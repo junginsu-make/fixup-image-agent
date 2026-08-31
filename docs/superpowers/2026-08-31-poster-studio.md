@@ -9,7 +9,7 @@
 
 **Goal:** 레퍼런스 이미지를 받아 한 장짜리 포스터·광고 이미지를 만들고, 사람이 고르고 고칠 수 있는 독립 섹션을 만든다.
 
-**Architecture:** `src/poster/` · `app/poster/` · `app/api/poster/` 를 새로 만들고 카드뉴스 도메인 코드를 참조하지 않는다. fal 클라이언트·모델 레지스트리·업로드·사용 기록·팀 격리만 공용으로 빌려 쓴다. 사용자가 비율과 한 줄 지시를 주면 fable 이 슬롯을 채운 초안을 만들고, 사람이 고친 뒤 fal `/edit` 로 변형 1~3장을 받는다. 변형 하나를 고르면 수정 명령과 다른 비율 재생성이 열린다.
+**Architecture:** `packages/poster-core/src/` · `app/poster/` · `app/api/poster/` 를 새로 만들고 카드뉴스 도메인 코드를 참조하지 않는다. fal 클라이언트·모델 레지스트리·업로드·사용 기록·팀 격리만 공용으로 빌려 쓴다. 사용자가 비율과 한 줄 지시를 주면 fable 이 슬롯을 채운 초안을 만들고, 사람이 고친 뒤 fal `/edit` 로 변형 1~3장을 받는다. 변형 하나를 고르면 수정 명령과 다른 비율 재생성이 열린다.
 
 **Tech Stack:** Next.js 15.5 App Router · TypeScript 5.9 · zod 4 · vitest 4 · Supabase(PostgreSQL/RLS) · fal.ai(`/edit` 엔드포인트) · Anthropic(기획) · OpenAI(비전)
 
@@ -17,8 +17,11 @@
 
 ## Global Constraints
 
-- **카드뉴스 도메인 코드를 참조하지 않는다.** `src/studio/` 중 빌려도 되는 것은 `fal-client.ts`, `models.ts`, `reference-files.ts` 뿐이다. `pipeline.ts` · `copy.ts` · `content-plan.ts` · `card-prompt.ts` · `vision-review.ts` · `schemas.ts` · `types.ts` 는 참조 금지.
-- **화면 코드(`"use client"`)는 `src/studio/types.ts` 와 `src/poster/types.ts` 를 값으로 import 하지 않는다.** 타입 전용 import 만 허용. 화면이 값으로 쓰는 스키마는 `src/poster/schemas.ts` 에 둔다. `tests/studio-client-bundle.test.ts` 가 이 규칙을 자동 검사한다.
+- **카드뉴스 도메인 코드를 참조하지 않는다.** `packages/sns-core/src/` 중 빌려도 되는 것은 `fal-client.ts`, `models.ts`, `ratios.ts` 뿐이다. `pipeline.ts` · `copy.ts` · `content-plan.ts` · `card-prompt.ts` · `review.ts` · `schemas.ts` · `types.ts` 는 참조 금지.
+- **팀 개념이 없다.** 소유자는 사람 한 명이다. 모든 테이블은 `user_id uuid references public.profiles(id)` 를 쓰고 RLS 는 `(select auth.uid()) = user_id` 다.
+- **비용 행은 회원이 쓰지 못한다.** `poster_generation_requests` 와 `poster_images` 는 서버가 admin 클라이언트로 쓴다. 회원 권한은 읽기와 `selected` 뿐이다. 회원이 `cost_usd` 를 고칠 수 있으면 비용 장부를 믿을 수 없다.
+- **admin 클라이언트를 쓰는 곳에서는 `user_id` 를 요청 본문에서 받지 않는다.** 반드시 로그인 세션에서 가져온다. RLS 를 우회하기 때문이다.
+- **화면 코드(`"use client"`)는 `types.ts` 를 값으로 import 하지 않는다.** 타입 전용 import 만 허용. 화면이 값으로 쓰는 스키마는 `packages/poster-core/src/schemas.ts` 에 둔다.
 - **컬럼 권한은 회수가 아니라 허용 목록으로 쓴다.** `revoke update on <table>` 을 먼저 하고 `grant update (col, ...)` 를 준다. 테이블 GRANT 뒤의 컬럼 REVOKE 는 아무 일도 하지 않는다.
 - **`unit_price` 견적 방식을 절대 부르지 않는다.** `openai/gpt-image-2/edit` 에서 장당 $1.00 이 나온다.
 - **GPT Image 2 는 `image_size` 를 항상 명시한다.** 기본값 `auto` 는 입력 이미지 크기를 물려받는다.
@@ -26,8 +29,9 @@
 - **웹 검색·`thinking_level` 을 켜지 않는다.** 추가 과금이 붙는다.
 - **비용 문구는 `최대` 가 아니라 `예상` 이다.** 공식 가격표로 실제 최대 금액을 보장할 수 없다.
 - **비전·기획 호출은 절대 예외를 밖으로 던지지 않는다.** 실패하면 빈 값을 돌려주고 상위가 계속 진행한다.
-- 테스트 실행: `npx vitest run` · 타입: `npx tsc --noEmit` · 빌드: `npx next build`
-- 기준 상태: 56 파일 / 445 테스트 통과. 모든 태스크 끝에서 이 수치 이상이어야 한다.
+- 테스트 실행: `pnpm -r test` · 타입: `pnpm typecheck` · 빌드: `pnpm build`
+- **운영 Supabase 와 EC2 를 건드리지 않는다.** 마이그레이션은 파일로만 쓴다. 배포는 계획 4 에서 마지막에 한다.
+- 기준 상태: 계획 2 가 끝난 시점의 테스트 수. 모든 태스크 끝에서 그 수치 이상이어야 한다.
 
 ---
 
@@ -38,8 +42,8 @@
 지금은 `data.images[0]` 만 꺼내고 `requestId` 를 버린다. 이 상태로 `num_images` 를 올리면 **N장 값을 내고 1장만 쓴다.**
 
 **Files:**
-- Modify: `src/studio/fal-client.ts:13-23` (타입), `:91-101` (`run`)
-- Modify: `src/studio/pipeline.ts:306` (유일한 운영 호출부)
+- Modify: `packages/sns-core/src/fal-client.ts:13-23` (타입), `:91-101` (`run`)
+- Modify: `packages/sns-core/src/pipeline.ts:306` (유일한 운영 호출부)
 - Modify: `tests/studio-pipeline.test.ts` (`runnerThat` 헬퍼)
 - Test: `tests/studio-fal-client.test.ts`
 
@@ -84,7 +88,7 @@ Expected: FAIL — `parseFalRunResult` is not exported
 
 - [ ] **Step 3: 최소 구현**
 
-`src/studio/fal-client.ts` 의 `FalImageResult` 를 다음으로 교체한다:
+`packages/sns-core/src/fal-client.ts` 의 `FalImageResult` 를 다음으로 교체한다:
 
 ```ts
 export interface FalImage {
@@ -131,7 +135,7 @@ export function parseFalRunResult(result: unknown): FalRunResult {
   }
 ```
 
-`src/studio/pipeline.ts:306` 을 고친다. 카드뉴스는 한 장만 쓰므로 동작이 바뀌지 않는다:
+`packages/sns-core/src/pipeline.ts:306` 을 고친다. 카드뉴스는 한 장만 쓰므로 동작이 바뀌지 않는다:
 
 ```ts
   // 카드뉴스는 카드당 한 장만 쓴다. 배치는 포스터 스튜디오에서만 켠다.
@@ -158,7 +162,7 @@ Expected: 445 tests + 새 3개 통과, typecheck exit 0
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/studio/fal-client.ts src/studio/pipeline.ts tests/studio-fal-client.test.ts tests/studio-pipeline.test.ts
+git add packages/sns-core/src/fal-client.ts packages/sns-core/src/pipeline.ts tests/studio-fal-client.test.ts tests/studio-pipeline.test.ts
 git commit -m "refactor(fal): 응답의 모든 이미지와 requestId 를 살린다"
 ```
 
@@ -169,7 +173,7 @@ git commit -m "refactor(fal): 응답의 모든 이미지와 requestId 를 살린
 `maxReferenceImages` 가 7 로 낡았고(실제 14), 지원 비율 목록이 없으며, GPT Image 2 단가가 `$0.25` 단일 추정치다.
 
 **Files:**
-- Modify: `src/studio/models.ts`
+- Modify: `packages/sns-core/src/models.ts`
 - Test: `tests/studio-models.test.ts`
 
 **Interfaces:**
@@ -181,7 +185,7 @@ git commit -m "refactor(fal): 응답의 모든 이미지와 requestId 를 살린
 `tests/studio-models.test.ts` 에 추가:
 
 ```ts
-import { GPT_IMAGE_2_PRICES, listModels } from "../src/studio/models";
+import { GPT_IMAGE_2_PRICES, listModels } from "../packages/sns-core/src/models";
 
 describe("모델 능력값", () => {
   const byId = (id: string) => listModels().find((model) => model.id === id)!;
@@ -224,7 +228,7 @@ Expected: FAIL — `GPT_IMAGE_2_PRICES` 없음, `supportedRatios` 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/studio/models.ts` 의 `StudioModelSpec` 에 필드를 더한다:
+`packages/sns-core/src/models.ts` 의 `StudioModelSpec` 에 필드를 더한다:
 
 ```ts
   /** 모델이 실제로 받는 비율 열거. 픽셀 지정 모델은 비운다. */
@@ -272,7 +276,7 @@ Expected: 전부 통과
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/studio/models.ts tests/studio-models.test.ts
+git add packages/sns-core/src/models.ts tests/studio-models.test.ts
 git commit -m "feat(models): 모델별 지원 비율과 GPT Image 2 공표 단가를 넣는다"
 ```
 
@@ -283,8 +287,8 @@ git commit -m "feat(models): 모델별 지원 비율과 GPT Image 2 공표 단�
 사용자는 의도(비율)를 고르고, 백엔드가 그 모델에 실제로 보낼 값을 정한다. 대체가 일어나면 반드시 알린다.
 
 **Files:**
-- Create: `src/poster/ratios.ts`
-- Test: `tests/poster-ratios.test.ts`
+- Create: `packages/poster-core/src/ratios.ts`
+- Test: `packages/poster-core/src/__tests__/poster-ratios.test.ts`
 
 **Interfaces:**
 - Consumes: `StudioModelSpec` (Task 2 의 `supportedRatios` · `pixelSizeLimits`)
@@ -292,12 +296,12 @@ git commit -m "feat(models): 모델별 지원 비율과 GPT Image 2 공표 단�
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-ratios.test.ts`:
+`packages/poster-core/src/__tests__/poster-ratios.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { POSTER_RATIOS, resolveSize } from "../src/poster/ratios";
-import { listModels } from "../src/studio/models";
+import { POSTER_RATIOS, resolveSize } from "../packages/poster-core/src/ratios";
+import { listModels } from "../packages/sns-core/src/models";
 
 const model = (id: string) => listModels().find((spec) => spec.id === id)!;
 
@@ -363,12 +367,12 @@ describe("모델에 보낼 값으로 바꾼다", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-ratios.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-ratios.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/ratios.ts`:
+`packages/poster-core/src/ratios.ts`:
 
 ```ts
 import type { StudioModelSpec } from "../studio/models";
@@ -450,13 +454,13 @@ export function resolveSize(ratioId: string, model: StudioModelSpec): ResolvedSi
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-ratios.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-ratios.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/ratios.ts tests/poster-ratios.test.ts
+git add packages/poster-core/src/ratios.ts packages/poster-core/src/__tests__/poster-ratios.test.ts
 git commit -m "feat(poster): 비율을 모델이 받는 값으로 바꾸는 순수 함수를 만든다"
 ```
 
@@ -467,8 +471,8 @@ git commit -m "feat(poster): 비율을 모델이 받는 값으로 바꾸는 순�
 `POST /v1/models/pricing/estimate` 는 지금 `FAL_KEY` 로 된다(2026-08-31 실측, HTTP 200). `unit_price` 방식은 부르면 안 된다.
 
 **Files:**
-- Create: `src/poster/pricing.ts`
-- Test: `tests/poster-pricing.test.ts`
+- Create: `packages/poster-core/src/pricing.ts`
+- Test: `packages/poster-core/src/__tests__/poster-pricing.test.ts`
 
 **Interfaces:**
 - Consumes: `GPT_IMAGE_2_PRICES` (Task 2), `StudioModelSpec`
@@ -476,12 +480,12 @@ git commit -m "feat(poster): 비율을 모델이 받는 값으로 바꾸는 순�
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-pricing.test.ts`:
+`packages/poster-core/src/__tests__/poster-pricing.test.ts`:
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
-import { estimateCost, publishedUnitPrice } from "../src/poster/pricing";
-import { listModels } from "../src/studio/models";
+import { estimateCost, publishedUnitPrice } from "../packages/poster-core/src/pricing";
+import { listModels } from "../packages/sns-core/src/models";
 
 const model = (id: string) => listModels().find((spec) => spec.id === id)!;
 
@@ -540,12 +544,12 @@ describe("비용 추정", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-pricing.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-pricing.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/pricing.ts`:
+`packages/poster-core/src/pricing.ts`:
 
 ```ts
 import { GPT_IMAGE_2_PRICES, type StudioModelSpec } from "../studio/models";
@@ -605,13 +609,13 @@ export async function estimateCost(input: EstimateInput): Promise<CostEstimate> 
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-pricing.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-pricing.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/pricing.ts tests/poster-pricing.test.ts
+git add packages/poster-core/src/pricing.ts packages/poster-core/src/__tests__/poster-pricing.test.ts
 git commit -m "feat(poster): 비용 추정을 fal 견적 API 1순위로 만든다"
 ```
 
@@ -622,8 +626,8 @@ git commit -m "feat(poster): 비용 추정을 fal 견적 API 1순위로 만든�
 `unit_price` 를 절대 부르지 않는다. 호출은 어떤 이유로도 던지지 않고 `undefined` 를 돌려준다.
 
 **Files:**
-- Create: `src/poster/fal-pricing-client.ts`
-- Test: `tests/poster-fal-pricing-client.test.ts`
+- Create: `packages/poster-core/src/fal-pricing-client.ts`
+- Test: `packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts`
 
 **Interfaces:**
 - Consumes: 없음
@@ -631,11 +635,11 @@ git commit -m "feat(poster): 비용 추정을 fal 견적 API 1순위로 만든�
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-fal-pricing-client.test.ts`:
+`packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts`:
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
-import { buildEstimateBody, createFalEstimator } from "../src/poster/fal-pricing-client";
+import { buildEstimateBody, createFalEstimator } from "../packages/poster-core/src/fal-pricing-client";
 
 describe("견적 요청 본문", () => {
   it("historical_api_price 만 쓴다", () => {
@@ -682,12 +686,12 @@ describe("견적 호출", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-fal-pricing-client.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/fal-pricing-client.ts`:
+`packages/poster-core/src/fal-pricing-client.ts`:
 
 ```ts
 const ESTIMATE_URL = "https://api.fal.ai/v1/models/pricing/estimate";
@@ -736,7 +740,7 @@ Expected: 전부 통과
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/fal-pricing-client.ts tests/poster-fal-pricing-client.test.ts
+git add packages/poster-core/src/fal-pricing-client.ts packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts
 git commit -m "feat(poster): fal 견적 API 클라이언트를 만든다"
 ```
 
@@ -747,23 +751,23 @@ git commit -m "feat(poster): fal 견적 API 클라이언트를 만든다"
 ## Task 6: 마이그레이션 0009 — 포스터 네 테이블
 
 **Files:**
-- Create: `supabase/migrations/0009_poster_studio.sql`
-- Test: `tests/poster-migration.test.ts`
+- Create: `supabase/migrations/202608310004_poster.sql`
+- Test: `packages/poster-core/src/__tests__/poster-migration.test.ts`
 
 **Interfaces:**
-- Consumes: `0007_team_membership.sql` 의 `is_master()` · `my_team_id()` · `has_permission()`
+- Consumes: 씨앗의 `public.profiles(id)`. 팀 개념은 없다 — 소유자는 사람 한 명이다
 - Produces: 테이블 `poster_references` · `poster_projects` · `poster_generation_requests` · `poster_images`
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-migration.test.ts` — 기존 `tests/team-auth-migrations.test.ts` 와 같은 방식으로 SQL 텍스트를 읽어 검사한다:
+`packages/poster-core/src/__tests__/poster-migration.test.ts` — 기존 `tests/team-auth-migrations.test.ts` 와 같은 방식으로 SQL 텍스트를 읽어 검사한다:
 
 ```ts
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const sql = readFileSync(path.join(process.cwd(), "supabase/migrations/0009_poster_studio.sql"), "utf8");
+const sql = readFileSync(path.join(process.cwd(), "supabase/migrations/202608310004_poster.sql"), "utf8");
 
 describe("포스터 마이그레이션", () => {
   it("네 테이블을 만든다", () => {
@@ -788,10 +792,10 @@ describe("포스터 마이그레이션", () => {
     }
   });
 
-  it("team_id 는 수정 대상 컬럼에 들어가지 않는다", () => {
+  it("user_id 는 수정 대상 컬럼에 들어가지 않는다", () => {
     const grants = sql.match(/grant update \(([^)]+)\)/g) ?? [];
     expect(grants.length).toBeGreaterThan(0);
-    for (const grant of grants) expect(grant).not.toContain("team_id");
+    for (const grant of grants) expect(grant).not.toContain("user_id");
   });
 
   it("비용은 생성 요청에만 있고 이미지에는 없다", () => {
@@ -806,31 +810,33 @@ describe("포스터 마이그레이션", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-migration.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-migration.test.ts`
 Expected: FAIL — 파일 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`supabase/migrations/0009_poster_studio.sql`:
+`supabase/migrations/202608310004_poster.sql`:
 
 ```sql
 -- 포스터 스튜디오. 카드뉴스와 데이터를 섞지 않는다 — 섹션을 버리면 이 테이블도 함께 버린다.
 
 create table public.poster_references (
   id uuid primary key default gen_random_uuid(),
-  team_id uuid not null references public.teams(id) on delete cascade,
-  added_by uuid not null references auth.users(id),
+  user_id uuid not null references public.profiles(id) on delete cascade,
   file_name text not null,
   storage_path text not null,
   title text,
   width int, height int,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 경로 첫 칸이 소유자여야 Storage 정책이 걸린다. 코드가 실수해도 여기서 막힌다.
+  constraint poster_references_storage_path_check check (
+    storage_path ~ ('^' || user_id::text || '/poster/references/' || id::text || '\.[^/]+$')
+  )
 );
 
 create table public.poster_projects (
   id uuid primary key default gen_random_uuid(),
-  team_id uuid not null references public.teams(id) on delete cascade,
-  created_by uuid not null references auth.users(id),
+  user_id uuid not null references public.profiles(id) on delete cascade,
   title text not null,
   status text not null default 'draft',
   -- 슬롯·비율·모델·레퍼런스 스냅샷을 통째로 담는다. 필드를 늘려도 마이그레이션이 필요 없다.
@@ -842,7 +848,7 @@ create table public.poster_projects (
 -- fal 호출 한 건. 과금이 이미지가 아니라 요청에 붙으므로 별도 행으로 둔다.
 create table public.poster_generation_requests (
   id uuid primary key default gen_random_uuid(),
-  team_id uuid not null references public.teams(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
   project_id uuid not null references public.poster_projects(id) on delete cascade,
   fal_request_id text,
   parent_image_id uuid,
@@ -863,7 +869,7 @@ create table public.poster_generation_requests (
 
 create table public.poster_images (
   id uuid primary key default gen_random_uuid(),
-  team_id uuid not null references public.teams(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
   project_id uuid not null references public.poster_projects(id) on delete cascade,
   generation_request_id uuid not null references public.poster_generation_requests(id) on delete cascade,
   variant_index int not null,
@@ -878,8 +884,8 @@ alter table public.poster_generation_requests
   add constraint poster_generation_requests_parent_fk
   foreign key (parent_image_id) references public.poster_images(id) on delete set null;
 
-create index poster_references_team_idx on public.poster_references(team_id, created_at desc);
-create index poster_projects_team_idx on public.poster_projects(team_id, updated_at desc);
+create index poster_references_user_idx on public.poster_references(user_id, created_at desc);
+create index poster_projects_user_idx on public.poster_projects(user_id, updated_at desc);
 create index poster_requests_project_idx on public.poster_generation_requests(project_id, created_at desc);
 create index poster_requests_cost_idx on public.poster_generation_requests(cost_state) where cost_state = 'pending';
 create index poster_images_request_idx on public.poster_images(generation_request_id, variant_index);
@@ -890,57 +896,64 @@ alter table public.poster_generation_requests enable row level security;
 alter table public.poster_images enable row level security;
 
 create policy poster_references_read on public.poster_references for select to authenticated
-  using (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id);
 create policy poster_references_insert on public.poster_references for insert to authenticated
-  with check ((public.is_master() or team_id = public.my_team_id()) and public.has_permission('reference.create'));
+  with check ((select auth.uid()) = user_id);
 create policy poster_references_delete on public.poster_references for delete to authenticated
-  using ((public.is_master() or team_id = public.my_team_id())
-         and (added_by = auth.uid() or public.has_permission('reference.manage')));
+  using ((select auth.uid()) = user_id);
 
 create policy poster_projects_read on public.poster_projects for select to authenticated
-  using (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id);
 create policy poster_projects_insert on public.poster_projects for insert to authenticated
-  with check ((public.is_master() or team_id = public.my_team_id()) and public.has_permission('content.create'));
+  with check ((select auth.uid()) = user_id);
 create policy poster_projects_update on public.poster_projects for update to authenticated
-  using (public.is_master() or team_id = public.my_team_id())
-  with check (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 create policy poster_requests_read on public.poster_generation_requests for select to authenticated
-  using (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id);
 create policy poster_requests_insert on public.poster_generation_requests for insert to authenticated
-  with check ((public.is_master() or team_id = public.my_team_id()) and public.has_permission('content.create'));
+  with check ((select auth.uid()) = user_id);
 create policy poster_requests_update on public.poster_generation_requests for update to authenticated
-  using (public.is_master() or team_id = public.my_team_id())
-  with check (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 create policy poster_images_read on public.poster_images for select to authenticated
-  using (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id);
 create policy poster_images_insert on public.poster_images for insert to authenticated
-  with check ((public.is_master() or team_id = public.my_team_id()) and public.has_permission('content.create'));
+  with check ((select auth.uid()) = user_id);
 create policy poster_images_update on public.poster_images for update to authenticated
-  using (public.is_master() or team_id = public.my_team_id())
-  with check (public.is_master() or team_id = public.my_team_id());
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 -- 컬럼 권한은 회수 먼저, 허용 목록 나중에. 테이블 GRANT 뒤의 컬럼 REVOKE 는 무시된다.
-grant select, insert, delete on public.poster_references to authenticated;
+-- id 를 INSERT 에 열어 둔다 — 파일을 올릴 때 이미 id 를 알아야 경로를 만들 수 있다.
+grant select, delete on public.poster_references to authenticated;
+revoke insert on public.poster_references from authenticated;
+grant insert (id, user_id, file_name, storage_path, title, width, height)
+  on public.poster_references to authenticated;
 
-grant select, insert on public.poster_projects to authenticated;
+grant select, delete on public.poster_projects to authenticated;
+revoke insert on public.poster_projects from authenticated;
+grant insert (user_id, title, data) on public.poster_projects to authenticated;
 revoke update on public.poster_projects from authenticated;
 grant update (title, status, data, updated_at) on public.poster_projects to authenticated;
 
-grant select, insert on public.poster_generation_requests to authenticated;
-revoke update on public.poster_generation_requests from authenticated;
-grant update (fal_request_id, returned_images, cost_state, cost_usd, cost_reason, updated_at)
-  on public.poster_generation_requests to authenticated;
+-- **비용 행은 회원이 쓰지 못한다. 읽기만 연다.**
+-- 회원이 cost_usd 를 고칠 수 있으면 비용 장부를 믿을 수 없다.
+-- 서버가 admin 클라이언트로 쓰고, user_id 는 로그인 세션에서만 가져온다.
+grant select on public.poster_generation_requests to authenticated;
+revoke insert, update, delete on public.poster_generation_requests from authenticated;
 
-grant select, insert on public.poster_images to authenticated;
-revoke update on public.poster_images from authenticated;
-grant update (selected, review) on public.poster_images to authenticated;
+-- 이미지 행도 서버가 쓴다. 회원이 바꾸는 것은 어느 변형을 골랐는지 하나뿐이다.
+grant select on public.poster_images to authenticated;
+revoke insert, update, delete on public.poster_images from authenticated;
+grant update (selected) on public.poster_images to authenticated;
 ```
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-migration.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-migration.test.ts`
 Expected: 통과
 
 마이그레이션을 실제 DB 에 밀지 않는다. 적용은 Task 15 이후 사용자 승인 아래 한다.
@@ -948,7 +961,7 @@ Expected: 통과
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add supabase/migrations/0009_poster_studio.sql tests/poster-migration.test.ts
+git add supabase/migrations/202608310004_poster.sql packages/poster-core/src/__tests__/poster-migration.test.ts
 git commit -m "feat(poster): 포스터 네 테이블 마이그레이션을 만든다"
 ```
 
@@ -957,8 +970,8 @@ git commit -m "feat(poster): 포스터 네 테이블 마이그레이션을 만�
 ## Task 7: 포스터 스키마와 저장소
 
 **Files:**
-- Create: `src/poster/schemas.ts`, `src/poster/store.ts`, `src/poster/supabase-store.ts`, `src/poster/request-store.ts`
-- Test: `tests/poster-schemas.test.ts`
+- Create: `packages/poster-core/src/schemas.ts`, `packages/poster-core/src/store.ts`, `packages/poster-core/src/supabase-store.ts`, `packages/poster-core/src/request-store.ts`
+- Test: `packages/poster-core/src/__tests__/poster-schemas.test.ts`
 
 **Interfaces:**
 - Consumes: `POSTER_RATIOS` (Task 3)
@@ -966,11 +979,11 @@ git commit -m "feat(poster): 포스터 네 테이블 마이그레이션을 만�
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-schemas.test.ts`:
+`packages/poster-core/src/__tests__/poster-schemas.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { PosterSlotsSchema, EMPTY_SLOTS } from "../src/poster/schemas";
+import { PosterSlotsSchema, EMPTY_SLOTS } from "../packages/poster-core/src/schemas";
 
 describe("포스터 슬롯", () => {
   it("빈 슬롯도 규칙을 통과한다 — 기획이 실패해도 사람이 채울 수 있어야 한다", () => {
@@ -1000,12 +1013,12 @@ describe("포스터 슬롯", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-schemas.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-schemas.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/schemas.ts` — **화면도 값으로 import 하므로 AI SDK 를 물고 있는 모듈을 참조하지 않는다**:
+`packages/poster-core/src/schemas.ts` — **화면도 값으로 import 하므로 AI SDK 를 물고 있는 모듈을 참조하지 않는다**:
 
 ```ts
 import { z } from "zod";
@@ -1048,14 +1061,14 @@ export const PosterReferenceSchema = z.object({
 export const PosterCostStateSchema = z.enum(["pending", "reconciled", "unknown"]);
 ```
 
-`src/poster/store.ts` — 인터페이스와 파일 저장소:
+`packages/poster-core/src/store.ts` — 인터페이스와 파일 저장소:
 
 ```ts
 import type { PosterSlots } from "./schemas";
 
 export interface PosterProject {
   id: string;
-  teamId?: string;
+  userId?: string;
   title: string;
   status: "draft" | "planning" | "slots_ready" | "generating" | "ready" | "failed";
   ratioId: string;
@@ -1114,7 +1127,7 @@ export interface PosterStorage {
 }
 ```
 
-`src/poster/supabase-store.ts` — 아래 세 메서드가 나머지 전부의 본이다. 같은 꼴로 채운다:
+`packages/poster-core/src/supabase-store.ts` — 아래 세 메서드가 나머지 전부의 본이다. 같은 꼴로 채운다:
 
 ```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1128,7 +1141,7 @@ export class SupabasePosterStore implements PosterStorage {
   constructor(
     private readonly client: SupabaseClient,
     private readonly userId: string,
-    private readonly teamId: string,
+    private readonly userId: string,
   ) {}
 
   // 조회는 필터를 걸지 않는다. 팀 격리는 RLS 가 강제한다 — 앱에서 또 거르면 규칙이 두 곳에 생긴다.
@@ -1139,10 +1152,10 @@ export class SupabasePosterStore implements PosterStorage {
     return (data ?? []).map((row) => this.toProject(row));
   }
 
-  // 쓰기에는 team_id 를 반드시 넣는다. RLS 의 with check 가 이 값을 본다.
+  // 쓰기에는 user_id 를 반드시 넣는다. RLS 의 with check 가 이 값을 본다.
   async createGenerationRequest(input: Omit<PosterGenerationRequest, "id" | "createdAt">): Promise<PosterGenerationRequest> {
     const { data, error } = await this.client.from("poster_generation_requests").insert({
-      team_id: this.teamId,
+      user_id: this.userId,
       project_id: input.projectId,
       parent_image_id: input.parentImageId ?? null,
       edit_instruction: input.editInstruction ?? null,
@@ -1172,9 +1185,9 @@ export class SupabasePosterStore implements PosterStorage {
 }
 ```
 
-나머지 메서드도 같은 규칙을 따른다 — **조회는 RLS 에 맡기고 필터를 걸지 않는다. 쓰기에는 `team_id` 를 넣는다.**
+나머지 메서드도 같은 규칙을 따른다 — **조회는 RLS 에 맡기고 필터를 걸지 않는다. 쓰기에는 `user_id` 를 넣는다.**
 
-`src/poster/request-store.ts`:
+`packages/poster-core/src/request-store.ts`:
 
 ```ts
 import { getCurrentMember } from "../server/auth";
@@ -1187,12 +1200,12 @@ import type { PosterStorage } from "./store";
  * 카드 스튜디오는 파일 백엔드 시절 유산이 있지만 포스터는 처음부터 팀 단위로만 쓴다.
  * 파일 백엔드를 만들지 않는 편이 격리 규칙(팀별 분리)을 한 곳에서만 지키게 한다.
  */
-export async function getRequestPosterStore(): Promise<{ store: PosterStorage; teamId: string }> {
+export async function getRequestPosterStore(): Promise<{ store: PosterStorage; userId: string }> {
   const { member, client } = await getCurrentMember();
   if (!client) throw new Error("포스터 스튜디오는 Supabase 연결이 필요합니다.");
-  const teamId = member.teamId;
-  if (!teamId) throw new Error("포스터를 만들 팀이 필요합니다.");
-  return { store: new SupabasePosterStore(client, member.userId, teamId), teamId };
+  const userId = member.userId;
+  if (!userId) throw new Error("포스터를 만들 팀이 필요합니다.");
+  return { store: new SupabasePosterStore(client, member.userId, userId), userId };
 }
 ```
 
@@ -1204,7 +1217,7 @@ Expected: 전부 통과
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/schemas.ts src/poster/store.ts src/poster/supabase-store.ts src/poster/request-store.ts tests/poster-schemas.test.ts
+git add packages/poster-core/src/schemas.ts packages/poster-core/src/store.ts packages/poster-core/src/supabase-store.ts packages/poster-core/src/request-store.ts packages/poster-core/src/__tests__/poster-schemas.test.ts
 git commit -m "feat(poster): 슬롯 스키마와 저장소를 만든다"
 ```
 
@@ -1215,8 +1228,8 @@ git commit -m "feat(poster): 슬롯 스키마와 저장소를 만든다"
 ## Task 8: fable 이 슬롯을 채우는 기획 제공자
 
 **Files:**
-- Create: `src/poster/planning.ts`
-- Test: `tests/poster-planning.test.ts`
+- Create: `packages/poster-core/src/planning.ts`
+- Test: `packages/poster-core/src/__tests__/poster-planning.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterSlots` · `EMPTY_SLOTS` (Task 7)
@@ -1224,12 +1237,12 @@ git commit -m "feat(poster): 슬롯 스키마와 저장소를 만든다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-planning.test.ts`:
+`packages/poster-core/src/__tests__/poster-planning.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { buildPlanningPrompt, planSlots } from "../src/poster/planning";
-import { EMPTY_SLOTS } from "../src/poster/schemas";
+import { buildPlanningPrompt, planSlots } from "../packages/poster-core/src/planning";
+import { EMPTY_SLOTS } from "../packages/poster-core/src/schemas";
 
 describe("기획 프롬프트", () => {
   it("사용자 지시와 비율을 담는다", () => {
@@ -1279,12 +1292,12 @@ describe("슬롯 기획", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-planning.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-planning.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/planning.ts`:
+`packages/poster-core/src/planning.ts`:
 
 ```ts
 import Anthropic from "@anthropic-ai/sdk";
@@ -1357,13 +1370,13 @@ export function createPosterPlanningProviderFromEnvironment(
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-planning.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-planning.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/planning.ts tests/poster-planning.test.ts
+git add packages/poster-core/src/planning.ts packages/poster-core/src/__tests__/poster-planning.test.ts
 git commit -m "feat(poster): fable 이 슬롯을 채우는 기획을 만든다"
 ```
 
@@ -1372,8 +1385,8 @@ git commit -m "feat(poster): fable 이 슬롯을 채우는 기획을 만든다"
 ## Task 9: 레퍼런스에서 문법을 읽는다 (절대 던지지 않는다)
 
 **Files:**
-- Create: `src/poster/reference-read.ts`
-- Test: `tests/poster-reference-read.test.ts`
+- Create: `packages/poster-core/src/reference-read.ts`
+- Test: `packages/poster-core/src/__tests__/poster-reference-read.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterSlots` (Task 7)
@@ -1381,11 +1394,11 @@ git commit -m "feat(poster): fable 이 슬롯을 채우는 기획을 만든다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-reference-read.test.ts`:
+`packages/poster-core/src/__tests__/poster-reference-read.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { buildGrammarPrompt, readReferenceGrammar } from "../src/poster/reference-read";
+import { buildGrammarPrompt, readReferenceGrammar } from "../packages/poster-core/src/reference-read";
 
 const bytes = async () => new Uint8Array([1, 2, 3]);
 
@@ -1448,12 +1461,12 @@ describe("레퍼런스 문법 추출", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-reference-read.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-reference-read.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/reference-read.ts`:
+`packages/poster-core/src/reference-read.ts`:
 
 ```ts
 import { z } from "zod";
@@ -1509,13 +1522,13 @@ export async function readReferenceGrammar(input: ReferenceGrammarInput): Promis
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-reference-read.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-reference-read.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/reference-read.ts tests/poster-reference-read.test.ts
+git add packages/poster-core/src/reference-read.ts packages/poster-core/src/__tests__/poster-reference-read.test.ts
 git commit -m "feat(poster): 레퍼런스에서 디자인 문법을 읽는다"
 ```
 
@@ -1524,8 +1537,8 @@ git commit -m "feat(poster): 레퍼런스에서 디자인 문법을 읽는다"
 ## Task 10: 슬롯을 fal 프롬프트로 조립한다
 
 **Files:**
-- Create: `src/poster/prompt.ts`
-- Test: `tests/poster-prompt.test.ts`
+- Create: `packages/poster-core/src/prompt.ts`
+- Test: `packages/poster-core/src/__tests__/poster-prompt.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterSlots` (Task 7)
@@ -1533,12 +1546,12 @@ git commit -m "feat(poster): 레퍼런스에서 디자인 문법을 읽는다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-prompt.test.ts`:
+`packages/poster-core/src/__tests__/poster-prompt.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { buildPosterPrompt } from "../src/poster/prompt";
-import { EMPTY_SLOTS } from "../src/poster/schemas";
+import { buildPosterPrompt } from "../packages/poster-core/src/prompt";
+import { EMPTY_SLOTS } from "../packages/poster-core/src/schemas";
 
 const full = {
   ...EMPTY_SLOTS,
@@ -1586,12 +1599,12 @@ describe("포스터 프롬프트", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-prompt.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-prompt.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/prompt.ts`:
+`packages/poster-core/src/prompt.ts`:
 
 ```ts
 import type { PosterSlots } from "./schemas";
@@ -1667,13 +1680,13 @@ export function buildPosterPrompt(input: {
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-prompt.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-prompt.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/prompt.ts tests/poster-prompt.test.ts
+git add packages/poster-core/src/prompt.ts packages/poster-core/src/__tests__/poster-prompt.test.ts
 git commit -m "feat(poster): 슬롯을 fal 프롬프트로 조립한다"
 ```
 
@@ -1684,8 +1697,8 @@ git commit -m "feat(poster): 슬롯을 fal 프롬프트로 조립한다"
 ## Task 11: 생성 파이프라인 — 요청 1행 + 이미지 N행
 
 **Files:**
-- Create: `src/poster/generate.ts`
-- Test: `tests/poster-generate.test.ts`
+- Create: `packages/poster-core/src/generate.ts`
+- Test: `packages/poster-core/src/__tests__/poster-generate.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveSize` (Task 3) · `estimateCost` (Task 4) · `buildPosterPrompt` (Task 10) · `PosterStorage` (Task 7) · `FalRunResult` (Task 1)
@@ -1693,13 +1706,13 @@ git commit -m "feat(poster): 슬롯을 fal 프롬프트로 조립한다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-generate.test.ts`:
+`packages/poster-core/src/__tests__/poster-generate.test.ts`:
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
-import { buildModelInput, generatePoster } from "../src/poster/generate";
-import { resolveSize } from "../src/poster/ratios";
-import { listModels } from "../src/studio/models";
+import { buildModelInput, generatePoster } from "../packages/poster-core/src/generate";
+import { resolveSize } from "../packages/poster-core/src/ratios";
+import { listModels } from "../packages/sns-core/src/models";
 
 const model = (id: string) => listModels().find((spec) => spec.id === id)!;
 
@@ -1751,7 +1764,7 @@ describe("포스터 생성", () => {
   it("요청 한 행과 이미지 세 행을 남긴다", async () => {
     const store = baseStore();
     const result = await generatePoster({
-      store: store as never, projectId: "p1", teamId: "t1",
+      store: store as never, projectId: "p1", userId: "t1",
       model: model("gpt-image-2"), ratioId: "feed_4_5", prompt: "p",
       referenceUrls: ["u"], imageCount: 3, deps,
     });
@@ -1763,7 +1776,7 @@ describe("포스터 생성", () => {
   it("추정액과 fal requestId 를 요청 행에 남긴다", async () => {
     const store = baseStore();
     const result = await generatePoster({
-      store: store as never, projectId: "p1", teamId: "t1",
+      store: store as never, projectId: "p1", userId: "t1",
       model: model("gpt-image-2"), ratioId: "feed_4_5", prompt: "p",
       referenceUrls: ["u"], imageCount: 3, deps,
     });
@@ -1776,7 +1789,7 @@ describe("포스터 생성", () => {
   it("실제로 돌아온 장수를 기록한다", async () => {
     const store = baseStore();
     const result = await generatePoster({
-      store: store as never, projectId: "p1", teamId: "t1",
+      store: store as never, projectId: "p1", userId: "t1",
       model: model("gpt-image-2"), ratioId: "feed_4_5", prompt: "p",
       referenceUrls: ["u"], imageCount: 3,
       deps: { ...deps, runner: { ...deps.runner, run: async () => ({ images: [{ url: "a" }], requestId: "fal_2" }) } },
@@ -1788,7 +1801,7 @@ describe("포스터 생성", () => {
   it("이 모델로 만들 수 없는 비율이면 만들기 전에 막는다", async () => {
     const store = baseStore();
     await expect(generatePoster({
-      store: store as never, projectId: "p1", teamId: "t1",
+      store: store as never, projectId: "p1", userId: "t1",
       model: model("nano-banana-pro"), ratioId: "a4_print", prompt: "p",
       referenceUrls: ["u"], imageCount: 1, deps,
     })).rejects.toThrow(/GPT Image 2/);
@@ -1799,12 +1812,12 @@ describe("포스터 생성", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-generate.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-generate.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/generate.ts`:
+`packages/poster-core/src/generate.ts`:
 
 ```ts
 import type { FalRunner } from "../studio/fal-client";
@@ -1847,7 +1860,7 @@ export interface GeneratePosterDeps {
 export async function generatePoster(input: {
   store: PosterStorage;
   projectId: string;
-  teamId: string;
+  userId: string;
   model: StudioModelSpec;
   ratioId: string;
   prompt: string;
@@ -1902,13 +1915,13 @@ export async function generatePoster(input: {
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-generate.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-generate.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/generate.ts tests/poster-generate.test.ts
+git add packages/poster-core/src/generate.ts packages/poster-core/src/__tests__/poster-generate.test.ts
 git commit -m "feat(poster): 요청 한 행과 변형 N 행을 남기는 생성 파이프라인"
 ```
 
@@ -1917,8 +1930,8 @@ git commit -m "feat(poster): 요청 한 행과 변형 N 행을 남기는 생성 
 ## Task 12: 포스터 전용 비전 검수 — 선택된 변형만
 
 **Files:**
-- Create: `src/poster/vision-review.ts`
-- Test: `tests/poster-vision-review.test.ts`
+- Create: `packages/poster-core/src/vision-review.ts`
+- Test: `packages/poster-core/src/__tests__/poster-vision-review.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterSlots` (Task 7)
@@ -1926,12 +1939,12 @@ git commit -m "feat(poster): 요청 한 행과 변형 N 행을 남기는 생성 
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-vision-review.test.ts`:
+`packages/poster-core/src/__tests__/poster-vision-review.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { buildPosterReviewPrompt, reviewPoster } from "../src/poster/vision-review";
-import { EMPTY_SLOTS } from "../src/poster/schemas";
+import { buildPosterReviewPrompt, reviewPoster } from "../packages/poster-core/src/vision-review";
+import { EMPTY_SLOTS } from "../packages/poster-core/src/schemas";
 
 const slots = { ...EMPTY_SLOTS, headline: "SNAP", sideTexts: ["ISO 400"] };
 
@@ -1984,12 +1997,12 @@ describe("포스터 검수", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-vision-review.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-vision-review.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/vision-review.ts`:
+`packages/poster-core/src/vision-review.ts`:
 
 ```ts
 import { z } from "zod";
@@ -2053,13 +2066,13 @@ export async function reviewPoster(input: {
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-vision-review.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-vision-review.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/vision-review.ts tests/poster-vision-review.test.ts
+git add packages/poster-core/src/vision-review.ts packages/poster-core/src/__tests__/poster-vision-review.test.ts
 git commit -m "feat(poster): 포스터 전용 비전 검수를 만든다"
 ```
 
@@ -2068,8 +2081,8 @@ git commit -m "feat(poster): 포스터 전용 비전 검수를 만든다"
 ## Task 13: 변형 선택과 수정 루프 규칙
 
 **Files:**
-- Create: `src/poster/flow.ts`
-- Test: `tests/poster-flow.test.ts`
+- Create: `packages/poster-core/src/flow.ts`
+- Test: `packages/poster-core/src/__tests__/poster-flow.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterImage` (Task 7)
@@ -2077,11 +2090,11 @@ git commit -m "feat(poster): 포스터 전용 비전 검수를 만든다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-flow.test.ts`:
+`packages/poster-core/src/__tests__/poster-flow.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { assertEditable, canEdit, selectedImage } from "../src/poster/flow";
+import { assertEditable, canEdit, selectedImage } from "../packages/poster-core/src/flow";
 
 const image = (id: string, selected: boolean) => ({
   id, projectId: "p", generationRequestId: "r", variantIndex: 0, selected, assetPath: `out/${id}.png`,
@@ -2111,12 +2124,12 @@ describe("수정 루프 진입 규칙", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-flow.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-flow.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/flow.ts`:
+`packages/poster-core/src/flow.ts`:
 
 ```ts
 import type { PosterImage } from "./store";
@@ -2144,13 +2157,13 @@ export function assertEditable(images: PosterImage[]): PosterImage {
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
-Run: `npx vitest run tests/poster-flow.test.ts` · `npx tsc --noEmit`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-flow.test.ts` · `npx tsc --noEmit`
 Expected: 통과
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/flow.ts tests/poster-flow.test.ts
+git add packages/poster-core/src/flow.ts packages/poster-core/src/__tests__/poster-flow.test.ts
 git commit -m "feat(poster): 변형을 고른 뒤에만 수정이 열리게 한다"
 ```
 
@@ -2162,7 +2175,7 @@ git commit -m "feat(poster): 변형을 고른 뒤에만 수정이 열리게 한�
 
 **Files:**
 - Create: `app/api/poster/projects/route.ts`, `app/api/poster/projects/[id]/route.ts`, `app/api/poster/projects/[id]/plan/route.ts`, `app/api/poster/projects/[id]/generate/route.ts`, `app/api/poster/projects/[id]/images/[imageId]/select/route.ts`, `app/api/poster/references/route.ts`, `app/api/poster/estimate/route.ts`
-- Test: `tests/poster-routes.test.ts`
+- Test: `packages/poster-core/src/__tests__/poster-routes.test.ts`
 
 **Interfaces:**
 - Consumes: `getRequestPosterStore` (Task 7) · `planSlots` (Task 8) · `generatePoster` (Task 11) · `assertEditable` (Task 13) · `estimateCost`·`createFalEstimator` (Task 4·5)
@@ -2170,7 +2183,7 @@ git commit -m "feat(poster): 변형을 고른 뒤에만 수정이 열리게 한�
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-routes.test.ts` — `tests/studio-routes.test.ts` 와 같은 방식으로 라우트 함수를 직접 부른다:
+`packages/poster-core/src/__tests__/poster-routes.test.ts` — `tests/studio-routes.test.ts` 와 같은 방식으로 라우트 함수를 직접 부른다:
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -2195,7 +2208,7 @@ describe("견적 라우트", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-routes.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-routes.test.ts`
 Expected: FAIL — 라우트 없음
 
 - [ ] **Step 3: 최소 구현**
@@ -2206,9 +2219,9 @@ Expected: FAIL — 라우트 없음
 import { z } from "zod";
 import { apiError, failure, success } from "../../../../src/server/api";
 import { requirePermission } from "../../../../src/server/auth";
-import { listModels } from "../../../../src/studio/models";
-import { createFalEstimator } from "../../../../src/poster/fal-pricing-client";
-import { estimateCost } from "../../../../src/poster/pricing";
+import { listModels } from "../../../../packages/sns-core/src/models";
+import { createFalEstimator } from "../../../../packages/poster-core/src/fal-pricing-client";
+import { estimateCost } from "../../../../packages/poster-core/src/pricing";
 
 const Schema = z.object({ modelId: z.string().min(1), imageCount: z.number().int().min(1).max(3) });
 
@@ -2247,7 +2260,7 @@ Expected: 전부 통과
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add app/api/poster tests/poster-routes.test.ts
+git add app/api/poster packages/poster-core/src/__tests__/poster-routes.test.ts
 git commit -m "feat(poster): 포스터 API 라우트를 만든다"
 ```
 
@@ -2259,7 +2272,7 @@ git commit -m "feat(poster): 포스터 API 라우트를 만든다"
 - Create: `app/poster/page.tsx`, `app/poster/new/page.tsx`, `app/poster/[id]/page.tsx`, `app/poster/gallery/page.tsx`
 - Create: `components/poster/slot-editor.tsx`, `components/poster/variant-picker.tsx`, `components/poster/cost-line.tsx`
 - Modify: `components/app-shell.tsx` (메뉴에 "포스터 스튜디오" 추가)
-- Test: `tests/poster-cost-line.test.ts`
+- Test: `packages/poster-core/src/__tests__/poster-cost-line.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterSlots`·`EMPTY_SLOTS` (Task 7) · `POSTER_RATIOS` (Task 3) · `canEdit` (Task 13)
@@ -2267,11 +2280,11 @@ git commit -m "feat(poster): 포스터 API 라우트를 만든다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-cost-line.test.ts` — 문구 규칙만 순수 함수로 떼어 검사한다:
+`packages/poster-core/src/__tests__/poster-cost-line.test.ts` — 문구 규칙만 순수 함수로 떼어 검사한다:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { costLine } from "../src/poster/cost-line";
+import { costLine } from "../packages/poster-core/src/cost-line";
 
 describe("비용 문구", () => {
   it("생성 전에는 예상이라고 쓴다 — 최대라고 쓰지 않는다", () => {
@@ -2298,12 +2311,12 @@ describe("비용 문구", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-cost-line.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-cost-line.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/cost-line.ts`:
+`packages/poster-core/src/cost-line.ts`:
 
 ```ts
 /**
@@ -2334,7 +2347,7 @@ export function costLine(input: {
 
 `components/app-shell.tsx` 의 `links` 에 `["포스터 스튜디오", "/poster"]` 를 `["카드 스튜디오", "/studio"]` 뒤에 넣는다.
 
-**주의:** 화면 파일은 `src/poster/schemas.ts`·`src/poster/ratios.ts`·`src/poster/flow.ts`·`src/poster/cost-line.ts` 만 값으로 import 한다. `src/poster/store.ts` 는 타입 전용으로만 가져온다.
+**주의:** 화면 파일은 `packages/poster-core/src/schemas.ts`·`packages/poster-core/src/ratios.ts`·`packages/poster-core/src/flow.ts`·`packages/poster-core/src/cost-line.ts` 만 값으로 import 한다. `packages/poster-core/src/store.ts` 는 타입 전용으로만 가져온다.
 
 - [ ] **Step 4: 테스트와 빌드를 확인한다**
 
@@ -2344,7 +2357,7 @@ Expected: 전부 통과. `tests/studio-client-bundle.test.ts` 가 새 화면의 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add app/poster components/poster components/app-shell.tsx src/poster/cost-line.ts tests/poster-cost-line.test.ts
+git add app/poster components/poster components/app-shell.tsx packages/poster-core/src/cost-line.ts packages/poster-core/src/__tests__/poster-cost-line.test.ts
 git commit -m "feat(poster): 갤러리·만들기·결과 화면을 만든다"
 ```
 
@@ -2355,8 +2368,8 @@ git commit -m "feat(poster): 갤러리·만들기·결과 화면을 만든다"
 `FAL_BILLING_ADMIN_KEY` 가 없으면 이 태스크는 **코드만 넣고 동작하지 않는다.** `unknown + admin_unavailable` 로 떨어진다.
 
 **Files:**
-- Create: `src/poster/reconcile.ts`
-- Test: `tests/poster-reconcile.test.ts`
+- Create: `packages/poster-core/src/reconcile.ts`
+- Test: `packages/poster-core/src/__tests__/poster-reconcile.test.ts`
 
 **Interfaces:**
 - Consumes: `PosterGenerationRequest` (Task 7)
@@ -2364,11 +2377,11 @@ git commit -m "feat(poster): 갤러리·만들기·결과 화면을 만든다"
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`tests/poster-reconcile.test.ts`:
+`packages/poster-core/src/__tests__/poster-reconcile.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { RECONCILE_DEADLINE_MS, reconcileRequest } from "../src/poster/reconcile";
+import { RECONCILE_DEADLINE_MS, reconcileRequest } from "../packages/poster-core/src/reconcile";
 
 const base = {
   id: "r1", projectId: "p", modelId: "gpt-image-2", ratioId: "feed_4_5", size: {},
@@ -2437,12 +2450,12 @@ describe("정산", () => {
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `npx vitest run tests/poster-reconcile.test.ts`
+Run: `npx vitest run packages/poster-core/src/__tests__/poster-reconcile.test.ts`
 Expected: FAIL — 모듈 없음
 
 - [ ] **Step 3: 최소 구현**
 
-`src/poster/reconcile.ts`:
+`packages/poster-core/src/reconcile.ts`:
 
 ```ts
 import type { PosterGenerationRequest } from "./store";
@@ -2479,7 +2492,7 @@ export async function reconcileRequest(input: {
 }
 ```
 
-Billing Events 호출기는 `createFalEstimator` 와 같은 형태로 `src/poster/fal-billing-client.ts` 에 만든다.
+Billing Events 호출기는 `createFalEstimator` 와 같은 형태로 `packages/poster-core/src/fal-billing-client.ts` 에 만든다.
 `FAL_BILLING_ADMIN_KEY` 가 없거나 403 이면 `code: "admin_unavailable"` 을 붙여 던진다.
 **`FAL_KEY` 를 대신 쓰지 않는다** — 그 키는 이 API 에서 403 이다(2026-08-31 실측).
 
@@ -2491,7 +2504,7 @@ Expected: 전부 통과
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/poster/reconcile.ts src/poster/fal-billing-client.ts tests/poster-reconcile.test.ts
+git add packages/poster-core/src/reconcile.ts packages/poster-core/src/fal-billing-client.ts packages/poster-core/src/__tests__/poster-reconcile.test.ts
 git commit -m "feat(poster): Admin 키가 있을 때 정산하고 없으면 상태로 남긴다"
 ```
 

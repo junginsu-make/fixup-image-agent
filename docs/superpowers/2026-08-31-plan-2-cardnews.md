@@ -1360,6 +1360,9 @@ Run: `pnpm --filter @fixup/sns-core test`
 create table public.sns_projects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
+  -- 수집함에서 왔으면 그 후보. **"제작함" 은 이 값으로 판정한다.**
+  -- ingest_candidates.status 에 requested 를 두지 않는다 —
+  -- 회원이 Supabase REST 로 직접 그 글자를 넣을 수 있어 프로젝트 없이 제작함이 된다.
   candidate_id uuid references public.ingest_candidates(id) on delete set null,
   title text not null,
   status text not null default 'draft'
@@ -1431,9 +1434,11 @@ revoke update on public.sns_projects from authenticated;
 grant update (title, status, ratio, language, model_id, card_count_mode, card_count, tone_note, data, updated_at)
   on public.sns_projects to authenticated;
 
-grant select, insert on public.sns_generation_requests to authenticated;
-revoke update on public.sns_generation_requests from authenticated;
-grant update (fal_request_id, returned_images, cost_usd) on public.sns_generation_requests to authenticated;
+-- **비용 행은 회원이 쓰지 못한다. 읽기만 연다.**
+-- 회원이 cost_usd 를 고칠 수 있으면 비용 장부를 믿을 수 없다.
+-- 서버가 admin 클라이언트로 쓰고, user_id 는 로그인 세션에서만 가져온다.
+grant select on public.sns_generation_requests to authenticated;
+revoke insert, update, delete on public.sns_generation_requests from authenticated;
 
 grant select, insert, delete on public.sns_cards to authenticated;
 revoke update on public.sns_cards from authenticated;
