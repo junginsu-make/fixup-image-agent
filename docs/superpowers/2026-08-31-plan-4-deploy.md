@@ -157,6 +157,26 @@ git commit -m "chore(deploy): 새 EC2 배포 설정을 만든다"
 
 ## Task 3: 수집 워커를 서비스로 올린다
 
+- [ ] **Step 0: 워커 서비스 파일의 경로가 아직 개인 배포를 가리킨다**
+
+Task 7 에서 만들 때 `deploy/` 전체가 씨앗 상태였다. 이름만 fixup 이고 경로는 detail-page 다.
+
+```
+WorkingDirectory=/opt/detail-page-studio/current
+EnvironmentFile=/etc/detail-page-studio/app.env
+```
+
+Task 2 의 이름 바꾸기가 이걸 잡았는지 확인한다.
+
+```bash
+grep -rn "detail-page" deploy/ scripts/
+```
+
+**한 줄이라도 나오면 멈춘다.** 개인 배포의 systemd 서비스를 건드릴 수 있다.
+
+또 `install-host.sh` 가 이 워커를 설치·활성화하는 두 줄을 갖고 있다.
+**이 스크립트를 개인 EC2 에서 절대 돌리지 않는다.**
+
 - [ ] **Step 1: 워커 서비스를 설치한다**
 
 `deploy/ec2/fixup-image-agent-worker.service` 를 등록하고 시작한다.
