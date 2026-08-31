@@ -67,7 +67,7 @@ describe("참고 이미지 마이그레이션", () => {
     const compactSql = sql.replace(/\s+/g, " ");
 
     expect(compactSql).toContain(
-      "grant insert (user_id, storage_path, title, purpose, width, height) on public.reference_images to authenticated",
+      "grant insert (id, user_id, storage_path, title, purpose, width, height) on public.reference_images to authenticated",
     );
     expect(compactSql).toContain(
       "grant insert (user_id, name, purpose) on public.reference_sets to authenticated",
@@ -84,5 +84,20 @@ describe("참고 이미지 마이그레이션", () => {
     expect(compactSql).toContain(
       "grant update (role, position) on public.reference_set_items to authenticated",
     );
+  });
+
+  it("세트 항목은 USING 과 WITH CHECK 모두 이미지 소유자를 확인한다", () => {
+    const policyStart = sql.indexOf('create policy "members manage own reference set items"');
+    const policyEnd = sql.indexOf(";", policyStart) + 1;
+    const policy = sql.slice(policyStart, policyEnd);
+    const withCheckAt = policy.indexOf("with check");
+    const usingClause = policy.slice(0, withCheckAt);
+    const withCheckClause = policy.slice(withCheckAt);
+
+    for (const clause of [usingClause, withCheckClause]) {
+      expect(clause).toContain("from public.reference_images i");
+      expect(clause).toContain("i.id = reference_image_id");
+      expect(clause).toContain("(select auth.uid()) = i.user_id");
+    }
   });
 });

@@ -54,14 +54,18 @@ create policy "members manage own reference sets"
 create policy "members manage own reference set items"
   on public.reference_set_items for all to authenticated
   using (exists (select 1 from public.reference_sets s
-                  where s.id = set_id and (select auth.uid()) = s.user_id))
+                  where s.id = set_id and (select auth.uid()) = s.user_id)
+         and exists (select 1 from public.reference_images i
+                      where i.id = reference_image_id and (select auth.uid()) = i.user_id))
   with check (exists (select 1 from public.reference_sets s
-                       where s.id = set_id and (select auth.uid()) = s.user_id));
+                       where s.id = set_id and (select auth.uid()) = s.user_id)
+              and exists (select 1 from public.reference_images i
+                           where i.id = reference_image_id and (select auth.uid()) = i.user_id));
 
 -- 컬럼 권한은 회수 먼저, 허용 목록 나중에 둔다.
 grant select, delete on public.reference_images to authenticated;
 revoke insert on public.reference_images from authenticated;
-grant insert (user_id, storage_path, title, purpose, width, height)
+grant insert (id, user_id, storage_path, title, purpose, width, height)
   on public.reference_images to authenticated;
 revoke update on public.reference_images from authenticated;
 grant update (title, purpose) on public.reference_images to authenticated;
