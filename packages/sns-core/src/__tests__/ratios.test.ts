@@ -35,6 +35,13 @@ describe("모델에 보낼 값", () => {
     expect(resolved.resolution).toBe("2K");
   });
 
+  it("고정 해상도가 없는 모델은 해상도를 지어내지 않는다", () => {
+    const resolved = resolveSize("4:5", modelById("nano-banana"));
+    expect(resolved.mode).toBe("enum");
+    expect(resolved.aspectRatio).toBe("4:5");
+    expect(resolved.resolution).toBeUndefined();
+  });
+
   it("네 비율은 모든 모델이 지원한다 — 대체가 없다", () => {
     for (const ratio of CARD_RATIOS) {
       for (const id of ["gpt-image-2", "nano-banana-pro", "nano-banana-2"]) {

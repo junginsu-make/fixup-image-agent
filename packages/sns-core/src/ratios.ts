@@ -31,5 +31,9 @@ export function resolveSize(ratioId: string, model: ImageModel): ResolvedSize {
   if (!model.supportedRatios?.includes(ratio.id)) {
     return { mode: "enum", rejected: `${model.label} 은 ${ratio.id} 를 지원하지 않습니다.` };
   }
-  return { mode: "enum", aspectRatio: ratio.id, resolution: model.fixedResolution ?? "2K" };
+  return {
+    mode: "enum",
+    aspectRatio: ratio.id,
+    ...(model.fixedResolution ? { resolution: model.fixedResolution } : {}),
+  };
 }
