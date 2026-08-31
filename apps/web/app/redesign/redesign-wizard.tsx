@@ -30,13 +30,21 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  StepBar,
   Textarea,
   cn,
+  type StepDefinition,
 } from "@fixup/ui";
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
 
 type Model = "openai" | "google";
 type View = "dashboard" | "workspace" | "results";
+
+const REDESIGN_STEPS: StepDefinition[] = [
+  { id: "dashboard", label: "대시보드", desc: "지난 작업" },
+  { id: "workspace", label: "리디자인 작업", desc: "섹션 고치기" },
+  { id: "results", label: "결과 확인", desc: "내보내기" },
+];
 
 type SectionResult = {
   id: string;
@@ -818,38 +826,7 @@ export function RedesignWizard() {
       {/* 단계 표시줄 — 이전에는 자체 248px 사이드바가 셸 안에 또 있었다(내비 중복).
           셸이 좌측 내비를 제공하므로 여기서는 이 도구의 3단계만 표시한다. */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {([
-            ["dashboard", "대시보드", "01"],
-            ["workspace", "리디자인 작업", "02"],
-            ["results", "결과 확인", "03"],
-          ] as const).map(([id, label, index]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setView(id as View)}
-              aria-current={view === id ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition-colors",
-                view === id
-                  ? "bg-primary-soft text-foreground shadow-[0_0_0_1px_var(--primary-ring)]"
-                  : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              <span
-                className={cn(
-                  "grid size-5 place-items-center rounded-[6px] border text-[10px] font-extrabold",
-                  view === id
-                    ? "border-transparent bg-primary text-primary-foreground"
-                    : "border-border bg-background text-subtle-foreground"
-                )}
-              >
-                {index}
-              </span>
-              {label}
-            </button>
-          ))}
-        </div>
+        <StepBar steps={REDESIGN_STEPS} current={view} onJump={(id) => setView(id as View)} />
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Badge variant={serverConfig.serverOpenaiKeyConfigured ? "green" : "default"}>OpenAI {serverConfig.serverOpenaiKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>

@@ -52,7 +52,7 @@ import type {
   TextOverlay,
   WorkbenchTab,
 } from "./pdp-drafts";
-import { Badge, Button, cn } from "@fixup/ui";
+import { Badge, Button, StepBar, cn } from "@fixup/ui";
 import styles from "./pdp-maker.module.css";
 
 /* 캔버스 위 도크 버튼. 상태 클래스를 기본과 분리해 둔다. */
@@ -66,7 +66,7 @@ import { SectionGallery } from "./SectionGallery";
 import { EmphasisWordPicker } from "./EmphasisWordPicker";
 import { keepWordsPresentIn } from "./emphasis-words";
 import { COPY_SLOTS, overlayStyleFor, type CopyOverlayType } from "./copy-slots";
-import { StepBar, type CreateMode } from "./StepBar";
+import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import { ReviewPanel } from "./ReviewPanel";
 import {
   chunkForModel,
@@ -2084,7 +2084,7 @@ export function PdpEditor({
       </header>
 
       <div onClick={stopShellClick}>
-        <StepBar mode={startMode} current={screen === "gallery" ? "sections" : "edit"} />
+        <StepBar steps={CREATE_STEPS[startMode]} current={screen === "gallery" ? "sections" : "edit"} />
       </div>
 
       <div

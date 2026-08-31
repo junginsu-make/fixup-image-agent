@@ -10,9 +10,9 @@ import { buildSectionKeys, deleteAllPdpDrafts, deletePdpDraft, getPdpDraft, list
 import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
-import { Badge, Button, cn } from "@fixup/ui";
+import { Badge, Button, StepBar, cn } from "@fixup/ui";
 import { PdpEditor } from "./PdpEditor";
-import { StepBar, type CreateMode } from "./StepBar";
+import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
@@ -642,7 +642,7 @@ export function PdpMakerClient() {
       </div>
 
       <StepBar
-        mode={startMode}
+        steps={CREATE_STEPS[startMode]}
         current={
           startMode === "text"
             ? textStage === "input"
