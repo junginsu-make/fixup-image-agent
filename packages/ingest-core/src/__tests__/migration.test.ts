@@ -65,4 +65,10 @@ describe("수집 마이그레이션", () => {
       expect(sql).toContain(column);
     }
   });
+
+  it("어댑터별 설정을 저장하고 회원이 자기 설정만 입력·수정한다", () => {
+    expect(sql).toContain("config jsonb not null default '{}'::jsonb");
+    expect(sql).toMatch(/grant insert \([^)]*config[^)]*\)\s+on public\.ingest_sources/);
+    expect(sql).toMatch(/grant update \([^)]*config[^)]*\) on public\.ingest_sources/);
+  });
 });

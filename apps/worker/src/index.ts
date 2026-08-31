@@ -70,6 +70,7 @@ type SourceRow = {
   kind: string;
   name: string;
   url: string;
+  config: Record<string, unknown>;
   interval_hours: number;
   enabled: boolean;
   last_checked_at: string | null;
@@ -89,7 +90,7 @@ function toPollSource(row: SourceRow): PollSource {
     url: row.url,
     intervalHours: row.interval_hours,
     enabled: row.enabled,
-    config: {},
+    config: row.config ?? {},
     lastCheckedAt: row.last_checked_at,
     nextPollAt: row.next_poll_at,
     leaseUntil: row.lease_until,

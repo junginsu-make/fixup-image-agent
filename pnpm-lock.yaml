@@ -70,6 +70,9 @@ importers:
       react-rnd:
         specifier: ^10.5.3
         version: 10.5.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^20

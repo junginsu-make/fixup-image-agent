@@ -8,6 +8,7 @@ create table public.ingest_sources (
   kind text not null check (kind in ('youtube_video','youtube_channel','rss','community','naver_news','official_ai')),
   name text not null,
   url text not null,
+  config jsonb not null default '{}'::jsonb,
   interval_hours int not null default 12 check (interval_hours between 1 and 168),
   enabled boolean not null default true,
   -- 워커가 쓰는 칸. 리스로 중복 실행을 막는다.
@@ -56,10 +57,10 @@ create policy "members manage own ingest candidates"
 -- 컬럼 권한은 회수 먼저, 허용 목록 나중에.
 grant select, delete on public.ingest_sources to authenticated;
 revoke insert on public.ingest_sources from authenticated;
-grant insert (user_id, kind, name, url, interval_hours, enabled)
+grant insert (user_id, kind, name, url, config, interval_hours, enabled)
   on public.ingest_sources to authenticated;
 revoke update on public.ingest_sources from authenticated;
-grant update (name, url, interval_hours, enabled, updated_at) on public.ingest_sources to authenticated;
+grant update (name, url, config, interval_hours, enabled, updated_at) on public.ingest_sources to authenticated;
 
 grant select on public.ingest_candidates to authenticated;
 revoke insert on public.ingest_candidates from authenticated;
