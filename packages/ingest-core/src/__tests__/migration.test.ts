@@ -35,6 +35,25 @@ describe("수집 마이그레이션", () => {
     }
   });
 
+  it("소스 INSERT 는 회원 입력 칸만 허용한다", () => {
+    const revokeAt = sql.indexOf("revoke insert on public.ingest_sources");
+    const grant = sql.match(/grant insert \(([^)]+)\)\s+on public\.ingest_sources/);
+    expect(revokeAt).toBeGreaterThan(-1);
+    expect(grant).not.toBeNull();
+    expect(sql.indexOf(grant![0])).toBeGreaterThan(revokeAt);
+
+    const allowed = grant![1]!;
+    for (const workerColumn of ["last_checked_at", "next_poll_at", "lease_until", "last_error"]) {
+      expect(allowed).not.toContain(workerColumn);
+    }
+  });
+
+  it("후보 INSERT 는 워커 전용이다", () => {
+    expect(sql).toContain("revoke insert on public.ingest_candidates from authenticated");
+    expect(sql).not.toMatch(/grant insert \([^)]+\)\s+on public\.ingest_candidates/);
+    expect(sql).not.toMatch(/grant [^;]*insert[^;]*on public\.ingest_candidates/);
+  });
+
   it("user_id 는 수정 대상 컬럼에 들어가지 않는다", () => {
     for (const grant of sql.match(/grant update \(([^)]+)\)/g) ?? []) {
       expect(grant).not.toContain("user_id");

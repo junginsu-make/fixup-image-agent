@@ -54,10 +54,14 @@ create policy "members manage own ingest candidates"
   with check ((select auth.uid()) = user_id);
 
 -- 컬럼 권한은 회수 먼저, 허용 목록 나중에.
-grant select, insert, delete on public.ingest_sources to authenticated;
+grant select, delete on public.ingest_sources to authenticated;
+revoke insert on public.ingest_sources from authenticated;
+grant insert (user_id, kind, name, url, interval_hours, enabled)
+  on public.ingest_sources to authenticated;
 revoke update on public.ingest_sources from authenticated;
 grant update (name, url, interval_hours, enabled, updated_at) on public.ingest_sources to authenticated;
 
-grant select, insert on public.ingest_candidates to authenticated;
+grant select on public.ingest_candidates to authenticated;
+revoke insert on public.ingest_candidates from authenticated;
 revoke update on public.ingest_candidates from authenticated;
 grant update (status) on public.ingest_candidates to authenticated;
