@@ -35,6 +35,7 @@ install -d -o root -g detail-page -m 0750 /opt/detail-page-studio
 install -d -o root -g detail-page -m 0750 /opt/detail-page-studio/releases
 install -d -o root -g detail-page -m 0750 /etc/detail-page-studio
 install -m 0644 "${script_dir}/detail-page-studio.service" /etc/systemd/system/detail-page-studio.service
+install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
 install -m 0640 -o root -g detail-page "${script_dir}/app.env.example" /etc/detail-page-studio/app.env.example
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
@@ -51,6 +52,7 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 systemctl daemon-reload
 systemctl enable detail-page-studio.service
+systemctl enable fixup-image-agent-worker.service
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
 echo "Host files installed for ${domain}."

@@ -1,0 +1,26 @@
+[Unit]
+Description=Fixup Image Agent content collector worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=detail-page
+Group=detail-page
+WorkingDirectory=/opt/detail-page-studio/current
+EnvironmentFile=/etc/detail-page-studio/app.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/pnpm --filter @fixup/worker start
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
