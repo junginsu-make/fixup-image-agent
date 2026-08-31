@@ -1,0 +1,67 @@
+/*
+ * create-theme.css
+ *
+ * 이식한 pdp-maker module CSS를 위한 호환 변수 레이어.
+ * 원본 pdp-maker globals.css의 레거시 토큰 이름을 공통 @fixup/ui
+ * 디자인 토큰에 매핑해, 옛 팔레트를 하드코딩하지 않고도 module CSS가
+ * 그대로 동작하게 한다.
+ *
+ * 범위(scope): .create-root (= /create 최상위 래퍼)에만 적용해
+ * 전역으로 새지 않게 한다.
+ *
+ * 주의: --foreground/--primary/--background/--card/--border/--accent/--radius
+ * 등은 이미 전역 토큰으로 존재하므로 여기서 재정의하지 않는다(자기참조 금지).
+ * .create-root 하위에서 var(--foreground) 등은 전역 값을 그대로 상속한다.
+ * 여기서는 "레거시 전용" 이름만 전역 토큰에 매핑한다.
+ *
+ * 2026-07-21: --muted 매핑을 제거했다. 전역에서 --muted 는 "표면"인데
+ * 여기서 전경색으로 덮어써, /create 하위 전체의 bg-muted 가 어두운
+ * 글자색으로 칠해지고 있었다. module CSS 는 --muted-foreground 를 직접 쓴다.
+ */
+
+.create-root {
+  /* 배경 표면 */
+  --bg: var(--background);
+  --bg-soft: color-mix(in srgb, var(--background) 80%, var(--card) 20%);
+  --panel: var(--card);
+  --panel-solid: var(--card);
+
+  /* 텍스트 */
+  --ink: var(--foreground);
+
+  /* 경계선 */
+  --line: var(--border);
+
+  /* 네이비/블루 계열 → foreground 패밀리로 매핑 */
+  --navy: var(--foreground);
+  --navy-deep: color-mix(in srgb, var(--foreground) 90%, black 10%);
+
+  /* 브랜드 틸 (원본 #14736c / #157f6e) → 공통 primary */
+  --teal: var(--primary);
+  --teal-soft: color-mix(in srgb, var(--primary) 14%, transparent 86%);
+
+  /* 골드/로즈 따뜻한 강조색 (테마 무관 유지) */
+  --gold: #bd8a43;
+  --gold-soft: rgba(189, 138, 67, 0.12);
+  --rose: #ae6c63;
+
+  /* 그림자 */
+  --shadow: 0 28px 70px rgba(18, 33, 47, 0.12);
+
+  /* 반경 (레거시 전용 스케일) */
+  --radius-xl: 32px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+}
+
+/* ── 다크 모드: 강조색/그림자만 보정 (나머지는 전역 토큰이 자동 반영) ── */
+.dark .create-root {
+  --bg-soft: color-mix(in srgb, var(--background) 70%, var(--card) 30%);
+  --navy-deep: color-mix(in srgb, var(--foreground) 85%, white 15%);
+  --teal-soft: color-mix(in srgb, var(--primary) 18%, transparent 82%);
+  --gold: #c89a55;
+  --gold-soft: rgba(200, 154, 85, 0.15);
+  --rose: #c07a72;
+  --shadow: 0 28px 70px rgba(0, 0, 0, 0.38);
+}

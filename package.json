@@ -1,0 +1,24 @@
+{
+  "name": "fixup-image-agent",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "pnpm --filter @fixup/web dev",
+    "build": "pnpm --filter @fixup/web build",
+    "build:ec2": "node scripts/build-ec2.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm --filter @fixup/web lint",
+    "test": "pnpm -r test"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": ">=8.5.12",
+      "protobufjs": "7.6.5",
+      "sharp": "0.35.0"
+    }
+  },
+  "devDependencies": {
+    "tsx": "^4.23.1",
+    "vitest": "^4.1.10"
+  }
+}

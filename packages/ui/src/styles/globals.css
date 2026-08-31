@@ -1,0 +1,199 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─────────────────────────────────────────────────────────────
+   디자인 토큰 — 2026-07-21 개편
+   따뜻한 종이 톤(Parchment/Ivory) + 초록 강조.
+   근거: docs/superpowers/specs/2026-07-21-ui-overhaul-design.md §2·§3
+
+   원칙 (설계 §2)
+   1. 화면당 강조 요소는 하나
+   2. 순수 검정·순수 흰색을 쓰지 않는다
+   3. 라운드는 8~24px 안에서만
+   4. 그림자 대신 링(ring). 떠 있어야 하는 것만 elevate
+   5. 그라디언트 금지
+
+   ⚠️ 표면(배경) 값을 하드코딩하지 말 것. 다크모드가 깨지는 원인이 그거였다.
+      반드시 --card / --background / --muted 토큰을 쓴다.
+   ───────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    /* 표면 */
+    --background: #f5f4ed;         /* Parchment — 페이지 */
+    --foreground: #141413;         /* Near Black — 순수 검정 아님 */
+    --card: #faf9f5;               /* Ivory — 카드 */
+    --card-foreground: #141413;
+    --popover: #faf9f5;
+    --popover-foreground: #141413;
+    --muted: #efeee7;
+    --muted-foreground: #5e5d59;   /* Olive Gray */
+    --subtle-foreground: #87867f;  /* Stone Gray — 메타/캡션 */
+    --border: #e8e6dc;             /* Border Warm */
+    --border-soft: #f0eee6;        /* Border Cream */
+    --input: #e8e6dc;
+
+    /* 강조 — 자미·플럼 (운영자 결정 2026-07-22) */
+    --primary: #B0446A;
+    --primary-foreground: #ffffff;
+    --primary-soft: rgba(176, 68, 106, 0.10);
+    --primary-ring: rgba(176, 68, 106, 0.35);
+
+    --secondary: #efeee7;
+    --secondary-foreground: #141413;
+    --accent: #eceae0;
+    --accent-foreground: #141413;
+
+    /* 상태 */
+    --destructive: #b0453c;
+    --destructive-foreground: #ffffff;
+    --success: #2f7d5f;
+    --warning: #b07d2a;
+    --ring: #B0446A;
+
+    /* 캔버스 — 생성된 상세페이지가 놓이는 바닥. 다크모드에서도 밝게 유지한다
+       (상세페이지 자체는 흰 배경 산출물이므로 어둡게 만들면 실제와 달라진다) */
+    --canvas: #ffffff;
+
+    /* 라운드 — 8~24px */
+    --radius: 14px;
+
+    /* 고도 — 그림자 대신 링 */
+    --shadow-ring: 0 0 0 1px var(--border);
+    --shadow-elevate: 0 4px 24px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark {
+    --background: #1c1b19;
+    --foreground: #eceae2;
+    --card: #26251f;
+    --card-foreground: #eceae2;
+    --popover: #26251f;
+    --popover-foreground: #eceae2;
+    --muted: #2f2e26;
+    --muted-foreground: #a8a69c;
+    --subtle-foreground: #8a887f;
+    --border: #3a382f;
+    --border-soft: #332f28;
+    --input: #3a382f;
+
+    --primary: #C96A8A;
+    --primary-foreground: #0d1b17;
+    --primary-soft: rgba(201, 106, 138, 0.14);
+    --primary-ring: rgba(201, 106, 138, 0.38);
+
+    --secondary: #2f2e26;
+    --secondary-foreground: #eceae2;
+    --accent: #343228;
+    --accent-foreground: #eceae2;
+
+    --destructive: #d8635a;
+    --destructive-foreground: #1c1b19;
+    --success: #4aa87f;
+    --warning: #d0a04a;
+    --ring: #C96A8A;
+
+    --canvas: #f5f4ed;
+
+    --shadow-ring: 0 0 0 1px var(--border);
+    --shadow-elevate: 0 4px 24px rgba(0, 0, 0, 0.38);
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-ring: var(--ring);
+  --color-canvas: var(--canvas);
+
+  /* 라운드 스케일 — 8 / 12 / 14 / 24 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: var(--radius);
+  --radius-xl: 24px;
+
+  /* 고도 */
+  --shadow-ring: var(--shadow-ring);
+  --shadow-elevate: var(--shadow-elevate);
+
+  /* 타입 스케일 — 이전에는 없어서 페이지마다 임의로 정했다 */
+  --text-display: 30px;
+  --text-display--line-height: 1.25;
+  --text-display--font-weight: 800;
+  --text-display--letter-spacing: -0.02em;
+
+  --text-h1: 22px;
+  --text-h1--line-height: 1.35;
+  --text-h1--font-weight: 800;
+  --text-h1--letter-spacing: -0.02em;
+
+  --text-h2: 17px;
+  --text-h2--line-height: 1.4;
+  --text-h2--font-weight: 800;
+
+  --text-h3: 14px;
+  --text-h3--line-height: 1.45;
+  --text-h3--font-weight: 800;
+
+  --text-body: 14px;
+  --text-body--line-height: 1.6;
+
+  --text-sm: 13px;
+  --text-sm--line-height: 1.55;
+
+  --text-xs: 12px;
+  --text-xs--line-height: 1.5;
+
+  --text-meta: 11px;
+  --text-meta--line-height: 1.45;
+  --text-meta--font-weight: 700;
+  --text-meta--letter-spacing: 0.04em;
+
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui,
+    sans-serif;
+}
+
+/* 진행률을 알 수 없는 작업(AI 분석)의 대기 막대.
+   가짜 퍼센트를 보여주는 것보다 정직하다. */
+@keyframes pdp-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}

@@ -1,0 +1,18 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.refs/
+*.tsbuildinfo
+.vercel
+dist/
+
+# 시크릿 (.env* 패턴이 못 잡는 것들 — 실제 키/비번/토큰 원문)
+env.local.md
+env*.md
+.secrets/
+
+# 임시 산출물
+.playwright-mcp/
+.remember/tmp/
+frontend/

@@ -1,0 +1,95 @@
+name: Build EC2 release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Verify public production variables
+        shell: bash
+        run: |
+          missing=0
+          for name in NEXT_PUBLIC_SITE_URL NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY NEXT_PUBLIC_TURNSTILE_SITE_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing GitHub Actions variable: ${name}" >&2
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build Linux standalone runtime
+        run: pnpm build:ec2
+
+      - name: Verify runtime contents
+        shell: bash
+        run: |
+          test -f dist/ec2/apps/web/server.js
+          if find dist/ec2 -name '.env*' -print -quit | grep -q .; then
+            echo 'Runtime artifact contains an .env file.' >&2
+            exit 1
+          fi
+          # 링크 자체는 있어야 한다 — pnpm 이 그 구조로 모듈을 해석한다.
+          # 막아야 하는 것은 러너의 절대 경로를 가리키는 링크다. 그런 아티팩트가
+          # 운영까지 갔다가 "Cannot find module 'next'" 로 죽었다(2026-07-28).
+          if find dist/ec2 -type l -lname '/*' -print -quit | grep -q .; then
+            echo 'Runtime artifact has absolute symlinks:' >&2
+            find dist/ec2 -type l -lname '/*' -printf '  %p -> %l\n' | head -10 >&2
+            exit 1
+          fi
+          # 끊어진 링크도 막는다.
+          if find dist/ec2 -type l ! -exec test -e {} \; -print -quit | grep -q .; then
+            echo 'Runtime artifact has broken symlinks:' >&2
+            find dist/ec2 -type l ! -exec test -e {} \; -printf '  %p -> %l\n' | head -10 >&2
+            exit 1
+          fi
+          # 실행에 꼭 필요한 모듈에 실제로 도달하는지 확인한다.
+          test -f dist/ec2/apps/web/node_modules/next/package.json
+          tar -czf detail-page-studio-${GITHUB_SHA::12}.tar.gz -C dist/ec2 .
+          tar -czf detail-page-studio-ops-${GITHUB_SHA::12}.tar.gz deploy/ec2
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: detail-page-studio-ec2-${{ github.sha }}
+          path: |
+            detail-page-studio-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
