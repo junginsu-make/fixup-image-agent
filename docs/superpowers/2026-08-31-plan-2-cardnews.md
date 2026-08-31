@@ -15,7 +15,7 @@
 
 **Spec:** `docs/2026-08-31-sns-integration-design.md` (§6)
 
-**Prerequisite:** 계획 1 이 끝나 있어야 한다. 라이브러리 묶음 세트와 수집함이 없으면 이 계획의 절반이 성립하지 않는다.
+**Prerequisite:** 계획 1 이 끝나 있어야 한다. 로컬 Supabase 가 떠 있어야 한다(계획 1 Task 2). 라이브러리 묶음 세트와 수집함이 없으면 이 계획의 절반이 성립하지 않는다.
 
 ## Global Constraints
 
@@ -35,7 +35,9 @@
   로컬 디스크에 쓰지 않는다. 경로 첫 칸이 `user_id` 라 기존 Storage 정책이 그대로 적용된다.
 - **`place_as_is` 와 사용자가 올린 마지막 장은 검수하지 않는다.** AI 를 거치지 않은 원본이다.
 - **「원본 그대로 쓸 장」의 위치는 사람이 정한다.** AI 에게 맡기지 않는다.
-- 명령: `pnpm typecheck` · `pnpm test` · `pnpm build`
+- **운영 Supabase 와 EC2 를 건드리지 않는다.** 마이그레이션은 `pnpm db:reset` 으로 로컬에만 적용한다.
+  `supabase db push` 금지. 운영 적용과 배포는 **계획 4** 에서 마지막에 한다.
+- 명령: `pnpm typecheck` · `pnpm test` · `pnpm build` · `pnpm db:reset`
 
 ---
 
@@ -1438,9 +1440,14 @@ revoke update on public.sns_cards from authenticated;
 grant update (copy, prompt, asset_path, status, review, error) on public.sns_cards to authenticated;
 ```
 
-- [ ] **Step 4: 통과 확인 후 적용**
+- [ ] **Step 4: 통과 확인 후 로컬 DB 에 적용**
 
-Run: `pnpm test` → `supabase db push`
+```bash
+pnpm test
+pnpm db:reset
+```
+
+**`db push` 를 쓰지 않는다.** 운영 적용은 계획 4 에서 한다.
 
 - [ ] **Step 5: 커밋**
 

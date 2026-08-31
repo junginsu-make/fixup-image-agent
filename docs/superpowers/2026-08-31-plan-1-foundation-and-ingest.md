@@ -7,7 +7,7 @@
 > `superpowers:executing-plans` 스킬을 쓰세요. **다른 환경이면 위 순서를 그대로 따르면 됩니다 —
 > 스킬은 필수가 아닙니다.**
 
-**Goal:** `detail-page-studio` 를 새 저장소 `Fixup Image Agent` 로 복제해 새 EC2 에 올리고, 스텝 UI 를 통일한 뒤, 수집 미디어 · 수집함 · 참고 이미지 라이브러리를 더한다.
+**Goal:** `detail-page-studio` 를 새 저장소 `Fixup Image Agent` 로 복제하고, 스텝 UI 를 통일한 뒤, 수집 미디어 · 수집함 · 참고 이미지 라이브러리를 더한다.
 
 **Architecture:** pnpm 모노레포를 그대로 유지한다. `packages/ingest-core` 를 새로 만들어 수집 도메인을 담고, `apps/worker` 를 systemd 서비스로 따로 돌린다. Supabase 는 상세페이지 것을 그대로 쓰되 **새 테이블만 추가**한다. 화면은 기존 `packages/ui` 의 shadcn 컴포넌트로 만든다.
 
@@ -17,6 +17,9 @@
 
 ## Global Constraints
 
+- **운영 Supabase 와 EC2 를 건드리지 않는다.** 개발과 테스트는 전부 로컬에서 한다.
+  마이그레이션은 파일로 쓰고 `pnpm db:reset` 으로 **로컬에만** 적용한다. `supabase db push` 금지.
+  운영 적용과 배포는 **계획 4** 에서 마지막에 한다.
 - **같은 Supabase 를 개인 배포와 공유한다.** 새 테이블만 추가한다. **기존 테이블의 컬럼을 바꾸거나 지우지 않는다.** 어기면 개인 배포(`detail-page-studio`)가 죽는다.
 - 마이그레이션 파일명은 `YYYYMMDDNNNN_name.sql`. **우리는 `202608` 부터 쓴다.** 기존 저장소는 `202607` 까지 썼다.
 - **컬럼 권한은 회수가 아니라 허용 목록으로 쓴다.** `revoke update on <table>` 을 먼저 하고 `grant update (col, ...)` 를 준다. 테이블 GRANT 뒤의 컬럼 REVOKE 는 아무 일도 하지 않는다.
@@ -129,94 +132,100 @@ Expected: 커밋 1개, private 저장소
 
 ---
 
-## Task 2: 새 EC2 에 올린다
+## Task 2: 로컬 Supabase 를 띄운다
+
+**운영 Supabase 를 건드리지 않는다.** 개발과 테스트는 로컬 Postgres 에서 한다.
+운영 적용은 계획 4 에서 마지막으로 한다.
 
 **Files:**
-- Modify: `deploy/ec2/Caddyfile.template` · `deploy/ec2/app.env.example` · `deploy/ec2/*.service`
-- Create: `docs/DEPLOY.md`
+- Create: `apps/web/.env.local` (git 에 올리지 않는다)
+- Create: `docs/LOCAL_DEV.md`
+- Modify: `package.json` (스크립트 추가)
 
 **Interfaces:**
 - Consumes: Task 1 의 저장소
-- Produces: 도는 웹 서비스. 기존 상세페이지와 **다른 인스턴스**
+- Produces: 로컬에서 도는 앱과 DB. 이후 모든 태스크가 여기서 검증된다
 
-- [ ] **Step 1: 서비스 이름을 바꾼다**
-
-`deploy/ec2/detail-page-studio.service` 를 `fixup-image-agent.service` 로 옮기고 안의 이름·경로를 바꾼다.
-`deploy-release.sh` · `rollback-release.sh` · `install-host.sh` 안의 서비스명도 함께 바꾼다.
+- [ ] **Step 1: 로컬 Supabase 를 시작한다**
 
 ```bash
-grep -rn "detail-page-studio" deploy/ scripts/
+npx supabase start
 ```
 
-**남는 것이 없어야 한다.** 하나라도 남으면 개인 배포의 서비스를 건드릴 수 있다.
+씨앗 저장소의 `supabase/migrations/` 가 **자동으로 전부 적용된다.**
+회원·라이브러리·캐릭터·비용 테이블과 Storage 버킷이 로컬에 생긴다.
 
-- [ ] **Step 2: 환경변수 표를 만든다**
-
-`deploy/ec2/app.env.example` 에 아래를 더한다. **값은 넣지 않는다.**
+출력에 나오는 값을 적어 둔다:
 
 ```
-# 이미지 생성
+API URL          http://127.0.0.1:54321
+anon key         eyJ...
+service_role key eyJ...
+Studio URL       http://127.0.0.1:54323
+```
+
+Docker 가 필요하다. 없으면 Docker Desktop 을 먼저 설치한다.
+
+- [ ] **Step 2: 환경변수를 로컬로 맞춘다**
+
+`apps/web/.env.local` 을 만든다. **이 파일은 git 에 올리지 않는다** — `.gitignore` 에 이미 있는지 확인한다.
+
+```
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<anon key>
+SUPABASE_SECRET_KEY=<service_role key>
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+# 실제 키가 필요한 것들 — 없으면 그 기능만 못 쓴다
 FAL_KEY=
-
-# 기획·원고 (메인)
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-5
-
-# 기획·원고 백업 · 검수 · 웹 검색
 OPENAI_API_KEY=
 OPENAI_DRAFT_MODEL=gpt-5.6-sol
-OPENAI_RESEARCH_MODEL=
-OPENAI_VISION_REVIEW_MODEL=
-
-# 유튜브 자막 우회 (EC2 IP 차단 때문에 필수)
 APIFY_TOKEN=
 APIFY_YOUTUBE_ACTOR=automation-lab~youtube-transcript
 ```
 
-**Supabase 값은 기존 상세페이지와 같은 것을 넣는다.** 같은 DB 를 쓴다.
+- [ ] **Step 3: 편의 스크립트를 더한다**
 
-- [ ] **Step 3: 새 EC2 인스턴스를 만들고 설치한다**
+루트 `package.json` 에:
 
-`docs/DEPLOY.md` 에 절차를 적는다:
-
-```markdown
-# 배포
-
-## 처음 한 번
-1. EC2 인스턴스 생성 (t3.small 이상 — 워커가 함께 돈다)
-2. 탄력적 IP 할당
-3. 보안 그룹: 22(내 IP) · 80 · 443
-4. `deploy/ec2/install-host.sh` 실행 — Node · Caddy · systemd 설치
-5. `/etc/fixup-image-agent/app.env` 에 환경변수 기록
-6. Caddy 에 도메인 등록 (HTTPS 자동)
-
-## 매 배포
-```bash
-node scripts/prepare-ec2-release.mjs
-bash deploy/ec2/deploy-release.sh
+```json
+{
+  "scripts": {
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:studio": "open http://127.0.0.1:54323"
+  }
+}
 ```
 
-## 되돌리기
-```bash
-bash deploy/ec2/rollback-release.sh
-```
-```
+**`db:reset` 은 로컬 DB 를 비우고 마이그레이션을 처음부터 다시 적용한다.**
+새 마이그레이션을 쓸 때마다 이걸로 확인한다. `db push` 는 **쓰지 않는다** — 그건 운영용이다.
 
-**개인 배포와 다른 인스턴스여야 한다.** 같은 서버에 두 서비스를 올리지 않는다.
-
-- [ ] **Step 4: 확인**
+- [ ] **Step 4: 로컬에서 도는지 확인한다**
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" https://<도메인>/login
+pnpm --filter @fixup/web dev
 ```
 
-Expected: 200. 그리고 **상세페이지 계정으로 로그인이 된다.** 같은 Supabase 를 보기 때문이다.
+`http://localhost:3000/signup` 에서 계정을 하나 만들고 `/create` 까지 들어가 본다.
+**로컬 회원이라 운영 회원과 무관하다.**
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 5: 문서로 남기고 커밋한다**
+
+`docs/LOCAL_DEV.md` 에 위 절차를 적는다. 그리고:
 
 ```bash
-git add deploy scripts docs/DEPLOY.md
-git commit -m "chore(deploy): 새 EC2 배포 설정을 만든다"
+git add package.json docs/LOCAL_DEV.md
+git commit -m "chore(dev): 로컬 Supabase 로 개발하도록 준비한다"
+```
+
+**`.env.local` 이 커밋에 들어가지 않았는지 확인한다.**
+
+```bash
+git show --stat HEAD | grep -i env && echo "위험 — .env 가 커밋됐다" || echo "안전"
 ```
 
 ---
@@ -619,16 +628,15 @@ grant update (status) on public.ingest_candidates to authenticated;
 
 **사용자는 `last_error` 나 `next_poll_at` 을 바꿀 수 없다.** 워커가 service_role 로 쓴다.
 
-- [ ] **Step 4: 통과 확인 후 실제 DB 에 적용한다**
-
-Run: `pnpm --filter @fixup/ingest-core test`
-그다음:
+- [ ] **Step 4: 통과 확인 후 로컬 DB 에 적용한다**
 
 ```bash
-supabase db push
+pnpm --filter @fixup/ingest-core test
+pnpm db:reset
 ```
 
-**적용 전에 개인 배포가 살아 있는지 확인한다.** 새 테이블만 더하므로 영향이 없어야 한다.
+**`db push` 를 쓰지 않는다.** 운영 Supabase 적용은 계획 4 에서 마지막에 한다.
+`db:reset` 은 로컬 DB 를 비우고 마이그레이션을 처음부터 다시 적용해, SQL 이 실제로 도는지 확인한다.
 
 - [ ] **Step 5: 커밋**
 
@@ -1207,11 +1215,14 @@ revoke update on public.reference_set_items from authenticated;
 grant update (role, position) on public.reference_set_items to authenticated;
 ```
 
-- [ ] **Step 4: 통과 확인 후 적용**
+- [ ] **Step 4: 통과 확인 후 로컬 DB 에 적용**
 
-Run: `pnpm --filter @fixup/ingest-core test` → `supabase db push`
+```bash
+pnpm --filter @fixup/ingest-core test
+pnpm db:reset
+```
 
-**적용 뒤 개인 배포가 여전히 정상인지 확인한다.** 새 테이블만 더했으므로 영향이 없어야 한다.
+**`db push` 를 쓰지 않는다.** 운영 적용은 계획 4 에서 한다.
 
 - [ ] **Step 5: 커밋**
 
@@ -1324,7 +1335,7 @@ git commit -m "feat(library): 참고 이미지와 묶음 세트를 라이브러�
 # 이 계획이 끝나면
 
 ```
-새 저장소 · 새 EC2 에서 상세페이지와 리디자인이 그대로 돈다
+새 저장소가 생기고 로컬에서 상세페이지와 리디자인이 그대로 돈다
 두 도구의 스텝 막대가 같다
 소스를 등록하면 워커가 주기적으로 수집한다
 수집한 내용을 읽고 제작 후보로 고를 수 있다
@@ -1335,7 +1346,8 @@ git commit -m "feat(library): 참고 이미지와 묶음 세트를 라이브러�
 
 # 사람이 확인할 것
 
-- [ ] 상세페이지 계정으로 새 배포에 로그인이 된다
+- [ ] 로컬에서 계정을 만들고 `/create` 까지 들어가진다
 - [ ] `/create` 와 `/redesign` 의 스텝 막대가 같은 모양이다
-- [ ] 유튜브 채널 하나를 등록하고 **EC2 에서 실제로 자막이 수집되는지** 본다 (apify 경로)
-- [ ] 개인 배포(`detail-page-studio`)가 여전히 정상인지 본다 — 같은 DB 를 쓴다
+- [ ] 유튜브 채널 하나를 등록하고 **로컬에서 자막이 수집되는지** 본다
+      (집 IP 라 직접 자막이 될 수 있다. apify 경로는 EC2 에 올린 뒤 계획 4 에서 확인한다)
+- [ ] `.env.local` 이 커밋에 들어가지 않았다
