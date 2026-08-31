@@ -113,13 +113,13 @@ export function SourcesClient() {
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm("이 수집 소스를 삭제할까요?")) return;
+  async function remove(source: SourceItem) {
+    if (!window.confirm(`'${source.name}' 수집 소스를 삭제할까요?`)) return;
     try {
-      const response = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/sources/${source.id}`, { method: "DELETE" });
       const payload = await response.json() as { ok?: boolean; message?: string };
       if (!response.ok || !payload.ok) throw new Error(payload.message ?? "소스를 삭제하지 못했습니다.");
-      setSources((current) => current.filter((item) => item.id !== id));
+      setSources((current) => current.filter((item) => item.id !== source.id));
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "소스를 삭제하지 못했습니다.");
@@ -181,7 +181,7 @@ export function SourcesClient() {
                 <thead><tr className="border-b text-muted-foreground"><th className="px-3 py-3 font-medium">이름</th><th className="px-3 py-3 font-medium">종류</th><th className="px-3 py-3 font-medium">주기</th><th className="px-3 py-3 font-medium">마지막 확인</th><th className="px-3 py-3 font-medium">상태</th><th className="px-3 py-3" /></tr></thead>
                 <tbody>{sources.map((source) => (
                   <React.Fragment key={source.id}>
-                    <tr className="border-b align-top"><td className="px-3 py-4 font-bold">{source.name}<p className="mt-1 max-w-sm truncate text-xs font-normal text-subtle-foreground">{source.url}</p></td><td className="px-3 py-4">{KIND_LABELS[source.kind]}</td><td className="px-3 py-4">{source.intervalHours}시간</td><td className="px-3 py-4 text-muted-foreground">{source.lastCheckedAt ? new Date(source.lastCheckedAt).toLocaleString("ko-KR") : "아직 확인 전"}</td><td className="px-3 py-4"><Button size="sm" variant={source.enabled ? "default" : "secondary"} onClick={() => void patch(source.id, { enabled: !source.enabled })}>{source.enabled ? "켬" : "끔"}</Button></td><td className="px-3 py-4 text-right"><Button size="icon" variant="ghost" aria-label={`${source.name} 삭제`} onClick={() => void remove(source.id)}><Trash2 className="size-4" /></Button></td></tr>
+                    <tr className="border-b align-top"><td className="px-3 py-4 font-bold">{source.name}<p className="mt-1 max-w-sm truncate text-xs font-normal text-subtle-foreground">{source.url}</p></td><td className="px-3 py-4">{KIND_LABELS[source.kind]}</td><td className="px-3 py-4">{source.intervalHours}시간</td><td className="px-3 py-4 text-muted-foreground">{source.lastCheckedAt ? new Date(source.lastCheckedAt).toLocaleString("ko-KR") : "아직 확인 전"}</td><td className="px-3 py-4"><Button size="sm" variant={source.enabled ? "default" : "secondary"} onClick={() => void patch(source.id, { enabled: !source.enabled })}>{source.enabled ? "켬" : "끔"}</Button></td><td className="px-3 py-4 text-right"><Button size="icon" variant="ghost" aria-label={`${source.name} 삭제`} onClick={() => void remove(source)}><Trash2 className="size-4" /></Button></td></tr>
                     {source.lastError ? <tr><td colSpan={6} className="px-3 pb-4"><div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive"><AlertTriangle className="mt-0.5 size-4 flex-none" /><div><strong className="text-sm">마지막 수집 오류</strong><p className="mt-1 text-sm leading-6">{source.lastError}</p></div></div></td></tr> : null}
                   </React.Fragment>
                 ))}</tbody>
