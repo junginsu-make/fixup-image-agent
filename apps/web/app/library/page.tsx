@@ -4,12 +4,13 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ImageIcon, ImagePlus, Loader2, Trash2 } from "lucide-react";
-import { Badge, Button, Card } from "@fixup/ui";
+import { Badge, Button, Card, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
 import { planUploadBatches } from "@fixup/pdp-core";
 import { loadLibrary, deleteLibraryItem, getPdpResultImages, getAccountItemImages } from "../../lib/library";
 import type { PdpResultImage } from "../../lib/library";
 import type { LibraryItem } from "@fixup/shared";
 import { ResultViewer } from "./ResultViewer";
+import { ReferencesTab } from "./references-tab";
 
 function formatDate(ms: number): string {
   if (!ms) return "";
@@ -200,13 +201,25 @@ export default function LibraryPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">내 작업</h1>
+        <h1 className="text-2xl font-bold tracking-tight">라이브러리</h1>
         <p className="text-sm text-muted-foreground">
-          내 계정에 보관한 작업과 이 브라우저에 저장한 작업을 한곳에서 봅니다. 카드를 누르면 그 작업의 이미지를 모두 크게 보고 내려받을 수 있습니다. 카드마다 어디에 보관돼 있는지 표시되며, ‘이 브라우저에만 있음’은 브라우저 데이터를 지우면 사라집니다.
+          완성한 작업물과 카드뉴스·포스터 제작에 사용할 참고 이미지를 한 화면에서 관리합니다.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <Tabs defaultValue="works" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="works">작업물</TabsTrigger>
+          <TabsTrigger value="references">참고 이미지</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="works" className="space-y-6">
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold">내 작업</h2>
+            <p className="text-sm text-muted-foreground">내 계정과 이 브라우저에 저장한 작업입니다. ‘이 브라우저에만 있음’은 브라우저 데이터를 지우면 사라집니다.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
         <input
           ref={fileInput}
           type="file"
@@ -226,9 +239,9 @@ export default function LibraryPage() {
         <span className="text-xs text-muted-foreground">
           {uploadMessage || "밖에서 만든 이미지도 내 계정에 보관할 수 있습니다. 여러 장은 한 작업으로 묶입니다."}
         </span>
-      </div>
+          </div>
 
-      {loading ? (
+          {loading ? (
         <div className="flex items-center gap-2 py-16 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           저장된 작업을 불러오는 중입니다.
@@ -327,7 +340,13 @@ export default function LibraryPage() {
             );
           })}
         </div>
-      )}
+          )}
+        </TabsContent>
+
+        <TabsContent value="references">
+          <ReferencesTab />
+        </TabsContent>
+      </Tabs>
 
       {viewer ? (
         <ResultViewer
