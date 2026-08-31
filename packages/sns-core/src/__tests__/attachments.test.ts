@@ -95,6 +95,16 @@ describe("첨부 검증", () => {
     expect(validateAttachments(list, 8, 6).join("\n")).toContain("2~5");
   });
 
+  it("원본 그대로 쓸 장이 속지 자리보다 많으면 장수와 자리 수를 알린다", () => {
+    const list = [
+      ...Array.from({ length: 6 }, () => item("place_as_is")),
+      item("style_reference", { role: "cover" }),
+    ];
+    const message = validateAttachments(list, 8, 4).join("\n");
+    expect(message).toContain("6장");
+    expect(message).toContain("2자리");
+  });
+
   it("문제가 없으면 빈 배열", () => {
     expect(validateAttachments([item("style_reference", { role: "cover" })], 8)).toEqual([]);
   });

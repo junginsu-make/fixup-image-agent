@@ -48,6 +48,51 @@ export function groupAttachments(list: Attachment[]): GroupedAttachments {
   };
 }
 
+export interface PlaceAsIsPlacement {
+  id: string;
+  bodySlot?: number;
+}
+
+/** 표지와 마지막 장을 뺀 실제 속지 자리 수. */
+export function placeAsIsCapacity(totalCards: number): number {
+  return Math.max(0, totalCards - 2);
+}
+
+export function validatePlaceAsIsCapacity(count: number, totalCards: number): string[] {
+  const capacity = placeAsIsCapacity(totalCards);
+  return count > capacity
+    ? [`원본 그대로 쓸 장은 ${count}장이지만 속지 자리는 ${capacity}자리뿐입니다.`]
+    : [];
+}
+
+export function validatePlaceAsIsSlots(
+  items: PlaceAsIsPlacement[],
+  totalCards: number,
+): string[] {
+  const issues = validatePlaceAsIsCapacity(items.length, totalCards);
+  const lastBodySlot = totalCards - 1;
+  const specifiedSlots = items.flatMap((item) =>
+    item.bodySlot === undefined ? [] : [item.bodySlot],
+  );
+
+  for (const slot of specifiedSlots) {
+    if (!Number.isInteger(slot) || slot < 2 || slot > lastBodySlot) {
+      issues.push(`원본 그대로 쓸 장의 속지 자리는 2~${lastBodySlot}번이어야 합니다.`);
+      break;
+    }
+  }
+
+  const seen = new Set<number>();
+  for (const slot of specifiedSlots) {
+    if (seen.has(slot)) {
+      issues.push(`원본 그대로 쓸 장의 ${slot}번 자리가 겹칩니다.`);
+      break;
+    }
+    seen.add(slot);
+  }
+  return issues;
+}
+
 /** 만들기 전에 막는다. 생성 뒤에 알면 돈만 나간다. */
 export function validateAttachments(list: Attachment[], max: number, totalCards?: number): string[] {
   const issues: string[] = [];
@@ -66,24 +111,7 @@ export function validateAttachments(list: Attachment[], max: number, totalCards?
     issues.push("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
   }
   if (totalCards !== undefined) {
-    const lastBodySlot = totalCards - 1;
-    const specifiedSlots = grouped.placeAsIs.flatMap((item) =>
-      item.bodySlot === undefined ? [] : [item.bodySlot],
-    );
-    for (const slot of specifiedSlots) {
-      if (!Number.isInteger(slot) || slot < 2 || slot > lastBodySlot) {
-        issues.push(`원본 그대로 쓸 장의 속지 자리는 2~${lastBodySlot}번이어야 합니다.`);
-        break;
-      }
-    }
-    const seen = new Set<number>();
-    for (const slot of specifiedSlots) {
-      if (seen.has(slot)) {
-        issues.push(`원본 그대로 쓸 장의 ${slot}번 자리가 겹칩니다.`);
-        break;
-      }
-      seen.add(slot);
-    }
+    issues.push(...validatePlaceAsIsSlots(grouped.placeAsIs, totalCards));
   }
   return issues;
 }
