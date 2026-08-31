@@ -12,7 +12,6 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: "all", label: "전체" },
   { value: "new", label: "새 소재" },
   { value: "picked", label: "제작 후보" },
-  { value: "requested", label: "제작 요청함" },
   { value: "archived", label: "보관됨" },
 ];
 

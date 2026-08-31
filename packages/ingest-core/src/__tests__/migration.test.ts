@@ -54,6 +54,10 @@ describe("수집 마이그레이션", () => {
     expect(sql).not.toMatch(/grant [^;]*insert[^;]*on public\.ingest_candidates/);
   });
 
+  it("후보 상태는 새 소재·제작 후보·보관뿐이다", () => {
+    expect(sql).toContain("check (status in ('new','picked','archived'))");
+  });
+
   it("user_id 는 수정 대상 컬럼에 들어가지 않는다", () => {
     for (const grant of sql.match(/grant update \(([^)]+)\)/g) ?? []) {
       expect(grant).not.toContain("user_id");

@@ -1,11 +1,9 @@
 import { z } from "zod";
 
-export const CandidateStatusSchema = z.enum(["new", "picked", "requested", "archived"]);
-export const CandidatePatchStatusSchema = z.enum(["new", "picked", "archived"]);
-export const CandidatePatchSchema = z.object({ status: CandidatePatchStatusSchema }).strict();
+export const CandidateStatusSchema = z.enum(["new", "picked", "archived"]);
+export const CandidatePatchSchema = z.object({ status: CandidateStatusSchema }).strict();
 
 export type CandidateStatus = z.infer<typeof CandidateStatusSchema>;
-export type CandidatePatchStatus = z.infer<typeof CandidatePatchStatusSchema>;
 export type CandidatePatch = z.infer<typeof CandidatePatchSchema>;
 
 export function candidateActions(status: CandidateStatus): Array<{ status: CandidateStatus; label: string }> {

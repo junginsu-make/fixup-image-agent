@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { handleCandidatePatch } from "../candidate-handler";
-import { CandidatePatchSchema, candidateActions, candidateToDraft } from "../schema";
+import { CandidatePatchSchema, CandidateStatusSchema, candidateActions, candidateToDraft } from "../schema";
 import { createCandidateService, type CandidateRecord, type CandidateRepository } from "../candidate-service";
 
 describe("후보 수정", () => {
@@ -14,13 +14,17 @@ describe("후보 수정", () => {
     expect(CandidatePatchSchema.safeParse({ status: "삭제됨" }).success).toBe(false);
   });
 
-  it("requested 상태는 사용자가 넣을 수 없다", async () => {
+  it("후보 상태는 새 소재·제작 후보·보관뿐이다", () => {
+    expect(CandidateStatusSchema.options).toEqual(["new", "picked", "archived"]);
+  });
+
+  it("허용하지 않는 상태 PATCH 는 400 이다", async () => {
     let updateCalls = 0;
     const response = await handleCandidatePatch(
       new Request("http://localhost/api/candidates/c1", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "requested" }),
+        body: JSON.stringify({ status: "완료" }),
       }),
       "c1",
       {

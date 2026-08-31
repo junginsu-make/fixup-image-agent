@@ -1,8 +1,8 @@
-import type { CandidatePatchStatus } from "./schema";
+import type { CandidateStatus } from "./schema";
 import { CandidatePatchSchema } from "./schema";
 
 interface CandidatePatchService {
-  updateStatus(id: string, status: CandidatePatchStatus): Promise<unknown>;
+  updateStatus(id: string, status: CandidateStatus): Promise<unknown>;
 }
 
 export async function handleCandidatePatch(

@@ -32,7 +32,7 @@ create table public.ingest_candidates (
   thumbnail_url text,
   published_at timestamptz,
   collected_at timestamptz not null default now(),
-  status text not null default 'new' check (status in ('new','picked','requested','archived')),
+  status text not null default 'new' check (status in ('new','picked','archived')),
   -- 같은 소스에서 같은 글을 두 번 담지 않는다.
   unique (source_id, external_id)
 );

@@ -46,5 +46,5 @@ export function CandidateDetail({ candidate, onClose, onStatus }: {
 }
 
 export function statusLabel(status: CandidateRecord["status"]): string {
-  return { new: "새 소재", picked: "제작 후보", requested: "제작 요청함", archived: "보관됨" }[status];
+  return { new: "새 소재", picked: "제작 후보", archived: "보관됨" }[status];
 }
