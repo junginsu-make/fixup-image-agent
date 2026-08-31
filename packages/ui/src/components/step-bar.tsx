@@ -41,7 +41,7 @@ export function StepBar({ steps, current, onJump }: {
   onJump?: (id: string) => void;
 }) {
   return (
-    <ol className="mb-4 flex flex-wrap items-center gap-x-1.5 gap-y-2 rounded-lg bg-card p-2.5 shadow-[var(--shadow-ring)]">
+    <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2 rounded-lg bg-card p-2.5 shadow-[var(--shadow-ring)]">
       {steps.map((step, index) => {
         const state = stepState(steps, current, step.id);
         const jumpable = Boolean(onJump) && canJumpTo(steps, current, step.id);

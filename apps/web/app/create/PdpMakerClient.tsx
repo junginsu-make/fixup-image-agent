@@ -641,18 +641,20 @@ export function PdpMakerClient() {
         </div>
       </div>
 
-      <StepBar
-        steps={CREATE_STEPS[startMode]}
-        current={
-          startMode === "text"
-            ? textStage === "input"
-              ? "upload"
-              : "analyze"
-            : appState === "processing"
-              ? "analyze"
-              : "upload"
-        }
-      />
+      <div className="mb-4">
+        <StepBar
+          steps={CREATE_STEPS[startMode]}
+          current={
+            startMode === "text"
+              ? textStage === "input"
+                ? "upload"
+                : "analyze"
+              : appState === "processing"
+                ? "analyze"
+                : "upload"
+          }
+        />
+      </div>
 
       {/* 시작 방식. 사진이 없는 사람도 진입할 수 있어야 해서 두 갈래로 나눈다.
           2단계 이후 화면은 두 갈래가 동일하다. */}

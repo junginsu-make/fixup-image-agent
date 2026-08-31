@@ -2083,7 +2083,7 @@ export function PdpEditor({
         </div>
       </header>
 
-      <div onClick={stopShellClick}>
+      <div className="mb-4" onClick={stopShellClick}>
         <StepBar steps={CREATE_STEPS[startMode]} current={screen === "gallery" ? "sections" : "edit"} />
       </div>
 
