@@ -65,3 +65,4 @@ export { Toaster, toast } from "./components/toaster";
 export { AppShell } from "./components/app-shell";
 export { BrandMark } from "./components/brand-mark";
 export { ImageLightbox, type LightboxImage } from "./components/image-lightbox";
+export { StepBar, stepState, canJumpTo, type StepDefinition, type StepState } from "./components/step-bar";
