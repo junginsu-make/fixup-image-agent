@@ -36,6 +36,15 @@ describe("참고 이미지 마이그레이션", () => {
     expect(sql).toContain("check (role in ('cover','body','ending'))");
   });
 
+  it("표지와 엔딩은 세트마다 한 장뿐이다", () => {
+    expect(sql).toContain(
+      "create unique index reference_set_items_one_cover on public.reference_set_items(set_id) where role = 'cover'",
+    );
+    expect(sql).toContain(
+      "create unique index reference_set_items_one_ending on public.reference_set_items(set_id) where role = 'ending'",
+    );
+  });
+
   it("용도로 카드뉴스와 포스터를 가른다", () => {
     expect(sql).toContain("check (purpose in ('cardnews','poster','both'))");
   });

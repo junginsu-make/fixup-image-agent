@@ -35,6 +35,8 @@ create table public.reference_set_items (
 create index reference_images_user_idx on public.reference_images(user_id, created_at desc);
 create index reference_sets_user_idx on public.reference_sets(user_id, updated_at desc);
 create index reference_set_items_set_idx on public.reference_set_items(set_id, position);
+create unique index reference_set_items_one_cover on public.reference_set_items(set_id) where role = 'cover';
+create unique index reference_set_items_one_ending on public.reference_set_items(set_id) where role = 'ending';
 
 alter table public.reference_images enable row level security;
 alter table public.reference_sets enable row level security;
