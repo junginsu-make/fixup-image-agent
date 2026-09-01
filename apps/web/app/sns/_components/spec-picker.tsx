@@ -1,7 +1,8 @@
 "use client";
 
-import { CARD_RATIOS, IMAGE_MODELS, modelById, planSlots, unitPrice, type Attachment } from "@fixup/sns-core";
+import { CARD_RATIOS, IMAGE_MODELS, modelById, planSlots, type Attachment } from "@fixup/sns-core";
 import { Badge, Card, CardContent, Label } from "@fixup/ui";
+import { estimateCost } from "../cost-estimate";
 
 export interface SnsSpec {
   ratio: string;
@@ -11,28 +12,25 @@ export interface SnsSpec {
   modelId: string;
 }
 
-function generatedCount(total: number, attachments: Attachment[]): number {
-  const originals = attachments.filter((attachment) => attachment.kind === "place_as_is").length;
-  const ending = attachments.some((attachment) => attachment.kind === "ending") ? 1 : 0;
-  return Math.max(0, total - originals - ending);
-}
-
 export function estimateCostLabel(spec: SnsSpec, attachments: Attachment[]): string {
   const model = modelById(spec.modelId);
-  const ratio = CARD_RATIOS.find((entry) => entry.id === spec.ratio)!;
-  const price = unitPrice(model, "i2i", ratio.pixel);
   if (spec.cardCountMode === "fixed") {
-    const count = generatedCount(spec.cardCount!, attachments);
-    return `예상 비용 $${(price * count).toFixed(2)} · ${model.label} · AI 생성 ${count}장`;
+    const estimate = estimateCost({
+      ratio: spec.ratio,
+      modelId: spec.modelId,
+      totalCards: spec.cardCount!,
+      attachments,
+    });
+    return `예상 비용 $${estimate.usd.toFixed(2)} · ${model.label} · AI 생성 ${estimate.generatedCount}장`;
   }
   const slotPlan = planSlots({
     requested: "auto",
     placeAsIsCount: attachments.filter((attachment) => attachment.kind === "place_as_is").length,
     hasEndingImage: attachments.some((attachment) => attachment.kind === "ending"),
   });
-  const min = generatedCount(slotPlan.autoRange!.min, attachments);
-  const max = generatedCount(slotPlan.autoRange!.max, attachments);
-  return `예상 비용 $${(price * min).toFixed(2)}~$${(price * max).toFixed(2)} · ${model.label}`;
+  const min = estimateCost({ ratio: spec.ratio, modelId: spec.modelId, totalCards: slotPlan.autoRange!.min, attachments });
+  const max = estimateCost({ ratio: spec.ratio, modelId: spec.modelId, totalCards: slotPlan.autoRange!.max, attachments });
+  return `예상 비용 $${min.usd.toFixed(2)}~$${max.usd.toFixed(2)} · ${model.label}`;
 }
 
 export function SpecPicker({ spec, onChange, attachments }: {

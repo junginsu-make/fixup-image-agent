@@ -8,7 +8,7 @@ type ProjectRow = {
   user_id: string;
   candidate_id: string | null;
   title: string;
-  status: "draft";
+  status: SnsProjectRecord["status"];
   ratio: SnsProjectRecord["ratio"];
   language: SnsProjectRecord["language"];
   model_id: SnsProjectRecord["modelId"];
@@ -40,7 +40,7 @@ function record(row: ProjectRow): SnsProjectRecord {
     cardCountMode: row.card_count_mode,
     cardCount: row.card_count ?? undefined,
     toneNote: row.tone_note ?? undefined,
-    data: { source: row.data.source, attachments: row.data.attachments },
+    data: { source: row.data.source, attachments: row.data.attachments, flow: row.data.flow },
     slotPlan: row.data.slotPlan,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

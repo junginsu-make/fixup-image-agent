@@ -1,11 +1,12 @@
 import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment, type SlotPlan } from "@fixup/sns-core";
 import type { ProjectInput, ProjectSource } from "./schema";
+import type { SnsFlowState } from "../flow-service";
 
 export interface SnsProjectCreateRecord {
   userId: string;
   candidateId?: string;
   title: string;
-  status: "draft";
+  status: "draft" | "planning" | "copy_ready" | "generating" | "ready" | "failed";
   ratio: ProjectInput["ratio"];
   language: ProjectInput["language"];
   modelId: ProjectInput["modelId"];
@@ -15,6 +16,7 @@ export interface SnsProjectCreateRecord {
   data: {
     source: ProjectSource;
     attachments: Attachment[];
+    flow?: SnsFlowState;
   };
   slotPlan: SlotPlan;
 }

@@ -13,6 +13,7 @@ import type {
 } from "../../app/api/sources/source-service";
 import type { ReferenceImageRow } from "../../app/library/reference-upload";
 import type { SnsProjectCreateRecord, SnsProjectRecord, SnsProjectRepository } from "../../app/api/sns/projects/project-service";
+import type { SnsFlowState } from "../../app/api/sns/flow-service";
 
 interface LocalCandidateRow extends Omit<CandidateRecord, "source"> {
   userId: string;
@@ -312,6 +313,31 @@ export function createLocalSnsProjectRepository(
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
     },
   };
+}
+
+export function getLocalSnsProject(
+  database: LocalDatabase,
+  userId: string,
+  id: string,
+): Promise<SnsProjectRecord | undefined> {
+  return database.read((data) => data.snsProjects.find((project) => project.id === id && project.userId === userId));
+}
+
+export function saveLocalSnsFlow(
+  database: LocalDatabase,
+  userId: string,
+  id: string,
+  flow: SnsFlowState,
+  status: SnsProjectRecord["status"],
+): Promise<SnsProjectRecord> {
+  return database.update((data) => {
+    const project = data.snsProjects.find((entry) => entry.id === id && entry.userId === userId);
+    if (!project) throw notFound("SNS 프로젝트");
+    project.data.flow = flow;
+    project.status = status;
+    project.updatedAt = new Date().toISOString();
+    return project;
+  });
 }
 
 function localFilePath(root: string, storagePath: string): string {

@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StepBar, type StepDefinition } from "@fixup/ui";
 import { AttachmentPicker } from "./_components/attachment-picker";
@@ -19,6 +20,7 @@ const STEPS: StepDefinition[] = [
 type Step = "content" | "images" | "spec";
 
 export function NewSnsClient() {
+  const router = useRouter();
   const [step, setStep] = React.useState<Step>("content");
   const [title, setTitle] = React.useState("");
   const [source, setSource] = React.useState<SourceDraft>({ kind: "text", text: "" });
@@ -33,7 +35,6 @@ export function NewSnsClient() {
   });
   const [message, setMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
-  const [createdId, setCreatedId] = React.useState<string | null>(null);
 
   const totalCards = spec.cardCountMode === "fixed" ? spec.cardCount! : MAX_CARDS;
   const attachmentIssues = validateAttachments(attachments, modelById(spec.modelId).maxReferenceImages, totalCards);
@@ -79,7 +80,9 @@ export function NewSnsClient() {
       });
       const payload = await response.json() as { ok?: boolean; project?: { id: string }; message?: string };
       if (!response.ok || !payload.project) throw new Error(payload.message ?? "프로젝트를 만들지 못했습니다.");
-      setCreatedId(payload.project.id);
+      const planned = await fetch(`/api/sns/projects/${payload.project.id}/plan`, { method: "POST" });
+      await planned.json();
+      router.push(`/sns/${payload.project.id}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "프로젝트를 만들지 못했습니다.");
     } finally {
@@ -108,15 +111,13 @@ export function NewSnsClient() {
           {step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}
 
           {message ? <p role="alert" className="whitespace-pre-line rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{message}</p> : null}
-          {createdId ? <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary-soft p-5"><CheckCircle2 className="mt-0.5 size-5 text-primary" /><div><strong>프로젝트를 저장했습니다.</strong><p className="mt-1 text-sm text-muted-foreground">ID {createdId} · 04 원고 확인은 Task 13에서 연결합니다.</p></div></div> : null}
-
           <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6">
             <div>{step !== "content" ? <Button variant="secondary" onClick={() => setStep(step === "spec" ? "images" : "content")}><ArrowLeft className="size-4" />이전</Button> : null}</div>
             <div className="flex flex-wrap items-center justify-end gap-3">
               {step === "spec" ? <span className="text-sm font-semibold text-primary">{estimateCostLabel(spec, attachments)}</span> : null}
               {step === "content" ? <Button onClick={nextFromContent}>이미지 고르기<ArrowRight className="size-4" /></Button> : null}
               {step === "images" ? <Button onClick={nextFromImages}>규격 고르기<ArrowRight className="size-4" /></Button> : null}
-              {step === "spec" ? <Button onClick={() => void createProject()} disabled={saving || Boolean(createdId)}>{saving ? "저장 중…" : "기획 시작"}</Button> : null}
+              {step === "spec" ? <Button onClick={() => void createProject()} disabled={saving}>{saving ? "저장 중…" : "기획 시작"}</Button> : null}
             </div>
           </div>
         </CardContent>
