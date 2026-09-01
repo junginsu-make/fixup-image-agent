@@ -30,9 +30,12 @@ describe("원고 프롬프트", () => {
     expect(prompt).toContain(base.sourceText);
   });
 
-  it("글자 수 상한을 알린다", () => {
+  it("숫자 상한 없이 읽기 좋은 양을 판단하라고 한다", () => {
     const prompt = buildCopyPrompt(base);
-    for (const limit of [60, 200, 30, 40]) expect(prompt).toContain(String(limit));
+    expect(prompt).toContain("카드 하나가 읽기 벅차지 않게 쓰세요.");
+    expect(prompt).toContain("제목은 한눈에 들어오는 길이로, 본문은 요점만.");
+    expect(prompt).toContain("내용이 꼭 필요해서 길어지면 줄이지 마세요");
+    expect(prompt).not.toMatch(/60자|200자|30자|40자/);
   });
 
   it("자료에 없는 것을 지어내지 말라고 못 박는다", () => {
@@ -49,7 +52,7 @@ describe("원고 쓰기", () => {
     expect(result.issues).toEqual([]);
   });
 
-  it("네 칸이 상한을 넘으면 자른다", async () => {
+  it("긴 원고를 자르지 않고 그대로 돌려준다", async () => {
     const result = await writeCopy(base, {
       generate: async () => ({ cards: [{
         index: 1,
@@ -59,10 +62,10 @@ describe("원고 쓰기", () => {
         footnote: "라".repeat(70),
       }] }),
     });
-    expect(result.copies[0]!.headline).toHaveLength(60);
-    expect(result.copies[0]!.body).toHaveLength(200);
-    expect(result.copies[0]!.accent).toHaveLength(30);
-    expect(result.copies[0]!.footnote).toHaveLength(40);
+    expect(result.copies[0]!.headline).toHaveLength(100);
+    expect(result.copies[0]!.body).toHaveLength(300);
+    expect(result.copies[0]!.accent).toHaveLength(50);
+    expect(result.copies[0]!.footnote).toHaveLength(70);
   });
 
   it("주 모델 실패 후 OpenAI 예비가 성공하면 원고와 경고를 돌려준다", async () => {
