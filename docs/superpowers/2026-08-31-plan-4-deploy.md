@@ -12,6 +12,15 @@ Caddy + systemd 로 웹과 수집 워커를 올린다. 개인 배포(`detail-pag
 
 **Prerequisite:** 계획 1·2·3 완료. **로컬에서 카드뉴스 한 벌과 포스터 한 장을 실제로 만들어 본 뒤**에만 시작한다.
 
+**먼저 확인한다 — 501 이 남아 있으면 안 된다.**
+
+```bash
+grep -rn "501" apps/web/app/api/sns/ apps/web/app/api/poster/ 2>/dev/null
+```
+
+계획 2 Task 14 가 실제 LLM·fal 을 연결한다. 안 했으면 **배포해도 카드뉴스를
+하나도 못 만든다.** 여기서 멈추고 Task 14 를 먼저 한다.
+
 ## Global Constraints
 
 - **개인 배포를 건드리지 않는다.** 기존 EC2(`nsi-server`, `fixup-insight-prod`)와

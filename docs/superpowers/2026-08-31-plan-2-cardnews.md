@@ -1736,3 +1736,51 @@ git commit -m "feat(sns): 원고 확인과 결과 화면"
 - [ ] 표를 「원본 그대로 쓸 장」으로 넣어 **여백이 자연스러운지** 본다
 - [ ] 6장을 골라 **정확히 6장이 나오는지** 본다
 - [ ] 같은 조건으로 GPT Image 2 와 Nano Banana Pro 를 **나란히 비교**한다
+---
+
+## Task 14: 실제 LLM · fal 을 연결한다
+
+Task 13 은 화면과 흐름을 만들었지만 **로컬 가짜 응답으로만 돕니다.**
+`LOCAL_STORE` 가 아니면 세 라우트가 501 을 냅니다.
+
+```
+/api/sns/projects/[id]/plan            실제 LLM 연결은 운영 배포 단계에서 설정합니다
+/api/sns/projects/[id]/generate        실제 fal·검수 연결은 ...
+/api/sns/projects/[id]/cards/[index]   실제 fal·검수 연결은 ...
+```
+
+**이걸 안 하면 배포된 앱에서 카드뉴스를 하나도 못 만듭니다.**
+501 이 조용한 실패가 아니라 눈에 띄는 오류인 건 다행이지만, 닫아야 한다.
+
+**Files:**
+- Modify: 위 세 라우트
+- Create: 실제 제공자 어댑터 (Anthropic · OpenAI · fal)
+
+**Interfaces:**
+- Consumes: `planCards` · `writeCopy` · `writeImagePrompt` · `generateCards` · `reviewCard`
+  — 전부 주입 구조라 어댑터만 끼우면 된다
+- Consumes: `bindGenerationRequestStore` — 비용은 admin 클라이언트로, user_id 는 세션에서만
+
+- [ ] **Step 1: 키가 없으면 무엇이 막히는지 먼저 정한다**
+
+`ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `FAL_KEY` 중 없는 것이 있으면
+**그 기능만 막고 이유를 사람이 읽을 수 있게 알린다.** 500 으로 끝내지 않는다.
+
+- [ ] **Step 2: 주 모델과 예비를 배선한다**
+
+Task 5·6·11 이 이미 `(주, 예비)` 구조다. **예비 인자를 빠뜨리지 않는다** —
+선택 인자라 안 넘기면 OpenAI 예비가 조용히 사라진다.
+
+- [ ] **Step 3: 비용 저장소를 admin 으로 묶는다**
+
+`bindGenerationRequestStore(auth.member.userId, adminWriter)`.
+요청 본문에서 user_id 를 받을 경로를 만들지 않는다.
+
+- [ ] **Step 4: 로컬에서 실제 키로 한 벌 만들어 본다**
+
+**이 태스크는 실제 API 를 부르지 않으면 검증되지 않는다.** 카드뉴스 한 벌을
+끝까지 만들고, 비용이 장부에 쌓이는지, 검수가 도는지 확인한다.
+
+- [ ] **Step 5: 커밋**
+
+---
