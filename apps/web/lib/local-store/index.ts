@@ -80,7 +80,7 @@ export function createLocalDatabase(root: string): LocalDatabase {
 }
 
 export function isLocalStoreEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
-  return environment.LOCAL_STORE === "1";
+  return environment.NODE_ENV !== "production" && environment.LOCAL_STORE === "1";
 }
 
 function findWorkspaceRoot(start: string): string {

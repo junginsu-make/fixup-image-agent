@@ -9,6 +9,7 @@ import {
   createLocalReferenceSetStore,
   createLocalSourceRepository,
   insertLocalReferenceImage,
+  isLocalStoreEnabled,
   listLocalReferenceImages,
   removeLocalReferenceFiles,
   seedLocalCandidate,
@@ -24,6 +25,13 @@ async function database() {
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("로컬 저장소 운영 잠금", () => {
+  it("production 에서는 LOCAL_STORE=1 이어도 꺼진다", () => {
+    expect(isLocalStoreEnabled({ NODE_ENV: "production", LOCAL_STORE: "1" })).toBe(false);
+    expect(isLocalStoreEnabled({ NODE_ENV: "development", LOCAL_STORE: "1" })).toBe(true);
+  });
 });
 
 describe("파일 저장소 소유자 격리", () => {
