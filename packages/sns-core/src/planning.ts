@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SlotPlan } from "./card-count";
+import { withIssueFallback } from "./provider-fallback";
 
 export const PRIMARY_PLANNING_MODEL = "claude-sonnet-5";
 export const BACKUP_PLANNING_PROVIDER = "openai";
@@ -20,6 +21,11 @@ export interface CardPlan {
 
 export interface PlanProvider {
   generate(prompt: string): Promise<unknown>;
+}
+
+export interface PlanResult {
+  cards: CardPlan[];
+  issues: string[];
 }
 
 const CardPlanSchema = z.object({
@@ -93,19 +99,27 @@ export async function planCards(
   input: PlanInput,
   primary: PlanProvider,
   backup?: PlanProvider,
-): Promise<CardPlan[]> {
-  if (input.slots.issues.length > 0) return [];
-  if (input.slots.total === "auto" && !input.slots.autoRange) return [];
+): Promise<PlanResult> {
+  if (input.slots.issues.length > 0) {
+    return {
+      cards: [],
+      issues: input.slots.issues.map((issue) => `Task 4 자리 계산 오류: ${issue}`),
+    };
+  }
+  if (input.slots.total === "auto" && !input.slots.autoRange) {
+    return { cards: [], issues: ["AI 추천 장수 범위가 없습니다."] };
+  }
 
   const prompt = buildPlanPrompt(input);
-  try {
-    return await generateValidPlan(input, prompt, primary);
-  } catch {
-    if (!backup) return [];
-    try {
-      return await generateValidPlan(input, prompt, backup);
-    } catch {
-      return [];
-    }
-  }
+  const result = await withIssueFallback(
+    () => generateValidPlan(input, prompt, primary),
+    backup ? () => generateValidPlan(input, prompt, backup) : undefined,
+    {
+      primaryFailure: "주 모델 기획 실패",
+      backupMissing: "OpenAI 예비 제공자가 설정되지 않았습니다.",
+      backupFailure: "OpenAI 예비 기획도 실패했습니다",
+      backupSuccess: "주 모델이 실패해 OpenAI 예비로 만들었습니다",
+    },
+  );
+  return { cards: result.value ?? [], issues: result.issues };
 }
