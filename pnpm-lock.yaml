@@ -31,6 +31,9 @@ importers:
       '@fixup/pdp-core':
         specifier: workspace:*
         version: link:../../packages/pdp-core
+      '@fixup/poster-core':
+        specifier: workspace:*
+        version: link:../../packages/poster-core
       '@fixup/redesign-core':
         specifier: workspace:*
         version: link:../../packages/redesign-core
