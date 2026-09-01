@@ -1,19 +1,8 @@
--- 포스터 스튜디오. 카드뉴스와 데이터를 섞지 않는다 — 섹션을 버리면 이 테이블도 함께 버린다.
--- 소유자는 사람 한 명이다. 팀 개념이 없다.
-
-create table public.poster_references (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles(id) on delete cascade,
-  file_name text not null,
-  storage_path text not null,
-  title text,
-  width int, height int,
-  created_at timestamptz not null default now(),
-  -- 경로 첫 칸이 소유자여야 기존 Storage 정책이 걸린다. 코드가 실수해도 여기서 막힌다.
-  constraint poster_references_storage_path_check check (
-    storage_path ~ ('^' || user_id::text || '/poster/references/' || id::text || '\.[^/]+$')
-  )
-);
+-- 포스터 스튜디오. 소유자는 사람 한 명이다. 팀 개념이 없다.
+--
+-- 레퍼런스는 따로 두지 않는다. 202608310003 의 reference_images 가 이미
+-- purpose('cardnews'|'poster'|'both') 를 갖고 있고 라이브러리에서 올린다.
+-- 테이블을 또 만들면 올리는 곳이 둘이 되어 사용자가 어디에 뒀는지 못 찾는다.
 
 create table public.poster_projects (
   id uuid primary key default gen_random_uuid(),
@@ -70,7 +59,6 @@ alter table public.poster_generation_requests
   add constraint poster_generation_requests_parent_fk
   foreign key (parent_image_id) references public.poster_images(id) on delete set null;
 
-create index poster_references_user_idx on public.poster_references(user_id, created_at desc);
 create index poster_projects_user_idx on public.poster_projects(user_id, updated_at desc);
 create index poster_requests_project_idx on public.poster_generation_requests(project_id, created_at desc);
 create index poster_images_request_idx on public.poster_images(generation_request_id, variant_index);
@@ -82,15 +70,9 @@ create index poster_images_request_idx on public.poster_images(generation_reques
 --   2) update ... set selected = true  where id = $2
 create unique index poster_images_one_selected on public.poster_images(project_id) where selected;
 
-alter table public.poster_references enable row level security;
 alter table public.poster_projects enable row level security;
 alter table public.poster_generation_requests enable row level security;
 alter table public.poster_images enable row level security;
-
-create policy "members manage own poster references"
-  on public.poster_references for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
 
 create policy "members manage own poster projects"
   on public.poster_projects for all to authenticated
@@ -113,12 +95,6 @@ create policy "members manage own poster images"
 
 -- 컬럼 권한은 회수 먼저, 허용 목록 나중에. 테이블 GRANT 뒤의 컬럼 REVOKE 는 무시된다.
 -- id 를 INSERT 에 열어 둔다 — 파일을 올릴 때 이미 id 를 알아야 경로를 만들 수 있다.
-grant select, delete on public.poster_references to authenticated;
-revoke insert on public.poster_references from authenticated;
-grant insert (id, user_id, file_name, storage_path, title, width, height)
-  on public.poster_references to authenticated;
-revoke update on public.poster_references from authenticated;
-grant update (title) on public.poster_references to authenticated;
 
 grant select, delete on public.poster_projects to authenticated;
 revoke insert on public.poster_projects from authenticated;

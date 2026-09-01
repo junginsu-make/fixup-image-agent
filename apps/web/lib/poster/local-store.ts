@@ -21,7 +21,6 @@ import { getLocalDatabase, type LocalDatabase } from "../local-store";
 type Owned<T> = T & { userId: string };
 
 export interface PosterLocalData {
-  posterReferences: Owned<PosterReferenceRecord>[];
   posterProjects: Owned<PosterProjectRecord>[];
   posterRequests: Owned<PosterGenerationRequestRecord>[];
   posterImages: Owned<PosterImageRecord>[];
@@ -86,18 +85,38 @@ export function createLocalPosterProjectStore(
   };
 }
 
+/**
+ * 포스터 레퍼런스는 **라이브러리의 참고 이미지를 그대로 쓴다.**
+ *
+ * 따로 테이블을 두면 올리는 곳이 둘이 되어 사용자가 어디에 뒀는지 못 찾는다.
+ * `reference_images` 가 이미 `purpose('cardnews'|'poster'|'both')` 를 갖고 있다.
+ */
 export function createLocalPosterReferenceStore(
   database: LocalDatabase,
   userId: string,
 ): PosterReferenceStore {
-  const mine = (data: unknown) => bucket(data, "posterReferences").filter((row) => row.userId === userId);
+  const mine = (data: unknown) => {
+    const store = data as { referenceImages?: Array<Record<string, unknown>> };
+    return (store.referenceImages ?? []).filter((row) =>
+      row.userId === userId && (row.purpose === "poster" || row.purpose === "both"));
+  };
+  const toRecord = (row: Record<string, unknown>): PosterReferenceRecord => ({
+    id: String(row.id),
+    storagePath: String(row.storagePath),
+    fileName: String(row.storagePath).split("/").pop() ?? "",
+    title: (row.title as string | null) ?? null,
+    width: (row.width as number | null) ?? null,
+    height: (row.height as number | null) ?? null,
+    createdAt: String(row.createdAt),
+    url: `/api/reference-images/${String(row.id)}/file`,
+  });
   return {
     async list() {
-      return database.read((data) => mine(data).map(strip));
+      return database.read((data) => mine(data).map(toRecord));
     },
     async byIds(ids) {
       // 남의 id 를 섞어 보내도 자기 것만 돌아온다.
-      return database.read((data) => mine(data).filter((row) => ids.includes(row.id)).map(strip));
+      return database.read((data) => mine(data).filter((row) => ids.includes(String(row.id))).map(toRecord));
     },
   };
 }

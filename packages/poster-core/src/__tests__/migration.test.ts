@@ -7,10 +7,10 @@ const sql = readFileSync(
   "utf8",
 );
 
-const tables = ["poster_references", "poster_projects", "poster_generation_requests", "poster_images"];
+const tables = ["poster_projects", "poster_generation_requests", "poster_images"];
 
 describe("포스터 마이그레이션", () => {
-  it("네 테이블을 만든다", () => {
+  it("세 테이블을 만든다", () => {
     for (const table of tables) expect(sql).toContain(`create table public.${table}`);
   });
 
@@ -35,20 +35,14 @@ describe("포스터 마이그레이션", () => {
     }
   });
 
-  it("Storage 경로 첫 칸이 소유자여야 한다", () => {
-    // 기존 Storage 정책이 경로 첫 칸으로 판정한다. 새 정책을 만들지 않는다.
-    expect(sql).toMatch(/storage_path ~ \('\^' \|\| user_id::text/);
-  });
-
-  it("참고 이미지 INSERT 에 id 가 열려 있다", () => {
-    // CHECK 가 경로에 행의 id 를 요구한다. id 를 못 넣으면 모든 INSERT 가 실패한다.
-    const grant = sql.match(/grant insert \(([^)]+)\)\s+on public\.poster_references/);
-    expect(grant).not.toBeNull();
-    expect(grant![1]).toContain("id");
+  it("레퍼런스 테이블을 또 만들지 않는다", () => {
+    // reference_images 가 이미 purpose('poster') 를 갖고 있다.
+    // 테이블이 둘이면 올리는 곳도 둘이 되어 사용자가 어디 뒀는지 못 찾는다.
+    expect(sql).not.toContain("create table public.poster_references");
   });
 
   it("컬럼 권한은 회수 먼저, 허용 목록 나중이다", () => {
-    for (const table of ["poster_references", "poster_projects"]) {
+    for (const table of ["poster_projects"]) {
       const revokeAt = sql.indexOf(`revoke insert on public.${table}`);
       const grantAt = sql.indexOf("grant insert (", revokeAt);
       expect(revokeAt).toBeGreaterThan(-1);

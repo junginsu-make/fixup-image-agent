@@ -20,6 +20,7 @@ const CONTENT_TYPES: Record<string, string> = {
 async function referenceBytes(storagePath: string): Promise<{ bytes: Buffer; contentType: string }> {
   if (!isLocalStoreEnabled()) throw new Error("운영 저장소는 배포 단계에서 연결합니다.");
   const root = localStoreRoot();
+  // 라이브러리의 참고 이미지와 같은 경로 규약이다: {user_id}/references/{id}.{ext}
   const file = path.join(root, "library", ...storagePath.split("/"));
   const extension = path.extname(storagePath).toLowerCase();
   return { bytes: await readFile(file), contentType: CONTENT_TYPES[extension] ?? "image/png" };
