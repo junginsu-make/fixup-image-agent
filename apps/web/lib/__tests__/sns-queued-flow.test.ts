@@ -40,8 +40,14 @@ function dependencies(events: string[], status: QueuedGenerationDependencies["qu
   let submitted = 0;
   return {
     sceneProvider: { generate: async () => "장면" },
-    reviewPrimary: { review: async () => ({ decision: "pass", summary: "통과", issues: [] }) },
-    reviewBackup: { review: async () => ({ decision: "pass", summary: "예비 통과", issues: [] }) },
+    reviewPrimary: { review: async () => ({
+      decision: "pass", summary: "통과", issues: [],
+      textFidelity: { headline: "exact", body: "not_applicable", accent: "not_applicable", footnote: "not_applicable" },
+    }) },
+    reviewBackup: { review: async () => ({
+      decision: "pass", summary: "예비 통과", issues: [],
+      textFidelity: { headline: "exact", body: "not_applicable", accent: "not_applicable", footnote: "not_applicable" },
+    }) },
     uploadReference: async (attachment) => { events.push(`upload:${attachment.id}`); return `https://fal.media/${attachment.id}`; },
     queue: {
       submit: async (_endpoint, _input, cardIndex) => {

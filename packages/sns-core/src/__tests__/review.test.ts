@@ -7,6 +7,7 @@ const base = {
   copy: { headline: "제목", body: "본문" },
   preservedImageUrls: [] as string[],
 };
+const exactFidelity = { headline: "exact", body: "exact", accent: "not_applicable", footnote: "not_applicable" } as const;
 
 describe("검수 프롬프트", () => {
   it("기대 글자를 담는다", () => {
@@ -20,6 +21,14 @@ describe("검수 프롬프트", () => {
 
   it("프롬프트가 아니라 실제 이미지를 보라고 한다", () => {
     expect(buildReviewPrompt({ copy: { headline: "x" }, hasPreserved: false })).toMatch(/실제로 보이는/);
+  });
+
+  it("비어 있지 않은 원고 필드를 통째로 대조하고 누락·요약이면 fail 하라고 한다", () => {
+    const prompt = buildReviewPrompt({ copy: { headline: "제목", body: "긴 본문", accent: "강조", footnote: "각주" }, hasPreserved: false });
+    expect(prompt).toMatch(/headline.*body.*accent.*footnote/is);
+    expect(prompt).toMatch(/통째로|전체 문자열/);
+    expect(prompt).toMatch(/누락|요약/);
+    expect(prompt).toMatch(/반드시 fail/);
   });
 
   it("점수나 숫자 문턱을 만들지 않는다", () => {
@@ -49,7 +58,7 @@ describe("검수 대상", () => {
 describe("검수", () => {
   it("통과하면 done 으로 돌려준다", async () => {
     const result = await reviewCard(base, {
-      review: async () => ({ decision: "pass", summary: "문제 없음", issues: [] }),
+      review: async () => ({ decision: "pass", summary: "문제 없음", issues: [], textFidelity: exactFidelity }),
     });
     expect(result).toMatchObject({
       status: "done",
@@ -62,7 +71,10 @@ describe("검수", () => {
 
   it("반려하면 이미지를 버리지 않고 사람이 보게 한다", async () => {
     const result = await reviewCard(base, {
-      review: async () => ({ decision: "fail", summary: "제목 오탈자", issues: ["제목이 다르게 보입니다."] }),
+      review: async () => ({
+        decision: "fail", summary: "제목 오탈자", issues: ["제목이 다르게 보입니다."],
+        textFidelity: { ...exactFidelity, headline: "changed" },
+      }),
     });
     expect(result).toMatchObject({
       status: "review_required",
@@ -70,6 +82,28 @@ describe("검수", () => {
       requiresHumanAction: true,
       autoRegenerated: false,
     });
+  });
+
+  it("모델이 pass라고 해도 비어 있지 않은 body가 missing이면 review_required로 닫는다", async () => {
+    const result = await reviewCard(base, {
+      review: async () => ({
+        decision: "pass",
+        summary: "의미는 전달됨",
+        issues: ["본문이 요약됨"],
+        textFidelity: { headline: "exact", body: "missing", accent: "not_applicable", footnote: "not_applicable" },
+      }),
+    });
+    expect(result.status).toBe("review_required");
+    expect(result.review?.decision).toBe("fail");
+    expect(result.review?.issues.join("\n")).toContain("body");
+  });
+
+  it("필드별 원문 대조 결과를 빠뜨린 검수 응답은 통과시키지 않는다", async () => {
+    const result = await reviewCard(base, {
+      review: async () => ({ decision: "pass", summary: "문제 없음", issues: [] }),
+    });
+    expect(result.status).toBe("review_required");
+    expect(result.issues.join("\n")).toContain("주 검수 실패");
   });
 
   it("검수 제외 카드는 제공자를 부르지 않는다", async () => {
@@ -102,7 +136,7 @@ describe("검수", () => {
     const result = await reviewCard(
       base,
       { review: async () => { throw new Error("Claude vision 실패"); } },
-      { review: async () => ({ decision: "pass", summary: "예비 통과", issues: [] }) },
+      { review: async () => ({ decision: "pass", summary: "예비 통과", issues: [], textFidelity: exactFidelity }) },
     );
     expect(result.status).toBe("done");
     expect(result.review?.decision).toBe("pass");
@@ -134,7 +168,10 @@ describe("검수", () => {
     const regenerate = vi.fn(async () => undefined);
     const input = { ...base, regenerate } as typeof base;
     const request: ReviewRequest = {
-      review: async () => ({ decision: "fail", summary: "사람 확인", issues: ["문제"] }),
+      review: async () => ({
+        decision: "fail", summary: "사람 확인", issues: ["문제"],
+        textFidelity: { ...exactFidelity, headline: "changed" },
+      }),
     };
     const result = await reviewCard(input, request);
     expect(result.autoRegenerated).toBe(false);

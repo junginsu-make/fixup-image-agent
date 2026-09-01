@@ -101,6 +101,8 @@ describe("다국어와 글자", () => {
     expect(frame).toContain(headline);
     expect(frame).toContain(body);
     expect(frame).not.toMatch(/60자|200자|maximum characters|max chars/i);
+    expect(frame).toMatch(/reduce the font size|smaller text/i);
+    expect(frame).toMatch(/every non-empty field.*in full/i);
   });
 });
 
@@ -167,6 +169,13 @@ describe("LLM 장면 프롬프트", () => {
     expect(request.prompt).toContain("Write the visual scene prompt");
     expect(request.prompt).toContain("핵심 설명");
     expect(request.prompt).not.toMatch(/cinematic|dramatic lighting|close-up|wide shot/i);
+  });
+
+  it("장면 프롬프트 LLM도 모든 원고 필드의 자리를 만들고 요약하지 않게 한다", () => {
+    const request = buildSceneRequest(input);
+    expect(request.prompt).toMatch(/every non-empty copy field/i);
+    expect(request.prompt).toMatch(/smaller font|reduce the font/i);
+    expect(request.prompt).toMatch(/do not omit|do not summarize/i);
   });
 
   it("LLM 실패는 밖으로 던지지 않고 빈 본문이다", async () => {

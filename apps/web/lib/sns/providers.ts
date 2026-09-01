@@ -97,8 +97,19 @@ const REVIEW_SPEC: StructuredSpec = {
       decision: { type: "string", enum: ["pass", "fail"] },
       summary: { type: "string" },
       issues: { type: "array", items: { type: "string" } },
+      textFidelity: {
+        type: "object",
+        properties: {
+          headline: { type: "string", enum: ["exact", "missing", "changed", "not_applicable"] },
+          body: { type: "string", enum: ["exact", "missing", "changed", "not_applicable"] },
+          accent: { type: "string", enum: ["exact", "missing", "changed", "not_applicable"] },
+          footnote: { type: "string", enum: ["exact", "missing", "changed", "not_applicable"] },
+        },
+        required: ["headline", "body", "accent", "footnote"],
+        additionalProperties: false,
+      },
     },
-    required: ["decision", "summary", "issues"],
+    required: ["decision", "summary", "issues", "textFidelity"],
     additionalProperties: false,
   },
 };

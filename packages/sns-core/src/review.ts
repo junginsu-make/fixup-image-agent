@@ -12,6 +12,9 @@ export function buildReviewPrompt(input: ReviewPromptInput): string {
   return [
     "완성된 카드뉴스 이미지를 검수합니다. 프롬프트가 아니라 이미지에 실제로 보이는 결과만 판단하세요.",
     `기대 원고: ${JSON.stringify(input.copy)}`,
+    "headline, body, accent, footnote 각각의 비어 있지 않은 전체 문자열이 이미지에 통째로 보이는지 하나씩 대조하세요.",
+    "일부 누락, 요약, 바꿔쓰기, 다른 라벨로 대체한 것은 의미가 같아도 원고 불일치입니다.",
+    "비어 있지 않은 필드가 하나라도 missing 또는 changed이면 판정은 반드시 fail이어야 합니다.",
     "기대 원고의 철자·띄어쓰기·누락·중복·임의 변경과 실제 읽기 어려움이 있는지 설명하세요.",
     input.hasPreserved
       ? "보존 대상 원본과 실제 이미지를 대조해 정체성·형태·색·비율·라벨이 유지됐는지 설명하세요."
@@ -33,6 +36,7 @@ export interface CardReview {
   decision: "pass" | "fail";
   summary: string;
   issues: string[];
+  textFidelity?: Record<"headline" | "body" | "accent" | "footnote", "exact" | "missing" | "changed" | "not_applicable">;
 }
 
 export interface ReviewProviderInput {
@@ -65,17 +69,37 @@ const CardReviewSchema = z.object({
   decision: z.enum(["pass", "fail"]),
   summary: z.string().min(1),
   issues: z.array(z.string()),
+  textFidelity: z.object({
+    headline: z.enum(["exact", "missing", "changed", "not_applicable"]),
+    body: z.enum(["exact", "missing", "changed", "not_applicable"]),
+    accent: z.enum(["exact", "missing", "changed", "not_applicable"]),
+    footnote: z.enum(["exact", "missing", "changed", "not_applicable"]),
+  }),
 });
 
 async function callReview(
   input: ReviewCardInput,
   provider: ReviewRequest,
 ): Promise<CardReview> {
-  return CardReviewSchema.parse(await provider.review({
+  const review = CardReviewSchema.parse(await provider.review({
     prompt: buildReviewPrompt({ copy: input.copy, hasPreserved: input.preservedImageUrls.length > 0 }),
     imageUrl: input.imageUrl,
     preservedImageUrls: input.preservedImageUrls,
   }));
+  const fields = ["headline", "body", "accent", "footnote"] as const;
+  const mismatched = fields.filter((field) => {
+    const expected = input.copy[field];
+    return Boolean(expected?.trim()) && review.textFidelity![field] !== "exact";
+  });
+  if (!mismatched.length) return review;
+  return {
+    ...review,
+    decision: "fail",
+    issues: [
+      ...review.issues,
+      ...mismatched.map((field) => `${field} 전체 원고가 이미지에 정확히 들어가지 않았습니다 (${review.textFidelity![field]}).`),
+    ],
+  };
 }
 
 /**
