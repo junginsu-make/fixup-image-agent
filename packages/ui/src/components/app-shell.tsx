@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Inbox, Rss, PanelsTopLeft } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Inbox, Rss, PanelsTopLeft, Frame } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -32,6 +32,7 @@ const navGroups = [
       { href: "/create", label: "새로 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },
       { href: "/redesign", label: "리디자인", desc: "기존 페이지 개선", icon: RefreshCw },
       { href: "/sns", label: "카드뉴스 만들기", desc: "내용·이미지·규격", icon: PanelsTopLeft },
+      { href: "/poster", label: "포스터 만들기", desc: "레퍼런스 기준 한 장", icon: Frame },
     ],
   },
   {
