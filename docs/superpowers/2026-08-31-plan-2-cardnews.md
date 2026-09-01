@@ -1622,7 +1622,7 @@ describe("검수 대상", () => {
 
 describe("검수", () => {
   it("판정을 돌려준다", async () => {
-    const review = await reviewCard({ /* ... */ call: async () => ({ decision: "pass", score: 90, summary: "ok", issues: [] }) });
+    const review = await reviewCard({ /* ... */ call: async () => ({ decision: "pass", summary: "ok", issues: [] }) });
     expect(review?.decision).toBe("pass");
   });
 
