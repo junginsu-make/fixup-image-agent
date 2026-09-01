@@ -17,7 +17,8 @@
 
 ## Global Constraints
 
-- **카드뉴스 도메인 코드를 참조하지 않는다.** `packages/sns-core/src/` 중 빌려도 되는 것은 `fal-client.ts`, `models.ts`, `ratios.ts` 뿐이다. `pipeline.ts` · `copy.ts` · `content-plan.ts` · `card-prompt.ts` · `review.ts` · `schemas.ts` · `types.ts` 는 참조 금지.
+- **카드뉴스 도메인 코드를 참조하지 않는다.** `packages/sns-core/src/` 중 빌려도 되는 것은 `models.ts`, `ratios.ts` 뿐이다.
+  fal 호출과 업로드는 Task 1 에서 `apps/web/lib/fal/` 로 뽑아 둘이 같이 쓴다. `pipeline.ts` · `copy.ts` · `content-plan.ts` · `card-prompt.ts` · `review.ts` · `schemas.ts` · `types.ts` 는 참조 금지.
 - **팀 개념이 없다.** 소유자는 사람 한 명이다. 모든 테이블은 `user_id uuid references public.profiles(id)` 를 쓰고 RLS 는 `(select auth.uid()) = user_id` 다.
 - **비용 행은 회원이 쓰지 못한다.** `poster_generation_requests` 와 `poster_images` 는 서버가 admin 클라이언트로 쓴다. 회원 권한은 읽기와 `selected` 뿐이다. 회원이 `cost_usd` 를 고칠 수 있으면 비용 장부를 믿을 수 없다.
 - **admin 클라이언트를 쓰는 곳에서는 `user_id` 를 요청 본문에서 받지 않는다.** 반드시 로그인 세션에서 가져온다. RLS 를 우회하기 때문이다.
@@ -28,6 +29,20 @@
 - **`quality` 는 `high` 고정.** 사용자에게 노출하지 않는다.
 - **웹 검색·`thinking_level` 을 켜지 않는다.** 추가 과금이 붙는다.
 - **비용 문구는 `최대` 가 아니라 `예상` 이다.** 공식 가격표로 실제 최대 금액을 보장할 수 없다.
+
+### 카드뉴스에서 돈으로 배운 것 — 되풀이하지 않는다
+
+- **모델 호출에 시간 제한을 두지 않는다.** 큐로 제출하고 `request_id` 를 **먼저 장부에
+  적은 뒤** 상태를 물어본다. 2분 제한 때문에 GPT Image 2 i2i 3건이 133~140초에서
+  끊겨 돈만 나갔다.
+- **레퍼런스는 fal 에 올린 URL 로 보낸다.** data URI 도 Supabase 서명 URL 도 아니다.
+  로컬과 운영이 같은 모양을 보내야 한다.
+- **원고를 이미지에 넣을 때 두 방향을 다 본다.**
+  빠진 것(`textFidelity`)과 **지어낸 것**(`extraCopy`) 둘 다. 한쪽만 보면
+  존재하지 않는 `© 2024 모든 권리 보유` 같은 것이 그대로 나간다.
+- **모델의 pass 를 믿지 않는다.** 원고 대조는 판단이 아니라 확인이다. 코드가 뒤집는다.
+- **지어낸 카피와 배경 글자를 가른다.** 간판·표지판은 자제하되 허용, 원고에 없는
+  인사말·CTA·저작권·날짜는 금지.
 - **비전·기획 호출은 절대 예외를 밖으로 던지지 않는다.** 실패하면 빈 값을 돌려주고 상위가 계속 진행한다.
 - 테스트 실행: `pnpm -r test` · 타입: `pnpm typecheck` · 빌드: `pnpm build`
 - **운영 Supabase 와 EC2 를 건드리지 않는다.** 마이그레이션은 파일로만 쓴다. 배포는 계획 4 에서 마지막에 한다.
@@ -37,133 +52,65 @@
 
 # Phase 1 — fal 계약과 비용 (카드 스튜디오도 함께 이득)
 
-## Task 1: FalRunner 가 모든 이미지와 requestId 를 돌려준다
+## Task 1: fal 호출을 공용으로 뽑는다
 
-지금은 `data.images[0]` 만 꺼내고 `requestId` 를 버린다. 이 상태로 `num_images` 를 올리면 **N장 값을 내고 1장만 쓴다.**
+카드뉴스가 `apps/web/lib/sns/` 안에서 fal 을 부른다. 포스터도 같은 것이 필요하다.
+**복사하지 말고 뽑아서 둘이 같이 쓴다.** 복사하면 오늘 겪은 문제를 포스터에서
+다시 겪는다.
+
+### 카드뉴스에서 실제로 겪은 것 — 그대로 가져간다
+
+```
+동기 호출 + 2분 타임아웃    GPT Image 2 i2i 가 133~140초 걸려 3장 전부 실패
+                          돈은 나갔는데 결과를 못 받았다
+큐 방식으로 바꾼 뒤          같은 요청이 전부 완료. 미확정 0건
+```
+
+**모델 호출에 임의의 시간 제한을 두지 않는다.** 제출하고, `request_id` 를 장부에
+적고, 상태를 물어본다. 연결이 끊겨도 `request_id` 로 결과를 찾아온다.
 
 **Files:**
-- Modify: `packages/sns-core/src/fal-client.ts:13-23` (타입), `:91-101` (`run`)
-- Modify: `packages/sns-core/src/pipeline.ts:306` (유일한 운영 호출부)
-- Modify: `tests/studio-pipeline.test.ts` (`runnerThat` 헬퍼)
-- Test: `tests/studio-fal-client.test.ts`
+- Create: `apps/web/lib/fal/queue.ts` — 제출·상태·결과
+- Create: `apps/web/lib/fal/upload.ts` — 레퍼런스를 fal 에 올리고 URL 을 받는다
+- Modify: `apps/web/lib/sns/queued-flow.ts` · `providers.ts` — 뽑아낸 것을 쓰게
+- Test: `apps/web/lib/fal/__tests__/`
 
 **Interfaces:**
-- Consumes: 없음
-- Produces: `FalImage { url: string; width?: number; height?: number; contentType?: string }` · `FalRunResult { images: FalImage[]; requestId?: string }` · `FalRunner.run(endpoint, input): Promise<FalRunResult>`
+- Produces: `submitJob(endpoint, input): Promise<{ requestId }>` ·
+  `jobStatus(endpoint, requestId)` · `jobResult(endpoint, requestId)` ·
+  `uploadReference(bytes, contentType): Promise<string>`
+- Consumes: `@fal-ai/client`
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [ ] **Step 1: 지금 코드를 먼저 읽는다**
 
-`tests/studio-fal-client.test.ts` 끝에 추가:
+`apps/web/lib/sns/queued-flow.ts` 가 이미 큐 방식으로 돈다. **거기서 카드뉴스에만
+해당하는 것과 어느 모델에나 해당하는 것을 가른다.** 후자만 뽑는다.
 
-```ts
-describe("fal 응답 해석", () => {
-  it("이미지를 전부 돌려주고 requestId 를 남긴다", () => {
-    const parsed = parseFalRunResult({
-      data: { images: [{ url: "https://a.png" }, { url: "https://b.png" }] },
-      requestId: "req_1",
-    });
-    expect(parsed.images.map((image) => image.url)).toEqual(["https://a.png", "https://b.png"]);
-    expect(parsed.requestId).toBe("req_1");
-  });
+- [ ] **Step 2: 실패하는 테스트를 쓴다**
 
-  it("requestId 가 없어도 이미지는 살린다", () => {
-    // 과금 조회는 못 해도 결과는 써야 한다.
-    const parsed = parseFalRunResult({ data: { images: [{ url: "https://a.png" }] } });
-    expect(parsed.images).toHaveLength(1);
-    expect(parsed.requestId).toBeUndefined();
-  });
+지켜야 할 것을 테스트로 박는다:
 
-  it("이미지가 하나도 없으면 던진다", () => {
-    expect(() => parseFalRunResult({ data: { images: [] } })).toThrow(/이미지/);
-  });
-});
+```
+제출은 한 번만 한다 — 자동 재시도 0회 (maxRetries: 0)
+제출 직후 requestId 를 돌려준다 — 저장할 기회를 준다
+상태 조회는 새 작업을 만들지 않는다
+레퍼런스는 fal 에 올린 URL 로 보낸다 — data URI 도 서명 URL 도 아니다
+같은 배치에서 같은 파일은 한 번만 올린다
 ```
 
-파일 맨 위 import 에 `parseFalRunResult` 를 추가한다.
+- [ ] **Step 3: 뽑아낸다**
 
-- [ ] **Step 2: 실패를 확인한다**
+카드뉴스가 그대로 돌아야 한다. **테스트 수가 줄면 안 된다.**
 
-Run: `npx vitest run tests/studio-fal-client.test.ts`
-Expected: FAIL — `parseFalRunResult` is not exported
+- [ ] **Step 4: 통과 확인**
 
-- [ ] **Step 3: 최소 구현**
-
-`packages/sns-core/src/fal-client.ts` 의 `FalImageResult` 를 다음으로 교체한다:
-
-```ts
-export interface FalImage {
-  url: string;
-  width?: number;
-  height?: number;
-  contentType?: string;
-}
-
-/**
- * fal 호출 한 건의 결과.
- *
- * 이미지를 전부 담는다. 첫 장만 꺼내던 예전 방식으로는 num_images 를 올리는 순간
- * 값을 치르고 결과를 버리게 된다. requestId 는 사후 정산 조회의 유일한 열쇠다.
- */
-export interface FalRunResult {
-  images: FalImage[];
-  requestId?: string;
-}
-
-/** 응답 해석만 떼어 낸다. 네트워크 없이 테스트하기 위해서다. */
-export function parseFalRunResult(result: unknown): FalRunResult {
-  const shaped = result as {
-    data?: { images?: Array<{ url?: string; width?: number; height?: number; content_type?: string }> };
-    requestId?: string;
-  };
-  const images = (shaped.data?.images ?? [])
-    .filter((image): image is { url: string; width?: number; height?: number; content_type?: string } => Boolean(image?.url))
-    .map((image) => ({ url: image.url, width: image.width, height: image.height, contentType: image.content_type }));
-  if (images.length === 0) throw new Error("fal.ai 가 이미지를 돌려주지 않았습니다.");
-  return { images, requestId: shaped.requestId };
-}
-```
-
-`FalRunner` 인터페이스의 `run` 반환형을 `Promise<FalRunResult>` 로 바꾸고, `FalClientRunner.run` 본문을 교체한다:
-
-```ts
-  async run(endpoint: string, input: Record<string, unknown>): Promise<FalRunResult> {
-    try {
-      return parseFalRunResult(await fal.subscribe(endpoint, buildFalSubscribeOptions(input)));
-    } catch (error) {
-      throw normalizeFalError(error);
-    }
-  }
-```
-
-`packages/sns-core/src/pipeline.ts:306` 을 고친다. 카드뉴스는 한 장만 쓰므로 동작이 바뀌지 않는다:
-
-```ts
-  // 카드뉴스는 카드당 한 장만 쓴다. 배치는 포스터 스튜디오에서만 켠다.
-  const image = (await input.runner.run(input.model.endpoint, falInput)).images[0]!;
-```
-
-`tests/studio-pipeline.test.ts` 의 `runnerThat` 안 `run` 을 고친다:
-
-```ts
-    run: async (endpoint, input) => {
-      calls.push({ endpoint, input });
-      const result = await behaviour(endpoint, input, calls.length);
-      return { images: [result], requestId: `req_${calls.length}` };
-    },
-```
-
-`FalImageResult` 를 참조하는 다른 곳이 있으면 `FalImage` 로 바꾼다. 찾기: `npx tsc --noEmit`
-
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
-
-Run: `npx vitest run` · `npx tsc --noEmit`
-Expected: 445 tests + 새 3개 통과, typecheck exit 0
+Run: `pnpm -r test` · `pnpm typecheck`
+카드뉴스 테스트가 하나도 안 깨져야 한다.
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add packages/sns-core/src/fal-client.ts packages/sns-core/src/pipeline.ts tests/studio-fal-client.test.ts tests/studio-pipeline.test.ts
-git commit -m "refactor(fal): 응답의 모든 이미지와 requestId 를 살린다"
+git commit -m "refactor(fal): 큐 호출과 업로드를 공용으로 뽑는다"
 ```
 
 ---
