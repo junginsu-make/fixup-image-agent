@@ -246,7 +246,7 @@ export class FalHttpRunner implements FalRunner {
     let data: { request_id?: string; images?: Array<{ url?: string }>; detail?: string; message?: string } = {};
     try { data = JSON.parse(text) as typeof data; } catch { /* 아래에서 읽을 수 있는 오류로 바꾼다. */ }
     if (!response.ok) {
-      const requestId = response.headers.get("x-request-id");
+      const requestId = response.headers.get("x-fal-request-id") ?? response.headers.get("x-request-id");
       const reason = response.status === 401 || response.status === 403
         ? "FAL_KEY가 올바른지 확인해 주세요."
         : response.status === 429
@@ -256,7 +256,10 @@ export class FalHttpRunner implements FalRunner {
     }
     const images = (data.images ?? []).flatMap((image) => image.url ? [{ url: image.url }] : []);
     if (!images.length) throw new Error(`${cardIndex}번 카드 생성 실패: fal 응답에 이미지가 없습니다.`);
-    return { requestId: data.request_id, images };
+    return {
+      requestId: data.request_id ?? response.headers.get("x-fal-request-id") ?? response.headers.get("x-request-id") ?? undefined,
+      images,
+    };
   }
 }
 

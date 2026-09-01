@@ -7,13 +7,20 @@ import {
   createLocalCandidateRepository,
   createLocalDatabase,
   createLocalReferenceSetStore,
+  createLocalSnsGenerationRequestStore,
   createLocalSnsProjectRepository,
   createLocalSourceRepository,
   insertLocalReferenceImage,
   isLocalStoreEnabled,
   listLocalReferenceImages,
+  listLocalSnsCards,
+  listLocalSnsGenerationRequests,
+  readLocalSnsResultFile,
+  replaceLocalSnsCards,
   removeLocalReferenceFiles,
   seedLocalCandidate,
+  updateLocalSnsCard,
+  writeLocalSnsResultFile,
   writeLocalReferenceFile,
 } from "../local-store";
 
@@ -112,6 +119,54 @@ describe("파일 저장소 소유자 격리", () => {
     expect((await userA.list()).map((project) => project.title)).toEqual(["A 프로젝트"]);
     expect(await userB.list()).toEqual([]);
   });
+
+  it("비용 요청은 자기 프로젝트에만 만들고 자기 요청만 확정한다", async () => {
+    const { db } = await database();
+    const projectA = await createLocalSnsProjectRepository(db, "user-a").create({
+      userId: "user-a", title: "A 프로젝트", status: "draft", ratio: "4:5", language: "ko",
+      modelId: "gpt-image-2", cardCountMode: "fixed", cardCount: 4,
+      data: { source: { kind: "text", text: "본문" }, attachments: [] },
+      slotPlan: { total: 4, cover: 1, placeAsIs: 0, aiBody: 2, ending: 1, issues: [] },
+    });
+    const userA = createLocalSnsGenerationRequestStore(db, "user-a");
+    const userB = createLocalSnsGenerationRequestStore(db, "user-b");
+    const request = await userA.create({
+      projectId: projectA.id, cardIndex: 1, modelId: "gpt-image-2", mode: "i2i",
+      size: { mode: "pixel", pixel: { width: 1088, height: 1360 } },
+      requestedImages: 1, unitCostUsd: 0.178,
+    });
+
+    await expect(userB.complete(request.id, { falRequestId: "stolen", returnedImages: 1, costUsd: 0.178 })).rejects.toThrow("찾을 수 없습니다");
+    await userA.complete(request.id, { falRequestId: "fal-1", returnedImages: 1, costUsd: 0.178 });
+
+    expect(await listLocalSnsGenerationRequests(db, "user-b", projectA.id)).toEqual([]);
+    expect(await listLocalSnsGenerationRequests(db, "user-a", projectA.id)).toMatchObject([{
+      id: request.id, cardIndex: 1, requestedImages: 1, unitCostUsd: 0.178,
+      falRequestId: "fal-1", returnedImages: 1, costUsd: 0.178,
+    }]);
+  });
+
+  it("카드 행은 프로젝트 소유자만 만들고 수정한다", async () => {
+    const { db } = await database();
+    const projectA = await createLocalSnsProjectRepository(db, "user-a").create({
+      userId: "user-a", title: "A 프로젝트", status: "draft", ratio: "4:5", language: "ko",
+      modelId: "gpt-image-2", cardCountMode: "fixed", cardCount: 4,
+      data: { source: { kind: "text", text: "본문" }, attachments: [] },
+      slotPlan: { total: 4, cover: 1, placeAsIs: 0, aiBody: 2, ending: 1, issues: [] },
+    });
+    await replaceLocalSnsCards(db, "user-a", projectA.id, {
+      stage: "copy", planningIssues: [], copyIssues: [], costs: [],
+      cards: [{ index: 1, kind: "generated", role: "cover", copy: { index: 1, headline: "표지" }, status: "pending" }],
+    });
+
+    await expect(updateLocalSnsCard(db, "user-b", projectA.id, 1, { status: "done" })).rejects.toThrow("찾을 수 없습니다");
+    await updateLocalSnsCard(db, "user-a", projectA.id, 1, { prompt: "실제 프롬프트", status: "review_required" });
+
+    expect(await listLocalSnsCards(db, "user-a", projectA.id)).toMatchObject([{
+      index: 1, prompt: "실제 프롬프트", status: "review_required",
+    }]);
+    expect(await listLocalSnsCards(db, "user-b", projectA.id)).toEqual([]);
+  });
 });
 
 describe("로컬 참고 이미지 업로드", () => {
@@ -148,5 +203,16 @@ describe("로컬 참고 이미지 업로드", () => {
     expect(await repository.list()).toHaveLength(20);
     const stored = JSON.parse(await readFile(path.join(root, "store.json"), "utf8")) as { sources: unknown[] };
     expect(stored.sources).toHaveLength(20);
+  });
+});
+
+describe("로컬 카드뉴스 결과 파일", () => {
+  it("사용자·프로젝트·카드 번호 경로에 PNG를 저장한다", async () => {
+    const { root } = await database();
+    const storagePath = await writeLocalSnsResultFile(root, "user-a", "project-a", 2, Buffer.from("png-result"));
+
+    expect(storagePath).toBe("user-a/sns/project-a/2.png");
+    expect(await readLocalSnsResultFile(root, storagePath)).toEqual(Buffer.from("png-result"));
+    expect(await readFile(path.join(root, "library", "user-a", "sns", "project-a", "2.png"))).toEqual(Buffer.from("png-result"));
   });
 });

@@ -110,6 +110,7 @@ export interface ActualGenerationDependencies {
   reviewBackup: ReviewRequest;
   generation: CardGenerationDependencies;
   getAssetUrl(path: string): Promise<string>;
+  getReviewAssetUrl?(path: string): Promise<string>;
   savePrompt(cardIndex: number, prompt: string): Promise<void>;
   saveReview(cardIndex: number, status: "done" | "review_required", review: unknown, issues: string[]): Promise<void>;
   saveOriginal(card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string }>;
@@ -185,7 +186,9 @@ export async function generateActualFlow(
     card.error = undefined;
     const reviewed = await reviewCard({
       kind: "generated",
-      imageUrl: card.assetUrl,
+      imageUrl: dependencies.getReviewAssetUrl
+        ? await dependencies.getReviewAssetUrl(result.assetPath)
+        : card.assetUrl,
       copy: card.copy,
       preservedImageUrls: grouped.keepIdentity.map((image) => image.url),
     }, dependencies.reviewPrimary, dependencies.reviewBackup);

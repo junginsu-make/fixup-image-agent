@@ -5,11 +5,7 @@ import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, RefreshCw } 
 import Image from "next/image";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
-
-function filename(title: string, index: number): string {
-  const safe = title.replace(/[\\/:*?"<>|]+/g, "-").trim() || "card-news";
-  return `${safe}-${String(index).padStart(2, "0")}.jpg`;
-}
+import { snsCardFilename } from "../download-filename";
 
 function triggerDownload(url: string, name: string) {
   const anchor = document.createElement("a");
@@ -50,7 +46,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
       for (const card of downloadable) {
         const response = await fetch(card.assetUrl!);
         if (!response.ok) throw new Error(`${card.index}번 이미지를 받지 못했습니다.`);
-        zip.file(filename(title, card.index), await response.blob());
+        zip.file(snsCardFilename(title, card.index, card.assetPath), await response.blob());
       }
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
@@ -99,7 +95,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
               {card.reviewIssues?.map((issue) => <p key={issue} className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">{issue}</p>)}
               {card.error ? <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{card.error}</p> : null}
               <div className="flex flex-wrap justify-end gap-2">
-                {card.assetUrl ? <Button variant="outline" onClick={() => triggerDownload(card.assetUrl!, filename(title, card.index))}><Download />낱장 내려받기</Button> : null}
+                {card.assetUrl ? <Button variant="outline" onClick={() => triggerDownload(card.assetUrl!, snsCardFilename(title, card.index, card.assetPath))}><Download />낱장 내려받기</Button> : null}
                 {card.kind === "generated" ? <Button variant="secondary" disabled={regeneratingIndex === card.index} onClick={() => void onRegenerate(card.index)}>
                   {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}{regeneratingIndex === card.index ? "다시 만드는 중…" : "다시 만들기"}
                 </Button> : null}

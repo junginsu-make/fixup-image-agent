@@ -1,10 +1,8 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
-import { isLocalStoreEnabled } from "../../../../../../lib/local-store";
 import { snsFlowStoreForUser } from "../../../../../../lib/sns-flow-store";
 import { createActualPlanningFlow } from "../../../../../../lib/sns/actual-flow";
 import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
 import { refreshProjectAssetUrls, replaceSnsCardRows } from "../../../../../../lib/sns/runtime";
-import { createLocalPlanningFlow } from "../../../local-fake-flow";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -19,7 +17,7 @@ export async function GET(_request: Request, context: Context) {
     const { id } = await context.params;
     let project = await (await snsFlowStoreForUser(auth.member.userId)).get(id);
     if (!project) return Response.json({ ok: false, message: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
-    if (!isLocalStoreEnabled()) project = await refreshProjectAssetUrls(project);
+    project = await refreshProjectAssetUrls(project);
     return Response.json({ ok: true, project });
   } catch (error) {
     return Response.json({ ok: false, message: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다." }, { status: 500 });
@@ -34,11 +32,8 @@ export async function POST(_request: Request, context: Context) {
     const store = await snsFlowStoreForUser(auth.member.userId);
     const project = await store.get(id);
     if (!project) return Response.json({ ok: false, message: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
-    const local = isLocalStoreEnabled();
-    const flow = local
-      ? await createLocalPlanningFlow(project)
-      : await createActualPlanningFlow(project, createSnsPlanningProviders());
-    if (!local) await replaceSnsCardRows(auth.member.userId, id, flow);
+    const flow = await createActualPlanningFlow(project, createSnsPlanningProviders());
+    await replaceSnsCardRows(auth.member.userId, id, flow);
     const saved = await store.save(id, flow, "copy_ready");
     return Response.json({ ok: true, project: saved });
   } catch (error) {

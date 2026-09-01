@@ -34,4 +34,14 @@ describe("fal HTTP 어댑터", () => {
     expect(String(fetcher.mock.calls[0]![0])).toBe("https://fal.run/fal-ai/model");
     expect(result.images).toHaveLength(1);
   });
+
+  it("본문에 request_id가 없으면 fal 응답 헤더의 요청 ID를 보존한다", async () => {
+    const fetcher = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ images: [{ url: "https://example.com/1.png" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json", "x-fal-request-id": "fal-header-1" },
+    }));
+    const runner = new FalHttpRunner("fal-key", fetcher);
+    const result = await runner.run("fal-ai/model", { prompt: "x", num_images: 1 }, 1);
+    expect(result.requestId).toBe("fal-header-1");
+  });
 });

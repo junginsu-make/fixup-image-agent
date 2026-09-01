@@ -13,7 +13,12 @@ import type {
 } from "../../app/api/sources/source-service";
 import type { ReferenceImageRow } from "../../app/library/reference-upload";
 import type { SnsProjectCreateRecord, SnsProjectRecord, SnsProjectRepository } from "../../app/api/sns/projects/project-service";
-import type { SnsFlowState } from "../../app/api/sns/flow-service";
+import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
+import type {
+  GenerationRequestComplete,
+  GenerationRequestCreate,
+  GenerationRequestStore,
+} from "@fixup/sns-core";
 
 interface LocalCandidateRow extends Omit<CandidateRecord, "source"> {
   userId: string;
@@ -30,10 +35,16 @@ interface LocalStoreData {
   referenceImages: ReferenceImageRow[];
   referenceSets: LocalReferenceSetRow[];
   snsProjects: SnsProjectRecord[];
+  generationRequests: LocalSnsGenerationRequest[];
+  cards: LocalSnsCardRow[];
 }
 
 function emptyData(): LocalStoreData {
-  return { version: 1, sources: [], candidates: [], referenceImages: [], referenceSets: [], snsProjects: [] };
+  return {
+    version: 1,
+    sources: [], candidates: [], referenceImages: [], referenceSets: [], snsProjects: [],
+    generationRequests: [], cards: [],
+  };
 }
 
 function copy<T>(value: T): T {
@@ -51,7 +62,12 @@ export class LocalDatabase {
   private async load(): Promise<LocalStoreData> {
     try {
       const stored = JSON.parse(await readFile(this.dataPath, "utf8")) as Partial<LocalStoreData>;
-      return { ...emptyData(), ...stored, snsProjects: stored.snsProjects ?? [] };
+      return {
+        ...emptyData(), ...stored,
+        snsProjects: stored.snsProjects ?? [],
+        generationRequests: stored.generationRequests ?? [],
+        cards: stored.cards ?? [],
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyData();
       throw error;
@@ -340,9 +356,130 @@ export function saveLocalSnsFlow(
   });
 }
 
+export interface LocalSnsGenerationRequest {
+  id: string;
+  userId: string;
+  projectId: string;
+  cardIndex: number;
+  modelId: string;
+  mode: GenerationRequestCreate["mode"];
+  size: GenerationRequestCreate["size"];
+  requestedImages: 1;
+  unitCostUsd: number;
+  falRequestId: string | null;
+  returnedImages: number;
+  costUsd: number | null;
+  createdAt: string;
+}
+
+export function createLocalSnsGenerationRequestStore(
+  database: LocalDatabase,
+  userId: string,
+): GenerationRequestStore {
+  return {
+    async create(row) {
+      return database.update((data) => {
+        if (!data.snsProjects.some((project) => project.id === row.projectId && project.userId === userId)) {
+          throw notFound("SNS 프로젝트");
+        }
+        const request: LocalSnsGenerationRequest = {
+          id: randomUUID(), userId, projectId: row.projectId, cardIndex: row.cardIndex,
+          modelId: row.modelId, mode: row.mode, size: row.size,
+          requestedImages: 1, unitCostUsd: row.unitCostUsd,
+          falRequestId: null, returnedImages: 0, costUsd: null,
+          createdAt: new Date().toISOString(),
+        };
+        data.generationRequests.push(request);
+        return { ...row, id: request.id };
+      });
+    },
+    async complete(id: string, patch: GenerationRequestComplete) {
+      await database.update((data) => {
+        const request = data.generationRequests.find((entry) => entry.id === id && entry.userId === userId);
+        if (!request) throw notFound("SNS 비용 요청");
+        request.falRequestId = patch.falRequestId ?? null;
+        request.returnedImages = patch.returnedImages;
+        request.costUsd = patch.costUsd;
+      });
+    },
+  };
+}
+
+export function listLocalSnsGenerationRequests(
+  database: LocalDatabase,
+  userId: string,
+  projectId?: string,
+): Promise<LocalSnsGenerationRequest[]> {
+  return database.read((data) => data.generationRequests
+    .filter((request) => request.userId === userId && (!projectId || request.projectId === projectId))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+}
+
+export interface LocalSnsCardRow {
+  id: string;
+  userId: string;
+  projectId: string;
+  index: number;
+  kind: SnsFlowCard["kind"];
+  role: SnsFlowCard["role"];
+  copy: SnsFlowCard["copy"];
+  prompt: string | null;
+  assetPath: string | null;
+  status: SnsFlowCard["status"];
+  review: unknown | null;
+  error: string | null;
+}
+
+export async function replaceLocalSnsCards(
+  database: LocalDatabase,
+  userId: string,
+  projectId: string,
+  flow: SnsFlowState,
+): Promise<void> {
+  await database.update((data) => {
+    if (!data.snsProjects.some((project) => project.id === projectId && project.userId === userId)) {
+      throw notFound("SNS 프로젝트");
+    }
+    data.cards = data.cards.filter((card) => card.projectId !== projectId || card.userId !== userId);
+    data.cards.push(...flow.cards.map((card) => ({
+      id: randomUUID(), userId, projectId, index: card.index,
+      kind: card.kind, role: card.role, copy: card.copy,
+      prompt: null, assetPath: null, status: card.status,
+      review: null, error: null,
+    })));
+  });
+}
+
+export function updateLocalSnsCard(
+  database: LocalDatabase,
+  userId: string,
+  projectId: string,
+  cardIndex: number,
+  patch: Partial<Pick<LocalSnsCardRow, "copy" | "prompt" | "assetPath" | "status" | "review" | "error">>,
+): Promise<LocalSnsCardRow> {
+  return database.update((data) => {
+    const card = data.cards.find((entry) => entry.projectId === projectId && entry.index === cardIndex && entry.userId === userId);
+    if (!card) throw notFound("SNS 카드");
+    Object.assign(card, patch);
+    return card;
+  });
+}
+
+export function listLocalSnsCards(
+  database: LocalDatabase,
+  userId: string,
+  projectId: string,
+): Promise<LocalSnsCardRow[]> {
+  return database.read((data) => data.cards
+    .filter((card) => card.userId === userId && card.projectId === projectId)
+    .sort((a, b) => a.index - b.index));
+}
+
 function localFilePath(root: string, storagePath: string): string {
   const parts = storagePath.split("/");
-  if (parts.length !== 3 || parts.some((part) => !part || part === "." || part === "..")) {
+  const validReference = parts.length === 3 && parts[1] === "references";
+  const validSnsResult = parts.length === 4 && parts[1] === "sns";
+  if ((!validReference && !validSnsResult) || parts.some((part) => !part || part === "." || part === "..")) {
     throw new Error("올바르지 않은 로컬 Storage 경로입니다.");
   }
   const libraryRoot = path.resolve(root, "library");
@@ -362,6 +499,37 @@ export async function removeLocalReferenceFiles(root: string, storagePaths: stri
 }
 
 export async function readLocalReferenceFile(root: string, storagePath: string): Promise<Buffer> {
+  const target = localFilePath(root, storagePath);
+  await access(target);
+  return readFile(target);
+}
+
+function assertLocalSegment(value: string, label: string): void {
+  if (!value || value.includes("/") || value.includes("\\") || value === "." || value === "..") {
+    throw new Error(`${label} 값이 올바르지 않습니다.`);
+  }
+}
+
+export async function writeLocalSnsResultFile(
+  root: string,
+  userId: string,
+  projectId: string,
+  cardIndex: number,
+  bytes: Buffer,
+): Promise<string> {
+  assertLocalSegment(userId, "사용자");
+  assertLocalSegment(projectId, "프로젝트");
+  if (!Number.isInteger(cardIndex) || cardIndex < 1) throw new Error("카드 번호가 올바르지 않습니다.");
+  const storagePath = `${userId}/sns/${projectId}/${cardIndex}.png`;
+  const target = localFilePath(root, storagePath);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, bytes);
+  return storagePath;
+}
+
+export async function readLocalSnsResultFile(root: string, storagePath: string): Promise<Buffer> {
+  const parts = storagePath.split("/");
+  if (parts.length !== 4 || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
   const target = localFilePath(root, storagePath);
   await access(target);
   return readFile(target);

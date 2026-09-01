@@ -1,13 +1,11 @@
 import { z } from "zod";
 import { authenticateApiMember } from "../../../../../../../lib/membership/api";
-import { isLocalStoreEnabled } from "../../../../../../../lib/local-store";
 import { snsFlowStoreForUser } from "../../../../../../../lib/sns-flow-store";
 import { snsGenerationRequestStoreForUser } from "../../../../../../../lib/sns-generation-store";
 import { regenerateActualFlowCard } from "../../../../../../../lib/sns/actual-flow";
 import { createSnsGenerationProviders, SnsProviderConfigurationError } from "../../../../../../../lib/sns/providers";
 import { createActualGenerationDependencies, refreshProjectAssetUrls } from "../../../../../../../lib/sns/runtime";
 import { updateFlowCopy } from "../../../../flow-service";
-import { regenerateLocalFlowCard } from "../../../../local-fake-flow";
 
 type Context = { params: Promise<{ id: string; index: string }> };
 
@@ -57,18 +55,15 @@ export async function POST(_request: Request, context: Context) {
     const store = await snsFlowStoreForUser(auth.member.userId);
     let project = await store.get(params.id);
     if (!project?.data.flow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
-    const local = isLocalStoreEnabled();
-    const providers = local ? undefined : createSnsGenerationProviders();
-    if (!local) project = await refreshProjectAssetUrls(project);
+    const providers = createSnsGenerationProviders();
+    project = await refreshProjectAssetUrls(project);
     const currentFlow = project.data.flow;
     if (!currentFlow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
-    const flow = local
-      ? await regenerateLocalFlowCard(project, currentFlow, index)
-      : await regenerateActualFlowCard(project, currentFlow, index, await createActualGenerationDependencies({
+    const flow = await regenerateActualFlowCard(project, currentFlow, index, await createActualGenerationDependencies({
         userId: auth.member.userId,
         project,
         requestStore: snsGenerationRequestStoreForUser(auth.member.userId),
-        providers: providers!,
+        providers,
       }));
     const saved = await store.save(params.id, flow, "ready");
     return Response.json({ ok: true, project: saved });

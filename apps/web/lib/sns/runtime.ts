@@ -4,6 +4,7 @@ import "server-only";
 // @ts-expect-error Runtime export is valid; upstream package metadata hides its bundled declarations.
 import sharp from "sharp";
 import {
+  CARD_RATIOS,
   averageEdgeColor,
   letterboxPlan,
   type CardGenerationDependencies,
@@ -13,6 +14,16 @@ import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
 import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
+import {
+  getLocalDatabase,
+  isLocalStoreEnabled,
+  localStoreRoot,
+  readLocalReferenceFile,
+  readLocalSnsResultFile,
+  replaceLocalSnsCards,
+  updateLocalSnsCard,
+  writeLocalSnsResultFile,
+} from "../local-store";
 import type { ActualGenerationDependencies } from "./actual-flow";
 import type { SnsProviders } from "./providers";
 
@@ -41,7 +52,28 @@ async function signedUrl(path: string): Promise<string> {
   return result.data.signedUrl;
 }
 
+function localResultUrl(storagePath: string): string {
+  const parts = storagePath.split("/");
+  if (parts.length !== 4 || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
+  const projectId = encodeURIComponent(parts[2]!);
+  const cardIndex = encodeURIComponent(parts[3]!.replace(/\.png$/i, ""));
+  return `/api/sns/projects/${projectId}/cards/${cardIndex}/file`;
+}
+
+async function localResultDataUrl(storagePath: string): Promise<string> {
+  const bytes = await readLocalSnsResultFile(localStoreRoot(), storagePath);
+  return `data:image/png;base64,${bytes.toString("base64")}`;
+}
+
+async function resultUrl(path: string): Promise<string> {
+  return isLocalStoreEnabled() ? localResultUrl(path) : signedUrl(path);
+}
+
 async function uploadResult(userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string) {
+  if (isLocalStoreEnabled()) {
+    const png = await sharp(bytes).png().toBuffer();
+    return writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
+  }
   const path = `${userId}/sns/${projectId}/${cardIndex}.${extensionFor(contentType)}`;
   const result = await createSupabaseAdminClient().storage.from(BUCKET).upload(path, bytes, { contentType, upsert: true });
   if (result.error) throw new Error(result.error.message);
@@ -74,6 +106,25 @@ async function letterbox(bytes: Buffer, target: { width: number; height: number 
 }
 
 export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promise<SnsProjectRecord> {
+  if (isLocalStoreEnabled()) {
+    const attachments = await Promise.all(project.data.attachments.map(async (attachment) => {
+      const bytes = await readLocalReferenceFile(localStoreRoot(), attachment.assetPath);
+      const extension = attachment.assetPath.slice(attachment.assetPath.lastIndexOf(".")).toLowerCase();
+      const contentType = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg" : extension === ".webp" ? "image/webp" : "image/png";
+      return { ...attachment, url: `data:${contentType};base64,${bytes.toString("base64")}` };
+    }));
+    const attachmentUrl = new Map(attachments.map((attachment) => [attachment.id, attachment.url]));
+    const flow = project.data.flow ? {
+      ...project.data.flow,
+      cards: project.data.flow.cards.map((card) => ({
+        ...card,
+        assetUrl: card.kind === "generated"
+          ? card.assetPath ? localResultUrl(card.assetPath) : card.assetUrl
+          : card.attachmentId ? attachmentUrl.get(card.attachmentId) ?? card.assetUrl : card.assetUrl,
+      })),
+    } : undefined;
+    return { ...project, data: { ...project.data, attachments, flow } };
+  }
   const paths = new Set<string>();
   project.data.attachments.forEach((attachment) => paths.add(attachment.assetPath));
   project.data.flow?.cards.forEach((card) => { if (card.assetPath) paths.add(card.assetPath); });
@@ -97,6 +148,9 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
 }
 
 export async function replaceSnsCardRows(userId: string, projectId: string, flow: SnsFlowState) {
+  if (isLocalStoreEnabled()) {
+    return replaceLocalSnsCards(getLocalDatabase(), userId, projectId, flow);
+  }
   const client = await createSupabaseServerClient();
   const removed = await client.from("sns_cards").delete().eq("project_id", projectId);
   if (removed.error) throw new Error(removed.error.message);
@@ -119,24 +173,39 @@ export async function createActualGenerationDependencies(input: {
   requestStore: GenerationRequestStore;
   providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falRunner">;
 }): Promise<ActualGenerationDependencies> {
-  const client = await createSupabaseServerClient();
+  const local = isLocalStoreEnabled();
+  const client = local ? undefined : await createSupabaseServerClient();
   const target = input.project.data.flow?.cards.length
     ? input.project.data.flow.cards
     : [];
-  const ratio = (await import("@fixup/sns-core")).CARD_RATIOS.find((entry) => entry.id === input.project.ratio)?.pixel;
+  const ratio = CARD_RATIOS.find((entry) => entry.id === input.project.ratio)?.pixel;
   if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${input.project.ratio}`);
+
+  async function updateCard(cardIndex: number, patch: Parameters<typeof updateLocalSnsCard>[4]) {
+    if (local) {
+      await updateLocalSnsCard(getLocalDatabase(), input.userId, input.project.id, cardIndex, patch);
+      return;
+    }
+    const result = await client!.from("sns_cards").update({
+      ...(patch.assetPath !== undefined ? { asset_path: patch.assetPath } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+      ...(patch.review !== undefined ? { review: patch.review } : {}),
+      ...(patch.error !== undefined ? { error: patch.error } : {}),
+      ...(patch.copy !== undefined ? { copy: patch.copy } : {}),
+    }).eq("project_id", input.project.id).eq("index", cardIndex);
+    if (result.error) throw new Error(result.error.message);
+  }
 
   const generation: CardGenerationDependencies = {
     requestStore: input.requestStore,
     runner: input.providers.falRunner,
     cardStore: {
       async markDone(cardIndex, assetPath) {
-        const result = await client.from("sns_cards").update({ asset_path: assetPath, status: "done", error: null }).eq("project_id", input.project.id).eq("index", cardIndex);
-        if (result.error) throw new Error(result.error.message);
+        await updateCard(cardIndex, { assetPath, status: "done", error: null });
       },
       async markFailed(cardIndex, message) {
-        const result = await client.from("sns_cards").update({ status: "failed", error: message }).eq("project_id", input.project.id).eq("index", cardIndex);
-        if (result.error) throw new Error(result.error.message);
+        await updateCard(cardIndex, { status: "failed", error: message });
       },
     },
     async saveAsset(imageUrl, job) {
@@ -153,14 +222,13 @@ export async function createActualGenerationDependencies(input: {
     reviewPrimary: input.providers.reviewPrimary,
     reviewBackup: input.providers.reviewBackup,
     generation,
-    getAssetUrl: signedUrl,
+    getAssetUrl: resultUrl,
+    getReviewAssetUrl: local ? localResultDataUrl : signedUrl,
     async savePrompt(cardIndex, prompt) {
-      const result = await client.from("sns_cards").update({ prompt }).eq("project_id", input.project.id).eq("index", cardIndex);
-      if (result.error) throw new Error(result.error.message);
+      await updateCard(cardIndex, { prompt });
     },
     async saveReview(cardIndex, status, review, issues) {
-      const result = await client.from("sns_cards").update({ status, review: { result: review, issues } }).eq("project_id", input.project.id).eq("index", cardIndex);
-      if (result.error) throw new Error(result.error.message);
+      await updateCard(cardIndex, { status, review: { result: review, issues } });
     },
     async saveOriginal(card) {
       const original = target.find((entry) => entry.index === card.index) ?? card;
@@ -168,9 +236,8 @@ export async function createActualGenerationDependencies(input: {
       const image = await fetchedImage(original.assetUrl);
       const rendered = await letterbox(image.bytes, ratio);
       const assetPath = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
-      const result = await client.from("sns_cards").update({ asset_path: assetPath, status: "done", review: null, error: null }).eq("project_id", input.project.id).eq("index", card.index);
-      if (result.error) throw new Error(result.error.message);
-      return { assetPath, assetUrl: await signedUrl(assetPath) };
+      await updateCard(card.index, { assetPath, status: "done", review: null, error: null });
+      return { assetPath, assetUrl: await resultUrl(assetPath) };
     },
   };
 }

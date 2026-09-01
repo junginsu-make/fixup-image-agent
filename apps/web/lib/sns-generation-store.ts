@@ -2,6 +2,7 @@ import "server-only";
 
 import { authenticateApiMember } from "./membership/api";
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { createLocalSnsGenerationRequestStore, getLocalDatabase, isLocalStoreEnabled } from "./local-store";
 import {
   bindGenerationRequestStore,
   type AdminGenerationRequestCompleteRow,
@@ -30,6 +31,9 @@ export async function authenticateSnsGenerationRequestStore() {
 }
 
 export function snsGenerationRequestStoreForUser(userId: string) {
+  if (isLocalStoreEnabled()) {
+    return createLocalSnsGenerationRequestStore(getLocalDatabase(), userId);
+  }
   const admin = createSupabaseAdminClient();
   const writer: GenerationRequestAdminWriter = {
     async create(row: AdminGenerationRequestCreateRow) {
