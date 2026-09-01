@@ -8,6 +8,11 @@ import type {
   ReviewProviderInput,
   ScenePromptRequest,
 } from "@fixup/sns-core";
+import {
+  AnthropicStructuredProvider,
+  OpenAIStructuredProvider,
+  type StructuredSpec,
+} from "../llm/structured";
 import { createFalQueueClient, type FalQueueClient } from "../fal/queue";
 import { createFalUploader, type FalUploader } from "../fal/upload";
 
@@ -35,8 +40,6 @@ export function requireSnsProviderKeys(
   if (missing.length) throw new SnsProviderConfigurationError(missing, scope);
 }
 
-type JsonSchema = Record<string, unknown>;
-type StructuredSpec = { name: string; description: string; schema: JsonSchema };
 
 const PLAN_SPEC: StructuredSpec = {
   name: "submit_card_plan",
@@ -137,37 +140,6 @@ async function imageBlock(url: string): Promise<Anthropic.ImageBlockParam> {
       data: Buffer.from(await response.arrayBuffer()).toString("base64"),
     },
   };
-}
-
-class AnthropicStructuredProvider implements PlanProvider, CopyProvider {
-  constructor(private readonly client: Anthropic, private readonly model: string, private readonly spec: StructuredSpec) {}
-  async generate(prompt: string): Promise<unknown> {
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
-      tools: [{ name: this.spec.name, description: this.spec.description, input_schema: this.spec.schema as Anthropic.Tool.InputSchema }],
-      tool_choice: { type: "tool", name: this.spec.name, disable_parallel_tool_use: true },
-    });
-    const call = response.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === this.spec.name);
-    if (!call) throw new Error(`Claude가 ${this.spec.name} 결과를 돌려주지 않았습니다.`);
-    return call.input;
-  }
-}
-
-class OpenAIStructuredProvider implements PlanProvider, CopyProvider {
-  constructor(private readonly client: OpenAI, private readonly model: string, private readonly spec: StructuredSpec) {}
-  async generate(prompt: string): Promise<unknown> {
-    const response = await this.client.responses.create({
-      model: this.model,
-      input: [{ role: "developer", content: "Return only the requested structured result." }, { role: "user", content: prompt }],
-      tools: [{ type: "function", name: this.spec.name, description: this.spec.description, parameters: this.spec.schema, strict: false }],
-      tool_choice: { type: "function", name: this.spec.name },
-    });
-    const call = response.output.find((item) => item.type === "function_call" && item.name === this.spec.name);
-    if (!call || call.type !== "function_call") throw new Error(`OpenAI가 ${this.spec.name} 결과를 돌려주지 않았습니다.`);
-    return JSON.parse(call.arguments) as unknown;
-  }
 }
 
 class AnthropicSceneProvider implements ImagePromptProvider {

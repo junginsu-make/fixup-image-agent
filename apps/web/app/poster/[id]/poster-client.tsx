@@ -42,7 +42,9 @@ const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
 export function PosterClient({ project, images }: { project: PosterProject; images: PosterImage[] }) {
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
+  const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
 
   function setField(field: TextSlot, value: string) {
@@ -64,6 +66,62 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
       setError(cause instanceof Error ? cause.message : "슬롯을 저장하지 못했습니다.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
+  async function runPlan() {
+    setBusy("기획하는 중…");
+    setError(null);
+    try {
+      const body = await (await fetch(`/api/poster/projects/${project.id}/plan`, { method: "POST" })).json();
+      if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
+      setSlots(body.project.data.slots);
+      setNotes(body.issues ?? []);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "기획하지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * 만든다.
+   *
+   * 제출하고 나서 상태를 물어본다. 모델 호출에 시간 제한을 두지 않는다 —
+   * GPT Image 2 는 2분을 넘긴다.
+   */
+  async function generate() {
+    setBusy("보내는 중…");
+    setError(null);
+    try {
+      const start = await (await fetch(`/api/poster/projects/${project.id}/generate`, { method: "POST" })).json();
+      if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
+      const submission = start.submission;
+      setBusy("그리는 중… 2~3분 걸립니다");
+
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+        const poll = await (await fetch(`/api/poster/projects/${project.id}/status`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            requestRowId: submission.requestRowId,
+            falRequestId: submission.falRequestId,
+            endpoint: submission.endpoint,
+            unitCostUsd: (submission.estimatedUsd ?? 0) / project.data.variants,
+          }),
+        })).json();
+        if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
+        if (poll.done) {
+          setList(poll.images);
+          break;
+        }
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "생성하지 못했습니다.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -91,12 +149,18 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
         </div>
       ) : null}
 
-      {project.data.grammarIssues?.length ? (
+      {notes.length ? (
         <div role="status" className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          <strong className="block">레퍼런스를 다 읽지는 못했습니다</strong>
+          <strong className="block">알아 두실 것</strong>
           <ul className="mt-1 list-disc pl-5">
-            {project.data.grammarIssues.map((issue) => <li key={issue}>{issue}</li>)}
+            {notes.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
+        </div>
+      ) : null}
+
+      {busy ? (
+        <div role="status" className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+          {busy}
         </div>
       ) : null}
 
@@ -165,9 +229,15 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
             <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>
           </div>
 
-          <div className="flex justify-end">
-            <Button onClick={() => void saveSlots()} disabled={saving}>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
+              AI 로 초안 채우기
+            </Button>
+            <Button variant="secondary" onClick={() => void saveSlots()} disabled={saving || Boolean(busy)}>
               {saving ? "저장하는 중…" : "기획 저장"}
+            </Button>
+            <Button onClick={() => void generate()} disabled={Boolean(busy)}>
+              {project.data.variants}장 만들기
             </Button>
           </div>
         </CardContent>
