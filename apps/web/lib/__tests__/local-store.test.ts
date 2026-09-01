@@ -7,6 +7,7 @@ import {
   createLocalCandidateRepository,
   createLocalDatabase,
   createLocalReferenceSetStore,
+  createLocalSnsProjectRepository,
   createLocalSourceRepository,
   insertLocalReferenceImage,
   isLocalStoreEnabled,
@@ -94,6 +95,22 @@ describe("파일 저장소 소유자 격리", () => {
       name: "남의 이미지", purpose: "cardnews",
       items: [{ referenceImageId: imageB.id, role: "cover", position: 0 }],
     })).rejects.toThrow("참고 이미지 항목을 찾을 수 없습니다");
+  });
+
+  it("두 사용자는 자기 SNS 프로젝트만 본다", async () => {
+    const { db } = await database();
+    const userA = createLocalSnsProjectRepository(db, "user-a");
+    const userB = createLocalSnsProjectRepository(db, "user-b");
+    await userA.create({
+      userId: "user-a", title: "A 프로젝트", status: "draft", ratio: "4:5", language: "ko",
+      modelId: "gpt-image-2", cardCountMode: "auto", data: {
+        source: { kind: "text", text: "본문" },
+        attachments: [],
+      },
+      slotPlan: { total: "auto", cover: 1, placeAsIs: 0, aiBody: 0, ending: 1, autoRange: { min: 4, max: 8 }, issues: [] },
+    });
+    expect((await userA.list()).map((project) => project.title)).toEqual(["A 프로젝트"]);
+    expect(await userB.list()).toEqual([]);
   });
 });
 

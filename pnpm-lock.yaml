@@ -31,6 +31,9 @@ importers:
       '@fixup/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@fixup/sns-core':
+        specifier: workspace:*
+        version: link:../../packages/sns-core
       '@fixup/ui':
         specifier: workspace:*
         version: link:../../packages/ui

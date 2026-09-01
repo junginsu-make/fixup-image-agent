@@ -12,6 +12,7 @@ import type {
   SourceUpdateRecord,
 } from "../../app/api/sources/source-service";
 import type { ReferenceImageRow } from "../../app/library/reference-upload";
+import type { SnsProjectCreateRecord, SnsProjectRecord, SnsProjectRepository } from "../../app/api/sns/projects/project-service";
 
 interface LocalCandidateRow extends Omit<CandidateRecord, "source"> {
   userId: string;
@@ -27,10 +28,11 @@ interface LocalStoreData {
   candidates: LocalCandidateRow[];
   referenceImages: ReferenceImageRow[];
   referenceSets: LocalReferenceSetRow[];
+  snsProjects: SnsProjectRecord[];
 }
 
 function emptyData(): LocalStoreData {
-  return { version: 1, sources: [], candidates: [], referenceImages: [], referenceSets: [] };
+  return { version: 1, sources: [], candidates: [], referenceImages: [], referenceSets: [], snsProjects: [] };
 }
 
 function copy<T>(value: T): T {
@@ -47,7 +49,8 @@ export class LocalDatabase {
 
   private async load(): Promise<LocalStoreData> {
     try {
-      return JSON.parse(await readFile(this.dataPath, "utf8")) as LocalStoreData;
+      const stored = JSON.parse(await readFile(this.dataPath, "utf8")) as Partial<LocalStoreData>;
+      return { ...emptyData(), ...stored, snsProjects: stored.snsProjects ?? [] };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyData();
       throw error;
@@ -285,6 +288,28 @@ export function createLocalReferenceSetStore(database: LocalDatabase, boundUserI
         if (index < 0) throw notFound("참고 이미지 세트");
         data.referenceSets.splice(index, 1);
       });
+    },
+  };
+}
+
+export function createLocalSnsProjectRepository(
+  database: LocalDatabase,
+  userId: string,
+): SnsProjectRepository {
+  return {
+    async create(row: SnsProjectCreateRecord): Promise<SnsProjectRecord> {
+      if (row.userId !== userId) throw notFound("SNS 프로젝트");
+      return database.update((data) => {
+        const now = new Date().toISOString();
+        const project: SnsProjectRecord = { ...row, id: randomUUID(), createdAt: now, updatedAt: now };
+        data.snsProjects.push(project);
+        return project;
+      });
+    },
+    async list(): Promise<SnsProjectRecord[]> {
+      return database.read((data) => data.snsProjects
+        .filter((project) => project.userId === userId)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
     },
   };
 }

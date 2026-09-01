@@ -13,6 +13,7 @@
   "dependencies": {
     "@fixup/pdp-core": "workspace:*",
     "@fixup/redesign-core": "workspace:*",
+    "@fixup/sns-core": "workspace:*",
     "@fixup/shared": "workspace:*",
     "@fixup/ui": "workspace:*",
     "@supabase/ssr": "^0.7.0",
