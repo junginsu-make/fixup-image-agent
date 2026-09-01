@@ -1,10 +1,13 @@
-import type { CardCopy, CardReview } from "@fixup/sns-core";
+import type { CardCopy, CardPlan, CardReview } from "@fixup/sns-core";
 
 export interface SnsFlowCard {
   index: number;
   kind: "generated" | "place_as_is" | "ending_image";
   role: "cover" | "body" | "ending";
   copy: CardCopy;
+  plan?: CardPlan;
+  attachmentId?: string;
+  assetPath?: string;
   status: "pending" | "generating" | "review_required" | "done" | "failed";
   assetUrl?: string;
   review?: CardReview;
@@ -81,7 +84,6 @@ export async function generateFlow(
 ): Promise<SnsFlowState> {
   const next = clone(flow);
   next.stage = "result";
-  next.costs = [];
   for (let offset = 0; offset < next.cards.length; offset += 1) {
     const card = next.cards[offset]!;
     if (card.kind !== "generated") {

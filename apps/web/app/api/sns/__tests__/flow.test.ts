@@ -24,6 +24,21 @@ describe("원고 수정", () => {
 });
 
 describe("결과 생성", () => {
+  it("원고 수정 뒤 전체를 다시 만들어도 이전 요청 비용을 지우지 않는다", async () => {
+    const state = flow();
+    state.costs = [{ cardIndex: 1, costUsd: 0.178 }];
+    const result = await generateFlow(state, {
+      generate: async (card) => ({ assetUrl: `/retry/${card.index}.jpg`, costUsd: 0.2 }),
+      review: async () => ({ decision: "pass", summary: "통과", issues: [] }),
+    });
+    expect(result.costs).toEqual([
+      { cardIndex: 1, costUsd: 0.178 },
+      { cardIndex: 1, costUsd: 0.2 },
+      { cardIndex: 2, costUsd: 0.2 },
+      { cardIndex: 3, costUsd: 0.2 },
+    ]);
+  });
+
   it("한 카드 실패 뒤에도 계속하고 검수·미확정 비용을 남긴다", async () => {
     const generated: number[] = [];
     const result = await generateFlow(flow(), {

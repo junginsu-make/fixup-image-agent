@@ -22,6 +22,14 @@ export async function authenticateSnsGenerationRequestStore() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
 
+  return {
+    ok: true as const,
+    member: auth.member,
+    requestStore: snsGenerationRequestStoreForUser(auth.member.userId),
+  };
+}
+
+export function snsGenerationRequestStoreForUser(userId: string) {
   const admin = createSupabaseAdminClient();
   const writer: GenerationRequestAdminWriter = {
     async create(row: AdminGenerationRequestCreateRow) {
@@ -34,9 +42,5 @@ export async function authenticateSnsGenerationRequestStore() {
     },
   };
 
-  return {
-    ok: true as const,
-    member: auth.member,
-    requestStore: bindGenerationRequestStore(auth.member.userId, writer),
-  };
+  return bindGenerationRequestStore(userId, writer);
 }

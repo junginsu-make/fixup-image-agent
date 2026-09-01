@@ -112,6 +112,17 @@ describe("카드 생성", () => {
     expect(result.status).toBe("done");
   });
 
+  it("fal 비용 확정 뒤 Storage 저장이 실패해도 확정 비용을 결과에서 잃지 않는다", async () => {
+    const deps = dependencies();
+    deps.saveAsset = async () => { throw new Error("Storage 저장 실패"); };
+
+    const result = await generateCard(generatedJob(), deps);
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("Storage 저장 실패");
+    expect(result.request).toMatchObject({ falRequestId: "fal-1", costUsd: 0.178 });
+  });
+
   it("레퍼런스가 있으면 i2i, 없으면 t2i 로 부른다", async () => {
     const endpoints: string[] = [];
     const deps = dependencies();

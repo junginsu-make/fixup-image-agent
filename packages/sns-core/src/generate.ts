@@ -111,6 +111,7 @@ async function failCard(
   job: CardGenerationJob,
   dependencies: CardGenerationDependencies,
   error: unknown,
+  request?: GeneratedRequestRecord,
 ): Promise<CardGenerationResult> {
   const message = errorMessage(error);
   try {
@@ -118,7 +119,7 @@ async function failCard(
   } catch {
     // 카드 실패 기록 자체가 실패해도 배치의 다음 카드는 계속한다.
   }
-  return { cardIndex: job.cardIndex, status: "failed", usedAi: job.kind === "generated", error: message };
+  return { cardIndex: job.cardIndex, status: "failed", usedAi: job.kind === "generated", request, error: message };
 }
 
 export async function generateCard(
@@ -136,6 +137,7 @@ export async function generateCard(
     }
   }
 
+  let confirmedRequest: GeneratedRequestRecord | undefined;
   try {
     const model = modelById(job.modelId);
     const resolved = resolveSize(job.ratioId, model);
@@ -166,6 +168,7 @@ export async function generateCard(
     };
     // fal 호출 비용은 이미 발생했다. Storage 저장보다 먼저 장부를 확정한다.
     await dependencies.requestStore.complete(created.id, completed);
+    confirmedRequest = { ...created, ...completed };
 
     const firstImage = falResult.images[0];
     if (!firstImage) throw new Error("fal 이 이미지를 돌려주지 않았습니다.");
@@ -176,10 +179,10 @@ export async function generateCard(
       status: "done",
       usedAi: true,
       assetPath,
-      request: { ...created, ...completed },
+      request: confirmedRequest,
     };
   } catch (error) {
-    return failCard(job, dependencies, error);
+    return failCard(job, dependencies, error, confirmedRequest);
   }
 }
 

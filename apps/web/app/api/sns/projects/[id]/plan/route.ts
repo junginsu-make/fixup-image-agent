@@ -1,20 +1,25 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { isLocalStoreEnabled } from "../../../../../../lib/local-store";
 import { snsFlowStoreForUser } from "../../../../../../lib/sns-flow-store";
+import { createActualPlanningFlow } from "../../../../../../lib/sns/actual-flow";
+import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
+import { refreshProjectAssetUrls, replaceSnsCardRows } from "../../../../../../lib/sns/runtime";
 import { createLocalPlanningFlow } from "../../../local-fake-flow";
 
 type Context = { params: Promise<{ id: string }> };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function GET(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
-    const project = await (await snsFlowStoreForUser(auth.member.userId)).get(id);
+    let project = await (await snsFlowStoreForUser(auth.member.userId)).get(id);
     if (!project) return Response.json({ ok: false, message: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
+    if (!isLocalStoreEnabled()) project = await refreshProjectAssetUrls(project);
     return Response.json({ ok: true, project });
   } catch (error) {
     return Response.json({ ok: false, message: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다." }, { status: 500 });
@@ -24,18 +29,20 @@ export async function GET(_request: Request, context: Context) {
 export async function POST(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
-  if (!isLocalStoreEnabled()) {
-    return Response.json({ ok: false, message: "실제 LLM 연결은 운영 배포 단계에서 설정합니다." }, { status: 501 });
-  }
   try {
     const { id } = await context.params;
     const store = await snsFlowStoreForUser(auth.member.userId);
     const project = await store.get(id);
     if (!project) return Response.json({ ok: false, message: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
-    const flow = await createLocalPlanningFlow(project);
+    const local = isLocalStoreEnabled();
+    const flow = local
+      ? await createLocalPlanningFlow(project)
+      : await createActualPlanningFlow(project, createSnsPlanningProviders());
+    if (!local) await replaceSnsCardRows(auth.member.userId, id, flow);
     const saved = await store.save(id, flow, "copy_ready");
     return Response.json({ ok: true, project: saved });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "기획과 원고를 만들지 못했습니다." }, { status: 500 });
+    const status = error instanceof SnsProviderConfigurationError ? error.status : 500;
+    return Response.json({ ok: false, message: error instanceof Error ? error.message : "기획과 원고를 만들지 못했습니다." }, { status });
   }
 }
