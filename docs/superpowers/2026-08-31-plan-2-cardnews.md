@@ -932,10 +932,11 @@ describe("원고 프롬프트", () => {
     expect(buildCopyPrompt({ ...base, language: "ko" })).toContain("한국어");
   });
 
-  it("글자 수 상한을 알린다", () => {
+  it("글자 수를 숫자로 못 박지 않는다", () => {
+    // 2026-08-20 결정 — 내용에 따라 적절한 양이 달라진다. LLM 이 판단하게 유도한다.
     const prompt = buildCopyPrompt(base);
-    expect(prompt).toContain("60");
-    expect(prompt).toContain("200");
+    expect(prompt).not.toMatch(/\d+\s*자/);
+    expect(prompt).toMatch(/읽기 벅차지 않게|한눈에 들어오는/);
   });
 
   it("자료에 없는 것을 지어내지 말라고 못 박는다", () => {
@@ -977,7 +978,6 @@ Run: `pnpm --filter @fixup/sns-core test`
 달라지므로 숫자로 못 박지 말고 LLM 이 판단하게 유도한다. 내용이 꼭 필요해서 길어지면
 막지 말고, 그림 단계에서 글자를 작게 넣어 소화한다. **자르지 않는다** — 잘린 문장은
 오류 없이 말이 끊긴다. 04 화면에서 사람이 보고 고친다.
-상한을 넘으면 **자른다.** 던지지 않는다. 사람이 04 단계에서 고칠 수 있다.
 
 - [ ] **Step 4: 통과 확인**
 
@@ -1174,7 +1174,10 @@ export function buildFrame(input: {
     "",
     `Render this ${input.language === "ko" ? "Korean" : input.language} text exactly as written, with correct spelling and spacing:`,
     ...texts.map(([label, value]) => `  ${label}: ${value}`),
-    "Do not translate, paraphrase, shorten, or add any text that is not listed above.",
+    // 위에 적은 글자는 그대로. 배경 글자는 금지가 아니라 자제다 —
+    // 간판·표지판 같은 것까지 막으면 그림이 어색해진다. 2026-08-20 결정.
+    "Do not translate, paraphrase, or shorten the text listed above.",
+    "Keep incidental background text sparse. This is a card, not a page full of words.",
     "",
     `Output size ${input.size.width}x${input.size.height}. No outer border, no page frame, no UI chrome.`,
   ].join("\n");
