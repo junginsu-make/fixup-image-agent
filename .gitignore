@@ -6,6 +6,7 @@ node_modules/
 *.tsbuildinfo
 .vercel
 dist/
+/data/local/
 
 # 시크릿 (.env* 패턴이 못 잡는 것들 — 실제 키/비번/토큰 원문)
 env.local.md

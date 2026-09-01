@@ -17,8 +17,8 @@ import type { MemberProfile, MembershipContext, UsageSummary } from "./membershi
 export const isLocalAuthBypass =
   process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "1";
 
-const DEV_USER_ID = "00000000-0000-4000-8000-000000000001";
-const DEV_EMAIL = "local-dev@example.com";
+const DEV_USER_ID = process.env.LOCAL_AUTH_USER_ID?.trim() || "00000000-0000-4000-8000-000000000001";
+const DEV_EMAIL = process.env.LOCAL_AUTH_EMAIL?.trim() || "local-dev@example.com";
 
 export const devMemberProfile: MemberProfile = {
   id: DEV_USER_ID,
