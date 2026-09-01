@@ -169,7 +169,7 @@ export async function createQueuedGenerationDependencies(input: {
   userId: string;
   project: SnsProjectRecord;
   requestStore: SubmittedGenerationRequestStore;
-  providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falQueue">;
+  providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falQueue" | "falUploader">;
 }): Promise<QueuedGenerationDependencies> {
   const local = isLocalStoreEnabled();
   const client = local ? undefined : await createSupabaseServerClient();
@@ -196,7 +196,10 @@ export async function createQueuedGenerationDependencies(input: {
     sceneProvider: input.providers.sceneProvider,
     reviewPrimary: input.providers.reviewPrimary,
     reviewBackup: input.providers.reviewBackup,
-    uploadReference: (attachment) => input.providers.falQueue.uploadReference(attachment),
+    async uploadReference(attachment) {
+      const image = await fetchedImage(attachment.url);
+      return input.providers.falUploader.uploadReference(image.bytes, image.contentType);
+    },
     queue: input.providers.falQueue,
     requestStore: input.requestStore,
     savePrompt: (cardIndex, prompt) => updateCard(cardIndex, { prompt }),

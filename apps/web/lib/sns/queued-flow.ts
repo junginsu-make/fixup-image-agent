@@ -19,27 +19,11 @@ import {
 } from "@fixup/sns-core";
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
+import type { FalQueueClient } from "../fal/queue";
+import { uploadUniqueReferences } from "../fal/upload";
 
 export const QUEUE_POLL_INTERVAL_MS = 10_000;
 export const QUEUE_GIVE_UP_MS = 30 * 60_000;
-
-export interface QueueSubmission {
-  requestId: string;
-  statusUrl: string;
-  responseUrl: string;
-  endpoint?: string;
-}
-
-export type QueueStatus =
-  | { state: "queued" }
-  | { state: "in_progress" }
-  | { state: "completed"; images: Array<{ url: string }> }
-  | { state: "failed"; error: string };
-
-export interface FalQueue {
-  submit(endpoint: string, input: Record<string, unknown>, cardIndex: number): Promise<QueueSubmission>;
-  status(submission: QueueSubmission, cardIndex: number): Promise<QueueStatus>;
-}
 
 export interface SubmittedGenerationRequestStore {
   createSubmitted(row: GenerationRequestCreate & { falRequestId: string }): Promise<{ id: string }>;
@@ -51,7 +35,7 @@ export interface QueuedGenerationDependencies {
   reviewPrimary: ReviewRequest;
   reviewBackup: ReviewRequest;
   uploadReference(attachment: Attachment): Promise<string>;
-  queue: FalQueue;
+  queue: FalQueueClient;
   requestStore: SubmittedGenerationRequestStore;
   savePrompt(cardIndex: number, prompt: string): Promise<void>;
   saveSubmitted(cardIndex: number): Promise<void>;
@@ -66,15 +50,13 @@ function nowIso(value?: string): string {
   return value ?? new Date().toISOString();
 }
 
-function queueSubmission(card: SnsFlowCard): QueueSubmission {
-  if (!card.falRequestId || !card.generationStatusUrl || !card.generationResponseUrl) {
+function queueIdentity(card: SnsFlowCard): { endpoint: string; requestId: string } {
+  if (!card.falRequestId || !card.generationEndpoint) {
     throw new Error(`${card.index}번 카드의 fal 큐 정보가 없습니다.`);
   }
   return {
-    requestId: card.falRequestId,
-    statusUrl: card.generationStatusUrl,
-    responseUrl: card.generationResponseUrl,
     endpoint: card.generationEndpoint,
+    requestId: card.falRequestId,
   };
 }
 
@@ -107,10 +89,9 @@ async function submitNext(
   const unitCostUsd = unitPrice(model, mode, resolved.pixel ?? { width: 1, height: 1 });
 
   // 과금 요청은 정확히 한 번 제출하고, 돌아온 request_id를 바로 장부에 쓴다.
-  const submitted = await dependencies.queue.submit(
+  const submitted = await dependencies.queue.submitJob(
     endpoint,
     buildModelInput(model, mode, resolved, card.prompt, imageUrls),
-    card.index,
   );
   const request = await dependencies.requestStore.createSubmitted({
     projectId: project.id,
@@ -127,8 +108,6 @@ async function submitNext(
   card.falRequestId = submitted.requestId;
   card.generationRequestId = request.id;
   card.generationEndpoint = endpoint;
-  card.generationStatusUrl = submitted.statusUrl;
-  card.generationResponseUrl = submitted.responseUrl;
   card.generationStartedAt = now;
   flow.costs.push({
     cardIndex: card.index,
@@ -156,10 +135,11 @@ export async function startQueuedFlow(
   for (const card of next.cards.filter((entry) => selected.has(entry.index) && entry.kind === "generated")) {
     selectReferencesForRole(grouped, card.role).forEach((reference) => referenceIds.add(reference.id));
   }
-  const falReferenceUrls: Record<string, string> = {};
-  for (const attachment of project.data.attachments) {
-    if (referenceIds.has(attachment.id)) falReferenceUrls[attachment.id] = await dependencies.uploadReference(attachment);
-  }
+  const falReferenceUrls = await uploadUniqueReferences(
+    project.data.attachments.filter((attachment) => referenceIds.has(attachment.id)),
+    (attachment) => attachment.id,
+    dependencies.uploadReference,
+  );
   next.stage = "result";
   next.generation = { selectedCardIndexes: selectedIndexes, falReferenceUrls, startedAt: now };
 
@@ -202,8 +182,6 @@ export async function startQueuedFlow(
     card.falRequestId = undefined;
     card.generationRequestId = undefined;
     card.generationEndpoint = undefined;
-    card.generationStatusUrl = undefined;
-    card.generationResponseUrl = undefined;
     card.generationStartedAt = undefined;
     await dependencies.savePrompt(card.index, card.prompt);
   }
@@ -234,11 +212,15 @@ export async function pollQueuedFlow(
     await submitNext(project, next, dependencies, now);
     return next;
   }
-  const status = await dependencies.queue.status(queueSubmission(card), card.index);
-  if (status.state === "queued" || status.state === "in_progress") return next;
-  if (status.state === "failed") {
+  const identity = queueIdentity(card);
+  const status = await dependencies.queue.jobStatus(identity.endpoint, identity.requestId);
+  if (status === "queued" || status === "in_progress") return next;
+  let result: { images: Array<{ url: string }> };
+  try {
+    result = await dependencies.queue.jobResult(identity.endpoint, identity.requestId);
+  } catch (error) {
     card.status = "failed";
-    card.error = status.error;
+    card.error = error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다.";
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
     await submitNext(project, next, dependencies, now);
@@ -249,13 +231,13 @@ export async function pollQueuedFlow(
   if (!cost?.unitCostUsd) throw new Error(`${card.index}번 카드 단가가 없습니다.`);
   const completed: GenerationRequestComplete = {
     falRequestId: card.falRequestId,
-    returnedImages: status.images.length,
+    returnedImages: result.images.length,
     costUsd: cost.unitCostUsd,
   };
   // fal 완료 직후 비용부터 확정하고, 그 다음에 결과 파일을 저장한다.
   await dependencies.requestStore.complete(card.generationRequestId, completed);
   cost.costUsd = completed.costUsd;
-  const image = status.images[0];
+  const image = result.images[0];
   if (!image) {
     card.status = "failed";
     card.error = "fal 완료 응답에 이미지가 없습니다.";

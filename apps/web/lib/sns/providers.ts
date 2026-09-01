@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createFalClient, type FalClient } from "@fal-ai/client";
 import OpenAI from "openai";
 import type {
   ImagePromptProvider,
@@ -9,8 +8,8 @@ import type {
   ReviewProviderInput,
   ScenePromptRequest,
 } from "@fixup/sns-core";
-import type { Attachment } from "@fixup/sns-core";
-import type { FalQueue, QueueStatus, QueueSubmission } from "./queued-flow";
+import { createFalQueueClient, type FalQueueClient } from "../fal/queue";
+import { createFalUploader, type FalUploader } from "../fal/upload";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const DEFAULT_OPENAI_TEXT_MODEL = "gpt-5.6-sol";
@@ -241,51 +240,6 @@ class OpenAIReviewProvider implements ReviewRequest {
   }
 }
 
-export class FalQueuedClient implements FalQueue {
-  private readonly client: FalClient;
-
-  constructor(apiKey: string, client?: FalClient) {
-    this.client = client ?? createFalClient({
-      credentials: apiKey,
-      retry: { maxRetries: 0 },
-    });
-  }
-
-  async uploadReference(attachment: Attachment): Promise<string> {
-    const response = await fetch(attachment.url, { signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS) });
-    if (!response.ok) throw new Error(`${attachment.id} 레퍼런스를 읽지 못했습니다: HTTP ${response.status}`);
-    const blob = await response.blob();
-    return this.client.storage.upload(blob, { lifecycle: { expiresIn: "1h" } });
-  }
-
-  async submit(endpoint: string, input: Record<string, unknown>, _cardIndex: number): Promise<QueueSubmission> {
-    if (input.num_images !== 1) throw new Error("fal num_images는 반드시 1이어야 합니다.");
-    const submitted = await this.client.queue.submit(endpoint as never, { input } as never);
-    return {
-      requestId: submitted.request_id,
-      statusUrl: submitted.status_url,
-      responseUrl: submitted.response_url,
-      endpoint,
-    };
-  }
-
-  async status(submission: QueueSubmission, cardIndex: number): Promise<QueueStatus> {
-    const endpoint = submission.endpoint ?? submission.statusUrl.split("/requests/")[0]?.replace(/^https:\/\/queue\.fal\.run\//, "");
-    if (!endpoint) throw new Error(`${cardIndex}번 카드 fal endpoint를 복원하지 못했습니다.`);
-    const status = await this.client.queue.status(endpoint, { requestId: submission.requestId, logs: true });
-    if (status.status === "IN_QUEUE") return { state: "queued" };
-    if (status.status === "IN_PROGRESS") return { state: "in_progress" };
-    try {
-      const result = await this.client.queue.result(endpoint as never, { requestId: submission.requestId });
-      const data = result.data as { images?: Array<{ url?: string }> };
-      const images = (data.images ?? []).flatMap((image) => image.url ? [{ url: image.url }] : []);
-      return { state: "completed", images };
-    } catch (error) {
-      return { state: "failed", error: error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다." };
-    }
-  }
-}
-
 export interface SnsProviders {
   planningPrimary: PlanProvider;
   planningBackup: PlanProvider;
@@ -294,7 +248,8 @@ export interface SnsProviders {
   sceneProvider: ImagePromptProvider;
   reviewPrimary: ReviewRequest;
   reviewBackup: ReviewRequest;
-  falQueue: FalQueuedClient;
+  falQueue: FalQueueClient;
+  falUploader: FalUploader;
 }
 
 function clients(environment: Record<string, string | undefined>) {
@@ -320,7 +275,8 @@ export function createSnsPlanningProviders(environment: Record<string, string | 
 export function createSnsGenerationProviders(environment: Record<string, string | undefined> = process.env) {
   requireSnsProviderKeys("generation", environment);
   const { anthropic, openai, anthropicModel, openaiVisionModel } = clients(environment);
-  const falQueue = new FalQueuedClient(environment.FAL_KEY!);
+  const falQueue = createFalQueueClient(environment.FAL_KEY!);
+  const falUploader = createFalUploader(environment.FAL_KEY!);
   return {
     sceneProvider: new FallbackSceneProvider(
       new AnthropicSceneProvider(anthropic, anthropicModel),
@@ -329,6 +285,7 @@ export function createSnsGenerationProviders(environment: Record<string, string 
     reviewPrimary: new AnthropicReviewProvider(anthropic, anthropicModel),
     reviewBackup: new OpenAIReviewProvider(openai, openaiVisionModel),
     falQueue,
+    falUploader,
   };
 }
 

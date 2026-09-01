@@ -13,8 +13,6 @@ export interface SnsFlowCard {
   falRequestId?: string;
   generationRequestId?: string;
   generationEndpoint?: string;
-  generationStatusUrl?: string;
-  generationResponseUrl?: string;
   generationStartedAt?: string;
   status: "pending" | "generating" | "review_required" | "done" | "failed";
   assetUrl?: string;

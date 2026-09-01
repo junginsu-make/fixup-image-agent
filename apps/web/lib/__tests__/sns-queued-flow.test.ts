@@ -35,7 +35,7 @@ function flow(): SnsFlowState {
   };
 }
 
-function dependencies(events: string[], status: QueuedGenerationDependencies["queue"]["status"] = async () => ({ state: "in_progress" })):
+function dependencies(events: string[], status: QueuedGenerationDependencies["queue"]["jobStatus"] = async () => "in_progress"):
   QueuedGenerationDependencies {
   let submitted = 0;
   return {
@@ -52,12 +52,13 @@ function dependencies(events: string[], status: QueuedGenerationDependencies["qu
     }) },
     uploadReference: async (attachment) => { events.push(`upload:${attachment.id}`); return `https://fal.media/${attachment.id}`; },
     queue: {
-      submit: async (_endpoint, _input, cardIndex) => {
+      submitJob: async (_endpoint, _input) => {
         submitted += 1;
-        events.push(`submit:${cardIndex}`);
-        return { requestId: `fal-${submitted}`, statusUrl: `https://queue/status/${submitted}`, responseUrl: `https://queue/result/${submitted}` };
+        events.push(`submit:${submitted}`);
+        return { requestId: `fal-${submitted}` };
       },
-      status,
+      jobStatus: status,
+      jobResult: async () => ({ images: [{ url: "https://fal.media/result.png" }] }),
     },
     requestStore: {
       createSubmitted: async (row) => { events.push(`ledger:create:${row.cardIndex}`); return { id: `ledger-${row.cardIndex}` }; },
@@ -80,13 +81,22 @@ describe("비동기 fal 큐 시작", () => {
   it("첨부를 배치당 한 번만 올리고 첫 카드만 submit한 뒤 request_id를 장부에 저장한다", async () => {
     expect(QUEUE_POLL_INTERVAL_MS).toBe(10_000);
     const events: string[] = [];
-    const started = await startQueuedFlow(project(), flow(), dependencies(events), { now: "2026-09-01T00:00:00.000Z" });
+    const deps = dependencies(events);
+    let submittedInput: Record<string, unknown> | undefined;
+    const submitJob = deps.queue.submitJob;
+    deps.queue.submitJob = async (endpoint, input) => {
+      submittedInput = input;
+      return submitJob(endpoint, input);
+    };
+    const started = await startQueuedFlow(project(), flow(), deps, { now: "2026-09-01T00:00:00.000Z" });
 
     expect(events).toEqual([
       "upload:body-ref", "prompt:1", "prompt:2",
       "submit:1", "ledger:create:1", "submitted:1",
     ]);
     expect(started.cards.map((card) => card.status)).toEqual(["generating", "pending"]);
+    expect(submittedInput?.image_urls).toEqual(["https://fal.media/body-ref"]);
+    expect(JSON.stringify(submittedInput)).not.toContain("data:image");
     expect(started.cards[0]).toMatchObject({ falRequestId: "fal-1", generationRequestId: "ledger-1" });
     expect(started.costs).toMatchObject([{ cardIndex: 1, costUsd: null, falRequestId: "fal-1" }]);
   });
@@ -97,7 +107,7 @@ describe("비동기 fal 큐 폴링", () => {
     const events: string[] = [];
     const deps = dependencies(events, async () => {
       events.push("status:1");
-      return { state: "completed", images: [{ url: "https://fal.media/result.png" }] };
+      return "completed";
     });
     deps.reviewPrimary = { review: async () => { throw new Error("Claude 검수 실패"); } };
     const started = await startQueuedFlow(project(), flow(), deps, { now: "2026-09-01T00:00:00.000Z" });
@@ -116,7 +126,7 @@ describe("비동기 fal 큐 폴링", () => {
   it("30분 뒤 상태 조회를 포기해도 request_id를 남기고 다음 카드로 진행한다", async () => {
     expect(QUEUE_GIVE_UP_MS).toBe(30 * 60_000);
     const events: string[] = [];
-    const status = vi.fn(async () => ({ state: "in_progress" as const }));
+    const status = vi.fn(async () => "in_progress" as const);
     const deps = dependencies(events, status);
     const started = await startQueuedFlow(project(), flow(), deps, { now: "2026-09-01T00:00:00.000Z" });
     events.length = 0;
