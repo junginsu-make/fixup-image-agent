@@ -951,11 +951,12 @@ describe("원고 쓰기", () => {
     expect(copy[0]!.headline).toBe("제목");
   });
 
-  it("제목이 상한을 넘으면 자른다", async () => {
-    const copy = await writeCopy(base, {
+  it("긴 제목을 자르지 않는다", async () => {
+    // 2026-08-20 결정 — 글자수로 막지 않는다. 길면 그림에서 작게 넣는다.
+    const result = await writeCopy(input, {
       generate: async () => ({ cards: [{ index: 1, headline: "가".repeat(100) }] }),
     });
-    expect(copy[0]!.headline.length).toBeLessThanOrEqual(60);
+    expect(result.copies[0]!.headline).toHaveLength(100);
   });
 
   it("실패하면 빈 배열 — 사람이 직접 쓸 수 있어야 한다", async () => {
@@ -970,7 +971,12 @@ Run: `pnpm --filter @fixup/sns-core test`
 
 - [ ] **Step 3: 최소 구현**
 
-칸은 넷이다 — `headline`(60) · `body`(200) · `accent`(30) · `footnote`(40).
+칸은 넷이다 — `headline` · `body` · `accent` · `footnote`.
+
+**글자수 상한을 두지 않는다.** 2026-08-20 사용자 결정이다 — 내용에 따라 적절한 양이
+달라지므로 숫자로 못 박지 말고 LLM 이 판단하게 유도한다. 내용이 꼭 필요해서 길어지면
+막지 말고, 그림 단계에서 글자를 작게 넣어 소화한다. **자르지 않는다** — 잘린 문장은
+오류 없이 말이 끊긴다. 04 화면에서 사람이 보고 고친다.
 상한을 넘으면 **자른다.** 던지지 않는다. 사람이 04 단계에서 고칠 수 있다.
 
 - [ ] **Step 4: 통과 확인**
