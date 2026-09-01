@@ -1075,7 +1075,10 @@ describe("코드가 씌우는 뼈대", () => {
   });
 
   it("목록에 없는 글자를 더하지 말라고 한다", () => {
-    expect(frame).toMatch(/not listed/i);
+    expect(frame).toMatch(/Do not translate, paraphrase, or shorten/i);
+    // 배경 글자는 금지가 아니라 자제다. 2026-08-20 결정.
+    expect(frame).toMatch(/background text sparse/i);
+    expect(frame).not.toMatch(/not listed/i);
   });
 
   it("규격을 담는다", () => {
