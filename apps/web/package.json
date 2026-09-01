@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
+    "@fal-ai/client": "^1.10.1",
     "@fixup/pdp-core": "workspace:*",
     "@fixup/redesign-core": "workspace:*",
     "@fixup/sns-core": "workspace:*",

@@ -7,6 +7,7 @@ import type { SnsFlowCard } from "../../api/sns/flow-service";
 import type { SnsProjectRecord } from "../../api/sns/projects/project-service";
 import { CopyReview } from "./copy-review";
 import { ResultBoard } from "./result-board";
+import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/sns/queued-flow";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -43,6 +44,31 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       .catch((error) => setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다."))
       .finally(() => setBusy(undefined));
   }, [projectId]);
+
+  const generationActive = hasActiveQueuedGeneration(project?.data.flow);
+  React.useEffect(() => {
+    if (!generationActive) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      timer = setTimeout(async () => {
+        try {
+          const saved = await projectRequest(`/api/sns/projects/${projectId}/status`, { method: "POST" });
+          if (stopped) return;
+          setProject(saved);
+          setView("result");
+          setMessage("");
+          if (hasActiveQueuedGeneration(saved.data.flow)) await poll();
+        } catch (error) {
+          if (stopped) return;
+          setMessage(error instanceof Error ? error.message : "생성 상태를 확인하지 못했습니다.");
+          await poll();
+        }
+      }, QUEUE_POLL_INTERVAL_MS);
+    };
+    void poll();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [generationActive, projectId]);
 
   async function plan() {
     setBusy("planning");
@@ -128,7 +154,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         <div className="grid gap-8">
           <section><h2 className="text-h2">04 원고 확인</h2><p className="mt-2 text-muted-foreground">글자수 제한 없이 직접 고치고 카드별로 저장하세요. 저장한 글자가 그림에 그대로 들어갑니다.</p></section>
           <CopyReview flow={flow} savingIndex={savingIndex} onSave={saveCopy} />
-          <div className="flex justify-end border-t pt-6"><Button disabled={busy === "generating" || flow.cards.length === 0} onClick={() => void generate()}>{busy === "generating" ? <Loader2 className="animate-spin" /> : <ArrowRight />}{busy === "generating" ? "카드를 차례로 만들고 검수하는 중입니다…" : "이 원고로 그림 만들기"}</Button></div>
+          <div className="flex justify-end border-t pt-6"><Button disabled={busy === "generating" || flow.cards.length === 0} onClick={() => void generate()}>{busy === "generating" ? <Loader2 className="animate-spin" /> : <ArrowRight />}{busy === "generating" ? "프롬프트·레퍼런스 준비 중…" : "이 원고로 그림 만들기"}</Button></div>
         </div>
       ) : (
         <div className="grid gap-8">

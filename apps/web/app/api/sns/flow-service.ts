@@ -8,6 +8,14 @@ export interface SnsFlowCard {
   plan?: CardPlan;
   attachmentId?: string;
   assetPath?: string;
+  prompt?: string;
+  promptWarnings?: string[];
+  falRequestId?: string;
+  generationRequestId?: string;
+  generationEndpoint?: string;
+  generationStatusUrl?: string;
+  generationResponseUrl?: string;
+  generationStartedAt?: string;
   status: "pending" | "generating" | "review_required" | "done" | "failed";
   assetUrl?: string;
   review?: CardReview;
@@ -18,6 +26,9 @@ export interface SnsFlowCard {
 export interface SnsFlowCost {
   cardIndex: number;
   costUsd: number | null;
+  unitCostUsd?: number;
+  falRequestId?: string;
+  generationRequestId?: string;
 }
 
 export interface SnsFlowState {
@@ -26,6 +37,12 @@ export interface SnsFlowState {
   copyIssues: string[];
   cards: SnsFlowCard[];
   costs: SnsFlowCost[];
+  generation?: {
+    selectedCardIndexes: number[];
+    falReferenceUrls: Record<string, string>;
+    startedAt: string;
+    completedAt?: string;
+  };
 }
 
 export interface FlowGenerationDependencies {

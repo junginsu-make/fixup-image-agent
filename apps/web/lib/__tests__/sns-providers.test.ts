@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FalHttpRunner, SnsProviderConfigurationError, requireSnsProviderKeys } from "../sns/providers";
+import { FalQueuedClient, SnsProviderConfigurationError, requireSnsProviderKeys } from "../sns/providers";
 
 describe("제공자 설정", () => {
   it("기획 키가 없으면 빠진 환경변수 이름을 사람이 읽는 문구로 알린다", () => {
@@ -15,33 +15,31 @@ describe("제공자 설정", () => {
   });
 });
 
-describe("fal HTTP 어댑터", () => {
-  it("num_images가 1이 아니면 네트워크 전에 거부한다", async () => {
-    const fetcher = vi.fn();
-    const runner = new FalHttpRunner("fal-key", fetcher);
-    await expect(runner.run("fal-ai/model", { prompt: "x", num_images: 2 }, 1)).rejects.toThrow(/num_images.*1/);
-    expect(fetcher).not.toHaveBeenCalled();
-  });
-
-  it("한 장 요청을 fal.run에 한 번만 보낸다", async () => {
-    const fetcher = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ request_id: "fal-1", images: [{ url: "https://example.com/1.png" }] }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
+describe("fal queue 어댑터", () => {
+  it("레퍼런스를 1시간 수명으로 올리고 submit에서 request_id를 즉시 돌려준다", async () => {
+    const upload = vi.fn(async () => "https://v3b.fal.media/reference.jpg");
+    const submit = vi.fn(async () => ({
+      status: "IN_QUEUE", request_id: "fal-queue-1", queue_position: 0,
+      status_url: "https://queue.fal.run/fal-ai/nano-banana/edit/requests/fal-queue-1/status",
+      response_url: "https://queue.fal.run/fal-ai/nano-banana/edit/requests/fal-queue-1",
+      cancel_url: "https://queue.fal.run/fal-ai/nano-banana/edit/requests/fal-queue-1/cancel",
     }));
-    const runner = new FalHttpRunner("fal-key", fetcher);
-    const result = await runner.run("fal-ai/model", { prompt: "x", num_images: 1 }, 1);
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(String(fetcher.mock.calls[0]![0])).toBe("https://fal.run/fal-ai/model");
-    expect(result.images).toHaveLength(1);
-  });
+    const client = {
+      storage: { upload },
+      queue: { submit, status: vi.fn(), result: vi.fn() },
+    };
+    const queued = new FalQueuedClient("key", client as never);
+    const referenceUrl = await queued.uploadReference({
+      id: "ref-1", kind: "style_reference", role: "body",
+      assetPath: "user/references/ref.jpg", url: "data:image/jpeg;base64,eA==",
+    });
+    const submitted = await queued.submit("fal-ai/nano-banana/edit", { prompt: "x", num_images: 1 }, 1);
 
-  it("본문에 request_id가 없으면 fal 응답 헤더의 요청 ID를 보존한다", async () => {
-    const fetcher = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ images: [{ url: "https://example.com/1.png" }] }), {
-      status: 200,
-      headers: { "content-type": "application/json", "x-fal-request-id": "fal-header-1" },
-    }));
-    const runner = new FalHttpRunner("fal-key", fetcher);
-    const result = await runner.run("fal-ai/model", { prompt: "x", num_images: 1 }, 1);
-    expect(result.requestId).toBe("fal-header-1");
+    expect(referenceUrl).toBe("https://v3b.fal.media/reference.jpg");
+    expect(upload).toHaveBeenCalledWith(expect.any(Blob), { lifecycle: { expiresIn: "1h" } });
+    expect(submit).toHaveBeenCalledOnce();
+    expect(submitted).toMatchObject({ requestId: "fal-queue-1", endpoint: "fal-ai/nano-banana/edit" });
+    await expect(queued.submit("fal-ai/nano-banana/edit", { prompt: "x", num_images: 2 }, 2)).rejects.toThrow(/num_images.*1/);
+    expect(submit).toHaveBeenCalledOnce();
   });
 });

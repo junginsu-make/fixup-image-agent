@@ -2,7 +2,13 @@ import "server-only";
 
 import { authenticateApiMember } from "./membership/api";
 import { createSupabaseAdminClient } from "./supabase/admin";
-import { createLocalSnsGenerationRequestStore, getLocalDatabase, isLocalStoreEnabled } from "./local-store";
+import {
+  createLocalSnsGenerationRequestStore,
+  createLocalSubmittedGenerationRequestStore,
+  getLocalDatabase,
+  isLocalStoreEnabled,
+} from "./local-store";
+import type { SubmittedGenerationRequestStore } from "./sns/queued-flow";
 import {
   bindGenerationRequestStore,
   type AdminGenerationRequestCompleteRow,
@@ -47,4 +53,37 @@ export function snsGenerationRequestStoreForUser(userId: string) {
   };
 
   return bindGenerationRequestStore(userId, writer);
+}
+
+export function snsSubmittedGenerationRequestStoreForUser(userId: string): SubmittedGenerationRequestStore {
+  if (isLocalStoreEnabled()) {
+    return createLocalSubmittedGenerationRequestStore(getLocalDatabase(), userId);
+  }
+  const admin = createSupabaseAdminClient();
+  return {
+    async createSubmitted(row) {
+      const { data, error } = await admin.from("sns_generation_requests").insert({
+        user_id: userId,
+        project_id: row.projectId,
+        card_index: row.cardIndex,
+        fal_request_id: row.falRequestId,
+        model_id: row.modelId,
+        mode: row.mode,
+        size: row.size,
+        requested_images: 1,
+        returned_images: 0,
+        unit_cost_usd: row.unitCostUsd,
+        cost_usd: null,
+      }).select("id").single();
+      return checked(data as { id: string }, error);
+    },
+    async complete(id, patch) {
+      const { error } = await admin.from("sns_generation_requests").update({
+        fal_request_id: patch.falRequestId ?? null,
+        returned_images: patch.returnedImages,
+        cost_usd: patch.costUsd,
+      }).eq("id", id).eq("user_id", userId);
+      checked(undefined, error);
+    },
+  };
 }

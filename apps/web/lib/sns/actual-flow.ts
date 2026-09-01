@@ -1,21 +1,11 @@
 import {
-  CARD_RATIOS,
-  buildFrame,
-  composePrompt,
-  generateCards,
   groupAttachments,
   layoutCards,
   planCards,
-  reviewCard,
-  selectReferencesForRole,
   writeCopy,
-  writeImagePrompt,
-  type CardGenerationDependencies,
   type CardPlan,
   type CopyProvider,
-  type ImagePromptProvider,
   type PlanProvider,
-  type ReviewRequest,
 } from "@fixup/sns-core";
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
@@ -102,113 +92,4 @@ export async function createActualPlanningFlow(
     };
   });
   return { stage: "copy", planningIssues: planned.issues, copyIssues: written.issues, cards, costs: [] };
-}
-
-export interface ActualGenerationDependencies {
-  sceneProvider: ImagePromptProvider;
-  reviewPrimary: ReviewRequest;
-  reviewBackup: ReviewRequest;
-  generation: CardGenerationDependencies;
-  getAssetUrl(path: string): Promise<string>;
-  getReviewAssetUrl?(path: string): Promise<string>;
-  savePrompt(cardIndex: number, prompt: string): Promise<void>;
-  saveReview(cardIndex: number, status: "done" | "review_required", review: unknown, issues: string[]): Promise<void>;
-  saveOriginal(card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string }>;
-}
-
-export async function generateActualFlow(
-  project: SnsProjectRecord,
-  flow: SnsFlowState,
-  dependencies: ActualGenerationDependencies,
-  options: { cardIndexes?: number[]; appendCosts?: boolean } = {},
-): Promise<SnsFlowState> {
-  const next = structuredClone(flow);
-  next.stage = "result";
-  if (options.appendCosts === false) next.costs = [];
-  const selected = new Set(options.cardIndexes ?? next.cards.map((card) => card.index));
-  const grouped = groupAttachments(project.data.attachments);
-  const ratio = CARD_RATIOS.find((entry) => entry.id === project.ratio);
-  if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${project.ratio}`);
-
-  for (const card of next.cards.filter((entry) => selected.has(entry.index) && entry.kind !== "generated")) {
-    try {
-      const saved = await dependencies.saveOriginal(card);
-      card.assetPath = saved.assetPath;
-      card.assetUrl = saved.assetUrl;
-      card.status = "done";
-      card.review = undefined;
-      card.reviewIssues = undefined;
-      card.error = undefined;
-    } catch (error) {
-      card.status = "failed";
-      card.error = error instanceof Error ? error.message : "사용자 원본을 저장하지 못했습니다.";
-    }
-  }
-
-  const jobs = [];
-  const promptWarnings = new Map<number, string[]>();
-  for (const card of next.cards.filter((entry) => selected.has(entry.index) && entry.kind === "generated")) {
-    const plan = card.plan ?? { index: card.index, role: card.role === "cover" ? "cover" as const : "body" as const, intent: card.copy.headline, visualBrief: card.copy.body ?? card.copy.headline };
-    const prompted = await writeImagePrompt({
-      role: card.role,
-      copy: card.copy,
-      plan,
-      grouped,
-      size: ratio.pixel,
-      language: project.language,
-    }, dependencies.sceneProvider);
-    const images = selectReferencesForRole(grouped, card.role);
-    const prompt = composePrompt(buildFrame({ copy: card.copy, images, size: ratio.pixel, language: project.language }), prompted.body);
-    promptWarnings.set(card.index, prompted.warnings);
-    await dependencies.savePrompt(card.index, prompt);
-    jobs.push({
-      kind: "generated" as const,
-      projectId: project.id,
-      cardIndex: card.index,
-      modelId: project.modelId,
-      ratioId: project.ratio,
-      prompt,
-      imageUrls: images.map((image) => image.url),
-    });
-  }
-
-  const results = await generateCards(jobs, dependencies.generation);
-  for (const result of results) {
-    const card = next.cards.find((entry) => entry.index === result.cardIndex)!;
-    next.costs.push({ cardIndex: card.index, costUsd: result.request?.costUsd ?? null });
-    if (result.status === "failed" || !result.assetPath) {
-      card.status = "failed";
-      card.error = result.error ?? "이미지를 만들지 못했습니다.";
-      continue;
-    }
-    card.assetPath = result.assetPath;
-    card.assetUrl = await dependencies.getAssetUrl(result.assetPath);
-    card.error = undefined;
-    const reviewed = await reviewCard({
-      kind: "generated",
-      imageUrl: dependencies.getReviewAssetUrl
-        ? await dependencies.getReviewAssetUrl(result.assetPath)
-        : card.assetUrl,
-      copy: card.copy,
-      preservedImageUrls: grouped.keepIdentity.map((image) => image.url),
-    }, dependencies.reviewPrimary, dependencies.reviewBackup);
-    card.review = reviewed.review;
-    card.reviewIssues = [...(promptWarnings.get(card.index) ?? []), ...reviewed.issues];
-    const reviewStatus = reviewed.status === "skipped" ? "done" : reviewed.status;
-    card.status = reviewStatus;
-    await dependencies.saveReview(card.index, reviewStatus, reviewed.review ?? null, card.reviewIssues);
-  }
-  return next;
-}
-
-export function regenerateActualFlowCard(
-  project: SnsProjectRecord,
-  flow: SnsFlowState,
-  cardIndex: number,
-  dependencies: ActualGenerationDependencies,
-) {
-  const card = flow.cards.find((entry) => entry.index === cardIndex);
-  if (!card) throw new Error("카드를 찾을 수 없습니다.");
-  if (card.kind !== "generated") throw new Error("사용자 원본 카드는 다시 만들지 않습니다.");
-  return generateActualFlow(project, flow, dependencies, { cardIndexes: [cardIndex], appendCosts: true });
 }

@@ -1,8 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { createFalClient, type FalClient } from "@fal-ai/client";
 import OpenAI from "openai";
 import type {
-  FalRunResult,
-  FalRunner,
   ImagePromptProvider,
   PlanProvider,
   CopyProvider,
@@ -10,11 +9,11 @@ import type {
   ReviewProviderInput,
   ScenePromptRequest,
 } from "@fixup/sns-core";
+import type { Attachment } from "@fixup/sns-core";
+import type { FalQueue, QueueStatus, QueueSubmission } from "./queued-flow";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const DEFAULT_OPENAI_TEXT_MODEL = "gpt-5.6-sol";
-const FAL_BASE_URL = "https://fal.run";
-const FAL_TIMEOUT_MS = 120_000;
 const IMAGE_FETCH_TIMEOUT_MS = 30_000;
 
 export class SnsProviderConfigurationError extends Error {
@@ -222,44 +221,48 @@ class OpenAIReviewProvider implements ReviewRequest {
   }
 }
 
-export type FalFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export class FalQueuedClient implements FalQueue {
+  private readonly client: FalClient;
 
-export class FalHttpRunner implements FalRunner {
-  constructor(private readonly apiKey: string, private readonly fetcher: FalFetch = fetch) {}
-  async run(endpoint: string, input: Record<string, unknown>, cardIndex: number): Promise<FalRunResult> {
+  constructor(apiKey: string, client?: FalClient) {
+    this.client = client ?? createFalClient({
+      credentials: apiKey,
+      retry: { maxRetries: 0 },
+    });
+  }
+
+  async uploadReference(attachment: Attachment): Promise<string> {
+    const response = await fetch(attachment.url, { signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`${attachment.id} 레퍼런스를 읽지 못했습니다: HTTP ${response.status}`);
+    const blob = await response.blob();
+    return this.client.storage.upload(blob, { lifecycle: { expiresIn: "1h" } });
+  }
+
+  async submit(endpoint: string, input: Record<string, unknown>, _cardIndex: number): Promise<QueueSubmission> {
     if (input.num_images !== 1) throw new Error("fal num_images는 반드시 1이어야 합니다.");
-    let response: Response;
-    try {
-      response = await this.fetcher(`${FAL_BASE_URL}/${endpoint}`, {
-        method: "POST",
-        headers: { Authorization: `Key ${this.apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify(input),
-        signal: AbortSignal.timeout(FAL_TIMEOUT_MS),
-      });
-    } catch (error) {
-      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-        throw new Error(`${cardIndex}번 카드가 2분 안에 응답하지 않았습니다. 중복 과금을 피하려고 자동 재시도하지 않습니다.`);
-      }
-      throw error;
-    }
-    const text = await response.text();
-    let data: { request_id?: string; images?: Array<{ url?: string }>; detail?: string; message?: string } = {};
-    try { data = JSON.parse(text) as typeof data; } catch { /* 아래에서 읽을 수 있는 오류로 바꾼다. */ }
-    if (!response.ok) {
-      const requestId = response.headers.get("x-fal-request-id") ?? response.headers.get("x-request-id");
-      const reason = response.status === 401 || response.status === 403
-        ? "FAL_KEY가 올바른지 확인해 주세요."
-        : response.status === 429
-          ? "fal 요청이 몰렸습니다. 잠시 후 사람이 다시 만들기를 눌러 주세요."
-          : data.detail ?? data.message ?? `fal HTTP ${response.status}`;
-      throw new Error(`${cardIndex}번 카드 생성 실패: ${reason}${requestId ? ` (request_id: ${requestId})` : ""}`);
-    }
-    const images = (data.images ?? []).flatMap((image) => image.url ? [{ url: image.url }] : []);
-    if (!images.length) throw new Error(`${cardIndex}번 카드 생성 실패: fal 응답에 이미지가 없습니다.`);
+    const submitted = await this.client.queue.submit(endpoint as never, { input } as never);
     return {
-      requestId: data.request_id ?? response.headers.get("x-fal-request-id") ?? response.headers.get("x-request-id") ?? undefined,
-      images,
+      requestId: submitted.request_id,
+      statusUrl: submitted.status_url,
+      responseUrl: submitted.response_url,
+      endpoint,
     };
+  }
+
+  async status(submission: QueueSubmission, cardIndex: number): Promise<QueueStatus> {
+    const endpoint = submission.endpoint ?? submission.statusUrl.split("/requests/")[0]?.replace(/^https:\/\/queue\.fal\.run\//, "");
+    if (!endpoint) throw new Error(`${cardIndex}번 카드 fal endpoint를 복원하지 못했습니다.`);
+    const status = await this.client.queue.status(endpoint, { requestId: submission.requestId, logs: true });
+    if (status.status === "IN_QUEUE") return { state: "queued" };
+    if (status.status === "IN_PROGRESS") return { state: "in_progress" };
+    try {
+      const result = await this.client.queue.result(endpoint as never, { requestId: submission.requestId });
+      const data = result.data as { images?: Array<{ url?: string }> };
+      const images = (data.images ?? []).flatMap((image) => image.url ? [{ url: image.url }] : []);
+      return { state: "completed", images };
+    } catch (error) {
+      return { state: "failed", error: error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다." };
+    }
   }
 }
 
@@ -271,7 +274,7 @@ export interface SnsProviders {
   sceneProvider: ImagePromptProvider;
   reviewPrimary: ReviewRequest;
   reviewBackup: ReviewRequest;
-  falRunner: FalRunner;
+  falQueue: FalQueuedClient;
 }
 
 function clients(environment: Record<string, string | undefined>) {
@@ -297,6 +300,7 @@ export function createSnsPlanningProviders(environment: Record<string, string | 
 export function createSnsGenerationProviders(environment: Record<string, string | undefined> = process.env) {
   requireSnsProviderKeys("generation", environment);
   const { anthropic, openai, anthropicModel, openaiVisionModel } = clients(environment);
+  const falQueue = new FalQueuedClient(environment.FAL_KEY!);
   return {
     sceneProvider: new FallbackSceneProvider(
       new AnthropicSceneProvider(anthropic, anthropicModel),
@@ -304,7 +308,7 @@ export function createSnsGenerationProviders(environment: Record<string, string 
     ),
     reviewPrimary: new AnthropicReviewProvider(anthropic, anthropicModel),
     reviewBackup: new OpenAIReviewProvider(openai, openaiVisionModel),
-    falRunner: new FalHttpRunner(environment.FAL_KEY!),
+    falQueue,
   };
 }
 

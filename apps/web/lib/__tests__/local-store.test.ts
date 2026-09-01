@@ -8,6 +8,7 @@ import {
   createLocalDatabase,
   createLocalReferenceSetStore,
   createLocalSnsGenerationRequestStore,
+  createLocalSubmittedGenerationRequestStore,
   createLocalSnsProjectRepository,
   createLocalSourceRepository,
   insertLocalReferenceImage,
@@ -143,6 +144,25 @@ describe("파일 저장소 소유자 격리", () => {
     expect(await listLocalSnsGenerationRequests(db, "user-a", projectA.id)).toMatchObject([{
       id: request.id, cardIndex: 1, requestedImages: 1, unitCostUsd: 0.178,
       falRequestId: "fal-1", returnedImages: 1, costUsd: 0.178,
+    }]);
+  });
+
+  it("fal queue submit 직후 request_id를 비용 장부 첫 행에 저장한다", async () => {
+    const { db } = await database();
+    const projectA = await createLocalSnsProjectRepository(db, "user-a").create({
+      userId: "user-a", title: "A 프로젝트", status: "draft", ratio: "4:5", language: "ko",
+      modelId: "gpt-image-2", cardCountMode: "fixed", cardCount: 4,
+      data: { source: { kind: "text", text: "본문" }, attachments: [] },
+      slotPlan: { total: 4, cover: 1, placeAsIs: 0, aiBody: 2, ending: 1, issues: [] },
+    });
+    const store = createLocalSubmittedGenerationRequestStore(db, "user-a");
+    const saved = await store.createSubmitted({
+      projectId: projectA.id, cardIndex: 1, modelId: "gpt-image-2", mode: "i2i",
+      size: { mode: "pixel", pixel: { width: 1088, height: 1360 } },
+      requestedImages: 1, unitCostUsd: 0.178, falRequestId: "fal-queue-1",
+    });
+    expect(await listLocalSnsGenerationRequests(db, "user-a", projectA.id)).toMatchObject([{
+      id: saved.id, falRequestId: "fal-queue-1", costUsd: null, returnedImages: 0,
     }]);
   });
 

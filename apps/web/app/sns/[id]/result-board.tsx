@@ -18,6 +18,8 @@ function triggerDownload(url: string, name: string) {
 
 function ReviewStatus({ card }: { card: SnsFlowCard }) {
   if (card.kind !== "generated") return <Badge variant="outline">사용자 원본 · 검수 생략</Badge>;
+  if (card.status === "pending") return <Badge variant="secondary">대기 중</Badge>;
+  if (card.status === "generating") return <Badge variant="secondary"><Loader2 className="animate-spin" />생성 중</Badge>;
   if (card.status === "failed") return <Badge variant="destructive">생성 실패</Badge>;
   if (card.status === "review_required") return <Badge variant="destructive">사람의 검수 필요</Badge>;
   if (card.review?.decision === "pass") return <Badge variant="green">검수 통과</Badge>;
@@ -36,6 +38,9 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
   const unconfirmed = flow.costs.filter((cost) => cost.costUsd === null).length;
   const downloadable = flow.cards.filter((card) => Boolean(card.assetUrl));
   const caption = flow.cards.flatMap((card) => [card.copy.headline, card.copy.body].filter(Boolean)).join("\n\n");
+  const counts = flow.cards.reduce((value, card) => ({ ...value, [card.status]: value[card.status] + 1 }), {
+    pending: 0, generating: 0, review_required: 0, done: 0, failed: 0,
+  });
 
   async function downloadAll() {
     if (!downloadable.length) return;
@@ -68,7 +73,8 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
         <div>
           <strong className="text-lg">생성 비용</strong>
           <p className="mt-1 text-sm text-muted-foreground">확인된 비용 ${confirmed.toFixed(3)} · 확인 안 된 비용 {unconfirmed}건</p>
-          {unconfirmed ? <p className="mt-2 text-sm text-amber-700">fal 응답 전에 끊긴 요청은 실제 청구 여부를 아직 확인할 수 있어 합계에서 따로 뺐습니다.</p> : null}
+          <p className="mt-2 text-sm text-muted-foreground">대기 {counts.pending} · 생성 중 {counts.generating} · 완료 {counts.done} · 검수 필요 {counts.review_required} · 실패 {counts.failed}</p>
+          {unconfirmed ? <p className="mt-2 text-sm text-amber-700">진행 중이거나 완료 여부를 확인하지 못한 요청은 합계에서 따로 뺐습니다. request_id는 장부에 남습니다.</p> : null}
         </div>
         <Button variant="secondary" disabled={!downloadable.length || zipping} onClick={() => void downloadAll()}>
           {zipping ? <Loader2 className="animate-spin" /> : <Download />}{zipping ? "ZIP 만드는 중…" : "전체 ZIP 내려받기"}
@@ -96,7 +102,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
               {card.error ? <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{card.error}</p> : null}
               <div className="flex flex-wrap justify-end gap-2">
                 {card.assetUrl ? <Button variant="outline" onClick={() => triggerDownload(card.assetUrl!, snsCardFilename(title, card.index, card.assetPath))}><Download />낱장 내려받기</Button> : null}
-                {card.kind === "generated" ? <Button variant="secondary" disabled={regeneratingIndex === card.index} onClick={() => void onRegenerate(card.index)}>
+                {card.kind === "generated" ? <Button variant="secondary" disabled={regeneratingIndex === card.index || card.status === "pending" || card.status === "generating"} onClick={() => void onRegenerate(card.index)}>
                   {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}{regeneratingIndex === card.index ? "다시 만드는 중…" : "다시 만들기"}
                 </Button> : null}
               </div>

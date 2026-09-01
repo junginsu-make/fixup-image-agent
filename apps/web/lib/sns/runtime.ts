@@ -7,8 +7,6 @@ import {
   CARD_RATIOS,
   averageEdgeColor,
   letterboxPlan,
-  type CardGenerationDependencies,
-  type GenerationRequestStore,
 } from "@fixup/sns-core";
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
@@ -24,8 +22,8 @@ import {
   updateLocalSnsCard,
   writeLocalSnsResultFile,
 } from "../local-store";
-import type { ActualGenerationDependencies } from "./actual-flow";
 import type { SnsProviders } from "./providers";
+import type { QueuedGenerationDependencies, SubmittedGenerationRequestStore } from "./queued-flow";
 
 const BUCKET = "library";
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
@@ -167,17 +165,14 @@ export async function replaceSnsCardRows(userId: string, projectId: string, flow
   if (inserted.error) throw new Error(inserted.error.message);
 }
 
-export async function createActualGenerationDependencies(input: {
+export async function createQueuedGenerationDependencies(input: {
   userId: string;
   project: SnsProjectRecord;
-  requestStore: GenerationRequestStore;
-  providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falRunner">;
-}): Promise<ActualGenerationDependencies> {
+  requestStore: SubmittedGenerationRequestStore;
+  providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falQueue">;
+}): Promise<QueuedGenerationDependencies> {
   const local = isLocalStoreEnabled();
   const client = local ? undefined : await createSupabaseServerClient();
-  const target = input.project.data.flow?.cards.length
-    ? input.project.data.flow.cards
-    : [];
   const ratio = CARD_RATIOS.find((entry) => entry.id === input.project.ratio)?.pixel;
   if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${input.project.ratio}`);
 
@@ -197,43 +192,32 @@ export async function createActualGenerationDependencies(input: {
     if (result.error) throw new Error(result.error.message);
   }
 
-  const generation: CardGenerationDependencies = {
-    requestStore: input.requestStore,
-    runner: input.providers.falRunner,
-    cardStore: {
-      async markDone(cardIndex, assetPath) {
-        await updateCard(cardIndex, { assetPath, status: "done", error: null });
-      },
-      async markFailed(cardIndex, message) {
-        await updateCard(cardIndex, { status: "failed", error: message });
-      },
-    },
-    async saveAsset(imageUrl, job) {
-      const image = await fetchedImage(imageUrl);
-      return uploadResult(input.userId, input.project.id, job.cardIndex, image.bytes, image.contentType);
-    },
-    async saveOriginal() {
-      throw new Error("원본 카드는 실제 흐름의 비AI 저장 경로를 사용합니다.");
-    },
-  };
-
   return {
     sceneProvider: input.providers.sceneProvider,
     reviewPrimary: input.providers.reviewPrimary,
     reviewBackup: input.providers.reviewBackup,
-    generation,
-    getAssetUrl: resultUrl,
-    getReviewAssetUrl: local ? localResultDataUrl : signedUrl,
-    async savePrompt(cardIndex, prompt) {
-      await updateCard(cardIndex, { prompt });
+    uploadReference: (attachment) => input.providers.falQueue.uploadReference(attachment),
+    queue: input.providers.falQueue,
+    requestStore: input.requestStore,
+    savePrompt: (cardIndex, prompt) => updateCard(cardIndex, { prompt }),
+    saveSubmitted: (cardIndex) => updateCard(cardIndex, { status: "generating", error: null }),
+    saveFailed: (cardIndex, message) => updateCard(cardIndex, { status: "failed", error: message }),
+    async saveAsset(imageUrl, card) {
+      const image = await fetchedImage(imageUrl);
+      const assetPath = await uploadResult(input.userId, input.project.id, card.index, image.bytes, image.contentType);
+      await updateCard(card.index, { assetPath, status: "done", error: null });
+      return {
+        assetPath,
+        assetUrl: await resultUrl(assetPath),
+        reviewUrl: local ? await localResultDataUrl(assetPath) : await signedUrl(assetPath),
+      };
     },
     async saveReview(cardIndex, status, review, issues) {
-      await updateCard(cardIndex, { status, review: { result: review, issues } });
+      await updateCard(cardIndex, { status, review: { result: review, issues }, error: null });
     },
     async saveOriginal(card) {
-      const original = target.find((entry) => entry.index === card.index) ?? card;
-      if (!original.assetUrl) throw new Error(`${card.index}번 사용자 원본 URL이 없습니다.`);
-      const image = await fetchedImage(original.assetUrl);
+      if (!card.assetUrl) throw new Error(`${card.index}번 사용자 원본 URL이 없습니다.`);
+      const image = await fetchedImage(card.assetUrl);
       const rendered = await letterbox(image.bytes, ratio);
       const assetPath = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
       await updateCard(card.index, { assetPath, status: "done", review: null, error: null });

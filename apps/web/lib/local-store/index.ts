@@ -19,6 +19,7 @@ import type {
   GenerationRequestCreate,
   GenerationRequestStore,
 } from "@fixup/sns-core";
+import type { SubmittedGenerationRequestStore } from "../sns/queued-flow";
 
 interface LocalCandidateRow extends Omit<CandidateRecord, "source"> {
   userId: string;
@@ -398,6 +399,39 @@ export function createLocalSnsGenerationRequestStore(
         const request = data.generationRequests.find((entry) => entry.id === id && entry.userId === userId);
         if (!request) throw notFound("SNS 비용 요청");
         request.falRequestId = patch.falRequestId ?? null;
+        request.returnedImages = patch.returnedImages;
+        request.costUsd = patch.costUsd;
+      });
+    },
+  };
+}
+
+export function createLocalSubmittedGenerationRequestStore(
+  database: LocalDatabase,
+  userId: string,
+): SubmittedGenerationRequestStore {
+  return {
+    async createSubmitted(row) {
+      return database.update((data) => {
+        if (!data.snsProjects.some((project) => project.id === row.projectId && project.userId === userId)) {
+          throw notFound("SNS 프로젝트");
+        }
+        const request: LocalSnsGenerationRequest = {
+          id: randomUUID(), userId, projectId: row.projectId, cardIndex: row.cardIndex,
+          modelId: row.modelId, mode: row.mode, size: row.size,
+          requestedImages: 1, unitCostUsd: row.unitCostUsd,
+          falRequestId: row.falRequestId, returnedImages: 0, costUsd: null,
+          createdAt: new Date().toISOString(),
+        };
+        data.generationRequests.push(request);
+        return { id: request.id };
+      });
+    },
+    async complete(id, patch) {
+      await database.update((data) => {
+        const request = data.generationRequests.find((entry) => entry.id === id && entry.userId === userId);
+        if (!request) throw notFound("SNS 비용 요청");
+        request.falRequestId = patch.falRequestId ?? request.falRequestId;
         request.returnedImages = patch.returnedImages;
         request.costUsd = patch.costUsd;
       });
