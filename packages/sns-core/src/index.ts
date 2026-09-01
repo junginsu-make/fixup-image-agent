@@ -6,6 +6,6 @@ export * from "./image-prompt";
 export * from "./letterbox";
 export * from "./models";
 export * from "./planning";
-export * from "./provider-fallback";
+export * from "@fixup/shared";
 export * from "./ratios";
 export * from "./review";

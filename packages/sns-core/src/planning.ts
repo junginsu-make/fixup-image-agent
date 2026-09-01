@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SlotPlan } from "./card-count";
-import { withIssueFallback } from "./provider-fallback";
+import { withIssueFallback } from "@fixup/shared";
 
 export const PRIMARY_PLANNING_MODEL = "claude-sonnet-5";
 export const BACKUP_PLANNING_PROVIDER = "openai";

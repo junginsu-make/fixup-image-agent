@@ -185,6 +185,9 @@ importers:
 
   packages/poster-core:
     dependencies:
+      '@fixup/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@fixup/sns-core':
         specifier: workspace:*
         version: link:../sns-core
@@ -223,6 +226,9 @@ importers:
 
   packages/sns-core:
     dependencies:
+      '@fixup/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: 4.4.3
         version: 4.4.3

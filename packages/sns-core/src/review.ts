@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CardSlotKind } from "./card-count";
 import type { CardCopy } from "./copy";
-import { withIssueFallback } from "./provider-fallback";
+import { withIssueFallback } from "@fixup/shared";
 
 export interface ReviewPromptInput {
   copy: Pick<CardCopy, "headline" | "body" | "accent" | "footnote">;
