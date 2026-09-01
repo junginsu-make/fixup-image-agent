@@ -17,6 +17,22 @@ export function selectReferencesForRole(
   return [...grouped.styleByRole[role], ...grouped.keepIdentity];
 }
 
+const ROLE_LABEL: Record<StyleRole, string> = {
+  cover: "표지",
+  body: "속지",
+  ending: "엔딩",
+};
+
+/** 역할이 맞는 스타일 레퍼런스가 없어도 막지는 않고 화면에 보여줄 경고를 남긴다. */
+export function referenceWarningsForRole(
+  grouped: GroupedAttachments,
+  role: StyleRole,
+): string[] {
+  if (grouped.styleByRole[role].length > 0) return [];
+  const label = ROLE_LABEL[role];
+  return [`${label} 레퍼런스가 없습니다. ${label} 카드가 다른 역할과 다른 모양으로 나올 수 있습니다.`];
+}
+
 export function buildAttachmentBlock(images: Attachment[]): string {
   const lines = [
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
@@ -92,6 +108,11 @@ export interface ImagePromptProvider {
   generate(request: ScenePromptRequest): Promise<unknown>;
 }
 
+export interface ImagePromptResult {
+  body: string;
+  warnings: string[];
+}
+
 /**
  * LLM 이 장면·구도·강조를 판단할 자료만 조립한다.
  * 코드가 구체적인 카메라·조명·장면 형용사를 만들지 않는다.
@@ -117,11 +138,12 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
 export async function writeImagePrompt(
   input: ImagePromptInput,
   provider: ImagePromptProvider,
-): Promise<string> {
+): Promise<ImagePromptResult> {
+  const warnings = referenceWarningsForRole(input.grouped, input.role);
   try {
     const generated = await provider.generate(buildSceneRequest(input));
-    return typeof generated === "string" ? generated : "";
+    return { body: typeof generated === "string" ? generated : "", warnings };
   } catch {
-    return "";
+    return { body: "", warnings };
   }
 }

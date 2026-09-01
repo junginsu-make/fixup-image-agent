@@ -5,6 +5,7 @@ import {
   buildFrame,
   buildSceneRequest,
   composePrompt,
+  referenceWarningsForRole,
   selectReferencesForRole,
   writeImagePrompt,
 } from "../image-prompt";
@@ -66,6 +67,15 @@ describe("역할별 레퍼런스", () => {
 
   it("엔딩은 엔딩 레퍼런스와 보존 대상만 쓴다", () => {
     expect(selectReferencesForRole(grouped, "ending").map((image) => image.id)).toEqual(["ending", "product"]);
+  });
+
+  it("역할 레퍼런스가 없으면 막지 않고 역할별 경고를 남긴다", () => {
+    const coverOnly = groupAttachments([
+      attachment({ id: "cover", kind: "style_reference", role: "cover" }),
+    ]);
+    expect(referenceWarningsForRole(coverOnly, "cover")).toEqual([]);
+    expect(referenceWarningsForRole(coverOnly, "body").join("\n")).toContain("속지 레퍼런스가 없습니다");
+    expect(selectReferencesForRole(coverOnly, "body")).toEqual([]);
   });
 });
 
@@ -133,8 +143,8 @@ describe("LLM 장면 프롬프트", () => {
 
   it("LLM 에 원고·기획과 역할 레퍼런스 원본을 직접 준다", async () => {
     const generate = vi.fn(async (_request: ScenePromptRequest) => "LLM이 쓴 장면 프롬프트");
-    const body = await writeImagePrompt(input, { generate });
-    expect(body).toBe("LLM이 쓴 장면 프롬프트");
+    const result = await writeImagePrompt(input, { generate });
+    expect(result).toEqual({ body: "LLM이 쓴 장면 프롬프트", warnings: [] });
     expect(generate).toHaveBeenCalledOnce();
     const request = generate.mock.calls[0]![0];
     expect(request.imageUrls).toEqual(["https://example.com/body.png"]);
@@ -159,8 +169,9 @@ describe("LLM 장면 프롬프트", () => {
     expect(request.prompt).not.toMatch(/cinematic|dramatic lighting|close-up|wide shot/i);
   });
 
-  it("LLM 실패는 밖으로 던지지 않고 빈 문자열이다", async () => {
-    await expect(writeImagePrompt(input, { generate: async () => { throw new Error("LLM 실패"); } })).resolves.toBe("");
+  it("LLM 실패는 밖으로 던지지 않고 빈 본문이다", async () => {
+    await expect(writeImagePrompt(input, { generate: async () => { throw new Error("LLM 실패"); } }))
+      .resolves.toEqual({ body: "", warnings: [] });
   });
 });
 
