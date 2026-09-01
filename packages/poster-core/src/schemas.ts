@@ -1,0 +1,69 @@
+import { z } from "zod";
+import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
+import { MAX_VARIANTS, MIN_VARIANTS } from "./pricing";
+
+/**
+ * 포스터는 자유 문장이 아니라 **슬롯**으로 기획한다.
+ *
+ * 유형(영화·장소 홍보·공익·제품 광고)이 달라도 슬롯 구조는 그대로다.
+ * 같은 칸에 다른 값이 들어갈 뿐이다.
+ *
+ * **글자수를 숫자로 못 박지 않는다.** 2026-08-20 결정이다 — 내용에 따라 적절한
+ * 양이 달라지므로 LLM 이 판단하게 유도하고, 길면 그림 단계에서 작게 넣는다.
+ * 개수 제한은 다르다. 곁텍스트는 화면에 놓을 자리가 정해져 있어 상한이 있다.
+ */
+
+/** 두 레퍼런스가 공유하는 가장 강한 특징. 문장에 묻어 두면 AI 가 자주 놓친다. */
+export const TYPE_INTERACTIONS = ["통과", "뒤로", "가림", "감쌈"] as const;
+
+export const MAX_SIDE_TEXTS = 8;
+
+const text = z.string().default("");
+
+export const PosterSlotsSchema = z.object({
+  // 무엇을 말하나
+  kind: text,
+  headline: text,
+  subline: text,
+  sideTexts: z.array(z.string())
+    .max(MAX_SIDE_TEXTS, `곁텍스트는 ${MAX_SIDE_TEXTS}개까지 넣을 수 있습니다.`)
+    // 빈 줄이 프롬프트에 들어가면 모델이 빈 칸을 스스로 채운다.
+    .transform((list) => list.filter((entry) => entry.trim().length > 0))
+    .default([]),
+  // 무엇이 보이나
+  scene: text,
+  subject: text,
+  action: text,
+  // 어떻게 보이나
+  typeInteraction: z.enum(TYPE_INTERACTIONS).nullable().default(null),
+  dominantColor: text,
+  accentColor: text,
+  forbidden: text,
+}).strict();
+
+export type PosterSlots = z.infer<typeof PosterSlotsSchema>;
+
+/** 기획이 실패해도 사람이 채울 수 있어야 한다. 빈 슬롯이 유효한 상태다. */
+export const EMPTY_SLOTS: PosterSlots = PosterSlotsSchema.parse({});
+
+const POSTER_RATIO_IDS = POSTER_RATIOS.map((ratio) => ratio.id) as [string, ...string[]];
+const MODEL_IDS = IMAGE_MODELS.map((model) => model.id) as [string, ...string[]];
+
+export const PosterProjectInputSchema = z.object({
+  title: z.string().trim().min(1),
+  ratio: z.enum(POSTER_RATIO_IDS),
+  modelId: z.enum(MODEL_IDS),
+  variants: z.number().int().min(MIN_VARIANTS).max(MAX_VARIANTS),
+  /** 사용자가 적는 한 줄. 나머지는 기획이 채운다. */
+  instruction: z.string().trim().min(1),
+  /** 따라 만들 기준. 없으면 만들 수 없다. */
+  referenceIds: z.array(z.string().uuid()).min(1, "따라 만들 레퍼런스를 한 장 이상 골라 주세요."),
+  /** 그대로 지킬 제품·인물. 선택이다. */
+  preservedIds: z.array(z.string().uuid()).default([]),
+  slots: PosterSlotsSchema.optional(),
+}).strict();
+
+export type PosterProjectInput = z.infer<typeof PosterProjectInputSchema>;
+
+export const PosterStatusSchema = z.enum(["draft", "planning", "ready", "generating", "done", "failed"]);
+export type PosterStatus = z.infer<typeof PosterStatusSchema>;
