@@ -108,8 +108,17 @@ const REVIEW_SPEC: StructuredSpec = {
         required: ["headline", "body", "accent", "footnote"],
         additionalProperties: false,
       },
+      extraCopy: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["none", "present", "uncertain"] },
+          texts: { type: "array", items: { type: "string" } },
+        },
+        required: ["status", "texts"],
+        additionalProperties: false,
+      },
     },
-    required: ["decision", "summary", "issues", "textFidelity"],
+    required: ["decision", "summary", "issues", "textFidelity", "extraCopy"],
     additionalProperties: false,
   },
 };

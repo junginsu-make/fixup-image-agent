@@ -15,6 +15,9 @@ export function buildReviewPrompt(input: ReviewPromptInput): string {
     "headline, body, accent, footnote 각각의 비어 있지 않은 전체 문자열이 이미지에 통째로 보이는지 하나씩 대조하세요.",
     "일부 누락, 요약, 바꿔쓰기, 다른 라벨로 대체한 것은 의미가 같아도 원고 불일치입니다.",
     "비어 있지 않은 필드가 하나라도 missing 또는 changed이면 판정은 반드시 fail이어야 합니다.",
+    "반대 방향도 확인하세요. 기대 원고에 없는 인사말, 슬로건, CTA, 푸터 문구, 저작권 표시, 상표 주장, 날짜, 브랜드명이 카드 카피처럼 추가됐으면 extraCopy.status를 present로 판정하세요.",
+    "장면 세계 안의 간판, 표지판, 소품 라벨, 보존 대상에 원래 있던 글자는 카드 카피나 사실 주장으로 쓰이지 않는 한 extraCopy가 아닙니다.",
+    "카피인지 배경 소품 글자인지 확신할 수 없으면 extraCopy.status를 uncertain으로 하고 보이는 문자열을 texts에 적으세요.",
     "기대 원고의 철자·띄어쓰기·누락·중복·임의 변경과 실제 읽기 어려움이 있는지 설명하세요.",
     input.hasPreserved
       ? "보존 대상 원본과 실제 이미지를 대조해 정체성·형태·색·비율·라벨이 유지됐는지 설명하세요."
@@ -37,6 +40,7 @@ export interface CardReview {
   summary: string;
   issues: string[];
   textFidelity?: Record<"headline" | "body" | "accent" | "footnote", "exact" | "missing" | "changed" | "not_applicable">;
+  extraCopy?: { status: "none" | "present" | "uncertain"; texts: string[] };
 }
 
 export interface ReviewProviderInput {
@@ -75,6 +79,10 @@ const CardReviewSchema = z.object({
     accent: z.enum(["exact", "missing", "changed", "not_applicable"]),
     footnote: z.enum(["exact", "missing", "changed", "not_applicable"]),
   }),
+  extraCopy: z.object({
+    status: z.enum(["none", "present", "uncertain"]),
+    texts: z.array(z.string()),
+  }),
 });
 
 async function callReview(
@@ -91,13 +99,19 @@ async function callReview(
     const expected = input.copy[field];
     return Boolean(expected?.trim()) && review.textFidelity![field] !== "exact";
   });
-  if (!mismatched.length) return review;
+  const extraCopyIssues = review.extraCopy.status === "none"
+    ? []
+    : [review.extraCopy.status === "present"
+      ? `원고에 없는 카드 카피가 추가됐습니다: ${review.extraCopy.texts.join(" | ") || "문자열 미상"}`
+      : `원고에 없는 카드 카피인지 사람이 확인해야 합니다: ${review.extraCopy.texts.join(" | ") || "문자열 미상"}`];
+  if (!mismatched.length && !extraCopyIssues.length) return review;
   return {
     ...review,
     decision: "fail",
     issues: [
       ...review.issues,
       ...mismatched.map((field) => `${field} 전체 원고가 이미지에 정확히 들어가지 않았습니다 (${review.textFidelity![field]}).`),
+      ...extraCopyIssues,
     ],
   };
 }

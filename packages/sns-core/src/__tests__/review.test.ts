@@ -8,6 +8,7 @@ const base = {
   preservedImageUrls: [] as string[],
 };
 const exactFidelity = { headline: "exact", body: "exact", accent: "not_applicable", footnote: "not_applicable" } as const;
+const noExtraCopy = { status: "none", texts: [] } as const;
 
 describe("검수 프롬프트", () => {
   it("기대 글자를 담는다", () => {
@@ -29,6 +30,14 @@ describe("검수 프롬프트", () => {
     expect(prompt).toMatch(/통째로|전체 문자열/);
     expect(prompt).toMatch(/누락|요약/);
     expect(prompt).toMatch(/반드시 fail/);
+  });
+
+  it("원고에 없는 카피와 장면 속 간판·소품 글자를 구분하라고 한다", () => {
+    const prompt = buildReviewPrompt({ copy: { headline: "제목" }, hasPreserved: false });
+    expect(prompt).toMatch(/원고에 없는.*인사말.*CTA.*저작권/is);
+    expect(prompt).toMatch(/상표.*날짜/is);
+    expect(prompt).toMatch(/간판.*표지판.*소품/);
+    expect(prompt).toMatch(/extraCopy/);
   });
 
   it("점수나 숫자 문턱을 만들지 않는다", () => {
@@ -58,7 +67,7 @@ describe("검수 대상", () => {
 describe("검수", () => {
   it("통과하면 done 으로 돌려준다", async () => {
     const result = await reviewCard(base, {
-      review: async () => ({ decision: "pass", summary: "문제 없음", issues: [], textFidelity: exactFidelity }),
+      review: async () => ({ decision: "pass", summary: "문제 없음", issues: [], textFidelity: exactFidelity, extraCopy: noExtraCopy }),
     });
     expect(result).toMatchObject({
       status: "done",
@@ -74,6 +83,7 @@ describe("검수", () => {
       review: async () => ({
         decision: "fail", summary: "제목 오탈자", issues: ["제목이 다르게 보입니다."],
         textFidelity: { ...exactFidelity, headline: "changed" },
+        extraCopy: noExtraCopy,
       }),
     });
     expect(result).toMatchObject({
@@ -91,6 +101,7 @@ describe("검수", () => {
         summary: "의미는 전달됨",
         issues: ["본문이 요약됨"],
         textFidelity: { headline: "exact", body: "missing", accent: "not_applicable", footnote: "not_applicable" },
+        extraCopy: noExtraCopy,
       }),
     });
     expect(result.status).toBe("review_required");
@@ -104,6 +115,41 @@ describe("검수", () => {
     });
     expect(result.status).toBe("review_required");
     expect(result.issues.join("\n")).toContain("주 검수 실패");
+  });
+
+  it("네 필드가 exact여도 원고에 없는 저작권 카피가 있으면 review_required로 닫는다", async () => {
+    const result = await reviewCard(base, {
+      review: async () => ({
+        decision: "pass",
+        summary: "원고는 정확함",
+        issues: [],
+        textFidelity: exactFidelity,
+        extraCopy: { status: "present", texts: ["© 2024 모든 권리 보유"] },
+      }),
+    });
+    expect(result.status).toBe("review_required");
+    expect(result.review?.decision).toBe("fail");
+    expect(result.review?.issues.join("\n")).toContain("© 2024 모든 권리 보유");
+  });
+
+  it("장면 속 표지판 글자뿐이면 extraCopy none으로 통과한다", async () => {
+    const result = await reviewCard(base, {
+      review: async () => ({
+        decision: "pass",
+        summary: "배경 표지판의 출구 글자는 장면 소품임",
+        issues: [],
+        textFidelity: exactFidelity,
+        extraCopy: { status: "none", texts: [] },
+      }),
+    });
+    expect(result.status).toBe("done");
+  });
+
+  it("extraCopy 판정을 빠뜨린 검수 응답은 통과시키지 않는다", async () => {
+    const result = await reviewCard(base, {
+      review: async () => ({ decision: "pass", summary: "문제 없음", issues: [], textFidelity: exactFidelity }),
+    });
+    expect(result.status).toBe("review_required");
   });
 
   it("검수 제외 카드는 제공자를 부르지 않는다", async () => {
@@ -136,7 +182,7 @@ describe("검수", () => {
     const result = await reviewCard(
       base,
       { review: async () => { throw new Error("Claude vision 실패"); } },
-      { review: async () => ({ decision: "pass", summary: "예비 통과", issues: [], textFidelity: exactFidelity }) },
+      { review: async () => ({ decision: "pass", summary: "예비 통과", issues: [], textFidelity: exactFidelity, extraCopy: noExtraCopy }) },
     );
     expect(result.status).toBe("done");
     expect(result.review?.decision).toBe("pass");
@@ -171,6 +217,7 @@ describe("검수", () => {
       review: async () => ({
         decision: "fail", summary: "사람 확인", issues: ["문제"],
         textFidelity: { ...exactFidelity, headline: "changed" },
+        extraCopy: noExtraCopy,
       }),
     };
     const result = await reviewCard(input, request);

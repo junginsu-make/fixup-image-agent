@@ -92,6 +92,9 @@ describe("다국어와 글자", () => {
     expect(frame).toContain("Do not translate, paraphrase, or shorten the text listed above.");
     expect(frame).toContain("Keep incidental background text sparse.");
     expect(frame).not.toMatch(/add any text that is not listed/i);
+    expect(frame).toMatch(/do not invent.*greeting.*CTA.*copyright/is);
+    expect(frame).toMatch(/trademark.*date/is);
+    expect(frame).toMatch(/incidental environmental text.*signs.*props/is);
   });
 
   it("긴 원고도 그대로 frame 에 넣는다", () => {
@@ -176,6 +179,8 @@ describe("LLM 장면 프롬프트", () => {
     expect(request.prompt).toMatch(/every non-empty copy field/i);
     expect(request.prompt).toMatch(/smaller font|reduce the font/i);
     expect(request.prompt).toMatch(/do not omit|do not summarize/i);
+    expect(request.prompt).toMatch(/do not invent.*copyright/is);
+    expect(request.prompt).toMatch(/signs.*props.*allowed/is);
   });
 
   it("LLM 실패는 밖으로 던지지 않고 빈 본문이다", async () => {

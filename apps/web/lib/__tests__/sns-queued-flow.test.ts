@@ -43,10 +43,12 @@ function dependencies(events: string[], status: QueuedGenerationDependencies["qu
     reviewPrimary: { review: async () => ({
       decision: "pass", summary: "통과", issues: [],
       textFidelity: { headline: "exact", body: "not_applicable", accent: "not_applicable", footnote: "not_applicable" },
+      extraCopy: { status: "none", texts: [] },
     }) },
     reviewBackup: { review: async () => ({
       decision: "pass", summary: "예비 통과", issues: [],
       textFidelity: { headline: "exact", body: "not_applicable", accent: "not_applicable", footnote: "not_applicable" },
+      extraCopy: { status: "none", texts: [] },
     }) },
     uploadReference: async (attachment) => { events.push(`upload:${attachment.id}`); return `https://fal.media/${attachment.id}`; },
     queue: {
