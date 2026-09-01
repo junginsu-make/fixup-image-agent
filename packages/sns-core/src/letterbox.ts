@@ -6,7 +6,12 @@ export interface LetterboxPlan {
   usesAi: false;
   reviewRequired: false;
   fillStrategy: "edge_average";
+  scale: number;
+  warnings: string[];
 }
+
+/** 선형 1.5배는 원본 한 픽셀이 출력에서 2.25픽셀 면적을 차지하는 경계다. */
+export const UPSCALE_WARNING_THRESHOLD = 1.5;
 
 export interface RgbColor {
   r: number;
@@ -51,6 +56,9 @@ export function letterboxPlan(
   const scale = Math.min(target.width / source.width, target.height / source.height);
   const drawWidth = Math.round(source.width * scale);
   const drawHeight = Math.round(source.height * scale);
+  const warnings = scale > UPSCALE_WARNING_THRESHOLD
+    ? [`원본을 ${scale.toFixed(2)}배 확대해야 합니다. 표·문서 글자가 흐려질 수 있으니 더 큰 원본을 쓰거나 결과를 확인해 주세요.`]
+    : [];
   return {
     drawWidth,
     drawHeight,
@@ -59,5 +67,7 @@ export function letterboxPlan(
     usesAi: false,
     reviewRequired: false,
     fillStrategy: "edge_average",
+    scale,
+    warnings,
   };
 }

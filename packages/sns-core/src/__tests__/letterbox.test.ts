@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { averageEdgeColor, letterboxPlan } from "../letterbox";
+import { UPSCALE_WARNING_THRESHOLD, averageEdgeColor, letterboxPlan } from "../letterbox";
 
 describe("여백 계산", () => {
   it("가로가 넓으면 위아래에 여백", () => {
@@ -51,6 +51,19 @@ describe("여백 계산", () => {
     expect(plan.usesAi).toBe(false);
     expect(plan.reviewRequired).toBe(false);
     expect(plan.fillStrategy).toBe("edge_average");
+  });
+
+  it("1.5배를 넘게 확대하면 실제 배율을 경고한다", () => {
+    const plan = letterboxPlan({ width: 400, height: 500 }, { width: 1088, height: 1360 });
+    expect(UPSCALE_WARNING_THRESHOLD).toBe(1.5);
+    expect(plan.scale).toBeCloseTo(2.72, 4);
+    expect(plan.warnings.join("\n")).toContain("2.72배");
+  });
+
+  it("1.5배 이하 확대는 경고하지 않는다", () => {
+    const plan = letterboxPlan({ width: 800, height: 1000 }, { width: 1088, height: 1360 });
+    expect(plan.scale).toBeCloseTo(1.36, 4);
+    expect(plan.warnings).toEqual([]);
   });
 });
 
