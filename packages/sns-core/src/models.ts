@@ -137,3 +137,28 @@ export function unitPrice(model: ImageModel, mode: ImageMode, size: PixelSize): 
   if (!spec.table) throw new Error(`${model.id} 에 단가 정보가 없습니다.`);
   return pickRow(spec.table, size).usd;
 }
+
+/**
+ * 표가 이 크기를 덮는가.
+ *
+ * 가격표에는 여섯 크기뿐이다. 요청 크기가 고른 행보다 훨씬 크면 비율만 비슷할 뿐
+ * 값이 맞을 리 없다 — A4 인쇄용(814만 픽셀)이 1024×1536(157만) 행에 붙어
+ * 5배 큰 이미지를 같은 값으로 계산하는 일이 실제로 있었다.
+ *
+ * 덮지 못하면 **표에서 가장 비싼 값**을 쓴다. 적게 잡는 쪽이 위험하다.
+ */
+export function priceCoverage(
+  model: ImageModel,
+  mode: ImageMode,
+  size: PixelSize,
+): { covered: boolean; usd: number } {
+  const spec = mode === "i2i" ? model.i2i : model.t2i;
+  if (spec.flatUsd !== undefined || !spec.table) {
+    return { covered: true, usd: unitPrice(model, mode, size) };
+  }
+  const row = pickRow(spec.table, size);
+  const requested = size.width * size.height;
+  const matched = row.width * row.height;
+  if (requested <= matched * 2) return { covered: true, usd: row.usd };
+  return { covered: false, usd: Math.max(...spec.table.map((entry) => entry.usd)) };
+}

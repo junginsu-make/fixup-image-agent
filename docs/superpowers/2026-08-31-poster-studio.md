@@ -24,7 +24,8 @@
 - **admin 클라이언트를 쓰는 곳에서는 `user_id` 를 요청 본문에서 받지 않는다.** 반드시 로그인 세션에서 가져온다. RLS 를 우회하기 때문이다.
 - **화면 코드(`"use client"`)는 `types.ts` 를 값으로 import 하지 않는다.** 타입 전용 import 만 허용. 화면이 값으로 쓰는 스키마는 `packages/poster-core/src/schemas.ts` 에 둔다.
 - **컬럼 권한은 회수가 아니라 허용 목록으로 쓴다.** `revoke update on <table>` 을 먼저 하고 `grant update (col, ...)` 를 준다. 테이블 GRANT 뒤의 컬럼 REVOKE 는 아무 일도 하지 않는다.
-- **`unit_price` 견적 방식을 절대 부르지 않는다.** `openai/gpt-image-2/edit` 에서 장당 $1.00 이 나온다.
+- **fal 견적 API 를 부르지 않는다.** 비용은 공표 가격표로 계산한다 — `sns-core` 의 `unitPrice()`.
+  카드뉴스에서 두 번 실측해 예측과 실제 청구가 일치했다.
 - **GPT Image 2 는 `image_size` 를 항상 명시한다.** 기본값 `auto` 는 입력 이미지 크기를 물려받는다.
 - **`quality` 는 `high` 고정.** 사용자에게 노출하지 않는다.
 - **웹 검색·`thinking_level` 을 켜지 않는다.** 추가 과금이 붙는다.
@@ -413,287 +414,59 @@ git commit -m "feat(poster): 비율을 모델이 받는 값으로 바꾸는 순�
 
 ---
 
-## Task 4: 비용 추정 — fal 견적 API 를 1순위로
+## Task 4: 비용 추정 — 공표 단가로 계산한다
 
-`POST /v1/models/pricing/estimate` 는 지금 `FAL_KEY` 로 된다(2026-08-31 실측, HTTP 200). `unit_price` 방식은 부르면 안 된다.
+계획서 원안은 `POST /v1/models/pricing/estimate` 를 1순위로 삼았다. **버린다.**
+
+사용자 지시가 *"각 모델 fal.ai 페이지에서 제공한 값으로 계산해서 추적하세요"* 였고,
+그 계산은 이미 `packages/sns-core/src/models.ts` 의 `unitPrice()` 에 있다.
+카드뉴스에서 두 번 실측했고 예측과 실제 청구가 같았다($0.699).
+
+**견적 API 를 부르면 실패 지점이 하나 늘고 돌아오는 값도 같다.** 부르지 않는다.
 
 **Files:**
 - Create: `packages/poster-core/src/pricing.ts`
-- Test: `packages/poster-core/src/__tests__/poster-pricing.test.ts`
+- Create: `packages/poster-core/package.json` · `tsconfig.json`
+- Test: `packages/poster-core/src/__tests__/pricing.test.ts`
 
 **Interfaces:**
-- Consumes: `GPT_IMAGE_2_PRICES` (Task 2), `StudioModelSpec`
-- Produces: `estimateCost(input): Promise<CostEstimate>` · `CostEstimate { usd: number; source: "fal_estimate" | "cache" | "listed"; confident: boolean }` · `publishedUnitPrice(model, resolution): number`
+- Consumes: `unitPrice` · `modelById` · `resolvePosterSize` (sns-core)
+- Produces: `estimatePosterCost(input): PosterCostEstimate` ·
+  `PosterCostEstimate { unitUsd; totalUsd; mode; variants; rejected? }`
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`packages/poster-core/src/__tests__/poster-pricing.test.ts`:
+지켜야 할 것:
 
-```ts
-import { describe, expect, it, vi } from "vitest";
-import { estimateCost, publishedUnitPrice } from "../packages/poster-core/src/pricing";
-import { listModels } from "../packages/sns-core/src/models";
-
-const model = (id: string) => listModels().find((spec) => spec.id === id)!;
-
-describe("공표 단가", () => {
-  it("nano 는 해상도 배수까지 정확하다", () => {
-    expect(publishedUnitPrice(model("nano-banana-2"), "2K")).toBeCloseTo(0.12, 4);
-    expect(publishedUnitPrice(model("nano-banana-pro"), "4K")).toBeCloseTo(0.30, 4);
-  });
-
-  it("GPT 는 표에서 가장 비싼 값을 쓴다 — 픽셀에 비례하지 않아 안전한 쪽으로", () => {
-    expect(publishedUnitPrice(model("gpt-image-2"))).toBeCloseTo(0.413, 4);
-  });
-});
-
-describe("비용 추정", () => {
-  const cache = new Map<string, number>();
-
-  it("견적 API 가 되면 그 값을 쓴다", async () => {
-    const fetchEstimate = vi.fn(async () => 0.22);
-    const result = await estimateCost({ model: model("gpt-image-2"), images: 2, fetchEstimate, cache });
-    expect(fetchEstimate).toHaveBeenCalledWith("openai/gpt-image-2/edit", 2);
-    expect(result).toEqual({ usd: 0.22, source: "fal_estimate", confident: true });
-  });
-
-  it("성공한 견적을 캐시에 남긴다", async () => {
-    expect(cache.get("openai/gpt-image-2/edit:2")).toBe(0.22);
-  });
-
-  it("견적이 실패하면 캐시를 쓴다", async () => {
-    const result = await estimateCost({
-      model: model("gpt-image-2"), images: 2, cache,
-      fetchEstimate: async () => { throw new Error("네트워크"); },
-    });
-    expect(result).toEqual({ usd: 0.22, source: "cache", confident: true });
-  });
-
-  it("캐시도 없으면 공표 단가로 떨어지고 정확도 낮음을 표시한다", async () => {
-    const result = await estimateCost({
-      model: model("gpt-image-2"), images: 1, cache: new Map(),
-      fetchEstimate: async () => { throw new Error("네트워크"); },
-    });
-    expect(result.source).toBe("listed");
-    expect(result.confident).toBe(false);
-    expect(result.usd).toBeCloseTo(0.413, 4);
-  });
-
-  it("견적이 0 이하면 믿지 않는다", async () => {
-    const result = await estimateCost({
-      model: model("nano-banana-2"), images: 1, cache: new Map(),
-      fetchEstimate: async () => 0,
-    });
-    expect(result.source).toBe("listed");
-  });
-});
+```
+레퍼런스가 있으면 i2i, 없으면 t2i — 카드뉴스와 같은 규칙
+변형 N장이면 단가 × N — 포스터는 N장을 다 저장하므로 다 낸다
+A4 인쇄용을 nano 로 고르면 거절 사유를 그대로 전달한다
+비율이 모델에 안 맞으면 금액을 지어내지 않는다
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [ ] **Step 2: 실패 확인**
 
-Run: `npx vitest run packages/poster-core/src/__tests__/poster-pricing.test.ts`
-Expected: FAIL — 모듈 없음
+Run: `pnpm --filter @fixup/poster-core test`
 
-- [ ] **Step 3: 최소 구현**
+- [ ] **Step 3: 구현**
 
-`packages/poster-core/src/pricing.ts`:
+`unitPrice` 를 부르고 변형 수를 곱한다. **새 가격표를 만들지 않는다.**
 
-```ts
-import { GPT_IMAGE_2_PRICES, type StudioModelSpec } from "../studio/models";
-import type { StudioResolution } from "../studio/schemas";
+- [ ] **Step 4: 통과 확인**
 
-export interface CostEstimate {
-  usd: number;
-  source: "fal_estimate" | "cache" | "listed";
-  /** false 면 화면에 "정확도 낮음"을 함께 표시한다. */
-  confident: boolean;
-}
-
-/**
- * 모델 페이지가 공표한 단가.
- *
- * nano 둘은 이 값이 정확하다. GPT Image 2 는 가격이 픽셀에 비례하지 않아 크기별로 고를 수
- * 없다 — 1024x1536 이 1024x1024 보다 싸다. 그래서 표의 최댓값을 쓴다. 과소 추정보다
- * 과대 추정이 낫고, 이 경로는 견적 API 가 죽었을 때만 쓰는 3순위다.
- */
-export function publishedUnitPrice(model: StudioModelSpec, resolution?: StudioResolution): number {
-  if (model.id === "gpt-image-2") return Math.max(...GPT_IMAGE_2_PRICES.map((row) => row.high));
-  return model.estimateCostUsd("1:1", resolution);
-}
-
-export interface EstimateInput {
-  model: StudioModelSpec;
-  images: number;
-  /** 엔드포인트와 호출 횟수를 받아 총액을 돌려준다. 실패하면 던져도 된다. */
-  fetchEstimate: (endpoint: string, calls: number) => Promise<number>;
-  cache: Map<string, number>;
-  resolution?: StudioResolution;
-}
-
-/**
- * 사전 추정. 1순위 견적 API → 2순위 캐시 → 3순위 공표 단가.
- *
- * 견적 API 는 지금 FAL_KEY 로 된다(2026-08-31 실측). 다만 한 번도 부르지 않은 엔드포인트도
- * 값을 돌려주고 nano-pro 는 알려진 단가의 2배가 나와, "우리 이력"이라고 단정하지 않는다.
- * 참고값으로 쓰고 진실은 사후 정산이다.
- */
-export async function estimateCost(input: EstimateInput): Promise<CostEstimate> {
-  const key = `${input.model.endpoint}:${input.images}`;
-  try {
-    const usd = await input.fetchEstimate(input.model.endpoint, input.images);
-    if (Number.isFinite(usd) && usd > 0) {
-      input.cache.set(key, usd);
-      return { usd, source: "fal_estimate", confident: true };
-    }
-  } catch {
-    // 견적을 못 받는 것은 실패가 아니다. 아래로 떨어진다.
-  }
-  const cached = input.cache.get(key);
-  if (cached !== undefined) return { usd: cached, source: "cache", confident: true };
-  return { usd: publishedUnitPrice(input.model, input.resolution) * input.images, source: "listed", confident: false };
-}
-```
-
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
-
-Run: `npx vitest run packages/poster-core/src/__tests__/poster-pricing.test.ts` · `npx tsc --noEmit`
-Expected: 통과
+Run: `pnpm -r test` · `pnpm typecheck`
 
 - [ ] **Step 5: 커밋**
 
-```bash
-git add packages/poster-core/src/pricing.ts packages/poster-core/src/__tests__/poster-pricing.test.ts
-git commit -m "feat(poster): 비용 추정을 fal 견적 API 1순위로 만든다"
-```
-
 ---
 
-## Task 5: 견적 API 를 실제로 부르는 클라이언트
+## Task 5: (없음 — Task 4 에 합쳤다)
 
-`unit_price` 를 절대 부르지 않는다. 호출은 어떤 이유로도 던지지 않고 `undefined` 를 돌려준다.
-
-**Files:**
-- Create: `packages/poster-core/src/fal-pricing-client.ts`
-- Test: `packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts`
-
-**Interfaces:**
-- Consumes: 없음
-- Produces: `createFalEstimator(environment?): (endpoint: string, calls: number) => Promise<number>` · `buildEstimateBody(endpoint, calls): object`
-
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
-
-`packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts`:
-
-```ts
-import { describe, expect, it, vi } from "vitest";
-import { buildEstimateBody, createFalEstimator } from "../packages/poster-core/src/fal-pricing-client";
-
-describe("견적 요청 본문", () => {
-  it("historical_api_price 만 쓴다", () => {
-    // unit_price 는 openai/gpt-image-2/edit 에서 장당 $1.00 이 나온다. 절대 쓰지 않는다.
-    const body = buildEstimateBody("openai/gpt-image-2/edit", 3);
-    expect(body).toEqual({
-      estimate_type: "historical_api_price",
-      endpoints: { "openai/gpt-image-2/edit": { call_quantity: 3 } },
-    });
-    expect(JSON.stringify(body)).not.toContain("unit_price");
-  });
-});
-
-describe("견적 호출", () => {
-  it("총액을 숫자로 돌려준다", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ total_cost: 0.22, currency: "USD" }), { status: 200 }));
-    const estimate = createFalEstimator({ FAL_KEY: "k" }, fetcher);
-    await expect(estimate("openai/gpt-image-2/edit", 1)).resolves.toBe(0.22);
-  });
-
-  it("Key 접두사를 붙여 보낸다", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ total_cost: 0.1 }), { status: 200 }));
-    await createFalEstimator({ FAL_KEY: "abc" }, fetcher)("x", 1);
-    const init = fetcher.mock.calls[0]![1] as RequestInit;
-    expect((init.headers as Record<string, string>).Authorization).toBe("Key abc");
-  });
-
-  it("키가 없으면 던진다 — 상위가 캐시로 떨어진다", async () => {
-    const estimate = createFalEstimator({}, vi.fn());
-    await expect(estimate("x", 1)).rejects.toThrow(/FAL_KEY/);
-  });
-
-  it("403 이면 던진다", async () => {
-    const fetcher = vi.fn(async () => new Response("{}", { status: 403 }));
-    await expect(createFalEstimator({ FAL_KEY: "k" }, fetcher)("x", 1)).rejects.toThrow(/403/);
-  });
-
-  it("total_cost 가 숫자가 아니면 던진다", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ currency: "USD" }), { status: 200 }));
-    await expect(createFalEstimator({ FAL_KEY: "k" }, fetcher)("x", 1)).rejects.toThrow(/금액/);
-  });
-});
-```
-
-- [ ] **Step 2: 실패를 확인한다**
-
-Run: `npx vitest run packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts`
-Expected: FAIL — 모듈 없음
-
-- [ ] **Step 3: 최소 구현**
-
-`packages/poster-core/src/fal-pricing-client.ts`:
-
-```ts
-const ESTIMATE_URL = "https://api.fal.ai/v1/models/pricing/estimate";
-
-/**
- * 견적 요청 본문.
- *
- * historical_api_price 만 쓴다. unit_price 방식은 openai/gpt-image-2/edit 에
- * unit_quantity 3 을 주면 $3.00(장당 $1)이 나와 실제 단가와 자릿수가 다르다.
- */
-export function buildEstimateBody(endpoint: string, calls: number): Record<string, unknown> {
-  return { estimate_type: "historical_api_price", endpoints: { [endpoint]: { call_quantity: calls } } };
-}
-
-/**
- * fal 견적 API 호출기.
- *
- * 이 API 는 ADMIN 이 아니라 일반 API 키로 된다(2026-08-31 실측, HTTP 200).
- * 정산용 billing-events·usage 와 다르다. 실패는 던지고, 상위(estimateCost)가 캐시·공표
- * 단가로 떨어진다.
- */
-export function createFalEstimator(
-  environment: { FAL_KEY?: string } = process.env as Record<string, string | undefined>,
-  fetcher: typeof fetch = fetch,
-): (endpoint: string, calls: number) => Promise<number> {
-  return async (endpoint, calls) => {
-    if (!environment.FAL_KEY) throw new Error("FAL_KEY 가 없어 견적을 받을 수 없습니다.");
-    const response = await fetcher(ESTIMATE_URL, {
-      method: "POST",
-      headers: { Authorization: `Key ${environment.FAL_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildEstimateBody(endpoint, calls)),
-    });
-    if (!response.ok) throw new Error(`견적을 받지 못했습니다. (${response.status})`);
-    const parsed = await response.json() as { total_cost?: unknown };
-    if (typeof parsed.total_cost !== "number") throw new Error("견적 응답에 금액이 없습니다.");
-    return parsed.total_cost;
-  };
-}
-```
-
-- [ ] **Step 4: 테스트가 통과하는지 확인한다**
-
-Run: `npx vitest run` · `npx tsc --noEmit`
-Expected: 전부 통과
-
-- [ ] **Step 5: 커밋**
-
-```bash
-git add packages/poster-core/src/fal-pricing-client.ts packages/poster-core/src/__tests__/poster-fal-pricing-client.test.ts
-git commit -m "feat(poster): fal 견적 API 클라이언트를 만든다"
-```
+견적 API 클라이언트를 만들지 않기로 했으므로 이 태스크는 사라졌다.
+번호는 뒤 태스크와의 대조를 위해 남겨 둔다.
 
 ---
-
-# Phase 2 — 저장소
 
 ## Task 6: 마이그레이션 0009 — 포스터 네 테이블
 
