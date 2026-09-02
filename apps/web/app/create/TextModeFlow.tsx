@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { takeHandoff } from "../../lib/handoff";
 import { AlertCircle } from "lucide-react";
 import {
   DEFAULT_IMAGE_MODEL,
@@ -70,6 +71,15 @@ export function TextModeFlow({
   onComplete,
 }: TextModeFlowProps) {
   const [text, setText] = useState("");
+  const [fromLibrary, setFromLibrary] = useState<string | null>(null);
+
+  // 라이브러리에서 「상세페이지로」를 눌러 왔으면 글이 이미 들어가 있어야 한다.
+  useEffect(() => {
+    const handoff = takeHandoff();
+    if (!handoff?.text) return;
+    setText(handoff.text);
+    setFromLibrary(handoff.title);
+  }, []);
   const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
   const [brief, setBrief] = useState<ProductBrief | null>(null);

@@ -22,6 +22,12 @@ export function putHandoff(payload: Handoff): void {
   sessionStorage.setItem(KEY, JSON.stringify(payload));
 }
 
+/** 짐이 있는지만 본다. 꺼내지 않는다 — 화면을 어느 모드로 열지 정할 때 쓴다. */
+export function hasHandoff(): boolean {
+  if (typeof window === "undefined") return false;
+  return sessionStorage.getItem(KEY) !== null;
+}
+
 /** 한 번만 읽힌다. 뒤로 갔다 다시 와도 또 채우지 않는다. */
 export function takeHandoff(): Handoff | null {
   if (typeof window === "undefined") return null;

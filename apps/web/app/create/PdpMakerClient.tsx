@@ -13,6 +13,7 @@ import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-contro
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
+import { hasHandoff } from "../../lib/handoff";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
@@ -37,6 +38,12 @@ export function PdpMakerClient() {
   const [appState, setAppState] = useState<PdpAppState>("upload");
   // 시작 방식. 기본은 기존 이미지 흐름이라 이 화면을 쓰던 사람에게 달라지는 게 없다.
   const [startMode, setStartMode] = useState<CreateMode>("image");
+
+  // 라이브러리에서 글을 갖고 왔으면 글 모드로 연다. 이미지 모드로 열면
+  // 갖고 온 글이 어디에도 안 보인다.
+  useEffect(() => {
+    if (hasHandoff()) setStartMode("text");
+  }, []);
   // 텍스트 경로의 중간 단계. 초안에 저장하지 않으므로 컴포넌트 상태로만 둔다.
   const [textStage, setTextStage] = useState<TextStage>("input");
   // 텍스트 경로에서 고른 이미지 모델. 편집기의 섹션 생성까지 이어진다.

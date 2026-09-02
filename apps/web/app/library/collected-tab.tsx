@@ -51,10 +51,10 @@ export function CollectedTab() {
     !query.trim() || item.title.includes(query.trim()));
 
   /** 고른 글을 그 도구의 시작 화면으로 넘긴다. 복사해 붙일 필요가 없어야 한다. */
-  function sendTo(tool: "sns" | "poster", item: Candidate) {
+  function sendTo(tool: "sns" | "poster" | "create", item: Candidate) {
     const text = (item.body ?? item.summary ?? "").trim();
     putHandoff({ title: item.title, text, url: item.url, candidateId: item.id });
-    router.push(tool === "sns" ? "/sns/new" : "/poster/new");
+    router.push(tool === "sns" ? "/sns/new" : tool === "poster" ? "/poster/new" : "/create");
   }
 
   if (error) {
@@ -99,6 +99,7 @@ export function CollectedTab() {
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => sendTo("sns", item)}>카드뉴스로</Button>
                 <Button size="sm" variant="secondary" onClick={() => sendTo("poster", item)}>포스터로</Button>
+                <Button size="sm" variant="secondary" onClick={() => sendTo("create", item)}>상세페이지로</Button>
                 {item.url ? (
                   <Button size="sm" variant="ghost" asChild>
                     <a href={item.url} target="_blank" rel="noreferrer">원문 보기</a>
