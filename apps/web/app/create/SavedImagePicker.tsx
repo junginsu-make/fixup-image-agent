@@ -64,11 +64,16 @@ export function SavedImagePicker({
     setLoading(true);
     setMessage("");
     try {
-      const [refs, library] = await Promise.all([
+      const [refs, library, shared] = await Promise.all([
         fetch("/api/pdp/style-references", { cache: "no-store" })
           .then((r) => r.json())
           .catch(() => ({})),
         fetch("/api/library", { cache: "no-store" })
+          .then((r) => r.json())
+          .catch(() => ({})),
+        // 카드뉴스·포스터가 쓰는 라이브러리 참고 이미지. 표가 다르다고 여기서
+        // 안 보이면 "분명 올렸는데 상세페이지에선 없다"가 된다.
+        fetch("/api/reference-images", { cache: "no-store" })
           .then((r) => r.json())
           .catch(() => ({})),
       ]);
@@ -91,7 +96,17 @@ export function SavedImagePicker({
         excludeCharacterItems,
       );
 
-      const all = [...fromRefs, ...fromLibrary];
+      const fromShared: SavedImage[] = (shared?.images ?? [])
+        .filter((item: { signedUrl?: string | null; url?: string | null }) => item.signedUrl || item.url)
+        .map((item: { id: string; title?: string | null; signedUrl?: string | null; url?: string | null }) => ({
+          id: `lib-${item.id}`,
+          name: item.title ?? "참고 이미지",
+          url: (item.signedUrl ?? item.url)!,
+          origin: "reference" as const,
+          description: "라이브러리 참고 이미지",
+        }));
+
+      const all = [...fromRefs, ...fromShared, ...fromLibrary];
       setImages(origin ? all.filter((image) => image.origin === origin) : all);
     } catch {
       setMessage("저장된 이미지를 불러오지 못했습니다.");

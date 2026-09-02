@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import type { ReferencePurpose, ReferenceSetRecord } from "../api/reference-sets/schema";
 import { persistReferenceImage, type ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 
 type ReferenceImageView = ReferenceImageRow & { signedUrl: string | null };
+
+const ROLE_LABEL: Record<string, string> = { cover: "표지", body: "속지", ending: "엔딩" };
 
 const PURPOSE_LABEL: Record<ReferencePurpose, string> = {
   cardnews: "카드뉴스",
@@ -54,6 +56,8 @@ export function ReferencesTab() {
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [editorOpen, setEditorOpen] = React.useState(false);
+  /** 어느 세트를 펼쳐 보고 있나. 표지만 보고는 뭐가 묶였는지 알 수 없다. */
+  const [previewSet, setPreviewSet] = React.useState<ReferenceSetRecord | null>(null);
   const [editingSet, setEditingSet] = React.useState<ReferenceSetRecord | null>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
@@ -243,12 +247,71 @@ export function ReferencesTab() {
                       <Button size="icon" variant="ghost" aria-label={`${set.name} 삭제`} onClick={() => void removeSet(set)}><Trash2 className="size-4" /></Button>
                     </div>
                   </CardHeader>
+                  <CardContent>
+                    {/* 이름만 있으면 뭐가 묶였는지 알 수 없다. 눌러서 전부 본다. */}
+                    <button
+                      type="button"
+                      className="grid w-full grid-cols-4 gap-1.5 rounded-lg p-1 text-left transition-colors hover:bg-muted"
+                      onClick={() => setPreviewSet(set)}
+                      aria-label={`${set.name} 묶인 이미지 보기`}
+                    >
+                      {set.items.slice(0, 4).map((item) => {
+                        const image = images.find((entry) => entry.id === item.referenceImageId);
+                        return (
+                          <span key={item.id ?? item.referenceImageId} className="block aspect-square overflow-hidden rounded-md bg-muted">
+                            {image?.signedUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={image.signedUrl} alt="" className="h-full w-full object-cover" />
+                            ) : null}
+                          </span>
+                        );
+                      })}
+                      {set.items.length === 0 ? (
+                        <span className="col-span-4 py-6 text-center text-xs text-muted-foreground">아직 담긴 이미지가 없습니다.</span>
+                      ) : null}
+                      {set.items.length > 4 ? (
+                        <span className="col-span-4 pt-1 text-center text-meta text-subtle-foreground">외 {set.items.length - 4}장 · 눌러서 전부 보기</span>
+                      ) : null}
+                    </button>
+                  </CardContent>
                 </Card>
               ))}
             </div>
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={Boolean(previewSet)} onOpenChange={(open) => { if (!open) setPreviewSet(null); }}>
+        <DialogContent className="max-w-3xl">
+          {previewSet ? <>
+            <DialogHeader>
+              <DialogTitle>{previewSet.name}</DialogTitle>
+              <DialogDescription>{PURPOSE_LABEL[previewSet.purpose]} · {previewSet.items.length}장</DialogDescription>
+            </DialogHeader>
+            <div className="grid max-h-[65vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3">
+              {previewSet.items.map((item) => {
+                const image = images.find((entry) => entry.id === item.referenceImageId);
+                return (
+                  <figure key={item.id ?? item.referenceImageId} className="grid gap-2">
+                    <span className="block aspect-[4/5] overflow-hidden rounded-lg border bg-muted">
+                      {image?.signedUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="grid h-full place-items-center text-xs text-muted-foreground">이미지를 찾을 수 없습니다</span>
+                      )}
+                    </span>
+                    <figcaption className="text-xs">
+                      <Badge variant="secondary">{ROLE_LABEL[item.role] ?? item.role}</Badge>
+                      <span className="mt-1 block truncate text-muted-foreground">{image?.title ?? "제목 없음"}</span>
+                    </figcaption>
+                  </figure>
+                );
+              })}
+            </div>
+          </> : null}
+        </DialogContent>
+      </Dialog>
 
       <SetEditor
         open={editorOpen}
