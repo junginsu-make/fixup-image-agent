@@ -82,7 +82,10 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
         </Button>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* 2열 고정이면 넓은 화면에서 한 칸이 1,100px 가 되고 4:5 라서 세로가
+          1,375px 이 된다. 카드 한 장도 화면에 안 들어온다. 넓을수록 열을 늘리고
+          그림에 최대 높이를 둔다. */}
+      <div className="grid gap-6 lg:grid-cols-2 2xl:grid-cols-3">
         {flow.cards.map((card) => (
           <Card key={card.index} className="overflow-hidden">
             <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
@@ -90,7 +93,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
               <ReviewStatus card={card} />
             </CardHeader>
             <CardContent className="grid gap-4">
-              {card.assetUrl ? <Image src={card.assetUrl} alt={`${card.index}번 카드 결과`} width={1088} height={1360} unoptimized data-zoomable className="aspect-[4/5] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
+              {card.assetUrl ? <Image src={card.assetUrl} alt={`${card.index}번 카드 결과`} width={1088} height={1360} unoptimized data-zoomable className="mx-auto max-h-[60vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] max-h-[60vh] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
               <div>
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}
