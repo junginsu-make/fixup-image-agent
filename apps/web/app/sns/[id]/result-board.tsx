@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
 import { snsCardFilename } from "../download-filename";
+import { SaveToLibrary } from "../../_components/save-to-library";
 
 function triggerDownload(url: string, name: string) {
   const anchor = document.createElement("a");
@@ -102,6 +103,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
               {card.error ? <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{card.error}</p> : null}
               <div className="flex flex-wrap justify-end gap-2">
                 {card.assetUrl ? <Button variant="outline" onClick={() => triggerDownload(card.assetUrl!, snsCardFilename(title, card.index, card.assetPath))}><Download />낱장 내려받기</Button> : null}
+                {card.assetUrl ? <SaveToLibrary fileUrl={card.assetUrl} title={`${title} ${card.index}번 카드`} /> : null}
                 {card.kind === "generated" ? <Button variant="secondary" disabled={regeneratingIndex === card.index || card.status === "pending" || card.status === "generating"} onClick={() => void onRegenerate(card.index)}>
                   {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}{regeneratingIndex === card.index ? "다시 만드는 중…" : "다시 만들기"}
                 </Button> : null}

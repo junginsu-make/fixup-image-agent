@@ -6,6 +6,7 @@ import {
   Input, Label, Textarea, cn,
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
+import { SaveToLibrary } from "../../_components/save-to-library";
 
 interface PosterImage {
   id: string;
@@ -361,6 +362,11 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                     >
                       내려받기
                     </a>
+                    <SaveToLibrary
+                      className="block"
+                      fileUrl={`/api/poster/projects/${project.id}/images/${image.variantIndex}/file`}
+                      title={`${project.title} 변형 ${image.variantIndex + 1}`}
+                    />
                     {image.review ? (
                       <span
                         role={image.review.decision === "pass" ? undefined : "alert"}
