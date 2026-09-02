@@ -3,11 +3,19 @@ import path from "node:path";
 import { authenticateApiMember } from "../../../../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../../../lib/local-store";
 import { posterStoresForUser } from "../../../../../../../../lib/poster/stores";
+import { createSupabaseAdminClient } from "../../../../../../../../lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string; index: string }> };
+
+/** 결과는 라이브러리 버킷에 있다. 서명 URL 대신 여기서 흘려보낸다 — 화면이 쓰는 주소가 하나여야 한다. */
+async function downloaded(assetPath: string): Promise<Buffer> {
+  const result = await createSupabaseAdminClient().storage.from("library").download(assetPath);
+  if (result.error || !result.data) throw new Error(result.error?.message ?? "이미지를 읽지 못했습니다.");
+  return Buffer.from(await result.data.arrayBuffer());
+}
 
 /**
  * 결과 이미지를 돌려준다.
@@ -23,10 +31,11 @@ export async function GET(_request: Request, context: Context) {
     const images = await posterStoresForUser(auth.member.userId).images.byProject(id);
     const target = images.find((image) => String(image.variantIndex) === index);
     if (!target) return new Response("찾을 수 없습니다.", { status: 404 });
-    if (!isLocalStoreEnabled()) return new Response("운영 저장소는 배포 단계에서 연결합니다.", { status: 503 });
 
-    const file = path.join(localStoreRoot(), "poster", ...target.assetPath.split("/"));
-    return new Response(new Uint8Array(await readFile(file)), {
+    const bytes = isLocalStoreEnabled()
+      ? await readFile(path.join(localStoreRoot(), "poster", ...target.assetPath.split("/")))
+      : await downloaded(target.assetPath);
+    return new Response(new Uint8Array(bytes), {
       headers: { "content-type": "image/png", "cache-control": "private, max-age=60" },
     });
   } catch {

@@ -1,0 +1,202 @@
+import "server-only";
+
+import type {
+  PosterImageStore,
+  PosterProjectStore,
+  PosterReferenceStore,
+  PosterRequestStore,
+} from "@fixup/poster-core";
+import { createSupabaseAdminClient } from "../supabase/admin";
+import { createSupabaseServerClient } from "../supabase/server";
+import {
+  imageInsertRows,
+  projectInsertRow,
+  projectPatchRow,
+  requestInsertRow,
+  toImageRecord,
+  toProjectRecord,
+  type PosterImageRow,
+  type PosterProjectRow,
+} from "./supabase-store-core";
+
+/**
+ * 포스터 저장소의 운영 구현.
+ *
+ * **회원 권한과 서버 권한을 나눠 쓴다.** 마이그레이션이 비용 장부와 이미지
+ * 행의 쓰기를 회원에게서 회수했다. 그러니 읽기와 「어느 변형을 골랐나」는
+ * 회원으로, 나머지 쓰기는 서버로 한다. 그 경계가 곧 회원이 비용을 고칠 수
+ * 없다는 뜻이다.
+ *
+ * 표 ↔ 기록 변환은 `supabase-store-core.ts` 에 있다.
+ */
+
+const BUCKET = "library";
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+const PROJECT_COLUMNS = "id,user_id,title,status,ratio,model_id,data,created_at,updated_at";
+const IMAGE_COLUMNS =
+  "id,user_id,project_id,generation_request_id,variant_index,selected,asset_path,width,height,review,created_at";
+
+function checked<T>(data: T, error: { message: string } | null, label: string): T {
+  if (error) throw new Error(`${label}: ${error.message}`);
+  return data;
+}
+
+function notFound(label: string): Error {
+  return new Error(`${label} 항목을 찾을 수 없습니다.`);
+}
+
+export function createSupabasePosterProjectStore(userId: string): PosterProjectStore {
+  return {
+    async list() {
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("poster_projects")
+        .select(PROJECT_COLUMNS).eq("user_id", userId).order("updated_at", { ascending: false });
+      return checked((data ?? []) as PosterProjectRow[], error, "포스터 작업 목록").map(toProjectRecord);
+    },
+    async get(id) {
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("poster_projects")
+        .select(PROJECT_COLUMNS).eq("id", id).eq("user_id", userId).maybeSingle();
+      const row = checked(data as PosterProjectRow | null, error, "포스터 작업");
+      return row ? toProjectRecord(row) : undefined;
+    },
+    async create(input) {
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("poster_projects")
+        .insert(projectInsertRow(userId, input)).select(PROJECT_COLUMNS).single();
+      return toProjectRecord(checked(data as PosterProjectRow, error, "포스터 작업 만들기"));
+    },
+    async update(id, patch) {
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("poster_projects")
+        .update(projectPatchRow(patch, new Date().toISOString()))
+        .eq("id", id).eq("user_id", userId).select(PROJECT_COLUMNS).maybeSingle();
+      const row = checked(data as PosterProjectRow | null, error, "포스터 작업 고치기");
+      if (!row) throw notFound("포스터 작업");
+      return toProjectRecord(row);
+    },
+    async remove(id) {
+      const client = await createSupabaseServerClient();
+      const { error } = await client.from("poster_projects").delete().eq("id", id).eq("user_id", userId);
+      checked(null, error, "포스터 작업 지우기");
+    },
+  };
+}
+
+/**
+ * 포스터 레퍼런스는 **라이브러리의 참고 이미지를 그대로 쓴다.**
+ *
+ * 용도로 거르지 않는다. 올린 곳이 어디든 세 도구가 다 쓴다 — 거르면
+ * "분명 올렸는데 여기선 안 보인다" 가 생긴다. 로컬 구현과 같은 판단이다.
+ */
+export function createSupabasePosterReferenceStore(userId: string): PosterReferenceStore {
+  interface ReferenceRow {
+    id: string; storage_path: string; title: string | null;
+    width: number | null; height: number | null; created_at: string;
+  }
+
+  const withUrls = async (rows: ReferenceRow[]) => {
+    if (!rows.length) return [];
+    const client = await createSupabaseServerClient();
+    const signed = await client.storage.from(BUCKET)
+      .createSignedUrls(rows.map((row) => row.storage_path), SIGNED_URL_TTL_SECONDS);
+    const urls = new Map((signed.data ?? []).flatMap((entry) => (
+      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
+    )));
+    return rows.map((row) => ({
+      id: row.id,
+      storagePath: row.storage_path,
+      fileName: row.storage_path.split("/").pop() ?? "",
+      title: row.title,
+      width: row.width,
+      height: row.height,
+      createdAt: row.created_at,
+      url: urls.get(row.storage_path),
+    }));
+  };
+
+  const columns = "id,storage_path,title,width,height,created_at";
+  return {
+    async list() {
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("reference_images")
+        .select(columns).eq("user_id", userId).order("created_at", { ascending: false });
+      return withUrls(checked((data ?? []) as ReferenceRow[], error, "참고 이미지 목록"));
+    },
+    async byIds(ids) {
+      if (!ids.length) return [];
+      const client = await createSupabaseServerClient();
+      // 남의 id 를 섞어 보내도 user_id 조건과 RLS 가 함께 막는다.
+      const { data, error } = await client.from("reference_images")
+        .select(columns).eq("user_id", userId).in("id", ids);
+      return withUrls(checked((data ?? []) as ReferenceRow[], error, "참고 이미지"));
+    },
+  };
+}
+
+/** 비용 장부. 회원 권한으로는 못 쓴다 — 서버가 쓴다. */
+export function createSupabasePosterRequestStore(userId: string): PosterRequestStore {
+  return {
+    async create(row) {
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_generation_requests").insert(requestInsertRow(userId, row)).select("id").single();
+      return checked(data as { id: string }, error, "포스터 비용 기록");
+    },
+    async complete(id, patch) {
+      const { error } = await createSupabaseAdminClient()
+        .from("poster_generation_requests")
+        .update({
+          fal_request_id: patch.falRequestId,
+          returned_images: patch.returnedImages,
+          cost_usd: patch.costUsd,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id).eq("user_id", userId);
+      checked(null, error, "포스터 비용 확정");
+    },
+  };
+}
+
+export function createSupabasePosterImageStore(userId: string): PosterImageStore {
+  return {
+    async byProject(projectId) {
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("poster_images")
+        .select(IMAGE_COLUMNS).eq("user_id", userId).eq("project_id", projectId)
+        .order("variant_index", { ascending: true });
+      return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 목록").map(toImageRecord);
+    },
+    async add(rows) {
+      if (!rows.length) return [];
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_images").insert(imageInsertRows(userId, rows)).select(IMAGE_COLUMNS);
+      return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 저장").map(toImageRecord);
+    },
+    async select(projectId, imageId) {
+      const client = await createSupabaseServerClient();
+      // 먼저 풀고 나서 건다. 부분 유니크 인덱스가 지연 검사를 못 한다.
+      const cleared = await client.from("poster_images")
+        .update({ selected: false }).eq("user_id", userId).eq("project_id", projectId).eq("selected", true);
+      checked(null, cleared.error, "포스터 변형 풀기");
+      const { data, error } = await client.from("poster_images")
+        .update({ selected: true }).eq("id", imageId).eq("user_id", userId).eq("project_id", projectId)
+        .select("id").maybeSingle();
+      if (!checked(data as { id: string } | null, error, "포스터 변형 고르기")) throw notFound("포스터 이미지");
+    },
+    async saveReview(imageId, review) {
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_images").update({ review }).eq("id", imageId).eq("user_id", userId)
+        .select("id").maybeSingle();
+      if (!checked(data as { id: string } | null, error, "포스터 검수 저장")) throw notFound("포스터 이미지");
+    },
+  };
+}
+
+export function supabasePosterStores(userId: string) {
+  return {
+    projects: createSupabasePosterProjectStore(userId),
+    references: createSupabasePosterReferenceStore(userId),
+    requests: createSupabasePosterRequestStore(userId),
+    images: createSupabasePosterImageStore(userId),
+  };
+}

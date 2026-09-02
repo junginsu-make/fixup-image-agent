@@ -6,6 +6,11 @@ import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { collectPoster } from "../../../../../../lib/poster/flow";
+import { posterAssetPath } from "../../../../../../lib/poster/supabase-store-core";
+import { createSupabaseAdminClient } from "../../../../../../lib/supabase/admin";
+
+/** 결과도 라이브러리 버킷에 둔다. 포스터만의 버킷을 따로 두지 않는다. */
+const LIBRARY_BUCKET = "library";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,15 +24,32 @@ const StatusSchema = z.object({
   unitCostUsd: z.number(),
 }).strict();
 
-/** fal 이 준 URL 을 우리 저장소로 옮긴다. 그 URL 은 오래 살지 않는다. */
-async function saveLocal(projectId: string, variantIndex: number, url: string): Promise<string> {
-  if (!isLocalStoreEnabled()) throw new Error("운영 저장소는 배포 단계에서 연결합니다.");
+/**
+ * fal 이 준 URL 을 우리 저장소로 옮긴다. 그 URL 은 오래 살지 않는다.
+ *
+ * 로컬은 디스크에, 운영은 라이브러리 버킷에 둔다. 경로 모양이 다르다 —
+ * 버킷 정책이 경로 첫 칸으로 소유자를 판정하므로 운영 경로는 사용자로
+ * 시작해야 한다. 어느 쪽이든 화면은 같은 주소로 읽는다.
+ */
+async function saveResult(
+  userId: string, projectId: string, variantIndex: number, url: string,
+): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`결과 이미지를 내려받지 못했습니다 (${response.status}).`);
-  const storagePath = `${projectId}/${variantIndex}.png`;
-  const target = path.join(localStoreRoot(), "poster", ...storagePath.split("/"));
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, Buffer.from(await response.arrayBuffer()));
+  const bytes = Buffer.from(await response.arrayBuffer());
+
+  if (isLocalStoreEnabled()) {
+    const storagePath = `${projectId}/${variantIndex}.png`;
+    const target = path.join(localStoreRoot(), "poster", ...storagePath.split("/"));
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, bytes);
+    return storagePath;
+  }
+
+  const storagePath = posterAssetPath(userId, projectId, variantIndex);
+  const result = await createSupabaseAdminClient().storage.from(LIBRARY_BUCKET)
+    .upload(storagePath, bytes, { contentType: "image/png", upsert: true });
+  if (result.error) throw new Error(result.error.message);
   return storagePath;
 }
 
@@ -55,7 +77,8 @@ export async function POST(request: Request, context: Context) {
         queue: fal.queue,
         requests: stores.requests,
         images: stores.images,
-        saveImage: (projectId, variantIndex, url) => saveLocal(projectId, variantIndex, url),
+        saveImage: (projectId, variantIndex, url) =>
+          saveResult(auth.member.userId, projectId, variantIndex, url),
       },
     );
 

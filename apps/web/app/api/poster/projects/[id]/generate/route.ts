@@ -3,6 +3,7 @@ import path from "node:path";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local-store";
+import { createSupabaseAdminClient } from "../../../../../../lib/supabase/admin";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { submitPoster } from "../../../../../../lib/poster/flow";
@@ -12,18 +13,27 @@ export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
+/** 참고 이미지는 라이브러리 버킷에 있다. 포스터만의 버킷을 따로 두지 않는다. */
+const LIBRARY_BUCKET = "library";
+
 const CONTENT_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".png": "image/png",
 };
 
 /** 로컬·운영 모두 fal 업로드 URL 로 보낸다. 같은 모양이어야 나중에 다르게 동작하지 않는다. */
 async function referenceBytes(storagePath: string): Promise<{ bytes: Buffer; contentType: string }> {
-  if (!isLocalStoreEnabled()) throw new Error("운영 저장소는 배포 단계에서 연결합니다.");
-  const root = localStoreRoot();
-  // 라이브러리의 참고 이미지와 같은 경로 규약이다: {user_id}/references/{id}.{ext}
-  const file = path.join(root, "library", ...storagePath.split("/"));
   const extension = path.extname(storagePath).toLowerCase();
-  return { bytes: await readFile(file), contentType: CONTENT_TYPES[extension] ?? "image/png" };
+  const contentType = CONTENT_TYPES[extension] ?? "image/png";
+  if (isLocalStoreEnabled()) {
+    // 라이브러리의 참고 이미지와 같은 경로 규약이다: {user_id}/references/{id}.{ext}
+    const file = path.join(localStoreRoot(), "library", ...storagePath.split("/"));
+    return { bytes: await readFile(file), contentType };
+  }
+  const downloaded = await createSupabaseAdminClient().storage.from(LIBRARY_BUCKET).download(storagePath);
+  if (downloaded.error || !downloaded.data) {
+    throw new Error(downloaded.error?.message ?? "참고 이미지를 읽지 못했습니다.");
+  }
+  return { bytes: Buffer.from(await downloaded.data.arrayBuffer()), contentType };
 }
 
 export async function POST(_request: Request, context: Context) {
