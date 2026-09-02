@@ -44,7 +44,19 @@ export function NewSnsClient() {
     const handoff = takeHandoff();
     if (!handoff) return;
     setTitle(handoff.title);
-    setSource({ kind: "text", text: handoff.text });
+    if (handoff.text.trim()) setSource({ kind: "text", text: handoff.text });
+    // 라이브러리에서 그림을 골라 왔으면 첨부로 이미 들어가 있어야 한다.
+    // 역할은 비워 둔다 — 02 에서 사용자가 정한다.
+    if (handoff.images?.length) {
+      setAttachments(handoff.images.map((image) => ({
+        id: image.id,
+        kind: "style_reference" as const,
+        role: "body" as const,
+        assetPath: image.assetPath,
+        url: image.url,
+      })));
+      setStep("images");
+    }
     setFromLibrary(handoff.title);
   }, []);
 

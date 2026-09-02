@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
+import { putHandoff } from "../../lib/handoff";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
 import type { ReferencePurpose, ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
@@ -18,6 +20,7 @@ const PURPOSE_LABEL: Record<ReferencePurpose, string> = {
 };
 
 export function ReferencesTab() {
+  const router = useRouter();
   const [images, setImages] = React.useState<ReferenceImageView[]>([]);
   const [sets, setSets] = React.useState<ReferenceSetRecord[]>([]);
   const [purpose, setPurpose] = React.useState<"all" | ReferencePurpose>("all");
@@ -76,6 +79,38 @@ export function ReferencesTab() {
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  /**
+   * 라이브러리의 그림을 도구로 보낸다.
+   *
+   * 라이브러리에 와서 그림을 찾아 놓고도 도구로 가서 다시 골라야 했다.
+   * 여기서 누르면 그 그림이 이미 첨부된 채로 열린다.
+   */
+  function sendTo(tool: "sns" | "poster" | "create", image: ReferenceImageView) {
+    putHandoff({
+      title: image.title ?? "참고 이미지",
+      text: "",
+      images: [{
+        id: image.id,
+        title: image.title ?? "참고 이미지",
+        url: image.signedUrl ?? "",
+        assetPath: image.storagePath,
+      }],
+    });
+    router.push(tool === "sns" ? "/sns/new" : tool === "poster" ? "/poster/new" : "/create");
+  }
+
+  /** 창고에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
+  async function removeImage(image: ReferenceImageView) {
+    if (!window.confirm(`'${image.title ?? "이 이미지"}' 를 라이브러리에서 지울까요?`)) return;
+    try {
+      const body = await (await fetch(`/api/reference-images/${image.id}`, { method: "DELETE" })).json();
+      if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
+      setImages((current) => current.filter((entry) => entry.id !== image.id));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "지우지 못했습니다.");
     }
   }
 
@@ -143,6 +178,18 @@ export function ReferencesTab() {
                   <CardContent className="grid gap-2 p-3">
                     <p className="truncate text-sm font-medium">{image.title || "제목 없음"}</p>
                     <Badge variant="secondary" className="w-fit">{PURPOSE_LABEL[image.purpose]}</Badge>
+                    {/* 라이브러리는 보기만 하는 곳이 아니다. 여기서 바로 도구로 보낸다. */}
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <Button size="sm" onClick={() => sendTo("sns", image)}>카드뉴스로</Button>
+                      <Button size="sm" variant="secondary" onClick={() => sendTo("poster", image)}>포스터로</Button>
+                      <Button size="sm" variant="secondary" onClick={() => sendTo("create", image)}>상세페이지로</Button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-fit text-subtle-foreground hover:text-destructive"
+                      onClick={() => void removeImage(image)}
+                    ><Trash2 className="size-3.5" />지우기</Button>
                   </CardContent>
                 </Card>
               ))}

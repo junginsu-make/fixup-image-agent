@@ -13,7 +13,7 @@ import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-contro
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
-import { hasHandoff } from "../../lib/handoff";
+import { peekHandoff, takeHandoff } from "../../lib/handoff";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
@@ -39,10 +39,28 @@ export function PdpMakerClient() {
   // 시작 방식. 기본은 기존 이미지 흐름이라 이 화면을 쓰던 사람에게 달라지는 게 없다.
   const [startMode, setStartMode] = useState<CreateMode>("image");
 
-  // 라이브러리에서 글을 갖고 왔으면 글 모드로 연다. 이미지 모드로 열면
-  // 갖고 온 글이 어디에도 안 보인다.
+  // 라이브러리에서 무엇을 갖고 왔느냐로 어느 모드로 열지 정한다.
+  //
+  //   글을 갖고 왔다   → 글 모드. 이미지 모드로 열면 갖고 온 글이 안 보인다
+  //   그림만 갖고 왔다 → 이미지 모드로 두고 그 그림을 상품 사진 자리에 넣는다
+  //
+  // 짐은 한 번만 읽힌다. 여기서 꺼내지 않으면 TextModeFlow 가 꺼낸다.
   useEffect(() => {
-    if (hasHandoff()) setStartMode("text");
+    const handoff = peekHandoff();
+    if (!handoff) return;
+    if (handoff.text.trim()) return setStartMode("text");
+    const picture = handoff.images?.[0];
+    if (!picture?.url) return;
+    takeHandoff();
+    void (async () => {
+      try {
+        const response = await fetch(picture.url);
+        const blob = await response.blob();
+        await handlePreparedImage(new File([blob], `${picture.title}.png`, { type: blob.type || "image/png" }));
+      } catch {
+        // 그림을 못 받아 오면 빈 화면으로 시작한다. 사용자가 다시 고르면 된다.
+      }
+    })();
   }, []);
   // 텍스트 경로의 중간 단계. 초안에 저장하지 않으므로 컴포넌트 상태로만 둔다.
   const [textStage, setTextStage] = useState<TextStage>("input");

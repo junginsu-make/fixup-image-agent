@@ -50,6 +50,11 @@ export function PosterNewClient() {
     // 포스터는 한 줄로 시작한다. 긴 글을 그대로 넣으면 오히려 방해가 된다.
     const firstSentence = handoff.text.split(/[.\n]/)[0]?.trim();
     setInstruction(firstSentence || handoff.title);
+    // 라이브러리에서 그림을 골라 왔으면 「따라 만들기」로 켜 둔다.
+    // 제품·인물을 지키려는 것이면 그림을 눌러 바꾼다.
+    if (handoff.images?.length) {
+      setRoles(Object.fromEntries(handoff.images.map((image) => [image.id, "style" as Role])));
+    }
   }, []);
 
   const loadReferences = React.useCallback(async () => {
