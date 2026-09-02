@@ -31,6 +31,18 @@ export interface LibraryPickImage {
   url: string | null;
 }
 
+/**
+ * 묶음 세트 — 표지·속지·엔딩까지 정해 둔 한 벌.
+ *
+ * 세트를 만들어 놓고도 여기서 못 불러왔다. 낱장만 보여줘서 한 장씩 고르고
+ * 자리도 다시 정해야 했다. 세트를 만든 뜻이 사라진다.
+ */
+export interface LibraryPickSet {
+  id: string;
+  name: string;
+  items: Array<{ referenceImageId: string; role: "cover" | "body" | "ending" }>;
+}
+
 export function LibraryPickerButton({
   images,
   selectedIds,
@@ -38,6 +50,8 @@ export function LibraryPickerButton({
   onToggle,
   onReload,
   onDelete,
+  sets,
+  onPickSet,
   label = "라이브러리에서 불러오기",
 }: {
   images: LibraryPickImage[];
@@ -45,6 +59,9 @@ export function LibraryPickerButton({
   loading?: boolean;
   onToggle(image: LibraryPickImage): void;
   onReload(): void;
+  /** 세트를 통째로 넣는다. 안 넘기면 세트 칸이 안 나온다. */
+  sets?: LibraryPickSet[];
+  onPickSet?(set: LibraryPickSet): void;
   /** 라이브러리에서 아주 지운다. 안 넘기면 지우기 버튼이 안 나온다. */
   onDelete?(image: LibraryPickImage): void;
   label?: string;
@@ -68,6 +85,26 @@ export function LibraryPickerButton({
               올려 둔 그림 {images.length}장 · 눌러서 고르고 다시 눌러 뺍니다
             </DialogDescription>
           </DialogHeader>
+
+          {sets?.length && onPickSet ? (
+            <section className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+              <p className="text-meta text-subtle-foreground">묶음 세트 — 누르면 한 벌이 통째로 들어갑니다</p>
+              <div className="flex flex-wrap gap-2">
+                {sets.map((set) => (
+                  <Button
+                    key={set.id}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => { onPickSet(set); setOpen(false); }}
+                  >
+                    {set.name}
+                    <Badge variant="secondary" className="ml-1">{set.items.length}장</Badge>
+                  </Button>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {loading ? (
             <p className="py-12 text-center text-sm text-muted-foreground">불러오는 중입니다.</p>

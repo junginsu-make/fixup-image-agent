@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, Clipboard, Download, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, Loader2, RefreshCw } from "lucide-react";
+import { plainReviewLine, reviewHeadline } from "@fixup/sns-core";
 import Image from "next/image";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
@@ -25,6 +26,45 @@ function ReviewStatus({ card }: { card: SnsFlowCard }) {
   if (card.status === "review_required") return <Badge variant="destructive">사람의 검수 필요</Badge>;
   if (card.review?.decision === "pass") return <Badge variant="green">검수 통과</Badge>;
   return <Badge variant="secondary">검수 결과 없음</Badge>;
+}
+
+/**
+ * 검수 결과 — 한 줄 먼저, 자세한 것은 접어 둔다.
+ *
+ * 걸린 것이 많을수록 카드가 길어져 그림보다 글이 더 커졌다. 그리고 검수
+ * 스키마의 영문 값(extraCopy·uncertain·changed)이 그대로 나와 무슨 말인지
+ * 알 수 없었다.
+ */
+function ReviewBox({ decision, summary, issues, tone = "default" }: {
+  decision: "pass" | "fail";
+  summary: string;
+  issues: string[];
+  tone?: "default" | "amber";
+}) {
+  const [open, setOpen] = React.useState(false);
+  const skin = tone === "amber"
+    ? "bg-amber-50 text-amber-900"
+    : decision === "fail" ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-900";
+
+  return (
+    <div className={`rounded-md p-3 text-sm ${skin}`}>
+      <button
+        type="button"
+        className="flex w-full items-start gap-2 text-left font-semibold"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+      >
+        {decision === "fail" ? <AlertTriangle className="mt-0.5 size-4 flex-none" /> : <CheckCircle2 className="mt-0.5 size-4 flex-none" />}
+        <span className="flex-1">{reviewHeadline(decision, summary, issues)}</span>
+        {issues.length ? (open ? <ChevronDown className="mt-0.5 size-4 flex-none" /> : <ChevronRight className="mt-0.5 size-4 flex-none" />) : null}
+      </button>
+      {open && issues.length ? (
+        <ul className="mt-2 grid gap-1.5 pl-6">
+          {issues.map((issue) => <li key={issue} className="list-disc leading-6">{plainReviewLine(issue)}</li>)}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
@@ -98,11 +138,8 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}
               </div>
-              {card.review ? <div className={`rounded-md p-4 text-sm ${card.review.decision === "fail" ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-900"}`}>
-                <p className="flex items-center gap-2 font-semibold">{card.review.decision === "fail" ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}{card.review.summary}</p>
-                {card.review.issues.map((issue) => <p key={issue} className="mt-1">· {issue}</p>)}
-              </div> : null}
-              {card.reviewIssues?.map((issue) => <p key={issue} className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">{issue}</p>)}
+              {card.review ? <ReviewBox decision={card.review.decision} summary={card.review.summary} issues={card.review.issues} /> : null}
+              {card.reviewIssues?.length ? <ReviewBox decision="fail" summary="" issues={card.reviewIssues} tone="amber" /> : null}
               {card.error ? <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{card.error}</p> : null}
               <div className="flex flex-wrap justify-end gap-2">
                 {card.assetUrl ? <Button variant="outline" onClick={() => triggerDownload(card.assetUrl!, snsCardFilename(title, card.index, card.assetPath))}><Download />낱장 내려받기</Button> : null}

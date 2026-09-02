@@ -5,7 +5,7 @@ import { AlertTriangle, ImagePlus, Loader2, X } from "lucide-react";
 import { groupAttachments, modelById, referenceWarningsForRole, validateAttachments, type Attachment, type AttachmentKind, type StyleRole } from "@fixup/sns-core";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
-import { LibraryPickerButton } from "../../_components/library-picker";
+import { LibraryPickerButton, type LibraryPickSet } from "../../_components/library-picker";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 
 type ImageView = ReferenceImageRow & { signedUrl: string | null };
@@ -27,6 +27,7 @@ export function AttachmentPicker({
   totalCards: number;
 }) {
   const [images, setImages] = React.useState<ImageView[]>([]);
+  const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -40,6 +41,9 @@ export function AttachmentPicker({
       const payload = await response.json() as { ok?: boolean; images?: ImageView[]; message?: string };
       if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 불러오지 못했습니다.");
       setImages(payload.images ?? []);
+      // 세트도 함께 읽는다. 한 벌로 만들어 뒀으면 한 벌로 부를 수 있어야 한다.
+      const setsBody = await (await fetch("/api/reference-sets", { cache: "no-store" })).json();
+      setSets(setsBody.ok ? (setsBody.sets ?? []) : []);
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다.");
@@ -71,6 +75,24 @@ export function AttachmentPicker({
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
     }
+  }
+
+  /** 세트를 통째로 넣는다. 표지·속지·엔딩 자리를 그대로 가져온다. */
+  function pickSet(set: LibraryPickSet) {
+    const added = set.items.flatMap((item) => {
+      const image = images.find((entry) => entry.id === item.referenceImageId);
+      if (!image || attachments.some((attachment) => attachment.id === image.id)) return [];
+      return [{
+        id: image.id,
+        kind: "style_reference" as const,
+        role: item.role,
+        assetPath: image.storagePath,
+        url: image.signedUrl ?? "",
+      }];
+    });
+    if (!added.length) return setMessage("이 세트의 그림이 이미 다 들어 있습니다.");
+    onChange([...attachments, ...added]);
+    setMessage(`'${set.name}' 세트에서 ${added.length}장을 넣었습니다.`);
   }
 
   function toggle(image: ImageView) {
@@ -123,6 +145,8 @@ export function AttachmentPicker({
             const image = images.find((entry) => entry.id === picked.id);
             if (image) toggle(image);
           }}
+          sets={sets}
+          onPickSet={pickSet}
           onReload={() => void load()}
           onDelete={(picked) => {
             const image = images.find((entry) => entry.id === picked.id);

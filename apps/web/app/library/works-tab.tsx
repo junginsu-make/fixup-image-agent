@@ -172,10 +172,11 @@ export function WorksTab() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
         {works.map((work) => (
           <Card key={`${work.tool}-${work.id}`} className="cursor-pointer overflow-hidden" onClick={() => setOpen(work)}>
-            <div className="h-40 bg-muted">
+            {/* 잘라 내지 않는다. 비율이 제각각이라 잘라 놓으면 무엇인지 모른다. */}
+            <div className="grid h-40 place-items-center bg-muted p-1">
               {work.cover ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={work.cover} alt={work.title} className="h-full w-full object-cover" />
+                <img src={work.cover} alt={work.title} className="max-h-full max-w-full object-contain" />
               ) : (
                 <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
               )}
@@ -211,7 +212,7 @@ export function WorksTab() {
                   {open.images.map((image) => (
                     <figure key={image.url} className="grid gap-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={image.url} alt={image.label} data-zoomable className="aspect-[4/5] w-full cursor-zoom-in rounded-md border object-cover" />
+                      <img src={image.url} alt={image.label} data-zoomable className="max-h-44 w-full cursor-zoom-in rounded-md border bg-muted object-contain" />
                       <figcaption className="text-center text-meta text-subtle-foreground">{image.label}</figcaption>
                     </figure>
                   ))}

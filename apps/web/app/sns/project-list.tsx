@@ -76,10 +76,12 @@ export function SnsProjectList() {
         return (
           <Card key={project.id} className="overflow-hidden">
             <Link href={`/sns/${project.id}`} className="block">
-              <div className="h-40 bg-muted">
+              {/* 잘라 내지 않는다. 1:1·16:9·9:16 이 섞여 있어 잘라 놓으면 무엇을
+                   만들었는지 알아볼 수 없다. 높이만 묶고 비율은 지킨다. */}
+              <div className="grid h-40 place-items-center bg-muted p-1">
                 {cover ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={cover} alt={project.title} className="h-full w-full object-cover" />
+                  <img src={cover} alt={project.title} className="max-h-full max-w-full object-contain" />
                 ) : (
                   <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
                 )}
