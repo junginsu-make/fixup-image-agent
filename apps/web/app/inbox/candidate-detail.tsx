@@ -4,6 +4,7 @@ import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, 
 import { useRouter } from "next/navigation";
 import { candidateActions } from "../api/candidates/schema";
 import { putHandoff } from "../../lib/handoff";
+import { bodyLabel, sourceLabel } from "./candidate-list";
 import type { CandidateRecord } from "../api/candidates/candidate-service";
 
 const PARAGRAPH_BREAK = new RegExp(String.fromCharCode(92) + "n{2,}");
@@ -39,7 +40,7 @@ export function CandidateDetail({ candidate, onClose, onStatus }: {
           <div className="grid max-h-[65vh] gap-6 overflow-y-auto p-1">
             <div className="flex flex-wrap gap-2">
               <Badge>{statusLabel(candidate.status)}</Badge>
-              {candidate.source ? <Badge variant="secondary">{candidate.source.kind}</Badge> : null}
+              <Badge variant="secondary">{sourceLabel(candidate)}</Badge>
               {candidate.publishedAt ? <Badge variant="secondary">발행 {new Date(candidate.publishedAt).toLocaleString("ko-KR")}</Badge> : null}
               {candidate.author ? <Badge variant="secondary">작성자·채널 {candidate.author}</Badge> : null}
             </div>
@@ -56,7 +57,7 @@ export function CandidateDetail({ candidate, onClose, onStatus }: {
                 </ul>
               </section>
             ) : null}
-            <section><h3 className="text-sm font-bold">수집 원문</h3><p className="mt-1 text-meta text-subtle-foreground">{(candidate.body ?? "").length.toLocaleString("ko-KR")}자</p><div className="mt-2 grid gap-3 text-sm leading-7">{(candidate.body ? candidate.body.split(PARAGRAPH_BREAK) : []).map((paragraph, index) => <p key={index} className="whitespace-pre-wrap">{paragraph}</p>)}{candidate.body ? null : <p className="text-muted-foreground">수집된 본문이 없습니다.</p>}</div></section>
+            <section><h3 className="text-sm font-bold">{bodyLabel(candidate)}</h3><p className="mt-1 text-meta text-subtle-foreground">{(candidate.body ?? "").length.toLocaleString("ko-KR")}자</p><div className="mt-2 grid gap-3 text-sm leading-7">{(candidate.body ? candidate.body.split(PARAGRAPH_BREAK) : []).map((paragraph, index) => <p key={index} className="whitespace-pre-wrap">{paragraph}</p>)}{candidate.body ? null : <p className="text-muted-foreground">수집된 본문이 없습니다.</p>}</div></section>
             {candidate.url ? <a href={candidate.url} target="_blank" rel="noreferrer" className="text-sm font-bold text-primary underline underline-offset-4">원문 열기</a> : null}
 
             {/* 기존 시스템의 「이 내용으로 카드뉴스 만들기」에 해당한다.
