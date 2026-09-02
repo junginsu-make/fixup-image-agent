@@ -51,7 +51,8 @@ export function NewSnsClient() {
       setAttachments(handoff.images.map((image) => ({
         id: image.id,
         kind: "style_reference" as const,
-        role: "body" as const,
+        // 묶음 세트에서 왔으면 그 자리를 그대로 쓴다. 낱장은 속지로 둔다.
+        role: image.slot ?? ("body" as const),
         assetPath: image.assetPath,
         url: image.url,
       })));

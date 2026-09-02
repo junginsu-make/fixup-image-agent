@@ -59,6 +59,27 @@ describe("그림도 넘긴다", () => {
     expect(takeHandoff()?.images).toHaveLength(1);
   });
 
+  it("묶음 세트는 카드 자리까지 실어 보낸다", () => {
+    // 세트는 표지·속지·엔딩을 이미 정해 둔 한 벌이다. 자리를 안 실으면
+    // 도구에서 다시 정해야 하고, 그러면 세트를 만든 뜻이 없다.
+    putHandoff({
+      title: "브랜드 기본 세트",
+      text: "",
+      images: [
+        { id: "a", title: "표지", url: "u1", assetPath: "p1", slot: "cover" },
+        { id: "b", title: "속지", url: "u2", assetPath: "p2", slot: "body" },
+      ],
+    });
+    expect(takeHandoff()?.images?.map((image) => image.slot)).toEqual(["cover", "body"]);
+  });
+
+  it("모르는 자리는 버린다", () => {
+    sessionStorage.setItem("fixup:handoff", JSON.stringify({
+      title: "t", text: "", images: [{ id: "a", title: "t", url: "u", assetPath: "p", slot: "표지" }],
+    }));
+    expect(takeHandoff()?.images?.[0]?.slot).toBeUndefined();
+  });
+
   it("그림이 없으면 images 를 비워 돌려준다", () => {
     putHandoff({ title: "세럼", text: "본문" });
     expect(takeHandoff()?.images).toEqual([]);

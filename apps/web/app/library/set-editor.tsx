@@ -7,32 +7,67 @@ import type { ReferenceImageRow } from "./reference-upload";
 
 type ImageOption = ReferenceImageRow & { signedUrl: string | null };
 
+/**
+ * 묶음 세트 — **카드뉴스 한 벌**이다.
+ *
+ * 역할이 표지·속지·엔딩이라 카드뉴스 말고는 뜻이 없다. 포스터는 한 장짜리라
+ * 표지도 속지도 없다. 전에는 용도를 고르게 해서 「포스터 세트」를 만들 수
+ * 있었는데, 만들어 놓아도 포스터가 쓰지 않는다.
+ */
 export function SetEditor({
   open,
   images,
   initialSet,
   onClose,
   onSaved,
+  onUploaded,
 }: {
   open: boolean;
   images: ImageOption[];
   initialSet: ReferenceSetRecord | null;
   onClose(): void;
   onSaved(set: ReferenceSetRecord): void;
+  /** 창 안에서 올린 뒤 목록을 다시 읽는다. 나갔다 오지 않게. */
+  onUploaded(): Promise<void>;
 }) {
+  const purpose: ReferencePurpose = "cardnews";
   const [name, setName] = React.useState("");
-  const [purpose, setPurpose] = React.useState<ReferencePurpose>("cardnews");
   const [roles, setRoles] = React.useState<Record<string, ReferenceRole | "">>({});
   const [saving, setSaving] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
+  const fileInput = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
     setName(initialSet?.name ?? "");
-    setPurpose(initialSet?.purpose ?? "cardnews");
     setRoles(Object.fromEntries((initialSet?.items ?? []).map((item) => [item.referenceImageId, item.role])));
     setMessage("");
   }, [initialSet, open]);
+
+  /** 세트를 만들다 그림이 모자라면 여기서 바로 올린다. */
+  async function upload(files: FileList | null) {
+    if (!files?.length) return;
+    setUploading(true);
+    setMessage("");
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.set("id", crypto.randomUUID());
+        form.set("title", file.name.replace(/\.[^.]+$/, ""));
+        form.set("purpose", "cardnews");
+        form.set("file", file);
+        const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json();
+        if (!body.ok) throw new Error(body.message ?? "올리지 못했습니다.");
+      }
+      await onUploaded();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
 
   const compatibleImages = React.useMemo(
     () => images.filter((image) => image.purpose === purpose || image.purpose === "both"),
@@ -71,27 +106,36 @@ export function SetEditor({
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{initialSet ? "묶음 세트 수정" : "묶음 세트 만들기"}</DialogTitle>
-          <DialogDescription>참고 이미지를 고르고 표지·속지·엔딩 역할을 지정합니다.</DialogDescription>
+          <DialogDescription>
+            카드뉴스 한 벌을 묶습니다. 그림을 고르고 표지·속지·엔딩 자리를 정하세요.
+            표지와 엔딩은 각각 한 장까지입니다.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid max-h-[65vh] gap-6 overflow-y-auto p-1">
-          <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
-            <div className="grid gap-2">
-              <Label htmlFor="reference-set-name">세트 이름</Label>
-              <Input id="reference-set-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="예: 브랜드 기본 카드 세트" />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="reference-set-purpose">용도</Label>
-              <select id="reference-set-purpose" value={purpose} onChange={(event) => setPurpose(event.target.value as ReferencePurpose)} className="h-9 rounded-md border bg-background px-3 text-sm">
-                <option value="cardnews">카드뉴스</option>
-                <option value="poster">포스터</option>
-                <option value="both">공용</option>
-              </select>
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="reference-set-name">세트 이름</Label>
+            <Input id="reference-set-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="예: 브랜드 기본 카드 세트" />
+          </div>
+
+          {/* 그림이 모자라면 나갔다 오지 않고 여기서 바로 올린다. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              className="hidden"
+              onChange={(event) => void upload(event.target.files)}
+            />
+            <Button type="button" variant="secondary" disabled={uploading} onClick={() => fileInput.current?.click()}>
+              {uploading ? "올리는 중…" : "이미지 올리기"}
+            </Button>
+            <span className="text-xs text-muted-foreground">여기서 올린 그림도 라이브러리 낱장에 들어갑니다.</span>
           </div>
 
           {compatibleImages.length === 0 ? (
-            <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">이 용도에 맞는 낱장 참고 이미지를 먼저 올려 주세요.</p>
+            <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">아직 고를 그림이 없습니다. 위에서 올려 주세요.</p>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {compatibleImages.map((image) => (

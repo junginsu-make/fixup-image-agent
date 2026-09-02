@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
+import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { putHandoff } from "../../lib/handoff";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
 import type { ReferencePurpose, ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
@@ -112,6 +112,59 @@ export function ReferencesTab() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "지우지 못했습니다.");
     }
+  }
+
+  /**
+   * 세트에서 그림 한 장을 뺀다.
+   *
+   * 전에는 수정 창을 열고, 그 그림을 찾고, 선택 상자를 「선택 안 함」으로
+   * 바꾸고, 저장해야 했다. 네 단계다. 미리보기에서 X 한 번으로 줄인다.
+   *
+   * 낱장은 그대로 둔다 — 세트에서 빼는 것과 창고에서 지우는 것은 다르다.
+   */
+  async function removeFromSet(set: ReferenceSetRecord, imageId: string) {
+    const items = set.items
+      .filter((item) => item.referenceImageId !== imageId)
+      .map((item, position) => ({ referenceImageId: item.referenceImageId, role: item.role, position }));
+    try {
+      const response = await fetch(`/api/reference-sets/${set.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: set.name, purpose: set.purpose, items }),
+      });
+      const payload = await response.json() as { ok?: boolean; set?: ReferenceSetRecord; message?: string };
+      if (!response.ok || !payload.set) throw new Error(payload.message ?? "세트를 고치지 못했습니다.");
+      setSets((current) => current.map((entry) => entry.id === set.id ? payload.set! : entry));
+      setPreviewSet(payload.set);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "세트를 고치지 못했습니다.");
+    }
+  }
+
+  /**
+   * 세트를 통째로 카드뉴스로 보낸다.
+   *
+   * 세트를 만들 수는 있는데 쓸 데가 없었다 — 어느 도구도 세트를 부르지 않는다.
+   * 표지·속지·엔딩 자리까지 그대로 실어 보낸다.
+   */
+  function sendSetTo(set: ReferenceSetRecord) {
+    const picked = set.items
+      .map((item) => ({ item, image: images.find((entry) => entry.id === item.referenceImageId) }))
+      .filter((entry): entry is { item: typeof entry.item; image: ReferenceImageView } => Boolean(entry.image));
+    if (!picked.length) return setMessage("이 세트에 남아 있는 그림이 없습니다.");
+    putHandoff({
+      title: set.name,
+      text: "",
+      images: picked.map(({ item, image }) => ({
+        id: image.id,
+        title: image.title ?? "참고 이미지",
+        url: image.signedUrl ?? "",
+        assetPath: image.storagePath,
+        // 세트의 자리를 그대로 들고 간다. 도구에서 다시 정하지 않는다.
+        slot: item.role,
+      })),
+    });
+    router.push("/sns/new");
   }
 
   async function removeSet(set: ReferenceSetRecord) {
@@ -266,14 +319,27 @@ export function ReferencesTab() {
                         <span className="grid h-full place-items-center text-xs text-muted-foreground">이미지를 찾을 수 없습니다</span>
                       )}
                     </span>
-                    <figcaption className="text-xs">
-                      <Badge variant="secondary">{ROLE_LABEL[item.role] ?? item.role}</Badge>
-                      <span className="mt-1 block truncate text-muted-foreground">{image?.title ?? "제목 없음"}</span>
+                    <figcaption className="flex items-start justify-between gap-2 text-xs">
+                      <span className="min-w-0">
+                        <Badge variant="secondary">{ROLE_LABEL[item.role] ?? item.role}</Badge>
+                        <span className="mt-1 block truncate text-muted-foreground">{image?.title ?? "제목 없음"}</span>
+                      </span>
+                      {/* 수정 창을 열고 선택 상자를 바꾸고 저장하는 네 단계였다. 한 번으로 줄인다. */}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`${image?.title ?? "이미지"} 세트에서 빼기`}
+                        onClick={() => void removeFromSet(previewSet, item.referenceImageId)}
+                      ><X className="size-4" /></Button>
                     </figcaption>
                   </figure>
                 );
               })}
             </div>
+            <DialogFooter className="sm:justify-between">
+              <span className="text-meta text-subtle-foreground">뺀 그림은 낱장에 그대로 남습니다</span>
+              <Button onClick={() => sendSetTo(previewSet)}>이 세트로 카드뉴스 만들기</Button>
+            </DialogFooter>
           </> : null}
         </DialogContent>
       </Dialog>
@@ -283,6 +349,7 @@ export function ReferencesTab() {
         images={images}
         initialSet={editingSet}
         onClose={() => setEditorOpen(false)}
+        onUploaded={load}
         onSaved={(saved) => setSets((current) => {
           const exists = current.some((set) => set.id === saved.id);
           return exists ? current.map((set) => set.id === saved.id ? saved : set) : [saved, ...current];

@@ -21,7 +21,14 @@ export interface HandoffImage {
   title: string;
   url: string;
   assetPath: string;
+  /**
+   * 묶음 세트에서 왔으면 그 카드 자리. 세트는 표지·속지·엔딩을 이미 정해 둔
+   * 한 벌이라, 자리를 안 실으면 도구에서 다시 정해야 하고 세트를 만든 뜻이 없다.
+   */
+  slot?: "cover" | "body" | "ending";
 }
+
+const SLOTS = ["cover", "body", "ending"];
 
 export interface Handoff {
   title: string;
@@ -35,13 +42,21 @@ export interface Handoff {
 function readImages(value: unknown): HandoffImage[] {
   if (!Array.isArray(value)) return [];
   // 옛 판이 남아 있거나 사용자가 개발자 도구로 건드렸을 수 있다. 모양인 것만 받는다.
-  return value.filter((entry): entry is HandoffImage =>
-    Boolean(entry)
-    && typeof entry === "object"
-    && typeof (entry as HandoffImage).id === "string"
-    && typeof (entry as HandoffImage).title === "string"
-    && typeof (entry as HandoffImage).url === "string"
-    && typeof (entry as HandoffImage).assetPath === "string");
+  return value
+    .filter((entry): entry is HandoffImage =>
+      Boolean(entry)
+      && typeof entry === "object"
+      && typeof (entry as HandoffImage).id === "string"
+      && typeof (entry as HandoffImage).title === "string"
+      && typeof (entry as HandoffImage).url === "string"
+      && typeof (entry as HandoffImage).assetPath === "string")
+    .map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      url: entry.url,
+      assetPath: entry.assetPath,
+      ...(SLOTS.includes(String(entry.slot)) ? { slot: entry.slot } : {}),
+    }));
 }
 
 export function putHandoff(payload: Handoff): void {
