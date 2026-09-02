@@ -167,6 +167,14 @@ export function createLocalPosterImageStore(
         .map(strip)
         .sort((a, b) => a.variantIndex - b.variantIndex));
     },
+    async byProjects(projectIds) {
+      if (!projectIds.length) return [];
+      const wanted = new Set(projectIds);
+      return database.read((data) => bucket(data, "posterImages")
+        .filter((row) => row.userId === userId && wanted.has(row.projectId))
+        .map(strip)
+        .sort((a, b) => a.projectId.localeCompare(b.projectId) || a.variantIndex - b.variantIndex));
+    },
     async add(rows) {
       return database.update((data) => rows.map((row) => {
         const saved = {

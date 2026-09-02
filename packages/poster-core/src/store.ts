@@ -102,6 +102,12 @@ export interface PosterRequestStore {
 
 export interface PosterImageStore {
   byProject(projectId: string): Promise<PosterImageRecord[]>;
+  /**
+   * 목록 화면이 대표 그림을 세울 때 쓴다.
+   *
+   * 작업마다 한 번씩 물어보면 작업 수만큼 질의가 나간다. 한 번에 가져온다.
+   */
+  byProjects(projectIds: string[]): Promise<PosterImageRecord[]>;
   add(rows: Array<Omit<PosterImageRecord, "id" | "createdAt" | "selected">>): Promise<PosterImageRecord[]>;
   /**
    * 하나만 고른다.

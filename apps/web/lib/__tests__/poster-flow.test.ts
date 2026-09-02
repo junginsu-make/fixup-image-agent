@@ -31,6 +31,7 @@ function deps(overrides: Record<string, unknown> = {}) {
       },
       images: {
         byProject: async () => [],
+        byProjects: async () => [],
         add: vi.fn(async (rows: unknown[]) => { added.push(...rows); return rows as never; }),
         select: async () => {},
         saveReview: async () => {},

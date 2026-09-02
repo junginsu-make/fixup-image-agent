@@ -20,8 +20,18 @@ export async function GET() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
-    const service = createPosterService(posterStoresForUser(auth.member.userId).projects);
-    return Response.json({ ok: true, projects: await service.list() });
+    const stores = posterStoresForUser(auth.member.userId);
+    const projects = await createPosterService(stores.projects).list();
+    // 라이브러리의 작업물 탭이 대표 그림을 세운다. 목록만 주면 만든 것이
+    // 무엇인지 알 수 없어 "아직 그림이 없습니다" 만 뜬다.
+    const images = await stores.images.byProjects(projects.map((project) => project.id));
+    return Response.json({
+      ok: true,
+      projects: projects.map((project) => ({
+        ...project,
+        images: images.filter((image) => image.projectId === project.id),
+      })),
+    });
   } catch (error) {
     return fail(error, "포스터 작업을 불러오지 못했습니다.");
   }

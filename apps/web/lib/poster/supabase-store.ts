@@ -166,6 +166,14 @@ export function createSupabasePosterImageStore(userId: string): PosterImageStore
         .order("variant_index", { ascending: true });
       return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 목록").map(toImageRecord);
     },
+    async byProjects(projectIds) {
+      if (!projectIds.length) return [];
+      const client = await createSupabaseServerClient();
+      const { data, error } = await client.from("poster_images")
+        .select(IMAGE_COLUMNS).eq("user_id", userId).in("project_id", projectIds)
+        .order("project_id", { ascending: true }).order("variant_index", { ascending: true });
+      return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 목록").map(toImageRecord);
+    },
     async add(rows) {
       if (!rows.length) return [];
       const { data, error } = await createSupabaseAdminClient()
