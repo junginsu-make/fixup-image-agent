@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { plainReviewLine, reviewHeadline } from "@fixup/sns-core";
 import Image from "next/image";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
@@ -67,18 +67,99 @@ function ReviewBox({ decision, summary, issues, tone = "default" }: {
   );
 }
 
-export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
+/**
+ * 붙여넣을 칸 하나.
+ *
+ * 게시글 전체를 한 덩어리로 주면 인스타그램에 넣을 때 사용자가 직접 잘라야
+ * 한다. 제목·내용·해시태그·첫 댓글은 들어가는 자리가 다르므로 따로 복사한다.
+ */
+function CopyField({ label, hint, value }: { label: string; hint?: string; value: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  if (!value) return null;
+
+  return (
+    <div className="grid gap-2 rounded-lg border bg-background p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <strong className="text-sm">{label}</strong>
+          {hint ? <span className="ml-2 text-meta text-subtle-foreground">{hint}</span> : null}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { void navigator.clipboard.writeText(value).then(() => setCopied(true)); }}
+        >
+          <Clipboard />{copied ? "복사됨" : "복사"}
+        </Button>
+      </div>
+      <p className="whitespace-pre-wrap text-sm leading-7">{value}</p>
+    </div>
+  );
+}
+
+function CaptionSection({ flow, writing, onWrite }: {
+  flow: SnsFlowState;
+  writing: boolean;
+  onWrite(): Promise<void>;
+}) {
+  const caption = flow.caption;
+
+  return (
+    <section className="grid gap-4 rounded-lg border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <strong>게시글 문구</strong>
+          <p className="mt-1 text-sm text-muted-foreground">
+            인스타그램에 그대로 붙여 넣도록 네 칸으로 나눠 씁니다. 원고를 고쳤다면 다시 쓰세요.
+          </p>
+        </div>
+        <Button variant={caption ? "outline" : "default"} disabled={writing} onClick={() => void onWrite()}>
+          {writing ? <Loader2 className="animate-spin" /> : <Sparkles />}
+          {writing ? "쓰는 중…" : caption ? "다시 쓰기" : "게시글 문구 만들기"}
+        </Button>
+      </div>
+
+      {caption ? (
+        <div className="grid gap-3">
+          <CopyField label="제목" hint="더보기 전에 보이는 첫 두 줄입니다" value={caption.hook} />
+          <CopyField label="내용" value={caption.body} />
+          <CopyField label="해시태그" hint={`${caption.hashtags.length}개`} value={caption.hashtags.join(" ")} />
+          <CopyField label="첫 댓글" hint="게시 직후 직접 남기세요" value={caption.firstComment} />
+        </div>
+      ) : (
+        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          아직 게시글 문구가 없습니다. 카드 원고를 바탕으로 제목·내용·해시태그·첫 댓글을 써 드립니다.
+        </p>
+      )}
+
+      {flow.captionIssues?.length ? (
+        <ul className="grid gap-1 text-sm text-amber-700">
+          {flow.captionIssues.map((issue) => <li key={issue}>{issue}</li>)}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writingCaption = false, onWriteCaption }: {
   title: string;
   flow: SnsFlowState;
   regeneratingIndex?: number;
   onRegenerate(index: number): Promise<void>;
+  writingCaption?: boolean;
+  onWriteCaption(): Promise<void>;
 }) {
   const [zipping, setZipping] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
   const confirmed = flow.costs.reduce((sum, cost) => sum + (cost.costUsd ?? 0), 0);
   const unconfirmed = flow.costs.filter((cost) => cost.costUsd === null).length;
   const downloadable = flow.cards.filter((card) => Boolean(card.assetUrl));
-  const caption = flow.cards.flatMap((card) => [card.copy.headline, card.copy.body].filter(Boolean)).join("\n\n");
   const counts = flow.cards.reduce((value, card) => ({ ...value, [card.status]: value[card.status] + 1 }), {
     pending: 0, generating: 0, review_required: 0, done: 0, failed: 0,
   });
@@ -101,11 +182,6 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
     } finally {
       setZipping(false);
     }
-  }
-
-  async function copyCaption() {
-    await navigator.clipboard.writeText(`${caption}\n\n#카드뉴스`);
-    setCopied(true);
   }
 
   return (
@@ -153,10 +229,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
         ))}
       </div>
 
-      <section className="grid gap-3 rounded-lg border bg-card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3"><strong>게시글 문구</strong><Button variant="outline" onClick={() => void copyCaption()}><Clipboard />{copied ? "복사됨" : "문구·해시태그 복사"}</Button></div>
-        <p className="whitespace-pre-wrap text-sm text-muted-foreground">{caption}{"\n\n"}#카드뉴스</p>
-      </section>
+      <CaptionSection flow={flow} writing={writingCaption} onWrite={onWriteCaption} />
     </div>
   );
 }

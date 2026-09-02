@@ -33,6 +33,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   const [busy, setBusy] = React.useState<"loading" | "planning" | "generating" | undefined>("loading");
   const [savingIndex, setSavingIndex] = React.useState<number>();
   const [regeneratingIndex, setRegeneratingIndex] = React.useState<number>();
+  const [writingCaption, setWritingCaption] = React.useState(false);
   const [message, setMessage] = React.useState("");
 
   React.useEffect(() => {
@@ -116,6 +117,18 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     }
   }
 
+  async function writeCaption() {
+    setWritingCaption(true);
+    setMessage("");
+    try {
+      setProject(await projectRequest(`/api/sns/projects/${projectId}/caption`, { method: "POST" }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "게시글 문구를 만들지 못했습니다.");
+    } finally {
+      setWritingCaption(false);
+    }
+  }
+
   async function regenerate(index: number) {
     setRegeneratingIndex(index);
     setMessage("");
@@ -159,7 +172,14 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       ) : (
         <div className="grid gap-8">
           <section><h2 className="text-h2">05 결과</h2><p className="mt-2 text-muted-foreground">검수에서 걸린 카드는 이유를 확인한 뒤 필요한 카드만 직접 다시 만드세요. 자동 재생성은 하지 않습니다.</p></section>
-          <ResultBoard title={project.title} flow={flow} regeneratingIndex={regeneratingIndex} onRegenerate={regenerate} />
+          <ResultBoard
+            title={project.title}
+            flow={flow}
+            regeneratingIndex={regeneratingIndex}
+            onRegenerate={regenerate}
+            writingCaption={writingCaption}
+            onWriteCaption={writeCaption}
+          />
         </div>
       )}
     </div>

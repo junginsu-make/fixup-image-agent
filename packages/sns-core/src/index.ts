@@ -1,4 +1,5 @@
 export * from "./attachments";
+export * from "./caption";
 export * from "./card-count";
 export * from "./copy";
 export * from "./generate";

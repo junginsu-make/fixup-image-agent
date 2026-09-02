@@ -41,7 +41,7 @@ const CopyResponseSchema = z.object({
   })).min(1),
 });
 
-const LANGUAGE_LABEL: Record<CopyLanguage, string> = {
+export const LANGUAGE_LABEL: Record<CopyLanguage, string> = {
   ko: "한국어",
   en: "English",
   ja: "日本語",

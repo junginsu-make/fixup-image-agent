@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import type {
+  CaptionProvider,
   ImagePromptProvider,
   PlanProvider,
   CopyProvider,
@@ -86,6 +87,22 @@ const COPY_SPEC: StructuredSpec = {
       },
     },
     required: ["cards"],
+    additionalProperties: false,
+  },
+};
+
+const CAPTION_SPEC: StructuredSpec = {
+  name: "submit_instagram_caption",
+  description: "Submit the Instagram caption for the finished card news.",
+  schema: {
+    type: "object",
+    properties: {
+      hook: { type: "string" },
+      body: { type: "string" },
+      hashtags: { type: "array", items: { type: "string" } },
+      firstComment: { type: "string" },
+    },
+    required: ["hook", "body", "hashtags", "firstComment"],
     additionalProperties: false,
   },
 };
@@ -217,6 +234,8 @@ export interface SnsProviders {
   planningBackup: PlanProvider;
   copyPrimary: CopyProvider;
   copyBackup: CopyProvider;
+  captionPrimary: CaptionProvider;
+  captionBackup: CaptionProvider;
   sceneProvider: ImagePromptProvider;
   reviewPrimary: ReviewRequest;
   reviewBackup: ReviewRequest;
@@ -241,6 +260,8 @@ export function createSnsPlanningProviders(environment: Record<string, string | 
     planningBackup: new OpenAIStructuredProvider(openai, openaiTextModel, PLAN_SPEC),
     copyPrimary: new AnthropicStructuredProvider(anthropic, anthropicModel, COPY_SPEC),
     copyBackup: new OpenAIStructuredProvider(openai, openaiTextModel, COPY_SPEC),
+    captionPrimary: new AnthropicStructuredProvider(anthropic, anthropicModel, CAPTION_SPEC),
+    captionBackup: new OpenAIStructuredProvider(openai, openaiTextModel, CAPTION_SPEC),
   };
 }
 

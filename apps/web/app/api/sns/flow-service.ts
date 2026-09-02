@@ -1,4 +1,4 @@
-import type { CardCopy, CardPlan, CardReview } from "@fixup/sns-core";
+import type { Caption, CardCopy, CardPlan, CardReview } from "@fixup/sns-core";
 
 export interface SnsFlowCard {
   index: number;
@@ -35,6 +35,9 @@ export interface SnsFlowState {
   copyIssues: string[];
   cards: SnsFlowCard[];
   costs: SnsFlowCost[];
+  /** 인스타그램에 붙일 게시글 문구. 카드가 다 나온 뒤 사용자가 눌러서 만든다. */
+  caption?: Caption;
+  captionIssues?: string[];
   generation?: {
     selectedCardIndexes: number[];
     falReferenceUrls: Record<string, string>;
