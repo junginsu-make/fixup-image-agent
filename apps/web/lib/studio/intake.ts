@@ -49,6 +49,16 @@ export interface Intake {
   needsPerson?: boolean;
   /** 쓸 만한 인물 사진이나 캐릭터를 이미 가졌나. */
   hasPersonImage?: boolean;
+  /**
+   * 정해진 칸에 안 들어가는 것들.
+   *
+   * 대화는 칸 채우기가 아니다. "톤은 유머러스하게", "마지막 장에 QR",
+   * "경쟁사 이름은 빼고" 같은 말이 나온다. 담을 곳이 없으면 그 말은
+   * 사라지고, 사용자는 말했는데 반영이 안 됐다고 느낀다.
+   *
+   * 여기 담긴 것은 나중에 이미지 프롬프트에 그대로 실린다.
+   */
+  notes?: string[];
 }
 
 export interface MissingSlot {

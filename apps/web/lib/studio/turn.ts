@@ -55,6 +55,13 @@ export const TURN_SCHEMA: StructuredSpec = {
           attachmentsDecided: { type: "boolean" },
           needsPerson: { type: "boolean" },
           hasPersonImage: { type: "boolean" },
+          notes: {
+            type: "array",
+            description:
+              "위 칸에 안 들어가지만 만들 때 알아야 할 것. 톤, 금지 사항, 특별한 요청, "
+              + "사용자가 강조한 것 등 무엇이든. 나중에 이미지 프롬프트를 쓸 때 그대로 쓴다.",
+            items: { type: "string" },
+          },
         },
       },
       chips: {
@@ -185,6 +192,10 @@ function sanitize(raw: unknown): Partial<Intake> {
   if (typeof source.attachmentsDecided === "boolean") next.attachmentsDecided = source.attachmentsDecided;
   if (typeof source.needsPerson === "boolean") next.needsPerson = source.needsPerson;
   if (typeof source.hasPersonImage === "boolean") next.hasPersonImage = source.hasPersonImage;
+  if (Array.isArray(source.notes)) {
+    const notes = source.notes.filter((note): note is string => typeof note === "string" && note.trim().length > 0);
+    if (notes.length) next.notes = notes;
+  }
   return next;
 }
 
@@ -197,7 +208,15 @@ export async function runTurn(input: TurnInput, provider: StructuredProvider): P
     `${buildTurnInstruction(input.intake)}\n\n## 지금까지의 대화\n${transcript || "(없음)"}`,
   )) as Record<string, unknown> | null;
 
-  const intake: Intake = { ...input.intake, ...sanitize(raw?.learned) };
+  const learned = sanitize(raw?.learned);
+  // 메모는 덮어쓰지 않고 쌓는다. 새 메모가 올 때마다 앞의 것을 지우면
+  // 첫 요청이 사라진다.
+  const notes = [...(input.intake.notes ?? []), ...(learned.notes ?? [])];
+  const intake: Intake = {
+    ...input.intake,
+    ...learned,
+    ...(notes.length ? { notes: [...new Set(notes)] } : {}),
+  };
   const missing = missingSlots(intake);
   const chips = Array.isArray(raw?.chips)
     ? raw.chips.filter((chip): chip is string => typeof chip === "string").slice(0, 4)

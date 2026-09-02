@@ -79,6 +79,33 @@ describe("한 턴 처리", () => {
     expect(result.intake.topic).toBe("세럼 출시");
   });
 
+  it("칸에 안 들어가는 말도 붙잡아 둔다", async () => {
+    // "톤은 유머러스하게", "마지막 장에 QR" 같은 말은 담을 칸이 없다.
+    // 흘리면 사용자는 말했는데 반영이 안 됐다고 느낀다.
+    const result = await runTurn(
+      { intake: before, messages: [] },
+      fake({ reply: "네", learned: { notes: ["톤은 유머러스하게", "경쟁사 이름은 빼기"] } }),
+    );
+    expect(result.intake.notes).toEqual(["톤은 유머러스하게", "경쟁사 이름은 빼기"]);
+  });
+
+  it("메모는 쌓인다. 덮어쓰지 않는다", async () => {
+    // 새 메모가 올 때마다 앞의 것을 지우면 첫 요청이 사라진다.
+    const result = await runTurn(
+      { intake: { ...before, notes: ["톤은 유머러스하게"] }, messages: [] },
+      fake({ reply: "네", learned: { notes: ["마지막 장에 QR"] } }),
+    );
+    expect(result.intake.notes).toEqual(["톤은 유머러스하게", "마지막 장에 QR"]);
+  });
+
+  it("같은 말을 두 번 담지 않는다", async () => {
+    const result = await runTurn(
+      { intake: { ...before, notes: ["톤은 유머러스하게"] }, messages: [] },
+      fake({ reply: "네", learned: { notes: ["톤은 유머러스하게"] } }),
+    );
+    expect(result.intake.notes).toEqual(["톤은 유머러스하게"]);
+  });
+
   it("아직 모자라면 준비됐다고 하지 않는다", async () => {
     const result = await runTurn(
       { intake: before, messages: [] },
