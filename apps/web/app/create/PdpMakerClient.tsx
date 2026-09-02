@@ -660,6 +660,13 @@ export function PdpMakerClient() {
                 ? "analyze"
                 : "upload"
           }
+          // 단계를 눌러 오갈 수 있어야 한다. 준비가 안 된 단계는 그 화면이 알린다.
+          onJump={(id) => {
+            if (id === "upload") {
+              setAppState("upload");
+              if (startMode === "text") setTextStage("input");
+            }
+          }}
         />
       </div>
 

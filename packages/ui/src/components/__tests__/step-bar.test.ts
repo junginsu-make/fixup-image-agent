@@ -29,8 +29,9 @@ describe("이동 가능 여부", () => {
     expect(canJumpTo(steps, "b", "b")).toBe(false);
   });
 
-  it("안 지난 단계로는 갈 수 없다", () => {
-    // 업로드 없이 분석으로 가면 빈 화면이 나온다.
-    expect(canJumpTo(steps, "a", "c")).toBe(false);
+  it("앞 단계로도 갈 수 있다", () => {
+    // 돌아가서 고치고 다시 앞으로 오는 일이 잦다. 매번 「다음」을 여러 번
+    // 누르게 하지 않는다. 준비가 안 됐으면 그 화면이 알린다.
+    expect(canJumpTo(steps, "a", "c")).toBe(true);
   });
 });

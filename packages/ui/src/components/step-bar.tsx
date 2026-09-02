@@ -30,14 +30,23 @@ export function stepState(steps: StepDefinition[], current: string, id: string):
   return index === currentIndex ? "active" : "todo";
 }
 
+/**
+ * 어느 단계로든 갈 수 있다.
+ *
+ * 처음에는 지난 단계만 열었다. 앞 단계를 건너뛰면 빈 화면에 닿는다는 이유였다.
+ * 실제로 써 보니 **돌아가서 고치고 다시 앞으로 오는 일이 잦았고**, 그때마다
+ * 「다음」을 여러 번 눌러야 했다. 빈 화면은 그 화면이 알아서 알린다.
+ *
+ * 지금 있는 단계만 누르면 아무 일도 하지 않는다.
+ */
 export function canJumpTo(steps: StepDefinition[], current: string, id: string): boolean {
-  return stepState(steps, current, id) === "done";
+  return stepState(steps, current, id) !== "active";
 }
 
 export function StepBar({ steps, current, onJump }: {
   steps: StepDefinition[];
   current: string;
-  /** 없으면 어느 단계도 누를 수 없다. */
+  /** 없으면 어느 단계도 누를 수 없다. 보여 주기만 할 때 쓴다. */
   onJump?: (id: string) => void;
 }) {
   return (

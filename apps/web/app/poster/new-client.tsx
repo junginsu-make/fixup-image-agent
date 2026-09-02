@@ -9,6 +9,7 @@ import {
 import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
 import { takeHandoff } from "../../lib/handoff";
+import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 
 const STEPS: StepDefinition[] = [
   { id: "reference", label: "01 레퍼런스", desc: "따라 만들 포스터" },
@@ -16,17 +17,11 @@ const STEPS: StepDefinition[] = [
   { id: "instruction", label: "03 지시", desc: "한 줄만" },
 ];
 
-interface ReferenceItem {
-  id: string;
-  title: string | null;
-  url?: string;
-}
-
 export function PosterNewClient() {
   const router = useRouter();
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   const [step, setStep] = React.useState("reference");
-  const [selected, setSelected] = React.useState<string[]>([]);
+  const [roles, setRoles] = React.useState<Record<string, Role>>({});
   const [ratio, setRatio] = React.useState("2:3");
   const [modelId, setModelId] = React.useState(
     IMAGE_MODELS.find((model) => model.isDefault)?.id ?? IMAGE_MODELS[0]!.id,
@@ -37,8 +32,12 @@ export function PosterNewClient() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  const styleIds = Object.keys(roles).filter((id) => roles[id] === "style");
+  const preservedIds = Object.keys(roles).filter((id) => roles[id] === "preserved");
+
   const estimate = estimatePosterCost({
-    modelId, ratioId: ratio, variants, hasReferences: selected.length > 0,
+    modelId, ratioId: ratio, variants,
+    hasReferences: styleIds.length + preservedIds.length > 0,
   });
 
   // 라이브러리에서 「포스터로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
@@ -51,25 +50,17 @@ export function PosterNewClient() {
     setInstruction(firstSentence || handoff.title);
   }, []);
 
-  React.useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const body = await (await fetch("/api/poster/references")).json();
-        if (!alive) return;
-        if (body.ok) setReferences(body.references);
-        else setError(body.message ?? "레퍼런스를 불러오지 못했습니다.");
-      } catch {
-        if (alive) setError("레퍼런스를 불러오지 못했습니다.");
-      }
-    })();
-    return () => { alive = false; };
+  const loadReferences = React.useCallback(async () => {
+    try {
+      const body = await (await fetch("/api/poster/references", { cache: "no-store" })).json();
+      if (body.ok) setReferences(body.references);
+      else setError(body.message ?? "참고 이미지를 불러오지 못했습니다.");
+    } catch {
+      setError("참고 이미지를 불러오지 못했습니다.");
+    }
   }, []);
 
-  function toggle(id: string) {
-    setSelected((current) =>
-      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
-  }
+  React.useEffect(() => { void loadReferences(); }, [loadReferences]);
 
   async function submit() {
     setBusy(true);
@@ -82,8 +73,8 @@ export function PosterNewClient() {
           title: title.trim() || "이름 없는 포스터",
           ratio, modelId, variants,
           instruction: instruction.trim(),
-          referenceIds: selected,
-          preservedIds: [],
+          referenceIds: styleIds,
+          preservedIds,
         }),
       });
       const body = await response.json();
@@ -95,7 +86,7 @@ export function PosterNewClient() {
     }
   }
 
-  const canSubmit = selected.length > 0 && instruction.trim().length > 0 && !estimate.rejected;
+  const canSubmit = styleIds.length > 0 && instruction.trim().length > 0 && !estimate.rejected;
 
   return (
     <div className="grid gap-6">
@@ -114,42 +105,21 @@ export function PosterNewClient() {
           <CardHeader>
             <CardTitle>따라 만들 포스터를 고르세요</CardTitle>
             <CardDescription>
-              레이아웃·서체·색을 이 그림에서 가져옵니다. 없으면 라이브러리에서 먼저 올려 주세요.
+              그림을 누를 때마다 역할이 바뀝니다 —
+              <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색을 가져옴) →
+              <strong className="text-foreground">그대로 지키기</strong>(제품·인물의 생김새 유지) → 안 씀.
+              따라 만들 그림이 최소 한 장 필요합니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            {references.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                올려 둔 포스터 레퍼런스가 없습니다. 라이브러리에서 먼저 올려 주세요.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                {references.map((reference) => (
-                  <button
-                    key={reference.id}
-                    type="button"
-                    onClick={() => toggle(reference.id)}
-                    aria-pressed={selected.includes(reference.id)}
-                    className={cn(
-                      "overflow-hidden rounded-lg border-2 text-left transition-colors",
-                      selected.includes(reference.id) ? "border-primary" : "border-transparent hover:border-border",
-                    )}
-                  >
-                    {reference.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={reference.url} alt={reference.title ?? "레퍼런스"} className="aspect-[2/3] w-full object-cover" />
-                    ) : (
-                      <div className="grid aspect-[2/3] w-full place-items-center bg-muted text-xs text-muted-foreground">
-                        미리보기 없음
-                      </div>
-                    )}
-                    <span className="block truncate px-3 py-2 text-xs">{reference.title ?? "제목 없음"}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <ReferencePicker
+              references={references}
+              roles={roles}
+              onRoleChange={(id, role) => setRoles((current) => ({ ...current, [id]: role }))}
+              onUploaded={() => void loadReferences()}
+            />
             <div className="flex justify-end">
-              <Button onClick={() => setStep("spec")} disabled={selected.length === 0}>다음</Button>
+              <Button onClick={() => setStep("spec")} disabled={styleIds.length === 0}>다음</Button>
             </div>
           </CardContent>
         </Card>

@@ -29,30 +29,23 @@ const navGroups = [
   {
     label: "도구",
     items: [
-      { href: "/create", label: "새로 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },
-      { href: "/redesign", label: "리디자인", desc: "기존 페이지 개선", icon: RefreshCw },
-      { href: "/sns", label: "카드뉴스 만들기", desc: "내용·이미지·규격", icon: PanelsTopLeft },
+      { href: "/sns", label: "카드뉴스 만들기", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft },
       { href: "/poster", label: "포스터 만들기", desc: "레퍼런스 기준 한 장", icon: Frame },
+      { href: "/create", label: "상세페이지 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },
+      { href: "/redesign", label: "상세 페이지 리디자인", desc: "기존 페이지 개선", icon: RefreshCw },
+      { href: "/characters", label: "캐릭터 만들기", desc: "인물을 고정해 재사용", icon: UserRound },
     ],
   },
   {
     label: "수집",
     items: [
       { href: "/inbox", label: "수집함", desc: "모아 온 소재", icon: Inbox },
-      { href: "/sources", label: "수집 미디어", desc: "가져올 곳 관리", icon: Rss },
+      { href: "/sources", label: "수집 리스트", desc: "가져올 곳 관리", icon: Rss },
     ],
   },
   {
     label: "보관",
-    items: [{ href: "/library", label: "라이브러리", desc: "저장한 작업", icon: Library }],
-  },
-  {
-    // 상세페이지를 만드는 주 흐름이 아니라, 필요할 때 쓰는 곁가지다.
-    // 그래서 도구·보관 아래에 따로 둔다.
-    label: "부가 기능",
-    items: [
-      { href: "/characters", label: "캐릭터 만들기", desc: "인물을 고정해 재사용", icon: UserRound },
-    ],
+    items: [{ href: "/library", label: "라이브러리", desc: "참고 이미지 · 수집한 글 · 작업물", icon: Library }],
   },
 ];
 

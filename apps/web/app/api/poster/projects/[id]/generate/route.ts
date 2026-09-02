@@ -36,10 +36,13 @@ export async function POST(_request: Request, context: Context) {
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
 
     const fal = createPosterFalClients();
+    // 따라 만들 것과 그대로 지킬 것을 함께 올린다. 순서가 프롬프트의
+    // Image 번호와 같아야 하므로 레퍼런스를 먼저 둔다.
     const references = await stores.references.byIds(project.data.referenceIds);
+    const preserved = await stores.references.byIds(project.data.preservedIds ?? []);
     // 같은 배치에서 같은 파일은 한 번만 올린다.
     const urls = await uploadUniqueReferences(
-      references,
+      [...references, ...preserved],
       (reference) => reference.id,
       async (reference) => {
         const { bytes, contentType } = await referenceBytes(reference.storagePath);
@@ -55,7 +58,7 @@ export async function POST(_request: Request, context: Context) {
         variants: project.data.variants,
         slots: project.data.slots,
         referenceUrls: references.map((reference) => urls[reference.id]!).filter(Boolean),
-        preservedUrls: [],
+        preservedUrls: preserved.map((reference) => urls[reference.id]!).filter(Boolean),
       },
       { queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => "" },
     );
