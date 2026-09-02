@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@fixup/ui";
 import { StudioLayout } from "../_components/studio-layout";
+import { PosterGallery } from "./gallery-client";
 
 export const metadata: Metadata = {
   title: "포스터",
@@ -34,6 +35,11 @@ export default function PosterPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <section className="grid gap-3">
+          <h2 className="text-h2">지난 작업</h2>
+          <PosterGallery />
+        </section>
       </div>
     </StudioLayout>
   );

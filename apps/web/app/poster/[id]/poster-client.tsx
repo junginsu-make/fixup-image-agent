@@ -46,6 +46,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   const [error, setError] = React.useState<string | null>(null);
   const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
+  const [editText, setEditText] = React.useState("");
 
   function setField(field: TextSlot, value: string) {
     setSlots((current: PosterSlots) => ({ ...current, [field]: value }));
@@ -99,25 +100,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
       setBusy("그리는 중… 2~3분 걸립니다");
-
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 10_000));
-        const poll = await (await fetch(`/api/poster/projects/${project.id}/status`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            requestRowId: submission.requestRowId,
-            falRequestId: submission.falRequestId,
-            endpoint: submission.endpoint,
-            unitCostUsd: (submission.estimatedUsd ?? 0) / project.data.variants,
-          }),
-        })).json();
-        if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
-        if (poll.done) {
-          setList(poll.images);
-          break;
-        }
-      }
+      await pollUntilDone(submission, project.data.variants);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "생성하지 못했습니다.");
     } finally {
@@ -138,6 +121,71 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
       setList(body.images);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "변형을 고르지 못했습니다.");
+    }
+  }
+
+  /** 고른 것만 검수한다. 반려해도 이미지는 남고 다시 만들지는 사람이 누른다. */
+  async function review() {
+    setBusy("검수하는 중…");
+    setError(null);
+    try {
+      const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
+      if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
+      setList(body.images);
+      if (body.issues?.length) setNotes(body.issues);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "검수하지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** 고른 것을 기준으로 고친다. 처음부터 다시 만들지 않는다. */
+  async function edit() {
+    const instruction = editText.trim();
+    if (!instruction) {
+      setError("무엇을 고칠지 적어 주세요. 비어 있으면 같은 것을 또 만듭니다.");
+      return;
+    }
+    setBusy("보내는 중…");
+    setError(null);
+    try {
+      const start = await (await fetch(`/api/poster/projects/${project.id}/edit`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ instruction }),
+      })).json();
+      if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
+      setBusy("고치는 중… 2~3분 걸립니다");
+      await pollUntilDone(start.submission, 1);
+      setEditText("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "고치지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function pollUntilDone(submission: {
+    requestRowId: string; falRequestId: string; endpoint: string; estimatedUsd?: number;
+  }, variants: number) {
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      const poll = await (await fetch(`/api/poster/projects/${project.id}/status`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          requestRowId: submission.requestRowId,
+          falRequestId: submission.falRequestId,
+          endpoint: submission.endpoint,
+          unitCostUsd: (submission.estimatedUsd ?? 0) / variants,
+        }),
+      })).json();
+      if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
+      if (poll.done) {
+        setList(poll.images);
+        return;
+      }
     }
   }
 
@@ -251,6 +299,33 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {list.some((image) => image.selected) ? (
+            <div className="mb-5 grid gap-3 rounded-lg border border-border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold">고른 변형으로 이어서 하기</p>
+                <Button size="sm" variant="secondary" onClick={() => void review()} disabled={Boolean(busy)}>
+                  검수하기
+                </Button>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="poster-edit">무엇을 고칠까요</Label>
+                <Textarea
+                  id="poster-edit"
+                  rows={2}
+                  value={editText}
+                  onChange={(event) => setEditText(event.target.value)}
+                  placeholder="배경을 밤으로 바꿔 주세요"
+                />
+                <p className="text-xs text-subtle-foreground">
+                  고른 이미지를 기준으로 한 장만 다시 만듭니다. 처음부터 만들지 않습니다.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => void edit()} disabled={Boolean(busy)}>고치기</Button>
+              </div>
+            </div>
+          ) : null}
+
           {list.length === 0 ? (
             <p className="text-sm text-muted-foreground">아직 만든 변형이 없습니다.</p>
           ) : (
@@ -279,6 +354,13 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                     <span className={cn("font-bold", image.selected && "text-primary")}>
                       변형 {image.variantIndex + 1}{image.selected ? " · 선택됨" : ""}
                     </span>
+                    <a
+                      href={`/api/poster/projects/${project.id}/images/${image.variantIndex}/file`}
+                      download={`poster-${image.variantIndex + 1}.png`}
+                      className="ml-2 underline underline-offset-2 hover:text-foreground"
+                    >
+                      내려받기
+                    </a>
                     {image.review ? (
                       <span
                         role={image.review.decision === "pass" ? undefined : "alert"}
