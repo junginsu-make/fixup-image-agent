@@ -9,12 +9,19 @@ import {
 } from "@fixup/sns-core";
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
+import { resolveSourceText, type ResolvedSource, type SourceResolverDependencies } from "./source-resolver";
 
-function sourceText(project: SnsProjectRecord): string {
-  const source = project.data.source;
-  if (source.kind === "text") return source.text;
-  if (source.kind === "question") return `질문: ${source.question}`;
-  return `가져올 주소: ${source.url}`;
+/**
+ * 내용을 **실제로 가져온다.**
+ *
+ * 예전에는 주소를 문자열로 넘겨 LLM 이 내용을 지어냈다. 이제 유튜브 자막·웹
+ * 본문·검색 결과를 가져와서 넘긴다. 못 가져오면 기획을 시작하지 않는다.
+ */
+async function resolveSource(
+  project: SnsProjectRecord,
+  resolver: SourceResolverDependencies,
+): Promise<ResolvedSource> {
+  return resolveSourceText(project.data.source, resolver);
 }
 
 export interface ActualPlanningProviders {
@@ -27,15 +34,22 @@ export interface ActualPlanningProviders {
 export async function createActualPlanningFlow(
   project: SnsProjectRecord,
   providers: ActualPlanningProviders,
+  resolver: SourceResolverDependencies,
 ): Promise<SnsFlowState> {
+  const source = await resolveSource(project, resolver);
+  // 내용을 못 가져왔으면 여기서 멈춘다. 진행하면 LLM 이 지어낸다.
+  if (!source.text) {
+    return { stage: "copy", planningIssues: source.issues, copyIssues: [], cards: [], costs: [] };
+  }
+
   const planned = await planCards({
-    sourceText: sourceText(project),
+    sourceText: source.text,
     slots: project.slotPlan,
     toneNote: project.toneNote,
     language: project.language,
   }, providers.planningPrimary, providers.planningBackup);
   const written = await writeCopy({
-    sourceText: sourceText(project),
+    sourceText: source.text,
     plans: planned.cards,
     toneNote: project.toneNote,
     language: project.language,

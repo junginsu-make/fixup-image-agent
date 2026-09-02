@@ -28,6 +28,9 @@ importers:
       '@fal-ai/client':
         specifier: ^1.10.1
         version: 1.10.1
+      '@fixup/ingest-core':
+        specifier: workspace:*
+        version: link:../../packages/ingest-core
       '@fixup/pdp-core':
         specifier: workspace:*
         version: link:../../packages/pdp-core

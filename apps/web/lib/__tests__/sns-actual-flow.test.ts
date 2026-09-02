@@ -50,6 +50,10 @@ describe("실제 기획·원고 배선", () => {
 
     const flow = await createActualPlanningFlow(project(), {
       planningPrimary, planningBackup, copyPrimary, copyBackup,
+    }, {
+      ingestYoutube: async () => ({ segments: [] }),
+      ingestWeb: async () => ({ segments: [] }),
+      research: async () => ({ text: "", citations: [] }),
     });
 
     expect(planningBackup.generate).toHaveBeenCalledOnce();
@@ -57,5 +61,52 @@ describe("실제 기획·원고 배선", () => {
     expect(flow.planningIssues.join("\n")).toContain("예비로 만들었습니다");
     expect(flow.copyIssues.join("\n")).toContain("예비로 원고를 썼습니다");
     expect(flow.cards).toHaveLength(4);
+  });
+
+  it("유튜브 주소면 자막을 실제로 가져와 LLM 에 넘긴다", async () => {
+    // 예전에는 "가져올 주소: https://..." 만 넘겨 LLM 이 내용을 지어냈다.
+    const prompts: string[] = [];
+    const planningPrimary: PlanProvider = {
+      generate: vi.fn(async (prompt: string) => {
+        prompts.push(prompt);
+        return { total: 4, cards: [{ index: 1, role: "cover", intent: "훅", visualBrief: "표지" }] };
+      }),
+    };
+    const copyPrimary: CopyProvider = {
+      generate: vi.fn(async () => ({ cards: [{ index: 1, headline: "제목" }] })),
+    };
+
+    const youtube = project();
+    youtube.data.source = { kind: "youtube", url: "https://youtu.be/abc12345678" };
+
+    await createActualPlanningFlow(youtube, {
+      planningPrimary, planningBackup: planningPrimary, copyPrimary, copyBackup: copyPrimary,
+    }, {
+      ingestYoutube: async () => ({ segments: [{ text: "실제 자막 내용입니다" }] }),
+      ingestWeb: async () => ({ segments: [] }),
+      research: async () => ({ text: "", citations: [] }),
+    });
+
+    expect(prompts[0]).toContain("실제 자막 내용입니다");
+    expect(prompts[0]).not.toContain("가져올 주소");
+  });
+
+  it("내용을 못 가져오면 기획을 시작하지 않는다 — 지어내면 안 된다", async () => {
+    const planningPrimary: PlanProvider = { generate: vi.fn(async () => ({ cards: [] })) };
+    const copyPrimary: CopyProvider = { generate: vi.fn(async () => ({ cards: [] })) };
+
+    const youtube = project();
+    youtube.data.source = { kind: "youtube", url: "https://youtu.be/abc12345678" };
+
+    const flow = await createActualPlanningFlow(youtube, {
+      planningPrimary, planningBackup: planningPrimary, copyPrimary, copyBackup: copyPrimary,
+    }, {
+      ingestYoutube: async () => { throw new Error("자막이 없습니다"); },
+      ingestWeb: async () => ({ segments: [] }),
+      research: async () => ({ text: "", citations: [] }),
+    });
+
+    expect(planningPrimary.generate).not.toHaveBeenCalled();
+    expect(flow.planningIssues.join(" ")).toContain("자막이 없습니다");
   });
 });

@@ -27,6 +27,9 @@ const nextConfig = {
     "@fixup/shared",
     "@fixup/ui",
   ],
+  // 수집 어댑터 중 커뮤니티 크롤러가 playwright 를 쓴다. 번들에 넣으려 하면
+  // chromium-bidi 를 못 찾아 빌드가 깨진다. 서버에서 그대로 require 하게 둔다.
+  serverExternalPackages: ["playwright", "playwright-core"],
   webpack: (config) => {
     // 이식한 코어가 ESM 관례대로 상대 import에 .js 확장자를 쓴다(소스는 .ts).
     // webpack이 .js 지정자를 .ts로도 해석하도록 매핑한다(typecheck는 bundler 해석으로 이미 통과).

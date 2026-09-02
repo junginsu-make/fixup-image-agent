@@ -15,6 +15,7 @@
     "@fal-ai/client": "^1.10.1",
     "@fixup/pdp-core": "workspace:*",
     "@fixup/redesign-core": "workspace:*",
+    "@fixup/ingest-core": "workspace:*",
     "@fixup/poster-core": "workspace:*",
     "@fixup/sns-core": "workspace:*",
     "@fixup/shared": "workspace:*",

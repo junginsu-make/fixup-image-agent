@@ -1,6 +1,7 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { snsFlowStoreForUser } from "../../../../../../lib/sns-flow-store";
 import { createActualPlanningFlow } from "../../../../../../lib/sns/actual-flow";
+import { createSourceAdapters } from "../../../../../../lib/sns/source-adapters";
 import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
 import { refreshProjectAssetUrls, replaceSnsCardRows } from "../../../../../../lib/sns/runtime";
 
@@ -32,7 +33,7 @@ export async function POST(_request: Request, context: Context) {
     const store = await snsFlowStoreForUser(auth.member.userId);
     const project = await store.get(id);
     if (!project) return Response.json({ ok: false, message: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
-    const flow = await createActualPlanningFlow(project, createSnsPlanningProviders());
+    const flow = await createActualPlanningFlow(project, createSnsPlanningProviders(), createSourceAdapters());
     await replaceSnsCardRows(auth.member.userId, id, flow);
     const saved = await store.save(id, flow, "copy_ready");
     return Response.json({ ok: true, project: saved });
