@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { localBypassRedirect } from "./lib/dev-auth";
 
 const PUBLIC_PATHS = [
   "/",
@@ -20,7 +21,8 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
   // 로컬 확인용 우회. NODE_ENV!=production 이고 LOCAL_AUTH_BYPASS=1 일 때만 열린다.
   if (process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "1") {
-    return response;
+    const entry = localBypassRedirect(request.nextUrl.pathname);
+    return entry ? NextResponse.redirect(new URL(entry, request.url)) : response;
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;

@@ -17,6 +17,22 @@ import type { MemberProfile, MembershipContext, UsageSummary } from "./membershi
 export const isLocalAuthBypass =
   process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "1";
 
+/** 로컬 우회 모드에서 문을 두드리면 열리는 곳. */
+export const LOCAL_BYPASS_ENTRY = "/create";
+
+/** 화면. 처리기(/auth/confirm, /auth/signout)는 여기 없다 — 가로채면 인증이 끊긴다. */
+const AUTH_SCREENS = ["/login", "/signup", "/forgot-password", "/reset-password"];
+
+/**
+ * 로컬 우회 모드에서 인증 화면을 어디로 보낼지.
+ *
+ * 로컬은 Supabase 공개 환경변수를 비워 두므로 이 화면들은 어차피 못 쓴다.
+ * 그대로 두면 사용자가 막힌 문을 두드리게 된다. 바로 들여보낸다.
+ */
+export function localBypassRedirect(pathname: string): string | null {
+  return AUTH_SCREENS.includes(pathname) ? LOCAL_BYPASS_ENTRY : null;
+}
+
 const DEV_USER_ID = process.env.LOCAL_AUTH_USER_ID?.trim() || "00000000-0000-4000-8000-000000000001";
 const DEV_EMAIL = process.env.LOCAL_AUTH_EMAIL?.trim() || "local-dev@example.com";
 
