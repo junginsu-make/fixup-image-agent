@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, ImagePlus, Loader2 } from "lucide-react";
+import { AlertTriangle, ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { groupAttachments, modelById, referenceWarningsForRole, validateAttachments, type Attachment, type AttachmentKind, type StyleRole } from "@fixup/sns-core";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { createSupabaseBrowserClient } from "../../../lib/supabase/browser";
@@ -139,22 +139,51 @@ export function AttachmentPicker({
   const grouped = groupAttachments(attachments);
   const warnings = (["cover", "body"] as StyleRole[]).flatMap((role) => referenceWarningsForRole(grouped, role));
 
+  /** 라이브러리에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
+  async function removeFromLibrary(image: ImageView) {
+    if (!window.confirm(`'${image.title ?? "이 이미지"}' 를 라이브러리에서 지울까요?`)) return;
+    try {
+      const body = await (await fetch(`/api/reference-images/${image.id}`, { method: "DELETE" })).json();
+      if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
+      onChange(attachments.filter((attachment) => attachment.id !== image.id));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "지우지 못했습니다.");
+    }
+  }
+
   return (
     <div className="grid gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold">라이브러리에서 불러오기</h3>
+          <p className="text-meta text-subtle-foreground">올려 둔 그림 {images.length}장 · 눌러서 고르고 다시 눌러 뺍니다</p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => void load()}>새로고침</Button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
         <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(event) => void upload(event.target.files)} />
         <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={uploading}>
           {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
           {uploading ? "올리는 중…" : "새 참고 이미지 올리기"}
         </Button>
-        <span className="text-sm text-muted-foreground">라이브러리 이미지에서 고르거나 새로 올리세요.</span>
+        <span className="text-sm text-muted-foreground">여기서 올린 그림도 라이브러리에 들어갑니다.</span>
       </div>
       {message ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{message}</p> : null}
       {loading ? <p className="py-8 text-center text-sm text-muted-foreground">이미지를 불러오는 중입니다.</p> : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
           {images.map((image) => {
             const selected = attachments.find((attachment) => attachment.id === image.id);
-            return <Card key={image.id} className={selected ? "border-primary shadow-[0_0_0_1px_var(--primary-ring)]" : ""}>
+            return <Card key={image.id} className={`relative ${selected ? "border-primary shadow-[0_0_0_1px_var(--primary-ring)]" : ""}`}>
+              <button
+                type="button"
+                aria-label={`${image.title ?? "참고 이미지"} 라이브러리에서 지우기`}
+                onClick={() => void removeFromLibrary(image)}
+                className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
               <button type="button" className="block w-full" onClick={() => toggle(image)} aria-label={`${image.title ?? "참고 이미지"} ${selected ? "선택 해제" : "선택"}`}>
                 <div className="aspect-square overflow-hidden rounded-t-xl bg-muted">{image.signedUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
