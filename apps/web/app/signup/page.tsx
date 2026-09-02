@@ -16,6 +16,7 @@ import {
 import { AuthShell } from "../_components/auth-shell";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+import { authAvailability } from "../../lib/supabase/env";
 
 /**
  * 인증 메일을 못 보낸 것과 입력이 틀린 것은 사용자가 할 일이 다르다.
@@ -35,8 +36,9 @@ export default function SignupPage() {
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
   const [captchaToken, setCaptchaToken] = React.useState("");
+  const auth = authAvailability();
   const [message, setMessage] = React.useState("");
-  const [error, setError] = React.useState("");
+  const [error, setError] = React.useState(auth.ready ? "" : auth.message);
   const [loading, setLoading] = React.useState(false);
   const [captchaVersion, setCaptchaVersion] = React.useState(0);
   const [mailBlocked, setMailBlocked] = React.useState(false);
@@ -45,31 +47,37 @@ export default function SignupPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+    if (!auth.ready) return setError(auth.message);
     if (password.length < 8) return setError("비밀번호는 8자 이상이어야 합니다.");
     if (password !== confirm) return setError("비밀번호 확인이 일치하지 않습니다.");
     if (captchaRequired && !captchaToken) return setError("보안 확인을 완료해 주세요.");
     setLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const { error: signupError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        captchaToken: captchaToken || undefined,
-        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/access`,
-      },
-    });
-    setLoading(false);
-    if (signupError) {
-      setCaptchaToken("");
-      setCaptchaVersion((version) => version + 1);
-      if (isMailDeliveryFailure(signupError)) {
-        setMailBlocked(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error: signupError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          captchaToken: captchaToken || undefined,
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/access`,
+        },
+      });
+      if (signupError) {
+        setCaptchaToken("");
+        setCaptchaVersion((version) => version + 1);
+        if (isMailDeliveryFailure(signupError)) {
+          setMailBlocked(true);
+          return;
+        }
+        setError(signupError.message.includes("rate") ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." : "회원가입을 완료하지 못했습니다. 입력값을 확인해 주세요.");
         return;
       }
-      setError(signupError.message.includes("rate") ? "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." : "회원가입을 완료하지 못했습니다. 입력값을 확인해 주세요.");
-      return;
+      setMessage(email.trim());
+    } catch (signupError) {
+      setError(signupError instanceof Error ? signupError.message : "회원가입을 완료하지 못했습니다.");
+    } finally {
+      setLoading(false);
     }
-    setMessage(email.trim());
   }
 
   return (
@@ -118,7 +126,7 @@ export default function SignupPage() {
           <div className="space-y-1.5"><Label htmlFor="confirm">비밀번호 확인</Label><Input id="confirm" type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} /></div>
           <Turnstile key={captchaVersion} onToken={setCaptchaToken} />
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-          <Button type="submit" className="w-full" disabled={loading}>{loading ? "가입 처리 중..." : "인증 메일 받기"}</Button>
+          <Button type="submit" className="w-full" disabled={loading || !auth.ready}>{loading ? "가입 처리 중..." : "인증 메일 받기"}</Button>
           <p className="text-center text-sm text-muted-foreground">이미 계정이 있나요? <Link href="/login" className="font-bold text-primary">로그인</Link></p>
         </form>
       )}

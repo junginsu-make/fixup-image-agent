@@ -21,7 +21,18 @@ export function PublicLogo() {
   );
 }
 
-export function PublicHeader({ showGuestActions = true }: { showGuestActions?: boolean }) {
+export function PublicHeader({
+  showGuestActions = true,
+  localMode = false,
+}: {
+  showGuestActions?: boolean;
+  /**
+   * 로컬 확인 모드(LOCAL_AUTH_BYPASS=1)에서는 Supabase 공개 환경변수를 비워 두므로
+   * 로그인 자체가 불가능하다. 그런데 들어갈 문은 있어야 한다 — 미들웨어는 이미
+   * 다 통과시키고 있으니 바로 스튜디오로 보낸다.
+   */
+  localMode?: boolean;
+}) {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
@@ -31,7 +42,14 @@ export function PublicHeader({ showGuestActions = true }: { showGuestActions?: b
           <Link href="/#how-it-works" className="transition-colors hover:text-foreground">이용 방법</Link>
           <Link href="/demo" className="transition-colors hover:text-foreground">결과물 데모</Link>
         </nav>
-        {showGuestActions ? (
+        {localMode ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-meta text-subtle-foreground sm:block">로컬 확인 모드</span>
+            <Button size="sm" asChild>
+              <Link href="/create">스튜디오 열기</Link>
+            </Button>
+          </div>
+        ) : showGuestActions ? (
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/login">로그인</Link>
@@ -109,10 +127,10 @@ export function OnboardingSteps({
   );
 }
 
-export function PublicPage({ children }: { children: ReactNode }) {
+export function PublicPage({ children, localMode = false }: { children: ReactNode; localMode?: boolean }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <PublicHeader />
+      <PublicHeader localMode={localMode} />
       {children}
       <PublicFooter />
     </div>

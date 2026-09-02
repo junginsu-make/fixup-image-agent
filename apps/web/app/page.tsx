@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { OnboardingSteps, PublicPage } from "./_components/public-shell";
+import { isLocalAuthBypass } from "../lib/dev-auth";
 
 const benefits = [
   "유튜브·웹·검색에서 소재를 모아 두기",
@@ -44,7 +45,7 @@ const features = [
 
 export default function HomePage() {
   return (
-    <PublicPage>
+    <PublicPage localMode={isLocalAuthBypass}>
       <main>
         <section className="relative overflow-hidden border-b">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.14),transparent_34%),radial-gradient(circle_at_85%_65%,hsl(var(--primary)/0.08),transparent_28%)]" />
