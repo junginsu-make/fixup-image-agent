@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, FolderOpen, Trash2 } from "lucide-react";
+import { Check, FolderOpen, Maximize2, Trash2 } from "lucide-react";
 import {
   Badge,
   Button,
@@ -13,6 +13,7 @@ import {
   DialogTitle,
   cn,
 } from "@fixup/ui";
+import { openImageViewer } from "./image-viewer";
 
 /**
  * 라이브러리에서 그림을 불러오는 버튼.
@@ -102,6 +103,15 @@ export function LibraryPickerButton({
                         ) : null}
                       </span>
                       <span className="block truncate px-2 py-2 text-xs">{image.title ?? "제목 없음"}</span>
+                    </button>
+                    {/* 그림 자체는 고르기에 쓰이므로 확대는 따로 연다. */}
+                    <button
+                      type="button"
+                      aria-label={`${image.title ?? "참고 이미지"} 크게 보기`}
+                      onClick={() => openImageViewer(image.url ?? "", image.title ?? "참고 이미지")}
+                      className="absolute left-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-foreground"
+                    >
+                      <Maximize2 className="size-3.5" />
                     </button>
                     {onDelete ? (
                       <button

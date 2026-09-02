@@ -502,10 +502,12 @@ export function CharacterStudio() {
               <ChevronLeft size={22} />
             </button>
             {/* eslint-disable-next-line @next/next/no-img-element */}
+            {/* 여기는 화면에 맞춘 크기다. 한 번 더 누르면 원본 크기로 본다. */}
             <img
               alt={current.label}
               src={current.src}
-              className="max-h-full max-w-full rounded-md object-contain shadow-[var(--shadow-elevate)]"
+              data-zoomable
+              className="max-h-full max-w-full cursor-zoom-in rounded-md object-contain shadow-[var(--shadow-elevate)]"
             />
             <button
               type="button"

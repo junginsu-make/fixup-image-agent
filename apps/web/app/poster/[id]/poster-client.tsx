@@ -344,7 +344,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                   >
                     {image.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={image.url} alt={`변형 ${image.variantIndex + 1}`} className="w-full" />
+                      <img src={image.url} alt={`변형 ${image.variantIndex + 1}`} data-zoomable className="w-full cursor-zoom-in" />
                     ) : (
                       <div className="grid aspect-[2/3] place-items-center bg-muted text-xs text-muted-foreground">
                         미리보기 없음

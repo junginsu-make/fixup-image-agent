@@ -464,10 +464,12 @@ export function SectionGallery({
               <ChevronLeft size={22} />
             </button>
 
+            {/* 여기는 화면에 맞춘 크기다. 한 번 더 누르면 원본 크기로 본다. */}
             <img
               alt={getName(zoomSection)}
               src={zoomSection.generatedImage}
-              className="max-h-full max-w-full rounded-md object-contain shadow-[var(--shadow-elevate)]"
+              data-zoomable
+              className="max-h-full max-w-full cursor-zoom-in rounded-md object-contain shadow-[var(--shadow-elevate)]"
             />
 
             <button

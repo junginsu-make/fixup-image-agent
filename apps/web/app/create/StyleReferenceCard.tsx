@@ -59,8 +59,9 @@ export function StyleReferenceCard({
         <img
           alt={`${reference.name} 레퍼런스`}
           src={`data:${reference.mimeType};base64,${reference.imageBase64}`}
+          data-zoomable
           className={cn(
-            "h-28 w-auto flex-none rounded-md object-cover shadow-[var(--shadow-ring)] transition-opacity",
+            "h-28 w-auto flex-none cursor-zoom-in rounded-md object-cover shadow-[var(--shadow-ring)] transition-opacity",
             enabled ? "" : "opacity-40 grayscale",
           )}
         />

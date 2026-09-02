@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlus, Maximize2, X } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
 import { LibraryPickerButton } from "../../_components/library-picker";
+import { openImageViewer } from "../../_components/image-viewer";
 
 /**
  * 포스터 레퍼런스 고르기.
@@ -158,6 +159,14 @@ export function ReferencePicker({
                   {label[role]}
                 </span>
               </button>
+                <button
+                  type="button"
+                  aria-label={`${reference.title ?? "참고 이미지"} 크게 보기`}
+                  onClick={() => openImageViewer(reference.url ?? "", reference.title ?? "참고 이미지")}
+                  className="absolute left-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-foreground"
+                >
+                  <Maximize2 className="size-3.5" />
+                </button>
                 <button
                   type="button"
                   aria-label={`${reference.title ?? "참고 이미지"} 빼기`}

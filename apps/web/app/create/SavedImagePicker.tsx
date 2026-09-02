@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FolderOpen, Loader2, X } from "lucide-react";
+import { FolderOpen, Loader2, Maximize2, X } from "lucide-react";
 import { Badge, Button, cn } from "@fixup/ui";
+import { openImageViewer } from "../_components/image-viewer";
 import { toSavedLibraryImages } from "./saved-image-picker";
 
 /**
@@ -188,8 +189,17 @@ export function SavedImagePicker({
       ) : (
         <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
           {images.map((image) => (
+            <div key={image.id} className="relative">
+            {/* 그림 자체는 고르기에 쓰이므로 확대는 돋보기로 따로 연다. */}
             <button
-              key={image.id}
+              type="button"
+              aria-label={`${image.name} 크게 보기`}
+              onClick={() => openImageViewer(image.url, image.name)}
+              className="absolute right-1 top-1 z-10 grid h-6 w-6 place-items-center rounded bg-background/85 text-subtle-foreground backdrop-blur hover:text-foreground"
+            >
+              <Maximize2 className="h-3 w-3" />
+            </button>
+            <button
               type="button"
               disabled={Boolean(pickingId)}
               onClick={() => void handlePick(image)}
@@ -219,6 +229,7 @@ export function SavedImagePicker({
                 {image.name}
               </span>
             </button>
+            </div>
           ))}
         </div>
       )}

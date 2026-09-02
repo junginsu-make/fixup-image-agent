@@ -46,7 +46,14 @@ export function CandidateDetail({ candidate, onClose, onStatus }: {
             </div>
             {candidate.thumbnailUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={candidate.thumbnailUrl} alt="" className="max-h-64 w-full rounded-lg border object-cover" />
+              // object-cover 는 위아래를 잘라 낸다. 무엇이 찍혔는지 보려고
+              // 여는 그림을 잘라 놓으면 안 된다.
+              <img
+                src={candidate.thumbnailUrl}
+                alt={candidate.title}
+                data-zoomable
+                className="max-h-80 w-full cursor-zoom-in rounded-lg border bg-muted object-contain"
+              />
             ) : null}
             {candidate.summary ? <section><h3 className="text-sm font-bold">요약</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{candidate.summary}</p></section> : null}
             {candidate.keyPoints?.length ? (

@@ -199,7 +199,7 @@ export function AttachmentPicker({
               </button>
               <div className="aspect-square overflow-hidden rounded-t-xl bg-muted">{url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={url} alt={title} className="h-full w-full object-cover" />
+                <img src={url} alt={title} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
               ) : null}</div>
               <p className="truncate p-3 text-left text-sm font-medium">{title}</p>
               <CardContent className="grid gap-3 border-t p-3">

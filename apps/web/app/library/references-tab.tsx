@@ -220,7 +220,7 @@ export function ReferencesTab() {
                 <Card key={image.id} className="overflow-hidden">
                   <div className="aspect-square bg-muted">{image.signedUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} className="h-full w-full object-cover" />
+                    <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                   ) : null}</div>
                   <CardContent className="grid gap-2 p-3">
                     <p className="truncate text-sm font-medium">{image.title || "제목 없음"}</p>
@@ -296,7 +296,7 @@ export function ReferencesTab() {
                     <span className="block aspect-[4/5] overflow-hidden rounded-lg border bg-muted">
                       {image?.signedUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} className="h-full w-full object-cover" />
+                        <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                       ) : (
                         <span className="grid h-full place-items-center text-xs text-muted-foreground">이미지를 찾을 수 없습니다</span>
                       )}

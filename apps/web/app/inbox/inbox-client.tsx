@@ -284,7 +284,7 @@ export function InboxClient() {
                         <td className={CELL}>
                           {candidate.thumbnailUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={candidate.thumbnailUrl} alt={`${candidate.title} 첨부 이미지`} className="h-14 w-24 rounded-md border object-cover" />
+                            <img src={candidate.thumbnailUrl} alt={`${candidate.title} 첨부 이미지`} data-zoomable className="h-14 w-24 cursor-zoom-in rounded-md border object-cover" />
                           ) : <span className="text-subtle-foreground">—</span>}
                         </td>
                         <td className={CELL}>

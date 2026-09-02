@@ -45,7 +45,8 @@ export function KeyVisualGate({ previewUrl, isBusy, onApprove, onRegenerate, onB
           <img
             src={previewUrl}
             alt="대표 이미지 미리보기"
-            className="max-h-[60vh] w-auto max-w-full rounded-md object-contain"
+            data-zoomable
+            className="max-h-[60vh] w-auto max-w-full cursor-zoom-in rounded-md object-contain"
           />
         ) : (
           <div className="grid h-64 place-items-center text-sm text-muted-foreground">

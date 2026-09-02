@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { ThemeProvider, Toaster } from "@fixup/ui";
+import { ImageViewerHost } from "./_components/image-viewer";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,6 +28,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <ThemeProvider>
           {children}
+          {/* 어느 화면에서 눌러도 같은 창이 뜨도록 한 곳에만 둔다. */}
+          <ImageViewerHost />
           <Toaster />
         </ThemeProvider>
       </body>

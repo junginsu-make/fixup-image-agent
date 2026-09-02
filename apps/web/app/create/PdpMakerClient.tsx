@@ -899,7 +899,8 @@ export function PdpMakerClient() {
                   <div className={previewFrameClass}>
                     <img
                       alt={preparedImage.fileName}
-                      className="h-full w-full object-contain"
+                      data-zoomable
+                      className="h-full w-full cursor-zoom-in object-contain"
                       src={preparedImage.previewUrl}
                     />
                   </div>
@@ -1050,7 +1051,8 @@ export function PdpMakerClient() {
                   <div className={previewFrameClass}>
                     <img
                       alt={modelImage.fileName}
-                      className="h-full w-full object-contain"
+                      data-zoomable
+                      className="h-full w-full cursor-zoom-in object-contain"
                       src={modelImage.previewUrl}
                     />
                   </div>
@@ -1115,7 +1117,8 @@ export function PdpMakerClient() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       alt={`${styleReference.name} 레퍼런스`}
-                      className="max-h-24 max-w-24 object-contain"
+                      data-zoomable
+                      className="max-h-24 max-w-24 cursor-zoom-in object-contain"
                       src={`data:${styleReference.mimeType};base64,${styleReference.imageBase64}`}
                     />
                   </div>

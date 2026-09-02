@@ -90,7 +90,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate }: {
               <ReviewStatus card={card} />
             </CardHeader>
             <CardContent className="grid gap-4">
-              {card.assetUrl ? <Image src={card.assetUrl} alt={`${card.index}번 카드 결과`} width={1088} height={1360} unoptimized className="aspect-[4/5] w-full rounded-lg bg-muted object-contain" /> : <div className="grid aspect-[4/5] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
+              {card.assetUrl ? <Image src={card.assetUrl} alt={`${card.index}번 카드 결과`} width={1088} height={1360} unoptimized data-zoomable className="aspect-[4/5] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
               <div>
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}
