@@ -4,8 +4,13 @@ import { fileURLToPath } from "node:url";
 const webRoot = path.dirname(fileURLToPath(import.meta.url));
 const buildStandalone = process.env.NEXT_STANDALONE === "1";
 
+// dev 서버가 떠 있는데 build 를 돌리면 프로덕션 빌드가 .next 를 덮어써
+// dev 청크가 사라진다(정적 파일 404). 빌드는 다른 폴더에 쌓는다.
+const distDir = process.env.NEXT_DIST_DIR;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...(distDir ? { distDir } : {}),
   ...(buildStandalone
     ? {
         output: "standalone",

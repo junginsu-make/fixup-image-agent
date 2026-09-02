@@ -17,3 +17,4 @@ env*.md
 .playwright-mcp/
 .remember/tmp/
 frontend/
+.next-build/
