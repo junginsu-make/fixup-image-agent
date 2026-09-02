@@ -32,10 +32,31 @@ describe("첨부 이미지 설명", () => {
     expect(block).toContain("body");
   });
 
-  it("따라 만들 카드뉴스는 내용만 바꾸라고 한다", () => {
+  it("따라 만들 카드뉴스는 꼴만 가져온다", () => {
     const block = buildAttachmentBlock([images[0]!]);
-    expect(block).toMatch(/replace only the content|내용만/i);
-    expect(block).not.toContain("specific illustrations");
+    expect(block).toMatch(/layout|typography/i);
+    expect(block).toMatch(/3D|photographic|illustrated/i);
+  });
+
+  it("레퍼런스 안의 것은 가져오지 말라고 못 박는다", () => {
+    // 3D 파란 배경과 서체는 지키되, 레퍼런스에 있던 아이콘·제품·글자는
+    // 그대로 나오면 안 된다. 안 적으면 모델이 통째로 베낀다.
+    const block = buildAttachmentBlock([images[0]!]);
+    expect(block).toMatch(/Do NOT copy/i);
+    expect(block).toMatch(/icons|illustrations/i);
+  });
+
+  it("아이콘은 같은 양식으로 새로 그리라고 한다", () => {
+    // 지우기만 하면 아이콘 없는 허전한 카드가 나온다. 새로 그리라고 해야 한다.
+    const block = buildAttachmentBlock([images[0]!]);
+    expect(block).toMatch(/Draw new|same style/i);
+  });
+
+  it("색을 어디에 쓰는지까지 말한다", () => {
+    // 실측(2026-07-30): colour palette 라고만 하면 모델이 색을 글자색으로만
+    // 쓰고 면으로는 안 쓴다.
+    const block = buildAttachmentBlock([images[0]!]);
+    expect(block).toMatch(/how each colour is used|fill surfaces/i);
   });
 
   it("그대로 넣을 것은 정체성을 지키되 각도는 자유라고 한다", () => {

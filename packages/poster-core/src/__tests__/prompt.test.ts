@@ -24,6 +24,24 @@ const images = [
 
 const size = { width: 1024, height: 1536 };
 
+describe("레퍼런스는 꼴만 가져온다", () => {
+  const only = buildPosterPrompt({ slots, images: [{ kind: "style_reference" }], size });
+
+  it("레퍼런스 안의 것은 가져오지 말라고 못 박는다", () => {
+    // 안 적으면 모델이 레퍼런스의 아이콘·제품·글자를 통째로 베낀다.
+    expect(only).toMatch(/Do NOT copy/i);
+    expect(only).toMatch(/icons|illustrations/i);
+  });
+
+  it("아이콘은 같은 양식으로 새로 그리라고 한다", () => {
+    expect(only).toMatch(/Draw new|same style/i);
+  });
+
+  it("색을 어디에 쓰는지까지 말한다", () => {
+    expect(only).toMatch(/how each colour is used|fill surfaces/i);
+  });
+});
+
 describe("지키는 대상이 사람인지 물건인지 가른다", () => {
   // 실측 정책(pdp.reference-policy.ts): 얼굴이 둘이면 모델이 절충해 제3의
   // 인물을 만든다. 물건과 사람을 같은 문장으로 지키라고 하면 그 경고를 할

@@ -40,11 +40,22 @@ export function buildAttachmentBlock(images: Attachment[]): string {
   images.forEach((image, offset) => {
     const number = offset + 1;
     if (image.kind === "style_reference") {
+      // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
+      //
+      // 전에는 "as closely as possible, replace only the content" 라고만 했다.
+      // 그러면 레퍼런스의 아이콘이 '꼴'인지 '내용'인지 모델이 알 수 없어,
+      // 있던 아이콘을 그대로 베끼거나 반대로 아이콘 없는 허전한 카드가 나왔다.
+      // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
       lines.push(
         `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. ` +
-        "Reproduce its layout, typography, color system, texture, and rendering style " +
-        "(photographic / illustrated / 3D) as closely as possible, and replace only the content " +
-        "with the text and scene described below.",
+        "Imitate its design language only:",
+        "  · layout and composition, typography (weight, width, character), text treatment, " +
+        "texture and rendering style (photographic / illustrated / 3D)",
+        "  · how each colour is used — which colours fill surfaces and bands, which are only type, " +
+        "which are accents. Reproduce that usage, not just the colours themselves.",
+        "Do NOT copy anything else from it — not its product, not its people, not its icons or " +
+        "illustrations, not its text content. Draw new icons and imagery in the same style so they " +
+        "match the text of THIS card.",
       );
     } else if (image.kind === "keep_identity") {
       lines.push(

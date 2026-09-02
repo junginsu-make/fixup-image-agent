@@ -52,9 +52,18 @@ function attachmentLines(images: PosterPromptImage[]): string[] {
           + "remain recognisably the same object.");
       return;
     }
+    // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
+    // "as closely as possible" 만 쓰면 레퍼런스의 아이콘·제품이 그대로 나온다.
+    // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
     lines.push(
-      `Image ${number} is a POSTER REFERENCE. Reproduce its layout, typography, color system, texture and `
-      + "rendering style as closely as possible, and replace only the content with what is described below.",
+      `Image ${number} is a POSTER REFERENCE. Imitate its design language only:`,
+      "  · layout and composition, typography (weight, width, character), text treatment, texture "
+      + "and rendering style (photographic / illustrated / 3D)",
+      "  · how each colour is used — which colours fill surfaces and bands, which are only type, "
+      + "which are accents. Reproduce that usage, not just the colours themselves.",
+      "Do NOT copy anything else from it — not its product, not its people, not its icons or "
+      + "illustrations, not its text content. Draw new icons and imagery in the same style so they "
+      + "match what is described below.",
     );
   });
   if (images.some((image) => image.kind === "preserved")) {
