@@ -3,9 +3,8 @@
 import * as React from "react";
 import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
-import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import type { ReferencePurpose, ReferenceSetRecord } from "../api/reference-sets/schema";
-import { persistReferenceImage, type ReferenceImageRow } from "./reference-upload";
+import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 
 type ReferenceImageView = ReferenceImageRow & { signedUrl: string | null };
@@ -17,36 +16,6 @@ const PURPOSE_LABEL: Record<ReferencePurpose, string> = {
   poster: "포스터",
   both: "공용",
 };
-
-type ReferenceImageDbRow = {
-  id: string;
-  user_id: string;
-  storage_path: string;
-  title: string | null;
-  purpose: ReferencePurpose;
-  width: number | null;
-  height: number | null;
-  created_at: string;
-};
-
-function toReferenceImage(row: ReferenceImageDbRow): ReferenceImageRow {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    storagePath: row.storage_path,
-    title: row.title,
-    purpose: row.purpose,
-    width: row.width,
-    height: row.height,
-    createdAt: row.created_at,
-  };
-}
-
-async function detectLocalStore(): Promise<boolean> {
-  const response = await fetch("/api/local-store", { cache: "no-store" });
-  const payload = await response.json() as { ok?: boolean; enabled?: boolean };
-  return Boolean(response.ok && payload.ok && payload.enabled);
-}
 
 export function ReferencesTab() {
   const [images, setImages] = React.useState<ReferenceImageView[]>([]);
@@ -64,26 +33,11 @@ export function ReferencesTab() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const local = await detectLocalStore();
-      if (local) {
-        const response = await fetch("/api/reference-images", { cache: "no-store" });
-        const payload = await response.json() as { ok?: boolean; images?: ReferenceImageView[]; message?: string };
-        if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 불러오지 못했습니다.");
-        setImages(payload.images ?? []);
-      } else {
-        // Supabase 경로는 기존 동작을 그대로 유지한다.
-        const supabase = createSupabaseBrowserClient();
-        const imageResult = await supabase.from("reference_images")
-          .select("id,user_id,storage_path,title,purpose,width,height,created_at")
-          .order("created_at", { ascending: false });
-        if (imageResult.error) throw new Error(imageResult.error.message);
-        const rows = (imageResult.data ?? []) as ReferenceImageDbRow[];
-        const signed = rows.length
-          ? await supabase.storage.from("library").createSignedUrls(rows.map((row) => row.storage_path), 60 * 60)
-          : { data: [], error: null };
-        if (signed.error) throw new Error(signed.error.message);
-        setImages(rows.map((row, index) => ({ ...toReferenceImage(row), signedUrl: signed.data?.[index]?.signedUrl ?? null })));
-      }
+      // 로컬이든 운영이든 같은 길로 읽는다. 서버가 모드를 가른다.
+      const imagesResponse = await fetch("/api/reference-images", { cache: "no-store" });
+      const imagesPayload = await imagesResponse.json() as { ok?: boolean; images?: ReferenceImageView[]; message?: string };
+      if (!imagesResponse.ok || !imagesPayload.ok) throw new Error(imagesPayload.message ?? "참고 이미지를 불러오지 못했습니다.");
+      setImages(imagesPayload.images ?? []);
 
       const response = await fetch("/api/reference-sets", { cache: "no-store" });
       const payload = await response.json() as { ok?: boolean; sets?: ReferenceSetRecord[]; message?: string };
@@ -104,52 +58,16 @@ export function ReferencesTab() {
     setUploading(true);
     setMessage("");
     try {
-      const local = await detectLocalStore();
-      if (local) {
-        for (const file of Array.from(files)) {
-          const form = new FormData();
-          form.set("id", crypto.randomUUID());
-          form.set("title", file.name.replace(/\.[^.]+$/, ""));
-          form.set("purpose", purpose === "all" ? "cardnews" : purpose);
-          form.set("file", file);
-          const response = await fetch("/api/reference-images", { method: "POST", body: form });
-          const payload = await response.json() as { ok?: boolean; message?: string };
-          if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 올리지 못했습니다.");
-        }
-      } else {
-        // Supabase 업로드 순서와 보상 삭제는 기존 구현을 그대로 쓴다.
-        const supabase = createSupabaseBrowserClient();
-        for (const file of Array.from(files)) {
-          await persistReferenceImage(
-            {
-              file,
-              title: file.name.replace(/\.[^.]+$/, ""),
-              purpose: purpose === "all" ? "cardnews" : purpose,
-            },
-            {
-              createId: () => crypto.randomUUID(),
-              getUserId: async () => {
-                const { data, error } = await supabase.auth.getUser();
-                if (error || !data.user) throw new Error(error?.message ?? "로그인이 필요합니다.");
-                return data.user.id;
-              },
-              upload: async (path, selectedFile) => {
-                const { error } = await supabase.storage.from("library").upload(path, selectedFile, { contentType: selectedFile.type, upsert: false });
-                if (error) throw new Error(error.message);
-              },
-              insert: async (row) => {
-                const { data, error } = await supabase.from("reference_images").insert(row)
-                  .select("id,user_id,storage_path,title,purpose,width,height,created_at").single();
-                if (error) throw new Error(error.message);
-                return toReferenceImage(data as ReferenceImageDbRow);
-              },
-              remove: async (paths) => {
-                const { error } = await supabase.storage.from("library").remove(paths);
-                if (error) throw new Error(error.message);
-              },
-            },
-          );
-        }
+      // 로컬이든 운영이든 같은 길로 올린다. 서버가 모드를 가른다.
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.set("id", crypto.randomUUID());
+        form.set("title", file.name.replace(/\.[^.]+$/, ""));
+        form.set("purpose", purpose === "all" ? "cardnews" : purpose);
+        form.set("file", file);
+        const response = await fetch("/api/reference-images", { method: "POST", body: form });
+        const payload = await response.json() as { ok?: boolean; message?: string };
+        if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 올리지 못했습니다.");
       }
       setMessage(`${files.length}장을 올렸습니다.`);
       await load();

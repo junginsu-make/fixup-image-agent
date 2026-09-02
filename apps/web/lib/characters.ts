@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   CHARACTER_ANGLES,
   buildCandidatePrompt,
@@ -11,6 +12,8 @@ import {
 } from "@fixup/pdp-core";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { saveLibraryItem } from "./server-library";
+import { characterReferenceEntries } from "./character-library";
+import { saveReferenceImage } from "./reference-images";
 
 /**
  * 상세페이지용 캐릭터.
@@ -219,6 +222,26 @@ export async function createCharacter(input: {
       });
     } catch (libraryError) {
       console.warn("[character] 라이브러리 저장 실패, 캐릭터는 유지합니다", libraryError);
+    }
+
+    // 참고 이미지 창고에도 네 각도를 다 넣는다. 여기 들어가야 카드뉴스·포스터·
+    // 상세페이지가 전부 쓴다. 정면 한 장만 넣으면 옆모습이 필요한 장면에서
+    // 다시 만들게 되고, 그러면 같은 인물로 안 보인다 — 네 각도로 만든 이유가
+    // 사라진다. 실패해도 캐릭터는 살린다.
+    try {
+      for (const entry of characterReferenceEntries(input.name, views)) {
+        await saveReferenceImage({
+          userId: input.userId,
+          id: randomUUID(),
+          title: entry.title,
+          // 용도로 거르지 않는다. 어느 도구에서든 인물을 지킬 때 쓴다.
+          purpose: "both",
+          bytes: Buffer.from(entry.base64, "base64"),
+          mimeType: entry.mimeType,
+        });
+      }
+    } catch (referenceError) {
+      console.warn("[character] 참고 이미지 저장 실패, 캐릭터는 유지합니다", referenceError);
     }
 
     return { ok: true as const, id: character.id as string, angleCount: rows.length };

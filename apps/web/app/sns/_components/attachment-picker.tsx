@@ -5,20 +5,9 @@ import { AlertTriangle, ImagePlus, Loader2, X } from "lucide-react";
 import { groupAttachments, modelById, referenceWarningsForRole, validateAttachments, type Attachment, type AttachmentKind, type StyleRole } from "@fixup/sns-core";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { LibraryPickerButton } from "../../_components/library-picker";
-import { createSupabaseBrowserClient } from "../../../lib/supabase/browser";
-import { persistReferenceImage, type ReferenceImageRow } from "../../library/reference-upload";
+import type { ReferenceImageRow } from "../../library/reference-upload";
 
 type ImageView = ReferenceImageRow & { signedUrl: string | null };
-type ReferenceImageDbRow = {
-  id: string; user_id: string; storage_path: string; title: string | null;
-  purpose: ReferenceImageRow["purpose"]; width: number | null; height: number | null; created_at: string;
-};
-
-async function localStoreEnabled(): Promise<boolean> {
-  const response = await fetch("/api/local-store", { cache: "no-store" });
-  const payload = await response.json() as { ok?: boolean; enabled?: boolean };
-  return Boolean(response.ok && payload.ok && payload.enabled);
-}
 
 export function AttachmentPicker({
   attachments,
@@ -40,26 +29,11 @@ export function AttachmentPicker({
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      if (await localStoreEnabled()) {
-        const response = await fetch("/api/reference-images", { cache: "no-store" });
-        const payload = await response.json() as { ok?: boolean; images?: ImageView[]; message?: string };
-        if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 불러오지 못했습니다.");
-        setImages(payload.images ?? []);
-      } else {
-        const supabase = createSupabaseBrowserClient();
-        const result = await supabase.from("reference_images")
-          .select("id,user_id,storage_path,title,purpose,width,height,created_at")
-          .order("created_at", { ascending: false });
-        if (result.error) throw new Error(result.error.message);
-        const rows = (result.data ?? []) as ReferenceImageDbRow[];
-        const signed = rows.length ? await supabase.storage.from("library").createSignedUrls(rows.map((row) => row.storage_path), 3600) : { data: [], error: null };
-        if (signed.error) throw new Error(signed.error.message);
-        setImages(rows.map((row, index) => ({
-          id: row.id, userId: row.user_id, storagePath: row.storage_path,
-          title: row.title, purpose: row.purpose, width: row.width, height: row.height,
-          createdAt: row.created_at, signedUrl: signed.data?.[index]?.signedUrl ?? null,
-        })) as ImageView[]);
-      }
+      // 로컬이든 운영이든 같은 길로 읽는다. 서버가 모드를 가른다.
+      const response = await fetch("/api/reference-images", { cache: "no-store" });
+      const payload = await response.json() as { ok?: boolean; images?: ImageView[]; message?: string };
+      if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 불러오지 못했습니다.");
+      setImages(payload.images ?? []);
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다.");
@@ -74,41 +48,15 @@ export function AttachmentPicker({
     if (!files?.length) return;
     setUploading(true);
     try {
-      const local = await localStoreEnabled();
       for (const file of Array.from(files)) {
-        if (local) {
-          const form = new FormData();
-          form.set("id", crypto.randomUUID());
-          form.set("title", file.name.replace(/\.[^.]+$/, ""));
-          form.set("purpose", "cardnews");
-          form.set("file", file);
-          const response = await fetch("/api/reference-images", { method: "POST", body: form });
-          const payload = await response.json() as { ok?: boolean; message?: string };
-          if (!response.ok || !payload.ok) throw new Error(payload.message ?? "업로드하지 못했습니다.");
-        } else {
-          const supabase = createSupabaseBrowserClient();
-          await persistReferenceImage({ file, title: file.name.replace(/\.[^.]+$/, ""), purpose: "cardnews" }, {
-            createId: () => crypto.randomUUID(),
-            getUserId: async () => {
-              const result = await supabase.auth.getUser();
-              if (result.error || !result.data.user) throw new Error(result.error?.message ?? "로그인이 필요합니다.");
-              return result.data.user.id;
-            },
-            upload: async (path, selected) => {
-              const result = await supabase.storage.from("library").upload(path, selected, { contentType: selected.type, upsert: false });
-              if (result.error) throw new Error(result.error.message);
-            },
-            insert: async (row) => {
-              const result = await supabase.from("reference_images").insert(row).select("id,user_id,storage_path,title,purpose,width,height,created_at").single();
-              if (result.error) throw new Error(result.error.message);
-              return { id: result.data.id, userId: result.data.user_id, storagePath: result.data.storage_path, title: result.data.title, purpose: result.data.purpose, width: result.data.width, height: result.data.height, createdAt: result.data.created_at };
-            },
-            remove: async (paths) => {
-              const result = await supabase.storage.from("library").remove(paths);
-              if (result.error) throw new Error(result.error.message);
-            },
-          });
-        }
+        const form = new FormData();
+        form.set("id", crypto.randomUUID());
+        form.set("title", file.name.replace(/\.[^.]+$/, ""));
+        form.set("purpose", "cardnews");
+        form.set("file", file);
+        const response = await fetch("/api/reference-images", { method: "POST", body: form });
+        const payload = await response.json() as { ok?: boolean; message?: string };
+        if (!response.ok || !payload.ok) throw new Error(payload.message ?? "업로드하지 못했습니다.");
       }
       await load();
     } catch (error) {
