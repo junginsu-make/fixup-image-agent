@@ -21,7 +21,7 @@ export async function POST(_request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "생성 흐름을 찾을 수 없습니다." }, { status: 404 });
-      if (!hasActiveQueuedGeneration(project.data.flow)) return Response.json({ ok: true, project });
+      if (!hasActiveQueuedGeneration(project.data.flow)) return Response.json({ ok: true, project, active: false });
       const providers = createSnsGenerationProviders();
       project = await refreshProjectAssetUrls(project);
       const dependencies = await createQueuedGenerationDependencies({
@@ -35,7 +35,7 @@ export async function POST(_request: Request, context: Context) {
       };
       const flow = await pollQueuedFlow(project, project.data.flow!, dependencies);
       const saved = await store.save(id, flow, hasActiveQueuedGeneration(flow) ? "generating" : "ready");
-      return Response.json({ ok: true, project: saved });
+      return Response.json({ ok: true, project: saved, active: hasActiveQueuedGeneration(flow) });
     });
   } catch (error) {
     const status = error instanceof SnsProviderConfigurationError ? error.status : 502;

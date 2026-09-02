@@ -7,6 +7,7 @@ import {
   hasActiveQueuedGeneration,
   pollQueuedFlow,
   startQueuedFlow,
+  stopQueuedGeneration,
   type QueuedGenerationDependencies,
 } from "../sns/queued-flow";
 
@@ -137,5 +138,33 @@ describe("비동기 fal 큐 폴링", () => {
     expect(polled.cards[0]!.error).toContain("30분");
     expect(polled.cards[0]!.error).toContain("fal-1");
     expect(polled.cards[1]!.status).toBe("generating");
+  });
+});
+
+describe("사람이 중지했을 때", () => {
+  it("생성 중으로 보지 않는다", async () => {
+    const started = await startQueuedFlow(project(), flow(), dependencies([]), { now: "2026-09-01T00:00:00.000Z" });
+    expect(hasActiveQueuedGeneration(started)).toBe(true);
+
+    const stopped = stopQueuedGeneration(started, "2026-09-01T00:05:00.000Z");
+    expect(hasActiveQueuedGeneration(stopped)).toBe(false);
+    expect(stopped.generation?.completedAt).toBe("2026-09-01T00:05:00.000Z");
+  });
+
+  it("아직 못 받은 카드에만 이유를 남긴다", async () => {
+    const started = await startQueuedFlow(project(), flow(), dependencies([]), { now: "2026-09-01T00:00:00.000Z" });
+    started.cards[0]!.status = "done";
+
+    const stopped = stopQueuedGeneration(started, "2026-09-01T00:05:00.000Z");
+    expect(stopped.cards[0]!.status).toBe("done");
+    expect(stopped.cards[0]!.error).toBeUndefined();
+    expect(stopped.cards[1]!.status).toBe("failed");
+    expect(stopped.cards[1]!.error).toContain("중지");
+  });
+
+  it("원래 흐름을 건드리지 않는다", async () => {
+    const started = await startQueuedFlow(project(), flow(), dependencies([]), { now: "2026-09-01T00:00:00.000Z" });
+    stopQueuedGeneration(started, "2026-09-01T00:05:00.000Z");
+    expect(hasActiveQueuedGeneration(started)).toBe(true);
   });
 });

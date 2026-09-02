@@ -8,6 +8,8 @@ import type { SnsProjectRecord } from "../../api/sns/projects/project-service";
 import { CopyReview } from "./copy-review";
 import { ResultBoard } from "./result-board";
 import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/sns/queued-flow";
+import { jobId } from "../../../lib/running-jobs";
+import { useRunningJobs } from "../../_components/running-jobs";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -47,6 +49,32 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const generationActive = hasActiveQueuedGeneration(project?.data.flow);
+
+  /**
+   * 사이드바에 등록한다.
+   *
+   * 이 화면을 떠나도 셸이 대신 결과를 받아 오고, 무엇이 돌고 있는지 어디서든
+   * 보인다. 이미 만드는 중인 프로젝트를 열었을 때도 같은 자리에 붙는다.
+   */
+  const { start, finish } = useRunningJobs();
+  const startedAt = project?.data.flow?.generation?.startedAt;
+  const title = project?.title;
+  React.useEffect(() => {
+    const id = jobId("sns", projectId);
+    if (!generationActive) {
+      finish(id);
+      return;
+    }
+    start({
+      id,
+      tool: "sns",
+      title: title ?? "카드뉴스",
+      href: `/sns/${projectId}`,
+      startedAt: startedAt ? Date.parse(startedAt) : Date.now(),
+      poll: { url: `/api/sns/projects/${projectId}/status` },
+    });
+  }, [generationActive, projectId, startedAt, title, start, finish]);
+
   React.useEffect(() => {
     if (!generationActive) return;
     let stopped = false;

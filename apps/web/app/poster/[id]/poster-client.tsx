@@ -7,6 +7,8 @@ import {
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
 import { SaveToLibrary } from "../../_components/save-to-library";
+import { useRunningJobs } from "../../_components/running-jobs";
+import { jobId } from "../../../lib/running-jobs";
 
 interface PosterImage {
   id: string;
@@ -48,6 +50,14 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
   const [editText, setEditText] = React.useState("");
+  const { start, finish } = useRunningJobs();
+
+  // 화면을 떠나면 여기서 물어보기를 그만둔다. 셸이 이어받으므로 결과는 안 놓친다.
+  const alive = React.useRef(true);
+  React.useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
   function setField(field: TextSlot, value: string) {
     setSlots((current: PosterSlots) => ({ ...current, [field]: value }));
@@ -170,22 +180,37 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   async function pollUntilDone(submission: {
     requestRowId: string; falRequestId: string; endpoint: string; estimatedUsd?: number;
   }, variants: number) {
+    const body = {
+      requestRowId: submission.requestRowId,
+      falRequestId: submission.falRequestId,
+      endpoint: submission.endpoint,
+      unitCostUsd: (submission.estimatedUsd ?? 0) / variants,
+    };
+    // 다른 화면으로 가도 셸이 대신 받아 온다. 어떤 요청인지 함께 넘긴다.
+    const id = jobId("poster", project.id);
+    start({
+      id, tool: "poster", title: project.title, href: `/poster/${project.id}`,
+      startedAt: Date.now(),
+      poll: { url: `/api/poster/projects/${project.id}/status`, body },
+    });
+    // 화면을 떠나 중간에 그만둔 것이라면 목록에 남겨 둔다. 셸이 이어받는다.
+    if (await collect(body)) finish(id);
+  }
+
+  /** 이 화면에 있는 동안에는 화면이 직접 물어본다. 떠나면 셸이 이어받는다. */
+  async function collect(body: Record<string, unknown>): Promise<boolean> {
     for (;;) {
+      if (!alive.current) return false;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
       const poll = await (await fetch(`/api/poster/projects/${project.id}/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          requestRowId: submission.requestRowId,
-          falRequestId: submission.falRequestId,
-          endpoint: submission.endpoint,
-          unitCostUsd: (submission.estimatedUsd ?? 0) / variants,
-        }),
+        body: JSON.stringify(body),
       })).json();
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
       if (poll.done) {
         setList(poll.images);
-        return;
+        return true;
       }
     }
   }

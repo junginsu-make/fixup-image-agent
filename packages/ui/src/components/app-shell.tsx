@@ -73,6 +73,13 @@ interface AppShellProps {
   /** 상단바 우측에 주입할 앱 전용 액션(예: 이용 안내 버튼). */
   actions?: React.ReactNode;
   /**
+   * 사이드바 맨 아래, 계정 메뉴 위에 놓을 것(예: 만드는 중 목록).
+   *
+   * 셸에 두는 이유는 자리 때문만이 아니다. 셸은 화면을 옮겨도 다시 만들어지지
+   * 않으므로, 화면이 바뀌어도 계속 돌아야 하는 것이 여기서 살 수 있다.
+   */
+  sidebarFooter?: React.ReactNode;
+  /**
    * 관리자 메뉴 노출 여부. 화면을 감추는 것은 안내일 뿐이고, 실제 차단은
    * `/admin` 의 `requireAdmin()` 이 서버에서 한다.
    */
@@ -123,7 +130,7 @@ function NavItem({
   );
 }
 
-export function AppShell({ children, actions, isAdmin = false }: AppShellProps) {
+export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: AppShellProps) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -190,10 +197,13 @@ export function AppShell({ children, actions, isAdmin = false }: AppShellProps) 
             </div>
           ))}
 
-          <div className="mt-auto grid gap-0.5">
-            {visibleBottomItems.map((item) => (
-              <NavItem key={item.href} {...item} active={isActive(item.href)} />
-            ))}
+          <div className="mt-auto grid gap-3">
+            {sidebarFooter}
+            <div className="grid gap-0.5">
+              {visibleBottomItems.map((item) => (
+                <NavItem key={item.href} {...item} active={isActive(item.href)} />
+              ))}
+            </div>
           </div>
         </aside>
 

@@ -266,6 +266,24 @@ export async function pollQueuedFlow(
   return next;
 }
 
+/**
+ * 사람이 중지를 눌렀다.
+ *
+ * fal 에 이미 보낸 요청은 취소하지 못한다. 우리가 그만두는 것은 **결과를
+ * 받아 오는 일**뿐이고, 보낸 요청의 비용은 그대로 나간다. 그러니 중지는
+ * 되돌리기가 아니라 멈춤이다 — 받아 둔 카드는 그대로 남는다.
+ */
+export function stopQueuedGeneration(flow: SnsFlowState, stoppedAt: string): SnsFlowState {
+  const next = structuredClone(flow);
+  next.cards = next.cards.map((card) => (
+    card.status === "pending" || card.status === "generating"
+      ? { ...card, status: "failed" as const, error: "사람이 중지했습니다. 필요하면 이 카드만 다시 만드세요." }
+      : card
+  ));
+  if (next.generation) next.generation = { ...next.generation, completedAt: stoppedAt };
+  return next;
+}
+
 export function hasActiveQueuedGeneration(flow?: SnsFlowState): boolean {
   if (!flow?.generation || flow.generation.completedAt) return false;
   const selected = new Set(flow.generation.selectedCardIndexes);
