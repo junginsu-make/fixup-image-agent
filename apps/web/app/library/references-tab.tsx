@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { putHandoff } from "../../lib/handoff";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
-import type { ReferencePurpose, ReferenceSetRecord } from "../api/reference-sets/schema";
+import type { ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 
@@ -13,17 +13,10 @@ type ReferenceImageView = ReferenceImageRow & { signedUrl: string | null };
 
 const ROLE_LABEL: Record<string, string> = { cover: "표지", body: "속지", ending: "엔딩" };
 
-const PURPOSE_LABEL: Record<ReferencePurpose, string> = {
-  cardnews: "카드뉴스",
-  poster: "포스터",
-  both: "공용",
-};
-
 export function ReferencesTab() {
   const router = useRouter();
   const [images, setImages] = React.useState<ReferenceImageView[]>([]);
   const [sets, setSets] = React.useState<ReferenceSetRecord[]>([]);
-  const [purpose, setPurpose] = React.useState<"all" | ReferencePurpose>("all");
   const [loading, setLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -66,7 +59,7 @@ export function ReferencesTab() {
         const form = new FormData();
         form.set("id", crypto.randomUUID());
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
-        form.set("purpose", purpose === "all" ? "cardnews" : purpose);
+        form.set("purpose", "both");
         form.set("file", file);
         const response = await fetch("/api/reference-images", { method: "POST", body: form });
         const payload = await response.json() as { ok?: boolean; message?: string };
@@ -179,8 +172,9 @@ export function ReferencesTab() {
     }
   }
 
-  const visibleImages = images.filter((image) => purpose === "all" || image.purpose === purpose || image.purpose === "both");
-  const visibleSets = sets.filter((set) => purpose === "all" || set.purpose === purpose || set.purpose === "both");
+  // 용도로 거르지 않는다. 어느 도구도 용도를 보지 않으므로 고를 이유가 없다.
+  const visibleImages = images;
+  const visibleSets = sets;
 
   return (
     <div className="grid gap-6">
@@ -189,15 +183,6 @@ export function ReferencesTab() {
           <h2 className="text-xl font-semibold">참고 이미지</h2>
           <p className="mt-1 text-sm text-muted-foreground">카드뉴스와 포스터에 반복해서 쓸 이미지를 낱장 또는 역할이 있는 세트로 관리합니다.</p>
         </div>
-        <label className="grid gap-1 text-xs text-muted-foreground">
-          용도
-          <select value={purpose} onChange={(event) => setPurpose(event.target.value as "all" | ReferencePurpose)} className="h-9 min-w-36 rounded-md border bg-background px-3 text-sm text-foreground">
-            <option value="all">전체</option>
-            <option value="cardnews">카드뉴스</option>
-            <option value="poster">포스터</option>
-            <option value="both">공용</option>
-          </select>
-        </label>
       </div>
 
       {message ? <p role="status" className="rounded-md border bg-muted/40 px-4 py-3 text-sm">{message}</p> : null}
@@ -215,34 +200,35 @@ export function ReferencesTab() {
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
               {uploading ? "올리는 중…" : "참고 이미지 올리기"}
             </Button>
-            <span className="text-xs text-muted-foreground">현재 선택한 용도로 저장됩니다. 전체에서는 카드뉴스로 저장됩니다.</span>
+            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다.</span>
           </div>
 
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">참고 이미지를 불러오는 중입니다.</p> : visibleImages.length === 0 ? (
-            <Card className="grid place-items-center gap-3 py-14 text-center"><ImageIcon className="size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">이 용도의 참고 이미지가 없습니다.</p></Card>
+            <Card className="grid place-items-center gap-3 py-14 text-center"><ImageIcon className="size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">아직 올린 참고 이미지가 없습니다.</p></Card>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {visibleImages.map((image) => (
-                <Card key={image.id} className="overflow-hidden">
+                <Card key={image.id} className="relative overflow-hidden">
+                  {/* 지우기는 모서리에 둔다. 아래에 줄로 두면 카드가 길어지고
+                      「~로 보내기」와 섞여 실수로 누르게 된다. */}
+                  <button
+                    type="button"
+                    aria-label={`${image.title ?? "참고 이미지"} 지우기`}
+                    onClick={() => void removeImage(image)}
+                    className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
+                  ><Trash2 className="size-3.5" /></button>
                   <div className="aspect-square bg-muted">{image.signedUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                   ) : null}</div>
                   <CardContent className="grid gap-2 p-3">
                     <p className="truncate text-sm font-medium">{image.title || "제목 없음"}</p>
-                    <Badge variant="secondary" className="w-fit">{PURPOSE_LABEL[image.purpose]}</Badge>
                     {/* 라이브러리는 보기만 하는 곳이 아니다. 여기서 바로 도구로 보낸다. */}
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1">
                       <Button size="sm" onClick={() => sendTo("sns", image)}>카드뉴스로</Button>
                       <Button size="sm" variant="secondary" onClick={() => sendTo("poster", image)}>포스터로</Button>
                       <Button size="sm" variant="secondary" onClick={() => sendTo("create", image)}>상세페이지로</Button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-fit text-subtle-foreground hover:text-destructive"
-                      onClick={() => void removeImage(image)}
-                    ><Trash2 className="size-3.5" />지우기</Button>
                   </CardContent>
                 </Card>
               ))}
@@ -253,13 +239,13 @@ export function ReferencesTab() {
         <TabsContent value="sets" className="grid gap-5">
           <div><Button onClick={() => { setEditingSet(null); setEditorOpen(true); }}><FolderPlus className="size-4" />세트 만들기</Button></div>
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">묶음 세트를 불러오는 중입니다.</p> : visibleSets.length === 0 ? (
-            <Card className="grid place-items-center gap-3 py-14 text-center"><FolderPlus className="size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">이 용도의 묶음 세트가 없습니다.</p></Card>
+            <Card className="grid place-items-center gap-3 py-14 text-center"><FolderPlus className="size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">아직 만든 묶음 세트가 없습니다.</p></Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {visibleSets.map((set) => (
                 <Card key={set.id}>
                   <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-                    <div className="grid gap-2"><CardTitle>{set.name}</CardTitle><div className="flex gap-2"><Badge variant="secondary">{PURPOSE_LABEL[set.purpose]}</Badge><Badge variant="secondary">{set.items.length}장</Badge></div></div>
+                    <div className="grid gap-2"><CardTitle>{set.name}</CardTitle><Badge variant="secondary" className="w-fit">{set.items.length}장</Badge></div>
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" aria-label={`${set.name} 수정`} onClick={() => { setEditingSet(set); setEditorOpen(true); }}><Pencil className="size-4" /></Button>
                       <Button size="icon" variant="ghost" aria-label={`${set.name} 삭제`} onClick={() => void removeSet(set)}><Trash2 className="size-4" /></Button>
@@ -304,7 +290,7 @@ export function ReferencesTab() {
           {previewSet ? <>
             <DialogHeader>
               <DialogTitle>{previewSet.name}</DialogTitle>
-              <DialogDescription>{PURPOSE_LABEL[previewSet.purpose]} · {previewSet.items.length}장</DialogDescription>
+              <DialogDescription>카드뉴스 · {previewSet.items.length}장</DialogDescription>
             </DialogHeader>
             <div className="grid max-h-[65vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3">
               {previewSet.items.map((item) => {
