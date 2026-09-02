@@ -77,6 +77,7 @@ import {
 } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
+import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
   anchorWorkbenchToOverlay,
   applyLanguageToTextOverlay,
@@ -2148,6 +2149,17 @@ export function PdpEditor({
           )}
           라이브러리에 저장
         </Button>
+        {/* 위 버튼은 상세페이지 보관함으로 간다. 이건 참고 이미지로 넣어
+            카드뉴스·포스터가 다음 작업의 기준으로 쓸 수 있게 한다. */}
+        <SaveImagesToLibrary
+          images={sections
+            .filter((section) => Boolean(section.generatedImage))
+            .map((section, index) => ({
+              fileUrl: section.generatedImage as string,
+              title: `상세페이지 ${index + 1}`,
+            }))}
+          disabled={!generatedCount}
+        />
         <div className="ml-auto flex items-center gap-1.5">
           <Button
             variant="outline"

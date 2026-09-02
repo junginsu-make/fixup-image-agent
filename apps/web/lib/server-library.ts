@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { isLocalStoreEnabled } from "./local-store";
 
 /**
  * 사용자별 서버 라이브러리.
@@ -137,6 +138,9 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
 }
 
 export async function listLibraryItems(userId: string): Promise<ServerLibraryItem[]> {
+  // 로컬 확인 모드에는 이 보관함이 없다. 500 을 내면 서버가 고장난 것처럼
+  // 보이지만 사실은 안 쓰는 저장소다. 비어 있다고 답하는 것이 정직하다.
+  if (isLocalStoreEnabled()) return [];
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase

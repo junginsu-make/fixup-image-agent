@@ -37,6 +37,7 @@ import {
 } from "@fixup/ui";
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
 import { SavedImagePicker } from "../create/SavedImagePicker";
+import { SaveImagesToLibrary } from "../_components/save-to-library";
 
 type Model = "openai" | "google";
 type View = "dashboard" | "workspace" | "results";
@@ -1967,6 +1968,15 @@ function Results({
         >
           <LibraryIcon className="size-4" />라이브러리에 저장
         </Button>
+        {/* 위 버튼은 리디자인 보관함으로 간다. 이건 참고 이미지로 넣어
+            카드뉴스·포스터가 다음 작업의 기준으로 쓸 수 있게 한다. */}
+        <SaveImagesToLibrary
+          images={downloadableSections.map((section, index) => ({
+            fileUrl: section.imageUrl as string,
+            title: `리디자인 ${index + 1}`,
+          }))}
+          disabled={downloadableSections.length === 0}
+        />
         <Button variant="secondary" onClick={() => onToast("히어로 1장 재생성은 다음 단계에서 연결할 예정입니다.")}><RefreshCw className="size-4" />히어로 다시 생성</Button>
         <Button onClick={downloadAllImages} disabled={downloadableSections.length === 0}><Download className="size-4" />전체 다운로드</Button>
       </Topbar>

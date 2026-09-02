@@ -1,6 +1,7 @@
 import { analyzeStyleImage, type StyleReferenceMatch } from "@fixup/pdp-core";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { resolveGeminiKey } from "./server-keys";
+import { isLocalStoreEnabled } from "./local-store";
 
 /**
  * 사용자별 스타일 레퍼런스.
@@ -100,6 +101,8 @@ export async function registerUserStyleReference(input: {
 }
 
 export async function listUserStyleReferences(userId: string): Promise<UserStyleReference[]> {
+  // 로컬 확인 모드에는 이 표가 없다. 비어 있다고 답한다 — 500 은 거짓말이다.
+  if (isLocalStoreEnabled()) return [];
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase
