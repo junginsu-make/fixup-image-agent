@@ -12,6 +12,24 @@ const base = {
   preservedUrls: [] as string[],
 };
 
+describe("지킬 대상이 사람인지 물건인지 프롬프트까지 간다", () => {
+  it("사람으로 표시한 것만 사람으로 다룬다", () => {
+    const job = buildPosterJob({
+      ...base,
+      preservedUrls: ["https://fal.media/model.png", "https://fal.media/product.png"],
+      personUrls: ["https://fal.media/model.png"],
+    });
+    expect(job.prompt).toMatch(/PRESERVED PERSON/);
+    expect(job.prompt).toMatch(/PRESERVED SUBJECT/);
+  });
+
+  it("표시가 없으면 전부 물건으로 다룬다", () => {
+    // 옛 작업에는 이 값이 없다. 사람으로 보면 없는 얼굴을 지키려 든다.
+    const job = buildPosterJob({ ...base, preservedUrls: ["https://fal.media/product.png"] });
+    expect(job.prompt).not.toMatch(/PRESERVED PERSON/);
+  });
+});
+
 describe("포스터 작업 조립", () => {
   it("레퍼런스가 있으면 편집 엔드포인트로 간다", () => {
     const job = buildPosterJob(base);

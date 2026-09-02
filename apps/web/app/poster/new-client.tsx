@@ -33,7 +33,9 @@ export function PosterNewClient() {
   const [error, setError] = React.useState<string | null>(null);
 
   const styleIds = Object.keys(roles).filter((id) => roles[id] === "style");
-  const preservedIds = Object.keys(roles).filter((id) => roles[id] === "preserved");
+  const preservedIds = Object.keys(roles).filter((id) => roles[id]?.startsWith("preserve"));
+  // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
+  const personIds = Object.keys(roles).filter((id) => roles[id] === "preserve_person");
 
   const estimate = estimatePosterCost({
     modelId, ratioId: ratio, variants,
@@ -75,6 +77,7 @@ export function PosterNewClient() {
           instruction: instruction.trim(),
           referenceIds: styleIds,
           preservedIds,
+          personIds,
         }),
       });
       const body = await response.json();
@@ -106,9 +109,10 @@ export function PosterNewClient() {
             <CardTitle>따라 만들 포스터를 고르세요</CardTitle>
             <CardDescription>
               새로 올리거나 라이브러리에서 불러오세요. 고른 그림을 누르면 역할이 바뀝니다 —
-              <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색을 가져옴) ↔
-              <strong className="text-foreground">그대로 지키기</strong>(제품·인물의 생김새 유지).
-              따라 만들 그림이 최소 한 장 필요합니다.
+              <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색) →
+              <strong className="text-foreground">제품 그대로 지키기</strong>(형태·재질·라벨) →
+              <strong className="text-foreground">인물 그대로 지키기</strong>(얼굴·체형).
+              따라 만들 그림이 최소 한 장 필요하고, 인물은 한 명만 쓸 수 있습니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">

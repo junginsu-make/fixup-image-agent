@@ -4,10 +4,16 @@ import * as React from "react";
 import { AlertTriangle, ImagePlus, Loader2, X } from "lucide-react";
 import { groupAttachments, modelById, referenceWarningsForRole, validateAttachments, type Attachment, type AttachmentKind, type StyleRole } from "@fixup/sns-core";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
+import { ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
 import { LibraryPickerButton } from "../../_components/library-picker";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 
 type ImageView = ReferenceImageRow & { signedUrl: string | null };
+
+/** 선택 상자에 표시할 값. 마지막 장은 역할이 아니라 자리라 따로 둔다. */
+function roleOf(attachment: Attachment): string {
+  return fromCardNewsAttachment(attachment.kind, attachment.subject) ?? "ending";
+}
 
 export function AttachmentPicker({
   attachments,
@@ -151,12 +157,25 @@ export function AttachmentPicker({
               ) : null}</div>
               <p className="truncate p-3 text-left text-sm font-medium">{title}</p>
               <CardContent className="grid gap-3 border-t p-3">
-                <label className="grid gap-1 text-xs">첨부 종류<select aria-label={`${title} 첨부 종류`} className="h-9 rounded-md border bg-background px-2 text-sm" value={selected.kind} onChange={(event) => {
-                  const kind = event.target.value as AttachmentKind;
-                  patch(selected.id, { kind, role: kind === "style_reference" ? "body" : undefined, subject: kind === "keep_identity" ? "object" : undefined, bodySlot: undefined });
-                }}><option value="style_reference">따라 만들 카드뉴스</option><option value="keep_identity">그대로 넣을 것</option><option value="place_as_is">원본 그대로 쓸 장</option><option value="ending">마지막 장</option></select></label>
-                {selected.kind === "style_reference" ? <label className="grid gap-1 text-xs">역할<select aria-label={`${title} 역할`} className="h-9 rounded-md border bg-background px-2 text-sm" value={selected.role ?? "body"} onChange={(event) => patch(selected.id, { role: event.target.value as StyleRole })}><option value="cover">표지</option><option value="body">속지</option><option value="ending">엔딩</option></select></label> : null}
-                {selected.kind === "keep_identity" ? <label className="grid gap-1 text-xs">대상<select aria-label={`${title} 대상`} className="h-9 rounded-md border bg-background px-2 text-sm" value={selected.subject ?? "object"} onChange={(event) => patch(selected.id, { subject: event.target.value as "person" | "object" })}><option value="object">제품·로고·물건</option><option value="person">인물</option></select></label> : null}
+                {/* 종류와 대상을 한 칸으로 합쳤다. 두 칸이면 '그대로 넣을 것'을
+                    고른 뒤 대상을 안 고르고 넘어가 사람이 물건으로 다뤄졌다. */}
+                <label className="grid gap-1 text-xs">이 그림의 역할<select aria-label={`${title} 역할`} className="h-9 rounded-md border bg-background px-2 text-sm" value={roleOf(selected)} onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "ending") return patch(selected.id, { kind: "ending", role: undefined, subject: undefined, bodySlot: undefined });
+                  const next = toCardNewsAttachment(value as AttachmentRole);
+                  patch(selected.id, {
+                    kind: next.kind as AttachmentKind,
+                    subject: next.subject,
+                    role: next.kind === "style_reference" ? (selected.role ?? "body") : undefined,
+                    bodySlot: undefined,
+                  });
+                }}>
+                  {(["style", "preserve_product", "preserve_person", "place_as_is"] as AttachmentRole[]).map((role) => (
+                    <option key={role} value={role}>{ATTACHMENT_ROLE_LABEL[role]}</option>
+                  ))}
+                  <option value="ending">마지막 장</option>
+                </select></label>
+                {selected.kind === "style_reference" ? <label className="grid gap-1 text-xs">카드 자리<select aria-label={`${title} 카드 자리`} className="h-9 rounded-md border bg-background px-2 text-sm" value={selected.role ?? "body"} onChange={(event) => patch(selected.id, { role: event.target.value as StyleRole })}><option value="cover">표지</option><option value="body">속지</option><option value="ending">엔딩</option></select></label> : null}
                 {selected.kind === "place_as_is" ? <label className="grid gap-1 text-xs">카드 번호 · 선택<input aria-label={`${title} 카드 번호`} className="h-9 rounded-md border bg-background px-2 text-sm" type="number" min={2} max={totalCards - 1} value={selected.bodySlot ?? ""} onChange={(event) => patch(selected.id, { bodySlot: event.target.value ? Number(event.target.value) : undefined })} placeholder={`2~${totalCards - 1}`} /></label> : null}
               </CardContent>
             </Card>;

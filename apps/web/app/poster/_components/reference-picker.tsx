@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ImagePlus, Maximize2, X } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
+import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import { LibraryPickerButton } from "../../_components/library-picker";
 import { openImageViewer } from "../../_components/image-viewer";
 
@@ -12,9 +13,12 @@ import { openImageViewer } from "../../_components/image-viewer";
  * 라이브러리의 그림을 그대로 쓴다. 여기서 새로 올려도 라이브러리에 들어간다 —
  * 올린 곳이 어디든 세 도구가 다 본다.
  *
- * 한 그림에 두 가지 역할이 있다:
- *   따라 만들기   레이아웃·서체·색을 가져온다
- *   그대로 지키기  제품·인물의 생김새를 유지한다
+ * 역할은 공용 어휘를 쓴다(@fixup/shared). 세 도구가 같은 말을 써야 라이브러리에서
+ * 불러온 그림이 도구를 옮겨도 역할을 잃지 않는다.
+ *
+ *   따라 만들기        레이아웃·서체·색을 가져온다
+ *   제품 그대로 지키기   형태·색·재질·라벨을 유지한다
+ *   인물 그대로 지키기   얼굴과 체형을 유지한다
  */
 
 export interface ReferenceItem {
@@ -23,7 +27,8 @@ export interface ReferenceItem {
   url?: string;
 }
 
-export type Role = "none" | "style" | "preserved";
+/** 공용 역할 어휘를 그대로 쓴다. none 은 '아직 안 골랐다'는 화면 상태다. */
+export type Role = "none" | AttachmentRole;
 
 export function ReferencePicker({
   references, roles, onRoleChange, onUploaded,
@@ -78,11 +83,17 @@ export function ReferencePicker({
   /** 고른 것만 화면에 남긴다. 라이브러리 전체는 불러오기 창에서 본다. */
   const picked = references.filter((reference) => (roles[reference.id] ?? "none") !== "none");
 
-  // 고른 뒤에는 두 역할 사이만 오간다. 빼기는 X 로 한다.
-  const nextRole: Record<Role, Role> = { none: "style", style: "preserved", preserved: "style" };
-  const label: Record<Role, string> = {
-    none: "안 씀", style: "따라 만들기", preserved: "그대로 지키기",
+  // 고른 뒤에는 세 역할을 돈다. 빼기는 X 로 한다.
+  // 사람과 물건을 가르는 이유: 지키는 방법이 다르고, 얼굴이 둘이면 모델이
+  // 절충해 제3의 인물을 만든다(2026-07-30 실측).
+  const nextRole: Record<Role, Role> = {
+    none: "style",
+    style: "preserve_product",
+    preserve_product: "preserve_person",
+    preserve_person: "style",
+    place_as_is: "style",
   };
+  const label: Record<Role, string> = { none: "안 씀", ...ATTACHMENT_ROLE_LABEL };
 
   return (
     <div className="grid gap-4">
@@ -137,7 +148,7 @@ export function ReferencePicker({
                 className={cn(
                   "overflow-hidden rounded-lg border-2 text-left transition-colors",
                   role === "style" ? "border-primary"
-                    : role === "preserved" ? "border-amber-500"
+                    : role.startsWith("preserve") ? "border-amber-500"
                       : "border-transparent hover:border-border",
                 )}
               >
@@ -153,7 +164,7 @@ export function ReferencePicker({
                 <span className={cn(
                   "block px-3 pb-2 text-xs font-bold",
                   role === "style" ? "text-primary"
-                    : role === "preserved" ? "text-amber-600"
+                    : role.startsWith("preserve") ? "text-amber-600"
                       : "text-subtle-foreground",
                 )}>
                   {label[role]}

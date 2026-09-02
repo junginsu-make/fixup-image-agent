@@ -59,6 +59,11 @@ export async function POST(_request: Request, context: Context) {
         slots: project.data.slots,
         referenceUrls: references.map((reference) => urls[reference.id]!).filter(Boolean),
         preservedUrls: preserved.map((reference) => urls[reference.id]!).filter(Boolean),
+        // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
+        personUrls: preserved
+          .filter((reference) => (project.data.personIds ?? []).includes(reference.id))
+          .map((reference) => urls[reference.id]!)
+          .filter(Boolean),
       },
       { queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => "" },
     );

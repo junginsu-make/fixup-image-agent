@@ -60,6 +60,12 @@ export const PosterProjectInputSchema = z.object({
   referenceIds: z.array(z.string().uuid()).min(1, "따라 만들 레퍼런스를 한 장 이상 골라 주세요."),
   /** 그대로 지킬 제품·인물. 선택이다. */
   preservedIds: z.array(z.string().uuid()).default([]),
+  /**
+   * preservedIds 중 사람인 것. 사람과 물건은 지키는 방법이 다르고, 얼굴이
+   * 둘이면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측).
+   * 비어 있으면 전부 물건으로 다룬다 — 옛 작업에는 이 값이 없다.
+   */
+  personIds: z.array(z.string().uuid()).default([]),
   slots: PosterSlotsSchema.optional(),
 }).strict();
 

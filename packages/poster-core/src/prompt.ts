@@ -16,6 +16,11 @@ export type PosterImageKind = "style_reference" | "preserved";
 
 export interface PosterPromptImage {
   kind: PosterImageKind;
+  /**
+   * 지킬 것이 사람인가 물건인가. 안 적으면 물건으로 다룬다 — 옛 자료에는
+   * 이 값이 없고, 사람으로 보면 없는 얼굴을 지키려 든다.
+   */
+  subject?: "person" | "object";
   title?: string;
 }
 
@@ -38,11 +43,13 @@ function attachmentLines(images: PosterPromptImage[]): string[] {
   images.forEach((image, index) => {
     const number = index + 1;
     if (image.kind === "preserved") {
-      lines.push(
-        `Image ${number} is a PRESERVED SUBJECT. Keep its identity exactly — shape, proportions, colors, `
-        + "materials, labels and logo text. Angle and lighting may change to fit this poster, but it must "
-        + "remain recognisably the same object or person.",
-      );
+      lines.push(image.subject === "person"
+        ? `Image ${number} is a PRESERVED PERSON. Keep the same identity — facial features, hair and body `
+          + "proportions. Expression, pose, angle and lighting may change to fit this poster, but it must "
+          + "remain recognisably the same person."
+        : `Image ${number} is a PRESERVED SUBJECT. Keep its identity exactly — shape, proportions, colors, `
+          + "materials, labels and logo text. Angle and lighting may change to fit this poster, but it must "
+          + "remain recognisably the same object.");
       return;
     }
     lines.push(
@@ -54,6 +61,14 @@ function attachmentLines(images: PosterPromptImage[]): string[] {
     lines.push(
       "Priority when instructions conflict: PRESERVED SUBJECT takes priority over the POSTER REFERENCE, "
       + "which takes priority over the scene description.",
+    );
+  }
+  // 얼굴이 둘이면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측,
+  // pdp-core/src/pdp.reference-policy.ts). 막을 수 없으면 못이라도 박는다.
+  if (images.filter((image) => image.kind === "preserved" && image.subject === "person").length > 1) {
+    lines.push(
+      "Multiple preserved people are attached. Show only one person in the poster — pick the first "
+      + "preserved person and do not blend the faces into a new individual.",
     );
   }
   return lines;

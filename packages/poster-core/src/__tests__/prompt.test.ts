@@ -24,6 +24,49 @@ const images = [
 
 const size = { width: 1024, height: 1536 };
 
+describe("지키는 대상이 사람인지 물건인지 가른다", () => {
+  // 실측 정책(pdp.reference-policy.ts): 얼굴이 둘이면 모델이 절충해 제3의
+  // 인물을 만든다. 물건과 사람을 같은 문장으로 지키라고 하면 그 경고를 할
+  // 자리가 없다.
+  const person = buildPosterPrompt({
+    slots,
+    images: [{ kind: "preserved", subject: "person", title: "모델" }],
+    size,
+  });
+  const product = buildPosterPrompt({
+    slots,
+    images: [{ kind: "preserved", subject: "object", title: "제품" }],
+    size,
+  });
+
+  it("사람에게는 얼굴과 체형을 지키라고 한다", () => {
+    expect(person).toMatch(/facial features|face/i);
+  });
+
+  it("물건에게는 라벨과 재질을 지키라고 한다", () => {
+    expect(product).toMatch(/labels/i);
+    expect(product).not.toMatch(/facial features/i);
+  });
+
+  it("얼굴이 둘이면 하나만 쓰라고 못 박는다", () => {
+    const twoFaces = buildPosterPrompt({
+      slots,
+      images: [
+        { kind: "preserved", subject: "person", title: "모델 A" },
+        { kind: "preserved", subject: "person", title: "모델 B" },
+      ],
+      size,
+    });
+    expect(twoFaces).toMatch(/only one person|single person/i);
+  });
+
+  it("대상을 안 적으면 물건으로 다룬다", () => {
+    // 옛 자료에는 대상이 없다. 사람으로 보면 없는 얼굴을 지키려 든다.
+    const legacy = buildPosterPrompt({ slots, images: [{ kind: "preserved", title: "무엇" }], size });
+    expect(legacy).not.toMatch(/facial features/i);
+  });
+});
+
 describe("포스터 프롬프트", () => {
   const prompt = buildPosterPrompt({ slots, images, size });
 

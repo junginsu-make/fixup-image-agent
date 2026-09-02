@@ -24,6 +24,11 @@ export interface PosterJobInput {
   /** 이미 fal 에 올려 둔 URL. 순서가 프롬프트의 Image 번호와 같아야 한다. */
   referenceUrls: string[];
   preservedUrls: string[];
+  /**
+   * preservedUrls 중 사람인 것. 표시가 없으면 물건으로 다룬다 — 옛 작업에는
+   * 이 값이 없고, 사람으로 보면 없는 얼굴을 지키려 든다.
+   */
+  personUrls?: string[];
 }
 
 export interface PosterJob {
@@ -47,7 +52,10 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
 
   const images: PosterPromptImage[] = [
     ...job.referenceUrls.map((): PosterPromptImage => ({ kind: "style_reference" })),
-    ...job.preservedUrls.map((): PosterPromptImage => ({ kind: "preserved" })),
+    ...job.preservedUrls.map((url): PosterPromptImage => ({
+      kind: "preserved",
+      subject: job.personUrls?.includes(url) ? "person" : "object",
+    })),
   ];
 
   if (estimate.rejected) {

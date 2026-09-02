@@ -30,6 +30,8 @@ export interface PosterProjectRecord {
     variants: number;
     referenceIds: string[];
     preservedIds: string[];
+    /** preservedIds 중 사람인 것. 옛 작업에는 없다. */
+    personIds?: string[];
     slots: PosterSlots;
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];
