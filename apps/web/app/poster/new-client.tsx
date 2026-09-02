@@ -105,9 +105,9 @@ export function PosterNewClient() {
           <CardHeader>
             <CardTitle>따라 만들 포스터를 고르세요</CardTitle>
             <CardDescription>
-              그림을 누를 때마다 역할이 바뀝니다 —
-              <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색을 가져옴) →
-              <strong className="text-foreground">그대로 지키기</strong>(제품·인물의 생김새 유지) → 안 씀.
+              새로 올리거나 라이브러리에서 불러오세요. 고른 그림을 누르면 역할이 바뀝니다 —
+              <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색을 가져옴) ↔
+              <strong className="text-foreground">그대로 지키기</strong>(제품·인물의 생김새 유지).
               따라 만들 그림이 최소 한 장 필요합니다.
             </CardDescription>
           </CardHeader>

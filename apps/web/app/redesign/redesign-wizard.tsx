@@ -36,6 +36,7 @@ import {
   type StepDefinition,
 } from "@fixup/ui";
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
+import { SavedImagePicker } from "../create/SavedImagePicker";
 
 type Model = "openai" | "google";
 type View = "dashboard" | "workspace" | "results";
@@ -1721,6 +1722,13 @@ function Workspace(props: {
                 accept="image/*,.pdf"
                 onChange={(event) => setFiles(Array.from(event.target.files || []))}
               />
+              <div className="mt-3">
+                {/* 라이브러리에 이미 있는 그림을 디스크에서 다시 찾게 하지 않는다. */}
+                <SavedImagePicker
+                  label="라이브러리에서 불러오기"
+                  onPick={(file) => setFiles([...files, file])}
+                />
+              </div>
               {files.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {files.map((file) => (

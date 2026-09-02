@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Trash2 } from "lucide-react";
+import { ImagePlus, X } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
+import { LibraryPickerButton } from "../../_components/library-picker";
 
 /**
  * 포스터 레퍼런스 고르기.
@@ -73,23 +74,17 @@ export function ReferencePicker({
     }
   }
 
-  const nextRole: Record<Role, Role> = { none: "style", style: "preserved", preserved: "none" };
+  /** 고른 것만 화면에 남긴다. 라이브러리 전체는 불러오기 창에서 본다. */
+  const picked = references.filter((reference) => (roles[reference.id] ?? "none") !== "none");
+
+  // 고른 뒤에는 두 역할 사이만 오간다. 빼기는 X 로 한다.
+  const nextRole: Record<Role, Role> = { none: "style", style: "preserved", preserved: "style" };
   const label: Record<Role, string> = {
     none: "안 씀", style: "따라 만들기", preserved: "그대로 지키기",
   };
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold">라이브러리에서 불러오기</h3>
-          <p className="text-meta text-subtle-foreground">
-            올려 둔 그림 {references.length}장 · 그림을 눌러 역할을 바꿉니다
-          </p>
-        </div>
-        <Button type="button" variant="ghost" size="sm" onClick={onUploaded}>새로고침</Button>
-      </div>
-
       <div className="flex flex-wrap items-center gap-3">
         <input
           ref={fileInput}
@@ -100,8 +95,19 @@ export function ReferencePicker({
           onChange={(event) => void upload(event.target.files)}
         />
         <Button type="button" variant="secondary" disabled={uploading} onClick={() => fileInput.current?.click()}>
+          <ImagePlus className="size-4" />
           {uploading ? "올리는 중…" : "새 이미지 올리기"}
         </Button>
+        <LibraryPickerButton
+          images={references.map((reference) => ({ id: reference.id, title: reference.title, url: reference.url ?? null }))}
+          selectedIds={references.filter((reference) => (roles[reference.id] ?? "none") !== "none").map((reference) => reference.id)}
+          onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
+          onReload={onUploaded}
+          onDelete={(picked) => {
+            const reference = references.find((entry) => entry.id === picked.id);
+            if (reference) void remove(reference);
+          }}
+        />
         <span className="text-sm text-muted-foreground">
           여기서 올린 그림도 라이브러리에 들어갑니다.
         </span>
@@ -113,13 +119,13 @@ export function ReferencePicker({
         </div>
       ) : null}
 
-      {references.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          라이브러리에 그림이 없습니다. 위에서 올리거나 라이브러리에서 먼저 올려 주세요.
+      {picked.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          아직 고른 그림이 없습니다. 새로 올리거나 라이브러리에서 불러오세요.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {references.map((reference) => {
+          {picked.map((reference) => {
             const role = roles[reference.id] ?? "none";
             return (
               <div key={reference.id} className="relative">
@@ -154,11 +160,11 @@ export function ReferencePicker({
               </button>
                 <button
                   type="button"
-                  aria-label={`${reference.title ?? "참고 이미지"} 라이브러리에서 지우기`}
-                  onClick={() => void remove(reference)}
+                  aria-label={`${reference.title ?? "참고 이미지"} 빼기`}
+                  onClick={() => onRoleChange(reference.id, "none")}
                   className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
                 >
-                  <Trash2 className="size-3.5" />
+                  <X className="size-3.5" />
                 </button>
               </div>
             );
