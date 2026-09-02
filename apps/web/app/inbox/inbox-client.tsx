@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Archive, RefreshCw, RotateCcw, Star } from "lucide-react";
+import { Archive, RefreshCw, RotateCcw, Search, SlidersHorizontal, Star } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from "@fixup/ui";
 import { candidateActions, type CandidateStatus } from "../api/candidates/schema";
 import type { CandidateRecord } from "../api/candidates/candidate-service";
@@ -11,6 +11,7 @@ import {
   EMPTY_CANDIDATE_FILTERS,
   SOURCE_TABS,
   bodyLabel,
+  countColumnFilters,
   filterAndSortCandidates,
   preview,
   sourceLabel,
@@ -28,6 +29,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 const CELL = "px-3 py-4 align-top";
+const CONTROL = "h-9 rounded-md border border-border bg-background px-3 text-sm";
 
 function SortHeader({ label, sortKey, sort, onSort }: {
   label: string;
@@ -59,6 +61,8 @@ export function InboxClient() {
   const [selected, setSelected] = React.useState<CandidateRecord | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
+  /** 열 필터 줄은 기본으로 접어 둔다. 늘 펴 두면 표보다 입력칸이 먼저 보인다. */
+  const [columnsOpen, setColumnsOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -118,6 +122,17 @@ export function InboxClient() {
     [searched, columnFilters, sort],
   );
 
+  const activeColumnFilters = countColumnFilters(columnFilters);
+  // 아무것도 안 좁혔으면 초기화 버튼을 감춘다. 누를 일 없는 버튼은 소음이다.
+  const narrowed = Boolean(
+    activeColumnFilters
+      || query.trim()
+      || filter !== "all"
+      || (columnFilters.sourceKind ?? "all") !== "all"
+      || sort.key !== DEFAULT_CANDIDATE_SORT.key
+      || sort.direction !== DEFAULT_CANDIDATE_SORT.direction,
+  );
+
   return (
     <div className="grid gap-8">
       <header>
@@ -133,33 +148,54 @@ export function InboxClient() {
             <Button variant="secondary" onClick={() => void load()} disabled={loading}><RefreshCw className="size-4" />새로고침</Button>
           </div>
 
-          <div className="flex flex-wrap gap-2" aria-label="콘텐츠 유형">
-            {SOURCE_TABS.map((tab) => (
-              <Button
-                key={tab.value}
-                size="sm"
-                variant={(columnFilters.sourceKind ?? "all") === tab.value ? "default" : "secondary"}
-                aria-pressed={(columnFilters.sourceKind ?? "all") === tab.value}
-                onClick={() => updateFilter("sourceKind", tab.value)}
-              >{tab.label}</Button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              {FILTERS.map((item) => (
-                <Button key={item.value} size="sm" variant={filter === item.value ? "default" : "secondary"} onClick={() => setFilter(item.value)}>{item.label}</Button>
-              ))}
-            </div>
-            <form className="flex gap-2" onSubmit={(event) => event.preventDefault()}>
+          {/* 찾기 · 좁히기 · 세부. 왼쪽에서 오른쪽으로 갈수록 덜 쓰는 것을 둔다. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[15rem] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" aria-hidden="true" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="제목·요약 검색"
                 aria-label="제목·요약 검색"
-                className="h-9 w-56"
+                className="h-9 pl-9"
               />
-            </form>
+            </div>
+
+            <select
+              aria-label="콘텐츠 유형"
+              className={CONTROL}
+              value={columnFilters.sourceKind ?? "all"}
+              onChange={(event) => updateFilter("sourceKind", event.target.value)}
+            >
+              {SOURCE_TABS.map((tab) => <option key={tab.value} value={tab.value}>{tab.label}</option>)}
+            </select>
+
+            <select
+              aria-label="상태"
+              className={CONTROL}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as Filter)}
+            >
+              {FILTERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+
+            <Button
+              variant={columnsOpen ? "default" : "secondary"}
+              aria-pressed={columnsOpen}
+              aria-expanded={columnsOpen}
+              onClick={() => setColumnsOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-4" />
+              열 필터
+              {activeColumnFilters ? <Badge variant="secondary" className="ml-1">{activeColumnFilters}</Badge> : null}
+            </Button>
+
+            {narrowed ? (
+              <Button
+                variant="ghost"
+                onClick={() => { setColumnFilters(EMPTY_CANDIDATE_FILTERS); setSort(DEFAULT_CANDIDATE_SORT); setQuery(""); setFilter("all"); }}
+              >초기화</Button>
+            ) : null}
           </div>
         </CardHeader>
 
@@ -167,14 +203,11 @@ export function InboxClient() {
           {message ? <p role="alert" className="mb-5 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{message}</p> : null}
           {loading ? <p className="py-10 text-center text-sm text-muted-foreground">수집 콘텐츠를 불러오는 중입니다.</p> : candidates.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">이 상태의 수집 콘텐츠가 없습니다.</p> : (
             <>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-meta text-subtle-foreground">
-                <span>표시 {visible.length}개 / 불러온 항목 {candidates.length}개</span>
-                <button
-                  type="button"
-                  className="font-bold text-primary underline underline-offset-4"
-                  onClick={() => { setColumnFilters(EMPTY_CANDIDATE_FILTERS); setSort(DEFAULT_CANDIDATE_SORT); setQuery(""); }}
-                >열 필터·정렬 초기화</button>
-              </div>
+              <p className="mb-3 text-meta text-subtle-foreground">
+                {narrowed
+                  ? <>전체 {candidates.length}개 중 <strong className="text-foreground">{visible.length}개</strong>를 보고 있습니다</>
+                  : <>수집한 소재 {candidates.length}개</>}
+              </p>
 
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[1600px] text-left text-sm">
@@ -192,34 +225,28 @@ export function InboxClient() {
                       <th className={CELL}><SortHeader label="첨부 이미지" sortKey="thumbnail" sort={sort} onSort={updateSort} /></th>
                       <th className={`${CELL} font-medium`}>작업</th>
                     </tr>
-                    <tr className="border-b">
-                      <th className="px-3 pb-3"><Input className="h-8" aria-label="제목 필터" value={columnFilters.title ?? ""} onChange={(event) => updateFilter("title", event.target.value)} placeholder="제목 포함" /></th>
-                      <th className="px-3 pb-3"><Input className="h-8" type="date" aria-label="발행일 필터" value={columnFilters.publishedDate ?? ""} onChange={(event) => updateFilter("publishedDate", event.target.value)} /></th>
-                      <th className="px-3 pb-3"><Input className="h-8" type="date" aria-label="수집일 필터" value={columnFilters.collectedDate ?? ""} onChange={(event) => updateFilter("collectedDate", event.target.value)} /></th>
-                      <th className="px-3 pb-3"><Input className="h-8" aria-label="작성자·채널 필터" value={columnFilters.author ?? ""} onChange={(event) => updateFilter("author", event.target.value)} placeholder="작성자 포함" /></th>
-                      <th className="px-3 pb-3">
-                        <select aria-label="소스 유형 필터" className="h-8 w-full rounded-md border bg-background px-2 text-sm" value={columnFilters.sourceKind ?? "all"} onChange={(event) => updateFilter("sourceKind", event.target.value)}>
-                          {SOURCE_TABS.map((tab) => <option key={tab.value} value={tab.value}>{tab.value === "all" ? "전체" : tab.label}</option>)}
-                        </select>
-                      </th>
-                      <th className="px-3 pb-3"><Input className="h-8" aria-label="요약 필터" value={columnFilters.summary ?? ""} onChange={(event) => updateFilter("summary", event.target.value)} placeholder="요약 포함" /></th>
-                      <th className="px-3 pb-3">
-                        <select aria-label="상태 필터" className="h-8 w-full rounded-md border bg-background px-2 text-sm" value={columnFilters.status ?? "all"} onChange={(event) => updateFilter("status", event.target.value as CandidateColumnFilters["status"])}>
-                          <option value="all">전체</option>
-                          {FILTERS.filter((item) => item.value !== "all").map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                        </select>
-                      </th>
-                      <th className="px-3 pb-3"><Input className="h-8" aria-label="원문 URL 필터" value={columnFilters.url ?? ""} onChange={(event) => updateFilter("url", event.target.value)} placeholder="주소 포함" /></th>
-                      <th className="px-3 pb-3"><Input className="h-8" aria-label="수집 본문 필터" value={columnFilters.body ?? ""} onChange={(event) => updateFilter("body", event.target.value)} placeholder="본문 포함" /></th>
-                      <th className="px-3 pb-3">
-                        <select aria-label="첨부 이미지 필터" className="h-8 w-full rounded-md border bg-background px-2 text-sm" value={columnFilters.thumbnail ?? "all"} onChange={(event) => updateFilter("thumbnail", event.target.value as CandidateColumnFilters["thumbnail"])}>
-                          <option value="all">전체</option><option value="yes">있음</option><option value="no">없음</option>
-                        </select>
-                      </th>
-                      <th className="px-3 pb-3">
-                        <button type="button" className="whitespace-nowrap text-meta font-bold text-primary underline underline-offset-4" onClick={() => setColumnFilters(EMPTY_CANDIDATE_FILTERS)}>필터 해제</button>
-                      </th>
-                    </tr>
+                    {/* 소스·상태는 도구줄에 있다. 같은 것을 두 군데 두지 않는다. */}
+                    {columnsOpen ? (
+                      <tr className="border-b bg-muted/30">
+                        <th className="px-3 py-2"><Input className="h-8" aria-label="제목 필터" value={columnFilters.title ?? ""} onChange={(event) => updateFilter("title", event.target.value)} placeholder="제목 포함" /></th>
+                        <th className="px-3 py-2"><Input className="h-8" type="date" aria-label="발행일 필터" value={columnFilters.publishedDate ?? ""} onChange={(event) => updateFilter("publishedDate", event.target.value)} /></th>
+                        <th className="px-3 py-2"><Input className="h-8" type="date" aria-label="수집일 필터" value={columnFilters.collectedDate ?? ""} onChange={(event) => updateFilter("collectedDate", event.target.value)} /></th>
+                        <th className="px-3 py-2"><Input className="h-8" aria-label="작성자·채널 필터" value={columnFilters.author ?? ""} onChange={(event) => updateFilter("author", event.target.value)} placeholder="작성자 포함" /></th>
+                        <th className="px-3 py-2" />
+                        <th className="px-3 py-2"><Input className="h-8" aria-label="요약 필터" value={columnFilters.summary ?? ""} onChange={(event) => updateFilter("summary", event.target.value)} placeholder="요약 포함" /></th>
+                        <th className="px-3 py-2" />
+                        <th className="px-3 py-2"><Input className="h-8" aria-label="원문 URL 필터" value={columnFilters.url ?? ""} onChange={(event) => updateFilter("url", event.target.value)} placeholder="주소 포함" /></th>
+                        <th className="px-3 py-2"><Input className="h-8" aria-label="수집 본문 필터" value={columnFilters.body ?? ""} onChange={(event) => updateFilter("body", event.target.value)} placeholder="본문 포함" /></th>
+                        <th className="px-3 py-2">
+                          <select aria-label="첨부 이미지 필터" className="h-8 w-full rounded-md border bg-background px-2 text-sm" value={columnFilters.thumbnail ?? "all"} onChange={(event) => updateFilter("thumbnail", event.target.value as CandidateColumnFilters["thumbnail"])}>
+                            <option value="all">이미지 전체</option><option value="yes">있음</option><option value="no">없음</option>
+                          </select>
+                        </th>
+                        <th className="px-3 py-2">
+                          <button type="button" className="whitespace-nowrap text-meta font-bold text-primary underline underline-offset-4" onClick={() => setColumnFilters(EMPTY_CANDIDATE_FILTERS)}>필터 해제</button>
+                        </th>
+                      </tr>
+                    ) : null}
                   </thead>
                   <tbody>
                     {visible.length === 0 ? (
@@ -245,11 +272,11 @@ export function InboxClient() {
                         </td>
                         <td className={`${CELL} whitespace-nowrap text-muted-foreground`}>{candidate.publishedAt ? new Date(candidate.publishedAt).toLocaleString("ko-KR") : "확인 불가"}</td>
                         <td className={`${CELL} whitespace-nowrap text-muted-foreground`}>{new Date(candidate.collectedAt).toLocaleString("ko-KR")}</td>
-                        <td className={CELL}>{candidate.author || "—"}</td>
-                        <td className={CELL}><Badge variant="secondary">{sourceLabel(candidate)}</Badge></td>
+                        <td className={`${CELL} whitespace-nowrap`}>{candidate.author || "—"}</td>
+                        <td className={`${CELL} whitespace-nowrap`}><Badge variant="secondary">{sourceLabel(candidate)}</Badge></td>
                         <td className={`${CELL} max-w-sm text-xs leading-5 text-muted-foreground`}>{preview(candidate.summary) || "요약을 준비하지 못했습니다."}</td>
-                        <td className={CELL}><Badge variant={candidate.status === "picked" ? "green" : "secondary"}>{statusLabel(candidate.status)}</Badge></td>
-                        <td className={CELL}>{candidate.url ? <a className="font-bold text-primary underline underline-offset-4" href={candidate.url} target="_blank" rel="noreferrer">원문 열기</a> : <span className="text-subtle-foreground">—</span>}</td>
+                        <td className={`${CELL} whitespace-nowrap`}><Badge variant={candidate.status === "picked" ? "green" : "secondary"}>{statusLabel(candidate.status)}</Badge></td>
+                        <td className={`${CELL} whitespace-nowrap`}>{candidate.url ? <a className="font-bold text-primary underline underline-offset-4" href={candidate.url} target="_blank" rel="noreferrer">원문 열기</a> : <span className="text-subtle-foreground">—</span>}</td>
                         <td className={`${CELL} max-w-sm text-xs leading-5 text-muted-foreground`}>
                           <span className="block text-meta font-bold text-subtle-foreground">{bodyLabel(candidate)}</span>
                           {preview(candidate.body, 180) || "—"}

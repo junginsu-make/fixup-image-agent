@@ -143,6 +143,21 @@ export function filterAndSortCandidates(
   });
 }
 
+/**
+ * 접어 둔 필터 줄에 몇 개가 걸려 있나.
+ *
+ * 소스·상태는 도구줄에 늘 보이므로 세지 않는다. 여기서 세는 것은 접으면
+ * 안 보이게 되는 것들뿐이다 — 개수를 배지로 띄워야 "왜 항목이 없지" 하고
+ * 헤매지 않는다.
+ */
+export function countColumnFilters(filters: CandidateColumnFilters): number {
+  const texts = [filters.title, filters.author, filters.summary, filters.url, filters.body];
+  const dates = [filters.publishedDate, filters.collectedDate];
+  return texts.filter((value) => Boolean(value?.trim())).length
+    + dates.filter(Boolean).length
+    + (filters.thumbnail && filters.thumbnail !== "all" ? 1 : 0);
+}
+
 /** 표 칸에 넣을 짧은 미리보기. 줄바꿈을 없애야 칸 높이가 흔들리지 않는다. */
 export function preview(value: string | null | undefined, length = 240): string {
   const text = (value ?? "").replace(/\s+/g, " ").trim();

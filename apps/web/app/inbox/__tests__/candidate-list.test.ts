@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CANDIDATE_SORT,
+  EMPTY_CANDIDATE_FILTERS,
   bodyLabel,
+  countColumnFilters,
   filterAndSortCandidates,
   sourceLabel,
 } from "../candidate-list";
@@ -94,5 +96,32 @@ describe("열 필터와 정렬", () => {
 
   it("기본 정렬은 수집일 내림차순이다", () => {
     expect(DEFAULT_CANDIDATE_SORT).toEqual({ key: "collectedAt", direction: "desc" });
+  });
+});
+
+describe("걸려 있는 열 필터 세기", () => {
+  it("아무것도 안 걸었으면 0", () => {
+    expect(countColumnFilters(EMPTY_CANDIDATE_FILTERS)).toBe(0);
+    expect(countColumnFilters({})).toBe(0);
+  });
+
+  it("접어 둔 줄에 무엇이 걸려 있는지 알려 준다", () => {
+    // 필터 줄을 접으면 걸어 둔 것이 안 보인다. 개수라도 배지로 보여야
+    // "왜 항목이 없지" 하고 헤매지 않는다.
+    expect(countColumnFilters({ title: "가", author: "나" })).toBe(2);
+    expect(countColumnFilters({ thumbnail: "yes" })).toBe(1);
+    expect(countColumnFilters({ publishedDate: "2026-08-28", collectedDate: "" })).toBe(1);
+  });
+
+  it("전체를 고른 것은 거른 것이 아니다", () => {
+    expect(countColumnFilters({ thumbnail: "all", status: "all", sourceKind: "all" })).toBe(0);
+  });
+
+  it("소스·상태는 도구줄로 옮겼으므로 세지 않는다", () => {
+    expect(countColumnFilters({ sourceKind: "rss", status: "picked" })).toBe(0);
+  });
+
+  it("공백만 넣은 것은 거른 것이 아니다", () => {
+    expect(countColumnFilters({ title: "   " })).toBe(0);
   });
 });
