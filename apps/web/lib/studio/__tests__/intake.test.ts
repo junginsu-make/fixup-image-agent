@@ -51,7 +51,7 @@ describe("카드뉴스에 필요한 것", () => {
   });
 
   it("첨부 안 하겠다고 답한 것도 답한 것이다", () => {
-    expect(isReady({ ...full, attachmentsDecided: true, attachmentCount: 0 })).toBe(true);
+    expect(isReady({ ...full, attachmentsDecided: true, attachments: [] })).toBe(true);
   });
 });
 
@@ -62,13 +62,18 @@ describe("포스터에 필요한 것", () => {
     sourceKind: "text",
     sourceRef: "10월 한 달, 성수동 골목 전시",
     attachmentsDecided: true,
-    attachmentCount: 1,
+    attachments: [{ id: "a", title: "전시 포스터", role: "style" }],
   };
 
   it("따라 만들 그림이 없으면 만들 수 없다", () => {
     // 포스터는 레퍼런스가 최소 한 장이어야 한다(PosterProjectInputSchema).
-    const ids = missingSlots({ ...poster, attachmentCount: 0 }).map((slot) => slot.id);
+    const ids = missingSlots({ ...poster, attachments: [] }).map((slot) => slot.id);
     expect(ids).toContain("reference");
+  });
+
+  it("지키기용만 있고 따라 만들 것이 없어도 막는다", () => {
+    const only = { ...poster, attachments: [{ id: "p", title: "제품", role: "preserve_product" as const }] };
+    expect(missingSlots(only).map((slot) => slot.id)).toContain("reference");
   });
 
   it("포스터는 장수를 묻지 않는다", () => {
@@ -79,6 +84,43 @@ describe("포스터에 필요한 것", () => {
 
   it("레퍼런스가 한 장이라도 있으면 시작할 수 있다", () => {
     expect(isReady(poster)).toBe(true);
+  });
+});
+
+describe("첨부한 그림은 무엇으로 쓸지 물어야 한다", () => {
+  const base: Intake = { ...full, attachments: [{ id: "x", title: "serum.jpg" }] };
+
+  it("역할이 안 정해진 그림이 있으면 그걸 묻는다", () => {
+    // 안 물으면 말없이 '따라 만들기'가 된다. 제품 사진을 넣어도 그렇다.
+    // 그러면 제품이 지켜지는 대신 다시 그려진다 — 사용자가 원한 것과 정반대다.
+    const missing = missingSlots(base);
+    expect(missing.map((slot) => slot.id)).toContain("attachmentRole");
+  });
+
+  it("무엇을 묻는지 그림 이름이 들어간다", () => {
+    const slot = missingSlots(base).find((entry) => entry.id === "attachmentRole");
+    expect(slot?.label).toContain("serum.jpg");
+  });
+
+  it("역할이 다 정해지면 넘어간다", () => {
+    expect(isReady({ ...base, attachments: [{ id: "x", title: "serum.jpg", role: "preserve_product" }] })).toBe(true);
+  });
+
+  it("여러 장이면 아직 안 정한 것만 묻는다", () => {
+    const many: Intake = {
+      ...full,
+      attachments: [
+        { id: "a", title: "ref.png", role: "style" },
+        { id: "b", title: "serum.jpg" },
+      ],
+    };
+    const slot = missingSlots(many).find((entry) => entry.id === "attachmentRole");
+    expect(slot?.label).toContain("serum.jpg");
+    expect(slot?.label).not.toContain("ref.png");
+  });
+
+  it("첨부를 안 하겠다고 하면 물을 것이 없다", () => {
+    expect(isReady({ ...full, attachments: [] })).toBe(true);
   });
 });
 

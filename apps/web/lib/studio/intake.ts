@@ -12,7 +12,23 @@
  * 이유를 읽고 사람이 하는 말로 바꾼다.
  */
 
+import type { AttachmentRole } from "@fixup/shared";
+
 export type StudioTool = "sns" | "poster";
+
+/**
+ * 대화 중에 붙은 그림 한 장.
+ *
+ * **역할이 비어 있는 채로 만들기를 시작하면 안 된다.** 지금 화면에서는
+ * 라이브러리에서 고르면 말없이 「따라 만들기」가 된다. 제품 사진을 넣어도
+ * 그렇다 — 지켜져야 할 제품이 다시 그려진다. 물어보는 것이 이 구조의
+ * 핵심이다.
+ */
+export interface IntakeAttachment {
+  id: string;
+  title: string;
+  role?: AttachmentRole;
+}
 
 export interface Intake {
   tool?: StudioTool;
@@ -27,7 +43,8 @@ export interface Intake {
   cardCount?: number;
   /** 첨부할지 안 할지 답을 들었나. 안 하겠다는 답도 답이다. */
   attachmentsDecided?: boolean;
-  attachmentCount?: number;
+  /** 첨부한 그림들. 역할이 비어 있으면 아직 무엇으로 쓸지 안 정한 것이다. */
+  attachments?: IntakeAttachment[];
   /** 인물이 등장해야 하나. */
   needsPerson?: boolean;
   /** 쓸 만한 인물 사진이나 캐릭터를 이미 가졌나. */
@@ -75,6 +92,11 @@ const SLOT = {
   },
 } as const;
 
+/** 아직 무엇으로 쓸지 안 정한 그림들. */
+function undecided(intake: Intake): IntakeAttachment[] {
+  return (intake.attachments ?? []).filter((attachment) => !attachment.role);
+}
+
 export function missingSlots(intake: Intake): MissingSlot[] {
   // 무엇을 만들지 모르면 나머지를 물어도 소용이 없다.
   if (!intake.tool) return [SLOT.tool];
@@ -88,9 +110,27 @@ export function missingSlots(intake: Intake): MissingSlot[] {
 
   if (intake.tool === "sns" && !intake.cardCount) missing.push(SLOT.cardCount);
 
-  if (!intake.attachmentsDecided) missing.push(SLOT.attachments);
+  if (!intake.attachmentsDecided) {
+    missing.push(SLOT.attachments);
+    return missing;
+  }
+
+  // 붙인 그림을 무엇으로 쓸지 안 정하면 말없이 「따라 만들기」가 된다.
+  // 제품 사진이 그렇게 되면 지켜지는 대신 다시 그려진다.
+  const waiting = undecided(intake);
+  if (waiting.length) {
+    missing.push({
+      id: "attachmentRole",
+      label: `${waiting.map((attachment) => attachment.title).join(", ")} 를 무엇으로 쓸지`,
+      why: "따라 만들기(배치·서체·색만 가져옴) · 제품 그대로 지키기 · 인물 그대로 지키기 중에서 고릅니다. "
+        + "안 정하면 따라 만들기로 처리되어, 지켜야 할 제품이 다시 그려집니다.",
+    });
+  }
+
   // 포스터는 따라 만들 그림이 없으면 시작 자체가 막힌다(PosterProjectInputSchema).
-  else if (intake.tool === "poster" && !intake.attachmentCount) missing.push(SLOT.reference);
+  if (intake.tool === "poster" && !(intake.attachments ?? []).some((attachment) => attachment.role === "style")) {
+    missing.push(SLOT.reference);
+  }
 
   return missing;
 }
