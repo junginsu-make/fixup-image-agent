@@ -169,14 +169,15 @@ export function WorksTab() {
         <p className="mt-1 text-sm text-muted-foreground">이 시스템으로 만든 결과물입니다. 눌러서 언제·무엇을·어떤 설정으로 만들었는지 봅니다.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {works.map((work) => (
           <Card key={`${work.tool}-${work.id}`} className="cursor-pointer overflow-hidden" onClick={() => setOpen(work)}>
-            {/* 잘라 내지 않는다. 비율이 제각각이라 잘라 놓으면 무엇인지 모른다. */}
-            <div className="grid h-40 place-items-center bg-muted p-1">
+            {/* 칸은 참고 이미지와 같은 정사각형, 그림은 잘라 내지 않는다.
+                비율이 제각각이라 잘라 놓으면 무엇을 만들었는지 모른다. */}
+            <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
               {work.cover ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={work.cover} alt={work.title} className="max-h-full max-w-full object-contain" />
+                <img src={work.cover} alt={work.title} className="h-full w-full object-contain" />
               ) : (
                 <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
               )}

@@ -66,7 +66,7 @@ export function SnsProjectList() {
   // 목록은 훑어보는 곳이다. 한 장이 크면 몇 개 없어도 스크롤을 해야 한다.
   // 자세히 보는 것은 눌러서 연다.
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {projects.map((project) => {
         const cards = project.data?.flow?.cards ?? [];
         // 대표 그림은 첫 장이다. 표지가 그 작업을 가장 잘 알려 준다.
@@ -78,10 +78,10 @@ export function SnsProjectList() {
             <Link href={`/sns/${project.id}`} className="block">
               {/* 잘라 내지 않는다. 1:1·16:9·9:16 이 섞여 있어 잘라 놓으면 무엇을
                    만들었는지 알아볼 수 없다. 높이만 묶고 비율은 지킨다. */}
-              <div className="grid h-40 place-items-center bg-muted p-1">
+              <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
                 {cover ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={cover} alt={project.title} className="max-h-full max-w-full object-contain" />
+                  <img src={cover} alt={project.title} className="h-full w-full object-contain" />
                 ) : (
                   <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
                 )}
