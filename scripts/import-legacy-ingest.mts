@@ -29,6 +29,7 @@ interface LegacySubscription {
 }
 interface LegacyCandidate {
   id: string; subscriptionId?: string; externalId: string; title: string; url?: string;
+  author?: string; keyPoints?: string[];
   excerpt?: string; summary?: string; sourceText?: string; thumbnailUrl?: string;
   publishedAt?: string; collectedAt?: string; status?: string;
 }
@@ -102,6 +103,8 @@ for (const candidate of legacy.candidates ?? []) {
     externalId: candidate.externalId,
     title: candidate.title,
     url: candidate.url ?? null,
+    author: candidate.author ?? null,
+    keyPoints: candidate.keyPoints ?? [],
     body: candidate.sourceText ?? null,
     summary: candidate.summary ?? candidate.excerpt ?? null,
     thumbnailUrl: candidate.thumbnailUrl ?? null,

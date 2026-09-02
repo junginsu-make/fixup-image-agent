@@ -67,11 +67,11 @@ describe("파일 저장소 소유자 격리", () => {
     const { db } = await database();
     const candidateA = await seedLocalCandidate(db, {
       userId: "user-a", sourceId: null, title: "A 후보", url: null, body: "A 본문",
-      summary: null, thumbnailUrl: null, publishedAt: null,
+      summary: null, author: null, keyPoints: [], thumbnailUrl: null, publishedAt: null,
     });
     const candidateB = await seedLocalCandidate(db, {
       userId: "user-b", sourceId: null, title: "B 후보", url: null, body: "B 본문",
-      summary: null, thumbnailUrl: null, publishedAt: null,
+      summary: null, author: null, keyPoints: [], thumbnailUrl: null, publishedAt: null,
     });
     const userA = createLocalCandidateRepository(db, "user-a");
     const userB = createLocalCandidateRepository(db, "user-b");

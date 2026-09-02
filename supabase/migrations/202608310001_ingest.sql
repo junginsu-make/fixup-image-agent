@@ -27,8 +27,11 @@ create table public.ingest_candidates (
   external_id text not null,
   title text not null,
   url text,
+  author text,
   body text,
   summary text,
+  -- 수집기가 뽑아 둔 핵심 문장들. 사람이 훑어보고 고를 때 쓴다.
+  key_points text[] not null default '{}',
   thumbnail_url text,
   published_at timestamptz,
   collected_at timestamptz not null default now(),

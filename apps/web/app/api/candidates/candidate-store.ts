@@ -8,6 +8,8 @@ type CandidateRow = {
   id: string;
   source_id: string | null;
   title: string;
+  author: string | null;
+  key_points: string[] | null;
   url: string | null;
   body: string | null;
   summary: string | null;
@@ -31,6 +33,8 @@ function toRecord(row: CandidateRow): CandidateRecord {
     id: row.id,
     sourceId: row.source_id,
     title: row.title,
+    author: (row.author as string | null) ?? null,
+    keyPoints: (row.key_points as string[] | null) ?? [],
     url: row.url,
     body: row.body,
     summary: row.summary,

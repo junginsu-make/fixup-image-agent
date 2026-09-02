@@ -72,7 +72,7 @@ describe("후보 서비스", () => {
     title: "새 글",
     url: "https://example.com/post",
     body: "본문",
-    summary: "요약",
+    summary: "요약", author: null, keyPoints: [],
     thumbnailUrl: null,
     publishedAt: "2026-08-30T01:00:00Z",
     collectedAt: "2026-08-31T01:00:00Z",

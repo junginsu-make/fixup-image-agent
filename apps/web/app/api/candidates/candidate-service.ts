@@ -11,6 +11,10 @@ export interface CandidateRecord {
   sourceId: string | null;
   title: string;
   url: string | null;
+  /** 작성자·채널. 어디서 온 글인지 사람이 판단할 때 쓴다. */
+  author: string | null;
+  /** 수집기가 뽑아 둔 핵심 문장들. 훑어보고 고를 때 쓴다. */
+  keyPoints: string[];
   body: string | null;
   summary: string | null;
   thumbnailUrl: string | null;
