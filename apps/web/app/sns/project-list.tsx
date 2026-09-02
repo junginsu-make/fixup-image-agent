@@ -63,8 +63,10 @@ export function SnsProjectList() {
   if (!projects) return <p className="py-8 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />지난 작업을 불러오는 중입니다.</p>;
   if (!projects.length) return <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">아직 만든 카드뉴스가 없습니다.</p>;
 
+  // 목록은 훑어보는 곳이다. 한 장이 크면 몇 개 없어도 스크롤을 해야 한다.
+  // 자세히 보는 것은 눌러서 연다.
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
       {projects.map((project) => {
         const cards = project.data?.flow?.cards ?? [];
         // 대표 그림은 첫 장이다. 표지가 그 작업을 가장 잘 알려 준다.
@@ -74,7 +76,7 @@ export function SnsProjectList() {
         return (
           <Card key={project.id} className="overflow-hidden">
             <Link href={`/sns/${project.id}`} className="block">
-              <div className="aspect-[4/5] bg-muted">
+              <div className="h-40 bg-muted">
                 {cover ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={cover} alt={project.title} className="h-full w-full object-cover" />

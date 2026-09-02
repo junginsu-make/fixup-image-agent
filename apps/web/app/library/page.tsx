@@ -11,6 +11,7 @@ import type { PdpResultImage } from "../../lib/library";
 import type { LibraryItem } from "@fixup/shared";
 import { ResultViewer } from "./ResultViewer";
 import { ReferencesTab } from "./references-tab";
+import { WorksTab } from "./works-tab";
 import { CollectedTab } from "./collected-tab";
 
 function formatDate(ms: number): string {
@@ -215,134 +216,8 @@ export default function LibraryPage() {
           <TabsTrigger value="collected">수집한 글</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="works" className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-xl font-semibold">내 작업</h2>
-            <p className="text-sm text-muted-foreground">내 계정과 이 브라우저에 저장한 작업입니다. ‘이 브라우저에만 있음’은 브라우저 데이터를 지우면 사라집니다.</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          multiple
-          className="hidden"
-          onChange={(event) => void handleUpload(event.target.files)}
-        />
-        <Button size="sm" disabled={uploading} onClick={() => fileInput.current?.click()}>
-          {uploading ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <ImagePlus className="mr-1.5 h-4 w-4" />
-          )}
-          {uploading ? "올리는 중…" : "이미지 올리기"}
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          {uploadMessage || "밖에서 만든 이미지도 내 계정에 보관할 수 있습니다. 여러 장은 한 작업으로 묶입니다."}
-        </span>
-          </div>
-
-          {loading ? (
-        <div className="flex items-center gap-2 py-16 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          저장된 작업을 불러오는 중입니다.
-        </div>
-      ) : items.length === 0 ? (
-        <Card className="flex flex-col items-center gap-4 py-16 text-center">
-          <ImageIcon className="h-8 w-8 text-muted-foreground" />
-          <div className="space-y-1">
-            <p className="font-medium">아직 저장된 작업이 없습니다.</p>
-            <p className="text-sm text-muted-foreground">
-              도구에서 작업을 저장하면 여기에 모아 보여 드립니다.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild size="sm">
-              <Link href="/create">새로 만들기</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/redesign">리디자인</Link>
-            </Button>
-          </div>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((item) => {
-            const meta = TOOL_META[item.tool];
-            const key = `${item.tool}-${item.id}`;
-            return (
-              // 카드 전체를 <button> 으로 감싸면 그 안의 삭제 버튼이 버튼 속
-              // 버튼이 된다. 유효하지 않은 HTML 이라 하이드레이션 오류가 났다.
-              // 바깥은 div 로 두고, 여는 동작은 이미지 위 버튼이 맡는다.
-              <div key={key} className="group relative">
-                <Card className="overflow-hidden transition-all duration-200 hover:border-primary/50 hover:shadow-md">
-                  <div className="relative aspect-[3/4] w-full bg-muted">
-                    {/* 카드를 여는 동작. 표지 전체를 덮되 삭제 버튼과 겹치지 않는다. */}
-                    <button
-                      type="button"
-                      onClick={() => void handleOpen(item)}
-                      aria-label={`${item.title} 열기`}
-                      className="absolute inset-0 z-10 block text-left"
-                    />
-                    {item.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.thumbnail}
-                        alt={item.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                        <ImageIcon className="h-6 w-6" />
-                      </div>
-                    )}
-                    <div className="absolute left-2 top-2">
-                      <Badge variant="secondary" className="backdrop-blur">
-                        {meta.label}
-                      </Badge>
-                    </div>
-                    {openingId === item.id ? (
-                      <div className="absolute inset-0 grid place-items-center bg-background/60">
-                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                      </div>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={(event) => handleDelete(event, item)}
-                      disabled={deletingId === key}
-                      aria-label={`${item.title} 삭제`}
-                      title="삭제"
-                      className="absolute right-2 top-2 z-20 grid h-7 w-7 place-items-center rounded-md bg-background/80 text-muted-foreground opacity-0 backdrop-blur transition-opacity hover:bg-background hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-100"
-                    >
-                      {deletingId === key ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  <div className="space-y-1 p-3">
-                    <p className="truncate text-sm font-medium" title={item.title}>
-                      {item.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{formatDate(item.createdAt)}</p>
-                    {/*
-                      어디에 보관돼 있는지 보여준다. 이걸 감추면 브라우저 데이터를
-                      지웠을 때 무엇이 사라지는지 알 수 없다.
-                    */}
-                    <p className="text-meta text-subtle-foreground">
-                      {item.storage === "account"
-                        ? `내 계정 보관${item.imageCount ? ` · ${item.imageCount}장` : ""}`
-                        : "이 브라우저에만 있음"}
-                    </p>
-                  </div>
-                </Card>
-              </div>
-            );
-          })}
-        </div>
-          )}
+        <TabsContent value="works">
+          <WorksTab />
         </TabsContent>
 
         <TabsContent value="references">
