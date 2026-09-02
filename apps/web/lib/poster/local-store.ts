@@ -97,8 +97,9 @@ export function createLocalPosterReferenceStore(
 ): PosterReferenceStore {
   const mine = (data: unknown) => {
     const store = data as { referenceImages?: Array<Record<string, unknown>> };
-    return (store.referenceImages ?? []).filter((row) =>
-      row.userId === userId && (row.purpose === "poster" || row.purpose === "both"));
+    // 용도로 거르지 않는다. 올린 곳이 어디든 세 도구가 다 쓴다 —
+    // 거르면 "분명 올렸는데 여기선 안 보인다" 가 생긴다.
+    return (store.referenceImages ?? []).filter((row) => row.userId === userId);
   };
   const toRecord = (row: Record<string, unknown>): PosterReferenceRecord => ({
     id: String(row.id),

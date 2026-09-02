@@ -8,6 +8,7 @@ import {
 } from "@fixup/ui";
 import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
+import { takeHandoff } from "../../lib/handoff";
 
 const STEPS: StepDefinition[] = [
   { id: "reference", label: "01 레퍼런스", desc: "따라 만들 포스터" },
@@ -39,6 +40,16 @@ export function PosterNewClient() {
   const estimate = estimatePosterCost({
     modelId, ratioId: ratio, variants, hasReferences: selected.length > 0,
   });
+
+  // 라이브러리에서 「포스터로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
+  React.useEffect(() => {
+    const handoff = takeHandoff();
+    if (!handoff) return;
+    setTitle(handoff.title);
+    // 포스터는 한 줄로 시작한다. 긴 글을 그대로 넣으면 오히려 방해가 된다.
+    const firstSentence = handoff.text.split(/[.\n]/)[0]?.trim();
+    setInstruction(firstSentence || handoff.title);
+  }, []);
 
   React.useEffect(() => {
     let alive = true;

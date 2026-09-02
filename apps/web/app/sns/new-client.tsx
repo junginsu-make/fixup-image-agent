@@ -8,6 +8,7 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Step
 import { AttachmentPicker } from "./_components/attachment-picker";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
+import { takeHandoff } from "../../lib/handoff";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -35,6 +36,17 @@ export function NewSnsClient() {
   });
   const [message, setMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [fromLibrary, setFromLibrary] = React.useState<string | null>(null);
+
+  // 라이브러리에서 「카드뉴스로」를 눌러 왔으면 내용이 이미 들어가 있어야 한다.
+  // 복사해 붙이게 만들면 라이브러리에 모아 둔 뜻이 없다.
+  React.useEffect(() => {
+    const handoff = takeHandoff();
+    if (!handoff) return;
+    setTitle(handoff.title);
+    setSource({ kind: "text", text: handoff.text });
+    setFromLibrary(handoff.title);
+  }, []);
 
   const totalCards = spec.cardCountMode === "fixed" ? spec.cardCount! : MAX_CARDS;
   const attachmentIssues = validateAttachments(attachments, modelById(spec.modelId).maxReferenceImages, totalCards);
@@ -106,6 +118,11 @@ export function NewSnsClient() {
           <CardDescription>{step === "content" ? "내용을 넣는 네 가지 길 중 하나를 고릅니다." : step === "images" ? "이미지를 고르고 생성 모델이 다룰 방법을 지정합니다." : "해상도 대신 게시 비율과 장수·언어·모델만 고릅니다."}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-8">
+          {step === "content" && fromLibrary ? (
+            <p role="status" className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              라이브러리의 <strong className="text-foreground">{fromLibrary}</strong> 을(를) 가져왔습니다. 고쳐서 쓰셔도 됩니다.
+            </p>
+          ) : null}
           {step === "content" ? <SourceInput title={title} onTitleChange={setTitle} source={source} onSourceChange={setSource} toneNote={toneNote} onToneNoteChange={setToneNote} /> : null}
           {step === "images" ? <AttachmentPicker attachments={attachments} onChange={setAttachments} modelId={spec.modelId} totalCards={totalCards} /> : null}
           {step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}

@@ -165,6 +165,44 @@ export async function loadUserReferenceCandidates(userId: string): Promise<Style
     }),
   );
 
+  const own = loaded.filter(Boolean) as StyleReferenceMatch[];
+  // 라이브러리의 참고 이미지도 여기서 같이 보인다.
+  // 표가 둘이면 사용자가 어디에 뒀는지 못 찾는다. 올린 곳이 어디든 세 도구가 다 쓴다.
+  return [...own, ...await loadLibraryReferences(supabase, userId, MAX_USER_REFERENCES - own.length)];
+}
+
+/** 라이브러리(reference_images)의 그림을 상세페이지 레퍼런스 형태로 바꾼다. */
+async function loadLibraryReferences(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  limit: number,
+): Promise<StyleReferenceMatch[]> {
+  if (limit <= 0) return [];
+  const { data, error } = await supabase
+    .from("reference_images")
+    .select("id,title,storage_path")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error || !data?.length) return [];
+
+  const loaded = await Promise.all(
+    data.map(async (row: Record<string, unknown>) => {
+      const { data: file } = await supabase.storage.from(BUCKET).download(row.storage_path as string);
+      if (!file) return null;
+      const path = String(row.storage_path);
+      const extension = path.slice(path.lastIndexOf(".")).toLowerCase();
+      return {
+        id: row.id as string,
+        name: (row.title as string | null) ?? "라이브러리 참고 이미지",
+        description: "라이브러리에 올린 참고 이미지",
+        imageBase64: Buffer.from(await file.arrayBuffer()).toString("base64"),
+        mimeType: extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
+          : extension === ".webp" ? "image/webp" : "image/png",
+        similarity: 1,
+      } satisfies StyleReferenceMatch;
+    }),
+  );
   return loaded.filter(Boolean) as StyleReferenceMatch[];
 }
 

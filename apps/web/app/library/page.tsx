@@ -11,6 +11,7 @@ import type { PdpResultImage } from "../../lib/library";
 import type { LibraryItem } from "@fixup/shared";
 import { ResultViewer } from "./ResultViewer";
 import { ReferencesTab } from "./references-tab";
+import { CollectedTab } from "./collected-tab";
 
 function formatDate(ms: number): string {
   if (!ms) return "";
@@ -203,7 +204,7 @@ export default function LibraryPage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold tracking-tight">라이브러리</h1>
         <p className="text-sm text-muted-foreground">
-          완성한 작업물과 카드뉴스·포스터 제작에 사용할 참고 이미지를 한 화면에서 관리합니다.
+          완성한 작업물, 참고 이미지, 수집 미디어가 모아 온 글을 한 화면에서 관리합니다. 여기서 바로 카드뉴스·포스터로 보냅니다.
         </p>
       </div>
 
@@ -211,6 +212,7 @@ export default function LibraryPage() {
         <TabsList>
           <TabsTrigger value="works">작업물</TabsTrigger>
           <TabsTrigger value="references">참고 이미지</TabsTrigger>
+          <TabsTrigger value="collected">수집한 글</TabsTrigger>
         </TabsList>
 
         <TabsContent value="works" className="space-y-6">
@@ -345,6 +347,10 @@ export default function LibraryPage() {
 
         <TabsContent value="references">
           <ReferencesTab />
+        </TabsContent>
+
+        <TabsContent value="collected">
+          <CollectedTab />
         </TabsContent>
       </Tabs>
 
