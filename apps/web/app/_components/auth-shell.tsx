@@ -20,7 +20,7 @@ export function AuthShell({
       <PublicHeader />
       <main className="mx-auto grid w-full max-w-5xl flex-1 content-center gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <section className="hidden lg:block">
-          <p className="text-sm font-extrabold text-primary">AI 상세페이지 스튜디오</p>
+          <p className="text-sm font-extrabold text-primary">AI 콘텐츠 스튜디오</p>
           <h1 className="mt-3 text-3xl font-black tracking-tight">가입부터 첫 생성까지<br />현재 단계를 확인하세요</h1>
           <p className="mt-4 max-w-md leading-7 text-muted-foreground">이메일 인증만 마치면 바로 이용할 수 있습니다. 운영자 AI 키로 생성하는 서비스라 월 이미지 크레딧이 정해져 있습니다.</p>
           <div className="mt-9 rounded-2xl border bg-background p-6">

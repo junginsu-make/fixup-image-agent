@@ -13,26 +13,32 @@ import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { OnboardingSteps, PublicPage } from "./_components/public-shell";
 
 const benefits = [
-  "상품 사진 한 장에서 판매 포인트 분석",
-  "모바일 상세페이지 섹션 이미지 생성",
-  "기존 상세페이지 진단과 리디자인",
+  "유튜브·웹·검색에서 소재를 모아 두기",
+  "레퍼런스를 그대로 따라 만드는 카드뉴스와 포스터",
+  "상품 사진 한 장에서 상세페이지 만들기",
+  "만든 결과를 다음 작업의 기준으로 재사용",
 ];
 
 const features = [
   {
-    icon: Wand2,
-    title: "새 상세페이지 만들기",
-    description: "상품 사진과 기본 정보에서 구성안을 분석하고, 필요한 섹션을 순서대로 생성합니다.",
-  },
-  {
-    icon: FileSearch,
-    title: "기존 페이지 리디자인",
-    description: "이미지나 PDF를 분석해 문제점을 찾고, 개선된 판매 흐름으로 다시 설계합니다.",
+    icon: Sparkles,
+    title: "카드뉴스 만들기",
+    description: "유튜브 자막이나 기사 본문을 가져와 레퍼런스에 맞춘 여러 장으로 만듭니다.",
   },
   {
     icon: Images,
-    title: "한눈에 검토하고 내보내기",
-    description: "전체 갤러리와 이어보기로 흐름을 확인한 뒤 이미지 또는 ZIP으로 내보냅니다.",
+    title: "포스터 만들기",
+    description: "따라 만들 포스터 한 장을 고르면 레이아웃·서체·색을 가져와 내용만 바꿉니다.",
+  },
+  {
+    icon: Wand2,
+    title: "상세페이지 만들기 · 리디자인",
+    description: "상품 사진에서 구성안을 잡고 섹션을 만들거나, 기존 페이지를 진단해 다시 설계합니다.",
+  },
+  {
+    icon: FileSearch,
+    title: "모아 두고 다시 쓰기",
+    description: "채널을 등록하면 소재가 쌓입니다. 참고 이미지와 만든 결과물을 라이브러리에서 함께 씁니다.",
   },
 ];
 
@@ -46,12 +52,12 @@ export default function HomePage() {
             <div>
               <Badge variant="secondary" className="mb-5">승인 회원 전용 AI 제작 도구</Badge>
               <h1 className="max-w-3xl text-4xl font-black leading-[1.12] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
-                상품 사진을
-                <span className="block text-primary">팔리는 상세페이지로</span>
+                모아 둔 소재를
+                <span className="block text-primary">팔리는 콘텐츠로</span>
               </h1>
               <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-                구성 분석부터 섹션 이미지 생성, 전체 흐름 검토와 내보내기까지 한 화면에서 진행하세요.
-                가입 전에는 고정 결과물 데모로 먼저 확인할 수 있습니다.
+                카드뉴스·포스터·상세페이지를 한 곳에서 만듭니다. 소재를 모아 두면 세 도구가 함께
+                끌어다 씁니다. 가입 전에는 고정 결과물 데모로 먼저 확인할 수 있습니다.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button size="lg" asChild>

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: "%s — PDP STUDIO",
   },
   description:
-    "상품 사진으로 상세페이지를 새로 만들거나, 기존 상세페이지를 리디자인하는 AI 통합 스튜디오",
+    "카드뉴스·포스터·상세페이지를 한 곳에서 만드는 AI 콘텐츠 스튜디오",
   applicationName: "PDP STUDIO",
   manifest: "/site.webmanifest",
   appleWebApp: { title: "PDP STUDIO" },

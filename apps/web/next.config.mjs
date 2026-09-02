@@ -13,13 +13,9 @@ const nextConfig = {
         outputFileTracingRoot: path.join(webRoot, "../.."),
       }
     : {}),
-  // 최상단(/) 은 이전 정적 랜딩(public/landing.html, 플럼 + 레퍼런스 샘플)을 보여준다.
-  // beforeFiles 라 app/page.tsx 보다 먼저 적용된다. 회원 셸/데모/인증은 그대로 둔다.
-  async rewrites() {
-    return {
-      beforeFiles: [{ source: "/", destination: "/landing.html" }],
-    };
-  },
+  // 예전에는 최상단(/)이 정적 랜딩(public/landing.html)으로 넘어갔다. 뺐다 —
+  // 문이 둘이면 하나는 반드시 낡는다. 실제로 그 랜딩은 상세페이지 두 가지만
+  // 소개하고 카드뉴스·포스터·수집을 한 번도 말하지 않았다.
   // 워크스페이스 패키지(보존된 백엔드 + 공통 UI)를 Next가 트랜스파일하도록 지정
   transpilePackages: [
     "@fixup/pdp-core",

@@ -3,7 +3,6 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = [
   "/",
-  "/landing.html",
   "/demo",
   "/login",
   "/signup",
