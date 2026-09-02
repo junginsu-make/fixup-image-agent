@@ -18,3 +18,7 @@ env*.md
 .remember/tmp/
 frontend/
 .next-build/
+
+# Supabase CLI 가 만드는 로컬 상태. 링크한 프로젝트 ref 가 들어간다.
+supabase/.temp/
+supabase/.branches/

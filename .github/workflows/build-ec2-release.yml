@@ -3,7 +3,7 @@ name: Build EC2 release
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [master]
 
 permissions:
   contents: read
@@ -82,14 +82,14 @@ jobs:
           fi
           # 실행에 꼭 필요한 모듈에 실제로 도달하는지 확인한다.
           test -f dist/ec2/apps/web/node_modules/next/package.json
-          tar -czf detail-page-studio-${GITHUB_SHA::12}.tar.gz -C dist/ec2 .
-          tar -czf detail-page-studio-ops-${GITHUB_SHA::12}.tar.gz deploy/ec2
+          tar -czf fixup-image-agent-${GITHUB_SHA::12}.tar.gz -C dist/ec2 .
+          tar -czf fixup-image-agent-ops-${GITHUB_SHA::12}.tar.gz deploy/ec2
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: detail-page-studio-ec2-${{ github.sha }}
+          name: fixup-image-agent-ec2-${{ github.sha }}
           path: |
-            detail-page-studio-*.tar.gz
+            fixup-image-agent-*.tar.gz
           if-no-files-found: error
           retention-days: 14

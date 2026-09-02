@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=detail-page
-Group=detail-page
-WorkingDirectory=/opt/detail-page-studio/current
-EnvironmentFile=/etc/detail-page-studio/app.env
+User=fixup-agent
+Group=fixup-agent
+WorkingDirectory=/opt/fixup-image-agent/current
+EnvironmentFile=/etc/fixup-image-agent/app.env
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/pnpm --filter @fixup/worker start
 Restart=always

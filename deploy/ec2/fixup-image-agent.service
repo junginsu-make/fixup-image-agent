@@ -1,14 +1,14 @@
 [Unit]
-Description=AI Detail Page Studio (Next.js standalone)
+Description=Fixup Image Agent web (Next.js standalone)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=detail-page
-Group=detail-page
-WorkingDirectory=/opt/detail-page-studio/current/apps/web
-EnvironmentFile=/etc/detail-page-studio/app.env
+User=fixup-agent
+Group=fixup-agent
+WorkingDirectory=/opt/fixup-image-agent/current/apps/web
+EnvironmentFile=/etc/fixup-image-agent/app.env
 Environment=NODE_ENV=production
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=3000
