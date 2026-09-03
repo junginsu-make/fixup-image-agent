@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 const scriptsRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptsRoot, "..");
 const webRoot = path.join(repoRoot, "apps", "web");
-const standaloneSource = path.join(webRoot, ".next", "standalone");
+/**
+ * 빌드 결과가 어디에 떨어졌는지. next.config.mjs 가 보는 값과 같아야 한다.
+ *
+ * 기본값과 다르게 두는 이유: 개발 서버가 `.next` 를 쓰고 있는 동안 그 위에
+ * 빌드하면 개발 서버가 500 을 뱉는다. 배포용 빌드는
+ * `NEXT_DIST_DIR=.next-release pnpm build` 로 따로 낸다.
+ */
+const distDirName = process.env.NEXT_DIST_DIR || ".next";
+const buildRoot = path.join(webRoot, distDirName);
+const standaloneSource = path.join(buildRoot, "standalone");
 const releaseRoot = path.join(repoRoot, "dist", "ec2");
 
 /** 워커를 묶을 때 빼는 것. 이유는 아래 bundleWorker 주석에 적었다. */
@@ -45,8 +54,10 @@ for (const root of [releaseRoot, runtimeRoot]) {
 }
 
 cpSync(path.join(webRoot, "public"), path.join(runtimeRoot, "public"), { recursive: true });
-mkdirSync(path.join(runtimeRoot, ".next"), { recursive: true });
-cpSync(path.join(webRoot, ".next", "static"), path.join(runtimeRoot, ".next", "static"), { recursive: true });
+// standalone 안의 폴더 이름은 빌드 때 쓴 distDir 그대로다. static 도 같은
+// 이름 밑에 둬야 standalone server.js 가 찾는다.
+mkdirSync(path.join(runtimeRoot, distDirName), { recursive: true });
+cpSync(path.join(buildRoot, "static"), path.join(runtimeRoot, distDirName, "static"), { recursive: true });
 
 await bundleWorker();
 placeSharpLibvips(releaseRoot);

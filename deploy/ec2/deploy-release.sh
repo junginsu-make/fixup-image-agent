@@ -48,10 +48,14 @@ chown -R root:fixup-agent "${release_root}"
 chmod -R o-rwx "${release_root}"
 find "${release_root}" -type d -exec chmod 0750 {} +
 find "${release_root}" -type f -exec chmod 0640 {} +
-# Next's image optimizer writes only under .next/cache. Keep the release
-# immutable to the service account except for that cache directory.
-install -d -o fixup-agent -g fixup-agent -m 0750 \
-  "${release_root}/apps/web/.next/cache/images"
+# Next's image optimizer writes only under its build directory's cache. Keep the
+# release immutable to the service account except for that cache directory.
+# The build directory is named after distDir, which is not always ".next" — a
+# release built while a dev server holds ".next" carries another name.
+for build_dir in "${release_root}/apps/web"/.next*; do
+  [[ -d ${build_dir} ]] || continue
+  install -d -o fixup-agent -g fixup-agent -m 0750 "${build_dir}/cache/images"
+done
 
 ln -sfnT "${release_root}" "${current_link}"
 systemctl restart fixup-image-agent.service
