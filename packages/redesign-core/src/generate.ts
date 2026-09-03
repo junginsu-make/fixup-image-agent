@@ -80,7 +80,30 @@ export type GenerateSectionsInput = {
   openaiKey?: string;
   googleKey?: string;
   transcript?: string;
+  /**
+   * 섹션마다 같은 사람이 나오게 하는 기준 한 장.
+   *
+   * 캐릭터 만들기에서 만든 것을 그대로 쓴다. **한 장만 보낸다** — 여러 각도를
+   * 함께 보내면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측).
+   *
+   * `directive` 는 그 인물을 지키라는 문장이다. 이미지만 보내면 모델이
+   * 참조 중 하나로만 다루고 얼굴을 바꾼다.
+   */
+  character?: { name: string; mimeType: string; buffer: Buffer; directive: string };
 };
+
+/**
+ * 등장인물을 참조 목록 맨 앞에 놓는다.
+ *
+ * **앞이어야 한다.** 생성 함수가 MAX_REFERENCE_IMAGES 장에서 자르므로, 뒤에
+ * 두면 원본이 많을 때 인물이 조용히 사라진다. 정체성 기준이 먼저다.
+ */
+export function referencesWithCharacter(
+  originals: ReferenceImage[],
+  character: ReferenceImage | undefined,
+): ReferenceImage[] {
+  return (character ? [character, ...originals] : originals).slice(0, MAX_REFERENCE_IMAGES);
+}
 
 export async function generateSections(input: GenerateSectionsInput) {
   const files = input.files || [];
@@ -137,7 +160,14 @@ export async function generateSections(input: GenerateSectionsInput) {
   console.info(`[generate] analysis start job=${jobId}`);
   const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript });
   console.info(`[generate] analysis done job=${jobId}`);
-  const sections = buildSections(count, startSection, payload, analysis, modelInfo);
+  // 분석에는 인물을 넣지 않는다. 분석은 원본 상세페이지를 읽어 제품을 파악하는
+  // 일이라, 인물이 섞이면 제품 분석이 오염된다. 생성에만 넣는다.
+  const character = input.character;
+  const drawReferences = referencesWithCharacter(
+    references,
+    character ? { name: character.name, mimeType: character.mimeType, buffer: character.buffer } : undefined,
+  );
+  const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive);
   const projectTitle = inferProjectTitle(analysis, channel);
 
   const generatedSections = [];
@@ -146,8 +176,8 @@ export async function generateSections(input: GenerateSectionsInput) {
     try {
       console.info(`[generate] ${provider} ${section.section_id} start (${index + 1}/${sections.length})`);
       const image = provider === "google"
-        ? await generateGoogleImage({ apiKey, prompt: section.promptText, references })
-        : await generateOpenAIImage({ apiKey, prompt: section.promptText, references });
+        ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences })
+        : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences });
 
       generatedSections.push({
         ...section,
@@ -441,12 +471,14 @@ function designLanguageBlock(analysis: unknown): string {
   ].join("\n");
 }
 
-function buildSections(
+export function buildSections(
   count: number,
   startSection: number,
   payload: { request: string; rolloutRequest: string; knowledgeText: string; options: { channel: string; ratio: string; count: number } },
   analysis: unknown,
-  modelInfo: ReturnType<typeof modelMeta>
+  modelInfo: ReturnType<typeof modelMeta>,
+  /** 등장인물을 지키라는 문장. **모든 섹션에 붙는다** — 한 장만 빠져도 그 장에서 다른 사람이 나온다. */
+  characterDirective?: string
 ): Section[] {
   return sectionTemplates(count, startSection).map((template) => {
     const facts = factsForSections(analysis);
@@ -475,7 +507,8 @@ function buildSections(
       "전체 연결 규칙: 8장을 이어 붙였을 때 하나의 상세페이지처럼 보여야 한다. 동일한 브랜드 색, 폰트 감각, 제품 사진 톤은 유지하되 각 섹션의 레이아웃은 반드시 다르게 구성한다. 모든 섹션이 큰 상단 헤드라인+중앙 제품컷으로 반복되면 안 된다.",
       "섹션별 변화 규칙: 제품 위치, 정보 카드 모양, 아이콘 밀도, 배경 분할, CTA 위치, 타이포 크기 리듬을 섹션마다 다르게 한다. 같은 헤드라인 문구를 반복하지 말고, 섹션 목적에 맞는 새로운 제목을 쓴다.",
       "안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. 근거 없는 수치, 리뷰, 인증, 효과를 만들지 않는다. 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다. 규제 리스크가 있으면 안전한 표현으로 완화한다.",
-      factsBlock
+      factsBlock,
+      characterDirective ?? ""
     ].join("\n");
 
     return {

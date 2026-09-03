@@ -235,6 +235,8 @@ export function RedesignWizard() {
   const [activeProject, setActiveProject] = React.useState<Project | null>(null);
   const [selectedModel, setSelectedModel] = React.useState<Model>("openai");
   const [channel, setChannel] = React.useState("스마트스토어");
+  // 캐릭터 만들기에서 만든 등장인물. 고르면 섹션마다 같은 사람이 나온다.
+  const [characterId, setCharacterId] = React.useState("");
   const [count, setCount] = React.useState(1);
   const [ratio, setRatio] = React.useState("9:16");
   const [files, setFiles] = React.useState<File[]>([]);
@@ -454,6 +456,7 @@ export function RedesignWizard() {
       form.append("startSection", String(startSection));
       form.append("rolloutRequest", outputRolloutRequest);
       if (transcript) form.append("transcript", transcript);
+      if (characterId) form.append("characterId", characterId);
 
       const response = await fetch("/api/redesign/generate", {
         method: "POST",
@@ -899,6 +902,8 @@ export function RedesignWizard() {
             setSelectedModel={setSelectedModel}
             channel={channel}
             setChannel={setChannel}
+            characterId={characterId}
+            setCharacterId={setCharacterId}
             count={count}
             setCount={setCount}
             ratio={ratio}
@@ -1641,6 +1646,8 @@ function Workspace(props: {
   setSelectedModel: (model: Model) => void;
   channel: string;
   setChannel: (channel: string) => void;
+  characterId: string;
+  setCharacterId: (id: string) => void;
   count: number;
   setCount: (count: number) => void;
   ratio: string;
@@ -1662,6 +1669,8 @@ function Workspace(props: {
     setSelectedModel,
     channel,
     setChannel,
+    characterId,
+    setCharacterId,
     count,
     setCount,
     ratio,
@@ -1815,6 +1824,7 @@ function Workspace(props: {
               <OptionGroup label="결과 장수" value={String(count)} options={[["1", "히어로 1장"], ["8", "기본 6~8장"]]} onChange={(value) => setCount(Number(value))} />
               <OptionGroup label="출력 비율" value={ratio} options={[["9:16", "9:16"], ["1080×1920", "1080×1920"]]} onChange={setRatio} />
               <ChannelOptionGroup value={channel} onChange={setChannel} />
+              <CharacterOptionGroup value={characterId} onChange={setCharacterId} />
               <div className="rounded-md bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
                 <strong className="text-foreground">예상 이미지 크레딧: 최대 {count}장</strong><br />
                 실제로 생성에 성공한 이미지 수만큼만 차감됩니다. 실패한 결과는 차감되지 않습니다.
@@ -1824,6 +1834,75 @@ function Workspace(props: {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * 등장인물 고르기.
+ *
+ * 안 고르면 지금까지대로 돈다 — 사람이 나오는 섹션마다 다른 사람이 나온다.
+ * 고르면 그 사람의 **정면 한 장**이 모든 섹션에 함께 간다. 여러 각도를 보내면
+ * 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측).
+ */
+function CharacterOptionGroup({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [characters, setCharacters] = React.useState<Array<{
+    id: string; name: string; views: Array<{ angle: string; url: string | null }>;
+  }>>([]);
+
+  React.useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const body = await (await fetch("/api/characters", { cache: "no-store" })).json();
+        if (alive) setCharacters(body.ok ? (body.characters ?? []) : []);
+      } catch {
+        // 못 불러와도 리디자인은 그대로 된다. 등장인물은 선택이다.
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  if (!characters.length) return null;
+
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-bold text-muted-foreground">등장인물 · 선택</label>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={cn(
+            "min-h-9 rounded-md border border-border bg-card px-2 text-xs font-bold",
+            !value && "bg-foreground text-background",
+          )}
+          onClick={() => onChange("")}
+        >
+          안 씀
+        </button>
+        {characters.map((character) => {
+          const front = character.views.find((view) => view.url);
+          return (
+            <button
+              key={character.id}
+              type="button"
+              className={cn(
+                "flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-bold",
+                value === character.id && "bg-foreground text-background",
+              )}
+              onClick={() => onChange(value === character.id ? "" : character.id)}
+            >
+              {front?.url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={front.url} alt="" className="size-6 rounded-sm object-cover" />
+              ) : null}
+              <span className="max-w-24 truncate">{character.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        고르면 사람이 나오는 섹션마다 같은 사람이 나옵니다. 안 고르면 섹션마다 다른 사람이 나옵니다.
+      </p>
+    </div>
   );
 }
 
