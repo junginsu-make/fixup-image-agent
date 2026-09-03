@@ -101,8 +101,10 @@
 
 ```
 apps/web/                Next.js 프론트엔드 + 얇은 API 어댑터 (단일 배포 대상)
-  app/                   /library(첫 화면) · /sns · /poster · /create · /redesign
-                         /characters · /inbox · /sources · /settings · /admin
+  app/                   /library(로그인 후 첫 화면) · /sns · /poster · /create
+                         /redesign · /characters · /inbox · /sources · /settings · /admin
+  app/page.tsx           공개 랜딩(/). 규칙은 docs/landing.md
+  app/_landing/          랜딩 섹션들. 이 페이지 밖에서는 쓰지 않는다
   app/_components/       셸에 붙는 것들 — 만드는 중 목록 · 이미지 뷰어 · 라이브러리 선택창
   lib/membership/        회원 권한 · 월 이미지 크레딧 · API 게이트
   lib/supabase/          브라우저 / SSR / 서버 전용 Supabase 클라이언트
@@ -120,6 +122,7 @@ packages/shared/         교차 타입 — 역할 어휘 · 제공자 대체 규
 ```
 
 설계 · 구현 문서: `docs/superpowers/specs/`, `docs/superpowers/plans/`
+공개 랜딩페이지 규칙: `docs/landing.md`
 
 ## 데이터
 
