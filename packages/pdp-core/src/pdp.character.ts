@@ -20,7 +20,21 @@ import type { AspectRatio, ImageModelId } from "./types";
  * 그래서 좌·우는 45도로 돌린 시점을 쓴다.
  */
 
-export type CharacterAngle = "front" | "left" | "right" | "back";
+/**
+ * 각도 — 여섯 종.
+ *
+ * 이름에 각도를 적는 이유가 있다. 2026-09 이전에는 `left`·`right` 가 **45도**를
+ * 뜻했다. 90도 측면을 더하면서 그 이름을 재활용하면, 마이그레이션을 한 군데라도
+ * 빠뜨렸을 때 45도 자료가 90도로 조용히 뒤바뀐다. 이름이 다르면 모르는 값으로
+ * 남아 눈에 띈다(→ `migrateAngle`).
+ */
+export type CharacterAngle =
+  | "front"
+  | "left_45"
+  | "right_45"
+  | "left_90"
+  | "right_90"
+  | "back";
 
 /** 무엇을 만드는가. 몸과 각도 지시가 여기서 갈린다. */
 export type CharacterKind = "person" | "animal" | "character" | "object";
@@ -54,12 +68,19 @@ const PERSON_ANGLE: Record<CharacterAngle, string> = {
   front:
     "a straight-on front view with the head and torso facing the camera, both sides of the " +
     "face equally visible",
-  left:
+  left_45:
     "a subject-left three-quarter view, with the character rotated about 45 degrees toward " +
     "their own left while both eyes remain visible",
-  right:
+  right_45:
     "a subject-right three-quarter view, with the character rotated about 45 degrees toward " +
     "their own right while both eyes remain visible",
+  // 90도는 두 눈이 안 보인다. 보인다고 적으면 모델이 억지로 얼굴을 돌린다.
+  left_90:
+    "a full side profile facing the subject's own left, rotated 90 degrees from the camera, " +
+    "with only one side of the face visible and the silhouette clearly readable",
+  right_90:
+    "a full side profile facing the subject's own right, rotated 90 degrees from the camera, " +
+    "with only one side of the face visible and the silhouette clearly readable",
   back:
     "a direct back view with the face fully hidden; accurately preserve the rear hairstyle, " +
     "silhouette, body proportions and outfit construction, and do not place facial features " +
@@ -76,12 +97,18 @@ const ANIMAL_ANGLE: Record<CharacterAngle, string> = {
   front:
     "a straight-on front view with the head and muzzle facing the camera, both sides of the " +
     "head equally visible",
-  left:
+  left_45:
     "a subject-left three-quarter view, rotated about 45 degrees toward its own left, with " +
     "the head and muzzle still clearly readable",
-  right:
+  right_45:
     "a subject-right three-quarter view, rotated about 45 degrees toward its own right, with " +
     "the head and muzzle still clearly readable",
+  left_90:
+    "a full side profile facing the subject's own left, rotated 90 degrees from the camera, " +
+    "showing the whole body length and the coat pattern along that side",
+  right_90:
+    "a full side profile facing the subject's own right, rotated 90 degrees from the camera, " +
+    "showing the whole body length and the coat pattern along that side",
   back:
     "a direct back view from behind; accurately preserve the fur pattern, coat colours, tail " +
     "shape and body silhouette, and do not show the muzzle or eyes from this angle",
@@ -95,8 +122,10 @@ const ANIMAL_ANGLE: Record<CharacterAngle, string> = {
  */
 const OBJECT_ANGLE: Record<CharacterAngle, string> = {
   front: "a straight-on front view of the object, its front surface facing the camera",
-  left: "a three-quarter view rotated about 45 degrees to show the front and left side together",
-  right: "a three-quarter view rotated about 45 degrees to show the front and right side together",
+  left_45: "a three-quarter view rotated about 45 degrees to show the front and left side together",
+  right_45: "a three-quarter view rotated about 45 degrees to show the front and right side together",
+  left_90: "a flat side view of the object's left side, rotated 90 degrees from the camera",
+  right_90: "a flat side view of the object's right side, rotated 90 degrees from the camera",
   back: "a direct rear view showing the back surface; preserve the silhouette, materials and construction",
 };
 
@@ -114,10 +143,39 @@ const ANGLE_BY_KIND: Record<CharacterKind, Record<CharacterAngle, string>> = {
  */
 export const CHARACTER_ANGLES: CharacterAngleInfo[] = [
   { id: "front", label: "정면", directive: PERSON_ANGLE.front },
-  { id: "left", label: "좌측", directive: PERSON_ANGLE.left },
-  { id: "right", label: "우측", directive: PERSON_ANGLE.right },
-  { id: "back", label: "뒷모습", directive: PERSON_ANGLE.back },
+  { id: "left_45", label: "왼쪽 45°", directive: PERSON_ANGLE.left_45 },
+  { id: "right_45", label: "오른쪽 45°", directive: PERSON_ANGLE.right_45 },
+  { id: "left_90", label: "왼쪽", directive: PERSON_ANGLE.left_90 },
+  { id: "right_90", label: "오른쪽", directive: PERSON_ANGLE.right_90 },
+  { id: "back", label: "뒷면", directive: PERSON_ANGLE.back },
 ];
+
+/**
+ * 정면 말고 기본으로 켜 두는 각도.
+ *
+ * 넷이 예전 기본값이고 대부분의 쓰임에 충분하다. 90도 측면은 얼굴이 반만
+ * 보여 정체성 기준으로 쓰기 나쁘므로 필요할 때만 켠다.
+ */
+export const DEFAULT_EXTRA_ANGLES: CharacterAngle[] = ["left_45", "right_45", "back"];
+
+/**
+ * 옛 각도 이름을 지금 이름으로.
+ *
+ * 2026-09 이전 자료는 `left`·`right` 가 45도를 뜻했고, 그 전에는 파일 이름이
+ * `three_quarter` 였다. 그 뜻 그대로 옮긴다.
+ *
+ * **모르는 이름은 그대로 돌려준다.** 조용히 정면으로 바꾸면 없던 정면이
+ * 둘이 되고, 어느 쪽이 진짜인지 알 수 없게 된다.
+ */
+const OLD_ANGLE: Record<string, CharacterAngle> = {
+  left: "left_45",
+  right: "right_45",
+  three_quarter: "left_45",
+};
+
+export function migrateAngle(angle: string): string {
+  return OLD_ANGLE[angle] ?? angle;
+}
 
 /** 종류에 맞는 각도 지시. 종류를 안 주면 사람으로 본다. */
 export function angleDirective(angle: CharacterAngle, kind: CharacterKind = "person"): string {
@@ -334,10 +392,10 @@ export function pickAngleForSection(layoutNotes: string): CharacterAngle {
   }
   // 오른쪽을 보고 선 장면. 왼쪽에 여백이 생겨 글자를 앉히기 좋다.
   if (/오른쪽|우측|right side|facing right/.test(text)) {
-    return "right";
+    return "right_45";
   }
   // 그 밖의 사용 장면은 좌측 45도가 자연스럽다. 두 눈이 보여 얼굴이 남는다.
-  return "left";
+  return "left_45";
 }
 
 /**

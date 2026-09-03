@@ -5,9 +5,11 @@ describe("캐릭터를 라이브러리에 넣을 때의 이름", () => {
   it("무슨 캐릭터의 어느 각도인지 제목만 보고 안다", () => {
     // 라이브러리에는 온갖 그림이 섞인다. 각도만 적으면 누구 것인지 알 수 없다.
     expect(characterReferenceTitle("민수", "front")).toBe("민수 (캐릭터) · 정면");
-    expect(characterReferenceTitle("민수", "left")).toBe("민수 (캐릭터) · 좌측");
-    expect(characterReferenceTitle("민수", "right")).toBe("민수 (캐릭터) · 우측");
-    expect(characterReferenceTitle("민수", "back")).toBe("민수 (캐릭터) · 뒷모습");
+    // 옛 이름으로 저장된 줄도 지금 이름표로 부른다 — left 는 45도였다.
+    expect(characterReferenceTitle("민수", "left")).toBe("민수 (캐릭터) · 왼쪽 45°");
+    expect(characterReferenceTitle("민수", "left_90")).toBe("민수 (캐릭터) · 왼쪽");
+    expect(characterReferenceTitle("민수", "right")).toBe("민수 (캐릭터) · 오른쪽 45°");
+    expect(characterReferenceTitle("민수", "back")).toBe("민수 (캐릭터) · 뒷면");
   });
 
   it("모르는 각도가 와도 이름을 만든다", () => {

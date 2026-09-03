@@ -20,7 +20,8 @@ export const maxDuration = 300;
 
 const BodySchema = z.object({
   characterId: z.string().min(1),
-  angle: z.enum(["left", "right", "back"]),
+  // 정면은 없다. 고른 후보 그 자체이고 나머지의 기준이라 새로 만들면 전부 남남이 된다.
+  angle: z.enum(["left_45", "right_45", "left_90", "right_90", "back"]),
   aspectRatio: z.enum(["1:1", "3:4", "4:3", "9:16", "16:9"]).default("3:4"),
   modelId: z.enum(IMAGE_MODELS.map((model) => model.id) as [string, ...string[]]).optional(),
 });

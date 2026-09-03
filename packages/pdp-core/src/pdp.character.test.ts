@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CHARACTER_ANGLES,
   angleDirective,
+  migrateAngle,
   buildCandidatePrompt,
   buildSceneWithCharacterDirective,
   buildTurnaroundPrompt,
@@ -10,37 +11,13 @@ import {
 } from "./pdp.character";
 
 describe("각도 정의", () => {
-  // 앞·뒤·좌·우 넷으로 고정한다.
-  it("네 종을 쓴다", () => {
-    expect(CHARACTER_ANGLES.map((angle) => angle.id)).toEqual([
-      "front",
-      "left",
-      "right",
-      "back",
-    ]);
-  });
 
   // 이 순서가 화면과 라이브러리의 순서다. 목록 표지와 첫 장이 정면이어야 한다.
   it("정면이 맨 앞이다", () => {
     expect(CHARACTER_ANGLES[0].id).toBe("front");
   });
 
-  // 90도 측면은 얼굴이 반만 보여 정체성 기준으로 쓰기 나쁘다.
-  // 좌·우는 45도로 돌린 시점을 쓴다 — 두 눈이 남는다.
-  it("좌·우는 두 눈이 보이는 45도다", () => {
-    for (const id of ["left", "right"] as const) {
-      const angle = CHARACTER_ANGLES.find((entry) => entry.id === id)!;
-      expect(angle.directive).toMatch(/45 degrees/i);
-      expect(angle.directive).toMatch(/both eyes remain visible/i);
-    }
-  });
 
-  it("좌와 우가 서로 반대쪽을 본다", () => {
-    const left = CHARACTER_ANGLES.find((angle) => angle.id === "left")!;
-    const right = CHARACTER_ANGLES.find((angle) => angle.id === "right")!;
-    expect(left.directive).toMatch(/subject-left/i);
-    expect(right.directive).toMatch(/subject-right/i);
-  });
 
   it("각도마다 영어 지시문이 있다", () => {
     for (const angle of CHARACTER_ANGLES) {
@@ -132,14 +109,14 @@ describe("섹션에 쓸 각도 고르기", () => {
   });
 
   it("오른쪽을 보는 장면이면 우측", () => {
-    expect(pickAngleForSection("모델이 오른쪽을 바라보는 구도")).toBe("right");
-    expect(pickAngleForSection("facing right, product on the left")).toBe("right");
+    expect(pickAngleForSection("모델이 오른쪽을 바라보는 구도")).toBe("right_45");
+    expect(pickAngleForSection("facing right, product on the left")).toBe("right_45");
   });
 
   // 대부분의 사용 장면은 좌측 45도가 자연스럽다. 판단이 안 서면 여기로 온다.
   it("그 외에는 좌측", () => {
-    expect(pickAngleForSection("주방에서 제품을 쓰는 장면")).toBe("left");
-    expect(pickAngleForSection("")).toBe("left");
+    expect(pickAngleForSection("주방에서 제품을 쓰는 장면")).toBe("left_45");
+    expect(pickAngleForSection("")).toBe("left_45");
   });
 });
 
@@ -330,5 +307,74 @@ describe("후보는 정면이어야 한다", () => {
       ...base, kind: "person", look: "anime", referenceRole: "extract",
     });
     expect(prompt).toContain(angleDirective("front", "person"));
+  });
+});
+
+describe("각도 여섯 종", () => {
+  it("여섯을 쓴다", () => {
+    expect(CHARACTER_ANGLES.map((angle) => angle.id)).toEqual([
+      "front", "left_45", "right_45", "left_90", "right_90", "back",
+    ]);
+  });
+
+  it("정면이 맨 앞이다", () => {
+    // 이 순서가 화면과 라이브러리의 순서다. 첫 장이 정면이어야 알아본다.
+    expect(CHARACTER_ANGLES[0]!.id).toBe("front");
+  });
+
+  it("45도는 두 눈이 남고 90도는 옆얼굴이다", () => {
+    for (const id of ["left_45", "right_45"] as const) {
+      expect(angleDirective(id, "person")).toMatch(/45 degrees/i);
+      expect(angleDirective(id, "person")).toMatch(/both eyes remain visible/i);
+    }
+    for (const id of ["left_90", "right_90"] as const) {
+      expect(angleDirective(id, "person")).toMatch(/90 degrees|profile/i);
+      // 90도는 두 눈이 안 보인다. 보인다고 하면 모델이 억지로 돌린다.
+      expect(angleDirective(id, "person")).not.toMatch(/both eyes remain visible/i);
+    }
+  });
+
+  it("왼쪽과 오른쪽이 서로 반대를 본다", () => {
+    for (const [left, right] of [["left_45", "right_45"], ["left_90", "right_90"]] as const) {
+      // 45도는 subject-left, 90도는 the subject's own left 로 적는다.
+      // 요구하는 것은 문구 형식이 아니라 좌우가 반대라는 사실이다.
+      expect(angleDirective(left, "person")).toMatch(/subject.{0,10}left/i);
+      expect(angleDirective(right, "person")).toMatch(/subject.{0,10}right/i);
+      expect(angleDirective(left, "person")).not.toMatch(/subject.{0,10}right/i);
+    }
+  });
+
+  it("여섯 각도 모두 종류마다 지시가 있다", () => {
+    for (const angle of CHARACTER_ANGLES) {
+      for (const kind of ["person", "animal", "character", "object"] as const) {
+        expect(angleDirective(angle.id, kind), `${angle.id}/${kind}`).toBeTruthy();
+      }
+    }
+  });
+
+  it("사물의 90도에도 얼굴 이야기가 없다", () => {
+    for (const id of ["left_90", "right_90"] as const) {
+      expect(angleDirective(id, "object")).not.toMatch(/\bfaces?\b|\beyes\b|hairstyle/i);
+    }
+  });
+});
+
+describe("옛 각도 이름", () => {
+  it("left·right 는 45도였다", () => {
+    // 2026-09 이전 자료는 left/right 가 45도를 뜻했다. 그 뜻 그대로 옮긴다.
+    expect(migrateAngle("left")).toBe("left_45");
+    expect(migrateAngle("right")).toBe("right_45");
+    expect(migrateAngle("three_quarter")).toBe("left_45");
+  });
+
+  it("아는 이름은 그대로 둔다", () => {
+    for (const angle of CHARACTER_ANGLES) {
+      expect(migrateAngle(angle.id)).toBe(angle.id);
+    }
+  });
+
+  it("모르는 이름은 그대로 돌려준다", () => {
+    // 조용히 정면으로 바꾸면 없던 정면이 둘이 된다.
+    expect(migrateAngle("무엇")).toBe("무엇");
   });
 });

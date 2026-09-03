@@ -12,6 +12,8 @@ import {
   type CharacterKind,
   type CharacterLook,
   type CharacterReferenceRole,
+  DEFAULT_EXTRA_ANGLES,
+  migrateAngle,
   type ImageModelId,
   type ReferenceImage,
 } from "@fixup/pdp-core";
@@ -62,11 +64,21 @@ const ANGLE_ORDER = new Map<string, number>(
 );
 
 function byAngleOrder(a: { angle: string }, b: { angle: string }) {
-  return (ANGLE_ORDER.get(a.angle) ?? 99) - (ANGLE_ORDER.get(b.angle) ?? 99);
+  return (ANGLE_ORDER.get(migrateAngle(a.angle)) ?? 99) - (ANGLE_ORDER.get(migrateAngle(b.angle)) ?? 99);
 }
 
-/** 후보 수. 늘리면 그만큼 크레딧이 든다. */
-export const CANDIDATE_COUNT = 2;
+/** 후보 수 — 사용자가 고른다. 늘리면 그만큼 크레딧이 든다. */
+export const MIN_CANDIDATES = 1;
+export const MAX_CANDIDATES = 3;
+export const DEFAULT_CANDIDATES = 2;
+
+/** @deprecated 후보 수는 이제 고를 수 있다. 옛 화면이 읽던 값만 남긴다. */
+export const CANDIDATE_COUNT = DEFAULT_CANDIDATES;
+
+function clampCandidates(count: number | undefined): number {
+  if (!Number.isFinite(count)) return DEFAULT_CANDIDATES;
+  return Math.min(MAX_CANDIDATES, Math.max(MIN_CANDIDATES, Math.trunc(count as number)));
+}
 
 export interface CharacterView {
   angle: CharacterAngle;
@@ -124,7 +136,10 @@ export async function generateCandidates(input: {
   look: CharacterLook;
   modelId?: ImageModelId;
   reference?: CharacterReferenceInput;
+  /** 1~3. 안 주면 2장. */
+  candidates?: number;
 }) {
+  const count = clampCandidates(input.candidates);
   const model = input.modelId ?? selectCharacterModel(input.look);
   const prompt = buildCandidatePrompt({
     description: input.description,
@@ -136,7 +151,7 @@ export async function generateCandidates(input: {
   const references = input.reference ? [toFalReference(input.reference)] : [];
 
   const settled = await Promise.allSettled(
-    Array.from({ length: CANDIDATE_COUNT }, () =>
+    Array.from({ length: count }, () =>
       generateImageViaFal(model, {
         prompt,
         systemPrompt: "You are a character designer. Produce one clean character reference.",
@@ -153,7 +168,7 @@ export async function generateCandidates(input: {
     )
     .map((entry) => entry.value);
 
-  return { model, candidates, requested: CANDIDATE_COUNT };
+  return { model, candidates, requested: count };
 }
 
 interface ViewBytes {
@@ -224,7 +239,15 @@ export async function createCharacter(input: {
   modelId?: ImageModelId;
   chosenBase64: string;
   chosenMimeType: string;
+  /**
+   * 정면 말고 더 만들 각도. 안 주면 예전 기본값 셋이다.
+   *
+   * 정면은 여기 없어도 늘 들어간다 — 고른 후보 그 자체이고 나머지의 기준이다.
+   * 하나도 안 고르면 정면 한 장짜리 캐릭터가 된다. 그것도 쓸모가 있다.
+   */
+  angles?: CharacterAngle[];
 }) {
+  const extraAngles = (input.angles ?? DEFAULT_EXTRA_ANGLES).filter((angle) => angle !== "front");
   const model = input.modelId ?? selectCharacterModel(input.look);
   const characterId = randomUUID();
   const name = input.name.slice(0, 80);
@@ -269,9 +292,9 @@ export async function createCharacter(input: {
     };
 
     const others = await Promise.allSettled(
-      CHARACTER_ANGLES.filter((entry) => entry.id !== "front").map((entry) =>
+      extraAngles.map((angle) =>
         generateAngle({
-          angle: entry.id,
+          angle,
           identityPrompt: input.description,
           aspectRatio: input.aspectRatio,
           kind: input.kind,
@@ -331,7 +354,8 @@ export async function createCharacter(input: {
       ok: true as const,
       id: characterId,
       angleCount: rows.length,
-      missingAngles: CHARACTER_ANGLES.length - rows.length,
+      // 정면 + 고른 각도 중 실제로 저장된 것을 뺀 수.
+      missingAngles: 1 + extraAngles.length - rows.length,
       referenceIssue,
     };
   } catch (caught) {
@@ -535,7 +559,7 @@ export async function listCharacters(userId: string): Promise<CharacterSummary[]
           .filter((view) => view.characterId === row.id)
           .sort(byAngleOrder)
           .map((view) => ({
-            angle: view.angle as CharacterAngle,
+            angle: migrateAngle(view.angle) as CharacterAngle,
             url: `/api/characters/file?path=${encodeURIComponent(view.path)}`,
           })),
       };
@@ -573,7 +597,7 @@ export async function listCharacters(userId: string): Promise<CharacterSummary[]
       .filter((view: { character_id: string }) => view.character_id === String(row.id))
       .sort(byAngleOrder)
       .map((view: { angle: string; path: string }) => ({
-        angle: view.angle as CharacterAngle,
+        angle: migrateAngle(view.angle) as CharacterAngle,
         url: urlByPath.get(view.path) ?? null,
       })),
   }));
@@ -680,9 +704,19 @@ export async function deleteCharacter(userId: string, characterId: string) {
   return { ok: true };
 }
 
-/** 캐릭터 하나를 만드는 데 드는 크레딧. 화면에 미리 알린다. */
-export function characterCreditCost(look: CharacterLook | boolean, modelId?: ImageModelId) {
+/**
+ * 캐릭터 하나를 만드는 데 드는 크레딧. 화면에 미리 알린다.
+ *
+ * 후보 수와 각도 수를 사용자가 고르므로 그 값으로 센다. 정면은 고른 후보를
+ * 그대로 쓰니 각도 수에서 빠진다.
+ */
+export function characterCreditCost(
+  look: CharacterLook | boolean,
+  modelId?: ImageModelId,
+  counts?: { candidates?: number; extraAngles?: number },
+) {
   const model = modelId ?? selectCharacterModel(look);
-  // 후보 2장 + 다각도 3장(정면은 고른 후보를 그대로 쓴다)
-  return creditUnitsFor(model, CANDIDATE_COUNT + CHARACTER_ANGLES.length - 1);
+  const candidates = clampCandidates(counts?.candidates);
+  const angles = counts?.extraAngles ?? DEFAULT_EXTRA_ANGLES.length;
+  return creditUnitsFor(model, candidates + angles);
 }

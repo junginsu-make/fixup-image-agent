@@ -1,14 +1,19 @@
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../lib/membership/api";
 import {
-  CANDIDATE_COUNT,
+  DEFAULT_CANDIDATES,
+  MAX_CANDIDATES,
+  MIN_CANDIDATES,
   characterCreditCost,
   createCharacter,
   deleteCharacter,
   generateCandidates,
   listCharacters,
 } from "../../../lib/characters";
-import { IMAGE_MODELS, selectCharacterModel } from "@fixup/pdp-core";
+import {
+  CHARACTER_ANGLES, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, selectCharacterModel,
+  type CharacterAngle,
+} from "@fixup/pdp-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +50,9 @@ const BodySchema = z.object({
   }).optional(),
   chosenBase64: z.string().optional(),
   chosenMimeType: z.string().optional(),
+  candidates: z.number().int().min(MIN_CANDIDATES).max(MAX_CANDIDATES).optional(),
+  /** 정면 말고 더 만들 각도. 빈 배열이면 정면 한 장짜리가 된다. */
+  angles: z.array(z.enum(CHARACTER_ANGLES.map((angle) => angle.id) as [string, ...string[]])).optional(),
 });
 
 type Body = z.infer<typeof BodySchema>;
@@ -62,8 +70,13 @@ export async function GET() {
     return Response.json({
       ok: true,
       characters: await listCharacters(auth.member.userId),
-      candidateCount: CANDIDATE_COUNT,
+      candidateCount: DEFAULT_CANDIDATES,
+      minCandidates: MIN_CANDIDATES,
+      maxCandidates: MAX_CANDIDATES,
       creditCost: characterCreditCost("photoreal"),
+      // 화면이 체크상자를 그리려면 목록과 기본값이 필요하다.
+      angles: CHARACTER_ANGLES.map((angle) => ({ id: angle.id, label: angle.label })),
+      defaultAngles: DEFAULT_EXTRA_ANGLES,
       // 화면이 모델을 고를 수 있어야 한다. 목록을 여기서 준다 —
       // 이미지 만들기와 같은 목록이다.
       models: IMAGE_MODELS.map((model) => ({
@@ -98,7 +111,12 @@ export async function POST(req: Request) {
     : undefined;
 
   if (body.step === "candidates") {
-    const reservation = await reserveAiUsage(req, "pdp_image", characterCreditCost(body.look, modelId));
+    // 후보 단계는 후보만 만든다. 각도 몫까지 잡아 두면 크레딧이 모자랄 때
+    // 만들 수 있는 것도 못 만든다.
+    const reservation = await reserveAiUsage(
+      req, "pdp_image",
+      characterCreditCost(body.look, modelId, { candidates: body.candidates, extraAngles: 0 }),
+    );
     if (!reservation.ok) return reservation.response;
 
     try {
@@ -109,6 +127,7 @@ export async function POST(req: Request) {
         look: body.look,
         modelId,
         reference,
+        candidates: body.candidates,
       });
       // 실패한 장은 차감하지 않는다.
       const usage = await finalizeAiUsage(
@@ -139,11 +158,17 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, message: "고른 후보가 없습니다." }, { status: 400 });
   }
 
-  const reservation = await reserveAiUsage(req, "pdp_image", characterCreditCost(body.look, modelId));
+  const angles = (body.angles ?? DEFAULT_EXTRA_ANGLES).filter((angle) => angle !== "front");
+  // 만드는 것은 고른 각도뿐이다. 정면은 이미 있다.
+  const reservation = await reserveAiUsage(
+    req, "pdp_image",
+    characterCreditCost(body.look, modelId, { candidates: 0, extraAngles: angles.length }),
+  );
   if (!reservation.ok) return reservation.response;
 
   try {
     const result = await createCharacter({
+      angles: angles as CharacterAngle[],
       userId: auth.member.userId,
       name: (body.name || body.description).slice(0, 80),
       description: body.description,

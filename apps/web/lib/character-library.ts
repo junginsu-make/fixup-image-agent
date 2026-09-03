@@ -1,4 +1,4 @@
-import { CHARACTER_ANGLES } from "@fixup/pdp-core";
+import { CHARACTER_ANGLES, migrateAngle } from "@fixup/pdp-core";
 
 /**
  * 캐릭터를 라이브러리(참고 이미지)에 넣기 위한 이름과 순서.
@@ -24,7 +24,9 @@ export interface CharacterReferenceEntry extends CharacterViewInput {
 
 /** 라이브러리에는 온갖 그림이 섞인다. 누구의 어느 각도인지 제목에 다 적는다. */
 export function characterReferenceTitle(name: string, angle: string): string {
-  return `${name} (캐릭터) · ${LABELS.get(angle) ?? angle}`;
+  // 옛 이름(left·right·three_quarter)으로 저장된 줄도 지금 이름표로 부른다.
+  // 제목이 이 각도들을 찾는 유일한 손잡이라, 어긋나면 갈아 끼우지 못한다.
+  return `${name} (캐릭터) · ${LABELS.get(migrateAngle(angle)) ?? angle}`;
 }
 
 /** 정면이 맨 앞이다 — 목록에서 대표로 보이는 것이 뒷모습이면 못 알아본다. */
@@ -33,6 +35,6 @@ export function characterReferenceEntries(
   views: CharacterViewInput[],
 ): CharacterReferenceEntry[] {
   return [...views]
-    .sort((left, right) => (ORDER.get(left.angle) ?? 99) - (ORDER.get(right.angle) ?? 99))
+    .sort((left, right) => (ORDER.get(migrateAngle(left.angle)) ?? 99) - (ORDER.get(migrateAngle(right.angle)) ?? 99))
     .map((view) => ({ ...view, title: characterReferenceTitle(name, view.angle) }));
 }

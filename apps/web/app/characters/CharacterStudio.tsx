@@ -40,10 +40,15 @@ const LOOKS = [
 type Kind = (typeof KINDS)[number]["id"];
 type Look = (typeof LOOKS)[number]["id"];
 
-const ANGLE_LABEL: Record<string, string> = {
-  front: "정면", left: "좌측", right: "우측", back: "뒷모습",
-};
-const ANGLES = ["front", "left", "right", "back"] as const;
+/** 서버가 목록을 내려 주지만, 못 받았을 때도 화면이 서야 한다. */
+const ANGLE_FALLBACK = [
+  { id: "front", label: "정면" },
+  { id: "left_45", label: "왼쪽 45°" },
+  { id: "right_45", label: "오른쪽 45°" },
+  { id: "left_90", label: "왼쪽" },
+  { id: "right_90", label: "오른쪽" },
+  { id: "back", label: "뒷면" },
+];
 
 /** 첨부한 그림의 쓸모. 둘은 정반대라 반드시 골라야 한다. */
 const REFERENCE_ROLES = [
@@ -72,6 +77,10 @@ type Candidate = { base64: string; mimeType: string };
 type Attached = { url: string; base64: string; mimeType: string; role: ReferenceRole };
 
 export function CharacterStudio() {
+  /** 모르는 각도는 이름을 그대로 보여 준다. 조용히 감추면 그 장을 잃는다. */
+  const angleLabel = (id: string) =>
+    ANGLE_FALLBACK.find((angle) => angle.id === id)?.label ?? id;
+
   const [characters, setCharacters] = useState<Character[]>([]);
   const [models, setModels] = useState<ImageModel[]>([]);
   const [creditCost, setCreditCost] = useState(0);
@@ -85,6 +94,9 @@ export function CharacterStudio() {
   const [attached, setAttached] = useState<Attached | null>(null);
   const [library, setLibrary] = useState<LibraryImage[]>([]);
 
+  const [candidateCount, setCandidateCount] = useState(2);
+  const [angleList, setAngleList] = useState(ANGLE_FALLBACK);
+  const [pickedAngles, setPickedAngles] = useState<string[]>(["left_45", "right_45", "back"]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [busy, setBusy] = useState<"" | "candidates" | "create">("");
   const [redoing, setRedoing] = useState("");
@@ -96,10 +108,13 @@ export function CharacterStudio() {
     try {
       const body = await (await fetch("/api/characters", { cache: "no-store" })).json() as {
         ok?: boolean; characters?: Character[]; creditCost?: number; models?: ImageModel[];
+        angles?: Array<{ id: string; label: string }>; defaultAngles?: string[];
       };
       setCharacters(body.ok ? (body.characters ?? []) : []);
       setModels(body.models ?? []);
       setCreditCost(body.creditCost ?? 0);
+      if (body.angles?.length) setAngleList(body.angles);
+      if (body.defaultAngles?.length) setPickedAngles(body.defaultAngles);
     } catch {
       setCharacters([]);
     } finally {
@@ -176,6 +191,7 @@ export function CharacterStudio() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           step: "candidates", description, kind, look, aspectRatio: "3:4",
+          candidates: candidateCount,
           modelId: modelId || undefined,
           reference: attached
             ? { role: attached.role, base64: attached.base64, mimeType: attached.mimeType }
@@ -205,6 +221,7 @@ export function CharacterStudio() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           step: "create", description, kind, look, aspectRatio: "3:4",
+          angles: pickedAngles,
           modelId: modelId || undefined,
           name: (name.trim() || description).slice(0, 40),
           chosenBase64: candidate.base64,
@@ -395,6 +412,55 @@ export function CharacterStudio() {
               />
             </label>
 
+            <fieldset className="grid gap-1.5">
+              <legend className="text-meta text-subtle-foreground">첫 후보 장수</legend>
+              <div className="flex flex-wrap gap-2">
+                {[1, 2, 3].map((count) => (
+                  <Button
+                    key={count} type="button" size="sm" disabled={Boolean(busy)}
+                    variant={candidateCount === count ? "default" : "secondary"}
+                    onClick={() => setCandidateCount(count)}
+                  >
+                    {count}장
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-subtle-foreground">
+                같은 조건으로 {candidateCount}번 그립니다. 전부 정면·무배경이고, 그중 하나를 골라
+                나머지 각도의 기준으로 씁니다.
+              </p>
+            </fieldset>
+
+            <fieldset className="grid gap-1.5">
+              <legend className="text-meta text-subtle-foreground">더 만들 각도</legend>
+              <div className="flex flex-wrap gap-2">
+                {angleList.map((angle) => {
+                  // 정면은 고른 후보 그 자체라 늘 들어간다. 끌 수 없다.
+                  const fixed = angle.id === "front";
+                  const on = fixed || pickedAngles.includes(angle.id);
+                  return (
+                    <Button
+                      key={angle.id} type="button" size="sm"
+                      disabled={Boolean(busy) || fixed}
+                      variant={on ? "default" : "secondary"}
+                      onClick={() => setPickedAngles((current) =>
+                        current.includes(angle.id)
+                          ? current.filter((id) => id !== angle.id)
+                          : [...current, angle.id])}
+                    >
+                      {angle.label}{fixed ? " (기본)" : ""}
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-subtle-foreground">
+                정면은 고른 후보를 그대로 씁니다. 켠 각도만 더 만듭니다 — 지금 {pickedAngles.length}장.
+                {pickedAngles.some((id) => id.endsWith("_90"))
+                  ? " 90° 측면은 얼굴이 반만 보여 다른 도구에서 인물 기준으로 쓰기에는 약합니다."
+                  : ""}
+              </p>
+            </fieldset>
+
             <fieldset className="grid gap-2 rounded-md border p-3">
               <legend className="px-1 text-meta text-subtle-foreground">참고할 그림 · 선택</legend>
               <div className="flex flex-wrap items-center gap-2">
@@ -462,7 +528,7 @@ export function CharacterStudio() {
                 {busy === "candidates"
                   ? <Loader2 size={16} className="mr-1.5 animate-spin" />
                   : <Sparkles size={16} className="mr-1.5" />}
-                {busy === "candidates" ? "만드는 중…" : "후보 2장 만들기"}
+                {busy === "candidates" ? "만드는 중…" : `후보 ${candidateCount}장 만들기`}
               </Button>
               {message ? <span className="text-xs text-muted-foreground">{message}</span> : null}
             </div>
@@ -558,8 +624,8 @@ export function CharacterStudio() {
 
                       {/* 네 각도를 항상 네 칸으로 둔다. 빠진 각도가 빈 칸으로 보여야
                           채울 수 있다는 것을 안다. */}
-                      <div className="grid grid-cols-4 gap-2">
-                        {ANGLES.map((angle) => {
+                      <div className="grid grid-cols-3 gap-2">
+                        {angleList.map(({ id: angle }) => {
                           const view = byAngle.get(angle);
                           const key = `${character.id}:${angle}`;
                           const filled = character.views.filter((entry) => entry.url);
@@ -568,14 +634,14 @@ export function CharacterStudio() {
                               <button
                                 type="button"
                                 disabled={!view?.url}
-                                aria-label={`${character.name} ${ANGLE_LABEL[angle]} 크게 보기`}
+                                aria-label={`${character.name} ${angleLabel(angle)} 크게 보기`}
                                 onClick={() => openImageGallery({
                                   images: filled.map((entry) => ({
                                     src: entry.url as string,
-                                    alt: `${character.name} ${ANGLE_LABEL[entry.angle] ?? entry.angle}`,
+                                    alt: `${character.name} ${angleLabel(entry.angle)}`,
                                     meta: [
                                       ["캐릭터", character.name],
-                                      ["각도", ANGLE_LABEL[entry.angle] ?? entry.angle],
+                                      ["각도", angleLabel(entry.angle)],
                                       ["종류", KINDS.find((k) => k.id === character.kind)?.label ?? "사람"],
                                       ["결", LOOKS.find((l) => l.id === character.look)?.label ?? "실사"],
                                       ["묘사", character.sourcePrompt],
@@ -601,7 +667,7 @@ export function CharacterStudio() {
                               </button>
                               <div className="mt-1 flex items-center justify-between gap-1">
                                 <span className="truncate text-[10px] text-subtle-foreground">
-                                  {ANGLE_LABEL[angle]}
+                                  {angleLabel(angle)}
                                 </span>
                                 {/* 정면은 고른 후보 그 자체다. 다시 만들면 나머지
                                     셋이 전부 남남이 된다. */}
@@ -609,7 +675,7 @@ export function CharacterStudio() {
                                   <button
                                     type="button"
                                     disabled={redoing === key}
-                                    aria-label={`${character.name} ${ANGLE_LABEL[angle]} 다시 만들기`}
+                                    aria-label={`${character.name} ${angleLabel(angle)} 다시 만들기`}
                                     onClick={() => void handleRedo(character, angle)}
                                     className="flex-none text-subtle-foreground hover:text-foreground disabled:opacity-50"
                                   >

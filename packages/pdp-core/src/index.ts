@@ -28,6 +28,8 @@ export { MAX_UPLOAD_BYTES, base64Bytes, planUploadBatches } from "./pdp.upload-b
 export {
   CHARACTER_ANGLES,
   angleDirective,
+  migrateAngle,
+  DEFAULT_EXTRA_ANGLES,
   buildCandidatePrompt,
   buildSceneWithCharacterDirective,
   buildTurnaroundPrompt,
