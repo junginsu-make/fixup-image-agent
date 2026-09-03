@@ -20,3 +20,29 @@ export function safeNext(next: string | null | undefined): string {
   if (!next) return HOME_AFTER_LOGIN;
   return next.startsWith("/") && !next.startsWith("//") ? next : HOME_AFTER_LOGIN;
 }
+
+/**
+ * 밖에서 보이는 주소.
+ *
+ * standalone 으로 띄우면 미들웨어의 `request.url` 출처가 **공개 주소가 아니라
+ * 내부 주소**(`http://localhost:3000`)다. 그걸 기준으로 로그인 화면으로
+ * 돌려보내면 사용자 브라우저가 자기 컴퓨터의 3000 포트로 간다. 실제로 그랬다 —
+ * Host 헤더를 맞게 줘도 마찬가지였으니 프록시 문제가 아니다.
+ *
+ * 앞단이 알려 주는 것을 본다. 없으면 물려받은 것을 그대로 쓴다.
+ *
+ * host 는 요청자가 마음대로 넣을 수 있다. 주소 모양이 아니면 버린다 —
+ * 그대로 믿으면 로그인 화면으로 보내는 척 남의 사이트로 보낼 수 있다.
+ */
+export function publicOrigin(
+  headers: { get(name: string): string | null },
+  fallback: string,
+): string {
+  // 프록시가 여러 겹이면 쉼표로 이어 붙는다. 맨 앞이 원래 요청자가 본 주소다.
+  const first = (value: string | null) => value?.split(",")[0]?.trim() || "";
+  const host = first(headers.get("x-forwarded-host")) || first(headers.get("host"));
+  if (!host || !/^[a-z0-9.\-[\]]+(:\d+)?$/i.test(host)) return fallback;
+
+  const proto = first(headers.get("x-forwarded-proto")) || fallback.split(":")[0];
+  return `${proto}://${host}`;
+}

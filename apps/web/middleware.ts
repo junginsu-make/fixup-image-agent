@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
-import { HOME_AFTER_LOGIN } from "./lib/routes";
+import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
 
 const PUBLIC_PATHS = [
   "/",
@@ -20,10 +20,14 @@ function matches(pathname: string, roots: string[]) {
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  // standalone 으로 띄우면 request.url 의 출처가 내부 주소(localhost:3000)다.
+  // 그걸 기준으로 돌려보내면 사용자를 자기 컴퓨터로 보낸다. 앞단이 알려 주는
+  // 공개 주소를 기준으로 삼는다.
+  const base = publicOrigin(request.headers, request.nextUrl.origin);
   // 로컬 확인용 우회. NODE_ENV!=production 이고 LOCAL_AUTH_BYPASS=1 일 때만 열린다.
   if (process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "1") {
     const entry = localBypassRedirect(request.nextUrl.pathname);
-    return entry ? NextResponse.redirect(new URL(entry, request.url)) : response;
+    return entry ? NextResponse.redirect(new URL(entry, base)) : response;
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -41,7 +45,7 @@ export async function middleware(request: NextRequest) {
       );
     }
     if (matches(pathname, PUBLIC_PATHS)) return response;
-    return NextResponse.redirect(new URL("/login?error=service_not_configured", request.url));
+    return NextResponse.redirect(new URL("/login?error=service_not_configured", base));
   }
 
   const supabase = createServerClient(url, publishableKey, {
@@ -63,7 +67,7 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = matches(pathname, ["/login", "/signup", "/forgot-password"]);
   if (!user) {
     if (matches(pathname, PUBLIC_PATHS)) return response;
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = new URL("/login", base);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -76,13 +80,13 @@ export async function middleware(request: NextRequest) {
 
   const active = Boolean(profile?.email_confirmed_at && profile?.status === "active");
   if (isAuthPage) {
-    return NextResponse.redirect(new URL(active ? HOME_AFTER_LOGIN : "/access", request.url));
+    return NextResponse.redirect(new URL(active ? HOME_AFTER_LOGIN : "/access", base));
   }
   if (pathname === "/access") return response;
   if (matches(pathname, PUBLIC_PATHS)) return response;
-  if (!active) return NextResponse.redirect(new URL("/access", request.url));
+  if (!active) return NextResponse.redirect(new URL("/access", base));
   if (pathname.startsWith("/admin") && profile?.role !== "admin") {
-    return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, request.url));
+    return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base));
   }
   return response;
 }
