@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Badge, Card, CardContent } from "@fixup/ui";
+import { DeleteWorkButton } from "../_components/delete-work-button";
 
 /**
  * 지난 카드뉴스 작업.
@@ -74,7 +75,13 @@ export function SnsProjectList() {
         const made = cards.filter((card) => card.assetUrl).length;
         const status = STATUS[project.status] ?? { label: project.status, tone: "secondary" as const };
         return (
-          <Card key={project.id} className="overflow-hidden">
+          <Card key={project.id} className="relative overflow-hidden">
+            <DeleteWorkButton
+              endpoint={`/api/sns/projects/${project.id}`}
+              title={project.title}
+              what=" 카드뉴스"
+              onDeleted={() => setProjects((current) => (current ?? []).filter((entry) => entry.id !== project.id))}
+            />
             <Link href={`/sns/${project.id}`} className="block">
               {/* 잘라 내지 않는다. 1:1·16:9·9:16 이 섞여 있어 잘라 놓으면 무엇을
                    만들었는지 알아볼 수 없다. 높이만 묶고 비율은 지킨다. */}

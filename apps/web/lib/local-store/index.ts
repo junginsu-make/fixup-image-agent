@@ -340,6 +340,33 @@ export function getLocalSnsProject(
   return database.read((data) => data.snsProjects.find((project) => project.id === id && project.userId === userId));
 }
 
+/**
+ * 카드뉴스 작업을 지운다.
+ *
+ * 작업과 카드는 지우고 **비용 기록은 남긴다.** 운영 DB 도 같다 — 작업을
+ * 지웠다고 돈이 안 나간 것이 되지는 않는다. 그 기록을 지울 수 있으면 장부를
+ * 믿을 수 없다.
+ *
+ * 파일 경로는 부르는 쪽이 준다. 여기서는 파일을 모른다.
+ */
+export function removeLocalSnsProject(
+  database: LocalDatabase,
+  userId: string,
+  projectId: string,
+): Promise<boolean> {
+  return database.update((data) => {
+    const index = data.snsProjects.findIndex(
+      (project) => project.id === projectId && project.userId === userId,
+    );
+    if (index < 0) return false;
+    data.snsProjects.splice(index, 1);
+    data.cards = data.cards.filter(
+      (card) => !(card.projectId === projectId && card.userId === userId),
+    );
+    return true;
+  });
+}
+
 export function saveLocalSnsFlow(
   database: LocalDatabase,
   userId: string,

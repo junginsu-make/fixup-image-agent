@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -135,6 +135,27 @@ export function WorksTab() {
   const [works, setWorks] = React.useState<Work[] | null>(null);
   const [message, setMessage] = React.useState("");
   const [open, setOpen] = React.useState<Work | null>(null);
+  const [confirming, setConfirming] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState<string | null>(null);
+
+  async function remove(work: Work) {
+    setDeleting(work.id);
+    setMessage("");
+    try {
+      const endpoint = work.tool === "sns"
+        ? `/api/sns/projects/${work.id}`
+        : `/api/poster/projects/${work.id}`;
+      const body = await (await fetch(endpoint, { method: "DELETE" })).json();
+      if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
+      setWorks((current) => (current ?? []).filter((entry) => entry.id !== work.id));
+      setOpen(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "지우지 못했습니다.");
+    } finally {
+      setDeleting(null);
+      setConfirming(null);
+    }
+  }
 
   React.useEffect(() => {
     let alive = true;
@@ -250,7 +271,23 @@ export function WorksTab() {
               </section>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="sm:justify-between">
+              {/* 지우기는 되돌릴 수 없다. 한 번 더 묻는다 — 다만 창을 또 띄우지는
+                  않는다. 버튼이 그 자리에서 바뀌는 편이 덜 성가시다. */}
+              {confirming === open.id ? (
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-destructive">지우면 되돌릴 수 없습니다.</span>
+                  <Button variant="destructive" size="sm" disabled={Boolean(deleting)} onClick={() => void remove(open)}>
+                    {deleting === open.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                    {deleting === open.id ? "지우는 중…" : "그래도 지웁니다"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>취소</Button>
+                </span>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => setConfirming(open.id)}>
+                  <Trash2 />지우기
+                </Button>
+              )}
               <Button onClick={() => router.push(open.href)}>이 작업 열기</Button>
             </DialogFooter>
           </> : null}

@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
+import { DeleteWorkButton } from "../_components/delete-work-button";
 
 interface PosterProjectSummary {
   id: string;
@@ -55,7 +56,13 @@ export function PosterGallery() {
   return (
     <div className="grid gap-3">
       {projects.map((project) => (
-        <Card key={project.id}>
+        <Card key={project.id} className="relative">
+          <DeleteWorkButton
+            endpoint={`/api/poster/projects/${project.id}`}
+            title={project.title}
+            what=" 이미지 작업"
+            onDeleted={() => setProjects((current) => (current ?? []).filter((entry) => entry.id !== project.id))}
+          />
           <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
             <div className="min-w-0">
               <CardTitle className="truncate text-base">{project.title}</CardTitle>
@@ -64,7 +71,7 @@ export function PosterGallery() {
                 {new Date(project.updatedAt).toLocaleString("ko-KR")}
               </p>
             </div>
-            <Button asChild size="sm" variant="secondary">
+            <Button asChild size="sm" variant="secondary" className="mr-8">
               <Link href={`/poster/${project.id}`}>열기</Link>
             </Button>
           </CardHeader>

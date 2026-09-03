@@ -6,6 +6,9 @@ import {
   getLocalDatabase,
   getLocalSnsProject,
   isLocalStoreEnabled,
+  localStoreRoot,
+  removeLocalReferenceFiles,
+  removeLocalSnsProject,
   saveLocalSnsFlow,
 } from "./local-store";
 import { createSupabaseServerClient } from "./supabase/server";
@@ -13,6 +16,21 @@ import { createSupabaseServerClient } from "./supabase/server";
 export interface SnsFlowStore {
   get(projectId: string): Promise<SnsProjectRecord | undefined>;
   save(projectId: string, flow: SnsFlowState, status: SnsProjectRecord["status"]): Promise<SnsProjectRecord>;
+  /**
+   * 작업과 그 카드, 만들어 둔 그림 파일까지 지운다.
+   *
+   * **비용 기록은 남긴다.** 작업을 지웠다고 돈이 안 나간 것이 되지 않는다.
+   * 그걸 지울 수 있으면 장부를 믿을 수 없다.
+   *
+   * 없는 것을 지우라고 하면 false 를 준다 — 두 번 눌러도 오류가 아니다.
+   */
+  remove(projectId: string): Promise<boolean>;
+}
+
+/** 이 작업이 만들어 둔 그림들의 저장 경로. */
+function assetPathsOf(project: SnsProjectRecord): string[] {
+  return (project.data.flow?.cards ?? [])
+    .flatMap((card) => (card.assetPath ? [card.assetPath] : []));
 }
 
 export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore> {
@@ -21,6 +39,15 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
     return {
       get: (projectId) => getLocalSnsProject(database, userId, projectId),
       save: (projectId, flow, status) => saveLocalSnsFlow(database, userId, projectId, flow, status),
+      async remove(projectId) {
+        const project = await getLocalSnsProject(database, userId, projectId);
+        if (!project) return false;
+        // 행을 먼저 지우고 파일을 나중에 지운다. 파일이 먼저 사라지면 목록에는
+        // 남아 있는데 미리보기만 깨진 상태가 된다.
+        const removed = await removeLocalSnsProject(database, userId, projectId);
+        if (removed) await removeLocalReferenceFiles(localStoreRoot(), assetPathsOf(project));
+        return removed;
+      },
     };
   }
 
@@ -49,6 +76,17 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
       const result = await client.from("sns_projects").update({ data, status, updated_at: new Date().toISOString() }).eq("id", projectId);
       if (result.error) throw new Error(result.error.message);
       return { ...project, data, status, updatedAt: new Date().toISOString() };
+    },
+    async remove(projectId) {
+      const project = await getProject(projectId);
+      if (!project) return false;
+      // 카드 행은 FK cascade 가 지운다. 비용 기록은 project_id 만 비워지고 남는다.
+      const removed = await client.from("sns_projects").delete().eq("id", projectId);
+      if (removed.error) throw new Error(removed.error.message);
+      const paths = assetPathsOf(project);
+      // 파일이 남아도 화면에는 안 보인다. 실패해도 삭제 자체는 끝난 것이다.
+      if (paths.length) await client.storage.from("library").remove(paths);
+      return true;
     },
   };
 }
