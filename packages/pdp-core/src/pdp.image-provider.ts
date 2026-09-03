@@ -34,11 +34,51 @@ function withinLimit(model: ImageModelId, references: ReferenceImage[]) {
   return references.slice(0, limit ?? 7);
 }
 
+/**
+ * 엔드포인트.
+ *
+ * Seedream·Qwen 의 경로와 파라미터는 2026-09-03 운영 fal 키로 **실제 호출해
+ * 확인했다.** 문서만 보고 적으면 런타임에서야 깨지고, 그때는 사용자가 먼저
+ * 만난다.
+ *
+ *   bytedance/seedream/v5/pro/text-to-image   200 · 약 10초
+ *   bytedance/seedream/v5/pro/edit            200 · 약 95초
+ *   fal-ai/qwen-image-2/pro/text-to-image     200 · 약 13초
+ *   fal-ai/qwen-image-2/pro/edit              200 · 약 18초
+ *
+ * `fal-ai/qwen-image-2/pro` 만 부르면 404 다 — 뒤 칸이 반드시 필요하다.
+ */
 const ENDPOINTS: Record<ImageModelId, { textToImage: string; edit: string }> = {
   "gpt-image-2": { textToImage: "openai/gpt-image-2", edit: "openai/gpt-image-2/edit" },
   "nano-banana-pro": { textToImage: "fal-ai/nano-banana-pro", edit: "fal-ai/nano-banana-pro/edit" },
+  "nano-banana-2": { textToImage: "fal-ai/nano-banana-2", edit: "fal-ai/nano-banana-2/edit" },
   "nano-banana": { textToImage: "fal-ai/nano-banana", edit: "fal-ai/nano-banana/edit" },
+  "seedream-5-pro": {
+    textToImage: "bytedance/seedream/v5/pro/text-to-image",
+    edit: "bytedance/seedream/v5/pro/edit",
+  },
+  "qwen-image-2-pro": {
+    textToImage: "fal-ai/qwen-image-2/pro/text-to-image",
+    edit: "fal-ai/qwen-image-2/pro/edit",
+  },
 };
+
+/**
+ * Seedream·Qwen 은 aspect_ratio 를 모른다. fal 의 preset 이름을 받는다.
+ *
+ * **이름이 헷갈린다** — `portrait_4_3` 이 세로 3:4 다. 앞의 낱말이 방향이고
+ * 뒤의 숫자는 짧은변:긴변이다.
+ */
+const PRESET_SIZE: Record<AspectRatio, string> = {
+  "1:1": "square_hd",
+  "3:4": "portrait_4_3",
+  "4:3": "landscape_4_3",
+  "9:16": "portrait_16_9",
+  "16:9": "landscape_16_9",
+};
+
+/** preset 이름으로 크기를 받는 모델. */
+const PRESET_MODELS: ImageModelId[] = ["seedream-5-pro", "qwen-image-2-pro"];
 
 /**
  * GPT Image 2 는 화면비 대신 픽셀 크기를 받는다.
@@ -114,6 +154,19 @@ export function buildFalPayload(model: ImageModelId, input: ImageProviderInput):
       payload.image_urls = withinLimit(model, references).map(toDataUri);
     }
     return payload;
+  }
+
+  if (PRESET_MODELS.includes(model)) {
+    const merged = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+    const preset: FalPayload = {
+      prompt: merged,
+      image_size: PRESET_SIZE[aspectRatio],
+      num_images: 1,
+    };
+    if (references.length > 0) {
+      preset.image_urls = withinLimit(model, references).map(toDataUri);
+    }
+    return preset;
   }
 
   const payload: FalPayload = {

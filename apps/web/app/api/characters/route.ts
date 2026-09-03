@@ -68,6 +68,8 @@ export async function GET() {
       // 이미지 만들기와 같은 목록이다.
       models: IMAGE_MODELS.map((model) => ({
         id: model.id, label: model.label, description: model.description,
+        // 아직 우리 쓰임에서 재 보지 않은 모델. 화면이 그렇게 표시한다.
+        untested: Boolean(model.characterOnly),
       })),
     });
   } catch (error) {

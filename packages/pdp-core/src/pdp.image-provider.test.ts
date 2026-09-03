@@ -7,6 +7,7 @@ import {
   resolveEndpoint,
   type FalPayload,
 } from "./pdp.image-provider";
+import { selectCharacterModel } from "./pdp.character";
 import { IMAGE_MODELS, type ImageModelId, type ReferenceImage } from "./types";
 
 const anchor: ReferenceImage = { kind: "anchor", base64: "AAAA", mimeType: "image/jpeg" };
@@ -152,11 +153,24 @@ describe("묶음 크기", () => {
   // 함수 상한이 300초다. 한 묶음이 여기 닿으면 예약한 크레딧이 finalize 되지 못한다.
   // 실측(6장 기준)을 묶음 크기로 환산해 여유가 남는지 본다.
   it("모든 모델의 한 묶음이 300초 상한 안에 넉넉히 들어간다", () => {
-    const 실측6장 = { "gpt-image-2": 288, "nano-banana-pro": 112, "nano-banana": 90 } as const;
+    // 앞의 셋은 6장 동시 배치 실측이다.
+    // 뒤의 셋은 2026-09-03 에 **한 장씩** 재서 6배로 환산했다 — 동시 배치가
+    // 완전 병렬이 아니라 실제로는 이보다 짧다. 크게 잡아 두는 쪽이 안전하다.
+    //   nano-banana-2      Pro 와 같은 계열, Pro 보다 빠르다고 공표
+    //   seedream-5-pro     edit 95초/장  ← 참조를 넣으면 느리다
+    //   qwen-image-2-pro   edit 18초/장
+    const 실측6장 = {
+      "gpt-image-2": 288,
+      "nano-banana-pro": 112,
+      "nano-banana-2": 100,
+      "nano-banana": 90,
+      "seedream-5-pro": 95 * 6,
+      "qwen-image-2-pro": 18 * 6,
+    } as const;
 
     for (const model of IMAGE_MODELS) {
       const 묶음소요 = (실측6장[model.id] / 6) * model.maxBatchSize;
-      expect(묶음소요).toBeLessThan(300 * 0.7);
+      expect(묶음소요, model.id).toBeLessThan(300 * 0.7);
     }
   });
 
@@ -226,5 +240,68 @@ describe("참조 이미지 장수 상한", () => {
       ...base, references: [anchor, ...many(20)],
     }) as FalPayload & { image_urls?: string[] };
     expect(payload.image_urls?.[0]).toContain("image/jpeg");
+  });
+});
+
+describe("특화 모델", () => {
+  // 엔드포인트와 파라미터는 2026-09-03 운영 fal 키로 실제 호출해 확인했다.
+  //   bytedance/seedream/v5/pro/text-to-image   200 · 약 10초
+  //   bytedance/seedream/v5/pro/edit            200 · 약 95초
+  //   fal-ai/qwen-image-2/pro/text-to-image     200 · 약 13초
+  //   fal-ai/qwen-image-2/pro/edit              200 · 약 18초
+  it("참조가 없으면 text-to-image, 있으면 edit", () => {
+    expect(resolveEndpoint("seedream-5-pro", [])).toBe("bytedance/seedream/v5/pro/text-to-image");
+    expect(resolveEndpoint("seedream-5-pro", [style])).toBe("bytedance/seedream/v5/pro/edit");
+    expect(resolveEndpoint("qwen-image-2-pro", [])).toBe("fal-ai/qwen-image-2/pro/text-to-image");
+    expect(resolveEndpoint("qwen-image-2-pro", [style])).toBe("fal-ai/qwen-image-2/pro/edit");
+  });
+
+  it("비율을 image_size 이름으로 보낸다", () => {
+    // 이 둘은 aspect_ratio 를 모른다. fal 의 preset 이름을 쓴다.
+    // fal 의 이름은 헷갈린다 — portrait_4_3 이 세로 3:4 다.
+    for (const model of ["seedream-5-pro", "qwen-image-2-pro"] as const) {
+      const payload = buildFalPayload(model, { ...base, aspectRatio: "3:4" }) as FalPayload & {
+        image_size?: string;
+      };
+      expect(payload.image_size).toBe("portrait_4_3");
+      expect(payload).not.toHaveProperty("aspect_ratio");
+    }
+  });
+
+  it("모든 비율에 이름이 있다", () => {
+    // 하나라도 비면 그 비율에서 요청이 기본값으로 떨어져 다른 크기가 나온다.
+    for (const aspectRatio of ["1:1", "3:4", "4:3", "9:16", "16:9"] as const) {
+      const payload = buildFalPayload("seedream-5-pro", { ...base, aspectRatio }) as FalPayload & {
+        image_size?: string;
+      };
+      expect(payload.image_size).toBeTruthy();
+    }
+  });
+
+  it("참조 상한이 10장이다", () => {
+    // Seedream 은 참조를 10장까지 받는다. nano 계열(14)보다 좁다.
+    const many = Array.from({ length: 15 }, (): ReferenceImage => style);
+    const payload = buildFalPayload("seedream-5-pro", { ...base, references: many }) as FalPayload & {
+      image_urls?: string[];
+    };
+    expect(payload.image_urls?.length).toBe(10);
+  });
+});
+
+describe("결에 맞는 모델", () => {
+  it("결마다 정해진 모델이 있다", () => {
+    for (const look of ["photoreal", "anime", "3d", "illustration"] as const) {
+      expect(selectCharacterModel(look)).toBeTruthy();
+    }
+  });
+
+  it("실사는 Nano Banana Pro 다", () => {
+    // 코드에 남은 실측 결론이다. 바꾸려면 비교를 먼저 한다.
+    expect(selectCharacterModel("photoreal")).toBe("nano-banana-pro");
+  });
+
+  it("옛 boolean 호출을 그대로 받는다", () => {
+    expect(selectCharacterModel(true)).toBe("nano-banana-pro");
+    expect(selectCharacterModel(false)).not.toBe("nano-banana-pro");
   });
 });

@@ -128,7 +128,13 @@ export interface GeneratedResult {
 // ── 이미지 생성 모델 ─────────────────────────────────────────────
 // 생성은 fal.ai 를 경유한다. 모델마다 입력 규격이 달라 어댑터가 흡수한다.
 
-export type ImageModelId = "gpt-image-2" | "nano-banana-pro" | "nano-banana";
+export type ImageModelId =
+  | "gpt-image-2"
+  | "nano-banana-pro"
+  | "nano-banana-2"
+  | "nano-banana"
+  | "seedream-5-pro"
+  | "qwen-image-2-pro";
 
 export const DEFAULT_IMAGE_MODEL: ImageModelId = "gpt-image-2";
 
@@ -140,7 +146,11 @@ export const DEFAULT_IMAGE_MODEL: ImageModelId = "gpt-image-2";
 export const IMAGE_MODEL_CREDIT_WEIGHT: Record<ImageModelId, number> = {
   "gpt-image-2": 4,
   "nano-banana-pro": 3,
+  "nano-banana-2": 2,
   "nano-banana": 1,
+  // $0.0675(1536 이하) — Nano Banana Pro 의 절반 아래다.
+  "seedream-5-pro": 2,
+  "qwen-image-2-pro": 2,
 };
 
 /**
@@ -175,6 +185,14 @@ export interface ImageModelInfo {
    * 알고 있으면 한쪽 화면에서만 실패한다.
    */
   maxReferenceImages: number;
+  /**
+   * 캐릭터 화면에서만 보인다.
+   *
+   * 상세페이지는 섹션 이미지 품질을 실측으로 맞춰 왔다. 검증 안 된 모델을
+   * 그 목록에 바로 넣으면 어느 모델로 만든 페이지인지 뒤섞인다. 캐릭터에서
+   * 먼저 비교하고, 나은 것이 확인되면 그때 푼다.
+   */
+  characterOnly?: boolean;
 }
 
 export const IMAGE_MODELS: ImageModelInfo[] = [
@@ -199,6 +217,15 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
     maxReferenceImages: 14,
   },
   {
+    id: "nano-banana-2",
+    label: "Nano Banana 2",
+    description: "Pro 보다 빠르고 저렴합니다. 비율을 15종까지 받습니다.",
+    creditWeight: 2,
+    expectedBatchSeconds: 100,
+    maxBatchSize: 6,
+    maxReferenceImages: 14,
+  },
+  {
     id: "nano-banana",
     label: "Nano Banana",
     description: "가장 저렴합니다. 글자가 적은 단순한 장면에 적합합니다.",
@@ -206,6 +233,29 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
     expectedBatchSeconds: 90,
     maxBatchSize: 6,
     maxReferenceImages: 7,
+  },
+  {
+    id: "seedream-5-pro",
+    label: "Seedream 5.0 Pro",
+    description:
+      "여러 참조를 놓고 같은 대상을 유지하는 데 맞춰진 모델입니다. 참조는 10장까지. " +
+      "참조를 넣으면 한 장에 90초 넘게 걸립니다.",
+    creditWeight: 2,
+    // 실측: edit 95초. 한 묶음에 여러 장을 넣으면 상한 300초에 걸린다.
+    expectedBatchSeconds: 100,
+    maxBatchSize: 2,
+    maxReferenceImages: 10,
+    characterOnly: true,
+  },
+  {
+    id: "qwen-image-2-pro",
+    label: "Qwen Image 2.0 Pro",
+    description: "화풍을 옮기는 데 강합니다. 애니·일러스트에 씁니다. 13~18초로 빠릅니다.",
+    creditWeight: 2,
+    expectedBatchSeconds: 40,
+    maxBatchSize: 6,
+    maxReferenceImages: 10,
+    characterOnly: true,
   },
 ];
 

@@ -23,7 +23,10 @@ export function ModelPicker({ value, sectionCount, disabled, onChange }: ModelPi
   return (
     <fieldset className="grid gap-2" disabled={disabled}>
       <legend className="mb-1 text-meta text-subtle-foreground">이미지 생성 모델</legend>
-      {IMAGE_MODELS.map((model) => {
+      {/* 캐릭터에서 먼저 비교 중인 모델은 여기 안 띄운다. 상세페이지는 섹션
+          이미지 품질을 실측으로 맞춰 왔다 — 검증 안 된 모델을 섞으면 어느
+          모델로 만든 페이지인지 뒤죽박죽이 된다. */}
+      {IMAGE_MODELS.filter((model) => !model.characterOnly).map((model) => {
         const selected = model.id === value;
         return (
           <button
@@ -49,7 +52,7 @@ export function ModelPicker({ value, sectionCount, disabled, onChange }: ModelPi
                 {selected ? <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" /> : null}
               </span>
               <strong className="text-sm">{model.label}</strong>
-              {model.id === IMAGE_MODELS[0].id ? (
+              {model.id === IMAGE_MODELS[0]!.id ? (
                 <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   기본
                 </span>

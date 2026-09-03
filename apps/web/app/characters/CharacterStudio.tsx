@@ -65,7 +65,7 @@ interface Character {
   views: CharacterView[];
 }
 
-interface ImageModel { id: string; label: string; description: string }
+interface ImageModel { id: string; label: string; description: string; untested?: boolean }
 interface LibraryImage { id: string; title: string | null; signedUrl: string | null }
 
 type Candidate = { base64: string; mimeType: string };
@@ -265,8 +265,16 @@ export function CharacterStudio() {
     }
   };
 
-  const autoModel = look === "photoreal" ? "nano-banana-pro" : "gpt-image-2";
+  // 서버의 selectCharacterModel 과 같은 표다. 결을 바꾸면 모델도 따라온다.
+  const MODEL_BY_LOOK: Record<Look, string> = {
+    photoreal: "nano-banana-pro",
+    anime: "gpt-image-2",
+    "3d": "gpt-image-2",
+    illustration: "gpt-image-2",
+  };
+  const autoModel = MODEL_BY_LOOK[look];
   const activeModel = modelId || autoModel;
+  const chosenModel = models.find((model) => model.id === activeModel);
 
   return (
     <div className="min-w-0">
@@ -344,14 +352,23 @@ export function CharacterStudio() {
                       onClick={() => setModelId(model.id)}
                     >
                       {model.label}
+                      {/* 아직 우리 쓰임에서 재 보지 않은 모델. 골라서 비교해
+                          보라는 뜻이지 기본으로 밀지 않는다. */}
+                      {model.untested ? <span className="ml-1 text-[10px] opacity-70">시험</span> : null}
                     </Button>
                   ))}
                 </div>
                 <p className="text-xs text-subtle-foreground">
                   {modelId
-                    ? models.find((model) => model.id === modelId)?.description
-                    : `고른 결에 맞춰 ${models.find((model) => model.id === autoModel)?.label ?? autoModel} 로 만듭니다.`}
+                    ? chosenModel?.description
+                    : `고른 결에 맞춰 ${chosenModel?.label ?? autoModel} 로 만듭니다.`}
                 </p>
+                {chosenModel?.untested ? (
+                  <p className="text-xs text-amber-700">
+                    「시험」 표시가 붙은 모델입니다. 이 쓰임에서 더 나은지 아직 재지 않았습니다 —
+                    같은 캐릭터를 기본 모델로도 만들어 견줘 보세요.
+                  </p>
+                ) : null}
               </fieldset>
             ) : null}
 

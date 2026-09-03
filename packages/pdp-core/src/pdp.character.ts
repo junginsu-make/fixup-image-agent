@@ -355,14 +355,30 @@ export function buildSceneWithCharacterDirective(input: {
 }
 
 /**
- * 기본 모델.
+ * 결에 맞는 기본 모델.
  *
- * 실사는 Nano Banana Pro 가 낫다는 것이 원본의 결론이다. 나머지 결은
- * GPT Image 2 를 쓴다. **기본값일 뿐 화면에서 바꿀 수 있다.**
+ * **비용보다 품질이 먼저다.** 그래서 값이 싸다는 이유로는 기본값을 바꾸지
+ * 않는다 — 지금 여기 적힌 둘은 이 저장소가 실측으로 골라 온 상위 모델이다.
+ *
+ *   실사   Nano Banana Pro — 실사 인물에서 낫다는 것이 원본의 결론이다
+ *   나머지 GPT Image 2 — 측정된 모델 중 표현 폭이 가장 넓다
+ *
+ * Seedream 5.0 Pro 와 Qwen Image 2.0 Pro 도 고를 수 있게 붙였다. 각각
+ * 다중 참조 정체성 유지와 화풍 전이에 맞춰진 모델이고 값도 절반 아래지만,
+ * **우리 쓰임에서 나은지는 아직 재지 않았다.** 재기 전에 기본값으로 올리면
+ * 품질을 값과 맞바꾸는 셈이 된다. 화면에서 같은 캐릭터를 둘로 만들어 비교한
+ * 뒤, 나은 것이 확인되면 이 표 한 줄만 바꾸면 된다.
  *
  * 옛 호출이 `boolean` 을 넘긴다. 같이 받는다.
  */
+const MODEL_BY_LOOK: Record<CharacterLook, ImageModelId> = {
+  photoreal: "nano-banana-pro",
+  anime: "gpt-image-2",
+  "3d": "gpt-image-2",
+  illustration: "gpt-image-2",
+};
+
 export function selectCharacterModel(look: CharacterLook | boolean): ImageModelId {
-  const photoreal = typeof look === "boolean" ? look : look === "photoreal";
-  return photoreal ? "nano-banana-pro" : "gpt-image-2";
+  if (typeof look === "boolean") return look ? "nano-banana-pro" : "gpt-image-2";
+  return MODEL_BY_LOOK[look] ?? "gpt-image-2";
 }
