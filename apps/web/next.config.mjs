@@ -16,6 +16,21 @@ const nextConfig = {
         output: "standalone",
         // 범위가 apps/web에 갇히면 workspace 패키지가 빠진다.
         outputFileTracingRoot: path.join(webRoot, "../.."),
+        // sharp 의 네이티브 부분은 추적이 못 따라간다.
+        //
+        // `@img/sharp-linux-x64` 안의 `.node` 는 `libvips-cpp.so` 를 OS 수준에서
+        // 연다. 자바스크립트 require 가 아니라 정적 분석에 안 잡히고, 그래서
+        // 그 `.so` 를 담은 `@img/sharp-libvips-linux-x64` 가 꾸러미에서 통째로
+        // 빠졌다. 서버에서 이렇게 죽었다(실측).
+        //
+        //   ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3: cannot open shared object file
+        //
+        // 죽는 자리가 API 안이라 Next 가 HTML 오류 페이지를 돌려주고, 화면은
+        // 그걸 JSON 으로 읽으려다 "Unexpected token '<'" 를 낸다. 원인과 증상이
+        // 멀어서 찾기 어렵다. 통째로 넣으라고 못박는다.
+        outputFileTracingIncludes: {
+          "/**/*": ["../../node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/**/*"],
+        },
       }
     : {}),
   // 예전에는 최상단(/)이 정적 랜딩(public/landing.html)으로 넘어갔다. 뺐다 —

@@ -5,7 +5,7 @@ export async function GET() {
   return Response.json(
     {
       ok: true,
-      service: "detail-page-studio",
+      service: "mcs",
       status: "alive",
       timestamp: new Date().toISOString(),
     },

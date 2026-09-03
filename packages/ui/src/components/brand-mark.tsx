@@ -1,5 +1,5 @@
 /**
- * PDP STUDIO 마크 — AI 가 쌓는 상세페이지 섹션 스택.
+ * MCS 마크 — AI 가 쌓는 상세페이지 섹션 스택.
  *
  * 마지막 한 칸이 구매전환(CTA) 섹션이라 액센트 컬러(버밀리언)다.
  * 브랜드 규칙상 **이 액센트 바는 다른 색으로 바꾸지 않는다.**
@@ -16,7 +16,7 @@ export function BrandMark({ className }: { className?: string }) {
       className={className}
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-label="PDP STUDIO"
+      aria-label="MCS"
     >
       <rect width="88" height="88" rx="22" fill="#141418" />
       <rect x="20" y="17.5" width="48" height="8" rx="2" fill="#F4F3F1" />

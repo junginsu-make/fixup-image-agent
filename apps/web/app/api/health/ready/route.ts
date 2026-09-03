@@ -29,7 +29,7 @@ export async function GET() {
   return Response.json(
     {
       ok: ready,
-      service: "detail-page-studio",
+      service: "mcs",
       status: ready ? "ready" : "not_ready",
       checks: {
         membership: membershipReady,

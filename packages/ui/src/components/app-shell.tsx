@@ -142,9 +142,9 @@ export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: 
       {/* 좁은 화면 전용 상단바. 넓은 화면에서는 사이드바가 그 역할을 한다. */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur lg:hidden">
         <div className="flex h-14 items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2" aria-label="PDP STUDIO 홈">
+          <Link href="/" className="flex items-center gap-2" aria-label="MCS 홈">
             <BrandMark className="h-6 w-6 flex-none" />
-            <span className="text-sm font-bold tracking-[-0.02em]">PDP STUDIO</span>
+            <span className="text-sm font-bold tracking-[-0.02em]">MCS</span>
           </Link>
           <div className="flex items-center gap-2">
             {actions}
@@ -174,12 +174,12 @@ export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: 
 
       <div className="lg:grid lg:grid-cols-[var(--shell-side)_minmax(0,1fr)] [--shell-side:clamp(236px,15vw,300px)]">
         <aside className="sticky top-0 hidden h-screen flex-col gap-6 border-r bg-card px-3.5 py-4 lg:flex">
-          <Link href="/" className="flex items-center gap-3 px-1.5" aria-label="PDP STUDIO 홈">
+          <Link href="/" className="flex items-center gap-3 px-1.5" aria-label="MCS 홈">
             <BrandMark className="h-8 w-8 flex-none" />
             <span className="flex flex-col gap-1 leading-none">
-              <strong className="text-[15px] font-bold tracking-[-0.02em]">PDP STUDIO</strong>
+              <strong className="text-[15px] font-bold tracking-[-0.02em]">MCS</strong>
               <em className="text-[9px] not-italic tracking-[0.2em] text-subtle-foreground">
-                SECTIONS BY AI
+                MARKETING CONTENT STUDIO
               </em>
             </span>
           </Link>

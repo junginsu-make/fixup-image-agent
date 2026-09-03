@@ -33,8 +33,8 @@ export async function sendApprovalEmail(email: string) {
   await createTransport().sendMail({
     from,
     to: email,
-    subject: "[PDP STUDIO] 회원 승인이 완료되었습니다",
+    subject: "[MCS] 회원 승인이 완료되었습니다",
     text: `회원 승인이 완료되었습니다. 지금 로그인해 계정에 설정된 이미지 크레딧을 사용할 수 있습니다.\n\n${loginUrl}`,
-    html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#2b2024"><h2 style="color:#B0446A">회원 승인이 완료되었습니다</h2><p>이제 PDP STUDIO에 로그인해 계정에 설정된 이미지 크레딧을 사용할 수 있습니다.</p><p><a href="${loginUrl}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#B0446A;color:white;text-decoration:none;font-weight:700">로그인하기</a></p></div>`,
+    html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#2b2024"><h2 style="color:#B0446A">회원 승인이 완료되었습니다</h2><p>이제 MCS에 로그인해 계정에 설정된 이미지 크레딧을 사용할 수 있습니다.</p><p><a href="${loginUrl}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#B0446A;color:white;text-decoration:none;font-weight:700">로그인하기</a></p></div>`,
   });
 }

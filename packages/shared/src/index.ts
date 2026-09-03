@@ -1,5 +1,5 @@
 /**
- * PDP STUDIO 교차 타입 (cross-cutting types).
+ * MCS 교차 타입 (cross-cutting types).
  * 두 도구(pdp / redesign)가 공유하는 프론트엔드 레벨 타입만 둔다.
  * 백엔드 도메인 타입은 각 core 패키지(@fixup/pdp-core, @fixup/redesign-core)에 있다.
  */

@@ -6,14 +6,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "PDP STUDIO",
-    template: "%s — PDP STUDIO",
+    default: "MCS",
+    template: "%s — MCS",
   },
   description:
     "카드뉴스·포스터·상세페이지를 한 곳에서 만드는 AI 콘텐츠 스튜디오",
-  applicationName: "PDP STUDIO",
+  applicationName: "MCS",
   manifest: "/site.webmanifest",
-  appleWebApp: { title: "PDP STUDIO" },
+  appleWebApp: { title: "MCS" },
 };
 
 // 브랜드 규정색. 모바일 브라우저 주소창이 이 색을 쓴다.

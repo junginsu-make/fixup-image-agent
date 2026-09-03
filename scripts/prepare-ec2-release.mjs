@@ -53,6 +53,7 @@ await bundleWorker();
 // 링크가 하나라도 꾸러미 바깥을 가리키면 다른 기계에서 깨진다. 이 검사가
 // 없어서 깨진 아티팩트가 운영 배포까지 갔다. 여기서 멈춘다.
 assertSelfContained(releaseRoot);
+assertSharpUsable(releaseRoot);
 
 writeFileSync(
   path.join(releaseRoot, "RELEASE_INFO.json"),
@@ -124,6 +125,47 @@ async function bundleWorker() {
   if (install.status !== 0) throw new Error("워커 의존성 설치에 실패했습니다.");
 
   console.log(`Worker bundled: worker/worker.mjs (+ ${NEEDS_REAL_FILES.join(", ")})`);
+}
+
+/**
+ * sharp 가 서버에서 실제로 열릴 수 있는지 본다.
+ *
+ * `@img/sharp-linux-x64` 안의 `.node` 는 `libvips-cpp.so` 를 OS 수준에서 연다.
+ * 자바스크립트 require 가 아니라 Next 의 추적에 안 잡히고, 그래서 그 `.so` 가
+ * 통째로 빠진 채 배포됐다. 서버에서 이렇게 죽었다.
+ *
+ *   ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3: cannot open shared object file
+ *
+ * 죽는 자리가 API 안이라 Next 가 HTML 오류 페이지를 돌려주고, 화면은 그걸
+ * JSON 으로 읽으려다 "Unexpected token '<'" 를 낸다. 원인과 증상이 멀어
+ * 찾는 데 오래 걸린다. 배포 전에 여기서 멈춘다.
+ *
+ * 리눅스 꾸러미를 만들 때만 본다. 다른 판에서는 그 파일이 없는 게 맞다.
+ */
+function assertSharpUsable(root) {
+  const usesSharp = existsSync(path.join(root, "node_modules", ".pnpm"))
+    && readdirSync(path.join(root, "node_modules", ".pnpm")).some((name) => name.startsWith("sharp@"));
+  if (!usesSharp || process.platform !== "linux") return;
+
+  const found = [];
+  const walk = (dir, depth) => {
+    if (depth > 8 || found.length) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (found.length) return;
+      if (entry.isFile() && entry.name.startsWith("libvips-cpp.so")) { found.push(entry.name); return; }
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), depth + 1);
+    }
+  };
+  walk(path.join(root, "node_modules"), 0);
+
+  if (!found.length) {
+    throw new Error(
+      "sharp 의 libvips 공유 라이브러리가 꾸러미에 없습니다. "
+      + "이대로 배포하면 이미지를 다루는 모든 API 가 HTML 오류 페이지를 돌려줍니다. "
+      + "next.config 의 outputFileTracingIncludes 를 확인하세요.",
+    );
+  }
+  console.log(`sharp native library present: ${found[0]}`);
 }
 
 /**
