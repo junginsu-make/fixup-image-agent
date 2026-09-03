@@ -1,4 +1,4 @@
-{{DOMAIN}} {
+{{SITE}} {
 	encode zstd gzip
 
 	header {

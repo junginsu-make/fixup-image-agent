@@ -68,7 +68,9 @@ async function splitImage(file: File, out: RedesignStrip[]) {
 async function splitPdf(file: File, out: RedesignStrip[]) {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"; // 로컬 번들
-  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  // pdfjs 6 부터 문서 자체에는 destroy 가 없다. 정리는 로딩 작업이 맡는다.
+  const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  const pdf = await loadingTask.promise;
   const pages = Math.min(pdf.numPages, MAX_PDF_PAGES);
   for (let n = 1; n <= pages && out.length < MAX_STRIPS_TOTAL; n += 1) {
     const page = await pdf.getPage(n);
@@ -86,7 +88,7 @@ async function splitPdf(file: File, out: RedesignStrip[]) {
     // 페이지별로만 슬라이스(세로 이어붙이기 금지)
     sliceRegionToStrips(canvas, canvas.width, canvas.height, (n - 1) / pages, n / pages, out);
   }
-  await pdf.destroy?.();
+  await loadingTask.destroy();
 }
 
 function loadImage(objectUrl: string) {

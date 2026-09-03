@@ -84,11 +84,21 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY
 - Node.js 22 이상과 Caddy 를 먼저 설치한다
 
 ```bash
-sudo bash deploy/ec2/install-host.sh studio.example.com
+sudo bash deploy/ec2/install-host.sh studio.example.com   # 도메인이 있으면
+sudo bash deploy/ec2/install-host.sh 54.180.68.212        # IP 로만 열 때
 ```
 
 사용자·디렉터리·systemd 유닛 두 개·Caddy 사이트를 만들고, 웹과 워커를
 `enable` 한다. 아직 시작하지는 않는다 — 환경변수가 없다.
+
+**도메인이면 HTTPS, IP 면 평문 HTTP 다.** 공개 인증 기관은 IP 에 인증서를
+내주지 않는다. 스크립트가 IP 를 받으면 Caddy 사이트 주소에 `http://` 를
+붙여 인증서 시도를 아예 막는다 — 안 그러면 발급에 실패하면서 사이트가
+뜨지 않는다.
+
+평문일 때 비밀번호는 새지 않는다. 로그인은 브라우저가 Supabase 로 직접
+보내고 그 구간은 HTTPS 다. 다만 **로그인 뒤 세션 토큰은 우리 서버로 평문**
+으로 오간다. 내부용이면 감수할 만하고, 밖에 열 것이라면 도메인을 붙인다.
 
 ### 4. 환경변수를 넣는다
 
@@ -105,9 +115,15 @@ sudo -e /etc/fixup-image-agent/app.env
 Supabase 값은 상세페이지와 **같은 것**을 넣는다. 같은 DB 를 본다.
 `LOCAL_*` 은 넣지 않는다.
 
-### 5. DNS 를 가리킨다
+### 5. 주소를 고정한다
 
-도메인 A 레코드를 탄력적 IP 로. Caddy 가 인증서를 알아서 받는다.
+도메인을 쓰면 A 레코드를 탄력적 IP 로 향하게 한다. Caddy 가 인증서를 알아서
+받는다. IP 로만 열 때는 **탄력적 IP 가 붙어 있는지만** 확인하면 된다 — 안
+붙어 있으면 인스턴스를 멈췄다 켤 때마다 주소가 바뀐다.
+
+> 로그인은 Supabase 의 CAPTCHA 를 거친다. 새 주소에서 처음 열 때는 그
+> 주소(도메인이든 IP 든)를 Cloudflare Turnstile 위젯의 호스트 이름 목록에
+> 넣어야 한다. 없으면 `110200` 으로 막힌다.
 
 ## 매 배포
 

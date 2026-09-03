@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ ${EUID} -ne 0 ]]; then
-  echo "Run as root: sudo bash deploy/ec2/install-host.sh <domain>" >&2
+  echo "Run as root: sudo bash deploy/ec2/install-host.sh <도메인 또는 IP>" >&2
   exit 1
 fi
 
@@ -15,9 +15,20 @@ if [[ -e /etc/systemd/system/detail-page-studio.service || -d /opt/detail-page-s
   exit 1
 fi
 
-domain=${1:-}
-if [[ ! ${domain} =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
-  echo "A hostname such as studio.example.com is required." >&2
+# 도메인 또는 IP 를 받는다.
+#
+# 도메인이면 Caddy 가 인증서를 받아 HTTPS 로 연다. IP 면 받을 수 없다 —
+# 공개 인증 기관은 IP 에 인증서를 내주지 않는다. 그때는 평문 HTTP 로 연다.
+# 그러라고 `http://` 를 붙여 준다. 안 붙이면 Caddy 가 인증서를 받으려다
+# 실패하고 사이트가 아예 안 뜬다.
+site=${1:-}
+if [[ ${site} =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
+  site_address=${site}
+elif [[ ${site} =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+  site_address="http://${site}"
+  echo "IP 로 엽니다: ${site_address} — 인증서 없이 평문 HTTP 입니다." >&2
+else
+  echo "도메인(studio.example.com) 또는 IP(54.180.68.212) 가 필요합니다." >&2
   exit 1
 fi
 
@@ -49,7 +60,7 @@ install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixu
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
 install -d -o caddy -g caddy -m 0750 /var/log/caddy
-sed "s/{{DOMAIN}}/${domain}/g" "${script_dir}/Caddyfile.template" > /etc/caddy/sites/fixup-image-agent.caddy
+sed "s|{{SITE}}|${site_address}|g" "${script_dir}/Caddyfile.template" > /etc/caddy/sites/fixup-image-agent.caddy
 caddy fmt --overwrite /etc/caddy/sites/fixup-image-agent.caddy
 
 touch /etc/caddy/Caddyfile
@@ -64,5 +75,5 @@ systemctl enable fixup-image-agent.service
 systemctl enable fixup-image-agent-worker.service
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
-echo "Host files installed for ${domain}."
-echo "Next: create /etc/fixup-image-agent/app.env, deploy a release, then point Gabia DNS to the Elastic IP."
+echo "Host files installed for ${site_address}."
+echo "Next: create /etc/fixup-image-agent/app.env, then deploy a release."
