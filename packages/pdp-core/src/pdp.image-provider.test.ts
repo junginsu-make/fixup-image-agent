@@ -186,3 +186,45 @@ describe("묶음 나누기", () => {
     expect(chunkForModel(원본, "gpt-image-2").flat()).toEqual(원본);
   });
 });
+
+describe("참조 이미지 장수 상한", () => {
+  // 모델마다 받을 수 있는 장수가 다르다. 넘겨서 보내면 fal 이 거절하거나
+  // 뒤쪽을 조용히 버린다 — 어느 쪽이든 사용자는 왜 안 반영됐는지 모른다.
+  const many = (count: number): ReferenceImage[] =>
+    Array.from({ length: count }, (_unused, index) => ({
+      kind: "style" as const, base64: `B${index}`, mimeType: "image/png",
+    }));
+
+  it("모델마다 상한이 정해져 있다", () => {
+    for (const model of IMAGE_MODELS) {
+      expect(model.maxReferenceImages).toBeGreaterThan(0);
+    }
+  });
+
+  it("상한을 넘으면 잘라서 보낸다 — nano 계열도", () => {
+    // 전에는 GPT 만 잘랐고 nano 계열은 받은 만큼 다 보냈다.
+    for (const model of IMAGE_MODELS) {
+      const payload = buildFalPayload(model.id, {
+        ...base, references: many(model.maxReferenceImages + 5),
+      }) as FalPayload & { image_urls?: string[] };
+      expect(payload.image_urls?.length).toBe(model.maxReferenceImages);
+    }
+  });
+
+  it("상한 안이면 그대로 다 보낸다", () => {
+    for (const model of IMAGE_MODELS) {
+      const payload = buildFalPayload(model.id, { ...base, references: many(3) }) as FalPayload & {
+        image_urls?: string[];
+      };
+      expect(payload.image_urls?.length).toBe(3);
+    }
+  });
+
+  it("앞쪽을 남긴다", () => {
+    // 순서가 곧 우선순위다. 정체성 기준이 앞에 온다.
+    const payload = buildFalPayload("nano-banana", {
+      ...base, references: [anchor, ...many(20)],
+    }) as FalPayload & { image_urls?: string[] };
+    expect(payload.image_urls?.[0]).toContain("image/jpeg");
+  });
+});

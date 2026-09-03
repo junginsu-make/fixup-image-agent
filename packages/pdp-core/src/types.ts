@@ -165,6 +165,16 @@ export interface ImageModelInfo {
    * 총 소요는 같고, 대신 묶음이 끝날 때마다 실제 진행률을 보여줄 수 있다.
    */
   maxBatchSize: number;
+  /**
+   * 한 요청에 함께 보낼 수 있는 최대 참조 장수.
+   *
+   * 넘겨서 보내면 fal 이 거절하거나 뒤쪽을 조용히 버린다. 어느 쪽이든
+   * 사용자는 붙인 그림이 왜 반영이 안 됐는지 알 수 없다.
+   *
+   * 값은 sns-core 의 같은 목록과 맞춘다 — 같은 모델을 두 곳에서 다르게
+   * 알고 있으면 한쪽 화면에서만 실패한다.
+   */
+  maxReferenceImages: number;
 }
 
 export const IMAGE_MODELS: ImageModelInfo[] = [
@@ -177,6 +187,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
     // 6장 288초를 절반으로 나눈 값. 총 소요는 같다.
     expectedBatchSeconds: 150,
     maxBatchSize: 3,
+    maxReferenceImages: 16,
   },
   {
     id: "nano-banana-pro",
@@ -185,6 +196,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
     creditWeight: 3,
     expectedBatchSeconds: 120,
     maxBatchSize: 6,
+    maxReferenceImages: 14,
   },
   {
     id: "nano-banana",
@@ -193,6 +205,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
     creditWeight: 1,
     expectedBatchSeconds: 90,
     maxBatchSize: 6,
+    maxReferenceImages: 7,
   },
 ];
 

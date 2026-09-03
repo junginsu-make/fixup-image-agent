@@ -97,7 +97,17 @@ export function PosterNewClient() {
     }
   }
 
-  const canSubmit = styleIds.length > 0 && instruction.trim().length > 0 && !estimate.rejected;
+  /**
+   * 붙인 그림이 모델 상한을 넘는가.
+   *
+   * 서버도 막지만 거기서 막히면 만들기를 누른 뒤에야 안다. 고르는 자리에서
+   * 바로 말한다 — 여기가 그림을 빼거나 모델을 바꿀 수 있는 자리다.
+   */
+  const referenceCount = styleIds.length + preservedIds.length;
+  const overReferenceLimit = referenceCount > choice.model.maxReferenceImages;
+
+  const canSubmit =
+    styleIds.length > 0 && instruction.trim().length > 0 && !estimate.rejected && !overReferenceLimit;
 
   return (
     <div className="grid gap-6">
@@ -129,8 +139,16 @@ export function PosterNewClient() {
               onRoleChange={(id, role) => setRoles((current) => ({ ...current, [id]: role }))}
               onUploaded={() => void loadReferences()}
             />
+            {overReferenceLimit ? (
+              <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {choice.model.label} 은 참고 이미지를 {choice.model.maxReferenceImages}장까지 받습니다.
+                지금 {referenceCount}장입니다 — 빼거나 02 규격에서 다른 모델을 고르세요.
+              </div>
+            ) : null}
             <div className="flex justify-end">
-              <Button onClick={() => setStep("spec")} disabled={styleIds.length === 0}>다음</Button>
+              <Button onClick={() => setStep("spec")} disabled={styleIds.length === 0 || overReferenceLimit}>
+                다음
+              </Button>
             </div>
           </CardContent>
         </Card>

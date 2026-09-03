@@ -73,6 +73,20 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
   }
 
   const model = modelById(job.modelId);
+
+  // 모델이 받을 수 있는 장수를 넘으면 여기서 멈춘다.
+  //
+  // 조용히 자르지 않는다. 뒤쪽을 버리면 지키려던 제품이 사라진 채로 그림이
+  // 나오고, 사용자는 왜 안 들어갔는지 알 수 없다. 만들기 전에 말한다.
+  const referenceCount = job.referenceUrls.length + job.preservedUrls.length;
+  if (referenceCount > model.maxReferenceImages) {
+    return {
+      endpoint: "", mode: estimate.mode, prompt: "", input: {}, estimate, size: {},
+      rejected:
+        `${model.label} 은 참고 이미지를 ${model.maxReferenceImages}장까지 받습니다. ` +
+        `지금 ${referenceCount}장입니다 — 빼거나 다른 모델을 고르세요.`,
+    };
+  }
   // 첨부한 그림을 따라가는 비율은 그때그때 크기가 다르다. 목록에 적힌 픽셀이
   // 아니라 실제 그림에서 뽑는다.
   const resolved = job.ratioId === MATCH_SOURCE

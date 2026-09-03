@@ -19,8 +19,20 @@ import {
 
 const FAL_BASE_URL = "https://fal.run";
 
-/** GPT Image 2 는 참조 이미지를 16장까지 받는다. */
-const GPT_MAX_REFERENCE_IMAGES = 16;
+/**
+ * 그 모델이 받을 수 있는 만큼만 보낸다.
+ *
+ * 전에는 GPT 만 16장으로 잘랐고 nano 계열은 받은 만큼 다 보냈다. nano 는
+ * 14장(pro)·7장(기본)까지인데 넘겨 보내면 fal 이 거절하거나 뒤쪽을 조용히
+ * 버린다 — 어느 쪽이든 사용자는 붙인 그림이 왜 반영이 안 됐는지 모른다.
+ *
+ * **앞쪽을 남긴다.** 순서가 곧 우선순위라, 정체성 기준이 앞에 온다.
+ */
+function withinLimit(model: ImageModelId, references: ReferenceImage[]) {
+  const limit = IMAGE_MODELS.find((entry) => entry.id === model)?.maxReferenceImages;
+  // 모르는 모델이면 가장 좁은 상한으로 떨어뜨린다. 크게 잡아 틀리면 요청이 죽는다.
+  return references.slice(0, limit ?? 7);
+}
 
 const ENDPOINTS: Record<ImageModelId, { textToImage: string; edit: string }> = {
   "gpt-image-2": { textToImage: "openai/gpt-image-2", edit: "openai/gpt-image-2/edit" },
@@ -99,7 +111,7 @@ export function buildFalPayload(model: ImageModelId, input: ImageProviderInput):
       output_format: "png",
     };
     if (references.length > 0) {
-      payload.image_urls = references.slice(0, GPT_MAX_REFERENCE_IMAGES).map(toDataUri);
+      payload.image_urls = withinLimit(model, references).map(toDataUri);
     }
     return payload;
   }
@@ -118,7 +130,7 @@ export function buildFalPayload(model: ImageModelId, input: ImageProviderInput):
   }
 
   if (references.length > 0) {
-    payload.image_urls = references.map(toDataUri);
+    payload.image_urls = withinLimit(model, references).map(toDataUri);
   }
 
   return payload;

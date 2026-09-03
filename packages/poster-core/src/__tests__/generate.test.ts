@@ -126,3 +126,41 @@ describe("결과를 이미지 행으로", () => {
     for (const row of rows) expect(row).not.toHaveProperty("costUsd");
   });
 });
+
+describe("참조 이미지 장수 상한", () => {
+  const small = {
+    projectId: "p1", modelId: "nano-banana", ratioId: "2:3", variants: 1,
+    slots: EMPTY_SLOTS, referenceUrls: [] as string[], preservedUrls: [] as string[],
+  };
+  const urls = (count: number, prefix: string) =>
+    Array.from({ length: count }, (_unused, index) => `https://x/${prefix}${index}.png`);
+
+  it("상한을 넘으면 만들기 전에 막는다", () => {
+    // 조용히 자르면 지키려던 제품이 사라진 채로 그림이 나오고, 사용자는 왜
+    // 안 들어갔는지 알 수 없다. Nano Banana 는 7장까지다.
+    const job = buildPosterJob({ ...small, referenceUrls: urls(8, "r") });
+    expect(job.rejected).toMatch(/7장/);
+    expect(job.prompt).toBe("");
+  });
+
+  it("따라 만들기와 지키기를 합쳐서 센다", () => {
+    // 둘 다 같은 요청에 함께 간다. 따로 세면 상한을 넘긴 채 통과한다.
+    const job = buildPosterJob({
+      ...small, referenceUrls: urls(4, "r"), preservedUrls: urls(4, "p"),
+    });
+    expect(job.rejected).toBeTruthy();
+  });
+
+  it("상한 안이면 그대로 만든다", () => {
+    const job = buildPosterJob({ ...small, referenceUrls: urls(7, "r") });
+    expect(job.rejected).toBeUndefined();
+  });
+
+  it("모델마다 상한이 다르다", () => {
+    // 같은 8장이 Nano Banana 에서는 막히고 Pro 에서는 지나간다.
+    expect(buildPosterJob({ ...small, referenceUrls: urls(8, "r") }).rejected).toBeTruthy();
+    expect(
+      buildPosterJob({ ...small, modelId: "nano-banana-pro", referenceUrls: urls(8, "r") }).rejected,
+    ).toBeUndefined();
+  });
+});
