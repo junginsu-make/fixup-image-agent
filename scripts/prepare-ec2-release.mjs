@@ -9,6 +9,11 @@ const webRoot = path.join(repoRoot, "apps", "web");
 const standaloneSource = path.join(webRoot, ".next", "standalone");
 const releaseRoot = path.join(repoRoot, "dist", "ec2");
 
+/** 워커를 묶을 때 빼는 것. 이유는 아래 bundleWorker 주석에 적었다. */
+const EXTERNAL = ["playwright", "jsdom", "@mozilla/readability"];
+/** 뺀 것 중 실제로 필요해서 따로 깔아 주는 것. */
+const NEEDS_REAL_FILES = ["jsdom", "@mozilla/readability"];
+
 if (!existsSync(standaloneSource)) {
   throw new Error("standalone build not found. Run `pnpm build` first.");
 }
@@ -79,8 +84,6 @@ console.log(`Entry point: ${path.relative(releaseRoot, path.join(runtimeRoot, "s
  * 한 파일로 묶으면 그 파일이 옆에 없어 `__dirname` 에서 바로 죽는다.
  * RSS 를 포함해 거의 모든 어댑터가 쓰므로 없으면 수집이 아예 안 된다.
  */
-const EXTERNAL = ["playwright", "jsdom", "@mozilla/readability"];
-const NEEDS_REAL_FILES = ["jsdom", "@mozilla/readability"];
 async function bundleWorker() {
   const esbuild = await import("esbuild");
   const workerRoot = path.join(releaseRoot, "worker");
