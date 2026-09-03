@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { LOCAL_BYPASS_ENTRY } from "../../lib/dev-auth";
+import { HOME_AFTER_LOGIN } from "../../lib/routes";
+import { signOutFromLanding } from "./session-actions";
 import type { LandingCopy, Locale } from "./landing-content";
 
 const NAV = [
@@ -20,10 +22,18 @@ export function LandingHeader({
   t,
   locale,
   localMode,
+  signedIn,
 }: {
   t: LandingCopy;
   locale: Locale;
   localMode: boolean;
+  /**
+   * 로그인한 채로 첫 화면에 왔는가.
+   *
+   * 모르면 「로그인」만 보이고, 눌러도 세션이 있어 스튜디오로 튕겨 들어간다 —
+   * 내가 로그인 상태인지 알 방법이 없었다.
+   */
+  signedIn: boolean;
 }) {
   return (
     <header className="mcs-header">
@@ -55,6 +65,18 @@ export function LandingHeader({
             <Link href={LOCAL_BYPASS_ENTRY} className="mcs-btn-sm mcs-btn-sm--solid">
               {t.navStudio}
             </Link>
+          ) : signedIn ? (
+            <>
+              {/* 폼으로 낸다. 자바스크립트가 없어도 로그아웃은 돼야 한다. */}
+              <form action={signOutFromLanding}>
+                <button type="submit" className="mcs-btn-sm mcs-btn-sm--quiet">
+                  {t.navLogout}
+                </button>
+              </form>
+              <Link href={HOME_AFTER_LOGIN} className="mcs-btn-sm mcs-btn-sm--solid">
+                {t.navStudio}
+              </Link>
+            </>
           ) : (
             <>
               <Link href="/login" className="mcs-btn-sm mcs-btn-sm--quiet">

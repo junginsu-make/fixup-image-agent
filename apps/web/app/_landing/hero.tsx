@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { HeroConsole } from "./hero-console";
 import type { LandingCopy } from "./landing-content";
+import { HOME_AFTER_LOGIN } from "../../lib/routes";
 
-export function Hero({ t }: { t: LandingCopy }) {
+/**
+ * 로그인한 사람에게 「가입 신청」을 내밀지 않는다. 이미 회원인데 가입하라고
+ * 하면 이 화면이 나를 모른다는 뜻으로 읽힌다.
+ */
+export function Hero({ t, signedIn }: { t: LandingCopy; signedIn: boolean }) {
   return (
     <section id="top" className="mcs-hero mcs-section">
       <div className="mcs-shell mcs-hero-grid">
@@ -20,8 +25,11 @@ export function Hero({ t }: { t: LandingCopy }) {
           <p className="mcs-lead">{t.heroLead}</p>
 
           <div className="mcs-hero-actions">
-            <Link href="/signup" className="mcs-btn mcs-btn--primary">
-              {t.ctaPrimary}
+            <Link
+              href={signedIn ? HOME_AFTER_LOGIN : "/signup"}
+              className="mcs-btn mcs-btn--primary"
+            >
+              {signedIn ? t.navStudio : t.ctaPrimary}
             </Link>
             <Link href="#gallery" className="mcs-btn mcs-btn--ghost">
               {t.ctaSecondary}

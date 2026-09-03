@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { LOCAL_BYPASS_ENTRY } from "../../lib/dev-auth";
 import type { LandingCopy } from "./landing-content";
+import { HOME_AFTER_LOGIN } from "../../lib/routes";
 
-export function CallToAction({ t, localMode }: { t: LandingCopy; localMode: boolean }) {
+export function CallToAction({
+  t, localMode, signedIn,
+}: { t: LandingCopy; localMode: boolean; signedIn: boolean }) {
   return (
     <section id="cta" className="mcs-section mcs-deep-section">
       <div className="mcs-shell mcs-cta-grid">
@@ -12,6 +15,11 @@ export function CallToAction({ t, localMode }: { t: LandingCopy; localMode: bool
           <div className="mcs-hero-actions">
             {localMode ? (
               <Link href={LOCAL_BYPASS_ENTRY} className="mcs-btn mcs-btn--primary">
+                {t.navStudio}
+              </Link>
+            ) : signedIn ? (
+              // 이미 들어와 있는 사람에게 가입·로그인을 다시 권하지 않는다.
+              <Link href={HOME_AFTER_LOGIN} className="mcs-btn mcs-btn--primary">
                 {t.navStudio}
               </Link>
             ) : (

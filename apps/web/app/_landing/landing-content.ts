@@ -22,7 +22,7 @@ export interface Preset {
 export const KO = {
   navGallery: "결과물", navTools: "도구", navHow: "작동 원리", navTry: "직접 해보기", navDiff: "차별점",
   ctaShort: "무료 체험 신청",
-  navLogin: "로그인", navSignup: "가입 신청", navStudio: "스튜디오 열기", localBadge: "로컬 확인 모드",
+  navLogin: "로그인", navSignup: "가입 신청", navStudio: "스튜디오 열기", navLogout: "로그아웃", localBadge: "로컬 확인 모드",
   eyebrow: "승인 회원 전용 AI 제작 도구",
   h1a: "모아 두고, 만들고,", h1b: "다시 재료로 쓴다",
   heroLead: "카드뉴스 · 광고 소재 · 포스터 · 상세페이지 · 캐릭터를 한 곳에서 만듭니다. 등록한 모든 것이 라이브러리에 쌓이고, 어느 도구에서든 그것을 불러 쓰고, 만든 결과물이 다시 다음 작업의 재료가 됩니다.",
@@ -133,7 +133,7 @@ export type LandingCopy = typeof KO;
 export const EN: LandingCopy = {
   navGallery: "Output", navTools: "Tools", navHow: "How it works", navTry: "Try it", navDiff: "Difference",
   ctaShort: "Request access",
-  navLogin: "Sign in", navSignup: "Request access", navStudio: "Open studio", localBadge: "Local preview mode",
+  navLogin: "Sign in", navSignup: "Request access", navStudio: "Open studio", navLogout: "Sign out", localBadge: "Local preview mode",
   eyebrow: "AI production tools for approved members",
   h1a: "Collect it, make it,", h1b: "then use it again",
   heroLead: "Card news, ad creative, posters, product detail pages and characters in one place. Everything you register lands in the library, every tool can pull from it, and every output goes back in as material for the next job.",

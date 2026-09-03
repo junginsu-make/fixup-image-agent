@@ -1,4 +1,5 @@
 import { isLocalAuthBypass } from "../lib/dev-auth";
+import { getMembership } from "../lib/membership/server";
 import { CallToAction, LandingFooter } from "./_landing/cta-footer";
 import { Compare } from "./_landing/compare";
 import { Difference } from "./_landing/difference";
@@ -28,19 +29,22 @@ export default async function HomePage({
   const { lang } = await searchParams;
   const locale: Locale = lang === "en" ? "en" : "ko";
   const t = CONTENT[locale];
+  // 첫 화면이 로그인 상태를 알아야 한다. 모르면 로그인한 사람에게도
+  // 「로그인」만 보이고, 눌러도 스튜디오로 튕겨 들어간다.
+  const signedIn = Boolean(await getMembership());
 
   return (
     <div className="mcs">
-      <LandingHeader t={t} locale={locale} localMode={isLocalAuthBypass} />
+      <LandingHeader t={t} locale={locale} localMode={isLocalAuthBypass} signedIn={signedIn} />
       <main>
-        <Hero t={t} />
+        <Hero t={t} signedIn={signedIn} />
         <Gallery t={t} />
         <Compare t={t} />
         <Tools t={t} />
         <HowItWorks t={t} />
         <TrySection t={t} />
         <Difference t={t} />
-        <CallToAction t={t} localMode={isLocalAuthBypass} />
+        <CallToAction t={t} localMode={isLocalAuthBypass} signedIn={signedIn} />
       </main>
       <LandingFooter t={t} />
     </div>
