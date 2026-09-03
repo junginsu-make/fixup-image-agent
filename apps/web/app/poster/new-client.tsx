@@ -119,13 +119,12 @@ export function PosterNewClient() {
       {step === "reference" ? (
         <Card>
           <CardHeader>
-            <CardTitle>따라 만들 이미지를 고르세요</CardTitle>
+            <CardTitle>쓸 이미지를 고르세요</CardTitle>
             <CardDescription>
-              새로 올리거나 라이브러리에서 불러오세요. 고른 그림을 누르면 역할이 바뀝니다 —
-              <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색) →
-              <strong className="text-foreground">제품 그대로 지키기</strong>(형태·재질·라벨) →
-              <strong className="text-foreground">인물 그대로 지키기</strong>(얼굴·체형).
-              따라 만들 그림이 최소 한 장 필요하고, 인물은 한 명만 쓸 수 있습니다.
+              새로 올리거나 라이브러리에서 불러온 뒤, 그림마다 역할을 고르세요 —
+              <strong className="text-foreground">따라 만들기</strong>는 레이아웃·서체·색만 가져오고,
+              <strong className="text-foreground">제품/인물 그대로 지키기</strong>는 그 대상이 결과 그림에
+              그대로 들어갑니다. 따라 만들 그림이 최소 한 장 필요하고, 인물은 한 명만 쓸 수 있습니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">

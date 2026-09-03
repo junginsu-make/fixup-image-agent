@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { ImagePlus, Maximize2, X } from "lucide-react";
+import { AlertTriangle, ImagePlus, X } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
-import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
+import {
+  ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, personOverflow, type AttachmentRole,
+} from "@fixup/shared";
 import { LibraryPickerButton, type LibraryPickSet } from "../../_components/library-picker";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
@@ -30,6 +32,15 @@ export interface ReferenceItem {
 
 /** 공용 역할 어휘를 그대로 쓴다. none 은 '아직 안 골랐다'는 화면 상태다. */
 export type Role = "none" | AttachmentRole;
+
+/**
+ * 여기서 고를 수 있는 역할.
+ *
+ * 「원본 그대로 넣기」는 뺐다. 그건 여러 장 중 한 자리에 원본을 끼우는
+ * 말인데 포스터는 한 장짜리라 끼울 자리가 없다(toPosterImage 도 null 을
+ * 돌려준다).
+ */
+const POSTER_ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person"];
 
 export function ReferencePicker({
   references, roles, onRoleChange, onUploaded,
@@ -113,17 +124,9 @@ export function ReferencePicker({
   /** 고른 것만 화면에 남긴다. 라이브러리 전체는 불러오기 창에서 본다. */
   const picked = references.filter((reference) => (roles[reference.id] ?? "none") !== "none");
 
-  // 고른 뒤에는 세 역할을 돈다. 빼기는 X 로 한다.
   // 사람과 물건을 가르는 이유: 지키는 방법이 다르고, 얼굴이 둘이면 모델이
   // 절충해 제3의 인물을 만든다(2026-07-30 실측).
-  const nextRole: Record<Role, Role> = {
-    none: "style",
-    style: "preserve_product",
-    preserve_product: "preserve_person",
-    preserve_person: "style",
-    place_as_is: "style",
-  };
-  const label: Record<Role, string> = { none: "안 씀", ...ATTACHMENT_ROLE_LABEL };
+  const tooManyPeople = personOverflow(picked.map((reference) => roles[reference.id] as AttachmentRole));
 
   return (
     <div className="grid gap-4">
@@ -163,6 +166,14 @@ export function ReferencePicker({
         </div>
       ) : null}
 
+      {tooManyPeople ? (
+        <div role="alert" className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 size-4 flex-none" />
+          인물을 지키는 그림이 둘 이상입니다. 모델이 얼굴을 섞어 없던 사람을 만듭니다 —
+          한 명만 남기세요. 그대로 두면 첫 번째 인물만 씁니다.
+        </div>
+      ) : null}
+
       {picked.length === 0 ? (
         <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           아직 고른 그림이 없습니다. 새로 올리거나 라이브러리에서 불러오세요.
@@ -170,46 +181,56 @@ export function ReferencePicker({
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {picked.map((reference) => {
-            const role = roles[reference.id] ?? "none";
+            const role = (roles[reference.id] ?? "style") as AttachmentRole;
+            const title = reference.title ?? "참고 이미지";
             return (
               <div key={reference.id} className="relative">
-              <button
-                type="button"
-                onClick={() => onRoleChange(reference.id, nextRole[role])}
-                aria-pressed={role !== "none"}
+              <div
                 className={cn(
-                  "overflow-hidden rounded-lg border-2 text-left transition-colors",
-                  role === "style" ? "border-primary"
-                    : role.startsWith("preserve") ? "border-amber-500"
-                      : "border-transparent hover:border-border",
+                  "overflow-hidden rounded-lg border-2 transition-colors",
+                  role === "style" ? "border-primary" : "border-amber-500",
                 )}
               >
-                {reference.url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={reference.url} alt={reference.title ?? "참고 이미지"} className="aspect-[2/3] w-full object-cover" />
-                ) : (
-                  <div className="grid aspect-[2/3] w-full place-items-center bg-muted text-xs text-muted-foreground">
-                    미리보기 없음
-                  </div>
-                )}
-                <span className="block truncate px-3 pt-2 text-xs">{reference.title ?? "제목 없음"}</span>
-                <span className={cn(
-                  "block px-3 pb-2 text-xs font-bold",
-                  role === "style" ? "text-primary"
-                    : role.startsWith("preserve") ? "text-amber-600"
-                      : "text-subtle-foreground",
-                )}>
-                  {label[role]}
-                </span>
-              </button>
                 <button
                   type="button"
-                  aria-label={`${reference.title ?? "참고 이미지"} 크게 보기`}
-                  onClick={() => openImageViewer(reference.url ?? "", reference.title ?? "참고 이미지")}
-                  className="absolute left-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-foreground"
+                  aria-label={`${title} 크게 보기`}
+                  onClick={() => openImageViewer(reference.url ?? "", title)}
+                  className="block w-full"
                 >
-                  <Maximize2 className="size-3.5" />
+                  {reference.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={reference.url} alt={title} className="aspect-[2/3] w-full object-cover" />
+                  ) : (
+                    <div className="grid aspect-[2/3] w-full place-items-center bg-muted text-xs text-muted-foreground">
+                      미리보기 없음
+                    </div>
+                  )}
                 </button>
+                <div className="grid gap-1 px-3 pb-3 pt-2">
+                  <span className="truncate text-xs">{title}</span>
+                  {/*
+                    역할은 고르게 한다. 예전에는 그림을 누르면 역할이 돌았는데,
+                    누를 수 있다는 것 자체가 안 보여서 전부 「따라 만들기」로
+                    나갔다. 지켜야 할 제품이 그냥 참고로 쓰이면 결과가 딴것이 된다.
+                  */}
+                  <label className="grid gap-1 text-xs">
+                    <span className="sr-only">이 그림의 역할</span>
+                    <select
+                      aria-label={`${title} 역할`}
+                      value={role}
+                      onChange={(event) => onRoleChange(reference.id, event.target.value as Role)}
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                    >
+                      {POSTER_ROLES.map((option) => (
+                        <option key={option} value={option}>{ATTACHMENT_ROLE_LABEL[option]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <span className="text-[11px] leading-snug text-subtle-foreground">
+                    {ATTACHMENT_ROLE_HINT[role]}
+                  </span>
+                </div>
+              </div>
                 <button
                   type="button"
                   aria-label={`${reference.title ?? "참고 이미지"} 빼기`}
