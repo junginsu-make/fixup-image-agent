@@ -18,6 +18,8 @@ env*.md
 .remember/tmp/
 frontend/
 .next-build/
+# dev 서버가 .next 를 쓰는 동안 따로 빌드해 보는 자리. 278MB 짜리다.
+.next-dev-check/
 
 # Supabase CLI 가 만드는 로컬 상태. 링크한 프로젝트 ref 가 들어간다.
 supabase/.temp/

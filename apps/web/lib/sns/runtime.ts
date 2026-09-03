@@ -24,6 +24,7 @@ import {
 } from "../local-store";
 import { collectCardPaths, withCardUrls } from "./list-urls";
 import { markAsAi } from "../watermark";
+import { composeLayoutCard } from "../layout/card-composer";
 import type { SnsProviders } from "./providers";
 import type { QueuedGenerationDependencies, SubmittedGenerationRequestStore } from "./queued-flow";
 
@@ -105,6 +106,28 @@ async function letterbox(bytes: Buffer, target: { width: number; height: number 
     .toBuffer();
 }
 
+/**
+ * 칸별 그림을 한꺼번에 내려받는다.
+ *
+ * 못 받은 칸은 조용히 뺀다 — 그 자리는 회색으로 남고 카드는 나온다.
+ * 한 칸을 못 받았다고 열 장을 못 만들면 안 된다.
+ */
+async function fetchSlotImages(
+  images: string | Record<number, string>,
+  cardIndex: number,
+): Promise<Record<number, Buffer>> {
+  if (typeof images === "string") throw new Error(`${cardIndex}번 카드에 칸별 그림이 아니라 통짜 주소가 왔습니다.`);
+  const loaded: Record<number, Buffer> = {};
+  for (const [slot, url] of Object.entries(images)) {
+    try {
+      loaded[Number(slot)] = (await fetchedImage(url)).bytes;
+    } catch {
+      // 그 칸만 비운다.
+    }
+  }
+  return loaded;
+}
+
 export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promise<SnsProjectRecord> {
   if (isLocalStoreEnabled()) {
     const attachments = await Promise.all(project.data.attachments.map(async (attachment) => {
@@ -176,6 +199,12 @@ export async function refreshProjectListAssetUrls(
   ));
 }
 
+/** 틀 없는 카드는 fal 이 그린 그림 하나가 반드시 있어야 한다. */
+function requireWholeImage(images: string | Record<number, string>, cardIndex: number): string {
+  if (typeof images !== "string") throw new Error(`${cardIndex}번 카드의 이미지 주소가 없습니다.`);
+  return images;
+}
+
 export async function replaceSnsCardRows(userId: string, projectId: string, flow: SnsFlowState) {
   if (isLocalStoreEnabled()) {
     return replaceLocalSnsCards(getLocalDatabase(), userId, projectId, flow);
@@ -236,11 +265,20 @@ export async function createQueuedGenerationDependencies(input: {
     savePrompt: (cardIndex, prompt) => updateCard(cardIndex, { prompt }),
     saveSubmitted: (cardIndex) => updateCard(cardIndex, { status: "generating", error: null }),
     saveFailed: (cardIndex, message) => updateCard(cardIndex, { status: "failed", error: message }),
-    async saveAsset(imageUrl, card) {
-      const image = await fetchedImage(imageUrl);
+    async saveAsset(images, card) {
       // AI 가 그린 카드에만 표기한다. 사용자가 넣은 원본은 saveOriginal 로 가고
       // 거기에는 붙이지 않는다 — 남의 사진에 "AI 이미지" 라고 적으면 거짓말이다.
-      const marked = await markAsAi(image.bytes);
+      const marked = card.layout
+        // 레이아웃 카드는 받은 그림을 칸마다 넣고 글까지 우리가 그려 완성한다.
+        // 표기는 composeLayoutCard 안에서 붙인다.
+        ? (await composeLayoutCard({
+            userId: input.userId,
+            size: ratio,
+            slots: card.layout.slots,
+            copy: card.copy,
+            slotImages: await fetchSlotImages(images, card.index),
+          })).png
+        : await markAsAi((await fetchedImage(requireWholeImage(images, card.index))).bytes);
       const assetPath = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
       await updateCard(card.index, { assetPath, status: "done", error: null });
       return {

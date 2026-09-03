@@ -54,6 +54,9 @@ for (const root of [releaseRoot, runtimeRoot]) {
 }
 
 cpSync(path.join(webRoot, "public"), path.join(runtimeRoot, "public"), { recursive: true });
+// 카드 글자를 서버에서 그린다. 서체가 빠지면 카드는 나오되 fallback 서체로
+// 그려져, 로컬에서 본 것과 다른 글씨가 운영에서 나온다. 조용한 실패라 여기서 담는다.
+cpSync(path.join(webRoot, "assets"), path.join(runtimeRoot, "assets"), { recursive: true });
 // standalone 안의 폴더 이름은 빌드 때 쓴 distDir 그대로다. static 도 같은
 // 이름 밑에 둬야 standalone server.js 가 찾는다.
 mkdirSync(path.join(runtimeRoot, distDirName), { recursive: true });

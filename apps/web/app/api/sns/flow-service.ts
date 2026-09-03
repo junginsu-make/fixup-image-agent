@@ -1,3 +1,4 @@
+import type { LayoutSlot } from "@fixup/layout-core";
 import type { Caption, CardCopy, CardPlan, CardReview } from "@fixup/sns-core";
 
 export interface SnsFlowCard {
@@ -15,9 +16,39 @@ export interface SnsFlowCard {
   generationEndpoint?: string;
   generationStartedAt?: string;
   status: "pending" | "generating" | "review_required" | "done" | "failed";
+  /**
+   * 레이아웃 고정으로 만들 때만 있다. **없으면 지금까지대로 통째로 그린다.**
+   *
+   * 뼈대를 참조(id)로 두지 않고 칸을 복사해 박아 둔다 — 참조만 두면 나중에
+   * 그 뼈대를 고쳤을 때 지난 작업이 소리 없이 달라진다.
+   */
+  layout?: { templateId: string; slots: LayoutSlot[] };
+  /**
+   * 레이아웃 카드의 그림 칸마다 하나씩. **칸 하나가 fal 요청 하나다.**
+   *
+   * 레퍼런스에 그림 자리가 셋이면 셋 다 채워야 「그대로」가 된다. 칸마다
+   * 주문서가 다르므로(「수리 전」과 「수리 후」) 한 번에 시킬 수 없다.
+   *
+   * 다 올 때까지 합성하지 않는다. 한 칸이 실패해도 나머지로 카드는 만든다.
+   */
+  slotJobs?: SnsFlowSlotJob[];
   assetUrl?: string;
   review?: CardReview;
   reviewIssues?: string[];
+  error?: string;
+}
+
+export interface SnsFlowSlotJob {
+  /** `layout.slots` 안의 자리. 합성할 때 이 번호로 그림을 꽂는다. */
+  slot: number;
+  prompt: string;
+  status: "pending" | "generating" | "done" | "failed";
+  falRequestId?: string;
+  generationRequestId?: string;
+  endpoint?: string;
+  startedAt?: string;
+  /** 받아 둔 그림. 다른 칸이 올 때까지 들고 있는다. */
+  imageUrl?: string;
   error?: string;
 }
 

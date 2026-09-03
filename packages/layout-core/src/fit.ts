@@ -44,18 +44,40 @@ function round2(value: number): number {
  *
  * 배수를 곱해 가며 줄이면 부동소수점 오차가 쌓여 같은 입력에 다른 크기가
  * 나온다. **비율을 정수에서 만들어** 1.00 · 0.95 · … · 0.60 을 못 박는다.
+ *
+ * **재는 일 한 번이 렌더 한 번이다.** 하나씩 내려가며 다 재면 안 들어가는
+ * 글마다 열 번을 그린다. 글 칸이 열여섯이면 그 곱만큼 서버가 묶인다(실측:
+ * 카드 한 장 8.7초). 다행히 작을수록 잘 들어가는 한 방향 성질이라,
+ * **양 끝을 먼저 보고 가운데를 반씩 갈라** 다섯 번 안에 같은 답을 찾는다.
  */
 export async function fitFontSize(input: FitInput): Promise<FitResult> {
   const steps = Math.round((1 - FIT_MIN_SCALE) / FIT_STEP);
-  let last = input.targetPx;
+  let measured = 0;
 
-  for (let step = 0; step <= steps; step += 1) {
-    const scale = (100 - step * FIT_STEP * 100) / 100;
-    last = round2(input.targetPx * scale);
-    const drawn = await input.measure(last);
-    if (drawn.width <= input.box.width && drawn.height <= input.box.height) {
-      return { fontPx: last, overflow: false, measured: step + 1 };
+  const sizeAt = (step: number) => round2(input.targetPx * ((100 - step * FIT_STEP * 100) / 100));
+  const fitsAt = async (step: number): Promise<boolean> => {
+    measured += 1;
+    const drawn = await input.measure(sizeAt(step));
+    return drawn.width <= input.box.width && drawn.height <= input.box.height;
+  };
+
+  // 목표 크기 그대로 들어가면 여기서 끝난다. 대부분이 여기다.
+  if (await fitsAt(0)) return { fontPx: sizeAt(0), overflow: false, measured };
+
+  // 가장 작게 줄여도 안 들어가면 그 사이를 뒤질 이유가 없다.
+  if (!(await fitsAt(steps))) return { fontPx: sizeAt(steps), overflow: true, measured };
+
+  let low = 1;
+  let high = steps - 1;
+  let best = steps;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (await fitsAt(middle)) {
+      best = middle;
+      high = middle - 1;
+    } else {
+      low = middle + 1;
     }
   }
-  return { fontPx: last, overflow: true, measured: steps + 1 };
+  return { fontPx: sizeAt(best), overflow: false, measured };
 }

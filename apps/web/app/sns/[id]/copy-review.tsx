@@ -3,13 +3,16 @@
 import * as React from "react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea } from "@fixup/ui";
 import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
+import { CardLayoutPicker } from "./card-layout-picker";
 
 type CopyPatch = Partial<Pick<SnsFlowCard["copy"], "headline" | "body" | "accent" | "footnote">>;
 
-function CopyCardEditor({ card, saving, onSave }: {
+function CopyCardEditor({ card, saving, projectId, onSave, onLayoutChanged }: {
   card: SnsFlowCard;
   saving: boolean;
+  projectId: string;
   onSave(patch: CopyPatch): Promise<void>;
+  onLayoutChanged(): void;
 }) {
   const [copy, setCopy] = React.useState(card.copy);
 
@@ -27,6 +30,7 @@ function CopyCardEditor({ card, saving, onSave }: {
         {card.kind !== "generated" ? (
           <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">이 카드는 사용자 이미지를 그대로 쓰므로 아래 원고가 이미지에 새로 그려지지는 않습니다.</p>
         ) : null}
+        <CardLayoutPicker projectId={projectId} card={card} onChanged={onLayoutChanged} />
         <label className="grid gap-2">
           <Label htmlFor={`headline-${card.index}`}>제목</Label>
           <Input id={`headline-${card.index}`} value={copy.headline} onChange={(event) => setCopy({ ...copy, headline: event.target.value })} />
@@ -58,10 +62,12 @@ function CopyCardEditor({ card, saving, onSave }: {
   );
 }
 
-export function CopyReview({ flow, savingIndex, onSave }: {
+export function CopyReview({ flow, savingIndex, projectId, onSave, onLayoutChanged }: {
   flow: SnsFlowState;
   savingIndex?: number;
+  projectId: string;
   onSave(index: number, patch: CopyPatch): Promise<void>;
+  onLayoutChanged(): void;
 }) {
   const notices = [
     ...flow.planningIssues.map((message) => ({ label: "기획", message })),
@@ -78,7 +84,14 @@ export function CopyReview({ flow, savingIndex, onSave }: {
       ) : null}
       <div className="grid gap-6">
         {flow.cards.map((card) => (
-          <CopyCardEditor key={card.index} card={card} saving={savingIndex === card.index} onSave={(patch) => onSave(card.index, patch)} />
+          <CopyCardEditor
+            key={card.index}
+            card={card}
+            saving={savingIndex === card.index}
+            projectId={projectId}
+            onSave={(patch) => onSave(card.index, patch)}
+            onLayoutChanged={onLayoutChanged}
+          />
         ))}
       </div>
     </div>

@@ -94,7 +94,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // site.webmanifest 는 로그인 전에도 읽혀야 한다. 로그인으로 돌려보내면
   // 브라우저가 앱 이름·아이콘을 못 읽는다.
+  // mp4 도 같은 이유다 — 랜딩의 모션 소재가 로그인으로 돌려보내져 재생되지 않았다.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|site.webmanifest|samples/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|site.webmanifest|samples/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4)$).*)",
   ],
 };

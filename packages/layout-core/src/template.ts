@@ -69,6 +69,20 @@ export function validateTemplate(template: CardTemplate): TemplateIssue[] {
     }
   });
 
+  /**
+   * 칸 하나가 fal 요청 하나다.
+   *
+   * 그림 자리가 셋이면 셋 다 채운다 — 레퍼런스를 그대로 살리려면 그래야 한다.
+   * 다만 부르는 횟수만큼 값이 드니 만들기 전에 말한다. 막지는 않는다.
+   */
+  const images = template.slots.filter((slot) => slot.kind === "image").length;
+  if (images > 1) {
+    issues.push({
+      severity: "warning",
+      message: `그림 칸이 ${images}개라 카드 한 장에 그림을 ${images}번 만듭니다. 그만큼 값이 듭니다.`,
+    });
+  }
+
   const texts = template.slots.flatMap((slot, offset) => (slot.kind === "text" ? [{ slot, offset }] : []));
   for (let first = 0; first < texts.length; first += 1) {
     for (let second = first + 1; second < texts.length; second += 1) {
@@ -156,7 +170,10 @@ export const DEFAULT_TEMPLATES: CardTemplate[] = [
     name: "표지 · 전면 그림에 아래 띠",
     role: "cover",
     slots: [
-      { kind: "image", box: { x: 0, y: 0, width: 1, height: 1 } },
+      // 띠가 시작하는 자리까지만. 카드 끝까지 두면 모델은 4:5 로 구도를 잡는데
+      // 사람은 위쪽 가로 화면만 본다 — 주제가 띠에 걸리고 값은 다 낸다.
+      // 0.02 만 겹쳐 두는 것은 반올림으로 실선이 비치지 않게 하려는 것이다.
+      { kind: "image", box: { x: 0, y: 0, width: 1, height: 0.64 } },
       { kind: "background", box: { x: 0, y: 0.62, width: 1, height: 0.38 }, fill: "#0F172A" },
       { kind: "text", box: { x: 0.08, y: 0.68, width: 0.84, height: 0.18 }, source: { from: "copy", field: "headline" }, style: styled(HEADLINE, { color: "#FFFFFF" }) },
       { kind: "text", box: { x: 0.08, y: 0.88, width: 0.84, height: 0.06 }, source: { from: "copy", field: "body" }, style: styled(BODY, { color: "#E2E8F0", sizeRatio: 0.42 }) },
