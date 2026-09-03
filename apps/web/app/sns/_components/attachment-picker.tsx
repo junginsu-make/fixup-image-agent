@@ -7,6 +7,7 @@ import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
 import { LibraryPickerButton, type LibraryPickSet } from "../../_components/library-picker";
 import type { ReferenceImageRow } from "../../library/reference-upload";
+import { randomId } from "../../../lib/browser-safe";
 
 type ImageView = ReferenceImageRow & { signedUrl: string | null };
 
@@ -60,7 +61,7 @@ export function AttachmentPicker({
     try {
       for (const file of Array.from(files)) {
         const form = new FormData();
-        form.set("id", crypto.randomUUID());
+        form.set("id", randomId());
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
         form.set("purpose", "cardnews");
         form.set("file", file);

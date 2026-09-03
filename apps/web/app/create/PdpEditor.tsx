@@ -118,6 +118,7 @@ import {
 import type {
   ImageColorRecommendations,
 } from "./pdp-canvas-utils";
+import { randomId } from "../../lib/browser-safe";
 
 interface PdpEditorProps {
   initialResult: GeneratedResult;
@@ -1372,7 +1373,7 @@ export function PdpEditor({
 
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setErrorMessage("");
-    const requestKey = retryRequestKeysRef.current[sectionKey] ?? crypto.randomUUID();
+    const requestKey = retryRequestKeysRef.current[sectionKey] ?? randomId();
     retryRequestKeysRef.current[sectionKey] = requestKey;
 
     try {
@@ -1747,7 +1748,7 @@ export function PdpEditor({
     });
 
     const newOverlay: TextOverlay = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       kind: "text",
       text: displayText,
       language: defaultCopyLanguage,
@@ -1792,7 +1793,7 @@ export function PdpEditor({
     }
 
     const newShape: ShapeLayer = normalizeShapeLayer({
-      id: crypto.randomUUID(),
+      id: randomId(),
       kind: "shape",
       x: 64,
       y: 64,

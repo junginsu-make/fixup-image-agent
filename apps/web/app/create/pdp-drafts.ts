@@ -13,6 +13,7 @@ import type {
 } from "@fixup/pdp-core";
 
 import { selectExpiredDraftIds } from "./draft-retention";
+import { randomId } from "../../lib/browser-safe";
 
 const PDP_DRAFT_DB = "hanirum-pdp-maker";
 const PDP_DRAFT_STORE = "drafts";
@@ -203,7 +204,7 @@ export async function getPdpDraft(id: string): Promise<PdpDraftRecord | null> {
 export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord> {
   const now = new Date().toISOString();
   const nextRecord: PdpDraftRecord = {
-    id: input.id ?? crypto.randomUUID(),
+    id: input.id ?? randomId(),
     title: buildDraftTitle(input),
     createdAt: input.createdAt ?? now,
     updatedAt: now,

@@ -22,6 +22,7 @@ import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
 import { ElapsedTime } from "../_components/elapsed-time";
+import { copyText } from "../../lib/browser-safe";
 
 type PreparedImage = PreparedImageDraft;
 
@@ -1221,7 +1222,7 @@ export function PdpMakerClient() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigator.clipboard.writeText(errorDetail)}
+                            onClick={() => { void copyText(errorDetail); }}
                           >
                             <Copy size={14} className="mr-1.5" />
                             복사

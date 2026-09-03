@@ -8,6 +8,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Dialog
 import type { ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
+import { randomId } from "../../lib/browser-safe";
 
 type ReferenceImageView = ReferenceImageRow & { signedUrl: string | null };
 
@@ -57,7 +58,7 @@ export function ReferencesTab() {
       // 로컬이든 운영이든 같은 길로 올린다. 서버가 모드를 가른다.
       for (const file of Array.from(files)) {
         const form = new FormData();
-        form.set("id", crypto.randomUUID());
+        form.set("id", randomId());
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
         form.set("purpose", "both");
         form.set("file", file);

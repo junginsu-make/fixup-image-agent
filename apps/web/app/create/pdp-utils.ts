@@ -1,4 +1,5 @@
 import type { AspectRatio } from "@fixup/pdp-core";
+import { randomId } from "../../lib/browser-safe";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
@@ -35,7 +36,7 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   headers.set("Content-Type", "application/json");
 
   if ((init?.method || "GET").toUpperCase() === "POST" && !headers.has("x-idempotency-key")) {
-    headers.set("x-idempotency-key", crypto.randomUUID());
+    headers.set("x-idempotency-key", randomId());
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {

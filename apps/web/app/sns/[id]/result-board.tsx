@@ -8,6 +8,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/
 import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
 import { snsCardFilename } from "../download-filename";
 import { SaveToLibrary } from "../../_components/save-to-library";
+import { copyText } from "../../../lib/browser-safe";
 
 function triggerDownload(url: string, name: string) {
   const anchor = document.createElement("a");
@@ -94,7 +95,7 @@ function CopyField({ label, hint, value }: { label: string; hint?: string; value
         <Button
           size="sm"
           variant="outline"
-          onClick={() => { void navigator.clipboard.writeText(value).then(() => setCopied(true)); }}
+          onClick={() => { void copyText(value).then((done) => setCopied(done)); }}
         >
           <Clipboard />{copied ? "복사됨" : "복사"}
         </Button>

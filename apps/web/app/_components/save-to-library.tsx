@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@fixup/ui";
+import { randomId } from "../../lib/browser-safe";
 
 /**
  * 만든 결과를 참고 이미지로 보관한다.
@@ -47,7 +48,7 @@ export function SaveImagesToLibrary({
         if (!response.ok) throw new Error("결과 이미지를 읽지 못했습니다.");
         const blob = await response.blob();
         const form = new FormData();
-        form.set("id", crypto.randomUUID());
+        form.set("id", randomId());
         form.set("title", image.title);
         // 용도로 거르지 않는다. 어디서 만들었든 세 도구가 다 쓴다.
         form.set("purpose", "both");

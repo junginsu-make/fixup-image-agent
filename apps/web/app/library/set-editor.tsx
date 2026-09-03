@@ -4,6 +4,7 @@ import * as React from "react";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from "@fixup/ui";
 import type { ReferencePurpose, ReferenceRole, ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
+import { randomId } from "../../lib/browser-safe";
 
 type ImageOption = ReferenceImageRow & { signedUrl: string | null };
 
@@ -53,7 +54,7 @@ export function SetEditor({
     try {
       for (const file of Array.from(files)) {
         const form = new FormData();
-        form.set("id", crypto.randomUUID());
+        form.set("id", randomId());
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
         form.set("purpose", "cardnews");
         form.set("file", file);

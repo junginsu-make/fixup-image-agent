@@ -38,6 +38,7 @@ import {
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
 import { SavedImagePicker } from "../create/SavedImagePicker";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
+import { copyText, randomId } from "../../lib/browser-safe";
 
 type Model = "openai" | "google";
 type View = "dashboard" | "workspace" | "results";
@@ -405,7 +406,7 @@ export function RedesignWizard() {
       outputRolloutRequest,
       files.map((file) => `${file.name}:${file.size}`).join(","),
     ].join("|");
-    const requestKey = retryRequestKeysRef.current[requestIdentity] ?? crypto.randomUUID();
+    const requestKey = retryRequestKeysRef.current[requestIdentity] ?? randomId();
     retryRequestKeysRef.current[requestIdentity] = requestKey;
     let outcomeKnown = false;
 
@@ -746,7 +747,7 @@ export function RedesignWizard() {
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
     const requestIdentity = ["edit", project.id, sectionId, model, trimmedEditRequest, section.imageUrl.length].join("|");
-    const requestKey = retryRequestKeysRef.current[requestIdentity] ?? crypto.randomUUID();
+    const requestKey = retryRequestKeysRef.current[requestIdentity] ?? randomId();
     retryRequestKeysRef.current[requestIdentity] = requestKey;
     let outcomeKnown = false;
 
@@ -1989,7 +1990,7 @@ function Results({
           </CardHeader>
           <CardContent>
             <ul className="list-disc space-y-1 pl-5 text-sm">{facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
-            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard?.writeText(facts.join("\n"))}>사실 목록 복사</Button>
+            <Button variant="ghost" size="sm" onClick={() => { void copyText(facts.join("\n")); }}>사실 목록 복사</Button>
           </CardContent>
         </Card>
       )}

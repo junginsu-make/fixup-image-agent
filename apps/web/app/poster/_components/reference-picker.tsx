@@ -6,6 +6,7 @@ import { Button, cn } from "@fixup/ui";
 import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import { LibraryPickerButton } from "../../_components/library-picker";
 import { openImageViewer } from "../../_components/image-viewer";
+import { randomId } from "../../../lib/browser-safe";
 
 /**
  * 포스터 레퍼런스 고르기.
@@ -62,7 +63,7 @@ export function ReferencePicker({
     try {
       for (const file of Array.from(files)) {
         const form = new FormData();
-        form.set("id", crypto.randomUUID());
+        form.set("id", randomId());
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
         // 용도로 거르지 않지만 어디서 올렸는지는 남긴다.
         form.set("purpose", "poster");
