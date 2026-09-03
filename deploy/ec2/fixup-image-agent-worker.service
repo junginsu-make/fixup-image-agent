@@ -7,10 +7,10 @@ Wants=network-online.target
 Type=simple
 User=fixup-agent
 Group=fixup-agent
-WorkingDirectory=/opt/fixup-image-agent/current
+WorkingDirectory=/opt/fixup-image-agent/current/worker
 EnvironmentFile=/etc/fixup-image-agent/app.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/pnpm --filter @fixup/worker start
+ExecStart=/usr/bin/node worker.mjs
 Restart=always
 RestartSec=5
 TimeoutStopSec=30

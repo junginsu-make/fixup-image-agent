@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
+import { HOME_AFTER_LOGIN } from "./lib/routes";
 
 const PUBLIC_PATHS = [
   "/",
@@ -75,13 +76,13 @@ export async function middleware(request: NextRequest) {
 
   const active = Boolean(profile?.email_confirmed_at && profile?.status === "active");
   if (isAuthPage) {
-    return NextResponse.redirect(new URL(active ? "/create" : "/access", request.url));
+    return NextResponse.redirect(new URL(active ? HOME_AFTER_LOGIN : "/access", request.url));
   }
   if (pathname === "/access") return response;
   if (matches(pathname, PUBLIC_PATHS)) return response;
   if (!active) return NextResponse.redirect(new URL("/access", request.url));
   if (pathname.startsWith("/admin") && profile?.role !== "admin") {
-    return NextResponse.redirect(new URL("/create", request.url));
+    return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, request.url));
   }
   return response;
 }

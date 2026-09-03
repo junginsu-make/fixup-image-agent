@@ -19,6 +19,7 @@
     }
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.1",
     "vitest": "^4.1.10"
   }

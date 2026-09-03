@@ -9,6 +9,7 @@ import { AuthShell } from "../_components/auth-shell";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import { authAvailability } from "../../lib/supabase/env";
+import { safeNext } from "../../lib/routes";
 
 export default function LoginPage() {
   return <Suspense fallback={<main className="grid min-h-screen place-items-center">로그인 화면을 불러오는 중입니다.</main>}><LoginForm /></Suspense>;
@@ -46,8 +47,7 @@ function LoginForm() {
         setCaptchaVersion((version) => version + 1);
         return setError("이메일 또는 비밀번호를 확인해 주세요.");
       }
-      const next = params.get("next");
-      router.replace(next?.startsWith("/") && !next.startsWith("//") ? next : "/create");
+      router.replace(safeNext(params.get("next")));
       router.refresh();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "로그인하지 못했습니다.");

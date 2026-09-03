@@ -1,4 +1,5 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,6 +43,8 @@ cpSync(path.join(webRoot, "public"), path.join(runtimeRoot, "public"), { recursi
 mkdirSync(path.join(runtimeRoot, ".next"), { recursive: true });
 cpSync(path.join(webRoot, ".next", "static"), path.join(runtimeRoot, ".next", "static"), { recursive: true });
 
+await bundleWorker();
+
 // 링크가 하나라도 꾸러미 바깥을 가리키면 다른 기계에서 깨진다. 이 검사가
 // 없어서 깨진 아티팩트가 운영 배포까지 갔다. 여기서 멈춘다.
 assertSelfContained(releaseRoot);
@@ -57,6 +60,68 @@ writeFileSync(
 
 console.log(`EC2 runtime prepared: ${releaseRoot}`);
 console.log(`Entry point: ${path.relative(releaseRoot, path.join(runtimeRoot, "server.js"))}`);
+
+/**
+ * 수집 워커를 파일 하나로 묶는다.
+ *
+ * Next 의 standalone 은 웹 앱만 담는다. 워커는 별도 꾸러미라 그대로면 서버에
+ * 없다 — 실제로 `203/EXEC`(실행 파일 없음)로 죽었다. 서버에 pnpm 을 깔고
+ * 작업 공간을 통째로 올리는 대신, 의존성까지 한 파일로 묶어 `node` 로 돌린다.
+ *
+ * **playwright 는 빼고 묶는다.** 브라우저 바이너리가 300MB 가 넘고 1GB 서버에서
+ * Chromium 을 띄우면 웹까지 같이 죽는다. 공식 AI 블로그 수집 어댑터 하나만
+ * 그걸 쓰는데, 그마저 실제로 긁을 때 동적으로 부른다. 그래서 빼도 나머지
+ * 수집(유튜브·RSS·네이버·커뮤니티)은 그대로 돈다. 그 어댑터를 켜면 그
+ * 소스만 "모듈 없음"으로 실패하고 다른 소스는 계속 돈다.
+ *
+ * **jsdom 과 readability 도 뺀다. 다만 이건 빼는 게 아니라 따로 깐다.**
+ * 이 둘은 디스크에서 자기 파일을 읽는다(jsdom 은 기본 스타일시트를 연다).
+ * 한 파일로 묶으면 그 파일이 옆에 없어 `__dirname` 에서 바로 죽는다.
+ * RSS 를 포함해 거의 모든 어댑터가 쓰므로 없으면 수집이 아예 안 된다.
+ */
+const EXTERNAL = ["playwright", "jsdom", "@mozilla/readability"];
+const NEEDS_REAL_FILES = ["jsdom", "@mozilla/readability"];
+async function bundleWorker() {
+  const esbuild = await import("esbuild");
+  const workerRoot = path.join(releaseRoot, "worker");
+  mkdirSync(workerRoot, { recursive: true });
+
+  await esbuild.build({
+    entryPoints: [path.join(repoRoot, "apps", "worker", "src", "index.ts")],
+    outfile: path.join(workerRoot, "worker.mjs"),
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node22",
+    external: EXTERNAL,
+    // esbuild 가 CommonJS 의존성을 ESM 으로 감쌀 때 require 를 남긴다.
+    banner: { js: "import { createRequire as __cr } from 'node:module';const require = __cr(import.meta.url);" },
+    logLevel: "warning",
+  });
+
+  // 자기 폴더에 자기 node_modules 를 둔다. 웹 쪽 node_modules 와 섞지 않는다.
+  writeFileSync(
+    path.join(workerRoot, "package.json"),
+    `${JSON.stringify({ name: "fixup-worker-runtime", private: true, type: "module" }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const ingest = JSON.parse(
+    readFileSync(path.join(repoRoot, "packages", "ingest-core", "package.json"), "utf8"),
+  );
+  // 저장소가 쓰는 판과 같은 것을 깐다. 여기서 판이 갈리면 로컬에서 되던 것이 서버에서 안 된다.
+  const wanted = NEEDS_REAL_FILES
+    .map((name) => `${name}@${ingest.dependencies[name].replace(/^[\^~]/, "")}`);
+
+  const install = spawnSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", ...wanted], {
+    cwd: workerRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  if (install.status !== 0) throw new Error("워커 의존성 설치에 실패했습니다.");
+
+  console.log(`Worker bundled: worker/worker.mjs (+ ${NEEDS_REAL_FILES.join(", ")})`);
+}
 
 /**
  * 빌드 머신의 절대 경로를 가리키는 링크를, 꾸러미 안을 가리키는 상대 경로로 바꾼다.

@@ -1,4 +1,5 @@
 import type { MemberProfile, MembershipContext, UsageSummary } from "./membership/types";
+import { HOME_AFTER_LOGIN } from "./routes";
 
 /**
  * 로컬 확인용 인증 우회.
@@ -18,7 +19,7 @@ export const isLocalAuthBypass =
   process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "1";
 
 /** 로컬 우회 모드에서 문을 두드리면 열리는 곳. */
-export const LOCAL_BYPASS_ENTRY = "/create";
+export const LOCAL_BYPASS_ENTRY = HOME_AFTER_LOGIN;
 
 /** 화면. 처리기(/auth/confirm, /auth/signout)는 여기 없다 — 가로채면 인증이 끊긴다. */
 const AUTH_SCREENS = ["/login", "/signup", "/forgot-password", "/reset-password"];
