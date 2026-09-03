@@ -16,7 +16,7 @@ export default function PosterPage() {
         <header>
           <p className="text-meta text-subtle-foreground">IMAGE</p>
           <h1 className="mt-1 text-h1">이미지 만들기</h1>
-          <p className="mt-2 max-w-3xl text-body text-muted-foreground">
+          <p className="mt-2 text-body text-muted-foreground">
             광고 소재부터 포스터, 일반 이미지까지 한 장을 만듭니다. 라이브러리에 올려 둔
             참고 이미지나 지금 직접 첨부한 이미지를 기준 삼아, 그 결을 따라 그립니다.
           </p>

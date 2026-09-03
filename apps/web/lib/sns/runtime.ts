@@ -22,6 +22,7 @@ import {
   updateLocalSnsCard,
   writeLocalSnsResultFile,
 } from "../local-store";
+import { collectCardPaths, withCardUrls } from "./list-urls";
 import type { SnsProviders } from "./providers";
 import type { QueuedGenerationDependencies, SubmittedGenerationRequestStore } from "./queued-flow";
 
@@ -143,6 +144,35 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     })),
   } : undefined;
   return { ...project, data: { ...project.data, attachments, flow } };
+}
+
+/**
+ * 목록에 나올 작업들의 그림 주소를 한 번에 만든다.
+ *
+ * 작업마다 `refreshProjectAssetUrls` 를 부르면 왕복이 작업 수만큼 늘어난다.
+ * 경로를 통째로 모아 한 번 서명하고 다시 나눠 붙인다.
+ */
+export async function refreshProjectListAssetUrls(
+  projects: SnsProjectRecord[],
+): Promise<SnsProjectRecord[]> {
+  const paths = collectCardPaths(projects);
+  if (!paths.length) return projects;
+
+  if (isLocalStoreEnabled()) {
+    // 경로 모양이 어긋난 것 하나 때문에 목록 전체가 500 이 되면 안 된다.
+    return withCardUrls(projects, new Map(paths.flatMap((path) => {
+      try { return [[path, localResultUrl(path)] as const]; } catch { return []; }
+    })));
+  }
+
+  const client = await createSupabaseServerClient();
+  const result = await client.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+  if (result.error) throw new Error(result.error.message);
+  return withCardUrls(projects, new Map(
+    (result.data ?? []).flatMap((entry) => (
+      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
+    )),
+  ));
 }
 
 export async function replaceSnsCardRows(userId: string, projectId: string, flow: SnsFlowState) {
