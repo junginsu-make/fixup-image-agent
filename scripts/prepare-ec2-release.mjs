@@ -49,6 +49,7 @@ mkdirSync(path.join(runtimeRoot, ".next"), { recursive: true });
 cpSync(path.join(webRoot, ".next", "static"), path.join(runtimeRoot, ".next", "static"), { recursive: true });
 
 await bundleWorker();
+placeSharpLibvips(releaseRoot);
 
 // 링크가 하나라도 꾸러미 바깥을 가리키면 다른 기계에서 깨진다. 이 검사가
 // 없어서 깨진 아티팩트가 운영 배포까지 갔다. 여기서 멈춘다.
@@ -128,6 +129,39 @@ async function bundleWorker() {
 }
 
 /**
+ * libvips 를 sharp 바로 옆에 놓는다.
+ *
+ * `.node` 바인딩은 `$ORIGIN/../../sharp-libvips-<판>/lib` 에서 `.so` 를 찾는다.
+ * 즉 **꾸러미 어딘가에 있는 것으로는 안 되고 그 자리에 있어야 한다.**
+ *
+ * pnpm 은 평소 그 자리에 심볼릭 링크를 둔다. 그런데 Next 의 추적은 그 링크를
+ * 따라오지 않아, 파일은 꾸러미에 들어왔는데 옆자리는 비어 있었다. 그래서
+ * 배포하고도 계속 이렇게 죽었다.
+ *
+ *   ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3: cannot open shared object file
+ *
+ * 링크 대신 실제로 복사한다. 링크는 꾸러미를 풀고 옮기는 과정에서 또 끊길 수
+ * 있고, 여기서 한 번 더 틀리면 다시 운영에서야 안다.
+ */
+function placeSharpLibvips(root) {
+  const pnpmRoot = path.join(root, "node_modules", ".pnpm");
+  if (!existsSync(pnpmRoot)) return;
+
+  const entries = readdirSync(pnpmRoot);
+  const libvipsDir = entries.find((name) => name.startsWith("@img+sharp-libvips-"));
+  const bindingDir = entries.find((name) => /^@img\+sharp-(?!libvips)/.test(name));
+  if (!libvipsDir || !bindingDir) return;
+
+  const libvipsName = libvipsDir.slice("@img+".length).split("@")[0];
+  const source = path.join(pnpmRoot, libvipsDir, "node_modules", "@img", libvipsName);
+  const target = path.join(pnpmRoot, bindingDir, "node_modules", "@img", libvipsName);
+  if (!existsSync(source) || existsSync(target)) return;
+
+  cpSync(source, target, { recursive: true, dereference: true });
+  console.log(`libvips placed beside the binding: ${path.relative(root, target)}`);
+}
+
+/**
  * sharp 가 서버에서 실제로 열릴 수 있는지 본다.
  *
  * `@img/sharp-linux-x64` 안의 `.node` 는 `libvips-cpp.so` 를 OS 수준에서 연다.
@@ -143,29 +177,28 @@ async function bundleWorker() {
  * 리눅스 꾸러미를 만들 때만 본다. 다른 판에서는 그 파일이 없는 게 맞다.
  */
 function assertSharpUsable(root) {
-  const usesSharp = existsSync(path.join(root, "node_modules", ".pnpm"))
-    && readdirSync(path.join(root, "node_modules", ".pnpm")).some((name) => name.startsWith("sharp@"));
-  if (!usesSharp || process.platform !== "linux") return;
+  const pnpmRoot = path.join(root, "node_modules", ".pnpm");
+  if (!existsSync(pnpmRoot) || process.platform !== "linux") return;
 
-  const found = [];
-  const walk = (dir, depth) => {
-    if (depth > 8 || found.length) return;
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (found.length) return;
-      if (entry.isFile() && entry.name.startsWith("libvips-cpp.so")) { found.push(entry.name); return; }
-      if (entry.isDirectory()) walk(path.join(dir, entry.name), depth + 1);
-    }
-  };
-  walk(path.join(root, "node_modules"), 0);
+  const entries = readdirSync(pnpmRoot);
+  const bindingDir = entries.find((name) => /^@img\+sharp-(?!libvips)/.test(name));
+  if (!bindingDir) return;
 
-  if (!found.length) {
+  // 바인딩이 실제로 찾는 자리를 본다. "꾸러미 어딘가에 있다" 로는 부족하다 —
+  // 실제로 파일은 있는데 옆자리가 비어서 운영에서 죽었다.
+  const neighbours = path.join(pnpmRoot, bindingDir, "node_modules", "@img");
+  const libvips = readdirSync(neighbours).find((name) => name.startsWith("sharp-libvips-"));
+  const found = libvips
+    && readdirSync(path.join(neighbours, libvips, "lib"))
+      .find((name) => name.startsWith("libvips-cpp.so"));
+
+  if (!found) {
     throw new Error(
-      "sharp 의 libvips 공유 라이브러리가 꾸러미에 없습니다. "
-      + "이대로 배포하면 이미지를 다루는 모든 API 가 HTML 오류 페이지를 돌려줍니다. "
-      + "next.config 의 outputFileTracingIncludes 를 확인하세요.",
+      `sharp 바인딩 옆에 libvips 가 없습니다(${path.relative(root, neighbours)}). `
+      + "이대로 배포하면 이미지를 다루는 모든 API 가 HTML 오류 페이지를 돌려줍니다.",
     );
   }
-  console.log(`sharp native library present: ${found[0]}`);
+  console.log(`libvips reachable from the binding: ${libvips}/lib/${found}`);
 }
 
 /**
