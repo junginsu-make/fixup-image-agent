@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
-  Input, Label, Textarea, cn,
+  Input, Label, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
 import { SaveToLibrary } from "../../_components/save-to-library";
@@ -29,6 +29,17 @@ interface PosterProject {
 
 type TextSlot = "kind" | "headline" | "subline" | "scene" | "subject" | "action"
   | "dominantColor" | "accentColor" | "forbidden";
+
+/**
+ * 앞 화면(`/poster/new`)의 01~03 에서 이어진다.
+ *
+ * 번호를 이어 붙이는 이유는 사용자가 한 흐름으로 느끼기 때문이다 — 주소가
+ * 바뀌었다고 처음부터 다시 세면 어디쯤 왔는지 알 수 없다.
+ */
+const STEPS: StepDefinition[] = [
+  { id: "plan", label: "04 기획 확인", desc: "틀린 칸만 고치기" },
+  { id: "result", label: "05 결과", desc: "고르고 검수" },
+];
 
 const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
   ["kind", "유형", "line"],
@@ -57,6 +68,26 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   React.useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; };
+  }, []);
+
+  /**
+   * 열자마자 초안을 채운다.
+   *
+   * 앞 화면이 "나머지 칸은 AI 가 초안으로 채웁니다" 라고 약속하고, 이 화면은
+   * "AI 가 채운 초안입니다" 라고 말한다. 그런데 실제로는 사람이 버튼을 눌러야
+   * 채워졌다 — 빈 칸만 보고 무엇을 해야 할지 알 수 없었다.
+   *
+   * 이미 채워진 것이 있으면 부르지 않는다. 다시 채우고 싶으면 버튼이 있다.
+   */
+  const planned = React.useRef(false);
+  React.useEffect(() => {
+    if (planned.current) return;
+    const empty = SLOT_LABELS.every(([field]) => !String(slots[field] ?? "").trim());
+    if (!empty) return;
+    planned.current = true;
+    void runPlan();
+    // 첫 진입에 한 번만. slots 를 넣으면 채워질 때마다 다시 돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function setField(field: TextSlot, value: string) {
@@ -215,8 +246,14 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
     }
   }
 
+  // 앞 화면(01~03)에서 이어지는 단계다. 어디쯤 왔는지 보여준다 —
+  // 카드뉴스가 쓰는 것과 같은 막대다.
+  const current = list.length ? "result" : "plan";
+
   return (
     <div className="grid gap-6">
+      <StepBar steps={STEPS} current={current} />
+
       {error ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -305,7 +342,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
 
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
-              AI 로 초안 채우기
+              초안 다시 채우기
             </Button>
             <Button variant="secondary" onClick={() => void saveSlots()} disabled={saving || Boolean(busy)}>
               {saving ? "저장하는 중…" : "기획 저장"}
