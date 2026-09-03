@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
+import { openImageGallery } from "../_components/image-viewer";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -134,9 +135,39 @@ export function WorksTab() {
   const router = useRouter();
   const [works, setWorks] = React.useState<Work[] | null>(null);
   const [message, setMessage] = React.useState("");
-  const [open, setOpen] = React.useState<Work | null>(null);
   const [confirming, setConfirming] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  const pending = React.useMemo(
+    () => (works ?? []).find((work) => work.id === confirming) ?? null,
+    [works, confirming],
+  );
+
+  /**
+   * 작업을 누르면 큰 창으로 연다.
+   *
+   * 전에는 작은 창에 썸네일을 늘어놓아, 정작 무엇을 만들었는지가 안 보였다.
+   * 만들기 화면이 쓰는 그 창을 그대로 쓴다 — 크게 보면서 설명도 보고,
+   * 넘기고, 내려받고, 지운다.
+   */
+  function openWork(work: Work) {
+    const meta: Array<[string, string]> = [
+      ["만든 때", when(work.createdAt || work.updatedAt)],
+      ["도구", TOOL_LABEL[work.tool]],
+      ...(work.intent ? ([["무엇을 만들려던 것인가", work.intent]] as Array<[string, string]>) : []),
+      ...work.settings.filter(([, value]) => value),
+      ["만든 사람", work.userId ?? "확인할 수 없음"],
+    ];
+    openImageGallery({
+      images: work.images.map((image) => ({
+        src: image.url,
+        alt: `${work.title} · ${image.label}`,
+        name: `${work.title} ${image.label}.png`,
+        meta,
+      })),
+      deleteLabel: "이 작업 지우기",
+      onDelete: () => setConfirming(work.id),
+    });
+  }
 
   async function remove(work: Work) {
     setDeleting(work.id);
@@ -148,7 +179,6 @@ export function WorksTab() {
       const body = await (await fetch(endpoint, { method: "DELETE" })).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
       setWorks((current) => (current ?? []).filter((entry) => entry.id !== work.id));
-      setOpen(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "지우지 못했습니다.");
     } finally {
@@ -192,7 +222,7 @@ export function WorksTab() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {works.map((work) => (
-          <Card key={`${work.tool}-${work.id}`} className="cursor-pointer overflow-hidden" onClick={() => setOpen(work)}>
+          <Card key={`${work.tool}-${work.id}`} className="cursor-pointer overflow-hidden" onClick={() => (work.images.length ? openWork(work) : router.push(work.href))}>
             {/* 칸은 참고 이미지와 같은 정사각형, 그림은 잘라 내지 않는다.
                 비율이 제각각이라 잘라 놓으면 무엇을 만들었는지 모른다. */}
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
@@ -217,78 +247,24 @@ export function WorksTab() {
         ))}
       </div>
 
-      <Dialog open={Boolean(open)} onOpenChange={(next) => { if (!next) setOpen(null); }}>
-        <DialogContent className="max-w-4xl">
-          {open ? <>
+      {/* 자세한 것은 큰 창이 보여준다. 여기 남는 것은 지우기 확인뿐이다.
+          되돌릴 수 없는 일이라 한 번 더 묻는다. */}
+      <Dialog open={Boolean(confirming)} onOpenChange={(next) => { if (!next) setConfirming(null); }}>
+        <DialogContent className="max-w-md">
+          {pending ? <>
             <DialogHeader>
-              <DialogTitle>{open.title}</DialogTitle>
+              <DialogTitle>지울까요?</DialogTitle>
               <DialogDescription>
-                {TOOL_LABEL[open.tool]} · {when(open.createdAt || open.updatedAt)}
-                {open.images.length ? ` · ${open.images.length}장` : ""}
+                「{pending.title}」{TOOL_LABEL[pending.tool]} 작업을 지웁니다.
+                만들어 둔 그림도 함께 사라지고, 되돌릴 수 없습니다.
               </DialogDescription>
             </DialogHeader>
-
-            <div className="grid max-h-[62vh] gap-5 overflow-y-auto p-1">
-              {open.images.length ? (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {open.images.map((image) => (
-                    <figure key={image.url} className="grid gap-1">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={image.url} alt={image.label} data-zoomable className="max-h-44 w-full cursor-zoom-in rounded-md border bg-muted object-contain" />
-                      <figcaption className="text-center text-meta text-subtle-foreground">{image.label}</figcaption>
-                    </figure>
-                  ))}
-                </div>
-              ) : null}
-
-              {open.intent ? (
-                <section>
-                  <h3 className="text-sm font-bold">무엇을 만들려던 것인가</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                    {open.intent.length > 800 ? `${open.intent.slice(0, 800)}…` : open.intent}
-                  </p>
-                </section>
-              ) : null}
-
-              <section>
-                <h3 className="text-sm font-bold">이렇게 만들었습니다</h3>
-                <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
-                  {open.settings.filter(([, value]) => value).map(([name, value]) => (
-                    <div key={name} className="flex gap-3">
-                      <dt className="w-24 flex-none text-subtle-foreground">{name}</dt>
-                      <dd className="m-0 flex-1 break-words">{value}</dd>
-                    </div>
-                  ))}
-                  <div className="flex gap-3">
-                    <dt className="w-24 flex-none text-subtle-foreground">만든 사람</dt>
-                    <dd className="m-0 flex-1 break-words">{open.userId ?? "확인할 수 없음"}</dd>
-                  </div>
-                  <div className="flex gap-3">
-                    <dt className="w-24 flex-none text-subtle-foreground">마지막 수정</dt>
-                    <dd className="m-0 flex-1">{when(open.updatedAt)}</dd>
-                  </div>
-                </dl>
-              </section>
-            </div>
-
-            <DialogFooter className="sm:justify-between">
-              {/* 지우기는 되돌릴 수 없다. 한 번 더 묻는다 — 다만 창을 또 띄우지는
-                  않는다. 버튼이 그 자리에서 바뀌는 편이 덜 성가시다. */}
-              {confirming === open.id ? (
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-destructive">지우면 되돌릴 수 없습니다.</span>
-                  <Button variant="destructive" size="sm" disabled={Boolean(deleting)} onClick={() => void remove(open)}>
-                    {deleting === open.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                    {deleting === open.id ? "지우는 중…" : "그래도 지웁니다"}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>취소</Button>
-                </span>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => setConfirming(open.id)}>
-                  <Trash2 />지우기
-                </Button>
-              )}
-              <Button onClick={() => router.push(open.href)}>이 작업 열기</Button>
+            <DialogFooter>
+              <Button variant="ghost" disabled={Boolean(deleting)} onClick={() => setConfirming(null)}>취소</Button>
+              <Button variant="destructive" disabled={Boolean(deleting)} onClick={() => void remove(pending)}>
+                {deleting === pending.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                {deleting === pending.id ? "지우는 중…" : "지웁니다"}
+              </Button>
             </DialogFooter>
           </> : null}
         </DialogContent>

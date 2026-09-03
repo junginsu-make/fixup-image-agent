@@ -165,6 +165,25 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
     pending: 0, generating: 0, review_required: 0, done: 0, failed: 0,
   });
 
+  /**
+   * 크게 볼 때 그림 옆에 같이 보여줄 것.
+   *
+   * 그림에 붙여 둔다 — 모달은 화면 전체에서 하나뿐이라 화면마다 넘겨받게
+   * 하면 어딘가는 빠진다. 프롬프트는 그림을 왜 이렇게 그렸는지 알려 주는
+   * 가장 중요한 값이라 함께 넣는다.
+   */
+  function cardMeta(card: SnsFlowCard): string {
+    return JSON.stringify({
+      카드: `${card.index}번 · ${card.role === "cover" ? "표지" : card.role === "ending" ? "엔딩" : "속지"}`,
+      제목: card.copy.headline,
+      본문: card.copy.body,
+      "강조 문구": card.copy.accent,
+      각주: card.copy.footnote,
+      "그림 지시(프롬프트)": card.prompt,
+      검수: card.review?.summary,
+    });
+  }
+
   async function downloadAll() {
     if (!downloadable.length) return;
     setZipping(true);
@@ -210,7 +229,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
               <ReviewStatus card={card} />
             </CardHeader>
             <CardContent className="grid gap-4">
-              {card.assetUrl ? <Image src={card.assetUrl} alt={`${card.index}번 카드 결과`} width={1088} height={1360} unoptimized data-zoomable className="mx-auto max-h-[60vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] max-h-[60vh] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
+              {card.assetUrl ? <Image src={card.assetUrl} alt={`${title} · ${card.index}번 카드`} width={1088} height={1360} unoptimized data-zoomable data-viewer-meta={cardMeta(card)} className="mx-auto max-h-[60vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] max-h-[60vh] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
               <div>
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}

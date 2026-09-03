@@ -74,6 +74,28 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   /** 지금 고치는 중인 변형. 한 번에 한 장만 고친다. */
   const [editing, setEditing] = React.useState<string | null>(null);
 
+  /**
+   * 크게 볼 때 그림 옆에 같이 보여줄 것.
+   *
+   * 그림에 붙여 둔다 — 모달은 화면 전체에서 하나뿐이라 화면마다 넘겨받게
+   * 하면 어딘가는 빠진다. 슬롯은 지금 화면의 값을 쓴다(저장 전에 고친 것도
+   * 그대로 보이는 편이 맞다).
+   */
+  const viewerMeta = JSON.stringify({
+    "무엇을 만들려던 것인가": project.data.instruction,
+    유형: slots.kind,
+    헤드라인: slots.headline,
+    "받침 문구": slots.subline,
+    장면: slots.scene,
+    피사체: slots.subject,
+    동작: slots.action,
+    지배색: slots.dominantColor,
+    강조색: slots.accentColor,
+    "넣지 말 것": slots.forbidden,
+    비율: project.ratio,
+    모델: project.modelId,
+  });
+
   function downloadVariant(image: PosterImage) {
     const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
     void downloadImage({ src, name: `${project.title} 변형 ${image.variantIndex + 1}.png` });
@@ -414,7 +436,13 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                   >
                     {image.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={image.url} alt={`변형 ${image.variantIndex + 1}`} data-zoomable className="w-full cursor-zoom-in" />
+                      <img
+                        src={image.url}
+                        alt={`${project.title} · 변형 ${image.variantIndex + 1}`}
+                        data-zoomable
+                        data-viewer-meta={viewerMeta}
+                        className="w-full cursor-zoom-in"
+                      />
                     ) : (
                       <div className="grid aspect-[2/3] place-items-center bg-muted text-xs text-muted-foreground">
                         미리보기 없음
