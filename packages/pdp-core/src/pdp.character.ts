@@ -139,10 +139,7 @@ function framingDirective(aspectRatio: AspectRatio, kind: CharacterKind) {
     " Keep the primary identifying features clearly visible and in sharp focus.";
 
   if (kind === "object") {
-    return (
-      " Show the whole object inside the frame against a plain neutral background, with no " +
-      "hands, no people and no props." + visible
-    );
+    return " Show the whole object inside the frame, with no hands, no people and no props." + visible;
   }
 
   if (kind === "animal") {
@@ -259,6 +256,22 @@ function resolve(input: { kind?: CharacterKind; look?: CharacterLook; photoreal?
   };
 }
 
+/**
+ * 네 장이 한 벌로 보이려면 배경이 같아야 한다.
+ *
+ * 각도 3장은 늘 이 배경으로 만든다. 후보(정면)에만 이 문장이 없어서, 정면은
+ * 어딘가의 장면 속에 있고 나머지 셋은 무배경으로 나오는 일이 생겼다.
+ */
+const PLAIN_BACKGROUND = " Place the subject alone on a plain neutral background.";
+
+/**
+ * 후보 — **정면이다.**
+ *
+ * 고른 후보를 그대로 「정면」으로 저장하고, 나머지 세 각도를 그것을 참조로
+ * 만든다. 그런데 여기에 각도 지시가 없었다. 모델이 3/4 뷰나 옆모습을 그리면
+ * 정면이 정면이 아닌 채로 나머지 셋의 기준이 되고, 네 장이 한 벌로 안 보인다.
+ * 각도 지시는 `buildTurnaroundPrompt` 와 같은 표에서 가져온다.
+ */
 export function buildCandidatePrompt(input: {
   description: string;
   aspectRatio: AspectRatio;
@@ -275,7 +288,9 @@ export function buildCandidatePrompt(input: {
     `Create exactly one original fictional ${noun}. Preserve these identity-defining ` +
     `traits consistently: ${input.description}. Do not add a second ${noun}.` +
     (input.referenceRole ? referenceDirective(input.referenceRole, kind) : "") +
+    ` Show it as ${angleDirective("front", kind)}.` +
     framingDirective(input.aspectRatio, kind) +
+    PLAIN_BACKGROUND +
     lookDirective(look, kind)
   );
 }
@@ -297,7 +312,7 @@ export function buildTurnaroundPrompt(input: {
     `The supplied reference image shows this ${noun}. Generate the same ${noun} as ` +
     `${angleDirective(input.angle, kind)}. Preserve the same ${identity} exactly. ` +
     `Identity description: ${input.identityPrompt}. ` +
-    `Generate exactly one ${noun} on a plain neutral background.` +
+    `Generate exactly one ${noun}.` + PLAIN_BACKGROUND +
     lookDirective(look, kind)
   );
 }

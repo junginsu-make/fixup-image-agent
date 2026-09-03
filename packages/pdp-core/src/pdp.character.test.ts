@@ -297,3 +297,38 @@ describe("옛 호출이 그대로 동작한다", () => {
     expect(prompt).toMatch(/back view/i);
   });
 });
+
+describe("후보는 정면이어야 한다", () => {
+  const base = { description: "30대 여성", aspectRatio: "3:4" as const };
+
+  it("후보 프롬프트에 정면 지시가 들어간다", () => {
+    // 후보를 그대로 「정면」으로 저장한다. 각도를 안 말하면 모델이 3/4 뷰를
+    // 그릴 수 있고, 그러면 정면이 정면이 아닌 채로 나머지 셋의 기준이 된다.
+    const prompt = buildCandidatePrompt({ ...base, kind: "person", look: "photoreal" });
+    expect(prompt).toContain(angleDirective("front", "person"));
+  });
+
+  it("종류에 맞는 정면 지시를 쓴다", () => {
+    const animal = buildCandidatePrompt({ ...base, kind: "animal", look: "photoreal" });
+    expect(animal).toContain(angleDirective("front", "animal"));
+    const object = buildCandidatePrompt({ ...base, kind: "object", look: "photoreal" });
+    expect(object).toContain(angleDirective("front", "object"));
+  });
+
+  it("후보도 각도 3장과 같은 배경을 쓴다", () => {
+    // 각도 3장은 plain neutral background 로 만든다. 정면만 배경이 있으면
+    // 네 장이 한 벌로 안 보인다.
+    for (const kind of ["person", "animal", "character", "object"] as const) {
+      const prompt = buildCandidatePrompt({ ...base, kind, look: "photoreal" });
+      expect(prompt, kind).toMatch(/plain neutral background/i);
+    }
+  });
+
+  it("뽑아내기에서도 정면을 요구한다", () => {
+    // 첨부한 그림이 옆모습이어도 정면으로 세워야 기준이 된다.
+    const prompt = buildCandidatePrompt({
+      ...base, kind: "person", look: "anime", referenceRole: "extract",
+    });
+    expect(prompt).toContain(angleDirective("front", "person"));
+  });
+});
