@@ -35,6 +35,9 @@ importers:
       '@fixup/ingest-core':
         specifier: workspace:*
         version: link:../../packages/ingest-core
+      '@fixup/layout-core':
+        specifier: workspace:*
+        version: link:../../packages/layout-core
       '@fixup/pdp-core':
         specifier: workspace:*
         version: link:../../packages/pdp-core
@@ -173,6 +176,25 @@ importers:
       '@types/jsdom':
         specifier: ^30.0.0
         version: 30.0.0
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
+  packages/layout-core:
+    dependencies:
+      '@fixup/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@fixup/sns-core':
+        specifier: workspace:*
+        version: link:../sns-core
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
       '@types/node':
         specifier: ^20
         version: 20.19.43
