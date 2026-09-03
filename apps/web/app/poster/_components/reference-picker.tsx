@@ -4,7 +4,7 @@ import * as React from "react";
 import { ImagePlus, Maximize2, X } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
 import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
-import { LibraryPickerButton } from "../../_components/library-picker";
+import { LibraryPickerButton, type LibraryPickSet } from "../../_components/library-picker";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
 
@@ -41,7 +41,36 @@ export function ReferencePicker({
 }) {
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
+  const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
   const fileInput = React.useRef<HTMLInputElement>(null);
+
+  /**
+   * 묶음 세트도 여기서 부른다.
+   *
+   * 세트의 역할(표지·속지·엔딩)은 카드뉴스의 말이라 여기서는 뜻이 없다.
+   * 그래도 **묶음 자체는 뜻이 있다** — 같이 쓰려고 묶어 둔 그림들이다.
+   * 역할은 버리고 전부 「따라 만들기」로 넣는다.
+   */
+  React.useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const body = await (await fetch("/api/reference-sets", { cache: "no-store" })).json();
+        if (alive) setSets(body.ok ? (body.sets ?? []) : []);
+      } catch {
+        // 세트를 못 불러와도 낱장 고르기는 그대로 된다.
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  function pickSet(set: LibraryPickSet) {
+    for (const item of set.items) {
+      if ((roles[item.referenceImageId] ?? "none") === "none") {
+        onRoleChange(item.referenceImageId, "style");
+      }
+    }
+  }
 
   /** 라이브러리에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
   async function remove(item: ReferenceItem) {
@@ -115,6 +144,8 @@ export function ReferencePicker({
           images={references.map((reference) => ({ id: reference.id, title: reference.title, url: reference.url ?? null }))}
           selectedIds={references.filter((reference) => (roles[reference.id] ?? "none") !== "none").map((reference) => reference.id)}
           onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
+          sets={sets}
+          onPickSet={pickSet}
           onReload={onUploaded}
           onDelete={(picked) => {
             const reference = references.find((entry) => entry.id === picked.id);
