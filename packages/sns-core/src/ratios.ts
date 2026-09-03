@@ -48,6 +48,13 @@ export const POSTER_RATIOS: RatioSpec[] = [
     pixel: { width: 2400, height: 3392 },
     pixelOnly: { reason: "A4 인쇄용은 픽셀을 직접 지정해야 해서 GPT Image 2 로만 만들 수 있습니다." },
   },
+  {
+    // 실제 크기는 첨부한 그림을 보고 그때 정한다. 여기 픽셀은 자리를 채우는 값이다.
+    id: "match-source",
+    label: "첨부한 그림과 같은 비율",
+    pixel: { width: 1088, height: 1088 },
+    pixelOnly: { reason: "첨부한 비율을 그대로 쓰려면 픽셀을 직접 지정해야 해서 GPT Image 2 로만 만들 수 있습니다." },
+  },
 ];
 
 export interface ResolvedSize {

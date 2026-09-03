@@ -5,6 +5,7 @@ export * from "./copy";
 export * from "./generate";
 export * from "./image-prompt";
 export * from "./letterbox";
+export * from "./model-choice";
 export * from "./models";
 export * from "./planning";
 export * from "@fixup/shared";

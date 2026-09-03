@@ -1,4 +1,4 @@
-import { modelById, pickEndpoint, resolvePosterSize } from "@fixup/sns-core";
+import { MATCH_SOURCE, modelById, pickEndpoint, resolvePosterSize, sizeFromSource } from "@fixup/sns-core";
 import { estimatePosterCost, type PosterCostEstimate } from "./pricing";
 import { buildPosterPrompt, type PosterPromptImage } from "./prompt";
 import type { PosterSlots } from "./schemas";
@@ -29,6 +29,13 @@ export interface PosterJobInput {
    * 이 값이 없고, 사람으로 보면 없는 얼굴을 지키려 든다.
    */
   personUrls?: string[];
+  /**
+   * 첨부한 그림의 실제 크기. 비율을 `match-source` 로 골랐을 때만 쓴다.
+   *
+   * 값이 없으면 그 비율을 만들 수 없다 — 무엇을 따라갈지 모르기 때문이다.
+   * 부르는 쪽이 파일을 읽어 넣어 준다.
+   */
+  sourceSize?: { width: number; height: number };
 }
 
 export interface PosterJob {
@@ -66,7 +73,19 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
   }
 
   const model = modelById(job.modelId);
-  const resolved = resolvePosterSize(job.ratioId, model);
+  // 첨부한 그림을 따라가는 비율은 그때그때 크기가 다르다. 목록에 적힌 픽셀이
+  // 아니라 실제 그림에서 뽑는다.
+  const resolved = job.ratioId === MATCH_SOURCE
+    ? (job.sourceSize
+      ? sizeFromSource(job.sourceSize, model)
+      : { mode: "pixel" as const, rejected: "첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다." })
+    : resolvePosterSize(job.ratioId, model);
+  if (resolved.rejected) {
+    return {
+      endpoint: "", mode: estimate.mode, prompt: "", input: {}, estimate, size: {},
+      rejected: resolved.rejected,
+    };
+  }
   const size = resolved.pixel
     ? { width: resolved.pixel.width, height: resolved.pixel.height }
     : { aspectRatio: resolved.aspectRatio, resolution: resolved.resolution };

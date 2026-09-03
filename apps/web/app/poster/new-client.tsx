@@ -6,7 +6,7 @@ import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
-import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
+import { IMAGE_MODELS, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
 import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
@@ -37,8 +37,16 @@ export function PosterNewClient() {
   // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
   const personIds = Object.keys(roles).filter((id) => roles[id] === "preserve_person");
 
+  /**
+   * 비율이 모델보다 우선한다.
+   *
+   * 고른 모델이 그 비율을 못 만들면 서버가 만들 수 있는 모델로 바꾼다.
+   * 화면도 같은 판단을 미리 해서, 바뀔 거라는 것과 그때의 값을 먼저 보여준다 —
+   * 만들고 나서 "왜 다른 모델로 만들어졌지" 가 되면 안 된다.
+   */
+  const choice = chooseModelForRatio(ratio, modelId, IMAGE_MODELS);
   const estimate = estimatePosterCost({
-    modelId, ratioId: ratio, variants,
+    modelId: choice.model.id, ratioId: ratio, variants,
     hasReferences: styleIds.length + preservedIds.length > 0,
   });
 
@@ -173,6 +181,10 @@ export function PosterNewClient() {
                   </Button>
                 ))}
               </div>
+              {/* 조용히 바꾸면 사용자는 자기가 고른 모델로 만든 줄 안다. */}
+              {choice.switched ? (
+                <p role="status" className="text-sm text-amber-700">{choice.reason}</p>
+              ) : null}
             </fieldset>
 
             <fieldset className="grid gap-2">
