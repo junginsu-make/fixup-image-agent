@@ -1,92 +1,104 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Loader2,
-  Sparkles,
-  Trash2,
-  X,
-} from "lucide-react";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Textarea,
-  cn,
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Input, Textarea, cn,
 } from "@fixup/ui";
+import { openImageGallery, openImageViewer } from "../_components/image-viewer";
+import { LibraryPickerButton } from "../_components/library-picker";
+import { randomId } from "../../lib/browser-safe";
 
 /**
  * 캐릭터 만들기.
  *
- * 상세페이지에 사람이 나오면 지금은 섹션마다 다른 사람이다. 여기서 인물을
- * 먼저 만들어 고정하면 그 사람이 페이지 내내 나온다.
+ * 사람만 만들던 기능이었다. 지금은 **종류와 결을 따로 고른다** — 「애니풍
+ * 사람」과 「실사 동물」이 둘 다 자연스러운 요구라 하나로 묶을 수 없다.
  *
- * 세 단계다 — 묘사 입력 → 후보 2장 중 선택 → 앞·좌·우·뒤 4종 고정.
+ * 세 단계다 — 무엇을 만들지 정하고 → 후보 중 고르고 → 나머지 각도를 고정한다.
  * 사이에 사용자의 선택이 들어가서 한 번에 끝낼 수 없다.
  *
- * 화면 규격은 도구 화면(/create·/redesign)과 맞춘다. 이전에는 max-w-4xl 로
- * 가운데 좁게 뒀는데, 도구 화면은 셸 너비를 그대로 쓰고 좌우 2단으로 나눈다.
- * 그래서 캐릭터 화면만 여백이 다르게 보였다.
+ * 크게 보기는 공용 뷰어를 쓴다. 전에는 이 화면만 자기 모달을 들고 있어서
+ * 다른 화면과 조작이 달랐다.
  */
 
-const ANGLE_LABEL: Record<string, string> = {
-  front: "정면",
-  left: "좌측",
-  right: "우측",
-  back: "뒷모습",
-};
+const KINDS = [
+  { id: "person", label: "사람", hint: "실제 사람 같은 인물" },
+  { id: "animal", label: "동물", hint: "강아지·고양이 등" },
+  { id: "character", label: "캐릭터", hint: "등신 비율이 자유로운 창작물" },
+  { id: "object", label: "사물", hint: "제품·소품" },
+] as const;
 
-interface CharacterView {
-  angle: string;
-  url: string | null;
-}
+const LOOKS = [
+  { id: "photoreal", label: "실사", hint: "사진처럼" },
+  { id: "anime", label: "애니", hint: "셀 셰이딩·굵은 선" },
+  { id: "3d", label: "3D", hint: "3D 렌더" },
+  { id: "illustration", label: "그림", hint: "손그림 질감" },
+] as const;
+
+type Kind = (typeof KINDS)[number]["id"];
+type Look = (typeof LOOKS)[number]["id"];
+
+const ANGLE_LABEL: Record<string, string> = {
+  front: "정면", left: "좌측", right: "우측", back: "뒷모습",
+};
+const ANGLES = ["front", "left", "right", "back"] as const;
+
+/** 첨부한 그림의 쓸모. 둘은 정반대라 반드시 골라야 한다. */
+const REFERENCE_ROLES = [
+  { id: "style", label: "결만 따라 만들기", hint: "화풍·색·질감만 가져오고 캐릭터는 새로 만듭니다" },
+  { id: "extract", label: "이 캐릭터 뽑아내기", hint: "그림 속 그 캐릭터를 그대로 살려 각도를 만듭니다" },
+] as const;
+
+type ReferenceRole = (typeof REFERENCE_ROLES)[number]["id"];
+
+interface CharacterView { angle: string; url: string | null }
 
 interface Character {
   id: string;
   name: string;
   sourcePrompt: string;
+  kind: Kind;
+  look: Look;
   createdAt: string;
   views: CharacterView[];
 }
 
-type Candidate = { base64: string; mimeType: string };
+interface ImageModel { id: string; label: string; description: string }
+interface LibraryImage { id: string; title: string | null; signedUrl: string | null }
 
-/** 크게 보기. 라이브러리 뷰어와 같은 조작(좌우 이동, Esc 닫기)을 쓴다. */
-interface ViewerState {
-  title: string;
-  images: Array<{ label: string; src: string }>;
-  index: number;
-}
+type Candidate = { base64: string; mimeType: string };
+type Attached = { url: string; base64: string; mimeType: string; role: ReferenceRole };
 
 export function CharacterStudio() {
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [models, setModels] = useState<ImageModel[]>([]);
   const [creditCost, setCreditCost] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [photoreal, setPhotoreal] = useState(true);
+  const [kind, setKind] = useState<Kind>("person");
+  const [look, setLook] = useState<Look>("photoreal");
+  const [modelId, setModelId] = useState("");
+  const [attached, setAttached] = useState<Attached | null>(null);
+  const [library, setLibrary] = useState<LibraryImage[]>([]);
+
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [busy, setBusy] = useState<"" | "candidates" | "create">("");
+  const [redoing, setRedoing] = useState("");
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/characters", { cache: "no-store" });
-      const body = (await response.json()) as {
-        ok?: boolean;
-        characters?: Character[];
-        creditCost?: number;
+      const body = await (await fetch("/api/characters", { cache: "no-store" })).json() as {
+        ok?: boolean; characters?: Character[]; creditCost?: number; models?: ImageModel[];
       };
       setCharacters(body.ok ? (body.characters ?? []) : []);
+      setModels(body.models ?? []);
       setCreditCost(body.creditCost ?? 0);
     } catch {
       setCharacters([]);
@@ -95,67 +107,90 @@ export function CharacterStudio() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // 모달에서 좌우·Esc 를 쓴다. 라이브러리 뷰어와 조작을 맞춘다.
-  useEffect(() => {
-    if (!viewer) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setViewer(null);
-      if (event.key === "ArrowLeft") {
-        setViewer((current) =>
-          current
-            ? { ...current, index: Math.max(0, current.index - 1) }
-            : current,
-        );
-      }
-      if (event.key === "ArrowRight") {
-        setViewer((current) =>
-          current
-            ? {
-                ...current,
-                index: Math.min(current.images.length - 1, current.index + 1),
-              }
-            : current,
-        );
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [viewer]);
-
-  const handleCandidates = async () => {
-    if (!description.trim()) {
-      setMessage("어떤 인물인지 적어주세요.");
-      return;
+  const loadLibrary = useCallback(async () => {
+    try {
+      const body = await (await fetch("/api/reference-images", { cache: "no-store" })).json() as {
+        ok?: boolean; images?: LibraryImage[];
+      };
+      setLibrary(body.ok ? (body.images ?? []) : []);
+    } catch {
+      // 라이브러리를 못 불러와도 새로 올리기는 그대로 된다.
     }
+  }, []);
+
+  useEffect(() => { void load(); void loadLibrary(); }, [load, loadLibrary]);
+
+  /** 그림 한 장을 base64 로 읽는다. 서버는 본문을 그대로 fal 에 넘긴다. */
+  async function readAsAttached(source: Blob, role: ReferenceRole): Promise<Attached> {
+    const buffer = await source.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]!);
+    const base64 = btoa(binary);
+    const mimeType = source.type || "image/png";
+    return { url: `data:${mimeType};base64,${base64}`, base64, mimeType, role };
+  }
+
+  async function attachFile(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setMessage("");
+    try {
+      setAttached(await readAsAttached(file, attached?.role ?? "style"));
+      // 올린 그림은 라이브러리에도 넣는다. 다음에 다시 쓸 수 있어야 한다.
+      const form = new FormData();
+      form.set("id", randomId());
+      form.set("title", file.name.replace(/\.[^.]+$/, ""));
+      form.set("purpose", "both");
+      form.set("file", file);
+      await fetch("/api/reference-images", { method: "POST", body: form });
+      await loadLibrary();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
+    } finally {
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function attachFromLibrary(image: { id: string; url: string | null }) {
+    if (!image.url) return setMessage("이 그림은 미리보기가 없어 쓸 수 없습니다.");
+    if (attached && library.find((entry) => entry.id === image.id)?.signedUrl === attached.url) {
+      return setAttached(null);
+    }
+    try {
+      const response = await fetch(image.url);
+      setAttached(await readAsAttached(await response.blob(), attached?.role ?? "style"));
+    } catch {
+      setMessage("그림을 불러오지 못했습니다.");
+    }
+  }
+
+  const handleCandidates = async (append = false) => {
+    if (!description.trim()) return setMessage("무엇을 만들지 적어 주세요.");
     setBusy("candidates");
     setMessage("");
-    setCandidates([]);
+    if (!append) setCandidates([]);
     try {
-      const response = await fetch("/api/characters", {
+      const body = await (await fetch("/api/characters", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          step: "candidates",
-          description,
-          photoreal,
-          aspectRatio: "3:4",
+          step: "candidates", description, kind, look, aspectRatio: "3:4",
+          modelId: modelId || undefined,
+          reference: attached
+            ? { role: attached.role, base64: attached.base64, mimeType: attached.mimeType }
+            : undefined,
         }),
-      });
-      const body = (await response.json()) as {
-        ok?: boolean;
-        candidates?: Candidate[];
-        message?: string;
-      };
-      if (body.ok && body.candidates?.length) setCandidates(body.candidates);
-      else setMessage(body.message ?? "후보를 만들지 못했습니다.");
+      })).json() as { ok?: boolean; candidates?: Candidate[]; message?: string };
+
+      // 앞의 후보를 지우지 않는다 — 먼저 것이 나았던 일이 생긴다.
+      if (body.ok && body.candidates?.length) {
+        setCandidates((current) => append ? [...current, ...body.candidates!] : body.candidates!);
+      } else {
+        setMessage(body.message ?? "후보를 만들지 못했습니다.");
+      }
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "후보를 만들지 못했습니다.",
-      );
+      setMessage(error instanceof Error ? error.message : "후보를 만들지 못했습니다.");
     } finally {
       setBusy("");
     }
@@ -163,44 +198,60 @@ export function CharacterStudio() {
 
   const handleChoose = async (candidate: Candidate) => {
     setBusy("create");
-    setMessage("고른 인물로 다른 각도를 만드는 중입니다…");
+    setMessage("고른 것으로 나머지 각도를 만드는 중입니다…");
     try {
-      const response = await fetch("/api/characters", {
+      const body = await (await fetch("/api/characters", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          step: "create",
-          description,
-          photoreal,
-          aspectRatio: "3:4",
-          name: description.slice(0, 40),
+          step: "create", description, kind, look, aspectRatio: "3:4",
+          modelId: modelId || undefined,
+          name: (name.trim() || description).slice(0, 40),
           chosenBase64: candidate.base64,
           chosenMimeType: candidate.mimeType,
         }),
-      });
-      const body = (await response.json()) as {
-        ok?: boolean;
-        message?: string;
-      };
-      if (body.ok) {
-        setMessage("캐릭터를 만들었습니다. 라이브러리에도 저장했습니다.");
-        setCandidates([]);
-        setDescription("");
-        await load();
-      } else {
-        setMessage(body.message ?? "캐릭터를 만들지 못했습니다.");
-      }
+      })).json() as { ok?: boolean; message?: string; missingAngles?: number; referenceIssue?: string };
+
+      if (!body.ok) return setMessage(body.message ?? "만들지 못했습니다.");
+
+      // 조용히 넘어가지 않는다. 빠진 각도도 라이브러리 실패도 알린다.
+      setMessage([
+        "만들었습니다. 라이브러리에도 넣었습니다.",
+        body.missingAngles ? `각도 ${body.missingAngles}개가 실패했습니다 — 아래에서 다시 만드세요.` : "",
+        body.referenceIssue ?? "",
+      ].filter(Boolean).join(" "));
+      setCandidates([]);
+      setDescription("");
+      setName("");
+      setAttached(null);
+      await load();
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "캐릭터를 만들지 못했습니다.",
-      );
+      setMessage(error instanceof Error ? error.message : "만들지 못했습니다.");
     } finally {
       setBusy("");
     }
   };
 
+  const handleRedo = async (character: Character, angle: string) => {
+    setRedoing(`${character.id}:${angle}`);
+    setMessage("");
+    try {
+      const body = await (await fetch("/api/characters/views", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ characterId: character.id, angle }),
+      })).json() as { ok?: boolean; message?: string };
+      if (!body.ok) setMessage(body.message ?? "다시 만들지 못했습니다.");
+      else await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "다시 만들지 못했습니다.");
+    } finally {
+      setRedoing("");
+    }
+  };
+
   const handleDelete = async (character: Character) => {
-    if (!window.confirm(`'${character.name}' 캐릭터를 삭제할까요?`)) return;
+    if (!window.confirm(`'${character.name}' 를 지울까요? 라이브러리에 넣은 각도도 같이 지웁니다.`)) return;
     setDeletingId(character.id);
     try {
       await fetch("/api/characters", {
@@ -208,157 +259,238 @@ export function CharacterStudio() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: character.id }),
       });
-      setCharacters((current) =>
-        current.filter((item) => item.id !== character.id),
-      );
+      setCharacters((current) => current.filter((item) => item.id !== character.id));
     } finally {
       setDeletingId(null);
     }
   };
 
-  const current = viewer?.images[viewer.index];
+  const autoModel = look === "photoreal" ? "nano-banana-pro" : "gpt-image-2";
+  const activeModel = modelId || autoModel;
 
   return (
     <div className="min-w-0">
-      {/* 도구 화면의 Topbar 규격 — 눈썹줄 + 제목 좌측, 상태는 우측. */}
       <div className="mb-5 flex items-start justify-between gap-4 max-md:flex-col">
         <div>
-          <p className="mb-1 text-xs font-bold text-muted-foreground">
-            부가 기능
-          </p>
+          <p className="mb-1 text-xs font-bold text-muted-foreground">부가 기능</p>
           <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-normal max-md:text-2xl">
             캐릭터 만들기
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            상세페이지에 사람을 넣고 싶은데 마땅한 사진이 없을 때 씁니다. 인물을
-            만들어 두면 섹션마다 <strong>같은 사람</strong>이 나옵니다. 그냥
-            생성하면 섹션마다 다른 사람이 나옵니다.
+            사람·동물·캐릭터·사물을 만들어 두면 카드뉴스·이미지 만들기·상세페이지에서
+            <strong> 같은 대상</strong>이 나옵니다. 만들지 않고 그냥 생성하면 매번 다른 것이 나옵니다.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={characters.length ? "green" : "default"}>
-            내 캐릭터 {characters.length}명
-          </Badge>
-          {creditCost ? (
-            <Badge variant="outline">1명당 약 {creditCost}장 차감</Badge>
-          ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">내 캐릭터 {characters.length}</Badge>
+          {creditCost ? <Badge variant="outline">1개당 약 {creditCost}장 차감</Badge> : null}
         </div>
       </div>
 
       <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)] gap-4 max-xl:grid-cols-1">
         <Card>
-          {/* CardHeader 는 세로 배치가 기본이라 뱃지가 한 줄을 다 먹는다.
-              도구 화면처럼 제목 왼쪽·뱃지 오른쪽으로 눕힌다. */}
-          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle>새 인물 만들기</CardTitle>
-              <CardDescription>
-                후보 두 장 중 하나를 고르면, 그 인물의 정면·좌측·우측·뒷모습을
-                만들어 고정합니다.
-              </CardDescription>
-            </div>
-            <Badge variant="secondary" className="flex-none">
-              4종 고정
-            </Badge>
+          <CardHeader>
+            <CardTitle>새로 만들기</CardTitle>
+            <CardDescription>
+              무엇을 어떤 결로 만들지 고르고 한 줄 적으면 후보 두 장이 나옵니다.
+              하나를 고르면 나머지 각도를 만들어 고정합니다.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
+            <fieldset className="grid gap-1.5">
+              <legend className="text-meta text-subtle-foreground">종류</legend>
+              <div className="flex flex-wrap gap-2">
+                {KINDS.map((entry) => (
+                  <Button
+                    key={entry.id} type="button" size="sm" disabled={Boolean(busy)}
+                    variant={kind === entry.id ? "default" : "secondary"}
+                    onClick={() => setKind(entry.id)}
+                  >
+                    {entry.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-subtle-foreground">
+                {KINDS.find((entry) => entry.id === kind)?.hint}
+              </p>
+            </fieldset>
+
+            <fieldset className="grid gap-1.5">
+              <legend className="text-meta text-subtle-foreground">결</legend>
+              <div className="flex flex-wrap gap-2">
+                {LOOKS.map((entry) => (
+                  <Button
+                    key={entry.id} type="button" size="sm" disabled={Boolean(busy)}
+                    variant={look === entry.id ? "default" : "secondary"}
+                    onClick={() => { setLook(entry.id); setModelId(""); }}
+                  >
+                    {entry.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-subtle-foreground">
+                {LOOKS.find((entry) => entry.id === look)?.hint}
+              </p>
+            </fieldset>
+
+            {models.length ? (
+              <fieldset className="grid gap-1.5">
+                <legend className="text-meta text-subtle-foreground">모델</legend>
+                <div className="flex flex-wrap gap-2">
+                  {models.map((model) => (
+                    <Button
+                      key={model.id} type="button" size="sm" disabled={Boolean(busy)}
+                      variant={activeModel === model.id ? "default" : "secondary"}
+                      onClick={() => setModelId(model.id)}
+                    >
+                      {model.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-subtle-foreground">
+                  {modelId
+                    ? models.find((model) => model.id === modelId)?.description
+                    : `고른 결에 맞춰 ${models.find((model) => model.id === autoModel)?.label ?? autoModel} 로 만듭니다.`}
+                </p>
+              </fieldset>
+            ) : null}
+
             <label className="grid gap-1.5">
-              <span className="text-meta text-subtle-foreground">
-                어떤 인물인가요
-              </span>
+              <span className="text-meta text-subtle-foreground">이름 · 선택</span>
+              <Input
+                value={name} disabled={Boolean(busy)}
+                placeholder="비우면 아래 묘사에서 가져옵니다"
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+
+            <label className="grid gap-1.5">
+              <span className="text-meta text-subtle-foreground">무엇을 만들까요</span>
               <Textarea
-                rows={3}
-                value={description}
-                disabled={Boolean(busy)}
-                placeholder="예: 30대 후반 한국인 여성, 단발머리, 베이지색 니트, 차분한 표정"
+                rows={3} value={description} disabled={Boolean(busy)}
+                placeholder={
+                  kind === "person" ? "예: 30대 후반 한국인 여성, 단발머리, 베이지색 니트, 차분한 표정"
+                    : kind === "animal" ? "예: 주황색 줄무늬 고양이, 초록 눈, 목에 파란 스카프"
+                      : kind === "object" ? "예: 유리병에 든 참기름, 크래프트 라벨, 금색 뚜껑"
+                        : "예: 둥근 얼굴의 3등신 마스코트, 노란 몸, 파란 멜빵바지"
+                }
                 onChange={(event) => setDescription(event.target.value)}
               />
             </label>
 
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={photoreal}
-                disabled={Boolean(busy)}
-                onChange={(event) => setPhotoreal(event.target.checked)}
-              />
-              실사 사진처럼 만들기
-              <span className="text-xs text-muted-foreground">
-                (끄면 일러스트 느낌으로 만듭니다)
-              </span>
-            </label>
+            <fieldset className="grid gap-2 rounded-md border p-3">
+              <legend className="px-1 text-meta text-subtle-foreground">참고할 그림 · 선택</legend>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp"
+                  className="hidden" onChange={(event) => void attachFile(event.target.files)}
+                />
+                <Button type="button" variant="secondary" size="sm" disabled={Boolean(busy)}
+                  onClick={() => fileInput.current?.click()}>
+                  <ImagePlus className="size-4" />새 이미지 올리기
+                </Button>
+                <LibraryPickerButton
+                  images={library.map((image) => ({ id: image.id, title: image.title, url: image.signedUrl }))}
+                  selectedIds={[]}
+                  onToggle={(image) => void attachFromLibrary(image)}
+                  onReload={() => void loadLibrary()}
+                />
+              </div>
+
+              {attached ? (
+                <div className="flex gap-3">
+                  <button
+                    type="button" aria-label="첨부한 그림 크게 보기"
+                    onClick={() => openImageViewer(attached.url, "첨부한 그림")}
+                    className="h-24 w-20 flex-none overflow-hidden rounded border"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={attached.url} alt="첨부한 그림" className="h-full w-full object-cover" />
+                  </button>
+                  <div className="grid min-w-0 flex-1 gap-1">
+                    <label className="grid gap-1 text-xs">
+                      <span className="text-subtle-foreground">이 그림의 역할</span>
+                      <select
+                        aria-label="첨부한 그림의 역할"
+                        className="h-9 rounded-md border bg-background px-2 text-sm"
+                        value={attached.role} disabled={Boolean(busy)}
+                        onChange={(event) =>
+                          setAttached({ ...attached, role: event.target.value as ReferenceRole })}
+                      >
+                        {REFERENCE_ROLES.map((role) => (
+                          <option key={role.id} value={role.id}>{role.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="text-[11px] leading-snug text-subtle-foreground">
+                      {REFERENCE_ROLES.find((role) => role.id === attached.role)?.hint}
+                    </p>
+                    <button
+                      type="button" onClick={() => setAttached(null)}
+                      className="justify-self-start text-xs text-subtle-foreground hover:text-destructive"
+                    >
+                      <X className="mr-1 inline size-3" />빼기
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-subtle-foreground">
+                  없어도 됩니다. 붙이면 그 그림의 결을 따라 만들거나, 그 안의 캐릭터를 뽑아낼 수 있습니다.
+                </p>
+              )}
+            </fieldset>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                disabled={Boolean(busy)}
-                onClick={() => void handleCandidates()}
-              >
-                {busy === "candidates" ? (
-                  <Loader2 size={16} className="mr-1.5 animate-spin" />
-                ) : (
-                  <Sparkles size={16} className="mr-1.5" />
-                )}
+              <Button disabled={Boolean(busy)} onClick={() => void handleCandidates(false)}>
                 {busy === "candidates"
-                  ? "후보를 만드는 중…"
-                  : "후보 2장 만들기"}
+                  ? <Loader2 size={16} className="mr-1.5 animate-spin" />
+                  : <Sparkles size={16} className="mr-1.5" />}
+                {busy === "candidates" ? "만드는 중…" : "후보 2장 만들기"}
               </Button>
-              {message ? (
-                <span className="text-xs text-muted-foreground">{message}</span>
-              ) : null}
+              {message ? <span className="text-xs text-muted-foreground">{message}</span> : null}
             </div>
 
             {candidates.length ? (
               <div>
-                <p className="mb-2 text-sm font-medium">
-                  마음에 드는 인물을 고르세요
-                </p>
-                <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium">마음에 드는 것을 고르세요</p>
+                  <Button
+                    type="button" variant="secondary" size="sm" disabled={Boolean(busy)}
+                    onClick={() => void handleCandidates(true)}
+                  >
+                    <RotateCw className="mr-1.5 size-3.5" />다른 후보 보기
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {candidates.map((candidate, index) => {
                     const src = `data:${candidate.mimeType};base64,${candidate.base64}`;
                     return (
                       <div key={index} className="space-y-2">
                         <button
-                          type="button"
-                          aria-label={`후보 ${index + 1} 크게 보기`}
-                          onClick={() =>
-                            setViewer({
-                              title: "후보",
-                              images: candidates.map((entry, position) => ({
-                                label: `후보 ${position + 1}`,
-                                src: `data:${entry.mimeType};base64,${entry.base64}`,
-                              })),
-                              index,
-                            })
-                          }
+                          type="button" aria-label={`후보 ${index + 1} 크게 보기`}
+                          onClick={() => openImageGallery({
+                            images: candidates.map((entry, position) => ({
+                              src: `data:${entry.mimeType};base64,${entry.base64}`,
+                              alt: `후보 ${position + 1}`,
+                            })),
+                            index,
+                          })}
                           className="block aspect-[3/4] w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            alt={`후보 ${index + 1}`}
-                            src={src}
-                            className="h-full w-full object-cover"
-                          />
+                          <img alt={`후보 ${index + 1}`} src={src} className="h-full w-full object-cover" />
                         </button>
-                        <Button
-                          size="sm"
-                          className="w-full"
-                          disabled={Boolean(busy)}
-                          onClick={() => void handleChoose(candidate)}
-                        >
-                          {busy === "create" ? (
-                            <Loader2
-                              size={14}
-                              className="mr-1.5 animate-spin"
-                            />
-                          ) : null}
-                          이 인물로 정하기
+                        <Button size="sm" className="w-full" disabled={Boolean(busy)}
+                          onClick={() => void handleChoose(candidate)}>
+                          {busy === "create" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                          이것으로 정하기
                         </Button>
                       </div>
                     );
                   })}
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  이미지를 누르면 크게 볼 수 있습니다.
+                  앞의 후보는 지우지 않습니다. 먼저 것이 나았을 수 있습니다.
                 </p>
               </div>
             ) : null}
@@ -366,178 +498,122 @@ export function CharacterStudio() {
         </Card>
 
         <Card>
-          {/* CardHeader 는 세로 배치가 기본이라 뱃지가 한 줄을 다 먹는다.
-              도구 화면처럼 제목 왼쪽·뱃지 오른쪽으로 눕힌다. */}
-          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle>내 캐릭터</CardTitle>
-              <CardDescription>
-                상세페이지를 만들 때 등장인물로 고를 수 있습니다. 라이브러리에도
-                함께 보관됩니다.
-              </CardDescription>
-            </div>
-            <Badge variant="green" className="flex-none">
-              {characters.length}명
-            </Badge>
+          <CardHeader>
+            <CardTitle>내 캐릭터</CardTitle>
+            <CardDescription>
+              라이브러리의 「캐릭터」 칸에서 불러 카드뉴스·이미지 만들기·상세페이지에 쓸 수 있습니다.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                불러오는 중입니다.
+                <Loader2 className="h-4 w-4 animate-spin" />불러오는 중입니다.
               </div>
             ) : characters.length === 0 ? (
               <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                아직 만든 캐릭터가 없습니다.
+                아직 만든 것이 없습니다.
               </div>
             ) : (
               <div className="space-y-4">
-                {characters.map((character) => (
-                  <div key={character.id} className="rounded-md border p-3">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <strong className="min-w-0 truncate text-sm">
-                        {character.name}
-                      </strong>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto text-muted-foreground hover:text-destructive"
-                        disabled={deletingId === character.id}
-                        aria-label={`${character.name} 삭제`}
-                        onClick={() => void handleDelete(character)}
-                      >
-                        {deletingId === character.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                    {/* 4종이라 좁은 단에서도 접히지 않게 격자로 둔다. */}
-                    <div className="grid grid-cols-4 gap-2">
-                      {character.views.map((view, index) => (
-                        <button
-                          key={view.angle}
-                          type="button"
-                          aria-label={`${character.name} ${ANGLE_LABEL[view.angle] ?? view.angle} 크게 보기`}
-                          onClick={() =>
-                            setViewer({
-                              title: character.name,
-                              images: character.views
-                                .filter((entry) => entry.url)
-                                .map((entry) => ({
-                                  label:
-                                    ANGLE_LABEL[entry.angle] ?? entry.angle,
-                                  src: entry.url as string,
-                                })),
-                              index,
-                            })
-                          }
-                          className="min-w-0 text-left transition-opacity hover:opacity-90"
+                {characters.map((character) => {
+                  const byAngle = new Map(character.views.map((view) => [view.angle, view]));
+                  return (
+                    <div key={character.id} className="rounded-md border p-3">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <strong className="min-w-0 truncate text-sm">{character.name}</strong>
+                        <Badge variant="outline" className="flex-none text-[10px]">
+                          {KINDS.find((entry) => entry.id === character.kind)?.label ?? "사람"}
+                          {" · "}
+                          {LOOKS.find((entry) => entry.id === character.look)?.label ?? "실사"}
+                        </Badge>
+                        <Button
+                          variant="ghost" size="sm"
+                          className="ml-auto text-muted-foreground hover:text-destructive"
+                          disabled={deletingId === character.id}
+                          aria-label={`${character.name} 삭제`}
+                          onClick={() => void handleDelete(character)}
                         >
-                          <span className="block aspect-[3/4] overflow-hidden rounded bg-muted">
-                            {view.url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                alt={view.angle}
-                                src={view.url}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : null}
-                          </span>
-                          <span className="mt-1 block text-center text-meta text-subtle-foreground">
-                            {ANGLE_LABEL[view.angle] ?? view.angle}
-                          </span>
-                        </button>
-                      ))}
+                          {deletingId === character.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Trash2 className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
+
+                      {/* 네 각도를 항상 네 칸으로 둔다. 빠진 각도가 빈 칸으로 보여야
+                          채울 수 있다는 것을 안다. */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {ANGLES.map((angle) => {
+                          const view = byAngle.get(angle);
+                          const key = `${character.id}:${angle}`;
+                          const filled = character.views.filter((entry) => entry.url);
+                          return (
+                            <div key={angle} className="min-w-0">
+                              <button
+                                type="button"
+                                disabled={!view?.url}
+                                aria-label={`${character.name} ${ANGLE_LABEL[angle]} 크게 보기`}
+                                onClick={() => openImageGallery({
+                                  images: filled.map((entry) => ({
+                                    src: entry.url as string,
+                                    alt: `${character.name} ${ANGLE_LABEL[entry.angle] ?? entry.angle}`,
+                                    meta: [
+                                      ["캐릭터", character.name],
+                                      ["각도", ANGLE_LABEL[entry.angle] ?? entry.angle],
+                                      ["종류", KINDS.find((k) => k.id === character.kind)?.label ?? "사람"],
+                                      ["결", LOOKS.find((l) => l.id === character.look)?.label ?? "실사"],
+                                      ["묘사", character.sourcePrompt],
+                                    ],
+                                  })),
+                                  index: Math.max(0, filled.findIndex((entry) => entry.angle === angle)),
+                                })}
+                                className={cn(
+                                  "block w-full text-left",
+                                  view?.url ? "transition-opacity hover:opacity-90" : "cursor-default",
+                                )}
+                              >
+                                <span className="block aspect-[3/4] overflow-hidden rounded bg-muted">
+                                  {view?.url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={view.url} alt="" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <span className="grid h-full place-items-center text-[10px] text-subtle-foreground">
+                                      없음
+                                    </span>
+                                  )}
+                                </span>
+                              </button>
+                              <div className="mt-1 flex items-center justify-between gap-1">
+                                <span className="truncate text-[10px] text-subtle-foreground">
+                                  {ANGLE_LABEL[angle]}
+                                </span>
+                                {/* 정면은 고른 후보 그 자체다. 다시 만들면 나머지
+                                    셋이 전부 남남이 된다. */}
+                                {angle === "front" ? null : (
+                                  <button
+                                    type="button"
+                                    disabled={redoing === key}
+                                    aria-label={`${character.name} ${ANGLE_LABEL[angle]} 다시 만들기`}
+                                    onClick={() => void handleRedo(character, angle)}
+                                    className="flex-none text-subtle-foreground hover:text-foreground disabled:opacity-50"
+                                  >
+                                    {redoing === key
+                                      ? <Loader2 className="size-3 animate-spin" />
+                                      : <RotateCw className="size-3" />}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
-
-      {viewer && current ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${viewer.title} 크게 보기`}
-          className="fixed inset-0 z-[60] flex flex-col bg-foreground/80 p-4 backdrop-blur-sm"
-          onClick={() => setViewer(null)}
-        >
-          <div className="mx-auto flex w-full max-w-5xl flex-none items-center gap-3 pb-3 text-background">
-            <div className="min-w-0">
-              <strong className="block truncate text-sm">{viewer.title}</strong>
-              <span className="block text-xs opacity-80">
-                {current.label} · {viewer.index + 1} / {viewer.images.length}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="닫기"
-              className="ml-auto text-background hover:bg-background/15"
-              onClick={() => setViewer(null)}
-            >
-              <X size={18} />
-            </Button>
-          </div>
-
-          <div
-            className="flex min-h-0 flex-1 items-center justify-center gap-3"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              aria-label="이전"
-              disabled={viewer.index === 0}
-              onClick={() => setViewer({ ...viewer, index: viewer.index - 1 })}
-              className={cn(
-                "grid h-11 w-11 flex-none place-items-center rounded-full",
-                "bg-background/15 text-background hover:bg-background/25 disabled:opacity-30",
-              )}
-            >
-              <ChevronLeft size={22} />
-            </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {/* 여기는 화면에 맞춘 크기다. 한 번 더 누르면 원본 크기로 본다. */}
-            <img
-              alt={current.label}
-              src={current.src}
-              data-zoomable
-              className="max-h-full max-w-full cursor-zoom-in rounded-md object-contain shadow-[var(--shadow-elevate)]"
-            />
-            <button
-              type="button"
-              aria-label="다음"
-              disabled={viewer.index === viewer.images.length - 1}
-              onClick={() => setViewer({ ...viewer, index: viewer.index + 1 })}
-              className={cn(
-                "grid h-11 w-11 flex-none place-items-center rounded-full",
-                "bg-background/15 text-background hover:bg-background/25 disabled:opacity-30",
-              )}
-            >
-              <ChevronRight size={22} />
-            </button>
-          </div>
-
-          <div
-            className="mx-auto flex w-full max-w-5xl flex-none justify-center pt-3"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={current.src}
-                download={`${viewer.title}-${current.label}.png`}
-              >
-                <Download size={14} className="mr-1.5" />이 이미지 저장
-              </a>
-            </Button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

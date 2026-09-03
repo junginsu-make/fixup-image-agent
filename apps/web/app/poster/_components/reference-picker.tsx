@@ -6,7 +6,9 @@ import { Button, cn } from "@fixup/ui";
 import {
   ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, personOverflow, type AttachmentRole,
 } from "@fixup/shared";
-import { LibraryPickerButton, type LibraryPickSet } from "../../_components/library-picker";
+import {
+  LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
+} from "../../_components/library-picker";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
 
@@ -53,6 +55,7 @@ export function ReferencePicker({
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
+  const [characters, setCharacters] = React.useState<LibraryPickCharacter[]>([]);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
   /**
@@ -68,12 +71,43 @@ export function ReferencePicker({
       try {
         const body = await (await fetch("/api/reference-sets", { cache: "no-store" })).json();
         if (alive) setSets(body.ok ? (body.sets ?? []) : []);
+        const characterBody = await (await fetch("/api/characters", { cache: "no-store" })).json();
+        if (alive) setCharacters(characterBody.ok ? (characterBody.characters ?? []) : []);
       } catch {
         // 세트를 못 불러와도 낱장 고르기는 그대로 된다.
       }
     })();
     return () => { alive = false; };
   }, []);
+
+  /**
+   * 캐릭터를 넣는다 — **정면 한 장만.**
+   *
+   * 네 장을 다 넣으면 안 된다. 정체성 참조가 여러 장이면 모델이 그것들을
+   * 절충해 제3의 인물을 만든다(2026-07-30 실측, pdp.character.ts 의
+   * pickAngleForSection 주석). 화면의 「인물은 한 명만」 경고에도 걸린다 —
+   * 같은 사람인데 넷으로 세어진다.
+   *
+   * 다른 각도가 필요하면 라이브러리 낱장에 「이름 (캐릭터) · 좌측」 으로
+   * 그대로 있으니 거기서 고르면 된다.
+   *
+   * 역할은 「인물 그대로 지키기」로 정한다. 캐릭터를 붙이는 이유가 그 대상을
+   * 지키려는 것이므로 「따라 만들기」로 들어가면 뜻이 반대가 된다. 사물
+   * 캐릭터라면 화면에서 「제품 그대로 지키기」로 바꾸면 된다.
+   */
+  function pickCharacter(character: LibraryPickCharacter) {
+    const prefix = `${character.name} (캐릭터)`;
+    const matched = references.filter((entry) => (entry.title ?? "").startsWith(prefix));
+    const front = matched.find((entry) => (entry.title ?? "").endsWith("정면")) ?? matched[0];
+    if (!front) {
+      setMessage("이 캐릭터의 각도를 라이브러리에서 찾지 못했습니다.");
+      return;
+    }
+    onRoleChange(front.id, "preserve_person");
+    setMessage(
+      `'${character.name}' 의 정면을 넣었습니다. 다른 각도가 필요하면 라이브러리 낱장에서 고르세요.`,
+    );
+  }
 
   function pickSet(set: LibraryPickSet) {
     for (const item of set.items) {
@@ -161,6 +195,8 @@ export function ReferencePicker({
           onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
           sets={sets}
           onPickSet={pickSet}
+          characters={characters}
+          onPickCharacter={pickCharacter}
           onReload={onUploaded}
           onDelete={(picked) => {
             const reference = references.find((entry) => entry.id === picked.id);

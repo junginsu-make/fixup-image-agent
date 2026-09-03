@@ -43,6 +43,19 @@ export interface LibraryPickSet {
   items: Array<{ referenceImageId: string; role: "cover" | "body" | "ending" }>;
 }
 
+/**
+ * 캐릭터 — 각도 네 장이 한 덩어리다.
+ *
+ * 낱장으로 섞어 두면 장이 늘수록 못 찾는다. 캐릭터 하나가 이미 네 장이고,
+ * 그 넷은 늘 같이 쓰인다 — 옆모습이 필요한 장면에서 정면만 있으면 다시
+ * 만들게 되고 그러면 같은 인물로 안 보인다.
+ */
+export interface LibraryPickCharacter {
+  id: string;
+  name: string;
+  views: Array<{ angle: string; url: string | null }>;
+}
+
 export function LibraryPickerButton({
   images,
   selectedIds,
@@ -52,6 +65,8 @@ export function LibraryPickerButton({
   onDelete,
   sets,
   onPickSet,
+  characters,
+  onPickCharacter,
   label = "라이브러리에서 불러오기",
 }: {
   images: LibraryPickImage[];
@@ -62,6 +77,9 @@ export function LibraryPickerButton({
   /** 세트를 통째로 넣는다. 안 넘기면 세트 칸이 안 나온다. */
   sets?: LibraryPickSet[];
   onPickSet?(set: LibraryPickSet): void;
+  /** 캐릭터를 통째로 넣는다. 안 넘기면 캐릭터 칸이 안 나온다. */
+  characters?: LibraryPickCharacter[];
+  onPickCharacter?(character: LibraryPickCharacter): void;
   /** 라이브러리에서 아주 지운다. 안 넘기면 지우기 버튼이 안 나온다. */
   onDelete?(image: LibraryPickImage): void;
   label?: string;
@@ -101,6 +119,42 @@ export function LibraryPickerButton({
                     {set.name}
                     <Badge variant="secondary" className="ml-1">{set.items.length}장</Badge>
                   </Button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {characters?.length && onPickCharacter ? (
+            <section className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+              <p className="text-meta text-subtle-foreground">
+                캐릭터 — 누르면 정면이 「그대로 지키기」로 들어갑니다
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {characters.map((character) => (
+                  <button
+                    key={character.id}
+                    type="button"
+                    onClick={() => { onPickCharacter(character); setOpen(false); }}
+                    className="flex items-center gap-2 rounded-md border bg-background p-2 text-left transition-colors hover:border-primary"
+                  >
+                    <span className="flex gap-0.5">
+                      {character.views.filter((view) => view.url).slice(0, 4).map((view) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={view.angle}
+                          src={view.url as string}
+                          alt=""
+                          className="h-12 w-9 rounded-sm object-cover"
+                        />
+                      ))}
+                    </span>
+                    <span className="grid">
+                      <span className="max-w-32 truncate text-sm font-bold">{character.name}</span>
+                      <span className="text-[11px] text-subtle-foreground">
+                        {character.views.filter((view) => view.url).length}장
+                      </span>
+                    </span>
+                  </button>
                 ))}
               </div>
             </section>
