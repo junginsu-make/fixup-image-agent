@@ -38,13 +38,36 @@ interface LocalStoreData {
   snsProjects: SnsProjectRecord[];
   generationRequests: LocalSnsGenerationRequest[];
   cards: LocalSnsCardRow[];
+  characters: LocalCharacterRow[];
+  characterViews: LocalCharacterViewRow[];
+}
+
+/** 캐릭터. 운영의 characters 표와 같은 칸을 쓴다. */
+export interface LocalCharacterRow {
+  id: string;
+  userId: string;
+  name: string;
+  sourcePrompt: string;
+  identityPrompt: string;
+  kind: string;
+  look: string;
+  createdAt: string;
+}
+
+/** 각도 한 장. path 는 characters/{characterId}/{angle}.{ext} 다. */
+export interface LocalCharacterViewRow {
+  characterId: string;
+  userId: string;
+  angle: string;
+  path: string;
+  mimeType: string;
 }
 
 function emptyData(): LocalStoreData {
   return {
     version: 1,
     sources: [], candidates: [], referenceImages: [], referenceSets: [], snsProjects: [],
-    generationRequests: [], cards: [],
+    generationRequests: [], cards: [], characters: [], characterViews: [],
   };
 }
 
@@ -68,6 +91,8 @@ export class LocalDatabase {
         snsProjects: stored.snsProjects ?? [],
         generationRequests: stored.generationRequests ?? [],
         cards: stored.cards ?? [],
+        characters: stored.characters ?? [],
+        characterViews: stored.characterViews ?? [],
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyData();

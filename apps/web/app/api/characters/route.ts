@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../lib/membership/api";
 import {
   CANDIDATE_COUNT,
@@ -7,11 +8,11 @@ import {
   generateCandidates,
   listCharacters,
 } from "../../../lib/characters";
-import { selectCharacterModel, type AspectRatio } from "@fixup/pdp-core";
+import { IMAGE_MODELS, selectCharacterModel } from "@fixup/pdp-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// 후보 2장 또는 다각도 2장을 동시에 만든다. 서버리스 상한이 300초다.
+// 후보 2장 또는 다각도 3장을 동시에 만든다. 서버리스 상한이 300초다.
 export const maxDuration = 300;
 
 /**
@@ -24,6 +25,35 @@ export const maxDuration = 300;
  * 크레딧은 각 단계에서 실제로 만든 장수만 차감한다.
  */
 
+const KINDS = ["person", "animal", "character", "object"] as const;
+const LOOKS = ["photoreal", "anime", "3d", "illustration"] as const;
+const ASPECTS = ["1:1", "3:4", "4:3", "9:16", "16:9"] as const;
+
+/** 입력은 전부 여기서 거른다. 아래 코드는 값이 맞다고 믿는다. */
+const BodySchema = z.object({
+  step: z.enum(["candidates", "create"]).default("create"),
+  name: z.string().max(80).optional(),
+  description: z.string().trim().min(1, "무엇을 만들지 적어 주세요."),
+  aspectRatio: z.enum(ASPECTS).default("3:4"),
+  kind: z.enum(KINDS).default("person"),
+  look: z.enum(LOOKS).default("photoreal"),
+  modelId: z.enum(IMAGE_MODELS.map((model) => model.id) as [string, ...string[]]).optional(),
+  reference: z.object({
+    role: z.enum(["style", "extract"]),
+    base64: z.string().min(1),
+    mimeType: z.string().min(1),
+  }).optional(),
+  chosenBase64: z.string().optional(),
+  chosenMimeType: z.string().optional(),
+});
+
+type Body = z.infer<typeof BodySchema>;
+
+/** data: 접두사를 떼어 낸다. 화면이 붙여 보내는 일이 잦다. */
+function rawBase64(value: string): string {
+  return value.replace(/^data:[^;]+;base64,/, "");
+}
+
 export async function GET() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
@@ -33,7 +63,12 @@ export async function GET() {
       ok: true,
       characters: await listCharacters(auth.member.userId),
       candidateCount: CANDIDATE_COUNT,
-      creditCost: characterCreditCost(true),
+      creditCost: characterCreditCost("photoreal"),
+      // 화면이 모델을 고를 수 있어야 한다. 목록을 여기서 준다 —
+      // 이미지 만들기와 같은 목록이다.
+      models: IMAGE_MODELS.map((model) => ({
+        id: model.id, label: model.label, description: model.description,
+      })),
     });
   } catch (error) {
     return Response.json(
@@ -47,42 +82,39 @@ export async function POST(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
-  let body: {
-    step?: string;
-    name?: string;
-    description?: string;
-    aspectRatio?: AspectRatio;
-    photoreal?: boolean;
-    chosenBase64?: string;
-    chosenMimeType?: string;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return Response.json({ ok: false, message: "요청을 해석하지 못했습니다." }, { status: 400 });
+  const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return Response.json(
+      { ok: false, message: parsed.error.issues[0]?.message ?? "요청을 해석하지 못했습니다." },
+      { status: 400 },
+    );
   }
-
-  const description = String(body.description || "").trim();
-  if (!description) {
-    return Response.json({ ok: false, message: "인물 묘사를 입력해 주세요." }, { status: 400 });
-  }
-
-  const aspectRatio = (body.aspectRatio ?? "3:4") as AspectRatio;
-  const photoreal = body.photoreal !== false;
+  const body: Body = parsed.data;
+  const modelId = (body.modelId ?? selectCharacterModel(body.look)) as never;
+  const reference = body.reference
+    ? { ...body.reference, base64: rawBase64(body.reference.base64) }
+    : undefined;
 
   if (body.step === "candidates") {
-    const reservation = await reserveAiUsage(req, "pdp_image", characterCreditCost(photoreal));
+    const reservation = await reserveAiUsage(req, "pdp_image", characterCreditCost(body.look, modelId));
     if (!reservation.ok) return reservation.response;
 
     try {
-      const result = await generateCandidates({ description, aspectRatio, photoreal });
+      const result = await generateCandidates({
+        description: body.description,
+        aspectRatio: body.aspectRatio,
+        kind: body.kind,
+        look: body.look,
+        modelId,
+        reference,
+      });
       // 실패한 장은 차감하지 않는다.
       const usage = await finalizeAiUsage(
         reservation,
         result.candidates.length > 0,
         result.candidates.length,
         result.candidates.length > 0 ? undefined : "candidates_failed",
-        { model: selectCharacterModel(photoreal), billableImages: result.candidates.length },
+        { model: result.model, billableImages: result.candidates.length },
       );
       return Response.json({
         ok: result.candidates.length > 0,
@@ -100,24 +132,25 @@ export async function POST(req: Request) {
     }
   }
 
-  const chosenBase64 = String(body.chosenBase64 || "").replace(/^data:[^;]+;base64,/, "");
+  const chosenBase64 = rawBase64(body.chosenBase64 ?? "");
   if (!chosenBase64) {
     return Response.json({ ok: false, message: "고른 후보가 없습니다." }, { status: 400 });
   }
 
-  // 정면은 고른 후보를 그대로 쓰므로 실제 생성은 나머지 각도뿐이다.
-  const reservation = await reserveAiUsage(req, "pdp_image", characterCreditCost(photoreal));
+  const reservation = await reserveAiUsage(req, "pdp_image", characterCreditCost(body.look, modelId));
   if (!reservation.ok) return reservation.response;
 
   try {
     const result = await createCharacter({
       userId: auth.member.userId,
-      name: String(body.name || description).slice(0, 80),
-      description,
-      aspectRatio,
-      photoreal,
+      name: (body.name || body.description).slice(0, 80),
+      description: body.description,
+      aspectRatio: body.aspectRatio,
+      kind: body.kind,
+      look: body.look,
+      modelId,
       chosenBase64,
-      chosenMimeType: String(body.chosenMimeType || "image/png"),
+      chosenMimeType: body.chosenMimeType || "image/png",
     });
 
     // 정면은 이미 만든 것이라 차감하지 않는다.
@@ -127,7 +160,7 @@ export async function POST(req: Request) {
       result.ok,
       generated,
       result.ok ? undefined : "character_create_failed",
-      { model: selectCharacterModel(photoreal), billableImages: generated },
+      { model: modelId, billableImages: generated },
     );
 
     return Response.json({ ...result, usage }, { status: result.ok ? 200 : 500 });

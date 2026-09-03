@@ -27,6 +27,7 @@ export { defaultPreserveProduct, shouldSendAnchor } from "./pdp.product-anchor";
 export { MAX_UPLOAD_BYTES, base64Bytes, planUploadBatches } from "./pdp.upload-budget";
 export {
   CHARACTER_ANGLES,
+  angleDirective,
   buildCandidatePrompt,
   buildSceneWithCharacterDirective,
   buildTurnaroundPrompt,
@@ -34,6 +35,9 @@ export {
   selectCharacterModel,
   type CharacterAngle,
   type CharacterAngleInfo,
+  type CharacterKind,
+  type CharacterLook,
+  type CharacterReferenceRole,
 } from "./pdp.character";
 export {
   MIN_STYLE_SIMILARITY,

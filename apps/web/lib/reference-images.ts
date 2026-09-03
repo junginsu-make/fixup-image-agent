@@ -164,3 +164,43 @@ export async function saveReferenceImage(input: {
     },
   );
 }
+
+/**
+ * 제목이 같은 참고 이미지를 지운다.
+ *
+ * 캐릭터가 각도마다 「이름 (캐릭터) · 정면」 이라는 정해진 제목으로 들어간다.
+ * 각도를 다시 만들거나 캐릭터를 지울 때 그 줄을 찾아 갈아 끼우려면 제목이
+ * 유일한 손잡이다 — 참고 이미지 쪽에는 캐릭터를 가리키는 칸이 없다.
+ *
+ * 없으면 아무 일도 하지 않는다. 지울 것이 없는 것은 실패가 아니다.
+ */
+export async function removeReferenceImagesByTitle(userId: string, title: string): Promise<void> {
+  if (isLocalStoreEnabled()) {
+    const paths = await getLocalDatabase().update((data) => {
+      const matched = data.referenceImages.filter(
+        (image) => image.userId === userId && image.title === title,
+      );
+      const ids = new Set(matched.map((image) => image.id));
+      data.referenceImages = data.referenceImages.filter((image) => !ids.has(image.id));
+      // 세트에서도 뺀다. 남겨 두면 없는 그림을 가리키는 항목이 생긴다.
+      for (const set of data.referenceSets) {
+        set.items = set.items.filter((item) => !ids.has(item.referenceImageId));
+      }
+      return matched.map((image) => image.storagePath);
+    });
+    if (paths.length) await removeLocalReferenceFiles(localStoreRoot(), paths);
+    return;
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data } = await supabase
+    .from("reference_images")
+    .select("id,storage_path")
+    .eq("user_id", userId)
+    .eq("title", title);
+  if (!data?.length) return;
+
+  // 행을 먼저 지운다. 파일이 먼저 사라지면 목록에는 남고 미리보기만 깨진다.
+  await supabase.from("reference_images").delete().in("id", data.map((row) => row.id));
+  await supabase.storage.from(BUCKET).remove(data.map((row) => row.storage_path as string));
+}

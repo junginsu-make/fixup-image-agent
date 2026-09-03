@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHARACTER_ANGLES,
+  angleDirective,
   buildCandidatePrompt,
   buildSceneWithCharacterDirective,
   buildTurnaroundPrompt,
@@ -182,5 +183,117 @@ describe("모델 선택", () => {
     expect(["gpt-image-2", "nano-banana-pro", "nano-banana"]).toContain(
       selectCharacterModel(false),
     );
+  });
+});
+
+/* ── 종류와 결 ───────────────────────────────────────────── */
+
+describe("종류가 몸을 정한다", () => {
+  const base = { description: "주황색 고양이", aspectRatio: "3:4" as const };
+
+  it("사물에는 얼굴 이야기를 하지 않는다", () => {
+    // 뒤통수에 얼굴을 그리지 말라는 지시는 물건에 뜻이 없다.
+    const back = angleDirective("back", "object");
+    // 단어 경계가 필요하다 — surface 안의 face 가 걸린다.
+    expect(back).not.toMatch(/faces?|eyes|hairstyle/i);
+  });
+
+  it("동물은 얼굴 대신 주둥이와 털로 말한다", () => {
+    expect(angleDirective("back", "animal")).toMatch(/fur|coat/i);
+    expect(angleDirective("front", "animal")).toMatch(/muzzle|snout|head/i);
+  });
+
+  it("캐릭터에는 사람 등신을 강제하지 않는다", () => {
+    // 2등신 캐릭터에 사람 비율을 요구하면 캐릭터가 사람이 된다.
+    const prompt = buildCandidatePrompt({ ...base, kind: "character", look: "anime" });
+    expect(prompt).not.toMatch(/anatomically correct/i);
+  });
+
+  it("사람에는 여전히 사람 비율을 요구한다", () => {
+    const prompt = buildCandidatePrompt({ ...base, kind: "person", look: "photoreal" });
+    expect(prompt).toMatch(/anatomically correct/i);
+  });
+
+  it("동물은 꼬리와 발까지 넣으라고 한다", () => {
+    const prompt = buildCandidatePrompt({ ...base, kind: "animal", look: "photoreal" });
+    expect(prompt).toMatch(/tail|paws|whole body/i);
+  });
+});
+
+describe("결이 질감을 정한다", () => {
+  const base = { description: "x", aspectRatio: "3:4" as const, kind: "person" as const };
+
+  it("모공 지시는 사람이고 실사일 때만 나온다", () => {
+    expect(buildCandidatePrompt({ ...base, look: "photoreal" })).toMatch(/pores/i);
+    expect(buildCandidatePrompt({ ...base, look: "anime" })).not.toMatch(/pores/i);
+    // 실사 동물에 사람 모공을 요구하면 이상해진다.
+    expect(buildCandidatePrompt({ ...base, kind: "animal", look: "photoreal" }))
+      .not.toMatch(/pores/i);
+  });
+
+  it("결마다 다른 질감을 말한다", () => {
+    const anime = buildCandidatePrompt({ ...base, look: "anime" });
+    const three = buildCandidatePrompt({ ...base, look: "3d" });
+    const draw = buildCandidatePrompt({ ...base, look: "illustration" });
+    expect(anime).toMatch(/cel|anime/i);
+    expect(three).toMatch(/3d|render/i);
+    expect(draw).toMatch(/hand|brush|paint|ink/i);
+    expect(new Set([anime, three, draw]).size).toBe(3);
+  });
+
+  it("결이 기본 모델을 정한다", () => {
+    expect(selectCharacterModel("photoreal")).toBe("nano-banana-pro");
+    for (const look of ["anime", "3d", "illustration"] as const) {
+      expect(selectCharacterModel(look)).toBe("gpt-image-2");
+    }
+  });
+});
+
+describe("첨부한 그림의 역할", () => {
+  const base = {
+    description: "x", aspectRatio: "3:4" as const,
+    kind: "person" as const, look: "anime" as const,
+  };
+
+  it("결만 따라 만들기는 그 캐릭터를 베끼지 말라고 한다", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "style" });
+    expect(prompt).toMatch(/do not copy/i);
+    expect(prompt).toMatch(/style|rendering|palette/i);
+  });
+
+  it("뽑아내기는 그 캐릭터를 그대로 살리라고 한다", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "extract" });
+    expect(prompt).toMatch(/same character/i);
+    // 배경은 버린다 — 캐릭터만 독립으로 뽑는 것이 목적이다.
+    expect(prompt).toMatch(/background/i);
+  });
+
+  it("역할이 없으면 첨부 이야기를 하지 않는다", () => {
+    expect(buildCandidatePrompt(base)).not.toMatch(/supplied reference/i);
+  });
+});
+
+describe("옛 호출이 그대로 동작한다", () => {
+  // 상세페이지(/create)가 같은 함수를 쓴다. 종류·결을 안 주면 사람으로 떨어진다.
+  it("photoreal 만 줘도 된다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "30대 여성", aspectRatio: "3:4", photoreal: true,
+    });
+    expect(prompt).toMatch(/pores/i);
+    expect(prompt).toMatch(/anatomically correct/i);
+  });
+
+  it("photoreal false 는 그림 결로 본다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "30대 여성", aspectRatio: "3:4", photoreal: false,
+    });
+    expect(prompt).not.toMatch(/pores/i);
+  });
+
+  it("각도 프롬프트도 옛 호출을 받는다", () => {
+    const prompt = buildTurnaroundPrompt({
+      identityPrompt: "x", angle: "back", photoreal: true,
+    });
+    expect(prompt).toMatch(/back view/i);
   });
 });
