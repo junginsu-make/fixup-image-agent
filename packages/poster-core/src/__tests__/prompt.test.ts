@@ -152,4 +152,14 @@ describe("포스터 프롬프트", () => {
     const bare = buildPosterPrompt({ slots: EMPTY_SLOTS, images: [], size });
     expect(bare).not.toMatch(/Render this/i);
   });
+
+  it("픽셀을 모르는 모델에는 크기를 적지 않는다", () => {
+    // 비율을 열거형으로 받는 모델은 픽셀이 없다. 그때 크기 자리에 0 이
+    // 들어가 "Output size 0x0" 이 그대로 모델에게 갔다.
+    const enumMode = buildPosterPrompt({ slots: EMPTY_SLOTS, images: [] });
+    expect(enumMode).not.toContain("0x0");
+    expect(enumMode).not.toMatch(/Output size/i);
+    // 크기와 함께 있던 지시는 남아야 한다.
+    expect(enumMode).toContain("No outer border");
+  });
 });

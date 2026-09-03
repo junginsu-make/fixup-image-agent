@@ -27,7 +27,14 @@ export interface PosterPromptImage {
 export interface PosterPromptInput {
   slots: PosterSlots;
   images: PosterPromptImage[];
-  size: { width: number; height: number };
+  /**
+   * 픽셀을 아는 모델만 준다.
+   *
+   * 비율을 열거형으로 받는 모델은 픽셀이 없다. 예전에는 그때도 이 칸이
+   * 필수라 0 을 채워 넣었고, "Output size 0x0" 이 그대로 모델에게 갔다.
+   * 없으면 안 적는 것이 맞다 — 비율은 API 쪽 aspect_ratio 로 이미 간다.
+   */
+  size?: { width: number; height: number };
 }
 
 const TYPE_INTERACTION_EN: Record<string, string> = {
@@ -136,6 +143,8 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
     ...copyLines(input.slots),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
-    `Output size ${input.size.width}x${input.size.height}. No outer border, no page frame, no UI chrome.`,
+    input.size
+      ? `Output size ${input.size.width}x${input.size.height}. No outer border, no page frame, no UI chrome.`
+      : "No outer border, no page frame, no UI chrome.",
   ].filter((line, index, all) => !(line === "" && all[index - 1] === "")).join("\n").trim();
 }

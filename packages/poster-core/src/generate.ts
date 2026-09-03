@@ -92,7 +92,7 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
   const prompt = buildPosterPrompt({
     slots: job.slots,
     images,
-    size: resolved.pixel ?? { width: 0, height: 0 },
+    size: resolved.pixel,
   });
 
   const input: Record<string, unknown> = { prompt, num_images: job.variants };
