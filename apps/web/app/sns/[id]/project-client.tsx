@@ -38,6 +38,15 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   const [writingCaption, setWritingCaption] = React.useState(false);
   const [message, setMessage] = React.useState("");
 
+  /** 뼈대를 바꾸면 서버가 고친 카드를 다시 받아 온다. */
+  const reload = React.useCallback(async () => {
+    try {
+      setProject(await projectRequest(`/api/sns/projects/${projectId}/plan`));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.");
+    }
+  }, [projectId]);
+
   React.useEffect(() => {
     projectRequest(`/api/sns/projects/${projectId}/plan`)
       .then((loaded) => {
@@ -194,7 +203,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       ) : view === "copy" ? (
         <div className="grid gap-8">
           <section><h2 className="text-h2">04 원고 확인</h2><p className="mt-2 text-muted-foreground">글자수 제한 없이 직접 고치고 카드별로 저장하세요. 저장한 글자가 그림에 그대로 들어갑니다.</p></section>
-          <CopyReview flow={flow} savingIndex={savingIndex} onSave={saveCopy} />
+          <CopyReview flow={flow} savingIndex={savingIndex} projectId={projectId} onSave={saveCopy} onLayoutChanged={() => void reload()} />
           <div className="flex justify-end border-t pt-6"><Button disabled={busy === "generating" || flow.cards.length === 0} onClick={() => void generate()}>{busy === "generating" ? <Loader2 className="animate-spin" /> : <ArrowRight />}{busy === "generating" ? "프롬프트·레퍼런스 준비 중…" : "이 원고로 그림 만들기"}</Button></div>
         </div>
       ) : (

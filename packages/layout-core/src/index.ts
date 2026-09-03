@@ -3,3 +3,7 @@ export * from "./fit";
 export * from "./template";
 export * from "./analyze";
 export * from "./image-request";
+export * from "./schema";
+export * from "./estimate";
+export * from "./deck";
+export * from "./slot-prompt";

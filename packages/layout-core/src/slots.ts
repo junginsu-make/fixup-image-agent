@@ -24,8 +24,16 @@ export type TextSource =
   /** 「자세히 보기」 같은 고정 문구. */
   | { from: "fixed"; text: string };
 
+/**
+ * 글꼴 이름에 쓸 수 있는 글자.
+ *
+ * 이름이 그대로 파일 경로가 된다. 막지 않으면 `../../..` 로 폰트 폴더 밖을
+ * 두드려 「그 파일이 있는가」를 알아낼 수 있다(읽지는 못한다).
+ */
+export const FONT_FAMILY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$/;
+
 export interface TextStyle {
-  /** 동봉한 폰트 이름. */
+  /** 동봉한 폰트 이름. `FONT_FAMILY_PATTERN` 을 지켜야 한다. */
   family: string;
   weight: 400 | 700;
   /** 칸 높이 대비 비율. 픽셀로 두면 카드 크기가 바뀔 때 안 맞는다. */
@@ -90,4 +98,20 @@ function span(start: number, end: number, total: number): { from: number; size: 
   const from = Math.round(clamp01(start) * total);
   const size = Math.min(total, Math.max(1, Math.round(clamp01(end) * total) - from));
   return { from: Math.min(from, total - size), size };
+}
+
+/**
+ * 칸 하나를 다른 자리로 옮긴다 — 레이어를 끌어 옮기는 일.
+ *
+ * 「위로 / 아래로」 버튼은 한 칸씩만 움직여서, 여섯 층 중 맨 아래를 맨 위로
+ * 올리려면 다섯 번을 눌러야 했다. 목록에서 끌어 놓으면 한 번이다.
+ */
+export function reorderSlot(slots: LayoutSlot[], from: number, to: number): LayoutSlot[] {
+  const last = slots.length - 1;
+  if (from < 0 || to < 0 || from > last || to > last || from === to) return slots;
+
+  const next = [...slots];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved!);
+  return next;
 }

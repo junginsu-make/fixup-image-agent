@@ -29,6 +29,9 @@ const navGroups = [
   {
     label: "도구",
     items: [
+      // 「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라
+      // 도구 목록에 나란히 두면 별개의 도구로 보인다. 카드뉴스 첫 화면
+      // 오른쪽 위에 「내 카드뉴스 만들기」로 둔다.
       { href: "/sns", label: "카드뉴스 만들기", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft },
       { href: "/poster", label: "이미지 만들기", desc: "광고 소재·포스터·일반 이미지", icon: Frame },
       { href: "/create", label: "상세페이지 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },

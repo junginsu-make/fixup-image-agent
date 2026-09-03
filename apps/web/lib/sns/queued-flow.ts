@@ -1,5 +1,6 @@
 import {
   CARD_RATIOS,
+  buildAttachmentBlock,
   buildFrame,
   buildModelInput,
   composePrompt,
@@ -17,6 +18,12 @@ import {
   type ImagePromptProvider,
   type ReviewRequest,
 } from "@fixup/sns-core";
+import {
+  buildSlotPrompt,
+  planSlotImage,
+  slotRect,
+  type LayoutSlot,
+} from "@fixup/layout-core";
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
 import type { FalQueueClient } from "../fal/queue";
@@ -40,7 +47,11 @@ export interface QueuedGenerationDependencies {
   savePrompt(cardIndex: number, prompt: string): Promise<void>;
   saveSubmitted(cardIndex: number): Promise<void>;
   saveFailed(cardIndex: number, message: string): Promise<void>;
-  saveAsset(imageUrl: string, card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string; reviewUrl: string }>;
+  /**
+   * 통짜 카드면 그림 주소 하나, 레이아웃 카드면 **칸 번호별 그림**이다.
+   * 그림 칸이 없는 레이아웃은 빈 목록으로 온다 — 글과 배경만으로 합성한다.
+   */
+  saveAsset(images: string | Record<number, string>, card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string; reviewUrl: string }>;
   saveReview(cardIndex: number, status: "done" | "review_required", review: unknown, issues: string[]): Promise<void>;
   saveOriginal(card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string }>;
   checkpoint?(flow: SnsFlowState): Promise<void>;
@@ -48,6 +59,64 @@ export interface QueuedGenerationDependencies {
 
 function nowIso(value?: string): string {
   return value ?? new Date().toISOString();
+}
+
+/** 틀의 그림 칸 전부. 자리 번호를 함께 준다 — 합성할 때 그 번호로 꽂는다. */
+function imageSlotsOf(card: SnsFlowCard): Array<{ slot: number; box: Extract<LayoutSlot, { kind: "image" }> }> {
+  return (card.layout?.slots ?? []).flatMap((slot, offset) => (
+    slot.kind === "image" ? [{ slot: offset, box: slot }] : []
+  ));
+}
+
+function cardPixels(project: SnsProjectRecord) {
+  const ratio = CARD_RATIOS.find((entry) => entry.id === project.ratio);
+  if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${project.ratio}`);
+  return ratio.pixel;
+}
+
+/** 그 칸을 fal 에 시킬 모델과 크기. 칸마다 비율이 달라 저마다 셈한다. */
+function slotPlanFor(card: SnsFlowCard, project: SnsProjectRecord, slotOffset: number) {
+  const found = imageSlotsOf(card).find((entry) => entry.slot === slotOffset);
+  if (!found) return undefined;
+  const rect = slotRect(found.box.box, cardPixels(project));
+  return planSlotImage({ width: rect.width, height: rect.height }, project.modelId);
+}
+
+/** 다 왔나. 실패한 칸은 기다리지 않는다 — 나머지로 카드는 만든다. */
+function slotJobsSettled(card: SnsFlowCard): boolean {
+  return (card.slotJobs ?? []).every((job) => job.status === "done" || job.status === "failed");
+}
+
+/** 합성에 넘길 칸별 그림. 못 받은 칸은 빠지고 그 자리는 회색으로 남는다. */
+function slotImagesOf(card: SnsFlowCard): Record<number, string> {
+  const images: Record<number, string> = {};
+  for (const job of card.slotJobs ?? []) if (job.imageUrl) images[job.slot] = job.imageUrl;
+  return images;
+}
+
+/**
+ * 칸이 다 왔으니 합성해서 저장한다.
+ *
+ * 한 칸이 실패해도 카드는 나온다 — 그 자리만 회색으로 남고 화면이 이유를 말한다.
+ */
+async function composeAndSave(
+  card: SnsFlowCard,
+  dependencies: QueuedGenerationDependencies,
+): Promise<void> {
+  try {
+    const saved = await dependencies.saveAsset(slotImagesOf(card), card);
+    card.assetPath = saved.assetPath;
+    card.assetUrl = saved.assetUrl;
+    card.status = "done";
+    const failed = (card.slotJobs ?? []).filter((job) => job.status === "failed");
+    card.reviewIssues = failed.length
+      ? failed.map((job) => `${job.slot + 1}번 칸 그림을 받지 못했습니다: ${job.error ?? "이유 없음"}`)
+      : undefined;
+    card.error = undefined;
+  } catch (error) {
+    card.status = "failed";
+    card.error = error instanceof Error ? error.message : "카드를 합성하지 못했습니다.";
+  }
 }
 
 function queueIdentity(card: SnsFlowCard): { endpoint: string; requestId: string } {
@@ -67,7 +136,13 @@ async function submitNext(
   now: string,
 ): Promise<void> {
   const selected = new Set(flow.generation?.selectedCardIndexes ?? []);
-  const card = flow.cards.find((entry) => selected.has(entry.index) && entry.kind === "generated" && entry.status === "pending");
+  // 레이아웃 카드는 칸이 여럿이라 「생성 중」이면서도 아직 안 보낸 칸이 남는다.
+  const card = flow.cards.find((entry) => (
+    selected.has(entry.index)
+    && entry.kind === "generated"
+    && (entry.status === "pending" || (entry.status === "generating" && entry.slotJobs?.some((job) => job.status === "pending")))
+    && !entry.slotJobs?.some((job) => job.status === "generating")
+  ));
   if (!card) {
     if (flow.generation && !flow.cards.some((entry) => selected.has(entry.index) && ["pending", "generating"].includes(entry.status))) {
       flow.generation.completedAt = now;
@@ -75,14 +150,26 @@ async function submitNext(
     }
     return;
   }
-  if (!card.prompt) throw new Error(`${card.index}번 카드 이미지 프롬프트가 없습니다.`);
   const grouped = groupAttachments(project.data.attachments);
   const references = selectReferencesForRole(grouped, card.role);
   const falUrls = flow.generation?.falReferenceUrls ?? {};
   const imageUrls = references.map((reference) => falUrls[reference.id]).filter((url): url is string => Boolean(url));
   if (imageUrls.length !== references.length) throw new Error(`${card.index}번 카드의 fal 레퍼런스 URL이 없습니다.`);
-  const model = modelById(project.modelId);
-  const resolved = resolveSize(project.ratio, model);
+
+  /**
+   * 레이아웃 카드는 **칸 하나가 요청 하나**다.
+   *
+   * 그림 자리가 셋이면 셋 다 채워야 「레퍼런스 그대로」가 된다. 칸마다 주문서가
+   * 다르므로(「수리 전」과 「수리 후」) 한 번에 시킬 수 없다. 한 번에 하나씩
+   * 보내는 것은 그대로 두고, 단위만 카드에서 칸으로 바꾼다.
+   */
+  const job = card.slotJobs?.find((entry) => entry.status === "pending");
+  const prompt = job?.prompt ?? card.prompt;
+  if (!prompt) throw new Error(`${card.index}번 카드 이미지 프롬프트가 없습니다.`);
+
+  const slotPlan = job ? slotPlanFor(card, project, job.slot) : undefined;
+  const model = slotPlan?.model ?? modelById(project.modelId);
+  const resolved = slotPlan?.size ?? resolveSize(project.ratio, model);
   if (resolved.rejected) throw new Error(resolved.rejected);
   const mode = imageUrls.length ? "i2i" as const : "t2i" as const;
   const endpoint = pickEndpoint(model, mode === "i2i");
@@ -91,7 +178,7 @@ async function submitNext(
   // 과금 요청은 정확히 한 번 제출하고, 돌아온 request_id를 바로 장부에 쓴다.
   const submitted = await dependencies.queue.submitJob(
     endpoint,
-    buildModelInput(model, mode, resolved, card.prompt, imageUrls),
+    buildModelInput(model, mode, resolved, prompt, imageUrls),
   );
   const request = await dependencies.requestStore.createSubmitted({
     projectId: project.id,
@@ -105,10 +192,18 @@ async function submitNext(
   });
   card.status = "generating";
   card.error = undefined;
-  card.falRequestId = submitted.requestId;
-  card.generationRequestId = request.id;
-  card.generationEndpoint = endpoint;
-  card.generationStartedAt = now;
+  if (job) {
+    job.status = "generating";
+    job.falRequestId = submitted.requestId;
+    job.generationRequestId = request.id;
+    job.endpoint = endpoint;
+    job.startedAt = now;
+  } else {
+    card.falRequestId = submitted.requestId;
+    card.generationRequestId = request.id;
+    card.generationEndpoint = endpoint;
+    card.generationStartedAt = now;
+  }
   flow.costs.push({
     cardIndex: card.index,
     costUsd: null,
@@ -167,6 +262,47 @@ export async function startQueuedFlow(
       intent: card.copy.headline,
       visualBrief: card.copy.body ?? card.copy.headline,
     };
+    if (card.layout) {
+      // 칸 프롬프트는 카드 전체가 아니라 그 칸에 들어갈 그림만 말한다.
+      // 모델에게 물어볼 것이 없으므로 장면 프롬프트 LLM 호출도 건너뛴다.
+      const styleBlock = buildAttachmentBlock(selectReferencesForRole(grouped, card.role));
+      const fallbackBrief = card.plan?.visualBrief ?? card.copy.body ?? card.copy.headline;
+
+      card.slotJobs = imageSlotsOf(card).map(({ slot, box }) => {
+        const rect = slotRect(box.box, ratio.pixel);
+        return {
+          slot,
+          prompt: buildSlotPrompt({
+            slot: box,
+            rect: { width: rect.width, height: rect.height },
+            visualBrief: fallbackBrief,
+            styleBlock,
+          }),
+          status: "pending" as const,
+        };
+      });
+      card.promptWarnings = imageSlotsOf(card).flatMap(
+        ({ slot }) => slotPlanFor(card, project, slot)?.notes ?? [],
+      );
+      // 칸마다 주문서가 다르다. 카드 하나짜리 prompt 는 더 이상 뜻이 없다.
+      card.prompt = undefined;
+      card.falRequestId = undefined;
+      card.generationRequestId = undefined;
+      card.generationEndpoint = undefined;
+      card.generationStartedAt = undefined;
+
+      if (card.slotJobs.length === 0) {
+        // 그림 칸이 없는 틀은 fal 을 부를 일이 없다. 바로 합성해서 끝낸다.
+        await composeAndSave(card, dependencies);
+        continue;
+      }
+      card.status = "pending";
+      // 화면이 프롬프트를 하나로 본다. 칸마다 무엇을 시켰는지 이어 붙여 남긴다.
+      const joined = card.slotJobs.map((job) => `${job.slot + 1}번 칸: ${job.prompt}`).join("\n\n");
+      await dependencies.savePrompt(card.index, joined);
+      continue;
+    }
+
     const prompted = await writeImagePrompt({
       role: card.role,
       copy: card.copy,
@@ -203,48 +339,106 @@ export async function pollQueuedFlow(
     await submitNext(project, next, dependencies, now);
     return next;
   }
-  const elapsed = Date.parse(now) - Date.parse(card.generationStartedAt ?? now);
+  /**
+   * 레이아웃 카드는 지금 돌고 있는 **칸**을 본다.
+   *
+   * 카드 하나에 요청이 여럿이라, 카드에 붙은 요청 정보 하나로는 어느 칸을
+   * 기다리는지 알 수 없다.
+   */
+  const job = card.slotJobs?.find((entry) => entry.status === "generating");
+  const startedAt = job?.startedAt ?? card.generationStartedAt;
+  const requestId = job?.falRequestId ?? card.falRequestId;
+  const ledgerId = job?.generationRequestId ?? card.generationRequestId;
+
+  /** 이 칸(또는 이 카드)이 끝났다. 남은 칸이 있으면 계속, 다 됐으면 합성한다. */
+  const afterSlot = async (): Promise<SnsFlowState> => {
+    if (card.slotJobs) {
+      if (!slotJobsSettled(card)) {
+        await dependencies.checkpoint?.(next);
+        await submitNext(project, next, dependencies, now);
+        return next;
+      }
+      await composeAndSave(card, dependencies);
+      if (card.status === "failed") await dependencies.saveFailed(card.index, card.error ?? "");
+      await dependencies.checkpoint?.(next);
+      await submitNext(project, next, dependencies, now);
+      return next;
+    }
+    await dependencies.checkpoint?.(next);
+    await submitNext(project, next, dependencies, now);
+    return next;
+  };
+
+  const elapsed = Date.parse(now) - Date.parse(startedAt ?? now);
   if (elapsed > QUEUE_GIVE_UP_MS) {
+    const message = `30분 동안 fal 상태가 끝나지 않아 조회를 중단했습니다. request_id ${requestId ?? "없음"}은 장부에 남겼습니다.`;
+    if (job) {
+      job.status = "failed";
+      job.error = message;
+      return afterSlot();
+    }
     card.status = "failed";
-    card.error = `30분 동안 fal 상태가 끝나지 않아 조회를 중단했습니다. request_id ${card.falRequestId ?? "없음"}은 장부에 남겼습니다.`;
+    card.error = message;
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
     await submitNext(project, next, dependencies, now);
     return next;
   }
-  const identity = queueIdentity(card);
+  const identity = job?.endpoint && job.falRequestId
+    ? { endpoint: job.endpoint, requestId: job.falRequestId }
+    : queueIdentity(card);
   const status = await dependencies.queue.jobStatus(identity.endpoint, identity.requestId);
   if (status === "queued" || status === "in_progress") return next;
   let result: { images: Array<{ url: string }> };
   try {
     result = await dependencies.queue.jobResult(identity.endpoint, identity.requestId);
   } catch (error) {
+    const message = error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다.";
+    if (job) {
+      // 한 칸이 실패해도 나머지로 카드는 만든다.
+      job.status = "failed";
+      job.error = message;
+      return afterSlot();
+    }
     card.status = "failed";
-    card.error = error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다.";
+    card.error = message;
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
     await submitNext(project, next, dependencies, now);
     return next;
   }
-  if (!card.generationRequestId) throw new Error(`${card.index}번 카드 비용 장부 ID가 없습니다.`);
-  const cost = next.costs.find((entry) => entry.generationRequestId === card.generationRequestId);
+  if (!ledgerId) throw new Error(`${card.index}번 카드 비용 장부 ID가 없습니다.`);
+  const cost = next.costs.find((entry) => entry.generationRequestId === ledgerId);
   if (!cost?.unitCostUsd) throw new Error(`${card.index}번 카드 단가가 없습니다.`);
   const completed: GenerationRequestComplete = {
-    falRequestId: card.falRequestId,
+    falRequestId: requestId,
     returnedImages: result.images.length,
     costUsd: cost.unitCostUsd,
   };
   // fal 완료 직후 비용부터 확정하고, 그 다음에 결과 파일을 저장한다.
-  await dependencies.requestStore.complete(card.generationRequestId, completed);
+  await dependencies.requestStore.complete(ledgerId, completed);
   cost.costUsd = completed.costUsd;
   const image = result.images[0];
   if (!image) {
+    const message = "fal 완료 응답에 이미지가 없습니다.";
+    if (job) {
+      job.status = "failed";
+      job.error = message;
+      return afterSlot();
+    }
     card.status = "failed";
-    card.error = "fal 완료 응답에 이미지가 없습니다.";
+    card.error = message;
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
     await submitNext(project, next, dependencies, now);
     return next;
+  }
+  if (job) {
+    // 받아 두고 다른 칸을 기다린다. 다 오면 한 번에 합성한다.
+    job.status = "done";
+    job.imageUrl = image.url;
+    job.error = undefined;
+    return afterSlot();
   }
   const saved = await dependencies.saveAsset(image.url, card);
   card.assetPath = saved.assetPath;
