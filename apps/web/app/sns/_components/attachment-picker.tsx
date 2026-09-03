@@ -8,6 +8,7 @@ import { ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, ty
 import { LibraryPickerButton, type LibraryPickSet } from "../../_components/library-picker";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 import { randomId } from "../../../lib/browser-safe";
+import { attachmentsForUploaded } from "./uploaded-attachments";
 
 type ImageView = ReferenceImageRow & { signedUrl: string | null };
 
@@ -34,20 +35,24 @@ export function AttachmentPicker({
   const [message, setMessage] = React.useState("");
   const fileInput = React.useRef<HTMLInputElement>(null);
 
-  const load = React.useCallback(async () => {
+  /** 읽은 목록을 돌려준다 — 방금 올린 그림을 바로 붙이려면 그 줄이 필요하다. */
+  const load = React.useCallback(async (): Promise<ImageView[]> => {
     setLoading(true);
     try {
       // 로컬이든 운영이든 같은 길로 읽는다. 서버가 모드를 가른다.
       const response = await fetch("/api/reference-images", { cache: "no-store" });
       const payload = await response.json() as { ok?: boolean; images?: ImageView[]; message?: string };
       if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 불러오지 못했습니다.");
-      setImages(payload.images ?? []);
+      const fresh = payload.images ?? [];
+      setImages(fresh);
       // 세트도 함께 읽는다. 한 벌로 만들어 뒀으면 한 벌로 부를 수 있어야 한다.
       const setsBody = await (await fetch("/api/reference-sets", { cache: "no-store" })).json();
       setSets(setsBody.ok ? (setsBody.sets ?? []) : []);
       setMessage("");
+      return fresh;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다.");
+      return [];
     } finally {
       setLoading(false);
     }
@@ -55,27 +60,39 @@ export function AttachmentPicker({
 
   React.useEffect(() => { void load(); }, [load]);
 
+  /**
+   * 올린 그림은 **바로 이 작업에 넣는다.**
+   *
+   * 전에는 라이브러리에만 넣고 끝냈다. 여기 보이는 것은 붙인 그림뿐이라 화면은
+   * 아무 변화가 없었고, 올리기가 안 되는 것처럼 보였다. 실제로는 저장까지 다
+   * 되고 있었다(2026-09-03 운영 DB 확인). 올리는 사람은 지금 쓰려고 올린다.
+   */
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true);
+    const added: string[] = [];
     try {
       for (const file of Array.from(files)) {
+        const id = randomId();
         const form = new FormData();
-        form.set("id", randomId());
+        form.set("id", id);
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
         form.set("purpose", "cardnews");
         form.set("file", file);
         const response = await fetch("/api/reference-images", { method: "POST", body: form });
         const payload = await response.json() as { ok?: boolean; message?: string };
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? "업로드하지 못했습니다.");
+        added.push(id);
       }
-      await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "업로드하지 못했습니다.");
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
     }
+    if (!added.length) return;
+    const attach = attachmentsForUploaded(added, await load(), attachments);
+    if (attach.length) onChange([...attachments, ...attach]);
   }
 
   /** 세트를 통째로 넣는다. 표지·속지·엔딩 자리를 그대로 가져온다. */

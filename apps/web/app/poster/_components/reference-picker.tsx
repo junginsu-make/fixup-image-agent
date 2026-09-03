@@ -96,14 +96,23 @@ export function ReferencePicker({
     }
   }
 
+  /**
+   * 올린 그림은 **바로 이 작업에 넣는다.**
+   *
+   * 전에는 라이브러리에만 넣고 끝냈다. 여기 보이는 것은 역할이 정해진 그림뿐이라
+   * 화면은 아무 변화가 없었고, 올리기가 안 되는 것처럼 보였다. 실제로는 저장까지
+   * 다 되고 있었다(2026-09-03 운영 DB 확인). 올리는 사람은 지금 쓰려고 올린다.
+   */
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true);
     setMessage("");
+    const added: string[] = [];
     try {
       for (const file of Array.from(files)) {
+        const id = randomId();
         const form = new FormData();
-        form.set("id", randomId());
+        form.set("id", id);
         form.set("title", file.name.replace(/\.[^.]+$/, ""));
         // 용도로 거르지 않지만 어디서 올렸는지는 남긴다.
         form.set("purpose", "poster");
@@ -111,11 +120,14 @@ export function ReferencePicker({
         const response = await fetch("/api/reference-images", { method: "POST", body: form });
         const payload = await response.json() as { ok?: boolean; message?: string };
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? "올리지 못했습니다.");
+        added.push(id);
       }
       onUploaded();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
     } finally {
+      // 중간에 실패해도 그 앞에 성공한 것들은 넣는다. 이미 라이브러리에 있다.
+      for (const id of added) onRoleChange(id, "style");
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
     }
