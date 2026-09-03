@@ -8,6 +8,7 @@ import { createPosterFalClients, PosterProviderConfigurationError } from "../../
 import { collectPoster } from "../../../../../../lib/poster/flow";
 import { posterAssetPath } from "../../../../../../lib/poster/supabase-store-core";
 import { createSupabaseAdminClient } from "../../../../../../lib/supabase/admin";
+import { markAsAi } from "../../../../../../lib/watermark";
 
 /** 결과도 라이브러리 버킷에 둔다. 포스터만의 버킷을 따로 두지 않는다. */
 const LIBRARY_BUCKET = "library";
@@ -36,7 +37,8 @@ async function saveResult(
 ): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`결과 이미지를 내려받지 못했습니다 (${response.status}).`);
-  const bytes = Buffer.from(await response.arrayBuffer());
+  // 만든 그림이므로 "AI 이미지" 를 파일에 새기고 저장한다.
+  const bytes = await markAsAi(Buffer.from(await response.arrayBuffer()));
 
   if (isLocalStoreEnabled()) {
     const storagePath = `${projectId}/${variantIndex}.png`;

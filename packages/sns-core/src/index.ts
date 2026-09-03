@@ -10,5 +10,6 @@ export * from "./models";
 export * from "./planning";
 export * from "@fixup/shared";
 export * from "./ratios";
+export * from "./watermark";
 export * from "./review";
 export * from "./review-plain";

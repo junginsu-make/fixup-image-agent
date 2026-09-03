@@ -23,6 +23,7 @@ import {
   writeLocalSnsResultFile,
 } from "../local-store";
 import { collectCardPaths, withCardUrls } from "./list-urls";
+import { markAsAi } from "../watermark";
 import type { SnsProviders } from "./providers";
 import type { QueuedGenerationDependencies, SubmittedGenerationRequestStore } from "./queued-flow";
 
@@ -237,7 +238,10 @@ export async function createQueuedGenerationDependencies(input: {
     saveFailed: (cardIndex, message) => updateCard(cardIndex, { status: "failed", error: message }),
     async saveAsset(imageUrl, card) {
       const image = await fetchedImage(imageUrl);
-      const assetPath = await uploadResult(input.userId, input.project.id, card.index, image.bytes, image.contentType);
+      // AI 가 그린 카드에만 표기한다. 사용자가 넣은 원본은 saveOriginal 로 가고
+      // 거기에는 붙이지 않는다 — 남의 사진에 "AI 이미지" 라고 적으면 거짓말이다.
+      const marked = await markAsAi(image.bytes);
+      const assetPath = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
       await updateCard(card.index, { assetPath, status: "done", error: null });
       return {
         assetPath,
