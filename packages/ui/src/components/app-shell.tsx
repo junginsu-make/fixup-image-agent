@@ -30,7 +30,7 @@ const navGroups = [
     label: "도구",
     items: [
       { href: "/sns", label: "카드뉴스 만들기", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft },
-      { href: "/poster", label: "포스터 만들기", desc: "레퍼런스 기준 한 장", icon: Frame },
+      { href: "/poster", label: "이미지 만들기", desc: "광고 소재·포스터·일반 이미지", icon: Frame },
       { href: "/create", label: "상세페이지 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },
       { href: "/redesign", label: "상세 페이지 리디자인", desc: "기존 페이지 개선", icon: RefreshCw },
       { href: "/characters", label: "캐릭터 만들기", desc: "인물을 고정해 재사용", icon: UserRound },

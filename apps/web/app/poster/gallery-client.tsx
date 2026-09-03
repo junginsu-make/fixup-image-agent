@@ -49,7 +49,7 @@ export function PosterGallery() {
   }
   if (projects === null) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
   if (projects.length === 0) {
-    return <p className="text-sm text-muted-foreground">아직 만든 포스터가 없습니다.</p>;
+    return <p className="text-sm text-muted-foreground">아직 만든 이미지가 없습니다.</p>;
   }
 
   return (

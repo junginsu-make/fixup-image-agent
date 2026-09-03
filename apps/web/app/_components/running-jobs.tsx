@@ -133,7 +133,7 @@ export function RunningJobsProvider({ children }: { children: React.ReactNode })
   );
 }
 
-const TOOL_LABEL: Record<RunningJob["tool"], string> = { sns: "카드뉴스", poster: "포스터" };
+const TOOL_LABEL: Record<RunningJob["tool"], string> = { sns: "카드뉴스", poster: "이미지" };
 
 /** 사이드바 아래 칸. 만드는 중인 것이 없으면 아무것도 안 보인다. */
 export function RunningJobsPanel() {

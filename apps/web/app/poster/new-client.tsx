@@ -12,7 +12,7 @@ import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 
 const STEPS: StepDefinition[] = [
-  { id: "reference", label: "01 레퍼런스", desc: "따라 만들 포스터" },
+  { id: "reference", label: "01 레퍼런스", desc: "따라 만들 이미지" },
   { id: "spec", label: "02 규격", desc: "비율 · 모델 · 장수" },
   { id: "instruction", label: "03 지시", desc: "한 줄만" },
 ];
@@ -42,7 +42,7 @@ export function PosterNewClient() {
     hasReferences: styleIds.length + preservedIds.length > 0,
   });
 
-  // 라이브러리에서 「포스터로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
+  // 라이브러리에서 「이미지로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
   React.useEffect(() => {
     const handoff = takeHandoff();
     if (!handoff) return;
@@ -77,7 +77,7 @@ export function PosterNewClient() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          title: title.trim() || "이름 없는 포스터",
+          title: title.trim() || "이름 없는 이미지",
           ratio, modelId, variants,
           instruction: instruction.trim(),
           referenceIds: styleIds,
@@ -86,10 +86,10 @@ export function PosterNewClient() {
         }),
       });
       const body = await response.json();
-      if (!body.ok) throw new Error(body.message ?? "포스터 작업을 만들지 못했습니다.");
+      if (!body.ok) throw new Error(body.message ?? "이미지 작업을 만들지 못했습니다.");
       router.push(`/poster/${body.project.id}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "포스터 작업을 만들지 못했습니다.");
+      setError(cause instanceof Error ? cause.message : "이미지 작업을 만들지 못했습니다.");
       setBusy(false);
     }
   }
@@ -111,7 +111,7 @@ export function PosterNewClient() {
       {step === "reference" ? (
         <Card>
           <CardHeader>
-            <CardTitle>따라 만들 포스터를 고르세요</CardTitle>
+            <CardTitle>따라 만들 이미지를 고르세요</CardTitle>
             <CardDescription>
               새로 올리거나 라이브러리에서 불러오세요. 고른 그림을 누르면 역할이 바뀝니다 —
               <strong className="text-foreground">따라 만들기</strong>(레이아웃·서체·색) →

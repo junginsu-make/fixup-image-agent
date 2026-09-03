@@ -77,7 +77,7 @@ export function CandidateDetail({ candidate, onClose, onStatus }: {
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" disabled={!handoffText(candidate)} onClick={() => send("sns", candidate)}>카드뉴스로</Button>
-                <Button size="sm" variant="secondary" disabled={!handoffText(candidate)} onClick={() => send("poster", candidate)}>포스터로</Button>
+                <Button size="sm" variant="secondary" disabled={!handoffText(candidate)} onClick={() => send("poster", candidate)}>이미지로</Button>
                 <Button size="sm" variant="secondary" disabled={!handoffText(candidate)} onClick={() => send("create", candidate)}>상세페이지로</Button>
               </div>
             </section>

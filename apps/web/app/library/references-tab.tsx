@@ -226,7 +226,7 @@ export function ReferencesTab() {
                     {/* 라이브러리는 보기만 하는 곳이 아니다. 여기서 바로 도구로 보낸다. */}
                     <div className="flex flex-wrap gap-1">
                       <Button size="sm" onClick={() => sendTo("sns", image)}>카드뉴스로</Button>
-                      <Button size="sm" variant="secondary" onClick={() => sendTo("poster", image)}>포스터로</Button>
+                      <Button size="sm" variant="secondary" onClick={() => sendTo("poster", image)}>이미지로</Button>
                       <Button size="sm" variant="secondary" onClick={() => sendTo("create", image)}>상세페이지로</Button>
                     </div>
                   </CardContent>

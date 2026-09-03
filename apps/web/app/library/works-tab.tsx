@@ -55,7 +55,7 @@ const STATUS: Record<string, { label: string; tone: "green" | "secondary" | "des
   failed: { label: "실패", tone: "destructive" },
 };
 
-const TOOL_LABEL: Record<Tool, string> = { sns: "카드뉴스", poster: "포스터" };
+const TOOL_LABEL: Record<Tool, string> = { sns: "카드뉴스", poster: "이미지" };
 
 function when(value: string): string {
   if (!value) return "";

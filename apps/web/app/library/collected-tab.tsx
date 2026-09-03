@@ -98,7 +98,7 @@ export function CollectedTab() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => sendTo("sns", item)}>카드뉴스로</Button>
-                <Button size="sm" variant="secondary" onClick={() => sendTo("poster", item)}>포스터로</Button>
+                <Button size="sm" variant="secondary" onClick={() => sendTo("poster", item)}>이미지로</Button>
                 <Button size="sm" variant="secondary" onClick={() => sendTo("create", item)}>상세페이지로</Button>
                 {item.url ? (
                   <Button size="sm" variant="ghost" asChild>
