@@ -34,4 +34,16 @@ describe("이동 가능 여부", () => {
     // 누르게 하지 않는다. 준비가 안 됐으면 그 화면이 알린다.
     expect(canJumpTo(steps, "a", "c")).toBe(true);
   });
+
+  it("화면이 못 간다고 하면 못 간다", () => {
+    // 이미지 만들기의 04·05 는 작업을 만든 뒤에야 생긴다. 다섯 단계를 다
+    // 보여 주되 아직 없는 화면으로 보내지는 않는다.
+    expect(canJumpTo(steps, "a", "c", () => false)).toBe(false);
+    expect(canJumpTo(steps, "a", "c", (id) => id !== "c")).toBe(false);
+    expect(canJumpTo(steps, "a", "b", (id) => id !== "c")).toBe(true);
+  });
+
+  it("현재 단계는 화면이 허락해도 여전히 못 누른다", () => {
+    expect(canJumpTo(steps, "b", "b", () => true)).toBe(false);
+  });
 });

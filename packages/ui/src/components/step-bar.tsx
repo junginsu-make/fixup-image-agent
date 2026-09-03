@@ -39,21 +39,35 @@ export function stepState(steps: StepDefinition[], current: string, id: string):
  *
  * 지금 있는 단계만 누르면 아무 일도 하지 않는다.
  */
-export function canJumpTo(steps: StepDefinition[], current: string, id: string): boolean {
-  return stepState(steps, current, id) !== "active";
+export function canJumpTo(
+  steps: StepDefinition[],
+  current: string,
+  id: string,
+  /**
+   * 화면이 거부할 수 있다.
+   *
+   * 이미지 만들기의 04·05 는 작업을 만든 뒤에야 생긴다. 다섯 단계를 다
+   * 보여 주는 것과, 아직 없는 화면으로 보내는 것은 다른 문제다.
+   */
+  allowed?: (id: string) => boolean,
+): boolean {
+  if (stepState(steps, current, id) === "active") return false;
+  return allowed ? allowed(id) : true;
 }
 
-export function StepBar({ steps, current, onJump }: {
+export function StepBar({ steps, current, onJump, allowJump }: {
   steps: StepDefinition[];
   current: string;
   /** 없으면 어느 단계도 누를 수 없다. 보여 주기만 할 때 쓴다. */
   onJump?: (id: string) => void;
+  /** 아직 갈 수 없는 단계를 화면이 가려낸다. 없으면 다 갈 수 있다. */
+  allowJump?: (id: string) => boolean;
 }) {
   return (
     <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2 rounded-lg bg-card p-2.5 shadow-[var(--shadow-ring)]">
       {steps.map((step, index) => {
         const state = stepState(steps, current, step.id);
-        const jumpable = Boolean(onJump) && canJumpTo(steps, current, step.id);
+        const jumpable = Boolean(onJump) && canJumpTo(steps, current, step.id, allowJump);
         return (
           <li key={step.id} className="flex items-center gap-1.5">
             <button

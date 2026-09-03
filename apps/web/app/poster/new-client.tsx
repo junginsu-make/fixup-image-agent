@@ -4,18 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
-  Input, Label, StepBar, Textarea, cn, type StepDefinition,
+  Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
 import { IMAGE_MODELS, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
 import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
-
-const STEPS: StepDefinition[] = [
-  { id: "reference", label: "01 레퍼런스", desc: "따라 만들 이미지" },
-  { id: "spec", label: "02 규격", desc: "비율 · 모델 · 장수" },
-  { id: "instruction", label: "03 지시", desc: "한 줄만" },
-];
+import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 
 export function PosterNewClient() {
   const router = useRouter();
@@ -107,7 +102,7 @@ export function PosterNewClient() {
   return (
     <div className="grid gap-6">
       <div className="mb-4">
-        <StepBar steps={STEPS} current={step} onJump={setStep} />
+        <StepBar steps={POSTER_STEPS} current={step} onJump={setStep} allowJump={reachableBeforeCreate} />
       </div>
 
       {error ? (

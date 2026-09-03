@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Download, Wand2 } from "lucide-react";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
-  Input, Label, StepBar, Textarea, cn, type StepDefinition,
+  Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
+import { POSTER_STEPS } from "../steps";
 
 interface PosterImage {
   id: string;
@@ -42,14 +43,6 @@ type TextSlot = "kind" | "headline" | "subline" | "scene" | "subject" | "action"
  * 앞 세 단계를 누르면 그 단계로 돌아간다. 이미 만든 작업이라도 레퍼런스나
  * 규격을 다시 고르고 싶을 수 있다.
  */
-const STEPS: StepDefinition[] = [
-  { id: "reference", label: "01 레퍼런스", desc: "따라 만들 이미지" },
-  { id: "spec", label: "02 규격", desc: "비율 · 모델 · 장수" },
-  { id: "instruction", label: "03 지시", desc: "한 줄만" },
-  { id: "plan", label: "04 기획 확인", desc: "틀린 칸만 고치기" },
-  { id: "result", label: "05 결과", desc: "고르고 검수" },
-];
-
 const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
   ["kind", "유형", "line"],
   ["headline", "헤드라인", "line"],
@@ -293,7 +286,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   return (
     <div className="grid gap-6">
       <StepBar
-        steps={STEPS}
+        steps={POSTER_STEPS}
         current={current}
         onJump={(id) => {
           // 앞 세 단계는 새로 만드는 화면에 있다. 거기로 보낸다.
