@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { Download, Maximize2, Minimize2, X } from "lucide-react";
 import { cn } from "@fixup/ui";
+import { downloadName } from "./download-name";
 import { describeZoom, fitScale, type PixelSize } from "./image-viewer-scale";
 
 /**
@@ -26,12 +27,40 @@ const OPEN_EVENT = "fixup:view-image";
 export interface ViewableImage {
   src: string;
   alt?: string;
+  /** 내려받을 때 붙일 이름. 없으면 alt 와 주소에서 만든다. */
+  name?: string;
 }
 
 /** 그림 자체가 다른 일에 쓰이는 자리에서 확대를 여는 길. */
-export function openImageViewer(src: string, alt = "") {
+export function openImageViewer(src: string, alt = "", name?: string) {
   if (!src) return;
-  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { src, alt } }));
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { src, alt, name } }));
+}
+
+/**
+ * 그림을 내려받는다.
+ *
+ * `<a download>` 로는 안 된다. 그림이 다른 곳(Supabase 서명 주소)에 있어서
+ * 브라우저가 `download` 를 무시하고 그냥 그 주소로 이동해 버린다. 받아서
+ * 메모리에 담은 뒤 그것을 내려준다.
+ *
+ * 실패하면 새 탭으로 연다 — 아무 일도 안 일어나는 것보다 낫다.
+ */
+export async function downloadImage(image: ViewableImage) {
+  try {
+    const response = await fetch(image.src);
+    if (!response.ok) throw new Error(String(response.status));
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = downloadName(image);
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  } catch {
+    window.open(image.src, "_blank", "noreferrer");
+  }
 }
 
 export function ImageViewerHost() {
@@ -121,6 +150,13 @@ export function ImageViewerHost() {
               {actualSize ? "화면에 맞추기" : "원본 크기"}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => void downloadImage(image)}
+            className="flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-bold text-black hover:bg-white/90"
+          >
+            <Download className="size-4" />내려받기
+          </button>
           <a
             href={image.src}
             target="_blank"

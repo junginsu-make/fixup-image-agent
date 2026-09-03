@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
+import { Badge, Card, CardContent } from "@fixup/ui";
 import { DeleteWorkButton } from "../_components/delete-work-button";
 
 interface PosterProjectSummary {
@@ -11,6 +11,7 @@ interface PosterProjectSummary {
   status: string;
   ratio: string;
   updatedAt: string;
+  images?: Array<{ url?: string; variantIndex: number }>;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -53,31 +54,46 @@ export function PosterGallery() {
     return <p className="text-sm text-muted-foreground">아직 만든 이미지가 없습니다.</p>;
   }
 
+  // 목록에도 무엇을 만들었는지 보여준다. 제목만 있으면 열어 보기 전에는
+  // 알 수 없다 — 카드뉴스 목록이 쓰는 것과 같은 격자다.
   return (
-    <div className="grid gap-3">
-      {projects.map((project) => (
-        <Card key={project.id} className="relative">
-          <DeleteWorkButton
-            endpoint={`/api/poster/projects/${project.id}`}
-            title={project.title}
-            what=" 이미지 작업"
-            onDeleted={() => setProjects((current) => (current ?? []).filter((entry) => entry.id !== project.id))}
-          />
-          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
-            <div className="min-w-0">
-              <CardTitle className="truncate text-base">{project.title}</CardTitle>
-              <p className="mt-1 text-meta text-subtle-foreground">
-                {project.ratio} · {STATUS_LABEL[project.status] ?? project.status} ·{" "}
-                {new Date(project.updatedAt).toLocaleString("ko-KR")}
-              </p>
-            </div>
-            <Button asChild size="sm" variant="secondary" className="mr-8">
-              <Link href={`/poster/${project.id}`}>열기</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="hidden" />
-        </Card>
-      ))}
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      {projects.map((project) => {
+        const cover = project.images?.find((image) => image.url)?.url ?? null;
+        const made = project.images?.filter((image) => image.url).length ?? 0;
+        return (
+          <Card key={project.id} className="relative overflow-hidden">
+            <DeleteWorkButton
+              endpoint={`/api/poster/projects/${project.id}`}
+              title={project.title}
+              what=" 이미지 작업"
+              onDeleted={() => setProjects((current) => (current ?? []).filter((entry) => entry.id !== project.id))}
+            />
+            <Link href={`/poster/${project.id}`} className="block">
+              {/* 잘라 내지 않는다. 비율이 제각각이라 잘라 놓으면 무엇을
+                   만들었는지 알아볼 수 없다. */}
+              <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
+                {cover ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={cover} alt={project.title} className="h-full w-full object-contain" />
+                ) : (
+                  <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
+                )}
+              </div>
+              <CardContent className="grid gap-2 p-3">
+                <p className="truncate text-sm font-bold">{project.title}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="secondary">{STATUS_LABEL[project.status] ?? project.status}</Badge>
+                  {made ? <Badge variant="secondary">{made}장</Badge> : null}
+                </div>
+                <p className="text-meta text-subtle-foreground">
+                  {new Date(project.updatedAt).toLocaleString("ko-KR")} · {project.ratio}
+                </p>
+              </CardContent>
+            </Link>
+          </Card>
+        );
+      })}
     </div>
   );
 }

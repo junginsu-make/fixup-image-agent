@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { Download, Wand2 } from "lucide-react";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
-import { SaveToLibrary } from "../../_components/save-to-library";
+import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
 
@@ -31,12 +33,19 @@ type TextSlot = "kind" | "headline" | "subline" | "scene" | "subject" | "action"
   | "dominantColor" | "accentColor" | "forbidden";
 
 /**
- * 앞 화면(`/poster/new`)의 01~03 에서 이어진다.
+ * 다섯 단계를 **늘 다 보여준다.**
  *
- * 번호를 이어 붙이는 이유는 사용자가 한 흐름으로 느끼기 때문이다 — 주소가
- * 바뀌었다고 처음부터 다시 세면 어디쯤 왔는지 알 수 없다.
+ * 전에는 이 화면에서 04·05 만 보였다. 앞 세 단계는 다른 주소(`/poster/new`)라
+ * 사라진 것인데, 사용자에게는 한 흐름이라 "왜 1~3 이 없지" 가 된다.
+ * 어디쯤 왔는지 알려면 전체가 보여야 한다.
+ *
+ * 앞 세 단계를 누르면 그 단계로 돌아간다. 이미 만든 작업이라도 레퍼런스나
+ * 규격을 다시 고르고 싶을 수 있다.
  */
 const STEPS: StepDefinition[] = [
+  { id: "reference", label: "01 레퍼런스", desc: "따라 만들 이미지" },
+  { id: "spec", label: "02 규격", desc: "비율 · 모델 · 장수" },
+  { id: "instruction", label: "03 지시", desc: "한 줄만" },
   { id: "plan", label: "04 기획 확인", desc: "틀린 칸만 고치기" },
   { id: "result", label: "05 결과", desc: "고르고 검수" },
 ];
@@ -61,6 +70,14 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
   const [editText, setEditText] = React.useState("");
+  const router = useRouter();
+  /** 지금 고치는 중인 변형. 한 번에 한 장만 고친다. */
+  const [editing, setEditing] = React.useState<string | null>(null);
+
+  function downloadVariant(image: PosterImage) {
+    const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
+    void downloadImage({ src, name: `${project.title} 변형 ${image.variantIndex + 1}.png` });
+  }
   const { start, finish } = useRunningJobs();
 
   // 화면을 떠나면 여기서 물어보기를 그만둔다. 셸이 이어받으므로 결과는 안 놓친다.
@@ -201,6 +218,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
       setBusy("고치는 중… 2~3분 걸립니다");
       await pollUntilDone(start.submission, 1);
       setEditText("");
+      setEditing(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "고치지 못했습니다.");
     } finally {
@@ -252,7 +270,15 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
 
   return (
     <div className="grid gap-6">
-      <StepBar steps={STEPS} current={current} />
+      <StepBar
+        steps={STEPS}
+        current={current}
+        onJump={(id) => {
+          // 앞 세 단계는 새로 만드는 화면에 있다. 거기로 보낸다.
+          if (id === "plan" || id === "result") return;
+          router.push("/poster/new");
+        }}
+      />
 
       {error ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -363,29 +389,11 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
         </CardHeader>
         <CardContent>
           {list.some((image) => image.selected) ? (
-            <div className="mb-5 grid gap-3 rounded-lg border border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-bold">고른 변형으로 이어서 하기</p>
-                <Button size="sm" variant="secondary" onClick={() => void review()} disabled={Boolean(busy)}>
-                  검수하기
-                </Button>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="poster-edit">무엇을 고칠까요</Label>
-                <Textarea
-                  id="poster-edit"
-                  rows={2}
-                  value={editText}
-                  onChange={(event) => setEditText(event.target.value)}
-                  placeholder="배경을 밤으로 바꿔 주세요"
-                />
-                <p className="text-xs text-subtle-foreground">
-                  고른 이미지를 기준으로 한 장만 다시 만듭니다. 처음부터 만들지 않습니다.
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <Button size="sm" onClick={() => void edit()} disabled={Boolean(busy)}>고치기</Button>
-              </div>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-4">
+              <p className="text-sm">고른 변형만 검수합니다. 글자가 원고대로 들어갔는지 봅니다.</p>
+              <Button size="sm" variant="secondary" onClick={() => void review()} disabled={Boolean(busy)}>
+                검수하기
+              </Button>
             </div>
           ) : null}
 
@@ -413,22 +421,48 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                       </div>
                     )}
                   </button>
-                  <figcaption className="text-xs">
+                  <figcaption className="grid gap-2 text-xs">
                     <span className={cn("font-bold", image.selected && "text-primary")}>
                       변형 {image.variantIndex + 1}{image.selected ? " · 선택됨" : ""}
                     </span>
-                    <a
-                      href={`/api/poster/projects/${project.id}/images/${image.variantIndex}/file`}
-                      download={`poster-${image.variantIndex + 1}.png`}
-                      className="ml-2 underline underline-offset-2 hover:text-foreground"
-                    >
-                      내려받기
-                    </a>
-                    <SaveToLibrary
-                      className="block"
-                      fileUrl={`/api/poster/projects/${project.id}/images/${image.variantIndex}/file`}
-                      title={`${project.title} 변형 ${image.variantIndex + 1}`}
-                    />
+                    {/* 만든 것은 이미 작업물로 저장돼 있다. 여기서 따로 보관할
+                        일이 없다. 대신 이 한 장만 고치는 길을 둔다. */}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void downloadVariant(image)}
+                      >
+                        <Download />내려받기
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={editing === image.id ? "default" : "outline"}
+                        onClick={() => { void select(image.id); setEditing(editing === image.id ? null : image.id); }}
+                        disabled={Boolean(busy)}
+                      >
+                        <Wand2 />이 장만 고치기
+                      </Button>
+                    </div>
+                    {editing === image.id ? (
+                      <div className="grid gap-1.5 rounded-md border border-border p-2.5">
+                        <Label htmlFor={`poster-edit-${image.id}`} className="text-xs">무엇을 고칠까요</Label>
+                        <Textarea
+                          id={`poster-edit-${image.id}`}
+                          rows={2}
+                          value={editText}
+                          onChange={(event) => setEditText(event.target.value)}
+                          placeholder="배경을 밤으로 바꿔 주세요"
+                        />
+                        <p className="text-meta text-subtle-foreground">
+                          이 장을 기준으로 한 장만 다시 만듭니다. 처음부터 만들지 않습니다.
+                        </p>
+                        <div className="flex justify-end gap-1.5">
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>취소</Button>
+                          <Button size="sm" onClick={() => void edit()} disabled={Boolean(busy)}>고치기</Button>
+                        </div>
+                      </div>
+                    ) : null}
                     {image.review ? (
                       <span
                         role={image.review.decision === "pass" ? undefined : "alert"}
