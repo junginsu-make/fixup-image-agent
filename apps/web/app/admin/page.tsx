@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
 import type { MemberProfile } from "../../lib/membership/types";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isAiBadgeEnabled } from "../../lib/ai-badge-setting";
-import { approveMember, deleteMember, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota } from "./actions";
+import { approveMember, deleteMember, moveShowcase, removeShowcase, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota, updateShowcase } from "./actions";
+import { listShowcaseForAdmin } from "../api/showcase/store";
+import type { ShowcaseAdminView } from "../api/showcase/core";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 import { CostPanel } from "./CostPanel";
 import {
@@ -77,6 +79,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       isAiBadgeEnabled(),
     ]);
 
+  /**
+   * 첫 화면에 걸린 것들.
+   *
+   * **못 읽어도 던지지 않는다.** 이 표는 나중에 붙은 것이라, 마이그레이션을
+   * 아직 안 돌린 서버에서는 없다. 그 한 줄 때문에 회원 승인까지 막히면 안
+   * 된다 — 못 읽었으면 `null` 로 두고 패널에서 그렇게 말한다.
+   */
+  const showcase = await listShowcaseForAdmin().catch(() => null);
+
   const summary = (summaryResult.data?.[0] ?? { today_units: 0, month_units: 0 }) as {
     today_units: number | string;
     month_units: number | string;
@@ -114,6 +125,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       />
 
       <AiBadgePanel enabled={aiBadgeOn} />
+
+      <ShowcasePanel items={showcase} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
         <UsageChart daily={daily} />
@@ -281,9 +294,23 @@ function TopUsers({ users }: { users: TopUsage[] }) {
   );
 }
 
+/**
+ * 첫 화면 갤러리 알림.
+ *
+ * 아래 사슬에 매달지 않고 표로 뺀다. 다섯 개를 더 이으면 무엇이 무엇의
+ * 짝인지 눈으로 못 따라간다.
+ */
+const SHOWCASE_NOTICE: Record<string, string> = {
+  showcase_on: "다시 첫 화면에 겁니다.",
+  showcase_off: "첫 화면에서 내렸습니다. 그림은 그대로 두었으니 언제든 다시 켤 수 있습니다.",
+  showcase_saved: "문구를 저장했습니다.",
+  showcase_moved: "차례를 바꿨습니다.",
+  showcase_removed: "첫 화면에서 지웠습니다. 원본 작업물은 그대로 있습니다.",
+};
+
 function AdminNotice({ notice }: { notice: string }) {
   const failed = notice === "approved_email_failed";
-  const message = notice === "approved"
+  const message = SHOWCASE_NOTICE[notice] ?? (notice === "approved"
     ? "회원 승인과 이메일 발송을 완료했습니다."
     : notice === "email_sent"
       ? "승인 이메일을 다시 보냈습니다."
@@ -301,7 +328,7 @@ function AdminNotice({ notice }: { notice: string }) {
                   ? "이제부터 만드는 그림에 \"AI 이미지\" 표기를 붙입니다."
                   : notice === "badge_off"
                     ? "이제부터 만드는 그림에는 표기를 붙이지 않습니다. 이미 만들어 둔 그림은 그대로입니다."
-            : "회원은 승인됐지만 이메일 발송에 실패했습니다. SMTP 설정 확인 후 재발송해 주세요.";
+            : "회원은 승인됐지만 이메일 발송에 실패했습니다. SMTP 설정 확인 후 재발송해 주세요.");
   return <div className={`rounded-md border px-4 py-3 text-sm ${failed ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-primary/30 bg-primary-soft"}`}>{message}</div>;
 }
 
@@ -337,6 +364,107 @@ function AiBadgePanel({ enabled }: { enabled: boolean }) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 첫 화면 갤러리.
+ *
+ * **거는 것은 여기가 아니라 라이브러리에서 한다.** 무엇을 걸지는 그림을 보고
+ * 정하는 일이라, 목록만 있는 화면에서 고르면 판단이 안 선다. 여기서는 이미
+ * 건 것을 다룬다 — 차례, 문구, 껐다 켜기, 지우기.
+ *
+ * `items` 가 `null` 이면 표를 못 읽은 것이다. 대개는 마이그레이션을 아직 안
+ * 돌린 서버다. 그럴 때 빈 목록으로 보여주면 "아직 아무것도 안 걸었네"로
+ * 읽혀, 걸어도 안 걸리는 이유를 영영 못 찾는다.
+ */
+function ShowcasePanel({ items }: { items: ShowcaseAdminView[] | null }) {
+  return (
+    <Card>
+      <CardHeader><CardTitle>첫 화면 갤러리</CardTitle></CardHeader>
+      <CardContent className="grid gap-4">
+        <p className="text-xs text-muted-foreground">
+          첫 화면에 걸 그림은 <Link href="/library" className="underline">라이브러리 → 작업물</Link>에서 그림을 열고
+          「첫 화면에 걸기」로 고릅니다. 아무것도 안 걸면 첫 화면은 미리 넣어 둔 네 장을 그대로 보여줍니다.
+        </p>
+
+        {items === null ? (
+          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            갤러리 표를 읽지 못했습니다. <code>supabase/migrations/202609040011_showcase.sql</code> 을 아직 안 돌린 서버일 수 있습니다.
+            표가 없으면 그림을 걸어도 걸리지 않습니다.
+          </p>
+        ) : items.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            아직 아무것도 걸지 않았습니다. 첫 화면은 미리 넣어 둔 네 장을 보여주고 있습니다.
+          </p>
+        ) : (
+          <ul className="grid gap-3">
+            {items.map((item, index) => (
+              <ShowcaseRow key={item.id} item={item} first={index === 0} last={index === items.length - 1} />
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** 걸린 그림 한 줄. */
+function ShowcaseRow({ item, first, last }: { item: ShowcaseAdminView; first: boolean; last: boolean }) {
+  const kindName = item.sourceKind === "sns" ? "카드뉴스" : item.sourceKind === "poster" ? "이미지" : "라이브러리";
+
+  return (
+    <li className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-start">
+      <div className="grid aspect-square w-[88px] place-items-center overflow-hidden rounded-md bg-muted">
+        {item.visible ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.url} alt={item.caption ?? "첫 화면에 걸린 그림"} className="h-full w-full object-contain" />
+        ) : (
+          // 끈 그림은 주소까지 막힌다 — 껐는데 주소를 아는 사람이 계속 볼 수
+          // 있으면 껐다고 할 수 없다. 그래서 여기서도 안 보인다.
+          <span className="px-1 text-center text-[11px] leading-tight text-muted-foreground">꺼 놓아<br />안 보입니다</span>
+        )}
+      </div>
+
+      <form action={updateShowcase} className="grid gap-2">
+        <input type="hidden" name="id" value={item.id} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={item.visible ? "default" : "secondary"}>{item.visible ? "걸림" : "내림"}</Badge>
+          <span className="text-xs text-muted-foreground">{kindName} · {item.sourceIndex + 1}번째 장 · {item.position + 1}번 자리</span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_auto]">
+          <Input name="kindLabel" defaultValue={item.kindLabel ?? ""} placeholder="종류 (예: 카드뉴스)" maxLength={60} />
+          <Input name="caption" defaultValue={item.caption ?? ""} placeholder="설명 — 화면에는 안 보이고 검색엔진만 읽습니다" maxLength={200} />
+          <Button type="submit" size="sm" variant="outline">문구 저장</Button>
+        </div>
+      </form>
+
+      <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+        <form action={moveShowcase}>
+          <input type="hidden" name="id" value={item.id} />
+          <input type="hidden" name="direction" value="up" />
+          <Button type="submit" size="icon" variant="ghost" aria-label="앞으로" disabled={first}><ArrowUp /></Button>
+        </form>
+        <form action={moveShowcase}>
+          <input type="hidden" name="id" value={item.id} />
+          <input type="hidden" name="direction" value="down" />
+          <Button type="submit" size="icon" variant="ghost" aria-label="뒤로" disabled={last}><ArrowDown /></Button>
+        </form>
+        <form action={updateShowcase}>
+          <input type="hidden" name="id" value={item.id} />
+          <input type="hidden" name="visible" value={item.visible ? "off" : "on"} />
+          <Button type="submit" size="sm" variant="outline">{item.visible ? "내리기" : "다시 걸기"}</Button>
+        </form>
+        <form action={removeShowcase}>
+          <input type="hidden" name="id" value={item.id} />
+          <ConfirmSubmitButton
+            variant="ghost"
+            confirmMessage="첫 화면에서 지웁니다. 원본 작업물은 그대로 남습니다. 계속할까요?"
+            pendingLabel="지우는 중..."
+          >지우기</ConfirmSubmitButton>
+        </form>
+      </div>
+    </li>
   );
 }
 

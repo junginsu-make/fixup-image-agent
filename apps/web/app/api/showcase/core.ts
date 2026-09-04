@@ -88,6 +88,14 @@ export function toShowcaseView(row: ShowcaseRow): ShowcaseView {
 export interface ShowcaseAdminView extends ShowcaseView {
   sourceKind: ShowcaseSourceKind;
   sourceId: string;
+  /**
+   * 원본에서 몇 번째 장인가.
+   *
+   * 카드뉴스는 한 작업에 여러 장이 들어 있다. 이 값이 없으면 라이브러리에서
+   * "이 작업의 무언가가 걸렸다"까지만 알 뿐, 지금 보고 있는 장이 그 장인지를
+   * 가릴 수 없어 같은 그림을 또 걸려다 중복 오류를 만난다.
+   */
+  sourceIndex: number;
   position: number;
   visible: boolean;
   createdAt: string;
@@ -98,10 +106,35 @@ export function toShowcaseAdminView(row: ShowcaseRow): ShowcaseAdminView {
     ...toShowcaseView(row),
     sourceKind: row.source_kind,
     sourceId: row.source_id,
+    sourceIndex: row.source_index,
     position: row.position,
     visible: row.visible,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * 이 그림이 이미 갤러리에 걸려 있는가.
+ *
+ * DB 의 중복 방지 열쇠(`source_kind, source_id, source_index`)와 **같은 세
+ * 값으로** 본다. 화면이 다른 기준으로 판단하면, 화면에는 "안 걸림"이라 떠
+ * 있는데 누르는 순간 중복 오류가 나는 어긋남이 생긴다.
+ *
+ * 꺼 놓은 것도 걸린 것으로 본다. 꺼져 있어도 행은 남아 있어 다시 걸 수 없고,
+ * 관리자가 할 일은 새로 거는 것이 아니라 켜는 것이다.
+ */
+export function isShowcased(
+  items: readonly ShowcaseAdminView[],
+  sourceKind: ShowcaseSourceKind,
+  sourceId: string,
+  sourceIndex: number,
+): boolean {
+  return items.some(
+    (item) =>
+      item.sourceKind === sourceKind &&
+      item.sourceId === sourceId &&
+      item.sourceIndex === sourceIndex,
+  );
 }
 
 const EXTENSIONS: Record<string, string> = {

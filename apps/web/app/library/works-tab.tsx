@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { openImageGallery } from "../_components/image-viewer";
+import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -27,7 +28,14 @@ import {
 
 type Tool = "sns" | "poster";
 
-interface WorkImage { url: string; label: string }
+/**
+ * 한 장.
+ *
+ * `index` 는 **원본에서의 자리**다 — 카드뉴스는 카드 번호, 포스터는 변형
+ * 번호. 배열 순서와 다를 수 있다(못 만든 카드는 목록에서 빠진다). 첫 화면에
+ * 걸 때 이 값으로 원본을 되짚으므로 배열 순서로 대신하면 엉뚱한 장이 걸린다.
+ */
+interface WorkImage { url: string; label: string; index: number }
 
 interface Work {
   id: string;
@@ -79,7 +87,7 @@ function toSnsWork(project: Record<string, any>): Work {
     project.data?.flow?.cards ?? [];
   const images = cards
     .filter((card) => card.assetUrl)
-    .map((card) => ({ url: card.assetUrl as string, label: `${card.index}번 카드` }));
+    .map((card) => ({ url: card.assetUrl as string, label: `${card.index}번 카드`, index: card.index }));
   return {
     id: project.id,
     tool: "sns",
@@ -107,7 +115,7 @@ function toPosterWork(project: Record<string, any>): Work {
   const images: WorkImage[] = (project.images ?? [])
     .filter((image: { url?: string }) => image.url)
     .map((image: { url: string; variantIndex: number }) => ({
-      url: image.url, label: `변형 ${image.variantIndex + 1}`,
+      url: image.url, label: `변형 ${image.variantIndex + 1}`, index: image.variantIndex,
     }));
   return {
     id: project.id,
@@ -137,6 +145,15 @@ export function WorksTab() {
   const [message, setMessage] = React.useState("");
   const [confirming, setConfirming] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  /**
+   * 첫 화면에 걸린 것들. **null 이면 관리자가 아니다.**
+   *
+   * 따로 "나는 관리자인가"를 묻지 않는다. 관리 목록을 달라고 해서 주면
+   * 관리자고, 막히면 아니다 — 두 번 물으면 두 대답이 어긋날 수 있다.
+   */
+  const [showcase, setShowcase] = React.useState<ShowcaseAdminView[] | null>(null);
+  const [featuring, setFeaturing] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState("");
   const pending = React.useMemo(
     () => (works ?? []).find((work) => work.id === confirming) ?? null,
     [works, confirming],
@@ -166,7 +183,72 @@ export function WorksTab() {
       })),
       deleteLabel: "이 작업 지우기",
       onDelete: () => setConfirming(work.id),
+      // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다.
+      action: showcase
+        ? {
+            label: "첫 화면에 걸기",
+            doneLabel: "첫 화면에 걸림",
+            doneAt: (position) => {
+              const image = work.images[position];
+              return image ? isShowcased(showcase, work.tool, work.id, image.index) : false;
+            },
+            run: (position) => void feature(work, position),
+          }
+        : undefined,
     });
+  }
+
+  /**
+   * 이 장을 첫 화면 갤러리에 건다. **관리자만.**
+   *
+   * 회원 작업물은 대부분 출시 전 상업용 기획물이라, 만들자마자 공개 인터넷에
+   * 걸리면 사고다. 그래서 자동으로 걸지 않고 사람이 한 장씩 고른다.
+   *
+   * 설명은 여기서 붙이지 않는다. 작업 제목은 회원이 자기 편하려고 쓴 말이라
+   * 그대로 첫 화면에 내걸 말이 아니다 — 문구는 관리자 화면에서 따로 쓴다.
+   */
+  async function feature(work: Work, position: number) {
+    const image = work.images[position];
+    if (!image || featuring) return;
+    setFeaturing(work.id);
+    setNotice("");
+    try {
+      const response = await fetch("/api/showcase/manage", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceKind: work.tool,
+          sourceId: work.id,
+          imageIndex: image.index,
+          kindLabel: TOOL_LABEL[work.tool],
+        }),
+      });
+      const body = (await response.json()) as { ok?: boolean; message?: string };
+      if (!body.ok) throw new Error(body.message ?? "걸지 못했습니다.");
+      // 방금 건 것을 목록에 더한다. 다시 받아오면 큰 그림을 또 내려받게 된다.
+      setShowcase((current) => [
+        ...(current ?? []),
+        {
+          id: `${work.tool}-${work.id}-${image.index}`,
+          url: "",
+          width: null,
+          height: null,
+          caption: null,
+          kindLabel: TOOL_LABEL[work.tool],
+          sourceKind: work.tool,
+          sourceId: work.id,
+          sourceIndex: image.index,
+          position: 0,
+          visible: true,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      setNotice(`「${work.title}」 ${image.label}을 첫 화면에 걸었습니다. 순서와 문구는 관리자 화면에서 고칩니다.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "걸지 못했습니다.");
+    } finally {
+      setFeaturing(null);
+    }
   }
 
   async function remove(work: Work) {
@@ -197,6 +279,16 @@ export function WorksTab() {
           fetch("/api/poster/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
         ]);
         if (!alive) return;
+
+        // 관리자면 첫 화면에 무엇이 걸렸는지도 안다. 막히면 관리자가 아니다 —
+        // 작업물 목록과 따로 다뤄서, 이쪽이 실패해도 목록은 그대로 뜬다.
+        void fetch("/api/showcase/manage", { cache: "no-store" })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((body: { ok?: boolean; items?: ShowcaseAdminView[] } | null) => {
+            if (alive && body?.ok) setShowcase(body.items ?? []);
+          })
+          .catch(() => {});
+
         const merged = [
           ...(sns.ok ? (sns.projects ?? []).map(toSnsWork) : []),
           ...(poster.ok ? (poster.projects ?? []).map(toPosterWork) : []),
@@ -217,8 +309,18 @@ export function WorksTab() {
     <div className="grid gap-5">
       <div>
         <h2 className="text-xl font-semibold">작업물</h2>
-        <p className="mt-1 text-sm text-muted-foreground">이 시스템으로 만든 결과물입니다. 눌러서 언제·무엇을·어떤 설정으로 만들었는지 봅니다.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          이 시스템으로 만든 결과물입니다. 눌러서 언제·무엇을·어떤 설정으로 만들었는지 봅니다.
+          {showcase ? " 관리자는 그림을 열어 첫 화면 갤러리에 걸 수 있습니다." : ""}
+        </p>
       </div>
+
+      {notice ? (
+        <p role="status" className="rounded-md border border-primary/30 bg-primary-soft px-4 py-3 text-sm">{notice}</p>
+      ) : null}
+      {featuring ? (
+        <p role="status" className="text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />첫 화면에 거는 중입니다. 그림을 한 벌 떠 두느라 몇 초 걸립니다.</p>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {works.map((work) => (
@@ -238,6 +340,9 @@ export function WorksTab() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary">{TOOL_LABEL[work.tool]}</Badge>
                 {work.images.length > 1 ? <Badge variant="secondary">{work.images.length}장 묶음</Badge> : null}
+                {showcase && work.images.some((image) => isShowcased(showcase, work.tool, work.id, image.index))
+                  ? <Badge>첫 화면</Badge>
+                  : null}
                 <Badge variant={(STATUS[work.status] ?? { tone: "secondary" as const }).tone}>
                   {(STATUS[work.status] ?? { label: work.status }).label}
                 </Badge>

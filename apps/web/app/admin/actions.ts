@@ -7,6 +7,7 @@ import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
+import { patchShowcaseItem, removeShowcaseItem, reorderShowcaseItem } from "../api/showcase/store";
 
 function readUserId(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -115,6 +116,77 @@ export async function updateAiBadge(formData: FormData) {
   await setAiBadgeEnabled(next === "on");
   revalidatePath("/admin");
   redirect(`/admin?notice=${next === "on" ? "badge_on" : "badge_off"}`);
+}
+
+function readShowcaseId(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("올바르지 않은 갤러리 항목입니다.");
+  return id;
+}
+
+/**
+ * 첫 화면 갤러리 한 칸을 고친다 — 켜고 끄기, 문구.
+ *
+ * 끄기와 지우기를 나눈 이유는 하나다. 껐다가 다시 켜려고 설명을 처음부터
+ * 다시 쓰게 하면 안 된다. 지우기는 복사본 파일까지 함께 없앤다.
+ *
+ * 빈 칸으로 낸 문구는 `null` 로 보낸다 — "안 보냈다"와 "지워 달라"는 다른
+ * 뜻이고, 여기서는 관리자가 비웠으니 지워 달라는 뜻이다.
+ */
+export async function updateShowcase(formData: FormData) {
+  await requireAdmin();
+  const id = readShowcaseId(formData);
+  const visible = String(formData.get("visible") || "");
+  const hasText = formData.has("caption") || formData.has("kindLabel");
+
+  const caption = String(formData.get("caption") || "").trim();
+  const kindLabel = String(formData.get("kindLabel") || "").trim();
+  if (caption.length > 200) throw new Error("설명은 200자를 넘길 수 없습니다.");
+  if (kindLabel.length > 60) throw new Error("종류 이름표는 60자를 넘길 수 없습니다.");
+
+  const result = await patchShowcaseItem({
+    id,
+    ...(visible === "on" || visible === "off" ? { visible: visible === "on" } : {}),
+    ...(hasText ? { caption: caption || null, kindLabel: kindLabel || null } : {}),
+  });
+  if (!result.ok) throw new Error(result.message);
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  redirect(`/admin?notice=${visible === "off" ? "showcase_off" : visible === "on" ? "showcase_on" : "showcase_saved"}`);
+}
+
+/** 갤러리에서 앞뒤로 한 칸 옮긴다. */
+export async function moveShowcase(formData: FormData) {
+  await requireAdmin();
+  const id = readShowcaseId(formData);
+  const direction = String(formData.get("direction") || "");
+  if (direction !== "up" && direction !== "down") throw new Error("올바르지 않은 방향입니다.");
+
+  const result = await reorderShowcaseItem(id, direction);
+  if (!result.ok) throw new Error(result.message);
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  redirect("/admin?notice=showcase_moved");
+}
+
+/**
+ * 갤러리에서 내리고 복사본까지 지운다.
+ *
+ * 원본 작업물은 그대로 남는다 — 여기서 지우는 것은 첫 화면에 걸려고 떠 둔
+ * 한 벌뿐이다. 다시 걸고 싶으면 라이브러리에서 다시 걸면 된다.
+ */
+export async function removeShowcase(formData: FormData) {
+  await requireAdmin();
+  const id = readShowcaseId(formData);
+
+  const result = await removeShowcaseItem(id);
+  if (!result.ok) throw new Error(result.message);
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  redirect("/admin?notice=showcase_removed");
 }
 
 export async function updateUsdKrw(formData: FormData) {

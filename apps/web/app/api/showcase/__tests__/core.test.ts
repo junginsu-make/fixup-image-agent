@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ShowcaseCreateSchema,
+  isShowcased,
   showcaseAssetPath,
   showcasePatchRow,
   toShowcaseAdminView,
@@ -54,6 +55,12 @@ describe("관리자가 보는 모양", () => {
   it("어디서 온 것인지와 꺼져 있는지를 더 준다", () => {
     const view = toShowcaseAdminView({ ...ROW, visible: false });
     expect(view).toMatchObject({ sourceKind: "poster", sourceId: "p1", visible: false });
+  });
+
+  it("몇 번째 장인지도 준다 — 카드뉴스는 한 작업에 여러 장이다", () => {
+    // 이 값이 없으면 라이브러리가 "이 작업의 무언가가 걸렸다"까지만 알아,
+    // 지금 보고 있는 장을 또 걸려다 중복 오류를 만난다.
+    expect(toShowcaseAdminView(ROW).sourceIndex).toBe(2);
   });
 
   it("그래도 소유자는 담지 않는다", () => {
@@ -116,5 +123,37 @@ describe("걸 것을 고를 때", () => {
         sourceId: "11111111-1111-4111-8111-111111111111",
       }),
     ).toThrow();
+  });
+});
+
+describe("이미 걸린 그림인가", () => {
+  const HUNG = [
+    toShowcaseAdminView(ROW),
+    toShowcaseAdminView({ ...ROW, id: "s2", source_kind: "sns", source_id: "n1", source_index: 0 }),
+  ];
+
+  it("세 값이 모두 같아야 걸린 것으로 본다", () => {
+    expect(isShowcased(HUNG, "poster", "p1", 2)).toBe(true);
+    expect(isShowcased(HUNG, "sns", "n1", 0)).toBe(true);
+  });
+
+  it("같은 작업이라도 다른 장은 안 걸린 것이다", () => {
+    // 카드뉴스 3번을 걸었다고 5번까지 걸린 것으로 보면, 관리자는 5번을
+    // 걸 방법이 없어진다.
+    expect(isShowcased(HUNG, "sns", "n1", 5)).toBe(false);
+  });
+
+  it("도구가 다르면 남이다 — id 가 겹칠 수 있다", () => {
+    expect(isShowcased(HUNG, "sns", "p1", 2)).toBe(false);
+  });
+
+  it("꺼 놓은 것도 걸린 것으로 본다", () => {
+    // 꺼져 있어도 행은 남아 있어 다시 걸 수 없다. 할 일은 켜는 것이다.
+    const off = [toShowcaseAdminView({ ...ROW, visible: false })];
+    expect(isShowcased(off, "poster", "p1", 2)).toBe(true);
+  });
+
+  it("아무것도 안 걸렸으면 거짓이다", () => {
+    expect(isShowcased([], "poster", "p1", 2)).toBe(false);
   });
 });
