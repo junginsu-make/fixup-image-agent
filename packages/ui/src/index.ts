@@ -27,16 +27,16 @@ export {
   DialogDescription,
 } from "./components/ui/dialog";
 export {
-  BottomSheet,
-  BottomSheetTrigger,
-  BottomSheetClose,
-  BottomSheetContent,
-  BottomSheetHeader,
-  BottomSheetBody,
-  BottomSheetFooter,
-  BottomSheetTitle,
-  BottomSheetDescription,
-} from "./components/ui/bottom-sheet";
+  SidePanel,
+  SidePanelTrigger,
+  SidePanelClose,
+  SidePanelContent,
+  SidePanelHeader,
+  SidePanelBody,
+  SidePanelFooter,
+  SidePanelTitle,
+  SidePanelDescription,
+} from "./components/ui/side-panel";
 export { Input } from "./components/ui/input";
 export type { InputProps } from "./components/ui/input";
 export { Textarea } from "./components/ui/textarea";

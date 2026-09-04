@@ -71,23 +71,48 @@ export interface CharacterAngleInfo {
   directive: string;
 }
 
+/**
+ * 사람·캐릭터의 각도.
+ *
+ * **「본인 기준 왼쪽」으로 쓰지 않는다.** 전에는 "toward their own left" 였는데,
+ * 2026-09-04 운영에서 왼쪽 45°와 오른쪽 45°가 거의 같은 그림으로 나왔다.
+ * 원인이 둘이다.
+ *
+ *   1. 「본인 기준」은 모델이 대상의 관점으로 한 번 뒤집어 생각해야 한다.
+ *      그 추론이 매번 같게 되지 않는다.
+ *   2. 두 지시문이 **낱말 하나만** 달랐다. 나머지가 통째로 같으면, 앞의 참조
+ *      그림이 그 한 낱말을 눌러 버린다.
+ *
+ * 그래서 **화면 기준**으로 바꾸고, 서로 다른 신호를 두 개씩 준다 — 코가 어느
+ * 쪽 가장자리를 보는가, 그리고 어느 쪽 뺨이 카메라를 보는가.
+ *
+ * 둘의 방향이 어긋나지 않게 적어 둔다. 코가 화면 왼쪽을 보면 카메라에는
+ * **대상의 왼쪽 뺨**이 온다 — 정면일 때 대상의 왼쪽은 화면 오른쪽에 있고,
+ * 왼쪽으로 돌리면 그쪽이 앞으로 나온다.
+ */
 const PERSON_ANGLE: Record<CharacterAngle, string> = {
   front:
     "a straight-on front view with the head and torso facing the camera, both sides of the " +
     "face equally visible",
   left_45:
-    "a subject-left three-quarter view, with the character rotated about 45 degrees toward " +
-    "their own left while both eyes remain visible",
+    "a three-quarter view: rotate the subject about 45 degrees so the nose and chest point " +
+    "toward the LEFT edge of the frame. The camera therefore sees the subject's left cheek " +
+    "and left ear, while the right ear is hidden behind the head. Both eyes stay visible. " +
+    "This is NOT a front view",
   right_45:
-    "a subject-right three-quarter view, with the character rotated about 45 degrees toward " +
-    "their own right while both eyes remain visible",
+    "a three-quarter view: rotate the subject about 45 degrees so the nose and chest point " +
+    "toward the RIGHT edge of the frame. The camera therefore sees the subject's right cheek " +
+    "and right ear, while the left ear is hidden behind the head. Both eyes stay visible. " +
+    "This is NOT a front view",
   // 90도는 두 눈이 안 보인다. 보인다고 적으면 모델이 억지로 얼굴을 돌린다.
   left_90:
-    "a full side profile facing the subject's own left, rotated 90 degrees from the camera, " +
-    "with only one side of the face visible and the silhouette clearly readable",
+    "a full side profile: rotate the subject 90 degrees so the nose points straight at the " +
+    "LEFT edge of the frame. Only the subject's left cheek and left ear face the camera; the " +
+    "far eye is hidden. The silhouette must read clearly. This is NOT a front view",
   right_90:
-    "a full side profile facing the subject's own right, rotated 90 degrees from the camera, " +
-    "with only one side of the face visible and the silhouette clearly readable",
+    "a full side profile: rotate the subject 90 degrees so the nose points straight at the " +
+    "RIGHT edge of the frame. Only the subject's right cheek and right ear face the camera; " +
+    "the far eye is hidden. The silhouette must read clearly. This is NOT a front view",
   back:
     "a direct back view with the face fully hidden; accurately preserve the rear hairstyle, " +
     "silhouette, body proportions and outfit construction, and do not place facial features " +
@@ -104,18 +129,23 @@ const ANIMAL_ANGLE: Record<CharacterAngle, string> = {
   front:
     "a straight-on front view with the head and muzzle facing the camera, both sides of the " +
     "head equally visible",
+  // 사람과 같은 이유로 화면 기준이다. PERSON_ANGLE 의 주석 참조.
   left_45:
-    "a subject-left three-quarter view, rotated about 45 degrees toward its own left, with " +
-    "the head and muzzle still clearly readable",
+    "a three-quarter view: rotate the animal about 45 degrees so the muzzle and chest point " +
+    "toward the LEFT edge of the frame. The camera sees the animal's left cheek and left ear; " +
+    "the right ear is hidden behind the head. This is NOT a front view",
   right_45:
-    "a subject-right three-quarter view, rotated about 45 degrees toward its own right, with " +
-    "the head and muzzle still clearly readable",
+    "a three-quarter view: rotate the animal about 45 degrees so the muzzle and chest point " +
+    "toward the RIGHT edge of the frame. The camera sees the animal's right cheek and right " +
+    "ear; the left ear is hidden behind the head. This is NOT a front view",
   left_90:
-    "a full side profile facing the subject's own left, rotated 90 degrees from the camera, " +
-    "showing the whole body length and the coat pattern along that side",
+    "a full side profile: rotate the animal 90 degrees so the muzzle points straight at the " +
+    "LEFT edge of the frame, showing the whole body length and the coat pattern along the " +
+    "animal's left flank. This is NOT a front view",
   right_90:
-    "a full side profile facing the subject's own right, rotated 90 degrees from the camera, " +
-    "showing the whole body length and the coat pattern along that side",
+    "a full side profile: rotate the animal 90 degrees so the muzzle points straight at the " +
+    "RIGHT edge of the frame, showing the whole body length and the coat pattern along the " +
+    "animal's right flank. This is NOT a front view",
   back:
     "a direct back view from behind; accurately preserve the fur pattern, coat colours, tail " +
     "shape and body silhouette, and do not show the muzzle or eyes from this angle",
@@ -129,10 +159,23 @@ const ANIMAL_ANGLE: Record<CharacterAngle, string> = {
  */
 const OBJECT_ANGLE: Record<CharacterAngle, string> = {
   front: "a straight-on front view of the object, its front surface facing the camera",
-  left_45: "a three-quarter view rotated about 45 degrees to show the front and left side together",
-  right_45: "a three-quarter view rotated about 45 degrees to show the front and right side together",
-  left_90: "a flat side view of the object's left side, rotated 90 degrees from the camera",
-  right_90: "a flat side view of the object's right side, rotated 90 degrees from the camera",
+  // 사람과 같은 이유로 화면 기준이다. PERSON_ANGLE 의 주석 참조.
+  left_45:
+    "a three-quarter view: rotate the object about 45 degrees so its front surface points " +
+    "toward the LEFT edge of the frame, showing the front and the object's left side " +
+    "together. This is NOT a straight-on front view",
+  right_45:
+    "a three-quarter view: rotate the object about 45 degrees so its front surface points " +
+    "toward the RIGHT edge of the frame, showing the front and the object's right side " +
+    "together. This is NOT a straight-on front view",
+  left_90:
+    "a flat side view: rotate the object 90 degrees so its front surface points at the LEFT " +
+    "edge of the frame and only the object's left side is toward the camera. " +
+    "This is NOT a straight-on front view",
+  right_90:
+    "a flat side view: rotate the object 90 degrees so its front surface points at the RIGHT " +
+    "edge of the frame and only the object's right side is toward the camera. " +
+    "This is NOT a straight-on front view",
   back: "a direct rear view showing the back surface; preserve the silhouette, materials and construction",
 };
 
@@ -364,7 +407,11 @@ export function buildTurnaroundPrompt(input: {
     ? "shape, proportions, materials, colours and markings"
     : "face, body proportions, hairstyle, outfit and colour palette";
   return (
-    `The supplied reference image shows this ${noun}. Generate the same ${noun} as ` +
+    // **참조는 정면이다.** 그 말을 안 하면 모델이 참조를 그대로 베껴 놓고
+    // 각도만 조금 흉내 낸다. 2026-09-04 운영에서 왼쪽 45°와 오른쪽 45°가
+    // 거의 같은 그림으로 나온 원인 중 하나다.
+    `The supplied reference image shows this ${noun} in a FRONT view. It defines identity ` +
+    `only — do not copy its camera angle. Generate the same ${noun} re-posed as ` +
     `${angleDirective(input.angle, kind)}. Preserve the same ${identity} exactly. ` +
     `Identity description: ${input.identityPrompt}. ` +
     `Generate exactly one ${noun}.` + PLAIN_BACKGROUND +

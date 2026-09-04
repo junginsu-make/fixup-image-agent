@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
-  Badge, BottomSheet, BottomSheetBody, BottomSheetContent, BottomSheetDescription,
-  BottomSheetFooter, BottomSheetHeader, BottomSheetTitle,
-  Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
-  Input, Textarea, cn,
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Input, SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
+  SidePanelFooter, SidePanelHeader, SidePanelTitle, Textarea, cn,
 } from "@fixup/ui";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
@@ -124,18 +123,22 @@ export function CharacterStudio() {
   /** 각도를 만드는 동안 자리를 잡아 둘 칸. 비면 만드는 중이 아니다. */
   const [pending, setPending] = useState<string[]>([]);
   /**
-   * 2단계 창이 열려 있는가. **`chosen` 과 따로 든다.**
+   * 작업 패널이 열려 있는가.
    *
-   * 창을 닫는 것과 고른 정면을 버리는 것은 다른 일이다. 하나로 묶으면 실수로
-   * 바깥을 눌렀을 때 방금 만든 정면이 사라진다 — 그건 크레딧을 쓴 결과다.
+   * **후보 만들기부터 이 안에서 한다.** 전에는 만드는 자리가 페이지에 붙어
+   * 있어서, 후보가 나오면 페이지가 길어지고 정면을 고르면 또 길어졌다. 결과는
+   * 화면 반대편 카드에 들어가 거기까지 화면을 옮겨 줘야 했다.
+   *
+   * 왼쪽 페이지에는 무엇을 만들지 정하는 칸만 남는다. 패널을 닫으면 「내
+   * 캐릭터」에 저장된 것이 보인다.
    */
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   /**
    * 방금 만든 캐릭터. 창 안에서 결과까지 보여주려고 든다.
    *
-   * 전에는 만들자마자 창을 닫고 화면 반대편 카드로 데려다줬다. 만드는 데
-   * 몇 십 초를 기다린 사람이 그 사이에 다른 곳을 보고 있으면, 화면이 혼자
-   * 움직여 어디로 갔는지 모른다. 만든 자리에서 그대로 보여준다.
+   * 전에는 만들자마자 화면 반대편 카드로 데려다줬다. 만드는 데 몇 십 초를
+   * 기다린 사람이 그 사이에 다른 곳을 보고 있으면, 화면이 혼자 움직여 어디로
+   * 갔는지 모른다. 만든 자리에서 그대로 보여준다.
    */
   const [created, setCreated] = useState<Character | null>(null);
   const [redoing, setRedoing] = useState("");
@@ -232,7 +235,14 @@ export function CharacterStudio() {
     if (!description.trim()) return setMessage("무엇을 만들지 적어 주세요.");
     setBusy("candidates");
     setMessage("");
-    if (!append) setCandidates([]);
+    if (!append) {
+      setCandidates([]);
+      setChosen(null);
+      setCreated(null);
+    }
+    // 만드는 일은 전부 패널 안에서 본다. 기다리는 동안에도 열려 있어야
+    // 무엇이 되고 있는지 안다.
+    setPanelOpen(true);
     try {
       const body = await (await billableFetch("/api/characters", {
         body: JSON.stringify({
@@ -258,24 +268,22 @@ export function CharacterStudio() {
     }
   };
 
-  /** 1단계의 끝. 만들지 않고 고르기만 한다 — 만드는 것은 2단계다. */
+  /** 정면을 고른다. 아직 만들지 않는다 — 저장은 다음 자리에서 정한다. */
   const handleChoose = (candidate: Candidate) => {
     setChosen({ ...candidate, description, name, kind, look, modelId });
     setCreated(null);
     setMessage("");
-    // 2단계는 아래에서 올라오는 창이다. 전에는 이 자리에 칸이 더 생겨서 페이지가
-    // 길어졌고, 화면 밖으로 밀려난 그 칸까지 데려다줘야 했다.
-    setSheetOpen(true);
   };
 
   /**
-   * 2단계 창을 닫는다.
+   * 작업 패널을 닫는다.
    *
-   * **만들고 나서 닫을 때만 1단계를 비운다.** 만들기 전에 닫는 것은 「잠깐
-   * 접어 둔다」는 뜻이지 「버린다」가 아니다 — 고른 정면은 크레딧을 쓴 결과다.
+   * **만들고 나서 닫을 때만 왼쪽 칸을 비운다.** 만들기 전에 닫는 것은 「잠깐
+   * 접어 둔다」는 뜻이지 「버린다」가 아니다 — 만들어 둔 후보는 크레딧을 쓴
+   * 결과다. 다시 열면 그대로 있다.
    */
-  const closeSheet = () => {
-    setSheetOpen(false);
+  const closePanel = () => {
+    setPanelOpen(false);
     if (!created) return;
     setChosen(null);
     setCreated(null);
@@ -603,90 +611,42 @@ export function CharacterStudio() {
                   : <Sparkles size={16} className="mr-1.5" />}
                 {busy === "candidates" ? "만드는 중…" : `후보 ${candidateCount}장 만들기`}
               </Button>
-              {/* 2단계에는 자기 자리에 따로 띄운다. 여기 두면 한참 위에서 혼자 바뀐다. */}
+              {/* 만드는 중의 말은 패널이 한다. 여기 두면 한참 위에서 혼자 바뀐다. */}
               {message && !chosen ? (
                 <span className="text-xs text-muted-foreground">{message}</span>
               ) : null}
               {chosen ? (
                 <span className="text-xs text-muted-foreground">
-                  아래 2단계를 하는 동안 잠급니다. 고치려면 「다시 고르기」를 누르세요.
+                  오른쪽 패널에서 만드는 동안 잠급니다. 고치려면 「다시 고르기」를 누르세요.
                 </span>
               ) : null}
             </div>
 
-            {/* 1단계는 여기서 끝난다. 고르기만 하고 만들지 않는다. */}
-            {candidates.length && !chosen ? (
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium">마음에 드는 것을 고르세요</p>
-                  <Button
-                    type="button" variant="secondary" size="sm" disabled={locked}
-                    onClick={() => void handleCandidates(true)}
-                  >
-                    <RotateCw className="mr-1.5 size-3.5" />다른 후보 보기
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {candidates.map((candidate, index) => {
-                    const src = `data:${candidate.mimeType};base64,${candidate.base64}`;
-                    return (
-                      <div key={index} className="space-y-2">
-                        <button
-                          type="button" aria-label={`후보 ${index + 1} 크게 보기`}
-                          onClick={() => openImageGallery({
-                            images: candidates.map((entry, position) => ({
-                              src: `data:${entry.mimeType};base64,${entry.base64}`,
-                              alt: `후보 ${position + 1}`,
-                            })),
-                            index,
-                          })}
-                          className="block aspect-[3/4] w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img alt={`후보 ${index + 1}`} src={src} className="h-full w-full object-cover" />
-                        </button>
-                        <Button size="sm" className="w-full" disabled={locked}
-                          onClick={() => handleChoose(candidate)}>
-                          이것으로 정하기
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  고른다고 바로 만들지 않습니다 — 각도는 다음 단계에서 고릅니다.
-                  앞의 후보도 지우지 않습니다. 먼저 것이 나았을 수 있습니다.
-                </p>
-              </div>
-            ) : null}
-
-            {/* 정면을 정하면 2단계는 아래에서 올라오는 창으로 연다. 여기에는
-                창을 닫아 둔 사이에도 「무엇을 정했고 무엇이 남았는지」만 남긴다. */}
-            {chosen && !sheetOpen ? (
+            {/* 만드는 일은 오른쪽 패널에서 한다. 여기에는 닫아 둔 사이에도
+                「하던 것이 있다」만 남긴다 — 다시 열 길이 없으면 만들어 둔
+                후보가 사라진 것처럼 보인다. */}
+            {!panelOpen && (candidates.length || chosen) ? (
               <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/40 bg-primary-soft/40 p-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img alt="고른 정면" src={chosenSrc} className="h-16 w-12 flex-none rounded border object-cover" />
+                {chosen ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="고른 정면" src={chosenSrc} className="h-16 w-12 flex-none rounded border object-cover" />
+                ) : null}
                 <p className="min-w-0 flex-1 text-xs leading-relaxed text-subtle-foreground">
                   {created
                     ? "만들기를 마쳤습니다. 결과를 다시 보려면 여세요."
-                    : "이 정면으로 정했습니다. 각도는 아래 창에서 고릅니다."}
+                    : chosen
+                      ? "정면을 정했습니다. 저장할지 각도를 더 만들지 패널에서 고릅니다."
+                      : `후보 ${candidates.length}장을 만들어 뒀습니다.`}
                 </p>
-                <Button type="button" size="sm" onClick={() => setSheetOpen(true)}>
-                  {created ? "결과 보기" : "각도 고르기"}
-                </Button>
-                <Button
-                  type="button" variant="secondary" size="sm" disabled={Boolean(busy)}
-                  onClick={() => { setChosen(null); setCreated(null); setMessage(""); }}
-                >
-                  <RotateCw className="mr-1.5 size-3.5" />다시 고르기
+                <Button type="button" size="sm" onClick={() => setPanelOpen(true)}>
+                  {created ? "결과 보기" : "이어서 하기"}
                 </Button>
               </div>
             ) : null}
           </CardContent>
         </Card>
 
-        {/* 만든 결과가 여기로 들어간다. 화면이 좁으면 한참 아래라, 다 만들고 나면
-            데려다준다(handleCreate). 안 그러면 아무 일도 없었던 것처럼 보인다. */}
+        {/* 저장된 것. 패널을 닫으면 여기서 본다. */}
         <Card>
           <CardHeader>
             <CardTitle>내 캐릭터</CardTitle>
@@ -723,26 +683,32 @@ export function CharacterStudio() {
         </Card>
       </div>
 
-      {/* 2단계. 아래에서 올라오는 창이다.
+      {/* 만드는 일은 전부 여기서 한다 — 후보 고르기, 저장할지 각도까지 갈지,
+          그리고 결과까지.
 
-          전에는 이것이 1단계 밑에 칸으로 붙어 있었다. 그래서 정면을 고르는
-          순간 페이지가 길어졌고, 만들고 나면 결과는 화면 반대편 카드에 들어가
-          거기까지 화면을 옮겨 줘야 했다. 고르는 자리와 결과를 한 창에 둔다. */}
-      <BottomSheet open={sheetOpen && Boolean(chosen)} onOpenChange={(next) => { if (!next) closeSheet(); }}>
-        <BottomSheetContent className="sm:mx-auto sm:max-w-3xl">
-          <BottomSheetHeader className="pr-12">
-            <BottomSheetTitle>{created ? "다 만들었습니다" : "2단계 · 각도 만들기"}</BottomSheetTitle>
-            <BottomSheetDescription>
+          전에는 이 셋이 페이지에 차례로 붙어서 하나 할 때마다 페이지가
+          길어졌다. 결과는 화면 반대편 카드에 들어가 거기까지 화면을 옮겨
+          줘야 했다. 아래에서 올리는 창으로도 해 봤는데 화면 높이에 갇혀
+          그림 넉 장을 늘어놓기에 좁았다. 옆에서 나오면 높이를 통째로 쓴다. */}
+      <SidePanel open={panelOpen} onOpenChange={(next) => { if (!next) closePanel(); }}>
+        <SidePanelContent>
+          <SidePanelHeader className="pr-12">
+            <SidePanelTitle>
+              {created ? "다 만들었습니다" : chosen ? "저장하거나, 각도를 더 만들거나" : "정면 후보 고르기"}
+            </SidePanelTitle>
+            <SidePanelDescription>
               {created
                 ? "「내 캐릭터」와 라이브러리에 넣었습니다. 카드뉴스·이미지 만들기·상세페이지에서 불러 씁니다."
-                : "고른 정면을 기준으로 나머지 각도를 만듭니다. 정면은 다시 그리지 않습니다."}
-            </BottomSheetDescription>
-          </BottomSheetHeader>
+                : chosen
+                  ? "정면 한 장으로 저장해도 되고, 각도를 더 만들어 한 벌로 저장해도 됩니다."
+                  : "마음에 드는 정면을 고르세요. 고른다고 바로 만들지 않습니다."}
+            </SidePanelDescription>
+          </SidePanelHeader>
 
-          <BottomSheetBody className="grid gap-4">
+          <SidePanelBody className="grid gap-4">
             {created ? (
-              /* 만든 결과. 창을 닫기 전에 여기서 다 본다. */
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              /* 만든 결과. 패널을 닫기 전에 여기서 다 본다. */
+              <div className="grid grid-cols-2 gap-3">
                 {created.views.filter((view) => view.url).map((view) => (
                   <button
                     key={view.angle}
@@ -765,56 +731,94 @@ export function CharacterStudio() {
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : chosen ? (
               <>
                 <div className="flex gap-3">
                   <button
                     type="button" aria-label="고른 정면 크게 보기"
                     onClick={() => openImageViewer(chosenSrc, "고른 정면")}
-                    className="h-28 w-[84px] flex-none overflow-hidden rounded border bg-muted"
+                    className="h-32 w-24 flex-none overflow-hidden rounded border bg-muted"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt="고른 정면" src={chosenSrc} className="h-full w-full object-cover" />
                   </button>
                   <p className="text-xs leading-relaxed text-subtle-foreground">
                     이 정면으로 정했습니다. 정면은 다시 그리지 않고 <strong>그대로</strong> 씁니다 —
-                    다시 그리면 얼굴이 달라집니다. 아래에서 켠 각도만 이 그림을 기준으로 더 만듭니다.
+                    다시 그리면 얼굴이 달라집니다.
                   </p>
                 </div>
 
-                <fieldset className="grid gap-1.5">
-                  <legend className="text-meta text-subtle-foreground">더 만들 각도</legend>
-                  <div className="flex flex-wrap gap-2">
-                    {angleList.map((angle) => {
-                      // 정면은 고른 후보 그 자체라 늘 들어간다. 끌 수 없다.
-                      const fixed = angle.id === "front";
-                      const on = fixed || pickedAngles.includes(angle.id);
-                      return (
-                        <Button
-                          key={angle.id} type="button" size="sm"
-                          disabled={Boolean(busy) || fixed}
-                          variant={on ? "default" : "secondary"}
-                          onClick={() => setPickedAngles((current) =>
-                            current.includes(angle.id)
-                              ? current.filter((id) => id !== angle.id)
-                              : [...current, angle.id])}
-                        >
-                          {angle.label}{fixed ? " (기본)" : ""}
-                        </Button>
-                      );
-                    })}
+                {/* 저장만 할지, 각도까지 갈지를 **먼저 묻는다.**
+
+                    전에는 각도 단추를 모두 꺼야 「정면 한 장으로 저장」이
+                    나타났다. 할 수는 있는데 보이지 않는 길이었다. */}
+                <fieldset className="grid gap-2">
+                  <legend className="text-meta text-subtle-foreground">어떻게 저장할까요</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button" disabled={Boolean(busy)}
+                      onClick={() => setPickedAngles([])}
+                      className={cn(
+                        "rounded-md border p-3 text-left transition-colors disabled:opacity-60",
+                        extraAngleCount === 0 ? "border-primary bg-primary-soft" : "hover:bg-muted",
+                      )}
+                    >
+                      <span className="block text-sm font-bold">정면 한 장만</span>
+                      <span className="mt-1 block text-xs text-subtle-foreground">
+                        더 만들지 않고 지금 것을 그대로 저장합니다. 크레딧이 더 들지 않습니다.
+                      </span>
+                    </button>
+                    <button
+                      type="button" disabled={Boolean(busy)}
+                      onClick={() => { if (!extraAngleCount) setPickedAngles(["left_45", "right_45", "back"]); }}
+                      className={cn(
+                        "rounded-md border p-3 text-left transition-colors disabled:opacity-60",
+                        extraAngleCount > 0 ? "border-primary bg-primary-soft" : "hover:bg-muted",
+                      )}
+                    >
+                      <span className="block text-sm font-bold">각도를 더 만들어 한 벌로</span>
+                      <span className="mt-1 block text-xs text-subtle-foreground">
+                        정면을 기준으로 다른 각도를 더 그립니다. 만든 장수만큼 크레딧이 듭니다.
+                      </span>
+                    </button>
                   </div>
-                  <p className="text-xs text-subtle-foreground">
-                    켠 각도만 더 만듭니다 — 지금 {extraAngleCount}장. 정면 포함 {extraAngleCount + 1}장짜리가 됩니다.
-                    {pickedAngles.some((id) => id.endsWith("_90"))
-                      ? " 90° 측면은 얼굴이 반만 보여 다른 도구에서 인물 기준으로 쓰기에는 약합니다."
-                      : ""}
-                  </p>
                 </fieldset>
+
+                {extraAngleCount > 0 ? (
+                  <fieldset className="grid gap-1.5">
+                    <legend className="text-meta text-subtle-foreground">더 만들 각도</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {angleList.map((angle) => {
+                        // 정면은 고른 후보 그 자체라 늘 들어간다. 끌 수 없다.
+                        const fixed = angle.id === "front";
+                        const on = fixed || pickedAngles.includes(angle.id);
+                        return (
+                          <Button
+                            key={angle.id} type="button" size="sm"
+                            disabled={Boolean(busy) || fixed}
+                            variant={on ? "default" : "secondary"}
+                            onClick={() => setPickedAngles((current) =>
+                              current.includes(angle.id)
+                                ? current.filter((id) => id !== angle.id)
+                                : [...current, angle.id])}
+                          >
+                            {angle.label}{fixed ? " (기본)" : ""}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-subtle-foreground">
+                      정면 포함 {extraAngleCount + 1}장짜리가 됩니다.
+                      {pickedAngles.some((id) => id.endsWith("_90"))
+                        ? " 90° 측면은 얼굴이 반만 보여 다른 도구에서 인물 기준으로 쓰기에는 약합니다."
+                        : ""}
+                    </p>
+                  </fieldset>
+                ) : null}
 
                 {/* 몇 십 초가 걸린다. 빈 자리라도 보여 줘야 뭐라도 되고 있다는 것을 안다. */}
                 {pending.length ? (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <div className="aspect-[3/4] overflow-hidden rounded-md border bg-muted">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -835,38 +839,99 @@ export function CharacterStudio() {
                   </div>
                 ) : null}
               </>
-            )}
-          </BottomSheetBody>
-
-          {/* 단추는 늘 보이는 바닥에 둔다. 각도를 고르다 만드는 단추를 찾아
-              몸통을 굴려 내려가야 하면 흐름이 끊긴다. */}
-          <BottomSheetFooter className="flex flex-wrap items-center gap-2">
-            {created ? (
-              <Button onClick={closeSheet}>닫고 새로 만들기</Button>
             ) : (
+              /* 후보 고르기. 만드는 동안에도 이 자리에 있어야 기다리는 줄 안다. */
               <>
-                <Button disabled={Boolean(busy)} onClick={() => void handleCreate()}>
-                  {busy === "create"
-                    ? <Loader2 size={16} className="mr-1.5 animate-spin" />
-                    : <Sparkles size={16} className="mr-1.5" />}
-                  {busy === "create"
-                    ? "만드는 중…"
-                    : extraAngleCount
-                      ? "각도 " + extraAngleCount + "장 만들기"
-                      : "정면 한 장으로 저장"}
-                </Button>
-                <Button
-                  type="button" variant="secondary" disabled={Boolean(busy)}
-                  onClick={() => { setSheetOpen(false); setChosen(null); setMessage(""); }}
-                >
-                  <RotateCw className="mr-1.5 size-3.5" />다시 고르기
-                </Button>
+                {busy === "candidates" && !candidates.length ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {Array.from({ length: candidateCount }).map((_, index) => (
+                      <div key={index} className="space-y-1">
+                        <div className="grid aspect-[3/4] place-items-center rounded-md border border-dashed bg-muted/50">
+                          <Loader2 className="size-5 animate-spin text-subtle-foreground" />
+                        </div>
+                        <p className="text-center text-[11px] text-subtle-foreground">만드는 중</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {candidates.length ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {candidates.map((candidate, index) => {
+                      const src = `data:${candidate.mimeType};base64,${candidate.base64}`;
+                      return (
+                        <div key={index} className="space-y-2">
+                          <button
+                            type="button" aria-label={`후보 ${index + 1} 크게 보기`}
+                            onClick={() => openImageGallery({
+                              images: candidates.map((entry, position) => ({
+                                src: `data:${entry.mimeType};base64,${entry.base64}`,
+                                alt: `후보 ${position + 1}`,
+                              })),
+                              index,
+                            })}
+                            className="block aspect-[3/4] w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img alt={`후보 ${index + 1}`} src={src} className="h-full w-full object-cover" />
+                          </button>
+                          <Button size="sm" className="w-full" disabled={Boolean(busy)}
+                            onClick={() => handleChoose(candidate)}>
+                            이것으로 정하기
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {candidates.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    앞의 후보도 지우지 않습니다. 먼저 것이 나았을 수 있습니다.
+                  </p>
+                ) : null}
               </>
             )}
-            {message ? <span className="min-w-0 flex-1 text-xs text-muted-foreground">{message}</span> : null}
-          </BottomSheetFooter>
-        </BottomSheetContent>
-      </BottomSheet>
+          </SidePanelBody>
+
+          {/* 단추는 늘 보이는 바닥에 둔다. 고르다 단추를 찾아 몸통을 굴려
+              내려가야 하면 흐름이 끊긴다. */}
+          <SidePanelFooter className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {created ? (
+                <Button onClick={closePanel}>닫고 새로 만들기</Button>
+              ) : chosen ? (
+                <>
+                  <Button disabled={Boolean(busy)} onClick={() => void handleCreate()}>
+                    {busy === "create"
+                      ? <Loader2 size={16} className="mr-1.5 animate-spin" />
+                      : <Sparkles size={16} className="mr-1.5" />}
+                    {busy === "create"
+                      ? "만드는 중…"
+                      : extraAngleCount
+                        ? "각도 " + extraAngleCount + "장 만들고 저장"
+                        : "정면 한 장으로 저장"}
+                  </Button>
+                  <Button
+                    type="button" variant="secondary" disabled={Boolean(busy)}
+                    onClick={() => { setChosen(null); setMessage(""); }}
+                  >
+                    <RotateCw className="mr-1.5 size-3.5" />다시 고르기
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button" variant="secondary" disabled={Boolean(busy) || !candidates.length}
+                  onClick={() => void handleCandidates(true)}
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />다른 후보 보기
+                </Button>
+              )}
+            </div>
+            {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
+          </SidePanelFooter>
+        </SidePanelContent>
+      </SidePanel>
     </div>
   );
 }
