@@ -5,6 +5,7 @@ import "server-only";
 import sharp from "sharp";
 import { BADGE_OPACITY, badgePlacement, isBrightCorner } from "@fixup/sns-core";
 import { BADGE_SIZE, badgeImage } from "./ai-badge";
+import { isAiBadgeEnabled } from "./ai-badge-setting";
 
 /**
  * 만든 그림에 "AI 이미지" 를 새긴다.
@@ -18,8 +19,13 @@ import { BADGE_SIZE, badgeImage } from "./ai-badge";
  *
  * **실패해도 원본을 돌려준다.** 표기를 못 넣었다고 만든 그림을 잃는 것이
  * 훨씬 나쁘다.
+ *
+ * 관리자가 꺼 두었으면 그대로 돌려준다. 켜고 끄는 자리를 이 한 곳에 둔 것은,
+ * 부르는 쪽이 세 군데라 각자 확인하게 하면 언젠가 한 곳이 빠지기 때문이다.
  */
 export async function markAsAi(bytes: Buffer): Promise<Buffer> {
+  if (!(await isAiBadgeEnabled())) return bytes;
+
   try {
     const image = sharp(bytes);
     const meta = await image.metadata();

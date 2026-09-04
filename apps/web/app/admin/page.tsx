@@ -4,7 +4,8 @@ import { BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
 import type { MemberProfile } from "../../lib/membership/types";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
-import { approveMember, deleteMember, resendApproval, resendConfirmation, setMemberStatus, updateQuota } from "./actions";
+import { isAiBadgeEnabled } from "../../lib/ai-badge-setting";
+import { approveMember, deleteMember, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota } from "./actions";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 import { CostPanel } from "./CostPanel";
 import {
@@ -64,7 +65,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   if (metricError) throw metricError;
 
   // 실제로 나간 돈. 장수와 따로 집계한다 — 모델마다 단가가 4배 넘게 차이 난다.
-  const [usdKrw, costSummary, costByMember, costByOperation, costByModel, costDaily, modelPrices] =
+  const [usdKrw, costSummary, costByMember, costByOperation, costByModel, costDaily, modelPrices, aiBadgeOn] =
     await Promise.all([
       getUsdKrw(),
       getCostSummary(),
@@ -73,6 +74,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       getCostByModel(30),
       getCostDaily(30),
       getModelPrices(),
+      isAiBadgeEnabled(),
     ]);
 
   const summary = (summaryResult.data?.[0] ?? { today_units: 0, month_units: 0 }) as {
@@ -110,6 +112,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         daily={costDaily}
         prices={modelPrices}
       />
+
+      <AiBadgePanel enabled={aiBadgeOn} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
         <UsageChart daily={daily} />
@@ -293,8 +297,47 @@ function AdminNotice({ notice }: { notice: string }) {
               ? "이메일 인증 메일을 다시 보냈습니다. 본인이 링크를 누르면 승인할 수 있습니다."
               : notice === "confirm_rate_limited"
                 ? "조금 전에 보냈습니다. 1분쯤 뒤에 다시 눌러 주세요."
+                : notice === "badge_on"
+                  ? "이제부터 만드는 그림에 \"AI 이미지\" 표기를 붙입니다."
+                  : notice === "badge_off"
+                    ? "이제부터 만드는 그림에는 표기를 붙이지 않습니다. 이미 만들어 둔 그림은 그대로입니다."
             : "회원은 승인됐지만 이메일 발송에 실패했습니다. SMTP 설정 확인 후 재발송해 주세요.";
   return <div className={`rounded-md border px-4 py-3 text-sm ${failed ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-primary/30 bg-primary-soft"}`}>{message}</div>;
+}
+
+/**
+ * "AI 이미지" 표기 스위치.
+ *
+ * 표기는 그림 파일 안에 새기므로, 여기서 끈 뒤 **새로 만든 것부터** 빠진다.
+ * 이미 만들어 둔 그림은 그대로라는 것을 화면에 적어 둔다 — 껐는데 예전
+ * 그림에 그대로 남아 있으면 고장으로 보인다.
+ */
+function AiBadgePanel({ enabled }: { enabled: boolean }) {
+  return (
+    <Card>
+      <CardHeader><CardTitle>&quot;AI 이미지&quot; 표기</CardTitle></CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Badge variant={enabled ? "default" : "secondary"}>{enabled ? "켜짐" : "꺼짐"}</Badge>
+            <p className="text-sm font-medium">
+              만든 그림 오른쪽 아래에 표기를 {enabled ? "붙이고 있습니다" : "붙이지 않습니다"}.
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            표기는 그림 파일 안에 새깁니다. 바꾸면 이때부터 새로 만드는 것에만 적용되고,
+            이미 만들어 둔 그림은 그대로입니다.
+          </p>
+        </div>
+        <form action={updateAiBadge}>
+          <input type="hidden" name="enabled" value={enabled ? "off" : "on"} />
+          <Button type="submit" variant={enabled ? "outline" : "default"}>
+            {enabled ? "표기 끄기" : "표기 켜기"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
 }
 
 function Metric({ icon, label, value, suffix = "명" }: { icon: ReactNode; label: string; value: number; suffix?: string }) {

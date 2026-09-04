@@ -6,6 +6,7 @@ import { sendApprovalEmail, sendConfirmationEmail } from "../../lib/email/approv
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
+import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 
 function readUserId(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -99,6 +100,21 @@ export async function updateModelPrice(formData: FormData) {
   await setModelPrice(model, raw);
   revalidatePath("/admin");
   redirect("/admin?notice=price_updated");
+}
+
+/**
+ * "AI 이미지" 표기를 켜고 끈다.
+ *
+ * 표기는 만든 그림 파일 안에 새긴다. 여기서 끄면 **그 뒤에 만드는 것부터**
+ * 안 붙는다 — 이미 만들어 둔 그림은 그대로다. 다시 뽑아야 사라진다.
+ */
+export async function updateAiBadge(formData: FormData) {
+  await requireAdmin();
+  const next = String(formData.get("enabled") || "");
+  if (next !== "on" && next !== "off") throw new Error("올바르지 않은 값입니다.");
+  await setAiBadgeEnabled(next === "on");
+  revalidatePath("/admin");
+  redirect(`/admin?notice=${next === "on" ? "badge_on" : "badge_off"}`);
 }
 
 export async function updateUsdKrw(formData: FormData) {

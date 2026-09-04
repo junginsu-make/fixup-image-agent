@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { badgePlacement, isBrightCorner } from "../watermark";
+import { BADGE_OPACITY, aiBadgeEnabledFrom, badgePlacement, isBrightCorner } from "../watermark";
 
 describe("표기를 어디에 얼마나 크게", () => {
   it("오른쪽 아래에 놓는다", () => {
@@ -36,6 +36,19 @@ describe("표기를 어디에 얼마나 크게", () => {
     expect(place.top + place.height).toBeLessThanOrEqual(120);
   });
 
+  it("눈에 먼저 들어오지 않을 만큼 작다", () => {
+    // 알리는 것이 목적이지 읽히는 것이 목적은 아니다. 한때 너비의 11% 를
+    // 차지해 카드 한 귀퉁이를 통째로 먹었다.
+    const place = badgePlacement({ width: 1000, height: 1000 }, { width: 422, height: 94 });
+    expect(place.width).toBeLessThanOrEqual(70);
+  });
+
+  it("옅게 얹는다", () => {
+    // 0 이면 아예 없는 것이고, 짙으면 그림보다 표기가 먼저 보인다.
+    expect(BADGE_OPACITY).toBeGreaterThan(0);
+    expect(BADGE_OPACITY).toBeLessThanOrEqual(0.2);
+  });
+
   it("긴 가로 그림에서도 안 넘친다", () => {
     const place = badgePlacement({ width: 2048, height: 300 }, { width: 422, height: 94 });
     expect(place.top + place.height).toBeLessThanOrEqual(300);
@@ -54,5 +67,23 @@ describe("바탕이 밝은지 어두운지", () => {
   it("아무 값도 없으면 어두운 쪽으로 본다", () => {
     // 흰 글자가 기본이다. 못 재면 원래대로 둔다.
     expect(isBrightCorner([])).toBe(false);
+  });
+});
+
+describe("표기를 켤지 끌지", () => {
+  it("적혀 있지 않으면 끈 것으로 본다", () => {
+    // 표기는 그림 파일에 지울 수 없게 새겨진다. 잘못 켜지면 이미 내보낸 것을
+    // 되돌릴 수 없지만, 잘못 꺼진 것은 켜고 다시 뽑으면 된다.
+    expect(aiBadgeEnabledFrom(undefined)).toBe(false);
+    expect(aiBadgeEnabledFrom(null)).toBe(false);
+    expect(aiBadgeEnabledFrom("")).toBe(false);
+  });
+
+  it("켠다고 적힌 것만 켠다", () => {
+    expect(aiBadgeEnabledFrom("on")).toBe(true);
+    expect(aiBadgeEnabledFrom(" ON ")).toBe(true);
+    expect(aiBadgeEnabledFrom("off")).toBe(false);
+    // 알 수 없는 값도 켜지 않는다. 오타로 표기가 붙어 버리면 안 된다.
+    expect(aiBadgeEnabledFrom("yes")).toBe(false);
   });
 });
