@@ -181,6 +181,8 @@ export function composePrompt(frame: string, llmBody: string, tuning: PromptTuni
   const instruction = tuning.userInstruction ?? "";
   return [
     userInstructionHead(instruction),
+    // 누가 그리는가는 사용자가 친 말 다음이다. 다섯 도구가 같은 사람을 세운다.
+    designerPersona(),
     llmBody.trim(),
     frame,
     userInstructionTail(instruction),

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
+  attachmentPlacementRule,
   designerPersona,
   imageLookDirective,
   priorityLine,
@@ -177,8 +178,15 @@ export function buildAttachmentRoleDirective(input: {
       "What you redesign is the page, not the product: section layout and composition, information" +
         " hierarchy, how the copy is grouped and paced, which element leads the eye.",
       "Never redesign, restyle or substitute the product itself.",
+      // 2026-09-04 사용자 보고: 제품이 「약간 변형되어」 나왔다. 「같은 제품」은
+      // 모델에게 「비슷한 제품」으로도 읽힌다. 그 문을 닫는다.
+      "Match seams, hardware and surface finish as well — this is not a similar product, " +
+        "it is this exact product. Its identity must survive unchanged.",
     );
   }
+
+  // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
+  lines.push("", attachmentPlacementRule(true));
 
   return lines.join("\n").trimEnd();
 }

@@ -1,4 +1,4 @@
-import { priorityLine } from "@fixup/shared";
+import { attachmentPlacementRule, priorityLine } from "@fixup/shared";
 import type { ReferenceImage } from "./types";
 
 /**
@@ -78,6 +78,10 @@ const ROLE_RULES: Record<ReferenceRole, string[]> = {
       // 사진이냐 아니냐는 결(look)이 정한다.
       "the scene description decides those. Show this same product in a newly composed image.",
     "Never redesign, restyle or substitute the product.",
+    // 2026-09-04 사용자 보고: 제품이 「약간 변형되어」 나왔다. 「같은 제품」은
+    // 모델에게 「비슷한 제품」으로도 읽힌다. 그 문을 닫는다.
+    "Match seams, hardware and surface finish as well — this is not a similar product, " +
+      "it is this exact product. Its identity must survive unchanged.",
   ],
   person: [
     // "이 사람이 등장한다"고 단정하면 안 된다. 제품 클로즈업처럼 사람을 부르지
@@ -85,6 +89,9 @@ const ROLE_RULES: Record<ReferenceRole, string[]> = {
     "This is the person for this page. Whenever a person appears, it must be recognisably this same person:",
     "  · face and facial geometry, body proportions, hairstyle, skin tone",
     "Their expression, pose, clothing styling and framing follow the scene description.",
+    // 같은 보고에서 인물도 변형됐다. 「같은 사람」만으로는 모델이 손을 본다.
+    "Do not beautify, slim, age, de-age or restyle them, and never blend in another face. " +
+      "Someone who knows this person must recognise them immediately.",
   ],
   style: [
     "This is a design reference. Imitate its design language only:",
@@ -151,6 +158,8 @@ export function buildReferenceRoleDirective(
   });
 
   const hasIdentity = references.some((reference) => isIdentityReference(reference.kind));
+  // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
+  lines.push(attachmentPlacementRule(hasIdentity), "");
   const hasStyle = references.some((reference) => reference.kind === "style");
 
   // 사람이 직접 친 말이 맨 위다. 그 아래는 지금까지의 서열을 그대로 둔다 —

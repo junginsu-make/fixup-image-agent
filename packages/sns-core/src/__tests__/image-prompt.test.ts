@@ -273,13 +273,18 @@ describe("사용자가 직접 친 지시", () => {
   });
 
   it("안 적었으면 그 줄 자체가 없다", () => {
+    // 완전일치로 보지 않는다 — 프롬프트에는 「누가 그리는가」처럼 늘 붙는
+    // 것이 있다. 여기서 볼 것은 **사용자 지시 줄이 없다**는 것뿐이다.
     const composed = composePrompt("FRAME", "장면");
-    expect(composed).toBe("장면\n\nFRAME");
     expect(composed).not.toMatch(/USER INSTRUCTION/);
+    expect(composed).toContain("장면");
+    expect(composed).toContain("FRAME");
   });
 
   it("공백만 적은 것은 안 적은 것과 같다", () => {
-    expect(composePrompt("FRAME", "장면", { userInstruction: "   " })).toBe("장면\n\nFRAME");
+    const composed = composePrompt("FRAME", "장면", { userInstruction: "   " });
+    expect(composed).not.toMatch(/USER INSTRUCTION/);
+    expect(composed).toBe(composePrompt("FRAME", "장면"));
   });
 
   it("장면을 쓰는 LLM 도 같은 지시를 받는다", () => {
