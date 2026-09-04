@@ -39,7 +39,9 @@ vi.mock("../supabase/admin", () => ({
     storage: {
       from: () => ({
         upload: async (path: string, bytes: Buffer, options: { contentType: string }) => {
-          uploads.push({ path, bytes, contentType: options.contentType });
+          // 목록용 작은 사본은 이 시험의 대상이 아니다 — 여기서 보는 것은
+          // 저장되는 **형식**이지 파생본이 아니다.
+          if (!path.includes(".thumb.")) uploads.push({ path, bytes, contentType: options.contentType });
           return { error: null };
         },
         remove: async () => ({ error: null }),

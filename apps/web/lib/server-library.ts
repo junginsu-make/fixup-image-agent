@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { isLocalStoreEnabled } from "./local-store";
-import { encodeForStorage, sniffImageMime } from "./image-encoding";
+import { encodeForStorage, makeThumbnail, sniffImageMime } from "./image-encoding";
 import { markAsAi } from "./watermark";
 import type { UserRole } from "./membership/types";
 
@@ -92,6 +92,8 @@ export interface ServerLibraryItem {
   createdAt: string;
   /** 목록용 표지. 서명 URL 이라 수명이 있다. */
   coverUrl: string | null;
+  /** 목록 카드가 쓰는 작은 사본. 없으면 `coverUrl` 로 떨어진다. */
+  coverThumbUrl: string | null;
   /** 내가 만든 것인가. 관리자 목록에서 남의 것과 구분하는 데 쓴다. */
   mine: boolean;
   /** 누가 만들었는가. **관리자에게만** 채운다 — 회원끼리 이메일이 보이면 안 된다. */
@@ -162,6 +164,7 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
   }
 
   const uploaded: string[] = [];
+  let coverThumbPath: string | null = null;
 
   try {
     const rows = [];
@@ -179,19 +182,50 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
       if (error) throw new Error(error.message);
 
       uploaded.push(path);
+
+      // 목록에 걸 작은 사본. **못 만들어도 저장을 막지 않는다** — 목록이
+      // 조금 무거운 것보다 결과물을 잃는 것이 훨씬 나쁘다.
+      // **원본보다 작을 때만 둔다.** 이미 작은 그림은 512px 로 줄여도 오히려
+      // 커질 수 있다 — 그때는 사본이 자리만 차지하고 목록도 더 느려진다.
+      // 저장 인코딩과 같은 규칙이라, 여기서도 용량이 느는 일이 없다.
+      const candidate = await makeThumbnail(bytes);
+      const thumbnail = candidate && candidate.length < bytes.length ? candidate : null;
+      let thumbPath: string | null = null;
+      if (thumbnail) {
+        thumbPath = `${input.userId}/${item.id}/${position}.thumb.webp`;
+        const { error: thumbError } = await supabase.storage
+          .from(BUCKET)
+          .upload(thumbPath, thumbnail, { contentType: "image/webp", upsert: true });
+        if (thumbError) {
+          // 사본 하나 때문에 되돌리지 않는다. 없으면 화면이 원본으로 떨어진다.
+          console.error(`[library] 작은 사본을 올리지 못했습니다: ${thumbError.message}`);
+          thumbPath = null;
+        } else {
+          // **되돌릴 목록에 넣는다.** 안 넣으면 저장이 엎어졌을 때 아무도
+          // 못 찾는 파일이 용량만 차지한 채 남는다.
+          uploaded.push(thumbPath);
+        }
+      }
+
+      if (position === 0) coverThumbPath = thumbPath;
+
       rows.push({
         item_id: item.id,
         user_id: input.userId,
         position,
         path,
         mime_type: mimeType,
+        thumb_path: thumbPath,
       });
     }
 
     const { error: imagesError } = await supabase.from("library_images").insert(rows);
     if (imagesError) throw new Error(imagesError.message);
 
-    await supabase.from("library_items").update({ cover_path: uploaded[0] }).eq("id", item.id);
+    await supabase
+      .from("library_items")
+      .update({ cover_path: rows[0]?.path ?? null, cover_thumb_path: coverThumbPath })
+      .eq("id", item.id);
 
     return { ok: true as const, id: item.id as string, imageCount: rows.length };
   } catch (error) {
@@ -232,7 +266,7 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   const owner = libraryScope(viewer, "read");
   let query = supabase
     .from("library_items")
-    .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,created_at")
+    .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (owner) query = query.eq("user_id", owner);
@@ -240,7 +274,21 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   const { data, error } = await query;
   if (error || !data) return [];
 
-  const covers = data.map((row: { cover_path: string | null }) => row.cover_path).filter(Boolean) as string[];
+  /**
+   * **원본과 사본을 둘 다 서명한다.**
+   *
+   * 사본으로 갈음하고 싶지만 그럴 수 없다 — `coverUrl` 은 화면에만 쓰이지
+   * 않는다. 「저장된 이미지에서 고르기」가 이 주소를 받아 파일로 만들어
+   * 상세페이지와 리디자인의 **생성 입력**으로 넘긴다. 거기에 512px 손실
+   * 사본을 물리면 크레딧을 쓰는 결과물의 품질이 조용히 깎인다.
+   *
+   * 그래서 목록 카드가 쓸 `coverThumbUrl` 을 따로 낸다. 두 경로를 한 번의
+   * `createSignedUrls` 에 함께 넣으므로 왕복은 늘지 않는다.
+   */
+  const covers = data
+    .flatMap((row: { cover_path: string | null; cover_thumb_path: string | null }) =>
+      [row.cover_path, row.cover_thumb_path])
+    .filter(Boolean) as string[];
   const signed = covers.length
     ? await supabase.storage.from(BUCKET).createSignedUrls(covers, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
@@ -262,6 +310,9 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
     imageCount: Number(row.image_count ?? 0),
     createdAt: String(row.created_at),
     coverUrl: row.cover_path ? urlByPath.get(row.cover_path as string) ?? null : null,
+    coverThumbUrl: row.cover_thumb_path
+      ? urlByPath.get(row.cover_thumb_path as string) ?? null
+      : null,
     mine: row.user_id === viewer.userId,
     ownerEmail: emails.get(row.user_id as string) ?? null,
   }));
@@ -357,10 +408,25 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
    * 된다. 한 줄도 안 지우면서 오류도 안 나므로, 화면에는 「지웠다」가 뜨고
    * 실제로는 그대로 남는다. 관리자에게 조건이 사라진 지금 이 함정이 열렸다.
    */
-  const imageQuery = supabase.from("library_images").select("path").eq("item_id", itemId);
-  const { data: images } = await (owner ? imageQuery.eq("user_id", owner) : imageQuery);
+  const imageQuery = supabase.from("library_images").select("path,thumb_path").eq("item_id", itemId);
+  const { data: images, error: imagesError } = await (owner ? imageQuery.eq("user_id", owner) : imageQuery);
 
-  const paths = (images ?? []).map((row: { path: string }) => row.path as string).filter(Boolean);
+  /**
+   * **못 읽으면 아무것도 지우지 않는다.**
+   *
+   * 여기서 조용히 넘어가면 지울 경로를 하나도 못 구한 채 아래 행 삭제가
+   * 성공한다 — 행은 사라지고 파일은 전부 남는데 화면에는 「지웠다」가 뜬다.
+   * 파일을 못 지울 것이면 행도 지우면 안 된다.
+   */
+  if (imagesError) {
+    return { ok: false as const, message: `그림 목록을 읽지 못해 지우지 않았습니다: ${imagesError.message}` };
+  }
+
+  // **작은 사본도 함께 지운다.** 표를 지우면 사본의 자리를 아는 곳이 사라지므로,
+  // 여기서 빠뜨리면 아무도 못 찾는 파일이 용량만 차지한 채 영영 남는다.
+  const paths = (images ?? [])
+    .flatMap((row: { path: string; thumb_path: string | null }) => [row.path, row.thumb_path])
+    .filter(Boolean) as string[];
   if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
 
   const deleteQuery = supabase.from("library_items").delete().eq("id", itemId);
