@@ -30,6 +30,13 @@ export function ReferencesTab() {
   const [images, setImages] = React.useState<ReferenceImageView[]>([]);
   const [sets, setSets] = React.useState<ReferenceSetRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
+  /**
+   * 관리자인가. 서버가 알려준다.
+   *
+   * 남이 올린 것도 지울 수 있는 사람이라 단추가 하나 더 나온다. 줄마다 실을
+   * 값이 아니라 보는 사람의 성질이라 목록과 따로 받는다.
+   */
+  const [isAdmin, setIsAdmin] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [editorOpen, setEditorOpen] = React.useState(false);
@@ -43,9 +50,10 @@ export function ReferencesTab() {
     try {
       // 로컬이든 운영이든 같은 길로 읽는다. 서버가 모드를 가른다.
       const imagesResponse = await fetch("/api/reference-images", { cache: "no-store" });
-      const imagesPayload = await imagesResponse.json() as { ok?: boolean; images?: ReferenceImageView[]; message?: string };
+      const imagesPayload = await imagesResponse.json() as { ok?: boolean; images?: ReferenceImageView[]; isAdmin?: boolean; message?: string };
       if (!imagesResponse.ok || !imagesPayload.ok) throw new Error(imagesPayload.message ?? "참고 이미지를 불러오지 못했습니다.");
       setImages(imagesPayload.images ?? []);
+      setIsAdmin(Boolean(imagesPayload.isAdmin));
 
       const response = await fetch("/api/reference-sets", { cache: "no-store" });
       const payload = await response.json() as { ok?: boolean; sets?: ReferenceSetRecord[]; message?: string };
@@ -109,7 +117,14 @@ export function ReferencesTab() {
 
   /** 창고에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
   async function removeImage(image: ReferenceImageView) {
-    if (!window.confirm(`'${image.title ?? "이 이미지"}' 를 라이브러리에서 지울까요?`)) return;
+    // 남의 것을 지울 때는 누구 것인지 밝히고 묻는다. 공용 창고라 목록에서는
+    // 내 것과 남의 것이 나란히 있어, 밝히지 않으면 잘못 짚기 쉽다.
+    const whose = image.mine === false
+      ? `
+
+${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰던 작업이 있으면 함께 깨집니다.`
+      : "";
+    if (!window.confirm(`'${image.title ?? "이 이미지"}' 를 라이브러리에서 지울까요?${whose}`)) return;
     try {
       const body = await (await fetch(`/api/reference-images/${image.id}`, { method: "DELETE" })).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
@@ -224,10 +239,12 @@ export function ReferencesTab() {
                   {/* 지우기는 모서리에 둔다. 아래에 줄로 두면 카드가 길어지고
                       「~로 보내기」와 섞여 실수로 누르게 된다.
 
-                      **남이 올린 것에는 안 보인다.** 전에는 모두에게 보였는데,
-                      누르면 서버가 막아 「지우지 못했습니다」만 떴다. 못 할 일은
-                      단추부터 없는 편이 낫다. */}
-                  {image.mine === false ? null : (
+                      **남이 올린 것에는 안 보인다 — 관리자만 빼고.** 회원이
+                      눌렀을 때는 서버가 막아 「지우지 못했습니다」만 떴다. 못 할
+                      일은 단추부터 없는 편이 낫다. 관리자는 할 수 있으므로 둔다 —
+                      공용 창고에 잘못 올라온 것을 내릴 사람이 없으면 그대로
+                      남는다. */}
+                  {image.mine === false && !isAdmin ? null : (
                     <button
                       type="button"
                       aria-label={`${image.title ?? "참고 이미지"} 지우기`}

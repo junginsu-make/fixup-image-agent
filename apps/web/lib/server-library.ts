@@ -34,12 +34,18 @@ export interface LibraryViewer {
 /**
  * 이 사람의 질의에 걸 소유자 조건. `null` 이면 조건을 걸지 않는다.
  *
- * 관리자는 **보기만** 전체가 열린다. 지우기는 관리자라도 자기 것만 한다 —
- * 남이 크레딧을 써서 만든 결과를 되돌릴 수 없게 없애는 일은, 갤러리를
- * 고르려고 목록을 여는 일과 무게가 다르다.
+ * **관리자는 보기도 지우기도 전체가 열린다.**
+ *
+ * 한동안 지우기는 관리자라도 자기 것만 두었다. 남이 크레딧을 써서 만든 결과를
+ * 되돌릴 수 없게 없애는 일이라 무겁다고 보았기 때문이다. 운영자의 판단은
+ * 달랐다 — 이 서비스의 최고 관리자는 회원이 올린 것을 내려야 할 사람이고,
+ * 지울 수 없으면 잘못 올라온 것을 치울 방법이 없다.
+ *
+ * 무거운 일이라는 사실은 그대로다. 그래서 화면은 지우기 전에 한 번 더 묻고,
+ * 무엇을 지우는지와 누가 만든 것인지를 함께 보여준다.
  */
 export function libraryScope(viewer: LibraryViewer, action: "read" | "delete"): string | null {
-  if (action === "read" && viewer.role === "admin") return null;
+  if (viewer.role === "admin") return null;
   return viewer.userId;
 }
 
@@ -310,22 +316,23 @@ export async function getLibraryItemImages(viewer: LibraryViewer, itemId: string
  */
 export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
   const supabase = createSupabaseAdminClient();
-  const owner = libraryScope(viewer, "delete") as string;
+  const owner = libraryScope(viewer, "delete");
 
-  const { data: images } = await supabase
-    .from("library_images")
-    .select("path")
-    .eq("user_id", owner)
-    .eq("item_id", itemId);
+  /**
+   * 조건이 없으면 **아예 걸지 않는다.**
+   *
+   * `null` 을 그대로 `eq` 에 넘기면 「소유자가 비어 있는 줄」을 찾는 질의가
+   * 된다. 한 줄도 안 지우면서 오류도 안 나므로, 화면에는 「지웠다」가 뜨고
+   * 실제로는 그대로 남는다. 관리자에게 조건이 사라진 지금 이 함정이 열렸다.
+   */
+  const imageQuery = supabase.from("library_images").select("path").eq("item_id", itemId);
+  const { data: images } = await (owner ? imageQuery.eq("user_id", owner) : imageQuery);
 
   const paths = (images ?? []).map((row: { path: string }) => row.path as string).filter(Boolean);
   if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
 
-  const { error } = await supabase
-    .from("library_items")
-    .delete()
-    .eq("user_id", owner)
-    .eq("id", itemId);
+  const deleteQuery = supabase.from("library_items").delete().eq("id", itemId);
+  const { error } = await (owner ? deleteQuery.eq("user_id", owner) : deleteQuery);
 
   return { ok: !error, message: error?.message };
 }

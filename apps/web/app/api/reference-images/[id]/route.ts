@@ -7,6 +7,7 @@ import {
   removeLocalReferenceFiles,
 } from "../../../../lib/local-store";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
+import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { canModifyReferenceImage } from "../../../../lib/reference-images";
 
 export const runtime = "nodejs";
@@ -60,16 +61,25 @@ export async function DELETE(_request: Request, context: Context) {
       .maybeSingle();
     if (found.error) throw new Error(found.error.message);
     if (!found.data) return Response.json({ ok: false, message: "참고 이미지를 찾을 수 없습니다." }, { status: 404 });
-    if (!canModifyReferenceImage(auth.member.userId, found.data.user_id as string)) {
+    if (!canModifyReferenceImage(
+      { userId: auth.member.userId, role: auth.member.profile.role },
+      found.data.user_id as string,
+    )) {
       return Response.json(
         { ok: false, message: "다른 회원이 올린 참고 이미지는 지울 수 없습니다." },
         { status: 403 },
       );
     }
 
-    const removed = await supabase.from("reference_images").delete().eq("id", id);
+    // 남의 것을 지우는 것은 **관리자 권한으로** 해야 한다. 세션 클라이언트로
+    // 보내면 RLS 가 0줄로 막는데, supabase-js 는 그것을 오류로 주지 않는다 —
+    // 화면에는 「지웠다」가 뜨고 실제로는 남는다. 누구 것인지는 위에서 이미
+    // 가렸으므로, 여기까지 온 요청은 지워도 되는 것이다.
+    const owned = found.data.user_id === auth.member.userId;
+    const writer = owned ? supabase : createSupabaseAdminClient();
+    const removed = await writer.from("reference_images").delete().eq("id", id);
     if (removed.error) throw new Error(removed.error.message);
-    await supabase.storage.from("library").remove([found.data.storage_path as string]);
+    await writer.storage.from("library").remove([found.data.storage_path as string]);
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(

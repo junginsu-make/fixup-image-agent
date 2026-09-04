@@ -119,3 +119,49 @@ export async function listAllWorks(viewerId: string) {
     poster: withOwner(poster, viewerId, emails),
   };
 }
+
+/**
+ * 어떤 회원의 작업이든 지운다. **관리자만.**
+ *
+ * 회원용 삭제 길을 넓히지 않고 여기에 따로 둔다. 같은 함수에 「관리자면
+ * 조건을 뺀다」를 심으면, 언젠가 그 조건이 어긋나 회원이 남의 작업을 지운다.
+ * 되돌릴 수 없는 일이라 실수의 값이 너무 크다.
+ *
+ * **비용 기록은 남긴다.** 작업을 지웠다고 돈이 안 나간 것이 되지 않는다.
+ * 그걸 지울 수 있으면 장부를 믿을 수 없다.
+ *
+ * 행을 먼저 지우고 파일을 나중에 지운다. 파일이 먼저 사라지면 목록에는
+ * 남아 있는데 미리보기만 깨진 상태가 된다.
+ *
+ * 없는 것을 지우라고 하면 `false` 를 준다 — 두 번 눌러도 오류가 아니다.
+ */
+export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise<boolean> {
+  const admin = createSupabaseAdminClient();
+
+  if (kind === "sns") {
+    const { data } = await admin.from("sns_projects").select("data").eq("id", id).maybeSingle();
+    if (!data) return false;
+    const paths = (((data.data as { flow?: { cards?: Array<{ assetPath?: string }> } })?.flow?.cards) ?? [])
+      .flatMap((card) => (card.assetPath ? [card.assetPath] : []));
+
+    // 카드 행은 FK cascade 가 지운다.
+    const { error } = await admin.from("sns_projects").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    if (paths.length) await admin.storage.from(BUCKET).remove(paths);
+    return true;
+  }
+
+  const { data: project } = await admin
+    .from("poster_projects").select("id").eq("id", id).maybeSingle();
+  if (!project) return false;
+
+  // 경로를 행보다 먼저 읽어 둔다. 지우고 나면 어디에 있었는지 알 수 없다.
+  const { data: images } = await admin
+    .from("poster_images").select("asset_path").eq("project_id", id);
+  const paths = ((images ?? []) as Array<{ asset_path: string }>).map((row) => row.asset_path);
+
+  const { error } = await admin.from("poster_projects").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  if (paths.length) await admin.storage.from(BUCKET).remove(paths);
+  return true;
+}
