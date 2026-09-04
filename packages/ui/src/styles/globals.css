@@ -238,3 +238,29 @@
     animation: none;
   }
 }
+
+/* 「다 됐다」고 부르는 손잡이.
+
+   패널을 닫아 둔 사이에 만들기가 끝나면, 끝난 줄 모른 채 그대로 있는다.
+   테두리에 붙은 손잡이가 두어 번 뛰어 눈길을 끈다.
+
+   계속 뛰지 않는다. 멈추지 않는 움직임은 화면 구석에서 계속 신경을 긁는다.
+   여섯 번만 뛰고 선다 — 그 사이에 못 봤으면 손잡이 글자가 대신 말한다. */
+@keyframes fixup-attention {
+  0%, 100% {
+    transform: translateY(-50%) translateX(0);
+  }
+  50% {
+    transform: translateY(-50%) translateX(-6px);
+  }
+}
+
+.fixup-attention {
+  animation: fixup-attention 900ms ease-in-out 6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixup-attention {
+    animation: none;
+  }
+}

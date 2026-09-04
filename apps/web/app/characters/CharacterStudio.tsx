@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
@@ -134,6 +134,20 @@ export function CharacterStudio() {
    */
   const [panelOpen, setPanelOpen] = useState(false);
   /**
+   * 패널을 **닫아 둔 사이에** 만들기가 끝났는가.
+   *
+   * 만드는 데 몇 십 초가 걸린다. 그 사이 다른 곳을 누르면 패널이 닫히는데,
+   * 끝난 줄 모른 채 그대로 있게 된다. 테두리 손잡이가 뛰어 알린다.
+   */
+  const [panelAlert, setPanelAlert] = useState(false);
+  /**
+   * 지금 패널이 열려 있나 — **비동기 작업이 끝난 그 순간에** 본다.
+   *
+   * 상태를 그대로 읽으면 작업을 시작할 때의 값이라, 그 사이에 닫은 것을
+   * 알 수 없다.
+   */
+  const panelOpenRef = useRef(false);
+  /**
    * 방금 만든 캐릭터. 창 안에서 결과까지 보여주려고 든다.
    *
    * 전에는 만들자마자 화면 반대편 카드로 데려다줬다. 만드는 데 몇 십 초를
@@ -152,6 +166,14 @@ export function CharacterStudio() {
    * 방금 만든 것을 곧바로 찾아야 하는데, 상태를 넣기만 하면 그 자리에서는
    * 아직 예전 값이라 못 찾는다.
    */
+  useEffect(() => { panelOpenRef.current = panelOpen; }, [panelOpen]);
+
+  /** 패널을 연다. 여는 순간 부르던 것을 멈춘다. */
+  const openPanel = () => {
+    setPanelOpen(true);
+    setPanelAlert(false);
+  };
+
   const load = useCallback(async (): Promise<Character[]> => {
     try {
       const body = await (await fetch("/api/characters", { cache: "no-store" })).json() as {
@@ -242,7 +264,7 @@ export function CharacterStudio() {
     }
     // 만드는 일은 전부 패널 안에서 본다. 기다리는 동안에도 열려 있어야
     // 무엇이 되고 있는지 안다.
-    setPanelOpen(true);
+    openPanel();
     try {
       const body = await (await billableFetch("/api/characters", {
         body: JSON.stringify({
@@ -265,6 +287,8 @@ export function CharacterStudio() {
       setMessage(error instanceof Error ? error.message : "후보를 만들지 못했습니다.");
     } finally {
       setBusy("");
+      // 기다리는 사이에 닫았으면, 끝났다는 것을 손잡이가 알린다.
+      if (!panelOpenRef.current) setPanelAlert(true);
     }
   };
 
@@ -338,6 +362,7 @@ export function CharacterStudio() {
     } finally {
       setPending([]);
       setBusy("");
+      if (!panelOpenRef.current) setPanelAlert(true);
     }
   };
 
@@ -391,17 +416,27 @@ export function CharacterStudio() {
    */
   const locked = Boolean(busy) || Boolean(chosen);
   const chosenSrc = chosen ? `data:${chosen.mimeType};base64,${chosen.base64}` : "";
+  /**
+   * 패널에 볼 것이 있는가. 없으면 손잡이도 없다.
+   *
+   * 만드는 중도 포함한다 — 기다리는 사이에 닫았을 때 돌아갈 길이 그것뿐이다.
+   */
+  const hasPanelWork =
+    Boolean(busy) || candidates.length > 0 || Boolean(chosen) || Boolean(created);
+
   const extraAngleCount = pickedAngles.filter((angle) => angle !== "front").length;
 
   return (
     <div className="min-w-0">
       <div className="mb-5 flex items-start justify-between gap-4 max-md:flex-col">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs font-bold text-muted-foreground">부가 기능</p>
-          <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-normal max-md:text-2xl">
+          <h1 className="text-3xl font-bold leading-tight tracking-normal max-md:text-2xl">
             캐릭터 만들기
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+          {/* 있는 폭을 다 쓴다. 48rem 으로 묶어 두어 오른쪽이 텅 빈 채 두 줄로
+              접혔다. 좁은 화면에서는 알아서 접힌다. */}
+          <p className="mt-2 text-sm text-muted-foreground">
             사람·동물·캐릭터·사물을 만들어 두면 카드뉴스·이미지 만들기·상세페이지에서
             <strong> 같은 대상</strong>이 나옵니다. 만들지 않고 그냥 생성하면 매번 다른 것이 나옵니다.
           </p>
@@ -622,27 +657,6 @@ export function CharacterStudio() {
               ) : null}
             </div>
 
-            {/* 만드는 일은 오른쪽 패널에서 한다. 여기에는 닫아 둔 사이에도
-                「하던 것이 있다」만 남긴다 — 다시 열 길이 없으면 만들어 둔
-                후보가 사라진 것처럼 보인다. */}
-            {!panelOpen && (candidates.length || chosen) ? (
-              <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/40 bg-primary-soft/40 p-3">
-                {chosen ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img alt="고른 정면" src={chosenSrc} className="h-16 w-12 flex-none rounded border object-cover" />
-                ) : null}
-                <p className="min-w-0 flex-1 text-xs leading-relaxed text-subtle-foreground">
-                  {created
-                    ? "만들기를 마쳤습니다. 결과를 다시 보려면 여세요."
-                    : chosen
-                      ? "정면을 정했습니다. 저장할지 각도를 더 만들지 패널에서 고릅니다."
-                      : `후보 ${candidates.length}장을 만들어 뒀습니다.`}
-                </p>
-                <Button type="button" size="sm" onClick={() => setPanelOpen(true)}>
-                  {created ? "결과 보기" : "이어서 하기"}
-                </Button>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 
@@ -690,8 +704,46 @@ export function CharacterStudio() {
           길어졌다. 결과는 화면 반대편 카드에 들어가 거기까지 화면을 옮겨
           줘야 했다. 아래에서 올리는 창으로도 해 봤는데 화면 높이에 갇혀
           그림 넉 장을 늘어놓기에 좁았다. 옆에서 나오면 높이를 통째로 쓴다. */}
+      {/* 테두리에 붙는 손잡이.
+
+          만드는 데 몇 십 초가 걸리는데, 그 사이 다른 곳을 누르면 패널이
+          닫혔고 **돌아갈 길이 없었다.** 끝났는지도 알 수 없었다.
+
+          페이지 안이 아니라 화면에 붙인다 — 화면을 어디로 굴려도 늘 보인다.
+          닫아 둔 사이에 끝났으면 두어 번 뛰어 알린다. */}
+      {!panelOpen && hasPanelWork ? (
+        <button
+          type="button"
+          onClick={openPanel}
+          className={cn(
+            "fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-lg border border-r-0 py-3 pl-3 pr-2 shadow-[var(--shadow-ring)] transition-colors",
+            panelAlert
+              ? "fixup-attention border-primary bg-primary text-primary-foreground"
+              : "border-border bg-background hover:bg-muted",
+          )}
+        >
+          <ChevronLeft className="size-4" />
+          <span className="text-xs font-bold [writing-mode:vertical-rl]">
+            {busy === "candidates"
+              ? "후보 만드는 중"
+              : busy === "create"
+                ? "각도 만드는 중"
+                : created
+                  ? "다 됐습니다 · 열기"
+                  : "이어서 하기"}
+          </span>
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+        </button>
+      ) : null}
+
       <SidePanel open={panelOpen} onOpenChange={(next) => { if (!next) closePanel(); }}>
-        <SidePanelContent>
+        <SidePanelContent
+          // 만드는 중에는 바깥을 눌러도, Esc 를 눌러도 안 닫는다. 몇 십 초를
+          // 기다리다 스치듯 누른 것으로 화면이 사라지면 무엇이 되고 있는지
+          // 알 길이 없어진다. 닫으려면 X 를 누른다 — 그건 일부러 하는 일이다.
+          onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
+          onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}
+        >
           <SidePanelHeader className="pr-12">
             <SidePanelTitle>
               {created ? "다 만들었습니다" : chosen ? "저장하거나, 각도를 더 만들거나" : "정면 후보 고르기"}
