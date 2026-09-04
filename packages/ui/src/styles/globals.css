@@ -197,3 +197,44 @@
     transform: translateX(400%);
   }
 }
+
+/* 아래에서 올라오는 창.
+
+   `tailwindcss-animate` 를 안 쓰므로 여기서 직접 만든다. 그 꾸러미를 들이면
+   `animate-in`·`slide-in-from-*` 같은 유틸이 통째로 딸려 오는데, 지금 필요한
+   것은 이 창 하나다.
+
+   화면 전환을 줄여 달라고 한 사람에게는 움직이지 않는다. 창이 올라오는 것은
+   장식이라, 그것 때문에 어지러울 이유가 없다. */
+@keyframes fixup-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fixup-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fixup-sheet {
+  animation: fixup-sheet-up 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.fixup-sheet-overlay {
+  animation: fixup-fade-in 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixup-sheet,
+  .fixup-sheet-overlay {
+    animation: none;
+  }
+}

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Badge, BottomSheet, BottomSheetBody, BottomSheetContent, BottomSheetDescription,
+  BottomSheetFooter, BottomSheetHeader, BottomSheetTitle,
+  Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Textarea, cn,
 } from "@fixup/ui";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
@@ -121,26 +123,48 @@ export function CharacterStudio() {
   const [busy, setBusy] = useState<"" | "candidates" | "create">("");
   /** 각도를 만드는 동안 자리를 잡아 둘 칸. 비면 만드는 중이 아니다. */
   const [pending, setPending] = useState<string[]>([]);
-  const stepTwoRef = useRef<HTMLDivElement>(null);
-  const libraryRef = useRef<HTMLDivElement>(null);
+  /**
+   * 2단계 창이 열려 있는가. **`chosen` 과 따로 든다.**
+   *
+   * 창을 닫는 것과 고른 정면을 버리는 것은 다른 일이다. 하나로 묶으면 실수로
+   * 바깥을 눌렀을 때 방금 만든 정면이 사라진다 — 그건 크레딧을 쓴 결과다.
+   */
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /**
+   * 방금 만든 캐릭터. 창 안에서 결과까지 보여주려고 든다.
+   *
+   * 전에는 만들자마자 창을 닫고 화면 반대편 카드로 데려다줬다. 만드는 데
+   * 몇 십 초를 기다린 사람이 그 사이에 다른 곳을 보고 있으면, 화면이 혼자
+   * 움직여 어디로 갔는지 모른다. 만든 자리에서 그대로 보여준다.
+   */
+  const [created, setCreated] = useState<Character | null>(null);
   const [redoing, setRedoing] = useState("");
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
+  /**
+   * 목록을 다시 읽는다. **읽은 것을 돌려준다.**
+   *
+   * 방금 만든 것을 곧바로 찾아야 하는데, 상태를 넣기만 하면 그 자리에서는
+   * 아직 예전 값이라 못 찾는다.
+   */
+  const load = useCallback(async (): Promise<Character[]> => {
     try {
       const body = await (await fetch("/api/characters", { cache: "no-store" })).json() as {
         ok?: boolean; characters?: Character[]; creditCost?: number; models?: ImageModel[];
         angles?: Array<{ id: string; label: string }>; defaultAngles?: string[];
       };
-      setCharacters(body.ok ? (body.characters ?? []) : []);
+      const list = body.ok ? (body.characters ?? []) : [];
+      setCharacters(list);
       setModels(body.models ?? []);
       setCreditCost(body.creditCost ?? 0);
       if (body.angles?.length) setAngleList(body.angles);
       if (body.defaultAngles?.length) setPickedAngles(body.defaultAngles);
+      return list;
     } catch {
       setCharacters([]);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -237,10 +261,29 @@ export function CharacterStudio() {
   /** 1단계의 끝. 만들지 않고 고르기만 한다 — 만드는 것은 2단계다. */
   const handleChoose = (candidate: Candidate) => {
     setChosen({ ...candidate, description, name, kind, look, modelId });
+    setCreated(null);
     setMessage("");
-    // 2단계가 화면 밖에 있으면 고른 것이 사라진 것처럼 보인다.
-    requestAnimationFrame(() =>
-      stepTwoRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    // 2단계는 아래에서 올라오는 창이다. 전에는 이 자리에 칸이 더 생겨서 페이지가
+    // 길어졌고, 화면 밖으로 밀려난 그 칸까지 데려다줘야 했다.
+    setSheetOpen(true);
+  };
+
+  /**
+   * 2단계 창을 닫는다.
+   *
+   * **만들고 나서 닫을 때만 1단계를 비운다.** 만들기 전에 닫는 것은 「잠깐
+   * 접어 둔다」는 뜻이지 「버린다」가 아니다 — 고른 정면은 크레딧을 쓴 결과다.
+   */
+  const closeSheet = () => {
+    setSheetOpen(false);
+    if (!created) return;
+    setChosen(null);
+    setCreated(null);
+    setCandidates([]);
+    setDescription("");
+    setName("");
+    setAttached(null);
+    setMessage("");
   };
 
   /** 2단계. 고른 정면을 기준으로 나머지 각도를 만들고 저장한다. */
@@ -264,25 +307,24 @@ export function CharacterStudio() {
           chosenBase64: chosen.base64,
           chosenMimeType: chosen.mimeType,
         }),
-      })).json() as { ok?: boolean; message?: string; missingAngles?: number; referenceIssue?: string };
+      })).json() as {
+        ok?: boolean; id?: string; message?: string; missingAngles?: number; referenceIssue?: string;
+      };
 
       if (!body.ok) return setMessage(body.message ?? "만들지 못했습니다.");
 
       // 조용히 넘어가지 않는다. 빠진 각도도 라이브러리 실패도 알린다.
       setMessage([
-        "만들었습니다. 아래 「내 캐릭터」에 넣었습니다.",
-        body.missingAngles ? `각도 ${body.missingAngles}개가 실패했습니다 — 거기서 다시 만드세요.` : "",
+        "만들었습니다. 「내 캐릭터」와 라이브러리에 넣었습니다.",
+        body.missingAngles ? `각도 ${body.missingAngles}개가 실패했습니다 — 「내 캐릭터」에서 다시 만드세요.` : "",
         body.referenceIssue ?? "",
       ].filter(Boolean).join(" "));
-      setChosen(null);
-      setCandidates([]);
-      setDescription("");
-      setName("");
-      setAttached(null);
-      await load();
-      // 결과가 다른 카드에 들어간다. 데려다주지 않으면 못 찾는다.
-      requestAnimationFrame(() =>
-        libraryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+
+      // 창을 닫지 않는다. 결과를 만든 자리에서 그대로 보여준다 — 화면을 혼자
+      // 옮기면 몇 십 초 기다린 사람이 어디로 갔는지 모른다. 1단계를 비우는
+      // 것은 사용자가 창을 닫을 때 한다.
+      const refreshed = await load();
+      setCreated(refreshed.find((entry) => entry.id === body.id) ?? null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "만들지 못했습니다.");
     } finally {
@@ -618,23 +660,113 @@ export function CharacterStudio() {
               </div>
             ) : null}
 
-            {/* 2단계. 고른 정면이 기준이고, 각도는 여기서 고른다.
-                이 칸이 따로 서 있어야 「정하기」 다음에 무슨 일이 남았는지가 보인다. */}
-            {chosen ? (
-              <div
-                ref={stepTwoRef}
-                className="grid gap-3 rounded-md border border-primary/40 bg-primary-soft/40 p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-bold">2단계 · 각도 만들기</p>
-                  <Button
-                    type="button" variant="secondary" size="sm" disabled={Boolean(busy)}
-                    onClick={() => { setChosen(null); setMessage(""); }}
-                  >
-                    <RotateCw className="mr-1.5 size-3.5" />다시 고르기
-                  </Button>
-                </div>
+            {/* 정면을 정하면 2단계는 아래에서 올라오는 창으로 연다. 여기에는
+                창을 닫아 둔 사이에도 「무엇을 정했고 무엇이 남았는지」만 남긴다. */}
+            {chosen && !sheetOpen ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/40 bg-primary-soft/40 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt="고른 정면" src={chosenSrc} className="h-16 w-12 flex-none rounded border object-cover" />
+                <p className="min-w-0 flex-1 text-xs leading-relaxed text-subtle-foreground">
+                  {created
+                    ? "만들기를 마쳤습니다. 결과를 다시 보려면 여세요."
+                    : "이 정면으로 정했습니다. 각도는 아래 창에서 고릅니다."}
+                </p>
+                <Button type="button" size="sm" onClick={() => setSheetOpen(true)}>
+                  {created ? "결과 보기" : "각도 고르기"}
+                </Button>
+                <Button
+                  type="button" variant="secondary" size="sm" disabled={Boolean(busy)}
+                  onClick={() => { setChosen(null); setCreated(null); setMessage(""); }}
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />다시 고르기
+                </Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
 
+        {/* 만든 결과가 여기로 들어간다. 화면이 좁으면 한참 아래라, 다 만들고 나면
+            데려다준다(handleCreate). 안 그러면 아무 일도 없었던 것처럼 보인다. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>내 캐릭터</CardTitle>
+            <CardDescription>
+              라이브러리의 「캐릭터」 칸에서 불러 카드뉴스·이미지 만들기·상세페이지에 쓸 수 있습니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />불러오는 중입니다.
+              </div>
+            ) : characters.length === 0 ? (
+              <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                아직 만든 것이 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {characters.map((character) => (
+                  <CharacterRow
+                    key={character.id}
+                    character={character}
+                    angles={angleList}
+                    angleLabel={angleLabel}
+                    redoing={redoing}
+                    deleting={deletingId === character.id}
+                    onRedo={(angle) => void handleRedo(character, angle)}
+                    onDelete={() => void handleDelete(character)}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 2단계. 아래에서 올라오는 창이다.
+
+          전에는 이것이 1단계 밑에 칸으로 붙어 있었다. 그래서 정면을 고르는
+          순간 페이지가 길어졌고, 만들고 나면 결과는 화면 반대편 카드에 들어가
+          거기까지 화면을 옮겨 줘야 했다. 고르는 자리와 결과를 한 창에 둔다. */}
+      <BottomSheet open={sheetOpen && Boolean(chosen)} onOpenChange={(next) => { if (!next) closeSheet(); }}>
+        <BottomSheetContent className="sm:mx-auto sm:max-w-3xl">
+          <BottomSheetHeader className="pr-12">
+            <BottomSheetTitle>{created ? "다 만들었습니다" : "2단계 · 각도 만들기"}</BottomSheetTitle>
+            <BottomSheetDescription>
+              {created
+                ? "「내 캐릭터」와 라이브러리에 넣었습니다. 카드뉴스·이미지 만들기·상세페이지에서 불러 씁니다."
+                : "고른 정면을 기준으로 나머지 각도를 만듭니다. 정면은 다시 그리지 않습니다."}
+            </BottomSheetDescription>
+          </BottomSheetHeader>
+
+          <BottomSheetBody className="grid gap-4">
+            {created ? (
+              /* 만든 결과. 창을 닫기 전에 여기서 다 본다. */
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {created.views.filter((view) => view.url).map((view) => (
+                  <button
+                    key={view.angle}
+                    type="button"
+                    aria-label={angleLabel(view.angle) + " 크게 보기"}
+                    onClick={() => openImageGallery({
+                      images: created.views.filter((entry) => entry.url).map((entry) => ({
+                        src: entry.url as string,
+                        alt: created.name + " · " + angleLabel(entry.angle),
+                        name: created.name + " " + angleLabel(entry.angle) + ".png",
+                      })),
+                    })}
+                    className="space-y-1 text-left"
+                  >
+                    <div className="aspect-[3/4] overflow-hidden rounded-md border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img alt={angleLabel(view.angle)} src={view.url as string} className="h-full w-full object-cover" />
+                    </div>
+                    <p className="text-center text-[11px] text-subtle-foreground">{angleLabel(view.angle)}</p>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
                 <div className="flex gap-3">
                   <button
                     type="button" aria-label="고른 정면 크게 보기"
@@ -680,20 +812,6 @@ export function CharacterStudio() {
                   </p>
                 </fieldset>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button disabled={Boolean(busy)} onClick={() => void handleCreate()}>
-                    {busy === "create"
-                      ? <Loader2 size={16} className="mr-1.5 animate-spin" />
-                      : <Sparkles size={16} className="mr-1.5" />}
-                    {busy === "create"
-                      ? "만드는 중…"
-                      : extraAngleCount
-                        ? `각도 ${extraAngleCount}장 만들기`
-                        : "정면 한 장으로 저장"}
-                  </Button>
-                  {message ? <span className="text-xs text-muted-foreground">{message}</span> : null}
-                </div>
-
                 {/* 몇 십 초가 걸린다. 빈 자리라도 보여 줘야 뭐라도 되고 있다는 것을 안다. */}
                 {pending.length ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -716,48 +834,39 @@ export function CharacterStudio() {
                     ))}
                   </div>
                 ) : null}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {/* 만든 결과가 여기로 들어간다. 화면이 좁으면 한참 아래라, 다 만들고 나면
-            데려다준다(handleCreate). 안 그러면 아무 일도 없었던 것처럼 보인다. */}
-        <Card ref={libraryRef}>
-          <CardHeader>
-            <CardTitle>내 캐릭터</CardTitle>
-            <CardDescription>
-              라이브러리의 「캐릭터」 칸에서 불러 카드뉴스·이미지 만들기·상세페이지에 쓸 수 있습니다.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />불러오는 중입니다.
-              </div>
-            ) : characters.length === 0 ? (
-              <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                아직 만든 것이 없습니다.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {characters.map((character) => (
-                  <CharacterRow
-                    key={character.id}
-                    character={character}
-                    angles={angleList}
-                    angleLabel={angleLabel}
-                    redoing={redoing}
-                    deleting={deletingId === character.id}
-                    onRedo={(angle) => void handleRedo(character, angle)}
-                    onDelete={() => void handleDelete(character)}
-                  />
-                ))}
-              </div>
+              </>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </BottomSheetBody>
+
+          {/* 단추는 늘 보이는 바닥에 둔다. 각도를 고르다 만드는 단추를 찾아
+              몸통을 굴려 내려가야 하면 흐름이 끊긴다. */}
+          <BottomSheetFooter className="flex flex-wrap items-center gap-2">
+            {created ? (
+              <Button onClick={closeSheet}>닫고 새로 만들기</Button>
+            ) : (
+              <>
+                <Button disabled={Boolean(busy)} onClick={() => void handleCreate()}>
+                  {busy === "create"
+                    ? <Loader2 size={16} className="mr-1.5 animate-spin" />
+                    : <Sparkles size={16} className="mr-1.5" />}
+                  {busy === "create"
+                    ? "만드는 중…"
+                    : extraAngleCount
+                      ? "각도 " + extraAngleCount + "장 만들기"
+                      : "정면 한 장으로 저장"}
+                </Button>
+                <Button
+                  type="button" variant="secondary" disabled={Boolean(busy)}
+                  onClick={() => { setSheetOpen(false); setChosen(null); setMessage(""); }}
+                >
+                  <RotateCw className="mr-1.5 size-3.5" />다시 고르기
+                </Button>
+              </>
+            )}
+            {message ? <span className="min-w-0 flex-1 text-xs text-muted-foreground">{message}</span> : null}
+          </BottomSheetFooter>
+        </BottomSheetContent>
+      </BottomSheet>
     </div>
   );
 }
