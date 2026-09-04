@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@fixup/ui";
 import { requireActiveMember, getUsageSummary } from "../../lib/membership/server";
-import { GuideDialog } from "./guide-dialog";
+import { GuideLink } from "./guide-link";
 import { ReferenceHuntButton } from "./reference-hunt-button";
 import { RunningJobsPanel, RunningJobsProvider } from "./running-jobs";
 import { StudioActions } from "./studio-actions";
@@ -20,7 +20,7 @@ export async function StudioLayout({ children }: { children: ReactNode }) {
           <StudioActions email={membership.profile.email} usage={usage}>
             {/* 앱 밖으로 나가는 문. 홈·랜딩에는 이 셸이 안 붙으므로 거기엔 안 나온다. */}
             <ReferenceHuntButton />
-            <GuideDialog />
+            <GuideLink />
           </StudioActions>
         }
       >

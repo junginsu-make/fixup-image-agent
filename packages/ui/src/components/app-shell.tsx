@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Inbox, Rss, PanelsTopLeft, Frame } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Inbox, Rss, PanelsTopLeft, Frame, BookOpen } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -25,7 +25,26 @@ import { cn } from "../lib/utils";
  * 설계: docs/superpowers/specs/2026-07-21-ui-overhaul-design.md §2
  */
 
-const navGroups = [
+interface NavGroup {
+  label: string;
+  /** 다른 메뉴와 다르게 보여야 하는 그룹. 지금은 설명서 하나뿐이다. */
+  highlight?: boolean;
+  items: Array<{
+    href: string;
+    label: string;
+    desc?: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }>;
+}
+
+const navGroups: NavGroup[] = [
+  {
+    // 맨 위에 둔다. 처음 온 사람이 도구부터 열면 무엇을 하는 도구인지 모르는
+    // 채로 시작한다. 도구 목록보다 먼저 눈에 걸려야 한다.
+    label: "설명서",
+    highlight: true,
+    items: [{ href: "/guide", label: "사용 설명서", desc: "도구마다 무엇을 하는지", icon: BookOpen }],
+  },
   {
     label: "도구",
     items: [
@@ -95,12 +114,15 @@ function NavItem({
   desc,
   icon: Icon,
   active,
+  highlight = false,
 }: {
   href: string;
   label: string;
   desc?: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
+  /** 다른 메뉴보다 눈에 띄어야 하는 항목. 테두리와 채운 아이콘으로 세운다. */
+  highlight?: boolean;
 }) {
   return (
     <Link
@@ -110,13 +132,15 @@ function NavItem({
         "flex items-start gap-2.5 rounded-md px-2.5 py-2 transition-colors",
         active
           ? "bg-primary-soft shadow-[0_0_0_1px_var(--primary-ring)]"
-          : "hover:bg-background"
+          : highlight
+            ? "border border-primary/35 bg-primary-soft/50 hover:bg-primary-soft"
+            : "hover:bg-background"
       )}
     >
       <span
         className={cn(
           "mt-0.5 grid h-5 w-5 flex-none place-items-center rounded-[6px] border",
-          active
+          active || highlight
             ? "border-transparent bg-primary text-primary-foreground"
             : "border-border bg-background text-subtle-foreground"
         )}
@@ -188,13 +212,23 @@ export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: 
           </Link>
 
           {navGroups.map((group) => (
-            <div key={group.label}>
-              <p className="mb-2 px-1.5 text-meta text-subtle-foreground">
+            <div key={group.label} className={cn(group.highlight && "border-b pb-5")}>
+              <p
+                className={cn(
+                  "mb-2 px-1.5 text-meta",
+                  group.highlight ? "text-primary" : "text-subtle-foreground",
+                )}
+              >
                 {group.label}
               </p>
               <div className="grid gap-0.5">
                 {group.items.map((item) => (
-                  <NavItem key={item.href} {...item} active={isActive(item.href)} />
+                  <NavItem
+                    key={item.href}
+                    {...item}
+                    active={isActive(item.href)}
+                    highlight={group.highlight}
+                  />
                 ))}
               </div>
             </div>
