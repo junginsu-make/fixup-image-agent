@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input } from "@fixup/ui";
 import { CARD_RATIOS, IMAGE_MODELS } from "@fixup/sns-core";
 import {
@@ -19,6 +19,7 @@ import { LibraryPicker, LibraryUploadButton, useLibraryImages } from "./library-
 import { PreviewPanel, type PreviewCopy, type PreviewResult } from "./preview-panel";
 import { DeckPanel } from "./deck-panel";
 import { SideDrawer } from "./side-drawer";
+import { PanelHandle } from "../../_components/panel-handle";
 import { LayerList } from "./layer-list";
 import { SLOT_LABEL, newSlot, removeSlot, replaceSlot } from "./slot-defaults";
 
@@ -85,6 +86,15 @@ export function LayoutStudio() {
   const [notes, setNotes] = useState<string[]>([]);
   /** 미리보기와 세트는 다 고친 뒤 한 번 쓰는 것이라 서랍에 넣는다. */
   const [drawer, setDrawer] = useState<"preview" | "deck" | null>(null);
+  /**
+   * 서랍을 **닫아 둔 사이에** 미리보기가 끝났는가.
+   *
+   * 한 장에 몇 십 초가 걸린다. 그 사이 덮개를 누르면 서랍이 닫히는데, 끝난
+   * 줄 모른 채 그대로 있게 된다. 테두리 손잡이가 뛰어 알린다.
+   */
+  const [drawerAlert, setDrawerAlert] = useState(false);
+  /** 끝난 그 순간에 서랍이 열려 있었는지. 상태는 시작할 때의 값이라 못 쓴다. */
+  const drawerRef = useRef<"preview" | "deck" | null>(null);
 
   const ratio = CARD_RATIOS.find((entry) => entry.id === ratioId)!;
   const { images: libraryImages, add: addLibraryImage } = useLibraryImages();
@@ -126,9 +136,12 @@ export function LayoutStudio() {
     setPreview(null);
   }
 
+  useEffect(() => { drawerRef.current = drawer; }, [drawer]);
+
   async function runPreview() {
     setBusy("preview");
     setNotes([]);
+    setDrawerAlert(false);
     try {
       const response = await fetch("/api/sns/layout/preview", {
         method: "POST",
@@ -142,6 +155,8 @@ export function LayoutStudio() {
       setNotes([error instanceof Error ? error.message : "미리보기를 만들지 못했습니다."]);
     } finally {
       setBusy(null);
+      // 기다리는 사이에 닫았으면, 끝났다는 것을 손잡이가 알린다.
+      if (drawerRef.current !== "preview") setDrawerAlert(true);
     }
   }
 
@@ -358,7 +373,22 @@ export function LayoutStudio() {
         </section>
       </div>
 
-      <SideDrawer open={drawer === "preview"} title="미리보기" onClose={() => setDrawer(null)}>
+      {/* 테두리 손잡이. 서랍을 닫아 두어도 돌아올 길이 있어야 한다 —
+          미리보기 한 장에 몇 십 초가 걸린다. */}
+      {!drawer && (busy === "preview" || preview) ? (
+        <PanelHandle
+          onOpen={() => { setDrawer("preview"); setDrawerAlert(false); }}
+          busy={busy === "preview"}
+          alert={drawerAlert}
+          label={busy === "preview" ? "미리보기 만드는 중" : drawerAlert ? "다 됐습니다 · 열기" : "미리보기 열기"}
+        />
+      ) : null}
+
+      <SideDrawer
+        open={drawer === "preview"} title="미리보기"
+        busy={busy === "preview"}
+        onClose={() => setDrawer(null)}
+      >
         <PreviewPanel
           copy={copy}
           onCopyChange={setCopy}
