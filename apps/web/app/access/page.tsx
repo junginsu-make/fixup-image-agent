@@ -28,7 +28,7 @@ export default async function AccessPage() {
             <CardContent className="space-y-4 text-sm text-muted-foreground">
               <p className="break-all font-medium text-foreground">{profile.email}</p>
               <p className="leading-6">{unconfirmed ? "이 주소로 보낸 메일에서 「이메일 인증 완료」 버튼을 눌러 주세요. 인증이 끝나면 바로 이용할 수 있습니다. 메일이 없으면 스팸함을 확인해 주세요." : suspended ? "계정 상태에 관한 문의는 서비스 운영자에게 연락해 주세요." : "계정 상태를 확인하고 있습니다. 이 화면을 새로고침하거나 다시 로그인해 주세요."}</p>
-              <AccessActions />
+              <AccessActions email={profile.email} unconfirmed={unconfirmed} />
             </CardContent>
           </Card>
         </div>

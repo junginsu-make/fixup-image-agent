@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { sendApprovalEmail } from "../../lib/email/approval";
+import { sendApprovalEmail, sendConfirmationEmail } from "../../lib/email/approval";
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
@@ -154,4 +154,53 @@ export async function deleteMember(formData: FormData) {
 
   revalidatePath("/admin");
   redirect("/admin?notice=deleted");
+}
+
+/**
+ * 아직 이메일 인증을 안 한 회원에게 인증 메일을 다시 보낸다.
+ *
+ * 사용자도 `/access` 화면에서 직접 보낼 수 있다. 그런데 **로그인을 해야 그
+ * 화면에 닿는다.** 메일이 통째로 안 왔거나 비밀번호를 잊은 사람은 거기까지
+ * 못 간다. 그때 관리자가 대신 눌러 준다.
+ *
+ * 승인 메일(`resendApproval`)과 다른 것이다 — 그건 이미 승인된 사람에게 보내고,
+ * 이건 인증 자체를 아직 안 한 사람에게 보낸다.
+ *
+ * **Supabase 의 재발송 API 는 못 쓴다.** 캡차를 요구하는데(실측 2026-09-04,
+ * `captcha_failed`) 관리자 화면은 캡차를 띄울 자리가 아니다. 그래서 관리 키로
+ * 링크만 만들고 메일은 우리 SMTP 로 보낸다.
+ *
+ * 링크는 `magiclink` 로 만든다. `signup` 은 **기존 계정의 비밀번호를 갱신하는
+ * 부작용**이 있다 — 인증 메일을 다시 보내려다 남의 비밀번호를 바꾸면 안 된다.
+ */
+export async function resendConfirmation(formData: FormData) {
+  await requireAdmin();
+  const userId = readUserId(formData);
+  const admin = createSupabaseAdminClient();
+
+  const { data: profile, error } = await admin
+    .from("profiles")
+    .select("email,email_confirmed_at")
+    .eq("id", userId)
+    .single();
+  if (error || !profile) throw new Error("회원 정보를 찾지 못했습니다.");
+  if (profile.email_confirmed_at) throw new Error("이미 이메일 인증을 마친 회원입니다.");
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  if (!siteUrl) throw new Error("NEXT_PUBLIC_SITE_URL 이 설정되지 않아 메일을 보낼 수 없습니다.");
+
+  const { data: link, error: linkError } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email: profile.email,
+    options: { redirectTo: `${siteUrl}/auth/confirm?next=/access` },
+  });
+  const actionLink = link?.properties?.action_link;
+  if (linkError || !actionLink) {
+    throw new Error(`인증 링크를 만들지 못했습니다: ${linkError?.message ?? "링크 없음"}`);
+  }
+
+  await sendConfirmationEmail(profile.email, actionLink);
+
+  revalidatePath("/admin");
+  redirect("/admin?notice=confirm_sent");
 }

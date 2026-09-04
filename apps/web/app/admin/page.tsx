@@ -4,7 +4,7 @@ import { BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
 import type { MemberProfile } from "../../lib/membership/types";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
-import { approveMember, deleteMember, resendApproval, setMemberStatus, updateQuota } from "./actions";
+import { approveMember, deleteMember, resendApproval, resendConfirmation, setMemberStatus, updateQuota } from "./actions";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 import { CostPanel } from "./CostPanel";
 import {
@@ -289,6 +289,10 @@ function AdminNotice({ notice }: { notice: string }) {
           ? "환율을 저장했습니다."
           : notice === "deleted"
             ? "회원을 지웠습니다. 그 회원이 만든 것도 함께 사라졌습니다."
+            : notice === "confirm_sent"
+              ? "이메일 인증 메일을 다시 보냈습니다. 본인이 링크를 누르면 승인할 수 있습니다."
+              : notice === "confirm_rate_limited"
+                ? "조금 전에 보냈습니다. 1분쯤 뒤에 다시 눌러 주세요."
             : "회원은 승인됐지만 이메일 발송에 실패했습니다. SMTP 설정 확인 후 재발송해 주세요.";
   return <div className={`rounded-md border px-4 py-3 text-sm ${failed ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-primary/30 bg-primary-soft"}`}>{message}</div>;
 }
@@ -349,6 +353,29 @@ function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile;
               이메일 인증 대기 중입니다. 본인이 인증 메일의 링크를 눌러야 승인할 수 있습니다.
             </p>
           ) : null}
+        </form>
+      ) : null}
+
+      {/*
+        인증 메일 다시 보내기.
+
+        사용자도 `/access` 에서 직접 보낼 수 있지만 **로그인을 해야 그 화면에
+        닿는다.** 메일이 통째로 안 왔거나 비밀번호를 잊은 사람은 거기까지 못
+        간다. 그때 관리자가 대신 눌러 준다.
+
+        이미 인증을 마친 사람에게는 안 보인다 — 보낼 것이 없다.
+      */}
+      {!profile.email_confirmed_at ? (
+        <form action={resendConfirmation} className={formClass}>
+          <input type="hidden" name="userId" value={profile.id} />
+          <ConfirmSubmitButton
+            className={buttonClass}
+            variant="outline"
+            confirmMessage={`${profile.email} 주소로 이메일 인증 메일을 다시 보낼까요?`}
+            pendingLabel="발송 중..."
+          >
+            인증 메일 재발송
+          </ConfirmSubmitButton>
         </form>
       ) : null}
       {profile.status === "active" ? (
