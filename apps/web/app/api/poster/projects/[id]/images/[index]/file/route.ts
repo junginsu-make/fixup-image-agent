@@ -18,19 +18,43 @@ async function downloaded(assetPath: string): Promise<Buffer> {
 }
 
 /**
+ * 관리자가 볼 때만 쓰는 조회. 소유자 조건을 걸지 않는다.
+ *
+ * 회원이 쓰는 길은 손대지 않는다. 같은 함수에 「관리자면 조건을 뺀다」를
+ * 심어 두면, 언젠가 그 조건이 어긋나 회원에게 남의 그림이 열린다.
+ */
+async function adminAssetPath(projectId: string, index: string): Promise<string | null> {
+  const { data } = await createSupabaseAdminClient()
+    .from("poster_images")
+    .select("asset_path")
+    .eq("project_id", projectId)
+    .eq("variant_index", Number(index))
+    .maybeSingle();
+  return (data?.asset_path as string | undefined) ?? null;
+}
+
+/**
  * 결과 이미지를 돌려준다.
  *
  * 경로를 그대로 노출하지 않고 소유자를 확인한 뒤 읽는다 — 파일 저장소에는
  * RLS 가 없어 코드가 대신 막는다.
+ *
+ * **관리자는 남의 것도 본다.** 관리자 작업물 목록에서 무엇을 만들었는지 보고
+ * 첫 화면에 걸 것을 고르는데, 목록은 나오면서 그림만 전부 비면 고를 수가
+ * 없다. 넓히는 것은 보기뿐이다 — 고치기·지우기는 그대로 자기 것만이다.
  */
 export async function GET(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
     const { id, index } = await context.params;
-    const images = await posterStoresForUser(auth.member.userId).images.byProject(id);
-    const target = images.find((image) => String(image.variantIndex) === index);
-    if (!target) return new Response("찾을 수 없습니다.", { status: 404 });
+    const isAdmin = auth.member.profile.role === "admin";
+    const assetPath = isAdmin
+      ? await adminAssetPath(id, index)
+      : (await posterStoresForUser(auth.member.userId).images.byProject(id))
+          .find((image) => String(image.variantIndex) === index)?.assetPath ?? null;
+    if (!assetPath) return new Response("찾을 수 없습니다.", { status: 404 });
+    const target = { assetPath };
 
     const bytes = isLocalStoreEnabled()
       ? await readFile(path.join(localStoreRoot(), "poster", ...target.assetPath.split("/")))
