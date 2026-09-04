@@ -56,15 +56,22 @@ export interface ReferenceViewer {
 /**
  * 이 그림을 고치거나 지울 수 있는가.
  *
- * 올린 사람만 할 수 있다. 관리자도 예외가 아니다 — 남이 올린 본보기를
- * 지우면 그것을 쓰던 다른 사람의 세트와 작업이 조용히 깨지는데, 지운
- * 관리자는 그 사실을 알 길이 없다.
+ * 올린 사람, 그리고 **관리자**다.
+ *
+ * 회원끼리는 서로 못 지운다. 남이 올린 본보기를 지우면 그것을 쓰던 사람의
+ * 세트와 작업이 조용히 깨지는데, 지운 쪽은 그 사실을 알 길이 없다.
+ *
+ * 관리자는 예외로 둔다. 참고 이미지는 회원 공용 창고라 잘못 올라온 것이
+ * 모두에게 보인다 — 내릴 수 있는 사람이 아무도 없으면 그대로 남는다.
  *
  * 목록 읽기가 모두에게 열리면서 이 판정이 **꼭 필요해졌다.** 전에는 남의
  * 행이 애초에 보이지 않아 못 지웠지만, 이제는 보인다.
  */
-export function canModifyReferenceImage(viewerId: string, ownerId: string): boolean {
-  return viewerId === ownerId;
+export function canModifyReferenceImage(
+  viewer: { userId: string; role: UserRole },
+  ownerId: string,
+): boolean {
+  return viewer.role === "admin" || viewer.userId === ownerId;
 }
 
 interface ReferenceImageDbRow {

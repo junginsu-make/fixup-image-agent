@@ -28,7 +28,9 @@ export async function GET() {
       userId: auth.member.userId,
       role: auth.member.profile.role,
     });
-    return Response.json({ ok: true, images });
+    // 관리자는 남이 올린 것도 지울 수 있다. 화면이 그 단추를 낼지 정하려면
+    // 알아야 하는데, 줄마다 실을 값이 아니라 보는 사람의 성질이다.
+    return Response.json({ ok: true, images, isAdmin: auth.member.profile.role === "admin" });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다." },

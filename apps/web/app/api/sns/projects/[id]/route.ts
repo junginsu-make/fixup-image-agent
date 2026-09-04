@@ -1,4 +1,5 @@
 import { authenticateApiMember } from "../../../../../lib/membership/api";
+import { deleteAnyWork } from "../../../admin/works/store";
 import { snsFlowStoreForUser } from "../../../../../lib/sns-flow-store";
 
 type Context = { params: Promise<{ id: string }> };
@@ -17,7 +18,12 @@ export async function DELETE(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
-    const removed = await (await snsFlowStoreForUser(auth.member.userId)).remove(id);
+    // 관리자는 누구 것이든 지운다. 회원용 길을 넓히지 않고 따로 부른다 —
+    // 같은 함수에 조건을 심으면 언젠가 그 조건이 어긋나 회원이 남의 작업을
+    // 지운다. 되돌릴 수 없는 일이라 실수의 값이 너무 크다.
+    const removed = auth.member.profile.role === "admin"
+      ? await deleteAnyWork("sns", id)
+      : await (await snsFlowStoreForUser(auth.member.userId)).remove(id);
     if (!removed) return Response.json({ ok: false, message: "작업을 찾을 수 없습니다." }, { status: 404 });
     return Response.json({ ok: true });
   } catch (error) {

@@ -123,17 +123,25 @@ describe("관리자는 작업물을 전부 본다", () => {
   });
 });
 
-describe("지우기는 관리자여도 자기 것만", () => {
-  it("관리자 삭제에도 소유자 조건이 붙는다", async () => {
+describe("관리자는 지우기도 전체", () => {
+  it("관리자 삭제에는 소유자 조건이 안 붙는다", async () => {
+    // 잘못 올라온 것을 내릴 수 있는 사람이 아무도 없으면 그대로 남는다.
     tableRows.library_images = [];
     tableRows.library_items = [];
     await deleteLibraryItem(ADMIN, "item-of-someone-else");
-    expect(ownerConditionOn("library_items")).toBe("admin-1");
+    expect(ownerConditionOn("library_items")).toBeUndefined();
   });
 
-  it("규칙 자체가 읽기와 지우기를 가른다", () => {
+  it("회원은 여전히 자기 것만 지운다", async () => {
+    tableRows.library_images = [];
+    tableRows.library_items = [];
+    await deleteLibraryItem(MEMBER, "item-of-someone-else");
+    expect(ownerConditionOn("library_items")).toBe("member-1");
+  });
+
+  it("규칙 자체가 관리자와 회원을 가른다", () => {
     expect(libraryScope(ADMIN, "read")).toBeNull();
-    expect(libraryScope(ADMIN, "delete")).toBe("admin-1");
+    expect(libraryScope(ADMIN, "delete")).toBeNull();
     expect(libraryScope(MEMBER, "read")).toBe("member-1");
     expect(libraryScope(MEMBER, "delete")).toBe("member-1");
   });
@@ -162,10 +170,18 @@ describe("참고 이미지는 회원 공용", () => {
     expect(image.ownerEmail).toBeNull();
   });
 
-  it("남이 올린 것은 지울 수 없다. 관리자도 마찬가지다", () => {
-    expect(canModifyReferenceImage("member-1", "member-1")).toBe(true);
-    expect(canModifyReferenceImage("member-1", "member-9")).toBe(false);
-    expect(canModifyReferenceImage("admin-1", "member-9")).toBe(false);
+  it("회원끼리는 서로 못 지운다", () => {
+    // 남이 올린 본보기를 지우면 그것을 쓰던 사람의 세트와 작업이 조용히
+    // 깨지는데, 지운 쪽은 그 사실을 알 길이 없다.
+    expect(canModifyReferenceImage(MEMBER, "member-1")).toBe(true);
+    expect(canModifyReferenceImage(MEMBER, "member-9")).toBe(false);
+  });
+
+  it("관리자는 남이 올린 것도 지운다", () => {
+    // 공용 창고라 잘못 올라온 것이 모두에게 보인다. 내릴 사람이 없으면
+    // 그대로 남는다.
+    expect(canModifyReferenceImage(ADMIN, "member-9")).toBe(true);
+    expect(canModifyReferenceImage(ADMIN, "admin-1")).toBe(true);
   });
 });
 

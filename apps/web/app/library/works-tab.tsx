@@ -212,9 +212,9 @@ export function WorksTab() {
         meta,
       })),
       deleteLabel: "이 작업 지우기",
-      // 지우기는 자기 것만이다. 관리자라도 남이 크레딧을 써서 만든 결과를
-      // 되돌릴 수 없게 없애지는 못한다 — 보려고 목록을 여는 일과 무게가 다르다.
-      onDelete: work.mine ? () => setConfirming(work.id) : undefined,
+      // 자기 것, 그리고 관리자. 잘못 올라온 것을 내릴 사람이 아무도 없으면
+      // 그대로 남는다. 되돌릴 수 없는 일이라 누른 뒤 한 번 더 묻는다.
+      onDelete: work.mine || isAdmin ? () => setConfirming(work.id) : undefined,
       // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다.
       action: showcase
         ? {
@@ -444,6 +444,12 @@ export function WorksTab() {
               <DialogDescription>
                 「{pending.title}」{TOOL_LABEL[pending.tool]} 작업을 지웁니다.
                 만들어 둔 그림도 함께 사라지고, 되돌릴 수 없습니다.
+                {!pending.mine ? (
+                  <>
+                    <br />
+                    <strong>{pending.ownerEmail ?? "다른 회원"}이 만든 것입니다.</strong> 만든 사람에게는 알리지 않습니다.
+                  </>
+                ) : null}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
