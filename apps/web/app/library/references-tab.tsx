@@ -10,7 +10,18 @@ import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 import { randomId } from "../../lib/browser-safe";
 
-type ReferenceImageView = ReferenceImageRow & { signedUrl: string | null };
+/**
+ * 화면이 보는 참고 이미지 한 장.
+ *
+ * `mine` 과 `ownerEmail` 은 서버가 정해서 보낸다. 참고 이미지는 회원 공용
+ * 창고라 남이 올린 것도 목록에 나오는데, 지우기는 올린 사람만 한다 —
+ * 남이 쓰던 본보기를 지우면 그 사람의 작업이 조용히 깨진다.
+ */
+type ReferenceImageView = ReferenceImageRow & {
+  signedUrl: string | null;
+  mine?: boolean;
+  ownerEmail?: string | null;
+};
 
 const ROLE_LABEL: Record<string, string> = { cover: "표지", body: "속지", ending: "엔딩" };
 
@@ -201,7 +212,7 @@ export function ReferencesTab() {
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
               {uploading ? "올리는 중…" : "참고 이미지 올리기"}
             </Button>
-            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다.</span>
+            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 참고 이미지는 회원 공용이라 다른 회원이 올린 것도 함께 보이고, 지우기는 올린 사람만 합니다.</span>
           </div>
 
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">참고 이미지를 불러오는 중입니다.</p> : visibleImages.length === 0 ? (
@@ -211,19 +222,28 @@ export function ReferencesTab() {
               {visibleImages.map((image) => (
                 <Card key={image.id} className="relative overflow-hidden">
                   {/* 지우기는 모서리에 둔다. 아래에 줄로 두면 카드가 길어지고
-                      「~로 보내기」와 섞여 실수로 누르게 된다. */}
-                  <button
-                    type="button"
-                    aria-label={`${image.title ?? "참고 이미지"} 지우기`}
-                    onClick={() => void removeImage(image)}
-                    className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
-                  ><Trash2 className="size-3.5" /></button>
+                      「~로 보내기」와 섞여 실수로 누르게 된다.
+
+                      **남이 올린 것에는 안 보인다.** 전에는 모두에게 보였는데,
+                      누르면 서버가 막아 「지우지 못했습니다」만 떴다. 못 할 일은
+                      단추부터 없는 편이 낫다. */}
+                  {image.mine === false ? null : (
+                    <button
+                      type="button"
+                      aria-label={`${image.title ?? "참고 이미지"} 지우기`}
+                      onClick={() => void removeImage(image)}
+                      className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
+                    ><Trash2 className="size-3.5" /></button>
+                  )}
                   <div className="aspect-square bg-muted">{image.signedUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                   ) : null}</div>
                   <CardContent className="grid gap-2 p-3">
                     <p className="truncate text-sm font-medium">{image.title || "제목 없음"}</p>
+                    {image.mine === false ? (
+                      <p className="truncate text-xs text-muted-foreground">{image.ownerEmail ?? "다른 회원"}이 올림</p>
+                    ) : null}
                     {/* 라이브러리는 보기만 하는 곳이 아니다. 여기서 바로 도구로 보낸다. */}
                     <div className="flex flex-wrap gap-1">
                       <Button size="sm" onClick={() => sendTo("sns", image)}>카드뉴스로</Button>
