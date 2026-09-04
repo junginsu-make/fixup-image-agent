@@ -1,3 +1,4 @@
+import { userInstructionHead, userInstructionTail } from "@fixup/shared";
 import { RedesignError } from "./errors.js";
 
 /**
@@ -66,6 +67,10 @@ export async function editSection(input: EditSectionInput) {
   }
 
   const prompt = [
+    // 수정 요청이 곧 사용자가 직접 친 지시다. 맨 앞과 맨 뒤에 두 번 넣는다 —
+    // 긴 프롬프트에서 중간 문장은 힘을 잃는다(2026-09-04 실측).
+    // 여기서는 requestText 가 비면 위에서 이미 400 으로 막히므로 항상 값이 있다.
+    userInstructionHead(requestText),
     "너는 커머스 상세페이지 섹션 이미지 편집 엔진이다.",
     "첨부된 9:16 상세페이지 섹션 이미지를 기반으로 같은 제품과 전체 톤앤매너를 유지하면서 필요한 부분만 편집한다.",
     `프로젝트: ${project.title || "상세페이지 리디자인"}`,
@@ -76,8 +81,11 @@ export async function editSection(input: EditSectionInput) {
     `사용자 수정 요청: ${requestText}`,
     "브랜드명 금지 규칙: '한이룸', '한이룸의', '한이룸 스킨', 'HANEERUM', 'Haneerum', 'HR'은 서비스명 또는 도구명일 뿐이며 제품 브랜드가 아니다. 이 단어들을 이미지 안의 제품명, 브랜드명, 로고, 라벨, 헤드라인, 후기, FAQ, CTA, 패키지 텍스트로 절대 사용하지 않는다.",
     "브랜드 사용 규칙: 제품 브랜드명과 제품명은 첨부된 이미지와 프로젝트 원본에서 확인되는 이름만 사용한다. 원본에서 확인되지 않는 새 브랜드명, 새 제품명, 새 로고를 만들지 않는다.",
-    "규칙: 제품명, 패키지, 핵심 수치, 안전한 표현 원칙은 유지한다. 근거 없는 효능/리뷰/인증/수치를 새로 만들지 않는다. 같은 상세페이지 안에서 이어 붙였을 때 반복 레이아웃처럼 보이지 않도록 정보 배치, 카드 구조, 타이포 리듬을 조정한다. 한국어 문구는 크게, 작은 글씨는 줄이고, 한 장에 메시지 하나만 담는다."
-  ].join("\n");
+    "규칙: 제품명, 패키지, 핵심 수치, 안전한 표현 원칙은 유지한다. 근거 없는 효능/리뷰/인증/수치를 새로 만들지 않는다. 같은 상세페이지 안에서 이어 붙였을 때 반복 레이아웃처럼 보이지 않도록 정보 배치, 카드 구조, 타이포 리듬을 조정한다. 한국어 문구는 크게, 작은 글씨는 줄이고, 한 장에 메시지 하나만 담는다.",
+    userInstructionTail(requestText)
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const edited = provider === "google"
     ? await editWithGoogle({ apiKey, prompt, image })

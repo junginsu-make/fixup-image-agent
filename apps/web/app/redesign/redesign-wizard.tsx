@@ -35,6 +35,12 @@ import {
   cn,
   type StepDefinition,
 } from "@fixup/ui";
+import {
+  IMAGE_LOOKS,
+  IMAGE_LOOK_HINT,
+  IMAGE_LOOK_LABEL,
+  type ImageLook,
+} from "@fixup/shared";
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
 import { SavedImagePicker } from "../create/SavedImagePicker";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
@@ -239,6 +245,9 @@ export function RedesignWizard() {
   const [characterId, setCharacterId] = React.useState("");
   const [count, setCount] = React.useState(1);
   const [ratio, setRatio] = React.useState("9:16");
+  // 기본은 원본의 결을 따라가는 auto. 리디자인은 남의 페이지를 다시 그리는 일이라
+  // 원본이 사진이면 사진이 나오는 것이 자연스럽다.
+  const [look, setLook] = React.useState<ImageLook>("auto");
   const [files, setFiles] = React.useState<File[]>([]);
   const [knowledgeItems, setKnowledgeItems] = React.useState<KnowledgeItem[]>([]);
   const [request, setRequest] = React.useState(
@@ -404,6 +413,9 @@ export function RedesignWizard() {
       baseProject?.id || "new",
       channel,
       ratio,
+      // 결을 바꿨으면 다른 요청이다. 안 넣으면 실패 후 결만 바꿔 다시 눌렀을 때
+      // 같은 멱등 키로 나가 서버가 같은 요청으로 본다.
+      look,
       request,
       outputRolloutRequest,
       files.map((file) => `${file.name}:${file.size}`).join(","),
@@ -452,6 +464,7 @@ export function RedesignWizard() {
       form.append("model", selectedModel);
       form.append("channel", channel);
       form.append("ratio", ratio);
+      form.append("look", look);
       form.append("count", String(outputCount));
       form.append("startSection", String(startSection));
       form.append("rolloutRequest", outputRolloutRequest);
@@ -908,6 +921,8 @@ export function RedesignWizard() {
             setCount={setCount}
             ratio={ratio}
             setRatio={setRatio}
+            look={look}
+            setLook={setLook}
             files={files}
             setFiles={setFiles}
             request={request}
@@ -1652,6 +1667,8 @@ function Workspace(props: {
   setCount: (count: number) => void;
   ratio: string;
   setRatio: (ratio: string) => void;
+  look: ImageLook;
+  setLook: (look: ImageLook) => void;
   files: File[];
   setFiles: (files: File[]) => void;
   request: string;
@@ -1675,6 +1692,8 @@ function Workspace(props: {
     setCount,
     ratio,
     setRatio,
+    look,
+    setLook,
     files,
     setFiles,
     request,
@@ -1750,8 +1769,37 @@ function Workspace(props: {
                   ))}
                 </div>
               )}
+              <div className="mt-4">
+                <label className="mb-2 block text-xs font-bold text-muted-foreground">결</label>
+                <div className="flex flex-wrap gap-2">
+                  {IMAGE_LOOKS.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      title={IMAGE_LOOK_HINT[option]}
+                      aria-pressed={look === option}
+                      className={cn(
+                        "min-h-9 rounded-md border border-border bg-card px-3 text-xs font-bold",
+                        look === option && "bg-foreground text-background"
+                      )}
+                      onClick={() => setLook(option)}
+                    >
+                      {IMAGE_LOOK_LABEL[option]}
+                    </button>
+                  ))}
+                </div>
+                <span className="mt-1 block text-xs text-muted-foreground">{IMAGE_LOOK_HINT[look]}</span>
+              </div>
               <label className="mt-4 block text-xs font-bold text-muted-foreground">추가 요청사항</label>
-              <Textarea value={request} onChange={(event) => setRequest(event.target.value)} />
+              <Textarea
+                value={request}
+                onChange={(event) => setRequest(event.target.value)}
+                placeholder="예: 배경은 밤, 창밖에 네온"
+              />
+              {/* 이 칸이 곧 사용자 지시다. 프롬프트 맨 앞과 맨 뒤에 두 번 들어간다. */}
+              <span className="mt-1 block text-xs text-muted-foreground">
+                여기 적은 말이 다른 모든 지시보다 우선합니다.
+              </span>
             </CardContent>
           </Card>
 

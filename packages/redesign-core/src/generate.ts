@@ -1,4 +1,12 @@
 import { randomUUID } from "node:crypto";
+import {
+  IMAGE_LOOKS,
+  imageLookDirective,
+  priorityLine,
+  userInstructionHead,
+  userInstructionTail,
+  type ImageLook,
+} from "@fixup/shared";
 import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
 import { RedesignError } from "./errors.js";
@@ -90,7 +98,19 @@ export type GenerateSectionsInput = {
    * 참조 중 하나로만 다루고 얼굴을 바꾼다.
    */
   character?: { name: string; mimeType: string; buffer: Buffer; directive: string };
+  /**
+   * 그림의 결. 기본은 `auto` — 원본의 결을 따라간다.
+   *
+   * 리디자인은 남의 페이지를 다시 그리는 일이라 원본이 사진이면 사진이,
+   * 그림이면 그림이 나오는 것이 자연스럽다. 명시적으로 골랐을 때만 바꾼다.
+   */
+  look?: ImageLook | string;
 };
+
+/** 아는 결인지 확인한다. 모르는 값은 원본을 따라가는 `auto` 로 되돌린다. */
+function normalizeLook(value: ImageLook | string | undefined): ImageLook {
+  return (IMAGE_LOOKS as readonly string[]).includes(String(value ?? "")) ? (value as ImageLook) : "auto";
+}
 
 /**
  * 등장인물을 참조 목록 맨 앞에 놓는다.
@@ -98,6 +118,70 @@ export type GenerateSectionsInput = {
  * **앞이어야 한다.** 생성 함수가 MAX_REFERENCE_IMAGES 장에서 자르므로, 뒤에
  * 두면 원본이 많을 때 인물이 조용히 사라진다. 정체성 기준이 먼저다.
  */
+/**
+ * 첨부한 이미지가 무엇이고 어떻게 다뤄야 하는지 적는다.
+ *
+ * **이게 없었다.** 리디자인은 원본 상세페이지를 그대로 첨부하면서 프롬프트에는
+ * `원본 참조: 제품컷, 대표 USP` 같은 섹션 템플릿 라벨만 붙였다 — 그 라벨은
+ * "이 섹션에서 원본의 어느 대목을 쓰라"는 말이지, **첨부된 그림이 무엇인지**를
+ * 알려 주는 말이 아니다. 다섯 도구 중 여기만 비어 있었다.
+ * 본보기는 상세페이지의 `buildReferenceRoleDirective`(pdp.reference-policy.ts).
+ *
+ * 무엇을 지키고 무엇을 새로 만드는가는 **이 파일이 이미 말하고 있는 것과 맞춘다**:
+ *   · 「안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다」
+ *   · `designLanguageBlock` — 원본의 색 쓰임새까지 그대로 따라간다
+ *   · 「전체 연결 규칙: 브랜드 색·폰트 감각은 유지하되 레이아웃은 다르게」
+ * 그래서 「색·서체까지 마음대로 새로 디자인하라」고 쓰면 안 된다. 정면충돌한다.
+ * 다시 짜는 것은 **페이지의 구성**이지 제품도 사실도 브랜드의 결도 아니다.
+ *
+ * 순서는 `referencesWithCharacter` 가 담는 순서와 같아야 한다 — 등장인물이
+ * 맨 앞이다. 여기서 번호를 다르게 매기면 조용히 어긋난다.
+ */
+export function buildAttachmentRoleDirective(input: {
+  /** 원본 상세페이지로 첨부되는 장수(잘린 뒤의 실제 장수). */
+  originalCount: number;
+  /** 등장인물 기준컷이 맨 앞에 붙었는가. */
+  hasCharacter: boolean;
+}): string {
+  if (input.originalCount <= 0 && !input.hasCharacter) return "";
+
+  const lines = [
+    // 첨부가 있어도 모델은 "이런 종류의 페이지"를 기억에서 꺼내 그리는 쪽으로
+    // 쏠린다. 그러면 라벨 글자가 비슷한 다른 글자가 되고 색도 근처 색이 된다.
+    "Study every attached image closely before drawing. They are the source of truth for what" +
+      " they define — reproduce what you actually see in them. Do not approximate them from" +
+      " memory, and never substitute a generic stand-in.",
+    "",
+  ];
+
+  let index = 1;
+  if (input.hasCharacter) {
+    // 인물을 지키라는 문장 자체는 buildSceneWithCharacterDirective 가 따로 붙인다.
+    // 여기서는 몇 번째 그림이 그것인지만 밝힌다 — 같은 말을 두 번 하지 않는다.
+    lines.push(`[Image ${index} — PERSON] The character identity anchor for this page.`);
+    lines.push("");
+    index += 1;
+  }
+
+  if (input.originalCount > 0) {
+    const range =
+      input.originalCount === 1 ? `Image ${index}` : `Images ${index}-${index + input.originalCount - 1}`;
+    lines.push(
+      `[${range} — ORIGINAL DETAIL PAGE]`,
+      "This is the page being redesigned. Keep what it is about:",
+      "  · the product itself — silhouette, colour, finish, material",
+      "  · every logo, label and package text, spelled exactly as shown",
+      "  · the factual claims, numbers and copy meaning",
+      "  · the brand's design language — its colours and how each one is used, its type character",
+      "What you redesign is the page, not the product: section layout and composition, information" +
+        " hierarchy, how the copy is grouped and paced, which element leads the eye.",
+      "Never redesign, restyle or substitute the product itself.",
+    );
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 export function referencesWithCharacter(
   originals: ReferenceImage[],
   character: ReferenceImage | undefined,
@@ -167,7 +251,16 @@ export async function generateSections(input: GenerateSectionsInput) {
     references,
     character ? { name: character.name, mimeType: character.mimeType, buffer: character.buffer } : undefined,
   );
-  const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive);
+  // 실제로 fal 에 가는 첨부 구성 그대로 역할을 적는다. 여기서 다시 세면
+  // 프롬프트의 번호와 첨부 순서가 갈라진다.
+  const attachmentDirective = buildAttachmentRoleDirective({
+    originalCount: drawReferences.length - (character ? 1 : 0),
+    hasCharacter: Boolean(character),
+  });
+  const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive, {
+    attachmentDirective,
+    look: normalizeLook(input.look),
+  });
   const projectTitle = inferProjectTitle(analysis, channel);
 
   const generatedSections = [];
@@ -478,8 +571,19 @@ export function buildSections(
   analysis: unknown,
   modelInfo: ReturnType<typeof modelMeta>,
   /** 등장인물을 지키라는 문장. **모든 섹션에 붙는다** — 한 장만 빠져도 그 장에서 다른 사람이 나온다. */
-  characterDirective?: string
+  characterDirective?: string,
+  options?: {
+    /** 첨부 이미지의 역할. `buildAttachmentRoleDirective` 가 실제 첨부 구성으로 만든다. */
+    attachmentDirective?: string;
+    /** 그림의 결. 기본 `auto` 는 아무 말도 보태지 않는다. */
+    look?: ImageLook;
+  }
 ): Section[] {
+  // 「추가 요청사항」이 곧 사용자가 직접 친 지시다. 리디자인에는 이미 이 칸이
+  // 있으므로 새 입력을 하나 더 만들지 않는다 — 두 칸이 서로 다투게 된다.
+  const userInstruction = payload.request.trim();
+  const lookDirective = imageLookDirective(options?.look ?? "auto");
+
   return sectionTemplates(count, startSection).map((template) => {
     const facts = factsForSections(analysis);
     const isFactSection = template.id === "S4" || template.id === "S5";
@@ -487,9 +591,16 @@ export function buildSections(
       ? `\n검증된 원본 사실(정확 표기 유지, 이 안에서만 인증/수치 사용):\n${facts.map((f) => `- ${f}`).join("\n")}\n핵심 인증/수치는 읽기 쉬운 정보 패널로 크게 배치한다(이 섹션에 한해 '작은 글씨 회피' 규칙보다 우선).`
       : "";
     const promptText = [
+      // 사용자가 직접 친 말은 맨 앞과 맨 뒤에 두 번 넣는다. 2026-09-04 실측에서
+      // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 —
+      // 긴 프롬프트에서 중간 문장은 힘을 잃는다.
+      userInstructionHead(userInstruction),
       "너는 커머스 상세페이지 리디자인 이미지 생성 엔진이다.",
       `이미지 생성 모델: ${modelInfo.label} (${modelInfo.id})`,
       "세로형 9:16 상세페이지 섹션 이미지 1장을 생성한다.",
+      // 첨부가 무엇인지 먼저 밝히고 섹션 이야기로 넘어간다. 뒤에 두면
+      // 「원본 참조: 제품컷」 같은 섹션 라벨과 섞여 무엇을 가리키는지 흐려진다.
+      options?.attachmentDirective ?? "",
       `섹션: ${template.name}`,
       `목적: ${template.purpose}`,
       `원본 참조: ${template.source}`,
@@ -508,8 +619,14 @@ export function buildSections(
       "섹션별 변화 규칙: 제품 위치, 정보 카드 모양, 아이콘 밀도, 배경 분할, CTA 위치, 타이포 크기 리듬을 섹션마다 다르게 한다. 같은 헤드라인 문구를 반복하지 말고, 섹션 목적에 맞는 새로운 제목을 쓴다.",
       "안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. 근거 없는 수치, 리뷰, 인증, 효과를 만들지 않는다. 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다. 규제 리스크가 있으면 안전한 표현으로 완화한다.",
       factsBlock,
-      characterDirective ?? ""
-    ].join("\n");
+      lookDirective,
+      characterDirective ?? "",
+      // 제품·인물이 레퍼런스를 이기는 서열은 그대로 두고, 사용자 지시를 그 위에 얹는다.
+      priorityLine({ hasUserInstruction: Boolean(userInstruction), hasPreserved: true }),
+      userInstructionTail(userInstruction)
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     return {
       section_id: template.id,

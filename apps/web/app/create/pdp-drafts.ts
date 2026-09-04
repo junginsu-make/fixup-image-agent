@@ -11,6 +11,7 @@ import type {
   ReferenceModelUsage,
   SectionBlueprint,
 } from "@fixup/pdp-core";
+import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 
 import { selectExpiredDraftIds } from "./draft-retention";
 import { randomId } from "../../lib/browser-safe";
@@ -108,6 +109,9 @@ export interface PdpDraftRecord {
   copyIntensity?: CopyIntensity;
   gapPolicy?: GapPolicy;
   desiredTone: string;
+  /** 그림의 결과 사용자가 직접 친 지시. 예전 초안에는 없다. */
+  look?: ImageLook;
+  userInstruction?: string;
   aspectRatio: AspectRatio;
   notice: string;
   editorState: PdpEditorDraftState | null;
@@ -218,6 +222,8 @@ export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord
     copyIntensity: input.copyIntensity,
     gapPolicy: input.gapPolicy,
     desiredTone: input.desiredTone,
+    look: input.look,
+    userInstruction: input.userInstruction,
     aspectRatio: input.aspectRatio,
     notice: input.notice,
     editorState: input.editorState,
@@ -321,6 +327,11 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     copyIntensity: record.copyIntensity ?? "normal",
     gapPolicy: record.gapPolicy ?? "ask",
     desiredTone: record.desiredTone ?? "",
+    // 결을 안 적어 둔 옛 초안은 photoreal 로 읽는다 — 그때의 동작이 사진이었다.
+    look: (IMAGE_LOOKS as readonly string[]).includes(String(record.look ?? ""))
+      ? (record.look as ImageLook)
+      : "photoreal",
+    userInstruction: record.userInstruction ?? "",
     aspectRatio: normalizeAspectRatio(record.aspectRatio),
     notice: record.notice ?? "저장된 작업을 불러왔습니다.",
     editorState: normalizeEditorState(record.editorState, result),

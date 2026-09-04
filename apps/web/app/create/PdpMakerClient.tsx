@@ -11,6 +11,7 @@ import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
+import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import { peekHandoff, takeHandoff } from "../../lib/handoff";
@@ -84,6 +85,15 @@ export function PdpMakerClient() {
   const [result, setResult] = useState<GeneratedResult | null>(null);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [desiredTone, setDesiredTone] = useState("");
+  /*
+   * 그림의 결과 사용자가 직접 친 지시.
+   *
+   * 상세페이지의 기본 결은 **photoreal** 이다. 다른 도구는 auto(첨부의 결을
+   * 따라감)가 기본이지만, 상세페이지는 처음부터 늘 사진이었다. auto 로 두면
+   * 쓰던 사람의 결과물이 조용히 바뀐다.
+   */
+  const [look, setLook] = useState<ImageLook>("photoreal");
+  const [userInstruction, setUserInstruction] = useState("");
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   // 기본 출력 = 통이미지(full-image): AI가 한글 카피까지 박은 완성형 섹션을 생성.
   // (사용자 토글 UI는 후속 phase. editable은 엔진 폴백으로 유지.)
@@ -222,11 +232,13 @@ export function PdpMakerClient() {
       copyIntensity,
       gapPolicy,
       desiredTone,
+      look,
+      userInstruction,
       aspectRatio,
       notice: editorDraftState?.notice ?? notice,
       editorState: result ? editorDraftState ?? createDefaultEditorDraftState(result, outputMode) : null
     };
-  }, [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, modelImage, modelImageUsage, notice, outputMode, preparedImage, result]);
+  }, [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction]);
 
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
@@ -346,6 +358,8 @@ export function PdpMakerClient() {
         setCopyIntensity(draft.copyIntensity ?? "normal");
         setGapPolicy(draft.gapPolicy ?? "ask");
         setDesiredTone(draft.desiredTone);
+        setLook(draft.look ?? "photoreal");
+        setUserInstruction(draft.userInstruction ?? "");
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
@@ -624,6 +638,8 @@ export function PdpMakerClient() {
         characterId={characterId}
         startMode={startMode}
         desiredTone={desiredTone}
+        look={look}
+        userInstruction={userInstruction}
         initialDraftState={editorDraftState}
         initialResult={result}
         lastSavedAt={lastSavedAt}
@@ -1375,6 +1391,52 @@ export function PdpMakerClient() {
                       );
                     })}
                   </div>
+                </div>
+
+                <div>
+                  <span className={fieldLabelClass}>결</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {IMAGE_LOOKS.map((option) => {
+                      const isActive = look === option;
+
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          title={IMAGE_LOOK_HINT[option]}
+                          aria-pressed={isActive}
+                          onClick={() => setLook(option)}
+                          className={cn(
+                            "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                            isActive
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background text-muted-foreground shadow-[var(--shadow-ring)] hover:bg-muted"
+                          )}
+                        >
+                          {IMAGE_LOOK_LABEL[option]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span className="mt-1 block text-meta text-subtle-foreground">{IMAGE_LOOK_HINT[look]}</span>
+                </div>
+
+                <div>
+                  <label className={fieldLabelClass} htmlFor="userInstruction">
+                    추가 지시 · 선택
+                  </label>
+                  <textarea
+                    id="userInstruction"
+                    rows={2}
+                    value={userInstruction}
+                    onChange={(event) => setUserInstruction(event.target.value)}
+                    placeholder="예: 배경은 밤, 창밖에 네온"
+                    className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
+                  />
+                  {/* 프롬프트 맨 앞과 맨 뒤에 두 번 들어간다. 중간에 두면 힘을 잃는다. */}
+                  <span className="mt-1 block text-meta text-subtle-foreground">
+                    여기 적은 말이 다른 모든 지시보다 우선합니다.
+                  </span>
                 </div>
 
                 <div>

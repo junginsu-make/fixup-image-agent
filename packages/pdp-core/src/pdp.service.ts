@@ -1,4 +1,10 @@
 import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import {
+  IMAGE_LOOKS,
+  userInstructionHead,
+  userInstructionTail,
+  type ImageLook,
+} from "@fixup/shared";
 import type {
   AspectRatio,
   CopyIntensity,
@@ -17,7 +23,12 @@ import type {
 import { DEFAULT_IMAGE_MODEL } from "./types";
 import { classifyOutcome, qaRetryDirective, runQaGate, type QaOutcome } from "./pdp.qa";
 import { generateImageViaFal, type ImageGenerator } from "./pdp.image-provider";
-import { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
+import {
+  DEFAULT_PDP_LOOK,
+  buildImageJson,
+  buildImageSystemPrompt,
+  type ImagePromptOptions,
+} from "./pdp.image-prompt";
 import { shouldSendAnchor } from "./pdp.product-anchor";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { buildSellerBriefPrompt, type SellerBrief } from "./pdp.seller-brief";
@@ -101,7 +112,28 @@ type InternalImageGenOptions = ImageGenOptions & {
   characterReference?: { base64: string; mimeType: string; identityPrompt: string };
   /** 강조할 단어. 시나리오 단계에서 정한다. */
   emphasisWords?: string[];
+} & PdpLookInput;
+
+/**
+ * 화면에서 넘어오는 결·지시. 둘 다 선택이다.
+ *
+ * `ImageGenOptions`(types.ts)에 두는 것이 제자리지만 그 파일은 이 작업의 담당
+ * 범위 밖이라 여기서 얹는다. 값은 JSON 으로 들어오므로 `look` 은 문자열로 받고
+ * `normalizeImageOptions` 가 아는 값인지 확인한다 — 경계에서 검증한다.
+ */
+export type PdpLookInput = {
+  /** 그림의 결. 안 고르면 `photoreal` — 상세페이지는 지금까지 늘 사진이었다. */
+  look?: ImageLook | string;
+  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
+  userInstruction?: string;
 };
+
+/** 아는 결인지 확인한다. 모르는 값은 기본값으로 되돌린다. */
+function normalizeLook(value: ImageLook | string | undefined): ImageLook {
+  return (IMAGE_LOOKS as readonly string[]).includes(String(value ?? ""))
+    ? (value as ImageLook)
+    : DEFAULT_PDP_LOOK;
+}
 
 type NormalizedReferenceModelImage = {
   base64: string;
@@ -351,7 +383,8 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
-    options?: ImageGenOptions;
+    // 결·사용자 지시는 `ImageGenOptions` 밖에서 얹는다(PdpLookInput 주석 참조).
+    options?: ImageGenOptions & PdpLookInput;
   }, geminiApiKeyOverride?: string) {
     const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
     const client = this.createClient(apiKey);
@@ -507,7 +540,8 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
         withModel: Boolean(options.withModel && (usesUploadedPerson || usesCharacter)),
         outputMode: options.outputMode ?? "editable",
         emphasisWords: options.emphasisWords,
-        desiredTone: request.desiredTone
+        desiredTone: request.desiredTone,
+        look: options.look
       };
 
       // 캐릭터는 생김새 서술을 함께 준다 — 이미지 한 장으로는 옆·뒷모습을 만들 때
@@ -521,11 +555,19 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           : "";
 
       // 재시도 지시(QA 결함 교정, 인물 불일치 교정)는 JSON 뒤에 덧붙인다.
+      //
+      // 사용자가 직접 친 말은 **맨 앞과 맨 뒤에 두 번** 넣는다. 2026-09-04 실측에서
+      // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 — 긴
+      // 프롬프트에서 중간 문장은 힘을 잃는다. 가장 중요한 것은 양끝에 둔다.
       const prompt = [
+        userInstructionHead(options.userInstruction),
         buildImageJson(section, promptOptions),
-        buildReferenceRoleDirective(references),
+        buildReferenceRoleDirective(references, {
+          hasUserInstruction: Boolean(options.userInstruction),
+        }),
         characterIdentity,
         retryDirective ? `Correction required: ${retryDirective}` : "",
+        userInstructionTail(options.userInstruction),
       ]
         .filter(Boolean)
         .join("\n\n");
@@ -1288,9 +1330,15 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
  *
  * 그래서 받은 것을 그대로 펼치고 기본값만 덮어쓴다.
  */
-function normalizeImageOptions(options?: InternalImageGenOptions): InternalImageGenOptions {
+function normalizeImageOptions(
+  options?: InternalImageGenOptions,
+): InternalImageGenOptions & { look: ImageLook; userInstruction: string } {
   return {
     ...options,
+    // 안 고르면 사진이다. 여기서 기본을 정해야 이 함수를 거치는 모든 경로가
+    // 같은 결로 간다 — 부르는 쪽마다 판단하면 언젠가 한 곳이 어긋난다.
+    look: normalizeLook(options?.look),
+    userInstruction: (options?.userInstruction ?? "").trim(),
     style: options?.style ?? "studio",
     withModel: options?.withModel ?? false,
     modelGender: options?.modelGender ?? "female",

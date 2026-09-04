@@ -6,7 +6,13 @@ import {
   toPdpErrorResponse,
   DEFAULT_IMAGE_MODEL,
 } from "@fixup/pdp-core";
-import type { AspectRatio, ImageModelId, PdpOutputMode, SectionBlueprint } from "@fixup/pdp-core";
+import type {
+  AspectRatio,
+  ImageGenOptions,
+  ImageModelId,
+  PdpOutputMode,
+  SectionBlueprint,
+} from "@fixup/pdp-core";
 import { resolveGeminiKey } from "../../../../../lib/server-keys";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../../lib/membership/api";
@@ -29,7 +35,17 @@ type BatchRequest = {
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   preserveProduct?: boolean;
   characterId?: string;
+  /** 그림의 결. 안 고르면 pdp-core 가 photoreal 로 되돌린다. */
+  look?: string;
+  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
+  userInstruction?: string;
 };
+
+/**
+ * 결·사용자 지시는 `ImageGenOptions` 밖에서 얹는다 — 그 타입은 이 작업의 담당
+ * 범위 밖이라 손대지 않았다. 값 검증은 pdp-core 의 `normalizeImageOptions` 가 한다.
+ */
+type PdpBatchImageOptions = ImageGenOptions & { look?: string; userInstruction?: string };
 
 export async function POST(req: Request) {
   let body: BatchRequest;
@@ -74,39 +90,45 @@ export async function POST(req: Request) {
   }
 
   const settled = await Promise.allSettled(
-    sections.map((section) =>
-      generateSectionImage(
+    sections.map((section) => {
+      // 객체를 먼저 만들어 넘긴다. 호출부에 그대로 적으면 TypeScript 가
+      // ImageGenOptions 에 없는 열쇠(look·userInstruction)를 초과 속성으로 막는다.
+      const options: PdpBatchImageOptions = {
+        style: "lifestyle",
+        withModel: false,
+        outputMode: body.outputMode ?? "full-image",
+        imageModel: model,
+        headline: section.headline,
+        subheadline: section.subheadline,
+        emphasisWords: body.emphasisWordsBySection?.[section.section_id],
+        // 페이지당 한 장. 모든 섹션이 같은 것을 써야 통일이 유지된다.
+        styleReferenceImages: body.styleReference
+          ? [
+              {
+                base64: body.styleReference.imageBase64,
+                mimeType: body.styleReference.mimeType,
+                description: body.styleReference.description,
+              },
+            ]
+          : undefined,
+        preserveProductImage: body.preserveProduct ?? true,
+        characterReference:
+          characterByAngle.get(pickAngleForSection(section.layout_notes ?? "")) ?? undefined,
+        look: body.look,
+        userInstruction: body.userInstruction,
+      };
+
+      return generateSectionImage(
         {
           originalImageBase64: body.originalImageBase64,
           section,
           aspectRatio: body.aspectRatio,
           desiredTone: body.desiredTone,
-          options: {
-            style: "lifestyle",
-            withModel: false,
-            outputMode: body.outputMode ?? "full-image",
-            imageModel: model,
-            headline: section.headline,
-            subheadline: section.subheadline,
-            emphasisWords: body.emphasisWordsBySection?.[section.section_id],
-            // 페이지당 한 장. 모든 섹션이 같은 것을 써야 통일이 유지된다.
-            styleReferenceImages: body.styleReference
-              ? [
-                  {
-                    base64: body.styleReference.imageBase64,
-                    mimeType: body.styleReference.mimeType,
-                    description: body.styleReference.description,
-                  },
-                ]
-              : undefined,
-            preserveProductImage: body.preserveProduct ?? true,
-            characterReference:
-              characterByAngle.get(pickAngleForSection(section.layout_notes ?? "")) ?? undefined,
-          },
+          options,
         },
         apiKey,
-      ),
-    ),
+      );
+    }),
   );
 
   const results = settled.map((outcome, index) => {
