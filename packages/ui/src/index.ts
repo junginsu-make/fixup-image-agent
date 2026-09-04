@@ -26,6 +26,17 @@ export {
   DialogTitle,
   DialogDescription,
 } from "./components/ui/dialog";
+export {
+  BottomSheet,
+  BottomSheetTrigger,
+  BottomSheetClose,
+  BottomSheetContent,
+  BottomSheetHeader,
+  BottomSheetBody,
+  BottomSheetFooter,
+  BottomSheetTitle,
+  BottomSheetDescription,
+} from "./components/ui/bottom-sheet";
 export { Input } from "./components/ui/input";
 export type { InputProps } from "./components/ui/input";
 export { Textarea } from "./components/ui/textarea";
