@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { collectCardPaths, withCardUrls } from "../sns/list-urls";
 
-const project = (id: string, cards: Array<{ index: number; assetPath?: string }>) => ({
+const project = (id: string, cards: Array<{ index: number; assetPath?: string; thumbPath?: string }>) => ({
   id,
   data: {
     attachments: [],
@@ -10,7 +10,7 @@ const project = (id: string, cards: Array<{ index: number; assetPath?: string }>
       cards: cards.map((card) => ({
         index: card.index, kind: "generated" as const, role: "body" as const,
         copy: { index: card.index, headline: `${card.index}` },
-        status: "done" as const, assetPath: card.assetPath,
+        status: "done" as const, assetPath: card.assetPath, thumbPath: card.thumbPath,
       })),
     },
   },
@@ -68,5 +68,37 @@ describe("모은 주소를 작업에 다시 붙이기", () => {
   it("흐름이 없는 작업도 그대로 지나간다", () => {
     const projects = [{ id: "a", data: { attachments: [] } }] as never;
     expect(withCardUrls(projects, new Map())).toHaveLength(1);
+  });
+});
+
+describe("미리보기 주소", () => {
+  it("원본과 미리보기를 함께 모은다 — 한 번에 서명해 왕복을 안 늘린다", () => {
+    const paths = collectCardPaths([
+      project("a", [{ index: 1, assetPath: "u/sns/a/1.png", thumbPath: "u/sns/a/1.thumb.webp" }]),
+    ] as never);
+
+    expect(paths.sort()).toEqual(["u/sns/a/1.png", "u/sns/a/1.thumb.webp"]);
+  });
+
+  it("둘 다 붙인다 — 목록은 미리보기를, 확대·내려받기는 원본을 쓴다", () => {
+    const [result] = withCardUrls(
+      [project("a", [{ index: 1, assetPath: "u/sns/a/1.png", thumbPath: "u/sns/a/1.thumb.webp" }])] as never,
+      new Map([["u/sns/a/1.png", "signed:orig"], ["u/sns/a/1.thumb.webp", "signed:thumb"]]),
+    );
+
+    const card = result!.data.flow!.cards[0]!;
+    expect(card.assetUrl).toBe("signed:orig");
+    expect(card.thumbUrl).toBe("signed:thumb");
+  });
+
+  it("미리보기가 없는 옛 카드는 원본만 붙는다", () => {
+    const [result] = withCardUrls(
+      [project("a", [{ index: 1, assetPath: "u/sns/a/1.png" }])] as never,
+      new Map([["u/sns/a/1.png", "signed:orig"]]),
+    );
+
+    const card = result!.data.flow!.cards[0]!;
+    expect(card.assetUrl).toBe("signed:orig");
+    expect(card.thumbUrl).toBeUndefined();
   });
 });

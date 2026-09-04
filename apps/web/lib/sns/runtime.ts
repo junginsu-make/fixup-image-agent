@@ -20,9 +20,11 @@ import {
   readLocalSnsResultFile,
   replaceLocalSnsCards,
   updateLocalSnsCard,
+  writeLocalSnsPreviewFile,
   writeLocalSnsResultFile,
 } from "../local-store";
 import { collectCardPaths, withCardUrls } from "./list-urls";
+import { makeSnsPreview, snsPreviewPath } from "./thumbnail";
 import { markAsAi } from "../watermark";
 import { composeLayoutCard } from "../layout/card-composer";
 import type { SnsProviders } from "./providers";
@@ -70,15 +72,42 @@ async function resultUrl(path: string): Promise<string> {
   return isLocalStoreEnabled() ? localResultUrl(path) : signedUrl(path);
 }
 
-async function uploadResult(userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string) {
+async function uploadResult(
+  userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string,
+): Promise<{ assetPath: string; thumbPath: string | null }> {
   if (isLocalStoreEnabled()) {
     const png = await sharp(bytes).png().toBuffer();
-    return writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
+    const assetPath = await writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
+    const preview = await makeSnsPreview(png);
+    if (!preview) return { assetPath, thumbPath: null };
+    const thumbPath = await writeLocalSnsPreviewFile(localStoreRoot(), userId, projectId, cardIndex, preview);
+    return { assetPath, thumbPath };
   }
+
   const path = `${userId}/sns/${projectId}/${cardIndex}.${extensionFor(contentType)}`;
-  const result = await createSupabaseAdminClient().storage.from(BUCKET).upload(path, bytes, { contentType, upsert: true });
+  const storage = createSupabaseAdminClient().storage.from(BUCKET);
+  const result = await storage.upload(path, bytes, { contentType, upsert: true });
   if (result.error) throw new Error(result.error.message);
-  return path;
+
+  /**
+   * 결과판에 걸 미리보기.
+   *
+   * 카드 열 장을 한꺼번에 깔면서 원본을 그대로 받는다 — 작업 하나를 여는 데
+   * 20~40MB 가 오간다. **못 만들어도 저장을 막지 않는다.** 없으면 화면이
+   * 원본으로 떨어진다.
+   */
+  const preview = await makeSnsPreview(bytes);
+  if (!preview) return { assetPath: path, thumbPath: null };
+
+  const thumbPath = snsPreviewPath(userId, projectId, cardIndex);
+  const previewResult = await storage.upload(thumbPath, preview, {
+    contentType: "image/webp", upsert: true,
+  });
+  if (previewResult.error) {
+    console.error(`[sns] 미리보기를 올리지 못했습니다: ${previewResult.error.message}`);
+    return { assetPath: path, thumbPath: null };
+  }
+  return { assetPath: path, thumbPath };
 }
 
 function edgeSamples(data: Buffer, width: number, height: number, channels: number) {
@@ -243,6 +272,7 @@ export async function createQueuedGenerationDependencies(input: {
     }
     const result = await client!.from("sns_cards").update({
       ...(patch.assetPath !== undefined ? { asset_path: patch.assetPath } : {}),
+      ...(patch.thumbPath !== undefined ? { thumb_path: patch.thumbPath } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
       ...(patch.review !== undefined ? { review: patch.review } : {}),
@@ -279,11 +309,14 @@ export async function createQueuedGenerationDependencies(input: {
             slotImages: await fetchSlotImages(images, card.index),
           })).png
         : await markAsAi((await fetchedImage(requireWholeImage(images, card.index))).bytes);
-      const assetPath = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
-      await updateCard(card.index, { assetPath, status: "done", error: null });
+      const saved = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
+      const { assetPath, thumbPath } = saved;
+      await updateCard(card.index, { assetPath, thumbPath, status: "done", error: null });
       return {
         assetPath,
         assetUrl: await resultUrl(assetPath),
+        // 검수는 원본을 본다. 미리보기로 검수하면 압축 자국을 그림의 흠으로
+        // 읽게 된다.
         reviewUrl: local ? await localResultDataUrl(assetPath) : await signedUrl(assetPath),
       };
     },
@@ -294,9 +327,11 @@ export async function createQueuedGenerationDependencies(input: {
       if (!card.assetUrl) throw new Error(`${card.index}번 사용자 원본 URL이 없습니다.`);
       const image = await fetchedImage(card.assetUrl);
       const rendered = await letterbox(image.bytes, ratio);
-      const assetPath = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
-      await updateCard(card.index, { assetPath, status: "done", review: null, error: null });
-      return { assetPath, assetUrl: await resultUrl(assetPath) };
+      const saved = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
+      await updateCard(card.index, {
+        assetPath: saved.assetPath, thumbPath: saved.thumbPath, status: "done", review: null, error: null,
+      });
+      return { assetPath: saved.assetPath, assetUrl: await resultUrl(saved.assetPath) };
     },
   };
 }

@@ -23,7 +23,7 @@ interface ProjectSummary {
   modelId: string;
   cardCount?: number;
   updatedAt: string;
-  data?: { flow?: { cards?: Array<{ index: number; assetUrl?: string | null }> } };
+  data?: { flow?: { cards?: Array<{ index: number; assetUrl?: string | null; thumbUrl?: string | null }> } };
 }
 
 const STATUS: Record<string, { label: string; tone: "green" | "secondary" | "destructive" }> = {
@@ -71,7 +71,9 @@ export function SnsProjectList() {
       {projects.map((project) => {
         const cards = project.data?.flow?.cards ?? [];
         // 대표 그림은 첫 장이다. 표지가 그 작업을 가장 잘 알려 준다.
-        const cover = cards.find((card) => card.assetUrl)?.assetUrl ?? null;
+        // 표지는 미리보기를 쓴다. 없으면 원본으로 떨어진다.
+        const first = cards.find((card) => card.assetUrl);
+        const cover = first?.thumbUrl ?? first?.assetUrl ?? null;
         const made = cards.filter((card) => card.assetUrl).length;
         const status = STATUS[project.status] ?? { label: project.status, tone: "secondary" as const };
         return (

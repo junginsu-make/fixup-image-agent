@@ -511,6 +511,8 @@ export interface LocalSnsCardRow {
   copy: SnsFlowCard["copy"];
   prompt: string | null;
   assetPath: string | null;
+  /** 결과판에 거는 미리보기. 없으면 화면이 원본으로 떨어진다. */
+  thumbPath?: string | null;
   status: SnsFlowCard["status"];
   review: unknown | null;
   error: string | null;
@@ -541,7 +543,7 @@ export function updateLocalSnsCard(
   userId: string,
   projectId: string,
   cardIndex: number,
-  patch: Partial<Pick<LocalSnsCardRow, "copy" | "prompt" | "assetPath" | "status" | "review" | "error">>,
+  patch: Partial<Pick<LocalSnsCardRow, "copy" | "prompt" | "assetPath" | "thumbPath" | "status" | "review" | "error">>,
 ): Promise<LocalSnsCardRow> {
   return database.update((data) => {
     const card = data.cards.find((entry) => entry.projectId === projectId && entry.index === cardIndex && entry.userId === userId);
@@ -607,6 +609,26 @@ export async function writeLocalSnsResultFile(
   assertLocalSegment(projectId, "프로젝트");
   if (!Number.isInteger(cardIndex) || cardIndex < 1) throw new Error("카드 번호가 올바르지 않습니다.");
   const storagePath = `${userId}/sns/${projectId}/${cardIndex}.png`;
+  const target = localFilePath(root, storagePath);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, bytes);
+  return storagePath;
+}
+
+/**
+ * 미리보기 파일. 원본과 **별개 파일**이라 원본 이름 규칙을 건드리지 않는다.
+ */
+export async function writeLocalSnsPreviewFile(
+  root: string,
+  userId: string,
+  projectId: string,
+  cardIndex: number,
+  bytes: Buffer,
+): Promise<string> {
+  assertLocalSegment(userId, "사용자");
+  assertLocalSegment(projectId, "프로젝트");
+  if (!Number.isInteger(cardIndex) || cardIndex < 1) throw new Error("카드 번호가 올바르지 않습니다.");
+  const storagePath = `${userId}/sns/${projectId}/${cardIndex}.thumb.webp`;
   const target = localFilePath(root, storagePath);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes);

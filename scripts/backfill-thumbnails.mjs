@@ -8,7 +8,7 @@ const sharp = require("sharp");
 /**
  * 이미 쌓인 그림에 목록용 작은 사본을 만들어 준다.
  *
- * 라이브러리(512px)·첫 화면 갤러리(1024px)·포스터(1024px)를 함께 채운다.
+ * 라이브러리(512px)·갤러리(1024px)·포스터(1024px)·카드뉴스(원본 크기)를 함께 채운다.
  *
  * 새로 저장하는 것은 저장할 때 사본이 함께 만들어진다. 그런데 그것만으로는
  * **옛 계정일수록 이득이 0** 이다 — 목록에 뜨는 것이 대부분 옛 그림이기 때문이다.
@@ -174,6 +174,70 @@ async function backfillPoster() {
   }
 }
 
+/**
+ * 카드뉴스.
+ *
+ * **줄이지 않고 형식만 바꾼다** — 카드는 이미 화면에 뜨는 크기로 만들어지므로
+ * 줄일 이유가 없고, 그래야 흐려질 위험이 0 이다.
+ * 값은 `apps/web/lib/sns/thumbnail.ts` 와 같아야 한다(줄이지 않음 / q88).
+ *
+ * 카드는 흐름 JSON 안에도 자리가 있어 표와 함께 고쳐야 한다.
+ */
+async function backfillSns() {
+  const after = process.argv.indexOf("--after-sns");
+  const cursor = after > 0 ? process.argv[after + 1] : "";
+
+  let listing = supabase
+    .from("sns_cards")
+    .select("id,user_id,project_id,index,asset_path")
+    .is("thumb_path", null)
+    .not("asset_path", "is", null)
+    .order("id", { ascending: true })
+    .limit(LIMIT);
+  if (cursor) listing = listing.gt("id", cursor);
+
+  const { data: rows, error } = await listing;
+  if (error) { console.error(`카드뉴스를 읽지 못했습니다: ${error.message}`); return; }
+  if (!rows.length) { console.log("카드뉴스: 채울 것이 없습니다."); return; }
+
+  console.log(`
+카드뉴스 ${rows.length}건`);
+  let made = 0, skipped = 0, failed = 0;
+
+  for (const row of rows) {
+    const file = await supabase.storage.from(BUCKET).download(row.asset_path);
+    if (file.error || !file.data) { failed += 1; continue; }
+
+    const bytes = Buffer.from(await file.data.arrayBuffer());
+    let preview;
+    try {
+      preview = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
+        .keepMetadata().webp({ quality: 88 }).toBuffer();
+    } catch { failed += 1; continue; }
+    if (preview.length >= bytes.length) { skipped += 1; continue; }
+
+    const thumbPath = `${row.user_id}/sns/${row.project_id}/${row.index}.thumb.webp`;
+    const uploaded = await supabase.storage
+      .from(BUCKET)
+      .upload(thumbPath, preview, { contentType: "image/webp", upsert: true });
+    if (uploaded.error) { failed += 1; continue; }
+
+    const { error: updateError } = await supabase
+      .from("sns_cards").update({ thumb_path: thumbPath }).eq("id", row.id);
+    if (updateError) {
+      await supabase.storage.from(BUCKET).remove([thumbPath]);
+      failed += 1;
+      continue;
+    }
+    made += 1;
+  }
+  console.log(`카드뉴스 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  console.log("  ※ 흐름 JSON 안의 카드 자리는 다음 저장 때 채워집니다.");
+  if (rows.length === LIMIT) {
+    console.log(`  이어서: --apply --after-sns ${rows[rows.length - 1].id}`);
+  }
+}
+
 async function main() {
   /**
    * **id 로 앞으로만 나아간다.**
@@ -243,6 +307,7 @@ async function main() {
 
   await backfillShowcase();
   await backfillPoster();
+  await backfillSns();
   if (rows.length === LIMIT) {
     console.log(`상한에 걸렸습니다. 이어서 하려면: --apply --after ${rows[rows.length - 1].id}`);
   }

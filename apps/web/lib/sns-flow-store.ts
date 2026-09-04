@@ -12,6 +12,7 @@ import {
   saveLocalSnsFlow,
 } from "./local-store";
 import { createSupabaseServerClient } from "./supabase/server";
+import { snsCardPathsToRemove } from "./sns/thumbnail";
 
 export interface SnsFlowStore {
   get(projectId: string): Promise<SnsProjectRecord | undefined>;
@@ -27,11 +28,18 @@ export interface SnsFlowStore {
   remove(projectId: string): Promise<boolean>;
 }
 
-/** 이 작업이 만들어 둔 그림들의 저장 경로. */
+/**
+ * 이 작업이 만들어 둔 그림들의 저장 경로. **미리보기도 함께 모은다.**
+ *
+ * 행이 사라지면 미리보기의 자리를 아는 근거가 없어진다 — 라이브러리·갤러리·
+ * 포스터에서 세 번 반복해 잡힌 실수라 규칙을 한 곳에 두고 쓴다.
+ */
 function assetPathsOf(project: SnsProjectRecord): string[] {
-  return (project.data.flow?.cards ?? [])
-    .flatMap((card) => (card.assetPath ? [card.assetPath] : []));
+  return snsCardPathsToRemove(project.data.flow?.cards ?? []);
 }
+
+/** 시험이 「삭제가 이 규칙을 부른다」를 확인할 수 있게 연다. */
+export const assetPathsOfForTest = assetPathsOf;
 
 export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore> {
   if (isLocalStoreEnabled()) {

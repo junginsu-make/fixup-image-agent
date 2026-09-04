@@ -11,6 +11,7 @@ import {
   type PosterProjectRow,
 } from "../../../../lib/poster/supabase-store-core";
 import { ownerIdsOf, withOwner } from "./core";
+import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 import { posterAssetPathsToRemove } from "../../../../lib/poster/supabase-store-core";
 
 /**
@@ -142,8 +143,10 @@ export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise
   if (kind === "sns") {
     const { data } = await admin.from("sns_projects").select("data").eq("id", id).maybeSingle();
     if (!data) return false;
-    const paths = (((data.data as { flow?: { cards?: Array<{ assetPath?: string }> } })?.flow?.cards) ?? [])
-      .flatMap((card) => (card.assetPath ? [card.assetPath] : []));
+    // 회원 삭제와 **같은 규칙**을 쓴다. 두 길이 갈라지면 한쪽만 미리보기를 남긴다.
+    const paths = snsCardPathsToRemove(
+      ((data.data as { flow?: { cards?: Array<{ assetPath?: string; thumbPath?: string | null }> } })?.flow?.cards) ?? [],
+    );
 
     // 카드 행은 FK cascade 가 지운다.
     const { error } = await admin.from("sns_projects").delete().eq("id", id);
