@@ -121,7 +121,15 @@ function NavItem({
   desc?: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
-  /** 다른 메뉴보다 눈에 띄어야 하는 항목. 테두리와 채운 아이콘으로 세운다. */
+  /**
+   * 다른 메뉴보다 눈에 띄어야 하는 항목.
+   *
+   * **「지금 이 화면」과는 다르게 보여야 한다.** 처음에는 강조도 선택도 같은
+   * `bg-primary-soft` 에 채운 아이콘을 써서, 다른 화면에 있는데도 설명서가
+   * 늘 눌린 것처럼 보였다. 두 개가 동시에 켜져 있으니 어디 있는지 알 수 없다.
+   *
+   * 그래서 갈랐다 — 선택은 **채운 배경**, 강조는 **테두리만**.
+   */
   highlight?: boolean;
 }) {
   return (
@@ -133,16 +141,18 @@ function NavItem({
         active
           ? "bg-primary-soft shadow-[0_0_0_1px_var(--primary-ring)]"
           : highlight
-            ? "border border-primary/35 bg-primary-soft/50 hover:bg-primary-soft"
+            ? "border border-dashed border-primary/40 hover:bg-primary-soft/60"
             : "hover:bg-background"
       )}
     >
       <span
         className={cn(
           "mt-0.5 grid h-5 w-5 flex-none place-items-center rounded-[6px] border",
-          active || highlight
+          active
             ? "border-transparent bg-primary text-primary-foreground"
-            : "border-border bg-background text-subtle-foreground"
+            : highlight
+              ? "border-primary/40 bg-background text-primary"
+              : "border-border bg-background text-subtle-foreground"
         )}
       >
         <Icon className="h-3 w-3" />
