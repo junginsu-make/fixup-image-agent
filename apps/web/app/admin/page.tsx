@@ -336,6 +336,17 @@ function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile;
           >
             승인
           </ConfirmSubmitButton>
+          {/*
+            왜 잠겼는지 말해 준다. 버튼만 회색이고 아무 설명이 없어서 관리자가
+            고장으로 봤다(2026-09-04). 이메일 주인이 맞는지 확인되기 전에
+            승인하면 남의 주소로 가입한 사람을 들여보내게 되므로 잠그는 것이
+            맞지만, 잠근 이유는 보여야 한다.
+          */}
+          {!profile.email_confirmed_at ? (
+            <p className="mt-1 text-[11px] leading-snug text-amber-700">
+              이메일 인증 대기 중입니다. 본인이 인증 메일의 링크를 눌러야 승인할 수 있습니다.
+            </p>
+          ) : null}
         </form>
       ) : null}
       {profile.status === "active" ? (
