@@ -161,6 +161,18 @@ export function toImageRecord(row: PosterImageRow): PosterImageRecord {
   };
 }
 
+/**
+ * 지울 경로를 모은다. 회원 삭제와 관리자 삭제가 **같은 답**을 내야 한다.
+ *
+ * 행은 FK 로 함께 사라지므로 사본의 자리를 아는 근거가 없어진다 — 여기서
+ * 빠뜨리면 아무도 못 찾는 파일이 버킷에 영원히 남는다.
+ */
+export function posterAssetPathsToRemove(
+  images: Array<{ assetPath: string; thumbPath?: string | null }>,
+): string[] {
+  return images.flatMap((image) => (image.thumbPath ? [image.assetPath, image.thumbPath] : [image.assetPath]));
+}
+
 export function imageInsertRows(
   userId: string,
   rows: Array<Omit<PosterImageRecord, "id" | "createdAt" | "selected">>,

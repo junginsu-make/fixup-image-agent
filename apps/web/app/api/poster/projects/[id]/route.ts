@@ -4,6 +4,7 @@ import path from "node:path";
 import { PosterSlotsSchema } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../lib/local-store";
+import { posterAssetPathsToRemove } from "../../../../../lib/poster/supabase-store-core";
 import { posterStoresForUser } from "../../../../../lib/poster/stores";
 import { createSupabaseAdminClient } from "../../../../../lib/supabase/admin";
 import { createPosterService, PosterValidationError } from "../poster-service";
@@ -94,7 +95,8 @@ export async function DELETE(_request: Request, context: Context) {
     }
     const stores = posterStoresForUser(auth.member.userId);
     // 행보다 먼저 경로를 읽어 둔다. 지우고 나면 어디에 있었는지 알 수 없다.
-    const paths = (await stores.images.byProject(id)).map((image) => image.assetPath);
+    // **사본도 함께 모은다.** 행이 사라지면 사본의 자리를 아는 곳이 없어진다.
+    const paths = posterAssetPathsToRemove(await stores.images.byProject(id));
     await createPosterService(stores.projects).remove(id);
     await removePosterAssets(paths);
     return Response.json({ ok: true });

@@ -10,6 +10,7 @@ import type {
   PosterRequestStore,
 } from "@fixup/poster-core";
 import { getLocalDatabase, type LocalDatabase } from "../local-store";
+import { posterImageUrl, posterThumbUrl } from "./supabase-store-core";
 
 /**
  * 로컬 파일 저장소의 포스터 부분.
@@ -35,6 +36,22 @@ function bucket<K extends keyof PosterLocalData>(data: unknown, key: K): PosterL
 function strip<T extends { userId: string }>(row: T): Omit<T, "userId"> {
   const { userId: _drop, ...rest } = row;
   return rest;
+}
+
+/**
+ * 화면이 읽을 주소를 붙인다.
+ *
+ * 운영에서는 `toImageRecord` 가 이 일을 하는데, 로컬은 표를 안 거치므로 여기서
+ * 같은 값을 만든다. 없으면 로컬에서는 **사본을 만들기만 하고 한 번도 읽지
+ * 않는다** — 두 모드가 다르게 동작하면 로컬에서 확인한 것이 운영에서 확인한
+ * 것이 아니게 된다.
+ */
+function withUrls<T extends { projectId: string; variantIndex: number; thumbPath?: string | null }>(row: T) {
+  return {
+    ...row,
+    url: posterImageUrl(row.projectId, row.variantIndex),
+    thumbUrl: row.thumbPath ? posterThumbUrl(row.projectId, row.variantIndex) : undefined,
+  };
 }
 
 function notFound(label: string): Error {
@@ -164,7 +181,7 @@ export function createLocalPosterImageStore(
     async byProject(projectId) {
       return database.read((data) => bucket(data, "posterImages")
         .filter((row) => row.userId === userId && row.projectId === projectId)
-        .map(strip)
+        .map((row) => withUrls(strip(row)))
         .sort((a, b) => a.variantIndex - b.variantIndex));
     },
     async byProjects(projectIds) {
@@ -172,7 +189,7 @@ export function createLocalPosterImageStore(
       const wanted = new Set(projectIds);
       return database.read((data) => bucket(data, "posterImages")
         .filter((row) => row.userId === userId && wanted.has(row.projectId))
-        .map(strip)
+        .map((row) => withUrls(strip(row)))
         .sort((a, b) => a.projectId.localeCompare(b.projectId) || a.variantIndex - b.variantIndex));
     },
     async add(rows) {
@@ -182,7 +199,7 @@ export function createLocalPosterImageStore(
           createdAt: new Date().toISOString(),
         };
         bucket(data, "posterImages").push(saved);
-        return strip(saved);
+        return withUrls(strip(saved));
       }));
     },
     async select(projectId, imageId) {

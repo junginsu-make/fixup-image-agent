@@ -432,11 +432,12 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                     {image.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        // 목록은 사본을 쓴다. 확대와 내려받기는 아래에서
-                        // 원본 주소를 그대로 쓰므로 품질이 깎이지 않는다.
+                        // 목록은 사본을 쓴다. 확대는 `data-viewer-src`, 내려받기는
+                        // 아래 `downloadVariant` 가 원본 주소를 쓰므로 품질이 깎이지 않는다.
                         src={image.thumbUrl ?? image.url}
                         alt={`${project.title} · 변형 ${image.variantIndex + 1}`}
                         data-zoomable
+                        data-viewer-src={image.url}
                         data-viewer-meta={viewerMeta}
                         className="w-full cursor-zoom-in"
                       />
