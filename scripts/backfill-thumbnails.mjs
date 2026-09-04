@@ -8,6 +8,8 @@ const sharp = require("sharp");
 /**
  * 이미 쌓인 그림에 목록용 작은 사본을 만들어 준다.
  *
+ * 라이브러리(512px)와 첫 화면 갤러리(1024px)를 함께 채운다.
+ *
  * 새로 저장하는 것은 저장할 때 사본이 함께 만들어진다. 그런데 그것만으로는
  * **옛 계정일수록 이득이 0** 이다 — 목록에 뜨는 것이 대부분 옛 그림이기 때문이다.
  *
@@ -23,6 +25,14 @@ const sharp = require("sharp");
 
 const BUCKET = "library";
 const THUMBNAIL_EDGE = 512;
+/**
+ * 갤러리는 화면에서 크게 뜬다. 512 로 줄이면 첫인상이 흐려진다.
+ *
+ * **가로만 묶는다** — 갤러리는 열로 흘려 배치하므로 제약이 가로뿐이고, 긴 변을
+ * 묶으면 세로로 긴 그림의 가로가 깎여 흐려진다. `store.ts` 의
+ * `SHOWCASE_THUMBNAIL_WIDTH` 와 같은 값이어야 한다.
+ */
+const SHOWCASE_WIDTH = 1024;
 const MAX_INPUT_PIXELS = 12_000_000;
 
 const apply = process.argv.includes("--apply");
@@ -44,12 +54,12 @@ const supabase = createClient(url, key, { auth: { persistSession: false } });
  * 512 / quality 78 / keepMetadata / limitInputPixels / 「작을 때만」.
  * 한쪽을 고치면 반드시 다른 쪽도 고칠 것.
  */
-async function thumbnailFor(bytes) {
+async function thumbnailFor(bytes, edge = THUMBNAIL_EDGE, quality = 78, widthOnly = false) {
   try {
     const thumb = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
       .keepMetadata()
-      .resize(THUMBNAIL_EDGE, THUMBNAIL_EDGE, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 78 })
+      .resize(edge, widthOnly ? null : edge, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality })
       .toBuffer();
     // 원본보다 작을 때만 둔다. 이미 작은 그림은 줄여도 오히려 커진다.
     return thumb.length < bytes.length ? thumb : null;
@@ -57,6 +67,53 @@ async function thumbnailFor(bytes) {
     console.error(`  sharp 실패: ${error instanceof Error ? error.message : error}`);
     return null;
   }
+}
+
+/**
+ * 첫 화면 갤러리.
+ *
+ * 커서를 두지 않는다. 표에 상한은 없지만 여기 걸리는 것은 **관리자가 직접 고른
+ * 것**이라 실전에서 수십 건이다. 사본을 못 만든 건은 다음 실행에서 또 걸리는데,
+ * 그 수가 적어 라이브러리처럼 제자리를 돌 위험이 없다. 그래도 한 번에 무한정
+ * 읽지는 않게 상한은 건다.
+ */
+async function backfillShowcase() {
+  const { data: rows, error } = await supabase
+    .from("showcase_items")
+    .select("id,storage_path")
+    .is("thumb_path", null)
+    .limit(LIMIT);
+  if (error) { console.error(`갤러리를 읽지 못했습니다: ${error.message}`); return; }
+  if (!rows.length) { console.log("갤러리: 채울 것이 없습니다."); return; }
+
+  console.log(`
+갤러리 ${rows.length}건`);
+  let made = 0, skipped = 0, failed = 0;
+
+  for (const row of rows) {
+    const file = await supabase.storage.from(BUCKET).download(row.storage_path);
+    if (file.error || !file.data) { failed += 1; continue; }
+
+    const bytes = Buffer.from(await file.data.arrayBuffer());
+    const thumb = await thumbnailFor(bytes, SHOWCASE_WIDTH, 82, true);
+    if (!thumb) { skipped += 1; continue; }
+
+    const thumbPath = `showcase/${row.id}.thumb.webp`;
+    const uploaded = await supabase.storage
+      .from(BUCKET)
+      .upload(thumbPath, thumb, { contentType: "image/webp", upsert: true });
+    if (uploaded.error) { failed += 1; continue; }
+
+    const { error: updateError } = await supabase
+      .from("showcase_items").update({ thumb_path: thumbPath }).eq("id", row.id);
+    if (updateError) {
+      await supabase.storage.from(BUCKET).remove([thumbPath]);
+      failed += 1;
+      continue;
+    }
+    made += 1;
+  }
+  console.log(`갤러리 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
 }
 
 async function main() {
@@ -125,6 +182,8 @@ async function main() {
 
   console.log(`\n만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 실패 ${failed}`);
   console.log(`목록 한 번당 아끼는 양: 약 ${(savedBytes / 1048576).toFixed(1)}MB`);
+
+  await backfillShowcase();
   if (rows.length === LIMIT) {
     console.log(`상한에 걸렸습니다. 이어서 하려면: --apply --after ${rows[rows.length - 1].id}`);
   }

@@ -417,8 +417,15 @@ function ShowcaseRow({ item, first, last }: { item: ShowcaseAdminView; first: bo
     <li className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-start">
       <div className="grid aspect-square w-[88px] place-items-center overflow-hidden rounded-md bg-muted">
         {item.visible ? (
+          // 88px 자리다. 원본을 넣으면 200장까지 내려받는다 — 이 변경이
+          // 줄이려던 바로 그 비용이다.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.url} alt={item.caption ?? "첫 화면에 걸린 그림"} className="h-full w-full object-contain" />
+          <img
+            src={item.thumbUrl}
+            alt={item.caption ?? "첫 화면에 걸린 그림"}
+            loading="lazy"
+            className="h-full w-full object-contain"
+          />
         ) : (
           // 끈 그림은 주소까지 막힌다 — 껐는데 주소를 아는 사람이 계속 볼 수
           // 있으면 껐다고 할 수 없다. 그래서 여기서도 안 보인다.

@@ -265,6 +265,7 @@ export function WorksTab() {
         {
           id: `${work.tool}-${work.id}-${image.index}`,
           url: "",
+          thumbUrl: "",
           width: null,
           height: null,
           caption: null,
