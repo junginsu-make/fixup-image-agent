@@ -1,3 +1,7 @@
+import {
+  imageLookDirective, priorityLine, userInstructionHead, userInstructionTail,
+  type ImageLook,
+} from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
 
 /**
@@ -10,6 +14,9 @@ import type { PosterSlots } from "./schemas";
  * - **글자 칸마다 자리를 준다.** 자리를 안 주면 모델이 짧은 라벨로 요약해 넣는다.
  * - **없는 것을 지어내지 말라고 한다.** 저작권 표시·인사말이 저절로 생긴 적이 있다.
  * - **배경 글자는 금지가 아니라 자제다.** 간판까지 막으면 그림이 어색해진다.
+ * - **사람이 직접 친 말은 양끝에 둔다.** 2026-09-04 실측에서 프롬프트 뒤에 긴
+ *   문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다. 긴 프롬프트에서 중간
+ *   문장은 힘을 잃는다.
  */
 
 export type PosterImageKind = "style_reference" | "preserved";
@@ -35,6 +42,20 @@ export interface PosterPromptInput {
    * 없으면 안 적는 것이 맞다 — 비율은 API 쪽 aspect_ratio 로 이미 간다.
    */
   size?: { width: number; height: number };
+  /**
+   * 사용자가 화면에서 직접 친 추가 지시.
+   *
+   * 슬롯(scene·subject·action)은 기획이 채운 초안이고 이건 사람이 친 말이다.
+   * 그래서 우선순위가 가장 높고, 프롬프트의 **맨 앞과 맨 뒤 두 곳**에 들어간다.
+   */
+  userInstruction?: string;
+  /**
+   * 그림의 결. 기본은 `auto`.
+   *
+   * `auto` 여야 지금 쓰던 사람이 안 깨진다 — 첨부 레퍼런스의 결을 따라가는
+   * 지금 동작이 그대로 유지된다. 명시적으로 골랐을 때만 지시가 들어간다.
+   */
+  look?: ImageLook;
 }
 
 const TYPE_INTERACTION_EN: Record<string, string> = {
@@ -44,9 +65,16 @@ const TYPE_INTERACTION_EN: Record<string, string> = {
   "감쌈": "the type wraps around the subject",
 };
 
-function attachmentLines(images: PosterPromptImage[]): string[] {
+function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolean): string[] {
   if (!images.length) return [];
-  const lines = ["Follow the instruction for each attached image separately. Image numbers match attachment order."];
+  const lines = [
+    // 첨부를 「대충 이런 느낌」으로 흘려보내지 말라고 먼저 못 박는다. 안 적으면
+    // 모델이 붙인 그림 대신 자기가 아는 비슷한 것을 그려 넣는다.
+    "Study every attached image closely before drawing. They are the source of truth for what they "
+    + "define — reproduce what you actually see in them. Do not approximate them from memory, and "
+    + "never substitute a generic stand-in.",
+    "Follow the instruction for each attached image separately. Image numbers match attachment order.",
+  ];
   images.forEach((image, index) => {
     const number = index + 1;
     if (image.kind === "preserved") {
@@ -73,12 +101,15 @@ function attachmentLines(images: PosterPromptImage[]): string[] {
       + "match what is described below.",
     );
   });
-  if (images.some((image) => image.kind === "preserved")) {
-    lines.push(
-      "Priority when instructions conflict: PRESERVED SUBJECT takes priority over the POSTER REFERENCE, "
-      + "which takes priority over the scene description.",
-    );
-  }
+  // 순서는 공용 어휘(@fixup/shared)가 정한다. 다섯 도구가 갈리면 안 된다.
+  //
+  // 전에는 여기에 「PRESERVED > REFERENCE > scene」 이 박혀 있었고 사용자가 친
+  // 말은 아예 없었다. 배경을 밤으로 해 달라고 적어도 낮인 레퍼런스가 이겼다.
+  const priority = priorityLine({
+    hasUserInstruction,
+    hasPreserved: images.some((image) => image.kind === "preserved"),
+  });
+  if (priority) lines.push(priority);
   // 얼굴이 둘이면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측,
   // pdp-core/src/pdp.reference-policy.ts). 막을 수 없으면 못이라도 박는다.
   if (images.filter((image) => image.kind === "preserved" && image.subject === "person").length > 1) {
@@ -135,14 +166,29 @@ function copyLines(slots: PosterSlots): string[] {
 
 export function buildPosterPrompt(input: PosterPromptInput): string {
   const forbidden = input.slots.forbidden.trim();
+  const instruction = input.userInstruction ?? "";
+  const head = userInstructionHead(instruction);
+  const tail = userInstructionTail(instruction);
+  // 지킬 인물이 붙어 있으면 실사 지시도 사람 몸으로 말해야 한다. 중립 문단만
+  // 가면 모공·솜털 이야기가 빠져 피부가 밀랍처럼 나온다 — 정작 얼굴을 지키려고
+  // 사람을 붙인 작업에서 그렇게 되면 안 된다.
+  const hasPerson = input.images.some(
+    (image) => image.kind === "preserved" && image.subject === "person",
+  );
+  const look = imageLookDirective(input.look ?? "auto", hasPerson ? "person" : "generic");
   return [
-    ...attachmentLines(input.images),
+    // 사람이 친 말이 맨 앞이다. 그 아래를 다 읽기 전에 무엇이 가장 센지 안다.
+    ...(head ? [head, ""] : []),
+    ...attachmentLines(input.images, Boolean(head)),
     "",
     ...sceneLines(input.slots),
+    ...(look ? [look] : []),
     "",
     ...copyLines(input.slots),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
+    // 맨 뒤에서 한 번 더 못 박는다. 긴 프롬프트에서 중간은 힘을 잃는다.
+    ...(tail ? [tail] : []),
     input.size
       ? `Output size ${input.size.width}x${input.size.height}. No outer border, no page frame, no UI chrome.`
       : "No outer border, no page frame, no UI chrome.",

@@ -45,6 +45,8 @@ export function createPosterService(store: PosterProjectStore) {
           referenceIds: input.referenceIds,
           preservedIds: input.preservedIds,
           personIds: input.personIds,
+          look: input.look,
+          userInstruction: input.userInstruction,
           slots: input.slots ?? EMPTY_SLOTS,
         },
       });

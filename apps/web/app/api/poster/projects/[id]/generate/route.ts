@@ -109,6 +109,10 @@ export async function POST(_request: Request, context: Context) {
         sourceSize,
         variants: project.data.variants,
         slots: project.data.slots,
+        // 사용자가 친 말과 고른 결. 옛 작업에는 없다 — 없으면 프롬프트가
+        // 지금까지처럼(추가 지시 없음 · 레퍼런스의 결을 따라감) 조립된다.
+        userInstruction: project.data.userInstruction,
+        look: project.data.look,
         referenceUrls: references.map((reference) => urls[reference.id]!).filter(Boolean),
         preservedUrls: preserved.map((reference) => urls[reference.id]!).filter(Boolean),
         // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
