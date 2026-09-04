@@ -383,7 +383,7 @@ export function WorksTab() {
           <h2 className="text-xl font-semibold">작업물</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {allMembers
-              ? "모든 회원이 만든 결과물입니다. 지우기는 자기 것에만 열립니다."
+              ? "모든 회원이 만든 결과물입니다. 관리자는 누가 만든 것이든 지울 수 있습니다."
               : "이 시스템으로 만든 결과물입니다. 눌러서 언제·무엇을·어떤 설정으로 만들었는지 봅니다."}
             {showcase ? " 그림을 열어 첫 화면 갤러리에 걸 수 있습니다." : ""}
           </p>
@@ -405,7 +405,28 @@ export function WorksTab() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {works.map((work) => (
-          <Card key={`${work.tool}-${work.id}`} className="cursor-pointer overflow-hidden" onClick={() => (work.images.length ? openWork(work) : router.push(work.href))}>
+          <Card key={`${work.tool}-${work.id}`} className="relative cursor-pointer overflow-hidden" onClick={() => (work.images.length ? openWork(work) : router.push(work.href))}>
+            {/* 지우기를 카드 모서리에 둔다.
+
+                전에는 큰 창을 열어야만 지울 수 있었다. 그런데 **그림이 없는
+                작업은 창이 안 열린다** — 누르면 도구 화면으로 간다. 그래서
+                만들다 만 작업은 지울 방법이 아예 없었다.
+
+                모서리에 두는 것은 참고 이미지와 같다. 아래에 줄로 두면 카드가
+                길어지고 다른 단추와 섞여 잘못 누르게 된다. */}
+            {work.mine || isAdmin ? (
+              <button
+                type="button"
+                aria-label={`${work.title} 지우기`}
+                disabled={Boolean(deleting)}
+                onClick={(event) => {
+                  // 카드를 누른 것으로도 읽히면 지우기 확인과 큰 창이 함께 뜬다.
+                  event.stopPropagation();
+                  setConfirming(work.id);
+                }}
+                className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive disabled:opacity-50"
+              ><Trash2 className="size-3.5" /></button>
+            ) : null}
             {/* 칸은 참고 이미지와 같은 정사각형, 그림은 잘라 내지 않는다.
                 비율이 제각각이라 잘라 놓으면 무엇을 만들었는지 모른다. */}
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
