@@ -67,7 +67,7 @@ const navGroups: NavGroup[] = [
   },
   {
     label: "보관",
-    items: [{ href: "/library", label: "라이브러리", desc: "참고 이미지 · 수집한 글 · 작업물", icon: Library }],
+    items: [{ href: "/library", label: "라이브러리", desc: "작업물 · 캐릭터 · 참고 이미지", icon: Library }],
   },
 ];
 
