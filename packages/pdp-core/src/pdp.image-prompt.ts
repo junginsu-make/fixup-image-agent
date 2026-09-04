@@ -1,4 +1,4 @@
-import { imageLookDirective, type ImageLook } from "@fixup/shared";
+import { designerPersona, imageLookDirective, type ImageLook } from "@fixup/shared";
 import type { PdpImageStyle, PdpOutputMode, SectionBlueprint } from "./types";
 
 /**
@@ -79,7 +79,10 @@ function peopleRule(options: ImagePromptOptions) {
 export function buildImageSystemPrompt(options: ImagePromptOptions) {
   const look = lookOf(options);
   return [
-    "You are an art director for Korean e-commerce detail page sections.",
+    // 누가 그리는가를 맨 앞에 세운다. 다섯 도구가 같은 사람을 세운다 —
+    // 도구마다 다른 사람을 세우면 결과의 격이 도구마다 갈린다.
+    designerPersona(),
+    "You are art-directing Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
     "People are optional. Only include a person when the scene genuinely calls for one; when one appears they must be Korean.",
     // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용

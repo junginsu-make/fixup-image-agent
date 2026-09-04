@@ -1,4 +1,6 @@
-import { imageLookDirective, userInstructionHead, userInstructionTail, type ImageLook } from "@fixup/shared";
+import {
+  designerPersona, imageLookDirective, userInstructionHead, userInstructionTail, type ImageLook,
+} from "@fixup/shared";
 import type { CardSize, LayoutSlot } from "./slots";
 
 /**
@@ -54,6 +56,8 @@ export function buildSlotPrompt(input: SlotPromptInput): string {
     // 힘을 잃는다(2026-09-04 실측).
     userInstructionHead(instruction),
     `A single image to fill a ${slotAspectLabel(input.rect)} area of a card.`,
+    // 누가 그리는가는 무엇을 그릴지 다음이다. 앞에 세우면 위 두 줄이 밀린다.
+    designerPersona(),
     `Subject: ${subject}`,
     input.styleBlock.trim() ? `Style:\n${input.styleBlock.trim()}` : "",
     look ? `Rendering style — this overrides the rendering style of the reference:\n${look}` : "",

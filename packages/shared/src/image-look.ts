@@ -163,3 +163,76 @@ export function priorityLine(options: { hasUserInstruction: boolean; hasPreserve
   if (ranks.length < 2) return "";
   return `Priority when instructions conflict: ${ranks.join(" > ")}.`;
 }
+
+/**
+ * 그리는 사람이 누구인가 — 프롬프트 **맨 앞**에 서는 한 줄.
+ *
+ * 역할을 안 주면 모델이 「무난한 것」으로 수렴한다. 세계적인 디자이너·
+ * 일러스트레이터의 자리에 세우면, 같은 지시로도 판단의 기준이 올라간다.
+ *
+ * 다섯 도구가 같은 문장을 쓴다. 도구마다 다른 사람을 세우면 결과의 격이
+ * 도구마다 갈린다.
+ *
+ * **지시를 이기라는 말이 아니다.** 아래 두 줄로 못 박는다 — 아무리 좋은
+ * 디자이너라도 받은 지시를 자기 취향으로 바꾸면 그건 다른 결과물이다.
+ */
+export function designerPersona(): string {
+  return [
+    "You are a world-class art director, graphic designer and illustrator.",
+    "Work at the level of an award-winning studio: deliberate composition, confident typography,",
+    "intentional colour, and craft in every detail. Never settle for a generic, templated look.",
+    "Craft is how you execute the brief — it never overrides it. Follow every instruction below exactly;",
+    "do not substitute your own taste for what was asked, and do not add elements nobody asked for.",
+  ].join("\n");
+}
+
+/**
+ * 지켜야 할 대상을 **그대로** 지키라는 지시.
+ *
+ * 전에는 「각도와 빛은 바뀌어도 된다」까지만 적었다. 그 말이 문을 너무 넓게
+ * 열었다 — 2026-09-04 사용자 보고에서 제품과 인물이 「약간 변형되어」 나왔다.
+ * 모델은 「바뀌어도 되는 것」이 있으면 나머지도 조금씩 손본다.
+ *
+ * 그래서 **무엇이 바뀌어도 되는지를 좁히고**, 바뀌면 안 되는 것을 낱낱이
+ * 적는다. 그리고 「새로 디자인하지 말라」를 따로 못 박는다 — 모델에게
+ * 「같은 물건을 그려라」와 「이 물건을 그려라」는 다른 말이다.
+ */
+export function preserveDirective(role: "preserve-person" | "preserve-object"): string {
+  if (role === "preserve-person") {
+    return [
+      "Reproduce this exact person — their identity must survive unchanged.",
+      "Facial structure, eye shape, nose, mouth, jawline, skin tone,",
+      "hairstyle and hair colour, and body proportions must match the attached photo feature by feature.",
+      "Only the pose, expression, framing and lighting may differ to fit the scene.",
+      "Do not beautify, slim, age, de-age, restyle or 'improve' them, and do not blend in another face.",
+      "Someone who knows this person must recognise them immediately.",
+    ].join(" ");
+  }
+  return [
+    "Reproduce this exact object — its identity must survive unchanged.",
+    "Silhouette, proportions, colours, materials, surface finish,",
+    "seams, hardware, labels, logos and any text on it must match the attached photo detail for detail.",
+    "Only the camera angle, placement and lighting may differ to fit the scene.",
+    "Do not redesign, restyle, simplify, embellish or change its branding — it is not a similar product,",
+    "it is this product.",
+  ].join(" ");
+}
+
+/**
+ * 첨부한 것이 결과의 **어디에** 놓이는지 정하라는 지시.
+ *
+ * 자리를 안 정해 주면 모델이 매번 다르게 놓는다. 지킬 대상이 구석에 작게
+ * 들어가 버리면 지킨 보람이 없고, 레퍼런스가 주인공 자리를 차지하면 따라
+ * 그리라고 준 것이 그대로 베껴진다.
+ */
+export function attachmentPlacementRule(hasPreserved: boolean): string {
+  if (!hasPreserved) {
+    return "Decide a deliberate placement for every element you draw — nothing floats without a reason.";
+  }
+  return [
+    "Give each preserved subject an explicit, deliberate place in the composition:",
+    "decide where it sits, how large it reads, what overlaps it, and how the eye reaches it.",
+    "A preserved subject must be clearly visible and legible at a glance — never cropped away,",
+    "never buried behind other elements, never reduced to a tiny detail.",
+  ].join(" ");
+}

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   IMAGE_LOOKS,
+  attachmentPlacementRule,
+  designerPersona,
   imageLookDirective,
+  preserveDirective,
   priorityLine,
   userInstructionHead,
   userInstructionTail,
@@ -80,5 +83,80 @@ describe("충돌 우선순위", () => {
     const line = priorityLine({ hasUserInstruction: false, hasPreserved: true });
     expect(line).not.toContain("USER INSTRUCTION");
     expect(line).toContain("PRESERVED SUBJECT");
+  });
+});
+
+describe("누가 그리는가", () => {
+  it("세계적인 디자이너·일러스트레이터 자리에 세운다", () => {
+    // 역할을 안 주면 모델이 「무난한 것」으로 수렴한다.
+    expect(designerPersona()).toMatch(/world-class/i);
+    expect(designerPersona()).toMatch(/designer/i);
+    expect(designerPersona()).toMatch(/illustrator/i);
+  });
+
+  it("역할이 지시를 이기지 않는다고 못 박는다", () => {
+    // 아무리 좋은 디자이너라도 받은 지시를 자기 취향으로 바꾸면 그건 다른
+    // 결과물이다. 사용자가 친 말이 가장 우선이라는 규칙과 부딪히면 안 된다.
+    expect(designerPersona()).toMatch(/never overrides it/i);
+    expect(designerPersona()).toMatch(/do not substitute your own taste/i);
+  });
+
+  it("다섯 도구가 같은 사람을 세운다", () => {
+    // 도구마다 다른 사람을 세우면 결과의 격이 도구마다 갈린다.
+    expect(designerPersona()).toBe(designerPersona());
+  });
+});
+
+describe("지켜야 할 것을 지킬 때", () => {
+  it("사람은 알아볼 수 있어야 한다고 말한다", () => {
+    const person = preserveDirective("preserve-person");
+    expect(person).toMatch(/identity/i);
+    expect(person).toMatch(/recognise them immediately/i);
+  });
+
+  it("사람을 예쁘게 고치지 말라고 못 박는다", () => {
+    // 2026-09-04 사용자 보고: 인물이 「약간 변형되어」 나왔다. 모델은 손볼
+    // 여지가 있으면 손본다.
+    const person = preserveDirective("preserve-person");
+    expect(person).toMatch(/do not beautify/i);
+    expect(person).toMatch(/do not blend in another face/i);
+  });
+
+  it("물건은 비슷한 것이 아니라 그 물건이라고 말한다", () => {
+    const object = preserveDirective("preserve-object");
+    expect(object).toMatch(/identity/i);
+    expect(object).toMatch(/not a similar product/i);
+    expect(object).toMatch(/do not redesign/i);
+  });
+
+  it("바뀌어도 되는 것을 좁게 적는다", () => {
+    // 전에는 「각도와 빛은 바뀌어도 된다」까지만 적어 문이 너무 넓었다.
+    // 무엇이 바뀌어도 되는지는 딱 그것뿐이라고 말한다.
+    for (const role of ["preserve-person", "preserve-object"] as const) {
+      expect(preserveDirective(role)).toMatch(/only the/i);
+    }
+  });
+
+  it("낱낱이 적는다 — 「정체성을 지켜라」 한 마디로는 안 지켜졌다", () => {
+    expect(preserveDirective("preserve-person")).toMatch(/hairstyle/i);
+    expect(preserveDirective("preserve-object")).toMatch(/logos/i);
+  });
+});
+
+describe("첨부한 것을 어디에 놓을까", () => {
+  it("지킬 대상이 있으면 자리를 정하라고 한다", () => {
+    const rule = attachmentPlacementRule(true);
+    expect(rule).toMatch(/explicit, deliberate place/i);
+    expect(rule).toMatch(/never cropped away/i);
+  });
+
+  it("지킬 대상이 없어도 아무렇게나 놓지 말라고 한다", () => {
+    expect(attachmentPlacementRule(false)).toMatch(/deliberate placement/i);
+  });
+
+  it("지킬 대상이 있을 때 더 많은 말을 한다", () => {
+    // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다.
+    expect(attachmentPlacementRule(true).length)
+      .toBeGreaterThan(attachmentPlacementRule(false).length);
   });
 });

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
+  attachmentPlacementRule,
+  designerPersona,
   imageLookDirective,
   priorityLine,
   userInstructionHead,
@@ -176,8 +178,15 @@ export function buildAttachmentRoleDirective(input: {
       "What you redesign is the page, not the product: section layout and composition, information" +
         " hierarchy, how the copy is grouped and paced, which element leads the eye.",
       "Never redesign, restyle or substitute the product itself.",
+      // 2026-09-04 사용자 보고: 제품이 「약간 변형되어」 나왔다. 「같은 제품」은
+      // 모델에게 「비슷한 제품」으로도 읽힌다. 그 문을 닫는다.
+      "Match seams, hardware and surface finish as well — this is not a similar product, " +
+        "it is this exact product. Its identity must survive unchanged.",
     );
   }
+
+  // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
+  lines.push("", attachmentPlacementRule(true));
 
   return lines.join("\n").trimEnd();
 }
@@ -595,7 +604,10 @@ export function buildSections(
       // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 —
       // 긴 프롬프트에서 중간 문장은 힘을 잃는다.
       userInstructionHead(userInstruction),
-      "너는 커머스 상세페이지 리디자인 이미지 생성 엔진이다.",
+      // 누가 그리는가는 사용자가 친 말 다음이다. 「생성 엔진」이라고만 하면
+      // 무난한 것으로 수렴한다.
+      designerPersona(),
+      "너는 커머스 상세페이지를 다시 그리는 사람이다.",
       `이미지 생성 모델: ${modelInfo.label} (${modelInfo.id})`,
       "세로형 9:16 상세페이지 섹션 이미지 1장을 생성한다.",
       // 첨부가 무엇인지 먼저 밝히고 섹션 이야기로 넘어간다. 뒤에 두면
