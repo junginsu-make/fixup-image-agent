@@ -1,5 +1,6 @@
 import {
-  imageLookDirective, priorityLine, userInstructionHead, userInstructionTail,
+  attachmentPlacementRule, designerPersona, imageLookDirective, preserveDirective,
+  priorityLine, userInstructionHead, userInstructionTail,
   type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
@@ -78,13 +79,11 @@ function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolea
   images.forEach((image, index) => {
     const number = index + 1;
     if (image.kind === "preserved") {
-      lines.push(image.subject === "person"
-        ? `Image ${number} is a PRESERVED PERSON. Keep the same identity — facial features, hair and body `
-          + "proportions. Expression, pose, angle and lighting may change to fit this poster, but it must "
-          + "remain recognisably the same person."
-        : `Image ${number} is a PRESERVED SUBJECT. Keep its identity exactly — shape, proportions, colors, `
-          + "materials, labels and logo text. Angle and lighting may change to fit this poster, but it must "
-          + "remain recognisably the same object.");
+      // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
+      // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
+      const role = image.subject === "person" ? "preserve-person" : "preserve-object";
+      const label = image.subject === "person" ? "PRESERVED PERSON" : "PRESERVED SUBJECT";
+      lines.push(`Image ${number} is a ${label}. ${preserveDirective(role)}`);
       return;
     }
     // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
@@ -110,6 +109,7 @@ function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolea
     hasPreserved: images.some((image) => image.kind === "preserved"),
   });
   if (priority) lines.push(priority);
+  lines.push(attachmentPlacementRule(images.some((image) => image.kind === "preserved")));
   // 얼굴이 둘이면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측,
   // pdp-core/src/pdp.reference-policy.ts). 막을 수 없으면 못이라도 박는다.
   if (images.filter((image) => image.kind === "preserved" && image.subject === "person").length > 1) {
@@ -177,8 +177,12 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
   );
   const look = imageLookDirective(input.look ?? "auto", hasPerson ? "person" : "generic");
   return [
-    // 사람이 친 말이 맨 앞이다. 그 아래를 다 읽기 전에 무엇이 가장 센지 안다.
+    // 사람이 친 말이 맨 앞이다. 아래를 다 읽기 전에 무엇이 가장 센지 안다.
     ...(head ? [head, ""] : []),
+    // 그 다음이 누가 그리는가다. 무엇을 할지가 먼저고, 어떻게 할지가 그 뒤다 —
+    // 역할을 앞에 세우면 사람이 친 말이 한 칸 밀린다.
+    designerPersona(),
+    "",
     ...attachmentLines(input.images, Boolean(head)),
     "",
     ...sceneLines(input.slots),

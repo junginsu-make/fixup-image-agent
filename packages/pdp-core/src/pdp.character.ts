@@ -1,5 +1,6 @@
 import {
   type LookSubject,
+  designerPersona,
   imageLookDirective,
   priorityLine,
   userInstructionHead,
@@ -371,6 +372,9 @@ export function buildCandidatePrompt(input: {
     // 반대로 친 말에 없는 것은 고른 값이 그대로 간다 — 결·종류·비율 지시는
     // 아래에 그대로 남아 있다.
     `${userInstructionHead(input.description)}
+
+` +
+    `${designerPersona()}
 
 ` +
     `Create exactly one original fictional ${noun}. Preserve the identity-defining ` +

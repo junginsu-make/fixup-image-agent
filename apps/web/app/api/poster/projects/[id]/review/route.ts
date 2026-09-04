@@ -1,7 +1,8 @@
 import { reviewPoster, shouldReviewPoster } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
-import { createPosterReviewProviders, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
+import { createPosterFalClients, createPosterReviewProviders, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
+import { posterImageBytes } from "../../../../../../lib/poster/asset-bytes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,11 +33,16 @@ export async function POST(_request: Request, context: Context) {
       );
     }
 
+    const { bytes, contentType } = await posterImageBytes(target.assetPath);
+    const reviewImageUrl = await createPosterFalClients().uploader.uploadReference(bytes, contentType);
+
     const providers = createPosterReviewProviders();
     const result = await reviewPoster(
       {
         slots: project.data.slots,
-        imageUrl: `${new URL(_request.url).origin}/api/poster/projects/${id}/images/${target.variantIndex}/file`,
+        // 검수 모델도 이 서버 밖에 있다. 우리 주소를 주면 401 을 받아 그림
+        // 없이 판단하게 된다. 만들 때와 같이 바이트를 올려서 넘긴다.
+        imageUrl: reviewImageUrl,
         preservedImageUrls: [],
       },
       providers.primary,

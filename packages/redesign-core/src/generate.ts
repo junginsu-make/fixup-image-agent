@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
+  designerPersona,
   imageLookDirective,
   priorityLine,
   userInstructionHead,
@@ -595,7 +596,10 @@ export function buildSections(
       // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 —
       // 긴 프롬프트에서 중간 문장은 힘을 잃는다.
       userInstructionHead(userInstruction),
-      "너는 커머스 상세페이지 리디자인 이미지 생성 엔진이다.",
+      // 누가 그리는가는 사용자가 친 말 다음이다. 「생성 엔진」이라고만 하면
+      // 무난한 것으로 수렴한다.
+      designerPersona(),
+      "너는 커머스 상세페이지를 다시 그리는 사람이다.",
       `이미지 생성 모델: ${modelInfo.label} (${modelInfo.id})`,
       "세로형 9:16 상세페이지 섹션 이미지 1장을 생성한다.",
       // 첨부가 무엇인지 먼저 밝히고 섹션 이야기로 넘어간다. 뒤에 두면

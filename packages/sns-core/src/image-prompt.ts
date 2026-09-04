@@ -1,5 +1,8 @@
 import {
+  attachmentPlacementRule,
+  designerPersona,
   imageLookDirective,
+  preserveDirective,
   priorityLine,
   userInstructionHead,
   userInstructionTail,
@@ -107,10 +110,12 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
         "match the text of THIS card.",
       );
     } else if (image.kind === "keep_identity") {
+      // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
+      // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
+      const person = image.subject === "person";
       lines.push(
-        `Image ${number} is a PRESERVED SUBJECT. Keep its identity exactly — shape, proportions, colors, ` +
-        "materials, labels and logo text. The camera angle and lighting may change to fit this card, " +
-        `but it must remain recognisably the same ${image.subject === "person" ? "person" : "object"}.`,
+        `Image ${number} is a ${person ? "PRESERVED PERSON" : "PRESERVED SUBJECT"}. ` +
+        preserveDirective(person ? "preserve-person" : "preserve-object"),
       );
     }
   });
@@ -124,6 +129,9 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
     hasPreserved: images.some((image) => image.kind === "keep_identity"),
   });
   if (priority) lines.push(priority);
+  if (images.length) {
+    lines.push(attachmentPlacementRule(images.some((image) => image.kind === "keep_identity")));
+  }
   return lines.join("\n");
 }
 

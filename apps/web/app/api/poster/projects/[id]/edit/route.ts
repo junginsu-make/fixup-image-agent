@@ -4,6 +4,7 @@ import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { submitPoster } from "../../../../../../lib/poster/flow";
+import { posterImageBytes } from "../../../../../../lib/poster/asset-bytes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,19 +47,29 @@ export async function POST(request: Request, context: Context) {
       );
     }
     const parent = images.find((image) => image.selected)!;
-    const origin = new URL(request.url).origin;
+
+    /**
+     * 고친 기준이 될 그림을 **fal 에 올려서** 넘긴다.
+     *
+     * 전에는 `/api/poster/.../file` 주소를 그대로 넘겼다. 그 길은 회원
+     * 확인을 거치는데 fal 에는 로그인 쿠키가 없다 — 401 이 떨어지고, fal 은
+     * 기준 그림 없이 일을 붙들고 있어 화면에는 「고치는 중」만 계속 떴다
+     * (2026-09-04 사용자 보고). 첫 생성은 처음부터 바이트를 올리고 있었다.
+     */
+    const { bytes, contentType } = await posterImageBytes(parent.assetPath);
+    const fal = createPosterFalClients();
+    const parentUrl = await fal.uploader.uploadReference(bytes, contentType);
 
     const job = planEditJob({
       projectId: id,
       parentImageId: parent.id,
-      parentUrl: `${origin}/api/poster/projects/${id}/images/${parent.variantIndex}/file`,
+      parentUrl,
       instruction: parsed.data.instruction,
       modelId: project.modelId,
       ratioId: parsed.data.ratioId ?? project.ratio,
       slots: project.data.slots,
     });
 
-    const fal = createPosterFalClients();
     const submission = await submitPoster(job, {
       queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => "",
     });
