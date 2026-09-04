@@ -52,9 +52,12 @@ export interface QueuedGenerationDependencies {
    * 통짜 카드면 그림 주소 하나, 레이아웃 카드면 **칸 번호별 그림**이다.
    * 그림 칸이 없는 레이아웃은 빈 목록으로 온다 — 글과 배경만으로 합성한다.
    */
-  saveAsset(images: string | Record<number, string>, card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string; reviewUrl: string }>;
+  saveAsset(
+    images: string | Record<number, string>,
+    card: SnsFlowCard,
+  ): Promise<{ assetPath: string; thumbPath: string | null; assetUrl: string; reviewUrl: string }>;
   saveReview(cardIndex: number, status: "done" | "review_required", review: unknown, issues: string[]): Promise<void>;
-  saveOriginal(card: SnsFlowCard): Promise<{ assetPath: string; assetUrl: string }>;
+  saveOriginal(card: SnsFlowCard): Promise<{ assetPath: string; thumbPath: string | null; assetUrl: string }>;
   checkpoint?(flow: SnsFlowState): Promise<void>;
 }
 
@@ -107,6 +110,9 @@ async function composeAndSave(
   try {
     const saved = await dependencies.saveAsset(slotImagesOf(card), card);
     card.assetPath = saved.assetPath;
+    // **여기가 읽는 쪽의 유일한 근거다.** 표에만 적으면 목록·삭제가 보는 이
+    // 흐름에는 값이 없어서, 미리보기가 만들어지되 아무도 못 찾는다.
+    card.thumbPath = saved.thumbPath;
     card.assetUrl = saved.assetUrl;
     card.status = "done";
     const failed = (card.slotJobs ?? []).filter((job) => job.status === "failed");
@@ -255,6 +261,7 @@ export async function startQueuedFlow(
       try {
         const saved = await dependencies.saveOriginal(card);
         card.assetPath = saved.assetPath;
+        card.thumbPath = saved.thumbPath;
         card.assetUrl = saved.assetUrl;
         card.status = "done";
       } catch (error) {
@@ -456,6 +463,7 @@ export async function pollQueuedFlow(
   }
   const saved = await dependencies.saveAsset(image.url, card);
   card.assetPath = saved.assetPath;
+  card.thumbPath = saved.thumbPath;
   card.assetUrl = saved.assetUrl;
   const grouped = groupAttachments(project.data.attachments);
   const reviewed = await reviewCard({

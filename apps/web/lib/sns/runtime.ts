@@ -55,12 +55,25 @@ async function signedUrl(path: string): Promise<string> {
   return result.data.signedUrl;
 }
 
+/**
+ * 로컬에서 읽을 주소.
+ *
+ * 미리보기(`{n}.thumb.webp`)도 이 길로 온다. 파일 이름에서 번호만 떼어 내고
+ * **미리보기면 `?size=thumb` 를 붙인다** — 이름을 통째로 번호로 넘기면
+ * `Number("1.thumb.webp")` 가 `NaN` 이 되어 404 가 난다.
+ */
+export function localResultUrlForTest(storagePath: string): string {
+  return localResultUrl(storagePath);
+}
+
 function localResultUrl(storagePath: string): string {
   const parts = storagePath.split("/");
   if (parts.length !== 4 || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
   const projectId = encodeURIComponent(parts[2]!);
-  const cardIndex = encodeURIComponent(parts[3]!.replace(/\.png$/i, ""));
-  return `/api/sns/projects/${projectId}/cards/${cardIndex}/file`;
+  const fileName = parts[3]!;
+  const thumb = fileName.includes(".thumb.");
+  const cardIndex = encodeURIComponent(fileName.replace(/\.thumb\.webp$/i, "").replace(/\.[a-z0-9]+$/i, ""));
+  return `/api/sns/projects/${projectId}/cards/${cardIndex}/file${thumb ? "?size=thumb" : ""}`;
 }
 
 async function localResultDataUrl(storagePath: string): Promise<string> {
@@ -314,6 +327,7 @@ export async function createQueuedGenerationDependencies(input: {
       await updateCard(card.index, { assetPath, thumbPath, status: "done", error: null });
       return {
         assetPath,
+        thumbPath,
         assetUrl: await resultUrl(assetPath),
         // 검수는 원본을 본다. 미리보기로 검수하면 압축 자국을 그림의 흠으로
         // 읽게 된다.
@@ -331,7 +345,11 @@ export async function createQueuedGenerationDependencies(input: {
       await updateCard(card.index, {
         assetPath: saved.assetPath, thumbPath: saved.thumbPath, status: "done", review: null, error: null,
       });
-      return { assetPath: saved.assetPath, assetUrl: await resultUrl(saved.assetPath) };
+      return {
+        assetPath: saved.assetPath,
+        thumbPath: saved.thumbPath,
+        assetUrl: await resultUrl(saved.assetPath),
+      };
     },
   };
 }

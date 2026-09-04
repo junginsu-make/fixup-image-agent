@@ -72,7 +72,7 @@ vi.mock("../supabase/server", () => ({
 
 vi.mock("../watermark", () => ({ markAsAi: async (b: Buffer) => b }));
 
-const { createQueuedGenerationDependencies } = await import("../sns/runtime");
+const { createQueuedGenerationDependencies, localResultUrlForTest } = await import("../sns/runtime");
 
 async function card(): Promise<Buffer> {
   const width = 600, height = 750;
@@ -151,5 +151,19 @@ describe("saveAsset — 미리보기 배선", () => {
 
     expect(localWrites).toEqual(["u1/sns/p1/1.png", "u1/sns/p1/1.thumb.webp"]);
     expect(cardUpdates.some((patch) => patch.thumbPath === "u1/sns/p1/1.thumb.webp")).toBe(true);
+  });
+});
+
+describe("로컬 주소 만들기", () => {
+  it("미리보기는 번호만 떼고 표시를 붙인다", () => {
+    // 이름을 통째로 번호로 넘기면 `Number("1.thumb.webp")` 가 NaN 이 되어
+    // 404 가 난다 — 로컬 목록의 표지가 통째로 깨진다.
+    expect(localResultUrlForTest("u1/sns/p1/1.thumb.webp"))
+      .toBe("/api/sns/projects/p1/cards/1/file?size=thumb");
+  });
+
+  it("원본은 예전 그대로다", () => {
+    expect(localResultUrlForTest("u1/sns/p1/1.png"))
+      .toBe("/api/sns/projects/p1/cards/1/file");
   });
 });
