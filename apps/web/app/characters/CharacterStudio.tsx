@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
@@ -9,6 +9,7 @@ import {
 } from "@fixup/ui";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
+import { PanelHandle } from "../_components/panel-handle";
 import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
 
@@ -704,36 +705,22 @@ export function CharacterStudio() {
           길어졌다. 결과는 화면 반대편 카드에 들어가 거기까지 화면을 옮겨
           줘야 했다. 아래에서 올리는 창으로도 해 봤는데 화면 높이에 갇혀
           그림 넉 장을 늘어놓기에 좁았다. 옆에서 나오면 높이를 통째로 쓴다. */}
-      {/* 테두리에 붙는 손잡이.
-
-          만드는 데 몇 십 초가 걸리는데, 그 사이 다른 곳을 누르면 패널이
-          닫혔고 **돌아갈 길이 없었다.** 끝났는지도 알 수 없었다.
-
-          페이지 안이 아니라 화면에 붙인다 — 화면을 어디로 굴려도 늘 보인다.
-          닫아 둔 사이에 끝났으면 두어 번 뛰어 알린다. */}
+      {/* 테두리 손잡이. 닫아 두어도 돌아올 길이 있어야 한다. */}
       {!panelOpen && hasPanelWork ? (
-        <button
-          type="button"
-          onClick={openPanel}
-          className={cn(
-            "fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-lg border border-r-0 py-3 pl-3 pr-2 shadow-[var(--shadow-ring)] transition-colors",
-            panelAlert
-              ? "fixup-attention border-primary bg-primary text-primary-foreground"
-              : "border-border bg-background hover:bg-muted",
-          )}
-        >
-          <ChevronLeft className="size-4" />
-          <span className="text-xs font-bold [writing-mode:vertical-rl]">
-            {busy === "candidates"
+        <PanelHandle
+          onOpen={openPanel}
+          busy={Boolean(busy)}
+          alert={panelAlert}
+          label={
+            busy === "candidates"
               ? "후보 만드는 중"
               : busy === "create"
                 ? "각도 만드는 중"
                 : created
                   ? "다 됐습니다 · 열기"
-                  : "이어서 하기"}
-          </span>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        </button>
+                  : "이어서 하기"
+          }
+        />
       ) : null}
 
       <SidePanel open={panelOpen} onOpenChange={(next) => { if (!next) closePanel(); }}>
