@@ -24,6 +24,15 @@ const images = [
   attachment({ kind: "keep_identity", subject: "object", url: "https://example.com/product.png" }),
 ];
 
+const sceneInput = {
+  role: "body" as const,
+  copy: { index: 2, headline: "제목", body: "본문" },
+  plan: { index: 2, role: "body" as const, intent: "핵심 설명", visualBrief: "설명을 돕는 장면" },
+  grouped: groupAttachments(images),
+  size: { width: 1088, height: 1360 },
+  language: "ko" as const,
+};
+
 describe("첨부 이미지 설명", () => {
   it("번호와 역할을 문장으로 알린다", () => {
     const block = buildAttachmentBlock(images);
@@ -66,7 +75,34 @@ describe("첨부 이미지 설명", () => {
   });
 
   it("우선순위를 명시한다", () => {
-    expect(buildAttachmentBlock(images)).toMatch(/takes priority|우선/i);
+    expect(buildAttachmentBlock(images)).toMatch(/Priority when instructions conflict/i);
+  });
+
+  /**
+   * 첨부를 훑고 기억으로 비슷한 것을 그려내면 로고가 닮은 다른 로고가 된다.
+   * 「진짜로 보라」를 먼저 못 박아야 한다.
+   */
+  it("첨부가 있으면 진짜로 보라고 먼저 말한다", () => {
+    const block = buildAttachmentBlock(images);
+    expect(block.split("\n")[0]).toMatch(/Study every attached image closely/i);
+    expect(block).toMatch(/never substitute a generic stand-in/i);
+  });
+
+  it("첨부가 하나도 없으면 보라는 말을 넣지 않는다", () => {
+    // 없는 것을 보라고 하면 모델이 지어낸다.
+    expect(buildAttachmentBlock([])).not.toMatch(/Study every attached image/i);
+  });
+
+  it("사용자가 친 지시가 우선순위 맨 앞이다", () => {
+    const line = buildAttachmentBlock(images, { userInstruction: "배경은 밤" })
+      .split("\n").find((entry) => entry.startsWith("Priority when"))!;
+    expect(line).toMatch(
+      /USER INSTRUCTION.*PRESERVED SUBJECT.*REFERENCE image.*scene description/,
+    );
+  });
+
+  it("지시를 안 적었으면 우선순위에서 그 자리를 빼 버린다", () => {
+    expect(buildAttachmentBlock(images)).not.toMatch(/USER INSTRUCTION/);
   });
 });
 
@@ -221,5 +257,60 @@ describe("합치기", () => {
     const composed = composePrompt("FRAME", "");
     expect(composed).toContain("FRAME");
     expect(composed).not.toContain("undefined");
+  });
+});
+
+describe("사용자가 직접 친 지시", () => {
+  /**
+   * 두 번 넣는 이유: 2026-09-04 실측에서 프롬프트 뒤에 긴 문단을 붙였더니
+   * 앞쪽 구도 지시가 밀려 무시됐다. 긴 프롬프트에서 가운데는 힘을 잃는다.
+   */
+  it("맨 앞과 맨 뒤 양쪽에 들어간다", () => {
+    const composed = composePrompt("FRAME", "장면", { userInstruction: "배경은 밤, 창밖에 네온" });
+    expect(composed.startsWith("USER INSTRUCTION")).toBe(true);
+    expect(composed).toMatch(/re-read the USER INSTRUCTION[\s\S]*배경은 밤, 창밖에 네온\s*$/);
+    expect(composed.match(/배경은 밤, 창밖에 네온/g)).toHaveLength(2);
+  });
+
+  it("안 적었으면 그 줄 자체가 없다", () => {
+    const composed = composePrompt("FRAME", "장면");
+    expect(composed).toBe("장면\n\nFRAME");
+    expect(composed).not.toMatch(/USER INSTRUCTION/);
+  });
+
+  it("공백만 적은 것은 안 적은 것과 같다", () => {
+    expect(composePrompt("FRAME", "장면", { userInstruction: "   " })).toBe("장면\n\nFRAME");
+  });
+
+  it("장면을 쓰는 LLM 도 같은 지시를 받는다", () => {
+    // 모르면 「밤」이라고 적은 사용자에게 낮 장면을 써 주고, 그 장면이 그대로
+    // 이미지 모델에 간다.
+    const request = buildSceneRequest({ ...sceneInput, userInstruction: "배경은 밤" });
+    expect(request.prompt.startsWith("USER INSTRUCTION")).toBe(true);
+    expect(request.prompt.trimEnd().endsWith("배경은 밤")).toBe(true);
+    expect(buildSceneRequest(sceneInput).prompt).not.toMatch(/USER INSTRUCTION/);
+  });
+});
+
+describe("이미지의 결", () => {
+  it("auto 면 결에 대해 아무 말도 보태지 않는다", () => {
+    // 지금까지의 동작(첨부 레퍼런스의 결을 따라감)이 유지돼야 쓰던 사람이 안 깨진다.
+    const frame = buildFrame({ copy: { index: 1, headline: "제목" }, images, size: { width: 1088, height: 1360 }, language: "ko" });
+    const auto = buildFrame({ copy: { index: 1, headline: "제목" }, images, size: { width: 1088, height: 1360 }, language: "ko", look: "auto" });
+    expect(frame).toBe(auto);
+    expect(frame).not.toMatch(/Rendering style for this card/i);
+  });
+
+  it("고른 결이 있으면 지시문이 들어간다", () => {
+    const frame = buildFrame({ copy: { index: 1, headline: "제목" }, images, size: { width: 1088, height: 1360 }, language: "ko", look: "anime" });
+    expect(frame).toMatch(/Rendering style for this card/i);
+    expect(frame).toMatch(/cel-shaded/i);
+    // 레퍼런스의 결을 따라 하라는 바로 위 지시와 부딪힌다. 어느 쪽이 이기는지 적어야 한다.
+    expect(frame).toMatch(/overrides the rendering style/i);
+  });
+
+  it("장면을 쓰는 LLM 도 결을 안다", () => {
+    expect(buildSceneRequest({ ...sceneInput, look: "3d" }).prompt).toMatch(/Rendering style for this card/i);
+    expect(buildSceneRequest(sceneInput).prompt).not.toMatch(/Rendering style for this card/i);
   });
 });

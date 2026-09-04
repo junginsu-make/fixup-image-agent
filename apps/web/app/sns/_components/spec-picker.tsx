@@ -1,7 +1,17 @@
 "use client";
 
-import { CARD_RATIOS, IMAGE_MODELS, modelById, planSlots, type Attachment } from "@fixup/sns-core";
-import { Badge, Card, CardContent, Label } from "@fixup/ui";
+import {
+  CARD_RATIOS,
+  IMAGE_LOOK_HINT,
+  IMAGE_LOOK_LABEL,
+  IMAGE_LOOKS,
+  IMAGE_MODELS,
+  modelById,
+  planSlots,
+  type Attachment,
+  type ImageLook,
+} from "@fixup/sns-core";
+import { Badge, Card, CardContent, Label, Textarea } from "@fixup/ui";
 import { estimateCost } from "../cost-estimate";
 
 export interface SnsSpec {
@@ -10,6 +20,10 @@ export interface SnsSpec {
   cardCount?: number;
   language: "ko" | "en" | "ja" | "zh";
   modelId: string;
+  /** 그림의 결. 기본은 `auto` — 첨부한 레퍼런스의 결을 따라간다. */
+  look: ImageLook;
+  /** 사용자가 직접 친 지시. 비어 있으면 프롬프트에 아무 줄도 안 들어간다. */
+  userInstruction: string;
 }
 
 export function estimateCostLabel(spec: SnsSpec, attachments: Attachment[]): string {
@@ -65,6 +79,35 @@ export function SpecPicker({ spec, onChange, attachments }: {
         <label className="grid gap-2"><Label htmlFor="sns-language">언어</Label><select id="sns-language" className="h-10 rounded-md border bg-background px-3 text-sm" value={spec.language} onChange={(event) => onChange({ ...spec, language: event.target.value as SnsSpec["language"] })}><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文</option></select></label>
         <label className="grid gap-2"><Label htmlFor="sns-model">이미지 모델</Label><select id="sns-model" className="h-10 rounded-md border bg-background px-3 text-sm" value={spec.modelId} onChange={(event) => onChange({ ...spec, modelId: event.target.value })}>{IMAGE_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}{model.isDefault ? " · 기본" : ""}</option>)}</select></label>
       </div>
+
+      <section className="grid gap-3">
+        <div><h3 className="font-semibold">결</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[spec.look]}</p></div>
+        <div className="flex flex-wrap gap-2">
+          {IMAGE_LOOKS.map((look) => (
+            <button
+              key={look}
+              type="button"
+              onClick={() => onChange({ ...spec, look })}
+              aria-pressed={spec.look === look}
+              className={`rounded-md border px-4 py-2 text-sm font-medium ${spec.look === look ? "border-primary bg-primary-soft" : "bg-card"}`}
+            >
+              {IMAGE_LOOK_LABEL[look]}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-3">
+        <div><Label htmlFor="sns-user-instruction">추가 지시 · 선택</Label></div>
+        <Textarea
+          id="sns-user-instruction"
+          rows={3}
+          value={spec.userInstruction}
+          onChange={(event) => onChange({ ...spec, userInstruction: event.target.value })}
+          placeholder="예: 배경은 밤, 창밖에 네온"
+        />
+        <p className="text-sm text-muted-foreground">여기 적은 말이 다른 모든 지시보다 우선합니다.</p>
+      </section>
 
       <Card>
         <CardContent className="grid gap-3 p-5">

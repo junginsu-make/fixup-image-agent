@@ -89,4 +89,53 @@ describe("buildSlotPrompt", () => {
     expect(prompt).toContain("No text, no letters, no numbers");
     expect(prompt).not.toContain("Style:\n\n");
   });
+
+  /**
+   * 두 번 넣는 이유: 긴 프롬프트에서 가운데 문장은 힘을 잃는다(2026-09-04 실측).
+   */
+  it("사용자가 친 지시는 맨 앞과 맨 뒤 양쪽에 들어간다", () => {
+    const prompt = buildSlotPrompt({
+      slot,
+      rect: { width: 544, height: 544 },
+      visualBrief: "책상 위 노트북",
+      styleBlock: STYLE_BLOCK,
+      userInstruction: "배경은 밤",
+    });
+
+    expect(prompt.startsWith("USER INSTRUCTION")).toBe(true);
+    expect(prompt.trimEnd().endsWith("배경은 밤")).toBe(true);
+    expect(prompt.match(/배경은 밤/g)).toHaveLength(2);
+  });
+
+  it("지시를 안 적었으면 그 줄 자체가 없다", () => {
+    const prompt = buildSlotPrompt({
+      slot,
+      rect: { width: 544, height: 544 },
+      visualBrief: "책상 위 노트북",
+      styleBlock: STYLE_BLOCK,
+    });
+
+    expect(prompt).not.toMatch(/USER INSTRUCTION/);
+    expect(prompt.split("\n")[0]).toContain("1:1");
+  });
+
+  it("결이 auto 면 결에 대해 아무 말도 보태지 않는다", () => {
+    // 지금까지의 동작(첨부 레퍼런스의 결을 따라감)이 유지돼야 쓰던 사람이 안 깨진다.
+    const base = { slot, rect: { width: 544, height: 544 }, visualBrief: "책상 위 노트북", styleBlock: STYLE_BLOCK };
+    expect(buildSlotPrompt({ ...base, look: "auto" })).toBe(buildSlotPrompt(base));
+    expect(buildSlotPrompt(base)).not.toMatch(/Rendering style/i);
+  });
+
+  it("고른 결이 있으면 지시문이 들어간다", () => {
+    const prompt = buildSlotPrompt({
+      slot,
+      rect: { width: 544, height: 544 },
+      visualBrief: "책상 위 노트북",
+      styleBlock: STYLE_BLOCK,
+      look: "anime",
+    });
+
+    expect(prompt).toMatch(/cel-shaded/i);
+    expect(prompt).toMatch(/overrides the rendering style/i);
+  });
 });

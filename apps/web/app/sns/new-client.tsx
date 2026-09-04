@@ -33,6 +33,8 @@ export function NewSnsClient() {
     cardCount: undefined,
     language: "ko",
     modelId: "gpt-image-2",
+    look: "auto",
+    userInstruction: "",
   });
   const [message, setMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -101,6 +103,8 @@ export function NewSnsClient() {
           cardCount: spec.cardCountMode === "fixed" ? spec.cardCount : undefined,
           language: spec.language,
           modelId: spec.modelId,
+          look: spec.look,
+          userInstruction: spec.userInstruction.trim() || undefined,
         }),
       });
       const payload = await response.json() as { ok?: boolean; project?: { id: string }; message?: string };
