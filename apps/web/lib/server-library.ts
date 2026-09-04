@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { isLocalStoreEnabled } from "./local-store";
+import { encodeForStorage, sniffImageMime } from "./image-encoding";
 import { markAsAi } from "./watermark";
 import type { UserRole } from "./membership/types";
 
@@ -112,30 +113,17 @@ function extensionFor(mimeType: string) {
   return "png";
 }
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
 /**
- * 바이트를 보고 형식을 정한다.
+ * 바이트를 보고 형식을 정한다. 정의는 `image-encoding` 에 있다.
  *
- * 표기를 새기면 sharp 가 무엇을 받았든 PNG 로 다시 굽는다. 그런데 확장자와
- * content-type 은 부르는 쪽이 알려준 원래 값이라, 그대로 쓰면 `.jpg` 라는
+ * 확장자와 content-type 은 부르는 쪽이 알려준 값이라, 그대로 쓰면 `.jpg` 라는
  * 이름의 PNG 가 `image/jpeg` 로 저장된다. 브라우저가 못 여는 파일이 된다.
+ * 그래서 **올리기 직전 실제 바이트를 보고** 정한다.
  *
- * 그래서 **올리기 직전 실제 바이트를 보고** 정한다. 표기가 꺼져 있어
- * 원본이 그대로 돌아온 경우도 같은 길로 지나가므로 갈래가 하나다.
+ * 인코딩과 같은 파일에 둔 것은, 저장할 바이트를 정하는 쪽과 그 바이트가
+ * 무엇인지 말하는 쪽이 갈라지면 언젠가 서로 다른 답을 내기 때문이다.
  */
-export function sniffImageMime(bytes: Buffer, fallback: string): string {
-  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return "image/png";
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (
-    bytes.length >= 12 &&
-    bytes.toString("ascii", 0, 4) === "RIFF" &&
-    bytes.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-  return fallback;
-}
+export { sniffImageMime };
 
 /**
  * 결과물 한 건을 저장한다.
@@ -179,8 +167,10 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
     const rows = [];
     for (const [position, image] of input.images.entries()) {
       const original = Buffer.from(image.base64, "base64");
-      const bytes = input.origin === "ai" ? await markAsAi(original) : original;
-      const mimeType = sniffImageMime(bytes, image.mimeType);
+      const marked = input.origin === "ai" ? await markAsAi(original) : original;
+      // 표기까지 새긴 뒤에 줄인다. 표기가 픽셀을 바꾸므로 순서가 뒤바뀌면
+      // 줄여 놓은 것을 다시 부풀린 채로 저장하게 된다.
+      const { bytes, mimeType } = await encodeForStorage(marked, image.mimeType);
 
       const path = `${input.userId}/${item.id}/${position}.${extensionFor(mimeType)}`;
       const { error } = await supabase.storage
@@ -303,6 +293,48 @@ export async function getLibraryItemImages(viewer: LibraryViewer, itemId: string
     mimeType: row.mime_type as string,
     url: urlByPath.get(row.path as string) ?? null,
   }));
+}
+
+/**
+ * 그림 한 장의 실제 바이트.
+ *
+ * 목록·뷰어는 Storage 서명 URL 을 그대로 쓴다. 이 길은 **내려받기 전용**이다 —
+ * 우리 손을 거쳐야 저장된 형식과 무관하게 PNG 로 되돌려 줄 수 있기 때문이다.
+ *
+ * 서명 URL 이 하던 방어를 여기서는 코드가 대신한다. 지켜야 할 것이 셋이다.
+ *
+ * 1. **소유자 조건은 `libraryScope` 하나로 정한다.** 관리자용 질의를 따로
+ *    두지 않는다 — 질의가 둘로 갈라지면 그 둘이 어긋나는 날이 사고 나는 날이다.
+ * 2. **경로는 표에 적힌 것을 쓴다.** 주소로 받은 값을 이어 붙이면 그 값이
+ *    그대로 저장소 경로가 된다.
+ * 3. **형식은 실제 바이트로 정한다.** `mime_type` 칸에는 화면이 보낸 문자열이
+ *    그대로 들어올 수 있어서, 그 값을 헤더로 흘리면 같은 출처에서 임의 문서가
+ *    열린다. 못 알아보는 바이트는 그림이라고 말하지 않는다.
+ */
+export async function getLibraryImageFile(
+  viewer: LibraryViewer,
+  itemId: string,
+  position: number,
+): Promise<{ bytes: Buffer; mimeType: string } | null> {
+  const supabase = createSupabaseAdminClient();
+
+  const owner = libraryScope(viewer, "read");
+  let query = supabase
+    .from("library_images")
+    .select("path")
+    .eq("item_id", itemId)
+    .eq("position", position);
+  if (owner) query = query.eq("user_id", owner);
+
+  const { data, error } = await query;
+  const path = (data as Array<{ path?: string }> | null)?.[0]?.path;
+  if (error || !path) return null;
+
+  const file = await supabase.storage.from(BUCKET).download(path);
+  if (file.error || !file.data) return null;
+
+  const bytes = Buffer.from(await file.data.arrayBuffer());
+  return { bytes, mimeType: sniffImageMime(bytes, "application/octet-stream") };
 }
 
 /**
