@@ -325,7 +325,8 @@ describe("각도 여섯 종", () => {
   it("45도는 두 눈이 남고 90도는 옆얼굴이다", () => {
     for (const id of ["left_45", "right_45"] as const) {
       expect(angleDirective(id, "person")).toMatch(/45 degrees/i);
-      expect(angleDirective(id, "person")).toMatch(/both eyes remain visible/i);
+      // 낱말이 아니라 뜻을 본다 — 45도에서 두 눈이 남는가.
+      expect(angleDirective(id, "person")).toMatch(/both eyes/i);
     }
     for (const id of ["left_90", "right_90"] as const) {
       expect(angleDirective(id, "person")).toMatch(/90 degrees|profile/i);
@@ -436,5 +437,67 @@ describe("사용자가 친 말과 고른 값이 부딪힐 때", () => {
     const prompt = buildTurnaroundPrompt({ identityPrompt: "수채화풍 소녀", angle: "back" });
     expect(prompt).not.toContain("USER INSTRUCTION");
     expect(prompt).toContain("Preserve the same");
+  });
+});
+
+describe("좌우가 갈리는가", () => {
+  const KINDS = ["person", "character", "animal", "object"] as const;
+
+  it("왼쪽과 오른쪽이 낱말 하나만 다르지 않다", () => {
+    // 2026-09-04 운영에서 왼쪽 45°와 오른쪽 45°가 거의 같은 그림으로 나왔다.
+    // 두 지시문이 "left"/"right" 한 낱말만 달랐던 것이 원인의 하나다 —
+    // 나머지가 통째로 같으면 앞의 참조 그림이 그 한 낱말을 눌러 버린다.
+    //
+    // 방향을 말하는 자리가 둘 이상이어야 한다.
+    for (const kind of KINDS) {
+      for (const [left, right] of [["left_45", "right_45"], ["left_90", "right_90"]] as const) {
+        const l = angleDirective(left, kind);
+        const r = angleDirective(right, kind);
+        expect((l.match(/\bLEFT\b|\bleft\b/g) ?? []).length).toBeGreaterThanOrEqual(2);
+        expect((r.match(/\bRIGHT\b|\bright\b/g) ?? []).length).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+
+  it("왼쪽 지시문에 오른쪽 방향이 섞이지 않는다", () => {
+    // 사람·동물은 「먼 쪽 귀는 가려진다」를 말하느라 반대 낱말이 한 번 나온다.
+    // 그것까지 막지는 않되, 방향을 말하는 횟수는 제 쪽이 더 많아야 한다.
+    for (const kind of KINDS) {
+      const l = angleDirective("left_45", kind);
+      const r = angleDirective("right_45", kind);
+      expect((l.match(/left/gi) ?? []).length).toBeGreaterThan((l.match(/right/gi) ?? []).length);
+      expect((r.match(/right/gi) ?? []).length).toBeGreaterThan((r.match(/left/gi) ?? []).length);
+    }
+  });
+
+  it("화면 기준으로 말한다 — 「본인 기준」은 모델이 뒤집어 생각해야 한다", () => {
+    for (const kind of KINDS) {
+      for (const angle of ["left_45", "right_45", "left_90", "right_90"] as const) {
+        expect(angleDirective(angle, kind)).toMatch(/edge of the frame/i);
+        expect(angleDirective(angle, kind)).not.toMatch(/their own|its own/i);
+      }
+    }
+  });
+
+  it("정면이 아니라고 못 박는다", () => {
+    // 참조로 정면을 함께 보내므로, 안 막으면 모델이 그것을 그대로 베낀다.
+    for (const kind of KINDS) {
+      for (const angle of ["left_45", "right_45", "left_90", "right_90"] as const) {
+        expect(angleDirective(angle, kind)).toMatch(/NOT a (straight-on )?front view/i);
+      }
+    }
+  });
+
+  it("각도 그리기는 참조가 정면이라는 것을 알린다", () => {
+    const prompt = buildTurnaroundPrompt({ identityPrompt: "호랑이", angle: "left_45" });
+    expect(prompt).toMatch(/FRONT view/);
+    expect(prompt).toMatch(/do not copy its camera angle/i);
+  });
+
+  it("사물 지시문에는 여전히 얼굴 이야기가 없다", () => {
+    // 물건에 얼굴 이야기가 섞이면 모델이 얼굴을 떠올린다. 동사 "faces" 도 안 쓴다.
+    for (const angle of ["left_45", "right_45", "left_90", "right_90"] as const) {
+      expect(angleDirective(angle, "object")).not.toMatch(/\bfaces?\b|\beyes\b|cheek|ear\b/i);
+    }
   });
 });
