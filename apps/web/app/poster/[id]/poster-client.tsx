@@ -18,6 +18,8 @@ interface PosterImage {
   variantIndex: number;
   selected: boolean;
   url?: string;
+  /** 목록에 거는 사본. 확대·내려받기는 원본을 쓴다. */
+  thumbUrl?: string;
   review?: { decision: string; summary: string; issues: string[] } | null;
 }
 
@@ -430,7 +432,9 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                     {image.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={image.url}
+                        // 목록은 사본을 쓴다. 확대와 내려받기는 아래에서
+                        // 원본 주소를 그대로 쓰므로 품질이 깎이지 않는다.
+                        src={image.thumbUrl ?? image.url}
                         alt={`${project.title} · 변형 ${image.variantIndex + 1}`}
                         data-zoomable
                         data-viewer-meta={viewerMeta}

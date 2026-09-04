@@ -93,15 +93,17 @@ describe("비용 장부", () => {
 describe("결과 이미지 행", () => {
   it("한 번에 여러 장을 세션 사용자로 묶는다", () => {
     const rows = imageInsertRows("u1", [
-      { projectId: "p1", generationRequestId: "r1", variantIndex: 0, assetPath: "a.png", width: 1, height: 2, review: null },
-      { projectId: "p1", generationRequestId: "r1", variantIndex: 1, assetPath: "b.png", width: null, height: null, review: null },
+      { projectId: "p1", generationRequestId: "r1", variantIndex: 0, assetPath: "a.png", thumbPath: null, width: 1, height: 2, review: null },
+      { projectId: "p1", generationRequestId: "r1", variantIndex: 1, assetPath: "b.png", thumbPath: "b.thumb.webp", width: null, height: null, review: null },
     ]);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual({
       user_id: "u1", project_id: "p1", generation_request_id: "r1",
-      variant_index: 0, asset_path: "a.png", width: 1, height: 2, review: null,
+      variant_index: 0, asset_path: "a.png", thumb_path: null, width: 1, height: 2, review: null,
     });
     expect(rows[1]!.variant_index).toBe(1);
+    // 사본의 자리가 장마다 제대로 실려야 한다. 어긋나면 목록에 남의 그림이 뜬다.
+    expect(rows[1]!.thumb_path).toBe("b.thumb.webp");
   });
 
   it("기록으로 되돌릴 때 화면이 읽을 주소를 함께 준다", () => {
@@ -120,5 +122,31 @@ describe("저장 경로", () => {
   it("소유자가 첫 칸이다", () => {
     // library 버킷의 정책이 경로 첫 칸으로 소유자를 판정한다.
     expect(posterAssetPath("u1", "p1", 0)).toBe("u1/poster/p1/0.png");
+  });
+});
+
+describe("toImageRecord — 사본을 화면까지 흘린다", () => {
+  it("표의 사본 자리와 사본 주소를 함께 낸다", () => {
+    // 여기서 사본을 흘리기만 해도 라우트의 판정이 늘 비어, 회원에게는 사본이
+    // 영영 안 나간다. **실패 신호가 없다** — 그림은 멀쩡히 뜨고 용량만 그대로다.
+    const record = toImageRecord({
+      id: "i1", user_id: "u1", project_id: "p1", generation_request_id: "r1",
+      variant_index: 2, selected: false, asset_path: "u1/poster/p1/2.png",
+      thumb_path: "u1/poster/p1/2.thumb.webp",
+      width: null, height: null, review: null, created_at: "2026-09-01T00:00:00.000Z",
+    });
+
+    expect(record.thumbPath).toBe("u1/poster/p1/2.thumb.webp");
+    expect(record.thumbUrl).toBe("/api/poster/projects/p1/images/2/file?size=thumb");
+  });
+
+  it("사본이 없는 옛 행은 자리가 비어 있다", () => {
+    const record = toImageRecord({
+      id: "i1", user_id: "u1", project_id: "p1", generation_request_id: "r1",
+      variant_index: 0, selected: false, asset_path: "u1/poster/p1/0.png",
+      width: null, height: null, review: null, created_at: "2026-09-01T00:00:00.000Z",
+    });
+
+    expect(record.thumbPath).toBeNull();
   });
 });

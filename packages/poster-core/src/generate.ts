@@ -145,6 +145,13 @@ export interface PosterResultInput {
   images: Array<{ url: string; width?: number; height?: number }>;
   /** 이미 저장을 마친 경로. 이미지와 같은 순서·같은 개수여야 한다. */
   paths: string[];
+  /**
+   * 목록에 거는 사본의 경로. 못 만든 장은 `null` 이다.
+   *
+   * 안 주면 전부 비어 있는 것으로 친다 — 사본이 없던 시절의 흐름이 그대로
+   * 동작해야 한다.
+   */
+  thumbPaths?: Array<string | null>;
 }
 
 export function posterImageRows(
@@ -155,11 +162,18 @@ export function posterImageRows(
       `저장한 경로 ${input.paths.length}개와 받은 이미지 ${input.images.length}장이 다릅니다.`,
     );
   }
+  // **어긋나면 거부한다.** 사본 자리가 한 칸 밀리면 목록에 남의 그림이 뜬다.
+  if (input.thumbPaths && input.thumbPaths.length !== input.images.length) {
+    throw new Error(
+      `사본 경로 ${input.thumbPaths.length}개와 받은 이미지 ${input.images.length}장이 다릅니다.`,
+    );
+  }
   return input.images.map((image, index) => ({
     projectId: input.projectId,
     generationRequestId: input.generationRequestId,
     variantIndex: index,
     assetPath: input.paths[index]!,
+    thumbPath: input.thumbPaths?.[index] ?? null,
     width: image.width ?? null,
     height: image.height ?? null,
     review: null,

@@ -95,7 +95,7 @@ export async function POST(_request: Request, context: Context) {
           .map((reference) => urls[reference.id]!)
           .filter(Boolean),
       },
-      { queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => "" },
+      { queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => ({ assetPath: "", thumbPath: null }) },
     );
 
     await stores.projects.update(id, { status: "generating" });

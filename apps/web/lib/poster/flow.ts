@@ -28,7 +28,11 @@ export interface PosterFlowDependencies {
   requests: PosterRequestStore;
   images: PosterImageStore;
   /** fal 이 준 URL 을 우리 저장소로 옮기고 경로를 돌려준다. */
-  saveImage(projectId: string, variantIndex: number, url: string): Promise<string>;
+  saveImage(
+    projectId: string,
+    variantIndex: number,
+    url: string,
+  ): Promise<{ assetPath: string; thumbPath: string | null }>;
 }
 
 export interface PosterSubmission {
@@ -96,8 +100,11 @@ export async function collectPoster(
   });
 
   const paths: string[] = [];
+  const thumbPaths: Array<string | null> = [];
   for (const [index, image] of result.images.entries()) {
-    paths.push(await dependencies.saveImage(input.projectId, index, image.url));
+    const saved = await dependencies.saveImage(input.projectId, index, image.url);
+    paths.push(saved.assetPath);
+    thumbPaths.push(saved.thumbPath);
   }
 
   const rows = posterImageRows({
@@ -105,6 +112,7 @@ export async function collectPoster(
     generationRequestId: input.requestRowId,
     images: result.images,
     paths,
+    thumbPaths,
   });
   return { done: true, images: await dependencies.images.add(rows) };
 }

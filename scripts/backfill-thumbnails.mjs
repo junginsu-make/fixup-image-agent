@@ -8,7 +8,7 @@ const sharp = require("sharp");
 /**
  * 이미 쌓인 그림에 목록용 작은 사본을 만들어 준다.
  *
- * 라이브러리(512px)와 첫 화면 갤러리(1024px)를 함께 채운다.
+ * 라이브러리(512px)·첫 화면 갤러리(1024px)·포스터(1024px)를 함께 채운다.
  *
  * 새로 저장하는 것은 저장할 때 사본이 함께 만들어진다. 그런데 그것만으로는
  * **옛 계정일수록 이득이 0** 이다 — 목록에 뜨는 것이 대부분 옛 그림이기 때문이다.
@@ -33,6 +33,8 @@ const THUMBNAIL_EDGE = 512;
  * `SHOWCASE_THUMBNAIL_WIDTH` 와 같은 값이어야 한다.
  */
 const SHOWCASE_WIDTH = 1024;
+/** 포스터 목록. 원본이 대개 가로 1024 라 줄지 않고 형식만 바뀐다 — 그래서 품질을 높게 잡는다. */
+const POSTER_WIDTH = 1024;
 const MAX_INPUT_PIXELS = 12_000_000;
 
 const apply = process.argv.includes("--apply");
@@ -116,6 +118,62 @@ async function backfillShowcase() {
   console.log(`갤러리 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
 }
 
+/**
+ * 포스터 결과.
+ *
+ * 원본 이름 규칙(`.png`)은 건드리지 않는다 — 사본은 별개 파일이다.
+ * 값은 `apps/web/lib/poster/thumbnail.ts` 와 같아야 한다(1024 가로만 / q88).
+ */
+async function backfillPoster() {
+  const after = process.argv.indexOf("--after-poster");
+  const cursor = after > 0 ? process.argv[after + 1] : "";
+
+  let listing = supabase
+    .from("poster_images")
+    .select("id,user_id,project_id,variant_index,asset_path")
+    .is("thumb_path", null)
+    .not("asset_path", "is", null)
+    .order("id", { ascending: true })
+    .limit(LIMIT);
+  if (cursor) listing = listing.gt("id", cursor);
+
+  const { data: rows, error } = await listing;
+  if (error) { console.error(`포스터를 읽지 못했습니다: ${error.message}`); return; }
+  if (!rows.length) { console.log("포스터: 채울 것이 없습니다."); return; }
+
+  console.log(`
+포스터 ${rows.length}건`);
+  let made = 0, skipped = 0, failed = 0;
+
+  for (const row of rows) {
+    const file = await supabase.storage.from(BUCKET).download(row.asset_path);
+    if (file.error || !file.data) { failed += 1; continue; }
+
+    const bytes = Buffer.from(await file.data.arrayBuffer());
+    const thumb = await thumbnailFor(bytes, POSTER_WIDTH, 88, true);
+    if (!thumb) { skipped += 1; continue; }
+
+    const thumbPath = `${row.user_id}/poster/${row.project_id}/${row.variant_index}.thumb.webp`;
+    const uploaded = await supabase.storage
+      .from(BUCKET)
+      .upload(thumbPath, thumb, { contentType: "image/webp", upsert: true });
+    if (uploaded.error) { failed += 1; continue; }
+
+    const { error: updateError } = await supabase
+      .from("poster_images").update({ thumb_path: thumbPath }).eq("id", row.id);
+    if (updateError) {
+      await supabase.storage.from(BUCKET).remove([thumbPath]);
+      failed += 1;
+      continue;
+    }
+    made += 1;
+  }
+  console.log(`포스터 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  if (rows.length === LIMIT) {
+    console.log(`  이어서: --apply --after-poster ${rows[rows.length - 1].id}`);
+  }
+}
+
 async function main() {
   /**
    * **id 로 앞으로만 나아간다.**
@@ -184,6 +242,7 @@ async function main() {
   console.log(`목록 한 번당 아끼는 양: 약 ${(savedBytes / 1048576).toFixed(1)}MB`);
 
   await backfillShowcase();
+  await backfillPoster();
   if (rows.length === LIMIT) {
     console.log(`상한에 걸렸습니다. 이어서 하려면: --apply --after ${rows[rows.length - 1].id}`);
   }

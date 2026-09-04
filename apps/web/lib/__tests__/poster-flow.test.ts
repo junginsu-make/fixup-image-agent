@@ -36,7 +36,13 @@ function deps(overrides: Record<string, unknown> = {}) {
         select: async () => {},
         saveReview: async () => {},
       },
-      saveImage: vi.fn(async (_p: string, index: number) => `p1/${index}.png`),
+      // **계약대로 돌려준다.** 문자열을 주면 `as never` 가 타입 검사를 가려서,
+      // 실행 중에는 assetPath·thumbPath 가 전부 undefined 가 된다 — 사본 배선이
+      // 순서를 뒤집어도 아무도 눈치채지 못한다.
+      saveImage: vi.fn(async (_p: string, index: number) => ({
+        assetPath: `p1/${index}.png`,
+        thumbPath: `p1/${index}.thumb.webp`,
+      })),
       ...overrides,
     } as never,
   };
@@ -123,5 +129,30 @@ describe("포스터 결과 회수", () => {
     const { dependencies, added } = deps();
     await collectPoster(collect, dependencies);
     for (const row of added) expect(row).not.toHaveProperty("costUsd");
+  });
+});
+
+describe("포스터 회수 — 사본의 자리", () => {
+  it("장마다 제 원본과 제 사본을 싣는다 — 한 칸 밀리면 남의 그림이 뜬다", async () => {
+    const { dependencies, added } = deps({
+      // deps 의 마지막 `...overrides` 가 queue 를 통째로 덮으므로 전부 준다.
+      queue: {
+        submitJob: vi.fn(async () => ({ requestId: "fal-1" })),
+        jobStatus: vi.fn(async () => "completed" as const),
+        jobResult: vi.fn(async () => ({ images: [{ url: "u1" }, { url: "u2" }] })),
+      },
+    });
+
+    await collectPoster(
+      {
+        projectId: "p1", requestRowId: "req-1", falRequestId: "fal-1",
+        endpoint: "openai/gpt-image-2/edit", unitCostUsd: 0.178,
+      },
+      dependencies,
+    );
+
+    expect(added).toHaveLength(2);
+    expect(added[0]).toMatchObject({ variantIndex: 0, assetPath: "p1/0.png", thumbPath: "p1/0.thumb.webp" });
+    expect(added[1]).toMatchObject({ variantIndex: 1, assetPath: "p1/1.png", thumbPath: "p1/1.thumb.webp" });
   });
 });

@@ -71,7 +71,7 @@ export async function POST(request: Request, context: Context) {
     });
 
     const submission = await submitPoster(job, {
-      queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => "",
+      queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => ({ assetPath: "", thumbPath: null }),
     });
     return Response.json({ ok: true, submission });
   } catch (error) {

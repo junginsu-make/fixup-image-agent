@@ -34,7 +34,7 @@ const BUCKET = "library";
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 const PROJECT_COLUMNS = "id,user_id,title,status,ratio,model_id,data,created_at,updated_at";
 const IMAGE_COLUMNS =
-  "id,user_id,project_id,generation_request_id,variant_index,selected,asset_path,width,height,review,created_at";
+  "id,user_id,project_id,generation_request_id,variant_index,selected,asset_path,thumb_path,width,height,review,created_at";
 
 function checked<T>(data: T, error: { message: string } | null, label: string): T {
   if (error) throw new Error(`${label}: ${error.message}`);

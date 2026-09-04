@@ -24,6 +24,25 @@ export function posterImageUrl(projectId: string, variantIndex: number): string 
   return `/api/poster/projects/${projectId}/images/${variantIndex}/file`;
 }
 
+/**
+ * 목록에 거는 사본의 주소.
+ *
+ * 사본이 없으면 라우트가 원본으로 떨어뜨리므로, 화면은 있는지 없는지 몰라도 된다.
+ */
+export function posterThumbUrl(projectId: string, variantIndex: number): string {
+  return `${posterImageUrl(projectId, variantIndex)}?size=thumb`;
+}
+
+/**
+ * 사본이 놓일 자리.
+ *
+ * **원본 이름 규칙은 건드리지 않는다.** 사본은 별개 파일이라 `.thumb.webp` 를
+ * 덧붙이기만 하면 되고, 그래야 이미 쌓인 `.png` 들이 그대로 열린다.
+ */
+export function posterThumbPath(userId: string, projectId: string, variantIndex: number): string {
+  return `${userId}/poster/${projectId}/${variantIndex}.thumb.webp`;
+}
+
 function numeric(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -117,6 +136,7 @@ export interface PosterImageRow {
   variant_index: number;
   selected: boolean;
   asset_path: string;
+  thumb_path?: string | null;
   width: number | null;
   height: number | null;
   review: unknown | null;
@@ -131,11 +151,13 @@ export function toImageRecord(row: PosterImageRow): PosterImageRecord {
     variantIndex: row.variant_index,
     selected: row.selected,
     assetPath: row.asset_path,
+    thumbPath: row.thumb_path ?? null,
     width: numeric(row.width),
     height: numeric(row.height),
     review: row.review ?? null,
     createdAt: row.created_at,
     url: posterImageUrl(row.project_id, row.variant_index),
+    thumbUrl: posterThumbUrl(row.project_id, row.variant_index),
   };
 }
 
@@ -148,6 +170,7 @@ export function imageInsertRows(
     project_id: row.projectId,
     generation_request_id: row.generationRequestId,
     variant_index: row.variantIndex,
+    thumb_path: row.thumbPath ?? null,
     asset_path: row.assetPath,
     width: row.width,
     height: row.height,

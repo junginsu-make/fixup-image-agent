@@ -3,10 +3,11 @@ import path from "node:path";
 import { z } from "zod";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local-store";
+import { makePosterThumbnail } from "../../../../../../lib/poster/thumbnail";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { collectPoster } from "../../../../../../lib/poster/flow";
-import { posterAssetPath } from "../../../../../../lib/poster/supabase-store-core";
+import { posterAssetPath, posterThumbPath } from "../../../../../../lib/poster/supabase-store-core";
 import { createSupabaseAdminClient } from "../../../../../../lib/supabase/admin";
 import { markAsAi } from "../../../../../../lib/watermark";
 
@@ -34,7 +35,7 @@ const StatusSchema = z.object({
  */
 async function saveResult(
   userId: string, projectId: string, variantIndex: number, url: string,
-): Promise<string> {
+): Promise<{ assetPath: string; thumbPath: string | null }> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`결과 이미지를 내려받지 못했습니다 (${response.status}).`);
   // 만든 그림이므로 "AI 이미지" 를 파일에 새기고 저장한다.
@@ -42,17 +43,46 @@ async function saveResult(
 
   if (isLocalStoreEnabled()) {
     const storagePath = `${projectId}/${variantIndex}.png`;
-    const target = path.join(localStoreRoot(), "poster", ...storagePath.split("/"));
+    const root = path.join(localStoreRoot(), "poster");
+    const target = path.join(root, ...storagePath.split("/"));
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, bytes);
-    return storagePath;
+
+    const thumbnail = await makePosterThumbnail(bytes);
+    if (!thumbnail) return { assetPath: storagePath, thumbPath: null };
+    const thumbStoragePath = `${projectId}/${variantIndex}.thumb.webp`;
+    await writeFile(path.join(root, ...thumbStoragePath.split("/")), thumbnail);
+    return { assetPath: storagePath, thumbPath: thumbStoragePath };
   }
 
   const storagePath = posterAssetPath(userId, projectId, variantIndex);
-  const result = await createSupabaseAdminClient().storage.from(LIBRARY_BUCKET)
-    .upload(storagePath, bytes, { contentType: "image/png", upsert: true });
+  const storage = createSupabaseAdminClient().storage.from(LIBRARY_BUCKET);
+  const result = await storage.upload(storagePath, bytes, { contentType: "image/png", upsert: true });
   if (result.error) throw new Error(result.error.message);
-  return storagePath;
+
+  /**
+   * 목록에 걸 사본.
+   *
+   * 결과 목록은 변형 세 장을 한꺼번에 깔면서 원본을 그대로 받는다 — 한 장이
+   * 2~4MB 라 목록 한 번이 10MB 를 넘는다.
+   *
+   * **못 만들어도 저장을 막지 않는다.** 없으면 화면이 원본으로 떨어진다.
+   * 원본의 이름 규칙(`.png`)은 손대지 않는다 — 사본은 별개 파일이라 이미 쌓인
+   * 것들이 그대로 열려야 한다.
+   */
+  const thumbnail = await makePosterThumbnail(bytes);
+  if (!thumbnail) return { assetPath: storagePath, thumbPath: null };
+
+  const thumbStoragePath = posterThumbPath(userId, projectId, variantIndex);
+  const thumbResult = await storage.upload(thumbStoragePath, thumbnail, {
+    contentType: "image/webp", upsert: true,
+  });
+  if (thumbResult.error) {
+    // 사본 하나 때문에 결과물을 잃지 않는다. 자리를 비워 두면 원본으로 떨어진다.
+    console.error(`[poster] 사본을 올리지 못했습니다: ${thumbResult.error.message}`);
+    return { assetPath: storagePath, thumbPath: null };
+  }
+  return { assetPath: storagePath, thumbPath: thumbStoragePath };
 }
 
 /**
