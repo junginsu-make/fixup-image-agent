@@ -4,7 +4,7 @@ import { BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
 import type { MemberProfile } from "../../lib/membership/types";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
-import { approveMember, resendApproval, setMemberStatus, updateQuota } from "./actions";
+import { approveMember, deleteMember, resendApproval, setMemberStatus, updateQuota } from "./actions";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 import { CostPanel } from "./CostPanel";
 import {
@@ -287,7 +287,9 @@ function AdminNotice({ notice }: { notice: string }) {
         ? "단가를 저장했습니다. 지난 기록의 금액도 새 단가로 다시 계산됩니다."
         : notice === "rate_updated"
           ? "환율을 저장했습니다."
-          : "회원은 승인됐지만 이메일 발송에 실패했습니다. SMTP 설정 확인 후 재발송해 주세요.";
+          : notice === "deleted"
+            ? "회원을 지웠습니다. 그 회원이 만든 것도 함께 사라졌습니다."
+            : "회원은 승인됐지만 이메일 발송에 실패했습니다. SMTP 설정 확인 후 재발송해 주세요.";
   return <div className={`rounded-md border px-4 py-3 text-sm ${failed ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-primary/30 bg-primary-soft"}`}>{message}</div>;
 }
 
@@ -388,6 +390,46 @@ function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile;
             정지 해제
           </ConfirmSubmitButton>
         </form>
+      ) : null}
+
+      {/*
+        아주 지우기.
+
+        관리자에게는 안 보인다 — 서로 지우기 시작하면 되돌릴 방법이 없다.
+        내리려면 먼저 일반 회원으로 낮춘 뒤 지운다.
+
+        **이메일을 그대로 입력해야 눌린다.** 표에서 줄을 잘못 짚는 일이 흔한데,
+        이건 되돌릴 수 없다 — 그 사람이 만든 작업물·참고 이미지·캐릭터가
+        같이 사라진다. 다시 못 들어오게만 할 생각이면 「이용 정지」를 쓴다.
+      */}
+      {profile.role !== "admin" ? (
+        <details className="w-full">
+          <summary className="cursor-pointer list-none text-xs text-subtle-foreground hover:text-destructive">
+            회원 지우기
+          </summary>
+          <form action={deleteMember} className="mt-2 grid gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-2">
+            <input type="hidden" name="userId" value={profile.id} />
+            <p className="text-[11px] leading-snug text-destructive">
+              되돌릴 수 없습니다. 이 회원이 만든 작업물·참고 이미지·캐릭터가 함께 사라집니다.
+              다시 못 들어오게만 하려면 「이용 정지」를 쓰세요.
+            </p>
+            <input
+              name="confirmEmail"
+              required
+              autoComplete="off"
+              placeholder={profile.email}
+              aria-label="지울 회원의 이메일 확인"
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+            />
+            <ConfirmSubmitButton
+              variant="destructive"
+              confirmMessage={`${profile.email} 회원을 아주 지웁니다. 되돌릴 수 없습니다. 계속할까요?`}
+              pendingLabel="지우는 중..."
+            >
+              아주 지우기
+            </ConfirmSubmitButton>
+          </form>
+        </details>
       ) : null}
     </div>
   );

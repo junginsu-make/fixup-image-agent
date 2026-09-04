@@ -37,11 +37,14 @@ export function PublicHeader({
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <PublicLogo />
-        <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex" aria-label="주요 메뉴">
-          <Link href="/#features" className="transition-colors hover:text-foreground">기능</Link>
-          <Link href="/#how-it-works" className="transition-colors hover:text-foreground">이용 방법</Link>
-          <Link href="/demo" className="transition-colors hover:text-foreground">결과물 데모</Link>
-        </nav>
+        {/*
+          가운데 메뉴(기능·이용 방법·결과물 데모)를 뺐다.
+
+          로그인·가입 화면에서는 할 일이 하나뿐인데 다른 데로 새는 길을
+          늘어놓을 이유가 없다. 게다가 `#features`·`#how-it-works` 는 랜딩을
+          새로 짜면서 사라진 앵커라 눌러도 아무 일도 일어나지 않았다.
+          소개는 로고를 눌러 첫 화면에서 본다.
+        */}
         {localMode ? (
           <div className="flex shrink-0 items-center gap-2">
             <span className="hidden text-meta text-subtle-foreground sm:block">로컬 확인 모드</span>

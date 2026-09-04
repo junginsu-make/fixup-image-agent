@@ -9,6 +9,7 @@ import {
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { randomId } from "../../lib/browser-safe";
+import { billableFetch } from "../../lib/billable-fetch";
 
 /**
  * 캐릭터 만들기.
@@ -186,9 +187,7 @@ export function CharacterStudio() {
     setMessage("");
     if (!append) setCandidates([]);
     try {
-      const body = await (await fetch("/api/characters", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const body = await (await billableFetch("/api/characters", {
         body: JSON.stringify({
           step: "candidates", description, kind, look, aspectRatio: "3:4",
           candidates: candidateCount,
@@ -216,9 +215,7 @@ export function CharacterStudio() {
     setBusy("create");
     setMessage("고른 것으로 나머지 각도를 만드는 중입니다…");
     try {
-      const body = await (await fetch("/api/characters", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const body = await (await billableFetch("/api/characters", {
         body: JSON.stringify({
           step: "create", description, kind, look, aspectRatio: "3:4",
           angles: pickedAngles,
@@ -253,9 +250,7 @@ export function CharacterStudio() {
     setRedoing(`${character.id}:${angle}`);
     setMessage("");
     try {
-      const body = await (await fetch("/api/characters/views", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const body = await (await billableFetch("/api/characters/views", {
         body: JSON.stringify({ characterId: character.id, angle }),
       })).json() as { ok?: boolean; message?: string };
       if (!body.ok) setMessage(body.message ?? "다시 만들지 못했습니다.");

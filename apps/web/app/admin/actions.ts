@@ -111,3 +111,47 @@ export async function updateUsdKrw(formData: FormData) {
   revalidatePath("/admin");
   redirect("/admin?notice=rate_updated");
 }
+
+/**
+ * 회원을 아주 지운다.
+ *
+ * **되돌릴 수 없다.** 인증 계정을 지우면 그 사람이 만든 것들도 표에 걸린
+ * `on delete cascade` 를 타고 같이 사라진다 — 작업물·참고 이미지·캐릭터·
+ * 사용량 기록까지. 그래서 정지(`suspended`)와 다른 일이다. 다시 들어오게만
+ * 막을 생각이면 정지를 쓴다.
+ *
+ * 막아 두는 것 셋:
+ *
+ * 1. **자기 자신은 못 지운다.** 지우는 순간 관리자가 사라져 아무도 못 들어온다
+ * 2. **다른 관리자도 못 지운다.** 관리자끼리 서로 지우기 시작하면 마지막
+ *    한 명이 남을 때까지 되돌릴 방법이 없다. 내리려면 먼저 권한을 낮춘다
+ * 3. **이메일을 그대로 입력해야 한다.** 표에서 줄을 잘못 짚는 일이 흔하다
+ */
+export async function deleteMember(formData: FormData) {
+  const current = await requireAdmin();
+  const userId = readUserId(formData);
+  const typed = String(formData.get("confirmEmail") || "").trim().toLowerCase();
+
+  if (userId === current.user.id) throw new Error("자기 계정은 지울 수 없습니다.");
+
+  const admin = createSupabaseAdminClient();
+  const { data: profile, error: findError } = await admin
+    .from("profiles")
+    .select("email,role")
+    .eq("id", userId)
+    .single();
+  if (findError || !profile) throw new Error("회원 정보를 찾지 못했습니다.");
+  if (profile.role === "admin") {
+    throw new Error("관리자는 지울 수 없습니다. 먼저 일반 회원으로 내린 뒤 지워 주세요.");
+  }
+  if (typed !== String(profile.email).trim().toLowerCase()) {
+    throw new Error("지우려는 회원의 이메일을 그대로 입력해 주세요.");
+  }
+
+  // 인증 계정을 지운다. profiles 는 auth.users 를 참조하므로 함께 사라진다.
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) throw new Error(`회원을 지우지 못했습니다: ${error.message}`);
+
+  revalidatePath("/admin");
+  redirect("/admin?notice=deleted");
+}
