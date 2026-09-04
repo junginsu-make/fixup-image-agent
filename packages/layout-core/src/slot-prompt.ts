@@ -1,3 +1,4 @@
+import { imageLookDirective, userInstructionHead, userInstructionTail, type ImageLook } from "@fixup/shared";
 import type { CardSize, LayoutSlot } from "./slots";
 
 /**
@@ -33,15 +34,31 @@ export interface SlotPromptInput {
   visualBrief: string;
   /** 레퍼런스 지시. 기존 `buildAttachmentBlock` 결과를 그대로 넣는다. */
   styleBlock: string;
+  /**
+   * 이미지의 결. 안 주면 `auto` — 첨부 레퍼런스의 결을 그대로 따라간다.
+   *
+   * 넣을지 말지는 `imageLookDirective` 가 정한다. 부르는 쪽마다 판단하면
+   * 언젠가 한 곳이 어긋나서, 같은 「애니」인데 칸마다 다른 그림이 나온다.
+   */
+  look?: ImageLook;
+  /** 사용자가 직접 친 지시. 통짜 카드와 같은 말이 칸에도 그대로 가야 한다. */
+  userInstruction?: string;
 }
 
 export function buildSlotPrompt(input: SlotPromptInput): string {
   const subject = input.slot.brief?.trim() || input.visualBrief.trim();
+  const instruction = input.userInstruction ?? "";
+  const look = imageLookDirective(input.look ?? "auto");
   return [
+    // 사용자 지시는 맨 앞과 맨 뒤 양쪽에 둔다. 긴 프롬프트에서 가운데 문장은
+    // 힘을 잃는다(2026-09-04 실측).
+    userInstructionHead(instruction),
     `A single image to fill a ${slotAspectLabel(input.rect)} area of a card.`,
     `Subject: ${subject}`,
     input.styleBlock.trim() ? `Style:\n${input.styleBlock.trim()}` : "",
+    look ? `Rendering style — this overrides the rendering style of the reference:\n${look}` : "",
     "No text, no letters, no numbers, no logos, no watermark, no borders.",
     "Fill the entire frame; the important subject must not touch the edges.",
+    userInstructionTail(instruction),
   ].filter(Boolean).join("\n\n");
 }

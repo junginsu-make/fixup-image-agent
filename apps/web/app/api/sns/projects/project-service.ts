@@ -1,4 +1,4 @@
-import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment, type SlotPlan } from "@fixup/sns-core";
+import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment, type ImageLook, type SlotPlan } from "@fixup/sns-core";
 import type { ProjectInput, ProjectSource } from "./schema";
 import type { SnsFlowState } from "../flow-service";
 
@@ -13,10 +13,17 @@ export interface SnsProjectCreateRecord {
   cardCountMode: ProjectInput["cardCountMode"];
   cardCount?: number;
   toneNote?: string;
+  /**
+   * 결과 사용자 지시는 **여기 안에 둔다.** 열(column) 을 새로 파지 않는 이유는
+   * 이미 저장된 작업이 그대로 열려야 하기 때문이다 — 없으면 `auto` 와 빈
+   * 문자열로 읽힌다.
+   */
   data: {
     source: ProjectSource;
     attachments: Attachment[];
     flow?: SnsFlowState;
+    look?: ImageLook;
+    userInstruction?: string;
   };
   slotPlan: SlotPlan;
 }
@@ -67,7 +74,12 @@ export function createProjectService(repository: SnsProjectRepository) {
         cardCountMode: input.cardCountMode,
         cardCount: input.cardCount,
         toneNote: input.toneNote,
-        data: { source: input.source, attachments: input.attachments },
+        data: {
+          source: input.source,
+          attachments: input.attachments,
+          look: input.look,
+          userInstruction: input.userInstruction,
+        },
         slotPlan,
       });
     },

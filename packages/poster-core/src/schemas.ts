@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
+import { IMAGE_LOOKS } from "@fixup/shared";
 import { MAX_VARIANTS, MIN_VARIANTS } from "./pricing";
 
 /**
@@ -66,6 +67,20 @@ export const PosterProjectInputSchema = z.object({
    * 비어 있으면 전부 물건으로 다룬다 — 옛 작업에는 이 값이 없다.
    */
   personIds: z.array(z.string().uuid()).default([]),
+  /**
+   * 그림의 결. 기본은 `auto` — 첨부한 그림의 결을 따라간다.
+   *
+   * 기본값이 auto 여야 지금까지 만들던 사람이 안 깨진다. 옛 작업에는 이 값이
+   * 아예 없고, 그때도 같은 뜻으로 읽힌다.
+   */
+  look: z.enum(IMAGE_LOOKS).default("auto"),
+  /**
+   * 사용자가 직접 친 추가 지시. 비워 둘 수 있다.
+   *
+   * 기획이 채운 슬롯보다 세다 — 사람이 친 말이기 때문이다. 프롬프트의 맨 앞과
+   * 맨 뒤 두 곳에 들어간다.
+   */
+  userInstruction: z.string().trim().default(""),
   slots: PosterSlotsSchema.optional(),
 }).strict();
 

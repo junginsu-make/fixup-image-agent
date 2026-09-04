@@ -16,6 +16,7 @@ import {
   type GenerationRequestComplete,
   type GenerationRequestCreate,
   type ImagePromptProvider,
+  type PromptTuning,
   type ReviewRequest,
 } from "@fixup/sns-core";
 import {
@@ -240,6 +241,12 @@ export async function startQueuedFlow(
 
   const ratio = CARD_RATIOS.find((entry) => entry.id === project.ratio);
   if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${project.ratio}`);
+  // 화면에서 고른 결과 직접 친 지시. 예전에 만든 작업에는 없어서 `auto` 와
+  // 빈 문자열로 읽힌다 — 그러면 지금까지와 똑같이 동작한다.
+  const tuning: PromptTuning = {
+    look: project.data.look,
+    userInstruction: project.data.userInstruction,
+  };
   for (const card of next.cards.filter((entry) => selected.has(entry.index))) {
     card.error = undefined;
     card.review = undefined;
@@ -265,7 +272,7 @@ export async function startQueuedFlow(
     if (card.layout) {
       // 칸 프롬프트는 카드 전체가 아니라 그 칸에 들어갈 그림만 말한다.
       // 모델에게 물어볼 것이 없으므로 장면 프롬프트 LLM 호출도 건너뛴다.
-      const styleBlock = buildAttachmentBlock(selectReferencesForRole(grouped, card.role));
+      const styleBlock = buildAttachmentBlock(selectReferencesForRole(grouped, card.role), tuning);
       const fallbackBrief = card.plan?.visualBrief ?? card.copy.body ?? card.copy.headline;
 
       card.slotJobs = imageSlotsOf(card).map(({ slot, box }) => {
@@ -277,6 +284,8 @@ export async function startQueuedFlow(
             rect: { width: rect.width, height: rect.height },
             visualBrief: fallbackBrief,
             styleBlock,
+            look: tuning.look,
+            userInstruction: tuning.userInstruction,
           }),
           status: "pending" as const,
         };
@@ -310,9 +319,14 @@ export async function startQueuedFlow(
       grouped,
       size: ratio.pixel,
       language: project.language,
+      ...tuning,
     }, dependencies.sceneProvider);
     const images = selectReferencesForRole(grouped, card.role);
-    card.prompt = composePrompt(buildFrame({ copy: card.copy, images, size: ratio.pixel, language: project.language }), prompted.body);
+    card.prompt = composePrompt(
+      buildFrame({ copy: card.copy, images, size: ratio.pixel, language: project.language, ...tuning }),
+      prompted.body,
+      tuning,
+    );
     card.promptWarnings = prompted.warnings;
     card.status = "pending";
     card.falRequestId = undefined;

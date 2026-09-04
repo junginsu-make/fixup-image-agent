@@ -1,3 +1,4 @@
+import type { ImageLook } from "@fixup/shared";
 import type { PosterSlots, PosterStatus } from "./schemas";
 
 /**
@@ -32,6 +33,10 @@ export interface PosterProjectRecord {
     preservedIds: string[];
     /** preservedIds 중 사람인 것. 옛 작업에는 없다. */
     personIds?: string[];
+    /** 그림의 결. 옛 작업에는 없다 — 없으면 auto 로 읽는다(지금까지의 동작). */
+    look?: ImageLook;
+    /** 사용자가 직접 친 추가 지시. 옛 작업에는 없다. */
+    userInstruction?: string;
     slots: PosterSlots;
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];

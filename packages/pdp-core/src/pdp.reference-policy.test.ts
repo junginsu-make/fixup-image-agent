@@ -310,3 +310,38 @@ describe("서술이 실제 생성 호출까지 닿는다", () => {
   });
 });
 
+
+/**
+ * 첨부를 실제로 보라는 한 줄과, 무엇이 무엇을 이기는지.
+ *
+ * 모델은 첨부가 있어도 「이런 종류의 그림」을 기억에서 꺼내 그리는 쪽으로 쏠린다.
+ * 그러면 라벨 글자가 비슷한 다른 글자가 되고 색도 근처 색이 된다.
+ */
+describe("첨부 선언과 우선순위", () => {
+  it("첨부가 있으면 실제로 보라고 먼저 말한다", () => {
+    const directive = buildReferenceRoleDirective([anchor]);
+    expect(directive.startsWith("Study every attached image closely")).toBe(true);
+    expect(directive).toContain("never substitute a generic stand-in");
+  });
+
+  it("첨부가 없으면 그 줄도 없다", () => {
+    expect(buildReferenceRoleDirective([], { hasUserInstruction: true })).toBe("");
+  });
+
+  it("사용자 지시가 있으면 그것이 맨 위라고 적는다", () => {
+    const directive = buildReferenceRoleDirective([anchor, style], { hasUserInstruction: true });
+    expect(directive).toContain("Priority when instructions conflict: the USER INSTRUCTION");
+    expect(directive).toContain("the PRESERVED SUBJECT");
+  });
+
+  it("제품·인물이 디자인 레퍼런스를 이기는 규칙은 그대로 남는다", () => {
+    const directive = buildReferenceRoleDirective([anchor, style], { hasUserInstruction: true });
+    expect(directive.toLowerCase()).toContain("win over");
+  });
+
+  // 상세페이지에서 장면을 정하는 것은 섹션 블루프린트다. 사용자 지시가 없는데
+  // 「레퍼런스 > 장면 지시」라고 적으면 style 역할 규칙과 부딪힌다.
+  it("사용자 지시가 없으면 서열 줄을 넣지 않는다", () => {
+    expect(buildReferenceRoleDirective([anchor, style])).not.toContain("Priority when instructions conflict");
+  });
+});

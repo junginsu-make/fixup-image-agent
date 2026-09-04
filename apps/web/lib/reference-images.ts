@@ -10,6 +10,7 @@ import {
 } from "./local-store";
 import { persistReferenceImage, type ReferenceImageRow } from "../app/library/reference-upload";
 import type { ReferencePurpose } from "../app/api/reference-sets/schema";
+import type { UserRole } from "./membership/types";
 
 /**
  * 참고 이미지 — 라이브러리의 공용 창고.
@@ -20,6 +21,13 @@ import type { ReferencePurpose } from "../app/api/reference-sets/schema";
  * 전에는 로컬은 API 로, 운영은 브라우저에서 Supabase 를 직접 불러 읽었다.
  * 길이 둘이면 화면마다 한쪽만 붙게 되고, 실제로 상세페이지의 선택창은
  * 운영에서 참고 이미지를 못 봤다. 두 모드를 여기서 한 번에 가른다.
+ *
+ * **회원 공용이다.** 여기 들어온 그림은 "따라 그릴 본보기"라, 한 사람이 올린
+ * 것을 다른 사람이 못 쓰면 같은 그림을 사람 수만큼 다시 올려야 한다. 작업물과
+ * 다른 점이 이것이다 — 작업물은 각자의 결과라 남에게 보이면 안 된다.
+ *
+ * **읽기만 공용이다.** 고치고 지우는 것은 올린 사람만 한다. 남이 올린 본보기가
+ * 사라지면 그것을 쓰던 다른 사람의 작업이 조용히 깨진다.
  */
 
 const BUCKET = "library";
@@ -33,6 +41,30 @@ const EXTENSIONS: Record<string, string> = {
 
 export interface ReferenceImageView extends ReferenceImageRow {
   signedUrl: string | null;
+  /** 내가 올린 것인가. 지우기 단추를 보일지 정하는 값이다. */
+  mine: boolean;
+  /** 누가 올렸는가. **관리자에게만** 채운다 — 회원끼리 이메일이 보이면 안 된다. */
+  ownerEmail: string | null;
+}
+
+/** 목록을 보는 사람. 클라이언트가 보낸 값이 아니라 세션에서 꺼낸 것만 넣는다. */
+export interface ReferenceViewer {
+  userId: string;
+  role: UserRole;
+}
+
+/**
+ * 이 그림을 고치거나 지울 수 있는가.
+ *
+ * 올린 사람만 할 수 있다. 관리자도 예외가 아니다 — 남이 올린 본보기를
+ * 지우면 그것을 쓰던 다른 사람의 세트와 작업이 조용히 깨지는데, 지운
+ * 관리자는 그 사실을 알 길이 없다.
+ *
+ * 목록 읽기가 모두에게 열리면서 이 판정이 **꼭 필요해졌다.** 전에는 남의
+ * 행이 애초에 보이지 않아 못 지웠지만, 이제는 보인다.
+ */
+export function canModifyReferenceImage(viewerId: string, ownerId: string): boolean {
+  return viewerId === ownerId;
 }
 
 interface ReferenceImageDbRow {
@@ -64,17 +96,32 @@ export function localFileUrl(id: string): string {
   return `/api/reference-images/${id}/file`;
 }
 
-export async function listReferenceImages(userId: string): Promise<ReferenceImageView[]> {
+/**
+ * 창고에 있는 그림 전부.
+ *
+ * **소유자로 거르지 않는다.** 서명 URL 도 admin 클라이언트가 발급하므로
+ * Storage 정책의 `{user_id}/...` 규칙에 걸리지 않는다 — 그 규칙은 회원이
+ * 브라우저에서 직접 읽을 때만 선다.
+ *
+ * 400장 상한은 그대로 둔다. 공용이 되면서 한 사람이 보던 수보다 훨씬 빨리
+ * 찰 것이므로, 넘치면 최신 것부터 잘린다. 검색이나 쪽 나누기는 화면 쪽에서
+ * 필요해질 때 붙인다.
+ */
+export async function listReferenceImages(viewer: ReferenceViewer): Promise<ReferenceImageView[]> {
   if (isLocalStoreEnabled()) {
-    const images = await listLocalReferenceImages(getLocalDatabase(), userId);
-    return images.map((image) => ({ ...image, signedUrl: localFileUrl(image.id) }));
+    const images = await listLocalReferenceImages(getLocalDatabase(), viewer.userId);
+    return images.map((image) => ({
+      ...image,
+      signedUrl: localFileUrl(image.id),
+      mine: image.userId === viewer.userId,
+      ownerEmail: null,
+    }));
   }
 
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("reference_images")
     .select("id,user_id,storage_path,title,purpose,width,height,created_at")
-    .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(400);
   if (error) throw new Error(error.message);
@@ -90,10 +137,35 @@ export async function listReferenceImages(userId: string): Promise<ReferenceImag
   const urlByPath = new Map(
     (signed.data ?? []).map((entry) => [entry.path ?? "", entry.signedUrl ?? null]),
   );
+  // 관리자만 누가 올렸는지 본다. 회원에게는 "내 것인가"만 알려주면 된다.
+  const emails = viewer.role === "admin"
+    ? await emailsByUserId(rows.map((row) => row.user_id))
+    : new Map<string, string>();
+
   return rows.map((row) => ({
     ...toRow(row),
     signedUrl: urlByPath.get(row.storage_path) ?? null,
+    mine: row.user_id === viewer.userId,
+    ownerEmail: emails.get(row.user_id) ?? null,
   }));
+}
+
+/**
+ * 올린 사람의 이메일. **관리자 목록에서만 부른다.**
+ *
+ * 조인 대신 두 번 묻는다. PostgREST 임베드는 관계 이름이 바뀌면 조용히 빈
+ * 값을 주는데, 여기서 빈 값은 "누가 올렸는지 모르는 목록"이 된다.
+ */
+async function emailsByUserId(userIds: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(userIds)];
+  if (!unique.length) return new Map();
+  const supabase = createSupabaseAdminClient();
+  const { data } = await supabase.from("profiles").select("id,email").in("id", unique);
+  return new Map(
+    ((data ?? []) as Array<{ id: string; email: string | null }>)
+      .filter((row) => row.email)
+      .map((row) => [row.id, row.email as string]),
+  );
 }
 
 /**

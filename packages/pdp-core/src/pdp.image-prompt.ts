@@ -1,3 +1,4 @@
+import { imageLookDirective, type ImageLook } from "@fixup/shared";
 import type { PdpImageStyle, PdpOutputMode, SectionBlueprint } from "./types";
 
 /**
@@ -21,6 +22,28 @@ export interface ImagePromptOptions {
   /** 인물을 아예 배제할지. 기본은 장면이 요구할 때만 넣는 auto. */
   peopleMode?: PeopleMode;
   desiredTone?: string;
+  /**
+   * 그림의 결. **상세페이지의 기본은 `photoreal`** 이다.
+   *
+   * 다른 도구는 `auto`(첨부의 결을 따라감)가 기본이지만, 상세페이지는 처음부터
+   * 늘 사진이었다. 기본을 `auto` 로 두면 쓰던 사람의 결과물이 조용히 바뀐다.
+   * 그래서 여기서만 기본이 다르다.
+   */
+  look?: ImageLook;
+}
+
+/** 상세페이지의 기본 결. 이유는 `ImagePromptOptions.look` 주석 참조. */
+export const DEFAULT_PDP_LOOK: ImageLook = "photoreal";
+
+/**
+ * 이 브리프의 결. 안 고르면 사진이다.
+ *
+ * 결이 사진이 아닐 때 실사 지시를 같이 보내면 정면충돌한다 — 애니를 골랐는데
+ * "3D 렌더도 일러스트도 아닌 진짜 사진이어야 한다"가 함께 나가면 모델이 둘 중
+ * 하나를 버린다. 그래서 실사 문구는 `photoreal` 일 때만 싣는다.
+ */
+function lookOf(options: ImagePromptOptions): ImageLook {
+  return options.look ?? DEFAULT_PDP_LOOK;
 }
 
 /**
@@ -54,11 +77,16 @@ function peopleRule(options: ImagePromptOptions) {
 }
 
 export function buildImageSystemPrompt(options: ImagePromptOptions) {
+  const look = lookOf(options);
   return [
     "You are an art director for Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
     "People are optional. Only include a person when the scene genuinely calls for one; when one appears they must be Korean.",
-    "Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo.",
+    // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용
+    // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
+    look === "photoreal"
+      ? "Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo."
+      : imageLookDirective(look, options.withModel ? "person" : "generic"),
     "Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections.",
     "Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour.",
     "Never draw buttons, arrows or other clickable controls — these are static images.",
@@ -69,6 +97,7 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
 }
 
 export function buildImageJson(section: SectionBlueprint, options: ImagePromptOptions) {
+  const look = lookOf(options);
   const brief: Record<string, unknown> = {
     task: "korean_ecommerce_detail_page_section",
     format: { orientation: "vertical", target: "mobile", static_image: true },
@@ -79,10 +108,6 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
       people: peopleRule(options),
     },
     layout: section.layout_notes || "compose it the way this message deserves",
-    realism: {
-      must: ["real photograph", "natural material texture", "physical light"],
-      must_not: ["3D render", "illustration", "stock photo look", "waxy over-smoothed skin"],
-    },
     forbidden: [
       "buttons",
       "arrows",
@@ -92,6 +117,18 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
       "watermarks",
     ],
   };
+
+  // 결에 따라 다른 열쇠가 나간다. 실사면 지금까지의 `realism` 을 그대로,
+  // 애니·3D·그림이면 그 결의 지시문을, `auto` 면 아무것도 싣지 않는다.
+  // 둘을 같이 실으면 "사진이어야 한다"와 "사진이 아니어야 한다"가 부딪힌다.
+  if (look === "photoreal") {
+    brief.realism = {
+      must: ["real photograph", "natural material texture", "physical light"],
+      must_not: ["3D render", "illustration", "stock photo look", "waxy over-smoothed skin"],
+    };
+  } else if (look !== "auto") {
+    brief.look = imageLookDirective(look, options.withModel ? "person" : "generic");
+  }
 
   if (section.style_guide) {
     brief.design_system = section.style_guide;

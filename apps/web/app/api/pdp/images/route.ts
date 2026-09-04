@@ -5,7 +5,17 @@ import {
   toPdpErrorResponse,
   mapPdpErrorCodeToStatus,
 } from "@fixup/pdp-core";
-import type { PdpGenerateImageRequest } from "@fixup/pdp-core";
+import type { ImageGenOptions, PdpGenerateImageRequest } from "@fixup/pdp-core";
+
+/**
+ * 화면이 보내는 몸통. 결(`look`)과 사용자 지시는 `ImageGenOptions` 밖에서 얹는다 —
+ * 그 타입은 이 작업의 담당 범위 밖이라 손대지 않았다. 값이 아는 결인지는
+ * pdp-core 의 `normalizeImageOptions` 가 확인한다.
+ */
+type PdpImagesRequestBody = PdpGenerateImageRequest & {
+  characterId?: string;
+  options?: ImageGenOptions & { look?: string; userInstruction?: string };
+};
 import { loadCharacterView } from "../../../../lib/characters";
 import { resolveGeminiKey } from "../../../../lib/server-keys";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
@@ -16,9 +26,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  let body: PdpGenerateImageRequest & { characterId?: string };
+  let body: PdpImagesRequestBody;
   try {
-    body = (await req.json()) as PdpGenerateImageRequest & { characterId?: string };
+    body = (await req.json()) as PdpImagesRequestBody;
   } catch {
     return Response.json(
       { ok: false, code: "INVALID_REQUEST", message: "요청을 해석하지 못했습니다." },
@@ -46,10 +56,10 @@ export async function POST(req: Request) {
         )
       : null;
 
-    const request: PdpGenerateImageRequest = characterReference
+    const request: PdpImagesRequestBody = characterReference
       ? {
           ...body,
-          options: { ...(body.options ?? {}), characterReference } as PdpGenerateImageRequest["options"],
+          options: { ...(body.options ?? {}), characterReference } as PdpImagesRequestBody["options"],
         }
       : body;
 

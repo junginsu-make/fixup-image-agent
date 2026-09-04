@@ -1,4 +1,5 @@
 import { MATCH_SOURCE, modelById, pickEndpoint, resolvePosterSize, sizeFromSource } from "@fixup/sns-core";
+import type { ImageLook } from "@fixup/shared";
 import { estimatePosterCost, type PosterCostEstimate } from "./pricing";
 import { buildPosterPrompt, type PosterPromptImage } from "./prompt";
 import type { PosterSlots } from "./schemas";
@@ -36,6 +37,10 @@ export interface PosterJobInput {
    * 부르는 쪽이 파일을 읽어 넣어 준다.
    */
   sourceSize?: { width: number; height: number };
+  /** 사용자가 직접 친 추가 지시. 프롬프트의 양끝으로 간다. */
+  userInstruction?: string;
+  /** 그림의 결. 없으면 auto — 첨부한 그림의 결을 따라간다. */
+  look?: ImageLook;
 }
 
 export interface PosterJob {
@@ -107,6 +112,8 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     slots: job.slots,
     images,
     size: resolved.pixel,
+    userInstruction: job.userInstruction,
+    look: job.look,
   });
 
   const input: Record<string, unknown> = { prompt, num_images: job.variants };

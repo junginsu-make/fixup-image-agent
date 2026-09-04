@@ -58,6 +58,8 @@ export async function POST(req: Request) {
       model: String(form.get("model") || "openai"),
       channel: String(form.get("channel") || "스마트스토어"),
       ratio: String(form.get("ratio") || "9:16"),
+      // 아는 값인지는 generateSections 가 확인한다. 모르면 원본을 따라가는 auto.
+      look: String(form.get("look") || "auto"),
       count: requestedCount,
       startSection: Number(form.get("startSection") || 1),
       openaiKey: resolveOpenaiKey(),

@@ -50,7 +50,8 @@ export function ReferencePicker({
   references: ReferenceItem[];
   roles: Record<string, Role>;
   onRoleChange(id: string, role: Role): void;
-  onUploaded(): void;
+  /** 다시 읽은 목록을 돌려준다. 방금 올린 줄이 들어왔는지 여기서 확인한다. */
+  onUploaded(): Promise<ReferenceItem[]>;
 }) {
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -124,7 +125,7 @@ export function ReferencePicker({
       const body = await (await fetch(`/api/reference-images/${item.id}`, { method: "DELETE" })).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
       onRoleChange(item.id, "none");
-      onUploaded();
+      await onUploaded();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "지우지 못했습니다.");
     }
@@ -136,6 +137,10 @@ export function ReferencePicker({
    * 전에는 라이브러리에만 넣고 끝냈다. 여기 보이는 것은 역할이 정해진 그림뿐이라
    * 화면은 아무 변화가 없었고, 올리기가 안 되는 것처럼 보였다. 실제로는 저장까지
    * 다 되고 있었다(2026-09-03 운영 DB 확인). 올리는 사람은 지금 쓰려고 올린다.
+   *
+   * **다시 읽기를 기다린다.** 던져 놓고 역할만 주면 그 사이 `picked` 가 못 찾는다
+   * — 화면에 붙인 그림은 `references` 에 있는 줄만 그리기 때문이다. 다시 읽기가
+   * 실패하면 역할만 남고 그림은 영영 안 나온다. 그때는 조용히 넘기지 않고 말한다.
    */
   async function upload(files: FileList | null) {
     if (!files?.length) return;
@@ -156,7 +161,14 @@ export function ReferencePicker({
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? "올리지 못했습니다.");
         added.push(id);
       }
-      onUploaded();
+      const fresh = await onUploaded();
+      const missing = added.filter((id) => !fresh.some((entry) => entry.id === id));
+      if (missing.length) {
+        setMessage(
+          `${missing.length}장이 라이브러리 목록에 아직 안 보입니다. `
+          + "저장은 됐으니 새로고침하면 나옵니다.",
+        );
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
     } finally {

@@ -85,6 +85,79 @@ describe("지키는 대상이 사람인지 물건인지 가른다", () => {
   });
 });
 
+describe("사용자가 직접 친 말이 가장 세다", () => {
+  const prompt = buildPosterPrompt({
+    slots, images, size, userInstruction: "배경은 밤, 창밖에 네온",
+  });
+
+  it("맨 앞과 맨 뒤 두 곳에 넣는다", () => {
+    // 2026-09-04 실측: 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려
+    // 무시됐다. 긴 프롬프트에서 중간 문장은 힘을 잃으므로 양끝에 둔다.
+    const first = prompt.indexOf("배경은 밤, 창밖에 네온");
+    const last = prompt.lastIndexOf("배경은 밤, 창밖에 네온");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(last).toBeGreaterThan(first);
+    // 앞의 것이 정말 맨 앞이다. 첨부 설명보다 먼저 읽힌다.
+    expect(first).toBeLessThan(prompt.indexOf("Image 1 is"));
+    // 뒤의 것이 정말 맨 뒤다. 출력 크기 줄 바로 앞이다.
+    expect(last).toBeGreaterThan(prompt.indexOf("Do not include"));
+  });
+
+  it("우선순위 줄에서 사용자 지시가 맨 앞이다", () => {
+    const priority = prompt.slice(prompt.indexOf("Priority when instructions conflict"));
+    expect(priority).toMatch(/USER INSTRUCTION/);
+    expect(priority.indexOf("USER INSTRUCTION")).toBeLessThan(priority.indexOf("PRESERVED"));
+    expect(priority.indexOf("PRESERVED")).toBeLessThan(priority.indexOf("REFERENCE"));
+  });
+
+  it("비어 있으면 그 줄 자체를 넣지 않는다", () => {
+    const bare = buildPosterPrompt({ slots, images, size });
+    expect(bare).not.toMatch(/USER INSTRUCTION/);
+    expect(bare).not.toMatch(/re-read the USER INSTRUCTION/);
+  });
+
+  it("공백만 적은 것은 안 적은 것으로 본다", () => {
+    const blank = buildPosterPrompt({ slots, images, size, userInstruction: "   \n  " });
+    expect(blank).not.toMatch(/USER INSTRUCTION/);
+  });
+});
+
+describe("결을 고르면 그 결로 그린다", () => {
+  it("auto 면 결 지시를 넣지 않는다", () => {
+    // 기본이 auto 여야 지금까지 쓰던 사람이 안 깨진다 — 첨부한 그림의 결을
+    // 따라가는 지금 동작이 그대로 유지된다.
+    const auto = buildPosterPrompt({ slots, images, size, look: "auto" });
+    const omitted = buildPosterPrompt({ slots, images, size });
+    expect(auto).toBe(omitted);
+    expect(auto).not.toMatch(/cel-shaded|photographic realism|hand-drawn illustration/i);
+  });
+
+  it("애니를 고르면 셀 셰이딩을 말한다", () => {
+    const anime = buildPosterPrompt({ slots, images, size, look: "anime" });
+    expect(anime).toMatch(/cel-shaded/i);
+  });
+
+  it("실사를 고르면 사진처럼 그리라고 한다", () => {
+    const photoreal = buildPosterPrompt({ slots, images, size, look: "photoreal" });
+    expect(photoreal).toMatch(/real photograph/i);
+  });
+});
+
+describe("첨부한 그림을 기억으로 대충 그리지 말라고 한다", () => {
+  it("첨부가 있으면 먼저 자세히 보라고 못 박는다", () => {
+    const prompt = buildPosterPrompt({ slots, images, size });
+    expect(prompt).toMatch(/Study every attached image closely/);
+    expect(prompt).toMatch(/never substitute a generic stand-in/);
+  });
+
+  it("첨부가 없으면 그 줄을 넣지 않는다", () => {
+    const none = buildPosterPrompt({ slots, images: [], size });
+    expect(none).not.toMatch(/Study every attached image/);
+    // 가리킬 그림이 없으면 우선순위를 말할 상대도 없다.
+    expect(none).not.toMatch(/Priority when instructions conflict/);
+  });
+});
+
 describe("포스터 프롬프트", () => {
   const prompt = buildPosterPrompt({ slots, images, size });
 

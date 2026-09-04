@@ -8,6 +8,7 @@ import {
 } from "@fixup/ui";
 import { IMAGE_MODELS, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
 import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
+import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
@@ -24,6 +25,10 @@ export function PosterNewClient() {
   const [variants, setVariants] = React.useState(3);
   const [title, setTitle] = React.useState("");
   const [instruction, setInstruction] = React.useState("");
+  // 기본은 auto — 지금까지처럼 첨부한 그림의 결을 따라간다.
+  const [look, setLook] = React.useState<ImageLook>("auto");
+  // 기획이 채운 슬롯보다 센 말. 비워 두면 프롬프트에 들어가지 않는다.
+  const [userInstruction, setUserInstruction] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -60,14 +65,26 @@ export function PosterNewClient() {
     }
   }, []);
 
-  const loadReferences = React.useCallback(async () => {
+  /**
+   * 읽은 목록을 **돌려준다.**
+   *
+   * 방금 올린 그림을 화면에 세우려면 그 줄이 필요하다. 상태로만 넘기면 부르는
+   * 쪽은 자기가 올린 것이 목록에 들어왔는지 알 수 없다 — 카드뉴스 쪽
+   * (attachment-picker 의 load)이 같은 이유로 이렇게 한다.
+   */
+  const loadReferences = React.useCallback(async (): Promise<ReferenceItem[]> => {
     try {
       const body = await (await fetch("/api/poster/references", { cache: "no-store" })).json();
-      if (body.ok) setReferences(body.references);
-      else setError(body.message ?? "참고 이미지를 불러오지 못했습니다.");
+      if (body.ok) {
+        const fresh = (body.references ?? []) as ReferenceItem[];
+        setReferences(fresh);
+        return fresh;
+      }
+      setError(body.message ?? "참고 이미지를 불러오지 못했습니다.");
     } catch {
       setError("참고 이미지를 불러오지 못했습니다.");
     }
+    return [];
   }, []);
 
   React.useEffect(() => { void loadReferences(); }, [loadReferences]);
@@ -86,6 +103,8 @@ export function PosterNewClient() {
           referenceIds: styleIds,
           preservedIds,
           personIds,
+          look,
+          userInstruction: userInstruction.trim(),
         }),
       });
       const body = await response.json();
@@ -137,7 +156,7 @@ export function PosterNewClient() {
               references={references}
               roles={roles}
               onRoleChange={(id, role) => setRoles((current) => ({ ...current, [id]: role }))}
-              onUploaded={() => void loadReferences()}
+              onUploaded={loadReferences}
             />
             {overReferenceLimit ? (
               <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -261,6 +280,43 @@ export function PosterNewClient() {
                 placeholder="필름 카메라 감성의 사진전 포스터"
               />
             </div>
+
+            <fieldset className="grid gap-2">
+              <legend className="text-meta text-subtle-foreground">결</legend>
+              <div className="flex flex-wrap gap-2">
+                {IMAGE_LOOKS.map((entry) => (
+                  <Button
+                    key={entry}
+                    type="button"
+                    size="sm"
+                    variant={look === entry ? "default" : "secondary"}
+                    onClick={() => setLook(entry)}
+                  >
+                    {IMAGE_LOOK_LABEL[entry]}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[look]}</p>
+            </fieldset>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="poster-user-instruction">추가 지시 · 선택</Label>
+              <Textarea
+                id="poster-user-instruction"
+                value={userInstruction}
+                onChange={(event) => setUserInstruction(event.target.value)}
+                rows={3}
+                placeholder="예: 배경은 밤, 창밖에 네온"
+              />
+              {/*
+                우선순위를 화면에서 말해 둔다. 여기 적은 말은 프롬프트의 맨 앞과
+                맨 뒤 두 곳에 들어가고, 첨부한 레퍼런스보다 세다.
+              */}
+              <p className="text-sm text-muted-foreground">
+                여기 적은 말이 다른 모든 지시보다 우선합니다.
+              </p>
+            </div>
+
             <div className="flex justify-end">
               <Button onClick={() => void submit()} disabled={!canSubmit || busy}>
                 {busy ? "만드는 중…" : "만들기"}

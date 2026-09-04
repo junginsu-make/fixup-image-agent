@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Download, Maximize2, Minimize2, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Maximize2, Minimize2, Star, Trash2, X } from "lucide-react";
 import { cn } from "@fixup/ui";
 import { downloadName } from "./download-name";
 import { parseViewerMeta, type ViewerMeta } from "./viewer-meta";
@@ -46,6 +46,23 @@ export interface ViewerRequest {
   /** 지우기를 열어 둘 때. 누르면 창이 닫히고 이 함수가 불린다. */
   onDelete?: () => void;
   deleteLabel?: string;
+  /**
+   * **지금 보고 있는 한 장**에 대한 여벌 동작. 넘긴 화면만 쓴다.
+   *
+   * 창 단위가 아니라 장 단위인 이유는 하나다. 카드뉴스는 한 벌에 여러 장이
+   * 들어 있어, 어느 장을 두고 하는 말인지가 동작의 뜻을 바꾼다. 넘겨보다
+   * 마음에 드는 장에서 누르는 것이 자연스럽다.
+   *
+   * 받는 값은 `images` 안의 자리 번호다. 그 자리가 원본의 몇 번째인지는
+   * 넘긴 화면이 안다 — 뷰어는 원본을 모른다.
+   */
+  action?: {
+    label: string;
+    /** 이미 해 둔 장인가. 참이면 눌리지 않고 `doneLabel` 을 보여준다. */
+    doneAt?: (index: number) => boolean;
+    doneLabel?: string;
+    run: (index: number) => void;
+  };
 }
 
 /** 한 장만 연다. */
@@ -213,6 +230,22 @@ export function ImageViewerHost() {
             rel="noreferrer"
             className="flex h-9 items-center rounded-md bg-white/15 px-3 text-sm hover:bg-white/25"
           >새 탭에서 열기</a>
+          {request.action ? (
+            (() => {
+              const done = request.action.doneAt?.(index) ?? false;
+              return (
+                <button
+                  type="button"
+                  disabled={done}
+                  onClick={() => { const run = request.action!.run; close(); run(index); }}
+                  className="flex h-9 items-center gap-1.5 rounded-md bg-white/15 px-3 text-sm hover:bg-white/25 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-white/15"
+                >
+                  <Star className="size-4" />
+                  {done ? (request.action.doneLabel ?? "해 둠") : request.action.label}
+                </button>
+              );
+            })()
+          ) : null}
           {request.onDelete ? (
             <button
               type="button"

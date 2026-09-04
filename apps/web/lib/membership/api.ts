@@ -81,6 +81,17 @@ export async function reserveAiUsage(
     p_analysis_limit: analysisLimit,
   });
   if (error || !data?.[0]) {
+    // 2026-09-04 운영에서 이 오류가 났는데 journalctl 에 한 줄도 없어 원인을 못
+    // 찾았다. 사용자에게 가는 문장은 하나지만 원인은 둘로 갈린다 — RPC 자체가
+    // 실패한 것(rpc_error)과, 호출은 됐는데 행이 안 온 것(empty_result)은
+    // 볼 곳이 다르다. 사용자 id·요청 id 까지만 남긴다. 이메일·키는 남기지 않는다.
+    logUsageFailure("예약 실패", error, {
+      cause: error ? "rpc_error" : "empty_result",
+      userId: auth.member.userId,
+      requestId,
+      operation,
+      units,
+    });
     return { ok: false, response: membershipApiError(500, "usage_unavailable", "사용량을 확인하지 못했습니다.") };
   }
   const row = data[0];
@@ -127,7 +138,20 @@ export async function finalizeAiUsage(
     p_consumed_units: consumedUnits,
     p_error_code: errorCode ?? null,
   });
-  if (error || !data?.[0]) throw error ?? new Error("사용량 확정에 실패했습니다.");
+  if (error || !data?.[0]) {
+    // 던지기만 하면 호출한 라우트가 catch 에서 다시 finalize 를 불러 또 던지고,
+    // 결국 500 만 남는다 — 어느 회원의 어느 요청이 매달렸는지가 사라진다.
+    // 예약된 채 묶인 크레딧을 손으로 풀려면 이 두 값이 있어야 한다.
+    logUsageFailure("확정 실패", error, {
+      cause: error ? "rpc_error" : "empty_result",
+      userId: reservation.userId,
+      requestId: reservation.requestId,
+      success,
+      consumedUnits,
+      errorCode: errorCode ?? null,
+    });
+    throw error ?? new Error("사용량 확정에 실패했습니다.");
+  }
 
   if (cost && cost.billableImages > 0) {
     const { error: costError } = await admin
@@ -135,10 +159,44 @@ export async function finalizeAiUsage(
       .update({ model: cost.model, billable_images: cost.billableImages })
       .eq("user_id", reservation.userId)
       .eq("request_id", reservation.requestId);
-    if (costError) console.warn("[usage] 비용 기록 실패", costError);
+    // 어느 요청의 비용이 빈 것인지 없으면 장부를 손으로 메울 수 없다.
+    if (costError) {
+      logUsageFailure("비용 기록 실패", costError, {
+        userId: reservation.userId,
+        requestId: reservation.requestId,
+        model: cost.model,
+        billableImages: cost.billableImages,
+      });
+    }
   }
 
   return usageFromRpc(data[0]);
+}
+
+/**
+ * 사용량 처리가 어긋난 자리를 서버 로그에 남긴다.
+ *
+ * 이 저장소에는 로거가 따로 없다. 기존 방식(`[usage] …`)의 태그를 그대로 쓴다.
+ *
+ * 객체를 그냥 넘기지 않고 JSON 한 줄로 만든다. 넘기면 node 가 예쁘게 여러
+ * 줄로 쪼개 찍어서, journalctl 에서 `[usage]` 로 걸러도 첫 줄만 남고 정작
+ * 원인인 오류 칸이 잘려 나간다. 이 함수는 그 잘림을 막으려고 있는 것이다.
+ *
+ * Supabase 오류는 통째로 넘기지 않고 네 칸만 뽑는다. 통째로 넘기면 나중에
+ * 무엇이 더 딸려 들어올지 우리가 통제할 수 없다 — 로그는 지울 수 없다.
+ */
+function logUsageFailure(
+  what: string,
+  error: { message?: string; code?: string; details?: string; hint?: string } | null,
+  context: Record<string, unknown>,
+) {
+  const payload = {
+    ...context,
+    error: error
+      ? { code: error.code, message: error.message, details: error.details, hint: error.hint }
+      : null,
+  };
+  console.error(`[usage] ${what} ${JSON.stringify(payload)}`);
 }
 
 function usageFromRpc(row: Record<string, unknown>): UsageSummary {

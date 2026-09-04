@@ -53,6 +53,7 @@ import type {
   WorkbenchTab,
 } from "./pdp-drafts";
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
+import type { ImageLook } from "@fixup/shared";
 import styles from "./pdp-maker.module.css";
 
 /* 캔버스 위 도크 버튼. 상태 클래스를 기본과 분리해 둔다. */
@@ -132,6 +133,10 @@ interface PdpEditorProps {
   characterId?: string;
   aspectRatio: AspectRatio;
   outputMode?: PdpOutputMode;
+  /** 그림의 결. 상세페이지의 기본은 photoreal — 지금까지 늘 사진이었다. */
+  look?: ImageLook;
+  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
+  userInstruction?: string;
   // 단계 표시줄은 4단계를 모두 그리므로 1·2단계 라벨도 계속 보인다.
   // 텍스트로 시작한 작업에 "이미지 업로드"가 뜨지 않게 시작 방식을 넘겨받는다.
   startMode?: CreateMode;
@@ -256,6 +261,8 @@ export function PdpEditor({
   characterId,
   aspectRatio,
   outputMode,
+  look = "photoreal",
+  userInstruction = "",
   startMode = "image",
   imageModel = DEFAULT_IMAGE_MODEL,
   desiredTone,
@@ -1407,6 +1414,10 @@ export function PdpEditor({
                 ]
               : undefined,
             preserveProductImage: preserveProduct,
+            // 배치와 같은 값을 보내야 한다. 한 장만 다시 만들었을 때 그 섹션만
+            // 결이 달라지거나 사용자 지시가 빠지면 안 된다.
+            look,
+            userInstruction: userInstruction.trim() || undefined,
             // 제목에 없는 낱말은 걸러서 보낸다. 그대로 보내면 모델이 강조할
             // 대상을 못 찾아 엉뚱한 곳이 강조된다.
             emphasisWords: keepWordsPresentIn(section.headline ?? "", options.emphasisWords ?? []),
@@ -1553,6 +1564,8 @@ export function PdpEditor({
             styleReference,
             preserveProduct,
             characterId,
+            look,
+            userInstruction: userInstruction.trim() || undefined,
             // 섹션마다 제목이 다르므로 강조도 섹션별이다.
             emphasisWordsBySection: Object.fromEntries(
               chunk

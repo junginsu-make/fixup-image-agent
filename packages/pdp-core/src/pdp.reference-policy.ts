@@ -1,3 +1,4 @@
+import { priorityLine } from "@fixup/shared";
 import type { ReferenceImage } from "./types";
 
 /**
@@ -72,7 +73,10 @@ const ROLE_RULES: Record<ReferenceRole, string[]> = {
     "  · colour, finish and material",
     "  · every logo, label and package text, spelled exactly as shown",
     "Do NOT copy the reference's camera angle, crop, distance, background or lighting — " +
-      "the scene description decides those. Show this same product in a new photograph.",
+      // 「new photograph」이라고 못 박으면 애니·그림 결을 골랐을 때 결 지시와
+      // 부딪힌다. 여기서 정할 것은 **같은 제품을 새로 그린다**는 것뿐이다.
+      // 사진이냐 아니냐는 결(look)이 정한다.
+      "the scene description decides those. Show this same product in a newly composed image.",
     "Never redesign, restyle or substitute the product.",
   ],
   person: [
@@ -93,6 +97,17 @@ const ROLE_RULES: Record<ReferenceRole, string[]> = {
   ],
 };
 
+/**
+ * 첨부를 실제로 보라는 한 줄. 다섯 도구가 같은 문장을 쓴다.
+ *
+ * 모델은 첨부가 있어도 "이런 종류의 그림"을 기억에서 꺼내 그리는 쪽으로 쏠린다.
+ * 그러면 라벨 글자가 비슷한 다른 글자가 되고, 색도 근처 색으로 바뀐다.
+ */
+const STUDY_ATTACHMENTS =
+  "Study every attached image closely before drawing. They are the source of truth for what" +
+  " they define — reproduce what you actually see in them. Do not approximate them from" +
+  " memory, and never substitute a generic stand-in.";
+
 const ROLE_LABEL: Record<ReferenceRole, string> = {
   anchor: "PRODUCT",
   person: "PERSON",
@@ -107,10 +122,17 @@ const ROLE_LABEL: Record<ReferenceRole, string> = {
  *
  * @returns 첨부가 없으면 빈 문자열.
  */
-export function buildReferenceRoleDirective(references: readonly ReferenceImage[]): string {
+export function buildReferenceRoleDirective(
+  references: readonly ReferenceImage[],
+  options?: { hasUserInstruction?: boolean },
+): string {
   if (references.length === 0) return "";
 
   const lines = [
+    // 첨부를 대충 훑고 기억으로 그리면 라벨 글자가 뭉개지고 색이 어긋난다.
+    // "붙어 있으니 알아서 보겠지"가 통하지 않아서 한 줄로 못 박는다.
+    STUDY_ATTACHMENTS,
+    "",
     `Reference images (${references.length}) are attached in this order. ` +
       "Each has a different job — do not mix them up:",
     "",
@@ -130,6 +152,17 @@ export function buildReferenceRoleDirective(references: readonly ReferenceImage[
 
   const hasIdentity = references.some((reference) => isIdentityReference(reference.kind));
   const hasStyle = references.some((reference) => reference.kind === "style");
+
+  // 사람이 직접 친 말이 맨 위다. 그 아래는 지금까지의 서열을 그대로 둔다 —
+  // 제품·인물이 레퍼런스를 이기는 것은 정체성 보존이라 양보할 수 없다.
+  //
+  // **사용자 지시가 있을 때만** 적는다. 없으면 이 줄이 남기는 말은
+  // "레퍼런스 > 장면 지시"뿐인데, 상세페이지에서 장면을 정하는 것은 섹션
+  // 블루프린트다. 레퍼런스가 그것을 이긴다고 말하면 style 역할 규칙과 부딪힌다.
+  if (options?.hasUserInstruction) {
+    const ranking = priorityLine({ hasUserInstruction: true, hasPreserved: hasIdentity });
+    if (ranking) lines.push(ranking);
+  }
 
   if (hasIdentity && hasStyle) {
     lines.push(

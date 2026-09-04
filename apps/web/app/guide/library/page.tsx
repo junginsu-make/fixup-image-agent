@@ -33,7 +33,7 @@ export default function LibraryGuidePage() {
 
       <Section title="라이브러리 — 세 가지가 들어 있습니다">
         <Mock title="라이브러리">
-          <MockTabs items={["작업물", "참고 이미지", "수집한 글"]} active={0} marker={1} />
+          <MockTabs items={["작업물", "참고 이미지", "캐릭터"]} active={0} marker={1} />
           <MockChoices
             columns={3}
             items={[
@@ -59,7 +59,7 @@ export default function LibraryGuidePage() {
                     나뉩니다
                   </li>
                   <li>
-                    <strong className="text-foreground">수집한 글</strong> — 수집 리스트에 등록한 곳에서 자동으로 모인 글
+                    <strong className="text-foreground">캐릭터</strong> — 캐릭터 만들기로 각도를 고정해 둔 인물·동물·사물
                   </li>
                 </ul>
               ),
