@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Textarea, cn,
@@ -741,104 +741,238 @@ export function CharacterStudio() {
               </div>
             ) : (
               <div className="space-y-4">
-                {characters.map((character) => {
-                  const byAngle = new Map(character.views.map((view) => [view.angle, view]));
-                  return (
-                    <div key={character.id} className="rounded-md border p-3">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <strong className="min-w-0 truncate text-sm">{character.name}</strong>
-                        <Badge variant="outline" className="flex-none text-[10px]">
-                          {KINDS.find((entry) => entry.id === character.kind)?.label ?? "사람"}
-                          {" · "}
-                          {LOOKS.find((entry) => entry.id === character.look)?.label ?? "실사"}
-                        </Badge>
-                        <Button
-                          variant="ghost" size="sm"
-                          className="ml-auto text-muted-foreground hover:text-destructive"
-                          disabled={deletingId === character.id}
-                          aria-label={`${character.name} 삭제`}
-                          onClick={() => void handleDelete(character)}
-                        >
-                          {deletingId === character.id
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <Trash2 className="h-3.5 w-3.5" />}
-                        </Button>
-                      </div>
-
-                      {/* 네 각도를 항상 네 칸으로 둔다. 빠진 각도가 빈 칸으로 보여야
-                          채울 수 있다는 것을 안다. */}
-                      <div className="grid grid-cols-3 gap-2">
-                        {angleList.map(({ id: angle }) => {
-                          const view = byAngle.get(angle);
-                          const key = `${character.id}:${angle}`;
-                          const filled = character.views.filter((entry) => entry.url);
-                          return (
-                            <div key={angle} className="min-w-0">
-                              <button
-                                type="button"
-                                disabled={!view?.url}
-                                aria-label={`${character.name} ${angleLabel(angle)} 크게 보기`}
-                                onClick={() => openImageGallery({
-                                  images: filled.map((entry) => ({
-                                    src: entry.url as string,
-                                    alt: `${character.name} ${angleLabel(entry.angle)}`,
-                                    meta: [
-                                      ["캐릭터", character.name],
-                                      ["각도", angleLabel(entry.angle)],
-                                      ["종류", KINDS.find((k) => k.id === character.kind)?.label ?? "사람"],
-                                      ["결", LOOKS.find((l) => l.id === character.look)?.label ?? "실사"],
-                                      ["묘사", character.sourcePrompt],
-                                    ],
-                                  })),
-                                  index: Math.max(0, filled.findIndex((entry) => entry.angle === angle)),
-                                })}
-                                className={cn(
-                                  "block w-full text-left",
-                                  view?.url ? "transition-opacity hover:opacity-90" : "cursor-default",
-                                )}
-                              >
-                                <span className="block aspect-[3/4] overflow-hidden rounded bg-muted">
-                                  {view?.url ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={view.url} alt="" className="h-full w-full object-cover" />
-                                  ) : (
-                                    <span className="grid h-full place-items-center text-[10px] text-subtle-foreground">
-                                      없음
-                                    </span>
-                                  )}
-                                </span>
-                              </button>
-                              <div className="mt-1 flex items-center justify-between gap-1">
-                                <span className="truncate text-[10px] text-subtle-foreground">
-                                  {angleLabel(angle)}
-                                </span>
-                                {/* 정면은 고른 후보 그 자체다. 다시 만들면 나머지
-                                    셋이 전부 남남이 된다. */}
-                                {angle === "front" ? null : (
-                                  <button
-                                    type="button"
-                                    disabled={redoing === key}
-                                    aria-label={`${character.name} ${angleLabel(angle)} 다시 만들기`}
-                                    onClick={() => void handleRedo(character, angle)}
-                                    className="flex-none text-subtle-foreground hover:text-foreground disabled:opacity-50"
-                                  >
-                                    {redoing === key
-                                      ? <Loader2 className="size-3 animate-spin" />
-                                      : <RotateCw className="size-3" />}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+                {characters.map((character) => (
+                  <CharacterRow
+                    key={character.id}
+                    character={character}
+                    angles={angleList}
+                    angleLabel={angleLabel}
+                    redoing={redoing}
+                    deleting={deletingId === character.id}
+                    onRedo={(angle) => void handleRedo(character, angle)}
+                    onDelete={() => void handleDelete(character)}
+                  />
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 「내 캐릭터」 한 줄. 정면만 보이고, 누르면 나머지 각도가 펼쳐진다.
+ *
+ * 여섯 칸을 늘 펼쳐 두니 캐릭터가 두어 개만 되어도 카드가 화면을 넘겨 무엇이
+ * 무엇인지 안 보였다. 라이브러리의 작업물 카드와 같이 대표 한 장만 두고
+ * 접는다. 접힌 채로도 장수를 말해야 한다 — 안 그러면 정면 한 장짜리인지
+ * 접힌 것인지 구분할 수 없다. 펼침은 캐릭터마다 따로 든다.
+ *
+ * **「없음」이 두 가지 뜻이었다.** 전에는 서버가 주는 각도 여섯을 늘 여섯 칸으로
+ * 그려서, 애초에 안 고른 각도와 만들다 실패한 각도가 똑같이 「없음」으로
+ * 보였다(2026-09-04 사용자 화면에서 6칸 중 3칸). 고장인지 아닌지 알 수 없다.
+ * 지금은 저장된 각도만 칸을 만들고, 없는 각도는 아래 더 만들 수 있는 자리로
+ * 뺀다. 둘을 갈라 말하지는 않는다 — 캐릭터 데이터에 가를 근거가 없다. 실패한
+ * 각도는 행을 아예 안 남기므로(characters.ts 의 create 는 성공한 것만 넣는다)
+ * 안 고른 각도와 똑같이 「없음」이다.
+ */
+function CharacterRow({ character, angles, angleLabel, redoing, deleting, onRedo, onDelete }: {
+  character: Character;
+  angles: Array<{ id: string; label: string }>;
+  angleLabel: (id: string) => string;
+  redoing: string;
+  deleting: boolean;
+  onRedo: (angle: string) => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const shown = character.views.filter((view) => view.url);
+  const cover = character.views.find((view) => view.angle === "front" && view.url) ?? shown[0];
+  // 정면은 고른 후보 그 자체라 다시 만들 수 없다(서버가 막는다). 빠진 목록에서도 뺀다.
+  const missing = angles.filter((angle) =>
+    angle.id !== "front" && !character.views.some((view) => view.angle === angle.id));
+  const panelId = `character-angles-${character.id}`;
+
+  const openGallery = (angle: string) => openImageGallery({
+    images: shown.map((entry) => ({
+      src: entry.url as string,
+      alt: `${character.name} ${angleLabel(entry.angle)}`,
+      meta: [
+        ["캐릭터", character.name],
+        ["각도", angleLabel(entry.angle)],
+        ["종류", KINDS.find((k) => k.id === character.kind)?.label ?? "사람"],
+        ["결", LOOKS.find((l) => l.id === character.look)?.label ?? "실사"],
+        ["묘사", character.sourcePrompt],
+      ],
+    })),
+    index: Math.max(0, shown.findIndex((entry) => entry.angle === angle)),
+  });
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <strong className="min-w-0 truncate text-sm">{character.name}</strong>
+        <Badge variant="outline" className="flex-none text-[10px]">
+          {KINDS.find((entry) => entry.id === character.kind)?.label ?? "사람"}
+          {" · "}
+          {LOOKS.find((entry) => entry.id === character.look)?.label ?? "실사"}
+        </Badge>
+        <Button
+          variant="ghost" size="sm"
+          className="ml-auto text-muted-foreground hover:text-destructive"
+          disabled={deleting}
+          aria-label={`${character.name} 삭제`}
+          onClick={onDelete}
+        >
+          {deleting
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <Trash2 className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
+      {/* 미리보기 자체가 펼침 단추다. 크게 보기는 펼친 뒤 각 칸에서 한다 —
+          한 자리에 두 뜻을 겹치면 어느 쪽이 나올지 알 수 없다. */}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center gap-3 rounded text-left hover:opacity-90"
+      >
+        <span className="h-[80px] w-[60px] flex-none overflow-hidden rounded bg-muted">
+          {cover?.url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={cover.url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="grid h-full place-items-center text-[10px] text-subtle-foreground">없음</span>
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-medium">
+            {cover ? angleLabel(cover.angle) : "보여 줄 그림이 없습니다"}
+          </span>
+          <span className="block text-[11px] leading-snug text-subtle-foreground">
+            {shown.length > 1
+              ? `다른 각도 +${shown.length - 1}장`
+              : missing.length
+                ? "각도가 이것뿐입니다 — 눌러서 더 만들 수 있습니다"
+                : "각도가 이것뿐입니다"}
+          </span>
+        </span>
+        {open
+          ? <ChevronDown className="size-4 flex-none text-subtle-foreground" />
+          : <ChevronRight className="size-4 flex-none text-subtle-foreground" />}
+      </button>
+
+      {open ? (
+        <div id={panelId} className="mt-3 space-y-3">
+          {character.views.length ? (
+            <div className="grid grid-cols-3 gap-2">
+              {character.views.map((view) => (
+                <AngleCell
+                  key={view.angle}
+                  name={character.name}
+                  label={angleLabel(view.angle)}
+                  view={view}
+                  busy={redoing === `${character.id}:${view.angle}`}
+                  onOpen={() => openGallery(view.angle)}
+                  onRedo={() => onRedo(view.angle)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="rounded border border-dashed p-3 text-center text-xs text-subtle-foreground">
+              저장된 각도가 없습니다.
+            </p>
+          )}
+
+          {/* 없는 각도를 칸으로 그리지 않는다 — 안 고른 것까지 「없음」으로 보여
+              고장처럼 읽혔다. 여기서는 채우는 방법만 말한다. */}
+          {missing.length ? (
+            <div className="rounded border border-dashed p-2">
+              <p className="mb-1.5 text-[11px] leading-snug text-subtle-foreground">
+                이 캐릭터에 없는 각도입니다. 만들 때 안 고른 것일 수도, 만들다 실패한 것일 수도
+                있습니다 — 어느 쪽인지는 남아 있지 않습니다.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {missing.map((angle) => {
+                  const busy = redoing === `${character.id}:${angle.id}`;
+                  return (
+                    <Button
+                      key={angle.id} type="button" variant="secondary" size="sm"
+                      disabled={busy}
+                      onClick={() => onRedo(angle.id)}
+                    >
+                      {busy
+                        ? <Loader2 className="mr-1 size-3 animate-spin" />
+                        : <Sparkles className="mr-1 size-3" />}
+                      {angle.label} 만들기
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 저장된 각도 한 칸.
+ *
+ * 행은 있는데 `url` 이 없는 경우가 따로 있다 — 파일은 있고 서명 URL 만 못 받은
+ * 것이다. 이것을 「없음」이라고 하면 만들다 실패한 것으로 읽혀 쓸데없이 다시
+ * 만들게 된다. 그래서 말을 다르게 한다.
+ */
+function AngleCell({ name, label, view, busy, onOpen, onRedo }: {
+  name: string;
+  label: string;
+  view: CharacterView;
+  busy: boolean;
+  onOpen: () => void;
+  onRedo: () => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        disabled={!view.url}
+        aria-label={`${name} ${label} 크게 보기`}
+        onClick={onOpen}
+        className={cn(
+          "block w-full text-left",
+          view.url ? "transition-opacity hover:opacity-90" : "cursor-default",
+        )}
+      >
+        <span className="block aspect-[3/4] overflow-hidden rounded bg-muted">
+          {view.url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={view.url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="grid h-full place-items-center px-1 text-center text-[10px] leading-tight text-subtle-foreground">
+              그림을 못 불러왔습니다
+            </span>
+          )}
+        </span>
+      </button>
+      <div className="mt-1 flex items-center justify-between gap-1">
+        <span className="truncate text-[10px] text-subtle-foreground">{label}</span>
+        {/* 정면은 고른 후보 그 자체다. 다시 만들면 나머지가 전부 남남이 된다. */}
+        {view.angle === "front" ? null : (
+          <button
+            type="button"
+            disabled={busy}
+            aria-label={`${name} ${label} 다시 만들기`}
+            onClick={onRedo}
+            className="flex-none text-subtle-foreground hover:text-foreground disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="size-3 animate-spin" /> : <RotateCw className="size-3" />}
+          </button>
+        )}
       </div>
     </div>
   );
