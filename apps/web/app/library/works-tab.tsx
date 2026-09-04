@@ -169,10 +169,19 @@ export function WorksTab() {
   /**
    * 관리자가 전체 회원의 작업물을 보고 있는가.
    *
-   * 기본은 꺼짐이다. 관리자도 대개는 자기 작업을 보러 온다 — 열자마자 남의
-   * 것이 섞여 나오면 자기 것을 찾는 데 시간이 든다.
+   * **관리자는 켜진 채로 시작한다.** 처음에는 꺼 두었는데, 그러면 관리자가
+   * 버튼을 찾아 누르기 전까지 남의 작업이 하나도 안 보인다 — 「관리자는 모두
+   * 볼 수 있다」가 아니라 「안 보인다」로 읽힌다. 자기 것만 보고 싶을 때
+   * 좁히는 편이, 볼 수 있다는 것을 모른 채 못 보는 것보다 낫다.
    */
   const [allMembers, setAllMembers] = React.useState(false);
+  /**
+   * 관리자인가. `null` 이면 아직 모른다.
+   *
+   * 정해지기 전에는 목록을 읽지 않는다. 모르는 채로 회원용 목록을 먼저 읽으면
+   * 관리자에게 자기 것만 한 번 보였다가 전체로 바뀌어 화면이 두 번 뒤집힌다.
+   */
+  const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const [featuring, setFeaturing] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState("");
   const pending = React.useMemo(
@@ -292,7 +301,37 @@ export function WorksTab() {
     }
   }
 
+  /**
+   * 관리자인지 먼저 가린다. **목록을 읽기 전에.**
+   *
+   * 따로 「나는 관리자인가」를 묻지 않는다. 관리 목록을 달라고 해서 주면
+   * 관리자고, 막히면 아니다 — 두 번 물으면 두 대답이 어긋날 수 있다.
+   *
+   * 관리자면 전체 보기로 시작한다. 버튼을 찾아 누르기 전까지 남의 작업이
+   * 하나도 안 보이면, 「관리자는 모두 볼 수 있다」가 아니라 「안 보인다」로
+   * 읽힌다.
+   */
   React.useEffect(() => {
+    let alive = true;
+    void fetch("/api/showcase/manage", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { ok?: boolean; items?: ShowcaseAdminView[] } | null) => {
+        if (!alive) return;
+        if (body?.ok) {
+          setShowcase(body.items ?? []);
+          setAllMembers(true);
+        }
+        setIsAdmin(Boolean(body?.ok));
+      })
+      .catch(() => { if (alive) setIsAdmin(false); });
+    return () => { alive = false; };
+  }, []);
+
+  React.useEffect(() => {
+    // 관리자 여부가 정해지기 전에는 읽지 않는다. 모르는 채로 회원용 목록을
+    // 먼저 읽으면 관리자에게 자기 것만 한 번 보였다가 전체로 바뀌어 화면이
+    // 두 번 뒤집힌다.
+    if (isAdmin === null) return;
     let alive = true;
     setWorks(null);
     void (async () => {
@@ -321,16 +360,6 @@ export function WorksTab() {
               ];
             })();
         if (!alive) return;
-
-        // 관리자면 첫 화면에 무엇이 걸렸는지도 안다. 막히면 관리자가 아니다 —
-        // 작업물 목록과 따로 다뤄서, 이쪽이 실패해도 목록은 그대로 뜬다.
-        void fetch("/api/showcase/manage", { cache: "no-store" })
-          .then((response) => (response.ok ? response.json() : null))
-          .then((body: { ok?: boolean; items?: ShowcaseAdminView[] } | null) => {
-            if (alive && body?.ok) setShowcase(body.items ?? []);
-          })
-          .catch(() => {});
-
         setWorks(merged.sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "")));
       } catch (error) {
         // 화면을 통째로 지우지 않는다. 전체 보기가 실패했는데 목록까지
@@ -341,7 +370,7 @@ export function WorksTab() {
       }
     })();
     return () => { alive = false; };
-  }, [allMembers]);
+  }, [isAdmin, allMembers]);
 
   if (message) return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{message}</p>;
   if (!works) return <p className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />작업물을 불러오는 중입니다.</p>;
