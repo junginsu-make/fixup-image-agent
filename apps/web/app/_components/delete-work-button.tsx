@@ -8,6 +8,17 @@ import {
 } from "@fixup/ui";
 
 /**
+ * 목록 카드 모서리에 놓는 지우기 단추의 생김새.
+ *
+ * 카드뉴스·이미지 목록은 아래 `DeleteWorkButton` 을 그대로 쓰고, 라이브러리
+ * 작업물은 자기 확인 창이 따로 있어(누가 만든 것인지까지 말해야 한다) 단추만
+ * 가져다 쓴다. 생김새가 두 곳에 갈려 있으면 한쪽만 고치는 날이 온다.
+ */
+export const DELETE_CORNER_BUTTON =
+  "absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md " +
+  "bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive";
+
+/**
  * 만든 것을 지우는 버튼.
  *
  * 목록 카드의 모서리에 둔다. 아래에 줄로 두면 카드가 길어지고, 열기 버튼과
@@ -56,7 +67,7 @@ export function DeleteWorkButton({
         type="button"
         aria-label={`${title} 지우기`}
         onClick={(event) => { event.preventDefault(); event.stopPropagation(); setOpen(true); }}
-        className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
+        className={DELETE_CORNER_BUTTON}
       >
         <Trash2 className="size-3.5" />
       </button>
