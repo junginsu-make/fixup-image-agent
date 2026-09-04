@@ -1,4 +1,10 @@
-import { type LookSubject, imageLookDirective } from "@fixup/shared";
+import {
+  type LookSubject,
+  imageLookDirective,
+  priorityLine,
+  userInstructionHead,
+  userInstructionTail,
+} from "@fixup/shared";
 import type { AspectRatio, ImageModelId } from "./types";
 
 /**
@@ -315,15 +321,31 @@ export function buildCandidatePrompt(input: {
   const { kind, look } = resolve(input);
   const noun = kind === "object" ? "object" : "character";
   return (
-    `Create exactly one original fictional ${noun}. Preserve these identity-defining ` +
-    `traits consistently: ${input.description}. Do not add a second ${noun}.` +
+    // 사용자가 친 말이 **맨 앞**이다. 종류·결은 고르는 값이고 이것은 직접 친
+    // 말이라, 둘이 부딪히면 친 말이 이겨야 한다. 「수채화풍으로」라고 적었는데
+    // 결이 사진에 머물러 있으면 적은 말이 무시된 것으로 보인다.
+    //
+    // 반대로 친 말에 없는 것은 고른 값이 그대로 간다 — 결·종류·비율 지시는
+    // 아래에 그대로 남아 있다.
+    `${userInstructionHead(input.description)}
+
+` +
+    `Create exactly one original fictional ${noun}. Preserve the identity-defining ` +
+    `traits from the USER INSTRUCTION above consistently. Do not add a second ${noun}.` +
     (input.referenceRole ? referenceDirective(input.referenceRole, kind) : "") +
     ` Show it as ${angleDirective("front", kind)}.` +
     PLAIN_BACKGROUND +
     lookDirective(look, kind) +
-    // 구도는 **맨 뒤**다. 2026-09-04 실측에서 결 지시를 길게 붙였더니 앞쪽
-    // 구도 지시가 밀려 전신으로 뽑으라는 말이 무시됐다(발이 프레임 밖으로
-    // 나갔다). 긴 프롬프트에서 중간 문장은 힘을 잃는다.
+    // 첨부가 있을 때만 순위를 밝힌다. 없는데 「레퍼런스보다 세다」고 말하면
+    // 모델이 있지도 않은 첨부를 찾는다.
+    (input.referenceRole
+      ? ` ${priorityLine({ hasUserInstruction: true, hasPreserved: input.referenceRole === "extract" })}`
+      : "") +
+    // 다시 못 박는 자리는 구도 **바로 앞**이다. 맨 뒤가 더 세지만, 구도를 맨
+    // 뒤에 두는 것은 2026-09-04 실측으로 정한 것이라 그 자리를 뺏지 않는다 —
+    // 결 지시를 길게 붙였더니 앞쪽 구도 지시가 밀려 전신으로 뽑으라는 말이
+    // 무시됐다(발이 프레임 밖으로 나갔다).
+    ` ${userInstructionTail(input.description)}` +
     framingDirective(input.aspectRatio, kind)
   );
 }

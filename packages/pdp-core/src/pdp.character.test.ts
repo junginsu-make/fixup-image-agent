@@ -378,3 +378,63 @@ describe("옛 각도 이름", () => {
     expect(migrateAngle("무엇")).toBe("무엇");
   });
 });
+
+describe("사용자가 친 말과 고른 값이 부딪힐 때", () => {
+  const base = { description: "수채화풍 소녀", aspectRatio: "3:4" as const };
+
+  it("친 말이 맨 앞에서 최우선으로 선다", () => {
+    // 종류·결은 고르는 값이고 이것은 직접 친 말이다. 「수채화풍으로」라고
+    // 적었는데 결이 사진에 머물면 적은 말이 무시된 것으로 보인다.
+    const prompt = buildCandidatePrompt({ ...base, look: "photoreal" });
+    expect(prompt.startsWith("USER INSTRUCTION")).toBe(true);
+    expect(prompt).toContain("highest priority");
+    expect(prompt.indexOf("수채화풍 소녀")).toBeLessThan(prompt.indexOf("Create exactly one"));
+  });
+
+  it("맨 끝 가까이에서 한 번 더 못 박는다", () => {
+    // 긴 프롬프트에서 중간 문장은 힘을 잃는다. 가장 중요한 것은 양끝에 둔다.
+    const prompt = buildCandidatePrompt({ ...base, look: "anime" });
+    expect(prompt).toContain("re-read the USER INSTRUCTION");
+    expect(prompt.lastIndexOf("수채화풍 소녀")).toBeGreaterThan(prompt.length / 2);
+  });
+
+  it("친 말에 없는 것은 고른 값이 그대로 간다", () => {
+    // 사용자 말을 최우선으로 올린다고 옵션이 빠지면 안 된다. 안 적은 것은
+    // 고른 대로 나와야 한다.
+    const prompt = buildCandidatePrompt({ ...base, kind: "animal", look: "anime" });
+    expect(prompt).toContain("Show it as");
+    expect(prompt.toLowerCase()).toContain("anime");
+  });
+
+  it("구도 지시는 여전히 맨 뒤다", () => {
+    // 2026-09-04 실측: 뒤에 문단을 덧붙였더니 앞쪽 구도 지시가 밀려 전신으로
+    // 뽑으라는 말이 무시됐다(발이 프레임 밖으로 나갔다). 그 자리를 뺏지 않는다.
+    const prompt = buildCandidatePrompt({ ...base, look: "photoreal" });
+    expect(prompt.indexOf("re-read the USER INSTRUCTION"))
+      .toBeLessThan(prompt.indexOf("Keep the primary identifying features clearly visible"));
+  });
+
+  it("첨부가 없으면 레퍼런스 순위를 말하지 않는다", () => {
+    // 없는데 「레퍼런스보다 세다」고 하면 모델이 있지도 않은 첨부를 찾는다.
+    expect(buildCandidatePrompt(base)).not.toContain("Priority when instructions conflict");
+  });
+
+  it("첨부가 있으면 순위를 밝힌다", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "style" });
+    expect(prompt).toContain("Priority when instructions conflict");
+    expect(prompt).toContain("the USER INSTRUCTION");
+  });
+
+  it("정체성을 뽑아 쓸 첨부면 그 대상도 순위에 넣는다", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "extract" });
+    expect(prompt).toContain("the PRESERVED SUBJECT");
+  });
+
+  it("각도 만들기는 첨부가 기준이라 손대지 않는다", () => {
+    // 각도는 「고른 정면과 같은 캐릭터」를 만드는 일이다. 여기서 친 말을
+    // 최우선으로 올리면 기준 그림에서 벗어난 것이 나온다.
+    const prompt = buildTurnaroundPrompt({ identityPrompt: "수채화풍 소녀", angle: "back" });
+    expect(prompt).not.toContain("USER INSTRUCTION");
+    expect(prompt).toContain("Preserve the same");
+  });
+});
