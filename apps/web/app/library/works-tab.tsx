@@ -4,10 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { openImageGallery } from "../_components/image-viewer";
+import { DELETE_CORNER_BUTTON } from "../_components/delete-work-button";
 import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  cn,
 } from "@fixup/ui";
 
 /**
@@ -424,7 +426,7 @@ export function WorksTab() {
                   event.stopPropagation();
                   setConfirming(work.id);
                 }}
-                className="absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive disabled:opacity-50"
+                className={cn(DELETE_CORNER_BUTTON, "disabled:opacity-50")}
               ><Trash2 className="size-3.5" /></button>
             ) : null}
             {/* 칸은 참고 이미지와 같은 정사각형, 그림은 잘라 내지 않는다.
