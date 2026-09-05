@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Loader2, UserRound } from "lucide-react";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
+import { ThumbImage } from "../_components/thumb-image";
 
 /**
  * 캐릭터.
@@ -130,10 +131,7 @@ export function CharactersTab() {
                       {shown.map((view) => (
                         <figure key={view.angle} className="w-20 shrink-0">
                           <span className="block aspect-[3/4] overflow-hidden rounded-md border bg-muted">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              loading="lazy"
-                              decoding="async"
+                            <ThumbImage
                               src={view.url as string}
                               alt={`${character.name} · ${angleLabels[view.angle] ?? view.angle}`}
                               data-zoomable

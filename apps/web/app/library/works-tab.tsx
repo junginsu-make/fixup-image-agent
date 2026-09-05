@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
   cn,
 } from "@fixup/ui";
+import { ThumbImage } from "../_components/thumb-image";
 
 /**
  * 작업물 — **이 시스템이 만든 결과물**.
@@ -444,8 +445,7 @@ export function WorksTab() {
                 비율이 제각각이라 잘라 놓으면 무엇을 만들었는지 모른다. */}
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
               {work.cover ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img loading="lazy" decoding="async" src={work.cover} alt={work.title} className="h-full w-full object-contain" />
+                <ThumbImage src={work.cover} alt={work.title} className="h-full w-full object-contain" />
               ) : (
                 <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
               )}
