@@ -1,5 +1,6 @@
 "use client";
 
+import { downloadSource } from "./download-source";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2, Package, Palette, Pencil, X } from "lucide-react";
 import { Button } from "@fixup/ui";
@@ -21,6 +22,11 @@ interface ResultViewerProps {
   onClose: () => void;
   /** 없으면 '이어서 편집'을 감춘다. 계정 보관분은 편집기 초안이 아니다. */
   onEdit?: () => void;
+  /**
+   * 계정 보관분의 작업 id. 있으면 내려받기가 우리 라우트를 거쳐 PNG 로 온다.
+   * 저장은 WebP 로 하지만 오래된 편집기가 못 열기 때문이다.
+   */
+  accountItemId?: string;
 }
 
 /** data URL 한 장을 파일로 내려받는다. */
@@ -57,22 +63,7 @@ async function base64Of(source: string): Promise<string> {
   return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
 }
 
-/** data URL 의 확장자를 mime 에서 유추한다(기본 jpg). */
-function extOf(source: string): string {
-  const dataMatch = source.match(/^data:image\/([a-z0-9.+-]+)/i);
-  if (dataMatch) {
-    // "svg+xml" 처럼 뒤에 붙는 건 잘라 파일명에 안전한 확장자만 남긴다.
-    const raw = dataMatch[1].toLowerCase().split("+")[0];
-    return raw === "jpeg" ? "jpg" : raw;
-  }
-
-  // 서명 URL 은 쿼리스트링이 붙는다. 경로 부분의 확장자만 본다.
-  const pathMatch = source.split("?")[0].match(/\.([a-z0-9]+)$/i);
-  const raw = (pathMatch?.[1] ?? "png").toLowerCase();
-  return raw === "jpeg" ? "jpg" : raw;
-}
-
-export function ResultViewer({ title, images, onClose, onEdit }: ResultViewerProps) {
+export function ResultViewer({ title, images, onClose, onEdit, accountItemId }: ResultViewerProps) {
   const [index, setIndex] = useState(0);
   const [zipping, setZipping] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
@@ -140,15 +131,15 @@ export function ResultViewer({ title, images, onClose, onEdit }: ResultViewerPro
 
   const handleDownloadOne = async () => {
     if (!current) return;
-    const filename = `${title}-${String(index + 1).padStart(2, "0")}.${extOf(current.image)}`;
+    const { url: source, filename } = downloadSource({ accountItemId, index, image: current.image, title });
 
     // 원격 이미지는 a[download] 로 바로 받으면 다른 출처라 무시되고 새 탭만 열린다.
     // 내려받아 blob 으로 바꾼 뒤 저장한다.
-    if (current.image.startsWith("data:")) {
-      downloadDataUrl(current.image, filename);
+    if (source.startsWith("data:")) {
+      downloadDataUrl(source, filename);
       return;
     }
-    const blob = await (await fetch(current.image)).blob();
+    const blob = await (await fetch(source)).blob();
     const url = URL.createObjectURL(blob);
     downloadDataUrl(url, filename);
     URL.revokeObjectURL(url);
@@ -162,11 +153,12 @@ export function ResultViewer({ title, images, onClose, onEdit }: ResultViewerPro
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       // base64Of 가 원격 이미지를 받아오므로 순차가 아니라 한 번에 기다린다.
-      const encoded = await Promise.all(images.map((entry) => base64Of(entry.image)));
-      images.forEach((entry, i) => {
-        zip.file(`${title}-${String(i + 1).padStart(2, "0")}.${extOf(entry.image)}`, encoded[i], {
-          base64: true,
-        });
+      const sources = images.map((entry, i) =>
+        downloadSource({ accountItemId, index: i, image: entry.image, title }),
+      );
+      const encoded = await Promise.all(sources.map((entry) => base64Of(entry.url)));
+      sources.forEach((entry, i) => {
+        zip.file(entry.filename, encoded[i], { base64: true });
       });
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);

@@ -4,6 +4,7 @@ import "server-only";
 // @ts-expect-error 런타임 export 는 정상. 꾸러미 메타데이터가 선언을 가린다.
 import sharp from "sharp";
 import { BADGE_OPACITY, badgePlacement, isBrightCorner } from "@fixup/sns-core";
+import { MAX_INPUT_PIXELS } from "./image-encoding";
 import { BADGE_SIZE, badgeImage } from "./ai-badge";
 import { isAiBadgeEnabled } from "./ai-badge-setting";
 
@@ -20,6 +21,10 @@ import { isAiBadgeEnabled } from "./ai-badge-setting";
  * **실패해도 원본을 돌려준다.** 표기를 못 넣었다고 만든 그림을 잃는 것이
  * 훨씬 나쁘다.
  *
+ * 여는 자리마다 픽셀 상한을 건다. 저장 경로가 이 함수를 **먼저** 부르므로,
+ * 인코딩 쪽에만 상한을 두면 표기 단계가 그 상한을 앞질러 간다 — 작은 파일
+ * 한 장으로 메모리를 훑는 길이 열린 채 남는다.
+ *
  * 관리자가 꺼 두었으면 그대로 돌려준다. 켜고 끄는 자리를 이 한 곳에 둔 것은,
  * 부르는 쪽이 세 군데라 각자 확인하게 하면 언젠가 한 곳이 빠지기 때문이다.
  */
@@ -27,7 +32,7 @@ export async function markAsAi(bytes: Buffer): Promise<Buffer> {
   if (!(await isAiBadgeEnabled())) return bytes;
 
   try {
-    const image = sharp(bytes);
+    const image = sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS });
     const meta = await image.metadata();
     if (!meta.width || !meta.height) return bytes;
 
@@ -35,7 +40,7 @@ export async function markAsAi(bytes: Buffer): Promise<Buffer> {
 
     // 글자가 놓일 자리만 떼어 밝기를 잰다. 그림 전체 평균으로는 어두운 그림의
     // 밝은 구석을 놓친다.
-    const corner = await sharp(bytes)
+    const corner = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
       .extract({ left: place.left, top: place.top, width: place.width, height: place.height })
       .greyscale()
       .raw()
@@ -55,7 +60,7 @@ export async function markAsAi(bytes: Buffer): Promise<Buffer> {
       .png()
       .toBuffer();
 
-    return await sharp(bytes)
+    return await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
       .composite([{ input: layer, left: place.left, top: place.top }])
       .png()
       .toBuffer();

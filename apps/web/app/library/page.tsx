@@ -43,7 +43,7 @@ export default function LibraryPage() {
   const [loading, setLoading] = React.useState(true);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [openingId, setOpeningId] = React.useState<string | null>(null);
-  const [viewer, setViewer] = React.useState<(ViewerState & { editable: boolean }) | null>(null);
+  const [viewer, setViewer] = React.useState<(ViewerState & { editable: boolean; account?: boolean }) | null>(null);
   const [uploading, setUploading] = React.useState(false);
   const [uploadMessage, setUploadMessage] = React.useState("");
   const fileInput = React.useRef<HTMLInputElement>(null);
@@ -148,7 +148,7 @@ export default function LibraryPage() {
         if (result?.images.length) {
           // 계정 보관분은 IndexedDB 초안이 아니라 '이어서 편집'이 불가능하다.
           // 예전에는 그래도 /create?draft= 로 보내 "저장된 작업을 찾지 못했습니다"가 떴다.
-          setViewer({ id: item.id, title: result.title, images: result.images, editable: false });
+          setViewer({ id: item.id, title: result.title, images: result.images, editable: false, account: true });
         } else {
           console.error("계정 보관 이미지를 불러오지 못했습니다.");
         }
@@ -235,6 +235,7 @@ export default function LibraryPage() {
           images={viewer.images}
           onClose={() => setViewer(null)}
           onEdit={viewer.editable ? () => router.push(`/create?draft=${viewer.id}`) : undefined}
+          accountItemId={viewer.account ? viewer.id : undefined}
         />
       ) : null}
     </div>
