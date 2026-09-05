@@ -132,6 +132,8 @@ export function CharactersTab() {
                           <span className="block aspect-[3/4] overflow-hidden rounded-md border bg-muted">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
+                              loading="lazy"
+                              decoding="async"
                               src={view.url as string}
                               alt={`${character.name} · ${angleLabels[view.angle] ?? view.angle}`}
                               data-zoomable
