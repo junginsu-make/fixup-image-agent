@@ -90,7 +90,7 @@ export function SnsProjectList() {
               <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
                 {cover ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={cover} alt={project.title} className="h-full w-full object-contain" />
+                  <img loading="lazy" decoding="async" src={cover} alt={project.title} className="h-full w-full object-contain" />
                 ) : (
                   <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
                 )}

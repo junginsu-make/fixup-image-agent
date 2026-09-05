@@ -219,7 +219,7 @@ export function SavedImagePicker({
               */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {/* 격자는 사본을 쓴다. 고르기(위 handlePick)와 확대는 원본이다. */}
-              <img alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
+              <img loading="lazy" decoding="async" alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
               <Badge
                 variant="secondary"
                 className="absolute left-1 top-1 text-meta backdrop-blur"

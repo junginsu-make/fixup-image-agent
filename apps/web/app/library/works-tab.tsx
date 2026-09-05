@@ -445,7 +445,7 @@ export function WorksTab() {
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
               {work.cover ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={work.cover} alt={work.title} className="h-full w-full object-contain" />
+                <img loading="lazy" decoding="async" src={work.cover} alt={work.title} className="h-full w-full object-contain" />
               ) : (
                 <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
               )}
