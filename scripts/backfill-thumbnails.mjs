@@ -33,7 +33,11 @@ const THUMBNAIL_EDGE = 512;
  * `SHOWCASE_THUMBNAIL_WIDTH` 와 같은 값이어야 한다.
  */
 const SHOWCASE_WIDTH = 1024;
-/** 포스터 목록. 원본이 대개 가로 1024 라 줄지 않고 형식만 바뀐다 — 그래서 품질을 높게 잡는다. */
+/**
+ * 포스터 목록. 원본은 비율마다 가로 1024~2400 이고 절반 이상이 1088 이라 거의
+ * 줄지 않는다 — 압축 자국이 1:1 에 가깝게 보여 품질을 높게 잡는다.
+ * `apps/web/lib/poster/thumbnail.ts` 와 같은 값이어야 한다.
+ */
 const POSTER_WIDTH = 1024;
 const MAX_INPUT_PIXELS = 12_000_000;
 
@@ -132,7 +136,6 @@ async function backfillPoster() {
     .from("poster_images")
     .select("id,user_id,project_id,variant_index,asset_path")
     .is("thumb_path", null)
-    .not("asset_path", "is", null)
     .order("id", { ascending: true })
     .limit(LIMIT);
   if (cursor) listing = listing.gt("id", cursor);
@@ -348,7 +351,10 @@ async function main() {
   await backfillPoster();
   await backfillSns();
   if (rows.length === LIMIT) {
-    console.log(`상한에 걸렸습니다. 이어서 하려면: --apply --after ${rows[rows.length - 1].id}`);
+    // 커서를 하나만 넘기면 다른 갈래가 처음부터 다시 돈다 — 건너뛴 건을
+    // 매번 다시 내려받게 되어 커서를 둔 이유가 사라진다. 함께 안내한다.
+    console.log(`상한에 걸렸습니다. 이어서 하려면 세 커서를 함께 넘기세요:`);
+    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id>`);
   }
 }
 

@@ -5,6 +5,7 @@ import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import { createSupabaseSnsProjectRepository } from "../../sns/projects/project-store";
 import { collectCardPaths, withCardUrls } from "../../../../lib/sns/list-urls";
 import {
+  posterAssetPathsToRemove,
   toImageRecord,
   toProjectRecord,
   type PosterImageRow,
@@ -12,7 +13,6 @@ import {
 } from "../../../../lib/poster/supabase-store-core";
 import { ownerIdsOf, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
-import { posterAssetPathsToRemove } from "../../../../lib/poster/supabase-store-core";
 
 /**
  * 관리자가 보는 **모든 회원의 작업물** — 저장소를 만지는 쪽.

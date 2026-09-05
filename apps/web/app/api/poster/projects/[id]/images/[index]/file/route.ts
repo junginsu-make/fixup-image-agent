@@ -56,8 +56,7 @@ export async function GET(request: Request, context: Context) {
     const found = isAdmin
       ? await adminAssetPath(id, index)
       : (await posterStoresForUser(auth.member.userId).images.byProject(id))
-          .filter((image) => String(image.variantIndex) === index)
-          .map((image) => ({ assetPath: image.assetPath, thumbPath: image.thumbPath ?? null }))[0] ?? null;
+          .find((image) => String(image.variantIndex) === index) ?? null;
     if (!found) return new Response("찾을 수 없습니다.", { status: 404 });
 
     /**
@@ -76,7 +75,12 @@ export async function GET(request: Request, context: Context) {
     let bytes: Buffer | null = null;
     let servedThumb = false;
     if (wantsThumb && found.thumbPath) {
-      bytes = await read(found.thumbPath).catch(() => null);
+      // **한 줄 남긴다.** 경로 규칙이 어긋나거나 정책이 바뀌어 사본 읽기가 전량
+      // 실패하면, 화면은 멀쩡히 뜨면서 전송량만 조용히 원래대로 돌아간다.
+      bytes = await read(found.thumbPath).catch((error: unknown) => {
+        console.error(`[poster] 사본을 못 읽어 원본으로 떨어집니다(${found.thumbPath}): ${error instanceof Error ? error.message : error}`);
+        return null;
+      });
       servedThumb = bytes !== null;
     }
     if (!bytes) bytes = await read(found.assetPath);

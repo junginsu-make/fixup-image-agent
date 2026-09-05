@@ -33,6 +33,27 @@ const StatusSchema = z.object({
  * 버킷 정책이 경로 첫 칸으로 소유자를 판정하므로 운영 경로는 사용자로
  * 시작해야 한다. 어느 쪽이든 화면은 같은 주소로 읽는다.
  */
+/**
+ * 목록에 걸 사본을 만들어 둔다. 자리를 돌려주고, 못 만들면 `null` 이다.
+ *
+ * **사본 하나 때문에 결과물을 잃지 않는다.** 없으면 화면이 원본으로 떨어진다.
+ */
+async function saveThumbnail(
+  bytes: Buffer,
+  target: string,
+  put: (path: string, body: Buffer) => Promise<string | null>,
+): Promise<string | null> {
+  const thumbnail = await makePosterThumbnail(bytes);
+  if (!thumbnail) return null;
+  return put(target, thumbnail);
+}
+
+/**
+ * 결과 한 장을 저장한다. 원본과 목록용 사본의 자리를 함께 돌려준다.
+ *
+ * **원본의 이름 규칙(`.png`)은 손대지 않는다** — 사본은 별개 파일이라 이미
+ * 쌓인 것들이 그대로 열려야 한다.
+ */
 async function saveResult(
   userId: string, projectId: string, variantIndex: number, url: string,
 ): Promise<{ assetPath: string; thumbPath: string | null }> {
@@ -42,47 +63,35 @@ async function saveResult(
   const bytes = await markAsAi(Buffer.from(await response.arrayBuffer()));
 
   if (isLocalStoreEnabled()) {
-    const storagePath = `${projectId}/${variantIndex}.png`;
     const root = path.join(localStoreRoot(), "poster");
-    const target = path.join(root, ...storagePath.split("/"));
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, bytes);
-
-    const thumbnail = await makePosterThumbnail(bytes);
-    if (!thumbnail) return { assetPath: storagePath, thumbPath: null };
-    const thumbStoragePath = `${projectId}/${variantIndex}.thumb.webp`;
-    await writeFile(path.join(root, ...thumbStoragePath.split("/")), thumbnail);
-    return { assetPath: storagePath, thumbPath: thumbStoragePath };
+    const write = async (storagePath: string, body: Buffer) => {
+      const target = path.join(root, ...storagePath.split("/"));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, body);
+      return storagePath;
+    };
+    const assetPath = await write(`${projectId}/${variantIndex}.png`, bytes);
+    const thumbPath = await saveThumbnail(bytes, `${projectId}/${variantIndex}.thumb.webp`, write);
+    return { assetPath, thumbPath };
   }
 
-  const storagePath = posterAssetPath(userId, projectId, variantIndex);
   const storage = createSupabaseAdminClient().storage.from(LIBRARY_BUCKET);
-  const result = await storage.upload(storagePath, bytes, { contentType: "image/png", upsert: true });
+  const assetPath = posterAssetPath(userId, projectId, variantIndex);
+  const result = await storage.upload(assetPath, bytes, { contentType: "image/png", upsert: true });
   if (result.error) throw new Error(result.error.message);
 
-  /**
-   * 목록에 걸 사본.
-   *
-   * 결과 목록은 변형 세 장을 한꺼번에 깔면서 원본을 그대로 받는다 — 한 장이
-   * 2~4MB 라 목록 한 번이 10MB 를 넘는다.
-   *
-   * **못 만들어도 저장을 막지 않는다.** 없으면 화면이 원본으로 떨어진다.
-   * 원본의 이름 규칙(`.png`)은 손대지 않는다 — 사본은 별개 파일이라 이미 쌓인
-   * 것들이 그대로 열려야 한다.
-   */
-  const thumbnail = await makePosterThumbnail(bytes);
-  if (!thumbnail) return { assetPath: storagePath, thumbPath: null };
-
-  const thumbStoragePath = posterThumbPath(userId, projectId, variantIndex);
-  const thumbResult = await storage.upload(thumbStoragePath, thumbnail, {
-    contentType: "image/webp", upsert: true,
-  });
-  if (thumbResult.error) {
-    // 사본 하나 때문에 결과물을 잃지 않는다. 자리를 비워 두면 원본으로 떨어진다.
-    console.error(`[poster] 사본을 올리지 못했습니다: ${thumbResult.error.message}`);
-    return { assetPath: storagePath, thumbPath: null };
-  }
-  return { assetPath: storagePath, thumbPath: thumbStoragePath };
+  const thumbPath = await saveThumbnail(
+    bytes,
+    posterThumbPath(userId, projectId, variantIndex),
+    async (target, body) => {
+      const uploaded = await storage.upload(target, body, { contentType: "image/webp", upsert: true });
+      if (!uploaded.error) return target;
+      // 자리를 비워 두면 원본으로 떨어진다.
+      console.error(`[poster] 사본을 올리지 못했습니다: ${uploaded.error.message}`);
+      return null;
+    },
+  );
+  return { assetPath, thumbPath };
 }
 
 /**
