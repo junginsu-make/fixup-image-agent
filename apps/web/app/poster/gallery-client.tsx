@@ -11,7 +11,7 @@ interface PosterProjectSummary {
   status: string;
   ratio: string;
   updatedAt: string;
-  images?: Array<{ url?: string; variantIndex: number }>;
+  images?: Array<{ url?: string; thumbUrl?: string | null; variantIndex: number }>;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -59,7 +59,9 @@ export function PosterGallery() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {projects.map((project) => {
-        const cover = project.images?.find((image) => image.url)?.url ?? null;
+        // 표지는 사본을 쓴다. 열어서 보는 화면은 원본을 그대로 쓴다.
+        const first = project.images?.find((image) => image.url);
+        const cover = first?.thumbUrl ?? first?.url ?? null;
         const made = project.images?.filter((image) => image.url).length ?? 0;
         return (
           <Card key={project.id} className="relative overflow-hidden">

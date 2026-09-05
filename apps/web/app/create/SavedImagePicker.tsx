@@ -20,7 +20,10 @@ import { toSavedLibraryImages } from "./saved-image-picker";
 interface SavedImage {
   id: string;
   name: string;
+  /** **원본이다.** 고르면 이 주소를 받아 생성 입력으로 넘긴다. */
   url: string;
+  /** 격자에 거는 사본. 없으면 `url` 로 떨어진다. */
+  thumbUrl?: string | null;
   origin: "reference" | "library";
   /** 레퍼런스로 이미 등록된 것이면 그 행의 id. 라이브러리 이미지는 없다. */
   referenceId?: string;
@@ -85,6 +88,8 @@ export function SavedImagePicker({
           id: `ref-${item.id}`,
           name: item.name,
           url: item.url,
+          // 참고 이미지에는 아직 사본이 없다. 원본으로 떨어진다.
+          thumbUrl: null,
           origin: "reference" as const,
           referenceId: item.id,
           description: item.description ?? "",
@@ -213,7 +218,8 @@ export function SavedImagePicker({
                 무엇을 고르는지 알 수 없다. 전체가 보이게 맞춘다.
               */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt={image.name} src={image.url} className="h-full w-full object-contain" />
+              {/* 격자는 사본을 쓴다. 고르기(위 handlePick)와 확대는 원본이다. */}
+              <img alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
               <Badge
                 variant="secondary"
                 className="absolute left-1 top-1 text-meta backdrop-blur"

@@ -6,6 +6,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import { openImageGallery } from "../_components/image-viewer";
 import { DELETE_CORNER_BUTTON } from "../_components/delete-work-button";
 import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
+import { coverOf } from "./works-cover";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -56,6 +57,12 @@ interface Work {
    * 남의 작업에 지우기 단추가 뜨고, 눌러도 아무 일이 안 일어난다.
    */
   mine: boolean;
+  /**
+   * 목록 표지. **사본이 있으면 사본이다.**
+   *
+   * 낱장 보기(`images`)와 확대·내려받기는 원본을 그대로 쓴다 — 표지만
+   * 작은 것으로 바꾼다.
+   */
   cover: string | null;
   images: WorkImage[];
   /** 무엇을 만들려던 것인가. 카드뉴스는 원본 글, 포스터는 한 줄 지시. */
@@ -94,11 +101,13 @@ function snsIntent(source: Record<string, unknown> | undefined): string {
 }
 
 function toSnsWork(project: Record<string, any>): Work {
-  const cards: Array<{ index: number; assetUrl?: string | null; copy?: { headline?: string } }> =
-    project.data?.flow?.cards ?? [];
-  const images = cards
-    .filter((card) => card.assetUrl)
+  const cards: Array<{
+    index: number; assetUrl?: string | null; thumbUrl?: string | null; copy?: { headline?: string };
+  }> = project.data?.flow?.cards ?? [];
+  const made = cards.filter((card) => card.assetUrl);
+  const images = made
     .map((card) => ({ url: card.assetUrl as string, label: `${card.index}번 카드`, index: card.index }));
+  const coverCard = made[0];
   return {
     id: project.id,
     tool: "sns",
@@ -110,7 +119,7 @@ function toSnsWork(project: Record<string, any>): Work {
     ownerEmail: project.ownerEmail ?? null,
     // 회원용 목록은 자기 것만 주므로 `mine` 을 싣지 않는다. 그때는 전부 내 것이다.
     mine: project.mine ?? true,
-    cover: images[0]?.url ?? null,
+    cover: coverOf(coverCard),
     images,
     intent: snsIntent(project.data?.source),
     settings: [
@@ -126,11 +135,12 @@ function toSnsWork(project: Record<string, any>): Work {
 }
 
 function toPosterWork(project: Record<string, any>): Work {
-  const images: WorkImage[] = (project.images ?? [])
-    .filter((image: { url?: string }) => image.url)
+  const shots = (project.images ?? []).filter((image: { url?: string }) => image.url);
+  const images: WorkImage[] = shots
     .map((image: { url: string; variantIndex: number }) => ({
       url: image.url, label: `변형 ${image.variantIndex + 1}`, index: image.variantIndex,
     }));
+  const coverShot = shots[0];
   return {
     id: project.id,
     tool: "poster",
@@ -141,7 +151,7 @@ function toPosterWork(project: Record<string, any>): Work {
     userId: project.userId,
     ownerEmail: project.ownerEmail ?? null,
     mine: project.mine ?? true,
-    cover: images[0]?.url ?? null,
+    cover: coverOf(coverShot),
     images,
     intent: project.data?.instruction ?? "",
     settings: [
