@@ -5,6 +5,7 @@ import { FolderOpen, Loader2, Maximize2, X } from "lucide-react";
 import { Badge, Button, cn } from "@fixup/ui";
 import { openImageViewer } from "../_components/image-viewer";
 import { toSavedLibraryImages } from "./saved-image-picker";
+import { ThumbImage } from "../_components/thumb-image";
 
 /**
  * 계정에 저장해 둔 이미지에서 고른다.
@@ -219,7 +220,7 @@ export function SavedImagePicker({
               */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {/* 격자는 사본을 쓴다. 고르기(위 handlePick)와 확대는 원본이다. */}
-              <img loading="lazy" decoding="async" alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
+              <ThumbImage alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
               <Badge
                 variant="secondary"
                 className="absolute left-1 top-1 text-meta backdrop-blur"

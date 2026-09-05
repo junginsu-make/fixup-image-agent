@@ -9,6 +9,7 @@ import type { ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 import { randomId } from "../../lib/browser-safe";
+import { ThumbImage } from "../_components/thumb-image";
 
 /**
  * 화면이 보는 참고 이미지 한 장.
@@ -253,8 +254,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                     ><Trash2 className="size-3.5" /></button>
                   )}
                   <div className="aspect-square bg-muted">{image.signedUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img loading="lazy" decoding="async" src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
+                    <ThumbImage src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                   ) : null}</div>
                   <CardContent className="grid gap-2 p-3">
                     <p className="truncate text-sm font-medium">{image.title || "제목 없음"}</p>
@@ -302,8 +302,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                         return (
                           <span key={item.id ?? item.referenceImageId} className="block aspect-square overflow-hidden rounded-md bg-muted">
                             {image?.signedUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img loading="lazy" decoding="async" src={image.signedUrl} alt="" className="h-full w-full object-cover" />
+                              <ThumbImage src={image.signedUrl} alt="" className="h-full w-full object-cover" />
                             ) : null}
                           </span>
                         );
@@ -337,8 +336,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                   <figure key={item.id ?? item.referenceImageId} className="grid gap-2">
                     <span className="block aspect-[4/5] overflow-hidden rounded-lg border bg-muted">
                       {image?.signedUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img loading="lazy" decoding="async" src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
+                        <ThumbImage src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                       ) : (
                         <span className="grid h-full place-items-center text-xs text-muted-foreground">이미지를 찾을 수 없습니다</span>
                       )}

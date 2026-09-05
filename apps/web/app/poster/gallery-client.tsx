@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Badge, Card, CardContent } from "@fixup/ui";
 import { DeleteWorkButton } from "../_components/delete-work-button";
+import { ThumbImage } from "../_components/thumb-image";
 
 interface PosterProjectSummary {
   id: string;
@@ -76,8 +77,7 @@ export function PosterGallery() {
                    만들었는지 알아볼 수 없다. */}
               <div className="flex aspect-square items-center justify-center overflow-hidden bg-muted p-1">
                 {cover ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img loading="lazy" decoding="async" src={cover} alt={project.title} className="h-full w-full object-contain" />
+                  <ThumbImage src={cover} alt={project.title} className="h-full w-full object-contain" />
                 ) : (
                   <div className="grid h-full place-items-center text-xs text-muted-foreground">아직 그림이 없습니다</div>
                 )}
