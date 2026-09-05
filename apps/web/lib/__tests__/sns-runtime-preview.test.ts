@@ -19,6 +19,7 @@ vi.mock("server-only", () => ({}));
 const uploads: Array<{ path: string; contentType: string }> = [];
 const cardUpdates: Array<Record<string, unknown>> = [];
 const localWrites: string[] = [];
+const removed: string[] = [];
 let local = false;
 let failPreviewUpload = false;
 
@@ -51,6 +52,7 @@ vi.mock("../supabase/admin", () => ({
           uploads.push({ path, contentType: o.contentType });
           return { error: null };
         },
+        remove: async (paths: string[]) => { removed.push(...paths); return { error: null }; },
       }),
     },
   }),
@@ -66,13 +68,25 @@ vi.mock("../supabase/server", () => ({
       };
       return self;
     },
-    storage: { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: "signed" }, error: null }) }) },
+    storage: {
+      from: () => ({
+        createSignedUrl: async () => ({ data: { signedUrl: "signed" }, error: null }),
+        createSignedUrls: async (paths: string[]) => ({
+          data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+          error: null,
+        }),
+      }),
+    },
   }),
 }));
 
 vi.mock("../watermark", () => ({ markAsAi: async (b: Buffer) => b }));
 
-const { createQueuedGenerationDependencies, localResultUrlForTest } = await import("../sns/runtime");
+const {
+  createQueuedGenerationDependencies,
+  localResultUrlForTest,
+  refreshProjectAssetUrls,
+} = await import("../sns/runtime");
 
 async function card(): Promise<Buffer> {
   const width = 600, height = 750;
@@ -108,7 +122,7 @@ async function runtime() {
 }
 
 beforeEach(() => {
-  uploads.length = 0; cardUpdates.length = 0; localWrites.length = 0;
+  uploads.length = 0; cardUpdates.length = 0; localWrites.length = 0; removed.length = 0;
   local = false; failPreviewUpload = false;
 });
 
@@ -138,6 +152,9 @@ describe("saveAsset — 미리보기 배선", () => {
 
     expect(uploads.map((u) => u.path)).toEqual(["u1/sns/p1/1.png"]);
     expect(cardUpdates.some((patch) => patch.thumb_path === null)).toBe(true);
+    // **같은 자리의 옛 파일을 지운다.** 자리를 비우면서 파일을 남기면 그것을
+    // 가리키는 것이 아무것도 없어져 영영 남는다.
+    expect(removed).toContain("u1/sns/p1/1.thumb.webp");
   });
 
   it("로컬 모드도 미리보기를 만든다 — 개발 환경 전체가 이 갈래로 돈다", async () => {
@@ -165,5 +182,46 @@ describe("로컬 주소 만들기", () => {
   it("원본은 예전 그대로다", () => {
     expect(localResultUrlForTest("u1/sns/p1/1.png"))
       .toBe("/api/sns/projects/p1/cards/1/file");
+  });
+});
+
+function projectWithCards(cards: Array<Record<string, unknown>>) {
+  return {
+    ...project(),
+    data: { source: { kind: "text", text: "본문" }, attachments: [], flow: { stage: "result", cards } },
+  } as never;
+}
+
+describe("refreshProjectAssetUrls — 결과판도 미리보기를 받는다", () => {
+  it("만든 카드에 미리보기 주소를 붙인다", async () => {
+    // **결과판이 이 함수를 반드시 지난다.** 여기서 안 붙이면 카드 열 장을
+    // 원본으로 받는 상태가 그대로다 — 이 변경의 목적이 바로 그것이었다.
+    const refreshed = await refreshProjectAssetUrls(projectWithCards([
+      { index: 1, kind: "generated", assetPath: "u1/sns/p1/1.png", thumbPath: "u1/sns/p1/1.thumb.webp" },
+    ]));
+
+    const card = refreshed.data.flow!.cards[0]!;
+    expect(card.assetUrl).toBeTruthy();
+    expect(card.thumbUrl).toBeTruthy();
+    expect(card.thumbUrl).not.toBe(card.assetUrl);
+  });
+
+  it("미리보기가 없는 옛 카드는 그대로 둔다", async () => {
+    const refreshed = await refreshProjectAssetUrls(projectWithCards([
+      { index: 1, kind: "generated", assetPath: "u1/sns/p1/1.png" },
+    ]));
+
+    expect(refreshed.data.flow!.cards[0]!.thumbUrl).toBeUndefined();
+  });
+
+  it("사용자가 넣은 카드에는 미리보기를 붙이지 않는다 — 보이는 그림과 확대가 달라진다", async () => {
+    // `place_as_is` 카드의 `assetUrl` 은 letterbox 결과가 아니라 **첨부 원본**을
+    // 가리킨다. 거기에 letterbox 결과의 미리보기를 짝지으면 화면에 뜨는 그림과
+    // 확대·내려받기가 서로 다른 그림이 된다.
+    const refreshed = await refreshProjectAssetUrls(projectWithCards([
+      { index: 1, kind: "place_as_is", assetPath: "u1/sns/p1/1.png", thumbPath: "u1/sns/p1/1.thumb.webp" },
+    ]));
+
+    expect(refreshed.data.flow!.cards[0]!.thumbUrl).toBeUndefined();
   });
 });

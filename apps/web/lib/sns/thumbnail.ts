@@ -39,20 +39,6 @@ export async function makeSnsPreview(bytes: Buffer): Promise<Buffer | null> {
   }
 }
 
-/** 미리보기가 놓일 자리. **원본 이름 규칙은 건드리지 않는다.** */
-export function snsPreviewPath(userId: string, projectId: string, cardIndex: number): string {
-  return `${userId}/sns/${projectId}/${cardIndex}.thumb.webp`;
-}
-
-/**
- * 지울 경로를 모은다. 회원 삭제와 관리자 삭제가 **같은 답**을 내야 한다.
- *
- * 행이 사라지면 미리보기의 자리를 아는 근거가 없어진다 — 라이브러리·갤러리·
- * 포스터에서 세 번 반복해 잡힌 실수다.
- */
-export function snsCardPathsToRemove(
-  cards: Array<{ assetPath?: string | null; thumbPath?: string | null }>,
-): string[] {
-  return cards.flatMap((card) =>
-    [card.assetPath, card.thumbPath].filter(Boolean) as string[]);
-}
+// 경로 규칙은 서버 전용이 아니다 — 로컬 저장소처럼 `server-only` 를 못 쓰는
+// 쪽에서도 같은 규칙을 써야 해서 따로 두고 여기서 다시 내보낸다.
+export { snsCardPathsToRemove, snsPreviewPath } from "./preview-path";

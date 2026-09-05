@@ -183,58 +183,97 @@ async function backfillPoster() {
  *
  * 카드는 흐름 JSON 안에도 자리가 있어 표와 함께 고쳐야 한다.
  */
+/**
+ * 카드뉴스.
+ *
+ * **작업 단위로 돈다.** SNS 는 읽는 쪽이 전부 흐름 JSON(`sns_projects.data`)
+ * 이라, 표(`sns_cards`)에만 적으면 화면이 미리보기를 못 쓰고 지울 때도 못 찾아
+ * 고아 파일만 쌓인다. 그래서 **둘을 함께** 고친다.
+ *
+ * 값은 `apps/web/lib/sns/thumbnail.ts` 와 같아야 한다 — **줄이지 않고** q88.
+ * 카드는 이미 화면에 뜨는 크기라 줄일 이유가 없고, 그래야 흐려질 위험이 0 이다.
+ *
+ * 경로 규칙도 같아야 한다: `{user}/sns/{project}/{index}.thumb.webp`
+ *
+ * 이 스크립트는 다른 작업이 없을 때 돌린다 — 흐름 JSON 을 읽고 고쳐 쓰므로,
+ * 같은 작업을 누가 동시에 저장하면 그쪽이 덮는다.
+ */
 async function backfillSns() {
   const after = process.argv.indexOf("--after-sns");
   const cursor = after > 0 ? process.argv[after + 1] : "";
 
   let listing = supabase
-    .from("sns_cards")
-    .select("id,user_id,project_id,index,asset_path")
-    .is("thumb_path", null)
-    .not("asset_path", "is", null)
+    .from("sns_projects")
+    .select("id,user_id,data")
     .order("id", { ascending: true })
     .limit(LIMIT);
   if (cursor) listing = listing.gt("id", cursor);
 
-  const { data: rows, error } = await listing;
+  const { data: projects, error } = await listing;
   if (error) { console.error(`카드뉴스를 읽지 못했습니다: ${error.message}`); return; }
-  if (!rows.length) { console.log("카드뉴스: 채울 것이 없습니다."); return; }
+  if (!projects.length) { console.log("카드뉴스: 채울 것이 없습니다."); return; }
 
-  console.log(`
-카드뉴스 ${rows.length}건`);
-  let made = 0, skipped = 0, failed = 0;
+  let made = 0, skipped = 0, failed = 0, touched = 0;
 
-  for (const row of rows) {
-    const file = await supabase.storage.from(BUCKET).download(row.asset_path);
-    if (file.error || !file.data) { failed += 1; continue; }
+  for (const project of projects) {
+    const cards = project.data?.flow?.cards ?? [];
+    const todo = cards.filter((card) => card.assetPath && !card.thumbPath);
+    if (!todo.length) continue;
 
-    const bytes = Buffer.from(await file.data.arrayBuffer());
-    let preview;
-    try {
-      preview = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
-        .keepMetadata().webp({ quality: 88 }).toBuffer();
-    } catch { failed += 1; continue; }
-    if (preview.length >= bytes.length) { skipped += 1; continue; }
+    let changed = false;
+    for (const card of todo) {
+      const file = await supabase.storage.from(BUCKET).download(card.assetPath);
+      if (file.error || !file.data) { failed += 1; continue; }
 
-    const thumbPath = `${row.user_id}/sns/${row.project_id}/${row.index}.thumb.webp`;
-    const uploaded = await supabase.storage
-      .from(BUCKET)
-      .upload(thumbPath, preview, { contentType: "image/webp", upsert: true });
-    if (uploaded.error) { failed += 1; continue; }
+      const bytes = Buffer.from(await file.data.arrayBuffer());
+      let preview;
+      try {
+        preview = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
+          .keepMetadata().webp({ quality: 88 }).toBuffer();
+      } catch { failed += 1; continue; }
+      if (preview.length >= bytes.length) { skipped += 1; continue; }
 
+      const thumbPath = `${project.user_id}/sns/${project.id}/${card.index}.thumb.webp`;
+      const uploaded = await supabase.storage
+        .from(BUCKET)
+        .upload(thumbPath, preview, { contentType: "image/webp", upsert: true });
+      if (uploaded.error) { failed += 1; continue; }
+
+      card.thumbPath = thumbPath;
+      changed = true;
+      made += 1;
+    }
+
+    if (!changed) continue;
+
+    // **흐름 JSON 이 읽는 쪽의 유일한 근거다.** 여기 못 적으면 방금 올린
+    // 파일들이 전부 아무도 못 찾는 파일이 된다 — 지울 때도 안 지워진다.
     const { error: updateError } = await supabase
-      .from("sns_cards").update({ thumb_path: thumbPath }).eq("id", row.id);
+      .from("sns_projects").update({ data: project.data }).eq("id", project.id);
     if (updateError) {
-      await supabase.storage.from(BUCKET).remove([thumbPath]);
-      failed += 1;
+      const orphans = todo.filter((card) => card.thumbPath).map((card) => card.thumbPath);
+      if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
+      failed += orphans.length;
+      made -= orphans.length;
+      console.error(`  흐름에 못 적음(되돌림): ${project.id}`);
       continue;
     }
-    made += 1;
+
+    // 표도 함께 맞춘다. 화면은 흐름을 보지만, 표가 어긋난 채 남으면 나중에
+    // 표를 보는 코드가 생겼을 때 두 값이 다르다.
+    for (const card of todo) {
+      if (!card.thumbPath) continue;
+      await supabase.from("sns_cards")
+        .update({ thumb_path: card.thumbPath })
+        .eq("project_id", project.id).eq("index", card.index);
+    }
+    touched += 1;
   }
-  console.log(`카드뉴스 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
-  console.log("  ※ 흐름 JSON 안의 카드 자리는 다음 저장 때 채워집니다.");
-  if (rows.length === LIMIT) {
-    console.log(`  이어서: --apply --after-sns ${rows[rows.length - 1].id}`);
+
+  console.log(`
+카드뉴스 — 작업 ${touched}건 · 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  if (projects.length === LIMIT) {
+    console.log(`  이어서: --apply --after-sns ${projects[projects.length - 1].id}`);
   }
 }
 

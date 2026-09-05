@@ -109,16 +109,30 @@ async function uploadResult(
    * 20~40MB 가 오간다. **못 만들어도 저장을 막지 않는다.** 없으면 화면이
    * 원본으로 떨어진다.
    */
-  const preview = await makeSnsPreview(bytes);
-  if (!preview) return { assetPath: path, thumbPath: null };
-
   const thumbPath = snsPreviewPath(userId, projectId, cardIndex);
+
+  /**
+   * 못 만들거나 못 올리면 **같은 자리의 옛 파일을 지운다.**
+   *
+   * 다시 만들기로 카드를 갱신했는데 미리보기만 실패하면 자리를 `null` 로
+   * 비우는데, 그러면 이전 미리보기를 가리키는 것이 아무것도 없어진다 —
+   * 지울 때도 안 지워져 영영 남는다. 없는 파일을 지우는 것은 조용히 지나가므로
+   * 처음 만드는 카드에도 안전하다.
+   */
+  const dropStale = async () => {
+    await storage.remove([thumbPath]);
+    return { assetPath: path, thumbPath: null };
+  };
+
+  const preview = await makeSnsPreview(bytes);
+  if (!preview) return dropStale();
+
   const previewResult = await storage.upload(thumbPath, preview, {
     contentType: "image/webp", upsert: true,
   });
   if (previewResult.error) {
     console.error(`[sns] 미리보기를 올리지 못했습니다: ${previewResult.error.message}`);
-    return { assetPath: path, thumbPath: null };
+    return dropStale();
   }
   return { assetPath: path, thumbPath };
 }
@@ -186,13 +200,19 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
         assetUrl: card.kind === "generated"
           ? card.assetPath ? localResultUrl(card.assetPath) : card.assetUrl
           : card.attachmentId ? attachmentUrl.get(card.attachmentId) ?? card.assetUrl : card.assetUrl,
+        ...previewUrlOf(card, (path) => localResultUrl(path)),
       })),
     } : undefined;
     return { ...project, data: { ...project.data, attachments, flow } };
   }
   const paths = new Set<string>();
   project.data.attachments.forEach((attachment) => paths.add(attachment.assetPath));
-  project.data.flow?.cards.forEach((card) => { if (card.assetPath) paths.add(card.assetPath); });
+  project.data.flow?.cards.forEach((card) => {
+    if (card.assetPath) paths.add(card.assetPath);
+    // **결과판이 이 함수를 지난다.** 여기서 안 모으면 카드 열 장을 원본으로
+    // 받는 상태가 그대로다 — 이 변경의 목적이 바로 그것이었다.
+    if (card.thumbPath) paths.add(card.thumbPath);
+  });
   if (!paths.size) return project;
   const client = await createSupabaseServerClient();
   const result = await client.storage.from(BUCKET).createSignedUrls([...paths], SIGNED_URL_TTL_SECONDS);
@@ -207,6 +227,7 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
       assetUrl: card.kind === "generated"
         ? card.assetPath ? urls.get(card.assetPath) ?? card.assetUrl : card.assetUrl
         : card.attachmentId ? attachmentUrl.get(card.attachmentId) ?? card.assetUrl : card.assetUrl,
+      ...previewUrlOf(card, (path) => urls.get(path)),
     })),
   } : undefined;
   return { ...project, data: { ...project.data, attachments, flow } };
@@ -239,6 +260,23 @@ export async function refreshProjectListAssetUrls(
       entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
     )),
   ));
+}
+
+/**
+ * 이 카드에 붙일 미리보기 주소.
+ *
+ * **`generated` 카드에만 붙인다.** 사용자가 넣은 카드(`place_as_is` 등)의
+ * `assetUrl` 은 letterbox 결과가 아니라 **첨부 원본**을 가리킨다. 거기에
+ * letterbox 결과의 미리보기를 짝지으면 화면에 뜨는 그림과 확대·내려받기가
+ * 서로 다른 그림이 된다.
+ */
+function previewUrlOf(
+  card: { kind: string; thumbPath?: string | null },
+  toUrl: (path: string) => string | undefined,
+): { thumbUrl?: string } {
+  if (card.kind !== "generated" || !card.thumbPath) return {};
+  const url = toUrl(card.thumbPath);
+  return url ? { thumbUrl: url } : {};
 }
 
 /** 틀 없는 카드는 fal 이 그린 그림 하나가 반드시 있어야 한다. */

@@ -20,6 +20,7 @@ import type {
   GenerationRequestStore,
 } from "@fixup/sns-core";
 import type { SubmittedGenerationRequestStore } from "../sns/queued-flow";
+import { snsPreviewPath } from "../sns/preview-path";
 
 interface LocalCandidateRow extends Omit<CandidateRecord, "source"> {
   userId: string;
@@ -628,7 +629,9 @@ export async function writeLocalSnsPreviewFile(
   assertLocalSegment(userId, "사용자");
   assertLocalSegment(projectId, "프로젝트");
   if (!Number.isInteger(cardIndex) || cardIndex < 1) throw new Error("카드 번호가 올바르지 않습니다.");
-  const storagePath = `${userId}/sns/${projectId}/${cardIndex}.thumb.webp`;
+  // 규칙은 `lib/sns/thumbnail.ts` 한 곳에서만 만든다. 두 곳에서 따로 자라면
+  // 미리보기가 두 종류로 갈리고 삭제가 한쪽만 잡는다.
+  const storagePath = snsPreviewPath(userId, projectId, cardIndex);
   const target = localFilePath(root, storagePath);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes);
