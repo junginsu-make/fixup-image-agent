@@ -5,12 +5,14 @@ import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import { createSupabaseSnsProjectRepository } from "../../sns/projects/project-store";
 import { collectCardPaths, withCardUrls } from "../../../../lib/sns/list-urls";
 import {
+  posterAssetPathsToRemove,
   toImageRecord,
   toProjectRecord,
   type PosterImageRow,
   type PosterProjectRow,
 } from "../../../../lib/poster/supabase-store-core";
 import { ownerIdsOf, withOwner } from "./core";
+import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 
 /**
  * 관리자가 보는 **모든 회원의 작업물** — 저장소를 만지는 쪽.
@@ -141,8 +143,10 @@ export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise
   if (kind === "sns") {
     const { data } = await admin.from("sns_projects").select("data").eq("id", id).maybeSingle();
     if (!data) return false;
-    const paths = (((data.data as { flow?: { cards?: Array<{ assetPath?: string }> } })?.flow?.cards) ?? [])
-      .flatMap((card) => (card.assetPath ? [card.assetPath] : []));
+    // 회원 삭제와 **같은 규칙**을 쓴다. 두 길이 갈라지면 한쪽만 미리보기를 남긴다.
+    const paths = snsCardPathsToRemove(
+      ((data.data as { flow?: { cards?: Array<{ assetPath?: string; thumbPath?: string | null }> } })?.flow?.cards) ?? [],
+    );
 
     // 카드 행은 FK cascade 가 지운다.
     const { error } = await admin.from("sns_projects").delete().eq("id", id);
@@ -157,8 +161,12 @@ export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise
 
   // 경로를 행보다 먼저 읽어 둔다. 지우고 나면 어디에 있었는지 알 수 없다.
   const { data: images } = await admin
-    .from("poster_images").select("asset_path").eq("project_id", id);
-  const paths = ((images ?? []) as Array<{ asset_path: string }>).map((row) => row.asset_path);
+    .from("poster_images").select("asset_path,thumb_path").eq("project_id", id);
+  // 회원 삭제와 **같은 규칙**을 쓴다. 두 길이 갈라지면 한쪽만 사본을 남긴다.
+  const paths = posterAssetPathsToRemove(
+    ((images ?? []) as Array<{ asset_path: string; thumb_path: string | null }>)
+      .map((row) => ({ assetPath: row.asset_path, thumbPath: row.thumb_path })),
+  );
 
   const { error } = await admin.from("poster_projects").delete().eq("id", id);
   if (error) throw new Error(error.message);

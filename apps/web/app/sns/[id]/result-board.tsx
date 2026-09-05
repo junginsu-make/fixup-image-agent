@@ -229,7 +229,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
               <ReviewStatus card={card} />
             </CardHeader>
             <CardContent className="grid gap-4">
-              {card.assetUrl ? <Image src={card.assetUrl} alt={`${title} · ${card.index}번 카드`} width={1088} height={1360} unoptimized data-zoomable data-viewer-meta={cardMeta(card)} className="mx-auto max-h-[60vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] max-h-[60vh] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
+              {card.assetUrl ? <Image src={card.thumbUrl ?? card.assetUrl} alt={`${title} · ${card.index}번 카드`} width={1088} height={1360} unoptimized data-zoomable data-viewer-src={card.assetUrl} data-viewer-meta={cardMeta(card)} className="mx-auto max-h-[60vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] max-h-[60vh] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
               <div>
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}

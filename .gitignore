@@ -24,3 +24,6 @@ frontend/
 # Supabase CLI 가 만드는 로컬 상태. 링크한 프로젝트 ref 가 들어간다.
 supabase/.temp/
 supabase/.branches/
+
+# 에이전트 작업 메모. 저장소에 넣지 않는다.
+.claude/

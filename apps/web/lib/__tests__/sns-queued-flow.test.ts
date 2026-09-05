@@ -68,7 +68,7 @@ function dependencies(events: string[], status: QueuedGenerationDependencies["qu
     savePrompt: async (cardIndex) => { events.push(`prompt:${cardIndex}`); },
     saveSubmitted: async (cardIndex) => { events.push(`submitted:${cardIndex}`); },
     saveFailed: async (cardIndex) => { events.push(`failed:${cardIndex}`); },
-    saveAsset: async (_url, card) => { events.push(`asset:${card.index}`); return { assetPath: `user/sns/project/${card.index}.png`, assetUrl: `/file/${card.index}`, reviewUrl: `data:image/png;base64,eA==` }; },
+    saveAsset: async (_url, card) => { events.push(`asset:${card.index}`); return { assetPath: `user/sns/project/${card.index}.png`, thumbPath: `user/sns/project/${card.index}.thumb.webp`, assetUrl: `/file/${card.index}`, reviewUrl: `data:image/png;base64,eA==` }; },
     saveReview: async (cardIndex) => { events.push(`review:${cardIndex}`); },
     saveOriginal: async () => { throw new Error("원본 없음"); },
   };
@@ -166,5 +166,22 @@ describe("사람이 중지했을 때", () => {
     const started = await startQueuedFlow(project(), flow(), dependencies([]), { now: "2026-09-01T00:00:00.000Z" });
     stopQueuedGeneration(started, "2026-09-01T00:05:00.000Z");
     expect(hasActiveQueuedGeneration(started)).toBe(true);
+  });
+});
+
+describe("흐름에 미리보기 자리를 남긴다", () => {
+  it("저장이 돌려준 미리보기 자리를 카드에 적는다", async () => {
+    // **흐름 JSON 이 읽는 쪽의 유일한 근거다.** 표(`sns_cards`)에만 적으면
+    // 목록·삭제가 보는 이 자리에는 값이 없어서, 미리보기 파일은 만들어지되
+    // 아무도 못 찾는다 — 기능이 통째로 죽고 실패 신호도 없다.
+    const events: string[] = [];
+    const deps = dependencies(events, async () => "completed" as const);
+    const started = await startQueuedFlow(project(), flow(), deps, { now: "2026-09-01T00:00:00.000Z" });
+
+    const polled = await pollQueuedFlow(project(), started, deps, { now: "2026-09-01T00:01:00.000Z" });
+
+    const done = polled.cards.find((card) => card.status === "done");
+    expect(done?.assetPath).toBe("user/sns/project/1.png");
+    expect(done?.thumbPath).toBe("user/sns/project/1.thumb.webp");
   });
 });

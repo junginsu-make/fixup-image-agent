@@ -9,6 +9,14 @@ export interface SnsFlowCard {
   plan?: CardPlan;
   attachmentId?: string;
   assetPath?: string;
+  /**
+   * 결과판·목록에 거는 미리보기.
+   *
+   * **없으면 화면이 원본으로 떨어진다.** 이미 만든 카드에는 없고, 자리는
+   * 적혀 있는데 파일만 사라질 수도 있다.
+   */
+  thumbPath?: string | null;
+  thumbUrl?: string;
   prompt?: string;
   promptWarnings?: string[];
   falRequestId?: string;

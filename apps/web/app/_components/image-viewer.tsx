@@ -1,5 +1,6 @@
 "use client";
 
+import { viewerSourceOf } from "./viewer-source";
 import * as React from "react";
 import { ChevronLeft, ChevronRight, Download, Maximize2, Minimize2, Star, Trash2, X } from "lucide-react";
 import { cn } from "@fixup/ui";
@@ -138,7 +139,11 @@ export function ImageViewerHost() {
   React.useEffect(() => {
     function onClick(event: MouseEvent) {
       const target = (event.target as HTMLElement | null)?.closest?.("img[data-zoomable]") as HTMLImageElement | null;
-      const src = target?.currentSrc || target?.src;
+      const src = viewerSourceOf({
+        viewerSrc: target?.dataset?.viewerSrc,
+        currentSrc: target?.currentSrc,
+        src: target?.src,
+      });
       if (!src) return;
       event.preventDefault();
       event.stopPropagation();

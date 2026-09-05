@@ -57,11 +57,19 @@ function ShowcaseFigure({ item }: { item: ShowcaseView }) {
 
   return (
     <figure className="mcs-figure">
+      {/*
+        화면에 걸 사본을 쓴다. next/image 가 여기서 한 번 더 줄이지만, 줄이기
+        전에 받아 오는 것이 원본이면 배포마다 그 캐시가 비면서 2~4MB 씩 다시
+        오간다. 사본은 1024px 이라 갤러리가 가장 크게 뜨는 자리(4K 에서 약
+        920px)까지 흐려지지 않는다.
+      */}
       {item.width && item.height ? (
-        <Image src={item.url} alt={alt} width={item.width} height={item.height} sizes={SIZES} />
+        <Image src={item.thumbUrl} alt={alt} width={item.width} height={item.height} sizes={SIZES} />
       ) : (
+        // 크기를 모르면 next/image 를 못 쓴다 — 원본이 그대로 브라우저까지
+        // 가던 자리라 사본의 이득이 가장 크다.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.url} alt={alt} loading="lazy" />
+        <img src={item.thumbUrl} alt={alt} loading="lazy" />
       )}
     </figure>
   );

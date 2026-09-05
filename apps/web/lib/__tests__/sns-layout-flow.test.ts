@@ -122,7 +122,7 @@ function dependencies(record: Recorder): QueuedGenerationDependencies {
       record.composedWithLayout = Boolean(card.layout);
       record.composedWithoutImage = typeof images !== "string" && Object.keys(images).length === 0;
       if (typeof images !== "string") record.composedSlots = images;
-      return { assetPath: "user/sns/project/1.png", assetUrl: "/file/1", reviewUrl: "data:image/png;base64,eA==" };
+      return { assetPath: "user/sns/project/1.png", thumbPath: null, assetUrl: "/file/1", reviewUrl: "data:image/png;base64,eA==" };
     },
     saveReview: async () => {},
     saveOriginal: async () => { throw new Error("원본 없음"); },

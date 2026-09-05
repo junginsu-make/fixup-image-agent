@@ -21,6 +21,10 @@ export function collectCardPaths(projects: SnsProjectRecord[]): string[] {
   for (const project of projects) {
     for (const card of project.data.flow?.cards ?? []) {
       if (card.assetPath) paths.add(card.assetPath);
+      // **미리보기도 함께 서명한다.** 목록은 미리보기를 걸고, 확대·내려받기·
+      // 라이브러리 저장은 원본을 쓴다 — 둘 다 필요하다. 한 번에 모아 서명하므로
+      // 왕복은 늘지 않는다.
+      if (card.thumbPath) paths.add(card.thumbPath);
     }
   }
   return [...paths];
@@ -43,7 +47,9 @@ export function withCardUrls(
             // 주소를 못 받은 카드는 그대로 둔다. 하나 실패했다고 나머지까지
             // 못 보여줄 이유가 없다.
             const url = card.assetPath ? urls.get(card.assetPath) : undefined;
-            return url ? { ...card, assetUrl: url } : card;
+            const thumbUrl = card.thumbPath ? urls.get(card.thumbPath) : undefined;
+            if (!url && !thumbUrl) return card;
+            return { ...card, ...(url ? { assetUrl: url } : {}), ...(thumbUrl ? { thumbUrl } : {}) };
           }),
         },
       },

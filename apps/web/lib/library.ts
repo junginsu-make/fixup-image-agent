@@ -111,7 +111,7 @@ async function readAccountItems(): Promise<LibraryItem[]> {
       ok?: boolean;
       items?: Array<{
         id: string; title: string; tool: string; imageCount: number;
-        createdAt: string; coverUrl: string | null;
+        createdAt: string; coverUrl: string | null; coverThumbUrl?: string | null;
       }>;
     };
     if (!body.ok || !body.items) return [];
@@ -122,7 +122,9 @@ async function readAccountItems(): Promise<LibraryItem[]> {
       // 여기서 맞춰준다 — 어긋나면 TOOL_META 조회가 undefined 라 배지에서 터진다.
       tool: item.tool === "redesign" ? "redesign" : "pdp",
       title: item.title,
-      thumbnail: item.coverUrl ?? undefined,
+      // **목록 카드에서만 작은 사본을 쓴다.** 없으면 원본으로 떨어진다 —
+      // 이미 쌓인 항목에는 사본이 없다.
+      thumbnail: item.coverThumbUrl ?? item.coverUrl ?? undefined,
       createdAt: Date.parse(item.createdAt) || 0,
       storage: "account" as const,
       imageCount: item.imageCount,

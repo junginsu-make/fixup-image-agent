@@ -72,11 +72,15 @@ export interface PosterImageRecord {
   variantIndex: number;
   selected: boolean;
   assetPath: string;
+  /** 목록에 거는 작은 사본. 없으면 화면이 원본으로 떨어진다. */
+  thumbPath: string | null;
   width: number | null;
   height: number | null;
   review: unknown | null;
   createdAt: string;
   url?: string;
+  /** 목록에 거는 사본의 주소. 사본이 없으면 라우트가 원본으로 떨어뜨린다. */
+  thumbUrl?: string;
 }
 
 export interface PosterProjectStore {

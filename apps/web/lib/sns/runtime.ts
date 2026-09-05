@@ -20,9 +20,11 @@ import {
   readLocalSnsResultFile,
   replaceLocalSnsCards,
   updateLocalSnsCard,
+  writeLocalSnsPreviewFile,
   writeLocalSnsResultFile,
 } from "../local-store";
 import { collectCardPaths, withCardUrls } from "./list-urls";
+import { makeSnsPreview, snsPreviewPath } from "./thumbnail";
 import { markAsAi } from "../watermark";
 import { composeLayoutCard } from "../layout/card-composer";
 import type { SnsProviders } from "./providers";
@@ -53,12 +55,25 @@ async function signedUrl(path: string): Promise<string> {
   return result.data.signedUrl;
 }
 
+/**
+ * 로컬에서 읽을 주소.
+ *
+ * 미리보기(`{n}.thumb.webp`)도 이 길로 온다. 파일 이름에서 번호만 떼어 내고
+ * **미리보기면 `?size=thumb` 를 붙인다** — 이름을 통째로 번호로 넘기면
+ * `Number("1.thumb.webp")` 가 `NaN` 이 되어 404 가 난다.
+ */
+export function localResultUrlForTest(storagePath: string): string {
+  return localResultUrl(storagePath);
+}
+
 function localResultUrl(storagePath: string): string {
   const parts = storagePath.split("/");
   if (parts.length !== 4 || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
   const projectId = encodeURIComponent(parts[2]!);
-  const cardIndex = encodeURIComponent(parts[3]!.replace(/\.png$/i, ""));
-  return `/api/sns/projects/${projectId}/cards/${cardIndex}/file`;
+  const fileName = parts[3]!;
+  const thumb = fileName.includes(".thumb.");
+  const cardIndex = encodeURIComponent(fileName.replace(/\.thumb\.webp$/i, "").replace(/\.[a-z0-9]+$/i, ""));
+  return `/api/sns/projects/${projectId}/cards/${cardIndex}/file${thumb ? "?size=thumb" : ""}`;
 }
 
 async function localResultDataUrl(storagePath: string): Promise<string> {
@@ -70,15 +85,56 @@ async function resultUrl(path: string): Promise<string> {
   return isLocalStoreEnabled() ? localResultUrl(path) : signedUrl(path);
 }
 
-async function uploadResult(userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string) {
+async function uploadResult(
+  userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string,
+): Promise<{ assetPath: string; thumbPath: string | null }> {
   if (isLocalStoreEnabled()) {
     const png = await sharp(bytes).png().toBuffer();
-    return writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
+    const assetPath = await writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
+    const preview = await makeSnsPreview(png);
+    if (!preview) return { assetPath, thumbPath: null };
+    const thumbPath = await writeLocalSnsPreviewFile(localStoreRoot(), userId, projectId, cardIndex, preview);
+    return { assetPath, thumbPath };
   }
+
   const path = `${userId}/sns/${projectId}/${cardIndex}.${extensionFor(contentType)}`;
-  const result = await createSupabaseAdminClient().storage.from(BUCKET).upload(path, bytes, { contentType, upsert: true });
+  const storage = createSupabaseAdminClient().storage.from(BUCKET);
+  const result = await storage.upload(path, bytes, { contentType, upsert: true });
   if (result.error) throw new Error(result.error.message);
-  return path;
+
+  /**
+   * 결과판에 걸 미리보기.
+   *
+   * 카드 열 장을 한꺼번에 깔면서 원본을 그대로 받는다 — 작업 하나를 여는 데
+   * 20~40MB 가 오간다. **못 만들어도 저장을 막지 않는다.** 없으면 화면이
+   * 원본으로 떨어진다.
+   */
+  const thumbPath = snsPreviewPath(userId, projectId, cardIndex);
+
+  /**
+   * 못 만들거나 못 올리면 **같은 자리의 옛 파일을 지운다.**
+   *
+   * 다시 만들기로 카드를 갱신했는데 미리보기만 실패하면 자리를 `null` 로
+   * 비우는데, 그러면 이전 미리보기를 가리키는 것이 아무것도 없어진다 —
+   * 지울 때도 안 지워져 영영 남는다. 없는 파일을 지우는 것은 조용히 지나가므로
+   * 처음 만드는 카드에도 안전하다.
+   */
+  const dropStale = async () => {
+    await storage.remove([thumbPath]);
+    return { assetPath: path, thumbPath: null };
+  };
+
+  const preview = await makeSnsPreview(bytes);
+  if (!preview) return dropStale();
+
+  const previewResult = await storage.upload(thumbPath, preview, {
+    contentType: "image/webp", upsert: true,
+  });
+  if (previewResult.error) {
+    console.error(`[sns] 미리보기를 올리지 못했습니다: ${previewResult.error.message}`);
+    return dropStale();
+  }
+  return { assetPath: path, thumbPath };
 }
 
 function edgeSamples(data: Buffer, width: number, height: number, channels: number) {
@@ -144,13 +200,19 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
         assetUrl: card.kind === "generated"
           ? card.assetPath ? localResultUrl(card.assetPath) : card.assetUrl
           : card.attachmentId ? attachmentUrl.get(card.attachmentId) ?? card.assetUrl : card.assetUrl,
+        ...previewUrlOf(card, (path) => localResultUrl(path)),
       })),
     } : undefined;
     return { ...project, data: { ...project.data, attachments, flow } };
   }
   const paths = new Set<string>();
   project.data.attachments.forEach((attachment) => paths.add(attachment.assetPath));
-  project.data.flow?.cards.forEach((card) => { if (card.assetPath) paths.add(card.assetPath); });
+  project.data.flow?.cards.forEach((card) => {
+    if (card.assetPath) paths.add(card.assetPath);
+    // **결과판이 이 함수를 지난다.** 여기서 안 모으면 카드 열 장을 원본으로
+    // 받는 상태가 그대로다 — 이 변경의 목적이 바로 그것이었다.
+    if (card.thumbPath) paths.add(card.thumbPath);
+  });
   if (!paths.size) return project;
   const client = await createSupabaseServerClient();
   const result = await client.storage.from(BUCKET).createSignedUrls([...paths], SIGNED_URL_TTL_SECONDS);
@@ -165,6 +227,7 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
       assetUrl: card.kind === "generated"
         ? card.assetPath ? urls.get(card.assetPath) ?? card.assetUrl : card.assetUrl
         : card.attachmentId ? attachmentUrl.get(card.attachmentId) ?? card.assetUrl : card.assetUrl,
+      ...previewUrlOf(card, (path) => urls.get(path)),
     })),
   } : undefined;
   return { ...project, data: { ...project.data, attachments, flow } };
@@ -197,6 +260,23 @@ export async function refreshProjectListAssetUrls(
       entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
     )),
   ));
+}
+
+/**
+ * 이 카드에 붙일 미리보기 주소.
+ *
+ * **`generated` 카드에만 붙인다.** 사용자가 넣은 카드(`place_as_is` 등)의
+ * `assetUrl` 은 letterbox 결과가 아니라 **첨부 원본**을 가리킨다. 거기에
+ * letterbox 결과의 미리보기를 짝지으면 화면에 뜨는 그림과 확대·내려받기가
+ * 서로 다른 그림이 된다.
+ */
+function previewUrlOf(
+  card: { kind: string; thumbPath?: string | null },
+  toUrl: (path: string) => string | undefined,
+): { thumbUrl?: string } {
+  if (card.kind !== "generated" || !card.thumbPath) return {};
+  const url = toUrl(card.thumbPath);
+  return url ? { thumbUrl: url } : {};
 }
 
 /** 틀 없는 카드는 fal 이 그린 그림 하나가 반드시 있어야 한다. */
@@ -243,6 +323,7 @@ export async function createQueuedGenerationDependencies(input: {
     }
     const result = await client!.from("sns_cards").update({
       ...(patch.assetPath !== undefined ? { asset_path: patch.assetPath } : {}),
+      ...(patch.thumbPath !== undefined ? { thumb_path: patch.thumbPath } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
       ...(patch.review !== undefined ? { review: patch.review } : {}),
@@ -279,11 +360,15 @@ export async function createQueuedGenerationDependencies(input: {
             slotImages: await fetchSlotImages(images, card.index),
           })).png
         : await markAsAi((await fetchedImage(requireWholeImage(images, card.index))).bytes);
-      const assetPath = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
-      await updateCard(card.index, { assetPath, status: "done", error: null });
+      const saved = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
+      const { assetPath, thumbPath } = saved;
+      await updateCard(card.index, { assetPath, thumbPath, status: "done", error: null });
       return {
         assetPath,
+        thumbPath,
         assetUrl: await resultUrl(assetPath),
+        // 검수는 원본을 본다. 미리보기로 검수하면 압축 자국을 그림의 흠으로
+        // 읽게 된다.
         reviewUrl: local ? await localResultDataUrl(assetPath) : await signedUrl(assetPath),
       };
     },
@@ -294,9 +379,15 @@ export async function createQueuedGenerationDependencies(input: {
       if (!card.assetUrl) throw new Error(`${card.index}번 사용자 원본 URL이 없습니다.`);
       const image = await fetchedImage(card.assetUrl);
       const rendered = await letterbox(image.bytes, ratio);
-      const assetPath = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
-      await updateCard(card.index, { assetPath, status: "done", review: null, error: null });
-      return { assetPath, assetUrl: await resultUrl(assetPath) };
+      const saved = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
+      await updateCard(card.index, {
+        assetPath: saved.assetPath, thumbPath: saved.thumbPath, status: "done", review: null, error: null,
+      });
+      return {
+        assetPath: saved.assetPath,
+        thumbPath: saved.thumbPath,
+        assetUrl: await resultUrl(saved.assetPath),
+      };
     },
   };
 }

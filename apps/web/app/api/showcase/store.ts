@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 // sharp 0.35.0 은 lib/index.d.ts 를 담지만 exports 에 types 조건이 없다.
 // @ts-expect-error 런타임 export 는 정상. 꾸러미 메타데이터가 선언을 가린다.
 import sharp from "sharp";
+import { MAX_INPUT_PIXELS } from "../../../lib/image-encoding";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { isLocalStoreEnabled } from "../../../lib/local-store";
 import {
@@ -32,7 +33,7 @@ import {
 const BUCKET = "library";
 
 const ROW_SELECT =
-  "id,source_kind,source_id,source_index,owner_id,storage_path,mime_type,width,height,caption,kind_label,position,visible,created_at";
+  "id,source_kind,source_id,source_index,owner_id,storage_path,thumb_path,mime_type,width,height,caption,kind_label,position,visible,created_at";
 
 /**
  * 첫 화면에 걸 것.
@@ -81,25 +82,82 @@ export async function listShowcaseForAdmin(): Promise<ShowcaseAdminView[]> {
  */
 export async function readShowcaseImage(
   id: string,
+  size: "full" | "thumb" = "full",
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   if (isLocalStoreEnabled()) return null;
   try {
     const supabase = createSupabaseAdminClient();
     const { data } = await supabase
       .from("showcase_items")
-      .select("storage_path,mime_type")
+      .select("storage_path,thumb_path,mime_type")
       .eq("id", id)
       .eq("visible", true)
       .maybeSingle();
     if (!data) return null;
 
-    const file = await supabase.storage.from(BUCKET).download(data.storage_path as string);
+    // **사본이 없으면 원본으로 떨어진다.** 이미 걸려 있는 그림에는 사본이
+    // 없으므로, 이 갈래가 신·구를 함께 살린다.
+    const thumbPath = size === "thumb" ? (data.thumb_path as string | null) : null;
+    const path = thumbPath ?? (data.storage_path as string);
+
+    let file = await supabase.storage.from(BUCKET).download(path);
+    let servedThumb = Boolean(thumbPath);
+
+    // **사본 파일이 사라졌으면 원본으로 한 번 더 간다.** 표에는 자리가 적혀
+    // 있는데 파일만 없어질 수 있다. 그때 404 를 내면 원본이 멀쩡한데도 첫
+    // 화면의 그림이 빈다 — 이 목록은 로그인 없이 열리는 첫인상이다.
+    if ((file.error || !file.data) && servedThumb) {
+      file = await supabase.storage.from(BUCKET).download(data.storage_path as string);
+      servedThumb = false;
+    }
     if (file.error || !file.data) return null;
+
     return {
       bytes: Buffer.from(await file.data.arrayBuffer()),
-      mimeType: (data.mime_type as string) || "image/png",
+      mimeType: servedThumb ? "image/webp" : (data.mime_type as string) || "image/png",
     };
   } catch {
+    return null;
+  }
+}
+
+const SHOWCASE_THUMBNAIL_WIDTH = 1024;
+
+/**
+ * 표시용 사본을 만들어 올린다. 자리를 돌려주고, 못 만들면 `null` 이다.
+ *
+ * 라이브러리와 같은 규칙을 쓴다 — **작아질 때만 둔다.** 이미 작은 그림은
+ * 줄여도 커지는데, 그때는 사본이 자리만 차지한다.
+ */
+async function uploadShowcaseThumbnail(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  id: string,
+  bytes: Buffer,
+): Promise<string | null> {
+  try {
+    const thumbnail = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
+      .keepMetadata()
+      // **가로만 묶는다.** 갤러리는 열로 흘려 배치하므로 제약은 가로뿐이다.
+      // 긴 변을 묶으면 세로로 긴 그림의 가로가 576px 까지 깎이는데, 열 최대
+      // 폭(364.5px)을 고해상도 화면에서 채우려면 729px 이 필요하다 — 모자라면
+      // 브라우저가 늘려 그려 흐려진다. 이 제품의 결과물은 포스터·카드뉴스라
+      // 세로가 기본값이다.
+      .resize(SHOWCASE_THUMBNAIL_WIDTH, null, { withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer();
+    if (thumbnail.length >= bytes.length) return null;
+
+    const path = `showcase/${id}.thumb.webp`;
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, thumbnail, { contentType: "image/webp", upsert: true });
+    if (error) {
+      console.error(`[showcase] 표시용 사본을 올리지 못했습니다: ${error.message}`);
+      return null;
+    }
+    return path;
+  } catch (error) {
+    console.error(`[showcase] 표시용 사본을 만들지 못했습니다: ${error instanceof Error ? error.message : error}`);
     return null;
   }
 }
@@ -220,6 +278,21 @@ export async function addShowcaseItem(
     .upload(storagePath, bytes, { contentType: mimeType, upsert: true });
   if (uploaded.error) return { ok: false, message: uploaded.error.message };
 
+  /**
+   * 화면에 걸 사본.
+   *
+   * 갤러리는 `next/image` 를 쓰므로 브라우저로 나가는 양은 이미 줄어 있다.
+   * 그래도 만드는 이유는 둘이다 — next/image 는 줄이기 전에 **원본을 통째로**
+   * 받아 오고(배포마다 그 캐시가 빈다), 크기를 못 잰 그림은 next/image 를
+   * 못 써서 원본이 그대로 브라우저까지 간다.
+   *
+   * 라이브러리 목록(512px)보다 크게 잡는다. 갤러리는 제품의 첫인상이고 화면에
+   * 24vw 로 뜨므로 4K 에서 920px 까지 커진다 — 512 로 줄이면 흐릿해진다.
+   *
+   * **못 만들어도 거는 것 자체는 막지 않는다.** 없으면 원본으로 떨어진다.
+   */
+  const thumbPath = await uploadShowcaseThumbnail(supabase, id, bytes);
+
   const { error } = await supabase.from("showcase_items").insert({
     id,
     source_kind: input.sourceKind,
@@ -227,6 +300,7 @@ export async function addShowcaseItem(
     source_index: source.index,
     owner_id: source.ownerId,
     storage_path: storagePath,
+    thumb_path: thumbPath,
     mime_type: mimeType,
     width,
     height,
@@ -238,7 +312,11 @@ export async function addShowcaseItem(
 
   if (error) {
     // 행이 없으면 아무도 못 찾는 파일이다. 용량만 차지하므로 되돌린다.
-    await supabase.storage.from(BUCKET).remove([storagePath]);
+    // **사본도 함께 지운다.** id 는 매번 새로 만들므로, 행이 안 생기면 이
+    // 사본을 가리킬 행이 영영 없다 — 삭제 때도 안 지워진다.
+    await supabase.storage
+      .from(BUCKET)
+      .remove([storagePath, thumbPath].filter(Boolean) as string[]);
     const duplicate = error.code === "23505";
     return {
       ok: false,
@@ -305,7 +383,7 @@ export async function removeShowcaseItem(id: string) {
   const supabase = createSupabaseAdminClient();
   const { data } = await supabase
     .from("showcase_items")
-    .select("storage_path")
+    .select("storage_path,thumb_path")
     .eq("id", id)
     .maybeSingle();
   if (!data) return { ok: false as const, message: "갤러리 항목을 찾지 못했습니다." };
@@ -313,6 +391,8 @@ export async function removeShowcaseItem(id: string) {
   const { error } = await supabase.from("showcase_items").delete().eq("id", id);
   if (error) return { ok: false as const, message: error.message };
 
-  await supabase.storage.from(BUCKET).remove([data.storage_path as string]);
+  // **사본도 함께 지운다.** 행이 사라지면 사본의 자리를 아는 곳이 없어진다.
+  const paths = [data.storage_path as string, data.thumb_path as string | null].filter(Boolean) as string[];
+  await supabase.storage.from(BUCKET).remove(paths);
   return { ok: true as const };
 }

@@ -62,6 +62,8 @@ export interface ShowcaseRow {
 export interface ShowcaseView {
   id: string;
   url: string;
+  /** 화면에 거는 작은 사본. 없으면 `url` 로 떨어진다. */
+  thumbUrl: string;
   width: number | null;
   height: number | null;
   caption: string | null;
@@ -73,10 +75,20 @@ export function showcaseImageUrl(id: string): string {
   return `/api/showcase/${id}/file`;
 }
 
+/**
+ * 화면에 걸 사본의 주소.
+ *
+ * 없으면 라우트가 원본으로 떨어뜨리므로 화면은 있는지 없는지 몰라도 된다.
+ */
+export function showcaseThumbUrl(id: string): string {
+  return `/api/showcase/${id}/file?size=thumb`;
+}
+
 export function toShowcaseView(row: ShowcaseRow): ShowcaseView {
   return {
     id: row.id,
     url: showcaseImageUrl(row.id),
+    thumbUrl: showcaseThumbUrl(row.id),
     width: row.width,
     height: row.height,
     caption: row.caption,

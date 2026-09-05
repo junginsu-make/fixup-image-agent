@@ -17,9 +17,12 @@ type Context = { params: Promise<{ id: string }> };
  * 그래서 비공개 버킷의 바이트를 서버가 직접 흘려 준다. 나가는 길이 이 하나뿐이라
  * `visible` 을 끄면 그 순간 막힌다.
  */
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
-  const image = await readShowcaseImage(id);
+  // `?size=thumb` 이면 화면에 걸 사본을 준다. 없으면 원본으로 떨어지므로
+  // 화면은 있는지 없는지 몰라도 된다.
+  const size = new URL(request.url).searchParams.get("size") === "thumb" ? "thumb" : "full";
+  const image = await readShowcaseImage(id, size);
   if (!image) return new Response("Not found", { status: 404 });
 
   return new Response(Uint8Array.from(image.bytes), {

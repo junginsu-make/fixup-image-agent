@@ -95,7 +95,9 @@ export async function POST(_request: Request, context: Context) {
           .map((reference) => urls[reference.id]!)
           .filter(Boolean),
       },
-      { queue: fal.queue, requests: stores.requests, images: stores.images, saveImage: async () => "" },
+      { queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
+        // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.
+        saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); } },
     );
 
     await stores.projects.update(id, { status: "generating" });
