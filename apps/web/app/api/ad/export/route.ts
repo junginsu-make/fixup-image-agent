@@ -44,8 +44,18 @@ const RequestSchema = z.object({
 }).strict();
 
 export async function POST(request: Request) {
-  // **꺼져 있으면 없는 길이다** (계약 5). 401 이 아니라 404 다 — 켜져 있는지
-  // 여부까지 알려 줄 이유가 없다.
+  /**
+   * **꺼져 있으면 없는 길이다** (계약 5).
+   *
+   * 스위치를 인증보다 **먼저** 본다. 그래서 로그인하지 않은 요청은 켜져 있을 때
+   * 401, 꺼져 있을 때 404 를 받는다 — **스위치 상태가 밖에서 보인다.**
+   *
+   * 그것을 감추려면 인증을 먼저 통과시켜야 하는데, 그러면 꺼져 있는 기능이
+   * 세션 조회 비용을 계속 치른다. **감출 값이 없다** — 이 기능이 있다는 사실은
+   * 비밀이 아니고, 켜져 있어도 소유자가 아니면 아무것도 못 뽑는다.
+   * (초판 주석은 「켜져 있는지 여부까지 알려 줄 이유가 없다」였는데, 코드가
+   * 반대였다. 코드를 그대로 두고 주석을 사실에 맞췄다.)
+   */
   if (!isAdExportEnabled()) return new Response("찾을 수 없습니다.", { status: 404 });
 
   const auth = await authenticateApiMember();
@@ -115,10 +125,19 @@ export async function POST(request: Request) {
     if (error instanceof RenderBusyError) {
       return Response.json({ ok: false, message: error.message }, { status: error.status });
     }
-    // 상한을 넘긴 요청 등은 사용자가 고칠 수 있는 것이라 400 으로 돌려준다.
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "뽑지 못했습니다." },
-      { status: 400 },
-    );
+    /**
+     * **`exportBatch` 가 스스로 던지는 두 문장만 그대로 돌려준다.**
+     *
+     * 「규격을 하나 이상 고르세요」·「한 번에 N개까지」는 사용자가 고칠 수 있는
+     * 말이다. 그 밖의 것 — sharp 동적 import 실패, Supabase 클라이언트 생성
+     * 실패 — 은 내부 사정이라 문구를 감춘다.
+     */
+    const sayable = error instanceof Error
+      && (error.message.includes("고르세요") || error.message.includes("한 번에"));
+    if (sayable) {
+      return Response.json({ ok: false, message: (error as Error).message }, { status: 400 });
+    }
+    console.error("[ad-export] 뽑기 실패", { userId: auth.member.userId, error });
+    return Response.json({ ok: false, message: "뽑지 못했습니다." }, { status: 500 });
   }
 }

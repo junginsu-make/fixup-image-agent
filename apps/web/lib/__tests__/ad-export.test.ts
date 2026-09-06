@@ -269,7 +269,10 @@ describe("압축 폭탄을 막는다", () => {
 
     const result = await exportForAd(bomb, spec, planDerivation(spec));
     expect("failed" in result).toBe(true);
-    expect((result as { failed: string }).failed).toMatch(/pixel limit/i);
+    // 문구는 감추되 「너무 크다」는 사용자가 고칠 수 있는 말이라 남긴다.
+    expect((result as { failed: string }).failed).toMatch(/너무 커서/);
+    expect((result as { failed: string }).failed, "libvips 문구가 새면 안 된다")
+      .not.toMatch(/pixel limit|vips/i);
   });
 
   /**
@@ -280,7 +283,8 @@ describe("압축 폭탄을 막는다", () => {
   it("검사하는 쪽도 거부한다", async () => {
     const check = await checkAgainstSpec(oversizedPng(8000, 5001), specById("google-rda-square"));
     expect(check.ok).toBe(false);
-    expect(check.failures.join()).toMatch(/pixel limit/i);
+    expect(check.failures.join()).toMatch(/너무 커서/);
+    expect(check.failures.join(), "libvips 문구가 새면 안 된다").not.toMatch(/pixel limit|vips/i);
   });
 
   /**
@@ -294,10 +298,10 @@ describe("압축 폭탄을 막는다", () => {
 
     const result = await exportForAd(nearLimit, spec, planDerivation(spec));
     expect("failed" in result).toBe(true); // 알맹이가 없는 PNG 라 어차피 못 만든다
-    expect((result as { failed: string }).failed).not.toMatch(/pixel limit/i);
+    expect((result as { failed: string }).failed).not.toMatch(/너무 커서/);
 
     const check = await checkAgainstSpec(nearLimit, spec);
-    expect(check.failures.join()).not.toMatch(/pixel limit/i);
+    expect(check.failures.join()).not.toMatch(/너무 커서/);
   });
 });
 
