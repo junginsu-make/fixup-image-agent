@@ -103,63 +103,36 @@ describe("사본 자리를 얹을 때", () => {
  * 카드를 다시 만들기 전에는 낫지 않는다.
  */
 function loadWriteFailure(): (input: Record<string, unknown>) => {
-  message: string; keepFiles: boolean; raced?: boolean;
+  message: string; raced?: boolean;
 } | null {
   const start = script.indexOf("function writeFailure(");
   if (start < 0) throw new Error("writeFailure 를 찾지 못했습니다.");
   const rest = script.slice(start);
   const source = rest.slice(0, rest.search(/^\}/m) + 1);
   // 꺼낸 조각이 알맹이인지 확인한다. 자르기가 어긋나면 아래가 전부 헛돈다.
-  expect(source).toMatch(/keepFiles/);
+  expect(source).toMatch(/updatedRows/);
   return new Function(`${source}; return writeFailure;`)() as never;
 }
 
 const writeFailure = loadWriteFailure();
-const ok = {
-  freshError: undefined, missing: false, cardsKnown: true,
-  rewritten: true, updateError: undefined, updatedRows: 1,
-};
+const ok = { rewritten: true, updateError: undefined, updatedRows: 1 };
 
-describe("못 적었을 때 파일을 지워도 되는지 — 작업 단위 판단", () => {
+describe("흐름에 못 적은 까닭을 가릴 때", () => {
   it("다 잘 됐으면 실패가 아니다", () => {
     expect(writeFailure(ok)).toBeNull();
   });
 
-  it("다시 읽지 못했으면 남긴다 — 흐름을 전혀 모르는데 지우는 것이 가장 나쁘다", () => {
-    expect(writeFailure({ ...ok, freshError: "네트워크" })?.keepFiles).toBe(true);
-  });
-
-  it("회원이 그 사이 저장했으면 남긴다", () => {
-    expect(writeFailure({ ...ok, updatedRows: 0 })?.keepFiles).toBe(true);
-  });
-
-  it("회원이 그 사이 채웠으면 남긴다", () => {
-    expect(writeFailure({ ...ok, rewritten: false })?.keepFiles).toBe(true);
-  });
-
-  it("작업이 사라졌으면 지운다 — 아무도 가리키지 않아 영영 남는다", () => {
-    expect(writeFailure({ ...ok, missing: true })?.keepFiles).toBe(false);
-  });
-
-  it("흐름의 모양을 모르면 지운다 — 카드 목록이 없으니 가리키는 것도 없다", () => {
-    expect(writeFailure({ ...ok, cardsKnown: false })?.keepFiles).toBe(false);
-  });
-
-  it("쓰기가 실패했으면 지운다 — 다만 경로별 거르기가 한 번 더 막는다", () => {
-    expect(writeFailure({ ...ok, updateError: "네트워크" })?.keepFiles).toBe(false);
-  });
-
-  it("경합은 실패가 아니다 — 회원의 흐름에는 이미 미리보기가 있다", () => {
+  it("회원이 그 사이 저장했으면 경합이다 — 실패로 세면 오경보가 뜬다", () => {
     expect(writeFailure({ ...ok, updatedRows: 0 })?.raced).toBe(true);
-    expect(writeFailure({ ...ok, rewritten: false })?.raced).toBe(true);
-    expect(writeFailure({ ...ok, freshError: "네트워크" })?.raced).toBe(true);
-    expect(writeFailure({ ...ok, missing: true })?.raced).toBeUndefined();
+  });
+
+  it("쓰기가 실패한 것은 경합이 아니다 — 우리 쪽 문제다", () => {
     expect(writeFailure({ ...ok, updateError: "네트워크" })?.raced).toBeUndefined();
   });
 
-  it("모양을 모르는 경우와 회원이 채운 경우가 다른 말을 한다", () => {
-    expect(writeFailure({ ...ok, cardsKnown: false })?.message)
-      .not.toBe(writeFailure({ ...ok, rewritten: false })?.message);
+  it("얹을 것이 없는 것도 경합이 아니다 — 흐름의 모양이 예상과 다르다", () => {
+    expect(writeFailure({ ...ok, rewritten: false })?.raced).toBeUndefined();
+    expect(writeFailure({ ...ok, rewritten: false })?.message).toMatch(/모양/);
   });
 });
 
@@ -173,8 +146,7 @@ describe("스크립트가 그 판단을 실제로 따르는지", () => {
   });
 
   it("지우는 갈래에서 경로별로 한 번 더 거른다", () => {
-    expect(branch).toMatch(/if \(!failure\.keepFiles\)/);
-    expect(branch).toMatch(/orphansToRemove\(madePaths, freshCards\)/);
+    expect(branch).toMatch(/orphansToRemove\(madePaths, now\.data/);
   });
 
   it("경합과 실패를 갈라 센다", () => {
@@ -184,6 +156,24 @@ describe("스크립트가 그 판단을 실제로 따르는지", () => {
 
   it("표 갱신도 만든 자리를 그대로 쓴다 — 낡은 흐름을 거치지 않는다", () => {
     expect(branch).toMatch(/for \(const \[index, thumbPath\] of madePaths\)/);
+  });
+
+  /**
+   * **잠금은 목록을 읽을 때의 시각이어야 한다.**
+   *
+   * 쓰기 직전에 다시 읽어 그 시각으로 잠그면, 회원이 「다시 기획」을 눌러
+   * 카드가 통째로 새로 만들어진 경우에도 쓰기가 통과한다. `withThumbPaths` 는
+   * 자리 번호로만 짝을 맞추는데 번호는 0..n-1 로 **재사용**되므로, 첨부A 로
+   * 만든 미리보기가 첨부B 카드에 얹힌다. 그 카드는 다음 실행에서 빠지므로
+   * 영영 낫지 않는다. 실제로 그렇게 만들었다가 되돌렸다.
+   */
+  it("목록을 읽을 때의 시각으로 잠근다 — 재기획한 작업에 낡은 그림이 붙지 않게", () => {
+    expect(branch).toMatch(/\.eq\("updated_at", project\.updated_at\)/);
+    expect(branch).not.toMatch(/\.eq\("updated_at", fresh/);
+  });
+
+  it("지우기 전에 지금 흐름을 읽는다 — 회원의 파일을 지키는 유일한 근거다", () => {
+    expect(branch).toMatch(/orphansToRemove\(madePaths, now\.data\?\.data\?\.flow\?\.cards\)/);
   });
 });
 

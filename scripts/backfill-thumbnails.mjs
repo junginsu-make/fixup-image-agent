@@ -18,7 +18,8 @@ const sharp = require("sharp");
  *
  * 사용법:
  *   node scripts/backfill-thumbnails.mjs               (미리보기 — 아무것도 안 바꾼다)
- *   node scripts/backfill-thumbnails.mjs --apply       (실제 생성)
+ *   node scripts/backfill-thumbnails.mjs --apply       (실제 생성, 카드뉴스 제외)
+ *   node scripts/backfill-thumbnails.mjs --apply --include-cardnews  (카드뉴스까지)
  *   node scripts/backfill-thumbnails.mjs --apply --limit 100
  *   node scripts/backfill-thumbnails.mjs --apply --after <마지막 id>   (이어서)
  */
@@ -52,6 +53,7 @@ const MAX_INPUT_PIXELS = 12_000_000;
 const GRID_MAX_PIXELS = 40_000_000;
 
 const apply = process.argv.includes("--apply");
+const includeCardnews = process.argv.includes("--include-cardnews");
 const limitAt = process.argv.indexOf("--limit");
 // **오타 한 번의 값이 크다.** 한 번 돌리고 끝인 명령이라, NaN 이 그대로 질의에
 // 실려 나가면 어디까지 됐는지 모르는 채로 죽는다. 시작 전에 막는다.
@@ -237,38 +239,29 @@ function orphansToRemove(madePaths, freshCards) {
  * 「안 지워서 한 장 남았다」는 자리가 정해져 있어 다음 사본이 그 위에 덮인다.
  * 그래서 **아는 것이 없으면 남기는 쪽**을 고른다.
  */
-function writeFailure({ freshError, missing, cardsKnown, rewritten, updateError, updatedRows }) {
-  // 다시 읽지 못했다 — **흐름을 전혀 모른다.** 모르면 남긴다.
-  if (freshError) return { message: freshError, keepFiles: true, raced: true };
-  // 작업이 사라졌다. 지울 때 이 자리를 아는 근거도 함께 사라졌다.
-  if (missing) return { message: "작업이 사라졌습니다", keepFiles: false };
-  // 흐름의 모양이 예상과 다르다. 카드 목록이 없으니 아무도 이 자리를 안 가리킨다.
-  if (!cardsKnown) return { message: "흐름의 모양을 알 수 없습니다", keepFiles: false };
-  // 얹을 것이 없다 = 그 사이 회원이 그 카드들을 전부 채웠다.
-  if (!rewritten) return { message: "그 사이 회원이 채웠습니다", keepFiles: true, raced: true };
-  // 쓰기 자체가 실패했다 — 행은 그대로다. 다만 회원이 카드 하나만 다시 만들었을
-  // 수 있으므로, 지우는 것은 부르는 쪽이 경로별로 다시 거른다.
-  if (updateError) return { message: updateError, keepFiles: false };
-  // 0행 = 읽은 뒤 쓰기 전에 회원이 저장했다.
-  if (!updatedRows) return { message: "그 사이 회원이 저장했습니다", keepFiles: true, raced: true };
+function writeFailure({ rewritten, updateError, updatedRows }) {
+  // 얹을 것이 없다 — 흐름의 모양이 예상과 다르다. 카드 목록이 없으니 아무도
+  // 이 자리를 안 가리킨다.
+  if (!rewritten) return { message: "흐름의 모양을 알 수 없습니다" };
+  // 쓰기 자체가 실패했다 — 행은 그대로다.
+  if (updateError) return { message: updateError };
+  // 0행 = 목록을 읽은 뒤 회원이 무엇인가 저장했다(수정·재기획 등).
+  if (!updatedRows) return { message: "그 사이 회원이 저장했습니다", raced: true };
   return null;
 }
 
 /**
- * 새로 읽은 흐름에 방금 만든 사본의 자리만 얹는다.
+ * 흐름에 방금 만든 사본의 자리를 얹는다.
  *
- * **회원이 그 사이 고친 것을 지키기 위해서다.** 전에는 읽을 때의 흐름을 통째로
- * 되돌려 썼다. 500건을 한꺼번에 읽고 한 건씩 내려받아 인코딩하므로, 뒤쪽 작업은
- * 읽은 지 수십 분 뒤에 쓴다 — 그 사이의 편집이 통째로 사라졌다.
+ * **불변으로 만든다.** 받은 흐름을 제자리에서 고치면, 쓰기가 실패해 되돌릴 때
+ * 이미 고쳐진 것을 되돌릴 방법이 없다.
  *
- * 이제 쓰기 직전에 다시 읽고 **사본 자리만** 얹으므로, 잠금이 지키는 창이
- * 밀리초로 줄고 회원의 편집도 그대로 남는다.
+ * 이미 사본이 있는 카드는 건드리지 않는다.
  *
- * **불변으로 만든다.** 받은 흐름을 제자리에서 고치면, 실패해 되돌릴 때 이미
- * 고쳐진 것을 되돌릴 방법이 없다.
- *
- * 이미 사본이 있는 카드는 건드리지 않는다 — 그 사이 회원이 다시 만들었을 수
- * 있고, 그러면 우리 것이 오히려 낡은 것이다.
+ * 짝은 **자리 번호**로 맞춘다. 그것으로 충분한 이유는 부르는 쪽이 목록을 읽을
+ * 때의 `updated_at` 으로 잠그기 때문이다 — 그 사이 회원이 「다시 기획」을 눌러
+ * 번호가 재사용됐다면 그 쓰기 자체가 거부된다. 잠금을 「쓰기 직전 재조회」로
+ * 옮기면 이 전제가 무너지므로, 한쪽만 바꾸지 말 것.
  */
 function withThumbPaths(data, pathByIndex) {
   const cards = data?.flow?.cards;
@@ -377,38 +370,55 @@ async function backfillSns() {
      * (`sns_projects_user_idx`), 백필이 시각을 건드리면 회원의 목록 순서가 통째로
      * 뒤바뀐다. 사본은 회원이 한 일이 아니다.
      */
-    const fresh = await supabase
-      .from("sns_projects").select("data,updated_at").eq("id", project.id).maybeSingle();
-    const rewritten = fresh.data ? withThumbPaths(fresh.data.data, madePaths) : null;
+    /**
+     * **목록을 읽을 때의 `updated_at` 으로 잠근다.** 그 사이 회원이 무엇이든
+     * 했으면 이 쓰기는 거부된다.
+     *
+     * 한때 「쓰기 직전에 다시 읽어 사본 자리만 얹기」로 바꿨다가 되돌렸다.
+     * 창은 짧아지지만 **자리 번호로만 짝을 맞추게 되어** 위험했다 — 회원이
+     * 「다시 기획」을 누르면 `createActualPlanningFlow` 가 카드를 통째로 새로
+     * 만들면서 번호를 0..n-1 로 **재사용한다**(`lib/sns/actual-flow.ts`).
+     * 그러면 첨부A 로 만든 미리보기가 첨부B 카드에 얹히고, 목록에는 A 가
+     * 뜨는데 눌러서 열면 B 가 뜬다. 그 카드는 다음 실행에서 `thumbPath` 가
+     * 있다는 이유로 빠지므로 **영영 낫지 않는다.**
+     *
+     * 목록 시점으로 잠그면 재기획이 곧 시각 변경이라 그 쓰기가 거부된다.
+     *
+     * **여기서는 `updated_at` 을 새로 적지 않는다.** 목록이 「최근 수정순」이라
+     * (`sns_projects_user_idx`), 백필이 시각을 건드리면 회원의 목록 순서가
+     * 통째로 뒤바뀐다. 사본은 회원이 한 일이 아니다.
+     */
+    const rewritten = withThumbPaths(project.data, madePaths);
     const updated = rewritten
       ? await supabase
           .from("sns_projects").update({ data: rewritten })
-          .eq("id", project.id).eq("updated_at", fresh.data.updated_at)
+          .eq("id", project.id).eq("updated_at", project.updated_at)
           .select("id")
       : null;
-
-    const freshCards = fresh.data?.data?.flow?.cards;
     const failure = writeFailure({
-      freshError: fresh.error?.message,
-      missing: !fresh.data,
-      cardsKnown: Array.isArray(freshCards),
       rewritten: Boolean(rewritten),
       updateError: updated?.error?.message,
       updatedRows: updated?.data?.length ?? 0,
     });
     if (failure) {
-      if (!failure.keepFiles) {
-        const orphans = orphansToRemove(madePaths, freshCards);
-        if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
-      }
-      // **경합은 실패가 아니다.** 회원의 흐름에는 이미 미리보기가 있다. 이것을
-      // `failed` 로 세면 아래의 「한 건도 못 썼다」 경보가 정상 실행에도 뜬다.
+      /**
+       * 지우기 전에 **지금 흐름을 한 번 읽는다.** 실패한 건에서만 도는 길이라
+       * 비용이 없고, 이것이 없으면 회원의 파일을 지운다.
+       *
+       * 사본의 자리가 앱의 `snsPreviewPath` 와 완전히 같아서, 그 사이 회원이
+       * 카드를 다시 만들었다면 그 자리는 이제 회원의 것이고 회원의 흐름이
+       * 그것을 가리킨다. 지우면 흐름은 멀쩡한데 그림만 사라지고, 화면에
+       * 대체가 없어 회원이 다시 만들기 전에는 낫지 않는다.
+       */
+      const now = await supabase
+        .from("sns_projects").select("data").eq("id", project.id).maybeSingle();
+      const orphans = orphansToRemove(madePaths, now.data?.data?.flow?.cards);
+      if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
+      // **경합은 실패가 아니다.** 회원이 먼저 썼을 뿐이고 다시 돌리면 집힌다.
       if (failure.raced) raced += madePaths.size;
       else failed += madePaths.size;
       made -= madePaths.size;
-      console.error(
-        `  흐름에 못 적음(${failure.keepFiles ? "파일은 남김" : "되돌림"}): ${project.id} — ${failure.message}`,
-      );
+      console.error(`  흐름에 못 적음(${orphans.length}/${madePaths.size} 지움): ${project.id} — ${failure.message}`);
       continue;
     }
 
@@ -590,7 +600,15 @@ async function main() {
 
   await backfillShowcase();
   await backfillPoster();
-  await backfillSns();
+  // **카드뉴스는 골라야 돈다.** 이 갈래만 사본 자리가 흐름 JSON 안에 있어
+  // 읽고-고쳐-쓰기가 필요하고, 그래서 회원이 같은 작업을 만지고 있으면 서로
+  // 부딪힌다. 나머지 다섯은 표의 빈 칸을 채우는 것뿐이라 그럴 일이 없다.
+  // 트래픽이 없는 시간에 `--include-cardnews` 로 따로 돌린다.
+  if (includeCardnews) await backfillSns();
+  else {
+    console.log("");
+    console.log("카드뉴스: 건너뜁니다 (돌리려면 --include-cardnews).");
+  }
   await backfillGrid("reference_images", "storage_path", "참고 이미지", "--after-reference");
   // **캐릭터는 버킷이 다르다.** 경로 모양이 라이브러리와 똑같아 눈으로는
   // 안 걸리는데, 틀리면 전 건 실패한다.
