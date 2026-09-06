@@ -289,7 +289,7 @@ async function backfillSns() {
  * 참고 이미지는 **공용 창고**라 한 화면에 400장까지 뜬다. 남은 것 중 전송량이
  * 가장 크다.
  */
-async function backfillGrid(table, pathColumn, label, cursorFlag) {
+async function backfillGrid(table, pathColumn, label, cursorFlag, bucket = BUCKET) {
   const after = process.argv.indexOf(cursorFlag);
   const cursor = after > 0 ? process.argv[after + 1] : "";
 
@@ -313,7 +313,7 @@ ${label} ${rows.length}건`);
     const originalPath = row[pathColumn];
     if (!originalPath) { skipped += 1; continue; }
 
-    const file = await supabase.storage.from(BUCKET).download(originalPath);
+    const file = await supabase.storage.from(bucket).download(originalPath);
     if (file.error || !file.data) { failed += 1; continue; }
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
@@ -324,14 +324,14 @@ ${label} ${rows.length}건`);
     const thumbPath = `${dot > slash ? originalPath.slice(0, dot) : originalPath}.thumb.webp`;
 
     const uploaded = await supabase.storage
-      .from(BUCKET)
+      .from(bucket)
       .upload(thumbPath, thumb, { contentType: "image/webp", upsert: true });
     if (uploaded.error) { failed += 1; continue; }
 
     const { error: updateError } = await supabase
       .from(table).update({ thumb_path: thumbPath }).eq("id", row.id);
     if (updateError) {
-      await supabase.storage.from(BUCKET).remove([thumbPath]);
+      await supabase.storage.from(bucket).remove([thumbPath]);
       failed += 1;
       continue;
     }
@@ -415,12 +415,14 @@ async function main() {
   await backfillPoster();
   await backfillSns();
   await backfillGrid("reference_images", "storage_path", "참고 이미지", "--after-reference");
-  await backfillGrid("character_views", "path", "캐릭터", "--after-character");
+  // **캐릭터는 버킷이 다르다.** 경로 모양이 라이브러리와 똑같아 눈으로는
+  // 안 걸리는데, 틀리면 전 건 실패한다.
+  await backfillGrid("character_views", "path", "캐릭터", "--after-character", "characters");
   if (rows.length === LIMIT) {
     // 커서를 하나만 넘기면 다른 갈래가 처음부터 다시 돈다 — 건너뛴 건을
     // 매번 다시 내려받게 되어 커서를 둔 이유가 사라진다. 함께 안내한다.
-    console.log(`상한에 걸렸습니다. 이어서 하려면 세 커서를 함께 넘기세요:`);
-    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id>`);
+    console.log("상한에 걸렸습니다. 이어서 하려면 다섯 커서를 함께 넘기세요:");
+    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id> --after-reference <끝 id> --after-character <끝 id>`);
   }
 }
 

@@ -1,7 +1,6 @@
 // sharp 0.35.0 은 lib/index.d.ts 를 담지만 exports 에 types 조건이 없다.
 // @ts-expect-error 런타임 export 는 정상. 꾸러미 메타데이터가 선언을 가린다.
 import sharp from "sharp";
-import { MAX_INPUT_PIXELS } from "./image-encoding";
 
 /**
  * 격자 목록에 거는 작은 사본.
@@ -21,9 +20,21 @@ import { MAX_INPUT_PIXELS } from "./image-encoding";
 const GRID_WIDTH = 512;
 const GRID_QUALITY = 78;
 
+/**
+ * 사본을 만들 때만 쓰는 상한.
+ *
+ * 저장 인코딩의 12MP 를 그대로 쓰면 **요즘 폰 사진이 걸린다** — 아이폰 기본이
+ * 4032×3024(12.19MP) 다. 그러면 400장 격자에서 **가장 무거운 것들만 원본으로
+ * 남아** 목적을 절반만 이룬다.
+ *
+ * 여기는 이미 저장을 통과해 창고에 놓인 파일을 읽는 자리라, 올리는 길의 상한과
+ * 성격이 다르다 — 낯선 바이트를 받는 문이 아니다. 그래서 넉넉히 잡는다.
+ */
+const GRID_MAX_PIXELS = 40_000_000;
+
 export async function makeGridThumbnail(bytes: Buffer): Promise<Buffer | null> {
   try {
-    const thumbnail = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
+    const thumbnail = await sharp(bytes, { limitInputPixels: GRID_MAX_PIXELS })
       .keepMetadata()
       .resize(GRID_WIDTH, null, { withoutEnlargement: true })
       .webp({ quality: GRID_QUALITY })

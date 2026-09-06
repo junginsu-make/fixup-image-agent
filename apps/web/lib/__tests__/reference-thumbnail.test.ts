@@ -51,7 +51,10 @@ describe("makeGridThumbnail", () => {
   it("작은 그림을 늘리지 않는다", async () => {
     const thumb = await makeGridThumbnail(await photoPng(300, 300));
 
-    if (thumb) expect((await sharp(thumb).metadata()).width).toBeLessThanOrEqual(300);
+    // `if` 로 감싸지 않는다 — 감싸면 null 이 됐을 때 아무것도 검증 안 하는
+    // 시험이 되어, 확대 방지가 사라져도 통과한다.
+    expect(thumb).not.toBeNull();
+    expect((await sharp(thumb!).metadata()).width).toBe(300);
   });
 
   it("크게 줄어든다", async () => {
@@ -75,8 +78,22 @@ describe("makeGridThumbnail", () => {
     expect(await makeGridThumbnail(already)).toBeNull();
   });
 
-  it("너무 큰 그림은 손대지 않는다", async () => {
-    const huge = await sharp({ create: { width: 4000, height: 4000, channels: 3, background: "#123456" } })
+  it("요즘 폰 사진(12MP 초과)도 사본을 받는다", async () => {
+    // 저장 인코딩의 12MP 상한을 그대로 쓰면 아이폰 기본(4032×3024=12.19MP)이
+    // 걸린다. 그러면 격자에서 **가장 무거운 것들만 원본으로 남아** 목적을
+    // 절반만 이룬다.
+    const phone = await sharp({
+      create: { width: 4032, height: 3024, channels: 3, background: "#3a7fd5" },
+    }).png().toBuffer();
+
+    const thumb = await makeGridThumbnail(phone);
+
+    expect(thumb).not.toBeNull();
+    expect((await sharp(thumb!).metadata()).width).toBe(512);
+  });
+
+  it("그래도 지나치게 큰 그림은 손대지 않는다", async () => {
+    const huge = await sharp({ create: { width: 8000, height: 8000, channels: 3, background: "#123456" } })
       .png().toBuffer();
 
     expect(await makeGridThumbnail(huge)).toBeNull();

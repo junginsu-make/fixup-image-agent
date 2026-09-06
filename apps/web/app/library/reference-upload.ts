@@ -1,4 +1,5 @@
 import type { ReferencePurpose } from "../api/reference-sets/schema";
+import { gridPathsToRemove } from "../../lib/grid-thumbnail-path";
 
 export interface ReferenceImageRow {
   id: string;
@@ -67,7 +68,8 @@ export async function persistReferenceImage(
     });
   } catch (insertError) {
     try {
-      await dependencies.remove([storagePath]);
+      // **사본도 함께 지운다.** 행이 안 생기면 그 자리를 아는 곳이 영영 없다.
+      await dependencies.remove(gridPathsToRemove([{ path: storagePath, thumbPath }]));
     } catch (cleanupError) {
       const insertMessage = insertError instanceof Error ? insertError.message : "이미지 정보를 저장하지 못했습니다.";
       const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "Storage 파일을 정리하지 못했습니다.";
