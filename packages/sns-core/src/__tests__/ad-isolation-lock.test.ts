@@ -15,23 +15,34 @@ import { CARD_RATIOS, POSTER_RATIOS } from "../ratios";
  * 기존 시험(`ratios.test.ts`·`models.test.ts`·`model-choice.test.ts`)에
  * 변경을 하나씩 넣어 무엇을 잡고 무엇을 놓치는지 확인했다.
  *
- * 이미 잡히는 것 — 여기서 다시 잠글 이유가 없다:
+ * **이 파일이 없어도 지켜지는 값** (배열을 통째로 맞대므로 결과적으로 여기서도
+ * 걸리지만, 이 파일이 존재하는 근거는 아니다):
  *   - `CARD_RATIOS` 의 `4:5` 픽셀 (`ratios.test.ts:26` 의 `resolveSize`)
  *   - `POSTER_RATIOS` 의 `2:3` 픽셀 (`ratios.test.ts:120`)
  *   - `POSTER_RATIOS` 에 항목 추가, `multipleOf`, `maxReferenceImages`
- *   - **`nano-banana-2` 의 극단 비율** —
- *     `apps/web/lib/studio/__tests__/model-choice.test.ts:26` 이 `4:1` 을 이름으로
- *     짚는다. **저장소 전체를 돌려야 보인다** — sns-core 만 돌리면 안 보인다
+ *   - **`nano-banana-2` 의 `4:1`·`1:4`** —
+ *     `apps/web/lib/studio/__tests__/model-choice.test.ts:26-31` 이 `4:1` 을 이름으로
+ *     짚는다. **저장소 전체를 돌려야 보인다** — sns-core 만 돌리면 안 보인다.
+ *     (함정: `model-choice.test.ts` 라는 같은 이름이 `packages/sns-core` 와
+ *     `apps/web/lib/studio` 양쪽에 있다. 인용할 때 패키지까지 적을 것)
  *
  * **놓치는 것 — 이 파일이 존재하는 이유**:
  *   - `POSTER_RATIOS` 의 `4:5`·`3:4`·`16:9` 픽셀. 개수도 제약도 그대로라 아무도
  *     안 본다. (같은 `4:5` 라도 `CARD_RATIOS` 쪽만 잡힌다)
- *   - **`8:1`·`1:8`**. `4:1` 은 위 시험이 이름으로 짚지만 `8:1` 은 아무도 안 본다
+ *   - **`8:1`·`1:8`**. `4:1` 은 위 시험이 짚지만 이 둘은 아무도 안 본다.
+ *     설계 §2.3 이 안 B 로 돌아올 때 근거가 되는 것이 바로 그 둘이다
  *   - **`maxAspect: 3`**. 설계 §1 의 「열둘 중 셋만 직접 생성 가능」과 §4.2 의
  *     「`match-source` 는 3:1 까지」가 이 숫자 하나 위에 서 있다
- *   - **`isDefault`·`batchMax`·`fixedResolution`·`resolutionMultiplier`**
+ *   - **`isDefault`·`batchMax`·`fixedResolution`**
  *
  * 즉 **광고 설계의 근거가 되는 값일수록 기존 시험이 안 잡는다.**
+ *
+ * ## 여기 없는 자물쇠 하나
+ *
+ * 광고가 가장 크게 기대는 것은 상수가 아니라 **동작**이다 —
+ * `sizeFromSource(마스터, gpt-image-2)` 가 입력을 그대로 돌려준다는 것(설계 §4.2).
+ * 그것은 `apps/web/lib/__tests__/ad-derive.test.ts` 가 `AD_MASTERS` 를 순회해
+ * 잠근다. 마스터 픽셀이 그쪽에 있어 여기 적으면 같은 값이 두 곳에 남는다.
  *
  * ## 왜 `toMatchSnapshot()` 을 쓰지 않는가
  *
@@ -51,6 +62,13 @@ import { CARD_RATIOS, POSTER_RATIOS } from "../ratios";
  *     바뀔 때마다 깨져서 위의 `-u` 문제를 그대로 부른다
  *   - **표시 문구**(`label`, `pixelOnly.reason`). 화면 문구는 바뀌어도 광고
  *     파생에 영향이 없다
+ *   - **`resolutionMultiplier`**. 이름은 능력처럼 보이지만 저장소 전체에서
+ *     쓰이는 곳이 `models.ts:135` 의 단가 계산 한 곳뿐이다 — 실단가가
+ *     `flatUsd × resolutionMultiplier` 라, 앞항을 풀고 뒷항을 묶으면 앞뒤가
+ *     안 맞는다. 게다가 광고는 `gpt-image-2` 전용이라(설계 §4.2) nano 의 배수에
+ *     기대지 않는다
+ *   - **엔드포인트**(`t2i.endpoint`·`i2i.endpoint`). 바뀌면 생성 전체가 죽으므로
+ *     광고만 조용히 깨지는 값이 아니다. 이 자물쇠가 잡을 종류의 고장이 아니다
  */
 
 /** 비교를 위해 광고가 기대는 필드만 남긴다. */
@@ -106,7 +124,6 @@ describe("격리 자물쇠 — 모델 능력", () => {
       supportedRatios: model.supportedRatios ?? null,
       pixelSizeLimits: model.pixelSizeLimits ?? null,
       fixedResolution: model.fixedResolution ?? null,
-      resolutionMultiplier: model.resolutionMultiplier ?? null,
       maxReferenceImages: model.maxReferenceImages,
       batchMax: model.batchMax,
     }))).toEqual([
@@ -118,7 +135,6 @@ describe("격리 자물쇠 — 모델 능력", () => {
           minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3,
         },
         fixedResolution: null,
-        resolutionMultiplier: null,
         maxReferenceImages: 16,
         batchMax: 4,
       },
@@ -128,7 +144,6 @@ describe("격리 자물쇠 — 모델 능력", () => {
         supportedRatios: ["auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"],
         pixelSizeLimits: null,
         fixedResolution: "2K",
-        resolutionMultiplier: 1,
         maxReferenceImages: 14,
         batchMax: 4,
       },
@@ -141,7 +156,6 @@ describe("격리 자물쇠 — 모델 능력", () => {
         ],
         pixelSizeLimits: null,
         fixedResolution: "2K",
-        resolutionMultiplier: 1.5,
         maxReferenceImages: 14,
         batchMax: 4,
       },
@@ -151,7 +165,6 @@ describe("격리 자물쇠 — 모델 능력", () => {
         supportedRatios: ["auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"],
         pixelSizeLimits: null,
         fixedResolution: null,
-        resolutionMultiplier: null,
         maxReferenceImages: 7,
         batchMax: 1,
       },
@@ -177,8 +190,10 @@ describe("격리 자물쇠 — 모델 능력", () => {
    */
   it("가격 필드는 값이 아니라 존재만 본다", () => {
     for (const model of IMAGE_MODELS) {
-      const hasPrice = (side: { flatUsd?: number; table?: unknown }) =>
-        typeof side.flatUsd === "number" || side.table !== undefined;
+      // `table: []` 을 통과시키면 안 된다 — 그 상태의 `unitPrice` 는
+      // `models.ts:128` 의 `pickRow([])[0]!` 에서 터진다.
+      const hasPrice = (side: { flatUsd?: number; table?: unknown[] }) =>
+        typeof side.flatUsd === "number" || (Array.isArray(side.table) && side.table.length > 0);
       expect(hasPrice(model.t2i)).toBe(true);
       expect(hasPrice(model.i2i)).toBe(true);
     }
