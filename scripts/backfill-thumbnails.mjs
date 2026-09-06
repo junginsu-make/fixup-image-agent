@@ -200,32 +200,57 @@ async function backfillPoster() {
 }
 
 /**
+ * 지우는 갈래에서 **실제로 지울 자리.**
+ *
+ * `writeFailure` 가 작업 단위로 「지우는 갈래」를 정해도, 그 안에서 다시 걸러야
+ * 한다. 회원이 카드 **하나만** 다시 만들었을 수 있기 때문이다 — 그 카드의
+ * 자리에는 회원의 파일이 놓이고 회원의 흐름이 그것을 가리키는데, 나머지 카드
+ * 때문에 이 갈래로 들어온다. 작업 단위로만 정하면 그 한 장을 함께 지운다.
+ *
+ * 사본의 자리가 앱의 `snsPreviewPath` 와 완전히 같아서 생기는 일이다.
+ */
+function orphansToRemove(madePaths, freshCards) {
+  const referenced = new Set(
+    (freshCards ?? []).map((card) => card.thumbPath).filter(Boolean),
+  );
+  return [...madePaths.values()].filter((path) => !referenced.has(path));
+}
+
+/**
  * 흐름에 못 적었을 때, **올린 파일을 지워도 되는가.**
  *
- * 사본의 자리는 `{회원}/sns/{작업}/{카드}.thumb.webp` 로 정해져 있어 앱의
- * `snsPreviewPath` 와 **완전히 같다.** 그래서 그 사이 회원이 그 카드를 다시
- * 만들었다면 우리가 올린 자리에 회원의 파일이 놓이고, 회원의 흐름이 그 자리를
- * 가리킨다. 그것을 지우면 **흐름은 멀쩡한데 그림만 사라진다** — 회원 눈에
- * 보이는 고장이다.
+ * 판단이 두 겹이다. 여기서는 **작업 단위**로 「지우는 갈래인가」를 정하고,
+ * 지우는 갈래에서도 부르는 쪽이 **경로별로** 다시 거른다. 한 겹만으로는 모자란
+ * 것이 실제로 드러났다 — 작업 단위로만 정했더니, 카드 하나만 회원이 다시 만든
+ * 경우에 그 카드의 파일까지 함께 지웠다.
  *
- * 그래서 **누가 손댄 흔적이 있으면 아무것도 안 지운다.** 남는 파일은 자리가
- * 정해져 있어 다음에 같은 카드의 사본이 그 위에 덮인다 — 쌓이지 않는다.
- * 「지웠는데 남이 쓰고 있었다」보다 「안 지워서 한 장 남았다」가 훨씬 싸다.
+ * 지우면 안 되는 이유: 사본의 자리가 앱의 `snsPreviewPath` 와 **완전히 같다.**
+ * 그 사이 회원이 카드를 다시 만들면 우리가 올린 자리에 회원의 파일이 놓이고
+ * 회원의 흐름이 그것을 가리킨다. 그걸 지우면 **흐름은 멀쩡한데 그림만
+ * 사라지고**, 화면에 대체 그림이 없어 회원이 그 카드를 다시 만들기 전에는
+ * 낫지 않는다.
  *
- * 반대로 아무도 안 건드린 것이 확실한 경우(행이 그대로거나 사라짐)에는 지운다.
- * 아무 행도 가리키지 않는 파일은 나중에 지울 근거가 없어 영영 남는다.
+ * 지워야 하는 이유: 아무 행도 가리키지 않는 파일은 나중에 지울 근거가 없어
+ * 영영 남는다. 작업이 지워질 때도 안 잡힌다.
+ *
+ * 두 손해의 방향이 다르다 — 「지웠는데 남이 쓰고 있었다」는 회원 화면이 깨지고,
+ * 「안 지워서 한 장 남았다」는 자리가 정해져 있어 다음 사본이 그 위에 덮인다.
+ * 그래서 **아는 것이 없으면 남기는 쪽**을 고른다.
  */
-function writeFailure({ freshError, missing, rewritten, updateError, updatedRows }) {
-  // 다시 읽지 못했다 — 행은 그대로다. 우리 파일은 아무도 안 가리킨다.
-  if (freshError) return { message: freshError, keepFiles: false };
+function writeFailure({ freshError, missing, cardsKnown, rewritten, updateError, updatedRows }) {
+  // 다시 읽지 못했다 — **흐름을 전혀 모른다.** 모르면 남긴다.
+  if (freshError) return { message: freshError, keepFiles: true, raced: true };
   // 작업이 사라졌다. 지울 때 이 자리를 아는 근거도 함께 사라졌다.
   if (missing) return { message: "작업이 사라졌습니다", keepFiles: false };
-  // 얹을 것이 없다 = 그 사이 회원이 그 카드들을 채웠거나 모양이 달라졌다.
-  if (!rewritten) return { message: "그 사이 회원이 채웠습니다", keepFiles: true };
-  // 쓰기 자체가 실패했다 — 행은 그대로다.
+  // 흐름의 모양이 예상과 다르다. 카드 목록이 없으니 아무도 이 자리를 안 가리킨다.
+  if (!cardsKnown) return { message: "흐름의 모양을 알 수 없습니다", keepFiles: false };
+  // 얹을 것이 없다 = 그 사이 회원이 그 카드들을 전부 채웠다.
+  if (!rewritten) return { message: "그 사이 회원이 채웠습니다", keepFiles: true, raced: true };
+  // 쓰기 자체가 실패했다 — 행은 그대로다. 다만 회원이 카드 하나만 다시 만들었을
+  // 수 있으므로, 지우는 것은 부르는 쪽이 경로별로 다시 거른다.
   if (updateError) return { message: updateError, keepFiles: false };
   // 0행 = 읽은 뒤 쓰기 전에 회원이 저장했다.
-  if (!updatedRows) return { message: "그 사이 회원이 저장했습니다", keepFiles: true };
+  if (!updatedRows) return { message: "그 사이 회원이 저장했습니다", keepFiles: true, raced: true };
   return null;
 }
 
@@ -299,7 +324,7 @@ async function backfillSns() {
   if (error) { console.error(`카드뉴스를 읽지 못했습니다: ${error.message}`); return; }
   if (!projects.length) { console.log("카드뉴스: 채울 것이 없습니다."); return; }
 
-  let made = 0, skipped = 0, failed = 0, touched = 0;
+  let made = 0, skipped = 0, failed = 0, touched = 0, raced = 0;
 
   for (const project of projects) {
     const cards = project.data?.flow?.cards ?? [];
@@ -308,7 +333,7 @@ async function backfillSns() {
 
     let changed = false;
     /** 만든 사본의 자리. 카드 번호로 찾는다 — 쓰기 직전에 다시 읽은 흐름에 얹는다. */
-    const made_paths = new Map();
+    const madePaths = new Map();
     for (const card of todo) {
       const file = await supabase.storage.from(BUCKET).download(card.assetPath);
       if (file.error || !file.data) { failed += 1; continue; }
@@ -328,8 +353,8 @@ async function backfillSns() {
       if (uploaded.error) { failed += 1; continue; }
 
       // **낡은 흐름을 제자리에서 고치지 않는다.** 쓰는 것은 다시 읽은 흐름이고,
-      // 만든 자리는 `made_paths` 가 안다. 여기서 고치면 두 근거가 생긴다.
-      made_paths.set(card.index, thumbPath);
+      // 만든 자리는 `madePaths` 가 안다. 여기서 고치면 두 근거가 생긴다.
+      madePaths.set(card.index, thumbPath);
       changed = true;
       made += 1;
     }
@@ -354,7 +379,7 @@ async function backfillSns() {
      */
     const fresh = await supabase
       .from("sns_projects").select("data,updated_at").eq("id", project.id).maybeSingle();
-    const rewritten = fresh.data ? withThumbPaths(fresh.data.data, made_paths) : null;
+    const rewritten = fresh.data ? withThumbPaths(fresh.data.data, madePaths) : null;
     const updated = rewritten
       ? await supabase
           .from("sns_projects").update({ data: rewritten })
@@ -362,19 +387,25 @@ async function backfillSns() {
           .select("id")
       : null;
 
+    const freshCards = fresh.data?.data?.flow?.cards;
     const failure = writeFailure({
       freshError: fresh.error?.message,
       missing: !fresh.data,
+      cardsKnown: Array.isArray(freshCards),
       rewritten: Boolean(rewritten),
       updateError: updated?.error?.message,
       updatedRows: updated?.data?.length ?? 0,
     });
     if (failure) {
       if (!failure.keepFiles) {
-        await supabase.storage.from(BUCKET).remove([...made_paths.values()]);
+        const orphans = orphansToRemove(madePaths, freshCards);
+        if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
       }
-      failed += made_paths.size;
-      made -= made_paths.size;
+      // **경합은 실패가 아니다.** 회원의 흐름에는 이미 미리보기가 있다. 이것을
+      // `failed` 로 세면 아래의 「한 건도 못 썼다」 경보가 정상 실행에도 뜬다.
+      if (failure.raced) raced += madePaths.size;
+      else failed += madePaths.size;
+      made -= madePaths.size;
       console.error(
         `  흐름에 못 적음(${failure.keepFiles ? "파일은 남김" : "되돌림"}): ${project.id} — ${failure.message}`,
       );
@@ -383,7 +414,7 @@ async function backfillSns() {
 
     // 표도 함께 맞춘다. 화면은 흐름을 보지만, 표가 어긋난 채 남으면 나중에
     // 표를 보는 코드가 생겼을 때 두 값이 다르다.
-    for (const [index, thumbPath] of made_paths) {
+    for (const [index, thumbPath] of madePaths) {
       await supabase.from("sns_cards")
         .update({ thumb_path: thumbPath })
         .eq("project_id", project.id).eq("index", index);
@@ -392,7 +423,7 @@ async function backfillSns() {
   }
 
   console.log(`
-카드뉴스 — 작업 ${touched}건 · 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 실패 ${failed}`);
+카드뉴스 — 작업 ${touched}건 · 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 경합(회원이 먼저 씀) ${raced} · 실패 ${failed}`);
   // 경합은 몇 건 나는 것이 정상이다. **한 건도 못 쓴 채 실패만 쌓였다면** 경합이
   // 아니라 시각 비교 자체가 어긋난 것이다 — 그대로 또 돌려도 같은 결과가 난다.
   if (touched === 0 && failed > 0) {
