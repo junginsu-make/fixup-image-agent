@@ -122,7 +122,7 @@ async function backfillShowcase() {
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
     const attempt = await thumbnailFor(bytes, SHOWCASE_WIDTH, 82, true);
-    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    if (!attempt.thumb) { if (attempt.reason === "error") failed += 1; else skipped += 1; continue; }
     const thumb = attempt.thumb;
 
     const thumbPath = `showcase/${row.id}.thumb.webp`;
@@ -175,7 +175,7 @@ async function backfillPoster() {
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
     const attempt = await thumbnailFor(bytes, POSTER_WIDTH, 88, true);
-    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    if (!attempt.thumb) { if (attempt.reason === "error") failed += 1; else skipped += 1; continue; }
     const thumb = attempt.thumb;
 
     const thumbPath = `${row.user_id}/poster/${row.project_id}/${row.variant_index}.thumb.webp`;
@@ -197,6 +197,36 @@ async function backfillPoster() {
   if (rows.length === LIMIT) {
     console.log(`  이어서: --apply --after-poster ${rows[rows.length - 1].id}`);
   }
+}
+
+/**
+ * 새로 읽은 흐름에 방금 만든 사본의 자리만 얹는다.
+ *
+ * **회원이 그 사이 고친 것을 지키기 위해서다.** 전에는 읽을 때의 흐름을 통째로
+ * 되돌려 썼다. 500건을 한꺼번에 읽고 한 건씩 내려받아 인코딩하므로, 뒤쪽 작업은
+ * 읽은 지 수십 분 뒤에 쓴다 — 그 사이의 편집이 통째로 사라졌다.
+ *
+ * 이제 쓰기 직전에 다시 읽고 **사본 자리만** 얹으므로, 잠금이 지키는 창이
+ * 밀리초로 줄고 회원의 편집도 그대로 남는다.
+ *
+ * **불변으로 만든다.** 받은 흐름을 제자리에서 고치면, 실패해 되돌릴 때 이미
+ * 고쳐진 것을 되돌릴 방법이 없다.
+ *
+ * 이미 사본이 있는 카드는 건드리지 않는다 — 그 사이 회원이 다시 만들었을 수
+ * 있고, 그러면 우리 것이 오히려 낡은 것이다.
+ */
+function withThumbPaths(data, pathByIndex) {
+  const cards = data?.flow?.cards;
+  if (!Array.isArray(cards)) return null;
+  let touchedAny = false;
+  const next = cards.map((card) => {
+    const thumbPath = pathByIndex.get(card.index);
+    if (!thumbPath || card.thumbPath) return card;
+    touchedAny = true;
+    return { ...card, thumbPath };
+  });
+  if (!touchedAny) return null;
+  return { ...data, flow: { ...data.flow, cards: next } };
 }
 
 /**
@@ -247,6 +277,8 @@ async function backfillSns() {
     if (!todo.length) continue;
 
     let changed = false;
+    /** 만든 사본의 자리. 카드 번호로 찾는다 — 쓰기 직전에 다시 읽은 흐름에 얹는다. */
+    const made_paths = new Map();
     for (const card of todo) {
       const file = await supabase.storage.from(BUCKET).download(card.assetPath);
       if (file.error || !file.data) { failed += 1; continue; }
@@ -266,6 +298,7 @@ async function backfillSns() {
       if (uploaded.error) { failed += 1; continue; }
 
       card.thumbPath = thumbPath;
+      made_paths.set(card.index, thumbPath);
       changed = true;
       made += 1;
     }
@@ -288,10 +321,15 @@ async function backfillSns() {
      * (`sns_projects_user_idx`), 백필이 시각을 건드리면 회원의 목록 순서가 통째로
      * 뒤바뀐다. 사본은 회원이 한 일이 아니다.
      */
-    const updated = await supabase
-      .from("sns_projects").update({ data: project.data })
-      .eq("id", project.id).eq("updated_at", project.updated_at)
-      .select("id");
+    const fresh = await supabase
+      .from("sns_projects").select("data,updated_at").eq("id", project.id).maybeSingle();
+    const rewritten = fresh.data ? withThumbPaths(fresh.data.data, made_paths) : null;
+    const updated = rewritten
+      ? await supabase
+          .from("sns_projects").update({ data: rewritten })
+          .eq("id", project.id).eq("updated_at", fresh.data.updated_at)
+          .select("id")
+      : { data: null, error: fresh.error ?? { message: "작업이 사라졌습니다" } };
     const updateError = updated.error
       ?? (updated.data?.length ? null : { message: "그 사이 회원이 저장했습니다(건너뜀)" });
     if (updateError) {
@@ -365,7 +403,7 @@ ${label} ${rows.length}건`);
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
     const attempt = await thumbnailFor(bytes, 512, 78, true, GRID_MAX_PIXELS);
-    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    if (!attempt.thumb) { if (attempt.reason === "error") failed += 1; else skipped += 1; continue; }
     const thumb = attempt.thumb;
 
     const dot = originalPath.lastIndexOf("."), slash = originalPath.lastIndexOf("/");
@@ -415,8 +453,10 @@ async function main() {
   const { data: rows, error } = await listing;
   if (error) throw new Error(error.message);
 
-  console.log(`${apply ? "생성" : "미리보기"} — 사본이 없는 그림 ${rows.length}건 (상한 ${LIMIT})`);
+  // 미리보기는 아래에서 갈래별로 다시 세므로 여기서 찍으면 같은 숫자가 겹친다.
+  if (apply) console.log(`생성 — 사본이 없는 그림 ${rows.length}건 (상한 ${LIMIT})`);
   if (!apply) {
+    console.log(`미리보기 — 사본을 받을 것 (한 번에 최대 ${LIMIT}건씩 처리)`);
     // **여섯 갈래를 모두 센다.** 라이브러리 건수만 보여 주면 몇 번 돌려야 하는지
     // 알 수 없고, 미리보기를 도는 목적이 규모 파악인데 반만 이룬다.
     for (const [table, label] of [
@@ -433,7 +473,7 @@ async function main() {
     // 카드뉴스는 사본 자리가 흐름 JSON 안에 있어 SQL 로 셀 수 없다. 작업 수만 알린다.
     const { count: snsCount } = await supabase
       .from("sns_projects").select("id", { count: "exact", head: true });
-    console.log(`  카드뉴스   작업 ${snsCount}건 (카드별 집계는 JSON 안이라 못 셉니다)`);
+    console.log(`  카드뉴스   훑을 작업 ${snsCount}건 (이미 채워진 것 포함 — 카드별 집계는 JSON 안이라 못 셉니다)`);
     console.log("");
     console.log("실제로 만들려면 --apply 를 붙이세요.");
     return;
@@ -447,7 +487,7 @@ async function main() {
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
     const attempt = await thumbnailFor(bytes);
-    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    if (!attempt.thumb) { if (attempt.reason === "error") failed += 1; else skipped += 1; continue; }
     const thumb = attempt.thumb;
 
     const thumbPath = `${row.user_id}/${row.item_id}/${row.position}.thumb.webp`;

@@ -77,6 +77,10 @@ describe("나머지 갈래 — 앱과 백필이 같은 규칙을 쓰는지", () 
     expect(app).toMatch(/\.webp\(\{ quality: 78 \}\)/);
     expect(script).toMatch(/const THUMBNAIL_EDGE = 512;/);
     expect(script).toMatch(/quality = 78/);
+    // **호출부까지 묶는다.** 기본 인자 선언만 보면 호출부가 자유로워, 스크립트만
+    // 가로 512·q70 으로 바뀌어도 통과한다(실제로 그 뮤테이션을 놓쳤다).
+    // 라이브러리는 여섯 갈래 중 가장 큰 갈래다.
+    expect(functionBody(script, "main")).toMatch(/await thumbnailFor\(\s*bytes\s*\)/);
   });
 
   it("갤러리: 가로 1024 · q82", () => {
@@ -84,6 +88,8 @@ describe("나머지 갈래 — 앱과 백필이 같은 규칙을 쓰는지", () 
     expect(constantIn(app, "SHOWCASE_THUMBNAIL_WIDTH", "앱"))
       .toBe(constantIn(script, "SHOWCASE_WIDTH", "백필"));
     expect(app).toMatch(/\.webp\(\{ quality: 82 \}\)/);
+    // 선언만 보면 「상수는 그대로, 쓰는 자리만 다른 값」이 통과한다.
+    expect(app).toMatch(/\.resize\(SHOWCASE_THUMBNAIL_WIDTH,/);
     expect(script).toMatch(/thumbnailFor\(\s*bytes,\s*SHOWCASE_WIDTH,\s*82,\s*true\s*\)/);
   });
 
@@ -91,6 +97,8 @@ describe("나머지 갈래 — 앱과 백필이 같은 규칙을 쓰는지", () 
     const app = read("lib/poster/thumbnail.ts");
     expect(constantIn(app, "PREVIEW_WIDTH", "앱")).toBe(constantIn(script, "POSTER_WIDTH", "백필"));
     expect(constantIn(app, "PREVIEW_QUALITY", "앱")).toBe("88");
+    expect(app).toMatch(/\.resize\(PREVIEW_WIDTH,/);
+    expect(app).toMatch(/\.webp\(\{ quality: PREVIEW_QUALITY \}\)/);
     expect(script).toMatch(/thumbnailFor\(\s*bytes,\s*POSTER_WIDTH,\s*88,\s*true\s*\)/);
   });
 
