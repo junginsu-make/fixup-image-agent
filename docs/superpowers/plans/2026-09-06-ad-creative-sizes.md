@@ -127,7 +127,9 @@ type Derive =
 
 마스터를 목표 비율로 **크롭한 뒤의 크기**가 목표보다 작으면 확대 보간이 걸려 흐려진다. 광고는 심사에서 「이미지가 흐림」으로 반려되는 항목이다.
 
-**마스터의 원래 크기와 비교하면 안 된다.** 크롭이 한쪽 변을 줄이기 때문이다 — 초판이 이것을 놓쳐 네이버 메인 배너(1250×560)에서 1.03배 확대가 필요했다.
+초판은 네이버 메인 배너(1250×560)에 1216×608 마스터를 붙여 **1.03배 확대**가 필요했다. 표를 손으로 적었기 때문이다.
+
+> **정정(1단계 구현 중)**: 초판은 이 자리에 「마스터의 원래 크기와 비교하면 안 된다」고 적었다. **틀렸다.** 크롭 결과는 마스터 안에 들어가는 가장 큰 직사각형이라 `마스터 ≥ 목표` 와 `크롭 후 ≥ 목표` 는 **같은 조건**이다(무작위 20만 건으로 확인, 다른 경우는 부동소수점 경계 3건). 초판의 잘못은 비교 대상이 아니라 **검사를 아예 안 한 것**이었다.
 
 확대가 필요한 경우는 **만들지 않고 실패로 알린다.** 조용히 흐린 그림을 주는 것이 가장 나쁘다.
 
@@ -180,8 +182,8 @@ export function planDerivation(spec: AdSpec): DerivePlan;
 
 1. `AD_SPECS` 의 모든 항목이 답을 받는다 — **빠진 규격이 없다**
 2. 마스터가 **모델 제한 다섯을 전부 통과**한다 (`minPixels`·`maxPixels`·`maxEdge`·`multipleOf`·`maxAspect`). §1 이 이 설계의 근거인데 마스터를 나중에 손대면 근거가 조용히 무너진다
-3. **어떤 규격도 확대되지 않는다** — 마스터를 목표 비율로 **크롭한 뒤**의 크기가 목표 이상. 마스터 원본 크기와 비교하면 안 된다
-4. **마스터와 규격의 방향이 같다** — 가로 마스터에서 세로 규격을 뽑지 않는다. 초판이 300×600(세로)을 `ad-2x1`(가로)에 배정했었다
+3. **어떤 규격도 확대되지 않는다.** 지금 실린 규격만 보는 것으로는 모자라다 — 확대 금지를 통째로 걷어내도 지금 배정은 안 바뀐다(뮤테이션으로 확인). **어떤 마스터로도 못 덮는 규격**을 넣어 그 가지를 실제로 밟아야 한다
+4. **마스터와 규격의 방향이 같다.** 다만 이것은 **결과 성질을 보는 시험이지 코드의 분기가 아니다** — 최대 유지율 선택이 이미 흡수한다(가로 마스터는 세로 목표에서 유지율이 언제나 더 낮다). 코드에 두면 도달 불가능한 가지가 되어 시험이 못 덮는다
 5. `format: "png-alpha"` 인 규격은 **반드시** `unsupported` 다 — 크롭으로 새어 나가면 투명 없이 등록 실패한다
 
 ---
@@ -380,7 +382,7 @@ export async function checkAgainstSpec(bytes: Buffer, spec: AdSpec): Promise<Spe
 
 ## 7. 데이터 — 규격을 한 곳에 모은다
 
-`packages/sns-core/src/ad-specs.ts` (신규)
+`apps/web/lib/ad/specs.ts` (신규)
 
 ```ts
 export interface AdSpec {
@@ -455,7 +457,7 @@ GFA 전체: 2MB 이하, 200KB 권장.
 
 ## 8. 파생 엔진 — 용량을 맞추는 것이 진짜 일이다
 
-`apps/web/lib/ad-export.ts` (신규, `server-only`)
+`apps/web/lib/ad/export.ts` (신규, `server-only`)
 
 지금 저장 인코더(`image-encoding.ts` 의 `encodeForStorage`)는 **무손실 전용**이다. 광고에는 못 쓴다. (같은 파일의 `makeThumbnail` 은 손실이지만 목록용 규칙이라 용량 상한 개념이 없다.)
 
@@ -530,11 +532,20 @@ export async function exportForAd(
 
 ### 1단계 — 규격 데이터 · 파생 판단 · 검증 (화면 없음)
 
-- `packages/sns-core/src/ad-specs.ts` — `AdSpec`, `AD_SPECS`, 마스터 다섯 (§6·§7)
-- `packages/sns-core/src/ad-derive.ts` — `planDerivation()` (§3.6)
-- `apps/web/lib/ad-export.ts` — `exportForAd()` (§8)
-- `apps/web/lib/ad-check.ts` — `checkAgainstSpec()` (§5.3)
+- `apps/web/lib/ad/specs.ts` — `AdSpec`, `AD_SPECS`, `AD_MASTERS` (§6·§7). 순수
+- `apps/web/lib/ad/derive.ts` — `planDerivation()` (§3.6). 순수
+- `apps/web/lib/ad/export.ts` — `exportForAd()` (§8). `server-only`
+- `apps/web/lib/ad/check.ts` — `checkAgainstSpec()` (§5.3). `server-only`
 - **기존 파일 변경 0곳**
+
+**`packages/sns-core` 가 아니라 `apps/web/lib` 에 두는 이유**: sns-core 는
+`src/index.ts` 하나로만 내보낸다(`package.json` 에 `exports` 가 없다). 거기에
+`export * from "./ad-specs"` 를 더하면 **계약 1(기존 파일 무접촉)을 어긴다.**
+광고 모듈은 앱 안에서만 쓰이므로 `apps/web/lib` 이 맞는 자리다.
+
+**순수 모듈과 `server-only` 모듈을 가른다.** 이 저장소는 `server-only` 를 붙인
+모듈을 시험에서 못 부른다 — `grid-thumbnail.ts` / `grid-thumbnail-path.ts` 가
+같은 이유로 갈라져 있다.
 
 **자물쇠**: §3.6 의 다섯 + §5.3 의 넷. 용량 시험은 **글자가 많은 실제 시안**으로 한다. 단색 이미지로 시험하면 상한이 늘 통과해 아무것도 검증하지 못한다.
 
