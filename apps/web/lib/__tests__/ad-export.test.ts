@@ -51,10 +51,14 @@ describe("규격대로 뽑는다", () => {
     expect([meta.width, meta.height]).toEqual([228, 152]);
   });
 
-  it("비율이 다른 마스터를 받으면 실패로 알린다 — 조용히 늘리지 않는다", async () => {
+  // 두 변을 따로 본다. 가로·세로가 동시에 모자란 입력만 쓰면 한쪽 조건을 지워도 통과한다.
+  it.each([
+    ["둘 다 모자람", 400, 210],
+    ["세로만 모자람", 1600, 300],
+    ["가로만 모자람", 900, 1200],
+  ])("작은 그림을 받으면 실패로 알린다 (%s) — 조용히 늘리지 않는다", async (_label, w, h) => {
     const spec = specById("naver-gfa-banner");
-    // 목표(1200×628)보다 작은 마스터. 확대해야만 채울 수 있다.
-    const result = await exportForAd(await flat(400, 210), spec, planDerivation(spec));
+    const result = await exportForAd(await flat(w, h), spec, planDerivation(spec));
     expect("failed" in result).toBe(true);
   });
 
@@ -76,6 +80,37 @@ describe("용량 상한을 지킨다", () => {
     const loose = await derive("google-rda-square", await busy(1200, 1200));
     const tight = await derive("naver-gfa-main", await busy(1600, 800));
     expect(loose.quality).toBeGreaterThan(tight.quality);
+  });
+
+  /**
+   * **「가장 높은 품질」이 정의대로인지 본다.**
+   *
+   * 위 시험은 `loose > tight` 만 보므로 tight 가 40 이든 76 이든 통과한다.
+   * 실제로 이분 탐색의 방향을 뒤집는 뮤테이션(`low = mid + 1` → `high = mid - 1`)
+   * 이 품질 76 을 40 으로 떨어뜨리는데 — 예산 250KB 중 107KB 만 쓰고 화질을
+   * 최저로 깎는데 — 시험이 전부 초록이었다(독립 리뷰 실측).
+   *
+   * 최대의 정의는 **한 칸 올리면 상한을 넘는다**는 것이다. 그것을 직접 잰다.
+   */
+  it("상한 안에서 더 올릴 수 없는 품질을 고른다", async () => {
+    const spec = specById("naver-gfa-main");
+    const master = await busy(1600, 800);
+    const { bytes, quality } = await derive(spec.id, master);
+    expect(bytes.length).toBeLessThanOrEqual(spec.maxBytes!);
+    expect(quality).toBeLessThan(92);
+
+    const oneHigher = await sharp(master)
+      .resize(spec.target.width, spec.target.height, { fit: "cover", position: "centre" })
+      .jpeg({ quality: quality + 1, mozjpeg: true })
+      .toBuffer();
+    expect(oneHigher.length).toBeGreaterThan(spec.maxBytes!);
+  });
+
+  it("품질 하한을 지킨다 — 그 아래는 글자가 뭉개져 광고로 못 쓴다", async () => {
+    const spec: AdSpec = { ...specById("naver-gfa-main"), maxBytes: 20_000 };
+    const result = await exportForAd(await busy(1600, 800), spec, planDerivation(spec));
+    // 40 아래로 내려가며 억지로 맞추지 않는다. 못 맞추면 실패로 알린다.
+    if (!("failed" in result)) expect(result.quality).toBeGreaterThanOrEqual(40);
   });
 
   it("어떤 품질로도 못 맞추면 실패로 알린다 — 조용히 넘기지 않는다", async () => {
@@ -108,10 +143,11 @@ describe("규격 검증 — 만들어진 바이트를 본다", () => {
     expect((await checkAgainstSpec(bytes, spec)).ok).toBe(true);
   });
 
-  it("픽셀이 어긋나면 잡는다", async () => {
+  // 가로·세로를 따로 본다. 한쪽만 시험하면 다른 쪽 조건을 지워도 통과한다.
+  it.each([[1199, 1200], [1200, 1199]])("픽셀이 %ix%i 로 어긋나면 잡는다", async (w, h) => {
     const spec = specById("google-rda-square");
     const wrong = await sharp({
-      create: { width: 1199, height: 1200, channels: 3, background: { r: 0, g: 0, b: 0 } },
+      create: { width: w, height: h, channels: 3, background: { r: 0, g: 0, b: 0 } },
     }).jpeg().toBuffer();
     const check = await checkAgainstSpec(wrong, spec);
     expect(check.ok).toBe(false);
@@ -138,11 +174,34 @@ describe("규격 검증 — 만들어진 바이트를 본다", () => {
     expect(check.failures.join()).toMatch(/용량/);
   });
 
-  it("메타데이터가 남아 있으면 잡는다", async () => {
+  /**
+   * **ICC 와 EXIF 를 따로 본다.**
+   *
+   * `withMetadata({ icc })` 는 sharp 가 EXIF 도 함께 쓴다. 그래서 그것만으로
+   * 시험하면 **ICC 검사를 지워도 EXIF 가 대신 잡아 준다** — 색관리된 원본에서
+   * 나오는 「ICC 만 달린 JPEG」이 검사 밖에 남는다(독립 리뷰 실측).
+   */
+  it("ICC 만 남아 있어도 잡는다", async () => {
     const spec = specById("google-rda-square");
     const bytes = await sharp({
       create: { width: 1200, height: 1200, channels: 3, background: { r: 10, g: 10, b: 10 } },
-    }).withMetadata({ icc: "srgb" }).jpeg().toBuffer();
+    }).withIccProfile("srgb").jpeg().toBuffer();
+    const meta = await sharp(bytes).metadata();
+    expect(meta.icc, "이 시험은 ICC 가 실제로 붙어야 뜻이 있다").toBeTruthy();
+    expect(meta.exif, "EXIF 가 함께 붙으면 ICC 검사를 못 가린다고 말할 수 없다").toBeFalsy();
+
+    const check = await checkAgainstSpec(bytes, spec);
+    expect(check.ok).toBe(false);
+    expect(check.failures.join()).toMatch(/메타데이터/);
+  });
+
+  it("EXIF 만 남아 있어도 잡는다", async () => {
+    const spec = specById("google-rda-square");
+    const bytes = await sharp({
+      create: { width: 1200, height: 1200, channels: 3, background: { r: 10, g: 10, b: 10 } },
+    }).withExif({ IFD0: { Copyright: "시험" } }).jpeg().toBuffer();
+    expect((await sharp(bytes).metadata()).exif).toBeTruthy();
+
     const check = await checkAgainstSpec(bytes, spec);
     expect(check.ok).toBe(false);
     expect(check.failures.join()).toMatch(/메타데이터/);

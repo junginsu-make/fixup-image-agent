@@ -33,14 +33,6 @@ export interface AdExport {
   quality: number;
 }
 
-/** 마스터를 목표 비율로 중앙 크롭했을 때 남는 크기. */
-function croppedTo(master: { width: number; height: number }, target: { width: number; height: number }) {
-  const aspect = target.width / target.height;
-  return master.width / master.height > aspect
-    ? { width: Math.round(master.height * aspect), height: master.height }
-    : { width: master.width, height: Math.round(master.width / aspect) };
-}
-
 function encode(pipeline: ReturnType<typeof sharp>, spec: AdSpec, quality: number): Promise<Buffer> {
   // **메타데이터를 지운다.** sharp 는 기본으로 안 옮기므로 `keepMetadata()` 를
   // 부르지 않는 것이 곧 지우는 것이다. 200KB 예산에서 ICC·EXIF 는 사치다.
@@ -69,9 +61,14 @@ export async function exportForAd(
      * `planDerivation` 은 마스터 **목록**을 보고 정하는데, 실제로 들어온
      * 바이트가 그 마스터라는 보장이 없다 — 사용자가 다른 그림을 고를 수도 있고,
      * 마스터 정의가 바뀌었을 수도 있다. 계획이 아니라 **받은 바이트**를 본다.
+     *
+     * `derive.ts` 의 `usable` 과 같은 이유로 **크롭 결과가 아니라 원본 크기를
+     * 정수로 비교한다.** 크롭 결과는 목표 비율을 정확히 갖게 되므로
+     * `가로 ≥ 목표` 와 `세로 ≥ 목표` 가 서로 동치가 되어, 한쪽 조건이 도달
+     * 불가능한 죽은 가지가 된다. 원본 크기끼리는 둘이 독립이다 — 1600×300 은
+     * 1200×628 에 대해 가로만 충분하다.
      */
-    const after = croppedTo(size, spec.target);
-    if (after.width < spec.target.width || after.height < spec.target.height) {
+    if (size.width < spec.target.width || size.height < spec.target.height) {
       return {
         failed: `원본이 작아 ${spec.target.width}×${spec.target.height} 를 만들려면 늘려야 합니다.`
           + " 늘리면 흐려져 광고 심사에서 반려됩니다.",

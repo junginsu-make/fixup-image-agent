@@ -55,15 +55,23 @@ function croppedTo(master: AdMaster, target: { width: number; height: number }) 
  *
  * **설계 문서가 적은 「마스터 원본 크기와 비교하면 안 된다」는 틀린 말이다.**
  * 크롭한 결과는 마스터 안에 들어가는 가장 큰 직사각형이므로,
- * `마스터 ≥ 목표` 와 `크롭 후 ≥ 목표` 는 **같은 조건**이다(무작위 20만 건으로
- * 확인했고, 다른 경우는 부동소수점 경계 3건뿐이었다). 초판의 실제 잘못은
+ * `마스터 ≥ 목표` 와 `크롭 후 ≥ 목표` 는 **같은 조건**이다. 초판의 실제 잘못은
  * 비교 대상이 아니라 **아무 검사도 안 하고 표를 손으로 적은 것**이었다.
- * 두 변을 다 보는 것도 같은 이유로 한 변만 보는 것과 동치다 — 그래도 의도가
- * 드러나게 둘 다 적는다.
+ *
+ * **그래서 크롭 결과가 아니라 마스터를 정수로 비교한다.** 동치인 두 식 중
+ * 나눗셈이 없는 쪽을 고르는 것이라 결과는 같고 오차만 사라진다.
+ *
+ * 크롭 결과로 비교하면 부동소수점 오차가 **경계에서 판정을 뒤집는다.** 실제로
+ * 그랬다 — 목표 997×1360 에서 `1088 / (997/1360)` 이 `996.9999999999999` 로
+ * 떨어져 `ad-4x5`(유지율 91.6%)가 탈락하고 `ad-9x16`(76.7%)이 뽑혔다.
+ * 오차 1e-13 때문에 화면의 15%p 를 더 버린 것이다.
+ *
+ * **이 자리에 「무작위 표본으로 확인했다」를 근거로 쓰면 안 된다.** 초판이 그렇게
+ * 적었는데, 문제가 나는 곳은 `목표 세로 == 마스터 세로` 같은 **측도 0 의 경계**라
+ * 무작위로는 거의 안 뽑힌다. 격자로 쓸어야 보인다(8.4만 목표에서 20건).
  */
 function usable(master: AdMaster, spec: AdSpec): boolean {
-  const after = croppedTo(master, spec.target);
-  return after.width >= spec.target.width && after.height >= spec.target.height;
+  return master.width >= spec.target.width && master.height >= spec.target.height;
 }
 
 export function planDerivation(spec: AdSpec): DerivePlan {

@@ -131,6 +131,32 @@ describe("확대하지 않는다", () => {
     expect((plan as { reason: string }).reason).toMatch(/확대/);
   });
 
+  /**
+   * **경계에서 부동소수점이 판정을 뒤집었다.**
+   *
+   * 크롭 결과로 비교하면 `1088 / (997/1360)` 이 `996.9999999999999` 로 떨어져
+   * `ad-4x5`(유지율 91.6%)가 탈락하고 `ad-9x16`(76.7%)이 뽑혔다. 오차 1e-13
+   * 때문에 화면의 15%p 를 더 버린 것이다.
+   *
+   * 이런 목표는 `목표 세로 == 마스터 세로` 같은 **측도 0 의 경계**라 무작위
+   * 표본으로는 거의 안 뽑힌다 — 격자로 쓸어야 보인다. 그래서 그 값을 직접 박는다.
+   */
+  it("마스터와 한 변이 정확히 같은 목표에서도 최적 마스터를 고른다", () => {
+    const edge: AdSpec = {
+      ...AD_SPECS[0]!, id: "시험용-경계", target: { width: 997, height: 1360 },
+    };
+    const plan = planDerivation(edge);
+    expect(plan.kind).toBe("crop");
+    expect((plan as { master: string }).master).toBe("ad-4x5");
+  });
+
+  it("마스터가 통째로 덮는 목표를 못 만든다고 하지 않는다", () => {
+    const inside: AdSpec = {
+      ...AD_SPECS[0]!, id: "시험용-내부", target: { width: 1152, height: 1550 },
+    };
+    expect(planDerivation(inside).kind).not.toBe("unsupported");
+  });
+
   it("세로로만 넘쳐도 만들지 않는다", () => {
     const tall: AdSpec = {
       ...AD_SPECS[0]!, id: "시험용-긴세로", target: { width: 900, height: 2500 },
