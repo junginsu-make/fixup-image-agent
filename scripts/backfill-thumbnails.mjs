@@ -333,11 +333,27 @@ async function backfillSns() {
     const updateError = updated.error
       ?? (updated.data?.length ? null : { message: "그 사이 회원이 저장했습니다(건너뜀)" });
     if (updateError) {
-      const orphans = todo.filter((card) => card.thumbPath).map((card) => card.thumbPath);
+      /**
+       * 되돌린다 — **다만 남이 쓰게 된 파일은 건드리지 않는다.**
+       *
+       * 사본의 자리는 `{회원}/sns/{작업}/{카드}.thumb.webp` 로 정해져 있어
+       * 앱의 `snsPreviewPath` 와 **완전히 같다**. 그래서 그 사이 회원이 카드를
+       * 다시 만들었다면 우리가 올린 자리에 회원의 파일이 놓이고, 회원의 흐름이
+       * 그 자리를 가리킨다. 그것까지 지우면 흐름은 멀쩡한데 그림만 사라진다.
+       *
+       * 방금 읽은 흐름이 가리키는 자리는 남긴다. 남는다 해도 자리가 정해져
+       * 있어 다음에 같은 카드의 사본이 그 위에 덮인다 — 쌓이지 않는다.
+       */
+      const referenced = new Set(
+        (fresh.data?.data?.flow?.cards ?? [])
+          .map((card) => card.thumbPath)
+          .filter(Boolean),
+      );
+      const orphans = [...made_paths.values()].filter((path) => !referenced.has(path));
       if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
-      failed += orphans.length;
-      made -= orphans.length;
-      console.error(`  흐름에 못 적음(되돌림): ${project.id} — ${updateError.message}`);
+      failed += made_paths.size;
+      made -= made_paths.size;
+      console.error(`  흐름에 못 적음(되돌림 ${orphans.length}/${made_paths.size}): ${project.id} — ${updateError.message}`);
       continue;
     }
 

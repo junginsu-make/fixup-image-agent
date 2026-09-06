@@ -78,3 +78,46 @@ describe("사본 자리를 얹을 때", () => {
     expect(withThumbPaths({ flow: {} }, new Map([[0, "x.webp"]]))).toBeNull();
   });
 });
+
+/**
+ * 되돌릴 때 **무엇을 지우는가.**
+ *
+ * 사본의 자리는 `{회원}/sns/{작업}/{카드}.thumb.webp` 로 정해져 있어 앱의
+ * `snsPreviewPath` 와 완전히 같다. 그 사이 회원이 카드를 다시 만들었다면 그
+ * 자리에 회원의 파일이 놓이고 회원의 흐름이 그것을 가리킨다. 그것까지 지우면
+ * **흐름은 멀쩡한데 그림만 사라진다.**
+ *
+ * 스크립트는 「방금 읽은 흐름이 가리키는 자리는 남긴다」로 고른다. 그 규칙을
+ * 여기 그대로 옮겨 두어, 스크립트에서 사라지면 시험이 먼저 깨지게 한다.
+ */
+describe("되돌릴 때 지울 것을 고르는 규칙", () => {
+  const rollbackScope = script.slice(script.indexOf("const referenced = new Set("));
+
+  it("스크립트가 그 규칙을 실제로 쓴다", () => {
+    expect(rollbackScope).toMatch(/\.filter\(\(path\) => !referenced\.has\(path\)\)/);
+    expect(rollbackScope.slice(0, 900)).toMatch(/fresh\.data\?\.data\?\.flow\?\.cards/);
+  });
+
+  const chooseOrphans = (uploaded: string[], freshCards: Array<{ thumbPath?: string }>) => {
+    const referenced = new Set(freshCards.map((card) => card.thumbPath).filter(Boolean));
+    return uploaded.filter((p) => !referenced.has(p));
+  };
+
+  it("아무도 안 쓰는 자리는 지운다", () => {
+    expect(chooseOrphans(["u/sns/p/0.thumb.webp"], [{}])).toEqual(["u/sns/p/0.thumb.webp"]);
+  });
+
+  it("회원의 흐름이 가리키는 자리는 남긴다 — 지우면 그림이 사라진다", () => {
+    expect(chooseOrphans(
+      ["u/sns/p/0.thumb.webp"],
+      [{ thumbPath: "u/sns/p/0.thumb.webp" }],
+    )).toEqual([]);
+  });
+
+  it("섞여 있으면 남의 것만 남긴다", () => {
+    expect(chooseOrphans(
+      ["u/sns/p/0.thumb.webp", "u/sns/p/1.thumb.webp"],
+      [{ thumbPath: "u/sns/p/1.thumb.webp" }],
+    )).toEqual(["u/sns/p/0.thumb.webp"]);
+  });
+});
