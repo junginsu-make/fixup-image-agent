@@ -132,9 +132,10 @@ export const AD_SPECS: AdSpec[] = [
     id: "google-rda-logo",
     portal: "google", product: "반응형 디스플레이", label: "로고 1200×300",
     target: { width: 1200, height: 300 },
-    required: false, format: "png", supply: "upload",
+    required: false, format: "png", supply: "upload", maxBytes: 5_242_880,
     verifiedAt: "2026-09-06", sourceKind: "official", source: GOOGLE_RDA,
-    note: "안 넣으면 구글이 기본 아이콘을 넣는다. 등록은 된다.",
+    note: "안 넣으면 구글이 기본 아이콘을 넣는다. 등록은 된다."
+      + " 만들지 않고 받지만 **받은 바이트도 규격 검사를 거친다**(2단계) — 그래서 상한이 필요하다.",
   },
 
   // ── 카카오 (공식 가이드 확인됨) ─────────────────────────────────────

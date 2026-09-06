@@ -289,6 +289,20 @@ describe("필수와 선택을 가른다", () => {
     for (const spec of naver) expect(spec.sourceKind, spec.id).toBe("reference");
   });
 
+  /**
+   * **받아 오는 규격도 규격이다.** `supply: "upload"` 라 우리가 만들지는 않지만,
+   * 2단계는 받은 바이트를 `checkAgainstSpec` 에 통과시킨다. 상한이 없으면 그
+   * 검사에서 용량만 조용히 빠진다 — 실제로 로고 하나가 그 상태였다.
+   */
+  it("용량 상한이 있는 포털의 규격은 빠짐없이 상한을 갖는다", () => {
+    for (const spec of AD_SPECS) {
+      if (spec.portal === "google") expect(spec.maxBytes, spec.id).toBe(5_242_880);
+      if (spec.portal === "kakao" && spec.product === "디스플레이") {
+        expect(spec.maxBytes, spec.id).toBe(10_485_760);
+      }
+    }
+  });
+
   it("구글·카카오는 전부 `official` 이다 — 공식 문서를 직접 봤다", () => {
     const official = AD_SPECS.filter((spec) => spec.portal !== "naver");
     expect(official.length).toBeGreaterThan(0);
