@@ -40,6 +40,16 @@ const SHOWCASE_WIDTH = 1024;
  */
 const POSTER_WIDTH = 1024;
 const MAX_INPUT_PIXELS = 12_000_000;
+/**
+ * 격자 사본(참고 이미지·캐릭터)에만 쓰는 상한.
+ *
+ * 저장 인코딩의 12MP 를 그대로 쓰면 **요즘 폰 사진이 걸린다** — 아이폰 기본이
+ * 4032×3024(12.19MP) 라 sharp 가 「exceeds pixel limit」로 거른다. 그러면 격자에서
+ * **가장 무거운 것들만 원본으로 남고**, 커서가 그 행을 지나쳐 다시 오지 않는다.
+ *
+ * `apps/web/lib/grid-thumbnail.ts` 의 `GRID_MAX_PIXELS` 와 같은 값이어야 한다.
+ */
+const GRID_MAX_PIXELS = 40_000_000;
 
 const apply = process.argv.includes("--apply");
 const limitAt = process.argv.indexOf("--limit");
@@ -60,9 +70,9 @@ const supabase = createClient(url, key, { auth: { persistSession: false } });
  * 512 / quality 78 / keepMetadata / limitInputPixels / 「작을 때만」.
  * 한쪽을 고치면 반드시 다른 쪽도 고칠 것.
  */
-async function thumbnailFor(bytes, edge = THUMBNAIL_EDGE, quality = 78, widthOnly = false) {
+async function thumbnailFor(bytes, edge = THUMBNAIL_EDGE, quality = 78, widthOnly = false, maxPixels = MAX_INPUT_PIXELS) {
   try {
-    const thumb = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
+    const thumb = await sharp(bytes, { limitInputPixels: maxPixels })
       .keepMetadata()
       .resize(edge, widthOnly ? null : edge, { fit: "inside", withoutEnlargement: true })
       .webp({ quality })
@@ -317,7 +327,7 @@ ${label} ${rows.length}건`);
     if (file.error || !file.data) { failed += 1; continue; }
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
-    const thumb = await thumbnailFor(bytes, 512, 78, true);
+    const thumb = await thumbnailFor(bytes, 512, 78, true, GRID_MAX_PIXELS);
     if (!thumb) { skipped += 1; continue; }
 
     const dot = originalPath.lastIndexOf("."), slash = originalPath.lastIndexOf("/");
