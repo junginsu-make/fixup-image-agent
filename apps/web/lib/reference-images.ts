@@ -9,6 +9,8 @@ import {
   writeLocalReferenceFile,
 } from "./local-store";
 import { persistReferenceImage, type ReferenceImageRow } from "../app/library/reference-upload";
+import { gridPathsToRemove, gridThumbPath } from "./grid-thumbnail-path";
+import { makeGridThumbnail } from "./grid-thumbnail";
 import type { ReferencePurpose } from "../app/api/reference-sets/schema";
 import type { UserRole } from "./membership/types";
 
@@ -41,6 +43,8 @@ const EXTENSIONS: Record<string, string> = {
 
 export interface ReferenceImageView extends ReferenceImageRow {
   signedUrl: string | null;
+  /** 목록 격자에 거는 사본. 없으면 화면이 `signedUrl` 로 떨어진다. */
+  thumbUrl: string | null;
   /** 내가 올린 것인가. 지우기 단추를 보일지 정하는 값이다. */
   mine: boolean;
   /** 누가 올렸는가. **관리자에게만** 채운다 — 회원끼리 이메일이 보이면 안 된다. */
@@ -78,6 +82,7 @@ interface ReferenceImageDbRow {
   id: string;
   user_id: string;
   storage_path: string;
+  thumb_path?: string | null;
   title: string | null;
   purpose: ReferencePurpose;
   width: number | null;
@@ -120,6 +125,8 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
     return images.map((image) => ({
       ...image,
       signedUrl: localFileUrl(image.id),
+      // 로컬은 사본을 두지 않는다 — 개발용 저장소라 목록이 무거울 일이 없다.
+      thumbUrl: null,
       mine: image.userId === viewer.userId,
       ownerEmail: null,
     }));
@@ -128,7 +135,7 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("reference_images")
-    .select("id,user_id,storage_path,title,purpose,width,height,created_at")
+    .select("id,user_id,storage_path,thumb_path,title,purpose,width,height,created_at")
     .order("created_at", { ascending: false })
     .limit(400);
   if (error) throw new Error(error.message);
@@ -136,9 +143,18 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   const rows = (data ?? []) as ReferenceImageDbRow[];
   if (!rows.length) return [];
 
+  /**
+   * **원본과 사본을 둘 다 서명한다.**
+   *
+   * 목록 격자는 사본을 쓰지만, 확대와 fal 참고 전달은 원본을 쓴다. 한 번에
+   * 모아 보내므로 왕복은 늘지 않는다.
+   */
   const signed = await supabase.storage
     .from(BUCKET)
-    .createSignedUrls(rows.map((row) => row.storage_path), SIGNED_URL_TTL_SECONDS);
+    .createSignedUrls(
+      rows.flatMap((row) => [row.storage_path, row.thumb_path].filter(Boolean) as string[]),
+      SIGNED_URL_TTL_SECONDS,
+    );
   if (signed.error) throw new Error(signed.error.message);
 
   const urlByPath = new Map(
@@ -152,6 +168,7 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   return rows.map((row) => ({
     ...toRow(row),
     signedUrl: urlByPath.get(row.storage_path) ?? null,
+    thumbUrl: row.thumb_path ? urlByPath.get(row.thumb_path) ?? null : null,
     mine: row.user_id === viewer.userId,
     ownerEmail: emails.get(row.user_id) ?? null,
   }));
@@ -222,16 +239,42 @@ export async function saveReferenceImage(input: {
       createId: () => input.id,
       getUserId: async () => input.userId,
       upload: async (storagePath, selected) => {
+        const bytes = Buffer.from(await selected.arrayBuffer());
         const result = await supabase.storage
           .from(BUCKET)
-          .upload(storagePath, selected, { contentType: selected.type, upsert: false });
+          .upload(storagePath, bytes, { contentType: selected.type, upsert: false });
         if (result.error) throw new Error(result.error.message);
+
+        /**
+         * 목록에 걸 사본.
+         *
+         * 창고는 **공용**이라 한 화면에 400장까지 뜬다. 라이브러리에서 가장
+         * 무거운 화면이다.
+         *
+         * **원본은 그대로 둔다.** 이 그림은 화면에만 뜨는 것이 아니라 fal 에
+         * 참고로 실려 나간다 — 사본을 물리면 생성 품질이 조용히 깎인다.
+         *
+         * 못 만들거나 못 올려도 **올리기를 막지 않는다.** 없으면 화면이
+         * 원본으로 떨어진다.
+         */
+        const thumbnail = await makeGridThumbnail(bytes);
+        if (!thumbnail) return null;
+
+        const thumbPath = gridThumbPath(storagePath);
+        const thumbResult = await supabase.storage
+          .from(BUCKET)
+          .upload(thumbPath, thumbnail, { contentType: "image/webp", upsert: true });
+        if (thumbResult.error) {
+          console.error(`[reference] 사본을 올리지 못했습니다: ${thumbResult.error.message}`);
+          return null;
+        }
+        return thumbPath;
       },
       insert: async (row) => {
         const result = await supabase
           .from("reference_images")
           .insert(row)
-          .select("id,user_id,storage_path,title,purpose,width,height,created_at")
+          .select("id,user_id,storage_path,thumb_path,title,purpose,width,height,created_at")
           .single();
         if (result.error) throw new Error(result.error.message);
         return toRow(result.data as ReferenceImageDbRow);
@@ -274,12 +317,15 @@ export async function removeReferenceImagesByTitle(userId: string, title: string
   const supabase = createSupabaseAdminClient();
   const { data } = await supabase
     .from("reference_images")
-    .select("id,storage_path")
+    .select("id,storage_path,thumb_path")
     .eq("user_id", userId)
     .eq("title", title);
   if (!data?.length) return;
 
   // 행을 먼저 지운다. 파일이 먼저 사라지면 목록에는 남고 미리보기만 깨진다.
   await supabase.from("reference_images").delete().in("id", data.map((row) => row.id));
-  await supabase.storage.from(BUCKET).remove(data.map((row) => row.storage_path as string));
+  // 사본도 함께 지운다. 행이 사라지면 그 자리를 아는 곳이 없어진다.
+  await supabase.storage.from(BUCKET).remove(gridPathsToRemove(
+    data.map((row) => ({ path: row.storage_path as string, thumbPath: row.thumb_path as string | null })),
+  ));
 }

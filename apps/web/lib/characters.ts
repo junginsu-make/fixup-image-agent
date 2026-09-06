@@ -33,6 +33,8 @@ import {
   upsertLocalCharacterView,
   writeLocalCharacterFile,
 } from "./characters-store";
+import { gridPathsToRemove, gridThumbPath } from "./grid-thumbnail-path";
+import { makeGridThumbnail } from "./grid-thumbnail";
 
 /**
  * 캐릭터.
@@ -83,6 +85,8 @@ function clampCandidates(count: number | undefined): number {
 export interface CharacterView {
   angle: CharacterAngle;
   url: string | null;
+  /** 목록 격자에 거는 사본. 없으면 화면이 `url` 로 떨어진다. */
+  thumbUrl?: string | null;
 }
 
 export interface CharacterSummary {
@@ -214,12 +218,34 @@ async function putView(storagePath: string, view: ViewBytes) {
   const bytes = Buffer.from(view.base64, "base64");
   if (isLocalStoreEnabled()) {
     await writeLocalCharacterFile(storagePath, bytes);
-    return;
+    return null;
   }
-  const { error } = await createSupabaseAdminClient().storage
-    .from(BUCKET)
-    .upload(storagePath, bytes, { contentType: view.mimeType, upsert: true });
+  const storage = createSupabaseAdminClient().storage.from(BUCKET);
+  const { error } = await storage.upload(storagePath, bytes, { contentType: view.mimeType, upsert: true });
   if (error) throw new Error(error.message);
+
+  /**
+   * 목록에 걸 사본.
+   *
+   * 한 사람에 각도가 셋이라 사람 수만큼 곱해진다.
+   *
+   * **원본은 그대로 둔다.** 각도 그림은 다각도 생성과 섹션 생성의 바탕이라
+   * 사본을 물리면 결과물 품질이 조용히 깎인다.
+   *
+   * 못 만들거나 못 올려도 저장을 막지 않는다 — 없으면 화면이 원본으로 떨어진다.
+   */
+  const thumbnail = await makeGridThumbnail(bytes);
+  if (!thumbnail) return null;
+
+  const thumbPath = gridThumbPath(storagePath);
+  const thumbResult = await storage.upload(thumbPath, thumbnail, {
+    contentType: "image/webp", upsert: true,
+  });
+  if (thumbResult.error) {
+    console.error(`[character] 사본을 올리지 못했습니다: ${thumbResult.error.message}`);
+    return null;
+  }
+  return thumbPath;
 }
 
 /**
@@ -319,13 +345,17 @@ export async function createCharacter(input: {
     const rows = [];
     for (const view of views) {
       const storagePath = storagePathFor(input.userId, characterId, view);
-      await putView(storagePath, view);
+      const thumbPath = await putView(storagePath, view);
       uploaded.push(storagePath);
+      // 되돌릴 목록에 사본도 넣는다. 빠뜨리면 저장이 엎어졌을 때 아무도 못
+      // 찾는 파일이 남는다.
+      if (thumbPath) uploaded.push(thumbPath);
       rows.push({
         characterId,
         userId: input.userId,
         angle: view.angle,
         path: storagePath,
+        thumbPath,
         mimeType: view.mimeType,
       });
     }
@@ -339,6 +369,7 @@ export async function createCharacter(input: {
           user_id: row.userId,
           angle: row.angle,
           path: row.path,
+          thumb_path: row.thumbPath,
           mime_type: row.mimeType,
         })),
       );
@@ -410,13 +441,14 @@ export async function regenerateAngle(input: {
     });
 
     const storagePath = storagePathFor(input.userId, input.characterId, view);
-    await putView(storagePath, view);
+    const thumbPath = await putView(storagePath, view);
 
     const row = {
       characterId: input.characterId,
       userId: input.userId,
       angle: view.angle,
       path: storagePath,
+      thumbPath,
       mimeType: view.mimeType,
     };
 
@@ -431,6 +463,7 @@ export async function regenerateAngle(input: {
             user_id: row.userId,
             angle: row.angle,
             path: row.path,
+            thumb_path: row.thumbPath,
             mime_type: row.mimeType,
           },
           { onConflict: "character_id,angle" },
@@ -578,10 +611,14 @@ export async function listCharacters(userId: string): Promise<CharacterSummary[]
 
   const { data: viewRows } = await supabase
     .from("character_views")
-    .select("character_id,angle,path")
+    .select("character_id,angle,path,thumb_path")
     .eq("user_id", userId);
 
-  const paths = (viewRows ?? []).map((row: { path: string }) => row.path).filter(Boolean);
+  // **원본과 사본을 둘 다 서명한다.** 격자는 사본을, 확대와 생성 입력은
+  // 원본을 쓴다. 한 번에 모아 보내므로 왕복은 늘지 않는다.
+  const paths = (viewRows ?? [])
+    .flatMap((row: { path: string; thumb_path?: string | null }) => [row.path, row.thumb_path])
+    .filter(Boolean) as string[];
   const signed = paths.length
     ? await supabase.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
@@ -596,8 +633,9 @@ export async function listCharacters(userId: string): Promise<CharacterSummary[]
     views: (viewRows ?? [])
       .filter((view: { character_id: string }) => view.character_id === String(row.id))
       .sort(byAngleOrder)
-      .map((view: { angle: string; path: string }) => ({
+      .map((view: { angle: string; path: string; thumb_path?: string | null }) => ({
         angle: migrateAngle(view.angle) as CharacterAngle,
+        thumbUrl: view.thumb_path ? urlByPath.get(view.thumb_path) ?? null : null,
         url: urlByPath.get(view.path) ?? null,
       })),
   }));
@@ -675,11 +713,16 @@ export async function deleteCharacter(userId: string, characterId: string) {
     const supabase = createSupabaseAdminClient();
     const { data: views } = await supabase
       .from("character_views")
-      .select("path")
+      .select("path,thumb_path")
       .eq("user_id", userId)
       .eq("character_id", characterId);
 
-    const paths = (views ?? []).map((row: { path: string }) => row.path).filter(Boolean);
+    // 사본도 함께 지운다. 행이 사라지면 그 자리를 아는 곳이 없어진다.
+    const paths = gridPathsToRemove(
+      (views ?? []).map((row: { path: string; thumb_path?: string | null }) => ({
+        path: row.path, thumbPath: row.thumb_path ?? null,
+      })),
+    );
     if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
 
     const { error } = await supabase

@@ -9,6 +9,7 @@ import {
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { canModifyReferenceImage } from "../../../../lib/reference-images";
+import { gridPathsToRemove } from "../../../../lib/grid-thumbnail-path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export async function DELETE(_request: Request, context: Context) {
     const supabase = await createSupabaseServerClient();
     const found = await supabase
       .from("reference_images")
-      .select("user_id,storage_path")
+      .select("user_id,storage_path,thumb_path")
       .eq("id", id)
       .maybeSingle();
     if (found.error) throw new Error(found.error.message);
@@ -79,7 +80,11 @@ export async function DELETE(_request: Request, context: Context) {
     const writer = owned ? supabase : createSupabaseAdminClient();
     const removed = await writer.from("reference_images").delete().eq("id", id);
     if (removed.error) throw new Error(removed.error.message);
-    await writer.storage.from("library").remove([found.data.storage_path as string]);
+    // 사본도 함께 지운다. 행이 사라지면 그 자리를 아는 곳이 없어진다.
+    await writer.storage.from("library").remove(gridPathsToRemove([{
+      path: found.data.storage_path as string,
+      thumbPath: (found.data.thumb_path as string | null) ?? null,
+    }]));
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(

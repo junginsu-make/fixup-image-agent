@@ -20,6 +20,8 @@ import { ThumbImage } from "../_components/thumb-image";
  */
 type ReferenceImageView = ReferenceImageRow & {
   signedUrl: string | null;
+  /** 격자에 거는 사본. 없으면 `signedUrl` 로 떨어진다. */
+  thumbUrl?: string | null;
   mine?: boolean;
   ownerEmail?: string | null;
 };
@@ -254,7 +256,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                     ><Trash2 className="size-3.5" /></button>
                   )}
                   <div className="aspect-square bg-muted">{image.signedUrl ? (
-                    <ThumbImage src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
+                    <ThumbImage src={image.thumbUrl ?? image.signedUrl} data-viewer-src={image.signedUrl ?? undefined} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                   ) : null}</div>
                   <CardContent className="grid gap-2 p-3">
                     <p className="truncate text-sm font-medium">{image.title || "제목 없음"}</p>
@@ -302,7 +304,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                         return (
                           <span key={item.id ?? item.referenceImageId} className="block aspect-square overflow-hidden rounded-md bg-muted">
                             {image?.signedUrl ? (
-                              <ThumbImage src={image.signedUrl} alt="" className="h-full w-full object-cover" />
+                              <ThumbImage src={image.thumbUrl ?? image.signedUrl} alt="" className="h-full w-full object-cover" />
                             ) : null}
                           </span>
                         );
@@ -336,7 +338,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                   <figure key={item.id ?? item.referenceImageId} className="grid gap-2">
                     <span className="block aspect-[4/5] overflow-hidden rounded-lg border bg-muted">
                       {image?.signedUrl ? (
-                        <ThumbImage src={image.signedUrl} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
+                        <ThumbImage src={image.thumbUrl ?? image.signedUrl} data-viewer-src={image.signedUrl ?? undefined} alt={image.title ?? "참고 이미지"} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
                       ) : (
                         <span className="grid h-full place-items-center text-xs text-muted-foreground">이미지를 찾을 수 없습니다</span>
                       )}

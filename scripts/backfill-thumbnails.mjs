@@ -8,7 +8,7 @@ const sharp = require("sharp");
 /**
  * 이미 쌓인 그림에 목록용 작은 사본을 만들어 준다.
  *
- * 라이브러리(512px)·갤러리(1024px)·포스터(1024px)·카드뉴스(원본 크기)를 함께 채운다.
+ * 라이브러리·갤러리·포스터·카드뉴스·참고 이미지·캐릭터를 함께 채운다.
  *
  * 새로 저장하는 것은 저장할 때 사본이 함께 만들어진다. 그런데 그것만으로는
  * **옛 계정일수록 이득이 0** 이다 — 목록에 뜨는 것이 대부분 옛 그림이기 때문이다.
@@ -280,6 +280,70 @@ async function backfillSns() {
   }
 }
 
+/**
+ * 참고 이미지와 캐릭터 각도.
+ *
+ * 값은 `apps/web/lib/grid-thumbnail.ts` 와 같아야 한다 — 가로 512 / q78.
+ * 경로는 원본에 `.thumb.webp` 를 덧붙인다(`grid-thumbnail-path.ts`).
+ *
+ * 참고 이미지는 **공용 창고**라 한 화면에 400장까지 뜬다. 남은 것 중 전송량이
+ * 가장 크다.
+ */
+async function backfillGrid(table, pathColumn, label, cursorFlag, bucket = BUCKET) {
+  const after = process.argv.indexOf(cursorFlag);
+  const cursor = after > 0 ? process.argv[after + 1] : "";
+
+  let listing = supabase
+    .from(table)
+    .select(`id,${pathColumn}`)
+    .is("thumb_path", null)
+    .order("id", { ascending: true })
+    .limit(LIMIT);
+  if (cursor) listing = listing.gt("id", cursor);
+
+  const { data: rows, error } = await listing;
+  if (error) { console.error(`${label}을 읽지 못했습니다: ${error.message}`); return; }
+  if (!rows.length) { console.log(`${label}: 채울 것이 없습니다.`); return; }
+
+  console.log(`
+${label} ${rows.length}건`);
+  let made = 0, skipped = 0, failed = 0;
+
+  for (const row of rows) {
+    const originalPath = row[pathColumn];
+    if (!originalPath) { skipped += 1; continue; }
+
+    const file = await supabase.storage.from(bucket).download(originalPath);
+    if (file.error || !file.data) { failed += 1; continue; }
+
+    const bytes = Buffer.from(await file.data.arrayBuffer());
+    const thumb = await thumbnailFor(bytes, 512, 78, true);
+    if (!thumb) { skipped += 1; continue; }
+
+    const dot = originalPath.lastIndexOf("."), slash = originalPath.lastIndexOf("/");
+    const thumbPath = `${dot > slash ? originalPath.slice(0, dot) : originalPath}.thumb.webp`;
+
+    const uploaded = await supabase.storage
+      .from(bucket)
+      .upload(thumbPath, thumb, { contentType: "image/webp", upsert: true });
+    if (uploaded.error) { failed += 1; continue; }
+
+    const { error: updateError } = await supabase
+      .from(table).update({ thumb_path: thumbPath }).eq("id", row.id);
+    if (updateError) {
+      await supabase.storage.from(bucket).remove([thumbPath]);
+      failed += 1;
+      continue;
+    }
+    made += 1;
+  }
+
+  console.log(`${label} — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  if (rows.length === LIMIT) {
+    console.log(`  이어서: --apply ${cursorFlag} ${rows[rows.length - 1].id}`);
+  }
+}
+
 async function main() {
   /**
    * **id 로 앞으로만 나아간다.**
@@ -350,11 +414,15 @@ async function main() {
   await backfillShowcase();
   await backfillPoster();
   await backfillSns();
+  await backfillGrid("reference_images", "storage_path", "참고 이미지", "--after-reference");
+  // **캐릭터는 버킷이 다르다.** 경로 모양이 라이브러리와 똑같아 눈으로는
+  // 안 걸리는데, 틀리면 전 건 실패한다.
+  await backfillGrid("character_views", "path", "캐릭터", "--after-character", "characters");
   if (rows.length === LIMIT) {
     // 커서를 하나만 넘기면 다른 갈래가 처음부터 다시 돈다 — 건너뛴 건을
     // 매번 다시 내려받게 되어 커서를 둔 이유가 사라진다. 함께 안내한다.
-    console.log(`상한에 걸렸습니다. 이어서 하려면 세 커서를 함께 넘기세요:`);
-    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id>`);
+    console.log("상한에 걸렸습니다. 이어서 하려면 다섯 커서를 함께 넘기세요:");
+    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id> --after-reference <끝 id> --after-character <끝 id>`);
   }
 }
 
