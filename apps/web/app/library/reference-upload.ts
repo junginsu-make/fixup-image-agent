@@ -22,11 +22,16 @@ interface PersistReferenceInput {
 interface PersistReferenceDependencies {
   createId(): string;
   getUserId(): Promise<string>;
-  upload(path: string, file: UploadFile): Promise<void>;
+  /**
+   * 원본을 올린다. 목록용 사본을 함께 만들었으면 그 자리를 돌려준다.
+   * 못 만들었으면 `null` — 화면이 원본으로 떨어진다.
+   */
+  upload(path: string, file: UploadFile): Promise<string | null | void>;
   insert(row: {
     id: string;
     user_id: string;
     storage_path: string;
+    thumb_path: string | null;
     title: string;
     purpose: ReferencePurpose;
   }): Promise<ReferenceImageRow>;
@@ -50,12 +55,13 @@ export async function persistReferenceImage(
   const id = dependencies.createId();
   const storagePath = `${userId}/references/${id}.${extension}`;
 
-  await dependencies.upload(storagePath, input.file);
+  const thumbPath = (await dependencies.upload(storagePath, input.file)) ?? null;
   try {
     return await dependencies.insert({
       id,
       user_id: userId,
       storage_path: storagePath,
+      thumb_path: thumbPath,
       title: input.title,
       purpose: input.purpose,
     });

@@ -21,6 +21,8 @@ import { ThumbImage } from "../_components/thumb-image";
 interface CharacterView {
   angle: string;
   url: string | null;
+  /** 격자에 거는 사본. 없으면 `url` 로 떨어진다. */
+  thumbUrl?: string | null;
 }
 
 interface Character {
@@ -132,7 +134,8 @@ export function CharactersTab() {
                         <figure key={view.angle} className="w-20 shrink-0">
                           <span className="block aspect-[3/4] overflow-hidden rounded-md border bg-muted">
                             <ThumbImage
-                              src={view.url as string}
+                              src={(view.thumbUrl ?? view.url) as string}
+                              data-viewer-src={(view.url as string) ?? undefined}
                               alt={`${character.name} · ${angleLabels[view.angle] ?? view.angle}`}
                               data-zoomable
                               className="h-full w-full cursor-zoom-in object-cover"
