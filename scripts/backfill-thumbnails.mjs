@@ -200,6 +200,36 @@ async function backfillPoster() {
 }
 
 /**
+ * 흐름에 못 적었을 때, **올린 파일을 지워도 되는가.**
+ *
+ * 사본의 자리는 `{회원}/sns/{작업}/{카드}.thumb.webp` 로 정해져 있어 앱의
+ * `snsPreviewPath` 와 **완전히 같다.** 그래서 그 사이 회원이 그 카드를 다시
+ * 만들었다면 우리가 올린 자리에 회원의 파일이 놓이고, 회원의 흐름이 그 자리를
+ * 가리킨다. 그것을 지우면 **흐름은 멀쩡한데 그림만 사라진다** — 회원 눈에
+ * 보이는 고장이다.
+ *
+ * 그래서 **누가 손댄 흔적이 있으면 아무것도 안 지운다.** 남는 파일은 자리가
+ * 정해져 있어 다음에 같은 카드의 사본이 그 위에 덮인다 — 쌓이지 않는다.
+ * 「지웠는데 남이 쓰고 있었다」보다 「안 지워서 한 장 남았다」가 훨씬 싸다.
+ *
+ * 반대로 아무도 안 건드린 것이 확실한 경우(행이 그대로거나 사라짐)에는 지운다.
+ * 아무 행도 가리키지 않는 파일은 나중에 지울 근거가 없어 영영 남는다.
+ */
+function writeFailure({ freshError, missing, rewritten, updateError, updatedRows }) {
+  // 다시 읽지 못했다 — 행은 그대로다. 우리 파일은 아무도 안 가리킨다.
+  if (freshError) return { message: freshError, keepFiles: false };
+  // 작업이 사라졌다. 지울 때 이 자리를 아는 근거도 함께 사라졌다.
+  if (missing) return { message: "작업이 사라졌습니다", keepFiles: false };
+  // 얹을 것이 없다 = 그 사이 회원이 그 카드들을 채웠거나 모양이 달라졌다.
+  if (!rewritten) return { message: "그 사이 회원이 채웠습니다", keepFiles: true };
+  // 쓰기 자체가 실패했다 — 행은 그대로다.
+  if (updateError) return { message: updateError, keepFiles: false };
+  // 0행 = 읽은 뒤 쓰기 전에 회원이 저장했다.
+  if (!updatedRows) return { message: "그 사이 회원이 저장했습니다", keepFiles: true };
+  return null;
+}
+
+/**
  * 새로 읽은 흐름에 방금 만든 사본의 자리만 얹는다.
  *
  * **회원이 그 사이 고친 것을 지키기 위해서다.** 전에는 읽을 때의 흐름을 통째로
@@ -329,31 +359,24 @@ async function backfillSns() {
           .from("sns_projects").update({ data: rewritten })
           .eq("id", project.id).eq("updated_at", fresh.data.updated_at)
           .select("id")
-      : { data: null, error: fresh.error ?? { message: "작업이 사라졌습니다" } };
-    const updateError = updated.error
-      ?? (updated.data?.length ? null : { message: "그 사이 회원이 저장했습니다(건너뜀)" });
-    if (updateError) {
-      /**
-       * 되돌린다 — **다만 남이 쓰게 된 파일은 건드리지 않는다.**
-       *
-       * 사본의 자리는 `{회원}/sns/{작업}/{카드}.thumb.webp` 로 정해져 있어
-       * 앱의 `snsPreviewPath` 와 **완전히 같다**. 그래서 그 사이 회원이 카드를
-       * 다시 만들었다면 우리가 올린 자리에 회원의 파일이 놓이고, 회원의 흐름이
-       * 그 자리를 가리킨다. 그것까지 지우면 흐름은 멀쩡한데 그림만 사라진다.
-       *
-       * 방금 읽은 흐름이 가리키는 자리는 남긴다. 남는다 해도 자리가 정해져
-       * 있어 다음에 같은 카드의 사본이 그 위에 덮인다 — 쌓이지 않는다.
-       */
-      const referenced = new Set(
-        (fresh.data?.data?.flow?.cards ?? [])
-          .map((card) => card.thumbPath)
-          .filter(Boolean),
-      );
-      const orphans = [...made_paths.values()].filter((path) => !referenced.has(path));
-      if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
+      : null;
+
+    const failure = writeFailure({
+      freshError: fresh.error?.message,
+      missing: !fresh.data,
+      rewritten: Boolean(rewritten),
+      updateError: updated?.error?.message,
+      updatedRows: updated?.data?.length ?? 0,
+    });
+    if (failure) {
+      if (!failure.keepFiles) {
+        await supabase.storage.from(BUCKET).remove([...made_paths.values()]);
+      }
       failed += made_paths.size;
       made -= made_paths.size;
-      console.error(`  흐름에 못 적음(되돌림 ${orphans.length}/${made_paths.size}): ${project.id} — ${updateError.message}`);
+      console.error(
+        `  흐름에 못 적음(${failure.keepFiles ? "파일은 남김" : "되돌림"}): ${project.id} — ${failure.message}`,
+      );
       continue;
     }
 

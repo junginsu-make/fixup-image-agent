@@ -80,44 +80,54 @@ describe("사본 자리를 얹을 때", () => {
 });
 
 /**
- * 되돌릴 때 **무엇을 지우는가.**
+ * 흐름에 못 적었을 때 **올린 파일을 지워도 되는가.**
  *
- * 사본의 자리는 `{회원}/sns/{작업}/{카드}.thumb.webp` 로 정해져 있어 앱의
- * `snsPreviewPath` 와 완전히 같다. 그 사이 회원이 카드를 다시 만들었다면 그
- * 자리에 회원의 파일이 놓이고 회원의 흐름이 그것을 가리킨다. 그것까지 지우면
- * **흐름은 멀쩡한데 그림만 사라진다.**
- *
- * 스크립트는 「방금 읽은 흐름이 가리키는 자리는 남긴다」로 고른다. 그 규칙을
- * 여기 그대로 옮겨 두어, 스크립트에서 사라지면 시험이 먼저 깨지게 한다.
+ * 자리가 앱의 `snsPreviewPath` 와 완전히 같아, 그 사이 회원이 카드를 다시
+ * 만들었다면 그 자리에 회원의 파일이 놓이고 회원의 흐름이 그것을 가리킨다.
+ * 잘못 지우면 **흐름은 멀쩡한데 그림만 사라진다.**
  */
-describe("되돌릴 때 지울 것을 고르는 규칙", () => {
-  const rollbackScope = script.slice(script.indexOf("const referenced = new Set("));
+function loadWriteFailure(): (input: Record<string, unknown>) => { keepFiles: boolean } | null {
+  const start = script.indexOf("function writeFailure(");
+  if (start < 0) throw new Error("writeFailure 를 찾지 못했습니다.");
+  const rest = script.slice(start);
+  const end = rest.search(/^\}/m);
+  const source = rest.slice(0, end + 1);
+  // 꺼낸 조각이 알맹이인지 확인한다. 자르기가 어긋나면 아래가 전부 헛돈다.
+  expect(source).toMatch(/keepFiles/);
+  return new Function(`${source}; return writeFailure;`)() as never;
+}
 
-  it("스크립트가 그 규칙을 실제로 쓴다", () => {
-    expect(rollbackScope).toMatch(/\.filter\(\(path\) => !referenced\.has\(path\)\)/);
-    expect(rollbackScope.slice(0, 900)).toMatch(/fresh\.data\?\.data\?\.flow\?\.cards/);
+const writeFailure = loadWriteFailure();
+const ok = { freshError: undefined, missing: false, rewritten: true, updateError: undefined, updatedRows: 1 };
+
+describe("못 적었을 때 파일을 지워도 되는지", () => {
+  it("다 잘 됐으면 실패가 아니다", () => {
+    expect(writeFailure(ok)).toBeNull();
   });
 
-  const chooseOrphans = (uploaded: string[], freshCards: Array<{ thumbPath?: string }>) => {
-    const referenced = new Set(freshCards.map((card) => card.thumbPath).filter(Boolean));
-    return uploaded.filter((p) => !referenced.has(p));
-  };
-
-  it("아무도 안 쓰는 자리는 지운다", () => {
-    expect(chooseOrphans(["u/sns/p/0.thumb.webp"], [{}])).toEqual(["u/sns/p/0.thumb.webp"]);
+  it("회원이 그 사이 저장했으면 지우지 않는다 — 그 자리를 회원이 쓰고 있을 수 있다", () => {
+    expect(writeFailure({ ...ok, updatedRows: 0 })?.keepFiles).toBe(true);
   });
 
-  it("회원의 흐름이 가리키는 자리는 남긴다 — 지우면 그림이 사라진다", () => {
-    expect(chooseOrphans(
-      ["u/sns/p/0.thumb.webp"],
-      [{ thumbPath: "u/sns/p/0.thumb.webp" }],
-    )).toEqual([]);
+  it("회원이 그 사이 채웠으면 지우지 않는다", () => {
+    expect(writeFailure({ ...ok, rewritten: false })?.keepFiles).toBe(true);
   });
 
-  it("섞여 있으면 남의 것만 남긴다", () => {
-    expect(chooseOrphans(
-      ["u/sns/p/0.thumb.webp", "u/sns/p/1.thumb.webp"],
-      [{ thumbPath: "u/sns/p/1.thumb.webp" }],
-    )).toEqual(["u/sns/p/0.thumb.webp"]);
+  it("작업이 사라졌으면 지운다 — 아무도 가리키지 않아 영영 남는다", () => {
+    expect(writeFailure({ ...ok, missing: true })?.keepFiles).toBe(false);
+  });
+
+  it("다시 읽지 못했으면 지운다 — 행은 그대로라 아무도 안 가리킨다", () => {
+    expect(writeFailure({ ...ok, freshError: "네트워크" })?.keepFiles).toBe(false);
+  });
+
+  it("쓰기가 실패했으면 지운다 — 행은 그대로다", () => {
+    expect(writeFailure({ ...ok, updateError: "네트워크" })?.keepFiles).toBe(false);
+  });
+
+  it("스크립트가 이 판단을 실제로 따른다", () => {
+    const call = script.slice(script.indexOf("const failure = writeFailure("));
+    expect(call.slice(0, 700)).toMatch(/if \(!failure\.keepFiles\)/);
+    expect(call.slice(0, 700)).toMatch(/remove\(\[\.\.\.made_paths\.values\(\)\]\)/);
   });
 });
