@@ -327,7 +327,8 @@ async function backfillSns() {
         .upload(thumbPath, preview, { contentType: "image/webp", upsert: true });
       if (uploaded.error) { failed += 1; continue; }
 
-      card.thumbPath = thumbPath;
+      // **낡은 흐름을 제자리에서 고치지 않는다.** 쓰는 것은 다시 읽은 흐름이고,
+      // 만든 자리는 `made_paths` 가 안다. 여기서 고치면 두 근거가 생긴다.
       made_paths.set(card.index, thumbPath);
       changed = true;
       made += 1;
@@ -382,11 +383,10 @@ async function backfillSns() {
 
     // 표도 함께 맞춘다. 화면은 흐름을 보지만, 표가 어긋난 채 남으면 나중에
     // 표를 보는 코드가 생겼을 때 두 값이 다르다.
-    for (const card of todo) {
-      if (!card.thumbPath) continue;
+    for (const [index, thumbPath] of made_paths) {
       await supabase.from("sns_cards")
-        .update({ thumb_path: card.thumbPath })
-        .eq("project_id", project.id).eq("index", card.index);
+        .update({ thumb_path: thumbPath })
+        .eq("project_id", project.id).eq("index", index);
     }
     touched += 1;
   }
