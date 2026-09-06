@@ -245,6 +245,39 @@ describe("배정이 설계 §6.2 와 같다", () => {
     expect(crops.sort()).toEqual(["naver-brand-mobile", "naver-brand-pc", "naver-gfa-main"]);
   });
 
+  /**
+   * **가장 흐린 결과물이 얼마나 흐린지 못 박는다.**
+   *
+   * 축소는 슈퍼샘플링이라 이득이지만 배율이 커지면 글자가 뭉개진다. 브랜드검색
+   * 둘이 최소값이었을 때 7.1배·9.7배였고, 그것이 결과물 중 가장 흐렸다.
+   * 출처가 「이상」이라 두 배로 올렸다(`specs.ts` 의 note 참고).
+   */
+  it("어떤 규격도 6배 넘게 줄이지 않는다", () => {
+    for (const { spec, plan } of derivable) {
+      const master = masterById((plan as { master: string }).master)!;
+      const after = cropped(master, spec.target);
+      expect(after.width / spec.target.width, `${spec.id} 축소 배율`).toBeLessThan(6);
+    }
+  });
+
+  /**
+   * **가장 많이 줄이는 것은 파워링크(5.6배)이고, 그건 줄일 수 없다.**
+   *
+   * 다른 규격은 출처가 「이상」이라 크게 뽑을 수 있는데, 파워링크는 **정확히
+   * 214×214** 여야 한다 — 더 큰 그림을 올리면 네이버가 214×214 로 **잘라서**
+   * 등록한다(줄이는 것이 아니다). 우리가 미리 맞춰 주는 편이 낫다.
+   *
+   * 그래서 위 상한 6 은 임의의 숫자가 아니라 이 규격이 정한 천장이다.
+   */
+  it("가장 많이 줄이는 규격이 파워링크다 — 그 값은 포털이 정한다", () => {
+    const factors = derivable.map(({ spec, plan }) => {
+      const master = masterById((plan as { master: string }).master)!;
+      return { id: spec.id, factor: cropped(master, spec.target).width / spec.target.width };
+    });
+    const worst = factors.reduce((a, b) => (a.factor > b.factor ? a : b));
+    expect(worst.id).toBe("naver-powerlink");
+  });
+
   it("가장 많이 깎는 규격도 면적의 3/4 은 남는다", () => {
     for (const { spec, plan } of derivable) {
       if (plan.kind !== "crop") continue;

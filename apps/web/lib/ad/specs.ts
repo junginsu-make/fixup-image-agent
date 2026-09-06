@@ -90,6 +90,11 @@ export interface AdSpec {
    * 네이버 공식 문서가 광고주 로그인 뒤에 있어 공개 확인이 안 됐다. 이것이
    * 데이터에 없으면 화면이 구글·카카오와 똑같이 보여 주게 되고, `verifiedAt` 이
    * 검증되지 않은 값에 검증 도장을 찍는 꼴이 된다.
+   *
+   * **읽는 곳은 3단계 규격 선택 화면의 「참고」 배지다**(설계 §9·§11).
+   * 아직 아무도 안 쓰지만 지금 적는다 — 이것은 규격 값이 아니라 **조사 시점의
+   * 관찰**이라 나중에 코드만 보고는 복원할 수 없다. `safeArea` 처럼 언제든
+   * 다시 찾을 수 있는 값과 다르다.
    */
   sourceKind: "official" | "reference";
   /** 출처 주소. 확인할 때 여기서 시작한다. */
@@ -208,19 +213,22 @@ export const AD_SPECS: AdSpec[] = [
   },
   {
     id: "naver-brand-pc",
-    portal: "naver", product: "브랜드검색", label: "PC 썸네일 228×152",
-    target: { width: 228, height: 152 },
+    portal: "naver", product: "브랜드검색", label: "PC 썸네일 456×304",
+    target: { width: 456, height: 304 },
     required: true, format: "jpg",
     verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
-    note: "「228×152 이상, 비율 유지」다. 테두리 불가.",
+    note: "출처는 「228×152 **이상**, 비율 유지」다. 그 두 배로 둔다 — 최소값으로"
+      + " 두면 마스터에서 7.1배를 줄여야 해서 **결과물 중 가장 흐려진다.**"
+      + " 「이상」이라는 읽기에 기대는 값이므로 콘솔 확인 목록에 있다. 테두리 불가.",
   },
   {
     id: "naver-brand-mobile",
-    portal: "naver", product: "브랜드검색", label: "모바일 썸네일 188×110",
-    target: { width: 188, height: 110 },
+    portal: "naver", product: "브랜드검색", label: "모바일 썸네일 376×220",
+    target: { width: 376, height: 220 },
     required: true, format: "jpg",
     verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
-    note: "「188×110 이상, 비율 유지」다.",
+    note: "출처는 「188×110 **이상**, 비율 유지」다. 그 두 배로 둔다 — 최소값이면"
+      + " 9.7배 축소로 가장 흐려진다. 「이상」이라는 읽기에 기대는 값이다.",
   },
   {
     id: "naver-powerlink",

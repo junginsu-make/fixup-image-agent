@@ -88,7 +88,7 @@ describe("규격대로 뽑는다", () => {
   it("픽셀이 목표와 정확히 같다 — 깎는 규격", async () => {
     const { bytes } = await derive("naver-brand-pc", await flat(2048, 1072));
     const meta = await sharp(bytes).metadata();
-    expect([meta.width, meta.height]).toEqual([228, 152]);
+    expect([meta.width, meta.height]).toEqual([456, 304]);
   });
 
   // 두 변을 따로 본다. 가로·세로가 동시에 모자란 입력만 쓰면 한쪽 조건을 지워도 통과한다.
@@ -272,10 +272,15 @@ describe("압축 폭탄을 막는다", () => {
     expect((result as { failed: string }).failed).toMatch(/pixel limit/i);
   });
 
+  /**
+   * **상한에 걸렸다는 것을 정확히 잰다.** `읽지 못했습니다` 는 `check.ts` 의
+   * catch 가 **어떤 읽기 실패에든** 붙이는 포장지라, 그것만 보면 `oversizedPng`
+   * 조립기가 깨져 PNG 를 아예 못 읽게 돼도 초록이다.
+   */
   it("검사하는 쪽도 거부한다", async () => {
     const check = await checkAgainstSpec(oversizedPng(8000, 5001), specById("google-rda-square"));
     expect(check.ok).toBe(false);
-    expect(check.failures.join()).toMatch(/읽지 못했습니다/);
+    expect(check.failures.join()).toMatch(/pixel limit/i);
   });
 
   /**
