@@ -213,7 +213,7 @@ async function backfillPoster() {
  */
 function orphansToRemove(madePaths, freshCards) {
   const referenced = new Set(
-    (freshCards ?? []).map((card) => card.thumbPath).filter(Boolean),
+    (freshCards ?? []).map((card) => card?.thumbPath).filter(Boolean),
   );
   return [...madePaths.values()].filter((path) => !referenced.has(path));
 }
@@ -268,7 +268,7 @@ function withThumbPaths(data, pathByIndex) {
   if (!Array.isArray(cards)) return null;
   let touchedAny = false;
   const next = cards.map((card) => {
-    const thumbPath = pathByIndex.get(card.index);
+    const thumbPath = pathByIndex.get(card?.index);
     if (!thumbPath || card.thumbPath) return card;
     touchedAny = true;
     return { ...card, thumbPath };
@@ -321,7 +321,7 @@ async function backfillSns() {
 
   for (const project of projects) {
     const cards = project.data?.flow?.cards ?? [];
-    const todo = cards.filter((card) => card.assetPath && !card.thumbPath);
+    const todo = cards.filter((card) => card?.assetPath && !card.thumbPath);
     if (!todo.length) continue;
 
     let changed = false;
@@ -434,11 +434,20 @@ async function backfillSns() {
 
   console.log(`
 카드뉴스 — 작업 ${touched}건 · 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 경합(회원이 먼저 씀) ${raced} · 실패 ${failed}`);
-  // 경합은 몇 건 나는 것이 정상이다. **한 건도 못 쓴 채 실패만 쌓였다면** 경합이
-  // 아니라 시각 비교 자체가 어긋난 것이다 — 그대로 또 돌려도 같은 결과가 난다.
-  if (touched === 0 && failed > 0) {
+  /**
+   * 경합은 몇 건 나는 것이 정상이다. **한 건도 못 쓴 채 못 쓴 것만 쌓였다면**
+   * 경합이 아니라 시각 비교 자체가 어긋난 것이다 — 그대로 또 돌려도 같은
+   * 결과가 난다.
+   *
+   * **`raced` 도 함께 본다.** 시각 비교가 통째로 어긋나면 모든 작업이 0행으로
+   * 떨어지는데, 그것은 `raced` 로 세어진다. `failed` 만 보면 이 경보가 잡으려던
+   * 바로 그 상황에서 `failed === 0` 이라 침묵한다.
+   * 정상 실행에서는 `touched > 0` 이므로 오경보는 나지 않는다.
+   */
+  if (touched === 0 && raced + failed > 0) {
     console.error("  카드뉴스가 한 건도 기록되지 않았습니다. 동시 저장이 아니라 updated_at 비교가");
-    console.error("  어긋났을 수 있습니다. 사본은 되돌렸으니 남은 것은 없습니다. 보고해 주세요.");
+    console.error("  어긋났을 수 있습니다. 만든 사본 중 일부는 저장소에 남아 있을 수 있습니다");
+    console.error("  (회원이 그 자리를 쓰게 된 것은 일부러 남깁니다). 보고해 주세요.");
   }
   if (projects.length === LIMIT) {
     console.log(`  이어서: --apply --after-sns ${projects[projects.length - 1].id}`);

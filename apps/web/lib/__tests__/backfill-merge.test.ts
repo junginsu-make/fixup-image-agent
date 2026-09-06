@@ -38,7 +38,7 @@ function loadWithThumbPaths(): (data: unknown, paths: Map<number, string>) => un
   if (end < 0) throw new Error("withThumbPaths 의 끝을 찾지 못했습니다.");
   const source = rest.slice(0, end + 1);
   // 꺼낸 조각이 실제 알맹이인지 확인한다. 자르기가 어긋나면 아래가 전부 헛돈다.
-  expect(source).toMatch(/pathByIndex\.get\(card\.index\)/);
+  expect(source).toMatch(/pathByIndex\.get\(card\?\.index\)/);
   return new Function(`${source}; return withThumbPaths;`)() as never;
 }
 
@@ -79,6 +79,14 @@ describe("사본 자리를 얹을 때", () => {
     const original = flow([{ index: 0, assetPath: "a.png" }]);
     withThumbPaths(original, new Map([[0, "a.thumb.webp"]]));
     expect(original.flow.cards[0]).not.toHaveProperty("thumbPath");
+  });
+
+  it("카드 목록에 빈 자리가 섞여도 죽지 않는다", () => {
+    const result = withThumbPaths(
+      { flow: { cards: [null, { index: 1 }] } },
+      new Map([[1, "b.thumb.webp"]]),
+    ) as { flow: { cards: Array<{ thumbPath?: string } | null> } };
+    expect(result.flow.cards[1]?.thumbPath).toBe("b.thumb.webp");
   });
 
   it("얹을 것이 하나도 없으면 null 이다 — 헛되이 쓰지 않는다", () => {
@@ -172,6 +180,15 @@ describe("스크립트가 그 판단을 실제로 따르는지", () => {
     expect(branch).not.toMatch(/\.eq\("updated_at", fresh/);
   });
 
+  /**
+   * 이 경보는 「시각 비교가 통째로 어긋남」을 잡으려고 둔 것이다. 그런데 그
+   * 고장이 나면 모든 작업이 0행으로 떨어져 **`raced`** 로 세어진다. `failed` 만
+   * 보면 잡으려던 바로 그 상황에서 침묵한다.
+   */
+  it("한 건도 못 썼을 때의 경보가 경합도 함께 본다", () => {
+    expect(branch).toMatch(/touched === 0 && raced \+ failed > 0/);
+  });
+
   it("지우기 전에 지금 흐름을 읽는다 — 회원의 파일을 지키는 유일한 근거다", () => {
     expect(branch).toMatch(/orphansToRemove\(madePaths, now\.data\?\.data\?\.flow\?\.cards\)/);
   });
@@ -215,6 +232,13 @@ describe("지울 자리를 고를 때", () => {
       new Map([[0, "u/sns/p/0.thumb.webp"]]),
       [{ index: 0, thumbPath: "u/sns/p/0.thumb.webp" }],
     )).toEqual([]);
+  });
+
+  it("카드 목록에 빈 자리가 섞여도 죽지 않는다 — 여기서 죽으면 실행이 통째로 멈춘다", () => {
+    expect(orphansToRemove(
+      new Map([[0, "u/sns/p/0.thumb.webp"]]),
+      [null, { index: 0 }],
+    )).toEqual(["u/sns/p/0.thumb.webp"]);
   });
 
   it("흐름을 모르면(카드 목록 없음) 우리 것만 지운다", () => {
