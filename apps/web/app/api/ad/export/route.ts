@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { authenticateApiMember } from "../../../../lib/membership/api";
+import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
 import { getLibraryImageFile } from "../../../../lib/server-library";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
 
@@ -20,10 +21,26 @@ export const dynamic = "force-dynamic";
  *
  * 소유권은 `getLibraryImageFile` 이 본다. 경로를 여기서 조립하지 않는다.
  */
+/**
+ * **문자열마다 상한을 건다.**
+ *
+ * 이 저장소는 본문 크기 상한이 어느 층에도 없다 — Caddy 에도, Next 설정에도,
+ * 라우트 핸들러 기본값에도. 그래서 스키마가 마지막 문이다.
+ *
+ * 상한이 없으면 4MB 짜리 문자열 24개(본문 100MB)가 들어오고, 본문 문자열 +
+ * 파싱 결과 + `trim()` 사본 + 되비추는 사본 + 직렬화 출력이 동시에 살아
+ * **6.4배로 부푼다**(독립 리뷰 실측: rss 251MB → 640MB). sharp 는 한 번도
+ * 안 타는데 프로세스가 죽는다.
+ *
+ * 같은 저장소의 `api/sns/layout/preview/route.ts:13` 이 이미 그 본을 보인다.
+ */
 const RequestSchema = z.object({
-  itemId: z.string().trim().min(1),
-  position: z.number().int().min(0),
-  specIds: z.array(z.string().trim().min(1)).min(1).max(MAX_SPECS_PER_REQUEST),
+  // 라이브러리 item id 는 uuid 다. 넉넉히 잡아도 64 면 충분하다.
+  itemId: z.string().trim().min(1).max(64),
+  // 한 작업의 그림 수에는 상한이 있다(`api/library/route.ts`).
+  position: z.number().int().min(0).max(1_000),
+  // 규격 id 는 `naver-smartchannel` 이 가장 길다(19자).
+  specIds: z.array(z.string().trim().min(1).max(64)).min(1).max(MAX_SPECS_PER_REQUEST),
 }).strict();
 
 export async function POST(request: Request) {
@@ -50,7 +67,21 @@ export async function POST(request: Request) {
     );
     if (!file) return new Response("찾을 수 없습니다.", { status: 404 });
 
-    const results = await exportBatch(file.bytes, parsed.data.specIds);
+    /**
+     * **동시 실행을 막는다.**
+     *
+     * 규격 전부를 요청하면 sharp 인코드가 20회 돌고 12MP 마스터에서 4.4초가
+     * 걸린다. 진짜 희소 자원은 **libuv 스레드풀(기본 4)** 이라, 이런 요청이
+     * 넷만 겹쳐도 다른 모든 요청의 파일 읽기·DNS 까지 함께 굶는다.
+     *
+     * 이 저장소는 같은 판단을 이미 했다 — `lib/layout/render-gate.ts` 가
+     * 카드뉴스 합성 미리보기에 회원당 1·전체 2 를 걸고 있다. **막아야 하는 것은
+     * 요청의 크기가 아니라 빈도**라는 그 머리말이 이 경로에도 그대로 맞는다.
+     */
+    const results = await withRenderSlot(
+      auth.member.userId,
+      () => exportBatch(file.bytes, parsed.data.specIds),
+    );
 
     /**
      * 바이트를 base64 로 실어 보낸다.
@@ -71,6 +102,10 @@ export async function POST(request: Request) {
       })),
     });
   } catch (error) {
+    // 붐비는 것은 사용자 잘못이 아니다. 다시 누르면 되는 상황이라 429 다.
+    if (error instanceof RenderBusyError) {
+      return Response.json({ ok: false, message: error.message }, { status: error.status });
+    }
     // 상한을 넘긴 요청 등은 사용자가 고칠 수 있는 것이라 400 으로 돌려준다.
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "뽑지 못했습니다." },

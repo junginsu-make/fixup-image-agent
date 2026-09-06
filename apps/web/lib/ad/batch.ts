@@ -10,8 +10,13 @@ import { AD_SPECS, type AdSpec } from "./specs";
  *
  * **파생을 두 번 돌리지 않는 것이 이 모듈의 존재 이유다.** 설계 §8.1 은
  * 「내려받을 때 만든다」고 적고 §5.2 는 「내려받기 전에 보여 준다」고 적는데,
- * 그대로 합치면 같은 파생이 두 번 돈다 — 요청당 sharp 인코드가 70~90회에서
- * 140~180회가 된다. 여기서 한 번 뽑아 **미리보기와 ZIP 이 같은 바이트를 쓴다.**
+ * 그대로 합치면 같은 파생이 두 번 돈다. 여기서 한 번 뽑아 **미리보기와 ZIP 이
+ * 같은 바이트를 쓴다.**
+ *
+ * **실측**: 규격 17개를 전부 요청하면 sharp 인코드는 **20회**다(12MP 마스터에서
+ * 4.4초). 17개 중 sharp 를 타는 것은 14개뿐이고(로고는 업로드, 투명 둘은 미지원),
+ * 이분 탐색이 붙는 것은 용량 상한이 빡빡한 `naver-gfa-main` 하나다.
+ * 설계 §5.2 가 적은 「70~90회」는 규격 10개 기준의 어림이었고 **실제와 다르다.**
  *
  * ZIP 은 만들지 않는다. `jszip` 이 이미 화면 쪽에 있고
  * (`app/library/ResultViewer.tsx:153`) 거기서 묶는 것이 이 저장소의 결이다.
@@ -20,11 +25,16 @@ import { AD_SPECS, type AdSpec } from "./specs";
 /**
  * 한 요청이 뽑을 수 있는 규격 수.
  *
- * 이 경로는 규격 하나당 크롭 1회 + 용량 이분 탐색 6~8회를 돈다. 상한이 없으면
- * **목록을 길게 보내는 것만으로 서버를 밀어붙일 수 있다.** 실제 규격 수보다는
- * 넉넉해야 한다 — 전부 고르는 것을 막으면 기능이 반쪽이 된다.
+ * **초판은 24 로 뒀는데 그것은 도달할 수 없는 수였다.** 아는 id 는 17개뿐이고
+ * 중복은 아래에서 제거하므로, 24 가 실제로 막는 유일한 것은 **모르는 id 를 길게
+ * 보내는 것**이었다. CPU 천장은 `AD_SPECS.length` 가 이미 정하고 있다.
+ *
+ * 그래서 목록 길이에 맞춘다. 규격이 늘면 따라 늘고, 전부 고르는 것은 막지 않는다.
+ *
+ * **CPU 를 막는 것은 이 수가 아니다.** 요청 하나의 크기가 아니라 요청의 빈도가
+ * 문제이고, 그것은 라우트의 `withRenderSlot` 이 막는다.
  */
-export const MAX_SPECS_PER_REQUEST = 24;
+export const MAX_SPECS_PER_REQUEST = AD_SPECS.length;
 
 export interface AdBatchEntry {
   specId: string;
@@ -80,7 +90,9 @@ export async function exportBatch(master: Buffer, specIds: string[]): Promise<Ad
       entries.push({
         specId: id, label: id, portal: "google", product: "?", required: false,
         sourceKind: "reference", format: "jpg", target: { width: 0, height: 0 },
-        status: "failed", reason: `모르는 규격입니다: ${id}`, failures: [],
+        // **잘라서 되비춘다.** 스키마가 길이를 막고 있지만 스키마는 언제든
+        // 갈아끼워진다 — 되비추는 쪽이 스스로를 지켜야 한다.
+        status: "failed", reason: `모르는 규격입니다: ${id.slice(0, 64)}`, failures: [],
       });
       continue;
     }

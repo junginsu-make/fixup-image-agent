@@ -99,16 +99,23 @@ describe("한 번에 여러 규격을 뽑는다", () => {
   });
 
   /**
-   * 이 경로는 요청 하나가 sharp 인코드를 수십 번 돌린다(설계 §5.2). 상한이
-   * 없으면 규격 목록을 길게 보내는 것만으로 서버를 밀어붙일 수 있다.
+   * **이 상한이 막는 것은 CPU 가 아니다.** 아는 id 는 17개뿐이라 CPU 천장은
+   * `AD_SPECS.length` 가 이미 정한다. 이 상한이 실제로 막는 것은 **모르는 id 를
+   * 길게 보내는 것**이고, CPU 는 라우트의 `withRenderSlot` 이 막는다.
    */
   it("한 번에 뽑을 수 있는 규격 수에 상한이 있다", async () => {
     const many = Array.from({ length: MAX_SPECS_PER_REQUEST + 1 }, (_, i) => `x${i}`);
     await expect(exportBatch(await busy(1200, 1200), many)).rejects.toThrow(/한 번에/);
   });
 
-  it("상한이 실제 규격 수보다 작지 않다 — 전부 고르는 것을 막으면 안 된다", () => {
-    expect(MAX_SPECS_PER_REQUEST).toBeGreaterThanOrEqual(AD_SPECS.length);
+  it("상한이 규격 수를 따라간다 — 전부 고르는 것을 막지도, 넘게 받지도 않는다", () => {
+    expect(MAX_SPECS_PER_REQUEST).toBe(AD_SPECS.length);
+  });
+
+  it("모르는 규격 id 를 통째로 되비추지 않는다", async () => {
+    const long = "x".repeat(500);
+    const results = await exportBatch(await busy(1200, 1200), [long]);
+    expect(results[0]!.reason!.length).toBeLessThan(120);
   });
 
   it("아무것도 안 고르면 거절한다", async () => {
