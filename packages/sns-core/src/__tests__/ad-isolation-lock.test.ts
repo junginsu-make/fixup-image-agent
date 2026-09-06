@@ -16,15 +16,20 @@ import { CARD_RATIOS, POSTER_RATIOS } from "../ratios";
  * 변경을 하나씩 넣어 무엇을 잡고 무엇을 놓치는지 확인했다.
  *
  * 이미 잡히는 것 — 여기서 다시 잠글 이유가 없다:
- *   `4:5`·`2:3` 픽셀, `POSTER_RATIOS` 에 항목 추가, `multipleOf`,
- *   `maxReferenceImages`
+ *   - `CARD_RATIOS` 의 `4:5` 픽셀 (`ratios.test.ts:26` 의 `resolveSize`)
+ *   - `POSTER_RATIOS` 의 `2:3` 픽셀 (`ratios.test.ts:120`)
+ *   - `POSTER_RATIOS` 에 항목 추가, `multipleOf`, `maxReferenceImages`
+ *   - **`nano-banana-2` 의 극단 비율** —
+ *     `apps/web/lib/studio/__tests__/model-choice.test.ts:26` 이 `4:1` 을 이름으로
+ *     짚는다. **저장소 전체를 돌려야 보인다** — sns-core 만 돌리면 안 보인다
  *
  * **놓치는 것 — 이 파일이 존재하는 이유**:
- *   - `3:4`·`16:9` 픽셀. 개수도 제약도 그대로라 아무도 안 본다
- *   - **`nano-banana-2` 의 `4:1`·`1:4`·`8:1`·`1:8`**. 이 목록이 설계 §2.3
- *     (안 A/안 B 선택)의 근거인데, 통째로 지워도 기존 시험은 조용하다
+ *   - `POSTER_RATIOS` 의 `4:5`·`3:4`·`16:9` 픽셀. 개수도 제약도 그대로라 아무도
+ *     안 본다. (같은 `4:5` 라도 `CARD_RATIOS` 쪽만 잡힌다)
+ *   - **`8:1`·`1:8`**. `4:1` 은 위 시험이 이름으로 짚지만 `8:1` 은 아무도 안 본다
  *   - **`maxAspect: 3`**. 설계 §1 의 「열둘 중 셋만 직접 생성 가능」과 §4.2 의
  *     「`match-source` 는 3:1 까지」가 이 숫자 하나 위에 서 있다
+ *   - **`isDefault`·`batchMax`·`fixedResolution`·`resolutionMultiplier`**
  *
  * 즉 **광고 설계의 근거가 되는 값일수록 기존 시험이 안 잡는다.**
  *

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modelById } from "@fixup/sns-core";
+import { modelById, sizeFromSource } from "@fixup/sns-core";
 import { AD_MASTERS, AD_SPECS, masterById, type AdSpec } from "../ad/specs";
 import { planDerivation } from "../ad/derive";
 
@@ -64,6 +64,32 @@ describe("마스터가 모델이 만들 수 있는 것인가", () => {
   it("마스터 id 가 겹치지 않는다", () => {
     const ids = AD_MASTERS.map((master) => master.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  /**
+   * **상수가 아니라 동작을 잠근다.**
+   *
+   * 무접촉 경로(설계 §4.2)는 `ratioId: "match-source"` + `sourceSize` 로 마스터
+   * 픽셀을 넘긴다. 그런데 `sizeFromSource` 는 받은 값을 그대로 쓰지 않는다 —
+   * 모델 한계 안으로 옮기는 계산을 한다. **입력이 그대로 나온다는 것이 이 설계의
+   * 전제인데, 그 전제는 상수 어디에도 안 적혀 있다.**
+   *
+   * 독립 리뷰가 실측으로 보였다: `model-choice.ts:105` 의
+   * `const idealPixels = width * height` 를 `limits.minPixels` 로 바꾸면
+   * **시험 1,735개가 전부 통과하면서** 마스터가 조용히 줄어든다
+   * (1200×1200 → 816×816). 그러면 1200×1200 규격을 뽑을 때 1.47배 확대가 걸려,
+   * 설계 §3.2 의 「절대 확대하지 않는다」가 뒤집힌다.
+   *
+   * `AD_MASTERS` 를 그대로 순회한다. 픽셀을 여기 다시 적으면 같은 값이 두 곳에
+   * 남는데, 이 저장소는 최근 그 형태로 두 번 사고가 났다.
+   */
+  it("마스터가 `sizeFromSource` 를 왕복해도 그대로다 — 무접촉 경로의 전제다", () => {
+    const gpt = modelById("gpt-image-2");
+    for (const master of AD_MASTERS) {
+      const resolved = sizeFromSource({ width: master.width, height: master.height }, gpt);
+      expect(resolved.rejected, master.id).toBeUndefined();
+      expect(resolved.pixel, master.id).toEqual({ width: master.width, height: master.height });
+    }
   });
 
   it("계획이 가리키는 마스터가 실재한다", () => {
