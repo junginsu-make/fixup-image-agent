@@ -53,7 +53,17 @@ const GRID_MAX_PIXELS = 40_000_000;
 
 const apply = process.argv.includes("--apply");
 const limitAt = process.argv.indexOf("--limit");
-const LIMIT = limitAt > 0 ? Number(process.argv[limitAt + 1]) : 500;
+// **오타 한 번의 값이 크다.** 한 번 돌리고 끝인 명령이라, NaN 이 그대로 질의에
+// 실려 나가면 어디까지 됐는지 모르는 채로 죽는다. 시작 전에 막는다.
+const LIMIT = (() => {
+  if (limitAt < 0) return 500;
+  const given = Number(process.argv[limitAt + 1]);
+  if (!Number.isInteger(given) || given < 1) {
+    console.error(`--limit 에는 1 이상의 정수를 주세요. 받은 값: ${process.argv[limitAt + 1] ?? "(없음)"}`);
+    process.exit(1);
+  }
+  return given;
+})();
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SECRET_KEY;
@@ -78,10 +88,10 @@ async function thumbnailFor(bytes, edge = THUMBNAIL_EDGE, quality = 78, widthOnl
       .webp({ quality })
       .toBuffer();
     // 원본보다 작을 때만 둔다. 이미 작은 그림은 줄여도 오히려 커진다.
-    return thumb.length < bytes.length ? thumb : null;
+    return thumb.length < bytes.length ? { thumb } : { thumb: null, reason: "smaller" };
   } catch (error) {
     console.error(`  sharp 실패: ${error instanceof Error ? error.message : error}`);
-    return null;
+    return { thumb: null, reason: "error" };
   }
 }
 
@@ -111,8 +121,9 @@ async function backfillShowcase() {
     if (file.error || !file.data) { failed += 1; continue; }
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
-    const thumb = await thumbnailFor(bytes, SHOWCASE_WIDTH, 82, true);
-    if (!thumb) { skipped += 1; continue; }
+    const attempt = await thumbnailFor(bytes, SHOWCASE_WIDTH, 82, true);
+    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    const thumb = attempt.thumb;
 
     const thumbPath = `showcase/${row.id}.thumb.webp`;
     const uploaded = await supabase.storage
@@ -129,7 +140,7 @@ async function backfillShowcase() {
     }
     made += 1;
   }
-  console.log(`갤러리 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  console.log(`갤러리 — 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 실패 ${failed}`);
 }
 
 /**
@@ -163,8 +174,9 @@ async function backfillPoster() {
     if (file.error || !file.data) { failed += 1; continue; }
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
-    const thumb = await thumbnailFor(bytes, POSTER_WIDTH, 88, true);
-    if (!thumb) { skipped += 1; continue; }
+    const attempt = await thumbnailFor(bytes, POSTER_WIDTH, 88, true);
+    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    const thumb = attempt.thumb;
 
     const thumbPath = `${row.user_id}/poster/${row.project_id}/${row.variant_index}.thumb.webp`;
     const uploaded = await supabase.storage
@@ -181,7 +193,7 @@ async function backfillPoster() {
     }
     made += 1;
   }
-  console.log(`포스터 — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  console.log(`포스터 — 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 실패 ${failed}`);
   if (rows.length === LIMIT) {
     console.log(`  이어서: --apply --after-poster ${rows[rows.length - 1].id}`);
   }
@@ -217,7 +229,8 @@ async function backfillSns() {
 
   let listing = supabase
     .from("sns_projects")
-    .select("id,user_id,data")
+    // `updated_at` 은 낙관적 잠금에 쓴다 — 아래 update 참고.
+    .select("id,user_id,data,updated_at")
     .order("id", { ascending: true })
     .limit(LIMIT);
   if (cursor) listing = listing.gt("id", cursor);
@@ -259,16 +272,34 @@ async function backfillSns() {
 
     if (!changed) continue;
 
-    // **흐름 JSON 이 읽는 쪽의 유일한 근거다.** 여기 못 적으면 방금 올린
-    // 파일들이 전부 아무도 못 찾는 파일이 된다 — 지울 때도 안 지워진다.
-    const { error: updateError } = await supabase
-      .from("sns_projects").update({ data: project.data }).eq("id", project.id);
+    /**
+     * **흐름 JSON 이 읽는 쪽의 유일한 근거다.** 여기 못 적으면 방금 올린
+     * 파일들이 전부 아무도 못 찾는 파일이 된다 — 지울 때도 안 지워진다.
+     *
+     * **읽고-고쳐-쓰기라 통째로 덮는다.** 백필이 도는 동안 회원이 같은 작업을
+     * 저장하면 그 사이 편집이 사라진다. 그래서 읽을 때 본 `updated_at` 을 조건에
+     * 걸고, 그 사이 누가 손댔으면 **아무것도 쓰지 않는다.** 못 쓴 건은 사본을
+     * 되돌리고 실패로 세므로, 나중에 다시 돌리면 그 작업만 다시 집는다.
+     *
+     * 잠금이 성립하는 근거: 앱은 `apps/web/lib/sns-flow-store.ts:84` 에서 `data` 를
+     * 고칠 때 `updated_at` 을 함께 새로 적는다. 그것이 이 조건을 어긋나게 한다.
+     *
+     * **여기서는 `updated_at` 을 새로 적지 않는다.** 목록이 「최근 수정순」이라
+     * (`sns_projects_user_idx`), 백필이 시각을 건드리면 회원의 목록 순서가 통째로
+     * 뒤바뀐다. 사본은 회원이 한 일이 아니다.
+     */
+    const updated = await supabase
+      .from("sns_projects").update({ data: project.data })
+      .eq("id", project.id).eq("updated_at", project.updated_at)
+      .select("id");
+    const updateError = updated.error
+      ?? (updated.data?.length ? null : { message: "그 사이 회원이 저장했습니다(건너뜀)" });
     if (updateError) {
       const orphans = todo.filter((card) => card.thumbPath).map((card) => card.thumbPath);
       if (orphans.length) await supabase.storage.from(BUCKET).remove(orphans);
       failed += orphans.length;
       made -= orphans.length;
-      console.error(`  흐름에 못 적음(되돌림): ${project.id}`);
+      console.error(`  흐름에 못 적음(되돌림): ${project.id} — ${updateError.message}`);
       continue;
     }
 
@@ -284,7 +315,13 @@ async function backfillSns() {
   }
 
   console.log(`
-카드뉴스 — 작업 ${touched}건 · 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+카드뉴스 — 작업 ${touched}건 · 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 실패 ${failed}`);
+  // 경합은 몇 건 나는 것이 정상이다. **한 건도 못 쓴 채 실패만 쌓였다면** 경합이
+  // 아니라 시각 비교 자체가 어긋난 것이다 — 그대로 또 돌려도 같은 결과가 난다.
+  if (touched === 0 && failed > 0) {
+    console.error("  카드뉴스가 한 건도 기록되지 않았습니다. 동시 저장이 아니라 updated_at 비교가");
+    console.error("  어긋났을 수 있습니다. 사본은 되돌렸으니 남은 것은 없습니다. 보고해 주세요.");
+  }
   if (projects.length === LIMIT) {
     console.log(`  이어서: --apply --after-sns ${projects[projects.length - 1].id}`);
   }
@@ -327,8 +364,9 @@ ${label} ${rows.length}건`);
     if (file.error || !file.data) { failed += 1; continue; }
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
-    const thumb = await thumbnailFor(bytes, 512, 78, true, GRID_MAX_PIXELS);
-    if (!thumb) { skipped += 1; continue; }
+    const attempt = await thumbnailFor(bytes, 512, 78, true, GRID_MAX_PIXELS);
+    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    const thumb = attempt.thumb;
 
     const dot = originalPath.lastIndexOf("."), slash = originalPath.lastIndexOf("/");
     const thumbPath = `${dot > slash ? originalPath.slice(0, dot) : originalPath}.thumb.webp`;
@@ -348,7 +386,7 @@ ${label} ${rows.length}건`);
     made += 1;
   }
 
-  console.log(`${label} — 만듦 ${made} · 건너뜀 ${skipped} · 실패 ${failed}`);
+  console.log(`${label} — 만듦 ${made} · 건너뜀(원본이 더 작음) ${skipped} · 실패 ${failed}`);
   if (rows.length === LIMIT) {
     console.log(`  이어서: --apply ${cursorFlag} ${rows[rows.length - 1].id}`);
   }
@@ -379,6 +417,24 @@ async function main() {
 
   console.log(`${apply ? "생성" : "미리보기"} — 사본이 없는 그림 ${rows.length}건 (상한 ${LIMIT})`);
   if (!apply) {
+    // **여섯 갈래를 모두 센다.** 라이브러리 건수만 보여 주면 몇 번 돌려야 하는지
+    // 알 수 없고, 미리보기를 도는 목적이 규모 파악인데 반만 이룬다.
+    for (const [table, label] of [
+      ["library_images", "라이브러리"],
+      ["showcase_items", "갤러리"],
+      ["poster_images", "포스터"],
+      ["reference_images", "참고 이미지"],
+      ["character_views", "캐릭터"],
+    ]) {
+      const { count, error: countError } = await supabase
+        .from(table).select("id", { count: "exact", head: true }).is("thumb_path", null);
+      console.log(`  ${label.padEnd(7)} ${countError ? `읽지 못함 — ${countError.message}` : `${count}건`}`);
+    }
+    // 카드뉴스는 사본 자리가 흐름 JSON 안에 있어 SQL 로 셀 수 없다. 작업 수만 알린다.
+    const { count: snsCount } = await supabase
+      .from("sns_projects").select("id", { count: "exact", head: true });
+    console.log(`  카드뉴스   작업 ${snsCount}건 (카드별 집계는 JSON 안이라 못 셉니다)`);
+    console.log("");
     console.log("실제로 만들려면 --apply 를 붙이세요.");
     return;
   }
@@ -390,8 +446,9 @@ async function main() {
     if (file.error || !file.data) { failed += 1; console.error(`  못 읽음: ${row.path}`); continue; }
 
     const bytes = Buffer.from(await file.data.arrayBuffer());
-    const thumb = await thumbnailFor(bytes);
-    if (!thumb) { skipped += 1; continue; }
+    const attempt = await thumbnailFor(bytes);
+    if (!attempt.thumb) { attempt.reason === "error" ? (failed += 1) : (skipped += 1); continue; }
+    const thumb = attempt.thumb;
 
     const thumbPath = `${row.user_id}/${row.item_id}/${row.position}.thumb.webp`;
     const uploaded = await supabase.storage
