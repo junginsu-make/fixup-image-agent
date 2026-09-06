@@ -2,7 +2,7 @@
 // @ts-expect-error 런타임 export 는 정상. 꾸러미 메타데이터가 선언을 가린다.
 import sharp from "sharp";
 import type { DerivePlan } from "./derive";
-import { masterById, type AdSpec } from "./specs";
+import type { AdSpec } from "./specs";
 
 /**
  * 마스터 한 장에서 광고 규격 하나를 뽑는다.
@@ -75,7 +75,6 @@ export async function exportForAd(
       };
     }
 
-    const declared = masterById(plan.master);
     const base = () =>
       sharp(master, { limitInputPixels: MAX_INPUT_PIXELS })
         .resize(spec.target.width, spec.target.height, { fit: "cover", position: "centre" });
@@ -120,13 +119,6 @@ export async function exportForAd(
         failed: `품질 ${QUALITY_MIN} 까지 낮춰도 상한 ${Math.round(spec.maxBytes / 1024)}KB 안에`
           + " 못 들어갑니다. 글자가 적은 시안으로 다시 만들어 보세요.",
       };
-    }
-    // 계획한 마스터와 실제 입력이 달라도 결과는 규격에 맞다. 다만 기록해 둔다.
-    if (declared && (declared.width !== size.width || declared.height !== size.height)) {
-      console.warn(
-        `[ad-export] ${spec.id}: 계획은 ${plan.master}(${declared.width}×${declared.height})`
-        + ` 인데 받은 그림은 ${size.width}×${size.height} 입니다.`,
-      );
     }
     return best;
   } catch (error) {

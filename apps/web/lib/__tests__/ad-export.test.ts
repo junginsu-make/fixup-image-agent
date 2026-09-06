@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 // sharp 0.35.0 은 lib/index.d.ts 를 담지만 exports 에 types 조건이 없다.
 // @ts-expect-error 런타임 export 는 정상. 꾸러미 메타데이터가 선언을 가린다.
 import sharp from "sharp";
+import { deflateSync } from "node:zlib";
 import { AD_SPECS, type AdSpec } from "../ad/specs";
 import { planDerivation } from "../ad/derive";
 import { exportForAd } from "../ad/export";
@@ -21,6 +22,45 @@ async function busy(width: number, height: number): Promise<Buffer> {
   const pixels = Buffer.alloc(width * height * 3);
   for (let i = 0; i < pixels.length; i += 1) pixels[i] = (i * 2654435761) % 256;
   return sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
+}
+
+/**
+ * **머리말에만 큰 크기를 적은 PNG.** 알맹이는 없다.
+ *
+ * `limitInputPixels` 를 실제로 밟으려면 상한을 넘는 입력이 필요한데, 40MP 짜리
+ * 그림을 진짜로 만들면 raw 로 120MB 를 쓴다(이 저장소는 39.7MP 에서 RSS 483MB 를
+ * 측정한 적이 있다). sharp 는 머리말만 보고 거부하므로 **68바이트면 충분하다.**
+ *
+ * 소스에 상수가 적혀 있는지 문자열로 대조하는 대신 **동작을 밟는다** — 이
+ * 저장소는 문자열 대조 시험이 무력화 변경을 못 잡는 함정에 이미 한 번 빠졌다.
+ */
+function oversizedPng(width: number, height: number): Buffer {
+  const table = [...Array(256)].map((_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    let crc = 0xffffffff;
+    for (const b of body) crc = table[(crc ^ b) & 0xff]! ^ (crc >>> 8);
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
+    return Buffer.concat([len, body, tail]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 0;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(Buffer.alloc(16))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
 }
 
 /** 압축이 아주 잘 되는 그림. 「작아서 통과」를 확인할 때 쓴다. */
@@ -212,5 +252,32 @@ describe("규격 검증 — 만들어진 바이트를 본다", () => {
     const { bytes } = await derive(spec.id, await flat(1200, 1200));
     const good = await checkAgainstSpec(bytes, spec);
     expect(good.failures).toEqual([]);
+  });
+});
+
+describe("압축 폭탄을 막는다", () => {
+  /**
+   * 입력 픽셀 상한이 없으면 작은 파일 하나가 서버 메모리를 통째로 먹는다.
+   * 이 저장소는 그 상한을 **두 번 빠뜨린 적이 있다** — 그래서 시험으로 밟는다.
+   */
+  it("뽑는 쪽이 40MP 를 넘는 입력을 거부한다", async () => {
+    const spec = specById("google-rda-square");
+    const bomb = oversizedPng(8000, 5001); // 40,008,000 픽셀
+    expect(bomb.length).toBeLessThan(200); // 시험 자체는 값싸야 한다
+
+    const result = await exportForAd(bomb, spec, planDerivation(spec));
+    expect("failed" in result).toBe(true);
+    expect((result as { failed: string }).failed).toMatch(/pixel limit/i);
+  });
+
+  it("검사하는 쪽도 거부한다", async () => {
+    const check = await checkAgainstSpec(oversizedPng(8000, 5001), specById("google-rda-square"));
+    expect(check.ok).toBe(false);
+    expect(check.failures.join()).toMatch(/읽지 못했습니다/);
+  });
+
+  it("상한 바로 아래는 통과한다 — 상한이 아무거나 막는 것이 아니다", async () => {
+    const meta = await sharp(oversizedPng(8000, 4999), { limitInputPixels: 40_000_000 }).metadata();
+    expect([meta.width, meta.height]).toEqual([8000, 4999]);
   });
 });
