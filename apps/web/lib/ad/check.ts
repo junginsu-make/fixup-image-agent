@@ -47,15 +47,43 @@ export async function checkAgainstSpec(bytes: Buffer, spec: AdSpec): Promise<Spe
       );
     }
 
-    // `png-alpha` 는 여기 오면 안 된다 — `planDerivation` 이 막는다.
-    // 그래도 새어 들어오면 png 로 취급해 형식 검사가 잡는다.
     const wanted = spec.format === "png-alpha" ? "png" : spec.format;
     const actual = formatOf(meta);
     if (actual !== wanted) failures.push(`형식이 다릅니다: ${actual} (규격은 ${wanted})`);
 
+    /**
+     * **투명이 요구되면 실제로 투명한지 본다.**
+     *
+     * 형식만 보면 불투명 PNG 가 통과한다. 그러면 포털이 등록 단계에서 거부하는데,
+     * 우리 화면은 「검증 통과」라고 말한 뒤다.
+     *
+     * 알파 채널이 있는 것으로도 모자라다 — 전부 불투명한 알파는 없는 것과 같다.
+     * 이 저장소는 같은 함정을 이미 한 번 겪었다(`image-encoding.ts` 의 알파 최소값).
+     *
+     * 오늘은 `planDerivation` 이 `png-alpha` 를 미지원으로 막지만, 이 함수의 존재
+     * 이유가 **「계획이 아니라 바이트를 본다」**이고 2·3단계는 업로드 바이트도 받는다.
+     */
+    if (spec.format === "png-alpha") {
+      if (!meta.hasAlpha) {
+        failures.push("투명 배경이 필요한데 알파 채널이 없습니다");
+      } else {
+        const stats = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS }).stats();
+        const alpha = stats.channels[stats.channels.length - 1];
+        if (!alpha || alpha.min !== 0) failures.push("알파 채널은 있지만 완전히 투명한 픽셀이 없습니다");
+      }
+    }
+
     if (spec.maxBytes && bytes.length > spec.maxBytes) {
       failures.push(
         `용량이 넘칩니다: ${Math.round(bytes.length / 1024)}KB (상한 ${Math.round(spec.maxBytes / 1024)}KB)`,
+      );
+    }
+
+    // **하한도 본다.** 상한만 보면 단색에 가까운 시안이 2KB 로 나와도 통과하는데,
+    // 네이버 메인은 50KB 미만을 받지 않는다.
+    if (spec.minBytes && bytes.length < spec.minBytes) {
+      failures.push(
+        `용량이 모자랍니다: ${Math.round(bytes.length / 1024)}KB (하한 ${Math.round(spec.minBytes / 1024)}KB)`,
       );
     }
 

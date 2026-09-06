@@ -247,11 +247,13 @@ describe("규격 검증 — 만들어진 바이트를 본다", () => {
     expect(check.failures.join()).toMatch(/메타데이터/);
   });
 
-  it("검사 넷이 각각 독립적으로 실패를 잡는다 — 하나가 다른 것을 가리지 않는다", async () => {
+  // 독립성은 위의 픽셀·형식·용량·ICC·EXIF 시험이 각각 지킨다. 여기서는
+  // 「정상 입력에 군더더기 실패가 안 붙는다」만 본다 — 이름이 본문보다 크면
+  // 다음 사람이 이 자리를 다시 안 본다.
+  it("정상 입력에는 실패가 하나도 안 붙는다", async () => {
     const spec = specById("google-rda-square");
     const { bytes } = await derive(spec.id, await flat(1200, 1200));
-    const good = await checkAgainstSpec(bytes, spec);
-    expect(good.failures).toEqual([]);
+    expect((await checkAgainstSpec(bytes, spec)).failures).toEqual([]);
   });
 });
 
@@ -276,8 +278,129 @@ describe("압축 폭탄을 막는다", () => {
     expect(check.failures.join()).toMatch(/읽지 못했습니다/);
   });
 
-  it("상한 바로 아래는 통과한다 — 상한이 아무거나 막는 것이 아니다", async () => {
-    const meta = await sharp(oversizedPng(8000, 4999), { limitInputPixels: 40_000_000 }).metadata();
-    expect([meta.width, meta.height]).toEqual([8000, 4999]);
+  /**
+   * **모듈을 거쳐 잰다.** 앞 판은 `sharp(..., { limitInputPixels: 40_000_000 })` 로
+   * 상수를 시험에 다시 적고 sharp 를 직접 불렀다. 그러면 모듈 상수를 40M → 5M 로
+   * **조이는** 변경을 못 잡는다(푸는 변경만 잡힌다). 실측으로 확인했다.
+   */
+  it("상한 바로 아래는 상한에 안 걸린다 — 상한이 아무거나 막는 것이 아니다", async () => {
+    const spec = specById("google-rda-square");
+    const nearLimit = oversizedPng(8000, 4999); // 39,992,000 픽셀
+
+    const result = await exportForAd(nearLimit, spec, planDerivation(spec));
+    expect("failed" in result).toBe(true); // 알맹이가 없는 PNG 라 어차피 못 만든다
+    expect((result as { failed: string }).failed).not.toMatch(/pixel limit/i);
+
+    const check = await checkAgainstSpec(nearLimit, spec);
+    expect(check.failures.join()).not.toMatch(/pixel limit/i);
+  });
+});
+
+describe("용량 하한 — 너무 작아도 거부된다", () => {
+  /**
+   * 상한만 보면 단색에 가까운 시안이 2KB 로 나와도 통과한다. 네이버 메인은
+   * **50KB 미만을 받지 않는다** — 우리 화면이 「검증 통과」라고 말한 뒤에
+   * 포털이 거부하면 사용자는 이유를 알 수 없다.
+   */
+  it("단색에 가까운 그림이 하한 아래로 떨어지면 잡는다", async () => {
+    const spec = specById("naver-gfa-main");
+    expect(spec.minBytes, "이 시험은 하한이 있어야 뜻이 있다").toBeGreaterThan(0);
+
+    const { bytes } = await derive(spec.id, await flat(1600, 800));
+    expect(bytes.length).toBeLessThan(spec.minBytes!);
+
+    const check = await checkAgainstSpec(bytes, spec);
+    expect(check.ok).toBe(false);
+    expect(check.failures.join()).toMatch(/모자랍니다/);
+  });
+
+  it("하한과 상한 사이는 통과한다", async () => {
+    const spec = specById("naver-gfa-main");
+    const { bytes } = await derive(spec.id, await busy(1600, 800));
+    expect(bytes.length).toBeGreaterThanOrEqual(spec.minBytes!);
+    expect((await checkAgainstSpec(bytes, spec)).ok).toBe(true);
+  });
+});
+
+describe("투명 배경 규격의 알파", () => {
+  const alphaSpec = () => specById("naver-smartchannel");
+
+  it("불투명 PNG 를 투명 규격으로 통과시키지 않는다", async () => {
+    const opaque = await sharp({
+      create: { width: 750, height: 160, channels: 3, background: { r: 10, g: 20, b: 30 } },
+    }).png().toBuffer();
+    const check = await checkAgainstSpec(opaque, alphaSpec());
+    expect(check.ok).toBe(false);
+    expect(check.failures.join()).toMatch(/알파 채널이 없습니다/);
+  });
+
+  it("알파 채널이 있어도 전부 불투명이면 잡는다 — 없는 것과 같다", async () => {
+    const fakeAlpha = await sharp({
+      create: { width: 750, height: 160, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 1 } },
+    }).png().toBuffer();
+    expect((await sharp(fakeAlpha).metadata()).hasAlpha).toBe(true);
+
+    const check = await checkAgainstSpec(fakeAlpha, alphaSpec());
+    expect(check.ok).toBe(false);
+    expect(check.failures.join()).toMatch(/완전히 투명한 픽셀이 없습니다/);
+  });
+
+  it("실제로 투명한 곳이 있으면 통과한다", async () => {
+    const real = await sharp({
+      create: { width: 750, height: 160, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 0 } },
+    }).png().toBuffer();
+    const check = await checkAgainstSpec(real, alphaSpec());
+    expect(check.failures.join()).not.toMatch(/알파|투명/);
+  });
+});
+
+describe("어디를 자르는가", () => {
+  /**
+   * **크롭 기준이 시험 밖이었다.** `position: "centre"` 를 `"top"` 으로 바꿔도
+   * 시험이 전부 통과했다 — 크롭하는 셋의 구도가 통째로 바뀌는데 아무도 안 봤다.
+   *
+   * 매직 넘버로 재지 않는다. 같은 마스터를 중앙·위·아래로 각각 깎아 두고
+   * **모듈의 결과가 어느 쪽에 가장 가까운지**를 본다. 크롭 양이 적어 색만으로는
+   * 안 갈리는 경우에도 이 방식은 갈린다.
+   */
+  async function striped(width: number, height: number): Promise<Buffer> {
+    const band = (r: number, g: number, b: number, h: number) =>
+      sharp({ create: { width, height: h, channels: 3, background: { r, g, b } } }).png().toBuffer();
+    const third = Math.round(height / 3);
+    return sharp({ create: { width, height, channels: 3, background: { r: 0, g: 255, b: 0 } } })
+      .composite([
+        { input: await band(255, 0, 0, third), top: 0, left: 0 },
+        { input: await band(0, 0, 255, height - third * 2), top: third * 2, left: 0 },
+      ])
+      .png().toBuffer();
+  }
+
+  /** 두 raw 버퍼의 평균 차이. 작을수록 닮았다. */
+  function distance(a: Buffer, b: Buffer): number {
+    let sum = 0;
+    for (let i = 0; i < a.length; i += 1) sum += Math.abs(a[i]! - b[i]!);
+    return sum / a.length;
+  }
+
+  it("가운데를 자른다 — 위도 아래도 아니다", async () => {
+    const spec = specById("naver-gfa-main");
+    const master = await striped(1600, 800);
+    const { bytes } = await derive(spec.id, master);
+    // 양쪽을 같은 형태(RGB 3채널)로 맞춘다 — 채널 수가 다르면 버퍼가 어긋나
+    // 무의미한 값이 나온다(실제로 그렇게 한 번 틀렸다).
+    const asRgb = (pipeline: ReturnType<typeof sharp>) =>
+      pipeline.removeAlpha().toColourspace("srgb").raw().toBuffer();
+
+    const got = await asRgb(sharp(bytes));
+    const reference = (position: string) =>
+      asRgb(sharp(master).resize(spec.target.width, spec.target.height, { fit: "cover", position }));
+
+    const toCentre = distance(got, await reference("centre"));
+    const toTop = distance(got, await reference("top"));
+    const toBottom = distance(got, await reference("bottom"));
+    expect(toCentre, "세 거리가 같으면 버퍼가 어긋난 것이다").not.toBe(toTop);
+
+    expect(toCentre, `중앙=${toCentre.toFixed(2)} 위=${toTop.toFixed(2)}`).toBeLessThan(toTop);
+    expect(toCentre, `중앙=${toCentre.toFixed(2)} 아래=${toBottom.toFixed(2)}`).toBeLessThan(toBottom);
   });
 });

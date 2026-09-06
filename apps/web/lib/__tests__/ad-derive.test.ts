@@ -275,4 +275,23 @@ describe("필수와 선택을 가른다", () => {
       expect(spec.source, spec.id).toMatch(/^https?:\/\//);
     }
   });
+
+  /**
+   * **`verifiedAt` 만으로는 「확인했다」와 「옮겨 적었다」가 구분되지 않는다.**
+   *
+   * 네이버 공식 문서가 광고주 로그인 뒤에 있어 공개 확인이 안 됐다. 그 사실이
+   * 데이터에 없으면 화면이 구글·카카오와 똑같이 보여 주게 되고, 확인 날짜가
+   * 검증되지 않은 값에 검증 도장을 찍는 꼴이 된다(설계 §11).
+   */
+  it("네이버는 전부 `reference` 다 — 공식 확인이 안 됐다", () => {
+    const naver = AD_SPECS.filter((spec) => spec.portal === "naver");
+    expect(naver.length).toBeGreaterThan(0);
+    for (const spec of naver) expect(spec.sourceKind, spec.id).toBe("reference");
+  });
+
+  it("구글·카카오는 전부 `official` 이다 — 공식 문서를 직접 봤다", () => {
+    const official = AD_SPECS.filter((spec) => spec.portal !== "naver");
+    expect(official.length).toBeGreaterThan(0);
+    for (const spec of official) expect(spec.sourceKind, spec.id).toBe("official");
+  });
 });

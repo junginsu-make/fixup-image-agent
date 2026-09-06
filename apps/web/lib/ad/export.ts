@@ -75,11 +75,27 @@ export async function exportForAd(
       };
     }
 
+    /**
+     * **중앙에서 자른다.**
+     *
+     * 설계 §3.3 은 「`safeArea` 가 있으면 그 영역이 살아남는 쪽으로 치우쳐
+     * 자른다」고 적었는데, **아직 구현하지 않았다.** 지금 크롭하는 셋
+     * (`naver-gfa-main`·`naver-brand-pc`·`naver-brand-mobile`)에는 `safeArea` 가
+     * 없고, `safeArea` 를 가진 카카오 넷은 전부 `resize` 라 치우칠 일이 없다.
+     * 필요해지는 규격이 생기면 그때 붙인다.
+     */
     const base = () =>
       sharp(master, { limitInputPixels: MAX_INPUT_PIXELS })
         .resize(spec.target.width, spec.target.height, { fit: "cover", position: "centre" });
 
-    // PNG 는 품질 손잡이가 없다. 한 번 만들고 상한만 본다.
+    /**
+     * PNG 는 품질 손잡이가 없다. 한 번 만들고 상한만 본다.
+     *
+     * **이 갈래는 아직 아무도 안 밟는다.** `format: "png"` 인 규격은
+     * `google-rda-logo` 하나뿐인데 `supply: "upload"` 라 위에서 이미 실패로 빠진다.
+     * 2단계에서 업로드받은 로고를 이 함수에 통과시키면 그때 처음 실행된다 —
+     * 그 전까지는 시험이 못 덮는 코드다.
+     */
     if (spec.format === "png") {
       const bytes = await encode(base(), spec, QUALITY_MAX);
       if (spec.maxBytes && bytes.length > spec.maxBytes) {

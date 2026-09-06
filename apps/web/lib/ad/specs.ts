@@ -64,11 +64,35 @@ export interface AdSpec {
   supply?: "upload";
   /** 포털이 거는 용량 상한. 넘으면 등록이 거부된다. */
   maxBytes?: number;
-  /** 주요 요소를 두면 안 되는 가장자리. 미리보기 띠와 크롭 기준에 쓴다. */
+  /**
+   * 포털이 거는 용량 **하한**. 모자라면 등록이 거부된다.
+   *
+   * 상한만 보면 단색에 가까운 시안이 2KB 로 나와도 통과한다 — 네이버 메인은
+   * 50KB 미만을 받지 않는다.
+   */
+  minBytes?: number;
+  /**
+   * 주요 요소를 두면 안 되는 가장자리.
+   *
+   * **아직 크롭 기준으로는 안 쓴다.** 설계 §3.3 은 「`safeArea` 가 있으면 그
+   * 영역이 살아남는 쪽으로 치우쳐 자른다」고 적었지만, 지금 크롭하는 셋
+   * (`naver-gfa-main`·`naver-brand-pc`·`naver-brand-mobile`)에는 `safeArea` 가
+   * 없고 `safeArea` 를 가진 카카오 넷은 전부 `resize` 라 치우칠 일이 없다.
+   * 쓰이는 곳은 2단계 미리보기의 반투명 띠다(§5.2).
+   */
   safeArea?: { top: number; right: number; bottom: number; left: number };
   /** 이 수치를 마지막으로 확인한 날. 규격은 조용히 바뀐다. */
   verifiedAt: string;
-  /** 공식 문서 주소. 확인할 때 여기서 시작한다. */
+  /**
+   * 출처의 성격.
+   *
+   * **`reference` 는 「확인했다」가 아니라 「대행사 자료를 옮겨 적었다」는 뜻이다.**
+   * 네이버 공식 문서가 광고주 로그인 뒤에 있어 공개 확인이 안 됐다. 이것이
+   * 데이터에 없으면 화면이 구글·카카오와 똑같이 보여 주게 되고, `verifiedAt` 이
+   * 검증되지 않은 값에 검증 도장을 찍는 꼴이 된다.
+   */
+  sourceKind: "official" | "reference";
+  /** 출처 주소. 확인할 때 여기서 시작한다. */
   source: string;
   note?: string;
 }
@@ -88,28 +112,28 @@ export const AD_SPECS: AdSpec[] = [
     portal: "google", product: "반응형 디스플레이", label: "가로 1200×628",
     target: { width: 1200, height: 628 },
     required: true, format: "jpg", maxBytes: 5_242_880,
-    verifiedAt: "2026-09-06", source: GOOGLE_RDA,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: GOOGLE_RDA,
   },
   {
     id: "google-rda-square",
     portal: "google", product: "반응형 디스플레이", label: "정사각 1200×1200",
     target: { width: 1200, height: 1200 },
     required: true, format: "jpg", maxBytes: 5_242_880,
-    verifiedAt: "2026-09-06", source: GOOGLE_RDA,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: GOOGLE_RDA,
   },
   {
     id: "google-rda-portrait",
     portal: "google", product: "반응형 디스플레이", label: "세로 960×1200",
     target: { width: 960, height: 1200 },
     required: false, format: "jpg", maxBytes: 5_242_880,
-    verifiedAt: "2026-09-06", source: GOOGLE_RDA,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: GOOGLE_RDA,
   },
   {
     id: "google-rda-logo",
     portal: "google", product: "반응형 디스플레이", label: "로고 1200×300",
     target: { width: 1200, height: 300 },
     required: false, format: "png", supply: "upload",
-    verifiedAt: "2026-09-06", source: GOOGLE_RDA,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: GOOGLE_RDA,
     note: "안 넣으면 구글이 기본 아이콘을 넣는다. 등록은 된다.",
   },
 
@@ -119,35 +143,35 @@ export const AD_SPECS: AdSpec[] = [
     portal: "kakao", product: "디스플레이", label: "정사각 1200×1200",
     target: { width: 1200, height: 1200 },
     required: true, format: "jpg", maxBytes: 10_485_760, safeArea: KAKAO_SAFE,
-    verifiedAt: "2026-09-06", source: KAKAO_DISPLAY,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: KAKAO_DISPLAY,
   },
   {
     id: "kakao-display-2x1",
     portal: "kakao", product: "디스플레이", label: "가로 1200×600",
     target: { width: 1200, height: 600 },
     required: false, format: "jpg", maxBytes: 10_485_760, safeArea: KAKAO_SAFE,
-    verifiedAt: "2026-09-06", source: KAKAO_DISPLAY,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: KAKAO_DISPLAY,
   },
   {
     id: "kakao-display-9x16",
     portal: "kakao", product: "디스플레이", label: "세로 720×1280",
     target: { width: 720, height: 1280 },
     required: false, format: "jpg", maxBytes: 10_485_760, safeArea: KAKAO_SAFE,
-    verifiedAt: "2026-09-06", source: KAKAO_DISPLAY,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: KAKAO_DISPLAY,
   },
   {
     id: "kakao-display-4x5",
     portal: "kakao", product: "디스플레이", label: "세로 960×1200",
     target: { width: 960, height: 1200 },
     required: false, format: "jpg", maxBytes: 10_485_760, safeArea: KAKAO_SAFE,
-    verifiedAt: "2026-09-06", source: KAKAO_DISPLAY,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: KAKAO_DISPLAY,
   },
   {
     id: "kakao-bizboard",
     portal: "kakao", product: "비즈보드", label: "비즈보드 1029×258",
     target: { width: 1029, height: 258 },
     required: true, format: "png-alpha", maxBytes: 307_200,
-    verifiedAt: "2026-09-06", source: KAKAO_BIZBOARD,
+    verifiedAt: "2026-09-06", sourceKind: "official", source: KAKAO_BIZBOARD,
     note: "투명 배경 PNG-24. 조립 엔진이 필요해 아직 지원하지 않는다(설계 §3.4).",
   },
 
@@ -157,36 +181,36 @@ export const AD_SPECS: AdSpec[] = [
     portal: "naver", product: "GFA", label: "네이티브 1200×1200",
     target: { width: 1200, height: 1200 },
     required: true, format: "jpg", maxBytes: 2_097_152,
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
   },
   {
     id: "naver-gfa-banner",
     portal: "naver", product: "GFA", label: "이미지 배너 1200×628",
     target: { width: 1200, height: 628 },
     required: true, format: "jpg", maxBytes: 2_097_152,
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
   },
   {
     id: "naver-gfa-main",
     portal: "naver", product: "GFA", label: "네이버 메인 1250×560",
     target: { width: 1250, height: 560 },
-    required: false, format: "jpg", maxBytes: 256_000,
-    verifiedAt: "2026-09-06", source: NAVER_REF,
-    note: "50~250KB. 상한이 가장 빡빡하다.",
+    required: false, format: "jpg", maxBytes: 256_000, minBytes: 50_000,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
+    note: "50~250KB. 위아래가 다 막혀 있는 유일한 규격이다.",
   },
   {
     id: "naver-gfa-thumb",
     portal: "naver", product: "GFA", label: "썸네일 300×300",
     target: { width: 300, height: 300 },
     required: false, format: "jpg", maxBytes: 2_097_152,
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
   },
   {
     id: "naver-brand-pc",
     portal: "naver", product: "브랜드검색", label: "PC 썸네일 228×152",
     target: { width: 228, height: 152 },
     required: true, format: "jpg",
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
     note: "「228×152 이상, 비율 유지」다. 테두리 불가.",
   },
   {
@@ -194,7 +218,7 @@ export const AD_SPECS: AdSpec[] = [
     portal: "naver", product: "브랜드검색", label: "모바일 썸네일 188×110",
     target: { width: 188, height: 110 },
     required: true, format: "jpg",
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
     note: "「188×110 이상, 비율 유지」다.",
   },
   {
@@ -202,7 +226,7 @@ export const AD_SPECS: AdSpec[] = [
     portal: "naver", product: "파워링크 확장소재", label: "파워링크 이미지 214×214",
     target: { width: 214, height: 214 },
     required: false, format: "jpg",
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
     note: "확장소재는 없어도 광고가 나간다.",
   },
   {
@@ -210,7 +234,7 @@ export const AD_SPECS: AdSpec[] = [
     portal: "naver", product: "GFA", label: "스마트채널 750×160",
     target: { width: 750, height: 160 },
     required: true, format: "png-alpha", maxBytes: 2_097_152,
-    verifiedAt: "2026-09-06", source: NAVER_REF,
+    verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
     note: "투명 PNG 만 받는다. 조립 엔진이 필요해 아직 지원하지 않는다(설계 §3.4).",
   },
 ];
