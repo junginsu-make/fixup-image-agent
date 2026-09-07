@@ -8,7 +8,7 @@ import {
   Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
 import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
-import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
+import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder } from "@fixup/poster-core";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
@@ -54,13 +54,16 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    *
    * 고르면 뒤에 붙이고, 빼면(`none`) 목록에서 지운다. 뺐다가 다시 고르면
    * 맨 뒤로 간다 — 그게 화면에서 보이는 것과 같다.
+   *
+   * **이미 있는 것은 자리를 안 옮긴다.** 역할만 바꾸는 것(따라 만들기 →
+   * 인물 지키기)은 고르는 일이 아니다. 옮기면 ①번 드롭다운을 건드렸다는
+   * 이유로 그 그림이 맨 뒤로 밀리고, 「①번을」이라고 쓴 지시가 다른 그림에
+   * 붙는다.
    */
   const changeRole = React.useCallback((id: string, role: Role) => {
     setRoles((current) => ({ ...current, [id]: role }));
-    setPickOrder((current) => {
-      const without = current.filter((entry) => entry !== id);
-      return role === "none" ? without : [...without, id];
-    });
+    // 규칙은 `@fixup/poster-core` 가 갖는다. 여기 또 적으면 둘이 갈린다.
+    setPickOrder((current) => nextPickOrder(current, id, role !== "none"));
   }, []);
 
   /** 고른 차례 그대로의 id 목록. 역할이 풀린 것은 뺀다. */

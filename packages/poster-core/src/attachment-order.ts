@@ -65,3 +65,27 @@ export function attachmentUrls(attachments: readonly OrderedAttachment[]): strin
 export function attachmentNumber(index: number): number {
   return index + 1;
 }
+
+/**
+ * 고른 차례를 손보는 규칙.
+ *
+ * 화면에서 역할을 바꿀 때마다 부른다. 세 가지 일이 일어난다.
+ *
+ *   처음 고름   맨 뒤에 붙는다
+ *   역할만 바꿈 **자리를 안 옮긴다**
+ *   뺌          목록에서 빠진다
+ *
+ * 가운데가 중요하다. 역할만 바꾸는 것(따라 만들기 → 인물 지키기)은 고르는 일이
+ * 아니다. 옮기면 ①번 드롭다운을 건드렸다는 이유로 그 그림이 맨 뒤로 밀리고,
+ * 「①번을」이라고 쓴 지시가 다른 그림에 붙는다.
+ *
+ * 뺐다가 다시 고르면 맨 뒤로 간다 — 그건 실제로 다시 고른 것이다.
+ */
+export function nextPickOrder(
+  current: readonly string[],
+  id: string,
+  picked: boolean,
+): string[] {
+  if (!picked) return current.filter((entry) => entry !== id);
+  return current.includes(id) ? [...current] : [...current, id];
+}

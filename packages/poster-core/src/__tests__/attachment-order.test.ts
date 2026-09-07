@@ -200,3 +200,42 @@ describe("수정 경로도 안 깨진다", () => {
     expect(job.prompt).toMatch(/Image 1 is a POSTER REFERENCE/);
   });
 });
+
+describe("고른 차례를 손보는 규칙", () => {
+  it("처음 고르면 맨 뒤에 붙는다", async () => {
+    const { nextPickOrder } = await import("../attachment-order");
+    expect(nextPickOrder(["a"], "b", true)).toEqual(["a", "b"]);
+  });
+
+  it("역할만 바꾸면 자리를 안 옮긴다", async () => {
+    /**
+     * **2026-09-07 리뷰에서 잡은 것.**
+     *
+     * ①번 그림의 역할을 「따라 만들기 → 인물 지키기」로 바꾸면 그것이 맨 뒤로
+     * 밀렸다. 드롭다운을 건드렸다는 이유로 번호가 바뀌면, 「①번을」이라고 쓴
+     * 지시가 다른 그림에 붙는다.
+     */
+    const { nextPickOrder } = await import("../attachment-order");
+    expect(nextPickOrder(["a", "b", "c"], "a", true)).toEqual(["a", "b", "c"]);
+    expect(nextPickOrder(["a", "b", "c"], "b", true)).toEqual(["a", "b", "c"]);
+  });
+
+  it("빼면 목록에서 빠진다", async () => {
+    const { nextPickOrder } = await import("../attachment-order");
+    expect(nextPickOrder(["a", "b"], "a", false)).toEqual(["b"]);
+  });
+
+  it("뺐다가 다시 고르면 맨 뒤로 간다", async () => {
+    // 그건 실제로 다시 고른 것이다. 화면에서 보이는 것과 같다.
+    const { nextPickOrder } = await import("../attachment-order");
+    const without = nextPickOrder(["a", "b"], "a", false);
+    expect(nextPickOrder(without, "a", true)).toEqual(["b", "a"]);
+  });
+
+  it("원본을 안 바꾼다", async () => {
+    const { nextPickOrder } = await import("../attachment-order");
+    const before = ["a"];
+    nextPickOrder(before, "b", true);
+    expect(before).toEqual(["a"]);
+  });
+});
