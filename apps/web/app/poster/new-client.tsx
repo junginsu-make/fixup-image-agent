@@ -13,6 +13,9 @@ import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { adSubmitPlan } from "./ad-mode";
+import {
+  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount,
+} from "./poster-form-rules";
 import { planDerivation } from "../../lib/ad/derive";
 import {
   PORTAL_LABEL, defaultSelection, missingRequiredCount, specRows,
@@ -60,9 +63,18 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 화면도 같은 판단을 미리 해서, 바뀔 거라는 것과 그때의 값을 먼저 보여준다 —
    * 만들고 나서 "왜 다른 모델로 만들어졌지" 가 되면 안 된다.
    */
-  const choice = chooseModelForRatio(ratio, modelId, IMAGE_MODELS);
+  /**
+   * **가드가 보는 값과 본문에 싣는 값이 같아야 한다.**
+   *
+   * 초판은 이 둘을 화면 상태(`ratio`, 광고 모드에서도 `"2:3"`)로 돌리고 본문에는
+   * `match-source` 를 실었다. `match-source` 는 `gpt-image-2` 로만 되는데 화면이
+   * `"2:3"` 로 재서 nano 계열도 통과시켰고, **모델 넷 중 셋에서 광고 모드가
+   * 죽어 있었다** — 사용자는 광고와 상관없어 보이는 문구만 봤다.
+   */
+  const submitRatio = effectiveRatio(adMode, ratio);
+  const choice = chooseModelForRatio(submitRatio, modelId, IMAGE_MODELS);
   const estimate = estimatePosterCost({
-    modelId: choice.model.id, ratioId: ratio, variants,
+    modelId: choice.model.id, ratioId: submitRatio, variants,
     hasReferences: styleIds.length + preservedIds.length > 0,
   });
 
@@ -109,7 +121,12 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   function projectBody(extra: Record<string, unknown> = {}) {
     return {
       title: title.trim() || "이름 없는 이미지",
-      ratio, modelId, variants,
+      ratio: submitRatio,
+      // **화면이 「GPT Image 2 로 만듭니다」라고 말했으면 그 모델을 보낸다.**
+      // 초판은 사용자가 고른 모델을 실어서, 화면의 안내와 서버가 받는 값이
+      // 어긋났다 — 서버는 그 비율을 못 만드는 모델을 받아 거절했다.
+      modelId: choice.model.id,
+      variants,
       instruction: instruction.trim(),
       referenceIds: styleIds,
       preservedIds,
@@ -147,12 +164,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
          * 만들어졌는지 알 수 없다.
          */
         const made: string[] = [];
-        for (const master of adPlan.masters) {
-          made.push(await createProject(projectBody({
-            ratio: MATCH_SOURCE,
-            adMasterId: master.id,
-            title: `${title.trim() || "이름 없는 이미지"} (${master.width}×${master.height})`,
-          })));
+        for (const body of adProjectBodies(projectBody(), adPlan.masters, title)) {
+          made.push(await createProject(body));
         }
         // 첫 작업으로 보낸다. 나머지는 라이브러리에 쌓이고 `/ad` 가 거기서 뽑는다.
         router.push(`/poster/${made[0]}`);
@@ -180,10 +193,18 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    */
   const adPlan = adSubmitPlan(adMode ? adPicked : []);
   const adMissingRequired = missingRequiredCount(AD_ROWS, adPicked);
+  const projects = projectCount(adMode, adPlan.masters.length);
+  // 무엇을 그릴지는 순수 규칙이 정한다 — 컴포넌트 안에 두면 시험이 못 간다.
+  const sections = posterSpecSections({ adEnabled, adMode });
 
-  const canSubmit =
-    styleIds.length > 0 && instruction.trim().length > 0 && !estimate.rejected
-    && !overReferenceLimit && (!adMode || adPlan.ready);
+  const canSubmit = canCreatePoster({
+    styleCount: styleIds.length,
+    instruction,
+    estimateRejected: Boolean(estimate.rejected),
+    overReferenceLimit,
+    adMode,
+    adReady: adPlan.ready,
+  });
 
   return (
     <div className="grid gap-6">
@@ -241,7 +262,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               **스위치가 꺼져 있으면 아예 안 그린다**(계약 5). 서버가 이미
               `poster-service.ts` 에서 `adMaster` 를 버리므로 두 겹이다.
             */}
-            {adEnabled && (
+            {sections.includes("mode-toggle") && (
               <fieldset className="grid gap-2">
                 <legend className="text-meta text-subtle-foreground">무엇을 만드나</legend>
                 <div className="flex flex-wrap gap-2">
@@ -266,7 +287,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             )}
 
             {/* **일반 모드는 지금 그대로 둔다**(설계 §9 원칙 4). */}
-            {!adMode && (
+            {sections.includes("ratio") && (
               <fieldset className="grid gap-2">
                 <legend className="text-meta text-subtle-foreground">비율</legend>
                 <div className="flex flex-wrap gap-2">
@@ -285,7 +306,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               </fieldset>
             )}
 
-            {adMode && (
+            {sections.includes("ad-specs") && (
               <fieldset className="grid gap-2">
                 <legend className="text-meta text-subtle-foreground">광고 규격</legend>
                 <ul className="grid gap-1">
@@ -389,7 +410,21 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                예상 비용 ${estimate.totalUsd?.toFixed(3)} · {IMAGE_MODELS.find((model) => model.id === modelId)?.label} · {variants}장
+                {/*
+                  **프로젝트 수를 곱한다.** 광고 모드의 한 번 클릭은 마스터마다
+                  프로젝트를 만든다(설계 3-0). 안 곱하면 「만들 그림 2장」 바로
+                  아래에서 한 장 값을 보여 주게 된다 — §9 원칙 2 가 「10배 과금을
+                  걱정하지 않게 하려고」 넣은 자리에서 **실제보다 낮은 금액**을
+                  보여 주는 셈이다.
+
+                  모델도 **실제로 쓸 모델**을 적는다. 고른 모델을 적으면 화면이
+                  「GPT Image 2 로 만듭니다」라고 말해 놓고 그 옆에서 다른 이름을
+                  보여 준다.
+                */}
+                예상 비용 ${((estimate.totalUsd ?? 0) * projects).toFixed(3)} · {choice.model.label}
+                {adMode
+                  ? ` · 그림 ${adPlan.masters.length}장 × 변형 ${variants}장 = ${adPlan.masters.length * variants}장`
+                  : ` · ${variants}장`}
                 {estimate.approximate ? " (공표 가격표에 없는 크기라 넉넉히 잡은 값입니다)" : ""}
               </p>
             )}
