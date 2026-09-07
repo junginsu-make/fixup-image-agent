@@ -4,6 +4,8 @@ import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-g
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
 import { markAsAi } from "../../../../lib/watermark";
 import { getLibraryImageFile } from "../../../../lib/server-library";
+import { posterStoresForUser } from "../../../../lib/poster/stores";
+import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
 
 export const runtime = "nodejs";
@@ -43,7 +45,37 @@ const RequestSchema = z.object({
   position: z.number().int().min(0).max(1_000),
   // 규격 id 는 `naver-smartchannel` 이 가장 길다(19자).
   specIds: z.array(z.string().trim().min(1).max(64)).min(1).max(MAX_SPECS_PER_REQUEST),
+  /**
+   * 어디서 그림을 가져오는가.
+   *
+   * **3단계가 만드는 것은 라이브러리에 없다**(설계 §10 3-e). 광고 마스터는
+   * `poster_images` 에 쌓이는데 2단계는 `library_images` 만 읽어서, 마스터를
+   * 만들고 이 화면에 오면 **고를 그림이 하나도 없었다.**
+   *
+   * 기본값이 `library` 라 **2단계 사용자는 안 깨진다** — 안 보내면 지금까지의 길이다.
+   */
+  source: z.enum(["library", "poster"]).default("library"),
 }).strict();
+
+/**
+ * 포스터 작업의 그림 한 장.
+ *
+ * **소유권을 넓히지 않는다.** `poster/…/images/[index]/file` 은 관리자에게
+ * 조건을 빼 주는데(첫 화면에 걸 것을 고르려고), **내보내기에는 그 필요가
+ * 없다** — 넓히면 관리자가 남의 그림으로 광고를 뽑는다. 세션의 `userId` 로만
+ * 조회하는 `posterStoresForUser` 가 그것을 강제한다.
+ */
+async function posterImageFile(
+  userId: string,
+  projectId: string,
+  position: number,
+): Promise<{ bytes: Buffer; mimeType: string } | null> {
+  const images = await posterStoresForUser(userId).images.byProject(projectId);
+  const found = images.find((image) => image.variantIndex === position);
+  if (!found) return null;
+  const { bytes, contentType } = await posterImageBytes(found.assetPath);
+  return { bytes, mimeType: contentType };
+}
 
 export async function POST(request: Request) {
   /**
@@ -72,11 +104,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const file = await getLibraryImageFile(
-      { userId: auth.member.userId, role: auth.member.profile.role },
-      parsed.data.itemId,
-      parsed.data.position,
-    );
+    const file = parsed.data.source === "poster"
+      ? await posterImageFile(auth.member.userId, parsed.data.itemId, parsed.data.position)
+      : await getLibraryImageFile(
+        { userId: auth.member.userId, role: auth.member.profile.role },
+        parsed.data.itemId,
+        parsed.data.position,
+      );
     if (!file) return new Response("찾을 수 없습니다.", { status: 404 });
 
     /**

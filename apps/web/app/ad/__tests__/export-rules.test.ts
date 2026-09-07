@@ -4,7 +4,8 @@ import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, bytesFromDataUrl, missingRequiredCount,
+  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
+  missingRequiredCount,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -444,5 +445,49 @@ describe("필수를 꺼 두면 알린다", () => {
     const blocked = rows.filter((r) => !r.supported && r.spec.required);
     expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
     expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+  });
+});
+
+describe("어디서 그림을 고르는가", () => {
+  /**
+   * **3단계가 만드는 것은 라이브러리에 없다**(설계 §10 3-e). 광고 마스터는
+   * `poster_images` 에 쌓이는데 이 화면은 `library_images` 만 읽어서, 마스터를
+   * 만들고 여기 오면 **고를 그림이 하나도 없었다.** 로컬에서 켜 보고 알았다.
+   */
+  const library = [
+    { id: "L1", title: "가을 사진전", storage: "account", tool: "pdp" },
+    { id: "L2", title: "브라우저 초안", storage: "browser", tool: "pdp" },
+    { id: "L3", title: "참고", storage: "account", tool: "reference" },
+  ] as never[];
+  const posters = [
+    { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ variantIndex: 0 }] },
+    { id: "P2", title: "만드는 중", status: "generating", images: [] },
+    { id: "P3", title: "결과 없음", status: "done", images: [] },
+  ];
+
+  it("라이브러리와 포스터를 함께 보여 준다", () => {
+    const items = adSourceItems(library, posters);
+    expect(items.map((item) => item.id)).toEqual(["P1", "L1"]);
+  });
+
+  /** 광고 마스터가 최근 것이므로 위에 온다 — 만들자마자 고르러 온다. */
+  it("포스터를 먼저 세운다", () => {
+    expect(adSourceItems(library, posters)[0]!.source).toBe("poster");
+  });
+
+  it("서버에 그림이 없는 것은 안 보여 준다", () => {
+    const ids = adSourceItems([], posters).map((item) => item.id);
+    expect(ids, "만드는 중이거나 결과가 없는 것은 고를 수 없다").toEqual(["P1"]);
+  });
+
+  it("라이브러리 쪽 거르기는 그대로다", () => {
+    const ids = adSourceItems(library, []).map((item) => item.id);
+    expect(ids, "브라우저 저장분과 참고 이미지는 서버에 파일이 없다").toEqual(["L1"]);
+  });
+
+  /** 어느 쪽에서 왔는지가 실려야 라우트가 어느 표를 읽을지 안다. */
+  it("출처를 함께 싣는다", () => {
+    const items = adSourceItems(library, posters);
+    expect(items.find((item) => item.id === "L1")!.source).toBe("library");
   });
 });

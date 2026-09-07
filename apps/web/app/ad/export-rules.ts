@@ -167,6 +167,50 @@ export function exportableItems(items: LibraryItem[]): LibraryItem[] {
 }
 
 /**
+ * 이 화면에서 고를 수 있는 것 — **라이브러리와 포스터 작업을 함께.**
+ *
+ * 설계 §10 3-e. **3단계가 만드는 것은 라이브러리에 없다.** 광고 마스터는
+ * `poster_images` 에 쌓이는데 이 화면은 `library_images` 만 읽어서, 마스터를
+ * 만들고 여기 오면 **고를 그림이 하나도 없었다.** 로컬에서 실제로 켜 보고
+ * 알았다 — 리뷰 넷이 전부 못 봤다. 양쪽이 각각은 맞았기 때문이다.
+ *
+ * **`loadLibrary()` 를 안 고친다.** 그 함수를 보는 화면이 넷이라(`/ad`·라이브러리·
+ * 카드뉴스 레이아웃·캐릭터), 거기에 포스터를 더하면 광고와 무관한 세 화면이
+ * 함께 바뀐다.
+ *
+ * **포스터를 먼저 세운다.** 광고 마스터를 막 만들고 고르러 오는 길이다.
+ */
+export interface AdSourceItem {
+  id: string;
+  title: string;
+  /** 라우트가 어느 표를 읽을지 정한다. */
+  source: "library" | "poster";
+}
+
+export function adSourceItems(
+  library: LibraryItem[],
+  posters: Array<{ id: string; title: string; status: string; images?: unknown[] }>,
+): AdSourceItem[] {
+  const fromPoster = posters
+    // **결과가 없는 것은 안 보여 준다.** 만드는 중이거나 실패한 작업을 고르면
+    // 「뽑지 못했습니다」만 돌아온다 — 왜 안 되는지 알 길이 없다.
+    .filter((project) => (project.images?.length ?? 0) > 0)
+    .map((project) => ({
+      id: project.id,
+      title: project.title || "제목 없음",
+      source: "poster" as const,
+    }));
+
+  const fromLibrary = exportableItems(library).map((item) => ({
+    id: item.id,
+    title: item.title || "제목 없음",
+    source: "library" as const,
+  }));
+
+  return [...fromPoster, ...fromLibrary];
+}
+
+/**
  * ZIP 에 담을 것.
  *
  * **검증에 걸린 것은 빼고 담는다.** `batch.ts` 는 일부러 실패한 것도 바이트를

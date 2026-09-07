@@ -27,6 +27,10 @@ const authCalls: number[] = [];
 const viewers: Array<{ userId: string; role: string }> = [];
 const fileArgs: Array<{ itemId: string; position: number }> = [];
 const batchArgs: Array<{ specIds: string[] }> = [];
+const posterOwners: string[] = [];
+let posterImages: Array<{ variantIndex: number; assetPath: string }> = [
+  { variantIndex: 0, assetPath: "u1/poster/p1/0.png" },
+];
 
 vi.mock("../../../../lib/ad/batch", async () => {
   const real = await vi.importActual<typeof import("../../../../lib/ad/batch")>(
@@ -55,6 +59,17 @@ vi.mock("../../../../lib/membership/api", () => ({
       ? { ok: true as const, member: { userId: member.userId, profile: { role: member.role } } }
       : { ok: false as const, response: new Response("로그인이 필요합니다.", { status: 401 }) };
   },
+}));
+
+vi.mock("../../../../lib/poster/stores", () => ({
+  posterStoresForUser: (userId: string) => {
+    posterOwners.push(userId);
+    return { images: { byProject: async () => posterImages } };
+  },
+}));
+
+vi.mock("../../../../lib/poster/asset-bytes", () => ({
+  posterImageBytes: async () => ({ bytes: Buffer.from("poster"), contentType: "image/png" }),
 }));
 
 vi.mock("../../../../lib/server-library", () => ({
@@ -98,6 +113,8 @@ beforeEach(() => {
   viewers.length = 0;
   fileArgs.length = 0;
   batchArgs.length = 0;
+  posterOwners.length = 0;
+  posterImages = [{ variantIndex: 0, assetPath: "u1/poster/p1/0.png" }];
 });
 
 describe("들어올 수 있는 사람인가", () => {
@@ -228,5 +245,54 @@ describe("실패를 어떻게 말하는가", () => {
     const body = await response.json();
     expect(body.message).toBe("뽑지 못했습니다.");
     expect(JSON.stringify(body), "내부 문구가 새면 안 된다").not.toMatch(/vips|node_modules/);
+  });
+});
+
+/**
+ * 포스터 작업에서 뽑기 (설계 §10 3-e).
+ *
+ * **2단계와 3단계가 이어져 있지 않았다.** 3단계는 `poster_images` 에 만들고
+ * 2단계는 `library_images` 를 읽어서, 광고 모드로 마스터를 만들고 `/ad` 에 가면
+ * **고를 그림이 하나도 없었다.** 로컬에서 실제로 켜 보고 알았다 — 리뷰 넷이
+ * 전부 못 봤다. 양쪽이 각각은 맞았기 때문이다.
+ */
+describe("포스터 작업에서 뽑는다", () => {
+  const posterCall = { itemId: "p1", position: 0, specIds: ["google-rda-square"], source: "poster" as const };
+
+  it("포스터 그림을 읽어 뽑는다", async () => {
+    const response = await call(posterCall);
+    expect(response.status).toBe(200);
+    expect(batchArgs).toEqual([{ specIds: ["google-rda-square"] }]);
+  });
+
+  /**
+   * **소유권을 넓히지 않는다.** `images/[index]/file` 은 관리자에게 조건을
+   * 빼 주는데(첫 화면에 걸 것을 고르려고), 내보내기에는 그 필요가 없다 —
+   * 넓히면 관리자가 **남의 그림으로 광고를 뽑는다.**
+   */
+  it("자기 작업만 읽는다 — 관리자도 마찬가지다", async () => {
+    member = { userId: "admin-1", role: "admin" };
+    await call(posterCall);
+    expect(posterOwners, "세션의 userId 로만 조회해야 한다").toEqual(["admin-1"]);
+  });
+
+  it("없는 작업이면 404 다", async () => {
+    posterImages = [];
+    expect((await call(posterCall)).status).toBe(404);
+  });
+
+  it("없는 변형 번호면 404 다", async () => {
+    expect((await call({ ...posterCall, position: 7 })).status).toBe(404);
+  });
+
+  /** 안 보내면 지금까지처럼 라이브러리를 읽는다 — 2단계 사용자가 안 깨진다. */
+  it("source 를 안 보내면 라이브러리를 읽는다", async () => {
+    await call(good);
+    expect(viewers).toHaveLength(1);
+    expect(posterOwners).toEqual([]);
+  });
+
+  it("모르는 source 는 거절한다", async () => {
+    expect((await call({ ...good, source: "어디선가" })).status).toBe(400);
   });
 });

@@ -9,10 +9,10 @@ import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../li
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
 import {
-  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
-  downloadable, excludedCount, exportableItems, failureMessage, isActualSize,
+  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
+  defaultSelection, downloadable, excludedCount, failureMessage, isActualSize,
   missingRequiredCount, previewWidth,
-  safeAreaOverlayStyle, specRows, zipEntryName,
+  safeAreaOverlayStyle, specRows, zipEntryName, type AdSourceItem,
 } from "./export-rules";
 
 /**
@@ -38,11 +38,28 @@ import {
  */
 type ResultEntry = Omit<AdBatchEntry, "bytes"> & { dataUrl?: string };
 
+type PosterWork = { id: string; title: string; status: string; images?: Array<{ variantIndex: number }> };
+
+/**
+ * 포스터 작업의 그림 목록.
+ *
+ * 라이브러리와 달리 목록 응답에 이미 실려 온다 — 다시 물을 이유가 없다.
+ * 주소는 포스터 화면이 쓰는 것과 같다.
+ */
+async function posterItemImages(projectId: string): Promise<PdpResultImage[]> {
+  const body = await (await fetch(`/api/poster/projects/${projectId}`, { cache: "no-store" })).json();
+  if (!body?.ok) return [];
+  return ((body.images ?? []) as Array<{ variantIndex: number }>).map((image) => ({
+    image: `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`,
+    sectionName: `변형 ${image.variantIndex + 1}`,
+  })) as PdpResultImage[];
+}
+
 const ROWS = specRows(planDerivation);
 
 export function AdExportClient() {
-  const [items, setItems] = React.useState<LibraryItem[] | null>(null);
-  const [item, setItem] = React.useState<LibraryItem | null>(null);
+  const [items, setItems] = React.useState<AdSourceItem[] | null>(null);
+  const [item, setItem] = React.useState<AdSourceItem | null>(null);
   const [images, setImages] = React.useState<PdpResultImage[] | null>(null);
   const [position, setPosition] = React.useState(0);
   const [picked, setPicked] = React.useState<string[]>(() => defaultSelection(ROWS));
@@ -87,12 +104,25 @@ export function AdExportClient() {
     // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
     // **실패해도 「불러오는 중…」에 머물지 않는다.** `catch` 가 없으면 화면이
     // 영원히 그 문장만 띄운 채 멈춘다 — 사용자는 느린 것인지 고장인지 모른다.
-    void loadLibrary()
-      .then((loaded) => setItems(exportableItems(loaded)))
+    /**
+     * **포스터 작업도 함께 읽는다**(설계 §10 3-e).
+     *
+     * 광고 모드가 만드는 마스터는 `poster_images` 에 쌓이고 라이브러리에는
+     * 안 들어간다. 이것을 안 읽으면 마스터를 만들고 여기 와도 **고를 그림이
+     * 하나도 없다.** 리뷰 넷이 못 봤고 실제로 켜 보고 알았다.
+     */
+    void Promise.all([
+      loadLibrary().catch(() => []),
+      fetch("/api/poster/projects", { cache: "no-store" })
+        .then((response) => response.json())
+        .then((body) => (body?.ok ? body.projects : []) as PosterWork[])
+        .catch(() => []),
+    ])
+      .then(([library, posters]) => setItems(adSourceItems(library, posters)))
       .catch(() => { setItems([]); setError("라이브러리를 불러오지 못했습니다. 새로고침해 주세요."); });
   }, []);
 
-  async function chooseItem(next: LibraryItem) {
+  async function chooseItem(next: AdSourceItem) {
     const mine = (token.current += 1);
     setItem(next);
     setImages(null);
@@ -100,9 +130,11 @@ export function AdExportClient() {
     setResults(null);
     setError(null);
     try {
-      const loaded = await getAccountItemImages(next);
+      const loaded = next.source === "poster"
+        ? await posterItemImages(next.id)
+        : (await getAccountItemImages({ id: next.id, title: next.title } as LibraryItem))?.images ?? [];
       if (mine !== token.current) return;
-      setImages(loaded?.images ?? []);
+      setImages(loaded);
     } catch {
       // 여기서도 삼키면 썸네일 줄이 영영 안 나타난다.
       if (mine !== token.current) return;
@@ -121,7 +153,7 @@ export function AdExportClient() {
       const response = await fetch("/api/ad/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ itemId: item.id, position, specIds: picked }),
+        body: JSON.stringify({ itemId: item.id, position, specIds: picked, source: item.source }),
       });
       const body = await response.json().catch(() => null);
       if (mine !== token.current) return;
