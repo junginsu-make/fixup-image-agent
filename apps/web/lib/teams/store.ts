@@ -472,3 +472,43 @@ export async function setPersonalQuota(userId: string, quota: number): Promise<v
     .eq("id", userId);
   if (error) throw new Error(error.message);
 }
+
+/**
+ * 이 회원들이 각각 어느 팀인가.
+ *
+ * 관리자 화면이 명단 옆에 팀을 붙이려고 부른다. 사람마다 한 번씩 물으면
+ * 50명이면 50번이라, 한 번에 묻고 표로 돌려준다.
+ */
+export async function teamsOf(
+  userIds: readonly string[],
+): Promise<Map<string, { teamId: string; teamName: string; role: TeamRole }>> {
+  const result = new Map<string, { teamId: string; teamName: string; role: TeamRole }>();
+  if (noTeamStore() || !userIds.length) return result;
+
+  const admin = createSupabaseAdminClient();
+  const { data: memberRows } = await admin
+    .from("team_members")
+    .select("user_id,team_id,role")
+    .in("user_id", [...userIds]);
+
+  const members = (memberRows ?? []) as Array<{ user_id: string; team_id: string; role: TeamRole }>;
+  if (!members.length) return result;
+
+  // 팀 이름은 따로 읽는다. 접힌 팀은 이름을 안 붙인다 — 목록에서 뺀 팀을
+  // 관리자 화면에만 살려 두면 두 화면이 다른 말을 한다.
+  const { data: teamRows } = await admin
+    .from("teams")
+    .select("id,name")
+    .in("id", [...new Set(members.map((row) => row.team_id))])
+    .is("deleted_at", null);
+  const names = new Map(
+    ((teamRows ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]),
+  );
+
+  for (const row of members) {
+    const teamName = names.get(row.team_id);
+    if (!teamName) continue;
+    result.set(row.user_id, { teamId: row.team_id, teamName, role: row.role });
+  }
+  return result;
+}

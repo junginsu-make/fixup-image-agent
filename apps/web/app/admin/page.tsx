@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, Clock3, Crown, ImageIcon, Search, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
 import type { MemberProfile } from "../../lib/membership/types";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { teamsOf } from "../../lib/teams/store";
 import { isAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { approveMember, deleteMember, moveShowcase, removeShowcase, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota, updateShowcase } from "./actions";
 import { listShowcaseForAdmin } from "../api/showcase/store";
@@ -51,6 +52,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   if (profilesError) throw profilesError;
   const profiles = (rawProfiles ?? []) as MemberProfile[];
   const profileIds = profiles.map((profile) => profile.id);
+  /**
+   * 이 쪽 사람들이 각각 어느 팀인가.
+   *
+   * 팀 편성은 `/team` 이 하지만, **운영자가 회원을 보는 곳은 여기다.** 여기에
+   * 팀이 안 보이면 「이 사람 어느 팀이지」를 물으러 화면을 옮겨야 한다.
+   */
+  const teamByUser = await teamsOf(profileIds);
 
   const [totalResult, pendingResult, summaryResult, dailyResult, topResult, memberUsageResult] = await Promise.all([
     admin.from("profiles").select("id", { count: "exact", head: true }),
@@ -104,6 +112,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div>
         <h1 className="text-h1">관리자</h1>
         <p className="mt-1 text-body text-muted-foreground">회원 승인, 상태, 월 한도와 실제 성공 이미지 사용량을 관리합니다.</p>
+        {/*
+          **월 한도의 뜻이 팀과 함께 바뀌었다.** 팀에 든 사람에게는 이 값이
+          「팀 잔량 안에서의 천장」이다. 100 으로 올려 둬도 팀 잔량이 40 이면
+          40 에서 막힌다 — 그 사실을 여기서 말하지 않으면 운영자는 한도를
+          올렸는데 왜 막히는지 알 수 없다.
+        */}
+        <p className="mt-1 text-meta text-subtle-foreground">
+          팀에 속한 회원의 월 한도는 <strong>팀 잔량 안에서의 천장</strong>입니다. 팀 잔량이 더 적으면
+          그쪽이 먼저 걸립니다 — 팀 한도는 <Link href="/team?tab=credit" className="underline underline-offset-4">팀 · 크레딧</Link>에서 정합니다.
+        </p>
       </div>
 
       {notice ? <AdminNotice notice={notice} /> : null}
@@ -169,6 +187,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     <dd className="mt-1 text-lg font-extrabold">{usageByUser.get(profile.id) ?? 0}장</dd>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3">
+                    <dt className="text-xs text-muted-foreground">팀</dt>
+                    <dd className="mt-1"><TeamCell team={teamByUser.get(profile.id)} /></dd>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
                     <dt className="text-xs text-muted-foreground">현재 월 한도</dt>
                     <dd className="mt-1 text-lg font-extrabold">{profile.monthly_quota}장</dd>
                   </div>
@@ -201,7 +223,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b text-xs text-muted-foreground">
-                <tr><th className="py-3 pr-3">회원</th><th className="py-3 pr-3">상태</th><th className="py-3 pr-3">이번 달</th><th className="py-3 pr-3">이번 달 비용</th><th className="py-3 pr-3">누적 비용</th><th className="py-3 pr-3">월 한도</th><th className="py-3">관리</th></tr>
+                <tr><th className="py-3 pr-3">회원</th><th className="py-3 pr-3">팀</th><th className="py-3 pr-3">상태</th><th className="py-3 pr-3">이번 달</th><th className="py-3 pr-3">이번 달 비용</th><th className="py-3 pr-3">누적 비용</th><th className="py-3 pr-3">월 한도</th><th className="py-3">관리</th></tr>
               </thead>
               <tbody>
                 {profiles.map((profile) => (
@@ -212,6 +234,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                         {profile.email_confirmed_at ? "이메일 인증" : "미인증"} · {new Date(profile.created_at).toLocaleDateString("ko-KR")}
                       </p>
                     </td>
+                    <td className="py-4 pr-3"><TeamCell team={teamByUser.get(profile.id)} /></td>
                     <td className="py-4 pr-3"><StatusBadge profile={profile} /></td>
                     <td className="py-4 pr-3 font-medium">{usageByUser.get(profile.id) ?? 0}장</td>
                     <td className="py-4 pr-3 font-medium">
@@ -637,6 +660,24 @@ function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile;
         </details>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 명단 옆의 팀 한 칸.
+ *
+ * 소속이 없으면 「미배정」이라고 말한다. 빈칸으로 두면 팀이 없는 것인지
+ * 못 읽어 온 것인지 구별이 안 된다.
+ */
+function TeamCell({ team }: { team?: { teamName: string; role: "leader" | "member" } }) {
+  if (!team) return <span className="text-xs text-muted-foreground">미배정</span>;
+  return (
+    <span className="flex items-center gap-1.5">
+      {team.role === "leader" ? (
+        <Crown className="h-3.5 w-3.5 flex-none text-primary" aria-label="팀장" />
+      ) : null}
+      <span className="text-sm">{team.teamName}</span>
+    </span>
   );
 }
 

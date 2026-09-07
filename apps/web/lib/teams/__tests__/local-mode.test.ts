@@ -94,3 +94,20 @@ describe("운영에서는 그대로 저장소를 본다", () => {
     await expect(myMembership("u1")).rejects.toThrow("환경변수");
   });
 });
+
+describe("관리자 명단에 붙는 팀", () => {
+  it("로컬 모드에서는 빈 표를 준다", async () => {
+    // 관리자 화면이 회원 줄마다 이걸 본다. 던지면 화면이 통째로 안 열린다.
+    const { teamsOf } = await import("../store");
+    await expect(teamsOf(["u1", "u2"])).resolves.toEqual(new Map());
+  });
+
+  it("물을 사람이 없으면 저장소를 안 건드린다", async () => {
+    // 운영에서도 빈 목록에 질의를 던지지 않는다 — `in()` 에 빈 배열을 주면
+    // PostgREST 가 이상한 조건을 만든다.
+    process.env.LOCAL_STORE = "";
+    vi.resetModules();
+    const { teamsOf } = await import("../store");
+    await expect(teamsOf([])).resolves.toEqual(new Map());
+  });
+});
