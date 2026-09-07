@@ -253,10 +253,18 @@ export function AdExportClient() {
   const noImages = images !== null && images.length === 0;
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 p-6">
-      <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">광고 규격으로 내보내기</h1>
-        <p className="text-meta text-subtle-foreground">
+    /*
+      **폭과 여백을 셸에 맡긴다.** 초판은 `mx-auto max-w-5xl p-6` 을 얹었는데,
+      `AppShell` 의 `<main>` 이 이미 `px-[clamp(16px,2.2vw,52px)] pb-6 pt-4` 를
+      준다(`app-shell.tsx:267`) — 여백이 두 겹이 되고 이 화면만 좁게 떴다.
+      미리보기를 실제 크기로 깔아야 하는 화면이라(§5.2) 좁힐 이유도 없다.
+    */
+    <div className="grid gap-8">
+      {/* `/poster`·`/sns` 첫 화면과 같은 머리말이다 — 라벨·제목·설명. */}
+      <header className="grid">
+        <p className="text-meta text-subtle-foreground">AD</p>
+        <h1 className="mt-1 text-h1">광고 규격으로 내보내기</h1>
+        <p className="mt-2 text-body text-muted-foreground">
           만들어 둔 그림 한 장에서 포털 광고 규격을 뽑습니다. 새로 만들지 않으므로 비용이 들지 않습니다.
         </p>
       </header>

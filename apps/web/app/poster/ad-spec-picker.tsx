@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { cn } from "@fixup/ui";
+import { Badge, cn } from "@fixup/ui";
 import { adSubmitPlan, type AdSubmitPlan } from "./ad-mode";
 import { planDerivation } from "../../lib/ad/derive";
 import { PORTAL_LABEL, defaultSelection, missingRequiredCount, specRows } from "../ad/export-rules";
@@ -63,10 +63,12 @@ export default function AdSpecPicker({
               />
               <span className="text-subtle-foreground">{PORTAL_LABEL[row.spec.portal]}</span>
               <span>{row.spec.label}</span>
-              {row.spec.required && <span className="text-meta text-subtle-foreground">필수</span>}
+              {/* **`/ad` 와 같은 모양이어야 한다.** 같은 규격 목록인데 한쪽은
+                  배지, 한쪽은 회색 글씨면 다른 것으로 읽힌다. */}
+              {row.spec.required && <Badge variant="secondary">필수</Badge>}
               {/* 미검증 규격임을 데이터가 말한다(설계 §11). 화면이 감추면 안 된다. */}
               {row.spec.sourceKind === "reference" && (
-                <span className="text-meta text-subtle-foreground">참고</span>
+                <Badge variant="outline">참고</Badge>
               )}
               {!row.supported && (
                 <span className="text-meta text-subtle-foreground">— {row.unsupportedReason}</span>
