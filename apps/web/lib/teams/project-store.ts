@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { isLocalStoreEnabled } from "../local-store";
 import {
   PROJECT_SCOPED_TABLES,
   normalizeProjectName,
@@ -15,7 +16,15 @@ import {
  *
  * `projects` 는 회원에게 권한을 회수해 두었다. 전부 서버 권한으로 읽고 쓰고,
  * 누가 부를 수 있는지는 부르는 쪽(서버 액션)이 정한다.
+ *
+ * 로컬 확인 모드에는 이 저장소가 없다. 셸이 모든 화면에서 프로젝트 목록을
+ * 부르므로, 안 막으면 로컬로 띄운 순간 전 화면이 500 이 된다.
  */
+
+/** 로컬 확인 모드인가. 그때는 프로젝트 저장소가 아예 없다. */
+function noProjectStore(): boolean {
+  return isLocalStoreEnabled();
+}
 
 const COLUMNS = "id,team_id,name,position,created_at";
 
@@ -46,7 +55,7 @@ function toRow(row: ProjectDbRow): ProjectRow {
  * 폴더를 만들게 하면, 나눌 이유가 없는 것을 나누는 일이 된다.
  */
 export async function listProjects(teamId: string | null): Promise<ProjectRow[]> {
-  if (!teamId) return [];
+  if (noProjectStore() || !teamId) return [];
   const { data, error } = await createSupabaseAdminClient()
     .from("projects")
     .select(COLUMNS)
@@ -65,6 +74,7 @@ export async function listProjects(teamId: string | null): Promise<ProjectRow[]>
  * 눌러서 텅 빈 화면을 본 뒤에야 비었다는 걸 안다.
  */
 export async function listProjectsWithCounts(teamId: string | null): Promise<ProjectItem[]> {
+  if (noProjectStore()) return [];
   const projects = await listProjects(teamId);
   if (!projects.length) return [];
 
@@ -91,6 +101,7 @@ export async function createProject(
   name: string,
   createdBy: string,
 ): Promise<string> {
+  if (noProjectStore()) throw new Error("로컬 확인 모드에는 프로젝트 저장소가 없습니다.");
   const problem = projectNameError(name);
   if (problem) throw new Error(problem);
 
@@ -121,6 +132,7 @@ export async function createProject(
 }
 
 export async function renameProject(projectId: string, name: string): Promise<void> {
+  if (noProjectStore()) throw new Error("로컬 확인 모드에는 프로젝트 저장소가 없습니다.");
   const problem = projectNameError(name);
   if (problem) throw new Error(problem);
 
@@ -147,6 +159,7 @@ export async function renameProject(projectId: string, name: string): Promise<vo
  * 「전체」로 보이므로 사라지지 않는다.
  */
 export async function archiveProject(projectId: string): Promise<void> {
+  if (noProjectStore()) throw new Error("로컬 확인 모드에는 프로젝트 저장소가 없습니다.");
   const { error } = await createSupabaseAdminClient()
     .from("projects")
     .update({ archived_at: new Date().toISOString() })
@@ -160,6 +173,7 @@ export async function moveProject(
   projectId: string,
   direction: "up" | "down",
 ): Promise<void> {
+  if (noProjectStore()) throw new Error("로컬 확인 모드에는 프로젝트 저장소가 없습니다.");
   const projects = await listProjects(teamId);
   const plan = reorder(projects, projectId, direction);
   if (!plan.length) return;
@@ -205,7 +219,7 @@ export function workLabel(table: TeamWork["table"]): string {
  * 를 먼저 떠올려야 프로젝트에 넣을 수 있다.
  */
 export async function listTeamWorks(teamId: string | null, limit = 200): Promise<TeamWork[]> {
-  if (!teamId) return [];
+  if (noProjectStore() || !teamId) return [];
   const admin = createSupabaseAdminClient();
 
   const batches = await Promise.all(
@@ -257,6 +271,7 @@ export async function moveWorkToProject(
   workId: string,
   projectId: string | null,
 ): Promise<void> {
+  if (noProjectStore()) throw new Error("로컬 확인 모드에는 프로젝트 저장소가 없습니다.");
   if (!PROJECT_SCOPED_TABLES.includes(table)) throw new Error("옮길 수 없는 종류입니다.");
 
   const admin = createSupabaseAdminClient();

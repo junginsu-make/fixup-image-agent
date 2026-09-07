@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Crown, UserMinus, Users } from "lucide-react";
-import { Badge, Button, Input } from "@fixup/ui";
+import { Badge, Button, Card, Input } from "@fixup/ui";
 import { requireActiveMember } from "../../lib/membership/server";
 import { canWriteTeam, summarize } from "../../lib/teams/core";
 import type { TeamWithMembers } from "../../lib/teams/core";
@@ -105,11 +105,13 @@ export default async function TeamPage({
       : { quota: 0, members: [] };
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 py-2">
+    // 바깥 상자와 머리글은 라이브러리·수집함과 같은 모양이다. 화면마다 폭과
+    // 글자 굵기가 다르면 메뉴를 옮길 때마다 제목 자리가 흔들린다.
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">팀</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">팀</h1>
+          <p className="text-sm text-muted-foreground">
             {isAdmin
               ? "팀을 만들고 회원을 배정합니다. 팀에 넣으면 그 사람이 만들어 둔 작업물도 함께 팀으로 갑니다."
               : "우리 팀 명단입니다. 같은 팀 사람이 만든 작업물은 서로 볼 수 있습니다."}
@@ -204,7 +206,12 @@ export default async function TeamPage({
 /** 한 화면 세 탭. 주소로 오가서 각 탭이 서버에서 자기 것만 읽는다. */
 function TabBar({ active, focusTeamId }: { active: TabId; focusTeamId: string | null }) {
   return (
-    <nav className="flex gap-1 border-b" aria-label="팀 화면 탭">
+    // 생김새를 `TabsList`·`TabsTrigger` 와 같게 맞춘다. 링크로 만든 이유는
+    // 각 탭이 자기 것만 서버에서 읽게 하려는 것이지, 다르게 보이려는 게 아니다.
+    <nav
+      className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground"
+      aria-label="팀 화면 탭"
+    >
       {TABS.map((entry) => {
         const on = entry.id === active;
         // 고른 팀을 탭을 옮겨도 유지한다. 안 그러면 운영자가 탭마다 팀을
@@ -217,10 +224,8 @@ function TabBar({ active, focusTeamId }: { active: TabId; focusTeamId: string | 
             key={entry.id}
             href={href}
             aria-current={on ? "page" : undefined}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-bold transition-colors ${
-              on
-                ? "border-primary text-primary"
-                : "border-transparent text-subtle-foreground hover:text-foreground"
+            className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all ${
+              on ? "bg-background text-foreground shadow" : "hover:text-foreground"
             }`}
           >
             {entry.label}
@@ -272,7 +277,7 @@ function Stat({ label, value, urgent = false }: { label: string; value: string; 
 
 function EmptyState({ isAdmin }: { isAdmin: boolean }) {
   return (
-    <div className="grid place-items-center gap-2 rounded-xl border border-dashed px-6 py-14 text-center">
+    <div className="grid place-items-center gap-2 rounded-lg border border-dashed p-10 text-center">
       <Users className="h-6 w-6 text-subtle-foreground" />
       <p className="text-sm font-bold">
         {isAdmin ? "아직 팀이 없습니다" : "아직 팀에 속해 있지 않습니다"}
@@ -302,7 +307,9 @@ function TeamCard({
   const leaders = team.members.filter((row) => row.role === "leader").length;
 
   return (
-    <section className="rounded-xl border bg-card">
+    // 같은 값을 손으로 적는 대신 `Card` 를 쓴다. 디자인이 바뀌는 날 이 화면만
+    // 안 따라가는 일이 없다.
+    <Card className="overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
         <div className="flex items-center gap-2">
           <h2 className="text-base font-bold">{team.name}</h2>
@@ -395,6 +402,6 @@ function TeamCard({
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }

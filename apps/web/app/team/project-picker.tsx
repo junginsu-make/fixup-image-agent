@@ -35,7 +35,8 @@ export function ProjectPicker({
         defaultValue={current ?? ""}
         aria-label="프로젝트 고르기"
         onChange={() => form.current?.requestSubmit()}
-        className="h-8 rounded-md border bg-background px-2 text-sm"
+        // 관리자·라이브러리 화면의 고르개와 같은 값이다.
+        className="h-9 rounded-md border bg-background px-3 text-sm"
       >
         <option value="">분류 없음</option>
         {projects.map((project) => (

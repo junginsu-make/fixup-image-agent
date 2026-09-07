@@ -1,5 +1,5 @@
 import { Coins, Crown, TriangleAlert } from "lucide-react";
-import { Button, Input } from "@fixup/ui";
+import { Button, Card, Input } from "@fixup/ui";
 import {
   balanceOf,
   effectiveQuotaOf,
@@ -26,7 +26,7 @@ export function CreditTab({
 }) {
   if (!teamId) {
     return (
-      <div className="grid place-items-center gap-2 rounded-xl border border-dashed px-6 py-14 text-center">
+      <div className="grid place-items-center gap-2 rounded-lg border border-dashed p-10 text-center">
         <Coins className="h-6 w-6 text-subtle-foreground" />
         <p className="text-sm font-bold">팀이 있어야 크레딧을 합칩니다</p>
         <p className="max-w-sm text-meta text-subtle-foreground">
@@ -42,7 +42,7 @@ export function CreditTab({
   return (
     <div className="space-y-6">
       {/* ── 팀 잔량 ── */}
-      <section className="rounded-xl border bg-card p-4">
+      <Card className="p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold">이번 달 팀 크레딧</h2>
@@ -100,7 +100,7 @@ export function CreditTab({
             ) : null}
           </>
         )}
-      </section>
+      </Card>
 
       {/* ── 팀원별 ── */}
       <section>
@@ -115,7 +115,8 @@ export function CreditTab({
             아직 팀원이 없습니다.
           </p>
         ) : (
-          <ul className="divide-y rounded-xl border bg-card">
+          <Card>
+            <ul className="divide-y">
             {credit.members.map((row) => {
               const ceiling = effectiveQuotaOf(credit, row);
               const capped = ceiling < row.personalQuota;
@@ -158,7 +159,8 @@ export function CreditTab({
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </Card>
         )}
       </section>
     </div>
