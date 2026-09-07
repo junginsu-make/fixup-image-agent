@@ -54,10 +54,15 @@ describe("과금 전에 막는다", () => {
    * §4.4: 3단계는 생성이 **먼저**다. 만들 수 없는 규격을 그냥 두면 돈을 쓰고 나서
    * 「이건 못 뽑습니다」를 보게 된다.
    */
-  it("투명 배경 규격은 까닭과 함께 막는다", () => {
-    expect(planMasters(["kakao-bizboard"]).blocked).toEqual([
-      { specId: "kakao-bizboard", reason: expect.stringContaining("투명") },
-    ]);
+  /**
+   * **4단계에서 열렸다.** 조립 엔진이 붙어 투명 배경을 만들 수 있게 됐다
+   * (설계 `2026-09-07-ad-assembly-engine.md` §3.1). 막히던 것이 이제 마스터를
+   * 돌려준다 — 그 마스터에서 오브젝트를 떼어 투명 캔버스에 얹는다.
+   */
+  it("투명 배경 규격은 이제 조립으로 만든다", () => {
+    const plan = planMasters(["kakao-bizboard"]);
+    expect(plan.blocked).toEqual([]);
+    expect(plan.masters).toHaveLength(1);
   });
 
   it("올려야 하는 규격도 막는다 — 모델이 지어내면 안 된다", () => {
@@ -66,7 +71,7 @@ describe("과금 전에 막는다", () => {
   });
 
   it("막힌 규격 때문에 마스터를 만들지 않는다", () => {
-    expect(planMasters(["kakao-bizboard"]).masters).toEqual([]);
+    expect(planMasters(["google-rda-logo"]).masters).toEqual([]);
   });
 
   /**
@@ -74,9 +79,9 @@ describe("과금 전에 막는다", () => {
    * 사용자는 무엇을 빼야 하는지 모른 채 되돌아간다.
    */
   it("막힌 것과 되는 것이 섞이면 되는 것만 만든다", () => {
-    const plan = planMasters(["kakao-bizboard", "google-rda-square"]);
+    const plan = planMasters(["google-rda-logo", "google-rda-square"]);
     expect(plan.masters.map((master) => master.id)).toEqual(["ad-1x1"]);
-    expect(plan.blocked.map((entry) => entry.specId)).toEqual(["kakao-bizboard"]);
+    expect(plan.blocked.map((entry) => entry.specId)).toEqual(["google-rda-logo"]);
   });
 
   it("모르는 규격 id 는 조용히 버리지 않는다", () => {

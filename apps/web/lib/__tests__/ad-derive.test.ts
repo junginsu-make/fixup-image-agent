@@ -187,14 +187,20 @@ describe("마스터와 규격의 방향이 같다", () => {
 
 describe("투명 배경 규격은 새어 나가지 않는다", () => {
   /**
-   * 크롭으로 새어 나가면 투명 없이 만들어져 **등록 자체가 거부된다.**
-   * 규격 검증(§5.1)은 픽셀만 보므로 통과시킨다.
+   * **이 시험이 지키는 것은 「미지원」이 아니라 「크롭·리사이즈로 새지 않는다」다.**
+   *
+   * 크롭·리사이즈는 배경을 그대로 들고 오므로 불투명해지고, 그러면 포털이
+   * 등록 자체를 거부한다. 규격 검증(§5.1)은 픽셀만 보므로 **그 상태로
+   * 통과한다** — 화면은 「검증 통과」라 하고 포털이 반려한다.
+   *
+   * 4단계가 조립을 붙이면서 답이 `unsupported` → `assemble` 로 바뀌었지만,
+   * **지켜야 할 것은 그대로다.**
    */
-  it("`png-alpha` 는 반드시 미지원이다", () => {
+  it("`png-alpha` 는 크롭·리사이즈로 안 만든다", () => {
     const alpha = AD_SPECS.filter((spec) => spec.format === "png-alpha");
     expect(alpha.length).toBeGreaterThan(0);
     for (const spec of alpha) {
-      expect(planDerivation(spec).kind, spec.id).toBe("unsupported");
+      expect(planDerivation(spec).kind, spec.id).toBe("assemble");
     }
   });
 
@@ -396,5 +402,60 @@ describe("3:2 마스터", () => {
     expect(master.height % 16, "16의 배수").toBe(0);
     expect(master.width * master.height, "최소 픽셀").toBeGreaterThanOrEqual(655_360);
     expect(master.width / master.height, "3:1 이하").toBeLessThanOrEqual(3);
+  });
+});
+
+/**
+ * 조립 갈래 (설계 `2026-09-07-ad-assembly-engine.md` §3.1 · 4-d).
+ *
+ * 투명 배경 규격은 **모델이 못 만든다** — 비즈보드 3.99:1, 스마트채널 4.69:1
+ * 이라 `gpt-image-2` 의 3:1 상한을 넘고, 배경도 투명이어야 한다. 마스터에서
+ * 오브젝트를 떼어 투명 캔버스에 얹는다.
+ */
+describe("조립 갈래", () => {
+  const bizboard = AD_SPECS.find((spec) => spec.id === "kakao-bizboard")!;
+  const smartChannel = AD_SPECS.find((spec) => spec.id === "naver-smartchannel")!;
+
+  it("투명 규격은 조립으로 만든다", () => {
+    expect(planDerivation(bizboard).kind).toBe("assemble");
+    expect(planDerivation(smartChannel).kind).toBe("assemble");
+  });
+
+  /**
+   * **마스터를 함께 들어야 한다.** 안 들면 `master-plan.ts:61` 에서
+   * `plan.master` 가 `undefined` 라 막히고, `adSubmitPlan` 이 「하나라도 막히면
+   * 전부 막는다」라서 **비즈보드를 고른 순간 생성 버튼 전체가 잠긴다.**
+   */
+  it("마스터를 함께 든다 — 안 들면 생성이 통째로 막힌다", () => {
+    for (const spec of [bizboard, smartChannel]) {
+      const plan = planDerivation(spec) as { master?: string };
+      expect(plan.master, spec.id).toBeTruthy();
+      expect(AD_MASTERS.some((master) => master.id === plan.master), spec.id).toBe(true);
+    }
+  });
+
+  /**
+   * **3:1 을 넘는 것이 조립의 존재 이유다.** 모델은 이 비율을 못 만든다 —
+   * 캔버스를 우리가 만들어야 나온다.
+   */
+  it("모델이 못 만드는 비율이다", () => {
+    for (const spec of [bizboard, smartChannel]) {
+      expect(spec.target.width / spec.target.height, spec.id).toBeGreaterThan(3);
+    }
+  });
+
+  it("투명 PNG 를 요구하는 규격만 조립한다", () => {
+    const assembled = AD_SPECS
+      .filter((spec) => planDerivation(spec).kind === "assemble")
+      .map((spec) => spec.id);
+    expect(assembled.sort()).toEqual(["kakao-bizboard", "naver-smartchannel"]);
+    for (const id of assembled) {
+      expect(AD_SPECS.find((spec) => spec.id === id)!.format).toBe("png-alpha");
+    }
+  });
+
+  /** 올려야 하는 것은 여전히 못 만든다 — 모델이 로고를 지어내면 안 된다. */
+  it("업로드 규격은 그대로 막힌다", () => {
+    expect(planDerivation(AD_SPECS.find((spec) => spec.id === "google-rda-logo")!).kind).toBe("upload");
   });
 });

@@ -34,7 +34,17 @@ export interface SpecRow {
 export function specRows(plan: (spec: AdSpec) => { kind: string; reason?: string }): SpecRow[] {
   return AD_SPECS.map((spec) => {
     const decided = plan(spec);
-    const supported = decided.kind === "resize" || decided.kind === "crop";
+    /**
+     * **조립을 빠뜨리면 필수 규격이 조용히 죽는다.**
+     *
+     * `derive.ts` 에 갈래를 더해도 이 줄이 모르면 화면이 계속 「아직 지원하지
+     * 않습니다」로 그리고, 아래 `defaultSelection` 이 `supported` 로 거르므로
+     * **필수인데 기본 선택에서 빠진다.** 판단을 순수 함수로 뽑아 놓고 그것을
+     * 부르는 줄을 안 잠그는 일이 이 프로젝트에서 **네 번 반복됐다.**
+     */
+    const supported = decided.kind === "resize"
+      || decided.kind === "crop"
+      || decided.kind === "assemble";
     return {
       spec,
       supported,

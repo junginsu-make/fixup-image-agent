@@ -7,6 +7,8 @@ import { getLibraryImageFile } from "../../../../lib/server-library";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
+import { createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
+import { createPosterFalClients } from "../../../../lib/poster/providers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +77,25 @@ async function posterImageFile(
   if (!found) return null;
   const { bytes, contentType } = await posterImageBytes(found.assetPath);
   return { bytes, mimeType: contentType };
+}
+
+/**
+ * 마스터에서 배경을 지워 오브젝트만 남긴다.
+ *
+ * **올리고 → 지우고 → 내려받는다.** fal 은 URL 로만 받으므로 먼저 올려야 한다.
+ * 업로드는 기존 `createFalUploader` 를 그대로 쓴다.
+ *
+ * **결과 읽기는 `background.ts` 가 한다** — 기존 fal 큐의 `jobResult` 는
+ * `data.images`(복수)를 보는데 birefnet 은 `image`(단수)라 **예외 없이 빈
+ * 배열**을 준다(설계 §2.3).
+ */
+async function cutoutForAd(master: Buffer): Promise<Buffer> {
+  const { uploader } = createPosterFalClients();
+  const url = await uploader.uploadReference(master, "image/png");
+  const cutUrl = await removeBackground(url, createBackgroundRemover(process.env.FAL_KEY!));
+  const response = await fetch(cutUrl);
+  if (!response.ok) throw new Error("배경을 지운 그림을 내려받지 못했습니다.");
+  return Buffer.from(await response.arrayBuffer());
 }
 
 export async function POST(request: Request) {
@@ -149,7 +170,20 @@ export async function POST(request: Request) {
     const badge = await isAiBadgeEnabled();
     const results = await withRenderSlot(
       auth.member.userId,
-      () => exportBatch(file.bytes, parsed.data.specIds, badge ? { finish: markAsAi } : {}),
+      () => exportBatch(file.bytes, parsed.data.specIds, {
+        ...(badge ? { finish: markAsAi } : {}),
+        /**
+         * **투명 배너를 만드는 길**(설계 4-d).
+         *
+         * 조립 규격(비즈보드·스마트채널)에만 쓰인다 — 모델이 못 만드는
+         * 3.99:1·4.69:1 을 캔버스를 우리가 만들어 해결한다.
+         *
+         * **주입으로 넘긴다.** `batch.ts` 는 규격마다 도는 순수한 루프이고
+         * 배경 제거는 네트워크다. 거기서 직접 부르면 `lib/ad/` 의 순수 층에
+         * fal 이 새고, 시험이 fal 없이 못 돈다.
+         */
+        cutout: (master: Buffer) => cutoutForAd(master),
+      }),
     );
 
     /**

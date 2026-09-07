@@ -20,9 +20,11 @@ describe("화면에 걸 목록", () => {
    * 모르는구나」가 되고, 보이면 「아직 안 되는구나」가 된다(설계 §9 원칙 3).
    */
   it("못 뽑는 규격도 목록에 남기고 까닭을 준다", () => {
-    const bizboard = rows.find((row) => row.spec.id === "kakao-bizboard")!;
-    expect(bizboard.supported).toBe(false);
-    expect(bizboard.unsupportedReason).toBeTruthy();
+    // 4단계에서 비즈보드가 조립으로 열렸다. 로고는 여전히 못 만든다 —
+    // 모델이 브랜드 로고를 지어내면 매번 다른 로고가 된다.
+    const logo = rows.find((row) => row.spec.id === "google-rda-logo")!;
+    expect(logo.supported).toBe(false);
+    expect(logo.unsupportedReason).toBeTruthy();
   });
 
   it("뽑을 수 있는 규격에는 까닭이 안 붙는다", () => {
@@ -45,9 +47,10 @@ describe("처음에 켜 두는 것", () => {
    * 카카오 비즈보드와 네이버 스마트채널이 그렇다.
    */
   it("못 뽑는 규격은 필수여도 안 켠다", () => {
+    const blocked = rows.filter((row) => !row.supported);
+    expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
     const picked = defaultSelection(rows);
-    expect(picked).not.toContain("kakao-bizboard");
-    expect(picked).not.toContain("naver-smartchannel");
+    for (const row of blocked) expect(picked, row.spec.id).not.toContain(row.spec.id);
   });
 
   it("전부 켜지 않는다 — 규격 12개면 응답이 8MB 다", () => {
@@ -441,10 +444,18 @@ describe("필수를 꺼 두면 알린다", () => {
     expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
   });
 
+  /**
+   * **4단계에서 「필수인데 못 뽑는 것」이 사라졌다.** 조립이 붙어 비즈보드와
+   * 스마트채널이 열렸고, 남은 미지원(로고)은 필수가 아니다. 그래도 규칙은
+   * 그대로 지킨다 — 나중에 다시 생길 수 있다.
+   */
   it("못 뽑는 필수 규격은 세지 않는다 — 사용자가 어쩔 수 없다", () => {
-    const blocked = rows.filter((r) => !r.supported && r.spec.required);
-    expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
-    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+    const fake = [
+      ...rows,
+      { spec: { ...rows[0]!.spec, id: "가짜-필수", required: true }, supported: false,
+        unsupportedReason: "가짜" },
+    ];
+    expect(missingRequiredCount(fake, defaultSelection(rows))).toBe(0);
   });
 });
 
@@ -620,5 +631,42 @@ describe("잘라서 만든 규격을 말한다", () => {
 
   it("모르는 규격에는 안 붙인다", () => {
     expect(cropNotice("없는-규격", planDerivation)).toBeUndefined();
+  });
+});
+
+describe("조립으로 만드는 규격", () => {
+  /**
+   * **판단을 순수 함수로 뽑아 놓고 그것을 부르는 줄을 안 잠그는 일이 이
+   * 프로젝트에서 네 번 반복됐다**(설계 4-d). `derive.ts` 에 조립 갈래를 더해도
+   * 이 줄이 그것을 모르면 두 화면이 계속 「아직 지원하지 않습니다」로 그리고,
+   * `defaultSelection` 이 `supported` 로 거르므로 **필수인데 기본 선택에서
+   * 빠진다.**
+   */
+  it("조립 규격을 회색으로 두지 않는다", () => {
+    for (const id of ["kakao-bizboard", "naver-smartchannel"]) {
+      const row = rows.find((entry) => entry.spec.id === id)!;
+      expect(planDerivation(row.spec).kind, "이 시험의 전제").toBe("assemble");
+      expect(row.supported, id).toBe(true);
+      expect(row.unsupportedReason, id).toBeUndefined();
+    }
+  });
+
+  it("필수인 조립 규격이 기본 선택에 든다", () => {
+    const picked = defaultSelection(rows);
+    expect(picked).toContain("kakao-bizboard");
+    expect(picked).toContain("naver-smartchannel");
+  });
+
+  /** 조립은 자르는 것이 아니다 — 「좌우를 잘랐습니다」가 붙으면 거짓말이다. */
+  it("조립 규격에는 잘림 안내를 안 붙인다", () => {
+    expect(cropNotice("kakao-bizboard", planDerivation)).toBeUndefined();
+    expect(cropNotice("naver-smartchannel", planDerivation)).toBeUndefined();
+  });
+
+  /** 올려야 하는 것은 여전히 회색이다 — 모델이 로고를 지어내면 안 된다. */
+  it("업로드 규격은 그대로 회색이다", () => {
+    const logo = rows.find((entry) => entry.spec.id === "google-rda-logo")!;
+    expect(logo.supported).toBe(false);
+    expect(logo.unsupportedReason).toBeTruthy();
   });
 });

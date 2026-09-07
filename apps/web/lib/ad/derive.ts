@@ -16,6 +16,17 @@ export type DerivePlan =
   | { kind: "resize"; master: string }
   /** `keep` 은 마스터 면적 중 남는 비율. 1 에 가까울수록 덜 버린다. */
   | { kind: "crop"; master: string; keep: number }
+  /**
+   * 투명 캔버스에 오브젝트를 얹어 만든다.
+   *
+   * **모델이 못 만드는 비율을 여기서 만든다** — 비즈보드 3.99:1,
+   * 스마트채널 4.69:1 은 `gpt-image-2` 의 3:1 상한을 넘는다. 캔버스를 우리가
+   * 만들면 그 상한이 상관없어진다(설계 §3.1).
+   *
+   * **`master` 를 반드시 든다.** 조립도 마스터에서 오브젝트를 떼므로 필요하고,
+   * 안 들면 `master-plan.ts:61` 에서 막혀 **생성 버튼이 통째로 잠긴다.**
+   */
+  | { kind: "assemble"; master: string }
   | { kind: "upload"; reason: string }
   | { kind: "unsupported"; reason: string };
 
@@ -75,11 +86,6 @@ function usable(master: AdMaster, spec: AdSpec): boolean {
 }
 
 export function planDerivation(spec: AdSpec): DerivePlan {
-  // **투명 배경을 가장 먼저 본다.** 크롭으로 새어 나가면 투명 없이 만들어져
-  // 등록 자체가 거부되는데, 규격 검증(§5.1)은 픽셀만 보므로 통과시킨다.
-  if (spec.format === "png-alpha") {
-    return { kind: "unsupported", reason: "투명 배경은 조립 엔진이 필요합니다(설계 §3.4)." };
-  }
   if (spec.supply === "upload") {
     return { kind: "upload", reason: "브랜드 로고는 모델이 지어내면 안 됩니다. 올려 주세요." };
   }
@@ -95,6 +101,19 @@ export function planDerivation(spec: AdSpec): DerivePlan {
   if (!best) {
     return { kind: "unsupported", reason: "확대 없이 이 규격을 덮는 마스터가 없습니다." };
   }
+  /**
+   * **투명 배경은 잘라서 만들 수 없다.** 크롭·리사이즈는 배경을 그대로 들고
+   * 오므로 불투명해지고, 그러면 포털이 등록 자체를 거부한다. 규격 검증(§5.1)은
+   * 픽셀만 보므로 **그 상태로 통과한다** — 그래서 여기서 갈라야 한다.
+   *
+   * **마스터를 고른 뒤에 본다.** 조립도 마스터에서 오브젝트를 떼므로 어느
+   * 마스터를 쓸지 정해야 하고, `master` 없이 돌려주면 `master-plan.ts` 가
+   * 막아 생성 버튼이 통째로 잠긴다(설계 4-d).
+   */
+  if (spec.format === "png-alpha") {
+    return { kind: "assemble", master: best.master.id };
+  }
+
   return best.keep >= RESIZE_EPSILON
     ? { kind: "resize", master: best.master.id }
     : { kind: "crop", master: best.master.id, keep: best.keep };
