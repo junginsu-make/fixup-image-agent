@@ -345,6 +345,24 @@ function resolve(input: { kind?: CharacterKind; look?: CharacterLook; photoreal?
 const PLAIN_BACKGROUND = " Place the subject alone on a plain neutral background.";
 
 /**
+ * **한 장에 한 자세만.**
+ *
+ * 「캐릭터를 하나만 그려라」로는 안 막힌다. 모델에게 캐릭터 시트 —
+ * 같은 캐릭터를 여러 자세로 늘어놓은 판 — 는 여전히 「캐릭터 하나」다.
+ * 2026-09-07 운영에서 정면 후보 한 장에 다섯 자세가 격자로 나왔다.
+ *
+ * 특히 「일러스트레이터」 역할을 준 뒤로 잘 나온다. 캐릭터 의뢰를 받은
+ * 일러스트레이터의 기본 납품물이 원래 캐릭터 시트이기 때문이다.
+ *
+ * 그래서 자세·격자·여러 컷을 낱낱이 이름 대어 막는다. 뭉뚱그리면 안 걸린다.
+ */
+const SINGLE_POSE =
+  " Render exactly ONE pose in a single frame. This is NOT a character sheet," +
+  " NOT a turnaround, NOT a model sheet, NOT a pose sheet, NOT a collage, and NOT a grid." +
+  " Do not repeat the subject anywhere in the image, and do not show it from several" +
+  " angles at once. One subject, one pose, one camera.";
+
+/**
  * 후보 — **정면이다.**
  *
  * 고른 후보를 그대로 「정면」으로 저장하고, 나머지 세 각도를 그것을 참조로
@@ -382,6 +400,7 @@ export function buildCandidatePrompt(input: {
     (input.referenceRole ? referenceDirective(input.referenceRole, kind) : "") +
     ` Show it as ${angleDirective("front", kind)}.` +
     PLAIN_BACKGROUND +
+    SINGLE_POSE +
     lookDirective(look, kind) +
     // 첨부가 있을 때만 순위를 밝힌다. 없는데 「레퍼런스보다 세다」고 말하면
     // 모델이 있지도 않은 첨부를 찾는다.
@@ -418,7 +437,7 @@ export function buildTurnaroundPrompt(input: {
     `only — do not copy its camera angle. Generate the same ${noun} re-posed as ` +
     `${angleDirective(input.angle, kind)}. Preserve the same ${identity} exactly. ` +
     `Identity description: ${input.identityPrompt}. ` +
-    `Generate exactly one ${noun}.` + PLAIN_BACKGROUND +
+    `Generate exactly one ${noun}.` + PLAIN_BACKGROUND + SINGLE_POSE +
     lookDirective(look, kind)
   );
 }

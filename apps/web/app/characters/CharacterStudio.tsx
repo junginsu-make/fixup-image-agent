@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, ImagePlus, Loader2, RotateCw, Sparkles, Trash2, X } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
   SidePanelFooter, SidePanelHeader, SidePanelTitle, Textarea, cn,
 } from "@fixup/ui";
-import { openImageGallery, openImageViewer } from "../_components/image-viewer";
+import { downloadImage, openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { PanelHandle } from "../_components/panel-handle";
 import { randomId } from "../../lib/browser-safe";
@@ -762,11 +762,17 @@ export function CharacterStudio() {
                     })}
                     className="space-y-1 text-left"
                   >
-                    <div className="aspect-[3/4] overflow-hidden rounded-md border bg-muted">
+                    <div className="relative aspect-[3/4] overflow-hidden rounded-md border bg-muted">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img alt={angleLabel(view.angle)} src={view.url as string} className="h-full w-full object-cover" />
                     </div>
-                    <p className="text-center text-[11px] text-subtle-foreground">{angleLabel(view.angle)}</p>
+                    <span className="flex items-center justify-center gap-1">
+                      <span className="text-[11px] text-subtle-foreground">{angleLabel(view.angle)}</span>
+                      <DownloadButton
+                        src={view.url as string}
+                        name={`${created.name} ${angleLabel(view.angle)}`}
+                      />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -976,6 +982,33 @@ export function CharacterStudio() {
 }
 
 /**
+ * 그림 한 장을 내려받는 단추.
+ *
+ * 캐릭터는 만들어서 **다른 데 가져가 쓰는 것**이다 — 카드뉴스에 넣든, 인쇄를
+ * 하든. 그런데 이 화면에만 내려받기가 없어서, 큰 창을 열어야만 받을 수 있었다.
+ *
+ * 그림 위에 겹치지 않고 이름표 줄에 둔다. 각도 격자는 칸이 작아서, 모서리에
+ * 얹으면 그림을 가린다.
+ */
+function DownloadButton({ src, name }: { src: string; name: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`${name} 내려받기`}
+      onClick={(event) => {
+        // 이 단추가 있는 자리는 대부분 누르면 큰 창이 열리는 곳이다.
+        event.preventDefault();
+        event.stopPropagation();
+        void downloadImage({ src, alt: name, name: `${name}.png` });
+      }}
+      className="grid size-6 flex-none place-items-center rounded text-subtle-foreground hover:bg-muted hover:text-foreground"
+    >
+      <Download className="size-3.5" />
+    </button>
+  );
+}
+
+/**
  * 「내 캐릭터」 한 줄. 정면만 보이고, 누르면 나머지 각도가 펼쳐진다.
  *
  * 여섯 칸을 늘 펼쳐 두니 캐릭터가 두어 개만 되어도 카드가 화면을 넘겨 무엇이
@@ -1012,6 +1045,8 @@ function CharacterRow({ character, angles, angleLabel, redoing, deleting, onRedo
     images: shown.map((entry) => ({
       src: entry.url as string,
       alt: `${character.name} ${angleLabel(entry.angle)}`,
+      // 이름을 안 주면 서명 주소에서 만들어져 알아볼 수 없는 파일이 된다.
+      name: `${character.name} ${angleLabel(entry.angle)}.png`,
       meta: [
         ["캐릭터", character.name],
         ["각도", angleLabel(entry.angle)],
@@ -1174,6 +1209,8 @@ function AngleCell({ name, label, view, busy, onOpen, onRedo }: {
       </button>
       <div className="mt-1 flex items-center justify-between gap-1">
         <span className="truncate text-[10px] text-subtle-foreground">{label}</span>
+        {/* 만든 것은 다른 데 가져가 쓰는 것이다. 큰 창을 열지 않고 바로 받는다. */}
+        {view.url ? <DownloadButton src={view.url} name={`${name} ${label}`} /> : null}
         {/* 정면은 고른 후보 그 자체다. 다시 만들면 나머지가 전부 남남이 된다. */}
         {view.angle === "front" ? null : (
           <button
