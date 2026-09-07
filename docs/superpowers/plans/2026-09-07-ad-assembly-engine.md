@@ -178,7 +178,29 @@ apps/web/lib/ad/assemble.ts        ← 새 파일
 
 **왜 `composeCard` 를 통째로 안 쓰는가.** 그 함수는 「흰 카드 한 장」을 전제한다. 광고 배너는 투명 캔버스이고, 슬롯 개념도 더 단순하다(오브젝트 하나 + 글자 몇). 억지로 맞추면 `compose.ts` 를 고치게 되고 그것이 계약 1 위반이다.
 
-**대신 재사용한다** — 글자 그리기가 필요해지면 그때 `compose.ts` 의 텍스트 레이어 함수를 **부르기만** 한다. 그 함수들은 이미 export 돼 있다(`textFor`).
+#### 글자 그리기는 **부를 수 없다. 다시 쓴다**
+
+초판은 「`compose.ts` 의 텍스트 레이어를 **부르기만** 한다. 이미 export 돼 있다(`textFor`)」고 적었다. **둘 다 틀렸다.**
+
+`compose.ts` 의 public 은 넷뿐이다 — `ComposeInput`(:32) · `ComposeResult`(:46) · `textFor`(:67) · `composeCard`(:194). 글자를 실제로 그리는 **`drawText`(:116)는 모듈 사설**이고 `drawImage`·`drawLogo` 도 마찬가지다.
+
+그리고 `textFor` 는 **픽셀을 한 개도 만들지 않는다.** 원고에서 문자열 하나를 골라 보이지 않는 글자를 걸러 주는 함수다(`:67-71`, `string | undefined`).
+
+그러면 길이 둘인데 하나는 계약 위반이다.
+
+| | 결과 |
+|---|---|
+| `compose.ts` 에 `export` 를 붙인다 | **계약 1 위반.** `git diff` 에 그 파일이 뜬다 |
+| **감싸개가 글자 레이어를 새로 쓴다** | **이쪽이다.** 필요한 조각이 전부 공용 export 다 |
+
+```
+packages/layout-core/src/fit.ts:34,53   targetFontSize · fitFontSize
+apps/web/lib/layout/fonts.ts:17,31      defaultFontDir · resolveFont
+```
+
+**약 45줄의 복제다**(`compose.ts:116-165` 와 같은 모양). 복제가 싫어서 `export` 를 붙이면 **카드뉴스가 쓰는 파일의 공개 표면이 넓어진다** — 그것이 이 단계에서 가장 피해야 할 일이다.
+
+3단계에서 「60줄 복제면 됐다」를 뒤늦게 알고 기각 사유를 고친 적이 있는데, **여기는 방향이 반대다.** 그때는 복제를 과대평가했고 지금은 복제가 정답이다.
 
 ### 2.3 계약 2를 지키는 방법 — 엔드포인트 문자열
 
@@ -188,6 +210,23 @@ apps/web/lib/ad/assemble.ts        ← 새 파일
 // lib/ad/background.ts — 광고 경로에서만 쓴다
 const BACKGROUND_REMOVAL = "fal-ai/birefnet/v2";
 ```
+
+#### **그런데 결과는 그 클라이언트로 못 읽는다**
+
+초판이 `queue.ts:6` 의 **인터페이스 선언**만 보고 구현(:30)을 안 봤다. 응답 원본을 찍어 확인했다.
+
+```
+fal-ai/birefnet/v2 응답의 키: [ 'image', 'mask_image' ]
+data.images = undefined
+```
+
+`jobResult` 는 `(data.images ?? []).flatMap(...)` 이다(`queue.ts:33`). birefnet 은 **`image`(단수)** 로 돌려주므로 이 클라이언트는 **예외 없이 빈 배열**을 준다. 던지지도 않는다 — 「배경 제거가 조용히 아무것도 안 돌려주는」 고장이 된다. 이 프로젝트에서 반복된 「화면은 멀쩡한데 보증이 없다」와 같은 모양이다.
+
+**그래서 `lib/ad/background.ts` 는 결과 읽기를 자기가 한다.** `createFalClient` 를 직접 잡고 `data.image.url` 을 읽는다. `jobResult` 를 고치면 카드뉴스·포스터가 함께 영향받으므로 계약 밖이다.
+
+**업로드는 재사용한다** — `lib/fal/upload.ts` 의 `createFalUploader` 는 그대로 쓸 수 있다(실측 확인).
+
+**이 오류가 §1 의 실측을 통과한 이유**: 실측 스크립트가 `client.subscribe()` 를 직접 불렀다. 저장소의 큐 클라이언트를 안 탔다. **「fal 에서 된다」와 「우리 코드로 된다」는 다른 문장이다.**
 
 `IMAGE_MODELS` 는 「사용자가 고르는 그림 모델」의 목록이다. 배경 제거는 사용자가 고르는 것이 아니라 **광고 파생의 한 단계**다. 거기 넣으면 포스터 만들기 화면의 모델 버튼에 「BiRefNet」이 뜬다.
 
