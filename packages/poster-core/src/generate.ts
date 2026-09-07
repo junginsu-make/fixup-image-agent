@@ -82,8 +82,12 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
    * 지키기」가 프롬프트에서 `Image 2` 가 됐다 — 사용자가 「①번을」이라고 쓰면
    * 반대로 알아들었다.
    */
-  const attachments = job.attachments
-    ?? orderFromLegacyLists(job.referenceUrls, job.preservedUrls, job.personUrls ?? []);
+  const attachments = job.attachments?.length
+    ? job.attachments
+    // **`??` 를 쓰면 안 된다.** 저장된 차례를 복원하는 쪽은 차례가 없는 옛
+    // 작업에 빈 배열을 준다. `[] ?? legacy` 는 `[]` 라서 첨부를 통째로 잃는다 —
+    // 프롬프트에 Image 줄이 없고 fal 에 URL 도 안 간다(2026-09-07 리뷰).
+    : orderFromLegacyLists(job.referenceUrls, job.preservedUrls, job.personUrls ?? []);
 
   const images: PosterPromptImage[] = attachments.map((attachment): PosterPromptImage =>
     attachment.role === "style"

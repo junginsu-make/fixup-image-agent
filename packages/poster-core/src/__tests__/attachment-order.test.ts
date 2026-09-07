@@ -142,3 +142,61 @@ describe("사용자가 쓴 그림 지시", () => {
     expect(prompt).not.toContain("USER INSTRUCTION");
   });
 });
+
+describe("빈 차례가 옛 목록을 가리면 안 된다", () => {
+  it("attachments 가 빈 배열이면 옛 목록으로 떨어진다", async () => {
+    /**
+     * **2026-09-07 리뷰에서 잡은 것.**
+     *
+     * `??` 는 `undefined` 에만 반응한다. 그런데 저장된 차례를 복원하는 쪽
+     * (`orderedAttachments`)은 차례가 없는 옛 작업에 **빈 배열**을 준다.
+     * 그대로 두면 `[] ?? legacy` 가 `[]` 라서, 옛 작업을 다시 만들 때
+     * **그림이 하나도 안 붙는다.** 프롬프트에 Image 줄이 없고 fal 에 URL 도
+     * 안 간다 — 첨부를 통째로 잃는다.
+     */
+    const { buildPosterJob } = await import("../generate");
+    const job = buildPosterJob({
+      projectId: "p1",
+      modelId: "nano-banana-pro",
+      ratioId: "2:3",
+      variants: 1,
+      slots: {
+        kind: "", headline: "", subline: "", sideTexts: [], scene: "",
+        subject: "", action: "", typeInteraction: null, dominantColor: "",
+        accentColor: "", forbidden: "",
+      },
+      attachments: [],
+      referenceUrls: ["style.png"],
+      preservedUrls: ["person.png"],
+      personUrls: ["person.png"],
+    });
+
+    expect(job.input.image_urls).toEqual(["style.png", "person.png"]);
+    expect(job.prompt).toMatch(/Image 1 is a POSTER REFERENCE/);
+    expect(job.prompt).toMatch(/Image 2 is a PRESERVED PERSON/);
+  });
+});
+
+describe("수정 경로도 안 깨진다", () => {
+  it("attachments 를 안 주면 부모 그림 하나가 그대로 간다", async () => {
+    // 수정(`buildEditJob`)은 부모 그림 한 장을 `referenceUrls` 로만 넘긴다.
+    // `attachments` 가 아예 없는 길이라 legacy 로 떨어져야 한다.
+    const { buildPosterJob } = await import("../generate");
+    const job = buildPosterJob({
+      projectId: "p1",
+      modelId: "nano-banana-pro",
+      ratioId: "2:3",
+      variants: 1,
+      slots: {
+        kind: "", headline: "", subline: "", sideTexts: [], scene: "",
+        subject: "", action: "", typeInteraction: null, dominantColor: "",
+        accentColor: "", forbidden: "",
+      },
+      referenceUrls: ["parent.png"],
+      preservedUrls: [],
+    });
+
+    expect(job.input.image_urls).toEqual(["parent.png"]);
+    expect(job.prompt).toMatch(/Image 1 is a POSTER REFERENCE/);
+  });
+});
