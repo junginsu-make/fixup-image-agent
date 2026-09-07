@@ -5,7 +5,6 @@ import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
 import { markAsAi } from "../../../../lib/watermark";
 import { getLibraryImageFile } from "../../../../lib/server-library";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
-import { teamIdOf } from "../../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,12 +73,7 @@ export async function POST(request: Request) {
 
   try {
     const file = await getLibraryImageFile(
-      {
-        userId: auth.member.userId,
-        role: auth.member.profile.role,
-        // 팀이 있으면 같은 팀 것도 연다. 목록에 보이는데 못 여는 것이 없게.
-        teamId: await teamIdOf(auth.member.userId),
-      },
+      { userId: auth.member.userId, role: auth.member.profile.role },
       parsed.data.itemId,
       parsed.data.position,
     );
