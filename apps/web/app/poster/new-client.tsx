@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
@@ -12,17 +13,25 @@ import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
-import { adSubmitPlan } from "./ad-mode";
+import type { AdSubmitPlan } from "./ad-mode";
 import {
   adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount,
 } from "./poster-form-rules";
-import { planDerivation } from "../../lib/ad/derive";
-import {
-  PORTAL_LABEL, defaultSelection, missingRequiredCount, specRows,
-} from "../ad/export-rules";
 
-/** 규격 목록은 상수에서 나온다. 화면을 그릴 때마다 다시 셀 이유가 없다. */
-const AD_ROWS = specRows(planDerivation);
+/**
+ * **광고 규격 칸은 켜졌을 때만 내려받는다.**
+ *
+ * 정적으로 들이면 `AD_SPECS`(249줄)·`derive`·`export-rules` 가 스위치와 무관하게
+ * **모든 포스터 사용자의 번들**에 실린다. 광고와 상관없는 사람이 이 화면의
+ * 대부분인데 「기존 시스템에 영향 없음」이라고 말할 수 없다.
+ */
+const AdSpecPicker = dynamic(() => import("./ad-spec-picker"), {
+  ssr: false,
+  loading: () => <p className="text-meta text-subtle-foreground">규격을 불러오는 중…</p>,
+});
+
+/** 아직 아무것도 못 만드는 상태. **닫힌 쪽으로 시작한다.** */
+const NO_AD_PLAN: AdSubmitPlan = { masters: [], ready: false };
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
@@ -37,7 +46,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 광고 UI 를 강요하지 않는다 — 켜야 보인다.
    */
   const [adMode, setAdMode] = React.useState(false);
-  const [adPicked, setAdPicked] = React.useState<string[]>(() => defaultSelection(AD_ROWS));
+  /** 자식이 알려 주는 판단 결과. **규격 목록은 부모가 안 든다** — 들면 잘라 낸 뜻이 없다. */
+  const [adPlan, setAdPlan] = React.useState<AdSubmitPlan>(NO_AD_PLAN);
   const [modelId, setModelId] = React.useState(
     IMAGE_MODELS.find((model) => model.isDefault)?.id ?? IMAGE_MODELS[0]!.id,
   );
@@ -163,12 +173,33 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
          * **하나씩 순서대로 만든다.** 한꺼번에 보내면 실패했을 때 몇 개가
          * 만들어졌는지 알 수 없다.
          */
+        const bodies = adProjectBodies(projectBody(), adPlan.masters, title);
         const made: string[] = [];
-        for (const body of adProjectBodies(projectBody(), adPlan.masters, title)) {
-          made.push(await createProject(body));
+        try {
+          for (const body of bodies) made.push(await createProject(body));
+        } catch (cause) {
+          /**
+           * **몇 개가 만들어졌는지 말해 준다.**
+           *
+           * 초판은 `made` 를 담아 놓고 실패하면 그냥 버렸다. 사용자는 「만들지
+           * 못했습니다」만 보고 **초안이 이미 생긴 줄 모른 채** 다시 누른다 —
+           * 그러면 성공했던 마스터의 초안이 하나 더 생기고, 둘 다 생성하면
+           * 그때 진짜 이중 과금이다.
+           */
+          if (made.length > 0) {
+            setError(`${bodies.length}개 중 ${made.length}개를 만들었습니다. `
+              + "라이브러리에서 확인한 뒤 나머지를 다시 만들어 주세요.");
+            setBusy(false);
+            return;
+          }
+          throw cause;
         }
+        // **빈 목록으로 여기 오면 `/poster/undefined` 로 보낸다.** 지금은
+        // `canSubmit` 이 막지만, 그 가드 하나가 바뀌면 바로 터진다.
+        const first = made[0];
+        if (!first) throw new Error("만들 그림이 없습니다. 규격을 골라 주세요.");
         // 첫 작업으로 보낸다. 나머지는 라이브러리에 쌓이고 `/ad` 가 거기서 뽑는다.
-        router.push(`/poster/${made[0]}`);
+        router.push(`/poster/${first}`);
         return;
       }
       router.push(`/poster/${await createProject(projectBody())}`);
@@ -190,9 +221,9 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   /**
    * **생성 전에 막는다**(설계 §4.4). 3단계는 생성이 **먼저**라, 만들 수 없는
    * 규격을 그냥 두면 돈을 쓰고 나서 「이건 못 뽑습니다」를 보게 된다.
+   *
+   * 광고 모드가 아니면 언제나 닫힌 값이라 `canCreatePoster` 가 무시한다.
    */
-  const adPlan = adSubmitPlan(adMode ? adPicked : []);
-  const adMissingRequired = missingRequiredCount(AD_ROWS, adPicked);
   const projects = projectCount(adMode, adPlan.masters.length);
   // 무엇을 그릴지는 순수 규칙이 정한다 — 컴포넌트 안에 두면 시험이 못 간다.
   const sections = posterSpecSections({ adEnabled, adMode });
@@ -307,62 +338,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             )}
 
             {sections.includes("ad-specs") && (
-              <fieldset className="grid gap-2">
-                <legend className="text-meta text-subtle-foreground">광고 규격</legend>
-                <ul className="grid gap-1">
-                  {AD_ROWS.map((row) => (
-                    <li key={row.spec.id}>
-                      <label
-                        className={cn(
-                          "flex items-center gap-2 rounded px-2 py-1.5 text-sm",
-                          row.supported ? "cursor-pointer hover:bg-muted" : "cursor-not-allowed opacity-50",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={adPicked.includes(row.spec.id)}
-                          disabled={!row.supported}
-                          onChange={() => setAdPicked((current) => current.includes(row.spec.id)
-                            ? current.filter((id) => id !== row.spec.id)
-                            : [...current, row.spec.id])}
-                        />
-                        <span className="text-subtle-foreground">{PORTAL_LABEL[row.spec.portal]}</span>
-                        <span>{row.spec.label}</span>
-                        {row.spec.required && <span className="text-meta text-subtle-foreground">필수</span>}
-                        {/* 미검증 규격임을 데이터가 말한다(설계 §11). 화면이 감추면 안 된다. */}
-                        {row.spec.sourceKind === "reference" && (
-                          <span className="text-meta text-subtle-foreground">참고</span>
-                        )}
-                        {!row.supported && (
-                          <span className="text-meta text-subtle-foreground">— {row.unsupportedReason}</span>
-                        )}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-
-                {/*
-                  **「만들 그림 N장」을 항상 보여 준다**(설계 §9 원칙 2).
-                  규격을 10개 골라도 생성은 두세 장이라는 것이 이 기능의 핵심인데,
-                  안 보여 주면 사용자는 10배 과금을 걱정한다.
-                */}
-                <p className="text-meta">
-                  <strong>만들 그림 {adPlan.masters.length}장</strong>
-                  {" · "}내보낼 규격 {adPicked.length}개
-                </p>
-
-                {adMissingRequired > 0 && (
-                  <p className="text-meta text-destructive" role="alert">
-                    필수 규격 {adMissingRequired}개가 꺼져 있습니다. 빠지면 포털이 반려할 수 있습니다.
-                  </p>
-                )}
-                {!adPlan.ready && adPicked.length > 0 && (
-                  <p className="text-meta text-destructive" role="alert">{adPlan.reason}</p>
-                )}
-                <p className="text-meta text-subtle-foreground">
-                  만든 뒤 <a href="/ad" className="underline">광고 규격으로 내보내기</a>에서 규격을 뽑습니다.
-                </p>
-              </fieldset>
+              <AdSpecPicker onPlanChange={(plan) => setAdPlan(plan)} />
             )}
 
             <fieldset className="grid gap-2">
