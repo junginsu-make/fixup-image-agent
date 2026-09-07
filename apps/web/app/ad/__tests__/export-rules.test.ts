@@ -196,7 +196,7 @@ describe("안전영역 띠가 실제로 그려지는가", () => {
    * jsdom 이 없어 DOM 으로는 못 재므로, **CSS 를 고르는 규칙 자체**를 잰다.
    */
   it("퍼센트를 받지 않는 속성에 퍼센트를 넣지 않는다", () => {
-    for (const [property, value] of Object.entries(style)) {
+    for (const [property, value] of Object.entries(style as Record<string, string>)) {
       if (!value.includes("%")) continue;
       expect(property, `${property} 는 퍼센트를 받지 않는다`).not.toMatch(/[Ww]idth$/);
       expect(property).not.toMatch(/border/i);
@@ -219,13 +219,25 @@ describe("안전영역 띠가 실제로 그려지는가", () => {
    * 봐도 안다.**
    */
   it("그림자가 실제로 보일 값이다 — 퍼짐도 투명도도 0 이 아니다", () => {
-    const matched = style.boxShadow.match(/^0 0 0 (\d+)px rgba\([\d, ]+?, ([\d.]+)\)$/);
+    const matched = String(style.boxShadow).match(
+      /^0 0 0 (\d+)px color-mix\(in srgb, var\(--[a-z-]+\) ([\d.]+)%, transparent\)$/,
+    );
     expect(matched, "형태부터 맞아야 한다").not.toBeNull();
     const [, spread, alpha] = matched!;
     // 미리보기 한 칸(최대 480px)을 덮고도 남아야 한다.
     expect(Number(spread)).toBeGreaterThan(PREVIEW_MAX_WIDTH);
     expect(Number(alpha), "0 이면 없는 것과 같다").toBeGreaterThan(0);
-    expect(Number(alpha), "그림을 못 볼 만큼 덮어도 안 된다").toBeLessThan(0.5);
+    expect(Number(alpha), "그림을 못 볼 만큼 덮어도 안 된다").toBeLessThan(50);
+  });
+
+  /**
+   * 리터럴 색으로 되돌아가면 **다크 모드에서 띠만 굳는다** — 배경이 어두워지는데
+   * 띠는 안 따라와 대비가 떨어진다. 화면은 멀쩡해 보인다.
+   */
+  it("색을 리터럴로 박지 않는다 — 테마를 탄다", () => {
+    expect(String(style.boxShadow)).toContain("var(--destructive)");
+    expect(String(style.boxShadow), "hex 토큰을 hsl() 로 감싸면 조용히 버려진다")
+      .not.toMatch(/hsl\(/);
   });
 
   it("안전영역이 없는 규격에는 띠를 만들지 않는다", () => {

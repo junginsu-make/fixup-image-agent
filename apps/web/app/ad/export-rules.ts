@@ -1,3 +1,4 @@
+import type * as React from "react";
 import type { LibraryItem } from "@fixup/shared";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
 
@@ -131,14 +132,22 @@ export const SHRINK_WARNING = 4;
 export function safeAreaOverlayStyle(
   safeArea: NonNullable<AdSpec["safeArea"]>,
   target: { width: number; height: number },
-): Record<string, string> {
+): React.CSSProperties {
   const band = safeAreaPercent(safeArea, target);
   return {
     top: band.top,
     right: band.right,
     bottom: band.bottom,
     left: band.left,
-    boxShadow: "0 0 0 9999px rgba(220, 38, 38, 0.18)",
+    // **색을 리터럴로 박지 않는다.** 이 띠가 하는 일이 「가려질 자리를 붉게
+    // 덮는다」이므로, 다크 모드에서 배경만 어두워지고 띠가 안 따라오면 대비가
+    // 그만큼 떨어진다. 초판(`border-destructive/40`)은 토큰이었고 따라 움직였다.
+    //
+    // `--destructive` 는 **hex** 다(`globals.css:50`). `hsl(var(--destructive))`
+    // 로 감싸면 `hsl(#b0453c)` 가 되어 **조용히 버려진다** — 이 함수가 고치려던
+    // 바로 그 부류의 버그다. 저장소가 이미 쓰는 `color-mix` 로 섞는다
+    // (`app/create/create-theme.css:41`).
+    boxShadow: "0 0 0 9999px color-mix(in srgb, var(--destructive) 18%, transparent)",
   };
 }
 

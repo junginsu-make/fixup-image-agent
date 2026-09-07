@@ -327,9 +327,16 @@ export function AdExportClient() {
               {madeCount}개 나옴
             </span>
           </div>
+          {/*
+            **띠가 없는 것을 「제약이 없다」로 읽히게 두면 안 된다.** `safeArea` 를
+            가진 규격은 카카오 디스플레이 넷뿐이고, 나머지 열셋에 띠가 없는 것은
+            제약이 없어서가 아니라 **우리 데이터에 없어서**다(설계 §11).
+          */}
           <p className="text-meta text-subtle-foreground">
             <strong>눈으로 확인해 주세요.</strong> 글자가 읽히는지, 주인공이 잘리지 않았는지는
-            자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다.
+            자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다 —
+            <strong>안전영역이 공개된 규격에만 띠가 붙습니다.</strong> 띠가 없다고 제약이
+            없는 것은 아닙니다.
           </p>
 
           {/*
@@ -370,7 +377,12 @@ export function AdExportClient() {
                   )}
                 </div>
                 <figcaption className="grid gap-0.5 text-meta">
-                  <span>{entry.label}</span>
+                  <span className="flex items-center gap-1">
+                    {entry.label}
+                    {/* 「참고」가 2단계 목록에만 붙어 있어, 결과만 보는 사람에게는
+                        미검증이라는 사실이 전달되지 않았다(설계 §11). */}
+                    {entry.sourceKind === "reference" && <Badge variant="outline">참고</Badge>}
+                  </span>
                   <span className="text-subtle-foreground">
                     {entry.target.width}×{entry.target.height}
                     {entry.byteLength ? ` · ${Math.round(entry.byteLength / 1024)}KB` : ""}
