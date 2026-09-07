@@ -5,7 +5,7 @@ import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
-  libraryImagePicks, missingRequiredCount, posterImagePicks,
+  cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -556,5 +556,60 @@ describe("라이브러리 그림의 번호가 어긋나는 자리", () => {
       { image: "c", sectionName: "3번째 이미지", position: 2 },
     ]);
     expect(picks.map((pick) => pick.position), "1번은 url 이 없어 걸러졌다").toEqual([0, 2]);
+  });
+});
+
+describe("작업을 썸네일로 고른다", () => {
+  /**
+   * **글자만으로는 못 고른다.** 광고 모드는 한 번 누를 때 마스터마다 프로젝트를
+   * 만들어 작업이 배로 쌓이고, 제목이 「가을 사진전 (1200×1200)」처럼 붙는다.
+   * 이 저장소는 그림 고르는 자리를 전부 썸네일 격자로 만든다
+   * (`_components/library-picker.tsx`).
+   */
+  it("포스터는 첫 변형의 사본을 쓴다", () => {
+    const items = adSourceItems([], [
+      { id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] },
+    ]);
+    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/2/file?size=thumb");
+  });
+
+  it("라이브러리는 목록이 준 썸네일을 쓴다", () => {
+    const items = adSourceItems(
+      [{ id: "L1", title: "가을", storage: "account", tool: "pdp", thumbnail: "data:x" }] as never[],
+      [],
+    );
+    expect(items[0]!.thumbnail).toBe("data:x");
+  });
+
+  /** 없으면 없는 채로 둔다 — 화면이 자리표시를 그린다. */
+  it("썸네일이 없어도 목록에서 빼지 않는다", () => {
+    const items = adSourceItems(
+      [{ id: "L1", title: "가을", storage: "account", tool: "pdp" }] as never[],
+      [],
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]!.thumbnail).toBeUndefined();
+  });
+});
+
+describe("잘라서 만든 규격을 말한다", () => {
+  /**
+   * **크롭은 구도를 버린다.** 2048×1072 마스터에서 456×304(1.5:1)를 뽑으면
+   * 좌우가 잘려 헤드라인 한쪽이 사라진다. 화면이 그 사실을 안 적으면 사용자는
+   * **그림이 깨진 줄 안다** — 실제로 그런 보고를 받았다.
+   *
+   * 설계 §11 이 「크롭하는 셋이 구도를 버린다 → 미리보기로 사람이 본다」고
+   * 적었는데, 보여 주기만 하고 **무엇을 보라고는 안 했다.**
+   */
+  it("잘라 만든 규격이면 그렇다고 한다", () => {
+    expect(cropNotice("naver-brand-pc", planDerivation)).toMatch(/잘랐습니다/);
+  });
+
+  it("그대로 줄인 규격에는 안 붙인다", () => {
+    expect(cropNotice("google-rda-landscape", planDerivation)).toBeUndefined();
+  });
+
+  it("모르는 규격에는 안 붙인다", () => {
+    expect(cropNotice("없는-규격", planDerivation)).toBeUndefined();
   });
 });

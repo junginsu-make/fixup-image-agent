@@ -185,26 +185,45 @@ export interface AdSourceItem {
   title: string;
   /** 라우트가 어느 표를 읽을지 정한다. */
   source: "library" | "poster";
+  /**
+   * 목록에 그릴 작은 그림.
+   *
+   * **글자만으로는 못 고른다.** 광고 모드는 한 번 누를 때 마스터마다 프로젝트를
+   * 만들어 작업이 배로 쌓이고, 제목도 「가을 사진전 (1200×1200)」처럼 길어진다.
+   * 이 저장소는 그림 고르는 자리를 전부 썸네일 격자로 만든다
+   * (`_components/library-picker.tsx`).
+   *
+   * 없을 수 있다 — 옛 작업에는 사본이 없다. 화면이 자리표시를 그린다.
+   */
+  thumbnail?: string;
 }
 
 export function adSourceItems(
   library: LibraryItem[],
-  posters: Array<{ id: string; title: string; status: string; images?: unknown[] }>,
+  posters: Array<{ id: string; title: string; status: string; images?: Array<{ variantIndex: number }> }>,
 ): AdSourceItem[] {
   const fromPoster = posters
     // **결과가 없는 것은 안 보여 준다.** 만드는 중이거나 실패한 작업을 고르면
     // 「뽑지 못했습니다」만 돌아온다 — 왜 안 되는지 알 길이 없다.
     .filter((project) => (project.images?.length ?? 0) > 0)
-    .map((project) => ({
-      id: project.id,
-      title: project.title || "제목 없음",
-      source: "poster" as const,
-    }));
+    .map((project) => {
+      // 첫 변형의 사본을 쓴다. 원본은 2MB 를 넘어 목록에 깔 수 없다.
+      const first = project.images?.[0] as { variantIndex: number } | undefined;
+      return {
+        id: project.id,
+        title: project.title || "제목 없음",
+        source: "poster" as const,
+        ...(first
+          ? { thumbnail: `/api/poster/projects/${project.id}/images/${first.variantIndex}/file?size=thumb` }
+          : {}),
+      };
+    });
 
   const fromLibrary = exportableItems(library).map((item) => ({
     id: item.id,
     title: item.title || "제목 없음",
     source: "library" as const,
+    ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
   }));
 
   return [...fromPoster, ...fromLibrary];
@@ -324,6 +343,27 @@ export function previewWidth(target: { width: number }, cellWidth = PREVIEW_MAX_
 /** 1:1 로 보이는가. 아니면 「실제보다 작게 보임」을 알려야 한다. */
 export function isActualSize(target: { width: number }, cellWidth = PREVIEW_MAX_WIDTH): boolean {
   return target.width <= cellWidth;
+}
+
+/**
+ * 잘라서 만든 규격인가 — 그렇다면 그렇다고 말한다.
+ *
+ * **크롭은 구도를 버린다.** 2048×1072 마스터에서 456×304(1.5:1)를 뽑으면 좌우가
+ * 잘려 헤드라인 한쪽이 사라진다. 화면이 그 사실을 안 적으면 사용자는 **그림이
+ * 깨진 줄 안다** — 실제로 그런 보고를 받았다.
+ *
+ * 설계 §11 은 「크롭하는 셋이 구도를 버린다 → 미리보기로 사람이 본다」고
+ * 적었는데, 보여 주기만 하고 **무엇을 보라고는 안 했다.**
+ */
+export function cropNotice(
+  specId: string,
+  plan: (spec: AdSpec) => { kind: string },
+): string | undefined {
+  const spec = AD_SPECS.find((entry) => entry.id === specId);
+  if (!spec) return undefined;
+  return plan(spec).kind === "crop"
+    ? "비율이 달라 좌우를 잘랐습니다 — 주인공이 남았는지 보세요"
+    : undefined;
 }
 
 /**

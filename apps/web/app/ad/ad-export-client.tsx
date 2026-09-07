@@ -3,7 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { AlertTriangle, Download, ImageIcon, Loader2 } from "lucide-react";
-import { Badge, Button, Card, cn } from "@fixup/ui";
+import {
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn,
+} from "@fixup/ui";
 import type { LibraryItem } from "@fixup/shared";
 import { loadLibrary, getAccountItemImages } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
@@ -12,7 +14,8 @@ import {
   PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
   defaultSelection, downloadable, excludedCount, failureMessage, isActualSize,
   missingRequiredCount, previewWidth,
-  libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows, zipEntryName,
+  cropNotice, libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows,
+  zipEntryName,
   type AdImagePick, type AdSourceItem,
 } from "./export-rules";
 
@@ -63,6 +66,8 @@ export function AdExportClient() {
   const [picked, setPicked] = React.useState<string[]>(() => defaultSelection(ROWS));
   const [results, setResults] = React.useState<ResultEntry[] | null>(null);
   const [busy, setBusy] = React.useState(false);
+  /** ZIP 을 묶는 중. 두 번 누르면 봉투가 둘 나온다. */
+  const [zipping, setZipping] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   /**
@@ -221,7 +226,8 @@ export function AdExportClient() {
     // **검증에 걸린 것은 안 담는다.** 담으면 포털이 반려할 파일이 정상 파일과
     // 같은 이름으로 한 봉투에 들어간다(설계 §8).
     const made = downloadable(results ?? []);
-    if (!made.length) return;
+    if (!made.length || zipping) return;
+    setZipping(true);
     try {
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
@@ -244,6 +250,8 @@ export function AdExportClient() {
       // `DOMException` 을 던지는데, `void download()` 라 미처리 rejection 이 되어
       // 화면에는 흔적조차 안 남는다.
       setError("ZIP 을 만들지 못했습니다. 다시 뽑아 주세요.");
+    } finally {
+      setZipping(false);
     }
   }
 
@@ -269,28 +277,56 @@ export function AdExportClient() {
         </p>
       </header>
 
-      <Card className="grid gap-3 p-4">
-        <h2 className="text-sm font-medium">1. 그림 고르기</h2>
+      <Card>
+        <CardHeader>
+          {/* 단계 번호는 두 자리로 채운다 — `POSTER_STEPS` 가 「01 레퍼런스」다. */}
+          <CardTitle>01 그림 고르기</CardTitle>
+          <CardDescription>만들어 둔 작업에서 한 장을 고릅니다.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
         {items === null ? (
-          <p className="text-meta text-subtle-foreground">불러오는 중…</p>
-        ) : items.length === 0 ? (
-          <p className="text-meta text-subtle-foreground">
-            보관된 작업이 없습니다. <Link href="/library" className="underline">라이브러리</Link>에서 먼저 저장해 주세요.
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 inline size-4 animate-spin" />작업을 불러오는 중입니다.
           </p>
+        ) : items.length === 0 ? (
+          <Card className="grid place-items-center gap-3 py-14 text-center">
+            <ImageIcon className="size-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              보관된 작업이 없습니다. <Link href="/library" className="underline">라이브러리</Link>에서 먼저 저장해 주세요.
+            </p>
+          </Card>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          /*
+            **글자만으로는 못 고른다.** 광고 모드는 마스터마다 프로젝트를 만들어
+            작업이 배로 쌓이고 제목도 「… (1200×1200)」처럼 길다.
+            `_components/library-picker.tsx` 와 같은 격자다.
+          */
+          <div className="grid max-h-[60vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3 lg:grid-cols-4">
             {items.map((entry) => (
-              <Button
+              <button
                 key={entry.id}
                 type="button"
-                size="sm"
-                variant={item?.id === entry.id ? "default" : "secondary"}
                 aria-pressed={item?.id === entry.id}
+                aria-label={`${entry.title} 고르기`}
                 disabled={busy}
                 onClick={() => void chooseItem(entry)}
+                className={cn(
+                  "block w-full overflow-hidden rounded-lg border-2 text-left transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "disabled:opacity-50",
+                  item?.id === entry.id ? "border-primary" : "border-transparent hover:border-border",
+                )}
               >
-                {entry.title || "제목 없음"}
-              </Button>
+                <span className="grid aspect-square place-items-center overflow-hidden bg-muted">
+                  {entry.thumbnail ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={entry.thumbnail} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <ImageIcon className="size-6 text-muted-foreground" />
+                  )}
+                </span>
+                <span className="block truncate px-2 py-2 text-xs">{entry.title}</span>
+              </button>
             ))}
           </div>
         )}
@@ -306,30 +342,44 @@ export function AdExportClient() {
                 onClick={() => { setPosition(image.position); setResults(null); }}
                 className={cn(
                   // `border-transparent` 상태에서는 초점이 아예 안 보인다.
-                  "h-20 w-20 overflow-hidden rounded border-2",
+                  "h-20 w-20 overflow-hidden rounded-lg border-2 disabled:opacity-50",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  position === image.position ? "border-foreground" : "border-transparent",
+                  // 고른 상태는 저장소 전체가 `border-primary` 다 —
+                  // `reference-picker`·`library-picker`·`ModelPicker` 가 같다.
+                  position === image.position ? "border-primary" : "border-transparent",
                 )}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.image} alt={image.sectionName} className="h-full w-full object-cover" />
+                <img
+                  src={image.image}
+                  alt={image.sectionName}
+                  data-zoomable
+                  className="h-full w-full object-cover"
+                />
               </button>
             ))}
           </div>
         )}
         {noImages && (
-          <p className="text-meta text-subtle-foreground">
+          <p className="text-sm text-muted-foreground">
             이 작업에는 서버에 보관된 이미지가 없습니다. 다른 작업을 골라 주세요.
           </p>
         )}
+        </CardContent>
       </Card>
 
-      <Card className="grid gap-3 p-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium">2. 규격 고르기</h2>
+      <Card>
+        <CardHeader className="flex-row items-baseline justify-between space-y-0">
+          <div className="grid gap-1.5">
+            <CardTitle>02 규격 고르기</CardTitle>
+            <CardDescription>포털에 올릴 규격을 고릅니다. 필수는 켜 둡니다.</CardDescription>
+          </div>
           <span className="text-meta text-subtle-foreground">{picked.length}개 고름</span>
-        </div>
-
+        </CardHeader>
+        <CardContent className="grid gap-3">
+        {/* 쌍둥이 화면(`poster/ad-spec-picker.tsx`)과 같이 묶음에 이름을 준다. */}
+        <fieldset className="grid gap-1">
+          <legend className="sr-only">광고 규격</legend>
         <ul className="grid gap-1">
           {ROWS.map((row) => {
             const checked = picked.includes(row.spec.id);
@@ -365,6 +415,7 @@ export function AdExportClient() {
             );
           })}
         </ul>
+        </fieldset>
 
         {/*
           초판은 여기에 「못 뽑는 규격이 있습니다」만 뒀는데, 그 경고는 **도달할 수
@@ -372,43 +423,62 @@ export function AdExportClient() {
           `disabled` 라 켤 수가 없다. 정작 설계 §9 원칙 1 의 뒷 절반인
           「필수를 끄면 알린다」가 없었다.
         */}
+        {/* 목록 안의 안내라 인라인으로 둔다 — 쌍둥이 화면과 짝이 맞는다. */}
         {missingRequired > 0 && (
-          <p className="text-meta text-destructive" role="alert">
+          <p className="text-sm text-destructive" role="alert">
             필수 규격 {missingRequired}개가 꺼져 있습니다. 빠지면 포털이 반려할 수 있습니다.
           </p>
         )}
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             type="button"
             disabled={!item || !picked.length || busy || noImages}
             onClick={() => void run()}
           >
             {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-            뽑아 보기
+            {/* 저장소는 도는 동안 글자를 바꾼다 — 「만드는 중…」·「저장 중…」. */}
+            {busy ? "뽑는 중…" : "뽑아 보기"}
           </Button>
-          <span className="text-meta text-subtle-foreground">
+          <span className="text-sm text-muted-foreground">
             {/* 이 기능의 핵심이 「새로 만들지 않는다」이므로 그것을 말한다. */}
             새로 만들지 않습니다 · 비용 0
           </span>
         </div>
-        {error && <p className="text-meta text-destructive" role="alert">{error}</p>}
+        {/*
+          **오류는 상자로 낸다.** 저장소 22곳이 같은 모양을 쓴다 — 같은 마법사인
+          `poster/new-client.tsx:247` 이 바로 그렇다. 11px 한 줄로 두면 뽑기가
+          실패한 것을 못 보고 다시 누른다.
+        */}
+        {error && (
+          <div
+            role="alert"
+            className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {error}
+          </div>
+        )}
+        </CardContent>
       </Card>
 
       {results && (
-        <Card className="grid gap-3 p-4">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-medium">3. 확인하고 내려받기</h2>
-            <span className="text-meta text-subtle-foreground" aria-live="polite">
+        <Card>
+          <CardHeader className="flex-row items-baseline justify-between space-y-0">
+            <div className="grid gap-1.5">
+              <CardTitle>03 확인하고 내려받기</CardTitle>
+              <CardDescription>뽑힌 것을 눈으로 보고 봉투에 담습니다.</CardDescription>
+            </div>
+            <span className="text-meta text-subtle-foreground" role="status">
               {madeCount}개 나옴
             </span>
-          </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
           {/*
             **띠가 없는 것을 「제약이 없다」로 읽히게 두면 안 된다.** `safeArea` 를
             가진 규격은 카카오 디스플레이 넷뿐이고, 나머지 열셋에 띠가 없는 것은
             제약이 없어서가 아니라 **우리 데이터에 없어서**다(설계 §11).
           */}
-          <p className="text-meta text-subtle-foreground">
+          <p className="text-sm text-muted-foreground">
             <strong>눈으로 확인해 주세요.</strong> 글자가 읽히는지, 주인공이 잘리지 않았는지는
             자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다 —
             <strong>안전영역이 공개된 규격에만 띠가 붙습니다.</strong> 띠가 없다고 제약이
@@ -433,25 +503,32 @@ export function AdExportClient() {
                   지우면 그림자가 새어 **격자 전체가 붉게 덮인다.** jsdom 이 없어
                   시험이 못 잡는 유일한 자리다(`export-rules.ts` 머리말).
                 */}
-                <div className="relative overflow-hidden rounded border bg-muted">
-                  {entry.dataUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={entry.dataUrl} alt={entry.label} className="w-full" />
-                      {entry.safeArea && (
-                        <span
-                          aria-hidden
-                          className="pointer-events-none absolute"
-                          style={safeAreaOverlayStyle(entry.safeArea, entry.target)}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <div className="flex h-24 items-center justify-center">
-                      <ImageIcon className="h-5 w-5 text-subtle-foreground" />
-                    </div>
-                  )}
-                </div>
+                {entry.dataUrl ? (
+                  <div className="relative overflow-hidden rounded border bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {/* 「글자가 읽히는지 보세요」라고 적었으면 크게 볼 길도 줘야 한다. */}
+                    <img src={entry.dataUrl} alt={entry.label} data-zoomable className="w-full" />
+                    {entry.safeArea && (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute"
+                        style={safeAreaOverlayStyle(entry.safeArea, entry.target)}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  /*
+                    **못 만든 것을 「빈 그림」으로 그리면 안 된다.**
+                    초판은 회색 칸에 그림 아이콘을 뒀는데, 그것은 **깨진 이미지와
+                    똑같이 생겼다** — 실제로 「이미지가 깨진다」는 보고를 받았다.
+                    일부러 안 만든 것과 만들다 실패한 것을 구분할 수 없으면
+                    사용자는 고장으로 읽는다.
+                  */
+                  <div className="grid place-items-center gap-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-6 text-center">
+                    <AlertTriangle className="size-5 text-destructive" />
+                    <p className="text-sm font-bold text-destructive">만들지 않았습니다</p>
+                  </div>
+                )}
                 <figcaption className="grid gap-0.5 text-meta">
                   <span className="flex items-center gap-1">
                     {entry.label}
@@ -468,6 +545,13 @@ export function AdExportClient() {
                     {entry.dataUrl && !isActualSize(entry.target, cellWidth)
                       && " · 실제보다 작게 보임"}
                   </span>
+                  {/* 왜 글자가 잘렸는지 화면이 말해야 한다 — 안 그러면 고장으로 읽힌다. */}
+                  {entry.dataUrl && cropNotice(entry.specId, planDerivation) && (
+                    <span className="flex items-center gap-1 text-destructive">
+                      <AlertTriangle className="h-3 w-3" />
+                      {cropNotice(entry.specId, planDerivation)}
+                    </span>
+                  )}
                   {entry.shrink && entry.shrink > SHRINK_WARNING && (
                     <span className="flex items-center gap-1 text-destructive">
                       <AlertTriangle className="h-3 w-3" />
@@ -482,17 +566,26 @@ export function AdExportClient() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button type="button" disabled={!madeCount} onClick={() => void download()}>
-              <Download className="mr-1 h-4 w-4" />
-              {madeCount}개 내려받기 (ZIP)
+          <div className="flex flex-wrap items-center gap-2">
+            {/*
+              **묶는 동안 잠근다.** 규격을 많이 고르면 base64 8MB 를 JSZip 으로
+              묶는다(`export-rules.ts` 머리말) — 그동안 아무 표시가 없으면
+              멈춘 줄 알고 다시 눌러 ZIP 이 둘 나온다. `library/ResultViewer.tsx`
+              가 같은 일을 같은 방식으로 한다.
+            */}
+            <Button type="button" disabled={!madeCount || zipping} onClick={() => void download()}>
+              {zipping
+                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                : <Download className="mr-1 h-4 w-4" />}
+              {zipping ? "묶는 중…" : `${madeCount}개 내려받기 (ZIP)`}
             </Button>
             {excluded > 0 && (
-              <span className="text-meta text-destructive">
+              <span className="text-sm text-destructive">
                 반려될 수 있는 {excluded}개는 봉투에서 뺐습니다
               </span>
             )}
           </div>
+        </CardContent>
         </Card>
       )}
     </div>

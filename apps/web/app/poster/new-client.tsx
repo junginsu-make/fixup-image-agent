@@ -300,7 +300,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             */}
             {sections.includes("mode-toggle") && (
               <fieldset className="grid gap-2">
-                <legend className="text-meta text-subtle-foreground">무엇을 만드나</legend>
+                <legend className="text-meta text-subtle-foreground">만들 것</legend>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button" size="sm"
@@ -395,8 +395,15 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 **「0장 만드는데 $0.657」을 보이면 안 된다.** `projectCount` 가
                 0 을 곱하지 않는 것은 「무료로 보이면 안 된다」는 이유인데, 만들
                 것이 없을 때 금액만 남기면 그 판단이 화면에서 거꾸로 읽힌다.
+
+                **까닭은 여기서 되풀이하지 않는다.** 규격 칸이 이미 같은 문장을
+                말하고 있고(`ad-spec-picker.tsx`), 두 곳에 다른 크기로 적으면
+                한 화면에서 같은 말이 두 번 보인다. 고칠 수 있는 자리는 규격
+                칸이므로 사유는 거기 맡기고 여기서는 금액이 없는 이유만 말한다.
               */
-              <p className="text-sm text-destructive">{adPlan.reason}</p>
+              <p className="text-sm text-muted-foreground">
+                고른 규격으로는 아직 만들 그림이 없습니다. 위에서 규격을 확인해 주세요.
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground">
                 {/*
