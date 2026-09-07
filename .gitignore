@@ -17,9 +17,11 @@ env*.md
 .playwright-mcp/
 .remember/tmp/
 frontend/
-.next-build/
-# dev 서버가 .next 를 쓰는 동안 따로 빌드해 보는 자리. 278MB 짜리다.
-.next-dev-check/
+# dev 서버가 `.next` 를 쓰는 동안 따로 빌드해 보는 자리. 하나에 278MB 다.
+#
+# **이름을 하나씩 적지 않는다.** `.next-build` `.next-dev-check` 를 적어 뒀는데,
+# 다른 이름으로 빌드할 때마다 그것만 빠져 커밋에 딸려 들어갔다(2026-09-07 두 번).
+.next-*/
 
 # Supabase CLI 가 만드는 로컬 상태. 링크한 프로젝트 ref 가 들어간다.
 supabase/.temp/

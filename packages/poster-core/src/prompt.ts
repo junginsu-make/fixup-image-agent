@@ -4,6 +4,7 @@ import {
   type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
+import { attachmentNumber } from "./attachment-order";
 
 /**
  * 슬롯을 fal 프롬프트로 조립한다.
@@ -51,6 +52,14 @@ export interface PosterPromptInput {
    */
   userInstruction?: string;
   /**
+   * 첨부한 그림들을 어떻게 쓸지 사용자가 01에서 적은 말.
+   *
+   * 03의 `userInstruction` 과 **뜻이 다르다** — 이쪽은 그림 얘기, 저쪽은
+   * 결과물 얘기다. 둘 다 사람이 친 말이라 똑같이 세지만, **그림 얘기를 먼저**
+   * 놓는다. 그림을 어떻게 쓸지가 정해져야 나머지가 말이 된다.
+   */
+  attachmentIntent?: string;
+  /**
    * 그림의 결. 기본은 `auto`.
    *
    * `auto` 여야 지금 쓰던 사람이 안 깨진다 — 첨부 레퍼런스의 결을 따라가는
@@ -77,7 +86,7 @@ function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolea
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
   images.forEach((image, index) => {
-    const number = index + 1;
+    const number = attachmentNumber(index);
     if (image.kind === "preserved") {
       // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
       // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
@@ -166,7 +175,21 @@ function copyLines(slots: PosterSlots): string[] {
 
 export function buildPosterPrompt(input: PosterPromptInput): string {
   const forbidden = input.slots.forbidden.trim();
-  const instruction = input.userInstruction ?? "";
+  /**
+   * 사람이 친 말 둘을 하나로 합친다.
+   *
+   * 우선순위 규칙(`priorityLine`)이 「USER INSTRUCTION」 하나를 가리키므로,
+   * 둘을 따로 보내면 어느 쪽이 센지 모호해진다. 라벨을 붙여 합치면 순서만으로
+   * 무엇이 먼저인지 말할 수 있다.
+   */
+  const instruction = [
+    input.attachmentIntent?.trim()
+      ? `첨부한 그림에 대해: ${input.attachmentIntent.trim()}`
+      : "",
+    input.userInstruction?.trim()
+      ? `결과물에 대해: ${input.userInstruction.trim()}`
+      : "",
+  ].filter(Boolean).join("\n");
   const head = userInstructionHead(instruction);
   const tail = userInstructionTail(instruction);
   // 지킬 인물이 붙어 있으면 실사 지시도 사람 몸으로 말해야 한다. 중립 문단만

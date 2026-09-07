@@ -8,7 +8,9 @@ import {
   Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
 import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
-import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "@fixup/poster-core";
+import {
+  estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder, visibleOrder,
+} from "@fixup/poster-core";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
@@ -38,6 +40,50 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   const [step, setStep] = React.useState("reference");
   const [roles, setRoles] = React.useState<Record<string, Role>>({});
+  /**
+   * **고른 차례.** 이것이 화면의 ①②③ 이고 프롬프트의 `Image N` 이다.
+   *
+   * `roles` 는 객체라 차례를 못 담고, 화면에 그려지는 차례는 라이브러리 목록
+   * 순서(최신순)라 먼저 고른 것이 뒤에 놓인다. 「①번 사람들을 ②번 느낌으로」가
+   * 생각한 대로 동작하려면 **고른 차례**를 따로 들어야 한다.
+   */
+  const [pickOrder, setPickOrder] = React.useState<string[]>([]);
+  /** 첨부한 그림들을 어떻게 쓸지. 비워 두면 프롬프트에 안 들어간다. */
+  const [attachmentIntent, setAttachmentIntent] = React.useState("");
+
+  /**
+   * 역할을 바꾸면서 차례도 함께 손본다.
+   *
+   * 고르면 뒤에 붙이고, 빼면(`none`) 목록에서 지운다. 뺐다가 다시 고르면
+   * 맨 뒤로 간다 — 그게 화면에서 보이는 것과 같다.
+   *
+   * **이미 있는 것은 자리를 안 옮긴다.** 역할만 바꾸는 것(따라 만들기 →
+   * 인물 지키기)은 고르는 일이 아니다. 옮기면 ①번 드롭다운을 건드렸다는
+   * 이유로 그 그림이 맨 뒤로 밀리고, 「①번을」이라고 쓴 지시가 다른 그림에
+   * 붙는다.
+   */
+  const changeRole = React.useCallback((id: string, role: Role) => {
+    setRoles((current) => ({ ...current, [id]: role }));
+    // 규칙은 `@fixup/poster-core` 가 갖는다. 여기 또 적으면 둘이 갈린다.
+    setPickOrder((current) => nextPickOrder(current, id, role !== "none"));
+  }, []);
+
+  /**
+   * 고른 차례 그대로의 id 목록.
+   *
+   * **보이는 것과 보내는 것을 같게 한다.** 화면은 `references` 에 없는 id 를
+   * 지우고 번호를 다시 매기는데, 여기서 안 지우면 그 뒤 번호가 전부 1씩 밀린다.
+   *
+   * 그런 id 가 생기는 길이 있다 — 여러 장을 올리다 중간에 실패하면 앞의 것에는
+   * 역할이 붙지만 목록 다시 읽기를 건너뛴다. 그러면 화면에는 안 보이는데
+   * 서버로는 가고, 「①번을」이라고 쓴 지시가 본 적도 없는 그림을 가리킨다
+   * (2026-09-07 리뷰).
+   */
+  const orderedIds = visibleOrder(
+    pickOrder,
+    (id) => (roles[id] ?? "none") !== "none",
+    (id) => references.some((entry) => entry.id === id),
+  );
   const [ratio, setRatio] = React.useState("2:3");
   /**
    * 광고 모드인가.
@@ -61,10 +107,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const styleIds = Object.keys(roles).filter((id) => roles[id] === "style");
-  const preservedIds = Object.keys(roles).filter((id) => roles[id]?.startsWith("preserve"));
+  // 세 목록도 고른 차례를 따른다. 서버가 옛 작업을 읽을 때 이 차례로 이어 붙인다.
+  const styleIds = orderedIds.filter((id) => roles[id] === "style");
+  const preservedIds = orderedIds.filter((id) => roles[id]?.startsWith("preserve"));
   // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
-  const personIds = Object.keys(roles).filter((id) => roles[id] === "preserve_person");
+  const personIds = orderedIds.filter((id) => roles[id] === "preserve_person");
 
   /**
    * 비율이 모델보다 우선한다.
@@ -99,7 +146,10 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     // 라이브러리에서 그림을 골라 왔으면 「따라 만들기」로 켜 둔다.
     // 제품·인물을 지키려는 것이면 그림을 눌러 바꾼다.
     if (handoff.images?.length) {
-      setRoles(Object.fromEntries(handoff.images.map((image) => [image.id, "style" as Role])));
+      const ids = handoff.images.map((image) => image.id);
+      setRoles(Object.fromEntries(ids.map((id) => [id, "style" as Role])));
+      // 넘어온 차례가 곧 고른 차례다. 안 담으면 번호가 안 붙는다.
+      setPickOrder(ids);
     }
   }, []);
 
@@ -141,6 +191,9 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       referenceIds: styleIds,
       preservedIds,
       personIds,
+      // **고른 차례 그대로.** 이것이 프롬프트의 Image 번호가 된다.
+      attachmentOrder: orderedIds,
+      attachmentIntent: attachmentIntent.trim(),
       look,
       userInstruction: userInstruction.trim(),
       ...extra,
@@ -264,8 +317,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             <ReferencePicker
               references={references}
               roles={roles}
-              onRoleChange={(id, role) => setRoles((current) => ({ ...current, [id]: role }))}
+              order={orderedIds}
+              onRoleChange={changeRole}
               onUploaded={loadReferences}
+              intent={attachmentIntent}
+              onIntentChange={setAttachmentIntent}
             />
             {overReferenceLimit ? (
               <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

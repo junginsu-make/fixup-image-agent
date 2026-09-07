@@ -37,6 +37,15 @@ export interface PosterProjectRecord {
     look?: ImageLook;
     /** 사용자가 직접 친 추가 지시. 옛 작업에는 없다. */
     userInstruction?: string;
+    /**
+     * 고른 차례 그대로의 첨부 id. 화면 ①②③ 이자 프롬프트의 `Image N`.
+     *
+     * 옛 작업에는 없다 — 그때는 차례를 저장하지 않았다. 없으면 읽는 쪽이
+     * `referenceIds` + `preservedIds` 를 이어 붙인다(지금까지의 동작).
+     */
+    attachmentOrder?: string[];
+    /** 첨부한 그림들을 어떻게 쓸지. 옛 작업에는 없다. */
+    attachmentIntent?: string;
     slots: PosterSlots;
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];
