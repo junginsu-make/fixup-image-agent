@@ -779,6 +779,25 @@ status === "generating" 이고 (지금 − project.updatedAt) < 60초  →  409
 
 **사용자 눈에 보이는 결과가 「에러」에서 「$1.239 짜리 생성」으로 바뀐다.** 그래서 여기 적어 둔다 — 대전제의 예외는 조용히 지나가면 안 된다.
 
+#### 3-e. **2단계와 3단계가 이어져 있지 않았다** — 돌려 보고 알았다
+
+**리뷰 넷이 전부 못 봤다.** 양쪽이 각각은 맞았기 때문이다. 로컬에서 실제로 켜서 마스터를 하나 만들고 `/ad` 에 가 보니 **고를 그림이 하나도 없었다.**
+
+```
+3단계가 만드는 것 : poster_projects · poster_images
+2단계가 읽는 것   : library_images  (loadLibrary + getLibraryImageFile)
+```
+
+`loadLibrary()` 가 합치는 갈래는 넷이다 — pdp 초안 · 리디자인 · 계정 라이브러리 · 참고 이미지. **포스터가 없다.** 실측으로 `GET /api/library` 가 `{"items":[]}` 를 돌려준다. 파일은 같은 버킷에 있지만(`{userId}/poster/{id}/0.png`) **`library_images` 표에 행이 안 생긴다.**
+
+**결정: `/ad` 가 포스터 작업도 읽는다.**
+
+버린 안은 「포스터 결과를 `library_images` 에 넣는다」였다. 그쪽이 자연스러워 보이지만 **`loadLibrary()` 를 보는 화면이 넷**이다 — `/ad`·라이브러리·카드뉴스 레이아웃 그림 고르기·캐릭터 화면. 광고 마스터를 그 선반에 올리면 **광고와 무관한 세 화면이 함께 바뀐다.** 「기존 시스템에 절대 영향 주지 않는다」가 이 작업의 대전제였고, 그 선을 넘는다.
+
+`/ad` 쪽은 이미 「어떤 그림을 고를까」만 하는 화면이고, 포스터 목록은 **이미 있는 `/api/poster/projects`** 로 읽는다 — 라이브러리 화면의 「작업」 탭이 이미 그것을 쓴다.
+
+**소유권은 회원 경로로 판정한다.** `posterStoresForUser(userId).images.byProject(id)` 다. `images/[index]/file` 라우트는 관리자에게 조건을 넓히는데(첫 화면에 걸 것을 고르려고), **내보내기에는 그 필요가 없다** — 넓히면 관리자가 남의 그림으로 광고를 뽑을 수 있다.
+
 #### 3-d. 검증
 
 **`generate/route.ts` 에는 지금 시험이 하나도 없다.** `app/api/poster/__tests__/` 에는 `projects`·`poster-file-route`·`poster-delete-thumbnails` 뿐이다. **이 파일에 처음 시험을 붙이는 단계가 3단계다.** 본은 이미 있다 — `app/api/ad/__tests__/ad-export-route.test.ts` 가 `vi.mock` 으로 인증·스토어를 갈아 끼워 **배선**을 검사한다. 같은 방식으로 `lib/poster/stores`·`lib/poster/providers`·`lib/fal/upload`·`sharp` 를 갈아 끼운다.
