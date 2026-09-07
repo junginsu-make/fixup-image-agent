@@ -221,7 +221,12 @@ async function withShrink(master: Buffer, entries: AdBatchEntry[]): Promise<AdBa
   const sourceWidth: number = meta.width ?? 0;
 
   for (const entry of entries) {
-    entry.shrink = entry.bytes && entry.target.width
+    /**
+     * **조립 항목은 비운다.** `shrink` 는 「원본을 몇 배로 줄였는가」인데,
+     * 조립은 줄인 것이 아니라 **조립한 것**이라 그 수치가 거짓이다(설계 §6.2).
+     * 눈에 보이는 고장은 없지만 거짓 수치를 들고 다니지 않는다.
+     */
+    entry.shrink = entry.bytes && entry.target.width && entry.format !== "png-alpha"
       ? Number((sourceWidth / entry.target.width).toFixed(2))
       : undefined;
   }

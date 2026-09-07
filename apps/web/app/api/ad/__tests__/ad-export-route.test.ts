@@ -409,12 +409,42 @@ describe("지워 둔 오브젝트를 실제로 넘긴다", () => {
     expect(batchArgs[0]!.options?.cutout).toBeUndefined();
   });
 
-  /** 실패했으면 사유를 들고 있다가 그 규격만 실패로 남긴다. */
+  /**
+   * 실패했으면 사유를 들고 있다가 그 규격만 실패로 남긴다.
+   *
+   * **문구는 걸러진다** — fal 내부 오류는 그대로 안 보인다(아래 「배경 제거
+   * 실패를 어떻게 말하는가」). 여기서 보는 것은 **실패가 전달되는가**다.
+   */
   it("배경 제거가 실패하면 그 사유를 넘긴다", async () => {
     cutoutThrows = new Error("fal 이 응답하지 않습니다.");
     await call({ ...good, specIds: ["kakao-bizboard"] });
     const passed = batchArgs[0]!.options?.cutout;
     expect(passed).toBeDefined();
-    await expect(passed!(Buffer.from("m"))).rejects.toThrow(/응답하지/);
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow();
+  });
+});
+
+describe("배경 제거 실패를 어떻게 말하는가", () => {
+  /**
+   * **내부 사정을 사용자 화면에 쓰지 않는다.** `createPosterFalClients()` 가
+   * 던지는 말은 「다음 환경변수가 없어…: FAL_KEY」다 — 그대로 쓰면 사용자가
+   * 그것을 본다. 이 라우트의 꼬리 catch 가 이미 같은 정책을 적어 두었다.
+   */
+  it("환경변수 이름을 사용자에게 안 보인다", async () => {
+    cutoutThrows = new Error("다음 환경변수가 없어 포스터를 만들 수 없습니다: FAL_KEY");
+    globalThis.fetch = (async () => new Response(Buffer.from("x"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow(/배경을 지우지 못했습니다/);
+    await expect(passed!(Buffer.from("m"))).rejects.not.toThrow(/FAL_KEY/);
+  });
+
+  /** 사용자가 고칠 수 있는 말은 그대로 준다 — 다시 누르면 되는 것들이다. */
+  it("시한 초과는 그대로 말해 준다", async () => {
+    cutoutThrows = new Error("배경을 지우는 데 너무 오래 걸립니다(60초).");
+    globalThis.fetch = (async () => new Response(Buffer.from("x"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow(/오래 걸립니다/);
   });
 });

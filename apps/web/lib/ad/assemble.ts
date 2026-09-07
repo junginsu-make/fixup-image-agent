@@ -26,11 +26,22 @@ export const EMPTY_OBJECT = "배경을 지운 그림이 비어 있습니다";
  * (실측). 그래서 배경 제거가 통째로 실패해도 파이프라인 어디에서도 신호가 안
  * 나고, 그 결과는 픽셀·형식·알파·용량 검사를 **전부 통과한다**(설계 §6.2).
  */
+/**
+ * 이 파일이 다루는 바이트는 **외부 URL 에서 받은 것**이다(fal 이 돌려준 결과).
+ * 저장소가 sharp 를 부르는 다른 자리는 전부 이 상한을 건다 — `check.ts:34`,
+ * `export.ts:34`, `batch.ts`. 여기만 빼면 관례가 깨진 자리가 하필 **유일한
+ * 외부 입구**가 된다.
+ */
+const MAX_INPUT_PIXELS = 40_000_000;
+
 async function hasVisiblePixels(
-  sharpLib: (input: Buffer) => { stats(): Promise<{ channels: Array<{ max: number }> }> },
+  sharpLib: (
+    input: Buffer,
+    options?: { limitInputPixels: number },
+  ) => { stats(): Promise<{ channels: Array<{ max: number }> }> },
   bytes: Buffer,
 ): Promise<boolean> {
-  const stats = await sharpLib(bytes).stats();
+  const stats = await sharpLib(bytes, { limitInputPixels: MAX_INPUT_PIXELS }).stats();
   const alpha = stats.channels[stats.channels.length - 1];
   // 알파가 없으면 불투명한 그림이다. 있으면 최댓값이 0 보다 커야 뭔가 보인다.
   return stats.channels.length < 4 || (alpha?.max ?? 0) > 0;
@@ -62,12 +73,12 @@ export async function assembleBanner(canvas: Box, object: Buffer): Promise<Assem
 
   // 여백을 잘라 실제 피사체 크기로 잰다. 안 자르면 투명 여백까지 크기로 세어
   // 오브젝트가 실제보다 작게 놓인다.
-  const trimmed = await sharp(object).trim().png().toBuffer();
-  const meta = await sharp(trimmed).metadata();
+  const trimmed = await sharp(object, { limitInputPixels: MAX_INPUT_PIXELS }).trim().png().toBuffer();
+  const meta = await sharp(trimmed, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
   if (!meta.width || !meta.height) throw new Error(EMPTY_OBJECT);
 
   const place = objectPlacement(canvas, { width: meta.width, height: meta.height });
-  const scaled = await sharp(trimmed)
+  const scaled = await sharp(trimmed, { limitInputPixels: MAX_INPUT_PIXELS })
     .resize(place.width, place.height, { fit: "fill" })
     .png()
     .toBuffer();

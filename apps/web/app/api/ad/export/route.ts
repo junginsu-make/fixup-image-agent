@@ -192,7 +192,22 @@ export async function POST(request: Request) {
       try {
         cutout = await cutoutForAd(file.bytes);
       } catch (error) {
-        cutoutFailed = error instanceof Error ? error.message : "배경을 지우지 못했습니다.";
+        /**
+         * **내부 사정을 사용자 화면에 쓰지 않는다.**
+         *
+         * `createPosterFalClients()` 가 던지는 말은 「다음 환경변수가 없어
+         * 포스터를 만들 수 없습니다: FAL_KEY」다. 그대로 규격 실패 사유로
+         * 쓰면 **사용자가 그것을 본다.** fal SDK 의 HTTP 오류 본문도 같은 길로
+         * 샌다. 이 라우트의 꼬리 catch 가 이미 정반대 정책을 적어 두었다 —
+         * 「그 밖의 것은 내부 사정이라 문구를 감춘다」.
+         *
+         * **아는 말만 통과시킨다.** 시한 초과와 「받지 못했습니다」는 사용자가
+         * 읽고 판단할 수 있는 말이다 — 다시 눌러 보면 되는 것들이다.
+         */
+        const message = error instanceof Error ? error.message : "";
+        const sayable = /오래 걸립니다|받지 못했습니다|내려받지 못했습니다/.test(message);
+        if (!sayable) console.error(`[ad] 배경 제거 실패: ${message}`);
+        cutoutFailed = sayable ? message : "배경을 지우지 못했습니다.";
       }
     }
 

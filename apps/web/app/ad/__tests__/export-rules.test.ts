@@ -4,7 +4,7 @@ import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
+  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl, previewBackdrop,
   cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks,
 } from "../export-rules";
 
@@ -668,5 +668,27 @@ describe("조립으로 만드는 규격", () => {
     const logo = rows.find((entry) => entry.spec.id === "google-rda-logo")!;
     expect(logo.supported).toBe(false);
     expect(logo.unsupportedReason).toBeTruthy();
+  });
+});
+
+describe("미리보기 바탕", () => {
+  /**
+   * **투명을 회색 판 위에 그리면 구분이 안 된다**(설계 §6.3). 이 기능의 존재
+   * 이유가 투명인데 사람 눈이 그것만 확인할 수 없다.
+   */
+  it("투명 규격에는 체크무늬를 깐다", () => {
+    const style = previewBackdrop("png-alpha");
+    expect(style.backgroundImage).toContain("linear-gradient");
+    expect(style.backgroundSize).toBeTruthy();
+  });
+
+  it("불투명 규격은 그대로 둔다", () => {
+    expect(previewBackdrop("jpg")).toEqual({});
+    expect(previewBackdrop("png")).toEqual({});
+  });
+
+  /** 색은 토큰을 탄다 — 리터럴을 박으면 다크 모드에서 굳는다. */
+  it("색을 리터럴로 박지 않는다", () => {
+    expect(previewBackdrop("png-alpha").backgroundImage).toContain("var(--muted)");
   });
 });

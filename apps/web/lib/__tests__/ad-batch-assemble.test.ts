@@ -170,3 +170,25 @@ describe("조립 갈래의 마무리", () => {
     expect(entry!.failures.length).toBeGreaterThan(0);
   });
 });
+
+describe("조립 항목의 축소 배율", () => {
+  /**
+   * **조립은 줄인 것이 아니라 조립한 것이다.** `shrink` 는 「원본을 몇 배로
+   * 줄였는가」인데, 조립 결과에 그 값을 채우면 거짓이다 — 실측으로 비즈보드
+   * 1.99, 스마트채널 2.73 이 채워졌다.
+   *
+   * 눈에 보이는 고장은 없다(화면이 `SHRINK_WARNING = 4` 를 넘을 때만 배지를
+   * 띄우고 조립 규격은 어떤 마스터에서도 4 를 못 넘는다). **그래도 거짓 수치를
+   * 들고 다니지 않는다**(설계 §6.2).
+   */
+  it("조립 항목에는 안 채운다", async () => {
+    const cut = await cutout();
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], { cutout: async () => cut });
+    expect(entry!.shrink).toBeUndefined();
+  });
+
+  it("파생 항목에는 그대로 채운다", async () => {
+    const [entry] = await exportBatch(master, ["google-rda-landscape"], {});
+    expect(entry!.shrink).toBeGreaterThan(0);
+  });
+});

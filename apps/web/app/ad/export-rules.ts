@@ -377,6 +377,29 @@ export function cropNotice(
 }
 
 /**
+ * 미리보기 칸의 바탕.
+ *
+ * **투명 배너를 회색 판 위에 그리면 투명한지 회색인지 알 수 없다**(설계 §6.3).
+ * 이 기능의 존재 이유가 투명인데, 「사람 눈이 의도 검증이다」(§5.2)가 그 한
+ * 가지에 대해서만 작동하지 않는다. 다크 모드에서는 어두운 오브젝트가 배경에
+ * 묻히기까지 한다.
+ *
+ * 그래서 투명 규격에만 **체크무늬**를 깐다 — 그림 편집기가 쓰는 그 표시다.
+ */
+export function previewBackdrop(format: AdSpec["format"]): React.CSSProperties {
+  if (format !== "png-alpha") return {};
+  return {
+    backgroundImage:
+      "linear-gradient(45deg, var(--muted) 25%, transparent 25%),"
+      + " linear-gradient(-45deg, var(--muted) 25%, transparent 25%),"
+      + " linear-gradient(45deg, transparent 75%, var(--muted) 75%),"
+      + " linear-gradient(-45deg, transparent 75%, var(--muted) 75%)",
+    backgroundSize: "16px 16px",
+    backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
+  };
+}
+
+/**
  * 실패를 사람이 읽을 말로 옮긴다.
  *
  * **비-JSON 응답을 삼키지 않는다.** 라우트는 두 곳에서 본문 없는 404 를 낸다 —
