@@ -81,6 +81,17 @@ export const PosterProjectInputSchema = z.object({
    * 맨 뒤 두 곳에 들어간다.
    */
   userInstruction: z.string().trim().default(""),
+  /**
+   * 광고 마스터의 **id**. 선택이다.
+   *
+   * **픽셀을 받지 않는다.** 자유 픽셀이면 경계가 없어 `{ 3840, 3840 }` 이
+   * 8.29MP 를 만드는데 장부에는 자리표시 1088×1088 값이 남는다(설계 §10 3-b).
+   * id 만 받으면 그 구멍이 존재하지 않는다.
+   *
+   * **`poster-core` 는 광고 규격을 모른다.** 아는 id 인지는 앱 쪽이 판단한다 —
+   * 여기서 `z.enum` 을 걸면 이 꾸러미가 광고 목록에 묶인다.
+   */
+  adMasterId: z.string().max(64).optional(),
   slots: PosterSlotsSchema.optional(),
 }).strict();
 

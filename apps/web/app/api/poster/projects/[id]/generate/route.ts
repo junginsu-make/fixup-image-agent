@@ -34,6 +34,20 @@ async function measure(
   }
 }
 
+/**
+ * 같은 클릭의 복제본이 도착할 수 있는 시간.
+ *
+ * **「생성이 얼마나 걸리는가」가 아니다.** 그것을 기준으로 잡으면 실패한 작업이
+ * 그만큼 잠긴다. 더블클릭과 재전송을 덮을 만큼만 두고, 지나면 푼다.
+ */
+const RESUBMIT_WINDOW_MS = 60_000;
+
+function justSubmitted(updatedAt: string): boolean {
+  const at = Date.parse(updatedAt);
+  // 날짜를 못 읽으면 막지 않는다 — 막는 쪽으로 틀리면 다시 만들 길이 없어진다.
+  return Number.isFinite(at) && Date.now() - at < RESUBMIT_WINDOW_MS;
+}
+
 export async function POST(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
@@ -42,6 +56,27 @@ export async function POST(_request: Request, context: Context) {
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
+
+    /**
+     * **같은 클릭이 두 번 오면 돈이 두 번 나간다.**
+     *
+     * 이 라우트는 `project.status` 를 안 봤고 상태 갱신도 제출 뒤였다. 더블클릭·
+     * 네트워크 재전송이 그대로 fal 작업 둘이 된다(설계 §11).
+     *
+     * **단순히 「생성 중이면 거절」로 두면 안 된다.** `status` 가 `"failed"` 로
+     * 가는 코드가 이 저장소에 없다 — `"generating"` 으로 가는 곳 하나,
+     * `"done"` 으로 가는 곳 하나뿐이다. 실패하거나 창을 닫으면 작업은
+     * `"generating"` 에 영원히 남고, 그것을 잠그면 **다시 만들 길이 사라진다.**
+     *
+     * 그래서 **짧은 창**만 본다. 막으려는 것은 같은 클릭의 복제본이지 한참 뒤의
+     * 재시도가 아니다. 창이 지나면 언제나 다시 만들 수 있다.
+     */
+    if (project.status === "generating" && justSubmitted(project.updatedAt)) {
+      return Response.json(
+        { ok: false, message: "방금 만들기를 시작했습니다. 잠시 뒤에 다시 눌러 주세요." },
+        { status: 409 },
+      );
+    }
 
     const fal = createPosterFalClients();
     // 따라 만들 것과 그대로 지킬 것을 함께 올린다. 순서가 프롬프트의
@@ -70,9 +105,18 @@ export async function POST(_request: Request, context: Context) {
      */
     const choice = chooseModelForRatio(project.ratio, project.modelId, IMAGE_MODELS);
 
-    // 첨부한 그림을 따라가는 비율이면 그 그림의 실제 크기를 읽는다.
+    /**
+     * 첨부한 그림을 따라가는 비율이면 그 그림의 실제 크기를 읽는다.
+     *
+     * **광고 마스터가 실려 있으면 재지 않는다.** 광고 규격은 정해진 크기의
+     * 마스터에서 파생되는데 그 크기를 지정할 길이 달리 없었다(설계 §4.2).
+     * 서버가 마스터 id 를 픽셀로 바꿔 넣은 값이라 밖에서 온 자유 픽셀이 아니다.
+     *
+     * **없으면 지금까지의 경로 그대로다** — `undefined ?? measure(…)` 는
+     * 이전 식과 완전히 같다.
+     */
     const sourceSize = project.ratio === MATCH_SOURCE
-      ? await measure(references[0] ?? preserved[0])
+      ? project.data.adMaster ?? await measure(references[0] ?? preserved[0])
       : undefined;
 
     const submission = await submitPoster(
