@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { hasFullScope, viewerFrom } from "../../../../../../../../lib/access/core";
 import path from "node:path";
 import { authenticateApiMember } from "../../../../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../../../lib/local-store";
@@ -53,9 +54,21 @@ export async function GET(request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id, index } = await context.params;
-    // 로컬에서는 관리자여도 Supabase 조회를 안 쓴다 — 거기엔 Supabase 가 없다.
-    const isAdmin = usesAdminLookup(auth.member.profile.role, isLocalStoreEnabled());
-    const found = isAdmin
+    /**
+     * **둘 다 필요하다.**
+     *
+     * 누가 전체를 보는가는 `lib/access/core.ts` 가 정한다 — 목록과 상세가 다른
+     * 답을 내면 「목록에는 뜨는데 안 열리는」 상태가 난다(2026-09-04).
+     *
+     * 그런데 **로컬에서는 그 답이 맞아도 쓸 수 없다.** 전체 조회는 Supabase 를
+     * 직접 읽는데 로컬은 파일 시스템을 쓰고 환경변수가 비어 있다. 게다가
+     * `dev-auth.ts:44` 가 로컬 사용자를 언제나 관리자로 주므로, 막지 않으면
+     * **로컬에서 포스터 그림이 한 장도 안 보인다**(실측 500).
+     */
+    const found = usesAdminLookup(
+      hasFullScope(viewerFrom(auth.member), "read"),
+      isLocalStoreEnabled(),
+    )
       ? await adminAssetPath(id, index)
       : (await posterStoresForUser(auth.member.userId).images.byProject(id))
           .find((image) => String(image.variantIndex) === index) ?? null;

@@ -1,4 +1,5 @@
 import "server-only";
+import { signPaths } from "../storage/signing";
 
 import type {
   PosterImageStore,
@@ -8,6 +9,9 @@ import type {
 } from "@fixup/poster-core";
 import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
+import { scopedRead } from "../teams/scope";
+import { teamIdOf } from "../teams/store";
+import { selectedProjectFor } from "../teams/current-project";
 import {
   imageInsertRows,
   projectInsertRow,
@@ -45,18 +49,42 @@ function notFound(label: string): Error {
   return new Error(`${label} 항목을 찾을 수 없습니다.`);
 }
 
+/**
+ * 이 사람이 볼 범위.
+ *
+ * 저장소를 만드는 함수(`posterStoresForUser`)를 async 로 바꾸지 않으려고
+ * 여기서 그때그때 묻는다. 그 함수를 부르는 자리가 열네 곳이고 그중 여럿을
+ * 지금 다른 작업이 고치고 있다 — 안 건드리는 편이 싸다.
+ *
+ * `isAdmin` 은 false 다. 이 길은 자기 작업을 만드는 화면이라 운영자라고
+ * 전부 볼 이유가 없고, 운영자 전용 목록은 따로 있다.
+ */
+async function viewScope(userId: string) {
+  return { userId, teamId: await teamIdOf(userId), isAdmin: false };
+}
+
 export function createSupabasePosterProjectStore(userId: string): PosterProjectStore {
   return {
     async list() {
       const client = await createSupabaseServerClient();
-      const { data, error } = await client.from("poster_projects")
-        .select(PROJECT_COLUMNS).eq("user_id", userId).order("updated_at", { ascending: false });
+      let query = scopedRead(
+        client.from("poster_projects").select(PROJECT_COLUMNS).order("updated_at", { ascending: false }),
+        await viewScope(userId),
+      );
+      // 고른 갈래만 보여 준다. 한 건을 열 때(`get`)는 안 건다 — 주소로 받은
+      // 작업이 갈래가 다르다고 안 열리면 더 놀랍다.
+      const projectId = await selectedProjectFor(userId);
+      if (projectId) query = query.eq("project_id", projectId);
+
+      const { data, error } = await query;
       return checked((data ?? []) as PosterProjectRow[], error, "포스터 작업 목록").map(toProjectRecord);
     },
     async get(id) {
       const client = await createSupabaseServerClient();
-      const { data, error } = await client.from("poster_projects")
-        .select(PROJECT_COLUMNS).eq("id", id).eq("user_id", userId).maybeSingle();
+      const { data, error } = await scopedRead(
+        client.from("poster_projects").select(PROJECT_COLUMNS).eq("id", id),
+        await viewScope(userId),
+      ).maybeSingle();
       const row = checked(data as PosterProjectRow | null, error, "포스터 작업");
       return row ? toProjectRecord(row) : undefined;
     },
@@ -97,12 +125,13 @@ export function createSupabasePosterReferenceStore(userId: string): PosterRefere
 
   const withUrls = async (rows: ReferenceRow[]) => {
     if (!rows.length) return [];
-    const client = await createSupabaseServerClient();
-    const signed = await client.storage.from(BUCKET)
-      .createSignedUrls(rows.map((row) => row.storage_path), SIGNED_URL_TTL_SECONDS);
-    const urls = new Map((signed.data ?? []).flatMap((entry) => (
-      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
-    )));
+    // 경로는 `user_id` 로 걸러 읽어 온 행에서 꺼낸 것이다. 서명을 서버
+    // 권한으로 하는 이유는 `lib/storage/signing.ts` 에 적어 두었다.
+    const urls = await signPaths(
+      BUCKET,
+      rows.map((row) => row.storage_path),
+      SIGNED_URL_TTL_SECONDS,
+    );
     return rows.map((row) => ({
       id: row.id,
       storagePath: row.storage_path,
@@ -119,16 +148,27 @@ export function createSupabasePosterReferenceStore(userId: string): PosterRefere
   return {
     async list() {
       const client = await createSupabaseServerClient();
-      const { data, error } = await client.from("reference_images")
-        .select(columns).eq("user_id", userId).order("created_at", { ascending: false });
+      const { data, error } = await scopedRead(
+        client.from("reference_images").select(columns).order("created_at", { ascending: false }),
+        await viewScope(userId),
+      );
       return withUrls(checked((data ?? []) as ReferenceRow[], error, "참고 이미지 목록"));
     },
     async byIds(ids) {
       if (!ids.length) return [];
       const client = await createSupabaseServerClient();
-      // 남의 id 를 섞어 보내도 user_id 조건과 RLS 가 함께 막는다.
-      const { data, error } = await client.from("reference_images")
-        .select(columns).eq("user_id", userId).in("id", ids);
+      /**
+       * **여기서는 조건이 유일한 방어선이다.**
+       *
+       * `reference_images` 의 RLS 는 아직 `using (true)` 다 — 회원 전원이
+       * 읽는다. 그래서 이 조건을 빼면 남의 id 를 섞어 보내는 것만으로 남의
+       * 참고 이미지가 나온다. 포스터 작업(`poster_projects`)과 달리 RLS 가
+       * 받쳐 주지 않는다.
+       */
+      const { data, error } = await scopedRead(
+        client.from("reference_images").select(columns).in("id", ids),
+        await viewScope(userId),
+      );
       return withUrls(checked((data ?? []) as ReferenceRow[], error, "참고 이미지"));
     },
   };
@@ -159,10 +199,20 @@ export function createSupabasePosterRequestStore(userId: string): PosterRequestS
 
 export function createSupabasePosterImageStore(userId: string): PosterImageStore {
   return {
+    /**
+     * 그림은 **부모(작업)를 통해 보인다.**
+     *
+     * `poster_images` 에는 `team_id` 가 없다. 4단계에서 자식 정책을
+     * 「부모가 보이면 자식도 보인다」로 세워 두었고, 이 길은 세션 클라이언트라
+     * 그 정책이 그대로 걸린다 — 남의 `project_id` 를 적어 보내도 DB 가 막는다.
+     *
+     * 그래서 `user_id` 조건을 뗀다. 남겨 두면 팀원의 작업은 열리는데 그 안에
+     * 그림만 안 보이는 상태가 된다.
+     */
     async byProject(projectId) {
       const client = await createSupabaseServerClient();
       const { data, error } = await client.from("poster_images")
-        .select(IMAGE_COLUMNS).eq("user_id", userId).eq("project_id", projectId)
+        .select(IMAGE_COLUMNS).eq("project_id", projectId)
         .order("variant_index", { ascending: true });
       return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 목록").map(toImageRecord);
     },
@@ -170,7 +220,7 @@ export function createSupabasePosterImageStore(userId: string): PosterImageStore
       if (!projectIds.length) return [];
       const client = await createSupabaseServerClient();
       const { data, error } = await client.from("poster_images")
-        .select(IMAGE_COLUMNS).eq("user_id", userId).in("project_id", projectIds)
+        .select(IMAGE_COLUMNS).in("project_id", projectIds)
         .order("project_id", { ascending: true }).order("variant_index", { ascending: true });
       return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 목록").map(toImageRecord);
     },

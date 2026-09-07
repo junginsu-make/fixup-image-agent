@@ -6,6 +6,8 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMembership, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import type { MemberProfile, MembershipContext, UsageSummary } from "./types";
+import { canAccessPage, viewerFrom } from "../access/core";
+import { PAGE_ACCESS } from "../access/routes";
 
 export const getMembership = cache(async (): Promise<MembershipContext | null> => {
   if (isLocalAuthBypass) return devMembership;
@@ -40,9 +42,17 @@ export async function requireActiveMember() {
   return membership;
 }
 
+/**
+ * 관리자 화면의 문지기.
+ *
+ * 미들웨어가 이미 막지만 여기서 한 번 더 본다 — 미들웨어는 경로로 판단하고,
+ * 이건 실제로 그 화면을 그리기 직전이다. 라우트 설정이 바뀌거나 미들웨어를
+ * 안 타는 길이 생겨도 화면 자체는 안 열린다.
+ */
 export async function requireAdmin() {
   const membership = await requireActiveMember();
-  if (membership.profile.role !== "admin") redirect("/create");
+  const viewer = viewerFrom({ userId: membership.user.id, profile: membership.profile });
+  if (!canAccessPage("/admin", viewer, PAGE_ACCESS)) redirect("/create");
   return membership;
 }
 

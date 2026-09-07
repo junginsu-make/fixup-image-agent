@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Inbox, Rss, PanelsTopLeft, Frame, BookOpen } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, Inbox, Rss, PanelsTopLeft, Frame, BookOpen } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -76,6 +76,15 @@ const bottomItems = [
   { href: "/settings", label: "계정", desc: "사용량·레퍼런스", icon: Settings },
 ];
 
+// 팀은 소속이 있는 사람에게만 낸다. 팀이 하나도 없는 회사에서 모두에게
+// 「팀」이 보이면, 눌러 봐야 빈 화면이라 메뉴만 늘어난다.
+const teamItem = {
+  href: "/team",
+  label: "팀",
+  desc: "팀원·소속 관리",
+  icon: Users,
+};
+
 // 관리자는 다른 메뉴와 같은 자리에 둔다. 우측 상단 버튼으로 있을 때는 회원
 // 상태 표시에 섞여, 회원 관리·비용을 보러 갈 곳이 있다는 걸 알기 어려웠다.
 const adminItem = {
@@ -85,9 +94,14 @@ const adminItem = {
   icon: ShieldCheck,
 };
 
-/** 관리자에게만 보이는 항목이 있어, 메뉴 목록은 권한에 따라 달라진다. */
-function bottomItemsFor(isAdmin: boolean) {
-  return isAdmin ? [...bottomItems, adminItem] : bottomItems;
+/** 권한과 소속에 따라 달라지는 메뉴. 보이는 것과 열리는 것은 별개다 — 실제
+ *  차단은 각 화면이 서버에서 한다. */
+function bottomItemsFor(isAdmin: boolean, hasTeam: boolean) {
+  return [
+    ...bottomItems,
+    ...(hasTeam || isAdmin ? [teamItem] : []),
+    ...(isAdmin ? [adminItem] : []),
+  ];
 }
 
 interface AppShellProps {
@@ -106,6 +120,30 @@ interface AppShellProps {
    * `/admin` 의 `requireAdmin()` 이 서버에서 한다.
    */
   isAdmin?: boolean;
+  /**
+   * 팀에 속해 있는지. 팀 메뉴를 낼지만 정한다.
+   *
+   * 감추는 것은 안내일 뿐이라, 소속 없는 사람이 주소를 쳐서 들어와도
+   * `/team` 은 열린다 — 거기서 「아직 팀에 속해 있지 않습니다」를 본다.
+   */
+  hasTeam?: boolean;
+  /**
+   * 사이드바에 걸 프로젝트 목록.
+   *
+   * 상세 화면이 없다. 프로젝트는 **고르는 것**이지 들어가는 곳이 아니다 —
+   * 골라 두면 라이브러리·카드뉴스·이미지가 그 갈래만 보여 준다.
+   */
+  projects?: ProjectLink[];
+  /** 지금 고른 것. 없으면 「전체」다. */
+  currentProjectId?: string | null;
+  /** 고르기를 처리하는 서버 액션. 셸은 폼만 그린다. */
+  onSelectProject?: (formData: FormData) => void | Promise<void>;
+}
+
+export interface ProjectLink {
+  id: string;
+  name: string;
+  workCount: number;
 }
 
 function NavItem({
@@ -167,11 +205,73 @@ function NavItem({
   );
 }
 
-export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: AppShellProps) {
+/**
+ * 프로젝트 목록.
+ *
+ * 「전체」를 맨 위에 늘 둔다. 고른 것을 푸는 길이 없으면, 한 번 고르고 나서
+ * 나머지를 못 보게 된다 — 그때 사용자는 작업물이 사라졌다고 여긴다.
+ *
+ * 지금 있는 화면으로 되돌아온다. 고른 뒤 다른 화면으로 튀면 하던 일을 잃는다.
+ */
+function ProjectList({
+  projects,
+  currentProjectId,
+  pathname,
+  onSelect,
+}: {
+  projects: ProjectLink[];
+  currentProjectId: string | null;
+  pathname: string;
+  onSelect: (formData: FormData) => void | Promise<void>;
+}) {
+  const row = (id: string, label: string, count: number | null, on: boolean) => (
+    <form key={id || "all"} action={onSelect}>
+      <input type="hidden" name="projectId" value={id} />
+      <input type="hidden" name="back" value={pathname} />
+      <button
+        type="submit"
+        aria-current={on ? "true" : undefined}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors",
+          on ? "bg-primary-soft shadow-[0_0_0_1px_var(--primary-ring)]" : "hover:bg-background"
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
+        {count === null ? null : (
+          <span className="flex-none text-meta tabular-nums text-subtle-foreground">{count}</span>
+        )}
+      </button>
+    </form>
+  );
+
+  return (
+    <div>
+      <p className="mb-2 px-1.5 text-meta text-subtle-foreground">프로젝트</p>
+      <div className="grid gap-0.5">
+        {row("", "전체", null, !currentProjectId)}
+        {projects.map((project) =>
+          row(project.id, project.name, project.workCount, project.id === currentProjectId),
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AppShell({
+  children,
+  actions,
+  sidebarFooter,
+  isAdmin = false,
+  hasTeam = false,
+  projects = [],
+  currentProjectId = null,
+  onSelectProject,
+}: AppShellProps) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
-  const visibleBottomItems = bottomItemsFor(isAdmin);
+  const visibleBottomItems = bottomItemsFor(isAdmin, hasTeam);
+  const current = projects.find((project) => project.id === currentProjectId) ?? null;
   const allLinks = [...navGroups.flatMap((g) => g.items), ...visibleBottomItems];
 
   return (
@@ -244,6 +344,15 @@ export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: 
             </div>
           ))}
 
+          {projects.length && onSelectProject ? (
+            <ProjectList
+              projects={projects}
+              currentProjectId={currentProjectId}
+              pathname={pathname}
+              onSelect={onSelectProject}
+            />
+          ) : null}
+
           <div className="mt-auto grid gap-3">
             {sidebarFooter}
             <div className="grid gap-0.5">
@@ -262,6 +371,30 @@ export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: 
             {actions}
             <ThemeToggle />
           </div>
+
+          {/*
+            무엇으로 걸러 보는 중인지 본문 바로 위에 말한다.
+
+            **이게 없으면 「작업물이 사라졌다」가 된다.** 갈래를 고른 뒤
+            비어 있는 화면을 열면, 원래 없는 것인지 걸러진 것인지 알 길이
+            없다. 푸는 단추도 같은 자리에 둔다 — 사이드바까지 눈을 옮겨
+            찾게 하지 않는다.
+          */}
+          {current ? (
+            <div className="mx-[clamp(16px,2.2vw,52px)] mt-4 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-sm">
+              <span className="font-bold text-primary">{current.name}</span>
+              <span className="text-subtle-foreground">만 보고 있습니다</span>
+              {onSelectProject ? (
+                <form action={onSelectProject} className="ml-auto">
+                  <input type="hidden" name="projectId" value="" />
+                  <input type="hidden" name="back" value={pathname} />
+                  <button type="submit" className="text-meta underline underline-offset-4">
+                    전체 보기
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* 페이지가 자기 <main> 을 또 열지 않도록 셸이 하나만 제공한다. */}
           <main className="min-w-0 px-[clamp(16px,2.2vw,52px)] pb-6 pt-4">{children}</main>

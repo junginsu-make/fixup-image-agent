@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { hasFullScope, viewerFrom } from "../access/core";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
@@ -43,7 +44,7 @@ export async function authenticateApiMember(): Promise<
 export async function authenticateApiAdmin() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
-  if (auth.member.profile.role !== "admin") {
+  if (!hasFullScope(viewerFrom(auth.member), "delete")) {
     return { ok: false as const, response: membershipApiError(403, "admin_required", "관리자 권한이 필요합니다.") };
   }
   return auth;
@@ -99,11 +100,15 @@ export async function reserveAiUsage(
   if (!row.allowed) {
     const messages: Record<string, string> = {
       quota_exceeded: "이번 달 이미지 생성 한도를 모두 사용했습니다.",
+      // 내 한도가 아니라 팀 한도에 걸린 것이다. 같은 말로 뭉뚱그리면 「내
+      // 한도를 늘려 달라」고 운영자에게 말하게 되는데 그래도 안 풀린다.
+      team_quota_exceeded: "팀의 이번 달 생성 한도를 모두 사용했습니다. 팀장에게 문의해 주세요.",
       concurrent_limit: "이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.",
       analysis_rate_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
       duplicate_request: "이미 처리된 요청입니다. 새로고침 후 다시 시도해 주세요.",
     };
-    const status = ["quota_exceeded", "concurrent_limit", "analysis_rate_limit"].includes(row.reason) ? 429 : 409;
+    const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit"]
+      .includes(row.reason) ? 429 : 409;
     return {
       ok: false,
       response: membershipApiError(status, row.reason, messages[row.reason] ?? "요청을 처리할 수 없습니다.", usage),

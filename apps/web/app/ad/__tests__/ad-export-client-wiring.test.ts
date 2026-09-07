@@ -56,13 +56,19 @@ describe("어느 그림을 뽑는가", () => {
   });
 });
 
-describe("로컬에서 관리자 조회를 안 쓴다", () => {
+describe("로컬에서 전체 조회를 안 쓴다", () => {
   /**
    * 지우면 로컬에서 포스터 그림이 한 장도 안 보인다(500) — 「사람 눈이 의도
    * 검증이다」가 통째로 없어진다. 순수 함수만 시험하면 이 줄이 안 잠긴다.
+   *
+   * **둘이 함께 있어야 한다.** 누가 전체를 보는가는 `access/core.ts` 가 정하고
+   * (`hasFullScope`), 로컬 예외는 `usesAdminLookup` 이 더한다. 한쪽만 남으면
+   * 목록과 상세가 어긋나거나(2026-09-04) 로컬이 500 이 된다.
    */
-  it("판단을 순수 함수에 맡긴다", () => {
-    expect(fileRoute).toContain("usesAdminLookup(auth.member.profile.role, isLocalStoreEnabled())");
+  it("등록부의 판단 위에 로컬 예외를 얹는다", () => {
+    expect(fileRoute).toMatch(
+      /usesAdminLookup\(\s*hasFullScope\(viewerFrom\(auth\.member\), "read"\),\s*isLocalStoreEnabled\(\),?\s*\)/,
+    );
   });
 });
 

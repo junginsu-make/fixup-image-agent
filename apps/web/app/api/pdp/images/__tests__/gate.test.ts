@@ -6,6 +6,11 @@ const membership = vi.hoisted(() => ({
   finalizeAiUsage: vi.fn(),
 }));
 
+// 이 길이 이제 팀을 묻는다. 「server-only」는 시험 환경에 없는 꾸러미라
+// 다른 시험들과 같은 방식으로 비워 둔다.
+vi.mock("server-only", () => ({}));
+vi.mock("../../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
+
 vi.mock("../../../../../lib/membership/api", () => membership);
 vi.mock("@fixup/pdp-core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@fixup/pdp-core")>()),

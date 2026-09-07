@@ -17,21 +17,21 @@ import { usesAdminLookup } from "../projects/[id]/images/[index]/file/admin-look
  * **운영에는 영향이 없다** — `isLocalStoreEnabled()` 가 거기서는 언제나 거짓이다.
  */
 
-describe("관리자 조회를 쓰는 조건", () => {
-  it("운영에서 관리자면 쓴다 — 첫 화면에 걸 것을 고르려면 남의 것도 봐야 한다", () => {
-    expect(usesAdminLookup("admin", false)).toBe(true);
+describe("전체 조회를 쓰는 조건", () => {
+  it("운영에서 전체 범위면 쓴다 — 첫 화면에 걸 것을 고르려면 남의 것도 봐야 한다", () => {
+    expect(usesAdminLookup(true, false)).toBe(true);
   });
 
-  it("운영에서 회원이면 안 쓴다", () => {
-    expect(usesAdminLookup("member", false)).toBe(false);
+  it("운영에서 자기 것만 보는 사람은 안 쓴다", () => {
+    expect(usesAdminLookup(false, false)).toBe(false);
   });
 
   /** 여기가 500 을 내던 자리다. */
-  it("로컬에서는 관리자여도 안 쓴다 — Supabase 가 없다", () => {
-    expect(usesAdminLookup("admin", true)).toBe(false);
+  it("로컬에서는 전체 범위여도 안 쓴다 — Supabase 가 없다", () => {
+    expect(usesAdminLookup(true, true)).toBe(false);
   });
 
-  it("로컬에서 회원도 안 쓴다", () => {
-    expect(usesAdminLookup("member", true)).toBe(false);
+  it("로컬에서는 어느 쪽도 안 쓴다", () => {
+    expect(usesAdminLookup(false, true)).toBe(false);
   });
 });

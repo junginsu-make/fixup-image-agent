@@ -1436,6 +1436,9 @@ export function PdpEditor({
           ok: false,
           stopBatch: [
             "quota_exceeded",
+            // 팀 한도도 더 만들어 봐야 계속 막힌다. 남은 섹션을 줄줄이
+            // 실패시키면 같은 알림만 열 번 뜬다.
+            "team_quota_exceeded",
             "concurrent_limit",
             "pending",
             "suspended",

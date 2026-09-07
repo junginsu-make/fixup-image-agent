@@ -19,19 +19,31 @@ let rows: Array<Record<string, unknown>> = [];
 let downloaded: string | null = null;
 let stored = Buffer.alloc(0);
 
-function builder() {
+/**
+ * 이제 질의가 둘이다 — 부모(작업물)를 먼저 확인하고 자식(그림)을 읽는다.
+ *
+ * `library_images` 에는 `team_id` 가 없어서, 팀에서 보이는지는 부모를 통해
+ * 판정한다. 양쪽에 칸을 달면 둘이 어긋나는 날이 온다.
+ */
+let parentVisible = true;
+
+function builder(table: string) {
+  const isParent = table === "library_items";
   const self: Record<string, unknown> = {
     select: () => self,
     order: () => self,
     eq: (column: string, value: unknown) => { queries.push({ column, value }); return self; },
-    then: (resolve: (r: unknown) => unknown) => Promise.resolve(resolve({ data: rows, error: null })),
+    or: (filter: string) => { queries.push({ column: "or", value: filter }); return self; },
+    maybeSingle: async () => ({ data: parentVisible ? { id: "item-1" } : null, error: null }),
+    then: (resolve: (r: unknown) => unknown) =>
+      Promise.resolve(resolve({ data: isParent ? [{ id: "item-1" }] : rows, error: null })),
   };
   return self;
 }
 
 vi.mock("../supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
-    from: () => builder(),
+    from: (table: string) => builder(table),
     storage: {
       from: () => ({
         download: async (path: string) => {
@@ -53,24 +65,43 @@ const ADMIN = { userId: "admin-1", role: "admin" as const };
 beforeEach(async () => {
   queries.length = 0;
   downloaded = null;
+  parentVisible = true;
   stored = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#2277cc" } })
     .webp({ lossless: true }).toBuffer();
   rows = [{ path: "owner-9/item-1/0.webp", mime_type: "image/webp" }];
 });
 
 describe("getLibraryImageFile", () => {
-  it("회원에게는 소유자 조건을 건다", async () => {
+  it("혼자면 자기 것만 연다", async () => {
     await getLibraryImageFile(MEMBER, "item-1", 0);
 
+    // 부모를 확인할 때 걸린다. 자식에는 안 건다 — 부모가 이미 정했다.
     expect(queries).toContainEqual({ column: "user_id", value: "member-1" });
   });
 
-  it("관리자는 소유자 조건 없이 본다 — 질의는 그대로 하나다", async () => {
+  it("팀에 있으면 팀 것도 연다", async () => {
+    // 목록에 보이는데 눌러서 안 열리는 것이 없어야 한다.
+    await getLibraryImageFile({ ...MEMBER, teamId: "team-1" }, "item-1", 0);
+
+    expect(queries).toContainEqual({ column: "or", value: "team_id.eq.team-1,user_id.eq.member-1" });
+  });
+
+  it("관리자는 조건 없이 본다", async () => {
     await getLibraryImageFile(ADMIN, "item-1", 0);
 
     expect(queries.some((q) => q.column === "user_id")).toBe(false);
+    expect(queries.some((q) => q.column === "or")).toBe(false);
     expect(queries).toContainEqual({ column: "item_id", value: "item-1" });
     expect(queries).toContainEqual({ column: "position", value: 0 });
+  });
+
+  it("남의 작업물이면 그림을 안 읽는다", async () => {
+    // **부모에서 막힌다.** 자식 표에 조건이 없으므로, 여기서 안 막으면
+    // 남의 item_id 하나로 남의 그림이 나간다.
+    parentVisible = false;
+
+    expect(await getLibraryImageFile(MEMBER, "item-1", 0)).toBeNull();
+    expect(queries.some((q) => q.column === "position")).toBe(false);
   });
 
   it("표에 없으면 null 이다", async () => {

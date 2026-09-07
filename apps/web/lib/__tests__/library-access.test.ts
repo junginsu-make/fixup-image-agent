@@ -24,6 +24,11 @@ function builderFor(table: string) {
       recorded.push({ table, column, value });
       return builder;
     },
+    or: (filter: string) => {
+      recorded.push({ table, column: "or", value: filter });
+      return builder;
+    },
+    maybeSingle: async () => ({ data: (tableRows[table] ?? [])[0] ?? null, error: null }),
     then: (resolve: (result: unknown) => unknown) =>
       Promise.resolve(resolve({ data: tableRows[table] ?? [], error: null })),
   };
@@ -59,6 +64,11 @@ function ownerConditionOn(table: string): unknown {
   return recorded.find((entry) => entry.table === table && entry.column === "user_id")?.value;
 }
 
+/** 이 표에 어떤 팀 조건이 붙었는가. 안 붙었으면 undefined. */
+function teamConditionOn(table: string): unknown {
+  return recorded.find((entry) => entry.table === table && entry.column === "or")?.value;
+}
+
 beforeEach(() => {
   recorded.length = 0;
   tableRows = {};
@@ -71,18 +81,30 @@ describe("작업물은 본인 것만", () => {
     expect(ownerConditionOn("library_items")).toBe("member-1");
   });
 
-  it("한 건을 열 때도 소유자 조건이 붙는다", async () => {
+  it("한 건을 열 때는 부모에 조건이 붙는다", async () => {
+    // **조건이 부모로 옮겨 갔다.** `library_images` 에는 `team_id` 가 없어서
+    // 팀에서 보이는지를 자식만 보고는 정할 수 없다. 부모를 먼저 확인하고
+    // 자식은 `item_id` 로만 읽는다 — 자식 표에도 칸을 달면 둘이 어긋난다.
+    tableRows.library_items = [{ id: "item-1" }];
     tableRows.library_images = [];
     await getLibraryItemImages(MEMBER, "item-1");
-    expect(ownerConditionOn("library_images")).toBe("member-1");
+    expect(ownerConditionOn("library_items")).toBe("member-1");
   });
 
-  it("남의 것을 열려 해도 조건이 남아 있어 빈 손으로 돌아온다", async () => {
-    // 소유자 조건은 그대로 붙는다. DB 가 남의 행을 안 준다는 뜻이다.
-    tableRows.library_images = [];
+  it("남의 것을 열려 하면 부모에서 막혀 그림을 안 읽는다", async () => {
+    // 부모가 안 보이면 자식 질의를 아예 안 던진다. 자식에 조건이 없으므로,
+    // 여기서 안 막으면 남의 item_id 하나로 남의 그림이 나간다.
+    tableRows.library_items = [];
     const images = await getLibraryItemImages(MEMBER, "someone-elses-item");
-    expect(ownerConditionOn("library_images")).toBe("member-1");
     expect(images).toEqual([]);
+    expect(recorded.some((entry) => entry.table === "library_images")).toBe(false);
+  });
+
+  it("팀에 있으면 같은 팀 것도 열린다", async () => {
+    tableRows.library_items = [{ id: "item-1" }];
+    tableRows.library_images = [];
+    await getLibraryItemImages({ ...MEMBER, teamId: "team-1" }, "item-1");
+    expect(teamConditionOn("library_items")).toBe("team_id.eq.team-1,user_id.eq.member-1");
   });
 });
 
@@ -93,10 +115,12 @@ describe("관리자는 작업물을 전부 본다", () => {
     expect(ownerConditionOn("library_items")).toBeUndefined();
   });
 
-  it("한 건을 열 때도 소유자 조건이 없다", async () => {
+  it("한 건을 열 때도 조건이 없다", async () => {
+    tableRows.library_items = [{ id: "item-1" }];
     tableRows.library_images = [];
     await getLibraryItemImages(ADMIN, "item-1");
-    expect(ownerConditionOn("library_images")).toBeUndefined();
+    expect(ownerConditionOn("library_items")).toBeUndefined();
+    expect(teamConditionOn("library_items")).toBeUndefined();
   });
 
   it("남의 것을 볼 때 누가 만들었는지 함께 준다", async () => {
@@ -140,24 +164,31 @@ describe("관리자는 지우기도 전체", () => {
   });
 
   it("규칙 자체가 관리자와 회원을 가른다", () => {
-    expect(libraryScope(ADMIN, "read")).toBeNull();
-    expect(libraryScope(ADMIN, "delete")).toBeNull();
+    // 조건이 없을 때 `null` 이 아니라 `undefined` 다. `null` 은 「값이 비어
+    // 있다」로 읽혀 그대로 `.eq("user_id", null)` 에 넘어가는데, 그러면 한 줄도
+    // 안 지우면서 오류도 안 난다 — 2026-09-04 에 실제로 그랬다.
+    // `undefined` 면 넘기는 순간 타입이 막는다.
+    expect(libraryScope(ADMIN, "read")).toBeUndefined();
+    expect(libraryScope(ADMIN, "delete")).toBeUndefined();
+    expect(libraryScope(ADMIN, "read")).not.toBeNull();
     expect(libraryScope(MEMBER, "read")).toBe("member-1");
     expect(libraryScope(MEMBER, "delete")).toBe("member-1");
   });
 });
 
 describe("참고 이미지는 회원 공용", () => {
-  it("목록에 소유자 조건을 붙이지 않는다", async () => {
+  it("소유자 조건을 곧바로 붙이지 않는다", async () => {
+    // 참고 이미지는 공용 창고다. 팀이 안 붙은 것은 누구나 본다.
     tableRows.reference_images = [];
     await listReferenceImages(MEMBER);
     expect(ownerConditionOn("reference_images")).toBeUndefined();
   });
 
-  it("남이 올린 것도 보이되 내 것이 아니라고 표시한다", async () => {
+  it("팀이 안 붙은 남의 것도 보이되 내 것이 아니라고 표시한다", async () => {
     tableRows.reference_images = [
       {
-        id: "r1", user_id: "member-9", storage_path: "member-9/references/r1.png",
+        id: "r1", user_id: "member-9", team_id: null,
+        storage_path: "member-9/references/r1.png",
         title: "로고", purpose: "both", width: null, height: null,
         created_at: "2026-09-01T00:00:00.000Z",
       },
@@ -168,6 +199,21 @@ describe("참고 이미지는 회원 공용", () => {
     expect(image.signedUrl).toBe("signed:member-9/references/r1.png");
     // 회원에게는 올린 사람의 이메일을 주지 않는다.
     expect(image.ownerEmail).toBeNull();
+  });
+
+  it("남의 팀에 묶인 것은 안 보인다", async () => {
+    // 팀 본보기는 어떤 브랜드를 준비 중인지가 드러나는 것이다. 질의가
+    // 걸러야 하지만, 조건을 빠뜨린 채 배포되는 것을 코드가 한 번 더 막는다.
+    tableRows.reference_images = [
+      {
+        id: "r2", user_id: "stranger", team_id: "team-9",
+        storage_path: "stranger/references/r2.png",
+        title: "남의 팀", purpose: "both", width: null, height: null,
+        created_at: "2026-09-01T00:00:00.000Z",
+      },
+    ];
+
+    expect(await listReferenceImages(MEMBER)).toEqual([]);
   });
 
   it("회원끼리는 서로 못 지운다", () => {
@@ -231,9 +277,15 @@ describe("내보내기 범위", () => {
     expect(libraryScope({ userId: "u1", role: "member" }, "export")).toBe("u1");
   });
 
-  /** 보기·지우기는 안 바뀐다 — 운영자가 그렇게 정했다. */
+  /**
+   * 보기·지우기는 안 바뀐다 — 운영자가 그렇게 정했다.
+   *
+   * `undefined` 다. **`null` 이 아닌 것이 중요하다** — `null` 은 「값이 비어
+   * 있다」로 읽혀 `.eq("user_id", null)` 에 그대로 넘어가는데, `undefined` 는
+   * 「조건 자체가 없다」라 넘기면 타입이 막는다(`access/core.ts` 머리말).
+   */
   it("보기와 지우기는 관리자에게 열린 채로 둔다", () => {
-    expect(libraryScope({ userId: "admin-1", role: "admin" }, "read")).toBeNull();
-    expect(libraryScope({ userId: "admin-1", role: "admin" }, "delete")).toBeNull();
+    expect(libraryScope({ userId: "admin-1", role: "admin" }, "read")).toBeUndefined();
+    expect(libraryScope({ userId: "admin-1", role: "admin" }, "delete")).toBeUndefined();
   });
 });

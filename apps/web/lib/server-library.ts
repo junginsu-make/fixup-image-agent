@@ -1,8 +1,10 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { scopedRead, type ViewScope } from "./teams/scope";
 import { isLocalStoreEnabled } from "./local-store";
 import { encodeForStorage, makeThumbnail, sniffImageMime } from "./image-encoding";
 import { markAsAi } from "./watermark";
 import type { UserRole } from "./membership/types";
+import { hasFullScope, ownerFilter, type ScopeAction } from "./access/core";
 
 /**
  * 사용자별 서버 라이브러리.
@@ -30,43 +32,46 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60;
 export interface LibraryViewer {
   userId: string;
   role: UserRole;
+  /**
+   * 지금 고른 프로젝트. 있으면 그 갈래만 보인다.
+   *
+   * **없으면 「전체」다.** 안 거는 쪽이 기본이라, 빠뜨렸을 때 화면이 비지 않는다.
+   */
+  projectId?: string | null;
+  /**
+   * 이 사람의 팀. 있으면 같은 팀 것이 함께 보인다.
+   *
+   * 없어도 되게 둔 것은, 팀을 모르는 자리에서 부르면 **개인으로 취급**되어
+   * 지금까지와 같게 동작하기 때문이다. 빠뜨렸을 때 남의 것이 보이는 쪽으로
+   * 틀리지 않는다.
+   */
+  teamId?: string | null;
+}
+
+/** 읽기 범위. 팀이 있으면 팀 것까지, 없으면 내 것만, 운영자는 전부. */
+function readScope(viewer: LibraryViewer): ViewScope {
+  return {
+    userId: viewer.userId,
+    teamId: viewer.teamId ?? null,
+    isAdmin: hasFullScope(viewer, "read"),
+  };
 }
 
 /**
- * 이 사람의 질의에 걸 소유자 조건. `null` 이면 조건을 걸지 않는다.
+ * 이 사람의 질의에 걸 소유자 조건. 조건이 필요 없으면 `undefined` 다.
  *
- * **관리자는 보기도 지우기도 전체가 열린다.**
+ * **판단 자체는 `lib/access/core.ts` 가 한다.** 여기 있던 규칙을 그리로
+ * 옮겼다 — 같은 질문("관리자는 남의 것을 볼 수 있나")을 열다섯 군데가 각자
+ * 답하다가 어긋난 적이 있다. 이 함수는 이름만 남겨 부르는 쪽을 안 건드린다.
  *
- * 한동안 지우기는 관리자라도 자기 것만 두었다. 남이 크레딧을 써서 만든 결과를
- * 되돌릴 수 없게 없애는 일이라 무겁다고 보았기 때문이다. 운영자의 판단은
- * 달랐다 — 이 서비스의 최고 관리자는 회원이 올린 것을 내려야 할 사람이고,
- * 지울 수 없으면 잘못 올라온 것을 치울 방법이 없다.
+ * 관리자는 보기도 지우기도 전체가 열린다. 무거운 일이라는 사실은 그대로라,
+ * 화면은 지우기 전에 한 번 더 묻고 누가 만든 것인지를 함께 보여준다.
  *
- * 무거운 일이라는 사실은 그대로다. 그래서 화면은 지우기 전에 한 번 더 묻고,
- * 무엇을 지우는지와 누가 만든 것인지를 함께 보여준다.
- *
- * **`export` 는 다르다 — 관리자여도 자기 것만이다.**
- *
- * 위 판단의 근거는 「잘못 올라온 것을 치울 방법이 없다」였다. 그것은 **보고
- * 지우는** 일이다. 광고 규격 내보내기는 **가공해서 파일로 내려받는** 일이라
- * 무게가 다르다 — ZIP 이 만들어지는 순간 서비스 밖으로 나가고, 그 안에는 누구
- * 것인지 적히지 않는다.
- *
- * 게다가 `/ad` 목록은 관리자에게 전 회원 최근 200건을 싣는데 화면이 소유자를
- * 안 보여 준다. **관리자 자신도 남의 것인 줄 모른 채 뽑게 된다.**
- *
- * **액션 이름으로 가른다.** 부르는 쪽에서 `role: "member"` 로 지어내 넘기는
- * 방식은 쓰지 않는다 — `api/ad/__tests__/ad-export-route.test.ts` 의 「본문에
- * 실린 역할을 믿지 않는다」가 막으려던 바로 그 관례이고, 역할을 위조하는
- * 버릇이 한 번 생기면 다른 라우트로 번진다.
+ * **`export` 만 다르다 — 전체가 열린 사람도 자기 것만이다.** 판단은
+ * `access/core.ts` 가 한다(거기 머리말에 근거를 적었다).
  */
-export function libraryScope(
-  viewer: LibraryViewer,
-  action: "read" | "delete" | "export",
-): string | null {
-  if (action === "export") return viewer.userId;
-  if (viewer.role === "admin") return null;
-  return viewer.userId;
+export function libraryScope(viewer: LibraryViewer, action: ScopeAction): string | undefined {
+  return ownerFilter(viewer, action);
 }
 
 export interface LibraryImageInput {
@@ -282,13 +287,17 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   if (isLocalStoreEnabled()) return [];
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, "read");
-  let query = supabase
-    .from("library_items")
-    .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (owner) query = query.eq("user_id", owner);
+  let query = scopedRead(
+    supabase
+      .from("library_items")
+      .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
+      .order("created_at", { ascending: false })
+      .limit(200),
+    readScope(viewer),
+  );
+  // 목록에만 건다. 한 건을 열 때는 안 건다 — 프로젝트를 고른 채로 다른 갈래의
+  // 작업물 주소를 받으면 열리지 않는 편이 더 놀랍다.
+  if (viewer.projectId) query = query.eq("project_id", viewer.projectId);
 
   const { data, error } = await query;
   if (error || !data) return [];
@@ -313,11 +322,20 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
     : { data: [] };
 
   const urlByPath = toUrlMap(signed.data);
-  // 관리자만 남의 것을 본다. 회원 목록은 전부 자기 것이라 이메일을 붙일
-  // 이유가 없고, 붙이면 회원끼리 이메일이 보이는 길이 하나 생긴다.
-  const emails = owner
-    ? new Map<string, string>()
-    : await emailsByUserId(data.map((row: { user_id: string }) => row.user_id));
+  /**
+   * 누가 만들었는지는 **남의 것이 섞일 때만** 붙인다.
+   *
+   * 혼자면 목록이 전부 자기 것이라 붙일 이유가 없고, 붙이면 회원끼리 이메일이
+   * 보이는 길이 하나 생긴다.
+   *
+   * 팀에 있으면 붙인다. 팀 목록에는 남의 것이 섞이는데 누가 만든 건지 모르면
+   * 「이건 누구 작업이지」를 물으러 나가야 한다. 같은 팀 사람의 메일 주소는
+   * 팀 화면이 이미 명단으로 보여준다.
+   */
+  const scope = readScope(viewer);
+  const emails = scope.isAdmin || scope.teamId
+    ? await emailsByUserId(data.map((row: { user_id: string }) => row.user_id))
+    : new Map<string, string>();
 
   return data.map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -337,19 +355,51 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   }));
 }
 
+/**
+ * 이 작업물이 이 사람에게 보이는가.
+ *
+ * **자식 표는 부모를 통해 판정한다.** `library_images` 에는 `team_id` 가
+ * 없다 — 4단계에서 자식에 칸을 안 단 이유가 이것이다. 양쪽에 달면 둘이
+ * 어긋나는 날이 오고, 그때 어느 쪽이 맞는지 정할 근거가 없다.
+ *
+ * 그래서 자식을 읽기 전에 부모를 한 번 확인한다. 질의가 하나 늘지만,
+ * 「팀원의 것도 대충 보이게」 하는 어림짐작보다 낫다.
+ */
+/**
+ * **내가 만든 것인가.** 팀도 전체 범위도 안 본다.
+ *
+ * `canSeeItem` 은 팀 것까지 보여 주는데, 내보내기는 그러면 안 된다 — 같은 팀
+ * 사람의 그림이라도 가공해서 파일로 내려받는 것은 다른 일이다.
+ */
+async function ownsItem(viewer: LibraryViewer, itemId: string): Promise<boolean> {
+  const { data } = await createSupabaseAdminClient()
+    .from("library_items")
+    .select("id")
+    .eq("id", itemId)
+    .eq("user_id", viewer.userId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+async function canSeeItem(viewer: LibraryViewer, itemId: string): Promise<boolean> {
+  const { data } = await scopedRead(
+    createSupabaseAdminClient().from("library_items").select("id").eq("id", itemId),
+    readScope(viewer),
+  ).maybeSingle();
+  return Boolean(data);
+}
+
 /** 한 건의 이미지 전체. 서명 URL 이라 수명이 있다. */
 export async function getLibraryItemImages(viewer: LibraryViewer, itemId: string) {
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, "read");
-  let query = supabase
+  if (!(await canSeeItem(viewer, itemId))) return [];
+
+  const { data, error } = await supabase
     .from("library_images")
     .select("position,path,mime_type")
     .eq("item_id", itemId)
     .order("position", { ascending: true });
-  if (owner) query = query.eq("user_id", owner);
-
-  const { data, error } = await query;
   if (error || !data?.length) return [];
 
   const signed = await supabase.storage
@@ -396,15 +446,22 @@ export async function getLibraryImageFile(
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, action);
-  let query = supabase
+  /**
+   * **내보내기는 자기 것만 본다.** 「보기」와 「가공해 내려받기」는 무게가
+   * 다르다 — ZIP 이 만들어지는 순간 서비스 밖으로 나가고 그 안에는 누구
+   * 것인지 안 적힌다. 게다가 `/ad` 목록은 전체가 열린 사람에게 남의 것도
+   * 싣는데 화면이 소유자를 안 보여 준다 — **본인도 남의 것인 줄 모른 채 뽑는다.**
+   */
+  const visible = action === "export"
+    ? await ownsItem(viewer, itemId)
+    : await canSeeItem(viewer, itemId);
+  if (!visible) return null;
+
+  const { data, error } = await supabase
     .from("library_images")
     .select("path")
     .eq("item_id", itemId)
     .eq("position", position);
-  if (owner) query = query.eq("user_id", owner);
-
-  const { data, error } = await query;
   const path = (data as Array<{ path?: string }> | null)?.[0]?.path;
   if (error || !path) return null;
 
@@ -421,8 +478,8 @@ export async function getLibraryImageFile(
  * on delete cascade 는 행만 지우고 Storage 파일은 남긴다. 지웠다고 생각한
  * 이미지가 서버에 남아 있는 것이 가장 나쁘다.
  *
- * 관리자여도 자기 것만 지운다 — `libraryScope` 가 delete 에는 언제나
- * 소유자 조건을 준다.
+ * **관리자는 남의 것도 지운다.** 잘못 올라온 것을 내릴 사람이 아무도 없으면
+ * 그대로 남는다 — 2026-09-04 운영자 판단.
  */
 export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
   const supabase = createSupabaseAdminClient();

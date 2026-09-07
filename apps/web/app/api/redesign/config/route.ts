@@ -1,4 +1,5 @@
 import { getServerConfig } from "@fixup/redesign-core";
+import { canManageKnowledge, viewerFrom } from "../../../../lib/access/core";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";
@@ -14,6 +15,6 @@ export async function GET() {
     knowledgeConfigured: config.knowledgeConfigured,
     knowledgeDocuments: config.knowledgeDocuments,
     knowledgeChunks: config.knowledgeChunks,
-    canManageKnowledge: auth.member.profile.role === "admin",
+    canManageKnowledge: canManageKnowledge(viewerFrom(auth.member)),
   });
 }

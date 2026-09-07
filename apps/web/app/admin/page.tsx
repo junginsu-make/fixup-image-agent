@@ -4,6 +4,9 @@ import { ArrowDown, ArrowUp, BarChart3, Clock3, ImageIcon, Search, Users } from 
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
 import type { MemberProfile } from "../../lib/membership/types";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { listTeams, teamsOf } from "../../lib/teams/store";
+import { TeamCell } from "./team-cell";
+import { MoreActions } from "./member-actions";
 import { isAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { approveMember, deleteMember, moveShowcase, removeShowcase, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota, updateShowcase } from "./actions";
 import { listShowcaseForAdmin } from "../api/showcase/store";
@@ -51,6 +54,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   if (profilesError) throw profilesError;
   const profiles = (rawProfiles ?? []) as MemberProfile[];
   const profileIds = profiles.map((profile) => profile.id);
+  /**
+   * 이 쪽 사람들이 각각 어느 팀인가.
+   *
+   * 팀 편성은 `/team` 이 하지만, **운영자가 회원을 보는 곳은 여기다.** 여기에
+   * 팀이 안 보이면 「이 사람 어느 팀이지」를 물으러 화면을 옮겨야 한다.
+   */
+  const teamByUser = await teamsOf(profileIds);
+  // 고르개에 넣을 팀 목록. 명단에서 바로 배정하려면 무엇이 있는지 알아야 한다.
+  const teamOptions = (await listTeams()).map((team) => ({ id: team.id, name: team.name }));
 
   const [totalResult, pendingResult, summaryResult, dailyResult, topResult, memberUsageResult] = await Promise.all([
     admin.from("profiles").select("id", { count: "exact", head: true }),
@@ -104,6 +116,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div>
         <h1 className="text-h1">관리자</h1>
         <p className="mt-1 text-body text-muted-foreground">회원 승인, 상태, 월 한도와 실제 성공 이미지 사용량을 관리합니다.</p>
+        {/*
+          **월 한도의 뜻이 팀과 함께 바뀌었다.** 팀에 든 사람에게는 이 값이
+          「팀 잔량 안에서의 천장」이다. 100 으로 올려 둬도 팀 잔량이 40 이면
+          40 에서 막힌다 — 그 사실을 여기서 말하지 않으면 운영자는 한도를
+          올렸는데 왜 막히는지 알 수 없다.
+        */}
+        <p className="mt-1 text-meta text-subtle-foreground">
+          팀에 속한 회원의 월 한도는 <strong>팀 잔량 안에서의 천장</strong>입니다. 팀 잔량이 더 적으면
+          그쪽이 먼저 걸립니다 — 팀 한도는 <Link href="/team?tab=credit" className="underline underline-offset-4">팀 · 크레딧</Link>에서 정합니다.
+        </p>
       </div>
 
       {notice ? <AdminNotice notice={notice} /> : null}
@@ -155,9 +177,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <article key={profile.id} className="rounded-xl border bg-background p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-all font-semibold leading-5">{profile.email}</p>
+                    <div className="flex flex-wrap items-center gap-1.5 break-all font-semibold leading-5">
+                      {profile.email}
+                      {profile.role === "admin" ? <Badge variant="secondary">운영자</Badge> : null}
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {profile.email_confirmed_at ? "이메일 인증 완료" : "이메일 미인증"} · 가입 {new Date(profile.created_at).toLocaleDateString("ko-KR")}
+                      {profile.approved_at
+                        ? ` · 승인 ${new Date(profile.approved_at).toLocaleDateString("ko-KR")}`
+                        : ""}
                     </p>
                   </div>
                   <StatusBadge profile={profile} />
@@ -167,6 +195,17 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   <div className="rounded-lg bg-muted/50 p-3">
                     <dt className="text-xs text-muted-foreground">이번 달 사용</dt>
                     <dd className="mt-1 text-lg font-extrabold">{usageByUser.get(profile.id) ?? 0}장</dd>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <dt className="text-xs text-muted-foreground">팀</dt>
+                    <dd className="mt-1">
+                      <TeamCell
+                        userId={profile.id}
+                        email={profile.email}
+                        team={teamByUser.get(profile.id)}
+                        teams={teamOptions}
+                      />
+                    </dd>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-3">
                     <dt className="text-xs text-muted-foreground">현재 월 한도</dt>
@@ -201,16 +240,41 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b text-xs text-muted-foreground">
-                <tr><th className="py-3 pr-3">회원</th><th className="py-3 pr-3">상태</th><th className="py-3 pr-3">이번 달</th><th className="py-3 pr-3">이번 달 비용</th><th className="py-3 pr-3">누적 비용</th><th className="py-3 pr-3">월 한도</th><th className="py-3">관리</th></tr>
+                <tr><th className="py-3 pr-3">회원</th><th className="py-3 pr-3">팀</th><th className="py-3 pr-3">상태</th><th className="py-3 pr-3">이번 달</th><th className="py-3 pr-3">이번 달 비용</th><th className="py-3 pr-3">누적 비용</th><th className="py-3 pr-3">월 한도</th><th className="py-3">관리</th></tr>
               </thead>
               <tbody>
                 {profiles.map((profile) => (
                   <tr key={profile.id} className="border-b align-top">
                     <td className="py-4 pr-3">
-                      <p className="font-medium">{profile.email}</p>
+                      {/*
+                        `<p>` 가 아니라 `<div>` 다. `Badge` 는 `<div>` 이고,
+                        HTML 은 `<p>` 안에 `<div>` 를 못 넣는다 — 넣으면
+                        브라우저가 `<p>` 를 강제로 닫아 서버가 보낸 것과 화면이
+                        어긋나고 hydration 오류가 난다.
+                      */}
+                      <div className="flex items-center gap-1.5 font-medium">
+                        {profile.email}
+                        {/*
+                          운영자를 명단에서 알아볼 수 있어야 한다. 지우기가 왜
+                          저 줄에만 없는지, 이 사람이 왜 남의 것을 다 보는지가
+                          여기서 설명된다.
+                        */}
+                        {profile.role === "admin" ? <Badge variant="secondary">운영자</Badge> : null}
+                      </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {profile.email_confirmed_at ? "이메일 인증" : "미인증"} · {new Date(profile.created_at).toLocaleDateString("ko-KR")}
+                        {profile.email_confirmed_at ? "이메일 인증" : "미인증"} · 가입 {new Date(profile.created_at).toLocaleDateString("ko-KR")}
+                        {profile.approved_at
+                          ? ` · 승인 ${new Date(profile.approved_at).toLocaleDateString("ko-KR")}`
+                          : ""}
                       </p>
+                    </td>
+                    <td className="py-4 pr-3">
+                      <TeamCell
+                        userId={profile.id}
+                        email={profile.email}
+                        team={teamByUser.get(profile.id)}
+                        teams={teamOptions}
+                      />
                     </td>
                     <td className="py-4 pr-3"><StatusBadge profile={profile} /></td>
                     <td className="py-4 pr-3 font-medium">{usageByUser.get(profile.id) ?? 0}장</td>
@@ -308,9 +372,21 @@ const SHOWCASE_NOTICE: Record<string, string> = {
   showcase_removed: "첫 화면에서 지웠습니다. 원본 작업물은 그대로 있습니다.",
 };
 
+/**
+ * 팀 편성 알림.
+ *
+ * 아래 삼항 사슬이 이미 길다. 거기 더 이으면 무엇이 무엇인지 못 읽는다.
+ */
+const TEAM_NOTICE: Record<string, string> = {
+  team_assigned: "팀에 넣었습니다. 이 회원이 만든 작업물과 참고 이미지도 함께 팀으로 갔습니다.",
+  team_removed: "팀에서 뺐습니다. 작업물과 참고 이미지는 개인 것으로 돌아갔습니다.",
+  team_promoted: "팀장으로 세웠습니다.",
+  team_demoted: "팀원으로 내렸습니다.",
+};
+
 function AdminNotice({ notice }: { notice: string }) {
   const failed = notice === "approved_email_failed";
-  const message = SHOWCASE_NOTICE[notice] ?? (notice === "approved"
+  const message = TEAM_NOTICE[notice] ?? SHOWCASE_NOTICE[notice] ?? (notice === "approved"
     ? "회원 승인과 이메일 발송을 완료했습니다."
     : notice === "email_sent"
       ? "승인 이메일을 다시 보냈습니다."
@@ -507,82 +583,46 @@ function QuotaForm({ profile, fullWidth = false }: { profile: MemberProfile; ful
 function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile; fullWidth?: boolean }) {
   const formClass = fullWidth ? "min-w-[10rem] flex-1" : "";
   const buttonClass = fullWidth ? "w-full" : undefined;
+  const locked = profile.status === "pending" && !profile.email_confirmed_at;
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-start gap-1.5">
+      {/*
+        자주 쓰는 것만 밖에 둔다. 승인 · 정지 · 정지 해제 셋이다.
+
+        나머지(메일 재발송 · 지우기)는 「⋯」 안으로 넣었다. 회원 하나가 세로로
+        다섯 줄을 차지하고 있었는데, 스무 명을 훑을 때 한 화면에 열 명이
+        들어오느냐 두 명이 들어오느냐가 갈린다.
+      */}
       {profile.status === "pending" ? (
         <form action={approveMember} className={formClass}>
           <input type="hidden" name="userId" value={profile.id} />
           <ConfirmSubmitButton
             className={buttonClass}
-            disabled={!profile.email_confirmed_at}
+            disabled={locked}
             confirmMessage={`${profile.email} 회원을 승인하고 승인 완료 메일을 보낼까요?`}
             pendingLabel="승인 중..."
           >
             승인
           </ConfirmSubmitButton>
-          {/*
-            왜 잠겼는지 말해 준다. 버튼만 회색이고 아무 설명이 없어서 관리자가
-            고장으로 봤다(2026-09-04). 이메일 주인이 맞는지 확인되기 전에
-            승인하면 남의 주소로 가입한 사람을 들여보내게 되므로 잠그는 것이
-            맞지만, 잠근 이유는 보여야 한다.
-          */}
-          {!profile.email_confirmed_at ? (
-            <p className="mt-1 text-[11px] leading-snug text-amber-700">
-              이메일 인증 대기 중입니다. 본인이 인증 메일의 링크를 눌러야 승인할 수 있습니다.
-            </p>
-          ) : null}
         </form>
       ) : null}
 
-      {/*
-        인증 메일 다시 보내기.
-
-        사용자도 `/access` 에서 직접 보낼 수 있지만 **로그인을 해야 그 화면에
-        닿는다.** 메일이 통째로 안 왔거나 비밀번호를 잊은 사람은 거기까지 못
-        간다. 그때 관리자가 대신 눌러 준다.
-
-        이미 인증을 마친 사람에게는 안 보인다 — 보낼 것이 없다.
-      */}
-      {!profile.email_confirmed_at ? (
-        <form action={resendConfirmation} className={formClass}>
+      {profile.status === "active" ? (
+        <form action={setMemberStatus} className={formClass}>
           <input type="hidden" name="userId" value={profile.id} />
+          <input type="hidden" name="status" value="suspended" />
           <ConfirmSubmitButton
             className={buttonClass}
-            variant="outline"
-            confirmMessage={`${profile.email} 주소로 이메일 인증 메일을 다시 보낼까요?`}
-            pendingLabel="발송 중..."
+            variant="destructive"
+            confirmMessage={`${profile.email} 회원의 스튜디오 이용을 정지할까요?`}
+            pendingLabel="정지 중..."
           >
-            인증 메일 재발송
+            이용 정지
           </ConfirmSubmitButton>
         </form>
       ) : null}
-      {profile.status === "active" ? (
-        <>
-          <form action={setMemberStatus} className={formClass}>
-            <input type="hidden" name="userId" value={profile.id} />
-            <input type="hidden" name="status" value="suspended" />
-            <ConfirmSubmitButton
-              className={buttonClass}
-              variant="destructive"
-              confirmMessage={`${profile.email} 회원의 스튜디오 이용을 정지할까요?`}
-              pendingLabel="정지 중..."
-            >
-              이용 정지
-            </ConfirmSubmitButton>
-          </form>
-          <form action={resendApproval} className={formClass}>
-            <input type="hidden" name="userId" value={profile.id} />
-            <ConfirmSubmitButton
-              className={buttonClass}
-              variant="outline"
-              confirmMessage={`${profile.email} 주소로 승인 완료 메일을 다시 보낼까요?`}
-              pendingLabel="발송 중..."
-            >
-              승인 메일 재발송
-            </ConfirmSubmitButton>
-          </form>
-        </>
-      ) : null}
+
       {profile.status === "suspended" ? (
         <form action={setMemberStatus} className={formClass}>
           <input type="hidden" name="userId" value={profile.id} />
@@ -598,21 +638,57 @@ function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile;
       ) : null}
 
       {/*
-        아주 지우기.
-
-        관리자에게는 안 보인다 — 서로 지우기 시작하면 되돌릴 방법이 없다.
-        내리려면 먼저 일반 회원으로 낮춘 뒤 지운다.
-
-        **이메일을 그대로 입력해야 눌린다.** 표에서 줄을 잘못 짚는 일이 흔한데,
-        이건 되돌릴 수 없다 — 그 사람이 만든 작업물·참고 이미지·캐릭터가
-        같이 사라진다. 다시 못 들어오게만 할 생각이면 「이용 정지」를 쓴다.
+        왜 승인이 잠겼는지 말해 준다. 버튼만 회색이고 설명이 없어서 관리자가
+        고장으로 봤다(2026-09-04). 전에는 두 줄짜리 문구를 늘 깔아 뒀는데,
+        잠긴 버튼 바로 옆에 한 줄이면 같은 말을 한다.
       */}
-      {profile.role !== "admin" ? (
-        <details className="w-full">
-          <summary className="cursor-pointer list-none text-xs text-subtle-foreground hover:text-destructive">
-            회원 지우기
-          </summary>
-          <form action={deleteMember} className="mt-2 grid gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-2">
+      {locked ? (
+        <span className="mt-1.5 text-[11px] leading-snug text-amber-700">
+          이메일 인증 대기
+        </span>
+      ) : null}
+
+      <MoreActions label={profile.email}>
+        {!profile.email_confirmed_at ? (
+          <form action={resendConfirmation}>
+            <input type="hidden" name="userId" value={profile.id} />
+            <ConfirmSubmitButton
+              className="w-full"
+              variant="outline"
+              confirmMessage={`${profile.email} 주소로 이메일 인증 메일을 다시 보낼까요?`}
+              pendingLabel="발송 중..."
+            >
+              인증 메일 재발송
+            </ConfirmSubmitButton>
+          </form>
+        ) : null}
+
+        {profile.status === "active" ? (
+          <form action={resendApproval}>
+            <input type="hidden" name="userId" value={profile.id} />
+            <ConfirmSubmitButton
+              className="w-full"
+              variant="outline"
+              confirmMessage={`${profile.email} 주소로 승인 완료 메일을 다시 보낼까요?`}
+              pendingLabel="발송 중..."
+            >
+              승인 메일 재발송
+            </ConfirmSubmitButton>
+          </form>
+        ) : null}
+
+        {/*
+          아주 지우기.
+
+          관리자에게는 안 보인다 — 서로 지우기 시작하면 되돌릴 방법이 없다.
+          내리려면 먼저 일반 회원으로 낮춘 뒤 지운다.
+
+          **이메일을 그대로 입력해야 눌린다.** 표에서 줄을 잘못 짚는 일이 흔한데,
+          이건 되돌릴 수 없다 — 그 사람이 만든 작업물·참고 이미지·캐릭터가
+          같이 사라진다. 다시 못 들어오게만 할 생각이면 「이용 정지」를 쓴다.
+        */}
+        {profile.role !== "admin" ? (
+          <form action={deleteMember} className="grid gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-2">
             <input type="hidden" name="userId" value={profile.id} />
             <p className="text-[11px] leading-snug text-destructive">
               되돌릴 수 없습니다. 이 회원이 만든 작업물·참고 이미지·캐릭터가 함께 사라집니다.
@@ -634,8 +710,8 @@ function MemberActions({ profile, fullWidth = false }: { profile: MemberProfile;
               아주 지우기
             </ConfirmSubmitButton>
           </form>
-        </details>
-      ) : null}
+        ) : null}
+      </MoreActions>
     </div>
   );
 }
