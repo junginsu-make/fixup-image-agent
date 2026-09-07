@@ -131,7 +131,20 @@ export function AdExportClient() {
           setError("만든 작업 목록을 불러오지 못했습니다. 새로고침해 주세요.");
           return [] as PosterWork[];
         }),
-    ]).then(([library, posters]) => setItems(adSourceItems(library, posters)));
+    ])
+      .then(([library, posters]) => setItems(adSourceItems(library, posters)))
+      /**
+       * **가정이 깨지는 날을 대비해 상태만 풀어 준다.**
+       *
+       * 지금 `loadLibrary()` 는 거절하지 않는다 — 그것이 부르는 넷이 전부
+       * `catch { return [] }` 다. 문제는 **그 사실이 다른 파일에 있다**는
+       * 점이다. `lib/library.ts` 는 화면 넷이 함께 쓰고, 거기서 `catch` 하나가
+       * 빠지는 날 이 화면은 「불러오는 중…」에 **영원히 멈춘다.**
+       *
+       * 문구는 안 붙인다 — 지금은 닿지 않는 길이라 거짓 안내가 된다.
+       * 목록을 비워 「보관된 작업이 없습니다」로 끝내면 최소한 멈추지는 않는다.
+       */
+      .catch(() => setItems([]));
   }, []);
 
   async function chooseItem(next: AdSourceItem) {
@@ -149,6 +162,15 @@ export function AdExportClient() {
         ))?.images ?? []);
       if (mine !== token.current) return;
       setImages(loaded);
+      /**
+       * **첫 장을 고른 상태로 시작한다.**
+       *
+       * `position` 은 이제 배열 번호가 아니라 **서버 번호**다. `0` 으로 두면
+       * 목록에 0번이 없을 때(라이브러리에서 첫 그림의 서명이 실패하면 그렇다)
+       * **아무것도 선택돼 보이지 않고**, 그 상태로 뽑으면 사용자가 본 적 없는
+       * 0번을 보내 「찾을 수 없습니다」가 온다 — 썸네일은 멀쩡히 보이는데.
+       */
+      setPosition(loaded[0]?.position ?? 0);
     } catch {
       // 여기서도 삼키면 썸네일 줄이 영영 안 나타난다.
       if (mine !== token.current) return;

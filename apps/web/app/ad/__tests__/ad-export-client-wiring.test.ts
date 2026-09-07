@@ -65,3 +65,22 @@ describe("로컬에서 관리자 조회를 안 쓴다", () => {
     expect(fileRoute).toContain("usesAdminLookup(auth.member.profile.role, isLocalStoreEnabled())");
   });
 });
+
+describe("고른 그림이 없는 상태로 두지 않는다", () => {
+  /**
+   * `position` 이 서버 번호가 된 뒤로 `0` 은 **목록에 없을 수 있는 값**이다.
+   * 라이브러리에서 첫 그림의 서명이 실패하면 목록이 1번부터 그려지고, 그때
+   * 아무것도 선택돼 보이지 않는데 뽑으면 0번을 보낸다.
+   */
+  it("첫 장의 실제 번호로 시작한다", () => {
+    expect(client).toContain("setPosition(loaded[0]?.position ?? 0)");
+  });
+
+  /**
+   * `loadLibrary()` 가 거절하지 않는다는 사실은 **다른 파일에** 있다. 그
+   * 가정이 깨지는 날 이 화면이 「불러오는 중…」에 영원히 멈추지 않게 한다.
+   */
+  it("목록 적재가 실패해도 멈추지 않는다", () => {
+    expect(client).toMatch(/\.catch\(\(\) => setItems\(\[\]\)\)/);
+  });
+});
