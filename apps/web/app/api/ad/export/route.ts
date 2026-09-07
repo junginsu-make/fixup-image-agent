@@ -110,6 +110,9 @@ export async function POST(request: Request) {
         { userId: auth.member.userId, role: auth.member.profile.role },
         parsed.data.itemId,
         parsed.data.position,
+        // **관리자여도 자기 것만.** 역할은 그대로 넘기고 액션으로 가른다 —
+        // 역할을 지어내 넘기는 관례는 위 시험이 막으려던 바로 그것이다.
+        "export",
       );
     if (!file) return new Response("찾을 수 없습니다.", { status: 404 });
 

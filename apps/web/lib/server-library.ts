@@ -44,8 +44,27 @@ export interface LibraryViewer {
  *
  * 무거운 일이라는 사실은 그대로다. 그래서 화면은 지우기 전에 한 번 더 묻고,
  * 무엇을 지우는지와 누가 만든 것인지를 함께 보여준다.
+ *
+ * **`export` 는 다르다 — 관리자여도 자기 것만이다.**
+ *
+ * 위 판단의 근거는 「잘못 올라온 것을 치울 방법이 없다」였다. 그것은 **보고
+ * 지우는** 일이다. 광고 규격 내보내기는 **가공해서 파일로 내려받는** 일이라
+ * 무게가 다르다 — ZIP 이 만들어지는 순간 서비스 밖으로 나가고, 그 안에는 누구
+ * 것인지 적히지 않는다.
+ *
+ * 게다가 `/ad` 목록은 관리자에게 전 회원 최근 200건을 싣는데 화면이 소유자를
+ * 안 보여 준다. **관리자 자신도 남의 것인 줄 모른 채 뽑게 된다.**
+ *
+ * **액션 이름으로 가른다.** 부르는 쪽에서 `role: "member"` 로 지어내 넘기는
+ * 방식은 쓰지 않는다 — `api/ad/__tests__/ad-export-route.test.ts` 의 「본문에
+ * 실린 역할을 믿지 않는다」가 막으려던 바로 그 관례이고, 역할을 위조하는
+ * 버릇이 한 번 생기면 다른 라우트로 번진다.
  */
-export function libraryScope(viewer: LibraryViewer, action: "read" | "delete"): string | null {
+export function libraryScope(
+  viewer: LibraryViewer,
+  action: "read" | "delete" | "export",
+): string | null {
+  if (action === "export") return viewer.userId;
   if (viewer.role === "admin") return null;
   return viewer.userId;
 }
@@ -366,10 +385,18 @@ export async function getLibraryImageFile(
   viewer: LibraryViewer,
   itemId: string,
   position: number,
+  /**
+   * 무엇을 하려고 읽는가.
+   *
+   * **기본은 `read` 라 기존 호출부가 안 바뀐다.** 광고 규격 내보내기만
+   * `export` 를 넘겨 관리자에게도 소유자 조건을 건다 — 보고 지우는 것과
+   * 가공해 내려받는 것은 무게가 다르다(`libraryScope` 머리말).
+   */
+  action: "read" | "export" = "read",
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, "read");
+  const owner = libraryScope(viewer, action);
   let query = supabase
     .from("library_images")
     .select("path")

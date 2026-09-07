@@ -28,6 +28,7 @@ const viewers: Array<{ userId: string; role: string }> = [];
 const fileArgs: Array<{ itemId: string; position: number }> = [];
 const batchArgs: Array<{ specIds: string[] }> = [];
 const posterOwners: string[] = [];
+const scopes: string[] = [];
 let posterImages: Array<{ variantIndex: number; assetPath: string }> = [
   { variantIndex: 0, assetPath: "u1/poster/p1/0.png" },
 ];
@@ -75,8 +76,10 @@ vi.mock("../../../../lib/poster/asset-bytes", () => ({
 vi.mock("../../../../lib/server-library", () => ({
   getLibraryImageFile: async (
     viewer: { userId: string; role: string }, itemId: string, position: number,
+    action?: string,
   ) => {
     viewers.push(viewer);
+    scopes.push(action ?? "read");
     fileArgs.push({ itemId, position });
     return file;
   },
@@ -114,6 +117,7 @@ beforeEach(() => {
   fileArgs.length = 0;
   batchArgs.length = 0;
   posterOwners.length = 0;
+  scopes.length = 0;
   posterImages = [{ variantIndex: 0, assetPath: "u1/poster/p1/0.png" }];
 });
 
@@ -294,5 +298,27 @@ describe("포스터 작업에서 뽑는다", () => {
 
   it("모르는 source 는 거절한다", async () => {
     expect((await call({ ...good, source: "어디선가" })).status).toBe(400);
+  });
+});
+
+/**
+ * 관리자가 남의 그림으로 광고를 뽑지 못한다 (설계 §10 3-e).
+ *
+ * **「보기」와 「가공해 내보내기」는 무게가 다르다.** `libraryScope` 가
+ * 관리자에게 전체를 여는 근거는 「잘못 올라온 것을 치울 방법이 없다」인데,
+ * 그것은 보고 지우는 일이다. ZIP 은 서비스 밖으로 나가고 누구 것인지 안 적힌다.
+ */
+describe("내보내기는 자기 것만", () => {
+  it("라이브러리 조회에 export 범위를 쓴다", async () => {
+    member = { userId: "admin-1", role: "admin" };
+    await call(good);
+    expect(scopes, "read 를 쓰면 관리자에게 전체가 열린다").toEqual(["export"]);
+  });
+
+  /** 역할은 그대로 넘긴다 — 지어내지 않는다. 가르는 것은 액션이다. */
+  it("역할을 위조해 넘기지 않는다", async () => {
+    member = { userId: "admin-1", role: "admin" };
+    await call(good);
+    expect(viewers).toEqual([{ userId: "admin-1", role: "admin" }]);
   });
 });
