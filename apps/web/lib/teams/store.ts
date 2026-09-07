@@ -12,6 +12,7 @@ import {
   type TeamWithMembers,
   type UnassignedRow,
 } from "./core";
+import type { TeamCredit } from "./credit";
 
 /**
  * 팀 편성 — 저장소를 만지는 쪽.
@@ -342,4 +343,101 @@ async function membersOf(teamId: string): Promise<Array<{ userId: string; role: 
     .from("team_members").select("user_id,role").eq("team_id", teamId);
   return ((data ?? []) as Array<{ user_id: string; role: TeamRole }>)
     .map((row) => ({ userId: row.user_id, role: row.role }));
+}
+
+/* ── 크레딧 ───────────────────────────────────────────────────── */
+
+/**
+ * 이 팀의 이번 달 크레딧 상황.
+ *
+ * 쓴 것과 잡아 둔 것을 **함께 센다.** 예약만 하고 아직 안 끝난 것을 빼고
+ * 세면, 화면에는 남았다고 뜨는데 만들면 막힌다. DB 의 `team_units_used()` 와
+ * 같은 규칙이라야 두 숫자가 안 갈린다.
+ */
+export async function teamCredit(teamId: string): Promise<TeamCredit> {
+  const admin = createSupabaseAdminClient();
+
+  const [{ data: teamRow }, members] = await Promise.all([
+    admin.from("teams").select("monthly_quota").eq("id", teamId).maybeSingle(),
+    (async () => {
+      const teams = await listTeams();
+      return teams.find((team) => team.id === teamId)?.members ?? [];
+    })(),
+  ]);
+  if (!members.length) {
+    return { quota: (teamRow as { monthly_quota: number } | null)?.monthly_quota ?? 0, members: [] };
+  }
+
+  const userIds = members.map((row) => row.userId);
+  const periodStart = seoulPeriodStart();
+
+  const [{ data: events }, { data: profiles }] = await Promise.all([
+    admin
+      .from("generation_events")
+      .select("user_id,status,requested_units,consumed_units,expires_at")
+      .in("user_id", userIds)
+      .eq("period_start", periodStart),
+    admin.from("profiles").select("id,monthly_quota").in("id", userIds),
+  ]);
+
+  const now = Date.now();
+  const used = new Map<string, number>();
+  for (const row of (events ?? []) as Array<{
+    user_id: string; status: string; requested_units: number;
+    consumed_units: number | null; expires_at: string | null;
+  }>) {
+    const amount =
+      row.status === "succeeded"
+        ? (row.consumed_units ?? 0)
+        : row.status === "reserved" && row.expires_at && Date.parse(row.expires_at) > now
+          ? row.requested_units
+          : 0;
+    if (amount) used.set(row.user_id, (used.get(row.user_id) ?? 0) + amount);
+  }
+
+  const quotas = new Map(
+    ((profiles ?? []) as Array<{ id: string; monthly_quota: number }>)
+      .map((row) => [row.id, row.monthly_quota]),
+  );
+
+  return {
+    quota: (teamRow as { monthly_quota: number } | null)?.monthly_quota ?? 0,
+    members: members.map((row) => ({
+      userId: row.userId,
+      email: row.email,
+      role: row.role,
+      used: used.get(row.userId) ?? 0,
+      personalQuota: quotas.get(row.userId) ?? 0,
+    })),
+  };
+}
+
+/**
+ * 정산이 도는 달의 첫날.
+ *
+ * DB 는 `date_trunc('month', now() at time zone 'Asia/Seoul')` 를 쓴다.
+ * 서버가 어느 시간대에 있든 같은 날을 가리켜야 한다 — UTC 로 재면 매달 1일
+ * 오전 아홉 시간 동안 지난달을 센다.
+ */
+function seoulPeriodStart(): string {
+  const seoul = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return `${seoul.getUTCFullYear()}-${String(seoul.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** 팀 한도를 정한다. 0 은 「안 정했다」로 남는다. */
+export async function setTeamQuota(teamId: string, quota: number): Promise<void> {
+  const { error } = await createSupabaseAdminClient()
+    .from("teams")
+    .update({ monthly_quota: quota, updated_at: new Date().toISOString() })
+    .eq("id", teamId);
+  if (error) throw new Error(error.message);
+}
+
+/** 팀원 한 사람의 개인 상한. 팀 잔량 안에서의 천장이다. */
+export async function setPersonalQuota(userId: string, quota: number): Promise<void> {
+  const { error } = await createSupabaseAdminClient()
+    .from("profiles")
+    .update({ monthly_quota: quota, updated_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
 }

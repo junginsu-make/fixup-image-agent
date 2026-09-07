@@ -21,7 +21,9 @@ import {
 import { AssignPanel, type Candidate } from "./assign-panel";
 import { ProjectsTab } from "./projects-tab";
 import { WorksTab } from "./works-tab";
+import { CreditTab } from "./credit-tab";
 import { listProjectsWithCounts, listTeamWorks } from "../../lib/teams/project-store";
+import { teamCredit } from "../../lib/teams/store";
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +39,15 @@ const NOTICES: Record<string, string> = {
   project_renamed: "프로젝트 이름을 바꿨습니다.",
   project_archived: "프로젝트를 접었습니다. 작업물은 그대로 있고 「전체」로 돌아갔습니다.",
   work_moved: "작업물을 옮겼습니다.",
+  team_quota_set: "팀 한도를 정했습니다.",
+  personal_quota_set: "개인 상한을 바꿨습니다.",
 };
 
 /** 한 화면 세 탭. 주소에 실어서 각 탭이 자기 것만 서버에서 읽는다. */
 const TABS = [
   { id: "members", label: "팀원" },
   { id: "projects", label: "프로젝트" },
+  { id: "credit", label: "크레딧" },
   { id: "works", label: "작업물" },
 ] as const;
 
@@ -94,6 +99,10 @@ export default async function TeamPage({
 
   const projects = active === "members" ? [] : await listProjectsWithCounts(focusTeamId);
   const works = active === "works" ? await listTeamWorks(focusTeamId) : [];
+  const credit =
+    active === "credit" && focusTeamId
+      ? await teamCredit(focusTeamId)
+      : { quota: 0, members: [] };
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 py-2">
@@ -152,6 +161,13 @@ export default async function TeamPage({
             <TeamSwitch teams={teams} focusTeamId={focusTeamId} tab="projects" />
           ) : null}
           <ProjectsTab teamId={focusTeamId} projects={projects} canWrite={canWriteFocus} />
+        </>
+      ) : active === "credit" ? (
+        <>
+          {isAdmin && teams.length > 1 ? (
+            <TeamSwitch teams={teams} focusTeamId={focusTeamId} tab="credit" />
+          ) : null}
+          <CreditTab teamId={focusTeamId} credit={credit} canWrite={canWriteFocus} />
         </>
       ) : active === "works" ? (
         <>

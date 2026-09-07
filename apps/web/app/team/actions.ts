@@ -12,6 +12,8 @@ import {
   removeMember,
   renameTeam,
   setMemberRole,
+  setPersonalQuota,
+  setTeamQuota,
   teamIdOf,
 } from "../../lib/teams/store";
 import {
@@ -22,6 +24,7 @@ import {
   moveWorkToProject,
   renameProject,
 } from "../../lib/teams/project-store";
+import { personalQuotaError, teamQuotaError } from "../../lib/teams/credit";
 import { setCurrentProject } from "../../lib/teams/current-project";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 
@@ -236,4 +239,46 @@ export async function selectProjectAction(formData: FormData) {
   // 그대로 보여 준다.
   revalidatePath("/", "layout");
   redirect(String(formData.get("back") || "/library"));
+}
+
+/* ── 크레딧 — 운영자와 그 팀의 팀장 ────────────────────────────── */
+
+function readQuota(
+  formData: FormData,
+  field: string,
+  check: (raw: string) => string | null,
+): number {
+  const raw = String(formData.get(field) || "");
+  const problem = check(raw);
+  if (problem) throw new Error(problem);
+  return Number(raw.trim());
+}
+
+/**
+ * 팀 한도를 정한다.
+ *
+ * **0 으로 두면 팀 한도가 아무것도 안 막는다** — 개인 상한만 본다. 그것이
+ * 지금까지의 동작이라, 값을 정하기 전까지는 아무도 갑자기 막히지 않는다.
+ */
+export async function setTeamQuotaAction(formData: FormData) {
+  const teamId = readId(formData, "teamId");
+  await requireTeamWrite(teamId);
+  await setTeamQuota(teamId, readQuota(formData, "quota", teamQuotaError));
+  revalidatePath("/team");
+  redirect(`/team?tab=credit&team=${teamId}&notice=team_quota_set`);
+}
+
+/**
+ * 팀원 한 사람의 개인 상한.
+ *
+ * 팀장이 팀원의 상한을 만질 수 있다. 팀 잔량을 한 사람이 다 쓰는 것을 막는
+ * 유일한 길이라, 이게 없으면 팀 한도를 정해도 나눌 방법이 없다.
+ */
+export async function setPersonalQuotaAction(formData: FormData) {
+  const userId = readId(formData, "userId");
+  const teamId = await teamOf(userId);
+  await requireTeamWrite(teamId);
+  await setPersonalQuota(userId, readQuota(formData, "quota", personalQuotaError));
+  revalidatePath("/team");
+  redirect(`/team?tab=credit&team=${teamId}&notice=personal_quota_set`);
 }
