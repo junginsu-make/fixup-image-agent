@@ -79,6 +79,9 @@ export function createPosterService(store: PosterProjectStore) {
           personIds: input.personIds,
           look: input.look,
           userInstruction: input.userInstruction,
+          // 고른 차례와 그림 지시. 옛 작업에는 없고, 읽는 쪽이 그때 만들어 준다.
+          attachmentOrder: input.attachmentOrder,
+          attachmentIntent: input.attachmentIntent,
           slots: input.slots ?? EMPTY_SLOTS,
           ...adMasterFor(input.adMasterId),
         },

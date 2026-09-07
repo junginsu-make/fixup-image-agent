@@ -2,6 +2,11 @@ import { MATCH_SOURCE, modelById, pickEndpoint, resolvePosterSize, sizeFromSourc
 import type { ImageLook } from "@fixup/shared";
 import { estimatePosterCost, type PosterCostEstimate } from "./pricing";
 import { buildPosterPrompt, type PosterPromptImage } from "./prompt";
+import {
+  attachmentUrls,
+  orderFromLegacyLists,
+  type OrderedAttachment,
+} from "./attachment-order";
 import type { PosterSlots } from "./schemas";
 import type { PosterImageRecord } from "./store";
 
@@ -22,7 +27,13 @@ export interface PosterJobInput {
   ratioId: string;
   variants: number;
   slots: PosterSlots;
-  /** 이미 fal 에 올려 둔 URL. 순서가 프롬프트의 Image 번호와 같아야 한다. */
+  /**
+   * **화면에 놓인 순서 그대로**의 첨부. 이것이 프롬프트의 `Image N` 번호가 된다.
+   *
+   * 없으면 아래 두 목록에서 만든다 — 옛 작업에는 순서가 저장돼 있지 않다.
+   */
+  attachments?: OrderedAttachment[];
+  /** 이미 fal 에 올려 둔 URL. `attachments` 가 없을 때만 쓴다. */
   referenceUrls: string[];
   preservedUrls: string[];
   /**
@@ -39,6 +50,8 @@ export interface PosterJobInput {
   sourceSize?: { width: number; height: number };
   /** 사용자가 직접 친 추가 지시. 프롬프트의 양끝으로 간다. */
   userInstruction?: string;
+  /** 첨부한 그림들을 어떻게 쓸지. 01에서 적는다. */
+  attachmentIntent?: string;
   /** 그림의 결. 없으면 auto — 첨부한 그림의 결을 따라간다. */
   look?: ImageLook;
 }
@@ -62,13 +75,23 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     hasReferences,
   });
 
-  const images: PosterPromptImage[] = [
-    ...job.referenceUrls.map((): PosterPromptImage => ({ kind: "style_reference" })),
-    ...job.preservedUrls.map((url): PosterPromptImage => ({
-      kind: "preserved",
-      subject: job.personUrls?.includes(url) ? "person" : "object",
-    })),
-  ];
+  /**
+   * 화면 순서 하나로 통일한다.
+   *
+   * 전에는 여기서 따라 만들 것을 먼저 이어 붙였다. 그래서 화면 왼쪽의 「인물
+   * 지키기」가 프롬프트에서 `Image 2` 가 됐다 — 사용자가 「①번을」이라고 쓰면
+   * 반대로 알아들었다.
+   */
+  const attachments = job.attachments
+    ?? orderFromLegacyLists(job.referenceUrls, job.preservedUrls, job.personUrls ?? []);
+
+  const images: PosterPromptImage[] = attachments.map((attachment): PosterPromptImage =>
+    attachment.role === "style"
+      ? { kind: "style_reference" }
+      : {
+        kind: "preserved",
+        subject: attachment.role === "preserve_person" ? "person" : "object",
+      });
 
   if (estimate.rejected) {
     return {
@@ -113,6 +136,7 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     images,
     size: resolved.pixel,
     userInstruction: job.userInstruction,
+    attachmentIntent: job.attachmentIntent,
     look: job.look,
   });
 
@@ -125,8 +149,9 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     input.aspect_ratio = resolved.aspectRatio;
     if (resolved.resolution) input.resolution = resolved.resolution;
   }
-  // 순서가 프롬프트의 Image 번호와 같아야 한다. 레퍼런스 먼저, 보존 대상 나중.
-  const imageUrls = [...job.referenceUrls, ...job.preservedUrls];
+  // 프롬프트와 같은 배열에서 뽑는다. 둘이 갈리면 「Image 2」라고 적힌 지시가
+  // 다른 그림에 붙는다.
+  const imageUrls = attachmentUrls(attachments);
   if (imageUrls.length) input.image_urls = imageUrls;
 
   return {

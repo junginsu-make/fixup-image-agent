@@ -16,7 +16,26 @@ export const BACKUP_POSTER_PROVIDER = "openai";
 export interface PosterPlanInput {
   instruction: string;
   ratio: string;
-  references: Array<{ title: string; grammar?: string }>;
+  /**
+   * 첨부한 그림 — **고른 차례 그대로.**
+   *
+   * 전에는 「따라 만들기」로 고른 것만, 제목만 넘겼다. 그래서 기획이 채운 칸이
+   * 첨부한 그림과 겉돌았다 — 지켜야 할 인물이 있는지도 몰랐다.
+   */
+  references: Array<{
+    title: string;
+    grammar?: string;
+    /** 화면 ①②③ 과 프롬프트 `Image N` 이 쓰는 그 번호. */
+    number?: number;
+    /** 이 그림을 어떻게 쓰기로 했는지. 사람이 화면에서 고른 것. */
+    roleLabel?: string;
+  }>;
+  /**
+   * 첨부한 그림들을 어떻게 쓸지 사용자가 적은 말.
+   *
+   * 기획이 채우는 칸보다 세다 — 사람이 친 말이기 때문이다.
+   */
+  attachmentIntent?: string;
 }
 
 export interface PosterPlanProvider {
@@ -31,7 +50,10 @@ export interface PosterPlanResult {
 export function buildPlanPrompt(input: PosterPlanInput): string {
   const references = input.references.map((reference, index) => {
     const grammar = reference.grammar?.trim();
-    return `  ${index + 1}. ${reference.title}${grammar ? ` — ${grammar}` : ""}`;
+    // 번호는 화면·프롬프트와 같은 것을 쓴다. 셋이 각자 세면 어긋난다.
+    const number = reference.number ?? index + 1;
+    const role = reference.roleLabel ? ` [${reference.roleLabel}]` : "";
+    return `  ${number}. ${reference.title}${role}${grammar ? ` — ${grammar}` : ""}`;
   });
 
   return [
@@ -40,8 +62,11 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
     `사용자 지시: ${input.instruction}`,
     `비율: ${input.ratio}`,
     "",
-    "따라 만들 레퍼런스:",
+    "첨부한 그림 (번호는 화면에 보이는 것과 같습니다):",
     ...(references.length ? references : ["  (없음)"]),
+    ...(input.attachmentIntent?.trim()
+      ? ["", `첨부한 그림을 어떻게 쓸지 — 사용자가 적은 말: ${input.attachmentIntent.trim()}`]
+      : []),
     "",
     "채울 칸:",
     "  kind             포스터 유형 (영화·장소 홍보·공익·제품 광고 등)",
@@ -61,6 +86,7 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
     "  길어지면 그림 단계에서 작게 넣어 소화합니다.",
     "  사용자 지시와 레퍼런스에서 알 수 없는 칸은 지어내지 말고 비워 두세요.",
     "  사람이 보고 마저 채웁니다.",
+    "  첨부한 그림을 어떻게 쓸지 적힌 말이 있으면 그것을 먼저 따르세요.",
   ].join("\n");
 }
 

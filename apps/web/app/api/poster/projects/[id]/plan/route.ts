@@ -17,6 +17,54 @@ type Context = { params: Promise<{ id: string }> };
  *
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
+const ROLE_LABEL = {
+  style: "따라 만들기",
+  preserve_person: "인물 그대로 지키기",
+  preserve_product: "제품 그대로 지키기",
+} as const;
+
+/**
+ * 기획 AI 에게 넘길 목록 — **고른 차례 그대로, 번호와 역할을 붙여서.**
+ *
+ * 번호가 화면·프롬프트와 같아야 사용자가 「①번」이라고 쓴 말이 통한다.
+ * 차례가 없는 옛 작업은 지금까지처럼 따라 만들기 먼저, 지키기 나중이다.
+ */
+function planReferences(
+  data: {
+    attachmentOrder?: string[];
+    preservedIds?: string[];
+    personIds?: string[];
+  },
+  all: Array<{ id: string; title?: string | null }>,
+  summaries: Record<string, string | undefined>,
+) {
+  const byId = new Map(all.map((entry) => [entry.id, entry]));
+  const order = data.attachmentOrder?.length
+    ? data.attachmentOrder
+    : all.map((entry) => entry.id);
+
+  const preserved = new Set(data.preservedIds ?? []);
+  const people = new Set(data.personIds ?? []);
+
+  return order
+    .map((id, index) => {
+      const entry = byId.get(id);
+      if (!entry) return null;
+      const role = people.has(id)
+        ? "preserve_person"
+        : preserved.has(id)
+          ? "preserve_product"
+          : "style";
+      return {
+        title: entry.title ?? "레퍼런스",
+        grammar: summaries[id],
+        number: index + 1,
+        roleLabel: ROLE_LABEL[role],
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+}
+
 export async function POST(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
@@ -26,7 +74,13 @@ export async function POST(_request: Request, context: Context) {
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
 
+    /**
+     * 문법은 「따라 만들기」에서만 읽는다 — 지킬 그림에는 레이아웃 문법이 없다.
+     * 기획에는 **첨부한 것 전부**를 넘긴다. 지켜야 할 인물이 있는지도 알아야
+     * 칸을 제대로 채운다.
+     */
     const references = await stores.references.byIds(project.data.referenceIds);
+    const preserved = await stores.references.byIds(project.data.preservedIds ?? []);
     const grammar = await readReferenceGrammar(
       references
         .filter((reference) => Boolean(reference.url))
@@ -39,10 +93,8 @@ export async function POST(_request: Request, context: Context) {
       {
         instruction: project.data.instruction,
         ratio: project.ratio,
-        references: references.map((reference) => ({
-          title: reference.title ?? "레퍼런스",
-          grammar: grammar.summaries[reference.id],
-        })),
+        references: planReferences(project.data, [...references, ...preserved], grammar.summaries),
+        attachmentIntent: project.data.attachmentIntent,
       },
       providers.primary,
       providers.backup,

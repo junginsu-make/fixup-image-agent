@@ -82,6 +82,20 @@ export const PosterProjectInputSchema = z.object({
    */
   userInstruction: z.string().trim().default(""),
   /**
+   * **고른 차례 그대로**의 첨부 id. 화면 ①②③ 이자 프롬프트의 `Image N` 이다.
+   *
+   * 옛 작업에는 없다. 없으면 서버가 `referenceIds` + `preservedIds` 를 이어
+   * 붙여 만든다 — 그 작업들은 애초에 차례가 저장돼 있지 않아 그것 말고 방법이 없다.
+   */
+  attachmentOrder: z.array(z.string().uuid()).default([]),
+  /**
+   * 첨부한 그림들을 어떻게 쓸지. 사용자가 01에서 적는다.
+   *
+   * 역할 셋은 「무엇을 가져올지」를 묶음으로만 고르게 한다. 「①번 사람들을
+   * ②번 느낌으로」처럼 갈라 가져오는 것은 어느 묶음에도 없어서 이 칸이 필요하다.
+   */
+  attachmentIntent: z.string().trim().default(""),
+  /**
    * 광고 마스터의 **id**. 선택이다.
    *
    * **픽셀을 받지 않는다.** 자유 픽셀이면 경계가 없어 `{ 3840, 3840 }` 이

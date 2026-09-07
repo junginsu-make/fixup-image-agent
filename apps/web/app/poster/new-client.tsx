@@ -38,6 +38,33 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   const [step, setStep] = React.useState("reference");
   const [roles, setRoles] = React.useState<Record<string, Role>>({});
+  /**
+   * **고른 차례.** 이것이 화면의 ①②③ 이고 프롬프트의 `Image N` 이다.
+   *
+   * `roles` 는 객체라 차례를 못 담고, 화면에 그려지는 차례는 라이브러리 목록
+   * 순서(최신순)라 먼저 고른 것이 뒤에 놓인다. 「①번 사람들을 ②번 느낌으로」가
+   * 생각한 대로 동작하려면 **고른 차례**를 따로 들어야 한다.
+   */
+  const [pickOrder, setPickOrder] = React.useState<string[]>([]);
+  /** 첨부한 그림들을 어떻게 쓸지. 비워 두면 프롬프트에 안 들어간다. */
+  const [attachmentIntent, setAttachmentIntent] = React.useState("");
+
+  /**
+   * 역할을 바꾸면서 차례도 함께 손본다.
+   *
+   * 고르면 뒤에 붙이고, 빼면(`none`) 목록에서 지운다. 뺐다가 다시 고르면
+   * 맨 뒤로 간다 — 그게 화면에서 보이는 것과 같다.
+   */
+  const changeRole = React.useCallback((id: string, role: Role) => {
+    setRoles((current) => ({ ...current, [id]: role }));
+    setPickOrder((current) => {
+      const without = current.filter((entry) => entry !== id);
+      return role === "none" ? without : [...without, id];
+    });
+  }, []);
+
+  /** 고른 차례 그대로의 id 목록. 역할이 풀린 것은 뺀다. */
+  const orderedIds = pickOrder.filter((id) => (roles[id] ?? "none") !== "none");
   const [ratio, setRatio] = React.useState("2:3");
   /**
    * 광고 모드인가.
@@ -61,10 +88,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const styleIds = Object.keys(roles).filter((id) => roles[id] === "style");
-  const preservedIds = Object.keys(roles).filter((id) => roles[id]?.startsWith("preserve"));
+  // 세 목록도 고른 차례를 따른다. 서버가 옛 작업을 읽을 때 이 차례로 이어 붙인다.
+  const styleIds = orderedIds.filter((id) => roles[id] === "style");
+  const preservedIds = orderedIds.filter((id) => roles[id]?.startsWith("preserve"));
   // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
-  const personIds = Object.keys(roles).filter((id) => roles[id] === "preserve_person");
+  const personIds = orderedIds.filter((id) => roles[id] === "preserve_person");
 
   /**
    * 비율이 모델보다 우선한다.
@@ -99,7 +127,10 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     // 라이브러리에서 그림을 골라 왔으면 「따라 만들기」로 켜 둔다.
     // 제품·인물을 지키려는 것이면 그림을 눌러 바꾼다.
     if (handoff.images?.length) {
-      setRoles(Object.fromEntries(handoff.images.map((image) => [image.id, "style" as Role])));
+      const ids = handoff.images.map((image) => image.id);
+      setRoles(Object.fromEntries(ids.map((id) => [id, "style" as Role])));
+      // 넘어온 차례가 곧 고른 차례다. 안 담으면 번호가 안 붙는다.
+      setPickOrder(ids);
     }
   }, []);
 
@@ -141,6 +172,9 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       referenceIds: styleIds,
       preservedIds,
       personIds,
+      // **고른 차례 그대로.** 이것이 프롬프트의 Image 번호가 된다.
+      attachmentOrder: orderedIds,
+      attachmentIntent: attachmentIntent.trim(),
       look,
       userInstruction: userInstruction.trim(),
       ...extra,
@@ -264,8 +298,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             <ReferencePicker
               references={references}
               roles={roles}
-              onRoleChange={(id, role) => setRoles((current) => ({ ...current, [id]: role }))}
+              order={orderedIds}
+              onRoleChange={changeRole}
               onUploaded={loadReferences}
+              intent={attachmentIntent}
+              onIntentChange={setAttachmentIntent}
             />
             {overReferenceLimit ? (
               <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

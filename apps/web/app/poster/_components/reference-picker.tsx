@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AlertTriangle, ImagePlus, X } from "lucide-react";
-import { Button, cn } from "@fixup/ui";
+import { Button, Label, Textarea, cn } from "@fixup/ui";
 import {
   ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, personOverflow, type AttachmentRole,
 } from "@fixup/shared";
@@ -45,13 +45,23 @@ export type Role = "none" | AttachmentRole;
 const POSTER_ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person"];
 
 export function ReferencePicker({
-  references, roles, onRoleChange, onUploaded,
+  references, roles, order, onRoleChange, onUploaded, intent, onIntentChange,
 }: {
   references: ReferenceItem[];
   roles: Record<string, Role>;
+  /**
+   * **고른 차례.** 이 차례가 화면의 ①②③ 이고 프롬프트의 `Image N` 이다.
+   *
+   * `references` 는 라이브러리 최신순이라 먼저 고른 것이 뒤에 놓인다. 그 순서로
+   * 번호를 매기면 「①번을」이라고 쓴 지시가 다른 그림에 붙는다.
+   */
+  order: string[];
   onRoleChange(id: string, role: Role): void;
   /** 다시 읽은 목록을 돌려준다. 방금 올린 줄이 들어왔는지 여기서 확인한다. */
   onUploaded(): Promise<ReferenceItem[]>;
+  /** 첨부한 그림들을 어떻게 쓸지. 드롭다운으로 못 만드는 조합을 여기서 연다. */
+  intent: string;
+  onIntentChange(value: string): void;
 }) {
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -179,8 +189,15 @@ export function ReferencePicker({
     }
   }
 
-  /** 고른 것만 화면에 남긴다. 라이브러리 전체는 불러오기 창에서 본다. */
-  const picked = references.filter((reference) => (roles[reference.id] ?? "none") !== "none");
+  /**
+   * 고른 것만, **고른 차례로** 화면에 남긴다.
+   *
+   * 전에는 `references.filter(...)` 였다. 그러면 라이브러리 최신순이라 먼저
+   * 고른 것이 뒤에 놓이고, 화면 번호가 사용자가 넣은 차례와 어긋난다.
+   */
+  const picked = order
+    .map((id) => references.find((reference) => reference.id === id))
+    .filter((reference): reference is ReferenceItem => Boolean(reference));
 
   // 사람과 물건을 가르는 이유: 지키는 방법이 다르고, 얼굴이 둘이면 모델이
   // 절충해 제3의 인물을 만든다(2026-07-30 실측).
@@ -239,10 +256,14 @@ export function ReferencePicker({
           아직 고른 그림이 없습니다. 새로 올리거나 라이브러리에서 불러오세요.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {picked.map((reference) => {
+        // 한 칸을 작게 잡는다. 넉 장을 넣어도 한 화면에 들어와야 「①번을 ②번
+        // 느낌으로」를 쓰면서 그림을 볼 수 있다. 큰 그림이 필요하면 눌러서 연다.
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          {picked.map((reference, index) => {
             const role = (roles[reference.id] ?? "style") as AttachmentRole;
             const title = reference.title ?? "참고 이미지";
+            // 화면 ①②③ 과 프롬프트 `Image N` 이 같은 번호를 쓴다.
+            const number = index + 1;
             return (
               <div key={reference.id} className="relative">
               <div
@@ -259,15 +280,29 @@ export function ReferencePicker({
                 >
                   {reference.url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={reference.url} alt={title} className="aspect-[2/3] w-full object-cover" />
+                    <img src={reference.url} alt={title} className="aspect-square w-full object-cover" />
                   ) : (
-                    <div className="grid aspect-[2/3] w-full place-items-center bg-muted text-xs text-muted-foreground">
+                    <div className="grid aspect-square w-full place-items-center bg-muted text-xs text-muted-foreground">
                       미리보기 없음
                     </div>
                   )}
                 </button>
+                {/*
+                  **번호를 크게 왼쪽 위에.** 지시란에 「①번」이라고 쓰려면 어느
+                  것이 ① 인지 보여야 한다. 프롬프트는 이미 이 번호를 쓰고 있었고,
+                  화면만 안 보여 주고 있었다.
+                */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-foreground/85 text-sm font-bold text-background shadow"
+                >
+                  {number}
+                </span>
                 <div className="grid gap-1 px-3 pb-3 pt-2">
-                  <span className="truncate text-xs">{title}</span>
+                  <span className="truncate text-xs">
+                    <span className="sr-only">{number}번 그림. </span>
+                    {title}
+                  </span>
                   {/*
                     역할은 고르게 한다. 예전에는 그림을 누르면 역할이 돌았는데,
                     누를 수 있다는 것 자체가 안 보여서 전부 「따라 만들기」로
@@ -304,6 +339,33 @@ export function ReferencePicker({
           })}
         </div>
       )}
+
+      {/*
+        **드롭다운으로 못 만드는 조합을 여기서 연다.**
+
+        역할 셋은 「무엇을 가져올지」를 묶음으로만 고르게 한다. 「①번 사람들을
+        ②번 느낌으로」는 누구인지(①)와 그림 느낌(②)을 갈라 가져오는 것이라
+        어느 묶음에도 없다.
+
+        여기 적은 말은 프롬프트의 맨 앞으로 가고, 다른 모든 지시보다 세다.
+
+        그림이 없으면 안 보인다 — 쓸 대상이 없다.
+      */}
+      {picked.length > 0 ? (
+        <div className="grid gap-1.5">
+          <Label htmlFor="attachment-intent">이 그림들을 어떻게 쓸까요 · 선택</Label>
+          <Textarea
+            id="attachment-intent"
+            value={intent}
+            onChange={(event) => onIntentChange(event.target.value)}
+            rows={2}
+            placeholder="예: 1번 사진의 사람들을 2번 그림 느낌으로"
+          />
+          <p className="text-sm text-muted-foreground">
+            그림 왼쪽 위 번호로 부르면 됩니다. 여기 적은 말이 위에서 고른 역할보다 우선합니다.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
