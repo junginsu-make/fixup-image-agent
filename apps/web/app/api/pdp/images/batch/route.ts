@@ -17,6 +17,7 @@ import { resolveGeminiKey } from "../../../../../lib/server-keys";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
+import { teamIdOf } from "../../../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,8 +85,13 @@ export async function POST(req: Request) {
   // 참조가 늘어 서로를 희석시킨다 — 앵커와 스타일만으로도 절충이 일어난다.
   const characterByAngle = new Map<string, Awaited<ReturnType<typeof loadCharacterView>>>();
   if (body.characterId) {
+    // 팀은 한 번만 묻는다. 각도마다 물으면 같은 질문이 세 번 간다.
+    const teamId = await teamIdOf(reservation.userId);
     for (const angle of new Set(sections.map((s) => pickAngleForSection(s.layout_notes ?? "")))) {
-      characterByAngle.set(angle, await loadCharacterView(reservation.userId, body.characterId, angle));
+      characterByAngle.set(
+        angle,
+        await loadCharacterView(reservation.userId, body.characterId, angle, teamId),
+      );
     }
   }
 

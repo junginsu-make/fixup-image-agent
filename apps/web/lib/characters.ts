@@ -18,6 +18,7 @@ import {
   type ReferenceImage,
 } from "@fixup/pdp-core";
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { scopedRead } from "./teams/scope";
 import { characterReferenceEntries, characterReferenceTitle } from "./character-library";
 import { saveReferenceImage, removeReferenceImagesByTitle } from "./reference-images";
 import { isLocalStoreEnabled } from "./local-store";
@@ -564,21 +565,33 @@ function normalizeRecord(row: Record<string, unknown>): CharacterRecord {
   };
 }
 
-async function findCharacter(userId: string, characterId: string): Promise<CharacterRecord | null> {
+/**
+ * 캐릭터 한 명.
+ *
+ * `teamId` 를 주면 같은 팀 것도 찾는다. **안 주면 자기 것만**이다 — 지우는
+ * 자리처럼 주인만 해야 하는 곳은 그냥 안 준다. 빠뜨렸을 때 남의 것을
+ * 건드리는 쪽으로 틀리지 않는다.
+ */
+async function findCharacter(
+  userId: string,
+  characterId: string,
+  teamId: string | null = null,
+): Promise<CharacterRecord | null> {
   if (isLocalStoreEnabled()) {
     const row = await findLocalCharacter(userId, characterId);
     return row ? normalizeRecord(row as unknown as Record<string, unknown>) : null;
   }
-  const { data } = await createSupabaseAdminClient()
-    .from("characters")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("id", characterId)
-    .maybeSingle();
+  const { data } = await scopedRead(
+    createSupabaseAdminClient().from("characters").select("*").eq("id", characterId),
+    { userId, teamId, isAdmin: false },
+  ).maybeSingle();
   return data ? normalizeRecord(data as Record<string, unknown>) : null;
 }
 
-export async function listCharacters(userId: string): Promise<CharacterSummary[]> {
+export async function listCharacters(
+  userId: string,
+  teamId: string | null = null,
+): Promise<CharacterSummary[]> {
   if (isLocalStoreEnabled()) {
     const [rows, views] = await Promise.all([
       listLocalCharacters(userId),
@@ -600,19 +613,20 @@ export async function listCharacters(userId: string): Promise<CharacterSummary[]
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("characters")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const { data, error } = await scopedRead(
+    supabase.from("characters").select("*").order("created_at", { ascending: false }).limit(100),
+    { userId, teamId, isAdmin: false },
+  );
 
   if (error || !data?.length) return [];
 
+  // 각도는 **부모로 거른다.** `character_views` 에는 `team_id` 가 없어서
+  // 팀에서 보이는지를 자식만 보고는 정할 수 없다. 위에서 이미 걸러 낸
+  // 캐릭터의 id 로 묻는 것이 정확하다.
   const { data: viewRows } = await supabase
     .from("character_views")
     .select("character_id,angle,path,thumb_path")
-    .eq("user_id", userId);
+    .in("character_id", data.map((row: { id: string }) => row.id));
 
   // **원본과 사본을 둘 다 서명한다.** 격자는 사본을, 확대와 생성 입력은
   // 원본을 쓴다. 한 번에 모아 보내므로 왕복은 늘지 않는다.
@@ -655,11 +669,13 @@ async function loadViewBytes(
     return { base64: bytes.toString("base64"), mimeType: view.mimeType };
   }
 
+  // 부르는 쪽(`loadCharacterView`)이 부모를 이미 확인했다. 여기서 다시
+  // `user_id` 로 거르면 팀원 캐릭터를 쓸 때 각도만 못 찾아, 목록에는
+  // 보이는데 생성에는 안 걸리는 상태가 된다.
   const supabase = createSupabaseAdminClient();
   const { data: view } = await supabase
     .from("character_views")
     .select("path,mime_type")
-    .eq("user_id", userId)
     .eq("character_id", characterId)
     .eq("angle", angle)
     .maybeSingle();
@@ -683,8 +699,9 @@ export async function loadCharacterView(
   userId: string,
   characterId: string,
   angle: CharacterAngle,
+  teamId: string | null = null,
 ) {
-  const character = await findCharacter(userId, characterId);
+  const character = await findCharacter(userId, characterId, teamId);
   if (!character) return null;
 
   const chosen =

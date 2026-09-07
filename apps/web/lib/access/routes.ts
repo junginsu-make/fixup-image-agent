@@ -46,6 +46,10 @@ export const APP_ROUTES: AppRoute[] = [
   { path: "/inbox", label: "수집함" },
   { path: "/sources", label: "수집 리스트" },
   { path: "/library", label: "라이브러리" },
+  // 역할을 안 건다. 「팀장」은 UserRole 이 아니라 팀 안의 자리라
+  // 여기서는 적을 수 없다. 화면은 누구나 열되 팀이 없는 사람에게는
+  // 「아직 팀이 없습니다」가 뜨고, 꾸미는 것은 서버 액션이 막는다.
+  { path: "/team", label: "팀" },
   { path: "/settings", label: "계정" },
   { path: "/admin", label: "관리자", requiredRole: "admin" },
 ];
