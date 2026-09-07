@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { isLocalStoreEnabled } from "../local-store";
 import {
   TEAM_SCOPED_TABLES,
   canDemote,
@@ -20,7 +21,24 @@ import type { TeamCredit } from "./credit";
  * 전부 서버 권한으로 한다. `teams`·`team_members` 는 회원에게 권한을
  * 회수해 두었다 — 브라우저가 PostgREST 로 직접 긁으면 남의 팀 구성과 이름이
  * 그대로 새 나간다. 누가 부를 수 있는지는 부르는 쪽(서버 액션)이 정한다.
+ *
+ * ── 로컬 확인 모드에는 이 저장소가 없다 ─────────────────────────
+ *
+ * 로컬은 **Supabase 환경변수를 비워 두고** 돈다(`lib/dev-auth.ts`). 그러면
+ * `createSupabaseAdminClient()` 가 던진다.
+ *
+ * 셸(`studio-layout`)이 모든 화면에서 `myMembership()` 을 부르므로, 여기서
+ * 안 막으면 **로컬로 띄운 순간 라이브러리·카드뉴스·이미지가 전부 500** 이
+ * 된다. 팀과 아무 상관 없는 화면까지 못 쓰게 된다.
+ *
+ * 그래서 읽는 자리는 「팀 없음」으로 답하고, 쓰는 자리는 사람이 읽을 수 있는
+ * 말로 막는다. 조용히 성공한 척하면 로컬에서 팀을 만든 줄 알게 된다.
  */
+
+/** 로컬 확인 모드인가. 그때는 팀 저장소가 아예 없다. */
+function noTeamStore(): boolean {
+  return isLocalStoreEnabled();
+}
 
 const TEAM_COLUMNS = "id,name,monthly_quota,created_at";
 
@@ -39,6 +57,7 @@ interface TeamDbRow {
  * 팀마다 팀원을 따로 물으면 팀이 열이면 질의가 열한 번이다. 두 번으로 끝낸다.
  */
 export async function listTeams(): Promise<TeamWithMembers[]> {
+  if (noTeamStore()) return [];
   const admin = createSupabaseAdminClient();
 
   const { data: teamRows, error } = await admin
@@ -105,6 +124,7 @@ async function emailsOf(userIds: readonly string[]): Promise<Map<string, string>
  * 회원이 영영 팀에 못 들어간다.
  */
 export async function listUnassigned(): Promise<UnassignedRow[]> {
+  if (noTeamStore()) return [];
   const admin = createSupabaseAdminClient();
 
   const { data: assigned } = await admin.from("team_members").select("user_id");
@@ -131,6 +151,7 @@ export async function listUnassigned(): Promise<UnassignedRow[]> {
 export async function myMembership(
   userId: string,
 ): Promise<{ teamId: string; role: TeamRole } | null> {
+  if (noTeamStore()) return null;
   const { data } = await createSupabaseAdminClient()
     .from("team_members").select("team_id,role").eq("user_id", userId).maybeSingle();
   if (!data) return null;
@@ -157,6 +178,7 @@ export async function getTeam(teamId: string): Promise<TeamWithMembers | null> {
 
 /** 활성 회원 수. 배정률을 재는 분모다. */
 export async function countActiveMembers(): Promise<number> {
+  if (noTeamStore()) return 0;
   const admin = createSupabaseAdminClient();
   const { count } = await admin
     .from("profiles")
@@ -178,7 +200,7 @@ export async function countWorkFor(
   userIds: readonly string[],
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  if (!userIds.length) return counts;
+  if (noTeamStore() || !userIds.length) return counts;
 
   const admin = createSupabaseAdminClient();
   const ids = [...userIds];
@@ -200,6 +222,7 @@ export async function countWorkFor(
 /* ── 쓰기 ─────────────────────────────────────────────────────── */
 
 export async function createTeam(name: string, createdBy: string): Promise<string> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const problem = teamNameError(name);
   if (problem) throw new Error(problem);
 
@@ -213,6 +236,7 @@ export async function createTeam(name: string, createdBy: string): Promise<strin
 }
 
 export async function renameTeam(teamId: string, name: string): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const problem = teamNameError(name);
   if (problem) throw new Error(problem);
 
@@ -233,6 +257,7 @@ export async function renameTeam(teamId: string, name: string): Promise<void> {
  * 못 보고 팀장도 못 보는 것이 된다 — 아무도 못 보는 작업물을 만들지 않는다.
  */
 export async function archiveTeam(teamId: string): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const admin = createSupabaseAdminClient();
 
   const { data: members } = await admin
@@ -291,6 +316,7 @@ export async function assignMember(
   teamId: string,
   role: TeamRole = "member",
 ): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("team_members")
@@ -301,6 +327,7 @@ export async function assignMember(
 
 /** 팀에서 뺀다. 작업물은 개인 것으로 돌아간다. */
 export async function removeMember(userId: string): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const admin = createSupabaseAdminClient();
 
   const { data: current } = await admin
@@ -321,6 +348,7 @@ export async function removeMember(userId: string): Promise<void> {
 }
 
 export async function setMemberRole(userId: string, role: TeamRole): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const admin = createSupabaseAdminClient();
 
   const { data: current } = await admin
@@ -355,6 +383,7 @@ async function membersOf(teamId: string): Promise<Array<{ userId: string; role: 
  * 같은 규칙이라야 두 숫자가 안 갈린다.
  */
 export async function teamCredit(teamId: string): Promise<TeamCredit> {
+  if (noTeamStore()) return { quota: 0, members: [] };
   const admin = createSupabaseAdminClient();
 
   const [{ data: teamRow }, members] = await Promise.all([
@@ -426,6 +455,7 @@ function seoulPeriodStart(): string {
 
 /** 팀 한도를 정한다. 0 은 「안 정했다」로 남는다. */
 export async function setTeamQuota(teamId: string, quota: number): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const { error } = await createSupabaseAdminClient()
     .from("teams")
     .update({ monthly_quota: quota, updated_at: new Date().toISOString() })
@@ -435,6 +465,7 @@ export async function setTeamQuota(teamId: string, quota: number): Promise<void>
 
 /** 팀원 한 사람의 개인 상한. 팀 잔량 안에서의 천장이다. */
 export async function setPersonalQuota(userId: string, quota: number): Promise<void> {
+  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const { error } = await createSupabaseAdminClient()
     .from("profiles")
     .update({ monthly_quota: quota, updated_at: new Date().toISOString() })
