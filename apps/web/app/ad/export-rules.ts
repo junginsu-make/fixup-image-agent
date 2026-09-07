@@ -1,3 +1,4 @@
+import type { LibraryItem } from "@fixup/shared";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
 
 /**
@@ -134,4 +135,62 @@ export function safeAreaOverlayStyle(
     left: band.left,
     boxShadow: "0 0 0 9999px rgba(220, 38, 38, 0.18)",
   };
+}
+
+/**
+ * 이 화면에서 고를 수 있는 작업만 남긴다.
+ *
+ * `loadLibrary()` 는 네 종류를 합쳐서 준다 — 브라우저에만 있는 pdp 초안·리디자인
+ * 프로젝트, 계정 보관분, 스타일 참고. 그런데 `/api/ad/export` 는
+ * `getLibraryImageFile` 로 **`library_images` 표만** 읽는다.
+ *
+ * 그래서 브라우저 저장분은 **서버에 파일이 아예 없고**, 참고 이미지는 id 체계가
+ * 다르다. 걸러내지 않으면 사용자가 고를 수 있는데 누르면 「뽑지 못했습니다」만
+ * 뜬다 — 왜 안 되는지 알 길이 없다.
+ */
+export function exportableItems(items: LibraryItem[]): LibraryItem[] {
+  return items.filter((item) => item.storage === "account" && item.tool !== "reference");
+}
+
+/**
+ * ZIP 에 담을 것.
+ *
+ * **검증에 걸린 것은 빼고 담는다.** `batch.ts` 는 일부러 실패한 것도 바이트를
+ * 함께 주는데(사람이 그림을 보고 판단해야 하므로), 그것을 그대로 묶으면
+ * **포털이 반려할 파일이 정상 파일과 같은 이름으로 한 봉투에 들어간다.**
+ * 설계 §8 의 「실패를 조용히 넘기지 않는다」가 화면의 빨간 글씨까지만 지켜지고
+ * 내려받기에서 풀린다.
+ */
+export function downloadable<T extends { status: string; dataUrl?: string }>(results: T[]): T[] {
+  return results.filter((entry) => entry.status === "ok" && entry.dataUrl);
+}
+
+/** 뽑히긴 했지만 검증에 걸려 봉투에서 빠지는 것. 화면이 그 수를 알린다. */
+export function excludedCount<T extends { status: string; dataUrl?: string }>(results: T[]): number {
+  return results.filter((entry) => entry.status !== "ok" && entry.dataUrl).length;
+}
+
+/**
+ * 미리보기 한 칸의 최대 폭.
+ *
+ * **이 값이 「가독을 볼 수 있는가」를 정한다.**
+ *
+ * 설계 §5.2 는 「**실제 크기 비율로** 격자에 깔고」라고 적었다. 전부 같은 폭으로
+ * 그리면 214×214 가 **확대**되어 실제보다 잘 읽히게 보인다 — 「글자가 읽히는지
+ * 보세요」라고 적어 놓고 읽히는지 볼 수 없는 크기로 보여 주는 셈이다.
+ *
+ * 480 인 근거: **많이 줄인 규격이 1:1 로 들어가는 가장 작은 값**이다.
+ * 경고가 붙는 셋은 456×304 · 376×220 · 214×214 이고, 가장 넓은 456 이 여기
+ * 들어간다. 초판의 3열 격자는 칸이 약 306px 이라 456 이 축소돼 버렸다.
+ */
+export const PREVIEW_MAX_WIDTH = 480;
+
+/** 셀보다 작은 규격은 1:1 로, 큰 규격은 셀에 맞춘다. **늘리지는 않는다.** */
+export function previewWidth(target: { width: number }, cellWidth = PREVIEW_MAX_WIDTH): number {
+  return Math.min(target.width, cellWidth);
+}
+
+/** 1:1 로 보이는가. 아니면 「실제보다 작게 보임」을 알려야 한다. */
+export function isActualSize(target: { width: number }, cellWidth = PREVIEW_MAX_WIDTH): boolean {
+  return target.width <= cellWidth;
 }

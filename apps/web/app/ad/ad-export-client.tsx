@@ -8,7 +8,8 @@ import type { LibraryItem } from "@fixup/shared";
 import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
 import {
-  PORTAL_LABEL, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
+  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
+  downloadable, excludedCount, exportableItems, isActualSize, previewWidth,
   safeAreaOverlayStyle, specRows, zipEntryName,
 } from "./export-rules";
 
@@ -54,21 +55,35 @@ export function AdExportClient() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  /**
+   * **늦게 온 응답이 다른 그림의 결과로 붙는 것을 막는다.**
+   *
+   * 요청이 도는 중에 다른 썸네일을 누르면, 먼저 보낸 요청의 응답이 나중에 와서
+   * 새 선택 밑에 앉는다. 사용자는 B 를 뽑았다고 믿고 **A 의 ZIP 을 내려받는다** —
+   * 「미리보기가 진짜 관문」(설계 §5.2)이 정확히 여기서 깨진다.
+   */
+  const token = React.useRef(0);
+
   React.useEffect(() => {
-    void loadLibrary().then((loaded) => setItems(loaded));
+    // 이 화면에서 못 뽑는 작업은 아예 안 보여 준다 — 고를 수 있는데 누르면
+    // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
+    void loadLibrary().then((loaded) => setItems(exportableItems(loaded)));
   }, []);
 
   async function chooseItem(next: LibraryItem) {
+    const mine = (token.current += 1);
     setItem(next);
     setImages(null);
     setPosition(0);
     setResults(null);
     const loaded = await getAccountItemImages(next);
+    if (mine !== token.current) return;
     setImages(loaded?.images ?? []);
   }
 
   async function run() {
     if (!item) return;
+    const mine = (token.current += 1);
     setBusy(true);
     setError(null);
     setResults(null);
@@ -79,15 +94,16 @@ export function AdExportClient() {
         body: JSON.stringify({ itemId: item.id, position, specIds: picked }),
       });
       const body = await response.json().catch(() => null);
+      if (mine !== token.current) return;
       if (!response.ok || !body?.ok) {
         setError(body?.message ?? "뽑지 못했습니다.");
         return;
       }
       setResults(body.results as ResultEntry[]);
     } catch {
-      setError("서버에 닿지 못했습니다.");
+      if (mine === token.current) setError("서버에 닿지 못했습니다.");
     } finally {
-      setBusy(false);
+      if (mine === token.current) setBusy(false);
     }
   }
 
@@ -98,7 +114,9 @@ export function AdExportClient() {
    * `jszip` 은 이미 이 저장소에 있고 `ResultViewer.tsx` 가 같은 방식으로 쓴다.
    */
   async function download() {
-    const made = (results ?? []).filter((entry) => entry.dataUrl);
+    // **검증에 걸린 것은 안 담는다.** 담으면 포털이 반려할 파일이 정상 파일과
+    // 같은 이름으로 한 봉투에 들어간다(설계 §8).
+    const made = downloadable(results ?? []);
     if (!made.length) return;
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
@@ -115,7 +133,9 @@ export function AdExportClient() {
   }
 
   const supported = ROWS.filter((row) => row.supported);
-  const madeCount = (results ?? []).filter((entry) => entry.dataUrl).length;
+  const madeCount = downloadable(results ?? []).length;
+  const excluded = excludedCount(results ?? []);
+  const noImages = images !== null && images.length === 0;
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6 p-6">
@@ -142,6 +162,7 @@ export function AdExportClient() {
                 type="button"
                 size="sm"
                 variant={item?.id === entry.id ? "default" : "secondary"}
+                disabled={busy}
                 onClick={() => void chooseItem(entry)}
               >
                 {entry.title || "제목 없음"}
@@ -156,6 +177,8 @@ export function AdExportClient() {
               <button
                 key={image.image}
                 type="button"
+                disabled={busy}
+                aria-pressed={position === index}
                 onClick={() => { setPosition(index); setResults(null); }}
                 className={cn(
                   "h-20 w-20 overflow-hidden rounded border-2",
@@ -168,8 +191,10 @@ export function AdExportClient() {
             ))}
           </div>
         )}
-        {images && images.length === 0 && (
-          <p className="text-meta text-subtle-foreground">이 작업에는 이미지가 없습니다.</p>
+        {noImages && (
+          <p className="text-meta text-subtle-foreground">
+            이 작업에는 서버에 보관된 이미지가 없습니다. 다른 작업을 골라 주세요.
+          </p>
         )}
       </Card>
 
@@ -193,7 +218,7 @@ export function AdExportClient() {
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={!row.supported}
+                    disabled={!row.supported || busy}
                     onChange={() => {
                       setResults(null);
                       setPicked((current) => current.includes(row.spec.id)
@@ -220,7 +245,11 @@ export function AdExportClient() {
         )}
 
         <div className="flex items-center gap-2 pt-1">
-          <Button type="button" disabled={!item || !picked.length || busy} onClick={() => void run()}>
+          <Button
+            type="button"
+            disabled={!item || !picked.length || busy || noImages}
+            onClick={() => void run()}
+          >
             {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
             뽑아 보기
           </Button>
@@ -243,9 +272,18 @@ export function AdExportClient() {
             자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다.
           </p>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {/*
+            **실제 크기로 깐다**(설계 §5.2). 전부 같은 폭으로 그리면 214×214 가
+            확대되어 실제보다 잘 읽히게 보인다 — 「글자가 읽히는지 보세요」라고
+            적어 놓고 읽히는지 볼 수 없는 크기로 보여 주는 셈이다.
+          */}
+          <div className="flex flex-wrap items-start gap-4">
             {results.map((entry) => (
-              <figure key={entry.specId} className="grid gap-1">
+              <figure
+                key={entry.specId}
+                className="grid gap-1"
+                style={{ width: previewWidth(entry.target, PREVIEW_MAX_WIDTH) }}
+              >
                 <div className="relative overflow-hidden rounded border bg-muted">
                   {entry.dataUrl ? (
                     <>
@@ -271,6 +309,10 @@ export function AdExportClient() {
                     {entry.target.width}×{entry.target.height}
                     {entry.byteLength ? ` · ${Math.round(entry.byteLength / 1024)}KB` : ""}
                     {entry.quality ? ` · q${entry.quality}` : ""}
+                    {/* 1:1 이 아니면 그렇다고 말한다. 안 그러면 사람이 이 크기로
+                        읽히는지 판단해 버린다. */}
+                    {entry.dataUrl && !isActualSize(entry.target, PREVIEW_MAX_WIDTH)
+                      && " · 실제보다 작게 보임"}
                   </span>
                   {entry.shrink && entry.shrink > SHRINK_WARNING && (
                     <span className="flex items-center gap-1 text-destructive">
@@ -286,11 +328,16 @@ export function AdExportClient() {
             ))}
           </div>
 
-          <div>
+          <div className="flex items-center gap-2">
             <Button type="button" disabled={!madeCount} onClick={() => void download()}>
               <Download className="mr-1 h-4 w-4" />
               {madeCount}개 내려받기 (ZIP)
             </Button>
+            {excluded > 0 && (
+              <span className="text-meta text-destructive">
+                반려될 수 있는 {excluded}개는 봉투에서 뺐습니다
+              </span>
+            )}
           </div>
         </Card>
       )}

@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { AD_SPECS } from "../../../lib/ad/specs";
 import { planDerivation } from "../../../lib/ad/derive";
 import {
-  defaultSelection, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  SHRINK_WARNING,
+  defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
+  previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
+  PREVIEW_MAX_WIDTH, SHRINK_WARNING,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -154,5 +155,94 @@ describe("안전영역 띠가 실제로 그려지는가", () => {
       { top: 0, right: 0, bottom: 0, left: 0 }, { width: 100, height: 100 },
     );
     expect(none.top).toBe("0.00%");
+  });
+});
+
+describe("고를 수 있는 작업만 보여 준다", () => {
+  const base = { title: "t", createdAt: 0 };
+  const items = [
+    { ...base, id: "a", tool: "pdp" as const, storage: "account" as const },
+    { ...base, id: "b", tool: "pdp" as const, storage: "browser" as const },
+    { ...base, id: "c", tool: "reference" as const, storage: "account" as const },
+    { ...base, id: "d", tool: "redesign" as const, storage: "account" as const },
+  ];
+
+  /**
+   * `/api/ad/export` 는 `library_images` 표만 읽는다. 브라우저 저장분은 **서버에
+   * 파일이 아예 없고**, 참고 이미지는 id 체계가 다르다. 걸러내지 않으면
+   * 사용자가 고를 수 있는데 누르면 「뽑지 못했습니다」만 뜬다.
+   */
+  it("브라우저에만 있는 작업을 뺀다 — 서버에 파일이 없다", () => {
+    expect(exportableItems(items).map((item) => item.id)).not.toContain("b");
+  });
+
+  it("참고 이미지를 뺀다 — id 체계가 다르다", () => {
+    expect(exportableItems(items).map((item) => item.id)).not.toContain("c");
+  });
+
+  it("계정에 보관된 작업은 남긴다", () => {
+    expect(exportableItems(items).map((item) => item.id)).toEqual(["a", "d"]);
+  });
+});
+
+describe("ZIP 에 무엇을 담는가", () => {
+  const results = [
+    { specId: "ok-1", status: "ok", dataUrl: "data:image/jpeg;base64,AA" },
+    { specId: "fail-bytes", status: "failed", dataUrl: "data:image/jpeg;base64,BB" },
+    { specId: "fail-none", status: "failed" },
+  ];
+
+  /**
+   * `batch.ts` 는 **일부러** 검증 실패 시에도 바이트를 준다 — 사람이 그림을
+   * 보고 판단해야 하기 때문이다. 그것을 그대로 묶으면 **포털이 반려할 파일이
+   * 정상 파일과 같은 이름으로 한 봉투에 들어간다.**
+   */
+  it("검증에 걸린 것은 빼고 담는다", () => {
+    expect(downloadable(results).map((entry) => entry.specId)).toEqual(["ok-1"]);
+  });
+
+  it("빠진 것의 수를 셀 수 있다 — 화면이 그것을 알린다", () => {
+    expect(excludedCount(results)).toBe(1);
+  });
+
+  it("바이트가 아예 없는 것은 뺀 것으로 세지 않는다 — 애초에 안 만들어졌다", () => {
+    expect(excludedCount([{ specId: "x", status: "failed" }])).toBe(0);
+  });
+});
+
+describe("미리보기를 실제 크기로 보여 준다", () => {
+  const CELL = PREVIEW_MAX_WIDTH;
+
+  /**
+   * 전부 같은 폭으로 그리면 214×214 가 **1.43배 확대**되어 실제보다 잘 읽히게
+   * 보인다 — 「글자가 읽히는지 보세요」라고 적어 놓고 읽히는지 볼 수 없는
+   * 크기로 보여 주는 셈이다(설계 §5.2).
+   */
+  it("셀보다 작은 규격은 1:1 로 그린다", () => {
+    expect(previewWidth({ width: 214 }, CELL)).toBe(214);
+    expect(isActualSize({ width: 214 }, CELL)).toBe(true);
+  });
+
+  it("경고가 붙는 셋은 전부 1:1 로 보인다 — 그래야 경고가 뜻이 있다", () => {
+    for (const width of [456, 376, 214]) {
+      expect(isActualSize({ width }, CELL), `${width}`).toBe(true);
+    }
+  });
+
+  it("셀보다 큰 규격은 셀에 맞추고 1:1 이 아니라고 말한다", () => {
+    expect(previewWidth({ width: 1200 }, CELL)).toBe(CELL);
+    expect(isActualSize({ width: 1200 }, CELL)).toBe(false);
+  });
+
+  /**
+   * **상한이 이 셋보다 작으면 경고가 뜻을 잃는다.** 「많이 줄었으니 글자를
+   * 보세요」라고 해 놓고 그림을 또 줄여서 보여 주는 꼴이 된다.
+   */
+  it("상한이 경고 대상 중 가장 넓은 것보다 크다", () => {
+    expect(PREVIEW_MAX_WIDTH).toBeGreaterThanOrEqual(456);
+  });
+
+  it("작은 것을 늘리지 않는다", () => {
+    expect(previewWidth({ width: 100 }, CELL)).toBeLessThanOrEqual(100);
   });
 });
