@@ -24,6 +24,11 @@ function builderFor(table: string) {
       recorded.push({ table, column, value });
       return builder;
     },
+    or: (filter: string) => {
+      recorded.push({ table, column: "or", value: filter });
+      return builder;
+    },
+    maybeSingle: async () => ({ data: (tableRows[table] ?? [])[0] ?? null, error: null }),
     then: (resolve: (result: unknown) => unknown) =>
       Promise.resolve(resolve({ data: tableRows[table] ?? [], error: null })),
   };
@@ -59,6 +64,11 @@ function ownerConditionOn(table: string): unknown {
   return recorded.find((entry) => entry.table === table && entry.column === "user_id")?.value;
 }
 
+/** 이 표에 어떤 팀 조건이 붙었는가. 안 붙었으면 undefined. */
+function teamConditionOn(table: string): unknown {
+  return recorded.find((entry) => entry.table === table && entry.column === "or")?.value;
+}
+
 beforeEach(() => {
   recorded.length = 0;
   tableRows = {};
@@ -71,18 +81,30 @@ describe("작업물은 본인 것만", () => {
     expect(ownerConditionOn("library_items")).toBe("member-1");
   });
 
-  it("한 건을 열 때도 소유자 조건이 붙는다", async () => {
+  it("한 건을 열 때는 부모에 조건이 붙는다", async () => {
+    // **조건이 부모로 옮겨 갔다.** `library_images` 에는 `team_id` 가 없어서
+    // 팀에서 보이는지를 자식만 보고는 정할 수 없다. 부모를 먼저 확인하고
+    // 자식은 `item_id` 로만 읽는다 — 자식 표에도 칸을 달면 둘이 어긋난다.
+    tableRows.library_items = [{ id: "item-1" }];
     tableRows.library_images = [];
     await getLibraryItemImages(MEMBER, "item-1");
-    expect(ownerConditionOn("library_images")).toBe("member-1");
+    expect(ownerConditionOn("library_items")).toBe("member-1");
   });
 
-  it("남의 것을 열려 해도 조건이 남아 있어 빈 손으로 돌아온다", async () => {
-    // 소유자 조건은 그대로 붙는다. DB 가 남의 행을 안 준다는 뜻이다.
-    tableRows.library_images = [];
+  it("남의 것을 열려 하면 부모에서 막혀 그림을 안 읽는다", async () => {
+    // 부모가 안 보이면 자식 질의를 아예 안 던진다. 자식에 조건이 없으므로,
+    // 여기서 안 막으면 남의 item_id 하나로 남의 그림이 나간다.
+    tableRows.library_items = [];
     const images = await getLibraryItemImages(MEMBER, "someone-elses-item");
-    expect(ownerConditionOn("library_images")).toBe("member-1");
     expect(images).toEqual([]);
+    expect(recorded.some((entry) => entry.table === "library_images")).toBe(false);
+  });
+
+  it("팀에 있으면 같은 팀 것도 열린다", async () => {
+    tableRows.library_items = [{ id: "item-1" }];
+    tableRows.library_images = [];
+    await getLibraryItemImages({ ...MEMBER, teamId: "team-1" }, "item-1");
+    expect(teamConditionOn("library_items")).toBe("team_id.eq.team-1,user_id.eq.member-1");
   });
 });
 
@@ -93,10 +115,12 @@ describe("관리자는 작업물을 전부 본다", () => {
     expect(ownerConditionOn("library_items")).toBeUndefined();
   });
 
-  it("한 건을 열 때도 소유자 조건이 없다", async () => {
+  it("한 건을 열 때도 조건이 없다", async () => {
+    tableRows.library_items = [{ id: "item-1" }];
     tableRows.library_images = [];
     await getLibraryItemImages(ADMIN, "item-1");
-    expect(ownerConditionOn("library_images")).toBeUndefined();
+    expect(ownerConditionOn("library_items")).toBeUndefined();
+    expect(teamConditionOn("library_items")).toBeUndefined();
   });
 
   it("남의 것을 볼 때 누가 만들었는지 함께 준다", async () => {

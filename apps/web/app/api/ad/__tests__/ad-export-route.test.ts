@@ -57,6 +57,12 @@ vi.mock("../../../../lib/membership/api", () => ({
   },
 }));
 
+// 팀은 여기서 시험하는 것이 아니다. 소속 없는 사람으로 둔다 — 그러면
+// 소유자 판정이 지금까지와 같게 돈다.
+vi.mock("../../../../lib/teams/store", () => ({
+  teamIdOf: async () => null,
+}));
+
 vi.mock("../../../../lib/server-library", () => ({
   getLibraryImageFile: async (
     viewer: { userId: string; role: string }, itemId: string, position: number,
@@ -121,13 +127,15 @@ describe("들어올 수 있는 사람인가", () => {
 
   it("소유자 판정에 세션의 역할을 그대로 넘긴다", async () => {
     await call(good);
-    expect(viewers).toEqual([{ userId: "u1", role: "member" }]);
+    // 팀은 세션에서 꺼낸다. 본문에 실려 오지 않는다 — 실려 오면 남의 팀
+    // ID 를 적는 것으로 남의 그림을 뽑을 수 있다.
+    expect(viewers).toEqual([{ userId: "u1", role: "member", teamId: null }]);
   });
 
   it("관리자면 관리자로 넘긴다 — 역할을 지어내지 않는다", async () => {
     member = { userId: "admin-1", role: "admin" };
     await call(good);
-    expect(viewers).toEqual([{ userId: "admin-1", role: "admin" }]);
+    expect(viewers).toEqual([{ userId: "admin-1", role: "admin", teamId: null }]);
   });
 
   it("그림이 없으면 404 다", async () => {

@@ -6,6 +6,7 @@ import {
   type LibraryViewer,
 } from "../../../lib/server-library";
 import { authenticateApiMember } from "../../../lib/membership/api";
+import { teamIdOf } from "../../../lib/teams/store";
 import { originOf } from "./core";
 
 export const runtime = "nodejs";
@@ -30,15 +31,19 @@ const MAX_IMAGES = 20;
  * 무게가 다르다.
  */
 
-function viewerOf(member: { userId: string; profile: { role: LibraryViewer["role"] } }): LibraryViewer {
-  return { userId: member.userId, role: member.profile.role };
+async function viewerOf(
+  member: { userId: string; profile: { role: LibraryViewer["role"] } },
+): Promise<LibraryViewer> {
+  // 팀이 있으면 같은 팀 것이 함께 보인다. 팀이 없으면 `null` 이고 지금까지와
+  // 똑같이 자기 것만 보인다.
+  return { userId: member.userId, role: member.profile.role, teamId: await teamIdOf(member.userId) };
 }
 
 export async function GET(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
-  const viewer = viewerOf(auth.member);
+  const viewer = await viewerOf(auth.member);
   const itemId = new URL(req.url).searchParams.get("id");
 
   try {
@@ -109,7 +114,7 @@ export async function DELETE(req: Request) {
     const id = String(body.id || "");
     if (!id) return Response.json({ ok: false, message: "id 가 없습니다." }, { status: 400 });
 
-    const result = await deleteLibraryItem(viewerOf(auth.member), id);
+    const result = await deleteLibraryItem(await viewerOf(auth.member), id);
     return Response.json(result, { status: result.ok ? 200 : 500 });
   } catch (error) {
     return Response.json(

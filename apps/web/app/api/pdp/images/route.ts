@@ -20,6 +20,7 @@ import { loadCharacterView } from "../../../../lib/characters";
 import { resolveGeminiKey } from "../../../../lib/server-keys";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
+import { teamIdOf } from "../../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +54,8 @@ export async function POST(req: Request) {
           reservation.userId,
           body.characterId,
           pickAngleForSection(body.section?.layout_notes ?? ""),
+          // 팀원이 만든 캐릭터도 쓴다. 목록에 보이는데 못 쓰는 것이 없게.
+          await teamIdOf(reservation.userId),
         )
       : null;
 

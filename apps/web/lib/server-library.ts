@@ -1,9 +1,10 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { scopedRead, type ViewScope } from "./teams/scope";
 import { isLocalStoreEnabled } from "./local-store";
 import { encodeForStorage, makeThumbnail, sniffImageMime } from "./image-encoding";
 import { markAsAi } from "./watermark";
 import type { UserRole } from "./membership/types";
-import { ownerFilter, type ScopeAction } from "./access/core";
+import { hasFullScope, ownerFilter, type ScopeAction } from "./access/core";
 
 /**
  * 사용자별 서버 라이브러리.
@@ -31,6 +32,23 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60;
 export interface LibraryViewer {
   userId: string;
   role: UserRole;
+  /**
+   * 이 사람의 팀. 있으면 같은 팀 것이 함께 보인다.
+   *
+   * 없어도 되게 둔 것은, 팀을 모르는 자리에서 부르면 **개인으로 취급**되어
+   * 지금까지와 같게 동작하기 때문이다. 빠뜨렸을 때 남의 것이 보이는 쪽으로
+   * 틀리지 않는다.
+   */
+  teamId?: string | null;
+}
+
+/** 읽기 범위. 팀이 있으면 팀 것까지, 없으면 내 것만, 운영자는 전부. */
+function readScope(viewer: LibraryViewer): ViewScope {
+  return {
+    userId: viewer.userId,
+    teamId: viewer.teamId ?? null,
+    isAdmin: hasFullScope(viewer, "read"),
+  };
 }
 
 /**
@@ -260,13 +278,14 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   if (isLocalStoreEnabled()) return [];
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, "read");
-  let query = supabase
-    .from("library_items")
-    .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (owner) query = query.eq("user_id", owner);
+  const query = scopedRead(
+    supabase
+      .from("library_items")
+      .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
+      .order("created_at", { ascending: false })
+      .limit(200),
+    readScope(viewer),
+  );
 
   const { data, error } = await query;
   if (error || !data) return [];
@@ -291,11 +310,20 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
     : { data: [] };
 
   const urlByPath = toUrlMap(signed.data);
-  // 관리자만 남의 것을 본다. 회원 목록은 전부 자기 것이라 이메일을 붙일
-  // 이유가 없고, 붙이면 회원끼리 이메일이 보이는 길이 하나 생긴다.
-  const emails = owner
-    ? new Map<string, string>()
-    : await emailsByUserId(data.map((row: { user_id: string }) => row.user_id));
+  /**
+   * 누가 만들었는지는 **남의 것이 섞일 때만** 붙인다.
+   *
+   * 혼자면 목록이 전부 자기 것이라 붙일 이유가 없고, 붙이면 회원끼리 이메일이
+   * 보이는 길이 하나 생긴다.
+   *
+   * 팀에 있으면 붙인다. 팀 목록에는 남의 것이 섞이는데 누가 만든 건지 모르면
+   * 「이건 누구 작업이지」를 물으러 나가야 한다. 같은 팀 사람의 메일 주소는
+   * 팀 화면이 이미 명단으로 보여준다.
+   */
+  const scope = readScope(viewer);
+  const emails = scope.isAdmin || scope.teamId
+    ? await emailsByUserId(data.map((row: { user_id: string }) => row.user_id))
+    : new Map<string, string>();
 
   return data.map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -315,19 +343,35 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   }));
 }
 
+/**
+ * 이 작업물이 이 사람에게 보이는가.
+ *
+ * **자식 표는 부모를 통해 판정한다.** `library_images` 에는 `team_id` 가
+ * 없다 — 4단계에서 자식에 칸을 안 단 이유가 이것이다. 양쪽에 달면 둘이
+ * 어긋나는 날이 오고, 그때 어느 쪽이 맞는지 정할 근거가 없다.
+ *
+ * 그래서 자식을 읽기 전에 부모를 한 번 확인한다. 질의가 하나 늘지만,
+ * 「팀원의 것도 대충 보이게」 하는 어림짐작보다 낫다.
+ */
+async function canSeeItem(viewer: LibraryViewer, itemId: string): Promise<boolean> {
+  const { data } = await scopedRead(
+    createSupabaseAdminClient().from("library_items").select("id").eq("id", itemId),
+    readScope(viewer),
+  ).maybeSingle();
+  return Boolean(data);
+}
+
 /** 한 건의 이미지 전체. 서명 URL 이라 수명이 있다. */
 export async function getLibraryItemImages(viewer: LibraryViewer, itemId: string) {
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, "read");
-  let query = supabase
+  if (!(await canSeeItem(viewer, itemId))) return [];
+
+  const { data, error } = await supabase
     .from("library_images")
     .select("position,path,mime_type")
     .eq("item_id", itemId)
     .order("position", { ascending: true });
-  if (owner) query = query.eq("user_id", owner);
-
-  const { data, error } = await query;
   if (error || !data?.length) return [];
 
   const signed = await supabase.storage
@@ -366,15 +410,13 @@ export async function getLibraryImageFile(
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   const supabase = createSupabaseAdminClient();
 
-  const owner = libraryScope(viewer, "read");
-  let query = supabase
+  if (!(await canSeeItem(viewer, itemId))) return null;
+
+  const { data, error } = await supabase
     .from("library_images")
     .select("path")
     .eq("item_id", itemId)
     .eq("position", position);
-  if (owner) query = query.eq("user_id", owner);
-
-  const { data, error } = await query;
   const path = (data as Array<{ path?: string }> | null)?.[0]?.path;
   if (error || !path) return null;
 

@@ -14,6 +14,7 @@ import {
   CHARACTER_ANGLES, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, selectCharacterModel,
   type CharacterAngle,
 } from "@fixup/pdp-core";
+import { teamIdOf } from "../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,7 +70,7 @@ export async function GET() {
   try {
     return Response.json({
       ok: true,
-      characters: await listCharacters(auth.member.userId),
+      characters: await listCharacters(auth.member.userId, await teamIdOf(auth.member.userId)),
       candidateCount: DEFAULT_CANDIDATES,
       minCandidates: MIN_CANDIDATES,
       maxCandidates: MAX_CANDIDATES,

@@ -137,6 +137,17 @@ export async function myMembership(
   return { teamId: row.team_id, role: row.role };
 }
 
+/**
+ * 이 사람의 팀 ID. 읽기 범위를 만들 때 쓴다.
+ *
+ * 캐시를 안 씌운다. 요청 하나에 한 번씩만 부르는 자리들이라 값이 없고,
+ * React 의 `cache` 는 RSC 조건에서만 나와서 라우트 시험이 통째로 못 뜬다.
+ */
+export async function teamIdOf(userId: string): Promise<string | null> {
+  const mine = await myMembership(userId);
+  return mine?.teamId ?? null;
+}
+
 /** 한 팀만 읽는다. 팀장 화면이 쓴다 — 남의 팀 이름까지 내려보내지 않는다. */
 export async function getTeam(teamId: string): Promise<TeamWithMembers | null> {
   const teams = await listTeams();

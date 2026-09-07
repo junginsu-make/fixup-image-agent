@@ -3,6 +3,7 @@ import { buildSceneWithCharacterDirective, pickAngleForSection } from "@fixup/pd
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { loadCharacterView } from "../../../../lib/characters";
+import { teamIdOf } from "../../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -31,7 +32,12 @@ export async function POST(req: Request) {
     if (characterId) {
       const auth = await authenticateApiMember();
       if (!auth.ok) return auth.response;
-      const view = await loadCharacterView(auth.member.userId, characterId, pickAngleForSection(""));
+      const view = await loadCharacterView(
+        auth.member.userId,
+        characterId,
+        pickAngleForSection(""),
+        await teamIdOf(auth.member.userId),
+      );
       if (view) {
         character = {
           name: "character.png",
