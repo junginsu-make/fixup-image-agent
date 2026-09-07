@@ -46,10 +46,23 @@ function planReferences(
   const preserved = new Set(data.preservedIds ?? []);
   const people = new Set(data.personIds ?? []);
 
+  /**
+   * **거른 뒤에 번호를 매긴다.**
+   *
+   * 매기고 나서 거르면 번호에 구멍이 생긴다 — 첨부 하나를 라이브러리에서 지운
+   * 뒤 기획을 다시 돌리면, 기획은 `1. A … 3. C` 를 보는데 최종 프롬프트는
+   * `Image 1=A, Image 2=C` 를 쓴다. 기획이 「3번 그림」을 근거로 칸을 채우면
+   * 그 3번은 존재하지 않는다(2026-09-07 리뷰).
+   *
+   * 최종 프롬프트 쪽(`orderedAttachments`)이 거른 뒤 위치로 세므로 그쪽에 맞춘다.
+   */
   return order
-    .map((id, index) => {
+    .map((id) => {
       const entry = byId.get(id);
-      if (!entry) return null;
+      return entry ? { id, entry } : null;
+    })
+    .filter((row): row is { id: string; entry: { id: string; title?: string | null } } => row !== null)
+    .map(({ id, entry }, index) => {
       const role = people.has(id)
         ? "preserve_person"
         : preserved.has(id)
@@ -61,8 +74,7 @@ function planReferences(
         number: index + 1,
         roleLabel: ROLE_LABEL[role],
       };
-    })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    });
 }
 
 export async function POST(_request: Request, context: Context) {

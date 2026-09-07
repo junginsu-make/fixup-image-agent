@@ -1,5 +1,6 @@
 import { withIssueFallback } from "@fixup/shared";
 import { EMPTY_SLOTS, PosterSlotsSchema, TYPE_INTERACTIONS, type PosterSlots } from "./schemas";
+import { attachmentNumber } from "./attachment-order";
 
 /**
  * 슬롯을 채우는 기획.
@@ -51,7 +52,7 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
   const references = input.references.map((reference, index) => {
     const grammar = reference.grammar?.trim();
     // 번호는 화면·프롬프트와 같은 것을 쓴다. 셋이 각자 세면 어긋난다.
-    const number = reference.number ?? index + 1;
+    const number = reference.number ?? attachmentNumber(index);
     const role = reference.roleLabel ? ` [${reference.roleLabel}]` : "";
     return `  ${number}. ${reference.title}${role}${grammar ? ` — ${grammar}` : ""}`;
   });

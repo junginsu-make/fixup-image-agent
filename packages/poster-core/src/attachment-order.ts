@@ -89,3 +89,21 @@ export function nextPickOrder(
   if (!picked) return current.filter((entry) => entry !== id);
   return current.includes(id) ? [...current] : [...current, id];
 }
+
+/**
+ * 보낼 첨부를 고른다 — **보이는 것과 보내는 것을 같게.**
+ *
+ * 화면은 라이브러리 목록에 없는 id 를 지우고 번호를 다시 매긴다. 보내는 쪽이
+ * 안 지우면 그 뒤 번호가 전부 1씩 밀리고, 「①번을」이라고 쓴 지시가 본 적도
+ * 없는 그림을 가리킨다.
+ *
+ * 그런 id 가 생기는 길이 있다 — 여러 장을 올리다 중간에 실패하면 앞의 것에는
+ * 역할이 붙지만 목록 다시 읽기를 건너뛴다(2026-09-07 리뷰).
+ */
+export function visibleOrder(
+  order: readonly string[],
+  isPicked: (id: string) => boolean,
+  exists: (id: string) => boolean,
+): string[] {
+  return order.filter((id) => isPicked(id) && exists(id));
+}

@@ -9,6 +9,7 @@ import {
 import {
   LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
 } from "../../_components/library-picker";
+import { attachmentNumber } from "@fixup/poster-core";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
 
@@ -262,8 +263,8 @@ export function ReferencePicker({
           {picked.map((reference, index) => {
             const role = (roles[reference.id] ?? "style") as AttachmentRole;
             const title = reference.title ?? "참고 이미지";
-            // 화면 ①②③ 과 프롬프트 `Image N` 이 같은 번호를 쓴다.
-            const number = index + 1;
+            // 화면 ①②③ 과 프롬프트 `Image N` 이 **같은 함수**로 센다.
+            const number = attachmentNumber(index);
             return (
               <div key={reference.id} className="relative">
               <div

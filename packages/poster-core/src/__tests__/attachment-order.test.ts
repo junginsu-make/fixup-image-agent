@@ -239,3 +239,35 @@ describe("고른 차례를 손보는 규칙", () => {
     expect(before).toEqual(["a"]);
   });
 });
+
+describe("보이는 것과 보내는 것이 같다", () => {
+  it("목록에 없는 것은 안 보낸다", async () => {
+    /**
+     * **2026-09-07 리뷰에서 잡은 것.**
+     *
+     * 여러 장을 올리다 중간에 실패하면 앞의 것에 역할이 붙지만 목록 다시
+     * 읽기를 건너뛴다. 그러면 화면에는 안 보이는데 서버로는 가고, 뒤 번호가
+     * 전부 1씩 밀린다 — 「①번을」이라고 쓴 지시가 본 적도 없는 그림을 가리킨다.
+     */
+    const { visibleOrder } = await import("../attachment-order");
+    const inLibrary = new Set(["a", "c"]);
+    expect(
+      visibleOrder(["b", "a", "c"], () => true, (id) => inLibrary.has(id)),
+    ).toEqual(["a", "c"]);
+  });
+
+  it("역할이 풀린 것도 안 보낸다", async () => {
+    const { visibleOrder } = await import("../attachment-order");
+    const picked = new Set(["a"]);
+    expect(
+      visibleOrder(["a", "b"], (id) => picked.has(id), () => true),
+    ).toEqual(["a"]);
+  });
+
+  it("둘 다 만족하는 것만 남는다", async () => {
+    const { visibleOrder } = await import("../attachment-order");
+    expect(
+      visibleOrder(["a", "b", "c"], (id) => id !== "b", (id) => id !== "c"),
+    ).toEqual(["a"]);
+  });
+});

@@ -8,7 +8,9 @@ import {
   Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
 import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
-import { estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder } from "@fixup/poster-core";
+import {
+  estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder, visibleOrder,
+} from "@fixup/poster-core";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
@@ -66,8 +68,22 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     setPickOrder((current) => nextPickOrder(current, id, role !== "none"));
   }, []);
 
-  /** 고른 차례 그대로의 id 목록. 역할이 풀린 것은 뺀다. */
-  const orderedIds = pickOrder.filter((id) => (roles[id] ?? "none") !== "none");
+  /**
+   * 고른 차례 그대로의 id 목록.
+   *
+   * **보이는 것과 보내는 것을 같게 한다.** 화면은 `references` 에 없는 id 를
+   * 지우고 번호를 다시 매기는데, 여기서 안 지우면 그 뒤 번호가 전부 1씩 밀린다.
+   *
+   * 그런 id 가 생기는 길이 있다 — 여러 장을 올리다 중간에 실패하면 앞의 것에는
+   * 역할이 붙지만 목록 다시 읽기를 건너뛴다. 그러면 화면에는 안 보이는데
+   * 서버로는 가고, 「①번을」이라고 쓴 지시가 본 적도 없는 그림을 가리킨다
+   * (2026-09-07 리뷰).
+   */
+  const orderedIds = visibleOrder(
+    pickOrder,
+    (id) => (roles[id] ?? "none") !== "none",
+    (id) => references.some((entry) => entry.id === id),
+  );
   const [ratio, setRatio] = React.useState("2:3");
   /**
    * 광고 모드인가.

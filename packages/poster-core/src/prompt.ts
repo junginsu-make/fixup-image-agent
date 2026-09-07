@@ -4,6 +4,7 @@ import {
   type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
+import { attachmentNumber } from "./attachment-order";
 
 /**
  * 슬롯을 fal 프롬프트로 조립한다.
@@ -85,7 +86,7 @@ function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolea
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
   images.forEach((image, index) => {
-    const number = index + 1;
+    const number = attachmentNumber(index);
     if (image.kind === "preserved") {
       // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
       // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
