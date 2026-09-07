@@ -226,7 +226,7 @@ describe("배정이 설계 §6.2 와 같다", () => {
     "naver-gfa-thumb": { master: "ad-1x1", kind: "resize" },
     "naver-powerlink": { master: "ad-1x1", kind: "resize" },
     "naver-gfa-main": { master: "ad-2x1", kind: "crop" },
-    "naver-brand-pc": { master: "ad-191x1", kind: "crop" },
+    "naver-brand-pc": { master: "ad-3x2", kind: "resize" },
     "naver-brand-mobile": { master: "ad-191x1", kind: "crop" },
   };
 
@@ -240,9 +240,14 @@ describe("배정이 설계 §6.2 와 같다", () => {
     expect(actual).toEqual(expected);
   });
 
-  it("크롭은 셋뿐이고 나머지는 구도를 안 바꾼다", () => {
+  /**
+   * **셋에서 둘로 줄었다.** `ad-3x2` 마스터를 더해 `naver-brand-pc` 가
+   * 크롭에서 빠졌다 — 456×304 가 정확히 3:2 라 구도를 하나도 안 버린다
+   * (설계 `2026-09-07-ad-assembly-engine.md` §3.2).
+   */
+  it("크롭은 둘뿐이고 나머지는 구도를 안 바꾼다", () => {
     const crops = derivable.filter(({ plan }) => plan.kind === "crop").map(({ spec }) => spec.id);
-    expect(crops.sort()).toEqual(["naver-brand-mobile", "naver-brand-pc", "naver-gfa-main"]);
+    expect(crops.sort()).toEqual(["naver-brand-mobile", "naver-gfa-main"]);
   });
 
   /**
@@ -340,5 +345,56 @@ describe("필수와 선택을 가른다", () => {
     const official = AD_SPECS.filter((spec) => spec.portal !== "naver");
     expect(official.length).toBeGreaterThan(0);
     for (const spec of official) expect(spec.sourceKind, spec.id).toBe("official");
+  });
+});
+
+/**
+ * 3:2 마스터 (설계 `2026-09-07-ad-assembly-engine.md` §3.2).
+ *
+ * **필수 규격 하나가 21.5% 잘려 나가는 것을 두고 볼 수 없어서 넣었다.**
+ * 브랜드검색 PC 는 광고주 콘솔에 올려야 하는 필수 소재인데, 좌우가 잘리면
+ * 헤드라인 한쪽이 사라진다 — 실제로 「건강한 선택」이 「한 선택」으로 보였다.
+ */
+describe("3:2 마스터", () => {
+  const brandPc = AD_SPECS.find((spec) => spec.id === "naver-brand-pc")!;
+
+  it("브랜드검색 PC 는 456×304 = 정확히 3:2 다", () => {
+    expect(brandPc.target.width / brandPc.target.height).toBeCloseTo(1.5, 5);
+  });
+
+  /** 크롭이 아니라 리사이즈다 — **구도를 하나도 안 버린다.** */
+  it("구도를 100% 남긴다", () => {
+    const plan = planDerivation(brandPc);
+    expect(plan.kind).toBe("resize");
+    expect((plan as { master: string }).master).toBe("ad-3x2");
+  });
+
+  /** 확대는 금지다(설계 §3.2). 마스터가 목표보다 커야 한다. */
+  it("확대하지 않는다", () => {
+    const master = AD_MASTERS.find((entry) => entry.id === "ad-3x2")!;
+    expect(master.width).toBeGreaterThanOrEqual(brandPc.target.width);
+    expect(master.height).toBeGreaterThanOrEqual(brandPc.target.height);
+  });
+
+  /**
+   * **다른 규격을 끌고 가지 않는다.** 마스터를 더하면 `planDerivation` 이
+   * 「가장 많이 남기는 것」을 다시 고르므로, 엉뚱한 규격이 이쪽으로 옮겨올 수
+   * 있다. 위 「모든 파생 규격의 마스터와 방법」 시험이 그것을 통째로 잠그지만,
+   * 이 마스터를 쓰는 규격이 하나뿐이라는 것을 여기서 한 번 더 못 박는다.
+   */
+  it("이 마스터를 쓰는 규격은 하나뿐이다", () => {
+    const users = AD_SPECS
+      .filter((spec) => (planDerivation(spec) as { master?: string }).master === "ad-3x2")
+      .map((spec) => spec.id);
+    expect(users).toEqual(["naver-brand-pc"]);
+  });
+
+  /** 16의 배수·최소 픽셀·3:1 — 모델이 그대로 만들 수 있는 값이어야 한다. */
+  it("모델이 그대로 만들 수 있는 픽셀이다", () => {
+    const master = AD_MASTERS.find((entry) => entry.id === "ad-3x2")!;
+    expect(master.width % 16, "16의 배수").toBe(0);
+    expect(master.height % 16, "16의 배수").toBe(0);
+    expect(master.width * master.height, "최소 픽셀").toBeGreaterThanOrEqual(655_360);
+    expect(master.width / master.height, "3:1 이하").toBeLessThanOrEqual(3);
   });
 });

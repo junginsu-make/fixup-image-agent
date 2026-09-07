@@ -380,15 +380,15 @@ describe("잘라 만드는 규격도 뽑을 수 있다", () => {
    * 이라, 빠지면 **필수 둘이 회색으로 죽고 기본 선택에서 조용히 사라진다.**
    * 그래서 규격 하나를 이름으로 짚어 못 박는다.
    */
-  it("브랜드검색 PC 썸네일은 잘라서라도 뽑는다", () => {
-    const row = rows.find((r) => r.spec.id === "naver-brand-pc")!;
+  it("브랜드검색 모바일 썸네일은 잘라서라도 뽑는다", () => {
+    const row = rows.find((r) => r.spec.id === "naver-brand-mobile")!;
     expect(planDerivation(row.spec).kind, "이 시험의 전제").toBe("crop");
     expect(row.supported).toBe(true);
     expect(row.unsupportedReason).toBeUndefined();
   });
 
   it("잘라 만드는 필수 규격이 기본 선택에 들어간다", () => {
-    expect(defaultSelection(rows)).toContain("naver-brand-pc");
+    expect(defaultSelection(rows)).toContain("naver-brand-mobile");
   });
 });
 
@@ -602,11 +602,20 @@ describe("잘라서 만든 규격을 말한다", () => {
    * 적었는데, 보여 주기만 하고 **무엇을 보라고는 안 했다.**
    */
   it("잘라 만든 규격이면 그렇다고 한다", () => {
-    expect(cropNotice("naver-brand-pc", planDerivation)).toMatch(/잘랐습니다/);
+    expect(cropNotice("naver-brand-mobile", planDerivation)).toMatch(/잘랐습니다/);
   });
 
   it("그대로 줄인 규격에는 안 붙인다", () => {
     expect(cropNotice("google-rda-landscape", planDerivation)).toBeUndefined();
+  });
+
+  /**
+   * **`ad-3x2` 마스터가 생기면서 브랜드검색 PC 가 여기서 빠졌다.**
+   * 456×304 가 정확히 3:2 라 이제 구도를 하나도 안 버린다
+   * (설계 `2026-09-07-ad-assembly-engine.md` §3.2).
+   */
+  it("브랜드검색 PC 는 이제 안 잘린다", () => {
+    expect(cropNotice("naver-brand-pc", planDerivation)).toBeUndefined();
   });
 
   it("모르는 규격에는 안 붙인다", () => {
