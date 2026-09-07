@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { canSeeReference, referenceVisibility } from "./teams/reference-scope";
 import { canSeeOwnerEmails, canTouch } from "./access/core";
 import {
   getLocalDatabase,
@@ -56,6 +57,15 @@ export interface ReferenceImageView extends ReferenceImageRow {
 export interface ReferenceViewer {
   userId: string;
   role: UserRole;
+  /** 이 사람의 팀. 없으면 개인이다. */
+  teamId?: string | null;
+  /**
+   * 이 회사에 살아 있는 팀이 있나.
+   *
+   * 없으면 **지금까지와 똑같이 전원 공용**이다. 안 넘기면 없는 것으로 보므로,
+   * 빠뜨렸을 때 남의 것이 감춰지는 쪽이 아니라 지금과 같은 쪽으로 떨어진다.
+   */
+  anyTeamExists?: boolean;
 }
 
 /**
@@ -112,11 +122,14 @@ export function localFileUrl(id: string): string {
 }
 
 /**
- * 창고에 있는 그림 전부.
+ * 창고에 있는 그림.
  *
- * **소유자로 거르지 않는다.** 서명 URL 도 admin 클라이언트가 발급하므로
- * Storage 정책의 `{user_id}/...` 규칙에 걸리지 않는다 — 그 규칙은 회원이
- * 브라우저에서 직접 읽을 때만 선다.
+ * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 팀을 안 쓰는 회사와
+ * 운영자는 전부, 팀원은 같은 팀 것과 내 것, 소속 없는 사람은 내 것만이다.
+ *
+ * 서버 권한으로 읽으므로 **RLS 가 여기를 안 막는다.** 이 필터가 유일한
+ * 문지기다 — 서명 URL 도 admin 클라이언트가 발급해 Storage 정책의
+ * `{user_id}/...` 규칙에 안 걸린다.
  *
  * 400장 상한은 그대로 둔다. 공용이 되면서 한 사람이 보던 수보다 훨씬 빨리
  * 찰 것이므로, 넘치면 최신 것부터 잘린다. 검색이나 쪽 나누기는 화면 쪽에서
@@ -135,15 +148,35 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
     }));
   }
 
+  const visibility = referenceVisibility({
+    userId: viewer.userId,
+    teamId: viewer.teamId ?? null,
+    anyTeamExists: viewer.anyTeamExists ?? false,
+    isAdmin: canSeeOwnerEmails(viewer),
+  });
+
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("reference_images")
-    .select("id,user_id,storage_path,thumb_path,title,purpose,width,height,created_at")
+    .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height,created_at")
     .order("created_at", { ascending: false })
     .limit(400);
+  // 400장 상한에 걸리기 전에 거른다. 뽑아 놓고 코드에서 버리면, 남의 팀 것이
+  // 상한을 다 차지해 내 것이 잘려 나갈 수 있다.
+  if (visibility.kind === "team") {
+    query = query.or(`team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`);
+  } else if (visibility.kind === "own") {
+    query = query.eq("user_id", visibility.userId);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  const rows = (data ?? []) as ReferenceImageDbRow[];
+  const rows = ((data ?? []) as Array<ReferenceImageDbRow & { team_id: string | null }>).filter(
+    // 질의와 같은 규칙을 한 번 더 본다. 조건을 빠뜨린 채로 배포되면 남의
+    // 본보기가 조용히 새 나가는데, 그건 화면에서 티가 안 난다.
+    (row) => canSeeReference(visibility, { userId: row.user_id, teamId: row.team_id }),
+  );
   if (!rows.length) return [];
 
   /**

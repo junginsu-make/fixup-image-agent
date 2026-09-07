@@ -155,6 +155,20 @@ export async function getTeam(teamId: string): Promise<TeamWithMembers | null> {
   return teams.find((team) => team.id === teamId) ?? null;
 }
 
+/**
+ * 이 회사가 팀을 쓰기 시작했나.
+ *
+ * 참고 이미지를 좁힐지가 여기서 갈린다. 팀이 하나도 없으면 좁힐 이유가
+ * 없다 — 나눌 상대가 없는데 나누면 잃기만 한다.
+ */
+export async function anyTeamExists(): Promise<boolean> {
+  const { count } = await createSupabaseAdminClient()
+    .from("teams")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null);
+  return (count ?? 0) > 0;
+}
+
 /** 활성 회원 수. 배정률을 재는 분모다. */
 export async function countActiveMembers(): Promise<number> {
   const admin = createSupabaseAdminClient();

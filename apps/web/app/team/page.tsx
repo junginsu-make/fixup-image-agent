@@ -125,7 +125,25 @@ export default async function TeamPage({
               className="h-9 w-48"
               aria-label="새 팀 이름"
             />
-            <Button type="submit" size="sm">팀 만들기</Button>
+            <ConfirmSubmitButton
+              // **첫 팀을 만들면 그날 참고 이미지가 나뉜다.** 지금은 회원
+              // 전원이 서로의 본보기를 보는데, 팀이 하나라도 생기면 같은 팀
+              // 것만 보인다. 조용히 좁히면 고장 신고가 들어온다.
+              confirmMessage={
+                allTeams.length === 0
+                  ? [
+                      "첫 팀을 만듭니다.",
+                      "",
+                      "지금은 회원 전원이 서로의 참고 이미지를 볼 수 있지만, 팀을 만든 뒤에는 같은 팀 것만 보입니다. 팀에 배정되지 않은 사람은 자기 것만 보게 됩니다.",
+                      "",
+                      "회원들에게 미리 알리셨나요?",
+                    ].join("\n")
+                  : "새 팀을 만듭니다. 계속할까요?"
+              }
+              pendingLabel="만드는 중..."
+            >
+              팀 만들기
+            </ConfirmSubmitButton>
           </form>
         ) : null}
       </header>
