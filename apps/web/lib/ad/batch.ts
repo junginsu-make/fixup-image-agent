@@ -1,6 +1,7 @@
 // 스위치는 잎 모듈에 있다 — 그것만 읽으려고 sharp 를 끌고 오면 안 된다.
 export { isAdExportEnabled } from "./feature";
-import { assembleBanner } from "./assemble";
+import { assembleBanner, type AssembledBanner } from "./assemble";
+import { isTooSmall } from "./layout-rules";
 import { checkAgainstSpec } from "./check";
 import { planDerivation } from "./derive";
 import { exportForAd } from "./export";
@@ -65,6 +66,18 @@ export interface AdBatchEntry {
    * 전부 통과하고 나간다(설계 §5.2). 화면이 「많이 줄었음」을 표시할 수 있어야 한다.
    */
   shrink?: number;
+  /**
+   * 오브젝트가 캔버스 폭의 15% 미만인가 — **조립 규격에만 붙는다.**
+   *
+   * 세로로 긴 피사체(사람 전신, 병, 튜브형 제품)를 가로로 긴 배너에 놓으면
+   * 폭 5~13% 까지 쪼그라든다. 1029px 배너에 62px 짜리 조각 하나면 **빈 배너에
+   * 점 하나**인데, 픽셀·형식·알파·용량이 전부 맞아 `checkAgainstSpec` 을
+   * **통과한다**(설계 §5.4② · §6.2).
+   *
+   * **막지 않고 알린다.** 늘이면 찌그러지고 자르면 얼굴이 잘린다 — 둘 다 광고로
+   * 못 쓴다. 사람이 보고 다른 마스터를 고르는 편이 낫다.
+   */
+  tooSmall?: boolean;
 }
 
 
@@ -158,6 +171,8 @@ export async function exportBatch(
         failures: check.failures,
         bytes,
         byteLength: bytes.length,
+        // **막지 않고 알린다.** 규격 검증은 이것을 통과시킨다(§5.4②).
+        ...(isTooSmall(spec.target, assembled.placement) ? { tooSmall: true } : {}),
       });
       continue;
     }
@@ -225,14 +240,14 @@ async function assembleFor(
   master: Buffer,
   options: ExportBatchOptions,
   cache: { object?: Buffer },
-): Promise<{ bytes: Buffer } | { failed: string }> {
+): Promise<AssembledBanner | { failed: string }> {
   if (!options.cutout) {
     return { failed: "투명 배경을 만들 준비가 안 됐습니다." };
   }
   try {
     // 마스터당 한 번. 두 번째 규격부터는 같은 오브젝트를 쓴다.
     cache.object ??= await options.cutout(master);
-    return { bytes: await assembleBanner(spec.target, cache.object) };
+    return await assembleBanner(spec.target, cache.object);
   } catch (error) {
     return { failed: error instanceof Error ? error.message : "투명 배너를 만들지 못했습니다." };
   }

@@ -26,7 +26,10 @@ let batchThrows: Error | null = null;
 const authCalls: number[] = [];
 const viewers: Array<{ userId: string; role: string }> = [];
 const fileArgs: Array<{ itemId: string; position: number }> = [];
-const batchArgs: Array<{ specIds: string[] }> = [];
+const batchArgs: Array<{
+  specIds: string[];
+  options?: { cutout?: (master: Buffer) => Promise<Buffer>; finish?: (bytes: Buffer) => Promise<Buffer> };
+}> = [];
 const posterOwners: string[] = [];
 const scopes: string[] = [];
 /** 무엇이 먼저 일어났는가. cutout 이 slot 보다 앞이어야 한다. */
@@ -43,8 +46,11 @@ vi.mock("../../../../lib/ad/batch", async () => {
   return {
     ...real,
     isAdExportEnabled: () => enabled,
-    exportBatch: async (_master: Buffer, specIds: string[]) => {
-      batchArgs.push({ specIds });
+    exportBatch: async (_master: Buffer, specIds: string[], options?: {
+      cutout?: (master: Buffer) => Promise<Buffer>;
+      finish?: (bytes: Buffer) => Promise<Buffer>;
+    }) => {
+      batchArgs.push({ specIds, options });
       if (batchThrows) throw batchThrows;
       return [{
         specId: specIds[0]!, label: "시험", portal: "google" as const, product: "p",
@@ -230,7 +236,7 @@ describe("자원을 지킨다", () => {
 describe("제대로 뽑는다", () => {
   it("고른 것을 그대로 넘긴다", async () => {
     await call({ ...good, specIds: ["google-rda-square", "naver-gfa-thumb"] });
-    expect(batchArgs).toEqual([{ specIds: ["google-rda-square", "naver-gfa-thumb"] }]);
+    expect(batchArgs.map((call) => call.specIds)).toEqual([["google-rda-square", "naver-gfa-thumb"]]);
     expect(fileArgs).toEqual([{ itemId: "item-1", position: 0 }]);
   });
 
@@ -285,7 +291,7 @@ describe("포스터 작업에서 뽑는다", () => {
   it("포스터 그림을 읽어 뽑는다", async () => {
     const response = await call(posterCall);
     expect(response.status).toBe(200);
-    expect(batchArgs).toEqual([{ specIds: ["google-rda-square"] }]);
+    expect(batchArgs.map((call) => call.specIds)).toEqual([["google-rda-square"]]);
   });
 
   /**
@@ -375,5 +381,40 @@ describe("배경 제거와 CPU 자리", () => {
     const response = await call({ ...good, specIds: ["google-rda-square", "kakao-bizboard"] });
     expect(response.status).toBe(200);
     expect(order).toContain("slot");
+  });
+});
+
+describe("지워 둔 오브젝트를 실제로 넘긴다", () => {
+  /**
+   * **이 줄을 지워도 저장소 전체 시험이 초록이었다.** 그 상태의 운영 결과는
+   * 필수 규격 둘이 「투명 배경을 만들 준비가 안 됐습니다」로 전부 실패 —
+   * **4단계 기능이 통째로 죽은 채 CI 가 초록이다.**
+   *
+   * 순서(cutout → slot)는 잠겨 있었는데 **전달**이 안 잠겨 있었다. 판단을 잘
+   * 뽑아 놓고 그것을 부르는 줄을 안 잠그는 일이 이 프로젝트에서 **다섯 번**
+   * 반복됐다.
+   */
+  it("조립 규격을 고르면 오브젝트를 넘긴다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    expect(passed, "cutout 을 안 넘기면 조립 규격이 전부 실패한다").toBeDefined();
+    const bytes = await passed!(Buffer.from("master"));
+    expect(bytes.toString(), "지워 둔 바이트가 그대로 와야 한다").toBe("cut");
+  });
+
+  /** 파생만 고르면 안 넘긴다 — 넘기면 batch 가 헛되이 부를 수 있다. */
+  it("파생 규격만 고르면 안 넘긴다", async () => {
+    await call({ ...good, specIds: ["google-rda-square"] });
+    expect(batchArgs[0]!.options?.cutout).toBeUndefined();
+  });
+
+  /** 실패했으면 사유를 들고 있다가 그 규격만 실패로 남긴다. */
+  it("배경 제거가 실패하면 그 사유를 넘긴다", async () => {
+    cutoutThrows = new Error("fal 이 응답하지 않습니다.");
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    expect(passed).toBeDefined();
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow(/응답하지/);
   });
 });

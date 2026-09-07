@@ -576,6 +576,19 @@ export function AdExportClient() {
                       {entry.shrink}배 줄임 — 글자가 읽히는지 보세요
                     </span>
                   )}
+                  {/*
+                    **「빈 배너에 점 하나」를 알린다**(설계 §5.4②).
+                    세로로 긴 피사체를 가로로 긴 배너에 놓으면 폭이 6% 까지
+                    쪼그라드는데, 픽셀·형식·용량이 전부 맞아 **규격 검증을
+                    통과한다.** 막지 않고 알린다 — 늘이면 찌그러지고 자르면
+                    얼굴이 잘린다.
+                  */}
+                  {entry.tooSmall && (
+                    <span className="flex items-center gap-1 text-destructive">
+                      <AlertTriangle className="h-3 w-3" />
+                      그림이 너무 작게 들어갔습니다 — 다른 그림을 골라 보세요
+                    </span>
+                  )}
                   {entry.status === "failed" && (
                     <span className="text-destructive">{entry.reason}</span>
                   )}

@@ -27,7 +27,7 @@ const BIZBOARD = { width: 1029, height: 258 };
 
 describe("투명 배너 조립", () => {
   it("정확한 픽셀로 나온다", async () => {
-    const png = await assembleBanner(BIZBOARD, await makeObject(800, 800));
+    const { bytes: png } = await assembleBanner(BIZBOARD, await makeObject(800, 800));
     const meta = await sharp(png).metadata();
     expect(meta.width).toBe(1029);
     expect(meta.height).toBe(258);
@@ -36,7 +36,7 @@ describe("투명 배너 조립", () => {
 
   /** **모델이 못 만드는 비율이다.** 3.99:1 은 `gpt-image-2` 의 3:1 상한을 넘는다. */
   it("3:1 을 넘는 비율을 만든다", async () => {
-    const meta = await sharp(await assembleBanner(BIZBOARD, await makeObject(800, 800))).metadata();
+    const meta = await sharp((await assembleBanner(BIZBOARD, await makeObject(800, 800))).bytes).metadata();
     expect(meta.width! / meta.height!).toBeGreaterThan(3);
   });
 
@@ -45,14 +45,14 @@ describe("투명 배너 조립", () => {
    * 불투명하다 — 3단계 `check.ts` 가 같은 판단을 한다.
    */
   it("진짜 투명하다 — 알파가 0 인 픽셀이 있다", async () => {
-    const png = await assembleBanner(BIZBOARD, await makeObject(400, 400));
+    const { bytes: png } = await assembleBanner(BIZBOARD, await makeObject(400, 400));
     const stats = await sharp(png).stats();
     expect(stats.channels).toHaveLength(4);
     expect(stats.channels[3]!.min).toBe(0);
   });
 
   it("왼쪽은 비워 둔다 — 광고주가 글자를 얹을 자리다", async () => {
-    const png = await assembleBanner(BIZBOARD, await makeObject(400, 400));
+    const { bytes: png } = await assembleBanner(BIZBOARD, await makeObject(400, 400));
     const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     // 왼쪽 위 모서리의 알파
     const alphaAt = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3]!;
@@ -61,7 +61,7 @@ describe("투명 배너 조립", () => {
   });
 
   it("오브젝트가 실제로 얹혔다 — 오른쪽에 불투명 픽셀이 있다", async () => {
-    const png = await assembleBanner(BIZBOARD, await makeObject(400, 400));
+    const { bytes: png } = await assembleBanner(BIZBOARD, await makeObject(400, 400));
     const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     const alphaAt = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3]!;
     expect(alphaAt(info.width - 100, Math.round(info.height / 2))).toBeGreaterThan(200);
@@ -78,20 +78,55 @@ describe("투명 배너 조립", () => {
   });
 
   it("스마트채널 4.69:1 도 만든다", async () => {
-    const meta = await sharp(await assembleBanner({ width: 750, height: 160 }, await makeObject(600, 600))).metadata();
+    const meta = await sharp((await assembleBanner({ width: 750, height: 160 }, await makeObject(600, 600))).bytes).metadata();
     expect(meta.width).toBe(750);
     expect(meta.height).toBe(160);
   });
 
   /** 세로로 긴 오브젝트도 캔버스 밖으로 안 나간다 — 배치 규칙이 보증한다. */
   it("세로로 긴 오브젝트를 얹어도 안 넘친다", async () => {
-    const png = await assembleBanner(BIZBOARD, await makeObject(422, 899));
+    const { bytes: png } = await assembleBanner(BIZBOARD, await makeObject(422, 899));
     const meta = await sharp(png).metadata();
     expect(meta.width).toBe(1029);
   });
 
   it("가로로 아주 긴 오브젝트도 안 넘친다", async () => {
-    const png = await assembleBanner(BIZBOARD, await makeObject(4500, 1000));
+    const { bytes: png } = await assembleBanner(BIZBOARD, await makeObject(4500, 1000));
     expect((await sharp(png).metadata()).width).toBe(1029);
+  });
+});
+
+describe("여백을 잘라 실제 피사체로 잰다", () => {
+  /**
+   * **`trim` 이 없으면 오브젝트가 엉뚱하게 작아진다.**
+   *
+   * 배경 제거 결과는 **항상 여백이 있다**(실측: 1600×800 → trim 후 1234×800).
+   * 안 자르면 투명 여백까지 크기로 세어, 실제 피사체가 캔버스의 몇 % 인지가
+   * 달라진다 — 그리고 그 값이 「너무 작다」 판정의 입력이다.
+   *
+   * 여백 없는 직사각형만으로 시험하면 `trim` 이 no-op 이라 **지워도 안 잡힌다.**
+   */
+  it("여백이 큰 오브젝트도 제 크기로 놓인다", async () => {
+    const subject = await sharp({
+      create: { width: 400, height: 400, channels: 4, background: { r: 200, g: 80, b: 40, alpha: 1 } },
+    }).png().toBuffer();
+    // 2048×1072 캔버스 안에 400×400 피사체 — 나머지는 투명 여백
+    const padded = await sharp({
+      create: { width: 2048, height: 1072, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).composite([{ input: subject, left: 800, top: 300 }]).png().toBuffer();
+
+    const { placement } = await assembleBanner(BIZBOARD, padded);
+    // 정사각 피사체이므로 높이에 맞춰 237×237 근처가 되어야 한다.
+    // trim 이 없으면 2048×1072(1.91:1)로 재서 폭이 훨씬 넓어진다.
+    expect(placement.width / placement.height).toBeCloseTo(1, 1);
+    expect(placement.width).toBeLessThan(300);
+  });
+
+  it("배치 정보를 함께 돌려준다 — 부르는 쪽이 「너무 작다」를 판단한다", async () => {
+    const { placement } = await assembleBanner(BIZBOARD, await makeObject(400, 400));
+    for (const value of [placement.left, placement.top, placement.width, placement.height]) {
+      expect(Number.isInteger(value)).toBe(true);
+    }
+    expect(placement.left + placement.width).toBeLessThanOrEqual(BIZBOARD.width);
   });
 });

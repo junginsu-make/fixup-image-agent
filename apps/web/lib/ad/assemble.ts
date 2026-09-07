@@ -1,4 +1,4 @@
-import { objectPlacement, type Box } from "./layout-rules";
+import { objectPlacement, type Box, type Placement } from "./layout-rules";
 
 /**
  * 투명 캔버스에 오브젝트를 얹어 배너를 만든다.
@@ -42,7 +42,18 @@ async function hasVisiblePixels(
  * 오브젝트를 오른쪽에 세로 가운데로 놓고 왼쪽을 비운다 — 광고주가 글자를 얹을
  * 자리다. 어디에 얼마나 크게 놓을지는 `layout-rules.ts` 가 정한다(순수 함수).
  */
-export async function assembleBanner(canvas: Box, object: Buffer): Promise<Buffer> {
+export interface AssembledBanner {
+  bytes: Buffer;
+  /**
+   * 오브젝트를 어디에 얼마나 크게 놓았는가.
+   *
+   * **부르는 쪽이 이것으로 「너무 작다」를 판단한다**(설계 §5.4②). 안 돌려주면
+   * `isTooSmall` 을 부를 자리가 없어 **폭 6% 짜리 조각이 「검증 통과」로 나간다.**
+   */
+  placement: Placement;
+}
+
+export async function assembleBanner(canvas: Box, object: Buffer): Promise<AssembledBanner> {
   // sharp 를 여기서만 부르려고 동적으로 들인다 — `batch.ts` 가 쓰는 방식이다.
   // @ts-expect-error sharp 0.35.0 의 꾸러미 메타데이터가 선언을 가린다.
   const { default: sharp } = await import("sharp");
@@ -61,7 +72,7 @@ export async function assembleBanner(canvas: Box, object: Buffer): Promise<Buffe
     .png()
     .toBuffer();
 
-  return sharp({
+  const bytes = await sharp({
     create: {
       width: canvas.width,
       height: canvas.height,
@@ -73,4 +84,6 @@ export async function assembleBanner(canvas: Box, object: Buffer): Promise<Buffe
     .composite([{ input: scaled, left: place.left, top: place.top }])
     .png()
     .toBuffer();
+
+  return { bytes, placement: place };
 }

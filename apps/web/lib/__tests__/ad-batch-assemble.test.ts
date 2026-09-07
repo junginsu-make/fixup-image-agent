@@ -81,3 +81,92 @@ describe("조립 규격 뽑기", () => {
     expect(cutout_).not.toHaveBeenCalled();
   });
 });
+
+describe("너무 작아진 오브젝트를 알린다", () => {
+  /**
+   * **이것이 없으면 「빈 배너에 점 하나」가 「검증 통과」로 나간다.**
+   *
+   * 9:16 마스터의 전신 피사체를 비즈보드(3.99:1)에 놓으면 폭 6% 다 — 1029px
+   * 배너에 62px 짜리 조각 하나가 오른쪽 끝에 붙는다. 그런데 픽셀·형식·알파·
+   * 용량이 전부 맞아 `checkAgainstSpec` 을 **통과한다.**
+   *
+   * 파생 갈래에는 대응물이 있다 — `export.ts:75` 가 **받은 바이트**로 확대
+   * 금지를 다시 검사한다. 조립 갈래에는 그 자리가 비어 있었다.
+   *
+   * **막지 않고 알린다**(설계 §5.4②). 늘이면 찌그러지고 자르면 얼굴이 잘린다 —
+   * 사람이 보고 다른 마스터를 고르는 편이 낫다.
+   */
+  async function tallObject() {
+    // 세로로 아주 긴 피사체 — 사람 전신·병·튜브형 제품이 이 모양이다
+    const subject = await sharp({
+      create: { width: 520, height: 1960, channels: 4, background: { r: 200, g: 80, b: 40, alpha: 1 } },
+    }).png().toBuffer();
+    return sharp({
+      create: { width: 1152, height: 2048, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).composite([{ input: subject, left: 316, top: 40 }]).png().toBuffer();
+  }
+
+  it("폭이 15% 미만이면 알린다 — 그래도 뽑기는 한다", async () => {
+    const object = await tallObject();
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], { cutout: async () => object });
+    expect(entry!.status, "막지 않는다 — 사람이 보고 판단한다").toBe("ok");
+    expect(entry!.tooSmall, "그런데 알려야 한다").toBe(true);
+  });
+
+  it("넉넉한 오브젝트에는 안 붙인다", async () => {
+    const cut = await cutout();
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], { cutout: async () => cut });
+    expect(entry!.status).toBe("ok");
+    expect(entry!.tooSmall).toBeUndefined();
+  });
+
+  /** 조립이 아닌 규격에는 붙일 일이 없다. */
+  it("파생 규격에는 안 붙인다", async () => {
+    const [entry] = await exportBatch(master, ["google-rda-landscape"], {});
+    expect(entry!.tooSmall).toBeUndefined();
+  });
+});
+
+describe("조립 갈래의 마무리", () => {
+  /**
+   * **AI 표기는 격리 계약 7 이다.** 파생 갈래는 `ad-batch.test.ts` 가 잠그는데,
+   * 조립 갈래는 자기 `finish` 호출을 따로 갖고 있어 그 줄이 안 잠겨 있었다 —
+   * 지워도 저장소 전체 시험이 초록이었다.
+   */
+  it("AI 표기를 태운다", async () => {
+    const cut = await cutout();
+    const finish = vi.fn(async (bytes: Buffer) => bytes);
+    await exportBatch(master, ["kakao-bizboard"], { cutout: async () => cut, finish });
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  /** **검증보다 먼저 태운다** — 배지가 용량을 키우므로 순서가 바뀌면 통과가 거짓말이 된다. */
+  it("표기를 태운 바이트로 검증한다", async () => {
+    const cut = await cutout();
+    // 상한을 넘기는 바이트를 돌려주면 검증이 실패해야 한다
+    const fat = Buffer.alloc(400_000, 1);
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], {
+      cutout: async () => cut,
+      finish: async () => fat,
+    });
+    expect(entry!.status, "태운 뒤 바이트로 검사해야 한다").toBe("failed");
+  });
+
+  /**
+   * **규격을 어기면 실패로 떨어진다.** `checkAgainstSpec` 을 `{ok:true}` 상수로
+   * 바꿔도 시험이 초록이었다 — 조립 결과가 무조건 ok 가 되는 뮤테이션이다.
+   */
+  it("규격을 어긴 조립 결과는 실패다", async () => {
+    const cut = await cutout();
+    // 픽셀이 다른 것을 돌려주면 규격 검증이 잡아야 한다
+    const wrong = await sharp({
+      create: { width: 500, height: 500, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).png().toBuffer();
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], {
+      cutout: async () => cut,
+      finish: async () => wrong,
+    });
+    expect(entry!.status).toBe("failed");
+    expect(entry!.failures.length).toBeGreaterThan(0);
+  });
+});

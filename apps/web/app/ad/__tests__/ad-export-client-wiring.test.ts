@@ -90,3 +90,15 @@ describe("고른 그림이 없는 상태로 두지 않는다", () => {
     expect(client).toMatch(/\.catch\(\(\) => setItems\(\[\]\)\)/);
   });
 });
+
+describe("너무 작아진 것을 화면이 알린다", () => {
+  /**
+   * `batch.ts` 가 `tooSmall` 을 실어 줘도 **화면이 안 그리면 뜻이 없다.**
+   * 설계 §5.4② 가 「막지 않고 알린다」로 정한 자리다 — 규격 검증은 이것을
+   * 통과시키므로 사람 눈이 유일한 관문이다.
+   */
+  it("경고를 그린다", () => {
+    expect(client).toContain("entry.tooSmall");
+    expect(client).toMatch(/너무 작게 들어갔습니다/);
+  });
+});
