@@ -1,4 +1,5 @@
 import { rm } from "node:fs/promises";
+import { hasFullScope, viewerFrom } from "../../../../../lib/access/core";
 import { deleteAnyWork } from "../../../admin/works/store";
 import path from "node:path";
 import { PosterSlotsSchema } from "@fixup/poster-core";
@@ -88,7 +89,7 @@ export async function DELETE(_request: Request, context: Context) {
   try {
     const { id } = await context.params;
     // 관리자는 누구 것이든 지운다. 회원용 길을 넓히지 않고 따로 부른다.
-    if (auth.member.profile.role === "admin") {
+    if (hasFullScope(viewerFrom(auth.member), "delete")) {
       const removed = await deleteAnyWork("poster", id);
       if (!removed) return Response.json({ ok: false, message: "작업을 찾을 수 없습니다." }, { status: 404 });
       return Response.json({ ok: true });

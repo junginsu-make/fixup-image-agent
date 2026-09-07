@@ -3,6 +3,7 @@ import { isLocalStoreEnabled } from "./local-store";
 import { encodeForStorage, makeThumbnail, sniffImageMime } from "./image-encoding";
 import { markAsAi } from "./watermark";
 import type { UserRole } from "./membership/types";
+import { ownerFilter, type ScopeAction } from "./access/core";
 
 /**
  * 사용자별 서버 라이브러리.
@@ -33,21 +34,17 @@ export interface LibraryViewer {
 }
 
 /**
- * 이 사람의 질의에 걸 소유자 조건. `null` 이면 조건을 걸지 않는다.
+ * 이 사람의 질의에 걸 소유자 조건. 조건이 필요 없으면 `undefined` 다.
  *
- * **관리자는 보기도 지우기도 전체가 열린다.**
+ * **판단 자체는 `lib/access/core.ts` 가 한다.** 여기 있던 규칙을 그리로
+ * 옮겼다 — 같은 질문("관리자는 남의 것을 볼 수 있나")을 열다섯 군데가 각자
+ * 답하다가 어긋난 적이 있다. 이 함수는 이름만 남겨 부르는 쪽을 안 건드린다.
  *
- * 한동안 지우기는 관리자라도 자기 것만 두었다. 남이 크레딧을 써서 만든 결과를
- * 되돌릴 수 없게 없애는 일이라 무겁다고 보았기 때문이다. 운영자의 판단은
- * 달랐다 — 이 서비스의 최고 관리자는 회원이 올린 것을 내려야 할 사람이고,
- * 지울 수 없으면 잘못 올라온 것을 치울 방법이 없다.
- *
- * 무거운 일이라는 사실은 그대로다. 그래서 화면은 지우기 전에 한 번 더 묻고,
- * 무엇을 지우는지와 누가 만든 것인지를 함께 보여준다.
+ * 관리자는 보기도 지우기도 전체가 열린다. 무거운 일이라는 사실은 그대로라,
+ * 화면은 지우기 전에 한 번 더 묻고 누가 만든 것인지를 함께 보여준다.
  */
-export function libraryScope(viewer: LibraryViewer, action: "read" | "delete"): string | null {
-  if (viewer.role === "admin") return null;
-  return viewer.userId;
+export function libraryScope(viewer: LibraryViewer, action: ScopeAction): string | undefined {
+  return ownerFilter(viewer, action);
 }
 
 export interface LibraryImageInput {
@@ -394,8 +391,8 @@ export async function getLibraryImageFile(
  * on delete cascade 는 행만 지우고 Storage 파일은 남긴다. 지웠다고 생각한
  * 이미지가 서버에 남아 있는 것이 가장 나쁘다.
  *
- * 관리자여도 자기 것만 지운다 — `libraryScope` 가 delete 에는 언제나
- * 소유자 조건을 준다.
+ * **관리자는 남의 것도 지운다.** 잘못 올라온 것을 내릴 사람이 아무도 없으면
+ * 그대로 남는다 — 2026-09-04 운영자 판단.
  */
 export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
   const supabase = createSupabaseAdminClient();

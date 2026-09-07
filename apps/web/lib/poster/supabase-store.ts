@@ -1,4 +1,5 @@
 import "server-only";
+import { signPaths } from "../storage/signing";
 
 import type {
   PosterImageStore,
@@ -97,12 +98,13 @@ export function createSupabasePosterReferenceStore(userId: string): PosterRefere
 
   const withUrls = async (rows: ReferenceRow[]) => {
     if (!rows.length) return [];
-    const client = await createSupabaseServerClient();
-    const signed = await client.storage.from(BUCKET)
-      .createSignedUrls(rows.map((row) => row.storage_path), SIGNED_URL_TTL_SECONDS);
-    const urls = new Map((signed.data ?? []).flatMap((entry) => (
-      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
-    )));
+    // 경로는 `user_id` 로 걸러 읽어 온 행에서 꺼낸 것이다. 서명을 서버
+    // 권한으로 하는 이유는 `lib/storage/signing.ts` 에 적어 두었다.
+    const urls = await signPaths(
+      BUCKET,
+      rows.map((row) => row.storage_path),
+      SIGNED_URL_TTL_SECONDS,
+    );
     return rows.map((row) => ({
       id: row.id,
       storagePath: row.storage_path,

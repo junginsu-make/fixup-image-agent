@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasFullScope, viewerFrom } from "../../../lib/access/core";
 import { authenticateApiMember } from "../../../lib/membership/api";
 import { listReferenceImages, localFileUrl, saveReferenceImage } from "../../../lib/reference-images";
 import { isLocalStoreEnabled } from "../../../lib/local-store";
@@ -30,7 +31,11 @@ export async function GET() {
     });
     // 관리자는 남이 올린 것도 지울 수 있다. 화면이 그 단추를 낼지 정하려면
     // 알아야 하는데, 줄마다 실을 값이 아니라 보는 사람의 성질이다.
-    return Response.json({ ok: true, images, isAdmin: auth.member.profile.role === "admin" });
+    // 화면은 이 값으로 「남이 올린 것에도 지우기를 낼지」를 가른다.
+    // 서버의 실제 판단(`canModifyReferenceImage`)과 같은 곳에서 나와야
+    // 화면에 뜬 단추가 눌리지 않는 일이 안 생긴다.
+    const viewer = viewerFrom(auth.member);
+    return Response.json({ ok: true, images, isAdmin: hasFullScope(viewer, "delete") });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다." },

@@ -1,4 +1,5 @@
 import "server-only";
+import { signPath, signPaths } from "../storage/signing";
 
 // sharp 0.35.0 ships lib/index.d.ts but omits the `types` condition from package exports.
 // @ts-expect-error Runtime export is valid; upstream package metadata hides its bundled declarations.
@@ -49,10 +50,9 @@ async function fetchedImage(url: string): Promise<{ bytes: Buffer; contentType: 
 }
 
 async function signedUrl(path: string): Promise<string> {
-  const client = await createSupabaseServerClient();
-  const result = await client.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
-  if (result.error || !result.data?.signedUrl) throw new Error(result.error?.message ?? "결과 이미지 URL을 만들지 못했습니다.");
-  return result.data.signedUrl;
+  // 경로는 방금 이 회원 id 로 만들어 올린 것이다. 서명을 서버 권한으로 하는
+  // 이유는 `lib/storage/signing.ts` 에 적어 두었다.
+  return signPath(BUCKET, path, SIGNED_URL_TTL_SECONDS);
 }
 
 /**
@@ -214,10 +214,8 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     if (card.thumbPath) paths.add(card.thumbPath);
   });
   if (!paths.size) return project;
-  const client = await createSupabaseServerClient();
-  const result = await client.storage.from(BUCKET).createSignedUrls([...paths], SIGNED_URL_TTL_SECONDS);
-  if (result.error) throw new Error(result.error.message);
-  const urls = new Map((result.data ?? []).flatMap((entry) => entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []));
+  // 경로는 RLS 를 지나 읽어 온 작업 행에서 꺼낸 것이다.
+  const urls = await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS);
   const attachments = project.data.attachments.map((attachment) => ({ ...attachment, url: urls.get(attachment.assetPath) ?? attachment.url }));
   const attachmentUrl = new Map(attachments.map((attachment) => [attachment.id, attachment.url]));
   const flow = project.data.flow ? {
@@ -252,14 +250,8 @@ export async function refreshProjectListAssetUrls(
     })));
   }
 
-  const client = await createSupabaseServerClient();
-  const result = await client.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
-  if (result.error) throw new Error(result.error.message);
-  return withCardUrls(projects, new Map(
-    (result.data ?? []).flatMap((entry) => (
-      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
-    )),
-  ));
+  // 경로는 RLS 를 지나 읽어 온 목록에서 꺼낸 것이다.
+  return withCardUrls(projects, await signPaths(BUCKET, paths, SIGNED_URL_TTL_SECONDS));
 }
 
 /**

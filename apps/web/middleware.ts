@@ -2,6 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
 import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
+import { canAccessPage } from "./lib/access/core";
+import { PAGE_ACCESS } from "./lib/access/routes";
+import type { UserRole } from "./lib/membership/types";
 
 const PUBLIC_PATHS = [
   "/",
@@ -85,7 +88,11 @@ export async function middleware(request: NextRequest) {
   if (pathname === "/access") return response;
   if (matches(pathname, PUBLIC_PATHS)) return response;
   if (!active) return NextResponse.redirect(new URL("/access", base));
-  if (pathname.startsWith("/admin") && profile?.role !== "admin") {
+  // 어느 화면을 누가 여는지는 등록부(`lib/access/routes.ts`)가 정한다.
+  // 여기서 경로를 직접 적으면 사이드바·페이지 문지기와 어긋난다 — 그러면
+  // 메뉴에는 없는데 주소를 치면 열리는 화면이 생긴다.
+  const viewer = { userId: user.id, role: (profile?.role ?? "member") as UserRole };
+  if (!canAccessPage(pathname, viewer, PAGE_ACCESS)) {
     return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base));
   }
   return response;

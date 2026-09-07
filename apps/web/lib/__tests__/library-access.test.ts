@@ -140,8 +140,13 @@ describe("관리자는 지우기도 전체", () => {
   });
 
   it("규칙 자체가 관리자와 회원을 가른다", () => {
-    expect(libraryScope(ADMIN, "read")).toBeNull();
-    expect(libraryScope(ADMIN, "delete")).toBeNull();
+    // 조건이 없을 때 `null` 이 아니라 `undefined` 다. `null` 은 「값이 비어
+    // 있다」로 읽혀 그대로 `.eq("user_id", null)` 에 넘어가는데, 그러면 한 줄도
+    // 안 지우면서 오류도 안 난다 — 2026-09-04 에 실제로 그랬다.
+    // `undefined` 면 넘기는 순간 타입이 막는다.
+    expect(libraryScope(ADMIN, "read")).toBeUndefined();
+    expect(libraryScope(ADMIN, "delete")).toBeUndefined();
+    expect(libraryScope(ADMIN, "read")).not.toBeNull();
     expect(libraryScope(MEMBER, "read")).toBe("member-1");
     expect(libraryScope(MEMBER, "delete")).toBe("member-1");
   });

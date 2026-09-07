@@ -53,6 +53,13 @@ vi.mock("../supabase/admin", () => ({
           return { error: null };
         },
         remove: async (paths: string[]) => { removed.push(...paths); return { error: null }; },
+        // 서명은 서버 권한으로 한다. 회원 세션으로는 팀원의 파일에 서명할 수
+        // 없기 때문이다 — Storage 정책이 경로 첫 칸을 소유자로 본다.
+        createSignedUrl: async () => ({ data: { signedUrl: "signed" }, error: null }),
+        createSignedUrls: async (paths: string[]) => ({
+          data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+          error: null,
+        }),
       }),
     },
   }),
@@ -68,15 +75,7 @@ vi.mock("../supabase/server", () => ({
       };
       return self;
     },
-    storage: {
-      from: () => ({
-        createSignedUrl: async () => ({ data: { signedUrl: "signed" }, error: null }),
-        createSignedUrls: async (paths: string[]) => ({
-          data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
-          error: null,
-        }),
-      }),
-    },
+    // 서명은 여기서 안 한다. 세션 클라이언트가 맡는 것은 DB 뿐이다.
   }),
 }));
 

@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { canSeeOwnerEmails, canTouch } from "./access/core";
 import {
   getLocalDatabase,
   insertLocalReferenceImage,
@@ -75,7 +76,9 @@ export function canModifyReferenceImage(
   viewer: { userId: string; role: UserRole },
   ownerId: string,
 ): boolean {
-  return viewer.role === "admin" || viewer.userId === ownerId;
+  // 판단은 `lib/access/core.ts` 가 한다. 여기서 따로 적으면 라이브러리와
+  // 참고 이미지가 서로 다른 답을 내는 날이 온다.
+  return canTouch(viewer, ownerId, "delete");
 }
 
 interface ReferenceImageDbRow {
@@ -161,7 +164,7 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
     (signed.data ?? []).map((entry) => [entry.path ?? "", entry.signedUrl ?? null]),
   );
   // 관리자만 누가 올렸는지 본다. 회원에게는 "내 것인가"만 알려주면 된다.
-  const emails = viewer.role === "admin"
+  const emails = canSeeOwnerEmails(viewer)
     ? await emailsByUserId(rows.map((row) => row.user_id))
     : new Map<string, string>();
 

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { hasFullScope, viewerFrom } from "../../../../../../../../lib/access/core";
 import path from "node:path";
 import { authenticateApiMember } from "../../../../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../../../lib/local-store";
@@ -52,8 +53,9 @@ export async function GET(request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id, index } = await context.params;
-    const isAdmin = auth.member.profile.role === "admin";
-    const found = isAdmin
+    // 판단은 `lib/access/core.ts` 가 한다. 목록과 상세가 다른 답을 내면
+    // 목록에는 뜨는데 안 열리는 상태가 난다 — 2026-09-04 에 그랬다.
+    const found = hasFullScope(viewerFrom(auth.member), "read")
       ? await adminAssetPath(id, index)
       : (await posterStoresForUser(auth.member.userId).images.byProject(id))
           .find((image) => String(image.variantIndex) === index) ?? null;
