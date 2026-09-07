@@ -101,23 +101,37 @@ export function AdExportClient() {
     // 이 화면에서 못 뽑는 작업은 아예 안 보여 준다 — 고를 수 있는데 누르면
     // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
     // **실패해도 「불러오는 중…」에 머물지 않는다.** `catch` 가 없으면 화면이
-    // 영원히 그 문장만 띄운 채 멈춘다 — 사용자는 느린 것인지 고장인지 모른다.
     /**
      * **포스터 작업도 함께 읽는다**(설계 §10 3-e).
      *
      * 광고 모드가 만드는 마스터는 `poster_images` 에 쌓이고 라이브러리에는
      * 안 들어간다. 이것을 안 읽으면 마스터를 만들고 여기 와도 **고를 그림이
      * 하나도 없다.** 리뷰 넷이 못 봤고 실제로 켜 보고 알았다.
+     *
+     * **실패와 「없음」을 가른다.** 초판은 둘을 뭉쳐 「보관된 작업이
+     * 없습니다. 라이브러리에서 먼저 저장해 주세요」를 띄웠다 — 서버가 죽어
+     * 있어도 그 문장이 나오고, 저장하러 가도 아무 일이 안 일어난다.
+     *
+     * `loadLibrary()` 쪽은 **가를 수 없다.** 그것이 부르는 네 함수가 전부
+     * `catch { return [] }` 로 끝나 거절하지 않는다(`lib/library.ts:38,133,163`).
+     * 그래서 거기에 걸어 뒀던 `catch` 와 오류 문구는 **닿지 않는 코드였다.**
+     * 지웠다 — 있는데 안 도는 방어는 다음 사람이 있다고 믿는다.
      */
     void Promise.all([
-      loadLibrary().catch(() => []),
+      loadLibrary(),
       fetch("/api/poster/projects", { cache: "no-store" })
         .then((response) => response.json())
-        .then((body) => (body?.ok ? body.projects : []) as PosterWork[])
-        .catch(() => []),
-    ])
-      .then(([library, posters]) => setItems(adSourceItems(library, posters)))
-      .catch(() => { setItems([]); setError("라이브러리를 불러오지 못했습니다. 새로고침해 주세요."); });
+        .then((body) => {
+          if (!body?.ok) throw new Error("포스터 목록을 읽지 못했습니다.");
+          return body.projects as PosterWork[];
+        })
+        .catch(() => {
+          // 이쪽은 가를 수 있다. 광고 마스터가 안 보이는 것이 이 화면에서
+          // 가장 나쁜 실패이므로, 조용히 빈 목록으로 넘기지 않는다.
+          setError("만든 작업 목록을 불러오지 못했습니다. 새로고침해 주세요.");
+          return [] as PosterWork[];
+        }),
+    ]).then(([library, posters]) => setItems(adSourceItems(library, posters)));
   }, []);
 
   async function chooseItem(next: AdSourceItem) {
