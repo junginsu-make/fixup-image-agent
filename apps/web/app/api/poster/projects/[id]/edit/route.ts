@@ -1,4 +1,5 @@
 import { canEdit, planEditJob } from "@fixup/poster-core";
+import { editSourceSize } from "./edit-source-size";
 import { z } from "zod";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
@@ -60,13 +61,17 @@ export async function POST(request: Request, context: Context) {
     const fal = createPosterFalClients();
     const parentUrl = await fal.uploader.uploadReference(bytes, contentType);
 
+    // 화면이 수정하면서 비율을 바꿀 수 있으므로 **정해진 뒤의** 값을 본다.
+    const ratioId = parsed.data.ratioId ?? project.ratio;
     const job = planEditJob({
       projectId: id,
       parentImageId: parent.id,
       parentUrl,
       instruction: parsed.data.instruction,
       modelId: project.modelId,
-      ratioId: parsed.data.ratioId ?? project.ratio,
+      ratioId,
+      // `match-source` 작업은 크기를 안 넘기면 거절된다(설계 §10 3-b).
+      sourceSize: editSourceSize(ratioId, project.data.adMaster, parent),
       slots: project.data.slots,
     });
 
