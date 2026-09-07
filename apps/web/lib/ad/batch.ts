@@ -1,3 +1,5 @@
+// 스위치는 잎 모듈에 있다 — 그것만 읽으려고 sharp 를 끌고 오면 안 된다.
+export { isAdExportEnabled } from "./feature";
 import { checkAgainstSpec } from "./check";
 import { planDerivation } from "./derive";
 import { exportForAd } from "./export";
@@ -64,15 +66,6 @@ export interface AdBatchEntry {
   shrink?: number;
 }
 
-/**
- * 기능을 통째로 끄는 스위치 (설계 §4.1 계약 5).
- *
- * `isLocalStoreEnabled` 와 같은 모양이다 — **켜는 것이 명시적이어야 한다.**
- * 오타나 빈 값으로 켜지면 스위치가 아니다.
- */
-export function isAdExportEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
-  return environment.AD_EXPORT === "1";
-}
 
 export interface ExportBatchOptions {
   /**

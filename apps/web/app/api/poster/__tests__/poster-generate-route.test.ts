@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PosterChargedError } from "../../../../lib/poster/flow";
 
 /**
  * 광고 마스터가 생성까지 가는 배선.
@@ -67,7 +68,8 @@ vi.mock("../../../../lib/fal/upload", () => ({
   },
 }));
 
-vi.mock("../../../../lib/poster/flow", () => ({
+vi.mock("../../../../lib/poster/flow", async () => ({
+  ...(await vi.importActual<typeof import("../../../../lib/poster/flow")>("../../../../lib/poster/flow")),
   submitPoster: async (job: { sourceSize?: { width: number; height: number } }) => {
     submitted.push(job);
     if (submitThrows) throw submitThrows;
@@ -143,7 +145,9 @@ describe("같은 클릭이 두 번 오면", () => {
    */
   it("오래 전에 멈춘 작업은 다시 만들 수 있다 — 영구히 잠기면 안 된다", async () => {
     project!.status = "generating";
-    project!.updatedAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    // **61초다.** 10분으로 두면 창을 9분으로 늘려도 시험이 안 잡는다 —
+    // 설계가 피하려던 「실패한 작업이 그만큼 잠긴다」 그 자체가 통과한다.
+    project!.updatedAt = new Date(Date.now() - 61 * 1000).toISOString();
     const response = await call();
     expect(response.status).toBe(200);
     expect(submitted).toHaveLength(1);
@@ -182,5 +186,26 @@ describe("두 요청이 겹치면", () => {
     expect(project!.status, "generating 에 남으면 60초 동안 못 누른다").toBe("ready");
     submitThrows = null;
     expect((await call()).status).toBe(200);
+  });
+});
+
+describe("돈이 나간 뒤에 실패하면", () => {
+  /**
+   * **되돌리면 안 된다.** `queue.submitJob` 이 성공한 뒤에 죽으면 fal 작업은
+   * 이미 만들어졌고 과금도 끝났다. 그때 상태를 풀면 사용자가 곧바로 다시 눌러
+   * **두 번째 작업을 만든다** — 자물쇠를 단 이유가 바로 그것인데, 무조건
+   * 되돌리기가 그 구멍을 다시 연다.
+   */
+  it("자리를 잡아 둔다 — 되돌리면 두 번째 작업이 만들어진다", async () => {
+    submitThrows = new PosterChargedError("fal-abc", new Error("장부 쓰기 실패"));
+    await call().catch(() => {});
+    expect(project!.status, "풀면 곧바로 다시 눌러 두 번 과금된다").toBe("generating");
+  });
+
+  /** 과금 전 실패는 반대다. 돈이 안 나갔으므로 바로 다시 누를 수 있어야 한다. */
+  it("과금 전 실패는 자리를 돌려준다", async () => {
+    submitThrows = new Error("첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다.");
+    await call().catch(() => {});
+    expect(project!.status).toBe("ready");
   });
 });

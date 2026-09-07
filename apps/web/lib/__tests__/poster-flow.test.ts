@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EMPTY_SLOTS } from "@fixup/poster-core";
-import { collectPoster, submitPoster } from "../poster/flow";
+import { collectPoster, PosterChargedError, submitPoster } from "../poster/flow";
 
 const job = {
   projectId: "p1",
@@ -28,6 +28,7 @@ function deps(overrides: Record<string, unknown> = {}) {
       requests: {
         create: vi.fn(async (row: unknown) => { created.push(row); return { id: "req-1" }; }),
         complete: vi.fn(async (id: string, patch: unknown) => { completed.push({ id, patch }); }),
+        ...(overrides.requests as object ?? {}),
       },
       images: {
         byProject: async () => [],
@@ -154,5 +155,37 @@ describe("포스터 회수 — 사본의 자리", () => {
     expect(added).toHaveLength(2);
     expect(added[0]).toMatchObject({ variantIndex: 0, assetPath: "p1/0.png", thumbPath: "p1/0.thumb.webp" });
     expect(added[1]).toMatchObject({ variantIndex: 1, assetPath: "p1/1.png", thumbPath: "p1/1.thumb.webp" });
+  });
+});
+
+/**
+ * 과금 경계.
+ *
+ * `queue.submitJob` 이 성공하는 순간 fal 작업은 만들어졌고 돈도 나갔다. 그
+ * **뒤**의 실패를 보통 오류와 같이 다루면, 부르는 쪽이 「실패했으니 되돌려도
+ * 되겠지」로 판단해 사용자가 곧바로 두 번째 작업을 만든다.
+ */
+describe("돈이 나간 뒤에 실패하면", () => {
+  it("과금됐음을 알리는 예외로 감싼다", async () => {
+    const { dependencies } = deps({
+      requests: { create: vi.fn(async () => { throw new Error("장부 쓰기 실패"); }) },
+    });
+    await expect(submitPoster(job, dependencies)).rejects.toBeInstanceOf(PosterChargedError);
+  });
+
+  /** 이 값이 없으면 「돈은 나갔는데 장부에 없는 요청」을 나중에 못 찾는다. */
+  it("fal 요청 id 를 실어 보낸다", async () => {
+    const { dependencies } = deps({
+      requests: { create: vi.fn(async () => { throw new Error("장부 쓰기 실패"); }) },
+    });
+    await expect(submitPoster(job, dependencies)).rejects.toMatchObject({ falRequestId: "fal-1" });
+  });
+
+  /** 제출 **전**의 실패는 감싸지 않는다 — 돈이 안 나갔다. */
+  it("과금 전 실패는 그대로 던진다", async () => {
+    const { dependencies } = deps({
+      queue: { submitJob: vi.fn(async () => { throw new Error("fal 이 거절했습니다."); }) },
+    });
+    await expect(submitPoster(job, dependencies)).rejects.not.toBeInstanceOf(PosterChargedError);
   });
 });

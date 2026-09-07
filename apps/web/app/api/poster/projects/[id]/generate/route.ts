@@ -6,7 +6,7 @@ import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
-import { submitPoster } from "../../../../../../lib/poster/flow";
+import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
 import { referenceBytes } from "../../../../../../lib/poster/asset-bytes";
 
 export const runtime = "nodejs";
@@ -175,7 +175,22 @@ export async function POST(_request: Request, context: Context) {
        *
        * 되돌리기 자체가 실패해도 원래 오류를 덮지 않는다. 창이 지나면 풀린다.
        */
-      await stores.projects.update(id, { status: previousStatus }).catch(() => {});
+      /**
+       * **과금 뒤의 실패는 되돌리지 않는다.**
+       *
+       * `queue.submitJob` 이 성공한 뒤에 죽으면 fal 작업은 이미 만들어졌고 돈도
+       * 나갔다. 그때 상태를 풀면 사용자가 곧바로 다시 눌러 **두 번째 작업을
+       * 만든다** — 이 자물쇠를 단 이유가 바로 그것이다. 창이 지날 때까지 잡아
+       * 둔다.
+       *
+       * 나머지(검증 거절·설정 오류)는 **돈이 안 나갔으므로** 자리를 돌려준다.
+       * 안 그러면 지금까지 바로 다시 누를 수 있던 것이 60초 잠긴다.
+       */
+      if (cause instanceof PosterChargedError) {
+        console.error(`[poster] 돈은 나갔는데 장부에 못 적었습니다: fal=${cause.falRequestId}`);
+      } else {
+        await stores.projects.update(id, { status: previousStatus }).catch(() => {});
+      }
       throw cause;
     }
   } catch (error) {

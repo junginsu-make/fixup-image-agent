@@ -706,13 +706,17 @@ status/route.ts           storage.upload(…, { upsert: true })
 |---|---|---|
 | `packages/poster-core/src/store.ts:29-43` | `data.adMaster?: { width, height }` 한 줄 | **선택 필드.** `personIds`·`look` 과 같은 모양이고 옛 작업에는 없다 |
 | `packages/poster-core/src/schemas.ts:53-85` | **마스터 id 만** 받는다 — `adMasterId: z.string().optional()` (`.strict()` 라 필수) | **자유 픽셀을 받지 않는다.** 아래 「왜 픽셀이 아니라 id 인가」 |
-| `apps/web/app/api/poster/projects/poster-service.ts:42-52` | id 를 `AD_MASTERS` 에서 픽셀로 바꿔 `data` 에 싣는다. **스위치가 꺼져 있으면 버린다** | 모르는 id 면 안 싣는다 → 지금 경로로 떨어진다 |
+| `apps/web/app/api/poster/projects/poster-service.ts:42-52` | id 를 `AD_MASTERS` 에서 픽셀로 바꿔 `data` 에 싣는다. **스위치가 꺼져 있으면 버린다** | **모르는 id 는 거절한다**(3-d 3번). 조용히 버리면 `adMaster` 없는 광고 프로젝트가 되고, `match-source` 라 생성이 첨부를 재서 엉뚱한 크기를 만든다 — 파생이 실패하고 **그때는 이미 과금된 뒤다.** 스위치가 꺼져 있을 때는 조용히 버린다 — 반응하면 스위치 상태가 새어 나간다 |
 | `apps/web/app/api/poster/projects/[id]/generate/route.ts:73` | `sourceSize = data.adMaster ?? measure(…)` | **있을 때만 우선한다.** `undefined ?? measure(…)` 는 지금 식과 완전히 같다 |
 | `apps/web/app/api/poster/projects/[id]/edit/route.ts:65-72` · `packages/poster-core/src/selection.ts:53,71` | `PosterEditJob` 에 `sourceSize` 를 실어 넘긴다 | 아래 「다섯 번째 파일」 |
 
 **왜 픽셀이 아니라 id 인가.** `adMaster` 를 클라이언트가 정하는 자유 픽셀로 두면 경계가 없다. `{ 3840, 3840 }` 을 보내면 `sizeFromSource` 가 한계 안으로 줄여 **2880×2880(8.29MP)** 로 생성하는데(`model-choice.ts:71-81`), `estimatePosterCost` 는 자리표시 1088×1088 만 보므로 「표를 넘으면 가장 비싼 값을 쓴다」는 방어(`models.ts:162`)가 **한 번도 안 걸린다.** 장부에 $0.219 가 남고 실제로는 최대 $0.413 이 나간다. §4.2 가 걱정한 「추정이 실제보다 낮게」는 마스터 다섯에서는 안 일어나고 **여기서만** 일어난다. **id 만 받으면 이 구멍이 존재하지 않는다.**
 
-**기능 스위치를 지난다** (계약 5). 2단계는 `AD_EXPORT === "1"` 을 인증보다 먼저 본다(`lib/ad/batch.ts:74`). 3단계가 이 스위치를 안 지나면 **끌 수 있는 기능이 아니게 되는데**, 3단계는 돈이 나가는 단계라 끌 수 있어야 할 필요가 2단계보다 크다. **스위치는 하나로 유지한다** — 「생성은 되는데 내보내기가 꺼져 있다」는 반쪽 상태가 가장 나쁘다.
+**기능 스위치를 지난다** (계약 5). 2단계는 `AD_EXPORT === "1"` 을 인증보다 먼저 본다.
+
+**스위치는 잎 모듈에 둔다** (`lib/ad/feature.ts`). 초판은 `batch.ts` 에 뒀는데, `poster-service.ts` 가 스위치 하나를 읽으려고 `batch → export/check → sharp` 를 통째로 끌고 왔다 — **포스터 만들기 라우트가 광고 파생 엔진과 네이티브 sharp 바인딩을 로드**하는 상태였고, 이것은 설계가 깨기로 목록에 올린 것이 아니다.
+
+**스위치가 막는 것은 「새 광고 작업이 생기는 것」이다.** 이미 만들어진 프로젝트는 `data.adMaster` 를 들고 있어 스위치를 끈 뒤에도 그 크기로 끝까지 간다. 저장된 데이터를 스위치로 무시하면 사용자가 만들던 광고 작업이 **조용히 엉뚱한 크기로 나오는데**, 그쪽이 더 나쁘다. 3단계가 이 스위치를 안 지나면 **끌 수 있는 기능이 아니게 되는데**, 3단계는 돈이 나가는 단계라 끌 수 있어야 할 필요가 2단계보다 크다. **스위치는 하나로 유지한다** — 「생성은 되는데 내보내기가 꺼져 있다」는 반쪽 상태가 가장 나쁘다.
 
 **마이그레이션은 없다** — `data` 가 `jsonb` 다(계약 4 유지).
 
