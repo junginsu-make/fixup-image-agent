@@ -214,3 +214,20 @@ export function failureMessage(status: number, message?: string | null): string 
   if (status >= 500) return "서버에서 뽑지 못했습니다. 잠시 뒤에 다시 눌러 주세요.";
   return "뽑지 못했습니다.";
 }
+
+/**
+ * 필수인데 꺼져 있는 규격의 수.
+ *
+ * 설계 §9 원칙 1 은 두 절이다 — 「필수는 켜고 시작한다」와 **「끄면 알린다」**.
+ * 앞 절만 있으면 사용자가 필수를 끄고 뽑아도 화면이 아무 말을 안 하고,
+ * **포털이 반려하고 나서야 안다.**
+ *
+ * **못 뽑는 필수는 세지 않는다.** 그것은 사용자가 어쩔 수 없는 것이고, 그 자리에는
+ * 이미 「아직 지원하지 않습니다」가 적혀 있다. 고칠 수 없는 것을 경고로 띄우면
+ * 경고가 상시로 켜져 뜻을 잃는다.
+ */
+export function missingRequiredCount(rows: SpecRow[], picked: string[]): number {
+  return rows.filter(
+    (row) => row.supported && row.spec.required && !picked.includes(row.spec.id),
+  ).length;
+}

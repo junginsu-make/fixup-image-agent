@@ -7,9 +7,11 @@ import { Badge, Button, Card, cn } from "@fixup/ui";
 import type { LibraryItem } from "@fixup/shared";
 import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
+import type { AdBatchEntry } from "../../lib/ad/batch";
 import {
   PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
-  downloadable, excludedCount, exportableItems, failureMessage, isActualSize, previewWidth,
+  downloadable, excludedCount, exportableItems, failureMessage, isActualSize,
+  missingRequiredCount, previewWidth,
   safeAreaOverlayStyle, specRows, zipEntryName,
 } from "./export-rules";
 
@@ -24,24 +26,17 @@ import {
  * 보므로, 글자가 안 읽히거나 주인공이 잘린 것은 사람이 봐야 안다.
  */
 
-interface ResultEntry {
-  specId: string;
-  label: string;
-  portal: "naver" | "google" | "kakao";
-  product: string;
-  required: boolean;
-  sourceKind: "official" | "reference";
-  format: "jpg" | "png" | "png-alpha";
-  target: { width: number; height: number };
-  safeArea?: { top: number; right: number; bottom: number; left: number };
-  status: "ok" | "failed";
-  reason?: string;
-  failures: string[];
-  byteLength?: number;
-  quality?: number;
-  shrink?: number;
-  dataUrl?: string;
-}
+/**
+ * 서버가 주는 것 그대로.
+ *
+ * **손으로 베끼지 않는다.** 초판은 `AdBatchEntry` 를 필드별로 옮겨 적었는데,
+ * 그러면 서버가 `shrink` 를 `scale` 로 바꿔도 **타입 검사가 통과하고 경고 배지만
+ * 조용히 사라진다.** 파생시켜 두면 그 순간 컴파일이 깨진다.
+ *
+ * `bytes` 만 뺀다 — 라우트가 base64 로 바꿔 `dataUrl` 로 싣기 때문이다.
+ * `batch.ts` 를 **읽기만** 하므로 격리 계약 1 에 걸리지 않는다.
+ */
+type ResultEntry = Omit<AdBatchEntry, "bytes"> & { dataUrl?: string };
 
 const ROWS = specRows(planDerivation);
 
@@ -67,7 +62,11 @@ export function AdExportClient() {
   React.useEffect(() => {
     // 이 화면에서 못 뽑는 작업은 아예 안 보여 준다 — 고를 수 있는데 누르면
     // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
-    void loadLibrary().then((loaded) => setItems(exportableItems(loaded)));
+    // **실패해도 「불러오는 중…」에 머물지 않는다.** `catch` 가 없으면 화면이
+    // 영원히 그 문장만 띄운 채 멈춘다 — 사용자는 느린 것인지 고장인지 모른다.
+    void loadLibrary()
+      .then((loaded) => setItems(exportableItems(loaded)))
+      .catch(() => { setItems([]); setError("라이브러리를 불러오지 못했습니다. 새로고침해 주세요."); });
   }, []);
 
   async function chooseItem(next: LibraryItem) {
@@ -76,9 +75,17 @@ export function AdExportClient() {
     setImages(null);
     setPosition(0);
     setResults(null);
-    const loaded = await getAccountItemImages(next);
-    if (mine !== token.current) return;
-    setImages(loaded?.images ?? []);
+    setError(null);
+    try {
+      const loaded = await getAccountItemImages(next);
+      if (mine !== token.current) return;
+      setImages(loaded?.images ?? []);
+    } catch {
+      // 여기서도 삼키면 썸네일 줄이 영영 안 나타난다.
+      if (mine !== token.current) return;
+      setImages([]);
+      setError("이 작업의 이미지를 불러오지 못했습니다.");
+    }
   }
 
   async function run() {
@@ -104,7 +111,12 @@ export function AdExportClient() {
     } catch {
       if (mine === token.current) setError("서버에 닿지 못했습니다.");
     } finally {
-      if (mine === token.current) setBusy(false);
+      // **토큰을 보고 풀면 안 된다.** 토큰이 바뀐 경우 `busy` 가 영영 안 풀려
+      // 화면 전체가 잠기고 새로고침 말고는 길이 없다. 지금은 토큰을 올리는 두
+      // 길이 모두 `disabled={busy}` 뒤에 있어 도달 불가지만, 그 네 곳 중 하나만
+      // 빠지면 바로 잠긴다. 동시 실행은 이미 막혀 있으니 무조건 해제가 낫다.
+      // 늦게 온 응답은 위의 토큰 검사가 여전히 버린다.
+      setBusy(false);
     }
   }
 
@@ -119,21 +131,32 @@ export function AdExportClient() {
     // 같은 이름으로 한 봉투에 들어간다(설계 §8).
     const made = downloadable(results ?? []);
     if (!made.length) return;
-    const { default: JSZip } = await import("jszip");
-    const zip = new JSZip();
-    for (const entry of made) {
-      zip.file(zipEntryName(entry.specId, entry.format), bytesFromDataUrl(entry.dataUrl!));
+    try {
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+      for (const entry of made) {
+        zip.file(zipEntryName(entry.specId, entry.format), bytesFromDataUrl(entry.dataUrl!));
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      // `ResultViewer.tsx` 와 `redesign-wizard.tsx` 가 쓰는 관례다 — DOM 에 붙이지
+      // 않고 클릭하면 일부 브라우저가 무시한다.
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `광고규격-${made.length}개.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // **삼키면 버튼을 눌러도 아무 일이 안 일어난다.** `atob` 은 깨진 base64 에
+      // `DOMException` 을 던지는데, `void download()` 라 미처리 rejection 이 되어
+      // 화면에는 흔적조차 안 남는다.
+      setError("ZIP 을 만들지 못했습니다. 다시 뽑아 주세요.");
     }
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `광고규격-${made.length}개.zip`;
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
-  const supported = ROWS.filter((row) => row.supported);
+  const missingRequired = missingRequiredCount(ROWS, picked);
   const madeCount = downloadable(results ?? []).length;
   const excluded = excludedCount(results ?? []);
   const noImages = images !== null && images.length === 0;
@@ -163,6 +186,7 @@ export function AdExportClient() {
                 type="button"
                 size="sm"
                 variant={item?.id === entry.id ? "default" : "secondary"}
+                aria-pressed={item?.id === entry.id}
                 disabled={busy}
                 onClick={() => void chooseItem(entry)}
               >
@@ -182,7 +206,9 @@ export function AdExportClient() {
                 aria-pressed={position === index}
                 onClick={() => { setPosition(index); setResults(null); }}
                 className={cn(
+                  // `border-transparent` 상태에서는 초점이 아예 안 보인다.
                   "h-20 w-20 overflow-hidden rounded border-2",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   position === index ? "border-foreground" : "border-transparent",
                 )}
               >
@@ -241,8 +267,16 @@ export function AdExportClient() {
           })}
         </ul>
 
-        {picked.some((id) => !supported.find((row) => row.spec.id === id)) && (
-          <p className="text-meta text-destructive">고른 것 중 지금 못 뽑는 규격이 있습니다.</p>
+        {/*
+          초판은 여기에 「못 뽑는 규격이 있습니다」만 뒀는데, 그 경고는 **도달할 수
+          없었다** — 고른 것은 지원되는 것에서만 시작하고 미지원 체크박스는
+          `disabled` 라 켤 수가 없다. 정작 설계 §9 원칙 1 의 뒷 절반인
+          「필수를 끄면 알린다」가 없었다.
+        */}
+        {missingRequired > 0 && (
+          <p className="text-meta text-destructive" role="alert">
+            필수 규격 {missingRequired}개가 꺼져 있습니다. 빠지면 포털이 반려할 수 있습니다.
+          </p>
         )}
 
         <div className="flex items-center gap-2 pt-1">
@@ -259,14 +293,16 @@ export function AdExportClient() {
             새로 만들지 않습니다 · 비용 0
           </span>
         </div>
-        {error && <p className="text-meta text-destructive">{error}</p>}
+        {error && <p className="text-meta text-destructive" role="alert">{error}</p>}
       </Card>
 
       {results && (
         <Card className="grid gap-3 p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-medium">3. 확인하고 내려받기</h2>
-            <span className="text-meta text-subtle-foreground">{madeCount}개 나옴</span>
+            <span className="text-meta text-subtle-foreground" aria-live="polite">
+              {madeCount}개 나옴
+            </span>
           </div>
           <p className="text-meta text-subtle-foreground">
             <strong>눈으로 확인해 주세요.</strong> 글자가 읽히는지, 주인공이 잘리지 않았는지는

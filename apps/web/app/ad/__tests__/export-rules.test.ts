@@ -4,7 +4,7 @@ import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, SHRINK_WARNING,
+  PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, missingRequiredCount,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -276,5 +276,81 @@ describe("실패를 사람이 읽을 말로 옮긴다", () => {
 
   it("모르는 상태에도 빈 말을 주지 않는다", () => {
     expect(failureMessage(418, null).length).toBeGreaterThan(0);
+  });
+});
+
+describe("잘라 만드는 규격도 뽑을 수 있다", () => {
+  /**
+   * **`supported` 에서 `crop` 을 빼도 시험 35개가 전부 초록이었다.**
+   *
+   * 실제 영향은 작지 않다. 기본으로 켜지는 필수 일곱 중 브랜드검색 둘이 `crop`
+   * 이라, 빠지면 **필수 둘이 회색으로 죽고 기본 선택에서 조용히 사라진다.**
+   * 그래서 규격 하나를 이름으로 짚어 못 박는다.
+   */
+  it("브랜드검색 PC 썸네일은 잘라서라도 뽑는다", () => {
+    const row = rows.find((r) => r.spec.id === "naver-brand-pc")!;
+    expect(planDerivation(row.spec).kind, "이 시험의 전제").toBe("crop");
+    expect(row.supported).toBe(true);
+    expect(row.unsupportedReason).toBeUndefined();
+  });
+
+  it("잘라 만드는 필수 규격이 기본 선택에 들어간다", () => {
+    expect(defaultSelection(rows)).toContain("naver-brand-pc");
+  });
+});
+
+describe("data URL 에서 바이트 꺼내기", () => {
+  it("base64 를 그대로 바이트로 옮긴다", () => {
+    expect(bytesFromDataUrl("data:image/png;base64,QUJD")).toEqual(new Uint8Array([65, 66, 67]));
+  });
+
+  /**
+   * `slice(comma + 1)` 을 `slice(comma)` 로 바꾸면 **ZIP 안의 모든 파일이
+   * 깨진다** — 앞에 쉼표가 붙은 채로 디코드된다. 화면은 멀쩡하고 봉투만 썩는다.
+   */
+  it("쉼표를 남기지 않는다", () => {
+    const bytes = bytesFromDataUrl("data:image/png;base64,QUJD");
+    expect(bytes.length).toBe(3);
+    expect(bytes[0]).toBe(65);
+  });
+
+  it("256 을 넘지 않는 값으로 담는다 — 멀티바이트가 아니다", () => {
+    const bytes = bytesFromDataUrl("data:application/octet-stream;base64,//79");
+    expect(Array.from(bytes)).toEqual([255, 254, 253]);
+  });
+
+  it("data URL 이 아니면 던진다", () => {
+    expect(() => bytesFromDataUrl("그냥 문자열")).toThrow();
+  });
+});
+
+describe("필수를 꺼 두면 알린다", () => {
+  /**
+   * 설계 §9 원칙 1 의 뒷 절반이다. 앞 절반(「필수는 켜고 시작한다」)만 있으면,
+   * 사용자가 필수를 끄고 뽑아도 화면이 아무 말을 안 한다 — 포털이 반려하고 나서야
+   * 안다.
+   *
+   * **못 뽑는 규격은 세지 않는다.** 그것은 사용자가 어쩔 수 없는 것이고,
+   * 그 자리에는 이미 다른 문구가 있다.
+   */
+  it("필수를 다 켜 두면 0 이다", () => {
+    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+  });
+
+  it("필수를 하나 끄면 1 이다", () => {
+    const picked = defaultSelection(rows).filter((id) => id !== "naver-brand-pc");
+    expect(missingRequiredCount(rows, picked)).toBe(1);
+  });
+
+  it("선택 규격을 꺼도 세지 않는다", () => {
+    const optional = rows.find((r) => r.supported && !r.spec.required)!;
+    expect(defaultSelection(rows)).not.toContain(optional.spec.id);
+    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+  });
+
+  it("못 뽑는 필수 규격은 세지 않는다 — 사용자가 어쩔 수 없다", () => {
+    const blocked = rows.filter((r) => !r.supported && r.spec.required);
+    expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
+    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
   });
 });
