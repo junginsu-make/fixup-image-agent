@@ -167,6 +167,138 @@ export function exportableItems(items: LibraryItem[]): LibraryItem[] {
 }
 
 /**
+ * 이 화면에서 고를 수 있는 것 — **라이브러리와 포스터 작업을 함께.**
+ *
+ * 설계 §10 3-e. **3단계가 만드는 것은 라이브러리에 없다.** 광고 마스터는
+ * `poster_images` 에 쌓이는데 이 화면은 `library_images` 만 읽어서, 마스터를
+ * 만들고 여기 오면 **고를 그림이 하나도 없었다.** 로컬에서 실제로 켜 보고
+ * 알았다 — 리뷰 넷이 전부 못 봤다. 양쪽이 각각은 맞았기 때문이다.
+ *
+ * **`loadLibrary()` 를 안 고친다.** 그 함수를 보는 화면이 넷이라(`/ad`·라이브러리·
+ * 카드뉴스 레이아웃·캐릭터), 거기에 포스터를 더하면 광고와 무관한 세 화면이
+ * 함께 바뀐다.
+ *
+ * **포스터를 먼저 세운다.** 광고 마스터를 막 만들고 고르러 오는 길이다.
+ */
+export interface AdSourceItem {
+  id: string;
+  title: string;
+  /** 라우트가 어느 표를 읽을지 정한다. */
+  source: "library" | "poster";
+  /**
+   * 목록에 그릴 작은 그림.
+   *
+   * **글자만으로는 못 고른다.** 광고 모드는 한 번 누를 때 마스터마다 프로젝트를
+   * 만들어 작업이 배로 쌓이고, 제목도 「가을 사진전 (1200×1200)」처럼 길어진다.
+   * 이 저장소는 그림 고르는 자리를 전부 썸네일 격자로 만든다
+   * (`_components/library-picker.tsx`).
+   *
+   * 없을 수 있다 — 옛 작업에는 사본이 없다. 화면이 자리표시를 그린다.
+   */
+  thumbnail?: string;
+}
+
+export function adSourceItems(
+  library: LibraryItem[],
+  posters: Array<{ id: string; title: string; status: string; images?: Array<{ variantIndex: number }> }>,
+): AdSourceItem[] {
+  const fromPoster = posters
+    // **결과가 없는 것은 안 보여 준다.** 만드는 중이거나 실패한 작업을 고르면
+    // 「뽑지 못했습니다」만 돌아온다 — 왜 안 되는지 알 길이 없다.
+    .filter((project) => (project.images?.length ?? 0) > 0)
+    .map((project) => {
+      // 첫 변형의 사본을 쓴다. 원본은 2MB 를 넘어 목록에 깔 수 없다.
+      const first = project.images?.[0] as { variantIndex: number } | undefined;
+      return {
+        id: project.id,
+        title: project.title || "제목 없음",
+        source: "poster" as const,
+        ...(first
+          ? { thumbnail: `/api/poster/projects/${project.id}/images/${first.variantIndex}/file?size=thumb` }
+          : {}),
+      };
+    });
+
+  const fromLibrary = exportableItems(library).map((item) => ({
+    id: item.id,
+    title: item.title || "제목 없음",
+    source: "library" as const,
+    ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
+  }));
+
+  return [...fromPoster, ...fromLibrary];
+}
+
+/**
+ * 미리보기 한 장 — **어느 그림인지와 어떻게 부를지를 함께 든다.**
+ *
+ * **초판은 배열 번호를 서버에 보냈다.** 서버는 그것을 `variantIndex` 로 읽는데,
+ * `variantIndex` 는 배치마다 0 부터 다시 시작하므로(`generate.ts:174`) 한 작업
+ * 안에서 번호가 겹친다 — 「고치기」나 재생성 한 번이면 그렇다. 그러면 사용자가
+ * A 를 보고 골랐는데 **ZIP 에는 B 가 담긴다.** 「사람 눈이 의도 검증이다」(§5.2)가
+ * 통째로 헛돈다.
+ *
+ * 3-0 에서 같은 사실(번호가 겹친다)을 **저장 경로 충돌**로만 봤다. 같은 사실의
+ * 다른 얼굴을 못 봤다.
+ */
+export interface AdImagePick {
+  /** 화면에 그릴 주소. */
+  image: string;
+  sectionName: string;
+  /** 서버에 보낼 값. **배열 번호가 아니다.** */
+  position: number;
+}
+
+/**
+ * 포스터 작업의 그림들.
+ *
+ * **겹친 변형 번호는 하나로 접는다.** 안 접으면 같은 그림이 두 번 뜨고 React
+ * key 도 겹친다.
+ *
+ * **접어도 잃는 그림이 없다.** `assetPath` 가 `(userId, projectId, variantIndex)`
+ * 의 순수 함수이고(`supabase-store-core.ts` 의 `posterAssetPath`) 그것을 쓰는
+ * 곳이 저장 한 군데뿐이라, **같은 번호의 행은 반드시 같은 파일을 가리킨다** —
+ * 겹친 행은 이미 서로의 파일을 덮어쓴 뒤다(설계 §10 3-0).
+ *
+ * **그 불변식이 여기를 떠받친다.** `byProject` 의 동점 정렬은 보장되지 않아
+ * 미리보기와 내보내기가 서로 다른 **행**을 집을 수 있는데, 같은 파일을
+ * 가리키므로 결과가 같다. `assetPath` 규칙을 바꾸면 여기가 먼저 깨진다.
+ */
+export function posterImagePicks(
+  projectId: string,
+  images: Array<{ variantIndex: number }>,
+): AdImagePick[] {
+  const seen = new Set<number>();
+  const picks: AdImagePick[] = [];
+  for (const image of images) {
+    if (seen.has(image.variantIndex)) continue;
+    seen.add(image.variantIndex);
+    picks.push({
+      image: `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`,
+      sectionName: `변형 ${image.variantIndex + 1}`,
+      position: image.variantIndex,
+    });
+  }
+  return picks;
+}
+
+/**
+ * 라이브러리 작업의 그림들.
+ *
+ * 여기는 `/api/library` 가 `position` 을 채워 준다. 옛 응답에 없으면 배열
+ * 번호로 떨어진다 — 지금까지의 동작이다.
+ */
+export function libraryImagePicks(
+  images: Array<{ image: string; sectionName: string; position?: number }>,
+): AdImagePick[] {
+  return images.map((image, index) => ({
+    image: image.image,
+    sectionName: image.sectionName,
+    position: image.position ?? index,
+  }));
+}
+
+/**
  * ZIP 에 담을 것.
  *
  * **검증에 걸린 것은 빼고 담는다.** `batch.ts` 는 일부러 실패한 것도 바이트를
@@ -211,6 +343,27 @@ export function previewWidth(target: { width: number }, cellWidth = PREVIEW_MAX_
 /** 1:1 로 보이는가. 아니면 「실제보다 작게 보임」을 알려야 한다. */
 export function isActualSize(target: { width: number }, cellWidth = PREVIEW_MAX_WIDTH): boolean {
   return target.width <= cellWidth;
+}
+
+/**
+ * 잘라서 만든 규격인가 — 그렇다면 그렇다고 말한다.
+ *
+ * **크롭은 구도를 버린다.** 2048×1072 마스터에서 456×304(1.5:1)를 뽑으면 좌우가
+ * 잘려 헤드라인 한쪽이 사라진다. 화면이 그 사실을 안 적으면 사용자는 **그림이
+ * 깨진 줄 안다** — 실제로 그런 보고를 받았다.
+ *
+ * 설계 §11 은 「크롭하는 셋이 구도를 버린다 → 미리보기로 사람이 본다」고
+ * 적었는데, 보여 주기만 하고 **무엇을 보라고는 안 했다.**
+ */
+export function cropNotice(
+  specId: string,
+  plan: (spec: AdSpec) => { kind: string },
+): string | undefined {
+  const spec = AD_SPECS.find((entry) => entry.id === specId);
+  if (!spec) return undefined;
+  return plan(spec).kind === "crop"
+    ? "비율이 달라 좌우를 잘랐습니다 — 주인공이 남았는지 보세요"
+    : undefined;
 }
 
 /**

@@ -51,6 +51,14 @@ export interface EditJobInput {
   instruction: string;
   modelId: string;
   ratioId: string;
+  /**
+   * `match-source` 로 만든 작업을 고칠 때 쓸 크기.
+   *
+   * **이 필드가 없어서 수정이 거절됐다.** `ratioId` 는 프로젝트의 것을 그대로
+   * 쓰므로 `match-source` 가 들어가는데, 크기가 없으면 `buildPosterJob` 이
+   * 「첨부한 그림의 크기를 읽지 못해」로 거절한다(설계 §10 3-b).
+   */
+  sourceSize?: { width: number; height: number };
   slots: PosterSlots;
 }
 
@@ -69,6 +77,7 @@ export function planEditJob(input: EditJobInput): PosterEditJob {
     editInstruction: instruction,
     modelId: input.modelId,
     ratioId: input.ratioId,
+    ...(input.sourceSize ? { sourceSize: input.sourceSize } : {}),
     // 수정은 한 장만 만든다. 세 장을 또 받으면 고르는 일이 반복된다.
     variants: 1,
     slots: {

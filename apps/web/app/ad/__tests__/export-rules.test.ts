@@ -4,7 +4,8 @@ import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, bytesFromDataUrl, missingRequiredCount,
+  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
+  cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -444,5 +445,171 @@ describe("필수를 꺼 두면 알린다", () => {
     const blocked = rows.filter((r) => !r.supported && r.spec.required);
     expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
     expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+  });
+});
+
+describe("어디서 그림을 고르는가", () => {
+  /**
+   * **3단계가 만드는 것은 라이브러리에 없다**(설계 §10 3-e). 광고 마스터는
+   * `poster_images` 에 쌓이는데 이 화면은 `library_images` 만 읽어서, 마스터를
+   * 만들고 여기 오면 **고를 그림이 하나도 없었다.** 로컬에서 켜 보고 알았다.
+   */
+  const library = [
+    { id: "L1", title: "가을 사진전", storage: "account", tool: "pdp" },
+    { id: "L2", title: "브라우저 초안", storage: "browser", tool: "pdp" },
+    { id: "L3", title: "참고", storage: "account", tool: "reference" },
+  ] as never[];
+  const posters = [
+    { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ variantIndex: 0 }] },
+    { id: "P2", title: "만드는 중", status: "generating", images: [] },
+    { id: "P3", title: "결과 없음", status: "done", images: [] },
+  ];
+
+  it("라이브러리와 포스터를 함께 보여 준다", () => {
+    const items = adSourceItems(library, posters);
+    expect(items.map((item) => item.id)).toEqual(["P1", "L1"]);
+  });
+
+  /** 광고 마스터가 최근 것이므로 위에 온다 — 만들자마자 고르러 온다. */
+  it("포스터를 먼저 세운다", () => {
+    expect(adSourceItems(library, posters)[0]!.source).toBe("poster");
+  });
+
+  it("서버에 그림이 없는 것은 안 보여 준다", () => {
+    const ids = adSourceItems([], posters).map((item) => item.id);
+    expect(ids, "만드는 중이거나 결과가 없는 것은 고를 수 없다").toEqual(["P1"]);
+  });
+
+  it("라이브러리 쪽 거르기는 그대로다", () => {
+    const ids = adSourceItems(library, []).map((item) => item.id);
+    expect(ids, "브라우저 저장분과 참고 이미지는 서버에 파일이 없다").toEqual(["L1"]);
+  });
+
+  /** 어느 쪽에서 왔는지가 실려야 라우트가 어느 표를 읽을지 안다. */
+  it("출처를 함께 싣는다", () => {
+    const items = adSourceItems(library, posters);
+    expect(items.find((item) => item.id === "L1")!.source).toBe("library");
+  });
+});
+
+describe("어느 그림을 뽑는가", () => {
+  /**
+   * **미리보기와 내보내기가 서로 다른 그림을 가리키고 있었다.**
+   *
+   * 화면은 배열 번호를 `position` 으로 보냈는데, 서버는 그것을 `variantIndex`
+   * 로 읽는다. `variantIndex` 는 **배치마다 0 부터 다시 시작하므로**
+   * (`generate.ts:174`) 한 작업 안에서 번호가 겹친다 — 「고치기」나 재생성을
+   * 한 번만 해도 그렇다. 그러면 사용자가 A 를 보고 골랐는데 **ZIP 에는 B 가
+   * 담긴다.** 「사람 눈이 의도 검증이다」(§5.2)가 여기서 헛돈다.
+   *
+   * 3-0 에서 같은 사실(번호가 겹친다)을 **저장 경로 충돌**로만 봤고 화면 쪽은
+   * 못 봤다. 같은 사실의 다른 얼굴이다.
+   */
+  it("포스터 그림은 변형 번호를 그대로 보낸다", () => {
+    const picks = posterImagePicks("p1", [{ variantIndex: 0 }, { variantIndex: 3 }]);
+    expect(picks.map((pick) => pick.position)).toEqual([0, 3]);
+  });
+
+  /** 겹친 번호는 하나로 접는다 — 안 접으면 같은 그림이 두 번 뜨고 React key 도 겹친다. */
+  it("겹친 변형 번호를 접는다", () => {
+    const picks = posterImagePicks("p1", [
+      { variantIndex: 0 }, { variantIndex: 0 }, { variantIndex: 1 },
+    ]);
+    expect(picks.map((pick) => pick.position)).toEqual([0, 1]);
+  });
+
+  it("주소가 변형 번호를 가리킨다 — 배열 번호가 아니다", () => {
+    const picks = posterImagePicks("p1", [{ variantIndex: 5 }]);
+    expect(picks[0]!.image).toBe("/api/poster/projects/p1/images/5/file");
+  });
+
+  it("그림이 없으면 빈 목록이다", () => {
+    expect(posterImagePicks("p1", [])).toEqual([]);
+  });
+
+  /**
+   * 라이브러리는 다르다 — `/api/library` 가 `position` 을 채워 주므로 그 값을 쓴다.
+   * 없으면 배열 번호로 떨어진다(옛 응답).
+   */
+  it("라이브러리 그림은 응답이 준 position 을 쓴다", () => {
+    const picks = libraryImagePicks([
+      { image: "a", sectionName: "1", position: 2 },
+      { image: "b", sectionName: "2" },
+    ]);
+    expect(picks.map((pick) => pick.position)).toEqual([2, 1]);
+  });
+});
+
+describe("라이브러리 그림의 번호가 어긋나는 자리", () => {
+  /**
+   * **`getAccountItemImages` 가 `position` 을 버린다**(`lib/library.ts:286`).
+   * 게다가 `url` 이 없는 것을 `.filter` 로 걸러내므로, 중간이 하나라도 비면
+   * **배열 번호와 실제 `position` 이 어긋난다.** 그러면 미리보기와 내보내기가
+   * 다른 그림이 된다 — 포스터 쪽에서 고친 것과 같은 부류다.
+   *
+   * 그래서 `position` 이 실려 오면 그것을 쓰고, 없으면 지금까지처럼 배열
+   * 번호로 떨어진다.
+   */
+  it("중간이 비어도 실제 번호를 따라간다", () => {
+    const picks = libraryImagePicks([
+      { image: "a", sectionName: "1번째 이미지", position: 0 },
+      { image: "c", sectionName: "3번째 이미지", position: 2 },
+    ]);
+    expect(picks.map((pick) => pick.position), "1번은 url 이 없어 걸러졌다").toEqual([0, 2]);
+  });
+});
+
+describe("작업을 썸네일로 고른다", () => {
+  /**
+   * **글자만으로는 못 고른다.** 광고 모드는 한 번 누를 때 마스터마다 프로젝트를
+   * 만들어 작업이 배로 쌓이고, 제목이 「가을 사진전 (1200×1200)」처럼 붙는다.
+   * 이 저장소는 그림 고르는 자리를 전부 썸네일 격자로 만든다
+   * (`_components/library-picker.tsx`).
+   */
+  it("포스터는 첫 변형의 사본을 쓴다", () => {
+    const items = adSourceItems([], [
+      { id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] },
+    ]);
+    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/2/file?size=thumb");
+  });
+
+  it("라이브러리는 목록이 준 썸네일을 쓴다", () => {
+    const items = adSourceItems(
+      [{ id: "L1", title: "가을", storage: "account", tool: "pdp", thumbnail: "data:x" }] as never[],
+      [],
+    );
+    expect(items[0]!.thumbnail).toBe("data:x");
+  });
+
+  /** 없으면 없는 채로 둔다 — 화면이 자리표시를 그린다. */
+  it("썸네일이 없어도 목록에서 빼지 않는다", () => {
+    const items = adSourceItems(
+      [{ id: "L1", title: "가을", storage: "account", tool: "pdp" }] as never[],
+      [],
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]!.thumbnail).toBeUndefined();
+  });
+});
+
+describe("잘라서 만든 규격을 말한다", () => {
+  /**
+   * **크롭은 구도를 버린다.** 2048×1072 마스터에서 456×304(1.5:1)를 뽑으면
+   * 좌우가 잘려 헤드라인 한쪽이 사라진다. 화면이 그 사실을 안 적으면 사용자는
+   * **그림이 깨진 줄 안다** — 실제로 그런 보고를 받았다.
+   *
+   * 설계 §11 이 「크롭하는 셋이 구도를 버린다 → 미리보기로 사람이 본다」고
+   * 적었는데, 보여 주기만 하고 **무엇을 보라고는 안 했다.**
+   */
+  it("잘라 만든 규격이면 그렇다고 한다", () => {
+    expect(cropNotice("naver-brand-pc", planDerivation)).toMatch(/잘랐습니다/);
+  });
+
+  it("그대로 줄인 규격에는 안 붙인다", () => {
+    expect(cropNotice("google-rda-landscape", planDerivation)).toBeUndefined();
+  });
+
+  it("모르는 규격에는 안 붙인다", () => {
+    expect(cropNotice("없는-규격", planDerivation)).toBeUndefined();
   });
 });

@@ -40,6 +40,16 @@ export interface PosterProjectRecord {
     slots: PosterSlots;
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];
+    /**
+     * 광고 마스터의 픽셀. 옛 작업에는 없다.
+     *
+     * **있으면 `match-source` 가 첨부 파일을 재는 대신 이 값을 쓴다.** 광고
+     * 규격은 정해진 크기의 마스터에서 파생되는데, 그 크기를 지정할 길이
+     * 달리 없었다(설계 §4.2).
+     *
+     * 서버가 마스터 id 를 픽셀로 바꿔 넣는다 — 밖에서 자유 픽셀을 받지 않는다.
+     */
+    adMaster?: { width: number; height: number };
   };
   createdAt: string;
   updatedAt: string;

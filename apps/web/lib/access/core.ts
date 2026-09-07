@@ -24,7 +24,21 @@ export interface Viewer {
   role: UserRole;
 }
 
-export type ScopeAction = "read" | "delete";
+/**
+ * 무엇을 하려는가.
+ *
+ * **`export` 가 따로 있는 이유**: 「보기」와 「가공해 파일로 내려받기」는 무게가
+ * 다르다. 전체가 열린 사람에게 보기·지우기를 연 근거는 「잘못 올라온 것을 치울
+ * 방법이 없다」였는데(`server-library.ts`), 그것은 **보고 지우는** 일이다.
+ * 광고 규격 내보내기는 ZIP 이 만들어지는 순간 서비스 밖으로 나가고 그 안에는
+ * 누구 것인지 안 적힌다.
+ *
+ * **역할을 지어내 넘기는 방식은 쓰지 않는다.** 호출부에서 `role: "member"` 로
+ * 바꿔 부르면 `api/ad/__tests__/ad-export-route.test.ts` 의 「본문에 실린 역할을
+ * 믿지 않는다」가 막으려던 그 관례가 되고, 한 번 생기면 다른 라우트로 번진다.
+ * 역할은 그대로 넘기고 **액션 이름으로 가른다.**
+ */
+export type ScopeAction = "read" | "delete" | "export";
 
 /**
  * 이 사람이 만질 수 있는 범위.
@@ -48,7 +62,9 @@ export type Scope =
  * 팀 기능이 들어오면 **이 함수 하나만** 고친다 — 그때 `{ kind: "team" }` 이
  * 하나 늘고, 부르는 쪽은 그대로다. 그것이 이 함수를 만든 이유다.
  */
-export function scope(viewer: Viewer, _action: ScopeAction): Scope {
+export function scope(viewer: Viewer, action: ScopeAction): Scope {
+  // 내보내기는 전체가 열린 사람도 자기 것만이다.
+  if (action === "export") return { kind: "user", userId: viewer.userId };
   if (viewer.role === "admin") return { kind: "all" };
   return { kind: "user", userId: viewer.userId };
 }

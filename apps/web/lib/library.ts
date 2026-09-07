@@ -256,6 +256,14 @@ export async function deleteLibraryItem(item: LibraryItem): Promise<void> {
 export interface PdpResultImage {
   sectionName: string;
   image: string;
+  /**
+   * 서버가 준 자리 번호. **배열 번호와 다를 수 있다.**
+   *
+   * 아래에서 `url` 없는 것을 걸러내므로, 중간이 하나라도 비면 배열 번호가
+   * 밀린다. 그 번호로 서버에 다시 물으면 **다른 그림이 온다.**
+   * 광고 규격 내보내기가 이 값을 쓴다.
+   */
+  position?: number;
 }
 
 /**
@@ -286,6 +294,8 @@ export async function getAccountItemImages(
         .map((entry) => ({
           sectionName: `${entry.position + 1}번째 이미지`,
           image: entry.url as string,
+          // **버리면 안 된다.** 위 `filter` 때문에 배열 번호가 밀릴 수 있다.
+          position: entry.position,
         })),
     };
   } catch {

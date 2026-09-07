@@ -251,3 +251,41 @@ describe("표기를 새긴 그림의 형식", () => {
     expect(sniffImageMime(Buffer.alloc(16), "image/webp")).toBe("image/webp");
   });
 });
+
+/**
+ * 내보내기는 관리자에게도 안 넓힌다 (설계 §10 3-e).
+ *
+ * **「보기」와 「가공해 내보내기」는 무게가 다르다.** 관리자에게 전체를 연
+ * 근거는 `libraryScope` 머리말에 적혀 있다 — 「잘못 올라온 것을 치울 방법이
+ * 없다」는 운영 판단이다. 그것은 **보고 지우는** 일이고, 광고 내보내기는
+ * **가공해서 파일로 내려받는** 일이다. ZIP 이 만들어지는 순간 서비스 밖으로
+ * 나가고, 안에는 누구 것인지 적히지 않는다.
+ *
+ * 게다가 `/ad` 목록은 관리자에게 전 회원 최근 200건을 싣는데 화면이 소유자를
+ * 안 보여 준다 — **관리자 자신도 남의 것인 줄 모른 채 뽑는다.**
+ *
+ * **호출부에서 역할을 지어내 넘기면 안 된다.** `role: "member"` 로 바꿔
+ * 부르는 방식은 `ad-export-route.test.ts` 의 「본문에 실린 역할을 믿지
+ * 않는다」가 막으려던 바로 그 관례다. 액션 이름으로 가른다.
+ */
+describe("내보내기 범위", () => {
+  it("관리자여도 자기 것만 내보낸다", () => {
+    expect(libraryScope({ userId: "admin-1", role: "admin" }, "export")).toBe("admin-1");
+  });
+
+  it("회원은 지금까지와 같다", () => {
+    expect(libraryScope({ userId: "u1", role: "member" }, "export")).toBe("u1");
+  });
+
+  /**
+   * 보기·지우기는 안 바뀐다 — 운영자가 그렇게 정했다.
+   *
+   * `undefined` 다. **`null` 이 아닌 것이 중요하다** — `null` 은 「값이 비어
+   * 있다」로 읽혀 `.eq("user_id", null)` 에 그대로 넘어가는데, `undefined` 는
+   * 「조건 자체가 없다」라 넘기면 타입이 막는다(`access/core.ts` 머리말).
+   */
+  it("보기와 지우기는 관리자에게 열린 채로 둔다", () => {
+    expect(libraryScope({ userId: "admin-1", role: "admin" }, "read")).toBeUndefined();
+    expect(libraryScope({ userId: "admin-1", role: "admin" }, "delete")).toBeUndefined();
+  });
+});

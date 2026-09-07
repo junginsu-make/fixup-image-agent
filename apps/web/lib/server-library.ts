@@ -66,6 +66,9 @@ function readScope(viewer: LibraryViewer): ViewScope {
  *
  * 관리자는 보기도 지우기도 전체가 열린다. 무거운 일이라는 사실은 그대로라,
  * 화면은 지우기 전에 한 번 더 묻고 누가 만든 것인지를 함께 보여준다.
+ *
+ * **`export` 만 다르다 — 전체가 열린 사람도 자기 것만이다.** 판단은
+ * `access/core.ts` 가 한다(거기 머리말에 근거를 적었다).
  */
 export function libraryScope(viewer: LibraryViewer, action: ScopeAction): string | undefined {
   return ownerFilter(viewer, action);
@@ -362,6 +365,22 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
  * 그래서 자식을 읽기 전에 부모를 한 번 확인한다. 질의가 하나 늘지만,
  * 「팀원의 것도 대충 보이게」 하는 어림짐작보다 낫다.
  */
+/**
+ * **내가 만든 것인가.** 팀도 전체 범위도 안 본다.
+ *
+ * `canSeeItem` 은 팀 것까지 보여 주는데, 내보내기는 그러면 안 된다 — 같은 팀
+ * 사람의 그림이라도 가공해서 파일로 내려받는 것은 다른 일이다.
+ */
+async function ownsItem(viewer: LibraryViewer, itemId: string): Promise<boolean> {
+  const { data } = await createSupabaseAdminClient()
+    .from("library_items")
+    .select("id")
+    .eq("id", itemId)
+    .eq("user_id", viewer.userId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
 async function canSeeItem(viewer: LibraryViewer, itemId: string): Promise<boolean> {
   const { data } = await scopedRead(
     createSupabaseAdminClient().from("library_items").select("id").eq("id", itemId),
@@ -416,10 +435,27 @@ export async function getLibraryImageFile(
   viewer: LibraryViewer,
   itemId: string,
   position: number,
+  /**
+   * 무엇을 하려고 읽는가.
+   *
+   * **기본은 `read` 라 기존 호출부가 안 바뀐다.** 광고 규격 내보내기만
+   * `export` 를 넘겨 관리자에게도 소유자 조건을 건다 — 보고 지우는 것과
+   * 가공해 내려받는 것은 무게가 다르다(`libraryScope` 머리말).
+   */
+  action: "read" | "export" = "read",
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   const supabase = createSupabaseAdminClient();
 
-  if (!(await canSeeItem(viewer, itemId))) return null;
+  /**
+   * **내보내기는 자기 것만 본다.** 「보기」와 「가공해 내려받기」는 무게가
+   * 다르다 — ZIP 이 만들어지는 순간 서비스 밖으로 나가고 그 안에는 누구
+   * 것인지 안 적힌다. 게다가 `/ad` 목록은 전체가 열린 사람에게 남의 것도
+   * 싣는데 화면이 소유자를 안 보여 준다 — **본인도 남의 것인 줄 모른 채 뽑는다.**
+   */
+  const visible = action === "export"
+    ? await ownsItem(viewer, itemId)
+    : await canSeeItem(viewer, itemId);
+  if (!visible) return null;
 
   const { data, error } = await supabase
     .from("library_images")

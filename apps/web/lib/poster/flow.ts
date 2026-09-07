@@ -43,6 +43,24 @@ export interface PosterSubmission {
   approximate?: true;
 }
 
+/**
+ * **돈이 나간 뒤에 실패했다.**
+ *
+ * `queue.submitJob` 이 성공하면 fal 작업은 이미 만들어졌고 과금도 끝났다.
+ * 그 뒤의 실패(장부 쓰기 등)를 보통 오류와 같이 다루면, 부르는 쪽이
+ * 「실패했으니 되돌려도 되겠지」로 판단해 **사용자가 곧바로 두 번째 작업을
+ * 만든다.** 그래서 갈래를 나눈다.
+ *
+ * `falRequestId` 를 실어 보낸다 — 지금까지 이 값은 예외와 함께 사라졌고,
+ * 그러면 「돈은 나갔는데 장부에 없는 요청」을 나중에 찾을 길이 없다.
+ */
+export class PosterChargedError extends Error {
+  constructor(readonly falRequestId: string, readonly cause: unknown) {
+    super("제출은 됐는데 장부에 적지 못했습니다.");
+    this.name = "PosterChargedError";
+  }
+}
+
 export async function submitPoster(
   job: PosterJobInput & { parentImageId?: string; editInstruction?: string },
   dependencies: PosterFlowDependencies,
@@ -52,19 +70,28 @@ export async function submitPoster(
 
   const { requestId } = await dependencies.queue.submitJob(built.endpoint, built.input);
 
+  // ─── 이 줄부터는 돈이 이미 나갔다 ───
+
   // 제출과 저장 사이에서 죽으면 돈이 어디로 갔는지 못 찾는다. 바로 적는다.
-  const { id } = await dependencies.requests.create({
-    projectId: job.projectId,
-    parentImageId: job.parentImageId ?? null,
-    editInstruction: job.editInstruction ?? null,
-    modelId: job.modelId,
-    ratioId: job.ratioId,
-    mode: built.mode,
-    size: built.size,
-    requestedImages: job.variants,
-    unitCostUsd: built.estimate.unitUsd ?? null,
-    costApproximate: built.estimate.approximate === true,
-  });
+  let id: string;
+  try {
+    ({ id } = await dependencies.requests.create({
+      projectId: job.projectId,
+      parentImageId: job.parentImageId ?? null,
+      editInstruction: job.editInstruction ?? null,
+      modelId: job.modelId,
+      ratioId: job.ratioId,
+      mode: built.mode,
+      size: built.size,
+      requestedImages: job.variants,
+      unitCostUsd: built.estimate.unitUsd ?? null,
+      costApproximate: built.estimate.approximate === true,
+    }));
+  } catch (cause) {
+    // **과금 뒤의 실패임을 부르는 쪽이 알아야 한다.** 모르면 「실패했으니
+    // 되돌려도 되겠지」로 판단해 사용자가 곧바로 두 번째 작업을 만든다.
+    throw new PosterChargedError(requestId, cause);
+  }
 
   return {
     requestRowId: id,
