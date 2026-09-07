@@ -106,3 +106,32 @@ export function safeAreaPercent(
  * 검증을 전부 통과하고 나가므로(설계 §5.2), 사람이 볼 때 눈에 띄어야 한다.
  */
 export const SHRINK_WARNING = 4;
+
+/**
+ * 안전영역 밖을 덮는 반투명 띠의 CSS.
+ *
+ * **`border-width` 에 퍼센트를 넣으면 안 된다.** CSS 의 `<line-width>` 는
+ * 길이·`thin`·`medium`·`thick` 만 받는다 — 퍼센트는 **무시된다.** 초판이 그렇게
+ * 썼고, 띠가 아예 안 그려지는데 화면은 멀쩡해 보였다. 이 화면의 핵심 보증 하나가
+ * 조용히 없는 상태였다.
+ *
+ * 대신 **안전영역만큼 안쪽에 놓인 사각형**을 만들고, 그 바깥을 거대한 그림자로
+ * 덮는다. `top`·`right`·`bottom`·`left` 는 퍼센트를 받는다. 부모가
+ * `overflow: hidden` 이라 그림자가 미리보기 밖으로 새지 않는다.
+ *
+ * 그래서 보이는 것은 **가장자리가 어둡게 덮인 그림**이다 — 그 어두운 자리에
+ * 주요 요소를 두면 포털이 가릴 수 있다는 뜻이다.
+ */
+export function safeAreaOverlayStyle(
+  safeArea: NonNullable<AdSpec["safeArea"]>,
+  target: { width: number; height: number },
+): Record<string, string> {
+  const band = safeAreaPercent(safeArea, target);
+  return {
+    top: band.top,
+    right: band.right,
+    bottom: band.bottom,
+    left: band.left,
+    boxShadow: "0 0 0 9999px rgba(220, 38, 38, 0.18)",
+  };
+}

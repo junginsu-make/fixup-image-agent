@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { AD_SPECS } from "../../../lib/ad/specs";
 import { planDerivation } from "../../../lib/ad/derive";
 import {
-  defaultSelection, safeAreaPercent, specRows, zipEntryName, SHRINK_WARNING,
+  defaultSelection, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
+  SHRINK_WARNING,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -112,5 +113,46 @@ describe("많이 줄었다는 경고", () => {
 
   it("얌전한 축소는 안 넘는다", () => {
     expect(2048 / 1200).toBeLessThan(SHRINK_WARNING);
+  });
+});
+
+describe("안전영역 띠가 실제로 그려지는가", () => {
+  const style = safeAreaOverlayStyle(
+    { top: 100, right: 0, bottom: 100, left: 40 },
+    { width: 1200, height: 1200 },
+  );
+
+  /**
+   * **초판이 여기서 틀렸다.** `border-width` 에 퍼센트를 넣었는데, CSS 의
+   * `<line-width>` 는 길이·`thin`·`medium`·`thick` 만 받는다 — 퍼센트는
+   * 무시된다. 띠가 아예 안 그려지는데 화면은 멀쩡해 보였다.
+   *
+   * jsdom 이 없어 DOM 으로는 못 재므로, **CSS 를 고르는 규칙 자체**를 잰다.
+   */
+  it("퍼센트를 받지 않는 속성에 퍼센트를 넣지 않는다", () => {
+    for (const [property, value] of Object.entries(style)) {
+      if (!value.includes("%")) continue;
+      expect(property, `${property} 는 퍼센트를 받지 않는다`).not.toMatch(/[Ww]idth$/);
+      expect(property).not.toMatch(/border/i);
+    }
+  });
+
+  it("퍼센트를 받는 자리에만 비율을 넣는다", () => {
+    expect(style.top).toBe("8.33%");
+    expect(style.left).toBe("3.33%");
+    expect(["top", "right", "bottom", "left"].every((key) => key in style)).toBe(true);
+  });
+
+  it("바깥을 덮을 그림자가 있다 — 안쪽 사각형만으로는 아무것도 안 가린다", () => {
+    expect(style.boxShadow).toMatch(/^0 0 0 \d+px rgba\(/);
+  });
+
+  it("안전영역이 없는 규격에는 띠를 만들지 않는다", () => {
+    // 화면이 `entry.safeArea` 가 있을 때만 부른다. 여기서는 0 이 들어와도
+    // 그림자가 화면을 통째로 덮지 않는지만 본다.
+    const none = safeAreaOverlayStyle(
+      { top: 0, right: 0, bottom: 0, left: 0 }, { width: 100, height: 100 },
+    );
+    expect(none.top).toBe("0.00%");
   });
 });

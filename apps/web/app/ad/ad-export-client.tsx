@@ -9,7 +9,7 @@ import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../li
 import { planDerivation } from "../../lib/ad/derive";
 import {
   PORTAL_LABEL, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
-  safeAreaPercent, specRows, zipEntryName,
+  safeAreaOverlayStyle, specRows, zipEntryName,
 } from "./export-rules";
 
 /**
@@ -254,8 +254,8 @@ export function AdExportClient() {
                       {entry.safeArea && (
                         <span
                           aria-hidden
-                          className="pointer-events-none absolute inset-0 border-destructive/40"
-                          style={{ borderStyle: "solid", borderWidth: 0, ...borderFrom(entry) }}
+                          className="pointer-events-none absolute"
+                          style={safeAreaOverlayStyle(entry.safeArea, entry.target)}
                         />
                       )}
                     </>
@@ -296,16 +296,4 @@ export function AdExportClient() {
       )}
     </div>
   );
-}
-
-/** 안전영역을 테두리 두께로 표현한다. 반투명 띠가 가장자리를 덮는다. */
-function borderFrom(entry: ResultEntry): React.CSSProperties {
-  if (!entry.safeArea) return {};
-  const band = safeAreaPercent(entry.safeArea, entry.target);
-  return {
-    borderTopWidth: band.top,
-    borderBottomWidth: band.bottom,
-    borderLeftWidth: band.left,
-    borderRightWidth: band.right,
-  };
 }
