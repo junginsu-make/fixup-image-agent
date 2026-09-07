@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AD_SPECS } from "../ad/specs";
-import { planMasters } from "../ad/master-plan";
+import { needsCutout, planMasters } from "../ad/master-plan";
 
 /**
  * 고른 규격에서 **만들어야 할 마스터를 역산한다.**
@@ -93,5 +93,36 @@ describe("과금 전에 막는다", () => {
   /** 모르는 id 가 화면에 그대로 찍히면 안 된다 — `batch.ts` 가 같은 판단을 한다. */
   it("모르는 id 를 잘라서 담는다", () => {
     expect(planMasters(["x".repeat(200)]).blocked[0]!.specId.length).toBeLessThanOrEqual(64);
+  });
+});
+
+/**
+ * 배경 제거가 필요한가 (설계 §9.2).
+ *
+ * **CPU 자리를 잡기 전에 알아야 한다.** `withRenderSlot` 은 「스레드풀이 넷이라」
+ * 만든 CPU 게이트인데, 배경 제거는 fal 이 일하는 4초 동안 **우리 CPU 를 안
+ * 쓴다.** 그 4초를 자리 안에서 기다리면 카드뉴스 미리보기가 이유 없이 429 를
+ * 받는다 — 게이트가 지키기로 한 자원과 실제로 쥐는 자원이 다르다.
+ */
+describe("배경 제거가 필요한가", () => {
+  it("조립 규격을 고르면 필요하다", () => {
+    expect(needsCutout(["kakao-bizboard"])).toBe(true);
+    expect(needsCutout(["naver-smartchannel"])).toBe(true);
+  });
+
+  it("파생 규격만 고르면 필요 없다", () => {
+    expect(needsCutout(["google-rda-square", "naver-brand-pc"])).toBe(false);
+  });
+
+  it("하나라도 섞이면 필요하다", () => {
+    expect(needsCutout(["google-rda-square", "kakao-bizboard"])).toBe(true);
+  });
+
+  it("모르는 id 는 필요 없다 — 어차피 막힌다", () => {
+    expect(needsCutout(["없는-규격"])).toBe(false);
+  });
+
+  it("아무것도 안 고르면 필요 없다", () => {
+    expect(needsCutout([])).toBe(false);
   });
 });

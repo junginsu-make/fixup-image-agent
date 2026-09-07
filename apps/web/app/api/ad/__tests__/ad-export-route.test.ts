@@ -29,6 +29,9 @@ const fileArgs: Array<{ itemId: string; position: number }> = [];
 const batchArgs: Array<{ specIds: string[] }> = [];
 const posterOwners: string[] = [];
 const scopes: string[] = [];
+/** 무엇이 먼저 일어났는가. cutout 이 slot 보다 앞이어야 한다. */
+const order: string[] = [];
+let cutoutThrows: Error | null = null;
 let posterImages: Array<{ variantIndex: number; assetPath: string }> = [
   { variantIndex: 0, assetPath: "u1/poster/p1/0.png" },
 ];
@@ -52,6 +55,19 @@ vi.mock("../../../../lib/ad/batch", async () => {
     },
   };
 });
+
+vi.mock("../../../../lib/ad/background", () => ({
+  createBackgroundRemover: () => ({}),
+  removeBackground: async () => {
+    order.push("cutout");
+    if (cutoutThrows) throw cutoutThrows;
+    return "https://fal/cut.png";
+  },
+}));
+
+vi.mock("../../../../lib/poster/providers", () => ({
+  createPosterFalClients: () => ({ uploader: { uploadReference: async () => "https://fal/up.png" } }),
+}));
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => {
@@ -92,6 +108,7 @@ vi.mock("../../../../lib/layout/render-gate", async () => {
   return {
     ...real,
     withRenderSlot: async <T,>(_userId: string, work: () => Promise<T>) => {
+      order.push("slot");
       if (busy) throw new real.RenderBusyError("붐빕니다.");
       return work();
     },
@@ -118,6 +135,8 @@ beforeEach(() => {
   batchArgs.length = 0;
   posterOwners.length = 0;
   scopes.length = 0;
+  order.length = 0;
+  cutoutThrows = null;
   posterImages = [{ variantIndex: 0, assetPath: "u1/poster/p1/0.png" }];
 });
 
@@ -320,5 +339,41 @@ describe("내보내기는 자기 것만", () => {
     member = { userId: "admin-1", role: "admin" };
     await call(good);
     expect(viewers).toEqual([{ userId: "admin-1", role: "admin" }]);
+  });
+});
+
+/**
+ * 배경 제거는 CPU 자리 **밖**에서 한다 (설계 §9.2).
+ *
+ * `withRenderSlot` 은 「스레드풀이 넷이라」 만든 **CPU** 게이트다. 그런데 배경
+ * 제거는 fal 이 일하는 4초 동안 **우리 CPU 를 안 쓴다** — 그 4초를 자리 안에서
+ * 기다리면 카드뉴스 미리보기가 이유 없이 429 를 받는다.
+ */
+describe("배경 제거와 CPU 자리", () => {
+  it("자리를 잡기 전에 배경을 지운다", async () => {
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    expect(order, "cutout 이 slot 보다 앞이어야 한다").toEqual(["cutout", "slot"]);
+  });
+
+  /** 조립이 없으면 부를 이유가 없다 — 돈과 4초를 헛되이 쓴다. */
+  it("파생 규격만 고르면 배경을 안 지운다", async () => {
+    await call({ ...good, specIds: ["google-rda-square"] });
+    expect(order).toEqual(["slot"]);
+  });
+
+  it("하나라도 조립이면 지운다", async () => {
+    await call({ ...good, specIds: ["google-rda-square", "naver-smartchannel"] });
+    expect(order).toEqual(["cutout", "slot"]);
+  });
+
+  /**
+   * **배경 제거가 실패해도 자리를 잡고 나머지를 뽑는다.** 조립 규격만 실패로
+   * 두면 되는데, 여기서 통째로 던지면 **파생 규격까지 못 받는다**(설계 §9.3).
+   */
+  it("배경 제거가 실패해도 나머지는 뽑는다", async () => {
+    cutoutThrows = new Error("fal 이 응답하지 않습니다.");
+    const response = await call({ ...good, specIds: ["google-rda-square", "kakao-bizboard"] });
+    expect(response.status).toBe(200);
+    expect(order).toContain("slot");
   });
 });

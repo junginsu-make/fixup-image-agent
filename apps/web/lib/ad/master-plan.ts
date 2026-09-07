@@ -70,3 +70,23 @@ export function planMasters(specIds: string[]): MasterPlan {
 
   return { masters: [...masters.values()], blocked };
 }
+
+/**
+ * 이 규격들을 뽑으려면 배경 제거가 필요한가.
+ *
+ * **CPU 자리를 잡기 전에 알아야 한다**(설계 §9.2). `withRenderSlot` 은
+ * 「스레드풀이 넷이라」 만든 CPU 게이트인데, 배경 제거는 fal 이 일하는 4초
+ * 동안 **우리 CPU 를 안 쓴다.** 그 4초를 자리 안에서 기다리면 카드뉴스
+ * 미리보기가 이유 없이 429 를 받는다 — 게이트가 지키기로 한 자원(스레드풀)과
+ * 실제로 쥐는 자원이 다르다.
+ *
+ * 그래서 배경 제거를 **자리 밖에서** 먼저 하고, 자리는 조립·인코딩에만 쓴다.
+ * 자리를 못 잡으면 그 호출값($0.003)이 버려지지만, 잃는 것이 0.4원이고 애초에
+ * 자리를 못 잡을 만큼 붐비는 것은 드물다.
+ */
+export function needsCutout(specIds: string[]): boolean {
+  return specIds.some((specId) => {
+    const spec = AD_SPECS.find((entry) => entry.id === specId);
+    return spec !== undefined && planDerivation(spec).kind === "assemble";
+  });
+}

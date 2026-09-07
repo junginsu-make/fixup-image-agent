@@ -7,6 +7,7 @@ import { getLibraryImageFile } from "../../../../lib/server-library";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
+import { needsCutout } from "../../../../lib/ad/master-plan";
 import { createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
 import { createPosterFalClients } from "../../../../lib/poster/providers";
 
@@ -168,21 +169,47 @@ export async function POST(request: Request) {
      * 조건 없이 넘기면 꺼져 있어도 규격 수만큼 조회가 돈다.
      */
     const badge = await isAiBadgeEnabled();
+
+    /**
+     * **배경 제거를 자리 밖에서 먼저 한다** (설계 §9.2).
+     *
+     * `withRenderSlot` 은 「스레드풀이 넷이라」 만든 **CPU** 게이트다. 그런데
+     * 배경 제거는 fal 이 일하는 4초 동안 **우리 CPU 를 안 쓴다** — 그 4초를
+     * 자리 안에서 기다리면 카드뉴스 미리보기가 이유 없이 429 를 받는다.
+     * **게이트가 지키기로 한 자원과 실제로 쥐는 자원이 다르다.**
+     *
+     * 대가: 자리를 못 잡으면 이 호출값($0.003)이 버려진다. 잃는 것이 0.4원이고
+     * 애초에 자리를 못 잡을 만큼 붐비는 것은 드물다.
+     *
+     * **조립 규격을 안 골랐으면 아예 안 부른다** — 돈과 4초를 헛되이 쓴다.
+     *
+     * **실패해도 여기서 안 던진다.** 조립 규격만 실패로 두면 되는데 통째로
+     * 던지면 **파생 규격까지 못 받는다**(설계 §9.3).
+     */
+    let cutout: Buffer | undefined;
+    let cutoutFailed: string | undefined;
+    if (needsCutout(parsed.data.specIds)) {
+      try {
+        cutout = await cutoutForAd(file.bytes);
+      } catch (error) {
+        cutoutFailed = error instanceof Error ? error.message : "배경을 지우지 못했습니다.";
+      }
+    }
+
     const results = await withRenderSlot(
       auth.member.userId,
       () => exportBatch(file.bytes, parsed.data.specIds, {
         ...(badge ? { finish: markAsAi } : {}),
         /**
-         * **투명 배너를 만드는 길**(설계 4-d).
-         *
-         * 조립 규격(비즈보드·스마트채널)에만 쓰인다 — 모델이 못 만드는
-         * 3.99:1·4.69:1 을 캔버스를 우리가 만들어 해결한다.
-         *
-         * **주입으로 넘긴다.** `batch.ts` 는 규격마다 도는 순수한 루프이고
-         * 배경 제거는 네트워크다. 거기서 직접 부르면 `lib/ad/` 의 순수 층에
-         * fal 이 새고, 시험이 fal 없이 못 돈다.
+         * **이미 지워 둔 것을 준다.** 자리 안에서는 조립·인코딩만 한다.
+         * 실패했으면 그 사유를 그대로 던져 그 규격만 실패로 남긴다.
          */
-        cutout: (master: Buffer) => cutoutForAd(master),
+        ...(cutout || cutoutFailed
+          ? { cutout: async () => {
+              if (cutout) return cutout;
+              throw new Error(cutoutFailed);
+            } }
+          : {}),
       }),
     );
 
