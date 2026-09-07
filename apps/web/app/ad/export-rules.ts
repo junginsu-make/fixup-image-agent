@@ -1,3 +1,4 @@
+import type * as React from "react";
 import type { LibraryItem } from "@fixup/shared";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
 
@@ -117,8 +118,13 @@ export const SHRINK_WARNING = 4;
  * 조용히 없는 상태였다.
  *
  * 대신 **안전영역만큼 안쪽에 놓인 사각형**을 만들고, 그 바깥을 거대한 그림자로
- * 덮는다. `top`·`right`·`bottom`·`left` 는 퍼센트를 받는다. 부모가
- * `overflow: hidden` 이라 그림자가 미리보기 밖으로 새지 않는다.
+ * 덮는다. `top`·`right`·`bottom`·`left` 는 퍼센트를 받는다.
+ *
+ * **부르는 쪽이 `overflow: hidden` 을 보장해야 한다.** 안 그러면 9999px 그림자가
+ * 미리보기 밖으로 새어 **격자 전체를 붉게 덮는다.** 이것이 이 함수의 유일한 숨은
+ * 전제이고, jsdom 이 없어 **시험이 못 잡는 유일한 자리**다 — CSS 를 만드는 곳과
+ * 담는 곳이 파일로 갈려 있어 한쪽만 고치는 사람이 다른 쪽을 안 본다.
+ * 담는 자리는 `ad-export-client.tsx` 의 미리보기 칸이다.
  *
  * 그래서 보이는 것은 **가장자리가 어둡게 덮인 그림**이다 — 그 어두운 자리에
  * 주요 요소를 두면 포털이 가릴 수 있다는 뜻이다.
@@ -126,14 +132,22 @@ export const SHRINK_WARNING = 4;
 export function safeAreaOverlayStyle(
   safeArea: NonNullable<AdSpec["safeArea"]>,
   target: { width: number; height: number },
-): Record<string, string> {
+): React.CSSProperties {
   const band = safeAreaPercent(safeArea, target);
   return {
     top: band.top,
     right: band.right,
     bottom: band.bottom,
     left: band.left,
-    boxShadow: "0 0 0 9999px rgba(220, 38, 38, 0.18)",
+    // **색을 리터럴로 박지 않는다.** 이 띠가 하는 일이 「가려질 자리를 붉게
+    // 덮는다」이므로, 다크 모드에서 배경만 어두워지고 띠가 안 따라오면 대비가
+    // 그만큼 떨어진다. 초판(`border-destructive/40`)은 토큰이었고 따라 움직였다.
+    //
+    // `--destructive` 는 **hex** 다(`globals.css:50`). `hsl(var(--destructive))`
+    // 로 감싸면 `hsl(#b0453c)` 가 되어 **조용히 버려진다** — 이 함수가 고치려던
+    // 바로 그 부류의 버그다. 저장소가 이미 쓰는 `color-mix` 로 섞는다
+    // (`app/create/create-theme.css:41`).
+    boxShadow: "0 0 0 9999px color-mix(in srgb, var(--destructive) 18%, transparent)",
   };
 }
 
@@ -180,8 +194,12 @@ export function excludedCount<T extends { status: string; dataUrl?: string }>(re
  * 보세요」라고 적어 놓고 읽히는지 볼 수 없는 크기로 보여 주는 셈이다.
  *
  * 480 인 근거: **많이 줄인 규격이 1:1 로 들어가는 가장 작은 값**이다.
- * 경고가 붙는 셋은 456×304 · 376×220 · 214×214 이고, 가장 넓은 456 이 여기
- * 들어간다. 초판의 3열 격자는 칸이 약 306px 이라 456 이 축소돼 버렸다.
+ *
+ * 초판의 이 자리는 「경고가 붙는 셋은 456·376·214」라고 단정했는데 **틀렸다.**
+ * 경고 대상은 `batch.ts:172` 가 **실제 올린 그림의 폭**으로 재기 때문에 원본마다
+ * 달라진다 — 1200 폭에서는 214 하나뿐이고, 2048 폭에서는 300·456·376·214 넷이다.
+ * 그 합집합에서 가장 넓은 것이 456 이고, 그것이 여기 들어간다.
+ * 초판의 3열 격자는 칸이 약 306px 이라 456 이 축소돼 버렸다.
  */
 export const PREVIEW_MAX_WIDTH = 480;
 
@@ -193,4 +211,41 @@ export function previewWidth(target: { width: number }, cellWidth = PREVIEW_MAX_
 /** 1:1 로 보이는가. 아니면 「실제보다 작게 보임」을 알려야 한다. */
 export function isActualSize(target: { width: number }, cellWidth = PREVIEW_MAX_WIDTH): boolean {
   return target.width <= cellWidth;
+}
+
+/**
+ * 실패를 사람이 읽을 말로 옮긴다.
+ *
+ * **비-JSON 응답을 삼키지 않는다.** 라우트는 두 곳에서 본문 없는 404 를 낸다 —
+ * 기능이 꺼져 있을 때와 그림을 못 찾을 때. 화면이 `response.json()` 을
+ * `catch(() => null)` 로 받으면 둘 다 「뽑지 못했습니다」로 뭉개져,
+ * **왜 안 되는지 알 길이 없다.**
+ *
+ * 상태 코드마다 할 일이 다르므로 그것을 말해 준다 — 다시 누르면 되는지,
+ * 다른 그림을 골라야 하는지, 사람을 불러야 하는지.
+ */
+export function failureMessage(status: number, message?: string | null): string {
+  if (message) return message;
+  if (status === 404) return "이 그림을 찾지 못했습니다. 다른 작업을 골라 주세요.";
+  if (status === 401 || status === 403) return "로그인이 풀렸습니다. 다시 들어와 주세요.";
+  if (status === 429) return "지금 서버가 붐빕니다. 잠시 뒤에 다시 눌러 주세요.";
+  if (status >= 500) return "서버에서 뽑지 못했습니다. 잠시 뒤에 다시 눌러 주세요.";
+  return "뽑지 못했습니다.";
+}
+
+/**
+ * 필수인데 꺼져 있는 규격의 수.
+ *
+ * 설계 §9 원칙 1 은 두 절이다 — 「필수는 켜고 시작한다」와 **「끄면 알린다」**.
+ * 앞 절만 있으면 사용자가 필수를 끄고 뽑아도 화면이 아무 말을 안 하고,
+ * **포털이 반려하고 나서야 안다.**
+ *
+ * **못 뽑는 필수는 세지 않는다.** 그것은 사용자가 어쩔 수 없는 것이고, 그 자리에는
+ * 이미 「아직 지원하지 않습니다」가 적혀 있다. 고칠 수 없는 것을 경고로 띄우면
+ * 경고가 상시로 켜져 뜻을 잃는다.
+ */
+export function missingRequiredCount(rows: SpecRow[], picked: string[]): number {
+  return rows.filter(
+    (row) => row.supported && row.spec.required && !picked.includes(row.spec.id),
+  ).length;
 }

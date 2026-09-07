@@ -7,9 +7,11 @@ import { Badge, Button, Card, cn } from "@fixup/ui";
 import type { LibraryItem } from "@fixup/shared";
 import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
+import type { AdBatchEntry } from "../../lib/ad/batch";
 import {
   PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
-  downloadable, excludedCount, exportableItems, isActualSize, previewWidth,
+  downloadable, excludedCount, exportableItems, failureMessage, isActualSize,
+  missingRequiredCount, previewWidth,
   safeAreaOverlayStyle, specRows, zipEntryName,
 } from "./export-rules";
 
@@ -24,24 +26,17 @@ import {
  * 보므로, 글자가 안 읽히거나 주인공이 잘린 것은 사람이 봐야 안다.
  */
 
-interface ResultEntry {
-  specId: string;
-  label: string;
-  portal: "naver" | "google" | "kakao";
-  product: string;
-  required: boolean;
-  sourceKind: "official" | "reference";
-  format: "jpg" | "png" | "png-alpha";
-  target: { width: number; height: number };
-  safeArea?: { top: number; right: number; bottom: number; left: number };
-  status: "ok" | "failed";
-  reason?: string;
-  failures: string[];
-  byteLength?: number;
-  quality?: number;
-  shrink?: number;
-  dataUrl?: string;
-}
+/**
+ * 서버가 주는 것 그대로.
+ *
+ * **손으로 베끼지 않는다.** 초판은 `AdBatchEntry` 를 필드별로 옮겨 적었는데,
+ * 그러면 서버가 `shrink` 를 `scale` 로 바꿔도 **타입 검사가 통과하고 경고 배지만
+ * 조용히 사라진다.** 파생시켜 두면 그 순간 컴파일이 깨진다.
+ *
+ * `bytes` 만 뺀다 — 라우트가 base64 로 바꿔 `dataUrl` 로 싣기 때문이다.
+ * `batch.ts` 를 **읽기만** 하므로 격리 계약 1 에 걸리지 않는다.
+ */
+type ResultEntry = Omit<AdBatchEntry, "bytes"> & { dataUrl?: string };
 
 const ROWS = specRows(planDerivation);
 
@@ -64,10 +59,37 @@ export function AdExportClient() {
    */
   const token = React.useRef(0);
 
+  /**
+   * **미리보기 한 칸이 실제로 몇 픽셀인가.**
+   *
+   * 상수 480 을 그대로 믿으면 좁은 화면에서 라벨이 거짓말을 한다. 데스크톱은
+   * `max-w-5xl`(1024) − `p-6`(48) − Card `p-4`(32) = **944px** 이라 480 이 1:1 로
+   * 들어가지만, 375px 화면에서는 쓸 수 있는 폭이 **295px** 다. 그때 456×304 는
+   * 1.55배 줄어 보이는데 화면은 「1:1」이라고 적는다 — §5.2 의 가독 보증이
+   * 좁은 화면에서만 조용히 사라진다.
+   */
+  const grid = React.useRef<HTMLDivElement>(null);
+  const [cellWidth, setCellWidth] = React.useState(PREVIEW_MAX_WIDTH);
+
+  React.useEffect(() => {
+    const node = grid.current;
+    // 서버 렌더와 오래된 브라우저에서는 상수로 둔다 — 없는 것보다 낫다.
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setCellWidth(Math.min(PREVIEW_MAX_WIDTH, node.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [results]);
+
   React.useEffect(() => {
     // 이 화면에서 못 뽑는 작업은 아예 안 보여 준다 — 고를 수 있는데 누르면
     // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
-    void loadLibrary().then((loaded) => setItems(exportableItems(loaded)));
+    // **실패해도 「불러오는 중…」에 머물지 않는다.** `catch` 가 없으면 화면이
+    // 영원히 그 문장만 띄운 채 멈춘다 — 사용자는 느린 것인지 고장인지 모른다.
+    void loadLibrary()
+      .then((loaded) => setItems(exportableItems(loaded)))
+      .catch(() => { setItems([]); setError("라이브러리를 불러오지 못했습니다. 새로고침해 주세요."); });
   }, []);
 
   async function chooseItem(next: LibraryItem) {
@@ -76,9 +98,17 @@ export function AdExportClient() {
     setImages(null);
     setPosition(0);
     setResults(null);
-    const loaded = await getAccountItemImages(next);
-    if (mine !== token.current) return;
-    setImages(loaded?.images ?? []);
+    setError(null);
+    try {
+      const loaded = await getAccountItemImages(next);
+      if (mine !== token.current) return;
+      setImages(loaded?.images ?? []);
+    } catch {
+      // 여기서도 삼키면 썸네일 줄이 영영 안 나타난다.
+      if (mine !== token.current) return;
+      setImages([]);
+      setError("이 작업의 이미지를 불러오지 못했습니다.");
+    }
   }
 
   async function run() {
@@ -96,14 +126,20 @@ export function AdExportClient() {
       const body = await response.json().catch(() => null);
       if (mine !== token.current) return;
       if (!response.ok || !body?.ok) {
-        setError(body?.message ?? "뽑지 못했습니다.");
+        // 본문 없는 404 도 온다(기능이 꺼짐·그림 없음). 상태로 갈라 말한다.
+        setError(failureMessage(response.status, body?.message));
         return;
       }
       setResults(body.results as ResultEntry[]);
     } catch {
       if (mine === token.current) setError("서버에 닿지 못했습니다.");
     } finally {
-      if (mine === token.current) setBusy(false);
+      // **토큰을 보고 풀면 안 된다.** 토큰이 바뀐 경우 `busy` 가 영영 안 풀려
+      // 화면 전체가 잠기고 새로고침 말고는 길이 없다. 지금은 토큰을 올리는 두
+      // 길이 모두 `disabled={busy}` 뒤에 있어 도달 불가지만, 그 네 곳 중 하나만
+      // 빠지면 바로 잠긴다. 동시 실행은 이미 막혀 있으니 무조건 해제가 낫다.
+      // 늦게 온 응답은 위의 토큰 검사가 여전히 버린다.
+      setBusy(false);
     }
   }
 
@@ -118,21 +154,32 @@ export function AdExportClient() {
     // 같은 이름으로 한 봉투에 들어간다(설계 §8).
     const made = downloadable(results ?? []);
     if (!made.length) return;
-    const { default: JSZip } = await import("jszip");
-    const zip = new JSZip();
-    for (const entry of made) {
-      zip.file(zipEntryName(entry.specId, entry.format), bytesFromDataUrl(entry.dataUrl!));
+    try {
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+      for (const entry of made) {
+        zip.file(zipEntryName(entry.specId, entry.format), bytesFromDataUrl(entry.dataUrl!));
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      // `ResultViewer.tsx` 와 `redesign-wizard.tsx` 가 쓰는 관례다 — DOM 에 붙이지
+      // 않고 클릭하면 일부 브라우저가 무시한다.
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `광고규격-${made.length}개.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // **삼키면 버튼을 눌러도 아무 일이 안 일어난다.** `atob` 은 깨진 base64 에
+      // `DOMException` 을 던지는데, `void download()` 라 미처리 rejection 이 되어
+      // 화면에는 흔적조차 안 남는다.
+      setError("ZIP 을 만들지 못했습니다. 다시 뽑아 주세요.");
     }
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `광고규격-${made.length}개.zip`;
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
-  const supported = ROWS.filter((row) => row.supported);
+  const missingRequired = missingRequiredCount(ROWS, picked);
   const madeCount = downloadable(results ?? []).length;
   const excluded = excludedCount(results ?? []);
   const noImages = images !== null && images.length === 0;
@@ -162,6 +209,7 @@ export function AdExportClient() {
                 type="button"
                 size="sm"
                 variant={item?.id === entry.id ? "default" : "secondary"}
+                aria-pressed={item?.id === entry.id}
                 disabled={busy}
                 onClick={() => void chooseItem(entry)}
               >
@@ -181,7 +229,9 @@ export function AdExportClient() {
                 aria-pressed={position === index}
                 onClick={() => { setPosition(index); setResults(null); }}
                 className={cn(
+                  // `border-transparent` 상태에서는 초점이 아예 안 보인다.
                   "h-20 w-20 overflow-hidden rounded border-2",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   position === index ? "border-foreground" : "border-transparent",
                 )}
               >
@@ -240,8 +290,16 @@ export function AdExportClient() {
           })}
         </ul>
 
-        {picked.some((id) => !supported.find((row) => row.spec.id === id)) && (
-          <p className="text-meta text-destructive">고른 것 중 지금 못 뽑는 규격이 있습니다.</p>
+        {/*
+          초판은 여기에 「못 뽑는 규격이 있습니다」만 뒀는데, 그 경고는 **도달할 수
+          없었다** — 고른 것은 지원되는 것에서만 시작하고 미지원 체크박스는
+          `disabled` 라 켤 수가 없다. 정작 설계 §9 원칙 1 의 뒷 절반인
+          「필수를 끄면 알린다」가 없었다.
+        */}
+        {missingRequired > 0 && (
+          <p className="text-meta text-destructive" role="alert">
+            필수 규격 {missingRequired}개가 꺼져 있습니다. 빠지면 포털이 반려할 수 있습니다.
+          </p>
         )}
 
         <div className="flex items-center gap-2 pt-1">
@@ -258,18 +316,27 @@ export function AdExportClient() {
             새로 만들지 않습니다 · 비용 0
           </span>
         </div>
-        {error && <p className="text-meta text-destructive">{error}</p>}
+        {error && <p className="text-meta text-destructive" role="alert">{error}</p>}
       </Card>
 
       {results && (
         <Card className="grid gap-3 p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-medium">3. 확인하고 내려받기</h2>
-            <span className="text-meta text-subtle-foreground">{madeCount}개 나옴</span>
+            <span className="text-meta text-subtle-foreground" aria-live="polite">
+              {madeCount}개 나옴
+            </span>
           </div>
+          {/*
+            **띠가 없는 것을 「제약이 없다」로 읽히게 두면 안 된다.** `safeArea` 를
+            가진 규격은 카카오 디스플레이 넷뿐이고, 나머지 열셋에 띠가 없는 것은
+            제약이 없어서가 아니라 **우리 데이터에 없어서**다(설계 §11).
+          */}
           <p className="text-meta text-subtle-foreground">
             <strong>눈으로 확인해 주세요.</strong> 글자가 읽히는지, 주인공이 잘리지 않았는지는
-            자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다.
+            자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다 —
+            <strong>안전영역이 공개된 규격에만 띠가 붙습니다.</strong> 띠가 없다고 제약이
+            없는 것은 아닙니다.
           </p>
 
           {/*
@@ -277,13 +344,19 @@ export function AdExportClient() {
             확대되어 실제보다 잘 읽히게 보인다 — 「글자가 읽히는지 보세요」라고
             적어 놓고 읽히는지 볼 수 없는 크기로 보여 주는 셈이다.
           */}
-          <div className="flex flex-wrap items-start gap-4">
+          <div ref={grid} className="flex flex-wrap items-start gap-4">
             {results.map((entry) => (
               <figure
                 key={entry.specId}
                 className="grid gap-1"
-                style={{ width: previewWidth(entry.target, PREVIEW_MAX_WIDTH) }}
+                style={{ width: previewWidth(entry.target, cellWidth), maxWidth: "100%" }}
               >
+                {/*
+                  **`overflow-hidden` 은 모양이 아니라 기능이다.**
+                  `safeAreaOverlayStyle` 의 9999px 그림자를 여기서 자른다.
+                  지우면 그림자가 새어 **격자 전체가 붉게 덮인다.** jsdom 이 없어
+                  시험이 못 잡는 유일한 자리다(`export-rules.ts` 머리말).
+                */}
                 <div className="relative overflow-hidden rounded border bg-muted">
                   {entry.dataUrl ? (
                     <>
@@ -304,14 +377,19 @@ export function AdExportClient() {
                   )}
                 </div>
                 <figcaption className="grid gap-0.5 text-meta">
-                  <span>{entry.label}</span>
+                  <span className="flex items-center gap-1">
+                    {entry.label}
+                    {/* 「참고」가 2단계 목록에만 붙어 있어, 결과만 보는 사람에게는
+                        미검증이라는 사실이 전달되지 않았다(설계 §11). */}
+                    {entry.sourceKind === "reference" && <Badge variant="outline">참고</Badge>}
+                  </span>
                   <span className="text-subtle-foreground">
                     {entry.target.width}×{entry.target.height}
                     {entry.byteLength ? ` · ${Math.round(entry.byteLength / 1024)}KB` : ""}
                     {entry.quality ? ` · q${entry.quality}` : ""}
                     {/* 1:1 이 아니면 그렇다고 말한다. 안 그러면 사람이 이 크기로
                         읽히는지 판단해 버린다. */}
-                    {entry.dataUrl && !isActualSize(entry.target, PREVIEW_MAX_WIDTH)
+                    {entry.dataUrl && !isActualSize(entry.target, cellWidth)
                       && " · 실제보다 작게 보임"}
                   </span>
                   {entry.shrink && entry.shrink > SHRINK_WARNING && (

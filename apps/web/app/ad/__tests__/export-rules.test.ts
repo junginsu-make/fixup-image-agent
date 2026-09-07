@@ -3,8 +3,8 @@ import { AD_SPECS } from "../../../lib/ad/specs";
 import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
-  previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, SHRINK_WARNING,
+  failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
+  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, bytesFromDataUrl, missingRequiredCount,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -108,18 +108,83 @@ describe("안전영역 띠", () => {
 });
 
 describe("많이 줄었다는 경고", () => {
-  it("파워링크가 그 기준을 넘는다 — 5.6배 축소다", () => {
-    expect(1200 / 214).toBeGreaterThan(SHRINK_WARNING);
+  /**
+   * **초판의 두 시험은 산술 항등식이라 규격표를 아예 안 봤다.** 그래서 기준을
+   * 2 로 바꿔도 5.5 로 바꿔도 전부 초록이었다.
+   *
+   * **경고 대상은 원본 폭에 따라 달라진다.** `batch.ts:172` 가 `AD_MASTERS` 가
+   * 아니라 **실제 올린 그림의 폭**으로 재기 때문이다. 그래서 집합 하나를
+   * 못 박을 수 없고, 폭을 주고 그때의 집합을 못 박는다.
+   */
+  const warnedAt = (sourceWidth: number) =>
+    AD_SPECS.filter(
+      (spec) => Number((sourceWidth / spec.target.width).toFixed(2)) > SHRINK_WARNING,
+    ).map((spec) => spec.id);
+
+  it("1200 폭 원본에서는 파워링크 하나뿐이다", () => {
+    expect(warnedAt(1200)).toEqual(["naver-powerlink"]);
   });
 
-  it("얌전한 축소는 안 넘는다", () => {
-    expect(2048 / 1200).toBeLessThan(SHRINK_WARNING);
+  it("2048 폭 원본에서는 넷으로 는다", () => {
+    expect(warnedAt(2048)).toEqual([
+      "naver-gfa-thumb", "naver-brand-pc", "naver-brand-mobile", "naver-powerlink",
+    ]);
+  });
+
+  /**
+   * `naver-gfa-thumb`(300×300)은 1200 폭에서 **정확히 4.00 배**다. 비교가 `>` 라
+   * 경고가 안 붙는다 — 경계에 정확히 앉은 유일한 규격이고, 아무도 검사하지
+   * 않던 자리다.
+   */
+  it("딱 4.00 배는 안 붙는다 — 비교가 `>` 다", () => {
+    expect(Number((1200 / 300).toFixed(2)), "이 시험의 전제").toBe(4);
+    expect(warnedAt(1200)).not.toContain("naver-gfa-thumb");
+  });
+
+  /**
+   * **두 상수를 잇는 유일한 시험이다.** 「많이 줄었으니 글자를 보세요」라고 해
+   * 놓고 그림을 또 줄여 보여 주면 경고가 뜻을 잃는다(설계 §5.2).
+   */
+  it("경고 대상은 전부 미리보기에 1:1 로 들어간다", () => {
+    const ids = new Set([...warnedAt(1200), ...warnedAt(2048)]);
+    for (const id of ids) {
+      const spec = AD_SPECS.find((entry) => entry.id === id)!;
+      expect(isActualSize(spec.target, PREVIEW_MAX_WIDTH), id).toBe(true);
+    }
+  });
+});
+
+describe("화면이 적는 말", () => {
+  /**
+   * `PORTAL_LABEL.naver` 를 `"카카오"` 로 바꿔도 시험이 전부 초록이었다.
+   * 포털 이름이 뒤바뀐 목록은 **틀린 규격을 고르게 만든다.**
+   */
+  it("포털 이름을 뒤바꾸지 않는다", () => {
+    expect(PORTAL_LABEL.naver).toBe("네이버");
+    expect(PORTAL_LABEL.google).toBe("구글");
+    expect(PORTAL_LABEL.kakao).toBe("카카오");
+  });
+
+  /**
+   * **`planDerivation` 이 준 말을 고정 문구로 덮지 않는다.** 덮으면 「투명 배경은
+   * 조립 엔진이 필요합니다」가 「아직 지원하지 않습니다」로 바뀌어, 사용자가
+   * 기다리면 되는 것인지 다른 길을 찾아야 하는지 알 수 없게 된다.
+   */
+  it("못 뽑는 까닭을 파생 계획이 준 말 그대로 옮긴다", () => {
+    for (const row of rows.filter((entry) => !entry.supported)) {
+      const plan = planDerivation(row.spec) as { reason?: string };
+      expect(row.unsupportedReason, row.spec.id).toBe(plan.reason);
+    }
   });
 });
 
 describe("안전영역 띠가 실제로 그려지는가", () => {
+  /**
+   * **넷을 전부 다르게 둔다.** 초판은 `top` 과 `bottom` 이 둘 다 100 이라
+   * **위아래를 맞바꿔도 시험이 통과했다** — 띠가 거꾸로 앉아도 조용하다.
+   */
   const style = safeAreaOverlayStyle(
-    { top: 100, right: 0, bottom: 100, left: 40 },
+    { top: 100, right: 20, bottom: 40, left: 60 },
     { width: 1200, height: 1200 },
   );
 
@@ -131,21 +196,48 @@ describe("안전영역 띠가 실제로 그려지는가", () => {
    * jsdom 이 없어 DOM 으로는 못 재므로, **CSS 를 고르는 규칙 자체**를 잰다.
    */
   it("퍼센트를 받지 않는 속성에 퍼센트를 넣지 않는다", () => {
-    for (const [property, value] of Object.entries(style)) {
+    for (const [property, value] of Object.entries(style as Record<string, string>)) {
       if (!value.includes("%")) continue;
       expect(property, `${property} 는 퍼센트를 받지 않는다`).not.toMatch(/[Ww]idth$/);
       expect(property).not.toMatch(/border/i);
     }
   });
 
-  it("퍼센트를 받는 자리에만 비율을 넣는다", () => {
+  it("네 변이 각자 제 값을 받는다", () => {
     expect(style.top).toBe("8.33%");
-    expect(style.left).toBe("3.33%");
-    expect(["top", "right", "bottom", "left"].every((key) => key in style)).toBe(true);
+    expect(style.right).toBe("1.67%");
+    expect(style.bottom).toBe("3.33%");
+    expect(style.left).toBe("5.00%");
   });
 
-  it("바깥을 덮을 그림자가 있다 — 안쪽 사각형만으로는 아무것도 안 가린다", () => {
-    expect(style.boxShadow).toMatch(/^0 0 0 \d+px rgba\(/);
+  /**
+   * **모양만 잠그면 「보이는가」가 안 잠긴다.** 초판은 `/^0 0 0 \d+px rgba\(/` 만
+   * 봤고, 그래서 퍼짐을 `0px` 로 바꿔도(아무것도 안 덮임 = 고치기 전과 같음)
+   * 투명도를 `0` 으로 바꿔도(완전 투명 = 안 보임) 전부 초록이었다.
+   *
+   * jsdom 이 없어 DOM 으로는 못 재지만, **값이 시각적으로 무효인지는 숫자만
+   * 봐도 안다.**
+   */
+  it("그림자가 실제로 보일 값이다 — 퍼짐도 투명도도 0 이 아니다", () => {
+    const matched = String(style.boxShadow).match(
+      /^0 0 0 (\d+)px color-mix\(in srgb, var\(--[a-z-]+\) ([\d.]+)%, transparent\)$/,
+    );
+    expect(matched, "형태부터 맞아야 한다").not.toBeNull();
+    const [, spread, alpha] = matched!;
+    // 미리보기 한 칸(최대 480px)을 덮고도 남아야 한다.
+    expect(Number(spread)).toBeGreaterThan(PREVIEW_MAX_WIDTH);
+    expect(Number(alpha), "0 이면 없는 것과 같다").toBeGreaterThan(0);
+    expect(Number(alpha), "그림을 못 볼 만큼 덮어도 안 된다").toBeLessThan(50);
+  });
+
+  /**
+   * 리터럴 색으로 되돌아가면 **다크 모드에서 띠만 굳는다** — 배경이 어두워지는데
+   * 띠는 안 따라와 대비가 떨어진다. 화면은 멀쩡해 보인다.
+   */
+  it("색을 리터럴로 박지 않는다 — 테마를 탄다", () => {
+    expect(String(style.boxShadow)).toContain("var(--destructive)");
+    expect(String(style.boxShadow), "hex 토큰을 hsl() 로 감싸면 조용히 버려진다")
+      .not.toMatch(/hsl\(/);
   });
 
   it("안전영역이 없는 규격에는 띠를 만들지 않는다", () => {
@@ -244,5 +336,113 @@ describe("미리보기를 실제 크기로 보여 준다", () => {
 
   it("작은 것을 늘리지 않는다", () => {
     expect(previewWidth({ width: 100 }, CELL)).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("실패를 사람이 읽을 말로 옮긴다", () => {
+  /**
+   * 라우트는 두 곳에서 **본문 없는 404** 를 낸다 — 기능이 꺼져 있을 때와 그림을
+   * 못 찾을 때. 화면이 `response.json()` 을 `catch(() => null)` 로 받으면 둘 다
+   * 「뽑지 못했습니다」로 뭉개져 **왜 안 되는지 알 길이 없다.**
+   */
+  it("본문이 없어도 404 는 무엇을 하라고 말한다", () => {
+    expect(failureMessage(404, null)).toMatch(/다른 작업/);
+  });
+
+  it("붐비는 것은 다시 누르면 된다고 말한다", () => {
+    expect(failureMessage(429, null)).toMatch(/다시/);
+  });
+
+  it("로그인이 풀린 것과 서버 오류를 가른다", () => {
+    expect(failureMessage(401, null)).toMatch(/로그인/);
+    expect(failureMessage(500, null)).not.toMatch(/로그인/);
+  });
+
+  /**
+   * 서버가 준 말이 있으면 그것이 낫다 — 「규격을 하나 이상 고르세요」처럼
+   * 무엇을 고치면 되는지 이미 적혀 있다.
+   */
+  it("서버가 준 말이 있으면 그대로 쓴다", () => {
+    expect(failureMessage(400, "규격을 하나 이상 고르세요.")).toBe("규격을 하나 이상 고르세요.");
+  });
+
+  it("모르는 상태에도 빈 말을 주지 않는다", () => {
+    expect(failureMessage(418, null).length).toBeGreaterThan(0);
+  });
+});
+
+describe("잘라 만드는 규격도 뽑을 수 있다", () => {
+  /**
+   * **`supported` 에서 `crop` 을 빼도 시험 35개가 전부 초록이었다.**
+   *
+   * 실제 영향은 작지 않다. 기본으로 켜지는 필수 일곱 중 브랜드검색 둘이 `crop`
+   * 이라, 빠지면 **필수 둘이 회색으로 죽고 기본 선택에서 조용히 사라진다.**
+   * 그래서 규격 하나를 이름으로 짚어 못 박는다.
+   */
+  it("브랜드검색 PC 썸네일은 잘라서라도 뽑는다", () => {
+    const row = rows.find((r) => r.spec.id === "naver-brand-pc")!;
+    expect(planDerivation(row.spec).kind, "이 시험의 전제").toBe("crop");
+    expect(row.supported).toBe(true);
+    expect(row.unsupportedReason).toBeUndefined();
+  });
+
+  it("잘라 만드는 필수 규격이 기본 선택에 들어간다", () => {
+    expect(defaultSelection(rows)).toContain("naver-brand-pc");
+  });
+});
+
+describe("data URL 에서 바이트 꺼내기", () => {
+  it("base64 를 그대로 바이트로 옮긴다", () => {
+    expect(bytesFromDataUrl("data:image/png;base64,QUJD")).toEqual(new Uint8Array([65, 66, 67]));
+  });
+
+  /**
+   * `slice(comma + 1)` 을 `slice(comma)` 로 바꾸면 **ZIP 안의 모든 파일이
+   * 깨진다** — 앞에 쉼표가 붙은 채로 디코드된다. 화면은 멀쩡하고 봉투만 썩는다.
+   */
+  it("쉼표를 남기지 않는다", () => {
+    const bytes = bytesFromDataUrl("data:image/png;base64,QUJD");
+    expect(bytes.length).toBe(3);
+    expect(bytes[0]).toBe(65);
+  });
+
+  it("256 을 넘지 않는 값으로 담는다 — 멀티바이트가 아니다", () => {
+    const bytes = bytesFromDataUrl("data:application/octet-stream;base64,//79");
+    expect(Array.from(bytes)).toEqual([255, 254, 253]);
+  });
+
+  it("data URL 이 아니면 던진다", () => {
+    expect(() => bytesFromDataUrl("그냥 문자열")).toThrow();
+  });
+});
+
+describe("필수를 꺼 두면 알린다", () => {
+  /**
+   * 설계 §9 원칙 1 의 뒷 절반이다. 앞 절반(「필수는 켜고 시작한다」)만 있으면,
+   * 사용자가 필수를 끄고 뽑아도 화면이 아무 말을 안 한다 — 포털이 반려하고 나서야
+   * 안다.
+   *
+   * **못 뽑는 규격은 세지 않는다.** 그것은 사용자가 어쩔 수 없는 것이고,
+   * 그 자리에는 이미 다른 문구가 있다.
+   */
+  it("필수를 다 켜 두면 0 이다", () => {
+    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+  });
+
+  it("필수를 하나 끄면 1 이다", () => {
+    const picked = defaultSelection(rows).filter((id) => id !== "naver-brand-pc");
+    expect(missingRequiredCount(rows, picked)).toBe(1);
+  });
+
+  it("선택 규격을 꺼도 세지 않는다", () => {
+    const optional = rows.find((r) => r.supported && !r.spec.required)!;
+    expect(defaultSelection(rows)).not.toContain(optional.spec.id);
+    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+  });
+
+  it("못 뽑는 필수 규격은 세지 않는다 — 사용자가 어쩔 수 없다", () => {
+    const blocked = rows.filter((r) => !r.supported && r.spec.required);
+    expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
+    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
   });
 });
