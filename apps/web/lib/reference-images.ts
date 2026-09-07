@@ -59,13 +59,6 @@ export interface ReferenceViewer {
   role: UserRole;
   /** 이 사람의 팀. 없으면 개인이다. */
   teamId?: string | null;
-  /**
-   * 이 회사에 살아 있는 팀이 있나.
-   *
-   * 없으면 **지금까지와 똑같이 전원 공용**이다. 안 넘기면 없는 것으로 보므로,
-   * 빠뜨렸을 때 남의 것이 감춰지는 쪽이 아니라 지금과 같은 쪽으로 떨어진다.
-   */
-  anyTeamExists?: boolean;
 }
 
 /**
@@ -124,8 +117,8 @@ export function localFileUrl(id: string): string {
 /**
  * 창고에 있는 그림.
  *
- * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 팀을 안 쓰는 회사와
- * 운영자는 전부, 팀원은 같은 팀 것과 내 것, 소속 없는 사람은 내 것만이다.
+ * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 팀이 안 붙은 것은
+ * 누구나, 팀에 묶인 것은 그 팀만, 운영자는 전부다.
  *
  * 서버 권한으로 읽으므로 **RLS 가 여기를 안 막는다.** 이 필터가 유일한
  * 문지기다 — 서명 URL 도 admin 클라이언트가 발급해 Storage 정책의
@@ -151,7 +144,6 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   const visibility = referenceVisibility({
     userId: viewer.userId,
     teamId: viewer.teamId ?? null,
-    anyTeamExists: viewer.anyTeamExists ?? false,
     isAdmin: canSeeOwnerEmails(viewer),
   });
 
@@ -164,9 +156,11 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   // 400장 상한에 걸리기 전에 거른다. 뽑아 놓고 코드에서 버리면, 남의 팀 것이
   // 상한을 다 차지해 내 것이 잘려 나갈 수 있다.
   if (visibility.kind === "team") {
-    query = query.or(`team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`);
-  } else if (visibility.kind === "own") {
-    query = query.eq("user_id", visibility.userId);
+    query = query.or(
+      `team_id.is.null,team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`,
+    );
+  } else if (visibility.kind === "loose") {
+    query = query.or(`team_id.is.null,user_id.eq.${visibility.userId}`);
   }
 
   const { data, error } = await query;

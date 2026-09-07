@@ -4,7 +4,7 @@ import { authenticateApiMember } from "../../../lib/membership/api";
 import { listReferenceImages, localFileUrl, saveReferenceImage } from "../../../lib/reference-images";
 import { isLocalStoreEnabled } from "../../../lib/local-store";
 import { ReferencePurposeSchema } from "../reference-sets/schema";
-import { anyTeamExists, teamIdOf } from "../../../lib/teams/store";
+import { teamIdOf } from "../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +18,9 @@ const IdSchema = z.string().uuid();
  * 404 였는데, 그걸 부르던 화면은 실패를 조용히 삼켜 "저장된 이미지가 없다"로
  * 보였다.
  *
- * **팀을 안 쓰는 동안은 회원 모두에게 같다.** 참고 이미지는 공용 창고였다.
- * 팀이 하나라도 생기면 같은 팀 것으로 좁아진다 — 본보기는 어떤 브랜드를
- * 준비 중인지가 그대로 드러나는 것이라, 남의 팀 것이 보이면 안 된다.
+ * **팀이 안 붙은 것은 누구나 본다.** 참고 이미지는 공용 창고다. 팀에 묶인
+ * 것만 그 팀 안으로 좁아진다 — 팀 본보기는 어떤 브랜드를 준비 중인지가
+ * 그대로 드러나는 것이라, 남의 팀에 보이면 안 된다.
  *
  * 각 줄에 `mine` 을 실어, 화면이 지우기 단추를 자기 것에만 보일 수 있게 한다.
  */
@@ -31,15 +31,10 @@ export async function GET() {
   try {
     // 팀은 세션에서 꺼낸다. 본문이나 주소로 받으면 남의 팀 ID 를 적어 보내는
     // 것만으로 남의 본보기를 볼 수 있다.
-    const [teamId, hasTeams] = await Promise.all([
-      teamIdOf(auth.member.userId),
-      anyTeamExists(),
-    ]);
     const images = await listReferenceImages({
       userId: auth.member.userId,
       role: auth.member.profile.role,
-      teamId,
-      anyTeamExists: hasTeams,
+      teamId: await teamIdOf(auth.member.userId),
     });
     // 관리자는 남이 올린 것도 지울 수 있다. 화면이 그 단추를 낼지 정하려면
     // 알아야 하는데, 줄마다 실을 값이 아니라 보는 사람의 성질이다.

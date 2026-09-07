@@ -4,27 +4,17 @@ import { canSeeReference, referenceVisibility, type ReferenceViewScope } from ".
 const scope = (over: Partial<ReferenceViewScope> = {}): ReferenceViewScope => ({
   userId: "me",
   teamId: null,
-  anyTeamExists: true,
   isAdmin: false,
   ...over,
 });
 
-describe("팀을 안 쓰는 회사는 지금과 같다", () => {
-  it("팀이 하나도 없으면 전부 본다", () => {
-    // **배포하는 날 아무것도 안 잃는다.** 설계는 「팀이 없는 사람은 자기 것만」
-    // 이었는데, 그대로 하면 팀을 만들기도 전에 전원이 서로의 본보기를 잃는다.
-    expect(referenceVisibility(scope({ anyTeamExists: false }))).toEqual({ kind: "all" });
-  });
+const mine = { userId: "me", teamId: null };
+const myTeam = { userId: "mate", teamId: "t1" };
+const otherTeam = { userId: "stranger", teamId: "t2" };
+const loose = { userId: "stranger", teamId: null };
 
-  it("팀이 없으면 소속 여부와 무관하다", () => {
-    expect(referenceVisibility(scope({ anyTeamExists: false, teamId: "t1" }))).toEqual({
-      kind: "all",
-    });
-  });
-});
-
-describe("팀이 생기면 좁아진다", () => {
-  it("팀에 있으면 같은 팀 것과 내 것", () => {
+describe("누가 무엇을 보는가", () => {
+  it("팀에 있으면 팀 것과 공용을 본다", () => {
     expect(referenceVisibility(scope({ teamId: "t1" }))).toEqual({
       kind: "team",
       teamId: "t1",
@@ -32,9 +22,8 @@ describe("팀이 생기면 좁아진다", () => {
     });
   });
 
-  it("팀이 있는데 나는 소속이 없으면 내 것만", () => {
-    // 회사가 나눠 쓰기로 정했는데 미배정인 사람만 전부 본다면, 그게 구멍이다.
-    expect(referenceVisibility(scope())).toEqual({ kind: "own", userId: "me" });
+  it("소속이 없으면 공용과 내 것을 본다", () => {
+    expect(referenceVisibility(scope())).toEqual({ kind: "loose", userId: "me" });
   });
 
   it("운영자는 전부 본다", () => {
@@ -43,45 +32,63 @@ describe("팀이 생기면 좁아진다", () => {
   });
 });
 
-describe("한 줄이 보이는가", () => {
-  const mine = { userId: "me", teamId: null };
-  const myTeam = { userId: "mate", teamId: "t1" };
-  const otherTeam = { userId: "stranger", teamId: "t2" };
-  const loose = { userId: "stranger", teamId: null };
-
-  it("전부 보는 사람에게는 다 보인다", () => {
-    const all = referenceVisibility(scope({ anyTeamExists: false }));
-    for (const row of [mine, myTeam, otherTeam, loose]) {
-      expect(canSeeReference(all, row)).toBe(true);
-    }
+describe("팀이 안 붙은 것은 공용 창고다", () => {
+  it("소속 있는 사람도 본다", () => {
+    const team = referenceVisibility(scope({ teamId: "t1" }));
+    expect(canSeeReference(team, loose)).toBe(true);
   });
 
-  it("팀원에게는 같은 팀 것이 보인다", () => {
+  it("소속 없는 사람도 본다", () => {
+    const own = referenceVisibility(scope());
+    expect(canSeeReference(own, loose)).toBe(true);
+  });
+
+  it("**팀을 쓰기 전에는 지금과 똑같다**", () => {
+    // 팀이 없으면 모든 줄의 팀이 비어 있다. 그래서 이 규칙만으로 배포일에
+    // 아무것도 안 잃는다 — 따로 안전장치를 두지 않아도 된다.
+    const beforeTeams = referenceVisibility(scope());
+    for (const row of [mine, loose, { userId: "other", teamId: null }]) {
+      expect(canSeeReference(beforeTeams, row)).toBe(true);
+    }
+  });
+});
+
+describe("팀에 묶인 것은 그 팀만", () => {
+  it("같은 팀 것이 보인다", () => {
     const team = referenceVisibility(scope({ teamId: "t1" }));
     expect(canSeeReference(team, myTeam)).toBe(true);
   });
 
-  it("팀원에게 남의 팀 것은 안 보인다", () => {
-    // 본보기는 어떤 브랜드를 준비 중인지가 그대로 드러나는 것이다.
+  it("남의 팀 것은 안 보인다", () => {
+    // 팀에 묶인 본보기는 어떤 브랜드를 준비 중인지가 드러나는 것이다.
     const team = referenceVisibility(scope({ teamId: "t1" }));
     expect(canSeeReference(team, otherTeam)).toBe(false);
   });
 
-  it("팀원에게 소속 없는 남의 것은 안 보인다", () => {
-    const team = referenceVisibility(scope({ teamId: "t1" }));
-    expect(canSeeReference(team, loose)).toBe(false);
+  it("소속 없는 사람에게도 남의 팀 것은 안 보인다", () => {
+    const own = referenceVisibility(scope());
+    expect(canSeeReference(own, myTeam)).toBe(false);
+    expect(canSeeReference(own, otherTeam)).toBe(false);
   });
 
-  it("내 것은 팀이 안 붙어 있어도 보인다", () => {
-    // 방금 올려 도장이 아직 안 찍힌 것이 내 눈앞에서 사라지면 안 된다.
+  it("운영자에게는 모든 팀 것이 보인다", () => {
+    const all = referenceVisibility(scope({ isAdmin: true }));
+    for (const row of [mine, myTeam, otherTeam, loose]) {
+      expect(canSeeReference(all, row)).toBe(true);
+    }
+  });
+});
+
+describe("내 것은 늘 보인다", () => {
+  it("팀이 안 붙은 내 것", () => {
     const team = referenceVisibility(scope({ teamId: "t1" }));
     expect(canSeeReference(team, mine)).toBe(true);
   });
 
-  it("소속 없는 사람에게는 자기 것만 보인다", () => {
-    const own = referenceVisibility(scope());
-    expect(canSeeReference(own, mine)).toBe(true);
-    expect(canSeeReference(own, myTeam)).toBe(false);
-    expect(canSeeReference(own, loose)).toBe(false);
+  it("어쩌다 다른 팀이 붙은 내 것도 보인다", () => {
+    // 팀에서 빠졌거나 손으로 팀을 고친 줄이 있어도 자기 본보기가 사라지지는
+    // 않는다.
+    const team = referenceVisibility(scope({ teamId: "t1" }));
+    expect(canSeeReference(team, { userId: "me", teamId: "t9" })).toBe(true);
   });
 });

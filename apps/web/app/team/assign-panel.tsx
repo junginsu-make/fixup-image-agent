@@ -81,6 +81,15 @@ export function AssignPanel({
             아직 어느 팀에도 없는 회원만 나옵니다. 넣으면 그 사람이 만들어 둔 작업물도 함께
             팀으로 가고, 팀에서 빼면 다시 개인 작업으로 돌아갑니다.
           </SidePanelDescription>
+          {/*
+            **여기가 무언가 좁아지는 유일한 자리다.** 지금까지 회원 전원이
+            보던 참고 이미지가, 팀에 들어가는 순간 그 팀 것이 되어 팀 밖에서
+            안 보인다. 조용히 좁히면 「본보기가 사라졌다」는 신고가 들어온다.
+          */}
+          <p className="mt-2 rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-meta">
+            팀에 넣으면 그 사람이 올린 <strong>참고 이미지가 팀 것</strong>이 됩니다. 지금까지
+            회원 전원이 보던 것이 팀 밖에서는 안 보이게 되니, 미리 알려 주세요.
+          </p>
         </SidePanelHeader>
 
         <SidePanelBody>

@@ -25,33 +25,31 @@ describe("판정 함수", () => {
   });
 });
 
-describe("팀을 안 쓰면 지금과 같다", () => {
-  it("팀이 하나도 없으면 전부 보인다", () => {
-    // **이 한 줄이 배포일에 아무것도 안 잃게 한다.** 설계대로 무조건 좁히면
-    // 팀을 만들기도 전에 전원이 서로의 본보기를 잃는다.
-    expect(code).toMatch(/when not exists \(select 1 from public\.teams where deleted_at is null\) then true/);
+describe("팀이 안 붙은 것은 공용 창고다", () => {
+  it("팀이 없는 줄은 누구나 본다", () => {
+    // **이 한 줄이 배포일에 아무것도 안 잃게 한다.** 팀을 쓰기 전에는 모든
+    // 줄의 팀이 비어 있어, 규칙이 지금과 똑같은 답을 낸다.
+    expect(code).toMatch(/when row_team_id is null then true/);
   });
 
-  it("접힌 팀은 「쓰는 중」으로 안 친다", () => {
-    expect(code).toContain("deleted_at is null");
+  it("내 것은 늘 보인다", () => {
+    // 팀에서 빠졌거나 손으로 팀을 고친 줄이 있어도 자기 본보기가 사라지지
+    // 않는다.
+    expect(code).toMatch(/when row_user_id = \(select auth\.uid\(\)\) then true/);
   });
 });
 
-describe("팀이 생기면 좁아진다", () => {
-  it("내 것은 팀이 안 붙어 있어도 보인다", () => {
-    // 방금 올려 도장이 아직 안 찍힌 것이 내 눈앞에서 사라지면 안 된다.
-    expect(code).toMatch(/when row_user_id = \(select auth\.uid\(\)\) then true/);
-  });
-
-  it("같은 팀 것이 보인다", () => {
+describe("팀에 묶인 것은 그 팀만", () => {
+  it("같은 팀이면 보인다", () => {
     expect(code).toMatch(
-      /row_team_id = \(select team_id from public\.team_members where user_id = \(select auth\.uid\(\)\)\)/,
+      /else row_team_id = \(select team_id from public\.team_members where user_id = \(select auth\.uid\(\)\)\)/,
     );
   });
 
-  it("그 밖은 안 보인다", () => {
-    // 이 `else false` 가 없으면 아무것도 안 좁혀진다.
-    expect(code).toMatch(/else false\s*\n?\s*end;/);
+  it("팀이 있는지 세지 않는다", () => {
+    // 「팀이 하나라도 있으면」 같은 전역 조건을 안 쓴다. 줄마다 팀이 붙었는지만
+    // 보면 되고, 그 편이 회사 전체 상태에 안 매인다.
+    expect(code).not.toMatch(/not exists \(select 1 from public\.teams/);
   });
 });
 

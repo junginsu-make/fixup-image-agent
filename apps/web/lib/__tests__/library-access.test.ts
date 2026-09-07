@@ -177,16 +177,18 @@ describe("관리자는 지우기도 전체", () => {
 });
 
 describe("참고 이미지는 회원 공용", () => {
-  it("목록에 소유자 조건을 붙이지 않는다", async () => {
+  it("소유자 조건을 곧바로 붙이지 않는다", async () => {
+    // 참고 이미지는 공용 창고다. 팀이 안 붙은 것은 누구나 본다.
     tableRows.reference_images = [];
     await listReferenceImages(MEMBER);
     expect(ownerConditionOn("reference_images")).toBeUndefined();
   });
 
-  it("남이 올린 것도 보이되 내 것이 아니라고 표시한다", async () => {
+  it("팀이 안 붙은 남의 것도 보이되 내 것이 아니라고 표시한다", async () => {
     tableRows.reference_images = [
       {
-        id: "r1", user_id: "member-9", storage_path: "member-9/references/r1.png",
+        id: "r1", user_id: "member-9", team_id: null,
+        storage_path: "member-9/references/r1.png",
         title: "로고", purpose: "both", width: null, height: null,
         created_at: "2026-09-01T00:00:00.000Z",
       },
@@ -197,6 +199,21 @@ describe("참고 이미지는 회원 공용", () => {
     expect(image.signedUrl).toBe("signed:member-9/references/r1.png");
     // 회원에게는 올린 사람의 이메일을 주지 않는다.
     expect(image.ownerEmail).toBeNull();
+  });
+
+  it("남의 팀에 묶인 것은 안 보인다", async () => {
+    // 팀 본보기는 어떤 브랜드를 준비 중인지가 드러나는 것이다. 질의가
+    // 걸러야 하지만, 조건을 빠뜨린 채 배포되는 것을 코드가 한 번 더 막는다.
+    tableRows.reference_images = [
+      {
+        id: "r2", user_id: "stranger", team_id: "team-9",
+        storage_path: "stranger/references/r2.png",
+        title: "남의 팀", purpose: "both", width: null, height: null,
+        created_at: "2026-09-01T00:00:00.000Z",
+      },
+    ];
+
+    expect(await listReferenceImages(MEMBER)).toEqual([]);
   });
 
   it("회원끼리는 서로 못 지운다", () => {
