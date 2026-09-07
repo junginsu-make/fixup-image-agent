@@ -286,7 +286,12 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         <Card>
           <CardHeader>
             <CardTitle>규격</CardTitle>
-            <CardDescription>픽셀은 묻지 않습니다. 비율에서 백엔드가 정합니다.</CardDescription>
+            <CardDescription>
+              {/* 광고 모드에서는 비율이 아니라 **고른 규격**에서 정해진다. */}
+              {adMode
+                ? "픽셀은 묻지 않습니다. 고른 규격에서 백엔드가 정합니다."
+                : "픽셀은 묻지 않습니다. 비율에서 백엔드가 정합니다."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6">
             {/*
@@ -385,6 +390,14 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 {estimate.rejected}
               </div>
             ) : (
+              adMode && adPlan.masters.length === 0 ? (
+              /*
+                **「0장 만드는데 $0.657」을 보이면 안 된다.** `projectCount` 가
+                0 을 곱하지 않는 것은 「무료로 보이면 안 된다」는 이유인데, 만들
+                것이 없을 때 금액만 남기면 그 판단이 화면에서 거꾸로 읽힌다.
+              */
+              <p className="text-sm text-destructive">{adPlan.reason}</p>
+            ) : (
               <p className="text-sm text-muted-foreground">
                 {/*
                   **프로젝트 수를 곱한다.** 광고 모드의 한 번 클릭은 마스터마다
@@ -403,6 +416,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                   : ` · ${variants}장`}
                 {estimate.approximate ? " (공표 가격표에 없는 크기라 넉넉히 잡은 값입니다)" : ""}
               </p>
+            )
             )}
 
             <div className="flex justify-end">

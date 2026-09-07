@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { cn } from "@fixup/ui";
 import { adSubmitPlan, type AdSubmitPlan } from "./ad-mode";
 import { planDerivation } from "../../lib/ad/derive";
@@ -99,7 +100,7 @@ export default function AdSpecPicker({
         <p className="text-meta text-destructive" role="alert">{plan.reason}</p>
       )}
       <p className="text-meta text-subtle-foreground">
-        만든 뒤 <a href="/ad" className="underline">광고 규격으로 내보내기</a>에서 규격을 뽑습니다.
+        만든 뒤 <Link href="/ad" className="underline">광고 규격으로 내보내기</Link>에서 규격을 뽑습니다.
       </p>
     </fieldset>
   );

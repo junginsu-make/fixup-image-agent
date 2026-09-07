@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { isAdExportEnabled } from "../../lib/ad/batch";
+// 스위치만 읽는다 — `batch` 를 지나면 sharp 를 통째로 끌고 온다.
+import { isAdExportEnabled } from "../../lib/ad/feature";
 import { AdExportClient } from "./ad-export-client";
 
 export const dynamic = "force-dynamic";
