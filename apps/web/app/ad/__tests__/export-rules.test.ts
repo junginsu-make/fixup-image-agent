@@ -4,7 +4,7 @@ import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, missingRequiredCount,
+  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, bytesFromDataUrl, missingRequiredCount,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -108,18 +108,83 @@ describe("안전영역 띠", () => {
 });
 
 describe("많이 줄었다는 경고", () => {
-  it("파워링크가 그 기준을 넘는다 — 5.6배 축소다", () => {
-    expect(1200 / 214).toBeGreaterThan(SHRINK_WARNING);
+  /**
+   * **초판의 두 시험은 산술 항등식이라 규격표를 아예 안 봤다.** 그래서 기준을
+   * 2 로 바꿔도 5.5 로 바꿔도 전부 초록이었다.
+   *
+   * **경고 대상은 원본 폭에 따라 달라진다.** `batch.ts:172` 가 `AD_MASTERS` 가
+   * 아니라 **실제 올린 그림의 폭**으로 재기 때문이다. 그래서 집합 하나를
+   * 못 박을 수 없고, 폭을 주고 그때의 집합을 못 박는다.
+   */
+  const warnedAt = (sourceWidth: number) =>
+    AD_SPECS.filter(
+      (spec) => Number((sourceWidth / spec.target.width).toFixed(2)) > SHRINK_WARNING,
+    ).map((spec) => spec.id);
+
+  it("1200 폭 원본에서는 파워링크 하나뿐이다", () => {
+    expect(warnedAt(1200)).toEqual(["naver-powerlink"]);
   });
 
-  it("얌전한 축소는 안 넘는다", () => {
-    expect(2048 / 1200).toBeLessThan(SHRINK_WARNING);
+  it("2048 폭 원본에서는 넷으로 는다", () => {
+    expect(warnedAt(2048)).toEqual([
+      "naver-gfa-thumb", "naver-brand-pc", "naver-brand-mobile", "naver-powerlink",
+    ]);
+  });
+
+  /**
+   * `naver-gfa-thumb`(300×300)은 1200 폭에서 **정확히 4.00 배**다. 비교가 `>` 라
+   * 경고가 안 붙는다 — 경계에 정확히 앉은 유일한 규격이고, 아무도 검사하지
+   * 않던 자리다.
+   */
+  it("딱 4.00 배는 안 붙는다 — 비교가 `>` 다", () => {
+    expect(Number((1200 / 300).toFixed(2)), "이 시험의 전제").toBe(4);
+    expect(warnedAt(1200)).not.toContain("naver-gfa-thumb");
+  });
+
+  /**
+   * **두 상수를 잇는 유일한 시험이다.** 「많이 줄었으니 글자를 보세요」라고 해
+   * 놓고 그림을 또 줄여 보여 주면 경고가 뜻을 잃는다(설계 §5.2).
+   */
+  it("경고 대상은 전부 미리보기에 1:1 로 들어간다", () => {
+    const ids = new Set([...warnedAt(1200), ...warnedAt(2048)]);
+    for (const id of ids) {
+      const spec = AD_SPECS.find((entry) => entry.id === id)!;
+      expect(isActualSize(spec.target, PREVIEW_MAX_WIDTH), id).toBe(true);
+    }
+  });
+});
+
+describe("화면이 적는 말", () => {
+  /**
+   * `PORTAL_LABEL.naver` 를 `"카카오"` 로 바꿔도 시험이 전부 초록이었다.
+   * 포털 이름이 뒤바뀐 목록은 **틀린 규격을 고르게 만든다.**
+   */
+  it("포털 이름을 뒤바꾸지 않는다", () => {
+    expect(PORTAL_LABEL.naver).toBe("네이버");
+    expect(PORTAL_LABEL.google).toBe("구글");
+    expect(PORTAL_LABEL.kakao).toBe("카카오");
+  });
+
+  /**
+   * **`planDerivation` 이 준 말을 고정 문구로 덮지 않는다.** 덮으면 「투명 배경은
+   * 조립 엔진이 필요합니다」가 「아직 지원하지 않습니다」로 바뀌어, 사용자가
+   * 기다리면 되는 것인지 다른 길을 찾아야 하는지 알 수 없게 된다.
+   */
+  it("못 뽑는 까닭을 파생 계획이 준 말 그대로 옮긴다", () => {
+    for (const row of rows.filter((entry) => !entry.supported)) {
+      const plan = planDerivation(row.spec) as { reason?: string };
+      expect(row.unsupportedReason, row.spec.id).toBe(plan.reason);
+    }
   });
 });
 
 describe("안전영역 띠가 실제로 그려지는가", () => {
+  /**
+   * **넷을 전부 다르게 둔다.** 초판은 `top` 과 `bottom` 이 둘 다 100 이라
+   * **위아래를 맞바꿔도 시험이 통과했다** — 띠가 거꾸로 앉아도 조용하다.
+   */
   const style = safeAreaOverlayStyle(
-    { top: 100, right: 0, bottom: 100, left: 40 },
+    { top: 100, right: 20, bottom: 40, left: 60 },
     { width: 1200, height: 1200 },
   );
 
@@ -138,14 +203,29 @@ describe("안전영역 띠가 실제로 그려지는가", () => {
     }
   });
 
-  it("퍼센트를 받는 자리에만 비율을 넣는다", () => {
+  it("네 변이 각자 제 값을 받는다", () => {
     expect(style.top).toBe("8.33%");
-    expect(style.left).toBe("3.33%");
-    expect(["top", "right", "bottom", "left"].every((key) => key in style)).toBe(true);
+    expect(style.right).toBe("1.67%");
+    expect(style.bottom).toBe("3.33%");
+    expect(style.left).toBe("5.00%");
   });
 
-  it("바깥을 덮을 그림자가 있다 — 안쪽 사각형만으로는 아무것도 안 가린다", () => {
-    expect(style.boxShadow).toMatch(/^0 0 0 \d+px rgba\(/);
+  /**
+   * **모양만 잠그면 「보이는가」가 안 잠긴다.** 초판은 `/^0 0 0 \d+px rgba\(/` 만
+   * 봤고, 그래서 퍼짐을 `0px` 로 바꿔도(아무것도 안 덮임 = 고치기 전과 같음)
+   * 투명도를 `0` 으로 바꿔도(완전 투명 = 안 보임) 전부 초록이었다.
+   *
+   * jsdom 이 없어 DOM 으로는 못 재지만, **값이 시각적으로 무효인지는 숫자만
+   * 봐도 안다.**
+   */
+  it("그림자가 실제로 보일 값이다 — 퍼짐도 투명도도 0 이 아니다", () => {
+    const matched = style.boxShadow.match(/^0 0 0 (\d+)px rgba\([\d, ]+?, ([\d.]+)\)$/);
+    expect(matched, "형태부터 맞아야 한다").not.toBeNull();
+    const [, spread, alpha] = matched!;
+    // 미리보기 한 칸(최대 480px)을 덮고도 남아야 한다.
+    expect(Number(spread)).toBeGreaterThan(PREVIEW_MAX_WIDTH);
+    expect(Number(alpha), "0 이면 없는 것과 같다").toBeGreaterThan(0);
+    expect(Number(alpha), "그림을 못 볼 만큼 덮어도 안 된다").toBeLessThan(0.5);
   });
 
   it("안전영역이 없는 규격에는 띠를 만들지 않는다", () => {

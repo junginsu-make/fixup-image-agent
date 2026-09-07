@@ -59,6 +59,29 @@ export function AdExportClient() {
    */
   const token = React.useRef(0);
 
+  /**
+   * **미리보기 한 칸이 실제로 몇 픽셀인가.**
+   *
+   * 상수 480 을 그대로 믿으면 좁은 화면에서 라벨이 거짓말을 한다. 데스크톱은
+   * `max-w-5xl`(1024) − `p-6`(48) − Card `p-4`(32) = **944px** 이라 480 이 1:1 로
+   * 들어가지만, 375px 화면에서는 쓸 수 있는 폭이 **295px** 다. 그때 456×304 는
+   * 1.55배 줄어 보이는데 화면은 「1:1」이라고 적는다 — §5.2 의 가독 보증이
+   * 좁은 화면에서만 조용히 사라진다.
+   */
+  const grid = React.useRef<HTMLDivElement>(null);
+  const [cellWidth, setCellWidth] = React.useState(PREVIEW_MAX_WIDTH);
+
+  React.useEffect(() => {
+    const node = grid.current;
+    // 서버 렌더와 오래된 브라우저에서는 상수로 둔다 — 없는 것보다 낫다.
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setCellWidth(Math.min(PREVIEW_MAX_WIDTH, node.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [results]);
+
   React.useEffect(() => {
     // 이 화면에서 못 뽑는 작업은 아예 안 보여 준다 — 고를 수 있는데 누르면
     // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
@@ -314,13 +337,19 @@ export function AdExportClient() {
             확대되어 실제보다 잘 읽히게 보인다 — 「글자가 읽히는지 보세요」라고
             적어 놓고 읽히는지 볼 수 없는 크기로 보여 주는 셈이다.
           */}
-          <div className="flex flex-wrap items-start gap-4">
+          <div ref={grid} className="flex flex-wrap items-start gap-4">
             {results.map((entry) => (
               <figure
                 key={entry.specId}
                 className="grid gap-1"
-                style={{ width: previewWidth(entry.target, PREVIEW_MAX_WIDTH) }}
+                style={{ width: previewWidth(entry.target, cellWidth), maxWidth: "100%" }}
               >
+                {/*
+                  **`overflow-hidden` 은 모양이 아니라 기능이다.**
+                  `safeAreaOverlayStyle` 의 9999px 그림자를 여기서 자른다.
+                  지우면 그림자가 새어 **격자 전체가 붉게 덮인다.** jsdom 이 없어
+                  시험이 못 잡는 유일한 자리다(`export-rules.ts` 머리말).
+                */}
                 <div className="relative overflow-hidden rounded border bg-muted">
                   {entry.dataUrl ? (
                     <>
@@ -348,7 +377,7 @@ export function AdExportClient() {
                     {entry.quality ? ` · q${entry.quality}` : ""}
                     {/* 1:1 이 아니면 그렇다고 말한다. 안 그러면 사람이 이 크기로
                         읽히는지 판단해 버린다. */}
-                    {entry.dataUrl && !isActualSize(entry.target, PREVIEW_MAX_WIDTH)
+                    {entry.dataUrl && !isActualSize(entry.target, cellWidth)
                       && " · 실제보다 작게 보임"}
                   </span>
                   {entry.shrink && entry.shrink > SHRINK_WARNING && (
