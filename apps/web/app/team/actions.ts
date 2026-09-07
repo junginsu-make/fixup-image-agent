@@ -12,7 +12,18 @@ import {
   removeMember,
   renameTeam,
   setMemberRole,
+  teamIdOf,
 } from "../../lib/teams/store";
+import {
+  archiveProject,
+  createProject,
+  listProjects,
+  moveProject,
+  moveWorkToProject,
+  renameProject,
+} from "../../lib/teams/project-store";
+import { setCurrentProject } from "../../lib/teams/current-project";
+import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 
 /**
  * 팀 편성 — 누가 무엇을 할 수 있나.
@@ -49,6 +60,14 @@ async function requireTeamWrite(teamId: string) {
   if (!canWriteTeam(isAdmin, mine, teamId)) {
     throw new Error("이 팀을 꾸릴 권한이 없습니다.");
   }
+}
+
+/** 이 프로젝트가 어느 팀 것인가. 팀장 확인의 기준이 된다. */
+async function teamOfProject(projectId: string): Promise<string> {
+  const { data } = await createSupabaseAdminClient()
+    .from("projects").select("team_id").eq("id", projectId).maybeSingle();
+  if (!data) throw new Error("프로젝트를 찾을 수 없습니다.");
+  return (data as { team_id: string }).team_id;
 }
 
 /** 이 회원이 지금 속한 팀. 팀장이 남을 건드리려 할 때 그 팀을 알아내는 데 쓴다. */
@@ -127,4 +146,94 @@ export async function removeMemberAction(formData: FormData) {
   await removeMember(userId);
   revalidatePath("/team");
   redirect("/team?notice=removed");
+}
+
+/* ── 프로젝트 — 운영자와 그 팀의 팀장 ──────────────────────────── */
+
+/**
+ * 프로젝트를 만질 수 있는 사람.
+ *
+ * 팀원을 넣고 빼는 것과 같은 기준이다. 팀 안을 꾸리는 일이라 팀장 몫이고,
+ * 팀원이 폴더를 마음대로 접으면 남의 분류가 사라진다.
+ */
+async function requireProjectWrite(projectId: string): Promise<string> {
+  const teamId = await teamOfProject(projectId);
+  await requireTeamWrite(teamId);
+  return teamId;
+}
+
+export async function createProjectAction(formData: FormData) {
+  const member = await requireActiveMember();
+  const teamId = readId(formData, "teamId");
+  await requireTeamWrite(teamId);
+  await createProject(teamId, String(formData.get("name") || ""), member.user.id);
+  revalidatePath("/team");
+  redirect("/team?tab=projects&notice=project_created");
+}
+
+export async function renameProjectAction(formData: FormData) {
+  const projectId = readId(formData, "projectId");
+  await requireProjectWrite(projectId);
+  await renameProject(projectId, String(formData.get("name") || ""));
+  revalidatePath("/team");
+  redirect("/team?tab=projects&notice=project_renamed");
+}
+
+export async function archiveProjectAction(formData: FormData) {
+  const projectId = readId(formData, "projectId");
+  await requireProjectWrite(projectId);
+  await archiveProject(projectId);
+  // 접은 것을 고른 채로 두면 모든 화면이 텅 빈다. 「전체」로 되돌린다.
+  await setCurrentProject(null);
+  revalidatePath("/team");
+  redirect("/team?tab=projects&notice=project_archived");
+}
+
+export async function moveProjectAction(formData: FormData) {
+  const projectId = readId(formData, "projectId");
+  const teamId = await requireProjectWrite(projectId);
+  await moveProject(teamId, projectId, formData.get("direction") === "up" ? "up" : "down");
+  revalidatePath("/team");
+  redirect("/team?tab=projects");
+}
+
+/** 작업물 하나를 프로젝트에 넣거나 뺀다. */
+export async function moveWorkAction(formData: FormData) {
+  const teamId = readId(formData, "teamId");
+  await requireTeamWrite(teamId);
+
+  const table = String(formData.get("table") || "") as Parameters<typeof moveWorkToProject>[1];
+  const workId = readId(formData, "workId");
+  const raw = String(formData.get("projectId") || "");
+  const projectId = raw ? readId(formData, "projectId") : null;
+
+  await moveWorkToProject(teamId, table, workId, projectId);
+  revalidatePath("/team");
+  redirect("/team?tab=works&notice=work_moved");
+}
+
+/**
+ * 사이드바에서 프로젝트를 고른다.
+ *
+ * 고를 수 있는 것인지 확인하고 남긴다. 확인 없이 남기면 남의 팀 프로젝트
+ * id 를 적어 보내는 것으로 화면이 텅 비는데, 왜 비었는지 알 길이 없다.
+ */
+export async function selectProjectAction(formData: FormData) {
+  const member = await requireActiveMember();
+  const raw = String(formData.get("projectId") || "");
+
+  if (!raw) {
+    await setCurrentProject(null);
+  } else {
+    const projects = await listProjects(await teamIdOf(member.user.id));
+    if (!projects.some((project) => project.id === raw)) {
+      throw new Error("고를 수 없는 프로젝트입니다.");
+    }
+    await setCurrentProject(raw);
+  }
+
+  // 화면 전부가 이 값으로 걸러진다. 하나만 되살리면 다른 화면이 옛 결과를
+  // 그대로 보여 준다.
+  revalidatePath("/", "layout");
+  redirect(String(formData.get("back") || "/library"));
 }

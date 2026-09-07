@@ -33,6 +33,12 @@ export interface LibraryViewer {
   userId: string;
   role: UserRole;
   /**
+   * 지금 고른 프로젝트. 있으면 그 갈래만 보인다.
+   *
+   * **없으면 「전체」다.** 안 거는 쪽이 기본이라, 빠뜨렸을 때 화면이 비지 않는다.
+   */
+  projectId?: string | null;
+  /**
    * 이 사람의 팀. 있으면 같은 팀 것이 함께 보인다.
    *
    * 없어도 되게 둔 것은, 팀을 모르는 자리에서 부르면 **개인으로 취급**되어
@@ -278,7 +284,7 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
   if (isLocalStoreEnabled()) return [];
   const supabase = createSupabaseAdminClient();
 
-  const query = scopedRead(
+  let query = scopedRead(
     supabase
       .from("library_items")
       .select("id,user_id,title,tool,aspect_ratio,source_type,source_id,image_count,cover_path,cover_thumb_path,created_at")
@@ -286,6 +292,9 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
       .limit(200),
     readScope(viewer),
   );
+  // 목록에만 건다. 한 건을 열 때는 안 건다 — 프로젝트를 고른 채로 다른 갈래의
+  // 작업물 주소를 받으면 열리지 않는 편이 더 놀랍다.
+  if (viewer.projectId) query = query.eq("project_id", viewer.projectId);
 
   const { data, error } = await query;
   if (error || !data) return [];

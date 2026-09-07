@@ -36,7 +36,8 @@ export interface SnsProjectRecord extends SnsProjectCreateRecord {
 
 export interface SnsProjectRepository {
   create(row: SnsProjectCreateRecord): Promise<SnsProjectRecord>;
-  list(): Promise<SnsProjectRecord[]>;
+  /** `projectId` 가 있으면 그 갈래만. 없으면 전체. */
+  list(projectId?: string | null): Promise<SnsProjectRecord[]>;
 }
 
 export class ProjectValidationError extends Error {
@@ -48,7 +49,7 @@ export class ProjectValidationError extends Error {
 
 export function createProjectService(repository: SnsProjectRepository) {
   return {
-    list: () => repository.list(),
+    list: (projectId?: string | null) => repository.list(projectId),
     async create(userId: string, input: ProjectInput): Promise<SnsProjectRecord> {
       const model = modelById(input.modelId);
       const totalCards = input.cardCountMode === "fixed" ? input.cardCount! : MAX_CARDS;

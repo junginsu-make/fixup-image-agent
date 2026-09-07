@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Crown, UserMinus, Users } from "lucide-react";
 import { Badge, Button, Input } from "@fixup/ui";
 import { requireActiveMember } from "../../lib/membership/server";
@@ -18,6 +19,9 @@ import {
   setMemberRoleAction,
 } from "./actions";
 import { AssignPanel, type Candidate } from "./assign-panel";
+import { ProjectsTab } from "./projects-tab";
+import { WorksTab } from "./works-tab";
+import { listProjectsWithCounts, listTeamWorks } from "../../lib/teams/project-store";
 
 export const dynamic = "force-dynamic";
 
@@ -29,14 +33,28 @@ const NOTICES: Record<string, string> = {
   promoted: "팀장으로 세웠습니다.",
   demoted: "팀원으로 내렸습니다.",
   removed: "팀에서 뺐습니다. 작업물은 개인 작업으로 돌아갔습니다.",
+  project_created: "프로젝트를 만들었습니다.",
+  project_renamed: "프로젝트 이름을 바꿨습니다.",
+  project_archived: "프로젝트를 접었습니다. 작업물은 그대로 있고 「전체」로 돌아갔습니다.",
+  work_moved: "작업물을 옮겼습니다.",
 };
+
+/** 한 화면 세 탭. 주소에 실어서 각 탭이 자기 것만 서버에서 읽는다. */
+const TABS = [
+  { id: "members", label: "팀원" },
+  { id: "projects", label: "프로젝트" },
+  { id: "works", label: "작업물" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string; tab?: string; team?: string }>;
 }) {
-  const { notice } = await searchParams;
+  const { notice, tab, team: teamParam } = await searchParams;
+  const active: TabId = TABS.some((entry) => entry.id === tab) ? (tab as TabId) : "members";
   const member = await requireActiveMember();
   const isAdmin = member.profile.role === "admin";
   const mine = await myMembership(member.user.id);
@@ -46,7 +64,8 @@ export default async function TeamPage({
   const allTeams = await listTeams();
   const teams = isAdmin ? allTeams : allTeams.filter((team) => team.id === mine?.teamId);
 
-  const canAssign = teams.some((team) => canWriteTeam(isAdmin, mine, team.id));
+  const canAssign =
+    active === "members" && teams.some((team) => canWriteTeam(isAdmin, mine, team.id));
   const [unassigned, totalMembers] = canAssign
     ? await Promise.all([listUnassigned(), countActiveMembers()])
     : [[], 0];
@@ -62,6 +81,20 @@ export default async function TeamPage({
   const assignedCount = allTeams.reduce((sum, team) => sum + team.members.length, 0);
   const stats = summarize(allTeams, assignedCount, totalMembers);
 
+  /**
+   * 프로젝트와 작업물은 **한 팀 것**이다.
+   *
+   * 팀원은 자기 팀이다. 운영자는 팀이 여럿일 수 있어 하나를 골라야 하는데,
+   * 안 고르면 첫 팀으로 둔다 — 「팀을 고르세요」만 뜬 빈 화면을 만들지 않는다.
+   */
+  const focusTeamId = isAdmin
+    ? (teams.find((entry) => entry.id === teamParam)?.id ?? teams[0]?.id ?? null)
+    : (mine?.teamId ?? null);
+  const canWriteFocus = focusTeamId ? canWriteTeam(isAdmin, mine, focusTeamId) : false;
+
+  const projects = active === "members" ? [] : await listProjectsWithCounts(focusTeamId);
+  const works = active === "works" ? await listTeamWorks(focusTeamId) : [];
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 py-2">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -73,7 +106,7 @@ export default async function TeamPage({
               : "우리 팀 명단입니다. 같은 팀 사람이 만든 작업물은 서로 볼 수 있습니다."}
           </p>
         </div>
-        {isAdmin ? (
+        {isAdmin && active === "members" ? (
           <form action={createTeamAction} className="flex items-center gap-2">
             <Input
               name="name"
@@ -96,7 +129,9 @@ export default async function TeamPage({
 
       {/* 통계 바 — 카드 넷 대신 밑줄 하나. 세로 공간을 거의 안 쓴다. 이 화면의
           주인공은 숫자가 아니라 명단이다. */}
-      {isAdmin ? (
+      <TabBar active={active} focusTeamId={isAdmin ? focusTeamId : null} />
+
+      {isAdmin && active === "members" ? (
         <dl className="flex flex-wrap items-baseline gap-x-8 gap-y-2 border-y py-3 text-sm">
           <Stat label="팀" value={`${stats.teams}개`} />
           <Stat label="배정" value={`${stats.assigned}명`} />
@@ -111,7 +146,26 @@ export default async function TeamPage({
         </dl>
       ) : null}
 
-      {teams.length === 0 ? (
+      {active === "projects" ? (
+        <>
+          {isAdmin && teams.length > 1 ? (
+            <TeamSwitch teams={teams} focusTeamId={focusTeamId} tab="projects" />
+          ) : null}
+          <ProjectsTab teamId={focusTeamId} projects={projects} canWrite={canWriteFocus} />
+        </>
+      ) : active === "works" ? (
+        <>
+          {isAdmin && teams.length > 1 ? (
+            <TeamSwitch teams={teams} focusTeamId={focusTeamId} tab="works" />
+          ) : null}
+          <WorksTab
+            teamId={focusTeamId}
+            works={works}
+            projects={projects}
+            canWrite={canWriteFocus}
+          />
+        </>
+      ) : teams.length === 0 ? (
         <EmptyState isAdmin={isAdmin} />
       ) : (
         <div className="grid gap-4">
@@ -127,6 +181,66 @@ export default async function TeamPage({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 한 화면 세 탭. 주소로 오가서 각 탭이 서버에서 자기 것만 읽는다. */
+function TabBar({ active, focusTeamId }: { active: TabId; focusTeamId: string | null }) {
+  return (
+    <nav className="flex gap-1 border-b" aria-label="팀 화면 탭">
+      {TABS.map((entry) => {
+        const on = entry.id === active;
+        // 고른 팀을 탭을 옮겨도 유지한다. 안 그러면 운영자가 탭마다 팀을
+        // 다시 고르게 된다.
+        const href = focusTeamId
+          ? `/team?tab=${entry.id}&team=${focusTeamId}`
+          : `/team?tab=${entry.id}`;
+        return (
+          <Link
+            key={entry.id}
+            href={href}
+            aria-current={on ? "page" : undefined}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-bold transition-colors ${
+              on
+                ? "border-primary text-primary"
+                : "border-transparent text-subtle-foreground hover:text-foreground"
+            }`}
+          >
+            {entry.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** 운영자가 어느 팀을 볼지. 팀이 둘 이상일 때만 나온다. */
+function TeamSwitch({
+  teams,
+  focusTeamId,
+  tab,
+}: {
+  teams: TeamWithMembers[];
+  focusTeamId: string | null;
+  tab: TabId;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-meta text-subtle-foreground">팀</span>
+      {teams.map((team) => (
+        <Link
+          key={team.id}
+          href={`/team?tab=${tab}&team=${team.id}`}
+          className={`rounded-full border px-2.5 py-1 text-sm transition-colors ${
+            team.id === focusTeamId
+              ? "border-primary/40 bg-primary-soft font-bold text-primary"
+              : "border-border hover:bg-muted/40"
+          }`}
+        >
+          {team.name}
+        </Link>
+      ))}
     </div>
   );
 }

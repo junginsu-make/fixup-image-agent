@@ -11,6 +11,7 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
 import { scopedRead } from "../teams/scope";
 import { teamIdOf } from "../teams/store";
+import { selectedProjectFor } from "../teams/current-project";
 import {
   imageInsertRows,
   projectInsertRow,
@@ -66,10 +67,16 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
   return {
     async list() {
       const client = await createSupabaseServerClient();
-      const { data, error } = await scopedRead(
+      let query = scopedRead(
         client.from("poster_projects").select(PROJECT_COLUMNS).order("updated_at", { ascending: false }),
         await viewScope(userId),
       );
+      // 고른 갈래만 보여 준다. 한 건을 열 때(`get`)는 안 건다 — 주소로 받은
+      // 작업이 갈래가 다르다고 안 열리면 더 놀랍다.
+      const projectId = await selectedProjectFor(userId);
+      if (projectId) query = query.eq("project_id", projectId);
+
+      const { data, error } = await query;
       return checked((data ?? []) as PosterProjectRow[], error, "포스터 작업 목록").map(toProjectRecord);
     },
     async get(id) {

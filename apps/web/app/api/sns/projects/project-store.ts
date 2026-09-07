@@ -70,8 +70,16 @@ export function createSupabaseSnsProjectRepository(client: SupabaseClient): SnsP
       }).select(SELECT).single();
       return record(checked(data as ProjectRow, error));
     },
-    async list() {
-      const { data, error } = await client.from("sns_projects").select(SELECT).order("updated_at", { ascending: false });
+    /**
+     * 목록. **누가 보는지는 RLS 가 정한다** — 여기서 `user_id` 를 안 건다.
+     *
+     * `projectId` 를 받으면 그 갈래만 낸다. 안 받으면 「전체」다 — 안 거는
+     * 쪽이 기본이라, 빠뜨렸을 때 화면이 비지 않는다.
+     */
+    async list(projectId?: string | null) {
+      let query = client.from("sns_projects").select(SELECT).order("updated_at", { ascending: false });
+      if (projectId) query = query.eq("project_id", projectId);
+      const { data, error } = await query;
       return checked((data ?? []) as ProjectRow[], error).map(record);
     },
   };

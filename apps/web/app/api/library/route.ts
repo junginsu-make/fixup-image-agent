@@ -7,6 +7,7 @@ import {
 } from "../../../lib/server-library";
 import { authenticateApiMember } from "../../../lib/membership/api";
 import { teamIdOf } from "../../../lib/teams/store";
+import { selectedProjectFor } from "../../../lib/teams/current-project";
 import { originOf } from "./core";
 
 export const runtime = "nodejs";
@@ -36,7 +37,12 @@ async function viewerOf(
 ): Promise<LibraryViewer> {
   // 팀이 있으면 같은 팀 것이 함께 보인다. 팀이 없으면 `null` 이고 지금까지와
   // 똑같이 자기 것만 보인다.
-  return { userId: member.userId, role: member.profile.role, teamId: await teamIdOf(member.userId) };
+  return {
+    userId: member.userId,
+    role: member.profile.role,
+    teamId: await teamIdOf(member.userId),
+    projectId: await selectedProjectFor(member.userId),
+  };
 }
 
 export async function GET(req: Request) {
