@@ -4,6 +4,7 @@ import { authenticateApiMember } from "../../../../../../../../lib/membership/ap
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../../../lib/local-store";
 import { posterStoresForUser } from "../../../../../../../../lib/poster/stores";
 import { createSupabaseAdminClient } from "../../../../../../../../lib/supabase/admin";
+import { usesAdminLookup } from "./admin-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +53,8 @@ export async function GET(request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id, index } = await context.params;
-    const isAdmin = auth.member.profile.role === "admin";
+    // 로컬에서는 관리자여도 Supabase 조회를 안 쓴다 — 거기엔 Supabase 가 없다.
+    const isAdmin = usesAdminLookup(auth.member.profile.role, isLocalStoreEnabled());
     const found = isAdmin
       ? await adminAssetPath(id, index)
       : (await posterStoresForUser(auth.member.userId).images.byProject(id))
