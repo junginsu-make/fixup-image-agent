@@ -9,7 +9,7 @@ import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../li
 import { planDerivation } from "../../lib/ad/derive";
 import {
   PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, bytesFromDataUrl, defaultSelection,
-  downloadable, excludedCount, exportableItems, isActualSize, previewWidth,
+  downloadable, excludedCount, exportableItems, failureMessage, isActualSize, previewWidth,
   safeAreaOverlayStyle, specRows, zipEntryName,
 } from "./export-rules";
 
@@ -96,7 +96,8 @@ export function AdExportClient() {
       const body = await response.json().catch(() => null);
       if (mine !== token.current) return;
       if (!response.ok || !body?.ok) {
-        setError(body?.message ?? "뽑지 못했습니다.");
+        // 본문 없는 404 도 온다(기능이 꺼짐·그림 없음). 상태로 갈라 말한다.
+        setError(failureMessage(response.status, body?.message));
         return;
       }
       setResults(body.results as ResultEntry[]);

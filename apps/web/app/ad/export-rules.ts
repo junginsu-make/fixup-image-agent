@@ -194,3 +194,23 @@ export function previewWidth(target: { width: number }, cellWidth = PREVIEW_MAX_
 export function isActualSize(target: { width: number }, cellWidth = PREVIEW_MAX_WIDTH): boolean {
   return target.width <= cellWidth;
 }
+
+/**
+ * 실패를 사람이 읽을 말로 옮긴다.
+ *
+ * **비-JSON 응답을 삼키지 않는다.** 라우트는 두 곳에서 본문 없는 404 를 낸다 —
+ * 기능이 꺼져 있을 때와 그림을 못 찾을 때. 화면이 `response.json()` 을
+ * `catch(() => null)` 로 받으면 둘 다 「뽑지 못했습니다」로 뭉개져,
+ * **왜 안 되는지 알 길이 없다.**
+ *
+ * 상태 코드마다 할 일이 다르므로 그것을 말해 준다 — 다시 누르면 되는지,
+ * 다른 그림을 골라야 하는지, 사람을 불러야 하는지.
+ */
+export function failureMessage(status: number, message?: string | null): string {
+  if (message) return message;
+  if (status === 404) return "이 그림을 찾지 못했습니다. 다른 작업을 골라 주세요.";
+  if (status === 401 || status === 403) return "로그인이 풀렸습니다. 다시 들어와 주세요.";
+  if (status === 429) return "지금 서버가 붐빕니다. 잠시 뒤에 다시 눌러 주세요.";
+  if (status >= 500) return "서버에서 뽑지 못했습니다. 잠시 뒤에 다시 눌러 주세요.";
+  return "뽑지 못했습니다.";
+}

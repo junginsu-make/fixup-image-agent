@@ -3,7 +3,7 @@ import { AD_SPECS } from "../../../lib/ad/specs";
 import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
-  previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
+  failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, SHRINK_WARNING,
 } from "../export-rules";
 
@@ -244,5 +244,37 @@ describe("미리보기를 실제 크기로 보여 준다", () => {
 
   it("작은 것을 늘리지 않는다", () => {
     expect(previewWidth({ width: 100 }, CELL)).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("실패를 사람이 읽을 말로 옮긴다", () => {
+  /**
+   * 라우트는 두 곳에서 **본문 없는 404** 를 낸다 — 기능이 꺼져 있을 때와 그림을
+   * 못 찾을 때. 화면이 `response.json()` 을 `catch(() => null)` 로 받으면 둘 다
+   * 「뽑지 못했습니다」로 뭉개져 **왜 안 되는지 알 길이 없다.**
+   */
+  it("본문이 없어도 404 는 무엇을 하라고 말한다", () => {
+    expect(failureMessage(404, null)).toMatch(/다른 작업/);
+  });
+
+  it("붐비는 것은 다시 누르면 된다고 말한다", () => {
+    expect(failureMessage(429, null)).toMatch(/다시/);
+  });
+
+  it("로그인이 풀린 것과 서버 오류를 가른다", () => {
+    expect(failureMessage(401, null)).toMatch(/로그인/);
+    expect(failureMessage(500, null)).not.toMatch(/로그인/);
+  });
+
+  /**
+   * 서버가 준 말이 있으면 그것이 낫다 — 「규격을 하나 이상 고르세요」처럼
+   * 무엇을 고치면 되는지 이미 적혀 있다.
+   */
+  it("서버가 준 말이 있으면 그대로 쓴다", () => {
+    expect(failureMessage(400, "규격을 하나 이상 고르세요.")).toBe("규격을 하나 이상 고르세요.");
+  });
+
+  it("모르는 상태에도 빈 말을 주지 않는다", () => {
+    expect(failureMessage(418, null).length).toBeGreaterThan(0);
   });
 });
