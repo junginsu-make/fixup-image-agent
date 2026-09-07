@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { hasFullScope, viewerFrom } from "../access/core";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
@@ -43,7 +44,7 @@ export async function authenticateApiMember(): Promise<
 export async function authenticateApiAdmin() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
-  if (auth.member.profile.role !== "admin") {
+  if (!hasFullScope(viewerFrom(auth.member), "delete")) {
     return { ok: false as const, response: membershipApiError(403, "admin_required", "관리자 권한이 필요합니다.") };
   }
   return auth;

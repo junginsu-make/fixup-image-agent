@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@fixup/ui";
 import { requireActiveMember, getUsageSummary } from "../../lib/membership/server";
+import { canAccessPage, viewerFrom } from "../../lib/access/core";
+import { PAGE_ACCESS } from "../../lib/access/routes";
 import { GuideLink } from "./guide-link";
 import { ReferenceHuntButton } from "./reference-hunt-button";
 import { RunningJobsPanel, RunningJobsProvider } from "./running-jobs";
@@ -14,7 +16,12 @@ export async function StudioLayout({ children }: { children: ReactNode }) {
     // 않으므로, 다른 화면으로 가도 결과를 계속 받아 올 수 있다.
     <RunningJobsProvider>
       <AppShell
-        isAdmin={membership.profile.role === "admin"}
+        // 메뉴에 관리자를 낼지도 등록부가 정한다. 미들웨어가 문을 여는 기준과
+        // 같은 곳에서 나와야, 「메뉴엔 있는데 안 열리는」 일이 안 생긴다.
+        isAdmin={canAccessPage("/admin", viewerFrom({
+          userId: membership.user.id,
+          profile: membership.profile,
+        }), PAGE_ACCESS)}
         sidebarFooter={<RunningJobsPanel />}
         actions={
           <StudioActions email={membership.profile.email} usage={usage}>
