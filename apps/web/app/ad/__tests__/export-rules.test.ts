@@ -689,6 +689,16 @@ describe("미리보기 바탕", () => {
 
   /** 색은 토큰을 탄다 — 리터럴을 박으면 다크 모드에서 굳는다. */
   it("색을 리터럴로 박지 않는다", () => {
-    expect(previewBackdrop("png-alpha").backgroundImage).toContain("var(--muted)");
+    expect(previewBackdrop("png-alpha").backgroundImage).toContain("var(--muted-foreground)");
+  });
+
+  /**
+   * **판 색과 같은 토큰을 쓰면 안 된다.** 미리보기 칸은 `bg-muted` 를 달고
+   * 있어서, 무늬 색이 `var(--muted)` 면 두 색이 같은 값이라 화면이 단색이 된다
+   * — CSS 는 유효하니 「무늬가 있다」 시험만으로는 안 잡힌다.
+   */
+  it("무늬 색이 판 색(--muted)과 같지 않다", () => {
+    const image = previewBackdrop("png-alpha").backgroundImage ?? "";
+    expect(image).not.toMatch(/var\(--muted\)/);
   });
 });

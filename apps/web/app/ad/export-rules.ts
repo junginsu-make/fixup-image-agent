@@ -388,12 +388,18 @@ export function cropNotice(
  */
 export function previewBackdrop(format: AdSpec["format"]): React.CSSProperties {
   if (format !== "png-alpha") return {};
+  // 사각형 색은 **판 색과 달라야 한다.** 칸이 `bg-muted` 를 달고 있으므로
+  // 여기서 `var(--muted)` 를 쓰면 무늬와 판이 같은 값이라 **결과가 단색**이다
+  // — CSS 는 멀쩡하고 화면만 고치기 전과 똑같다. 밝기 차를 만들되 라이트·다크
+  // 양쪽을 따로 적지 않으려고, 저장소가 이미 쓰는 `color-mix` 로 앞색을 섞는다
+  // (`safeAreaOverlayStyle`, `create-theme.css`).
+  const square = "color-mix(in srgb, var(--muted-foreground) 22%, transparent)";
   return {
     backgroundImage:
-      "linear-gradient(45deg, var(--muted) 25%, transparent 25%),"
-      + " linear-gradient(-45deg, var(--muted) 25%, transparent 25%),"
-      + " linear-gradient(45deg, transparent 75%, var(--muted) 75%),"
-      + " linear-gradient(-45deg, transparent 75%, var(--muted) 75%)",
+      `linear-gradient(45deg, ${square} 25%, transparent 25%),`
+      + ` linear-gradient(-45deg, ${square} 25%, transparent 25%),`
+      + ` linear-gradient(45deg, transparent 75%, ${square} 75%),`
+      + ` linear-gradient(-45deg, transparent 75%, ${square} 75%)`,
     backgroundSize: "16px 16px",
     backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
   };
