@@ -490,7 +490,18 @@ export function AdExportClient() {
             확대되어 실제보다 잘 읽히게 보인다 — 「글자가 읽히는지 보세요」라고
             적어 놓고 읽히는지 볼 수 없는 크기로 보여 주는 셈이다.
           */}
-          <div ref={grid} className="flex flex-wrap items-start gap-4">
+          {/*
+            **`min-w-0` 이 없으면 좁은 화면이 통째로 넘친다.**
+            grid·flex 의 자식은 기본이 `min-width: auto` 라 **내용보다 작아지지
+            않는다.** 미리보기 한 칸이 480px 이면 이 줄이 480px 로 버티고,
+            `maxWidth: 100%` 는 그 480px 의 100% 라 아무것도 막지 못한다 —
+            실측으로 360px 화면에서 문서가 546px 로 벌어졌다.
+            `AppShell` 의 `<main className="min-w-0 …">` 이 같은 것을 막는다.
+
+            폭을 재는 `ResizeObserver` 도 이것이 있어야 참값을 읽는다 — 없으면
+            「칸이 넓으니 그림을 크게 → 그래서 칸이 넓다」로 되먹임한다.
+          */}
+          <div ref={grid} className="flex min-w-0 flex-wrap items-start gap-4">
             {results.map((entry) => (
               <figure
                 key={entry.specId}
