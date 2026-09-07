@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Inbox, Rss, PanelsTopLeft, Frame, BookOpen } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, Inbox, Rss, PanelsTopLeft, Frame, BookOpen } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -76,6 +76,15 @@ const bottomItems = [
   { href: "/settings", label: "계정", desc: "사용량·레퍼런스", icon: Settings },
 ];
 
+// 팀은 소속이 있는 사람에게만 낸다. 팀이 하나도 없는 회사에서 모두에게
+// 「팀」이 보이면, 눌러 봐야 빈 화면이라 메뉴만 늘어난다.
+const teamItem = {
+  href: "/team",
+  label: "팀",
+  desc: "팀원·소속 관리",
+  icon: Users,
+};
+
 // 관리자는 다른 메뉴와 같은 자리에 둔다. 우측 상단 버튼으로 있을 때는 회원
 // 상태 표시에 섞여, 회원 관리·비용을 보러 갈 곳이 있다는 걸 알기 어려웠다.
 const adminItem = {
@@ -85,9 +94,14 @@ const adminItem = {
   icon: ShieldCheck,
 };
 
-/** 관리자에게만 보이는 항목이 있어, 메뉴 목록은 권한에 따라 달라진다. */
-function bottomItemsFor(isAdmin: boolean) {
-  return isAdmin ? [...bottomItems, adminItem] : bottomItems;
+/** 권한과 소속에 따라 달라지는 메뉴. 보이는 것과 열리는 것은 별개다 — 실제
+ *  차단은 각 화면이 서버에서 한다. */
+function bottomItemsFor(isAdmin: boolean, hasTeam: boolean) {
+  return [
+    ...bottomItems,
+    ...(hasTeam || isAdmin ? [teamItem] : []),
+    ...(isAdmin ? [adminItem] : []),
+  ];
 }
 
 interface AppShellProps {
@@ -106,6 +120,13 @@ interface AppShellProps {
    * `/admin` 의 `requireAdmin()` 이 서버에서 한다.
    */
   isAdmin?: boolean;
+  /**
+   * 팀에 속해 있는지. 팀 메뉴를 낼지만 정한다.
+   *
+   * 감추는 것은 안내일 뿐이라, 소속 없는 사람이 주소를 쳐서 들어와도
+   * `/team` 은 열린다 — 거기서 「아직 팀에 속해 있지 않습니다」를 본다.
+   */
+  hasTeam?: boolean;
 }
 
 function NavItem({
@@ -167,11 +188,17 @@ function NavItem({
   );
 }
 
-export function AppShell({ children, actions, sidebarFooter, isAdmin = false }: AppShellProps) {
+export function AppShell({
+  children,
+  actions,
+  sidebarFooter,
+  isAdmin = false,
+  hasTeam = false,
+}: AppShellProps) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
-  const visibleBottomItems = bottomItemsFor(isAdmin);
+  const visibleBottomItems = bottomItemsFor(isAdmin, hasTeam);
   const allLinks = [...navGroups.flatMap((g) => g.items), ...visibleBottomItems];
 
   return (
