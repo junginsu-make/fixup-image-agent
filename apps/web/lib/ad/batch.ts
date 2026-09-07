@@ -74,7 +74,29 @@ export function isAdExportEnabled(environment: NodeJS.ProcessEnv = process.env):
   return environment.AD_EXPORT === "1";
 }
 
-export async function exportBatch(master: Buffer, specIds: string[]): Promise<AdBatchEntry[]> {
+export interface ExportBatchOptions {
+  /**
+   * 뽑은 바이트를 **검증 전에** 한 번 거치게 하는 자리.
+   *
+   * AI 표기(격리 계약 7)가 여기로 들어온다. 설계 §4.3 이 「크롭이 배지를
+   * 잘라내고 축소가 뭉갠다 → 파생 뒤에 다시 태운다」로 결론냈고, `export.ts` 의
+   * 머리말이 그 의무를 **이 함수를 부르는 쪽**에 지목했다.
+   *
+   * **검증보다 먼저 태운다.** 배지가 용량을 키우므로, 태우기 전 바이트로
+   * `maxBytes` 를 통과시키면 그 통과가 거짓말이 된다.
+   *
+   * 주입으로 받는 이유: `markAsAi` 는 `server-only` 이고 호출마다 설정을
+   * 조회한다. 여기서 직접 부르면 이 모듈이 시험에서 안 돌고, 규격 수만큼
+   * 조회가 늘어난다. **켤지 말지는 부르는 쪽이 한 번 정한다.**
+   */
+  finish?: (bytes: Buffer) => Promise<Buffer>;
+}
+
+export async function exportBatch(
+  master: Buffer,
+  specIds: string[],
+  options: ExportBatchOptions = {},
+): Promise<AdBatchEntry[]> {
   // 같은 규격을 여러 번 골라도 한 번만 뽑는다. 순서는 고른 순서를 지킨다.
   const wanted = [...new Set(specIds)];
   if (!wanted.length) throw new Error("규격을 하나 이상 고르세요.");
@@ -116,14 +138,15 @@ export async function exportBatch(master: Buffer, specIds: string[]): Promise<Ad
      * 검증에 걸려도 바이트는 함께 준다 — 무엇이 왜 걸렸는지 사람이 보고
      * 판단해야 한다. 「검증 실패」만 던지고 그림을 안 보여 주면 판단할 수가 없다.
      */
-    const check = await checkAgainstSpec(made.bytes, spec);
+    const bytes = options.finish ? await options.finish(made.bytes) : made.bytes;
+    const check = await checkAgainstSpec(bytes, spec);
     entries.push({
       ...shared,
       status: check.ok ? "ok" : "failed",
       ...(check.ok ? {} : { reason: check.failures.join(" · ") }),
       failures: check.failures,
-      bytes: made.bytes,
-      byteLength: made.bytes.length,
+      bytes,
+      byteLength: bytes.length,
       quality: made.quality,
     });
   }

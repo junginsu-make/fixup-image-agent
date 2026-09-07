@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
+import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
+import { markAsAi } from "../../../../lib/watermark";
 import { getLibraryImageFile } from "../../../../lib/server-library";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
 
@@ -97,9 +99,20 @@ export async function POST(request: Request) {
      * (광고 한 요청이 2.6초를 쓴다). 줄을 세우지 않고 바로 거절하는 것이 이
      * 게이트의 설계라, 사용자는 기다리지 않고 다시 누르면 된다.
      */
+    /**
+     * **AI 표기를 다시 태운다** (격리 계약 7, 설계 §4.3).
+     *
+     * 원본에 굽힌 배지는 오른쪽 아래에 있어 **크롭이 잘라내고 축소가 뭉갠다** —
+     * 214×214 에서 배지 높이는 5px 이하다. 파생 뒤에 태우면 배지 크기가 캔버스
+     * 너비에 비례하므로 규격마다 알아서 맞는다.
+     *
+     * **켤지는 여기서 한 번만 정한다.** `markAsAi` 가 호출마다 설정을 조회하므로,
+     * 조건 없이 넘기면 꺼져 있어도 규격 수만큼 조회가 돈다.
+     */
+    const badge = await isAiBadgeEnabled();
     const results = await withRenderSlot(
       auth.member.userId,
-      () => exportBatch(file.bytes, parsed.data.specIds),
+      () => exportBatch(file.bytes, parsed.data.specIds, badge ? { finish: markAsAi } : {}),
     );
 
     /**

@@ -191,3 +191,52 @@ describe("기능을 통째로 끌 수 있다", () => {
     expect(isAdExportEnabled({ AD_EXPORT: "0" } as unknown as NodeJS.ProcessEnv)).toBe(false);
   });
 });
+
+describe("AI 표기를 파생 뒤에 태운다", () => {
+  /**
+   * 격리 계약 7 (설계 §4.3). 원본의 배지는 오른쪽 아래에 있어 크롭이 잘라내고
+   * 축소가 뭉갠다 — 파생 뒤에 태워야 규격마다 크기가 맞는다.
+   */
+  it("뽑은 바이트가 `finish` 를 거친다", async () => {
+    const seen: number[] = [];
+    const results = await exportBatch(await busy(1200, 1200), ["google-rda-square"], {
+      finish: async (bytes) => { seen.push(bytes.length); return bytes; },
+    });
+    expect(seen).toHaveLength(1);
+    expect(results[0]!.status).toBe("ok");
+  });
+
+  /**
+   * **검증보다 먼저 태운다.** 배지가 용량을 키우므로, 태우기 전 바이트로
+   * `maxBytes` 를 통과시키면 그 통과가 거짓말이 된다.
+   */
+  it("태운 결과가 용량 검증을 받는다 — 태우기 전 바이트로 통과시키지 않는다", async () => {
+    const master = await busy(1600, 800);
+    // 배지를 태우면 용량이 는다. 그것을 흉내 내려고 상한(250KB)을 넘는 같은
+    // 규격·같은 크기의 그림을 돌려준다 — 형식도 픽셀도 맞으므로 **용량만** 걸린다.
+    const fat = await sharp(master)
+      .resize(1250, 560, { fit: "cover" }).jpeg({ quality: 100 }).toBuffer();
+
+    const clean = await exportBatch(master, ["naver-gfa-main"]);
+    expect(clean[0]!.status, "태우기 전에는 통과해야 이 시험이 뜻이 있다").toBe("ok");
+    expect(fat.length, "흉내 낸 바이트가 상한을 넘어야 한다").toBeGreaterThan(256_000);
+
+    const results = await exportBatch(master, ["naver-gfa-main"], { finish: async () => fat });
+    expect(results[0]!.status).toBe("failed");
+    expect(results[0]!.failures.join()).toMatch(/용량이 넘칩니다/);
+  });
+
+  it("`finish` 가 없으면 그대로 둔다", async () => {
+    const results = await exportBatch(await busy(1200, 1200), ["google-rda-square"]);
+    expect(results[0]!.status).toBe("ok");
+  });
+
+  it("돌려준 바이트가 결과에 실린다 — 원본이 아니라 태운 것이다", async () => {
+    const marked = Buffer.from("표기됨");
+    const results = await exportBatch(await busy(1200, 1200), ["google-rda-square"], {
+      finish: async () => marked,
+    });
+    expect(results[0]!.bytes!.equals(marked)).toBe(true);
+    expect(results[0]!.byteLength).toBe(marked.length);
+  });
+});
