@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { patchShowcaseItem, removeShowcaseItem, reorderShowcaseItem } from "../api/showcase/store";
+import { assignMember, removeMember, setMemberRole } from "../../lib/teams/store";
 
 function readUserId(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -291,4 +292,44 @@ export async function resendConfirmation(formData: FormData) {
 
   revalidatePath("/admin");
   redirect("/admin?notice=confirm_sent");
+}
+
+/* ── 팀 편성 — 회원 명단에서 바로 ─────────────────────────────── */
+
+/**
+ * 팀 편성은 `/team` 이 하는데 왜 여기에도 두나.
+ *
+ * **운영자가 회원을 보는 곳은 여기다.** 승인하고 한도를 정하다가 팀을
+ * 바꾸려면 화면을 옮겨야 하고, 옮기면 방금 보던 회원을 다시 찾아야 한다.
+ * 회원 하나를 두고 하는 일은 한 자리에서 끝나야 한다.
+ *
+ * `/team` 의 액션을 그대로 못 쓰는 이유는 그쪽이 끝나고 `/team` 으로
+ * 돌려보내기 때문이다. 명단에서 눌렀는데 팀 화면으로 튕기면 하던 일을 잃는다.
+ */
+export async function assignTeamFromAdmin(formData: FormData) {
+  await requireAdmin();
+  const userId = readUserId(formData);
+  const teamId = String(formData.get("teamId") || "");
+
+  // 「팀 없음」을 고르면 뺀다. 고르개 하나로 넣고 빼는 것이 둘 다 된다.
+  if (!teamId) {
+    await removeMember(userId);
+    revalidatePath("/admin");
+    redirect("/admin?notice=team_removed");
+  }
+
+  if (!/^[0-9a-f-]{36}$/i.test(teamId)) throw new Error("올바르지 않은 팀 ID입니다.");
+  await assignMember(userId, teamId);
+  revalidatePath("/admin");
+  redirect("/admin?notice=team_assigned");
+}
+
+/** 팀장 · 팀원을 바꾼다. 마지막 팀장은 못 내린다 — `setMemberRole` 이 막는다. */
+export async function setTeamRoleFromAdmin(formData: FormData) {
+  await requireAdmin();
+  const userId = readUserId(formData);
+  const role = formData.get("role") === "leader" ? "leader" : "member";
+  await setMemberRole(userId, role);
+  revalidatePath("/admin");
+  redirect(`/admin?notice=${role === "leader" ? "team_promoted" : "team_demoted"}`);
 }
