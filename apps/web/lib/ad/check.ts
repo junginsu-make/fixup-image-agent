@@ -91,7 +91,10 @@ export async function checkAgainstSpec(bytes: Buffer, spec: AdSpec): Promise<Spe
     // 정반대로 `keepMetadata()` 를 쓰는데, 거기는 색이 틀어지면 안 되기 때문이다.
     if (meta.icc || meta.exif) failures.push("메타데이터가 남아 있습니다 (ICC 또는 EXIF)");
   } catch (error) {
-    failures.push(`읽지 못했습니다: ${error instanceof Error ? error.message : error}`);
+    // `export.ts` 와 같은 규칙 — 고칠 수 있는 것만 문장을 주고 내부 문구는 감춘다.
+    console.error("[ad-check] 읽기 실패", { specId: spec.id, error });
+    const tooBig = error instanceof Error && /pixel limit/i.test(error.message);
+    failures.push(tooBig ? "그림이 너무 커서 읽지 못했습니다." : "읽지 못했습니다.");
   }
   return { ok: failures.length === 0, failures };
 }

@@ -148,6 +148,23 @@ export async function exportForAd(
     }
     return best;
   } catch (error) {
-    return { failed: error instanceof Error ? error.message : String(error) };
+    /**
+     * **libvips 문구를 그대로 내보내지 않는다.**
+     *
+     * 파일 경로는 안 샌다(입력이 Buffer 다). 새는 것은 라이브러리 내부 문구와
+     * 버전 단서이고, 그건 사용자가 고칠 수 있는 정보가 아니다.
+     *
+     * 위쪽의 실패 문장들 — 「원본이 작아 …」·「품질 40 까지 낮춰도 …」 — 은
+     * 설계 §8 이 정한 값이라 그대로 둔다. 사용자가 무엇을 바꾸면 되는지 말한다.
+     */
+    console.error("[ad-export] 인코딩 실패", { specId: spec.id, error });
+    /**
+     * **사용자가 고칠 수 있는 것만 문장을 준다.**
+     *
+     * 「그림이 너무 크다」는 사용자가 다른 그림을 고르면 되는 말이라 알린다.
+     * 그 밖의 libvips 문구는 고칠 수 있는 정보가 아니라 감춘다.
+     */
+    const tooBig = error instanceof Error && /pixel limit/i.test(error.message);
+    return { failed: tooBig ? "그림이 너무 커서 뽑지 못했습니다." : "이 그림에서는 뽑지 못했습니다." };
   }
 }
