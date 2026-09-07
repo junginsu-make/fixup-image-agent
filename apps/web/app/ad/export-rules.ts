@@ -235,6 +235,15 @@ export interface AdImagePick {
  *
  * **겹친 변형 번호는 하나로 접는다.** 안 접으면 같은 그림이 두 번 뜨고 React
  * key 도 겹친다.
+ *
+ * **접어도 잃는 그림이 없다.** `assetPath` 가 `(userId, projectId, variantIndex)`
+ * 의 순수 함수이고(`supabase-store-core.ts` 의 `posterAssetPath`) 그것을 쓰는
+ * 곳이 저장 한 군데뿐이라, **같은 번호의 행은 반드시 같은 파일을 가리킨다** —
+ * 겹친 행은 이미 서로의 파일을 덮어쓴 뒤다(설계 §10 3-0).
+ *
+ * **그 불변식이 여기를 떠받친다.** `byProject` 의 동점 정렬은 보장되지 않아
+ * 미리보기와 내보내기가 서로 다른 **행**을 집을 수 있는데, 같은 파일을
+ * 가리키므로 결과가 같다. `assetPath` 규칙을 바꾸면 여기가 먼저 깨진다.
  */
 export function posterImagePicks(
   projectId: string,
