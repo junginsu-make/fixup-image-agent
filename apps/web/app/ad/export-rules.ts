@@ -211,6 +211,66 @@ export function adSourceItems(
 }
 
 /**
+ * 미리보기 한 장 — **어느 그림인지와 어떻게 부를지를 함께 든다.**
+ *
+ * **초판은 배열 번호를 서버에 보냈다.** 서버는 그것을 `variantIndex` 로 읽는데,
+ * `variantIndex` 는 배치마다 0 부터 다시 시작하므로(`generate.ts:174`) 한 작업
+ * 안에서 번호가 겹친다 — 「고치기」나 재생성 한 번이면 그렇다. 그러면 사용자가
+ * A 를 보고 골랐는데 **ZIP 에는 B 가 담긴다.** 「사람 눈이 의도 검증이다」(§5.2)가
+ * 통째로 헛돈다.
+ *
+ * 3-0 에서 같은 사실(번호가 겹친다)을 **저장 경로 충돌**로만 봤다. 같은 사실의
+ * 다른 얼굴을 못 봤다.
+ */
+export interface AdImagePick {
+  /** 화면에 그릴 주소. */
+  image: string;
+  sectionName: string;
+  /** 서버에 보낼 값. **배열 번호가 아니다.** */
+  position: number;
+}
+
+/**
+ * 포스터 작업의 그림들.
+ *
+ * **겹친 변형 번호는 하나로 접는다.** 안 접으면 같은 그림이 두 번 뜨고 React
+ * key 도 겹친다.
+ */
+export function posterImagePicks(
+  projectId: string,
+  images: Array<{ variantIndex: number }>,
+): AdImagePick[] {
+  const seen = new Set<number>();
+  const picks: AdImagePick[] = [];
+  for (const image of images) {
+    if (seen.has(image.variantIndex)) continue;
+    seen.add(image.variantIndex);
+    picks.push({
+      image: `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`,
+      sectionName: `변형 ${image.variantIndex + 1}`,
+      position: image.variantIndex,
+    });
+  }
+  return picks;
+}
+
+/**
+ * 라이브러리 작업의 그림들.
+ *
+ * 여기는 `/api/library` 가 `position` 을 채워 준다. 옛 응답에 없으면 배열
+ * 번호로 떨어진다 — 지금까지의 동작이다.
+ */
+export function libraryImagePicks(
+  images: Array<{ image: string; sectionName: string; position?: number }>,
+): AdImagePick[] {
+  return images.map((image, index) => ({
+    image: image.image,
+    sectionName: image.sectionName,
+    position: image.position ?? index,
+  }));
+}
+
+/**
  * ZIP 에 담을 것.
  *
  * **검증에 걸린 것은 빼고 담는다.** `batch.ts` 는 일부러 실패한 것도 바이트를

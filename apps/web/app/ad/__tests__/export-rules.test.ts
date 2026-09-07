@@ -5,7 +5,7 @@ import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
-  missingRequiredCount,
+  libraryImagePicks, missingRequiredCount, posterImagePicks,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -489,5 +489,72 @@ describe("어디서 그림을 고르는가", () => {
   it("출처를 함께 싣는다", () => {
     const items = adSourceItems(library, posters);
     expect(items.find((item) => item.id === "L1")!.source).toBe("library");
+  });
+});
+
+describe("어느 그림을 뽑는가", () => {
+  /**
+   * **미리보기와 내보내기가 서로 다른 그림을 가리키고 있었다.**
+   *
+   * 화면은 배열 번호를 `position` 으로 보냈는데, 서버는 그것을 `variantIndex`
+   * 로 읽는다. `variantIndex` 는 **배치마다 0 부터 다시 시작하므로**
+   * (`generate.ts:174`) 한 작업 안에서 번호가 겹친다 — 「고치기」나 재생성을
+   * 한 번만 해도 그렇다. 그러면 사용자가 A 를 보고 골랐는데 **ZIP 에는 B 가
+   * 담긴다.** 「사람 눈이 의도 검증이다」(§5.2)가 여기서 헛돈다.
+   *
+   * 3-0 에서 같은 사실(번호가 겹친다)을 **저장 경로 충돌**로만 봤고 화면 쪽은
+   * 못 봤다. 같은 사실의 다른 얼굴이다.
+   */
+  it("포스터 그림은 변형 번호를 그대로 보낸다", () => {
+    const picks = posterImagePicks("p1", [{ variantIndex: 0 }, { variantIndex: 3 }]);
+    expect(picks.map((pick) => pick.position)).toEqual([0, 3]);
+  });
+
+  /** 겹친 번호는 하나로 접는다 — 안 접으면 같은 그림이 두 번 뜨고 React key 도 겹친다. */
+  it("겹친 변형 번호를 접는다", () => {
+    const picks = posterImagePicks("p1", [
+      { variantIndex: 0 }, { variantIndex: 0 }, { variantIndex: 1 },
+    ]);
+    expect(picks.map((pick) => pick.position)).toEqual([0, 1]);
+  });
+
+  it("주소가 변형 번호를 가리킨다 — 배열 번호가 아니다", () => {
+    const picks = posterImagePicks("p1", [{ variantIndex: 5 }]);
+    expect(picks[0]!.image).toBe("/api/poster/projects/p1/images/5/file");
+  });
+
+  it("그림이 없으면 빈 목록이다", () => {
+    expect(posterImagePicks("p1", [])).toEqual([]);
+  });
+
+  /**
+   * 라이브러리는 다르다 — `/api/library` 가 `position` 을 채워 주므로 그 값을 쓴다.
+   * 없으면 배열 번호로 떨어진다(옛 응답).
+   */
+  it("라이브러리 그림은 응답이 준 position 을 쓴다", () => {
+    const picks = libraryImagePicks([
+      { image: "a", sectionName: "1", position: 2 },
+      { image: "b", sectionName: "2" },
+    ]);
+    expect(picks.map((pick) => pick.position)).toEqual([2, 1]);
+  });
+});
+
+describe("라이브러리 그림의 번호가 어긋나는 자리", () => {
+  /**
+   * **`getAccountItemImages` 가 `position` 을 버린다**(`lib/library.ts:286`).
+   * 게다가 `url` 이 없는 것을 `.filter` 로 걸러내므로, 중간이 하나라도 비면
+   * **배열 번호와 실제 `position` 이 어긋난다.** 그러면 미리보기와 내보내기가
+   * 다른 그림이 된다 — 포스터 쪽에서 고친 것과 같은 부류다.
+   *
+   * 그래서 `position` 이 실려 오면 그것을 쓰고, 없으면 지금까지처럼 배열
+   * 번호로 떨어진다.
+   */
+  it("중간이 비어도 실제 번호를 따라간다", () => {
+    const picks = libraryImagePicks([
+      { image: "a", sectionName: "1번째 이미지", position: 0 },
+      { image: "c", sectionName: "3번째 이미지", position: 2 },
+    ]);
+    expect(picks.map((pick) => pick.position), "1번은 url 이 없어 걸러졌다").toEqual([0, 2]);
   });
 });

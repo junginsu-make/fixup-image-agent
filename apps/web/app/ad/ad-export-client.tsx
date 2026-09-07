@@ -5,14 +5,15 @@ import Link from "next/link";
 import { AlertTriangle, Download, ImageIcon, Loader2 } from "lucide-react";
 import { Badge, Button, Card, cn } from "@fixup/ui";
 import type { LibraryItem } from "@fixup/shared";
-import { loadLibrary, getAccountItemImages, type PdpResultImage } from "../../lib/library";
+import { loadLibrary, getAccountItemImages } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
 import {
   PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
   defaultSelection, downloadable, excludedCount, failureMessage, isActualSize,
   missingRequiredCount, previewWidth,
-  safeAreaOverlayStyle, specRows, zipEntryName, type AdSourceItem,
+  libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows, zipEntryName,
+  type AdImagePick, type AdSourceItem,
 } from "./export-rules";
 
 /**
@@ -46,13 +47,10 @@ type PosterWork = { id: string; title: string; status: string; images?: Array<{ 
  * 라이브러리와 달리 목록 응답에 이미 실려 온다 — 다시 물을 이유가 없다.
  * 주소는 포스터 화면이 쓰는 것과 같다.
  */
-async function posterItemImages(projectId: string): Promise<PdpResultImage[]> {
+async function posterItemImages(projectId: string): Promise<AdImagePick[]> {
   const body = await (await fetch(`/api/poster/projects/${projectId}`, { cache: "no-store" })).json();
   if (!body?.ok) return [];
-  return ((body.images ?? []) as Array<{ variantIndex: number }>).map((image) => ({
-    image: `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`,
-    sectionName: `변형 ${image.variantIndex + 1}`,
-  })) as PdpResultImage[];
+  return posterImagePicks(projectId, (body.images ?? []) as Array<{ variantIndex: number }>);
 }
 
 const ROWS = specRows(planDerivation);
@@ -60,7 +58,7 @@ const ROWS = specRows(planDerivation);
 export function AdExportClient() {
   const [items, setItems] = React.useState<AdSourceItem[] | null>(null);
   const [item, setItem] = React.useState<AdSourceItem | null>(null);
-  const [images, setImages] = React.useState<PdpResultImage[] | null>(null);
+  const [images, setImages] = React.useState<AdImagePick[] | null>(null);
   const [position, setPosition] = React.useState(0);
   const [picked, setPicked] = React.useState<string[]>(() => defaultSelection(ROWS));
   const [results, setResults] = React.useState<ResultEntry[] | null>(null);
@@ -132,7 +130,9 @@ export function AdExportClient() {
     try {
       const loaded = next.source === "poster"
         ? await posterItemImages(next.id)
-        : (await getAccountItemImages({ id: next.id, title: next.title } as LibraryItem))?.images ?? [];
+        : libraryImagePicks((await getAccountItemImages(
+          { id: next.id, title: next.title } as LibraryItem,
+        ))?.images ?? []);
       if (mine !== token.current) return;
       setImages(loaded);
     } catch {
@@ -253,18 +253,18 @@ export function AdExportClient() {
 
         {images && images.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2">
-            {images.map((image, index) => (
+            {images.map((image) => (
               <button
-                key={image.image}
+                key={image.position}
                 type="button"
                 disabled={busy}
-                aria-pressed={position === index}
-                onClick={() => { setPosition(index); setResults(null); }}
+                aria-pressed={position === image.position}
+                onClick={() => { setPosition(image.position); setResults(null); }}
                 className={cn(
                   // `border-transparent` 상태에서는 초점이 아예 안 보인다.
                   "h-20 w-20 overflow-hidden rounded border-2",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  position === index ? "border-foreground" : "border-transparent",
+                  position === image.position ? "border-foreground" : "border-transparent",
                 )}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
