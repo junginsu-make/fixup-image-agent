@@ -317,10 +317,17 @@ export function AdExportClient() {
                   item?.id === entry.id ? "border-primary" : "border-transparent hover:border-border",
                 )}
               >
-                <span className="grid aspect-square place-items-center overflow-hidden bg-muted">
+                {/*
+                  **`object-cover` 가 아니라 `contain` 이다.** 참고 이미지를 고르는
+                  `library-picker` 는 `cover` 가 맞지만, 여기 놓이는 것은 **광고
+                  마스터**라 2:1·1.91:1 처럼 가로가 길다. 정사각으로 자르면 좌우가
+                  날아가 「건강한 선택」이 「한 선택」이 된다 — 어느 작업인지
+                  알아보려고 보는 그림인데 알아볼 수가 없다.
+                */}
+                <span className="grid aspect-square place-items-center overflow-hidden bg-muted p-1">
                   {entry.thumbnail ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={entry.thumbnail} alt="" className="h-full w-full object-cover" />
+                    <img src={entry.thumbnail} alt="" className="max-h-full max-w-full object-contain" />
                   ) : (
                     <ImageIcon className="size-6 text-muted-foreground" />
                   )}
