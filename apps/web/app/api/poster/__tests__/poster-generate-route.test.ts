@@ -18,6 +18,7 @@ let project: { id: string; ratio: string; status: string; updatedAt: string; mod
 const measured: string[] = [];
 const submitted: Array<{ sourceSize?: { width: number; height: number } }> = [];
 const updates: Array<Record<string, unknown>> = [];
+let submitThrows: Error | null = null;
 
 vi.mock("sharp", () => ({
   default: () => ({ metadata: async () => ({ width: 800, height: 600 }) }),
@@ -38,7 +39,15 @@ vi.mock("../../../../lib/poster/stores", () => ({
   posterStoresForUser: () => ({
     projects: {
       get: async () => project,
-      update: async (_id: string, patch: Record<string, unknown>) => { updates.push(patch); return project; },
+      /**
+       * **patch 를 담기만 하면 안 된다.** 그러면 두 번째 요청이 첫 번째가 바꾼
+       * 상태를 못 보고, 동시 제출 구멍이 시험에 안 보인다.
+       */
+      update: async (_id: string, patch: Record<string, unknown>) => {
+        updates.push(patch);
+        Object.assign(project!, patch, { updatedAt: new Date().toISOString() });
+        return project;
+      },
     },
     references: { byIds: async () => [{ id: "r1", storagePath: "u1/ref/1.png" }] },
     requests: {}, images: {},
@@ -51,12 +60,18 @@ vi.mock("../../../../lib/poster/providers", () => ({
 }));
 
 vi.mock("../../../../lib/fal/upload", () => ({
-  uploadUniqueReferences: async () => ({ "r1": "https://fal/r1.png" }),
+  uploadUniqueReferences: async () => {
+    // 실제로는 네트워크다. 그 사이에 두 번째 요청이 도착한다.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return { "r1": "https://fal/r1.png" };
+  },
 }));
 
 vi.mock("../../../../lib/poster/flow", () => ({
   submitPoster: async (job: { sourceSize?: { width: number; height: number } }) => {
     submitted.push(job);
+    if (submitThrows) throw submitThrows;
+    await new Promise((resolve) => setTimeout(resolve, 30));
     return { requestRowId: "req1", falRequestId: "fal1", endpoint: "e", estimatedUsd: 1 };
   },
 }));
@@ -77,6 +92,7 @@ beforeEach(() => {
   measured.length = 0;
   submitted.length = 0;
   updates.length = 0;
+  submitThrows = null;
 });
 
 describe("마스터 크기가 어디서 오는가", () => {
@@ -136,6 +152,35 @@ describe("같은 클릭이 두 번 오면", () => {
   it("생성 중이 아니면 창과 무관하게 통과한다", async () => {
     project!.status = "ready";
     project!.updatedAt = new Date().toISOString();
+    expect((await call()).status).toBe(200);
+  });
+});
+
+describe("두 요청이 겹치면", () => {
+  /**
+   * **자물쇠를 검사만 하고 자리를 안 잡으면 소용이 없다.**
+   *
+   * 초판은 검사를 맨 앞에서 하고 `status: "generating"` 은 fal 업로드와 제출이
+   * **전부 끝난 뒤**에 썼다. 그 사이가 네트워크라 수백 ms~수 초인데, 더블클릭의
+   * 두 번째 요청은 그 구간에 도착해 **아직 `"ready"` 인 프로젝트를 읽고 통과한다.**
+   * 자물쇠가 실제로 막던 것은 「첫 요청이 DB 갱신까지 마친 뒤의 재클릭」뿐이었다.
+   */
+  it("같은 클릭이 두 번 와도 한 번만 제출한다", async () => {
+    const [first, second] = await Promise.all([call(), call()]);
+    expect(submitted, "돈이 두 번 나가면 안 된다").toHaveLength(1);
+    expect([first.status, second.status].sort()).toEqual([200, 409]);
+  });
+
+  /**
+   * **제출이 실패하면 자리를 돌려줘야 한다.** 안 그러면 지금까지 `"ready"` 로
+   * 남아 바로 다시 누를 수 있던 것이, 창이 지날 때까지 잠긴다 — 기존 사용자에게
+   * 없던 제약이 생긴다.
+   */
+  it("제출이 실패하면 상태를 되돌린다 — 바로 다시 누를 수 있어야 한다", async () => {
+    submitThrows = new Error("fal 이 거절했습니다.");
+    await call().catch(() => {});
+    expect(project!.status, "generating 에 남으면 60초 동안 못 누른다").toBe("ready");
+    submitThrows = null;
     expect((await call()).status).toBe(200);
   });
 });

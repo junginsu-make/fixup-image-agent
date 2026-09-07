@@ -78,6 +78,22 @@ export async function POST(_request: Request, context: Context) {
       );
     }
 
+    /**
+     * **돈 쓰기 전에 자리를 잡는다.**
+     *
+     * 초판은 이 갱신을 제출이 **전부 끝난 뒤**에 했다. 그 사이가 fal 업로드와
+     * 제출이라 수백 ms~수 초인데, 더블클릭의 두 번째 요청은 그 구간에 도착해
+     * **아직 `"ready"` 인 프로젝트를 읽고 그냥 통과했다.** 위 자물쇠가 실제로
+     * 막던 것은 「첫 요청이 갱신까지 마친 뒤의 재클릭」뿐이었다.
+     *
+     * 여기로 올리면 창이 **DB 왕복 한 번**으로 줄어든다. 완전히 닫으려면
+     * 조건부 갱신(갱신된 행이 0이면 409)이 필요한데 그것은 `PosterProjectStore`
+     * 를 늘리는 일이라 별건이다.
+     */
+    const previousStatus = project.status;
+    await stores.projects.update(id, { status: "generating" });
+
+    try {
     const fal = createPosterFalClients();
     // 따라 만들 것과 그대로 지킬 것을 함께 올린다. 순서가 프롬프트의
     // Image 번호와 같아야 하므로 레퍼런스를 먼저 둔다.
@@ -144,13 +160,24 @@ export async function POST(_request: Request, context: Context) {
         saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); } },
     );
 
-    await stores.projects.update(id, { status: "generating" });
     return Response.json({
       ok: true,
       submission,
       // 바꿨으면 화면이 그대로 보여준다. 사용자는 자기가 고른 모델로 만든 줄 안다.
       ...(choice.switched ? { modelSwitchedTo: choice.model.id, notice: choice.reason } : {}),
     });
+    } catch (cause) {
+      /**
+       * **자리를 돌려준다.** 안 그러면 제출이 실패했을 때 프로젝트가
+       * `"generating"` 에 남아 **창이 지날 때까지 다시 못 누른다** — 지금까지는
+       * `"ready"` 로 남아 바로 다시 누를 수 있었다. 기존 사용자에게 없던 제약을
+       * 만들지 않는다.
+       *
+       * 되돌리기 자체가 실패해도 원래 오류를 덮지 않는다. 창이 지나면 풀린다.
+       */
+      await stores.projects.update(id, { status: previousStatus }).catch(() => {});
+      throw cause;
+    }
   } catch (error) {
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
