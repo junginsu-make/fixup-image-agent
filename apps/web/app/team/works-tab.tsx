@@ -1,5 +1,5 @@
 import { Inbox } from "lucide-react";
-import { Badge } from "@fixup/ui";
+import { Badge, Card } from "@fixup/ui";
 import type { ProjectItem } from "../../lib/teams/projects";
 import { workLabel, type TeamWork } from "../../lib/teams/project-store";
 import { ProjectPicker } from "./project-picker";
@@ -47,7 +47,8 @@ export function WorksTab({
           : "먼저 「프로젝트」 탭에서 갈래를 만드세요. 만들기 전에는 넣을 곳이 없습니다."}
       </p>
 
-      <ul className="divide-y rounded-xl border bg-card">
+      <Card>
+        <ul className="divide-y">
         {works.map((work) => (
           <li key={`${work.table}:${work.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
             <Badge variant="outline" className="flex-none">{workLabel(work.table)}</Badge>
@@ -73,14 +74,15 @@ export function WorksTab({
             )}
           </li>
         ))}
-      </ul>
+        </ul>
+      </Card>
     </div>
   );
 }
 
 function Empty({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="grid place-items-center gap-2 rounded-xl border border-dashed px-6 py-14 text-center">
+    <div className="grid place-items-center gap-2 rounded-lg border border-dashed p-10 text-center">
       <Inbox className="h-6 w-6 text-subtle-foreground" />
       <p className="text-sm font-bold">{title}</p>
       <p className="max-w-sm text-meta text-subtle-foreground">{detail}</p>

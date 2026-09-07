@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, FolderOpen } from "lucide-react";
-import { Badge, Button, Input } from "@fixup/ui";
+import { Badge, Button, Card, Input } from "@fixup/ui";
 import type { ProjectItem } from "../../lib/teams/projects";
 import { ConfirmSubmitButton } from "../admin/confirm-submit-button";
 import { archiveProjectAction, createProjectAction, moveProjectAction, renameProjectAction } from "./actions";
@@ -21,7 +21,7 @@ export function ProjectsTab({
 }) {
   if (!teamId) {
     return (
-      <div className="grid place-items-center gap-2 rounded-xl border border-dashed px-6 py-14 text-center">
+      <div className="grid place-items-center gap-2 rounded-lg border border-dashed p-10 text-center">
         <FolderOpen className="h-6 w-6 text-subtle-foreground" />
         <p className="text-sm font-bold">팀이 있어야 프로젝트를 만듭니다</p>
         <p className="max-w-sm text-meta text-subtle-foreground">
@@ -55,7 +55,7 @@ export function ProjectsTab({
       </div>
 
       {projects.length === 0 ? (
-        <div className="grid place-items-center gap-2 rounded-xl border border-dashed px-6 py-14 text-center">
+        <div className="grid place-items-center gap-2 rounded-lg border border-dashed p-10 text-center">
           <FolderOpen className="h-6 w-6 text-subtle-foreground" />
           <p className="text-sm font-bold">아직 프로젝트가 없습니다</p>
           <p className="max-w-sm text-meta text-subtle-foreground">
@@ -65,7 +65,8 @@ export function ProjectsTab({
           </p>
         </div>
       ) : (
-        <ul className="divide-y rounded-xl border bg-card">
+        <Card>
+          <ul className="divide-y">
           {projects.map((project, index) => (
             <li key={project.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
               <FolderOpen className="h-4 w-4 flex-none text-subtle-foreground" aria-hidden />
@@ -122,7 +123,8 @@ export function ProjectsTab({
               ) : null}
             </li>
           ))}
-        </ul>
+          </ul>
+        </Card>
       )}
     </div>
   );
