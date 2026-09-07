@@ -501,3 +501,44 @@ describe("좌우가 갈리는가", () => {
     }
   });
 });
+
+describe("한 장에 한 자세만", () => {
+  const base = { description: "호랑이 마스코트", aspectRatio: "3:4" as const };
+
+  it("캐릭터 시트를 이름 대어 막는다", () => {
+    // 2026-09-07 운영에서 정면 후보 한 장에 다섯 자세가 격자로 나왔다.
+    // 「캐릭터를 하나만」으로는 안 막힌다 — 모델에게 캐릭터 시트는 여전히
+    // 「캐릭터 하나」다.
+    const prompt = buildCandidatePrompt(base);
+    expect(prompt).toMatch(/NOT a character sheet/i);
+    expect(prompt).toMatch(/NOT a turnaround/i);
+    expect(prompt).toMatch(/NOT a grid/i);
+  });
+
+  it("자세와 카메라가 하나라고 못 박는다", () => {
+    const prompt = buildCandidatePrompt(base);
+    expect(prompt).toMatch(/exactly ONE pose/i);
+    expect(prompt).toMatch(/one subject, one pose, one camera/i);
+  });
+
+  it("같은 대상을 다시 그리지 말라고 한다", () => {
+    // 「하나만 그려라」는 두 인물이 나오는 것만 막는다. 같은 인물을 여러 번
+    // 그리는 것은 안 막힌다 — 그것이 캐릭터 시트다.
+    const prompt = buildCandidatePrompt(base);
+    expect(prompt).toMatch(/do not repeat the subject/i);
+    expect(prompt).toMatch(/several\s+angles at once/i);
+  });
+
+  it("각도 그리기에도 같은 빗장이 걸린다", () => {
+    // 각도 한 장을 부탁했는데 시트가 오면 똑같이 못 쓴다.
+    const prompt = buildTurnaroundPrompt({ identityPrompt: "호랑이", angle: "left_45" });
+    expect(prompt).toMatch(/exactly ONE pose/i);
+    expect(prompt).toMatch(/NOT a character sheet/i);
+  });
+
+  it("종류가 무엇이든 걸린다", () => {
+    for (const kind of ["person", "character", "animal", "object"] as const) {
+      expect(buildCandidatePrompt({ ...base, kind })).toMatch(/exactly ONE pose/i);
+    }
+  });
+});
