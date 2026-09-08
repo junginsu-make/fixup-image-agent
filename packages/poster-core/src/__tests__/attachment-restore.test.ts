@@ -176,3 +176,26 @@ describe("그림 느낌만 바꾸는 사람", () => {
     ]);
   });
 });
+
+/**
+ * 읽어 둔 사람 줄을 기획 목록에 실어 보낸다 (2026-09-08).
+ */
+describe("사람 줄을 기획에 넘긴다", () => {
+  const ALL = [{ id: "a", title: "단체 사진" }, { id: "b", title: "레퍼런스" }];
+
+  it("그 그림의 사람만 붙는다", () => {
+    const rows = planReferences(
+      { attachmentOrder: ["a", "b"], preservedIds: ["a"], personIds: ["a"] },
+      ALL,
+      {},
+      { a: ["왼쪽 첫째 · 선글라스"] },
+    );
+    expect(rows[0]!.people).toEqual(["왼쪽 첫째 · 선글라스"]);
+    expect(rows[1]!.people).toBeUndefined();
+  });
+
+  it("안 넘기면 지금까지 그대로다 — 옛 호출부", () => {
+    const rows = planReferences({ attachmentOrder: ["a"] }, ALL, {});
+    expect(rows[0]!.people).toBeUndefined();
+  });
+});

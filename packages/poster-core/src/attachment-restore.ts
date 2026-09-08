@@ -64,6 +64,8 @@ export interface PlanReference {
   grammar?: string;
   number: number;
   roleLabel: string;
+  /** 이 그림에 있는 사람들 — 한 명당 한 줄. 읽은 것이 없으면 없다. */
+  people?: string[];
 }
 
 /**
@@ -92,6 +94,8 @@ export function planReferences(
   data: StoredAttachmentData,
   all: Array<{ id: string; title?: string | null }>,
   summaries: Record<string, string | undefined>,
+  /** 첨부마다 읽어 둔 사람 줄. 없으면 지금까지 그대로다. */
+  people: Record<string, string[]> = {},
 ): PlanReference[] {
   const byId = new Map(all.map((entry) => [entry.id, entry]));
   const order = data.attachmentOrder?.length
@@ -110,5 +114,6 @@ export function planReferences(
       grammar: summaries[id],
       number: index + 1,
       roleLabel: ATTACHMENT_ROLE_LABEL[roleOf(data, id)],
+      people: people[id],
     }));
 }

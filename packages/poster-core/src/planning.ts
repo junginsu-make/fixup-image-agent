@@ -30,6 +30,14 @@ export interface PosterPlanInput {
     number?: number;
     /** 이 그림을 어떻게 쓰기로 했는지. 사람이 화면에서 고른 것. */
     roleLabel?: string;
+    /**
+     * 이 그림에 있는 사람들 — **한 명당 한 줄**.
+     *
+     * 없으면 기획이 인물을 한 줄로 뭉뚱그린다. 실제로 「1번 사진에 등장하는
+     * 사람들(흰색 티셔츠 착용)」로 끝나서, 세 번째 사람의 안경이 몇 번을 돌려도
+     * 안 나왔다(2026-09-08 실측).
+     */
+    people?: string[];
   }>;
   /**
    * 첨부한 그림들을 어떻게 쓸지 사용자가 적은 말.
@@ -54,7 +62,10 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
     // 번호는 화면·프롬프트와 같은 것을 쓴다. 셋이 각자 세면 어긋난다.
     const number = reference.number ?? attachmentNumber(index);
     const role = reference.roleLabel ? ` [${reference.roleLabel}]` : "";
-    return `  ${number}. ${reference.title}${role}${grammar ? ` — ${grammar}` : ""}`;
+    const head = `  ${number}. ${reference.title}${role}${grammar ? ` — ${grammar}` : ""}`;
+    // 사람은 **한 명당 한 줄**로 이어 붙인다. 한 줄로 뭉치면 기획이 다시 요약한다.
+    const people = (reference.people ?? []).map((person) => `       · ${person}`);
+    return [head, ...people].join("\n");
   });
 
   return [
@@ -75,7 +86,21 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
     "  subline          헤드라인을 받치는 문구",
     "  sideTexts        상단바·하단바·스펙 라벨 같은 곁텍스트 (배열)",
     "  scene            장소·사물·상황",
-    "  subject          사람/제품/둘 다. 나이·관계·외형까지",
+        /**
+     * **사람이 여럿이면 한 명씩 적게 한다.**
+     *
+     * 전에는 「나이·관계·외형까지」였는데, 기획이 여럿을 한 줄로 뭉갰다 —
+     * 「1번 사진에 등장하는 사람들(흰색 티셔츠 착용)」. 그 한 줄이 최종
+     * 프롬프트의 유일한 인물 묘사라, 요약에 없는 안경이 안 그려졌다
+     * (2026-09-08 실측).
+     *
+     * 위 목록에서 읽어 준 사람 줄이 그대로 근거다 — **지어내지 말라**고 함께
+     * 못 박는다. 읽은 것이 없으면 짧게 두는 편이 낫다.
+     */
+    "  subject          사람/제품/둘 다.",
+    "                   **사람이 여럿이면 위에 적힌 사람 줄을 한 명씩 그대로 옮깁니다** —",
+    "                   안경·모자·옷·자세까지. 한 줄로 뭉뚱그리지 마세요.",
+    "                   위에 없는 것은 지어내지 말고, 읽은 것이 없으면 짧게 둡니다.",
     "  action           지금 이 순간 무슨 일이 일어나나",
     `  typeInteraction  글자와 피사체의 관계 — ${TYPE_INTERACTIONS.join(" / ")} 중 하나`,
     "  dominantColor    지배색",

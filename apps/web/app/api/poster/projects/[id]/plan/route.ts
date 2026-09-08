@@ -1,8 +1,9 @@
-import { planPoster, planReferences, readReferenceGrammar } from "@fixup/poster-core";
+import { planPoster, planReferences, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import {
   createPosterGrammarReader,
+  createPosterPeopleReader,
   createPosterPlanningProviders,
   PosterProviderConfigurationError,
 } from "../../../../../../lib/poster/providers";
@@ -40,12 +41,34 @@ export async function POST(_request: Request, context: Context) {
       createPosterGrammarReader(),
     );
 
+    /**
+     * **지킬 사람의 사진에서 누가 있는지 읽는다.**
+     *
+     * 전에는 기획이 사람을 볼 방법이 아예 없었다. 문법 읽기는 「어떻게 보이나」만
+     * 읽고 「따라 만들기」 그림에만 도는데, 지킬 사람의 사진은 아무도 안 봤다.
+     * 그래서 기획이 인물을 한 줄로 뭉뚱그렸고 — 「1번 사진에 등장하는 사람들(흰색
+     * 티셔츠 착용)」 — 그 요약에 없는 안경이 몇 번을 돌려도 안 나왔다
+     * (2026-09-08 실측).
+     *
+     * **실패해도 계속한다.** 사람 묘사가 없어도 포스터는 만들 수 있고, 그림
+     * 모델은 사진 자체를 여전히 본다.
+     */
+    const personIds = new Set(project.data.personIds ?? []);
+    const crowd = await readPeople(
+      preserved
+        .filter((reference) => Boolean(reference.url) && personIds.has(reference.id))
+        .map((reference) => ({ id: reference.id, title: reference.title ?? "사진", url: reference.url! })),
+      createPosterPeopleReader(),
+    );
+
     const providers = createPosterPlanningProviders();
     const plan = await planPoster(
       {
         instruction: project.data.instruction,
         ratio: project.ratio,
-        references: planReferences(project.data, [...references, ...preserved], grammar.summaries),
+        references: planReferences(
+          project.data, [...references, ...preserved], grammar.summaries, crowd.people,
+        ),
         attachmentIntent: project.data.attachmentIntent,
       },
       providers.primary,
@@ -63,9 +86,9 @@ export async function POST(_request: Request, context: Context) {
 
     const saved = await stores.projects.update(id, {
       status: "ready",
-      data: { ...project.data, slots, grammarIssues: [...grammar.issues, ...plan.issues] },
+      data: { ...project.data, slots, grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues] },
     });
-    return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...plan.issues] });
+    return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...crowd.issues, ...plan.issues] });
   } catch (error) {
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });

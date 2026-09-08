@@ -131,6 +131,44 @@ export function createPosterPlanningProviders(environment: Record<string, string
   };
 }
 
+/**
+ * 사람을 읽는 눈.
+ *
+ * 문법 읽기와 **따로 둔다.** 문법은 「어떻게 보이나」(색·타이포)를 읽고 내용을
+ * 일부러 안 읽는다 — 그 안에 사람을 끼워 넣으면 둘 다 흐려진다. 도구를 나누면
+ * 모델이 한 번에 하나만 본다.
+ */
+const PEOPLE_SPEC: StructuredSpec = {
+  name: "photo_people",
+  description: "사진에 있는 사람을 왼쪽부터 한 명씩 적는다.",
+  schema: {
+    type: "object",
+    properties: {
+      people: { type: "array", items: { type: "string" } },
+    },
+    required: ["people"],
+  },
+};
+
+export function createPosterPeopleReader(environment: Record<string, string | undefined> = process.env) {
+  requireKeys(["ANTHROPIC_API_KEY"], environment);
+  const { anthropic, anthropicModel } = clients(environment);
+  return {
+    async read(input: { prompt: string; imageUrls: string[] }) {
+      const response = await anthropic.messages.create({
+        model: anthropicModel,
+        max_tokens: 2048,
+        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
+        tools: [{ name: PEOPLE_SPEC.name, description: PEOPLE_SPEC.description, input_schema: PEOPLE_SPEC.schema as never }],
+        tool_choice: { type: "tool", name: PEOPLE_SPEC.name, disable_parallel_tool_use: true },
+      });
+      const call = response.content.find((block) => block.type === "tool_use" && block.name === PEOPLE_SPEC.name);
+      if (!call || call.type !== "tool_use") throw new Error("사람을 읽지 못했습니다.");
+      return call.input;
+    },
+  };
+}
+
 export function createPosterGrammarReader(environment: Record<string, string | undefined> = process.env) {
   requireKeys(["ANTHROPIC_API_KEY"], environment);
   const { anthropic, anthropicModel } = clients(environment);

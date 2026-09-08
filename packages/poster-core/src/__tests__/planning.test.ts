@@ -149,3 +149,48 @@ describe("기획도 화면과 같은 번호로 첨부를 본다", () => {
     expect(prompt).toContain("1. SNAP 포스터");
   });
 });
+
+/**
+ * 사람을 한 명씩 넘긴다 (2026-09-08 실측).
+ *
+ * 전에는 기획이 여럿을 한 줄로 뭉갰다 — 「1번 사진에 등장하는 사람들(흰색
+ * 티셔츠 착용)」. 그 한 줄이 최종 프롬프트의 유일한 인물 묘사라, 요약에 없는
+ * 안경이 안 그려졌다.
+ */
+describe("사람을 한 명씩 넘긴다", () => {
+  const withPeople = {
+    ...input,
+    references: [{
+      title: "단체 사진",
+      number: 1,
+      roleLabel: "사람은 그대로, 그림 느낌만",
+      people: ["왼쪽 첫째 · 선글라스 · 흰 티셔츠", "둘째 · 검정 캡 · 흰 티셔츠"],
+    }],
+  };
+
+  it("한 명당 한 줄로 적는다", () => {
+    const prompt = buildPlanPrompt(withPeople);
+    expect(prompt).toContain("· 왼쪽 첫째 · 선글라스 · 흰 티셔츠");
+    expect(prompt).toContain("· 둘째 · 검정 캡 · 흰 티셔츠");
+  });
+
+  it("그림 줄 아래에 붙는다 — 어느 그림의 사람인지 알아야 한다", () => {
+    const prompt = buildPlanPrompt(withPeople);
+    expect(prompt.indexOf("1. 단체 사진")).toBeLessThan(prompt.indexOf("왼쪽 첫째"));
+  });
+
+  it("**한 줄로 뭉뚱그리지 말라고 시킨다**", () => {
+    expect(buildPlanPrompt(withPeople)).toContain("한 줄로 뭉뚱그리지 마세요");
+  });
+
+  it("위에 없는 것은 지어내지 말라고 한다", () => {
+    // 읽은 것이 없는데 채우면 그림이 사진과 달라진다.
+    expect(buildPlanPrompt(withPeople)).toContain("위에 없는 것은 지어내지 말고");
+  });
+
+  it("읽은 사람이 없으면 지금까지 그대로다", () => {
+    const prompt = buildPlanPrompt(input);
+    expect(prompt).toContain("1. SNAP 포스터");
+    expect(prompt).not.toContain("       · ");
+  });
+});
