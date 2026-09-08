@@ -38,8 +38,23 @@ vi.mock("../../../../lib/poster/asset-bytes", () => ({
   },
 }));
 
+/** 예약이 잡은 장수와 확정한 장수. **돈이 오가는 길이라 둘 다 본다.** */
+const reserved: number[] = [];
+const finalized: Array<{ success: boolean; units: number; error?: string }> = [];
+let reserveFails = false;
+
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
+  reserveAiUsage: async (_request: Request, _operation: string, units: number) => {
+    if (reserveFails) {
+      return { ok: false as const, response: new Response("한도 초과", { status: 429 }) };
+    }
+    reserved.push(units);
+    return { ok: true as const, userId: "u1", requestId: "req-key", usage: {} };
+  },
+  finalizeAiUsage: async (
+    _reservation: unknown, success: boolean, units: number, errorCode?: string,
+  ) => { finalized.push({ success, units, error: errorCode }); },
 }));
 
 vi.mock("../../../../lib/poster/stores", () => ({
@@ -109,6 +124,9 @@ beforeEach(() => {
   submitted.length = 0;
   updates.length = 0;
   submitThrows = null;
+  reserved.length = 0;
+  finalized.length = 0;
+  reserveFails = false;
 });
 
 describe("마스터 크기가 어디서 오는가", () => {
@@ -264,5 +282,66 @@ describe("고른 차례가 제출까지 가는가", () => {
     project!.data.attachmentIntent = "1번 사람을 2번 느낌으로";
     await call();
     expect(submitted[0]).toMatchObject({ attachmentIntent: "1번 사람을 2번 느낌으로" });
+  });
+});
+
+
+/**
+ * 이미지 만들기가 **장부에 남는가** (2026-09-08).
+ *
+ * 지금까지 이 화면은 사용량 장부에 한 줄도 안 남겼다 — 개인 한도에도 안 걸리고
+ * 팀 크레딧에서도 안 빠졌다. 운영에서 $5.641 이 장부 밖에 있었다.
+ */
+describe("돈이 장부에 남는가", () => {
+  it("제출 전에 자리를 잡는다", async () => {
+    await call();
+    expect(reserved).toHaveLength(1);
+    expect(reserved[0]).toBeGreaterThan(0);
+  });
+
+  it("**실제 단가에서 장을 뽑는다**", async () => {
+    // gpt-image-2 · 포스터 2:3 · 1장 = $0.178 → 올림($0.178 / $0.05) = 4장
+    project!.ratio = "2:3";
+    await call();
+    expect(reserved[0]).toBe(4);
+  });
+
+  it("**크기가 다르면 장수도 다르다** — 정수 가중치로는 못 하던 것", async () => {
+    // 같은 모델·같은 1장인데 정사각은 $0.219 라 5장이다. 픽스처의
+    // `match-source` 는 첨부(800×600)를 따라가 정사각 줄에 붙는다.
+    project!.ratio = "1:1";
+    await call();
+    expect(reserved[0]).toBe(5);
+  });
+
+  it("장수가 늘면 장도 는다", async () => {
+    project!.ratio = "2:3";
+    project!.data.variants = 3;
+    await call();
+    // $0.178 × 3 = $0.534 → 11장
+    expect(reserved[0]).toBe(11);
+  });
+
+  it("한도에 걸리면 제출하지 않는다 — 돈이 나가면 안 된다", async () => {
+    reserveFails = true;
+    const response = await call();
+    expect(response.status).toBe(429);
+    expect(submitted, "예약이 막았는데 돈이 나갔다").toEqual([]);
+  });
+
+  it("제출이 실패하면 묶은 장을 돌려준다", async () => {
+    submitThrows = new Error("fal 이 죽었다");
+    await call();
+    expect(finalized).toContainEqual({ success: false, units: 0, error: "poster_submit_failed" });
+  });
+
+  it("**확정은 여기서 안 한다** — 몇 장이 올지는 status 가 안다", async () => {
+    await call();
+    expect(finalized.filter((entry) => entry.success)).toEqual([]);
+  });
+
+  it("예약 열쇠를 작업에 적어 둔다 — 확정이 다른 요청에서 일어난다", async () => {
+    await call();
+    expect(project!.data.reservationId).toBe("req-key");
   });
 });

@@ -4,7 +4,11 @@ export type GenerationOperation =
   | "pdp_analyze"
   | "pdp_image"
   | "redesign_generate"
-  | "redesign_edit";
+  | "redesign_edit"
+  // 이미지 만들기·카드뉴스. **2026-09-08 까지 장부에 한 줄도 없었다** —
+  // 여기에 값이 없어서 예약 자체를 부를 수 없었다.
+  | "poster_image"
+  | "sns_image";
 
 export type MemberProfile = {
   id: string;

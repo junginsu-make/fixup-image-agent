@@ -3,12 +3,13 @@
 import sharp from "sharp";
 import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
-import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { creditUnits } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
 import { referenceBytes } from "../../../../../../lib/poster/asset-bytes";
-import { restoreAttachments } from "@fixup/poster-core";
+import { estimatePosterCost, restoreAttachments } from "@fixup/poster-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +50,9 @@ function justSubmitted(updatedAt: string): boolean {
   return Number.isFinite(at) && Date.now() - at < RESUBMIT_WINDOW_MS;
 }
 
-export async function POST(_request: Request, context: Context) {
+export async function POST(request: Request, context: Context) {
+  /** `catch` 에서도 봐야 한다 — 실패하면 묶인 장을 돌려줘야 한다. */
+  let reservation: { userId: string; requestId: string } | null = null;
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
@@ -136,6 +139,32 @@ export async function POST(_request: Request, context: Context) {
       ? project.data.adMaster ?? await measure(references[0] ?? preserved[0])
       : undefined;
 
+    /**
+     * **돈이 나가기 전에 장부에 자리를 잡는다.**
+     *
+     * 지금까지 이미지 만들기는 장부에 한 줄도 안 남겼다 — 개인 한도에도 안
+     * 걸리고 팀 크레딧에서도 안 빠졌다(2026-09-08 운영 확인, $5.641 이 장부
+     * 밖에 있었다).
+     *
+     * 장은 **실제 단가에서 나온다**(`creditUnits`). 모델도 크기도 저절로
+     * 따라온다 — 손으로 매기던 정수 가중치는 같은 「1장」이 $0.039~$0.060 로
+     * 갈렸다.
+     *
+     * **확정은 여기서 안 한다.** fal 이 몇 장을 돌려줄지는 `status` 를 물어봐야
+     * 알고, 덜 왔으면 그만큼만 받아야 한다. 그래서 예약 열쇠를 작업에 적어
+     * 두고 거기서 마무리한다.
+     */
+    const estimate = estimatePosterCost({
+      modelId: choice.model.id,
+      ratioId: project.ratio,
+      variants: project.data.variants,
+      hasReferences: references.length > 0 || preserved.length > 0,
+    });
+    const units = creditUnits(estimate.totalUsd ?? 0);
+    const reserved = await reserveAiUsage(request, "poster_image", units);
+    if (!reserved.ok) return reserved.response;
+    reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
     const submission = await submitPoster(
       {
         projectId: id,
@@ -175,6 +204,17 @@ export async function POST(_request: Request, context: Context) {
         saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); } },
     );
 
+    /**
+     * **예약 열쇠를 작업에 적어 둔다.**
+     *
+     * 확정은 `status` 가 결과를 받은 뒤에 한다. 그 요청은 다른 HTTP 요청이라
+     * 열쇠를 여기서 넘겨줄 길이 이것뿐이다. `data` 는 jsonb 라 칸을 더해도
+     * 마이그레이션이 필요 없다.
+     */
+    await stores.projects.update(id, {
+      data: { ...project.data, reservationId: reserved.requestId },
+    });
+
     return Response.json({
       ok: true,
       submission,
@@ -182,6 +222,15 @@ export async function POST(_request: Request, context: Context) {
       ...(choice.switched ? { modelSwitchedTo: choice.model.id, notice: choice.reason } : {}),
     });
     } catch (cause) {
+      /**
+       * **묶어 둔 장을 돌려준다.**
+       *
+       * 제출이 실패했으면 돈이 안 나갔다. 안 풀면 만료될 때까지 그 사람 한도에서
+       * 빠져 있는다. 확정이 또 실패해도 원래 오류를 덮지 않는다.
+       */
+      if (reservation) {
+        try { await finalizeAiUsage(reservation, false, 0, "poster_submit_failed"); } catch { /* 아래 원인이 우선이다 */ }
+      }
       /**
        * **자리를 돌려준다.** 안 그러면 제출이 실패했을 때 프로젝트가
        * `"generating"` 에 남아 **창이 지날 때까지 다시 못 누른다** — 지금까지는

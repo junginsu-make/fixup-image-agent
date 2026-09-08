@@ -17,6 +17,7 @@ import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
 import { POSTER_STEPS } from "../steps";
+import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
 
@@ -247,7 +248,7 @@ export function PosterClient(
     setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     setError(null);
     try {
-      const body = await (await fetch(`/api/poster/projects/${project.id}/plan`, { method: "POST" })).json();
+      const body = await (await billableFetch(`/api/poster/projects/${project.id}/plan`)).json();
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
       setNotes(body.issues ?? []);
@@ -268,7 +269,7 @@ export function PosterClient(
     setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
-      const start = await (await fetch(`/api/poster/projects/${project.id}/generate`, { method: "POST" })).json();
+      const start = await (await billableFetch(`/api/poster/projects/${project.id}/generate`)).json();
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
       setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
