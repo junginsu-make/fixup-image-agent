@@ -469,13 +469,22 @@ export function actionNotices(
    * 이것을 안 적으면 사용자는 **문구가 빠진 것을 고장으로 읽는다.** 문구를
    * 우리가 그려 넣는 일은 아직 안 했다 — 그때까지는 말이라도 해야 한다.
    */
-  if (picked.some((spec) => plan(spec).kind === "assemble")) {
+  const assembled = picked.filter((spec) => plan(spec).kind === "assemble");
+  if (assembled.length > 0) {
+    /**
+     * **어느 관리자인지 이름을 대 준다.** 「광고 관리자에서 넣으세요」만으로는
+     * 카카오를 만드는 사람이 네이버 얘기인지 헷갈린다. 고른 규격에서 그대로
+     * 뽑으므로 없는 메뉴를 지어내지 않는다.
+     */
+    const where = [...new Set(assembled.map((spec) =>
+      `${PORTAL_LABEL[spec.portal]} ${spec.product}`))].join(" · ");
     notices.push({
       key: "assemble",
-      title: "투명 배너에는 글자가 없습니다",
-      body: "이 규격은 모델이 만들 수 없는 비율이라, 배경을 지운 그림만 얹어"
-        + " 만듭니다. 배경을 지울 때 글자도 함께 지워지므로 문구는 광고"
-        + " 관리자에서 넣으세요.",
+      title: "투명 배너에는 글자가 없습니다 — 관리자에서 직접 입력하세요",
+      body: `${where} 광고 관리자에서 소재를 등록할 때 문구를 직접 입력하세요.`
+        + " 이 규격은 모델이 만들 수 없는 비율이라 배경을 지운 그림만 얹어"
+        + " 만드는데, 배경을 지울 때 글자도 함께 지워집니다. 그림은 그대로"
+        + " 쓰시고 문구만 넣으면 됩니다.",
     });
   }
 

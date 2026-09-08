@@ -791,3 +791,40 @@ describe("이후 할 일 안내", () => {
     expect(keys).toContain("upload");
   });
 });
+
+/**
+ * **어느 관리자인지 이름을 댄다.**
+ *
+ * 사용자 확인(2026-09-08): 문구는 광고 관리자에서 사람이 넣는 것이 맞고,
+ * 그러면 이것은 고장이 아니라 **안내의 문제**다. 「광고 관리자에서 넣으세요」
+ * 만으로는 카카오를 만드는 사람이 네이버 얘기인지 헷갈린다.
+ */
+describe("문구를 어디에 넣는지 말한다", () => {
+  it("카카오만 골랐으면 카카오만 말한다", () => {
+    const body = actionNotices(["kakao-bizboard"], planDerivation)
+      .find((notice) => notice.key === "assemble")!.body;
+    expect(body).toContain("카카오 비즈보드");
+    expect(body).not.toContain("네이버");
+  });
+
+  it("네이버만 골랐으면 네이버만 말한다", () => {
+    const body = actionNotices(["naver-smartchannel"], planDerivation)
+      .find((notice) => notice.key === "assemble")!.body;
+    expect(body).toContain("네이버 GFA");
+    expect(body).not.toContain("카카오");
+  });
+
+  it("둘 다 골랐으면 둘 다 말한다", () => {
+    const body = actionNotices(["kakao-bizboard", "naver-smartchannel"], planDerivation)
+      .find((notice) => notice.key === "assemble")!.body;
+    expect(body).toContain("카카오 비즈보드");
+    expect(body).toContain("네이버 GFA");
+  });
+
+  /** 「직접 입력하세요」가 제목에 있어야 스크롤 중에도 읽힌다. */
+  it("무엇을 하라는지 제목이 말한다", () => {
+    const notice = actionNotices(["kakao-bizboard"], planDerivation)
+      .find((entry) => entry.key === "assemble")!;
+    expect(notice.title).toMatch(/직접 입력/);
+  });
+});
