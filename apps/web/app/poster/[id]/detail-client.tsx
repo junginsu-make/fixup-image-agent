@@ -11,7 +11,9 @@ type Ready = { kind: "ready" } & React.ComponentProps<typeof PosterClient>;
  * 서버에서 미리 담지 않고 여기서 가져온다 — 카드뉴스와 같은 방식이다.
  * 저장소가 아직 운영 DB 에 없을 때 화면 전체가 깨지지 않고 이유만 보인다.
  */
-export function PosterDetailClient({ projectId }: { projectId: string }) {
+export function PosterDetailClient(
+  { projectId, adEnabled = false }: { projectId: string; adEnabled?: boolean },
+) {
   const [state, setState] = React.useState<
     { kind: "loading" } | { kind: "error"; message: string } | Ready
   >({ kind: "loading" });
@@ -41,5 +43,5 @@ export function PosterDetailClient({ projectId }: { projectId: string }) {
       </div>
     );
   }
-  return <PosterClient project={state.project} images={state.images} />;
+  return <PosterClient project={state.project} images={state.images} adEnabled={adEnabled} />;
 }

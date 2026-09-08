@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, Inbox, Rss, PanelsTopLeft, Frame, BookOpen } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, Inbox, Rss, PanelsTopLeft, Frame, BookOpen, Megaphone } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -94,6 +94,40 @@ const adminItem = {
   icon: ShieldCheck,
 };
 
+/**
+ * 광고 규격 내보내기. **스위치가 켜졌을 때만 낸다.**
+ *
+ * 「만들고 → 뽑는」 차례가 눈에 보이게 `이미지 만들기` 바로 뒤에 둔다. 그
+ * 도구의 설명이 이미 「광고 소재·포스터·일반 이미지」다.
+ *
+ * **새로 만드는 곳이 아니다.** 이미 있는 그림에서 규격을 뽑으므로 비용이 0 이고,
+ * 그래서 「도구」에 있어도 여기를 먼저 눌러 돈이 나가는 일이 없다.
+ */
+const adItem = {
+  href: "/ad",
+  label: "광고 규격으로 내보내기",
+  desc: "만든 그림에서 포털 규격 뽑기",
+  icon: Megaphone,
+};
+
+/**
+ * 스위치에 따라 달라지는 도구 목록.
+ *
+ * 감추는 것은 안내일 뿐이고 실제 차단은 `/ad` 의 `notFound()` 가 서버에서
+ * 한다 — 관리자·팀 메뉴와 같은 규칙이다. 다만 **눌러서 404 를 만나는 메뉴**는
+ * 그 둘도 안 만든다.
+ */
+export function navGroupsFor(hasAd: boolean): NavGroup[] {
+  if (!hasAd) return navGroups;
+  return navGroups.map((group) => {
+    const at = group.items.findIndex((item) => item.href === "/poster");
+    if (at < 0) return group;
+    const items = [...group.items];
+    items.splice(at + 1, 0, adItem);
+    return { ...group, items };
+  });
+}
+
 /** 권한과 소속에 따라 달라지는 메뉴. 보이는 것과 열리는 것은 별개다 — 실제
  *  차단은 각 화면이 서버에서 한다. */
 function bottomItemsFor(isAdmin: boolean, hasTeam: boolean) {
@@ -127,6 +161,13 @@ interface AppShellProps {
    * `/team` 은 열린다 — 거기서 「아직 팀에 속해 있지 않습니다」를 본다.
    */
   hasTeam?: boolean;
+  /**
+   * 광고 규격 내보내기가 켜져 있는지. 메뉴를 낼지만 정한다.
+   *
+   * **앱이 내려 준다.** 스위치는 서버 환경변수라 셸이 직접 못 읽는다
+   * (`NEXT_PUBLIC_` 을 새로 만들면 스위치가 둘이 된다).
+   */
+  hasAd?: boolean;
   /**
    * 사이드바에 걸 프로젝트 목록.
    *
@@ -263,6 +304,7 @@ export function AppShell({
   sidebarFooter,
   isAdmin = false,
   hasTeam = false,
+  hasAd = false,
   projects = [],
   currentProjectId = null,
   onSelectProject,
@@ -270,9 +312,10 @@ export function AppShell({
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const visibleGroups = navGroupsFor(hasAd);
   const visibleBottomItems = bottomItemsFor(isAdmin, hasTeam);
   const current = projects.find((project) => project.id === currentProjectId) ?? null;
-  const allLinks = [...navGroups.flatMap((g) => g.items), ...visibleBottomItems];
+  const allLinks = [...visibleGroups.flatMap((g) => g.items), ...visibleBottomItems];
 
   return (
     <div className="min-h-screen bg-background">
@@ -321,7 +364,7 @@ export function AppShell({
             </span>
           </Link>
 
-          {navGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label} className={cn(group.highlight && "border-b pb-5")}>
               <p
                 className={cn(

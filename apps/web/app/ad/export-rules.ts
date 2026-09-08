@@ -405,6 +405,133 @@ export function previewBackdrop(format: AdSpec["format"]): React.CSSProperties {
   };
 }
 
+/** 규격 칸의 상태 — 어떤 포털을 켰고 어떤 규격을 골랐는가. */
+export interface PortalSelection {
+  portals: AdSpec["portal"][];
+  picked: string[];
+}
+
+/**
+ * 포털 하나를 켜고 끈다. **포털과 선택을 한 번에 판단한다.**
+ *
+ * 초판은 화면이 `setPortals` 의 **업데이터 안에서** `setPicked` 를 불렀다.
+ * 업데이터는 순수해야 하는데 그렇지 않아, React 가 두 번 돌리는 순간 고른
+ * 규격이 겹쳐 쌓였다 — 화면에는 「10개 고름」인데 켜진 체크박스는 다섯이었다.
+ * **브라우저로 보지 않았으면 못 찾았다**(시험 1,213개가 전부 초록이었다).
+ *
+ * 여기로 옮기면 화면은 결과를 받아 넣기만 하고, 두 번 불러도 같은 값이다.
+ */
+export function togglePortal(
+  rows: SpecRow[],
+  state: PortalSelection,
+  portal: AdSpec["portal"],
+): PortalSelection {
+  const on = state.portals.includes(portal);
+  const portals = on
+    ? state.portals.filter((entry) => entry !== portal)
+    : [...state.portals, portal];
+  const picked = on
+    ? keepPickedInPortals(state.picked, portals)
+    // `Set` 으로 접는다 — 이미 켜 둔 것을 두 번 넣지 않는다.
+    : [...new Set([...state.picked, ...selectionForPortals(rows, [portal])])];
+  return { portals, picked };
+}
+
+/**
+ * 결과 화면에서 넘어온 주소가 가리키는 그림.
+ *
+ * 설계: `2026-09-08-ad-portal-first-selection.md` §1 ②
+ *
+ * **못 찾으면 조용히 없음을 준다.** 남의 작업 id 나 지워진 id 가 들어와도
+ * 화면은 지금처럼 목록을 보여 주면 된다 — 소유권은 서버가 이미 막는다
+ * (`posterStoresForUser`). 여기서 오류를 내면 **화면이 안 열린다.**
+ *
+ * **표 이름까지 맞춘다.** 라이브러리와 포스터는 서로 다른 표라 id 가 겹칠 수
+ * 있고, 겹치면 **엉뚱한 그림을 고른 채로** 뽑기 버튼이 활성화된다.
+ */
+export function itemFromQuery(
+  items: AdSourceItem[],
+  query: { source: string | null; id: string | null },
+): AdSourceItem | null {
+  if (!query.id || (query.source !== "poster" && query.source !== "library")) return null;
+  return items.find((item) => item.source === query.source && item.id === query.id) ?? null;
+}
+
+/**
+ * 주소에 적힌 변형 번호.
+ *
+ * **이상한 값에 0 을 주지 않는다.** 0 은 실재하는 변형이라, 조용히 **다른
+ * 그림이 뽑힌다** — 「사람 눈이 의도 검증이다」가 헛돈다. 없음을 주면 화면이
+ * 지금처럼 첫 장을 고르되 그것은 사용자가 보고 있는 값이다.
+ */
+export function positionFromQuery(raw: string | null): number | null {
+  if (raw === null || raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/**
+ * 처음에 고를 변형의 **서버 번호**.
+ *
+ * 주소가 가리킨 것이 실재하면 그것, 아니면 첫 장. **없는 번호를 그대로 쓰지
+ * 않는다** — 아무것도 선택돼 보이지 않는 채로 뽑기 버튼이 켜지고, 사용자가
+ * 본 적 없는 번호가 서버로 간다.
+ */
+export function startingPosition(picks: AdImagePick[], preferred: number | null): number {
+  if (preferred !== null && picks.some((pick) => pick.position === preferred)) return preferred;
+  return picks[0]?.position ?? 0;
+}
+
+/**
+ * 화면에 그릴 포털 차례. **데이터에서 나온다** — 목록에 없는 포털은 안 생긴다.
+ */
+export const AD_PORTALS: AdSpec["portal"][] = ["google", "kakao", "naver"];
+
+/**
+ * 고른 포털의 규격만 남긴다.
+ *
+ * 설계: `2026-09-08-ad-portal-first-selection.md` §1 ③
+ *
+ * **처음에 아무것도 안 고른 상태가 기본이다.** 지금은 `/ad` 를 열면 필수 9개가
+ * 세 포털에 걸쳐 켜져 있어서, 한 포털만 쓰는 사람에게는 「안 쓸 것까지 이미
+ * 켜진」 화면이 된다 — 그것이 「무조건 리사이징된다」로 읽힌다.
+ *
+ * 원래 순서를 지킨다. 고를 때마다 차례가 바뀌면 눈이 자리를 잃는다.
+ */
+export function rowsForPortals(rows: SpecRow[], portals: AdSpec["portal"][]): SpecRow[] {
+  // 빈 목록에 이른 반환을 두지 않는다 — 빈 `Set` 으로 거르면 결과가 같아서,
+  // 그 줄은 지워도 시험이 안 깨진다(뮤테이션이 살아남았다). 안 도는 방어는
+  // 다음 사람이 있다고 믿는다.
+  const wanted = new Set(portals);
+  return rows.filter((row) => wanted.has(row.spec.portal));
+}
+
+/**
+ * 포털을 켰을 때 자동으로 켜 줄 규격.
+ *
+ * **그 포털의 필수만.** 카카오를 켰는데 구글 필수가 딸려 오면 그게 「무조건」이다.
+ * 못 뽑는 것은 필수여도 안 켠다 — 켜 두면 뽑기가 통째로 막힌다(`adSubmitPlan`).
+ */
+export function selectionForPortals(rows: SpecRow[], portals: AdSpec["portal"][]): string[] {
+  return rowsForPortals(rows, portals)
+    .filter((row) => row.supported && row.spec.required)
+    .map((row) => row.spec.id);
+}
+
+/**
+ * 포털을 껐을 때 남길 선택.
+ *
+ * **손으로 켠 비필수도 그 포털이면 남긴다** — 껐다 켜는 사이에 사용자가 고른
+ * 것을 뺏지 않는다. 모르는 id 는 버린다.
+ */
+export function keepPickedInPortals(picked: string[], portals: AdSpec["portal"][]): string[] {
+  const wanted = new Set(portals);
+  return picked.filter((specId) => {
+    const spec = AD_SPECS.find((entry) => entry.id === specId);
+    return spec !== undefined && wanted.has(spec.portal);
+  });
+}
+
 /**
  * 고른 규격에서 **사용자가 이후에 해야 할 일**을 뽑는다.
  *

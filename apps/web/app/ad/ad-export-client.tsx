@@ -11,9 +11,11 @@ import type { LibraryItem } from "@fixup/shared";
 import { loadLibrary, getAccountItemImages } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
+import type { AdSpec } from "../../lib/ad/specs";
 import {
-  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, actionNotices, adSourceItems, bytesFromDataUrl,
-  defaultSelection, downloadable, excludedCount, failureMessage, isActualSize,
+  AD_PORTALS, PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, actionNotices, adSourceItems,
+  bytesFromDataUrl, downloadable, excludedCount, failureMessage, isActualSize, itemFromQuery,
+  positionFromQuery, rowsForPortals, startingPosition, togglePortal,
   missingRequiredCount, previewBackdrop, previewWidth,
   cropNotice, libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows,
   zipEntryName,
@@ -64,8 +66,34 @@ export function AdExportClient() {
   const [item, setItem] = React.useState<AdSourceItem | null>(null);
   const [images, setImages] = React.useState<AdImagePick[] | null>(null);
   const [position, setPosition] = React.useState(0);
-  const [picked, setPicked] = React.useState<string[]>(() => defaultSelection(ROWS));
+  /**
+   * **아무 포털도 안 고른 채로 시작한다**(설계 §1 ③).
+   *
+   * 초판은 필수 9개를 미리 켰는데, 그것이 세 포털에 걸쳐 있어서 한 포털만
+   * 쓰는 사람에게는 **안 쓸 것까지 이미 켜진** 화면이었다 — 「무조건
+   * 리사이징된다」로 읽힌다. 「빼는」 화면을 「고르는」 화면으로 바꾼다.
+   */
+  const [portals, setPortals] = React.useState<AdSpec["portal"][]>([]);
+  const [picked, setPicked] = React.useState<string[]>([]);
   const [results, setResults] = React.useState<ResultEntry[] | null>(null);
+  /** 고른 포털의 규격만 그린다. 매번 세는 대신 한 번만 판단한다. */
+  const visibleRows = rowsForPortals(ROWS, portals);
+
+  /**
+   * 포털을 켜고 끈다.
+   *
+   * 켜면 **그 포털의 필수만** 따라 켜지고, 끄면 그 포털 규격이 선택에서 빠진다.
+   * 손으로 켠 비필수는 그 포털이 살아 있는 한 남는다 — 껐다 켜는 사이에 고른
+   * 것을 뺏지 않는다.
+   */
+  const onTogglePortal = (portal: AdSpec["portal"]) => {
+    setResults(null);
+    // **업데이터 안에서 다른 상태를 건드리지 않는다.** 그러면 순수하지 않아
+    // React 가 두 번 돌릴 때 선택이 겹쳐 쌓인다 — 실제로 그랬다.
+    const next = togglePortal(ROWS, { portals, picked }, portal);
+    setPortals(next.portals);
+    setPicked(next.picked);
+  };
   const [busy, setBusy] = React.useState(false);
   /** ZIP 을 묶는 중. 두 번 누르면 봉투가 둘 나온다. */
   const [zipping, setZipping] = React.useState(false);
@@ -138,7 +166,31 @@ export function AdExportClient() {
           return [] as PosterWork[];
         }),
     ])
-      .then(([library, posters]) => setItems(adSourceItems(library, posters)))
+      .then(([library, posters]) => {
+        const list = adSourceItems(library, posters);
+        setItems(list);
+        /**
+         * **결과 화면에서 넘어온 그림을 골라 준다**(설계 §1 ②).
+         *
+         * 목록을 받은 **뒤에** 판단한다 — 주소만 보고 고르면 그 그림이 실제로
+         * 이 사람 것인지 모른 채 뽑기 버튼이 켜진다.
+         *
+         * `useSearchParams` 를 안 쓴다. 이 화면은 `force-dynamic` 이지만 그 훅은
+         * Suspense 경계를 요구해서, 이 한 줄 때문에 화면을 감싸게 된다.
+         * 어차피 목록을 받은 뒤에만 쓰므로 여기서 주소를 읽는다.
+         *
+         * **못 찾으면 아무 일도 안 한다.** 남의 id·지워진 id 가 와도 화면은
+         * 지금처럼 목록을 보여 준다.
+         */
+        const query = new URLSearchParams(window.location.search);
+        const wanted = itemFromQuery(list, {
+          source: query.get("source"),
+          id: query.get("id"),
+        });
+        // **`chooseItem` 을 거친다.** `setItem` 만 하면 그림 목록을 안 불러와
+        // 「고를 변형이 없는」 화면이 된다.
+        if (wanted) void chooseItem(wanted, positionFromQuery(query.get("position")));
+      })
       /**
        * **가정이 깨지는 날을 대비해 상태만 풀어 준다.**
        *
@@ -153,7 +205,7 @@ export function AdExportClient() {
       .catch(() => setItems([]));
   }, []);
 
-  async function chooseItem(next: AdSourceItem) {
+  async function chooseItem(next: AdSourceItem, preferred: number | null = null) {
     const mine = (token.current += 1);
     setItem(next);
     setImages(null);
@@ -176,7 +228,8 @@ export function AdExportClient() {
        * **아무것도 선택돼 보이지 않고**, 그 상태로 뽑으면 사용자가 본 적 없는
        * 0번을 보내 「찾을 수 없습니다」가 온다 — 썸네일은 멀쩡히 보이는데.
        */
-      setPosition(loaded[0]?.position ?? 0);
+      // 주소가 가리킨 변형이 실재하면 그것으로 시작한다(설계 §1 ②).
+      setPosition(startingPosition(loaded, preferred));
     } catch {
       // 여기서도 삼키면 썸네일 줄이 영영 안 나타난다.
       if (mine !== token.current) return;
@@ -256,7 +309,11 @@ export function AdExportClient() {
     }
   }
 
-  const missingRequired = missingRequiredCount(ROWS, picked);
+  /**
+   * **보이는 규격만 센다.** 안 고른 포털의 필수를 두고 「빠졌습니다」라고 하면,
+   * 카카오만 하려는 사람에게 영원히 지워지지 않는 경고가 뜬다.
+   */
+  const missingRequired = missingRequiredCount(visibleRows, picked);
   const madeCount = downloadable(results ?? []).length;
   const excluded = excludedCount(results ?? []);
   const noImages = images !== null && images.length === 0;
@@ -290,11 +347,30 @@ export function AdExportClient() {
             <Loader2 className="mr-2 inline size-4 animate-spin" />작업을 불러오는 중입니다.
           </p>
         ) : items.length === 0 ? (
+          /*
+            **아무것도 없는 사람에게 라이브러리를 보내면 안 된다.** 사이드바에
+            이 화면이 걸린 뒤로는 **처음 온 사람이 여기를 먼저 누른다** —
+            그때 라이브러리로 보내 봐야 거기도 비어 있다. 만드는 곳을 준다.
+
+            이 화면은 새로 만들지 않는다는 것도 함께 말한다. 「광고」라는 말만
+            보고 여기서 만들어지는 줄 알면 계속 기다리게 된다.
+          */
           <Card className="grid place-items-center gap-3 py-14 text-center">
             <ImageIcon className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              보관된 작업이 없습니다. <Link href="/library" className="underline">라이브러리</Link>에서 먼저 저장해 주세요.
-            </p>
+            <div className="grid gap-1.5">
+              <p className="text-sm font-bold">뽑을 그림이 아직 없습니다</p>
+              <p className="text-sm text-muted-foreground">
+                이 화면은 새로 만들지 않고 <strong>이미 만들어 둔 그림</strong>에서 규격을 뽑습니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm">
+                <Link href="/poster/new">이미지 만들기</Link>
+              </Button>
+              <Button asChild size="sm" variant="secondary">
+                <Link href="/library">라이브러리 보기</Link>
+              </Button>
+            </div>
           </Card>
         ) : (
           /*
@@ -379,17 +455,46 @@ export function AdExportClient() {
       <Card>
         <CardHeader className="flex-row items-baseline justify-between space-y-0">
           <div className="grid gap-1.5">
-            <CardTitle>02 규격 고르기</CardTitle>
-            <CardDescription>포털에 올릴 규격을 고릅니다. 필수는 켜 둡니다.</CardDescription>
+            <CardTitle>02 어디에 올릴까요</CardTitle>
+            <CardDescription>포털을 고르면 그 포털 규격만 나옵니다. 고른 것만 뽑습니다.</CardDescription>
           </div>
           <span className="text-meta text-subtle-foreground">{picked.length}개 고름</span>
         </CardHeader>
         <CardContent className="grid gap-3">
+        {/*
+          **포털을 먼저 묻는다**(설계 §1 ③). 한 포털만 쓰는 사람이 안 쓸 규격을
+          하나씩 꺼야 했다 — 그것이 「무조건 리사이징된다」로 읽혔다.
+          만들 것 고르는 자리(`poster/new-client.tsx:302`)와 같은 버튼 모양이다.
+        */}
+        <fieldset className="grid gap-2">
+          <legend className="text-meta text-subtle-foreground">포털</legend>
+          <div className="flex flex-wrap gap-2">
+            {AD_PORTALS.map((portal) => (
+              <Button
+                key={portal}
+                type="button" size="sm"
+                variant={portals.includes(portal) ? "default" : "secondary"}
+                aria-pressed={portals.includes(portal)}
+                disabled={busy}
+                onClick={() => onTogglePortal(portal)}
+              >
+                {PORTAL_LABEL[portal]}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
+
+        {portals.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            올릴 포털을 하나 이상 고르세요. 고른 포털의 규격만 뽑습니다.
+          </p>
+        ) : (
+        <>
         {/* 쌍둥이 화면(`poster/ad-spec-picker.tsx`)과 같이 묶음에 이름을 준다. */}
         <fieldset className="grid gap-1">
           <legend className="sr-only">광고 규격</legend>
         <ul className="grid gap-1">
-          {ROWS.map((row) => {
+          {visibleRows.map((row) => {
             const checked = picked.includes(row.spec.id);
             return (
               <li key={row.spec.id}>
@@ -442,6 +547,8 @@ export function AdExportClient() {
           <p className="text-sm text-destructive" role="alert">
             필수 규격 {missingRequired}개가 꺼져 있습니다. 빠지면 포털이 반려할 수 있습니다.
           </p>
+        )}
+        </>
         )}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
