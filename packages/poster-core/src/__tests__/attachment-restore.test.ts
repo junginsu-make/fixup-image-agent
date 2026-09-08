@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { planReferences, restoreAttachments, roleOf } from "../attachment-restore";
 
 /**
@@ -127,13 +128,9 @@ describe("두 쪽이 같은 번호를 본다", () => {
     expect(restored.length).toBe(planned.length);
     restored.forEach((attachment, index) => {
       expect(planned[index]!.number).toBe(index + 1);
-      // 역할도 같은 것을 가리켜야 한다.
-      const sameRole = {
-        style: "따라 만들기",
-        preserve_product: "제품 그대로 지키기",
-        preserve_person: "인물 그대로 지키기",
-      }[attachment.role as "style" | "preserve_product" | "preserve_person"];
-      expect(planned[index]!.roleLabel).toBe(sameRole);
+      // 역할도 같은 것을 가리켜야 한다. **라벨은 `@fixup/shared` 가 갖는다** —
+      // 여기 다시 적으면 카드뉴스·상세페이지와 갈린다(설계 §3).
+      expect(planned[index]!.roleLabel).toBe(ATTACHMENT_ROLE_LABEL[attachment.role]);
     });
   });
 

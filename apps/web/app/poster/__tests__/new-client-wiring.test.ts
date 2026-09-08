@@ -106,3 +106,29 @@ describe("고른 차례가 화면 상태에 이어져 있는가", () => {
     expect(source).toContain("attachmentIntent: attachmentIntent.trim()");
   });
 });
+
+/**
+ * 01에 적은 말을 03에서 다시 볼 수 있는가.
+ *
+ * 03은 **우선순위를 정하는 자리**다 — 「여기 적은 말이 다른 모든 지시보다
+ * 우선합니다」라고 화면이 말한다. 그런데 정작 01에 무엇을 적었는지는 볼 수 없어,
+ * 같은 말을 두 번 쓰거나 반대되는 말을 적어 놓고 모르는 일이 생긴다.
+ */
+describe("01에 적은 말이 03에서 보이는가", () => {
+  const panel = source.slice(source.indexOf('step === "instruction"'));
+
+  it("03 화면이 01의 말을 읽는다", () => {
+    expect(panel).toContain("01에서 첨부한 그림에 대해 적은 말");
+    expect(panel).toMatch(/\{attachmentIntent\.trim\(\) \? \(/);
+  });
+
+  it("안 적었으면 아무것도 안 보인다 — 빈 칸을 만들지 않는다", () => {
+    expect(panel).toMatch(/attachmentIntent\.trim\(\)[\s\S]{0,900}?\) : null\}/);
+  });
+
+  it("여기서 고치지 않고 01로 돌려보낸다 — 입력 칸은 하나뿐이어야 한다", () => {
+    // 두 곳에서 고치게 하면 어느 쪽이 진짜인지 사람이 판단해야 한다.
+    expect(panel).toContain('onClick={() => setStep("reference")}');
+    expect(panel).not.toMatch(/setAttachmentIntent\(/);
+  });
+});

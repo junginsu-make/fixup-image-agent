@@ -1,4 +1,4 @@
-import type { AttachmentRole } from "@fixup/shared";
+import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import type { OrderedAttachment } from "./attachment-order";
 
 /**
@@ -61,13 +61,6 @@ export interface PlanReference {
   roleLabel: string;
 }
 
-const ROLE_LABEL: Record<AttachmentRole, string> = {
-  style: "따라 만들기",
-  preserve_person: "인물 그대로 지키기",
-  preserve_product: "제품 그대로 지키기",
-  place_as_is: "원본 그대로 넣기",
-};
-
 /**
  * 기획 AI 에게 넘길 목록 — **거른 뒤에 번호를 매긴다.**
  *
@@ -111,6 +104,6 @@ export function planReferences(
       title: entry.title ?? "레퍼런스",
       grammar: summaries[id],
       number: index + 1,
-      roleLabel: ROLE_LABEL[roleOf(data, id)],
+      roleLabel: ATTACHMENT_ROLE_LABEL[roleOf(data, id)],
     }));
 }

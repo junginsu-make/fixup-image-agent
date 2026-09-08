@@ -29,7 +29,16 @@ interface PosterProject {
   status: string;
   ratio: string;
   modelId: string;
-  data: { instruction: string; variants: number; slots: PosterSlots; grammarIssues?: string[] };
+  data: {
+    instruction: string;
+    variants: number;
+    slots: PosterSlots;
+    grammarIssues?: string[];
+    /** 01에서 첨부한 그림에 대해 적은 말. 옛 작업에는 없다. */
+    attachmentIntent?: string;
+    /** 03에서 결과물에 대해 적은 말. 옛 작업에는 없다. */
+    userInstruction?: string;
+  };
 }
 
 type TextSlot = "kind" | "headline" | "subline" | "scene" | "subject" | "action"
@@ -90,6 +99,16 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
     비율: project.ratio,
     모델: project.modelId,
   });
+
+  /**
+   * 사용자가 직접 친 말 — 있는 것만.
+   *
+   * 둘 다 없으면 빈 배열이라 화면에 아무것도 안 나온다. 옛 작업이 그렇다.
+   */
+  const userWords: Array<[string, string]> = [
+    ["첨부한 그림에 대해", project.data.attachmentIntent?.trim() ?? ""],
+    ["결과물에 대해", project.data.userInstruction?.trim() ?? ""],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
 
   function downloadVariant(image: PosterImage) {
     const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
@@ -326,6 +345,29 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
+          {/*
+            사용자가 직접 친 말을 기획 칸 위에 둔다.
+
+            **이 화면은 「AI 가 채운 칸이 내가 시킨 것과 맞나」를 판단하는
+            자리다.** 그런데 정작 자기가 뭐라고 시켰는지는 01·03 을 떠나면 다시
+            볼 수 없었다. 아래 칸들보다 이 말이 세다는 것도 여기서만 말할 수 있다.
+
+            옛 작업에는 두 값이 없다 — 그때는 빈 자리로 남는다.
+          */}
+          {userWords.length ? (
+            <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
+              <span className="text-meta text-subtle-foreground">
+                내가 적은 말 — 아래 칸보다 우선합니다
+              </span>
+              {userWords.map(([label, text]) => (
+                <p key={label} className="text-sm">
+                  <span className="text-muted-foreground">{label} · </span>
+                  <span className="whitespace-pre-wrap">{text}</span>
+                </p>
+              ))}
+            </div>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2">
             {SLOT_LABELS.map(([field, label, kind]) => (
               <div key={field} className={cn("grid gap-1.5", kind === "area" && "sm:col-span-2")}>

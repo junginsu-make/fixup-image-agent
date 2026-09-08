@@ -534,6 +534,29 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               <p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[look]}</p>
             </fieldset>
 
+            {/*
+              01에서 적은 말을 여기서 다시 보여준다.
+
+              **여기가 우선순위를 정하는 자리이기 때문이다.** 바로 아래 「추가
+              지시」가 다른 모든 지시보다 세다고 적어 두었는데, 정작 01에 무엇을
+              적었는지는 이 화면에서 볼 수 없었다. 그러면 같은 말을 두 번 쓰거나
+              서로 반대되는 말을 적어 놓고 모른다.
+
+              **여기서 고치게 하지는 않는다.** 입력 칸은 01 하나뿐이어야 한다 —
+              두 곳에 두면 어느 쪽이 진짜인지 사람이 판단해야 한다.
+            */}
+            {attachmentIntent.trim() ? (
+              <div className="grid gap-1.5 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-meta text-subtle-foreground">01에서 첨부한 그림에 대해 적은 말</span>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setStep("reference")}>
+                    고치기
+                  </Button>
+                </div>
+                <p className="whitespace-pre-wrap text-sm">{attachmentIntent.trim()}</p>
+              </div>
+            ) : null}
+
             <div className="grid gap-1.5">
               <Label htmlFor="poster-user-instruction">추가 지시 · 선택</Label>
               <Textarea
