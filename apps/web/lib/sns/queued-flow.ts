@@ -4,6 +4,7 @@ import {
   buildFrame,
   buildModelInput,
   composePrompt,
+  intentForRole,
   groupAttachments,
   modelById,
   pickEndpoint,
@@ -253,6 +254,14 @@ export async function startQueuedFlow(
     look: project.data.look,
     userInstruction: project.data.userInstruction,
   };
+  /**
+   * 자리마다 사용자가 적은 말 (표지/속지/엔딩).
+   *
+   * **`tuning` 에 안 넣는다.** `tuning` 은 카드 전체에 똑같이 가는 것이고, 이건
+   * 카드 자리마다 달라야 한다 — 표지 지시가 속지에 새면 안 된다. 그래서 카드를
+   * 돌 때마다 그 자리 것을 골라 넣는다.
+   */
+  const intents = project.data.attachmentIntents;
   for (const card of next.cards.filter((entry) => selected.has(entry.index))) {
     card.error = undefined;
     card.review = undefined;
@@ -279,7 +288,10 @@ export async function startQueuedFlow(
     if (card.layout) {
       // 칸 프롬프트는 카드 전체가 아니라 그 칸에 들어갈 그림만 말한다.
       // 모델에게 물어볼 것이 없으므로 장면 프롬프트 LLM 호출도 건너뛴다.
-      const styleBlock = buildAttachmentBlock(selectReferencesForRole(grouped, card.role), tuning);
+      const styleBlock = buildAttachmentBlock(selectReferencesForRole(grouped, card.role), {
+        ...tuning,
+        attachmentIntent: intentForRole(intents, card.role),
+      });
       const fallbackBrief = card.plan?.visualBrief ?? card.copy.body ?? card.copy.headline;
 
       card.slotJobs = imageSlotsOf(card).map(({ slot, box }) => {
@@ -327,10 +339,14 @@ export async function startQueuedFlow(
       size: ratio.pixel,
       language: project.language,
       ...tuning,
+      attachmentIntents: intents,
     }, dependencies.sceneProvider);
     const images = selectReferencesForRole(grouped, card.role);
     card.prompt = composePrompt(
-      buildFrame({ copy: card.copy, images, size: ratio.pixel, language: project.language, ...tuning }),
+      buildFrame({
+        copy: card.copy, images, size: ratio.pixel, language: project.language, ...tuning,
+        attachmentIntent: intentForRole(intents, card.role),
+      }),
       prompted.body,
       tuning,
     );

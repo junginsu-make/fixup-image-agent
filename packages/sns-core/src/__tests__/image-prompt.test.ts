@@ -5,6 +5,7 @@ import {
   buildFrame,
   buildSceneRequest,
   composePrompt,
+  intentForRole,
   referenceWarningsForRole,
   selectReferencesForRole,
   writeImagePrompt,
@@ -317,5 +318,71 @@ describe("이미지의 결", () => {
   it("장면을 쓰는 LLM 도 결을 안다", () => {
     expect(buildSceneRequest({ ...sceneInput, look: "3d" }).prompt).toMatch(/Rendering style for this card/i);
     expect(buildSceneRequest(sceneInput).prompt).not.toMatch(/Rendering style for this card/i);
+  });
+});
+
+/**
+ * 자리마다 적은 말이 그 자리에만 간다 (2026-09-08 사용자 결정).
+ *
+ * 카드뉴스는 **카드마다 첨부를 골라서** 보낸다 — 표지는 표지 레퍼런스만, 속지는
+ * 속지 것만(인물은 전부에 따라감). 그래서 화면 번호와 프롬프트 번호를 맞추려면
+ * **자리 안에서** 세야 하고, 지시도 자리마다 따로 받아야 한다.
+ */
+describe("자리마다 적은 말", () => {
+  const person = {
+    id: "p", kind: "keep_identity" as const, subject: "person" as const,
+    assetPath: "a", url: "u",
+  };
+  const cover = {
+    id: "c", kind: "style_reference" as const, role: "cover" as const,
+    assetPath: "b", url: "v",
+  };
+
+  it("그 자리 것만 꺼낸다", () => {
+    const intents = { cover: "①번을 크게", body: "사람은 작게" };
+    expect(intentForRole(intents, "cover")).toBe("①번을 크게");
+    expect(intentForRole(intents, "body")).toBe("사람은 작게");
+    expect(intentForRole(intents, "ending")).toBe("");
+  });
+
+  it("안 적었으면 빈 문자열 — 옛 작업", () => {
+    expect(intentForRole(undefined, "cover")).toBe("");
+    expect(intentForRole({ cover: "   " }, "cover")).toBe("");
+  });
+
+  it("지시를 적으면 역할 고정 문구가 사라진다", () => {
+    const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번 사람을 만화로" });
+    expect(block).not.toContain("Do NOT copy anything else from it");
+    expect(block).not.toContain("Reproduce this exact person");
+    expect(block).toContain("deliberately omitted");
+  });
+
+  it("**번호와 역할 이름은 남는다** — 빼면 「①번」이 가리킬 것이 없다", () => {
+    const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번을 크게" });
+    expect(block).toContain('Image 1: the user marked this "reference to imitate".');
+    expect(block).toContain('Image 2: the user marked this "person to keep".');
+  });
+
+  it("안 적었으면 지금까지 그대로다", () => {
+    const block = buildAttachmentBlock([cover, person], {});
+    expect(block).toContain("Do NOT copy anything else from it");
+    expect(block).toContain("Reproduce this exact person");
+  });
+
+  it("「사람은 그대로, 그림 느낌만」은 지시를 적어도 안 지운다", () => {
+    // 부딪히지 않기 때문이다. 지우면 사람을 하나하나 옮기라는 말이 사라져
+    // 작은 것(안경 같은)이 빠진다.
+    const block = buildAttachmentBlock(
+      [cover, { ...person, restyle: true }],
+      { attachmentIntent: "①번 느낌으로" },
+    );
+    expect(block).toContain("PRESERVED PERSON, REDRAWN");
+    expect(block).toContain("glasses");
+  });
+
+  it("restyle 은 지시가 없어도 다른 말을 쓴다", () => {
+    const block = buildAttachmentBlock([{ ...person, restyle: true }], {});
+    expect(block).toContain("PRESERVED PERSON, REDRAWN");
+    expect(block).not.toContain("Do not beautify, slim, age, de-age, restyle");
   });
 });
