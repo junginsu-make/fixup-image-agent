@@ -8,7 +8,7 @@ import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
 import { needsCutout } from "../../../../lib/ad/master-plan";
-import { createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
+import { assertCutoutSize, createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
 import { createPosterFalClients } from "../../../../lib/poster/providers";
 
 export const runtime = "nodejs";
@@ -90,13 +90,21 @@ async function posterImageFile(
  * `data.images`(복수)를 보는데 birefnet 은 `image`(단수)라 **예외 없이 빈
  * 배열**을 준다(설계 §2.3).
  */
-async function cutoutForAd(master: Buffer): Promise<Buffer> {
+async function cutoutForAd(master: Buffer, mimeType: string): Promise<Buffer> {
   const { uploader } = createPosterFalClients();
-  const url = await uploader.uploadReference(master, "image/png");
+  // **형식을 지어내지 않는다.** 여기서 `"image/png"` 를 박으면 저장 형식이
+  // 바뀌는 날 fal 에 거짓 형식을 알린다 — 그 작업은 이미 계획에 있다.
+  const url = await uploader.uploadReference(master, mimeType);
   const cutUrl = await removeBackground(url, createBackgroundRemover(process.env.FAL_KEY!));
   const response = await fetch(cutUrl);
   if (!response.ok) throw new Error("배경을 지운 그림을 내려받지 못했습니다.");
-  return Buffer.from(await response.arrayBuffer());
+
+  // 미리 밝힌 크기가 있으면 **받기 전에** 막는다. 없으면 받은 만큼을 잰다.
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > 0) assertCutoutSize(declared);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assertCutoutSize(bytes.byteLength);
+  return bytes;
 }
 
 export async function POST(request: Request) {
@@ -190,7 +198,7 @@ export async function POST(request: Request) {
     let cutoutFailed: string | undefined;
     if (needsCutout(parsed.data.specIds)) {
       try {
-        cutout = await cutoutForAd(file.bytes);
+        cutout = await cutoutForAd(file.bytes, file.mimeType);
       } catch (error) {
         /**
          * **내부 사정을 사용자 화면에 쓰지 않는다.**
@@ -205,7 +213,7 @@ export async function POST(request: Request) {
          * 읽고 판단할 수 있는 말이다 — 다시 눌러 보면 되는 것들이다.
          */
         const message = error instanceof Error ? error.message : "";
-        const sayable = /오래 걸립니다|받지 못했습니다|내려받지 못했습니다/.test(message);
+        const sayable = /오래 걸립니다|받지 못했습니다|내려받지 못했습니다|너무 큽니다/.test(message);
         if (!sayable) console.error(`[ad] 배경 제거 실패: ${message}`);
         cutoutFailed = sayable ? message : "배경을 지우지 못했습니다.";
       }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * 광고 규격을 뽑는 길.
@@ -62,7 +62,9 @@ vi.mock("../../../../lib/ad/batch", async () => {
   };
 });
 
-vi.mock("../../../../lib/ad/background", () => ({
+vi.mock("../../../../lib/ad/background", async (importOriginal) => ({
+  // **크기 상한은 진짜를 쓴다.** 목에 다시 적으면 목을 시험하게 된다.
+  ...(await importOriginal<typeof import("../../../../lib/ad/background")>()),
   createBackgroundRemover: () => ({}),
   removeBackground: async () => {
     order.push("cutout");
@@ -71,8 +73,18 @@ vi.mock("../../../../lib/ad/background", () => ({
   },
 }));
 
+/** 무엇을 어떤 형식으로 올렸는지 본다 — 하드코딩하면 여기서 드러난다. */
+const uploaded: { mime: string }[] = [];
+
 vi.mock("../../../../lib/poster/providers", () => ({
-  createPosterFalClients: () => ({ uploader: { uploadReference: async () => "https://fal/up.png" } }),
+  createPosterFalClients: () => ({
+    uploader: {
+      uploadReference: async (_bytes: Buffer, mime: string) => {
+        uploaded.push({ mime });
+        return "https://fal/up.png";
+      },
+    },
+  }),
 }));
 
 vi.mock("../../../../lib/membership/api", () => ({
@@ -127,6 +139,16 @@ const call = (body: unknown) =>
   POST(new Request("http://x/api/ad/export", { method: "POST", body: JSON.stringify(body) }));
 
 const good = { itemId: "item-1", position: 0, specIds: ["google-rda-square"] };
+
+/**
+ * **덮어쓴 `fetch` 를 되돌린다.**
+ *
+ * 시험들이 `globalThis.fetch` 를 갈아 끼우고 놓아 두었다. 파일 단위 격리라
+ * 오늘은 무해하지만, 이 파일에 나중에 진짜 `fetch` 를 쓰는 시험이 붙으면
+ * **조용히 남의 stub 을 쓴다** — 그때는 원인을 찾기 어렵다.
+ */
+const realFetch = globalThis.fetch;
+afterEach(() => { globalThis.fetch = realFetch; });
 
 beforeEach(() => {
   enabled = true;
@@ -446,5 +468,58 @@ describe("배경 제거 실패를 어떻게 말하는가", () => {
     await call({ ...good, specIds: ["kakao-bizboard"] });
     const passed = batchArgs[0]!.options?.cutout;
     await expect(passed!(Buffer.from("m"))).rejects.toThrow(/오래 걸립니다/);
+  });
+});
+
+/**
+ * 남아 있던 자잘한 것들(재검증 LOW).
+ *
+ * 하나하나는 오늘 고장이 아니다. 다만 **셋 다 「지금은 우연히 맞는」 부류**라,
+ * 옆을 건드리는 다음 사람이 조용히 밟는다.
+ */
+describe("올릴 때 형식을 지어내지 않는다", () => {
+  /**
+   * `cutoutForAd` 가 `"image/png"` 를 박고 있었다. 지금은 저장소가 PNG 로
+   * 저장하므로 맞지만, **그 사실을 이 줄이 아는 것이 아니다** — 저장 형식이
+   * WebP 로 바뀌면 fal 에 거짓 형식을 알리게 된다(그 작업은 이미 계획에 있다).
+   */
+  it("파일이 말한 형식으로 올린다", async () => {
+    // **PNG 로 재면 안 된다.** 하드코딩된 값과 우연히 같아서, 되돌려도
+    // 시험이 통과한다(실제로 뮤테이션이 살아남았다). 다른 형식으로 잰다.
+    file = { bytes: Buffer.from("x"), mimeType: "image/webp" };
+    uploaded.length = 0;
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    await batchArgs[0]!.options!.cutout!(Buffer.from("master"));
+    expect(uploaded).toHaveLength(1);
+    expect(uploaded[0]!.mime).toBe("image/webp");
+  });
+});
+
+describe("내려받는 크기에 상한이 있다", () => {
+  /**
+   * `assemble.ts` 의 sharp 넷에는 40M 픽셀 상한을 붙였는데 **라우트가 fal 에서
+   * 받아오는 자리에는 아무 상한이 없었다.** 우리가 올린 그림을 도로 받는
+   * 경로라 남이 밀어 넣을 자리는 아니지만, 상한 없는 `arrayBuffer()` 는
+   * 받은 만큼 전부 메모리에 올린다.
+   */
+  it("미리 밝힌 크기가 너무 크면 안 받는다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("x"), {
+      headers: { "content-length": String(200 * 1024 * 1024) },
+    })) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    await expect(batchArgs[0]!.options!.cutout!(Buffer.from("m")))
+      .rejects.toThrow(/너무 큽니다/);
+  });
+
+  // 크기를 안 밝히고 오는 갈래는 받은 바이트로 재는데, 그것을 여기서 확인하려면
+  // 시험이 32MB 를 실제로 만들어야 한다(만들다가 워커가 죽었다). 판단은
+  // `assertCutoutSize` 로 떼어 `ad-background.test.ts` 에서 작은 수로 잠근다.
+
+  it("보통 크기는 그대로 받는다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const bytes = await batchArgs[0]!.options!.cutout!(Buffer.from("m"));
+    expect(bytes.toString()).toBe("cut");
   });
 });

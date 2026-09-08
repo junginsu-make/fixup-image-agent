@@ -193,7 +193,7 @@ export const AD_SPECS: AdSpec[] = [
     target: { width: 1029, height: 258 },
     required: true, format: "png-alpha", maxBytes: 307_200,
     verifiedAt: "2026-09-06", sourceKind: "official", source: KAKAO_BIZBOARD,
-    note: "투명 배경 PNG-24. 조립 엔진이 필요해 아직 지원하지 않는다(설계 §3.4).",
+    note: "투명 배경 PNG-24. 모델이 못 만드는 3.99:1 이라 조립으로 만든다(4단계).",
   },
 
   // ── 네이버 (⚠️ 공식 문서가 로그인 뒤에 있어 미검증) ──────────────────
@@ -259,6 +259,6 @@ export const AD_SPECS: AdSpec[] = [
     target: { width: 750, height: 160 },
     required: true, format: "png-alpha", maxBytes: 2_097_152,
     verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
-    note: "투명 PNG 만 받는다. 조립 엔진이 필요해 아직 지원하지 않는다(설계 §3.4).",
+    note: "투명 PNG 만 받는다. 모델이 못 만드는 4.69:1 이라 조립으로 만든다(4단계).",
   },
 ];

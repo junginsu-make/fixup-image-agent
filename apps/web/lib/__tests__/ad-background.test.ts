@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { removeBackground, BACKGROUND_REMOVAL_ENDPOINT } from "../ad/background";
+import { removeBackground, BACKGROUND_REMOVAL_ENDPOINT, assertCutoutSize, MAX_CUTOUT_BYTES } from "../ad/background";
 
 /**
  * 배경을 지워 오브젝트만 남긴다.
@@ -77,5 +77,59 @@ describe("배경 제거", () => {
   it("시한 안에 끝나면 그대로 준다", async () => {
     const result = await removeBackground("https://fal/m.png", falStub(ok) as never, { timeoutMs: 5_000 });
     expect(result).toBe("https://fal/cut.png");
+  });
+});
+
+/**
+ * **시한이 지나도 fal 은 계속 돈다.**
+ *
+ * `Promise.race` 는 **기다리기를 그만둘 뿐** 폴링을 멈추지 않는다. 우리 쪽은
+ * 60초 뒤 슬롯을 놓지만 fal 클라이언트는 그 뒤로도 상태를 물으며, 그 요청은
+ * 서버가 살아 있는 한 계속 나간다. 원래는 주석으로만 적어 두었다 —
+ * `@fal-ai/client` 의 `RunOptions` 에 `abortSignal` 이 있으므로 실제로 끊는다.
+ */
+describe("시한이 지나면 폴링도 끊는다", () => {
+  it("시한을 넘기면 넘긴 신호가 abort 된다", async () => {
+    let seen: AbortSignal | undefined;
+    const never = {
+      subscribe: (_endpoint: string, options: { abortSignal?: AbortSignal }) => {
+        seen = options.abortSignal;
+        return new Promise(() => {});
+      },
+    };
+    await expect(removeBackground("https://fal/m.png", never as never, { timeoutMs: 30 }))
+      .rejects.toThrow(/오래/);
+    expect(seen).toBeDefined();
+    expect(seen!.aborted).toBe(true);
+  });
+
+  /** 제때 끝났으면 안 끊는다 — 끊으면 다음 호출이 죽은 신호를 받는다. */
+  it("제때 끝나면 abort 하지 않는다", async () => {
+    let seen: AbortSignal | undefined;
+    const quick = {
+      subscribe: (_endpoint: string, options: { abortSignal?: AbortSignal }) => {
+        seen = options.abortSignal;
+        return Promise.resolve({ data: { image: { url: "https://fal/cut.png" } } });
+      },
+    };
+    await removeBackground("https://fal/m.png", quick as never, { timeoutMs: 5_000 });
+    expect(seen!.aborted).toBe(false);
+  });
+});
+
+describe("내려받는 크기 상한", () => {
+  it("상한 안이면 통과한다", () => {
+    expect(() => assertCutoutSize(10, 100)).not.toThrow();
+    expect(() => assertCutoutSize(100, 100)).not.toThrow();
+  });
+
+  it("상한을 넘으면 던진다", () => {
+    expect(() => assertCutoutSize(101, 100)).toThrow(/너무 큽니다/);
+  });
+
+  /** 기본값이 실측(3MB 안쪽)보다 넉넉하되 무한은 아니다. */
+  it("기본 상한이 32MB 다", () => {
+    expect(MAX_CUTOUT_BYTES).toBe(32 * 1024 * 1024);
+    expect(() => assertCutoutSize(MAX_CUTOUT_BYTES + 1)).toThrow();
   });
 });
