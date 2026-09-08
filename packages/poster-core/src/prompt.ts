@@ -75,7 +75,41 @@ const TYPE_INTERACTION_EN: Record<string, string> = {
   "감쌈": "the type wraps around the subject",
 };
 
-function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolean): string[] {
+/**
+ * 첨부 그림마다 무엇을 하라고 말하는 줄들.
+ *
+ * ── 사용자가 첨부 지시를 적었으면 고정 문구를 빼고 그 말만 남긴다 ──
+ *
+ * 역할 셋에는 각각 여섯 문장쯤 되는 고정 문구가 붙는다. 그 문구가 사용자가
+ * 적은 한 줄과 **정면으로 부딪히는 경우가 있다.**
+ *
+ * 실제로 그렇게 나왔다(2026-09-08 사용자 실측). 두 장 다 「따라 만들기」로
+ * 고르고 「1번 사진의 사람들을 2번 그림 느낌으로」라고 적었는데, 프롬프트는
+ * 두 장 모두에 대해 `not its people` 을 보내고 있었다. 우선순위 줄
+ * (`USER INSTRUCTION > …`)이 이미 있었지만 **한 줄로는 못 이겼다** — 반대편이
+ * 여섯 문장이고 전부 구체적이기 때문이다.
+ *
+ * 그래서 지시를 적었으면 고정 문구를 **통째로 뺀다**(설계 §4-1 A안,
+ * 2026-09-08 사용자 결정).
+ *
+ * **번호와 역할 이름은 남긴다.** 그것까지 빼면 「1번」이 가리킬 것이 없어져
+ * 이 기능 자체가 무너진다. 남기는 것은 이름뿐이고 규칙은 안 붙인다.
+ *
+ * **위험을 알고 고른 것이다.** 「얼굴 특징을 하나하나 맞춰라」도 함께 사라져
+ * 얼굴이 딴사람이 될 수 있다. 그때는 사용자가 그 말을 직접 적으면 된다 —
+ * 이제 그 한 줄이 프롬프트에서 가장 센 말이다.
+ */
+/** 사용자가 화면에서 고른 역할의 이름. **규칙은 안 붙인다.** */
+function roleName(image: PosterPromptImage): string {
+  if (image.kind !== "preserved") return "reference to imitate";
+  return image.subject === "person" ? "person to keep" : "subject to keep";
+}
+
+function attachmentLines(
+  images: PosterPromptImage[],
+  hasUserInstruction: boolean,
+  hasAttachmentIntent = false,
+): string[] {
   if (!images.length) return [];
   const lines = [
     // 첨부를 「대충 이런 느낌」으로 흘려보내지 말라고 먼저 못 박는다. 안 적으면
@@ -85,6 +119,15 @@ function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolea
     + "never substitute a generic stand-in.",
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
+  if (hasAttachmentIntent) {
+    lines.push(
+      "The user wrote what to do with these images. Their words replace the usual rules for each "
+      + "role — those rules are deliberately omitted here. Read the USER INSTRUCTION and follow it.",
+    );
+    images.forEach((image, index) => {
+      lines.push(`Image ${attachmentNumber(index)}: the user marked this "${roleName(image)}".`);
+    });
+  } else {
   images.forEach((image, index) => {
     const number = attachmentNumber(index);
     if (image.kind === "preserved") {
@@ -109,6 +152,7 @@ function attachmentLines(images: PosterPromptImage[], hasUserInstruction: boolea
       + "match what is described below.",
     );
   });
+  }
   // 순서는 공용 어휘(@fixup/shared)가 정한다. 다섯 도구가 갈리면 안 된다.
   //
   // 전에는 여기에 「PRESERVED > REFERENCE > scene」 이 박혀 있었고 사용자가 친
@@ -156,7 +200,35 @@ function copyLines(slots: PosterSlots): string[] {
   ];
   const entries = all.filter(([, value]) => value.trim().length > 0);
 
-  if (!entries.length) return [];
+  /**
+   * **글자를 하나도 안 적었으면 「넣지 마라」고 말한다.**
+   *
+   * 전에는 여기서 빈 배열을 돌려줬다. 그러면 프롬프트에 **글자 이야기가 통째로
+   * 사라진다** — 「넣지 마라」도 함께 사라진다. 없어도 되는 말이 아니라,
+   * 글자가 하나도 없을 때가 그 말이 가장 필요한 순간이다.
+   *
+   * 그 사이 프롬프트는 반대쪽으로 민다. 맨 앞 `designerPersona()` 가
+   * 「confident typography」를 요구하고, 첨부는 `POSTER REFERENCE` 라고
+   * 부르며 「typography 를 흉내 내라」고 말한다. 막는 말이 없으면 모델은
+   * 당연히 글자를 만든다.
+   *
+   * 실제로 그렇게 나왔다 — 첨부 두 장 어디에도 글자가 없고 사용자도 글자를
+   * 요구하지 않았는데 「BEST DAY EVER!」가 크게 박혀 나왔다(2026-09-08).
+   *
+   * `designerPersona()` 는 안 고친다. 다섯 도구가 함께 쓰는 문장이고,
+   * 카드뉴스·상세페이지는 글자가 있어야 하는 도구다.
+   */
+  if (!entries.length) {
+    return [
+      "No text was authored for this image. Render it with NO text.",
+      "Do not add a headline, tagline, slogan, caption, title, label, watermark, signature,",
+      "logo, date, or any decorative lettering — not even as a design flourish.",
+      "This overrides any instinct to add typography for visual balance:",
+      "an image with no text is the intended result, not an unfinished one.",
+      "Text that genuinely belongs to the scene in an attached image (a sign, a shirt print,",
+      "a product label) may stay as it is, but do not invent any that was not already there.",
+    ];
+  }
 
   return [
     "Render this text exactly as written, with correct spelling and spacing:",
@@ -206,7 +278,7 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
     // 역할을 앞에 세우면 사람이 친 말이 한 칸 밀린다.
     designerPersona(),
     "",
-    ...attachmentLines(input.images, Boolean(head)),
+    ...attachmentLines(input.images, Boolean(head), Boolean(input.attachmentIntent?.trim())),
     "",
     ...sceneLines(input.slots),
     ...(look ? [look] : []),

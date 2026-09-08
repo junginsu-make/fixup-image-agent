@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MATCH_SOURCE } from "@fixup/sns-core";
 import {
-  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount,
+  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount, seedInstruction, showsTypeInteraction, splitFilledSlots,
 } from "../poster-form-rules";
 
 /**
@@ -140,5 +140,99 @@ describe("무엇을 보내는가", () => {
 
   it("제목이 비어 있어도 이름을 준다", () => {
     expect(adProjectBodies({}, masters, "   ")[0]!.title.trim().length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 01에서 적은 말을 03에 미리 채운다.
+ *
+ * **01에서 이미 한 번 말했는데 03에서 또 쓰게 하고 있었다**(2026-09-08 사용자).
+ * 한 줄 지시는 비면 다음으로 못 가는 칸이라, 같은 말을 옮겨 적어야 했다.
+ */
+describe("한 줄 지시 미리 채우기", () => {
+  const intent = "1번 사진의 사람들을 2번 사진 느낌으로";
+
+  it("비어 있고 안 건드렸으면 01의 말을 채운다", () => {
+    expect(seedInstruction({ attachmentIntent: intent, instruction: "", touched: false })).toBe(intent);
+  });
+
+  it("**한 번이라도 건드렸으면 안 덮는다** — 그때부터 그 사람의 것이다", () => {
+    // 지웠을 수도 있다. 지운 것을 다시 채우면 지울 방법이 없어진다.
+    expect(seedInstruction({ attachmentIntent: intent, instruction: "", touched: true })).toBeNull();
+  });
+
+  it("이미 쓴 것이 있으면 안 덮는다", () => {
+    expect(seedInstruction({ attachmentIntent: intent, instruction: "가을 사진전", touched: false })).toBeNull();
+  });
+
+  it("01에 적은 말이 없으면 채울 것이 없다", () => {
+    expect(seedInstruction({ attachmentIntent: "", instruction: "", touched: false })).toBeNull();
+    expect(seedInstruction({ attachmentIntent: "   ", instruction: "", touched: false })).toBeNull();
+  });
+
+  it("공백만 있는 칸은 빈 칸으로 본다", () => {
+    expect(seedInstruction({ attachmentIntent: intent, instruction: "   ", touched: false })).toBe(intent);
+  });
+
+  it("앞뒤 공백은 떼고 채운다", () => {
+    expect(seedInstruction({ attachmentIntent: `  ${intent}  `, instruction: "", touched: false })).toBe(intent);
+  });
+});
+
+/**
+ * 기획 확인에서 어떤 칸을 바로 보여줄까 (2026-09-08 사용자 결정).
+ *
+ * 칸 열한 개가 늘 다 보였다. 글자가 하나도 없는 그림인데 「글자와 피사체의
+ * 관계」가 버젓이 있었고, 그 화면 하나가 페이지를 통째로 썼다.
+ */
+describe("채운 칸과 빈 칸을 가른다", () => {
+  const value: Record<string, string> = { scene: "강가 바위", subject: "청년 다섯", kind: "  " };
+
+  it("값이 있는 칸과 없는 칸으로 나눈다", () => {
+    const { filled, empty } = splitFilledSlots(
+      ["scene", "subject", "kind", "action"],
+      (field) => value[field] ?? "",
+    );
+    expect(filled).toEqual(["scene", "subject"]);
+    expect(empty).toEqual(["kind", "action"]);
+  });
+
+  it("공백만 있는 칸은 빈 칸이다", () => {
+    // 기획이 실패하면 공백이 들어오기도 한다. 그걸 「채웠다」로 보면 안 된다.
+    const { filled } = splitFilledSlots(["kind"], (field) => value[field] ?? "");
+    expect(filled).toEqual([]);
+  });
+
+  it("차례는 그대로 지킨다 — 화면 순서가 매번 달라지면 안 된다", () => {
+    const { filled } = splitFilledSlots(["subject", "scene"], (field) => value[field] ?? "");
+    expect(filled).toEqual(["subject", "scene"]);
+  });
+
+  it("아무것도 없으면 둘 다 빈 목록", () => {
+    expect(splitFilledSlots([], () => "")).toEqual({ filled: [], empty: [] });
+  });
+});
+
+describe("글자와 피사체의 관계를 보여줄까", () => {
+  it("글자가 하나도 없으면 안 보여준다 — 관계를 맺을 대상이 없다", () => {
+    expect(showsTypeInteraction({ headline: "", subline: "", sideTexts: [] })).toBe(false);
+    expect(showsTypeInteraction({})).toBe(false);
+  });
+
+  it("헤드라인이 있으면 보여준다", () => {
+    expect(showsTypeInteraction({ headline: "가을, 셔터를 누르다" })).toBe(true);
+  });
+
+  it("곁텍스트만 있어도 보여준다", () => {
+    expect(showsTypeInteraction({ sideTexts: ["28MM F2.0"] })).toBe(true);
+  });
+
+  it("**이미 고른 값이 있으면 글자가 없어도 보여준다**", () => {
+    // 안 그러면 글자를 지우는 순간 고른 값이 화면에서 사라져 되돌릴 수 없다.
+    expect(showsTypeInteraction({ typeInteraction: "통과" })).toBe(true);
+  });
+
+  it("빈 곁텍스트 줄은 글자로 안 본다", () => {
+    expect(showsTypeInteraction({ sideTexts: ["", "  "] })).toBe(false);
   });
 });

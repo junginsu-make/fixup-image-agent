@@ -132,3 +132,27 @@ describe("01에 적은 말이 03에서 보이는가", () => {
     expect(panel).not.toMatch(/setAttachmentIntent\(/);
   });
 });
+
+/**
+ * 01에서 적은 말이 03 한 줄 지시에 미리 채워지는가.
+ *
+ * 규칙(`seedInstruction`)은 잠겨 있는데 **그것을 부르는 줄**은 아무도 안 본다.
+ */
+describe("한 줄 지시 미리 채우기가 이어져 있는가", () => {
+  it("규칙을 여기 다시 적지 않고 부른다", () => {
+    expect(source).toContain("seedInstruction({ attachmentIntent, instruction, touched: instructionTouched })");
+  });
+
+  it("03 에 들어갈 때만 채운다", () => {
+    // 01·02 에서 미리 채우면 아직 안 본 칸이 채워져 있다.
+    expect(source).toMatch(/if \(step !== "instruction"\) return;/);
+  });
+
+  it("null 이면 안 채운다 — 빈 문자열로 덮으면 남의 글을 지운다", () => {
+    expect(source).toContain("if (seed !== null) setInstruction(seed);");
+  });
+
+  it("사람이 고치면 표시를 남긴다", () => {
+    expect(source).toMatch(/setInstructionTouched\(true\);[\s\S]{0,80}setInstruction\(event\.target\.value\)/);
+  });
+});

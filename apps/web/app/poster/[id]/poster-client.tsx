@@ -3,18 +3,22 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Download, Megaphone, Wand2 } from "lucide-react";
+import { Download, Loader2, Megaphone, Wand2 } from "lucide-react";
 // 잎 모듈이다 — 규격 목록을 이 화면 번들로 끌고 오지 않는다.
 import { adExportHref } from "../../ad/href";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
+  SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
+  SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
 import { POSTER_STEPS } from "../steps";
+import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
+import { WorkingBanner } from "../_components/working-banner";
 
 interface PosterImage {
   id: string;
@@ -75,7 +79,13 @@ export function PosterClient(
 ) {
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
-  const [busy, setBusy] = React.useState<string | null>(null);
+  /**
+   * 지금 무엇을 하는 중인가. `null` 이면 아무것도 안 한다.
+   *
+   * **`kind` 를 따로 든다.** 「그리는 중」일 때만 결과 자리에 빈 칸을 깔아야
+   * 하는데, 글자만으로 판단하면 문구를 고칠 때마다 그 조건이 깨진다.
+   */
+  const [busy, setBusy] = React.useState<{ kind: "plan" | "generate" | "review"; label: string; hint?: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
@@ -83,6 +93,21 @@ export function PosterClient(
   const router = useRouter();
   /** 지금 고치는 중인 변형. 한 번에 한 장만 고친다. */
   const [editing, setEditing] = React.useState<string | null>(null);
+
+  /**
+   * 기획 확인을 오른쪽 패널로 연다.
+   *
+   * **한 페이지를 통째로 쓸 내용이 아니었다**(2026-09-08 사용자). 칸 열한 개가
+   * 늘 다 보였고, 글자가 없는 그림인데 「글자와 피사체의 관계」까지 있었다.
+   *
+   * 페이지는 **05 결과**가 갖는다 — 만든 것을 보고 고르고 다시 만드는 자리라
+   * 넓어야 한다. 기획은 만들기 전에 한 번 훑는 자리이므로 패널이 맞다.
+   */
+  const [planOpen, setPlanOpen] = React.useState(false);
+  /** 저절로 연 적이 있나. 닫은 것을 다시 열면 성가시다. */
+  const openedOnce = React.useRef(false);
+  /** 빈 칸을 펼쳤나. 기본은 접힘. */
+  const [showEmpty, setShowEmpty] = React.useState(false);
 
   /**
    * 크게 볼 때 그림 옆에 같이 보여줄 것.
@@ -115,6 +140,52 @@ export function PosterClient(
     ["첨부한 그림에 대해", project.data.attachmentIntent?.trim() ?? ""],
     ["결과물에 대해", project.data.userInstruction?.trim() ?? ""],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+
+  /**
+   * 아직 아무것도 안 만들었으면 기획을 저절로 연다.
+   *
+   * 03에서 만들기를 누르면 여기로 오는데, 패널이 안 열리면 「빈 결과 화면」만
+   * 보이고 다음에 뭘 해야 할지 알 수 없다. 한 번만 연다 — 닫은 것을 다시 열면
+   * 성가시다.
+   */
+  React.useEffect(() => {
+    if (openedOnce.current) return;
+    if (images.length) return;
+    openedOnce.current = true;
+    setPlanOpen(true);
+  }, [images.length]);
+
+  /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
+  const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
+    SLOT_LABELS.map(([field]) => field),
+    (field) => String(slots[field] ?? ""),
+  );
+
+  /** 칸 하나를 그린다. 채운 칸과 접힌 칸이 같은 모양이어야 한다. */
+  function renderSlot(field: TextSlot) {
+    const entry = SLOT_LABELS.find(([name]) => name === field);
+    if (!entry) return null;
+    const [, label, kind] = entry;
+    return (
+      <div key={field} className="grid gap-1.5">
+        <Label htmlFor={`slot-${field}`}>{label}</Label>
+        {kind === "area" ? (
+          <Textarea
+            id={`slot-${field}`}
+            rows={2}
+            value={String(slots[field] ?? "")}
+            onChange={(event) => setField(field, event.target.value)}
+          />
+        ) : (
+          <Input
+            id={`slot-${field}`}
+            value={String(slots[field] ?? "")}
+            onChange={(event) => setField(field, event.target.value)}
+          />
+        )}
+      </div>
+    );
+  }
 
   function downloadVariant(image: PosterImage) {
     const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
@@ -173,7 +244,7 @@ export function PosterClient(
 
   /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
   async function runPlan() {
-    setBusy("기획하는 중…");
+    setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     setError(null);
     try {
       const body = await (await fetch(`/api/poster/projects/${project.id}/plan`, { method: "POST" })).json();
@@ -194,13 +265,13 @@ export function PosterClient(
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
-    setBusy("보내는 중…");
+    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
       const start = await (await fetch(`/api/poster/projects/${project.id}/generate`, { method: "POST" })).json();
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
-      setBusy("그리는 중… 2~3분 걸립니다");
+      setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
       await pollUntilDone(submission, project.data.variants);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "생성하지 못했습니다.");
@@ -227,7 +298,7 @@ export function PosterClient(
 
   /** 고른 것만 검수한다. 반려해도 이미지는 남고 다시 만들지는 사람이 누른다. */
   async function review() {
-    setBusy("검수하는 중…");
+    setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     setError(null);
     try {
       const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
@@ -248,7 +319,7 @@ export function PosterClient(
       setError("무엇을 고칠지 적어 주세요. 비어 있으면 같은 것을 또 만듭니다.");
       return;
     }
-    setBusy("보내는 중…");
+    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
     setError(null);
     try {
       const start = await (await fetch(`/api/poster/projects/${project.id}/edit`, {
@@ -257,7 +328,7 @@ export function PosterClient(
         body: JSON.stringify({ instruction }),
       })).json();
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
-      setBusy("고치는 중… 2~3분 걸립니다");
+      setBusy({ kind: "generate", label: "고치는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
       await pollUntilDone(start.submission, 1);
       setEditText("");
       setEditing(null);
@@ -337,113 +408,126 @@ export function PosterClient(
         </div>
       ) : null}
 
-      {busy ? (
-        <div role="status" className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-          {busy}
-        </div>
-      ) : null}
+      {busy ? <WorkingBanner label={busy.label} hint={busy.hint} /> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>기획 확인</CardTitle>
-          <CardDescription>
-            AI 가 채운 초안입니다. 틀린 칸만 고치세요. 빈 칸은 그대로 둬도 됩니다.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
+      {/*
+        **기획은 패널, 결과는 페이지.**
+
+        페이지는 05 결과가 갖는다 — 만든 것을 보고 고르고 다시 만드는 자리라
+        넓어야 한다. 기획은 만들기 전에 한 번 훑는 자리이므로 옆에서 나온다
+        (2026-09-08 사용자 결정).
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3">
+        <p className="text-sm text-muted-foreground">
+          {images.length ? "기획을 고치고 다시 만들 수 있습니다." : "기획을 확인한 뒤 만듭니다."}
+        </p>
+        <Button variant="secondary" size="sm" onClick={() => setPlanOpen(true)} disabled={Boolean(busy)}>
+          기획 확인
+        </Button>
+      </div>
+
+      <SidePanel open={planOpen} onOpenChange={setPlanOpen}>
+        <SidePanelContent>
+          <SidePanelHeader>
+            <SidePanelTitle>기획 확인</SidePanelTitle>
+            <SidePanelDescription>
+              AI 가 채운 초안입니다. 틀린 칸만 고치세요.
+            </SidePanelDescription>
+          </SidePanelHeader>
           {/*
-            사용자가 직접 친 말을 기획 칸 위에 둔다.
-
-            **이 화면은 「AI 가 채운 칸이 내가 시킨 것과 맞나」를 판단하는
-            자리다.** 그런데 정작 자기가 뭐라고 시켰는지는 01·03 을 떠나면 다시
-            볼 수 없었다. 아래 칸들보다 이 말이 세다는 것도 여기서만 말할 수 있다.
-
-            옛 작업에는 두 값이 없다 — 그때는 빈 자리로 남는다.
+            **`content-start` 가 있어야 한다.** 없으면 내용이 패널보다 짧을 때
+            grid 가 남는 높이를 줄마다 나눠 늘려, 칸 사이가 제멋대로 벌어진다
+            (2026-09-08 화면에서 138px 벌어짐).
           */}
-          {userWords.length ? (
-            <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
-              <span className="text-meta text-subtle-foreground">
-                내가 적은 말 — 아래 칸보다 우선합니다
-              </span>
-              {userWords.map(([label, text]) => (
-                <p key={label} className="text-sm">
-                  <span className="text-muted-foreground">{label} · </span>
-                  <span className="whitespace-pre-wrap">{text}</span>
-                </p>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {SLOT_LABELS.map(([field, label, kind]) => (
-              <div key={field} className={cn("grid gap-1.5", kind === "area" && "sm:col-span-2")}>
-                <Label htmlFor={`slot-${field}`}>{label}</Label>
-                {kind === "area" ? (
-                  <Textarea
-                    id={`slot-${field}`}
-                    rows={2}
-                    value={String(slots[field] ?? "")}
-                    onChange={(event) => setField(field, event.target.value)}
-                  />
-                ) : (
-                  <Input
-                    id={`slot-${field}`}
-                    value={String(slots[field] ?? "")}
-                    onChange={(event) => setField(field, event.target.value)}
-                  />
-                )}
+          <SidePanelBody className="grid content-start gap-5">
+            {userWords.length ? (
+              <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="text-meta text-subtle-foreground">
+                  내가 적은 말 — 아래 칸보다 우선합니다
+                </span>
+                {userWords.map(([label, text]) => (
+                  <p key={label} className="text-sm">
+                    <span className="text-muted-foreground">{label} · </span>
+                    <span className="whitespace-pre-wrap">{text}</span>
+                  </p>
+                ))}
               </div>
-            ))}
-          </div>
+            ) : null}
 
-          <fieldset className="grid gap-2">
-            <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
-            <div className="flex flex-wrap gap-2">
-              {TYPE_INTERACTIONS.map((value) => (
+            {/* 기획이 값을 넣은 칸이 이 그림에 필요한 칸이다. */}
+            <div className="grid gap-4">{filledFields.map(renderSlot)}</div>
+
+            {emptyFields.length ? (
+              <div className="grid gap-3">
                 <Button
-                  key={value}
                   type="button"
+                  variant="ghost"
                   size="sm"
-                  variant={slots.typeInteraction === value ? "default" : "secondary"}
-                  onClick={() => setSlots((current: PosterSlots) => ({
-                    ...current,
-                    typeInteraction: current.typeInteraction === value ? null : value,
-                  }))}
+                  className="justify-start px-0 text-muted-foreground"
+                  onClick={() => setShowEmpty((current) => !current)}
                 >
-                  {value}
+                  {showEmpty ? "▾" : "▸"} 비어 있는 칸 {emptyFields.length}개 · 필요하면 채우세요
                 </Button>
-              ))}
+                {showEmpty ? <div className="grid gap-4">{emptyFields.map(renderSlot)}</div> : null}
+              </div>
+            ) : null}
+
+            {/* **글자가 없으면 관계도 없다.** 판단이 아니라 규칙이다. */}
+            {showsTypeInteraction(slots) ? (
+              <fieldset className="grid gap-2">
+                <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
+                <div className="flex flex-wrap gap-2">
+                  {TYPE_INTERACTIONS.map((value) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      size="sm"
+                      variant={slots.typeInteraction === value ? "default" : "secondary"}
+                      onClick={() => setSlots((current: PosterSlots) => ({
+                        ...current,
+                        typeInteraction: current.typeInteraction === value ? null : value,
+                      }))}
+                    >
+                      {value}
+                    </Button>
+                  ))}
+                </div>
+              </fieldset>
+            ) : null}
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="slot-side">곁텍스트</Label>
+              <Textarea
+                id="slot-side"
+                rows={2}
+                value={slots.sideTexts.join("\n")}
+                onChange={(event) => setSlots((current: PosterSlots) => ({
+                  ...current,
+                  sideTexts: event.target.value.split("\n"),
+                }))}
+                placeholder={"28MM F2.0\nISO 400"}
+              />
+              <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>
             </div>
-          </fieldset>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="slot-side">곁텍스트</Label>
-            <Textarea
-              id="slot-side"
-              rows={2}
-              value={slots.sideTexts.join("\n")}
-              onChange={(event) => setSlots((current: PosterSlots) => ({
-                ...current,
-                sideTexts: event.target.value.split("\n"),
-              }))}
-              placeholder={"28MM F2.0\nISO 400"}
-            />
-            <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-2">
+          </SidePanelBody>
+          <SidePanelFooter className="flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
-              초안 다시 채우기
+              {busy?.kind === "plan" ? <><Loader2 className="mr-1.5 size-4 animate-spin" />기획하는 중…</> : "초안 다시 채우기"}
             </Button>
             <Button variant="secondary" onClick={() => void saveSlots()} disabled={saving || Boolean(busy)}>
               {saving ? "저장하는 중…" : "기획 저장"}
             </Button>
-            <Button onClick={() => void generate()} disabled={Boolean(busy)}>
-              {project.data.variants}장 만들기
+            <Button
+              onClick={() => { setPlanOpen(false); void generate(); }}
+              disabled={Boolean(busy)}
+            >
+              {busy?.kind === "generate"
+                ? <><Loader2 className="mr-1.5 size-4 animate-spin" />만드는 중…</>
+                : `${project.data.variants}장 만들기`}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </SidePanelFooter>
+        </SidePanelContent>
+      </SidePanel>
 
       <Card>
         <CardHeader>
@@ -462,7 +546,30 @@ export function PosterClient(
             </div>
           ) : null}
 
-          {list.length === 0 ? (
+          {/*
+            **그리는 동안 결과 자리가 비어 있으면 안 된다.**
+
+            전에는 「아직 만든 변형이 없습니다」가 그대로 있었다. 만들기를 눌러도
+            대시보드는 아무 변화가 없어, 눌린 건지 아닌지 알 수 없었다
+            (2026-09-08 사용자). 만들 장수만큼 빈 칸을 미리 깔면 **몇 장이 올
+            자리인지**까지 함께 말한다.
+          */}
+          {busy?.kind === "generate" && !list.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: project.data.variants }, (_unused, index) => (
+                <div
+                  key={index}
+                  /* **고를 비율 그대로 잡는다.** 다른 모양으로 두면 그림이 도착할 때
+                     화면이 튀고, 몇 대 몇으로 나오는지도 거짓말이 된다. */
+                  style={{ aspectRatio: placeholderRatio(project.ratio) }}
+                  className="flex animate-pulse flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary/40 bg-primary-soft"
+                >
+                  <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+                  <span className="text-xs text-primary">{index + 1}번째 그림</span>
+                </div>
+              ))}
+            </div>
+          ) : list.length === 0 ? (
             <p className="text-sm text-muted-foreground">아직 만든 변형이 없습니다.</p>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
