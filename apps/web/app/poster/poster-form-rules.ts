@@ -117,3 +117,72 @@ export function placeholderRatio(ratio: string): string {
   const usable = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
   return usable ? `${width} / ${height}` : "2 / 3";
 }
+
+/**
+ * 03 「한 줄 지시」에 01에서 적은 말을 미리 채워 둘까.
+ *
+ * **01에서 이미 한 번 말했는데 03에서 또 쓰게 하고 있었다**(2026-09-08 사용자).
+ * 한 줄 지시는 비면 다음으로 못 가는 칸이라, 「1번 사진의 사람들을 2번 느낌으로」를
+ * 그대로 한 번 더 옮겨 적어야 했다.
+ *
+ * 채워 두기만 한다 — **고치든 지우든 더 쓰든 사용자 마음이다.** 그래서 조건이
+ * 셋이다.
+ *
+ *   손댄 적 없다   한 번이라도 고쳤으면 그 사람의 것이다. 덮지 않는다
+ *   비어 있다      쓰다 만 것을 지우고 덮으면 남의 글을 지우는 것이다
+ *   01에 말이 있다  없으면 채울 것이 없다
+ *
+ * 되돌아가서 01을 고치면 그때 다시 채워진다 — 03을 아직 안 건드렸을 때만.
+ */
+export function seedInstruction(input: {
+  attachmentIntent: string;
+  instruction: string;
+  touched: boolean;
+}): string | null {
+  if (input.touched) return null;
+  if (input.instruction.trim()) return null;
+  const seed = input.attachmentIntent.trim();
+  return seed ? seed : null;
+}
+
+/**
+ * 기획 확인에서 어떤 칸을 바로 보여줄까.
+ *
+ * **칸을 없애지도, 다 보여주지도 않는다**(2026-09-08 사용자 결정).
+ *
+ * 칸 열한 개가 늘 다 보였다. 글자가 하나도 없는 그림인데 「글자와 피사체의
+ * 관계」가 버젓이 있었고, 그 화면 하나가 페이지를 통째로 썼다.
+ *
+ * 기준은 하나다 — **기획이 값을 넣은 칸이 이 그림에 필요한 칸이다.** 빈 칸은
+ * 접어 둔다. 없애지는 않는다: 없으면 사용자가 고를 방법도 사라진다.
+ */
+export function splitFilledSlots<T extends string>(
+  fields: T[],
+  valueOf: (field: T) => string,
+): { filled: T[]; empty: T[] } {
+  const filled: T[] = [];
+  const empty: T[] = [];
+  for (const field of fields) (valueOf(field).trim() ? filled : empty).push(field);
+  return { filled, empty };
+}
+
+/**
+ * 「글자와 피사체의 관계」를 보여줄까.
+ *
+ * **글자가 없으면 관계도 없다.** 이건 판단이 아니라 규칙이다 — 헤드라인·받침
+ * 문구·곁텍스트가 전부 비었으면 관계를 고를 대상 자체가 없다.
+ *
+ * 이미 고른 값이 있으면 보여준다. 안 그러면 글자를 지우는 순간 고른 값이
+ * 화면에서 사라져 되돌릴 방법이 없어진다.
+ */
+export function showsTypeInteraction(slots: {
+  headline?: string | null;
+  subline?: string | null;
+  sideTexts?: string[] | null;
+  typeInteraction?: string | null;
+}): boolean {
+  if (slots.typeInteraction) return true;
+  const hasText = [slots.headline, slots.subline, ...(slots.sideTexts ?? [])]
+    .some((value) => (value ?? "").trim().length > 0);
+  return hasText;
+}

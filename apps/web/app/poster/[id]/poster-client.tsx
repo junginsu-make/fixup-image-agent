@@ -6,13 +6,15 @@ import { Download, Loader2, Wand2 } from "lucide-react";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
+  SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
+  SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
 import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
 import { POSTER_STEPS } from "../steps";
-import { placeholderRatio } from "../poster-form-rules";
+import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
 
 interface PosterImage {
@@ -87,6 +89,21 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
   const [editing, setEditing] = React.useState<string | null>(null);
 
   /**
+   * 기획 확인을 오른쪽 패널로 연다.
+   *
+   * **한 페이지를 통째로 쓸 내용이 아니었다**(2026-09-08 사용자). 칸 열한 개가
+   * 늘 다 보였고, 글자가 없는 그림인데 「글자와 피사체의 관계」까지 있었다.
+   *
+   * 페이지는 **05 결과**가 갖는다 — 만든 것을 보고 고르고 다시 만드는 자리라
+   * 넓어야 한다. 기획은 만들기 전에 한 번 훑는 자리이므로 패널이 맞다.
+   */
+  const [planOpen, setPlanOpen] = React.useState(false);
+  /** 저절로 연 적이 있나. 닫은 것을 다시 열면 성가시다. */
+  const openedOnce = React.useRef(false);
+  /** 빈 칸을 펼쳤나. 기본은 접힘. */
+  const [showEmpty, setShowEmpty] = React.useState(false);
+
+  /**
    * 크게 볼 때 그림 옆에 같이 보여줄 것.
    *
    * 그림에 붙여 둔다 — 모달은 화면 전체에서 하나뿐이라 화면마다 넘겨받게
@@ -117,6 +134,52 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
     ["첨부한 그림에 대해", project.data.attachmentIntent?.trim() ?? ""],
     ["결과물에 대해", project.data.userInstruction?.trim() ?? ""],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+
+  /**
+   * 아직 아무것도 안 만들었으면 기획을 저절로 연다.
+   *
+   * 03에서 만들기를 누르면 여기로 오는데, 패널이 안 열리면 「빈 결과 화면」만
+   * 보이고 다음에 뭘 해야 할지 알 수 없다. 한 번만 연다 — 닫은 것을 다시 열면
+   * 성가시다.
+   */
+  React.useEffect(() => {
+    if (openedOnce.current) return;
+    if (images.length) return;
+    openedOnce.current = true;
+    setPlanOpen(true);
+  }, [images.length]);
+
+  /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
+  const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
+    SLOT_LABELS.map(([field]) => field),
+    (field) => String(slots[field] ?? ""),
+  );
+
+  /** 칸 하나를 그린다. 채운 칸과 접힌 칸이 같은 모양이어야 한다. */
+  function renderSlot(field: TextSlot) {
+    const entry = SLOT_LABELS.find(([name]) => name === field);
+    if (!entry) return null;
+    const [, label, kind] = entry;
+    return (
+      <div key={field} className="grid gap-1.5">
+        <Label htmlFor={`slot-${field}`}>{label}</Label>
+        {kind === "area" ? (
+          <Textarea
+            id={`slot-${field}`}
+            rows={2}
+            value={String(slots[field] ?? "")}
+            onChange={(event) => setField(field, event.target.value)}
+          />
+        ) : (
+          <Input
+            id={`slot-${field}`}
+            value={String(slots[field] ?? "")}
+            onChange={(event) => setField(field, event.target.value)}
+          />
+        )}
+      </div>
+    );
+  }
 
   function downloadVariant(image: PosterImage) {
     const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
@@ -341,113 +404,124 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
 
       {busy ? <WorkingBanner label={busy.label} hint={busy.hint} /> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>기획 확인</CardTitle>
-          <CardDescription>
-            AI 가 채운 초안입니다. 틀린 칸만 고치세요. 빈 칸은 그대로 둬도 됩니다.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
+      {/*
+        **기획은 패널, 결과는 페이지.**
+
+        페이지는 05 결과가 갖는다 — 만든 것을 보고 고르고 다시 만드는 자리라
+        넓어야 한다. 기획은 만들기 전에 한 번 훑는 자리이므로 옆에서 나온다
+        (2026-09-08 사용자 결정).
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3">
+        <p className="text-sm text-muted-foreground">
+          {images.length ? "기획을 고치고 다시 만들 수 있습니다." : "기획을 확인한 뒤 만듭니다."}
+        </p>
+        <Button variant="secondary" size="sm" onClick={() => setPlanOpen(true)} disabled={Boolean(busy)}>
+          기획 확인
+        </Button>
+      </div>
+
+      <SidePanel open={planOpen} onOpenChange={setPlanOpen}>
+        <SidePanelContent>
+          <SidePanelHeader>
+            <SidePanelTitle>기획 확인</SidePanelTitle>
+            <SidePanelDescription>
+              AI 가 채운 초안입니다. 틀린 칸만 고치세요.
+            </SidePanelDescription>
+          </SidePanelHeader>
           {/*
-            사용자가 직접 친 말을 기획 칸 위에 둔다.
-
-            **이 화면은 「AI 가 채운 칸이 내가 시킨 것과 맞나」를 판단하는
-            자리다.** 그런데 정작 자기가 뭐라고 시켰는지는 01·03 을 떠나면 다시
-            볼 수 없었다. 아래 칸들보다 이 말이 세다는 것도 여기서만 말할 수 있다.
-
-            옛 작업에는 두 값이 없다 — 그때는 빈 자리로 남는다.
+            **`content-start` 가 있어야 한다.** 없으면 내용이 패널보다 짧을 때
+            grid 가 남는 높이를 줄마다 나눠 늘려, 칸 사이가 제멋대로 벌어진다
+            (2026-09-08 화면에서 138px 벌어짐).
           */}
-          {userWords.length ? (
-            <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
-              <span className="text-meta text-subtle-foreground">
-                내가 적은 말 — 아래 칸보다 우선합니다
-              </span>
-              {userWords.map(([label, text]) => (
-                <p key={label} className="text-sm">
-                  <span className="text-muted-foreground">{label} · </span>
-                  <span className="whitespace-pre-wrap">{text}</span>
-                </p>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {SLOT_LABELS.map(([field, label, kind]) => (
-              <div key={field} className={cn("grid gap-1.5", kind === "area" && "sm:col-span-2")}>
-                <Label htmlFor={`slot-${field}`}>{label}</Label>
-                {kind === "area" ? (
-                  <Textarea
-                    id={`slot-${field}`}
-                    rows={2}
-                    value={String(slots[field] ?? "")}
-                    onChange={(event) => setField(field, event.target.value)}
-                  />
-                ) : (
-                  <Input
-                    id={`slot-${field}`}
-                    value={String(slots[field] ?? "")}
-                    onChange={(event) => setField(field, event.target.value)}
-                  />
-                )}
+          <SidePanelBody className="grid content-start gap-5">
+            {userWords.length ? (
+              <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
+                <span className="text-meta text-subtle-foreground">
+                  내가 적은 말 — 아래 칸보다 우선합니다
+                </span>
+                {userWords.map(([label, text]) => (
+                  <p key={label} className="text-sm">
+                    <span className="text-muted-foreground">{label} · </span>
+                    <span className="whitespace-pre-wrap">{text}</span>
+                  </p>
+                ))}
               </div>
-            ))}
-          </div>
+            ) : null}
 
-          <fieldset className="grid gap-2">
-            <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
-            <div className="flex flex-wrap gap-2">
-              {TYPE_INTERACTIONS.map((value) => (
+            {/* 기획이 값을 넣은 칸이 이 그림에 필요한 칸이다. */}
+            <div className="grid gap-4">{filledFields.map(renderSlot)}</div>
+
+            {emptyFields.length ? (
+              <div className="grid gap-3">
                 <Button
-                  key={value}
                   type="button"
+                  variant="ghost"
                   size="sm"
-                  variant={slots.typeInteraction === value ? "default" : "secondary"}
-                  onClick={() => setSlots((current: PosterSlots) => ({
-                    ...current,
-                    typeInteraction: current.typeInteraction === value ? null : value,
-                  }))}
+                  className="justify-start px-0 text-muted-foreground"
+                  onClick={() => setShowEmpty((current) => !current)}
                 >
-                  {value}
+                  {showEmpty ? "▾" : "▸"} 비어 있는 칸 {emptyFields.length}개 · 필요하면 채우세요
                 </Button>
-              ))}
+                {showEmpty ? <div className="grid gap-4">{emptyFields.map(renderSlot)}</div> : null}
+              </div>
+            ) : null}
+
+            {/* **글자가 없으면 관계도 없다.** 판단이 아니라 규칙이다. */}
+            {showsTypeInteraction(slots) ? (
+              <fieldset className="grid gap-2">
+                <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
+                <div className="flex flex-wrap gap-2">
+                  {TYPE_INTERACTIONS.map((value) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      size="sm"
+                      variant={slots.typeInteraction === value ? "default" : "secondary"}
+                      onClick={() => setSlots((current: PosterSlots) => ({
+                        ...current,
+                        typeInteraction: current.typeInteraction === value ? null : value,
+                      }))}
+                    >
+                      {value}
+                    </Button>
+                  ))}
+                </div>
+              </fieldset>
+            ) : null}
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="slot-side">곁텍스트</Label>
+              <Textarea
+                id="slot-side"
+                rows={2}
+                value={slots.sideTexts.join("\n")}
+                onChange={(event) => setSlots((current: PosterSlots) => ({
+                  ...current,
+                  sideTexts: event.target.value.split("\n"),
+                }))}
+                placeholder={"28MM F2.0\nISO 400"}
+              />
+              <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>
             </div>
-          </fieldset>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="slot-side">곁텍스트</Label>
-            <Textarea
-              id="slot-side"
-              rows={2}
-              value={slots.sideTexts.join("\n")}
-              onChange={(event) => setSlots((current: PosterSlots) => ({
-                ...current,
-                sideTexts: event.target.value.split("\n"),
-              }))}
-              placeholder={"28MM F2.0\nISO 400"}
-            />
-            <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-2">
-            {/*
-              **누른 그 단추가 말하게 한다.** 띠는 화면 위에 있고 단추는 아래에
-              있어, 누른 직후 눈이 머무는 곳에는 아무 변화가 없었다.
-            */}
+          </SidePanelBody>
+          <SidePanelFooter className="flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
               {busy?.kind === "plan" ? <><Loader2 className="mr-1.5 size-4 animate-spin" />기획하는 중…</> : "초안 다시 채우기"}
             </Button>
             <Button variant="secondary" onClick={() => void saveSlots()} disabled={saving || Boolean(busy)}>
               {saving ? "저장하는 중…" : "기획 저장"}
             </Button>
-            <Button onClick={() => void generate()} disabled={Boolean(busy)}>
+            <Button
+              onClick={() => { setPlanOpen(false); void generate(); }}
+              disabled={Boolean(busy)}
+            >
               {busy?.kind === "generate"
                 ? <><Loader2 className="mr-1.5 size-4 animate-spin" />만드는 중…</>
                 : `${project.data.variants}장 만들기`}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </SidePanelFooter>
+        </SidePanelContent>
+      </SidePanel>
 
       <Card>
         <CardHeader>
