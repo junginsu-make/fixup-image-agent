@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { creditUnits } from "@fixup/shared";
+import { imageCreditUnits, maxImageUnitUsd } from "../../../../lib/credit-cost";
 import { regenerateAngle } from "../../../../lib/characters";
 import { IMAGE_MODELS } from "@fixup/pdp-core";
 
@@ -38,8 +40,17 @@ export async function POST(req: Request) {
     );
   }
 
-  // 한 장이다.
-  const reservation = await reserveAiUsage(req, "pdp_image", 1);
+  /**
+   * 한 장이다. **다만 모델마다 값이 다르다**(2026-09-08 사용자 결정).
+   *
+   * 전에는 무엇을 고르든 1장이었다 — nano-banana($0.039)나 GPT Image 2($0.219)나
+   * 같은 1장이라, 비싼 모델을 쓰는 쪽이 5배 덜 냈다.
+   */
+  const reserved = parsed.data.modelId
+    ? imageCreditUnits(parsed.data.modelId, 1)
+    // 결이 모델을 정하므로 예약 시점에는 모른다. 비싸게 잡고 아래에서 확정한다.
+    : creditUnits(maxImageUnitUsd());
+  const reservation = await reserveAiUsage(req, "pdp_image", reserved);
   if (!reservation.ok) return reservation.response;
 
   try {
@@ -54,7 +65,8 @@ export async function POST(req: Request) {
     const usage = await finalizeAiUsage(
       reservation,
       result.ok,
-      result.ok ? 1 : 0,
+      // **실제로 쓴 모델로 확정한다.** 예약은 비싸게 잡아 둔 것이다.
+      result.ok ? imageCreditUnits(result.model, 1) : 0,
       result.ok ? undefined : "character_angle_failed",
       result.ok ? { model: result.model, billableImages: 1 } : undefined,
     );

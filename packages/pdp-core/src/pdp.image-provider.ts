@@ -1,6 +1,5 @@
 import { PdpServiceError } from "./pdp.service";
 import {
-  IMAGE_MODEL_CREDIT_WEIGHT,
   IMAGE_MODELS,
   type AspectRatio,
   type ImageModelId,
@@ -107,9 +106,13 @@ export function resolveEndpoint(model: ImageModelId, references: ReferenceImage[
   return references.length > 0 ? entry.edit : entry.textToImage;
 }
 
-export function creditUnitsFor(model: ImageModelId, imageCount: number) {
-  return IMAGE_MODEL_CREDIT_WEIGHT[model] * imageCount;
-}
+/**
+ * **없어졌다.** 손으로 매긴 정수 가중치로 장을 세던 함수다.
+ *
+ * 같은 「1장」이 모델마다 $0.039~$0.060 로 갈렸고 크기는 담을 자리조차 없었다.
+ * 이제 실제 단가에서 뽑는다 — `apps/web/lib/credit-cost.ts` 의
+ * `imageCreditUnits` (2026-09-08 사용자 결정).
+ */
 
 /** 모델별로 한 요청에 묶을 수 있는 최대 장수. */
 export function maxBatchSizeFor(model: ImageModelId) {

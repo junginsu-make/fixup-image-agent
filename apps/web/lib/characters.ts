@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { imageCreditUnits } from "./credit-cost";
 import {
   CHARACTER_ANGLES,
   buildCandidatePrompt,
   buildTurnaroundPrompt,
-  creditUnitsFor,
   generateImageViaFal,
   selectCharacterModel,
   type AspectRatio,
@@ -778,5 +778,11 @@ export function characterCreditCost(
   const model = modelId ?? selectCharacterModel(look);
   const candidates = clampCandidates(counts?.candidates);
   const angles = counts?.extraAngles ?? DEFAULT_EXTRA_ANGLES.length;
-  return creditUnitsFor(model, candidates + angles);
+  /**
+   * **장을 실제 단가에서 뽑는다**(2026-09-08 사용자 결정).
+   *
+   * 전에는 손으로 매긴 정수 가중치였다 — 같은 「1장」이 모델마다 $0.039~$0.060
+   * 로 갈렸다.
+   */
+  return imageCreditUnits(model, candidates + angles);
 }

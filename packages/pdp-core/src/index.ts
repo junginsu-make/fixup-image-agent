@@ -15,7 +15,6 @@ export { isBlockingDefect } from "./pdp.qa";
 export {
   buildFalPayload,
   chunkForModel,
-  creditUnitsFor,
   generateImageViaFal,
   maxBatchSizeFor,
   resolveEndpoint,

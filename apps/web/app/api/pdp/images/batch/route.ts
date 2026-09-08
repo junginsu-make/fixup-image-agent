@@ -1,5 +1,4 @@
 import {
-  creditUnitsFor,
   pickAngleForSection,
   generateSectionImage,
   maxBatchSizeFor,
@@ -16,6 +15,7 @@ import type {
 import { resolveGeminiKey } from "../../../../../lib/server-keys";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../../lib/membership/api";
+import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
 
@@ -76,7 +76,13 @@ export async function POST(req: Request) {
 
   // 섹션마다 따로 예약하면 concurrent_limit(1건)에 막힌다.
   // 배치 전체를 한 번에 예약해 예약 건수를 1로 유지한다.
-  const reservation = await reserveAiUsage(req, "pdp_image", creditUnitsFor(model, sections.length));
+  /**
+   * **장을 실제 단가에서 뽑는다**(2026-09-08 사용자 결정).
+   *
+   * 전에는 모델마다 손으로 매긴 정수 가중치였다. 같은 「1장」이 $0.039~$0.060 로
+   * 갈려 싼 모델을 쓰는 사람이 손해를 봤고, 크기 차이는 담을 자리조차 없었다.
+   */
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
 
   const apiKey = resolveGeminiKey();
@@ -169,7 +175,7 @@ export async function POST(req: Request) {
   const usage = await finalizeAiUsage(
     reservation,
     succeeded > 0,
-    creditUnitsFor(model, succeeded),
+    imageCreditUnits(model, succeeded),
     succeeded > 0 ? undefined : "batch_all_failed",
     { model, billableImages },
   );
