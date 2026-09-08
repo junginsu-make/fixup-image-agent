@@ -8,6 +8,7 @@ import type { SnsProjectRecord } from "../../api/sns/projects/project-service";
 import { CopyReview } from "./copy-review";
 import { ResultBoard } from "./result-board";
 import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/sns/queued-flow";
+import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
 
@@ -144,7 +145,11 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setBusy("generating");
     setMessage("");
     try {
-      const saved = await projectRequest(`/api/sns/projects/${projectId}/generate`, { method: "POST" });
+      // 크레딧이 깎이는 요청이다 — 열쇠 없이 보내면 서버가 예약을 거절한다.
+      const saved = await projectRequest(`/api/sns/projects/${projectId}/generate`, {
+        method: "POST",
+        headers: billableHeaders(),
+      });
       setProject(saved);
       setView("result");
     } catch (error) {

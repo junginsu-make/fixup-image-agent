@@ -3,9 +3,11 @@
 import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
+import { MAX_CARDS, groupAttachments, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StepBar, type StepDefinition } from "@fixup/ui";
 import { AttachmentPicker } from "./_components/attachment-picker";
+import type { SlotIntents } from "./_components/slot-intents";
+import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
@@ -27,6 +29,13 @@ export function NewSnsClient() {
   const [source, setSource] = React.useState<SourceDraft>({ kind: "text", text: "" });
   const [toneNote, setToneNote] = React.useState("");
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
+  /**
+   * 자리마다 「이 그림들을 어떻게 쓸까요」 (표지/속지/엔딩).
+   *
+   * **한 칸으로 안 묶는다.** 표지와 속지는 원하는 것이 다르다
+   * (2026-09-08 사용자 결정).
+   */
+  const [intents, setIntents] = React.useState<SlotIntents>({ cover: "", body: "", ending: "" });
   const [spec, setSpec] = React.useState<SnsSpec>({
     ratio: "4:5",
     cardCountMode: "auto",
@@ -98,6 +107,8 @@ export function NewSnsClient() {
           source,
           toneNote: toneNote.trim() || undefined,
           attachments,
+      // 화면에 없는 자리의 글은 지우고 보낸다 — 못 보는 값이 남으면 나중에 물린다.
+      attachmentIntents: visibleIntents(groupAttachments(attachments), intents),
           ratio: spec.ratio,
           cardCountMode: spec.cardCountMode,
           cardCount: spec.cardCountMode === "fixed" ? spec.cardCount : undefined,
@@ -141,7 +152,7 @@ export function NewSnsClient() {
             </p>
           ) : null}
           {step === "content" ? <SourceInput title={title} onTitleChange={setTitle} source={source} onSourceChange={setSource} toneNote={toneNote} onToneNoteChange={setToneNote} /> : null}
-          {step === "images" ? <AttachmentPicker attachments={attachments} onChange={setAttachments} modelId={spec.modelId} totalCards={totalCards} /> : null}
+          {step === "images" ? <AttachmentPicker attachments={attachments} onChange={setAttachments} modelId={spec.modelId} totalCards={totalCards} intents={intents} onIntentsChange={setIntents} /> : null}
           {step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}
 
           {message ? <p role="alert" className="whitespace-pre-line rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{message}</p> : null}

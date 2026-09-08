@@ -24,6 +24,8 @@ export interface SnsProjectCreateRecord {
     flow?: SnsFlowState;
     look?: ImageLook;
     userInstruction?: string;
+    /** 자리마다 사용자가 적은 말 (표지/속지/엔딩). 옛 작업에는 없다. */
+    attachmentIntents?: { cover?: string; body?: string; ending?: string };
   };
   slotPlan: SlotPlan;
 }
@@ -80,6 +82,8 @@ export function createProjectService(repository: SnsProjectRepository) {
           attachments: input.attachments,
           look: input.look,
           userInstruction: input.userInstruction,
+          // 자리마다 적은 말 (표지/속지/엔딩).
+          attachmentIntents: input.attachmentIntents,
         },
         slotPlan,
       });

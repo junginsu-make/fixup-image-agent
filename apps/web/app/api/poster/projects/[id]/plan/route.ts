@@ -1,4 +1,5 @@
-import { planPoster, planReferences, readPeople, readReferenceGrammar } from "@fixup/poster-core";
+import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
+import { planReferences } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";

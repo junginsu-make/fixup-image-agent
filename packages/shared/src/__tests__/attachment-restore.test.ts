@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
+import { ATTACHMENT_ROLE_LABEL } from "../attachment-role";
 import { planReferences, restoreAttachments, roleOf } from "../attachment-restore";
 
 /**

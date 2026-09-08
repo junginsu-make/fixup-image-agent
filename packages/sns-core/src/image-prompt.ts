@@ -3,6 +3,7 @@ import {
   designerPersona,
   imageLookDirective,
   preserveDirective,
+  restyledPersonDirective,
   priorityLine,
   userInstructionHead,
   userInstructionTail,
@@ -30,6 +31,13 @@ export interface PromptTuning {
   look?: ImageLook;
   /** 사용자가 직접 친 지시. 다른 모든 지시보다 세다. */
   userInstruction?: string;
+  /**
+   * **이 자리**의 첨부를 어떻게 쓸지 사용자가 적은 말 (표지/속지/엔딩).
+   *
+   * 표지와 속지는 원하는 것이 다르므로 자리마다 따로 받는다. 적혀 있으면 그
+   * 자리의 역할 고정 문구를 빼고 이 말만 남긴다(설계 §4-1 A안).
+   */
+  attachmentIntent?: string;
 }
 
 /**
@@ -83,12 +91,55 @@ export function referenceWarningsForRole(
   return [`${label} 레퍼런스가 없습니다. ${label} 카드가 다른 역할과 다른 모양으로 나올 수 있습니다.`];
 }
 
+/** 사용자가 고른 역할의 이름. **규칙은 안 붙인다** (설계 §4-1 A안). */
+function shortRole(image: Attachment): string {
+  if (image.kind === "style_reference") return "reference to imitate";
+  if (image.kind !== "keep_identity") return "place as is";
+  if (image.subject !== "person") return "subject to keep";
+  return image.restyle ? "person to keep, redrawn in another style" : "person to keep";
+}
+
 export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning = {}): string {
   const lines: string[] = [];
   if (images.length > 0) lines.push(ATTACHMENT_DECLARATION);
   lines.push(
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   );
+  /**
+   * **사용자가 이 자리에 대해 적은 말.**
+   *
+   * 표지와 속지는 원하는 것이 다르므로 자리마다 따로 받는다(2026-09-08 사용자
+   * 결정). 이미지 만들기는 결과가 한 장이라 칸이 하나면 됐지만, 카드뉴스는
+   * 자리가 셋이다.
+   */
+  const intent = tuning.attachmentIntent?.trim() ?? "";
+
+  /**
+   * 지시를 적었으면 **부딪히는 고정 문구를 통째로 뺀다** (설계 §4-1 A안).
+   *
+   * 이미지 만들기에서 실측으로 정한 것이다. 역할 문구가 여섯 문장이고 전부
+   * 구체적이라, 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼다.
+   *
+   * **번호와 역할 이름은 남긴다.** 빼면 「①번」이 가리킬 것이 없어진다.
+   */
+  if (intent && images.length) {
+    lines.push(
+      "The user wrote what to do with these images. Their words replace the usual rules for each "
+      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
+      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
+    );
+    images.forEach((image, offset) => {
+      const number = offset + 1;
+      const person = image.kind === "keep_identity" && image.subject === "person";
+      // 「사람은 그대로, 그림 느낌만」은 안 지운다 — 부딪히지 않고, 지우면
+      // 사람을 하나하나 옮기라는 말이 사라져 작은 것(안경 같은)이 빠진다.
+      if (person && image.restyle) {
+        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+        return;
+      }
+      lines.push(`Image ${number}: the user marked this "${shortRole(image)}".`);
+    });
+  } else {
   images.forEach((image, offset) => {
     const number = offset + 1;
     if (image.kind === "style_reference") {
@@ -110,22 +161,31 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
         "match the text of THIS card.",
       );
     } else if (image.kind === "keep_identity") {
+      const person = image.subject === "person";
+      // 사람을 그대로 두고 그림 느낌만 바꾸는 경우는 다른 말을 쓴다 (설계 §4-3).
+      // `preserveDirective` 는 restyle 을 금지해서, 그 말이 가면 처음부터 막힌다.
+      if (person && image.restyle) {
+        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+        return;
+      }
       // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
       // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
-      const person = image.subject === "person";
       lines.push(
         `Image ${number} is a ${person ? "PRESERVED PERSON" : "PRESERVED SUBJECT"}. ` +
         preserveDirective(person ? "preserve-person" : "preserve-object"),
       );
     }
   });
+  }
   // 우선순위 문장은 다섯 도구가 같은 것을 쓴다(@fixup/shared). 여기서 따로
   // 쓰면 도구마다 순서가 갈리고, 같은 지시에 다른 그림이 나온다.
   //
   // 사용자가 직접 친 말이 맨 위다. 전에는 그 자리가 아예 없어서, 「배경을
   // 밤으로」라고 적어도 낮인 레퍼런스가 이겼다.
   const priority = priorityLine({
-    hasUserInstruction: Boolean(tuning.userInstruction?.trim()),
+    // 첨부 지시도 사람이 친 말이다. 이것만 적었을 때 우선순위 줄이 빠지면
+    // 「무엇이 먼저인지」를 아무도 안 말해 준다.
+    hasUserInstruction: Boolean(mergedInstruction(tuning)),
     hasPreserved: images.some((image) => image.kind === "keep_identity"),
   });
   if (priority) lines.push(priority);
@@ -142,6 +202,8 @@ export function buildFrame(input: {
   language: CopyLanguage;
   look?: ImageLook;
   userInstruction?: string;
+  /** 이 카드 자리에 적은 말. 부르는 쪽이 골라 넘긴다. */
+  attachmentIntent?: string;
 }): string {
   const texts = [
     ["HEADLINE", input.copy.headline],
@@ -152,7 +214,11 @@ export function buildFrame(input: {
   const look = lookBlock(input.look);
 
   return [
-    buildAttachmentBlock(input.images, { look: input.look, userInstruction: input.userInstruction }),
+    buildAttachmentBlock(input.images, {
+      look: input.look,
+      userInstruction: input.userInstruction,
+      attachmentIntent: input.attachmentIntent,
+    }),
     ...(look ? ["", look] : []),
     "",
     `Render this ${LANGUAGE_LABEL[input.language]} text exactly as written, with correct spelling and spacing:`,
@@ -177,8 +243,33 @@ export function buildFrame(input: {
  * 프롬프트 뒤에 긴 문단을 덧붙였더니 앞쪽 구도 지시가 밀려 무시됐다. 긴
  * 프롬프트에서 가운데 문장은 힘을 잃는다 — 가장 중요한 것은 양끝에 둔다.
  */
+/**
+ * 사람이 친 말 둘을 하나로 합친다.
+ *
+ * **자리별 첨부 지시(`attachmentIntent`)와 결과물 지시(`userInstruction`)는 서로
+ * 다른 말이다.** 우선순위 규칙(`priorityLine`)이 「USER INSTRUCTION」 하나를
+ * 가리키므로, 둘을 따로 보내면 어느 쪽이 센지 모호해진다. 라벨을 붙여 합치면
+ * 순서만으로 무엇이 먼저인지 말할 수 있다.
+ *
+ * ── 이것이 없으면 지시를 적는 쪽이 손해다 ───────────────────
+ *
+ * 지시를 적으면 역할 고정 문구가 사라지는데(4-1 A안), 그 자리를 채울 말이 안
+ * 실리면 **보호 문구만 없어지고 대신 들어오는 말이 없다.** 실제로 그 상태로
+ * 한 번 나갔다 — 「USER INSTRUCTION 을 읽고 따르라」고 써 놓고 그 블록이
+ * 비어 있었다(2026-09-08 리뷰).
+ *
+ * 이미지 만들기가 이미 같은 모양이다(`poster-core/src/prompt.ts`).
+ */
+export function mergedInstruction(tuning: PromptTuning): string {
+  return [
+    tuning.attachmentIntent?.trim() ? `첨부한 그림에 대해: ${tuning.attachmentIntent.trim()}` : "",
+    tuning.userInstruction?.trim() ? `결과물에 대해: ${tuning.userInstruction.trim()}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 export function composePrompt(frame: string, llmBody: string, tuning: PromptTuning = {}): string {
-  const instruction = tuning.userInstruction ?? "";
+  // 첨부 지시와 결과물 지시를 함께 싣는다. 하나만 실으면 나머지가 사라진다.
+  const instruction = mergedInstruction(tuning);
   return [
     userInstructionHead(instruction),
     // 누가 그리는가는 사용자가 친 말 다음이다. 다섯 도구가 같은 사람을 세운다.
@@ -187,6 +278,19 @@ export function composePrompt(frame: string, llmBody: string, tuning: PromptTuni
     frame,
     userInstructionTail(instruction),
   ].filter(Boolean).join("\n\n");
+}
+
+/**
+ * 자리마다 사용자가 적은 말 (표지/속지/엔딩).
+ *
+ * **한 칸으로 묶지 않는다.** 표지와 속지는 원하는 것이 다르다
+ * (2026-09-08 사용자 결정).
+ */
+export type AttachmentIntents = Partial<Record<StyleRole, string>>;
+
+/** 이 카드 자리에 해당하는 말만 꺼낸다. 없으면 빈 문자열. */
+export function intentForRole(intents: AttachmentIntents | undefined, role: StyleRole): string {
+  return intents?.[role]?.trim() ?? "";
 }
 
 export interface ImagePromptInput {
@@ -198,6 +302,8 @@ export interface ImagePromptInput {
   language: CopyLanguage;
   look?: ImageLook;
   userInstruction?: string;
+  /** 자리마다 적은 말. 이 카드의 자리에 해당하는 것만 쓴다. */
+  attachmentIntents?: AttachmentIntents;
 }
 
 export interface ScenePromptRequest {
@@ -224,10 +330,20 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
   // 적은 사용자에게 낮 장면을 써 주고, 그 장면이 그대로 이미지 모델에 간다.
   return {
     prompt: [
-      userInstructionHead(input.userInstruction ?? ""),
+      // 장면을 쓰는 LLM 도 첨부 지시를 알아야 한다. 모르면 「①번 사람을」이라고
+      // 적은 사용자에게 그 사람이 없는 장면을 써 준다.
+      userInstructionHead(mergedInstruction({
+        userInstruction: input.userInstruction,
+        attachmentIntent: intentForRole(input.attachmentIntents, input.role),
+      })),
       "Write the visual scene prompt for one card-news image.",
       "Inspect the attached reference images directly. Use them as the visual source; do not replace them with a textual reconstruction.",
-      buildAttachmentBlock(references, { look: input.look, userInstruction: input.userInstruction }),
+      buildAttachmentBlock(references, {
+        look: input.look,
+        userInstruction: input.userInstruction,
+        // 이 카드의 자리에 적은 말만 간다 — 표지 지시가 속지에 새면 안 된다.
+        attachmentIntent: intentForRole(input.attachmentIntents, input.role),
+      }),
       lookBlock(input.look),
       `Card role: ${input.role}`,
       `Planner intent: ${input.plan.intent}`,

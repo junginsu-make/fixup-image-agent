@@ -17,7 +17,29 @@ const AttachmentSchema = z.object({
   url: z.string().min(1),
   role: z.enum(["cover", "body", "ending"]).optional(),
   subject: z.enum(["person", "object"]).optional(),
+  /**
+   * 사람은 그대로 두되 **그림 느낌만** 바꿔도 되나 (설계 §4-3).
+   *
+   * `keep_identity` + `subject: "person"` 일 때만 뜻이 있다. 없으면 지금까지처럼
+   * 그림 느낌까지 고정한다 — 옛 작업에는 이 값이 없다.
+   */
+  restyle: z.boolean().optional(),
   bodySlot: z.number().int().optional(),
+}).strict();
+
+/**
+ * 자리마다 「이 그림들을 어떻게 쓸까요」.
+ *
+ * **한 칸으로 묶지 않는다.** 표지와 속지는 원하는 것이 다르다 — 표지는 「크게,
+ * 사람은 가운데」, 속지는 「사람은 작게, 글자 자리를 비워」. 하나로 묶으면 이
+ * 둘을 못 나눈다(2026-09-08 사용자 결정).
+ *
+ * 이미지 만들기는 결과가 한 장이라 칸이 하나면 됐다. 카드뉴스는 자리가 셋이다.
+ */
+const AttachmentIntentsSchema = z.object({
+  cover: z.string().trim().max(USER_INSTRUCTION_MAX).default(""),
+  body: z.string().trim().max(USER_INSTRUCTION_MAX).default(""),
+  ending: z.string().trim().max(USER_INSTRUCTION_MAX).default(""),
 }).strict();
 
 const SourceSchema = z.discriminatedUnion("kind", [
@@ -33,6 +55,8 @@ export const ProjectInputSchema = z.object({
   source: SourceSchema,
   toneNote: z.string().trim().optional(),
   attachments: z.array(AttachmentSchema),
+  /** 자리마다 사용자가 적은 말. 옛 작업에는 없다 — 없으면 지금까지 그대로다. */
+  attachmentIntents: AttachmentIntentsSchema.default({ cover: "", body: "", ending: "" }),
   ratio: z.enum(["4:5", "1:1", "9:16", "16:9"]),
   cardCountMode: z.enum(["auto", "fixed"]).default("auto"),
   cardCount: z.number().int().min(4).max(8).optional(),

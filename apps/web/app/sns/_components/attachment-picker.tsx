@@ -4,27 +4,48 @@ import * as React from "react";
 import { AlertTriangle, ImagePlus, Loader2, X } from "lucide-react";
 import { groupAttachments, modelById, referenceWarningsForRole, validateAttachments, type Attachment, type AttachmentKind, type StyleRole } from "@fixup/sns-core";
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
-import { ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
+import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
 import {
   LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
 } from "../../_components/library-picker";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 import { randomId } from "../../../lib/browser-safe";
 import { attachmentsForUploaded } from "./uploaded-attachments";
+import { SlotIntents, type SlotIntents as SlotIntentsValue } from "./slot-intents";
 
 type ImageView = ReferenceImageRow & { signedUrl: string | null };
 
 /** 선택 상자에 표시할 값. 마지막 장은 역할이 아니라 자리라 따로 둔다. */
 function roleOf(attachment: Attachment): string {
+  // **그림 느낌만 바꾸는 사람을 먼저 본다.** 공용 어휘는 이 둘을 같은 kind 로
+  // 옮기므로(카드뉴스에 담을 칸이 없다), 화면에서는 `restyle` 로 갈라야 한다.
+  if (attachment.kind === "keep_identity" && attachment.subject === "person" && attachment.restyle) {
+    return "preserve_person_restyled";
+  }
   return fromCardNewsAttachment(attachment.kind, attachment.subject) ?? "ending";
 }
+
+/**
+ * 카드뉴스가 쓰는 역할 다섯.
+ *
+ * **「사람은 그대로, 그림 느낌만」이 넷째다**(설계 §4-3). 「인물 지키기」는 그림
+ * 느낌까지 고정하고 「따라 만들기」는 사람을 새로 만든다 — 그 사이가 비어 있었다.
+ */
+const CARD_ROLES: AttachmentRole[] = [
+  "style", "preserve_product", "preserve_person", "preserve_person_restyled", "place_as_is",
+];
 
 export function AttachmentPicker({
   attachments,
   onChange,
   modelId,
   totalCards,
+  intents,
+  onIntentsChange,
 }: {
+  /** 자리마다 사용자가 적은 말 (표지/속지/엔딩). */
+  intents: SlotIntentsValue;
+  onIntentsChange: (next: SlotIntentsValue) => void;
   attachments: Attachment[];
   onChange(value: Attachment[]): void;
   modelId: string;
@@ -214,7 +235,10 @@ export function AttachmentPicker({
           아직 고른 그림이 없습니다. 새로 올리거나 라이브러리에서 불러오세요.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+        // **이미지 만들기와 같은 격자.** 전에는 카드 하나가 511px 라 넉 장만
+        // 넣어도 한 화면에 안 들어왔다 — 「①번을 ②번 느낌으로」를 쓰면서 그림을
+        // 봐야 하는데 굴려야 보이면 번호를 붙인 뜻이 없다(2026-09-08 사용자).
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {attachments.map((selected) => {
             const image = images.find((entry) => entry.id === selected.id);
             const title = image?.title ?? "참고 이미지";
@@ -243,15 +267,22 @@ export function AttachmentPicker({
                   patch(selected.id, {
                     kind: next.kind as AttachmentKind,
                     subject: next.subject,
+                    // 공용 어휘가 둘을 같은 kind 로 옮기므로 여기서 갈라 적는다.
+                    restyle: value === "preserve_person_restyled" ? true : undefined,
                     role: next.kind === "style_reference" ? (selected.role ?? "body") : undefined,
                     bodySlot: undefined,
                   });
                 }}>
-                  {(["style", "preserve_product", "preserve_person", "place_as_is"] as AttachmentRole[]).map((role) => (
+                  {CARD_ROLES.map((role) => (
                     <option key={role} value={role}>{ATTACHMENT_ROLE_LABEL[role]}</option>
                   ))}
                   <option value="ending">마지막 장</option>
                 </select></label>
+                {/* 무엇을 고른 것인지 한 줄로 말해 준다. 이미지 만들기에는 있고
+                    카드뉴스에는 없어서, 이름만 보고 골라야 했다. */}
+                <span className="text-[11px] leading-snug text-subtle-foreground">
+                  {ATTACHMENT_ROLE_HINT[roleOf(selected) as AttachmentRole] ?? "마지막 장에 그대로 넣습니다"}
+                </span>
                 {selected.kind === "style_reference" ? <label className="grid gap-1 text-xs">카드 자리<select aria-label={`${title} 카드 자리`} className="h-9 rounded-md border bg-background px-2 text-sm" value={selected.role ?? "body"} onChange={(event) => patch(selected.id, { role: event.target.value as StyleRole })}><option value="cover">표지</option><option value="body">속지</option><option value="ending">엔딩</option></select></label> : null}
                 {selected.kind === "place_as_is" ? <label className="grid gap-1 text-xs">카드 번호 · 선택<input aria-label={`${title} 카드 번호`} className="h-9 rounded-md border bg-background px-2 text-sm" type="number" min={2} max={totalCards - 1} value={selected.bodySlot ?? ""} onChange={(event) => patch(selected.id, { bodySlot: event.target.value ? Number(event.target.value) : undefined })} placeholder={`2~${totalCards - 1}`} /></label> : null}
               </CardContent>
@@ -259,6 +290,19 @@ export function AttachmentPicker({
           })}
         </div>
       )}
+      {/*
+        **자리마다 번호와 지시.**
+
+        카드에 배지를 못 단다 — 같은 인물이 표지에서는 ②, 속지에서는 ①일 수
+        있기 때문이다. 자리별로 묶어야 화면 번호와 프롬프트 번호가 맞는다.
+      */}
+      <SlotIntents
+        attachments={attachments}
+        images={images}
+        intents={intents}
+        onChange={onIntentsChange}
+      />
+
       <div className="grid gap-2" aria-live="polite">
         {issues.map((issue) => <div key={issue} role="alert" className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"><AlertTriangle className="mt-0.5 size-4 flex-none" />{issue}</div>)}
         {warnings.map((warning) => <div key={warning} className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{warning}</div>)}

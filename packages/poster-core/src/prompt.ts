@@ -4,7 +4,7 @@ import {
   type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
-import { attachmentNumber } from "./attachment-order";
+import { attachmentNumber } from "@fixup/shared";
 
 /**
  * 슬롯을 fal 프롬프트로 조립한다.

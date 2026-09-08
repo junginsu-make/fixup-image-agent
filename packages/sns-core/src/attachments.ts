@@ -21,6 +21,13 @@ export interface Attachment {
   role?: StyleRole;
   /** keep_identity 가 사람인지 물건인지. 사람은 하나만 허용한다. */
   subject?: "person" | "object";
+  /**
+   * 사람은 그대로 두되 **그림 느낌만** 바꿔도 되나 (설계 §4-3).
+   *
+   * `keep_identity` + `subject: "person"` 일 때만 뜻이 있다. 없으면 지금까지처럼
+   * 그림 느낌까지 고정한다 — 옛 작업에는 이 값이 없다.
+   */
+  restyle?: boolean;
   /** place_as_is 를 넣을 속지 번호. 사람이 정하며, 비우면 입력 순서를 쓴다. */
   bodySlot?: number;
 }

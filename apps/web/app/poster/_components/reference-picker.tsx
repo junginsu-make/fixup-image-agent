@@ -9,7 +9,7 @@ import {
 import {
   LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
 } from "../../_components/library-picker";
-import { attachmentNumber } from "@fixup/poster-core";
+import { attachmentNumber } from "@fixup/shared";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
 
