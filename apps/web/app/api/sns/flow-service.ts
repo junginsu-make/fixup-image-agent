@@ -90,6 +90,13 @@ export interface SnsFlowState {
      * 다음 만들기가 옛 열쇠로 확정한다.
      */
     reservationId?: string;
+    /**
+     * 예약할 때까지 **이미 쓴 값**. 확정은 그 뒤로 늘어난 만큼만 받는다.
+     *
+     * `flow.costs` 는 쌓이기만 하고 안 비워진다. 다시 만들기를 누르면 옛 값이
+     * 그대로 남아 있어, 합계를 그냥 쓰면 **이미 낸 것을 또 받는다.**
+     */
+    costBaselineUsd?: number;
   };
 }
 

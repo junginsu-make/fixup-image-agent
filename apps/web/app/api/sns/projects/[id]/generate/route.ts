@@ -69,8 +69,22 @@ export async function POST(request: Request, context: Context) {
        * **흐름 안에 둔다.** 저장소에 새 함수를 만들면 로컬·운영 두 벌을 다
        * 고쳐야 하는데, 흐름은 이미 통째로 저장된다.
        */
+      /**
+       * **기준선을 함께 적는다.**
+       *
+       * `flow.costs` 는 쌓이기만 하고 안 비워진다 — 다시 만들기를 누르면 옛 값이
+       * 남아 있다. 확정에서 합계를 그냥 쓰면 **이미 낸 것을 또 받는다.**
+       * 여기서 지금까지 쓴 값을 적어 두고, 그 뒤로 늘어난 만큼만 받는다.
+       */
       const marked = flow.generation
-        ? { ...flow, generation: { ...flow.generation, reservationId: reserved.requestId } }
+        ? {
+          ...flow,
+          generation: {
+            ...flow.generation,
+            reservationId: reserved.requestId,
+            costBaselineUsd: currentFlow.costs.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0),
+          },
+        }
         : flow;
       const saved = await store.save(id, marked, "generating");
       return Response.json({ ok: true, project: saved });

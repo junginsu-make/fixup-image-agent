@@ -51,8 +51,19 @@ export async function POST(_request: Request, context: Context) {
       let settled = flow;
       const reservationId = flow.generation?.reservationId;
       if (!active && reservationId) {
-        const spent = flow.costs.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0);
-        const made = flow.cards.filter((card) => card.status === "done").length;
+        /**
+         * **이번에 늘어난 만큼만 받는다.**
+         *
+         * `flow.costs` 는 쌓이기만 한다. 합계를 그냥 쓰면 다시 만들기를 누를
+         * 때마다 옛 값을 또 받는다.
+         */
+        const total = flow.costs.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0);
+        const spent = Math.max(0, total - (flow.generation?.costBaselineUsd ?? 0));
+        /** 이번에 고른 장 중 실제로 나온 것. 옛 카드는 안 센다. */
+        const picked = new Set(flow.generation?.selectedCardIndexes ?? []);
+        const made = flow.cards.filter(
+          (card) => picked.has(card.index) && card.status === "done",
+        ).length;
         try {
           await finalizeAiUsage(
             { userId: auth.member.userId, requestId: reservationId },
@@ -62,7 +73,10 @@ export async function POST(_request: Request, context: Context) {
         } catch {
           // 삼킨다. 사용자가 만든 카드를 못 보는 것이 더 나쁘다.
         }
-        settled = { ...flow, generation: { ...flow.generation!, reservationId: undefined } };
+        settled = {
+          ...flow,
+          generation: { ...flow.generation!, reservationId: undefined, costBaselineUsd: undefined },
+        };
       }
 
       const saved = await store.save(id, settled, active ? "generating" : "ready");

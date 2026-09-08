@@ -70,3 +70,29 @@ describe("화면이 열쇠를 보내는가", () => {
     expect(client).toContain("headers: billableHeaders()");
   });
 });
+
+/**
+ * **다시 만들기가 옛 비용을 또 받으면 안 된다.**
+ *
+ * `flow.costs` 는 쌓이기만 하고 안 비워진다(`queued-flow.ts:215` 가 push 만
+ * 한다). 합계를 그냥 쓰면 다시 만들기를 누를 때마다 이미 낸 것을 또 받는다.
+ */
+describe("다시 만들 때 두 번 받지 않는가", () => {
+  it("예약할 때 지금까지 쓴 값을 기준선으로 적는다", () => {
+    expect(generate).toContain("costBaselineUsd: currentFlow.costs.reduce(");
+  });
+
+  it("**늘어난 만큼만 받는다**", () => {
+    expect(status).toContain("Math.max(0, total - (flow.generation?.costBaselineUsd ?? 0))");
+  });
+
+  it("이번에 고른 장만 센다 — 옛 카드는 안 센다", () => {
+    // 전부 세면 다시 만들기에서 「한 장도 못 만들었다」가 영영 안 나온다.
+    expect(status).toContain("selectedCardIndexes");
+    expect(status).toMatch(/picked\.has\(card\.index\) && card\.status === "done"/);
+  });
+
+  it("확정하면 기준선도 지운다", () => {
+    expect(status).toContain("costBaselineUsd: undefined");
+  });
+});
