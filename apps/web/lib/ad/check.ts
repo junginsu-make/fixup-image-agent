@@ -60,8 +60,9 @@ export async function checkAgainstSpec(bytes: Buffer, spec: AdSpec): Promise<Spe
      * 알파 채널이 있는 것으로도 모자라다 — 전부 불투명한 알파는 없는 것과 같다.
      * 이 저장소는 같은 함정을 이미 한 번 겪었다(`image-encoding.ts` 의 알파 최소값).
      *
-     * 오늘은 `planDerivation` 이 `png-alpha` 를 미지원으로 막지만, 이 함수의 존재
-     * 이유가 **「계획이 아니라 바이트를 본다」**이고 2·3단계는 업로드 바이트도 받는다.
+     * 4단계에서 `planDerivation` 이 `png-alpha` 를 조립으로 열었으므로, 이 검사는
+     * **조립 결과가 실제로 통과하는 자리**가 됐다. 2·3단계는 업로드 바이트도
+     * 받으므로 어느 쪽이든 「계획이 아니라 바이트를 본다」가 이 함수의 존재 이유다.
      */
     if (spec.format === "png-alpha") {
       if (!meta.hasAlpha) {

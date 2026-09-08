@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * 광고 규격을 뽑는 길.
@@ -26,9 +26,15 @@ let batchThrows: Error | null = null;
 const authCalls: number[] = [];
 const viewers: Array<{ userId: string; role: string }> = [];
 const fileArgs: Array<{ itemId: string; position: number }> = [];
-const batchArgs: Array<{ specIds: string[] }> = [];
+const batchArgs: Array<{
+  specIds: string[];
+  options?: { cutout?: (master: Buffer) => Promise<Buffer>; finish?: (bytes: Buffer) => Promise<Buffer> };
+}> = [];
 const posterOwners: string[] = [];
 const scopes: string[] = [];
+/** 무엇이 먼저 일어났는가. cutout 이 slot 보다 앞이어야 한다. */
+const order: string[] = [];
+let cutoutThrows: Error | null = null;
 let posterImages: Array<{ variantIndex: number; assetPath: string }> = [
   { variantIndex: 0, assetPath: "u1/poster/p1/0.png" },
 ];
@@ -40,8 +46,11 @@ vi.mock("../../../../lib/ad/batch", async () => {
   return {
     ...real,
     isAdExportEnabled: () => enabled,
-    exportBatch: async (_master: Buffer, specIds: string[]) => {
-      batchArgs.push({ specIds });
+    exportBatch: async (_master: Buffer, specIds: string[], options?: {
+      cutout?: (master: Buffer) => Promise<Buffer>;
+      finish?: (bytes: Buffer) => Promise<Buffer>;
+    }) => {
+      batchArgs.push({ specIds, options });
       if (batchThrows) throw batchThrows;
       return [{
         specId: specIds[0]!, label: "시험", portal: "google" as const, product: "p",
@@ -52,6 +61,31 @@ vi.mock("../../../../lib/ad/batch", async () => {
     },
   };
 });
+
+vi.mock("../../../../lib/ad/background", async (importOriginal) => ({
+  // **크기 상한은 진짜를 쓴다.** 목에 다시 적으면 목을 시험하게 된다.
+  ...(await importOriginal<typeof import("../../../../lib/ad/background")>()),
+  createBackgroundRemover: () => ({}),
+  removeBackground: async () => {
+    order.push("cutout");
+    if (cutoutThrows) throw cutoutThrows;
+    return "https://fal/cut.png";
+  },
+}));
+
+/** 무엇을 어떤 형식으로 올렸는지 본다 — 하드코딩하면 여기서 드러난다. */
+const uploaded: { mime: string }[] = [];
+
+vi.mock("../../../../lib/poster/providers", () => ({
+  createPosterFalClients: () => ({
+    uploader: {
+      uploadReference: async (_bytes: Buffer, mime: string) => {
+        uploaded.push({ mime });
+        return "https://fal/up.png";
+      },
+    },
+  }),
+}));
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => {
@@ -92,6 +126,7 @@ vi.mock("../../../../lib/layout/render-gate", async () => {
   return {
     ...real,
     withRenderSlot: async <T,>(_userId: string, work: () => Promise<T>) => {
+      order.push("slot");
       if (busy) throw new real.RenderBusyError("붐빕니다.");
       return work();
     },
@@ -104,6 +139,16 @@ const call = (body: unknown) =>
   POST(new Request("http://x/api/ad/export", { method: "POST", body: JSON.stringify(body) }));
 
 const good = { itemId: "item-1", position: 0, specIds: ["google-rda-square"] };
+
+/**
+ * **덮어쓴 `fetch` 를 되돌린다.**
+ *
+ * 시험들이 `globalThis.fetch` 를 갈아 끼우고 놓아 두었다. 파일 단위 격리라
+ * 오늘은 무해하지만, 이 파일에 나중에 진짜 `fetch` 를 쓰는 시험이 붙으면
+ * **조용히 남의 stub 을 쓴다** — 그때는 원인을 찾기 어렵다.
+ */
+const realFetch = globalThis.fetch;
+afterEach(() => { globalThis.fetch = realFetch; });
 
 beforeEach(() => {
   enabled = true;
@@ -118,6 +163,8 @@ beforeEach(() => {
   batchArgs.length = 0;
   posterOwners.length = 0;
   scopes.length = 0;
+  order.length = 0;
+  cutoutThrows = null;
   posterImages = [{ variantIndex: 0, assetPath: "u1/poster/p1/0.png" }];
 });
 
@@ -211,7 +258,7 @@ describe("자원을 지킨다", () => {
 describe("제대로 뽑는다", () => {
   it("고른 것을 그대로 넘긴다", async () => {
     await call({ ...good, specIds: ["google-rda-square", "naver-gfa-thumb"] });
-    expect(batchArgs).toEqual([{ specIds: ["google-rda-square", "naver-gfa-thumb"] }]);
+    expect(batchArgs.map((call) => call.specIds)).toEqual([["google-rda-square", "naver-gfa-thumb"]]);
     expect(fileArgs).toEqual([{ itemId: "item-1", position: 0 }]);
   });
 
@@ -266,7 +313,7 @@ describe("포스터 작업에서 뽑는다", () => {
   it("포스터 그림을 읽어 뽑는다", async () => {
     const response = await call(posterCall);
     expect(response.status).toBe(200);
-    expect(batchArgs).toEqual([{ specIds: ["google-rda-square"] }]);
+    expect(batchArgs.map((call) => call.specIds)).toEqual([["google-rda-square"]]);
   });
 
   /**
@@ -320,5 +367,159 @@ describe("내보내기는 자기 것만", () => {
     member = { userId: "admin-1", role: "admin" };
     await call(good);
     expect(viewers).toEqual([{ userId: "admin-1", role: "admin" }]);
+  });
+});
+
+/**
+ * 배경 제거는 CPU 자리 **밖**에서 한다 (설계 §9.2).
+ *
+ * `withRenderSlot` 은 「스레드풀이 넷이라」 만든 **CPU** 게이트다. 그런데 배경
+ * 제거는 fal 이 일하는 4초 동안 **우리 CPU 를 안 쓴다** — 그 4초를 자리 안에서
+ * 기다리면 카드뉴스 미리보기가 이유 없이 429 를 받는다.
+ */
+describe("배경 제거와 CPU 자리", () => {
+  it("자리를 잡기 전에 배경을 지운다", async () => {
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    expect(order, "cutout 이 slot 보다 앞이어야 한다").toEqual(["cutout", "slot"]);
+  });
+
+  /** 조립이 없으면 부를 이유가 없다 — 돈과 4초를 헛되이 쓴다. */
+  it("파생 규격만 고르면 배경을 안 지운다", async () => {
+    await call({ ...good, specIds: ["google-rda-square"] });
+    expect(order).toEqual(["slot"]);
+  });
+
+  it("하나라도 조립이면 지운다", async () => {
+    await call({ ...good, specIds: ["google-rda-square", "naver-smartchannel"] });
+    expect(order).toEqual(["cutout", "slot"]);
+  });
+
+  /**
+   * **배경 제거가 실패해도 자리를 잡고 나머지를 뽑는다.** 조립 규격만 실패로
+   * 두면 되는데, 여기서 통째로 던지면 **파생 규격까지 못 받는다**(설계 §9.3).
+   */
+  it("배경 제거가 실패해도 나머지는 뽑는다", async () => {
+    cutoutThrows = new Error("fal 이 응답하지 않습니다.");
+    const response = await call({ ...good, specIds: ["google-rda-square", "kakao-bizboard"] });
+    expect(response.status).toBe(200);
+    expect(order).toContain("slot");
+  });
+});
+
+describe("지워 둔 오브젝트를 실제로 넘긴다", () => {
+  /**
+   * **이 줄을 지워도 저장소 전체 시험이 초록이었다.** 그 상태의 운영 결과는
+   * 필수 규격 둘이 「투명 배경을 만들 준비가 안 됐습니다」로 전부 실패 —
+   * **4단계 기능이 통째로 죽은 채 CI 가 초록이다.**
+   *
+   * 순서(cutout → slot)는 잠겨 있었는데 **전달**이 안 잠겨 있었다. 판단을 잘
+   * 뽑아 놓고 그것을 부르는 줄을 안 잠그는 일이 이 프로젝트에서 **다섯 번**
+   * 반복됐다.
+   */
+  it("조립 규격을 고르면 오브젝트를 넘긴다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    expect(passed, "cutout 을 안 넘기면 조립 규격이 전부 실패한다").toBeDefined();
+    const bytes = await passed!(Buffer.from("master"));
+    expect(bytes.toString(), "지워 둔 바이트가 그대로 와야 한다").toBe("cut");
+  });
+
+  /** 파생만 고르면 안 넘긴다 — 넘기면 batch 가 헛되이 부를 수 있다. */
+  it("파생 규격만 고르면 안 넘긴다", async () => {
+    await call({ ...good, specIds: ["google-rda-square"] });
+    expect(batchArgs[0]!.options?.cutout).toBeUndefined();
+  });
+
+  /**
+   * 실패했으면 사유를 들고 있다가 그 규격만 실패로 남긴다.
+   *
+   * **문구는 걸러진다** — fal 내부 오류는 그대로 안 보인다(아래 「배경 제거
+   * 실패를 어떻게 말하는가」). 여기서 보는 것은 **실패가 전달되는가**다.
+   */
+  it("배경 제거가 실패하면 그 사유를 넘긴다", async () => {
+    cutoutThrows = new Error("fal 이 응답하지 않습니다.");
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    expect(passed).toBeDefined();
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow();
+  });
+});
+
+describe("배경 제거 실패를 어떻게 말하는가", () => {
+  /**
+   * **내부 사정을 사용자 화면에 쓰지 않는다.** `createPosterFalClients()` 가
+   * 던지는 말은 「다음 환경변수가 없어…: FAL_KEY」다 — 그대로 쓰면 사용자가
+   * 그것을 본다. 이 라우트의 꼬리 catch 가 이미 같은 정책을 적어 두었다.
+   */
+  it("환경변수 이름을 사용자에게 안 보인다", async () => {
+    cutoutThrows = new Error("다음 환경변수가 없어 포스터를 만들 수 없습니다: FAL_KEY");
+    globalThis.fetch = (async () => new Response(Buffer.from("x"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow(/배경을 지우지 못했습니다/);
+    await expect(passed!(Buffer.from("m"))).rejects.not.toThrow(/FAL_KEY/);
+  });
+
+  /** 사용자가 고칠 수 있는 말은 그대로 준다 — 다시 누르면 되는 것들이다. */
+  it("시한 초과는 그대로 말해 준다", async () => {
+    cutoutThrows = new Error("배경을 지우는 데 너무 오래 걸립니다(60초).");
+    globalThis.fetch = (async () => new Response(Buffer.from("x"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const passed = batchArgs[0]!.options?.cutout;
+    await expect(passed!(Buffer.from("m"))).rejects.toThrow(/오래 걸립니다/);
+  });
+});
+
+/**
+ * 남아 있던 자잘한 것들(재검증 LOW).
+ *
+ * 하나하나는 오늘 고장이 아니다. 다만 **셋 다 「지금은 우연히 맞는」 부류**라,
+ * 옆을 건드리는 다음 사람이 조용히 밟는다.
+ */
+describe("올릴 때 형식을 지어내지 않는다", () => {
+  /**
+   * `cutoutForAd` 가 `"image/png"` 를 박고 있었다. 지금은 저장소가 PNG 로
+   * 저장하므로 맞지만, **그 사실을 이 줄이 아는 것이 아니다** — 저장 형식이
+   * WebP 로 바뀌면 fal 에 거짓 형식을 알리게 된다(그 작업은 이미 계획에 있다).
+   */
+  it("파일이 말한 형식으로 올린다", async () => {
+    // **PNG 로 재면 안 된다.** 하드코딩된 값과 우연히 같아서, 되돌려도
+    // 시험이 통과한다(실제로 뮤테이션이 살아남았다). 다른 형식으로 잰다.
+    file = { bytes: Buffer.from("x"), mimeType: "image/webp" };
+    uploaded.length = 0;
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    await batchArgs[0]!.options!.cutout!(Buffer.from("master"));
+    expect(uploaded).toHaveLength(1);
+    expect(uploaded[0]!.mime).toBe("image/webp");
+  });
+});
+
+describe("내려받는 크기에 상한이 있다", () => {
+  /**
+   * `assemble.ts` 의 sharp 넷에는 40M 픽셀 상한을 붙였는데 **라우트가 fal 에서
+   * 받아오는 자리에는 아무 상한이 없었다.** 우리가 올린 그림을 도로 받는
+   * 경로라 남이 밀어 넣을 자리는 아니지만, 상한 없는 `arrayBuffer()` 는
+   * 받은 만큼 전부 메모리에 올린다.
+   */
+  it("미리 밝힌 크기가 너무 크면 안 받는다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("x"), {
+      headers: { "content-length": String(200 * 1024 * 1024) },
+    })) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    await expect(batchArgs[0]!.options!.cutout!(Buffer.from("m")))
+      .rejects.toThrow(/너무 큽니다/);
+  });
+
+  // 크기를 안 밝히고 오는 갈래는 받은 바이트로 재는데, 그것을 여기서 확인하려면
+  // 시험이 32MB 를 실제로 만들어야 한다(만들다가 워커가 죽었다). 판단은
+  // `assertCutoutSize` 로 떼어 `ad-background.test.ts` 에서 작은 수로 잠근다.
+
+  it("보통 크기는 그대로 받는다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    const bytes = await batchArgs[0]!.options!.cutout!(Buffer.from("m"));
+    expect(bytes.toString()).toBe("cut");
   });
 });

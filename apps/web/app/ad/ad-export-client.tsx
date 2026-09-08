@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { AlertTriangle, Download, ImageIcon, Loader2 } from "lucide-react";
+import { ActionNotices } from "./action-notices";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn,
 } from "@fixup/ui";
@@ -11,9 +12,9 @@ import { loadLibrary, getAccountItemImages } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
 import {
-  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
+  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, actionNotices, adSourceItems, bytesFromDataUrl,
   defaultSelection, downloadable, excludedCount, failureMessage, isActualSize,
-  missingRequiredCount, previewWidth,
+  missingRequiredCount, previewBackdrop, previewWidth,
   cropNotice, libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows,
   zipEntryName,
   type AdImagePick, type AdSourceItem,
@@ -430,6 +431,12 @@ export function AdExportClient() {
           `disabled` 라 켤 수가 없다. 정작 설계 §9 원칙 1 의 뒷 절반인
           「필수를 끄면 알린다」가 없었다.
         */}
+        {/*
+          **이후에 사람이 할 일**은 고르는 자리에서 말한다(사용자 요청
+          2026-09-08). 결과가 나온 뒤에 「글자가 없네」를 알면 늦는다.
+        */}
+        <ActionNotices notices={actionNotices(picked, planDerivation)} />
+
         {/* 목록 안의 안내라 인라인으로 둔다 — 쌍둥이 화면과 짝이 맞는다. */}
         {missingRequired > 0 && (
           <p className="text-sm text-destructive" role="alert">
@@ -522,7 +529,15 @@ export function AdExportClient() {
                   시험이 못 잡는 유일한 자리다(`export-rules.ts` 머리말).
                 */}
                 {entry.dataUrl ? (
-                  <div className="relative overflow-hidden rounded border bg-muted">
+                  /*
+                    **투명 규격에는 체크무늬를 깐다**(설계 §6.3). 회색 판 위에
+                    그리면 투명한지 회색인지 사람이 구분할 수 없다 — 이 기능의
+                    존재 이유가 투명인데 그것만 확인이 안 된다.
+                  */
+                  <div
+                    className="relative overflow-hidden rounded border bg-muted"
+                    style={previewBackdrop(entry.format)}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {/* 「글자가 읽히는지 보세요」라고 적었으면 크게 볼 길도 줘야 한다. */}
                     <img src={entry.dataUrl} alt={entry.label} data-zoomable className="w-full" />
@@ -574,6 +589,19 @@ export function AdExportClient() {
                     <span className="flex items-center gap-1 text-destructive">
                       <AlertTriangle className="h-3 w-3" />
                       {entry.shrink}배 줄임 — 글자가 읽히는지 보세요
+                    </span>
+                  )}
+                  {/*
+                    **「빈 배너에 점 하나」를 알린다**(설계 §5.4②).
+                    세로로 긴 피사체를 가로로 긴 배너에 놓으면 폭이 6% 까지
+                    쪼그라드는데, 픽셀·형식·용량이 전부 맞아 **규격 검증을
+                    통과한다.** 막지 않고 알린다 — 늘이면 찌그러지고 자르면
+                    얼굴이 잘린다.
+                  */}
+                  {entry.tooSmall && (
+                    <span className="flex items-center gap-1 text-destructive">
+                      <AlertTriangle className="h-3 w-3" />
+                      그림이 너무 작게 들어갔습니다 — 다른 그림을 골라 보세요
                     </span>
                   )}
                   {entry.status === "failed" && (

@@ -90,3 +90,53 @@ describe("고른 그림이 없는 상태로 두지 않는다", () => {
     expect(client).toMatch(/\.catch\(\(\) => setItems\(\[\]\)\)/);
   });
 });
+
+describe("너무 작아진 것을 화면이 알린다", () => {
+  /**
+   * `batch.ts` 가 `tooSmall` 을 실어 줘도 **화면이 안 그리면 뜻이 없다.**
+   * 설계 §5.4② 가 「막지 않고 알린다」로 정한 자리다 — 규격 검증은 이것을
+   * 통과시키므로 사람 눈이 유일한 관문이다.
+   */
+  it("경고를 그린다", () => {
+    expect(client).toContain("entry.tooSmall");
+    expect(client).toMatch(/너무 작게 들어갔습니다/);
+  });
+});
+
+describe("투명 배너를 투명하게 보여 준다", () => {
+  /**
+   * 규칙이 있어도 **화면이 안 부르면 뜻이 없다.** 이 기능의 존재 이유가
+   * 투명인데, 회색 판 위에 그리면 사람이 그것만 확인할 수 없다(설계 §6.3).
+   */
+  it("미리보기 바탕에 체크무늬를 건다", () => {
+    expect(client).toContain("previewBackdrop(entry.format)");
+  });
+});
+
+/**
+ * **이후에 할 일 안내**(사용자 요청 2026-09-08).
+ *
+ * `actionNotices` 는 순수 함수라 시험은 쉽다. 늘 빠지는 것은 **부르는 줄**이고,
+ * 그 줄이 없으면 함수도 시험도 멀쩡한 채로 화면만 조용하다.
+ */
+describe("이후 할 일 안내를 화면이 부른다", () => {
+  const picker = readFileSync(
+    new URL("../../poster/ad-spec-picker.tsx", import.meta.url), "utf8",
+  );
+
+  it("`/ad` 가 고른 규격으로 안내를 그린다", () => {
+    expect(client).toContain("<ActionNotices notices={actionNotices(picked, planDerivation)} />");
+  });
+
+  /** 쌍둥이 화면이 다른 말을 하면 안 된다 — 같은 함수, 같은 상자. */
+  it("만들기 화면도 같은 함수로 그린다", () => {
+    expect(picker).toContain("<ActionNotices notices={actionNotices(picked, planDerivation)} />");
+  });
+
+  /** 고장이 아니라 할 일이다. 오류 상자 색을 쓰면 사용자가 잘못된 줄 안다. */
+  it("안내 상자는 오류 색을 안 쓴다", () => {
+    const box = readFileSync(new URL("../action-notices.tsx", import.meta.url), "utf8");
+    expect(box).toContain("border-primary/25");
+    expect(box).not.toContain("destructive");
+  });
+});
