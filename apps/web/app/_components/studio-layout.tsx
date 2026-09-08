@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { AppShell } from "@fixup/ui";
 import { requireActiveMember, getUsageSummary } from "../../lib/membership/server";
 import { canAccessPage, viewerFrom } from "../../lib/access/core";
+// 스위치만 읽는다 — `batch` 를 지나면 sharp 를 통째로 끌고 온다.
+import { isAdExportEnabled } from "../../lib/ad/feature";
 import { PAGE_ACCESS } from "../../lib/access/routes";
 import { GuideLink } from "./guide-link";
 import { ReferenceHuntButton } from "./reference-hunt-button";
@@ -34,6 +36,8 @@ export async function StudioLayout({ children }: { children: ReactNode }) {
           profile: membership.profile,
         }), PAGE_ACCESS)}
         hasTeam={Boolean(team)}
+        // 꺼져 있으면 메뉴에도 없다. 눌러서 404 를 만나는 메뉴는 안 만든다.
+        hasAd={isAdExportEnabled()}
         projects={projects.map((project) => ({
           id: project.id,
           name: project.name,

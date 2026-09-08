@@ -347,11 +347,30 @@ export function AdExportClient() {
             <Loader2 className="mr-2 inline size-4 animate-spin" />작업을 불러오는 중입니다.
           </p>
         ) : items.length === 0 ? (
+          /*
+            **아무것도 없는 사람에게 라이브러리를 보내면 안 된다.** 사이드바에
+            이 화면이 걸린 뒤로는 **처음 온 사람이 여기를 먼저 누른다** —
+            그때 라이브러리로 보내 봐야 거기도 비어 있다. 만드는 곳을 준다.
+
+            이 화면은 새로 만들지 않는다는 것도 함께 말한다. 「광고」라는 말만
+            보고 여기서 만들어지는 줄 알면 계속 기다리게 된다.
+          */
           <Card className="grid place-items-center gap-3 py-14 text-center">
             <ImageIcon className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              보관된 작업이 없습니다. <Link href="/library" className="underline">라이브러리</Link>에서 먼저 저장해 주세요.
-            </p>
+            <div className="grid gap-1.5">
+              <p className="text-sm font-bold">뽑을 그림이 아직 없습니다</p>
+              <p className="text-sm text-muted-foreground">
+                이 화면은 새로 만들지 않고 <strong>이미 만들어 둔 그림</strong>에서 규격을 뽑습니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm">
+                <Link href="/poster/new">이미지 만들기</Link>
+              </Button>
+              <Button asChild size="sm" variant="secondary">
+                <Link href="/library">라이브러리 보기</Link>
+              </Button>
+            </div>
           </Card>
         ) : (
           /*

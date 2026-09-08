@@ -229,3 +229,28 @@ describe("`/ad` 가 포털부터 묻는다", () => {
     expect(client).toContain("void chooseItem(wanted, positionFromQuery(query.get(\"position\")))");
   });
 });
+
+/**
+ * **사이드바에 걸고, 빈 화면에서 만드는 곳을 준다**(사용자 요청 2026-09-08).
+ *
+ * 사이드바에 걸리면 **처음 온 사람이 여기를 먼저 누른다.** 그때 라이브러리로
+ * 보내 봐야 거기도 비어 있다.
+ */
+describe("아무것도 없는 사람이 먼저 왔을 때", () => {
+  const shell = readFileSync(
+    new URL("../../_components/studio-layout.tsx", import.meta.url), "utf8",
+  );
+
+  it("만드는 곳을 준다", () => {
+    expect(client).toContain('<Link href="/poster/new">이미지 만들기</Link>');
+  });
+
+  /** 「광고」라는 말만 보고 여기서 만들어지는 줄 알면 계속 기다리게 된다. */
+  it("새로 만들지 않는다고 말한다", () => {
+    expect(client).toContain("새로 만들지 않고");
+  });
+
+  it("셸에 스위치를 내려 준다", () => {
+    expect(shell).toContain("hasAd={isAdExportEnabled()}");
+  });
+});
