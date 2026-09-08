@@ -4,7 +4,7 @@ import {
   attachmentUrls,
   orderFromLegacyLists,
   type OrderedAttachment,
-} from "../attachment-order";
+} from "@fixup/shared";
 
 describe("화면 순서 그대로 간다", () => {
   it("넣은 순서를 안 바꾼다", () => {
@@ -203,7 +203,7 @@ describe("수정 경로도 안 깨진다", () => {
 
 describe("고른 차례를 손보는 규칙", () => {
   it("처음 고르면 맨 뒤에 붙는다", async () => {
-    const { nextPickOrder } = await import("../attachment-order");
+    const { nextPickOrder } = await import("@fixup/shared");
     expect(nextPickOrder(["a"], "b", true)).toEqual(["a", "b"]);
   });
 
@@ -215,25 +215,25 @@ describe("고른 차례를 손보는 규칙", () => {
      * 밀렸다. 드롭다운을 건드렸다는 이유로 번호가 바뀌면, 「①번을」이라고 쓴
      * 지시가 다른 그림에 붙는다.
      */
-    const { nextPickOrder } = await import("../attachment-order");
+    const { nextPickOrder } = await import("@fixup/shared");
     expect(nextPickOrder(["a", "b", "c"], "a", true)).toEqual(["a", "b", "c"]);
     expect(nextPickOrder(["a", "b", "c"], "b", true)).toEqual(["a", "b", "c"]);
   });
 
   it("빼면 목록에서 빠진다", async () => {
-    const { nextPickOrder } = await import("../attachment-order");
+    const { nextPickOrder } = await import("@fixup/shared");
     expect(nextPickOrder(["a", "b"], "a", false)).toEqual(["b"]);
   });
 
   it("뺐다가 다시 고르면 맨 뒤로 간다", async () => {
     // 그건 실제로 다시 고른 것이다. 화면에서 보이는 것과 같다.
-    const { nextPickOrder } = await import("../attachment-order");
+    const { nextPickOrder } = await import("@fixup/shared");
     const without = nextPickOrder(["a", "b"], "a", false);
     expect(nextPickOrder(without, "a", true)).toEqual(["b", "a"]);
   });
 
   it("원본을 안 바꾼다", async () => {
-    const { nextPickOrder } = await import("../attachment-order");
+    const { nextPickOrder } = await import("@fixup/shared");
     const before = ["a"];
     nextPickOrder(before, "b", true);
     expect(before).toEqual(["a"]);
@@ -249,7 +249,7 @@ describe("보이는 것과 보내는 것이 같다", () => {
      * 읽기를 건너뛴다. 그러면 화면에는 안 보이는데 서버로는 가고, 뒤 번호가
      * 전부 1씩 밀린다 — 「①번을」이라고 쓴 지시가 본 적도 없는 그림을 가리킨다.
      */
-    const { visibleOrder } = await import("../attachment-order");
+    const { visibleOrder } = await import("@fixup/shared");
     const inLibrary = new Set(["a", "c"]);
     expect(
       visibleOrder(["b", "a", "c"], () => true, (id) => inLibrary.has(id)),
@@ -257,7 +257,7 @@ describe("보이는 것과 보내는 것이 같다", () => {
   });
 
   it("역할이 풀린 것도 안 보낸다", async () => {
-    const { visibleOrder } = await import("../attachment-order");
+    const { visibleOrder } = await import("@fixup/shared");
     const picked = new Set(["a"]);
     expect(
       visibleOrder(["a", "b"], (id) => picked.has(id), () => true),
@@ -265,7 +265,7 @@ describe("보이는 것과 보내는 것이 같다", () => {
   });
 
   it("둘 다 만족하는 것만 남는다", async () => {
-    const { visibleOrder } = await import("../attachment-order");
+    const { visibleOrder } = await import("@fixup/shared");
     expect(
       visibleOrder(["a", "b", "c"], (id) => id !== "b", (id) => id !== "c"),
     ).toEqual(["a"]);

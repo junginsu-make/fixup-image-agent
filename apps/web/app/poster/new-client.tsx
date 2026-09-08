@@ -9,8 +9,9 @@ import {
 } from "@fixup/ui";
 import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
 import {
-  DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder, visibleOrder,
+  DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS,
 } from "@fixup/poster-core";
+import { nextPickOrder, visibleOrder } from "@fixup/shared";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";

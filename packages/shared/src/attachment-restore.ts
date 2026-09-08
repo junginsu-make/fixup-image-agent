@@ -1,4 +1,4 @@
-import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
+import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "./attachment-role";
 import type { OrderedAttachment } from "./attachment-order";
 
 /**

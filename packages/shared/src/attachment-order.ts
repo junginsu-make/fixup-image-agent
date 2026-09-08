@@ -1,4 +1,4 @@
-import type { AttachmentRole } from "@fixup/shared";
+import type { AttachmentRole } from "./attachment-role";
 
 /**
  * 첨부한 그림을 **화면에 놓인 순서 그대로** 다룬다.

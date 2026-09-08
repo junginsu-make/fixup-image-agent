@@ -1,6 +1,6 @@
 import { withIssueFallback } from "@fixup/shared";
 import { EMPTY_SLOTS, PosterSlotsSchema, TYPE_INTERACTIONS, type PosterSlots } from "./schemas";
-import { attachmentNumber } from "./attachment-order";
+import { attachmentNumber } from "@fixup/shared";
 
 /**
  * 슬롯을 채우는 기획.

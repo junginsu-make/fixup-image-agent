@@ -6,7 +6,7 @@ import {
   attachmentUrls,
   orderFromLegacyLists,
   type OrderedAttachment,
-} from "./attachment-order";
+} from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
 import type { PosterImageRecord } from "./store";
 

@@ -9,7 +9,8 @@ import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
 import { referenceBytes } from "../../../../../../lib/poster/asset-bytes";
-import { estimatePosterCost, restoreAttachments } from "@fixup/poster-core";
+import { estimatePosterCost } from "@fixup/poster-core";
+import { restoreAttachments } from "@fixup/shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
