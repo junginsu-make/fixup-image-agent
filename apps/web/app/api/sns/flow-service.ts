@@ -82,6 +82,14 @@ export interface SnsFlowState {
     falReferenceUrls: Record<string, string>;
     startedAt: string;
     completedAt?: string;
+    /**
+     * 이번 만들기의 예약 열쇠. `status` 가 다 끝난 뒤 이것으로 확정한다.
+     *
+     * 예약과 확정이 **서로 다른 HTTP 요청**이라 열쇠를 넘길 길이 이것뿐이다.
+     * 흐름 안에 두므로 저장소를 안 건드린다. 확정하고 나면 지운다 — 남겨 두면
+     * 다음 만들기가 옛 열쇠로 확정한다.
+     */
+    reservationId?: string;
   };
 }
 
