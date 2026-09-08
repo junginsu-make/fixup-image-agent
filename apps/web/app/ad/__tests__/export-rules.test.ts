@@ -4,8 +4,8 @@ import { planDerivation } from "../../../lib/ad/derive";
 import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
-  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
-  cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks,
+  PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl, previewBackdrop,
+  cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks, actionNotices,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -20,9 +20,11 @@ describe("화면에 걸 목록", () => {
    * 모르는구나」가 되고, 보이면 「아직 안 되는구나」가 된다(설계 §9 원칙 3).
    */
   it("못 뽑는 규격도 목록에 남기고 까닭을 준다", () => {
-    const bizboard = rows.find((row) => row.spec.id === "kakao-bizboard")!;
-    expect(bizboard.supported).toBe(false);
-    expect(bizboard.unsupportedReason).toBeTruthy();
+    // 4단계에서 비즈보드가 조립으로 열렸다. 로고는 여전히 못 만든다 —
+    // 모델이 브랜드 로고를 지어내면 매번 다른 로고가 된다.
+    const logo = rows.find((row) => row.spec.id === "google-rda-logo")!;
+    expect(logo.supported).toBe(false);
+    expect(logo.unsupportedReason).toBeTruthy();
   });
 
   it("뽑을 수 있는 규격에는 까닭이 안 붙는다", () => {
@@ -45,9 +47,10 @@ describe("처음에 켜 두는 것", () => {
    * 카카오 비즈보드와 네이버 스마트채널이 그렇다.
    */
   it("못 뽑는 규격은 필수여도 안 켠다", () => {
+    const blocked = rows.filter((row) => !row.supported);
+    expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
     const picked = defaultSelection(rows);
-    expect(picked).not.toContain("kakao-bizboard");
-    expect(picked).not.toContain("naver-smartchannel");
+    for (const row of blocked) expect(picked, row.spec.id).not.toContain(row.spec.id);
   });
 
   it("전부 켜지 않는다 — 규격 12개면 응답이 8MB 다", () => {
@@ -380,15 +383,15 @@ describe("잘라 만드는 규격도 뽑을 수 있다", () => {
    * 이라, 빠지면 **필수 둘이 회색으로 죽고 기본 선택에서 조용히 사라진다.**
    * 그래서 규격 하나를 이름으로 짚어 못 박는다.
    */
-  it("브랜드검색 PC 썸네일은 잘라서라도 뽑는다", () => {
-    const row = rows.find((r) => r.spec.id === "naver-brand-pc")!;
+  it("브랜드검색 모바일 썸네일은 잘라서라도 뽑는다", () => {
+    const row = rows.find((r) => r.spec.id === "naver-brand-mobile")!;
     expect(planDerivation(row.spec).kind, "이 시험의 전제").toBe("crop");
     expect(row.supported).toBe(true);
     expect(row.unsupportedReason).toBeUndefined();
   });
 
   it("잘라 만드는 필수 규격이 기본 선택에 들어간다", () => {
-    expect(defaultSelection(rows)).toContain("naver-brand-pc");
+    expect(defaultSelection(rows)).toContain("naver-brand-mobile");
   });
 });
 
@@ -441,10 +444,18 @@ describe("필수를 꺼 두면 알린다", () => {
     expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
   });
 
+  /**
+   * **4단계에서 「필수인데 못 뽑는 것」이 사라졌다.** 조립이 붙어 비즈보드와
+   * 스마트채널이 열렸고, 남은 미지원(로고)은 필수가 아니다. 그래도 규칙은
+   * 그대로 지킨다 — 나중에 다시 생길 수 있다.
+   */
   it("못 뽑는 필수 규격은 세지 않는다 — 사용자가 어쩔 수 없다", () => {
-    const blocked = rows.filter((r) => !r.supported && r.spec.required);
-    expect(blocked.length, "이 시험의 전제").toBeGreaterThan(0);
-    expect(missingRequiredCount(rows, defaultSelection(rows))).toBe(0);
+    const fake = [
+      ...rows,
+      { spec: { ...rows[0]!.spec, id: "가짜-필수", required: true }, supported: false,
+        unsupportedReason: "가짜" },
+    ];
+    expect(missingRequiredCount(fake, defaultSelection(rows))).toBe(0);
   });
 });
 
@@ -602,14 +613,218 @@ describe("잘라서 만든 규격을 말한다", () => {
    * 적었는데, 보여 주기만 하고 **무엇을 보라고는 안 했다.**
    */
   it("잘라 만든 규격이면 그렇다고 한다", () => {
-    expect(cropNotice("naver-brand-pc", planDerivation)).toMatch(/잘랐습니다/);
+    expect(cropNotice("naver-brand-mobile", planDerivation)).toMatch(/잘랐습니다/);
   });
 
   it("그대로 줄인 규격에는 안 붙인다", () => {
     expect(cropNotice("google-rda-landscape", planDerivation)).toBeUndefined();
   });
 
+  /**
+   * **`ad-3x2` 마스터가 생기면서 브랜드검색 PC 가 여기서 빠졌다.**
+   * 456×304 가 정확히 3:2 라 이제 구도를 하나도 안 버린다
+   * (설계 `2026-09-07-ad-assembly-engine.md` §3.2).
+   */
+  it("브랜드검색 PC 는 이제 안 잘린다", () => {
+    expect(cropNotice("naver-brand-pc", planDerivation)).toBeUndefined();
+  });
+
   it("모르는 규격에는 안 붙인다", () => {
     expect(cropNotice("없는-규격", planDerivation)).toBeUndefined();
+  });
+});
+
+describe("조립으로 만드는 규격", () => {
+  /**
+   * **판단을 순수 함수로 뽑아 놓고 그것을 부르는 줄을 안 잠그는 일이 이
+   * 프로젝트에서 네 번 반복됐다**(설계 4-d). `derive.ts` 에 조립 갈래를 더해도
+   * 이 줄이 그것을 모르면 두 화면이 계속 「아직 지원하지 않습니다」로 그리고,
+   * `defaultSelection` 이 `supported` 로 거르므로 **필수인데 기본 선택에서
+   * 빠진다.**
+   */
+  it("조립 규격을 회색으로 두지 않는다", () => {
+    for (const id of ["kakao-bizboard", "naver-smartchannel"]) {
+      const row = rows.find((entry) => entry.spec.id === id)!;
+      expect(planDerivation(row.spec).kind, "이 시험의 전제").toBe("assemble");
+      expect(row.supported, id).toBe(true);
+      expect(row.unsupportedReason, id).toBeUndefined();
+    }
+  });
+
+  it("필수인 조립 규격이 기본 선택에 든다", () => {
+    const picked = defaultSelection(rows);
+    expect(picked).toContain("kakao-bizboard");
+    expect(picked).toContain("naver-smartchannel");
+  });
+
+  /** 조립은 자르는 것이 아니다 — 「좌우를 잘랐습니다」가 붙으면 거짓말이다. */
+  it("조립 규격에는 잘림 안내를 안 붙인다", () => {
+    expect(cropNotice("kakao-bizboard", planDerivation)).toBeUndefined();
+    expect(cropNotice("naver-smartchannel", planDerivation)).toBeUndefined();
+  });
+
+  /** 올려야 하는 것은 여전히 회색이다 — 모델이 로고를 지어내면 안 된다. */
+  it("업로드 규격은 그대로 회색이다", () => {
+    const logo = rows.find((entry) => entry.spec.id === "google-rda-logo")!;
+    expect(logo.supported).toBe(false);
+    expect(logo.unsupportedReason).toBeTruthy();
+  });
+});
+
+describe("미리보기 바탕", () => {
+  /**
+   * **투명을 회색 판 위에 그리면 구분이 안 된다**(설계 §6.3). 이 기능의 존재
+   * 이유가 투명인데 사람 눈이 그것만 확인할 수 없다.
+   */
+  it("투명 규격에는 체크무늬를 깐다", () => {
+    const style = previewBackdrop("png-alpha");
+    expect(style.backgroundImage).toContain("linear-gradient");
+    expect(style.backgroundSize).toBeTruthy();
+  });
+
+  it("불투명 규격은 그대로 둔다", () => {
+    expect(previewBackdrop("jpg")).toEqual({});
+    expect(previewBackdrop("png")).toEqual({});
+  });
+
+  /** 색은 토큰을 탄다 — 리터럴을 박으면 다크 모드에서 굳는다. */
+  it("색을 리터럴로 박지 않는다", () => {
+    expect(previewBackdrop("png-alpha").backgroundImage).toContain("var(--muted-foreground)");
+  });
+
+  /**
+   * **판 색과 같은 토큰을 쓰면 안 된다.** 미리보기 칸은 `bg-muted` 를 달고
+   * 있어서, 무늬 색이 `var(--muted)` 면 두 색이 같은 값이라 화면이 단색이 된다
+   * — CSS 는 유효하니 「무늬가 있다」 시험만으로는 안 잡힌다.
+   */
+  it("무늬 색이 판 색(--muted)과 같지 않다", () => {
+    const image = previewBackdrop("png-alpha").backgroundImage ?? "";
+    expect(image).not.toMatch(/var\(--muted\)/);
+  });
+});
+
+/**
+ * **「알아야 할 것」은 고른 규격에서 나온다.**
+ *
+ * 사용자 요청(2026-09-08): 「로고와 같은 사용자가 반드시 알아야 하거나 이후
+ * 작업을 해야 할 부분이 있다면 해당 섹션에서 안내 메시지를 보여주세요.」
+ *
+ * 셋 다 **화면이 지금 말하지 않는 것**이다. 로고는 흐린 글씨로 한 줄 있지만
+ * 「그래서 어디서 올리나」가 없고, 조립 규격에 글자가 없다는 사실은 **어디에도
+ * 없다.** 참고 배지는 붙어 있으나 무슨 뜻인지 아무도 안 적었다.
+ */
+describe("이후 할 일 안내", () => {
+  it("고른 게 없으면 아무 말도 안 한다", () => {
+    expect(actionNotices([], planDerivation)).toEqual([]);
+  });
+
+  /**
+   * **이 시험이 이 안내의 존재 이유다.**
+   *
+   * 로고 줄은 두 화면에서 `disabled` 라 사람이 켤 수 없다. 「로고를 골랐으면」
+   * 으로 조건을 걸면 그 안내는 **도달 불가**가 되어, 함수도 있고 시험도 있는데
+   * 화면에는 영원히 안 뜬다. 그래서 **실제로 고를 수 있는 규격만으로** 뜨는지
+   * 본다.
+   */
+  it("실제로 고를 수 있는 규격만으로 로고 안내가 뜬다", () => {
+    const pickable = rows.filter((row) => row.supported).map((row) => row.spec.id);
+    expect(pickable).not.toContain("google-rda-logo");
+
+    const notices = actionNotices(pickable, planDerivation);
+    const upload = notices.find((notice) => notice.key === "upload");
+    expect(upload).toBeDefined();
+    expect(upload!.body).toMatch(/올리|올려/);
+  });
+
+  it("같은 상품을 고르면 로고 안내가 뜬다", () => {
+    const keys = actionNotices(["google-rda-square"], planDerivation).map((n) => n.key);
+    expect(keys).toContain("upload");
+  });
+
+  /** 상품이 다르면 안 뜬다 — 카카오를 만드는 사람에게 구글 로고 얘기는 소음이다. */
+  it("다른 상품만 고르면 로고 안내가 안 뜬다", () => {
+    const keys = actionNotices(["kakao-display-2x1"], planDerivation).map((n) => n.key);
+    expect(keys).not.toContain("upload");
+  });
+
+  /**
+   * **이것이 이번에 새로 말하는 것이다.** 배경을 지우면 글자가 함께 지워진다
+   * (설계 §1.5 실측: 헤드라인·본문·배지·바닥 띠가 전부 사라짐). 조립 규격은
+   * 오브젝트만 남으므로 **문구는 광고 관리자에서 넣어야 한다.**
+   */
+  it("조립 규격을 고르면 글자가 없다고 말한다", () => {
+    const notices = actionNotices(["kakao-bizboard"], planDerivation);
+    const assemble = notices.find((notice) => notice.key === "assemble");
+    expect(assemble).toBeDefined();
+    expect(assemble!.body).toMatch(/글자/);
+  });
+
+  it("참고 규격을 고르면 공식 문서로 확인하라고 말한다", () => {
+    const notices = actionNotices(["naver-smartchannel"], planDerivation);
+    expect(notices.map((notice) => notice.key)).toContain("reference");
+  });
+
+  /** 공식·줄이기뿐인 규격만 고르면 조용하다 — 항상 뜨는 안내는 벽지가 된다. */
+  it("말할 게 없으면 조용하다", () => {
+    // 카카오 정사각: 공식·줄이기·로고 없는 상품 — 할 말이 없다.
+    expect(actionNotices(["kakao-display-square"], planDerivation)).toEqual([]);
+  });
+
+  /** 같은 안내를 규격 수만큼 반복하지 않는다. */
+  it("같은 안내를 겹쳐 내지 않는다", () => {
+    const notices = actionNotices(["kakao-bizboard", "naver-smartchannel"], planDerivation);
+    expect(notices.filter((notice) => notice.key === "assemble")).toHaveLength(1);
+  });
+
+  /** 모르는 id 를 받아도 죽지 않는다 — 화면이 그리는 중이다. */
+  it("모르는 규격은 무시한다", () => {
+    expect(actionNotices(["없는-규격"], planDerivation)).toEqual([]);
+  });
+
+  /** 필수 9개를 고르면 셋 다 뜬다. 이것이 실제로 가장 흔한 조합이다. */
+  it("필수 전부를 고르면 셋 다 말한다", () => {
+    const required = AD_SPECS.filter((spec) => spec.required).map((spec) => spec.id);
+    const keys = actionNotices(required, planDerivation).map((notice) => notice.key);
+    expect(keys).toContain("assemble");
+    expect(keys).toContain("reference");
+    // 필수에 구글 반응형 디스플레이가 들어 있으므로 로고 안내도 뜬다.
+    expect(keys).toContain("upload");
+  });
+});
+
+/**
+ * **어느 관리자인지 이름을 댄다.**
+ *
+ * 사용자 확인(2026-09-08): 문구는 광고 관리자에서 사람이 넣는 것이 맞고,
+ * 그러면 이것은 고장이 아니라 **안내의 문제**다. 「광고 관리자에서 넣으세요」
+ * 만으로는 카카오를 만드는 사람이 네이버 얘기인지 헷갈린다.
+ */
+describe("문구를 어디에 넣는지 말한다", () => {
+  it("카카오만 골랐으면 카카오만 말한다", () => {
+    const body = actionNotices(["kakao-bizboard"], planDerivation)
+      .find((notice) => notice.key === "assemble")!.body;
+    expect(body).toContain("카카오 비즈보드");
+    expect(body).not.toContain("네이버");
+  });
+
+  it("네이버만 골랐으면 네이버만 말한다", () => {
+    const body = actionNotices(["naver-smartchannel"], planDerivation)
+      .find((notice) => notice.key === "assemble")!.body;
+    expect(body).toContain("네이버 GFA");
+    expect(body).not.toContain("카카오");
+  });
+
+  it("둘 다 골랐으면 둘 다 말한다", () => {
+    const body = actionNotices(["kakao-bizboard", "naver-smartchannel"], planDerivation)
+      .find((notice) => notice.key === "assemble")!.body;
+    expect(body).toContain("카카오 비즈보드");
+    expect(body).toContain("네이버 GFA");
+  });
+
+  /** 「직접 입력하세요」가 제목에 있어야 스크롤 중에도 읽힌다. */
+  it("무엇을 하라는지 제목이 말한다", () => {
+    const notice = actionNotices(["kakao-bizboard"], planDerivation)
+      .find((entry) => entry.key === "assemble")!;
+    expect(notice.title).toMatch(/직접 입력/);
   });
 });

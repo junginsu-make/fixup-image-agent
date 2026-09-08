@@ -103,9 +103,21 @@ describe("규격대로 뽑는다", () => {
   });
 
   it("만들 수 없는 규격은 뽑지 않는다", async () => {
-    const spec = specById("kakao-bizboard");
+    const spec = specById("google-rda-logo");
     const result = await exportForAd(await flat(1200, 1200), spec, planDerivation(spec));
     expect("failed" in result).toBe(true);
+  });
+
+  /**
+   * **조립 규격을 여기서 만들면 안 된다.** 자르거나 줄이면 배경이 그대로 남아
+   * 불투명해지는데, 규격 검증은 픽셀만 보므로 **그 상태로 통과한다** — 화면은
+   * 「검증 통과」라 하고 포털이 등록을 거부한다(설계 §3.1).
+   */
+  it("조립 규격은 파생으로 만들지 않는다", async () => {
+    const spec = specById("kakao-bizboard");
+    const result = await exportForAd(await flat(2048, 1072), spec, planDerivation(spec));
+    expect("failed" in result).toBe(true);
+    expect((result as { failed: string }).failed).toMatch(/조립/);
   });
 });
 

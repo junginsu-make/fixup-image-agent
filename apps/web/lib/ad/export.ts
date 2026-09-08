@@ -56,6 +56,18 @@ export async function exportForAd(
   spec: AdSpec,
   plan: DerivePlan,
 ): Promise<AdExport | { failed: string }> {
+  /**
+   * **조립은 여기서 안 만든다.** 이 함수는 자르고 줄이는 파생 전용이고,
+   * 조립은 배경을 지운 오브젝트를 투명 캔버스에 얹는 다른 길이다
+   * (`assemble.ts`, 설계 §3.1).
+   *
+   * **막지 않으면 불투명한 배너가 나온다** — 크롭·리사이즈는 배경을 그대로
+   * 들고 오는데, 규격 검증(§5.1)은 픽셀만 보므로 **그 상태로 통과한다.**
+   * 화면은 「검증 통과」라 말하고 포털이 등록을 거부한다.
+   */
+  if (plan.kind === "assemble") {
+    return { failed: "투명 배너는 조립으로 만듭니다. 파생으로 만들 수 없습니다." };
+  }
   if (plan.kind === "unsupported" || plan.kind === "upload") {
     return { failed: plan.reason };
   }

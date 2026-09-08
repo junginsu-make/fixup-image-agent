@@ -1,5 +1,7 @@
 // 스위치는 잎 모듈에 있다 — 그것만 읽으려고 sharp 를 끌고 오면 안 된다.
 export { isAdExportEnabled } from "./feature";
+import { assembleBanner, type AssembledBanner } from "./assemble";
+import { isTooSmall } from "./layout-rules";
 import { checkAgainstSpec } from "./check";
 import { planDerivation } from "./derive";
 import { exportForAd } from "./export";
@@ -64,10 +66,32 @@ export interface AdBatchEntry {
    * 전부 통과하고 나간다(설계 §5.2). 화면이 「많이 줄었음」을 표시할 수 있어야 한다.
    */
   shrink?: number;
+  /**
+   * 오브젝트가 캔버스 폭의 15% 미만인가 — **조립 규격에만 붙는다.**
+   *
+   * 세로로 긴 피사체(사람 전신, 병, 튜브형 제품)를 가로로 긴 배너에 놓으면
+   * 폭 5~13% 까지 쪼그라든다. 1029px 배너에 62px 짜리 조각 하나면 **빈 배너에
+   * 점 하나**인데, 픽셀·형식·알파·용량이 전부 맞아 `checkAgainstSpec` 을
+   * **통과한다**(설계 §5.4② · §6.2).
+   *
+   * **막지 않고 알린다.** 늘이면 찌그러지고 자르면 얼굴이 잘린다 — 둘 다 광고로
+   * 못 쓴다. 사람이 보고 다른 마스터를 고르는 편이 낫다.
+   */
+  tooSmall?: boolean;
 }
 
 
 export interface ExportBatchOptions {
+  /**
+   * 마스터에서 배경을 지워 오브젝트만 남긴다. **조립 규격에만 쓴다.**
+   *
+   * **주입으로 받는다.** 이 모듈은 규격마다 도는 순수한 루프이고 배경 제거는
+   * 네트워크다 — 직접 부르면 시험이 fal 없이 못 돌고, 계약상 `lib/ad/` 의
+   * 순수 층에 fal 이 새는 것도 막아야 한다(설계 §4.2).
+   *
+   * 안 넘기면 조립 규격만 실패한다. **조용히 빈 배너를 만들지 않는다.**
+   */
+  cutout?: (master: Buffer) => Promise<Buffer>;
   /**
    * 뽑은 바이트를 **검증 전에** 한 번 거치게 하는 자리.
    *
@@ -98,6 +122,8 @@ export async function exportBatch(
   }
 
   const entries: AdBatchEntry[] = [];
+  // 마스터당 하나. 여러 조립 규격이 같은 오브젝트를 나눠 쓴다.
+  const cache: { object?: Buffer } = {};
   for (const id of wanted) {
     const spec = AD_SPECS.find((entry) => entry.id === id);
     if (!spec) {
@@ -119,7 +145,39 @@ export async function exportBatch(
       ...(spec.safeArea ? { safeArea: spec.safeArea } : {}),
     };
 
-    const made = await exportForAd(master, spec, planDerivation(spec));
+    const plan = planDerivation(spec);
+
+    /**
+     * **조립은 파생과 길이 다르다.** 자르거나 줄이는 것이 아니라, 배경을 지운
+     * 오브젝트를 투명 캔버스에 얹는다 — 모델이 못 만드는 비율(3.99:1·4.69:1)이
+     * 그렇게 나온다(설계 §3.1).
+     *
+     * **오브젝트는 마스터당 한 번만 만든다.** 두 규격이 같은 마스터를 쓰면
+     * 배경 제거가 한 번이다 — 아끼는 것은 돈($0.003)이 아니라 **시간**이다
+     * (3.7초 × 규격 수만큼 사용자가 기다린다, 설계 §8).
+     */
+    if (plan.kind === "assemble") {
+      const assembled = await assembleFor(spec, master, options, cache);
+      if ("failed" in assembled) {
+        entries.push({ ...shared, status: "failed", reason: assembled.failed, failures: [] });
+        continue;
+      }
+      const bytes = options.finish ? await options.finish(assembled.bytes) : assembled.bytes;
+      const check = await checkAgainstSpec(bytes, spec);
+      entries.push({
+        ...shared,
+        status: check.ok ? "ok" : "failed",
+        ...(check.ok ? {} : { reason: check.failures.join(" · ") }),
+        failures: check.failures,
+        bytes,
+        byteLength: bytes.length,
+        // **막지 않고 알린다.** 규격 검증은 이것을 통과시킨다(§5.4②).
+        ...(isTooSmall(spec.target, assembled.placement) ? { tooSmall: true } : {}),
+      });
+      continue;
+    }
+
+    const made = await exportForAd(master, spec, plan);
     if ("failed" in made) {
       entries.push({ ...shared, status: "failed", reason: made.failed, failures: [] });
       continue;
@@ -163,9 +221,39 @@ async function withShrink(master: Buffer, entries: AdBatchEntry[]): Promise<AdBa
   const sourceWidth: number = meta.width ?? 0;
 
   for (const entry of entries) {
-    entry.shrink = entry.bytes && entry.target.width
+    /**
+     * **조립 항목은 비운다.** `shrink` 는 「원본을 몇 배로 줄였는가」인데,
+     * 조립은 줄인 것이 아니라 **조립한 것**이라 그 수치가 거짓이다(설계 §6.2).
+     * 눈에 보이는 고장은 없지만 거짓 수치를 들고 다니지 않는다.
+     */
+    entry.shrink = entry.bytes && entry.target.width && entry.format !== "png-alpha"
       ? Number((sourceWidth / entry.target.width).toFixed(2))
       : undefined;
   }
   return entries;
+}
+
+/**
+ * 조립 규격 한 장.
+ *
+ * **실패를 삼키지 않는다.** 배경 제거가 실패하면 그 규격만 실패로 두고 나머지는
+ * 그대로 나온다 — 실패 지점이 생성 **뒤**로 옮겨가므로, 하나 때문에 전부 못
+ * 받으면 **이미 쓴 돈이 통째로 버려진다**(설계 §9.3).
+ */
+async function assembleFor(
+  spec: AdSpec,
+  master: Buffer,
+  options: ExportBatchOptions,
+  cache: { object?: Buffer },
+): Promise<AssembledBanner | { failed: string }> {
+  if (!options.cutout) {
+    return { failed: "투명 배경을 만들 준비가 안 됐습니다." };
+  }
+  try {
+    // 마스터당 한 번. 두 번째 규격부터는 같은 오브젝트를 쓴다.
+    cache.object ??= await options.cutout(master);
+    return await assembleBanner(spec.target, cache.object);
+  } catch (error) {
+    return { failed: error instanceof Error ? error.message : "투명 배너를 만들지 못했습니다." };
+  }
 }

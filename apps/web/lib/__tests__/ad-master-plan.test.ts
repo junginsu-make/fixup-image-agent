@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AD_SPECS } from "../ad/specs";
-import { planMasters } from "../ad/master-plan";
+import { needsCutout, planMasters } from "../ad/master-plan";
 
 /**
  * 고른 규격에서 **만들어야 할 마스터를 역산한다.**
@@ -54,10 +54,15 @@ describe("과금 전에 막는다", () => {
    * §4.4: 3단계는 생성이 **먼저**다. 만들 수 없는 규격을 그냥 두면 돈을 쓰고 나서
    * 「이건 못 뽑습니다」를 보게 된다.
    */
-  it("투명 배경 규격은 까닭과 함께 막는다", () => {
-    expect(planMasters(["kakao-bizboard"]).blocked).toEqual([
-      { specId: "kakao-bizboard", reason: expect.stringContaining("투명") },
-    ]);
+  /**
+   * **4단계에서 열렸다.** 조립 엔진이 붙어 투명 배경을 만들 수 있게 됐다
+   * (설계 `2026-09-07-ad-assembly-engine.md` §3.1). 막히던 것이 이제 마스터를
+   * 돌려준다 — 그 마스터에서 오브젝트를 떼어 투명 캔버스에 얹는다.
+   */
+  it("투명 배경 규격은 이제 조립으로 만든다", () => {
+    const plan = planMasters(["kakao-bizboard"]);
+    expect(plan.blocked).toEqual([]);
+    expect(plan.masters).toHaveLength(1);
   });
 
   it("올려야 하는 규격도 막는다 — 모델이 지어내면 안 된다", () => {
@@ -66,7 +71,7 @@ describe("과금 전에 막는다", () => {
   });
 
   it("막힌 규격 때문에 마스터를 만들지 않는다", () => {
-    expect(planMasters(["kakao-bizboard"]).masters).toEqual([]);
+    expect(planMasters(["google-rda-logo"]).masters).toEqual([]);
   });
 
   /**
@@ -74,9 +79,9 @@ describe("과금 전에 막는다", () => {
    * 사용자는 무엇을 빼야 하는지 모른 채 되돌아간다.
    */
   it("막힌 것과 되는 것이 섞이면 되는 것만 만든다", () => {
-    const plan = planMasters(["kakao-bizboard", "google-rda-square"]);
+    const plan = planMasters(["google-rda-logo", "google-rda-square"]);
     expect(plan.masters.map((master) => master.id)).toEqual(["ad-1x1"]);
-    expect(plan.blocked.map((entry) => entry.specId)).toEqual(["kakao-bizboard"]);
+    expect(plan.blocked.map((entry) => entry.specId)).toEqual(["google-rda-logo"]);
   });
 
   it("모르는 규격 id 는 조용히 버리지 않는다", () => {
@@ -88,5 +93,36 @@ describe("과금 전에 막는다", () => {
   /** 모르는 id 가 화면에 그대로 찍히면 안 된다 — `batch.ts` 가 같은 판단을 한다. */
   it("모르는 id 를 잘라서 담는다", () => {
     expect(planMasters(["x".repeat(200)]).blocked[0]!.specId.length).toBeLessThanOrEqual(64);
+  });
+});
+
+/**
+ * 배경 제거가 필요한가 (설계 §9.2).
+ *
+ * **CPU 자리를 잡기 전에 알아야 한다.** `withRenderSlot` 은 「스레드풀이 넷이라」
+ * 만든 CPU 게이트인데, 배경 제거는 fal 이 일하는 4초 동안 **우리 CPU 를 안
+ * 쓴다.** 그 4초를 자리 안에서 기다리면 카드뉴스 미리보기가 이유 없이 429 를
+ * 받는다 — 게이트가 지키기로 한 자원과 실제로 쥐는 자원이 다르다.
+ */
+describe("배경 제거가 필요한가", () => {
+  it("조립 규격을 고르면 필요하다", () => {
+    expect(needsCutout(["kakao-bizboard"])).toBe(true);
+    expect(needsCutout(["naver-smartchannel"])).toBe(true);
+  });
+
+  it("파생 규격만 고르면 필요 없다", () => {
+    expect(needsCutout(["google-rda-square", "naver-brand-pc"])).toBe(false);
+  });
+
+  it("하나라도 섞이면 필요하다", () => {
+    expect(needsCutout(["google-rda-square", "kakao-bizboard"])).toBe(true);
+  });
+
+  it("모르는 id 는 필요 없다 — 어차피 막힌다", () => {
+    expect(needsCutout(["없는-규격"])).toBe(false);
+  });
+
+  it("아무것도 안 고르면 필요 없다", () => {
+    expect(needsCutout([])).toBe(false);
   });
 });

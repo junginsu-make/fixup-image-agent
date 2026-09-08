@@ -7,6 +7,9 @@ import { getLibraryImageFile } from "../../../../lib/server-library";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
+import { needsCutout } from "../../../../lib/ad/master-plan";
+import { assertCutoutSize, createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
+import { createPosterFalClients } from "../../../../lib/poster/providers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +78,33 @@ async function posterImageFile(
   if (!found) return null;
   const { bytes, contentType } = await posterImageBytes(found.assetPath);
   return { bytes, mimeType: contentType };
+}
+
+/**
+ * 마스터에서 배경을 지워 오브젝트만 남긴다.
+ *
+ * **올리고 → 지우고 → 내려받는다.** fal 은 URL 로만 받으므로 먼저 올려야 한다.
+ * 업로드는 기존 `createFalUploader` 를 그대로 쓴다.
+ *
+ * **결과 읽기는 `background.ts` 가 한다** — 기존 fal 큐의 `jobResult` 는
+ * `data.images`(복수)를 보는데 birefnet 은 `image`(단수)라 **예외 없이 빈
+ * 배열**을 준다(설계 §2.3).
+ */
+async function cutoutForAd(master: Buffer, mimeType: string): Promise<Buffer> {
+  const { uploader } = createPosterFalClients();
+  // **형식을 지어내지 않는다.** 여기서 `"image/png"` 를 박으면 저장 형식이
+  // 바뀌는 날 fal 에 거짓 형식을 알린다 — 그 작업은 이미 계획에 있다.
+  const url = await uploader.uploadReference(master, mimeType);
+  const cutUrl = await removeBackground(url, createBackgroundRemover(process.env.FAL_KEY!));
+  const response = await fetch(cutUrl);
+  if (!response.ok) throw new Error("배경을 지운 그림을 내려받지 못했습니다.");
+
+  // 미리 밝힌 크기가 있으면 **받기 전에** 막는다. 없으면 받은 만큼을 잰다.
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > 0) assertCutoutSize(declared);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assertCutoutSize(bytes.byteLength);
+  return bytes;
 }
 
 export async function POST(request: Request) {
@@ -147,9 +177,63 @@ export async function POST(request: Request) {
      * 조건 없이 넘기면 꺼져 있어도 규격 수만큼 조회가 돈다.
      */
     const badge = await isAiBadgeEnabled();
+
+    /**
+     * **배경 제거를 자리 밖에서 먼저 한다** (설계 §9.2).
+     *
+     * `withRenderSlot` 은 「스레드풀이 넷이라」 만든 **CPU** 게이트다. 그런데
+     * 배경 제거는 fal 이 일하는 4초 동안 **우리 CPU 를 안 쓴다** — 그 4초를
+     * 자리 안에서 기다리면 카드뉴스 미리보기가 이유 없이 429 를 받는다.
+     * **게이트가 지키기로 한 자원과 실제로 쥐는 자원이 다르다.**
+     *
+     * 대가: 자리를 못 잡으면 이 호출값($0.003)이 버려진다. 잃는 것이 0.4원이고
+     * 애초에 자리를 못 잡을 만큼 붐비는 것은 드물다.
+     *
+     * **조립 규격을 안 골랐으면 아예 안 부른다** — 돈과 4초를 헛되이 쓴다.
+     *
+     * **실패해도 여기서 안 던진다.** 조립 규격만 실패로 두면 되는데 통째로
+     * 던지면 **파생 규격까지 못 받는다**(설계 §9.3).
+     */
+    let cutout: Buffer | undefined;
+    let cutoutFailed: string | undefined;
+    if (needsCutout(parsed.data.specIds)) {
+      try {
+        cutout = await cutoutForAd(file.bytes, file.mimeType);
+      } catch (error) {
+        /**
+         * **내부 사정을 사용자 화면에 쓰지 않는다.**
+         *
+         * `createPosterFalClients()` 가 던지는 말은 「다음 환경변수가 없어
+         * 포스터를 만들 수 없습니다: FAL_KEY」다. 그대로 규격 실패 사유로
+         * 쓰면 **사용자가 그것을 본다.** fal SDK 의 HTTP 오류 본문도 같은 길로
+         * 샌다. 이 라우트의 꼬리 catch 가 이미 정반대 정책을 적어 두었다 —
+         * 「그 밖의 것은 내부 사정이라 문구를 감춘다」.
+         *
+         * **아는 말만 통과시킨다.** 시한 초과와 「받지 못했습니다」는 사용자가
+         * 읽고 판단할 수 있는 말이다 — 다시 눌러 보면 되는 것들이다.
+         */
+        const message = error instanceof Error ? error.message : "";
+        const sayable = /오래 걸립니다|받지 못했습니다|내려받지 못했습니다|너무 큽니다/.test(message);
+        if (!sayable) console.error(`[ad] 배경 제거 실패: ${message}`);
+        cutoutFailed = sayable ? message : "배경을 지우지 못했습니다.";
+      }
+    }
+
     const results = await withRenderSlot(
       auth.member.userId,
-      () => exportBatch(file.bytes, parsed.data.specIds, badge ? { finish: markAsAi } : {}),
+      () => exportBatch(file.bytes, parsed.data.specIds, {
+        ...(badge ? { finish: markAsAi } : {}),
+        /**
+         * **이미 지워 둔 것을 준다.** 자리 안에서는 조립·인코딩만 한다.
+         * 실패했으면 그 사유를 그대로 던져 그 규격만 실패로 남긴다.
+         */
+        ...(cutout || cutoutFailed
+          ? { cutout: async () => {
+              if (cutout) return cutout;
+              throw new Error(cutoutFailed);
+            } }
+          : {}),
+      }),
     );
 
     /**

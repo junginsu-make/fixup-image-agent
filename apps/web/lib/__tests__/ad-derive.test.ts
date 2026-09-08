@@ -187,14 +187,20 @@ describe("마스터와 규격의 방향이 같다", () => {
 
 describe("투명 배경 규격은 새어 나가지 않는다", () => {
   /**
-   * 크롭으로 새어 나가면 투명 없이 만들어져 **등록 자체가 거부된다.**
-   * 규격 검증(§5.1)은 픽셀만 보므로 통과시킨다.
+   * **이 시험이 지키는 것은 「미지원」이 아니라 「크롭·리사이즈로 새지 않는다」다.**
+   *
+   * 크롭·리사이즈는 배경을 그대로 들고 오므로 불투명해지고, 그러면 포털이
+   * 등록 자체를 거부한다. 규격 검증(§5.1)은 픽셀만 보므로 **그 상태로
+   * 통과한다** — 화면은 「검증 통과」라 하고 포털이 반려한다.
+   *
+   * 4단계가 조립을 붙이면서 답이 `unsupported` → `assemble` 로 바뀌었지만,
+   * **지켜야 할 것은 그대로다.**
    */
-  it("`png-alpha` 는 반드시 미지원이다", () => {
+  it("`png-alpha` 는 크롭·리사이즈로 안 만든다", () => {
     const alpha = AD_SPECS.filter((spec) => spec.format === "png-alpha");
     expect(alpha.length).toBeGreaterThan(0);
     for (const spec of alpha) {
-      expect(planDerivation(spec).kind, spec.id).toBe("unsupported");
+      expect(planDerivation(spec).kind, spec.id).toBe("assemble");
     }
   });
 
@@ -226,7 +232,7 @@ describe("배정이 설계 §6.2 와 같다", () => {
     "naver-gfa-thumb": { master: "ad-1x1", kind: "resize" },
     "naver-powerlink": { master: "ad-1x1", kind: "resize" },
     "naver-gfa-main": { master: "ad-2x1", kind: "crop" },
-    "naver-brand-pc": { master: "ad-191x1", kind: "crop" },
+    "naver-brand-pc": { master: "ad-3x2", kind: "resize" },
     "naver-brand-mobile": { master: "ad-191x1", kind: "crop" },
   };
 
@@ -240,9 +246,14 @@ describe("배정이 설계 §6.2 와 같다", () => {
     expect(actual).toEqual(expected);
   });
 
-  it("크롭은 셋뿐이고 나머지는 구도를 안 바꾼다", () => {
+  /**
+   * **셋에서 둘로 줄었다.** `ad-3x2` 마스터를 더해 `naver-brand-pc` 가
+   * 크롭에서 빠졌다 — 456×304 가 정확히 3:2 라 구도를 하나도 안 버린다
+   * (설계 `2026-09-07-ad-assembly-engine.md` §3.2).
+   */
+  it("크롭은 둘뿐이고 나머지는 구도를 안 바꾼다", () => {
     const crops = derivable.filter(({ plan }) => plan.kind === "crop").map(({ spec }) => spec.id);
-    expect(crops.sort()).toEqual(["naver-brand-mobile", "naver-brand-pc", "naver-gfa-main"]);
+    expect(crops.sort()).toEqual(["naver-brand-mobile", "naver-gfa-main"]);
   });
 
   /**
@@ -340,5 +351,111 @@ describe("필수와 선택을 가른다", () => {
     const official = AD_SPECS.filter((spec) => spec.portal !== "naver");
     expect(official.length).toBeGreaterThan(0);
     for (const spec of official) expect(spec.sourceKind, spec.id).toBe("official");
+  });
+});
+
+/**
+ * 3:2 마스터 (설계 `2026-09-07-ad-assembly-engine.md` §3.2).
+ *
+ * **필수 규격 하나가 21.5% 잘려 나가는 것을 두고 볼 수 없어서 넣었다.**
+ * 브랜드검색 PC 는 광고주 콘솔에 올려야 하는 필수 소재인데, 좌우가 잘리면
+ * 헤드라인 한쪽이 사라진다 — 실제로 「건강한 선택」이 「한 선택」으로 보였다.
+ */
+describe("3:2 마스터", () => {
+  const brandPc = AD_SPECS.find((spec) => spec.id === "naver-brand-pc")!;
+
+  it("브랜드검색 PC 는 456×304 = 정확히 3:2 다", () => {
+    expect(brandPc.target.width / brandPc.target.height).toBeCloseTo(1.5, 5);
+  });
+
+  /** 크롭이 아니라 리사이즈다 — **구도를 하나도 안 버린다.** */
+  it("구도를 100% 남긴다", () => {
+    const plan = planDerivation(brandPc);
+    expect(plan.kind).toBe("resize");
+    expect((plan as { master: string }).master).toBe("ad-3x2");
+  });
+
+  /** 확대는 금지다(설계 §3.2). 마스터가 목표보다 커야 한다. */
+  it("확대하지 않는다", () => {
+    const master = AD_MASTERS.find((entry) => entry.id === "ad-3x2")!;
+    expect(master.width).toBeGreaterThanOrEqual(brandPc.target.width);
+    expect(master.height).toBeGreaterThanOrEqual(brandPc.target.height);
+  });
+
+  /**
+   * **다른 규격을 끌고 가지 않는다.** 마스터를 더하면 `planDerivation` 이
+   * 「가장 많이 남기는 것」을 다시 고르므로, 엉뚱한 규격이 이쪽으로 옮겨올 수
+   * 있다. 위 「모든 파생 규격의 마스터와 방법」 시험이 그것을 통째로 잠그지만,
+   * 이 마스터를 쓰는 규격이 하나뿐이라는 것을 여기서 한 번 더 못 박는다.
+   */
+  it("이 마스터를 쓰는 규격은 하나뿐이다", () => {
+    const users = AD_SPECS
+      .filter((spec) => (planDerivation(spec) as { master?: string }).master === "ad-3x2")
+      .map((spec) => spec.id);
+    expect(users).toEqual(["naver-brand-pc"]);
+  });
+
+  /** 16의 배수·최소 픽셀·3:1 — 모델이 그대로 만들 수 있는 값이어야 한다. */
+  it("모델이 그대로 만들 수 있는 픽셀이다", () => {
+    const master = AD_MASTERS.find((entry) => entry.id === "ad-3x2")!;
+    expect(master.width % 16, "16의 배수").toBe(0);
+    expect(master.height % 16, "16의 배수").toBe(0);
+    expect(master.width * master.height, "최소 픽셀").toBeGreaterThanOrEqual(655_360);
+    expect(master.width / master.height, "3:1 이하").toBeLessThanOrEqual(3);
+  });
+});
+
+/**
+ * 조립 갈래 (설계 `2026-09-07-ad-assembly-engine.md` §3.1 · 4-d).
+ *
+ * 투명 배경 규격은 **모델이 못 만든다** — 비즈보드 3.99:1, 스마트채널 4.69:1
+ * 이라 `gpt-image-2` 의 3:1 상한을 넘고, 배경도 투명이어야 한다. 마스터에서
+ * 오브젝트를 떼어 투명 캔버스에 얹는다.
+ */
+describe("조립 갈래", () => {
+  const bizboard = AD_SPECS.find((spec) => spec.id === "kakao-bizboard")!;
+  const smartChannel = AD_SPECS.find((spec) => spec.id === "naver-smartchannel")!;
+
+  it("투명 규격은 조립으로 만든다", () => {
+    expect(planDerivation(bizboard).kind).toBe("assemble");
+    expect(planDerivation(smartChannel).kind).toBe("assemble");
+  });
+
+  /**
+   * **마스터를 함께 들어야 한다.** 안 들면 `master-plan.ts:61` 에서
+   * `plan.master` 가 `undefined` 라 막히고, `adSubmitPlan` 이 「하나라도 막히면
+   * 전부 막는다」라서 **비즈보드를 고른 순간 생성 버튼 전체가 잠긴다.**
+   */
+  it("마스터를 함께 든다 — 안 들면 생성이 통째로 막힌다", () => {
+    for (const spec of [bizboard, smartChannel]) {
+      const plan = planDerivation(spec) as { master?: string };
+      expect(plan.master, spec.id).toBeTruthy();
+      expect(AD_MASTERS.some((master) => master.id === plan.master), spec.id).toBe(true);
+    }
+  });
+
+  /**
+   * **3:1 을 넘는 것이 조립의 존재 이유다.** 모델은 이 비율을 못 만든다 —
+   * 캔버스를 우리가 만들어야 나온다.
+   */
+  it("모델이 못 만드는 비율이다", () => {
+    for (const spec of [bizboard, smartChannel]) {
+      expect(spec.target.width / spec.target.height, spec.id).toBeGreaterThan(3);
+    }
+  });
+
+  it("투명 PNG 를 요구하는 규격만 조립한다", () => {
+    const assembled = AD_SPECS
+      .filter((spec) => planDerivation(spec).kind === "assemble")
+      .map((spec) => spec.id);
+    expect(assembled.sort()).toEqual(["kakao-bizboard", "naver-smartchannel"]);
+    for (const id of assembled) {
+      expect(AD_SPECS.find((spec) => spec.id === id)!.format).toBe("png-alpha");
+    }
+  });
+
+  /** 올려야 하는 것은 여전히 못 만든다 — 모델이 로고를 지어내면 안 된다. */
+  it("업로드 규격은 그대로 막힌다", () => {
+    expect(planDerivation(AD_SPECS.find((spec) => spec.id === "google-rda-logo")!).kind).toBe("upload");
   });
 });

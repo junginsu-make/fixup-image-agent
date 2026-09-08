@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Badge, cn } from "@fixup/ui";
 import { adSubmitPlan, type AdSubmitPlan } from "./ad-mode";
 import { planDerivation } from "../../lib/ad/derive";
-import { PORTAL_LABEL, defaultSelection, missingRequiredCount, specRows } from "../ad/export-rules";
+import { PORTAL_LABEL, actionNotices, defaultSelection, missingRequiredCount, specRows } from "../ad/export-rules";
+import { ActionNotices } from "../ad/action-notices";
 
 /**
  * 광고 규격을 고르는 칸.
@@ -87,6 +88,12 @@ export default function AdSpecPicker({
         <strong>만들 그림 {plan.masters.length}장</strong>
         {" · "}내보낼 규격 {picked.length}개
       </p>
+
+      {/*
+        **이후에 사람이 할 일.** `/ad` 와 같은 함수·같은 상자를 쓴다 — 같은
+        규격 목록인데 두 화면이 다른 말을 하면 그게 더 나쁘다.
+      */}
+      <ActionNotices notices={actionNotices(picked, planDerivation)} />
 
       {missingRequired > 0 && (
         <p className="text-meta text-destructive" role="alert">
