@@ -14,6 +14,22 @@ import { IMAGE_MODELS, priceCoverage, resolvePosterSize, type ImageMode } from "
 export const MIN_VARIANTS = 1;
 export const MAX_VARIANTS = 3;
 
+/**
+ * 화면을 열었을 때 몇 장으로 시작하나.
+ *
+ * **1장이다**(2026-09-08 사용자 결정). 3장으로 시작하고 있었다 — 한 장만 보려던
+ * 사람도 세 배를 내고, 그것도 **누르기 전에는 모른다.**
+ *
+ * 더 필요하면 그 자리에서 올리면 된다. 기본값은 **되돌릴 수 없는 쪽이 아니라
+ * 싼 쪽**에 둔다 — 세 장이 필요한 사람은 한 번 더 누르면 되지만, 한 장이면 됐던
+ * 사람은 이미 나간 돈을 못 돌려받는다.
+ *
+ * `MIN_VARIANTS` 와 같은 값이지만 **뜻이 다르다.** 하한은 「이보다 적게는 못
+ * 만든다」이고 이것은 「안 고르면 이것」이다. 하한이 바뀌어도 기본값은 그대로일
+ * 수 있으므로 한 이름으로 합치지 않는다.
+ */
+export const DEFAULT_VARIANTS = 1;
+
 export interface PosterCostInput {
   modelId: string;
   ratioId: string;

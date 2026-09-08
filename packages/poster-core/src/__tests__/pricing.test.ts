@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimatePosterCost } from "../pricing";
+import { DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "../pricing";
 
 describe("포스터 비용 추정", () => {
   it("레퍼런스가 있으면 i2i 단가를 쓴다", () => {
@@ -99,5 +99,26 @@ describe("포스터 비용 추정", () => {
     });
     expect(result.rejected).toBeTruthy();
     expect(result.totalUsd).toBeUndefined();
+  });
+});
+
+/**
+ * 안 고르면 몇 장인가 (2026-09-08 사용자 결정).
+ *
+ * 3장으로 시작하고 있었다 — 한 장만 보려던 사람도 세 배를 내고, 그것도 누르기
+ * 전에는 모른다.
+ */
+describe("기본 장수", () => {
+  it("한 장이다", () => {
+    expect(DEFAULT_VARIANTS).toBe(1);
+  });
+
+  it("**싼 쪽에 둔다** — 더 필요하면 올리면 되지만 나간 돈은 못 돌려받는다", () => {
+    expect(DEFAULT_VARIANTS).toBe(MIN_VARIANTS);
+  });
+
+  it("만들 수 있는 범위 안이다", () => {
+    expect(DEFAULT_VARIANTS).toBeGreaterThanOrEqual(MIN_VARIANTS);
+    expect(DEFAULT_VARIANTS).toBeLessThanOrEqual(MAX_VARIANTS);
   });
 });

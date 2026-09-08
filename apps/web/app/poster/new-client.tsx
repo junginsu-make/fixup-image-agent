@@ -9,7 +9,7 @@ import {
 } from "@fixup/ui";
 import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
 import {
-  estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder, visibleOrder,
+  DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS, nextPickOrder, visibleOrder,
 } from "@fixup/poster-core";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
@@ -96,7 +96,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [modelId, setModelId] = React.useState(
     IMAGE_MODELS.find((model) => model.isDefault)?.id ?? IMAGE_MODELS[0]!.id,
   );
-  const [variants, setVariants] = React.useState(3);
+  // 기본은 1장. 숫자는 `poster-core` 가 갖는다 — 화면에 박으면 둘이 갈린다.
+  const [variants, setVariants] = React.useState(DEFAULT_VARIANTS);
   const [title, setTitle] = React.useState("");
   const [instruction, setInstruction] = React.useState("");
   /** 03 한 줄 지시를 사람이 한 번이라도 건드렸나. 건드렸으면 안 덮는다. */
