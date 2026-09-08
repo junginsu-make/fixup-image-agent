@@ -61,7 +61,9 @@ const ANGLE_FALLBACK = [
 /** 첨부한 그림의 쓸모. 둘은 정반대라 반드시 골라야 한다. */
 const REFERENCE_ROLES = [
   { id: "style", label: "결만 따라 만들기", hint: "화풍·색·질감만 가져오고 캐릭터는 새로 만듭니다" },
-  { id: "extract", label: "이 캐릭터 뽑아내기", hint: "그림 속 그 캐릭터를 그대로 살려 각도를 만듭니다" },
+  // **결은 따로 고른다.** 뽑아내기가 그림 느낌까지 가져오는 것으로 읽히면,
+  // 「만화 캐릭터를 실사로」를 하려는 사람이 이 역할을 안 고른다(2026-09-08).
+  { id: "extract", label: "이 캐릭터 뽑아내기", hint: "그림 속 그 캐릭터를 그대로 살립니다. 그림 느낌은 아래 「결」에서 따로 고릅니다" },
 ] as const;
 
 type ReferenceRole = (typeof REFERENCE_ROLES)[number]["id"];
