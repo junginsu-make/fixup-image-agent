@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import { imageCreditUnits, imageUnitUsd, maxImageUnitUsd } from "../credit-cost";
+
+/**
+ * 도구 넷이 **같은 곳에서** 단가를 본다 (2026-09-08 사용자 결정).
+ *
+ * 전에는 도구마다 따로 셌다. 상세페이지·캐릭터는 손으로 매긴 정수 가중치,
+ * 리디자인은 무엇이든 1장 — $0.19 짜리를 1장으로 세어 **4배 덜 받았다.**
+ */
+
+describe("한 장이 얼마인가", () => {
+  it("표가 있는 모델은 그 표를 쓴다", () => {
+    // 2026-09-08 실측. 이 값이 바뀌면 시험이 알려 준다.
+    expect(imageUnitUsd("nano-banana", { size: { width: 1024, height: 1536 } })).toBeCloseTo(0.039, 4);
+    expect(imageUnitUsd("gpt-image-2", { size: { width: 1024, height: 1536 } })).toBeCloseTo(0.178, 4);
+  });
+
+  it("**크기가 반영된다** — 정수 가중치로는 못 하던 것", () => {
+    const tall = imageUnitUsd("gpt-image-2", { size: { width: 1024, height: 1536 } });
+    const square = imageUnitUsd("gpt-image-2", { size: { width: 1024, height: 1024 } });
+    expect(square).toBeGreaterThan(tall);
+  });
+
+  it("표에 없는 모델은 정해 둔 값을 쓴다", () => {
+    expect(imageUnitUsd("seedream-5-pro")).toBe(0.0675);
+    expect(imageUnitUsd("redesign-openai")).toBe(0.19);
+    expect(imageUnitUsd("redesign-google")).toBe(0.13);
+  });
+
+  it("**모르는 모델은 가장 비싼 값으로 잡는다** — 적게 잡으면 공짜 구멍이 된다", () => {
+    expect(imageUnitUsd("아직-없는-모델")).toBe(maxImageUnitUsd());
+    expect(maxImageUnitUsd()).toBeGreaterThanOrEqual(0.219);
+  });
+});
+
+describe("몇 장을 만들면 몇 장인가", () => {
+  it("장수만큼 곱한다", () => {
+    // $0.19 × 3 = $0.57 → 올림($0.57 / $0.05) = 12장
+    expect(imageCreditUnits("redesign-openai", 3)).toBe(12);
+  });
+
+  it("**리디자인 한 장이 4장이다** — 전에는 1장이었다", () => {
+    expect(imageCreditUnits("redesign-openai", 1)).toBe(4);
+    expect(imageCreditUnits("redesign-google", 1)).toBe(3);
+  });
+
+  it("안 만들면 0장", () => {
+    expect(imageCreditUnits("gpt-image-2", 0)).toBe(0);
+    expect(imageCreditUnits("gpt-image-2", -1)).toBe(0);
+  });
+});
+
+/**
+ * **상한을 넘으면 예약이 통째로 막힌다.**
+ *
+ * `max_reserve_units()` 가 60 이다. 넘으면 사용자는 「사용량을 확인하지
+ * 못했습니다」만 보고 이유를 알 수 없다. 정수 가중치를 실제 단가로 바꾸면서
+ * 장수가 커졌으므로, 현실적으로 가능한 가장 큰 조합을 재 둔다.
+ */
+describe("가장 큰 조합도 상한 60 안에 있는가", () => {
+  const CAP = 60;
+
+  it("상세페이지 — 7섹션 × 가장 비싼 모델", () => {
+    expect(imageCreditUnits("gpt-image-2", 7)).toBeLessThanOrEqual(CAP);
+  });
+
+  it("리디자인 — 10장 × OpenAI", () => {
+    expect(imageCreditUnits("redesign-openai", 10)).toBeLessThanOrEqual(CAP);
+  });
+
+  it("캐릭터 — 후보 3 + 각도 6", () => {
+    expect(imageCreditUnits("gpt-image-2", 9)).toBeLessThanOrEqual(CAP);
+  });
+
+  it("카드뉴스 — 카드 10장", () => {
+    expect(imageCreditUnits("gpt-image-2", 10)).toBeLessThanOrEqual(CAP);
+  });
+
+  it("이미지 만들기 — 변형 3장", () => {
+    expect(imageCreditUnits("gpt-image-2", 3)).toBeLessThanOrEqual(CAP);
+  });
+});

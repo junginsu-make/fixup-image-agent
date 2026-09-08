@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildFalPayload,
   chunkForModel,
-  creditUnitsFor,
   maxBatchSizeFor,
   resolveEndpoint,
   type FalPayload,
@@ -119,23 +118,6 @@ describe("화면비 매핑", () => {
 
   it("Nano Banana 계열은 화면비를 그대로 넘긴다", () => {
     expect(buildFalPayload("nano-banana-pro", { ...base, aspectRatio: "3:4" }).aspect_ratio).toBe("3:4");
-  });
-});
-
-describe("크레딧 계산", () => {
-  it("모델별 가중치 × 장수", () => {
-    expect(creditUnitsFor("gpt-image-2", 6)).toBe(24);
-    expect(creditUnitsFor("nano-banana-pro", 6)).toBe(18);
-    expect(creditUnitsFor("nano-banana", 6)).toBe(6);
-  });
-
-  it("한 장이면 가중치 그대로", () => {
-    expect(creditUnitsFor("gpt-image-2", 1)).toBe(4);
-  });
-
-  // 마이그레이션으로 상한을 60 으로 올린다. 최대 7섹션 × 4 = 28 이 들어가야 한다.
-  it("최대 조합이 상한 60 을 넘지 않는다", () => {
-    expect(creditUnitsFor("gpt-image-2", 7)).toBeLessThanOrEqual(60);
   });
 });
 

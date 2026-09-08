@@ -2,6 +2,7 @@ import { generateSections, humanizeProviderError, RedesignError, type GenerateIn
 import { buildSceneWithCharacterDirective, pickAngleForSection } from "@fixup/pdp-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 
@@ -14,7 +15,14 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const parsedCount = Number(form.get("count") || 1);
     const requestedCount = Number.isFinite(parsedCount) ? Math.max(1, Math.min(10, Math.trunc(parsedCount))) : 1;
-    reservation = await reserveAiUsage(req, "redesign_generate", requestedCount);
+    /**
+     * **장을 실제 단가에서 뽑는다**(2026-09-08 사용자 결정).
+     *
+     * 전에는 「요청한 장수」가 곧 장수였다 — $0.19 짜리 OpenAI 한 장이 1장이라
+     * **4배 덜 받고 있었다.** Google($0.13)은 3배였다.
+     */
+    const provider = String(form.get("model") || "openai") === "google" ? "redesign-google" : "redesign-openai";
+    reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(provider, requestedCount));
     if (!reservation.ok) return reservation.response;
     const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
     const files: GenerateInputFile[] = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, type: f.type, buffer: Buffer.from(await f.arrayBuffer()) })));
@@ -72,12 +80,11 @@ export async function POST(req: Request) {
       googleKey: resolveGoogleKey(),
     });
     const consumed = Math.min(requestedCount, result.project.sections.length);
-    // 어느 제공자로 만들었는지 남긴다. 안 남기면 나중에 비용으로 환산할 수 없다.
-    const provider = String(form.get("model") || "openai") === "google" ? "redesign-google" : "redesign-openai";
     const usage = await finalizeAiUsage(
       reservation,
       consumed > 0,
-      consumed,
+      // 만든 만큼만 받는다. 단가는 위에서 정한 제공자를 그대로 쓴다.
+      imageCreditUnits(provider, consumed),
       consumed > 0 ? undefined : "no_image_generated",
       { model: provider, billableImages: consumed },
     );
