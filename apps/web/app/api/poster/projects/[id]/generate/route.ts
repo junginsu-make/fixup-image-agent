@@ -164,6 +164,11 @@ export async function POST(_request: Request, context: Context) {
           .filter((reference) => (project.data.personIds ?? []).includes(reference.id))
           .map((reference) => urls[reference.id]!)
           .filter(Boolean),
+        // 그림 느낌만 바꿔도 되는 사람 (설계 §4-3). 옛 작업에는 없다.
+        restyledUrls: preserved
+          .filter((reference) => (project.data.restyledIds ?? []).includes(reference.id))
+          .map((reference) => urls[reference.id]!)
+          .filter(Boolean),
       },
       { queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
         // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.

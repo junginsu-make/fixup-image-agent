@@ -68,6 +68,14 @@ export const PosterProjectInputSchema = z.object({
    */
   personIds: z.array(z.string().uuid()).default([]),
   /**
+   * personIds 중 **그림 느낌만 바꿔도 되는** 것 (설계 §4-3).
+   *
+   * 「인물 지키기」는 그림 느낌까지 고정한다(`restyle` 을 금지한다). 「이 사람들을
+   * 만화로」는 그 지시로도, 「따라 만들기」(사람을 새로 만든다)로도 표현이 안 됐다.
+   * 옛 작업에는 이 값이 없다 — 없으면 지금까지처럼 그림 느낌까지 고정한다.
+   */
+  restyledIds: z.array(z.string().uuid()).default([]),
+  /**
    * 그림의 결. 기본은 `auto` — 첨부한 그림의 결을 따라간다.
    *
    * 기본값이 auto 여야 지금까지 만들던 사람이 안 깨진다. 옛 작업에는 이 값이

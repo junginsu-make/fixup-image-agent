@@ -43,7 +43,16 @@ export type Role = "none" | AttachmentRole;
  * 말인데 포스터는 한 장짜리라 끼울 자리가 없다(toPosterImage 도 null 을
  * 돌려준다).
  */
-const POSTER_ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person"];
+/**
+ * 포스터가 쓰는 역할 넷.
+ *
+ * **「사람은 그대로, 그림 느낌만」이 넷째다**(설계 §4-3, 2026-09-08 사용자 결정).
+ * 「인물 지키기」는 그림 느낌까지 고정하고 「따라 만들기」는 사람을 새로 만든다 —
+ * 그 사이가 비어 있었다.
+ */
+const POSTER_ROLES: AttachmentRole[] = [
+  "style", "preserve_product", "preserve_person", "preserve_person_restyled",
+];
 
 export function ReferencePicker({
   references, roles, order, onRoleChange, onUploaded, intent, onIntentChange,

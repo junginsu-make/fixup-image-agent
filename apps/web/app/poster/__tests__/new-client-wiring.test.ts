@@ -156,3 +156,19 @@ describe("한 줄 지시 미리 채우기가 이어져 있는가", () => {
     expect(source).toMatch(/setInstructionTouched\(true\);[\s\S]{0,80}setInstruction\(event\.target\.value\)/);
   });
 });
+
+/**
+ * 「사람은 그대로, 그림 느낌만」이 화면에서 서버까지 이어지는가 (설계 §4-3).
+ */
+describe("그림 느낌만 바꾸는 사람이 이어져 있는가", () => {
+  it("사람 목록에도 함께 넣는다 — 「인물은 한 명만」이 함께 걸려야 한다", () => {
+    expect(source).toMatch(
+      /personIds = orderedIds\.filter\([\s\S]{0,160}preserve_person_restyled/,
+    );
+  });
+
+  it("따로 든 목록을 서버로 보낸다", () => {
+    expect(source).toContain('roles[id] === "preserve_person_restyled"');
+    expect(source).toMatch(/^\s+restyledIds,$/m);
+  });
+});

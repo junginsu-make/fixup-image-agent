@@ -125,7 +125,14 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const styleIds = orderedIds.filter((id) => roles[id] === "style");
   const preservedIds = orderedIds.filter((id) => roles[id]?.startsWith("preserve"));
   // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
-  const personIds = orderedIds.filter((id) => roles[id] === "preserve_person");
+  //
+  // **그림 느낌만 바꾸는 사람도 사람 목록에 넣는다**(설계 §4-3). 얼굴을 지키는
+  // 것은 같고, 「인물은 한 명만」도 함께 걸려야 한다. 다른 점은 그림 느낌을
+  // 바꿔도 되느냐 하나뿐이라 그것만 따로 든다.
+  const personIds = orderedIds.filter(
+    (id) => roles[id] === "preserve_person" || roles[id] === "preserve_person_restyled",
+  );
+  const restyledIds = orderedIds.filter((id) => roles[id] === "preserve_person_restyled");
 
   /**
    * 비율이 모델보다 우선한다.
@@ -205,6 +212,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       referenceIds: styleIds,
       preservedIds,
       personIds,
+      restyledIds,
       // **고른 차례 그대로.** 이것이 프롬프트의 Image 번호가 된다.
       attachmentOrder: orderedIds,
       attachmentIntent: attachmentIntent.trim(),

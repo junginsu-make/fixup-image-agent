@@ -1,6 +1,6 @@
 import {
   attachmentPlacementRule, designerPersona, imageLookDirective, preserveDirective,
-  priorityLine, userInstructionHead, userInstructionTail,
+  priorityLine, restyledPersonDirective, userInstructionHead, userInstructionTail,
   type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
@@ -30,6 +30,12 @@ export interface PosterPromptImage {
    * 이 값이 없고, 사람으로 보면 없는 얼굴을 지키려 든다.
    */
   subject?: "person" | "object";
+  /**
+   * 사람은 그대로 두되 **그림 느낌만** 바꿔도 되나 (설계 §4-3).
+   *
+   * 안 적으면 지금까지처럼 그림 느낌까지 고정한다 — 옛 작업에는 이 값이 없다.
+   */
+  restyle?: boolean;
   title?: string;
 }
 
@@ -102,7 +108,8 @@ const TYPE_INTERACTION_EN: Record<string, string> = {
 /** 사용자가 화면에서 고른 역할의 이름. **규칙은 안 붙인다.** */
 function roleName(image: PosterPromptImage): string {
   if (image.kind !== "preserved") return "reference to imitate";
-  return image.subject === "person" ? "person to keep" : "subject to keep";
+  if (image.subject !== "person") return "subject to keep";
+  return image.restyle ? "person to keep, redrawn in another style" : "person to keep";
 }
 
 function attachmentLines(
@@ -120,17 +127,50 @@ function attachmentLines(
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
   if (hasAttachmentIntent) {
+    /**
+     * **문구를 뺐다는 말과 실제가 어긋나면 안 된다.**
+     *
+     * 4-3 역할(사람은 그대로, 그림 느낌만)의 지시는 남는다. 그런데 「규칙은 전부
+     * 뺐다」고 적어 두면 모델이 바로 아래 남아 있는 그 지시를 「빼려다 만 것」으로
+     * 읽을 수 있다. 남는 것이 있다고 함께 말한다.
+     */
     lines.push(
       "The user wrote what to do with these images. Their words replace the usual rules for each "
-      + "role — those rules are deliberately omitted here. Read the USER INSTRUCTION and follow it.",
+      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
+      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
     );
     images.forEach((image, index) => {
-      lines.push(`Image ${attachmentNumber(index)}: the user marked this "${roleName(image)}".`);
+      const number = attachmentNumber(index);
+      /**
+       * **「그림 느낌만 바꾸기」는 지우지 않는다**(설계 §4-3).
+       *
+       * 4-1 A안이 지우는 것은 사용자가 적은 말과 **부딪히는** 문구다. 이 역할의
+       * 말은 「사람은 그대로 + 그림 느낌은 바꿔도 된다」이고, 이 역할을 고른
+       * 사람이 적는 지시가 바로 그것이다 — 부딪히지 않는다.
+       *
+       * 이것까지 지우면 4-3 을 만든 이유가 사라진다. 사람을 하나하나 옮기라는
+       * 말이 다시 프롬프트에서 없어져 안경이 또 사라진다.
+       */
+      if (image.kind === "preserved" && image.subject === "person" && image.restyle) {
+        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+        return;
+      }
+      lines.push(`Image ${number}: the user marked this "${roleName(image)}".`);
     });
   } else {
   images.forEach((image, index) => {
     const number = attachmentNumber(index);
     if (image.kind === "preserved") {
+      /**
+       * **그림 느낌만 바꾸는 사람은 다른 말을 쓴다**(설계 §4-3).
+       *
+       * `preserveDirective("preserve-person")` 은 `restyle` 을 금지한다. 그 말을
+       * 그대로 보내면 「이 사람들을 만화로」가 처음부터 막힌다.
+       */
+      if (image.subject === "person" && image.restyle) {
+        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+        return;
+      }
       // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
       // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
       const role = image.subject === "person" ? "preserve-person" : "preserve-object";

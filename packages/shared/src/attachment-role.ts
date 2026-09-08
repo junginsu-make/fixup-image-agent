@@ -24,12 +24,25 @@ export type AttachmentRole =
   | "style"             // 꼴만 따라간다 — 레이아웃·서체·색
   | "preserve_product"  // 제품·로고·물건의 생김새를 지킨다
   | "preserve_person"   // 인물의 얼굴·체형을 지킨다
+  /**
+   * 사람은 그대로 두되 **그림 느낌만** 다른 첨부를 따라간다.
+   *
+   * 「인물 지키기」와 「따라 만들기」 어느 쪽으로도 표현이 안 되던 조합이다
+   * (설계 §4-3, 2026-09-08 사용자 결정). 지키기는 그림 느낌까지 고정하고
+   * (`restyle` 을 금지한다), 따라 만들기는 사람을 아예 새로 만든다.
+   *
+   * **실측이 이 옵션을 불렀다.** 사진 다섯 명을 만화로 바꿨더니 사람은 나왔는데
+   * 세 번째 사람의 안경이 몇 번을 돌려도 안 나왔다. 프롬프트 어디에도 「하나하나
+   * 그대로 옮겨라」가 없었기 때문이다.
+   */
+  | "preserve_person_restyled"
   | "place_as_is";      // 모델을 안 거치고 원본 그대로 넣는다
 
 export const ATTACHMENT_ROLE_LABEL: Record<AttachmentRole, string> = {
   style: "따라 만들기",
   preserve_product: "제품 그대로 지키기",
   preserve_person: "인물 그대로 지키기",
+  preserve_person_restyled: "사람은 그대로, 그림 느낌만",
   place_as_is: "원본 그대로 넣기",
 };
 
@@ -38,6 +51,7 @@ export const ATTACHMENT_ROLE_HINT: Record<AttachmentRole, string> = {
   style: "레이아웃·서체·색만 가져오고 내용은 새로 만듭니다",
   preserve_product: "형태·색·재질·라벨을 그대로 유지합니다",
   preserve_person: "얼굴과 체형을 그대로 유지합니다",
+  preserve_person_restyled: "얼굴·안경·모자·옷차림은 그대로 두고, 그림 느낌만 다른 첨부를 따라갑니다",
   place_as_is: "AI 를 거치지 않고 원본을 그대로 배치합니다",
 };
 
@@ -49,7 +63,11 @@ type Subject = "person" | "object";
 export function toCardNewsAttachment(
   role: AttachmentRole,
 ): { kind: CardNewsKind; subject?: Subject } {
-  if (role === "preserve_person") return { kind: "keep_identity", subject: "person" };
+  // 카드뉴스는 아직 「그림 느낌만 바꾸기」를 모른다(설계 §3 3단계). 가장 가까운
+  // 것으로 보낸다 — 사람을 잃는 것보다 그림 느낌이 안 바뀌는 편이 덜 나쁘다.
+  if (role === "preserve_person" || role === "preserve_person_restyled") {
+    return { kind: "keep_identity", subject: "person" };
+  }
   if (role === "preserve_product") return { kind: "keep_identity", subject: "object" };
   if (role === "place_as_is") return { kind: "place_as_is" };
   return { kind: "style_reference" };
@@ -78,7 +96,11 @@ type PosterKind = "style_reference" | "preserved";
  */
 export function toPosterImage(role: AttachmentRole): { kind: PosterKind; subject?: Subject } | null {
   if (role === "place_as_is") return null;
-  if (role === "preserve_person") return { kind: "preserved", subject: "person" };
+  // 포스터의 어휘는 「그림 느낌만」을 따로 못 담는다. 지킬 사람으로 보내고,
+  // 그림 느낌을 바꿔도 되는지는 `poster-core` 가 따로 들고 다닌다.
+  if (role === "preserve_person" || role === "preserve_person_restyled") {
+    return { kind: "preserved", subject: "person" };
+  }
   if (role === "preserve_product") return { kind: "preserved", subject: "object" };
   return { kind: "style_reference" };
 }
@@ -94,7 +116,8 @@ type PdpKind = "anchor" | "person" | "style";
 
 export function toPdpReference(role: AttachmentRole): PdpKind | null {
   if (role === "preserve_product") return "anchor";
-  if (role === "preserve_person") return "person";
+  // 상세페이지도 아직 모른다(설계 §3 3단계).
+  if (role === "preserve_person" || role === "preserve_person_restyled") return "person";
   if (role === "style") return "style";
   return null;
 }
@@ -114,5 +137,8 @@ export function fromPdpReference(kind: PdpKind): AttachmentRole {
  * (pdp-core/src/pdp.reference-policy.ts). 제품은 여럿이어도 된다.
  */
 export function personOverflow(roles: AttachmentRole[]): boolean {
-  return roles.filter((role) => role === "preserve_person").length > 1;
+  // 그림 느낌을 바꾸든 안 바꾸든 지킬 얼굴이라는 점은 같다. 함께 센다.
+  return roles.filter(
+    (role) => role === "preserve_person" || role === "preserve_person_restyled",
+  ).length > 1;
 }

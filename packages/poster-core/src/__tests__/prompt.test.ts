@@ -341,7 +341,7 @@ describe("첨부 지시를 적었을 때", () => {
   it("왜 규칙이 없는지 모델에게 말해 준다", () => {
     // 안 말하면 모델이 「빠뜨렸구나」 하고 자기가 아는 기본값을 채운다.
     expect(buildPosterPrompt({ ...base, attachmentIntent: intent }))
-      .toContain("those rules are deliberately omitted here");
+      .toContain("deliberately omitted");
   });
 
   it("지시를 안 적었으면 지금까지 그대로다", () => {
@@ -359,5 +359,102 @@ describe("첨부 지시를 적었을 때", () => {
     const prompt = buildPosterPrompt({ ...base, attachmentIntent: intent });
     expect(prompt.startsWith("USER INSTRUCTION")).toBe(true);
     expect(prompt).toContain(`re-read the USER INSTRUCTION and make sure it is satisfied: 첨부한 그림에 대해: ${intent}`);
+  });
+});
+
+/**
+ * 「사람은 그대로, 그림 느낌만」 — 설계 §4-3 (2026-09-08 사용자 결정).
+ *
+ * **실측이 이 옵션을 불렀다.** 사진 다섯 명을 만화로 바꿨더니 사람은 나왔는데
+ * 세 번째 사람의 안경이 몇 번을 돌려도 안 나왔다. 프롬프트 어디에도 「하나하나
+ * 그대로 옮겨라」가 없었고, 인물 묘사는 기획이 쓴 한 줄 요약뿐이었다.
+ */
+describe("사람은 그대로 두고 그림 느낌만 바꿀 때", () => {
+  const base = { slots: { ...EMPTY_SLOTS, scene: "강가 바위" } };
+  const restyled = {
+    ...base,
+    images: [{ kind: "preserved" as const, subject: "person" as const, restyle: true }],
+  };
+
+  it("그림 느낌을 바꾸라고 말한다", () => {
+    const prompt = buildPosterPrompt(restyled);
+    expect(prompt).toContain("PRESERVED PERSON, REDRAWN");
+    expect(prompt).toContain("redrawn in the rendering style");
+  });
+
+  it("**restyle 을 금지하지 않는다** — 바로 그것을 시킨 것이다", () => {
+    // `preserveDirective("preserve-person")` 은 restyle 을 금지한다. 그 말이
+    // 그대로 가면 「이 사람들을 만화로」가 처음부터 막힌다.
+    expect(buildPosterPrompt(restyled)).not.toContain("Do not beautify, slim, age, de-age, restyle");
+  });
+
+  it("작은 것을 이름으로 부른다 — 안경이 사라진 이유가 그것이다", () => {
+    const prompt = buildPosterPrompt(restyled);
+    for (const item of ["glasses", "sunglasses", "hats and caps", "watches", "shoes"]) {
+      expect(prompt, `${item} 를 이름으로 불러야 한다`).toContain(item);
+    }
+  });
+
+  it("한 명씩 확인하라고 못 박는다", () => {
+    // 여럿이면 전체 인상만 맞추고 개인을 뭉갠다.
+    expect(buildPosterPrompt(restyled)).toContain("Go through the people one at a time");
+  });
+
+  it("얼굴은 여전히 지킨다 — 그림 느낌만 바뀌는 것이다", () => {
+    const prompt = buildPosterPrompt(restyled);
+    expect(prompt).toContain("face shape, eye shape, nose, mouth, jawline");
+    expect(prompt).toContain("recognisably theirs in the new style");
+  });
+
+  it("표시가 없으면 지금까지 그대로다 — 옛 작업", () => {
+    const prompt = buildPosterPrompt({
+      ...base,
+      images: [{ kind: "preserved", subject: "person" }],
+    });
+    expect(prompt).toContain("Do not beautify, slim, age, de-age, restyle");
+    expect(prompt).not.toContain("REDRAWN");
+  });
+
+  it("물건에는 안 붙는다", () => {
+    const prompt = buildPosterPrompt({
+      ...base,
+      images: [{ kind: "preserved", subject: "object", restyle: true }],
+    });
+    expect(prompt).not.toContain("REDRAWN");
+  });
+
+  /**
+   * **4-1 A안이 이 역할까지 지우면 안 된다.**
+   *
+   * A안이 지우는 것은 사용자가 적은 말과 **부딪히는** 문구다. 이 역할의 말은
+   * 「사람은 그대로 + 그림 느낌은 바꿔도 된다」이고, 이 역할을 고른 사람이 적는
+   * 지시가 바로 그것이다 — 부딪히지 않는다.
+   *
+   * 지우면 4-3 을 만든 이유가 사라진다. 안경이 또 사라진다.
+   */
+  it("첨부 지시를 적어도 이 말은 남는다", () => {
+    const prompt = buildPosterPrompt({
+      ...restyled,
+      images: [...restyled.images, { kind: "style_reference" }],
+      attachmentIntent: "1번 사람들을 2번 느낌으로",
+    });
+    expect(prompt).toContain("PRESERVED PERSON, REDRAWN");
+    expect(prompt).toContain("glasses");
+    // 다른 역할의 고정 문구는 그대로 사라진다.
+    expect(prompt).not.toContain("not its people");
+    expect(prompt).toContain('Image 2: the user marked this "reference to imitate".');
+  });
+});
+
+describe("문구를 뺐다는 말과 실제가 맞는가", () => {
+  it("남는 지시가 있으면 있다고 함께 말한다", () => {
+    // 「규칙은 전부 뺐다」고만 적으면, 바로 아래 남아 있는 4-3 지시를 모델이
+    // 「빼려다 만 것」으로 읽을 수 있다.
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, scene: "강가" },
+      images: [{ kind: "preserved", subject: "person", restyle: true }],
+      attachmentIntent: "1번 사람들을 만화로",
+    });
+    expect(prompt).toContain("except where an instruction is spelled out below, which still applies");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTACHMENT_ROLE_HINT,
   ATTACHMENT_ROLE_LABEL,
   fromCardNewsAttachment,
   fromPdpReference,
@@ -94,5 +95,30 @@ describe("인물은 하나만", () => {
     expect(personOverflow(["preserve_person", "preserve_product", "preserve_product"])).toBe(false);
     expect(personOverflow(["style", "style"])).toBe(false);
     expect(personOverflow([])).toBe(false);
+  });
+});
+
+/**
+ * 「사람은 그대로, 그림 느낌만」 (설계 §4-3, 2026-09-08 사용자 결정).
+ */
+describe("그림 느낌만 바꾸는 사람", () => {
+  it("이름과 설명을 갖는다", () => {
+    expect(ATTACHMENT_ROLE_LABEL.preserve_person_restyled).toBe("사람은 그대로, 그림 느낌만");
+    expect(ATTACHMENT_ROLE_HINT.preserve_person_restyled).toContain("안경");
+  });
+
+  it("포스터에서는 지킬 사람으로 간다", () => {
+    expect(toPosterImage("preserve_person_restyled")).toEqual({ kind: "preserved", subject: "person" });
+  });
+
+  it("**인물은 한 명만에 함께 걸린다** — 지킬 얼굴인 것은 같다", () => {
+    expect(personOverflow(["preserve_person", "preserve_person_restyled"])).toBe(true);
+    expect(personOverflow(["preserve_person_restyled"])).toBe(false);
+  });
+
+  it("아직 모르는 도구에서는 가장 가까운 것으로 간다 — 사람을 잃지 않는다", () => {
+    // 카드뉴스·상세페이지는 설계 §3 3단계에서 배운다.
+    expect(toCardNewsAttachment("preserve_person_restyled")).toEqual({ kind: "keep_identity", subject: "person" });
+    expect(toPdpReference("preserve_person_restyled")).toBe("person");
   });
 });
