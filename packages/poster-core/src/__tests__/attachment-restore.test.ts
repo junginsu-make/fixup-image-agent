@@ -144,3 +144,35 @@ describe("두 쪽이 같은 번호를 본다", () => {
     expect(planned.map((row) => row.number)).toEqual([1, 2]);
   });
 });
+
+/**
+ * 「사람은 그대로, 그림 느낌만」을 되살린다 (설계 §4-3).
+ *
+ * 이 목록은 사람 목록의 **부분집합**이다. 사람을 먼저 보면 이 역할이 영영
+ * 안 나온다 — `personIds` 를 먼저 본 채로 두면 시험이 그것을 잡는다.
+ */
+describe("그림 느낌만 바꾸는 사람", () => {
+  const DATA = {
+    attachmentOrder: ["a", "b", "c"],
+    preservedIds: ["b", "c"],
+    personIds: ["b", "c"],
+    restyledIds: ["c"],
+  };
+
+  it("좁은 목록을 먼저 본다", () => {
+    expect(roleOf(DATA, "c")).toBe("preserve_person_restyled");
+    expect(roleOf(DATA, "b")).toBe("preserve_person");
+  });
+
+  it("표시가 없으면 지금까지 그대로다 — 옛 작업", () => {
+    expect(roleOf({ preservedIds: ["c"], personIds: ["c"] }, "c")).toBe("preserve_person");
+  });
+
+  it("되살릴 때도 그 역할로 나온다", () => {
+    expect(restoreAttachments(DATA, { a: "a.png", b: "b.png", c: "c.png" })).toEqual([
+      { url: "a.png", role: "style" },
+      { url: "b.png", role: "preserve_person" },
+      { url: "c.png", role: "preserve_person_restyled" },
+    ]);
+  });
+});

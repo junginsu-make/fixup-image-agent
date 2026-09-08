@@ -197,6 +197,42 @@ export function designerPersona(): string {
  * 적는다. 그리고 「새로 디자인하지 말라」를 따로 못 박는다 — 모델에게
  * 「같은 물건을 그려라」와 「이 물건을 그려라」는 다른 말이다.
  */
+/**
+ * 사람은 그대로 두되 **그림 느낌만** 바꾸라는 지시.
+ *
+ * `preserveDirective("preserve-person")` 은 `restyle` 을 금지한다 — 그림 느낌까지
+ * 고정하는 것이 그 지시의 뜻이다. 그래서 「이 사람들을 만화로」는 그 지시로도,
+ * 「따라 만들기」(사람을 아예 새로 만든다)로도 표현이 안 됐다(설계 §4-3).
+ *
+ * ── 왜 하나하나 세라고 적나 ──────────────────────────────────
+ *
+ * 2026-09-08 실측에서 사진 다섯 명을 만화로 바꿨더니 사람은 나왔는데 **세 번째
+ * 사람의 안경이 몇 번을 돌려도 안 나왔다.** 그때 프롬프트에 있던 인물 묘사는
+ * 기획이 쓴 한 줄 요약(「흰색 티셔츠 착용」)뿐이었다. 요약에 없는 것은 안
+ * 그려진다.
+ *
+ * 그래서 **작은 것을 이름으로 부른다** — 안경·모자·옷의 프린트·시계·신발.
+ * 「그대로 재현하라」만 적으면 모델은 큰 것(얼굴·옷)만 옮기고 작은 것을 버린다.
+ * 그리고 **한 명씩 확인하라**고 못 박는다: 여럿이 있으면 전체 인상만 맞추고
+ * 개인을 뭉갠다.
+ */
+export function restyledPersonDirective(): string {
+  return [
+    "Reproduce these exact people, redrawn in the rendering style described elsewhere in this prompt.",
+    "Their identity must survive the change of style: the same number of people, each one in the same",
+    "position, and each person's own face — face shape, eye shape, nose, mouth, jawline, skin tone,",
+    "hairstyle and hair colour, and body proportions — recognisably theirs in the new style.",
+    "Keep every accessory and garment each person is actually wearing in the attached photo:",
+    "glasses, sunglasses, hats and caps, what is printed on their clothes, jewellery, watches, shoes.",
+    "Go through the people one at a time and check each one against the photo — do not drop an item",
+    "because it is small, and do not give an item to someone who is not wearing it.",
+    "Only the drawing medium may change (photographic → illustrated / anime / 3D, and the line,",
+    "shading and colour treatment that comes with it).",
+    "Do not swap, merge, beautify, slim, age or de-age anyone, and do not add a person who is not there.",
+    "Someone who knows these people must recognise each of them in the result.",
+  ].join(" ");
+}
+
 export function preserveDirective(role: "preserve-person" | "preserve-object"): string {
   if (role === "preserve-person") {
     return [

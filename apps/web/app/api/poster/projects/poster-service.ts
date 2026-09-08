@@ -77,6 +77,8 @@ export function createPosterService(store: PosterProjectStore) {
           referenceIds: input.referenceIds,
           preservedIds: input.preservedIds,
           personIds: input.personIds,
+          // 그림 느낌만 바꿔도 되는 사람 (설계 §4-3).
+          restyledIds: input.restyledIds,
           look: input.look,
           userInstruction: input.userInstruction,
           // 고른 차례와 그림 지시. 옛 작업에는 없고, 읽는 쪽이 그때 만들어 준다.

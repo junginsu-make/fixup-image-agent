@@ -18,15 +18,20 @@ export interface StoredAttachmentData {
   attachmentOrder?: string[];
   preservedIds?: string[];
   personIds?: string[];
+  /** personIds 중 그림 느낌만 바꿔도 되는 것 (설계 §4-3). */
+  restyledIds?: string[];
 }
 
 /**
  * 이 id 가 어떤 역할이었나.
  *
- * 사람 → 물건 → 따라 만들기 순으로 판정한다. 사람은 `personIds` 와
- * `preservedIds` 양쪽에 들어 있으므로 먼저 봐야 한다.
+ * 그림 느낌 바꾸는 사람 → 사람 → 물건 → 따라 만들기 순으로 판정한다.
+ * 뒤로 갈수록 넓은 목록이라, 좁은 것을 먼저 봐야 한다.
  */
 export function roleOf(data: StoredAttachmentData, id: string): AttachmentRole {
+  // **그림 느낌을 바꿔도 되는 사람을 먼저 본다.** 그 목록은 사람 목록의
+  // 부분집합이라, 사람을 먼저 보면 이 역할이 영영 안 나온다(설계 §4-3).
+  if ((data.restyledIds ?? []).includes(id)) return "preserve_person_restyled";
   if ((data.personIds ?? []).includes(id)) return "preserve_person";
   if ((data.preservedIds ?? []).includes(id)) return "preserve_product";
   return "style";

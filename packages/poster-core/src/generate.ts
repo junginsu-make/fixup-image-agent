@@ -42,6 +42,12 @@ export interface PosterJobInput {
    */
   personUrls?: string[];
   /**
+   * `personUrls` 중 **그림 느낌만 바꿔도 되는** 것 (설계 §4-3).
+   *
+   * 옛 작업에는 없다 — 없으면 지금까지처럼 그림 느낌까지 고정한다.
+   */
+  restyledUrls?: string[];
+  /**
    * 첨부한 그림의 실제 크기. 비율을 `match-source` 로 골랐을 때만 쓴다.
    *
    * 값이 없으면 그 비율을 만들 수 없다 — 무엇을 따라갈지 모르기 때문이다.
@@ -87,15 +93,21 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     // **`??` 를 쓰면 안 된다.** 저장된 차례를 복원하는 쪽은 차례가 없는 옛
     // 작업에 빈 배열을 준다. `[] ?? legacy` 는 `[]` 라서 첨부를 통째로 잃는다 —
     // 프롬프트에 Image 줄이 없고 fal 에 URL 도 안 간다(2026-09-07 리뷰).
-    : orderFromLegacyLists(job.referenceUrls, job.preservedUrls, job.personUrls ?? []);
+    : orderFromLegacyLists(
+      job.referenceUrls, job.preservedUrls, job.personUrls ?? [], job.restyledUrls ?? [],
+    );
 
-  const images: PosterPromptImage[] = attachments.map((attachment): PosterPromptImage =>
-    attachment.role === "style"
-      ? { kind: "style_reference" }
-      : {
-        kind: "preserved",
-        subject: attachment.role === "preserve_person" ? "person" : "object",
-      });
+  const images: PosterPromptImage[] = attachments.map((attachment): PosterPromptImage => {
+    if (attachment.role === "style") return { kind: "style_reference" };
+    // 그림 느낌만 바꾸는 사람도 **사람**이다. 물건으로 보면 얼굴을 안 지킨다.
+    const person = attachment.role === "preserve_person"
+      || attachment.role === "preserve_person_restyled";
+    return {
+      kind: "preserved",
+      subject: person ? "person" : "object",
+      restyle: attachment.role === "preserve_person_restyled",
+    };
+  });
 
   if (estimate.rejected) {
     return {

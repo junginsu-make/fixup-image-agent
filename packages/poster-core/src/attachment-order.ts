@@ -35,13 +35,18 @@ export function orderFromLegacyLists(
   referenceUrls: readonly string[],
   preservedUrls: readonly string[],
   personUrls: readonly string[] = [],
+  restyledUrls: readonly string[] = [],
 ): OrderedAttachment[] {
   return [
     ...referenceUrls.map((url): OrderedAttachment => ({ url, role: "style" })),
     ...preservedUrls.map((url): OrderedAttachment => ({
       url,
-      // 표시가 없으면 물건으로 다룬다. 사람으로 보면 없는 얼굴을 지키려 든다.
-      role: personUrls.includes(url) ? "preserve_person" : "preserve_product",
+      // 그림 느낌을 바꿔도 되는 사람을 **먼저 본다** — 그 목록은 사람 목록의
+      // 부분집합이라, 사람을 먼저 보면 이 역할이 영영 안 나온다(설계 §4-3).
+      role: restyledUrls.includes(url)
+        ? "preserve_person_restyled"
+        // 표시가 없으면 물건으로 다룬다. 사람으로 보면 없는 얼굴을 지키려 든다.
+        : personUrls.includes(url) ? "preserve_person" : "preserve_product",
     })),
   ];
 }
