@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Download, Wand2 } from "lucide-react";
+import Link from "next/link";
+import { Download, Megaphone, Wand2 } from "lucide-react";
+// 잎 모듈이다 — 규격 목록을 이 화면 번들로 끌고 오지 않는다.
+import { adExportHref } from "../../ad/href";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
@@ -66,7 +69,10 @@ const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
   ["forbidden", "넣지 말 것", "line"],
 ];
 
-export function PosterClient({ project, images }: { project: PosterProject; images: PosterImage[] }) {
+export function PosterClient(
+  { project, images, adEnabled = false }:
+  { project: PosterProject; images: PosterImage[]; adEnabled?: boolean },
+) {
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -511,6 +517,21 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
                       >
                         <Wand2 />이 장만 고치기
                       </Button>
+                      {/*
+                        **광고는 묻고 간다**(설계 §1 ①). 리사이징이 자동으로
+                        따라붙으면 「한 장만 받고 끝내려는」 사람에게는 강요다.
+                        여기서 눌러야만 그 길로 간다.
+
+                        스위치가 꺼져 있으면 아예 안 그린다 — 눌러도 404 인
+                        버튼을 보여 주면 그게 더 나쁘다.
+                      */}
+                      {adEnabled && (
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={adExportHref(project.id, image.variantIndex)}>
+                            <Megaphone />광고 소재로 뽑기
+                          </Link>
+                        </Button>
+                      )}
                     </div>
                     {editing === image.id ? (
                       <div className="grid gap-1.5 rounded-md border border-border p-2.5">

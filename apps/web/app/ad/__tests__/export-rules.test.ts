@@ -6,6 +6,7 @@ import {
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl, previewBackdrop,
   cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks, actionNotices,
+  rowsForPortals, selectionForPortals, keepPickedInPortals, itemFromQuery, positionFromQuery, startingPosition, togglePortal, AD_PORTALS,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -826,5 +827,217 @@ describe("문구를 어디에 넣는지 말한다", () => {
     const notice = actionNotices(["kakao-bizboard"], planDerivation)
       .find((entry) => entry.key === "assemble")!;
     expect(notice.title).toMatch(/직접 입력/);
+  });
+});
+
+/**
+ * **포털부터 고른다**(설계 `2026-09-08-ad-portal-first-selection.md` §1 ③).
+ *
+ * 지금은 `/ad` 를 열면 필수 9개가 세 포털에 걸쳐 미리 켜져 있다. 한 포털만
+ * 쓰는 사람에게는 **안 쓸 것까지 켜진 화면**이라, 「무조건 리사이징된다」로
+ * 읽힌다. 「빼는」 화면을 「고르는」 화면으로 바꾼다.
+ */
+describe("포털로 규격을 좁힌다", () => {
+  it("포털을 안 고르면 아무 규격도 안 보인다", () => {
+    expect(rowsForPortals(rows, [])).toEqual([]);
+  });
+
+  it("고른 포털의 규격만 보인다", () => {
+    const only = rowsForPortals(rows, ["kakao"]);
+    expect(only.length).toBeGreaterThan(0);
+    expect(only.every((row) => row.spec.portal === "kakao")).toBe(true);
+  });
+
+  it("여럿 고르면 순서를 지켜 합친다", () => {
+    const two = rowsForPortals(rows, ["google", "naver"]);
+    expect(new Set(two.map((row) => row.spec.portal))).toEqual(new Set(["google", "naver"]));
+    // 원래 목록 순서를 흐트러뜨리지 않는다 — 화면이 매번 다른 차례로 그리면 안 된다.
+    expect(two.map((row) => row.spec.id))
+      .toEqual(rows.filter((row) => row.spec.portal !== "kakao").map((row) => row.spec.id));
+  });
+});
+
+describe("포털을 켜면 그 포털 필수만 켜진다", () => {
+  it("아무것도 안 고르면 빈 선택", () => {
+    expect(selectionForPortals(rows, [])).toEqual([]);
+  });
+
+  /** 카카오만 켰는데 구글 필수가 딸려 오면 그게 「무조건」이다. */
+  it("고른 포털의 필수만 든다", () => {
+    const picked = selectionForPortals(rows, ["kakao"]);
+    expect(picked.length).toBeGreaterThan(0);
+    for (const id of picked) {
+      const spec = AD_SPECS.find((entry) => entry.id === id)!;
+      expect(spec.portal).toBe("kakao");
+      expect(spec.required).toBe(true);
+    }
+  });
+
+  /** 못 뽑는 규격은 필수여도 안 켠다 — 켜 두면 뽑기가 통째로 막힌다. */
+  it("못 뽑는 규격은 안 켠다", () => {
+    const picked = selectionForPortals(rows, ["google", "kakao", "naver"]);
+    expect(picked).not.toContain("google-rda-logo");
+  });
+
+  it("셋 다 켜면 기존 기본 선택과 같다", () => {
+    expect(new Set(selectionForPortals(rows, ["google", "kakao", "naver"])))
+      .toEqual(new Set(defaultSelection(rows)));
+  });
+});
+
+describe("포털을 끄면 그 규격은 선택에서 빠진다", () => {
+  it("끈 포털의 규격을 버린다", () => {
+    const before = ["google-rda-square", "kakao-bizboard", "naver-gfa-native"];
+    expect(keepPickedInPortals(before, ["kakao"])).toEqual(["kakao-bizboard"]);
+  });
+
+  /** 사용자가 손으로 켠 비필수도 그 포털이면 남긴다 — 고른 것을 뺏지 않는다. */
+  it("같은 포털이면 비필수도 남긴다", () => {
+    expect(keepPickedInPortals(["kakao-display-2x1"], ["kakao"])).toEqual(["kakao-display-2x1"]);
+  });
+
+  it("모르는 id 는 버린다", () => {
+    expect(keepPickedInPortals(["없는-규격", "kakao-bizboard"], ["kakao"])).toEqual(["kakao-bizboard"]);
+  });
+});
+
+/**
+ * **결과 화면에서 들어오는 길**(설계 §1 ②).
+ *
+ * 지금은 `/ad` 를 따로 찾아가 그림을 **다시 골라야** 한다. 결과 카드에서
+ * 바로 올 수 있게 하되, **못 찾으면 조용히 무시**한다 — 남의 작업 id 를
+ * 넣어도 화면이 깨지면 안 된다(소유권은 서버가 이미 막는다).
+ */
+describe("주소로 들어온 그림을 고른다", () => {
+  const items = [
+    { id: "p1", title: "가을", source: "poster" as const },
+    { id: "L9", title: "겨울", source: "library" as const },
+  ];
+
+  it("주소가 가리키는 것을 고른다", () => {
+    const found = itemFromQuery(items, { source: "poster", id: "p1" });
+    expect(found?.id).toBe("p1");
+  });
+
+  it("표가 다르면 안 고른다 — id 가 겹칠 수 있다", () => {
+    expect(itemFromQuery(items, { source: "library", id: "p1" })).toBeNull();
+  });
+
+  it("없는 id 면 안 고른다", () => {
+    expect(itemFromQuery(items, { source: "poster", id: "없음" })).toBeNull();
+  });
+
+  it("주소가 없으면 안 고른다", () => {
+    expect(itemFromQuery(items, { source: null, id: null })).toBeNull();
+    expect(itemFromQuery(items, { source: "poster", id: null })).toBeNull();
+  });
+
+  /** 모르는 표 이름을 넣어도 죽지 않는다. */
+  it("모르는 표 이름은 무시한다", () => {
+    expect(itemFromQuery(items, { source: "무엇", id: "p1" })).toBeNull();
+  });
+});
+
+describe("주소로 들어온 변형 번호", () => {
+  it("숫자면 그대로 쓴다", () => {
+    expect(positionFromQuery("2")).toBe(2);
+    expect(positionFromQuery("0")).toBe(0);
+  });
+
+  /** 이상한 값에 0 을 주면 **다른 그림이 뽑힌다** — 조용히 틀리느니 없는 편이 낫다. */
+  it("숫자가 아니면 없음", () => {
+    expect(positionFromQuery(null)).toBeNull();
+    expect(positionFromQuery("첫째")).toBeNull();
+    expect(positionFromQuery("-1")).toBeNull();
+    expect(positionFromQuery("1.5")).toBeNull();
+    expect(positionFromQuery("")).toBeNull();
+  });
+});
+
+/**
+ * 주소가 가리킨 변형이 **실재하는지** 본다.
+ *
+ * 없는 번호를 그대로 쓰면 아무것도 선택돼 보이지 않고, 그 상태로 뽑으면
+ * 사용자가 본 적 없는 것을 보내 「찾을 수 없습니다」가 온다 — 썸네일은
+ * 멀쩡히 보이는데(`chooseItem` 머리말이 같은 함정을 이미 적어 두었다).
+ */
+describe("어느 변형을 고를까", () => {
+  const picks = [
+    { image: "/a", sectionName: "변형 1", position: 0 },
+    { image: "/b", sectionName: "변형 3", position: 2 },
+  ];
+
+  it("주소가 가리킨 것이 있으면 그것", () => {
+    expect(startingPosition(picks, 2)).toBe(2);
+    expect(startingPosition(picks, 0)).toBe(0);
+  });
+
+  it("없는 번호면 첫 장", () => {
+    expect(startingPosition(picks, 5)).toBe(0);
+  });
+
+  it("주소가 없으면 첫 장", () => {
+    expect(startingPosition(picks, null)).toBe(0);
+  });
+
+  /** 첫 장이 0번이라는 보장이 없다 — 서버 번호다. */
+  it("첫 장의 서버 번호를 쓴다", () => {
+    expect(startingPosition([{ image: "/c", sectionName: "변형 4", position: 3 }], null)).toBe(3);
+  });
+
+  it("한 장도 없으면 0", () => {
+    expect(startingPosition([], 7)).toBe(0);
+  });
+});
+
+/**
+ * **포털 하나를 켜고 끄는 것을 한 번에 판단한다.**
+ *
+ * 초판은 화면이 `setPortals` 의 **업데이터 안에서** `setPicked` 를 불렀다.
+ * 업데이터는 순수해야 하는데 그렇지 않아, React 가 두 번 돌리는 순간
+ * **고른 규격이 겹쳐 쌓였다** — 화면에는 「10개 고름」인데 켜진 체크박스는
+ * 다섯이었다(브라우저에서 실제로 봤다).
+ *
+ * 판단을 여기로 옮기면 화면은 결과를 받아 넣기만 한다.
+ */
+describe("포털 하나를 켜고 끈다", () => {
+  it("켜면 포털과 그 필수가 함께 붙는다", () => {
+    const next = togglePortal(rows, { portals: [], picked: [] }, "kakao");
+    expect(next.portals).toEqual(["kakao"]);
+    expect(next.picked.length).toBeGreaterThan(0);
+    expect(next.picked.every((id) =>
+      AD_SPECS.find((spec) => spec.id === id)!.portal === "kakao")).toBe(true);
+  });
+
+  it("끄면 그 포털 규격이 빠진다", () => {
+    const on = togglePortal(rows, { portals: [], picked: [] }, "kakao");
+    const both = togglePortal(rows, on, "naver");
+    const off = togglePortal(rows, both, "kakao");
+    expect(off.portals).toEqual(["naver"]);
+    expect(off.picked.every((id) =>
+      AD_SPECS.find((spec) => spec.id === id)!.portal === "naver")).toBe(true);
+  });
+
+  /** **두 번 돌아도 같은 값이어야 한다** — 이것이 그 버그를 막는 자물쇠다. */
+  it("같은 입력으로 두 번 불러도 결과가 같다", () => {
+    const once = togglePortal(rows, { portals: [], picked: [] }, "kakao");
+    const twice = togglePortal(rows, { portals: [], picked: [] }, "kakao");
+    expect(twice).toEqual(once);
+    expect(new Set(once.picked).size).toBe(once.picked.length);
+  });
+
+  /** 이미 손으로 켜 둔 것이 있어도 겹쳐 쌓이지 않는다. */
+  it("겹쳐 쌓지 않는다", () => {
+    const seeded = { portals: [] as typeof AD_PORTALS, picked: ["kakao-bizboard"] };
+    const next = togglePortal(rows, seeded, "kakao");
+    expect(next.picked.filter((id) => id === "kakao-bizboard")).toHaveLength(1);
+  });
+
+  /** 손으로 켠 비필수는 그 포털이 살아 있는 한 남는다. */
+  it("손으로 켠 것을 뺏지 않는다", () => {
+    const on = togglePortal(rows, { portals: [], picked: [] }, "kakao");
+    const withExtra = { ...on, picked: [...on.picked, "kakao-display-2x1"] };
+    const again = togglePortal(rows, withExtra, "naver");
+    expect(again.picked).toContain("kakao-display-2x1");
   });
 });
