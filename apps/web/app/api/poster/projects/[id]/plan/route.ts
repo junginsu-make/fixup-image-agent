@@ -1,5 +1,6 @@
 import { planPoster, planReferences, readPeople, readReferenceGrammar } from "@fixup/poster-core";
-import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import {
   createPosterGrammarReader,
@@ -18,7 +19,12 @@ type Context = { params: Promise<{ id: string }> };
  *
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
-export async function POST(_request: Request, context: Context) {
+export async function POST(request: Request, context: Context) {
+  /**
+   * **`catch` 에서도 봐야 한다.** 안에서 선언하면 실패했을 때 예약을 못 풀고,
+   * 묶인 장이 만료될 때까지 그 사람 한도에서 빠져 있는다.
+   */
+  let reservation: { userId: string; requestId: string } | null = null;
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
@@ -61,6 +67,25 @@ export async function POST(_request: Request, context: Context) {
       createPosterPeopleReader(),
     );
 
+    /**
+     * **여기서 쓴 글 모델 값을 장부에 적는다**(2026-09-08 사용자 결정).
+     *
+     * 기획은 그림보다 싸지만 공짜가 아니다 — 기획 한 번에 첨부를 넉 장 읽으면
+     * nano-banana 그림 한 장보다 비싸다. 지금까지는 이 화면이 장부에 한 줄도
+     * 안 남겼다.
+     *
+     * **읽기가 끝난 뒤에 센다.** 실제로 몇 장을 읽었는지는 그때 알 수 있고,
+     * 실패한 읽기는 세지 않는다(`grammar.issues`·`crowd.issues` 로 빠진다).
+     *
+     * 저절로 도는 것이 걱정되지 않는다 — 자동 기획은 **칸이 전부 빈 첫 회에만**
+     * 돈다. 다시 채우려면 사람이 눌러야 한다.
+     */
+    const visionReads = Object.keys(grammar.grammars).length + Object.keys(crowd.people).length;
+    const units = creditUnits(llmCostUsd({ planCalls: 1, visionReads }));
+    const reserved = await reserveAiUsage(request, "poster_image", units);
+    if (!reserved.ok) return reserved.response;
+    reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
     const providers = createPosterPlanningProviders();
     const plan = await planPoster(
       {
@@ -88,8 +113,11 @@ export async function POST(_request: Request, context: Context) {
       status: "ready",
       data: { ...project.data, slots, grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues] },
     });
+    await finalizeAiUsage(reservation, true, units);
     return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...crowd.issues, ...plan.issues] });
   } catch (error) {
+    // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.
+    if (reservation) await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
     }

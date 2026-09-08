@@ -35,6 +35,13 @@ export interface PosterProjectRecord {
     personIds?: string[];
     /** personIds 중 그림 느낌만 바꿔도 되는 것. 옛 작업에는 없다 (설계 §4-3). */
     restyledIds?: string[];
+    /**
+     * 이번 만들기의 예약 열쇠. `status` 가 결과를 받은 뒤 이것으로 확정한다.
+     *
+     * 예약과 확정이 **서로 다른 HTTP 요청**이라 열쇠를 넘길 길이 이것뿐이다.
+     * 확정하고 나면 지운다 — 남겨 두면 다음 만들기가 옛 열쇠로 확정한다.
+     */
+    reservationId?: string;
     /** 그림의 결. 옛 작업에는 없다 — 없으면 auto 로 읽는다(지금까지의 동작). */
     look?: ImageLook;
     /** 사용자가 직접 친 추가 지시. 옛 작업에는 없다. */

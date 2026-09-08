@@ -1,7 +1,8 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { creditUnits } from "@fixup/shared";
+import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local-store";
 import { makePosterThumbnail } from "../../../../../../lib/poster/thumbnail";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
@@ -123,7 +124,39 @@ export async function POST(request: Request, context: Context) {
       },
     );
 
-    if (result.done) await stores.projects.update(id, { status: "done" });
+    /**
+     * **결과를 받았으면 그때 장부를 확정한다.**
+     *
+     * 예약은 만들기 요청이 「변형 N장」으로 잡아 뒀다. fal 이 덜 돌려주면 그만큼만
+     * 받아야 하므로, 실제로 저장된 장수로 다시 센다.
+     *
+     * **열쇠를 지운다.** 남겨 두면 다음 만들기가 옛 열쇠로 확정해 두 번 깎이거나
+     * 엉뚱한 요청을 닫는다.
+     *
+     * 확정이 실패해도 결과는 돌려준다 — 그림은 이미 저장됐고, 묶인 장은 예약이
+     * 만료되면 풀린다. 여기서 막으면 사용자가 만든 그림을 못 본다.
+     */
+    if (result.done) {
+      const project = await stores.projects.get(id);
+      const saved = await stores.images.byProject(id);
+      const unitUsd = parsed.data.unitCostUsd;
+      const reservationId = project?.data.reservationId;
+      if (reservationId) {
+        try {
+          await finalizeAiUsage(
+            { userId: auth.member.userId, requestId: reservationId },
+            saved.length > 0,
+            creditUnits(unitUsd * saved.length),
+          );
+        } catch {
+          // 삼킨다. 사용자가 만든 그림을 못 보는 것이 더 나쁘다.
+        }
+      }
+      await stores.projects.update(id, {
+        status: "done",
+        ...(project ? { data: { ...project.data, reservationId: undefined } } : {}),
+      });
+    }
     return Response.json({
       ok: true,
       done: result.done,
