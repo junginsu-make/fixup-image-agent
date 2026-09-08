@@ -107,7 +107,35 @@ export const PosterProjectInputSchema = z.object({
    */
   adMasterId: z.string().max(64).optional(),
   slots: PosterSlotsSchema.optional(),
-}).strict();
+}).strict().superRefine((input, ctx) => {
+  /**
+   * **차례는 첨부 전부를 담아야 한다.**
+   *
+   * 담지 않으면 빠진 첨부가 조용히 사라진다 — 오류도 경고도 없이. 게다가
+   * 장수 상한과 비용은 `referenceIds + preservedIds` 를 세는데 실제로 fal 에
+   * 가는 것은 차례에 담긴 것뿐이라, 「7장이라 거절」해 놓고 정작 1장만 보내는
+   * 조합이 만들어진다(2026-09-08 리뷰).
+   *
+   * 화면은 세 목록을 전부 차례에서 뽑으므로 이 조건을 늘 만족한다. 여기서
+   * 막는 것은 낡은 화면·직접 친 요청처럼 **화면을 안 거친 것**이다.
+   *
+   * 차례가 비어 있으면 안 본다 — 옛 작업에는 애초에 없다.
+   */
+  if (!input.attachmentOrder.length) return;
+
+  const attached = new Set([...input.referenceIds, ...input.preservedIds]);
+  const ordered = new Set(input.attachmentOrder);
+  const missing = [...attached].filter((id) => !ordered.has(id));
+  const extra = [...ordered].filter((id) => !attached.has(id));
+
+  if (missing.length || extra.length) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["attachmentOrder"],
+      message: "첨부한 그림과 고른 차례가 어긋납니다. 화면을 새로고침한 뒤 다시 골라 주세요.",
+    });
+  }
+});
 
 export type PosterProjectInput = z.infer<typeof PosterProjectInputSchema>;
 

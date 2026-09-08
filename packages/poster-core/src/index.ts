@@ -1,3 +1,4 @@
+export * from "./attachment-restore";
 export * from "./attachment-order";
 export * from "./pricing";
 export * from "./schemas";

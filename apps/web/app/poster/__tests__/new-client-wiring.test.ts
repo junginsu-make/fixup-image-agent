@@ -65,3 +65,70 @@ describe("판단이 살아 있는 상태에 이어져 있는가", () => {
     expect(source).toContain("adProjectBodies(projectBody(), adPlan.masters, title)");
   });
 });
+
+/**
+ * 고른 차례가 화면 상태에 이어져 있는가.
+ *
+ * 규칙은 `@fixup/poster-core` 로 뽑아 시험으로 잠갔는데, **화면이 그것을 부르는
+ * 줄은 아무도 안 보고 있었다.** `picked` 를 예전처럼 `references.filter(…)` 로
+ * 되돌리거나 세 목록을 `Object.keys(roles)` 에서 뽑아도 시험 1059개가 전부
+ * 초록이었다(2026-09-08 리뷰). 그 줄들이 정확히 이번에 고친 고장이 살던 자리다.
+ */
+describe("고른 차례가 화면 상태에 이어져 있는가", () => {
+  it("규칙을 여기 다시 적지 않고 poster-core 를 부른다", () => {
+    // 두 벌로 적으면 화면과 서버의 번호가 갈린다.
+    expect(source).toContain("nextPickOrder(current, id,");
+    expect(source).toMatch(/visibleOrder\(\s*pickOrder,/);
+  });
+
+  it("역할을 바꿀 때 차례도 함께 고친다", () => {
+    expect(source).toMatch(/setRoles\([\s\S]{0,200}?setPickOrder\(/);
+  });
+
+  it("보이는 것만 보낸다 — 목록에 없는 id 를 거른다", () => {
+    // 안 거르면 그 뒤 번호가 전부 1씩 밀린다.
+    expect(source).toContain("references.some((entry) => entry.id === id)");
+  });
+
+  it("세 목록을 전부 고른 차례에서 뽑는다", () => {
+    // `roles` 에서 직접 뽑으면 차례에 없는 id 가 서버로 새어 나간다.
+    for (const line of [
+      "const styleIds = orderedIds.filter",
+      "const preservedIds = orderedIds.filter",
+      "const personIds = orderedIds.filter",
+    ]) {
+      expect(source, `${line} 가 orderedIds 에서 나와야 한다`).toContain(line);
+    }
+  });
+
+  it("차례와 첨부에 대한 말을 서버로 보낸다", () => {
+    expect(source).toContain("attachmentOrder: orderedIds");
+    expect(source).toContain("attachmentIntent: attachmentIntent.trim()");
+  });
+});
+
+/**
+ * 01에 적은 말을 03에서 다시 볼 수 있는가.
+ *
+ * 03은 **우선순위를 정하는 자리**다 — 「여기 적은 말이 다른 모든 지시보다
+ * 우선합니다」라고 화면이 말한다. 그런데 정작 01에 무엇을 적었는지는 볼 수 없어,
+ * 같은 말을 두 번 쓰거나 반대되는 말을 적어 놓고 모르는 일이 생긴다.
+ */
+describe("01에 적은 말이 03에서 보이는가", () => {
+  const panel = source.slice(source.indexOf('step === "instruction"'));
+
+  it("03 화면이 01의 말을 읽는다", () => {
+    expect(panel).toContain("01에서 첨부한 그림에 대해 적은 말");
+    expect(panel).toMatch(/\{attachmentIntent\.trim\(\) \? \(/);
+  });
+
+  it("안 적었으면 아무것도 안 보인다 — 빈 칸을 만들지 않는다", () => {
+    expect(panel).toMatch(/attachmentIntent\.trim\(\)[\s\S]{0,900}?\) : null\}/);
+  });
+
+  it("여기서 고치지 않고 01로 돌려보낸다 — 입력 칸은 하나뿐이어야 한다", () => {
+    // 두 곳에서 고치게 하면 어느 쪽이 진짜인지 사람이 판단해야 한다.
+    expect(panel).toContain('onClick={() => setStep("reference")}');
+    expect(panel).not.toMatch(/setAttachmentIntent\(/);
+  });
+});

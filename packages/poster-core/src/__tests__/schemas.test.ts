@@ -79,3 +79,56 @@ describe("포스터 프로젝트 입력", () => {
     expect(PosterProjectInputSchema.safeParse({ ...valid, width: 2400 }).success).toBe(false);
   });
 });
+
+/**
+ * 차례와 첨부 목록이 어긋나면 막는다.
+ *
+ * 어긋나도 통과하던 때는 빠진 첨부가 **조용히 사라졌다.** 오류도 경고도 없이
+ * 그림이 만들어지고, 장수 상한과 비용은 세 목록(3장)을 세는데 fal 에는 차례에
+ * 담긴 것(1장)만 갔다 — 「7장이라 거절」해 놓고 1장만 보내는 조합이
+ * 가능했다(2026-09-08 리뷰).
+ */
+describe("고른 차례와 첨부 목록이 맞는가", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const C = "33333333-3333-4333-8333-333333333333";
+  const base = {
+    title: "가을 사진전",
+    ratio: "2:3",
+    modelId: "gpt-image-2",
+    variants: 3,
+    instruction: "필름 카메라 감성의 사진전 포스터",
+    referenceIds: [A],
+    preservedIds: [B],
+  };
+
+  it("둘이 같으면 통과한다 — 차례는 달라도 된다", () => {
+    // 화면에서 지키기(B)를 먼저 골랐으면 차례도 B 가 먼저다. 그것이 요점이다.
+    const parsed = PosterProjectInputSchema.safeParse({ ...base, attachmentOrder: [B, A] });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("차례가 첨부보다 짧으면 막는다 — 빠진 그림이 조용히 사라진다", () => {
+    const parsed = PosterProjectInputSchema.safeParse({ ...base, attachmentOrder: [A] });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("첨부에 없는 id 가 차례에 있으면 막는다", () => {
+    const parsed = PosterProjectInputSchema.safeParse({ ...base, attachmentOrder: [A, B, C] });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("차례가 비어 있으면 안 본다 — 옛 작업에는 애초에 없다", () => {
+    expect(PosterProjectInputSchema.safeParse(base).success).toBe(true);
+    expect(PosterProjectInputSchema.safeParse({ ...base, attachmentOrder: [] }).success).toBe(true);
+  });
+
+  it("막을 때 사람이 읽을 수 있는 말을 준다", () => {
+    const parsed = PosterProjectInputSchema.safeParse({ ...base, attachmentOrder: [A] });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]!.message).toContain("차례가 어긋납니다");
+      expect(parsed.error.issues[0]!.path).toEqual(["attachmentOrder"]);
+    }
+  });
+});
