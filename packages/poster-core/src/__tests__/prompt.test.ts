@@ -236,3 +236,61 @@ describe("포스터 프롬프트", () => {
     expect(enumMode).toContain("No outer border");
   });
 });
+
+/**
+ * 글자를 안 적었으면 「넣지 마라」고 말해야 한다.
+ *
+ * 전에는 글자 칸이 전부 비면 프롬프트에서 **글자 이야기가 통째로 사라졌다** —
+ * 「넣지 마라」도 함께. 그런데 맨 앞 `designerPersona()` 는 「confident
+ * typography」를 요구하고 첨부는 `POSTER REFERENCE` 라고 부른다. 막는 말이
+ * 없으니 모델이 글자를 만든다.
+ *
+ * 실제로 첨부 두 장에 글자가 없고 사용자도 요구하지 않았는데 「BEST DAY
+ * EVER!」가 크게 박혀 나왔다(2026-09-08 사용자 실측).
+ */
+describe("글자를 안 적었을 때", () => {
+  const noCopy = {
+    slots: { ...EMPTY_SLOTS, scene: "강가 바위", subject: "청년 다섯" },
+    images: [{ kind: "style_reference" as const }],
+  };
+
+  it("글자를 넣지 말라고 말한다", () => {
+    const prompt = buildPosterPrompt(noCopy);
+    expect(prompt).toContain("Render it with NO text");
+  });
+
+  it("무엇이 글자인지 낱낱이 적는다 — 「제목만 아니면 된다」로 새지 않게", () => {
+    const prompt = buildPosterPrompt(noCopy);
+    for (const word of ["headline", "tagline", "slogan", "caption", "watermark", "logo"]) {
+      expect(prompt, `${word} 를 막아야 한다`).toContain(word);
+    }
+  });
+
+  it("글자가 없는 것이 완성이라고 말한다", () => {
+    // 「균형을 위해 글자를 넣자」는 판단을 미리 막는다.
+    expect(buildPosterPrompt(noCopy)).toContain("not an unfinished one");
+  });
+
+  it("첨부에 원래 있던 글자는 남겨도 된다", () => {
+    // 사진 속 티셔츠 문구까지 지우면 첨부를 안 따라간 것이 된다.
+    expect(buildPosterPrompt(noCopy)).toContain("do not invent any that was not already there");
+  });
+
+  it("한 칸이라도 적었으면 그 칸을 그리라고 말한다 — 지금까지의 동작", () => {
+    const prompt = buildPosterPrompt({
+      ...noCopy,
+      slots: { ...noCopy.slots, headline: "가을, 셔터를 누르다" },
+    });
+    expect(prompt).toContain("Render this text exactly as written");
+    expect(prompt).toContain("가을, 셔터를 누르다");
+    expect(prompt).not.toContain("Render it with NO text");
+  });
+
+  it("곁텍스트 하나만 있어도 「글자 없음」이 아니다", () => {
+    const prompt = buildPosterPrompt({
+      ...noCopy,
+      slots: { ...noCopy.slots, sideTexts: ["28MM F2.0"] },
+    });
+    expect(prompt).not.toContain("Render it with NO text");
+  });
+});

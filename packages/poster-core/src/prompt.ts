@@ -156,7 +156,35 @@ function copyLines(slots: PosterSlots): string[] {
   ];
   const entries = all.filter(([, value]) => value.trim().length > 0);
 
-  if (!entries.length) return [];
+  /**
+   * **글자를 하나도 안 적었으면 「넣지 마라」고 말한다.**
+   *
+   * 전에는 여기서 빈 배열을 돌려줬다. 그러면 프롬프트에 **글자 이야기가 통째로
+   * 사라진다** — 「넣지 마라」도 함께 사라진다. 없어도 되는 말이 아니라,
+   * 글자가 하나도 없을 때가 그 말이 가장 필요한 순간이다.
+   *
+   * 그 사이 프롬프트는 반대쪽으로 민다. 맨 앞 `designerPersona()` 가
+   * 「confident typography」를 요구하고, 첨부는 `POSTER REFERENCE` 라고
+   * 부르며 「typography 를 흉내 내라」고 말한다. 막는 말이 없으면 모델은
+   * 당연히 글자를 만든다.
+   *
+   * 실제로 그렇게 나왔다 — 첨부 두 장 어디에도 글자가 없고 사용자도 글자를
+   * 요구하지 않았는데 「BEST DAY EVER!」가 크게 박혀 나왔다(2026-09-08).
+   *
+   * `designerPersona()` 는 안 고친다. 다섯 도구가 함께 쓰는 문장이고,
+   * 카드뉴스·상세페이지는 글자가 있어야 하는 도구다.
+   */
+  if (!entries.length) {
+    return [
+      "No text was authored for this image. Render it with NO text.",
+      "Do not add a headline, tagline, slogan, caption, title, label, watermark, signature,",
+      "logo, date, or any decorative lettering — not even as a design flourish.",
+      "This overrides any instinct to add typography for visual balance:",
+      "an image with no text is the intended result, not an unfinished one.",
+      "Text that genuinely belongs to the scene in an attached image (a sign, a shirt print,",
+      "a product label) may stay as it is, but do not invent any that was not already there.",
+    ];
+  }
 
   return [
     "Render this text exactly as written, with correct spelling and spacing:",

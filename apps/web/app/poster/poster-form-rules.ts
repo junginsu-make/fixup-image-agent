@@ -99,3 +99,21 @@ export function adProjectBodies<T extends object>(
     title: `${name} (${master.width}×${master.height})`,
   }));
 }
+
+/**
+ * 그림이 도착할 자리가 잡을 모양.
+ *
+ * 그리는 동안 결과 자리에 빈 칸을 깔아 두는데, **모양이 다르면 그림이 도착할 때
+ * 화면이 튄다.** 몇 대 몇으로 나오는지도 거짓말이 된다.
+ *
+ * `match-source` 는 첨부한 그림을 따라가므로 여기서는 알 수 없다. 그때와
+ * 알아볼 수 없는 값에는 포스터의 기본 비율을 쓴다 — 모양이 좀 다른 편이
+ * 화면이 죽는 것보다 낫다.
+ */
+export function placeholderRatio(ratio: string): string {
+  const parts = ratio.split(":");
+  if (parts.length !== 2) return "2 / 3";
+  const [width, height] = parts.map(Number);
+  const usable = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+  return usable ? `${width} / ${height}` : "2 / 3";
+}
