@@ -5,6 +5,7 @@ export * from "./schemas";
 export * from "./store";
 export * from "./planning";
 export * from "./grammar";
+export * from "./people";
 export * from "./prompt";
 export * from "./generate";
 export * from "./review";
