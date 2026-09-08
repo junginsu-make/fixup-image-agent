@@ -17,8 +17,7 @@ import { ReferencePicker, type ReferenceItem, type Role } from "./_components/re
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
-  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount,
-} from "./poster-form-rules";
+  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount, seedInstruction } from "./poster-form-rules";
 
 /**
  * **광고 규격 칸은 켜졌을 때만 내려받는다.**
@@ -100,6 +99,21 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [variants, setVariants] = React.useState(3);
   const [title, setTitle] = React.useState("");
   const [instruction, setInstruction] = React.useState("");
+  /** 03 한 줄 지시를 사람이 한 번이라도 건드렸나. 건드렸으면 안 덮는다. */
+  const [instructionTouched, setInstructionTouched] = React.useState(false);
+
+  /**
+   * 03 에 들어갈 때 01에서 적은 말을 미리 채운다.
+   *
+   * 규칙은 `poster-form-rules` 가 갖는다 — 여기 또 적으면 둘이 갈린다.
+   * `null` 이면 채우지 않는다는 뜻이다(사람이 건드렸거나, 쓰다 만 것이 있거나,
+   * 01에 적은 말이 없거나).
+   */
+  React.useEffect(() => {
+    if (step !== "instruction") return;
+    const seed = seedInstruction({ attachmentIntent, instruction, touched: instructionTouched });
+    if (seed !== null) setInstruction(seed);
+  }, [step, attachmentIntent, instruction, instructionTouched]);
   // 기본은 auto — 지금까지처럼 첨부한 그림의 결을 따라간다.
   const [look, setLook] = React.useState<ImageLook>("auto");
   // 기획이 채운 슬롯보다 센 말. 비워 두면 프롬프트에 들어가지 않는다.
@@ -510,7 +524,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               <Textarea
                 id="poster-instruction"
                 value={instruction}
-                onChange={(event) => setInstruction(event.target.value)}
+                onChange={(event) => {
+                  // 한 번이라도 손대면 그때부터 이 칸은 그 사람의 것이다.
+                  setInstructionTouched(true);
+                  setInstruction(event.target.value);
+                }}
                 rows={3}
                 placeholder="필름 카메라 감성의 사진전 포스터"
               />
