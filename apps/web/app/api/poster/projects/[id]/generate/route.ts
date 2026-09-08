@@ -8,7 +8,7 @@ import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
 import { referenceBytes } from "../../../../../../lib/poster/asset-bytes";
-import type { OrderedAttachment } from "@fixup/poster-core";
+import { restoreAttachments } from "@fixup/poster-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,34 +47,6 @@ function justSubmitted(updatedAt: string): boolean {
   const at = Date.parse(updatedAt);
   // 날짜를 못 읽으면 막지 않는다 — 막는 쪽으로 틀리면 다시 만들 길이 없어진다.
   return Number.isFinite(at) && Date.now() - at < RESUBMIT_WINDOW_MS;
-}
-
-/**
- * 저장된 차례로 첨부를 만든다.
- *
- * 차례가 없으면(옛 작업) 빈 배열을 준다 — 그때는 `buildPosterJob` 이 두 목록을
- * 이어 붙이고, 그것이 지금까지의 동작이다.
- */
-function orderedAttachments(
-  data: { attachmentOrder?: string[]; personIds?: string[]; preservedIds?: string[] },
-  urls: Record<string, string>,
-): OrderedAttachment[] {
-  const order = data.attachmentOrder ?? [];
-  if (!order.length) return [];
-
-  const preserved = new Set(data.preservedIds ?? []);
-  const people = new Set(data.personIds ?? []);
-
-  return order
-    .filter((id) => urls[id])
-    .map((id): OrderedAttachment => ({
-      url: urls[id]!,
-      role: people.has(id)
-        ? "preserve_person"
-        : preserved.has(id)
-          ? "preserve_product"
-          : "style",
-    }));
 }
 
 export async function POST(_request: Request, context: Context) {
@@ -184,7 +156,7 @@ export async function POST(_request: Request, context: Context) {
          * 비어서 `buildPosterJob` 이 두 목록을 이어 붙인다 — 지금까지의 동작이라
          * 다시 만들어도 결과가 안 바뀐다.
          */
-        attachments: orderedAttachments(project.data, urls),
+        attachments: restoreAttachments(project.data, urls),
         referenceUrls: references.map((reference) => urls[reference.id]!).filter(Boolean),
         preservedUrls: preserved.map((reference) => urls[reference.id]!).filter(Boolean),
         // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
