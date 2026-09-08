@@ -172,3 +172,14 @@ describe("그림 느낌만 바꾸는 사람이 이어져 있는가", () => {
     expect(source).toMatch(/^\s+restyledIds,$/m);
   });
 });
+
+/**
+ * 안 고르면 한 장으로 시작한다 (2026-09-08 사용자 결정).
+ */
+describe("기본 장수가 이어져 있는가", () => {
+  it("숫자를 화면에 박지 않고 poster-core 를 쓴다", () => {
+    // 박아 두면 상수를 고쳐도 화면이 안 따라온다.
+    expect(source).toContain("React.useState(DEFAULT_VARIANTS)");
+    expect(source, "3장으로 되돌아가면 안 된다").not.toContain("useState(3)");
+  });
+});
