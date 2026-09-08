@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Download, Wand2 } from "lucide-react";
+import { Download, Loader2, Wand2 } from "lucide-react";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
@@ -12,6 +12,8 @@ import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
 import { POSTER_STEPS } from "../steps";
+import { placeholderRatio } from "../poster-form-rules";
+import { WorkingBanner } from "../_components/working-banner";
 
 interface PosterImage {
   id: string;
@@ -69,7 +71,13 @@ const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
 export function PosterClient({ project, images }: { project: PosterProject; images: PosterImage[] }) {
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
-  const [busy, setBusy] = React.useState<string | null>(null);
+  /**
+   * 지금 무엇을 하는 중인가. `null` 이면 아무것도 안 한다.
+   *
+   * **`kind` 를 따로 든다.** 「그리는 중」일 때만 결과 자리에 빈 칸을 깔아야
+   * 하는데, 글자만으로 판단하면 문구를 고칠 때마다 그 조건이 깨진다.
+   */
+  const [busy, setBusy] = React.useState<{ kind: "plan" | "generate" | "review"; label: string; hint?: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
@@ -167,7 +175,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
 
   /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
   async function runPlan() {
-    setBusy("기획하는 중…");
+    setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     setError(null);
     try {
       const body = await (await fetch(`/api/poster/projects/${project.id}/plan`, { method: "POST" })).json();
@@ -188,13 +196,13 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
-    setBusy("보내는 중…");
+    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
       const start = await (await fetch(`/api/poster/projects/${project.id}/generate`, { method: "POST" })).json();
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
-      setBusy("그리는 중… 2~3분 걸립니다");
+      setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
       await pollUntilDone(submission, project.data.variants);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "생성하지 못했습니다.");
@@ -221,7 +229,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
 
   /** 고른 것만 검수한다. 반려해도 이미지는 남고 다시 만들지는 사람이 누른다. */
   async function review() {
-    setBusy("검수하는 중…");
+    setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     setError(null);
     try {
       const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
@@ -242,7 +250,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
       setError("무엇을 고칠지 적어 주세요. 비어 있으면 같은 것을 또 만듭니다.");
       return;
     }
-    setBusy("보내는 중…");
+    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
     setError(null);
     try {
       const start = await (await fetch(`/api/poster/projects/${project.id}/edit`, {
@@ -251,7 +259,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
         body: JSON.stringify({ instruction }),
       })).json();
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
-      setBusy("고치는 중… 2~3분 걸립니다");
+      setBusy({ kind: "generate", label: "고치는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
       await pollUntilDone(start.submission, 1);
       setEditText("");
       setEditing(null);
@@ -331,11 +339,7 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
         </div>
       ) : null}
 
-      {busy ? (
-        <div role="status" className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-          {busy}
-        </div>
-      ) : null}
+      {busy ? <WorkingBanner label={busy.label} hint={busy.hint} /> : null}
 
       <Card>
         <CardHeader>
@@ -426,14 +430,20 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
           </div>
 
           <div className="flex flex-wrap justify-end gap-2">
+            {/*
+              **누른 그 단추가 말하게 한다.** 띠는 화면 위에 있고 단추는 아래에
+              있어, 누른 직후 눈이 머무는 곳에는 아무 변화가 없었다.
+            */}
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
-              초안 다시 채우기
+              {busy?.kind === "plan" ? <><Loader2 className="mr-1.5 size-4 animate-spin" />기획하는 중…</> : "초안 다시 채우기"}
             </Button>
             <Button variant="secondary" onClick={() => void saveSlots()} disabled={saving || Boolean(busy)}>
               {saving ? "저장하는 중…" : "기획 저장"}
             </Button>
             <Button onClick={() => void generate()} disabled={Boolean(busy)}>
-              {project.data.variants}장 만들기
+              {busy?.kind === "generate"
+                ? <><Loader2 className="mr-1.5 size-4 animate-spin" />만드는 중…</>
+                : `${project.data.variants}장 만들기`}
             </Button>
           </div>
         </CardContent>
@@ -456,7 +466,30 @@ export function PosterClient({ project, images }: { project: PosterProject; imag
             </div>
           ) : null}
 
-          {list.length === 0 ? (
+          {/*
+            **그리는 동안 결과 자리가 비어 있으면 안 된다.**
+
+            전에는 「아직 만든 변형이 없습니다」가 그대로 있었다. 만들기를 눌러도
+            대시보드는 아무 변화가 없어, 눌린 건지 아닌지 알 수 없었다
+            (2026-09-08 사용자). 만들 장수만큼 빈 칸을 미리 깔면 **몇 장이 올
+            자리인지**까지 함께 말한다.
+          */}
+          {busy?.kind === "generate" && !list.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: project.data.variants }, (_unused, index) => (
+                <div
+                  key={index}
+                  /* **고를 비율 그대로 잡는다.** 다른 모양으로 두면 그림이 도착할 때
+                     화면이 튀고, 몇 대 몇으로 나오는지도 거짓말이 된다. */
+                  style={{ aspectRatio: placeholderRatio(project.ratio) }}
+                  className="flex animate-pulse flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary/40 bg-primary-soft"
+                >
+                  <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+                  <span className="text-xs text-primary">{index + 1}번째 그림</span>
+                </div>
+              ))}
+            </div>
+          ) : list.length === 0 ? (
             <p className="text-sm text-muted-foreground">아직 만든 변형이 없습니다.</p>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

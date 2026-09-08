@@ -264,3 +264,39 @@
     animation: none;
   }
 }
+
+/* 「지금 돌고 있다」고 말하는 막대.
+
+   도는 표시(`animate-spin`)만으로는 멀리서 안 보인다. 04 에서 기획이 저절로
+   돌기 시작할 때 사용자가 작동 중인지 못 알아봤다(2026-09-08).
+
+   **진행률이 아니다.** fal 은 얼마나 갔는지 알려 주지 않는다. 흐르기만 하는
+   막대는 「살아 있다」는 뜻이고, 남은 시간은 글자가 말한다. 진행률처럼 보이는
+   막대를 채웠다 비우면 거짓말이 된다.
+
+   위 「손잡이」와 달리 **멈추지 않는다.** 저건 다 됐다고 부르는 신호라 여섯 번만
+   뛰면 되지만, 이건 일이 끝날 때까지 계속 도는 중이라는 뜻이다. 일이 끝나면
+   띠 자체가 사라진다. */
+@keyframes fixup-working {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.fixup-working-track {
+  overflow: hidden;
+}
+
+.fixup-working-bar {
+  animation: fixup-working 1400ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixup-working-bar {
+    animation: none;
+    width: 100%;
+  }
+}
