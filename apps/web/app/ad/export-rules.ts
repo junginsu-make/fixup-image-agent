@@ -406,6 +406,92 @@ export function previewBackdrop(format: AdSpec["format"]): React.CSSProperties {
 }
 
 /**
+ * 고른 규격에서 **사용자가 이후에 해야 할 일**을 뽑는다.
+ *
+ * 사용자 요청(2026-09-08): 「로고와 같은 사용자가 반드시 알아야 하거나 이후
+ * 작업을 해야 할 부분이 있다면 해당 섹션에서 안내 메시지를 보여주세요.」
+ *
+ * **줄마다 붙는 경고와 다른 것이다.** 크롭·축소·작음 경고는 「이 결과물을
+ * 보세요」이고, 여기 있는 셋은 **화면 밖에서 할 일**이다 — 로고를 올리고,
+ * 광고 관리자에서 문구를 넣고, 포털 문서로 수치를 확인하는 일.
+ *
+ * **고른 것에서만 나온다.** 항상 뜨는 안내는 벽지가 되어 아무도 안 읽는다.
+ *
+ * 순수하다. 두 화면이 같은 말을 하도록 여기 한 곳에 둔다 — 만들기 화면의
+ * 규격 칸과 `/ad` 의 규격 칸이 서로 다른 안내를 하면 그게 더 나쁘다.
+ */
+export interface AdNotice {
+  /** 겹침을 막는 열쇠. 화면이 `key` 로 그린다. */
+  key: "upload" | "assemble" | "reference";
+  title: string;
+  body: string;
+}
+
+export function actionNotices(
+  specIds: string[],
+  plan: (spec: AdSpec) => { kind: string },
+): AdNotice[] {
+  const picked = specIds
+    .map((specId) => AD_SPECS.find((spec) => spec.id === specId))
+    .filter((spec): spec is AdSpec => spec !== undefined);
+
+  const notices: AdNotice[] = [];
+
+  /**
+   * **고른 규격이 아니라 「고른 상품」으로 판단한다.**
+   *
+   * 로고 줄은 두 화면에서 `disabled` 다(`specRows` 의 `supported === false`).
+   * 그래서 「로고를 골랐으면」으로 조건을 걸면 **그 안내는 영원히 안 뜬다** —
+   * 판단을 순수 함수로 뽑아 놓고 부르는 줄이 도달 불가인, 이 프로젝트에서
+   * 여러 번 반복된 그 모양이다.
+   *
+   * 같은 상품(포털+상품)에 올려야 하는 규격이 하나라도 있으면 말한다. 구글
+   * 반응형 디스플레이를 만드는 사람은 로고 자리가 있다는 것을 알아야 한다.
+   */
+  const uploadKinds = AD_SPECS.filter((spec) => spec.supply === "upload");
+  const needsUpload = uploadKinds.filter((logo) => picked.some((spec) =>
+    spec.portal === logo.portal && spec.product === logo.product));
+  if (needsUpload.length > 0) {
+    const labels = needsUpload.map((spec) => spec.label).join(", ");
+    notices.push({
+      key: "upload",
+      title: "로고는 직접 올려야 합니다",
+      body: `이 상품에는 ${labels} 규격이 따로 있는데 여기서는 만들지 않습니다.`
+        + " 브랜드 로고를 모델이 지어내면 매번 다른 로고가 되기 때문입니다."
+        + " 가지고 계신 로고 파일을 광고 관리자에 그대로 올리세요.",
+    });
+  }
+
+  /**
+   * **배경을 지우면 글자도 지워진다**(설계 §1.5 실측 — 헤드라인·본문·배지·바닥
+   * 띠가 전부 사라졌다). 조립 규격은 오브젝트만 남는다.
+   *
+   * 이것을 안 적으면 사용자는 **문구가 빠진 것을 고장으로 읽는다.** 문구를
+   * 우리가 그려 넣는 일은 아직 안 했다 — 그때까지는 말이라도 해야 한다.
+   */
+  if (picked.some((spec) => plan(spec).kind === "assemble")) {
+    notices.push({
+      key: "assemble",
+      title: "투명 배너에는 글자가 없습니다",
+      body: "이 규격은 모델이 만들 수 없는 비율이라, 배경을 지운 그림만 얹어"
+        + " 만듭니다. 배경을 지울 때 글자도 함께 지워지므로 문구는 광고"
+        + " 관리자에서 넣으세요.",
+    });
+  }
+
+  if (picked.some((spec) => spec.sourceKind === "reference")) {
+    notices.push({
+      key: "reference",
+      title: "「참고」 규격은 공식 문서로 다시 확인하세요",
+      body: "「참고」가 붙은 규격의 수치는 포털 공식 문서가 아니라 참고 자료에서"
+        + " 가져왔습니다. 집행 전에 광고 관리자에서 한 번 확인하세요.",
+    });
+  }
+
+  return notices;
+}
+
+/**
  * 실패를 사람이 읽을 말로 옮긴다.
  *
  * **비-JSON 응답을 삼키지 않는다.** 라우트는 두 곳에서 본문 없는 404 를 낸다 —

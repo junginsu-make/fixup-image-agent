@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { AlertTriangle, Download, ImageIcon, Loader2 } from "lucide-react";
+import { ActionNotices } from "./action-notices";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn,
 } from "@fixup/ui";
@@ -11,7 +12,7 @@ import { loadLibrary, getAccountItemImages } from "../../lib/library";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
 import {
-  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, adSourceItems, bytesFromDataUrl,
+  PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, actionNotices, adSourceItems, bytesFromDataUrl,
   defaultSelection, downloadable, excludedCount, failureMessage, isActualSize,
   missingRequiredCount, previewBackdrop, previewWidth,
   cropNotice, libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows,
@@ -430,6 +431,12 @@ export function AdExportClient() {
           `disabled` 라 켤 수가 없다. 정작 설계 §9 원칙 1 의 뒷 절반인
           「필수를 끄면 알린다」가 없었다.
         */}
+        {/*
+          **이후에 사람이 할 일**은 고르는 자리에서 말한다(사용자 요청
+          2026-09-08). 결과가 나온 뒤에 「글자가 없네」를 알면 늦는다.
+        */}
+        <ActionNotices notices={actionNotices(picked, planDerivation)} />
+
         {/* 목록 안의 안내라 인라인으로 둔다 — 쌍둥이 화면과 짝이 맞는다. */}
         {missingRequired > 0 && (
           <p className="text-sm text-destructive" role="alert">

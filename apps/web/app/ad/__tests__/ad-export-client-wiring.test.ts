@@ -112,3 +112,31 @@ describe("투명 배너를 투명하게 보여 준다", () => {
     expect(client).toContain("previewBackdrop(entry.format)");
   });
 });
+
+/**
+ * **이후에 할 일 안내**(사용자 요청 2026-09-08).
+ *
+ * `actionNotices` 는 순수 함수라 시험은 쉽다. 늘 빠지는 것은 **부르는 줄**이고,
+ * 그 줄이 없으면 함수도 시험도 멀쩡한 채로 화면만 조용하다.
+ */
+describe("이후 할 일 안내를 화면이 부른다", () => {
+  const picker = readFileSync(
+    new URL("../../poster/ad-spec-picker.tsx", import.meta.url), "utf8",
+  );
+
+  it("`/ad` 가 고른 규격으로 안내를 그린다", () => {
+    expect(client).toContain("<ActionNotices notices={actionNotices(picked, planDerivation)} />");
+  });
+
+  /** 쌍둥이 화면이 다른 말을 하면 안 된다 — 같은 함수, 같은 상자. */
+  it("만들기 화면도 같은 함수로 그린다", () => {
+    expect(picker).toContain("<ActionNotices notices={actionNotices(picked, planDerivation)} />");
+  });
+
+  /** 고장이 아니라 할 일이다. 오류 상자 색을 쓰면 사용자가 잘못된 줄 안다. */
+  it("안내 상자는 오류 색을 안 쓴다", () => {
+    const box = readFileSync(new URL("../action-notices.tsx", import.meta.url), "utf8");
+    expect(box).toContain("border-primary/25");
+    expect(box).not.toContain("destructive");
+  });
+});

@@ -5,7 +5,7 @@ import {
   defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl, previewBackdrop,
-  cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks,
+  cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks, actionNotices,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -700,5 +700,94 @@ describe("미리보기 바탕", () => {
   it("무늬 색이 판 색(--muted)과 같지 않다", () => {
     const image = previewBackdrop("png-alpha").backgroundImage ?? "";
     expect(image).not.toMatch(/var\(--muted\)/);
+  });
+});
+
+/**
+ * **「알아야 할 것」은 고른 규격에서 나온다.**
+ *
+ * 사용자 요청(2026-09-08): 「로고와 같은 사용자가 반드시 알아야 하거나 이후
+ * 작업을 해야 할 부분이 있다면 해당 섹션에서 안내 메시지를 보여주세요.」
+ *
+ * 셋 다 **화면이 지금 말하지 않는 것**이다. 로고는 흐린 글씨로 한 줄 있지만
+ * 「그래서 어디서 올리나」가 없고, 조립 규격에 글자가 없다는 사실은 **어디에도
+ * 없다.** 참고 배지는 붙어 있으나 무슨 뜻인지 아무도 안 적었다.
+ */
+describe("이후 할 일 안내", () => {
+  it("고른 게 없으면 아무 말도 안 한다", () => {
+    expect(actionNotices([], planDerivation)).toEqual([]);
+  });
+
+  /**
+   * **이 시험이 이 안내의 존재 이유다.**
+   *
+   * 로고 줄은 두 화면에서 `disabled` 라 사람이 켤 수 없다. 「로고를 골랐으면」
+   * 으로 조건을 걸면 그 안내는 **도달 불가**가 되어, 함수도 있고 시험도 있는데
+   * 화면에는 영원히 안 뜬다. 그래서 **실제로 고를 수 있는 규격만으로** 뜨는지
+   * 본다.
+   */
+  it("실제로 고를 수 있는 규격만으로 로고 안내가 뜬다", () => {
+    const pickable = rows.filter((row) => row.supported).map((row) => row.spec.id);
+    expect(pickable).not.toContain("google-rda-logo");
+
+    const notices = actionNotices(pickable, planDerivation);
+    const upload = notices.find((notice) => notice.key === "upload");
+    expect(upload).toBeDefined();
+    expect(upload!.body).toMatch(/올리|올려/);
+  });
+
+  it("같은 상품을 고르면 로고 안내가 뜬다", () => {
+    const keys = actionNotices(["google-rda-square"], planDerivation).map((n) => n.key);
+    expect(keys).toContain("upload");
+  });
+
+  /** 상품이 다르면 안 뜬다 — 카카오를 만드는 사람에게 구글 로고 얘기는 소음이다. */
+  it("다른 상품만 고르면 로고 안내가 안 뜬다", () => {
+    const keys = actionNotices(["kakao-display-2x1"], planDerivation).map((n) => n.key);
+    expect(keys).not.toContain("upload");
+  });
+
+  /**
+   * **이것이 이번에 새로 말하는 것이다.** 배경을 지우면 글자가 함께 지워진다
+   * (설계 §1.5 실측: 헤드라인·본문·배지·바닥 띠가 전부 사라짐). 조립 규격은
+   * 오브젝트만 남으므로 **문구는 광고 관리자에서 넣어야 한다.**
+   */
+  it("조립 규격을 고르면 글자가 없다고 말한다", () => {
+    const notices = actionNotices(["kakao-bizboard"], planDerivation);
+    const assemble = notices.find((notice) => notice.key === "assemble");
+    expect(assemble).toBeDefined();
+    expect(assemble!.body).toMatch(/글자/);
+  });
+
+  it("참고 규격을 고르면 공식 문서로 확인하라고 말한다", () => {
+    const notices = actionNotices(["naver-smartchannel"], planDerivation);
+    expect(notices.map((notice) => notice.key)).toContain("reference");
+  });
+
+  /** 공식·줄이기뿐인 규격만 고르면 조용하다 — 항상 뜨는 안내는 벽지가 된다. */
+  it("말할 게 없으면 조용하다", () => {
+    // 카카오 정사각: 공식·줄이기·로고 없는 상품 — 할 말이 없다.
+    expect(actionNotices(["kakao-display-square"], planDerivation)).toEqual([]);
+  });
+
+  /** 같은 안내를 규격 수만큼 반복하지 않는다. */
+  it("같은 안내를 겹쳐 내지 않는다", () => {
+    const notices = actionNotices(["kakao-bizboard", "naver-smartchannel"], planDerivation);
+    expect(notices.filter((notice) => notice.key === "assemble")).toHaveLength(1);
+  });
+
+  /** 모르는 id 를 받아도 죽지 않는다 — 화면이 그리는 중이다. */
+  it("모르는 규격은 무시한다", () => {
+    expect(actionNotices(["없는-규격"], planDerivation)).toEqual([]);
+  });
+
+  /** 필수 9개를 고르면 셋 다 뜬다. 이것이 실제로 가장 흔한 조합이다. */
+  it("필수 전부를 고르면 셋 다 말한다", () => {
+    const required = AD_SPECS.filter((spec) => spec.required).map((spec) => spec.id);
+    const keys = actionNotices(required, planDerivation).map((notice) => notice.key);
+    expect(keys).toContain("assemble");
+    expect(keys).toContain("reference");
+    // 필수에 구글 반응형 디스플레이가 들어 있으므로 로고 안내도 뜬다.
+    expect(keys).toContain("upload");
   });
 });
