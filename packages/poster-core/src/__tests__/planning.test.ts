@@ -100,3 +100,52 @@ describe("슬롯 기획", () => {
     expect(result.slots.typeInteraction).toBeNull();
   });
 });
+
+/**
+ * 설계 §5 4번 — 기획 AI 도 번호·역할·01 지시를 함께 본다.
+ *
+ * **셋 다 시험 밖이었다.** 위 `input` 에 그 값들이 아예 없어서, `planning.ts`
+ * 에서 번호를 지우든 역할을 지우든 01 지시를 지우든 시험 81개가 전부
+ * 초록이었다(2026-09-08 리뷰). 기획이 첨부를 못 보면 「첨부한 그림과 겉도는
+ * 칸」이라는 원래 문제로 되돌아간다.
+ */
+describe("기획도 화면과 같은 번호로 첨부를 본다", () => {
+  const withRoles = {
+    ...input,
+    references: [
+      { title: "만화 포스터", number: 2, roleLabel: "따라 만들기" },
+      { title: "가족 사진", number: 1, roleLabel: "인물 그대로 지키기" },
+    ],
+  };
+
+  it("넘겨받은 번호를 그대로 쓴다 — 다시 세지 않는다", () => {
+    // 화면 ②번이 기획에서도 2번이어야 한다. 여기서 다시 세면 목록에 담긴
+    // 차례대로 1, 2 가 되어 화면·프롬프트와 갈린다.
+    const prompt = buildPlanPrompt(withRoles);
+    expect(prompt).toContain("2. 만화 포스터");
+    expect(prompt).toContain("1. 가족 사진");
+  });
+
+  it("역할을 함께 알려 준다", () => {
+    const prompt = buildPlanPrompt(withRoles);
+    expect(prompt).toContain("[따라 만들기]");
+    expect(prompt).toContain("[인물 그대로 지키기]");
+  });
+
+  it("첨부에 대해 사용자가 적은 말을 넘긴다", () => {
+    const prompt = buildPlanPrompt({
+      ...withRoles,
+      attachmentIntent: "1번 사진의 사람들을 2번 그림 느낌으로",
+    });
+    expect(prompt).toContain("1번 사진의 사람들을 2번 그림 느낌으로");
+  });
+
+  it("안 적었으면 그 줄이 없다", () => {
+    expect(buildPlanPrompt(withRoles)).not.toContain("사용자가 적은 말");
+  });
+
+  it("번호가 없으면 담긴 차례대로 센다 — 옛 작업", () => {
+    const prompt = buildPlanPrompt(input);
+    expect(prompt).toContain("1. SNAP 포스터");
+  });
+});

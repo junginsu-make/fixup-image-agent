@@ -164,3 +164,49 @@ describe("참조 이미지 장수 상한", () => {
     ).toBeUndefined();
   });
 });
+
+/**
+ * 이 배선이 이 기능의 존재 이유다.
+ *
+ * `buildPosterPrompt` 를 직접 부르는 시험은 있었는데, **`buildPosterJob` 을
+ * 통과해 오는 길**을 보는 시험이 없었다. `generate.ts` 에서 그 두 줄을
+ * `undefined` 로 바꿔도 시험 81개가 전부 초록이었다 — 사용자가 01 화면에 뭐라고
+ * 적든 프롬프트에 안 들어가고, **오류 하나 없이 예전 결과가 나온다**(2026-09-08 리뷰).
+ */
+describe("사용자가 적은 말이 프롬프트까지 간다", () => {
+  it("첨부에 대한 말이 조립을 거쳐 프롬프트에 들어간다", () => {
+    const job = buildPosterJob({
+      ...base,
+      attachmentIntent: "1번 사진의 사람들을 2번 그림 느낌으로",
+    });
+    expect(job.prompt).toContain("첨부한 그림에 대해: 1번 사진의 사람들을 2번 그림 느낌으로");
+  });
+
+  it("결과물에 대한 말도 조립을 거쳐 프롬프트에 들어간다", () => {
+    const job = buildPosterJob({ ...base, userInstruction: "배경은 밤, 창밖에 네온" });
+    expect(job.prompt).toContain("결과물에 대해: 배경은 밤, 창밖에 네온");
+  });
+
+  it("둘 다 있으면 첨부에 대한 말이 먼저다", () => {
+    // 첨부를 어떻게 쓸지가 결과물을 어떻게 할지보다 앞선다 — 설계 §5 3번.
+    const job = buildPosterJob({
+      ...base,
+      attachmentIntent: "1번을 2번 느낌으로",
+      userInstruction: "배경은 밤",
+    });
+    expect(job.prompt.indexOf("첨부한 그림에 대해")).toBeLessThan(
+      job.prompt.indexOf("결과물에 대해"),
+    );
+  });
+
+  it("둘 다 프롬프트 맨 앞에 온다 — 화풍 지시보다 먼저", () => {
+    const job = buildPosterJob({ ...base, attachmentIntent: "1번을 2번 느낌으로" });
+    expect(job.prompt.startsWith("USER INSTRUCTION")).toBe(true);
+  });
+
+  it("안 적었으면 아무것도 안 들어간다", () => {
+    const job = buildPosterJob(base);
+    expect(job.prompt).not.toContain("첨부한 그림에 대해");
+    expect(job.prompt).not.toContain("USER INSTRUCTION");
+  });
+});

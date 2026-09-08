@@ -65,3 +65,44 @@ describe("판단이 살아 있는 상태에 이어져 있는가", () => {
     expect(source).toContain("adProjectBodies(projectBody(), adPlan.masters, title)");
   });
 });
+
+/**
+ * 고른 차례가 화면 상태에 이어져 있는가.
+ *
+ * 규칙은 `@fixup/poster-core` 로 뽑아 시험으로 잠갔는데, **화면이 그것을 부르는
+ * 줄은 아무도 안 보고 있었다.** `picked` 를 예전처럼 `references.filter(…)` 로
+ * 되돌리거나 세 목록을 `Object.keys(roles)` 에서 뽑아도 시험 1059개가 전부
+ * 초록이었다(2026-09-08 리뷰). 그 줄들이 정확히 이번에 고친 고장이 살던 자리다.
+ */
+describe("고른 차례가 화면 상태에 이어져 있는가", () => {
+  it("규칙을 여기 다시 적지 않고 poster-core 를 부른다", () => {
+    // 두 벌로 적으면 화면과 서버의 번호가 갈린다.
+    expect(source).toContain("nextPickOrder(current, id,");
+    expect(source).toMatch(/visibleOrder\(\s*pickOrder,/);
+  });
+
+  it("역할을 바꿀 때 차례도 함께 고친다", () => {
+    expect(source).toMatch(/setRoles\([\s\S]{0,200}?setPickOrder\(/);
+  });
+
+  it("보이는 것만 보낸다 — 목록에 없는 id 를 거른다", () => {
+    // 안 거르면 그 뒤 번호가 전부 1씩 밀린다.
+    expect(source).toContain("references.some((entry) => entry.id === id)");
+  });
+
+  it("세 목록을 전부 고른 차례에서 뽑는다", () => {
+    // `roles` 에서 직접 뽑으면 차례에 없는 id 가 서버로 새어 나간다.
+    for (const line of [
+      "const styleIds = orderedIds.filter",
+      "const preservedIds = orderedIds.filter",
+      "const personIds = orderedIds.filter",
+    ]) {
+      expect(source, `${line} 가 orderedIds 에서 나와야 한다`).toContain(line);
+    }
+  });
+
+  it("차례와 첨부에 대한 말을 서버로 보낸다", () => {
+    expect(source).toContain("attachmentOrder: orderedIds");
+    expect(source).toContain("attachmentIntent: attachmentIntent.trim()");
+  });
+});

@@ -17,7 +17,13 @@ vi.mock("server-only", () => ({}));
 
 let project: { id: string; ratio: string; status: string; updatedAt: string; modelId: string; data: Record<string, unknown> } | undefined;
 const measured: string[] = [];
-const submitted: Array<{ sourceSize?: { width: number; height: number } }> = [];
+const submitted: Array<{
+  sourceSize?: { width: number; height: number };
+  attachments?: Array<{ url: string; role: string }>;
+  referenceUrls?: string[];
+}> = [];
+/** 레퍼런스 라이브러리. 시험마다 필요한 만큼 채운다. */
+const LIBRARY: Array<{ id: string; storagePath: string }> = [];
 const updates: Array<Record<string, unknown>> = [];
 let submitThrows: Error | null = null;
 
@@ -50,7 +56,13 @@ vi.mock("../../../../lib/poster/stores", () => ({
         return project;
       },
     },
-    references: { byIds: async () => [{ id: "r1", storagePath: "u1/ref/1.png" }] },
+    /**
+     * **id 로 걸러 준다.** 늘 같은 한 줄을 돌려주면 차례를 보는 시험을 못 쓴다 —
+     * 어떤 id 를 물어도 답이 같으니 순서가 뒤바뀌어도 티가 안 난다.
+     */
+    references: {
+      byIds: async (ids: string[]) => LIBRARY.filter((row) => ids.includes(row.id)),
+    },
     requests: {}, images: {},
   }),
 }));
@@ -61,16 +73,16 @@ vi.mock("../../../../lib/poster/providers", () => ({
 }));
 
 vi.mock("../../../../lib/fal/upload", () => ({
-  uploadUniqueReferences: async () => {
+  uploadUniqueReferences: async (rows: Array<{ id: string }>) => {
     // 실제로는 네트워크다. 그 사이에 두 번째 요청이 도착한다.
     await new Promise((resolve) => setTimeout(resolve, 30));
-    return { "r1": "https://fal/r1.png" };
+    return Object.fromEntries(rows.map((row) => [row.id, `https://fal/${row.id}.png`]));
   },
 }));
 
 vi.mock("../../../../lib/poster/flow", async () => ({
   ...(await vi.importActual<typeof import("../../../../lib/poster/flow")>("../../../../lib/poster/flow")),
-  submitPoster: async (job: { sourceSize?: { width: number; height: number } }) => {
+  submitPoster: async (job: (typeof submitted)[number]) => {
     submitted.push(job);
     if (submitThrows) throw submitThrows;
     await new Promise((resolve) => setTimeout(resolve, 30));
@@ -91,6 +103,8 @@ const base = {
 
 beforeEach(() => {
   project = { ...base, data: { ...base.data } };
+  LIBRARY.length = 0;
+  LIBRARY.push({ id: "r1", storagePath: "u1/ref/1.png" });
   measured.length = 0;
   submitted.length = 0;
   updates.length = 0;
@@ -207,5 +221,48 @@ describe("돈이 나간 뒤에 실패하면", () => {
     submitThrows = new Error("첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다.");
     await call().catch(() => {});
     expect(project!.status).toBe("ready");
+  });
+});
+
+/**
+ * 화면에서 고른 차례가 fal 까지 가는가 — **라우트 배선**.
+ *
+ * `restoreAttachments` 자체는 `poster-core` 에서 재고 있는데, **라우트가 그것을
+ * 부르는 자리**는 아무도 안 보고 있었다. `attachments: restoreAttachments(…)` 를
+ * `attachments: []` 로 바꿔도 시험이 전부 초록이었다(2026-09-08 리뷰).
+ *
+ * 그러면 사용자가 ①②로 고른 차례가 조용히 사라지고, 프롬프트의 `Image 1` 이
+ * 다른 그림을 가리킨다 — 오류 하나 없이.
+ */
+describe("고른 차례가 제출까지 가는가", () => {
+  beforeEach(() => {
+    LIBRARY.push({ id: "r2", storagePath: "u1/ref/2.png" });
+    project!.data.referenceIds = ["r2"];
+    project!.data.preservedIds = ["r1"];
+    project!.data.personIds = ["r1"];
+    // 화면에서 인물(r1)을 먼저 골랐다. 목록 차례(따라 만들기 먼저)와 **반대다.**
+    project!.data.attachmentOrder = ["r1", "r2"];
+  });
+
+  it("저장된 차례 그대로 넘긴다 — 목록 차례가 아니다", async () => {
+    await call();
+    expect(submitted[0]!.attachments).toEqual([
+      { url: "https://fal/r1.png", role: "preserve_person" },
+      { url: "https://fal/r2.png", role: "style" },
+    ]);
+  });
+
+  it("차례가 없는 옛 작업은 빈 배열로 넘어간다 — 조립이 옛 목록을 쓴다", async () => {
+    delete project!.data.attachmentOrder;
+    await call();
+    expect(submitted[0]!.attachments).toEqual([]);
+    // 빈 배열이어도 옛 목록은 그대로 실려 가야 한다. 둘 다 비면 첨부를 통째로 잃는다.
+    expect(submitted[0]!.referenceUrls).toEqual(["https://fal/r2.png"]);
+  });
+
+  it("01 화면에 적은 말이 제출까지 간다", async () => {
+    project!.data.attachmentIntent = "1번 사람을 2번 느낌으로";
+    await call();
+    expect(submitted[0]).toMatchObject({ attachmentIntent: "1번 사람을 2번 느낌으로" });
   });
 });
