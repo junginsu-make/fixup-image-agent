@@ -245,6 +245,56 @@ describe("첨부한 그림의 역할", () => {
     expect(prompt).toMatch(/background/i);
   });
 
+  /**
+   * **「그리는 방식」은 뽑아내기에서 뗀다** (2026-09-08).
+   *
+   * 캐릭터 도구는 결(실사/애니/3D)을 따로 고르게 되어 있는데, 뽑아내기 문구가
+   * `the same colour palette` 를 요구해서 「뽑아내기 + 결: 실사」가 정면으로
+   * 부딪혔다 — 화면에서 그냥 눌리는 조합인데도.
+   */
+  it("**그리는 방식은 베끼지 말라고 못 박는다**", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "extract" });
+    expect(prompt).toMatch(/rendering style is NOT part of what you copy/i);
+    expect(prompt).toMatch(/may differ from the reference/i);
+  });
+
+  it("그림 전체의 색조를 그대로 가져오라고 하지 않는다", () => {
+    // 이 한 마디가 결(look)과 부딪혔다. 결은 아래에서 따로 말한다.
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "extract" });
+    expect(prompt).not.toMatch(/the same colour palette/i);
+  });
+
+  it("**그 캐릭터의 색은 지킨다** — 머리·피부·옷", () => {
+    // 그림 전체의 색조와 캐릭터 자신의 색은 다르다. 뒤엣것은 정체성이다.
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "extract" });
+    expect(prompt).toMatch(/colours that belong to the character itself/i);
+  });
+
+  it("작은 것을 이름으로 부른다 — 안경이 사라진 자리다", () => {
+    // 이미지 만들기에서 겪은 것과 같다(설계 §4-3). 「그대로 재현하라」만 적으면
+    // 큰 것만 옮기고 안경·모자를 버린다.
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "extract" });
+    for (const item of ["glasses", "hats", "one at a time"]) {
+      expect(prompt, `${item} 를 말해야 한다`).toContain(item);
+    }
+  });
+
+  it("결을 바꿔도 사람은 그대로라고 말한다 — 두 지시가 함께 선다", () => {
+    const prompt = buildCandidatePrompt({
+      ...base, kind: "person", look: "anime", referenceRole: "extract",
+    });
+    // 정체성 쪽
+    expect(prompt).toMatch(/same face or head shape/i);
+    // 결 쪽 — 서로 안 부딪힌다
+    expect(prompt).toMatch(/rendering style is NOT part of what you copy/i);
+  });
+
+  it("결만 따라 만들기는 지금까지 그대로다", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "style" });
+    expect(prompt).toMatch(/STYLE reference/i);
+    expect(prompt).toMatch(/Do not copy the character in it/i);
+  });
+
   it("역할이 없으면 첨부 이야기를 하지 않는다", () => {
     expect(buildCandidatePrompt(base)).not.toMatch(/supplied reference/i);
   });

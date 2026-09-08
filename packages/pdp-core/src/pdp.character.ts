@@ -303,14 +303,35 @@ function lookDirective(look: CharacterLook, kind: CharacterKind) {
  *
  * 아무 말도 안 하면 모델은 참조를 「비슷하게」 다룬다. 그러면 결만 가져오려 해도
  * 그 캐릭터가 따라오고, 그 캐릭터를 뽑아내려 해도 다른 것이 섞인다.
+ *
+ * ── 「같은 색 팔레트」가 결과 부딪히고 있었다 ────────────────
+ *
+ * 캐릭터 도구는 **결(실사/애니/3D)을 따로 고르게** 되어 있다. 그런데 뽑아내기
+ * 문구가 `the same colour palette` 를 요구해서, 「이 캐릭터 뽑아내기 + 결: 실사」를
+ * 고르면 두 지시가 정면으로 부딪혔다 — 화면에서 그냥 눌리는 조합인데도
+ * (2026-09-08 실측).
+ *
+ * 이미지 만들기에서 겪은 것과 같은 모양이다. 거기서는 `restyle` 금지 문구가
+ * 「만화로 바꿔 줘」와 부딪혔다(설계 §4-1·§4-3).
+ *
+ * **그래서 「그리는 방식」을 뽑아내기에서 뗀다.** 뽑아내는 것은 *누구인가*이고,
+ * *어떻게 그리는가*는 아래 `lookDirective` 가 따로 말한다. 색도 나눈다 — 머리·
+ * 피부·옷의 색은 그 캐릭터의 것이라 지키고, 그림 전체의 색조는 결이 정한다.
  */
 function referenceDirective(role: CharacterReferenceRole, kind: CharacterKind) {
   const noun = kind === "object" ? "object" : "character";
   if (role === "extract") {
     return (
-      ` The supplied reference image contains this ${noun}. Reproduce the same character` +
-      ` exactly — same face or head shape, same proportions, same outfit or markings and the` +
-      " same colour palette. Remove the original background and everything else in the image;" +
+      ` The supplied reference image contains this ${noun}. Reproduce the same ${noun} —` +
+      " same face or head shape, same proportions, same outfit, markings and hair, and the" +
+      ` colours that belong to the ${noun} itself (hair, skin, clothing, markings).` +
+      " Keep every accessory it is actually wearing: glasses, hats, jewellery, what is printed" +
+      " on its clothes. Go through those small things one at a time and check each against the" +
+      " reference — do not drop an item because it is small." +
+      " **The rendering style is NOT part of what you copy.** How it is drawn — photographic," +
+      " illustrated, anime or 3D, and the line, shading and overall colour treatment that comes" +
+      " with it — is set separately below and may differ from the reference." +
+      " Remove the original background and everything else in the image;" +
       " place the subject alone on a plain neutral background."
     );
   }
