@@ -3,10 +3,11 @@
 import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
+import { MAX_CARDS, groupAttachments, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StepBar, type StepDefinition } from "@fixup/ui";
 import { AttachmentPicker } from "./_components/attachment-picker";
 import type { SlotIntents } from "./_components/slot-intents";
+import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
@@ -106,7 +107,8 @@ export function NewSnsClient() {
           source,
           toneNote: toneNote.trim() || undefined,
           attachments,
-      attachmentIntents: intents,
+      // 화면에 없는 자리의 글은 지우고 보낸다 — 못 보는 값이 남으면 나중에 물린다.
+      attachmentIntents: visibleIntents(groupAttachments(attachments), intents),
           ratio: spec.ratio,
           cardCountMode: spec.cardCountMode,
           cardCount: spec.cardCountMode === "fixed" ? spec.cardCount : undefined,

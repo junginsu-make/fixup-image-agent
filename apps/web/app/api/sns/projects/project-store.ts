@@ -46,6 +46,9 @@ function record(row: ProjectRow): SnsProjectRecord {
       flow: row.data.flow,
       look: row.data.look,
       userInstruction: row.data.userInstruction,
+    // **화이트리스트는 빠뜨린다.** 이 줄이 없으면 목록 경로로 읽은 작업에서
+    // 사용자가 적은 글이 말없이 사라진다(2026-09-08 리뷰).
+    attachmentIntents: row.data.attachmentIntents,
     },
     slotPlan: row.data.slotPlan,
     createdAt: row.created_at,

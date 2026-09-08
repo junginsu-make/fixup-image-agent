@@ -3,10 +3,8 @@
 import * as React from "react";
 import { Label, Textarea } from "@fixup/ui";
 import { attachmentNumber } from "@fixup/shared";
-import {
-  groupAttachments, selectReferencesForRole,
-  type Attachment, type StyleRole,
-} from "@fixup/sns-core";
+import { groupAttachments, type Attachment, type StyleRole } from "@fixup/sns-core";
+import { slotRows } from "./slot-rows";
 
 /**
  * 자리마다 「이 그림들을 어떻게 쓸까요」.
@@ -44,8 +42,6 @@ const SLOT_LABEL: Record<StyleRole, string> = {
   ending: "엔딩에 쓸 그림",
 };
 
-const SLOTS: StyleRole[] = ["cover", "body", "ending"];
-
 export function SlotIntents({
   attachments, images, intents, onChange,
 }: {
@@ -62,9 +58,7 @@ export function SlotIntents({
    * 인물만 있고 그 자리 레퍼런스가 없어도 인물은 간다. 그때도 보여줘야
    * 「속지에는 사람이 안 들어가나?」로 오해하지 않는다.
    */
-  const rows = SLOTS
-    .map((slot) => ({ slot, picks: selectReferencesForRole(grouped, slot) }))
-    .filter((row) => row.picks.length > 0);
+  const rows = slotRows(grouped);
 
   if (!rows.length) return null;
 

@@ -6,6 +6,7 @@ import {
   buildSceneRequest,
   composePrompt,
   intentForRole,
+  mergedInstruction,
   referenceWarningsForRole,
   selectReferencesForRole,
   writeImagePrompt,
@@ -384,5 +385,62 @@ describe("자리마다 적은 말", () => {
     const block = buildAttachmentBlock([{ ...person, restyle: true }], {});
     expect(block).toContain("PRESERVED PERSON, REDRAWN");
     expect(block).not.toContain("Do not beautify, slim, age, de-age, restyle");
+  });
+});
+
+/**
+ * **지시 원문이 실제로 실리는가** (2026-09-08 리뷰가 잡은 HIGH).
+ *
+ * 스위치만 왔고 원문을 싣는 배선이 안 왔었다. 그 결과 지시를 적으면 보호 문구만
+ * 사라지고 대신 들어오는 말이 없었다 — **안 적느니만 못했다.**
+ * 「USER INSTRUCTION 을 읽고 따르라」고 써 놓고 그 블록이 비어 있었다.
+ */
+describe("적은 말이 프롬프트까지 가는가", () => {
+  const person = {
+    id: "p", kind: "keep_identity" as const, subject: "person" as const,
+    assetPath: "a", url: "u",
+  };
+  const intent = "①번 사람을 ②번 느낌으로";
+
+  it("첨부 지시가 최종 프롬프트에 들어간다", () => {
+    const tuning = { attachmentIntent: intent };
+    const prompt = composePrompt(buildAttachmentBlock([person], tuning), "장면", tuning);
+    expect(prompt).toContain(`첨부한 그림에 대해: ${intent}`);
+  });
+
+  it("결과물 지시도 함께 들어간다", () => {
+    const tuning = { attachmentIntent: intent, userInstruction: "배경은 밤" };
+    const prompt = composePrompt(buildAttachmentBlock([person], tuning), "장면", tuning);
+    expect(prompt).toContain(`첨부한 그림에 대해: ${intent}`);
+    expect(prompt).toContain("결과물에 대해: 배경은 밤");
+  });
+
+  it("첨부 지시가 결과물 지시보다 먼저다", () => {
+    const tuning = { attachmentIntent: intent, userInstruction: "배경은 밤" };
+    const prompt = composePrompt(buildAttachmentBlock([person], tuning), "장면", tuning);
+    expect(prompt.indexOf("첨부한 그림에 대해")).toBeLessThan(prompt.indexOf("결과물에 대해"));
+  });
+
+  it("맨 앞과 맨 뒤 두 곳에 들어간다", () => {
+    const tuning = { attachmentIntent: intent };
+    const prompt = composePrompt(buildAttachmentBlock([person], tuning), "장면", tuning);
+    expect(prompt.startsWith("USER INSTRUCTION")).toBe(true);
+    expect(prompt.lastIndexOf(intent)).toBeGreaterThan(prompt.indexOf("장면"));
+  });
+
+  it("**첨부 지시만 적어도 우선순위 줄이 나온다**", () => {
+    // 없으면 「무엇이 먼저인지」를 아무도 안 말해 준다.
+    const block = buildAttachmentBlock([person], { attachmentIntent: intent });
+    expect(block).toContain("the USER INSTRUCTION >");
+  });
+
+  it("둘 다 안 적었으면 아무것도 안 들어간다", () => {
+    const prompt = composePrompt(buildAttachmentBlock([person], {}), "장면", {});
+    expect(prompt).not.toContain("USER INSTRUCTION");
+    expect(prompt).not.toContain("첨부한 그림에 대해");
+  });
+
+  it("공백만 적은 것은 안 적은 것이다", () => {
+    expect(mergedInstruction({ attachmentIntent: "   ", userInstruction: "  " })).toBe("");
   });
 });

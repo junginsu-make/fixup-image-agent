@@ -63,8 +63,11 @@ type Subject = "person" | "object";
 export function toCardNewsAttachment(
   role: AttachmentRole,
 ): { kind: CardNewsKind; subject?: Subject } {
-  // 카드뉴스는 아직 「그림 느낌만 바꾸기」를 모른다(설계 §3 3단계). 가장 가까운
-  // 것으로 보낸다 — 사람을 잃는 것보다 그림 느낌이 안 바뀌는 편이 덜 나쁘다.
+  // **카드뉴스는 `restyle` 을 따로 들고 다닌다.** 카드뉴스 어휘에는 담을 칸이
+  // 없어서 여기서는 둘을 같은 kind 로 보내고, 화면(`attachment-picker` 의
+  // `roleOf`)과 프롬프트(`image-prompt`)가 `restyle` 플래그로 가른다.
+  // `fromCardNewsAttachment` 로는 이 역할을 못 돌려주므로 화면이 앞질러 읽는다 —
+  // 그 앞지르기를 지우면 넷째 역할이 화면에서 사라진다.
   if (role === "preserve_person" || role === "preserve_person_restyled") {
     return { kind: "keep_identity", subject: "person" };
   }

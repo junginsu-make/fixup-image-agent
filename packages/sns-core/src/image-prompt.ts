@@ -183,7 +183,9 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
   // 사용자가 직접 친 말이 맨 위다. 전에는 그 자리가 아예 없어서, 「배경을
   // 밤으로」라고 적어도 낮인 레퍼런스가 이겼다.
   const priority = priorityLine({
-    hasUserInstruction: Boolean(tuning.userInstruction?.trim()),
+    // 첨부 지시도 사람이 친 말이다. 이것만 적었을 때 우선순위 줄이 빠지면
+    // 「무엇이 먼저인지」를 아무도 안 말해 준다.
+    hasUserInstruction: Boolean(mergedInstruction(tuning)),
     hasPreserved: images.some((image) => image.kind === "keep_identity"),
   });
   if (priority) lines.push(priority);
@@ -241,8 +243,33 @@ export function buildFrame(input: {
  * 프롬프트 뒤에 긴 문단을 덧붙였더니 앞쪽 구도 지시가 밀려 무시됐다. 긴
  * 프롬프트에서 가운데 문장은 힘을 잃는다 — 가장 중요한 것은 양끝에 둔다.
  */
+/**
+ * 사람이 친 말 둘을 하나로 합친다.
+ *
+ * **자리별 첨부 지시(`attachmentIntent`)와 결과물 지시(`userInstruction`)는 서로
+ * 다른 말이다.** 우선순위 규칙(`priorityLine`)이 「USER INSTRUCTION」 하나를
+ * 가리키므로, 둘을 따로 보내면 어느 쪽이 센지 모호해진다. 라벨을 붙여 합치면
+ * 순서만으로 무엇이 먼저인지 말할 수 있다.
+ *
+ * ── 이것이 없으면 지시를 적는 쪽이 손해다 ───────────────────
+ *
+ * 지시를 적으면 역할 고정 문구가 사라지는데(4-1 A안), 그 자리를 채울 말이 안
+ * 실리면 **보호 문구만 없어지고 대신 들어오는 말이 없다.** 실제로 그 상태로
+ * 한 번 나갔다 — 「USER INSTRUCTION 을 읽고 따르라」고 써 놓고 그 블록이
+ * 비어 있었다(2026-09-08 리뷰).
+ *
+ * 이미지 만들기가 이미 같은 모양이다(`poster-core/src/prompt.ts`).
+ */
+export function mergedInstruction(tuning: PromptTuning): string {
+  return [
+    tuning.attachmentIntent?.trim() ? `첨부한 그림에 대해: ${tuning.attachmentIntent.trim()}` : "",
+    tuning.userInstruction?.trim() ? `결과물에 대해: ${tuning.userInstruction.trim()}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 export function composePrompt(frame: string, llmBody: string, tuning: PromptTuning = {}): string {
-  const instruction = tuning.userInstruction ?? "";
+  // 첨부 지시와 결과물 지시를 함께 싣는다. 하나만 실으면 나머지가 사라진다.
+  const instruction = mergedInstruction(tuning);
   return [
     userInstructionHead(instruction),
     // 누가 그리는가는 사용자가 친 말 다음이다. 다섯 도구가 같은 사람을 세운다.
@@ -303,7 +330,12 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
   // 적은 사용자에게 낮 장면을 써 주고, 그 장면이 그대로 이미지 모델에 간다.
   return {
     prompt: [
-      userInstructionHead(input.userInstruction ?? ""),
+      // 장면을 쓰는 LLM 도 첨부 지시를 알아야 한다. 모르면 「①번 사람을」이라고
+      // 적은 사용자에게 그 사람이 없는 장면을 써 준다.
+      userInstructionHead(mergedInstruction({
+        userInstruction: input.userInstruction,
+        attachmentIntent: intentForRole(input.attachmentIntents, input.role),
+      })),
       "Write the visual scene prompt for one card-news image.",
       "Inspect the attached reference images directly. Use them as the visual source; do not replace them with a textual reconstruction.",
       buildAttachmentBlock(references, {

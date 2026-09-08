@@ -5,6 +5,7 @@ import {
   buildModelInput,
   composePrompt,
   intentForRole,
+  mergedInstruction,
   groupAttachments,
   modelById,
   pickEndpoint,
@@ -304,7 +305,17 @@ export async function startQueuedFlow(
             visualBrief: fallbackBrief,
             styleBlock,
             look: tuning.look,
-            userInstruction: tuning.userInstruction,
+            /**
+             * **여기도 합친 말을 넘긴다.**
+             *
+             * 칸 프롬프트만 `userInstruction` 을 그대로 넘기면 레이아웃 카드에서만
+             * 첨부 지시가 사라진다 — 같은 작업 안에서 카드마다 다르게 도는 것이
+             * 가장 찾기 어려운 고장이다(2026-09-08 리뷰).
+             */
+            userInstruction: mergedInstruction({
+              userInstruction: tuning.userInstruction,
+              attachmentIntent: intentForRole(intents, card.role),
+            }),
           }),
           status: "pending" as const,
         };
@@ -342,13 +353,21 @@ export async function startQueuedFlow(
       attachmentIntents: intents,
     }, dependencies.sceneProvider);
     const images = selectReferencesForRole(grouped, card.role);
+    /**
+     * **이 카드의 자리 지시까지 넣어 하나로 만든다.**
+     *
+     * `buildFrame` 에만 넣고 `composePrompt` 에 `tuning` 을 그대로 주면, 맨 앞·맨
+     * 뒤의 「USER INSTRUCTION」 블록이 자리 지시를 못 받는다 — 첨부 설명은
+     * 「사용자가 적은 말을 따르라」고 하는데 그 말이 없는 상태가 된다
+     * (2026-09-08 시험이 잡았다).
+     */
+    const cardTuning = { ...tuning, attachmentIntent: intentForRole(intents, card.role) };
     card.prompt = composePrompt(
       buildFrame({
-        copy: card.copy, images, size: ratio.pixel, language: project.language, ...tuning,
-        attachmentIntent: intentForRole(intents, card.role),
+        copy: card.copy, images, size: ratio.pixel, language: project.language, ...cardTuning,
       }),
       prompted.body,
-      tuning,
+      cardTuning,
     );
     card.promptWarnings = prompted.warnings;
     card.status = "pending";

@@ -185,3 +185,80 @@ describe("흐름에 미리보기 자리를 남긴다", () => {
     expect(done?.thumbPath).toBe("user/sns/project/1.thumb.webp");
   });
 });
+
+/**
+ * **자리마다 적은 말이 그 자리에만 가는가** (2026-09-08 리뷰가 잡은 자리).
+ *
+ * 호출부는 맞았는데 그것을 지키는 시험이 없었다. 기존 시험은 프롬프트 본문을
+ * 한 번도 안 보고, 카드가 전부 `body` 라 표지/속지를 가르는 상황 자체가 안
+ * 만들어졌다. 그래서 `intentForRole(intents, card.role)` 을
+ * `intentForRole(intents, "cover")` 로 바꿔도 통과했다.
+ */
+describe("자리별 지시가 새지 않는가", () => {
+  function mixedProject(): SnsProjectRecord {
+    const base = project();
+    return {
+      ...base,
+      data: {
+        ...base.data,
+        attachments: [
+          { id: "cover-ref", kind: "style_reference", role: "cover", assetPath: "a", url: "data:image/jpeg;base64,eA==" },
+          { id: "body-ref", kind: "style_reference", role: "body", assetPath: "b", url: "data:image/jpeg;base64,eA==" },
+        ],
+        attachmentIntents: { cover: "표지전용문구", body: "", ending: "" },
+      },
+    };
+  }
+
+  function mixedFlow(): SnsFlowState {
+    return {
+      stage: "copy", planningIssues: [], copyIssues: [], costs: [],
+      cards: [
+        {
+          index: 1, kind: "generated" as const, role: "cover" as const,
+          copy: { index: 1, headline: "표지" },
+          plan: { index: 1, role: "cover" as const, intent: "표지", visualBrief: "표지 장면" },
+          status: "pending" as const,
+        },
+        {
+          index: 2, kind: "generated" as const, role: "body" as const,
+          copy: { index: 2, headline: "속지" },
+          plan: { index: 2, role: "body" as const, intent: "속지", visualBrief: "속지 장면" },
+          status: "pending" as const,
+        },
+      ],
+    };
+  }
+
+  it("표지에 적은 말이 속지 카드에는 안 간다", async () => {
+    const events: string[] = [];
+    const deps = dependencies(events);
+    const prompts = new Map<number, string>();
+    deps.savePrompt = async (cardIndex, prompt) => { prompts.set(cardIndex, prompt); };
+
+    const started = await startQueuedFlow(mixedProject(), mixedFlow(), deps, { now: "2026-09-01T00:00:00.000Z" });
+
+    const cover = started.cards.find((card) => card.index === 1)!;
+    const body = started.cards.find((card) => card.index === 2)!;
+    expect(cover.prompt, "표지 프롬프트에 표지 지시가 있어야 한다").toContain("표지전용문구");
+    expect(body.prompt, "속지 프롬프트에 표지 지시가 새면 안 된다").not.toContain("표지전용문구");
+  });
+
+  it("지시를 적으면 그 자리의 역할 고정 문구가 사라진다", async () => {
+    const deps = dependencies([]);
+    const started = await startQueuedFlow(mixedProject(), mixedFlow(), deps, { now: "2026-09-01T00:00:00.000Z" });
+    const cover = started.cards.find((card) => card.index === 1)!;
+    const body = started.cards.find((card) => card.index === 2)!;
+    expect(cover.prompt).not.toContain("Do NOT copy anything else from it");
+    // 속지는 안 적었으므로 지금까지 그대로다.
+    expect(body.prompt).toContain("Do NOT copy anything else from it");
+  });
+
+  it("안 적었으면 어느 카드에도 USER INSTRUCTION 이 안 붙는다", async () => {
+    const base = mixedProject();
+    const plain = { ...base, data: { ...base.data, attachmentIntents: undefined } };
+    const deps = dependencies([]);
+    const started = await startQueuedFlow(plain, mixedFlow(), deps, { now: "2026-09-01T00:00:00.000Z" });
+    for (const card of started.cards) expect(card.prompt).not.toContain("USER INSTRUCTION");
+  });
+});
