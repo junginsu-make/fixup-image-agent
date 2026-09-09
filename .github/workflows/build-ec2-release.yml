@@ -6,7 +6,8 @@ on:
     branches: [master]
 
 permissions:
-  contents: read
+  # 꾸러미를 **릴리스 자산**으로 올린다. 쓰기 권한이 필요하다.
+  contents: write
 
 # 검사와 빌드를 **나란히** 돌린다.
 #
@@ -150,11 +151,28 @@ jobs:
           tar -czf fixup-image-agent-${GITHUB_SHA::12}.tar.gz -C dist/ec2 .
           tar -czf fixup-image-agent-ops-${GITHUB_SHA::12}.tar.gz deploy/ec2
 
-      - name: Upload release artifacts
+      # 꾸러미의 **본 배송지**는 릴리스다.
+      #
+      # 2026-09-09 배포가 여기서 막혔다 — 「Artifact storage quota has been
+      # hit」. 빌드는 멀쩡히 끝났는데 56MB 짜리 꾸러미 90개가 4.3GB 를 채우고
+      # 있었다. 오래된 것을 지워도 용량은 6~12시간마다 다시 계산되어 그날
+      # 배포를 못 했다. 릴리스 자산은 그 한도와 별개다.
+      - name: Publish release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="release-${GITHUB_SHA::12}"
+          gh release create "$tag"             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "$tag"             --notes "자동 빌드 — ${GITHUB_SHA}"             fixup-image-agent-*.tar.gz
+
+      # 아티팩트는 곁다리로 남긴다. 용량에 걸려도 **배포를 막지 않는다.**
+      - name: Upload release artifacts (best effort)
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: fixup-image-agent-ec2-${{ github.sha }}
           path: |
             fixup-image-agent-*.tar.gz
           if-no-files-found: error
-          retention-days: 14
+          # 14일이면 90개가 쌓인다. 릴리스가 본 배송지이니 짧게 잡는다.
+          retention-days: 3
