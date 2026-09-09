@@ -164,3 +164,24 @@ describe("페이지가 정하는 것과 섹션이 정하는 것", () => {
     expect(buildSectionImageOptions({}, target()).style).toBe("studio");
   });
 });
+
+describe("자리별 지시는 페이지 값이다", () => {
+  it("조립기가 그대로 실어 준다", () => {
+    const built = buildSectionImageOptions(
+      { attachmentIntents: { style: "색만 가져와", anchor: "라벨 그대로" } },
+      target(),
+    );
+    expect(built.attachmentIntents).toEqual({ style: "색만 가져와", anchor: "라벨 그대로" });
+  });
+
+  it("모든 섹션이 같은 지시를 받는다 — 첨부가 페이지 단위이기 때문이다", () => {
+    const page = { attachmentIntents: { style: "색만 가져와" } };
+    expect(buildSectionImageOptions(page, target({ index: 0 })).attachmentIntents).toEqual(
+      buildSectionImageOptions(page, target({ index: 4 })).attachmentIntents,
+    );
+  });
+
+  it("안 적으면 없다", () => {
+    expect(buildSectionImageOptions({}, target()).attachmentIntents).toBeUndefined();
+  });
+});

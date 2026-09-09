@@ -345,3 +345,102 @@ describe("첨부 선언과 우선순위", () => {
     expect(buildReferenceRoleDirective([anchor, style])).not.toContain("Priority when instructions conflict");
   });
 });
+
+/**
+ * 설계 §4-1 A안 — **자리별로** 적용한다.
+ *
+ * 포스터는 첨부 지시가 하나뿐이라 지시를 적으면 모든 역할 문구가 함께 빠진다.
+ * 설계 문서가 걱정한 것이 바로 그것이다 — 「왼쪽에 놓아 줘」만 써도 얼굴
+ * 지키기가 풀린다.
+ *
+ * 상세페이지는 자리마다 따로 받으므로 그 걱정이 없다. 레퍼런스에 적은 말이
+ * 제품 지키기를 풀지 않는다.
+ *
+ * 그리고 **적은 말이 실제로 프롬프트에 실려야 한다.** 카드뉴스에서 스위치만
+ * 옮기고 원문을 안 옮겨, 보호 문구만 사라지고 대신 들어오는 말이 없었다.
+ */
+describe("자리별 지시 (설계 4-1 A안)", () => {
+  it("적은 말이 프롬프트에 그대로 실린다", () => {
+    const directive = buildReferenceRoleDirective([
+      { ...style, intent: "색만 가져오고 배치는 무시해 주세요" },
+    ]);
+    expect(directive).toContain("색만 가져오고 배치는 무시해 주세요");
+  });
+
+  it("지시를 적은 자리의 고정 문구는 빠진다", () => {
+    const withRules = buildReferenceRoleDirective([style]);
+    const withIntent = buildReferenceRoleDirective([{ ...style, intent: "색만 가져와" }]);
+
+    expect(withRules).toContain("Imitate its design language only:");
+    expect(withIntent).not.toContain("Imitate its design language only:");
+  });
+
+  it("번호와 역할 이름은 남는다 — 빼면 무엇에 대한 말인지 사라진다", () => {
+    const directive = buildReferenceRoleDirective([
+      anchor,
+      { ...style, intent: "색만 가져와" },
+    ]);
+    expect(directive).toContain("[Image 1 — PRODUCT]");
+    expect(directive).toContain("[Image 2 — DESIGN REFERENCE]");
+  });
+
+  it("**다른 자리의 고정 문구는 그대로 남는다** — 이것이 자리별로 두는 이유다", () => {
+    const directive = buildReferenceRoleDirective([
+      anchor,
+      { ...style, intent: "색만 가져와" },
+    ]);
+    // 제품 지키기는 살아 있어야 한다
+    expect(directive).toContain("Never redesign, restyle or substitute the product");
+    // 레퍼런스 규칙만 빠졌다
+    expect(directive).not.toContain("Imitate its design language only:");
+  });
+
+  it("사람에게 적어도 제품은 안 풀린다", () => {
+    const directive = buildReferenceRoleDirective([
+      anchor,
+      { ...person, intent: "안경을 꼭 씌워 주세요" },
+    ]);
+    expect(directive).toContain("Never redesign, restyle or substitute the product");
+    expect(directive).not.toContain("Do not beautify, slim, age, de-age or restyle them");
+    expect(directive).toContain("안경을 꼭 씌워 주세요");
+  });
+
+  it("빈 문자열이나 공백만 적은 것은 안 적은 것이다", () => {
+    const blank = buildReferenceRoleDirective([{ ...style, intent: "   " }]);
+    expect(blank).toContain("Imitate its design language only:");
+  });
+
+  it("지시가 있으면 그 말이 규칙을 대신한다고 밝힌다", () => {
+    const directive = buildReferenceRoleDirective([{ ...style, intent: "색만 가져와" }]);
+    expect(directive).toMatch(/replace the usual rules/i);
+  });
+
+  it("지시가 없으면 그 안내도 없다 — 뺀 것이 없는데 뺐다고 말하지 않는다", () => {
+    const directive = buildReferenceRoleDirective([anchor, style]);
+    expect(directive).not.toMatch(/replace the usual rules/i);
+  });
+
+  it("레퍼런스 서술은 지시가 있어도 남는다 — 서술은 사용자 말과 부딪히지 않는다", () => {
+    const directive = buildReferenceRoleDirective([
+      { ...style, description: "주조색을 면으로 쓴다", intent: "색만 가져와" },
+    ]);
+    expect(directive).toContain("주조색을 면으로 쓴다");
+  });
+
+  it("자리마다 다른 말을 적으면 각자 실린다", () => {
+    const directive = buildReferenceRoleDirective([
+      { ...anchor, intent: "라벨 글씨는 그대로" },
+      { ...person, intent: "안경을 씌워 주세요" },
+      { ...style, intent: "색만 가져와" },
+    ]);
+    expect(directive).toContain("라벨 글씨는 그대로");
+    expect(directive).toContain("안경을 씌워 주세요");
+    expect(directive).toContain("색만 가져와");
+    expect(directive).not.toContain("Never redesign, restyle or substitute the product");
+  });
+
+  it("자리 지시만 있어도 우선순위 줄이 나온다", () => {
+    const directive = buildReferenceRoleDirective([anchor, { ...style, intent: "색만 가져와" }]);
+    expect(directive).toMatch(/Priority when instructions conflict/i);
+  });
+});

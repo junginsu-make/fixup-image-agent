@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest";
+import { PdpService } from "./pdp.service";
+import type { SectionBlueprint } from "./types";
+
+/**
+ * 「이 그림을 어떻게 쓸까요」에 적은 말이 **최종 프롬프트까지 실제로 실리는가.**
+ *
+ * 이 기능은 배선이 둘이다.
+ *
+ *   1. 스위치   지시가 있으면 그 자리의 고정 문구를 뺀다
+ *   2. 원문     그 지시를 프롬프트에 싣는다
+ *
+ * 2026-09-08 카드뉴스에서 1만 옮기고 2를 빠뜨렸다. 타입검사 0건, 시험 전부
+ * 통과였는데 실제 프롬프트에는 「USER INSTRUCTION 을 읽고 따르라」고 써 놓고
+ * 그 블록이 아예 없었다. **보호 문구만 사라지고 대신 들어오는 말이 없었다.**
+ *
+ * 그래서 여기서는 fal 로 나가는 진짜 프롬프트를 붙잡아 본다.
+ */
+
+const section = (): SectionBlueprint =>
+  ({
+    section_id: "s1",
+    section_name: "히어로",
+    headline: "제목",
+    subheadline: "부제",
+    prompt_en: "a clean product photo on a table",
+    layout_notes: "",
+    bullets: [],
+    copy_blocks: [],
+  }) as unknown as SectionBlueprint;
+
+/** fal 로 나가는 프롬프트를 붙잡는다. 네트워크는 타지 않는다. */
+async function promptFor(options: Record<string, unknown>) {
+  const service = new PdpService();
+  const captured: string[] = [];
+
+  await (service as never as {
+    generateSectionImageInternal(input: unknown): Promise<unknown>;
+  }).generateSectionImageInternal({
+    originalImageBase64: "iVBORw0KGgo=",
+    section: section(),
+    aspectRatio: "3:4",
+    options,
+    client: { llm: { generate: async () => ({ text: "{}" }) }, models: { generateContent: async () => ({ text: "{}" }) } },
+    generateImage: async (_model: unknown, input: { prompt: string; systemPrompt: string }) => {
+      captured.push(`${input.systemPrompt}\n${input.prompt}`);
+      return { base64: "IMG", mimeType: "image/jpeg" };
+    },
+  });
+
+  return captured.join("\n");
+}
+
+const 레퍼런스 = { base64: "REF", mimeType: "image/png" };
+const 인물 = { base64: "PERSON", mimeType: "image/png" };
+
+describe("적은 말이 프롬프트에 실린다", () => {
+  it("레퍼런스에 적은 말이 그대로 간다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      styleReferenceImages: [레퍼런스],
+      attachmentIntents: { style: "색만 가져오고 배치는 무시해 주세요" },
+    });
+
+    expect(prompt).toContain("색만 가져오고 배치는 무시해 주세요");
+  });
+
+  it("제품에 적은 말이 그대로 간다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      attachmentIntents: { anchor: "라벨 글씨는 한 글자도 바꾸지 마세요" },
+    });
+
+    expect(prompt).toContain("라벨 글씨는 한 글자도 바꾸지 마세요");
+  });
+
+  it("인물에 적은 말이 그대로 간다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: true,
+      outputMode: "editable",
+      referenceModelImageBase64: 인물.base64,
+      referenceModelImageMimeType: 인물.mimeType,
+      referenceModelProfile: null,
+      attachmentIntents: { person: "안경을 꼭 씌워 주세요" },
+    });
+
+    expect(prompt).toContain("안경을 꼭 씌워 주세요");
+  });
+});
+
+describe("적은 자리의 고정 문구만 빠진다", () => {
+  it("레퍼런스에 적으면 레퍼런스 규칙이 빠진다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      styleReferenceImages: [레퍼런스],
+      attachmentIntents: { style: "색만 가져와" },
+    });
+
+    expect(prompt).not.toContain("Imitate its design language only:");
+  });
+
+  it("**레퍼런스에 적어도 제품 지키기는 안 풀린다**", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      preserveProductImage: true,
+      styleReferenceImages: [레퍼런스],
+      attachmentIntents: { style: "색만 가져와" },
+    });
+
+    expect(prompt).toContain("Never redesign, restyle or substitute the product");
+  });
+
+  it("아무 데도 안 적으면 규칙이 전부 그대로다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      styleReferenceImages: [레퍼런스],
+    });
+
+    expect(prompt).toContain("Imitate its design language only:");
+    expect(prompt).toContain("Never redesign, restyle or substitute the product");
+  });
+});

@@ -76,7 +76,7 @@ import {
   IMAGE_MODELS,
   IMAGE_MODEL_CREDIT_WEIGHT,
 } from "@fixup/pdp-core";
-import type { ImageModelId, PageImageWire } from "@fixup/pdp-core";
+import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
@@ -153,6 +153,8 @@ interface PdpEditorProps {
   apiConnectionLabel?: string;
   referenceModelImage?: PreparedImageDraft | null;
   referenceModelUsage?: ReferenceModelUsage | null;
+  /** 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 안 붙은 자리는 걸러서 온다. */
+  attachmentIntents?: AttachmentIntents;
   saveState?: "idle" | "saving" | "saved" | "error";
 }
 
@@ -276,6 +278,7 @@ export function PdpEditor({
   apiConnectionLabel = "키 필요",
   referenceModelImage = null,
   referenceModelUsage = null,
+  attachmentIntents,
   saveState = "idle",
 }: PdpEditorProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
@@ -1366,6 +1369,7 @@ export function PdpEditor({
     userInstruction: userInstruction.trim() || undefined,
     preserveProduct,
     styleReference,
+    attachmentIntents,
     referenceModel: referenceModelImage
       ? {
           imageBase64: referenceModelImage.base64,

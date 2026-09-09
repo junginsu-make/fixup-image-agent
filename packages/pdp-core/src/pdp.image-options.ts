@@ -1,4 +1,5 @@
 import type {
+  AttachmentIntents,
   ImageGenOptions,
   ImageGenOptionsInput,
   ImageModelId,
@@ -31,6 +32,8 @@ export interface PageImageInputs {
   look?: string;
   /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
   userInstruction?: string;
+  /** 첨부마다 「이 그림을 어떻게 쓸까요」에 적은 말. 페이지 전체가 공유한다. */
+  attachmentIntents?: AttachmentIntents;
   /** 제품 이미지를 지킬 것인가. */
   preserveProduct?: boolean;
   /** 페이지의 디자인 언어를 정하는 참조. 모든 섹션이 같은 한 장을 쓴다. */
@@ -103,6 +106,7 @@ export function buildSectionImageOptions(
     outputMode: page.outputMode,
     look: page.look,
     userInstruction: page.userInstruction,
+    attachmentIntents: page.attachmentIntents,
     preserveProductImage: page.preserveProduct ?? true,
     styleReferenceImages: page.styleReference ? [page.styleReference] : undefined,
   };
@@ -123,6 +127,8 @@ export interface PageImageWire {
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   referenceModel?: { imageBase64: string; mimeType: string; fileName?: string };
   referenceModelUsage?: ReferenceModelUsage | null;
+  /** 첨부마다 「이 그림을 어떻게 쓸까요」에 적은 말. */
+  attachmentIntents?: AttachmentIntents;
 }
 
 export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
@@ -133,6 +139,7 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     look: wire.look,
     userInstruction: wire.userInstruction,
     preserveProduct: wire.preserveProduct,
+    attachmentIntents: wire.attachmentIntents,
     styleReference: wire.styleReference
       ? {
           base64: wire.styleReference.imageBase64,

@@ -11,6 +11,9 @@ import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
+import type { AttachmentIntents } from "@fixup/pdp-core";
+import { AttachmentIntentField } from "./AttachmentIntentField";
+import { intentsOrUndefined } from "./attachment-intents";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
@@ -94,6 +97,13 @@ export function PdpMakerClient() {
    */
   const [look, setLook] = useState<ImageLook>("photoreal");
   const [userInstruction, setUserInstruction] = useState("");
+  /** 첨부 자리마다 적는 「이 그림을 어떻게 쓸까요」. 적은 자리의 고정 문구만 빠진다. */
+  const [attachmentIntents, setAttachmentIntents] = useState<AttachmentIntents>({});
+  const setIntent = useCallback(
+    (slot: keyof AttachmentIntents, next: string) =>
+      setAttachmentIntents((current) => ({ ...current, [slot]: next })),
+    [],
+  );
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   // 기본 출력 = 통이미지(full-image): AI가 한글 카피까지 박은 완성형 섹션을 생성.
   // (사용자 토글 UI는 후속 phase. editable은 엔진 폴백으로 유지.)
@@ -651,6 +661,11 @@ export function PdpMakerClient() {
         apiConnectionLabel={apiConnectionLabel}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
+        attachmentIntents={intentsOrUndefined(attachmentIntents, {
+          person: Boolean(modelImage || characterId),
+          // 시나리오에서 레퍼런스를 껐으면 그 칸에 적은 말도 안 간다.
+          style: Boolean(styleReferenceEnabled && styleReference),
+        })}
         saveState={saveState}
       />
     );
@@ -992,6 +1007,27 @@ export function PdpMakerClient() {
                 사람 사진과 캐릭터는 같은 일(얼굴 정하기)이고 엔진도 하나만 쓰므로
                 (pdp.service.ts: 사진이 있으면 캐릭터 무시) 한 칸에 둔다.
               */}
+              {/*
+                제품 사진은 1단계에서 받으므로 이 칸에 올리는 자리가 없다. 그래도
+                **지시는 여기서 받는다** — 세 자리가 한자리에 모여야 무엇에 대해
+                적는 말인지 헷갈리지 않는다.
+              */}
+              <div className="mb-3 grid gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
+                <div>
+                  <Badge variant="secondary">그대로 지킵니다</Badge>
+                  <strong className="mt-1.5 block text-sm">제품 사진</strong>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    1단계에서 올린 사진입니다. 모든 섹션이 같은 제품을 씁니다.
+                  </p>
+                </div>
+                <AttachmentIntentField
+                  id="intent-anchor"
+                  value={attachmentIntents.anchor ?? ""}
+                  onChange={(next) => setIntent("anchor", next)}
+                  placeholder="예: 라벨 글씨는 한 글자도 바꾸지 마세요"
+                />
+              </div>
+
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="grid content-start gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
                   <div className="min-h-[74px]">
@@ -1052,6 +1088,15 @@ export function PdpMakerClient() {
                         : undefined
                     }
                   />
+                  {/* 붙은 것이 없으면 적을 대상이 없다. 빈 칸만 남으면 오해를 만든다. */}
+                  {modelImage || characterId ? (
+                    <AttachmentIntentField
+                      id="intent-person"
+                      value={attachmentIntents.person ?? ""}
+                      onChange={(next) => setIntent("person", next)}
+                      placeholder="예: 안경을 꼭 씌워 주세요"
+                    />
+                  ) : null}
                 </div>
 
                 <div className="grid content-start gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
@@ -1077,7 +1122,14 @@ export function PdpMakerClient() {
                     </div>
                   ) : null}
                   <StyleReferenceAttach onAttached={setStyleReference} />
-
+                  {styleReference ? (
+                    <AttachmentIntentField
+                      id="intent-style"
+                      value={attachmentIntents.style ?? ""}
+                      onChange={(next) => setIntent("style", next)}
+                      placeholder="예: 색만 가져오고 배치는 무시해 주세요"
+                    />
+                  ) : null}
                 </div>
               </div>
 

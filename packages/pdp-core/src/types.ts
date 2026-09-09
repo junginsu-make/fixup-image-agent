@@ -263,6 +263,13 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
 /** 생성에 함께 넣는 참조 이미지. 종류에 따라 처리가 갈린다. */
 export interface ReferenceImage {
   kind: "anchor" | "person" | "style";
+  /**
+   * 사용자가 **이 그림에 대해** 직접 적은 말.
+   *
+   * 있으면 이 자리의 고정 문구를 대신한다(설계 4-1 A안). 자리마다 따로 받으므로
+   * 레퍼런스에 적은 말이 제품 지키기를 풀지 않는다.
+   */
+  intent?: string;
   base64: string;
   mimeType: string;
   /**
@@ -327,7 +334,17 @@ export interface ImageGenOptions {
   look?: ImageLook | string;
   /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
   userInstruction?: string;
+  /**
+   * 첨부마다 「이 그림을 어떻게 쓸까요」에 적은 말. 자리 이름이 열쇠다.
+   *
+   * 적은 자리의 고정 문구만 빠진다(설계 4-1 A안). 레퍼런스에 적었다고 제품
+   * 지키기가 풀리지 않는다 — 자리마다 따로 받는 이유다.
+   */
+  attachmentIntents?: AttachmentIntents;
 }
+
+/** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */
+export type AttachmentIntents = Partial<Record<ReferenceImage["kind"], string>>;
 
 // ── 텍스트 기반 진입 ─────────────────────────────────────────────
 // 이미지 없이 자유 텍스트로 시작하는 경로. 주 대상은 무형 상품·서비스라

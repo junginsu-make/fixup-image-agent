@@ -501,6 +501,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           kind: "anchor",
           base64: originalImageBase64,
           mimeType: DEFAULT_IMAGE_MIME,
+          intent: options.attachmentIntents?.anchor,
         });
       }
 
@@ -514,12 +515,14 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           kind: "person",
           base64: normalizedReferenceModel.base64,
           mimeType: normalizedReferenceModel.mimeType,
+          intent: options.attachmentIntents?.person,
         });
       } else if (usesCharacter && options.characterReference) {
         references.push({
           kind: "person",
           base64: options.characterReference.base64,
           mimeType: options.characterReference.mimeType,
+          intent: options.attachmentIntents?.person,
         });
       }
 
@@ -534,6 +537,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           base64: styleReference.base64,
           mimeType: styleReference.mimeType,
           description: styleReference.description,
+          intent: options.attachmentIntents?.style,
         });
       }
 
