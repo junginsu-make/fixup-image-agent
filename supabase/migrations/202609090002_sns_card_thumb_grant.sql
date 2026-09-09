@@ -1,0 +1,37 @@
+-- ════════════════════════════════════════════════════════════════════
+--  카드에 미리보기 경로를 적을 권한을 준다
+--
+--  `sns_cards` 는 칸마다 권한이 걸려 있다. 회원이 고칠 수 있는 칸은
+--  202608310002_sns.sql 이 정한 여섯이었다.
+--
+--    copy, prompt, asset_path, status, review, error
+--
+--  그런데 2026-09-04 부터 코드가 카드를 마칠 때 `thumb_path` 도 함께 적는다
+--  (`lib/sns/runtime.ts`, 회원 세션 권한으로 쓴다). 그 칸은 목록에 없어서
+--  Postgres 가 문장을 통째로 거절한다 —
+--
+--    permission denied for table sns_cards
+--
+--  칸은 202609040013_image_thumbnails.sql 이 만들었는데 **권한은 아무도
+--  안 줬다.** 칸을 더할 때 권한을 같이 안 준 것이 이 일의 뿌리다.
+--
+--  실측(2026-09-09 운영):
+--    information_schema.column_privileges  UPDATE 허용 칸
+--      asset_path, copy, error, prompt, review, status   ← thumb_path 없음
+--    thumb_path 가 채워진 카드 16장은 전부 2026-09-05 백필 스크립트가
+--    관리자 권한으로 채운 것이다. 앱이 회원 권한으로 쓴 적은 없다.
+--
+--  이 한 칸만 연다. 다른 도구(포스터·캐릭터·라이브러리)는 그림 기록을
+--  관리자 권한으로 하므로 이 검사를 안 받는다 — 저장소 전체를 훑어
+--  확인했다(회원 권한 쓰기 23곳, 권한 밖은 이 한 곳뿐).
+--
+--  여러 번 돌려도 안전하다.
+-- ════════════════════════════════════════════════════════════════════
+
+grant update (thumb_path) on public.sns_cards to authenticated;
+
+-- 확인:
+--   select column_name from information_schema.column_privileges
+--   where table_name='sns_cards' and grantee='authenticated'
+--     and privilege_type='UPDATE' order by column_name;
+--   -- thumb_path 가 목록에 있어야 한다.
