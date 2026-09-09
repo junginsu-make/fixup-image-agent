@@ -309,3 +309,54 @@ describe("페이지 배경 설명이 그림까지 간다", () => {
     expect(buildImageSystemPrompt({ ...base, pageContext: "   " })).not.toMatch(/Page context/i);
   });
 });
+
+/**
+ * **기획이 섹션마다 적어 둔 것을 그림이 읽어야 한다.**
+ *
+ * 2026-09-09 확인: 기획에게 「이 이미지가 전달해야 하는 메시지」와 「제품을
+ * 어떻게 참고할지」를 섹션마다 적으라고 시켜 놓고, 만들어진 그 값을 **아무도
+ * 안 읽고 있었다.** 섹션마다 다르게 적히는데 전부 버려졌다.
+ *
+ * `compliance_notes` 는 특히 위험했다 — 통이미지 모드는 글자를 그림에 직접
+ * 그리는데 「이 카테고리는 이런 표현을 쓰면 안 된다」를 모르고 그렸다.
+ */
+describe("섹션 기획이 그림까지 간다", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+
+  it("이 그림이 전달할 메시지가 실린다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ purpose: "착유 직후의 신선함" }), base),
+    );
+    expect(JSON.stringify(j)).toContain("착유 직후의 신선함");
+  });
+
+  it("섹션 이름과 역할이 실린다 — 무엇을 하는 자리인지 알아야 한다", () => {
+    const j = JSON.parse(buildImageJson(makeSection(), base));
+    expect(JSON.stringify(j.section)).toContain("차별점 신선도");
+    expect(JSON.stringify(j.section)).toContain("신선함을 각인");
+  });
+
+  /** 기획에게 「형태·라벨·재질·색감을 유지하는 기준을 명시하라」고 시켜 놓은 값이다. */
+  it("제품을 어떻게 참고할지가 실린다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ reference_usage: "라벨 글씨와 병 곡선을 그대로" }), base),
+    );
+    expect(j.product_reference).toBe("라벨 글씨와 병 곡선을 그대로");
+  });
+
+  it("규제 주의가 실린다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ compliance_notes: "의약품 효능 표현 금지" }), base),
+    );
+    expect(j.compliance).toBe("의약품 효능 표현 금지");
+  });
+
+  it("빈 칸은 안 싣는다 — 빈 자리를 채우라는 뜻으로 읽힌다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ purpose: "", reference_usage: "  ", compliance_notes: "" }), base),
+    );
+    expect(j.product_reference).toBeUndefined();
+    expect(j.compliance).toBeUndefined();
+    expect(j.section?.message).toBeUndefined();
+  });
+});

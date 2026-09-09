@@ -189,3 +189,43 @@ describe("페이지 배경 설명이 프롬프트까지 간다", () => {
     expect(prompt).not.toMatch(/Page context/i);
   });
 });
+
+/**
+ * 기획이 섹션마다 적어 둔 것이 **fal 로 나가는 프롬프트**까지 가는가.
+ *
+ * 옵션에 실리는 것과 프롬프트에 실리는 것은 다르다. 이 저장소는 그 차이로
+ * 이미 여러 번 데였다.
+ */
+describe("섹션 기획이 프롬프트까지 간다", () => {
+  it("메시지·제품 참고 기준·규제 주의가 실린다", async () => {
+    const service = new PdpService();
+    const captured: string[] = [];
+
+    await (service as never as {
+      generateSectionImageInternal(input: unknown): Promise<unknown>;
+    }).generateSectionImageInternal({
+      originalImageBase64: "iVBORw0KGgo=",
+      section: {
+        ...section(),
+        purpose: "착유 직후의 신선함",
+        reference_usage: "라벨 글씨와 병 곡선을 그대로",
+        compliance_notes: "의약품 효능 표현 금지",
+      },
+      aspectRatio: "3:4",
+      options: { style: "studio", withModel: false, outputMode: "editable" },
+      client: {
+        llm: { generate: async () => ({ text: "{}" }) },
+        models: { generateContent: async () => ({ text: "{}" }) },
+      },
+      generateImage: async (_model: unknown, input: { prompt: string }) => {
+        captured.push(input.prompt);
+        return { base64: "IMG", mimeType: "image/jpeg" };
+      },
+    });
+
+    const prompt = captured.join("\n");
+    expect(prompt).toContain("착유 직후의 신선함");
+    expect(prompt).toContain("라벨 글씨와 병 곡선을 그대로");
+    expect(prompt).toContain("의약품 효능 표현 금지");
+  });
+});

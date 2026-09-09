@@ -199,6 +199,41 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
     brief.look = imageLookDirective(look, options.withModel ? "person" : "generic");
   }
 
+  /*
+    **기획이 이 섹션에 대해 적어 둔 것.**
+
+    기획에게 섹션마다 「이 이미지가 전달할 메시지」와 「제품을 어떻게 참고할지」를
+    적으라고 시켜 놓고 아무도 안 읽고 있었다. 섹션마다 다르게 적히는데 전부
+    버려졌다 — 그래서 모든 섹션이 같은 얼굴로 나왔다.
+
+    빈 칸은 안 싣는다. 빈 자리를 남기면 모델이 채워야 할 자리로 읽고 지어낸다.
+  */
+  const trimmed = (value: string | undefined) => {
+    const text = String(value ?? "").trim();
+    return text || undefined;
+  };
+  const sectionMeta = {
+    name: trimmed(section.section_name),
+    role: trimmed(section.goal),
+    message: trimmed(section.purpose),
+  };
+  if (Object.values(sectionMeta).some(Boolean)) {
+    brief.section = Object.fromEntries(
+      Object.entries(sectionMeta).filter(([, value]) => value),
+    );
+  }
+
+  // 기획이 정한 「제품을 어떻게 참고할지」. 형태·라벨·재질을 지키는 기준이다.
+  const productReference = trimmed(section.reference_usage);
+  if (productReference) brief.product_reference = productReference;
+
+  /*
+    규제·표현 주의. **통이미지 모드에서 특히 중요하다** — 글자를 그림에 직접
+    그리므로 쓰면 안 되는 표현을 모르면 그대로 그려진다.
+  */
+  const compliance = trimmed(section.compliance_notes);
+  if (compliance) brief.compliance = compliance;
+
   if (section.style_guide) {
     brief.design_system = section.style_guide;
   }
