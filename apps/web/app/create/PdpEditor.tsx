@@ -76,7 +76,7 @@ import {
   IMAGE_MODELS,
   IMAGE_MODEL_CREDIT_WEIGHT,
 } from "@fixup/pdp-core";
-import type { ImageModelId } from "@fixup/pdp-core";
+import type { ImageModelId, PageImageWire } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
@@ -1354,6 +1354,29 @@ export function PdpEditor({
   };
 
   /**
+   * 페이지 전체가 공유하는 값. **한 장이든 여러 장이든 같은 것을 보낸다.**
+   *
+   * 전에는 두 호출이 각자 몸통을 지었고, 그래서 「배치와 같은 값을 보내야 한다」는
+   * 주석이 네 군데 붙어 있었다. 주석으로 지키던 것을 여기 한 곳으로 옮겼다.
+   */
+  const pageWire = (): PageImageWire => ({
+    imageModel,
+    outputMode,
+    look,
+    userInstruction: userInstruction.trim() || undefined,
+    preserveProduct,
+    styleReference,
+    referenceModel: referenceModelImage
+      ? {
+          imageBase64: referenceModelImage.base64,
+          mimeType: referenceModelImage.mimeType,
+          fileName: referenceModelImage.fileName,
+        }
+      : undefined,
+    referenceModelUsage,
+  });
+
+  /**
    * 섹션 이미지를 만든다. 대상을 넘기지 않으면 현재 섹션.
    *
    * 완료 시 setSections 는 인덱스가 아니라 섹션 키로 대상을 찾는다.
@@ -1367,15 +1390,12 @@ export function PdpEditor({
       return { ok: false };
     }
 
+    // **인물을 쓸지는 여기서 정하지 않는다.** 두 호출이 각자 판단하면 언젠가
+    // 갈린다 — 실제로 갈려서 일괄 생성에는 사람이 아예 안 들어갔다.
+    // 사용자가 이 섹션에 대해 고른 값만 보내고, 판단은 조립기가 한다.
     const options = normalizeImageOptions(
       sectionOptions[sectionKey],
       referenceModelUsage === "all-sections" ? true : index === 0
-    );
-    const useModel = Boolean(
-      options.withModel &&
-        referenceModelImage &&
-        referenceModelUsage &&
-        (referenceModelUsage === "all-sections" || index === 0)
     );
 
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
@@ -1392,38 +1412,15 @@ export function PdpEditor({
           section,
           aspectRatio,
           desiredTone: desiredTone || undefined,
+          sectionIndex: index,
+          page: pageWire(),
           options: {
             ...options,
-            outputMode,
-            imageModel,
-            headline: section.headline,
-            subheadline: section.subheadline,
             isRegeneration: Boolean(section.generatedImage),
-            referenceModelImageBase64: useModel ? referenceModelImage?.base64 : undefined,
-            referenceModelImageMimeType: useModel ? referenceModelImage?.mimeType : undefined,
-            referenceModelImageFileName: useModel ? referenceModelImage?.fileName : undefined,
-            // 배치와 같은 값을 보내야 한다. 없으면 한 장만 다시 만들었을 때
-            // 그 섹션만 디자인이 달라진다 — 통일을 지키려는 기능이 정작 깨진다.
-            styleReferenceImages: styleReference
-              ? [
-                  {
-                    base64: styleReference.imageBase64,
-                    mimeType: styleReference.mimeType,
-                    description: styleReference.description,
-                  },
-                ]
-              : undefined,
-            preserveProductImage: preserveProduct,
-            // 배치와 같은 값을 보내야 한다. 한 장만 다시 만들었을 때 그 섹션만
-            // 결이 달라지거나 사용자 지시가 빠지면 안 된다.
-            look,
-            userInstruction: userInstruction.trim() || undefined,
-            // 제목에 없는 낱말은 걸러서 보낸다. 그대로 보내면 모델이 강조할
-            // 대상을 못 찾아 엉뚱한 곳이 강조된다.
-            emphasisWords: keepWordsPresentIn(section.headline ?? "", options.emphasisWords ?? []),
           },
-          // 배치와 같은 값을 보내야 한다. 없으면 한 장만 다시 만들었을 때
-          // 그 섹션만 다른 사람이 된다.
+          // 제목에 없는 낱말은 걸러서 보낸다. 그대로 보내면 모델이 강조할
+          // 대상을 못 찾아 엉뚱한 곳이 강조된다.
+          emphasisWords: keepWordsPresentIn(section.headline ?? "", options.emphasisWords ?? []),
           characterId,
         }),
       });
@@ -1560,15 +1557,25 @@ export function PdpEditor({
           body: JSON.stringify({
             originalImageBase64: initialResult.originalImage,
             sections: chunk.map(({ section }) => section),
+            // 묶음 안 순서가 아니라 **페이지에서의 자리**를 보낸다. 인물 사진을
+            // 「첫 섹션에만」 쓸 때 두 번째 묶음의 첫 장은 히어로가 아니다.
+            sectionIndexes: chunk.map(({ index }) => index),
             aspectRatio,
             desiredTone: desiredTone || undefined,
-            outputMode,
-            imageModel,
-            styleReference,
-            preserveProduct,
             characterId,
-            look,
-            userInstruction: userInstruction.trim() || undefined,
+            page: pageWire(),
+            // 사용자가 섹션마다 고른 값. 전에는 일괄이 이것을 통째로 무시하고
+            // style 을 lifestyle 로 박아 보냈다 — 한 장만 다시 만들면 studio 라
+            // 같은 페이지 안에서 결이 갈렸다.
+            optionsBySection: Object.fromEntries(
+              chunk.map(({ section, index }) => [
+                section.section_id,
+                normalizeImageOptions(
+                  sectionOptions[sectionKeys[index] ?? String(index)],
+                  referenceModelUsage === "all-sections" ? true : index === 0,
+                ),
+              ]),
+            ),
             // 섹션마다 제목이 다르므로 강조도 섹션별이다.
             emphasisWordsBySection: Object.fromEntries(
               chunk

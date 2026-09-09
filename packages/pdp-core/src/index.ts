@@ -24,6 +24,14 @@ export {
 } from "./pdp.image-provider";
 export { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
 export { defaultPreserveProduct, shouldSendAnchor } from "./pdp.product-anchor";
+export {
+  buildSectionImageOptions,
+  pageInputsFromWire,
+  usesUploadedPerson,
+  type PageImageInputs,
+  type PageImageWire,
+  type SectionImageTarget,
+} from "./pdp.image-options";
 export { MAX_UPLOAD_BYTES, base64Bytes, planUploadBatches } from "./pdp.upload-budget";
 export {
   CHARACTER_ANGLES,

@@ -3,13 +3,14 @@ import {
   generateSectionImage,
   maxBatchSizeFor,
   toPdpErrorResponse,
+  buildSectionImageOptions,
+  pageInputsFromWire,
   DEFAULT_IMAGE_MODEL,
 } from "@fixup/pdp-core";
 import type {
   AspectRatio,
-  ImageGenOptions,
-  ImageModelId,
-  PdpOutputMode,
+  ImageGenOptionsInput,
+  PageImageWire,
   SectionBlueprint,
 } from "@fixup/pdp-core";
 import { resolveGeminiKey } from "../../../../../lib/server-keys";
@@ -28,18 +29,21 @@ export const maxDuration = 300;
 type BatchRequest = {
   originalImageBase64: string;
   sections: SectionBlueprint[];
+  /**
+   * 각 섹션이 **페이지에서** 몇 번째인지. 묶음 안 순서가 아니다.
+   *
+   * 인물 사진을 「첫 섹션에만」 쓸 때 이 값이 있어야 판단할 수 있다. 없으면
+   * 묶음 안 순서로 떨어지는데, 두 번째 묶음에서는 그것이 히어로가 아니다.
+   */
+  sectionIndexes?: number[];
   aspectRatio: AspectRatio;
   desiredTone?: string;
-  outputMode?: PdpOutputMode;
-  imageModel?: ImageModelId;
-  emphasisWordsBySection?: Record<string, string[]>;
-  styleReference?: { imageBase64: string; mimeType: string; description?: string };
-  preserveProduct?: boolean;
   characterId?: string;
-  /** 그림의 결. 안 고르면 pdp-core 가 photoreal 로 되돌린다. */
-  look?: string;
-  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
-  userInstruction?: string;
+  /** 페이지 전체가 공유하는 값. **단건 라우트와 같은 모양이다.** */
+  page?: PageImageWire;
+  /** 사용자가 섹션마다 고른 값. 열쇠는 `section_id`. */
+  optionsBySection?: Record<string, ImageGenOptionsInput>;
+  emphasisWordsBySection?: Record<string, string[]>;
 };
 
 export async function POST(req: Request) {
@@ -53,7 +57,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const model = body.imageModel ?? DEFAULT_IMAGE_MODEL;
+  const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
 
   // 클라이언트가 이미 나눠 보내지만, 여기서도 자른다. 넘겨받은 장수를 그대로
   // 믿으면 함수가 300초에 걸려 죽고, 예약한 크레딧이 finalize 되지 못한다.
@@ -95,32 +99,20 @@ export async function POST(req: Request) {
     }
   }
 
+  // **조립은 한 곳에서만 한다.** 전에는 여기서 손으로 지었고, 그래서 인물 사진을
+  // 받는 자리조차 없었다. 단건 라우트와 같은 함수를 쓴다.
+  const page = pageInputsFromWire({ ...body.page, imageModel: model });
+
   const settled = await Promise.allSettled(
-    sections.map((section) => {
-      const options: ImageGenOptions = {
-        style: "lifestyle",
-        withModel: false,
-        outputMode: body.outputMode ?? "full-image",
-        imageModel: model,
-        headline: section.headline,
-        subheadline: section.subheadline,
+    sections.map((section, position) => {
+      const options = buildSectionImageOptions(page, {
+        section,
+        index: body.sectionIndexes?.[position] ?? position,
+        options: body.optionsBySection?.[section.section_id],
         emphasisWords: body.emphasisWordsBySection?.[section.section_id],
-        // 페이지당 한 장. 모든 섹션이 같은 것을 써야 통일이 유지된다.
-        styleReferenceImages: body.styleReference
-          ? [
-              {
-                base64: body.styleReference.imageBase64,
-                mimeType: body.styleReference.mimeType,
-                description: body.styleReference.description,
-              },
-            ]
-          : undefined,
-        preserveProductImage: body.preserveProduct ?? true,
         characterReference:
           characterByAngle.get(pickAngleForSection(section.layout_notes ?? "")) ?? undefined,
-        look: body.look,
-        userInstruction: body.userInstruction,
-      };
+      });
 
       return generateSectionImage(
         {
