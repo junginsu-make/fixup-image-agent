@@ -1,8 +1,6 @@
 import "server-only";
 import { signPath, signPaths } from "../storage/signing";
 
-// sharp 0.35.0 ships lib/index.d.ts but omits the `types` condition from package exports.
-// @ts-expect-error Runtime export is valid; upstream package metadata hides its bundled declarations.
 import sharp from "sharp";
 import {
   CARD_RATIOS,

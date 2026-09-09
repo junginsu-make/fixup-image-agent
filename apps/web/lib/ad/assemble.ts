@@ -66,7 +66,6 @@ export interface AssembledBanner {
 
 export async function assembleBanner(canvas: Box, object: Buffer): Promise<AssembledBanner> {
   // sharp 를 여기서만 부르려고 동적으로 들인다 — `batch.ts` 가 쓰는 방식이다.
-  // @ts-expect-error sharp 0.35.0 의 꾸러미 메타데이터가 선언을 가린다.
   const { default: sharp } = await import("sharp");
 
   if (!(await hasVisiblePixels(sharp, object))) throw new Error(EMPTY_OBJECT);

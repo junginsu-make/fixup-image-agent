@@ -215,7 +215,6 @@ async function withShrink(master: Buffer, entries: AdBatchEntry[]): Promise<AdBa
   if (!made.length) return entries;
 
   // sharp 를 여기서만 부르려고 동적으로 들인다 — 이 모듈의 나머지는 순수하다.
-  // @ts-expect-error sharp 0.35.0 의 꾸러미 메타데이터가 선언을 가린다.
   const { default: sharp } = await import("sharp");
   const meta = await sharp(master, { limitInputPixels: 40_000_000 }).metadata();
   const sourceWidth: number = meta.width ?? 0;
