@@ -1,3 +1,4 @@
+import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { ProductReading } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
@@ -262,6 +263,13 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
 /** 생성에 함께 넣는 참조 이미지. 종류에 따라 처리가 갈린다. */
 export interface ReferenceImage {
   kind: "anchor" | "person" | "style";
+  /**
+   * 사용자가 **이 그림에 대해** 직접 적은 말.
+   *
+   * 있으면 이 자리의 고정 문구를 대신한다(설계 4-1 A안). 자리마다 따로 받으므로
+   * 레퍼런스에 적은 말이 제품 지키기를 풀지 않는다.
+   */
+  intent?: string;
   base64: string;
   mimeType: string;
   /**
@@ -317,7 +325,26 @@ export interface ImageGenOptions {
    * 3종을 다 보내면 참조가 늘어 서로를 희석시킨다.
    */
   characterReference?: { base64: string; mimeType: string; identityPrompt: string };
+  /**
+   * 그림의 결. 안 고르면 `photoreal` — 상세페이지는 지금까지 늘 사진이었다.
+   *
+   * 값은 JSON 으로 들어오므로 문자열도 받는다. 아는 값인지는 pdp.service 의
+   * `normalizeImageOptions` 가 경계에서 확인한다.
+   */
+  look?: ImageLook | string;
+  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
+  userInstruction?: string;
+  /**
+   * 첨부마다 「이 그림을 어떻게 쓸까요」에 적은 말. 자리 이름이 열쇠다.
+   *
+   * 적은 자리의 고정 문구만 빠진다(설계 4-1 A안). 레퍼런스에 적었다고 제품
+   * 지키기가 풀리지 않는다 — 자리마다 따로 받는 이유다.
+   */
+  attachmentIntents?: AttachmentIntents;
 }
+
+/** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */
+export type AttachmentIntents = Partial<Record<ReferenceImage["kind"], string>>;
 
 // ── 텍스트 기반 진입 ─────────────────────────────────────────────
 // 이미지 없이 자유 텍스트로 시작하는 경로. 주 대상은 무형 상품·서비스라
@@ -414,6 +441,23 @@ export interface PdpAnalyzeRequest {
   modelImageBase64?: string;
   modelImageMimeType?: string;
   modelImageFileName?: string;
+  /**
+   * 디자인 레퍼런스. **구성안을 짤 때부터 본다.**
+   *
+   * 전에는 이미지를 만들 때 처음 등장했다. 그래서 구성안의 `style_guide` 를
+   * 기획이 상상으로 채웠고, 그 값이 그대로 이미지 프롬프트의 `design_system`
+   * 이 됐다 — 레퍼런스를 붙여 놓고도 구성이 그것과 무관하게 짜였다.
+   *
+   * 열쇠 이름은 화면이 들고 있는 것과 같다. 옮겨 적으면 언젠가 어긋난다.
+   */
+  styleReference?: {
+    imageBase64: string;
+    mimeType: string;
+    /** 디자인 언어를 어떻게 쓰는지 적은 서술. 레퍼런스를 등록할 때 만들어진다. */
+    description?: string;
+    /** 사용자가 그 그림에 대해 적은 「어떻게 쓸까요」. */
+    intent?: string;
+  };
   additionalInfo?: string;
   desiredTone?: string;
   aspectRatio: AspectRatio;
@@ -426,12 +470,22 @@ export interface PdpAnalyzeSuccessResponse {
   result: GeneratedResult;
 }
 
+/**
+ * 화면이 그물 너머로 보내는 옵션.
+ *
+ * **완성된 옵션과 들어오는 옵션은 다른 물건이다.** 화면은 `style`·`withModel` 을
+ * 빼고 보낼 수 있고, 빠진 칸은 `normalizeImageOptions` 가 경계에서 채운다.
+ * 전에는 이 둘을 같은 타입으로 두고 라우트에서 `as` 로 눌렀다 — 그러면 진짜
+ * 어긋남도 함께 눌린다.
+ */
+export type ImageGenOptionsInput = Partial<ImageGenOptions>;
+
 export interface PdpGenerateImageRequest {
   originalImageBase64: string;
   section: SectionBlueprint;
   aspectRatio: AspectRatio;
   desiredTone?: string;
-  options?: ImageGenOptions;
+  options?: ImageGenOptionsInput;
 }
 
 export interface PdpGenerateImageSuccessResponse {
@@ -449,13 +503,13 @@ export interface PdpValidateApiKeySuccessResponse {
 }
 
 export type PdpErrorCode =
-  | "GEMINI_API_KEY_MISSING"
-  | "GEMINI_API_KEY_INVALID"
-  | "GEMINI_MODEL_ACCESS_DENIED"
+  | "AI_KEY_MISSING"
+  | "AI_KEY_INVALID"
+  | "AI_MODEL_ACCESS_DENIED"
   | "INVALID_IMAGE_PAYLOAD"
   | "INVALID_REQUEST"
-  | "GEMINI_QUOTA_EXCEEDED"
-  | "GEMINI_RESPONSE_INVALID"
+  | "AI_QUOTA_EXCEEDED"
+  | "AI_RESPONSE_INVALID"
   | "PDP_ANALYZE_FAILED"
   | "PDP_IMAGE_GENERATION_FAILED"
   | "PDP_IMAGE_QA_REJECTED"

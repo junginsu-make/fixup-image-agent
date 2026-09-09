@@ -76,7 +76,19 @@ import {
   IMAGE_MODELS,
   IMAGE_MODEL_CREDIT_WEIGHT,
 } from "@fixup/pdp-core";
-import type { ImageModelId } from "@fixup/pdp-core";
+import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-core";
+import { buildPageWire } from "./page-wire";
+import { describeBatchRun } from "./generation-run";
+import {
+  ALIGN_OPTIONS,
+  BASIC_SOLID_COLORS,
+  FONT_OPTIONS,
+  FONT_WEIGHT_OPTIONS,
+  MODEL_AGE_OPTIONS,
+  MODEL_COUNTRY_OPTIONS,
+  MODEL_GENDER_OPTIONS,
+  STYLE_OPTIONS,
+} from "./editor-options";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
@@ -153,6 +165,8 @@ interface PdpEditorProps {
   apiConnectionLabel?: string;
   referenceModelImage?: PreparedImageDraft | null;
   referenceModelUsage?: ReferenceModelUsage | null;
+  /** 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 안 붙은 자리는 걸러서 온다. */
+  attachmentIntents?: AttachmentIntents;
   saveState?: "idle" | "saving" | "saved" | "error";
 }
 
@@ -190,69 +204,6 @@ type ImageGenerationOutcome = {
 };
 
 
-const FONT_OPTIONS = [
-  { label: "Pretendard", value: "'Pretendard', sans-serif" },
-  { label: "Noto Sans KR", value: "'Noto Sans KR', sans-serif" },
-  { label: "Georgia", value: "Georgia, serif" },
-  { label: "Monospace", value: "monospace" },
-];
-
-const STYLE_OPTIONS: Array<{ value: NonNullable<ImageGenOptions["style"]>; label: string; description: string }> = [
-  { value: "studio", label: "스튜디오컷", description: "정제된 배경과 집중도 높은 제품 연출" },
-  { value: "lifestyle", label: "라이프스타일컷", description: "실사용 장면과 감정선이 느껴지는 연출" },
-  { value: "outdoor", label: "아웃도어컷", description: "씬이 살아있는 외부 공간 연출" },
-];
-
-const MODEL_GENDER_OPTIONS: Array<{ value: NonNullable<ImageGenOptions["modelGender"]>; label: string }> = [
-  { value: "female", label: "여자 모델" },
-  { value: "male", label: "남자 모델" },
-];
-
-const MODEL_AGE_OPTIONS: Array<{ value: NonNullable<ImageGenOptions["modelAgeRange"]>; label: string }> = [
-  { value: "teen", label: "10대 후반" },
-  { value: "20s", label: "20대" },
-  { value: "30s", label: "30대" },
-  { value: "40s", label: "40대" },
-  { value: "50s_plus", label: "50대+" },
-];
-
-const MODEL_COUNTRY_OPTIONS: Array<{ value: NonNullable<ImageGenOptions["modelCountry"]>; label: string }> = [
-  { value: "korea", label: "한국" },
-  { value: "japan", label: "일본" },
-  { value: "usa", label: "미국" },
-  { value: "france", label: "프랑스" },
-  { value: "germany", label: "독일" },
-  { value: "africa", label: "아프리카" },
-];
-
-const FONT_WEIGHT_OPTIONS = [
-  { value: "400", label: "Regular" },
-  { value: "500", label: "Medium" },
-  { value: "700", label: "Bold" },
-  { value: "900", label: "Black" },
-];
-
-const ALIGN_OPTIONS: Array<{ value: OverlayTextAlign; label: string; Icon: typeof AlignLeft }> = [
-  { value: "left", label: "왼쪽", Icon: AlignLeft },
-  { value: "center", label: "가운데", Icon: AlignCenter },
-  { value: "right", label: "오른쪽", Icon: AlignRight },
-];
-
-const BASIC_SOLID_COLORS = [
-  "#ffffff",
-  "#f4efe6",
-  "#d9d2c3",
-  "#c4b8a0",
-  "#c8474d",
-  "#e05a63",
-  "#102532",
-  "#1d3748",
-  "#4cb7aa",
-  "#cf6f52",
-  "#d8b65b",
-  "#111111",
-];
-
 export function PdpEditor({
   initialResult,
   review,
@@ -276,6 +227,7 @@ export function PdpEditor({
   apiConnectionLabel = "키 필요",
   referenceModelImage = null,
   referenceModelUsage = null,
+  attachmentIntents,
   saveState = "idle",
 }: PdpEditorProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
@@ -1354,6 +1306,25 @@ export function PdpEditor({
   };
 
   /**
+   * 페이지 전체가 공유하는 값. **한 장이든 여러 장이든 같은 것을 보낸다.**
+   *
+   * 전에는 두 호출이 각자 몸통을 지었고, 그래서 「배치와 같은 값을 보내야 한다」는
+   * 주석이 네 군데 붙어 있었다. 주석으로 지키던 것을 여기 한 곳으로 옮겼다.
+   */
+  const pageWire = (): PageImageWire =>
+    buildPageWire({
+      imageModel,
+      outputMode,
+      look,
+      userInstruction,
+      preserveProduct,
+      styleReference,
+      attachmentIntents,
+      referenceModel: referenceModelImage,
+      referenceModelUsage,
+    });
+
+  /**
    * 섹션 이미지를 만든다. 대상을 넘기지 않으면 현재 섹션.
    *
    * 완료 시 setSections 는 인덱스가 아니라 섹션 키로 대상을 찾는다.
@@ -1367,15 +1338,12 @@ export function PdpEditor({
       return { ok: false };
     }
 
+    // **인물을 쓸지는 여기서 정하지 않는다.** 두 호출이 각자 판단하면 언젠가
+    // 갈린다 — 실제로 갈려서 일괄 생성에는 사람이 아예 안 들어갔다.
+    // 사용자가 이 섹션에 대해 고른 값만 보내고, 판단은 조립기가 한다.
     const options = normalizeImageOptions(
       sectionOptions[sectionKey],
       referenceModelUsage === "all-sections" ? true : index === 0
-    );
-    const useModel = Boolean(
-      options.withModel &&
-        referenceModelImage &&
-        referenceModelUsage &&
-        (referenceModelUsage === "all-sections" || index === 0)
     );
 
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
@@ -1392,38 +1360,15 @@ export function PdpEditor({
           section,
           aspectRatio,
           desiredTone: desiredTone || undefined,
+          sectionIndex: index,
+          page: pageWire(),
           options: {
             ...options,
-            outputMode,
-            imageModel,
-            headline: section.headline,
-            subheadline: section.subheadline,
             isRegeneration: Boolean(section.generatedImage),
-            referenceModelImageBase64: useModel ? referenceModelImage?.base64 : undefined,
-            referenceModelImageMimeType: useModel ? referenceModelImage?.mimeType : undefined,
-            referenceModelImageFileName: useModel ? referenceModelImage?.fileName : undefined,
-            // 배치와 같은 값을 보내야 한다. 없으면 한 장만 다시 만들었을 때
-            // 그 섹션만 디자인이 달라진다 — 통일을 지키려는 기능이 정작 깨진다.
-            styleReferenceImages: styleReference
-              ? [
-                  {
-                    base64: styleReference.imageBase64,
-                    mimeType: styleReference.mimeType,
-                    description: styleReference.description,
-                  },
-                ]
-              : undefined,
-            preserveProductImage: preserveProduct,
-            // 배치와 같은 값을 보내야 한다. 한 장만 다시 만들었을 때 그 섹션만
-            // 결이 달라지거나 사용자 지시가 빠지면 안 된다.
-            look,
-            userInstruction: userInstruction.trim() || undefined,
-            // 제목에 없는 낱말은 걸러서 보낸다. 그대로 보내면 모델이 강조할
-            // 대상을 못 찾아 엉뚱한 곳이 강조된다.
-            emphasisWords: keepWordsPresentIn(section.headline ?? "", options.emphasisWords ?? []),
           },
-          // 배치와 같은 값을 보내야 한다. 없으면 한 장만 다시 만들었을 때
-          // 그 섹션만 다른 사람이 된다.
+          // 제목에 없는 낱말은 걸러서 보낸다. 그대로 보내면 모델이 강조할
+          // 대상을 못 찾아 엉뚱한 곳이 강조된다.
+          emphasisWords: keepWordsPresentIn(section.headline ?? "", options.emphasisWords ?? []),
           characterId,
         }),
       });
@@ -1531,25 +1476,18 @@ export function PdpEditor({
     // 예약해 둔 크레딧이 finalize 되지 못한 채 남는다.
     const chunks = chunkForModel(targets, imageModel);
 
-    const describeRun = (
-      status: GenerationRun["status"],
-      label: string,
-    ): GenerationRun => ({
-      mode: "batch",
-      status,
-      total: targets.length,
-      completed,
-      failed,
-      skipped: targets.length - processed,
-      currentLabel: label,
-      startedAt,
-      // 이미 끝난 묶음은 빼고, 남은 묶음의 예상 소요만 보여준다.
-      expectedSeconds: modelInfo
-        ? modelInfo.expectedBatchSeconds *
-          Math.max(1, chunks.length - Math.floor(processed / modelInfo.maxBatchSize))
-        : undefined,
-      ...(status === "finished" ? { endedAt: Date.now() } : {}),
-    });
+    const describeRun = (status: GenerationRun["status"], label: string): GenerationRun =>
+      describeBatchRun({
+        status,
+        label,
+        total: targets.length,
+        completed,
+        failed,
+        processed,
+        startedAt,
+        chunkCount: chunks.length,
+        model: modelInfo,
+      });
 
     setGenerationRun(describeRun("running", getDisplaySectionName(targets[0].section)));
 
@@ -1560,15 +1498,25 @@ export function PdpEditor({
           body: JSON.stringify({
             originalImageBase64: initialResult.originalImage,
             sections: chunk.map(({ section }) => section),
+            // 묶음 안 순서가 아니라 **페이지에서의 자리**를 보낸다. 인물 사진을
+            // 「첫 섹션에만」 쓸 때 두 번째 묶음의 첫 장은 히어로가 아니다.
+            sectionIndexes: chunk.map(({ index }) => index),
             aspectRatio,
             desiredTone: desiredTone || undefined,
-            outputMode,
-            imageModel,
-            styleReference,
-            preserveProduct,
             characterId,
-            look,
-            userInstruction: userInstruction.trim() || undefined,
+            page: pageWire(),
+            // 사용자가 섹션마다 고른 값. 전에는 일괄이 이것을 통째로 무시하고
+            // style 을 lifestyle 로 박아 보냈다 — 한 장만 다시 만들면 studio 라
+            // 같은 페이지 안에서 결이 갈렸다.
+            optionsBySection: Object.fromEntries(
+              chunk.map(({ section, index }) => [
+                section.section_id,
+                normalizeImageOptions(
+                  sectionOptions[sectionKeys[index] ?? String(index)],
+                  referenceModelUsage === "all-sections" ? true : index === 0,
+                ),
+              ]),
+            ),
             // 섹션마다 제목이 다르므로 강조도 섹션별이다.
             emphasisWordsBySection: Object.fromEntries(
               chunk

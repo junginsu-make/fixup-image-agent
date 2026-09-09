@@ -1,6 +1,6 @@
 import { analyzeStyleImage, type StyleReferenceMatch } from "@fixup/pdp-core";
 import { createSupabaseAdminClient } from "./supabase/admin";
-import { resolveGeminiKey } from "./server-keys";
+import { createPdpLlmOrNull } from "./pdp/providers";
 import { isLocalStoreEnabled } from "./local-store";
 
 /**
@@ -62,7 +62,7 @@ export async function registerUserStyleReference(input: {
   imageBase64: string;
   mimeType: string;
 }) {
-  const description = await analyzeStyleImage(input.imageBase64, input.mimeType, resolveGeminiKey());
+  const description = await analyzeStyleImage(input.imageBase64, input.mimeType, createPdpLlmOrNull() ?? undefined);
 
   const supabase = createSupabaseAdminClient();
   const { data: row, error } = await supabase

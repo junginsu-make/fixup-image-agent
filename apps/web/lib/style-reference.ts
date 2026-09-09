@@ -1,7 +1,7 @@
 import { pickStyleWithLlm, type StyleReferenceMatch } from "@fixup/pdp-core";
 import type { ProductBrief } from "@fixup/pdp-core";
 import { loadUserReferenceCandidates } from "./user-style-references";
-import { resolveGeminiKey } from "./server-keys";
+import { createPdpLlmOrNull } from "./pdp/providers";
 
 /**
  * 브리프에 어울리는 레퍼런스 한 장을 고른다.
@@ -24,7 +24,7 @@ export async function suggestStyleReference(
     const candidates = await loadUserReferenceCandidates(userId);
     if (candidates.length === 0) return { reference: null, reason: "", total: 0 };
 
-    const { reference, pick } = await pickStyleWithLlm(brief, candidates, resolveGeminiKey());
+    const { reference, pick } = await pickStyleWithLlm(brief, candidates, createPdpLlmOrNull() ?? undefined);
     return { reference, reason: pick.reason, total: candidates.length };
   } catch (error) {
     console.warn("[style] 레퍼런스 선택 실패, 없이 진행합니다", error);

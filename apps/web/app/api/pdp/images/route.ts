@@ -4,20 +4,40 @@ import {
   pickAngleForSection,
   toPdpErrorResponse,
   mapPdpErrorCodeToStatus,
+  buildSectionImageOptions,
+  pageInputsFromWire,
 } from "@fixup/pdp-core";
-import type { ImageGenOptions, PdpGenerateImageRequest } from "@fixup/pdp-core";
+import type {
+  AspectRatio,
+  ImageGenOptionsInput,
+  PageImageWire,
+  SectionBlueprint,
+} from "@fixup/pdp-core";
 
 /**
- * 화면이 보내는 몸통. 결(`look`)과 사용자 지시는 `ImageGenOptions` 밖에서 얹는다 —
- * 그 타입은 이 작업의 담당 범위 밖이라 손대지 않았다. 값이 아는 결인지는
- * pdp-core 의 `normalizeImageOptions` 가 확인한다.
+ * 섹션 한 장을 만든다. 처음 만들 때도, 다시 만들 때도 여기로 온다.
+ *
+ * **몸통이 일괄 라우트와 같은 모양이다.** 페이지가 정하는 것은 `page`, 섹션이
+ * 정하는 것은 `options` 다. 전에는 화면이 옵션을 다 지어서 보냈고, 일괄 쪽은
+ * 라우트가 따로 지었다 — 그래서 인물 사진이 한쪽에만 실렸다.
  */
-type PdpImagesRequestBody = PdpGenerateImageRequest & {
+type PdpImagesRequestBody = {
+  originalImageBase64: string;
+  section: SectionBlueprint;
+  aspectRatio: AspectRatio;
+  desiredTone?: string;
+  /** 이 섹션이 페이지에서 몇 번째인지. 인물 사진을 「첫 섹션에만」 쓸 때 쓴다. */
+  sectionIndex?: number;
   characterId?: string;
-  options?: ImageGenOptions & { look?: string; userInstruction?: string };
+  /** 페이지 전체가 공유하는 값. 일괄 라우트와 같은 모양이다. */
+  page?: PageImageWire;
+  /** 사용자가 이 섹션에 대해 고른 값. 빠진 칸은 조립기가 채운다. */
+  options?: ImageGenOptionsInput;
+  emphasisWords?: string[];
 };
 import { loadCharacterView } from "../../../../lib/characters";
-import { resolveGeminiKey } from "../../../../lib/server-keys";
+import { createPdpProviders } from "../../../../lib/pdp/providers";
+import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
@@ -40,14 +60,14 @@ export async function POST(req: Request) {
   const gateResponse = rejectIfUnverified(body.section ? [body.section] : []);
   if (gateResponse) return gateResponse;
 
-  const reservation = await reserveAiUsage(req, "pdp_image", 1);
+  // 장은 실제 단가에서 뽑는다. 전에는 여기만 무조건 1 이었고 일괄 쪽만 제대로
+  // 셌다 — 같은 그림 한 장이 어느 버튼으로 들어왔느냐에 따라 값이 달랐다.
+  const model = body.page?.imageModel ?? body.options?.imageModel ?? DEFAULT_IMAGE_MODEL;
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1));
   if (!reservation.ok) return reservation.response;
-  // 실패해도 어떤 모델로 몇 장을 만들었는지 남겨야 비용이 사라지지 않는다.
-  let model = DEFAULT_IMAGE_MODEL;
-  try {
-    model = body.options?.imageModel ?? DEFAULT_IMAGE_MODEL;
 
-    // 배치와 같은 규칙으로 각도를 고른다. 없으면 한 장만 다시 만들었을 때
+  try {
+    // 일괄과 같은 규칙으로 각도를 고른다. 없으면 한 장만 다시 만들었을 때
     // 그 섹션만 다른 사람이 된다.
     const characterReference = body.characterId
       ? await loadCharacterView(
@@ -59,19 +79,29 @@ export async function POST(req: Request) {
         )
       : null;
 
-    const request: PdpImagesRequestBody = characterReference
-      ? {
-          ...body,
-          options: { ...(body.options ?? {}), characterReference } as PdpImagesRequestBody["options"],
-        }
-      : body;
+    const options = buildSectionImageOptions(
+      pageInputsFromWire({ ...body.page, imageModel: model }),
+      {
+        section: body.section,
+        index: body.sectionIndex ?? 0,
+        options: body.options,
+        emphasisWords: body.emphasisWords ?? body.options?.emphasisWords,
+        characterReference: characterReference ?? undefined,
+      },
+    );
 
     const { imageBase64, mimeType, generatedImages, qa } = await generateSectionImage(
-      request,
-      resolveGeminiKey(),
+      {
+        originalImageBase64: body.originalImageBase64,
+        section: body.section,
+        aspectRatio: body.aspectRatio,
+        desiredTone: body.desiredTone,
+        options,
+      },
+      createPdpProviders(),
     );
-    // 회원에게는 결과물 한 장만 차감하지만, 우리는 QA 재시도로 만든 장까지 낸다.
-    const usage = await finalizeAiUsage(reservation, true, 1, undefined, {
+    // 회원에게는 나온 한 장만 셈하지만, 우리는 QA 재시도로 만든 장까지 낸다.
+    const usage = await finalizeAiUsage(reservation, true, imageCreditUnits(model, 1), undefined, {
       model,
       billableImages: generatedImages,
     });

@@ -1,4 +1,4 @@
-import { Type } from "@google/genai";
+import { Type } from "./pdp.llm";
 import type { LandingPageBlueprint, SectionBlueprint } from "./types";
 
 /**

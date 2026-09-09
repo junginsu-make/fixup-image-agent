@@ -147,17 +147,62 @@ export function buildReferenceRoleDirective(
 
   references.forEach((reference, index) => {
     lines.push(`[Image ${index + 1} — ${ROLE_LABEL[reference.kind]}]`);
-    lines.push(...ROLE_RULES[reference.kind]);
+    const intent = reference.intent?.trim();
+    if (intent) {
+      /**
+       * **설계 4-1 A안 — 자리별로.**
+       *
+       * 사용자가 이 그림에 대해 적었으면 이 자리의 고정 문구를 통째로 뺀다.
+       * 우선순위 한 줄로는 못 이긴다 — 반대편이 여섯 문장이고 전부 구체적이다.
+       *
+       * **번호와 역할 이름은 남긴다.** 빼면 이 말이 무엇을 가리키는지 사라진다.
+       *
+       * 포스터와 다른 점: 거기는 첨부 지시가 하나라 적는 순간 모든 역할 문구가
+       * 함께 빠진다. 설계 문서가 걱정한 것이 그것이다 — 「왼쪽에 놓아 줘」만
+       * 써도 얼굴 지키기가 풀린다. 여기는 자리마다 받으므로 그 걱정이 없다.
+       */
+      lines.push(
+        // 이름을 붙인다. 우선순위 줄이 「USER INSTRUCTION 이 1등」이라고 말하는데
+        // 그 이름의 블록이 없으면, 없는 것을 1등으로 올려 둔 셈이 된다.
+        "USER INSTRUCTION for this image. The user wrote what to do with it. Their words " +
+          "replace the usual rules for this role, so those rules are deliberately omitted. " +
+          "Follow this exactly:",
+      );
+      lines.push(intent);
+      /**
+       * **푸는 것은 이 자리의 역할 문구뿐이다.**
+       *
+       * 그림의 결(`look`)과 텍스트 정책은 다른 곳에서 정해져 시스템 프롬프트와
+       * JSON 에 따로 실린다. 그래서 「이 제품을 만화풍으로」라고 적으면 제품
+       * 보호는 풀리지만 `Realism: produce a real photograph` 는 그대로 남아
+       * 요청이 여전히 막힌다 — 2026-09-09 독립 리뷰가 실측으로 확인했다.
+       *
+       * 그런 요청은 화면에서 결을 함께 바꾸도록 안내한다. 여기서 결까지 풀면
+       * 「배치를 왼쪽으로」 한 줄에 사진이 만화가 되는 일이 생긴다.
+       */
+    } else {
+      lines.push(...ROLE_RULES[reference.kind]);
+    }
     // 서술은 이미지를 대체하지 않는다. 이미지가 전달하지 못한 **쓰임새**를 보탠다.
     // 그래서 규칙 뒤에 붙이고, 무엇에 대한 말인지 한 줄로 밝힌다.
     if (reference.kind === "style" && reference.description?.trim()) {
-      lines.push("How this reference uses its design language:");
+      // 서술은 기계가 읽어 적은 것이고 지시는 사람이 쓴 것이다. 「배치는 무시해
+      // 주세요」 뒤에 배치 서술이 그냥 붙으면 방금 뺐다고 한 말이 거짓이 된다.
+      lines.push(
+        intent
+          ? "How this reference uses its design language (context only — the instruction above wins):"
+          : "How this reference uses its design language:",
+      );
       lines.push(reference.description.trim());
     }
     lines.push("");
   });
 
-  const hasIdentity = references.some((reference) => isIdentityReference(reference.kind));
+  // 지시를 적어 규칙을 뺀 자리는 더 이상 「지킨 대상」이 아니다. 그대로 세면
+  // 「deliberately omitted」와 같은 단락에서 「preserved subject」가 부딪힌다.
+  const hasIdentity = references.some(
+    (reference) => isIdentityReference(reference.kind) && !reference.intent?.trim(),
+  );
   // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
   lines.push(attachmentPlacementRule(hasIdentity), "");
   const hasStyle = references.some((reference) => reference.kind === "style");
@@ -168,7 +213,10 @@ export function buildReferenceRoleDirective(
   // **사용자 지시가 있을 때만** 적는다. 없으면 이 줄이 남기는 말은
   // "레퍼런스 > 장면 지시"뿐인데, 상세페이지에서 장면을 정하는 것은 섹션
   // 블루프린트다. 레퍼런스가 그것을 이긴다고 말하면 style 역할 규칙과 부딪힌다.
-  if (options?.hasUserInstruction) {
+  // 자리에 적은 말도 사람이 직접 친 말이다. 그것만 있고 「추가 지시」가 비어
+  // 있어도 서열을 밝혀야 한다 — 안 그러면 적은 말이 규칙 아래로 읽힌다.
+  const hasSlotIntent = references.some((reference) => Boolean(reference.intent?.trim()));
+  if (options?.hasUserInstruction || hasSlotIntent) {
     const ranking = priorityLine({ hasUserInstruction: true, hasPreserved: hasIdentity });
     if (ranking) lines.push(ranking);
   }

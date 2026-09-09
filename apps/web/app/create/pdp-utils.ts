@@ -94,6 +94,28 @@ function toAnchorJpegDataUrl(sourceImage: HTMLImageElement) {
   return canvas.toDataURL("image/jpeg", ANCHOR_JPEG_QUALITY);
 }
 
+/**
+ * 기획 호출에 실을 만큼만 줄인다.
+ *
+ * 제품·인물 사진은 `prepareImageFile` 이 1024px JPEG 으로 줄여서 담는데
+ * 디자인 레퍼런스만 원본 바이트 그대로였다. 기획 요청 몸통은 여러 번 나간다 —
+ * 재시도 2회 × 심사 재작성 2회 × 내부 재시도 3회.
+ *
+ * **줄인 것은 기획에만 쓴다.** 이미지를 만들 때는 원본이 가야 한다. 디자인을
+ * 흉내 내는 일이라 서체 획과 색 경계가 뭉개지면 결과가 나빠진다.
+ *
+ * 실패하면 원본을 그대로 돌려준다. 곁다리 최적화 때문에 만들기가 막히면 안 된다.
+ */
+export async function shrinkForPlanning(base64: string, mimeType: string) {
+  try {
+    const image = await loadImage(`data:${mimeType};base64,${base64}`);
+    const shrunk = toAnchorJpegDataUrl(image).split(",")[1];
+    return shrunk ? { base64: shrunk, mimeType: "image/jpeg" } : { base64, mimeType };
+  } catch {
+    return { base64, mimeType };
+  }
+}
+
 export async function prepareImageFile(file: File) {
   const sourceDataUrl = await readFileAsDataUrl(file);
   const sourceImage = await loadImage(sourceDataUrl);

@@ -11,6 +11,11 @@ import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
+import type { AttachmentIntents } from "@fixup/pdp-core";
+import { AttachmentIntentField } from "./AttachmentIntentField";
+import { attachedSlotsOf, intentsOrUndefined } from "./attachment-intents";
+import { buildAnalyzeRequest } from "./analyze-request";
+import { buildDraftInput as buildDraftPayload } from "./draft-input";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
@@ -21,7 +26,7 @@ import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
-import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile, shrinkForPlanning } from "./pdp-utils";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
 
@@ -94,6 +99,13 @@ export function PdpMakerClient() {
    */
   const [look, setLook] = useState<ImageLook>("photoreal");
   const [userInstruction, setUserInstruction] = useState("");
+  /** 첨부 자리마다 적는 「이 그림을 어떻게 쓸까요」. 적은 자리의 고정 문구만 빠진다. */
+  const [attachmentIntents, setAttachmentIntents] = useState<AttachmentIntents>({});
+  const setIntent = useCallback(
+    (slot: keyof AttachmentIntents, next: string) =>
+      setAttachmentIntents((current) => ({ ...current, [slot]: next })),
+    [],
+  );
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   // 기본 출력 = 통이미지(full-image): AI가 한글 카피까지 박은 완성형 섹션을 생성.
   // (사용자 토글 UI는 후속 phase. editable은 엔진 폴백으로 유지.)
@@ -214,31 +226,36 @@ export function PdpMakerClient() {
     }
   };
 
-  const buildDraftInput = useCallback(() => {
-    if (!hasDraftContent) {
-      return null;
-    }
-
-    return {
-      id: activeDraftId ?? undefined,
-      createdAt: draftCreatedAt ?? undefined,
-      appState: result ? "editor" : appState === "processing" ? "upload" : appState,
-      preparedImage,
-      modelImage,
-      modelImageUsage,
-      result,
-      additionalInfo,
-      sellerBrief,
-      copyIntensity,
-      gapPolicy,
-      desiredTone,
-      look,
-      userInstruction,
-      aspectRatio,
-      notice: editorDraftState?.notice ?? notice,
-      editorState: result ? editorDraftState ?? createDefaultEditorDraftState(result, outputMode) : null
-    };
-  }, [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction]);
+  const buildDraftInput = useCallback(
+    () =>
+      buildDraftPayload(
+        {
+          id: activeDraftId ?? undefined,
+          createdAt: draftCreatedAt ?? undefined,
+          appState,
+          preparedImage,
+          modelImage,
+          modelImageUsage,
+          result,
+          additionalInfo,
+          sellerBrief,
+          copyIntensity,
+          gapPolicy,
+          desiredTone,
+          look,
+          userInstruction,
+          attachmentIntents,
+          styleReference,
+          styleReferenceEnabled,
+          aspectRatio,
+          notice,
+          editorDraftState,
+          defaultEditorState: () => createDefaultEditorDraftState(result!, outputMode),
+        },
+        hasDraftContent,
+      ),
+    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled],
+  );
 
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
@@ -307,6 +324,13 @@ export function PdpMakerClient() {
     setCopyIntensity("normal");
     setGapPolicy("ask");
     setDesiredTone("");
+    // 첨부에 대해 적은 말은 그 그림의 것이다. 그림이 사라지면 함께 사라진다.
+    setAttachmentIntents({});
+    // 그림도 함께 비운다. 지시만 지우면 「지시 없는 남의 레퍼런스」가 남는다.
+    // 토글은 켜 둔 상태로 되돌린다 — 안 그러면 새 작업에서 레퍼런스를 붙여도
+    // 조용히 안 쓰이고, 그 토글은 시나리오 화면에만 있어 볼 방법이 없다.
+    setStyleReference(undefined);
+    setStyleReferenceEnabled(true);
     setAspectRatio("9:16");
     setNotice("새 이미지로 다시 시작할 수 있습니다.");
     setErrorMessage("");
@@ -360,6 +384,11 @@ export function PdpMakerClient() {
         setDesiredTone(draft.desiredTone);
         setLook(draft.look ?? "photoreal");
         setUserInstruction(draft.userInstruction ?? "");
+        // 안 되돌리면 앞 작업의 제품 지시가 새 제품에 그대로 붙는다.
+        setAttachmentIntents(draft.attachmentIntents ?? {});
+        // 그림과 그 그림에 적은 말은 함께 움직여야 짝이 안 어긋난다.
+        setStyleReference(draft.styleReference ?? undefined);
+        setStyleReferenceEnabled(draft.styleReferenceEnabled ?? true);
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
@@ -494,21 +523,33 @@ export function PdpMakerClient() {
     try {
       setLoadingStep("제품을 분석하고 상세페이지 구조를 설계하는 중입니다.");
 
+      // 레퍼런스는 기획에 실을 만큼만 줄여 보낸다. 이미지를 만들 때는 원본이
+      // 그대로 간다 — 서체 획과 색 경계가 뭉개지면 흉내가 나빠진다.
+      const planningStyleReference =
+        styleReferenceEnabled && styleReference
+          ? {
+              ...styleReference,
+              ...(await shrinkForPlanning(styleReference.imageBase64, styleReference.mimeType)),
+            }
+          : styleReference;
+
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
         method: "POST",
         body: JSON.stringify({
-          imageBase64: preparedImage.base64,
-          mimeType: preparedImage.mimeType,
-          modelImageBase64: modelImage?.base64,
-          modelImageMimeType: modelImage?.mimeType,
-          modelImageFileName: modelImage?.fileName,
-          additionalInfo: additionalInfo.trim() || undefined,
-          sellerBrief,
-          copyIntensity,
-          gapPolicy,
-          desiredTone: desiredTone.trim() || undefined,
-          aspectRatio,
-          outputMode
+          ...buildAnalyzeRequest({
+            preparedImage,
+            modelImage,
+            additionalInfo,
+            sellerBrief,
+            copyIntensity,
+            gapPolicy,
+            desiredTone,
+            aspectRatio,
+            outputMode,
+            styleReference: planningStyleReference,
+            styleReferenceEnabled,
+            attachmentIntents,
+          }),
         })
       });
 
@@ -592,6 +633,8 @@ export function PdpMakerClient() {
           <p className="rounded-md bg-primary-soft p-3.5 text-sm text-foreground">{notice}</p>
         ) : null}
         <ScenarioEditor
+          attachmentIntents={attachmentIntents}
+          onIntentChange={setIntent}
           blueprint={result.blueprint}
           referenceModelName={modelImage ? modelImageDisplayName : undefined}
           onReferenceModelRemove={() => {
@@ -651,6 +694,16 @@ export function PdpMakerClient() {
         apiConnectionLabel={apiConnectionLabel}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
+        attachmentIntents={intentsOrUndefined(
+          attachmentIntents,
+          attachedSlotsOf({
+            preparedImage,
+            modelImage,
+            characterId,
+            styleReference,
+            styleReferenceEnabled,
+          }),
+        )}
         saveState={saveState}
       />
     );
@@ -771,6 +824,8 @@ export function PdpMakerClient() {
         </section>
       ) : startMode === "text" ? (
         <TextModeFlow
+          attachmentIntents={attachmentIntents}
+          onIntentChange={setIntent}
           aspectRatio={aspectRatio}
           outputMode={outputMode}
           desiredTone={desiredTone}
@@ -975,6 +1030,16 @@ export function PdpMakerClient() {
                     <strong className="text-foreground">비슷하게 따라갑니다.</strong> 필요한 것만 골라도 됩니다.
                     1단계에 올린 제품 사진은 항상 그대로 유지됩니다.
                   </p>
+                  {/*
+                    풀리는 것과 안 풀리는 것을 미리 밝힌다. 자리 지시는 그 자리의
+                    보호 문구만 뺀다 — 그림의 결이나 텍스트 정책은 따로 정한 값이라
+                    여기 적어도 안 바뀐다. 안 밝히면 「적었는데 왜 안 되지」가 된다.
+                  */}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    각 그림 아래에 <strong className="text-foreground">어떻게 쓸지 직접 적으면</strong> 그
+                    그림의 기본 규칙 대신 적은 말을 따릅니다. 다만 그림의 결(사진·애니)과 글자 넣기는
+                    설정에서 정하는 값이라 여기 적어도 바뀌지 않습니다.
+                  </p>
                 </div>
               </div>
 
@@ -992,6 +1057,27 @@ export function PdpMakerClient() {
                 사람 사진과 캐릭터는 같은 일(얼굴 정하기)이고 엔진도 하나만 쓰므로
                 (pdp.service.ts: 사진이 있으면 캐릭터 무시) 한 칸에 둔다.
               */}
+              {/*
+                제품 사진은 1단계에서 받으므로 이 칸에 올리는 자리가 없다. 그래도
+                **지시는 여기서 받는다** — 세 자리가 한자리에 모여야 무엇에 대해
+                적는 말인지 헷갈리지 않는다.
+              */}
+              <div className="mb-3 grid gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
+                <div>
+                  <Badge variant="secondary">그대로 지킵니다</Badge>
+                  <strong className="mt-1.5 block text-sm">제품 사진</strong>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    1단계에서 올린 사진입니다. 모든 섹션이 같은 제품을 씁니다.
+                  </p>
+                </div>
+                <AttachmentIntentField
+                  id="intent-anchor"
+                  value={attachmentIntents.anchor ?? ""}
+                  onChange={(next) => setIntent("anchor", next)}
+                  placeholder="예: 뚜껑 색은 그대로 두고 각도만 바꿔 주세요"
+                />
+              </div>
+
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="grid content-start gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
                   <div className="min-h-[74px]">
@@ -1052,6 +1138,15 @@ export function PdpMakerClient() {
                         : undefined
                     }
                   />
+                  {/* 붙은 것이 없으면 적을 대상이 없다. 빈 칸만 남으면 오해를 만든다. */}
+                  {modelImage || characterId ? (
+                    <AttachmentIntentField
+                      id="intent-person"
+                      value={attachmentIntents.person ?? ""}
+                      onChange={(next) => setIntent("person", next)}
+                      placeholder="예: 안경을 꼭 씌워 주세요"
+                    />
+                  ) : null}
                 </div>
 
                 <div className="grid content-start gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
@@ -1077,7 +1172,14 @@ export function PdpMakerClient() {
                     </div>
                   ) : null}
                   <StyleReferenceAttach onAttached={setStyleReference} />
-
+                  {styleReference ? (
+                    <AttachmentIntentField
+                      id="intent-style"
+                      value={attachmentIntents.style ?? ""}
+                      onChange={(next) => setIntent("style", next)}
+                      placeholder="예: 색만 가져오고 배치는 무시해 주세요"
+                    />
+                  ) : null}
                 </div>
               </div>
 

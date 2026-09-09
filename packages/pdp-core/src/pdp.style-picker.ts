@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "./pdp.llm";
+import type { PdpLlm } from "./pdp.llm";
 import type { StyleReferenceMatch } from "./pdp.style-reference";
 import type { ProductBrief } from "./types";
 
@@ -23,7 +24,6 @@ import type { ProductBrief } from "./types";
  * 규모가 커지면 임베딩으로 후보를 좁힌 뒤 LLM 이 고르게 한다.
  */
 
-const PICK_MODEL = "gemini-3.1-pro-preview";
 
 /**
  * LLM 에게 통째로 넘길 수 있는 레퍼런스 수.
@@ -125,13 +125,15 @@ export type StylePicker = (prompt: string) => Promise<unknown>;
 export async function pickStyleWithLlm(
   brief: ProductBrief,
   candidates: readonly StyleReferenceMatch[],
-  apiKey?: string,
+  llm?: PdpLlm,
   picker?: StylePicker,
 ): Promise<{ reference: StyleReferenceMatch | null; pick: StylePick }> {
   const empty = { referenceId: "", confidence: 0, reason: "" };
   if (candidates.length === 0) return { reference: null, pick: empty };
 
-  const run = picker ?? createDefaultPicker(apiKey);
+  const run = picker ?? (llm ? pickerFrom(llm) : null);
+  // 글 모델이 없으면 아무것도 안 고른다. 레퍼런스는 있으면 좋은 것이다.
+  if (!run) return { reference: null, pick: empty };
   try {
     const pick = normalizeStylePick(
       await run(buildStylePickPrompt(brief, candidates.slice(0, MAX_PICK_CANDIDATES))),
@@ -143,19 +145,16 @@ export async function pickStyleWithLlm(
   }
 }
 
-function createDefaultPicker(apiKey?: string): StylePicker {
-  // 키 이름 우선순위는 저장소 전체가 같아야 한다 — GOOGLE_API_KEY 가 먼저다.
-  const resolved = apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-  const client = new GoogleGenAI({ apiKey: resolved });
-
+function pickerFrom(llm: PdpLlm): StylePicker {
   return async (prompt) => {
-    const response = await client.models.generateContent({
-      model: PICK_MODEL,
-      contents: [{ parts: [{ text: prompt }] }] as never,
-      config: { responseMimeType: "application/json", responseSchema: PICK_SCHEMA as never },
+    const response = await llm.generate({
+      name: "style_pick",
+      description: "후보 레퍼런스 중 이 제품에 맞는 하나를 고른다.",
+      prompt,
+      schema: PICK_SCHEMA,
     });
     try {
-      return JSON.parse(response.text ?? "");
+      return JSON.parse(response.text);
     } catch {
       return null;
     }

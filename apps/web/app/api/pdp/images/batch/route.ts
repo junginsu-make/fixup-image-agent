@@ -3,16 +3,17 @@ import {
   generateSectionImage,
   maxBatchSizeFor,
   toPdpErrorResponse,
+  buildSectionImageOptions,
+  pageInputsFromWire,
   DEFAULT_IMAGE_MODEL,
 } from "@fixup/pdp-core";
 import type {
   AspectRatio,
-  ImageGenOptions,
-  ImageModelId,
-  PdpOutputMode,
+  ImageGenOptionsInput,
+  PageImageWire,
   SectionBlueprint,
 } from "@fixup/pdp-core";
-import { resolveGeminiKey } from "../../../../../lib/server-keys";
+import { createPdpProviders } from "../../../../../lib/pdp/providers";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../../lib/membership/api";
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
@@ -28,25 +29,22 @@ export const maxDuration = 300;
 type BatchRequest = {
   originalImageBase64: string;
   sections: SectionBlueprint[];
+  /**
+   * 각 섹션이 **페이지에서** 몇 번째인지. 묶음 안 순서가 아니다.
+   *
+   * 인물 사진을 「첫 섹션에만」 쓸 때 이 값이 있어야 판단할 수 있다. 없으면
+   * 묶음 안 순서로 떨어지는데, 두 번째 묶음에서는 그것이 히어로가 아니다.
+   */
+  sectionIndexes?: number[];
   aspectRatio: AspectRatio;
   desiredTone?: string;
-  outputMode?: PdpOutputMode;
-  imageModel?: ImageModelId;
-  emphasisWordsBySection?: Record<string, string[]>;
-  styleReference?: { imageBase64: string; mimeType: string; description?: string };
-  preserveProduct?: boolean;
   characterId?: string;
-  /** 그림의 결. 안 고르면 pdp-core 가 photoreal 로 되돌린다. */
-  look?: string;
-  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
-  userInstruction?: string;
+  /** 페이지 전체가 공유하는 값. **단건 라우트와 같은 모양이다.** */
+  page?: PageImageWire;
+  /** 사용자가 섹션마다 고른 값. 열쇠는 `section_id`. */
+  optionsBySection?: Record<string, ImageGenOptionsInput>;
+  emphasisWordsBySection?: Record<string, string[]>;
 };
-
-/**
- * 결·사용자 지시는 `ImageGenOptions` 밖에서 얹는다 — 그 타입은 이 작업의 담당
- * 범위 밖이라 손대지 않았다. 값 검증은 pdp-core 의 `normalizeImageOptions` 가 한다.
- */
-type PdpBatchImageOptions = ImageGenOptions & { look?: string; userInstruction?: string };
 
 export async function POST(req: Request) {
   let body: BatchRequest;
@@ -59,7 +57,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const model = body.imageModel ?? DEFAULT_IMAGE_MODEL;
+  const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
 
   // 클라이언트가 이미 나눠 보내지만, 여기서도 자른다. 넘겨받은 장수를 그대로
   // 믿으면 함수가 300초에 걸려 죽고, 예약한 크레딧이 finalize 되지 못한다.
@@ -82,10 +80,17 @@ export async function POST(req: Request) {
    * 전에는 모델마다 손으로 매긴 정수 가중치였다. 같은 「1장」이 $0.039~$0.060 로
    * 갈려 싼 모델을 쓰는 사람이 손해를 봤고, 크기 차이는 담을 자리조차 없었다.
    */
+  /**
+   * **예약보다 먼저 만든다.**
+   *
+   * 이 뒤에는 try/catch 가 없다. 예약을 잡은 뒤에 여기서 던지면 확정이 못 돌고
+   * 크레딧이 묶인 채 남는다 — 그 사용자는 다음 요청부터 `concurrent_limit` 로
+   * 막힌다. 요청 몸통에 의존하지 않으므로 앞으로 옮겨도 아무것도 안 바뀐다.
+   */
+  const providers = createPdpProviders();
+
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
-
-  const apiKey = resolveGeminiKey();
 
   // 캐릭터가 있으면 섹션마다 어울리는 각도를 하나씩 고른다. 3종을 다 보내면
   // 참조가 늘어 서로를 희석시킨다 — 앵커와 스타일만으로도 절충이 일어난다.
@@ -101,34 +106,20 @@ export async function POST(req: Request) {
     }
   }
 
+  // **조립은 한 곳에서만 한다.** 전에는 여기서 손으로 지었고, 그래서 인물 사진을
+  // 받는 자리조차 없었다. 단건 라우트와 같은 함수를 쓴다.
+  const page = pageInputsFromWire({ ...body.page, imageModel: model });
+
   const settled = await Promise.allSettled(
-    sections.map((section) => {
-      // 객체를 먼저 만들어 넘긴다. 호출부에 그대로 적으면 TypeScript 가
-      // ImageGenOptions 에 없는 열쇠(look·userInstruction)를 초과 속성으로 막는다.
-      const options: PdpBatchImageOptions = {
-        style: "lifestyle",
-        withModel: false,
-        outputMode: body.outputMode ?? "full-image",
-        imageModel: model,
-        headline: section.headline,
-        subheadline: section.subheadline,
+    sections.map((section, position) => {
+      const options = buildSectionImageOptions(page, {
+        section,
+        index: body.sectionIndexes?.[position] ?? position,
+        options: body.optionsBySection?.[section.section_id],
         emphasisWords: body.emphasisWordsBySection?.[section.section_id],
-        // 페이지당 한 장. 모든 섹션이 같은 것을 써야 통일이 유지된다.
-        styleReferenceImages: body.styleReference
-          ? [
-              {
-                base64: body.styleReference.imageBase64,
-                mimeType: body.styleReference.mimeType,
-                description: body.styleReference.description,
-              },
-            ]
-          : undefined,
-        preserveProductImage: body.preserveProduct ?? true,
         characterReference:
           characterByAngle.get(pickAngleForSection(section.layout_notes ?? "")) ?? undefined,
-        look: body.look,
-        userInstruction: body.userInstruction,
-      };
+      });
 
       return generateSectionImage(
         {
@@ -138,7 +129,7 @@ export async function POST(req: Request) {
           desiredTone: body.desiredTone,
           options,
         },
-        apiKey,
+        providers,
       );
     }),
   );

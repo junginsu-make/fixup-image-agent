@@ -10,6 +10,7 @@ import {
   mergeArtDirection,
 } from "@fixup/pdp-core";
 import type {
+  AttachmentIntents,
   AspectRatio,
   BlueprintReview,
   CopyIntensity,
@@ -41,6 +42,9 @@ import { replaceBlueprintState } from "./text-plan-state";
 export type TextStage = "input" | "scenario" | "unverifiedReview" | "keyVisual";
 
 interface TextModeFlowProps {
+  /** 첨부 자리별 지시. 글로 시작해도 레퍼런스·캐릭터는 붙일 수 있다. */
+  attachmentIntents: AttachmentIntents;
+  onIntentChange: (slot: keyof AttachmentIntents, value: string) => void;
   aspectRatio: AspectRatio;
   outputMode: PdpOutputMode;
   desiredTone: string;
@@ -63,6 +67,8 @@ function errorText(error: unknown) {
 }
 
 export function TextModeFlow({
+  attachmentIntents,
+  onIntentChange,
   aspectRatio,
   outputMode,
   desiredTone,
@@ -232,6 +238,8 @@ export function TextModeFlow({
 
       {stage === "scenario" && brief && blueprint ? (
         <ScenarioEditor
+          attachmentIntents={attachmentIntents}
+          onIntentChange={onIntentChange}
           brief={brief}
           blueprint={blueprint}
           review={review}

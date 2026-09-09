@@ -1,28 +1,17 @@
 import type { PdpAnalyzeRequest, PdpGenerateImageRequest } from "./types";
 import { PdpService, PdpServiceError, toPdpErrorResponse } from "./pdp.service";
+import type { PdpProviders } from "./pdp.image-provider";
 
 export class PdpController {
   constructor(private readonly pdpService = new PdpService()) {}
 
-  async validateApiKey(geminiApiKeyOverride?: string) {
-    try {
-      const result = await this.pdpService.validateGeminiApiKey(geminiApiKeyOverride);
-      return {
-        ok: true as const,
-        ...result
-      };
-    } catch (error) {
-      return toPdpErrorResponse(error);
-    }
-  }
-
   async analyze(
     body: PdpAnalyzeRequest,
-    geminiApiKeyOverride?: string,
+    providers?: PdpProviders,
     options?: { skipFirstImage?: boolean }
   ) {
     try {
-      const result = await this.pdpService.analyzeProduct(body, geminiApiKeyOverride, options);
+      const result = await this.pdpService.analyzeProduct(body, providers, options);
       return {
         ok: true as const,
         result
@@ -32,9 +21,9 @@ export class PdpController {
     }
   }
 
-  async generateImage(body: PdpGenerateImageRequest, geminiApiKeyOverride?: string) {
+  async generateImage(body: PdpGenerateImageRequest, providers?: PdpProviders) {
     try {
-      const result = await this.pdpService.generateSectionImage(body, geminiApiKeyOverride);
+      const result = await this.pdpService.generateSectionImage(body, providers);
       return {
         ok: true as const,
         ...result

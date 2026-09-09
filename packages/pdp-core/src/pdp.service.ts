@@ -1,4 +1,5 @@
-import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import { Type } from "./pdp.llm";
+import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
   userInstructionHead,
@@ -10,6 +11,7 @@ import type {
   CopyIntensity,
   GapPolicy,
   ImageGenOptions,
+  ImageGenOptionsInput,
   ImageModelId,
   LandingPageBlueprint,
   PdpGuidePriorityMode,
@@ -22,7 +24,7 @@ import type {
 } from "./types";
 import { DEFAULT_IMAGE_MODEL } from "./types";
 import { classifyOutcome, qaRetryDirective, runQaGate, type QaOutcome } from "./pdp.qa";
-import { generateImageViaFal, type ImageGenerator } from "./pdp.image-provider";
+import type { ImageGenerator, PdpProviders } from "./pdp.image-provider";
 import {
   DEFAULT_PDP_LOOK,
   buildImageJson,
@@ -50,7 +52,6 @@ import {
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 
-const ANALYZE_MODEL = "gemini-3.1-pro-preview";
 const DEFAULT_IMAGE_MIME = "image/jpeg";
 
 const REFERENCE_MODEL_MAX_ATTEMPTS = 3;
@@ -112,21 +113,15 @@ type InternalImageGenOptions = ImageGenOptions & {
   characterReference?: { base64: string; mimeType: string; identityPrompt: string };
   /** 강조할 단어. 시나리오 단계에서 정한다. */
   emphasisWords?: string[];
-} & PdpLookInput;
+};
 
 /**
- * 화면에서 넘어오는 결·지시. 둘 다 선택이다.
+ * 들어오는 옵션. 빠진 칸은 `normalizeImageOptions` 가 채운다.
  *
- * `ImageGenOptions`(types.ts)에 두는 것이 제자리지만 그 파일은 이 작업의 담당
- * 범위 밖이라 여기서 얹는다. 값은 JSON 으로 들어오므로 `look` 은 문자열로 받고
- * `normalizeImageOptions` 가 아는 값인지 확인한다 — 경계에서 검증한다.
+ * 완성된 `InternalImageGenOptions` 와 일부러 나눠 둔다 — 하나로 두면 라우트에서
+ * `as` 로 눌러야 하고, 그러면 진짜 어긋남까지 같이 눌린다.
  */
-export type PdpLookInput = {
-  /** 그림의 결. 안 고르면 `photoreal` — 상세페이지는 지금까지 늘 사진이었다. */
-  look?: ImageLook | string;
-  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
-  userInstruction?: string;
-};
+type InternalImageGenOptionsInput = Partial<InternalImageGenOptions>;
 
 /** 아는 결인지 확인한다. 모르는 값은 기본값으로 되돌린다. */
 function normalizeLook(value: ImageLook | string | undefined): ImageLook {
@@ -138,12 +133,6 @@ function normalizeLook(value: ImageLook | string | undefined): ImageLook {
 type NormalizedReferenceModelImage = {
   base64: string;
   mimeType: string;
-};
-
-type ModelAccessCheck = {
-  accessible: boolean;
-  status: number;
-  detail?: string;
 };
 
 export class PdpServiceError extends Error {
@@ -162,67 +151,123 @@ export class PdpServiceError extends Error {
   }
 }
 
+type LlmPart = { text?: string; inlineData?: { data: string; mimeType: string } };
+
+export interface LegacyContentsClient {
+  llm: PdpLlm;
+  models: {
+    generateContent(args: {
+      name: string;
+      contents: Array<{ parts: LlmPart[] }>;
+      config?: { responseSchema?: unknown; maxOutputTokens?: number };
+    }): Promise<{ text: string }>;
+  };
+}
+
+/**
+ * 옛 호출 모양을 그대로 받는 어댑터.
+ *
+ * 이 파일의 네 호출 자리에는 **시험이 하나도 없다**. 호출 모양까지 한꺼번에
+ * 고치면 안 잡히는 자리 넷을 동시에 건드리게 된다. 그래서 부르는 쪽은 그대로
+ * 두고 말단만 갈아끼웠다 — 프롬프트도 스키마도 한 글자 안 바뀐다.
+ *
+ * `parts` 안의 글은 이어 붙이고 그림은 순서대로 뽑는다. 순서가 중요하다 —
+ * 구성안 만들 때 첫 그림이 제품이고 둘째가 인물이다.
+ */
+function legacyContentsClient(llm: PdpLlm): LegacyContentsClient {
+  return {
+    llm,
+    models: {
+      async generateContent(args) {
+        const parts = args.contents.flatMap((entry) => entry.parts);
+        return llm.generate({
+          name: args.name,
+          prompt: parts
+            .map((part) => part.text)
+            .filter((text): text is string => Boolean(text))
+            .join("\n\n"),
+          images: parts
+            .filter((part) => part.inlineData)
+            .map((part) => ({
+              base64: part.inlineData!.data,
+              mimeType: part.inlineData!.mimeType,
+            })),
+          schema: args.config?.responseSchema,
+          maxTokens: args.config?.maxOutputTokens ?? 8192,
+        });
+      },
+    },
+  };
+}
+
 export class PdpService {
-  async validateGeminiApiKey(geminiApiKeyOverride?: string) {
-    const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
-    const analyzeModelAccess = await checkModelAccess(apiKey, ANALYZE_MODEL);
-
-    if (!analyzeModelAccess.accessible) {
-      throw createModelAccessError(ANALYZE_MODEL, analyzeModelAccess);
-    }
-
-    // 이미지 생성은 fal.ai 를 경유하므로 Gemini 이미지 모델 접근은 확인하지 않는다.
-    // 대신 fal 키가 있는지만 본다.
-    if (!process.env.FAL_KEY) {
-      throw new PdpServiceError(
-        "GEMINI_API_KEY_MISSING",
-        "이미지 생성 키(FAL_KEY)가 설정되지 않았습니다.",
-        "FAL_KEY is not configured."
-      );
-    }
-
-    return {
-      message: "Gemini 키로 텍스트 분석·검수가 가능하고, fal 키로 이미지 생성이 가능합니다.",
-      analyzeModel: ANALYZE_MODEL,
-      imageModel: DEFAULT_IMAGE_MODEL
-    };
-  }
-
   async analyzeProduct(
     request: PdpAnalyzeRequest,
-    geminiApiKeyOverride?: string,
+    providers?: PdpProviders,
     options?: { skipFirstImage?: boolean }
   ) {
-    const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
+    const resolved = this.requireProviders(providers);
     const normalizedImage = sanitizeBase64Payload(request.imageBase64);
     const mimeType = normalizeMimeType(request.mimeType);
     const referenceModelImage = normalizeReferenceModelImage(request.modelImageBase64, request.modelImageMimeType);
-    const client = this.createClient(apiKey);
+    const client = this.getClient(resolved.llm);
     const referenceModelProfile =
       referenceModelImage ? await this.extractReferenceModelProfile(client, referenceModelImage) : null;
 
+    // 구성안을 짤 때부터 레퍼런스를 본다. 안 주면 `style_guide` 를 상상으로 채운다.
+    // 제품·인물과 같은 손질을 거친다. 레퍼런스만 건너뛰면 `data:` 접두사가
+    // 붙어 오거나 그림이 아닌 형식이 와도 그대로 모델에 실린다.
+    const styleReferenceForPlan = request.styleReference?.imageBase64?.trim()
+      ? {
+          imageBase64: sanitizeBase64Payload(request.styleReference.imageBase64),
+          mimeType: normalizeMimeType(request.styleReference.mimeType),
+          description: request.styleReference.description,
+          intent: request.styleReference.intent,
+        }
+      : undefined;
+    const analyzePrompt = buildAnalyzePrompt(
+      request.additionalInfo,
+      request.desiredTone,
+      referenceModelProfile,
+      request.outputMode,
+      request.sellerBrief,
+      request.copyIntensity,
+      request.gapPolicy,
+      styleReferenceForPlan
+        ? {
+            styleReference: {
+              description: styleReferenceForPlan.description,
+              intent: styleReferenceForPlan.intent,
+            },
+          }
+        : undefined,
+    );
+
     const makeBlueprint = (revisionDirective: string) => retryOperation(async () => {
       const response = await client.models.generateContent({
-        model: ANALYZE_MODEL,
+        name: "pdp_blueprint",
         contents: [
           {
             parts: [
               buildHighResolutionInlinePart(mimeType, normalizedImage),
               ...(referenceModelImage ? [buildHighResolutionInlinePart(referenceModelImage.mimeType, referenceModelImage.base64)] : []),
+              // 디자인 레퍼런스는 맨 뒤다. 제품이 첫 그림이어야 프롬프트의
+              // 「이 제품」이 가리키는 것이 어긋나지 않는다.
+              ...(styleReferenceForPlan
+                ? [buildHighResolutionInlinePart(styleReferenceForPlan.mimeType, styleReferenceForPlan.imageBase64)]
+                : []),
               {
                 // 지적사항은 규칙보다 앞에 둔다. 뒤에 붙이면 긴 규칙에 묻혀 무시된다.
                 text: revisionDirective
                   ? `${revisionDirective}
 
-${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModelProfile, request.outputMode, request.sellerBrief, request.copyIntensity, request.gapPolicy)}`
-                  : buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModelProfile, request.outputMode, request.sellerBrief, request.copyIntensity, request.gapPolicy)
+${analyzePrompt}`
+                  : analyzePrompt
               }
             ]
           }
         ] as any,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             // productReading 이 맨 앞이다. JSON 은 앞에서부터 만들어지므로 먼저 적은
@@ -296,11 +341,9 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     const runReview = async (candidate: LandingPageBlueprint) => {
       try {
         const response = await client.models.generateContent({
-          model: ANALYZE_MODEL,
+          name: "pdp_review",
           contents: [{ parts: [{ text: buildReviewPrompt(candidate, SALES_PRINCIPLES) }] }] as never,
           config: {
-            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-            responseMimeType: "application/json",
             responseSchema: REVIEW_SCHEMA as never,
           },
         });
@@ -329,7 +372,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
 
     if (!firstSection) {
       throw new PdpServiceError(
-        "GEMINI_RESPONSE_INVALID",
+        "AI_RESPONSE_INVALID",
         "상세페이지 섹션을 생성하지 못했습니다.",
         "No sections returned from analyze response."
       );
@@ -356,7 +399,8 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
         outputMode: request.outputMode,
         imageModel: request.imageModel ?? DEFAULT_IMAGE_MODEL
       },
-      client
+      client,
+      generateImage: resolved.generateImage
     });
 
       blueprint.sections[0] = {
@@ -383,11 +427,10 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
-    // 결·사용자 지시는 `ImageGenOptions` 밖에서 얹는다(PdpLookInput 주석 참조).
-    options?: ImageGenOptions & PdpLookInput;
-  }, geminiApiKeyOverride?: string) {
-    const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
-    const client = this.createClient(apiKey);
+    options?: ImageGenOptionsInput;
+  }, providers?: PdpProviders) {
+    const resolved = this.requireProviders(providers);
+    const client = this.getClient(resolved.llm);
     const normalizedReferenceModel = normalizeReferenceModelImage(
       request.options?.referenceModelImageBase64,
       request.options?.referenceModelImageMimeType
@@ -400,6 +443,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     const image = await this.generateSectionImageInternal({
       ...request,
       client,
+      generateImage: resolved.generateImage,
       options: request.options
         ? {
             ...request.options,
@@ -436,8 +480,8 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
-    options?: InternalImageGenOptions;
-    client?: GoogleGenAI;
+    options?: InternalImageGenOptionsInput;
+    client?: LegacyContentsClient;
     /** 테스트에서 fal 호출을 대신 끼워 넣는 통로. 운영에서는 비운다. */
     generateImage?: ImageGenerator;
   }): Promise<SectionImageResult> {
@@ -495,6 +539,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           kind: "anchor",
           base64: originalImageBase64,
           mimeType: DEFAULT_IMAGE_MIME,
+          intent: options.attachmentIntents?.anchor,
         });
       }
 
@@ -508,12 +553,14 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           kind: "person",
           base64: normalizedReferenceModel.base64,
           mimeType: normalizedReferenceModel.mimeType,
+          intent: options.attachmentIntents?.person,
         });
       } else if (usesCharacter && options.characterReference) {
         references.push({
           kind: "person",
           base64: options.characterReference.base64,
           mimeType: options.characterReference.mimeType,
+          intent: options.attachmentIntents?.person,
         });
       }
 
@@ -528,6 +575,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           base64: styleReference.base64,
           mimeType: styleReference.mimeType,
           description: styleReference.description,
+          intent: options.attachmentIntents?.style,
         });
       }
 
@@ -576,7 +624,15 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
       // 프롬프트는 JSON 구조로 주고 아트 디렉션은 system 쪽으로 분리한다 —
       // 평문 대비 지시 준수가 확실히 높다(spec 1절 측정표).
       const generatedImage = await retryOperation(async () => {
-        const generate = request.generateImage ?? generateImageViaFal;
+        // 그림 만드는 통로는 바깥이 넣어 준다. 이 패키지는 fal 을 직접 안 부른다.
+        const generate = request.generateImage;
+        if (!generate) {
+          throw new PdpServiceError(
+            "AI_KEY_MISSING",
+            "이미지 생성 키가 설정되지 않았습니다.",
+            "no image generator was provided",
+          );
+        }
         // 위에서 만든 references 를 그대로 보낸다. 여기서 다시 만들면 프롬프트에
         // 적힌 번호와 실제 첨부 순서가 갈라진다 — 한쪽만 고치는 날 조용히 어긋난다.
         return generate(options.imageModel ?? DEFAULT_IMAGE_MODEL, {
@@ -608,11 +664,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
       let qaOk = true;
       let qaDirective = "";
       if (qaEnabled) {
-        const verdict = await runQaGate(client, {
-          generatedImage,
-          section,
-          model: ANALYZE_MODEL
-        });
+        const verdict = await runQaGate(client.llm, { generatedImage, section });
         if (verdict.parseError && sawBlockingOutcome) {
           // fail-open 이지만 이전에 확인된 blocking 을 통과로 위장하지 않는다.
           lastQaOutcome = sawBlockingOutcome;
@@ -665,30 +717,27 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     };
   }
 
-  private getClient(geminiApiKeyOverride?: string) {
-    return this.createClient(this.getRequiredApiKey(geminiApiKeyOverride));
+  /** 바깥세상 통로가 다 왔는지 확인한다. 없으면 무엇이 없는지 알린다. */
+  private requireProviders(providers?: PdpProviders): PdpProviders {
+    if (!providers?.llm) {
+      throw new PdpServiceError("AI_KEY_MISSING", "AI 공급자 키가 설정되지 않았습니다.");
+    }
+    return providers;
   }
 
-  private createClient(apiKey: string) {
-    return new GoogleGenAI({ apiKey, apiVersion: "v1alpha" });
-  }
-
-  private getRequiredApiKey(geminiApiKeyOverride?: string) {
-    const apiKey = geminiApiKeyOverride?.trim();
-
-    if (!apiKey) {
+  private getClient(llm?: PdpLlm) {
+    if (!llm) {
       throw new PdpServiceError(
-        "GEMINI_API_KEY_MISSING",
-        "설정 메뉴에서 본인 Gemini API 키를 입력해 주세요."
+        "AI_KEY_MISSING",
+        "AI 공급자 키가 설정되지 않았습니다."
       );
     }
-
-    return apiKey;
+    return legacyContentsClient(llm);
   }
 
-  private async extractReferenceModelProfile(client: GoogleGenAI, referenceModelImage: NormalizedReferenceModelImage) {
+  private async extractReferenceModelProfile(client: LegacyContentsClient, referenceModelImage: NormalizedReferenceModelImage) {
     const response = await client.models.generateContent({
-      model: ANALYZE_MODEL,
+      name: "pdp_person_profile",
       contents: [
         {
           parts: [
@@ -701,8 +750,6 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
         }
       ] as any,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -736,7 +783,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
   }
 
   private async validateGeneratedImage(
-    client: GoogleGenAI,
+    client: LegacyContentsClient,
     input: {
       generatedImage: GeneratedImagePayload;
       referenceModelImage: NormalizedReferenceModelImage;
@@ -745,7 +792,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     }
   ) {
     const response = await client.models.generateContent({
-      model: ANALYZE_MODEL,
+      name: "pdp_person_check",
       contents: [
         {
           parts: [
@@ -758,8 +805,6 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
         }
       ] as any,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -809,8 +854,8 @@ export function toPdpErrorResponse(error: unknown): {
   if (isInvalidApiKeyError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_API_KEY_INVALID" as const,
-      message: "입력한 Gemini API 키를 확인할 수 없습니다. 키가 올바른지 다시 확인해 주세요.",
+      code: "AI_KEY_INVALID" as const,
+      message: "AI 공급자 키를 확인할 수 없습니다. 운영자에게 문의해 주세요.",
       detail
     };
   }
@@ -818,9 +863,9 @@ export function toPdpErrorResponse(error: unknown): {
   if (isPermissionError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_MODEL_ACCESS_DENIED" as const,
+      code: "AI_MODEL_ACCESS_DENIED" as const,
       message:
-        "입력한 Gemini API 키로는 현재 상세페이지 생성에 필요한 모델을 사용할 수 없습니다. Gemini 3.1 Pro Preview와 Gemini 3 Pro Image Preview 접근 권한을 확인해 주세요.",
+        "현재 키로는 상세페이지 생성에 필요한 모델을 쓸 수 없습니다. 운영자에게 문의해 주세요.",
       detail
     };
   }
@@ -828,7 +873,7 @@ export function toPdpErrorResponse(error: unknown): {
   if (isQuotaError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_QUOTA_EXCEEDED" as const,
+      code: "AI_QUOTA_EXCEEDED" as const,
       message: "AI 사용량이 초과되었습니다. 잠시 후 다시 시도하거나 quota 상태를 확인해 주세요.",
       detail
     };
@@ -837,7 +882,7 @@ export function toPdpErrorResponse(error: unknown): {
   if (isJsonError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_RESPONSE_INVALID" as const,
+      code: "AI_RESPONSE_INVALID" as const,
       message: "AI 응답을 해석하지 못했습니다. 같은 이미지로 다시 시도해 주세요.",
       detail
     };
@@ -901,7 +946,16 @@ export function buildAnalyzePrompt(
   outputMode: PdpOutputMode = "editable",
   sellerBrief?: SellerBrief,
   copyIntensity: CopyIntensity = "normal",
-  gapPolicy: GapPolicy = "ask"
+  gapPolicy: GapPolicy = "ask",
+  /**
+   * 나중에 붙은 것들. **객체로 받는다.**
+   *
+   * 앞의 일곱은 자리로 받는데, 여덟 번째부터도 그렇게 하면 부르는 쪽이
+   * `undefined` 를 여섯 개씩 늘어놓게 된다. 새로 늘어나는 것은 여기 담는다.
+   */
+  extras?: {
+    styleReference?: { description?: string; intent?: string };
+  },
 ) {
   const referenceModelPrompt = referenceModelProfile
     ? `[참고 모델 이미지가 함께 제공됨]: 모델이 포함되는 컷은 업로드된 동일 인물의 정체성을 유지해야 합니다.
@@ -909,6 +963,61 @@ export function buildAnalyzePrompt(
 - 식별 포인트: ${referenceModelProfile.distinctiveFeatures.join(", ")}
 - 전체 인상: ${referenceModelProfile.overallVibe}`
     : "";
+
+  /**
+   * **구성안을 짤 때 레퍼런스를 본다.**
+   *
+   * 전에는 이미지를 만들 때 처음 등장했다. 그래서 `style_guide` 를 기획이
+   * 상상으로 채웠고, 그 값이 그대로 이미지 프롬프트의 `design_system` 이 됐다.
+   *
+   * 서술과 사용자 지시를 함께 싣는다. 그림만 보내면 「무엇을 가져올지」가
+   * 사람마다 다르게 읽힌다.
+   */
+  const styleReferencePrompt = extras?.styleReference
+    ? [
+        "[디자인 레퍼런스가 함께 제공됨 — a design reference image is attached]",
+        "- 이 이미지는 **어떻게 보이는가**만 준다. 레이아웃·여백·색 쓰임·서체 인상·분위기를 읽어",
+        "  각 섹션의 `style_guide` 를 이 이미지 기준으로 채울 것.",
+        "- **Do not copy its product, its people, its text content or its specific scene.**",
+        "  담을 내용은 이 제품의 사실에서만 나온다. 레퍼런스의 문구를 옮겨 적지 말 것.",
+        /*
+          **순서가 이미지 경로와 같아야 한다.**
+
+          `pdp.reference-policy.ts` 는 사용자가 적은 말을 먼저 놓고, 기계가 읽어
+          적은 서술을 뒤에 「참고용」으로 붙인다. 반대로 놓으면 「배치는 무시해
+          주세요」 위에 배치 서술이 앉아 방금 한 말이 묻힌다.
+
+          그리고 **범위를 그 그림으로 좁힌다.** 이 프롬프트에는 근거 없는 숫자
+          금지·표시광고 규칙이 함께 실려 있다. 「다른 지시보다 우선」이라고 쓰면
+          첨부칸에 적은 한 줄이 그것들 위에 놓인다고 읽힐 수 있다.
+        */
+        extras.styleReference.intent?.trim()
+          ? `- 이 그림에 대해서는 사용자가 적은 말을 따를 것: ${extras.styleReference.intent.trim()}`
+          : "",
+        extras.styleReference.description?.trim()
+          ? `- 이 레퍼런스가 디자인 언어를 쓰는 방식${
+              extras.styleReference.intent?.trim() ? "(참고용 — 위 지시가 이긴다)" : ""
+            }: ${extras.styleReference.description.trim()}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+  /**
+   * `style_guide` 설명이 한 프롬프트에 두 번, 다른 어휘로 있으면 안 된다.
+   *
+   * 위쪽 레퍼런스 블록은 그래픽 디자인 어휘로 말하고 여기는 사진 연출 어휘로
+   * 말했다. 이 파일 자신의 규칙대로면 **뒤에 있는 쪽이 이긴다** — 레퍼런스를
+   * 보여 준 의미가 조용히 희석된다.
+   *
+   * 「디자인 가이드 우선 모드에서만 강하게」도 뺐다. `pdp.image-prompt.ts` 는
+   * `design_system = style_guide` 를 조건 없이 한다. 기획에게 스스로 힘을
+   * 빼라고 말할 이유가 없다.
+   */
+  const styleGuideFieldRule = extras?.styleReference
+    ? "- style_guide: 전체 통일 스타일. **위에 첨부된 디자인 레퍼런스를 기준으로** 레이아웃·여백·색 쓰임·서체 인상을 적을 것."
+    : "- style_guide: 전체 통일 스타일. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것.";
 
   const outputModePrompt =
     outputMode === "full-image"
@@ -943,6 +1052,7 @@ ${outputModePrompt}
 ${additionalInfo ? `[사용자 추가 정보]: ${additionalInfo}` : ""}
 ${desiredTone ? `[원하는 디자인 톤]: ${desiredTone}` : ""}
 ${referenceModelPrompt}
+${styleReferencePrompt}
 
 # 섹션 템플릿(필수 필드)
 - section_id: S1~S6
@@ -990,7 +1100,7 @@ ${referenceModelPrompt}
 - prompt_ko: 한국어 이미지 생성 프롬프트(1~2문장). 구도, 거리감, 시선 높이, 제품이 프레임에서 차지하는 비중을 함께 명시할 것.
 - prompt_en: 영어 프롬프트(실제 이미지 생성용). Include composition, framing distance, camera angle, product prominence, and the key subject action. Keep it neutral enough that studio/lifestyle/outdoor priority can still be controlled at generation time.
 - negative_prompt: 피해야 할 요소
-- style_guide: 전체 통일 스타일. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것. 이 값은 디자인 가이드 우선 모드에서만 강하게 적용될 수 있도록 작성할 것.
+${styleGuideFieldRule}
 - reference_usage: 업로드된 기존 제품 이미지를 어떻게 참고할지. 제품 형태, 라벨, 재질, 색감을 유지하는 기준을 명시할 것.
 - section_name, goal, layout_notes, compliance_notes, purpose, style_guide, reference_usage는 반드시 한국어로 작성할 것
 - 영어는 *_en 필드와 prompt_en에만 사용할 것
@@ -1255,7 +1365,7 @@ function parseBlueprintResponse(response: { text?: string }) {
     return sanitizeBlueprint(parsed);
   } catch (error) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "AI 응답을 해석하지 못했습니다.",
       stringifyError(error)
     );
@@ -1331,7 +1441,7 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
  * 그래서 받은 것을 그대로 펼치고 기본값만 덮어쓴다.
  */
 function normalizeImageOptions(
-  options?: InternalImageGenOptions,
+  options?: InternalImageGenOptionsInput,
 ): InternalImageGenOptions & { look: ImageLook; userInstruction: string } {
   return {
     ...options,
@@ -1479,7 +1589,7 @@ function parseReferenceModelProfileResponse(response: { text?: string }) {
     } satisfies ReferenceModelProfile;
   } catch (error) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "참조 모델 이미지를 해석하지 못했습니다.",
       stringifyError(error)
     );
@@ -1500,7 +1610,7 @@ function parseGeneratedImageValidationResponse(response: { text?: string }) {
     } satisfies GeneratedImageValidation;
   } catch (error) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "생성된 이미지 검증 응답을 해석하지 못했습니다.",
       stringifyError(error)
     );
@@ -1510,9 +1620,9 @@ function parseGeneratedImageValidationResponse(response: { text?: string }) {
 function extractResponseText(response: { text?: string }) {
   if (!response.text) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "AI 응답이 비어 있습니다.",
-      "Gemini did not return response.text."
+      "provider returned no text."
     );
   }
 
@@ -1649,7 +1759,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
 
     if (isQuotaError(message)) {
       throw new PdpServiceError(
-        "GEMINI_QUOTA_EXCEEDED",
+        "AI_QUOTA_EXCEEDED",
         "AI 사용량이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
         message
       );
@@ -1657,7 +1767,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
 
     if (isJsonError(message)) {
       throw new PdpServiceError(
-        "GEMINI_RESPONSE_INVALID",
+        "AI_RESPONSE_INVALID",
         "AI 응답을 해석하지 못했습니다.",
         message
       );
@@ -1725,67 +1835,6 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function checkModelAccess(apiKey: string, model: string): Promise<ModelAccessCheck> {
-  // 보안: API 키를 URL 쿼리스트링이 아닌 x-goog-api-key 헤더로 전송한다.
-  // (Gemini REST API가 동일하게 지원하므로 동작은 그대로이며 로그 노출 위험만 제거된다.)
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`;
-  const response = await fetch(endpoint, {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      "x-goog-api-key": apiKey
-    }
-  });
-
-  if (response.ok) {
-    return {
-      accessible: true,
-      status: response.status
-    };
-  }
-
-  const detail = extractGoogleApiErrorMessage(await response.text());
-  return {
-    accessible: false,
-    status: response.status,
-    detail
-  };
-}
-
-function createModelAccessError(model: string, access: ModelAccessCheck) {
-  if (access.status === 400 && access.detail && isInvalidApiKeyError(access.detail)) {
-    return new PdpServiceError(
-      "GEMINI_API_KEY_INVALID",
-      "입력한 Gemini API 키가 올바르지 않습니다. 다시 확인해 주세요.",
-      `${model}: ${access.detail}`
-    );
-  }
-
-  if (access.status === 401) {
-    return new PdpServiceError(
-      "GEMINI_API_KEY_INVALID",
-      "입력한 Gemini API 키가 인증되지 않았습니다. 키를 다시 확인해 주세요.",
-      `${model}: ${access.detail ?? "unauthorized"}`
-    );
-  }
-
-  if (access.status === 403 || access.status === 404) {
-    return new PdpServiceError(
-      "GEMINI_MODEL_ACCESS_DENIED",
-      `입력한 Gemini API 키로는 ${model} 모델에 접근할 수 없습니다.`,
-      access.detail
-        ? `${model}: ${access.detail}`
-        : `${model}: permission denied or model unavailable for this key`
-    );
-  }
-
-  return new PdpServiceError(
-    "PDP_ANALYZE_FAILED",
-    "Gemini API 키 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-    access.detail ? `${model}: ${access.detail}` : `${model}: HTTP ${access.status}`
-  );
-}
 
 function extractGoogleApiErrorMessage(rawText: string) {
   const trimmed = rawText.trim();

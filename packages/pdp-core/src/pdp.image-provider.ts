@@ -1,4 +1,5 @@
 import { PdpServiceError } from "./pdp.service";
+import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_MODELS,
   type AspectRatio,
@@ -16,7 +17,6 @@ import {
  * 자세한 근거는 docs/superpowers/specs/2026-07-27-fal-image-provider-design.md 참조.
  */
 
-const FAL_BASE_URL = "https://fal.run";
 
 /**
  * 그 모델이 받을 수 있는 만큼만 보낸다.
@@ -197,68 +197,23 @@ export interface GeneratedImage {
   mimeType: string;
 }
 
-/** 테스트에서 fal 호출을 대신 끼워 넣기 위한 통로. */
-export type FalFetch = (endpoint: string, payload: FalPayload) => Promise<unknown>;
-
-async function callFal(endpoint: string, payload: FalPayload): Promise<unknown> {
-  const apiKey = process.env.FAL_KEY;
-  if (!apiKey) {
-    throw new PdpServiceError(
-      "GEMINI_API_KEY_MISSING",
-      "이미지 생성 키가 설정되지 않았습니다.",
-      "FAL_KEY is not configured.",
-    );
-  }
-
-  const response = await fetch(`${FAL_BASE_URL}/${endpoint}`, {
-    method: "POST",
-    headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new PdpServiceError(
-      response.status === 429 ? "GEMINI_QUOTA_EXCEEDED" : "PDP_IMAGE_GENERATION_FAILED",
-      response.status === 429
-        ? "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요."
-        : "이미지를 생성하지 못했습니다.",
-      `fal ${endpoint} responded ${response.status}: ${text.slice(0, 300)}`,
-    );
-  }
-
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
-      "이미지 생성 응답을 해석하지 못했습니다.",
-      "fal response was not valid JSON.",
-    );
-  }
-}
-
-export async function extractFalImage(result: unknown): Promise<GeneratedImage> {
-  const url = (result as { images?: Array<{ url?: string; content_type?: string }> })?.images?.[0];
-  if (!url?.url) {
+/**
+ * fal 응답에서 그림 주소를 뽑는다. **내려받지는 않는다.**
+ *
+ * 내려받기는 그물을 타는 일이라 `apps/web` 이 맡는다. 이 패키지는 포스터·
+ * 카드뉴스 코어와 같이 순수해야 한다 — 무엇을 어디로 보낼지는 알되, 보내지는
+ * 않는다.
+ */
+export function falImageFrom(result: unknown): { url: string; mimeType: string } {
+  const image = (result as { images?: Array<{ url?: string; content_type?: string }> })?.images?.[0];
+  if (!image?.url) {
     throw new PdpServiceError(
       "PDP_IMAGE_GENERATION_FAILED",
       "이미지를 생성하지 못했습니다.",
       "fal response contained no image url.",
     );
   }
-
-  // fal 은 호스팅 URL 로 돌려준다. 파이프라인이 base64 를 쓰므로 여기서 받아 변환한다.
-  const response = await fetch(url.url);
-  if (!response.ok) {
-    throw new PdpServiceError(
-      "PDP_IMAGE_GENERATION_FAILED",
-      "생성한 이미지를 내려받지 못했습니다.",
-      `image download responded ${response.status}`,
-    );
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return { base64: buffer.toString("base64"), mimeType: url.content_type || "image/png" };
+  return { url: image.url, mimeType: image.content_type || "image/png" };
 }
 
 /** 이미지 한 장을 만드는 함수의 모양. 테스트에서 이 자리를 대신 채운다. */
@@ -267,13 +222,14 @@ export type ImageGenerator = (
   input: ImageProviderInput,
 ) => Promise<GeneratedImage>;
 
-/** 모델 하나로 이미지 한 장을 만든다. */
-export async function generateImageViaFal(
-  model: ImageModelId,
-  input: ImageProviderInput,
-  falFetch: FalFetch = callFal,
-): Promise<GeneratedImage> {
-  const endpoint = resolveEndpoint(model, input.references);
-  const payload = buildFalPayload(model, input);
-  return extractFalImage(await falFetch(endpoint, payload));
+
+/**
+ * 상세페이지가 바깥세상과 만나는 자리 전부.
+ *
+ * `apps/web/lib/pdp/providers.ts` 가 만들어 넣는다. 이 패키지 안에는
+ * `process.env` 도 `fetch` 도 없다 — 포스터·카드뉴스 코어와 같다.
+ */
+export interface PdpProviders {
+  llm: PdpLlm;
+  generateImage: ImageGenerator;
 }

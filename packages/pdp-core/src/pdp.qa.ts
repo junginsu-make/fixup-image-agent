@@ -1,4 +1,5 @@
-import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import { Type } from "./pdp.llm";
+import type { PdpLlm } from "./pdp.llm";
 import type { QaDefect, QaDefectType, QaSeverity, QaTextLocation, SectionBlueprint } from "./types";
 
 // 풀이미지 QA 게이트: 생성된 이미지를 승인 카피와 대조해 결함을 판정한다.
@@ -18,7 +19,6 @@ export interface QaOutcome {
 export interface RunQaGateInput {
   generatedImage: { base64: string; mimeType: string };
   section: SectionBlueprint;
-  model: string;
 }
 
 const DEFECT_TYPES: QaDefectType[] = ["forbidden_brand", "text_typo", "unsupported_number", "body_distortion"];
@@ -160,13 +160,6 @@ export function qaRetryDirective(verdict: { defects: QaDefect[] }): string {
   return `The previous attempt failed quality review. Fix every issue below and keep all approved Korean copy exactly as written: ${fixes.join(" ")}`;
 }
 
-function qaInlineImagePart(mimeType: string, data: string) {
-  return {
-    inlineData: { mimeType, data },
-    mediaResolution: { level: "media_resolution_high" }
-  } as any;
-}
-
 const QA_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -187,26 +180,17 @@ const QA_RESPONSE_SCHEMA = {
 };
 
 // 1회 비전 호출로 QA 판정. 호출/파싱 예외는 fail-open(빈 결함 + parseError).
-export async function runQaGate(client: GoogleGenAI, input: RunQaGateInput): Promise<QaVerdict> {
+export async function runQaGate(llm: PdpLlm, input: RunQaGateInput): Promise<QaVerdict> {
   try {
-    const response = await client.models.generateContent({
-      model: input.model,
-      contents: [
-        {
-          parts: [
-            { text: buildQaPrompt(input.section) },
-            qaInlineImagePart(input.generatedImage.mimeType, input.generatedImage.base64)
-          ]
-        }
-      ] as any,
-      config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: "application/json",
-        responseSchema: QA_RESPONSE_SCHEMA
-      }
+    const response = await llm.generate({
+      name: "pdp_qa",
+      description: "만들어진 섹션 이미지를 승인된 원고와 대조해 결함만 적는다.",
+      prompt: buildQaPrompt(input.section),
+      images: [input.generatedImage],
+      schema: QA_RESPONSE_SCHEMA
     });
 
-    return parseQaResponse(response as { text?: string });
+    return parseQaResponse(response);
   } catch {
     return { defects: [], parseError: true };
   }
