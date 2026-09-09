@@ -13,6 +13,7 @@ import type {
 
 export { PdpController, PdpService, PdpServiceError, toPdpErrorResponse };
 export { isBlockingDefect } from "./pdp.qa";
+import type { PdpLlm } from "./pdp.llm";
 export {
   buildFalPayload,
   chunkForModel,
@@ -24,6 +25,7 @@ export {
 } from "./pdp.image-provider";
 export { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
 export { defaultPreserveProduct, shouldSendAnchor } from "./pdp.product-anchor";
+export { Type, type PdpLlm, type PdpLlmImage, type PdpLlmRequest, type PdpLlmResponse } from "./pdp.llm";
 export {
   buildSectionImageOptions,
   pageInputsFromWire,
@@ -145,12 +147,12 @@ export function mapPdpErrorCodeToStatus(code?: PdpErrorCode | string): number {
     case "INVALID_REQUEST":
     case "TEXT_INPUT_INSUFFICIENT":
       return 400;
-    case "GEMINI_API_KEY_MISSING":
-    case "GEMINI_API_KEY_INVALID":
+    case "AI_KEY_MISSING":
+    case "AI_KEY_INVALID":
       return 401;
-    case "GEMINI_MODEL_ACCESS_DENIED":
+    case "AI_MODEL_ACCESS_DENIED":
       return 403;
-    case "GEMINI_QUOTA_EXCEEDED":
+    case "AI_QUOTA_EXCEEDED":
       return 429;
     case "PDP_IMAGE_QA_REJECTED":
       return 422;
@@ -165,10 +167,10 @@ export function mapPdpErrorCodeToStatus(code?: PdpErrorCode | string): number {
  */
 export function mapValidateApiKeyErrorCodeToStatus(code?: PdpErrorCode | string): number {
   switch (code) {
-    case "GEMINI_API_KEY_MISSING":
-    case "GEMINI_API_KEY_INVALID":
+    case "AI_KEY_MISSING":
+    case "AI_KEY_INVALID":
       return 401;
-    case "GEMINI_MODEL_ACCESS_DENIED":
+    case "AI_MODEL_ACCESS_DENIED":
       return 403;
     default:
       return 500;
@@ -191,16 +193,16 @@ function throwFromErrorResponse(response: {
  * as called by `app/api/pdp/analyze/route.ts`.
  *
  * @param input parsed `PdpAnalyzeRequest` body
- * @param apiKey value of the `x-gemini-api-key` request header
+ * @param llm provider built by `apps/web/lib/pdp/providers.ts`
  * @returns the `result` payload (`{ originalImage, blueprint }`)
  * @throws PdpServiceError carrying a `PdpErrorCode` on failure
  */
 export async function analyzeProduct(
   input: PdpAnalyzeRequest,
-  apiKey?: string,
+  llm?: PdpLlm,
   options?: { skipFirstImage?: boolean }
 ): Promise<PdpAnalyzeSuccessResponse["result"]> {
-  const response = await controller.analyze(input, apiKey, options);
+  const response = await controller.analyze(input, llm, options);
 
   if (response.ok) {
     return response.result;
@@ -215,13 +217,13 @@ export async function analyzeProduct(
  * `app/api/pdp/images/route.ts`.
  *
  * @param input parsed `PdpGenerateImageRequest` body
- * @param apiKey value of the `x-gemini-api-key` request header
+ * @param llm provider built by `apps/web/lib/pdp/providers.ts`
  * @returns `{ imageBase64, mimeType }`
  * @throws PdpServiceError carrying a `PdpErrorCode` on failure
  */
 export async function generateSectionImage(
   input: PdpGenerateImageRequest,
-  apiKey?: string
+  llm?: PdpLlm
 ): Promise<{
   imageBase64: string;
   mimeType: string;
@@ -229,7 +231,7 @@ export async function generateSectionImage(
   generatedImages: number;
   qa?: { warnings: QaDefect[] };
 }> {
-  const response = await controller.generateImage(input, apiKey);
+  const response = await controller.generateImage(input, llm);
 
   if (response.ok) {
     return {
@@ -243,27 +245,3 @@ export async function generateSectionImage(
   throwFromErrorResponse(response);
 }
 
-/**
- * Validate that the supplied Gemini API key can access both the analyze and
- * image models. Mirrors `PdpController.validateApiKey(apiKey)` as called by
- * `app/api/pdp/validate-key/route.ts`.
- *
- * @param apiKey value of the `x-gemini-api-key` request header
- * @returns `{ message, analyzeModel, imageModel }`
- * @throws PdpServiceError carrying a `PdpErrorCode` on failure
- */
-export async function validateApiKey(
-  apiKey?: string
-): Promise<Omit<PdpValidateApiKeySuccessResponse, "ok">> {
-  const response = await controller.validateApiKey(apiKey);
-
-  if (response.ok) {
-    return {
-      message: response.message,
-      analyzeModel: response.analyzeModel,
-      imageModel: response.imageModel
-    };
-  }
-
-  throwFromErrorResponse(response);
-}

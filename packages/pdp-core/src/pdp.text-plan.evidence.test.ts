@@ -127,7 +127,7 @@ describe("예시 채우기", () => {
     const { deps } = scriptedDeps([brief, sample, reviewPass]);
     const result = await planFromText(
       { text: "요가 클래스", aspectRatio: "9:16", gapPolicy: "sample" },
-      "key",
+      undefined,
       deps,
     );
     expect(result.blueprint.sections[0]?.evidence?.[0]?.kind).toBe("sample");
@@ -140,7 +140,7 @@ describe("예시 채우기", () => {
     const { deps } = scriptedDeps([brief, omitted, reviewPass]);
     const result = await planFromText(
       { text: "요가 클래스", aspectRatio: "9:16", gapPolicy: "omit" },
-      "key",
+      undefined,
       deps,
     );
     expect(result.blueprint.sections.flatMap((item) => item.evidence ?? []))
@@ -164,7 +164,7 @@ describe("예시 채우기", () => {
     const { deps } = scriptedDeps([brief, banned, reviewPass, banned, reviewPass, banned, reviewPass]);
     const result = await planFromText(
       { text: "요가 클래스", aspectRatio: "9:16", gapPolicy: "sample" },
-      "key",
+      undefined,
       deps,
     );
     expect(result.blueprint.sections[0]?.headline).toBe("");
@@ -181,7 +181,7 @@ describe("구조 실패 재생성", () => {
       { target: { slot: "headline" }, value: "오늘 가볍게 시작하세요", kind: "rhetoric" },
     ]);
     const { deps, prompts } = scriptedDeps([brief, bad, reviewPass, good, reviewPass]);
-    const result = await planFromText({ text: "요가 클래스", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 클래스", aspectRatio: "9:16" }, undefined, deps);
 
     expect(prompts).toHaveLength(5);
     expect(prompts[3]).toContain("근거 구조");
@@ -198,7 +198,7 @@ describe("구조 실패 재생성", () => {
       },
     ]);
     const { deps } = scriptedDeps([brief, bad, reviewPass, bad, reviewPass, bad, reviewPass]);
-    const result = await planFromText({ text: "요가 클래스", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 클래스", aspectRatio: "9:16" }, undefined, deps);
 
     expect(result.blueprint.sections[0]?.headline).toBe("");
     expect(result.blueprint.sections[0]?.evidence?.[0]).toMatchObject({ kind: "ask", value: "" });

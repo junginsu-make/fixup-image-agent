@@ -10,8 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fixup/shared": "workspace:*",
-    "@google/genai": "^1.46.0"
+    "@fixup/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

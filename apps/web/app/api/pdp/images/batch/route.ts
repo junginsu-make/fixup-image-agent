@@ -13,7 +13,7 @@ import type {
   PageImageWire,
   SectionBlueprint,
 } from "@fixup/pdp-core";
-import { resolveGeminiKey } from "../../../../../lib/server-keys";
+import { createPdpLlm } from "../../../../../lib/pdp/providers";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../../lib/membership/api";
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
 
-  const apiKey = resolveGeminiKey();
+  const llm = createPdpLlm();
 
   // 캐릭터가 있으면 섹션마다 어울리는 각도를 하나씩 고른다. 3종을 다 보내면
   // 참조가 늘어 서로를 희석시킨다 — 앵커와 스타일만으로도 절충이 일어난다.
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
           desiredTone: body.desiredTone,
           options,
         },
-        apiKey,
+        llm,
       );
     }),
   );

@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "./pdp.llm";
+import type { PdpLlm } from "./pdp.llm";
 import type { ProductBrief } from "./types";
 
 /**
@@ -116,7 +117,6 @@ export function normalizeStyleAnalysis(raw: unknown): string {
   return lines.join("\n");
 }
 
-const ANALYSIS_MODEL = "gemini-3.1-pro-preview";
 
 const ANALYSIS_SCHEMA = {
   type: Type.OBJECT,
@@ -136,7 +136,7 @@ export type StyleImageAnalyzer = (imageBase64: string, mimeType: string) => Prom
  * 분석을 기다리는 한도.
  *
  * 이 서술은 **자동 추천에만** 쓰인다. 이미지 생성에는 원본 이미지가 그대로
- * 첨부되므로 서술이 없어도 아무 손해가 없다. 그런데 한도가 없으면 Gemini 가
+ * 첨부되므로 서술이 없어도 아무 손해가 없다. 그런데 한도가 없으면 글 모델이
  * 응답하지 않을 때 화면이 몇 분씩 "분석하는 중"에 갇힌다 — 실제로 그랬다.
  * 곁다리 정보 때문에 본 작업을 막을 이유가 없다.
  */
@@ -145,10 +145,12 @@ const ANALYSIS_TIMEOUT_MS = 20_000;
 export async function analyzeStyleImage(
   imageBase64: string,
   mimeType: string,
-  apiKey?: string,
+  llm?: PdpLlm,
   analyze?: StyleImageAnalyzer,
 ): Promise<string> {
-  const run = analyze ?? createDefaultAnalyzer(apiKey);
+  const run = analyze ?? (llm ? analyzerFrom(llm) : null);
+  // 글 모델이 없으면 서술 없이 간다. 곁다리 정보 때문에 본 작업을 막지 않는다.
+  if (!run) return "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const raw = await Promise.race([
@@ -169,27 +171,18 @@ export async function analyzeStyleImage(
   }
 }
 
-function createDefaultAnalyzer(apiKey?: string): StyleImageAnalyzer {
-  // 키 이름 우선순위는 저장소 전체가 같아야 한다 — GOOGLE_API_KEY 가 먼저다.
-  const resolved = apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-  const client = new GoogleGenAI({ apiKey: resolved });
-
+function analyzerFrom(llm: PdpLlm): StyleImageAnalyzer {
   return async (imageBase64, mimeType) => {
-    const response = await client.models.generateContent({
-      model: ANALYSIS_MODEL,
-      contents: [
-        {
-          parts: [
-            { inlineData: { data: imageBase64, mimeType } },
-            { text: buildStyleAnalysisPrompt() },
-          ],
-        },
-      ] as never,
-      config: { responseMimeType: "application/json", responseSchema: ANALYSIS_SCHEMA as never },
+    const response = await llm.generate({
+      name: "style_analysis",
+      description: "레퍼런스 이미지가 디자인 언어를 어떻게 쓰는지 읽는다.",
+      prompt: buildStyleAnalysisPrompt(),
+      images: [{ base64: imageBase64, mimeType }],
+      schema: ANALYSIS_SCHEMA,
     });
 
     try {
-      return JSON.parse(response.text ?? "");
+      return JSON.parse(response.text);
     } catch {
       return null;
     }

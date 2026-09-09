@@ -43,7 +43,9 @@ vi.mock("../../../../lib/membership/api", () => ({
 }));
 
 vi.mock("../../../../lib/evidence-gate", () => ({ rejectIfUnverified: () => null }));
-vi.mock("../../../../lib/server-keys", () => ({ resolveGeminiKey: () => "KEY" }));
+vi.mock("../../../../lib/pdp/providers", () => ({
+  createPdpLlm: () => ({ generate: async () => ({ text: "{}" }) }),
+}));
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 
 let character: { base64: string; mimeType: string; identityPrompt: string } | null = null;

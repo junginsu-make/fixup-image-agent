@@ -20,7 +20,9 @@ vi.mock("@fixup/pdp-core", async (importOriginal) => ({
     generatedImages: 1,
   })),
 }));
-vi.mock("../../../../../lib/server-keys", () => ({ resolveGeminiKey: () => "key" }));
+vi.mock("../../../../../lib/pdp/providers", () => ({
+  createPdpLlm: () => ({ generate: async () => ({ text: "{}" }) }),
+}));
 vi.mock("../../../../../lib/characters", () => ({ loadCharacterView: vi.fn(async () => null) }));
 
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";

@@ -5,7 +5,6 @@ import {
   mapPdpErrorCodeToStatus,
 } from "@fixup/pdp-core";
 import type { KeyVisualRequest } from "@fixup/pdp-core";
-import { resolveGeminiKey } from "../../../../lib/server-keys";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";
@@ -28,7 +27,7 @@ export async function POST(req: Request) {
 
   try {
     const body = (await req.json()) as KeyVisualRequest;
-    const { imageBase64, mimeType } = await generateKeyVisual(body, resolveGeminiKey());
+    const { imageBase64, mimeType } = await generateKeyVisual(body);
     // 섹션 이미지와 똑같이 fal 에서 한 장을 만든다. 모델을 안 남기면 이 한 장은
     // 비용 집계에서 0원으로 사라진다.
     const usage = await finalizeAiUsage(reservation, true, 1, undefined, {

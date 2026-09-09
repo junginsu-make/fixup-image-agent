@@ -78,7 +78,7 @@ const 미달 = reviewPayload({ objection: "fail" });
 describe("심사 루프", () => {
   it("한 번에 통과하면 다시 만들지 않는다", async () => {
     const { deps, prompts } = scriptedDeps([brief, blueprintPayload("첫판"), 통과]);
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(prompts).toHaveLength(3); // 브리프 · 구성안 · 심사
     expect(result.blueprint.executiveSummary).toBe("첫판");
@@ -93,7 +93,7 @@ describe("심사 루프", () => {
       blueprintPayload("두번째"),
       통과,
     ]);
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(prompts).toHaveLength(5);
     expect(result.blueprint.executiveSummary).toBe("두번째");
@@ -114,7 +114,7 @@ describe("심사 루프", () => {
       미달,
       blueprintPayload("4"), // 여기까지 오면 안 된다
     ]);
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(MAX_BLUEPRINT_REVISIONS).toBe(2);
     expect(prompts).toHaveLength(1 + 1 + 2 * MAX_BLUEPRINT_REVISIONS + 1);
@@ -132,7 +132,7 @@ describe("심사 루프", () => {
       blueprintPayload("3"),
       미달,
     ]);
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(result.review?.items.some((item) => item.rating === "fail")).toBe(true);
   });
@@ -143,7 +143,7 @@ describe("심사 루프", () => {
       blueprintPayload("첫판"),
       reviewPayload({ flow: "weak", problem: "weak" }),
     ]);
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(prompts).toHaveLength(3);
     expect(result.blueprint.executiveSummary).toBe("첫판");
@@ -163,7 +163,7 @@ describe("시간 예산", () => {
 
     // 시작은 0, 그 뒤로는 예산을 넘긴 시각. 첫 심사를 마친 시점에 이미 초과한 상황이다.
     let reads = 0;
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps, {
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps, {
       now: () => (reads++ === 0 ? 0 : REVISION_TIME_BUDGET_MS + 1),
     });
 
@@ -181,7 +181,7 @@ describe("시간 예산", () => {
       통과,
     ]);
 
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps, {
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps, {
       now: () => 0,
     });
 
@@ -208,14 +208,14 @@ describe("심사가 실패해도 생성은 살린다", () => {
       generateImage: async () => ({ base64: "AAAA", mimeType: "image/jpeg" }),
     };
 
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
     expect(result.blueprint.executiveSummary).toBe("첫판");
     expect(result.review).toBeUndefined();
   });
 
   it("심사 응답이 엉뚱해도 구성안을 돌려준다", async () => {
     const { deps, prompts } = scriptedDeps([brief, blueprintPayload("첫판"), { 이상한: "응답" }]);
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(prompts).toHaveLength(3);
     expect(result.blueprint.executiveSummary).toBe("첫판");
@@ -225,7 +225,7 @@ describe("심사가 실패해도 생성은 살린다", () => {
 describe("심사자에게 주는 것", () => {
   it("판매 원칙을 통째로 싣는다", async () => {
     const { deps, prompts } = scriptedDeps([brief, blueprintPayload("첫판"), 통과]);
-    await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
     expect(prompts[2]).toContain("경쟁 상품 페이지에 그대로 붙여도");
   });
@@ -235,7 +235,7 @@ describe("심사자에게 주는 것", () => {
     const { deps, prompts } = scriptedDeps([brief, blueprintPayload("첫판"), 통과]);
     await planFromText(
       { text: "이 문장은 심사자에게 가면 안 된다", aspectRatio: "9:16" },
-      "key",
+      undefined,
       deps,
     );
 

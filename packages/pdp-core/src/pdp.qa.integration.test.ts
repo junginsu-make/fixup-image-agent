@@ -39,16 +39,14 @@ function makeFakeClient(qaScript: QaScript) {
   // 이미지 생성은 fal 로 옮겨가서 client 를 거치지 않는다.
   // client 는 QA 호출만 담당하고, 이미지는 generateImage 주입으로 대신한다.
   const counts = { image: 0, qa: 0 };
-  const client = {
-    models: {
-      generateContent: async () => {
-        const entry = qaScript[counts.qa] ?? { defects: [] };
-        counts.qa += 1;
-        if (entry === "throw") throw new Error("QA model unavailable");
-        return { text: JSON.stringify(entry) };
-      },
-    },
+  const answer = async () => {
+    const entry = qaScript[counts.qa] ?? { defects: [] };
+    counts.qa += 1;
+    if (entry === "throw") throw new Error("QA model unavailable");
+    return { text: JSON.stringify(entry) };
   };
+  // QA 게이트는 `llm` 을 직접 쓰고, 나머지 호출은 옛 모양 어댑터를 거친다.
+  const client = { llm: { generate: answer }, models: { generateContent: answer } };
   const generateImage = async () => {
     counts.image += 1;
     return { base64: `IMG${counts.image}`, mimeType: "image/jpeg" };
@@ -151,8 +149,7 @@ describe("실제 생성 장수(비용 계산용)", () => {
 
   it("QA 거절로 던지는 오류가 만든 장수를 싣는다", async () => {
     const service = new PdpService();
-    (service as any).getRequiredApiKey = () => "key";
-    (service as any).createClient = () => ({});
+    (service as any).getClient = () => ({});
     (service as any).generateSectionImageInternal = async () => ({
       base64: "IMG2",
       mimeType: "image/jpeg",

@@ -1,6 +1,6 @@
 import { planFromText, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { CopyIntensity, GapPolicy, TextPlanRequest } from "@fixup/pdp-core";
-import { resolveGeminiKey } from "../../../../lib/server-keys";
+import { createPdpLlm } from "../../../../lib/pdp/providers";
 import { suggestStyleReference } from "../../../../lib/style-reference";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 
@@ -31,13 +31,13 @@ export async function POST(req: Request) {
       ? (rawBody.gapPolicy as GapPolicy)
       : "ask";
     const body = { ...rawBody, copyIntensity, gapPolicy };
-    const apiKey = resolveGeminiKey();
+    const llm = createPdpLlm();
     let lastEnvelope: ReturnType<typeof toPdpErrorResponse> | null = null;
     let lastStatus = 500;
 
     for (let attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt++) {
       try {
-        const result = await planFromText(body, apiKey);
+        const result = await planFromText(body, llm);
         // 레퍼런스 추천은 곁다리다. 실패해도 구성안은 그대로 돌려준다.
         const suggestion = await suggestStyleReference(reservation.userId, result.brief);
         const usage = await finalizeAiUsage(reservation, true, 0);

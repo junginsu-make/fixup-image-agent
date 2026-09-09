@@ -79,14 +79,14 @@ describe("판독 불가 입력만 거부한다", () => {
 
   it("빈 문자열은 TEXT_INPUT_INSUFFICIENT", async () => {
     await expectCode(
-      planFromText({ text: "", aspectRatio: "9:16" }, "key", deps),
+      planFromText({ text: "", aspectRatio: "9:16" }, undefined, deps),
       "TEXT_INPUT_INSUFFICIENT",
     );
   });
 
   it("공백만 있어도 TEXT_INPUT_INSUFFICIENT", async () => {
     await expectCode(
-      planFromText({ text: "   \n\t ", aspectRatio: "9:16" }, "key", deps),
+      planFromText({ text: "   \n\t ", aspectRatio: "9:16" }, undefined, deps),
       "TEXT_INPUT_INSUFFICIENT",
     );
   });
@@ -94,13 +94,13 @@ describe("판독 불가 입력만 거부한다", () => {
   it("offeringName을 특정하지 못하면 TEXT_INPUT_INSUFFICIENT", async () => {
     const blind = makeTwoStepDeps({ offeringName: "", offeringKind: "other" }, { sections: [rawSection()] });
     await expectCode(
-      planFromText({ text: "asdf", aspectRatio: "9:16" }, "key", blind),
+      planFromText({ text: "asdf", aspectRatio: "9:16" }, undefined, blind),
       "TEXT_INPUT_INSUFFICIENT",
     );
   });
 
   it("얇지만 판독 가능한 입력은 통과시킨다 (되묻지 않는다)", async () => {
-    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, "key", deps);
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
     expect(result.brief.offeringName).toBe("요가");
     expect(result.blueprint.sections).toHaveLength(1);
   });
@@ -380,26 +380,25 @@ describe("대표 이미지 생성", () => {
   };
 
   it("이미지를 돌려주면 그대로 전달한다", async () => {
-    const result = await generateKeyVisual(input, "key", makeDeps());
+    const result = await generateKeyVisual(input, makeDeps());
     expect(result.imageBase64).toBe("AAAA");
     expect(result.mimeType).toBe("image/jpeg");
   });
 
   it("이미지가 비면 PDP_IMAGE_GENERATION_FAILED", async () => {
     const empty = makeDeps({ generateImage: async () => null });
-    await expectCode(generateKeyVisual(input, "key", empty), "PDP_IMAGE_GENERATION_FAILED");
+    await expectCode(generateKeyVisual(input, empty), "PDP_IMAGE_GENERATION_FAILED");
   });
 
   // 라우트는 요청 본문을 그대로 넘긴다. 경계 검증은 코어가 맡는다.
   it("브리프나 섹션이 없으면 INVALID_REQUEST", async () => {
     await expectCode(
-      generateKeyVisual({ ...input, brief: undefined as never }, "key", makeDeps()),
+      generateKeyVisual({ ...input, brief: undefined as never }, makeDeps()),
       "INVALID_REQUEST",
     );
     await expectCode(
       generateKeyVisual(
         { ...input, blueprint: { ...input.blueprint, sections: [] } },
-        "key",
         makeDeps(),
       ),
       "INVALID_REQUEST",
@@ -414,7 +413,7 @@ describe("대표 이미지 생성", () => {
         return { base64: "AAAA", mimeType: "image/jpeg" };
       },
     });
-    await generateKeyVisual({ ...input, aspectRatio: "1:1" }, "key", spy);
+    await generateKeyVisual({ ...input, aspectRatio: "1:1" }, spy);
     expect(seen).toBe("1:1");
   });
 });

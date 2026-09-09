@@ -204,7 +204,7 @@ async function callFal(endpoint: string, payload: FalPayload): Promise<unknown> 
   const apiKey = process.env.FAL_KEY;
   if (!apiKey) {
     throw new PdpServiceError(
-      "GEMINI_API_KEY_MISSING",
+      "AI_KEY_MISSING",
       "이미지 생성 키가 설정되지 않았습니다.",
       "FAL_KEY is not configured.",
     );
@@ -219,7 +219,7 @@ async function callFal(endpoint: string, payload: FalPayload): Promise<unknown> 
   const text = await response.text();
   if (!response.ok) {
     throw new PdpServiceError(
-      response.status === 429 ? "GEMINI_QUOTA_EXCEEDED" : "PDP_IMAGE_GENERATION_FAILED",
+      response.status === 429 ? "AI_QUOTA_EXCEEDED" : "PDP_IMAGE_GENERATION_FAILED",
       response.status === 429
         ? "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요."
         : "이미지를 생성하지 못했습니다.",
@@ -231,7 +231,7 @@ async function callFal(endpoint: string, payload: FalPayload): Promise<unknown> 
     return JSON.parse(text) as unknown;
   } catch {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "이미지 생성 응답을 해석하지 못했습니다.",
       "fal response was not valid JSON.",
     );

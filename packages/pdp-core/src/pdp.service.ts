@@ -1,4 +1,5 @@
-import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import { Type } from "./pdp.llm";
+import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
   userInstructionHead,
@@ -51,7 +52,6 @@ import {
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 
-const ANALYZE_MODEL = "gemini-3.1-pro-preview";
 const DEFAULT_IMAGE_MIME = "image/jpeg";
 
 const REFERENCE_MODEL_MAX_ATTEMPTS = 3;
@@ -135,12 +135,6 @@ type NormalizedReferenceModelImage = {
   mimeType: string;
 };
 
-type ModelAccessCheck = {
-  accessible: boolean;
-  status: number;
-  detail?: string;
-};
-
 export class PdpServiceError extends Error {
   constructor(
     readonly code: PdpErrorCode,
@@ -157,48 +151,71 @@ export class PdpServiceError extends Error {
   }
 }
 
+type LlmPart = { text?: string; inlineData?: { data: string; mimeType: string } };
+
+export interface LegacyContentsClient {
+  llm: PdpLlm;
+  models: {
+    generateContent(args: {
+      name: string;
+      contents: Array<{ parts: LlmPart[] }>;
+      config?: { responseSchema?: unknown; maxOutputTokens?: number };
+    }): Promise<{ text: string }>;
+  };
+}
+
+/**
+ * 옛 호출 모양을 그대로 받는 어댑터.
+ *
+ * 이 파일의 네 호출 자리에는 **시험이 하나도 없다**. 호출 모양까지 한꺼번에
+ * 고치면 안 잡히는 자리 넷을 동시에 건드리게 된다. 그래서 부르는 쪽은 그대로
+ * 두고 말단만 갈아끼웠다 — 프롬프트도 스키마도 한 글자 안 바뀐다.
+ *
+ * `parts` 안의 글은 이어 붙이고 그림은 순서대로 뽑는다. 순서가 중요하다 —
+ * 구성안 만들 때 첫 그림이 제품이고 둘째가 인물이다.
+ */
+function legacyContentsClient(llm: PdpLlm): LegacyContentsClient {
+  return {
+    llm,
+    models: {
+      async generateContent(args) {
+        const parts = args.contents.flatMap((entry) => entry.parts);
+        return llm.generate({
+          name: args.name,
+          prompt: parts
+            .map((part) => part.text)
+            .filter((text): text is string => Boolean(text))
+            .join("\n\n"),
+          images: parts
+            .filter((part) => part.inlineData)
+            .map((part) => ({
+              base64: part.inlineData!.data,
+              mimeType: part.inlineData!.mimeType,
+            })),
+          schema: args.config?.responseSchema,
+          maxTokens: args.config?.maxOutputTokens ?? 8192,
+        });
+      },
+    },
+  };
+}
+
 export class PdpService {
-  async validateGeminiApiKey(geminiApiKeyOverride?: string) {
-    const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
-    const analyzeModelAccess = await checkModelAccess(apiKey, ANALYZE_MODEL);
-
-    if (!analyzeModelAccess.accessible) {
-      throw createModelAccessError(ANALYZE_MODEL, analyzeModelAccess);
-    }
-
-    // 이미지 생성은 fal.ai 를 경유하므로 Gemini 이미지 모델 접근은 확인하지 않는다.
-    // 대신 fal 키가 있는지만 본다.
-    if (!process.env.FAL_KEY) {
-      throw new PdpServiceError(
-        "GEMINI_API_KEY_MISSING",
-        "이미지 생성 키(FAL_KEY)가 설정되지 않았습니다.",
-        "FAL_KEY is not configured."
-      );
-    }
-
-    return {
-      message: "Gemini 키로 텍스트 분석·검수가 가능하고, fal 키로 이미지 생성이 가능합니다.",
-      analyzeModel: ANALYZE_MODEL,
-      imageModel: DEFAULT_IMAGE_MODEL
-    };
-  }
-
   async analyzeProduct(
     request: PdpAnalyzeRequest,
-    geminiApiKeyOverride?: string,
+    llm?: PdpLlm,
     options?: { skipFirstImage?: boolean }
   ) {
-    const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
     const normalizedImage = sanitizeBase64Payload(request.imageBase64);
     const mimeType = normalizeMimeType(request.mimeType);
     const referenceModelImage = normalizeReferenceModelImage(request.modelImageBase64, request.modelImageMimeType);
-    const client = this.createClient(apiKey);
+    const client = this.getClient(llm);
     const referenceModelProfile =
       referenceModelImage ? await this.extractReferenceModelProfile(client, referenceModelImage) : null;
 
     const makeBlueprint = (revisionDirective: string) => retryOperation(async () => {
       const response = await client.models.generateContent({
-        model: ANALYZE_MODEL,
+        name: "pdp_blueprint",
         contents: [
           {
             parts: [
@@ -216,8 +233,6 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
           }
         ] as any,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             // productReading 이 맨 앞이다. JSON 은 앞에서부터 만들어지므로 먼저 적은
@@ -291,11 +306,9 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     const runReview = async (candidate: LandingPageBlueprint) => {
       try {
         const response = await client.models.generateContent({
-          model: ANALYZE_MODEL,
+          name: "pdp_review",
           contents: [{ parts: [{ text: buildReviewPrompt(candidate, SALES_PRINCIPLES) }] }] as never,
           config: {
-            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-            responseMimeType: "application/json",
             responseSchema: REVIEW_SCHEMA as never,
           },
         });
@@ -324,7 +337,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
 
     if (!firstSection) {
       throw new PdpServiceError(
-        "GEMINI_RESPONSE_INVALID",
+        "AI_RESPONSE_INVALID",
         "상세페이지 섹션을 생성하지 못했습니다.",
         "No sections returned from analyze response."
       );
@@ -379,9 +392,8 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     aspectRatio: AspectRatio;
     desiredTone?: string;
     options?: ImageGenOptionsInput;
-  }, geminiApiKeyOverride?: string) {
-    const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
-    const client = this.createClient(apiKey);
+  }, llm?: PdpLlm) {
+    const client = this.getClient(llm);
     const normalizedReferenceModel = normalizeReferenceModelImage(
       request.options?.referenceModelImageBase64,
       request.options?.referenceModelImageMimeType
@@ -431,7 +443,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     aspectRatio: AspectRatio;
     desiredTone?: string;
     options?: InternalImageGenOptionsInput;
-    client?: GoogleGenAI;
+    client?: LegacyContentsClient;
     /** 테스트에서 fal 호출을 대신 끼워 넣는 통로. 운영에서는 비운다. */
     generateImage?: ImageGenerator;
   }): Promise<SectionImageResult> {
@@ -602,11 +614,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
       let qaOk = true;
       let qaDirective = "";
       if (qaEnabled) {
-        const verdict = await runQaGate(client, {
-          generatedImage,
-          section,
-          model: ANALYZE_MODEL
-        });
+        const verdict = await runQaGate(client.llm, { generatedImage, section });
         if (verdict.parseError && sawBlockingOutcome) {
           // fail-open 이지만 이전에 확인된 blocking 을 통과로 위장하지 않는다.
           lastQaOutcome = sawBlockingOutcome;
@@ -659,30 +667,19 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     };
   }
 
-  private getClient(geminiApiKeyOverride?: string) {
-    return this.createClient(this.getRequiredApiKey(geminiApiKeyOverride));
-  }
-
-  private createClient(apiKey: string) {
-    return new GoogleGenAI({ apiKey, apiVersion: "v1alpha" });
-  }
-
-  private getRequiredApiKey(geminiApiKeyOverride?: string) {
-    const apiKey = geminiApiKeyOverride?.trim();
-
-    if (!apiKey) {
+  private getClient(llm?: PdpLlm) {
+    if (!llm) {
       throw new PdpServiceError(
-        "GEMINI_API_KEY_MISSING",
-        "설정 메뉴에서 본인 Gemini API 키를 입력해 주세요."
+        "AI_KEY_MISSING",
+        "AI 공급자 키가 설정되지 않았습니다."
       );
     }
-
-    return apiKey;
+    return legacyContentsClient(llm);
   }
 
-  private async extractReferenceModelProfile(client: GoogleGenAI, referenceModelImage: NormalizedReferenceModelImage) {
+  private async extractReferenceModelProfile(client: LegacyContentsClient, referenceModelImage: NormalizedReferenceModelImage) {
     const response = await client.models.generateContent({
-      model: ANALYZE_MODEL,
+      name: "pdp_person_profile",
       contents: [
         {
           parts: [
@@ -695,8 +692,6 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
         }
       ] as any,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -730,7 +725,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
   }
 
   private async validateGeneratedImage(
-    client: GoogleGenAI,
+    client: LegacyContentsClient,
     input: {
       generatedImage: GeneratedImagePayload;
       referenceModelImage: NormalizedReferenceModelImage;
@@ -739,7 +734,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     }
   ) {
     const response = await client.models.generateContent({
-      model: ANALYZE_MODEL,
+      name: "pdp_person_check",
       contents: [
         {
           parts: [
@@ -752,8 +747,6 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
         }
       ] as any,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -803,8 +796,8 @@ export function toPdpErrorResponse(error: unknown): {
   if (isInvalidApiKeyError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_API_KEY_INVALID" as const,
-      message: "입력한 Gemini API 키를 확인할 수 없습니다. 키가 올바른지 다시 확인해 주세요.",
+      code: "AI_KEY_INVALID" as const,
+      message: "AI 공급자 키를 확인할 수 없습니다. 운영자에게 문의해 주세요.",
       detail
     };
   }
@@ -812,9 +805,9 @@ export function toPdpErrorResponse(error: unknown): {
   if (isPermissionError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_MODEL_ACCESS_DENIED" as const,
+      code: "AI_MODEL_ACCESS_DENIED" as const,
       message:
-        "입력한 Gemini API 키로는 현재 상세페이지 생성에 필요한 모델을 사용할 수 없습니다. Gemini 3.1 Pro Preview와 Gemini 3 Pro Image Preview 접근 권한을 확인해 주세요.",
+        "현재 키로는 상세페이지 생성에 필요한 모델을 쓸 수 없습니다. 운영자에게 문의해 주세요.",
       detail
     };
   }
@@ -822,7 +815,7 @@ export function toPdpErrorResponse(error: unknown): {
   if (isQuotaError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_QUOTA_EXCEEDED" as const,
+      code: "AI_QUOTA_EXCEEDED" as const,
       message: "AI 사용량이 초과되었습니다. 잠시 후 다시 시도하거나 quota 상태를 확인해 주세요.",
       detail
     };
@@ -831,7 +824,7 @@ export function toPdpErrorResponse(error: unknown): {
   if (isJsonError(message)) {
     return {
       ok: false as const,
-      code: "GEMINI_RESPONSE_INVALID" as const,
+      code: "AI_RESPONSE_INVALID" as const,
       message: "AI 응답을 해석하지 못했습니다. 같은 이미지로 다시 시도해 주세요.",
       detail
     };
@@ -1249,7 +1242,7 @@ function parseBlueprintResponse(response: { text?: string }) {
     return sanitizeBlueprint(parsed);
   } catch (error) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "AI 응답을 해석하지 못했습니다.",
       stringifyError(error)
     );
@@ -1473,7 +1466,7 @@ function parseReferenceModelProfileResponse(response: { text?: string }) {
     } satisfies ReferenceModelProfile;
   } catch (error) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "참조 모델 이미지를 해석하지 못했습니다.",
       stringifyError(error)
     );
@@ -1494,7 +1487,7 @@ function parseGeneratedImageValidationResponse(response: { text?: string }) {
     } satisfies GeneratedImageValidation;
   } catch (error) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "생성된 이미지 검증 응답을 해석하지 못했습니다.",
       stringifyError(error)
     );
@@ -1504,9 +1497,9 @@ function parseGeneratedImageValidationResponse(response: { text?: string }) {
 function extractResponseText(response: { text?: string }) {
   if (!response.text) {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "AI 응답이 비어 있습니다.",
-      "Gemini did not return response.text."
+      "provider returned no text."
     );
   }
 
@@ -1643,7 +1636,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
 
     if (isQuotaError(message)) {
       throw new PdpServiceError(
-        "GEMINI_QUOTA_EXCEEDED",
+        "AI_QUOTA_EXCEEDED",
         "AI 사용량이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
         message
       );
@@ -1651,7 +1644,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
 
     if (isJsonError(message)) {
       throw new PdpServiceError(
-        "GEMINI_RESPONSE_INVALID",
+        "AI_RESPONSE_INVALID",
         "AI 응답을 해석하지 못했습니다.",
         message
       );
@@ -1719,67 +1712,6 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function checkModelAccess(apiKey: string, model: string): Promise<ModelAccessCheck> {
-  // 보안: API 키를 URL 쿼리스트링이 아닌 x-goog-api-key 헤더로 전송한다.
-  // (Gemini REST API가 동일하게 지원하므로 동작은 그대로이며 로그 노출 위험만 제거된다.)
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`;
-  const response = await fetch(endpoint, {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      "x-goog-api-key": apiKey
-    }
-  });
-
-  if (response.ok) {
-    return {
-      accessible: true,
-      status: response.status
-    };
-  }
-
-  const detail = extractGoogleApiErrorMessage(await response.text());
-  return {
-    accessible: false,
-    status: response.status,
-    detail
-  };
-}
-
-function createModelAccessError(model: string, access: ModelAccessCheck) {
-  if (access.status === 400 && access.detail && isInvalidApiKeyError(access.detail)) {
-    return new PdpServiceError(
-      "GEMINI_API_KEY_INVALID",
-      "입력한 Gemini API 키가 올바르지 않습니다. 다시 확인해 주세요.",
-      `${model}: ${access.detail}`
-    );
-  }
-
-  if (access.status === 401) {
-    return new PdpServiceError(
-      "GEMINI_API_KEY_INVALID",
-      "입력한 Gemini API 키가 인증되지 않았습니다. 키를 다시 확인해 주세요.",
-      `${model}: ${access.detail ?? "unauthorized"}`
-    );
-  }
-
-  if (access.status === 403 || access.status === 404) {
-    return new PdpServiceError(
-      "GEMINI_MODEL_ACCESS_DENIED",
-      `입력한 Gemini API 키로는 ${model} 모델에 접근할 수 없습니다.`,
-      access.detail
-        ? `${model}: ${access.detail}`
-        : `${model}: permission denied or model unavailable for this key`
-    );
-  }
-
-  return new PdpServiceError(
-    "PDP_ANALYZE_FAILED",
-    "Gemini API 키 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-    access.detail ? `${model}: ${access.detail}` : `${model}: HTTP ${access.status}`
-  );
-}
 
 function extractGoogleApiErrorMessage(rawText: string) {
   const trimmed = rawText.trim();

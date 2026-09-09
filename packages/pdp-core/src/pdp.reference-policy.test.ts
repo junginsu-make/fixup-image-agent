@@ -109,7 +109,7 @@ function section(): SectionBlueprint {
 }
 
 /**
- * 업로드 사진 경로는 생성 뒤 얼굴 일치 검사를 돌린다(Gemini). 여기서는 "같은
+ * 업로드 사진 경로는 생성 뒤 얼굴 일치 검사를 돌린다. 여기서는 "같은
  * 사람으로 나왔다"만 흉내 내서 재시도 없이 한 번에 끝나게 한다.
  */
 const passingClient = {

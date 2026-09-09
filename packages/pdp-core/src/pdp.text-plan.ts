@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "./pdp.llm";
+import type { PdpLlm } from "./pdp.llm";
 import { PdpServiceError } from "./pdp.service";
 import { generateImageViaFal } from "./pdp.image-provider";
 import {
@@ -43,9 +44,14 @@ import type {
  * docs/superpowers/specs/2026-07-27-text-based-pdp-design.md 4.1 참조.
  */
 
-const BRIEF_MODEL = "gemini-3.1-pro-preview";
-const BLUEPRINT_MODEL = "gemini-3.1-pro-preview";
-const REVIEW_MODEL = "gemini-3.1-pro-preview";
+/**
+ * 도구 이름. 어느 모델을 쓰는지는 `apps/web` 이 정한다.
+ *
+ * 전에는 이 자리에 Gemini 모델 이름이 셋 다 같은 문자열로 박혀 있었다.
+ */
+const BRIEF_TOOL = "pdp_brief";
+const BLUEPRINT_TOOL = "pdp_blueprint";
+const REVIEW_TOOL = "pdp_review";
 const DEFAULT_IMAGE_MIME = "image/jpeg";
 
 /**
@@ -78,10 +84,11 @@ type GeneratedImagePayload = { base64: string; mimeType: string };
 
 /**
  * 외부 호출을 한 곳으로 모아 테스트에서 주입할 수 있게 한다.
- * 기본 구현은 apiKey 로 Gemini 를 직접 호출한다.
+ * 기본 구현은 넘겨받은 `PdpLlm` 을 쓴다 — 어느 회사 모델인지는 모른다.
  */
 export interface TextPlanDeps {
-  generateJson(prompt: string, schema: unknown, model: string): Promise<unknown>;
+  /** `name` 은 도구 이름이다. 모델 이름이 아니다. */
+  generateJson(prompt: string, schema: unknown, name: string): Promise<unknown>;
   generateImage(prompt: string, aspectRatio: AspectRatio): Promise<GeneratedImagePayload | null>;
 }
 
@@ -566,43 +573,33 @@ const BLUEPRINT_SCHEMA = {
 
 // ── 기본 구현 ───────────────────────────────────────────────────
 
-function requireApiKey(apiKey?: string) {
-  // GOOGLE_API_KEY 를 먼저 본다. 이름이 여러 개면 어느 쪽이 이기는지가 파일마다
-  // 달라지고, 두 키를 다르게 넣은 순간 경로마다 다른 키를 쓰게 된다.
-  // apps/web/lib/server-keys.ts 와 같은 순서다.
-  const resolved = apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-  if (!resolved) {
-    throw new PdpServiceError("GEMINI_API_KEY_MISSING", "AI 공급자 키가 설정되지 않았습니다.");
-  }
-  return resolved;
-}
-
 function parseJsonText(text: string) {
   try {
     return JSON.parse(text) as unknown;
   } catch {
     throw new PdpServiceError(
-      "GEMINI_RESPONSE_INVALID",
+      "AI_RESPONSE_INVALID",
       "AI 응답을 해석하지 못했습니다.",
       "response was not valid JSON",
     );
   }
 }
 
-function createDefaultDeps(apiKey?: string): TextPlanDeps {
-  const client = new GoogleGenAI({ apiKey: requireApiKey(apiKey) });
+function requireDeps(llm?: PdpLlm): TextPlanDeps {
+  if (!llm) {
+    throw new PdpServiceError("AI_KEY_MISSING", "AI 공급자 키가 설정되지 않았습니다.");
+  }
+  return depsFrom(llm);
+}
 
+function depsFrom(llm: PdpLlm): TextPlanDeps {
   return {
-    async generateJson(prompt, schema, model) {
-      const response = await client.models.generateContent({
-        model,
-        contents: [{ parts: [{ text: prompt }] }] as never,
-        config: { responseMimeType: "application/json", responseSchema: schema as never },
-      });
-      return parseJsonText(response.text ?? "");
+    async generateJson(prompt, schema, name) {
+      const response = await llm.generate({ name, prompt, schema, maxTokens: 8192 });
+      return parseJsonText(response.text);
     },
 
-    // 이미지 생성은 fal 을 경유한다. Gemini 클라이언트는 텍스트(브리프·구성안)에만 쓴다.
+    // 이미지 생성은 fal 을 경유한다. 글 모델은 텍스트(브리프·구성안)에만 쓴다.
     async generateImage(prompt, aspectRatio) {
       return generateImageViaFal(DEFAULT_IMAGE_MODEL, {
         prompt,
@@ -645,7 +642,7 @@ ${details}`;
 
 export async function planFromText(
   input: TextPlanRequest,
-  apiKey?: string,
+  llm?: PdpLlm,
   deps?: TextPlanDeps,
   clock: TextPlanClock = { now: () => Date.now() },
 ): Promise<TextPlanResult> {
@@ -658,9 +655,9 @@ export async function planFromText(
     );
   }
 
-  const resolved = deps ?? createDefaultDeps(apiKey);
+  const resolved = deps ?? requireDeps(llm);
   const brief = normalizeBrief(
-    await resolved.generateJson(buildBriefPrompt(sourceText), BRIEF_SCHEMA, BRIEF_MODEL),
+    await resolved.generateJson(buildBriefPrompt(sourceText), BRIEF_SCHEMA, BRIEF_TOOL),
     sourceText,
   );
 
@@ -685,7 +682,7 @@ export async function planFromText(
           input.gapPolicy,
         ),
         BLUEPRINT_SCHEMA,
-        BLUEPRINT_MODEL,
+        BLUEPRINT_TOOL,
       ),
     );
 
@@ -697,7 +694,7 @@ export async function planFromText(
         await resolved.generateJson(
           buildReviewPrompt(candidate, SALES_PRINCIPLES),
           REVIEW_SCHEMA,
-          REVIEW_MODEL,
+          REVIEW_TOOL,
         ),
       );
     } catch {
@@ -735,7 +732,6 @@ export async function planFromText(
 /** 섹션 이미지들의 색·조명·질감을 묶는 대표 이미지 1장. 항상 텍스트 없이 만든다. */
 export async function generateKeyVisual(
   input: KeyVisualRequest,
-  apiKey?: string,
   deps?: TextPlanDeps,
 ): Promise<{ imageBase64: string; mimeType: string }> {
   if (!input?.brief?.offeringName || !input.blueprint?.sections?.length) {
