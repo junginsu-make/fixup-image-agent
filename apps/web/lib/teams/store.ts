@@ -147,13 +147,26 @@ export async function listUnassigned(): Promise<UnassignedRow[]> {
  *
  * 화면이 무엇을 낼지가 여기서 갈린다 — 운영자는 전부, 팀장은 자기 팀,
  * 소속 없는 사람은 「아직 팀이 없습니다」.
+ *
+ * **못 읽은 것을 「소속 없음」으로 돌려주지 않는다.** 예전에는 오류를 버리고
+ * `null` 을 줬는데, 그 `null` 은 두 가지 서로 다른 사실을 한 값으로 뭉갠 것이다
+ * — 「이 사람은 팀이 없다」와 「지금은 알 수 없다」. 부르는 쪽은 앞의 뜻으로
+ * 읽으므로, 조회가 한 번 흔들리면 **문지기가 열린 채로 실패한다**:
+ * `assignMemberAction` 의 검사가 남의 팀 사람을 「아직 팀이 없는 사람」으로
+ * 보고 통과시킨다. 읽기 범위 쪽도 조용히 개인 것만 보여 주어, 팀 자료가
+ * 사라진 것처럼 보인다.
+ *
+ * 같은 실수를 `lib/access/core.ts` 의 `ownerFilter` 가 이미 겪었다 — 「값이
+ * 비었다」와 「조건이 없다」를 한 값으로 두면 질의에 그대로 흘러 들어간다.
+ * 모르면 던진다. 부르는 쪽이 그 사실을 알아야 한다.
  */
 export async function myMembership(
   userId: string,
 ): Promise<{ teamId: string; role: TeamRole } | null> {
   if (noTeamStore()) return null;
-  const { data } = await createSupabaseAdminClient()
+  const { data, error } = await createSupabaseAdminClient()
     .from("team_members").select("team_id,role").eq("user_id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
   if (!data) return null;
   const row = data as { team_id: string; role: TeamRole };
   return { teamId: row.team_id, role: row.role };
@@ -355,15 +368,30 @@ export async function assignMember(
    * 팀장을 B팀으로 옮기면 A팀은 팀장 0명이 되어, 운영자가 손대기 전에는
    * 아무도 사람을 넣고 뺄 수 없는 굳은 팀이 됐다 — `core.ts` 가 명시적으로
    * 없애려던 상태다. 팀을 옮기는 것은 옛 팀에서 빠지는 것이므로 같은 규칙을 건다.
+   *
+   * **제자리에 다시 넣는 것도 같은 규칙이다.** 배정은 자리뿐 아니라 맡은 자리
+   * (`role`)까지 덮어쓴다. 그래서 이미 이 팀인 사람을 `role: "member"` 로 다시
+   * 보내면 `setMemberRole` 을 거치지 않고 왕관이 벗겨진다 — 혼자뿐인 팀장이
+   * 자기 ID 를 그렇게 보내면 그 팀은 팀장 0명이 된다. 배정 폼과 역할 폼이
+   * 서로 다른 답을 내면 안 되므로 여기서 `canDemote` 를 같이 본다.
    */
-  const { data: current } = await admin
+  const { data: current, error: currentError } = await admin
     .from("team_members").select("team_id").eq("user_id", userId).maybeSingle();
+  // 못 읽은 것을 「소속 없음」으로 넘기면 아래 두 검사가 통째로 건너뛰어진다.
+  if (currentError) throw new Error(currentError.message);
   const fromTeamId = (current as { team_id: string } | null)?.team_id;
 
   if (fromTeamId && fromTeamId !== teamId) {
     const members = await membersOf(fromTeamId);
     if (!canRemove(members, userId)) {
       throw new Error("마지막 팀장은 다른 팀으로 옮길 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
+    }
+  }
+
+  if (fromTeamId === teamId && role === "member") {
+    const members = await membersOf(teamId);
+    if (!canDemote(members, userId)) {
+      throw new Error("마지막 팀장은 팀원으로 내릴 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
     }
   }
 

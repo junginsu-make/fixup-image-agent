@@ -42,3 +42,31 @@ describe("팀을 옮기면", () => {
     expect(store).toContain("if (fromTeamId && fromTeamId !== teamId) {");
   });
 });
+
+describe("제자리에 다시 넣어도", () => {
+  it("마지막 팀장은 팀원으로 안 내려간다", () => {
+    // 배정은 맡은 자리까지 덮어쓴다. 이미 이 팀인 사람을 role: "member" 로
+    // 다시 보내면 `setMemberRole` 을 안 거치고 왕관이 벗겨지므로, 혼자뿐인
+    // 팀장이 자기 ID 를 그렇게 보내면 그 팀이 팀장 0명으로 굳는다.
+    expect(store).toContain('if (fromTeamId === teamId && role === "member") {');
+    const assign = store.slice(store.indexOf("export async function assignMember("));
+    expect(assign.slice(0, assign.indexOf("export async function removeMember")))
+      .toContain("canDemote(members, userId)");
+  });
+});
+
+describe("소속을 못 읽으면", () => {
+  it("「소속 없음」으로 넘기지 않고 던진다", () => {
+    // `null` 하나에 「팀이 없다」와 「지금은 알 수 없다」를 함께 담으면,
+    // 조회가 한 번 흔들릴 때 문지기가 열린 채로 실패한다 —
+    // `assignMemberAction` 이 남의 팀 사람을 미배정으로 보고 통과시킨다.
+    const membership = store.slice(store.indexOf("export async function myMembership("));
+    expect(membership.slice(0, membership.indexOf("export async function teamIdOf")))
+      .toContain("if (error) throw new Error(error.message);");
+  });
+
+  it("배정도 같은 자리에서 멈춘다", () => {
+    // 못 읽은 것을 넘기면 마지막 팀장 검사 두 개가 통째로 건너뛰어진다.
+    expect(store).toContain("if (currentError) throw new Error(currentError.message);");
+  });
+});

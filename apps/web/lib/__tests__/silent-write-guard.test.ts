@@ -11,12 +11,21 @@ import { readFileSync } from "node:fs";
  *
  * 세 곳이 같은 함정에 빠져 있었다. 셋 다 지운 줄을 세는지 여기서 지킨다.
  */
-const flowStore = readFileSync(new URL("../sns-flow-store.ts", import.meta.url), "utf8");
-const library = readFileSync(new URL("../server-library.ts", import.meta.url), "utf8");
-const posterStore = readFileSync(new URL("../poster/supabase-store.ts", import.meta.url), "utf8");
-const posterRoute = readFileSync(
-  new URL("../../app/api/poster/projects/[id]/route.ts", import.meta.url), "utf8",
-);
+/**
+ * 줄바꿈을 맞춰서 읽는다.
+ *
+ * 여러 줄에 걸친 배선을 그대로 찾는 검사가 아래에 있는데, 이 저장소는
+ * `core.autocrlf=true` 로 받는 곳(윈도)에서는 파일이 `\r\n` 으로 놓인다.
+ * 그러면 검사에 적은 `\n` 이 안 맞아, 소스는 멀쩡한데 시험만 빨개진다.
+ * 여기서 보려는 것은 배선이지 그 사람이 어떤 운영체제로 받았는지가 아니다.
+ */
+const source = (path: string) =>
+  readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+
+const flowStore = source("../sns-flow-store.ts");
+const library = source("../server-library.ts");
+const posterStore = source("../poster/supabase-store.ts");
+const posterRoute = source("../../app/api/poster/projects/[id]/route.ts");
 
 describe("카드뉴스 저장소", () => {
   it("저장이 소유자 조건을 걸고 쓴 줄을 센다", () => {
