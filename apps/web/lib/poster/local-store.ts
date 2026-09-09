@@ -95,11 +95,14 @@ export function createLocalPosterProjectStore(
       });
     },
     async remove(id) {
-      await database.update((data) => {
+      return database.update((data) => {
         const list = bucket(data, "posterProjects");
         const index = list.findIndex((entry) => entry.id === id && entry.userId === userId);
-        if (index < 0) throw notFound("포스터 작업");
+        // 없으면 던지지 않고 false 를 준다 — 운영(RLS)과 같은 답을 내야
+        // 부르는 쪽이 두 벌의 갈래를 안 만든다.
+        if (index < 0) return false;
         list.splice(index, 1);
+        return true;
       });
     },
   };

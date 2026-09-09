@@ -105,8 +105,13 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
     },
     async remove(id) {
       const client = await createSupabaseServerClient();
-      const { error } = await client.from("poster_projects").delete().eq("id", id).eq("user_id", userId);
+      // **지운 줄을 받아 본다.** 조건에 안 걸리면 supabase-js 는 오류 대신
+      // 빈 결과를 주므로, 세지 않으면 남의 작업 삭제가 성공으로 보인다.
+      const { data, error } = await client
+        .from("poster_projects").delete().eq("id", id).eq("user_id", userId)
+        .select("id");
       checked(null, error, "포스터 작업 지우기");
+      return (data ?? []).length > 0;
     },
   };
 }

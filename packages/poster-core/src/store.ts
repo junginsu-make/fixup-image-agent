@@ -116,7 +116,17 @@ export interface PosterProjectStore {
   get(id: string): Promise<PosterProjectRecord | undefined>;
   create(input: Omit<PosterProjectRecord, "id" | "createdAt" | "updatedAt">): Promise<PosterProjectRecord>;
   update(id: string, patch: Partial<Pick<PosterProjectRecord, "title" | "status" | "ratio" | "modelId" | "data">>): Promise<PosterProjectRecord>;
-  remove(id: string): Promise<void>;
+  /**
+   * 지운다. **정말 지웠으면 true.**
+   *
+   * `void` 였을 때, 팀 읽기 정책으로 목록에 뜬 팀원의 작업을 지우면 RLS 가
+   * 0줄로 막는데 supabase-js 는 그것을 오류로 주지 않아 그대로 통과했다.
+   * 부르는 쪽은 성공으로 알고 **파일 삭제를 admin 권한으로 이어서 돌렸고,
+   * 그것은 RLS 를 우회해 남의 그림을 실제로 지웠다.**
+   *
+   * 지운 줄이 없으면 false 를 준다 — 부르는 쪽이 거기서 멈춰야 한다.
+   */
+  remove(id: string): Promise<boolean>;
 }
 
 export interface PosterReferenceStore {
