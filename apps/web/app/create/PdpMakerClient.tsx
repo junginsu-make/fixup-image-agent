@@ -1030,16 +1030,6 @@ export function PdpMakerClient() {
                     <strong className="text-foreground">비슷하게 따라갑니다.</strong> 필요한 것만 골라도 됩니다.
                     1단계에 올린 제품 사진은 항상 그대로 유지됩니다.
                   </p>
-                  {/*
-                    풀리는 것과 안 풀리는 것을 미리 밝힌다. 자리 지시는 그 자리의
-                    보호 문구만 뺀다 — 그림의 결이나 텍스트 정책은 따로 정한 값이라
-                    여기 적어도 안 바뀐다. 안 밝히면 「적었는데 왜 안 되지」가 된다.
-                  */}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    각 그림 아래에 <strong className="text-foreground">어떻게 쓸지 직접 적으면</strong> 그
-                    그림의 기본 규칙 대신 적은 말을 따릅니다. 다만 그림의 결(사진·애니)과 글자 넣기는
-                    설정에서 정하는 값이라 여기 적어도 바뀌지 않습니다.
-                  </p>
                 </div>
               </div>
 
