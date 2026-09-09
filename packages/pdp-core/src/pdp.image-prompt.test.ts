@@ -188,3 +188,93 @@ describe("full-image 모드가 카피를 온전히 넘긴다", () => {
   });
 });
 
+
+/**
+ * 화면에서 고른 인물 조건이 **그림 프롬프트까지 가야 한다.**
+ *
+ * 2026-09-09 확인: 성별·나이대·국가·가이드 우선 모드 넷을 화면에서 고를 수
+ * 있는데 엔진이 하나도 안 읽고 있었다. 그 값들을 쓰는 함수(`buildImagePrompt`)는
+ * 시험 말고 부르는 곳이 없었다.
+ *
+ * 게다가 국가는 무시되는 정도가 아니라 **반대로** 갔다 — 프롬프트가
+ * 「한국인」과 `location: "Korea"` 를 못 박고 있었다.
+ */
+describe("인물 조건이 그림까지 간다", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+
+  it("안 고르면 지금까지처럼 한국이다", () => {
+    const j = JSON.parse(buildImageJson(makeSection(), { ...base }));
+    expect(j.scene.location).toBe("Korea");
+    expect(JSON.stringify(j.scene.people)).toMatch(/Korean/);
+  });
+
+  it("국가를 고르면 그 나라로 간다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection(), { ...base, modelCountry: "france" }),
+    );
+    expect(j.scene.location).toBe("France");
+    expect(JSON.stringify(j.scene.people)).toMatch(/French/);
+    expect(JSON.stringify(j.scene.people)).not.toMatch(/Korean/);
+  });
+
+  it("성별과 나이대가 묘사로 실린다", () => {
+    const people = JSON.parse(
+      buildImageJson(makeSection(), {
+        ...base,
+        modelGender: "male",
+        modelAgeRange: "40s",
+      }),
+    ).scene.people as string;
+    expect(people).toMatch(/man/);
+    expect(people).toMatch(/40s/);
+  });
+
+  it("여성·10대도 그대로 간다", () => {
+    const people = JSON.parse(
+      buildImageJson(makeSection(), { ...base, modelGender: "female", modelAgeRange: "teen" }),
+    ).scene.people as string;
+    expect(people).toMatch(/woman/);
+    expect(people).toMatch(/teen/);
+  });
+
+  /**
+   * 사진이나 캐릭터를 붙였으면 **그쪽이 누구인지를 정한다.**
+   * 설정으로 덮으면 얼굴은 그 사람인데 나이·국적 설명이 부딪힌다.
+   */
+  it("인물 참조가 붙으면 설정이 사람을 덮지 않는다", () => {
+    const people = JSON.parse(
+      buildImageJson(makeSection(), {
+        ...base,
+        withModel: true,
+        modelGender: "male",
+        modelCountry: "france",
+      }),
+    ).scene.people as string;
+    expect(people).toMatch(/required|must/i);
+    expect(people).not.toMatch(/French man/);
+  });
+
+  it("시스템 프롬프트에도 같은 나라가 실린다", () => {
+    const prompt = buildImageSystemPrompt({ ...base, modelCountry: "japan" });
+    expect(prompt).toMatch(/Japanese/);
+    expect(prompt).not.toMatch(/they must be Korean/);
+  });
+});
+
+describe("가이드 우선 모드", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+  const section = () => ({ ...makeSection(), layout_notes: "왼쪽 정렬", style_guide: "짙은 올리브" });
+
+  it("기본은 가이드 우선 — 구성안의 배치와 스타일을 따른다", () => {
+    const j = JSON.parse(buildImageJson(section(), { ...base }));
+    expect(j.layout).toBe("왼쪽 정렬");
+    expect(j.design_system).toBe("짙은 올리브");
+    expect(j.guide_priority).toMatch(/guide/i);
+  });
+
+  it("스타일 우선이면 촬영 방식이 이긴다고 말한다", () => {
+    const j = JSON.parse(buildImageJson(section(), { ...base, guidePriorityMode: "style-first" }));
+    expect(j.guide_priority).toMatch(/shot type|style/i);
+    expect(j.guide_priority).toMatch(/ignore|override|wins/i);
+  });
+});

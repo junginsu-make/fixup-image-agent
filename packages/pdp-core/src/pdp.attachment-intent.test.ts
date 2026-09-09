@@ -131,3 +131,43 @@ describe("적은 자리의 고정 문구만 빠진다", () => {
     expect(prompt).toContain("Never redesign, restyle or substitute the product");
   });
 });
+
+/**
+ * 화면에서 고른 인물 조건이 **fal 로 나가는 진짜 프롬프트**까지 가는가.
+ *
+ * 2026-09-09 확인: 성별·나이대·국가를 고를 수 있는데 엔진이 안 읽고 있었다.
+ * 옵션에 실어 보내는 것과 프롬프트에 실리는 것은 다르다.
+ */
+describe("인물 조건이 프롬프트까지 간다", () => {
+  it("고른 나라와 성별이 실린다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      modelCountry: "japan",
+      modelGender: "male",
+      modelAgeRange: "40s",
+    });
+
+    expect(prompt).toMatch(/Japanese/);
+    expect(prompt).toMatch(/man/);
+    expect(prompt).toMatch(/40s/);
+  });
+
+  it("안 고르면 지금까지처럼 한국이다", async () => {
+    const prompt = await promptFor({ style: "studio", withModel: false, outputMode: "editable" });
+    expect(prompt).toMatch(/Korean/);
+  });
+
+  it("가이드 우선 모드가 실린다", async () => {
+    const guide = await promptFor({ style: "studio", withModel: false, outputMode: "editable" });
+    const shot = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      guidePriorityMode: "style-first",
+    });
+    expect(guide).toMatch(/guide_priority/);
+    expect(shot).toMatch(/shot type wins/);
+  });
+});

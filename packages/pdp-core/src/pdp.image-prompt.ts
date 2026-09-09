@@ -1,5 +1,13 @@
 import { designerPersona, imageLookDirective, type ImageLook } from "@fixup/shared";
-import type { PdpImageStyle, PdpOutputMode, SectionBlueprint } from "./types";
+import type {
+  PdpGuidePriorityMode,
+  PdpImageStyle,
+  PdpModelAgeRange,
+  PdpModelCountry,
+  PdpModelGender,
+  PdpOutputMode,
+  SectionBlueprint,
+} from "./types";
 
 /**
  * 이미지 생성 프롬프트를 JSON 구조로 만든다.
@@ -30,6 +38,51 @@ export interface ImagePromptOptions {
    * 그래서 여기서만 기본이 다르다.
    */
   look?: ImageLook;
+  /**
+   * 사람이 나올 때 **누구인가**. 화면의 인물 설정이 여기로 온다.
+   *
+   * 인물 사진이나 캐릭터가 붙으면(`withModel`) 그쪽이 누구인지를 정하므로
+   * 이 값들은 안 쓴다 — 얼굴은 그 사람인데 나이·국적 설명이 부딪히면 모델이
+   * 절충해 제3의 인물이 된다.
+   */
+  modelGender?: PdpModelGender;
+  modelAgeRange?: PdpModelAgeRange;
+  modelCountry?: PdpModelCountry;
+  /**
+   * 구성안의 배치·스타일과 촬영 방식이 부딪힐 때 어느 쪽을 따를지.
+   *
+   * 화면에 손잡이가 있는데 엔진이 안 보고 있었다(2026-09-09 확인).
+   */
+  guidePriorityMode?: PdpGuidePriorityMode;
+}
+
+/** 나라 이름. 안 고르면 지금까지처럼 한국이다. */
+const COUNTRY_LABEL: Record<PdpModelCountry, { people: string; place: string }> = {
+  korea: { people: "Korean", place: "Korea" },
+  japan: { people: "Japanese", place: "Japan" },
+  usa: { people: "American", place: "the United States" },
+  france: { people: "French", place: "France" },
+  germany: { people: "German", place: "Germany" },
+  africa: { people: "African", place: "Africa" },
+};
+
+const AGE_LABEL: Record<PdpModelAgeRange, string> = {
+  teen: "in their late teens",
+  "20s": "in their 20s",
+  "30s": "in their 30s",
+  "40s": "in their 40s",
+  "50s_plus": "in their 50s or older",
+};
+
+function countryOf(options: ImagePromptOptions) {
+  return COUNTRY_LABEL[options.modelCountry ?? "korea"];
+}
+
+/** 「40대 한국 남성」 같은 한 마디. 사람이 나올 때만 쓴다. */
+export function personDescriptor(options: ImagePromptOptions) {
+  const country = countryOf(options).people;
+  const gender = options.modelGender === "male" ? "man" : "woman";
+  return `a ${country} ${gender} ${AGE_LABEL[options.modelAgeRange ?? "20s"]}`;
 }
 
 /** 상세페이지의 기본 결. 이유는 `ImagePromptOptions.look` 주석 참조. */
@@ -71,9 +124,12 @@ function peopleRule(options: ImagePromptOptions) {
     return "none — this is a product or texture shot. Do not add a person.";
   }
   if (options.withModel) {
-    return "required — the supplied reference person must appear, and must read as Korean.";
+    // 붙인 사진·캐릭터가 누구인지를 정한다. 여기서 나이·국적을 덧대면
+    // 얼굴은 그 사람인데 설명이 부딪혀 제3의 인물이 나온다.
+    return "required — the supplied reference person must appear exactly as shown.";
   }
-  return "optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they must be Korean, and the setting must read as Korea.";
+  const place = countryOf(options).place;
+  return `optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as ${personDescriptor(options)}, and the setting must read as ${place}.`;
 }
 
 export function buildImageSystemPrompt(options: ImagePromptOptions) {
@@ -84,7 +140,7 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     designerPersona(),
     "You are art-directing Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
-    "People are optional. Only include a person when the scene genuinely calls for one; when one appears they must be Korean.",
+    `People are optional. Only include a person when the scene genuinely calls for one; when one appears they should read as ${personDescriptor(options)}.`,
     // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용
     // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
     look === "photoreal"
@@ -107,7 +163,7 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
     scene: {
       subject: section.prompt_en || section.prompt_ko || section.headline,
       setting: STYLE_SETTING[options.style],
-      location: "Korea",
+      location: countryOf(options).place,
       people: peopleRule(options),
     },
     layout: section.layout_notes || "compose it the way this message deserves",
@@ -136,6 +192,15 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
   if (section.style_guide) {
     brief.design_system = section.style_guide;
   }
+
+  /*
+    구성안의 배치·스타일과 촬영 방식이 부딪힐 때 어느 쪽을 따를지.
+    화면에 손잡이가 있는데 엔진이 안 보고 있었다.
+  */
+  brief.guide_priority =
+    options.guidePriorityMode === "style-first"
+      ? "the selected shot type wins — ignore layout and design_system whenever they conflict with it"
+      : "the guide wins — follow layout and design_system first, and treat the shot type as a supporting constraint";
   if (section.negative_prompt) {
     brief.avoid = section.negative_prompt;
   }
