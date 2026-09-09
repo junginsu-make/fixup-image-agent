@@ -1,5 +1,5 @@
-import { creditUnits, llmCostUsd } from "@fixup/shared";
-import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
+import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { settleSnsReservation } from "../../../../../../lib/sns/settle";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../lib/sns-generation-store";
 import { createSnsGenerationProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
@@ -22,7 +22,18 @@ export async function POST(_request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "생성 흐름을 찾을 수 없습니다." }, { status: 404 });
-      if (!hasActiveQueuedGeneration(project.data.flow)) return Response.json({ ok: true, project, active: false });
+      /**
+       * **도는 중이 아니어도 열쇠가 남아 있으면 마무리한다.**
+       *
+       * 예전에는 여기서 그냥 빠져나갔다. 그래서 사이드바 「중지」로 끝났거나
+       * 그림 칸이 없어 제출 안에서 끝난 흐름은 예약이 영영 안 풀렸고, 이미
+       * 나간 fal 값도 장부에 안 실렸다.
+       */
+      if (!hasActiveQueuedGeneration(project.data.flow)) {
+        const settled = await settleSnsReservation(auth.member.userId, project.data.flow);
+        if (settled === project.data.flow) return Response.json({ ok: true, project, active: false });
+        return Response.json({ ok: true, project: await store.save(id, settled, "ready"), active: false });
+      }
       const providers = createSnsGenerationProviders();
       project = await refreshProjectAssetUrls(project);
       const dependencies = await createQueuedGenerationDependencies({
@@ -48,45 +59,7 @@ export async function POST(_request: Request, context: Context) {
        * 확정이 실패해도 결과는 돌려준다 — 카드는 이미 저장됐고, 묶인 장은 예약이
        * 만료되면 풀린다. 여기서 막으면 사용자가 만든 카드를 못 본다.
        */
-      let settled = flow;
-      const reservationId = flow.generation?.reservationId;
-      if (!active && reservationId) {
-        /**
-         * **이번에 늘어난 만큼만 받는다.**
-         *
-         * `flow.costs` 는 쌓이기만 한다. 합계를 그냥 쓰면 다시 만들기를 누를
-         * 때마다 옛 값을 또 받는다.
-         */
-        const total = flow.costs.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0);
-        const spent = Math.max(0, total - (flow.generation?.costBaselineUsd ?? 0));
-        /**
-         * 이번에 고른 장 중 실제로 나온 것. 옛 카드는 안 센다.
-         *
-         * **검수에 걸린 장도 나온 장이다.** `review_required` 는 그림이 이미
-         * 만들어졌고 fal 값도 다 나간 상태이고, 원고와 글자가 다르다는 것은 이
-         * 도구의 정상 결과다. 예전에는 `"done"` 만 세어서, 여섯 장이 모두 검수에
-         * 걸리면 `made` 가 0 이 됐다. 그러면 `finalize_generation` 이
-         * `consumed_units` 를 0 으로 만들어 이미 나간 비용이 통째로 사라졌다.
-         * 표지 한 장이 그대로 놓이는 구성이냐에 따라 과금 여부가 갈리기까지 했다.
-         */
-        const picked = new Set(flow.generation?.selectedCardIndexes ?? []);
-        const made = flow.cards.filter(
-          (card) => picked.has(card.index) && (card.status === "done" || card.status === "review_required"),
-        ).length;
-        try {
-          await finalizeAiUsage(
-            { userId: auth.member.userId, requestId: reservationId },
-            made > 0,
-            creditUnits(spent + llmCostUsd({ planCalls: 1 + made })),
-          );
-        } catch {
-          // 삼킨다. 사용자가 만든 카드를 못 보는 것이 더 나쁘다.
-        }
-        settled = {
-          ...flow,
-          generation: { ...flow.generation!, reservationId: undefined, costBaselineUsd: undefined },
-        };
-      }
+      const settled = active ? flow : await settleSnsReservation(auth.member.userId, flow);
 
       const saved = await store.save(id, settled, active ? "generating" : "ready");
       return Response.json({ ok: true, project: saved, active });

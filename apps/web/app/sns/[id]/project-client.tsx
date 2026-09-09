@@ -175,7 +175,11 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setRegeneratingIndex(index);
     setMessage("");
     try {
-      setProject(await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, { method: "POST" }));
+      // 다시 만들기도 크레딧이 깎인다 — 열쇠가 없으면 예약이 거절된다.
+      setProject(await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, {
+        method: "POST",
+        headers: billableHeaders(),
+      }));
       setView("result");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다.");
