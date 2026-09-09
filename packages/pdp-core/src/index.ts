@@ -5,6 +5,7 @@ import type {
   PdpAnalyzeSuccessResponse,
   PdpErrorCode,
   PdpGenerateImageRequest,
+  ImageGenOptionsInput,
   PdpGenerateImageSuccessResponse,
   PdpValidateApiKeySuccessResponse,
   QaDefect

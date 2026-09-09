@@ -10,6 +10,7 @@ import type {
   CopyIntensity,
   GapPolicy,
   ImageGenOptions,
+  ImageGenOptionsInput,
   ImageModelId,
   LandingPageBlueprint,
   PdpGuidePriorityMode,
@@ -112,21 +113,15 @@ type InternalImageGenOptions = ImageGenOptions & {
   characterReference?: { base64: string; mimeType: string; identityPrompt: string };
   /** 강조할 단어. 시나리오 단계에서 정한다. */
   emphasisWords?: string[];
-} & PdpLookInput;
+};
 
 /**
- * 화면에서 넘어오는 결·지시. 둘 다 선택이다.
+ * 들어오는 옵션. 빠진 칸은 `normalizeImageOptions` 가 채운다.
  *
- * `ImageGenOptions`(types.ts)에 두는 것이 제자리지만 그 파일은 이 작업의 담당
- * 범위 밖이라 여기서 얹는다. 값은 JSON 으로 들어오므로 `look` 은 문자열로 받고
- * `normalizeImageOptions` 가 아는 값인지 확인한다 — 경계에서 검증한다.
+ * 완성된 `InternalImageGenOptions` 와 일부러 나눠 둔다 — 하나로 두면 라우트에서
+ * `as` 로 눌러야 하고, 그러면 진짜 어긋남까지 같이 눌린다.
  */
-export type PdpLookInput = {
-  /** 그림의 결. 안 고르면 `photoreal` — 상세페이지는 지금까지 늘 사진이었다. */
-  look?: ImageLook | string;
-  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
-  userInstruction?: string;
-};
+type InternalImageGenOptionsInput = Partial<InternalImageGenOptions>;
 
 /** 아는 결인지 확인한다. 모르는 값은 기본값으로 되돌린다. */
 function normalizeLook(value: ImageLook | string | undefined): ImageLook {
@@ -383,8 +378,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
-    // 결·사용자 지시는 `ImageGenOptions` 밖에서 얹는다(PdpLookInput 주석 참조).
-    options?: ImageGenOptions & PdpLookInput;
+    options?: ImageGenOptionsInput;
   }, geminiApiKeyOverride?: string) {
     const apiKey = this.getRequiredApiKey(geminiApiKeyOverride);
     const client = this.createClient(apiKey);
@@ -436,7 +430,7 @@ ${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModel
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
-    options?: InternalImageGenOptions;
+    options?: InternalImageGenOptionsInput;
     client?: GoogleGenAI;
     /** 테스트에서 fal 호출을 대신 끼워 넣는 통로. 운영에서는 비운다. */
     generateImage?: ImageGenerator;
@@ -1331,7 +1325,7 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
  * 그래서 받은 것을 그대로 펼치고 기본값만 덮어쓴다.
  */
 function normalizeImageOptions(
-  options?: InternalImageGenOptions,
+  options?: InternalImageGenOptionsInput,
 ): InternalImageGenOptions & { look: ImageLook; userInstruction: string } {
   return {
     ...options,

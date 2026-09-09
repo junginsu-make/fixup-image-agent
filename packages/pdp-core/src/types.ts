@@ -1,3 +1,4 @@
+import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { ProductReading } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
@@ -317,6 +318,15 @@ export interface ImageGenOptions {
    * 3종을 다 보내면 참조가 늘어 서로를 희석시킨다.
    */
   characterReference?: { base64: string; mimeType: string; identityPrompt: string };
+  /**
+   * 그림의 결. 안 고르면 `photoreal` — 상세페이지는 지금까지 늘 사진이었다.
+   *
+   * 값은 JSON 으로 들어오므로 문자열도 받는다. 아는 값인지는 pdp.service 의
+   * `normalizeImageOptions` 가 경계에서 확인한다.
+   */
+  look?: ImageLook | string;
+  /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
+  userInstruction?: string;
 }
 
 // ── 텍스트 기반 진입 ─────────────────────────────────────────────
@@ -426,12 +436,22 @@ export interface PdpAnalyzeSuccessResponse {
   result: GeneratedResult;
 }
 
+/**
+ * 화면이 그물 너머로 보내는 옵션.
+ *
+ * **완성된 옵션과 들어오는 옵션은 다른 물건이다.** 화면은 `style`·`withModel` 을
+ * 빼고 보낼 수 있고, 빠진 칸은 `normalizeImageOptions` 가 경계에서 채운다.
+ * 전에는 이 둘을 같은 타입으로 두고 라우트에서 `as` 로 눌렀다 — 그러면 진짜
+ * 어긋남도 함께 눌린다.
+ */
+export type ImageGenOptionsInput = Partial<ImageGenOptions>;
+
 export interface PdpGenerateImageRequest {
   originalImageBase64: string;
   section: SectionBlueprint;
   aspectRatio: AspectRatio;
   desiredTone?: string;
-  options?: ImageGenOptions;
+  options?: ImageGenOptionsInput;
 }
 
 export interface PdpGenerateImageSuccessResponse {

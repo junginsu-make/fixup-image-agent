@@ -42,12 +42,6 @@ type BatchRequest = {
   userInstruction?: string;
 };
 
-/**
- * 결·사용자 지시는 `ImageGenOptions` 밖에서 얹는다 — 그 타입은 이 작업의 담당
- * 범위 밖이라 손대지 않았다. 값 검증은 pdp-core 의 `normalizeImageOptions` 가 한다.
- */
-type PdpBatchImageOptions = ImageGenOptions & { look?: string; userInstruction?: string };
-
 export async function POST(req: Request) {
   let body: BatchRequest;
   try {
@@ -103,9 +97,7 @@ export async function POST(req: Request) {
 
   const settled = await Promise.allSettled(
     sections.map((section) => {
-      // 객체를 먼저 만들어 넘긴다. 호출부에 그대로 적으면 TypeScript 가
-      // ImageGenOptions 에 없는 열쇠(look·userInstruction)를 초과 속성으로 막는다.
-      const options: PdpBatchImageOptions = {
+      const options: ImageGenOptions = {
         style: "lifestyle",
         withModel: false,
         outputMode: body.outputMode ?? "full-image",

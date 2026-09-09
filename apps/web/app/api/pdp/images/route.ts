@@ -5,16 +5,17 @@ import {
   toPdpErrorResponse,
   mapPdpErrorCodeToStatus,
 } from "@fixup/pdp-core";
-import type { ImageGenOptions, PdpGenerateImageRequest } from "@fixup/pdp-core";
+import type { ImageGenOptionsInput, PdpGenerateImageRequest } from "@fixup/pdp-core";
 
 /**
- * 화면이 보내는 몸통. 결(`look`)과 사용자 지시는 `ImageGenOptions` 밖에서 얹는다 —
- * 그 타입은 이 작업의 담당 범위 밖이라 손대지 않았다. 값이 아는 결인지는
- * pdp-core 의 `normalizeImageOptions` 가 확인한다.
+ * 화면이 보내는 몸통.
+ *
+ * 결(`look`)과 사용자 지시는 이제 `ImageGenOptions` 안에 있다. 값이 아는 결인지는
+ * pdp-core 의 `normalizeImageOptions` 가 경계에서 확인한다.
  */
 type PdpImagesRequestBody = PdpGenerateImageRequest & {
   characterId?: string;
-  options?: ImageGenOptions & { look?: string; userInstruction?: string };
+  options?: ImageGenOptionsInput;
 };
 import { loadCharacterView } from "../../../../lib/characters";
 import { resolveGeminiKey } from "../../../../lib/server-keys";
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
     const request: PdpImagesRequestBody = characterReference
       ? {
           ...body,
-          options: { ...(body.options ?? {}), characterReference } as PdpImagesRequestBody["options"],
+          options: { ...(body.options ?? {}), characterReference },
         }
       : body;
 
