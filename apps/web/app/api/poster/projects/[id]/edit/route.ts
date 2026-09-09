@@ -1,10 +1,11 @@
-import { canEdit, planEditJob } from "@fixup/poster-core";
+import { canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
 import { z } from "zod";
-import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { creditUnits } from "@fixup/shared";
+import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
-import { submitPoster } from "../../../../../../lib/poster/flow";
+import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
 import { posterImageBytes } from "../../../../../../lib/poster/asset-bytes";
 
 export const runtime = "nodejs";
@@ -27,6 +28,8 @@ const EditSchema = z.object({
 export async function POST(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
+  /** `catch` 에서도 봐야 한다 — 제출이 실패하면 묶인 장을 돌려줘야 한다. */
+  let reservation: { userId: string; requestId: string } | null = null;
   const parsed = EditSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return Response.json(
@@ -75,13 +78,57 @@ export async function POST(request: Request, context: Context) {
       slots: project.data.slots,
     });
 
+    /**
+     * **수정도 돈이다.**
+     *
+     * 이 길에는 예약도 확정도 없었다. 「이 장만 고치기」를 열 번 누르면 fal
+     * 호출 열 번이 실제로 과금되는데 `generation_events` 에는 한 줄도 안 남고
+     * 개인 한도·팀 크레딧에서도 전혀 안 빠졌다. 만들기와 같은 순서를 따른다.
+     *
+     * 수정은 언제나 한 장이다(설계 §「세 장을 또 받지 않는다」).
+     */
+    const estimate = estimatePosterCost({
+      modelId: project.modelId,
+      ratioId,
+      variants: 1,
+      // 고친 기준 그림을 늘 레퍼런스로 넣는다 — i2i 단가다.
+      hasReferences: true,
+    });
+    const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0));
+    if (!reserved.ok) return reserved.response;
+    reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
     const submission = await submitPoster(job, {
       queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
         // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.
         saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); },
     });
+
+    /**
+     * **예약 열쇠를 작업에 적어 둔다.**
+     *
+     * 확정은 `status` 가 결과를 받은 뒤에 한다 — 만들기와 같은 길이다. 화면도
+     * 수정 뒤에 같은 `status` 를 물어보므로 거기서 마무리된다.
+     */
+    await stores.projects.update(id, {
+      data: { ...project.data, reservationId: reserved.requestId },
+    });
     return Response.json({ ok: true, submission });
   } catch (error) {
+    /**
+     * **묶어 둔 장을 돌려준다.** 제출이 실패했으면 돈이 안 나갔다. 안 풀면
+     * 만료될 때까지 그 사람 한도에서 빠져 있는다.
+     *
+     * 과금 뒤의 실패(`PosterChargedError`)는 돈이 이미 나갔으므로 풀지 않는다.
+     * 그때는 예약이 만료되며 정리된다 — 사람이 찾을 수 있게 자국만 남긴다.
+     */
+    if (reservation) {
+      if (error instanceof PosterChargedError) {
+        console.error(`[poster] 수정: 돈은 나갔는데 장부에 못 적었습니다: fal=${error.falRequestId}`);
+      } else {
+        try { await finalizeAiUsage(reservation, false, 0, "poster_edit_failed"); } catch { /* 아래 원인이 우선이다 */ }
+      }
+    }
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
     }

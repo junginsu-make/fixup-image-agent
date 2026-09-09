@@ -1,6 +1,7 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { stopQueuedGeneration } from "../../../../../../lib/sns/queued-flow";
+import { settleSnsReservation } from "../../../../../../lib/sns/settle";
 import { withSnsProjectLock } from "../../../../../../lib/sns/project-lock";
 
 type Context = { params: Promise<{ id: string }> };
@@ -24,7 +25,16 @@ export async function POST(_request: Request, context: Context) {
       const project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "생성 흐름을 찾을 수 없습니다." }, { status: 404 });
       const flow = stopQueuedGeneration(project.data.flow, new Date().toISOString());
-      const saved = await store.save(id, flow, "ready");
+      /**
+       * **여기서 장부를 닫는다.**
+       *
+       * 멈추면 흐름이 끝난다. 그런데 확정은 `status` 폴링 안에만 있었고, 그
+       * 라우트는 「도는 중이 아니다」로 곧장 빠져나가므로 여기서 끝난 예약은
+       * 영영 안 풀렸다 — 만료까지 크레딧을 묶고, 이미 나간 fal 값은 장부에
+       * 안 실렸다. 받아 둔 카드만큼은 받고 나머지는 돌려준다.
+       */
+      const settled = await settleSnsReservation(auth.member.userId, flow);
+      const saved = await store.save(id, settled, "ready");
       return Response.json({ ok: true, project: saved });
     });
   } catch (error) {

@@ -26,6 +26,13 @@ export interface CostEstimateInput {
    * 그때는 지금까지처럼 카드당 한 번으로 센다.
    */
   cards?: Array<{ index: number; layout?: { slots: LayoutSlot[] } | null }>;
+  /**
+   * 이 번호의 카드만 센다. 비우면 전부 센다.
+   *
+   * 카드 한 장 「다시 만들기」가 쓴다 — 그 한 장 값만 예약해야 나머지 장수가
+   * 괜히 한도에 묶이지 않는다.
+   */
+  onlyCardIndexes?: number[];
 }
 
 export interface CostEstimate {
@@ -52,11 +59,13 @@ export function estimateCost(input: CostEstimateInput): CostEstimate {
   const layoutByIndex = new Map(
     (input.cards ?? []).map((card) => [card.index, card.layout?.slots ?? []]),
   );
+  const only = input.onlyCardIndexes ? new Set(input.onlyCardIndexes) : undefined;
 
   let usd = 0;
   let generatedCount = 0;
   for (const card of layout) {
     if (card.kind === "place_as_is" || card.kind === "ending_image") continue;
+    if (only && !only.has(card.index)) continue;
     const mode = selectReferencesForRole(grouped, card.role).length ? "i2i" : "t2i";
     // 틀의 그림 칸마다 따로 시킨다. 칸은 카드보다 작아 값도 칸 크기로 센다.
     const slots = estimateSlots(layoutByIndex.get(card.index) ?? [], ratio.pixel, input.modelId);
