@@ -888,6 +888,21 @@ export function toPdpErrorResponse(error: unknown): {
   const detail = stringifyError(error);
   const message = error instanceof Error ? error.message : "상세페이지 마법사 처리 중 오류가 발생했습니다.";
 
+  /*
+    운영자가 키를 안 넣은 채 배포한 경우. 라우트가 공급자를 만들다 던진다.
+    문구가 한국어라 아래 매처에 안 걸려 「처리 중 오류」로 떨어졌다 — 무엇이
+    없는지는 접힌 detail 안에만 있었다. 이름으로 가른다(엔진은 웹 쪽 클래스를
+    import 하지 않는다).
+  */
+  if (error instanceof Error && error.name === "PdpProviderConfigurationError") {
+    return {
+      ok: false as const,
+      code: "AI_KEY_INVALID" as const,
+      message: "서버에 AI 공급자 키가 설정되지 않았습니다. 운영자에게 문의해 주세요.",
+      detail
+    };
+  }
+
   if (isInvalidApiKeyError(message)) {
     return {
       ok: false as const,

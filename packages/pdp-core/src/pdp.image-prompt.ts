@@ -127,17 +127,28 @@ const STYLE_SETTING: Record<PdpImageStyle, string> = {
  * 이 서비스의 핵심은 입력 텍스트를 정확히 읽어 페이지를 설계하는 것이지
  * 인물을 넣는 것이 아니다.
  */
+/**
+ * 사람이 나올 때 **누구인가** 한 문장.
+ *
+ * 인물 참조가 붙으면 나이·국적을 덧대지 않는다 — 얼굴은 그 사람인데 설명이
+ * 부딪히면 모델이 절충해 제3의 인물을 그린다. 이 판단을 두 곳이 따로 적었다가
+ * 한쪽만 갈라져 실제로 어긋났다(2026-09-09). 그래서 한 자리로 모은다.
+ */
+function whoAppears(options: ImagePromptOptions) {
+  return options.withModel
+    ? "the supplied reference person, exactly as shown"
+    : personDescriptor(options);
+}
+
 function peopleRule(options: ImagePromptOptions) {
   if (options.peopleMode === "none") {
     return "none — this is a product or texture shot. Do not add a person.";
   }
   if (options.withModel) {
-    // 붙인 사진·캐릭터가 누구인지를 정한다. 여기서 나이·국적을 덧대면
-    // 얼굴은 그 사람인데 설명이 부딪혀 제3의 인물이 나온다.
-    return "required — the supplied reference person must appear exactly as shown.";
+    return `required — ${whoAppears(options)} must appear.`;
   }
   const place = countryOf(options).place;
-  return `optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as ${personDescriptor(options)}, and the setting must read as ${place}.`;
+  return `optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as ${whoAppears(options)}, and the setting must read as ${place}.`;
 }
 
 /**
@@ -149,7 +160,9 @@ function peopleRule(options: ImagePromptOptions) {
 const MAX_PAGE_CONTEXT = 500;
 
 function pageContextOf(options: ImagePromptOptions) {
-  return options.pageContext?.trim().slice(0, MAX_PAGE_CONTEXT) ?? "";
+  const trimmed = options.pageContext?.trim() ?? "";
+  // 코드 단위로 자르면 500번째가 이모지일 때 서러게이트 쌍이 갈린다.
+  return Array.from(trimmed).slice(0, MAX_PAGE_CONTEXT).join("");
 }
 
 export function buildImageSystemPrompt(options: ImagePromptOptions) {
@@ -160,11 +173,7 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     designerPersona(),
     "You are art-directing Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
-    // 인물 참조가 붙으면 나이·국적을 덧대지 않는다. 얼굴은 그 사람인데 설명이
-    // 부딪히면 모델이 절충해 제3의 인물을 그린다 — `peopleRule` 과 같은 규칙이다.
-    options.withModel
-      ? "People are optional. When someone appears, it must be the supplied reference person, exactly as shown."
-      : `People are optional. Only include a person when the scene genuinely calls for one; when one appears they should read as ${personDescriptor(options)}.`,
+    `People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as ${whoAppears(options)}.`,
     // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용
     // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
     look === "photoreal"

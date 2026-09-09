@@ -45,6 +45,8 @@ describe("긴 레퍼런스", () => {
 
   it("조각들이 원본 높이를 다 덮는다", async () => {
     const slices = await sliceTallReference({ imageBase64: await png(1000, 5401), mimeType: "image/png" });
+    // 합만 재면 「안 자른 원본」도 통과한다. 나뉘었다는 것부터 못 박는다.
+    expect(slices.length).toBeGreaterThan(1);
     const heights = await Promise.all(slices.map(async (s) => (await meta(s.imageBase64)).height ?? 0));
     // 폭이 1000 → 1024 로 안 커지므로(withoutEnlargement) 높이가 그대로 남는다.
     expect(heights.reduce((a, b) => a + b, 0)).toBe(5401);
@@ -71,6 +73,30 @@ describe("짧은 레퍼런스", () => {
     const slices = await sliceTallReference({ imageBase64: 원본, mimeType: "image/png" });
 
     expect(slices).toEqual([{ imageBase64: 원본, mimeType: "image/png" }]);
+  });
+
+  /**
+   * 나누는 자리는 **비율만** 본다. 3000×4000 은 한 조각으로 판정되므로,
+   * 기획 쪽에서 폭 상한을 안 걸면 원본 바이트가 요청마다 통째로 나간다.
+   * 반대로 그림 쪽은 원본이 가야 서체 획이 산다 — 두 경로가 서로 반대다.
+   */
+  it("기획에는 폭 상한이 걸린다", async () => {
+    const 원본 = await png(3000, 4000);
+
+    const 그림용 = await sliceTallReference({ imageBase64: 원본, mimeType: "image/png" });
+    expect(그림용[0]!.imageBase64).toBe(원본);
+
+    const 기획용 = await sliceTallReference({ imageBase64: 원본, mimeType: "image/png" }, { shrinkWhole: true });
+    expect(기획용).toHaveLength(1);
+    expect(기획용[0]!.mimeType).toBe("image/jpeg");
+    expect((await meta(기획용[0]!.imageBase64)).width).toBe(1024);
+  });
+
+  it("상한보다 작으면 기획에도 원본이 간다", async () => {
+    const 원본 = await png(800, 1200);
+    expect(await sliceTallReference({ imageBase64: 원본, mimeType: "image/png" }, { shrinkWhole: true })).toEqual([
+      { imageBase64: 원본, mimeType: "image/png" },
+    ]);
   });
 
   it("정사각도 그대로 간다", async () => {

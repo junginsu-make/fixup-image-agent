@@ -28,7 +28,11 @@ export async function POST(req: Request) {
       자르는 일은 여기서 한다. `pdp-core` 는 순수해야 하고 sharp 는 서버 것이다.
     */
     const styleReference = body.styleReference
-      ? { ...body.styleReference, slices: await sliceTallReference(body.styleReference) }
+      ? {
+          ...body.styleReference,
+          // 기획 요청은 여러 번 나간다. 읽는 값은 1024px 이면 충분하다.
+          slices: await sliceTallReference(body.styleReference, { shrinkWhole: true }),
+        }
       : undefined;
     const request = { ...body, styleReference };
     let lastEnvelope: ReturnType<typeof toPdpErrorResponse> | null = null;

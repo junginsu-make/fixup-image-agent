@@ -32,9 +32,12 @@ vi.mock("../../../../lib/pdp/providers", () => ({
   createPdpProviders: () => ({ llm: { generate: async () => ({ text: "{}" }) }, generateImage: async () => ({}) }),
 }));
 
+const sliceOptions: Array<Record<string, unknown> | undefined> = [];
+
 // sharp 없이 자르기를 흉내 낸다. 실제로 자르는 동작은 `slice-image.test.ts` 가 잰다.
 vi.mock("../../../../lib/pdp/slice-image", () => ({
-  sliceTallReference: async (input: { imageBase64: string }) => [
+  sliceTallReference: async (input: { imageBase64: string }, options?: Record<string, unknown>) => [
+    ...(sliceOptions.push(options), []),
     { imageBase64: `${input.imageBase64}-1`, mimeType: "image/jpeg" },
     { imageBase64: `${input.imageBase64}-2`, mimeType: "image/jpeg" },
   ],
@@ -47,6 +50,7 @@ const 요청 = (body: unknown) =>
 
 beforeEach(() => {
   analyzed.length = 0;
+  sliceOptions.length = 0;
 });
 
 describe("기획 요청", () => {
@@ -65,6 +69,19 @@ describe("기획 요청", () => {
       { imageBase64: "REF-1", mimeType: "image/jpeg" },
       { imageBase64: "REF-2", mimeType: "image/jpeg" },
     ]);
+  });
+
+  /** 기획 요청은 여러 번 나간다. 그림 경로와 달리 폭 상한을 켜야 한다. */
+  it("폭 상한을 켜서 자른다", async () => {
+    await POST(
+      요청({
+        imageBase64: "PRODUCT",
+        mimeType: "image/png",
+        styleReference: { imageBase64: "REF", mimeType: "image/png" },
+      }),
+    );
+
+    expect(sliceOptions).toEqual([{ shrinkWhole: true }]);
   });
 
   it("레퍼런스가 없으면 그 칸이 아예 없다", async () => {
