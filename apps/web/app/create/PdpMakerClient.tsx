@@ -19,6 +19,7 @@ import { buildDraftInput as buildDraftPayload } from "./draft-input";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
+import { canReachStep } from "./step-jump";
 import { peekHandoff, takeHandoff } from "../../lib/handoff";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
@@ -620,6 +621,23 @@ export function PdpMakerClient() {
   if (appState === "scenario" && result) {
     return (
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:px-6">
+        {/*
+          이 화면에는 막대가 아예 없었다. 앞뒤로 몇 단계가 남았는지 알 수 없고
+          되돌아갈 방법도 없었다 — 다른 두 화면에는 있는데 여기만 빠져 있었다.
+        */}
+        <StepBar
+          steps={CREATE_STEPS[startMode]}
+          current="analyze"
+          allowJump={(id) => canReachStep(id, { hasResult: Boolean(result) })}
+          onJump={(id) => {
+            if (id === "upload") {
+              setAppState("upload");
+              if (startMode === "text") setTextStage("input");
+              return;
+            }
+            setAppState("editor");
+          }}
+        />
         {notice ? (
           <p className="rounded-md bg-primary-soft p-3.5 text-sm text-foreground">{notice}</p>
         ) : null}
@@ -684,6 +702,7 @@ export function PdpMakerClient() {
         onReset={() => void handleReset()}
         apiConnectionLabel={apiConnectionLabel}
         pageContext={additionalInfo}
+        onJumpStep={(id) => setAppState(id === "upload" ? "upload" : "scenario")}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
         attachmentIntents={intentsOrUndefined(
@@ -741,11 +760,15 @@ export function PdpMakerClient() {
                 : "upload"
           }
           // 단계를 눌러 오갈 수 있어야 한다. 준비가 안 된 단계는 그 화면이 알린다.
+          allowJump={(id) => canReachStep(id, { hasResult: Boolean(result) })}
           onJump={(id) => {
             if (id === "upload") {
               setAppState("upload");
               if (startMode === "text") setTextStage("input");
+              return;
             }
+            // 구성안이 있으면 그 뒤 단계로도 돌아갈 수 있다. 없으면 allowJump 가 막는다.
+            setAppState(id === "analyze" ? "scenario" : "editor");
           }}
         />
       </div>
