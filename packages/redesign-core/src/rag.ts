@@ -213,7 +213,17 @@ export async function retrieveKnowledge(
     similarity: Number(row.similarity)
   }));
 
-  return filterByRelevance(chunks, options.minSimilarity ?? 0);
+  /**
+   * **기본값이 0 이면 하한이 없는 것과 같다.**
+   *
+   * 운영 호출부(`generate.ts`)는 옵션을 안 넘긴다. 그래서 `DEFAULT_MIN_SIMILARITY`
+   * 는 export 되고 시험까지 있는데 실사용에서 한 번도 안 걸렸다 — 위 주석이
+   * 경고한 그대로, 유사도 0.12 짜리 무관한 조각이 「RAG 검색 지식」이라는
+   * 이름표를 달고 매 생성 프롬프트에 들어갔다.
+   *
+   * 하한을 아예 없애려면 `minSimilarity: 0` 을 명시적으로 넘긴다.
+   */
+  return filterByRelevance(chunks, options.minSimilarity ?? DEFAULT_MIN_SIMILARITY);
 }
 
 export async function getKnowledgeStats() {
