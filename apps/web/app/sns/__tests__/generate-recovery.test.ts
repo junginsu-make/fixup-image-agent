@@ -61,6 +61,16 @@ describe("화면이 그 판단을 쓴다", () => {
     expect(reload).toContain("if (loaded.data.flow) setView(loaded.data.flow.stage);");
   });
 
+  /**
+   * **「다시 만들기」에도 같은 구멍이 있었다.** `/cards/[index]` 도 409 로
+   * 「다른 카드가 생성 중입니다」를 주는데, 화면은 문구만 적고 넘어갔다.
+   */
+  it("카드 다시 만들기에서도 판단을 부른다", () => {
+    const at = client.indexOf("카드를 다시 만들지 못했습니다.");
+    expect(at).toBeGreaterThan(-1);
+    expect(client.indexOf('afterGenerateFailure(status) === "resync"', at)).toBeGreaterThan(at);
+  });
+
   /** 오류 문구를 지우면 안 된다 — 무엇이 잘못됐는지 알 길이 없어진다. */
   it("문구를 남긴 뒤에 다시 읽는다", () => {
     const at = client.indexOf("afterGenerateFailure(status)");

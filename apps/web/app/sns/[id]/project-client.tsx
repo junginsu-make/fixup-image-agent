@@ -215,6 +215,9 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       setView("result");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다.");
+      // 「다른 카드가 생성 중입니다」(409)도 같은 통보다 — 화면만 모르고 있다.
+      const status = error instanceof ProjectRequestError ? error.status : undefined;
+      if (afterGenerateFailure(status) === "resync") await reload();
     } finally {
       setRegeneratingIndex(undefined);
     }
