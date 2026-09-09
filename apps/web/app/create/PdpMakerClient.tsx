@@ -837,30 +837,6 @@ export function PdpMakerClient() {
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_clamp(320px,25vw,400px)]">
           <section className="grid gap-4">
           <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-ring)]">
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <div>
-                <span className="text-meta text-subtle-foreground">안내 사항</span>
-                <h2 className="text-h2">사용 전 꼭 확인해 주세요</h2>
-              </div>
-              <Badge variant="green" className="ml-auto">작업 초안 브라우저 저장</Badge>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                ["성공한 이미지만 사용량에서 차감됩니다.", "분석은 무료이며 이미지 생성에 성공한 수만큼 월 한도에서 차감됩니다."],
-                ["생성 속도는 Gemini API 서버 영향이 가장 큽니다.", "상세페이지 분석과 이미지 생성 시간은 서버보다 Gemini 응답 시간의 영향이 더 큽니다."],
-                ["작업 초안은 서버에 저장되지 않습니다.", "편집 중인 작업과 결과는 현재 PC 브라우저에만 저장됩니다."],
-                ["시크릿 모드에서는 저장 내용이 사라질 수 있습니다.", "브라우저 저장 공간을 비우면 저장된 작업이 보이지 않을 수 있습니다."],
-              ].map(([title, desc]) => (
-                <article key={title} className="rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
-                  <strong className="block text-sm">{title}</strong>
-                  <p className="mt-1 text-sm text-muted-foreground">{desc}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-ring)]">
             <div className="mb-4 flex flex-wrap items-start gap-3">
               <div className="min-w-0">
                 <span className="text-meta text-subtle-foreground">저장된 작업</span>
