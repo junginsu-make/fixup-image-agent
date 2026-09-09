@@ -46,8 +46,3 @@ export function planReferenceSlices(width: number, height: number): SliceRegion[
     return { top, height: index === count - 1 ? height - top : band };
   });
 }
-
-/** 조각으로 나뉘었나. 안내 문구를 바꿀 때 쓴다. */
-export function isSliced(regions: SliceRegion[]) {
-  return regions.length > 1;
-}

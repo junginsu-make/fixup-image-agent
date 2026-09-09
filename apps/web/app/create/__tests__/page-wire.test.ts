@@ -27,6 +27,7 @@ describe("페이지 값이 하나도 빠지지 않는다", () => {
         referenceModel: { base64: "PERSON", mimeType: "image/png", fileName: "p.png" },
         referenceModelUsage: "all-sections",
         attachmentIntents: { style: "색만 가져와", anchor: "라벨 그대로" },
+        pageContext: "여름 시즌, 인스타 유입",
       }),
     ).toEqual({
       imageModel: "nano-banana",
@@ -38,7 +39,13 @@ describe("페이지 값이 하나도 빠지지 않는다", () => {
       referenceModel: { imageBase64: "PERSON", mimeType: "image/png", fileName: "p.png" },
       referenceModelUsage: "all-sections",
       attachmentIntents: { style: "색만 가져와", anchor: "라벨 그대로" },
+      pageContext: "여름 시즌, 인스타 유입",
     });
+  });
+
+  /** 「그 밖에 · 채널과 시즌」. 이 줄을 지워도 2,006건이 통과했다. */
+  it("페이지 배경 설명이 실린다", () => {
+    expect(buildPageWire({ ...기본, pageContext: "여름 시즌" }).pageContext).toBe("여름 시즌");
   });
 
   it("자리별 지시가 실린다", () => {
@@ -62,6 +69,10 @@ describe("페이지 값이 하나도 빠지지 않는다", () => {
 });
 
 describe("빈 값은 안 싣는다", () => {
+  it("공백만 적은 배경 설명은 없는 것으로 보낸다", () => {
+    expect(buildPageWire({ ...기본, pageContext: "   " }).pageContext).toBeUndefined();
+  });
+
   it("공백만 적은 지시는 없는 것으로 보낸다", () => {
     expect(buildPageWire({ ...기본, userInstruction: "   " }).userInstruction).toBeUndefined();
   });

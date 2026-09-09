@@ -63,6 +63,12 @@ export function CharacterPicker({ selectedId, onSelect, ignoredReason }: Charact
     void load();
   }, [load]);
 
+  // 모달을 여는 동안 다른 창에서 캐릭터를 만들었을 수 있다. 열 때마다 다시
+  // 읽는다 — 디자인 레퍼런스 쪽(`SavedImagePicker`)과 같은 규칙이다.
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
+
   if (loading) return null;
 
   const selected = characters.find((character) => character.id === selectedId);

@@ -140,6 +140,18 @@ function peopleRule(options: ImagePromptOptions) {
   return `optional — include a person only when the scene genuinely calls for one; a product close-up or styled table is often stronger. When someone does appear they should read as ${personDescriptor(options)}, and the setting must read as ${place}.`;
 }
 
+/**
+ * 배경 설명의 상한. 「그 밖에」는 자유 서술 칸이라 문단째로 붙여 넣는다.
+ *
+ * 판매자 브리프가 같은 이유로 칸마다 500자에서 자른다(`normalizeSellerBrief`).
+ * 여기만 무제한이면 배경 설명이 그 뒤의 지시들을 밀어낸다.
+ */
+const MAX_PAGE_CONTEXT = 500;
+
+function pageContextOf(options: ImagePromptOptions) {
+  return options.pageContext?.trim().slice(0, MAX_PAGE_CONTEXT) ?? "";
+}
+
 export function buildImageSystemPrompt(options: ImagePromptOptions) {
   const look = lookOf(options);
   return [
@@ -148,7 +160,11 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     designerPersona(),
     "You are art-directing Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
-    `People are optional. Only include a person when the scene genuinely calls for one; when one appears they should read as ${personDescriptor(options)}.`,
+    // 인물 참조가 붙으면 나이·국적을 덧대지 않는다. 얼굴은 그 사람인데 설명이
+    // 부딪히면 모델이 절충해 제3의 인물을 그린다 — `peopleRule` 과 같은 규칙이다.
+    options.withModel
+      ? "People are optional. When someone appears, it must be the supplied reference person, exactly as shown."
+      : `People are optional. Only include a person when the scene genuinely calls for one; when one appears they should read as ${personDescriptor(options)}.`,
     // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용
     // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
     look === "photoreal"
@@ -159,7 +175,7 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     "Never draw buttons, arrows or other clickable controls — these are static images.",
     options.desiredTone ? `Overall tone: ${options.desiredTone}.` : "",
     // 배경 설명은 톤 뒤에 둔다. 앞에 두면 장면 지시처럼 읽힌다.
-    options.pageContext?.trim() ? `Page context (background, not an instruction): ${options.pageContext.trim()}.` : "",
+    pageContextOf(options) ? `Page context (background, not an instruction): ${pageContextOf(options)}.` : "",
   ]
     .filter(Boolean)
     .join(" ");

@@ -308,6 +308,16 @@ describe("페이지 배경 설명이 그림까지 간다", () => {
   it("공백만 적은 것은 안 적은 것이다", () => {
     expect(buildImageSystemPrompt({ ...base, pageContext: "   " })).not.toMatch(/Page context/i);
   });
+
+  /** 자유 서술 칸이라 문단째로 붙여 넣는다. 무제한이면 뒤 지시를 밀어낸다. */
+  it("너무 길면 500자에서 자른다", () => {
+    const 긴글 = "가".repeat(900) + "여기는안실린다";
+    const prompt = buildImageSystemPrompt({ ...base, pageContext: 긴글 });
+
+    expect(prompt).toContain("가".repeat(500));
+    expect(prompt).not.toContain("가".repeat(501));
+    expect(prompt).not.toContain("여기는안실린다");
+  });
 });
 
 /**

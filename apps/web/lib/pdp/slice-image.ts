@@ -41,20 +41,29 @@ export async function sliceTallReference(input: {
 
     const regions = planReferenceSlices(width, height);
 
-    const slices = await Promise.all(
-      regions.map(async (region) => {
-        const cropped = sharp(source)
-          .extract({ left: 0, top: region.top, width, height: region.height })
-          .resize({ width: Math.min(width, MAX_SLICE_WIDTH), withoutEnlargement: true })
-          // 디자인을 읽는 용도라 색 경계와 글자 획이 살아야 한다. JPEG 품질을
-          // 낮게 잡으면 서체 인상이 뭉개져 읽는 의미가 없어진다.
-          .jpeg({ quality: 88 });
-        return {
-          imageBase64: (await cropped.toBuffer()).toString("base64"),
-          mimeType: "image/jpeg",
-        };
-      }),
-    );
+    // 자를 것이 없으면 **손대지 않는다.** 한 조각짜리도 다시 구우면 짧은
+    // 레퍼런스가 절반 해상도 JPEG 이 되어 나간다 — 서체 획과 색 경계가
+    // 뭉개지면 흉내가 나빠진다. 긴 페이지를 고치면서 짧은 쪽을 깎을 일이 없다.
+    if (regions.length <= 1) return whole;
+
+    // 순서대로 자른다. 한꺼번에 돌리면 원본을 조각 수만큼 동시에 펼쳐 놓게 되어
+    // 1080×15480 한 장에 200MB 가까이 튄다.
+    const slices: ReferenceSlice[] = [];
+    for (const region of regions) {
+      const cropped = sharp(source)
+        .extract({ left: 0, top: region.top, width, height: region.height })
+        .resize({ width: Math.min(width, MAX_SLICE_WIDTH), withoutEnlargement: true })
+        // JPEG 은 투명을 모른다. 깔개를 안 주면 sharp 가 검정 위에 얹어서
+        // 투명 PNG 레퍼런스가 통째로 「어두운 페이지」로 읽힌다.
+        .flatten({ background: "#ffffff" })
+        // 디자인을 읽는 용도라 색 경계와 글자 획이 살아야 한다. JPEG 품질을
+        // 낮게 잡으면 서체 인상이 뭉개져 읽는 의미가 없어진다.
+        .jpeg({ quality: 88 });
+      slices.push({
+        imageBase64: (await cropped.toBuffer()).toString("base64"),
+        mimeType: "image/jpeg",
+      });
+    }
 
     return slices.length ? slices : whole;
   } catch (error) {

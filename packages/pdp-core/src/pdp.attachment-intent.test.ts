@@ -150,13 +150,47 @@ describe("인물 조건이 프롬프트까지 간다", () => {
     });
 
     expect(prompt).toMatch(/Japanese/);
-    expect(prompt).toMatch(/man/);
+    // `/man/` 은 기본값 "woman" 에도 걸린다 — 성별 배선을 끊어도 초록이었다.
+    expect(prompt).toMatch(/\bman\b/);
+    expect(prompt).not.toContain("woman");
     expect(prompt).toMatch(/40s/);
+  });
+
+  it("남성과 여성이 서로 다른 프롬프트가 된다", async () => {
+    const 남 = await promptFor({ style: "studio", withModel: false, outputMode: "editable", modelGender: "male" });
+    const 여 = await promptFor({ style: "studio", withModel: false, outputMode: "editable", modelGender: "female" });
+    expect(남).not.toBe(여);
   });
 
   it("안 고르면 지금까지처럼 한국이다", async () => {
     const prompt = await promptFor({ style: "studio", withModel: false, outputMode: "editable" });
     expect(prompt).toMatch(/Korean/);
+  });
+
+  /**
+   * 인물 사진을 붙이면 나이·국적 설명이 빠져야 한다.
+   *
+   * 얼굴은 붙인 사람인데 「20대 한국 여성」이 함께 나가면 모델이 절충해 제3의
+   * 인물을 그린다. `peopleRule` 은 이미 갈라져 있었는데 시스템 프롬프트의 같은
+   * 문장이 무조건 붙이고 있었다(2026-09-09 확인).
+   */
+  it("인물을 붙이면 나이·국적을 덧대지 않는다", async () => {
+    const 조건 = { modelCountry: "japan", modelGender: "male", modelAgeRange: "40s" };
+
+    const 사진없음 = await promptFor({ style: "studio", withModel: false, outputMode: "editable", ...조건 });
+    const 사진있음 = await promptFor({
+      style: "studio",
+      withModel: true,
+      outputMode: "editable",
+      referenceModelImageBase64: 인물.base64,
+      referenceModelImageMimeType: 인물.mimeType,
+      ...조건,
+    });
+
+    expect(사진없음).toMatch(/Japanese/);
+    expect(사진있음).not.toContain("Japanese");
+    expect(사진있음).not.toContain("40s");
+    expect(사진있음).toContain("the supplied reference person");
   });
 
   it("가이드 우선 모드가 실린다", async () => {

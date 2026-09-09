@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSliced, planReferenceSlices } from "../reference-slices";
+import { planReferenceSlices } from "../reference-slices";
 
 /**
  * 자르는 자리를 잘못 잡으면 **아래쪽이 조용히 사라진다.**
@@ -57,15 +57,5 @@ describe("이상한 값", () => {
   it("크기를 모르면 통째로 본다", () => {
     expect(planReferenceSlices(0, 0)).toEqual([{ top: 0, height: 0 }]);
     expect(planReferenceSlices(-1, 500)).toEqual([{ top: 0, height: 500 }]);
-  });
-});
-
-describe("나뉘었는지 알려준다", () => {
-  it("한 조각이면 아니다", () => {
-    expect(isSliced(planReferenceSlices(1000, 1000))).toBe(false);
-  });
-
-  it("여럿이면 그렇다", () => {
-    expect(isSliced(planReferenceSlices(1080, 15000))).toBe(true);
   });
 });

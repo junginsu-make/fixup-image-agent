@@ -300,3 +300,28 @@ describe("레퍼런스 조각이 그림 옵션까지 간다", () => {
     );
   });
 });
+
+/**
+ * 「그 밖에 · 채널과 시즌」이 그림까지 가는 배선.
+ *
+ * 독립 리뷰가 이 자리를 짚었다 — 네 구간 중 **어느 하나를 끊어도** 2,006건이
+ * 전부 통과했다. 운반 구간에 시험이 없다는 이 저장소의 같은 실패가 네 번째다.
+ */
+describe("페이지 배경 설명이 섹션까지 간다", () => {
+  it("그물에서 페이지 값으로 옮겨진다", () => {
+    expect(
+      pageInputsFromWire({ imageModel: "nano-banana", outputMode: "full-image", pageContext: "여름 시즌" })
+        .pageContext,
+    ).toBe("여름 시즌");
+  });
+
+  it("페이지 값에서 섹션 옵션으로 옮겨진다", () => {
+    const page: PageImageInputs = { pageContext: "여름 시즌, 인스타 유입" };
+    expect(buildSectionImageOptions(page, target()).pageContext).toBe("여름 시즌, 인스타 유입");
+    expect(buildSectionImageOptions(page, target({ index: 4 })).pageContext).toBe("여름 시즌, 인스타 유입");
+  });
+
+  it("안 적었으면 아무것도 안 붙는다", () => {
+    expect(buildSectionImageOptions({}, target()).pageContext).toBeUndefined();
+  });
+});
