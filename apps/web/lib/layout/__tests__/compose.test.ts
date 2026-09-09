@@ -1,6 +1,5 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-// @ts-expect-error sharp 0.35.0 은 exports 에 types 조건이 없다. 런타임 export 는 정상.
 import sharp from "sharp";
 import type { CardCopy } from "@fixup/sns-core";
 import type { LayoutSlot } from "@fixup/layout-core";

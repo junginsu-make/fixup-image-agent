@@ -1,8 +1,6 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-// sharp 0.35.0 은 lib/index.d.ts 를 담지만 exports 에 types 조건이 없다.
-// @ts-expect-error 런타임 export 는 정상. 꾸러미 메타데이터가 선언을 가린다.
 import sharp from "sharp";
 import { MAX_INPUT_PIXELS } from "../../../lib/image-encoding";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
