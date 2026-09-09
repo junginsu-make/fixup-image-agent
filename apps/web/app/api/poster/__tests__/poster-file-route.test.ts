@@ -35,10 +35,14 @@ vi.mock("../../../../lib/local-store", () => ({
 vi.mock("../../../../lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: () => {
+      // **`maybeSingle` 이 아니라 목록으로 받는다.** 변형 번호는 회차가 둘
+      // 이상이면 겹치는데, 그때 `maybeSingle` 은 다중 행 오류를 준다 —
+      // 관리자에게만 모든 그림이 404 로 떨어지던 자리다.
       const self: Record<string, unknown> = {
         select: () => self,
         eq: () => self,
-        maybeSingle: async () => ({ data: adminRow, error: null }),
+        order: () => self,
+        limit: async () => ({ data: adminRow ? [adminRow] : [], error: null }),
       };
       return self;
     },
@@ -66,8 +70,8 @@ beforeEach(() => {
   missingPaths = [];
   adminRow = null;
   byProject = [
-    { variantIndex: 0, assetPath: "u1/poster/p1/0.png", thumbPath: "u1/poster/p1/0.thumb.webp" },
-    { variantIndex: 1, assetPath: "u1/poster/p1/1.png", thumbPath: "u1/poster/p1/1.thumb.webp" },
+    { id: "img-0", createdAt: "2026-01-01", variantIndex: 0, assetPath: "u1/poster/p1/0.png", thumbPath: "u1/poster/p1/0.thumb.webp" },
+    { id: "img-1", createdAt: "2026-01-01", variantIndex: 1, assetPath: "u1/poster/p1/1.png", thumbPath: "u1/poster/p1/1.thumb.webp" },
   ];
 });
 
@@ -92,7 +96,7 @@ describe("GET 포스터 결과 파일", () => {
   });
 
   it("사본 자리가 비어 있으면 원본으로 떨어진다 — 옛 결과가 안 깨진다", async () => {
-    byProject = [{ variantIndex: 1, assetPath: "u1/poster/p1/1.png", thumbPath: null }];
+    byProject = [{ id: "img-1", createdAt: "2026-01-01", variantIndex: 1, assetPath: "u1/poster/p1/1.png", thumbPath: null }];
 
     const response = await call("https://x/f?size=thumb", "1");
 
@@ -124,5 +128,33 @@ describe("GET 포스터 결과 파일", () => {
     await call("https://x/f?size=thumb", "1");
 
     expect(reads).toEqual(["u2/poster/p1/1.thumb.webp"]);
+  });
+
+  /**
+   * **변형 번호가 겹쳐도 제 장을 준다.**
+   *
+   * `variant_index` 는 그 요청 안의 배열 번호라 회차가 바뀌면 다시 0 부터다.
+   * 다시 만들기나 수정을 한 번만 해도 같은 번호의 줄이 둘 이상 생긴다.
+   */
+  it("줄 id 로 물으면 그 장을 준다 — 번호가 겹쳐도 안 헷갈린다", async () => {
+    byProject = [
+      { id: "old", createdAt: "2026-01-01", variantIndex: 0, assetPath: "u1/poster/p1/req-1/0.png", thumbPath: null },
+      { id: "new", createdAt: "2026-02-01", variantIndex: 0, assetPath: "u1/poster/p1/req-2/0.png", thumbPath: null },
+    ];
+
+    await call("https://x/f", "old");
+
+    expect(reads).toEqual(["u1/poster/p1/req-1/0.png"]);
+  });
+
+  it("옛 번호 주소는 가장 나중 장으로 떨어진다 — 화면이 비는 것보다 낫다", async () => {
+    byProject = [
+      { id: "old", createdAt: "2026-01-01", variantIndex: 0, assetPath: "u1/poster/p1/req-1/0.png", thumbPath: null },
+      { id: "new", createdAt: "2026-02-01", variantIndex: 0, assetPath: "u1/poster/p1/req-2/0.png", thumbPath: null },
+    ];
+
+    await call("https://x/f", "0");
+
+    expect(reads).toEqual(["u1/poster/p1/req-2/0.png"]);
   });
 });

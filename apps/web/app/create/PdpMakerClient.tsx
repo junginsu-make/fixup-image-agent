@@ -4,7 +4,7 @@ import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
 import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, mergeArtDirection } from "@fixup/pdp-core";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
 import { buildSectionKeys, deleteAllPdpDrafts, deletePdpDraft, getPdpDraft, listPdpDrafts, purgeExpiredPdpDrafts, savePdpDraft } from "./pdp-drafts";
 import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
@@ -88,6 +88,18 @@ export function PdpMakerClient() {
   const [modelImage, setModelImage] = useState<PreparedImage | null>(null);
   const [modelImageUsage, setModelImageUsage] = useState<ReferenceModelUsage | null>(null);
   const [result, setResult] = useState<GeneratedResult | null>(null);
+  /**
+   * 분석이 처음 준 구성안. **고치기 전의 원본이다.**
+   *
+   * 시나리오 화면의 「이미지 방향」 칸은 `prompt_ko` 만 고치는데 생성은
+   * `prompt_en` 만 본다. 그 둘을 잇는 것이 `mergeArtDirection` 이고, 그러려면
+   * 고치기 전 값이 있어야 「사용자가 무엇을 바꿨는지」를 가릴 수 있다.
+   *
+   * 글 경로는 `TextModeFlow` 가 이 일을 이미 하고 있었는데 사진 경로만
+   * 빠져 있었다 — 방향을 고쳐도 원래 프롬프트로 생성됐고, 사용자는 왜 안
+   * 먹었는지 알 방법이 없었다.
+   */
+  const [analyzedBlueprint, setAnalyzedBlueprint] = useState<LandingPageBlueprint | null>(null);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [desiredTone, setDesiredTone] = useState("");
   /*
@@ -377,6 +389,8 @@ export function PdpMakerClient() {
         setModelImage(draft.modelImage ?? null);
         setModelImageUsage(draft.modelImageUsage ?? null);
         setResult(draft.result);
+        // 심사 결과도 함께 되살린다. 안 넘기면 지적이 있어도 화면이 늘 비어 있다.
+        setReview(draft.result?.review);
         setAdditionalInfo(draft.additionalInfo);
         setSellerBrief(draft.sellerBrief ?? {});
         setCopyIntensity(draft.copyIntensity ?? "normal");
@@ -392,7 +406,8 @@ export function PdpMakerClient() {
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
-        setAppState(draft.result ? "editor" : "upload");
+        // 저장해 둔 단계로 돌아간다. 시나리오에서 저장했으면 시나리오다.
+        setAppState(draft.result ? draft.appState : "upload");
         setSaveState("saved");
         setIsDirty(false);
         setEditorSessionKey((current) => current + 1);
@@ -561,6 +576,7 @@ export function PdpMakerClient() {
       }
 
       setResult(response.result);
+      setAnalyzedBlueprint(response.result.blueprint);
       // 심사 결과를 시나리오 화면에 넘긴다. 사진 경로에도 심사가 붙었는데
       // 받아 두지 않으면 화면은 늘 비어 있다.
       setReview(response.result.review);
@@ -658,6 +674,10 @@ export function PdpMakerClient() {
           onModelChange={setImageModel}
           onRegenerate={() => void handleAnalyze()}
           onConfirm={() => {
+            // 고친 한국어 이미지 방향을 실제 생성에 쓰이는 prompt_en 에 실어 보낸다.
+            if (analyzedBlueprint) {
+              setResult({ ...result, blueprint: mergeArtDirection(analyzedBlueprint, result.blueprint) });
+            }
             setNotice("섹션별 이미지를 만들어 보세요.");
             setAppState("editor");
           }}

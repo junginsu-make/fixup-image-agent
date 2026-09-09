@@ -103,9 +103,9 @@ function loadImage(objectUrl: string) {
 export async function runTranscription(
   strips: RedesignStrip[],
   opts: { provider: string; onProgress?: (done: number, total: number) => void; signal?: AbortSignal }
-): Promise<{ transcript: string | null; failedBatches: number }> {
+): Promise<{ transcript: string | null; failedBatches: number; complete: boolean }> {
   const batches = planTranscribeBatches(strips);
-  if (batches.length === 0) return { transcript: null, failedBatches: 0 };
+  if (batches.length === 0) return { transcript: null, failedBatches: 0, complete: true };
   const parts: { transcript: string | null; batchIndex: number }[] = [];
   let done = 0, failed = 0, prevHint: string | undefined;
   for (let i = 0; i < batches.length; i += 1) {
@@ -131,5 +131,17 @@ export async function runTranscription(
     opts.onProgress?.(done, batches.length);
   }
   const stitched = stitchTranscripts(parts);
-  return { transcript: failed === batches.length ? null : stitched, failedBatches: failed };
+  /**
+   * **끝까지 갔는지 알려 준다.**
+   *
+   * 중단은 예외를 던지지 않고 `break` 로 빠져나가므로, 부르는 쪽이 보기에는
+   * 성공한 것과 구별되지 않았다. 그 값을 캐시에 넣으면 잘린 전사가 새로고침
+   * 전까지 영구히 재사용된다 — 5배치짜리를 2/5 에서 취소하고 설정만 바꿔 다시
+   * 만들면, 하단의 수치·인증번호·후기가 통째로 빠진 결과가 계속 나온다.
+   */
+  return {
+    transcript: failed === batches.length ? null : stitched,
+    failedBatches: failed,
+    complete: done === batches.length,
+  };
 }

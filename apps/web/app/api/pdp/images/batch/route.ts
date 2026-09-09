@@ -43,6 +43,14 @@ type BatchRequest = {
   page?: PageImageWire;
   /** 사용자가 섹션마다 고른 값. 열쇠는 `section_id`. */
   optionsBySection?: Record<string, ImageGenOptionsInput>;
+  /**
+   * 섹션 자리 차례의 강조어. `sections` 와 길이·차례가 맞물린다.
+   *
+   * **`section_id` 로 묶지 않는다.** 그 값은 AI 응답값이라 겹칠 수 있고,
+   * 겹치면 두 섹션이 같은 강조어를 받는다.
+   */
+  emphasisWordsList?: string[][];
+  /** 옛 화면이 보내던 모양. 자리 차례가 오면 그것이 우선이다. */
   emphasisWordsBySection?: Record<string, string[]>;
 };
 
@@ -116,7 +124,10 @@ export async function POST(req: Request) {
         section,
         index: body.sectionIndexes?.[position] ?? position,
         options: body.optionsBySection?.[section.section_id],
-        emphasisWords: body.emphasisWordsBySection?.[section.section_id],
+        // **자리 차례가 먼저다.** `section_id` 는 AI 응답값이라 겹칠 수 있고,
+        // 겹치면 두 섹션이 같은 강조어를 받는다. 옛 화면이 보내던 모양은
+        // 자리 차례가 없을 때만 쓴다.
+        emphasisWords: body.emphasisWordsList?.[position] ?? body.emphasisWordsBySection?.[section.section_id],
         characterReference:
           characterByAngle.get(pickAngleForSection(section.layout_notes ?? "")) ?? undefined,
       });

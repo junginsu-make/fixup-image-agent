@@ -114,14 +114,16 @@ describe("결과 이미지 행", () => {
       width: 1088, height: 1360, review: null, created_at: "2026-09-01T00:00:00.000Z",
     });
     expect(record).toMatchObject({ id: "i1", projectId: "p1", variantIndex: 2, selected: true });
-    expect(record.url).toBe("/api/poster/projects/p1/images/2/file");
+    // **주소의 열쇠는 줄 id 다.** 변형 번호는 회차가 둘 이상이면 겹친다.
+    expect(record.url).toBe("/api/poster/projects/p1/images/i1/file");
   });
 });
 
 describe("저장 경로", () => {
   it("소유자가 첫 칸이다", () => {
     // library 버킷의 정책이 경로 첫 칸으로 소유자를 판정한다.
-    expect(posterAssetPath("u1", "p1", 0)).toBe("u1/poster/p1/0.png");
+    // 회차가 한 칸 들어간다 — 다음 회차가 앞 회차의 파일을 덮어쓰지 않게.
+    expect(posterAssetPath("u1", "p1", "req-1", 0)).toBe("u1/poster/p1/req-1/0.png");
   });
 });
 
@@ -137,7 +139,7 @@ describe("toImageRecord — 사본을 화면까지 흘린다", () => {
     });
 
     expect(record.thumbPath).toBe("u1/poster/p1/2.thumb.webp");
-    expect(record.thumbUrl).toBe("/api/poster/projects/p1/images/2/file?size=thumb");
+    expect(record.thumbUrl).toBe("/api/poster/projects/p1/images/i1/file?size=thumb");
   });
 
   it("사본이 없는 옛 행은 자리가 비어 있다", () => {

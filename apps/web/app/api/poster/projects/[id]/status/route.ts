@@ -56,7 +56,7 @@ async function saveThumbnail(
  * 쌓인 것들이 그대로 열려야 한다.
  */
 async function saveResult(
-  userId: string, projectId: string, variantIndex: number, url: string,
+  userId: string, projectId: string, generationRequestId: string, variantIndex: number, url: string,
 ): Promise<{ assetPath: string; thumbPath: string | null }> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`결과 이미지를 내려받지 못했습니다 (${response.status}).`);
@@ -71,19 +71,23 @@ async function saveResult(
       await writeFile(target, body);
       return storagePath;
     };
-    const assetPath = await write(`${projectId}/${variantIndex}.png`, bytes);
-    const thumbPath = await saveThumbnail(bytes, `${projectId}/${variantIndex}.thumb.webp`, write);
+    // 운영과 같은 규칙으로 회차를 한 칸 둔다 — 두 모드가 다르면 로컬에서 확인한
+    // 것이 운영에서 확인한 것이 아니게 된다.
+    const assetPath = await write(`${projectId}/${generationRequestId}/${variantIndex}.png`, bytes);
+    const thumbPath = await saveThumbnail(
+      bytes, `${projectId}/${generationRequestId}/${variantIndex}.thumb.webp`, write,
+    );
     return { assetPath, thumbPath };
   }
 
   const storage = createSupabaseAdminClient().storage.from(LIBRARY_BUCKET);
-  const assetPath = posterAssetPath(userId, projectId, variantIndex);
+  const assetPath = posterAssetPath(userId, projectId, generationRequestId, variantIndex);
   const result = await storage.upload(assetPath, bytes, { contentType: "image/png", upsert: true });
   if (result.error) throw new Error(result.error.message);
 
   const thumbPath = await saveThumbnail(
     bytes,
-    posterThumbPath(userId, projectId, variantIndex),
+    posterThumbPath(userId, projectId, generationRequestId, variantIndex),
     async (target, body) => {
       const uploaded = await storage.upload(target, body, { contentType: "image/webp", upsert: true });
       if (!uploaded.error) return target;
@@ -119,8 +123,8 @@ export async function POST(request: Request, context: Context) {
         queue: fal.queue,
         requests: stores.requests,
         images: stores.images,
-        saveImage: (projectId, variantIndex, url) =>
-          saveResult(auth.member.userId, projectId, variantIndex, url),
+        saveImage: (projectId, generationRequestId, variantIndex, url) =>
+          saveResult(auth.member.userId, projectId, generationRequestId, variantIndex, url),
       },
     );
 

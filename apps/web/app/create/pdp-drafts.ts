@@ -347,7 +347,15 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     title: record.title?.trim() || buildFallbackDraftTitle(preparedImage, normalizedSections),
     createdAt: record.createdAt || new Date().toISOString(),
     updatedAt: record.updatedAt || record.createdAt || new Date().toISOString(),
-    appState: record.appState === "processing" || record.appState === "editor" ? record.appState : "upload",
+    /**
+     * 되살릴 수 있는 단계만 남긴다.
+     *
+     * **`"scenario"` 가 빠져 있었다.** 그래서 시나리오를 보던 중에 저장된
+     * 초안이 언제나 편집기로 열렸고, 그 화면에만 있는 심사 지적(`ReviewPanel`)이
+     * 통째로 사라졌다. `"processing"` 은 도중 상태라 되살릴 것이 없어 뺀다.
+     */
+    appState:
+      record.appState === "scenario" || record.appState === "editor" ? record.appState : "upload",
     preparedImage,
     modelImage,
     modelImageUsage:
@@ -400,6 +408,14 @@ function normalizeGeneratedResult(
         blueprintList: Array.isArray(result.blueprint.blueprintList) ? result.blueprint.blueprintList : [],
         sections: result.blueprint.sections,
       },
+      /**
+       * **심사 결과를 버리지 않는다.**
+       *
+       * 여기서 `{ originalImage, blueprint }` 만 새로 만들던 동안, 초안을
+       * 다시 열면 끝까지 남은 `fail` 지적이 사라졌다. 「통과한 척하지 않는다」가
+       * 이 기능의 목적인데 재적재 한 번에 무너졌다.
+       */
+      ...(result.review ? { review: result.review } : {}),
     };
   }
 

@@ -79,6 +79,9 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     ratioId: job.ratioId,
     variants: job.variants,
     hasReferences,
+    // 같은 비율을 따라갈 때는 실제 첨부 크기로 값을 낸다. 안 넘기면
+    // 자리표시 픽셀로 계산되어 견적과 실제 요청이 서로 다른 크기를 본다.
+    sourceSize: job.sourceSize,
   });
 
   /**
