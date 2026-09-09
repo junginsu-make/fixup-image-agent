@@ -7,6 +7,7 @@ import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../../
 import { createSnsGenerationProviders, SnsProviderConfigurationError } from "../../../../../../../lib/sns/providers";
 import { createQueuedGenerationDependencies, refreshProjectAssetUrls } from "../../../../../../../lib/sns/runtime";
 import { hasActiveQueuedGeneration, startQueuedFlow } from "../../../../../../../lib/sns/queued-flow";
+import { CARD_NOTE_MAX } from "../../../../../../sns/[id]/result-rules";
 import { withSnsProjectLock } from "../../../../../../../lib/sns/project-lock";
 import { updateFlowCopy } from "../../../../flow-service";
 
@@ -15,6 +16,17 @@ type Context = { params: Promise<{ id: string; index: string }> };
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+/**
+ * 낱장을 다시 만들 때 사람이 그 자리에서 적는 말.
+ *
+ * **없어도 된다.** 안 적으면 지금까지처럼 같은 프롬프트로 한 번 더 돌린다.
+ * 상한은 화면과 같은 값을 쓴다 — 화면만 믿고 서버가 안 재면, 화면을 안 거친
+ * 요청이 그대로 들어온다.
+ */
+const CardNoteSchema = z.object({
+  note: z.string().trim().max(CARD_NOTE_MAX).optional(),
+}).strict();
 
 const CopyPatchSchema = z.object({
   headline: z.string().optional(),
@@ -60,6 +72,11 @@ export async function POST(request: Request, context: Context) {
     const params = await context.params;
     const index = cardIndex(params.index);
     if (!index) return Response.json({ ok: false, message: "카드 번호가 올바르지 않습니다." }, { status: 400 });
+    // 본문이 없어도 된다 — 옛 화면은 아무것도 안 보낸다.
+    const noteInput = CardNoteSchema.safeParse(await request.json().catch(() => ({})));
+    if (!noteInput.success) {
+      return Response.json({ ok: false, message: "적으신 말이 너무 깁니다." }, { status: 400 });
+    }
     return await withSnsProjectLock(params.id, async () => {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(params.id);
@@ -100,7 +117,7 @@ export async function POST(request: Request, context: Context) {
       if (!reserved.ok) return reserved.response;
       reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
-      const flow = await startQueuedFlow(project, currentFlow, dependencies, { cardIndexes: [index] });
+      const flow = await startQueuedFlow(project, currentFlow, dependencies, { cardIndexes: [index], note: noteInput.data.note });
       /**
        * **열쇠는 `startQueuedFlow` 뒤에 적는다.**
        *

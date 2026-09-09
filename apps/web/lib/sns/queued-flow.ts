@@ -33,6 +33,9 @@ import type { FalQueueClient } from "../fal/queue";
 import { uploadUniqueReferences } from "../fal/upload";
 
 export const QUEUE_POLL_INTERVAL_MS = 10_000;
+
+/** 작업에 저장된 지시와 이번에 적은 말 사이. */
+const NOTE_SEPARATOR = String.fromCharCode(10);
 export const QUEUE_GIVE_UP_MS = 30 * 60_000;
 
 export interface SubmittedGenerationRequestStore {
@@ -228,7 +231,12 @@ export async function startQueuedFlow(
   project: SnsProjectRecord,
   flow: SnsFlowState,
   dependencies: QueuedGenerationDependencies,
-  options: { cardIndexes?: number[]; now?: string } = {},
+  /**
+   * `note` 는 **낱장을 다시 만들 때 사람이 그 자리에서 적는 말**이다.
+   * 작업에 저장된 지시(`data.userInstruction`)를 지우지 않고 **덧붙인다** —
+   * 이번 한 번만 쓰고 흐름에 남기지 않는다.
+   */
+  options: { cardIndexes?: number[]; now?: string; note?: string } = {},
 ): Promise<SnsFlowState> {
   const next = structuredClone(flow);
   const now = nowIso(options.now);
@@ -251,9 +259,11 @@ export async function startQueuedFlow(
   if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${project.ratio}`);
   // 화면에서 고른 결과 직접 친 지시. 예전에 만든 작업에는 없어서 `auto` 와
   // 빈 문자열로 읽힌다 — 그러면 지금까지와 똑같이 동작한다.
+  const note = options.note?.trim();
   const tuning: PromptTuning = {
     look: project.data.look,
-    userInstruction: project.data.userInstruction,
+    // 적은 말을 **뒤에** 붙인다. 뒤에 온 말이 앞말을 덮는 것이 사람의 기대다.
+    userInstruction: [project.data.userInstruction?.trim(), note].filter(Boolean).join(NOTE_SEPARATOR) || undefined,
   };
   /**
    * 자리마다 사용자가 적은 말 (표지/속지/엔딩).
