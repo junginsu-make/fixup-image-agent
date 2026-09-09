@@ -39,8 +39,16 @@ describe("서버가 적은 말을 받는다", () => {
 });
 
 describe("화면이 적을 자리를 준다", () => {
-  it("결과판이 지시를 받아 넘긴다", () => {
-    expect(board).toContain("onRegenerate(card.index, ");
+  /**
+   * **인자까지 못 박는다.** 처음엔 `onRegenerate(card.index, ` 까지만 봤는데,
+   * 그 검사는 `onRegenerate(card.index, undefined)` 에도 그대로 맞는다 —
+   * 사람이 적은 말을 안 보내도 저장소 1,556개가 전부 초록이었다
+   * (2026-09-09 독립 리뷰가 뮤테이션으로 증명).
+   *
+   * 다듬기 자체는 `result-rules.test.ts` 가 값으로 잠근다.
+   */
+  it("결과판이 적은 말을 다듬어 넘긴다", () => {
+    expect(board).toContain("onRegenerate(card.index, trimCardNote(notes[card.index]))");
     expect(board).toContain("Textarea");
   });
 
@@ -89,5 +97,56 @@ describe("결과판 크기", () => {
   /** 장부 각주는 우리 회계 사정이지 사용자가 할 일이 아니다. */
   it("장부 각주를 사용자에게 안 보인다", () => {
     expect(board).not.toContain("request_id는 장부에 남습니다");
+  });
+
+  /**
+   * **상태 표시를 옛 하드코딩으로 되돌려도 통과했다**(리뷰 MEDIUM-2).
+   * 크기(38vh)를 그대로 둔 채 문구만 되돌리면 어떤 검사에도 안 걸렸다.
+   */
+  it("상태 표시를 조각에 맡긴다", () => {
+    expect(board).toContain("<CardPlaceholder status={card.status} />");
+    expect(board, "화면에 문구를 박아 두면 상태를 못 가른다").not.toMatch(/>이미지가 없습니다\./);
+  });
+
+  /**
+   * 누르자마자 닫으면 「다시 만드는 중…」이 한 프레임도 안 보인다(리뷰 MEDIUM-3).
+   * 예전에는 바깥 버튼이 그 말을 했는데, 이번에 그 자리가 「다시 만들기」로
+   * 고정되면서 표시가 통째로 사라졌다.
+   */
+  it("응답이 올 때까지 진행 표시를 남긴다", () => {
+    expect(board).toContain("noteFor === card.index || regeneratingIndex === card.index");
+  });
+
+  /** 적은 말은 이번 한 번만 — 화면이 들고 있으면 다음에 몰래 또 나간다(리뷰 LOW-2). */
+  it("보내고 나면 적은 말을 지운다", () => {
+    expect(board).toContain("delete next[card.index]");
+  });
+});
+
+/**
+ * **낱장 다시 만들기도 칸 수만큼 예약해야 한다**(2026-09-09 독립 리뷰 HIGH-3).
+ *
+ * 전체 만들기(`generate`)는 `cards` 를 넘겨 그림 칸 수만큼 센다. 낱장
+ * (`cards/[index]`)은 그것을 안 넘겨 **칸이 셋인 틀도 한 번으로 셌다.**
+ * 예약액이 실제 지출의 1/N 이 되고, 넘친 지출은 확정 때 상한에 깎여
+ * **장부에서 사라진다**(`202607230001_membership_usage.sql` 의
+ * `least(greatest(p_consumed_units,0), requested_units)`).
+ *
+ * 이 커밋이 만든 문제는 아니지만, 같은 라우트를 고치는 김에 함께 막는다 —
+ * 이 저장소가 어제 겪은 것이 정확히 「장부 밖으로 나간 돈」이다.
+ */
+describe("낱장 다시 만들기의 예약액", () => {
+  it("두 라우트가 같은 재료를 넘긴다", () => {
+    const generate = readFileSync(
+      new URL("../projects/[id]/generate/route.ts", import.meta.url), "utf8",
+    );
+    const material = "cards: currentFlow.cards.map((card) => ({ index: card.index, layout: card.layout }))";
+    expect(generate, "전체 만들기는 이미 넘긴다").toContain(material);
+    expect(route, "낱장도 같은 재료를 넘겨야 한다").toContain(material);
+  });
+
+  /** 그 한 장만 잡는다는 원래 뜻은 그대로 지킨다. */
+  it("여전히 그 한 장만 잡는다", () => {
+    expect(route).toContain("onlyCardIndexes: [index]");
   });
 });

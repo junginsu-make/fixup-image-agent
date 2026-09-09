@@ -75,7 +75,14 @@ export async function POST(request: Request, context: Context) {
     // 본문이 없어도 된다 — 옛 화면은 아무것도 안 보낸다.
     const noteInput = CardNoteSchema.safeParse(await request.json().catch(() => ({})));
     if (!noteInput.success) {
-      return Response.json({ ok: false, message: "적으신 말이 너무 깁니다." }, { status: 400 });
+      // 길이만 문제인 게 아니다 — 모르는 칸이 섞여도 여기로 온다. 길이일
+      // 때만 길이라고 말하고, 아니면 뭉뚱그리지 말고 사유를 함께 보낸다.
+      const tooLong = noteInput.error.issues.some((issue) => issue.code === "too_big");
+      return Response.json({
+        ok: false,
+        message: tooLong ? "적으신 말이 너무 깁니다." : "요청을 확인해 주세요.",
+        issues: noteInput.error.issues,
+      }, { status: 400 });
     }
     return await withSnsProjectLock(params.id, async () => {
       const store = await snsFlowStoreForUser(auth.member.userId);
@@ -109,6 +116,10 @@ export async function POST(request: Request, context: Context) {
         modelId: project.modelId,
         totalCards: currentFlow.cards.length,
         attachments: project.data.attachments,
+        // **칸 수만큼 센다.** 이걸 안 넘기면 그림 칸이 셋인 틀도 한 번으로
+        // 세어, 넘친 지출이 확정 때 상한에 깎여 장부에서 사라진다.
+        // 전체 만들기(`generate/route.ts`)가 같은 재료를 넘긴다.
+        cards: currentFlow.cards.map((card) => ({ index: card.index, layout: card.layout })),
         onlyCardIndexes: [index],
       });
       // 이 카드의 장면 프롬프트 한 번. 원고 기획은 다시 하지 않는다.

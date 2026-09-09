@@ -22,7 +22,12 @@ export function cardPlaceholder(status: string): CardPlaceholder {
   if (status === "generating") return { label: "만드는 중입니다", spinning: true };
   if (status === "pending") return { label: "차례를 기다리는 중입니다", spinning: false };
   if (status === "failed") return { label: "만들지 못했습니다", spinning: false };
-  return { label: "이미지가 없습니다.", spinning: false };
+  /**
+   * 여기 오는 흔한 경우는 **`done` 인데 주소가 없는 카드**다. 서명이 실패한
+   * 경로를 `signPaths` 가 조용히 버려서 그렇다(`lib/storage/signing.ts`).
+   * 「없습니다」는 사실만 말하고 할 일을 안 알려 준다.
+   */
+  return { label: "그림을 불러오지 못했습니다. 다시 만들어 보세요.", spinning: false };
 }
 
 /** 낱장을 다시 만들 때 사람이 적는 지시의 길이 상한. */

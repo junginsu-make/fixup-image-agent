@@ -9,7 +9,7 @@ import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
 import { snsCardFilename } from "../download-filename";
 import { SaveToLibrary } from "../../_components/save-to-library";
 import { copyText } from "../../../lib/browser-safe";
-import { cardPlaceholder, CARD_NOTE_MAX } from "./result-rules";
+import { cardPlaceholder, trimCardNote, CARD_NOTE_MAX } from "./result-rules";
 
 function triggerDownload(url: string, name: string) {
   const anchor = document.createElement("a");
@@ -294,7 +294,13 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
 
                 **비워 두고 눌러도 된다** — 그때는 지금까지처럼 그냥 다시 만든다.
               */}
-              {noteFor === card.index ? (
+              {/*
+                **응답이 올 때까지 열어 둔다.** 누르자마자 닫으면 안쪽 「다시
+                만드는 중…」이 한 프레임도 안 보이고, 바깥 버튼은 그대로라
+                화면에 아무 표시가 없다. 그 사이 서버는 레퍼런스를 올리고
+                프롬프트를 만들고 fal 에 제출한다 — 몇 초가 조용히 흐른다.
+              */}
+              {noteFor === card.index || regeneratingIndex === card.index ? (
                 <div className="grid gap-2 rounded-md border border-border p-3">
                   <Label htmlFor={`sns-note-${card.index}`} className="text-xs">무엇을 고칠까요 (안 적어도 됩니다)</Label>
                   <Textarea
@@ -311,12 +317,25 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
                       size="sm"
                       disabled={regeneratingIndex === card.index}
                       onClick={() => {
-                        setNoteFor(undefined);
-                        void onRegenerate(card.index, notes[card.index]);
+                        // **다듬어서 보낸다.** 공백만 적고 누르면 지시 없이 같은 것을 또
+                        // 만들게 되는데, 그건 사용자가 기대한 일이 아니다.
+                        // 적은 말은 이번 한 번만 쓴다 — 서버가 흐름에 안 남기므로
+                        // 화면도 안 들고 있어야 다음에 몰래 또 나가지 않는다.
+                        void onRegenerate(card.index, trimCardNote(notes[card.index])).finally(() => {
+                          setNoteFor(undefined);
+                          setNotes((current) => {
+                            const next = { ...current };
+                            delete next[card.index];
+                            return next;
+                          });
+                        });
                       }}
                     >
                       {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                      {regeneratingIndex === card.index ? "다시 만드는 중…" : "이대로 다시 만들기"}
+                      {regeneratingIndex === card.index
+                        ? "다시 만드는 중…"
+                        // 「이대로」는 적은 말을 안 쓰겠다는 뜻으로 읽힌다.
+                        : trimCardNote(notes[card.index]) ? "적은 대로 다시 만들기" : "그대로 다시 만들기"}
                     </Button>
                   </div>
                 </div>

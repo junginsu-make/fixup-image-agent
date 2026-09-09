@@ -17,8 +17,14 @@ describe("그림이 없는 칸", () => {
     expect(cardPlaceholder("failed").spinning).toBe(false);
   });
 
-  it("모르는 상태는 지금까지대로 둔다", () => {
-    expect(cardPlaceholder("done").label).toBe("이미지가 없습니다.");
+  /**
+   * **`done` 인데 그림이 없는 카드가 실제로 난다.** 서명이 실패한 경로를
+   * `signPaths` 가 조용히 버려서 그렇다. 「없습니다」는 사실만 말하고 할 일을
+   * 안 알려 준다 — 다시 만들면 풀린다는 것을 말해 준다(리뷰 LOW-3).
+   */
+  it("그림이 못 온 카드에는 할 일을 알려 준다", () => {
+    expect(cardPlaceholder("done").label).toMatch(/다시 만들어/);
+    expect(cardPlaceholder("done").spinning).toBe(false);
     expect(cardPlaceholder("무엇").spinning).toBe(false);
   });
 });
