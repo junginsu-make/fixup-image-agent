@@ -46,14 +46,14 @@ function strip<T extends { userId: string }>(row: T): Omit<T, "userId"> {
  * 않는다** — 두 모드가 다르게 동작하면 로컬에서 확인한 것이 운영에서 확인한
  * 것이 아니게 된다.
  */
-function withUrls<T extends { projectId: string; variantIndex: number }>(row: T) {
+function withUrls<T extends { id: string; projectId: string; variantIndex: number }>(row: T) {
   return {
     ...row,
-    url: posterImageUrl(row.projectId, row.variantIndex),
+    url: posterImageUrl(row.projectId, row.id),
     // **조건을 걸지 않는다.** 운영은 무조건 붙이고 라우트가 사본이 없으면
     // 원본으로 떨어뜨린다. 로컬만 조건을 걸면 **이미 쌓인 모든 행이 타는 그
     // 폴백 갈래**를 로컬에서 한 번도 못 밟는다 — 두 모드를 맞추려던 뜻이 어긋난다.
-    thumbUrl: posterThumbUrl(row.projectId, row.variantIndex),
+    thumbUrl: posterThumbUrl(row.projectId, row.id),
   };
 }
 

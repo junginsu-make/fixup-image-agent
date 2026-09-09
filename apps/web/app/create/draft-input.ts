@@ -41,8 +41,24 @@ export function buildDraftInput(state: DraftInputState, hasContent: boolean): Dr
     // 받은 것을 먼저 펼친다. 하나씩 나열하면 새 칸이 늘 때 조용히 사라진다 —
     // 이 파일이 존재하는 이유가 그것이다.
     ...rest,
-    // 분석 중에 저장하면 되불렀을 때 「분석 중」에 갇힌다. 업로드로 되돌린다.
-    appState: rest.result ? "editor" : appState === "processing" ? "upload" : appState,
+    /**
+     * 지금 보고 있는 단계를 그대로 적는다.
+     *
+     * **`result` 가 있다고 무조건 `"editor"` 로 적으면 안 된다.** 시나리오를
+     * 보던 중에도 결과는 이미 있으므로, 자동 저장이 도는 순간 그 단계가
+     * 사라지고 되불렀을 때 편집기로 열렸다 — 시나리오 화면에만 있는 심사
+     * 지적이 통째로 안 보였다.
+     *
+     * 되살릴 수 있는 단계는 `"scenario"` 와 `"editor"` 둘뿐이다. 그 밖이면
+     * 결과가 있을 때만 편집기로 열고, 없으면 업로드로 되돌린다 — 분석 중에
+     * 저장하면 되불렀을 때 「분석 중」에 갇히기 때문이다.
+     */
+    appState:
+      appState === "scenario" || appState === "editor"
+        ? appState
+        : rest.result
+          ? "editor"
+          : "upload",
     notice: editorDraftState?.notice ?? notice,
     editorState: rest.result ? (editorDraftState ?? defaultEditorState()) : null,
   };

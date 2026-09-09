@@ -16,7 +16,22 @@ function CopyCardEditor({ card, saving, projectId, onSave, onLayoutChanged }: {
 }) {
   const [copy, setCopy] = React.useState(card.copy);
 
-  React.useEffect(() => setCopy(card.copy), [card]);
+  /**
+   * **서버 값이 실제로 바뀌었을 때만 되돌린다.**
+   *
+   * 예전에는 `[card]` 였다. 저장과 새로고침은 `setProject` 로 프로젝트를 통째로
+   * 갈아 끼우므로 모든 카드가 새 객체가 되고, 그때마다 이 효과가 돌아 **저장하지
+   * 않은 다른 카드의 수정이 말없이 사라졌다.** 1·2·3번을 고친 뒤 1번만 저장하면
+   * 2·3번이 날아갔고, 아무 카드의 틀을 바꿔도 같은 일이 났다.
+   *
+   * 「사람이 글을 고친다」가 이 도구의 핵심 단계라 손실이 곧바로 그림에 반영된다.
+   */
+  const syncedRef = React.useRef(card.copy);
+  React.useEffect(() => {
+    if (JSON.stringify(card.copy) === JSON.stringify(syncedRef.current)) return;
+    syncedRef.current = card.copy;
+    setCopy(card.copy);
+  }, [card.copy]);
 
   return (
     <Card>

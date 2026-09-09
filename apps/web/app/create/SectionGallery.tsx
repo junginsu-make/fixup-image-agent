@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { GeneratedResult, SectionBlueprint } from "@fixup/pdp-core";
 import { apiJson } from "./pdp-utils";
+// **서버가 차감할 때 쓰는 그 함수다.** 화면이 장수를 따로 세면 안내와 실제가 갈린다.
+import { imageCreditUnits } from "../../lib/credit-cost";
 import { Badge, Button, cn } from "@fixup/ui";
 
 /**
@@ -51,6 +53,8 @@ const SIZE_LABEL: Array<{ value: GalleryCardSize; label: string }> = [
 interface SectionGalleryProps {
   sections: Section[];
   sectionKeys: string[];
+  /** 지금 고른 그림 모델. 차감 장수를 서버와 같은 식으로 세는 데 쓴다. */
+  imageModel: string;
   generatingKeys: string[];
   layerCounts: Record<string, number>;
   onGenerate: (index: number) => void;
@@ -103,6 +107,7 @@ function SegmentedControl<T extends string>({
 export function SectionGallery({
   sections,
   sectionKeys,
+  imageModel,
   generatingKeys,
   layerCounts,
   onGenerate,
@@ -241,7 +246,7 @@ export function SectionGallery({
                 )}
                 남은 {missingCount}장 만들기
               </Button>
-              <span className="text-[11px] text-subtle-foreground">전부 성공 시 최대 {missingCount}장 차감</span>
+              <span className="text-[11px] text-subtle-foreground">전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount)}장 차감</span>
             </div>
           ) : null}
           <Button size="sm" disabled={!generatedCount || isBusy} onClick={onGoEdit}>

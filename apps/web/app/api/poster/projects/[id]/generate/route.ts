@@ -158,6 +158,9 @@ export async function POST(request: Request, context: Context) {
       ratioId: project.ratio,
       variants: project.data.variants,
       hasReferences: references.length > 0 || preserved.length > 0,
+      // 아래 제출과 같은 크기를 본다. 안 넘기면 자리표시 픽셀로 계산되어
+      // 예약한 장수와 실제로 청구되는 값이 갈린다.
+      sourceSize,
     });
     const units = creditUnits(estimate.totalUsd ?? 0);
     const reserved = await reserveAiUsage(request, "poster_image", units);

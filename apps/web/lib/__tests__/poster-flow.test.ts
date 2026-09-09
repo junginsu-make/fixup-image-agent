@@ -41,9 +41,10 @@ function deps(overrides: Record<string, unknown> = {}) {
       // **계약대로 돌려준다.** 문자열을 주면 `as never` 가 타입 검사를 가려서,
       // 실행 중에는 assetPath·thumbPath 가 전부 undefined 가 된다 — 사본 배선이
       // 순서를 뒤집어도 아무도 눈치채지 못한다.
-      saveImage: vi.fn(async (_p: string, index: number) => ({
-        assetPath: `p1/${index}.png`,
-        thumbPath: `p1/${index}.thumb.webp`,
+      // 회차가 자리에 들어간다 — 다음 회차가 앞 회차 파일을 덮어쓰지 않게.
+      saveImage: vi.fn(async (_p: string, requestId: string, index: number) => ({
+        assetPath: `p1/${requestId}/${index}.png`,
+        thumbPath: `p1/${requestId}/${index}.thumb.webp`,
       })),
       ...overrides,
     } as never,
@@ -204,8 +205,8 @@ describe("포스터 회수 — 사본의 자리", () => {
     );
 
     expect(added).toHaveLength(2);
-    expect(added[0]).toMatchObject({ variantIndex: 0, assetPath: "p1/0.png", thumbPath: "p1/0.thumb.webp" });
-    expect(added[1]).toMatchObject({ variantIndex: 1, assetPath: "p1/1.png", thumbPath: "p1/1.thumb.webp" });
+    expect(added[0]).toMatchObject({ variantIndex: 0, assetPath: "p1/req-1/0.png", thumbPath: "p1/req-1/0.thumb.webp" });
+    expect(added[1]).toMatchObject({ variantIndex: 1, assetPath: "p1/req-1/1.png", thumbPath: "p1/req-1/1.thumb.webp" });
   });
 });
 

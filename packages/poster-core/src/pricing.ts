@@ -1,4 +1,4 @@
-import { IMAGE_MODELS, priceCoverage, resolvePosterSize, type ImageMode } from "@fixup/sns-core";
+import { IMAGE_MODELS, MATCH_SOURCE, priceCoverage, resolvePosterSize, sizeFromSource, type ImageMode } from "@fixup/sns-core";
 
 /**
  * 포스터 비용 추정.
@@ -35,6 +35,17 @@ export interface PosterCostInput {
   ratioId: string;
   variants: number;
   hasReferences: boolean;
+  /**
+   * 첨부한 그림의 실제 크기. 비율이 `match-source` 일 때만 쓴다.
+   *
+   * **없으면 값이 틀린다.** `POSTER_RATIOS` 의 `match-source` 픽셀은
+   * 자리표시 1088×1088 인데, 실제 크기는 `buildPosterJob` 이 `sizeFromSource`
+   * 로 따로 구한다 — 두 값이 만나는 자리가 없었다. GPT Image 2 는 크기별
+   * 단가표를 쓰므로 값이 그대로 어긋났다. 3840×2160 참고 이미지는 실제
+   * $0.413 인데 견적은 1024×1024 행의 $0.219 였고, 광고 마스터
+   * 2048×1072 는 반대로 실제보다 39% 더 깎였다.
+   */
+  sourceSize?: { width: number; height: number };
 }
 
 export interface PosterCostEstimate {
@@ -64,8 +75,26 @@ export function estimatePosterCost(input: PosterCostInput): PosterCostEstimate {
   const model = IMAGE_MODELS.find((entry) => entry.id === input.modelId);
   if (!model) return { ...base, rejected: `모르는 모델입니다: ${input.modelId}` };
 
-  const resolved = resolvePosterSize(input.ratioId, model);
+  /**
+   * **`buildPosterJob` 과 같은 방법으로 크기를 구한다.**
+   *
+   * 여기서 갈리면 견적과 실제 요청이 다른 크기를 보게 되고, 그 차이가 그대로
+   * 크레딧과 `poster_generation_requests.unit_cost_usd` 에 남는다.
+   */
+  const followsSource = input.ratioId === MATCH_SOURCE && Boolean(input.sourceSize);
+  const resolved = followsSource
+    ? sizeFromSource(input.sourceSize!, model)
+    : resolvePosterSize(input.ratioId, model);
   if (resolved.rejected) return { ...base, rejected: resolved.rejected };
+
+  /**
+   * **크기를 아직 모르는 자리는 거절하지 않는다.**
+   *
+   * 작업을 만들 때와 첫 화면의 「예상 비용」은 아직 첨부를 안 쟀다. 그때
+   * 거절하면 광고·같은 비율 작업을 아예 못 만든다. 자리표시 픽셀로 값을 내되
+   * **어림값이라고 표시한다** — 실제 청구는 만들고 나서 장부에 남는 값이다.
+   */
+  const unknownSource = input.ratioId === MATCH_SOURCE && !input.sourceSize;
 
   // 열거 모델은 픽셀이 단가에 영향을 주지 않는다(고정 단가). 그래도 표 조회에는
   // 크기가 필요하므로 비율의 픽셀을 그대로 넘긴다.
@@ -77,8 +106,9 @@ export function estimatePosterCost(input: PosterCostInput): PosterCostEstimate {
     ...base,
     unitUsd: usd,
     totalUsd: Number((usd * input.variants).toFixed(4)),
-    // 표에 없는 크기다. 적게 잡는 쪽이 위험해 가장 비싼 값을 썼다.
-    ...(covered ? {} : { approximate: true }),
+    // 표에 없는 크기이거나, 아직 첨부를 안 재서 자리표시로 계산한 값이다.
+    // 적게 잡는 쪽이 위험해 어림이라고 알린다.
+    ...(covered && !unknownSource ? {} : { approximate: true }),
   };
 }
 

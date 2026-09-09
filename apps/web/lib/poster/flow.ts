@@ -27,9 +27,16 @@ export interface PosterFlowDependencies {
   queue: FalQueueClient;
   requests: PosterRequestStore;
   images: PosterImageStore;
-  /** fal 이 준 URL 을 우리 저장소로 옮기고 경로를 돌려준다. */
+  /**
+   * fal 이 준 URL 을 우리 저장소로 옮기고 경로를 돌려준다.
+   *
+   * **회차를 함께 넘긴다.** `variantIndex` 는 그 요청 안의 배열 번호라서
+   * 회차마다 0 부터 다시 센다. 그것만으로 자리를 정하면 다음 회차가 앞 회차의
+   * 파일을 덮어쓴다.
+   */
   saveImage(
     projectId: string,
+    generationRequestId: string,
     variantIndex: number,
     url: string,
   ): Promise<{ assetPath: string; thumbPath: string | null }>;
@@ -157,7 +164,7 @@ export async function collectPoster(
   const paths: string[] = [];
   const thumbPaths: Array<string | null> = [];
   for (const [index, image] of result.images.entries()) {
-    const saved = await dependencies.saveImage(input.projectId, index, image.url);
+    const saved = await dependencies.saveImage(input.projectId, input.requestRowId, index, image.url);
     paths.push(saved.assetPath);
     thumbPaths.push(saved.thumbPath);
   }

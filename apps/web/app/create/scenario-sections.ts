@@ -41,3 +41,21 @@ export function createEmptySection(index: number): SectionBlueprint {
     evidence: [],
   };
 }
+
+/**
+ * 이 목록에 넣어도 안 겹치는 섹션을 만든다.
+ *
+ * **배열 길이로 번호를 매기면 안 된다.** S1~S6 에서 S2 를 지우면 길이가 5 라
+ * 새 섹션이 다시 `S6` 가 됐다. `section_id` 는 이 화면 뒤의 거의 모든 것이
+ * 쓰는 열쇠라, 겹치면 헤드라인·불릿 수정이 원래 섹션까지 덮어쓰고(`applyUserEdit`)
+ * 배치 생성 결과가 엉뚱한 섹션에 붙는다. React `key` 도 중복된다.
+ *
+ * 안 쓰인 가장 작은 번호를 고른다 — 지우고 다시 넣었을 때 번호가 끝없이
+ * 커지지 않는다.
+ */
+export function createSectionFor(sections: readonly SectionBlueprint[]): SectionBlueprint {
+  const taken = new Set(sections.map((section) => section.section_id));
+  let number = 1;
+  while (taken.has(`S${number}`)) number += 1;
+  return createEmptySection(number - 1);
+}
