@@ -14,6 +14,7 @@ import { Badge, Button, StepBar, cn } from "@fixup/ui";
 import type { AttachmentIntents } from "@fixup/pdp-core";
 import { AttachmentIntentField } from "./AttachmentIntentField";
 import { attachedSlotsOf, intentsOrUndefined } from "./attachment-intents";
+import { buildAnalyzeRequest } from "./analyze-request";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
@@ -24,7 +25,7 @@ import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
-import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile, shrinkForPlanning } from "./pdp-utils";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
 
@@ -244,6 +245,8 @@ export function PdpMakerClient() {
       desiredTone,
       look,
       attachmentIntents,
+      styleReference,
+      styleReferenceEnabled,
       userInstruction,
       aspectRatio,
       notice: editorDraftState?.notice ?? notice,
@@ -320,6 +323,11 @@ export function PdpMakerClient() {
     setDesiredTone("");
     // 첨부에 대해 적은 말은 그 그림의 것이다. 그림이 사라지면 함께 사라진다.
     setAttachmentIntents({});
+    // 그림도 함께 비운다. 지시만 지우면 「지시 없는 남의 레퍼런스」가 남는다.
+    // 토글은 켜 둔 상태로 되돌린다 — 안 그러면 새 작업에서 레퍼런스를 붙여도
+    // 조용히 안 쓰이고, 그 토글은 시나리오 화면에만 있어 볼 방법이 없다.
+    setStyleReference(undefined);
+    setStyleReferenceEnabled(true);
     setAspectRatio("9:16");
     setNotice("새 이미지로 다시 시작할 수 있습니다.");
     setErrorMessage("");
@@ -375,6 +383,9 @@ export function PdpMakerClient() {
         setUserInstruction(draft.userInstruction ?? "");
         // 안 되돌리면 앞 작업의 제품 지시가 새 제품에 그대로 붙는다.
         setAttachmentIntents(draft.attachmentIntents ?? {});
+        // 그림과 그 그림에 적은 말은 함께 움직여야 짝이 안 어긋난다.
+        setStyleReference(draft.styleReference ?? undefined);
+        setStyleReferenceEnabled(draft.styleReferenceEnabled ?? true);
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
@@ -509,37 +520,33 @@ export function PdpMakerClient() {
     try {
       setLoadingStep("제품을 분석하고 상세페이지 구조를 설계하는 중입니다.");
 
+      // 레퍼런스는 기획에 실을 만큼만 줄여 보낸다. 이미지를 만들 때는 원본이
+      // 그대로 간다 — 서체 획과 색 경계가 뭉개지면 흉내가 나빠진다.
+      const planningStyleReference =
+        styleReferenceEnabled && styleReference
+          ? {
+              ...styleReference,
+              ...(await shrinkForPlanning(styleReference.imageBase64, styleReference.mimeType)),
+            }
+          : styleReference;
+
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
         method: "POST",
         body: JSON.stringify({
-          imageBase64: preparedImage.base64,
-          mimeType: preparedImage.mimeType,
-          modelImageBase64: modelImage?.base64,
-          modelImageMimeType: modelImage?.mimeType,
-          modelImageFileName: modelImage?.fileName,
-          additionalInfo: additionalInfo.trim() || undefined,
-          sellerBrief,
-          copyIntensity,
-          gapPolicy,
-          desiredTone: desiredTone.trim() || undefined,
-          aspectRatio,
-          outputMode,
-          /*
-            구성안을 짤 때부터 레퍼런스를 본다. 안 주면 기획이 style_guide 를
-            상상으로 채우고, 그 값이 그대로 이미지 프롬프트의 design_system 이 된다.
-
-            시나리오 화면에서 나중에 붙인 레퍼런스는 여기 못 온다 — 그때는 구성안이
-            이미 만들어진 뒤다. 그 경우 레퍼런스는 이미지에만 반영된다.
-          */
-          styleReference:
-            styleReferenceEnabled && styleReference
-              ? {
-                  imageBase64: styleReference.imageBase64,
-                  mimeType: styleReference.mimeType,
-                  description: styleReference.description,
-                  intent: attachmentIntents.style?.trim() || undefined,
-                }
-              : undefined
+          ...buildAnalyzeRequest({
+            preparedImage,
+            modelImage,
+            additionalInfo,
+            sellerBrief,
+            copyIntensity,
+            gapPolicy,
+            desiredTone,
+            aspectRatio,
+            outputMode,
+            styleReference: planningStyleReference,
+            styleReferenceEnabled,
+            attachmentIntents,
+          }),
         })
       });
 

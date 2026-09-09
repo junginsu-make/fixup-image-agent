@@ -87,6 +87,22 @@ export interface PdpEditorDraftState {
   workbenchState: FloatingWorkbenchState;
 }
 
+/**
+ * 초안에 담는 디자인 레퍼런스.
+ *
+ * 화면의 `StyleReferenceView` 를 그대로 참조하지 않는다 — 초안 파일이 화면
+ * 컴포넌트에 매달리면 화면을 고칠 때마다 저장 형식이 흔들린다.
+ */
+export interface StyleReferenceDraft {
+  id: string;
+  name: string;
+  imageBase64: string;
+  mimeType: string;
+  description: string;
+  /** 왜 이것을 골랐는지. 자동 추천일 때만 채워진다. */
+  reason: string;
+}
+
 export interface PreparedImageDraft {
   base64: string;
   mimeType: string;
@@ -121,6 +137,14 @@ export interface PdpDraftRecord {
    * 사용자는 무엇이 반영되는지 볼 수도 없다.
    */
   attachmentIntents?: AttachmentIntents;
+  /**
+   * 디자인 레퍼런스와 그 토글. 예전 초안에는 없다.
+   *
+   * 지시(`attachmentIntents.style`)만 담고 그림을 안 담으면 되돌렸을 때 짝이
+   * 어긋난다 — 앞 레퍼런스에 대해 적은 말이 새로 붙인 그림에 붙는다.
+   */
+  styleReference?: StyleReferenceDraft;
+  styleReferenceEnabled?: boolean;
   aspectRatio: AspectRatio;
   notice: string;
   editorState: PdpEditorDraftState | null;

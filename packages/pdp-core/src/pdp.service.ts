@@ -214,8 +214,15 @@ export class PdpService {
       referenceModelImage ? await this.extractReferenceModelProfile(client, referenceModelImage) : null;
 
     // 구성안을 짤 때부터 레퍼런스를 본다. 안 주면 `style_guide` 를 상상으로 채운다.
+    // 제품·인물과 같은 손질을 거친다. 레퍼런스만 건너뛰면 `data:` 접두사가
+    // 붙어 오거나 그림이 아닌 형식이 와도 그대로 모델에 실린다.
     const styleReferenceForPlan = request.styleReference?.imageBase64?.trim()
-      ? request.styleReference
+      ? {
+          imageBase64: sanitizeBase64Payload(request.styleReference.imageBase64),
+          mimeType: normalizeMimeType(request.styleReference.mimeType),
+          description: request.styleReference.description,
+          intent: request.styleReference.intent,
+        }
       : undefined;
     const analyzePrompt = buildAnalyzePrompt(
       request.additionalInfo,
@@ -953,16 +960,44 @@ export function buildAnalyzePrompt(
         "  각 섹션의 `style_guide` 를 이 이미지 기준으로 채울 것.",
         "- **Do not copy its product, its people, its text content or its specific scene.**",
         "  담을 내용은 이 제품의 사실에서만 나온다. 레퍼런스의 문구를 옮겨 적지 말 것.",
-        extras.styleReference.description?.trim()
-          ? `- 이 레퍼런스가 디자인 언어를 쓰는 방식: ${extras.styleReference.description.trim()}`
-          : "",
+        /*
+          **순서가 이미지 경로와 같아야 한다.**
+
+          `pdp.reference-policy.ts` 는 사용자가 적은 말을 먼저 놓고, 기계가 읽어
+          적은 서술을 뒤에 「참고용」으로 붙인다. 반대로 놓으면 「배치는 무시해
+          주세요」 위에 배치 서술이 앉아 방금 한 말이 묻힌다.
+
+          그리고 **범위를 그 그림으로 좁힌다.** 이 프롬프트에는 근거 없는 숫자
+          금지·표시광고 규칙이 함께 실려 있다. 「다른 지시보다 우선」이라고 쓰면
+          첨부칸에 적은 한 줄이 그것들 위에 놓인다고 읽힐 수 있다.
+        */
         extras.styleReference.intent?.trim()
-          ? `- 사용자가 이 그림에 대해 적은 말(다른 지시보다 우선): ${extras.styleReference.intent.trim()}`
+          ? `- 이 그림에 대해서는 사용자가 적은 말을 따를 것: ${extras.styleReference.intent.trim()}`
+          : "",
+        extras.styleReference.description?.trim()
+          ? `- 이 레퍼런스가 디자인 언어를 쓰는 방식${
+              extras.styleReference.intent?.trim() ? "(참고용 — 위 지시가 이긴다)" : ""
+            }: ${extras.styleReference.description.trim()}`
           : "",
       ]
         .filter(Boolean)
         .join("\n")
     : "";
+
+  /**
+   * `style_guide` 설명이 한 프롬프트에 두 번, 다른 어휘로 있으면 안 된다.
+   *
+   * 위쪽 레퍼런스 블록은 그래픽 디자인 어휘로 말하고 여기는 사진 연출 어휘로
+   * 말했다. 이 파일 자신의 규칙대로면 **뒤에 있는 쪽이 이긴다** — 레퍼런스를
+   * 보여 준 의미가 조용히 희석된다.
+   *
+   * 「디자인 가이드 우선 모드에서만 강하게」도 뺐다. `pdp.image-prompt.ts` 는
+   * `design_system = style_guide` 를 조건 없이 한다. 기획에게 스스로 힘을
+   * 빼라고 말할 이유가 없다.
+   */
+  const styleGuideFieldRule = extras?.styleReference
+    ? "- style_guide: 전체 통일 스타일. **위에 첨부된 디자인 레퍼런스를 기준으로** 레이아웃·여백·색 쓰임·서체 인상을 적을 것."
+    : "- style_guide: 전체 통일 스타일. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것.";
 
   const outputModePrompt =
     outputMode === "full-image"
@@ -1045,7 +1080,7 @@ ${styleReferencePrompt}
 - prompt_ko: 한국어 이미지 생성 프롬프트(1~2문장). 구도, 거리감, 시선 높이, 제품이 프레임에서 차지하는 비중을 함께 명시할 것.
 - prompt_en: 영어 프롬프트(실제 이미지 생성용). Include composition, framing distance, camera angle, product prominence, and the key subject action. Keep it neutral enough that studio/lifestyle/outdoor priority can still be controlled at generation time.
 - negative_prompt: 피해야 할 요소
-- style_guide: 전체 통일 스타일. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것. 이 값은 디자인 가이드 우선 모드에서만 강하게 적용될 수 있도록 작성할 것.
+${styleGuideFieldRule}
 - reference_usage: 업로드된 기존 제품 이미지를 어떻게 참고할지. 제품 형태, 라벨, 재질, 색감을 유지하는 기준을 명시할 것.
 - section_name, goal, layout_notes, compliance_notes, purpose, style_guide, reference_usage는 반드시 한국어로 작성할 것
 - 영어는 *_en 필드와 prompt_en에만 사용할 것
