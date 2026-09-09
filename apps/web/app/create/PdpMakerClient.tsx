@@ -15,6 +15,7 @@ import type { AttachmentIntents } from "@fixup/pdp-core";
 import { AttachmentIntentField } from "./AttachmentIntentField";
 import { attachedSlotsOf, intentsOrUndefined } from "./attachment-intents";
 import { buildAnalyzeRequest } from "./analyze-request";
+import { buildDraftInput as buildDraftPayload } from "./draft-input";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
@@ -225,34 +226,36 @@ export function PdpMakerClient() {
     }
   };
 
-  const buildDraftInput = useCallback(() => {
-    if (!hasDraftContent) {
-      return null;
-    }
-
-    return {
-      id: activeDraftId ?? undefined,
-      createdAt: draftCreatedAt ?? undefined,
-      appState: result ? "editor" : appState === "processing" ? "upload" : appState,
-      preparedImage,
-      modelImage,
-      modelImageUsage,
-      result,
-      additionalInfo,
-      sellerBrief,
-      copyIntensity,
-      gapPolicy,
-      desiredTone,
-      look,
-      attachmentIntents,
-      styleReference,
-      styleReferenceEnabled,
-      userInstruction,
-      aspectRatio,
-      notice: editorDraftState?.notice ?? notice,
-      editorState: result ? editorDraftState ?? createDefaultEditorDraftState(result, outputMode) : null
-    };
-  }, [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents]);
+  const buildDraftInput = useCallback(
+    () =>
+      buildDraftPayload(
+        {
+          id: activeDraftId ?? undefined,
+          createdAt: draftCreatedAt ?? undefined,
+          appState,
+          preparedImage,
+          modelImage,
+          modelImageUsage,
+          result,
+          additionalInfo,
+          sellerBrief,
+          copyIntensity,
+          gapPolicy,
+          desiredTone,
+          look,
+          userInstruction,
+          attachmentIntents,
+          styleReference,
+          styleReferenceEnabled,
+          aspectRatio,
+          notice,
+          editorDraftState,
+          defaultEditorState: () => createDefaultEditorDraftState(result!, outputMode),
+        },
+        hasDraftContent,
+      ),
+    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled],
+  );
 
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
