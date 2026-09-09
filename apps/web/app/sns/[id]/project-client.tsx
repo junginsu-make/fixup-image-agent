@@ -205,7 +205,14 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     }
   }
 
-  async function regenerate(index: number, note?: string) {
+  /**
+   * 낱장을 다시 만든다. **성공 여부를 돌려준다.**
+   *
+   * 실패했는데 화면이 그것을 모르면, 적은 말을 지우고 입력칸을 닫아 버린다 —
+   * 아무것도 안 나갔는데 사람은 다시 적어야 한다. 카드는 한 장씩 돌기 때문에
+   * 「다른 카드가 생성 중입니다」(409)는 정상 흐름에서 자주 난다.
+   */
+  async function regenerate(index: number, note?: string): Promise<boolean> {
     setRegeneratingIndex(index);
     setMessage("");
     try {
@@ -217,11 +224,13 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         body: JSON.stringify({ note }),
       }));
       setView("result");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다.");
       // 「다른 카드가 생성 중입니다」(409)도 같은 통보다 — 화면만 모르고 있다.
       const status = error instanceof ProjectRequestError ? error.status : undefined;
       if (afterGenerateFailure(status) === "resync") await reload();
+      return false;
     } finally {
       setRegeneratingIndex(undefined);
     }

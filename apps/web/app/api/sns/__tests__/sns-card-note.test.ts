@@ -10,6 +10,15 @@ import { describe, expect, it } from "vitest";
  *
  * 판단(다듬기·상한)은 `result-rules.test.ts` 가, 프롬프트에 실리는지는
  * `sns-queued-flow.test.ts` 가 값으로 잠근다. 여기서는 **이어 주는 줄**을 본다.
+ *
+ * **여기서 못 잠그는 구간이 하나 있다 — 입력칸 → `notes` state.**
+ * 이 저장소에는 DOM 시험 환경이 없어(`jsdom`·`happy-dom`·`@testing-library`
+ * 모두 없고 `vitest.config.ts` 도 없다) `onChange` 가 망가져도 문자열 검사는
+ * 통과한다. 그 구간은 **시험이 아니라 브라우저 실측이 지킨다** — 커밋
+ * 메시지에 실측 결과를 남긴다.
+ *
+ * 문자열 검사가 뮤테이션에서 살아남으면 **인자를 통째로 못 박아** 죽인다.
+ * 그 방법으로도 안 죽는 날이 오면 그때가 시험 환경을 논할 때다.
  */
 const route = readFileSync(
   new URL("../projects/[id]/cards/[index]/route.ts", import.meta.url), "utf8",
@@ -120,6 +129,24 @@ describe("결과판 크기", () => {
   /** 적은 말은 이번 한 번만 — 화면이 들고 있으면 다음에 몰래 또 나간다(리뷰 LOW-2). */
   it("보내고 나면 적은 말을 지운다", () => {
     expect(board).toContain("delete next[card.index]");
+  });
+
+  /**
+   * **실패했으면 적은 말을 남긴다**(재검증 2번).
+   *
+   * 카드는 한 장씩 돌기 때문에 **생성 중에 결과판을 보는 것이 정상 흐름**이고,
+   * 그때 이미 끝난 카드의 「다시 만들기」는 안 잠긴다. 누르면 서버가 409
+   * 「다른 카드가 생성 중입니다」로 막는다. 그때까지 적은 말을 지우면 사람은
+   * 빨간 띠만 보고 **다시 적어야 한다** — 아무것도 안 나갔는데.
+   */
+  it("실패하면 적은 말을 남긴다", () => {
+    expect(board).toContain("if (!ok) return;");
+    expect(client, "실패를 거짓으로 돌려줘야 화면이 가른다").toMatch(/catch[\s\S]{0,400}return false/);
+  });
+
+  /** 길이만 문제인 게 아니다(리뷰 LOW-1). */
+  it("400 사유를 가른다", () => {
+    expect(route).toMatch(/issue\.code === "too_big"/);
   });
 });
 

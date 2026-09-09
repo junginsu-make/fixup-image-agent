@@ -175,7 +175,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
   title: string;
   flow: SnsFlowState;
   regeneratingIndex?: number;
-  onRegenerate(index: number, note?: string): Promise<void>;
+  onRegenerate(index: number, note?: string): Promise<boolean>;
   writingCaption?: boolean;
   onWriteCaption(): Promise<void>;
 }) {
@@ -321,7 +321,10 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
                         // 만들게 되는데, 그건 사용자가 기대한 일이 아니다.
                         // 적은 말은 이번 한 번만 쓴다 — 서버가 흐름에 안 남기므로
                         // 화면도 안 들고 있어야 다음에 몰래 또 나가지 않는다.
-                        void onRegenerate(card.index, trimCardNote(notes[card.index])).finally(() => {
+                        void onRegenerate(card.index, trimCardNote(notes[card.index])).then((ok) => {
+                          // **실패했으면 그대로 둔다.** 아무것도 안 나갔는데
+                          // 지우면 사람이 다시 적어야 한다.
+                          if (!ok) return;
                           setNoteFor(undefined);
                           setNotes((current) => {
                             const next = { ...current };
