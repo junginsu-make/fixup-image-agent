@@ -162,23 +162,47 @@ export function buildReferenceRoleDirective(
        * 써도 얼굴 지키기가 풀린다. 여기는 자리마다 받으므로 그 걱정이 없다.
        */
       lines.push(
-        "The user wrote what to do with this image. Their words replace the usual rules " +
-          "for this role, so those rules are deliberately omitted. Follow this exactly:",
+        // 이름을 붙인다. 우선순위 줄이 「USER INSTRUCTION 이 1등」이라고 말하는데
+        // 그 이름의 블록이 없으면, 없는 것을 1등으로 올려 둔 셈이 된다.
+        "USER INSTRUCTION for this image. The user wrote what to do with it. Their words " +
+          "replace the usual rules for this role, so those rules are deliberately omitted. " +
+          "Follow this exactly:",
       );
       lines.push(intent);
+      /**
+       * **푸는 것은 이 자리의 역할 문구뿐이다.**
+       *
+       * 그림의 결(`look`)과 텍스트 정책은 다른 곳에서 정해져 시스템 프롬프트와
+       * JSON 에 따로 실린다. 그래서 「이 제품을 만화풍으로」라고 적으면 제품
+       * 보호는 풀리지만 `Realism: produce a real photograph` 는 그대로 남아
+       * 요청이 여전히 막힌다 — 2026-09-09 독립 리뷰가 실측으로 확인했다.
+       *
+       * 그런 요청은 화면에서 결을 함께 바꾸도록 안내한다. 여기서 결까지 풀면
+       * 「배치를 왼쪽으로」 한 줄에 사진이 만화가 되는 일이 생긴다.
+       */
     } else {
       lines.push(...ROLE_RULES[reference.kind]);
     }
     // 서술은 이미지를 대체하지 않는다. 이미지가 전달하지 못한 **쓰임새**를 보탠다.
     // 그래서 규칙 뒤에 붙이고, 무엇에 대한 말인지 한 줄로 밝힌다.
     if (reference.kind === "style" && reference.description?.trim()) {
-      lines.push("How this reference uses its design language:");
+      // 서술은 기계가 읽어 적은 것이고 지시는 사람이 쓴 것이다. 「배치는 무시해
+      // 주세요」 뒤에 배치 서술이 그냥 붙으면 방금 뺐다고 한 말이 거짓이 된다.
+      lines.push(
+        intent
+          ? "How this reference uses its design language (context only — the instruction above wins):"
+          : "How this reference uses its design language:",
+      );
       lines.push(reference.description.trim());
     }
     lines.push("");
   });
 
-  const hasIdentity = references.some((reference) => isIdentityReference(reference.kind));
+  // 지시를 적어 규칙을 뺀 자리는 더 이상 「지킨 대상」이 아니다. 그대로 세면
+  // 「deliberately omitted」와 같은 단락에서 「preserved subject」가 부딪힌다.
+  const hasIdentity = references.some(
+    (reference) => isIdentityReference(reference.kind) && !reference.intent?.trim(),
+  );
   // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
   lines.push(attachmentPlacementRule(hasIdentity), "");
   const hasStyle = references.some((reference) => reference.kind === "style");

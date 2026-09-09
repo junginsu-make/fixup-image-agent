@@ -225,3 +225,50 @@ describe("장은 두 라우트가 같은 규칙으로 센다", () => {
     expect(reserved[0]!).toBeGreaterThan(싼모델);
   });
 });
+
+/**
+ * 몸통에 실은 자리별 지시가 **생성 옵션까지** 남는가.
+ *
+ * 독립 리뷰가 이 구간에 시험이 없다고 짚었다 — 운반 한 줄을 지워도 전부
+ * 통과했다. 조용하고, 타입도 통과하고, 돈은 나간다.
+ */
+describe("자리별 지시가 라우트를 지나 생성까지 간다", () => {
+  const intents = { anchor: "라벨 그대로", person: "안경", style: "색만 가져와" };
+
+  it("단건", async () => {
+    await single(
+      post({
+        originalImageBase64: "AAAA",
+        section: section("s1"),
+        aspectRatio: "3:4",
+        page: { imageModel: "nano-banana", attachmentIntents: intents },
+      }),
+    );
+    expect(calls[0]!.options.attachmentIntents).toEqual(intents);
+  });
+
+  it("일괄 — 묶음의 모든 섹션이 같은 지시를 받는다", async () => {
+    await batch(
+      post({
+        originalImageBase64: "AAAA",
+        sections: [section("s1"), section("s2")],
+        sectionIndexes: [0, 1],
+        aspectRatio: "3:4",
+        page: { imageModel: "nano-banana", attachmentIntents: intents },
+      }),
+    );
+    expect(calls.map((c) => c.options.attachmentIntents)).toEqual([intents, intents]);
+  });
+
+  it("안 보내면 없다", async () => {
+    await single(
+      post({
+        originalImageBase64: "AAAA",
+        section: section("s1"),
+        aspectRatio: "3:4",
+        page: { imageModel: "nano-banana" },
+      }),
+    );
+    expect(calls[0]!.options.attachmentIntents).toBeUndefined();
+  });
+});

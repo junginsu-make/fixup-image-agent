@@ -13,7 +13,7 @@ import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-contro
 import { Badge, Button, StepBar, cn } from "@fixup/ui";
 import type { AttachmentIntents } from "@fixup/pdp-core";
 import { AttachmentIntentField } from "./AttachmentIntentField";
-import { intentsOrUndefined } from "./attachment-intents";
+import { attachedSlotsOf, intentsOrUndefined } from "./attachment-intents";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
@@ -243,12 +243,13 @@ export function PdpMakerClient() {
       gapPolicy,
       desiredTone,
       look,
+      attachmentIntents,
       userInstruction,
       aspectRatio,
       notice: editorDraftState?.notice ?? notice,
       editorState: result ? editorDraftState ?? createDefaultEditorDraftState(result, outputMode) : null
     };
-  }, [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction]);
+  }, [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents]);
 
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
@@ -317,6 +318,8 @@ export function PdpMakerClient() {
     setCopyIntensity("normal");
     setGapPolicy("ask");
     setDesiredTone("");
+    // 첨부에 대해 적은 말은 그 그림의 것이다. 그림이 사라지면 함께 사라진다.
+    setAttachmentIntents({});
     setAspectRatio("9:16");
     setNotice("새 이미지로 다시 시작할 수 있습니다.");
     setErrorMessage("");
@@ -370,6 +373,8 @@ export function PdpMakerClient() {
         setDesiredTone(draft.desiredTone);
         setLook(draft.look ?? "photoreal");
         setUserInstruction(draft.userInstruction ?? "");
+        // 안 되돌리면 앞 작업의 제품 지시가 새 제품에 그대로 붙는다.
+        setAttachmentIntents(draft.attachmentIntents ?? {});
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
@@ -602,6 +607,8 @@ export function PdpMakerClient() {
           <p className="rounded-md bg-primary-soft p-3.5 text-sm text-foreground">{notice}</p>
         ) : null}
         <ScenarioEditor
+          attachmentIntents={attachmentIntents}
+          onIntentChange={setIntent}
           blueprint={result.blueprint}
           referenceModelName={modelImage ? modelImageDisplayName : undefined}
           onReferenceModelRemove={() => {
@@ -661,11 +668,16 @@ export function PdpMakerClient() {
         apiConnectionLabel={apiConnectionLabel}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
-        attachmentIntents={intentsOrUndefined(attachmentIntents, {
-          person: Boolean(modelImage || characterId),
-          // 시나리오에서 레퍼런스를 껐으면 그 칸에 적은 말도 안 간다.
-          style: Boolean(styleReferenceEnabled && styleReference),
-        })}
+        attachmentIntents={intentsOrUndefined(
+          attachmentIntents,
+          attachedSlotsOf({
+            preparedImage,
+            modelImage,
+            characterId,
+            styleReference,
+            styleReferenceEnabled,
+          }),
+        )}
         saveState={saveState}
       />
     );
@@ -786,6 +798,8 @@ export function PdpMakerClient() {
         </section>
       ) : startMode === "text" ? (
         <TextModeFlow
+          attachmentIntents={attachmentIntents}
+          onIntentChange={setIntent}
           aspectRatio={aspectRatio}
           outputMode={outputMode}
           desiredTone={desiredTone}
@@ -990,6 +1004,16 @@ export function PdpMakerClient() {
                     <strong className="text-foreground">비슷하게 따라갑니다.</strong> 필요한 것만 골라도 됩니다.
                     1단계에 올린 제품 사진은 항상 그대로 유지됩니다.
                   </p>
+                  {/*
+                    풀리는 것과 안 풀리는 것을 미리 밝힌다. 자리 지시는 그 자리의
+                    보호 문구만 뺀다 — 그림의 결이나 텍스트 정책은 따로 정한 값이라
+                    여기 적어도 안 바뀐다. 안 밝히면 「적었는데 왜 안 되지」가 된다.
+                  */}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    각 그림 아래에 <strong className="text-foreground">어떻게 쓸지 직접 적으면</strong> 그
+                    그림의 기본 규칙 대신 적은 말을 따릅니다. 다만 그림의 결(사진·애니)과 글자 넣기는
+                    설정에서 정하는 값이라 여기 적어도 바뀌지 않습니다.
+                  </p>
                 </div>
               </div>
 
@@ -1024,7 +1048,7 @@ export function PdpMakerClient() {
                   id="intent-anchor"
                   value={attachmentIntents.anchor ?? ""}
                   onChange={(next) => setIntent("anchor", next)}
-                  placeholder="예: 라벨 글씨는 한 글자도 바꾸지 마세요"
+                  placeholder="예: 뚜껑 색은 그대로 두고 각도만 바꿔 주세요"
                 />
               </div>
 

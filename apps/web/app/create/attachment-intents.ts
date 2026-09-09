@@ -9,9 +9,14 @@ import type { AttachmentIntents } from "@fixup/pdp-core";
  *
  * 카드뉴스에서 같은 자리를 겪었다(`slot-rows.ts` 의 `visibleIntents`).
  *
- * 제품 사진은 1단계에서 받으므로 **항상 붙어 있다.**
+ * **제품 자리도 물어본다.** 「자리가 비지 않는다」와 「같은 그림이다」는 다른 말이다.
+ * 다른 작업을 불러오면 제품이 바뀌는데, 앞 제품에 대해 적은 말이 그대로 남으면
+ * 새 제품의 보호 문구가 엉뚱한 이유로 풀린다. 글로 시작한 경로에는 제품 사진이
+ * 아예 없다.
  */
 export interface AttachedSlots {
+  /** 제품 사진이 실제로 붙어 있는가. 글로 시작한 경로에는 없다. */
+  anchor: boolean;
   /** 인물 사진 또는 캐릭터 중 하나라도 골랐는가. */
   person: boolean;
   /** 디자인 레퍼런스를 골랐는가. */
@@ -28,8 +33,7 @@ export function visibleIntents(
     if (present && text) kept[key] = text;
   };
 
-  // 제품은 1단계 필수 업로드다. 자리가 비는 경우가 없다.
-  put("anchor", true);
+  put("anchor", attached.anchor);
   put("person", attached.person);
   put("style", attached.style);
   return kept;
@@ -42,4 +46,25 @@ export function intentsOrUndefined(
 ): AttachmentIntents | undefined {
   const kept = visibleIntents(intents, attached);
   return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+/**
+ * 화면 상태에서 「어느 자리가 붙어 있나」를 읽는다.
+ *
+ * 화면 안에 두면 시험이 못 잡는다 — 조건 하나를 지워도 1,300건이 전부 통과한다.
+ * 실제로 독립 리뷰가 그렇게 재서 잡아냈다.
+ */
+export function attachedSlotsOf(input: {
+  preparedImage: unknown;
+  modelImage: unknown;
+  characterId: string | undefined;
+  styleReference: unknown;
+  /** 시나리오 화면의 「디자인 레퍼런스 쓰기」 토글. 끄면 그림도 지시도 안 간다. */
+  styleReferenceEnabled: boolean;
+}): AttachedSlots {
+  return {
+    anchor: Boolean(input.preparedImage),
+    person: Boolean(input.modelImage || input.characterId),
+    style: Boolean(input.styleReferenceEnabled && input.styleReference),
+  };
 }

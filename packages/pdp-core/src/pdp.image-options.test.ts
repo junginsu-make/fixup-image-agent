@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSectionImageOptions, usesUploadedPerson } from "./pdp.image-options";
+import { buildSectionImageOptions, pageInputsFromWire, usesUploadedPerson } from "./pdp.image-options";
 import type { PageImageInputs, SectionImageTarget } from "./pdp.image-options";
 import type { SectionBlueprint } from "./types";
 
@@ -183,5 +183,58 @@ describe("자리별 지시는 페이지 값이다", () => {
 
   it("안 적으면 없다", () => {
     expect(buildSectionImageOptions({}, target()).attachmentIntents).toBeUndefined();
+  });
+});
+
+/**
+ * 그물 너머에서 온 값이 **하나도 빠지지 않고** 안쪽 모양으로 바뀌는가.
+ *
+ * 독립 리뷰가 이 자리를 짚었다 — `attachmentIntents` 한 줄을 지워도 492건이
+ * 전부 통과했다. 운반 구간에는 시험이 없었다.
+ */
+describe("그물 값에서 페이지 값으로", () => {
+  it("모든 칸이 넘어온다", () => {
+    expect(
+      pageInputsFromWire({
+        imageModel: "gpt-image-2",
+        outputMode: "full-image",
+        look: "anime",
+        userInstruction: "밤 장면으로",
+        preserveProduct: false,
+        styleReference: { imageBase64: "REF", mimeType: "image/png", description: "참고" },
+        referenceModel: { imageBase64: "PERSON", mimeType: "image/jpeg", fileName: "p.jpg" },
+        referenceModelUsage: "hero-only",
+        attachmentIntents: { style: "색만 가져와", person: "안경", anchor: "라벨 그대로" },
+      }),
+    ).toEqual({
+      imageModel: "gpt-image-2",
+      outputMode: "full-image",
+      look: "anime",
+      userInstruction: "밤 장면으로",
+      preserveProduct: false,
+      styleReference: { base64: "REF", mimeType: "image/png", description: "참고" },
+      referenceModel: { base64: "PERSON", mimeType: "image/jpeg", fileName: "p.jpg" },
+      referenceModelUsage: "hero-only",
+      attachmentIntents: { style: "색만 가져와", person: "안경", anchor: "라벨 그대로" },
+    });
+  });
+
+  it("그물 이름과 안쪽 이름이 여기서만 만난다", () => {
+    const page = pageInputsFromWire({
+      styleReference: { imageBase64: "REF", mimeType: "image/png" },
+    });
+    expect(page.styleReference).toEqual({ base64: "REF", mimeType: "image/png", description: undefined });
+  });
+
+  it("아무것도 안 오면 빈 값이다", () => {
+    expect(pageInputsFromWire()).toEqual({});
+  });
+
+  it("**끝까지 이어진다** — 그물 값이 조립된 옵션에 그대로 남는다", () => {
+    const built = buildSectionImageOptions(
+      pageInputsFromWire({ attachmentIntents: { style: "색만 가져와" } }),
+      target(),
+    );
+    expect(built.attachmentIntents).toEqual({ style: "색만 가져와" });
   });
 });

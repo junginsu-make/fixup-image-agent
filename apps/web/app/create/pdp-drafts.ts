@@ -10,6 +10,7 @@ import type {
   PdpCopyLanguage,
   ReferenceModelUsage,
   SectionBlueprint,
+  AttachmentIntents,
 } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 
@@ -112,6 +113,14 @@ export interface PdpDraftRecord {
   /** 그림의 결과 사용자가 직접 친 지시. 예전 초안에는 없다. */
   look?: ImageLook;
   userInstruction?: string;
+  /**
+   * 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 예전 초안에는 없다.
+   *
+   * **초안을 따라다녀야 한다.** 안 담으면 다른 작업을 불러왔을 때 앞 제품에
+   * 대해 적은 말이 새 제품에 그대로 붙는다 — 편집기 화면에는 그 칸이 없어서
+   * 사용자는 무엇이 반영되는지 볼 수도 없다.
+   */
+  attachmentIntents?: AttachmentIntents;
   aspectRatio: AspectRatio;
   notice: string;
   editorState: PdpEditorDraftState | null;

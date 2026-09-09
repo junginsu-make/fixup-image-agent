@@ -444,3 +444,60 @@ describe("자리별 지시 (설계 4-1 A안)", () => {
     expect(directive).toMatch(/Priority when instructions conflict/i);
   });
 });
+
+/**
+ * 독립 리뷰가 잡은 것들.
+ *
+ * 프롬프트가 스스로 모순되면 모델이 어느 쪽을 따를지 알 수 없다. 「규칙을 뺐다」고
+ * 써 놓고 규칙이 남아 있거나, 없는 블록을 1등으로 올려 두면 그렇게 된다.
+ */
+describe("프롬프트가 스스로 모순되지 않는다", () => {
+  it("우선순위 줄이 가리키는 블록이 실제로 있다", () => {
+    const directive = buildReferenceRoleDirective([{ ...style, intent: "색만 가져와" }]);
+    // 「USER INSTRUCTION 이 1등」이라고 써 두려면 그 이름의 블록이 있어야 한다.
+    expect(directive).toMatch(/Priority when instructions conflict/i);
+    expect(directive).toContain("USER INSTRUCTION");
+  });
+
+  it("서술이 지시를 덮지 않는다 — 서열을 밝힌다", () => {
+    const directive = buildReferenceRoleDirective([
+      { ...style, description: "가운데 정렬에 위 여백이 넓다", intent: "배치는 무시해 주세요" },
+    ]);
+    const 지시자리 = directive.indexOf("배치는 무시해 주세요");
+    const 서술자리 = directive.indexOf("가운데 정렬에 위 여백이 넓다");
+    expect(지시자리).toBeGreaterThan(-1);
+    expect(서술자리).toBeGreaterThan(지시자리);
+    // 서술이 뒤에 오므로 어느 쪽이 센지 못 박아야 한다.
+    expect(directive).toMatch(/instruction above wins/i);
+  });
+
+  it("지시가 없으면 서술에 그런 단서를 안 붙인다", () => {
+    const directive = buildReferenceRoleDirective([
+      { ...style, description: "가운데 정렬에 위 여백이 넓다" },
+    ]);
+    expect(directive).toContain("가운데 정렬에 위 여백이 넓다");
+    expect(directive).not.toMatch(/instruction above wins/i);
+  });
+
+  it("보호를 푼 그림을 계속 「지킨 대상」이라 부르지 않는다", () => {
+    const 안풂 = buildReferenceRoleDirective([anchor]);
+    const 품 = buildReferenceRoleDirective([{ ...anchor, intent: "만화풍으로 다시 그려 주세요" }]);
+    expect(안풂).toMatch(/preserved subject/i);
+    expect(품).not.toMatch(/preserved subject/i);
+  });
+
+  it("하나만 풀면 나머지는 여전히 지킨 대상이다", () => {
+    const directive = buildReferenceRoleDirective([
+      { ...anchor, intent: "만화풍으로" },
+      person,
+    ]);
+    expect(directive).toMatch(/preserved subject/i);
+  });
+
+  it("보호를 푼 자리는 레퍼런스를 이긴다고 말하지 않는다", () => {
+    const 안풂 = buildReferenceRoleDirective([anchor, style]);
+    const 품 = buildReferenceRoleDirective([{ ...anchor, intent: "만화풍으로" }, style]);
+    expect(안풂).toContain("the product and the person win over the design reference");
+    expect(품).not.toContain("the product and the person win over the design reference");
+  });
+});

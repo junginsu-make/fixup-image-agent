@@ -16,6 +16,8 @@ import { ReviewPanel } from "./ReviewPanel";
 import { StyleReferenceCard, type StyleReferenceView } from "./StyleReferenceCard";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { CharacterPicker } from "./CharacterPicker";
+import { AttachmentIntentField } from "./AttachmentIntentField";
+import type { AttachmentIntents } from "@fixup/pdp-core";
 import { updateScenarioBullets } from "./scenario-evidence";
 import { createEmptySection } from "./scenario-sections";
 const quietFieldClass =
@@ -37,6 +39,14 @@ interface ScenarioEditorProps {
   onPreserveProductChange: (preserve: boolean) => void;
   characterId?: string;
   onCharacterChange: (id: string | undefined) => void;
+  /**
+   * 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」.
+   *
+   * 이 화면에서도 레퍼런스와 캐릭터를 붙일 수 있다. 칸이 업로드 화면에만
+   * 있으면 여기서 붙인 사람은 이 기능을 쓸 방법이 없다.
+   */
+  attachmentIntents: AttachmentIntents;
+  onIntentChange: (slot: keyof AttachmentIntents, value: string) => void;
   outputMode: PdpOutputMode;
   imageModel: ImageModelId;
   isBusy: boolean;
@@ -231,6 +241,8 @@ export function ScenarioEditor({
   onPreserveProductChange,
   characterId,
   onCharacterChange,
+  attachmentIntents,
+  onIntentChange,
   outputMode,
   imageModel,
   isBusy,
@@ -280,6 +292,16 @@ export function ScenarioEditor({
         </p>
 
         <CharacterPicker selectedId={characterId} onSelect={onCharacterChange} />
+        {characterId || referenceModelName ? (
+          <div className="mb-4 mt-2">
+            <AttachmentIntentField
+              id="scenario-intent-person"
+              value={attachmentIntents.person ?? ""}
+              onChange={(next) => onIntentChange("person", next)}
+              placeholder="예: 안경을 꼭 씌워 주세요"
+            />
+          </div>
+        ) : null}
 
         {styleReference ? (
           <div className="mb-4">
@@ -292,6 +314,14 @@ export function ScenarioEditor({
             />
             {/* 추천이 마음에 안 들면 그 자리에서 바꾼다. */}
             <StyleReferenceAttach onAttached={onStyleReferenceAttached} />
+            <div className="mt-2">
+              <AttachmentIntentField
+                id="scenario-intent-style"
+                value={attachmentIntents.style ?? ""}
+                onChange={(next) => onIntentChange("style", next)}
+                placeholder="예: 색만 가져오고 배치는 무시해 주세요"
+              />
+            </div>
           </div>
         ) : (
           <div className="mb-4 rounded-md border border-dashed p-3.5 text-sm">

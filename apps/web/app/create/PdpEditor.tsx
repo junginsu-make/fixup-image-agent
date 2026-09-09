@@ -77,6 +77,7 @@ import {
   IMAGE_MODEL_CREDIT_WEIGHT,
 } from "@fixup/pdp-core";
 import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-core";
+import { buildPageWire } from "./page-wire";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
@@ -1362,23 +1363,18 @@ export function PdpEditor({
    * 전에는 두 호출이 각자 몸통을 지었고, 그래서 「배치와 같은 값을 보내야 한다」는
    * 주석이 네 군데 붙어 있었다. 주석으로 지키던 것을 여기 한 곳으로 옮겼다.
    */
-  const pageWire = (): PageImageWire => ({
-    imageModel,
-    outputMode,
-    look,
-    userInstruction: userInstruction.trim() || undefined,
-    preserveProduct,
-    styleReference,
-    attachmentIntents,
-    referenceModel: referenceModelImage
-      ? {
-          imageBase64: referenceModelImage.base64,
-          mimeType: referenceModelImage.mimeType,
-          fileName: referenceModelImage.fileName,
-        }
-      : undefined,
-    referenceModelUsage,
-  });
+  const pageWire = (): PageImageWire =>
+    buildPageWire({
+      imageModel,
+      outputMode,
+      look,
+      userInstruction,
+      preserveProduct,
+      styleReference,
+      attachmentIntents,
+      referenceModel: referenceModelImage,
+      referenceModelUsage,
+    });
 
   /**
    * 섹션 이미지를 만든다. 대상을 넘기지 않으면 현재 섹션.
