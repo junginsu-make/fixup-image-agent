@@ -114,7 +114,11 @@ async function imagesSentFor(
       styleReference,
       ...extra,
     },
-    llm,
+    {
+      llm,
+      // 이 시험은 그림을 안 만든다(skipFirstImage). 통로만 채워 둔다.
+      generateImage: async () => ({ base64: "IMG", mimeType: "image/jpeg" }),
+    },
     { skipFirstImage: true },
   );
 

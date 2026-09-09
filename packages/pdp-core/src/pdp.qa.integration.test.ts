@@ -150,6 +150,10 @@ describe("실제 생성 장수(비용 계산용)", () => {
   it("QA 거절로 던지는 오류가 만든 장수를 싣는다", async () => {
     const service = new PdpService();
     (service as any).getClient = () => ({});
+    (service as any).requireProviders = () => ({
+      llm: { generate: async () => ({ text: "{}" }) },
+      generateImage: async () => ({ base64: "IMG", mimeType: "image/jpeg" }),
+    });
     (service as any).generateSectionImageInternal = async () => ({
       base64: "IMG2",
       mimeType: "image/jpeg",

@@ -4,7 +4,6 @@ import {
   CHARACTER_ANGLES,
   buildCandidatePrompt,
   buildTurnaroundPrompt,
-  generateImageViaFal,
   selectCharacterModel,
   type AspectRatio,
   type CharacterAngle,
@@ -17,6 +16,16 @@ import {
   type ImageModelId,
   type ReferenceImage,
 } from "@fixup/pdp-core";
+import { createPdpImageGenerator } from "./pdp/fal";
+
+/**
+ * 그림 통로. **부를 때 만든다.**
+ *
+ * 모듈이 실릴 때 만들면 FAL_KEY 가 없는 환경에서 캐릭터와 무관한 화면까지
+ * 함께 죽는다. `pdp-core` 가 순수해지면서 통로를 여기서 들게 됐다.
+ */
+const falImage: ReturnType<typeof createPdpImageGenerator> = (model, input) =>
+  createPdpImageGenerator()(model, input);
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { scopedRead } from "./teams/scope";
 import { characterReferenceEntries, characterReferenceTitle } from "./character-library";
@@ -157,7 +166,7 @@ export async function generateCandidates(input: {
 
   const settled = await Promise.allSettled(
     Array.from({ length: count }, () =>
-      generateImageViaFal(model, {
+      falImage(model, {
         prompt,
         systemPrompt: "You are a character designer. Produce one clean character reference.",
         aspectRatio: input.aspectRatio,
@@ -193,7 +202,7 @@ async function generateAngle(input: {
   frontBase64: string;
   frontMimeType: string;
 }): Promise<ViewBytes> {
-  const image = await generateImageViaFal(input.model, {
+  const image = await falImage(input.model, {
     prompt: buildTurnaroundPrompt({
       identityPrompt: input.identityPrompt,
       angle: input.angle,

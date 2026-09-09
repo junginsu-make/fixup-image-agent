@@ -1,6 +1,6 @@
 import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
-import { createPdpLlm } from "../../../../lib/pdp/providers";
+import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";
@@ -17,12 +17,12 @@ export async function POST(req: Request) {
   if (!reservation.ok) return reservation.response;
   try {
     const body = (await req.json()) as PdpAnalyzeRequest;
-    const llm = createPdpLlm();
+    const providers = createPdpProviders();
     let lastEnvelope: ReturnType<typeof toPdpErrorResponse> | null = null;
     let lastStatus = 500;
     for (let attempt = 1; attempt <= MAX_ANALYZE_ATTEMPTS; attempt++) {
       try {
-        const result = await analyzeProduct(body, llm, { skipFirstImage: true });
+        const result = await analyzeProduct(body, providers, { skipFirstImage: true });
         const usage = await finalizeAiUsage(reservation, true, 0);
         return Response.json({ ok: true, result, usage });
       } catch (err) {

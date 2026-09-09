@@ -1,7 +1,7 @@
 import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
 import { PdpServiceError } from "./pdp.service";
-import { generateImageViaFal } from "./pdp.image-provider";
+import type { PdpProviders } from "./pdp.image-provider";
 import {
   REVIEW_SCHEMA,
   buildReviewPrompt,
@@ -585,23 +585,33 @@ function parseJsonText(text: string) {
   }
 }
 
-function requireDeps(llm?: PdpLlm): TextPlanDeps {
-  if (!llm) {
+function requireDeps(providers?: PdpProviders): TextPlanDeps {
+  if (!providers) {
     throw new PdpServiceError("AI_KEY_MISSING", "AI 공급자 키가 설정되지 않았습니다.");
   }
-  return depsFrom(llm);
+  return depsFrom(providers);
 }
 
-function depsFrom(llm: PdpLlm): TextPlanDeps {
+/**
+ * 바깥세상 통로에서 글·그림 의존성을 만든다.
+ *
+ * 라우트가 이걸 써서 `generateKeyVisual` 에 넘긴다. 전에는 인자를 안 주면
+ * 코어가 fal 을 직접 불렀다 — 그 자리가 이 패키지의 마지막 그물이었다.
+ */
+export function textPlanDepsFrom(providers: PdpProviders): TextPlanDeps {
+  return depsFrom(providers);
+}
+
+function depsFrom(providers: PdpProviders): TextPlanDeps {
   return {
     async generateJson(prompt, schema, name) {
-      const response = await llm.generate({ name, prompt, schema, maxTokens: 8192 });
+      const response = await providers.llm.generate({ name, prompt, schema, maxTokens: 8192 });
       return parseJsonText(response.text);
     },
 
     // 이미지 생성은 fal 을 경유한다. 글 모델은 텍스트(브리프·구성안)에만 쓴다.
     async generateImage(prompt, aspectRatio) {
-      return generateImageViaFal(DEFAULT_IMAGE_MODEL, {
+      return providers.generateImage(DEFAULT_IMAGE_MODEL, {
         prompt,
         systemPrompt: "",
         aspectRatio,
@@ -642,7 +652,7 @@ ${details}`;
 
 export async function planFromText(
   input: TextPlanRequest,
-  llm?: PdpLlm,
+  providers?: PdpProviders,
   deps?: TextPlanDeps,
   clock: TextPlanClock = { now: () => Date.now() },
 ): Promise<TextPlanResult> {
@@ -655,7 +665,7 @@ export async function planFromText(
     );
   }
 
-  const resolved = deps ?? requireDeps(llm);
+  const resolved = deps ?? requireDeps(providers);
   const brief = normalizeBrief(
     await resolved.generateJson(buildBriefPrompt(sourceText), BRIEF_SCHEMA, BRIEF_TOOL),
     sourceText,
@@ -743,14 +753,15 @@ export async function generateKeyVisual(
   }
 
   // 대표 이미지도 섹션과 같은 모델로 만들어야 톤이 이어진다.
-  const image = deps
-    ? await deps.generateImage(buildKeyVisualPrompt(input.brief, input.blueprint), input.aspectRatio)
-    : await generateImageViaFal(input.imageModel ?? DEFAULT_IMAGE_MODEL, {
-        prompt: buildKeyVisualPrompt(input.brief, input.blueprint),
-        systemPrompt: "",
-        aspectRatio: input.aspectRatio,
-        references: [],
-      }).then((r) => ({ base64: r.base64, mimeType: r.mimeType }));
+  //
+  // 그림 통로는 바깥이 넣어 준다. 전에는 여기서 fal 을 직접 불렀다.
+  if (!deps) {
+    throw new PdpServiceError("AI_KEY_MISSING", "이미지 생성 키가 설정되지 않았습니다.");
+  }
+  const image = await deps.generateImage(
+    buildKeyVisualPrompt(input.brief, input.blueprint),
+    input.aspectRatio,
+  );
 
   if (!image?.base64) {
     throw new PdpServiceError(

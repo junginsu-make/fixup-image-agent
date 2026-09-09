@@ -1,17 +1,17 @@
 import type { PdpAnalyzeRequest, PdpGenerateImageRequest } from "./types";
 import { PdpService, PdpServiceError, toPdpErrorResponse } from "./pdp.service";
-import type { PdpLlm } from "./pdp.llm";
+import type { PdpProviders } from "./pdp.image-provider";
 
 export class PdpController {
   constructor(private readonly pdpService = new PdpService()) {}
 
   async analyze(
     body: PdpAnalyzeRequest,
-    llm?: PdpLlm,
+    providers?: PdpProviders,
     options?: { skipFirstImage?: boolean }
   ) {
     try {
-      const result = await this.pdpService.analyzeProduct(body, llm, options);
+      const result = await this.pdpService.analyzeProduct(body, providers, options);
       return {
         ok: true as const,
         result
@@ -21,9 +21,9 @@ export class PdpController {
     }
   }
 
-  async generateImage(body: PdpGenerateImageRequest, llm?: PdpLlm) {
+  async generateImage(body: PdpGenerateImageRequest, providers?: PdpProviders) {
     try {
-      const result = await this.pdpService.generateSectionImage(body, llm);
+      const result = await this.pdpService.generateSectionImage(body, providers);
       return {
         ok: true as const,
         ...result

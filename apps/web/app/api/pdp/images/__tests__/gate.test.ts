@@ -21,7 +21,10 @@ vi.mock("@fixup/pdp-core", async (importOriginal) => ({
   })),
 }));
 vi.mock("../../../../../lib/pdp/providers", () => ({
-  createPdpLlm: () => ({ generate: async () => ({ text: "{}" }) }),
+  createPdpProviders: () => ({
+    llm: { generate: async () => ({ text: "{}" }) },
+    generateImage: async () => ({ base64: "IMG", mimeType: "image/jpeg" }),
+  }),
 }));
 vi.mock("../../../../../lib/characters", () => ({ loadCharacterView: vi.fn(async () => null) }));
 

@@ -24,7 +24,7 @@ import type {
 } from "./types";
 import { DEFAULT_IMAGE_MODEL } from "./types";
 import { classifyOutcome, qaRetryDirective, runQaGate, type QaOutcome } from "./pdp.qa";
-import { generateImageViaFal, type ImageGenerator } from "./pdp.image-provider";
+import type { ImageGenerator, PdpProviders } from "./pdp.image-provider";
 import {
   DEFAULT_PDP_LOOK,
   buildImageJson,
@@ -203,13 +203,14 @@ function legacyContentsClient(llm: PdpLlm): LegacyContentsClient {
 export class PdpService {
   async analyzeProduct(
     request: PdpAnalyzeRequest,
-    llm?: PdpLlm,
+    providers?: PdpProviders,
     options?: { skipFirstImage?: boolean }
   ) {
+    const resolved = this.requireProviders(providers);
     const normalizedImage = sanitizeBase64Payload(request.imageBase64);
     const mimeType = normalizeMimeType(request.mimeType);
     const referenceModelImage = normalizeReferenceModelImage(request.modelImageBase64, request.modelImageMimeType);
-    const client = this.getClient(llm);
+    const client = this.getClient(resolved.llm);
     const referenceModelProfile =
       referenceModelImage ? await this.extractReferenceModelProfile(client, referenceModelImage) : null;
 
@@ -398,7 +399,8 @@ ${analyzePrompt}`
         outputMode: request.outputMode,
         imageModel: request.imageModel ?? DEFAULT_IMAGE_MODEL
       },
-      client
+      client,
+      generateImage: resolved.generateImage
     });
 
       blueprint.sections[0] = {
@@ -426,8 +428,9 @@ ${analyzePrompt}`
     aspectRatio: AspectRatio;
     desiredTone?: string;
     options?: ImageGenOptionsInput;
-  }, llm?: PdpLlm) {
-    const client = this.getClient(llm);
+  }, providers?: PdpProviders) {
+    const resolved = this.requireProviders(providers);
+    const client = this.getClient(resolved.llm);
     const normalizedReferenceModel = normalizeReferenceModelImage(
       request.options?.referenceModelImageBase64,
       request.options?.referenceModelImageMimeType
@@ -440,6 +443,7 @@ ${analyzePrompt}`
     const image = await this.generateSectionImageInternal({
       ...request,
       client,
+      generateImage: resolved.generateImage,
       options: request.options
         ? {
             ...request.options,
@@ -620,7 +624,15 @@ ${analyzePrompt}`
       // 프롬프트는 JSON 구조로 주고 아트 디렉션은 system 쪽으로 분리한다 —
       // 평문 대비 지시 준수가 확실히 높다(spec 1절 측정표).
       const generatedImage = await retryOperation(async () => {
-        const generate = request.generateImage ?? generateImageViaFal;
+        // 그림 만드는 통로는 바깥이 넣어 준다. 이 패키지는 fal 을 직접 안 부른다.
+        const generate = request.generateImage;
+        if (!generate) {
+          throw new PdpServiceError(
+            "AI_KEY_MISSING",
+            "이미지 생성 키가 설정되지 않았습니다.",
+            "no image generator was provided",
+          );
+        }
         // 위에서 만든 references 를 그대로 보낸다. 여기서 다시 만들면 프롬프트에
         // 적힌 번호와 실제 첨부 순서가 갈라진다 — 한쪽만 고치는 날 조용히 어긋난다.
         return generate(options.imageModel ?? DEFAULT_IMAGE_MODEL, {
@@ -703,6 +715,14 @@ ${analyzePrompt}`
           }
         : undefined
     };
+  }
+
+  /** 바깥세상 통로가 다 왔는지 확인한다. 없으면 무엇이 없는지 알린다. */
+  private requireProviders(providers?: PdpProviders): PdpProviders {
+    if (!providers?.llm) {
+      throw new PdpServiceError("AI_KEY_MISSING", "AI 공급자 키가 설정되지 않았습니다.");
+    }
+    return providers;
   }
 
   private getClient(llm?: PdpLlm) {

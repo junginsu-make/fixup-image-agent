@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import type { PdpLlm, PdpLlmRequest } from "@fixup/pdp-core";
+import type { PdpLlm, PdpLlmRequest, PdpProviders } from "@fixup/pdp-core";
+import { createPdpImageGenerator } from "./fal";
 import { unwrapStringified } from "../llm/structured";
 
 /**
@@ -175,4 +176,17 @@ export function createPdpLlmOrNull(environment: Env = process.env): PdpLlm | nul
   } catch {
     return null;
   }
+}
+
+/**
+ * 상세페이지가 바깥세상과 만나는 자리 전부를 한 번에 만든다.
+ *
+ * 글 모델과 그림 통로를 따로 넘기면 어느 라우트에서 하나를 빠뜨린다. 묶어
+ * 두면 빠뜨릴 자리가 없다.
+ */
+export function createPdpProviders(environment: Env = process.env): PdpProviders {
+  return {
+    llm: createPdpLlm(environment),
+    generateImage: createPdpImageGenerator(environment),
+  };
 }

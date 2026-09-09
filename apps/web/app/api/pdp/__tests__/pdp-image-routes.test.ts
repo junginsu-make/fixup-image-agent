@@ -44,7 +44,10 @@ vi.mock("../../../../lib/membership/api", () => ({
 
 vi.mock("../../../../lib/evidence-gate", () => ({ rejectIfUnverified: () => null }));
 vi.mock("../../../../lib/pdp/providers", () => ({
-  createPdpLlm: () => ({ generate: async () => ({ text: "{}" }) }),
+  createPdpProviders: () => ({
+    llm: { generate: async () => ({ text: "{}" }) },
+    generateImage: async () => ({ base64: "IMG", mimeType: "image/jpeg" }),
+  }),
 }));
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 

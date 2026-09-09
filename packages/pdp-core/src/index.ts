@@ -13,11 +13,12 @@ import type {
 
 export { PdpController, PdpService, PdpServiceError, toPdpErrorResponse };
 export { isBlockingDefect } from "./pdp.qa";
-import type { PdpLlm } from "./pdp.llm";
+import type { PdpProviders } from "./pdp.image-provider";
 export {
   buildFalPayload,
   chunkForModel,
-  generateImageViaFal,
+  falImageFrom,
+  type PdpProviders,
   maxBatchSizeFor,
   resolveEndpoint,
   type ImageGenerator,
@@ -124,6 +125,7 @@ export {
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
   generateKeyVisual,
+  textPlanDepsFrom,
   planFromText,
   buildBriefPrompt,
   buildKeyVisualPrompt,
@@ -199,10 +201,10 @@ function throwFromErrorResponse(response: {
  */
 export async function analyzeProduct(
   input: PdpAnalyzeRequest,
-  llm?: PdpLlm,
+  providers?: PdpProviders,
   options?: { skipFirstImage?: boolean }
 ): Promise<PdpAnalyzeSuccessResponse["result"]> {
-  const response = await controller.analyze(input, llm, options);
+  const response = await controller.analyze(input, providers, options);
 
   if (response.ok) {
     return response.result;
@@ -223,7 +225,7 @@ export async function analyzeProduct(
  */
 export async function generateSectionImage(
   input: PdpGenerateImageRequest,
-  llm?: PdpLlm
+  providers?: PdpProviders
 ): Promise<{
   imageBase64: string;
   mimeType: string;
@@ -231,7 +233,7 @@ export async function generateSectionImage(
   generatedImages: number;
   qa?: { warnings: QaDefect[] };
 }> {
-  const response = await controller.generateImage(input, llm);
+  const response = await controller.generateImage(input, providers);
 
   if (response.ok) {
     return {

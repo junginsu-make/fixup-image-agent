@@ -36,7 +36,7 @@ type PdpImagesRequestBody = {
   emphasisWords?: string[];
 };
 import { loadCharacterView } from "../../../../lib/characters";
-import { createPdpLlm } from "../../../../lib/pdp/providers";
+import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
         desiredTone: body.desiredTone,
         options,
       },
-      createPdpLlm(),
+      createPdpProviders(),
     );
     // 회원에게는 나온 한 장만 셈하지만, 우리는 QA 재시도로 만든 장까지 낸다.
     const usage = await finalizeAiUsage(reservation, true, imageCreditUnits(model, 1), undefined, {
