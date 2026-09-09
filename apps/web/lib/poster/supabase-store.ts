@@ -105,8 +105,13 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
     },
     async remove(id) {
       const client = await createSupabaseServerClient();
-      const { error } = await client.from("poster_projects").delete().eq("id", id).eq("user_id", userId);
+      // **지운 줄을 받아 본다.** 조건에 안 걸리면 supabase-js 는 오류 대신
+      // 빈 결과를 주므로, 세지 않으면 남의 작업 삭제가 성공으로 보인다.
+      const { data, error } = await client
+        .from("poster_projects").delete().eq("id", id).eq("user_id", userId)
+        .select("id");
       checked(null, error, "포스터 작업 지우기");
+      return (data ?? []).length > 0;
     },
   };
 }
@@ -193,6 +198,20 @@ export function createSupabasePosterRequestStore(userId: string): PosterRequestS
         })
         .eq("id", id).eq("user_id", userId);
       checked(null, error, "포스터 비용 확정");
+    },
+    /**
+     * **소유자 조건을 함께 건다.** 남의 요청 행의 단가로 내 예약을 확정하는
+     * 길을 남기지 않는다. 못 찾으면 `null` 이고, 부르는 쪽이 확정을 미룬다.
+     */
+    async unitCost(id) {
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_generation_requests")
+        .select("unit_cost_usd")
+        .eq("id", id).eq("user_id", userId)
+        .maybeSingle();
+      if (error) return null;
+      const value = (data as { unit_cost_usd: number | null } | null)?.unit_cost_usd;
+      return typeof value === "number" && Number.isFinite(value) ? value : null;
     },
   };
 }

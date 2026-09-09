@@ -147,13 +147,26 @@ export async function listUnassigned(): Promise<UnassignedRow[]> {
  *
  * 화면이 무엇을 낼지가 여기서 갈린다 — 운영자는 전부, 팀장은 자기 팀,
  * 소속 없는 사람은 「아직 팀이 없습니다」.
+ *
+ * **못 읽은 것을 「소속 없음」으로 돌려주지 않는다.** 예전에는 오류를 버리고
+ * `null` 을 줬는데, 그 `null` 은 두 가지 서로 다른 사실을 한 값으로 뭉갠 것이다
+ * — 「이 사람은 팀이 없다」와 「지금은 알 수 없다」. 부르는 쪽은 앞의 뜻으로
+ * 읽으므로, 조회가 한 번 흔들리면 **문지기가 열린 채로 실패한다**:
+ * `assignMemberAction` 의 검사가 남의 팀 사람을 「아직 팀이 없는 사람」으로
+ * 보고 통과시킨다. 읽기 범위 쪽도 조용히 개인 것만 보여 주어, 팀 자료가
+ * 사라진 것처럼 보인다.
+ *
+ * 같은 실수를 `lib/access/core.ts` 의 `ownerFilter` 가 이미 겪었다 — 「값이
+ * 비었다」와 「조건이 없다」를 한 값으로 두면 질의에 그대로 흘러 들어간다.
+ * 모르면 던진다. 부르는 쪽이 그 사실을 알아야 한다.
  */
 export async function myMembership(
   userId: string,
 ): Promise<{ teamId: string; role: TeamRole } | null> {
   if (noTeamStore()) return null;
-  const { data } = await createSupabaseAdminClient()
+  const { data, error } = await createSupabaseAdminClient()
     .from("team_members").select("team_id,role").eq("user_id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
   if (!data) return null;
   const row = data as { team_id: string; role: TeamRole };
   return { teamId: row.team_id, role: row.role };
@@ -276,18 +289,43 @@ export async function archiveTeam(teamId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** 이 회원이 만든 것에 팀을 단다. 배정과 함께 움직인다. */
-async function stampWorkTeam(userId: string, teamId: string): Promise<void> {
+/**
+ * 이 회원이 만든 것에 팀을 단다. 배정과 함께 움직인다.
+ *
+ * `fromTeamId` 를 주면 **그 팀에 달려 있던 것도 함께 옮긴다.** 팀을 옮기는
+ * 경우다.
+ *
+ * 예전에는 `team_id IS NULL` 인 것만 달았다. 주석은 「한 사람은 한 팀이라
+ * 지금은 있을 수 없다」였지만, `assignMember` 가 `onConflict: "user_id"`
+ * upsert 라 소속 변경이 실제로 일어난다. 그래서 옮긴 사람의 작업물이 옛 팀에
+ * 그대로 남았다 — 새 팀장에게는 안 보이고 옛 팀장은 계속 보고 만질 수 있으며,
+ * 그다음 「팀 없음」을 골라도 `clearWorkTeam` 은 현재 팀만 푸므로 화면으로는
+ * 되돌릴 방법이 없었다.
+ *
+ * `fromTeamId` 가 없으면 지금까지처럼 팀 없는 것만 단다 — 규칙이 넓어지는 날
+ * 조용히 남의 팀 것을 끌어오면 안 된다.
+ */
+async function stampWorkTeam(
+  userId: string,
+  teamId: string,
+  fromTeamId?: string,
+): Promise<void> {
   const admin = createSupabaseAdminClient();
   for (const table of TEAM_SCOPED_TABLES) {
-    // 이미 다른 팀에 있는 것은 안 건드린다 — 한 사람은 한 팀이라 지금은
-    // 있을 수 없지만, 규칙이 넓어지는 날 조용히 남의 팀 것을 끌어오면 안 된다.
     const { error } = await admin
       .from(table)
       .update({ team_id: teamId })
       .eq("user_id", userId)
       .is("team_id", null);
     if (error) throw new Error(error.message);
+
+    if (!fromTeamId || fromTeamId === teamId) continue;
+    const moved = await admin
+      .from(table)
+      .update({ team_id: teamId })
+      .eq("user_id", userId)
+      .eq("team_id", fromTeamId);
+    if (moved.error) throw new Error(moved.error.message);
   }
 }
 
@@ -318,11 +356,50 @@ export async function assignMember(
 ): Promise<void> {
   if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const admin = createSupabaseAdminClient();
+
+  /**
+   * **어디서 오는지 먼저 본다.**
+   *
+   * 두 가지가 여기에 달려 있다. 하나는 옛 팀에 남을 뻔한 작업물을 함께
+   * 옮기는 것이고, 다른 하나는 **마지막 팀장 보호**다.
+   *
+   * `removeMember` 와 `setMemberRole` 은 `canRemove`·`canDemote` 로 「팀장 없는
+   * 팀」을 막는데 이 함수만 검사가 없었다. 운영자가 고르개에서 A팀의 유일한
+   * 팀장을 B팀으로 옮기면 A팀은 팀장 0명이 되어, 운영자가 손대기 전에는
+   * 아무도 사람을 넣고 뺄 수 없는 굳은 팀이 됐다 — `core.ts` 가 명시적으로
+   * 없애려던 상태다. 팀을 옮기는 것은 옛 팀에서 빠지는 것이므로 같은 규칙을 건다.
+   *
+   * **제자리에 다시 넣는 것도 같은 규칙이다.** 배정은 자리뿐 아니라 맡은 자리
+   * (`role`)까지 덮어쓴다. 그래서 이미 이 팀인 사람을 `role: "member"` 로 다시
+   * 보내면 `setMemberRole` 을 거치지 않고 왕관이 벗겨진다 — 혼자뿐인 팀장이
+   * 자기 ID 를 그렇게 보내면 그 팀은 팀장 0명이 된다. 배정 폼과 역할 폼이
+   * 서로 다른 답을 내면 안 되므로 여기서 `canDemote` 를 같이 본다.
+   */
+  const { data: current, error: currentError } = await admin
+    .from("team_members").select("team_id").eq("user_id", userId).maybeSingle();
+  // 못 읽은 것을 「소속 없음」으로 넘기면 아래 두 검사가 통째로 건너뛰어진다.
+  if (currentError) throw new Error(currentError.message);
+  const fromTeamId = (current as { team_id: string } | null)?.team_id;
+
+  if (fromTeamId && fromTeamId !== teamId) {
+    const members = await membersOf(fromTeamId);
+    if (!canRemove(members, userId)) {
+      throw new Error("마지막 팀장은 다른 팀으로 옮길 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
+    }
+  }
+
+  if (fromTeamId === teamId && role === "member") {
+    const members = await membersOf(teamId);
+    if (!canDemote(members, userId)) {
+      throw new Error("마지막 팀장은 팀원으로 내릴 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
+    }
+  }
+
   const { error } = await admin
     .from("team_members")
     .upsert({ user_id: userId, team_id: teamId, role }, { onConflict: "user_id" });
   if (error) throw new Error(error.message);
-  await stampWorkTeam(userId, teamId);
+  await stampWorkTeam(userId, teamId, fromTeamId);
 }
 
 /** 팀에서 뺀다. 작업물은 개인 것으로 돌아간다. */
@@ -383,7 +460,7 @@ async function membersOf(teamId: string): Promise<Array<{ userId: string; role: 
  * 같은 규칙이라야 두 숫자가 안 갈린다.
  */
 export async function teamCredit(teamId: string): Promise<TeamCredit> {
-  if (noTeamStore()) return { quota: 0, members: [] };
+  if (noTeamStore()) return { quota: 0, teamUsed: 0, members: [] };
   const admin = createSupabaseAdminClient();
 
   const [{ data: teamRow }, members] = await Promise.all([
@@ -394,34 +471,64 @@ export async function teamCredit(teamId: string): Promise<TeamCredit> {
     })(),
   ]);
   if (!members.length) {
-    return { quota: (teamRow as { monthly_quota: number } | null)?.monthly_quota ?? 0, members: [] };
+    return { quota: (teamRow as { monthly_quota: number } | null)?.monthly_quota ?? 0, teamUsed: 0, members: [] };
   }
 
   const userIds = members.map((row) => row.userId);
   const periodStart = seoulPeriodStart();
 
-  const [{ data: events }, { data: profiles }] = await Promise.all([
+  /**
+   * **두 벌을 따로 센다.**
+   *
+   *   - 사람별(`user_id`): 개인 상한과 비교할 값이다. 예약 함수도 팀을 안 가리고
+   *     이 사람의 이벤트를 전부 더해 개인 상한과 비교한다.
+   *   - 팀별(`team_id`): DB 의 `team_units_used()` 와 같은 기준이다. 지금 팀원이
+   *     아닌 사람이 이 팀에서 쓴 것도 여기 들어간다.
+   *
+   * 예전에는 사람별 하나로 둘 다 대신했다. `generation_events.team_id` 는 배정
+   * 때 소급 갱신되지 않으므로, 달 중간에 사람이 빠지면 화면과 DB 가 갈렸다.
+   */
+  const [{ data: events }, { data: teamEvents }, { data: profiles }] = await Promise.all([
     admin
       .from("generation_events")
       .select("user_id,status,requested_units,consumed_units,expires_at")
       .in("user_id", userIds)
       .eq("period_start", periodStart),
+    admin
+      .from("generation_events")
+      .select("user_id,status,requested_units,consumed_units,expires_at")
+      .eq("team_id", teamId)
+      .eq("period_start", periodStart),
     admin.from("profiles").select("id,monthly_quota").in("id", userIds),
   ]);
 
   const now = Date.now();
-  const used = new Map<string, number>();
-  for (const row of (events ?? []) as Array<{
+  type EventRow = {
     user_id: string; status: string; requested_units: number;
     consumed_units: number | null; expires_at: string | null;
-  }>) {
-    const amount =
-      row.status === "succeeded"
-        ? (row.consumed_units ?? 0)
-        : row.status === "reserved" && row.expires_at && Date.parse(row.expires_at) > now
-          ? row.requested_units
-          : 0;
+  };
+  /** DB 의 `team_units_used()` 와 같은 셈. 여기가 갈리면 화면이 거짓말을 한다. */
+  const amountOf = (row: EventRow): number => (
+    row.status === "succeeded"
+      ? (row.consumed_units ?? 0)
+      : row.status === "reserved" && row.expires_at && Date.parse(row.expires_at) > now
+        ? row.requested_units
+        : 0
+  );
+
+  const used = new Map<string, number>();
+  for (const row of (events ?? []) as EventRow[]) {
+    const amount = amountOf(row);
     if (amount) used.set(row.user_id, (used.get(row.user_id) ?? 0) + amount);
+  }
+
+  const usedInTeam = new Map<string, number>();
+  let teamUsed = 0;
+  for (const row of (teamEvents ?? []) as EventRow[]) {
+    const amount = amountOf(row);
+    if (!amount) continue;
+    teamUsed += amount;
+    usedInTeam.set(row.user_id, (usedInTeam.get(row.user_id) ?? 0) + amount);
   }
 
   const quotas = new Map(
@@ -431,11 +538,13 @@ export async function teamCredit(teamId: string): Promise<TeamCredit> {
 
   return {
     quota: (teamRow as { monthly_quota: number } | null)?.monthly_quota ?? 0,
+    teamUsed,
     members: members.map((row) => ({
       userId: row.userId,
       email: row.email,
       role: row.role,
       used: used.get(row.userId) ?? 0,
+      usedInTeam: usedInTeam.get(row.userId) ?? 0,
       personalQuota: quotas.get(row.userId) ?? 0,
     })),
   };

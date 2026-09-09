@@ -40,6 +40,16 @@ vi.mock("../../../../lib/membership/api", () => ({
     finalized.push({ success, units });
     return {};
   },
+  /**
+   * 성공 경로가 쓰는 갈래. **던지지 않는 `finalizeAiUsage` 다.**
+   *
+   * 여기 없으면 라우트가 부르는 순간 「export 가 없다」로 죽어, 장부와 무관한
+   * 시험까지 함께 빨개진다. 세는 곳은 같아야 하므로 같은 배열에 담는다.
+   */
+  settleAiUsage: async (_r: unknown, success: boolean, units: number) => {
+    finalized.push({ success, units });
+    return {};
+  },
 }));
 
 vi.mock("../../../../lib/evidence-gate", () => ({ rejectIfUnverified: () => null }));

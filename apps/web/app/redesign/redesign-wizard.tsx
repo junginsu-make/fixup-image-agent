@@ -434,6 +434,15 @@ export function RedesignWizard() {
       if (transcriptCacheRef.current?.key === transcriptCacheKey) {
         transcript = transcriptCacheRef.current.transcript;
       } else {
+        /**
+         * **끝까지 간 전사만 캐시에 넣는다.**
+         *
+         * 중단은 예외를 던지지 않고 이미 끝난 배치까지만 이어붙여 정상으로
+         * 돌아온다. 그것을 성공한 것과 같은 열쇠로 넣어 두면, 설정만 바꿔 다시
+         * 만들 때 전사 단계를 건너뛰고 **잘린 텍스트를 영구히 재사용한다** —
+         * 새로고침 전까지 몇 번을 눌러도 같은 결과가 나온다.
+         */
+        let complete = false;
         try {
           setToast("원본 상세페이지를 전사하는 중입니다(작은 글씨까지 확인).");
           const strips = await splitFilesToStrips(files);
@@ -443,11 +452,13 @@ export function RedesignWizard() {
             onProgress: (d, t) => setToast(`전사 진행 ${d}/${t} 배치`),
           });
           transcript = r.transcript;
+          complete = r.complete;
           if (r.failedBatches) setToast(`일부 구간 전사 실패(${r.failedBatches}) — 가능한 범위로 진행합니다.`);
         } catch {
           transcript = null; // graceful degradation
         }
-        transcriptCacheRef.current = { key: transcriptCacheKey, transcript };
+        // 못 다 읽은 것은 남기지 않는다. 다음 번에 처음부터 다시 읽는다.
+        if (complete) transcriptCacheRef.current = { key: transcriptCacheKey, transcript };
       }
 
       setToast("원본 분석과 실제 이미지 생성을 시작합니다.");
@@ -1750,7 +1761,18 @@ function Workspace(props: {
                 multiple
                 type="file"
                 accept="image/*,.pdf"
-                onChange={(event) => setFiles(Array.from(event.target.files || []))}
+                onChange={(event) => {
+                  setFiles(Array.from(event.target.files || []));
+                  /**
+                   * **고른 뒤에 비운다.**
+                   *
+                   * 안 비우면 같은 파일을 다시 고를 때 값이 안 바뀌어 change 가
+                   * 안 뜬다. a.png 를 고르고 드래그로 b.png 로 바꾼 뒤 파일창에서
+                   * 다시 a.png 를 고르면 아무 일도 안 일어났고, 배지에는 b.png 가
+                   * 남아 있는데 사용자는 a.png 를 올린 줄 알고 크레딧을 썼다.
+                   */
+                  event.target.value = "";
+                }}
               />
               <div className="mt-3">
                 {/* 라이브러리에 이미 있는 그림을 디스크에서 다시 찾게 하지 않는다. */}

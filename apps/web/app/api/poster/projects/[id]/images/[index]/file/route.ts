@@ -27,16 +27,54 @@ async function downloaded(assetPath: string): Promise<Buffer> {
  */
 async function adminAssetPath(
   projectId: string,
-  index: string,
+  key: string,
 ): Promise<{ assetPath: string; thumbPath: string | null } | null> {
-  const { data } = await createSupabaseAdminClient()
+  const base = createSupabaseAdminClient()
     .from("poster_images")
     .select("asset_path,thumb_path")
-    .eq("project_id", projectId)
-    .eq("variant_index", Number(index))
-    .maybeSingle();
-  const assetPath = data?.asset_path as string | undefined;
-  return assetPath ? { assetPath, thumbPath: (data?.thumb_path as string | null) ?? null } : null;
+    .eq("project_id", projectId);
+  /**
+   * **번호가 아니라 줄 id 로 찾는다.**
+   *
+   * `variant_index` 는 그 요청 안의 배열 번호라 회차가 둘 이상이면 같은 값이
+   * 여럿 생긴다. 예전에는 그것으로 `maybeSingle()` 을 불러서, 두 번 만든 작업을
+   * 관리자가 열면 다중 행 오류로 `data` 가 비고 **모든 변형이 404** 였다.
+   * 회원 갈래는 `find()` 라 첫 줄을 집어 통과했으니, 같은 그림이 관리자에게만
+   * 안 보였다.
+   *
+   * 옛 주소(숫자 번호)는 아직 열려 있는 탭이나 캐시가 들고 있을 수 있다. 그때는
+   * 가장 최근 줄을 준다 — 화면이 비는 것보다 낫다.
+   */
+  const byId = isNumericKey(key)
+    ? await base.eq("variant_index", Number(key)).order("created_at", { ascending: false }).limit(1)
+    : await base.eq("id", key).limit(1);
+  const row = (byId.data ?? [])[0] as { asset_path?: string; thumb_path?: string | null } | undefined;
+  return row?.asset_path
+    ? { assetPath: row.asset_path, thumbPath: row.thumb_path ?? null }
+    : null;
+}
+
+/** 옛 주소인가. 새 주소는 이미지 줄의 uuid 다. */
+function isNumericKey(key: string): boolean {
+  return /^\d+$/.test(key);
+}
+
+/**
+ * 이 주소가 가리키는 줄. **줄 id 가 먼저다.**
+ *
+ * 옛 주소는 변형 번호였고 회차가 둘 이상이면 같은 값이 여럿이다. 그때는
+ * 가장 나중에 만들어진 것을 준다 — 화면이 비는 것보다 낫다.
+ */
+function pickImage<T extends { id: string; variantIndex: number; createdAt: string }>(
+  images: T[],
+  key: string,
+): T | null {
+  const byId = images.find((image) => image.id === key);
+  if (byId) return byId;
+  if (!isNumericKey(key)) return null;
+  return images
+    .filter((image) => image.variantIndex === Number(key))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
 /**
@@ -70,8 +108,7 @@ export async function GET(request: Request, context: Context) {
       isLocalStoreEnabled(),
     )
       ? await adminAssetPath(id, index)
-      : (await posterStoresForUser(auth.member.userId).images.byProject(id))
-          .find((image) => String(image.variantIndex) === index) ?? null;
+      : pickImage(await posterStoresForUser(auth.member.userId).images.byProject(id), index);
     if (!found) return new Response("찾을 수 없습니다.", { status: 404 });
 
     /**

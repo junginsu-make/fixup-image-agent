@@ -19,7 +19,7 @@ import { CharacterPicker } from "./CharacterPicker";
 import { AttachmentIntentField } from "./AttachmentIntentField";
 import type { AttachmentIntents } from "@fixup/pdp-core";
 import { updateScenarioBullets } from "./scenario-evidence";
-import { createEmptySection } from "./scenario-sections";
+import { createSectionFor } from "./scenario-sections";
 const quietFieldClass =
   "resize-y border-transparent bg-transparent px-2 shadow-none transition-colors hover:border-input hover:bg-background focus-visible:border-input focus-visible:bg-background";
 
@@ -269,7 +269,7 @@ export function ScenarioEditor({
   };
 
   const addSection = () => {
-    onChange({ ...blueprint, sections: [...blueprint.sections, createEmptySection(blueprint.sections.length)] });
+    onChange({ ...blueprint, sections: [...blueprint.sections, createSectionFor(blueprint.sections)] });
   };
 
   return (

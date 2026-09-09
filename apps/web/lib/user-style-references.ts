@@ -17,6 +17,17 @@ import { isLocalStoreEnabled } from "./local-store";
  */
 
 const BUCKET = "references";
+/**
+ * 라이브러리의 참고 이미지(`reference_images`)가 놓인 버킷.
+ *
+ * **`references` 가 아니다.** 경로가 `{userId}/references/...` 로 시작해서
+ * 헷갈리지만 파일은 `library` 에 있다(`lib/reference-images.ts` 를 비롯한
+ * 아홉 곳이 전부 그 버킷을 쓴다). 여기서 잘못 짚는 동안 다운로드가 늘 실패했고,
+ * 실패는 `if (!file) return null` 로 조용히 걸러져 **「라이브러리의 참고
+ * 이미지도 여기서 같이 보인다」가 한 번도 동작하지 않았다.** 오류도 로그도
+ * 남지 않았다.
+ */
+const LIBRARY_BUCKET = "library";
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 /** LLM 에 한 번에 넘길 수 있는 수. 서술 한 건이 약 300자다. */
@@ -208,8 +219,13 @@ async function loadLibraryReferences(
 
   const loaded = await Promise.all(
     data.map(async (row: Record<string, unknown>) => {
-      const { data: file } = await supabase.storage.from(BUCKET).download(row.storage_path as string);
-      if (!file) return null;
+      const { data: file, error: downloadError } = await supabase.storage
+        .from(LIBRARY_BUCKET).download(row.storage_path as string);
+      if (!file) {
+        // 한 줄 남긴다. 조용히 걸러지면 전량 탈락해도 아무도 모른다.
+        console.error(`[style-reference] 라이브러리 참고 이미지를 못 읽었습니다(${row.storage_path}): ${downloadError?.message ?? "알 수 없음"}`);
+        return null;
+      }
       const path = String(row.storage_path);
       const extension = path.slice(path.lastIndexOf(".")).toLowerCase();
       return {

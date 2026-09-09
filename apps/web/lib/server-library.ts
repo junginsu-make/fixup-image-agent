@@ -511,10 +511,25 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
   const paths = (images ?? [])
     .flatMap((row: { path: string; thumb_path: string | null }) => [row.path, row.thumb_path])
     .filter(Boolean) as string[];
+
+  /**
+   * **행을 먼저 지우고, 지운 줄을 세어 본다.**
+   *
+   * 목록은 팀원의 작업물까지 보여 주는데(`listLibraryItems` 의 `scopedRead`)
+   * 삭제는 소유자 조건이 걸린다. 조건에 안 걸리면 supabase-js 는 오류 대신
+   * 빈 결과를 주므로, 세지 않으면 `ok: true` 가 나가고 화면에서는 사라졌다가
+   * 새로고침하면 되살아난다.
+   *
+   * 파일 삭제를 뒤로 옮긴 것도 같은 이유다. 앞에 두면 지울 권한이 없는 항목의
+   * 그림만 지우고 행은 남기는 순간이 생긴다.
+   */
+  const deleteQuery = supabase.from("library_items").delete().eq("id", itemId).select("id");
+  const { data: deleted, error } = await (owner ? deleteQuery.eq("user_id", owner) : deleteQuery);
+  if (error) return { ok: false as const, message: error.message };
+  if (!(deleted ?? []).length) {
+    return { ok: false as const, denied: true as const, message: "내가 만든 작업물만 지울 수 있습니다." };
+  }
+
   if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
-
-  const deleteQuery = supabase.from("library_items").delete().eq("id", itemId);
-  const { error } = await (owner ? deleteQuery.eq("user_id", owner) : deleteQuery);
-
-  return { ok: !error, message: error?.message };
+  return { ok: true as const };
 }

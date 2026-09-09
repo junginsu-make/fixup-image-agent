@@ -8,6 +8,7 @@ import type { SnsProjectRecord } from "../../api/sns/projects/project-service";
 import { CopyReview } from "./copy-review";
 import { ResultBoard } from "./result-board";
 import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/sns/queued-flow";
+import { afterGenerateFailure } from "../generate-recovery";
 import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -23,10 +24,26 @@ const STEPS: StepDefinition[] = [
 type Payload = { ok?: boolean; project?: SnsProjectRecord; message?: string };
 type CopyPatch = Partial<Pick<SnsFlowCard["copy"], "headline" | "body" | "accent" | "footnote">>;
 
+/**
+ * **상태 코드를 들고 던진다.**
+ *
+ * 지금까지는 문구만 남기고 코드를 버렸다. 그래서 「이미 생성 중입니다」(409)와
+ * 진짜 실패를 화면이 구분하지 못했고, 서버가 「이미 돌고 있다」고 말해도
+ * 화면은 그냥 오류로 적고 04 에 머물렀다.
+ */
+class ProjectRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ProjectRequestError";
+  }
+}
+
 async function projectRequest(url: string, init?: RequestInit): Promise<SnsProjectRecord> {
   const response = await fetch(url, init);
   const payload = await response.json() as Payload;
-  if (!response.ok || !payload.project) throw new Error(payload.message ?? "프로젝트를 처리하지 못했습니다.");
+  if (!response.ok || !payload.project) {
+    throw new ProjectRequestError(payload.message ?? "프로젝트를 처리하지 못했습니다.", response.status);
+  }
   return payload.project;
 }
 
@@ -42,7 +59,11 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   /** 뼈대를 바꾸면 서버가 고친 카드를 다시 받아 온다. */
   const reload = React.useCallback(async () => {
     try {
-      setProject(await projectRequest(`/api/sns/projects/${projectId}/plan`));
+      const loaded = await projectRequest(`/api/sns/projects/${projectId}/plan`);
+      setProject(loaded);
+      // **첫 적재와 같은 규칙을 쓴다.** 다시 읽고도 화면 단계를 안 맞추면,
+      // 서버가 「생성 중」이라고 알려 줘도 사용자는 04 에 그대로 남는다.
+      if (loaded.data.flow) setView(loaded.data.flow.stage);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.");
     }
@@ -154,6 +175,17 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       setView("result");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "카드를 만들지 못했습니다.");
+      /**
+       * **409 는 「이미 돌고 있다」는 통보다.**
+       *
+       * 만들기 요청이 서버에는 닿았는데 응답이 화면까지 못 온 경우(배포
+       * 재시작·네트워크·탭 닫힘) 화면만 그 사실을 모른다. 그대로 두면 사용자는
+       * **영원히 안 되는 버튼**을 계속 누른다 — 운영에서 실제로 그랬다.
+       *
+       * 다시 읽으면 진행 중인 흐름이 보이고, 그때부터 결과를 받아 오기 시작한다.
+       */
+      const status = error instanceof ProjectRequestError ? error.status : undefined;
+      if (afterGenerateFailure(status) === "resync") await reload();
     } finally {
       setBusy(undefined);
     }
@@ -175,10 +207,17 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setRegeneratingIndex(index);
     setMessage("");
     try {
-      setProject(await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, { method: "POST" }));
+      // 다시 만들기도 크레딧이 깎인다 — 열쇠가 없으면 예약이 거절된다.
+      setProject(await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, {
+        method: "POST",
+        headers: billableHeaders(),
+      }));
       setView("result");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다.");
+      // 「다른 카드가 생성 중입니다」(409)도 같은 통보다 — 화면만 모르고 있다.
+      const status = error instanceof ProjectRequestError ? error.status : undefined;
+      if (afterGenerateFailure(status) === "resync") await reload();
     } finally {
       setRegeneratingIndex(undefined);
     }

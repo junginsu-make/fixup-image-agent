@@ -42,7 +42,11 @@ export type QaDefectType =
   | "forbidden_brand" // 카피에 없는 브랜드/로고/워터마크
   | "text_typo" // 카피와 불일치하는 오타/깨진 글자
   | "unsupported_number" // 카피에 없는 수치/통계
-  | "body_distortion"; // 인체 왜곡
+  | "body_distortion" // 인체 왜곡
+  // 참고 인물과 다른 사람. QA 모델이 내는 값이 아니라, 인물 검증이 시도를
+  // 다 쓰고도 못 맞췄을 때 코드가 붙인다 — 그 사실을 실을 자리가 없어서
+  // 다른 사람 얼굴이 나온 그림이 통과로 표시되어 나갔다.
+  | "reference_person_mismatch";
 
 export type QaSeverity = "critical" | "minor";
 

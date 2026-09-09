@@ -116,7 +116,17 @@ export interface PosterProjectStore {
   get(id: string): Promise<PosterProjectRecord | undefined>;
   create(input: Omit<PosterProjectRecord, "id" | "createdAt" | "updatedAt">): Promise<PosterProjectRecord>;
   update(id: string, patch: Partial<Pick<PosterProjectRecord, "title" | "status" | "ratio" | "modelId" | "data">>): Promise<PosterProjectRecord>;
-  remove(id: string): Promise<void>;
+  /**
+   * 지운다. **정말 지웠으면 true.**
+   *
+   * `void` 였을 때, 팀 읽기 정책으로 목록에 뜬 팀원의 작업을 지우면 RLS 가
+   * 0줄로 막는데 supabase-js 는 그것을 오류로 주지 않아 그대로 통과했다.
+   * 부르는 쪽은 성공으로 알고 **파일 삭제를 admin 권한으로 이어서 돌렸고,
+   * 그것은 RLS 를 우회해 남의 그림을 실제로 지웠다.**
+   *
+   * 지운 줄이 없으면 false 를 준다 — 부르는 쪽이 거기서 멈춰야 한다.
+   */
+  remove(id: string): Promise<boolean>;
 }
 
 export interface PosterReferenceStore {
@@ -135,6 +145,15 @@ export interface PosterRequestStore {
     "id" | "createdAt" | "returnedImages" | "costUsd" | "falRequestId">): Promise<{ id: string }>;
   /** fal 응답 직후 확정한다. 결과 저장보다 먼저 — 돈은 이미 나갔다. */
   complete(id: string, patch: { falRequestId: string | null; returnedImages: number; costUsd: number }): Promise<void>;
+  /**
+   * 제출할 때 적어 둔 한 장 단가를 돌려준다. 모르면 `null`.
+   *
+   * **회수 경로가 값을 클라이언트에게 묻지 않게 하려고 있다.** 예전에는
+   * 상태 조회 본문의 `unitCostUsd` 를 그대로 믿고 크레딧을 확정했다 — 회원이
+   * 0 을 보내면 공짜로 만들 수 있었고 비용 장부까지 0 달러가 됐다. 단가는
+   * 제출 시점에 서버가 계산해 이 행에 적어 두므로, 여기서 다시 읽는다.
+   */
+  unitCost(id: string): Promise<number | null>;
 }
 
 export interface PosterImageStore {

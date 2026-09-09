@@ -121,9 +121,21 @@ await insert("ingest_candidates", (store.candidates ?? []).map((row) => ({
 
 // ── 참고 이미지와 묶음 세트 ─────────────────────────────────────────
 const referenceRows = [];
+/**
+ * 실제로 옮겨진 참고 이미지의 id.
+ *
+ * **건너뛴 것을 가리키는 세트 항목은 넣으면 안 된다.**
+ * `reference_set_items.reference_image_id` 는 `not null references
+ * reference_images(id)` 라서, 파일이 없어 건너뛴 그림을 가리키면 FK 위반으로
+ * 최상위 await 가 통째로 죽는다. 그러면 `ingest_*` 와 `reference_*` 는 이미
+ * 들어간 채 `sns_projects` 이후는 하나도 안 옮겨지고, 미리보기 모드는 insert
+ * 를 아예 안 하므로 「건너뜀 1개」만 찍고 정상으로 보인다.
+ */
+const migratedReferenceIds = new Set();
 for (const row of store.referenceImages ?? []) {
   const target = await upload(row.storagePath);
   if (!target) continue;
+  migratedReferenceIds.add(row.id);
   referenceRows.push({
     id: row.id, user_id: targetUser, storage_path: target, title: row.title ?? null,
     purpose: row.purpose ?? "cardnews", width: row.width ?? null, height: row.height ?? null,
@@ -137,11 +149,17 @@ await insert("reference_sets", (store.referenceSets ?? []).map((row) => ({
   created_at: row.createdAt, updated_at: row.updatedAt,
 })));
 
-await insert("reference_set_items", (store.referenceSets ?? []).flatMap((set) =>
+const setItemRows = (store.referenceSets ?? []).flatMap((set) =>
   (set.items ?? []).map((item, index) => ({
     id: item.id, set_id: set.id, reference_image_id: item.referenceImageId,
     role: item.role, position: item.position ?? index,
-  }))));
+  })));
+const keptSetItems = setItemRows.filter((row) => migratedReferenceIds.has(row.reference_image_id));
+const droppedSetItems = setItemRows.length - keptSetItems.length;
+if (droppedSetItems > 0) {
+  console.warn(`[migrate] 옮기지 못한 참고 이미지를 가리키는 세트 항목 ${droppedSetItems}개를 뺐습니다.`);
+}
+await insert("reference_set_items", keptSetItems);
 
 // ── 카드뉴스 작업물 ─────────────────────────────────────────────────
 const projectRows = [];

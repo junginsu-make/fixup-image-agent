@@ -1,5 +1,5 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
-import { snsFlowStoreForUser } from "../../../../../../lib/sns-flow-store";
+import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { createActualPlanningFlow } from "../../../../../../lib/sns/actual-flow";
 import { createSourceAdapters } from "../../../../../../lib/sns/source-adapters";
 import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
@@ -21,6 +21,9 @@ export async function GET(_request: Request, context: Context) {
     project = await refreshProjectAssetUrls(project);
     return Response.json({ ok: true, project });
   } catch (error) {
+    // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
+    const denied = snsWriteDenied(error);
+    if (denied) return denied;
     return Response.json({ ok: false, message: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다." }, { status: 500 });
   }
 }
@@ -38,6 +41,9 @@ export async function POST(_request: Request, context: Context) {
     const saved = await store.save(id, flow, "copy_ready");
     return Response.json({ ok: true, project: saved });
   } catch (error) {
+    // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
+    const denied = snsWriteDenied(error);
+    if (denied) return denied;
     const status = error instanceof SnsProviderConfigurationError ? error.status : 500;
     return Response.json({ ok: false, message: error instanceof Error ? error.message : "기획과 원고를 만들지 못했습니다." }, { status });
   }

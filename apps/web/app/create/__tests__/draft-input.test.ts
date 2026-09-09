@@ -111,9 +111,17 @@ describe("단계와 알림", () => {
     expect(draft.appState).toBe("upload");
   });
 
-  it("결과가 있으면 언제나 편집기 단계다", () => {
+  it("되살릴 단계가 아니면 결과가 있을 때 편집기로 연다", () => {
     const draft = buildDraftInput({ ...상태, appState: "upload" }, true)!;
     expect(draft.appState).toBe("editor");
+  });
+
+  it("**시나리오를 보던 중이면 그 단계를 지킨다**", () => {
+    // 시나리오 화면에도 결과는 이미 있다. 결과만 보고 편집기로 적으면 자동
+    // 저장이 도는 순간 그 단계가 사라지고, 되불렀을 때 시나리오 화면에만 있는
+    // 심사 지적이 통째로 안 보였다.
+    const draft = buildDraftInput({ ...상태, appState: "scenario" }, true)!;
+    expect(draft.appState).toBe("scenario");
   });
 
   it("편집기 알림이 화면 알림보다 앞선다", () => {

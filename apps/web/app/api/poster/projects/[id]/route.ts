@@ -98,7 +98,22 @@ export async function DELETE(_request: Request, context: Context) {
     // 행보다 먼저 경로를 읽어 둔다. 지우고 나면 어디에 있었는지 알 수 없다.
     // **사본도 함께 모은다.** 행이 사라지면 사본의 자리를 아는 곳이 없어진다.
     const paths = posterAssetPathsToRemove(await stores.images.byProject(id));
-    await createPosterService(stores.projects).remove(id);
+    /**
+     * **정말 지워졌는지 보고 나서 파일에 손댄다.**
+     *
+     * 목록은 팀 읽기 정책으로 팀원의 작업까지 보여 준다. 그것을 지우면 행
+     * 삭제는 RLS 가 0줄로 막는데 supabase-js 는 오류를 안 준다. 그대로
+     * 이어서 돌던 `removePosterAssets` 는 **admin 클라이언트라 RLS 를
+     * 우회했고, 남의 그림 파일만 실제로 지웠다** — 작업은 남고 그림만
+     * 사라지는, 되돌릴 수 없는 상태였다.
+     */
+    const removed = await createPosterService(stores.projects).remove(id);
+    if (!removed) {
+      return Response.json(
+        { ok: false, message: "내가 만든 작업만 지울 수 있습니다." },
+        { status: 403 },
+      );
+    }
     await removePosterAssets(paths);
     return Response.json({ ok: true });
   } catch (error) {

@@ -127,6 +127,34 @@ export async function reserveAiUsage(
  * 비용 기록이 실패해도 사용량 확정은 되돌리지 않는다. 장부가 조금 비는 것보다
  * 회원의 크레딧이 예약된 채 묶이는 쪽이 훨씬 나쁘다.
  */
+/**
+ * 성공한 결과를 돌려주는 길에서 장부를 닫는다. **던지지 않는다.**
+ *
+ * `finalizeAiUsage` 는 RPC 가 흔들리면 던진다. 그것이 성공 경로의 `try` 안에
+ * 있으면, 이미 만들어 낸 결과가 catch 로 빨려 들어가 **생성 실패인 척하는
+ * 오류**로 바뀐다. 사용자는 「분석 실패」를 보고 다시 눌러 돈을 또 쓴다.
+ *
+ * 포스터와 카드뉴스는 같은 자리를 이미 `try { … } catch {}` 로 감싸고
+ * 「사용자가 만든 것을 못 보는 것이 더 나쁘다」고 적어 두었다. 그 판단을
+ * 한 곳에 모은다 — 묶인 장은 예약이 만료되면 풀린다.
+ *
+ * 못 닫았으면 `undefined` 를 준다. 부르는 쪽은 사용량 칸만 비우면 된다.
+ */
+export async function settleAiUsage(
+  reservation: { userId: string; requestId: string },
+  success: boolean,
+  consumedUnits: number,
+  errorCode?: string,
+  cost?: { model: string; billableImages: number },
+) {
+  try {
+    return await finalizeAiUsage(reservation, success, consumedUnits, errorCode, cost);
+  } catch {
+    // 이미 `logUsageFailure` 가 사용자 id 와 요청 id 를 남겼다. 손으로 풀 수 있다.
+    return undefined;
+  }
+}
+
 export async function finalizeAiUsage(
   reservation: { userId: string; requestId: string },
   success: boolean,

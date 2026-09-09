@@ -24,7 +24,17 @@ const StatusSchema = z.object({
   requestRowId: z.string(),
   falRequestId: z.string(),
   endpoint: z.string(),
-  unitCostUsd: z.number(),
+  /**
+   * **더 이상 쓰지 않는다.** 받기만 하고 버린다.
+   *
+   * 이 값은 브라우저가 정한다. 그대로 믿고 확정하던 동안에는 `0` 을 보내면
+   * 크레딧이 한 장도 안 깎이고 관리자 비용 장부까지 0 달러가 됐다. 단가는
+   * 이제 제출 때 서버가 적어 둔 요청 행에서 읽는다.
+   *
+   * `.strict()` 라 칸을 지우면 배포 중인 옛 화면이 400 을 받는다. 그래서
+   * 자리만 남기고 값은 안 본다. 화면에서 이 칸이 사라진 뒤에 지운다.
+   */
+  unitCostUsd: z.number().optional(),
 }).strict();
 
 /**
@@ -56,7 +66,7 @@ async function saveThumbnail(
  * 쌓인 것들이 그대로 열려야 한다.
  */
 async function saveResult(
-  userId: string, projectId: string, variantIndex: number, url: string,
+  userId: string, projectId: string, generationRequestId: string, variantIndex: number, url: string,
 ): Promise<{ assetPath: string; thumbPath: string | null }> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`결과 이미지를 내려받지 못했습니다 (${response.status}).`);
@@ -71,19 +81,23 @@ async function saveResult(
       await writeFile(target, body);
       return storagePath;
     };
-    const assetPath = await write(`${projectId}/${variantIndex}.png`, bytes);
-    const thumbPath = await saveThumbnail(bytes, `${projectId}/${variantIndex}.thumb.webp`, write);
+    // 운영과 같은 규칙으로 회차를 한 칸 둔다 — 두 모드가 다르면 로컬에서 확인한
+    // 것이 운영에서 확인한 것이 아니게 된다.
+    const assetPath = await write(`${projectId}/${generationRequestId}/${variantIndex}.png`, bytes);
+    const thumbPath = await saveThumbnail(
+      bytes, `${projectId}/${generationRequestId}/${variantIndex}.thumb.webp`, write,
+    );
     return { assetPath, thumbPath };
   }
 
   const storage = createSupabaseAdminClient().storage.from(LIBRARY_BUCKET);
-  const assetPath = posterAssetPath(userId, projectId, variantIndex);
+  const assetPath = posterAssetPath(userId, projectId, generationRequestId, variantIndex);
   const result = await storage.upload(assetPath, bytes, { contentType: "image/png", upsert: true });
   if (result.error) throw new Error(result.error.message);
 
   const thumbPath = await saveThumbnail(
     bytes,
-    posterThumbPath(userId, projectId, variantIndex),
+    posterThumbPath(userId, projectId, generationRequestId, variantIndex),
     async (target, body) => {
       const uploaded = await storage.upload(target, body, { contentType: "image/webp", upsert: true });
       if (!uploaded.error) return target;
@@ -114,13 +128,18 @@ export async function POST(request: Request, context: Context) {
     const fal = createPosterFalClients();
 
     const result = await collectPoster(
-      { projectId: id, ...parsed.data },
+      {
+        projectId: id,
+        requestRowId: parsed.data.requestRowId,
+        falRequestId: parsed.data.falRequestId,
+        endpoint: parsed.data.endpoint,
+      },
       {
         queue: fal.queue,
         requests: stores.requests,
         images: stores.images,
-        saveImage: (projectId, variantIndex, url) =>
-          saveResult(auth.member.userId, projectId, variantIndex, url),
+        saveImage: (projectId, generationRequestId, variantIndex, url) =>
+          saveResult(auth.member.userId, projectId, generationRequestId, variantIndex, url),
       },
     );
 
@@ -138,15 +157,22 @@ export async function POST(request: Request, context: Context) {
      */
     if (result.done) {
       const project = await stores.projects.get(id);
-      const saved = await stores.images.byProject(id);
-      const unitUsd = parsed.data.unitCostUsd;
+      /**
+       * **이번 회차만 센다.**
+       *
+       * 예전에는 `images.byProject(id)` 로 셌는데 그것은 프로젝트의 **모든**
+       * 그림이다. `add` 는 옛 행을 지우지 않으므로, 두 번째 생성이 0장을
+       * 돌려줘도 옛 그림 때문에 성공으로 확정되고 전액이 깎였다.
+       */
+      const savedCount = result.savedCount ?? 0;
+      const unitUsd = result.unitCostUsd ?? 0;
       const reservationId = project?.data.reservationId;
       if (reservationId) {
         try {
           await finalizeAiUsage(
             { userId: auth.member.userId, requestId: reservationId },
-            saved.length > 0,
-            creditUnits(unitUsd * saved.length),
+            savedCount > 0,
+            creditUnits(unitUsd * savedCount),
           );
         } catch {
           // 삼킨다. 사용자가 만든 그림을 못 보는 것이 더 나쁘다.

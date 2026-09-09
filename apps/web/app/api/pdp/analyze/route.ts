@@ -2,7 +2,7 @@ import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fi
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { sliceTallReference } from "../../../../lib/pdp/slice-image";
-import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,8 +39,11 @@ export async function POST(req: Request) {
     let lastStatus = 500;
     for (let attempt = 1; attempt <= MAX_ANALYZE_ATTEMPTS; attempt++) {
       try {
+        // 조각낸 레퍼런스가 실린 `request` 를 보낸다(`body` 가 아니다).
         const result = await analyzeProduct(request, providers, { skipFirstImage: true });
-        const usage = await finalizeAiUsage(reservation, true, 0);
+        // 장부가 안 닫혀도 결과는 돌려준다. 여기서 던지면 아래 catch 가 성공한
+        // 분석을 「분석 실패」로 바꾸고, 사용자는 다시 눌러 돈을 또 쓴다.
+        const usage = await settleAiUsage(reservation, true, 0);
         return Response.json({ ok: true, result, usage });
       } catch (err) {
         lastEnvelope = toPdpErrorResponse(err);

@@ -74,9 +74,11 @@ import {
   planUploadBatches,
   DEFAULT_IMAGE_MODEL,
   IMAGE_MODELS,
-  IMAGE_MODEL_CREDIT_WEIGHT,
 } from "@fixup/pdp-core";
 import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-core";
+// **서버가 차감할 때 쓰는 그 함수다.** 화면이 정수 가중치로 따로 세던 동안,
+// gpt-image-2 여섯 장이면 서버는 27장을 깎는데 화면은 24장이라고 안내했다.
+import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
 import {
@@ -313,7 +315,20 @@ export function PdpEditor({
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   // 라이브러리 저장은 브라우저 초안 저장과 다르다. 계정에 올려 기기를 옮겨도 남는다.
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
-  const imageContainerRef = useRef<HTMLDivElement>(null);
+  const imageContainerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 편집 캔버스의 마지막 실제 폭.
+   *
+   * 레이어의 `x`·`y`·`width` 는 그 캔버스 폭을 기준으로 한 절대 픽셀이다. 그런데
+   * 캔버스는 편집 화면에서만 붙어 있고, 「전체 ZIP」 버튼은 공통 머리글에 있어
+   * 갤러리에서도 눌린다. 그때 폭을 못 구해 460 고정값으로 떨어졌고, 가용 폭이
+   * 그보다 좁은 화면(모바일·좁은 창)에서 배치한 글자가 안쪽으로 밀리거나
+   * 이미지 밖으로 나갔다 — 같은 섹션이 어느 화면에서 받았느냐에 따라 달라졌다.
+   *
+   * 사용자가 레이어를 놓은 것은 캔버스가 붙어 있던 그때이므로, 마지막으로 잰
+   * 값이 곧 그 기준이다.
+   */
+  const lastCanvasWidthRef = useRef<number | null>(null);
   const previewStageRef = useRef<HTMLDivElement>(null);
   const resizeSessionRef = useRef<Record<string, { width: number; height: number; fontSize: number }>>({});
   const generationLockRef = useRef(false);
@@ -1474,6 +1489,22 @@ export function PdpEditor({
     if (!targets.length) return;
 
     generationLockRef.current = true;
+    /**
+     * **도는 동안 갤러리를 잠근다.**
+     *
+     * 배치는 `generatingKeys` 를 안 채우고 있었다. 그래서 `isBusy` 가 내내
+     * false 였고, 5분짜리 배치가 도는 동안 카드에 스피너가 안 뜨며 순서 변경과
+     * **삭제** 버튼이 열려 있었다. 도중에 섹션을 지우면 돌아온 결과가 붙을
+     * 자리를 잃어 **이미 과금된 그림이 조용히 버려졌다.** 단건 경로는 처음부터
+     * 이 열쇠를 채우고 있었다.
+     */
+    const targetKeys = targets
+      .map(({ index }) => sectionKeys[index])
+      .filter((key): key is string => Boolean(key));
+    setGeneratingKeys((current) => [
+      ...current,
+      ...targetKeys.filter((key) => !current.includes(key)),
+    ]);
     const startedAt = Date.now();
     const modelInfo = IMAGE_MODELS.find((m) => m.id === imageModel);
     let completed = 0;
@@ -1526,18 +1557,17 @@ export function PdpEditor({
                 ),
               ]),
             ),
-            // 섹션마다 제목이 다르므로 강조도 섹션별이다.
-            emphasisWordsBySection: Object.fromEntries(
-              chunk
-                .map(({ section, index }) => {
-                  const words = keepWordsPresentIn(
-                    section.headline ?? "",
-                    sectionOptions[sectionKeys[index] ?? String(index)]?.emphasisWords ?? [],
-                  );
-                  return [section.section_id, words] as const;
-                })
-                .filter(([, words]) => words.length > 0),
-            ),
+            /**
+             * 섹션마다 제목이 다르므로 강조도 섹션별이다.
+             *
+             * **자리 차례로 보낸다.** `section_id` 로 묶으면 그 값이 겹칠 때
+             * 두 섹션이 같은 강조어를 받는다 — AI 응답값이라 겹칠 수 있고,
+             * `buildSectionKeys` 주석이 그 사실을 이미 못 박아 두었다.
+             */
+            emphasisWordsList: chunk.map(({ section, index }) => keepWordsPresentIn(
+              section.headline ?? "",
+              sectionOptions[sectionKeys[index] ?? String(index)]?.emphasisWords ?? [],
+            )),
           }),
         });
 
@@ -1551,10 +1581,27 @@ export function PdpEditor({
           break;
         }
 
-        const bySection = new Map(response.results.map((item) => [item.sectionId, item]));
+        /**
+         * **자리 차례로 되돌린다. 단건 경로와 같은 규칙이다.**
+         *
+         * 예전에는 `section_id` 로 맵을 만들어 붙였는데, 그 값은 AI 응답값이라
+         * 겹칠 수 있다(`buildSectionKeys` 주석). 겹치면 두 섹션이 같은 그림을
+         * 받고, 게다가 아래가 전체 섹션을 훑기 때문에 **이번에 만들지도 않은
+         * 섹션의 기존 이미지가 덮여 사라졌다.**
+         *
+         * 서버의 `results` 는 보낸 `sections` 와 자리가 그대로 맞물린다
+         * (`settled.map((outcome, index) => …)`). 그 자리를 `sectionKeys` 로
+         * 옮기면 생성 중에 순서가 바뀌어도 제 섹션을 찾는다.
+         */
+        const byKey = new Map<string, (typeof response.results)[number]>();
+        chunk.forEach(({ index }, position) => {
+          const key = sectionKeys[index];
+          const outcome = response.results[position];
+          if (key && outcome) byKey.set(key, outcome);
+        });
         setSections((current) =>
-          current.map((item) => {
-            const outcome = bySection.get(item.section_id);
+          current.map((item, position) => {
+            const outcome = byKey.get(sectionKeys[position] ?? String(position));
             if (!outcome?.ok) return item;
             return {
               ...item,
@@ -1577,6 +1624,8 @@ export function PdpEditor({
         error instanceof Error ? `${error.message}` : "일괄 생성 응답을 확인하지 못했습니다.",
       );
     } finally {
+      // 잠금을 반드시 푼다. 안 풀면 갤러리가 영영 잠긴 채로 남는다.
+      setGeneratingKeys((current) => current.filter((key) => !targetKeys.includes(key)));
       setGenerationRun(
         describeRun(
           "finished",
@@ -1584,7 +1633,7 @@ export function PdpEditor({
         ),
       );
       setNotice(
-        `일괄 생성 결과: 성공 ${completed}장${failed ? ` · 실패 ${failed}장` : ""}. 성공한 ${completed}장에 대해 ${completed * IMAGE_MODEL_CREDIT_WEIGHT[imageModel]}장이 차감됐습니다.`
+        `일괄 생성 결과: 성공 ${completed}장${failed ? ` · 실패 ${failed}장` : ""}. 성공한 ${completed}장에 대해 ${imageCreditUnits(imageModel, completed)}장이 차감됐습니다.`
       );
       generationLockRef.current = false;
     }
@@ -1877,7 +1926,9 @@ export function PdpEditor({
       throw new Error("이미지가 없는 섹션은 다운로드할 수 없습니다.");
     }
 
-    const width = imageContainerRef.current?.clientWidth ?? 460;
+    // 붙어 있으면 지금 값을, 아니면 마지막으로 잰 값을 쓴다. 둘 다 없을 때만
+    // 기본 폭으로 떨어진다(레이어를 한 번도 안 놓은 작업이라 어긋날 것도 없다).
+    const width = imageContainerRef.current?.clientWidth || lastCanvasWidthRef.current || 460;
     const layers = overlaysBySection[sectionKeys[sectionIndex] ?? String(sectionIndex)] ?? [];
     const exportNode = await buildExportNode({ imageSrc: section.generatedImage, width, layers });
 
@@ -2219,7 +2270,7 @@ export function PdpEditor({
               ) : null}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 장당 {IMAGE_MODEL_CREDIT_WEIGHT[imageModel]}장씩 차감됩니다.
+              성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 차감되며 {generationRun.completed}장이면 {imageCreditUnits(imageModel, generationRun.completed)}장입니다.
             </p>
           </div>
         ) : null}
@@ -2241,6 +2292,7 @@ export function PdpEditor({
           <SectionGallery
             sections={sections}
             sectionKeys={sectionKeys}
+            imageModel={imageModel}
             generatingKeys={generatingKeys}
             layerCounts={layerCounts}
             onGenerate={(index) => void handleGenerateImage(index)}
@@ -2470,7 +2522,15 @@ export function PdpEditor({
 
               <div className={styles.previewStage} ref={previewStageRef}>
                 {currentSection.generatedImage ? (
-                  <div className={styles.imageCanvas} ref={imageContainerRef}>
+                  <div
+                    className={styles.imageCanvas}
+                    ref={(node) => {
+                      imageContainerRef.current = node;
+                      // 붙거나 크기가 바뀔 때 기준 폭을 적어 둔다. 갤러리에서
+                      // 내려받을 때 이 값이 없으면 좌표가 어긋난다.
+                      if (node?.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
+                    }}
+                  >
                     <img
                       alt={currentSection.section_name}
                       className={styles.sectionImage}

@@ -98,11 +98,11 @@ describe("makePosterThumbnail", () => {
 describe("사본의 자리와 주소", () => {
   it("원본 이름 규칙을 건드리지 않는다", () => {
     // 원본이 `.png` 인 채로 남아야 이미 쌓인 결과가 그대로 열린다.
-    expect(posterAssetPath("u1", "p1", 0)).toBe("u1/poster/p1/0.png");
-    expect(posterThumbPath("u1", "p1", 0)).toBe("u1/poster/p1/0.thumb.webp");
+    expect(posterAssetPath("u1", "p1", "req-1", 0)).toBe("u1/poster/p1/req-1/0.png");
+    expect(posterThumbPath("u1", "p1", "req-1", 0)).toBe("u1/poster/p1/req-1/0.thumb.webp");
   });
 
   it("주소에 사본을 달라는 표시를 붙인다", () => {
-    expect(posterThumbUrl("p1", 2)).toBe("/api/poster/projects/p1/images/2/file?size=thumb");
+    expect(posterThumbUrl("p1", "img-2")).toBe("/api/poster/projects/p1/images/img-2/file?size=thumb");
   });
 });

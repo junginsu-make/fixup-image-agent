@@ -28,6 +28,7 @@ function deps(overrides: Record<string, unknown> = {}) {
       requests: {
         create: vi.fn(async (row: unknown) => { created.push(row); return { id: "req-1" }; }),
         complete: vi.fn(async (id: string, patch: unknown) => { completed.push({ id, patch }); }),
+        unitCost: vi.fn(async () => 0.178),
         ...(overrides.requests as object ?? {}),
       },
       images: {
@@ -40,9 +41,10 @@ function deps(overrides: Record<string, unknown> = {}) {
       // **계약대로 돌려준다.** 문자열을 주면 `as never` 가 타입 검사를 가려서,
       // 실행 중에는 assetPath·thumbPath 가 전부 undefined 가 된다 — 사본 배선이
       // 순서를 뒤집어도 아무도 눈치채지 못한다.
-      saveImage: vi.fn(async (_p: string, index: number) => ({
-        assetPath: `p1/${index}.png`,
-        thumbPath: `p1/${index}.thumb.webp`,
+      // 회차가 자리에 들어간다 — 다음 회차가 앞 회차 파일을 덮어쓰지 않게.
+      saveImage: vi.fn(async (_p: string, requestId: string, index: number) => ({
+        assetPath: `p1/${requestId}/${index}.png`,
+        thumbPath: `p1/${requestId}/${index}.thumb.webp`,
       })),
       ...overrides,
     } as never,
@@ -91,7 +93,7 @@ describe("포스터 제출", () => {
 describe("포스터 결과 회수", () => {
   const collect = {
     projectId: "p1", requestRowId: "req-1", falRequestId: "fal-1",
-    endpoint: "openai/gpt-image-2/edit", unitCostUsd: 0.178,
+    endpoint: "openai/gpt-image-2/edit",
   };
 
   it("아직 안 끝났으면 기다린다 — 결과를 부르지 않는다", async () => {
@@ -106,6 +108,7 @@ describe("포스터 결과 회수", () => {
       requests: {
         create: async () => ({ id: "req-1" }),
         complete: async () => { order.push("cost"); },
+        unitCost: async () => 0.178,
       },
       saveImage: async () => { order.push("save"); return "p.png"; },
     });
@@ -117,6 +120,55 @@ describe("포스터 결과 회수", () => {
     const { dependencies, completed } = deps();
     await collectPoster(collect, dependencies);
     expect((completed[0] as { patch: { costUsd: number } }).patch.costUsd).toBeCloseTo(0.534, 4);
+  });
+
+  it("단가를 요청 행에서 읽는다 — 부르는 쪽이 준 값을 믿지 않는다", async () => {
+    // 예전에는 상태 조회 본문의 `unitCostUsd` 를 그대로 썼다. 그 값은 브라우저가
+    // 정하므로 0 을 보내면 크레딧이 안 깎이고 비용 장부까지 0 달러가 됐다.
+    const { dependencies, completed } = deps({
+      requests: {
+        create: vi.fn(async () => ({ id: "req-1" })),
+        complete: vi.fn(async (id: string, patch: unknown) => { completed.push({ id, patch }); }),
+        unitCost: vi.fn(async () => 0.5),
+      },
+    });
+    const result = await collectPoster(collect, dependencies);
+    expect(result.unitCostUsd).toBe(0.5);
+    expect((completed[0] as { patch: { costUsd: number } }).patch.costUsd).toBeCloseTo(1.5, 4);
+  });
+
+  it("단가를 모르면 0 으로 떨어진다 — 그때는 예약도 0장이었다", async () => {
+    const { dependencies, completed } = deps({
+      requests: {
+        create: vi.fn(async () => ({ id: "req-1" })),
+        complete: vi.fn(async (id: string, patch: unknown) => { completed.push({ id, patch }); }),
+        unitCost: vi.fn(async () => null),
+      },
+    });
+    const result = await collectPoster(collect, dependencies);
+    expect(result.unitCostUsd).toBeNull();
+    expect((completed[0] as { patch: { costUsd: number } }).patch.costUsd).toBe(0);
+  });
+
+  it("이번 회차에 저장한 장수를 돌려준다 — 옛 그림을 같이 세지 않는다", async () => {
+    // 확정하는 쪽이 `images.byProject` 로 세면 두 번째 생성이 0장을 돌려줘도
+    // 옛 그림 때문에 성공으로 확정된다. 회차 장수를 여기서 준다.
+    const { dependencies } = deps({
+      queue: {
+        submitJob: vi.fn(async () => ({ requestId: "fal-1" })),
+        jobStatus: vi.fn(async () => "completed" as const),
+        jobResult: vi.fn(async () => ({ images: [] })),
+      },
+      images: {
+        byProject: async () => [{ id: "old-1" }, { id: "old-2" }],
+        byProjects: async () => [],
+        add: vi.fn(async (rows: unknown[]) => rows as never),
+        select: async () => {},
+        saveReview: async () => {},
+      },
+    });
+    const result = await collectPoster(collect, dependencies);
+    expect(result.savedCount).toBe(0);
   });
 
   it("받은 장수만큼 이미지 행을 만든다", async () => {
@@ -147,14 +199,14 @@ describe("포스터 회수 — 사본의 자리", () => {
     await collectPoster(
       {
         projectId: "p1", requestRowId: "req-1", falRequestId: "fal-1",
-        endpoint: "openai/gpt-image-2/edit", unitCostUsd: 0.178,
+        endpoint: "openai/gpt-image-2/edit",
       },
       dependencies,
     );
 
     expect(added).toHaveLength(2);
-    expect(added[0]).toMatchObject({ variantIndex: 0, assetPath: "p1/0.png", thumbPath: "p1/0.thumb.webp" });
-    expect(added[1]).toMatchObject({ variantIndex: 1, assetPath: "p1/1.png", thumbPath: "p1/1.thumb.webp" });
+    expect(added[0]).toMatchObject({ variantIndex: 0, assetPath: "p1/req-1/0.png", thumbPath: "p1/req-1/0.thumb.webp" });
+    expect(added[1]).toMatchObject({ variantIndex: 1, assetPath: "p1/req-1/1.png", thumbPath: "p1/req-1/1.thumb.webp" });
   });
 });
 

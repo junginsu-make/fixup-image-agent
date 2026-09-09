@@ -24,8 +24,21 @@ export interface MemberUsage {
   userId: string;
   email: string;
   role: "leader" | "member";
-  /** 이번 달 쓴 것 + 잡아 둔 것. */
+  /**
+   * 이번 달 쓴 것 + 잡아 둔 것. **어느 팀에서 썼든 전부.**
+   *
+   * 개인 상한과 비교하는 값이라 팀을 안 가린다 — 예약 함수도 이 사람의
+   * 이벤트를 팀과 무관하게 더해 개인 상한과 비교한다.
+   */
   used: number;
+  /**
+   * 그중 **이 팀에 달린 것만.**
+   *
+   * DB 의 `team_units_used()` 가 `generation_events.team_id` 로 세기 때문에
+   * 팀 잔량은 이 값으로 셈해야 한다. 팀을 옮겨 온 사람은 옛 팀에서 쓴 것이
+   * `used` 에는 있고 여기에는 없다.
+   */
+  usedInTeam: number;
   /** 이 사람의 개인 상한. */
   personalQuota: number;
 }
@@ -33,6 +46,15 @@ export interface MemberUsage {
 export interface TeamCredit {
   /** 팀 한도. **0 은 「아직 안 정했다」** — 그때는 개인 상한만 본다. */
   quota: number;
+  /**
+   * 이 팀에 달린 이번 달 사용량 전부. **지금 팀원이 아닌 사람 것도 포함한다.**
+   *
+   * 예전에는 화면이 현재 팀원의 `used` 를 더해서 이 값을 대신했다. 그런데 DB 의
+   * `team_units_used()` 는 `team_id` 로 세고 `generation_events.team_id` 는
+   * 배정 때 소급 갱신되지 않는다. 그래서 달 중간에 사람이 빠지면 화면은
+   * 「60장 남음」인데 DB 는 옛 이벤트를 계속 세어 11장째부터 막았다.
+   */
+  teamUsed: number;
   members: MemberUsage[];
 }
 
@@ -79,7 +101,9 @@ export interface TeamBalance {
 }
 
 export function balanceOf(credit: TeamCredit): TeamBalance {
-  const used = credit.members.reduce((sum, member) => sum + member.used, 0);
+  // **DB 와 같은 기준으로 센다.** 현재 팀원을 더하면 빠져나간 사람이 쓴 것이
+  // 화면에서만 사라져, 남았다고 뜨는데 만들면 막힌다.
+  const used = credit.teamUsed;
   const unset = credit.quota === 0;
   return {
     quota: credit.quota,
@@ -102,8 +126,8 @@ export function balanceOf(credit: TeamCredit): TeamBalance {
  */
 export function effectiveQuotaOf(credit: TeamCredit, member: MemberUsage): number {
   if (credit.quota === 0) return member.personalQuota;
-  const others = credit.members
-    .filter((row) => row.userId !== member.userId)
-    .reduce((sum, row) => sum + row.used, 0);
+  // DB 의 `team_units_used(team, period, exclude_user)` 와 같은 셈이다 —
+  // 팀에 달린 전부에서 내 몫만 뺀다.
+  const others = Math.max(0, credit.teamUsed - member.usedInTeam);
   return Math.min(member.personalQuota, Math.max(0, credit.quota - others));
 }

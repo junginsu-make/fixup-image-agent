@@ -122,3 +122,43 @@ describe("기본 장수", () => {
     expect(DEFAULT_VARIANTS).toBeLessThanOrEqual(MAX_VARIANTS);
   });
 });
+
+/**
+ * **같은 비율을 따라갈 때 값이 맞는가.**
+ *
+ * `POSTER_RATIOS` 의 `match-source` 픽셀은 자리표시 1088×1088 이고, 실제 크기는
+ * `buildPosterJob` 이 `sizeFromSource` 로 따로 구한다. 견적이 그 사실을 모르면
+ * 두 값이 만나는 자리가 없어 크기별 단가표를 쓰는 모델에서 값이 그대로 틀린다.
+ */
+describe("첨부한 그림과 같은 비율", () => {
+  const base = { modelId: "gpt-image-2", ratioId: "match-source", variants: 1, hasReferences: true };
+
+  it("첨부 크기를 넘기면 그 크기로 값을 낸다", () => {
+    const wide = estimatePosterCost({ ...base, sourceSize: { width: 3840, height: 2160 } });
+    const square = estimatePosterCost({ ...base, sourceSize: { width: 1024, height: 1024 } });
+
+    expect(wide.rejected).toBeUndefined();
+    expect(square.rejected).toBeUndefined();
+    // 크기가 다르면 값도 달라야 한다 — 같으면 크기를 안 보고 있다는 뜻이다.
+    expect(wide.unitUsd).not.toBe(square.unitUsd);
+  });
+
+  it("크기를 모르면 거절하지 않고 어림으로 표시한다", () => {
+    // 작업을 만들 때와 첫 화면의 예상 비용은 아직 첨부를 안 쟀다. 거절하면
+    // 광고·같은 비율 작업을 아예 못 만든다.
+    const estimate = estimatePosterCost(base);
+
+    expect(estimate.rejected).toBeUndefined();
+    expect(estimate.approximate).toBe(true);
+    expect(estimate.unitUsd).toBeGreaterThan(0);
+  });
+
+  it("다른 비율은 첨부 크기를 봐도 답이 안 바뀐다", () => {
+    const withSize = estimatePosterCost({
+      ...base, ratioId: "1:1", sourceSize: { width: 3840, height: 2160 },
+    });
+    const without = estimatePosterCost({ ...base, ratioId: "1:1" });
+
+    expect(withSize.unitUsd).toBe(without.unitUsd);
+  });
+});

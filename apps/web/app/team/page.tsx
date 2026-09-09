@@ -102,7 +102,7 @@ export default async function TeamPage({
   const credit =
     active === "credit" && focusTeamId
       ? await teamCredit(focusTeamId)
-      : { quota: 0, members: [] };
+      : { quota: 0, teamUsed: 0, members: [] };
 
   return (
     // 바깥 상자와 머리글은 라이브러리·수집함과 같은 모양이다. 화면마다 폭과
