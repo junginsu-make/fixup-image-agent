@@ -14,6 +14,32 @@ import {
 import { createSupabaseServerClient } from "./supabase/server";
 import { snsCardPathsToRemove } from "./sns/thumbnail";
 
+/**
+ * 읽히기는 하는데 쓸 수는 없는 작업이다.
+ *
+ * 팀 읽기 정책은 select 전용이라, 팀원의 작업은 목록과 상세에 뜨지만 저장과
+ * 삭제는 RLS 가 막는다. 그 사실을 부르는 쪽이 403 으로 옮길 수 있게 갈래를
+ * 나눠 둔다 — 보통 오류로 섞으면 「알 수 없는 오류」가 뜬다.
+ */
+export class SnsProjectNotWritable extends Error {
+  constructor() {
+    super("내가 만든 카드뉴스만 고치거나 지울 수 있습니다.");
+    this.name = "SnsProjectNotWritable";
+  }
+}
+
+/**
+ * 쓰기가 막힌 것이면 403 응답을, 아니면 `undefined` 를 준다.
+ *
+ * 라우트의 `catch` 마다 같은 조건을 적지 않으려고 여기 둔다. 500 으로 흘리면
+ * 사용자에게 「알 수 없는 오류」가 뜨는데, 실제로는 남의 작업이라 못 고치는
+ * 것이라 답이 분명해야 한다.
+ */
+export function snsWriteDenied(error: unknown): Response | undefined {
+  if (!(error instanceof SnsProjectNotWritable)) return undefined;
+  return Response.json({ ok: false, message: error.message }, { status: 403 });
+}
+
 export interface SnsFlowStore {
   get(projectId: string): Promise<SnsProjectRecord | undefined>;
   save(projectId: string, flow: SnsFlowState, status: SnsProjectRecord["status"]): Promise<SnsProjectRecord>;
@@ -81,16 +107,36 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
       const project = await getProject(projectId);
       if (!project) throw new Error("SNS 프로젝트를 찾을 수 없습니다.");
       const data = { ...project.data, flow };
-      const result = await client.from("sns_projects").update({ data, status, updated_at: new Date().toISOString() }).eq("id", projectId);
+      /**
+       * **정말 써졌는지 세어 본다.**
+       *
+       * `getProject` 는 팀 읽기 정책 덕에 팀원의 작업도 읽어 온다. 그런데 그
+       * 정책은 select 전용이라 update 는 RLS 가 0줄로 막는다 — 그리고
+       * supabase-js 는 그것을 오류로 주지 않는다.
+       *
+       * 그래서 예전에는 **DB 에 없는 값을 조립해서** 성공으로 돌려줬다.
+       * 팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에
+       * 실제 요청이 나간 뒤, 결과만 어디에도 안 남았다.
+       */
+      const result = await client.from("sns_projects")
+        .update({ data, status, updated_at: new Date().toISOString() })
+        .eq("id", projectId).eq("user_id", userId)
+        .select("id");
       if (result.error) throw new Error(result.error.message);
+      if (!(result.data ?? []).length) throw new SnsProjectNotWritable();
       return { ...project, data, status, updatedAt: new Date().toISOString() };
     },
     async remove(projectId) {
       const project = await getProject(projectId);
       if (!project) return false;
       // 카드 행은 FK cascade 가 지운다. 비용 기록은 project_id 만 비워지고 남는다.
-      const removed = await client.from("sns_projects").delete().eq("id", projectId);
+      // 여기도 소유자 조건을 걸고 지운 줄을 세어 본다 — 안 그러면 「지웠습니다」
+      // 뒤에 새로고침하면 그대로 있다.
+      const removed = await client.from("sns_projects")
+        .delete().eq("id", projectId).eq("user_id", userId)
+        .select("id");
       if (removed.error) throw new Error(removed.error.message);
+      if (!(removed.data ?? []).length) throw new SnsProjectNotWritable();
       const paths = assetPathsOf(project);
       // 파일이 남아도 화면에는 안 보인다. 실패해도 삭제 자체는 끝난 것이다.
       if (paths.length) await client.storage.from("library").remove(paths);

@@ -24,9 +24,13 @@ let signedPaths: string[] = [];
 let failThumbnail = false;
 let failImageInsert = false;
 let failImageSelect = false;
+/** 삭제가 0줄을 지운 상황. 남의 항목을 지우려 했을 때 운영에서 나는 답이다. */
+let deleteReturnsNoRows = false;
 let failThumbUpload = false;
 
 function builderFor(table: string) {
+  /** 이 핸들이 지우는 길인가. `delete()` 가 켠다. */
+  let deleting = false;
   const self: Record<string, unknown> = {
     insert: (rows: unknown) => {
       if (table === "library_images") imageRows = rows as Array<Record<string, unknown>>;
@@ -40,7 +44,10 @@ function builderFor(table: string) {
       return self;
     },
     select: () => self,
-    delete: () => self,
+    // **지우는 길인지 표시해 둔다.** 삭제는 `.select("id")` 로 지운 줄을 돌려받아
+    // 세는데, 여기서 목록과 같은 답을 주면 「0줄 지웠다」가 되어 실제 코드가
+    // 권한 거절로 빠진다 — 시험이 진짜 동작을 못 보게 된다.
+    delete: () => { deleting = true; return self; },
     order: () => self,
     limit: () => self,
     eq: () => self,
@@ -49,7 +56,9 @@ function builderFor(table: string) {
       Promise.resolve(resolve(
         table === "library_images" && failImageSelect
           ? { data: null, error: { message: "column does not exist" } }
-          : { data: table === "library_items" ? listRows : imageSelectRows, error: null },
+          : deleting
+            ? { data: deleteReturnsNoRows ? [] : [{ id: "a" }], error: null }
+            : { data: table === "library_items" ? listRows : imageSelectRows, error: null },
       )),
   };
   return self;
@@ -118,6 +127,7 @@ beforeEach(() => {
   uploads.length = 0; removed.length = 0;
   imageRows = []; itemUpdates = []; listRows = []; imageSelectRows = []; signedPaths = [];
   failThumbnail = false; failImageInsert = false; failImageSelect = false; failThumbUpload = false;
+  deleteReturnsNoRows = false;
 });
 
 describe("saveLibraryItem — 작은 사본", () => {
@@ -224,6 +234,20 @@ describe("deleteLibraryItem — 작은 사본도 함께 지운다", () => {
       "user-1/a/0.webp",
       "user-1/a/1.webp",
     ]);
+  });
+
+  it("**한 줄도 안 지웠으면 성공이라고 하지 않는다**", async () => {
+    // 목록은 팀원의 작업물까지 보여 주는데 삭제는 소유자 조건이 걸린다. 조건에
+    // 안 걸리면 supabase-js 는 오류 대신 빈 결과를 준다 — 세지 않으면
+    // 「지웠습니다」가 뜨고 새로고침하면 되살아난다.
+    deleteReturnsNoRows = true;
+    imageSelectRows = [{ path: "user-1/a/0.webp", thumb_path: null }];
+
+    const result = await deleteLibraryItem({ userId: "user-1", role: "member" }, "a");
+
+    expect(result.ok).toBe(false);
+    expect("denied" in result && result.denied).toBe(true);
+    expect(removed.flat(), "못 지운 항목의 파일에 손댔다").toEqual([]);
   });
 });
 

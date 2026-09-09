@@ -27,7 +27,7 @@ function fakeStore() {
         return { ...(row as object), id: "p1", createdAt: "t", updatedAt: "t" } as never;
       }),
       update: async () => ({}) as never,
-      remove: async () => {},
+      remove: async () => true,
     },
   };
 }

@@ -1,7 +1,7 @@
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { estimateCost } from "../../../../../sns/cost-estimate";
-import { snsFlowStoreForUser } from "../../../../../../lib/sns-flow-store";
+import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../lib/sns-generation-store";
 import { createSnsGenerationProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
 import { createQueuedGenerationDependencies, refreshProjectAssetUrls } from "../../../../../../lib/sns/runtime";
@@ -99,9 +99,13 @@ export async function POST(request: Request, context: Context) {
     });
   } catch (error) {
     // 제출이 실패했으면 돈이 안 나갔다. 묶어 둔 장을 돌려준다.
+    // **응답을 정하기 전에 한다.** 여기서 일찍 빠져나가면 장이 묶인 채 남는다.
     if (reservation) {
       try { await finalizeAiUsage(reservation, false, 0, "sns_submit_failed"); } catch { /* 아래 원인이 우선이다 */ }
     }
+    // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
+    const denied = snsWriteDenied(error);
+    if (denied) return denied;
     const status = error instanceof SnsProviderConfigurationError ? error.status : 500;
     return Response.json({ ok: false, message: error instanceof Error ? error.message : "카드 이미지를 만들지 못했습니다." }, { status });
   }

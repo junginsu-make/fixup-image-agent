@@ -121,7 +121,9 @@ export async function DELETE(req: Request) {
     if (!id) return Response.json({ ok: false, message: "id 가 없습니다." }, { status: 400 });
 
     const result = await deleteLibraryItem(await viewerOf(auth.member), id);
-    return Response.json(result, { status: result.ok ? 200 : 500 });
+    // 못 지운 이유가 권한이면 403 이다. 500 으로 흘리면 「알 수 없는 오류」가 뜬다.
+    const status = result.ok ? 200 : ("denied" in result && result.denied ? 403 : 500);
+    return Response.json(result, { status });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "삭제하지 못했습니다." },

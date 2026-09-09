@@ -62,7 +62,7 @@ describe("읽는 자리는 조용히 비어 있다", () => {
 
   it("크레딧은 정하지 않은 것으로 답한다", async () => {
     const { teamCredit } = await import("../store");
-    await expect(teamCredit("t1")).resolves.toEqual({ quota: 0, members: [] });
+    await expect(teamCredit("t1")).resolves.toEqual({ quota: 0, teamUsed: 0, members: [] });
   });
 });
 
