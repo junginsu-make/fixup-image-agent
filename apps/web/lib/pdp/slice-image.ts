@@ -62,3 +62,22 @@ export async function sliceTallReference(input: {
     return whole;
   }
 }
+
+/**
+ * 페이지 값 안의 디자인 레퍼런스를 조각으로 나눠 채워 넣는다.
+ *
+ * 두 이미지 라우트가 같은 것을 해야 한다 — 한쪽만 조각을 보내면 「한 장만 다시
+ * 만들면 디자인이 달라진다」가 된다. 이 저장소가 이미 겪은 일이다.
+ */
+export async function withSlicedStyleReference<
+  T extends { styleReference?: { imageBase64: string; mimeType: string } },
+>(page: T | undefined): Promise<T | undefined> {
+  if (!page?.styleReference?.imageBase64?.trim()) return page;
+  return {
+    ...page,
+    styleReference: {
+      ...page.styleReference,
+      slices: await sliceTallReference(page.styleReference),
+    },
+  };
+}

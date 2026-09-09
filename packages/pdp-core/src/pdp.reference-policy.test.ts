@@ -501,3 +501,48 @@ describe("프롬프트가 스스로 모순되지 않는다", () => {
     expect(품).not.toContain("the product and the person win over the design reference");
   });
 });
+
+/**
+ * 긴 상세페이지 레퍼런스는 **조각으로 나눠서** 온다.
+ *
+ * 조각을 그냥 여러 장으로 던지면 모델이 서로 다른 레퍼런스 넷으로 읽고 절충한다.
+ * 「한 페이지를 위에서 아래로 나눈 것」이라고 말해야 이어 읽는다.
+ *
+ * 사용자 지적: 긴 상세페이지는 중간에 다른 느낌·다른 디자인이 들어간다.
+ * 맨 위 한 장만 보내면 그 페이지를 「어두운 히어로 하나」로 읽는다.
+ */
+describe("레퍼런스 조각", () => {
+  const slice = (n: string) => ({ ...style, base64: n });
+
+  it("조각이 여럿이면 한 페이지를 나눈 것이라고 말한다", () => {
+    const directive = buildReferenceRoleDirective([slice("A"), slice("B"), slice("C")]);
+    expect(directive).toMatch(/slices of ONE long detail page/i);
+    expect(directive).toMatch(/top to bottom/i);
+  });
+
+  it("조각마다 몇 번째인지 알려준다 — 섹션에 맞는 조각을 고르게", () => {
+    const directive = buildReferenceRoleDirective([slice("A"), slice("B"), slice("C")]);
+    expect(directive).toMatch(/part 1 of 3/i);
+    expect(directive).toMatch(/part 3 of 3/i);
+  });
+
+  it("한 장이면 조각 이야기를 안 한다", () => {
+    const directive = buildReferenceRoleDirective([style]);
+    expect(directive).not.toMatch(/slices of ONE/i);
+    expect(directive).not.toMatch(/part 1 of/i);
+  });
+
+  it("역할 규칙은 한 번만 말한다 — 조각마다 되풀이하면 프롬프트가 규칙으로 찬다", () => {
+    const directive = buildReferenceRoleDirective([slice("A"), slice("B"), slice("C")]);
+    const 횟수 = directive.split("Imitate its design language only:").length - 1;
+    expect(횟수).toBe(1);
+  });
+
+  it("제품·인물과 섞여도 조각만 묶어서 센다", () => {
+    const directive = buildReferenceRoleDirective([anchor, person, slice("A"), slice("B")]);
+    expect(directive).toContain("[Image 1 — PRODUCT]");
+    expect(directive).toContain("[Image 2 — PERSON]");
+    expect(directive).toMatch(/part 1 of 2/i);
+    expect(directive).toMatch(/part 2 of 2/i);
+  });
+});

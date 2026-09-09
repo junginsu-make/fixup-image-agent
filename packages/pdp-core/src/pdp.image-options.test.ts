@@ -114,7 +114,7 @@ describe("페이지가 정하는 것과 섹션이 정하는 것", () => {
     look: "anime",
     userInstruction: "밤 장면으로",
     preserveProduct: false,
-    styleReference: { base64: "REF", mimeType: "image/png", description: "참고" },
+    styleReferenceImages: [{ base64: "REF", mimeType: "image/png", description: "참고" }],
   };
 
   it("페이지 값은 섹션 값이 있어도 이긴다", () => {
@@ -212,7 +212,7 @@ describe("그물 값에서 페이지 값으로", () => {
       look: "anime",
       userInstruction: "밤 장면으로",
       preserveProduct: false,
-      styleReference: { base64: "REF", mimeType: "image/png", description: "참고" },
+      styleReferenceImages: [{ base64: "REF", mimeType: "image/png", description: "참고" }],
       referenceModel: { base64: "PERSON", mimeType: "image/jpeg", fileName: "p.jpg" },
       referenceModelUsage: "hero-only",
       attachmentIntents: { style: "색만 가져와", person: "안경", anchor: "라벨 그대로" },
@@ -223,7 +223,9 @@ describe("그물 값에서 페이지 값으로", () => {
     const page = pageInputsFromWire({
       styleReference: { imageBase64: "REF", mimeType: "image/png" },
     });
-    expect(page.styleReference).toEqual({ base64: "REF", mimeType: "image/png", description: undefined });
+    expect(page.styleReferenceImages).toEqual([
+      { base64: "REF", mimeType: "image/png", description: undefined },
+    ]);
   });
 
   it("아무것도 안 오면 빈 값이다", () => {
@@ -236,5 +238,65 @@ describe("그물 값에서 페이지 값으로", () => {
       target(),
     );
     expect(built.attachmentIntents).toEqual({ style: "색만 가져와" });
+  });
+});
+
+/**
+ * 긴 레퍼런스는 **조각으로 나눠서** 온다. 맨 위 한 장만 보내면 중간부터
+ * 달라지는 디자인을 못 본다.
+ */
+describe("레퍼런스 조각이 그림 옵션까지 간다", () => {
+  it("조각이 오면 순서대로 전부 실린다", () => {
+    const page = pageInputsFromWire({
+      styleReference: {
+        imageBase64: "WHOLE",
+        mimeType: "image/png",
+        description: "참고",
+        slices: [
+          { imageBase64: "TOP", mimeType: "image/jpeg" },
+          { imageBase64: "MID", mimeType: "image/jpeg" },
+        ],
+      },
+    });
+    expect(page.styleReferenceImages?.map((image) => image.base64)).toEqual(["TOP", "MID"]);
+  });
+
+  it("서술은 첫 조각에만 붙는다 — 조각마다 되풀이하면 규칙으로 찬다", () => {
+    const page = pageInputsFromWire({
+      styleReference: {
+        imageBase64: "WHOLE",
+        mimeType: "image/png",
+        description: "짙은 올리브",
+        slices: [
+          { imageBase64: "TOP", mimeType: "image/jpeg" },
+          { imageBase64: "MID", mimeType: "image/jpeg" },
+        ],
+      },
+    });
+    expect(page.styleReferenceImages?.[0]!.description).toBe("짙은 올리브");
+    expect(page.styleReferenceImages?.[1]!.description).toBeUndefined();
+  });
+
+  it("조각이 없으면 원본 한 장이다", () => {
+    const page = pageInputsFromWire({
+      styleReference: { imageBase64: "WHOLE", mimeType: "image/png" },
+    });
+    expect(page.styleReferenceImages?.map((image) => image.base64)).toEqual(["WHOLE"]);
+  });
+
+  it("모든 섹션이 같은 조각들을 받는다", () => {
+    const page = pageInputsFromWire({
+      styleReference: {
+        imageBase64: "W",
+        mimeType: "image/png",
+        slices: [
+          { imageBase64: "A", mimeType: "image/jpeg" },
+          { imageBase64: "B", mimeType: "image/jpeg" },
+        ],
+      },
+    });
+    expect(buildSectionImageOptions(page, target({ index: 0 })).styleReferenceImages).toEqual(
+      buildSectionImageOptions(page, target({ index: 5 })).styleReferenceImages,
+    );
   });
 });

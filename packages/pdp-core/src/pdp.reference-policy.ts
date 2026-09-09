@@ -145,8 +145,26 @@ export function buildReferenceRoleDirective(
     "",
   ];
 
+  /**
+   * 디자인 레퍼런스가 여럿이면 **한 페이지를 나눈 조각들**이다.
+   *
+   * 긴 상세페이지는 중간에 다른 느낌·다른 디자인이 들어간다. 맨 위 한 장만
+   * 보내면 그 페이지를 「어두운 히어로 하나」로 읽는다. 그래서 조각을 다 보낸다.
+   *
+   * 그냥 여러 장으로 던지면 모델이 **서로 다른 레퍼런스 넷**으로 읽고 절충한다.
+   * 몇 번째 조각인지 알려야 이어 읽고, 이 섹션에 맞는 대목을 고른다.
+   */
+  const styleCount = references.filter((reference) => reference.kind === "style").length;
+  let stylePart = 0;
+
   references.forEach((reference, index) => {
-    lines.push(`[Image ${index + 1} — ${ROLE_LABEL[reference.kind]}]`);
+    const isSlice = reference.kind === "style" && styleCount > 1;
+    if (isSlice) stylePart += 1;
+    lines.push(
+      isSlice
+        ? `[Image ${index + 1} — ${ROLE_LABEL[reference.kind]}, part ${stylePart} of ${styleCount}]`
+        : `[Image ${index + 1} — ${ROLE_LABEL[reference.kind]}]`,
+    );
     const intent = reference.intent?.trim();
     if (intent) {
       /**
@@ -180,8 +198,17 @@ export function buildReferenceRoleDirective(
        * 그런 요청은 화면에서 결을 함께 바꾸도록 안내한다. 여기서 결까지 풀면
        * 「배치를 왼쪽으로」 한 줄에 사진이 만화가 되는 일이 생긴다.
        */
-    } else {
+    } else if (!isSlice || stylePart === 1) {
+      // 조각마다 같은 규칙을 되풀이하면 프롬프트가 규칙으로 찬다. 첫 조각에서
+      // 한 번만 말하고, 나머지 조각은 번호로만 잇는다.
       lines.push(...ROLE_RULES[reference.kind]);
+      if (isSlice) {
+        lines.push(
+          `The ${styleCount} DESIGN REFERENCE images are slices of ONE long detail page, ` +
+            "top to bottom, in order. Read them as a single page. Different parts may look " +
+            "different — use the part that matches the section being made.",
+        );
+      }
     }
     // 서술은 이미지를 대체하지 않는다. 이미지가 전달하지 못한 **쓰임새**를 보탠다.
     // 그래서 규칙 뒤에 붙이고, 무엇에 대한 말인지 한 줄로 밝힌다.

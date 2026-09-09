@@ -43,6 +43,22 @@ vi.mock("../../../../lib/membership/api", () => ({
 }));
 
 vi.mock("../../../../lib/evidence-gate", () => ({ rejectIfUnverified: () => null }));
+// sharp 없이 조각내기를 흉내 낸다. 자르는 자리는 reference-slices 시험이 따로 잰다.
+vi.mock("../../../../lib/pdp/slice-image", () => ({
+  withSlicedStyleReference: async (page: { styleReference?: { imageBase64: string } }) =>
+    page?.styleReference
+      ? {
+          ...page,
+          styleReference: {
+            ...page.styleReference,
+            slices: [
+              { imageBase64: "S1", mimeType: "image/jpeg" },
+              { imageBase64: "S2", mimeType: "image/jpeg" },
+            ],
+          },
+        }
+      : page,
+}));
 vi.mock("../../../../lib/pdp/providers", () => ({
   createPdpProviders: () => ({
     llm: { generate: async () => ({ text: "{}" }) },
@@ -179,8 +195,10 @@ describe("두 라우트가 같은 옵션을 만든다", () => {
     const 일괄 = calls[0]!.options;
 
     expect(일괄).toEqual(단건);
+    // 조각으로 나뉘어 나간다(위 mock). 나뉘는 자리 자체는 reference-slices 시험이 잰다.
     expect(단건.styleReferenceImages).toEqual([
-      { base64: "REF", mimeType: "image/png", description: "참고" },
+      { base64: "S1", mimeType: "image/jpeg", description: "참고" },
+      { base64: "S2", mimeType: "image/jpeg", description: undefined },
     ]);
     expect(단건.look).toBe("anime");
     expect(단건.userInstruction).toBe("밤 장면으로");
@@ -273,5 +291,43 @@ describe("자리별 지시가 라우트를 지나 생성까지 간다", () => {
       }),
     );
     expect(calls[0]!.options.attachmentIntents).toBeUndefined();
+  });
+});
+
+/**
+ * 긴 레퍼런스는 **조각으로 나눠** 모든 섹션에 간다.
+ *
+ * 두 라우트가 같아야 한다 — 한쪽만 조각을 보내면 「한 장만 다시 만들면
+ * 디자인이 달라진다」가 된다.
+ */
+describe("레퍼런스 조각이 두 라우트 모두에서 나간다", () => {
+  const page = {
+    imageModel: "nano-banana",
+    styleReference: { imageBase64: "WHOLE", mimeType: "image/png", description: "참고" },
+  };
+
+  it("단건", async () => {
+    await single(
+      post({ originalImageBase64: "AAAA", section: section("s1"), aspectRatio: "3:4", page }),
+    );
+    expect(calls[0]!.options.styleReferenceImages).toEqual([
+      { base64: "S1", mimeType: "image/jpeg", description: "참고" },
+      { base64: "S2", mimeType: "image/jpeg", description: undefined },
+    ]);
+  });
+
+  it("일괄 — 모든 섹션이 같은 조각을 받는다", async () => {
+    await batch(
+      post({
+        originalImageBase64: "AAAA",
+        sections: [section("s1"), section("s2")],
+        sectionIndexes: [0, 1],
+        aspectRatio: "3:4",
+        page,
+      }),
+    );
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.options.styleReferenceImages).toEqual(calls[1]!.options.styleReferenceImages);
+    expect((calls[0]!.options.styleReferenceImages as unknown[]).length).toBe(2);
   });
 });

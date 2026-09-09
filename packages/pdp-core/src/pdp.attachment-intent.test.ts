@@ -229,3 +229,52 @@ describe("섹션 기획이 프롬프트까지 간다", () => {
     expect(prompt).toContain("의약품 효능 표현 금지");
   });
 });
+
+/**
+ * 조각을 **전부** 싣는지 프롬프트로 확인한다.
+ *
+ * 변이로 재 보니 첫 조각만 써도 565건이 전부 통과했다 — 옵션에 실리는 것과
+ * 실제로 첨부되는 것은 다르다. 사용자가 지적한 그 문제(긴 페이지는 중간에
+ * 디자인이 바뀐다)가 조용히 되돌아갈 자리였다.
+ */
+describe("레퍼런스 조각이 전부 첨부된다", () => {
+  const slices = [
+    { base64: "TOP", mimeType: "image/jpeg", description: "짙은 올리브" },
+    { base64: "MID", mimeType: "image/jpeg" },
+    { base64: "BOTTOM", mimeType: "image/jpeg" },
+  ];
+
+  it("조각 수만큼 번호가 매겨진다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      styleReferenceImages: slices,
+    });
+
+    expect(prompt).toMatch(/part 1 of 3/i);
+    expect(prompt).toMatch(/part 2 of 3/i);
+    expect(prompt).toMatch(/part 3 of 3/i);
+  });
+
+  it("한 페이지를 나눈 것이라고 말한다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      styleReferenceImages: slices,
+    });
+    expect(prompt).toMatch(/slices of ONE long detail page/i);
+    expect(prompt).toMatch(/use the part that matches the section/i);
+  });
+
+  it("한 장이면 조각 이야기를 안 한다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      styleReferenceImages: [slices[0]!],
+    });
+    expect(prompt).not.toMatch(/part 1 of/i);
+  });
+});

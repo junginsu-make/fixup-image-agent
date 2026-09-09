@@ -38,8 +38,13 @@ export interface PageImageInputs {
   attachmentIntents?: AttachmentIntents;
   /** 제품 이미지를 지킬 것인가. */
   preserveProduct?: boolean;
-  /** 페이지의 디자인 언어를 정하는 참조. 모든 섹션이 같은 한 장을 쓴다. */
-  styleReference?: { base64: string; mimeType: string; description?: string };
+  /**
+   * 페이지의 디자인 언어를 정하는 참조. 모든 섹션이 같은 것을 쓴다.
+   *
+   * **여러 장이면 한 페이지를 위에서 아래로 나눈 조각들이다.** 긴 상세페이지는
+   * 중간에 다른 느낌이 들어가서, 맨 위 한 장만 보내면 그 페이지를 잘못 읽는다.
+   */
+  styleReferenceImages?: Array<{ base64: string; mimeType: string; description?: string }>;
   /** 업로드한 인물 사진. 각도 개념이 없어 모든 섹션이 같은 한 장을 쓴다. */
   referenceModel?: { base64: string; mimeType: string; fileName?: string };
   /** 그 사진을 첫 섹션에만 쓸지 전 섹션에 쓸지. */
@@ -111,7 +116,7 @@ export function buildSectionImageOptions(
     pageContext: page.pageContext,
     attachmentIntents: page.attachmentIntents,
     preserveProductImage: page.preserveProduct ?? true,
-    styleReferenceImages: page.styleReference ? [page.styleReference] : undefined,
+    styleReferenceImages: page.styleReferenceImages?.length ? page.styleReferenceImages : undefined,
   };
 }
 
@@ -127,7 +132,13 @@ export interface PageImageWire {
   look?: string;
   userInstruction?: string;
   preserveProduct?: boolean;
-  styleReference?: { imageBase64: string; mimeType: string; description?: string };
+  styleReference?: {
+    imageBase64: string;
+    mimeType: string;
+    description?: string;
+    /** 세로로 긴 레퍼런스를 나눈 조각들. 없으면 `imageBase64` 한 장을 쓴다. */
+    slices?: Array<{ imageBase64: string; mimeType: string }>;
+  };
   referenceModel?: { imageBase64: string; mimeType: string; fileName?: string };
   referenceModelUsage?: ReferenceModelUsage | null;
   /** 페이지 전체의 배경 설명(채널·시즌). */
@@ -146,12 +157,21 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     preserveProduct: wire.preserveProduct,
     pageContext: wire.pageContext,
     attachmentIntents: wire.attachmentIntents,
-    styleReference: wire.styleReference
-      ? {
-          base64: wire.styleReference.imageBase64,
-          mimeType: wire.styleReference.mimeType,
-          description: wire.styleReference.description,
-        }
+    styleReferenceImages: wire.styleReference
+      ? wire.styleReference.slices?.length
+        // 서술은 첫 조각에만 붙인다. 조각마다 되풀이하면 규칙으로 찬다.
+        ? wire.styleReference.slices.map((slice, index) => ({
+            base64: slice.imageBase64,
+            mimeType: slice.mimeType,
+            description: index === 0 ? wire.styleReference!.description : undefined,
+          }))
+        : [
+            {
+              base64: wire.styleReference.imageBase64,
+              mimeType: wire.styleReference.mimeType,
+              description: wire.styleReference.description,
+            },
+          ]
       : undefined,
     referenceModel: wire.referenceModel
       ? {
