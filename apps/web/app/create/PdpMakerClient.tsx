@@ -523,7 +523,23 @@ export function PdpMakerClient() {
           gapPolicy,
           desiredTone: desiredTone.trim() || undefined,
           aspectRatio,
-          outputMode
+          outputMode,
+          /*
+            구성안을 짤 때부터 레퍼런스를 본다. 안 주면 기획이 style_guide 를
+            상상으로 채우고, 그 값이 그대로 이미지 프롬프트의 design_system 이 된다.
+
+            시나리오 화면에서 나중에 붙인 레퍼런스는 여기 못 온다 — 그때는 구성안이
+            이미 만들어진 뒤다. 그 경우 레퍼런스는 이미지에만 반영된다.
+          */
+          styleReference:
+            styleReferenceEnabled && styleReference
+              ? {
+                  imageBase64: styleReference.imageBase64,
+                  mimeType: styleReference.mimeType,
+                  description: styleReference.description,
+                  intent: attachmentIntents.style?.trim() || undefined,
+                }
+              : undefined
         })
       });
 

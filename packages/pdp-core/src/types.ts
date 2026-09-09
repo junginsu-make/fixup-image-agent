@@ -441,6 +441,23 @@ export interface PdpAnalyzeRequest {
   modelImageBase64?: string;
   modelImageMimeType?: string;
   modelImageFileName?: string;
+  /**
+   * 디자인 레퍼런스. **구성안을 짤 때부터 본다.**
+   *
+   * 전에는 이미지를 만들 때 처음 등장했다. 그래서 구성안의 `style_guide` 를
+   * 기획이 상상으로 채웠고, 그 값이 그대로 이미지 프롬프트의 `design_system`
+   * 이 됐다 — 레퍼런스를 붙여 놓고도 구성이 그것과 무관하게 짜였다.
+   *
+   * 열쇠 이름은 화면이 들고 있는 것과 같다. 옮겨 적으면 언젠가 어긋난다.
+   */
+  styleReference?: {
+    imageBase64: string;
+    mimeType: string;
+    /** 디자인 언어를 어떻게 쓰는지 적은 서술. 레퍼런스를 등록할 때 만들어진다. */
+    description?: string;
+    /** 사용자가 그 그림에 대해 적은 「어떻게 쓸까요」. */
+    intent?: string;
+  };
   additionalInfo?: string;
   desiredTone?: string;
   aspectRatio: AspectRatio;

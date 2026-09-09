@@ -213,6 +213,28 @@ export class PdpService {
     const referenceModelProfile =
       referenceModelImage ? await this.extractReferenceModelProfile(client, referenceModelImage) : null;
 
+    // 구성안을 짤 때부터 레퍼런스를 본다. 안 주면 `style_guide` 를 상상으로 채운다.
+    const styleReferenceForPlan = request.styleReference?.imageBase64?.trim()
+      ? request.styleReference
+      : undefined;
+    const analyzePrompt = buildAnalyzePrompt(
+      request.additionalInfo,
+      request.desiredTone,
+      referenceModelProfile,
+      request.outputMode,
+      request.sellerBrief,
+      request.copyIntensity,
+      request.gapPolicy,
+      styleReferenceForPlan
+        ? {
+            styleReference: {
+              description: styleReferenceForPlan.description,
+              intent: styleReferenceForPlan.intent,
+            },
+          }
+        : undefined,
+    );
+
     const makeBlueprint = (revisionDirective: string) => retryOperation(async () => {
       const response = await client.models.generateContent({
         name: "pdp_blueprint",
@@ -221,13 +243,18 @@ export class PdpService {
             parts: [
               buildHighResolutionInlinePart(mimeType, normalizedImage),
               ...(referenceModelImage ? [buildHighResolutionInlinePart(referenceModelImage.mimeType, referenceModelImage.base64)] : []),
+              // 디자인 레퍼런스는 맨 뒤다. 제품이 첫 그림이어야 프롬프트의
+              // 「이 제품」이 가리키는 것이 어긋나지 않는다.
+              ...(styleReferenceForPlan
+                ? [buildHighResolutionInlinePart(styleReferenceForPlan.mimeType, styleReferenceForPlan.imageBase64)]
+                : []),
               {
                 // 지적사항은 규칙보다 앞에 둔다. 뒤에 붙이면 긴 규칙에 묻혀 무시된다.
                 text: revisionDirective
                   ? `${revisionDirective}
 
-${buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModelProfile, request.outputMode, request.sellerBrief, request.copyIntensity, request.gapPolicy)}`
-                  : buildAnalyzePrompt(request.additionalInfo, request.desiredTone, referenceModelProfile, request.outputMode, request.sellerBrief, request.copyIntensity, request.gapPolicy)
+${analyzePrompt}`
+                  : analyzePrompt
               }
             ]
           }
@@ -892,13 +919,49 @@ export function buildAnalyzePrompt(
   outputMode: PdpOutputMode = "editable",
   sellerBrief?: SellerBrief,
   copyIntensity: CopyIntensity = "normal",
-  gapPolicy: GapPolicy = "ask"
+  gapPolicy: GapPolicy = "ask",
+  /**
+   * 나중에 붙은 것들. **객체로 받는다.**
+   *
+   * 앞의 일곱은 자리로 받는데, 여덟 번째부터도 그렇게 하면 부르는 쪽이
+   * `undefined` 를 여섯 개씩 늘어놓게 된다. 새로 늘어나는 것은 여기 담는다.
+   */
+  extras?: {
+    styleReference?: { description?: string; intent?: string };
+  },
 ) {
   const referenceModelPrompt = referenceModelProfile
     ? `[참고 모델 이미지가 함께 제공됨]: 모델이 포함되는 컷은 업로드된 동일 인물의 정체성을 유지해야 합니다.
 - 유지할 핵심 특성: ${referenceModelProfile.keepTraits.join(", ")}
 - 식별 포인트: ${referenceModelProfile.distinctiveFeatures.join(", ")}
 - 전체 인상: ${referenceModelProfile.overallVibe}`
+    : "";
+
+  /**
+   * **구성안을 짤 때 레퍼런스를 본다.**
+   *
+   * 전에는 이미지를 만들 때 처음 등장했다. 그래서 `style_guide` 를 기획이
+   * 상상으로 채웠고, 그 값이 그대로 이미지 프롬프트의 `design_system` 이 됐다.
+   *
+   * 서술과 사용자 지시를 함께 싣는다. 그림만 보내면 「무엇을 가져올지」가
+   * 사람마다 다르게 읽힌다.
+   */
+  const styleReferencePrompt = extras?.styleReference
+    ? [
+        "[디자인 레퍼런스가 함께 제공됨 — a design reference image is attached]",
+        "- 이 이미지는 **어떻게 보이는가**만 준다. 레이아웃·여백·색 쓰임·서체 인상·분위기를 읽어",
+        "  각 섹션의 `style_guide` 를 이 이미지 기준으로 채울 것.",
+        "- **Do not copy its product, its people, its text content or its specific scene.**",
+        "  담을 내용은 이 제품의 사실에서만 나온다. 레퍼런스의 문구를 옮겨 적지 말 것.",
+        extras.styleReference.description?.trim()
+          ? `- 이 레퍼런스가 디자인 언어를 쓰는 방식: ${extras.styleReference.description.trim()}`
+          : "",
+        extras.styleReference.intent?.trim()
+          ? `- 사용자가 이 그림에 대해 적은 말(다른 지시보다 우선): ${extras.styleReference.intent.trim()}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
     : "";
 
   const outputModePrompt =
@@ -934,6 +997,7 @@ ${outputModePrompt}
 ${additionalInfo ? `[사용자 추가 정보]: ${additionalInfo}` : ""}
 ${desiredTone ? `[원하는 디자인 톤]: ${desiredTone}` : ""}
 ${referenceModelPrompt}
+${styleReferencePrompt}
 
 # 섹션 템플릿(필수 필드)
 - section_id: S1~S6
