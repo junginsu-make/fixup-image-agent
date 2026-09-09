@@ -54,6 +54,14 @@ export interface ImagePromptOptions {
    * 화면에 손잡이가 있는데 엔진이 안 보고 있었다(2026-09-09 확인).
    */
   guidePriorityMode?: PdpGuidePriorityMode;
+  /**
+   * 페이지 전체의 배경 설명. 화면의 「그 밖에 · 채널과 시즌」이 여기로 온다.
+   *
+   * **지시가 아니라 배경이다.** 사용자가 이 그림에 대해 직접 친 말
+   * (`userInstruction`)이 따로 있고 그쪽이 위다. 둘을 같은 무게로 실으면
+   * 「여름 시즌」이 「왼쪽에 놓아 줘」와 다툰다.
+   */
+  pageContext?: string;
 }
 
 /** 나라 이름. 안 고르면 지금까지처럼 한국이다. */
@@ -150,6 +158,8 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     "Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour.",
     "Never draw buttons, arrows or other clickable controls — these are static images.",
     options.desiredTone ? `Overall tone: ${options.desiredTone}.` : "",
+    // 배경 설명은 톤 뒤에 둔다. 앞에 두면 장면 지시처럼 읽힌다.
+    options.pageContext?.trim() ? `Page context (background, not an instruction): ${options.pageContext.trim()}.` : "",
   ]
     .filter(Boolean)
     .join(" ");

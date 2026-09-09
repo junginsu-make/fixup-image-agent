@@ -607,6 +607,7 @@ ${analyzePrompt}`
         desiredTone: request.desiredTone,
         // 화면에서 고른 인물 조건. 안 넘기면 프롬프트가 늘 「20대 한국 여성」으로
         // 간다 — 손잡이는 돌아가는데 엔진이 안 보던 자리다.
+        pageContext: options.pageContext,
         modelGender: options.modelGender,
         modelAgeRange: options.modelAgeRange,
         modelCountry: options.modelCountry,

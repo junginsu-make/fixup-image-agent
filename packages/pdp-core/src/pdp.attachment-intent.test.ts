@@ -171,3 +171,21 @@ describe("인물 조건이 프롬프트까지 간다", () => {
     expect(shot).toMatch(/shot type wins/);
   });
 });
+
+/** 「그 밖에」(채널·시즌)가 fal 로 나가는 프롬프트까지 가는가. */
+describe("페이지 배경 설명이 프롬프트까지 간다", () => {
+  it("적은 말이 실린다", async () => {
+    const prompt = await promptFor({
+      style: "studio",
+      withModel: false,
+      outputMode: "editable",
+      pageContext: "여름 시즌, 프리미엄 보습 이미지 강조",
+    });
+    expect(prompt).toContain("여름 시즌, 프리미엄 보습 이미지 강조");
+  });
+
+  it("안 적으면 그 말이 없다", async () => {
+    const prompt = await promptFor({ style: "studio", withModel: false, outputMode: "editable" });
+    expect(prompt).not.toMatch(/Page context/i);
+  });
+});

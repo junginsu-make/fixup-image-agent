@@ -167,6 +167,8 @@ interface PdpEditorProps {
   referenceModelUsage?: ReferenceModelUsage | null;
   /** 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 안 붙은 자리는 걸러서 온다. */
   attachmentIntents?: AttachmentIntents;
+  /** 페이지 전체의 배경 설명(채널·시즌). 1단계의 「그 밖에」다. */
+  pageContext?: string;
   saveState?: "idle" | "saving" | "saved" | "error";
 }
 
@@ -228,6 +230,7 @@ export function PdpEditor({
   referenceModelImage = null,
   referenceModelUsage = null,
   attachmentIntents,
+  pageContext,
   saveState = "idle",
 }: PdpEditorProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
@@ -1320,6 +1323,7 @@ export function PdpEditor({
       preserveProduct,
       styleReference,
       attachmentIntents,
+      pageContext,
       referenceModel: referenceModelImage,
       referenceModelUsage,
     });

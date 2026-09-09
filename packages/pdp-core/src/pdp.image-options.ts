@@ -32,6 +32,8 @@ export interface PageImageInputs {
   look?: string;
   /** 사용자가 직접 친 지시. 프롬프트 양끝에 놓여 다른 모든 지시보다 앞선다. */
   userInstruction?: string;
+  /** 페이지 전체의 배경 설명(채널·시즌). 지시가 아니라 배경이다. */
+  pageContext?: string;
   /** 첨부마다 「이 그림을 어떻게 쓸까요」에 적은 말. 페이지 전체가 공유한다. */
   attachmentIntents?: AttachmentIntents;
   /** 제품 이미지를 지킬 것인가. */
@@ -106,6 +108,7 @@ export function buildSectionImageOptions(
     outputMode: page.outputMode,
     look: page.look,
     userInstruction: page.userInstruction,
+    pageContext: page.pageContext,
     attachmentIntents: page.attachmentIntents,
     preserveProductImage: page.preserveProduct ?? true,
     styleReferenceImages: page.styleReference ? [page.styleReference] : undefined,
@@ -127,6 +130,8 @@ export interface PageImageWire {
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   referenceModel?: { imageBase64: string; mimeType: string; fileName?: string };
   referenceModelUsage?: ReferenceModelUsage | null;
+  /** 페이지 전체의 배경 설명(채널·시즌). */
+  pageContext?: string;
   /** 첨부마다 「이 그림을 어떻게 쓸까요」에 적은 말. */
   attachmentIntents?: AttachmentIntents;
 }
@@ -139,6 +144,7 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     look: wire.look,
     userInstruction: wire.userInstruction,
     preserveProduct: wire.preserveProduct,
+    pageContext: wire.pageContext,
     attachmentIntents: wire.attachmentIntents,
     styleReference: wire.styleReference
       ? {

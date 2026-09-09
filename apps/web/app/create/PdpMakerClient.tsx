@@ -23,6 +23,7 @@ import { peekHandoff, takeHandoff } from "../../lib/handoff";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
+import { StyleReferenceCard } from "./StyleReferenceCard";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
@@ -682,6 +683,7 @@ export function PdpMakerClient() {
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
         apiConnectionLabel={apiConnectionLabel}
+        pageContext={additionalInfo}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
         attachmentIntents={intentsOrUndefined(
@@ -1114,18 +1116,32 @@ export function PdpMakerClient() {
                     </p>
                   </div>
                   {styleReference ? (
-                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/25 bg-primary-soft/40 px-3 py-2 text-sm">
-                      <span className="min-w-0 flex-1 truncate font-medium">{styleReference.name}</span>
+                    <>
+                      {/*
+                        **토글을 여기에도 둔다.**
+
+                        전에는 시나리오 화면에만 있었다. 그래서 **최초 분석은 늘
+                        기본값**으로 돌았다 — 레퍼런스를 안 쓰겠다고 정할 방법이
+                        분석 전에는 없었고, 끄려면 구성안을 다시 만들어야 했다.
+                        구성안이 레퍼런스를 보게 된 지금은 그 차이가 결과에 남는다.
+                      */}
+                      <StyleReferenceCard
+                        reference={styleReference}
+                        enabled={styleReferenceEnabled}
+                        onToggle={setStyleReferenceEnabled}
+                        preserveProduct={preserveProduct}
+                        onPreserveProductChange={setPreserveProduct}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="justify-self-start text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => setStyleReference(undefined)}
                       >
                         <Trash2 size={14} className="mr-1.5" />
-                        삭제
+                        레퍼런스 빼기
                       </Button>
-                    </div>
+                    </>
                   ) : null}
                   <StyleReferenceAttach onAttached={setStyleReference} />
                   {styleReference ? (
@@ -1364,7 +1380,7 @@ export function PdpMakerClient() {
 
                 <div>
                   <label className={fieldLabelClass} htmlFor="additionalInfo">
-                    그 밖에
+                    그 밖에 · 채널과 시즌
                   </label>
                   <textarea
                     id="additionalInfo"
@@ -1579,7 +1595,7 @@ const emptyBoxClass =
  * 경쟁자가 못 하는 말을 찾는다.
  */
 const SELLER_BRIEF_FIELDS: ReadonlyArray<{
-  key: "audience" | "problem" | "differentiator";
+  key: "audience" | "problem" | "features" | "differentiator" | "emphasis";
   label: string;
   placeholder: string;
 }> = [
@@ -1594,9 +1610,24 @@ const SELLER_BRIEF_FIELDS: ReadonlyArray<{
     placeholder: "예: 세럼을 바르면 손이 끈적여 다시 씻어야 한다",
   },
   {
+    /*
+      이 칸이 없어서 「남과 다른 점」 하나에 성분·소재·규격을 다 몰아넣어야 했다.
+      둘은 다르다 — 특징은 사실이고, 차별점은 그중 경쟁자가 못 하는 말이다.
+    */
+    key: "features",
+    label: "제품의 특징은",
+    placeholder: "예: 히알루론산 5종·무향·200ml / 국내 공장에서 소량 생산",
+  },
+  {
     key: "differentiator",
     label: "남과 다른 점은",
     placeholder: "예: 점증제를 안 넣어 물처럼 묽다 / 3대째 같은 방식으로 만든다",
+  },
+  {
+    /* 상호·인증·수상처럼 반드시 남아야 하는 것. 근거 없는 주장으로 안 걸린다. */
+    key: "emphasis",
+    label: "꼭 넣고 싶은 말은",
+    placeholder: "예: 2026 우수제품 선정 / 무료 반품 30일",
   },
 ];
 

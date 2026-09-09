@@ -278,3 +278,34 @@ describe("가이드 우선 모드", () => {
     expect(j.guide_priority).toMatch(/ignore|override|wins/i);
   });
 });
+
+/**
+ * 「그 밖에」(채널·시즌·강조하고 싶은 분위기)가 **그림까지 가야 한다.**
+ *
+ * 2026-09-09 확인: 이 값은 기획에서 끝나고 그림 프롬프트에는 한 글자도 안 갔다.
+ * 「여름 시즌」이라고 적어도 그림은 계절을 몰랐다.
+ *
+ * 다만 「추가 지시」(userInstruction)보다는 아래다. 그쪽은 사용자가 이 그림에
+ * 대해 직접 친 말이고, 이쪽은 페이지 전체의 배경 설명이다.
+ */
+describe("페이지 배경 설명이 그림까지 간다", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+
+  it("시스템 프롬프트에 실린다", () => {
+    const prompt = buildImageSystemPrompt({ ...base, pageContext: "여름 시즌, 프리미엄 보습" });
+    expect(prompt).toContain("여름 시즌, 프리미엄 보습");
+  });
+
+  it("배경 설명이라고 밝힌다 — 지시가 아니다", () => {
+    const prompt = buildImageSystemPrompt({ ...base, pageContext: "여름 시즌" });
+    expect(prompt).toMatch(/context|background/i);
+  });
+
+  it("안 적으면 아무 말도 안 보탠다", () => {
+    expect(buildImageSystemPrompt(base)).not.toMatch(/Page context/i);
+  });
+
+  it("공백만 적은 것은 안 적은 것이다", () => {
+    expect(buildImageSystemPrompt({ ...base, pageContext: "   " })).not.toMatch(/Page context/i);
+  });
+});
