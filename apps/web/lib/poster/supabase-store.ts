@@ -194,6 +194,20 @@ export function createSupabasePosterRequestStore(userId: string): PosterRequestS
         .eq("id", id).eq("user_id", userId);
       checked(null, error, "포스터 비용 확정");
     },
+    /**
+     * **소유자 조건을 함께 건다.** 남의 요청 행의 단가로 내 예약을 확정하는
+     * 길을 남기지 않는다. 못 찾으면 `null` 이고, 부르는 쪽이 확정을 미룬다.
+     */
+    async unitCost(id) {
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_generation_requests")
+        .select("unit_cost_usd")
+        .eq("id", id).eq("user_id", userId)
+        .maybeSingle();
+      if (error) return null;
+      const value = (data as { unit_cost_usd: number | null } | null)?.unit_cost_usd;
+      return typeof value === "number" && Number.isFinite(value) ? value : null;
+    },
   };
 }
 

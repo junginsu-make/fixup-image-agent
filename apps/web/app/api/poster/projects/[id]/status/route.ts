@@ -24,7 +24,17 @@ const StatusSchema = z.object({
   requestRowId: z.string(),
   falRequestId: z.string(),
   endpoint: z.string(),
-  unitCostUsd: z.number(),
+  /**
+   * **더 이상 쓰지 않는다.** 받기만 하고 버린다.
+   *
+   * 이 값은 브라우저가 정한다. 그대로 믿고 확정하던 동안에는 `0` 을 보내면
+   * 크레딧이 한 장도 안 깎이고 관리자 비용 장부까지 0 달러가 됐다. 단가는
+   * 이제 제출 때 서버가 적어 둔 요청 행에서 읽는다.
+   *
+   * `.strict()` 라 칸을 지우면 배포 중인 옛 화면이 400 을 받는다. 그래서
+   * 자리만 남기고 값은 안 본다. 화면에서 이 칸이 사라진 뒤에 지운다.
+   */
+  unitCostUsd: z.number().optional(),
 }).strict();
 
 /**
@@ -114,7 +124,12 @@ export async function POST(request: Request, context: Context) {
     const fal = createPosterFalClients();
 
     const result = await collectPoster(
-      { projectId: id, ...parsed.data },
+      {
+        projectId: id,
+        requestRowId: parsed.data.requestRowId,
+        falRequestId: parsed.data.falRequestId,
+        endpoint: parsed.data.endpoint,
+      },
       {
         queue: fal.queue,
         requests: stores.requests,
@@ -138,15 +153,22 @@ export async function POST(request: Request, context: Context) {
      */
     if (result.done) {
       const project = await stores.projects.get(id);
-      const saved = await stores.images.byProject(id);
-      const unitUsd = parsed.data.unitCostUsd;
+      /**
+       * **이번 회차만 센다.**
+       *
+       * 예전에는 `images.byProject(id)` 로 셌는데 그것은 프로젝트의 **모든**
+       * 그림이다. `add` 는 옛 행을 지우지 않으므로, 두 번째 생성이 0장을
+       * 돌려줘도 옛 그림 때문에 성공으로 확정되고 전액이 깎였다.
+       */
+      const savedCount = result.savedCount ?? 0;
+      const unitUsd = result.unitCostUsd ?? 0;
       const reservationId = project?.data.reservationId;
       if (reservationId) {
         try {
           await finalizeAiUsage(
             { userId: auth.member.userId, requestId: reservationId },
-            saved.length > 0,
-            creditUnits(unitUsd * saved.length),
+            savedCount > 0,
+            creditUnits(unitUsd * savedCount),
           );
         } catch {
           // 삼킨다. 사용자가 만든 그림을 못 보는 것이 더 나쁘다.

@@ -173,6 +173,13 @@ export function createLocalPosterRequestStore(
         Object.assign(row, patch);
       });
     },
+    async unitCost(id) {
+      return database.read((data) => {
+        const row = bucket(data, "posterRequests").find((entry) => entry.id === id && entry.userId === userId);
+        const value = row?.unitCostUsd;
+        return typeof value === "number" && Number.isFinite(value) ? value : null;
+      });
+    },
   };
 }
 

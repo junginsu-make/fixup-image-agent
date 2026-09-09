@@ -329,6 +329,15 @@ describe("돈이 장부에 남는가", () => {
     expect(submitted, "예약이 막았는데 돈이 나갔다").toEqual([]);
   });
 
+  it("**예약이 거절되면 자리를 돌려준다** — 영구히 「만드는 중」에 갇히면 안 된다", async () => {
+    // 이 갈래는 `return` 이라 아래 `catch` 의 되돌리기를 안 탔다. 이 저장소에는
+    // `"failed"` 로 가는 길이 없어서, 한 번 거절되면 프로젝트가 영원히
+    // `"generating"` 으로 남고 창이 지날 때까지 재시도까지 막혔다.
+    reserveFails = true;
+    await call();
+    expect(project!.status, "예약 거절 뒤에도 생성 중으로 남았다").toBe("ready");
+  });
+
   it("제출이 실패하면 묶은 장을 돌려준다", async () => {
     submitThrows = new Error("fal 이 죽었다");
     await call();
