@@ -516,6 +516,14 @@ ${analyzePrompt}`
     let generatedImages = 0;
     let retryDirective = options.retryDirective;
     let lastQaOutcome: QaOutcome = { blocking: [], warnings: [] };
+    /**
+     * 마지막 시도에서 인물 검증이 통과했나.
+     *
+     * **시도를 다 쓰고도 실패한 사실이 반환값에 안 실렸다.** 그래서 다른 사람
+     * 얼굴이 나온 그림이 `qa.passed: true` 로 나가 경고 없이 과금됐다. QA 게이트가
+     * 꺼져 있으면 `qa` 자체가 `undefined` 라 말할 자리조차 없었다.
+     */
+    let lastRefOk = true;
     // 이전 attempt 에서 확인된 blocking. fail-open(QA 인프라 실패)이 known-bad 를 통과로 위장하지 못하게 유지.
     let sawBlockingOutcome: QaOutcome | null = null;
 
@@ -656,6 +664,7 @@ ${analyzePrompt}`
           expectedStyle: options.style
         });
         refOk = validation.isSamePerson && validation.genderPresentationPreserved && validation.styleMatch;
+        lastRefOk = refOk;
         if (!refOk) {
           refDirective = buildRetryDirective(validation, referenceModelProfile, options.style);
         }
@@ -703,13 +712,29 @@ ${analyzePrompt}`
       );
     }
 
+    /**
+     * **끝까지 못 맞춘 인물 검증을 숨기지 않는다.**
+     *
+     * 여기까지 왔다는 것은 시도를 다 쓰고도 통과하지 못했다는 뜻이다. 그것을
+     * 안 실으면 다른 사람 얼굴이 나온 그림이 통과로 표시되어 나간다. 게이트가
+     * 꺼져 있어도 이때는 `qa` 를 만들어 말한다.
+     */
+    const refBlocking: QaDefect[] = lastRefOk
+      ? []
+      : [{
+        type: "reference_person_mismatch",
+        severity: "critical",
+        evidence: "참고 인물과 같은 사람으로 맞추지 못했습니다. 얼굴을 확인해 주세요.",
+        correctionHint: "Match the reference person's face and features exactly."
+      }];
+
     return {
       ...lastGeneratedImage,
       generatedImages,
-      qa: qaEnabled
+      qa: qaEnabled || refBlocking.length
         ? {
-            passed: lastQaOutcome.blocking.length === 0,
-            blocking: lastQaOutcome.blocking,
+            passed: lastQaOutcome.blocking.length === 0 && lastRefOk,
+            blocking: [...lastQaOutcome.blocking, ...refBlocking],
             warnings: lastQaOutcome.warnings,
             attempts: maxAttempts
           }

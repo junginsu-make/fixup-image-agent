@@ -15,7 +15,7 @@ import type {
 } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../../lib/pdp/providers";
 import { loadCharacterView } from "../../../../../lib/characters";
-import { finalizeAiUsage, reserveAiUsage } from "../../../../../lib/membership/api";
+import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api";
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
@@ -65,6 +65,19 @@ export async function POST(req: Request) {
   if (sections.length === 0) {
     return Response.json(
       { ok: false, code: "INVALID_REQUEST", message: "생성할 섹션이 없습니다." },
+      { status: 400 },
+    );
+  }
+  /**
+   * **모양만이라도 본다.**
+   *
+   * `body.sections` 는 캐스팅만 하고 검증이 없었다. `{"sections":[null]}` 을
+   * 보내면 바로 아래 `rejectIfUnverified` 안에서 던져 400 이 아니라 500 이 났다.
+   * 여기서 걸러 내면 잘못된 입력이 잘못된 입력으로 답한다.
+   */
+  if (sections.some((section) => !section || typeof section !== "object")) {
+    return Response.json(
+      { ok: false, code: "INVALID_REQUEST", message: "섹션 형식이 올바르지 않습니다." },
       { status: 400 },
     );
   }
@@ -163,7 +176,16 @@ export async function POST(req: Request) {
   // 우리가 낸 돈은 성공 건수가 아니라 fal 이 만든 장수다. 재시도한 섹션과
   // 품질 미달로 버린 섹션까지 합쳐야 실제 청구액에 가까워진다.
   const billableImages = results.reduce((sum, r) => sum + r.generatedImages, 0);
-  const usage = await finalizeAiUsage(
+  /**
+   * **확정이 실패해도 결과는 돌려준다.**
+   *
+   * 이 호출은 `try` 밖에 벌거벗은 채 있었다. 던지면 핸들러 전체가 거부되고
+   * Next 가 본문 없는 500 을 내는데, 그 시점의 `results` 에는 fal 에서 이미
+   * 값을 치른 이미지가 최대 배치분 들어 있다 — 한 장도 못 싣고 잃었다.
+   * 이 파일 앞머리가 「함수가 300초에 걸려 죽으면 예약한 크레딧이 finalize
+   * 되지 못한다」며 경계한 것과 같은 손실이다. 묶인 장은 예약이 만료되면 풀린다.
+   */
+  const usage = await settleAiUsage(
     reservation,
     succeeded > 0,
     imageCreditUnits(model, succeeded),

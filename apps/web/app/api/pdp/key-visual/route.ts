@@ -7,7 +7,7 @@ import {
 } from "@fixup/pdp-core";
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
-import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +32,8 @@ export async function POST(req: Request) {
     const { imageBase64, mimeType } = await generateKeyVisual(body, textPlanDepsFrom(createPdpProviders()));
     // 섹션 이미지와 똑같이 fal 에서 한 장을 만든다. 모델을 안 남기면 이 한 장은
     // 비용 집계에서 0원으로 사라진다.
-    const usage = await finalizeAiUsage(reservation, true, 1, undefined, {
+    // 장부가 안 닫혀도 그림은 돌려준다. 포스터·카드뉴스와 같은 판단이다.
+    const usage = await settleAiUsage(reservation, true, 1, undefined, {
       model: body.imageModel ?? DEFAULT_IMAGE_MODEL,
       billableImages: 1,
     });

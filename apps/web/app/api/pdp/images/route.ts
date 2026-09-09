@@ -38,7 +38,7 @@ type PdpImagesRequestBody = {
 import { loadCharacterView } from "../../../../lib/characters";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
-import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
 
@@ -101,7 +101,9 @@ export async function POST(req: Request) {
       createPdpProviders(),
     );
     // 회원에게는 나온 한 장만 셈하지만, 우리는 QA 재시도로 만든 장까지 낸다.
-    const usage = await finalizeAiUsage(reservation, true, imageCreditUnits(model, 1), undefined, {
+    // 장부가 안 닫혀도 그림은 돌려준다. 여기서 던지면 아래 catch 가 이미 만든
+    // 그림을 「생성 실패」로 바꾼다 — 돈은 나갔고 사용자는 결과를 못 본다.
+    const usage = await settleAiUsage(reservation, true, imageCreditUnits(model, 1), undefined, {
       model,
       billableImages: generatedImages,
     });

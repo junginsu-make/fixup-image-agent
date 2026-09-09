@@ -21,6 +21,8 @@ export interface RunQaGateInput {
   section: SectionBlueprint;
 }
 
+// **인물 불일치는 여기 없다.** QA 모델이 내는 값이 아니라 인물 검증이 붙이는
+// 것이라, 모델 응답 파서가 그 값을 받아들이면 안 된다.
 const DEFECT_TYPES: QaDefectType[] = ["forbidden_brand", "text_typo", "unsupported_number", "body_distortion"];
 const SEVERITIES: QaSeverity[] = ["critical", "minor"];
 const TEXT_LOCATIONS: QaTextLocation[] = ["headline", "subheadline", "bullet", "other"];
@@ -29,7 +31,8 @@ const DEFAULT_HINT: Record<QaDefectType, string> = {
   forbidden_brand: "Remove any brand name, logo, or watermark that is not in the approved copy.",
   text_typo: "Render every Korean phrase exactly as written in the approved copy, with clean, unbroken glyphs.",
   unsupported_number: "Remove any number or statistic that is not present in the approved copy.",
-  body_distortion: "Fix anatomy: correct finger count, natural limbs, and an undistorted face."
+  body_distortion: "Fix anatomy: correct finger count, natural limbs, and an undistorted face.",
+  reference_person_mismatch: "Match the reference person's face and features exactly."
 };
 
 function asString(value: unknown): string {
@@ -52,6 +55,9 @@ export function isBlockingDefect(defect: QaDefect): boolean {
       return defect.location === "headline" || defect.location === "subheadline";
     case "body_distortion":
       return defect.severity === "critical";
+    case "reference_person_mismatch":
+      // 다른 사람 얼굴은 언제나 막는다. 사용자가 고른 인물이 지켜지지 않았다.
+      return true;
     default:
       return false;
   }
