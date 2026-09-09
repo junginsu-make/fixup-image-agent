@@ -187,6 +187,15 @@ export function createPdpLlmOrNull(environment: Env = process.env): PdpLlm | nul
 export function createPdpProviders(environment: Env = process.env): PdpProviders {
   return {
     llm: createPdpLlm(environment),
-    generateImage: createPdpImageGenerator(environment),
+    /*
+      **그림 통로는 부를 때 만든다.**
+
+      바로 만들면 FAL_KEY 확인이 여기로 올라온다. 그러면 그림을 한 장도 안
+      만드는 라우트(분석·기획)까지 fal 키를 요구하고, 전에는 되던 배포가 죽는다.
+
+      키 확인 시점을 옮기지 않는 것이 이 리팩터의 약속이었다 — 전에도 그림을
+      실제로 만들 때 확인했다.
+    */
+    generateImage: (model, input) => createPdpImageGenerator(environment)(model, input),
   };
 }

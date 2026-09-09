@@ -2,6 +2,7 @@ import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
 import { PdpServiceError } from "./pdp.service";
 import type { PdpProviders } from "./pdp.image-provider";
+import type { ImageModelId } from "./types";
 import {
   REVIEW_SCHEMA,
   buildReviewPrompt,
@@ -89,7 +90,18 @@ type GeneratedImagePayload = { base64: string; mimeType: string };
 export interface TextPlanDeps {
   /** `name` 은 도구 이름이다. 모델 이름이 아니다. */
   generateJson(prompt: string, schema: unknown, name: string): Promise<unknown>;
-  generateImage(prompt: string, aspectRatio: AspectRatio): Promise<GeneratedImagePayload | null>;
+  /**
+   * `model` 을 반드시 나른다.
+   *
+   * 안 나르면 라우트는 사용자가 고른 모델로 청구하고 그림은 기본 모델로 나온다.
+   * 2026-09-09 리팩터에서 실제로 그렇게 됐고, 안 읽는 것은 타입 오류가 아니라
+   * 아무도 못 잡았다.
+   */
+  generateImage(
+    prompt: string,
+    aspectRatio: AspectRatio,
+    model?: ImageModelId,
+  ): Promise<GeneratedImagePayload | null>;
 }
 
 // ── 프롬프트 ────────────────────────────────────────────────────
@@ -610,8 +622,8 @@ function depsFrom(providers: PdpProviders): TextPlanDeps {
     },
 
     // 이미지 생성은 fal 을 경유한다. 글 모델은 텍스트(브리프·구성안)에만 쓴다.
-    async generateImage(prompt, aspectRatio) {
-      return providers.generateImage(DEFAULT_IMAGE_MODEL, {
+    async generateImage(prompt, aspectRatio, model) {
+      return providers.generateImage(model ?? DEFAULT_IMAGE_MODEL, {
         prompt,
         systemPrompt: "",
         aspectRatio,
@@ -761,6 +773,7 @@ export async function generateKeyVisual(
   const image = await deps.generateImage(
     buildKeyVisualPrompt(input.brief, input.blueprint),
     input.aspectRatio,
+    input.imageModel ?? DEFAULT_IMAGE_MODEL,
   );
 
   if (!image?.base64) {

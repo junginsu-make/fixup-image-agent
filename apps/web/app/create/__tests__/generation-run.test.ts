@@ -51,6 +51,16 @@ describe("남은 예상 시간", () => {
     expect(describeBatchRun({ ...기본, processed: 6, model: gpt }).expectedSeconds).toBe(150);
   });
 
+  /**
+   * 묶음이 덜 끝난 상태에서는 **내림**이다. 올림하면 아직 안 끝난 묶음을
+   * 끝난 것으로 세어 남은 시간을 실제보다 짧게 말한다.
+   */
+  it("묶음 중간이면 그 묶음은 아직 남은 것으로 센다", () => {
+    expect(describeBatchRun({ ...기본, processed: 1, model: gpt }).expectedSeconds).toBe(300);
+    expect(describeBatchRun({ ...기본, processed: 2, model: gpt }).expectedSeconds).toBe(300);
+    expect(describeBatchRun({ ...기본, processed: 4, model: gpt }).expectedSeconds).toBe(150);
+  });
+
   /** 틀린 숫자보다 없는 편이 낫다. */
   it("모델을 모르면 아예 안 보여준다", () => {
     expect(describeBatchRun(기본).expectedSeconds).toBeUndefined();

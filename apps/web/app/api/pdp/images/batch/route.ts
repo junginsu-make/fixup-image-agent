@@ -80,10 +80,17 @@ export async function POST(req: Request) {
    * 전에는 모델마다 손으로 매긴 정수 가중치였다. 같은 「1장」이 $0.039~$0.060 로
    * 갈려 싼 모델을 쓰는 사람이 손해를 봤고, 크기 차이는 담을 자리조차 없었다.
    */
+  /**
+   * **예약보다 먼저 만든다.**
+   *
+   * 이 뒤에는 try/catch 가 없다. 예약을 잡은 뒤에 여기서 던지면 확정이 못 돌고
+   * 크레딧이 묶인 채 남는다 — 그 사용자는 다음 요청부터 `concurrent_limit` 로
+   * 막힌다. 요청 몸통에 의존하지 않으므로 앞으로 옮겨도 아무것도 안 바뀐다.
+   */
+  const providers = createPdpProviders();
+
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
-
-  const providers = createPdpProviders();
 
   // 캐릭터가 있으면 섹션마다 어울리는 각도를 하나씩 고른다. 3종을 다 보내면
   // 참조가 늘어 서로를 희석시킨다 — 앵커와 스타일만으로도 절충이 일어난다.

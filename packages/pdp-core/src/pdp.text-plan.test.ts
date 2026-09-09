@@ -439,3 +439,40 @@ describe("CTA 는 만들지 않는다", () => {
   }
 });
 
+
+/**
+ * 대표 이미지가 **사용자가 고른 모델**로 만들어져야 한다.
+ *
+ * 2026-09-09 리팩터에서 이 인자가 사라졌다. 라우트는 고른 모델로 청구하는데
+ * 그림은 기본 모델로 나왔다 — 비싼 모델을 고른 사람이 비싼 값을 내고 싼
+ * 그림을 받았다. 타입도 시험도 못 잡았다. 안 읽는 것은 오류가 아니다.
+ */
+describe("대표 이미지의 모델", () => {
+  const input = {
+    brief: { offeringName: "요가 클래스" },
+    blueprint: { sections: [{ section_id: "s1", headline: "제목" }] },
+    aspectRatio: "9:16" as const,
+  };
+
+  function depsCapturing(seen: Array<string | undefined>) {
+    return {
+      generateJson: async () => ({}),
+      generateImage: async (_prompt: string, _ratio: unknown, model?: string) => {
+        seen.push(model);
+        return { base64: "IMG", mimeType: "image/jpeg" };
+      },
+    };
+  }
+
+  it("고른 모델이 그대로 간다", async () => {
+    const seen: Array<string | undefined> = [];
+    await generateKeyVisual({ ...input, imageModel: "gpt-image-2" } as never, depsCapturing(seen) as never);
+    expect(seen).toEqual(["gpt-image-2"]);
+  });
+
+  it("안 고르면 기본 모델이다", async () => {
+    const seen: Array<string | undefined> = [];
+    await generateKeyVisual(input as never, depsCapturing(seen) as never);
+    expect(seen).toEqual(["gpt-image-2"]);
+  });
+});

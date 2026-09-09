@@ -17,7 +17,6 @@ import {
  * 자세한 근거는 docs/superpowers/specs/2026-07-27-fal-image-provider-design.md 참조.
  */
 
-const FAL_BASE_URL = "https://fal.run";
 
 /**
  * 그 모델이 받을 수 있는 만큼만 보낸다.
