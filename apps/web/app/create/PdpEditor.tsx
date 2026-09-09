@@ -164,11 +164,18 @@ interface PdpEditorProps {
   onReset: () => void;
   onDraftStateChange?: (draftState: PdpEditorDraftState) => void;
   onManualSave?: () => void;
-  apiConnectionLabel?: string;
   referenceModelImage?: PreparedImageDraft | null;
   referenceModelUsage?: ReferenceModelUsage | null;
   /** 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 안 붙은 자리는 걸러서 온다. */
   attachmentIntents?: AttachmentIntents;
+  /** 페이지 전체의 배경 설명(채널·시즌). 1단계의 「그 밖에」다. */
+  pageContext?: string;
+  /**
+   * 앞 단계로 되돌아간다. 편집기 안에서 못 가는 곳만 부모가 받는다.
+   *
+   * 전에는 편집기 막대에 이동이 아예 없어서, 눌러도 아무 일이 안 일어났다.
+   */
+  onJumpStep?: (id: "upload" | "analyze") => void;
   saveState?: "idle" | "saving" | "saved" | "error";
 }
 
@@ -226,10 +233,11 @@ export function PdpEditor({
   onReset,
   onDraftStateChange,
   onManualSave,
-  apiConnectionLabel = "키 필요",
   referenceModelImage = null,
   referenceModelUsage = null,
   attachmentIntents,
+  pageContext,
+  onJumpStep,
   saveState = "idle",
 }: PdpEditorProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
@@ -1335,6 +1343,7 @@ export function PdpEditor({
       preserveProduct,
       styleReference,
       attachmentIntents,
+      pageContext,
       referenceModel: referenceModelImage,
       referenceModelUsage,
     });
@@ -2086,9 +2095,6 @@ export function PdpEditor({
         <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
           <Badge variant="secondary">비율 {aspectRatio}</Badge>
           <Badge variant="secondary">톤 {toneLabel}</Badge>
-          <Badge variant={apiConnectionLabel === "연결됨" ? "green" : "destructive"}>
-            API {apiConnectionLabel}
-          </Badge>
           <Badge variant="green">
             생성됨 {generatedCount}/{sections.length}
           </Badge>
@@ -2101,7 +2107,19 @@ export function PdpEditor({
       </header>
 
       <div className="mb-4" onClick={stopShellClick}>
-        <StepBar steps={CREATE_STEPS[startMode]} current={screen === "gallery" ? "sections" : "edit"} />
+        {/*
+          3·4단계는 편집기 안에서 오간다. 1·2단계는 화면을 벗어나므로 부모가 받는다.
+          작업은 자동 저장되므로 되돌아가도 잃는 것이 없다.
+        */}
+        <StepBar
+          steps={CREATE_STEPS[startMode]}
+          current={screen === "gallery" ? "sections" : "edit"}
+          onJump={(id) => {
+            if (id === "sections") setScreen("gallery");
+            else if (id === "edit") setScreen("editor");
+            else if (id === "upload" || id === "analyze") onJumpStep?.(id);
+          }}
+        />
       </div>
 
       <div

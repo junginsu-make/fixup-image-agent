@@ -141,15 +141,32 @@ describe("생성 프롬프트에 싣는 지시", () => {
   });
 });
 
+describe("조각으로 들어오면 그것부터 말해 준다", () => {
+  it("한 장이면 조각 이야기를 안 한다", () => {
+    expect(buildStyleAnalysisPrompt(1)).not.toContain("자른 조각");
+    expect(buildStyleAnalysisPrompt()).not.toContain("자른 조각");
+  });
+
+  /** 안 밝히면 서로 다른 그림 넷으로 읽고 「여러 디자인이 섞였다」고 적는다. */
+  it("여러 장이면 한 페이지를 나눈 것이라고 밝힌다", () => {
+    const prompt = buildStyleAnalysisPrompt(4);
+    expect(prompt).toContain("4장");
+    expect(prompt).toContain("자른 조각");
+    expect(prompt).toContain("한 페이지");
+  });
+});
+
 // 이 서술은 자동 추천에만 쓰인다. 생성에는 원본 이미지가 그대로 첨부되므로
 // 서술이 없어도 손해가 없다. 그런데 기다림에 한도가 없어서 화면이 몇 분씩
 // "분석하는 중"에 갇힌 적이 있다 — 곁다리가 본 작업을 막으면 안 된다.
+const 그림 = [{ base64: "AAAA", mimeType: "image/png" }];
+
 describe("분석은 본 작업을 막지 않는다", () => {
   it("응답이 오지 않으면 기다리다 빈 서술로 끝난다", async () => {
     vi.useFakeTimers();
     try {
       const never = new Promise<unknown>(() => {});
-      const pending = analyzeStyleImage("AAAA", "image/png", undefined, () => never);
+      const pending = analyzeStyleImage(그림, undefined, () => never);
       await vi.advanceTimersByTimeAsync(20_000);
       await expect(pending).resolves.toBe("");
     } finally {
@@ -159,14 +176,44 @@ describe("분석은 본 작업을 막지 않는다", () => {
 
   it("분석이 던져도 빈 서술로 끝난다", async () => {
     await expect(
-      analyzeStyleImage("AAAA", "image/png", undefined, async () => {
+      analyzeStyleImage(그림, undefined, async () => {
         throw new Error("quota exceeded");
       }),
     ).resolves.toBe("");
   });
 
+  it("이미지가 없으면 부르지도 않는다", async () => {
+    let 불렸나 = false;
+    const description = await analyzeStyleImage([], undefined, async () => {
+      불렸나 = true;
+      return { palette: "네이비" };
+    });
+    expect(description).toBe("");
+    expect(불렸나).toBe(false);
+  });
+
+  /**
+   * 긴 상세페이지는 조각으로 나뉘어 들어온다. 한 장만 보내면 위쪽만 보고
+   * 서술을 적고, 그 서술이 자동 추천의 유일한 근거가 된다.
+   */
+  it("받은 조각을 전부 넘긴다", async () => {
+    const 조각들 = [
+      { base64: "S1", mimeType: "image/jpeg" },
+      { base64: "S2", mimeType: "image/jpeg" },
+      { base64: "S3", mimeType: "image/jpeg" },
+    ];
+    let 받은것: unknown;
+
+    await analyzeStyleImage(조각들, undefined, async (images) => {
+      받은것 = images;
+      return { palette: "네이비" };
+    });
+
+    expect(받은것).toEqual(조각들);
+  });
+
   it("제때 오면 그 서술을 쓴다", async () => {
-    const description = await analyzeStyleImage("AAAA", "image/png", undefined, async () => ({
+    const description = await analyzeStyleImage(그림, undefined, async () => ({
       palette: "네이비와 옐로",
     }));
     expect(description).toContain("네이비와 옐로");

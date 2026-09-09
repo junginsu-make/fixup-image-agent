@@ -21,6 +21,8 @@ export interface PageWireInputs {
   referenceModel?: { base64: string; mimeType: string; fileName?: string } | null;
   referenceModelUsage?: ReferenceModelUsage | null;
   attachmentIntents?: AttachmentIntents;
+  /** 페이지 전체의 배경 설명(채널·시즌). 화면의 「그 밖에」다. */
+  pageContext?: string;
 }
 
 export function buildPageWire(input: PageWireInputs): PageImageWire {
@@ -42,5 +44,7 @@ export function buildPageWire(input: PageWireInputs): PageImageWire {
       : undefined,
     referenceModelUsage: input.referenceModelUsage,
     attachmentIntents: input.attachmentIntents,
+    // 공백만 적은 것은 안 적은 것이다.
+    pageContext: input.pageContext?.trim() || undefined,
   };
 }

@@ -30,10 +30,21 @@ export interface SellerBrief {
   audience?: string;
   /** 그 사람이 겪는 불편. 장면이면 더 좋다. */
   problem?: string;
+  /**
+   * 제품의 특징. 성분·소재·규격·사용법처럼 **사진으로는 알 수 없는 사실.**
+   *
+   * 이 칸이 없어서 「남과 다른 점」 하나에 다 몰아넣어야 했다. 둘은 다른
+   * 것이다 — 특징은 사실이고 차별점은 그중 경쟁자가 못 하는 말이다.
+   */
+  features?: string;
   /** 남과 다른 점. 방식·포기한 것·검증 가능한 숫자. */
   differentiator?: string;
-  /** 나머지. 채널·시즌·톤 등. */
-  extra?: string;
+  /**
+   * 꼭 넣고 싶은 말. 상호·인증·수상처럼 반드시 페이지에 남아야 하는 것.
+   *
+   * 근거 없는 숫자를 막는 규칙에 걸리지 않게 **판매자가 보증한 사실**로 다룬다.
+   */
+  emphasis?: string;
 }
 
 const FIELDS: ReadonlyArray<{
@@ -44,8 +55,17 @@ const FIELDS: ReadonlyArray<{
 }> = [
   { key: "audience", label: "누구에게", use: "이 사람 한 명을 떠올리고 쓴다. 대상을 넓히지 않는다" },
   { key: "problem", label: "겪는 불편", use: "문제 섹션은 이 장면에서 출발한다" },
+  {
+    key: "features",
+    label: "제품의 특징",
+    use: "사진으로 알 수 없는 사실이다. 성분·소재·규격은 여기 적힌 대로만 쓰고, 없는 것을 보태지 않는다",
+  },
   { key: "differentiator", label: "남과 다른 점", use: "차별점 섹션의 근거다. 이것 말고 다른 우위를 지어내지 않는다" },
-  { key: "extra", label: "그 밖에", use: "" },
+  {
+    key: "emphasis",
+    label: "꼭 넣고 싶은 말",
+    use: "판매자가 보증한 사실이다. 페이지 어딘가에 반드시 남기고, 근거 없는 주장으로 취급하지 않는다",
+  },
 ];
 
 /** 빈 문자열·공백만 있는 값을 걷어낸다. 화면에서 넘어오는 값을 믿지 않는다. */
@@ -59,8 +79,9 @@ export function normalizeSellerBrief(input: SellerBrief | undefined): SellerBrie
   return {
     audience: clean(input.audience),
     problem: clean(input.problem),
+    features: clean(input.features),
     differentiator: clean(input.differentiator),
-    extra: clean(input.extra),
+    emphasis: clean(input.emphasis),
   };
 }
 

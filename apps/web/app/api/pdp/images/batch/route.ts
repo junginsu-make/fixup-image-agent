@@ -14,6 +14,7 @@ import type {
   SectionBlueprint,
 } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../../lib/pdp/providers";
+import { withSlicedStyleReference } from "../../../../../lib/pdp/slice-image";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api";
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
@@ -129,7 +130,10 @@ export async function POST(req: Request) {
 
   // **조립은 한 곳에서만 한다.** 전에는 여기서 손으로 지었고, 그래서 인물 사진을
   // 받는 자리조차 없었다. 단건 라우트와 같은 함수를 쓴다.
-  const page = pageInputsFromWire({ ...body.page, imageModel: model });
+  // 긴 레퍼런스를 조각으로 나눈다. 한 번만 나누고 모든 섹션이 같은 조각을 쓴다.
+  const page = pageInputsFromWire(
+    await withSlicedStyleReference({ ...body.page, imageModel: model }),
+  );
 
   const settled = await Promise.allSettled(
     sections.map((section, position) => {

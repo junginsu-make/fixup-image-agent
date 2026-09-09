@@ -37,6 +37,7 @@ type PdpImagesRequestBody = {
 };
 import { loadCharacterView } from "../../../../lib/characters";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
+import { withSlicedStyleReference } from "../../../../lib/pdp/slice-image";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
@@ -79,8 +80,12 @@ export async function POST(req: Request) {
         )
       : null;
 
+    // 긴 레퍼런스를 조각으로 나눈다. 일괄 라우트와 같아야 한다 — 한쪽만
+    // 조각을 보내면 한 장만 다시 만들었을 때 디자인이 달라진다.
+    const page = await withSlicedStyleReference({ ...body.page, imageModel: model });
+
     const options = buildSectionImageOptions(
-      pageInputsFromWire({ ...body.page, imageModel: model }),
+      pageInputsFromWire(page),
       {
         section: body.section,
         index: body.sectionIndex ?? 0,

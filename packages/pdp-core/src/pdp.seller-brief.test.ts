@@ -96,3 +96,56 @@ describe("분석 프롬프트에 실린다", () => {
     expect(prompt).not.toContain("# 파는 사람이 알려준 것");
   });
 });
+
+/**
+ * **제품의 특징을 적을 칸이 없었다.**
+ *
+ * 「남과 다른 점」 한 칸에 성분·소재·규격·사용법을 다 몰아넣어야 했다. 사진은
+ * 형태·색·재질만 말해 주므로, 성분표나 시험 수치는 파는 사람이 적어야 나온다.
+ *
+ * 반대로 `extra`(그 밖에)는 화면의 「그 밖에」(`additionalInfo`)와 하는 일이
+ * 겹쳤다 — 둘 다 채널·시즌이다. 화면은 `extra` 를 채운 적이 없었다.
+ */
+describe("제품의 특징과 꼭 넣을 말", () => {
+  it("특징이 프롬프트에 실린다", () => {
+    const prompt = buildSellerBriefPrompt({ features: "히알루론산 5종, 무향" });
+    expect(prompt).toContain("히알루론산 5종, 무향");
+    expect(prompt).toMatch(/특징/);
+  });
+
+  it("꼭 넣을 말이 프롬프트에 실린다", () => {
+    const prompt = buildSellerBriefPrompt({ emphasis: "3대째 같은 방식" });
+    expect(prompt).toContain("3대째 같은 방식");
+  });
+
+  /** 사진으로 알 수 없는 사실이라 지어낸 것이 아니라고 못 박아야 한다. */
+  it("판매자가 적은 사실이라는 용도가 함께 간다", () => {
+    const prompt = buildSellerBriefPrompt({ features: "무향" });
+    const 특징줄 = prompt.split("\n").findIndex((line) => line.includes("무향"));
+    expect(prompt.split("\n")[특징줄 + 1]).toMatch(/→/);
+  });
+
+  it("겹치던 「그 밖에」 칸은 없앴다 — 화면의 그 칸은 다른 자리로 간다", () => {
+    const brief = normalizeSellerBrief({ extra: "여름 시즌" } as never);
+    expect((brief as Record<string, unknown>).extra).toBeUndefined();
+  });
+
+  it("새 칸도 비우면 아무 말도 안 한다", () => {
+    expect(buildSellerBriefPrompt({ features: "  ", emphasis: "" })).toBe("");
+  });
+
+  it("순서는 대상 → 불편 → 특징 → 차별점 → 꼭 넣을 말", () => {
+    const prompt = buildSellerBriefPrompt({
+      audience: "A",
+      problem: "B",
+      features: "C",
+      differentiator: "D",
+      emphasis: "E",
+    });
+    const at = (value: string) => prompt.indexOf(`: ${value}`);
+    expect(at("A")).toBeLessThan(at("B"));
+    expect(at("B")).toBeLessThan(at("C"));
+    expect(at("C")).toBeLessThan(at("D"));
+    expect(at("D")).toBeLessThan(at("E"));
+  });
+});

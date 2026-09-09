@@ -1,6 +1,7 @@
 import { analyzeStyleImage, type StyleReferenceMatch } from "@fixup/pdp-core";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { createPdpLlmOrNull } from "./pdp/providers";
+import { sliceTallReference } from "./pdp/slice-image";
 import { isLocalStoreEnabled } from "./local-store";
 
 /**
@@ -73,7 +74,23 @@ export async function registerUserStyleReference(input: {
   imageBase64: string;
   mimeType: string;
 }) {
-  const description = await analyzeStyleImage(input.imageBase64, input.mimeType, createPdpLlmOrNull() ?? undefined);
+  /*
+    서술을 만들 때도 **조각으로 나눠 보낸다.**
+
+    상세페이지 레퍼런스는 1080×15000 처럼 길다. 통째로 보내면 글 모델이 긴 변
+    기준으로 줄여 폭 100픽셀짜리 띠를 보게 되고, 그 상태로 「팔레트·서체·구성」을
+    적으라고 하면 아무 말이나 적는다. 그 서술이 자동 추천의 유일한 근거다.
+
+    기획과 같은 규칙을 쓴다 — 짧아도 폭이 크면 줄인다(`shrinkWhole`).
+  */
+  const slices = await sliceTallReference(
+    { imageBase64: input.imageBase64, mimeType: input.mimeType },
+    { shrinkWhole: true },
+  );
+  const description = await analyzeStyleImage(
+    slices.map((slice) => ({ base64: slice.imageBase64, mimeType: slice.mimeType })),
+    createPdpLlmOrNull() ?? undefined,
+  );
 
   const supabase = createSupabaseAdminClient();
   const { data: row, error } = await supabase

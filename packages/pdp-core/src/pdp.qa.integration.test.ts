@@ -176,6 +176,22 @@ describe("실제 생성 장수(비용 계산용)", () => {
     );
     expect(envelope.billableImages).toBe(2);
   });
+
+  /**
+   * 운영자가 키를 안 넣고 배포한 경우. 문구가 한국어라 영어 매처에 안 걸려
+   * 「처리 중 오류가 발생했습니다」로 떨어졌다 — 무엇이 없는지는 접힌 detail
+   * 안에만 있었다. 사용자는 자기가 뭘 잘못했는지 알 수 없다.
+   */
+  it("서버 키가 없으면 그것을 말한다", () => {
+    const error = new Error("다음 환경변수가 없어 상세페이지를 만들 수 없습니다: ANTHROPIC_API_KEY");
+    error.name = "PdpProviderConfigurationError";
+
+    const envelope = toPdpErrorResponse(error);
+
+    expect(envelope.code).toBe("AI_KEY_INVALID");
+    expect(envelope.message).toContain("키가 설정되지 않았습니다");
+    expect(envelope.detail).toContain("ANTHROPIC_API_KEY");
+  });
 });
 
 describe("generateSectionImageInternal QA gate (editable = 미적용)", () => {

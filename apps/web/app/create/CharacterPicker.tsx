@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { UserRound, X } from "lucide-react";
-import { Badge, Button, cn } from "@fixup/ui";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  cn,
+} from "@fixup/ui";
 
 /**
  * 저장해 둔 캐릭터에서 이 페이지에 등장할 인물을 고른다.
@@ -54,6 +63,12 @@ export function CharacterPicker({ selectedId, onSelect, ignoredReason }: Charact
     void load();
   }, [load]);
 
+  // 모달을 여는 동안 다른 창에서 캐릭터를 만들었을 수 있다. 열 때마다 다시
+  // 읽는다 — 디자인 레퍼런스 쪽(`SavedImagePicker`)과 같은 규칙이다.
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
+
   if (loading) return null;
 
   const selected = characters.find((character) => character.id === selectedId);
@@ -100,28 +115,28 @@ export function CharacterPicker({ selectedId, onSelect, ignoredReason }: Charact
           </a>{" "}
           같은 사람이 계속 나옵니다.
         </p>
-      ) : !open ? (
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-          <UserRound size={14} className="mr-1.5" />
-          다각도 캐릭터 고르기
-        </Button>
       ) : (
-        <div className="rounded-md border p-3">
-          <div className="mb-2.5 flex items-center gap-2">
-            <UserRound size={14} className="text-primary" />
-            <strong className="text-sm">다각도 캐릭터 고르기</strong>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-auto"
-              aria-label="닫기"
-              onClick={() => setOpen(false)}
-            >
-              <X size={14} />
-            </Button>
-          </div>
+        <>
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            <UserRound size={14} className="mr-1.5" />
+            다각도 캐릭터 고르기
+          </Button>
 
-          <div className="grid max-h-56 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+          {/*
+            **모달로 연다.** 격자를 칸 안에 펼치면 인물·레퍼런스 칸이 동시에
+            길어져 아래 설정이 화면 밖으로 밀린다. 이미지 만들기가 먼저 같은
+            이유로 모달이 됐다(`_components/library-picker.tsx`).
+          */}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>다각도 캐릭터 고르기</DialogTitle>
+                <DialogDescription>
+                  만들어 둔 캐릭터 {characters.length}명 · 섹션 구성에 맞는 각도(정면·45도·뒷모습)가 자동으로 들어갑니다
+                </DialogDescription>
+              </DialogHeader>
+
+          <div className="grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 lg:grid-cols-5">
             {characters.map((character) => {
               const cover =
                 character.views.find((view) => view.angle === "front") ?? character.views[0];
@@ -151,10 +166,9 @@ export function CharacterPicker({ selectedId, onSelect, ignoredReason }: Charact
             })}
           </div>
 
-          <p className="mt-2 text-xs text-muted-foreground">
-            섹션 구성에 맞는 각도(정면·45도·뒷모습)가 자동으로 들어갑니다.
-          </p>
-        </div>
+            </DialogContent>
+          </Dialog>
+        </>
       )}
     </>
   );

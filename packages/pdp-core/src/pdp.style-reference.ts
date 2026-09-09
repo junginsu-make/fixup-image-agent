@@ -85,8 +85,17 @@ const ANALYSIS_FIELDS: Array<{ key: keyof StyleAnalysis; label: string }> = [
   { key: "suitedFor", label: "어울리는 상품군" },
 ];
 
-export function buildStyleAnalysisPrompt() {
-  return `이 이미지의 **디자인**을 읽어라.
+export function buildStyleAnalysisPrompt(imageCount = 1) {
+  // 조각으로 들어오면 그것부터 말해 준다. 안 그러면 서로 다른 그림 넷으로 읽고
+  // 「여러 디자인이 섞였다」는 서술이 나온다 — 자동 추천이 그 말을 믿는다.
+  const 조각안내 =
+    imageCount > 1
+      ? `
+
+이미지 ${imageCount}장은 **한 장의 긴 상세페이지를 위에서 아래로 자른 조각**이다. 서로 다른 그림이 아니라 한 페이지다. 전체를 하나로 보고 적어라.`
+      : "";
+
+  return `이 이미지의 **디자인**을 읽어라.${조각안내}
 
 무엇이 찍혔는지(피사체·사물·장소)는 적지 마라. 나중에 "차분한 프리미엄 식품"
 같은 말로 이 이미지를 찾아낼 수 있도록, 디자인 특성만 한국어로 적는다.
@@ -129,8 +138,14 @@ const ANALYSIS_SCHEMA = {
   },
 };
 
+/** 분석에 넘길 이미지 한 장. */
+export interface StyleAnalysisImage {
+  base64: string;
+  mimeType: string;
+}
+
 /** 이미지를 읽어 디자인 특성 서술을 만든다. 테스트에서는 analyze 를 갈아 끼운다. */
-export type StyleImageAnalyzer = (imageBase64: string, mimeType: string) => Promise<unknown>;
+export type StyleImageAnalyzer = (images: StyleAnalysisImage[]) => Promise<unknown>;
 
 /**
  * 분석을 기다리는 한도.
@@ -143,18 +158,17 @@ export type StyleImageAnalyzer = (imageBase64: string, mimeType: string) => Prom
 const ANALYSIS_TIMEOUT_MS = 20_000;
 
 export async function analyzeStyleImage(
-  imageBase64: string,
-  mimeType: string,
+  images: StyleAnalysisImage[],
   llm?: PdpLlm,
   analyze?: StyleImageAnalyzer,
 ): Promise<string> {
   const run = analyze ?? (llm ? analyzerFrom(llm) : null);
   // 글 모델이 없으면 서술 없이 간다. 곁다리 정보 때문에 본 작업을 막지 않는다.
-  if (!run) return "";
+  if (!run || !images.length) return "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const raw = await Promise.race([
-      run(imageBase64, mimeType),
+      run(images),
       new Promise<null>((resolve) => {
         timer = setTimeout(() => {
           console.warn(`[style] 이미지 분석 시간 초과 (${ANALYSIS_TIMEOUT_MS}ms) — 서술 없이 진행합니다`);
@@ -172,12 +186,12 @@ export async function analyzeStyleImage(
 }
 
 function analyzerFrom(llm: PdpLlm): StyleImageAnalyzer {
-  return async (imageBase64, mimeType) => {
+  return async (images) => {
     const response = await llm.generate({
       name: "style_analysis",
       description: "레퍼런스 이미지가 디자인 언어를 어떻게 쓰는지 읽는다.",
-      prompt: buildStyleAnalysisPrompt(),
-      images: [{ base64: imageBase64, mimeType }],
+      prompt: buildStyleAnalysisPrompt(images.length),
+      images,
       schema: ANALYSIS_SCHEMA,
     });
 

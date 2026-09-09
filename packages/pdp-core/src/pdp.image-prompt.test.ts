@@ -188,3 +188,185 @@ describe("full-image 모드가 카피를 온전히 넘긴다", () => {
   });
 });
 
+
+/**
+ * 화면에서 고른 인물 조건이 **그림 프롬프트까지 가야 한다.**
+ *
+ * 2026-09-09 확인: 성별·나이대·국가·가이드 우선 모드 넷을 화면에서 고를 수
+ * 있는데 엔진이 하나도 안 읽고 있었다. 그 값들을 쓰는 함수(`buildImagePrompt`)는
+ * 시험 말고 부르는 곳이 없었다.
+ *
+ * 게다가 국가는 무시되는 정도가 아니라 **반대로** 갔다 — 프롬프트가
+ * 「한국인」과 `location: "Korea"` 를 못 박고 있었다.
+ */
+describe("인물 조건이 그림까지 간다", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+
+  it("안 고르면 지금까지처럼 한국이다", () => {
+    const j = JSON.parse(buildImageJson(makeSection(), { ...base }));
+    expect(j.scene.location).toBe("Korea");
+    expect(JSON.stringify(j.scene.people)).toMatch(/Korean/);
+  });
+
+  it("국가를 고르면 그 나라로 간다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection(), { ...base, modelCountry: "france" }),
+    );
+    expect(j.scene.location).toBe("France");
+    expect(JSON.stringify(j.scene.people)).toMatch(/French/);
+    expect(JSON.stringify(j.scene.people)).not.toMatch(/Korean/);
+  });
+
+  it("성별과 나이대가 묘사로 실린다", () => {
+    const people = JSON.parse(
+      buildImageJson(makeSection(), {
+        ...base,
+        modelGender: "male",
+        modelAgeRange: "40s",
+      }),
+    ).scene.people as string;
+    expect(people).toMatch(/man/);
+    expect(people).toMatch(/40s/);
+  });
+
+  it("여성·10대도 그대로 간다", () => {
+    const people = JSON.parse(
+      buildImageJson(makeSection(), { ...base, modelGender: "female", modelAgeRange: "teen" }),
+    ).scene.people as string;
+    expect(people).toMatch(/woman/);
+    expect(people).toMatch(/teen/);
+  });
+
+  /**
+   * 사진이나 캐릭터를 붙였으면 **그쪽이 누구인지를 정한다.**
+   * 설정으로 덮으면 얼굴은 그 사람인데 나이·국적 설명이 부딪힌다.
+   */
+  it("인물 참조가 붙으면 설정이 사람을 덮지 않는다", () => {
+    const people = JSON.parse(
+      buildImageJson(makeSection(), {
+        ...base,
+        withModel: true,
+        modelGender: "male",
+        modelCountry: "france",
+      }),
+    ).scene.people as string;
+    expect(people).toMatch(/required|must/i);
+    expect(people).not.toMatch(/French man/);
+  });
+
+  it("시스템 프롬프트에도 같은 나라가 실린다", () => {
+    const prompt = buildImageSystemPrompt({ ...base, modelCountry: "japan" });
+    expect(prompt).toMatch(/Japanese/);
+    expect(prompt).not.toMatch(/they must be Korean/);
+  });
+});
+
+describe("가이드 우선 모드", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+  const section = () => ({ ...makeSection(), layout_notes: "왼쪽 정렬", style_guide: "짙은 올리브" });
+
+  it("기본은 가이드 우선 — 구성안의 배치와 스타일을 따른다", () => {
+    const j = JSON.parse(buildImageJson(section(), { ...base }));
+    expect(j.layout).toBe("왼쪽 정렬");
+    expect(j.design_system).toBe("짙은 올리브");
+    expect(j.guide_priority).toMatch(/guide/i);
+  });
+
+  it("스타일 우선이면 촬영 방식이 이긴다고 말한다", () => {
+    const j = JSON.parse(buildImageJson(section(), { ...base, guidePriorityMode: "style-first" }));
+    expect(j.guide_priority).toMatch(/shot type|style/i);
+    expect(j.guide_priority).toMatch(/ignore|override|wins/i);
+  });
+});
+
+/**
+ * 「그 밖에」(채널·시즌·강조하고 싶은 분위기)가 **그림까지 가야 한다.**
+ *
+ * 2026-09-09 확인: 이 값은 기획에서 끝나고 그림 프롬프트에는 한 글자도 안 갔다.
+ * 「여름 시즌」이라고 적어도 그림은 계절을 몰랐다.
+ *
+ * 다만 「추가 지시」(userInstruction)보다는 아래다. 그쪽은 사용자가 이 그림에
+ * 대해 직접 친 말이고, 이쪽은 페이지 전체의 배경 설명이다.
+ */
+describe("페이지 배경 설명이 그림까지 간다", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+
+  it("시스템 프롬프트에 실린다", () => {
+    const prompt = buildImageSystemPrompt({ ...base, pageContext: "여름 시즌, 프리미엄 보습" });
+    expect(prompt).toContain("여름 시즌, 프리미엄 보습");
+  });
+
+  it("배경 설명이라고 밝힌다 — 지시가 아니다", () => {
+    const prompt = buildImageSystemPrompt({ ...base, pageContext: "여름 시즌" });
+    expect(prompt).toMatch(/context|background/i);
+  });
+
+  it("안 적으면 아무 말도 안 보탠다", () => {
+    expect(buildImageSystemPrompt(base)).not.toMatch(/Page context/i);
+  });
+
+  it("공백만 적은 것은 안 적은 것이다", () => {
+    expect(buildImageSystemPrompt({ ...base, pageContext: "   " })).not.toMatch(/Page context/i);
+  });
+
+  /** 자유 서술 칸이라 문단째로 붙여 넣는다. 무제한이면 뒤 지시를 밀어낸다. */
+  it("너무 길면 500자에서 자른다", () => {
+    const 긴글 = "가".repeat(900) + "여기는안실린다";
+    const prompt = buildImageSystemPrompt({ ...base, pageContext: 긴글 });
+
+    expect(prompt).toContain("가".repeat(500));
+    expect(prompt).not.toContain("가".repeat(501));
+    expect(prompt).not.toContain("여기는안실린다");
+  });
+});
+
+/**
+ * **기획이 섹션마다 적어 둔 것을 그림이 읽어야 한다.**
+ *
+ * 2026-09-09 확인: 기획에게 「이 이미지가 전달해야 하는 메시지」와 「제품을
+ * 어떻게 참고할지」를 섹션마다 적으라고 시켜 놓고, 만들어진 그 값을 **아무도
+ * 안 읽고 있었다.** 섹션마다 다르게 적히는데 전부 버려졌다.
+ *
+ * `compliance_notes` 는 특히 위험했다 — 통이미지 모드는 글자를 그림에 직접
+ * 그리는데 「이 카테고리는 이런 표현을 쓰면 안 된다」를 모르고 그렸다.
+ */
+describe("섹션 기획이 그림까지 간다", () => {
+  const base = { style: "studio", withModel: false, outputMode: "editable" } as const;
+
+  it("이 그림이 전달할 메시지가 실린다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ purpose: "착유 직후의 신선함" }), base),
+    );
+    expect(JSON.stringify(j)).toContain("착유 직후의 신선함");
+  });
+
+  it("섹션 이름과 역할이 실린다 — 무엇을 하는 자리인지 알아야 한다", () => {
+    const j = JSON.parse(buildImageJson(makeSection(), base));
+    expect(JSON.stringify(j.section)).toContain("차별점 신선도");
+    expect(JSON.stringify(j.section)).toContain("신선함을 각인");
+  });
+
+  /** 기획에게 「형태·라벨·재질·색감을 유지하는 기준을 명시하라」고 시켜 놓은 값이다. */
+  it("제품을 어떻게 참고할지가 실린다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ reference_usage: "라벨 글씨와 병 곡선을 그대로" }), base),
+    );
+    expect(j.product_reference).toBe("라벨 글씨와 병 곡선을 그대로");
+  });
+
+  it("규제 주의가 실린다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ compliance_notes: "의약품 효능 표현 금지" }), base),
+    );
+    expect(j.compliance).toBe("의약품 효능 표현 금지");
+  });
+
+  it("빈 칸은 안 싣는다 — 빈 자리를 채우라는 뜻으로 읽힌다", () => {
+    const j = JSON.parse(
+      buildImageJson(makeSection({ purpose: "", reference_usage: "  ", compliance_notes: "" }), base),
+    );
+    expect(j.product_reference).toBeUndefined();
+    expect(j.compliance).toBeUndefined();
+    expect(j.section?.message).toBeUndefined();
+  });
+});

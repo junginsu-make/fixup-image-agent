@@ -103,8 +103,10 @@ type InternalImageGenOptions = ImageGenOptions & {
   retryDirective?: string;
   imageModel?: ImageModelId;
   /**
-   * 페이지의 디자인 언어를 정하는 참조 이미지. 페이지당 한 장을 모든 섹션이 공유한다.
-   * 여러 장을 섞으면 섹션 간 통일이 깨져서 첫 장만 쓴다.
+   * 페이지의 디자인 언어를 정하는 참조 이미지. 한 페이지를 모든 섹션이 공유한다.
+   *
+   * **여러 장이면 그 한 페이지를 위에서 아래로 나눈 조각들이다.** 서로 다른
+   * 레퍼런스를 섞으라는 뜻이 아니다 — 그건 섹션 간 통일을 깬다.
    */
   styleReferenceImages?: Array<{ base64: string; mimeType: string; description?: string }>;
   /** 제품 이미지를 지킬 것인가. 자세한 판단은 pdp.product-anchor 참조. */
@@ -225,6 +227,21 @@ export class PdpService {
           intent: request.styleReference.intent,
         }
       : undefined;
+
+    /**
+     * 세로로 긴 레퍼런스는 **조각으로 나눠 온다**(`apps/web` 이 자른다).
+     *
+     * 통째로 보내면 모델이 긴 변 기준으로 줄여 폭 100픽셀짜리 띠가 된다.
+     * 조각이 없으면 원본 한 장을 그대로 쓴다.
+     */
+    const styleReferenceImages = styleReferenceForPlan
+      ? (request.styleReference?.slices?.length
+          ? request.styleReference.slices.map((slice) => ({
+              base64: sanitizeBase64Payload(slice.imageBase64),
+              mimeType: normalizeMimeType(slice.mimeType),
+            }))
+          : [{ base64: styleReferenceForPlan.imageBase64, mimeType: styleReferenceForPlan.mimeType }])
+      : [];
     const analyzePrompt = buildAnalyzePrompt(
       request.additionalInfo,
       request.desiredTone,
@@ -238,6 +255,7 @@ export class PdpService {
             styleReference: {
               description: styleReferenceForPlan.description,
               intent: styleReferenceForPlan.intent,
+              sliceCount: styleReferenceImages.length,
             },
           }
         : undefined,
@@ -253,9 +271,9 @@ export class PdpService {
               ...(referenceModelImage ? [buildHighResolutionInlinePart(referenceModelImage.mimeType, referenceModelImage.base64)] : []),
               // 디자인 레퍼런스는 맨 뒤다. 제품이 첫 그림이어야 프롬프트의
               // 「이 제품」이 가리키는 것이 어긋나지 않는다.
-              ...(styleReferenceForPlan
-                ? [buildHighResolutionInlinePart(styleReferenceForPlan.mimeType, styleReferenceForPlan.imageBase64)]
-                : []),
+              ...styleReferenceImages.map((image) =>
+                buildHighResolutionInlinePart(image.mimeType, image.base64),
+              ),
               {
                 // 지적사항은 규칙보다 앞에 둔다. 뒤에 붙이면 긴 규칙에 묻혀 무시된다.
                 text: revisionDirective
@@ -533,7 +551,16 @@ ${analyzePrompt}`
       // 무엇이고 어떻게 다뤄야 하는가**뿐이고, buildReferenceRoleDirective 가 첨부
       // 순서 그대로 적어 준다. 정책은 pdp.reference-policy.ts 참조.
       const references: ReferenceImage[] = [];
-      const styleReference = options.styleReferenceImages?.[0];
+      /**
+       * 디자인 레퍼런스. **여러 장이면 한 페이지를 나눈 조각들이다.**
+       *
+       * 긴 상세페이지는 중간에 다른 느낌·다른 디자인이 들어간다. 전에는 첫
+       * 장만 썼는데, 그러면 그 페이지를 「맨 위 한 화면」으로만 읽는다.
+       *
+       * 서로 다른 레퍼런스를 섞는 것은 여전히 안 된다 — 화면도 한 장만 받는다.
+       */
+      const styleReferences = options.styleReferenceImages ?? [];
+      const styleReference = styleReferences[0];
 
       // 참조가 둘이면 모델이 절충한다. 제품 보존을 끄면 앵커를 빼서
       // 레퍼런스의 디자인을 온전히 받는다.
@@ -572,20 +599,23 @@ ${analyzePrompt}`
         });
       }
 
-      // 페이지당 한 장만 쓴다. 여러 장을 섞으면 섹션 간 통일이 깨진다.
+      // 한 페이지에서 온 것만 쓴다. 서로 다른 레퍼런스를 섞으면 섹션 간
+      // 통일이 깨진다 — 조각은 그 경우가 아니다.
       //
       // 서술을 함께 보낸다. 이미지를 대체하는 것이 아니라, 이미지만으로 전달되지
       // 않는 **색의 쓰임새**(면으로 쓰나 글자로 쓰나)를 보태는 것이다 — 실측 근거는
       // pdp.reference-policy.ts 의 표. 서술이 없으면 그냥 이미지만 간다.
-      if (styleReference) {
+      // 조각을 위에서 아래 순서 그대로 담는다. 순서가 곧 페이지 순서다.
+      // 서술과 지시는 첫 조각에만 붙인다 — 조각마다 되풀이하면 규칙으로 찬다.
+      styleReferences.forEach((slice, sliceIndex) => {
         references.push({
           kind: "style",
-          base64: styleReference.base64,
-          mimeType: styleReference.mimeType,
-          description: styleReference.description,
-          intent: options.attachmentIntents?.style,
+          base64: slice.base64,
+          mimeType: slice.mimeType,
+          description: sliceIndex === 0 ? slice.description : undefined,
+          intent: sliceIndex === 0 ? options.attachmentIntents?.style : undefined,
         });
-      }
+      });
 
       const promptOptions: ImagePromptOptions = {
         style: options.style,
@@ -597,6 +627,13 @@ ${analyzePrompt}`
         outputMode: options.outputMode ?? "editable",
         emphasisWords: options.emphasisWords,
         desiredTone: request.desiredTone,
+        // 화면에서 고른 인물 조건. 안 넘기면 프롬프트가 늘 「20대 한국 여성」으로
+        // 간다 — 손잡이는 돌아가는데 엔진이 안 보던 자리다.
+        pageContext: options.pageContext,
+        modelGender: options.modelGender,
+        modelAgeRange: options.modelAgeRange,
+        modelCountry: options.modelCountry,
+        guidePriorityMode: options.guidePriorityMode,
         look: options.look
       };
 
@@ -876,6 +913,21 @@ export function toPdpErrorResponse(error: unknown): {
   const detail = stringifyError(error);
   const message = error instanceof Error ? error.message : "상세페이지 마법사 처리 중 오류가 발생했습니다.";
 
+  /*
+    운영자가 키를 안 넣은 채 배포한 경우. 라우트가 공급자를 만들다 던진다.
+    문구가 한국어라 아래 매처에 안 걸려 「처리 중 오류」로 떨어졌다 — 무엇이
+    없는지는 접힌 detail 안에만 있었다. 이름으로 가른다(엔진은 웹 쪽 클래스를
+    import 하지 않는다).
+  */
+  if (error instanceof Error && error.name === "PdpProviderConfigurationError") {
+    return {
+      ok: false as const,
+      code: "AI_KEY_INVALID" as const,
+      message: "서버에 AI 공급자 키가 설정되지 않았습니다. 운영자에게 문의해 주세요.",
+      detail
+    };
+  }
+
   if (isInvalidApiKeyError(message)) {
     return {
       ok: false as const,
@@ -979,7 +1031,12 @@ export function buildAnalyzePrompt(
    * `undefined` 를 여섯 개씩 늘어놓게 된다. 새로 늘어나는 것은 여기 담는다.
    */
   extras?: {
-    styleReference?: { description?: string; intent?: string };
+    styleReference?: {
+      description?: string;
+      intent?: string;
+      /** 조각으로 나눠 보냈으면 몇 장인지. 모델이 순서를 알아야 이어 읽는다. */
+      sliceCount?: number;
+    };
   },
 ) {
   const referenceModelPrompt = referenceModelProfile
@@ -1000,7 +1057,9 @@ export function buildAnalyzePrompt(
    */
   const styleReferencePrompt = extras?.styleReference
     ? [
-        "[디자인 레퍼런스가 함께 제공됨 — a design reference image is attached]",
+        (extras.styleReference.sliceCount ?? 1) > 1
+          ? `[디자인 레퍼런스가 함께 제공됨 — ${extras.styleReference.sliceCount} images are slices of ONE long detail page, top to bottom, in order. Read them as a single page.]`
+          : "[디자인 레퍼런스가 함께 제공됨 — a design reference image is attached]",
         "- 이 이미지는 **어떻게 보이는가**만 준다. 레이아웃·여백·색 쓰임·서체 인상·분위기를 읽어",
         "  각 섹션의 `style_guide` 를 이 이미지 기준으로 채울 것.",
         "- **Do not copy its product, its people, its text content or its specific scene.**",

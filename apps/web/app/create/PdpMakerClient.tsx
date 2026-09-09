@@ -19,14 +19,16 @@ import { buildDraftInput as buildDraftPayload } from "./draft-input";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
+import { canReachStep } from "./step-jump";
 import { peekHandoff, takeHandoff } from "../../lib/handoff";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
+import { StyleReferenceCard } from "./StyleReferenceCard";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
-import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile, shrinkForPlanning } from "./pdp-utils";
+import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
 
@@ -139,8 +141,6 @@ export function PdpMakerClient() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [manualSaveToastToken, setManualSaveToastToken] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
-  /* AI 공급자 키는 운영자 서버 환경변수로만 관리한다. */
-  const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   const isApplyingDraftRef = useRef(false);
   const saveInFlightRef = useRef(false);
 
@@ -149,9 +149,7 @@ export function PdpMakerClient() {
   const preparedImageDisplayName = preparedImage ? formatCompactFileName(preparedImage.fileName) : "";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
   const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId);
-  const hasAvailableGeminiKey = serverKeyConfigured;
-  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && hasAvailableGeminiKey);
-  const apiConnectionLabel = serverKeyConfigured ? "회원 서버 키" : "서버 설정 필요";
+  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage));
 
   const goToSettings = useCallback(() => router.push("/settings"), [router]);
 
@@ -172,23 +170,6 @@ export function PdpMakerClient() {
   useEffect(() => {
     void refreshDrafts();
   }, [refreshDrafts]);
-
-  // 서버 키 유무는 한 번만 물어본다(값이 아니라 유무만 온다).
-  useEffect(() => {
-    let alive = true;
-    apiJson<{ serverKeyConfigured?: boolean }>("/pdp/config")
-      .then((config) => {
-        if (alive) {
-          setServerKeyConfigured(Boolean(config?.serverKeyConfigured));
-        }
-      })
-      .catch(() => {
-        // 서버 설정 조회 실패는 생성 시작 전에 사용자에게 안내한다.
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (isApplyingDraftRef.current || !hasDraftContent) {
@@ -518,11 +499,6 @@ export function PdpMakerClient() {
       return;
     }
 
-    if (!hasAvailableGeminiKey) {
-      setErrorMessage("운영자 Gemini 서버 키가 설정되지 않았습니다. 관리자에게 문의해 주세요.");
-      return;
-    }
-
     if (modelImage && !modelImageUsage) {
       setErrorMessage("모델 이미지를 사용할 방식을 먼저 선택해 주세요.");
       return;
@@ -538,16 +514,6 @@ export function PdpMakerClient() {
     try {
       setLoadingStep("제품을 분석하고 상세페이지 구조를 설계하는 중입니다.");
 
-      // 레퍼런스는 기획에 실을 만큼만 줄여 보낸다. 이미지를 만들 때는 원본이
-      // 그대로 간다 — 서체 획과 색 경계가 뭉개지면 흉내가 나빠진다.
-      const planningStyleReference =
-        styleReferenceEnabled && styleReference
-          ? {
-              ...styleReference,
-              ...(await shrinkForPlanning(styleReference.imageBase64, styleReference.mimeType)),
-            }
-          : styleReference;
-
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
         method: "POST",
         body: JSON.stringify({
@@ -561,7 +527,7 @@ export function PdpMakerClient() {
             desiredTone,
             aspectRatio,
             outputMode,
-            styleReference: planningStyleReference,
+            styleReference,
             styleReferenceEnabled,
             attachmentIntents,
           }),
@@ -645,6 +611,23 @@ export function PdpMakerClient() {
   if (appState === "scenario" && result) {
     return (
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:px-6">
+        {/*
+          이 화면에는 막대가 아예 없었다. 앞뒤로 몇 단계가 남았는지 알 수 없고
+          되돌아갈 방법도 없었다 — 다른 두 화면에는 있는데 여기만 빠져 있었다.
+        */}
+        <StepBar
+          steps={CREATE_STEPS[startMode]}
+          current="analyze"
+          allowJump={(id) => canReachStep(id, { hasResult: Boolean(result) })}
+          onJump={(id) => {
+            if (id === "upload") {
+              setAppState("upload");
+              if (startMode === "text") setTextStage("input");
+              return;
+            }
+            setAppState("editor");
+          }}
+        />
         {notice ? (
           <p className="rounded-md bg-primary-soft p-3.5 text-sm text-foreground">{notice}</p>
         ) : null}
@@ -711,7 +694,8 @@ export function PdpMakerClient() {
         onManualSave={() => void persistDraft("manual", { showToast: true })}
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
-        apiConnectionLabel={apiConnectionLabel}
+        pageContext={additionalInfo}
+        onJumpStep={(id) => setAppState(id === "upload" ? "upload" : "scenario")}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
         attachmentIntents={intentsOrUndefined(
@@ -743,8 +727,6 @@ export function PdpMakerClient() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {/* 키가 없을 때 초록 배지를 쓰면 정상처럼 읽힌다. 경고 색으로 구분한다. */}
-          <Badge variant={hasAvailableGeminiKey ? "green" : "destructive"}>API {apiConnectionLabel}</Badge>
           {preparedImage ? (
             /* 옛 UI에서는 제목 자체가 이 동작을 하는 버튼이었다(보이지 않는 조작).
                저장 확인 후 작업을 비우는 실제 기능이므로 명시적 버튼으로 남긴다. */
@@ -769,11 +751,15 @@ export function PdpMakerClient() {
                 : "upload"
           }
           // 단계를 눌러 오갈 수 있어야 한다. 준비가 안 된 단계는 그 화면이 알린다.
+          allowJump={(id) => canReachStep(id, { hasResult: Boolean(result) })}
           onJump={(id) => {
             if (id === "upload") {
               setAppState("upload");
               if (startMode === "text") setTextStage("input");
+              return;
             }
+            // 구성안이 있으면 그 뒤 단계로도 돌아갈 수 있다. 없으면 allowJump 가 막는다.
+            setAppState(id === "analyze" ? "scenario" : "editor");
           }}
         />
       </div>
@@ -812,15 +798,6 @@ export function PdpMakerClient() {
               <span className="mt-1 block pl-6 text-sm text-muted-foreground">{option.desc}</span>
             </button>
           ))}
-        </div>
-      ) : null}
-
-      {!hasAvailableGeminiKey ? (
-        <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
-          <AlertCircle size={16} className="mt-0.5 flex-none text-destructive" />
-          <span>
-            운영자 Gemini 서버 키가 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.
-          </span>
         </div>
       ) : null}
 
@@ -1144,18 +1121,32 @@ export function PdpMakerClient() {
                     </p>
                   </div>
                   {styleReference ? (
-                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/25 bg-primary-soft/40 px-3 py-2 text-sm">
-                      <span className="min-w-0 flex-1 truncate font-medium">{styleReference.name}</span>
+                    <>
+                      {/*
+                        **토글을 여기에도 둔다.**
+
+                        전에는 시나리오 화면에만 있었다. 그래서 **최초 분석은 늘
+                        기본값**으로 돌았다 — 레퍼런스를 안 쓰겠다고 정할 방법이
+                        분석 전에는 없었고, 끄려면 구성안을 다시 만들어야 했다.
+                        구성안이 레퍼런스를 보게 된 지금은 그 차이가 결과에 남는다.
+                      */}
+                      <StyleReferenceCard
+                        reference={styleReference}
+                        enabled={styleReferenceEnabled}
+                        onToggle={setStyleReferenceEnabled}
+                        preserveProduct={preserveProduct}
+                        onPreserveProductChange={setPreserveProduct}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="justify-self-start text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => setStyleReference(undefined)}
                       >
                         <Trash2 size={14} className="mr-1.5" />
-                        삭제
+                        레퍼런스 빼기
                       </Button>
-                    </div>
+                    </>
                   ) : null}
                   <StyleReferenceAttach onAttached={setStyleReference} />
                   {styleReference ? (
@@ -1394,7 +1385,7 @@ export function PdpMakerClient() {
 
                 <div>
                   <label className={fieldLabelClass} htmlFor="additionalInfo">
-                    그 밖에
+                    그 밖에 · 채널과 시즌
                   </label>
                   <textarea
                     id="additionalInfo"
@@ -1609,7 +1600,7 @@ const emptyBoxClass =
  * 경쟁자가 못 하는 말을 찾는다.
  */
 const SELLER_BRIEF_FIELDS: ReadonlyArray<{
-  key: "audience" | "problem" | "differentiator";
+  key: "audience" | "problem" | "features" | "differentiator" | "emphasis";
   label: string;
   placeholder: string;
 }> = [
@@ -1624,9 +1615,24 @@ const SELLER_BRIEF_FIELDS: ReadonlyArray<{
     placeholder: "예: 세럼을 바르면 손이 끈적여 다시 씻어야 한다",
   },
   {
+    /*
+      이 칸이 없어서 「남과 다른 점」 하나에 성분·소재·규격을 다 몰아넣어야 했다.
+      둘은 다르다 — 특징은 사실이고, 차별점은 그중 경쟁자가 못 하는 말이다.
+    */
+    key: "features",
+    label: "제품의 특징은",
+    placeholder: "예: 히알루론산 5종·무향·200ml / 국내 공장에서 소량 생산",
+  },
+  {
     key: "differentiator",
     label: "남과 다른 점은",
     placeholder: "예: 점증제를 안 넣어 물처럼 묽다 / 3대째 같은 방식으로 만든다",
+  },
+  {
+    /* 상호·인증·수상처럼 반드시 남아야 하는 것. 근거 없는 주장으로 안 걸린다. */
+    key: "emphasis",
+    label: "꼭 넣고 싶은 말은",
+    placeholder: "예: 2026 우수제품 선정 / 무료 반품 30일",
   },
 ];
 
