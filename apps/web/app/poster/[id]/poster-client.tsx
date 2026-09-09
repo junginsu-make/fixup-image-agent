@@ -323,9 +323,8 @@ export function PosterClient(
     setBusy({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
     setError(null);
     try {
-      const start = await (await fetch(`/api/poster/projects/${project.id}/edit`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
+      const start = await (await billableFetch(`/api/poster/projects/${project.id}/edit`, {
         body: JSON.stringify({ instruction }),
       })).json();
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
