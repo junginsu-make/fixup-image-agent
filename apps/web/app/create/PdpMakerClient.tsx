@@ -26,7 +26,7 @@ import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
-import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile, shrinkForPlanning } from "./pdp-utils";
+import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
 
@@ -523,16 +523,6 @@ export function PdpMakerClient() {
     try {
       setLoadingStep("제품을 분석하고 상세페이지 구조를 설계하는 중입니다.");
 
-      // 레퍼런스는 기획에 실을 만큼만 줄여 보낸다. 이미지를 만들 때는 원본이
-      // 그대로 간다 — 서체 획과 색 경계가 뭉개지면 흉내가 나빠진다.
-      const planningStyleReference =
-        styleReferenceEnabled && styleReference
-          ? {
-              ...styleReference,
-              ...(await shrinkForPlanning(styleReference.imageBase64, styleReference.mimeType)),
-            }
-          : styleReference;
-
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
         method: "POST",
         body: JSON.stringify({
@@ -546,7 +536,7 @@ export function PdpMakerClient() {
             desiredTone,
             aspectRatio,
             outputMode,
-            styleReference: planningStyleReference,
+            styleReference,
             styleReferenceEnabled,
             attachmentIntents,
           }),

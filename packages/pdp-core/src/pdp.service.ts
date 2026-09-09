@@ -225,6 +225,21 @@ export class PdpService {
           intent: request.styleReference.intent,
         }
       : undefined;
+
+    /**
+     * 세로로 긴 레퍼런스는 **조각으로 나눠 온다**(`apps/web` 이 자른다).
+     *
+     * 통째로 보내면 모델이 긴 변 기준으로 줄여 폭 100픽셀짜리 띠가 된다.
+     * 조각이 없으면 원본 한 장을 그대로 쓴다.
+     */
+    const styleReferenceImages = styleReferenceForPlan
+      ? (request.styleReference?.slices?.length
+          ? request.styleReference.slices.map((slice) => ({
+              base64: sanitizeBase64Payload(slice.imageBase64),
+              mimeType: normalizeMimeType(slice.mimeType),
+            }))
+          : [{ base64: styleReferenceForPlan.imageBase64, mimeType: styleReferenceForPlan.mimeType }])
+      : [];
     const analyzePrompt = buildAnalyzePrompt(
       request.additionalInfo,
       request.desiredTone,
@@ -238,6 +253,7 @@ export class PdpService {
             styleReference: {
               description: styleReferenceForPlan.description,
               intent: styleReferenceForPlan.intent,
+              sliceCount: styleReferenceImages.length,
             },
           }
         : undefined,
@@ -253,9 +269,9 @@ export class PdpService {
               ...(referenceModelImage ? [buildHighResolutionInlinePart(referenceModelImage.mimeType, referenceModelImage.base64)] : []),
               // 디자인 레퍼런스는 맨 뒤다. 제품이 첫 그림이어야 프롬프트의
               // 「이 제품」이 가리키는 것이 어긋나지 않는다.
-              ...(styleReferenceForPlan
-                ? [buildHighResolutionInlinePart(styleReferenceForPlan.mimeType, styleReferenceForPlan.imageBase64)]
-                : []),
+              ...styleReferenceImages.map((image) =>
+                buildHighResolutionInlinePart(image.mimeType, image.base64),
+              ),
               {
                 // 지적사항은 규칙보다 앞에 둔다. 뒤에 붙이면 긴 규칙에 묻혀 무시된다.
                 text: revisionDirective
@@ -960,7 +976,12 @@ export function buildAnalyzePrompt(
    * `undefined` 를 여섯 개씩 늘어놓게 된다. 새로 늘어나는 것은 여기 담는다.
    */
   extras?: {
-    styleReference?: { description?: string; intent?: string };
+    styleReference?: {
+      description?: string;
+      intent?: string;
+      /** 조각으로 나눠 보냈으면 몇 장인지. 모델이 순서를 알아야 이어 읽는다. */
+      sliceCount?: number;
+    };
   },
 ) {
   const referenceModelPrompt = referenceModelProfile
@@ -981,7 +1002,9 @@ export function buildAnalyzePrompt(
    */
   const styleReferencePrompt = extras?.styleReference
     ? [
-        "[디자인 레퍼런스가 함께 제공됨 — a design reference image is attached]",
+        (extras.styleReference.sliceCount ?? 1) > 1
+          ? `[디자인 레퍼런스가 함께 제공됨 — ${extras.styleReference.sliceCount} images are slices of ONE long detail page, top to bottom, in order. Read them as a single page.]`
+          : "[디자인 레퍼런스가 함께 제공됨 — a design reference image is attached]",
         "- 이 이미지는 **어떻게 보이는가**만 준다. 레이아웃·여백·색 쓰임·서체 인상·분위기를 읽어",
         "  각 섹션의 `style_guide` 를 이 이미지 기준으로 채울 것.",
         "- **Do not copy its product, its people, its text content or its specific scene.**",

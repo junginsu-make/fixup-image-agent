@@ -255,3 +255,43 @@ describe("레퍼런스도 다른 첨부와 같은 손질을 거친다", () => {
     ).rejects.toMatchObject({ code: "INVALID_IMAGE_PAYLOAD" });
   });
 });
+
+/**
+ * 세로로 긴 레퍼런스는 **조각으로 나눠서** 온다(자르는 일은 `apps/web`).
+ *
+ * 통째로 보내면 모델이 긴 변 기준으로 줄여 폭 100픽셀짜리 띠가 된다 —
+ * 글꼴도 배치도 안 보인다. 조각이 오면 그 조각들을 그대로 싣고, 모델에게
+ * 「한 페이지를 위에서 아래로 나눈 것」이라고 알려야 이어 읽는다.
+ */
+describe("긴 레퍼런스는 조각으로 간다", () => {
+  const 조각들 = {
+    ...레퍼런스,
+    slices: [
+      { imageBase64: "TOP", mimeType: "image/jpeg" },
+      { imageBase64: "MID", mimeType: "image/jpeg" },
+      { imageBase64: "BOTTOM", mimeType: "image/jpeg" },
+    ],
+  };
+
+  it("조각이 오면 그 조각들이 순서대로 실린다", async () => {
+    const images = await imagesSentFor(조각들 as never);
+    expect(images.map((image) => image.base64)).toEqual([
+      "iVBORw0KGgo=",
+      "TOP",
+      "MID",
+      "BOTTOM",
+    ]);
+  });
+
+  it("한 페이지를 나눈 것이라고 알린다", async () => {
+    await imagesSentFor(조각들 as never);
+    expect(sentPrompts[0]).toMatch(/slices of ONE long detail page/i);
+    expect(sentPrompts[0]).toContain("3 images");
+  });
+
+  it("조각이 없으면 원본 한 장만 간다", async () => {
+    const images = await imagesSentFor(레퍼런스);
+    expect(images.map((image) => image.base64)).toEqual(["iVBORw0KGgo=", "REF"]);
+    expect(sentPrompts[0]).not.toMatch(/slices of ONE/i);
+  });
+});

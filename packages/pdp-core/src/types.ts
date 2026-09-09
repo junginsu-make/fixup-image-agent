@@ -457,6 +457,17 @@ export interface PdpAnalyzeRequest {
     description?: string;
     /** 사용자가 그 그림에 대해 적은 「어떻게 쓸까요」. */
     intent?: string;
+    /**
+     * 세로로 긴 레퍼런스를 위에서 아래로 나눈 조각들.
+     *
+     * 상세페이지 레퍼런스는 1080×10000 처럼 아주 길다. 통째로 보내면 모델이
+     * 긴 변 기준으로 줄여 **폭 100픽셀짜리 띠**가 된다 — 글꼴도 배치도 안
+     * 보인다. 조각으로 나누면 각 조각이 제 폭을 지킨다.
+     *
+     * 자르는 일은 `apps/web` 이 한다(sharp). 이 패키지는 순수하다.
+     * 비어 있으면 `imageBase64` 한 장을 그대로 쓴다.
+     */
+    slices?: Array<{ imageBase64: string; mimeType: string }>;
   };
   additionalInfo?: string;
   desiredTone?: string;
