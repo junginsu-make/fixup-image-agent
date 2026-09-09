@@ -96,32 +96,46 @@ export function RunningJobsProvider({ children }: { children: React.ReactNode })
   const away = jobs.filter((job) => job.href !== pathname);
   const awayKey = away.map((job) => job.id).join("|");
 
+  /**
+   * **앞 차례가 끝난 뒤에 다음을 쏜다.**
+   *
+   * 예전에는 `setInterval` 이라 앞 요청이 안 끝나도 10초마다 새로 쐈다.
+   * 카드뉴스 `status` 는 fal 이미지 내려받기·합성·업로드·검수 LLM 두 번까지
+   * 하는 요청이라(`maxDuration = 300`) 수십 초가 예사다. 그러면 같은 프로젝트로
+   * 요청이 쌓여, 같은 프로세스에서는 잠금에 줄을 서다 타임아웃까지 가고
+   * 인스턴스가 여럿인 배포에서는 잠금이 안 걸쳐 **같은 카드를 두 번 제출**할
+   * 수 있었다. 화면 쪽 폴러는 이미 연쇄 호출로 겹침을 막고 있었다.
+   */
   React.useEffect(() => {
     if (!awayKey) return;
     let stopped = false;
-    const timer = setInterval(() => {
-      void (async () => {
-        for (const job of away) {
-          if (stopped) return;
-          try {
-            const response = await fetch(job.poll.url, {
-              method: "POST",
-              ...(job.poll.body === undefined ? {} : {
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(job.poll.body),
-              }),
-            });
-            // 프로젝트가 사라졌으면 유령이 30분간 남는다. 그때는 지운다.
-            if (response.status === 404) { finish(job.id); continue; }
-            if (jobDone(await response.json())) finish(job.id);
-          } catch {
-            // 한 번 못 물어봤다고 지우지 않는다. 다음 차례에 다시 물어본다.
-          }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const tick = async () => {
+      for (const job of away) {
+        if (stopped) return;
+        try {
+          const response = await fetch(job.poll.url, {
+            method: "POST",
+            ...(job.poll.body === undefined ? {} : {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(job.poll.body),
+            }),
+          });
+          // 프로젝트가 사라졌으면 유령이 남는다. 그때는 지운다.
+          if (response.status === 404) { finish(job.id); continue; }
+          if (jobDone(await response.json())) finish(job.id);
+        } catch {
+          // 한 번 못 물어봤다고 지우지 않는다. 다음 차례에 다시 물어본다.
         }
-        setJobs((current) => pruneJobs(current, Date.now()));
-      })();
-    }, JOB_POLL_INTERVAL_MS);
-    return () => { stopped = true; clearInterval(timer); };
+      }
+      if (stopped) return;
+      setJobs((current) => pruneJobs(current, Date.now()));
+      timer = setTimeout(() => void tick(), JOB_POLL_INTERVAL_MS);
+    };
+
+    timer = setTimeout(() => void tick(), JOB_POLL_INTERVAL_MS);
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
     // away 는 매 렌더 새 배열이라 키로 비교한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awayKey, finish]);
