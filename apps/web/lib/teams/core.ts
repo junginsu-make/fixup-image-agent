@@ -180,3 +180,30 @@ export function canWriteTeam(
   if (isAdmin) return true;
   return Boolean(mine && mine.teamId === teamId && mine.role === "leader");
 }
+
+/**
+ * 이 회원을 이 팀에 넣을 수 있나.
+ *
+ * `canWriteTeam` 은 **넣는 자리**를 본다 — 「이 팀을 꾸릴 사람인가」. 그것만
+ * 물으면 **끌어올 사람**은 아무나가 된다. 팀장이 자기 팀 ID 를 적는 것은
+ * 정당한데, 그 폼에 남의 팀 사람 ID 를 실어 보내면 그 사람이 원래 팀에서
+ * 빠져 이쪽으로 옮겨진다 — 배정은 `user_id` 로 덮어쓰기 때문이다
+ * (`store.ts` 의 `assignMember`). 그러면 팀 도장이 없던 그 사람의 작업물이
+ * 이쪽 팀 것이 되고(`stampWorkTeam`), 원래 팀의 공용 본보기는 안 보이게 된다.
+ *
+ * **그래서 대상이 지금 어디 있는지를 함께 본다.**
+ *
+ *   운영자   누구든 어느 팀으로든 — 팀 사이를 옮기는 것이 원래 운영자 몫이다
+ *   팀장     **아직 팀이 없는 사람**과 **이미 우리 팀인 사람**만
+ *
+ * 팀장에게 옮기기를 막는 것이지 넣기를 막는 것이 아니다. 미배정 명단에서
+ * 고르는 지금 화면의 쓰임새는 그대로다.
+ */
+export function canAssignMember(
+  isAdmin: boolean,
+  currentTeamId: string | null,
+  teamId: string,
+): boolean {
+  if (isAdmin) return true;
+  return currentTeamId === null || currentTeamId === teamId;
+}

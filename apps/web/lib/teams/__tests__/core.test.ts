@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TEAM_SCOPED_TABLES,
+  canAssignMember,
   canDemote,
   canWriteTeam,
   canRemove,
@@ -148,5 +149,30 @@ describe("팀을 꾸릴 수 있는 사람", () => {
 
   it("소속 없는 사람은 못 꾸린다", () => {
     expect(canWriteTeam(false, null, "t1")).toBe(false);
+  });
+});
+
+describe("배정할 수 있는 대상", () => {
+  it("운영자는 남의 팀 사람도 옮긴다", () => {
+    // 팀 사이를 옮기는 일이 운영자 몫이다.
+    expect(canAssignMember(true, "t2", "t1")).toBe(true);
+  });
+
+  it("팀장은 아직 팀이 없는 사람을 넣는다", () => {
+    expect(canAssignMember(false, null, "t1")).toBe(true);
+  });
+
+  it("팀장은 이미 우리 팀인 사람을 다시 넣을 수 있다", () => {
+    // 이 함수가 답하는 것은 「끌어와도 되나」 하나뿐이다. 그 사람을 팀원으로
+    // 내려도 되는지는 마지막 팀장 규칙(`canDemote`)이 따로 본다 — 두 질문을
+    // 한 함수에 섞으면 나중에 한쪽만 고쳐진다.
+    expect(canAssignMember(false, "t1", "t1")).toBe(true);
+  });
+
+  it("팀장은 남의 팀 사람을 끌어오지 못한다", () => {
+    // 회원 ID 는 폼이 실어 보낸다. 넣는 자리만 보고 통과시키면, 남의 팀
+    // 사람 ID 하나로 그 사람을 원래 팀에서 빼내 이쪽으로 옮길 수 있다 —
+    // 배정이 `user_id` 로 덮어쓰기 때문이다.
+    expect(canAssignMember(false, "t2", "t1")).toBe(false);
   });
 });

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActiveMember, requireAdmin } from "../../lib/membership/server";
-import { canWriteTeam } from "../../lib/teams/core";
+import { canAssignMember, canWriteTeam } from "../../lib/teams/core";
 import {
   archiveTeam,
   assignMember,
@@ -31,8 +31,9 @@ import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 /**
  * 팀 편성 — 누가 무엇을 할 수 있나.
  *
- *   운영자   팀 만들기·이름 바꾸기·접기, **모든 팀**의 배정
- *   팀장     **자기 팀에만** 넣고 빼기, 왕관 옮기기
+ *   운영자   팀 만들기·이름 바꾸기·접기, **모든 팀**의 배정, 팀 사이 옮기기
+ *   팀장     **자기 팀에만** 넣고 빼기, 왕관 옮기기 — 넣는 것은 **아직 팀이
+ *            없는 사람**만이다(`canAssignMember`)
  *   팀원     명단 보기만
  *
  * 팀을 만드는 것과 팀 안을 꾸리는 것을 가른 이유. 팀을 만드는 일은 회사
@@ -56,13 +57,17 @@ function readId(formData: FormData, field: string) {
  * 팀장은 **자기 팀만**이다. 팀 ID 를 폼에서 받으므로, 확인 없이 통과시키면
  * 남의 팀 ID 를 적어 보내는 것으로 아무 팀이나 꾸릴 수 있게 된다.
  */
-async function requireTeamWrite(teamId: string) {
+async function requireTeamWrite(teamId: string): Promise<{ isAdmin: boolean }> {
   const member = await requireActiveMember();
   const isAdmin = member.profile.role === "admin";
   const mine = isAdmin ? null : await myMembership(member.user.id);
   if (!canWriteTeam(isAdmin, mine, teamId)) {
     throw new Error("이 팀을 꾸릴 권한이 없습니다.");
   }
+  // 운영자인지를 돌려준다. 배정은 넣는 자리뿐 아니라 **끌어올 사람**도
+  // 봐야 하는데(`canAssignMember`), 그 판단이 운영자에게만 열려 있다.
+  // 부르는 쪽에서 프로필을 다시 읽으면 두 곳이 서로 다른 답을 낼 수 있다.
+  return { isAdmin };
 }
 
 /** 이 프로젝트가 어느 팀 것인가. 팀장 확인의 기준이 된다. */
@@ -116,7 +121,7 @@ export async function archiveTeamAction(formData: FormData) {
  */
 export async function assignMemberAction(formData: FormData) {
   const teamId = readId(formData, "teamId");
-  await requireTeamWrite(teamId);
+  const { isAdmin } = await requireTeamWrite(teamId);
 
   const userIds = formData.getAll("userId").map((value) => {
     const id = String(value);
@@ -124,6 +129,28 @@ export async function assignMemberAction(formData: FormData) {
     return id;
   });
   if (!userIds.length) throw new Error("넣을 회원을 고르세요.");
+
+  /**
+   * **넣기 전에 전원을 먼저 본다.**
+   *
+   * 문지기는 팀 ID 만 봤다(`requireTeamWrite`). 회원 ID 는 폼이 실어 보내므로,
+   * 여기서 안 보면 팀장이 남의 팀 사람 ID 를 적어 그 사람을 이쪽으로 끌어올
+   * 수 있다 — 배정은 `user_id` 로 덮어쓴다.
+   *
+   * 넣으면서 하나씩 보면 안 된다. 세 명 중 둘째에서 막히면 첫째는 이미
+   * 옮겨진 뒤라, 권한이 없는 편성이 절반만 남는다.
+   *
+   * **운영자는 아예 안 묻는다.** 어느 팀 사람이든 옮길 수 있어 답이 이미
+   * 정해져 있는데, 고른 사람 수만큼 조회를 돌 이유가 없다.
+   */
+  if (!isAdmin) {
+    for (const userId of userIds) {
+      const current = await myMembership(userId);
+      if (!canAssignMember(false, current?.teamId ?? null, teamId)) {
+        throw new Error("이미 다른 팀에 속한 회원이 있습니다. 팀을 옮기는 것은 운영자에게 부탁해 주세요.");
+      }
+    }
+  }
 
   const role = formData.get("role") === "leader" ? "leader" : "member";
   for (const userId of userIds) {
