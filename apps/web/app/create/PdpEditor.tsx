@@ -162,7 +162,6 @@ interface PdpEditorProps {
   onReset: () => void;
   onDraftStateChange?: (draftState: PdpEditorDraftState) => void;
   onManualSave?: () => void;
-  apiConnectionLabel?: string;
   referenceModelImage?: PreparedImageDraft | null;
   referenceModelUsage?: ReferenceModelUsage | null;
   /** 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 안 붙은 자리는 걸러서 온다. */
@@ -232,7 +231,6 @@ export function PdpEditor({
   onReset,
   onDraftStateChange,
   onManualSave,
-  apiConnectionLabel = "키 필요",
   referenceModelImage = null,
   referenceModelUsage = null,
   attachmentIntents,
@@ -2046,9 +2044,6 @@ export function PdpEditor({
         <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
           <Badge variant="secondary">비율 {aspectRatio}</Badge>
           <Badge variant="secondary">톤 {toneLabel}</Badge>
-          <Badge variant={apiConnectionLabel === "연결됨" ? "green" : "destructive"}>
-            API {apiConnectionLabel}
-          </Badge>
           <Badge variant="green">
             생성됨 {generatedCount}/{sections.length}
           </Badge>

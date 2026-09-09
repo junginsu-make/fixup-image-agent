@@ -129,8 +129,6 @@ export function PdpMakerClient() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [manualSaveToastToken, setManualSaveToastToken] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
-  /* AI 공급자 키는 운영자 서버 환경변수로만 관리한다. */
-  const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   const isApplyingDraftRef = useRef(false);
   const saveInFlightRef = useRef(false);
 
@@ -139,9 +137,7 @@ export function PdpMakerClient() {
   const preparedImageDisplayName = preparedImage ? formatCompactFileName(preparedImage.fileName) : "";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
   const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId);
-  const hasAvailableGeminiKey = serverKeyConfigured;
-  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && hasAvailableGeminiKey);
-  const apiConnectionLabel = serverKeyConfigured ? "회원 서버 키" : "서버 설정 필요";
+  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage));
 
   const goToSettings = useCallback(() => router.push("/settings"), [router]);
 
@@ -162,23 +158,6 @@ export function PdpMakerClient() {
   useEffect(() => {
     void refreshDrafts();
   }, [refreshDrafts]);
-
-  // 서버 키 유무는 한 번만 물어본다(값이 아니라 유무만 온다).
-  useEffect(() => {
-    let alive = true;
-    apiJson<{ serverKeyConfigured?: boolean }>("/pdp/config")
-      .then((config) => {
-        if (alive) {
-          setServerKeyConfigured(Boolean(config?.serverKeyConfigured));
-        }
-      })
-      .catch(() => {
-        // 서버 설정 조회 실패는 생성 시작 전에 사용자에게 안내한다.
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (isApplyingDraftRef.current || !hasDraftContent) {
@@ -505,11 +484,6 @@ export function PdpMakerClient() {
       return;
     }
 
-    if (!hasAvailableGeminiKey) {
-      setErrorMessage("운영자 Gemini 서버 키가 설정되지 않았습니다. 관리자에게 문의해 주세요.");
-      return;
-    }
-
     if (modelImage && !modelImageUsage) {
       setErrorMessage("모델 이미지를 사용할 방식을 먼저 선택해 주세요.");
       return;
@@ -700,7 +674,6 @@ export function PdpMakerClient() {
         onManualSave={() => void persistDraft("manual", { showToast: true })}
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
-        apiConnectionLabel={apiConnectionLabel}
         pageContext={additionalInfo}
         onJumpStep={(id) => setAppState(id === "upload" ? "upload" : "scenario")}
         referenceModelImage={modelImage}
@@ -734,8 +707,6 @@ export function PdpMakerClient() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {/* 키가 없을 때 초록 배지를 쓰면 정상처럼 읽힌다. 경고 색으로 구분한다. */}
-          <Badge variant={hasAvailableGeminiKey ? "green" : "destructive"}>API {apiConnectionLabel}</Badge>
           {preparedImage ? (
             /* 옛 UI에서는 제목 자체가 이 동작을 하는 버튼이었다(보이지 않는 조작).
                저장 확인 후 작업을 비우는 실제 기능이므로 명시적 버튼으로 남긴다. */
@@ -807,15 +778,6 @@ export function PdpMakerClient() {
               <span className="mt-1 block pl-6 text-sm text-muted-foreground">{option.desc}</span>
             </button>
           ))}
-        </div>
-      ) : null}
-
-      {!hasAvailableGeminiKey ? (
-        <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
-          <AlertCircle size={16} className="mt-0.5 flex-none text-destructive" />
-          <span>
-            운영자 Gemini 서버 키가 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.
-          </span>
         </div>
       ) : null}
 
