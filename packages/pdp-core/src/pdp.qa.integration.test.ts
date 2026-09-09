@@ -188,3 +188,71 @@ describe("generateSectionImageInternal QA gate (editable = 미적용)", () => {
     expect(result.base64).toBe("IMG1");
   });
 });
+
+/**
+ * **끝까지 못 맞춘 인물 검증을 숨기지 않는다.**
+ *
+ * 시도를 다 쓰고도 참고 인물과 다른 사람이 나온 경우, 그 사실이 반환값에 전혀
+ * 실리지 않았다. QA 게이트가 꺼진 모드에서는 `qa` 자체가 `undefined` 라 말할
+ * 자리조차 없어서, 다른 사람 얼굴이 나온 그림이 경고 없이 성공 처리되고
+ * 그대로 과금됐다.
+ */
+function runWithReferenceModel(samePerson: boolean) {
+  const service = new PdpService();
+  let calls = 0;
+  const client = {
+    models: {
+      generateContent: async () => {
+        calls += 1;
+        return {
+          text: JSON.stringify({
+            isSamePerson: samePerson,
+            genderPresentationPreserved: samePerson,
+            styleMatch: samePerson,
+            reason: samePerson ? "" : "다른 사람으로 보입니다",
+            correctionFocus: samePerson ? [] : ["face"],
+          }),
+        };
+      },
+    },
+  };
+  const generateImage = async () => ({ base64: "IMG", mimeType: "image/jpeg" });
+  return (service as any).generateSectionImageInternal({
+    originalImageBase64: "iVBORw0KGgo=",
+    section: makeSection(),
+    aspectRatio: "3:4",
+    options: {
+      style: "studio",
+      withModel: true,
+      // QA 게이트를 끈다 — 인물 검증만 남겨 그 답만 본다.
+      outputMode: "background-only",
+      referenceModelImageBase64: "iVBORw0KGgo=",
+      referenceModelImageMimeType: "image/png",
+      // 프로필 추출을 건너뛴다. 가짜 client 가 검증 답만 내면 된다.
+      referenceModelProfile: {
+        faceShape: "둥근형", hairstyle: "긴 흑발", skinTone: "밝은 톤",
+        eyeDetails: "쌍꺼풀", browDetails: "일자 눈썹", lipDetails: "도톰한 입술",
+        overallVibe: "차분한 20대", distinctiveFeatures: ["왼쪽 볼 점"],
+        keepTraits: ["얼굴형"], flexibleTraits: ["헤어 스타일링"],
+      },
+    },
+    client,
+    generateImage,
+  }).then((result: { qa?: { passed: boolean; blocking: Array<{ type: string; evidence: string }> } }) => ({ result, calls }));
+}
+
+describe("인물 검증이 끝까지 실패하면", () => {
+  it("통과했다고 하지 않는다", async () => {
+    const { result } = await runWithReferenceModel(false);
+    expect(result.qa, "게이트가 꺼져 있어도 말할 자리를 만든다").toBeDefined();
+    expect(result.qa!.passed).toBe(false);
+    expect(result.qa!.blocking.map((defect: { type: string }) => defect.type)).toContain("reference_person_mismatch");
+    expect(result.qa!.blocking[0]!.evidence).toContain("참고 인물");
+  });
+
+  it("통과하면 지금까지처럼 조용하다", async () => {
+    const { result } = await runWithReferenceModel(true);
+    // 게이트가 꺼져 있고 검증도 통과했으면 실을 것이 없다.
+    expect(result.qa).toBeUndefined();
+  });
+});
