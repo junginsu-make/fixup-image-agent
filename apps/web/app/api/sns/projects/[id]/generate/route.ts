@@ -55,6 +55,14 @@ export async function POST(request: Request, context: Context) {
         modelId: project.modelId,
         totalCards: currentFlow.cards.length,
         attachments: project.data.attachments,
+        /**
+         * **틀을 함께 넘긴다.** 여기서는 카드에 어떤 틀이 붙었는지 안다.
+         *
+         * 넘기지 않으면 카드당 요청 한 번으로 세는데, 그림 칸이 셋인 세트는
+         * 실제로 세 번 간다. 예약이 모자라면 넘치는 지출은 확정 때 상한에
+         * 깎여 장부에서 사라진다.
+         */
+        cards: currentFlow.cards.map((card) => ({ index: card.index, layout: card.layout })),
       });
       // 원고 기획 한 번 + 카드마다 장면 프롬프트 한 번.
       const llm = llmCostUsd({ planCalls: 1 + estimate.generatedCount });

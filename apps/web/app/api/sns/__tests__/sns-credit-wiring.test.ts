@@ -89,7 +89,14 @@ describe("다시 만들 때 두 번 받지 않는가", () => {
   it("이번에 고른 장만 센다 — 옛 카드는 안 센다", () => {
     // 전부 세면 다시 만들기에서 「한 장도 못 만들었다」가 영영 안 나온다.
     expect(status).toContain("selectedCardIndexes");
-    expect(status).toMatch(/picked\.has\(card\.index\) && card\.status === "done"/);
+    expect(status).toContain("picked.has(card.index)");
+  });
+
+  it("검수에 걸린 장도 나온 장으로 센다", () => {
+    // `review_required` 는 그림이 이미 만들어졌고 fal 값도 다 나간 상태다.
+    // `"done"` 만 세면 여섯 장이 모두 검수에 걸릴 때 `made` 가 0 이 되고,
+    // `finalize_generation` 이 소비량을 0 으로 만들어 나간 비용이 사라진다.
+    expect(status).toMatch(/card\.status === "done" \|\| card\.status === "review_required"/);
   });
 
   it("확정하면 기준선도 지운다", () => {

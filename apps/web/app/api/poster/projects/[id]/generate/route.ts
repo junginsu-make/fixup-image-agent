@@ -161,7 +161,18 @@ export async function POST(request: Request, context: Context) {
     });
     const units = creditUnits(estimate.totalUsd ?? 0);
     const reserved = await reserveAiUsage(request, "poster_image", units);
-    if (!reserved.ok) return reserved.response;
+    /**
+     * **거절이면 자리부터 돌려준다.**
+     *
+     * 여기는 `return` 이라 아래 `catch` 의 되돌리기를 타지 않는다. 그대로 두면
+     * 한도를 다 쓴 사람이 「만들기」를 누를 때마다 프로젝트가 `"generating"` 에
+     * 남는다 — 이 저장소에는 `"failed"` 로 가는 길이 없어 **영구히** 그렇다.
+     * 돈이 한 푼도 안 나간 갈래이므로 아래 `catch` 와 같은 판단을 여기서 한다.
+     */
+    if (!reserved.ok) {
+      await stores.projects.update(id, { status: previousStatus }).catch(() => {});
+      return reserved.response;
+    }
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
     const submission = await submitPoster(

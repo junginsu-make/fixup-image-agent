@@ -59,10 +59,19 @@ export async function POST(_request: Request, context: Context) {
          */
         const total = flow.costs.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0);
         const spent = Math.max(0, total - (flow.generation?.costBaselineUsd ?? 0));
-        /** 이번에 고른 장 중 실제로 나온 것. 옛 카드는 안 센다. */
+        /**
+         * 이번에 고른 장 중 실제로 나온 것. 옛 카드는 안 센다.
+         *
+         * **검수에 걸린 장도 나온 장이다.** `review_required` 는 그림이 이미
+         * 만들어졌고 fal 값도 다 나간 상태이고, 원고와 글자가 다르다는 것은 이
+         * 도구의 정상 결과다. 예전에는 `"done"` 만 세어서, 여섯 장이 모두 검수에
+         * 걸리면 `made` 가 0 이 됐다. 그러면 `finalize_generation` 이
+         * `consumed_units` 를 0 으로 만들어 이미 나간 비용이 통째로 사라졌다.
+         * 표지 한 장이 그대로 놓이는 구성이냐에 따라 과금 여부가 갈리기까지 했다.
+         */
         const picked = new Set(flow.generation?.selectedCardIndexes ?? []);
         const made = flow.cards.filter(
-          (card) => picked.has(card.index) && card.status === "done",
+          (card) => picked.has(card.index) && (card.status === "done" || card.status === "review_required"),
         ).length;
         try {
           await finalizeAiUsage(
