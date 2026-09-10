@@ -63,33 +63,51 @@ export function shouldShowBackToTop(
 /* ── 휠 한 칸이 얼마나 내려갈까 ─────────────────────────────────── */
 
 /**
- * 브라우저 기본은 한 칸에 100px 안팎이다. 이 화면은 섹션이 크고 사이가
- * 넓어서(`.mcs-section` 이 위아래로 최대 208px씩) 한 칸이 «거의 안 움직인다»로
- * 느껴진다(2026-09-10 사용자 신고).
+ * 마우스 휠 한 칸의 **최소 거리(px).**
  *
- * 배수만 둔다. 값을 바꿀 일이 생기면 여기 한 줄이다.
+ * 처음에는 배수만 두고 `deltaY × 2.4` 로 냈다. **그게 마우스마다 갈렸다** —
+ * 크롬은 한 칸에 보통 100 을 보내지만, 윈도의 「한 번에 스크롤할 줄 수」를 1 로
+ * 둔 마우스는 33 쯤을 보낸다. 배수만 곱하면 그 사람은 79px 밖에 안 내려가고,
+ * 게다가 옛 문지기의 하한(40)에 걸려 **아예 손도 못 댔다**(사용자 신고).
+ *
+ * 그래서 **바닥을 깐다.** 마우스가 무엇을 보내든 한 칸은 이만큼 이상 간다.
  */
-export const WHEEL_BOOST = 2.4;
+export const WHEEL_MIN_STEP = 260;
+
+/** 크게 보내는 마우스는 그 크기를 살린다. 두 칸을 한 번에 보내는 것도 있다. */
+export const WHEEL_BOOST = 2.6;
 
 /**
- * 이보다 작은 델타는 **트랙패드**로 본다.
+ * 이보다 작은 델타는 **트랙패드·정밀 휠**로 본다. 브라우저에 맡긴다.
  *
- * 트랙패드는 손가락 한 번에 잔 델타를 수십 번 보낸다. 거기에 배수를 곱하면
- * 화면이 날아간다. 마우스 휠은 한 칸에 100 안팎을 한 번 보낸다.
+ * 하한을 40 에서 내렸다. 40 은 「한 줄」 마우스(33)를 함께 걸러냈다.
  */
-export const MOUSE_WHEEL_MIN = 40;
+export const MOUSE_WHEEL_MIN = 12;
+
+/**
+ * 앞 휠에서 이보다 촘촘히 오면 **흐르는 입력**으로 본다. 손대지 않는다.
+ *
+ * 트랙패드는 손가락 한 번에 60Hz(약 16ms)로 잔 값을 흘려보낸다. 거기에 바닥을
+ * 깔면 화면이 날아간다. 마우스 휠은 손으로 굴리는 것이라 한 칸 사이가 이보다
+ * 넓다.
+ */
+export const WHEEL_STREAM_MS = 25;
 
 /**
  * 이 휠을 우리가 더 내려 줄까. 0 이면 **브라우저에 맡긴다.**
  *
  * 맡기는 쪽이 기본이다 — 스크롤을 가로채는 것은 트랙패드·확대·접근성 도구를
- * 망가뜨리기 쉬운 일이라, 확실히 마우스 휠인 경우만 손을 댄다.
+ * 망가뜨리기 쉬운 일이라, 확실히 마우스 휠인 경우만 손을 댄다. 0 을 돌려주면
+ * `preventDefault` 를 부르지 않으므로 **브라우저가 제 몫을 그대로 한다** —
+ * 아무것도 잃지 않는다.
  */
 export function boostedWheel(event: {
   deltaY: number;
   deltaMode: number;
   ctrlKey: boolean;
   defaultPrevented: boolean;
+  /** 앞 휠에서 지난 시간(ms). 첫 휠이면 큰 값을 준다. */
+  sinceLast: number;
 }): number {
   // 첫 화면 캐러셀이 이미 가로챘다. 거기서는 휠이 페이지를 내리는 게 아니다.
   if (event.defaultPrevented) return 0;
@@ -98,5 +116,49 @@ export function boostedWheel(event: {
   // 픽셀 단위로 오는 것만 다룬다. 줄·장 단위(옛 브라우저)는 맡긴다.
   if (event.deltaMode !== 0) return 0;
   if (Math.abs(event.deltaY) < MOUSE_WHEEL_MIN) return 0;
-  return event.deltaY * WHEEL_BOOST;
+  // 흐르는 입력(트랙패드)이다.
+  if (event.sinceLast < WHEEL_STREAM_MS) return 0;
+
+  const step = Math.max(Math.abs(event.deltaY) * WHEEL_BOOST, WHEEL_MIN_STEP);
+  return Math.sign(event.deltaY) * step;
+}
+
+/**
+ * 한 손짓이 이어지는 것으로 볼 시간(ms).
+ *
+ * 이보다 오래 쉬었으면 **새 손짓**이라 지금 화면에서 다시 센다. 이어지는
+ * 동안에는 앞의 목표에 더한다.
+ */
+export const WHEEL_GESTURE_MS = 250;
+
+/**
+ * 다음에 멈출 자리. **거리를 쌓는다.**
+ *
+ * 처음에는 `scrollBy({ behavior: "smooth" })` 를 썼는데 그게 잘못이었다.
+ * 그 함수는 **지금 위치**에서 재고, 새 부드러운 스크롤은 앞의 것을 **취소**한다.
+ * 그래서 연속으로 굴리면 남은 거리가 버려진다 —
+ *
+ *   한 칸: 1000 → 1240 으로 간다
+ *   두 칸(움직이는 중, 지금 1080): 1080+240 = 1320. 남았던 160 이 사라진다
+ *   세 칸(지금 1150): 1390
+ *
+ * 세 칸을 굴렸는데 390 밖에 안 간다. **기본 동작보다 못하다** — 브라우저는
+ * 제대로 쌓는다. 그래서 목표를 우리가 들고 절대 위치로 보낸다.
+ */
+export function nextWheelTarget(input: {
+  /** 지금 스크롤 위치. */
+  current: number;
+  /** 앞서 정한 목표. 없으면 `null`. */
+  target: number | null;
+  /** 앞 휠에서 지난 시간(ms). */
+  sinceLast: number;
+  /** 이번 휠이 옮길 거리. */
+  distance: number;
+  /** 문서 끝. 이보다 더 내려갈 수 없다. */
+  max: number;
+}): number {
+  const { current, target, sinceLast, distance, max } = input;
+  // 쉬었다가 다시 굴리면 새 손짓이다. 화면 밖으로 달아난 목표를 이어받지 않는다.
+  const base = target !== null && sinceLast <= WHEEL_GESTURE_MS ? target : current;
+  return Math.min(Math.max(base + distance, 0), Math.max(max, 0));
 }

@@ -26,7 +26,11 @@ import { downScrollBlock, downScrollOptions, scrollBehaviorFor } from "../scroll
 import {
   MOUSE_WHEEL_MIN,
   WHEEL_BOOST,
+  WHEEL_GESTURE_MS,
+  WHEEL_MIN_STEP,
+  WHEEL_STREAM_MS,
   boostedWheel,
+  nextWheelTarget,
   shouldCaptureWheel,
   shouldShowBackToTop,
   wheelDelta,
@@ -442,15 +446,37 @@ describe("위로 가기", () => {
  * 하나하나 잠근다 — 새 조건을 넣다가 그중 하나를 풀면 화면에서만 드러난다.
  */
 describe("휠 한 칸의 거리", () => {
-  const 마우스휠 = { deltaY: 100, deltaMode: 0, ctrlKey: false, defaultPrevented: false };
+  /** 크롬이 마우스 한 칸에 보내는 값. 손으로 굴리므로 간격이 넓다. */
+  const 마우스휠 = { deltaY: 100, deltaMode: 0, ctrlKey: false, defaultPrevented: false, sinceLast: 200 };
 
-  it("마우스 휠은 더 내려간다", () => {
+  it("마우스 휠은 브라우저 기본보다 더 내려간다", () => {
+    // 브라우저 기본은 delta 그대로(100px)다.
+    expect(boostedWheel(마우스휠)).toBeGreaterThan(100);
     expect(boostedWheel(마우스휠)).toBe(100 * WHEEL_BOOST);
-    expect(WHEEL_BOOST).toBeGreaterThan(1);
+  });
+
+  /**
+   * **여기가 처음에 틀렸던 자리다.**
+   *
+   * 배수만 곱했더니 마우스마다 갈렸다. 윈도의 「한 번에 스크롤할 줄 수」를 1 로
+   * 둔 마우스는 33 쯤을 보내는데, 그 사람은 79px 밖에 안 내려갔고 게다가 옛
+   * 하한(40)에 걸려 아예 손도 못 댔다. 바닥을 깔아 어떤 마우스든 같게 만든다.
+   */
+  it("작게 보내는 마우스도 같은 만큼 내려간다", () => {
+    const 한줄마우스 = { ...마우스휠, deltaY: 33 };
+    expect(boostedWheel(한줄마우스)).toBe(WHEEL_MIN_STEP);
+    // 크게 보내는 마우스는 그 크기를 살린다.
+    expect(boostedWheel({ ...마우스휠, deltaY: 200 })).toBe(200 * WHEEL_BOOST);
+  });
+
+  it("바닥이 브라우저 기본보다 넉넉하다", () => {
+    // 이 값이 100 아래로 내려가면 「더 내려가게」라는 뜻이 사라진다.
+    expect(WHEEL_MIN_STEP).toBeGreaterThan(200);
   });
 
   it("위로 굴리면 위로 간다 — 부호를 뒤집지 않는다", () => {
     expect(boostedWheel({ ...마우스휠, deltaY: -100 })).toBe(-100 * WHEEL_BOOST);
+    expect(boostedWheel({ ...마우스휠, deltaY: -33 })).toBe(-WHEEL_MIN_STEP);
   });
 
   it("첫 화면 캐러셀이 가로챈 휠은 안 건드린다", () => {
@@ -463,15 +489,71 @@ describe("휠 한 칸의 거리", () => {
   });
 
   it("트랙패드의 잔 델타는 안 건드린다", () => {
-    // 손가락 한 번에 수십 번 오는 값이다. 배수를 곱하면 화면이 날아간다.
     expect(boostedWheel({ ...마우스휠, deltaY: MOUSE_WHEEL_MIN - 1 })).toBe(0);
     expect(boostedWheel({ ...마우스휠, deltaY: -(MOUSE_WHEEL_MIN - 1) })).toBe(0);
     // 경계에서는 건드린다 — 「이보다 작으면」이 조건이다.
     expect(boostedWheel({ ...마우스휠, deltaY: MOUSE_WHEEL_MIN })).not.toBe(0);
   });
 
+  it("흐르는 입력은 안 건드린다 — 트랙패드는 60Hz 로 흘려보낸다", () => {
+    // 값이 커도 촘촘히 오면 손가락이다. 바닥을 깔면 화면이 날아간다.
+    expect(boostedWheel({ ...마우스휠, sinceLast: WHEEL_STREAM_MS - 1 })).toBe(0);
+    expect(boostedWheel({ ...마우스휠, sinceLast: WHEEL_STREAM_MS })).not.toBe(0);
+  });
+
+  it("첫 휠은 흐르는 입력으로 오해하지 않는다", () => {
+    expect(boostedWheel({ ...마우스휠, sinceLast: Number.POSITIVE_INFINITY })).not.toBe(0);
+  });
+
   it("줄·장 단위로 오는 휠은 브라우저에 맡긴다", () => {
     expect(boostedWheel({ ...마우스휠, deltaMode: 1 })).toBe(0);
     expect(boostedWheel({ ...마우스휠, deltaMode: 2 })).toBe(0);
+  });
+});
+
+describe("굴린 만큼 쌓인다", () => {
+  const 끝 = 10000;
+  const 한칸 = 240;
+
+  it("이어서 굴리면 더해진다", () => {
+    // 두 칸이면 두 칸만큼 간다. 앞의 남은 거리를 버리지 않는다.
+    const 첫칸 = nextWheelTarget({ current: 1000, target: null, sinceLast: 9999, distance: 한칸, max: 끝 });
+    expect(첫칸).toBe(1240);
+
+    // 화면은 아직 1080 까지밖에 안 갔는데 다음 칸이 온다.
+    const 둘째칸 = nextWheelTarget({ current: 1080, target: 첫칸, sinceLast: 120, distance: 한칸, max: 끝 });
+    expect(둘째칸).toBe(1480);
+
+    const 셋째칸 = nextWheelTarget({ current: 1150, target: 둘째칸, sinceLast: 120, distance: 한칸, max: 끝 });
+    expect(셋째칸).toBe(1720);
+
+    // 세 칸이면 세 칸이다. 옛 방식은 여기서 1390 이었다.
+    expect(셋째칸 - 1000).toBe(한칸 * 3);
+  });
+
+  it("쉬었다 굴리면 지금 화면에서 다시 센다", () => {
+    // 안 그러면 옛 목표가 남아 첫 칸에 화면이 튄다.
+    const 쉰뒤 = nextWheelTarget({
+      current: 1080, target: 5000, sinceLast: WHEEL_GESTURE_MS + 1, distance: 한칸, max: 끝,
+    });
+    expect(쉰뒤).toBe(1080 + 한칸);
+  });
+
+  it("이어지는 경계까지는 이어받는다", () => {
+    const 경계 = nextWheelTarget({
+      current: 1080, target: 1240, sinceLast: WHEEL_GESTURE_MS, distance: 한칸, max: 끝,
+    });
+    expect(경계).toBe(1480);
+  });
+
+  it("문서 밖으로 나가지 않는다", () => {
+    // 끝에서 계속 굴려도 목표가 달아나면, 위로 굴릴 때 한참 아무 일도 안 난다.
+    expect(nextWheelTarget({ current: 9900, target: 끝, sinceLast: 50, distance: 한칸, max: 끝 })).toBe(끝);
+    expect(nextWheelTarget({ current: 100, target: 100, sinceLast: 50, distance: -한칸, max: 끝 })).toBe(0);
+  });
+
+  it("문서가 화면보다 짧으면 0 이다", () => {
+    // `scrollHeight - innerHeight` 가 음수로 오는 경우다.
+    expect(nextWheelTarget({ current: 0, target: null, sinceLast: 999, distance: 한칸, max: -50 })).toBe(0);
   });
 });
