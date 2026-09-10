@@ -55,7 +55,7 @@ export async function editSection(input: EditSectionInput) {
 
   if (!apiKey) {
     throw new RedesignError(
-      provider === "google" ? "Google Nano Banana 2 API 키가 필요합니다." : "OpenAI Image 2.0 API 키가 필요합니다.",
+      provider === "google" ? "속도형 API 키가 필요합니다." : "정밀형 API 키가 필요합니다.",
       400
     );
   }
@@ -122,7 +122,7 @@ async function editWithOpenAI({
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "OpenAI Image 2.0 섹션 수정 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "정밀형 섹션 수정 실패", response));
   const imageBase64 = data?.data?.[0]?.b64_json;
   if (!imageBase64) throw new Error("OpenAI 응답에 이미지 데이터가 없습니다.");
   return { mimeType: "image/png", buffer: Buffer.from(imageBase64, "base64") };
@@ -154,7 +154,7 @@ async function editWithGoogle({
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "Google Nano Banana 2 섹션 수정 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "속도형 섹션 수정 실패", response));
   const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData);
   if (!imagePart?.inlineData?.data) throw new Error("Google 응답에 이미지 데이터가 없습니다.");
   return {
@@ -194,7 +194,9 @@ export function humanizeEditError(message: string) {
     return "API 키가 올바르지 않습니다. 선택한 이미지 생성 모델에 맞는 API 키를 다시 입력해주세요.";
   }
   if (message.includes("must be verified") && message.includes("gpt-image-2-2026-04-21")) {
-    return "OpenAI Image 2.0 사용 권한이 아직 없습니다. OpenAI 조직 인증을 완료한 뒤 다시 시도해주세요.";
+    // 조직 인증은 **운영자가** 할 일이다. 회원에게 업체 이름과 절차를 알려 봐야
+    // 할 수 있는 것이 없고, 어디에 무엇을 쓰는지만 드러난다.
+    return "정밀형 사용 권한이 아직 없습니다. 운영자에게 문의해 주세요.";
   }
   return message;
 }
