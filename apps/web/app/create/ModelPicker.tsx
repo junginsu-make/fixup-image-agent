@@ -1,6 +1,6 @@
 "use client";
 
-import { IMAGE_MODELS } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { cn } from "@fixup/ui";
 
@@ -52,7 +52,13 @@ export function ModelPicker({ value, sectionCount, disabled, onChange }: ModelPi
                 {selected ? <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" /> : null}
               </span>
               <strong className="text-sm">{model.label}</strong>
-              {model.id === IMAGE_MODELS[0]!.id ? (
+              {/*
+                배열 첫 항목이 아니라 **기본값**으로 판정한다. 전에는
+                `IMAGE_MODELS[0]` 을 봤는데, 그러면 `DEFAULT_IMAGE_MODEL` 만
+                되돌렸을 때 서버는 옛 모델로 만드는데 화면은 새 모델에
+                「기본」을 붙인다 — 배지가 거짓말을 한다.
+              */}
+              {model.id === DEFAULT_IMAGE_MODEL ? (
                 <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   기본
                 </span>

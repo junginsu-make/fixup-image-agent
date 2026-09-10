@@ -7,7 +7,13 @@ import {
   type FalPayload,
 } from "./pdp.image-provider";
 import { selectCharacterModel } from "./pdp.character";
-import { IMAGE_MODELS, type ImageModelId, type ReferenceImage } from "./types";
+import {
+  DEFAULT_IMAGE_MODEL,
+  IMAGE_MODELS,
+  IMAGE_MODEL_CREDIT_WEIGHT,
+  type ImageModelId,
+  type ReferenceImage,
+} from "./types";
 
 const anchor: ReferenceImage = { kind: "anchor", base64: "AAAA", mimeType: "image/jpeg" };
 const style: ReferenceImage = { kind: "style", base64: "BBBB", mimeType: "image/png" };
@@ -224,6 +230,43 @@ describe("묶음 크기", () => {
     const gpt = IMAGE_MODELS.find((m) => m.id === "gpt-image-2")!;
     expect(gpt.expectedBatchSeconds).toBe(150); // 288초 6장 → 3장이면 절반
     expect(gpt.maxBatchSize).toBe(3);
+  });
+
+  /**
+   * 안내 소요는 **화면에 그대로 나가는 숫자다.** 틀려도 아무것도 안 막힌다 —
+   * 사용자만 2분짜리를 5분으로 알고 기다린다. 그래서 위 실측표에서 다시
+   * 계산해 맞댄다.
+   *
+   * 2.5 는 6장 배치를 안 재 봤다. 잰 것은 장당 시간이고(2/high 125초 대
+   * 2.5/max 49초, 비 0.39), 6장 배치는 2 만 재 봤다(288초). 그래서 2 의
+   * 묶음값 150초에 같은 비를 곱해 60초로 뒀다 — **유도값이지 실측이 아니다.**
+   */
+  it("2.5 의 안내 소요가 장당 실측비와 맞는다", () => {
+    const flare = IMAGE_MODELS.find((m) => m.id === "gpt-image-2.5-flare")!;
+    const gpt = IMAGE_MODELS.find((m) => m.id === "gpt-image-2")!;
+
+    expect(flare.maxBatchSize).toBe(gpt.maxBatchSize); // 같은 묶음 크기여야 비교가 된다
+    const 장당비 = 49 / 125; // 2026-09-10 실측, 1088×1360
+    expect(flare.expectedBatchSeconds).toBe(Math.round(gpt.expectedBatchSeconds * 장당비 / 5) * 5);
+
+    // 설명 문구가 숫자와 같이 움직여야 한다. 6장 = 두 묶음 = 약 2분.
+    expect(flare.expectedBatchSeconds * 2).toBeLessThan(150);
+    expect(flare.description).toContain("2분");
+  });
+
+  /**
+   * **상세페이지의 기본 모델은 값으로 못 박는다.**
+   *
+   * 화질 판단이라 바꾸려면 사람이 손으로 고치고 리뷰에서 diff 로 보여야 한다.
+   * 카드뉴스 쪽도 같은 형식이다(`sns-core/__tests__/models.test.ts`).
+   * 2026-09-10 에 gpt-image-2 → gpt-image-2.5-flare 로 옮겼다.
+   */
+  it("상세페이지 기본은 GPT Image 2.5 다", () => {
+    expect(DEFAULT_IMAGE_MODEL).toBe("gpt-image-2.5-flare");
+    // 기본이 목록·엔드포인트·가중치에 다 있어야 한다. 하나만 빠져도 런타임에서 터진다.
+    expect(IMAGE_MODELS.map((model) => model.id)).toContain(DEFAULT_IMAGE_MODEL);
+    expect(resolveEndpoint(DEFAULT_IMAGE_MODEL, [])).toBeTruthy();
+    expect(IMAGE_MODEL_CREDIT_WEIGHT[DEFAULT_IMAGE_MODEL]).toBeGreaterThan(0);
   });
 });
 

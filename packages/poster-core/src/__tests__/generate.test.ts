@@ -74,10 +74,18 @@ describe("포스터 작업 조립", () => {
    * 나온다. 두 곳이 갈리면 여기만 조용히 틀린 값으로 차감한다.
    */
   it("품질을 모델에서 받는다", () => {
-    for (const model of IMAGE_MODELS) {
-      if (!model.pixelSizeLimits) continue; // nano 계열은 품질 칸이 없다
+    // **값을 못 박는다.** `model.quality ?? "high"` 로 적으면 구현과 같은 식이라
+    // `models.ts` 에서 `quality` 를 지워도 통과한다 — 재는 게 아니라 되읽는 것이다.
+    const 기대: Record<string, string> = {
+      "gpt-image-2.5-flare": "max",
+      "gpt-image-2.5-sunburst": "max",
+      "gpt-image-2": "high",
+    };
+    const 픽셀모델 = IMAGE_MODELS.filter((model) => model.pixelSizeLimits);
+    expect(픽셀모델.map((model) => model.id).sort()).toEqual(Object.keys(기대).sort());
+    for (const model of 픽셀모델) {
       const job = buildPosterJob({ ...base, modelId: model.id });
-      expect(job.input.quality, model.id).toBe(model.quality ?? "high");
+      expect(job.input.quality, model.id).toBe(기대[model.id]);
     }
   });
 

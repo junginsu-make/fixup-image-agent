@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MAX_CARDS, groupAttachments, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
+import { IMAGE_MODELS, MAX_CARDS, groupAttachments, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StepBar, type StepDefinition } from "@fixup/ui";
 import { AttachmentPicker } from "./_components/attachment-picker";
 import type { SlotIntents } from "./_components/slot-intents";
@@ -11,6 +11,18 @@ import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
+
+/**
+ * **손으로 박지 않는다.**
+ *
+ * 이 화면은 `modelId` 를 **항상 명시로** 보내므로 서버의 `.default` 를 절대
+ * 안 탄다. 그래서 두 값이 갈려도 아무 오류가 안 난다 — 드롭다운에는
+ * 「GPT Image 2.5 · 기본」이 떠 있는데 아무것도 안 건드린 사용자의 작업만
+ * 옛 모델로 나간다. 값도 화질도 다른데 화면은 멀쩡해 보인다.
+ *
+ * 목록에서 받으면 기본을 옮길 때 여기가 저절로 따라온다.
+ */
+const DEFAULT_MODEL_ID = IMAGE_MODELS.find((model) => model.isDefault)!.id;
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -41,9 +53,7 @@ export function NewSnsClient() {
     cardCountMode: "auto",
     cardCount: undefined,
     language: "ko",
-    // 손으로 박힌 초기값이다. 되돌릴 때 서버 `.default` 와 **같이** 옮겨야
-    // 한다 — 한쪽만 바꾸면 화면과 서버가 서로 다른 모델을 고른다.
-    modelId: "gpt-image-2.5-flare",
+    modelId: DEFAULT_MODEL_ID,
     look: "auto",
     userInstruction: "",
   });
