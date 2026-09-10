@@ -11,6 +11,7 @@ import {
   type TextPlanDeps,
 } from "./pdp.text-plan";
 import { PdpServiceError } from "./pdp.service";
+import { DEFAULT_IMAGE_MODEL } from "./types";
 import type { LandingPageBlueprint, ProductBrief } from "./types";
 
 function makeBrief(overrides: Partial<ProductBrief> = {}): ProductBrief {
@@ -471,8 +472,12 @@ describe("대표 이미지의 모델", () => {
   });
 
   it("안 고르면 기본 모델이다", async () => {
+    // 값이 아니라 **뜻을** 잠근다. 기본 모델이 무엇인지는 types.ts 가 정하고,
+    // 여기서 볼 것은 「안 고르면 그 값이 그대로 내려가는가」다. 값을 손으로
+    // 박아 두면 기본을 옮길 때마다 이 줄이 같이 깨지는데, 그건 회귀가 아니라
+    // 잡음이라 다음 사람이 무심코 고치고 지나간다.
     const seen: Array<string | undefined> = [];
     await generateKeyVisual(input as never, depsCapturing(seen) as never);
-    expect(seen).toEqual(["gpt-image-2"]);
+    expect(seen).toEqual([DEFAULT_IMAGE_MODEL]);
   });
 });

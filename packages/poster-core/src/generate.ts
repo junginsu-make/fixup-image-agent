@@ -163,7 +163,8 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
   if (resolved.pixel) {
     // 기본값 auto 는 입력 이미지 크기를 물려받는다. 반드시 명시한다.
     input.image_size = resolved.pixel;
-    input.quality = "high";
+    // 품질은 모델이 정한다(`sns-core/models.ts` 의 `quality`).
+    input.quality = model.quality ?? "high";
   } else {
     input.aspect_ratio = resolved.aspectRatio;
     if (resolved.resolution) input.resolution = resolved.resolution;

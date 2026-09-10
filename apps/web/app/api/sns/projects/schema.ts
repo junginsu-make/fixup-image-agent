@@ -61,7 +61,22 @@ export const ProjectInputSchema = z.object({
   cardCountMode: z.enum(["auto", "fixed"]).default("auto"),
   cardCount: z.number().int().min(4).max(8).optional(),
   language: z.enum(["ko", "en", "ja", "zh"]),
-  modelId: z.enum(["gpt-image-2", "nano-banana-pro", "nano-banana-2", "nano-banana"]).default("gpt-image-2"),
+  /**
+   * **목록에서 id 를 빼지 않는다.** 저장된 작업이 그 시점의 id 를 들고 있고,
+   * 화면이 작업을 열어 그 값을 되보내는 순간 400 이 난다 — 기본을 되돌리는
+   * 일이 「옛 작업을 못 여는 사고」로 바뀐다. 되돌릴 때는 `.default` 만 옮긴다.
+   *
+   * 이 목록은 `@fixup/sns-core` 의 `IMAGE_MODELS` 와 같아야 한다.
+   * `__tests__/sns-project-schema.test.ts` 가 그 관계를 잠근다.
+   */
+  modelId: z.enum([
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2",
+    "nano-banana-pro",
+    "nano-banana-2",
+    "nano-banana",
+  ]).default("gpt-image-2.5-flare"),
   // 안 보내면 auto — 예전에 만든 화면과 이미 저장된 작업이 그대로 돈다.
   look: z.enum(IMAGE_LOOKS).default("auto"),
   userInstruction: z.string().trim().max(USER_INSTRUCTION_MAX).optional(),

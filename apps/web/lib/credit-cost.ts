@@ -1,4 +1,4 @@
-import { CARD_RATIOS, modelById, unitPrice, type ImageMode } from "@fixup/sns-core";
+import { CARD_RATIOS, IMAGE_MODELS, modelById, unitPrice, type ImageMode } from "@fixup/sns-core";
 import { creditUnits } from "@fixup/shared";
 
 /**
@@ -79,8 +79,14 @@ export function imageUnitUsd(
 export function maxImageUnitUsd(): number {
   const prices = Object.values(FLAT_USD);
   for (const ratio of CARD_RATIOS) {
-    for (const id of ["gpt-image-2", "nano-banana-pro", "nano-banana-2", "nano-banana"]) {
-      try { prices.push(unitPrice(modelById(id), "i2i", ratio.pixel)); } catch { /* 목록이 바뀌면 건너뛴다 */ }
+    /**
+     * **목록을 손으로 적지 않는다.** 전에는 네 id 를 여기 박아 뒀는데, 모델을
+     * 하나 더 비싼 것으로 들이면서 이 줄을 잊으면 「가장 비싼 값」이 실제보다
+     * 싸진다. 그러면 예약이 모자란 채로 통과하고 **한도를 넘겨 만들 수 있다** —
+     * 막히지 않고 조용히 새는 쪽이라 아무도 모른다.
+     */
+    for (const model of IMAGE_MODELS) {
+      try { prices.push(unitPrice(model, "i2i", ratio.pixel)); } catch { /* 표가 없는 모델은 건너뛴다 */ }
     }
   }
   return Math.max(...prices);

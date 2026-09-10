@@ -33,6 +33,67 @@ describe("엔드포인트 선택", () => {
   });
 });
 
+describe("GPT 계열 공통", () => {
+  // 이 묶음이 지키는 것은 **값이 아니라 관계다.** 모델을 하나 더 넣을 때
+  // 표를 한쪽만 고치면 `buildFalPayload` 가 GPT 분기를 지나쳐 아래 nano
+  // 분기로 떨어진다. 그러면 `image_size` 대신 `aspect_ratio` 가 나가고
+  // fal 은 **200 을 돌려준다** — 요청한 적 없는 크기의 그림이 오는데
+  // 아무도 모른다. 실패로 보이지 않는 실패라 사람 눈으로는 못 잡는다.
+  const gptModels = IMAGE_MODELS.filter((model) => model.id.startsWith("gpt-image-"));
+
+  it("한 종류가 아니다 — 아래 반복문이 헛돌지 않는지 먼저 본다", () => {
+    expect(gptModels.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("전부 픽셀 크기와 품질을 함께 보낸다", () => {
+    for (const model of gptModels) {
+      const payload = buildFalPayload(model.id, base);
+      expect(payload, model.id).toHaveProperty("image_size");
+      expect(payload, model.id).not.toHaveProperty("aspect_ratio");
+      expect(typeof payload.quality, model.id).toBe("string");
+    }
+  });
+
+  it("모든 모델에 엔드포인트가 있다 — 참조를 붙이면 edit 로 간다", () => {
+    for (const model of IMAGE_MODELS) {
+      expect(resolveEndpoint(model.id, []), model.id).toBeTruthy();
+      expect(resolveEndpoint(model.id, [anchor]), model.id).toContain("/edit");
+    }
+  });
+});
+
+describe("GPT Image 2.5 페이로드", () => {
+  // 2026-09-10 실측 근거: docs/superpowers/plans/2026-09-10-gpt-image-25.md
+  it("flare 경로로 간다", () => {
+    expect(resolveEndpoint("gpt-image-2.5-flare", [])).toBe(
+      "openai/gpt-image-2.5/flare/text-to-image",
+    );
+    expect(resolveEndpoint("gpt-image-2.5-flare", [anchor])).toBe(
+      "openai/gpt-image-2.5/flare/edit",
+    );
+  });
+
+  it("품질은 max 다 — high 는 22초로 빠른 대신 화질이 떨어졌다", () => {
+    expect(buildFalPayload("gpt-image-2.5-flare", base).quality).toBe("max");
+  });
+
+  it("크기 제약은 2 와 같다 — 2.5 는 거부 대신 조용히 보정한다", () => {
+    for (const ratio of ["1:1", "3:4", "4:3", "9:16", "16:9"] as const) {
+      const payload = buildFalPayload("gpt-image-2.5-flare", {
+        ...base, aspectRatio: ratio,
+      }) as FalPayload & { image_size: { width: number; height: number } };
+      const { width, height } = payload.image_size;
+      expect(width % 16, `${ratio} width`).toBe(0);
+      expect(height % 16, `${ratio} height`).toBe(0);
+      expect(Math.max(width, height), `${ratio} edge`).toBeLessThanOrEqual(3840);
+      expect(width * height, `${ratio} pixels`).toBeGreaterThanOrEqual(655_360);
+      expect(width * height, `${ratio} pixels`).toBeLessThanOrEqual(8_294_400);
+      expect(Math.max(width, height) / Math.min(width, height), `${ratio} aspect`)
+        .toBeLessThanOrEqual(3);
+    }
+  });
+});
+
 describe("GPT Image 2 페이로드", () => {
   it("픽셀 크기와 high 품질을 쓴다", () => {
     const p = buildFalPayload("gpt-image-2", base) as FalPayload & {
@@ -141,7 +202,10 @@ describe("묶음 크기", () => {
     //   nano-banana-2      Pro 와 같은 계열, Pro 보다 빠르다고 공표
     //   seedream-5-pro     edit 95초/장  ← 참조를 넣으면 느리다
     //   qwen-image-2-pro   edit 18초/장
+    //   gpt-image-2.5-flare  한 장 49초 × 6 ← 6장 배치는 안 재 봤다.
+    //                        병렬을 아예 없다고 보는 쪽이 안전하다.
     const 실측6장 = {
+      "gpt-image-2.5-flare": 49 * 6,
       "gpt-image-2": 288,
       "nano-banana-pro": 112,
       "nano-banana-2": 100,

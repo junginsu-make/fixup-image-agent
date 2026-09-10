@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IMAGE_MODELS } from "@fixup/sns-core";
 import { buildPosterJob, posterImageRows } from "../generate";
 import { EMPTY_SLOTS } from "../schemas";
 
@@ -66,6 +67,18 @@ describe("포스터 작업 조립", () => {
     const job = buildPosterJob(base);
     expect(job.input.image_size).toEqual({ width: 1024, height: 1536 });
     expect(job.input.quality).toBe("high");
+  });
+
+  /**
+   * 카드뉴스와 **같은 규칙**이다. 품질을 모델이 정하고, 값은 그 모델의 표에서
+   * 나온다. 두 곳이 갈리면 여기만 조용히 틀린 값으로 차감한다.
+   */
+  it("품질을 모델에서 받는다", () => {
+    for (const model of IMAGE_MODELS) {
+      if (!model.pixelSizeLimits) continue; // nano 계열은 품질 칸이 없다
+      const job = buildPosterJob({ ...base, modelId: model.id });
+      expect(job.input.quality, model.id).toBe(model.quality ?? "high");
+    }
   });
 
   it("열거 모델은 비율 문자열을 준다", () => {

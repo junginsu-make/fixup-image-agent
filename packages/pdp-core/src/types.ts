@@ -134,6 +134,7 @@ export interface GeneratedResult {
 // 생성은 fal.ai 를 경유한다. 모델마다 입력 규격이 달라 어댑터가 흡수한다.
 
 export type ImageModelId =
+  | "gpt-image-2.5-flare"
   | "gpt-image-2"
   | "nano-banana-pro"
   | "nano-banana-2"
@@ -141,14 +142,28 @@ export type ImageModelId =
   | "seedream-5-pro"
   | "qwen-image-2-pro";
 
-export const DEFAULT_IMAGE_MODEL: ImageModelId = "gpt-image-2";
+/**
+ * 2026-09-10 에 옮겼다. 실측 근거는
+ * `docs/superpowers/plans/2026-09-10-gpt-image-25.md` §0.2 다.
+ *
+ * **되돌릴 때 여기 한 줄이면 상세페이지가 전부 따라온다** —
+ * `/api/pdp/images`·`/batch`·`/key-visual`·`pdp.text-plan.ts` 가 이 값을 본다.
+ * 캐릭터는 따로다(`pdp.character.ts` 의 `MODEL_BY_LOOK`).
+ */
+export const DEFAULT_IMAGE_MODEL: ImageModelId = "gpt-image-2.5-flare";
 
 /**
  * 크레딧 가중치. 원가가 4.6배까지 벌어져 1장=1크레딧으로 두면
  * 모두가 가장 비싼 모델을 골라 원가만 뛴다.
  * 원가: $0.178 / $0.150 / $0.039 (fal, 9:16, 2026-07-27)
+ * gpt-image-2.5 는 $0.165 (fal, 4:5, max, 2026-09-10 실측) — 2 와 거의 같아
+ * 같은 가중치를 준다.
+ *
+ * **이 값은 화면 표시용이다.** 실제 차감은 `credit-cost.ts` 의
+ * `creditUnits(imageUnitUsd × 장수)` 가 한다.
  */
 export const IMAGE_MODEL_CREDIT_WEIGHT: Record<ImageModelId, number> = {
+  "gpt-image-2.5-flare": 4,
   "gpt-image-2": 4,
   "nano-banana-pro": 3,
   "nano-banana-2": 2,
@@ -201,6 +216,26 @@ export interface ImageModelInfo {
 }
 
 export const IMAGE_MODELS: ImageModelInfo[] = [
+  {
+    id: "gpt-image-2.5-flare",
+    label: "GPT Image 2.5",
+    description:
+      "글자를 정확하게 그리면서 2 보다 2.5배 빠릅니다. 6장에 약 2분입니다.",
+    creditWeight: 4,
+    /**
+     * **실측에서 유도한 값이지 직접 잰 값이 아니다.**
+     *
+     * 잰 것은 한 장이다 — 1088×1360 에서 2.5/max 48·50초, 2/high 121·129초
+     * (2026-09-10). 장당 비가 0.39 다. 6장 동시 배치는 2 만 재 봤고(288초)
+     * fal 이 완전 병렬이 아니라 장당 × 6 보다 짧다. 그래서 2 의 묶음값 150초에
+     * 같은 비를 곱해 60초로 둔다.
+     *
+     * 6장 = 두 묶음 = 약 2분. 위 설명 문구와 이 숫자가 같이 움직여야 한다.
+     */
+    expectedBatchSeconds: 60,
+    maxBatchSize: 3,
+    maxReferenceImages: 16,
+  },
   {
     id: "gpt-image-2",
     label: "GPT Image 2",

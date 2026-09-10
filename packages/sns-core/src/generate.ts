@@ -93,7 +93,8 @@ export function buildModelInput(
   if (model.pixelSizeLimits) {
     if (!resolved.pixel) throw new Error(`${model.label} 에 보낼 image_size 가 없습니다.`);
     input.image_size = resolved.pixel;
-    input.quality = "high";
+    // 품질은 모델이 정한다. 단가표와 한 객체에 있어야 값이 안 갈린다.
+    input.quality = model.quality ?? "high";
   } else {
     if (!resolved.aspectRatio) throw new Error(`${model.label} 에 보낼 aspect_ratio 가 없습니다.`);
     input.aspect_ratio = resolved.aspectRatio;

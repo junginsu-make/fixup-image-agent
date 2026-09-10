@@ -9,6 +9,7 @@ import {
   pickAngleForSection,
   selectCharacterModel,
 } from "./pdp.character";
+import { IMAGE_MODELS } from "./types";
 
 describe("각도 정의", () => {
 
@@ -157,9 +158,10 @@ describe("모델 선택", () => {
   });
 
   it("실사가 아니어도 우리가 쓰는 모델 안에서 고른다", () => {
-    expect(["gpt-image-2", "nano-banana-pro", "nano-banana"]).toContain(
-      selectCharacterModel(false),
-    );
+    // 목록을 손으로 적어 두면 기본을 옮길 때 같이 깨진다. 여기서 지킬 것은
+    // **아는 모델인가** 하나다 — 모르는 id 를 돌려주면 `ENDPOINTS` 에도
+    // `IMAGE_MODEL_CREDIT_WEIGHT` 에도 자리가 없어 런타임에서 터진다.
+    expect(IMAGE_MODELS.map((model) => model.id)).toContain(selectCharacterModel(false));
   });
 });
 
@@ -219,10 +221,19 @@ describe("결이 질감을 정한다", () => {
   });
 
   it("결이 기본 모델을 정한다", () => {
+    // 실사만 값을 박는다. 실측 결론이라 바꾸려면 비교를 먼저 해야 한다.
     expect(selectCharacterModel("photoreal")).toBe("nano-banana-pro");
-    for (const look of ["anime", "3d", "illustration"] as const) {
-      expect(selectCharacterModel(look)).toBe("gpt-image-2");
-    }
+
+    // 나머지 셋은 **서로 같고, 실사와 다르고, 아는 모델**이면 된다. 어느
+    // 모델인지는 `MODEL_BY_LOOK` 한 곳이 정한다.
+    const 나머지 = ["anime", "3d", "illustration"].map((look) =>
+      selectCharacterModel(look as never),
+    );
+    expect(new Set(나머지).size).toBe(1);
+    expect(나머지[0]).not.toBe("nano-banana-pro");
+    expect(IMAGE_MODELS.map((model) => model.id)).toContain(나머지[0]);
+    // 옛 boolean 호출과도 어긋나면 안 된다 — 같은 「실사 아님」이다.
+    expect(나머지[0]).toBe(selectCharacterModel(false));
   });
 });
 

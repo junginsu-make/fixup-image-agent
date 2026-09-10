@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CARD_RATIOS, POSTER_RATIOS, resolvePosterSize, resolveSize } from "../ratios";
-import { modelById } from "../models";
+import { IMAGE_MODELS, modelById } from "../models";
 
 describe("비율 목록", () => {
   it("넷을 제공한다", () => {
@@ -43,9 +43,11 @@ describe("모델에 보낼 값", () => {
   });
 
   it("네 비율은 모든 모델이 지원한다 — 대체가 없다", () => {
+    // 목록을 손으로 적지 않는다. 모델을 하나 더할 때 이 줄을 잊으면 새 모델만
+    // 안 재는 채로 통과한다 — 거절은 화면에서야 보인다.
     for (const ratio of CARD_RATIOS) {
-      for (const id of ["gpt-image-2", "nano-banana-pro", "nano-banana-2"]) {
-        expect(resolveSize(ratio.id, modelById(id)).rejected).toBeUndefined();
+      for (const model of IMAGE_MODELS) {
+        expect(resolveSize(ratio.id, model).rejected, `${ratio.id}·${model.id}`).toBeUndefined();
       }
     }
   });

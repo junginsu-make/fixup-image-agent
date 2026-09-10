@@ -11,6 +11,9 @@ export const metadata: Metadata = { title: "크레딧과 모델 — 사용 설�
  * 이름이 바뀌면 여기도 따라 바뀌게 둔다.
  */
 const WEIGHTS: Record<string, { weight: number; note: string }> = {
+  // 빠진 모델은 표에 「—」로 나온다. 막히지 않고 빈칸으로 새는 쪽이라 잊기 쉽다.
+  "gpt-image-2.5-flare": { weight: 4, note: "글자가 정확하면서 2 보다 2.5배 빠릅니다" },
+  "gpt-image-2.5-sunburst": { weight: 4, note: "글자 배치 지시를 더 잘 지킵니다. 대신 느립니다" },
   "gpt-image-2": { weight: 4, note: "글자가 가장 정확합니다. 명조 계열도 표현합니다" },
   "nano-banana-pro": { weight: 3, note: "빠릅니다. 글자는 고딕 계열입니다" },
   "nano-banana-2": { weight: 3, note: "Pro 와 같은 계열입니다" },

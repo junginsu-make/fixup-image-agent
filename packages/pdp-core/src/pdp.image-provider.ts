@@ -48,6 +48,10 @@ function withinLimit(model: ImageModelId, references: ReferenceImage[]) {
  * `fal-ai/qwen-image-2/pro` 만 부르면 404 다 — 뒤 칸이 반드시 필요하다.
  */
 const ENDPOINTS: Record<ImageModelId, { textToImage: string; edit: string }> = {
+  "gpt-image-2.5-flare": {
+    textToImage: "openai/gpt-image-2.5/flare/text-to-image",
+    edit: "openai/gpt-image-2.5/flare/edit",
+  },
   "gpt-image-2": { textToImage: "openai/gpt-image-2", edit: "openai/gpt-image-2/edit" },
   "nano-banana-pro": { textToImage: "fal-ai/nano-banana-pro", edit: "fal-ai/nano-banana-pro/edit" },
   "nano-banana-2": { textToImage: "fal-ai/nano-banana-2", edit: "fal-ai/nano-banana-2/edit" },
@@ -80,9 +84,13 @@ const PRESET_SIZE: Record<AspectRatio, string> = {
 const PRESET_MODELS: ImageModelId[] = ["seedream-5-pro", "qwen-image-2-pro"];
 
 /**
- * GPT Image 2 는 화면비 대신 픽셀 크기를 받는다.
+ * GPT 계열은 화면비 대신 픽셀 크기를 받는다.
  * 제약: 16의 배수, 최대변 3840px, 비율 ≤3:1, 총 픽셀 655,360 ~ 8,294,400.
  * 아래 값들은 그 범위 안에서 각 비율에 맞춰 고른 것이다.
+ *
+ * **2.5 도 네 제약이 같다**(2026-09-10 실측 34회). 다만 2.5 는 어긋난 값을
+ * 거부하지 않고 **조용히 보정한다** — 미리 맞춰 보내는 이 표가 그래서 더
+ * 중요해졌다. 보정되면 요청한 적 없는 크기가 돌아오는데 아무도 모른다.
  */
 const GPT_IMAGE_SIZE: Record<AspectRatio, { width: number; height: number }> = {
   "1:1": { width: 1536, height: 1536 },
@@ -90,6 +98,22 @@ const GPT_IMAGE_SIZE: Record<AspectRatio, { width: number; height: number }> = {
   "4:3": { width: 2048, height: 1536 },
   "9:16": { width: 1536, height: 2752 },
   "16:9": { width: 2752, height: 1536 },
+};
+
+/**
+ * GPT 계열이 fal 에 보낼 품질. **이 표가 곧 「GPT 계열이냐」의 판별자다.**
+ *
+ * 따로 목록을 두면 새 GPT 모델을 넣을 때 한쪽만 고치기 쉽다. 그러면
+ * `buildFalPayload` 가 GPT 분기를 지나쳐 아래 nano 분기로 떨어지고,
+ * `image_size` 대신 `aspect_ratio` 가 나간다 — fal 은 200 을 돌려주고 우리는
+ * 요청한 적 없는 크기의 그림을 받는다. 실패로 보이지 않는 실패다.
+ *
+ * 2.5 는 `max`(= `high` × 4.00) 다. 2026-09-10 실측에서 `high` 는 22초로 빠른
+ * 대신 화질이 떨어졌고, `max` 가 현재 `2/high` 보다 3~7% 싸면서 2.5배 빨랐다.
+ */
+const GPT_QUALITY: Partial<Record<ImageModelId, string>> = {
+  "gpt-image-2.5-flare": "max",
+  "gpt-image-2": "high",
 };
 
 export type FalPayload = Record<string, unknown>;
@@ -143,13 +167,14 @@ function toDataUri(reference: ReferenceImage) {
 export function buildFalPayload(model: ImageModelId, input: ImageProviderInput): FalPayload {
   const { prompt, systemPrompt, aspectRatio, references } = input;
 
-  if (model === "gpt-image-2") {
+  const gptQuality = GPT_QUALITY[model];
+  if (gptQuality) {
     // GPT 계열에는 system_prompt 가 없다. 아트 디렉션을 프롬프트 앞에 붙인다.
     const merged = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
     const payload: FalPayload = {
       prompt: merged,
       image_size: GPT_IMAGE_SIZE[aspectRatio],
-      quality: "high",
+      quality: gptQuality,
       num_images: 1,
       output_format: "png",
     };

@@ -18,7 +18,13 @@ export const dynamic = "force-dynamic";
 
 const InputSchema = z.object({
   deck: LayoutDeckSchema,
-  modelId: z.string().trim().min(1).max(60).default("gpt-image-2"),
+  /**
+   * 화면에 보여 줄 **예상 비용**을 만드는 데만 쓴다. 여기서 fal 을 부르지
+   * 않는다 — 그림 칸은 회색 상자다. 그러니 값을 싼 쪽으로 낮춰도 그림은
+   * 하나도 안 싸지고 **화면의 예상값만 실제와 갈린다.** 본편과 같은 기본
+   * 모델을 쓴다.
+   */
+  modelId: z.string().trim().min(1).max(60).default("gpt-image-2.5-flare"),
   copy: PreviewCopySchema,
 });
 

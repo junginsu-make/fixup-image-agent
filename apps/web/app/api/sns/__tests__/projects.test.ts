@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IMAGE_MODELS } from "@fixup/sns-core";
 import { ProjectInputSchema } from "../projects/schema";
 import { ProjectValidationError, createProjectService, type SnsProjectRepository } from "../projects/project-service";
 
@@ -29,7 +30,10 @@ describe("SNS 프로젝트 입력", () => {
     }
   });
 
-  it("기본 모델은 GPT Image 2, 기본 장수는 AI 추천이다", () => {
+  it("안 보내면 sns-core 가 정한 기본 모델, 기본 장수는 AI 추천이다", () => {
+    // 값을 손으로 박지 않는다. 기본을 정하는 곳은 `sns-core/models.ts` 한 군데고,
+    // 여기서 볼 것은 **서버가 그 값을 따라가는가**다. 두 곳이 갈리면 화면은
+    // 한 모델을 고르는데 모델 미지정 요청만 다른 모델로 나간다.
     const parsed = ProjectInputSchema.parse({
       title: base.title,
       source: base.source,
@@ -37,9 +41,25 @@ describe("SNS 프로젝트 입력", () => {
       ratio: "4:5",
       language: "ko",
     });
-    expect(parsed.modelId).toBe("gpt-image-2");
+    expect(parsed.modelId).toBe(IMAGE_MODELS.find((model) => model.isDefault)!.id);
     expect(parsed.cardCountMode).toBe("auto");
     expect(parsed.cardCount).toBeUndefined();
+  });
+
+  it("sns-core 에 있는 모델은 전부 받는다", () => {
+    // 손으로 적은 `z.enum` 목록이 `IMAGE_MODELS` 와 갈리는 것을 막는다.
+    // 빠진 id 가 있으면 화면은 그 모델을 보여 주는데 저장이 400 으로 막힌다.
+    for (const model of IMAGE_MODELS) {
+      const result = ProjectInputSchema.safeParse({ ...base, modelId: model.id });
+      expect(result.success, model.id).toBe(true);
+    }
+  });
+
+  it("옛 작업이 들고 있는 id 를 계속 받는다", () => {
+    // 저장된 작업은 만들 때의 id 를 들고 있고, 화면이 그 작업을 열면 그 값을
+    // 그대로 되보낸다. 목록에서 id 를 빼면 **옛 작업을 못 여는 사고**가 된다 —
+    // 기본을 되돌릴 때는 `.default` 만 옮긴다.
+    expect(ProjectInputSchema.safeParse({ ...base, modelId: "gpt-image-2" }).success).toBe(true);
   });
 
   it("해상도와 픽셀 입력을 받지 않는다", () => {

@@ -41,7 +41,9 @@ export function NewSnsClient() {
     cardCountMode: "auto",
     cardCount: undefined,
     language: "ko",
-    modelId: "gpt-image-2",
+    // 손으로 박힌 초기값이다. 되돌릴 때 서버 `.default` 와 **같이** 옮겨야
+    // 한다 — 한쪽만 바꾸면 화면과 서버가 서로 다른 모델을 고른다.
+    modelId: "gpt-image-2.5-flare",
     look: "auto",
     userInstruction: "",
   });

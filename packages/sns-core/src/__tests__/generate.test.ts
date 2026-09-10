@@ -7,7 +7,7 @@ import {
   type GeneratedCardJob,
 } from "../generate";
 import { letterboxPlan } from "../letterbox";
-import { modelById } from "../models";
+import { IMAGE_MODELS, modelById } from "../models";
 import { resolveSize } from "../ratios";
 
 describe("모델 입력", () => {
@@ -21,6 +21,28 @@ describe("모델 입력", () => {
     );
     expect(input.image_size).toEqual({ width: 1088, height: 1360 });
     expect(input.quality).toBe("high");
+  });
+
+  /**
+   * **품질은 모델이 정한다.** 크레딧이 단가표에서 나오는데
+   * (`unitPrice` → `estimateCost` → `creditUnits` → `reserveAiUsage`), 표는
+   * 모델당 하나다. 나가는 품질과 표의 품질이 갈리면 **막히지 않고 조용히**
+   * 틀린 값으로 차감한다 — 2.5 는 `max` 가 `high` 의 4배라 어긋나면 4배다.
+   */
+  it("품질을 모델에서 받는다 — 호출자가 못 정한다", () => {
+    for (const model of IMAGE_MODELS) {
+      if (!model.pixelSizeLimits) continue; // nano 계열은 품질 칸이 없다
+      const input = buildModelInput(model, "t2i", resolveSize("4:5", model), "p", []);
+      expect(input.quality, model.id).toBe(model.quality ?? "high");
+    }
+  });
+
+  it("2.5 는 max 로 나간다 — 단가표가 max 기준이다", () => {
+    for (const id of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]) {
+      const model = modelById(id);
+      const input = buildModelInput(model, "i2i", resolveSize("4:5", model), "p", ["u"]);
+      expect(input.quality, id).toBe("max");
+    }
   });
 
   it("nano 는 aspect_ratio 와 정해진 resolution 만 준다", () => {
@@ -38,8 +60,7 @@ describe("모델 입력", () => {
   });
 
   it("항상 한 장만 요청한다", () => {
-    for (const id of ["gpt-image-2", "nano-banana-pro", "nano-banana-2", "nano-banana"]) {
-      const model = modelById(id);
+    for (const model of IMAGE_MODELS) {
       const input = buildModelInput(model, "t2i", resolveSize("4:5", model), "p", []);
       expect(input.num_images).toBe(1);
     }
