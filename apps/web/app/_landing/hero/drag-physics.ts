@@ -28,6 +28,20 @@ const REST_VELOCITY = 0.02;
 export const MAX_VELOCITY = 26;
 
 /**
+ * 휠만의 상한. 끌기보다 **높다.**
+ *
+ * 굴렸을 때 가는 거리는 미는 순간의 이동이 아니라 **놓은 뒤 미끄러지는 거리**가
+ * 거의 다 정한다. 마찰이 시간으로 감쇠하므로 총 거리는 속도에 비례한다 —
+ * 대략 `속도 ÷ 3.1` 이다. 그래서 미는 양을 두 배로 해도 속도가 상한에 걸려
+ * 있으면 거리는 9% 밖에 안 는다(실측).
+ *
+ * 끌기와 값을 나눈 이유는 손이 다르기 때문이다. 끌기는 손이 판을 쥐고 있어서
+ * 26 이면 충분하고, 그 이상은 던졌을 때 화면이 흐른다. 휠은 한 번 굴리고 손을
+ * 떼므로 그만큼 더 가 줘야 「굴린 보람」이 있다.
+ */
+export const WHEEL_MAX_VELOCITY = 35;
+
+/**
  * 화면에서 이만큼(px) 끌면 월드 1단위가 움직인다.
  *
  * 판이 **손끝을 그대로 따라오게** 맞춘 값이다. 카메라 거리 7.4, 화각 45°,
@@ -96,12 +110,16 @@ export function step(state: DragState, dt: number): DragState {
   return { ...state, scroll: state.scroll + velocity * dt, velocity };
 }
 
-/** 휠·트랙패드. 관성은 브라우저가 이미 넣어 주므로 위치만 민다. */
+/** 휠·트랙패드. 미는 순간 위치를 옮기고, 남은 거리는 미끄러짐이 채운다. */
 export function nudge(state: DragState, deltaPixels: number, dt: number): DragState {
   const delta = scrollDeltaFromPixels(-deltaPixels);
+  const raw = delta / dt;
   return {
     ...state,
     scroll: state.scroll + delta,
-    velocity: dt > 0 ? clampVelocity(delta / dt) : state.velocity,
+    velocity:
+      dt > 0
+        ? Math.max(-WHEEL_MAX_VELOCITY, Math.min(WHEEL_MAX_VELOCITY, raw))
+        : state.velocity,
   };
 }

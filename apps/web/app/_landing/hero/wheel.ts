@@ -29,31 +29,19 @@ export function shouldCaptureWheel(scrollY: number, heroHeight: number): boolean
 }
 
 /**
- * 휠 한 칸이 손가락 몇 px 어치인가.
- *
- * 끌기는 판이 **손끝을 그대로 따라오는** 것이 맞다 — 1px 끌면 1px 간다. 그런데
- * 휠은 손끝이 아니다. 한 칸이 120px 이고 월드 1단위가 147px 이라, 그대로 쓰면
- * 한 칸에 판 하나의 4분의 1쯤 간다. **그림 하나 넘기는 데 네 칸**이라 굴려도
- * 굴려도 제자리인 느낌이 든다.
- *
- * 두 배로 두면 한 칸에 판의 절반, **두 칸에 그림 하나**가 된다.
- *
- * 더 올리지 않는 이유는 물결이다. 미는 속도가 휘어짐을 정하는데 이미 상한
- * (`MAX_VELOCITY`)에 닿아 있어서, 더 키우면 위치만 빨라지고 물결은 그대로다 —
- * 그림이 미끄러지듯 지나가 버린다.
- */
-export const WHEEL_GAIN = 2;
-
-/**
  * 세로·가로 중 **더 세게 민 쪽**을 쓴다.
  *
  * 일반 마우스는 세로만 보내고, 트랙패드는 둘 다 보낸다. 세로만 받으면
  * 트랙패드로 옆으로 쓸어도 안 움직이고, 가로만 받으면 마우스로는 아무것도
  * 못 한다.
+ *
+ * **미는 양에 배율을 곱하지 않는다.** 한 번 해 봤는데 두 배로 해도 실제로
+ * 가는 거리는 9% 밖에 안 늘었다 — 굴렸을 때의 거리는 미는 순간이 아니라
+ * **놓은 뒤 미끄러지는 거리**가 정하고, 그 속도가 이미 상한에 걸려 있었기
+ * 때문이다. 손잡이는 `drag-physics.ts` 의 `WHEEL_MAX_VELOCITY` 하나다.
  */
 export function wheelDelta(deltaX: number, deltaY: number): number {
-  const stronger = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
-  return stronger * WHEEL_GAIN;
+  return Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
 }
 
 /**

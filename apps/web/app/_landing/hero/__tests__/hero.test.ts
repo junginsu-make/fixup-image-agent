@@ -12,6 +12,7 @@ import {
 import {
   INITIAL,
   MAX_VELOCITY,
+  WHEEL_MAX_VELOCITY,
   beginDrag,
   clampVelocity,
   dragBy,
@@ -22,7 +23,7 @@ import {
 } from "../drag-physics";
 import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wave";
 import { scrollBehaviorFor } from "../scroll-down";
-import { WHEEL_GAIN, shouldCaptureWheel, shouldShowBackToTop, wheelDelta } from "../wheel";
+import { shouldCaptureWheel, shouldShowBackToTop, wheelDelta } from "../wheel";
 
 /**
  * 화면은 눈으로 보지만 **판단은 값으로 잰다.**
@@ -350,9 +351,9 @@ describe("휠을 누가 받는가", () => {
 
   it("더 세게 민 쪽을 쓴다", () => {
     // 일반 마우스는 세로만 보낸다.
-    expect(wheelDelta(0, 120)).toBe(120 * WHEEL_GAIN);
+    expect(wheelDelta(0, 120)).toBe(120);
     // 트랙패드로 옆으로 쓸면 가로가 이긴다.
-    expect(wheelDelta(-80, 12)).toBe(-80 * WHEEL_GAIN);
+    expect(wheelDelta(-80, 12)).toBe(-80);
   });
 
   it("아래로 굴리면 다음 그림 쪽으로 간다", () => {
@@ -361,21 +362,30 @@ describe("휠을 누가 받는가", () => {
   });
 
   /**
-   * **몇 칸에 그림 하나가 넘어가는가.** 이게 굴렸을 때의 느낌 그 자체다.
+   * **한 칸 굴리면 그림 몇 장이 지나가는가.** 이게 굴렸을 때의 느낌 그 자체다.
    *
-   * 배율만 재면 「2배가 맞다」밖에 못 말한다. 정작 알아야 하는 것은 손이
-   * 몇 번 움직여야 다음 그림이 오느냐다.
+   * 미는 순간의 이동만 재면 안 된다 — 굴렸을 때 가는 거리는 **놓은 뒤
+   * 미끄러지는 거리**가 거의 다 정하기 때문이다. 실제로 미는 양을 두 배로
+   * 했을 때 총 거리는 9% 밖에 안 늘었다(속도가 상한에 걸려 있었다). 재는
+   * 자리를 잘못 잡으면 아무것도 안 고치고 고쳤다고 믿게 된다.
    */
-  it("휠 두 칸에 그림 하나가 넘어간다", () => {
-    const 한칸 = 120; // 윈도우 크롬의 한 칸
-    const 판하나 = 정사각 + GAP; // 가운데 그림 하나가 차지하는 호 길이
+  it("한 칸 굴리면 그림 서너 장이 지나간다", () => {
+    const 판하나 = 정사각 + GAP;
 
-    const 한칸간거리 = nudge(INITIAL, wheelDelta(0, 한칸), 1 / 60).scroll;
-    const 칸수 = 판하나 / 한칸간거리;
+    let state = nudge(INITIAL, wheelDelta(0, 120), 1 / 60); // 윈도우 크롬의 한 칸
+    for (let f = 0; f < 600; f += 1) state = step(state, 1 / 60); // 설 때까지
 
-    // 한 칸에 절반쯤, 두 칸에 하나. 네 칸이던 것을 여기까지 당겼다.
-    expect(칸수).toBeGreaterThan(1.5);
-    expect(칸수).toBeLessThan(2.5);
+    const 장수 = state.scroll / 판하나;
+    expect(장수).toBeGreaterThan(3);
+    expect(장수).toBeLessThan(4.5);
+  });
+
+  /** 휠은 끌기보다 멀리 간다. 한 번 굴리고 손을 떼기 때문이다. */
+  it("휠의 속도 상한이 끌기보다 높다", () => {
+    expect(WHEEL_MAX_VELOCITY).toBeGreaterThan(MAX_VELOCITY);
+
+    const 굴림 = nudge(INITIAL, wheelDelta(0, 9999), 1 / 60);
+    expect(Math.abs(굴림.velocity)).toBe(WHEEL_MAX_VELOCITY);
   });
 });
 
