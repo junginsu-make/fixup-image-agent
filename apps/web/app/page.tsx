@@ -59,7 +59,7 @@ export default async function HomePage({
         <Difference t={t} />
       </main>
 
-      <LandingFooter t={t} />
+      <LandingFooter t={t} locale={locale} />
 
       {/* 바닥에 닿았을 때만 나온다. 첫 화면까지 올라갈 길을 남긴다. */}
       <BackToTop />

@@ -1428,7 +1428,7 @@
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
-  padding-block: 30px;
+  padding-block: 30px 20px;
   font-size: 12px;
   color: var(--mcs-ink-subtle);
 }
@@ -1439,6 +1439,57 @@
 }
 .mcs-footer-inner .mcs-footer-right {
   margin-left: auto;
+}
+
+/*
+  사업자 정보 (전자상거래법 제10조). 위 줄과 가는 선으로 나눠 둔다 — 링크와
+  번호가 한 줄에 섞이면 둘 다 안 읽힌다.
+*/
+.mcs-footer-legal {
+  padding-bottom: 30px;
+}
+.mcs-footer-business {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 16px;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--mcs-ink-line);
+  font-size: 11.5px;
+  line-height: 1.72;
+  color: var(--mcs-ink-subtle);
+}
+/*
+  이름표와 값은 한 짝이다. 줄바꿈이 꺼진 flex 줄(기본값)에 둬서 둘이 갈라지지
+  않게 하고, 주소처럼 긴 값은 자기 칸 안에서만 접히게 한다.
+*/
+.mcs-footer-business > div {
+  display: flex;
+  gap: 6px;
+  /*
+    `min-width` 을 풀지 않으면 flex 칸이 제 글자 길이 아래로 안 줄어든다. 휴대폰
+    너비에서 주소가 화면 밖으로 삐져나가던 자리다.
+  */
+  min-width: 0;
+  max-width: 100%;
+}
+.mcs-footer-business dt {
+  flex: none;
+  opacity: 0.66;
+}
+.mcs-footer-business dd {
+  margin: 0;
+  min-width: 0;
+}
+/*
+  「맨 위로」 단추(`.mcs-to-top`)는 화면 오른쪽 아래에 **붙박이로 떠 있다.** 좁은
+  화면에서는 사업자 정보의 마지막 줄이 그 자리까지 뻗어 단추 밑으로 들어갔다.
+  바닥을 그만큼 비워 단추가 글자를 덮지 않게 한다.
+*/
+@media (max-width: 860px) {
+  .mcs-footer-legal {
+    padding-bottom: 86px;
+  }
 }
 
 /* ── 접근성 ───────────────────────────────────────────────── */

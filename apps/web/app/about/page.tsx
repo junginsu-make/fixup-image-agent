@@ -209,7 +209,7 @@ export default async function AboutPage({
         </section>
       </main>
 
-      <LandingFooter t={t} />
+      <LandingFooter t={t} locale={locale} />
 
       {/* 첫 화면과 같은 휠 감각을 쓴다. 한 벌로 읽혀야 한다. */}
       <WheelBoost />
