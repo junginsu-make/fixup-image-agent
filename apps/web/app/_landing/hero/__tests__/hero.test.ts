@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   GAP,
@@ -604,5 +605,58 @@ describe("굴린 만큼 쌓인다", () => {
   it("문서가 화면보다 짧으면 0 이다", () => {
     // `scrollHeight - innerHeight` 가 음수로 오는 경우다.
     expect(nextWheelTarget({ current: 0, target: null, sinceLast: 999, distance: 한칸, max: -50 })).toBe(0);
+  });
+});
+
+/*
+  「지워지는 직업 이름」의 글꼴.
+
+  jsdom 이 없는 저장소라 그려 볼 수 없다. **CSS 를 글자로 읽어 잠근다** — 이
+  값들은 갈려도 테스트로는 안 보이고 화면에서만 드러났고, 실제로 두 번 드러났다.
+
+  파일 경로는 `import.meta.url` 기준이다. `process.cwd()` 로 잡으면 저장소
+  뿌리에서 돌릴 때 파일을 못 찾아 「실패」로 뜬다.
+*/
+const heroCss = readFileSync(new URL("../hero.css", import.meta.url), "utf8");
+
+/** `.key-slogan s { … }` 한 덩이. */
+const 지워진글자 = (() => {
+  const 시작 = heroCss.indexOf(".key-slogan s {");
+  // 이 규칙 안에는 중괄호가 없다. 그래서 다음 `}` 가 규칙의 끝이다.
+  // 찾는 값을 기준으로 끊으면 그 값을 지웠을 때 엉뚱한 데를 자른다.
+  return heroCss.slice(시작, heroCss.indexOf("}", 시작));
+})();
+
+describe("지워지는 직업 이름", () => {
+  it("규칙을 찾았다", () => {
+    // 아래 검사들이 빈 글자를 뒤지고 있으면 다 통과해 버린다. 먼저 확인한다.
+    expect(지워진글자).toContain(".key-slogan s {");
+    expect(지워진글자).toContain("-webkit-text-stroke");
+    expect(지워진글자.length).toBeGreaterThan(200);
+  });
+
+  it("부모 h2 는 Pretendard 900 에 자간이 음수다", () => {
+    // 이게 전제다. 이 값이 바뀌면 아래 이유 자체가 달라진다.
+    const h2시작 = heroCss.indexOf(".key-slogan h2 {");
+    const h2 = heroCss.slice(h2시작, heroCss.indexOf("}", h2시작));
+    expect(h2).toContain("font-weight: 900");
+    expect(h2).toContain("letter-spacing: -0.055em");
+  });
+
+  it("이 글자만 자기 글꼴을 명시한다", () => {
+    /*
+      Pretendard 는 글자폭이 좁아서, 900 굵기를 윤곽으로 바꾸면 「디」와 「자」가
+      붙어 한 덩어리가 된다. 웹폰트를 붙이기 전까지 이 글자는 시스템 글꼴로
+      그려지고 있었고 그때는 문제가 없었다.
+    */
+    expect(지워진글자).toContain("font-family:");
+    expect(지워진글자).toContain("Malgun Gothic");
+    expect(지워진글자).not.toContain("var(--font-sans)");
+  });
+
+  it("굵기와 자간은 부모에게서 물려받는다", () => {
+    // 900 / -0.055em 이 옛 모습이었다. 여기서 따로 잡으면 그 모습이 아니다.
+    expect(지워진글자).not.toMatch(/^\s*font-weight:/m);
+    expect(지워진글자).not.toMatch(/^\s*letter-spacing:/m);
   });
 });
