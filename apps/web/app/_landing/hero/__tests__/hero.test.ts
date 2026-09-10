@@ -454,9 +454,9 @@ describe("휠 한 칸의 거리", () => {
   };
   const 한칸 = 화면 * WHEEL_SCREEN_RATIO;
 
-  it("브라우저 기본보다 훨씬 더 내려간다", () => {
-    // 브라우저 기본은 delta 그대로(100px)다.
-    expect(boostedWheel(마우스휠)).toBeGreaterThan(WHEEL_NOTCH * 3);
+  it("브라우저 기본보다는 더 내려간다", () => {
+    // 브라우저 기본은 delta 그대로(100px)다. 얼마나 더 갈지는 아래 「살짝」이 잰다.
+    expect(boostedWheel(마우스휠)).toBeGreaterThan(WHEEL_NOTCH);
   });
 
   /**
@@ -487,9 +487,15 @@ describe("휠 한 칸의 거리", () => {
     }
   });
 
-  it("두 칸 반이면 한 화면이 지나간다", () => {
-    // 이 비율이 뜻이다. 너무 작으면 「안 움직인다」, 너무 크면 화면이 날아간다.
-    expect(화면 / 한칸).toBeCloseTo(2.5, 1);
+  /**
+   * **「평균보다 살짝 더」가 기준이다**(운영자). 브라우저 기본은 한 칸에 100px
+   * 안팎이다. 너무 작으면 「안 움직인다」, 너무 크면 읽던 자리를 잃는다.
+   */
+  it("기본보다 더 가되, 한 칸에 화면을 넘지 않는다", () => {
+    expect(한칸).toBeGreaterThan(WHEEL_NOTCH);       // 기본보다는 더
+    expect(한칸).toBeLessThan(WHEEL_NOTCH * 2.5);    // 그래도 「살짝」
+    // 한 칸에 화면의 4분의 1을 넘으면 읽던 자리를 잃는다.
+    expect(한칸 / 화면).toBeLessThan(0.25);
   });
 
   it("화면 높이를 모르면 손대지 않는다", () => {
