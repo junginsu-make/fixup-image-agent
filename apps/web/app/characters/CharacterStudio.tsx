@@ -10,6 +10,7 @@ import {
 import { downloadImage, openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { PanelHandle } from "../_components/panel-handle";
+import { modelDisplayName } from "../../lib/model-name";
 import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
 
@@ -516,7 +517,7 @@ export function CharacterStudio() {
                 <p className="text-xs text-subtle-foreground">
                   {modelId
                     ? chosenModel?.description
-                    : `고른 결에 맞춰 ${chosenModel?.label ?? autoModel} 로 만듭니다.`}
+                    : `고른 결에 맞춰 ${chosenModel?.label ?? modelDisplayName(autoModel)} 로 만듭니다.`}
                 </p>
                 {chosenModel?.untested ? (
                   <p className="text-xs text-amber-700">

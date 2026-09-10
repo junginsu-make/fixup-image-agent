@@ -12,11 +12,11 @@ export const metadata: Metadata = { title: "크레딧과 모델 — 사용 설�
  */
 const WEIGHTS: Record<string, { weight: number; note: string }> = {
   // 빠진 모델은 표에 「—」로 나온다. 막히지 않고 빈칸으로 새는 쪽이라 잊기 쉽다.
-  "gpt-image-2.5-flare": { weight: 4, note: "글자가 정확하면서 2 보다 2.5배 빠릅니다" },
+  "gpt-image-2.5-flare": { weight: 4, note: "글자가 정확하면서 빠릅니다. 대부분 이것으로 충분합니다" },
   "gpt-image-2.5-sunburst": { weight: 4, note: "글자 배치 지시를 더 잘 지킵니다. 대신 느립니다" },
   "gpt-image-2": { weight: 4, note: "글자가 가장 정확합니다. 명조 계열도 표현합니다" },
   "nano-banana-pro": { weight: 3, note: "빠릅니다. 글자는 고딕 계열입니다" },
-  "nano-banana-2": { weight: 3, note: "Pro 와 같은 계열입니다" },
+  "nano-banana-2": { weight: 3, note: "속도형보다 빠르고 저렴합니다" },
   "nano-banana": { weight: 1, note: "가장 저렴합니다. 글자가 적은 장면에" },
 };
 
@@ -91,8 +91,8 @@ export default function CreditsGuidePage() {
           </table>
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          「한 장당 차감」은 이미지 한 장을 만들 때 월 한도에서 빠지는 양입니다. GPT Image 2로 카드 6장을 만들면{" "}
-          <strong className="text-foreground">6 × 4 = 24장</strong>이 차감됩니다. Nano Banana로 같은 6장을 만들면
+          「한 장당 차감」은 이미지 한 장을 만들 때 월 한도에서 빠지는 양입니다. 정밀형으로 카드 6장을 만들면{" "}
+          <strong className="text-foreground">6 × 4 = 24장</strong>이 차감됩니다. 경제형으로 같은 6장을 만들면
           6장입니다.
         </p>
       </Section>
@@ -101,12 +101,12 @@ export default function CreditsGuidePage() {
         <ChoiceTable
           head={["이런 결과물이면", "이 모델", "왜"]}
           rows={[
-            ["카드뉴스 · 글자가 많다", "GPT Image 2", "한글이 가장 정확합니다. 여기서 아끼면 다시 만들게 됩니다"],
-            ["포스터 · 헤드라인이 크다", "GPT Image 2", "큰 글자가 틀리면 바로 눈에 띕니다"],
-            ["A4 인쇄용", "GPT Image 2", "픽셀을 직접 지정해야 해서 다른 모델은 이 비율을 못 만듭니다"],
-            ["배경 · 분위기 이미지", "Nano Banana", "글자가 없으면 비싼 모델을 쓸 이유가 없습니다"],
-            ["여러 안을 빠르게 보고 싶다", "Nano Banana Pro", "빠르고 차감이 GPT 보다 적습니다"],
-            ["모르겠다", "기본값 그대로", "기본은 GPT Image 2 입니다. 가장 안전합니다"],
+            ["카드뉴스 · 글자가 많다", "정밀형", "한글이 가장 정확합니다. 여기서 아끼면 다시 만들게 됩니다"],
+            ["포스터 · 헤드라인이 크다", "정밀형", "큰 글자가 틀리면 바로 눈에 띕니다"],
+            ["A4 인쇄용", "정밀형", "픽셀을 직접 지정해야 해서 다른 방식은 이 비율을 못 만듭니다"],
+            ["배경 · 분위기 이미지", "경제형", "글자가 없으면 비싼 쪽을 쓸 이유가 없습니다"],
+            ["여러 안을 빠르게 보고 싶다", "속도형", "빠르고 차감이 정밀형보다 적습니다"],
+            ["모르겠다", "기본값 그대로", "기본은 표준형입니다. 가장 안전합니다"],
           ]}
         />
       </Section>

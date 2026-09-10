@@ -182,6 +182,18 @@ export const IMAGE_MODEL_CREDIT_WEIGHT: Record<ImageModelId, number> = {
  */
 export interface ImageModelInfo {
   id: ImageModelId;
+  /**
+   * 회원에게 보이는 이름. **우리가 붙인 이름이지 모델 이름이 아니다.**
+   *
+   * 어떤 업체의 어떤 모델을 어디에 쓰는지는 이 서비스가 실측으로 쌓은
+   * 결론이다. 화면에 그대로 적으면 가입 한 번으로 그 결론이 통째로 넘어간다.
+   * 대신 **성질로 부른다** — 고르는 사람에게 필요한 것은 모델의 이름이 아니라
+   * 「글자가 정확한가」·「빠른가」·「싼가」이기 때문이다.
+   *
+   * 진짜 이름을 담는 칸은 **두지 않는다.** 화면에 쓸 일이 없는데 목록이
+   * 브라우저로 통째로 실려 나가므로, 칸을 만들면 가린 이름이 번들 안에
+   * 그대로 남는다. 운영·로그가 볼 진짜 정체는 `id` 다.
+   */
   label: string;
   description: string;
   creditWeight: number;
@@ -218,9 +230,9 @@ export interface ImageModelInfo {
 export const IMAGE_MODELS: ImageModelInfo[] = [
   {
     id: "gpt-image-2.5-flare",
-    label: "GPT Image 2.5",
+    label: "표준형",
     description:
-      "글자를 정확하게 그리면서 2 보다 2.5배 빠릅니다. 6장에 약 2분입니다.",
+      "글자가 정확하면서 빠릅니다. 6장에 약 2분입니다. 대부분의 경우 이것으로 충분합니다.",
     creditWeight: 4,
     /**
      * **실측에서 유도한 값이지 직접 잰 값이 아니다.**
@@ -238,7 +250,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "gpt-image-2",
-    label: "GPT Image 2",
+    label: "정밀형",
     description:
       "글자를 가장 정확하게 그립니다. 명조체 같은 섬세한 서체도 표현됩니다. 6장에 약 5분으로 가장 오래 걸립니다.",
     creditWeight: 4,
@@ -249,7 +261,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "nano-banana-pro",
-    label: "Nano Banana Pro",
+    label: "속도형",
     description: "6장에 약 2분으로 빠릅니다. 글자는 고딕 계열만 나옵니다.",
     creditWeight: 3,
     expectedBatchSeconds: 120,
@@ -258,8 +270,8 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "nano-banana-2",
-    label: "Nano Banana 2",
-    description: "Pro 보다 빠르고 저렴합니다. 비율을 15종까지 받습니다.",
+    label: "속도형 라이트",
+    description: "속도형보다 빠르고 저렴합니다. 비율을 15종까지 받습니다.",
     creditWeight: 2,
     expectedBatchSeconds: 100,
     maxBatchSize: 6,
@@ -267,7 +279,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "nano-banana",
-    label: "Nano Banana",
+    label: "경제형",
     description: "가장 저렴합니다. 글자가 적은 단순한 장면에 적합합니다.",
     creditWeight: 1,
     expectedBatchSeconds: 90,
@@ -276,7 +288,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "seedream-5-pro",
-    label: "Seedream 5.0 Pro",
+    label: "일관형",
     description:
       "여러 참조를 놓고 같은 대상을 유지하는 데 맞춰진 모델입니다. 참조는 10장까지. " +
       "참조를 넣으면 한 장에 90초 넘게 걸립니다.",
@@ -289,7 +301,7 @@ export const IMAGE_MODELS: ImageModelInfo[] = [
   },
   {
     id: "qwen-image-2-pro",
-    label: "Qwen Image 2.0 Pro",
+    label: "화풍형",
     description: "화풍을 옮기는 데 강합니다. 애니·일러스트에 씁니다. 13~18초로 빠릅니다.",
     creditWeight: 2,
     expectedBatchSeconds: 40,

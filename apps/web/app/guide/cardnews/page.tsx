@@ -217,7 +217,7 @@ export default function CardNewsGuidePage() {
               title: "첨부 장수 제한",
               body: (
                 <>
-                  모델마다 다릅니다. GPT Image 2는 16장, Nano Banana Pro와 Nano Banana 2는 14장, Nano Banana는 7장까지
+                  방식마다 다릅니다. 정밀형·표준형은 16장, 속도형과 속도형 라이트는 14장, 경제형은 7장까지
                   받습니다. 다음 단계로 넘어갈 때 확인하므로 미리 세지 않아도 됩니다.
                 </>
               ),
@@ -241,7 +241,7 @@ export default function CardNewsGuidePage() {
             label="언어 · 이미지 모델"
             marker={3}
             columns={2}
-            items={[{ title: "한국어", hint: "English · 日本語 · 中文" }, { title: "GPT Image 2 · 기본", hint: MODEL_NAMES }]}
+            items={[{ title: "한국어", hint: "English · 日本語 · 中文" }, { title: "표준형 · 기본", hint: MODEL_NAMES }]}
           />
           <MockNote marker={4}>
             6장 = 표지 1 + 원본 1 + AI 속지 3 + 마지막 1 · 예상 비용 $0.24
@@ -278,7 +278,7 @@ export default function CardNewsGuidePage() {
                   <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
                     크레딧과 모델
                   </Link>
-                  에 있습니다. <strong className="text-foreground">모르겠으면 기본값(GPT Image 2)이 가장 안전합니다.</strong>
+                  에 있습니다. <strong className="text-foreground">모르겠으면 기본값(표준형)이 가장 안전합니다.</strong>
                 </>
               ),
             },
@@ -351,7 +351,7 @@ export default function CardNewsGuidePage() {
             },
             {
               q: "만든 그림의 글자가 원고와 다릅니다",
-              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 GPT Image 2를 쓰세요 — 글자가 가장 정확합니다.",
+              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 정밀형을 쓰세요 — 글자가 가장 정확합니다.",
             },
             {
               q: "만드는 중에 다른 화면으로 가도 되나요",

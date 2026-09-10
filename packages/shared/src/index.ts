@@ -44,3 +44,4 @@ export * from "./attachment-order";
 export * from "./attachment-restore";
 export * from "./credit";
 export * from "./image-look";
+export * from "./josa";

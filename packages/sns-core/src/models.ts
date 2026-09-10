@@ -14,6 +14,11 @@ export interface ModeSpec {
 
 export interface ImageModel {
   id: string;
+  /**
+   * 회원에게 보이는 이름. **우리가 붙인 이름이지 모델 이름이 아니다.**
+   * 진짜 정체는 `id` 다 — 서버에 보낼 값이라 지울 수 없다.
+   * 이유는 `pdp-core/types.ts` 의 같은 자리에 적어 두었다.
+   */
   label: string;
   isDefault?: boolean;
   t2i: ModeSpec;
@@ -104,7 +109,7 @@ export const IMAGE_MODELS: ImageModel[] = [
      * 싸다.
      */
     id: "gpt-image-2.5-flare",
-    label: "GPT Image 2.5",
+    label: "표준형",
     isDefault: true,
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/flare/text-to-image", table: GPT25_MAX },
@@ -128,7 +133,7 @@ export const IMAGE_MODELS: ImageModel[] = [
      * (`pdp/images/batch/route.ts`), 95초 × 3장이면 285초다.
      */
     id: "gpt-image-2.5-sunburst",
-    label: "GPT Image 2.5 정밀",
+    label: "정밀형 플러스",
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/sunburst/text-to-image", table: GPT25_MAX },
     i2i: { endpoint: "openai/gpt-image-2.5/sunburst/edit", table: GPT25_MAX },
@@ -142,7 +147,7 @@ export const IMAGE_MODELS: ImageModel[] = [
      * id 에 던진다 — 지우면 그 작업들이 500 이 된다.
      */
     id: "gpt-image-2",
-    label: "GPT Image 2",
+    label: "정밀형",
     t2i: { endpoint: "openai/gpt-image-2", table: GPT_T2I },
     i2i: { endpoint: "openai/gpt-image-2/edit", table: GPT_I2I },
     maxReferenceImages: 16,
@@ -151,7 +156,7 @@ export const IMAGE_MODELS: ImageModel[] = [
   },
   {
     id: "nano-banana-pro",
-    label: "Nano Banana Pro",
+    label: "속도형",
     t2i: { endpoint: "fal-ai/nano-banana-pro", flatUsd: 0.15 },
     i2i: { endpoint: "fal-ai/nano-banana-pro/edit", flatUsd: 0.15 },
     maxReferenceImages: 14,
@@ -162,7 +167,7 @@ export const IMAGE_MODELS: ImageModel[] = [
   },
   {
     id: "nano-banana-2",
-    label: "Nano Banana 2",
+    label: "속도형 라이트",
     t2i: { endpoint: "fal-ai/nano-banana-2", flatUsd: 0.08 },
     i2i: { endpoint: "fal-ai/nano-banana-2/edit", flatUsd: 0.08 },
     maxReferenceImages: 14,
@@ -173,7 +178,7 @@ export const IMAGE_MODELS: ImageModel[] = [
   },
   {
     id: "nano-banana",
-    label: "Nano Banana",
+    label: "경제형",
     t2i: { endpoint: "fal-ai/nano-banana", flatUsd: 0.039 },
     i2i: { endpoint: "fal-ai/nano-banana/edit", flatUsd: 0.039 },
     maxReferenceImages: 7,

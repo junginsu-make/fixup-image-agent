@@ -1,3 +1,4 @@
+import { withJosa } from "@fixup/shared";
 import type { ImageModel, PixelSize } from "./models";
 import { POSTER_RATIOS, type ResolvedSize } from "./ratios";
 
@@ -157,7 +158,7 @@ export function chooseModelForRatio(
     return {
       model: preferred,
       switched: false,
-      reason: `${ratioId} 를 만들 수 있는 모델이 없습니다.`,
+      reason: `${withJosa(ratioId, "을를")} 만들 수 있는 방식이 없습니다.`,
     };
   }
 
@@ -165,6 +166,6 @@ export function chooseModelForRatio(
   return {
     model: able,
     switched: true,
-    reason: `${preferred.label} 은 ${what} 을 만들 수 없어 ${able.label} 로 만듭니다.`,
+    reason: `${withJosa(preferred.label, "은는")} ${withJosa(what, "을를")} 만들 수 없어 ${withJosa(able.label, "으로로")} 만듭니다.`,
   };
 }

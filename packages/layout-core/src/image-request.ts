@@ -1,3 +1,4 @@
+import { withJosa } from "@fixup/shared";
 import {
   IMAGE_MODELS,
   nearestEnumRatio,
@@ -157,7 +158,7 @@ export function planSlotImage(
       model: exact.model,
       size: exact.size,
       crop: false,
-      notes: [`${preferred.label} 은 이 칸 비율에 맞는 크기가 없어 ${exact.model.label} 로 만듭니다.`],
+      notes: [`${withJosa(preferred.label, "은는")} 이 칸 비율에 맞는 크기가 없어 ${withJosa(exact.model.label, "으로로")} 만듭니다.`],
     };
   }
 
@@ -170,7 +171,7 @@ export function planSlotImage(
 
   const notes = best.model.id === preferred.id
     ? []
-    : [`${preferred.label} 은 이 칸 비율에 맞는 크기가 없어 ${best.model.label} 로 만듭니다.`];
+    : [`${withJosa(preferred.label, "은는")} 이 칸 비율에 맞는 크기가 없어 ${withJosa(best.model.label, "으로로")} 만듭니다.`];
   notes.push("이 칸 비율을 정확히 만들 수 있는 모델이 없어 가장 가까운 비율로 만든 뒤 가운데를 잘라 넣습니다.");
   return { model: best.model, size: best.size, crop: true, notes };
 }

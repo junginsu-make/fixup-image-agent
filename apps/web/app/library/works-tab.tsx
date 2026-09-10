@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { modelDisplayName } from "../../lib/model-name";
 import { Loader2, Trash2 } from "lucide-react";
 import { openImageGallery } from "../_components/image-viewer";
 import { DELETE_CORNER_BUTTON } from "../_components/delete-work-button";
@@ -126,7 +127,7 @@ function toSnsWork(project: Record<string, any>): Work {
     settings: [
       ["비율", project.ratio],
       ["언어", project.language],
-      ["모델", project.modelId],
+      ["모델", modelDisplayName(project.modelId)],
       ["장수", project.cardCountMode === "fixed" ? `${project.cardCount}장 고정` : "AI 추천"],
       ...(project.toneNote ? ([["톤·요청", project.toneNote]] as Array<[string, string]>) : []),
       ["첨부 그림", `${(project.data?.attachments ?? []).length}장`],
@@ -157,7 +158,7 @@ function toPosterWork(project: Record<string, any>): Work {
     intent: project.data?.instruction ?? "",
     settings: [
       ["비율", project.ratio],
-      ["모델", project.modelId],
+      ["모델", modelDisplayName(project.modelId)],
       ["변형", `${project.data?.variants ?? 0}장`],
       ["따라 만들 그림", `${(project.data?.referenceIds ?? []).length}장`],
       ["그대로 지킬 것", `${(project.data?.preservedIds ?? []).length}장`],

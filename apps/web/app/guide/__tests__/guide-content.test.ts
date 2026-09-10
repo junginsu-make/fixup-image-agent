@@ -93,18 +93,27 @@ describe("설명서 내용", () => {
     expect(POSTER_RATIOS.length).toBeGreaterThan(CARD_RATIOS.length);
   });
 
-  it("모델 이름을 직접 적은 곳은 코드의 이름과 같다", () => {
-    // 설명서는 모델을 이름으로 언급한다(어느 모델을 고르라는 안내). 그 이름이
-    // 실제 목록에 없으면 없는 모델을 고르라고 말하는 셈이다.
+  it("설명서가 말하는 생성 방식은 실제로 고를 수 있는 것이다", () => {
+    // 설명서는 방식을 이름으로 언급한다(무엇을 고르라는 안내). 그 이름이
+    // 목록에 없으면 없는 것을 고르라고 말하는 셈이다.
+    //
+    // **모델 이름이 아니라 우리가 붙인 이름으로 부른다.** 업체·모델 이름이
+    // 다시 들어오는 것은 `lib/__tests__/model-name.test.ts` 가 막는다.
     const known = IMAGE_MODELS.map((model) => model.label);
     const mentioned = new Set<string>();
     for (const file of guideSources()) {
-      for (const match of file.source.matchAll(/(GPT Image \d|Nano Banana(?: Pro| \d)?)/g)) {
-        mentioned.add(match[1]);
+      for (const match of file.source.matchAll(/([가-힣]+형(?: [가-힣]+)?)/g)) {
+        const name = match[1]!;
+        // 「형」으로 끝나는 낱말이 다 방식 이름은 아니다(예: 「정사각형」).
+        if (known.includes(name)) continue;
+        if (known.some((label) => label.startsWith(name))) mentioned.add(name);
       }
     }
     for (const name of mentioned) {
       expect(known, `설명서가 말하는 "${name}" 가 IMAGE_MODELS 에 없다`).toContain(name);
     }
+
+    // 목록이 비면 위 검사가 무의미해진다.
+    expect(known).toContain("표준형");
   });
 });
