@@ -127,31 +127,72 @@ Supabase 값은 상세페이지와 **같은 것**을 넣는다. 같은 DB 를 �
 
 ## 매 배포
 
-`master` 에 push 하면 GitHub Actions 가 두 꾸러미를 만든다.
+`master` 에 push 하면 GitHub Actions(`Build EC2 release`)가 검사·빌드를 하고
+꾸러미 둘을 **릴리스 자산**으로 올린다. 태그는 `release-<sha12>` 다.
 
 ```
-fixup-image-agent-<sha>.tar.gz        앱
-fixup-image-agent-ops-<sha>.tar.gz    deploy/ec2 (스크립트·유닛 파일)
+fixup-image-agent-<sha12>.tar.gz        앱 (약 56MB)
+fixup-image-agent-ops-<sha12>.tar.gz    deploy/ec2 (스크립트·유닛 파일)
 ```
 
-받아서 서버에 올린 뒤,
+> **아티팩트가 아니라 릴리스다.** 2026-09-09 배포가 「Artifact storage quota
+> has been hit」로 막혔다. 빌드는 멀쩡했는데 56MB 짜리가 90개(4.3GB) 쌓여
+> 업로드만 실패했다. 오래된 것을 지워도 GitHub 은 용량을 6~12시간마다 다시
+> 계산해서 이튿날까지 못 올렸다. 릴리스 자산은 그 한도와 별개다. 아티팩트
+> 업로드도 남아 있지만 `continue-on-error` 라 막혀도 배포를 세우지 않는다.
+
+### 절차
 
 ```bash
-sudo bash deploy/ec2/deploy-release.sh fixup-image-agent-<sha>.tar.gz
+# 1. 릴리스가 만들어졌는지 확인한다 (실행이 끝나야 태그가 생긴다)
+gh run list --workflow "Build EC2 release" --limit 1
+gh release view release-<sha12> --json assets
+
+# 2. 꾸러미를 받는다
+gh release download release-<sha12> -D <작업폴더> -p '*.tar.gz'
+
+# 3. 서버로 올린다
+scp -i <키> <작업폴더>/fixup-image-agent-*.tar.gz ubuntu@<호스트>:/tmp/
+
+# 4. 서버에서 ops 를 풀고 배포 스크립트를 돌린다
+ssh -i <키> ubuntu@<호스트>
+mkdir -p /tmp/ops-<sha8> && tar -xzf /tmp/fixup-image-agent-ops-<sha12>.tar.gz -C /tmp/ops-<sha8>
+sudo bash /tmp/ops-<sha8>/deploy/ec2/deploy-release.sh   /tmp/fixup-image-agent-<sha12>.tar.gz "$(date -u +%Y%m%dT%H%M%SZ)-<sha8>"
 ```
 
-새 릴리스를 풀고 `current` 를 옮긴 다음 웹을 다시 시작하고, `/api/health` 와
-`/api/health/ready` 를 확인한다. **둘 중 하나라도 실패하면 스스로 이전
-릴리스로 되돌린다.** 웹이 건강한 것을 본 뒤에야 워커를 넘긴다 — 웹이
-카나리아다.
+스크립트가 새 릴리스를 풀고 `current` 를 옮긴 다음 웹을 다시 시작하고,
+`/api/health` 와 `/api/health/ready` 를 확인한다. **둘 중 하나라도 실패하면
+스스로 이전 릴리스로 되돌린다.** 웹이 건강한 것을 본 뒤에야 워커를 넘긴다 —
+웹이 카나리아다.
 
-직접 빌드하려면,
+재시작 순간에 `curl: (7) Failed to connect to 127.0.0.1 port 3000` 이 한 번
+보이는 것은 정상이다. 기동에 1~2초가 걸린다. 마지막 줄이 `Release active:` 면
+성공이다.
+
+### 배포 뒤 확인 (여기까지 해야 배포가 끝난 것이다)
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm build:ec2
-node scripts/prepare-ec2-release.mjs   # dist/ec2 에 꾸러미 내용이 생긴다
+systemctl is-active fixup-image-agent fixup-image-agent-worker   # 둘 다 active
+curl -s -o /dev/null -w "%{http_code}
+" http://127.0.0.1:3000/  # 200
+sudo readlink -f /opt/fixup-image-agent/current                   # 새 릴리스 id
 ```
+
+**꾸러미가 아니라 화면이 바뀌었는지를 본다.** 이번에 넣은 변경 중 눈에 보이는
+문자열 하나를 골라 빌드 안에서 찾아보면 확실하다.
+
+```bash
+sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps/web/.next && echo 반영됨
+```
+
+### 하지 말 것
+
+| 하지 말 것 | 이유 |
+|---|---|
+| Windows 에서 `pnpm build:ec2` | 꾸러미는 **Linux 전용**이다. 스크립트가 스스로 막는다 |
+| EC2 에서 빌드 | 램이 **911MB** 뿐이다. 빌드하면 돌고 있는 서비스가 죽는다 |
+| dev 서버가 뜬 워크트리에서 빌드 | `.next` 를 공유해 사용자 서버가 500 이 된다 |
+| 아티팩트 업로드 실패를 배포 실패로 읽기 | 릴리스가 본 배송지다. `verify`·`build` 가 success 면 꾸러미는 나왔다 |
 
 ## 되돌리기
 
