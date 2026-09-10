@@ -448,17 +448,21 @@
   margin-top: clamp(26px, 4.5vh, 58px);
 }
 
-/* 번호는 아주 크고 옅게. 읽으라고 두는 것이 아니라 자리를 잡아 주는 것이다. */
+/*
+  번호. 읽으라고 두는 것이 아니라 자리를 잡아 주는 것이지만, **보이기는 해야
+  한다.** 처음엔 획이 1px 에 색도 구분선과 같아 검은 바탕에서 거의 사라졌다.
+  획을 굵히고 한 단 밝힌다.
+*/
 .key-index {
   position: absolute;
-  top: clamp(10px, 1.6vh, 22px);
+  top: clamp(8px, 1.4vh, 18px);
   right: 0;
-  font-size: clamp(56px, 9vw, 132px);
+  font-size: clamp(64px, 10vw, 150px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.06em;
   color: transparent;
-  -webkit-text-stroke: 1px var(--mcs-line);
+  -webkit-text-stroke: max(2px, 0.022em) rgb(255 255 255 / 0.3);
   pointer-events: none;
   user-select: none;
 }

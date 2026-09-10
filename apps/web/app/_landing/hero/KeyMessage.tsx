@@ -23,7 +23,7 @@ const LINES = [
     index: "01",
     koRole: "디자이너",
     enRole: "designer",
-    koRest: "가 아니어도",
+    koRest: "가 아니여도",
     enRest: "not required",
     /** 앞은 조건, 뒤는 결론. 뒤가 굵게 남는다. */
     koLead: "마음에 든 이미지 한 장만 첨부하면,",
@@ -35,7 +35,7 @@ const LINES = [
     index: "02",
     koRole: "마케터",
     enRole: "marketer",
-    koRest: "가 아니어도",
+    koRest: "가 아니여도",
     enRest: "not required",
     koLead: "리사이징 할 필요 없이",
     koPunch: "규격에 맞는 이미지들이 생성됩니다",
