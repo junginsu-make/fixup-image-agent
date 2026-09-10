@@ -59,7 +59,7 @@ export const GUIDE_TOPICS: GuideTopic[] = [
   },
   {
     href: "/guide/library",
-    label: "라이브러리와 수집",
+    label: "라이브러리",
     desc: "재료를 모아 두고 어느 도구에서든 불러 쓰기",
     toolHref: "/library",
     toolLabel: "라이브러리 열기",

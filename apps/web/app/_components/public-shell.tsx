@@ -10,7 +10,13 @@ const onboardingSteps = ["가입 신청", "이메일 인증", "스튜디오 이�
 export function PublicLogo() {
   return (
     <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="MCS 홈">
-      <BrandMark className="h-9 w-9 shrink-0" />
+      {/*
+        **색을 여기서 못 박는다.** 마크의 회색 둘은 `currentColor` 라 부모의
+        글자색을 물려받는데, 푸터(`PublicFooter`)는 상자에
+        `text-muted-foreground` 가 걸려 있다. 안 박으면 헤더에서는 또렷하고
+        푸터에서만 반쯤 묻힌다 — 밝은 테마에서 대비가 36% 떨어진다.
+      */}
+      <BrandMark className="h-9 w-9 shrink-0 text-foreground" />
       <span className="flex min-w-0 flex-col gap-1 leading-none">
         <strong className="truncate text-base font-bold tracking-[-0.02em]">MCS</strong>
         <em className="hidden text-[9px] not-italic tracking-[0.2em] text-muted-foreground sm:block">
