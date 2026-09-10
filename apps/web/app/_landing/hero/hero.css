@@ -428,6 +428,17 @@
     transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/*
+  **첫 줄 위에는 선을 긋지 않는다.**
+
+  그 선이 히어로 바로 아래에 놓여 「첫 화면과 슬로건을 가르는 구분선」으로
+  읽혔다. 여기서 가르고 싶은 것은 슬로건 둘 사이지 화면과 화면 사이가 아니다.
+*/
+.key-slogan:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .key-slogan[data-shown="true"] {
   opacity: 1;
   transform: none;
