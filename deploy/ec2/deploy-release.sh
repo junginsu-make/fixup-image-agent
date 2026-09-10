@@ -96,7 +96,16 @@ fi
 # 웹이 먼저 도는 카나리아다. 나쁜 릴리스면 위에서 되돌리고 끝나므로 워커는
 # 이전 코드로 계속 돈다. 그리고 심볼릭 링크만 바꾸면 이미 뜬 워커는 옛 파일을
 # 붙들고 있으므로, 다시 시작하지 않으면 배포해도 옛 코드가 수집한다.
-if systemctl list-unit-files fixup-image-agent-worker.service >/dev/null 2>&1; then
+# 잠근(masked) 워커는 **건너뛴다.** 수집을 안 쓰기로 하고 일부러 잠근 서버가
+# 있는데, 거기서 restart 를 걸면 배포할 때마다 빨간 실패 줄이 나온다. 무해한
+# 실패가 늘 떠 있으면 나중에 진짜 실패도 「늘 뜨던 그거」로 넘어간다.
+#
+# `is-enabled` 는 잠겼으면 masked, 없으면 not-found 를 찍는다. 없는 것과
+# 잠근 것은 다른 이야기이므로 따로 가른다.
+worker_state="$(systemctl is-enabled fixup-image-agent-worker.service 2>/dev/null || true)"
+if [[ ${worker_state} == masked* ]]; then
+  echo "Worker is masked - skipping restart (수집을 쓰지 않는 서버)."
+elif systemctl list-unit-files fixup-image-agent-worker.service >/dev/null 2>&1; then
   systemctl restart fixup-image-agent-worker.service || true
 fi
 
