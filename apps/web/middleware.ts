@@ -120,7 +120,13 @@ export const config = {
   // site.webmanifest 는 로그인 전에도 읽혀야 한다. 로그인으로 돌려보내면
   // 브라우저가 앱 이름·아이콘을 못 읽는다.
   // mp4 도 같은 이유다 — 랜딩의 모션 소재가 로그인으로 돌려보내져 재생되지 않았다.
+  //
+  // **글꼴도 같다.** woff2 를 안 빼 뒀더니 `/fonts/pretendard/*.woff2` 가
+  // 로그인으로 307 돼서, 로그인 안 한 사람에게는 글꼴이 한 조각도 안 갔다.
+  // 첫 화면은 로그인 앞에 있는 화면이라 그 사람이 곧 손님이다. 로컬에서는
+  // `LOCAL_AUTH_BYPASS` 가 미들웨어를 건너뛰어 200 으로 보였고, 운영에 올린
+  // 뒤에야 드러났다(2026-09-10).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|site.webmanifest|samples/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|site.webmanifest|samples/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|woff2?|otf|ttf)$).*)",
   ],
 };
