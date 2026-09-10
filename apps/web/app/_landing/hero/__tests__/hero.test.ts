@@ -23,14 +23,11 @@ import {
 import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wave";
 import { scrollBehaviorFor } from "../scroll-down";
 import {
-  FRESH_BUDGET,
-  TURN_PIXELS,
-  WHEEL_TURNS,
-  addRoll,
-  resetIfAtTop,
+  SLIDES_BEFORE_RELEASE,
+  isBackAtTop,
   shouldCaptureWheel,
   shouldShowBackToTop,
-  turnsSpent,
+  slidesTraveled,
   wheelDelta,
 } from "../wheel";
 
@@ -348,35 +345,34 @@ describe("휠을 누가 받는가", () => {
   /**
    * **영원히 돌지는 않는다.** 마우스만 쓰는 사람이 첫 화면에 갇히면 아래에
    * 무엇이 있는지 영영 모른다.
+   *
+   * 세는 단위는 **넘어간 장**이다. 바퀴로 세면 한 바퀴에 한 장도 안 넘어가서
+   * 두세 장 보고 화면이 내려가 버린다(2026-09-10 실제로 그랬다).
    */
-  it("다섯 바퀴까지만 캐러셀이 받는다", () => {
-    let budget = FRESH_BUDGET;
-    for (let turn = 0; turn < WHEEL_TURNS; turn += 1) {
-      expect(shouldCaptureWheel(0, 히어로높이, budget)).toBe(true);
-      budget = addRoll(budget, TURN_PIXELS);
-    }
-
-    // 여섯 바퀴째는 페이지가 받는다.
-    expect(turnsSpent(budget)).toBe(WHEEL_TURNS);
-    expect(shouldCaptureWheel(0, 히어로높이, budget)).toBe(false);
+  it("정해진 장수까지만 캐러셀이 받는다", () => {
+    expect(shouldCaptureWheel(0, 히어로높이, 0)).toBe(true);
+    expect(shouldCaptureWheel(0, 히어로높이, SLIDES_BEFORE_RELEASE - 0.5)).toBe(true);
+    expect(shouldCaptureWheel(0, 히어로높이, SLIDES_BEFORE_RELEASE)).toBe(false);
   });
 
-  /** 트랙패드는 잘게 여러 번 보낸다. 이벤트 수가 아니라 거리로 세야 한다. */
-  it("잘게 굴려도 거리로 센다", () => {
-    let budget = FRESH_BUDGET;
-    for (let i = 0; i < 14; i += 1) budget = addRoll(budget, 10);
-    expect(turnsSpent(budget)).toBe(1);
+  it("판 폭이 제각각이어도 평균 한 장으로 잰다", () => {
+    // 열두 장이 한 바퀴 24 단위를 채우면 한 장은 평균 2 단위다.
+    expect(slidesTraveled(2, 24, 12)).toBeCloseTo(1);
+    expect(slidesTraveled(8, 24, 12)).toBeCloseTo(4);
   });
 
-  it("어느 방향으로 돌려도 한 바퀴는 한 바퀴다", () => {
-    expect(turnsSpent(addRoll(FRESH_BUDGET, -TURN_PIXELS))).toBe(1);
+  it("어느 방향으로 돌려도 넘긴 것은 넘긴 것이다", () => {
+    expect(slidesTraveled(-8, 24, 12)).toBeCloseTo(4);
   });
 
-  it("첫 화면으로 돌아오면 다시 다섯 바퀴를 준다", () => {
-    const 다쓴것 = addRoll(FRESH_BUDGET, TURN_PIXELS * WHEEL_TURNS);
-    expect(resetIfAtTop(다쓴것, 0)).toEqual(FRESH_BUDGET);
-    // 아직 아래에 있으면 그대로 둔다.
-    expect(resetIfAtTop(다쓴것, 400)).toBe(다쓴것);
+  it("고리를 모르면 0 장이다", () => {
+    expect(slidesTraveled(10, 0, 12)).toBe(0);
+    expect(slidesTraveled(10, 24, 0)).toBe(0);
+  });
+
+  it("첫 화면으로 돌아오면 다시 셀 수 있다", () => {
+    expect(isBackAtTop(0)).toBe(true);
+    expect(isBackAtTop(400)).toBe(false);
   });
 
   it("더 세게 민 쪽을 쓴다", () => {

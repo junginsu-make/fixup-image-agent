@@ -5,7 +5,7 @@ import { buildRing, rebaseScroll, visibleItems } from "./arc-layout";
 import { INITIAL, beginDrag, dragBy, endDrag, nudge, step } from "./drag-physics";
 import type { DragState } from "./drag-physics";
 import { IDLE_AMPLITUDE, relaxBend } from "./wave";
-import { FRESH_BUDGET, addRoll, resetIfAtTop, shouldCaptureWheel, wheelDelta } from "./wheel";
+import { isBackAtTop, shouldCaptureWheel, slidesTraveled, wheelDelta } from "./wheel";
 import { createPlaceholderTexture, createPlane, link, loadImage, uploadTexture } from "./gl";
 import { chain, perspective, rotationY, scaling, translation } from "./mat4";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "./shaders";
@@ -165,11 +165,13 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
     };
 
     /*
-      휠을 몇 바퀴나 돌렸나. **다섯 바퀴까지만** 캐러셀이 받고, 그 뒤로는
-      페이지에 넘긴다 — 마우스만 쓰는 사람이 첫 화면에 갇히면 안 된다.
-      첫 화면으로 돌아오면 다시 다섯 바퀴를 준다.
+      휠로 **몇 장이나 넘겨 봤나.**
+
+      바퀴 수로 세면 안 된다 — 휠 한 바퀴에 한 장도 안 넘어가서, 다섯 바퀴에
+      두세 장 보고 화면이 내려가 버렸다. 사람이 세는 것은 넘어간 장이다.
+      여기서는 휠을 받기 시작한 자리를 기억해 두고 거리로 잰다.
     */
-    let budget = FRESH_BUDGET;
+    let wheelStart: number | null = null;
 
     const onWheel = (event: WheelEvent) => {
       /*
@@ -180,24 +182,24 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
         가로채는 동안에는 기본 동작을 막아야 한다. 안 막으면 캐러셀이 돌면서
         페이지도 함께 내려가 둘 다 어정쩡해진다. 그래서 `passive: false` 다.
       */
-      if (!shouldCaptureWheel(window.scrollY, canvas.clientHeight, budget)) return;
+      if (wheelStart === null) wheelStart = state.scroll;
+      const seen = slidesTraveled(state.scroll - wheelStart, ring.total, source.length);
+      if (!shouldCaptureWheel(window.scrollY, canvas.clientHeight, seen)) return;
 
-      const delta = wheelDelta(event.deltaX, event.deltaY);
-      budget = addRoll(budget, delta);
       event.preventDefault();
-      state = nudge(state, delta, 1 / 60);
+      state = nudge(state, wheelDelta(event.deltaX, event.deltaY), 1 / 60);
     };
 
     /*
-      **바퀴는 스크롤이 일어난 뒤에만 되돌린다.**
+      **센 것은 스크롤이 일어난 뒤에만 되돌린다.**
 
       휠을 받는 동안에는 기본 동작을 막으므로 페이지가 안 움직이고 `scrollY` 가
       계속 0 이다. 그래서 휠 처리 안에서 「맨 위면 초기화」를 하면 매번 다시
-      다섯 바퀴가 생겨 영영 안 넘어간다(실제로 그랬다). 실제로 내려갔다 올라온
+      처음부터 세어 영영 안 넘어간다(실제로 그랬다). 실제로 내려갔다 올라온
       경우에만 되돌린다.
     */
     const onScroll = () => {
-      budget = resetIfAtTop(budget, window.scrollY);
+      if (isBackAtTop(window.scrollY)) wheelStart = null;
     };
 
     canvas.addEventListener("pointerdown", onPointerDown);
