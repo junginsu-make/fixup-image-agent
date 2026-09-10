@@ -261,4 +261,59 @@ describe("자리별 지시가 새지 않는가", () => {
     const started = await startQueuedFlow(plain, mixedFlow(), deps, { now: "2026-09-01T00:00:00.000Z" });
     for (const card of started.cards) expect(card.prompt).not.toContain("USER INSTRUCTION");
   });
+  /**
+   * **낱장을 다시 만들 때 사람이 적는 말**(사용자 요청 2026-09-09).
+   *
+   * 지금까지 「다시 만들기」는 같은 프롬프트로 한 번 더 돌리는 것뿐이었다.
+   * 마음에 안 들어서 누르는 버튼인데 **무엇이 마음에 안 드는지 말할 자리가
+   * 없었다.** 이미지 만들기의 「이 장만 고치기」는 이미 그 자리를 준다.
+   */
+  describe("낱장을 다시 만들 때 적는 말", () => {
+    it("적은 말이 그 카드 프롬프트에 실린다", async () => {
+      const deps = dependencies([]);
+      const started = await startQueuedFlow(mixedProject(), mixedFlow(), deps, {
+        now: "2026-09-01T00:00:00.000Z",
+        cardIndexes: [1],
+        note: "인물을 더 밝게",
+      });
+      const cover = started.cards.find((card) => card.index === 1)!;
+      expect(cover.prompt).toContain("인물을 더 밝게");
+    });
+
+    /**
+     * 원래 지시를 지우면 안 된다 — 이번 말은 **덧붙이는** 것이다.
+     *
+     * **작업에 저장된 지시로 잰다.** 처음엔 자리별 첨부 지시(`표지전용문구`)로
+     * 쟀는데 그건 다른 경로라, 「적은 말이 원래 지시를 덮는」 잘못된 구현에서도
+     * 통과했다(뮤테이션 생존).
+     */
+    it("작업에 저장된 지시를 지우지 않는다", async () => {
+      const deps = dependencies([]);
+      const project = mixedProject();
+      project.data.userInstruction = "작업전체지시";
+      const started = await startQueuedFlow(project, mixedFlow(), deps, {
+        now: "2026-09-01T00:00:00.000Z",
+        cardIndexes: [1],
+        note: "인물을 더 밝게",
+      });
+      const cover = started.cards.find((card) => card.index === 1)!;
+      expect(cover.prompt, "작업 지시가 그대로 있어야 한다").toContain("작업전체지시");
+      expect(cover.prompt, "이번에 적은 말도 있어야 한다").toContain("인물을 더 밝게");
+      expect(cover.prompt, "자리별 지시도 그대로다").toContain("표지전용문구");
+    });
+
+    /** 안 적으면 지금까지와 똑같이 돈다. */
+    it("안 적으면 지금까지대로다", async () => {
+      const deps = dependencies([]);
+      const withNote = await startQueuedFlow(mixedProject(), mixedFlow(), deps, {
+        now: "2026-09-01T00:00:00.000Z", cardIndexes: [1],
+      });
+      const plain = await startQueuedFlow(mixedProject(), mixedFlow(), deps, {
+        now: "2026-09-01T00:00:00.000Z", cardIndexes: [1], note: undefined,
+      });
+      expect(withNote.cards.find((c) => c.index === 1)!.prompt)
+        .toBe(plain.cards.find((c) => c.index === 1)!.prompt);
+    });
+  });
 });
+

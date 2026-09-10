@@ -4,11 +4,12 @@ import * as React from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { plainReviewLine, reviewHeadline } from "@fixup/sns-core";
 import Image from "next/image";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Label, Textarea } from "@fixup/ui";
 import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
 import { snsCardFilename } from "../download-filename";
 import { SaveToLibrary } from "../../_components/save-to-library";
 import { copyText } from "../../../lib/browser-safe";
+import { cardPlaceholder, trimCardNote, CARD_NOTE_MAX } from "./result-rules";
 
 function triggerDownload(url: string, name: string) {
   const anchor = document.createElement("a");
@@ -17,6 +18,27 @@ function triggerDownload(url: string, name: string) {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
+}
+
+/**
+ * 그림이 아직 없는 칸.
+ *
+ * **오른쪽 위 배지만으로는 안 보인다**(사용자 요청 2026-09-09). 카드가 큰
+ * 화면에서는 그 배지가 눈에 안 들어와, 만드는 중인지 멈춘 것인지 알 수 없다.
+ * 칸 한가운데서 말한다.
+ *
+ * 무엇을 적을지는 `result-rules.ts` 가 정한다 — 시험이 값으로 잠근다.
+ */
+function CardPlaceholder({ status }: { status: string }) {
+  const { label, spinning } = cardPlaceholder(status);
+  return (
+    <div className="grid aspect-[4/5] max-h-[38vh] place-items-center rounded-lg border border-dashed bg-muted">
+      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+        {spinning ? <Loader2 className="size-4 animate-spin text-primary" aria-hidden /> : null}
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function ReviewStatus({ card }: { card: SnsFlowCard }) {
@@ -153,10 +175,14 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
   title: string;
   flow: SnsFlowState;
   regeneratingIndex?: number;
-  onRegenerate(index: number): Promise<void>;
+  onRegenerate(index: number, note?: string): Promise<boolean>;
   writingCaption?: boolean;
   onWriteCaption(): Promise<void>;
 }) {
+  /** 지금 어느 카드의 지시 상자를 열어 뒀나. */
+  const [noteFor, setNoteFor] = React.useState<number>();
+  const [notes, setNotes] = React.useState<Record<number, string>>({});
+
   const [zipping, setZipping] = React.useState(false);
   const confirmed = flow.costs.reduce((sum, cost) => sum + (cost.costUsd ?? 0), 0);
   const unconfirmed = flow.costs.filter((cost) => cost.costUsd === null).length;
@@ -211,7 +237,11 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
           <strong className="text-lg">생성 비용</strong>
           <p className="mt-1 text-sm text-muted-foreground">확인된 비용 ${confirmed.toFixed(3)} · 확인 안 된 비용 {unconfirmed}건</p>
           <p className="mt-2 text-sm text-muted-foreground">대기 {counts.pending} · 생성 중 {counts.generating} · 완료 {counts.done} · 검수 필요 {counts.review_required} · 실패 {counts.failed}</p>
-          {unconfirmed ? <p className="mt-2 text-sm text-amber-700">진행 중이거나 완료 여부를 확인하지 못한 요청은 합계에서 따로 뺐습니다. request_id는 장부에 남습니다.</p> : null}
+          {/*
+            **장부 각주는 사용자에게 안 보인다**(사용자 요청 2026-09-09).
+            합계에서 무엇을 뺐는지, 식별자가 어디에 남는지는 우리 회계 사정이지
+            사용자가 할 일이 아니다. 뺀 건수는 위 숫자에 이미 드러난다.
+          */}
         </div>
         <Button variant="secondary" disabled={!downloadable.length || zipping} onClick={() => void downloadAll()}>
           {zipping ? <Loader2 className="animate-spin" /> : <Download />}{zipping ? "ZIP 만드는 중…" : "전체 ZIP 내려받기"}
@@ -221,7 +251,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
       {/* 2열 고정이면 넓은 화면에서 한 칸이 1,100px 가 되고 4:5 라서 세로가
           1,375px 이 된다. 카드 한 장도 화면에 안 들어온다. 넓을수록 열을 늘리고
           그림에 최대 높이를 둔다. */}
-      <div className="grid gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {flow.cards.map((card) => (
           <Card key={card.index} className="overflow-hidden">
             <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
@@ -229,7 +259,13 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
               <ReviewStatus card={card} />
             </CardHeader>
             <CardContent className="grid gap-4">
-              {card.assetUrl ? <Image src={card.thumbUrl ?? card.assetUrl} alt={`${title} · ${card.index}번 카드`} width={1088} height={1360} unoptimized data-zoomable data-viewer-src={card.assetUrl} data-viewer-meta={cardMeta(card)} className="mx-auto max-h-[60vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> :<div className="grid aspect-[4/5] max-h-[60vh] place-items-center rounded-lg border border-dashed bg-muted text-sm text-muted-foreground">이미지가 없습니다.</div>}
+              {/*
+                **한 번에 여러 장이 눈에 들어와야 한다**(사용자 요청 2026-09-09).
+                눌러서 크게 보는 길이 이미 있으므로(`data-zoomable`) 여기서
+                화면 높이의 60%를 쓸 이유가 없다. 카드가 크면 스크롤만 길어져
+                「어느 장이 어떤지」를 못 본다.
+              */}
+              {card.assetUrl ? <Image src={card.thumbUrl ?? card.assetUrl} alt={`${title} · ${card.index}번 카드`} width={1088} height={1360} unoptimized data-zoomable data-viewer-src={card.assetUrl} data-viewer-meta={cardMeta(card)} className="mx-auto max-h-[38vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> : <CardPlaceholder status={card.status} />}
               <div>
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}
@@ -240,10 +276,73 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
               <div className="flex flex-wrap justify-end gap-2">
                 {card.assetUrl ? <Button variant="outline" onClick={() => triggerDownload(card.assetUrl!, snsCardFilename(title, card.index, card.assetPath))}><Download />낱장 내려받기</Button> : null}
                 {card.assetUrl ? <SaveToLibrary fileUrl={card.assetUrl} title={`${title} ${card.index}번 카드`} /> : null}
-                {card.kind === "generated" ? <Button variant="secondary" disabled={regeneratingIndex === card.index || card.status === "pending" || card.status === "generating"} onClick={() => void onRegenerate(card.index)}>
-                  {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}{regeneratingIndex === card.index ? "다시 만드는 중…" : "다시 만들기"}
-                </Button> : null}
+                {card.kind === "generated" ? (
+                  <Button
+                    variant="secondary"
+                    disabled={regeneratingIndex === card.index || card.status === "pending" || card.status === "generating"}
+                    onClick={() => setNoteFor(noteFor === card.index ? undefined : card.index)}
+                  >
+                    <RefreshCw />다시 만들기
+                  </Button>
+                ) : null}
               </div>
+              {/*
+                **무엇이 마음에 안 드는지 적을 자리**(사용자 요청 2026-09-09).
+                지금까지 「다시 만들기」는 같은 프롬프트로 한 번 더 돌리는
+                것뿐이라, 같은 결과가 또 나와도 사람이 할 수 있는 게 없었다.
+                이미지 만들기의 「이 장만 고치기」와 같은 모양이다.
+
+                **비워 두고 눌러도 된다** — 그때는 지금까지처럼 그냥 다시 만든다.
+              */}
+              {/*
+                **응답이 올 때까지 열어 둔다.** 누르자마자 닫으면 안쪽 「다시
+                만드는 중…」이 한 프레임도 안 보이고, 바깥 버튼은 그대로라
+                화면에 아무 표시가 없다. 그 사이 서버는 레퍼런스를 올리고
+                프롬프트를 만들고 fal 에 제출한다 — 몇 초가 조용히 흐른다.
+              */}
+              {noteFor === card.index || regeneratingIndex === card.index ? (
+                <div className="grid gap-2 rounded-md border border-border p-3">
+                  <Label htmlFor={`sns-note-${card.index}`} className="text-xs">무엇을 고칠까요 (안 적어도 됩니다)</Label>
+                  <Textarea
+                    id={`sns-note-${card.index}`}
+                    rows={2}
+                    maxLength={CARD_NOTE_MAX}
+                    value={notes[card.index] ?? ""}
+                    placeholder="예) 인물을 더 밝게, 글자를 크게"
+                    onChange={(event) => setNotes({ ...notes, [card.index]: event.target.value })}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setNoteFor(undefined)}>닫기</Button>
+                    <Button
+                      size="sm"
+                      disabled={regeneratingIndex === card.index}
+                      onClick={() => {
+                        // **다듬어서 보낸다.** 공백만 적고 누르면 지시 없이 같은 것을 또
+                        // 만들게 되는데, 그건 사용자가 기대한 일이 아니다.
+                        // 적은 말은 이번 한 번만 쓴다 — 서버가 흐름에 안 남기므로
+                        // 화면도 안 들고 있어야 다음에 몰래 또 나가지 않는다.
+                        void onRegenerate(card.index, trimCardNote(notes[card.index])).then((ok) => {
+                          // **실패했으면 그대로 둔다.** 아무것도 안 나갔는데
+                          // 지우면 사람이 다시 적어야 한다.
+                          if (!ok) return;
+                          setNoteFor(undefined);
+                          setNotes((current) => {
+                            const next = { ...current };
+                            delete next[card.index];
+                            return next;
+                          });
+                        });
+                      }}
+                    >
+                      {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                      {regeneratingIndex === card.index
+                        ? "다시 만드는 중…"
+                        // 「이대로」는 적은 말을 안 쓰겠다는 뜻으로 읽힌다.
+                        : trimCardNote(notes[card.index]) ? "적은 대로 다시 만들기" : "그대로 다시 만들기"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ))}

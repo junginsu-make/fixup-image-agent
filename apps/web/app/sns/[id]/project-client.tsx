@@ -9,6 +9,8 @@ import { CopyReview } from "./copy-review";
 import { ResultBoard } from "./result-board";
 import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/sns/queued-flow";
 import { afterGenerateFailure } from "../generate-recovery";
+// 이미지 만들기가 같은 문제를 이미 풀었다 — 새 조각을 만들지 않는다.
+import { WorkingBanner } from "../../poster/_components/working-banner";
 import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -203,21 +205,32 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     }
   }
 
-  async function regenerate(index: number) {
+  /**
+   * 낱장을 다시 만든다. **성공 여부를 돌려준다.**
+   *
+   * 실패했는데 화면이 그것을 모르면, 적은 말을 지우고 입력칸을 닫아 버린다 —
+   * 아무것도 안 나갔는데 사람은 다시 적어야 한다. 카드는 한 장씩 돌기 때문에
+   * 「다른 카드가 생성 중입니다」(409)는 정상 흐름에서 자주 난다.
+   */
+  async function regenerate(index: number, note?: string): Promise<boolean> {
     setRegeneratingIndex(index);
     setMessage("");
     try {
       // 다시 만들기도 크레딧이 깎인다 — 열쇠가 없으면 예약이 거절된다.
+      // 적은 말은 이번 한 번만 쓴다. 안 적으면 지금까지와 똑같이 돈다.
       setProject(await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, {
         method: "POST",
         headers: billableHeaders(),
+        body: JSON.stringify({ note }),
       }));
       setView("result");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다.");
       // 「다른 카드가 생성 중입니다」(409)도 같은 통보다 — 화면만 모르고 있다.
       const status = error instanceof ProjectRequestError ? error.status : undefined;
       if (afterGenerateFailure(status) === "resync") await reload();
+      return false;
     } finally {
       setRegeneratingIndex(undefined);
     }
@@ -234,6 +247,21 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         <h1 className="mt-1 text-h1">{project.title}</h1>
         <p className="mt-2 max-w-3xl text-body text-muted-foreground">원고를 직접 확인한 뒤 이미지를 만들고, 검수 결과를 보고 사람이 다시 만들지 결정합니다.</p>
       </header>
+
+      {/*
+        **돌고 있다는 것을 눈에 띄게 말한다**(사용자 요청 2026-09-09).
+        버튼 글자만 바뀌면 화면이 멈춘 것으로 읽힌다 — 이미지 만들기가 같은
+        지적을 받고 이 띠를 만들었다(`working-banner.tsx` 머리말).
+      */}
+      {busy === "planning" ? (
+        <WorkingBanner label="기획과 원고를 만드는 중입니다" hint="1~2분 걸립니다. 이 화면을 닫아도 계속됩니다" />
+      ) : null}
+      {busy === "generating" ? (
+        <WorkingBanner label="그림을 만드는 중입니다" hint="장수만큼 차례로 만듭니다. 이 화면을 닫아도 계속됩니다" />
+      ) : null}
+      {generationActive && busy !== "generating" ? (
+        <WorkingBanner label="그림을 만드는 중입니다" hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다" />
+      ) : null}
 
       <StepBar steps={STEPS} current={view} onJump={view === "result" ? (id) => id === "copy" && setView("copy") : undefined} />
 
