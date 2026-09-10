@@ -1,28 +1,36 @@
 /**
- * MCS 마크 — AI 가 쌓는 상세페이지 섹션 스택.
+ * MCS 마크 — 겹쳐 쌓인 사각형 셋.
  *
- * 마지막 한 칸이 구매전환(CTA) 섹션이라 액센트 컬러(버밀리언)다.
- * 브랜드 규칙상 **이 액센트 바는 다른 색으로 바꾸지 않는다.**
+ * 2026-09-10 에 첫 화면 로고가 바뀌면서 여기도 맞췄다. 원본은
+ * `apps/web/public/brand/mcs-mark-{dark,light}-bg.svg` 다.
  *
- * 타일은 항상 어두운 색이다. 라이트 모드에서도 그대로 둔다 — 로고는
- * 화면 테마를 따라가는 요소가 아니라 고정된 표식이다.
+ * **원본은 배경별로 두 벌인데 여기서는 한 벌로 쓴다.**
  *
- * 원본: frontend/PDP 스튜디오 로고 제안/brand/svg/mark-dark-tile.svg
+ *   어두운 배경용   회색 둘이 `#F2F2F0`
+ *   밝은 배경용     회색 둘이 `#08080A`
+ *
+ * 첫 화면은 항상 어두워서 한 벌을 그냥 박아도 됐다. 이 컴포넌트가 붙는
+ * 스튜디오 사이드바와 가입·로그인 화면은 **테마를 따라간다** — 한 벌만 박으면
+ * 한쪽 테마에서 배경에 묻혀 안 보인다. 그래서 회색 둘을 `currentColor` 로 두고
+ * 글자색을 따라가게 한다. 두 원본이 쓰는 색이 정확히 그 자리의 글자색이라,
+ * 결과가 원본과 같아진다.
+ *
+ * **맨 위 초록(`#6EE7A8`)만 고정이다.** 액센트는 테마를 안 따라간다 —
+ * 로고에서 브랜드를 알아보게 하는 자리가 여기 하나뿐이다.
  */
 export function BrandMark({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 88 88"
+      viewBox="0 0 32 32"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
+      fill="none"
       role="img"
       aria-label="MCS"
     >
-      <rect width="88" height="88" rx="22" fill="#141418" />
-      <rect x="20" y="17.5" width="48" height="8" rx="2" fill="#F4F3F1" />
-      <rect x="20" y="32.5" width="33.6" height="8" rx="2" fill="#8B8781" />
-      <rect x="20" y="47.5" width="40.8" height="8" rx="2" fill="#8B8781" />
-      <rect x="20" y="62.5" width="48" height="8" rx="2" fill="#E8622E" />
+      <rect x="2" y="12" width="18" height="18" rx="3" fill="currentColor" fillOpacity="0.35" />
+      <rect x="7" y="7" width="18" height="18" rx="3" fill="currentColor" fillOpacity="0.7" />
+      <rect x="12" y="2" width="18" height="18" rx="3" fill="#6EE7A8" />
     </svg>
   );
 }

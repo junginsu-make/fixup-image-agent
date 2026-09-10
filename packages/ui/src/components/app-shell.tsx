@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, Inbox, Rss, PanelsTopLeft, Frame, BookOpen, Megaphone } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -58,13 +58,10 @@ const navGroups: NavGroup[] = [
       { href: "/characters", label: "캐릭터 만들기", desc: "인물을 고정해 재사용", icon: UserRound },
     ],
   },
-  {
-    label: "수집",
-    items: [
-      { href: "/inbox", label: "수집함", desc: "모아 온 소재", icon: Inbox },
-      { href: "/sources", label: "수집 리스트", desc: "가져올 곳 관리", icon: Rss },
-    ],
-  },
+  // 「수집」 묶음(수집함 · 수집 리스트)은 2026-09-10 에 뺐다. 운영자 판단으로
+  // 자동 수집을 당분간 안 쓴다. 화면과 표는 그대로 두고 **입구만 닫았다** —
+  // 켜는 곳은 `apps/web/lib/access/routes.ts` 의 `disabled` 두 줄이고,
+  // 여기 묶음도 그때 같이 되살린다.
   {
     label: "보관",
     items: [{ href: "/library", label: "라이브러리", desc: "작업물 · 캐릭터 · 참고 이미지", icon: Library }],

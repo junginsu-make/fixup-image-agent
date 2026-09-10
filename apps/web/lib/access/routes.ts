@@ -34,6 +34,17 @@ export interface AppRoute {
   label: string;
   /** 이 역할만 들어온다. 없으면 활성 회원 누구나. */
   requiredRole?: UserRole;
+  /**
+   * **당분간 끈 화면.** 지우지 않고 꺼 둔다.
+   *
+   * 지우면 되돌릴 때 사이드바 항목·페이지·설명서를 다시 만들어야 하고,
+   * 무엇이 있었는지도 잊는다. 여기 한 줄을 지우는 것이 되돌리기다.
+   *
+   * **역할 규칙으로는 못 막는다.** `canAccessPage()` 가 관리자를 무조건
+   * 통과시킨다(`core.ts` 의 첫 줄). 그래서 주소를 막는 일은 페이지가
+   * `isDisabledRoute()` 를 보고 직접 한다.
+   */
+  disabled?: true;
 }
 
 export const APP_ROUTES: AppRoute[] = [
@@ -43,8 +54,11 @@ export const APP_ROUTES: AppRoute[] = [
   { path: "/create", label: "상세페이지 만들기" },
   { path: "/redesign", label: "상세 페이지 리디자인" },
   { path: "/characters", label: "캐릭터 만들기" },
-  { path: "/inbox", label: "수집함" },
-  { path: "/sources", label: "수집 리스트" },
+  // 2026-09-10 운영자 판단으로 당분간 끈다. 자동 수집을 안 쓰기로 했다.
+  // 사이드바에서도 뺐고(`packages/ui/src/components/app-shell.tsx`),
+  // EC2 수집 워커도 멈춘다(`systemctl mask fixup-image-agent-worker`).
+  { path: "/inbox", label: "수집함", disabled: true },
+  { path: "/sources", label: "수집 리스트", disabled: true },
   { path: "/library", label: "라이브러리" },
   // 역할을 안 건다. 「팀장」은 UserRole 이 아니라 팀 안의 자리라
   // 여기서는 적을 수 없다. 화면은 누구나 열되 팀이 없는 사람에게는
@@ -65,3 +79,19 @@ export const PAGE_ACCESS: AccessConfig = Object.fromEntries(
     .filter((route): route is AppRoute & { requiredRole: UserRole } => Boolean(route.requiredRole))
     .map((route) => [route.path, { allowedRoles: [route.requiredRole] }]),
 );
+
+/**
+ * 지금 꺼 둔 화면들.
+ *
+ * 페이지가 이 값을 보고 스스로 돌려보낸다. 사이드바에서 뺀 것만으로는
+ * **주소를 치면 열린다** — 등록부 머리말이 경계하는 「메뉴에 없는데 주소를
+ * 치면 열리는 화면」이 바로 그것이다.
+ */
+export const DISABLED_ROUTES: string[] = APP_ROUTES
+  .filter((route) => route.disabled)
+  .map((route) => route.path);
+
+/** 이 주소가 꺼져 있나. 하위 경로도 함께 막는다(`/inbox/123`). */
+export function isDisabledRoute(path: string): boolean {
+  return DISABLED_ROUTES.some((disabled) => path === disabled || path.startsWith(`${disabled}/`));
+}

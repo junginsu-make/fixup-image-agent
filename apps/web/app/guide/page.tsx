@@ -27,7 +27,7 @@ export default function GuideHomePage() {
       >
         <Flow
           nodes={[
-            { label: "재료 모으기", sub: "수집 · 업로드" },
+            { label: "재료 모으기", sub: "업로드 · 라이브러리" },
             { label: "무엇을 만들지", sub: "한 줄이면 됩니다" },
             { label: "글자 확정", sub: "사람이 고칩니다", human: true },
             { label: "그림 생성", sub: "여기서 돈이 듭니다" },
