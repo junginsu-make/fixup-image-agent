@@ -1,8 +1,9 @@
 import Link from "next/link";
-import type { LandingCopy } from "./landing-content";
+import type { LandingCopy, Locale } from "./landing-content";
+import { BusinessInfo } from "./legal/BusinessInfo";
 import { LegalLinks } from "./legal/LegalLinks";
 
-export function LandingFooter({ t }: { t: LandingCopy }) {
+export function LandingFooter({ t, locale }: { t: LandingCopy; locale: Locale }) {
   return (
     <footer className="mcs-footer">
       <div className="mcs-shell mcs-footer-inner">
@@ -23,6 +24,14 @@ export function LandingFooter({ t }: { t: LandingCopy }) {
         */}
         <LegalLinks />
         <span className="mcs-footer-right">{t.footerRight}</span>
+      </div>
+
+      {/*
+        사업자 정보도 같은 이유로 여기 있다(전자상거래법 제10조). 위 줄과 섞으면
+        링크 사이에 번호가 끼어 둘 다 읽기 어려워지므로 **줄을 나눈다.**
+      */}
+      <div className="mcs-shell mcs-footer-legal">
+        <BusinessInfo locale={locale} />
       </div>
     </footer>
   );
