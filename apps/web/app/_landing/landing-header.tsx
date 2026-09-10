@@ -1,16 +1,28 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Languages } from "lucide-react";
 import { LOCAL_BYPASS_ENTRY } from "../../lib/dev-auth";
 import { HOME_AFTER_LOGIN } from "../../lib/routes";
 import { signOutFromLanding } from "./session-actions";
 import type { LandingCopy, Locale } from "./landing-content";
 
+/**
+ * 헤더가 **제 목록을 갖는다.**
+ *
+ * 전에는 여기 다섯 줄이 있었는데 그중 셋(`#gallery`·`#tools`·`#how`)이 가리키는
+ * 섹션이 사라졌고, `hero/hero.css` 가 `display: none` 으로 감춰 두고 있었다.
+ * 그 규칙 옆에 「이 화면이 정식이 되면 헤더가 제 목록을 갖게 하고 이 규칙은
+ * 지운다」고 적혀 있었다. 지금이 그때다 — 목록을 실제 섹션에 맞추고 그 규칙을
+ * 지웠다.
+ *
+ * `href` 는 **`/` 기준**으로 적는다. 하위 화면(`/about`)에서도 같은 헤더를
+ * 쓰는데, 거기서 `#try` 는 그 화면 안을 찾다 아무 일도 안 한다.
+ */
 const NAV = [
-  { href: "#gallery", key: "navGallery" },
-  { href: "#tools", key: "navTools" },
-  { href: "#how", key: "navHow" },
-  { href: "#try", key: "navTry" },
-  { href: "#diff", key: "navDiff" },
+  { href: "/about", key: "navAbout" },
+  { href: "/#claim", key: "navGallery" },
+  { href: "/#try", key: "navTry" },
+  { href: "/#diff", key: "navDiff" },
 ] as const;
 
 /**
@@ -24,6 +36,7 @@ export function LandingHeader({
   locale,
   localMode,
   signedIn,
+  path = "/",
 }: {
   t: LandingCopy;
   locale: Locale;
@@ -35,7 +48,14 @@ export function LandingHeader({
    * 내가 로그인 상태인지 알 방법이 없었다.
    */
   signedIn: boolean;
+  /**
+   * 지금 어느 화면인가. 언어를 바꿔도 **보던 화면에 남기려고** 받는다.
+   * 없으면 `/about` 에서 언어를 바꾼 사람이 첫 화면으로 튕겨 나간다.
+   */
+  path?: string;
 }) {
+  const other: Locale = locale === "ko" ? "en" : "ko";
+
   return (
     <header className="mcs-header">
       <div className="mcs-shell mcs-header-inner">
@@ -58,14 +78,23 @@ export function LandingHeader({
             ))}
           </span>
 
-          <span className="mcs-lang">
-            <Link href="/?lang=ko" aria-current={locale === "ko"} hrefLang="ko">
-              KO
-            </Link>
-            <Link href="/?lang=en" aria-current={locale === "en"} hrefLang="en">
-              EN
-            </Link>
-          </span>
+          {/*
+            **언어는 눈에 띌 자리가 아니다.**
+
+            전에는 테두리 상자 안에 KO·EN 을 넣고 고른 쪽에 강조색을 칠했다.
+            로그인·가입과 같은 무게로 보여 상단바에서 셋이 경쟁했다. 지금은
+            **갈 수 있는 쪽 하나만** 조용한 글자로 둔다 — 한국어 화면에서는
+            「EN」, 영어 화면에서는 「한」.
+          */}
+          <Link
+            className="mcs-lang"
+            href={`${path}?lang=${other}`}
+            hrefLang={other}
+            aria-label={t.langSwitchLabel}
+          >
+            <Languages size={13} strokeWidth={1.9} aria-hidden="true" />
+            {t.langOther}
+          </Link>
 
           {localMode ? (
             <Link href={LOCAL_BYPASS_ENTRY} className="mcs-btn-sm mcs-btn-sm--solid">

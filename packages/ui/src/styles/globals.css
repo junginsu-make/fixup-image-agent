@@ -183,8 +183,18 @@
   --text-meta--font-weight: 700;
   --text-meta--letter-spacing: 0.04em;
 
-  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui,
-    sans-serif;
+  /*
+   * 맨 앞이 **우리가 부르는 이름**이어야 한다.
+   *
+   * `"Pretendard"` 만 적혀 있던 동안 그 글꼴을 부르는 곳이 없어서, 깔아 둔
+   * 사람만 그것으로 보고 나머지는 `system-ui`(윈도에서 맑은 고딕)로 떨어졌다.
+   * `apps/web/app/pretendard.css` 가 `"Pretendard Variable"` 로 부른다.
+   *
+   * 뒤의 `"Pretendard"` 는 남긴다 — 조각을 받기 전이나 못 받았을 때, 깔려
+   * 있는 사람은 그것으로 보인다.
+   */
+  --font-sans: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo",
+    "Noto Sans KR", system-ui, sans-serif;
 }
 
 /* 진행률을 알 수 없는 작업(AI 분석)의 대기 막대.

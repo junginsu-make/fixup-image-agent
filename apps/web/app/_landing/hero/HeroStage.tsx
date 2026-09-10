@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { ChevronDown } from "lucide-react";
 import { HeroCarousel } from "./HeroCarousel";
 import type { Slide } from "./slides";
-import { scrollBehaviorFor } from "./scroll-down";
+import { downScrollOptions } from "./scroll-down";
 
 /**
  * 첫 화면 한 판. 캔버스와 내려가기 손잡이만 있다.
@@ -16,9 +16,8 @@ export function HeroStage({ slides }: { slides: Slide[] }) {
   const goDown = useCallback(() => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // 히어로 바로 다음 섹션으로 간다. 어느 섹션인지는 페이지가 정한다.
-    document
-      .querySelector(".mcs-hero + *")
-      ?.scrollIntoView({ behavior: scrollBehaviorFor(reduceMotion), block: "start" });
+    // 어디에 멈출지는 `scroll-down.ts` 가 정한다 — 값으로 재려고 빼 뒀다.
+    document.querySelector(".mcs-hero + *")?.scrollIntoView(downScrollOptions(reduceMotion));
   }, []);
 
   return (

@@ -5,6 +5,7 @@ import { LandingFooter } from "./_landing/cta-footer";
 import { Difference } from "./_landing/difference";
 import { BackToTop } from "./_landing/hero/BackToTop";
 import { ClaimStrip } from "./_landing/hero/ClaimStrip";
+import { WheelBoost } from "./_landing/hero/WheelBoost";
 import { HeroStage } from "./_landing/hero/HeroStage";
 import { KeyMessage } from "./_landing/hero/KeyMessage";
 import { slidesFromShowcase } from "./_landing/hero/slides";
@@ -62,6 +63,9 @@ export default async function HomePage({
 
       {/* 바닥에 닿았을 때만 나온다. 첫 화면까지 올라갈 길을 남긴다. */}
       <BackToTop />
+
+      {/* 마우스 휠 한 칸이 이 화면 크기에 맞게 내려가게 한다. */}
+      <WheelBoost />
     </div>
   );
 }
