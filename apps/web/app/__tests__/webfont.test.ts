@@ -115,3 +115,66 @@ describe("글꼴 배선", () => {
     expect(hero).not.toContain("Malgun Gothic");
   });
 });
+
+/**
+ * **미들웨어가 글꼴을 로그인으로 돌려보내지 않아야 한다.**
+ *
+ * `config.matcher` 는 정적 파일을 «지나가게» 빼 두는 목록이다. woff2 를 안 빼
+ * 뒀더니 `/fonts/pretendard/*.woff2` 가 307 로 로그인으로 갔고, **로그인 안 한
+ * 사람에게는 글꼴이 한 조각도 안 갔다.** 첫 화면은 로그인 앞에 있는 화면이라
+ * 그 사람이 곧 손님이다.
+ *
+ * 로컬에서는 `LOCAL_AUTH_BYPASS` 가 미들웨어를 아예 건너뛰어 200 으로 보였다.
+ * 운영에 올린 뒤에야 드러났다. 그래서 여기서는 **글자를 대조하지 않고 패턴을
+ * 실제로 돌린다** — 목록에 이름만 들어 있고 정규식이 안 맞는 경우까지 잡는다.
+ */
+describe("미들웨어가 지나가게 두는 것", () => {
+  const middlewareSource = read("middleware.ts");
+
+  /**
+   * `config.matcher` 의 정규식을 **그대로 꺼내 쓴다.**
+   *
+   * 글자를 대조하지 않는 이유가 있다 — 목록에 `woff2` 라는 글자가 들어 있어도
+   * 정규식이 안 맞으면 파일은 여전히 로그인으로 간다. 실제로 돌려야 잡힌다.
+   *
+   * 정규식으로 정규식을 꺼내지 않는다. 이스케이프가 겹쳐 엉킨다. 그 값이 적힌
+   * 줄을 찾아 큰따옴표 사이를 떼어 내고 `JSON.parse` 로 푼다 — 소스의 그 값이
+   * 곧 JSON 문자열이라 이스케이프를 정확히 풀어 준다.
+   */
+  const matcher = (() => {
+    const from = middlewareSource.indexOf('"/((?!');
+    expect(from, "matcher 를 못 찾았다").toBeGreaterThan(-1);
+    // 그 값 안에는 큰따옴표가 없다. 다음 따옴표가 곧 끝이다.
+    const to = middlewareSource.indexOf('"', from + 1);
+    const pattern = JSON.parse(middlewareSource.slice(from, to + 1)) as string;
+    return new RegExp(`^${pattern}$`);
+  })();
+
+  /** 미들웨어를 타는가. 타면 로그인 검사를 받는다. */
+  const goesThroughMiddleware = (path: string) => matcher.test(path);
+
+  it("패턴이 제대로 읽혔다 — 화면은 미들웨어를 탄다", () => {
+    // 이 줄이 깨지면 아래 판단이 전부 무의미하다.
+    expect(goesThroughMiddleware("/sns")).toBe(true);
+    expect(goesThroughMiddleware("/about")).toBe(true);
+  });
+
+  it("글꼴 조각은 미들웨어를 타지 않는다", () => {
+    for (const url of cssUrls) {
+      expect(goesThroughMiddleware(url), `${url} 가 로그인으로 갈 수 있다`).toBe(false);
+    }
+  });
+
+  it("서버 렌더링용 글꼴 파일 꼴도 함께 빼 뒀다", () => {
+    // 지금 쓰지 않아도, 나중에 `public` 으로 옮길 때 같은 사고를 반복하지 않게.
+    for (const path of ["/fonts/a.woff", "/fonts/a.woff2", "/fonts/a.otf", "/fonts/a.ttf"]) {
+      expect(goesThroughMiddleware(path), `${path}`).toBe(false);
+    }
+  });
+
+  it("먼저 있던 것들도 그대로 지나간다", () => {
+    for (const path of ["/site.webmanifest", "/og.png", "/landing/result-motion.mp4", "/icon.svg"]) {
+      expect(goesThroughMiddleware(path), `${path}`).toBe(false);
+    }
+  });
+});
