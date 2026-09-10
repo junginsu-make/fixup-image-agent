@@ -5,7 +5,7 @@ import { buildRing, rebaseScroll, visibleItems } from "./arc-layout";
 import { INITIAL, beginDrag, dragBy, endDrag, nudge, step } from "./drag-physics";
 import type { DragState } from "./drag-physics";
 import { IDLE_AMPLITUDE, relaxBend } from "./wave";
-import { shouldCaptureWheel, wheelDelta } from "./wheel";
+import { FRESH_BUDGET, addRoll, resetIfAtTop, shouldCaptureWheel, wheelDelta } from "./wheel";
 import { createPlaceholderTexture, createPlane, link, loadImage, uploadTexture } from "./gl";
 import { chain, perspective, rotationY, scaling, translation } from "./mat4";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "./shaders";
@@ -164,17 +164,40 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
       state = endDrag(state);
     };
 
+    /*
+      휠을 몇 바퀴나 돌렸나. **다섯 바퀴까지만** 캐러셀이 받고, 그 뒤로는
+      페이지에 넘긴다 — 마우스만 쓰는 사람이 첫 화면에 갇히면 안 된다.
+      첫 화면으로 돌아오면 다시 다섯 바퀴를 준다.
+    */
+    let budget = FRESH_BUDGET;
+
     const onWheel = (event: WheelEvent) => {
       /*
-        첫 화면에서는 휠이 **캐러셀을 돌린다.** 아래로 내려간 뒤에는 손을 떼고
-        평범한 스크롤에 맡긴다 — 그러지 않으면 페이지가 영영 안 내려간다.
+        첫 화면에서는 휠이 **캐러셀을 돌린다.** 다섯 바퀴를 다 쓰거나 아래로
+        내려간 뒤에는 손을 떼고 평범한 스크롤에 맡긴다 — 그러지 않으면 마우스만
+        쓰는 사람이 첫 화면에 갇힌다.
 
         가로채는 동안에는 기본 동작을 막아야 한다. 안 막으면 캐러셀이 돌면서
         페이지도 함께 내려가 둘 다 어정쩡해진다. 그래서 `passive: false` 다.
       */
-      if (!shouldCaptureWheel(window.scrollY, canvas.clientHeight)) return;
+      if (!shouldCaptureWheel(window.scrollY, canvas.clientHeight, budget)) return;
+
+      const delta = wheelDelta(event.deltaX, event.deltaY);
+      budget = addRoll(budget, delta);
       event.preventDefault();
-      state = nudge(state, wheelDelta(event.deltaX, event.deltaY), 1 / 60);
+      state = nudge(state, delta, 1 / 60);
+    };
+
+    /*
+      **바퀴는 스크롤이 일어난 뒤에만 되돌린다.**
+
+      휠을 받는 동안에는 기본 동작을 막으므로 페이지가 안 움직이고 `scrollY` 가
+      계속 0 이다. 그래서 휠 처리 안에서 「맨 위면 초기화」를 하면 매번 다시
+      다섯 바퀴가 생겨 영영 안 넘어간다(실제로 그랬다). 실제로 내려갔다 올라온
+      경우에만 되돌린다.
+    */
+    const onScroll = () => {
+      budget = resetIfAtTop(budget, window.scrollY);
     };
 
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -183,6 +206,7 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
     canvas.addEventListener("pointercancel", onPointerUp);
     // 기본 스크롤을 막아야 하므로 passive 가 아니다.
     canvas.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     // ── 그리기 ──────────────────────────────────────────────────────────
     /*
@@ -276,6 +300,7 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
       canvas.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointercancel", onPointerUp);
       canvas.removeEventListener("wheel", onWheel);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [source]);
 

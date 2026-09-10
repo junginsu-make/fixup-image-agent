@@ -22,7 +22,17 @@ import {
 } from "../drag-physics";
 import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wave";
 import { scrollBehaviorFor } from "../scroll-down";
-import { shouldCaptureWheel, wheelDelta } from "../wheel";
+import {
+  FRESH_BUDGET,
+  TURN_PIXELS,
+  WHEEL_TURNS,
+  addRoll,
+  resetIfAtTop,
+  shouldCaptureWheel,
+  shouldShowBackToTop,
+  turnsSpent,
+  wheelDelta,
+} from "../wheel";
 
 /**
  * 화면은 눈으로 보지만 **판단은 값으로 잰다.**
@@ -335,6 +345,40 @@ describe("휠을 누가 받는가", () => {
     expect(shouldCaptureWheel(0, 0)).toBe(false);
   });
 
+  /**
+   * **영원히 돌지는 않는다.** 마우스만 쓰는 사람이 첫 화면에 갇히면 아래에
+   * 무엇이 있는지 영영 모른다.
+   */
+  it("다섯 바퀴까지만 캐러셀이 받는다", () => {
+    let budget = FRESH_BUDGET;
+    for (let turn = 0; turn < WHEEL_TURNS; turn += 1) {
+      expect(shouldCaptureWheel(0, 히어로높이, budget)).toBe(true);
+      budget = addRoll(budget, TURN_PIXELS);
+    }
+
+    // 여섯 바퀴째는 페이지가 받는다.
+    expect(turnsSpent(budget)).toBe(WHEEL_TURNS);
+    expect(shouldCaptureWheel(0, 히어로높이, budget)).toBe(false);
+  });
+
+  /** 트랙패드는 잘게 여러 번 보낸다. 이벤트 수가 아니라 거리로 세야 한다. */
+  it("잘게 굴려도 거리로 센다", () => {
+    let budget = FRESH_BUDGET;
+    for (let i = 0; i < 14; i += 1) budget = addRoll(budget, 10);
+    expect(turnsSpent(budget)).toBe(1);
+  });
+
+  it("어느 방향으로 돌려도 한 바퀴는 한 바퀴다", () => {
+    expect(turnsSpent(addRoll(FRESH_BUDGET, -TURN_PIXELS))).toBe(1);
+  });
+
+  it("첫 화면으로 돌아오면 다시 다섯 바퀴를 준다", () => {
+    const 다쓴것 = addRoll(FRESH_BUDGET, TURN_PIXELS * WHEEL_TURNS);
+    expect(resetIfAtTop(다쓴것, 0)).toEqual(FRESH_BUDGET);
+    // 아직 아래에 있으면 그대로 둔다.
+    expect(resetIfAtTop(다쓴것, 400)).toBe(다쓴것);
+  });
+
   it("더 세게 민 쪽을 쓴다", () => {
     // 일반 마우스는 세로만 보낸다.
     expect(wheelDelta(0, 120)).toBe(120);
@@ -345,5 +389,29 @@ describe("휠을 누가 받는가", () => {
   it("아래로 굴리면 다음 그림 쪽으로 간다", () => {
     const 굴린뒤 = nudge(INITIAL, wheelDelta(0, 120), 1 / 60);
     expect(굴린뒤.scroll).toBeGreaterThan(0);
+  });
+});
+
+describe("위로 가기", () => {
+  const 화면 = 900;
+  const 문서 = 5000;
+
+  it("맨 위에서는 안 보인다", () => {
+    expect(shouldShowBackToTop(0, 화면, 문서)).toBe(false);
+  });
+
+  it("중간에서도 안 보인다", () => {
+    expect(shouldShowBackToTop(2000, 화면, 문서)).toBe(false);
+  });
+
+  /** 딱 끝일 때만 내면 관성 때문에 깜빡인다. 한 화면의 4분의 1쯤 남으면 낸다. */
+  it("바닥 가까이에서 보인다", () => {
+    expect(shouldShowBackToTop(문서 - 화면 - 100, 화면, 문서)).toBe(true);
+    expect(shouldShowBackToTop(문서 - 화면, 화면, 문서)).toBe(true);
+  });
+
+  it("스크롤할 데가 없으면 안 보인다", () => {
+    expect(shouldShowBackToTop(0, 화면, 화면)).toBe(false);
+    expect(shouldShowBackToTop(0, 0, 문서)).toBe(false);
   });
 });

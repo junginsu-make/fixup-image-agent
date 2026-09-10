@@ -3,6 +3,7 @@ import { getMembership } from "../lib/membership/server";
 import { listPublicShowcase } from "./api/showcase/store";
 import { LandingFooter } from "./_landing/cta-footer";
 import { Difference } from "./_landing/difference";
+import { BackToTop } from "./_landing/hero/BackToTop";
 import { ClaimStrip } from "./_landing/hero/ClaimStrip";
 import { HeroStage } from "./_landing/hero/HeroStage";
 import { KeyMessage } from "./_landing/hero/KeyMessage";
@@ -58,6 +59,9 @@ export default async function HomePage({
       </main>
 
       <LandingFooter t={t} />
+
+      {/* 바닥에 닿았을 때만 나온다. 첫 화면까지 올라갈 길을 남긴다. */}
+      <BackToTop />
     </div>
   );
 }
