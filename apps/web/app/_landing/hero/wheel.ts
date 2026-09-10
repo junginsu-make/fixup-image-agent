@@ -63,19 +63,30 @@ export function shouldShowBackToTop(
 /* ── 휠 한 칸이 얼마나 내려갈까 ─────────────────────────────────── */
 
 /**
- * 마우스 휠 한 칸의 **최소 거리(px).**
+ * 마우스 휠 **한 칸이 화면의 몇 분의 몇**을 지나갈까.
  *
- * 처음에는 배수만 두고 `deltaY × 2.4` 로 냈다. **그게 마우스마다 갈렸다** —
- * 크롬은 한 칸에 보통 100 을 보내지만, 윈도의 「한 번에 스크롤할 줄 수」를 1 로
- * 둔 마우스는 33 쯤을 보낸다. 배수만 곱하면 그 사람은 79px 밖에 안 내려가고,
- * 게다가 옛 문지기의 하한(40)에 걸려 **아예 손도 못 댔다**(사용자 신고).
+ * 값을 바꿀 일이 생기면 여기 한 줄이다. 0.4 면 두 칸 반에 한 화면이다.
  *
- * 그래서 **바닥을 깐다.** 마우스가 무엇을 보내든 한 칸은 이만큼 이상 간다.
+ * ── 두 번 잘못 짚었다 ────────────────────────────────────────────
+ * ① `deltaY × 2.4` — **마우스마다 갈렸다.** 크롬은 한 칸에 보통 100 을 보내는데
+ *    윈도의 「한 번에 스크롤할 줄 수」를 1 로 둔 마우스는 33 쯤을 보낸다. 그
+ *    사람은 79px 밖에 안 내려갔다.
+ * ② 고정 260px — **화면 크기에 따라 갈렸다.** 노트북에서는 화면의 3분의 1인데
+ *    큰 모니터에서는 5분의 1이라 같은 값이 다르게 느껴진다.
+ *
+ * 그래서 **칸을 세고, 화면에 비례한 거리를 준다.** 어느 마우스, 어느 모니터든
+ * 한 칸이 화면의 같은 만큼을 지나간다.
  */
-export const WHEEL_MIN_STEP = 260;
+export const WHEEL_SCREEN_RATIO = 0.4;
 
-/** 크게 보내는 마우스는 그 크기를 살린다. 두 칸을 한 번에 보내는 것도 있다. */
-export const WHEEL_BOOST = 2.6;
+/**
+ * 크롬이 마우스 한 칸에 보내는 값. **「한 칸」을 세는 기준자다.**
+ *
+ * 이 값으로 나눠 몇 칸인지 센다. 33 을 보내는 마우스는 0.33 → 한 칸으로 올리고,
+ * 두 칸을 한 번에 보내는 마우스(200)는 두 칸으로 센다. 그래야 큰 값을 보내는
+ * 마우스가 바닥에 묶여 느려지지 않는다.
+ */
+export const WHEEL_NOTCH = 100;
 
 /**
  * 이보다 작은 델타는 **트랙패드·정밀 휠**로 본다. 브라우저에 맡긴다.
@@ -87,9 +98,9 @@ export const MOUSE_WHEEL_MIN = 12;
 /**
  * 앞 휠에서 이보다 촘촘히 오면 **흐르는 입력**으로 본다. 손대지 않는다.
  *
- * 트랙패드는 손가락 한 번에 60Hz(약 16ms)로 잔 값을 흘려보낸다. 거기에 바닥을
- * 깔면 화면이 날아간다. 마우스 휠은 손으로 굴리는 것이라 한 칸 사이가 이보다
- * 넓다.
+ * 트랙패드는 손가락 한 번에 60Hz(약 16ms)로 잔 값을 흘려보낸다. 거기에 한 칸을
+ * 통째로 주면 화면이 날아간다. 마우스 휠은 손으로 굴리는 것이라 한 칸 사이가
+ * 이보다 넓다.
  */
 export const WHEEL_STREAM_MS = 25;
 
@@ -108,6 +119,8 @@ export function boostedWheel(event: {
   defaultPrevented: boolean;
   /** 앞 휠에서 지난 시간(ms). 첫 휠이면 큰 값을 준다. */
   sinceLast: number;
+  /** 화면 높이(px). 한 칸의 거리가 여기에 비례한다. */
+  viewport: number;
 }): number {
   // 첫 화면 캐러셀이 이미 가로챘다. 거기서는 휠이 페이지를 내리는 게 아니다.
   if (event.defaultPrevented) return 0;
@@ -118,9 +131,11 @@ export function boostedWheel(event: {
   if (Math.abs(event.deltaY) < MOUSE_WHEEL_MIN) return 0;
   // 흐르는 입력(트랙패드)이다.
   if (event.sinceLast < WHEEL_STREAM_MS) return 0;
+  // 화면 높이를 모르면 손대지 않는다. 엉뚱한 거리를 내는 것보다 낫다.
+  if (!(event.viewport > 0)) return 0;
 
-  const step = Math.max(Math.abs(event.deltaY) * WHEEL_BOOST, WHEEL_MIN_STEP);
-  return Math.sign(event.deltaY) * step;
+  const notches = Math.max(1, Math.round(Math.abs(event.deltaY) / WHEEL_NOTCH));
+  return Math.sign(event.deltaY) * notches * event.viewport * WHEEL_SCREEN_RATIO;
 }
 
 /**

@@ -52,6 +52,7 @@ export function WheelBoost() {
         ctrlKey: event.ctrlKey,
         defaultPrevented: event.defaultPrevented,
         sinceLast,
+        viewport: window.innerHeight,
       });
       if (distance === 0) {
         // 손대지 않은 것도 「방금 왔다」로 기억한다 — 흐르는 입력의 다음 값이

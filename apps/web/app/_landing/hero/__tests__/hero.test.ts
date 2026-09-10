@@ -25,9 +25,9 @@ import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wa
 import { downScrollBlock, downScrollOptions, scrollBehaviorFor } from "../scroll-down";
 import {
   MOUSE_WHEEL_MIN,
-  WHEEL_BOOST,
   WHEEL_GESTURE_MS,
-  WHEEL_MIN_STEP,
+  WHEEL_NOTCH,
+  WHEEL_SCREEN_RATIO,
   WHEEL_STREAM_MS,
   boostedWheel,
   nextWheelTarget,
@@ -446,37 +446,62 @@ describe("위로 가기", () => {
  * 하나하나 잠근다 — 새 조건을 넣다가 그중 하나를 풀면 화면에서만 드러난다.
  */
 describe("휠 한 칸의 거리", () => {
+  const 화면 = 1000;
   /** 크롬이 마우스 한 칸에 보내는 값. 손으로 굴리므로 간격이 넓다. */
-  const 마우스휠 = { deltaY: 100, deltaMode: 0, ctrlKey: false, defaultPrevented: false, sinceLast: 200 };
+  const 마우스휠 = {
+    deltaY: WHEEL_NOTCH, deltaMode: 0, ctrlKey: false, defaultPrevented: false,
+    sinceLast: 200, viewport: 화면,
+  };
+  const 한칸 = 화면 * WHEEL_SCREEN_RATIO;
 
-  it("마우스 휠은 브라우저 기본보다 더 내려간다", () => {
+  it("브라우저 기본보다 훨씬 더 내려간다", () => {
     // 브라우저 기본은 delta 그대로(100px)다.
-    expect(boostedWheel(마우스휠)).toBeGreaterThan(100);
-    expect(boostedWheel(마우스휠)).toBe(100 * WHEEL_BOOST);
+    expect(boostedWheel(마우스휠)).toBeGreaterThan(WHEEL_NOTCH * 3);
   });
 
   /**
-   * **여기가 처음에 틀렸던 자리다.**
-   *
-   * 배수만 곱했더니 마우스마다 갈렸다. 윈도의 「한 번에 스크롤할 줄 수」를 1 로
-   * 둔 마우스는 33 쯤을 보내는데, 그 사람은 79px 밖에 안 내려갔고 게다가 옛
-   * 하한(40)에 걸려 아예 손도 못 댔다. 바닥을 깔아 어떤 마우스든 같게 만든다.
+   * **처음에 틀렸던 자리 ①.** `deltaY × 배수` 로 냈더니 마우스마다 갈렸다.
+   * 윈도의 「한 번에 스크롤할 줄 수」를 1 로 둔 마우스는 33 쯤을 보내는데, 그
+   * 사람은 79px 밖에 안 내려갔고 게다가 옛 하한(40)에 걸려 아예 손도 못 댔다.
    */
-  it("작게 보내는 마우스도 같은 만큼 내려간다", () => {
-    const 한줄마우스 = { ...마우스휠, deltaY: 33 };
-    expect(boostedWheel(한줄마우스)).toBe(WHEEL_MIN_STEP);
-    // 크게 보내는 마우스는 그 크기를 살린다.
-    expect(boostedWheel({ ...마우스휠, deltaY: 200 })).toBe(200 * WHEEL_BOOST);
+  it("작게 보내는 마우스도 한 칸은 한 칸이다", () => {
+    for (const deltaY of [12, 33, 50, 100, 140]) {
+      expect(boostedWheel({ ...마우스휠, deltaY }), `deltaY ${deltaY}`).toBe(한칸);
+    }
   });
 
-  it("바닥이 브라우저 기본보다 넉넉하다", () => {
-    // 이 값이 100 아래로 내려가면 「더 내려가게」라는 뜻이 사라진다.
-    expect(WHEEL_MIN_STEP).toBeGreaterThan(200);
+  it("두 칸을 한 번에 보내는 마우스는 두 칸으로 센다", () => {
+    // 바닥에 묶어 두면 큰 값을 보내는 마우스만 느려진다.
+    expect(boostedWheel({ ...마우스휠, deltaY: 200 })).toBe(한칸 * 2);
+    expect(boostedWheel({ ...마우스휠, deltaY: 400 })).toBe(한칸 * 4);
+  });
+
+  /**
+   * **처음에 틀렸던 자리 ②.** 고정 260px 로 바꿨더니 화면 크기에 따라 갈렸다.
+   * 노트북에서는 화면의 3분의 1인데 큰 모니터에서는 5분의 1이었다.
+   */
+  it("어느 화면에서든 같은 비율이 지나간다", () => {
+    for (const viewport of [700, 1000, 1440, 2160]) {
+      const step = boostedWheel({ ...마우스휠, viewport });
+      expect(step / viewport, `화면 ${viewport}`).toBeCloseTo(WHEEL_SCREEN_RATIO, 5);
+    }
+  });
+
+  it("두 칸 반이면 한 화면이 지나간다", () => {
+    // 이 비율이 뜻이다. 너무 작으면 「안 움직인다」, 너무 크면 화면이 날아간다.
+    expect(화면 / 한칸).toBeCloseTo(2.5, 1);
+  });
+
+  it("화면 높이를 모르면 손대지 않는다", () => {
+    // 엉뚱한 거리를 내는 것보다 브라우저에 맡기는 편이 낫다.
+    expect(boostedWheel({ ...마우스휠, viewport: 0 })).toBe(0);
+    expect(boostedWheel({ ...마우스휠, viewport: Number.NaN })).toBe(0);
   });
 
   it("위로 굴리면 위로 간다 — 부호를 뒤집지 않는다", () => {
-    expect(boostedWheel({ ...마우스휠, deltaY: -100 })).toBe(-100 * WHEEL_BOOST);
-    expect(boostedWheel({ ...마우스휠, deltaY: -33 })).toBe(-WHEEL_MIN_STEP);
+    expect(boostedWheel({ ...마우스휠, deltaY: -WHEEL_NOTCH })).toBe(-한칸);
+    expect(boostedWheel({ ...마우스휠, deltaY: -33 })).toBe(-한칸);
+    expect(boostedWheel({ ...마우스휠, deltaY: -200 })).toBe(-한칸 * 2);
   });
 
   it("첫 화면 캐러셀이 가로챈 휠은 안 건드린다", () => {
@@ -496,7 +521,7 @@ describe("휠 한 칸의 거리", () => {
   });
 
   it("흐르는 입력은 안 건드린다 — 트랙패드는 60Hz 로 흘려보낸다", () => {
-    // 값이 커도 촘촘히 오면 손가락이다. 바닥을 깔면 화면이 날아간다.
+    // 값이 커도 촘촘히 오면 손가락이다. 한 칸을 통째로 주면 화면이 날아간다.
     expect(boostedWheel({ ...마우스휠, sinceLast: WHEEL_STREAM_MS - 1 })).toBe(0);
     expect(boostedWheel({ ...마우스휠, sinceLast: WHEEL_STREAM_MS })).not.toBe(0);
   });
