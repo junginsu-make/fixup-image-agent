@@ -115,6 +115,7 @@ export const KO = {
     { item: "글자 수정", a: "이미지를 다시 생성, 그때마다 비용", b: "즉시 수정", c: "그림 전 단계에서 확정하므로 재생성 비용이 발생하지 않습니다" },
     { item: "품질 심사", a: "없음", b: "사람이 판단", c: "만든 호출과 다른 호출이 6항목을 심사, fail 이면 최대 2회 재작성" },
     { item: "레퍼런스 사용", a: "스타일만 흐릿하게 반영", b: "템플릿에 고정", c: "역할을 네 가지 어휘로 명시. 따라 만들기 / 제품 · 인물 지키기 / 원본 그대로" },
+    { item: "인물 일관성", a: "장마다 다른 사람이 나옵니다", b: "쓰던 사진을 계속 씁니다", c: "인물·캐릭터를 정면·좌·우·후면으로 고정해 두고 불러 씁니다. 여러 장에 같은 사람이 나옵니다" },
     { item: "광고 규격", a: "규격마다 다시 만들거나 직접 자릅니다", b: "규격마다 템플릿을 다시 맞춥니다", c: "만든 그림 하나에서 네이버 · 구글 · 카카오 규격을 뽑습니다. 새로 만들지 않으므로 크레딧이 안 듭니다" },
     { item: "결과물 재사용", a: "내려받고 끝", b: "파일로 관리", c: "라이브러리로 돌아와 다음 작업의 레퍼런스가 됩니다" },
     { item: "비용", a: "실패한 결과도 과금", b: "정액", c: "분석은 무료, 성공한 이미지만 차감. 모델별 가중치 4 / 3 / 1" }
@@ -226,6 +227,7 @@ export const EN: LandingCopy = {
     { item: "Editing text", a: "Regenerate the image, cost each time", b: "Instant", c: "Locked before the image exists, so there is no regeneration cost" },
     { item: "Quality judging", a: "None", b: "Human judgement", c: "A different call scores six criteria; a fail triggers up to two rebuilds" },
     { item: "Using references", a: "Style vaguely echoed", b: "Fixed to a template", c: "Role stated in four words. Follow it / keep product · person / place original" },
+    { item: "Character consistency", a: "A different person every time", b: "You reuse the same stock photo", c: "Lock a person or character in front, left, right and back views, then reuse it — the same face across every image" },
     { item: "Ad sizes", a: "Regenerate or crop for every size", b: "Re-fit a template for every size", c: "Pull Naver, Google and Kakao sizes from one image you already made — nothing is regenerated, so no credits" },
     { item: "Reusing output", a: "Download and done", b: "Managed as files", c: "Returns to the library as the reference for the next job" },
     { item: "Cost", a: "Failures billed too", b: "Flat fee", c: "Analysis free, only successful images counted. Model weights 4 / 3 / 1" }

@@ -701,3 +701,38 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/*
+  맨 위로. 바닥에 닿았을 때만 나온다.
+
+  히어로의 내려가기 손잡이와 **같은 결**로 둔다 — 유리처럼 살짝 비치고,
+  글자 없이 아이콘만. 다만 이쪽은 화면에 붙어 따라다닌다.
+*/
+.mcs-to-top {
+  position: fixed;
+  right: clamp(16px, 3vw, 34px);
+  bottom: clamp(16px, 3vh, 34px);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  background: rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(6px);
+  color: rgb(255 255 255 / 0.72);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.mcs-to-top:hover {
+  background: rgb(255 255 255 / 0.16);
+  border-color: rgb(255 255 255 / 0.38);
+  color: #fff;
+}
+
+.mcs-to-top:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.75);
+  outline-offset: 3px;
+}
