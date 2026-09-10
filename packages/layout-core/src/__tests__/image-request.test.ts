@@ -28,7 +28,8 @@ describe("planSlotImage", () => {
     expect(plan.model.id).not.toBe("nano-banana-pro");
     expect(plan.crop).toBe(false);
     expect(plan.notes).toHaveLength(1);
-    expect(plan.notes[0]).toContain("Nano Banana Pro");
+    expect(plan.notes[0]).toContain("속도형은");
+    expect(plan.notes[0]).toContain("표준형으로");
   });
 
   it("어느 모델도 못 만드는 비율이면 가장 가까운 것으로 만들고 잘린다고 알린다", () => {

@@ -74,7 +74,9 @@ describe("비율이 모델보다 우선한다", () => {
     // id 를 적어 두면 기본을 옮길 때마다 뜻과 무관하게 고치게 된다.
     expect(choice.model.pixelSizeLimits, "픽셀을 지정할 수 있어야 한다").toBeTruthy();
     expect(choice.switched).toBe(true);
-    expect(choice.reason).toContain("Nano Banana");
+    // 이름과 조사가 함께 맞아야 한다 — 「경제형 은 … 표준형 로」가 아니라.
+    expect(choice.reason).toContain("경제형은");
+    expect(choice.reason).toContain("표준형으로");
   });
 
   it("첨부 비율 그대로는 픽셀을 지정할 수 있는 모델이라야 한다", () => {

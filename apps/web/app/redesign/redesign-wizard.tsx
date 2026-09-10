@@ -142,13 +142,18 @@ const knowledgeStorageKey = "hanirum-knowledge-items";
 const projectDbName = "hanirum-redesign-projects";
 const projectStoreName = "projects";
 
+/**
+ * 화면에 보이는 이름은 **성질**이다. 업체·모델 이름을 적지 않는다 —
+ * 어디에 무엇을 쓰는지가 이 서비스의 결론이라, 적어 두면 가입 한 번으로
+ * 넘어간다. 진짜 정체는 아래 `id` 다 — 서버에 보낼 값이라 지울 수 없다.
+ */
 const models = {
   openai: {
-    label: "OpenAI Image 2.0",
+    label: "정밀형",
     id: "gpt-image-2-2026-04-21"
   },
   google: {
-    label: "Google Nano Banana 2",
+    label: "속도형",
     id: "gemini-3.1-flash-image-preview"
   }
 };
@@ -859,8 +864,8 @@ export function RedesignWizard() {
         <StepBar steps={REDESIGN_STEPS} current={view} onJump={(id) => setView(id as View)} />
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Badge variant={serverConfig.serverOpenaiKeyConfigured ? "green" : "default"}>OpenAI {serverConfig.serverOpenaiKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
-          <Badge variant={serverConfig.serverGoogleKeyConfigured ? "green" : "default"}>Google {serverConfig.serverGoogleKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
+          <Badge variant={serverConfig.serverOpenaiKeyConfigured ? "green" : "default"}>정밀형 {serverConfig.serverOpenaiKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
+          <Badge variant={serverConfig.serverGoogleKeyConfigured ? "green" : "default"}>속도형 {serverConfig.serverGoogleKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
           {/* 보관소가 준비된 것과 지식이 들어 있는 것은 다르다. 예전에는 0건이어도
               "연결"이라 떠서, 쓰이지 않는 기능이 켜져 있는 것처럼 보였다. */}
           <Badge
@@ -2328,7 +2333,7 @@ function SectionResultCard({
           <OptionGroup
             label="수정 모델"
             value={editModel}
-            options={[["openai", "OpenAI Image 2.0"], ["google", "Nano Banana 2"]]}
+            options={[["openai", models.openai.label], ["google", models.google.label]]}
             onChange={(value) => setEditModel(value as Model)}
           />
           <Button
@@ -2395,8 +2400,8 @@ function GenerationProgressPanel({
         <div className="mt-3 grid grid-cols-[160px_minmax(0,1fr)] gap-3 text-sm max-sm:grid-cols-1">
           <div className="rounded-md bg-primary px-3 py-2 font-bold text-primary">{progress.phase}</div>
           <div className="rounded-md border border-border bg-card px-3 py-2 leading-relaxed text-muted-foreground">
-            {isLongWait && modelLabel.includes("OpenAI")
-              ? "OpenAI Image 2.0은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다. 특히 긴 상세페이지 캡처나 참조 이미지가 여러 장이면 응답 시간이 길어질 수 있어요."
+            {isLongWait && modelLabel === models.openai.label
+              ? "정밀형은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다. 특히 긴 상세페이지 캡처나 참조 이미지가 여러 장이면 응답 시간이 길어질 수 있어요."
               : progress.tip}
           </div>
         </div>
