@@ -15,6 +15,32 @@
  *   본문  `rem` 으로 넉넉히. 좁게 잡으면 한 줄에 들어갈 문장이 두 줄로 접힌다.
  */
 
+/*
+  **글자를 한 단 부드럽게.**
+
+  글꼴은 첫 화면과 같다(`--font-sans` → Pretendard). 다만 첫 화면의 제목은
+  900 굵기에 자간 -0.038em 인데, 그 화면에는 큰 그림과 움직임이 함께 있어
+  그 무게가 버텨진다. 이 화면은 글만 있어서 같은 값이 그대로 «딱딱하게» 읽힌다.
+
+  글꼴도 크기도 그대로 두고 **굵기 한 단, 자간 한 단, 줄 간격 한 단**만 푼다.
+*/
+.about .mcs-h1,
+.about .mcs-h2 {
+  font-weight: 800;
+  letter-spacing: -0.028em;
+  line-height: 1.24;
+}
+.about .mcs-h2--cta {
+  line-height: 1.2;
+}
+.about .mcs-lead {
+  line-height: 1.8;
+}
+.about .mcs-kicker {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
 .about {
   /*
    * 본문 한 줄의 상한. 1600px 셸을 다 쓰면 눈이 줄을 놓친다.
@@ -34,6 +60,31 @@
 .about .mcs-h2.about-measure,
 .about .mcs-h1 {
   max-width: min(23em, 100%);
+}
+
+/* ── 상단바 ──────────────────────────────────────────────── */
+
+/*
+  상단바는 **첫 화면과 똑같이 고정**이다(`hero.css` 의
+  `.mcs.mcs-dark .mcs-header` 가 `position: fixed`). 이 화면은 첫 화면의 하위
+  화면이지 별개의 사이트가 아니다.
+
+  다만 **바탕만 다르게 둔다.** 첫 화면에서 그 상단바는 히어로 위에 얹히려고
+  아래로 갈수록 투명해지는 그늘을 쓴다. 여기에는 히어로가 없어서, 글이 그
+  투명한 부분 아래로 지나가며 겹쳐 읽힌다. 원래 `.mcs-header` 가 쓰던
+  «흐린 유리 + 아래 선» 으로 되돌린다.
+*/
+/*
+  **선택자를 `hero.css` 보다 무겁게 잡는다.** 저쪽은
+  `.mcs.mcs-dark .mcs-header`(클래스 셋)라서 `.about .mcs-header`(둘)로는
+  못 이긴다 — 처음에 그렇게 적었다가 아무것도 안 먹는 것을 브라우저에서
+  확인했다. `.about` 은 `.mcs.mcs-dark` 와 같은 요소에 붙으므로 넷이 된다.
+*/
+.mcs.mcs-dark.about .mcs-header {
+  background: rgb(0 0 0 / 0.72);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--mcs-ink-line);
+  padding-bottom: 0;
 }
 
 /* ── 첫 화면 ─────────────────────────────────────────────── */

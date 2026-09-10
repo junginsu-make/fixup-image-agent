@@ -106,9 +106,12 @@ export const ABOUT_KO = {
 
   endA: "잘 만들고 싶은 마음이,",
   endB: "시간에 막히지 않도록.",
-  endLead: "그 하나를 위해 만들었습니다. 결과물을 먼저 보고, 그다음에 시작하세요.",
-  endPrimary: "결과물 먼저 보기",
-  endSecondary: "가입 신청",
+  endLead: "그 하나를 위해 만들었습니다. 가입 신청 후 이메일 인증과 승인을 거치면 바로 쓰실 수 있습니다.",
+  /**
+   * **문은 하나만 낸다.** 「결과물 먼저 보기」를 나란히 뒀다가 지웠다 —
+   * 여기까지 읽은 사람은 이미 볼 만큼 봤고, 갈림길을 주면 둘 다 안 누른다.
+   */
+  endPrimary: "가입 신청",
 };
 
 export type AboutCopy = typeof ABOUT_KO;
@@ -183,9 +186,8 @@ export const ABOUT_EN: AboutCopy = {
 
   endA: "So that wanting to make it well",
   endB: "is not stopped by the clock.",
-  endLead: "That is what this was built for. See the output first, then begin.",
-  endPrimary: "See the output",
-  endSecondary: "Request access",
+  endLead: "That is what this was built for. Request access, confirm your email, and you are in.",
+  endPrimary: "Request access",
 };
 
 export const ABOUT: Record<"ko" | "en", AboutCopy> = { ko: ABOUT_KO, en: ABOUT_EN };

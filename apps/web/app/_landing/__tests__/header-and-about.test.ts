@@ -190,6 +190,39 @@ describe("MCS 란 화면", () => {
     }
   });
 
+  it("마지막에 내는 문은 하나뿐이다", () => {
+    // 여기까지 읽은 사람에게 갈림길을 주면 둘 다 안 누른다.
+    const page = read("app/about/page.tsx");
+    const cta = page.slice(page.indexOf('className="about-cta"'));
+    expect((cta.match(/mcs-btn /g) ?? []).length).toBe(1);
+    expect(cta).toContain('href="/signup"');
+    expect(cta).not.toContain('href="/demo"');
+  });
+
+  it("상단바가 이 화면에서도 고정이다 — 하위 화면이지 별개 사이트가 아니다", () => {
+    // `hero.css` 가 `.mcs.mcs-dark .mcs-header` 를 `position: fixed` 로 둔다.
+    // 그 규칙이 사라지면 이 화면의 상단바가 스크롤에 밀려 올라간다.
+    expect(heroCss).toContain(".mcs.mcs-dark .mcs-header");
+    const rule = heroCss.slice(heroCss.indexOf(".mcs.mcs-dark .mcs-header"));
+    expect(rule.slice(0, 160)).toContain("position: fixed");
+
+    // 다만 바탕은 이 화면 것으로 덮는다. 히어로가 없어서 그늘이 투명해지는
+    // 아래쪽으로 글이 지나가면 겹쳐 읽힌다.
+    const aboutCss = read("app/about/about.css");
+    /**
+     * **`hero.css` 보다 무거운 선택자여야 한다.** 저쪽이 클래스 셋
+     * (`.mcs.mcs-dark .mcs-header`)이라 둘로는 못 이긴다 — 실제로 그렇게
+     * 적었다가 브라우저에서 아무것도 안 먹는 것을 봤다.
+     */
+    expect(aboutCss).toContain(".mcs.mcs-dark.about .mcs-header");
+    expect(aboutCss).toContain("backdrop-filter");
+
+    const weigh = (selector: string) => (selector.match(/\./g) ?? []).length;
+    expect(weigh(".mcs.mcs-dark.about .mcs-header")).toBeGreaterThan(
+      weigh(".mcs.mcs-dark .mcs-header"),
+    );
+  });
+
   it("사람이 손대는 걸음은 하나뿐이다", () => {
     // 이 화면이 하는 주장 자체다. 둘이 되면 문장과 그림이 어긋난다.
     for (const copy of [ABOUT_KO, ABOUT_EN]) {

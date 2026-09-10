@@ -200,11 +200,8 @@ export default async function AboutPage({
             <p className="mcs-lead about-measure">{a.endLead}</p>
 
             <div className="about-cta">
-              <Link className="mcs-btn mcs-btn--primary" href="/demo">
+              <Link className="mcs-btn mcs-btn--primary" href="/signup">
                 {a.endPrimary}
-              </Link>
-              <Link className="mcs-btn mcs-btn--ghost" href="/signup">
-                {a.endSecondary}
               </Link>
             </div>
           </div>
