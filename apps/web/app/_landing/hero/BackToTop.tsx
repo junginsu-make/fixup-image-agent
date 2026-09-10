@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowUp } from "lucide-react";
+import { ChevronUp } from "lucide-react";
 import { scrollBehaviorFor } from "./scroll-down";
 import { shouldShowBackToTop } from "./wheel";
 
@@ -49,7 +49,8 @@ export function BackToTop() {
       // 걸리면 어디로 갔는지 알 수 없다.
       hidden={!shown}
     >
-      <ArrowUp size={20} strokeWidth={1.6} aria-hidden />
+      {/* 아래의 내려가기(∨)와 짝이 맞게 같은 모양을 쓴다. */}
+      <ChevronUp size={22} strokeWidth={1.5} aria-hidden />
     </button>
   );
 }

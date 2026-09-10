@@ -22,14 +22,7 @@ import {
 } from "../drag-physics";
 import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wave";
 import { scrollBehaviorFor } from "../scroll-down";
-import {
-  SLIDES_BEFORE_RELEASE,
-  isBackAtTop,
-  shouldCaptureWheel,
-  shouldShowBackToTop,
-  slidesTraveled,
-  wheelDelta,
-} from "../wheel";
+import { shouldCaptureWheel, shouldShowBackToTop, wheelDelta } from "../wheel";
 
 /**
  * 화면은 눈으로 보지만 **판단은 값으로 잰다.**
@@ -343,36 +336,16 @@ describe("휠을 누가 받는가", () => {
   });
 
   /**
-   * **영원히 돌지는 않는다.** 마우스만 쓰는 사람이 첫 화면에 갇히면 아래에
-   * 무엇이 있는지 영영 모른다.
+   * 첫 화면은 **머무는 자리**다. 휠로는 안 내려간다 — 내려가는 길은 아래의
+   * 손잡이 하나뿐이다.
    *
-   * 세는 단위는 **넘어간 장**이다. 바퀴로 세면 한 바퀴에 한 장도 안 넘어가서
-   * 두세 장 보고 화면이 내려가 버린다(2026-09-10 실제로 그랬다).
+   * 「몇 장 보면 놓아 준다」를 두 번 넣어 봤다가 두 번 다 걷어냈다. 바퀴로 세면
+   * 두세 장 만에 내려가 버렸고, 장으로 세도 한 바퀴를 못 돌고 끊겼다.
    */
-  it("정해진 장수까지만 캐러셀이 받는다", () => {
-    expect(shouldCaptureWheel(0, 히어로높이, 0)).toBe(true);
-    expect(shouldCaptureWheel(0, 히어로높이, SLIDES_BEFORE_RELEASE - 0.5)).toBe(true);
-    expect(shouldCaptureWheel(0, 히어로높이, SLIDES_BEFORE_RELEASE)).toBe(false);
-  });
-
-  it("판 폭이 제각각이어도 평균 한 장으로 잰다", () => {
-    // 열두 장이 한 바퀴 24 단위를 채우면 한 장은 평균 2 단위다.
-    expect(slidesTraveled(2, 24, 12)).toBeCloseTo(1);
-    expect(slidesTraveled(8, 24, 12)).toBeCloseTo(4);
-  });
-
-  it("어느 방향으로 돌려도 넘긴 것은 넘긴 것이다", () => {
-    expect(slidesTraveled(-8, 24, 12)).toBeCloseTo(4);
-  });
-
-  it("고리를 모르면 0 장이다", () => {
-    expect(slidesTraveled(10, 0, 12)).toBe(0);
-    expect(slidesTraveled(10, 24, 0)).toBe(0);
-  });
-
-  it("첫 화면으로 돌아오면 다시 셀 수 있다", () => {
-    expect(isBackAtTop(0)).toBe(true);
-    expect(isBackAtTop(400)).toBe(false);
+  it("첫 화면에 머무는 동안에는 늘 캐러셀이 받는다", () => {
+    expect(shouldCaptureWheel(0, 히어로높이)).toBe(true);
+    expect(shouldCaptureWheel(120, 히어로높이)).toBe(true);
+    expect(shouldCaptureWheel(히어로높이 / 2 - 1, 히어로높이)).toBe(true);
   });
 
   it("더 세게 민 쪽을 쓴다", () => {

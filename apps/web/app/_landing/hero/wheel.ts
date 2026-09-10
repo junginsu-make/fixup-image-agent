@@ -11,49 +11,21 @@
  */
 
 /**
- * 이만큼 **넘겨 본 뒤에** 페이지에 넘긴다.
- *
- * 처음엔 「휠 다섯 바퀴」로 셌는데, 한 바퀴에 한 장도 안 넘어가서 두세 장 보고
- * 화면이 내려가 버렸다. 사람이 세는 것은 바퀴가 아니라 **넘어간 장**이다.
- */
-export const SLIDES_BEFORE_RELEASE = 4;
-
-/**
- * 고리 위를 이만큼 움직였으면 몇 장을 넘긴 것인가.
- *
- * 판마다 폭이 달라(1:1 · 9:16 · 16:9) 한 장이 몇 단위인지 고정할 수 없다.
- * 한 바퀴 길이를 장수로 나눠 **평균 한 장**을 구한다.
- */
-export function slidesTraveled(distance: number, ringTotal: number, slideCount: number): number {
-  if (!(ringTotal > 0) || !(slideCount > 0)) return 0;
-  const perSlide = ringTotal / slideCount;
-  return Math.abs(distance) / perSlide;
-}
-
-/**
  * 첫 화면에서 휠을 받을 것인가.
  *
- * 히어로가 화면을 차지하고 있고, 아직 넘겨 볼 장이 남았을 때만 받는다.
+ * **히어로가 화면을 차지하는 동안에는 늘 받는다.** 여기서 페이지를 내리는
+ * 길은 아래의 손잡이(∨) 하나뿐이다.
+ *
+ * 한때 「몇 장 보면 놓아 준다」를 넣어 봤는데 두 번 다 잘못이었다. 바퀴로 세면
+ * 두세 장 만에 화면이 내려가 버렸고, 장으로 세도 한 바퀴를 못 돌고 끊겼다.
+ * 첫 화면은 **머무는 자리**다. 내려갈 때는 사람이 스스로 정한다.
+ *
  * 절반을 기준으로 삼는다 — 조금만 내려가도 놓아 버리면 손이 미끄러졌을 때
  * 화면이 튀고, 끝까지 붙잡으면 아래 내용으로 못 간다.
  */
-export function shouldCaptureWheel(
-  scrollY: number,
-  heroHeight: number,
-  slidesSeen = 0,
-): boolean {
+export function shouldCaptureWheel(scrollY: number, heroHeight: number): boolean {
   if (!(heroHeight > 0)) return false;
-  if (scrollY >= heroHeight / 2) return false;
-  return slidesSeen < SLIDES_BEFORE_RELEASE;
-}
-
-/**
- * 첫 화면으로 돌아왔는가. 돌아왔으면 **다시 처음부터 넘겨 볼 수 있다.**
- *
- * 한 번 써 버리면 끝인 화면은 「아까는 되던 게 왜 안 되지」가 된다.
- */
-export function isBackAtTop(scrollY: number): boolean {
-  return scrollY <= 0;
+  return scrollY < heroHeight / 2;
 }
 
 /**
