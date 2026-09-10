@@ -184,8 +184,7 @@
   color: var(--mcs-muted);
 }
 .mcs-ink-section .mcs-lead,
-.mcs-deep-section .mcs-lead,
-.mcs-hero .mcs-lead {
+.mcs-deep-section .mcs-lead {
   color: var(--mcs-ink-muted);
 }
 
@@ -416,25 +415,6 @@
 
 /* ── 히어로 ───────────────────────────────────────────────── */
 
-.mcs-hero {
-  background: var(--mcs-ink);
-  color: var(--mcs-ink-fg);
-  border-bottom: 1px solid var(--mcs-ink-line);
-  min-height: calc(100svh - var(--mcs-header-h));
-}
-.mcs-hero-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: clamp(38px, 4vw, 72px);
-  align-items: center;
-  width: 100%;
-}
-@media (min-width: 980px) {
-  .mcs-hero-grid {
-    grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
-  }
-}
-
 .mcs-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -449,13 +429,6 @@
 }
 .mcs-eyebrow .mcs-dot {
   animation: mcsPulse 2s ease-in-out infinite;
-}
-
-.mcs-hero-actions {
-  margin-top: 38px;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .mcs-stats {

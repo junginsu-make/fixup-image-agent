@@ -185,7 +185,14 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
     canvas.addEventListener("wheel", onWheel, { passive: false });
 
     // ── 그리기 ──────────────────────────────────────────────────────────
-    gl.clearColor(0.02, 0.02, 0.03, 1);
+    /*
+      **순수 검정으로 지운다.**
+
+      전에는 아주 살짝 밝은 회색(rgb 5,5,8)이었다. 눈으로는 검정이지만 아래
+      섹션은 진짜 #000 이라, 캔버스가 끝나는 자리에 가로줄이 하나 생겼다 —
+      그리지도 않은 선이 보였다.
+    */
+    gl.clearColor(0, 0, 0, 1);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
