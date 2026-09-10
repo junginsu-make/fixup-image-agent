@@ -23,7 +23,11 @@ describe("한 장이 얼마인가", () => {
   });
 
   it("표에 없는 모델은 정해 둔 값을 쓴다", () => {
+    // 전부 fal·공급자 공표값이다 (2026-09-10 모델 페이지에서 다시 확인).
     expect(imageUnitUsd("seedream-5-pro")).toBe(0.0675);
+    // **$0.0675 였다가 고쳤다.** 재지도 읽지도 않고 seedream 등급에서 옮겨 적은
+    // 값이라 11% 적게 차감하고 있었다. 공표값은 t2i·edit 두 페이지 모두 $0.075 다.
+    expect(imageUnitUsd("qwen-image-2-pro")).toBe(0.075);
     expect(imageUnitUsd("redesign-openai")).toBe(0.19);
     expect(imageUnitUsd("redesign-google")).toBe(0.13);
   });

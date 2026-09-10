@@ -33,9 +33,14 @@ import { creditUnits } from "@fixup/shared";
 const FLAT_USD: Record<string, number> = {
   // pdp-core 주석의 실측값: $0.0675(1536 이하) — Nano Banana Pro 의 절반 아래다.
   "seedream-5-pro": 0.0675,
-  // **실측 안 했다.** 지금까지 seedream 과 같은 등급(가중치 2)으로 다뤄 왔으므로
-  // 같은 값으로 둔다. 재고 나면 이 줄만 고치면 된다.
-  "qwen-image-2-pro": 0.0675,
+  /**
+   * fal 모델 페이지 공표값 (2026-09-10 확인, t2i·edit 두 페이지 모두 $0.075).
+   *
+   * 전에는 $0.0675 였다 — **재지도 읽지도 않고 seedream 과 같은 등급이라는
+   * 이유로 같은 값을 적어 둔 것이었다.** 11% 적게 잡았으니 그만큼 덜 차감했다.
+   * 공표값은 페이지에 그냥 적혀 있었다.
+   */
+  "qwen-image-2-pro": 0.075,
   // model_prices 표의 값 (2026-09-08 운영 확인).
   "redesign-openai": 0.19,
   "redesign-google": 0.13,
