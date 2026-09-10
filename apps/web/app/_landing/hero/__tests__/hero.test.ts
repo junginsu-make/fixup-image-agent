@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   GAP,
@@ -28,6 +29,7 @@ import {
   WHEEL_GESTURE_MS,
   WHEEL_NOTCH,
   WHEEL_SCREEN_RATIO,
+  WHEEL_STREAM_MAX_DELTA,
   WHEEL_STREAM_MS,
   boostedWheel,
   nextWheelTarget,
@@ -488,14 +490,14 @@ describe("휠 한 칸의 거리", () => {
   });
 
   /**
-   * **「평균보다 살짝 더」가 기준이다**(운영자). 브라우저 기본은 한 칸에 100px
-   * 안팎이다. 너무 작으면 「안 움직인다」, 너무 크면 읽던 자리를 잃는다.
+   * **세 칸에 한 화면**이 기준이다. 브라우저 기본(한 칸 100px)으로는 이 화면에서
+   * 「거의 안 움직인다」로 느껴진다 — 운영자가 네 번 「더」라고 했다. 그렇다고
+   * 한 칸에 화면 반을 넘기면 읽던 자리를 잃는다.
    */
-  it("기본보다 더 가되, 한 칸에 화면을 넘지 않는다", () => {
-    expect(한칸).toBeGreaterThan(WHEEL_NOTCH);       // 기본보다는 더
-    expect(한칸).toBeLessThan(WHEEL_NOTCH * 2.5);    // 그래도 「살짝」
-    // 한 칸에 화면의 4분의 1을 넘으면 읽던 자리를 잃는다.
-    expect(한칸 / 화면).toBeLessThan(0.25);
+  it("세 칸에 한 화면이 지나간다", () => {
+    expect(화면 / 한칸).toBeCloseTo(3, 0);
+    expect(한칸).toBeGreaterThan(WHEEL_NOTCH * 3); // 기본의 세 배 이상
+    expect(한칸 / 화면).toBeLessThan(0.5); // 그래도 한 칸에 반 화면은 넘지 않는다
   });
 
   it("화면 높이를 모르면 손대지 않는다", () => {
@@ -526,10 +528,27 @@ describe("휠 한 칸의 거리", () => {
     expect(boostedWheel({ ...마우스휠, deltaY: MOUSE_WHEEL_MIN })).not.toBe(0);
   });
 
-  it("흐르는 입력은 안 건드린다 — 트랙패드는 60Hz 로 흘려보낸다", () => {
-    // 값이 커도 촘촘히 오면 손가락이다. 한 칸을 통째로 주면 화면이 날아간다.
-    expect(boostedWheel({ ...마우스휠, sinceLast: WHEEL_STREAM_MS - 1 })).toBe(0);
-    expect(boostedWheel({ ...마우스휠, sinceLast: WHEEL_STREAM_MS })).not.toBe(0);
+  it("작은 값이 촘촘히 오면 안 건드린다 — 트랙패드는 60Hz 로 흘려보낸다", () => {
+    const 잔값 = { ...마우스휠, deltaY: WHEEL_STREAM_MAX_DELTA - 1 };
+    expect(boostedWheel({ ...잔값, sinceLast: WHEEL_STREAM_MS - 1 })).toBe(0);
+    // 간격이 벌어지면 마우스로 본다.
+    expect(boostedWheel({ ...잔값, sinceLast: WHEEL_STREAM_MS })).not.toBe(0);
+  });
+
+  /**
+   * **여기가 「아직도 조금씩」의 범인일 수 있다.**
+   *
+   * 처음에는 「촘촘하면 무조건 흐르는 입력」으로 뒀다. 그런데 부드러운 스크롤을
+   * 지원하는 마우스·드라이버는 한 칸을 여러 이벤트로 쪼개 빠르게 보낸다. 그러면
+   * 첫 이벤트만 우리 손을 타고 나머지는 브라우저 기본으로 빠져 조금씩 내려간다.
+   */
+  it("큰 값이 촘촘히 오면 한 칸을 쪼개 보내는 마우스로 본다", () => {
+    const 쪼개보내는마우스 = {
+      ...마우스휠, deltaY: WHEEL_STREAM_MAX_DELTA, sinceLast: 5,
+    };
+    expect(boostedWheel(쪼개보내는마우스)).toBe(한칸);
+    // 크롬 기본값(100)도 촘촘히 와도 받는다 — 빠르게 굴리는 손이다.
+    expect(boostedWheel({ ...마우스휠, sinceLast: 5 })).toBe(한칸);
   });
 
   it("첫 휠은 흐르는 입력으로 오해하지 않는다", () => {
@@ -586,5 +605,58 @@ describe("굴린 만큼 쌓인다", () => {
   it("문서가 화면보다 짧으면 0 이다", () => {
     // `scrollHeight - innerHeight` 가 음수로 오는 경우다.
     expect(nextWheelTarget({ current: 0, target: null, sinceLast: 999, distance: 한칸, max: -50 })).toBe(0);
+  });
+});
+
+/*
+  「지워지는 직업 이름」의 글꼴.
+
+  jsdom 이 없는 저장소라 그려 볼 수 없다. **CSS 를 글자로 읽어 잠근다** — 이
+  값들은 갈려도 테스트로는 안 보이고 화면에서만 드러났고, 실제로 두 번 드러났다.
+
+  파일 경로는 `import.meta.url` 기준이다. `process.cwd()` 로 잡으면 저장소
+  뿌리에서 돌릴 때 파일을 못 찾아 「실패」로 뜬다.
+*/
+const heroCss = readFileSync(new URL("../hero.css", import.meta.url), "utf8");
+
+/** `.key-slogan s { … }` 한 덩이. */
+const 지워진글자 = (() => {
+  const 시작 = heroCss.indexOf(".key-slogan s {");
+  // 이 규칙 안에는 중괄호가 없다. 그래서 다음 `}` 가 규칙의 끝이다.
+  // 찾는 값을 기준으로 끊으면 그 값을 지웠을 때 엉뚱한 데를 자른다.
+  return heroCss.slice(시작, heroCss.indexOf("}", 시작));
+})();
+
+describe("지워지는 직업 이름", () => {
+  it("규칙을 찾았다", () => {
+    // 아래 검사들이 빈 글자를 뒤지고 있으면 다 통과해 버린다. 먼저 확인한다.
+    expect(지워진글자).toContain(".key-slogan s {");
+    expect(지워진글자).toContain("-webkit-text-stroke");
+    expect(지워진글자.length).toBeGreaterThan(200);
+  });
+
+  it("부모 h2 는 Pretendard 900 에 자간이 음수다", () => {
+    // 이게 전제다. 이 값이 바뀌면 아래 이유 자체가 달라진다.
+    const h2시작 = heroCss.indexOf(".key-slogan h2 {");
+    const h2 = heroCss.slice(h2시작, heroCss.indexOf("}", h2시작));
+    expect(h2).toContain("font-weight: 900");
+    expect(h2).toContain("letter-spacing: -0.055em");
+  });
+
+  it("이 글자만 자기 글꼴을 명시한다", () => {
+    /*
+      Pretendard 는 글자폭이 좁아서, 900 굵기를 윤곽으로 바꾸면 「디」와 「자」가
+      붙어 한 덩어리가 된다. 웹폰트를 붙이기 전까지 이 글자는 시스템 글꼴로
+      그려지고 있었고 그때는 문제가 없었다.
+    */
+    expect(지워진글자).toContain("font-family:");
+    expect(지워진글자).toContain("Malgun Gothic");
+    expect(지워진글자).not.toContain("var(--font-sans)");
+  });
+
+  it("굵기와 자간은 부모에게서 물려받는다", () => {
+    // 900 / -0.055em 이 옛 모습이었다. 여기서 따로 잡으면 그 모습이 아니다.
+    expect(지워진글자).not.toMatch(/^\s*font-weight:/m);
+    expect(지워진글자).not.toMatch(/^\s*letter-spacing:/m);
   });
 });
