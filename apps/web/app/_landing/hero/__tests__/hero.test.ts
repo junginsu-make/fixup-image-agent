@@ -22,7 +22,7 @@ import {
 } from "../drag-physics";
 import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wave";
 import { scrollBehaviorFor } from "../scroll-down";
-import { shouldCaptureWheel, shouldShowBackToTop, wheelDelta } from "../wheel";
+import { WHEEL_GAIN, shouldCaptureWheel, shouldShowBackToTop, wheelDelta } from "../wheel";
 
 /**
  * 화면은 눈으로 보지만 **판단은 값으로 잰다.**
@@ -350,14 +350,32 @@ describe("휠을 누가 받는가", () => {
 
   it("더 세게 민 쪽을 쓴다", () => {
     // 일반 마우스는 세로만 보낸다.
-    expect(wheelDelta(0, 120)).toBe(120);
+    expect(wheelDelta(0, 120)).toBe(120 * WHEEL_GAIN);
     // 트랙패드로 옆으로 쓸면 가로가 이긴다.
-    expect(wheelDelta(-80, 12)).toBe(-80);
+    expect(wheelDelta(-80, 12)).toBe(-80 * WHEEL_GAIN);
   });
 
   it("아래로 굴리면 다음 그림 쪽으로 간다", () => {
     const 굴린뒤 = nudge(INITIAL, wheelDelta(0, 120), 1 / 60);
     expect(굴린뒤.scroll).toBeGreaterThan(0);
+  });
+
+  /**
+   * **몇 칸에 그림 하나가 넘어가는가.** 이게 굴렸을 때의 느낌 그 자체다.
+   *
+   * 배율만 재면 「2배가 맞다」밖에 못 말한다. 정작 알아야 하는 것은 손이
+   * 몇 번 움직여야 다음 그림이 오느냐다.
+   */
+  it("휠 두 칸에 그림 하나가 넘어간다", () => {
+    const 한칸 = 120; // 윈도우 크롬의 한 칸
+    const 판하나 = 정사각 + GAP; // 가운데 그림 하나가 차지하는 호 길이
+
+    const 한칸간거리 = nudge(INITIAL, wheelDelta(0, 한칸), 1 / 60).scroll;
+    const 칸수 = 판하나 / 한칸간거리;
+
+    // 한 칸에 절반쯤, 두 칸에 하나. 네 칸이던 것을 여기까지 당겼다.
+    expect(칸수).toBeGreaterThan(1.5);
+    expect(칸수).toBeLessThan(2.5);
   });
 });
 
