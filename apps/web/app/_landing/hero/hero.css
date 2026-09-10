@@ -487,7 +487,12 @@
   position: relative;
   text-decoration: none;
   color: transparent;
-  -webkit-text-stroke: max(1.5px, 0.016em) var(--mcs-subtle);
+  /*
+    **획을 가늘게.** 두꺼운 윤곽은 획 하나가 굵은 평행선 둘로 보여 글자가
+    무거워진다. 이 글자는 「지워지는 자격」이라 남는 글자보다 물러나야 하고,
+    가는 선이 그 뜻에 맞는다.
+  */
+  -webkit-text-stroke: max(1px, 0.011em) var(--mcs-subtle);
 
   /*
     **굵기와 자간을 여기서 따로 잡는다.**
@@ -507,10 +512,11 @@
   */
   font-weight: 500;
   /*
-    자간은 0 이 아니라 조금 벌린다. 획이 밖으로 약 1.9px 번지므로(위의
+    자간은 0 이 아니라 조금 벌린다. 획이 밖으로 번지므로(위의
     `-webkit-text-stroke`), 글자 사이가 딱 붙으면 그 번짐끼리 닿는다.
+    획을 1.9px → 1.3px 로 가늘게 하면서 벌림도 함께 줄였다.
   */
-  letter-spacing: 0.02em;
+  letter-spacing: 0.008em;
 }
 
 .key-slogan s::after {
