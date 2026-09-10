@@ -23,6 +23,43 @@ describe("문서 자체", () => {
   });
 });
 
+/**
+ * 사업자·시행일·연락처는 **빈칸으로 게시하면 안 되는 칸**이다.
+ *
+ * 대괄호가 그대로 남은 채 올라가면 「누가 제공하는 서비스인지」와 「언제부터
+ * 적용되는지」가 없는 문서가 된다. 그 상태로는 법이 요구하는 고지를 한 것으로
+ * 볼 수 없다. 나머지 빈칸(위탁업체 법인명 등)은 아직 값이 없어 남아 있지만,
+ * 이 넷은 채워져 있어야 한다.
+ */
+describe("채워야 하는 칸", () => {
+  it("두 문서 모두 사업자명과 시행일이 들어 있다", () => {
+    for (const doc of LEGAL_DOCS) {
+      expect(doc.body).toContain("fixup");
+      expect(doc.body).toContain("2026년 9월 10일");
+    }
+  });
+
+  it("두 문서 모두 연락처 이메일이 들어 있다", () => {
+    for (const doc of LEGAL_DOCS) {
+      expect(doc.body).toContain("9843ohs@gmail.com");
+    }
+  });
+
+  it("처리방침에 개인정보 보호 담당자 이름이 있다", () => {
+    expect(PRIVACY_DOC.body).toContain("정인수");
+  });
+
+  /** 채운 칸이 다시 대괄호로 돌아가지 않게 못을 박는다. */
+  it("채운 칸의 빈칸 표시가 남아 있지 않다", () => {
+    const filled = ["[사업자명]", "[YYYY년 MM월 DD일]", "[이메일]", "[고객지원 이메일]", "[개인정보 문의 이메일]", "[성명 또는 부서명]", "[담당자 또는 부서]", "[날짜]"];
+    for (const doc of LEGAL_DOCS) {
+      for (const blank of filled) {
+        expect(doc.body).not.toContain(blank);
+      }
+    }
+  });
+});
+
 describe("조각내기", () => {
   it("제목을 단계까지 알아본다", () => {
     const blocks = parseLegal("# 큰 제목\n\n## 제1조 목적\n\n본문입니다.");
