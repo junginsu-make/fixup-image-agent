@@ -1,0 +1,688 @@
+/*
+  실험실 전용 스타일. **랜딩의 토큰을 건드리지 않는다.**
+
+  `landing.css` 의 `--mcs-*` 를 빌려 쓰면 이 폴더를 지울 때 랜딩이 함께
+  흔들린다. 값이 겹쳐도 여기에 따로 적는다 — 프로토타입은 버릴 수 있어야 한다.
+*/
+
+/*
+  첫 화면. **상단바가 이 위에 얹히므로** 높이를 한 화면 전부로 잡는다.
+  헤더 높이를 빼면 아래에 띠가 생겨 메뉴와 히어로가 두 덩어리로 읽힌다.
+*/
+.mcs-hero {
+  --lab-bg: #000;
+
+  position: relative;
+  height: 100svh;
+  background: var(--lab-bg);
+  overflow: hidden;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic",
+    sans-serif;
+  /* 한글이 "시 / 작하세요" 로 끊기지 않게. */
+  word-break: keep-all;
+}
+
+.mcs-hero-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* 끄는 화면이라는 것을 커서로 알린다. */
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.mcs-hero-canvas:active {
+  cursor: grabbing;
+}
+
+/*
+  캔버스 위에 얹는 것들. 지금은 내려가기 손잡이 하나뿐이다.
+  끄는 조작은 캔버스가 받아야 하므로 이 층은 클릭을 통과시킨다.
+*/
+.mcs-hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.mcs-hero-overlay a,
+.mcs-hero-overlay button {
+  pointer-events: auto;
+}
+
+/* WebGL 이 없는 기기. 못 쓰게 두지 않고 평범한 가로 목록으로 내린다. */
+.mcs-hero-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 0 clamp(20px, 4vw, 48px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+
+.mcs-hero-fallback img {
+  height: min(62vh, 520px);
+  width: auto;
+  border-radius: 10px;
+  scroll-snap-align: center;
+  flex: none;
+}
+
+/*
+  내려가기 손잡이.
+
+  **선명하지 않게 둔다.** 첫 화면의 주인공은 결과물이다. 손잡이가 또렷하면
+  시선이 그리로 먼저 간다. 유리처럼 살짝 비치는 정도로만 둔다.
+*/
+.mcs-hero-down {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(18px, 3vh, 34px);
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  background: rgb(255 255 255 / 0.08);
+  /* 뒤가 비치되 글자와 겹쳐도 읽히게. */
+  backdrop-filter: blur(6px);
+  color: rgb(255 255 255 / 0.72);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+  animation: mcs-hero-bob 2.6s ease-in-out infinite;
+}
+
+.mcs-hero-down:hover {
+  background: rgb(255 255 255 / 0.16);
+  border-color: rgb(255 255 255 / 0.38);
+  color: #fff;
+}
+
+.mcs-hero-down:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.75);
+  outline-offset: 3px;
+}
+
+/** 아주 조금만 오르내린다. 크게 움직이면 안내가 아니라 소음이 된다. */
+@keyframes mcs-hero-bob {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, 5px);
+  }
+}
+
+/* 움직임을 원하지 않는 사람에게는 멈춰 세운다. 없애지는 않는다. */
+@media (prefers-reduced-motion: reduce) {
+  .mcs-hero-down {
+    animation: none;
+  }
+}
+
+/*
+  검은 바탕 위의 랜딩.
+
+  `landing.css` 의 토큰을 **여기서만** 덮어쓴다. 원본을 고치면 기존 `/` 가 함께
+  바뀌므로, 이 화면이 정식이 될 때까지는 스코프 안에서만 바꾼다.
+*/
+.mcs.mcs-dark {
+  /*
+    라이트 표면 토큰을 **검은 바탕용으로 다시 정한다.**
+
+    섹션 40곳이 전부 이 토큰을 참조하므로 여기만 바꾸면 페이지 전체가 뒤집힌다.
+    각 섹션의 CSS 는 손대지 않는다 — 손대기 시작하면 기존 `/` 와 두 벌이 된다.
+
+    검정 하나로 칠하지 않는다. 배경(#000)·면(#0c0c0e)·옅은 면(#141416)으로
+    단을 나눠야 카드가 바탕에서 떠 보이고 표·구분선이 읽힌다.
+  */
+  --mcs-bg: #000;
+  --mcs-card: #0c0c0e;
+  --mcs-card-pure: #121215;
+  --mcs-mutedbg: #141416;
+  --mcs-line: #26262b;
+
+  --mcs-fg: #f2f1ee;
+  --mcs-muted: #a9a8a2;
+  --mcs-subtle: #7e7d78;
+  --mcs-wait: #4a4a4e;
+
+  /* 강조색은 검은 바탕에서 탁해 보인다. 같은 색조로 한 단 밝힌다. */
+  --mcs-accent: #e06a92;
+  --mcs-accent-soft: rgb(224 106 146 / 0.14);
+  --mcs-accent-faint: rgb(224 106 146 / 0.07);
+  --mcs-success: #4fae86;
+
+  background: var(--mcs-bg);
+  color: var(--mcs-fg);
+}
+
+/*
+  다크 섹션(작동 원리·CTA)은 원래도 어두웠다. 검은 바탕에서 **그 어두움이
+  회색 덩어리로 뜬다.** 한 단 더 내려 바탕과 이어지게 한다.
+*/
+.mcs.mcs-dark {
+  --mcs-ink: #050506;
+  --mcs-ink-deep: #000;
+  --mcs-ink-card: #121215;
+  --mcs-ink-bar: #0e0e11;
+  --mcs-ink-line: #2a2a30;
+}
+
+/*
+  상단바를 히어로 위에 얹는다.
+
+  `position: sticky` 는 자리를 차지해서 그만큼 히어로가 아래로 밀리고, 아래
+  테두리가 남아 메뉴와 첫 화면이 잘려 보인다. 겹쳐 놓고 테두리를 지운다.
+*/
+.mcs.mcs-dark .mcs-header {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  border-bottom: 0;
+  backdrop-filter: none;
+
+  /*
+    **선 대신 그늘.**
+
+    투명하게만 두면 아래 섹션의 글자와 겹쳐 둘 다 안 읽힌다(실제로 그랬다).
+    그렇다고 배경을 채우면 첫 화면에 띠가 생겨 메뉴와 히어로가 갈린다.
+    위에서 아래로 사라지는 그늘을 깔면 글자는 읽히고 경계는 안 생긴다.
+  */
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.82) 0%,
+    rgb(0 0 0 / 0.6) 55%,
+    rgb(0 0 0 / 0) 100%
+  );
+  padding-bottom: 14px;
+}
+
+/* 아래로 내려가면 그때 배경이 든다. 글자가 밝은 섹션 위를 지날 때 안 읽힌다. */
+.mcs-dark main {
+  position: relative;
+}
+
+/* ── 핵심 한 줄과 증거 ───────────────────────────────────────────────────
+   설명하지 않고 보여준다. 한 자리에 겹쳐 놓고 손잡이로 가른다.
+*/
+.claim-line {
+  margin: 0 0 clamp(28px, 4vh, 48px);
+  font-size: clamp(26px, 3.2vw, 44px);
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  font-weight: 800;
+  text-wrap: balance;
+  max-width: 20em;
+}
+
+.claim-line em {
+  font-style: normal;
+  color: var(--mcs-accent);
+}
+
+.claim-pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: clamp(18px, 2.6vw, 34px);
+}
+
+.claim-pair {
+  margin: 0;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 460ms ease,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.claim-pair[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.claim-pair figcaption {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mcs-fg);
+}
+
+.claim-pair figcaption span {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--mcs-subtle);
+}
+
+/* 손잡이로 가르는 비교판. */
+.pair-slider {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--mcs-line);
+  background: var(--mcs-card);
+  aspect-ratio: 4 / 5;
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.pair-slider:focus-visible {
+  outline: 2px solid var(--mcs-accent);
+  outline-offset: 3px;
+}
+
+.pair-slider img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pair-slider-top {
+  position: absolute;
+  inset: 0;
+}
+
+/*
+  라벨.
+
+  왼쪽 라벨은 원래 흰 알약이었다. 검은 바탕에 맞춰 글자를 흰색으로 바꾸자
+  **흰 알약에 흰 글자**가 되어 아무것도 안 보였다(2026-09-10 확인).
+  둘 다 어두운 알약에 밝은 글자로 통일한다.
+*/
+.pair-tag {
+  position: absolute;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+}
+
+.pair-tag--before {
+  left: 10px;
+  background: rgb(0 0 0 / 0.68);
+  border: 1px solid rgb(255 255 255 / 0.22);
+  color: #f2f1ee;
+}
+
+.pair-tag--after {
+  right: 10px;
+  background: var(--mcs-accent);
+  color: #14090d;
+}
+
+.pair-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgb(255 255 255 / 0.85);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+
+.pair-handle i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--mcs-accent);
+  color: #14090d;
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .claim-pair {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/*
+  내비에서 **지운 섹션으로 가는 링크를 감춘다.**
+
+  갤러리·작동 원리·도구 목록을 뺐는데 메뉴에는 남아 있어, 눌러도 아무 일이
+  안 일어난다. 헤더는 기존 `/` 와 함께 쓰는 컴포넌트라 목록 자체는 손대지 않고
+  여기서만 감춘다 — 이 화면이 정식이 되면 헤더가 제 목록을 갖게 하고 이 규칙은
+  지운다.
+*/
+.mcs.mcs-dark .mcs-nav a[href="#gallery"],
+.mcs.mcs-dark .mcs-nav a[href="#how"],
+.mcs.mcs-dark .mcs-nav a[href="#tools"] {
+  display: none;
+}
+
+/* ── 슬로건 한 판 ────────────────────────────────────────────────────────
+   목록이 아니라 키비주얼이다. 크기 차이와 획 자체가 디자인 노릇을 한다.
+*/
+/*
+  이 화면의 섹션 간격을 **한 단 넓힌다.**
+
+  기존 랜딩(`/`)은 섹션이 여덟이라 좁게 잡혀 있었다. 여기는 넷뿐이고 각 섹션이
+  한 가지 이야기만 하므로, 사이가 넓어야 「끝났고 다음이 시작한다」가 읽힌다.
+  `landing.css` 는 `/` 가 함께 쓰므로 이 스코프 안에서만 바꾼다.
+*/
+.mcs.mcs-dark .mcs-section {
+  padding-block: clamp(104px, 13vh, 208px);
+}
+
+.key-visual {
+  /*
+    슬로건은 **한 단 더 넓게.**
+
+    첫 화면과 본문 사이에 놓인 한 판이다. 양옆이 아니라 위아래 여백이 이 문장을
+    크게 만든다 — 글자 크기를 더 키우는 대신 주변을 비운다.
+  */
+  padding-block: clamp(140px, 18vh, 280px);
+  background: var(--mcs-bg);
+}
+
+.key-now {
+  margin: 0 0 clamp(22px, 3.4vh, 40px);
+  font-size: clamp(12px, 1.1vw, 14px);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--mcs-accent);
+}
+
+.key-slogan {
+  position: relative;
+  padding-top: clamp(20px, 3vh, 34px);
+  /* 줄 위의 가는 선. 두 슬로건을 한 짝으로 묶어 준다. */
+  border-top: 1px solid var(--mcs-line);
+
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 620ms ease,
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.key-slogan[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.key-slogan + .key-slogan {
+  margin-top: clamp(26px, 4.5vh, 58px);
+}
+
+/* 번호는 아주 크고 옅게. 읽으라고 두는 것이 아니라 자리를 잡아 주는 것이다. */
+.key-index {
+  position: absolute;
+  top: clamp(10px, 1.6vh, 22px);
+  right: 0;
+  font-size: clamp(56px, 9vw, 132px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--mcs-line);
+  pointer-events: none;
+  user-select: none;
+}
+
+.key-slogan h2 {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.16em;
+  font-size: clamp(40px, 8vw, 118px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-weight: 900;
+  text-wrap: balance;
+}
+
+/*
+  직업 이름은 **속을 비우고 선을 그어 지운다.**
+
+  채운 글자에 선만 그으면 「강조」로 읽힌다. 획만 남기면 자리는 있는데 알맹이가
+  없는 상태가 되고, 그 위를 선이 지나가면서 「이제 필요 없다」가 된다.
+*/
+.key-slogan s {
+  position: relative;
+  text-decoration: none;
+  color: transparent;
+  -webkit-text-stroke: max(1.5px, 0.018em) var(--mcs-subtle);
+}
+
+.key-slogan s::after {
+  content: "";
+  position: absolute;
+  left: -0.04em;
+  right: -0.04em;
+  top: 56%;
+  height: max(4px, 0.055em);
+  border-radius: 999px;
+  background: var(--mcs-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1) 260ms;
+}
+
+.key-slogan[data-shown="true"] s::after {
+  transform: scaleX(1);
+}
+
+.key-slogan h2 span {
+  color: var(--mcs-fg);
+}
+
+/* 설명 줄도 읽히는 크기여야 한다. 작으면 슬로건만 남고 뜻이 안 남는다. */
+.key-slogan p {
+  margin: clamp(14px, 2vh, 24px) 0 0;
+  max-width: 24em;
+  font-size: clamp(17px, 2vw, 30px);
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+  color: var(--mcs-subtle);
+}
+
+/* 한 줄 안에서도 무게를 가른다. 조건은 물러나고 결론이 남는다. */
+.key-slogan p b {
+  font-weight: 700;
+  color: var(--mcs-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .key-slogan {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .key-slogan s::after {
+    transform: scaleX(1);
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  /* 좁은 화면에서는 번호가 슬로건과 겹친다. 뒤로 뺀다. */
+  .key-index {
+    top: auto;
+    bottom: 0;
+    opacity: 0.6;
+  }
+}
+
+/* ── 법률 문서 ───────────────────────────────────────────────────────────
+   푸터의 작은 링크와, 눌렀을 때 뜨는 모달. 원문을 그대로 담는다.
+*/
+.mcs-legal-links {
+  display: inline-flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.mcs-legal-links button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--mcs-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.mcs-legal-links button:hover {
+  color: var(--mcs-ink-fg);
+}
+
+.mcs-legal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vh, 48px) clamp(12px, 4vw, 40px);
+  background: rgb(0 0 0 / 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.mcs-legal-modal {
+  width: min(760px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid var(--mcs-line);
+  background: #0c0c0e;
+  color: var(--mcs-fg);
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.6);
+}
+
+.mcs-legal-modal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--mcs-line);
+}
+
+.mcs-legal-modal header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.mcs-legal-modal header button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--mcs-line);
+  background: none;
+  color: var(--mcs-muted);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.mcs-legal-modal header button:hover {
+  color: var(--mcs-fg);
+  border-color: var(--mcs-subtle);
+}
+
+/* 본문만 스크롤한다. 머리와 닫기 버튼은 늘 보여야 한다. */
+.mcs-legal-body {
+  overflow-y: auto;
+  padding: 20px 22px 28px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--mcs-muted);
+  overscroll-behavior: contain;
+}
+
+.mcs-legal-body h3,
+.mcs-legal-body h4,
+.mcs-legal-body h5 {
+  margin: 22px 0 8px;
+  color: var(--mcs-fg);
+  letter-spacing: -0.01em;
+}
+
+.mcs-legal-body h3 { font-size: 17px; }
+.mcs-legal-body h4 { font-size: 15px; }
+.mcs-legal-body h5 { font-size: 14px; }
+
+.mcs-legal-body > :first-child {
+  margin-top: 0;
+}
+
+.mcs-legal-body p {
+  margin: 0 0 12px;
+}
+
+.mcs-legal-body ul {
+  margin: 0 0 14px;
+  padding-left: 18px;
+}
+
+.mcs-legal-body li {
+  margin-bottom: 5px;
+}
+
+/* 좁은 화면에서 표가 넘칠 때 페이지가 아니라 표만 가로로 움직인다. */
+.mcs-legal-table {
+  overflow-x: auto;
+  margin: 0 0 16px;
+}
+
+.mcs-legal-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mcs-legal-body th,
+.mcs-legal-body td {
+  border: 1px solid var(--mcs-line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.mcs-legal-body th {
+  background: var(--mcs-mutedbg);
+  color: var(--mcs-fg);
+  font-weight: 600;
+  white-space: nowrap;
+}
