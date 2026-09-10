@@ -126,7 +126,51 @@ describe("당분간 꺼 둔 화면", () => {
   it("꺼 둔 화면의 페이지가 직접 돌려보낸다", () => {
     for (const route of DISABLED_ROUTES) {
       const page = readFileSync(path.join(process.cwd(), `app${route}/page.tsx`), "utf8");
-      expect(page, `${route} 가 문을 안 걸었다`).toContain(`if (isDisabledRoute("${route}")) redirect(`);
+      // 되돌림 대상까지 못 박는다. 안 그러면 `redirect("/inbox")` 같은 무한
+      // 되돌림도 통과한다.
+      expect(page, `${route} 가 문을 안 걸었다`)
+        .toContain(`if (isDisabledRoute("${route}")) redirect(HOME_AFTER_LOGIN);`);
+    }
+  });
+
+  /**
+   * **진짜 문은 미들웨어다.** 페이지 쪽은 `config.matcher` 가 바뀌어도
+   * 살아남는 두 번째 문이고, 위 시험은 글자를 대조할 뿐이라 「문구는 맞는데
+   * 안 도는」 경우를 못 잡는다. 미들웨어는 `isDisabledRoute()` 를 그대로
+   * 부르므로 이 함수를 값으로 재는 위 시험들이 곧 그 문을 재는 셈이다.
+   */
+  it("미들웨어가 등록부를 보고 막는다", () => {
+    const middleware = readFileSync(path.join(process.cwd(), "middleware.ts"), "utf8");
+    expect(middleware).toContain("isDisabledRoute(pathname)");
+    // 로그인 검사보다 **앞**이어야 한다. 뒤면 `?next=/inbox` 가 만들어져
+    // 로그인 직후 갈 데 없는 곳으로 한 번 갔다 온다.
+    // 주석에도 `if (!user)` 가 나온다. 코드만 집으려고 여는 중괄호까지 본다.
+    const guard = middleware.indexOf("if (isDisabledRoute(pathname))");
+    const login = middleware.indexOf("if (!user) {");
+    expect(guard, "미들웨어에 문지기가 없다").toBeGreaterThan(-1);
+    expect(login, "로그인 검사를 못 찾았다").toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(login);
+  });
+
+  /**
+   * 미들웨어는 등록부를 보기 **한참 전에** `/api/` 를 통과시킨다
+   * (`if (pathname.startsWith("/api/")) return response;`). 그래서 화면만
+   * 닫으면 회원 누구나 `curl -X POST /api/sources` 로 소스를 계속 등록할 수
+   * 있다 — 화면에는 안 보이는데 표에는 쌓인다.
+   */
+  it("꺼 둔 화면의 API 도 막혀 있다", () => {
+    const files = [
+      "app/api/sources/route.ts",
+      "app/api/sources/[id]/route.ts",
+      "app/api/candidates/route.ts",
+      "app/api/candidates/[id]/route.ts",
+    ];
+    for (const file of files) {
+      const source = readFileSync(path.join(process.cwd(), file), "utf8");
+      const handlers = source.match(/export async function (GET|POST|PATCH|DELETE|PUT)\(/g) ?? [];
+      const guards = source.match(/disabledRouteResponse\("/g) ?? [];
+      expect(handlers.length, `${file} 에 핸들러가 없다`).toBeGreaterThan(0);
+      expect(guards.length, `${file} 에 문지기가 모자라다`).toBe(handlers.length);
     }
   });
 });

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
 import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
-import { PAGE_ACCESS } from "./lib/access/routes";
+import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
 
 const PUBLIC_PATHS = [
@@ -66,6 +66,21 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (pathname.startsWith("/api/")) return response;
+
+  /**
+   * 꺼 둔 화면은 **로그인 여부를 따지기 전에** 돌려보낸다.
+   *
+   * 아래 `if (!user)` 뒤에 두면 로그인 안 한 사람에게 `?next=/inbox` 가
+   * 붙는다. 로그인하면 거기로 갔다가 페이지가 다시 돌려보내서 주소창이 한 번
+   * 번쩍인다 — 열리지는 않지만 갈 데가 없는 곳으로 한 번 갔다 오는 셈이다.
+   *
+   * API 조기 반환(바로 위)보다는 뒤에 둔다. API 는 화면이 아니라 각 라우트가
+   * 스스로 막는다(`api/sources/route.ts`).
+   *
+   * 페이지 쪽 문지기(`app/inbox/page.tsx`)도 그대로 둔다. 아래 `config.matcher`
+   * 가 나중에 바뀌어도 살아남는 두 번째 문이다.
+   */
+  if (isDisabledRoute(pathname)) return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base));
 
   const isAuthPage = matches(pathname, ["/login", "/signup", "/forgot-password"]);
   if (!user) {

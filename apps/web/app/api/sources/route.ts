@@ -1,3 +1,4 @@
+import { disabledRouteResponse } from "../../../lib/access/disabled-api";
 import { authenticateApiMember } from "../../../lib/membership/api";
 import { sourceServiceForUser } from "../../../lib/repository-factory";
 import { SourceInputSchema } from "./schema";
@@ -6,6 +7,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // 꺼 둔 화면의 API 다. 미들웨어는 `/api/` 를 등록부보다 먼저 통과시킨다.
+  const disabled = disabledRouteResponse("/sources");
+  if (disabled) return disabled;
+
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
@@ -16,6 +21,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // 꺼 둔 화면의 API 다. 미들웨어는 `/api/` 를 등록부보다 먼저 통과시킨다.
+  const disabled = disabledRouteResponse("/sources");
+  if (disabled) return disabled;
+
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   const parsed = SourceInputSchema.safeParse(await request.json().catch(() => ({})));

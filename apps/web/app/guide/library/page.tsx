@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ChoiceTable, DiffList, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
-import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockTabs } from "../_components/mockup";
+import { Callouts, Mock, MockButtons, MockChoices, MockTabs } from "../_components/mockup";
 
 /**
  * 수집(수집함 · 수집 리스트) 이야기를 통째로 뺐다 — 2026-09-10.
