@@ -31,6 +31,12 @@ export const metadata: Metadata = {
 
     1200×630 은 이런 미리보기의 표준 규격이다. 세로로 긴 포스터를 그대로 걸면
     위아래가 잘린다.
+
+    **그림을 바꾸면 파일 이름도 바꾼다.** 긁는 쪽은 페이지 정보와 이미지를
+    따로 캐시한다. 같은 주소(`/og.png`)에 내용만 갈아 끼우면, 페이지 캐시를
+    지워도 이미지는 저장해 둔 옛 파일이 계속 나온다. 2026-09-10 에 그림을 두 번
+    바꿨는데 카카오톡에는 끝까지 첫 번째 것이 떴다. 주소가 달라지면 캐시가
+    없으니 새로 받아 간다.
   */
   openGraph: {
     type: "website",
@@ -39,13 +45,13 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: SITE_URL,
     locale: "ko_KR",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "MCS 가 만든 결과물" }],
+    images: [{ url: "/og-hero.png", width: 1200, height: 630, alt: "MCS 가 만든 결과물" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "MCS — Marketing Content Studio",
     description: DESCRIPTION,
-    images: ["/og.png"],
+    images: ["/og-hero.png"],
   },
 };
 
