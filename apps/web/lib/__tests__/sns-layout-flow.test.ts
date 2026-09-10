@@ -160,6 +160,35 @@ describe("레이아웃이 붙은 카드", () => {
   });
 
   /**
+   * **칸 프롬프트에도 사람이 적은 말이 실려야 한다.**
+   *
+   * 바로 위 `queued-flow.ts` 의 주석이 「칸 프롬프트만 `userInstruction` 을
+   * 그대로 넘기면 레이아웃 카드에서만 첨부 지시가 사라진다」고 적어 두었는데,
+   * **그 판단을 붙잡는 시험이 없었다.** 실제로 그 줄을 지워도 저장소 1,556개가
+   * 전부 초록이었다(2026-09-09 독립 리뷰).
+   *
+   * 통짜 카드 쪽은 `sns-queued-flow.test.ts` 가 값으로 잠근다. 여기서는
+   * **칸으로 갈라지는 쪽**을 잠근다 — 카드 종류에 따라 조용히 달라지는 것이
+   * 가장 찾기 어려운 고장이다.
+   */
+  it("칸 프롬프트에 작업 지시와 이번에 적은 말이 함께 실린다", async () => {
+    const record = recorder();
+    const withInstruction = project();
+    withInstruction.data.userInstruction = "작업전체지시";
+
+    const started = await startQueuedFlow(
+      withInstruction,
+      flow({ templateId: "t", slots: SQUARE_IMAGE }),
+      dependencies(record),
+      { now: "2026-09-01T00:00:00.000Z", cardIndexes: [1], note: "인물을더밝게" },
+    );
+
+    const slotPrompt = started.cards[0]!.slotJobs![0]!.prompt;
+    expect(slotPrompt, "작업에 저장된 지시").toContain("작업전체지시");
+    expect(slotPrompt, "이번에 적은 말").toContain("인물을더밝게");
+  });
+
+  /**
    * 이 기능의 전부다. 카드 비율(4:5)로 시키면 칸에 넣을 때 여백이 생기거나
    * 잘린다. 칸이 1088×1088 이니 1:1 로 시켜야 한다.
    */
