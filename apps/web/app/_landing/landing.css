@@ -348,24 +348,32 @@
   }
 }
 
+/*
+  언어 전환.
+
+  **눈에 띌 자리가 아니다.** 전에는 테두리 상자 안에 KO·EN 을 넣고 고른 쪽에
+  강조색을 칠했는데, 로그인·가입 버튼과 같은 무게로 보여 상단바에서 셋이
+  경쟁했다. 지금은 갈 수 있는 쪽 하나만 조용한 글자로 둔다.
+
+  아이콘을 붙이는 이유는 「한」·「EN」한 글자만으로는 그것이 언어라는 것을
+  모르기 때문이다. 크기는 글자보다 작게 둔다.
+*/
 .mcs-lang {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  border: 1px solid var(--mcs-ink-line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.mcs-lang a {
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  padding: 7px 11px;
-  color: var(--mcs-ink-muted);
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--mcs-ink-subtle);
   text-decoration: none;
+  transition: color 0.2s ease;
 }
-.mcs-lang a[aria-current="true"] {
-  background: var(--mcs-ink-accent);
-  color: var(--mcs-ink);
+.mcs-lang:hover {
+  color: var(--mcs-ink-fg);
+}
+.mcs-lang svg {
+  opacity: 0.75;
 }
 
 /* 헤더용 소형 버튼 — 로그인(고스트) · 가입 신청(강조) */
@@ -400,9 +408,9 @@
   background: var(--mcs-ink-accent-hover);
 }
 @media (max-width: 700px) {
-  .mcs-lang a {
-    padding: 6px 8px;
-    font-size: 11px;
+  .mcs-lang {
+    font-size: 11.5px;
+    gap: 4px;
   }
   .mcs-btn-sm {
     padding: 9px 12px;
@@ -1135,12 +1143,63 @@
   background: var(--mcs-accent);
   color: #ffffff;
   cursor: pointer;
-  transition: all 0.25s ease;
+  /*
+    `all` 이 아니라 색만 옮긴다. 아래 `mcsInvite` 가 box-shadow 를 움직이는데,
+    같은 속성을 transition 과 animation 이 함께 잡으면 떨린다.
+  */
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    filter 0.2s ease;
+}
+/* 강조색이 무엇이든 따라가게 밝기로만 올린다. */
+.mcs-run:not([data-running="true"]):hover {
+  filter: brightness(1.08);
+}
+/*
+  **누를 수 있는 것으로 보이게 한다.**
+
+  가만히 두면 이 버튼이 안내문인지 버튼인지 구분이 안 됐다. 화면에서 유일하게
+  누를 자리인데 아무도 안 누르면 데모가 데모 노릇을 못 한다.
+
+  깜빡임이 아니라 **숨쉬기**다. 투명도를 깜빡이면 글자가 읽히다 말다 하고
+  눈이 피로하다. 여기서는 테두리 빛무리만 커졌다 작아진다 — 글자는 늘 또렷하고
+  가장자리만 움직인다.
+
+  **도는 동안에는 멈춘다.** 이미 눌린 버튼이 계속 부르면 두 번 누르게 된다.
+*/
+@keyframes mcsInvite {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--mcs-accent) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 13px transparent;
+  }
+}
+.mcs-run:not([data-running="true"]) {
+  animation: mcsInvite 2.6s ease-out infinite;
+}
+.mcs-run:not([data-running="true"]):hover,
+.mcs-run:not([data-running="true"]):focus-visible {
+  /* 이미 찾아온 사람에게는 더 부를 필요가 없다. */
+  animation: none;
+}
+/*
+  움직임을 줄여 달라고 한 사람에게도 **누를 자리라는 것은 알려야 한다.**
+  파일 끝의 전역 규칙이 `animation: none !important` 로 위를 끄므로, 여기서
+  움직이지 않는 테두리를 대신 둔다.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .mcs-run:not([data-running="true"]) {
+    box-shadow: 0 0 0 3px var(--mcs-accent-soft);
+  }
 }
 .mcs-run[data-running="true"] {
   background: var(--mcs-mutedbg);
   color: var(--mcs-subtle);
   cursor: default;
+  animation: none;
 }
 .mcs-log {
   margin: 24px 0 0;

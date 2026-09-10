@@ -368,18 +368,12 @@
 }
 
 /*
-  내비에서 **지운 섹션으로 가는 링크를 감춘다.**
+  **지운 섹션으로 가는 링크를 감추던 규칙이 여기 있었다.**
 
-  갤러리·작동 원리·도구 목록을 뺐는데 메뉴에는 남아 있어, 눌러도 아무 일이
-  안 일어난다. 헤더는 기존 `/` 와 함께 쓰는 컴포넌트라 목록 자체는 손대지 않고
-  여기서만 감춘다 — 이 화면이 정식이 되면 헤더가 제 목록을 갖게 하고 이 규칙은
-  지운다.
+  2026-09-10 에 `landing-header.tsx` 가 제 목록을 갖게 되면서 없앴다. 그 규칙
+  옆에 적혀 있던 「이 화면이 정식이 되면 … 이 규칙은 지운다」를 그대로 따랐다.
+  이제 헤더의 네 줄이 전부 실제로 있는 자리를 가리킨다.
 */
-.mcs.mcs-dark .mcs-nav a[href="#gallery"],
-.mcs.mcs-dark .mcs-nav a[href="#how"],
-.mcs.mcs-dark .mcs-nav a[href="#tools"] {
-  display: none;
-}
 
 /* ── 슬로건 한 판 ────────────────────────────────────────────────────────
    목록이 아니라 키비주얼이다. 크기 차이와 획 자체가 디자인 노릇을 한다.
@@ -575,6 +569,18 @@
 }
 
 .mcs-legal-links button:hover {
+  color: var(--mcs-ink-fg);
+}
+
+/* 푸터의 「MCS란」. 법률 링크와 같은 결로 둔다 — 푸터에서 혼자 튀면 안 된다. */
+.mcs-footer-link {
+  font-size: 12px;
+  color: var(--mcs-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 160ms ease;
+}
+.mcs-footer-link:hover {
   color: var(--mcs-ink-fg);
 }
 

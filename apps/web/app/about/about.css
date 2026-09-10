@@ -1,0 +1,346 @@
+/* MCS 란(`/about`) 전용 스타일.
+ *
+ * **토큰도 타이포도 새로 만들지 않는다.** 색·글꼴·제목 크기·섹션 간격은
+ * `_landing/landing.css` 와 `_landing/hero/hero.css` 가 정한 것을 그대로 쓴다.
+ * 여기에는 이 화면에만 있는 짜임새만 둔다 — 지워진 일 목록, 다섯 걸음, 세 순간.
+ *
+ * 폭 규칙 ─────────────────────────────────────────────────────────
+ * 한글은 `ch` 로 재면 안 된다(`landing.css` 의 `.mcs-lead` 주석). `ch` 는 숫자
+ * 0 의 폭이라 한글에서는 절반도 안 되는 값이 나오고, 자리가 남는데도 문장이
+ * 접힌다.
+ *
+ *   제목  `em` 으로 잰다. 한글은 1em 이 거의 한 글자라 「몇 글자에서 접을까」를
+ *         그대로 쓸 수 있다. 제목이 커져도 글자 수 기준이 유지된다.
+ *         (`hero.css` 의 `.claim-line` 이 쓰는 방법과 같다)
+ *   본문  `rem` 으로 넉넉히. 좁게 잡으면 한 줄에 들어갈 문장이 두 줄로 접힌다.
+ */
+
+.about {
+  /*
+   * 본문 한 줄의 상한. 1600px 셸을 다 쓰면 눈이 줄을 놓친다.
+   *
+   * **제목과 같은 자리에서 끝나게 맞췄다.** 아래 제목이 `23em` 에서 접히는데
+   * (가장 큰 50px 기준 약 1150px), 본문만 좁게 두면 오른쪽 끝이 들쭉날쭉해
+   * 글 덩어리가 한 벌로 안 보인다.
+   */
+  --about-measure: 72rem;
+}
+
+.about-measure {
+  max-width: min(var(--about-measure), 100%);
+}
+
+/* 제목은 글자 수로 접는다. 본문보다 넉넉해야 두 줄로 내려오지 않는다. */
+.about .mcs-h2.about-measure,
+.about .mcs-h1 {
+  max-width: min(23em, 100%);
+}
+
+/* ── 첫 화면 ─────────────────────────────────────────────── */
+
+.about-hero {
+  /*
+    상단바가 얹혀 있다(`position: sticky`). 그대로 두면 제목이 상단바 밑에서
+    시작해 첫인상이 답답하다. 한 단 내려 시작한다.
+  */
+  padding-top: clamp(72px, 11vh, 148px);
+}
+
+/*
+  두 번째 줄은 **조용하게 둔다.**
+
+  `landing.css` 의 `.mcs-h1 span:last-child` 는 강조색을 칠한다. 여기서는 그
+  줄이 광고 문구가 아니라 약속이라, 흰 줄 뒤에 한 단 물러선 회색으로 두는 쪽이
+  말의 결과 맞는다. 크기·굵기·자간은 그대로 물려받는다.
+*/
+.about .mcs-h1 span:last-child {
+  color: var(--mcs-muted);
+  font-weight: 800;
+}
+
+.about-two {
+  margin-top: clamp(28px, 4vw, 44px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.about-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--mcs-line);
+  background: var(--mcs-card);
+  border-radius: 999px;
+  padding: 9px 17px 9px 13px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--mcs-fg);
+}
+.about-cell b {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--mcs-accent-soft);
+  color: var(--mcs-accent);
+  font-size: 11px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.about-rest {
+  font-size: 14px;
+  color: var(--mcs-subtle);
+}
+
+/* ── 우리가 본 것 ────────────────────────────────────────── */
+
+.about-prose {
+  margin-top: 26px;
+  display: grid;
+  gap: 17px;
+  font-size: clamp(16px, 1.15vw, 18.5px);
+  line-height: 1.78;
+  color: var(--mcs-ink-muted);
+}
+.about-prose em {
+  font-style: normal;
+  color: var(--mcs-ink-fg);
+}
+
+.about-pull {
+  margin: 34px 0 0;
+  padding-left: 18px;
+  border-left: 3px solid var(--mcs-ink-accent);
+  font-size: clamp(19px, 2.1vw, 27px);
+  line-height: 1.45;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+  color: var(--mcs-ink-fg);
+}
+
+/* ── 덜어 낸 것 ──────────────────────────────────────────── */
+
+.about-lifted {
+  margin: clamp(32px, 4vw, 46px) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--mcs-line);
+}
+.about-lifted li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 8px 40px;
+  align-items: baseline;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--mcs-line);
+}
+/* 취소선이 이 절의 유일한 장치다. 「덜어 냈다」를 설명하지 않고 획으로 보여 준다. */
+.about-gone {
+  font-size: clamp(17px, 1.7vw, 22px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--mcs-subtle);
+  text-decoration: line-through;
+  text-decoration-color: var(--mcs-accent);
+  text-decoration-thickness: 2px;
+}
+.about-instead {
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: var(--mcs-muted);
+}
+.about-instead b {
+  color: var(--mcs-fg);
+  font-weight: 800;
+}
+
+/* ── 다섯 걸음 ───────────────────────────────────────────── */
+
+.about-steps {
+  margin: clamp(30px, 4vw, 42px) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--mcs-ink-line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.about-steps li {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 22px 20px 24px;
+  border-right: 1px solid var(--mcs-ink-line);
+  background: var(--mcs-ink-card);
+}
+.about-steps li:last-child {
+  border-right: 0;
+}
+/* 사람이 하는 자리는 하나뿐이다. 그 하나만 밝게 띄운다. */
+.about-steps li[data-human="true"] {
+  background: var(--mcs-ink-bar);
+  box-shadow: inset 0 2px 0 0 var(--mcs-ink-accent);
+}
+.about-n {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--mcs-ink-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.about-step-title {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--mcs-ink-fg);
+}
+.about-step-desc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--mcs-ink-muted);
+}
+.about-by {
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mcs-ink-subtle);
+}
+.about-steps li[data-human="true"] .about-by {
+  color: var(--mcs-ink-accent);
+}
+
+.about-note {
+  margin: 22px 0 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--mcs-ink-muted);
+}
+.about-note b {
+  color: var(--mcs-ink-fg);
+  font-weight: 800;
+}
+
+/* ── 쓸 때의 마음 ────────────────────────────────────────── */
+
+.about-moments {
+  margin-top: clamp(30px, 4vw, 42px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--mcs-line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--mcs-card);
+}
+.about-moment {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 26px 24px 28px;
+  border-right: 1px solid var(--mcs-line);
+}
+.about-moment:last-child {
+  border-right: 0;
+}
+.about-when {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mcs-subtle);
+}
+.about-now {
+  font-size: 18.5px;
+  font-weight: 900;
+  line-height: 1.42;
+  letter-spacing: -0.025em;
+  color: var(--mcs-fg);
+}
+.about-why {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.72;
+  color: var(--mcs-muted);
+}
+
+/* ── 지키려는 것 ─────────────────────────────────────────── */
+
+.about-vows {
+  margin: clamp(28px, 4vw, 40px) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px 48px;
+}
+.about-vows li {
+  padding-top: 16px;
+  border-top: 2px solid var(--mcs-fg);
+}
+.about-vows b {
+  display: block;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  color: var(--mcs-fg);
+}
+.about-vows p {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.72;
+  color: var(--mcs-muted);
+}
+
+/* ── 끝 ──────────────────────────────────────────────────── */
+
+.about-cta {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* ── 좁은 화면 ───────────────────────────────────────────── */
+
+@media (max-width: 1000px) {
+  .about-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .about-steps li {
+    border-right: 0;
+    border-bottom: 1px solid var(--mcs-ink-line);
+  }
+  .about-steps li:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .about-lifted li {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .about-moments {
+    grid-template-columns: 1fr;
+  }
+  .about-moment {
+    border-right: 0;
+    border-bottom: 1px solid var(--mcs-line);
+  }
+  .about-moment:last-child {
+    border-bottom: 0;
+  }
+  .about-vows {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .about-steps {
+    grid-template-columns: 1fr;
+  }
+}

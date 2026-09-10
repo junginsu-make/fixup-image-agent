@@ -8,6 +8,9 @@ import type { UserRole } from "./lib/membership/types";
 
 const PUBLIC_PATHS = [
   "/",
+  // 브랜드 소개. **첫 화면 메뉴에서 바로 가는 자리**라 로그인 앞에 둔다 —
+  // 안 넣으면 「MCS란」을 누른 사람이 로그인 화면을 만난다.
+  "/about",
   "/demo",
   "/login",
   "/signup",
