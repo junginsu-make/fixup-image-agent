@@ -219,7 +219,7 @@ export async function generateSections(input: GenerateSectionsInput) {
 
   if (!apiKey) {
     throw new RedesignError(
-      provider === "google" ? "Google Nano Banana 2 API 키가 필요합니다." : "OpenAI Image 2.0 API 키가 필요합니다.",
+      provider === "google" ? "속도형 API 키가 필요합니다." : "정밀형 API 키가 필요합니다.",
       400
     );
   }
@@ -321,7 +321,7 @@ export async function generateSections(input: GenerateSectionsInput) {
       sections: generatedSections,
       failedSections,
       warning: failedSections.length > 0
-        ? `${generatedSections.length}장은 생성됐고 ${failedSections.length}장 이후는 실패했습니다. OpenAI Image 2.0 요청 제한이면 잠시 후 섹션별 재생성을 실행하세요.`
+        ? `${generatedSections.length}장은 생성됐고 ${failedSections.length}장 이후는 실패했습니다. 정밀형 요청 제한이면 잠시 후 섹션별 재생성을 실행하세요.`
         : ""
     }
   };
@@ -508,7 +508,7 @@ async function generateOpenAIImage({ apiKey, prompt, references }: { apiKey: str
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "OpenAI Image 2.0 생성 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "정밀형 생성 실패", response));
   const imageBase64 = data?.data?.[0]?.b64_json;
   if (!imageBase64) throw new Error("OpenAI 응답에 이미지 데이터가 없습니다.");
   return { mimeType: "image/png", buffer: Buffer.from(imageBase64, "base64") };
@@ -535,7 +535,7 @@ async function generateGoogleImage({ apiKey, prompt, references }: { apiKey: str
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "Google Nano Banana 2 생성 실패", response));
+  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "속도형 생성 실패", response));
   const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData);
   if (!imagePart?.inlineData?.data) throw new Error("Google 응답에 이미지 데이터가 없습니다.");
   return {
@@ -726,9 +726,9 @@ function extractOpenAIText(data: { output?: Array<{ content?: Array<{ text?: str
 
 function modelMeta(provider: Provider) {
   if (provider === "google") {
-    return { provider: "google" as const, label: "Google Nano Banana 2", id: GOOGLE_NANO_BANANA_2_MODEL };
+    return { provider: "google" as const, label: "속도형", id: GOOGLE_NANO_BANANA_2_MODEL };
   }
-  return { provider: "openai" as const, label: "OpenAI Image 2.0", id: OPENAI_IMAGE_MODEL };
+  return { provider: "openai" as const, label: "정밀형", id: OPENAI_IMAGE_MODEL };
 }
 
 async function readJsonResponse(response: Response) {
@@ -762,7 +762,7 @@ export function humanizeProviderError(message: string) {
   }
   if (message.includes("must be verified") && message.includes("gpt-image-2-2026-04-21")) {
     return [
-      "OpenAI Image 2.0 사용 권한이 아직 없습니다.",
+      "정밀형 사용 권한이 아직 없습니다.",
       "이 모델은 OpenAI 조직 인증이 필요합니다.",
       "OpenAI Platform > Settings > Organization > General에서 Verify Organization을 완료한 뒤 15분 정도 기다려주세요.",
       message.match(/request_id: [^)]+/)?.[0] || ""
@@ -770,7 +770,7 @@ export function humanizeProviderError(message: string) {
   }
   if (message.includes("Invalid image file or mode")) {
     return [
-      "업로드 이미지 형식이 OpenAI Image 2.0 편집 입력과 맞지 않습니다.",
+      "업로드 이미지 형식이 정밀형 편집 입력과 맞지 않습니다.",
       "긴 상세페이지 캡처나 JPG 색상 모드 문제일 수 있어, 앱에서 PNG 변환/분할 후 다시 전송하도록 수정했습니다.",
       "새로고침 후 다시 생성해주세요.",
       message.match(/request_id: [^)]+/)?.[0] || ""

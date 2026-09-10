@@ -40,25 +40,51 @@ const 새면_안_되는_이름 = [
 const 진짜_ID = [...PDP_MODELS.map((m) => m.id as string), ...STUDIO_MODELS.map((m) => m.id)];
 
 const WEB = join(__dirname, "..", "..");
+const ROOT = join(WEB, "..", "..");
 
-/** 회원이 보는 화면만 훑는다. `/admin` 은 진짜 이름을 써야 하므로 뺀다. */
+/**
+ * 회원에게 **글이 나갈 수 있는 곳**을 전부 훑는다.
+ *
+ * 처음에는 `apps/web/app` 의 `.tsx` 만 봤다가 **두 군데를 놓쳤다.**
+ *
+ *   - `app/_landing/landing-content.ts` — 로그인도 필요 없는 **공개 홈**에
+ *     「GPT Image 2 · 가중치 4」가 그대로 떠 있었다. 검색엔진도 읽는 자리다.
+ *   - `packages` 안의 `src` — 비율 안내와 오류 문구가 여기서 만들어져 화면으로 간다.
+ *
+ * 화면 파일만 보면 **문구를 만드는 자리**를 놓친다. 확장자와 폴더를 넓게 잡는
+ * 편이 낫다 — 여기서 한 번 빠뜨리면 그 경로는 영영 검사되지 않는다.
+ */
 function 회원화면(): Array<{ path: string; source: string }> {
   const found: Array<{ path: string; source: string }> = [];
 
-  const walk = (dir: string) => {
+  const walk = (dir: string, base: string) => {
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       if (statSync(full).isDirectory()) {
-        if (entry === "admin" || entry === "__tests__" || entry.startsWith(".")) continue;
-        walk(full);
+        // `/admin` 은 운영자만 본다. 시험 파일은 이름을 적어 두는 자리다.
+        if (entry === "admin" || entry === "__tests__" || entry === "node_modules") continue;
+        if (entry.startsWith(".")) continue;
+        walk(full, base);
         continue;
       }
-      if (!entry.endsWith(".tsx")) continue;
-      found.push({ path: full.slice(WEB.length + 1), source: readFileSync(full, "utf8") });
+      if (!entry.endsWith(".tsx") && !entry.endsWith(".ts")) continue;
+      if (entry.endsWith(".test.ts") || entry.endsWith(".test.tsx")) continue;
+
+      // 윈도우는 경로를 역슬래시로 준다. 아래 판정을 한 가지 모양으로만 하려고 바꾼다.
+      const path = full.slice(base.length + 1).split(String.fromCharCode(92)).join("/");
+      // 수집은 **남의 소식을 구독하는 기능**이다. 「Anthropic Claude 공식 소식」은
+      // 우리가 무엇으로 만드는지가 아니라 사용자가 고르는 출처 이름이다.
+      if (path.includes("/sources") || path.includes("ingest")) continue;
+
+      found.push({ path, source: readFileSync(full, "utf8") });
     }
   };
 
-  walk(join(WEB, "app"));
+  walk(join(WEB, "app"), WEB);
+  walk(join(WEB, "lib"), WEB);
+  for (const pkg of ["sns-core", "poster-core", "pdp-core", "redesign-core", "layout-core", "shared"]) {
+    walk(join(ROOT, "packages", pkg, "src"), ROOT);
+  }
   return found;
 }
 
@@ -75,13 +101,23 @@ describe("회원 화면에 모델 이름이 없다", () => {
 
   it("훑을 화면이 있다", () => {
     // 걷기가 조용히 빈 배열을 돌려주면 아래 검사가 전부 통과해 버린다.
-    expect(화면들.length).toBeGreaterThan(30);
+    expect(화면들.length).toBeGreaterThan(150);
   });
+
+  /**
+   * **문자열 안만 본다.** 화면에 나가는 것은 결국 문자열이다.
+   *
+   * 코드 이름까지 잡으면 `import Anthropic from "@anthropic-ai/sdk"` 같은
+   * 서버 전용 임포트가 걸린다. 그건 브라우저로 가지도 않고 바꿀 수도 없다.
+   * 잘못 걸리는 검사는 곧 꺼지고, 꺼진 검사는 없는 것만 못하다.
+   */
+  const 문자열들 = (source: string): string[] =>
+    (주석을_뺀다(source).match(/"[^"\n]*"|'[^'\n]*'|`[^`]*`/g) ?? []).map((조각) => 조각.slice(1, -1));
 
   for (const 이름 of 새면_안_되는_이름) {
     it(`「${이름}」이 없다`, () => {
       const 걸린곳 = 화면들
-        .filter((file) => 주석을_뺀다(file.source).includes(이름))
+        .filter((file) => 문자열들(file.source).some((글) => 글.includes(이름)))
         .map((file) => file.path);
 
       expect(걸린곳, `회원 화면에 「${이름}」이 남아 있다`).toEqual([]);
