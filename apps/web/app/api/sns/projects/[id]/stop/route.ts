@@ -33,7 +33,7 @@ export async function POST(_request: Request, context: Context) {
        * 영영 안 풀렸다 — 만료까지 크레딧을 묶고, 이미 나간 fal 값은 장부에
        * 안 실렸다. 받아 둔 카드만큼은 받고 나머지는 돌려준다.
        */
-      const settled = await settleSnsReservation(auth.member.userId, flow);
+      const settled = await settleSnsReservation(auth.member.userId, flow, project.modelId);
       const saved = await store.save(id, settled, "ready");
       return Response.json({ ok: true, project: saved });
     });

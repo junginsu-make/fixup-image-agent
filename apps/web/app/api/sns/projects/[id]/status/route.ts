@@ -30,7 +30,7 @@ export async function POST(_request: Request, context: Context) {
        * 나간 fal 값도 장부에 안 실렸다.
        */
       if (!hasActiveQueuedGeneration(project.data.flow)) {
-        const settled = await settleSnsReservation(auth.member.userId, project.data.flow);
+        const settled = await settleSnsReservation(auth.member.userId, project.data.flow, project.modelId);
         if (settled === project.data.flow) return Response.json({ ok: true, project, active: false });
         return Response.json({ ok: true, project: await store.save(id, settled, "ready"), active: false });
       }
@@ -59,7 +59,7 @@ export async function POST(_request: Request, context: Context) {
        * 확정이 실패해도 결과는 돌려준다 — 카드는 이미 저장됐고, 묶인 장은 예약이
        * 만료되면 풀린다. 여기서 막으면 사용자가 만든 카드를 못 본다.
        */
-      const settled = active ? flow : await settleSnsReservation(auth.member.userId, flow);
+      const settled = active ? flow : await settleSnsReservation(auth.member.userId, flow, project.modelId);
 
       const saved = await store.save(id, settled, active ? "generating" : "ready");
       return Response.json({ ok: true, project: saved, active });

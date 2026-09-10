@@ -1,3 +1,4 @@
+import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { LAYOUT_ANALYSIS_PROMPT, LAYOUT_ANALYSIS_SCHEMA } from "@fixup/layout-core";
@@ -69,6 +70,7 @@ class AnthropicLayoutAnalyst implements LayoutAnalysisProvider {
       }],
       tool_choice: { type: "tool", name: TOOL_NAME, disable_parallel_tool_use: true },
     });
+    recordFrom(this.model, response);
     const call = response.content.find(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === TOOL_NAME,
     );
@@ -101,6 +103,7 @@ class OpenAILayoutAnalyst implements LayoutAnalysisProvider {
       }],
       tool_choice: { type: "function", name: TOOL_NAME },
     });
+    recordFrom(this.model, response);
     const call = response.output.find((item) => item.type === "function_call" && item.name === TOOL_NAME);
     if (!call || call.type !== "function_call") throw new Error("OpenAI가 칸 목록을 돌려주지 않았습니다.");
     return unwrapStringified(JSON.parse(call.arguments) as unknown);

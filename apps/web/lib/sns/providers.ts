@@ -1,3 +1,4 @@
+import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import type {
@@ -168,6 +169,7 @@ class AnthropicSceneProvider implements ImagePromptProvider {
       max_tokens: 1800,
       messages: [{ role: "user", content: [{ type: "text", text: request.prompt }, ...images] }],
     });
+    recordFrom(this.model, response);
     return response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map((block) => block.text).join("\n");
   }
 }
@@ -182,6 +184,7 @@ class OpenAISceneProvider implements ImagePromptProvider {
         ...request.imageUrls.map((imageUrl) => ({ type: "input_image" as const, image_url: imageUrl, detail: "original" as const })),
       ] }],
     });
+    recordFrom(this.model, response);
     if (!response.output_text) throw new Error("OpenAI가 이미지 프롬프트를 돌려주지 않았습니다.");
     return response.output_text;
   }
@@ -205,6 +208,7 @@ class AnthropicReviewProvider implements ReviewRequest {
       tools: [{ name: REVIEW_SPEC.name, description: REVIEW_SPEC.description, input_schema: REVIEW_SPEC.schema as Anthropic.Tool.InputSchema }],
       tool_choice: { type: "tool", name: REVIEW_SPEC.name, disable_parallel_tool_use: true },
     });
+    recordFrom(this.model, response);
     const call = response.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === REVIEW_SPEC.name);
     if (!call) throw new Error("Claude가 검수 결과를 돌려주지 않았습니다.");
     return call.input;
@@ -223,6 +227,7 @@ class OpenAIReviewProvider implements ReviewRequest {
       tools: [{ type: "function", name: REVIEW_SPEC.name, description: REVIEW_SPEC.description, parameters: REVIEW_SPEC.schema, strict: false }],
       tool_choice: { type: "function", name: REVIEW_SPEC.name },
     });
+    recordFrom(this.model, response);
     const call = response.output.find((item) => item.type === "function_call" && item.name === REVIEW_SPEC.name);
     if (!call || call.type !== "function_call") throw new Error("OpenAI가 검수 결과를 돌려주지 않았습니다.");
     return JSON.parse(call.arguments) as unknown;
