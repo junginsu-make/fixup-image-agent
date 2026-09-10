@@ -117,6 +117,30 @@ describe("격리 자물쇠 — 카드뉴스 비율", () => {
 });
 
 describe("격리 자물쇠 — 모델 능력", () => {
+  /**
+   * **광고 마스터 크기가 이 한계에서 역산돼 있다**(`lib/ad/specs.ts:41` —
+   * 「`sizeFromSource` 가 이 값을 그대로 돌려준다」). 기본 모델이 바뀔 때 한계가
+   * 한 글자만 달라도 `AD_MASTERS` 여섯 개의 실제 생성 크기가 조용히 바뀐다.
+   *
+   * 위 표는 모델 목록을 통째로 맞대므로 새 모델을 더할 때 기계적으로 갱신되기
+   * 쉽다. 이 단정은 **값이 아니라 관계**를 잠가서 그때도 살아남는다.
+   */
+  it("픽셀을 지정하는 모델들은 한계가 서로 같다", () => {
+    const limits = IMAGE_MODELS
+      .filter((model) => model.pixelSizeLimits)
+      .map((model) => JSON.stringify(model.pixelSizeLimits));
+    expect(limits.length, "픽셀 모델이 둘 이상이어야 비교가 뜻이 있다").toBeGreaterThan(1);
+    expect(new Set(limits).size, "픽셀 모델의 한계가 서로 다르다 — 광고 마스터 크기가 갈린다").toBe(1);
+  });
+
+  /**
+   * **2026-09-10 에 기대값을 손으로 고쳤다.** gpt-image-2.5 둘을 맨 앞에 더하고
+   * 기본을 flare 로 옮겼다. 광고가 기대는 것은 **픽셀 한계**이고 그 값은 그대로다
+   * — fal 실호출로 확인했다(설계 §0.1). 옛 모델은 `isDefault: false` 로만 바뀐다.
+   *
+   * 아래 「픽셀 한계가 서로 같다」가 이 표와 별개로 그 불변식을 지킨다. 표를
+   * 기계적으로 갱신하면 그것까지는 못 지나간다.
+   */
   it("광고가 기대는 능력이 그대로다 — 가격은 일부러 안 본다", () => {
     expect(IMAGE_MODELS.map((model) => ({
       id: model.id,
@@ -128,8 +152,30 @@ describe("격리 자물쇠 — 모델 능력", () => {
       batchMax: model.batchMax,
     }))).toEqual([
       {
-        id: "gpt-image-2",
+        id: "gpt-image-2.5-flare",
         isDefault: true,
+        supportedRatios: null,
+        pixelSizeLimits: {
+          minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3,
+        },
+        fixedResolution: null,
+        maxReferenceImages: 16,
+        batchMax: 4,
+      },
+      {
+        id: "gpt-image-2.5-sunburst",
+        isDefault: false,
+        supportedRatios: null,
+        pixelSizeLimits: {
+          minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3,
+        },
+        fixedResolution: null,
+        maxReferenceImages: 16,
+        batchMax: 4,
+      },
+      {
+        id: "gpt-image-2",
+        isDefault: false,
         supportedRatios: null,
         pixelSizeLimits: {
           minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3,

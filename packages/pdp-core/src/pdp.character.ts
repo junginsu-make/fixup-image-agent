@@ -522,7 +522,11 @@ export function buildSceneWithCharacterDirective(input: {
  * 않는다 — 지금 여기 적힌 둘은 이 저장소가 실측으로 골라 온 상위 모델이다.
  *
  *   실사   Nano Banana Pro — 실사 인물에서 낫다는 것이 원본의 결론이다
- *   나머지 GPT Image 2 — 측정된 모델 중 표현 폭이 가장 넓다
+ *   나머지 GPT Image 2.5 — 2026-09-10 실측에서 2 와 같은 크기·안 깨진 한글을
+ *          1/2.5 시간에 냈고, 사용자가 두 결과를 직접 보고 화질 우위를 확인했다.
+ *          **`max` 품질이다**(`pdp.image-provider.ts` 의 `GPT_QUALITY`).
+ *          정밀판(sunburst)은 여기 안 낸다 — 캐릭터는 동기로 돌고 상한이
+ *          300초인데 95초 × 3장이면 285초다.
  *
  * Seedream 5.0 Pro 와 Qwen Image 2.0 Pro 도 고를 수 있게 붙였다. 각각
  * 다중 참조 정체성 유지와 화풍 전이에 맞춰진 모델이고 값도 절반 아래지만,
@@ -534,12 +538,15 @@ export function buildSceneWithCharacterDirective(input: {
  */
 const MODEL_BY_LOOK: Record<CharacterLook, ImageModelId> = {
   photoreal: "nano-banana-pro",
-  anime: "gpt-image-2",
-  "3d": "gpt-image-2",
-  illustration: "gpt-image-2",
+  anime: "gpt-image-2.5-flare",
+  "3d": "gpt-image-2.5-flare",
+  illustration: "gpt-image-2.5-flare",
 };
 
+/** 결을 모르거나 옛 `boolean` 이 `false` 로 올 때. 실사가 아니면 이쪽이다. */
+const NON_PHOTOREAL: ImageModelId = "gpt-image-2.5-flare";
+
 export function selectCharacterModel(look: CharacterLook | boolean): ImageModelId {
-  if (typeof look === "boolean") return look ? "nano-banana-pro" : "gpt-image-2";
-  return MODEL_BY_LOOK[look] ?? "gpt-image-2";
+  if (typeof look === "boolean") return look ? "nano-banana-pro" : NON_PHOTOREAL;
+  return MODEL_BY_LOOK[look] ?? NON_PHOTOREAL;
 }

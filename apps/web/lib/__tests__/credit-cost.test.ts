@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CARD_RATIOS, IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
 import { imageCreditUnits, imageUnitUsd, maxImageUnitUsd } from "../credit-cost";
 
 /**
@@ -22,7 +23,11 @@ describe("한 장이 얼마인가", () => {
   });
 
   it("표에 없는 모델은 정해 둔 값을 쓴다", () => {
+    // 전부 fal·공급자 공표값이다 (2026-09-10 모델 페이지에서 다시 확인).
     expect(imageUnitUsd("seedream-5-pro")).toBe(0.0675);
+    // **$0.0675 였다가 고쳤다.** 재지도 읽지도 않고 seedream 등급에서 옮겨 적은
+    // 값이라 11% 적게 차감하고 있었다. 공표값은 t2i·edit 두 페이지 모두 $0.075 다.
+    expect(imageUnitUsd("qwen-image-2-pro")).toBe(0.075);
     expect(imageUnitUsd("redesign-openai")).toBe(0.19);
     expect(imageUnitUsd("redesign-google")).toBe(0.13);
   });
@@ -30,6 +35,25 @@ describe("한 장이 얼마인가", () => {
   it("**모르는 모델은 가장 비싼 값으로 잡는다** — 적게 잡으면 공짜 구멍이 된다", () => {
     expect(imageUnitUsd("아직-없는-모델")).toBe(maxImageUnitUsd());
     expect(maxImageUnitUsd()).toBeGreaterThanOrEqual(0.219);
+  });
+
+  it("목록에 있는 어느 모델보다도 싸지 않다", () => {
+    /**
+     * 위 `0.219` 는 **오늘 가장 비싼 모델의 값**이라 목록이 늘어도 안 움직인다.
+     * 더 비싼 모델이 들어오는데 `maxImageUnitUsd` 가 그것을 못 보면, 예약이
+     * 모자란 채로 통과해 **한도를 넘겨 만들 수 있다.** `unitPrice` 가 던지면
+     * `catch` 가 조용히 삼키므로 오류로도 안 보인다. 그래서 값을 목록에서
+     * 다시 세어 맞댄다.
+     */
+    const 아는것중최대 = Math.max(
+      ...IMAGE_MODELS.flatMap((model) =>
+        CARD_RATIOS.map((ratio) => {
+          try { return unitPrice(model, "i2i", ratio.pixel); } catch { return 0; }
+        }),
+      ),
+    );
+    expect(아는것중최대).toBeGreaterThan(0);
+    expect(maxImageUnitUsd()).toBeGreaterThanOrEqual(아는것중최대);
   });
 });
 

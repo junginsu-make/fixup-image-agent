@@ -403,9 +403,9 @@ export function CharacterStudio() {
   // 서버의 selectCharacterModel 과 같은 표다. 결을 바꾸면 모델도 따라온다.
   const MODEL_BY_LOOK: Record<Look, string> = {
     photoreal: "nano-banana-pro",
-    anime: "gpt-image-2",
-    "3d": "gpt-image-2",
-    illustration: "gpt-image-2",
+    anime: "gpt-image-2.5-flare",
+    "3d": "gpt-image-2.5-flare",
+    illustration: "gpt-image-2.5-flare",
   };
   const autoModel = MODEL_BY_LOOK[look];
   const activeModel = modelId || autoModel;

@@ -55,6 +55,9 @@ export interface ModelChoice {
 const DEFAULT_SIZE = { width: 1024, height: 1536 };
 
 const NOTES: Record<string, string> = {
+  // 빠진 모델은 LLM 에게 성질 없이 이름과 값만 간다 — 안 골라지거나 잘못 골라진다.
+  "gpt-image-2.5-flare": "픽셀 크기를 직접 지정할 수 있어 인쇄용·비표준 규격에 쓸 수 있습니다. 참고 그림을 가장 많이(16장) 받고, 같은 화질에서 가장 빠릅니다.",
+  "gpt-image-2.5-sunburst": "flare 와 같은 화질·값이지만 글자 배치 지시를 더 잘 지킵니다. 대신 두 배 느립니다 — 장수가 많으면 flare 를 쓰세요.",
   "gpt-image-2": "픽셀 크기를 직접 지정할 수 있어 인쇄용·비표준 규격에 쓸 수 있습니다. 참고 그림을 가장 많이(16장) 받습니다.",
   "nano-banana-pro": "값이 한 장에 고정이라 큰 그림에서 유리합니다. 인물 실사에 강한 편입니다.",
   "nano-banana-2": "지원하는 비율이 가장 넓습니다(4:1, 8:1 같은 띠 모양 포함).",

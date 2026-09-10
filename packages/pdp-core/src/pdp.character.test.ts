@@ -9,6 +9,9 @@ import {
   pickAngleForSection,
   selectCharacterModel,
 } from "./pdp.character";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { IMAGE_MODELS } from "./types";
 
 describe("각도 정의", () => {
 
@@ -157,9 +160,10 @@ describe("모델 선택", () => {
   });
 
   it("실사가 아니어도 우리가 쓰는 모델 안에서 고른다", () => {
-    expect(["gpt-image-2", "nano-banana-pro", "nano-banana"]).toContain(
-      selectCharacterModel(false),
-    );
+    // 목록을 손으로 적어 두면 기본을 옮길 때 같이 깨진다. 여기서 지킬 것은
+    // **아는 모델인가** 하나다 — 모르는 id 를 돌려주면 `ENDPOINTS` 에도
+    // `IMAGE_MODEL_CREDIT_WEIGHT` 에도 자리가 없어 런타임에서 터진다.
+    expect(IMAGE_MODELS.map((model) => model.id)).toContain(selectCharacterModel(false));
   });
 });
 
@@ -218,10 +222,52 @@ describe("결이 질감을 정한다", () => {
     expect(new Set([anime, three, draw]).size).toBe(3);
   });
 
+  /**
+   * **값을 손으로 못 박는다. 관계로 바꾸지 않는다.**
+   *
+   * 한 번 「서로 같고·실사가 아니고·아는 모델이면 된다」로 느슨하게 적었다가
+   * 되돌렸다. 그 세 조건은 **가장 싼 `nano-banana` 도 전부 만족한다** — 네
+   * 자리를 다 그것으로 바꿔도 시험이 통과했다. 캐릭터 모델은 이 저장소가
+   * 실측으로 골라 온 화질 판단인데(`pdp.character.ts` 의 `MODEL_BY_LOOK` 주석),
+   * 잠금이 느슨하면 그 판단이 조용히 싼 쪽으로 미끄러져도 안 잡힌다.
+   *
+   * 기본을 옮길 때 이 줄이 같이 깨지는 것은 **잡음이 아니라 의도다.** 화질
+   * 판단을 바꾸는 일이니 사람이 손으로 고치고 리뷰에서 diff 로 보여야 한다.
+   * 2026-09-10 에 gpt-image-2 → gpt-image-2.5-flare 로 옮겼다.
+   */
   it("결이 기본 모델을 정한다", () => {
     expect(selectCharacterModel("photoreal")).toBe("nano-banana-pro");
     for (const look of ["anime", "3d", "illustration"] as const) {
-      expect(selectCharacterModel(look)).toBe("gpt-image-2");
+      expect(selectCharacterModel(look)).toBe("gpt-image-2.5-flare");
+    }
+    // 옛 boolean 호출도 같은 「실사 아님」이어야 한다.
+    expect(selectCharacterModel(false)).toBe("gpt-image-2.5-flare");
+  });
+
+  /**
+   * 같은 표가 화면에 한 벌 더 있다
+   * (`apps/web/app/characters/CharacterStudio.tsx` 의 `MODEL_BY_LOOK`).
+   * 갈리면 **화면이 가리키는 모델과 실제로 그리는 모델이 달라진다** — 화면은
+   * 사용자가 직접 고를 때만 `modelId` 를 보내고, 안 고르면 서버가 결로 정한다.
+   * 패키지 경계를 넘는 import 는 못 하니 파일을 글자로 읽어 맞댄다.
+   */
+  it("화면에 있는 같은 표와 어긋나지 않는다", () => {
+    // `process.cwd()` 는 패키지 뿌리다 — 이 저장소의 다른 파일 읽기 시험과 같은
+    // 형식이다(`sns-core/__tests__/migration.test.ts`).
+    const studio = readFileSync(
+      path.join(process.cwd(), "../../apps/web/app/characters/CharacterStudio.tsx"),
+      "utf8",
+    );
+    const start = studio.indexOf("const MODEL_BY_LOOK");
+    expect(start, "화면에서 MODEL_BY_LOOK 를 못 찾았다").toBeGreaterThan(-1);
+    const table = studio.slice(start, studio.indexOf("};", start));
+
+    for (const look of ["photoreal", "anime", "3d", "illustration"] as const) {
+      // 화면 표는 `3d` 만 따옴표가 붙는다(식별자로 못 쓰는 이름이라).
+      const key = /^[a-z]/.test(look) ? look : `"${look}"`;
+      expect(table, `화면 표에 ${look} 가 없다`).toContain(`${key}: "`);
+      expect(table, `${look} 가 서버와 다르다`)
+        .toContain(`${key}: "${selectCharacterModel(look)}"`);
     }
   });
 });

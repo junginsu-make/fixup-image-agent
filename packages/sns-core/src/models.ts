@@ -28,6 +28,20 @@ export interface ImageModel {
   fixedResolution?: "0.5K" | "1K" | "2K" | "4K";
   /** 고정 해상도에 곱할 배수. */
   resolutionMultiplier?: number;
+  /**
+   * fal 에 보낼 품질. **모델 속성이지 호출자 인자가 아니다.**
+   *
+   * 크레딧이 단가표에서 나온다(`unitPrice` → `estimateCost` → `creditUnits` →
+   * `reserveAiUsage`). 품질을 호출자가 넘기게 하면 같은 모델·같은 크기에서 값이
+   * 4배 달라지는데 표는 하나다. 그러면 `unitPrice`·`priceCoverage`·
+   * `estimateSlots`·`deckEstimate`·`estimateCost`·`poster-core/pricing`·
+   * `credit-cost` 여덟 자리의 시그니처를 다 고쳐야 하고, **한 곳만 빠져도 그
+   * 경로가 조용히 틀린 값으로 차감한다.**
+   *
+   * 여기 두면 「이 모델의 표 = 이 품질의 값」이 한 객체 안에서 깨질 수 없다.
+   * 비우면 `high` 다 — 옛 모델들이 그렇게 돌고 있었다.
+   */
+  quality?: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 /** fal 모델 페이지 공표값 (2026-08-31 확인). high 품질 기준. */
@@ -49,14 +63,86 @@ const GPT_I2I: PriceRow[] = [
   { width: 3840, height: 2160, usd: 0.413 },
 ];
 
+/**
+ * gpt-image-2.5 의 `max` 품질 단가.
+ *
+ * **1088×1360(→ `1024×1536` 행)만 실측했다**(2026-09-10, fal 실호출).
+ * 나머지 다섯 행은 fal 모델 페이지의 표를 그대로 옮겼고, 그 표에서 모든
+ * 크기가 `max = high × 4.00` 으로 일정한 것을 확인했다.
+ *
+ * **t2i 와 i2i 가 같다.** gpt-image-2 는 편집이 3~4% 비쌌는데 2.5 는 같은 값이다.
+ * 그래서 표를 하나만 둔다.
+ */
+const GPT25_MAX: PriceRow[] = [
+  { width: 1024, height: 768, usd: 0.14445 },
+  { width: 1024, height: 1024, usd: 0.21072 },
+  { width: 1024, height: 1536, usd: 0.16464 },
+  { width: 1920, height: 1080, usd: 0.15840 },
+  { width: 2560, height: 1440, usd: 0.22110 },
+  { width: 3840, height: 2160, usd: 0.40026 },
+];
+
 const NANO_RATIOS_15 = ["auto","21:9","16:9","3:2","4:3","5:4","1:1","4:5","3:4","2:3","9:16","4:1","1:4","8:1","1:8"];
 const NANO_RATIOS_11 = ["auto","21:9","16:9","3:2","4:3","5:4","1:1","4:5","3:4","2:3","9:16"];
 
+/**
+ * **차례가 뜻을 갖는다.** 세 곳이 배열 순서를 본다 —
+ * `poster-core/pricing.ts` 가 첫 픽셀 모델로 크기를 계산하고,
+ * `create/ModelPicker.tsx` 가 첫 항목에 「기본」 배지를 붙이고,
+ * `layout-core/image-request.ts` 의 `planSlotImage` 가 동점일 때 앞을 고른다.
+ * flare 와 gpt-image-2 는 픽셀 한계가 같아 **항상 동점**이므로, 새 기본을
+ * 맨 앞에 둔다.
+ */
 export const IMAGE_MODELS: ImageModel[] = [
   {
+    /**
+     * 기본. **빠르고 값이 싸다** — 2026-09-10 실측에서 현재 모델의 1/2.5 시간에
+     * 3~7% 싼 값으로 같은 크기·안 깨진 한글을 냈다.
+     *
+     * **`max` 를 쓴다.** 2.5 는 품질 단계가 다섯이고 `high` 는 값으로 보면 옛
+     * `medium` 자리다. 지금 화질을 지키려면 `max` 여야 하고, 그래도 현재보다
+     * 싸다.
+     */
+    id: "gpt-image-2.5-flare",
+    label: "GPT Image 2.5",
+    isDefault: true,
+    quality: "max",
+    t2i: { endpoint: "openai/gpt-image-2.5/flare/text-to-image", table: GPT25_MAX },
+    i2i: { endpoint: "openai/gpt-image-2.5/flare/edit", table: GPT25_MAX },
+    maxReferenceImages: 16,
+    batchMax: 4,
+    pixelSizeLimits: { minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3 },
+  },
+  {
+    /**
+     * 정밀. **느린 대신 지시를 더 잘 지킨다.**
+     *
+     * 2026-09-10 실측에서 배치 지시(`image-prompt.ts:352`)를 2회 모두 지킨
+     * 유일한 모델이다. 대신 95초로 현재 모델과 비슷하게 느리다 — 카드 여덟
+     * 장이면 13분이다.
+     *
+     * **기본으로 안 둔다.** 표본이 2개뿐이라 배치 준수를 단정할 수 없고,
+     * 화질 등급이 flare 와 같은데(둘 다 `max`) 속도가 2배 차이다.
+     *
+     * **상세페이지·캐릭터에는 안 낸다.** 그 둘은 동기로 돌고 상한이 300초인데
+     * (`pdp/images/batch/route.ts`), 95초 × 3장이면 285초다.
+     */
+    id: "gpt-image-2.5-sunburst",
+    label: "GPT Image 2.5 정밀",
+    quality: "max",
+    t2i: { endpoint: "openai/gpt-image-2.5/sunburst/text-to-image", table: GPT25_MAX },
+    i2i: { endpoint: "openai/gpt-image-2.5/sunburst/edit", table: GPT25_MAX },
+    maxReferenceImages: 16,
+    batchMax: 4,
+    pixelSizeLimits: { minPixels: 655360, maxPixels: 8294400, maxEdge: 3840, multipleOf: 16, maxAspect: 3 },
+  },
+  {
+    /**
+     * **지우지 않는다.** 저장된 작업이 이 id 를 들고 있고 `modelById` 가 모르는
+     * id 에 던진다 — 지우면 그 작업들이 500 이 된다.
+     */
     id: "gpt-image-2",
     label: "GPT Image 2",
-    isDefault: true,
     t2i: { endpoint: "openai/gpt-image-2", table: GPT_T2I },
     i2i: { endpoint: "openai/gpt-image-2/edit", table: GPT_I2I },
     maxReferenceImages: 16,

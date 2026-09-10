@@ -69,14 +69,17 @@ describe("비율이 모델보다 우선한다", () => {
   it("못 하면 할 수 있는 모델로 바꾼다", () => {
     // A4 인쇄용은 픽셀을 직접 지정해야 해서 열거 모델로는 못 만든다.
     const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
-    expect(choice.model.id).toBe("gpt-image-2");
+    // **id 를 못 박지 않는다.** 여기서 묻는 것은 「픽셀을 지정할 수 있는 모델로
+    // 바꾸는가」이지 어느 모델인가가 아니다. 기본이 바뀌면 여기도 따라와야 하는데,
+    // id 를 적어 두면 기본을 옮길 때마다 뜻과 무관하게 고치게 된다.
+    expect(choice.model.pixelSizeLimits, "픽셀을 지정할 수 있어야 한다").toBeTruthy();
     expect(choice.switched).toBe(true);
     expect(choice.reason).toContain("Nano Banana");
   });
 
   it("첨부 비율 그대로는 픽셀을 지정할 수 있는 모델이라야 한다", () => {
     const choice = chooseModelForRatio(MATCH_SOURCE, "nano-banana-pro", IMAGE_MODELS);
-    expect(choice.model.id).toBe("gpt-image-2");
+    expect(choice.model.pixelSizeLimits).toBeTruthy();
     expect(choice.switched).toBe(true);
   });
 
@@ -88,7 +91,8 @@ describe("비율이 모델보다 우선한다", () => {
 
   it("모르는 모델을 주면 기본 모델로 본다", () => {
     const choice = chooseModelForRatio("1:1", "없는-모델", IMAGE_MODELS);
-    expect(choice.model.id).toBe("gpt-image-2");
+    // 「기본이 무엇인가」는 목록이 정한다. 여기서 다시 적으면 두 곳이 갈린다.
+    expect(choice.model.id).toBe(IMAGE_MODELS.find((model) => model.isDefault)!.id);
   });
 
   it("아무도 못 하는 비율이면 알린다", () => {
