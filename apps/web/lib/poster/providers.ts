@@ -1,3 +1,4 @@
+import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { TYPE_INTERACTIONS } from "@fixup/poster-core";
@@ -162,6 +163,7 @@ export function createPosterPeopleReader(environment: Record<string, string | un
         tools: [{ name: PEOPLE_SPEC.name, description: PEOPLE_SPEC.description, input_schema: PEOPLE_SPEC.schema as never }],
         tool_choice: { type: "tool", name: PEOPLE_SPEC.name, disable_parallel_tool_use: true },
       });
+      recordFrom(anthropicModel, response);
       const call = response.content.find((block) => block.type === "tool_use" && block.name === PEOPLE_SPEC.name);
       if (!call || call.type !== "tool_use") throw new Error("사람을 읽지 못했습니다.");
       return call.input;
@@ -181,6 +183,7 @@ export function createPosterGrammarReader(environment: Record<string, string | u
         tools: [{ name: GRAMMAR_SPEC.name, description: GRAMMAR_SPEC.description, input_schema: GRAMMAR_SPEC.schema as never }],
         tool_choice: { type: "tool", name: GRAMMAR_SPEC.name, disable_parallel_tool_use: true },
       });
+      recordFrom(anthropicModel, response);
       const call = response.content.find((block) => block.type === "tool_use" && block.name === GRAMMAR_SPEC.name);
       if (!call || call.type !== "tool_use") throw new Error("문법을 읽지 못했습니다.");
       return call.input;
@@ -207,6 +210,7 @@ export function createPosterReviewProviders(environment: Record<string, string |
           tools: [{ name: REVIEW_SPEC.name, description: REVIEW_SPEC.description, input_schema: REVIEW_SPEC.schema as never }],
           tool_choice: { type: "tool", name: REVIEW_SPEC.name, disable_parallel_tool_use: true },
         });
+        recordFrom(anthropicModel, response);
         const call = response.content.find((block) => block.type === "tool_use" && block.name === REVIEW_SPEC.name);
         if (!call || call.type !== "tool_use") throw new Error("검수 결과를 받지 못했습니다.");
         return call.input;

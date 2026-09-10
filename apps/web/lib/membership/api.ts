@@ -145,7 +145,7 @@ export async function settleAiUsage(
   success: boolean,
   consumedUnits: number,
   errorCode?: string,
-  cost?: { model: string; billableImages: number },
+  cost?: { model: string; billableImages: number; llmUsd?: number },
 ) {
   try {
     return await finalizeAiUsage(reservation, success, consumedUnits, errorCode, cost);
@@ -160,7 +160,7 @@ export async function finalizeAiUsage(
   success: boolean,
   consumedUnits: number,
   errorCode?: string,
-  cost?: { model: string; billableImages: number },
+  cost?: { model: string; billableImages: number; llmUsd?: number },
 ) {
   if (isLocalAuthBypass) return devUsageSummary;
   const admin = createSupabaseAdminClient();
@@ -186,10 +186,25 @@ export async function finalizeAiUsage(
     throw error ?? new Error("사용량 확정에 실패했습니다.");
   }
 
-  if (cost && cost.billableImages > 0) {
+  /**
+   * **0장이어도 적는다.**
+   *
+   * 전에는 `billableImages > 0` 일 때만 적었다. 그래서 실패한 요청은 모델도
+   * 장수도 빈 채로 남았고, `admin_cost_summary` 의 「낭비」가 언제나 $0 이었다 —
+   * 실패가 다섯 건인데도 그랬다. **낭비가 안 보이면 줄일 수도 없다.**
+   *
+   * 실패했는데 정말 0장이면 0을 적는 것이 맞다. 「돈이 안 나갔다」와 「모른다」는
+   * 다르고, 지금까지는 둘이 같은 모양이었다.
+   */
+  if (cost) {
     const { error: costError } = await admin
       .from("generation_events")
-      .update({ model: cost.model, billable_images: cost.billableImages })
+      .update({
+        model: cost.model,
+        billable_images: cost.billableImages,
+        // 그림이 없는 단계(분석·기획)도 여기로 원가가 들어온다.
+        llm_usd: cost.llmUsd ?? 0,
+      })
       .eq("user_id", reservation.userId)
       .eq("request_id", reservation.requestId);
     // 어느 요청의 비용이 빈 것인지 없으면 장부를 손으로 메울 수 없다.

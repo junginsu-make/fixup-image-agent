@@ -1,3 +1,4 @@
+import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import type { PdpLlm, PdpLlmRequest, PdpProviders } from "@fixup/pdp-core";
@@ -74,6 +75,7 @@ async function viaAnthropic(
     // 도구를 반드시 부르게 한다. 자유 문장으로 답하면 파싱이 깨진다.
     tool_choice: { type: "tool", name: request.name, disable_parallel_tool_use: true },
   });
+  recordFrom(model, response);
 
   const call = response.content.find(
     (block): block is Anthropic.ToolUseBlock =>
@@ -116,6 +118,7 @@ async function viaOpenAI(
     ],
     tool_choice: { type: "function", name: request.name },
   });
+  recordFrom(model, response);
 
   const call = response.output.find(
     (item) => item.type === "function_call" && item.name === request.name,

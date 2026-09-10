@@ -1,3 +1,4 @@
+import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
@@ -14,6 +15,11 @@ function isTransientBlueprintFailure(code: unknown, detail?: string) {
 }
 
 export async function POST(req: Request) {
+  // 이 요청에서 글 모델에 쓴 돈을 잰다. 안쪽 어디서 부르든 여기로 모인다.
+  return withLlmMeter(() => analyze(req));
+}
+
+async function analyze(req: Request) {
   const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
   if (!reservation.ok) return reservation.response;
   try {
@@ -43,7 +49,16 @@ export async function POST(req: Request) {
         const result = await analyzeProduct(request, providers, { skipFirstImage: true });
         // 장부가 안 닫혀도 결과는 돌려준다. 여기서 던지면 아래 catch 가 성공한
         // 분석을 「분석 실패」로 바꾸고, 사용자는 다시 눌러 돈을 또 쓴다.
-        const usage = await settleAiUsage(reservation, true, 0);
+        /**
+         * **그림이 없는 단계도 돈이 든다.** 크레딧은 0장이지만 글 모델 값은
+         * 나갔다. 그동안 이 값이 장부에 안 실려, 분석만 반복하는 사용이
+         * 원가 집계에서 $0 으로 보였다.
+         */
+        const usage = await settleAiUsage(reservation, true, 0, undefined, {
+          model: "",
+          billableImages: 0,
+          llmUsd: readLlmMeter().usd,
+        });
         return Response.json({ ok: true, result, usage });
       } catch (err) {
         lastEnvelope = toPdpErrorResponse(err);
@@ -51,7 +66,12 @@ export async function POST(req: Request) {
         if (!(attempt < MAX_ANALYZE_ATTEMPTS && isTransientBlueprintFailure(lastEnvelope.code, lastEnvelope.detail))) break;
       }
     }
-    await finalizeAiUsage(reservation, false, 0, String(lastEnvelope?.code || "analyze_failed"));
+    // 실패해도 글 모델 값은 이미 나갔다. 낭비가 안 보이면 줄일 수도 없다.
+    await finalizeAiUsage(reservation, false, 0, String(lastEnvelope?.code || "analyze_failed"), {
+      model: "",
+      billableImages: 0,
+      llmUsd: readLlmMeter().usd,
+    });
     return Response.json(lastEnvelope, { status: lastStatus });
   } catch (err) {
     await finalizeAiUsage(reservation, false, 0, "invalid_request");

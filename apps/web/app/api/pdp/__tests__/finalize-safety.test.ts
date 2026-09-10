@@ -26,7 +26,9 @@ describe("확정을 감싸는 자리가 한 곳인가", () => {
 
 describe("성공 경로가 그것을 쓰는가", () => {
   it("분석", () => {
-    expect(analyze).toContain("await settleAiUsage(reservation, true, 0)");
+    // 크레딧은 0장이다(그림이 없다). 대신 글 모델 값을 실은 채로 닫는다.
+    expect(analyze).toContain("await settleAiUsage(reservation, true, 0,");
+    expect(analyze).toContain("llmUsd: readLlmMeter().usd");
   });
 
   it("섹션 이미지", () => {

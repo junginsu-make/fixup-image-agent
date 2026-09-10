@@ -173,6 +173,16 @@ export async function POST(request: Request, context: Context) {
             { userId: auth.member.userId, requestId: reservationId },
             savedCount > 0,
             creditUnits(unitUsd * savedCount),
+            undefined,
+            /**
+             * **원가를 함께 남긴다.**
+             *
+             * 그동안 포스터는 장부에 원가가 한 줄도 없었다 — 실제로 26장을
+             * 만들었는데 `admin_cost_by_operation` 에는 포스터가 아예 안 나왔다.
+             * 회원 차감(`consumed_units`)과 우리가 낸 돈은 다른 값이라,
+             * 차감만 적으면 원가를 영영 알 수 없다.
+             */
+            { model: project?.modelId ?? "", billableImages: savedCount },
           );
         } catch {
           // 삼킨다. 사용자가 만든 그림을 못 보는 것이 더 나쁘다.

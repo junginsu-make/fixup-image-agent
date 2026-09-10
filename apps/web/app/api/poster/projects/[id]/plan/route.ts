@@ -1,3 +1,4 @@
+import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
@@ -21,6 +22,11 @@ type Context = { params: Promise<{ id: string }> };
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
 export async function POST(request: Request, context: Context) {
+  // 이 요청에서 글 모델에 쓴 돈을 잰다. 문법 읽기·사람 읽기·기획이 모두 여기로 모인다.
+  return withLlmMeter(() => plan(request, context));
+}
+
+async function plan(request: Request, context: Context) {
   /**
    * **`catch` 에서도 봐야 한다.** 안에서 선언하면 실패했을 때 예약을 못 풀고,
    * 묶인 장이 만료될 때까지 그 사람 한도에서 빠져 있는다.
@@ -114,7 +120,17 @@ export async function POST(request: Request, context: Context) {
       status: "ready",
       data: { ...project.data, slots, grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues] },
     });
-    await finalizeAiUsage(reservation, true, units);
+    /**
+     * **어림 대신 실측으로 닫는다.** 예약은 부르기 전이라 어림일 수밖에 없지만,
+     * 확정은 이미 다 부른 뒤다. 못 쟀으면(계량기 밖) 어림값을 그대로 쓴다.
+     */
+    const 잰값 = readLlmMeter();
+    const 실제 = 잰값.metered && 잰값.usd > 0 ? 잰값.usd : llmCostUsd({ planCalls: 1, visionReads });
+    await finalizeAiUsage(reservation, true, creditUnits(실제), undefined, {
+      model: "",
+      billableImages: 0,
+      llmUsd: 실제,
+    });
     return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...crowd.issues, ...plan.issues] });
   } catch (error) {
     // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.

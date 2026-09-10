@@ -77,7 +77,17 @@ describe("다 끝난 뒤에 확정하는가", () => {
  */
 describe("폴링 밖에서 끝나도 닫는가", () => {
   it("중지도 확정한다", () => {
-    expect(stop).toContain("settleSnsReservation(auth.member.userId, flow)");
+    expect(stop).toContain("settleSnsReservation(auth.member.userId, flow");
+  });
+
+  /**
+   * 원가는 모델별로 갈라야 뜻이 있다. 안 넘기면 장부에서 「단가 미등록」으로
+   * 뭉쳐, 카드뉴스가 얼마짜리 방식으로 만들어졌는지 영영 알 수 없다.
+   */
+  it("확정할 때 모델과 장수를 함께 넘긴다", () => {
+    expect(stop).toContain("project.modelId");
+    expect(status).toContain("project.modelId");
+    expect(settle).toContain("billableImages: made");
   });
 
   it("도는 중이 아닌 흐름에 열쇠가 남아 있으면 마무리한다", () => {

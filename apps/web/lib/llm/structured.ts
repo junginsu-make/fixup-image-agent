@@ -1,3 +1,4 @@
+import { recordFrom } from "./meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
@@ -75,6 +76,7 @@ export class AnthropicStructuredProvider implements StructuredProvider {
       // 도구를 반드시 부르게 한다. 자유 문장으로 답하면 파싱이 깨진다.
       tool_choice: { type: "tool", name: this.spec.name, disable_parallel_tool_use: true },
     });
+    recordFrom(this.model, response);
     const call = response.content.find(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === this.spec.name,
     );
@@ -106,6 +108,7 @@ export class OpenAIStructuredProvider implements StructuredProvider {
       }],
       tool_choice: { type: "function", name: this.spec.name },
     });
+    recordFrom(this.model, response);
     const call = response.output.find((item) => item.type === "function_call" && item.name === this.spec.name);
     if (!call || call.type !== "function_call") {
       throw new Error(`OpenAI가 ${this.spec.name} 결과를 돌려주지 않았습니다.`);

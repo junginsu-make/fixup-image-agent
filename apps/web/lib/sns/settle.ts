@@ -23,6 +23,13 @@ import type { SnsFlowState } from "../../app/api/sns/flow-service";
 export async function settleSnsReservation(
   userId: string,
   flow: SnsFlowState,
+  /**
+   * 이 작업이 쓴 모델. **흐름에는 없고 프로젝트에 있다.**
+   *
+   * 없으면 원가를 모델별로 못 가른다 — `admin_cost_by_model` 에서 「단가
+   * 미등록」으로 뭉쳐 버린다. 옛 작업에는 없을 수 있어 선택으로 받는다.
+   */
+  modelId?: string,
 ): Promise<SnsFlowState> {
   const reservationId = flow.generation?.reservationId;
   if (!reservationId) return flow;
@@ -55,6 +62,15 @@ export async function settleSnsReservation(
       { userId, requestId: reservationId },
       made > 0,
       creditUnits(spent + llmCostUsd({ planCalls: 1 + made })),
+      undefined,
+      /**
+       * **원가를 함께 남긴다.**
+       *
+       * 그동안 카드뉴스는 장부에 원가가 한 줄도 없었다 — 실제로 24장을
+       * 만들었는데 `admin_cost_by_operation` 에는 0장으로 나왔다. 회원 차감과
+       * 우리가 낸 돈은 다른 값이라, 차감만 적으면 원가를 영영 알 수 없다.
+       */
+      { model: modelId ?? "", billableImages: made },
     );
   } catch {
     // 삼킨다. 사용자가 만든 카드를 못 보는 것이 더 나쁘다.
