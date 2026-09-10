@@ -654,6 +654,25 @@ describe("지워지는 직업 이름", () => {
     expect(지워진글자).not.toContain("var(--font-sans)");
   });
 
+  it("획은 글자 크기에 비례한다 — 휴대폰에서 뭉개지지 않게", () => {
+    /*
+      글자 크기가 `clamp(40px, 8vw, 118px)` 라 좁은 화면에서 40px 까지 내려간다.
+      바닥값이 크면 그 구간에서만 획이 두꺼워져 900 굵기 한글의 속공간을 메운다.
+      바닥은 「선이 사라지지 않게」 두는 것이지 그림을 정하는 값이 아니다.
+    */
+    const 획 = 지워진글자.match(/-webkit-text-stroke:\s*max\(([\d.]+)px,\s*([\d.]+)em\)/);
+    expect(획).not.toBeNull();
+    const [, 바닥, 비율] = 획!;
+
+    // 가장 작은 글자(40px)에서도 바닥이 비율을 크게 넘어서면 안 된다.
+    const 최소글자 = 40;
+    const 비율일때 = Number(비율) * 최소글자;
+    expect(Number(바닥)).toBeLessThanOrEqual(비율일때 * 1.1);
+
+    // 그렇다고 0 이면 저해상도 화면에서 선이 사라진다.
+    expect(Number(바닥)).toBeGreaterThan(0);
+  });
+
   it("굵기와 자간은 부모에게서 물려받는다", () => {
     // 900 / -0.055em 이 옛 모습이었다. 여기서 따로 잡으면 그 모습이 아니다.
     expect(지워진글자).not.toMatch(/^\s*font-weight:/m);
