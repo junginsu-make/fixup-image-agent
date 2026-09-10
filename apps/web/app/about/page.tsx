@@ -6,6 +6,7 @@ import { ABOUT } from "../_landing/about-content";
 import { LandingFooter } from "../_landing/cta-footer";
 import { CONTENT, type Locale } from "../_landing/landing-content";
 import { LandingHeader } from "../_landing/landing-header";
+import { WheelBoost } from "../_landing/hero/WheelBoost";
 import "../_landing/landing.css";
 import "../_landing/hero/hero.css";
 import "./about.css";
@@ -209,6 +210,9 @@ export default async function AboutPage({
       </main>
 
       <LandingFooter t={t} />
+
+      {/* 첫 화면과 같은 휠 감각을 쓴다. 한 벌로 읽혀야 한다. */}
+      <WheelBoost />
     </div>
   );
 }

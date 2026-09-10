@@ -54,3 +54,44 @@ export function shouldShowBackToTop(
   const remaining = documentHeight - (scrollY + viewportHeight);
   return remaining <= viewportHeight / 4;
 }
+
+/* ── 휠 한 칸이 얼마나 내려갈까 ─────────────────────────────────── */
+
+/**
+ * 브라우저 기본은 한 칸에 100px 안팎이다. 이 화면은 섹션이 크고 사이가
+ * 넓어서(`.mcs-section` 이 위아래로 최대 208px씩) 한 칸이 «거의 안 움직인다»로
+ * 느껴진다(2026-09-10 사용자 신고).
+ *
+ * 배수만 둔다. 값을 바꿀 일이 생기면 여기 한 줄이다.
+ */
+export const WHEEL_BOOST = 2.4;
+
+/**
+ * 이보다 작은 델타는 **트랙패드**로 본다.
+ *
+ * 트랙패드는 손가락 한 번에 잔 델타를 수십 번 보낸다. 거기에 배수를 곱하면
+ * 화면이 날아간다. 마우스 휠은 한 칸에 100 안팎을 한 번 보낸다.
+ */
+export const MOUSE_WHEEL_MIN = 40;
+
+/**
+ * 이 휠을 우리가 더 내려 줄까. 0 이면 **브라우저에 맡긴다.**
+ *
+ * 맡기는 쪽이 기본이다 — 스크롤을 가로채는 것은 트랙패드·확대·접근성 도구를
+ * 망가뜨리기 쉬운 일이라, 확실히 마우스 휠인 경우만 손을 댄다.
+ */
+export function boostedWheel(event: {
+  deltaY: number;
+  deltaMode: number;
+  ctrlKey: boolean;
+  defaultPrevented: boolean;
+}): number {
+  // 첫 화면 캐러셀이 이미 가로챘다. 거기서는 휠이 페이지를 내리는 게 아니다.
+  if (event.defaultPrevented) return 0;
+  // 확대·축소다. 건드리면 안 된다.
+  if (event.ctrlKey) return 0;
+  // 픽셀 단위로 오는 것만 다룬다. 줄·장 단위(옛 브라우저)는 맡긴다.
+  if (event.deltaMode !== 0) return 0;
+  if (Math.abs(event.deltaY) < MOUSE_WHEEL_MIN) return 0;
+  return event.deltaY * WHEEL_BOOST;
+}

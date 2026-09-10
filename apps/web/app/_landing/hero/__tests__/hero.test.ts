@@ -21,8 +21,15 @@ import {
   step,
 } from "../drag-physics";
 import { IDLE_AMPLITUDE, MAX_BEND, relaxBend, targetBend, worldXOf } from "../wave";
-import { scrollBehaviorFor } from "../scroll-down";
-import { shouldCaptureWheel, shouldShowBackToTop, wheelDelta } from "../wheel";
+import { downScrollBlock, downScrollOptions, scrollBehaviorFor } from "../scroll-down";
+import {
+  MOUSE_WHEEL_MIN,
+  WHEEL_BOOST,
+  boostedWheel,
+  shouldCaptureWheel,
+  shouldShowBackToTop,
+  wheelDelta,
+} from "../wheel";
 
 /**
  * 화면은 눈으로 보지만 **판단은 값으로 잰다.**
@@ -315,6 +322,20 @@ describe("내려가기", () => {
   it("움직임을 줄이라고 했으면 즉시 내려간다", () => {
     expect(scrollBehaviorFor(true)).toBe("auto");
   });
+
+  /**
+   * `start` 는 다음 섹션의 **위쪽**을 화면 위쪽에 붙인다. 그 섹션은 위아래로
+   * `clamp(104px, 13vh, 208px)` 씩 여백을 두고 있어서, 그렇게 붙이면 빈 여백이
+   * 화면을 채우고 글은 한참 아래에 걸렸다(2026-09-10 사용자 신고).
+   */
+  it("글이 화면 가운데 오게 멈춘다", () => {
+    expect(downScrollBlock()).toBe("center");
+  });
+
+  it("손잡이가 값을 조립하지 않는다 — 한 벌로 받는다", () => {
+    expect(downScrollOptions(false)).toEqual({ behavior: "smooth", block: "center" });
+    expect(downScrollOptions(true)).toEqual({ behavior: "auto", block: "center" });
+  });
 });
 
 describe("휠을 누가 받는가", () => {
@@ -382,5 +403,47 @@ describe("위로 가기", () => {
   it("스크롤할 데가 없으면 안 보인다", () => {
     expect(shouldShowBackToTop(0, 화면, 화면)).toBe(false);
     expect(shouldShowBackToTop(0, 0, 문서)).toBe(false);
+  });
+});
+
+/**
+ * 휠 한 칸이 얼마나 내려가는가.
+ *
+ * **맡기는 쪽이 기본이다.** 스크롤을 가로채면 트랙패드·확대·접근성 도구가
+ * 쉽게 망가진다. 그래서 「손대는 경우」가 아니라 「손대지 않는 경우」를
+ * 하나하나 잠근다 — 새 조건을 넣다가 그중 하나를 풀면 화면에서만 드러난다.
+ */
+describe("휠 한 칸의 거리", () => {
+  const 마우스휠 = { deltaY: 100, deltaMode: 0, ctrlKey: false, defaultPrevented: false };
+
+  it("마우스 휠은 더 내려간다", () => {
+    expect(boostedWheel(마우스휠)).toBe(100 * WHEEL_BOOST);
+    expect(WHEEL_BOOST).toBeGreaterThan(1);
+  });
+
+  it("위로 굴리면 위로 간다 — 부호를 뒤집지 않는다", () => {
+    expect(boostedWheel({ ...마우스휠, deltaY: -100 })).toBe(-100 * WHEEL_BOOST);
+  });
+
+  it("첫 화면 캐러셀이 가로챈 휠은 안 건드린다", () => {
+    // 거기서 휠은 페이지를 내리는 것이 아니라 그림을 돌리는 것이다.
+    expect(boostedWheel({ ...마우스휠, defaultPrevented: true })).toBe(0);
+  });
+
+  it("확대·축소는 안 건드린다", () => {
+    expect(boostedWheel({ ...마우스휠, ctrlKey: true })).toBe(0);
+  });
+
+  it("트랙패드의 잔 델타는 안 건드린다", () => {
+    // 손가락 한 번에 수십 번 오는 값이다. 배수를 곱하면 화면이 날아간다.
+    expect(boostedWheel({ ...마우스휠, deltaY: MOUSE_WHEEL_MIN - 1 })).toBe(0);
+    expect(boostedWheel({ ...마우스휠, deltaY: -(MOUSE_WHEEL_MIN - 1) })).toBe(0);
+    // 경계에서는 건드린다 — 「이보다 작으면」이 조건이다.
+    expect(boostedWheel({ ...마우스휠, deltaY: MOUSE_WHEEL_MIN })).not.toBe(0);
+  });
+
+  it("줄·장 단위로 오는 휠은 브라우저에 맡긴다", () => {
+    expect(boostedWheel({ ...마우스휠, deltaMode: 1 })).toBe(0);
+    expect(boostedWheel({ ...마우스휠, deltaMode: 2 })).toBe(0);
   });
 });

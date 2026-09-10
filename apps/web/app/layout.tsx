@@ -2,6 +2,18 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { ThemeProvider, Toaster } from "@fixup/ui";
 import { ImageViewerHost } from "./_components/image-viewer";
+/*
+  글꼴을 여기서 부른다.
+
+  `packages/ui` 의 `--font-sans` 는 `"Pretendard"` 를 맨 앞에 적어 두고도
+  그것을 **불러오지 않았다** — 깔려 있는 사람만 보고 나머지는 맑은 고딕으로
+  떨어졌다. 자세한 사정은 `pretendard.css` 머리말에 적었다.
+
+  `globals.css` 보다 먼저 부른다. 뒤에 부르면 Tailwind 의 preflight 가 뒤에
+  와서 순서가 헷갈린다 — @font-face 는 선언 순서와 무관하지만, 읽는 사람에게
+  「글꼴을 먼저 정하고 그 위에 스타일」로 보이는 편이 낫다.
+*/
+import "./pretendard.css";
 import "./globals.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://54.180.68.212";
