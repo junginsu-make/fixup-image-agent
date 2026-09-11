@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, FolderOpen, Layers, Maximize2, Trash2, UserRound } from "lucide-react";
+import { FolderOpen, Layers, UserRound } from "lucide-react";
 import {
 
   Button,
@@ -13,8 +13,8 @@ import {
   DialogTitle,
   cn,
 } from "@fixup/ui";
-import { openImageViewer } from "./image-viewer";
 import { groupCharacterRows, withoutCharacterRows } from "./character-rows";
+import { PickCell } from "./pick-cell";
 
 /**
  * 라이브러리에서 그림을 불러오는 버튼.
@@ -226,7 +226,7 @@ export function LibraryPickerButton({
                       image={image}
                       selected={picked.has(image.id)}
                       fit={fit}
-                      onToggle={() => onToggle(image)}
+                      onPick={() => onToggle(image)}
                       onDelete={onDelete ? () => onDelete(image) : undefined}
                     />
                   ))}
@@ -321,7 +321,7 @@ export function LibraryPickerButton({
                         caption={row.angle}
                         selected={picked.has(row.image.id)}
                         fit="cover"
-                        onToggle={() => {
+                        onPick={() => {
                           onPickCharacterAngle({ name: group.name, angle: row.angle, image: row.image });
                           setOpen(false);
                         }}
@@ -342,79 +342,5 @@ export function LibraryPickerButton({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-/**
- * 고를 수 있는 그림 한 칸. 낱장 탭과 캐릭터 탭이 같은 칸을 쓴다.
- *
- * 고른 표시는 **오른쪽 아래**다. 왼쪽 위에는 확대 단추가 겹쳐 있어서, 거기
- * 두면 골랐다는 표시가 그 단추에 가려 안 보였다(2026-09-11).
- */
-function PickCell({ image, selected, fit, caption, onToggle, onDelete }: {
-  image: LibraryPickImage;
-  selected: boolean;
-  fit: "cover" | "contain";
-  /** 그림 아래에 적을 말. 없으면 제목을 적는다. */
-  caption?: string;
-  onToggle(): void;
-  onDelete?(): void;
-}) {
-  return (
-    <div className="relative min-w-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={selected}
-        aria-label={`${caption ?? image.title ?? "참고 이미지"} ${selected ? "빼기" : "고르기"}`}
-        className={cn(
-          "block w-full overflow-hidden rounded-lg border-2 text-left transition-colors",
-          selected
-            ? "border-primary bg-primary-soft ring-2 ring-primary/40"
-            : "border-transparent hover:border-border",
-        )}
-      >
-        <span className="relative block aspect-square overflow-hidden bg-muted">
-          {image.url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={image.url}
-              alt=""
-              className={cn("h-full w-full", fit === "contain" ? "object-contain p-1" : "object-cover")}
-            />
-          ) : null}
-          {selected ? (
-            <span className="absolute bottom-1.5 right-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-ring)]">
-              <Check className="size-3.5" />
-            </span>
-          ) : null}
-        </span>
-        <span className={cn(
-          "block truncate px-2 py-2 text-xs",
-          selected && "font-bold text-primary",
-        )}>
-          {caption ?? image.title ?? "제목 없음"}
-        </span>
-      </button>
-      {/* 그림 자체는 고르기에 쓰이므로 확대는 따로 연다. */}
-      <button
-        type="button"
-        aria-label={`${caption ?? image.title ?? "참고 이미지"} 크게 보기`}
-        onClick={() => openImageViewer(image.url ?? "", caption ?? image.title ?? "참고 이미지")}
-        className="absolute left-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-foreground"
-      >
-        <Maximize2 className="size-3.5" />
-      </button>
-      {onDelete ? (
-        <button
-          type="button"
-          aria-label={`${image.title ?? "참고 이미지"} 라이브러리에서 지우기`}
-          onClick={onDelete}
-          className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-      ) : null}
-    </div>
   );
 }
