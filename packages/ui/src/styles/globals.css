@@ -1,4 +1,4 @@
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+/* The web layout loads the bundled Pretendard fonts from its own origin. */
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
