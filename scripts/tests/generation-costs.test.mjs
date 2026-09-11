@@ -61,3 +61,12 @@ test('deployment resumes the old policy only after matching heartbeat and preser
   assert.equal(await db.sql(`SELECT resume_generation_after_deploy('${next.pauseId}','${release}');`),'f');
   assert.equal(await db.sql('SELECT admission_enabled FROM usage_controls;'),'f');
 });
+
+test('a confirmed provider failure with unknown cost can be reconciled exactly once',async()=>{
+  await db.sql(`UPDATE generation_runs SET state='needs_reconciliation' WHERE id=(SELECT run_id FROM generation_attempts WHERE id='${uncertain.id}');
+    UPDATE generation_attempts SET state='failed',measured_cost_microusd=null,metering_state='unknown' WHERE id='${uncertain.id}';`);
+  await db.sql(`SELECT resolve_generation_attempt('${ids.a}','${uncertain.id}',20000,'provider receipt','confirmed failed call cost');`);
+  assert.equal(await db.sql(`SELECT state||':'||measured_cost_microusd FROM generation_attempts WHERE id='${uncertain.id}';`),'failed:20000');
+  await db.sql(`UPDATE generation_runs SET state='needs_reconciliation' WHERE id=(SELECT run_id FROM generation_attempts WHERE id='${uncertain.id}');`);
+  await assert.rejects(db.sql(`SELECT resolve_generation_attempt('${ids.a}','${uncertain.id}',0,'different receipt','overwrite recorded cost');`),/cost_already_recorded/);
+});

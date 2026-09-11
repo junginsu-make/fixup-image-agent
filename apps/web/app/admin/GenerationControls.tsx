@@ -29,7 +29,7 @@ export async function GenerationControls(){
       <p className="text-sm text-muted-foreground">제공자 기록에서 확인한 원가와 증거 식별자를 입력합니다. 결과가 불명확한 호출은 대조 상태로 유지하세요.</p>
       {(runs.data??[]).map(run=><div key={run.id} className="rounded border p-3 text-sm">
         <p>{run.operation} · {run.error_code}</p><p className="break-all text-xs text-muted-foreground">{run.id}</p>
-        {(run.generation_attempts??[]).filter(a=>["unknown","submitting","submitted"].includes(a.state)||(a.state==="stored"&&a.measured_cost_microusd==null)).map(attempt=><form key={attempt.id} action={resolveGenerationCost} className="mt-3 grid gap-2 sm:grid-cols-2">
+        {(run.generation_attempts??[]).filter(a=>["unknown","submitting","submitted"].includes(a.state)||(["stored","failed"].includes(a.state)&&a.measured_cost_microusd==null)).map(attempt=><form key={attempt.id} action={resolveGenerationCost} className="mt-3 grid gap-2 sm:grid-cols-2">
           <input type="hidden" name="attemptId" value={attempt.id}/><p className="sm:col-span-2">{attempt.model} · {attempt.state}</p>
           <Input name="costUsd" type="number" min="0" step="0.000001" placeholder="확인한 원가 USD" aria-label="확인한 원가 USD" required/>
           <Input name="evidence" placeholder="제공자 증거 식별자" aria-label="제공자 증거 식별자" required minLength={3}/>

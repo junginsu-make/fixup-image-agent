@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFalQueueClient } from "../queue";
+import { ApiError } from "@fal-ai/client";
+
+it("keeps explicit provider result failures distinct from a temporary lookup outage",async()=>{
+  const result=vi.fn().mockRejectedValueOnce(new ApiError({status:422,message:"generation rejected"})).mockResolvedValueOnce({data:{error:"generation failed",images:[{url:"https://invalid/partial"}]}}).mockRejectedValueOnce(new ApiError({status:503,message:"try later"}));
+  const queue=createFalQueueClient("key",()=>({queue:{result}} as never));
+  expect(await queue.jobResult("endpoint","id")).toEqual({images:[],failed:true});
+  expect(await queue.jobResult("endpoint","id")).toEqual({images:[],failed:true});
+  await expect(queue.jobResult("endpoint","id")).rejects.toThrow("try later");
+});
 
 describe("공용 fal queue", () => {
   it("자동 재시도 없이 한 번 제출하고 requestId를 즉시 돌려준다", async () => {

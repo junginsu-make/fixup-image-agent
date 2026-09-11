@@ -105,8 +105,8 @@ begin
   select run_id into r.id from public.generation_attempts where id=p_attempt;
   select * into r from public.generation_runs where id=r.id for update;
   select * into a from public.generation_attempts where id=p_attempt for update;
-  if r.id is null or r.state<>'needs_reconciliation' or a.state not in ('submitting','submitted','unknown','stored') then raise exception 'review_required'; end if;
-  if a.state='stored' and a.measured_cost_microusd is not null then raise exception 'cost_already_recorded'; end if;
+  if r.id is null or r.state<>'needs_reconciliation' or a.state not in ('submitting','submitted','unknown','stored','failed') then raise exception 'review_required'; end if;
+  if a.state in ('stored','failed') and a.measured_cost_microusd is not null then raise exception 'cost_already_recorded'; end if;
   update public.generation_attempts set state=case when a.state='stored' then 'stored' else 'failed' end,measured_cost_microusd=p_cost,metering_state='observed',billable_state='reconciled',error_code=case when a.state='stored' then null else 'operator_confirmed_no_delivery' end,completed_at=now() where id=p_attempt;
   insert into public.usage_audit_events(actor_id,action,target_id,before_value,after_value,reason)
     values(p_actor,'resolve_generation_attempt',a.id,to_jsonb(a),jsonb_build_object('costMicrousd',p_cost,'evidence',p_evidence),p_reason);

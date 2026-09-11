@@ -32,6 +32,7 @@ export async function advanceQueueAttempt(
     const status = await queue.jobStatus(attempt.endpoint, attempt.provider_request_id);
     if (status !== "completed") return attempt;
     const result = await queue.jobResult(attempt.endpoint, attempt.provider_request_id);
+    if (result.failed) return store.advance(attempt.id, { state: "failed", errorCode: "provider_result_failed", meteringState: "unknown" });
     if (!result.images.length) return store.advance(attempt.id, { state: "failed", errorCode: "no_images", meteringState: "unknown" });
     const unit = attempt.price_snapshot.providerUnitMicrousd;
     return store.advance(attempt.id, {
