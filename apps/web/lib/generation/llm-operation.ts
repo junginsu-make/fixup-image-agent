@@ -12,7 +12,8 @@ export async function withRunLease<T>(run:GenerationRun,call:()=>Promise<T>):Pro
 
 /** Free-to-member planning still gets a durable, rate-limited and costed run. */
 export async function runLlmOperation<T>(request:Request,userId:string,options:{
-  operation:"sns_plan"|"sns_caption"|"layout_analyze"|"poster_review"|"redesign_transcribe"|"pdp_analyze";
+  operation:"sns_plan"|"sns_caption"|"layout_analyze"|"poster_review"|"redesign_transcribe"|"pdp_analyze"|"poster_plan";
+  units?: number;
   resourceType?:"sns"|"poster";resourceId?:string;identity:unknown;models:string[];maxCalls:number;maxOutputTokens?:number;
   maxToolCalls?:number;isSuccess?:(value:T)=>boolean;
 },call:()=>Promise<T>):Promise<T> {
@@ -33,7 +34,7 @@ export async function runLlmOperation<T>(request:Request,userId:string,options:{
     throw new Error(isTerminal(previous.state)?"result_unavailable":previous.state==="needs_reconciliation"?"outcome_unknown":"concurrent_limit");
   }
   const maximum=Math.max(...options.models.map(m=>llmCallUpperMicrousd(m,9,options.maxOutputTokens??16384)))*options.maxCalls+(options.maxToolCalls??0)*10000;
-  const run=await beginRun({userId,key,operation:options.operation,units:0,resourceType:options.resourceType,resourceId:options.resourceId,identity:options.identity,
+  const run=await beginRun({userId,key,operation:options.operation,units:options.operation==="poster_plan"?options.units??0:0,resourceType:options.resourceType,resourceId:options.resourceId,identity:options.identity,
     snapshot:{kind:"llm",models:options.models,maxCalls:options.maxCalls},maxCostMicrousd:maximum,inline:true});
   if(!run.lease_token){const cached=await readCachedResult<{value:T}>(run);if(cached!==undefined)return cached.value;throw new Error("concurrent_limit");}
   const store=executionStore(run);

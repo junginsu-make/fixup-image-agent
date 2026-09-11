@@ -95,3 +95,28 @@ test('late planning output cannot overwrite a newer draft',async()=>{
   await db.sql(`SELECT save_sns_draft_checked('${ids.a}','${ids.project}','{"cards":[],"caption":"fresh AI"}','copy_ready','${fresh}');`);
   assert.equal(await db.sql(`SELECT data#>>'{flow,caption}' FROM sns_projects WHERE id='${ids.project}';`),'fresh AI');
 });
+test('poster planning bills observed LLM cost once without pretending an image was generated',async()=>{
+  const status=await db.sql(`SELECT status FROM poster_projects WHERE id='${ids.project}';`);
+  const run=await begin(input(randomUUID(),{operation:'poster_plan',units:3,inline:true}));
+  assert.equal(await db.sql(`SELECT status FROM poster_projects WHERE id='${ids.project}';`),status);
+  const spec={step:'planning',sequence:0,provider:'openai',model:'test',endpoint:'llm',requestHash:'x',payload:{},price:{},maxCostMicrousd:200000,requestedImages:0};
+  const a=JSON.parse(await db.sql(`SELECT prepare_generation_attempt('${run.id}','${run.lease_token}',${quote(spec)});`));
+  for(const patch of [{state:'submitting'},{state:'result_ready',costMicrousd:100001,meteringState:'observed',output:{response:{}}},{state:'stored',output:{response:{}}}])
+    await db.sql(`SELECT advance_generation_attempt('${a.id}','${run.lease_token}',${quote(patch)});`);
+  await db.sql(`SELECT checkpoint_generation_run('${run.id}','${run.lease_token}','{"businessSuccess":true}','settlement_pending',0);`);
+  const result=JSON.parse(await db.sql(`SELECT settle_generation_v2('${run.id}','${run.lease_token}');`));
+  assert.equal(result.state,'succeeded');
+  assert.equal(await db.sql(`SELECT consumed_units FROM generation_events WHERE id='${run.event_id}';`),'3');
+  assert.equal(await db.sql(`SELECT status FROM poster_projects WHERE id='${ids.project}';`),status);
+});
+test('T08: poster planning with missing usage remains held for reconciliation',async()=>{
+  const run=await begin(input(randomUUID(),{operation:'poster_plan',units:3,inline:true}));
+  const spec={step:'planning',sequence:0,provider:'openai',model:'test',endpoint:'llm',requestHash:'x',payload:{},price:{},maxCostMicrousd:200000,requestedImages:0};
+  const a=JSON.parse(await db.sql(`SELECT prepare_generation_attempt('${run.id}','${run.lease_token}',${quote(spec)});`));
+  for(const patch of [{state:'submitting'},{state:'result_ready',meteringState:'unknown',output:{response:{}}},{state:'stored',output:{response:{}}}])
+    await db.sql(`SELECT advance_generation_attempt('${a.id}','${run.lease_token}',${quote(patch)});`);
+  await db.sql(`SELECT checkpoint_generation_run('${run.id}','${run.lease_token}','{"businessSuccess":true}','settlement_pending',0);`);
+  const result=JSON.parse(await db.sql(`SELECT settle_generation_v2('${run.id}','${run.lease_token}');`));
+  assert.equal(result.state,'needs_reconciliation');assert.equal(result.error_code,'price_unavailable');
+  assert.equal(await db.sql(`SELECT status FROM generation_events WHERE id='${run.event_id}';`),'reserved');
+});

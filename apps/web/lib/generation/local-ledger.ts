@@ -100,6 +100,10 @@ export function localLedger(database:LocalDatabase=getLocalDatabase()) {
             successful=made.length;const paid=made.filter(c=>c.falRequestId||c.slotJobs?.some(j=>j.status==="done"&&j.falRequestId)).length;
             if(paid)micros+=(1+paid)*Number(r.execution_snapshot.customerLlmUnitMicrousd??0);
           }
+          if(r.operation==="poster_plan"){
+            if(list.some(a=>a.state==="stored"&&a.measured_cost_microusd===undefined)){r.state="needs_reconciliation";r.error_code="price_unavailable";return r;}
+            micros=list.reduce((sum,a)=>sum+(a.measured_cost_microusd??0),0);
+          }
           if(r.checkpoint.businessSuccess===false){successful=0;micros=0;}
           const units=Math.ceil(micros/50000);if(units>r.units){r.state="needs_reconciliation";r.error_code="credit_estimate_exceeded";return r;}
           r.consumed_units=units;r.state=successful?"succeeded":r.stop_requested_at?"cancelled":"failed";r.lease_until=null;

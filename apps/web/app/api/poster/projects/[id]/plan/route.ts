@@ -1,4 +1,6 @@
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
+import { durablePosterPlanning } from "../../../../../../lib/poster/planning-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../../../lib/generation/run-store";
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";
@@ -23,6 +25,7 @@ type Context = { params: Promise<{ id: string }> };
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
 export async function POST(request: Request, context: Context) {
+  if (durableGenerationEnabled()) return durablePosterPlanning(request, (await context.params).id);
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 문법 읽기·사람 읽기·기획이 모두 여기로 모인다.
   return withLlmMeter(() => plan(request, context));
 }

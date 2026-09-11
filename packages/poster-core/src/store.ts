@@ -115,7 +115,7 @@ export interface PosterProjectStore {
   list(): Promise<PosterProjectRecord[]>;
   get(id: string): Promise<PosterProjectRecord | undefined>;
   create(input: Omit<PosterProjectRecord, "id" | "createdAt" | "updatedAt">): Promise<PosterProjectRecord>;
-  update(id: string, patch: Partial<Pick<PosterProjectRecord, "title" | "status" | "ratio" | "modelId" | "data">>): Promise<PosterProjectRecord>;
+  update(id: string, patch: Partial<Pick<PosterProjectRecord, "title" | "status" | "ratio" | "modelId" | "data">>, expectedUpdatedAt?: string): Promise<PosterProjectRecord>;
   /**
    * 지운다. **정말 지웠으면 true.**
    *

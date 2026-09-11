@@ -86,10 +86,11 @@ export function createLocalPosterProjectStore(
         return strip(row);
       });
     },
-    async update(id, patch) {
+    async update(id, patch, expectedUpdatedAt) {
       return database.update((data) => {
         const row = bucket(data, "posterProjects").find((entry) => entry.id === id && entry.userId === userId);
         if (!row) throw notFound("포스터 작업");
+        if (expectedUpdatedAt !== undefined && row.updatedAt !== expectedUpdatedAt) throw new Error("draft_conflict");
         Object.assign(row, patch, { updatedAt: new Date().toISOString() });
         return strip(row);
       });
