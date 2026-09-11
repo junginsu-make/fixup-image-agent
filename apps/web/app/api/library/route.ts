@@ -2,7 +2,7 @@ import {
   deleteLibraryItem,
   getLibraryItemImages,
   listLibraryItems,
-  saveLibraryItem,
+  saveOrAppendLibraryItem,
   type LibraryViewer,
 } from "../../../lib/server-library";
 import { authenticateApiMember } from "../../../lib/membership/api";
@@ -75,6 +75,13 @@ export async function POST(req: Request) {
       tool?: string;
       origin?: string;
       aspectRatio?: string;
+      /**
+       * 같은 작업의 장을 **나눠 보낼 때**의 열쇠.
+       *
+       * 리디자인은 섹션을 한 장씩 만든다. 이 값이 있으면 이미 있는 작업에
+       * 이어 붙고, 없으면 지금까지처럼 새 작업이 된다.
+       */
+      sourceId?: string;
       images?: Array<{ base64?: string; mimeType?: string }>;
     };
 
@@ -91,12 +98,13 @@ export async function POST(req: Request) {
     }
 
     const tool = body.tool === "redesign" ? "redesign" : "create";
-    const result = await saveLibraryItem({
+    const result = await saveOrAppendLibraryItem({
       userId: auth.member.userId,
       title: String(body.title || "제목 없는 작업"),
       tool,
       origin: originOf(body.origin, tool),
       aspectRatio: body.aspectRatio,
+      sourceId: body.sourceId ? String(body.sourceId).slice(0, 120) : undefined,
       images,
     });
 

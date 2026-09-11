@@ -8,6 +8,9 @@ export { RedesignError } from "./errors.js";
 export {
   generateSections,
   humanizeProviderError,
+  // 화면이 「몇 장까지 반영되는지」를 말해 주려면 이 값을 알아야 한다.
+  MAX_REFERENCE_IMAGES,
+  sizeForRatio,
   type GenerateSectionsInput,
   type GenerateInputFile
 } from "./generate.js";
