@@ -1,0 +1,1107 @@
+{
+  "checkedOn": "2026-09-11",
+  "scope": "개인용 웹 구독 · 미국 USD 정상 월 결제 가격 우선 · API 사용료 제외",
+  "sources": {
+    "mj-price": {
+      "title": "Midjourney 공식 플랜 비교",
+      "url": "https://docs.midjourney.com/hc/en-us/articles/27870484040333-Comparing-Midjourney-Plans",
+      "kind": "official"
+    },
+    "mj-free": {
+      "title": "Midjourney 무료 체험 정책",
+      "url": "https://docs.midjourney.com/hc/en-us/articles/27870399340173-Free-Trials",
+      "kind": "official"
+    },
+    "mj-speed": {
+      "title": "Midjourney GPU 시간과 속도",
+      "url": "https://docs.midjourney.com/hc/en-us/articles/32016412137741-GPU-Speed-Fast-Relax-Turbo",
+      "kind": "official"
+    },
+    "mj-size": {
+      "title": "Midjourney 공식 Discord 커뮤니티",
+      "url": "https://discord.com/servers/662267976984297473",
+      "kind": "official"
+    },
+    "adobe-price": {
+      "title": "Adobe Firefly 공식 요금표",
+      "url": "https://www.adobe.com/products/firefly/plans.html",
+      "kind": "official"
+    },
+    "adobe-promo": {
+      "title": "Firefly 무제한 특별 혜택 조건",
+      "url": "https://helpx.adobe.com/firefly/web/get-started/learn-the-basics/current-firefly-promotions.html",
+      "kind": "official"
+    },
+    "adobe-size": {
+      "title": "Adobe 공식 발표 · 2025-06-17",
+      "url": "https://news.adobe.com/news/2025/06/adobe-firefly-revolutionizes-creative-ideation-new-mobile-app",
+      "kind": "official"
+    },
+    "leo-price": {
+      "title": "Leonardo 공식 요금·토큰·모델 표",
+      "url": "https://www.leonardo.ai/pricing",
+      "kind": "official"
+    },
+    "leo-size": {
+      "title": "Canva의 Leonardo 인수 당시 공식 발표",
+      "url": "https://www.canva.com/newsroom/news/leonardo-ai/",
+      "kind": "official"
+    },
+    "ideo-price": {
+      "title": "Ideogram 공식 실시간 요금표",
+      "url": "https://ideogram.ai/pricing/",
+      "kind": "official"
+    },
+    "ideo-doc": {
+      "title": "Ideogram 플랜 문서 · 2026-08-21 확인 표시",
+      "url": "https://docs.ideogram.ai/plans-and-pricing/available-plans",
+      "kind": "official"
+    },
+    "ideo-size": {
+      "title": "Ideogram 베타 이용 실적 · 2023-09",
+      "url": "https://ideogram.ai/publicly-available",
+      "kind": "official"
+    },
+    "recraft-price": {
+      "title": "Recraft 공식 유료 플랜 문서",
+      "url": "https://www.recraft.ai/docs/plans-and-billing/paid-plans",
+      "kind": "official"
+    },
+    "recraft-live": {
+      "title": "Recraft 공식 요금 페이지",
+      "url": "https://www.recraft.ai/pricing",
+      "kind": "official"
+    },
+    "recraft-free": {
+      "title": "Recraft 공식 앱·모델·무료 크레딧 안내",
+      "url": "https://www.recraft.ai/docs/mobile-apps",
+      "kind": "official"
+    },
+    "recraft-size": {
+      "title": "Recraft 공식 성장 발표 · 2025",
+      "url": "https://www.recraft.ai/blog/recrafts-next-chapter-creativity-without-compromise",
+      "kind": "official"
+    },
+    "gpt-price": {
+      "title": "ChatGPT 공식 요금·이미지 제공 범위",
+      "url": "https://chatgpt.com/pricing/",
+      "kind": "official"
+    },
+    "gpt-plus": {
+      "title": "ChatGPT Plus 공식 가격 안내",
+      "url": "https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus",
+      "kind": "official"
+    },
+    "gpt-pro": {
+      "title": "ChatGPT Pro 티어·$200 신규 가입 중단 안내",
+      "url": "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro",
+      "kind": "official"
+    },
+    "gpt-image": {
+      "title": "ChatGPT Images 2.5 공식 발표 · 2026-09-08",
+      "url": "https://openai.com/index/introducing-chatgpt-images-2-5/",
+      "kind": "official"
+    },
+    "gemini-price": {
+      "title": "Google AI 미국 공식 요금표",
+      "url": "https://gemini.google/us/subscriptions/?hl=en",
+      "kind": "official"
+    },
+    "gemini-limits": {
+      "title": "Gemini 최신 사용량 한도 · 2026-05-17 변경 안내",
+      "url": "https://support.google.com/gemini/answer/16275805?hl=en",
+      "kind": "official"
+    },
+    "gemini-image": {
+      "title": "Gemini 이미지 모델·무료 1K·유료 2K 안내",
+      "url": "https://support.google.com/gemini/answer/14286560?hl=en",
+      "kind": "official"
+    },
+    "claude-price": {
+      "title": "Claude 공식 플랜 선택 안내 · 2026-05-19",
+      "url": "https://support.claude.com/en/articles/11049762-choose-a-claude-plan",
+      "kind": "official"
+    },
+    "claude-image": {
+      "title": "Claude 사진·일러스트 생성 여부 · 2026-03-16",
+      "url": "https://support.claude.com/en/articles/9002504-can-claude-produce-images",
+      "kind": "official"
+    },
+    "grok-price": {
+      "title": "Grok 공식 가격표",
+      "url": "https://x.ai/pricing",
+      "kind": "official"
+    },
+    "grok-limits": {
+      "title": "Grok 공식 FAQ · 2026-06 주간 통합 사용량 변경",
+      "url": "https://docs.x.ai/grok/faq",
+      "kind": "official"
+    },
+    "genspark-price": {
+      "title": "Genspark 공식 가격 설명 · 2026-07-06",
+      "url": "https://www.genspark.ai/ja/blog/pricing",
+      "kind": "official"
+    },
+    "genspark-plans": {
+      "title": "Genspark 공식 회원 혜택·무제한 조건",
+      "url": "https://www.genspark.ai/helpcenter/membership-plans",
+      "kind": "official"
+    },
+    "genspark-credits": {
+      "title": "Genspark 공식 크레딧 가이드",
+      "url": "https://www.genspark.ai/helpcenter/credits-guide",
+      "kind": "official"
+    },
+    "recraft-free-conflict": {
+      "title": "Recraft 마케팅 페이지 · 무료 50/일 안내와의 차이",
+      "url": "https://www.recraft.ai/ai-image-combiner",
+      "kind": "official"
+    },
+    "gpt-image-help": {
+      "title": "ChatGPT Images 공식 도움말 · Plus의 Thinking 이미지 접근",
+      "url": "https://help.openai.com/en/articles/11084440-chatgpt-images",
+      "kind": "official"
+    },
+    "gpt-observed-geni": {
+      "title": "비공식 · GeniGPT · 2026-07-02 사용자 보고 집계",
+      "url": "https://genigpt.net/guides/chatgpt-image-limits/",
+      "kind": "secondary"
+    },
+    "gpt-observed-career": {
+      "title": "비공식 · The AI Career Lab · 2026년 9월판 관측치 안내",
+      "url": "https://theaicareerlab.com/blog/ai-usage-limits-compared-2026",
+      "kind": "secondary"
+    },
+    "gpt-observed-low": {
+      "title": "개인 사례 · Plus 3장 생성 후 제한됐다는 Reddit 보고",
+      "url": "https://www.reddit.com/user/PlasticIcy5213/comments/1up1x4p/chatgpt_plus_image_generation_limit_triggered/",
+      "kind": "firsthand"
+    },
+    "adobe-image-costs": {
+      "title": "Adobe 공식 외부 모델별 크레딧 차감표",
+      "url": "https://helpx.adobe.com/creative-cloud/apps/generative-ai/non-adobe-models-in-adobe-products.html",
+      "kind": "official"
+    },
+    "recraft-operation-costs": {
+      "title": "Recraft 공식 Studio 모델별 크레딧 표",
+      "url": "https://www.recraft.ai/docs/plans-and-billing/credits",
+      "kind": "official"
+    },
+    "leo-observed-batch": {
+      "title": "비공식 · Lucid Origin 4장에 46토큰 커뮤니티 보고 · 2025-08",
+      "url": "https://www.reddit.com/r/leonardoai/comments/1mi92fy/new_preset/",
+      "kind": "firsthand"
+    },
+    "ideo-review-costs": {
+      "title": "비공식 · MobileAppDaily Ideogram 모델별 차감표",
+      "url": "https://www.mobileappdaily.com/product-review/ideogram",
+      "kind": "secondary"
+    },
+    "gemini-observed-free": {
+      "title": "개인 테스트 · Gemini 무료 이미지 1회에 한도 5%p 증가",
+      "url": "https://www.reddit.com/r/GeminiAI/comments/1tiklmr/i_tested_the_new_gemini_usage_limits_on_a_free/",
+      "kind": "firsthand"
+    },
+    "gemini-observed-pro": {
+      "title": "개인 보고 · Gemini Pro 이미지 1장에 5시간 한도 1%",
+      "url": "https://www.reddit.com/r/GeminiAI/comments/1trv3t7/how_many_images_can_you_generate_in_google_flow/",
+      "kind": "firsthand"
+    },
+    "grok-observed-edit": {
+      "title": "개인 테스트 · SuperGrok 이미지 편집 6회에 주간 한도 1%",
+      "url": "https://www.reddit.com/r/grok/comments/1vl0yvw/how_many_image_edits_can_you_do_in_supergrok_a_day/",
+      "kind": "firsthand"
+    },
+    "grok-extrapolated": {
+      "title": "비공식 · Heavy 실측에서 일반 SuperGrok 1,000장/주 추정",
+      "url": "https://www.reddit.com/r/grok/comments/1v9o4t9/how_many_grokimages_can_i_generate_dailymonth/",
+      "kind": "firsthand"
+    },
+    "genspark-observed-project": {
+      "title": "개인 제작 기록 · Genspark 이미지 113장 프로젝트 · 2026-03-05",
+      "url": "https://note.com/nice_wolf2883/n/nde1eef6a267b?hl=en",
+      "kind": "firsthand"
+    }
+  },
+  "platforms": [
+    {
+      "id": "midjourney",
+      "name": "Midjourney",
+      "category": "image",
+      "basis": "월정액 + GPU 시간",
+      "from": 10,
+      "free": "웹·Discord 무료 체험 없음. niji 앱은 별도 제한 체험.",
+      "quota": "고속 GPU 시간 공개 / 이미지 장수로 고정 환산 불가",
+      "quality": "요금표의 핵심 차이는 Fast 시간·Relax 모드·동시 실행·비공개 생성입니다. GPU 시간은 결과 장수와 같지 않습니다.",
+      "plans": [
+        {
+          "name": "Basic",
+          "usd": 10,
+          "limit": "Fast 3.3시간/월 (200분)",
+          "grade": "Relax 이미지 미포함",
+          "refs": [
+            "mj-price"
+          ]
+        },
+        {
+          "name": "Standard",
+          "usd": 30,
+          "limit": "Fast 15시간/월 + Relax 이미지 무제한",
+          "grade": "느린 생성은 대기 가능",
+          "refs": [
+            "mj-price"
+          ]
+        },
+        {
+          "name": "Pro",
+          "usd": 60,
+          "limit": "Fast 30시간/월 + Relax 이미지 무제한",
+          "grade": "Stealth 비공개 모드",
+          "refs": [
+            "mj-price"
+          ]
+        },
+        {
+          "name": "Mega",
+          "usd": 120,
+          "limit": "Fast 60시간/월 + Relax 이미지 무제한",
+          "grade": "Stealth 비공개 모드",
+          "refs": [
+            "mj-price"
+          ]
+        }
+      ],
+      "extra": "추가 Fast 시간 $4/시간. 연간 선결제는 20% 할인.",
+      "caution": "무제한은 Relax 이미지 기준입니다. 고속 생성이나 모든 품질·모드에 동일하게 적용되는 무제한 장수로 해석하지 마세요.",
+      "adoption": "공식 Discord 목록에 약 1,861만 회원. 커뮤니티 회원 수이며 유료 구독자·월간 활성 이용자 수는 아닙니다.",
+      "adoptionRefs": [
+        "mj-size"
+      ],
+      "refs": [
+        "mj-price",
+        "mj-free",
+        "mj-speed"
+      ],
+      "lesson": "해석: 빠른 생성에는 한도를 두고, 느린 생성으로 사용 지속성을 제공하는 구조입니다.",
+      "quantityEvidence": {
+        "type": "공식 시간표로 조건부 환산",
+        "summary": "Basic: 약 150~250프롬프트/월 (SD·HD 기준 계산)",
+        "confidence": "입력 근거 높음 / 실제 출력량은 변동",
+        "cases": [
+          {
+            "value": "Basic 200분 ÷ SD 0.8분 ≈ 250회 / HD 1.3분 ≈ 153회",
+            "condition": "공식 GPU 표의 일반 프롬프트 예시. 1회 결과 장수는 별도이며 업스케일·편집·모델에 따라 시간 변화.",
+            "date": "공식 문서 2026-09-11 확인",
+            "refs": [
+              "mj-price",
+              "mj-speed"
+            ]
+          },
+          {
+            "value": "Standard 900분 → SD 약 1,125회 / HD 약 692회",
+            "condition": "Fast 시간만 계산. Relax 무제한과 합산한 최대 장수가 아님.",
+            "date": "공식 단가표에 대한 산술 환산",
+            "refs": [
+              "mj-price",
+              "mj-speed"
+            ]
+          }
+        ],
+        "warning": "위 숫자는 프롬프트 횟수입니다. 4장/회로 설정했다면 결과 장수는 4배일 수 있지만 모든 모델의 기본 출력수를 4장으로 가정하지 않았습니다."
+      }
+    },
+    {
+      "id": "firefly",
+      "name": "Adobe Firefly",
+      "category": "image",
+      "basis": "월정액 + 표준 무제한 + 고급 크레딧",
+      "from": 9.99,
+      "free": "무료 플랜의 일일 생성은 제한적. 공식 가격표에 공통 고정 장수는 미기재.",
+      "quota": "크레딧 수 공개 / 모델·기능별 차감 / 프로모션 구분 필요",
+      "quality": "표준 이미지 기능과 외부 고급 모델을 구분합니다. 1K·2K·4K 및 모델별 무제한 범위는 가입 플랜·특별 혜택 조건에 따라 다릅니다.",
+      "plans": [
+        {
+          "name": "Standard",
+          "usd": 9.99,
+          "limit": "2,000크레딧/월 + 표준 생성 무제한",
+          "grade": "Firefly 표준 이미지 기능",
+          "refs": [
+            "adobe-price"
+          ]
+        },
+        {
+          "name": "Pro",
+          "usd": 19.99,
+          "limit": "4,000크레딧/월 + 표준 생성 무제한",
+          "grade": "선택 모델 무제한 특별 혜택 별도",
+          "refs": [
+            "adobe-price",
+            "adobe-promo"
+          ]
+        },
+        {
+          "name": "Pro Plus",
+          "usd": 49.99,
+          "limit": "10,000크레딧/월",
+          "grade": "선택 고급 모델·해상도 혜택 확인",
+          "refs": [
+            "adobe-price",
+            "adobe-promo"
+          ]
+        },
+        {
+          "name": "Premium",
+          "usd": 199.99,
+          "limit": "50,000크레딧/월",
+          "grade": "고해상도·외부 모델 범위 별도 확인",
+          "refs": [
+            "adobe-price",
+            "adobe-promo"
+          ]
+        }
+      ],
+      "extra": "크레딧 추가 플랜 제공. 화면의 첫해 할인과 정상 월 요금을 구분했습니다.",
+      "caution": "특정 외부 모델의 무제한은 기간 한정 혜택입니다. 50,000크레딧을 50,000장으로 읽으면 안 됩니다.",
+      "adoption": "2025-06-17 공식 발표: Firefly 누적 240억 이상 에셋 생성. 이미지 외 에셋 포함이며 현재 월간 사용자 수가 아닙니다.",
+      "adoptionRefs": [
+        "adobe-size"
+      ],
+      "refs": [
+        "adobe-price",
+        "adobe-promo"
+      ],
+      "lesson": "해석: 저비용 표준 기능과 비싼 외부 모델을 같은 무제한 약속으로 묶지 않습니다.",
+      "quantityEvidence": {
+        "type": "공식 차감표로 조건부 환산",
+        "summary": "Standard: Nano Banana 2 약 100회 / GPT Image 2 High 약 25회",
+        "confidence": "입력 근거 높음 / 모델·프로모션 조건부",
+        "cases": [
+          {
+            "value": "2,000크레딧 ÷ Nano Banana 2 1K·2K 20크레딧 = 100회",
+            "condition": "크레딧 차감이 적용되는 생성만. 해당 단가는 기간 한정 표기. 1회 1장 출력일 때 100장.",
+            "date": "Adobe 차감표 2026-09-11 확인",
+            "refs": [
+              "adobe-price",
+              "adobe-image-costs"
+            ]
+          },
+          {
+            "value": "GPT Image 2 High 80크레딧/회 → Standard 25회 / Pro 50회",
+            "condition": "각각 2,000/4,000크레딧 전부를 같은 모델에 사용. 표준 무제한이나 특별 무제한 혜택은 별도.",
+            "date": "같은 차감표에 대한 산술 환산",
+            "refs": [
+              "adobe-price",
+              "adobe-image-costs"
+            ]
+          }
+        ],
+        "warning": "생성 횟수와 이미지 장수가 다를 수 있습니다. 이 수치는 Firefly 모든 모델에 적용하는 장수 제한이 아닙니다."
+      }
+    },
+    {
+      "id": "leonardo",
+      "name": "Leonardo.Ai",
+      "category": "image",
+      "basis": "월정액 토큰 + 일부 모델 Relax",
+      "from": 12,
+      "free": "150 Fast 토큰/일. 무료 결과는 공개, 품질 설정은 Basic.",
+      "quota": "토큰 수 공개 / 1토큰 ≠ 1장",
+      "quality": "유료는 Enhanced 품질 설정. 일부 자체 모델의 느린 생성이 무제한이며, 모든 외부 모델을 포함하는 것은 아닙니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "150토큰/일",
+          "grade": "Basic 품질·공개 생성",
+          "refs": [
+            "leo-price"
+          ]
+        },
+        {
+          "name": "Essential",
+          "usd": 12,
+          "limit": "8,500토큰/월",
+          "grade": "Enhanced·비공개 생성",
+          "refs": [
+            "leo-price"
+          ]
+        },
+        {
+          "name": "Premium",
+          "usd": 30,
+          "limit": "25,000토큰/월 + 일부 모델 Relax",
+          "grade": "Lucid·Phoenix 등 지정 모델",
+          "refs": [
+            "leo-price"
+          ]
+        },
+        {
+          "name": "Ultimate",
+          "usd": 60,
+          "limit": "60,000토큰/월 + 일부 모델 Relax",
+          "grade": "동시 실행·대기열 확대",
+          "refs": [
+            "leo-price"
+          ]
+        }
+      ],
+      "extra": "이월 Token Bank 상한은 Essential 25,500 / Premium 75,000 / Ultimate 180,000. 추가 토큰은 만료하지 않지만 사용 시 유료 구독 필요.",
+      "caution": "토큰 차감은 계산량·모델·기능에 따라 달라집니다. 고정 이미지 장수로 환산하지 않았습니다. 요금은 세금 제외.",
+      "adoption": "Canva 인수 당시 공식 발표: 이용자 1,900만 명 이상. 과거 회사 발표이며 현재 활성 이용자 수로 사용하지 않았습니다.",
+      "adoptionRefs": [
+        "leo-size"
+      ],
+      "refs": [
+        "leo-price"
+      ],
+      "lesson": "해석: 무료 일일 토큰, 유료 월간 토큰, 이월 한도, 추가 구매를 각각 구분합니다.",
+      "quantityEvidence": {
+        "type": "과거 관측 단가로 조건부 환산",
+        "summary": "Lucid Origin 과거 46토큰/4장 보고 → 무료 약 12장/일 예시",
+        "confidence": "낮음 · 2025년 보고를 사용한 조건부 계산",
+        "cases": [
+          {
+            "value": "150토큰 ÷ 46토큰/4장 → 3묶음, 12장/일",
+            "condition": "Lucid Origin·Fast·표준 크기라는 커뮤니티 답변. Ultra·외부 모델·현재 설정에서는 다를 수 있음.",
+            "date": "2025-08 게시물 · 오래된 자료",
+            "refs": [
+              "leo-observed-batch",
+              "leo-price"
+            ]
+          },
+          {
+            "value": "Essential 8,500토큰 → 같은 설정이면 184묶음, 736장/월",
+            "condition": "4장 단위로 정수 계산. 실제 현재 토큰 견적을 확인해야 하며 Relax 생성은 제외.",
+            "date": "현재 월 토큰량 × 과거 설정 단가",
+            "refs": [
+              "leo-observed-batch",
+              "leo-price"
+            ]
+          }
+        ],
+        "warning": "150토큰을 150장으로 표기하지 않았습니다. 이 예시는 최신 계정에서 직접 소진해 확인한 장수가 아닙니다."
+      }
+    },
+    {
+      "id": "ideogram",
+      "name": "Ideogram",
+      "category": "image",
+      "basis": "월정액 Priority + Slow 크레딧",
+      "from": 20,
+      "free": "적격 계정에 주간 Slow 크레딧. 지급량은 변동하며 현재 고정 숫자는 미공개.",
+      "quota": "Priority 수 공개 / 무료 주간량 변동",
+      "quality": "현 가격 페이지는 Ideogram 4.0·3.0 등을 안내합니다. 크레딧은 모델·속도·출력 장수·해상도에 따라 달라집니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "주간 Slow 크레딧 · 계정별 변동",
+          "grade": "공개 생성 중심",
+          "refs": [
+            "ideo-price"
+          ]
+        },
+        {
+          "name": "Plus",
+          "usd": 20,
+          "limit": "Priority 1,000/월 + Slow 무제한",
+          "grade": "비공개·캐릭터 일관성 기능",
+          "refs": [
+            "ideo-price"
+          ]
+        },
+        {
+          "name": "Pro",
+          "usd": 60,
+          "limit": "Priority 3,500/월 + Slow 무제한",
+          "grade": "Batch Generation·Quality export",
+          "refs": [
+            "ideo-price"
+          ]
+        }
+      ],
+      "extra": "연간 선결제 월환산: Plus $15, Pro $42. 우선 크레딧 추가 구매 제공.",
+      "caution": "무료 10크레딧/주 같은 과거 숫자를 현재 한도로 쓰지 않았습니다. 문서도 최신 가격·차감은 실시간 가격표를 보도록 안내합니다.",
+      "adoption": "2023-09 공식 베타 발표: 첫 주 이용자 9만 명·이미지 300만 장 이상. 최신 활성 규모는 공식 확인하지 못했습니다.",
+      "adoptionRefs": [
+        "ideo-size"
+      ],
+      "refs": [
+        "ideo-price",
+        "ideo-doc"
+      ],
+      "lesson": "해석: 무료 체험량보다 우선 처리·비공개·일괄 작업 기능을 유료 차별점으로 함께 둡니다.",
+      "quantityEvidence": {
+        "type": "비공식 모델별 차감표로 환산",
+        "summary": "Plus 1,000크레딧: 3.0 기본 약 1,000장 / 4.0 2K 기본 약 250장",
+        "confidence": "중간 이하 · 외부 리뷰의 설정별 비용표",
+        "cases": [
+          {
+            "value": "Ideogram 3.0 Default: 4크레딧/4장 → 약 1,000장",
+            "condition": "Plus 1,000 Priority 크레딧 전량 사용. 외부 리뷰 표를 적용한 계산, Slow 무제한 제외.",
+            "date": "리뷰 2026-09-11 확인 · 정확한 비용 측정일 미기재",
+            "refs": [
+              "ideo-review-costs",
+              "ideo-price"
+            ]
+          },
+          {
+            "value": "Ideogram 4.0 2K Balanced: 4크레딧/1장 → 약 250장",
+            "condition": "같은 1,000크레딧이어도 모델·출력 수가 달라짐. Turbo·Quality 비용은 또 다름.",
+            "date": "동일 외부 리뷰의 모델별 비교표",
+            "refs": [
+              "ideo-review-costs",
+              "ideo-doc"
+            ]
+          }
+        ],
+        "warning": "공식 현재 문서는 모델·속도·크기에 따라 비용이 바뀐다고 안내합니다. 무료 지급량은 변동하므로 과거 10크레딧/주를 현재 고정값으로 쓰지 않았습니다."
+      }
+    },
+    {
+      "id": "recraft",
+      "name": "Recraft",
+      "category": "image",
+      "basis": "월정액 크레딧 + 추가 충전",
+      "from": 12,
+      "free": "공식 앱 문서 기준 30크레딧/일. 무료 결과의 상업적 사용 권한은 제한됨.",
+      "quota": "크레딧 수 공개 / 모델별 차감",
+      "verification": "요금은 공식 문서 기준 · 결제 화면 재확인",
+      "quality": "Recraft V4.1·Nano Banana·GPT Image·Seedream·Flux 등 모델과 벡터/편집 기능을 제공합니다. 모델별 비용은 다릅니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "30크레딧/일",
+          "grade": "공개 결과·상업 사용 제한",
+          "refs": [
+            "recraft-free",
+            "recraft-live"
+          ]
+        },
+        {
+          "name": "Basic",
+          "usd": 12,
+          "limit": "1,000크레딧/월",
+          "grade": "비공개 생성·유료 권한",
+          "refs": [
+            "recraft-price"
+          ]
+        },
+        {
+          "name": "Pro 시작",
+          "usd": 20,
+          "limit": "2,000크레딧/월",
+          "grade": "4,000 / 8,000 / 16,000 단계도 제공",
+          "refs": [
+            "recraft-price"
+          ]
+        }
+      ],
+      "extra": "구독 크레딧은 월 초기화·미이월. 별도 충전 크레딧은 만료하지 않습니다.",
+      "caution": "공식 앱 문서는 무료 30/일, 일부 마케팅 페이지는 50/일로 안내가 다릅니다. 앱 문서의 30/일을 채택했으며 실제 계정 한도 재확인이 필요합니다. 유료 요금은 공식 플랜 문서 기준입니다.",
+      "adoption": "2025년 공식 성장 발표: 사용자 400만 명 이상. 현재 활성 사용자 수나 유료 가입자 수를 뜻하지 않습니다.",
+      "adoptionRefs": [
+        "recraft-size"
+      ],
+      "refs": [
+        "recraft-price",
+        "recraft-live",
+        "recraft-free",
+        "recraft-free-conflict"
+      ],
+      "lesson": "해석: 구독 크레딧과 충전 크레딧의 만료 정책을 분리한 사례입니다.",
+      "quantityEvidence": {
+        "type": "공식 모델별 단가로 환산",
+        "summary": "V4.1 Vector: 무료 약 7장/일 / Basic 약 250장/월",
+        "confidence": "높음 · 공식 Studio 단가와 할당량의 조건부 계산",
+        "cases": [
+          {
+            "value": "Recraft V4.1 Vector 4크레딧/장 → 30크레딧으로 7장",
+            "condition": "벡터 모델 기준. Create 모드에서 다른 유료 작업을 하지 않는 가정.",
+            "date": "공식 Studio 크레딧 문서 2026-09-11 확인",
+            "refs": [
+              "recraft-operation-costs",
+              "recraft-free"
+            ]
+          },
+          {
+            "value": "V4.1 Vector: Basic 1,000크레딧으로 250장 / Pro Vector 12크레딧이면 83장",
+            "condition": "V4.1 Vector와 V4.1 Pro Vector는 다른 비용. 외부 모델/API 단가와 구분.",
+            "date": "동일 공식 표에 대한 산술 계산",
+            "refs": [
+              "recraft-operation-costs",
+              "recraft-price"
+            ]
+          }
+        ],
+        "warning": "무료 크레딧은 공식 앱 문서 30/일 기준입니다. 일반 생성의 1* 표기는 모델 가격을 곱한다는 뜻이므로 모든 이미지가 1크레딧은 아닙니다."
+      }
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "category": "assistant",
+      "basis": "LLM 월 구독 + 이미지 기능",
+      "from": 20,
+      "free": "이미지 생성 가능. 제한적·느린 생성이며 고정 일일 장수는 현재 공식 문서에서 미공개.",
+      "quota": "공식 고정 장수 미공개 / 비공식 집계 약 40~50회·3시간 (신뢰 낮음)",
+      "quality": "2026-09-08 Images 2.5를 전 티어에 배포 시작. 무료와 유료를 단순히 구형·신형 모델로 나누면 부정확합니다. API의 Flare/Sunburst 구분은 별도입니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "제한적 이미지 생성 · 고정 장수 미공개",
+          "grade": "Images 2.5 전 티어 배포 대상",
+          "refs": [
+            "gpt-price",
+            "gpt-image"
+          ]
+        },
+        {
+          "name": "Plus",
+          "usd": 20,
+          "limit": "공식 고정 장수 미공개. 비공식 보고 집계: 약 40~50회/3시간 (확정 한도 아님)",
+          "grade": "Images 2.5 및 Images with thinking 접근",
+          "refs": [
+            "gpt-plus",
+            "gpt-price",
+            "gpt-image-help",
+            "gpt-observed-geni",
+            "gpt-observed-career"
+          ]
+        },
+        {
+          "name": "Pro $100",
+          "usd": 100,
+          "limit": "빠른 이미지 생성·무제한 표기, 보호 제한 적용",
+          "grade": "특정 해상도별 고정 장수 미공개",
+          "refs": [
+            "gpt-price",
+            "gpt-pro"
+          ]
+        },
+        {
+          "name": "Pro $200 기존 가입자",
+          "usd": 200,
+          "limit": "2026-09-10부터 신규 가입·업그레이드 일시 중단",
+          "grade": "기존 구독은 유지·갱신 가능",
+          "refs": [
+            "gpt-pro"
+          ]
+        }
+      ],
+      "extra": "ChatGPT 앱 구독에 API 사용료는 포함되지 않습니다.",
+      "caution": "Pro $200을 지금 신규 가입 가능한 요금제로 안내하면 틀립니다. Pro의 5배·20배 수치를 이미지 장수 배수로 환산하지 않았습니다.",
+      "adoption": "2026-09-08 공식 발표: ChatGPT Images와 이미지 API 합계 주 30억 장 이상. 앱 단독 이용자 수가 아닙니다.",
+      "adoptionRefs": [
+        "gpt-image"
+      ],
+      "refs": [
+        "gpt-price",
+        "gpt-plus",
+        "gpt-pro",
+        "gpt-image",
+        "gpt-image-help",
+        "gpt-observed-geni",
+        "gpt-observed-career",
+        "gpt-observed-low"
+      ],
+      "lesson": "해석: 앱 구독의 이미지 혜택과 서비스 운영에 사용하는 API 원가를 분리해 비교해야 합니다.",
+      "plusQuota": {
+        "checkedOn": "2026-09-11",
+        "monthlyUsd": 20,
+        "guaranteedMonthlyImages": null,
+        "guaranteedDailyImages": null,
+        "guaranteedImagesPerWindow": null,
+        "status": "공식 고정 장수 미공개",
+        "explanation": "Plus는 이미지 N장을 정액 구매하는 상품으로 안내되어 있지 않습니다. 공식 도움말은 이미지 생성 포함과 시스템 상황에 따라 달라지는 사용 한도를 안내합니다. 이미지 업로드/메시지 한도를 생성 장수로 대체하지 않았습니다.",
+        "sources": [
+          "gpt-plus",
+          "gpt-image-help",
+          "gpt-price"
+        ],
+        "assumedMonthlyImageCounts": [
+          100,
+          500,
+          1000
+        ],
+        "observedReference": {
+          "range": [
+            40,
+            50
+          ],
+          "unit": "생성 회수",
+          "windowHours": 3,
+          "evidenceLevel": "낮음",
+          "official": false,
+          "sources": [
+            "gpt-observed-geni",
+            "gpt-observed-career"
+          ],
+          "freshness": "GeniGPT는 2026-07-02 테스트일을 표기하나 해당 한도는 사용자 보고 집계. AI Career Lab은 2026년 9월판 제목이나 이미지 측정일·모델 버전·표본수 미기재.",
+          "limitations": "두 자료의 독립적인 원시 로그를 확인하지 못했습니다. 9월 8일 Images 2.5 배포 후 모든 Plus 계정의 한도로 검증된 수치가 아닙니다. 생성 회수와 결과 이미지 장수가 항상 같지는 않습니다.",
+          "counterexample": {
+            "images": 3,
+            "date": "확인 시 게시 시점이 약 2개월 전으로 표시됨",
+            "kind": "개인 실패 사례 · 대표 한도 아님",
+            "source": "gpt-observed-low"
+          },
+          "monthlyScenario": {
+            "windowsPerDay": 1,
+            "days": 20,
+            "outputsPerGeneration": 1,
+            "range": [
+              800,
+              1000
+            ],
+            "kind": "계산상 사용 예시 · 실측 또는 보장 장수 아님",
+            "usdPerImageRange": [
+              0.02,
+              0.025
+            ]
+          }
+        }
+      },
+      "verification": "공식 요금과 비공식 한도 참고를 구분",
+      "quantityEvidence": {
+        "type": "비공식 보고 집계",
+        "summary": "Plus 약 40~50회/3시간 보고 · 공식 보장 아님",
+        "confidence": "낮음 · 원시 로그/모델 버전/독립 표본 미확인",
+        "cases": [
+          {
+            "value": "Plus 약 40~50회/3시간",
+            "condition": "GeniGPT 7월 사용자 보고 집계와 AI Career Lab 9월판 안내. Images 2.5 공통 한도 검증 아님.",
+            "date": "2026-07-02 및 2026년 9월판 표기",
+            "refs": [
+              "gpt-observed-geni",
+              "gpt-observed-career"
+            ]
+          },
+          {
+            "value": "반례: Plus 사용자가 3장 생성 후 제한됐다고 보고",
+            "condition": "단일 사례로 버그·계정 상태는 확인하지 못함. 3장을 일반 최저 한도로 쓰지 않음.",
+            "date": "확인 당시 약 2개월 전 표시",
+            "refs": [
+              "gpt-observed-low"
+            ]
+          }
+        ],
+        "warning": "하루 한 구간 × 20일 × 1회 1장이라면 월 800~1,000장이라는 계산 예시가 가능하지만 실제 월간 관측량은 아닙니다."
+      }
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "category": "assistant",
+      "basis": "LLM 구독 + 공통 연산 사용량",
+      "from": 4.99,
+      "free": "Nano Banana 2/2 Lite 이미지 생성 가능, 다운로드 1K. 현재 고정 일일 장수 미공개.",
+      "quota": "5시간·주간 공통 한도 / 고정 이미지 장수 미공개",
+      "quality": "무료 1K, Google AI 구독은 2K 다운로드. 유료는 Pro 모델에서 Nano Banana Pro로 다시 생성 가능. API·Flow의 별도 4K/크레딧과 혼동하지 마세요.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "표준 공통 사용량 · 이미지 장수 미공개",
+          "grade": "Nano Banana 2 / 2 Lite · 1K",
+          "refs": [
+            "gemini-limits",
+            "gemini-image"
+          ]
+        },
+        {
+          "name": "Google AI Plus",
+          "usd": 4.99,
+          "limit": "무료 대비 공통 사용량 2배",
+          "grade": "AI 플랜 2K·Pro 재생성 접근",
+          "refs": [
+            "gemini-price",
+            "gemini-image"
+          ]
+        },
+        {
+          "name": "Google AI Pro",
+          "usd": 19.99,
+          "limit": "무료 대비 공통 사용량 4배",
+          "grade": "2K 다운로드·Nano Banana Pro 재생성",
+          "refs": [
+            "gemini-price",
+            "gemini-image"
+          ]
+        },
+        {
+          "name": "Google AI Ultra",
+          "usd": 99.99,
+          "limit": "$99.99: Pro 대비 5배 / $199.99: 20배",
+          "grade": "공통 한도 차이 · 이미지 장수 배수 아님",
+          "refs": [
+            "gemini-price",
+            "gemini-limits"
+          ]
+        }
+      ],
+      "extra": "Google Flow Credits는 Gemini 앱 이미지 장수와 별도입니다. 가격은 미국 페이지 기준입니다.",
+      "caution": "2026-05-17 변경 공지 이후 최신 한도 문서는 공통 사용량을 안내합니다. 검색에 남은 무료 3장·Pro 100장·Ultra 1,000장/일 표를 현재 한도로 쓰지 않았습니다.",
+      "adoption": "사용자 요청에 따라 포함한 범용 AI 서비스. 이미지 생성 전용 활성 이용 규모는 이번 조사에서 별도 확인하지 않았습니다.",
+      "adoptionRefs": [],
+      "refs": [
+        "gemini-price",
+        "gemini-limits",
+        "gemini-image"
+      ],
+      "lesson": "해석: 동일 모델이라도 Gemini 앱·Flow·API의 비용과 할당량은 서로 다릅니다.",
+      "quantityEvidence": {
+        "type": "개인 사용량 게이지 관측·외삽",
+        "summary": "Pro: 이미지 1장에 5시간 한도 약 1%라는 보고",
+        "confidence": "낮음 · 단일 계정/설정·모델 버전 불완전",
+        "cases": [
+          {
+            "value": "Pro 1장 ≈ 5시간 한도 1% → 단순 역산 약 100장/5시간",
+            "condition": "게시글 제목은 Flow지만 해당 댓글은 Gemini 앱이라고 명시. 실제 100장을 끝까지 생성한 테스트가 아님. 다른 작업·주간 제한을 제외한 외삽.",
+            "date": "2026년 5~6월 무렵 게시물 · 확인 시 3개월 전 표시",
+            "refs": [
+              "gemini-observed-pro",
+              "gemini-limits"
+            ]
+          },
+          {
+            "value": "무료 계정: 이미지 1회 후 5시간 게이지 77% → 82%",
+            "condition": "여러 텍스트·Deep Research 작업 이후의 단일 관측. 5%/회가 일정하다고 가정하면 약 20회지만 독립 최대치 테스트가 아님.",
+            "date": "2026-05-20 게시물 · 공유 대화 링크 포함",
+            "refs": [
+              "gemini-observed-free"
+            ]
+          }
+        ],
+        "warning": "두 값을 합쳐 모든 무료/유료 계정의 확정 범위로 제시하지 않았습니다. 최신 5시간·주간 제한, 혼잡도와 프롬프트 조건이 실제 제공량을 바꿉니다."
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude",
+      "category": "assistant",
+      "basis": "LLM 월 구독 · 사진 생성 미지원",
+      "from": 20,
+      "free": "사진·일러스트 직접 생성 미지원. 이미지 업로드 분석은 가능.",
+      "quota": "이미지 생성 장수 해당 없음",
+      "quality": "공식 안내는 사진·일러스트 생성 도구가 아니라고 명시합니다. HTML/SVG 차트·인터랙티브 시각화는 가능하지만 이미지 생성 모델의 화질 티어와 다릅니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "사진·일러스트 생성 해당 없음",
+          "grade": "이미지 이해·HTML/SVG 시각화와 구분",
+          "refs": [
+            "claude-image"
+          ]
+        },
+        {
+          "name": "Pro",
+          "usd": 20,
+          "limit": "사진 생성 장수 할당 없음",
+          "grade": "LLM 사용량 확대",
+          "refs": [
+            "claude-price",
+            "claude-image"
+          ]
+        },
+        {
+          "name": "Max 5x",
+          "usd": 100,
+          "limit": "Pro 대비 세션 용량 5배 · 이미지 장수 아님",
+          "grade": "사진 생성 미지원",
+          "refs": [
+            "claude-price",
+            "claude-image"
+          ]
+        },
+        {
+          "name": "Max 20x",
+          "usd": 200,
+          "limit": "Pro 대비 세션 용량 20배 · 이미지 장수 아님",
+          "grade": "사진 생성 미지원",
+          "refs": [
+            "claude-price",
+            "claude-image"
+          ]
+        }
+      ],
+      "extra": "Pro 연간 선결제 $200. 외부 이미지 도구를 연결하면 그 도구의 비용·조건을 별도 확인해야 합니다.",
+      "caution": "Claude Pro가 이미지 몇 장을 생성한다는 식으로 다른 이미지 플랫폼과 직접 비교하지 않았습니다.",
+      "adoption": "사용자 요청에 따라 포함한 범용 AI 서비스. 이미지 생성 플랫폼의 사용 규모 비교에서는 제외합니다.",
+      "adoptionRefs": [],
+      "refs": [
+        "claude-price",
+        "claude-image"
+      ],
+      "lesson": "해석: 이미지 분석 능력이나 SVG 생성 능력을 사진 생성 API와 같은 기능으로 계산하면 안 됩니다.",
+      "quantityEvidence": {
+        "type": "공식 기능 범위",
+        "summary": "사진·일러스트 직접 생성은 해당 없음",
+        "confidence": "높음 · 모델 기능 범위에 대한 공식 안내",
+        "cases": [
+          {
+            "value": "Free·Pro·Max의 네이티브 사진 생성량: 해당 없음",
+            "condition": "Claude의 HTML/SVG 시각화·이미지 분석과 사진 생성 모델을 구분. 외부 도구 연결은 별도 서비스의 과금/한도 적용.",
+            "date": "공식 이미지 생성 안내 2026-09-11 확인",
+            "refs": [
+              "claude-image"
+            ]
+          }
+        ],
+        "warning": "지원하지 않는 기능에 임의의 생성 장수를 추정해 넣지 않았습니다."
+      }
+    },
+    {
+      "id": "grok",
+      "name": "Grok / SuperGrok",
+      "category": "assistant",
+      "basis": "LLM 구독 + 주간 공통 사용량",
+      "from": 30,
+      "free": "Free 플랜은 존재. 이미지 무료 제공 여부·고정 장수는 읽은 공식 가격표 본문만으로 확정 불가.",
+      "quota": "2026-06부터 유료 주간 공통 한도 / 장수 미공개",
+      "quality": "유료에서 Imagine 이미지·영상 생성 제공. 이미지 해상도/등급별 고정 장수는 미공개입니다. Plus의 1080p 혜택은 영상 해상도입니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "이미지 무료 할당은 공식 공개 본문에서 미확인",
+          "grade": "사진 생성 품질·장수 확정 불가",
+          "refs": [
+            "grok-price"
+          ]
+        },
+        {
+          "name": "SuperGrok",
+          "usd": 30,
+          "limit": "Chat·Imagine 등 주간 사용량 공유",
+          "grade": "Imagine 이미지·영상 생성",
+          "refs": [
+            "grok-price",
+            "grok-limits"
+          ]
+        },
+        {
+          "name": "SuperGrok Plus",
+          "usd": 100,
+          "limit": "공통 사용량 확대 · 고정 이미지 장수 미공개",
+          "grade": "1080p 영상·우선 접근",
+          "refs": [
+            "grok-price"
+          ]
+        }
+      ],
+      "extra": "한도 소진 후 추가 사용량 결제 또는 상위 플랜 선택. Lite·Heavy는 공식 비교 목록에 있으나 가격은 이번 공개 본문에서 확정하지 못했습니다.",
+      "caution": "X의 Grok와 grok.com/app, X Premium과 SuperGrok를 같은 상품으로 취급하지 않았습니다. 과거 일일 이미지 수는 현재 주간 공통 한도로 대체되어 비교에 사용하지 않았습니다.",
+      "adoption": "사용자 요청에 따라 포함한 범용 AI 서비스. 이번 조사에서는 이미지 전용 활성 규모를 별도 확인하지 않았습니다.",
+      "adoptionRefs": [],
+      "refs": [
+        "grok-price",
+        "grok-limits"
+      ],
+      "lesson": "해석: 챗·이미지·영상이 한 예산을 공유하면 이미지 장수만 고정해 약속하기 어렵습니다.",
+      "quantityEvidence": {
+        "type": "개인 게이지 관측·다른 플랜에서 외삽",
+        "summary": "편집 6회에 주간 1% 보고 / 생성 1,000장·주는 매우 낮은 신뢰의 추정",
+        "confidence": "낮음~매우 낮음 · 편집과 생성을 구분",
+        "cases": [
+          {
+            "value": "SuperGrok 이미지 편집 6회 후 주간 한도 1% 증가",
+            "condition": "단일 사용자의 짧은 테스트. 선형이면 약 600회/주지만 게이지 반영 지연·다른 사용량·작업 복잡성을 확인하지 못함.",
+            "date": "2026-08-10 게시물",
+            "refs": [
+              "grok-observed-edit"
+            ]
+          },
+          {
+            "value": "1K Quality 생성 약 1,000장/주라는 추정과 약 100장이라는 반박",
+            "condition": "1,000장은 Heavy 실측을 일반 SuperGrok이 1/10이라는 가정으로 옮긴 값. 일반 $30 플랜 실측 최대치가 아니므로 두 숫자를 정상 범위로 합치지 않음.",
+            "date": "2026-07-29 게시물",
+            "refs": [
+              "grok-extrapolated",
+              "grok-limits"
+            ]
+          }
+        ],
+        "warning": "영상·채팅·음성도 주간 예산을 공유합니다. 이 자료에서 월 최대 장수나 무료 계정의 확정 장수를 도출하지 않았습니다."
+      }
+    },
+    {
+      "id": "genspark",
+      "name": "Genspark",
+      "category": "assistant",
+      "basis": "멀티모델 구독 + 크레딧 + 한시적 이미지 무제한",
+      "from": 24.99,
+      "free": "100크레딧/일. 모델·작업별 비용이 달라 이미지 고정 장수로 환산 불가.",
+      "quota": "유료 이미지 0크레딧 혜택 / 세션 제한 존재",
+      "quality": "Plus는 AI Image Agent 이미지 무제한 혜택. Pro는 Nano Banana Pro·Nano Banana 2의 4K와 GPT Image 2 High 품질 독점 접근을 명시합니다.",
+      "plans": [
+        {
+          "name": "Free",
+          "usd": 0,
+          "limit": "100크레딧/일",
+          "grade": "모델별 이미지 수·등급 할당 미공개",
+          "refs": [
+            "genspark-credits"
+          ]
+        },
+        {
+          "name": "Plus 시작",
+          "usd": 24.99,
+          "limit": "10,000크레딧/월 + AI Image 0크레딧 혜택",
+          "grade": "모델·세션 제한 적용",
+          "refs": [
+            "genspark-price",
+            "genspark-plans"
+          ]
+        },
+        {
+          "name": "Pro 시작",
+          "usd": 249.99,
+          "limit": "125,000크레딧/월 + AI Image 0크레딧 혜택",
+          "grade": "지정 모델 4K·GPT Image 2 High",
+          "refs": [
+            "genspark-price",
+            "genspark-plans"
+          ]
+        }
+      ],
+      "extra": "공식 가격 글: 추가 $20에 7,500크레딧, 3개월 유효. 월 구독 크레딧은 미이월. 상위 크레딧 티어도 존재합니다.",
+      "caution": "이미지 무제한 혜택은 2026-12-31까지 안내되어 있고 세션별 제한이 있습니다. 공식 가격 글은 5시간 창을 명시하며, 고정 이미지 장수는 미공개입니다.",
+      "adoption": "사용자 요청에 따라 포함한 멀티모델 AI 서비스. 생성 장수·활성 사용자 수를 별도 추정하지 않았습니다.",
+      "adoptionRefs": [],
+      "refs": [
+        "genspark-price",
+        "genspark-plans",
+        "genspark-credits"
+      ],
+      "lesson": "해석: 크레딧 총량과 이미지 무제한 혜택은 다른 조건입니다. 프로모션 종료 후 원가 구조까지 같다고 가정하면 안 됩니다.",
+      "quantityEvidence": {
+        "type": "개인 프로젝트 제작 실적",
+        "summary": "한 프로젝트에서 113장 제작 사례 · 일/월 최대 한도 아님",
+        "confidence": "제작 사례로는 참고 가능 / 한도 추정에는 낮음",
+        "cases": [
+          {
+            "value": "유료 월 구독으로 영상 1편에 쓸 이미지 113장 제작",
+            "condition": "작성자는 약 30장씩 나눠 진행했다고 설명. Nano Banana Pro/2를 언급하나 개별 출력별 모델·해상도·정확한 소요 시간은 불명.",
+            "date": "2026-03-05 제작 후기",
+            "refs": [
+              "genspark-observed-project"
+            ]
+          },
+          {
+            "value": "같은 작성자가 장시간 사용 중 5시간 제한 메시지 경험",
+            "condition": "113장을 5시간당 보장한다는 뜻이 아님. 공식 세션 제한과 함께 참고하며 고정 최대 장수로 환산하지 않음.",
+            "date": "같은 후기 + 현재 공식 정책",
+            "refs": [
+              "genspark-observed-project",
+              "genspark-plans"
+            ]
+          }
+        ],
+        "warning": "113장은 관측 제작량이지 무제한의 실측 상한이 아닙니다. 이미지 혜택의 기간·모델·해상도 조건도 확인해야 합니다."
+      }
+    }
+  ]
+}
