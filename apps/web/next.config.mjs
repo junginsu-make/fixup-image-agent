@@ -36,7 +36,12 @@ const nextConfig = {
             추적이 못 따라간다 — 안 적으면 **로컬에서는 되고 배포본에서만
             404** 가 된다. 파일 이름은 `lib/admin/cost-lab.ts` 가 들고 있다.
           */
-          "/admin/cost-lab": ["app/admin/cost-lab/lab.html"],
+          "/admin/cost-lab/doc/**": [
+            "app/admin/cost-lab/assets/*.html",
+            // 창 안은 다른 문서라 부모의 글꼴·토큰이 안 내려간다. 읽어서 넣는다.
+            "app/pretendard.css",
+            "../../packages/ui/src/styles/globals.css",
+          ],
         },
       }
     : {}),

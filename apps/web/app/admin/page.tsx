@@ -150,9 +150,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </p>
           </div>
           <Button asChild variant="secondary" size="sm">
-            <a href="/admin/cost-lab" target="_blank" rel="noreferrer">
-              열기
-            </a>
+            {/*
+              **같은 창에서 연다.** 이 화면도 시스템의 한 화면이라 사이드바와
+              머리말을 그대로 쓴다 — 새 창으로 띄우면 밖으로 나간 것처럼 된다.
+            */}
+            <Link href="/admin/cost-lab">열기</Link>
           </Button>
         </CardContent>
       </Card>
