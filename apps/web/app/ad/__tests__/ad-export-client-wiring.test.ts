@@ -34,8 +34,28 @@ describe("어디서 그림을 가져오는가", () => {
     expect(client).toMatch(/next\.source === "poster"\s*\?\s*await posterItemImages\(next\.id\)/);
   });
 
-  it("두 목록을 합쳐 보여 준다", () => {
-    expect(client).toContain("adSourceItems(library, posters)");
+  it("세 목록을 합쳐 보여 준다", () => {
+    expect(client).toContain("adSourceItems({");
+    for (const key of ["works: works ?? []", "references: references ?? []", "posters: posters ?? []"]) {
+      expect(client, key).toContain(key);
+    }
+  });
+
+  /**
+   * **`loadLibrary()` 를 안 쓴다.** 그 함수는 서버가 준 `mine` 과 `sourceType` 을
+   * 떨어뜨려, 누구 것인지와 캐릭터인지를 가릴 수 없게 만든다. 이 화면이 쓰는
+   * 세 곳만 직접 읽는다.
+   */
+  it("합쳐 주는 함수 대신 세 곳을 직접 읽는다", () => {
+    expect(client).not.toMatch(/loadLibrary\(\)/);
+    for (const url of ['"/api/library"', '"/api/reference-images"', '"/api/poster/projects"']) {
+      expect(client, url).toContain(url);
+    }
+  });
+
+  /** 참고 이미지는 한 줄이 곧 한 장이다. 변형 목록을 물을 곳이 없다. */
+  it("참고 이미지는 한 장으로 세운다", () => {
+    expect(client).toMatch(/next\.source === "reference"/);
   });
 });
 
@@ -86,11 +106,59 @@ describe("고른 그림이 없는 상태로 두지 않는다", () => {
   });
 
   /**
-   * `loadLibrary()` 가 거절하지 않는다는 사실은 **다른 파일에** 있다. 그
-   * 가정이 깨지는 날 이 화면이 「불러오는 중…」에 영원히 멈추지 않게 한다.
+   * 세 곳 중 하나가 죽어도 「불러오는 중…」에 영원히 멈추지 않는다. 셋 다
+   * 실패했을 때만 오류로 끝내고, 일부만 실패하면 **모자라다는 사실을 말한다** —
+   * 있어야 할 그림이 안 보이는데 이유를 모르는 것이 가장 나쁘다.
    */
   it("목록 적재가 실패해도 멈추지 않는다", () => {
-    expect(client).toMatch(/\.catch\(\(\) => setItems\(\[\]\)\)/);
+    // 세 요청이 각각 `catch` 로 `null` 이 되어야 한 곳이 죽어도 나머지가 뜬다.
+    // **`loadSources` 안만 본다** — 이 파일에는 다른 `catch` 도 있다.
+    const from = client.indexOf("const loadSources");
+    const to = client.indexOf("React.useEffect", from);
+    expect(from, "loadSources 를 찾았다").toBeGreaterThan(0);
+    const loader = client.slice(from, to);
+    expect(loader.match(/\.catch\(\(\) => null\)/g) ?? [], "세 곳 각각").toHaveLength(3);
+    expect(client).toContain("setItems([])");
+    expect(client).toContain("일부 목록을 불러오지 못했습니다");
+  });
+});
+
+describe("단계를 나눠 보여 준다", () => {
+  /** 다른 도구(`/poster`·`/sns`·`/create`·`/redesign`)와 같은 부품이다. */
+  it("진행 막대를 단다", () => {
+    expect(client).toContain("<StepBar steps={AD_STEPS}");
+  });
+
+  /**
+   * **어느 단계로든 자유롭게 간다**(운영자 요청 2026-09-11). `StepBar` 는
+   * `allowJump` 을 받으면 그것으로 막는다 — 이 화면은 넘기지 않아야 한다.
+   */
+  it("어느 단계로든 갈 수 있다", () => {
+    const from = client.indexOf("<StepBar");
+    const bar = client.slice(from, client.indexOf("/>", from));
+    expect(bar, "allowJump 을 넘기면 막힌다").not.toContain("allowJump");
+    expect(bar).toContain("onJump={setStep}");
+  });
+
+  it("한 단계씩 보여 준다", () => {
+    for (const id of ['step === "pick"', 'step === "portal"', 'step === "result"']) {
+      expect(client, id).toContain(id);
+    }
+  });
+
+  /** 고르고 나서 같은 자리에 머물면 「골랐는데 아무 일도 안 일어난다」가 된다. */
+  it("고르면 다음 단계로 넘긴다", () => {
+    expect(client).toContain('if (loaded.length > 0) setStep("portal")');
+    expect(client).toContain('setStep("result")');
+  });
+
+  /**
+   * 막대가 어느 단계로든 보내므로 **아직 안 뽑은 채 03 으로 뛰는 길**이 늘
+   * 열려 있다. 그때 빈 화면이면 고장 난 것처럼 보인다.
+   */
+  it("아직 뽑지 않았을 때도 03 이 비지 않는다", () => {
+    expect(client).toContain("{!results && (");
+    expect(client).toContain("아직 뽑은 것이 없습니다");
   });
 });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AD_SPECS } from "../../../lib/ad/specs";
 import { planDerivation } from "../../../lib/ad/derive";
 import {
-  defaultSelection, downloadable, excludedCount, exportableItems, isActualSize,
+  defaultSelection, downloadable, excludedCount, isActualSize, pickerKey,
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl, previewBackdrop,
   cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks, actionNotices,
@@ -255,30 +255,86 @@ describe("안전영역 띠가 실제로 그려지는가", () => {
   });
 });
 
-describe("고를 수 있는 작업만 보여 준다", () => {
-  const base = { title: "t", createdAt: 0 };
-  const items = [
-    { ...base, id: "a", tool: "pdp" as const, storage: "account" as const },
-    { ...base, id: "b", tool: "pdp" as const, storage: "browser" as const },
-    { ...base, id: "c", tool: "reference" as const, storage: "account" as const },
-    { ...base, id: "d", tool: "redesign" as const, storage: "account" as const },
+describe("고를 수 있는 것을 고르는 규칙", () => {
+  const works = [
+    { id: "W1", title: "가을 사진전", mine: true, sourceType: "generation", coverThumbUrl: "t1" },
+    { id: "W2", title: "남의 작업", mine: false, sourceType: "generation", coverThumbUrl: "t2" },
+    { id: "W3", title: "내 캐릭터", mine: true, sourceType: "character", coverThumbUrl: "t3" },
+    { id: "W4", title: "사본 없는 옛 작업", mine: true, sourceType: "generation" },
   ];
+  const references = [
+    { id: "R1", title: "내가 올린 본보기", mine: true, thumbUrl: "r1" },
+    { id: "R2", title: "남이 올린 본보기", mine: false, thumbUrl: "r2" },
+  ];
+  const posters = [
+    { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ variantIndex: 0 }] },
+    { id: "P2", title: "만드는 중", status: "generating", images: [] },
+    { id: "P3", title: "결과 없음", status: "done", images: [] },
+  ];
+  const all = () => adSourceItems({ works, references, posters });
+
+  it("셋을 함께 보여 준다 — 포스터가 먼저다", () => {
+    // 광고 마스터를 막 만들고 고르러 오는 길이다.
+    expect(all().map((item) => item.id)).toEqual(["P1", "W1", "W4", "R1"]);
+  });
 
   /**
-   * `/api/ad/export` 는 `library_images` 표만 읽는다. 브라우저 저장분은 **서버에
-   * 파일이 아예 없고**, 참고 이미지는 id 체계가 다르다. 걸러내지 않으면
-   * 사용자가 고를 수 있는데 누르면 「뽑지 못했습니다」만 뜬다.
+   * **목록과 내보내기의 범위가 다르다.**
+   *
+   * 목록(`read`)은 같은 팀 것과, 관리자에게는 전부를 싣는다. 내보내기(`export`)는
+   * **자기 것만이다 — 관리자도**(`lib/access/core.ts:66`). 그대로 실으면 고를
+   * 수는 있는데 누르면 실패하는 항목이 섞인다.
    */
-  it("브라우저에만 있는 작업을 뺀다 — 서버에 파일이 없다", () => {
-    expect(exportableItems(items).map((item) => item.id)).not.toContain("b");
+  it("남의 작업물은 안 싣는다 — 뽑을 수 없다", () => {
+    expect(all().map((item) => item.id)).not.toContain("W2");
   });
 
-  it("참고 이미지를 뺀다 — id 체계가 다르다", () => {
-    expect(exportableItems(items).map((item) => item.id)).not.toContain("c");
+  /** 참고 이미지는 공용 창고라 남이 올린 것도 목록에 온다. 뽑기는 자기 것만이다. */
+  it("남이 올린 참고 이미지도 안 싣는다", () => {
+    expect(all().map((item) => item.id)).not.toContain("R2");
   });
 
-  it("계정에 보관된 작업은 남긴다", () => {
-    expect(exportableItems(items).map((item) => item.id)).toEqual(["a", "d"]);
+  /** `mine` 을 안 보내는 길이 생기면 **빼는 쪽**으로 틀려야 한다. */
+  it("`mine` 이 없으면 뺀다", () => {
+    const items = adSourceItems({
+      works: [{ id: "X", title: "알 수 없음", sourceType: "generation" }],
+      references: [{ id: "Y", title: "알 수 없음" }],
+      posters: [],
+    });
+    expect(items).toEqual([]);
+  });
+
+  it("캐릭터는 뺀다", () => {
+    expect(all().map((item) => item.id)).not.toContain("W3");
+  });
+
+  it("결과가 없는 포스터는 안 보여 준다", () => {
+    const ids = all().map((item) => item.id);
+    expect(ids, "만드는 중이거나 결과가 없는 것은 고를 수 없다").not.toContain("P2");
+    expect(ids).not.toContain("P3");
+  });
+
+  /** 어느 쪽에서 왔는지가 실려야 라우트가 어느 표를 읽을지 안다. */
+  it("출처를 함께 싣는다", () => {
+    const byId = new Map(all().map((item) => [item.id, item.source]));
+    expect(byId.get("P1")).toBe("poster");
+    expect(byId.get("W1")).toBe("library");
+    expect(byId.get("R1")).toBe("reference");
+  });
+
+  it("사본이 없어도 고를 수는 있다", () => {
+    const old = all().find((item) => item.id === "W4")!;
+    expect(old.thumbnail, "옛 작업에는 작은 사본이 없다. 화면이 자리표시를 그린다").toBeUndefined();
+  });
+
+  /**
+   * 세 표의 id 가 겹치지 않는다는 보장이 없다. 겹치면 창에서 A 를 눌렀는데
+   * B 가 골라진다.
+   */
+  it("창에서 쓰는 열쇠에는 출처가 붙는다", () => {
+    expect(pickerKey({ source: "library", id: "same" })).not.toBe(
+      pickerKey({ source: "poster", id: "same" }),
+    );
   });
 });
 
@@ -460,50 +516,6 @@ describe("필수를 꺼 두면 알린다", () => {
   });
 });
 
-describe("어디서 그림을 고르는가", () => {
-  /**
-   * **3단계가 만드는 것은 라이브러리에 없다**(설계 §10 3-e). 광고 마스터는
-   * `poster_images` 에 쌓이는데 이 화면은 `library_images` 만 읽어서, 마스터를
-   * 만들고 여기 오면 **고를 그림이 하나도 없었다.** 로컬에서 켜 보고 알았다.
-   */
-  const library = [
-    { id: "L1", title: "가을 사진전", storage: "account", tool: "pdp" },
-    { id: "L2", title: "브라우저 초안", storage: "browser", tool: "pdp" },
-    { id: "L3", title: "참고", storage: "account", tool: "reference" },
-  ] as never[];
-  const posters = [
-    { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ variantIndex: 0 }] },
-    { id: "P2", title: "만드는 중", status: "generating", images: [] },
-    { id: "P3", title: "결과 없음", status: "done", images: [] },
-  ];
-
-  it("라이브러리와 포스터를 함께 보여 준다", () => {
-    const items = adSourceItems(library, posters);
-    expect(items.map((item) => item.id)).toEqual(["P1", "L1"]);
-  });
-
-  /** 광고 마스터가 최근 것이므로 위에 온다 — 만들자마자 고르러 온다. */
-  it("포스터를 먼저 세운다", () => {
-    expect(adSourceItems(library, posters)[0]!.source).toBe("poster");
-  });
-
-  it("서버에 그림이 없는 것은 안 보여 준다", () => {
-    const ids = adSourceItems([], posters).map((item) => item.id);
-    expect(ids, "만드는 중이거나 결과가 없는 것은 고를 수 없다").toEqual(["P1"]);
-  });
-
-  it("라이브러리 쪽 거르기는 그대로다", () => {
-    const ids = adSourceItems(library, []).map((item) => item.id);
-    expect(ids, "브라우저 저장분과 참고 이미지는 서버에 파일이 없다").toEqual(["L1"]);
-  });
-
-  /** 어느 쪽에서 왔는지가 실려야 라우트가 어느 표를 읽을지 안다. */
-  it("출처를 함께 싣는다", () => {
-    const items = adSourceItems(library, posters);
-    expect(items.find((item) => item.id === "L1")!.source).toBe("library");
-  });
-});
-
 describe("어느 그림을 뽑는가", () => {
   /**
    * **미리보기와 내보내기가 서로 다른 그림을 가리키고 있었다.**
@@ -579,26 +591,40 @@ describe("작업을 썸네일로 고른다", () => {
    * (`_components/library-picker.tsx`).
    */
   it("포스터는 첫 변형의 사본을 쓴다", () => {
-    const items = adSourceItems([], [
-      { id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] },
-    ]);
+    const items = adSourceItems({
+      works: [],
+      references: [],
+      posters: [{ id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] }],
+    });
     expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/2/file?size=thumb");
   });
 
-  it("라이브러리는 목록이 준 썸네일을 쓴다", () => {
-    const items = adSourceItems(
-      [{ id: "L1", title: "가을", storage: "account", tool: "pdp", thumbnail: "data:x" }] as never[],
-      [],
-    );
-    expect(items[0]!.thumbnail).toBe("data:x");
+  /** 목록 카드는 작은 사본을 먼저 쓴다. 원본은 2MB 를 넘어 격자에 못 깐다. */
+  it("작업물은 작은 사본을 먼저 쓴다", () => {
+    const items = adSourceItems({
+      works: [{ id: "L1", title: "가을", mine: true, coverThumbUrl: "thumb", coverUrl: "full" }],
+      references: [],
+      posters: [],
+    });
+    expect(items[0]!.thumbnail).toBe("thumb");
+  });
+
+  it("작은 사본이 없으면 원본으로 떨어진다", () => {
+    const items = adSourceItems({
+      works: [{ id: "L1", title: "가을", mine: true, coverUrl: "full" }],
+      references: [],
+      posters: [],
+    });
+    expect(items[0]!.thumbnail).toBe("full");
   });
 
   /** 없으면 없는 채로 둔다 — 화면이 자리표시를 그린다. */
   it("썸네일이 없어도 목록에서 빼지 않는다", () => {
-    const items = adSourceItems(
-      [{ id: "L1", title: "가을", storage: "account", tool: "pdp" }] as never[],
-      [],
-    );
+    const items = adSourceItems({
+      works: [{ id: "L1", title: "가을", mine: true }],
+      references: [],
+      posters: [],
+    });
     expect(items).toHaveLength(1);
     expect(items[0]!.thumbnail).toBeUndefined();
   });

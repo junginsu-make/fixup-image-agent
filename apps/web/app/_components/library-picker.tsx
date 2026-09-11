@@ -68,6 +68,9 @@ export function LibraryPickerButton({
   characters,
   onPickCharacter,
   label = "라이브러리에서 불러오기",
+  fit = "cover",
+  title = "라이브러리에서 불러오기",
+  description,
 }: {
   images: LibraryPickImage[];
   selectedIds: string[];
@@ -83,6 +86,18 @@ export function LibraryPickerButton({
   /** 라이브러리에서 아주 지운다. 안 넘기면 지우기 버튼이 안 나온다. */
   onDelete?(image: LibraryPickImage): void;
   label?: string;
+  /**
+   * 격자에 그림을 **채울지 담을지.**
+   *
+   * 기본은 `cover` — 참고 이미지는 정사각으로 잘라도 무엇인지 알아본다.
+   * 광고 마스터처럼 **가로가 긴 그림**(2:1·1.91:1)은 자르면 좌우가 날아가
+   * 「건강한 선택」이 「한 선택」이 된다. 어느 작업인지 보려고 보는 그림인데
+   * 알아볼 수가 없다. 그럴 때 `contain` 을 준다.
+   */
+  fit?: "cover" | "contain";
+  /** 창을 열고 닫을 때의 제목·설명. 쓰는 화면마다 고르는 것이 다르다. */
+  title?: string;
+  description?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const picked = new Set(selectedIds);
@@ -98,9 +113,9 @@ export function LibraryPickerButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>라이브러리에서 불러오기</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              올려 둔 그림 {images.length}장 · 눌러서 고르고 다시 눌러 뺍니다
+              {description ?? `올려 둔 그림 ${images.length}장 · 눌러서 고르고 다시 눌러 뺍니다`}
             </DialogDescription>
           </DialogHeader>
 
@@ -185,7 +200,14 @@ export function LibraryPickerButton({
                       <span className="relative block aspect-square overflow-hidden bg-muted">
                         {image.url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={image.url} alt="" className="h-full w-full object-cover" />
+                          <img
+                            src={image.url}
+                            alt=""
+                            className={cn(
+                              "h-full w-full",
+                              fit === "contain" ? "object-contain p-1" : "object-cover",
+                            )}
+                          />
                         ) : null}
                         {selected ? (
                           <span className="absolute left-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground">
