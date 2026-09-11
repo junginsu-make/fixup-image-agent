@@ -2,11 +2,13 @@ import { createSupabaseAdminClient } from "./supabase/admin";
 import { canSeeReference, referenceVisibility } from "./teams/reference-scope";
 import { canSeeOwnerEmails, canTouch } from "./access/core";
 import {
+  findLocalReferenceImage,
   getLocalDatabase,
   insertLocalReferenceImage,
   isLocalStoreEnabled,
   listLocalReferenceImages,
   localStoreRoot,
+  readLocalReferenceFile,
   removeLocalReferenceFiles,
   writeLocalReferenceFile,
 } from "./local-store";
@@ -128,6 +130,66 @@ export function localFileUrl(id: string): string {
  * 찰 것이므로, 넘치면 최신 것부터 잘린다. 검색이나 쪽 나누기는 화면 쪽에서
  * 필요해질 때 붙인다.
  */
+/**
+ * 참고 이미지 한 장의 바이트 — **올린 사람만.**
+ *
+ * 목록(`listReferenceImages`)과 범위가 **일부러 다르다.** 목록은 공용 창고라
+ * 팀이 안 붙은 것을 누구나 보고, 운영자는 전부 본다. 그런데 **가공해서
+ * 내려받는 것은 다른 일이다** — ZIP 은 서비스 밖으로 나가고 그 안에는 누구
+ * 것인지 안 적힌다. 저장소가 이미 같은 판단을 해 뒀다
+ * (`lib/access/core.ts:66` 「내보내기는 전체가 열린 사람도 자기 것만이다」).
+ *
+ * 그래서 **역할을 안 받는다.** 받으면 언젠가 「운영자는 예외」가 끼어든다.
+ * 올린 사람의 id 하나로만 판정한다.
+ */
+export async function getReferenceImageFile(
+  userId: string,
+  id: string,
+): Promise<{ bytes: Buffer; mimeType: string } | null> {
+  if (isLocalStoreEnabled()) {
+    const image = await findLocalReferenceImage(getLocalDatabase(), userId, id);
+    if (!image) return null;
+    try {
+      const bytes = await readLocalReferenceFile(localStoreRoot(), image.storagePath);
+      return { bytes: Buffer.from(bytes), mimeType: mimeFromPath(image.storagePath) };
+    } catch {
+      return null;
+    }
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("reference_images")
+    .select("storage_path,user_id")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .limit(1);
+  const row = (data as Array<{ storage_path?: string }> | null)?.[0];
+  if (error || !row?.storage_path) return null;
+
+  const file = await supabase.storage.from(BUCKET).download(row.storage_path);
+  if (file.error || !file.data) return null;
+  return {
+    bytes: Buffer.from(await file.data.arrayBuffer()),
+    mimeType: mimeFromPath(row.storage_path),
+  };
+}
+
+/**
+ * 경로 끝으로 형식을 정한다.
+ *
+ * **`mime_type` 칸을 안 믿는다** — 화면이 보낸 문자열이 그대로 들어올 수 있고,
+ * 그 값을 헤더로 흘리면 같은 출처에서 임의 문서가 열린다. 저장할 때 확장자를
+ * `EXTENSIONS` 로 정해 붙이므로 경로가 더 믿을 만하다.
+ */
+function mimeFromPath(path: string): string {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  for (const [mime, ext] of Object.entries(EXTENSIONS)) {
+    if (ext === extension) return mime;
+  }
+  return "application/octet-stream";
+}
+
 export async function listReferenceImages(viewer: ReferenceViewer): Promise<ReferenceImageView[]> {
   if (isLocalStoreEnabled()) {
     const images = await listLocalReferenceImages(getLocalDatabase(), viewer.userId);

@@ -1,6 +1,6 @@
 import type * as React from "react";
-import type { LibraryItem } from "@fixup/shared";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
+import { isCharacterReferenceTitle } from "../../lib/character-library";
 
 /**
  * 광고 규격 화면의 순수한 규칙들.
@@ -162,63 +162,104 @@ export function safeAreaOverlayStyle(
 }
 
 /**
- * 이 화면에서 고를 수 있는 작업만 남긴다.
+ * 이 화면이 읽는 **서버 라이브러리 한 줄.** `/api/library` 가 주는 칸 중 쓰는 것만.
  *
- * `loadLibrary()` 는 네 종류를 합쳐서 준다 — 브라우저에만 있는 pdp 초안·리디자인
- * 프로젝트, 계정 보관분, 스타일 참고. 그런데 `/api/ad/export` 는
- * `getLibraryImageFile` 로 **`library_images` 표만** 읽는다.
- *
- * 그래서 브라우저 저장분은 **서버에 파일이 아예 없고**, 참고 이미지는 id 체계가
- * 다르다. 걸러내지 않으면 사용자가 고를 수 있는데 누르면 「뽑지 못했습니다」만
- * 뜬다 — 왜 안 되는지 알 길이 없다.
+ * `loadLibrary()` 를 안 쓴다. 그 함수는 브라우저 저장분까지 합쳐 주는데 여기서는
+ * 전부 버려야 하고, 무엇보다 **`mine` 과 `sourceType` 을 떨어뜨린다** — 이 화면이
+ * 누구 것인지와 캐릭터인지를 가리는 데 꼭 필요한 두 값이다.
  */
-export function exportableItems(items: LibraryItem[]): LibraryItem[] {
-  return items.filter((item) => item.storage === "account" && item.tool !== "reference");
+export interface AdAccountWork {
+  id: string;
+  title: string;
+  /** `"character"` 면 캐릭터다. 서버가 `library_items.source_type` 으로 준다. */
+  sourceType?: string | null;
+  /** 내가 만든 것인가. **서버가 세션으로 정해서 보낸다** — 화면이 셈하지 않는다. */
+  mine?: boolean;
+  coverThumbUrl?: string | null;
+  coverUrl?: string | null;
+}
+
+/** 참고 이미지 한 줄 — `/api/reference-images` 가 주는 칸 중 쓰는 것만. */
+export interface AdReferenceImage {
+  id: string;
+  title?: string | null;
+  mine?: boolean;
+  thumbUrl?: string | null;
+  signedUrl?: string | null;
+}
+
+/** 포스터 작업 한 줄. */
+export interface AdPosterWork {
+  id: string;
+  title: string;
+  status: string;
+  images?: Array<{ variantIndex: number }>;
 }
 
 /**
- * 이 화면에서 고를 수 있는 것 — **라이브러리와 포스터 작업을 함께.**
+ * 이 화면에서 고를 수 있는 것 — **작업물 · 참고 이미지 · 포스터 작업.**
  *
- * 설계 §10 3-e. **3단계가 만드는 것은 라이브러리에 없다.** 광고 마스터는
- * `poster_images` 에 쌓이는데 이 화면은 `library_images` 만 읽어서, 마스터를
- * 만들고 여기 오면 **고를 그림이 하나도 없었다.** 로컬에서 실제로 켜 보고
- * 알았다 — 리뷰 넷이 전부 못 봤다. 양쪽이 각각은 맞았기 때문이다.
+ * 캐릭터는 뺀다(운영자 요청 2026-09-11). 캐릭터는 각도 넉 장이 한 덩어리로
+ * 쓰이는 것이라 광고 한 장을 뽑는 자리와 결이 다르다.
  *
- * **`loadLibrary()` 를 안 고친다.** 그 함수를 보는 화면이 넷이라(`/ad`·라이브러리·
- * 카드뉴스 레이아웃·캐릭터), 거기에 포스터를 더하면 광고와 무관한 세 화면이
- * 함께 바뀐다.
+ * ── **남의 것은 안 싣는다** ─────────────────────────────────────────
+ * 목록과 내보내기의 범위가 **원래 다르다.**
  *
- * **포스터를 먼저 세운다.** 광고 마스터를 막 만들고 고르러 오는 길이다.
+ *   목록(`read`)       내 것 + 같은 팀 것 + 관리자는 전부
+ *   참고 이미지        팀이 안 붙은 것은 **누구나** (공용 창고)
+ *   내보내기(`export`) **자기 것만. 관리자도.** (`lib/access/core.ts:66`)
+ *
+ * 그래서 목록을 그대로 실으면 **고를 수는 있는데 누르면 실패하는 항목**이
+ * 섞인다. `server-library.ts` 가 이 화면을 짚어 그 위험을 이미 적어 뒀다 —
+ * 「`/ad` 목록은 전체가 열린 사람에게 남의 것도 싣는데 화면이 소유자를 안
+ * 보여 준다 — 본인도 남의 것인 줄 모른 채 뽑는다」.
+ *
+ * 뽑을 수 있는 것만 보여 주는 쪽으로 맞춘다. ZIP 은 서비스 밖으로 나가고 그
+ * 안에는 누구 것인지 안 적힌다.
+ *
+ * **`mine` 은 서버가 준 값만 믿는다.** 화면에서 사용자 id 를 비교하지 않는다 —
+ * 그러면 그 비교가 틀리는 날 남의 것이 새어 나간다.
  */
 export interface AdSourceItem {
   id: string;
   title: string;
   /** 라우트가 어느 표를 읽을지 정한다. */
-  source: "library" | "poster";
+  source: "library" | "poster" | "reference";
   /**
    * 목록에 그릴 작은 그림.
    *
    * **글자만으로는 못 고른다.** 광고 모드는 한 번 누를 때 마스터마다 프로젝트를
    * 만들어 작업이 배로 쌓이고, 제목도 「가을 사진전 (1200×1200)」처럼 길어진다.
-   * 이 저장소는 그림 고르는 자리를 전부 썸네일 격자로 만든다
-   * (`_components/library-picker.tsx`).
    *
    * 없을 수 있다 — 옛 작업에는 사본이 없다. 화면이 자리표시를 그린다.
    */
   thumbnail?: string;
 }
 
-export function adSourceItems(
-  library: LibraryItem[],
-  posters: Array<{ id: string; title: string; status: string; images?: Array<{ variantIndex: number }> }>,
-): AdSourceItem[] {
-  const fromPoster = posters
-    // **결과가 없는 것은 안 보여 준다.** 만드는 중이거나 실패한 작업을 고르면
-    // 「뽑지 못했습니다」만 돌아온다 — 왜 안 되는지 알 길이 없다.
+/** 내가 만든 것만. 서버가 `mine` 을 안 보내는 길이 생기면 **빼는 쪽**으로 틀린다. */
+function onlyMine<T extends { mine?: boolean }>(rows: T[]): T[] {
+  return rows.filter((row) => row.mine === true);
+}
+
+export function adSourceItems(input: {
+  works: AdAccountWork[];
+  references: AdReferenceImage[];
+  posters: AdPosterWork[];
+}): AdSourceItem[] {
+  /**
+   * **포스터를 먼저 세운다.** 광고 마스터를 막 만들고 고르러 오는 길이다.
+   *
+   * 결과가 없는 것은 안 보여 준다 — 만드는 중이거나 실패한 작업을 고르면
+   * 「뽑지 못했습니다」만 돌아온다.
+   *
+   * 포스터는 `mine` 을 안 본다. `/api/poster/projects` 가 세션 사용자 것만
+   * 주기 때문이다(`posterStoresForUser`).
+   */
+  const fromPoster = input.posters
     .filter((project) => (project.images?.length ?? 0) > 0)
     .map((project) => {
       // 첫 변형의 사본을 쓴다. 원본은 2MB 를 넘어 목록에 깔 수 없다.
-      const first = project.images?.[0] as { variantIndex: number } | undefined;
+      const first = project.images?.[0];
       return {
         id: project.id,
         title: project.title || "제목 없음",
@@ -229,15 +270,55 @@ export function adSourceItems(
       };
     });
 
-  const fromLibrary = exportableItems(library).map((item) => ({
-    id: item.id,
-    title: item.title || "제목 없음",
-    source: "library" as const,
-    ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
+  const fromWorks = onlyMine(input.works)
+    // 캐릭터는 이 화면이 다루지 않는다.
+    .filter((work) => work.sourceType !== "character")
+    .map((work) => ({
+      id: work.id,
+      title: work.title || "제목 없음",
+      source: "library" as const,
+      ...(work.coverThumbUrl || work.coverUrl
+        ? { thumbnail: (work.coverThumbUrl || work.coverUrl) as string }
+        : {}),
+    }));
+
+  const fromReferences = onlyMine(input.references)
+    /*
+      **캐릭터도 여기로 들어온다.** 요즘 캐릭터는 `library_items` 가 아니라
+      참고 이미지 쪽에 **각도마다 한 줄씩** 「이름 (캐릭터) · 정면」으로 쌓인다
+      (`lib/character-library.ts`). `source_type = "character"` 로 찍히는 것은
+      옛 줄뿐이라, 작업물만 걸러서는 캐릭터가 그대로 목록에 뜬다.
+    */
+    .filter((reference) => !isCharacterReferenceTitle(reference.title))
+    .map((reference) => ({
+    id: reference.id,
+    title: reference.title || "참고 이미지",
+    source: "reference" as const,
+    ...(reference.thumbUrl || reference.signedUrl
+      ? { thumbnail: (reference.thumbUrl || reference.signedUrl) as string }
+      : {}),
   }));
 
-  return [...fromPoster, ...fromLibrary];
+  return [...fromPoster, ...fromWorks, ...fromReferences];
 }
+
+/**
+ * 고르는 창에서 쓸 **한 줄짜리 열쇠.**
+ *
+ * 작업물·참고 이미지·포스터가 한 창에 섞이는데, 셋은 각각 다른 표의 id 다.
+ * **겹치지 않는다는 보장이 없다** — 겹치면 창에서 A 를 눌렀는데 B 가 골라진다.
+ * 출처를 붙여 한 값으로 만든다.
+ */
+export function pickerKey(item: { source: AdSourceItem["source"]; id: string }): string {
+  return `${item.source}:${item.id}`;
+}
+
+/** 어디서 온 그림인지 한 낱말로. 고른 뒤에 무엇을 골랐는지 알려 준다. */
+export const SOURCE_LABEL: Record<AdSourceItem["source"], string> = {
+  library: "작업물",
+  poster: "광고 마스터",
+  reference: "참고 이미지",
+};
 
 /**
  * 미리보기 한 장 — **어느 그림인지와 어떻게 부를지를 함께 든다.**
@@ -453,7 +534,10 @@ export function itemFromQuery(
   items: AdSourceItem[],
   query: { source: string | null; id: string | null },
 ): AdSourceItem | null {
-  if (!query.id || (query.source !== "poster" && query.source !== "library")) return null;
+  if (!query.id) return null;
+  if (query.source !== "poster" && query.source !== "library" && query.source !== "reference") {
+    return null;
+  }
   return items.find((item) => item.source === query.source && item.id === query.id) ?? null;
 }
 

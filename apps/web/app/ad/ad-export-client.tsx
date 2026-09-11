@@ -5,15 +5,18 @@ import Link from "next/link";
 import { AlertTriangle, Download, ImageIcon, Loader2 } from "lucide-react";
 import { ActionNotices } from "./action-notices";
 import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn,
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StepBar, cn,
 } from "@fixup/ui";
 import type { LibraryItem } from "@fixup/shared";
-import { loadLibrary, getAccountItemImages } from "../../lib/library";
+import { getAccountItemImages } from "../../lib/library";
+import { LibraryPickerButton } from "../_components/library-picker";
+import { AD_STEPS } from "./steps";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
 import type { AdSpec } from "../../lib/ad/specs";
 import {
-  AD_PORTALS, PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, actionNotices, adSourceItems,
+  AD_PORTALS, PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, SOURCE_LABEL, actionNotices, adSourceItems, pickerKey,
+  type AdAccountWork, type AdPosterWork, type AdReferenceImage,
   bytesFromDataUrl, downloadable, excludedCount, failureMessage, isActualSize, itemFromQuery,
   positionFromQuery, rowsForPortals, startingPosition, togglePortal,
   missingRequiredCount, previewBackdrop, previewWidth,
@@ -45,8 +48,6 @@ import {
  */
 type ResultEntry = Omit<AdBatchEntry, "bytes"> & { dataUrl?: string };
 
-type PosterWork = { id: string; title: string; status: string; images?: Array<{ variantIndex: number }> };
-
 /**
  * 포스터 작업의 그림 목록.
  *
@@ -62,6 +63,14 @@ async function posterItemImages(projectId: string): Promise<AdImagePick[]> {
 const ROWS = specRows(planDerivation);
 
 export function AdExportClient() {
+  /**
+   * 지금 보고 있는 단계.
+   *
+   * **어느 단계로든 자유롭게 간다**(운영자 요청 2026-09-11). `StepBar` 에
+   * `allowJump` 을 안 넘기면 그렇게 된다 — 이 화면은 새로 만들지 않아서
+   * 「아직 없는 단계」가 없고, 되돌아가 다른 그림을 고르는 일이 잦다.
+   */
+  const [step, setStep] = React.useState<string>("pick");
   const [items, setItems] = React.useState<AdSourceItem[] | null>(null);
   const [item, setItem] = React.useState<AdSourceItem | null>(null);
   const [images, setImages] = React.useState<AdImagePick[] | null>(null);
@@ -131,79 +140,84 @@ export function AdExportClient() {
     return () => observer.disconnect();
   }, [results]);
 
-  React.useEffect(() => {
-    // 이 화면에서 못 뽑는 작업은 아예 안 보여 준다 — 고를 수 있는데 누르면
-    // 「뽑지 못했습니다」만 뜨는 것이 가장 나쁘다.
-    // **실패해도 「불러오는 중…」에 머물지 않는다.** `catch` 가 없으면 화면이
-    /**
-     * **포스터 작업도 함께 읽는다**(설계 §10 3-e).
-     *
-     * 광고 모드가 만드는 마스터는 `poster_images` 에 쌓이고 라이브러리에는
-     * 안 들어간다. 이것을 안 읽으면 마스터를 만들고 여기 와도 **고를 그림이
-     * 하나도 없다.** 리뷰 넷이 못 봤고 실제로 켜 보고 알았다.
-     *
-     * **실패와 「없음」을 가른다.** 초판은 둘을 뭉쳐 「보관된 작업이
-     * 없습니다. 라이브러리에서 먼저 저장해 주세요」를 띄웠다 — 서버가 죽어
-     * 있어도 그 문장이 나오고, 저장하러 가도 아무 일이 안 일어난다.
-     *
-     * `loadLibrary()` 쪽은 **가를 수 없다.** 그것이 부르는 네 함수가 전부
-     * `catch { return [] }` 로 끝나 거절하지 않는다(`lib/library.ts:38,133,163`).
-     * 그래서 거기에 걸어 뒀던 `catch` 와 오류 문구는 **닿지 않는 코드였다.**
-     * 지웠다 — 있는데 안 도는 방어는 다음 사람이 있다고 믿는다.
-     */
-    void Promise.all([
-      loadLibrary(),
-      fetch("/api/poster/projects", { cache: "no-store" })
-        .then((response) => response.json())
-        .then((body) => {
-          if (!body?.ok) throw new Error("포스터 목록을 읽지 못했습니다.");
-          return body.projects as PosterWork[];
-        })
-        .catch(() => {
-          // 이쪽은 가를 수 있다. 광고 마스터가 안 보이는 것이 이 화면에서
-          // 가장 나쁜 실패이므로, 조용히 빈 목록으로 넘기지 않는다.
-          setError("만든 작업 목록을 불러오지 못했습니다. 새로고침해 주세요.");
-          return [] as PosterWork[];
-        }),
-    ])
-      .then(([library, posters]) => {
-        const list = adSourceItems(library, posters);
-        setItems(list);
-        /**
-         * **결과 화면에서 넘어온 그림을 골라 준다**(설계 §1 ②).
-         *
-         * 목록을 받은 **뒤에** 판단한다 — 주소만 보고 고르면 그 그림이 실제로
-         * 이 사람 것인지 모른 채 뽑기 버튼이 켜진다.
-         *
-         * `useSearchParams` 를 안 쓴다. 이 화면은 `force-dynamic` 이지만 그 훅은
-         * Suspense 경계를 요구해서, 이 한 줄 때문에 화면을 감싸게 된다.
-         * 어차피 목록을 받은 뒤에만 쓰므로 여기서 주소를 읽는다.
-         *
-         * **못 찾으면 아무 일도 안 한다.** 남의 id·지워진 id 가 와도 화면은
-         * 지금처럼 목록을 보여 준다.
-         */
-        const query = new URLSearchParams(window.location.search);
-        const wanted = itemFromQuery(list, {
-          source: query.get("source"),
-          id: query.get("id"),
-        });
-        // **`chooseItem` 을 거친다.** `setItem` 만 하면 그림 목록을 안 불러와
-        // 「고를 변형이 없는」 화면이 된다.
-        if (wanted) void chooseItem(wanted, positionFromQuery(query.get("position")));
-      })
-      /**
-       * **가정이 깨지는 날을 대비해 상태만 풀어 준다.**
-       *
-       * 지금 `loadLibrary()` 는 거절하지 않는다 — 그것이 부르는 넷이 전부
-       * `catch { return [] }` 다. 문제는 **그 사실이 다른 파일에 있다**는
-       * 점이다. `lib/library.ts` 는 화면 넷이 함께 쓰고, 거기서 `catch` 하나가
-       * 빠지는 날 이 화면은 「불러오는 중…」에 **영원히 멈춘다.**
-       *
-       * 문구는 안 붙인다 — 지금은 닿지 않는 길이라 거짓 안내가 된다.
-       * 목록을 비워 「보관된 작업이 없습니다」로 끝내면 최소한 멈추지는 않는다.
-       */
-      .catch(() => setItems([]));
+  /**
+   * 고를 수 있는 것을 모은다 — **작업물 · 참고 이미지 · 포스터 작업.**
+   *
+   * **`loadLibrary()` 를 안 쓴다.** 그 함수는 브라우저 저장분까지 합쳐 주는데
+   * 여기서는 전부 버려야 하고, 무엇보다 서버가 준 **`mine` 과 `sourceType` 을
+   * 떨어뜨린다** — 누구 것인지와 캐릭터인지를 가릴 수 없게 된다. 이 화면이
+   * 쓰는 세 곳만 직접 읽는다.
+   *
+   * **셋을 각각 가른다.** 하나가 죽어도 나머지는 보여 준다. 전부 실패했을
+   * 때만 「불러오지 못했습니다」다 — 참고 이미지 서버 하나 때문에 내 작업물이
+   * 안 보이면 안 된다.
+   */
+  const loadSources = React.useCallback(async () => {
+    setItems(null);
+    setError(null);
+
+    const readJson = async (url: string) => {
+      const response = await fetch(url, { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok || !body?.ok) throw new Error(url);
+      return body as Record<string, unknown>;
+    };
+
+    const [works, references, posters] = await Promise.all([
+      readJson("/api/library")
+        .then((body) => (body.items ?? []) as AdAccountWork[])
+        .catch(() => null),
+      readJson("/api/reference-images")
+        .then((body) => (body.images ?? []) as AdReferenceImage[])
+        .catch(() => null),
+      readJson("/api/poster/projects")
+        .then((body) => (body.projects ?? []) as AdPosterWork[])
+        .catch(() => null),
+    ]);
+
+    if (works === null && references === null && posters === null) {
+      setError("만든 작업 목록을 불러오지 못했습니다. 새로고침해 주세요.");
+      setItems([]);
+      return;
+    }
+    if (works === null || posters === null) {
+      // 일부만 실패했다. 목록은 보여 주되 **모자라다는 사실을 숨기지 않는다** —
+      // 있어야 할 그림이 안 보이는데 이유를 모르는 것이 가장 나쁘다.
+      setError("일부 목록을 불러오지 못했습니다. 찾는 그림이 없으면 새로고침해 주세요.");
+    }
+
+    const list = adSourceItems({
+      works: works ?? [],
+      references: references ?? [],
+      posters: posters ?? [],
+    });
+    setItems(list);
+    return list;
   }, []);
+
+  React.useEffect(() => {
+    void loadSources().then((list) => {
+      if (!list) return;
+      /**
+       * **결과 화면에서 넘어온 그림을 골라 준다**(설계 §1 ②).
+       *
+       * 목록을 받은 **뒤에** 판단한다 — 주소만 보고 고르면 그 그림이 실제로
+       * 이 사람 것인지 모른 채 뽑기 버튼이 켜진다.
+       *
+       * **못 찾으면 아무 일도 안 한다.** 남의 id·지워진 id 가 와도 화면은
+       * 지금처럼 목록을 보여 준다.
+       */
+      const query = new URLSearchParams(window.location.search);
+      const wanted = itemFromQuery(list, {
+        source: query.get("source"),
+        id: query.get("id"),
+      });
+      // **`chooseItem` 을 거친다.** `setItem` 만 하면 그림 목록을 안 불러와
+      // 「고를 변형이 없는」 화면이 된다.
+      if (wanted) void chooseItem(wanted, positionFromQuery(query.get("position")));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadSources]);
 
   async function chooseItem(next: AdSourceItem, preferred: number | null = null) {
     const mine = (token.current += 1);
@@ -213,11 +227,20 @@ export function AdExportClient() {
     setResults(null);
     setError(null);
     try {
+      /*
+        **참고 이미지는 한 장짜리다.** 작업물처럼 변형 목록을 물을 곳이 없다 —
+        `reference_images` 는 한 줄이 곧 한 장이다. 목록에서 이미 주소를 받아
+        왔으므로 그것으로 한 장을 세운다. 서버 번호는 0 이다.
+      */
       const loaded = next.source === "poster"
         ? await posterItemImages(next.id)
-        : libraryImagePicks((await getAccountItemImages(
-          { id: next.id, title: next.title } as LibraryItem,
-        ))?.images ?? []);
+        : next.source === "reference"
+          ? (next.thumbnail
+            ? [{ image: next.thumbnail, sectionName: next.title, position: 0 }]
+            : [])
+          : libraryImagePicks((await getAccountItemImages(
+            { id: next.id, title: next.title } as LibraryItem,
+          ))?.images ?? []);
       if (mine !== token.current) return;
       setImages(loaded);
       /**
@@ -230,6 +253,15 @@ export function AdExportClient() {
        */
       // 주소가 가리킨 변형이 실재하면 그것으로 시작한다(설계 §1 ②).
       setPosition(startingPosition(loaded, preferred));
+      /*
+        **고르면 다음 단계로 넘긴다.** 한 단계씩 보이는 화면에서는 고른 뒤에도
+        같은 자리에 머물면 「골랐는데 아무 일도 안 일어난다」가 된다. 되돌아가
+        다른 그림을 고르는 길은 막대에 늘 열려 있다.
+
+        그림이 하나도 안 딸려 온 작업은 넘기지 않는다 — 넘겨 봐야 02 에서
+        뽑기가 안 눌린다.
+      */
+      if (loaded.length > 0) setStep("portal");
     } catch {
       // 여기서도 삼키면 썸네일 줄이 영영 안 나타난다.
       if (mine !== token.current) return;
@@ -258,6 +290,8 @@ export function AdExportClient() {
         return;
       }
       setResults(body.results as ResultEntry[]);
+      // 결과는 03 에 그려진다. 뽑아 놓고 안 보여 주면 안 된다.
+      setStep("result");
     } catch {
       if (mine === token.current) setError("서버에 닿지 못했습니다.");
     } finally {
@@ -334,6 +368,13 @@ export function AdExportClient() {
           만들어 둔 그림 한 장에서 포털 광고 규격을 뽑습니다. 새로 만들지 않으므로 비용이 들지 않습니다.
         </p>
       </header>
+      {/*
+        **진행 막대.** 다른 도구(`/poster`·`/sns`·`/create`·`/redesign`)와 같은
+        부품이다. `allowJump` 을 안 넘겨 **어느 단계로든 자유롭게** 간다.
+      */}
+      <StepBar steps={AD_STEPS} current={step} onJump={setStep} />
+
+      {step === "pick" ? (
 
       <Card>
         <CardHeader>
@@ -374,44 +415,57 @@ export function AdExportClient() {
           </Card>
         ) : (
           /*
-            **글자만으로는 못 고른다.** 광고 모드는 마스터마다 프로젝트를 만들어
-            작업이 배로 쌓이고 제목도 「… (1200×1200)」처럼 길다.
-            `_components/library-picker.tsx` 와 같은 격자다.
+            **다른 화면과 같은 창을 쓴다**(운영자 요청 2026-09-11).
+
+            전에는 이 화면만 격자를 페이지에 통째로 깔았다. 저장소의 다른 아홉
+            화면은 `_components/library-picker.tsx` 한 부품으로 창을 띄운다 —
+            같은 시스템에서 그림 고르는 방식이 화면마다 다르면 매번 다시 배운다.
+
+            **캐릭터를 안 넘긴다.** 그 부품은 `characters` 를 받아야 캐릭터 칸을
+            그린다. 안 넘기면 칸 자체가 안 나온다.
+
+            **`contain` 이다.** 여기 놓이는 것은 광고 마스터라 가로가 길다
+            (2:1·1.91:1). 정사각으로 자르면 좌우가 날아가 어느 작업인지 못
+            알아본다.
+
+            **`id` 에 출처를 붙인다.** 작업물·참고 이미지·포스터가 한 창에
+            섞이는데 세 표의 id 가 겹치지 않는다는 보장이 없다. 겹치면 엉뚱한
+            그림이 골라진다.
           */
-          <div className="grid max-h-[60vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3 lg:grid-cols-4">
-            {items.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                aria-pressed={item?.id === entry.id}
-                aria-label={`${entry.title} 고르기`}
-                disabled={busy}
-                onClick={() => void chooseItem(entry)}
-                className={cn(
-                  "block w-full overflow-hidden rounded-lg border-2 text-left transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "disabled:opacity-50",
-                  item?.id === entry.id ? "border-primary" : "border-transparent hover:border-border",
-                )}
-              >
-                {/*
-                  **`object-cover` 가 아니라 `contain` 이다.** 참고 이미지를 고르는
-                  `library-picker` 는 `cover` 가 맞지만, 여기 놓이는 것은 **광고
-                  마스터**라 2:1·1.91:1 처럼 가로가 길다. 정사각으로 자르면 좌우가
-                  날아가 「건강한 선택」이 「한 선택」이 된다 — 어느 작업인지
-                  알아보려고 보는 그림인데 알아볼 수가 없다.
-                */}
-                <span className="grid aspect-square place-items-center overflow-hidden bg-muted p-1">
-                  {entry.thumbnail ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={entry.thumbnail} alt="" className="max-h-full max-w-full object-contain" />
-                  ) : (
-                    <ImageIcon className="size-6 text-muted-foreground" />
-                  )}
-                </span>
-                <span className="block truncate px-2 py-2 text-xs">{entry.title}</span>
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <LibraryPickerButton
+              label="라이브러리에서 고르기"
+              title="라이브러리에서 고르기"
+              description={`고를 수 있는 그림 ${items.length}장 · 눌러서 고릅니다`}
+              fit="contain"
+              images={items.map((entry) => ({
+                id: pickerKey(entry),
+                title: entry.title,
+                url: entry.thumbnail ?? null,
+              }))}
+              selectedIds={item ? [pickerKey(item)] : []}
+              loading={busy}
+              onReload={() => void loadSources()}
+              /*
+                고르면 `chooseItem` 이 02 로 넘기고, 그러면 이 카드가 통째로
+                사라지면서 **창도 함께 닫힌다.** 따로 닫는 코드가 없는 것이
+                빠뜨린 것이 아니라 이 구조의 결과다.
+              */
+              onToggle={(picked) => {
+                const found = items.find((entry) => pickerKey(entry) === picked.id);
+                // 이미 고른 것을 다시 누르면 그대로 둔다. 이 화면은 한 장만
+                // 쓰므로 「빼기」가 할 일이 없다 — 비우면 02·03 이 닫힌다.
+                if (found && found.id !== item?.id) void chooseItem(found);
+              }}
+            />
+            {item ? (
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="truncate font-bold">{item.title}</span>
+                <Badge variant="secondary">{SOURCE_LABEL[item.source]}</Badge>
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">아직 고르지 않았습니다.</span>
+            )}
           </div>
         )}
 
@@ -451,7 +505,9 @@ export function AdExportClient() {
         )}
         </CardContent>
       </Card>
+      ) : null}
 
+      {step === "portal" ? (
       <Card>
         <CardHeader className="flex-row items-baseline justify-between space-y-0">
           <div className="grid gap-1.5">
@@ -581,6 +637,31 @@ export function AdExportClient() {
         )}
         </CardContent>
       </Card>
+      ) : null}
+
+      {step === "result" ? (
+        <>
+      {/*
+        **빈 화면으로 두지 않는다.** 단계 막대가 어느 단계로든 보내 주므로,
+        아직 안 뽑은 채 03 으로 뛰는 길이 늘 열려 있다. 그때 아무것도 안 그리면
+        화면이 고장 난 것처럼 보인다 — 실제로 그랬다(2026-09-11 실측).
+      */}
+      {!results && (
+        <Card className="grid place-items-center gap-3 py-14 text-center">
+          <ImageIcon className="size-8 text-muted-foreground" />
+          <div className="grid gap-1.5">
+            <p className="text-sm font-bold">아직 뽑은 것이 없습니다</p>
+            <p className="text-sm text-muted-foreground">
+              {item
+                ? "02 에서 포털을 고르고 「뽑아 보기」를 누르면 여기에 나옵니다."
+                : "01 에서 그림을 먼저 고르세요."}
+            </p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setStep(item ? "portal" : "pick")}>
+            {item ? "02 로 가기" : "01 로 가기"}
+          </Button>
+        </Card>
+      )}
 
       {results && (
         <Card>
@@ -741,6 +822,8 @@ export function AdExportClient() {
         </CardContent>
         </Card>
       )}
+        </>
+      ) : null}
     </div>
   );
 }

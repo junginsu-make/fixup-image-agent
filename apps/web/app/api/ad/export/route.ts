@@ -4,6 +4,7 @@ import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-g
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
 import { markAsAi } from "../../../../lib/watermark";
 import { getLibraryImageFile } from "../../../../lib/server-library";
+import { getReferenceImageFile } from "../../../../lib/reference-images";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
@@ -57,7 +58,7 @@ const RequestSchema = z.object({
    *
    * 기본값이 `library` 라 **2단계 사용자는 안 깨진다** — 안 보내면 지금까지의 길이다.
    */
-  source: z.enum(["library", "poster"]).default("library"),
+  source: z.enum(["library", "poster", "reference"]).default("library"),
 }).strict();
 
 /**
@@ -134,9 +135,19 @@ export async function POST(request: Request) {
   }
 
   try {
+    /*
+      **참고 이미지는 올린 사람만 뽑는다.** 목록은 공용 창고라 팀이 안 붙은
+      것을 누구나 보지만, 가공해서 내려받는 것은 다른 일이다 — 라이브러리
+      작업물에 이미 같은 규칙(`"export"`)이 걸려 있다.
+
+      `getReferenceImageFile` 이 역할을 아예 안 받는다. 여기서 넘길 것이 없어야
+      언젠가 「운영자는 예외」가 끼어들지 않는다.
+    */
     const file = parsed.data.source === "poster"
       ? await posterImageFile(auth.member.userId, parsed.data.itemId, parsed.data.position)
-      : await getLibraryImageFile(
+      : parsed.data.source === "reference"
+        ? await getReferenceImageFile(auth.member.userId, parsed.data.itemId)
+        : await getLibraryImageFile(
         { userId: auth.member.userId, role: auth.member.profile.role },
         parsed.data.itemId,
         parsed.data.position,
