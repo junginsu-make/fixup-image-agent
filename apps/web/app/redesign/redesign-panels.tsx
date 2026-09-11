@@ -1,33 +1,47 @@
+/*
+ * ("use client" 를 두지 않는다 — 이 파일은 화면 진입점이 아니라 그 아래다.
+ * 진입점이 선언하면 아래로 다 퍼지는데, 여기서 또 선언하면 Next 가 이 파일도
+ * 진입점으로 보고 함수 props 마다 「직렬화되어야 한다」고 경고한다.)
+ */
 /**
  * 리디자인의 앞 두 화면 — 지난 작업 목록과 작업대.
  *
  * 화면 파일이 2,589줄이었다. 규칙은 최대 800줄이다. **동작은 그대로 두고 자리만 옮겼다.**
  */
-"use client";
 
 import * as React from "react";
 import {
-  ChevronLeft, ChevronRight, CircleHelp, Download, FileImage, FileText,
-  Image as ImageIcon, Library as LibraryIcon, Loader2, RefreshCw, Sparkles, Trash2, Upload,
+  CircleHelp,
+  FileImage,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Sparkles,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-  Input, StepBar, Textarea, cn, type StepDefinition,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Textarea,
+  cn,
 } from "@fixup/ui";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { SavedImagePicker } from "../create/SavedImagePicker";
-import { SaveImagesToLibrary } from "../_components/save-to-library";
-import { copyText } from "../../lib/browser-safe";
-import {
-  MAX_REFERENCE_IMAGES, REDESIGN_STEPS, baseSections, commerceTips, models,
-  type GenerationPlan, type GenerationProgress, type GenerationSummary,
-  type KnowledgeItem, type Model, type Project, type SectionResult, type ServerConfig, type View,
-} from "./redesign-model";
+import { MAX_REFERENCE_IMAGES, models, type Model, type Project, type ServerConfig } from "./redesign-model";
 import { buildImageFileName, downloadDataUrl, imageExtension } from "./redesign-files";
 import { ensureSectionRevisions, projectDisplayTitle, sectionSortNumber } from "./redesign-project";
-import { isDemoProject } from "./redesign-storage";
-import { MiniThumb, OptionGroup, PlaceholderThumb, Stat, Topbar } from "./redesign-bits";
+import { MiniThumb, OptionGroup, Stat, Topbar } from "./redesign-bits";
 export function Dashboard({
   projects,
   onNew,
@@ -35,7 +49,7 @@ export function Dashboard({
   onDeleteProject,
   onKnowledge,
   knowledgeCount,
-  serverConfig
+  serverConfig,
 }: {
   projects: Project[];
   onNew: () => void;
@@ -201,7 +215,6 @@ export function Workspace(props: {
     setRequest,
     inputRef,
     knowledgeCount,
-    serverConfig,
     useSharedKnowledge,
     setUseSharedKnowledge,
     generating,

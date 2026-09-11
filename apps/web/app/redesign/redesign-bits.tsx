@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import { Badge, Button, Card, CardContent, cn } from "@fixup/ui";
+import { cn } from "@fixup/ui";
 export function Topbar({ eyebrow, title, children }: { eyebrow: string; title?: string; children: React.ReactNode }) {
   return (
     <div className="mb-5 flex items-start justify-between gap-4 max-md:flex-col">
