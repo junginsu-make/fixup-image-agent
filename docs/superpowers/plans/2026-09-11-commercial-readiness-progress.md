@@ -14,11 +14,15 @@
 | 5 동기/LLM | 구현 및 단계 검증: LLM/PDP/리디자인/캐릭터 연결, 비공개 결과·입력 보존, 저장 fence | 웹 전체 1957시험, DB 전체 37시험 후 계약 시험 추가 통과; 운영 통합 검증은 후속 단계 | 미적용 |
 | 6 운영 처리기 | 실행기·timer·journal 복구·운영자 비용 대조·배포 점검 구현 | 전체 웹 1975시험, DB/배포 helper 49시험, 타입·lint 통과; 실제 systemd·배포 검증은 단계 8 | 미적용 |
 | 7 웹 보안 | canonical origin·공통 next/back·공개 health 축소·admin 진단·CSP 보고 모드 구현 | 웹 1980시험/타입/lint 통과, 실제 로컬 Next 내부 인증·Chromium 화면 확인; HTTPS/Auth·CSP 강제 모드 미완료 | 미적용 |
-| 8 출시 검증 | CI의 DB 통합·감사 실패 차단·패키지 smoke 연결; 운영 입력 대기 중 사전 검증 | Linux 회귀/타입/lint/감사·DB 50시험·빌드/패키지 실행 성공; 추가 UI 통합 뒤 재검증 중 | 미적용 |
+| 8 출시 검증 | CI 사전 검증 완료, 운영 전환 조건 대기 | 최종 조합 웹 1982시험·DB/배포 51시험·타입/lint/감사·Linux 빌드·패키지 실행 성공 | 미적용, 출시 판정 미완료 |
 
 ## 단계 5 진행 기록: LLM 경로
 
 ### 단계 8 사전 검증 (운영 전환 승인으로 해석하지 않음)
+
+**최종 코드 검증 기준: `385c7f5`.** [Linux CI 34590020065](https://github.com/junginsu-make/fixup-image-agent/actions/runs/34590020065)에서 verify/integration/build 모두 성공했다. 웹 1982시험, DB/배포 51시험, 타입·lint·실제 의존성 감사, manifest/helper/schema/build identity 검증, 패키지 Node 실행(liveness 200·미설정 readiness 503의 최소 응답·무인증 tick 404), artifact 업로드까지 성공했다. 운영 릴리스 발행과 서버/DB 적용은 하지 않았다.
+
+마지막 배포 대조에서 현재 HTTP 설정과 HTTPS 필수 앱의 충돌을 앱 전환 전에 차단하도록 보완했다. 릴리스에 빌드 당시 publicSiteOrigin을 기록하고, 서버의 HTTPS origin과 같아야 배포 제어가 진행된다. 불일치하면 환경 파일·DB 변경 이전에 거절한다. 이 보호와 UI `39c4f5c`가 모두 최종 CI에 포함됐다. 이 뒤 진행 기록만 수정한 커밋은 실행 코드 변경이 아니다.
 
 - 코드 기준 `f277d85`, Linux CI [34589440557](https://github.com/junginsu-make/fixup-image-agent/actions/runs/34589440557) 전체 성공. verify·별도 DB integration·Linux build·패키지 실제 Node 실행·artifact 업로드 성공. DB/배포 도구 50시험 성공. 이후 추가한 구형 롤백 차단 shell 시험은 Windows Git Bash에서 별도 1시험 성공이며 이 CI 수치에 포함하지 않는다.
 - 병행 UI의 완료 커밋 `39c4f5c`를 추가 통합했다. library-picker/pick-cell/SavedImagePicker 세 파일이며 API·DB 변경은 없다. 이 기능을 여기서 새로 설계하거나 수정하지 않았으며, 통합 뒤 타입 검사 성공. 최종 조합의 CI를 다시 실행한다.
