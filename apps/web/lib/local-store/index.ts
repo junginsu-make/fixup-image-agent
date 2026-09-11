@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { assertLocalGenerationFence } from "../generation/fence-context";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -110,6 +111,7 @@ export class LocalDatabase {
     let result!: T;
     const operation = this.queue.then(async () => {
       const data = await this.load();
+      assertLocalGenerationFence(data);
       result = await change(data);
       await mkdir(this.root, { recursive: true });
       const temporary = path.join(this.root, `.store-${randomUUID()}.tmp`);

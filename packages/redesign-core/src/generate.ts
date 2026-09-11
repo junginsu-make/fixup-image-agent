@@ -177,6 +177,7 @@ export type GenerateSectionsInput = {
    */
   onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
   onProviderCall?: InvokeProvider;
+  onResolvedInput?: <T>(name: string, prepare: () => Promise<T>) => Promise<T>;
   /**
    * 그림을 **실제로 만드는 사람.**
    *
@@ -331,14 +332,15 @@ export async function generateSections(input: GenerateSectionsInput) {
   }
 
   const modelInfo = modelMeta(provider);
-  const retrievedKnowledgeText = useKnowledge
-    ? await buildKnowledgeContext({
+  const prepareKnowledge = () => buildKnowledgeContext({
         requestText,
         rolloutRequest,
         channel,
         fallbackText: knowledgeText,
         onProviderCall: input.onProviderCall,
-      })
+      });
+  const retrievedKnowledgeText = useKnowledge
+    ? await (input.onResolvedInput ? input.onResolvedInput("redesign-knowledge", prepareKnowledge) : prepareKnowledge())
     : "";
   console.info(`[generate] knowledge ready job=${jobId} useKnowledge=${useKnowledge} chars=${retrievedKnowledgeText.length}`);
   const payload = { request: requestText, rolloutRequest, knowledgeText: retrievedKnowledgeText, options: { channel, ratio, count } };

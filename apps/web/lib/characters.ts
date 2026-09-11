@@ -1,4 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { generationFence } from "./generation/fence-context";
+import { haltRecordedCalls } from "./llm/recorded-call";
+import { rememberGenerationInput } from "./generation/prepared-input";
 import { imageCreditUnits } from "./credit-cost";
 import {
   CHARACTER_ANGLES,
@@ -262,7 +265,8 @@ async function generateSheet(input: {
 }
 
 function storagePathFor(userId: string, characterId: string, view: ViewBytes) {
-  const tail = `${characterId}/${view.angle}.${extensionFor(view.mimeType)}`;
+  const run = generationFence();
+  const tail = `${characterId}/${run ? `${run.id}/` : ""}${view.angle}.${extensionFor(view.mimeType)}`;
   // 운영 버킷은 경로 첫 칸으로 소유자를 판정한다. 로컬은 사용자 폴더 안에 있다.
   return isLocalStoreEnabled() ? tail : `${userId}/${tail}`;
 }
@@ -309,6 +313,8 @@ async function putView(storagePath: string, view: ViewBytes) {
  * `regenerateAngle` 로 채운다.
  */
 export async function createCharacter(input: {
+  executionId?: string;
+  onStoredViews?: (views: readonly ViewBytes[]) => void;
   userId: string;
   name: string;
   description: string;
@@ -336,10 +342,12 @@ export async function createCharacter(input: {
   const extraAngles = (input.angles ?? DEFAULT_EXTRA_ANGLES).filter((angle) => angle !== "front");
   const wantsSheet = Boolean(input.sheet);
   const model = input.modelId ?? selectCharacterModel(input.look);
-  const characterId = randomUUID();
+  const characterId = input.executionId ?? randomUUID();
   const name = input.name.slice(0, 80);
   const createdAt = new Date().toISOString();
 
+  const existing = input.executionId ? await findCharacter(input.userId, characterId) : null;
+  if (!existing) {
   if (isLocalStoreEnabled()) {
     await insertLocalCharacter({
       id: characterId,
@@ -366,6 +374,7 @@ export async function createCharacter(input: {
         look: input.look,
       });
     if (error) return { ok: false as const, message: error.message };
+  }
   }
 
   const uploaded: string[] = [];
@@ -435,7 +444,7 @@ export async function createCharacter(input: {
     if (isLocalStoreEnabled()) {
       await replaceLocalCharacterViews(characterId, rows);
     } else {
-      const { error } = await createSupabaseAdminClient().from("character_views").insert(
+      const { error } = await createSupabaseAdminClient().from("character_views").upsert(
         rows.map((row) => ({
           character_id: row.characterId,
           user_id: row.userId,
@@ -444,6 +453,7 @@ export async function createCharacter(input: {
           thumb_path: row.thumbPath,
           mime_type: row.mimeType,
         })),
+        { onConflict: "character_id,angle" },
       );
       if (error) throw new Error(error.message);
     }
@@ -452,6 +462,7 @@ export async function createCharacter(input: {
     // 만들기·상세페이지가 전부 쓴다. 정면 한 장만 넣으면 옆모습이 필요한
     // 장면에서 다시 만들게 되고, 그러면 같은 인물로 안 보인다.
     const referenceIssue = await saveAsReferences(input.userId, name, views);
+    input.onStoredViews?.(views);
 
     return {
       ok: true as const,
@@ -462,6 +473,8 @@ export async function createCharacter(input: {
       referenceIssue,
     };
   } catch (caught) {
+    // A stale worker must not remove files another lease has already published.
+    if (input.executionId) throw haltRecordedCalls("storage_unavailable");
     // 되돌린다. 파일부터 지우고 행을 지운다 — 순서가 반대면 경로를 잃는다.
     await removeStored(uploaded);
     await removeCharacterRow(input.userId, characterId);
@@ -479,6 +492,7 @@ export async function createCharacter(input: {
  * 방법이 아예 없었다. 정면을 참조로 넣어 같은 인물을 유지한다.
  */
 export async function regenerateAngle(input: {
+  onStoredViews?: (views: readonly ViewBytes[]) => void;
   userId: string;
   characterId: string;
   /** 진짜 각도 다섯(정면 제외) 또는 다각도 한 장. */
@@ -492,10 +506,15 @@ export async function regenerateAngle(input: {
     return { ok: false as const, message: "정면은 다시 만들 수 없습니다. 새 캐릭터로 만드세요." };
   }
 
-  const character = await findCharacter(input.userId, input.characterId);
+  const source = await rememberGenerationInput("character-view", async () => {
+    const character = await findCharacter(input.userId, input.characterId);
+    const front = character ? await loadViewBytes(input.userId, input.characterId, "front") : null;
+    return { character, front };
+  });
+  const character = source.character;
   if (!character) return { ok: false as const, message: "캐릭터를 찾지 못했습니다." };
 
-  const front = await loadViewBytes(input.userId, input.characterId, "front");
+  const front = source.front;
   if (!front) return { ok: false as const, message: "정면 그림이 없어 다시 만들 수 없습니다." };
 
   const look = character.look;
@@ -561,9 +580,11 @@ export async function regenerateAngle(input: {
       characterReferenceTitle(character.name, view.angle),
     );
     await saveAsReferences(input.userId, character.name, [view]);
+    input.onStoredViews?.([view]);
 
     return { ok: true as const, angle: view.angle, model };
   } catch (caught) {
+    if (generationFence() && !(caught && typeof caught === "object" && "providerStatus" in caught)) throw haltRecordedCalls("storage_unavailable");
     return {
       ok: false as const,
       message: caught instanceof Error ? caught.message : "다시 만들지 못했습니다.",
@@ -584,9 +605,12 @@ async function saveAsReferences(
 ): Promise<string | undefined> {
   try {
     for (const entry of characterReferenceEntries(name, views)) {
+      const run = generationFence();
+      const digest = run ? createHash("sha256").update(`${run.id}:${entry.angle}`).digest("hex") : undefined;
+      const id = digest ? `${digest.slice(0,8)}-${digest.slice(8,12)}-5${digest.slice(13,16)}-8${digest.slice(17,20)}-${digest.slice(20,32)}` : randomUUID();
       await saveReferenceImage({
         userId,
-        id: randomUUID(),
+        id,
         title: entry.title,
         // 용도로 거르지 않는다. 어느 도구에서든 정체성을 지킬 때 쓴다.
         purpose: "both",
@@ -669,6 +693,7 @@ async function findCharacter(
   ).maybeSingle();
   return data ? normalizeRecord(data as Record<string, unknown>) : null;
 }
+export async function characterForWrite(userId: string, characterId: string) { return findCharacter(userId, characterId); }
 
 export async function listCharacters(
   userId: string,
@@ -822,14 +847,13 @@ export async function deleteCharacter(userId: string, characterId: string) {
         path: row.path, thumbPath: row.thumb_path ?? null,
       })),
     );
-    if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
-
     const { error } = await supabase
       .from("characters")
       .delete()
       .eq("user_id", userId)
       .eq("id", characterId);
     if (error) return { ok: false, message: error.message };
+    if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
   }
 
   // 라이브러리에 남은 각도도 지운다. 안 지우면 캐릭터를 지워도 참고 이미지에

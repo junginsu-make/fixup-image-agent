@@ -4,6 +4,8 @@ import { generationFailureResponse, inputHash } from "../../../../lib/generation
 import { invokeRecordedLlm } from "../../../../lib/llm/recorded-call";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember } from "../../../../lib/membership/api";
+import { boundedJson } from "../../../../lib/generation/request-body";
+import { validateTranscriptionStrips } from "../../../../lib/redesign/validate-strips";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,7 +14,8 @@ export async function POST(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
-    const body = await req.json();
+    const body = await boundedJson(req) as Record<string, unknown>;
+    await validateTranscriptionStrips(body?.strips);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
     try {

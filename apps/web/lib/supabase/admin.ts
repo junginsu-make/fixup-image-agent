@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseSecretEnv } from "./secret-env";
 import { assertStoragePath } from "../storage/safe-path";
+import { generationFence } from "../generation/fence-context";
 
 let adminClient: SupabaseClient<any> | undefined;
 
@@ -9,6 +10,14 @@ export function createSupabaseAdminClient(): SupabaseClient<any> {
     const { url, secretKey } = getSupabaseSecretEnv();
     adminClient = createClient(url, secretKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: (input, init) => {
+        const target = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+        const fence = generationFence();
+        if (!fence || target.origin !== new URL(url).origin || !target.pathname.startsWith("/rest/v1/")) return fetch(input, init);
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        headers.set("x-generation-run", fence.id); headers.set("x-generation-lease", fence.lease_token ?? "");
+        return fetch(input, { ...init, headers });
+      } },
     });
     // All privileged Storage calls share a canonical key check. A user-owned
     // metadata row must not turn ../ into access to another private bucket.

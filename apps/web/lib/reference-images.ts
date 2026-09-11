@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { generationFence } from "./generation/fence-context";
 import { canSeeReference, referenceVisibility } from "./teams/reference-scope";
 import { canSeeOwnerEmails, canTouch } from "./access/core";
 import {
@@ -300,6 +301,19 @@ export async function saveReferenceImage(input: {
 }): Promise<ReferenceImageRow> {
   const extension = EXTENSIONS[input.mimeType];
   if (!extension) throw new Error("PNG, JPG, WEBP 이미지만 보관할 수 있습니다.");
+  if (generationFence()) {
+    const existing = isLocalStoreEnabled()
+      ? await findLocalReferenceImage(getLocalDatabase(), input.userId, input.id)
+      : await (async () => {
+        const result = await createSupabaseAdminClient().from("reference_images").select("id,user_id,storage_path,thumb_path,title,purpose,width,height,created_at").eq("id",input.id).eq("user_id",input.userId).maybeSingle();
+        if(result.error)throw new Error(result.error.message);
+        return result.data ? toRow(result.data as ReferenceImageDbRow) : undefined;
+      })();
+    if (existing) {
+      if (existing.storagePath !== `${input.userId}/references/${input.id}.${extension}`) throw new Error("reference_replay_conflict");
+      return existing;
+    }
+  }
   const file = new File([new Uint8Array(input.bytes)], `${input.id}.${extension}`, { type: input.mimeType });
 
   if (isLocalStoreEnabled()) {
@@ -402,7 +416,7 @@ export async function removeReferenceImagesByTitle(userId: string, title: string
       }
       return matched.map((image) => image.storagePath);
     });
-    if (paths.length) await removeLocalReferenceFiles(localStoreRoot(), paths);
+    if (paths.length && !generationFence()) await removeLocalReferenceFiles(localStoreRoot(), paths);
     return;
   }
 
@@ -415,7 +429,10 @@ export async function removeReferenceImagesByTitle(userId: string, title: string
   if (!data?.length) return;
 
   // 행을 먼저 지운다. 파일이 먼저 사라지면 목록에는 남고 미리보기만 깨진다.
-  await supabase.from("reference_images").delete().in("id", data.map((row) => row.id));
+  const removed = await supabase.from("reference_images").delete().in("id", data.map((row) => row.id));
+  if (removed.error) throw new Error(removed.error.message);
+  // An old in-flight generation may still refer to the prior artifact.
+  if (generationFence()) return;
   // 사본도 함께 지운다. 행이 사라지면 그 자리를 아는 곳이 없어진다.
   await supabase.storage.from(BUCKET).remove(gridPathsToRemove(
     data.map((row) => ({ path: row.storage_path as string, thumbPath: row.thumb_path as string | null })),

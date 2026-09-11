@@ -12,6 +12,7 @@ import { withSlicedStyleReference } from "./slice-image";
 import { loadCharacterView } from "../characters";
 import { teamIdOf } from "../teams/store";
 import { rejectIfUnverified } from "../evidence-gate";
+import { rememberGenerationInput } from "../generation/prepared-input";
 import type { PdpImagesRequestBody } from "../../app/api/pdp/images/route";
 import type { BatchRequest } from "../../app/api/pdp/images/batch/route";
 
@@ -61,6 +62,7 @@ export async function durablePdpSections(request: Request, mode: "single" | "bat
       maximumImages: sections.length * 9, maximumImageCostMicrousd: price, maximumLlmCalls: sections.length * 12,
     }, async () => {
       const providers = createPdpProviders();
+      const prepared = await rememberGenerationInput("pdp-sections", async () => {
       const characterByAngle = new Map<string, Awaited<ReturnType<typeof loadCharacterView>>>();
       if (body.characterId) {
         const team = await teamIdOf(auth.member.userId);
@@ -68,6 +70,10 @@ export async function durablePdpSections(request: Request, mode: "single" | "bat
           characterByAngle.set(angle, await loadCharacterView(auth.member.userId, body.characterId, angle, team));
       }
       const page = pageInputsFromWire(await withSlicedStyleReference({ ...body.page, imageModel: model }));
+      return { page, characters: [...characterByAngle.entries()] };
+      });
+      const page=prepared.page;
+      const characterByAngle=new Map(prepared.characters);
       // Keep the existing batch concurrency; logical request hashes isolate its responses.
       const outcomes = await Promise.allSettled(sections.map((section, position) => generateSectionImage({
         originalImageBase64: body.originalImageBase64, section, aspectRatio: body.aspectRatio, desiredTone: body.desiredTone,

@@ -11,6 +11,7 @@ import { createRedesignImageGenerator, quoteRedesignFal, REDESIGN_FAL_MODEL } fr
 import { directRedesignImagePrice, invokeRecordedRedesign } from "./recorded-provider";
 import { loadCharacterView } from "../characters";
 import { teamIdOf } from "../teams/store";
+import { rememberGenerationInput } from "../generation/prepared-input";
 
 export async function durableRedesignGenerate(request: Request): Promise<Response> {
   const auth = await authenticateApiMember();
@@ -39,14 +40,14 @@ export async function durableRedesignGenerate(request: Request): Promise<Respons
       let character: GenerateSectionsInput["character"];
       const characterId = String(form.get("characterId") || "");
       if (characterId) {
-        const view = await loadCharacterView(auth.member.userId, characterId, pickAngleForSection(""), await teamIdOf(auth.member.userId));
+        const view = await rememberGenerationInput("redesign-character", async () => loadCharacterView(auth.member.userId, characterId, pickAngleForSection(""), await teamIdOf(auth.member.userId)));
         if (view) character = { name: "character.png", mimeType: view.mimeType, buffer: Buffer.from(view.base64, "base64"),
           directive: buildSceneWithCharacterDirective({ identityPrompt: view.identityPrompt, hasStyleReference: files.length > 0 }) };
       }
       const value = await generateSections({ files, character, request: String(form.get("request") || ""), rolloutRequest: String(form.get("rolloutRequest") || ""),
         knowledgeText: String(form.get("knowledgeText") || ""), transcript: String(form.get("transcript") || ""), useKnowledge: String(form.get("useKnowledge") || "") === "true",
         knowledgeAccessAuthorized: true, model: provider, channel: String(form.get("channel") || "스마트스토어"), ratio, look: String(form.get("look") || "auto"),
-        count, startSection: Number(form.get("startSection") || 1), generateImage, onProviderCall: invokeRecordedRedesign,
+        count, startSection: Number(form.get("startSection") || 1), generateImage, onProviderCall: invokeRecordedRedesign, onResolvedInput: rememberGenerationInput,
         openaiKey: resolveOpenaiKey(), googleKey: resolveGoogleKey(),
       });
       const images = value.project.sections.map(section => ({ base64: section.imageUrl.slice(section.imageUrl.indexOf(",") + 1), mimeType: section.mimeType }));

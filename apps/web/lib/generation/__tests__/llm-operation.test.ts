@@ -24,6 +24,7 @@ vi.mock("../run-store", () => ({
   renewRun: async () => {},
 }));
 vi.mock("../result-cache", () => ({
+  readCachedResultEntry: async () => state.cached === undefined ? undefined : { value: state.cached, path: "owner/run/result.json" },
   readCachedResult: async () => state.cached,
   writeCachedResult: async (_run: unknown, value: unknown) => { state.cached = value; return "owner/run/result.json"; },
 }));

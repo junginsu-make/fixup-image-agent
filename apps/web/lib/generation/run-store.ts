@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { isLocalStoreEnabled } from "../local-store";
 import { localLedger } from "./local-ledger";
 import type { AttemptPatch, AttemptSpec, ExecutionStore, GenerationAttempt, GenerationRun } from "./types";
+import type { GenerationOperationV2 } from "./operations";
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -24,6 +25,8 @@ export function requestKey(request: Request) {
 export function generationFailureResponse(error:unknown):Response|undefined {
   const code=error instanceof Error?error.message:"";
   const messages:Record<string,[number,string]>={
+    invalid_image_input:[400,"이미지 형식이나 크기를 확인해 주세요."],
+    generation_active:[409,"생성 작업이 끝난 뒤 삭제할 수 있습니다."],
     request_too_large:[413,"첨부 자료가 너무 큽니다. 용량을 줄여 다시 시도해 주세요."],
     invalid_json:[400,"요청 내용을 읽지 못했습니다."],
     draft_conflict:[409,"처리 중 원고가 변경되어 이전 결과를 덮어쓰지 않았습니다. 최신 원고를 확인해 주세요."],
@@ -47,14 +50,16 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 export async function beginRun(input: {
-  userId: string; key: string; operation: string; units: number;
+  userId: string; key: string; operation: GenerationOperationV2; units: number;
   resourceType?: "sns" | "poster" | "character"; resourceId?: string;
   snapshot: Record<string, unknown>; identity: unknown; maxCostMicrousd: number;
   inline?: boolean;
 }) {
   if(isLocalStoreEnabled())return localLedger().begin({...input,inputHash:inputHash(input.identity)});
   const { identity, ...metadata } = input;
-  return rpc<GenerationRun>("begin_generation_v2", {p_input:{...metadata,inputHash:inputHash(identity)}});
+  const configured=Number(process.env.ANALYZE_HOURLY_LIMIT||10);
+  const pdpAnalysisLimit=Number.isFinite(configured)?Math.min(1000,Math.max(1,Math.floor(configured))):10;
+  return rpc<GenerationRun>("begin_generation_v2", {p_input:{...metadata,inputHash:inputHash(identity),pdpAnalysisLimit}});
 }
 export async function existingRun(userId:string,key:string,resourceId:string|null,identity:unknown,operation:string) {
   if(isLocalStoreEnabled()) {

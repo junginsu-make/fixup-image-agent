@@ -15,6 +15,9 @@ import {
   type CharacterAngle,
 } from "@fixup/pdp-core";
 import { teamIdOf } from "../../../lib/teams/store";
+import { durableCharacterRequest } from "../../../lib/generation/character-operation";
+import { boundedJson } from "../../../lib/generation/request-body";
+import { generationFailureResponse, useDurableGeneration as durableGenerationEnabled } from "../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +59,7 @@ const BodySchema = z.object({
   chosenMimeType: z.string().optional(),
   candidates: z.number().int().min(MIN_CANDIDATES).max(MAX_CANDIDATES).optional(),
   /** 정면 말고 더 만들 각도. 빈 배열이면 정면 한 장짜리가 된다. */
-  angles: z.array(z.enum(CHARACTER_ANGLES.map((angle) => angle.id) as [string, ...string[]])).optional(),
+  angles: z.array(z.enum(CHARACTER_ANGLES.map((angle) => angle.id) as [string, ...string[]])).max(CHARACTER_ANGLES.length).refine(angles=>new Set(angles).size===angles.length,"같은 각도를 중복 선택할 수 없습니다.").optional(),
   /**
    * 여섯 각도를 한 그림에 담은 한 장도 같이 만들까.
    *
@@ -66,7 +69,7 @@ const BodySchema = z.object({
   sheet: z.boolean().optional(),
 });
 
-type Body = z.infer<typeof BodySchema>;
+export type Body = z.infer<typeof BodySchema>;
 
 /** data: 접두사를 떼어 낸다. 화면이 붙여 보내는 일이 잦다. */
 function rawBase64(value: string): string {
@@ -125,7 +128,7 @@ export async function POST(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
-  const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
+  const parsed = BodySchema.safeParse(await boundedJson(req).catch(() => ({})));
   if (!parsed.success) {
     return Response.json(
       { ok: false, message: parsed.error.issues[0]?.message ?? "요청을 해석하지 못했습니다." },
@@ -133,6 +136,7 @@ export async function POST(req: Request) {
     );
   }
   const body: Body = parsed.data;
+  if(durableGenerationEnabled())return durableCharacterRequest(req,auth.member.userId,body);
   const modelId = (body.modelId ?? selectCharacterModel(body.look)) as never;
   const reference = body.reference
     ? { ...body.reference, base64: rawBase64(body.reference.base64) }
@@ -240,8 +244,10 @@ export async function DELETE(req: Request) {
     if (!id) return Response.json({ ok: false, message: "id 가 없습니다." }, { status: 400 });
 
     const result = await deleteCharacter(auth.member.userId, id);
+    if("message" in result){const blocked=generationFailureResponse(new Error(result.message));if(blocked)return blocked;}
     return Response.json(result, { status: result.ok ? 200 : 500 });
   } catch (error) {
+    const blocked=generationFailureResponse(error);if(blocked)return blocked;
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "삭제하지 못했습니다." },
       { status: 500 },

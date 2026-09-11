@@ -4,6 +4,9 @@ import { creditUnits } from "@fixup/shared";
 import { imageCreditUnits, maxImageUnitUsd } from "../../../../lib/credit-cost";
 import { regenerateAngle } from "../../../../lib/characters";
 import { CHARACTER_SHEET, IMAGE_MODELS } from "@fixup/pdp-core";
+import { durableCharacterView } from "../../../../lib/generation/character-operation";
+import { boundedJson } from "../../../../lib/generation/request-body";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,18 +31,20 @@ const BodySchema = z.object({
   aspectRatio: z.enum(["1:1", "3:4", "4:3", "9:16", "16:9"]).default("3:4"),
   modelId: z.enum(IMAGE_MODELS.map((model) => model.id) as [string, ...string[]]).optional(),
 });
+export type ViewBody = z.infer<typeof BodySchema>;
 
 export async function POST(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
-  const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
+  const parsed = BodySchema.safeParse(await boundedJson(req).catch(() => ({})));
   if (!parsed.success) {
     return Response.json(
       { ok: false, message: parsed.error.issues[0]?.message ?? "다시 만들 각도를 알려 주세요." },
       { status: 400 },
     );
   }
+  if(durableGenerationEnabled())return durableCharacterView(req,auth.member.userId,parsed.data);
 
   /**
    * 한 장이다. **다만 모델마다 값이 다르다**(2026-09-08 사용자 결정).

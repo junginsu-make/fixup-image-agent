@@ -2,6 +2,7 @@ import "server-only";
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertStoragePath } from "./storage/safe-path";
 import {
   getLocalDatabase,
   localStoreRoot,
@@ -24,8 +25,9 @@ import {
 const ROOT_DIR = "characters";
 
 function fileFor(storagePath: string): string {
+  assertStoragePath(storagePath);
   const parts = storagePath.split("/");
-  if (parts.length !== 2 || parts.some((part) => !part || part === "." || part === "..")) {
+  if (![2, 3].includes(parts.length)) {
     throw new Error("캐릭터 파일 경로가 올바르지 않습니다.");
   }
   return path.join(localStoreRoot(), ROOT_DIR, ...parts);
@@ -100,6 +102,9 @@ export function findLocalCharacter(
 
 export async function deleteLocalCharacter(userId: string, characterId: string): Promise<string[]> {
   return getLocalDatabase().update((data) => {
+    const active=(data as unknown as {generationRuns?:Array<{id:string;user_id:string;resource_type:string|null;resource_id:string|null;state:string}>}).generationRuns?.some(run=>
+      run.user_id===userId&&!['succeeded','failed','cancelled'].includes(run.state)&&(run.id===characterId||(run.resource_type==='character'&&run.resource_id===characterId)));
+    if(active)throw new Error("generation_active");
     const paths = data.characterViews
       .filter((view) => view.userId === userId && view.characterId === characterId)
       .map((view) => view.path);

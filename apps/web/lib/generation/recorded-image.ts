@@ -12,6 +12,7 @@ interface Context {
   calls: number; occurrences: Map<string, number>; halted?: ExecutionControlError;
 }
 const context = new AsyncLocalStorage<Context>();
+export function recordedImageRun() { return context.getStore()?.run; }
 export function assertRecordedImagesHealthy() { const halted = context.getStore()?.halted; if (halted) throw halted; }
 export async function withRecordedImages<T>(run: GenerationRun, store: ExecutionStore, maximumCalls: number, call: () => Promise<T>) {
   const calls = (await store.attempts()).filter(a => a.endpoint !== "llm").length;

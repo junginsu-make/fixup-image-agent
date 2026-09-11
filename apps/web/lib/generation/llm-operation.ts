@@ -2,7 +2,7 @@ import "server-only";
 import { ExecutionControlError } from "@fixup/shared";
 import { llmCallUpperMicrousd, withRecordedLlm, assertRecordedLlmHealthy } from "../llm/recorded-call";
 import { beginRun, claimRun, existingRun, executionStore, renewRun, requestKey, useDurableGeneration as durableGenerationEnabled } from "./run-store";
-import { readCachedResult, writeCachedResult } from "./result-cache";
+import { readCachedResult, readCachedResultEntry, writeCachedResult } from "./result-cache";
 import { isTerminal, type GenerationRun } from "./types";
 
 export async function withRunLease<T>(run:GenerationRun,call:()=>Promise<T>):Promise<T> {
@@ -21,12 +21,13 @@ export async function runLlmOperation<T>(request:Request,userId:string,options:{
   const key=requestKey(request);
   const previous=await existingRun(userId,key,options.resourceId??null,options.identity,options.operation);
   if(previous) {
-    const cached=await readCachedResult<{value:T;businessSuccess:boolean}>(previous);
-    if(cached!==undefined){
+    const entry=await readCachedResultEntry<{value:T;businessSuccess:boolean}>(previous);
+    if(entry!==undefined){
+      const cached=entry.value;
       if(!isTerminal(previous.state)&&previous.state!=="needs_reconciliation"){
         try {
           const claimed=await claimRun(previous.id);
-          if(claimed){const store=executionStore(claimed);await store.checkpoint({resultRef:`${previous.user_id}/${previous.id}/result.json`,businessSuccess:cached.businessSuccess},"settlement_pending",0);await store.settle();}
+          if(claimed){const store=executionStore(claimed);await store.checkpoint({resultRef:entry.path,businessSuccess:cached.businessSuccess},"settlement_pending",0);await store.settle();}
         } catch { /* The cached response survives a settlement outage; the executor retries. */ }
       }
       return cached.value;

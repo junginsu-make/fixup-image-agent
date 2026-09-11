@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { GENERATION_OPERATIONS, type GenerationOperationV2 } from "./operations";
 import { getLocalDatabase, type LocalDatabase } from "../local-store";
 import { isTerminal, type GenerationRun, type GenerationAttempt, type ExecutionStore } from "./types";
 
@@ -23,6 +24,7 @@ function leased(data:LocalLedger,claimed:GenerationRun) {
 export function localLedger(database:LocalDatabase=getLocalDatabase()) {
   return {
     async begin(input:{userId:string;key:string;operation:string;units:number;resourceType?:"sns"|"poster"|"character";resourceId?:string;snapshot:Record<string,unknown>;inputHash:string;maxCostMicrousd:number;inline?:boolean}) {
+      if(!GENERATION_OPERATIONS.includes(input.operation as GenerationOperationV2))throw new Error("invalid_request");
       return database.update(raw=>{
         const data=raw as unknown as LocalLedger;
         const existing=runs(data).find(r=>r.user_id===input.userId&&r.idempotency_key===input.key);
@@ -104,6 +106,7 @@ export function localLedger(database:LocalDatabase=getLocalDatabase()) {
             if(list.some(a=>a.state==="stored"&&a.measured_cost_microusd===undefined)){r.state="needs_reconciliation";r.error_code="price_unavailable";return r;}
             micros=list.reduce((sum,a)=>sum+(a.measured_cost_microusd??0),0);
           }
+          if(r.execution_snapshot.allowNoNewImages===true&&r.units===0&&!list.some(a=>a.requested_images>0)&&r.checkpoint.businessSuccess===true){successful=1;micros=0;}
           if(r.checkpoint.businessSuccess===false){successful=0;micros=0;}
           const units=Math.ceil(micros/50000);if(units>r.units){r.state="needs_reconciliation";r.error_code="credit_estimate_exceeded";return r;}
           r.consumed_units=units;r.state=successful?"succeeded":r.stop_requested_at?"cancelled":"failed";r.lease_until=null;
