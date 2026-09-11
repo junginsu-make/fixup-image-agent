@@ -3,7 +3,7 @@ import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../..
 import { creditUnits } from "@fixup/shared";
 import { imageCreditUnits, maxImageUnitUsd } from "../../../../lib/credit-cost";
 import { regenerateAngle } from "../../../../lib/characters";
-import { IMAGE_MODELS } from "@fixup/pdp-core";
+import { CHARACTER_SHEET, IMAGE_MODELS } from "@fixup/pdp-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +23,8 @@ export const maxDuration = 300;
 const BodySchema = z.object({
   characterId: z.string().min(1),
   // 정면은 없다. 고른 후보 그 자체이고 나머지의 기준이라 새로 만들면 전부 남남이 된다.
-  angle: z.enum(["left_45", "right_45", "left_90", "right_90", "back"]),
+  // 다각도 한 장은 각도가 아니지만 만드는 길은 같다 — 정면을 참조로 한 장을 만든다.
+  angle: z.enum(["left_45", "right_45", "left_90", "right_90", "back", CHARACTER_SHEET.id]),
   aspectRatio: z.enum(["1:1", "3:4", "4:3", "9:16", "16:9"]).default("3:4"),
   modelId: z.enum(IMAGE_MODELS.map((model) => model.id) as [string, ...string[]]).optional(),
 });

@@ -23,6 +23,9 @@ const TONES = [
 
 const ANGLES = ["정면", "왼쪽 45°", "오른쪽 45°", "왼쪽", "오른쪽", "뒷면"];
 
+/** 각도가 아니라 일곱 번째 항목이다. 화면과 같은 말을 쓴다. */
+const SHEET_LABEL = "다각도 한 장";
+
 export default function CharacterGuidePage() {
   return (
     <>
@@ -63,13 +66,13 @@ export default function CharacterGuidePage() {
         </p>
       </Section>
 
-      <Section title="전체 흐름" hint="세 단계입니다.">
+      <Section title="전체 흐름" hint="화면은 두 단계입니다.">
         <Flow
           nodes={[
             { label: "무엇을 만들지", sub: "종류 · 결 · 설명" },
-            { label: "후보 고르기", sub: "마음에 드는 것", human: true },
-            { label: "각도 고정", sub: "나머지 다섯 면" },
-            { label: "저장", sub: "라이브러리로" },
+            { label: "정면 보기", sub: "이대로 갈지 정합니다", human: true },
+            { label: "이어서 더 만들기", sub: "각도 또는 다각도 한 장", human: true },
+            { label: "결과", sub: "라이브러리에도 들어갑니다" },
           ]}
           loopBack="다른 도구에서 불러 씁니다"
         />
@@ -100,7 +103,7 @@ export default function CharacterGuidePage() {
 
       <Section title="화면 읽기">
         <Mock title="캐릭터 만들기 · 무엇을 만들지">
-          <MockSteps steps={["무엇을 만들지", "후보 고르기", "각도 고정"]} current={0} />
+          <MockSteps steps={["만들기", "결과"]} current={0} />
           <MockChoices label="종류" marker={1} items={KINDS} active={0} />
           <MockChoices label="결" marker={2} items={TONES} active={0} />
           <MockField
@@ -114,12 +117,12 @@ export default function CharacterGuidePage() {
             marker={4}
             columns={2}
             items={[
+              { title: "이 캐릭터 뽑아내기", hint: "그림 속 그 대상을 살립니다 · 기본값" },
               { title: "결만 따라 만들기", hint: "화풍·색·질감만 가져옵니다" },
-              { title: "이 캐릭터 뽑아내기", hint: "그림 속 그 캐릭터를 살립니다" },
             ]}
           />
-          <MockNote>후보를 몇 장 만들지도 여기서 고릅니다.</MockNote>
-          <MockButtons items={[{ label: "후보 만들기" }]} />
+          <MockNote>정면을 몇 장 만들지도 여기서 고릅니다. 기본은 한 장입니다.</MockNote>
+          <MockButtons items={[{ label: "정면 1장 만들기" }]} />
         </Mock>
 
         <Callouts
@@ -167,9 +170,33 @@ export default function CharacterGuidePage() {
           ))}
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          먼저 후보 중에서 <strong className="text-foreground">정면</strong>을 고릅니다. 그 정면을 기준으로 나머지 다섯
-          면을 만듭니다. 여섯 면을 다 만들 필요는 없습니다 — 필요한 각도만 만들어도 저장됩니다. 다만 각도가 많을수록
-          다른 도구에서 쓸 때 자연스럽습니다.
+          먼저 <strong className="text-foreground">정면</strong>이 나옵니다. 그 정면을 기준으로 나머지 다섯 면을
+          만듭니다. 여섯 면을 다 만들 필요는 없습니다 — 정면 한 장으로 끝내도 저장되고, 나중에 「내 캐릭터」에서
+          빈 각도를 채울 수 있습니다. 다만 각도가 많을수록 다른 도구에서 쓸 때 자연스럽습니다.
+        </p>
+        <p className="text-sm leading-6 text-muted-foreground">
+          <strong className="text-foreground">시작할 때는 아무 각도도 켜져 있지 않습니다.</strong> 만들 것만
+          직접 고르세요 — 켜 둔 것을 못 보고 눌러 원치 않는 장을 만드는 일을 막으려는 것입니다.
+        </p>
+      </Section>
+
+      <Section title={SHEET_LABEL} hint="여섯 면을 한 그림에 담습니다.">
+        <p className="text-sm leading-6 text-muted-foreground">
+          각도를 낱장으로 여섯 개 만들면 <strong className="text-foreground">여섯 번 그리고 여섯 번 냅니다.</strong>
+          「{SHEET_LABEL}」은 여섯 면을 한 이미지 안에 3×2 로 담은 한 장이라 <strong className="text-foreground">한 장
+          값</strong>만 듭니다. 인쇄물이나 자료로 한눈에 보려는 쓰임에 맞습니다.
+        </p>
+        <div className="grid grid-cols-3 gap-2 rounded-lg border bg-card p-3 sm:max-w-md">
+          {ANGLES.map((angle) => (
+            <div key={angle} className="rounded border border-dashed p-3 text-center text-[11px] text-muted-foreground">
+              {angle}
+            </div>
+          ))}
+        </div>
+        <p className="text-sm leading-6 text-muted-foreground">
+          다만 <strong className="text-foreground">다른 도구에는 이 한 장이 안 나갑니다.</strong> 카드뉴스나
+          상세페이지가 인물 기준으로 집어 가는 것은 낱장 각도뿐입니다 — 여섯 컷짜리 격자를 기준으로 넣으면
+          그 격자가 결과물에 그대로 따라 나옵니다. 두 쓰임이 다르니 필요하면 둘 다 만들어 두세요.
         </p>
       </Section>
 

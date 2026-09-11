@@ -193,8 +193,12 @@ export function LibraryPickerButton({
                       aria-pressed={selected}
                       aria-label={`${image.title ?? "참고 이미지"} ${selected ? "빼기" : "고르기"}`}
                       className={cn(
+                        // 고른 것은 **멀리서도 보여야 한다.** 테두리 하나로는
+                        // 격자 안에서 눈에 안 띈다 — 색 고리와 바탕까지 같이 바꾼다.
                         "block w-full overflow-hidden rounded-lg border-2 text-left transition-colors",
-                        selected ? "border-primary" : "border-transparent hover:border-border",
+                        selected
+                          ? "border-primary bg-primary-soft ring-2 ring-primary/40"
+                          : "border-transparent hover:border-border",
                       )}
                     >
                       <span className="relative block aspect-square overflow-hidden bg-muted">
@@ -209,13 +213,23 @@ export function LibraryPickerButton({
                             )}
                           />
                         ) : null}
+                        {/*
+                          **오른쪽 아래다.** 왼쪽 위에는 확대 단추가 겹쳐 있어서,
+                          거기 두면 골랐다는 표시가 그 단추에 가려 안 보였다
+                          (2026-09-11). 지우기 단추는 오른쪽 위에 있다.
+                        */}
                         {selected ? (
-                          <span className="absolute left-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground">
+                          <span className="absolute bottom-1.5 right-1.5 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-ring)]">
                             <Check className="size-3.5" />
                           </span>
                         ) : null}
                       </span>
-                      <span className="block truncate px-2 py-2 text-xs">{image.title ?? "제목 없음"}</span>
+                      <span className={cn(
+                        "block truncate px-2 py-2 text-xs",
+                        selected && "font-bold text-primary",
+                      )}>
+                        {image.title ?? "제목 없음"}
+                      </span>
                     </button>
                     {/* 그림 자체는 고르기에 쓰이므로 확대는 따로 연다. */}
                     <button

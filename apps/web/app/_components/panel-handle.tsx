@@ -15,6 +15,11 @@ import { cn } from "@fixup/ui";
  * 닫아 둔 사이에 끝났으면 두어 번 뛴다(`alert`). 계속 뛰지는 않는다 — 멈추지
  * 않는 움직임은 화면 구석에서 계속 신경을 긁는다. 여섯 번만 뛰고 서고, 그
  * 사이에 못 봤으면 글자가 대신 말한다.
+ *
+ * **색은 다른 단추와 같다**(2026-09-11 사용자 요청). 전에는 흰 바탕에 회색
+ * 테두리였는데, 화면 가장자리에 붙어 있는 데다 배경과 같은 색이라 「돌아갈
+ * 길」로 안 보였다. 이 자리는 누르라고 둔 자리다 — 단추처럼 보여야 한다.
+ * `alert` 는 이제 색이 아니라 **움직임**으로만 말한다.
  */
 export function PanelHandle({
   label,
@@ -36,10 +41,9 @@ export function PanelHandle({
       onClick={onOpen}
       className={cn(
         "fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5",
-        "rounded-l-lg border border-r-0 py-3 pl-3 pr-2 shadow-[var(--shadow-ring)] transition-colors",
-        alert
-          ? "fixup-attention border-primary bg-primary text-primary-foreground"
-          : "border-border bg-background hover:bg-muted",
+        "rounded-l-lg border border-r-0 border-primary py-3 pl-3 pr-2 shadow-[var(--shadow-ring)] transition-colors",
+        "bg-primary text-primary-foreground hover:bg-primary/90",
+        alert && "fixup-attention",
       )}
     >
       <ChevronLeft className="size-4" />

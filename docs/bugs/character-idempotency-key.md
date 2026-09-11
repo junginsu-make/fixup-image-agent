@@ -1,7 +1,9 @@
 # 캐릭터 만들기가 400 「요청 식별자가 올바르지 않습니다」로 막힌다
 
 - 발견: 2026-09-04
-- 상태: **원인 확정 · 미수정** (분석만 진행, 코드는 손대지 않음)
+- 상태: **수정 완료** (2026-09-11 확인)
+- 고친 방법: 캐릭터 화면이 생 `fetch` 를 버리고 공용 래퍼 `lib/billable-fetch.ts` 의 `billableFetch` 를 쓴다.
+  그 래퍼가 `x-idempotency-key` 를 요청마다 하나씩 넣는다 — 아래 「고칠 때 참고」의 근본 처방 쪽이다
 - 영향: `/characters` 화면의 **캐릭터 만들기 전 과정**. 로그인 상태에서 100% 재현
 - 한 줄 요약: **캐릭터 화면만 `x-idempotency-key` 헤더를 안 보낸다.** 서버는 크레딧을 차감하는 모든 요청에 이 헤더를 요구한다
 
@@ -42,11 +44,11 @@ if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 
 `apps/web/app/characters/CharacterStudio.tsx`
 
-| 줄 | 하는 일 | 보내는 헤더 |
+| 하는 일 | 그때 | 지금 |
 |---|---|---|
-| 189–191 | `handleCandidates` — 후보 만들기 | `content-type` 만 |
-| 219–221 | `handleChoose` — 고른 후보로 각도 만들어 저장 | `content-type` 만 |
-| 256–258 | `handleRedo` — 각도 다시 만들기 | `content-type` 만 |
+| `handleCandidates` — 후보 만들기 | `content-type` 만 | `billableFetch` ✓ |
+| `handleCreate` — 고른 후보로 각도 만들어 저장 | `content-type` 만 | `billableFetch` ✓ |
+| `handleRedo` — 각도 다시 만들기 | `content-type` 만 | `billableFetch` ✓ |
 
 ```ts
 const body = await (await fetch("/api/characters", {
@@ -66,7 +68,7 @@ const body = await (await fetch("/api/characters", {
 | `app/create/pdp-utils.ts:38` (`apiJson`) | POST면 `randomId()` 자동 주입 ✓ |
 | `app/create/PdpEditor.tsx:1382` | 명시적으로 넣음 ✓ |
 | `app/redesign/redesign-wizard.tsx:463, 766` | 명시적으로 넣음 ✓ |
-| **`app/characters/CharacterStudio.tsx`** | **없음 ✗** |
+| **`app/characters/CharacterStudio.tsx`** | ~~없음 ✗~~ → `billableFetch` 자동 주입 ✓ |
 
 ## 왜 지금 드러났나
 
@@ -103,3 +105,9 @@ if (isLocalAuthBypass) {
 2. `/characters` 접속
 3. 설명을 적고 「후보 만들기」 클릭
 4. → 400, `요청 식별자가 올바르지 않습니다.`
+
+## 남은 것
+
+없다. `billableFetch` 는 이미 넣어 준 열쇠가 있으면 존중하므로(`billable-fetch.ts:21`)
+재시도에서 같은 열쇠를 쓰고 싶을 때도 길이 있다. 같은 실수가 다시 나지 않도록
+**크레딧을 쓰는 새 화면은 생 `fetch` 대신 `billableFetch` 를 쓴다.**
