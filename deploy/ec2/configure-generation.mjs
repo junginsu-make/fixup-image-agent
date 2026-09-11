@@ -12,6 +12,12 @@ try{
     let value=match[2].trim();if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'")))value=value.slice(1,-1);
     return[[match[1],value]];
   }));
+  const origin=value=>{
+    const parsed=new URL(value);
+    if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/'||value!==value.trim())throw new Error('site_origin_invalid');
+    return parsed.origin;
+  };
+  if(!manifest.publicSiteOrigin||!values.NEXT_PUBLIC_SITE_URL||origin(manifest.publicSiteOrigin)!==origin(values.NEXT_PUBLIC_SITE_URL))throw new Error('site_origin_invalid');
   if(!values.GENERATION_EXECUTOR_SECRET){
     const line=`GENERATION_EXECUTOR_SECRET=${randomBytes(32).toString('hex')}`;
     text=/^GENERATION_EXECUTOR_SECRET\s*=/m.test(text)?text.replace(/^GENERATION_EXECUTOR_SECRET\s*=.*$/m,line):`${text.trimEnd()}\n${line}\n`;
@@ -44,6 +50,6 @@ try{
     console.log(restored?'Previous admission policy restored.':'Operator policy changed; preserving the newer policy.');
   }
 }catch(error){
-  const known=['executor_secret_invalid','arguments_invalid','release_incompatible','database_url_invalid','database_key_missing','database_control_failed','legacy_requests_require_review','admission_not_paused','inline_requests_still_running'];
+  const known=['site_origin_invalid','executor_secret_invalid','arguments_invalid','release_incompatible','database_url_invalid','database_key_missing','database_control_failed','legacy_requests_require_review','admission_not_paused','inline_requests_still_running'];
   console.error(`Generation configuration: ${known.includes(error?.message)?error.message:'configuration_failed'}`);process.exitCode=1;
 }

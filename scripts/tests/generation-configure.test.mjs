@@ -17,8 +17,9 @@ test('deployment configuration creates a private secret without printing it and 
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const config=path.join(root,'app.env');const manifest=path.join(root,'RELEASE_INFO.json');const state=path.join(root,'pause.json');
-    await writeFile(config,`NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:${server.address().port}\nSUPABASE_SECRET_KEY=fake\nKEEP_THIS=unchanged\n`);
-    await writeFile(manifest,JSON.stringify({generationProtocol:2,generationSchemaVersion:31,generationSchemaMin:31,generationSchemaMax:31,releaseId:'a'.repeat(40)}));
+    await writeFile(config,`NEXT_PUBLIC_SITE_URL=https://studio.example.com\nNEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:${server.address().port}\nSUPABASE_SECRET_KEY=fake\nKEEP_THIS=unchanged\n`);
+    const release={publicSiteOrigin:'https://studio.example.com',generationProtocol:2,generationSchemaVersion:31,generationSchemaMin:31,generationSchemaMax:31,releaseId:'a'.repeat(40)};
+    await writeFile(manifest,JSON.stringify(release));
     const helper=fileURLToPath(new URL('../../deploy/ec2/configure-generation.mjs',import.meta.url));
     const env={...process.env,NODE_ENV:'test',GENERATION_ENV_FILE:config};
     const outputs=[];
@@ -26,6 +27,11 @@ test('deployment configuration creates a private secret without printing it and 
     const saved=await readFile(config,'utf8');const secret=/^GENERATION_EXECUTOR_SECRET=([a-f0-9]{64})$/m.exec(saved)?.[1];
     assert.ok(secret);assert.match(saved,/KEEP_THIS=unchanged/);assert.equal((saved.match(/GENERATION_EXECUTOR_SECRET=/g)||[]).length,1);
     assert.ok(!outputs.map(o=>o.stdout+o.stderr).join('').includes(secret));assert.equal(calls.length,3);
+    for(const publicSiteOrigin of ['http://studio.example.com','https://different.example.com']){
+      await writeFile(manifest,JSON.stringify({...release,publicSiteOrigin}));
+      await assert.rejects(exec(process.execPath,[helper,'--pause',manifest,state],{env}),/site_origin_invalid/);
+      assert.equal(calls.length,3);assert.equal(await readFile(config,'utf8'),saved);
+    }
   }finally{
     await new Promise(resolve=>server.close(resolve));const target=await realpath(root);assert.equal(path.dirname(target),parent);assert.ok(path.basename(target).startsWith('fixup-generation-configure-'));await rm(target,{recursive:true});
   }

@@ -82,6 +82,7 @@ writeFileSync(
   `${JSON.stringify({
     generatedAt: new Date().toISOString(),
     releaseId,
+    publicSiteOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? null,
     generationProtocol: 2,
     generationSchemaVersion,
     generationSchemaMin: generationSchemaVersion,
