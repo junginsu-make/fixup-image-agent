@@ -153,6 +153,8 @@ jobs:
       # 있었다. 오래된 것을 지워도 용량은 6~12시간마다 다시 계산되어 그날
       # 배포를 못 했다. 릴리스 자산은 그 한도와 별개다.
       - name: Publish release assets
+        # Feature branches validate the complete package; only master publishes production releases.
+        if: github.ref == 'refs/heads/master'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
