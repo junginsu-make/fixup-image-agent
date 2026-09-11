@@ -9,7 +9,6 @@
  */
 
 import type { StepDefinition } from "@fixup/ui";
-import { randomId } from "../../lib/browser-safe";
 export type Model = "openai" | "google";
 export type View = "dashboard" | "workspace" | "results";
 

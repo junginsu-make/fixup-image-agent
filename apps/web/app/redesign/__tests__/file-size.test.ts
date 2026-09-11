@@ -19,13 +19,13 @@ const REDESIGN = join(__dirname, "..");
 const 최대줄수 = 800;
 
 /**
- * 지금 남은 가장 큰 파일(`redesign-wizard.tsx`, 962줄)은 아직 상한을 넘는다.
+ * 지금 남은 가장 큰 파일(`redesign-wizard.tsx`, 911줄)은 아직 상한을 넘는다.
  *
  * 남은 것은 **화면 하나의 상태와 손잡이들**이라, 더 줄이려면 옮기는 것이
  * 아니라 다시 쓰는 일이 된다. 그건 동작이 바뀔 수 있어 따로 한다. 그동안
  * **더 커지지는 않게** 이 값으로 막아 둔다.
  */
-const 봐주는_파일 = new Map([["redesign-wizard.tsx", 1000]]);
+const 봐주는_파일 = new Map([["redesign-wizard.tsx", 920]]);
 
 describe("파일 크기", () => {
   const 파일들 = readdirSync(REDESIGN)

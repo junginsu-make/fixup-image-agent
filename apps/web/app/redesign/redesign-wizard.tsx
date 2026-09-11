@@ -2,62 +2,31 @@
 
 import * as React from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
-  CircleHelp,
-  Download,
-  FileImage,
   FileText,
-  Image as ImageIcon,
-  Library as LibraryIcon,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-  Trash2,
-  Upload
 } from "lucide-react";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  Input,
   StepBar,
-  Textarea,
   cn,
-  type StepDefinition,
 } from "@fixup/ui";
 import {
-  IMAGE_LOOKS,
-  IMAGE_LOOK_HINT,
-  IMAGE_LOOK_LABEL,
   type ImageLook,
 } from "@fixup/shared";
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
-import { SavedImagePicker } from "../create/SavedImagePicker";
-import { SaveImagesToLibrary } from "../_components/save-to-library";
-import { copyText, randomId } from "../../lib/browser-safe";
+import { randomId } from "../../lib/browser-safe";
 import {
-  MAX_REFERENCE_IMAGES,
   REDESIGN_STEPS,
-  baseSections,
   commerceTips,
-  demoProjectTitles,
   knowledgeStorageKey,
   loadKnowledgeItems,
   loadProjects,
-  makeProject,
   models,
-  projectDbName,
-  projectStoreName,
   type GenerationPlan,
   type GenerationProgress,
   type GenerationSummary,
@@ -65,44 +34,27 @@ import {
   type Model,
   type Project,
   type SectionResult,
-  type SectionRevision,
   type ServerConfig,
   type View,
 } from "./redesign-model";
-import { fetchServerConfig, readApiResponse, reportClientLog, simplifyPlainTextError } from "./redesign-api";
-import { deleteProjectFromDb, isDemoProject, loadSavedProjects, openProjectDb, saveProjectToDb } from "./redesign-storage";
+import { fetchServerConfig, readApiResponse, reportClientLog } from "./redesign-api";
+import { deleteProjectFromDb, loadSavedProjects, saveProjectToDb } from "./redesign-storage";
 import {
   addSectionRevision,
-  ensureSectionRevisions,
-  inferTitleFromAnalysis,
   mergeGeneratedProject,
-  pickAnalysisText,
   projectDisplayTitle,
-  sectionSortNumber,
 } from "./redesign-project";
 import {
-  blobToDataUrl,
-  buildImageFileName,
-  canvasToDataUrl,
   compressImageForRequest,
-  cropImageToPngFile,
   deleteIndexedKnowledge,
-  downloadDataUrl,
   estimateDataUrlBytes,
   extractKnowledgeText,
-  extractPdfText,
-  imageExtension,
   indexKnowledgeFile,
-  loadDataUrlImage,
-  loadImageElement,
   normalizeFilesForUpload,
-  renderImageToReferenceFiles,
-  renderPdfToImages,
-  sanitizeDownloadName,
 } from "./redesign-files";
-import { CharacterOptionGroup, ChannelOptionGroup, Dashboard, Workspace } from "./redesign-panels";
-import { GenerationProgressPanel, Results, estimateGenerationSeconds, formatDuration, generationPhase, isAbortError } from "./redesign-results";
-import { Topbar } from "./redesign-bits";
+import { Dashboard, Workspace } from "./redesign-panels";
+import { GenerationProgressPanel, Results, estimateGenerationSeconds, generationPhase, isAbortError } from "./redesign-results";
+import { requestIdentityOf } from "./redesign-request";
 
 
 
@@ -276,21 +228,18 @@ export function RedesignWizard() {
     setToast("원본 자료를 이미지 생성용 PNG로 변환하는 중입니다.");
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
-    const requestIdentity = [
-      "generate",
-      selectedModel,
+    const requestIdentity = requestIdentityOf({
+      model: selectedModel,
       startSection,
-      outputCount,
-      baseProject?.id || "new",
+      count: outputCount,
+      baseProject,
       channel,
       ratio,
-      // 결을 바꿨으면 다른 요청이다. 안 넣으면 실패 후 결만 바꿔 다시 눌렀을 때
-      // 같은 멱등 키로 나가 서버가 같은 요청으로 본다.
       look,
       request,
-      outputRolloutRequest,
-      files.map((file) => `${file.name}:${file.size}`).join(","),
-    ].join("|");
+      rolloutRequest: outputRolloutRequest,
+      files,
+    });
     const requestKey = retryRequestKeysRef.current[requestIdentity] ?? randomId();
     retryRequestKeysRef.current[requestIdentity] = requestKey;
     let outcomeKnown = false;

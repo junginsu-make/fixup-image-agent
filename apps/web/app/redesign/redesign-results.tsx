@@ -1,33 +1,49 @@
+/*
+ * ("use client" 를 두지 않는다 — 이 파일은 화면 진입점이 아니라 그 아래다.
+ * 진입점이 선언하면 아래로 다 퍼지는데, 여기서 또 선언하면 Next 가 이 파일도
+ * 진입점으로 보고 함수 props 마다 「직렬화되어야 한다」고 경고한다.)
+ */
 /**
  * 결과 화면과 그 부속들 — 섹션 카드, 진행 막대, 작은 조각들.
  *
  * 여기 있는 것들은 전부 props 로만 움직인다. 화면 상태를 들고 있지 않다.
  */
-"use client";
 
 import * as React from "react";
 import {
-  ChevronLeft, ChevronRight, CircleHelp, Download, FileImage, FileText,
-  Image as ImageIcon, Library as LibraryIcon, Loader2, RefreshCw, Sparkles, Trash2, Upload,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileText,
+  Library as LibraryIcon,
+  Loader2,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-  Input, StepBar, Textarea, cn, type StepDefinition,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Textarea,
+  cn,
 } from "@fixup/ui";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
-import { SavedImagePicker } from "../create/SavedImagePicker";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import { copyText } from "../../lib/browser-safe";
 import {
-  MAX_REFERENCE_IMAGES, REDESIGN_STEPS, baseSections, commerceTips, models,
-  type GenerationPlan, type GenerationProgress, type GenerationSummary,
-  type KnowledgeItem, type Model, type Project, type SectionResult, type ServerConfig, type View,
+  models,
+  type GenerationProgress,
+  type Model,
+  type Project,
+  type SectionResult,
 } from "./redesign-model";
-import { buildImageFileName, downloadDataUrl, imageExtension } from "./redesign-files";
-import { ensureSectionRevisions, projectDisplayTitle, sectionSortNumber } from "./redesign-project";
-import { isDemoProject } from "./redesign-storage";
-import { MiniThumb, OptionGroup, PlaceholderThumb, Stat, Topbar } from "./redesign-bits";
+import { buildImageFileName, downloadDataUrl } from "./redesign-files";
+import { ensureSectionRevisions, projectDisplayTitle } from "./redesign-project";
+import { OptionGroup, PlaceholderThumb, Topbar } from "./redesign-bits";
 export function Results({
   project,
   rolloutRequest,
@@ -382,7 +398,6 @@ export function GenerationProgressPanel({
   );
 }
 
-
 export function estimateGenerationSeconds(model: Model, count: number) {
   const setupSeconds = 24;
   const perImageSeconds = model === "google" ? 78 : 65;
@@ -407,8 +422,4 @@ export function formatDuration(seconds: number) {
 export function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
-
-
-
-
 

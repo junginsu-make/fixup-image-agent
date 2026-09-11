@@ -4,7 +4,6 @@
  * 화면이 없어도 값으로 잴 수 있는 것만 모았다.
  */
 
-import { randomId } from "../../lib/browser-safe";
 import type { Model, Project, SectionResult, SectionRevision } from "./redesign-model";
 export function projectDisplayTitle(project: Partial<Project>) {
   const inferred = inferTitleFromAnalysis(project.analysis);
