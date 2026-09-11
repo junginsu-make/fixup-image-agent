@@ -26,7 +26,7 @@ try {
   assert.deepEqual(Object.keys(await ready.json()).sort(),['ok','status']);
   const internal=await fetch(`${origin}/api/internal/generation/tick`);
   assert.equal(internal.status,404);
-  assert.ok(internal.headers.has('content-security-policy-report-only'));
+  assert.ok(internal.headers.has('content-security-policy'));
   console.log('Packaged Linux runtime: liveness, private readiness response and unauthenticated executor denial passed.');
 } finally {
   if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,5000))]);}

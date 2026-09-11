@@ -1,0 +1,28 @@
+name: Browser security runtime
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SITE_URL: https://studio.example.test
+      NEXT_PUBLIC_SUPABASE_URL: https://supabase.example.test
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: fixture-publishable-key
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: fixture-site-key
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir packages/ingest-core exec playwright install --with-deps chromium
+      - run: pnpm build:ec2
+      - run: node scripts/smoke-web-security.mjs dist/ec2

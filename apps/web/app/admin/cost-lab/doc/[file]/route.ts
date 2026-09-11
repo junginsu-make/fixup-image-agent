@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
  *
  * **못 들어오면 404 다.** 403 은 「여기 뭔가 있다」를 알려 준다.
  */
-export async function GET(_request: Request, context: { params: Promise<{ file: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ file: string }> }) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return new Response("찾을 수 없습니다.", { status: 404 });
   if (!canOpenCostLab({ role: auth.member.profile.role })) {
@@ -54,7 +54,7 @@ export async function GET(_request: Request, context: { params: Promise<{ file: 
       readFile(costLabFontPath(), "utf8"),
       readFile(costLabTokenPath(), "utf8"),
     ]);
-    return new Response(costLabDocument(html, fontCss, tokenCss), { headers: COST_LAB_HEADERS });
+    return new Response(costLabDocument(html, fontCss, tokenCss, request.headers.get("x-nonce") ?? undefined), { headers: COST_LAB_HEADERS });
   } catch {
     /*
       여기로 빠지는 경우는 하나다 — `next.config.mjs` 의 추적 목록에서 파일이

@@ -1,4 +1,9 @@
-/** Report-only until the production Auth, inline-script and image flows are verified. */
+export function cspHeaderName(): "Content-Security-Policy" | "Content-Security-Policy-Report-Only" {
+  return process.env.CSP_MODE === "report-only" || (process.env.NODE_ENV !== "production" && process.env.CSP_MODE !== "enforce")
+    ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
+}
+
+/** The same policy is observed in report mode and verified before enforcement. */
 export function cspReportPolicy(nonce: string, supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL): string {
   const origins: string[] = [];
   try {

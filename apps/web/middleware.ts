@@ -5,7 +5,7 @@ import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
-import { cspReportPolicy } from "./lib/security/csp";
+import { cspHeaderName, cspReportPolicy } from "./lib/security/csp";
 
 const PUBLIC_PATHS = [
   "/",
@@ -28,11 +28,13 @@ function matches(pathname: string, roots: string[]) {
 export async function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const policy = cspReportPolicy(nonce);
+  const policyHeader = cspHeaderName();
   request.headers.delete("content-security-policy");
-  request.headers.set("content-security-policy-report-only", policy);
+  request.headers.delete("content-security-policy-report-only");
+  request.headers.set(policyHeader, policy);
   request.headers.set("x-nonce", nonce);
   const response = await applicationMiddleware(request);
-  response.headers.set("Content-Security-Policy-Report-Only", policy);
+  response.headers.set(policyHeader, policy);
   return response;
 }
 
