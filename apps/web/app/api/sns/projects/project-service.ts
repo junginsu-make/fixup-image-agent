@@ -22,6 +22,8 @@ export interface SnsProjectCreateRecord {
     source: ProjectSource;
     attachments: Attachment[];
     flow?: SnsFlowState;
+    /** Server execution projection; editing the draft does not alter an in-flight run. */
+    executionFlow?: SnsFlowState;
     look?: ImageLook;
     userInstruction?: string;
     /** 자리마다 사용자가 적은 말 (표지/속지/엔딩). 옛 작업에는 없다. */

@@ -44,6 +44,7 @@ function record(row: ProjectRow): SnsProjectRecord {
       source: row.data.source,
       attachments: row.data.attachments,
       flow: row.data.flow,
+      executionFlow: row.data.executionFlow,
       look: row.data.look,
       userInstruction: row.data.userInstruction,
     // **화이트리스트는 빠뜨린다.** 이 줄이 없으면 목록 경로로 읽은 작업에서

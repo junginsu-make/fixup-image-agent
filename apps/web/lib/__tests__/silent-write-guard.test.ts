@@ -30,7 +30,9 @@ const posterRoute = source("../../app/api/poster/projects/[id]/route.ts");
 describe("카드뉴스 저장소", () => {
   it("저장이 소유자 조건을 걸고 쓴 줄을 센다", () => {
     expect(flowStore).toContain('.eq("id", projectId).eq("user_id", userId)');
-    expect(flowStore).toContain("if (!(result.data ?? []).length) throw new SnsProjectNotWritable();");
+    expect(flowStore).toContain("if (project.userId !== userId) throw new SnsProjectNotWritable();");
+    expect(flowStore).toContain('rpc("save_sns_draft_v2"');
+    expect(flowStore).toContain("if (!updated) throw new SnsProjectNotWritable();");
   });
 
   it("삭제도 지운 줄을 센다", () => {

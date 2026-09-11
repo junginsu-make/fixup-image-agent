@@ -24,7 +24,8 @@ interface ProjectSummary {
   modelId: string;
   cardCount?: number;
   updatedAt: string;
-  data?: { flow?: { cards?: Array<{ index: number; assetUrl?: string | null; thumbUrl?: string | null }> } };
+  data?: { flow?: { cards?: Array<{ index: number; assetUrl?: string | null; thumbUrl?: string | null }> };
+    executionFlow?: { cards?: Array<{ index: number; assetUrl?: string | null; thumbUrl?: string | null }> } };
 }
 
 const STATUS: Record<string, { label: string; tone: "green" | "secondary" | "destructive" }> = {
@@ -70,7 +71,7 @@ export function SnsProjectList() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {projects.map((project) => {
-        const cards = project.data?.flow?.cards ?? [];
+        const cards = (project.data?.executionFlow ?? project.data?.flow)?.cards ?? [];
         // 대표 그림은 첫 장이다. 표지가 그 작업을 가장 잘 알려 준다.
         // 표지는 미리보기를 쓴다. 없으면 원본으로 떨어진다.
         const first = cards.find((card) => card.assetUrl);

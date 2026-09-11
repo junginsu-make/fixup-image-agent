@@ -42,7 +42,7 @@ describe("화면이 그 판단을 쓴다", () => {
   );
 
   it("만들기 실패에서 판단을 부른다", () => {
-    expect(client).toContain('if (afterGenerateFailure(status) === "resync") await reload();');
+    expect(client).toContain('if (afterGenerateFailure(status, error instanceof ProjectRequestError ? error.code : undefined) === "resync") await reload();');
   });
 
   /** 코드를 안 들고 던지면 409 와 진짜 실패를 구분할 수 없다. */
@@ -58,7 +58,8 @@ describe("화면이 그 판단을 쓴다", () => {
    */
   it("다시 읽을 때 화면 단계도 맞춘다", () => {
     const reload = client.slice(client.indexOf("const reload"), client.indexOf("React.useEffect"));
-    expect(reload).toContain("if (loaded.data.flow) setView(loaded.data.flow.stage);");
+    expect(reload).toContain("loaded.data.executionFlow ?? loaded.data.flow");
+    expect(reload).toContain("if (loadedFlow) setView(loadedFlow.stage);");
   });
 
   /**
@@ -68,13 +69,18 @@ describe("화면이 그 판단을 쓴다", () => {
   it("카드 다시 만들기에서도 판단을 부른다", () => {
     const at = client.indexOf("카드를 다시 만들지 못했습니다.");
     expect(at).toBeGreaterThan(-1);
-    expect(client.indexOf('afterGenerateFailure(status) === "resync"', at)).toBeGreaterThan(at);
+    expect(client.indexOf('afterGenerateFailure(status, error instanceof ProjectRequestError ? error.code : undefined) === "resync"', at)).toBeGreaterThan(at);
   });
 
   /** 오류 문구를 지우면 안 된다 — 무엇이 잘못됐는지 알 길이 없어진다. */
   it("문구를 남긴 뒤에 다시 읽는다", () => {
-    const at = client.indexOf("afterGenerateFailure(status)");
+    const at = client.indexOf("afterGenerateFailure(status,");
     expect(client.lastIndexOf("setMessage(error instanceof Error ? error.message : \"카드를 만들지 못했습니다.\")", at))
       .toBeGreaterThan(-1);
   });
+});
+
+it("resyncs an active v2 run but not a depleted quota", () => {
+  expect(afterGenerateFailure(429,"concurrent_limit")).toBe("resync");
+  expect(afterGenerateFailure(429,"quota_exceeded")).toBe("show-error");
 });

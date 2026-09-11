@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { SnsProviderConfigurationError, requireSnsProviderKeys } from "../sns/providers";
 
 describe("제공자 설정", () => {

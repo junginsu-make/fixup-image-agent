@@ -44,6 +44,9 @@ export interface SubmittedGenerationRequestStore {
 }
 
 export interface QueuedGenerationDependencies {
+  /** Durable execution owns timeouts and submission identity outside the UI flow. */
+  durable?: boolean;
+  submitImage?(input: { endpoint: string; input: Record<string, unknown>; cardIndex: number; slot?: number; modelId: string; unitCostUsd: number }): Promise<{ requestId: string }>;
   sceneProvider: ImagePromptProvider;
   reviewPrimary: ReviewRequest;
   reviewBackup: ReviewRequest;
@@ -91,6 +94,23 @@ function slotPlanFor(card: SnsFlowCard, project: SnsProjectRecord, slotOffset: n
   return planSlotImage({ width: rect.width, height: rect.height }, project.modelId);
 }
 
+/** Freeze the exact model/size price used by submission before admitting a run. */
+export function quoteQueuedImages(project: SnsProjectRecord, flow: SnsFlowState, selected: number[]) {
+  const grouped=groupAttachments(project.data.attachments);
+  return flow.cards.filter(c=>selected.includes(c.index)&&c.kind==="generated").flatMap(card=>{
+    const slots: Array<number|undefined> = card.layout ? imageSlotsOf(card).map(s=>s.slot) : [undefined];
+    return slots.map(slot=>{
+      const plan=slot===undefined?undefined:slotPlanFor(card,project,slot);
+      const model=plan?.model??modelById(project.modelId);
+      const resolved=plan?.size??resolveSize(project.ratio,model);
+      if(resolved.rejected)throw new Error(resolved.rejected);
+      const mode=selectReferencesForRole(grouped,card.role).length?"i2i" as const:"t2i" as const;
+      return {step:`image:${card.index}:${slot??"whole"}`,modelId:model.id,endpoint:pickEndpoint(model,mode==="i2i"),
+        mode,size:resolved,unitCostUsd:unitPrice(model,mode,resolved.pixel??{width:1,height:1})};
+    });
+  });
+}
+
 /** 다 왔나. 실패한 칸은 기다리지 않는다 — 나머지로 카드는 만든다. */
 function slotJobsSettled(card: SnsFlowCard): boolean {
   return (card.slotJobs ?? []).every((job) => job.status === "done" || job.status === "failed");
@@ -126,6 +146,7 @@ async function composeAndSave(
       : undefined;
     card.error = undefined;
   } catch (error) {
+    if (dependencies.durable) throw error;
     card.status = "failed";
     card.error = error instanceof Error ? error.message : "카드를 합성하지 못했습니다.";
   }
@@ -188,10 +209,10 @@ async function submitNext(
   const unitCostUsd = unitPrice(model, mode, resolved.pixel ?? { width: 1, height: 1 });
 
   // 과금 요청은 정확히 한 번 제출하고, 돌아온 request_id를 바로 장부에 쓴다.
-  const submitted = await dependencies.queue.submitJob(
-    endpoint,
-    buildModelInput(model, mode, resolved, prompt, imageUrls),
-  );
+  const payload = buildModelInput(model, mode, resolved, prompt, imageUrls);
+  const submitted = dependencies.submitImage
+    ? await dependencies.submitImage({ endpoint, input: payload, cardIndex: card.index, slot: job?.slot, modelId: model.id, unitCostUsd })
+    : await dependencies.queue.submitJob(endpoint, payload);
   const request = await dependencies.requestStore.createSubmitted({
     projectId: project.id,
     cardIndex: card.index,
@@ -236,7 +257,7 @@ export async function startQueuedFlow(
    * 작업에 저장된 지시(`data.userInstruction`)를 지우지 않고 **덧붙인다** —
    * 이번 한 번만 쓰고 흐름에 남기지 않는다.
    */
-  options: { cardIndexes?: number[]; now?: string; note?: string } = {},
+  options: { cardIndexes?: number[]; now?: string; note?: string; deferSubmit?: boolean } = {},
 ): Promise<SnsFlowState> {
   const next = structuredClone(flow);
   const now = nowIso(options.now);
@@ -285,6 +306,7 @@ export async function startQueuedFlow(
         card.assetUrl = saved.assetUrl;
         card.status = "done";
       } catch (error) {
+        if (dependencies.durable) throw error;
         card.status = "failed";
         card.error = error instanceof Error ? error.message : "사용자 원본을 저장하지 못했습니다.";
       }
@@ -387,7 +409,7 @@ export async function startQueuedFlow(
     card.generationStartedAt = undefined;
     await dependencies.savePrompt(card.index, card.prompt);
   }
-  await submitNext(project, next, dependencies, now);
+  if (!options.deferSubmit) await submitNext(project, next, dependencies, now);
   return next;
 }
 
@@ -436,7 +458,7 @@ export async function pollQueuedFlow(
   };
 
   const elapsed = Date.parse(now) - Date.parse(startedAt ?? now);
-  if (elapsed > QUEUE_GIVE_UP_MS) {
+  if (!dependencies.durable && elapsed > QUEUE_GIVE_UP_MS) {
     const message = `30분 동안 fal 상태가 끝나지 않아 조회를 중단했습니다. request_id ${requestId ?? "없음"}은 장부에 남겼습니다.`;
     if (job) {
       job.status = "failed";
@@ -459,6 +481,7 @@ export async function pollQueuedFlow(
   try {
     result = await dependencies.queue.jobResult(identity.endpoint, identity.requestId);
   } catch (error) {
+    if (dependencies.durable) throw error;
     const message = error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다.";
     if (job) {
       // 한 칸이 실패해도 나머지로 카드는 만든다.

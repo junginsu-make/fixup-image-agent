@@ -1,3 +1,5 @@
+import { beginPosterRun, replayPosterRun } from "../../../../../../lib/generation/poster-execution";
+import { useDurableGeneration, generationFailureResponse } from "../../../../../../lib/generation/run-store";
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import sharp from "sharp";
 import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
@@ -61,6 +63,7 @@ export async function POST(request: Request, context: Context) {
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
+    if (useDurableGeneration()) { const replay = await replayPosterRun(request, auth.member.userId, project); if (replay) return replay; }
 
     /**
      * **같은 클릭이 두 번 오면 돈이 두 번 나간다.**
@@ -155,33 +158,7 @@ export async function POST(request: Request, context: Context) {
      * 알고, 덜 왔으면 그만큼만 받아야 한다. 그래서 예약 열쇠를 작업에 적어
      * 두고 거기서 마무리한다.
      */
-    const estimate = estimatePosterCost({
-      modelId: choice.model.id,
-      ratioId: project.ratio,
-      variants: project.data.variants,
-      hasReferences: references.length > 0 || preserved.length > 0,
-      // 아래 제출과 같은 크기를 본다. 안 넘기면 자리표시 픽셀로 계산되어
-      // 예약한 장수와 실제로 청구되는 값이 갈린다.
-      sourceSize,
-    });
-    const units = creditUnits(estimate.totalUsd ?? 0);
-    const reserved = await reserveAiUsage(request, "poster_image", units);
-    /**
-     * **거절이면 자리부터 돌려준다.**
-     *
-     * 여기는 `return` 이라 아래 `catch` 의 되돌리기를 타지 않는다. 그대로 두면
-     * 한도를 다 쓴 사람이 「만들기」를 누를 때마다 프로젝트가 `"generating"` 에
-     * 남는다 — 이 저장소에는 `"failed"` 로 가는 길이 없어 **영구히** 그렇다.
-     * 돈이 한 푼도 안 나간 갈래이므로 아래 `catch` 와 같은 판단을 여기서 한다.
-     */
-    if (!reserved.ok) {
-      await stores.projects.update(id, { status: previousStatus }).catch(() => {});
-      return reserved.response;
-    }
-    reservation = { userId: reserved.userId, requestId: reserved.requestId };
-
-    const submission = await submitPoster(
-      {
+    const job = {
         projectId: id,
         modelId: choice.model.id,
         ratioId: project.ratio,
@@ -213,7 +190,35 @@ export async function POST(request: Request, context: Context) {
           .filter((reference) => (project.data.restyledIds ?? []).includes(reference.id))
           .map((reference) => urls[reference.id]!)
           .filter(Boolean),
-      },
+      };
+    const estimate = estimatePosterCost({
+      modelId: choice.model.id,
+      ratioId: project.ratio,
+      variants: project.data.variants,
+      hasReferences: references.length > 0 || preserved.length > 0,
+      // 아래 제출과 같은 크기를 본다. 안 넘기면 자리표시 픽셀로 계산되어
+      // 예약한 장수와 실제로 청구되는 값이 갈린다.
+      sourceSize,
+    });
+    const units = creditUnits(estimate.totalUsd ?? 0);
+    if (useDurableGeneration()) return await beginPosterRun(request, auth.member.userId, project, job);
+    const reserved = await reserveAiUsage(request, "poster_image", units);
+    /**
+     * **거절이면 자리부터 돌려준다.**
+     *
+     * 여기는 `return` 이라 아래 `catch` 의 되돌리기를 타지 않는다. 그대로 두면
+     * 한도를 다 쓴 사람이 「만들기」를 누를 때마다 프로젝트가 `"generating"` 에
+     * 남는다 — 이 저장소에는 `"failed"` 로 가는 길이 없어 **영구히** 그렇다.
+     * 돈이 한 푼도 안 나간 갈래이므로 아래 `catch` 와 같은 판단을 여기서 한다.
+     */
+    if (!reserved.ok) {
+      await stores.projects.update(id, { status: previousStatus }).catch(() => {});
+      return reserved.response;
+    }
+    reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
+    const submission = await submitPoster(
+      job,
       { queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
         // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.
         saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); } },
@@ -273,6 +278,8 @@ export async function POST(request: Request, context: Context) {
       throw cause;
     }
   } catch (error) {
+    const generationFailure = generationFailureResponse(error);
+    if (generationFailure) return generationFailure;
     const writeDenied = projectWriteDeniedResponse(error);
     if (writeDenied) return writeDenied;
     if (error instanceof PosterProviderConfigurationError) {

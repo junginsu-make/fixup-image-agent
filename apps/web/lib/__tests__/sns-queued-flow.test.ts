@@ -36,6 +36,23 @@ function flow(): SnsFlowState {
   };
 }
 
+it("durable preparation can finish without submitting a paid image", async()=>{
+  const events:string[]=[];const deps=dependencies(events);deps.durable=true;
+  const prepared=await startQueuedFlow(project(),flow(),deps,{deferSubmit:true});
+  expect(events.filter(e=>e.startsWith("submit:"))).toEqual([]);
+  expect(hasActiveQueuedGeneration(prepared)).toBe(true);
+  await pollQueuedFlow(project(),prepared,deps);
+  expect(events.filter(e=>e.startsWith("submit:"))).toHaveLength(1);
+});
+
+it("durable execution does not treat thirty minutes as provider failure",async()=>{
+  const events:string[]=[];const deps=dependencies(events);deps.durable=true;
+  const prepared=await startQueuedFlow(project(),flow(),deps,{now:"2026-09-01T00:00:00Z"});
+  const polled=await pollQueuedFlow(project(),prepared,deps,{now:"2026-09-01T01:00:00Z"});
+  expect(hasActiveQueuedGeneration(polled)).toBe(true);
+  expect(events.some(e=>e.startsWith("failed:"))).toBe(false);
+});
+
 function dependencies(events: string[], status: QueuedGenerationDependencies["queue"]["jobStatus"] = async () => "in_progress"):
   QueuedGenerationDependencies {
   let submitted = 0;

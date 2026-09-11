@@ -340,9 +340,9 @@ export function PosterClient(
   }
 
   async function pollUntilDone(submission: {
-    requestRowId: string; falRequestId: string; endpoint: string; estimatedUsd?: number;
+    runId?: string; requestRowId?: string; falRequestId?: string; endpoint?: string; estimatedUsd?: number;
   }, variants: number) {
-    const body = {
+    const body = submission.runId ? { runId: submission.runId } : {
       requestRowId: submission.requestRowId,
       falRequestId: submission.falRequestId,
       endpoint: submission.endpoint,

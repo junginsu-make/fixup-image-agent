@@ -69,3 +69,20 @@ test('T03/T19: yesterday unresolved exposure still counts against todays admissi
     UPDATE usage_controls SET daily_cost_limit_microusd=1000000;`);
   await assert.rejects(begin(input(randomUUID(),{userId:ids.b,operation:'redesign_generate',resourceType:null,resourceId:null})),/provider_budget_exceeded/);
 });
+
+test('draft edits survive executor checkpoints for the same SNS project',async()=>{
+  await db.sql('UPDATE usage_controls SET daily_cost_limit_microusd=10000000;');
+  await db.sql(`INSERT INTO sns_projects(id,user_id,title,ratio,model_id,data) VALUES ('${ids.project}','${ids.a}','sns','1:1','nano-banana','{"flow":{"cards":[{"copy":{"headline":"old"}}]}}');`);
+  const run=await begin(input(randomUUID(),{operation:'sns_image',resourceType:'sns',units:3,maxCostMicrousd:100000,snapshot:{customerLlmUnitMicrousd:14000,initialFlow:{cards:[{copy:{headline:'old'}}]}}}));
+  await db.sql(`SELECT save_sns_draft_v2('${ids.a}','${ids.project}','{"cards":[{"copy":{"headline":"new draft"}}]}','copy_ready');`);
+  const claimed=JSON.parse(await db.sql(`SELECT claim_generation_run('${run.id}');`));
+  await db.sql(`SELECT checkpoint_generation_run('${run.id}','${claimed.lease_token}','{"flow":{"cards":[{"copy":{"headline":"old result"}}]}}','running',0,false);`);
+  assert.equal(await db.sql(`SELECT data#>>'{flow,cards,0,copy,headline}' FROM sns_projects WHERE id='${ids.project}';`),'new draft');
+  assert.equal(await db.sql(`SELECT data#>>'{executionFlow,cards,0,copy,headline}' FROM sns_projects WHERE id='${ids.project}';`),'old result');
+  await assert.rejects(db.sql(`SELECT save_sns_draft_v2('${ids.c}','${ids.project}','{}','copy_ready');`),/not_owner/);
+  await db.sql(`INSERT INTO generation_attempts(run_id,logical_step,sequence,provider,model,endpoint,state,request_hash,request_payload,price_snapshot,estimated_cost_microusd,requested_images,returned_images,delivered_images,submitted_at)
+    SELECT '${run.id}','image-'||n,n,'fal','m','e','stored','h','{}','{"chargeUnitMicrousd":39000}',39000,1,1,1,now() FROM generate_series(1,2)n;
+    SELECT checkpoint_generation_run('${run.id}','${claimed.lease_token}','{"flow":{"generation":{"selectedCardIndexes":[1,2]},"cards":[{"index":1,"status":"done","falRequestId":"f1"},{"index":2,"status":"done","falRequestId":"f2"}]}}','settlement_pending',0);
+    SELECT settle_generation_v2('${run.id}','${claimed.lease_token}');`);
+  assert.equal(await db.sql(`SELECT consumed_units FROM generation_events WHERE id='${run.event_id}';`),'3');
+});

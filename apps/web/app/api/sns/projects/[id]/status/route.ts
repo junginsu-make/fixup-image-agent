@@ -1,4 +1,6 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { useDurableGeneration, runForResource } from "../../../../../../lib/generation/run-store";
+import { isTerminal, publicRun } from "../../../../../../lib/generation/types";
 import { settleSnsReservation } from "../../../../../../lib/sns/settle";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../lib/sns-generation-store";
@@ -22,6 +24,11 @@ export async function POST(_request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "생성 흐름을 찾을 수 없습니다." }, { status: 404 });
+      if (useDurableGeneration()) {
+        const run = await runForResource(project.userId,"sns",id);
+        if (run?.state === "needs_reconciliation") return Response.json({ok:false,active:false,message:"생성 요청 상태를 확인 중입니다. 잠시 후 다시 확인해 주세요."},{status:409});
+        return Response.json({ok:true,project:await refreshProjectAssetUrls(project),active:run?!isTerminal(run.state):false,...(run?{run:publicRun(run)}:{})});
+      }
       /**
        * **도는 중이 아니어도 열쇠가 남아 있으면 마무리한다.**
        *

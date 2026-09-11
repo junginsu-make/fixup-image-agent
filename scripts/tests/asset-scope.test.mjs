@@ -19,3 +19,8 @@ test('T06: an owned metadata row cannot authorize a path in someone elses namesp
     INSERT INTO library_images(item_id,user_id,position,path) VALUES ('${ids.project}','${ids.a}',0,'${ids.c}/secret.png');`);
   assert.equal(await db.sql(`SELECT count(*) FROM accessible_generation_asset_paths('${ids.a}',ARRAY['${ids.c}/secret.png']);`),'0');
 });
+test('T06: storage paths cannot traverse their owner namespace',async()=>{
+  const malformed=`${ids.a}/../${ids.c}/secret.png`;
+  await db.sql(`INSERT INTO library_images(item_id,user_id,position,path) VALUES ('${ids.project}','${ids.a}',1,'${malformed}');`);
+  assert.equal(await db.sql(`SELECT count(*) FROM accessible_generation_asset_paths('${ids.a}',ARRAY['${malformed}']);`),'0');
+});

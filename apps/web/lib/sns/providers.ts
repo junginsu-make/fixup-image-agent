@@ -1,3 +1,5 @@
+import { recordedLlmCall } from "../llm/recorded-call";
+import { isExecutionControl } from "@fixup/shared";
 import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -164,11 +166,11 @@ class AnthropicSceneProvider implements ImagePromptProvider {
   constructor(private readonly client: Anthropic, private readonly model: string) {}
   async generate(request: ScenePromptRequest): Promise<unknown> {
     const images = await Promise.all(request.imageUrls.map(imageBlock));
-    const response = await this.client.messages.create({
+    const response = await recordedLlmCall("anthropic", this.model, request, () => this.client.messages.create({
       model: this.model,
       max_tokens: 1800,
       messages: [{ role: "user", content: [{ type: "text", text: request.prompt }, ...images] }],
-    });
+    }));
     recordFrom(this.model, response);
     return response.content.filter((block): block is Anthropic.TextBlock => block.type === "text").map((block) => block.text).join("\n");
   }
@@ -177,13 +179,14 @@ class AnthropicSceneProvider implements ImagePromptProvider {
 class OpenAISceneProvider implements ImagePromptProvider {
   constructor(private readonly client: OpenAI, private readonly model: string) {}
   async generate(request: ScenePromptRequest): Promise<unknown> {
-    const response = await this.client.responses.create({
+    const response = await recordedLlmCall("openai", this.model, request, () => this.client.responses.create({
       model: this.model,
+      max_output_tokens: 4096,
       input: [{ role: "user", content: [
         { type: "input_text", text: request.prompt },
         ...request.imageUrls.map((imageUrl) => ({ type: "input_image" as const, image_url: imageUrl, detail: "original" as const })),
       ] }],
-    });
+    }));
     recordFrom(this.model, response);
     if (!response.output_text) throw new Error("OpenAI가 이미지 프롬프트를 돌려주지 않았습니다.");
     return response.output_text;
@@ -193,7 +196,7 @@ class OpenAISceneProvider implements ImagePromptProvider {
 class FallbackSceneProvider implements ImagePromptProvider {
   constructor(private readonly primary: ImagePromptProvider, private readonly backup: ImagePromptProvider) {}
   async generate(request: ScenePromptRequest): Promise<unknown> {
-    try { return await this.primary.generate(request); } catch { return this.backup.generate(request); }
+    try { return await this.primary.generate(request); } catch (error) { if (isExecutionControl(error)) throw error; return this.backup.generate(request); }
   }
 }
 
@@ -201,13 +204,13 @@ class AnthropicReviewProvider implements ReviewRequest {
   constructor(private readonly client: Anthropic, private readonly model: string) {}
   async review(input: ReviewProviderInput): Promise<unknown> {
     const images = await Promise.all([input.imageUrl, ...input.preservedImageUrls].map(imageBlock));
-    const response = await this.client.messages.create({
+    const response = await recordedLlmCall("anthropic", this.model, input, () => this.client.messages.create({
       model: this.model,
       max_tokens: 1800,
       messages: [{ role: "user", content: [{ type: "text", text: input.prompt }, ...images] }],
       tools: [{ name: REVIEW_SPEC.name, description: REVIEW_SPEC.description, input_schema: REVIEW_SPEC.schema as Anthropic.Tool.InputSchema }],
       tool_choice: { type: "tool", name: REVIEW_SPEC.name, disable_parallel_tool_use: true },
-    });
+    }));
     recordFrom(this.model, response);
     const call = response.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === REVIEW_SPEC.name);
     if (!call) throw new Error("Claude가 검수 결과를 돌려주지 않았습니다.");
@@ -218,15 +221,16 @@ class AnthropicReviewProvider implements ReviewRequest {
 class OpenAIReviewProvider implements ReviewRequest {
   constructor(private readonly client: OpenAI, private readonly model: string) {}
   async review(input: ReviewProviderInput): Promise<unknown> {
-    const response = await this.client.responses.create({
+    const response = await recordedLlmCall("openai", this.model, input, () => this.client.responses.create({
       model: this.model,
+      max_output_tokens: 4096,
       input: [{ role: "user", content: [
         { type: "input_text", text: input.prompt },
         ...[input.imageUrl, ...input.preservedImageUrls].map((imageUrl) => ({ type: "input_image" as const, image_url: imageUrl, detail: "original" as const })),
       ] }],
       tools: [{ type: "function", name: REVIEW_SPEC.name, description: REVIEW_SPEC.description, parameters: REVIEW_SPEC.schema, strict: false }],
       tool_choice: { type: "function", name: REVIEW_SPEC.name },
-    });
+    }));
     recordFrom(this.model, response);
     const call = response.output.find((item) => item.type === "function_call" && item.name === REVIEW_SPEC.name);
     if (!call || call.type !== "function_call") throw new Error("OpenAI가 검수 결과를 돌려주지 않았습니다.");
@@ -249,8 +253,8 @@ export interface SnsProviders {
 }
 
 function clients(environment: Record<string, string | undefined>) {
-  const anthropic = new Anthropic({ apiKey: environment.ANTHROPIC_API_KEY!, maxRetries: 2, timeout: 120_000 });
-  const openai = new OpenAI({ apiKey: environment.OPENAI_API_KEY!, maxRetries: 2, timeout: 120_000 });
+  const anthropic = new Anthropic({ apiKey: environment.ANTHROPIC_API_KEY!, maxRetries: 0, timeout: 120_000 });
+  const openai = new OpenAI({ apiKey: environment.OPENAI_API_KEY!, maxRetries: 0, timeout: 120_000 });
   const anthropicModel = environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL;
   const openaiTextModel = environment.OPENAI_DRAFT_MODEL?.trim() || DEFAULT_OPENAI_TEXT_MODEL;
   const openaiVisionModel = environment.OPENAI_VISION_MODEL?.trim() || openaiTextModel;
@@ -285,6 +289,12 @@ export function createSnsGenerationProviders(environment: Record<string, string 
     falQueue,
     falUploader,
   };
+}
+
+export function snsModelSnapshot(environment: Record<string, string | undefined> = process.env) {
+  const text = environment.OPENAI_DRAFT_MODEL?.trim() || DEFAULT_OPENAI_TEXT_MODEL;
+  return { ANTHROPIC_MODEL: environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL,
+    OPENAI_DRAFT_MODEL: text, OPENAI_VISION_MODEL: environment.OPENAI_VISION_MODEL?.trim() || text };
 }
 
 export function createSnsProviders(environment: Record<string, string | undefined> = process.env): SnsProviders {

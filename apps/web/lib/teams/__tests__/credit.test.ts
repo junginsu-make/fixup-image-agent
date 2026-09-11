@@ -148,6 +148,10 @@ describe("이 사람이 쓸 수 있는 최대치", () => {
  * 계속 달려 있다. 화면이 현재 팀원만 더하면 두 숫자가 갈린다.
  */
 describe("팀을 드나든 사람이 있을 때", () => {
+  it("이전 팀 사용량 때문에 새 팀의 남은 몫을 잃지 않는다",()=>{
+    const moved=member({used:20,usedInTeam:0,personalQuota:100});
+    expect(effectiveQuotaOf(teamCreditOf(10,[moved],0),moved)-moved.used).toBe(10);
+  });
   it("빠져나간 사람이 쓴 것도 팀 잔량에서 뺀다", () => {
     // T(한도 100)에서 M 이 50 을 쓰고 달 중간에 나갔다. 남은 사람은 40 을 썼다.
     const stayed = member({ userId: "u1", used: 40 });

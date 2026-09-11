@@ -34,7 +34,7 @@ type CopyPatch = Partial<Pick<SnsFlowCard["copy"], "headline" | "body" | "accent
  * 화면은 그냥 오류로 적고 04 에 머물렀다.
  */
 class ProjectRequestError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly code?: string) {
     super(message);
     this.name = "ProjectRequestError";
   }
@@ -44,7 +44,7 @@ async function projectRequest(url: string, init?: RequestInit): Promise<SnsProje
   const response = await fetch(url, init);
   const payload = await response.json() as Payload;
   if (!response.ok || !payload.project) {
-    throw new ProjectRequestError(payload.message ?? "프로젝트를 처리하지 못했습니다.", response.status);
+    throw new ProjectRequestError(payload.message ?? "프로젝트를 처리하지 못했습니다.", response.status, (payload as Payload & {code?:string}).code);
   }
   return payload.project;
 }
@@ -65,7 +65,8 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       setProject(loaded);
       // **첫 적재와 같은 규칙을 쓴다.** 다시 읽고도 화면 단계를 안 맞추면,
       // 서버가 「생성 중」이라고 알려 줘도 사용자는 04 에 그대로 남는다.
-      if (loaded.data.flow) setView(loaded.data.flow.stage);
+      const loadedFlow = loaded.data.executionFlow ?? loaded.data.flow;
+      if (loadedFlow) setView(loadedFlow.stage);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.");
     }
@@ -75,13 +76,14 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     projectRequest(`/api/sns/projects/${projectId}/plan`)
       .then((loaded) => {
         setProject(loaded);
-        if (loaded.data.flow) setView(loaded.data.flow.stage);
+        const loadedFlow = loaded.data.executionFlow ?? loaded.data.flow;
+        if (loadedFlow) setView(loadedFlow.stage);
       })
       .catch((error) => setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다."))
       .finally(() => setBusy(undefined));
   }, [projectId]);
 
-  const generationActive = hasActiveQueuedGeneration(project?.data.flow);
+  const generationActive = hasActiveQueuedGeneration(project?.data.executionFlow ?? project?.data.flow);
 
   /**
    * 사이드바에 등록한다.
@@ -90,7 +92,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
    * 보인다. 이미 만드는 중인 프로젝트를 열었을 때도 같은 자리에 붙는다.
    */
   const { start, finish } = useRunningJobs();
-  const startedAt = project?.data.flow?.generation?.startedAt;
+  const startedAt = (project?.data.executionFlow ?? project?.data.flow)?.generation?.startedAt;
   const title = project?.title;
   React.useEffect(() => {
     const id = jobId("sns", projectId);
@@ -120,7 +122,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
           setProject(saved);
           setView("result");
           setMessage("");
-          if (hasActiveQueuedGeneration(saved.data.flow)) await poll();
+          if (hasActiveQueuedGeneration(saved.data.executionFlow ?? saved.data.flow)) await poll();
         } catch (error) {
           if (stopped) return;
           setMessage(error instanceof Error ? error.message : "생성 상태를 확인하지 못했습니다.");
@@ -187,7 +189,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
        * 다시 읽으면 진행 중인 흐름이 보이고, 그때부터 결과를 받아 오기 시작한다.
        */
       const status = error instanceof ProjectRequestError ? error.status : undefined;
-      if (afterGenerateFailure(status) === "resync") await reload();
+      if (afterGenerateFailure(status, error instanceof ProjectRequestError ? error.code : undefined) === "resync") await reload();
     } finally {
       setBusy(undefined);
     }
@@ -229,7 +231,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       setMessage(error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다.");
       // 「다른 카드가 생성 중입니다」(409)도 같은 통보다 — 화면만 모르고 있다.
       const status = error instanceof ProjectRequestError ? error.status : undefined;
-      if (afterGenerateFailure(status) === "resync") await reload();
+      if (afterGenerateFailure(status, error instanceof ProjectRequestError ? error.code : undefined) === "resync") await reload();
       return false;
     } finally {
       setRegeneratingIndex(undefined);
@@ -239,7 +241,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   if (busy === "loading") return <div className="flex items-center gap-3 py-16 text-muted-foreground"><Loader2 className="animate-spin" />프로젝트를 불러오는 중입니다.</div>;
   if (!project) return <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-5 text-destructive">{message || "프로젝트를 찾을 수 없습니다."}</p>;
 
-  const flow = project.data.flow;
+  const flow = view === "copy" ? project.data.flow : project.data.executionFlow ?? project.data.flow;
   return (
     <div className="grid gap-8">
       <header>

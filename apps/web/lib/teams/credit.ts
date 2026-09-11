@@ -129,5 +129,6 @@ export function effectiveQuotaOf(credit: TeamCredit, member: MemberUsage): numbe
   // DB 의 `team_units_used(team, period, exclude_user)` 와 같은 셈이다 —
   // 팀에 달린 전부에서 내 몫만 뺀다.
   const others = Math.max(0, credit.teamUsed - member.usedInTeam);
-  return Math.min(member.personalQuota, Math.max(0, credit.quota - others));
+  const outsideTeam = Math.max(0, member.used - member.usedInTeam);
+  return Math.min(member.personalQuota, Math.max(0, credit.quota - others) + outsideTeam);
 }

@@ -130,6 +130,11 @@ export function isLocalStoreEnabled(environment: NodeJS.ProcessEnv = process.env
   return environment.NODE_ENV !== "production" && environment.LOCAL_STORE === "1";
 }
 
+export function hasLocalActiveGeneration(data:unknown,kind:"sns"|"poster",id:string):boolean {
+  const ledger=data as {generationRuns?:Array<{resource_type:string;resource_id:string;operation:string;state:string}>};
+  return Boolean(ledger.generationRuns?.some(r=>r.resource_type===kind&&r.resource_id===id&&r.operation===`${kind}_image`&&!['succeeded','failed','cancelled'].includes(r.state)));
+}
+
 function findWorkspaceRoot(start: string): string {
   let current = path.resolve(start);
   while (true) {
@@ -385,6 +390,7 @@ export function removeLocalSnsProject(
       (project) => project.id === projectId && project.userId === userId,
     );
     if (index < 0) return false;
+    if (hasLocalActiveGeneration(data,"sns",projectId)) throw new Error("generation_in_progress");
     data.snsProjects.splice(index, 1);
     data.cards = data.cards.filter(
       (card) => !(card.projectId === projectId && card.userId === userId),
@@ -404,7 +410,7 @@ export function saveLocalSnsFlow(
     const project = data.snsProjects.find((entry) => entry.id === id && entry.userId === userId);
     if (!project) throw notFound("SNS 프로젝트");
     project.data.flow = flow;
-    project.status = status;
+    project.status = hasLocalActiveGeneration(data,"sns",id) ? "generating" : status;
     project.updatedAt = new Date().toISOString();
     return project;
   });
@@ -605,11 +611,13 @@ export async function writeLocalSnsResultFile(
   projectId: string,
   cardIndex: number,
   bytes: Buffer,
+  runId?: string,
 ): Promise<string> {
   assertLocalSegment(userId, "사용자");
   assertLocalSegment(projectId, "프로젝트");
   if (!Number.isInteger(cardIndex) || cardIndex < 1) throw new Error("카드 번호가 올바르지 않습니다.");
-  const storagePath = `${userId}/sns/${projectId}/${cardIndex}.png`;
+  if(runId)assertLocalSegment(runId,"생성 회차");
+  const storagePath = `${userId}/sns/${projectId}/${runId?`${runId}/`:""}${cardIndex}.png`;
   const target = localFilePath(root, storagePath);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes);
@@ -625,13 +633,15 @@ export async function writeLocalSnsPreviewFile(
   projectId: string,
   cardIndex: number,
   bytes: Buffer,
+  runId?: string,
 ): Promise<string> {
   assertLocalSegment(userId, "사용자");
   assertLocalSegment(projectId, "프로젝트");
   if (!Number.isInteger(cardIndex) || cardIndex < 1) throw new Error("카드 번호가 올바르지 않습니다.");
   // 규칙은 `lib/sns/thumbnail.ts` 한 곳에서만 만든다. 두 곳에서 따로 자라면
   // 미리보기가 두 종류로 갈리고 삭제가 한쪽만 잡는다.
-  const storagePath = snsPreviewPath(userId, projectId, cardIndex);
+  if(runId)assertLocalSegment(runId,"생성 회차");
+  const storagePath = runId ? `${userId}/sns/${projectId}/${runId}/${cardIndex}.thumb.webp` : snsPreviewPath(userId, projectId, cardIndex);
   const target = localFilePath(root, storagePath);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes);
@@ -640,7 +650,7 @@ export async function writeLocalSnsPreviewFile(
 
 export async function readLocalSnsResultFile(root: string, storagePath: string): Promise<Buffer> {
   const parts = storagePath.split("/");
-  if (parts.length !== 4 || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
+  if (![4,5].includes(parts.length) || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
   const target = localFilePath(root, storagePath);
   await access(target);
   return readFile(target);

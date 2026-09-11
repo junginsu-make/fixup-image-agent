@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { beginSnsRun } from "../../../../../../../lib/generation/sns-execution";
+import { useDurableGeneration, generationFailureResponse } from "../../../../../../../lib/generation/run-store";
+import { publicRun } from "../../../../../../../lib/generation/types";
+import { assertProjectWrite } from "../../../../../../../lib/generation/ownership";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../../lib/membership/api";
 import { estimateCost } from "../../../../../../sns/cost-estimate";
@@ -88,6 +92,11 @@ export async function POST(request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(params.id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
+      if (useDurableGeneration()) {
+        await assertProjectWrite(auth.member.userId,"sns",params.id);
+        const run = await beginSnsRun(request,auth.member.userId,project,{cardIndexes:[index],note:noteInput.data.note});
+        return Response.json({ok:true,project:await store.get(params.id),run:publicRun(run)});
+      }
       if (hasActiveQueuedGeneration(project.data.flow)) return Response.json({ ok: false, message: "다른 카드가 생성 중입니다." }, { status: 409 });
       const providers = createSnsGenerationProviders();
       project = await refreshProjectAssetUrls(project);
@@ -150,6 +159,8 @@ export async function POST(request: Request, context: Context) {
       return Response.json({ ok: true, project: saved });
     });
   } catch (error) {
+    const generationFailure = generationFailureResponse(error);
+    if (generationFailure) return generationFailure;
     // 제출이 실패했으면 돈이 안 나갔다. 안 풀면 만료될 때까지 한도에서 빠져 있는다.
     // **응답을 정하기 전에 한다.** 여기서 일찍 빠져나가면 장이 묶인 채 남는다.
     if (reservation) {

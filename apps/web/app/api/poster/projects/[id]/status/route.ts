@@ -1,19 +1,14 @@
-import { writeFile, mkdir } from "node:fs/promises";
-import path from "node:path";
+import { savePosterResult } from "../../../../../../lib/poster/save-result";
+import { useDurableGeneration, runForResource } from "../../../../../../lib/generation/run-store";
+import { isTerminal, publicRun } from "../../../../../../lib/generation/types";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
-import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local-store";
-import { makePosterThumbnail } from "../../../../../../lib/poster/thumbnail";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { collectPoster } from "../../../../../../lib/poster/flow";
-import { posterAssetPath, posterThumbPath } from "../../../../../../lib/poster/supabase-store-core";
-import { createSupabaseAdminClient } from "../../../../../../lib/supabase/admin";
-import { markAsAi } from "../../../../../../lib/watermark";
 
 /** 결과도 라이브러리 버킷에 둔다. 포스터만의 버킷을 따로 두지 않는다. */
-const LIBRARY_BUCKET = "library";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,66 +44,6 @@ const StatusSchema = z.object({
  *
  * **사본 하나 때문에 결과물을 잃지 않는다.** 없으면 화면이 원본으로 떨어진다.
  */
-async function saveThumbnail(
-  bytes: Buffer,
-  target: string,
-  put: (path: string, body: Buffer) => Promise<string | null>,
-): Promise<string | null> {
-  const thumbnail = await makePosterThumbnail(bytes);
-  if (!thumbnail) return null;
-  return put(target, thumbnail);
-}
-
-/**
- * 결과 한 장을 저장한다. 원본과 목록용 사본의 자리를 함께 돌려준다.
- *
- * **원본의 이름 규칙(`.png`)은 손대지 않는다** — 사본은 별개 파일이라 이미
- * 쌓인 것들이 그대로 열려야 한다.
- */
-async function saveResult(
-  userId: string, projectId: string, generationRequestId: string, variantIndex: number, url: string,
-): Promise<{ assetPath: string; thumbPath: string | null }> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`결과 이미지를 내려받지 못했습니다 (${response.status}).`);
-  // 만든 그림이므로 "AI 이미지" 를 파일에 새기고 저장한다.
-  const bytes = await markAsAi(Buffer.from(await response.arrayBuffer()));
-
-  if (isLocalStoreEnabled()) {
-    const root = path.join(localStoreRoot(), "poster");
-    const write = async (storagePath: string, body: Buffer) => {
-      const target = path.join(root, ...storagePath.split("/"));
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, body);
-      return storagePath;
-    };
-    // 운영과 같은 규칙으로 회차를 한 칸 둔다 — 두 모드가 다르면 로컬에서 확인한
-    // 것이 운영에서 확인한 것이 아니게 된다.
-    const assetPath = await write(`${projectId}/${generationRequestId}/${variantIndex}.png`, bytes);
-    const thumbPath = await saveThumbnail(
-      bytes, `${projectId}/${generationRequestId}/${variantIndex}.thumb.webp`, write,
-    );
-    return { assetPath, thumbPath };
-  }
-
-  const storage = createSupabaseAdminClient().storage.from(LIBRARY_BUCKET);
-  const assetPath = posterAssetPath(userId, projectId, generationRequestId, variantIndex);
-  const result = await storage.upload(assetPath, bytes, { contentType: "image/png", upsert: true });
-  if (result.error) throw new Error(result.error.message);
-
-  const thumbPath = await saveThumbnail(
-    bytes,
-    posterThumbPath(userId, projectId, generationRequestId, variantIndex),
-    async (target, body) => {
-      const uploaded = await storage.upload(target, body, { contentType: "image/webp", upsert: true });
-      if (!uploaded.error) return target;
-      // 자리를 비워 두면 원본으로 떨어진다.
-      console.error(`[poster] 사본을 올리지 못했습니다: ${uploaded.error.message}`);
-      return null;
-    },
-  );
-  return { assetPath, thumbPath };
-}
-
 /**
  * 상태를 물어보고, 끝났으면 회수한다.
  *
@@ -118,7 +53,21 @@ async function saveResult(
 export async function POST(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
-  const parsed = StatusSchema.safeParse(await request.json().catch(() => ({})));
+  const body = await request.json().catch(() => ({}));
+  if (useDurableGeneration()) {
+    const input = z.object({ runId: z.string().uuid() }).strict().safeParse(body);
+    if (!input.success) return Response.json({ok:false,code:"reload_required",message:"화면을 새로고침한 뒤 실행 상태를 확인해 주세요."},{status:409});
+    try {
+      const { id } = await context.params;
+      const run = await runForResource(auth.member.userId,"poster",id,input.data.runId);
+      if (!run) return Response.json({ok:false,message:"생성 요청을 찾을 수 없습니다."},{status:404});
+      const ok = !["failed","cancelled","needs_reconciliation"].includes(run.state);
+      return Response.json({ok,done:isTerminal(run.state),run:publicRun(run),
+        ...(!ok ? {message:run.state==="needs_reconciliation"?"생성 요청 상태를 확인 중입니다. 잠시 후 다시 확인해 주세요.":"이미지 생성을 완료하지 못했습니다."}:{}),
+        images:await posterStoresForUser(auth.member.userId).images.byProject(id)});
+    } catch { return Response.json({ok:false,message:"생성 상태를 확인하지 못했습니다."},{status:503}); }
+  }
+  const parsed = StatusSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ ok: false, message: "조회할 요청을 알려 주세요." }, { status: 400 });
   }
@@ -139,7 +88,7 @@ export async function POST(request: Request, context: Context) {
         requests: stores.requests,
         images: stores.images,
         saveImage: (projectId, generationRequestId, variantIndex, url) =>
-          saveResult(auth.member.userId, projectId, generationRequestId, variantIndex, url),
+          savePosterResult(auth.member.userId, projectId, generationRequestId, variantIndex, url),
       },
     );
 

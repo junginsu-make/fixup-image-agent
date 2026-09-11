@@ -63,7 +63,7 @@ export interface SnsFlowStore {
  * 포스터에서 세 번 반복해 잡힌 실수라 규칙을 한 곳에 두고 쓴다.
  */
 function assetPathsOf(project: SnsProjectRecord): string[] {
-  return snsCardPathsToRemove(project.data.flow?.cards ?? []);
+  return [...new Set([...snsCardPathsToRemove(project.data.flow?.cards ?? []), ...snsCardPathsToRemove(project.data.executionFlow?.cards ?? [])])];
 }
 
 /** 시험이 「삭제가 이 규칙을 부른다」를 확인할 수 있게 연다. */
@@ -109,7 +109,6 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
       const project = await getProject(projectId);
       if (!project) throw new Error("SNS 프로젝트를 찾을 수 없습니다.");
       if (project.userId !== userId) throw new SnsProjectNotWritable();
-      const data = { ...project.data, flow };
       /**
        * **정말 써졌는지 세어 본다.**
        *
@@ -121,13 +120,13 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
        * 팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에
        * 실제 요청이 나간 뒤, 결과만 어디에도 안 남았다.
        */
-      const result = await createSupabaseAdminClient().from("sns_projects")
-        .update({ data, status, updated_at: new Date().toISOString() })
-        .eq("id", projectId).eq("user_id", userId)
-        .select("id");
+      const result = await createSupabaseAdminClient().rpc("save_sns_draft_v2", {
+        p_actor: userId, p_id: projectId, p_flow: flow, p_status: status,
+      });
       if (result.error) throw new Error(result.error.message);
-      if (!(result.data ?? []).length) throw new SnsProjectNotWritable();
-      return { ...project, data, status, updatedAt: new Date().toISOString() };
+      const updated = await getProject(projectId);
+      if (!updated) throw new SnsProjectNotWritable();
+      return updated;
     },
     async remove(projectId) {
       const project = await getProject(projectId);
