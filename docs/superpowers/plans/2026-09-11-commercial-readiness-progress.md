@@ -13,10 +13,19 @@
 | 4 비동기 실행 | 서버 run/attempt 기반 SNS·포스터, 조회 전용 status, 원고/실행 분리, 로컬 기록 복구 | 코어/재시작 모사/결과 연결 시험 성공; 실제 자동 호출은 단계 6 | 미적용 |
 | 5 동기/LLM | 구현 및 단계 검증: LLM/PDP/리디자인/캐릭터 연결, 비공개 결과·입력 보존, 저장 fence | 웹 전체 1957시험, DB 전체 37시험 후 계약 시험 추가 통과; 운영 통합 검증은 후속 단계 | 미적용 |
 | 6 운영 처리기 | 실행기·timer·journal 복구·운영자 비용 대조·배포 점검 구현 | 전체 웹 1975시험, DB/배포 helper 49시험, 타입·lint 통과; 실제 systemd·배포 검증은 단계 8 | 미적용 |
-| 7 웹 보안 | 미착수 | 미실행 | 미적용 |
+| 7 웹 보안 | canonical origin·공통 next/back·공개 health 축소·admin 진단·CSP 보고 모드 구현 | 웹 1980시험/타입/lint 통과, 실제 로컬 Next 내부 인증·Chromium 화면 확인; HTTPS/Auth·CSP 강제 모드 미완료 | 미적용 |
 | 8 출시 검증 | 미착수 | 미실행 | 미적용 |
 
 ## 단계 5 진행 기록: LLM 경로
+
+### 단계 7: 코드 검증과 운영 확인 경계
+
+- T22/T23 RED 3개에서 악성 forwarded-proto가 javascript origin으로 반영되고 역슬래시 next가 통과하며 공개 health가 설정을 노출함을 재현했다. production은 설정된 HTTPS origin만 사용하고, auth confirm/login/team back을 같은 경로 검증으로 통일했다. 기존 개발 포트는 유지한다.
+- 공개 readiness는 ok/status만 반환하고 실제 모델 주 제공자·fallback 키 유무를 검사한다. 상세 진단은 API admin 인증 뒤에만 조회한다. 키 존재와 실제 provider 인증 성공은 구분한다.
+- CSP 보고는 16 KiB/프로세스당 분당 60요청/요청당 5항목으로 제한한다. 비밀이 있을 수 있는 URL 경로·query·본문은 버린다. 아직 강제 모드는 아니다. 정적 페이지·Next 테마 스크립트·비용 전략실 inline script의 production 관측이 남았다.
+- 실제 Next 15.5.24 BaseServer가 loopback에도 x-forwarded-*를 자동 생성함을 발견했다. 6단계의 전면 거절을 로컬 host/http/loopback IP 정확 일치 검사로 바로잡았다. 비밀키 없는 실제 요청 404, 올바른 요청 GET/POST 200을 로컬 서버에서 확인했다. 외부 프록시 경로는 계속 차단한다.
+- Chromium으로 /guide, /library, /admin/cost-lab의 200과 pageerror 0을 확인했다. 처음 networkidle 대기는 개발 CSP/eval 보고 때문에 timeout했으므로 성공으로 세지 않았고 DOM 로딩 기준으로 다시 확인했다. iframe 내부 계산과 실제 운영 Auth를 검증한 것은 아니다.
+- 전체 pnpm test 성공(웹 190파일/1980시험), 타입·lint 성공. 신규 설치는 HTTP IP 자동 설정을 제거하고 설계의 HTTPS 도메인을 요구한다. 현재 운영 DNS/TLS/Auth/Turnstile 값은 바꾸지 않았다. 도메인·예산·공유 DB 소비 앱 확인이 없어 운영 전환과 단계 7 전체 완료를 주장하지 않는다.
 
 ### 단계 6 구현과 별도 설계 대조
 

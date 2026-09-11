@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { safeNext } from "../../lib/routes";
 import { requireActiveMember, requireAdmin } from "../../lib/membership/server";
 import { canAssignMember, canWriteTeam } from "../../lib/teams/core";
 import {
@@ -265,7 +266,7 @@ export async function selectProjectAction(formData: FormData) {
   // 화면 전부가 이 값으로 걸러진다. 하나만 되살리면 다른 화면이 옛 결과를
   // 그대로 보여 준다.
   revalidatePath("/", "layout");
-  redirect(String(formData.get("back") || "/library"));
+  redirect(safeNext(String(formData.get("back") || ""), "/library"));
 }
 
 /* ── 크레딧 총한도 — 운영자만 ─────────────────────────────────── */

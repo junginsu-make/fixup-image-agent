@@ -91,22 +91,16 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY
 - Node.js 22 이상과 Caddy 를 먼저 설치한다
 
 ```bash
-sudo bash deploy/ec2/install-host.sh studio.example.com   # 도메인이 있으면
-sudo bash deploy/ec2/install-host.sh 54.180.68.212        # IP 로만 열 때
+sudo bash deploy/ec2/install-host.sh studio.example.com
 ```
 
 사용자·디렉터리·웹/수집/생성 처리기 systemd 유닛·Caddy 사이트를 만든다.
 생성 timer는 웹과 DB가 준비된 뒤 배포 스크립트가 시작한다. 기존 수집 워커가
 masked이면 유닛을 덮어쓰거나 활성화하지 않는다.
 
-**도메인이면 HTTPS, IP 면 평문 HTTP 다.** 공개 인증 기관은 IP 에 인증서를
-내주지 않는다. 스크립트가 IP 를 받으면 Caddy 사이트 주소에 `http://` 를
-붙여 인증서 시도를 아예 막는다 — 안 그러면 발급에 실패하면서 사이트가
-뜨지 않는다.
-
-평문일 때 비밀번호는 새지 않는다. 로그인은 브라우저가 Supabase 로 직접
-보내고 그 구간은 HTTPS 다. 다만 **로그인 뒤 세션 토큰은 우리 서버로 평문**
-으로 오간다. 내부용이면 감수할 만하고, 밖에 열 것이라면 도메인을 붙인다.
+상용 설치는 검증된 도메인의 HTTPS를 사용한다. IP 인증서 지원 여부에 대한
+추측으로 HTTP로 자동 전환하지 않는다. 기존 HTTP 운영 설정은 이 문서 수정으로
+바뀌지 않는다. DNS·인증서·80/443 접근·Auth 설정을 확인한 뒤 함께 전환한다.
 
 ### 4. 환경변수를 넣는다
 
@@ -125,13 +119,23 @@ Supabase 값은 상세페이지와 **같은 것**을 넣는다. 같은 DB 를 �
 
 ### 5. 주소를 고정한다
 
-도메인을 쓰면 A 레코드를 탄력적 IP 로 향하게 한다. Caddy 가 인증서를 알아서
-받는다. IP 로만 열 때는 **탄력적 IP 가 붙어 있는지만** 확인하면 된다 — 안
-붙어 있으면 인스턴스를 멈췄다 켤 때마다 주소가 바뀐다.
+도메인의 A 레코드를 탄력적 IP로 향하게 하고 Caddy 인증서 발급 및 HTTP→HTTPS
+전환을 외부에서 확인한다. `NEXT_PUBLIC_SITE_URL`은 같은 HTTPS origin으로
+GitHub Actions 변수와 서버 환경 파일 모두에 설정한다. Supabase Authentication의
+URL Configuration과 메일 확인/비밀번호 재설정 redirect allow list도 일치시킨다.
 
 > 로그인은 Supabase 의 CAPTCHA 를 거친다. 새 주소에서 처음 열 때는 그
 > 주소(도메인이든 IP 든)를 Cloudflare Turnstile 위젯의 호스트 이름 목록에
 > 넣어야 한다. 없으면 `110200` 으로 막힌다.
+
+공개 `/api/health/ready`는 `{ok,status}`만 제공한다. 상세 키 설정 여부와 실행기
+상태는 관리자 전용 `/api/admin/diagnostics`에서 확인한다. 키가 있다는 결과를
+실제 제공자 인증 성공으로 해석하지 않는다.
+
+CSP는 먼저 보고 모드로 관측한다. 보고에는 directive와 차단 출처만 남기며,
+문서 URL·query·쿠키·토큰·스크립트 본문을 기록하지 않는다. Next inline script,
+테마, 비용 전략실 iframe, Turnstile, 이미지·다운로드를 실제 브라우저에서 확인한
+뒤 강제 모드를 적용한다. 개발의 eval 보고를 없애려고 unsafe-eval을 허용하지 않는다.
 
 ## 매 배포
 

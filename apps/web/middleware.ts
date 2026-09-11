@@ -5,6 +5,7 @@ import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
+import { cspReportPolicy } from "./lib/security/csp";
 
 const PUBLIC_PATHS = [
   "/",
@@ -25,11 +26,27 @@ function matches(pathname: string, roots: string[]) {
 }
 
 export async function middleware(request: NextRequest) {
+  const nonce = btoa(crypto.randomUUID());
+  const policy = cspReportPolicy(nonce);
+  request.headers.delete("content-security-policy");
+  request.headers.set("content-security-policy-report-only", policy);
+  request.headers.set("x-nonce", nonce);
+  const response = await applicationMiddleware(request);
+  response.headers.set("Content-Security-Policy-Report-Only", policy);
+  return response;
+}
+
+async function applicationMiddleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/api/health" || pathname === "/api/health/ready" || pathname === "/api/security/csp-report") return response;
+  if (pathname.startsWith("/api/internal/generation/")) return response;
   // standalone 으로 띄우면 request.url 의 출처가 내부 주소(localhost:3000)다.
   // 그걸 기준으로 돌려보내면 사용자를 자기 컴퓨터로 보낸다. 앞단이 알려 주는
   // 공개 주소를 기준으로 삼는다.
-  const base = publicOrigin(request.headers, request.nextUrl.origin);
+  let base: string;
+  try { base = publicOrigin(request.headers, request.nextUrl.origin); }
+  catch { return NextResponse.json({ ok: false, code: "service_not_configured" }, { status: 503 }); }
   // 로컬 확인용 우회. NODE_ENV!=production 이고 LOCAL_AUTH_BYPASS=1 일 때만 열린다.
   if (process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "1") {
     const entry = localBypassRedirect(request.nextUrl.pathname);
@@ -37,13 +54,6 @@ export async function middleware(request: NextRequest) {
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  const pathname = request.nextUrl.pathname;
-
-  // EC2/Caddy와 배포 스크립트가 인증 설정과 무관하게 프로세스 상태를 확인한다.
-  // readiness 상세 판단은 각 health route가 직접 수행한다.
-  if (pathname === "/api/health" || pathname === "/api/health/ready") return response;
-  // The loopback executor authenticates its own server secret; it has no user session.
-  if (pathname.startsWith("/api/internal/generation/")) return response;
 
   if (!url || !publishableKey) {
     if (pathname.startsWith("/api/")) {

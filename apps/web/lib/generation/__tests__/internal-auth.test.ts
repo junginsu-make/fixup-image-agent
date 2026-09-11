@@ -5,6 +5,7 @@ const headers={host:"127.0.0.1:3000",authorization:`Bearer ${secret}`,"x-generat
 const request=(extra:Record<string,string>={},url="http://127.0.0.1:3000/api/internal/generation/tick")=>new Request(url,{headers:{...headers,...extra}});
 it("accepts the matching internal helper and rejects external, proxied or mismatched requests",()=>{
   expect(authorizedGenerationExecutor(request(),secret,"release")).toBe(true);
+  expect(authorizedGenerationExecutor(request({"x-forwarded-host":"127.0.0.1:3000","x-forwarded-proto":"http","x-forwarded-for":"127.0.0.1"}),secret,"release")).toBe(true);
   expect(authorizedGenerationExecutor(request({},"https://public.example/api/internal/generation/tick"),secret,"release")).toBe(false);
   for(const h of ["forwarded","x-forwarded-for","x-forwarded-host","x-forwarded-proto"])
     expect(authorizedGenerationExecutor(request({[h]:"attacker"}),secret,"release")).toBe(false);
