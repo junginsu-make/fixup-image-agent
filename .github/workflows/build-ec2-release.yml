@@ -6,20 +6,9 @@ on:
     branches: [master]
 
 permissions:
-  # 꾸러미를 **릴리스 자산**으로 올린다. 쓰기 권한이 필요하다.
   contents: write
 
-# 검사와 빌드를 **나란히** 돌린다.
-#
-# 한 줄로 이어 붙였더니 2026-09-04 배포가 9분 41초 걸렸다. 재 보니 진짜 빌드는
-# 1분 54초뿐이고, 나머지 8분이 준비와 검사였다 — 감사 4분 11초, pnpm 설치
-# 2분 32초, 타입 검사 41초.
-#
-# 감사와 타입 검사는 빌드 결과를 안 쓴다. 기다릴 이유가 없다. 나란히 돌리면
-# 벽시계 시간이 둘의 합이 아니라 **더 오래 걸리는 쪽**이 된다.
-#
-# 검사를 빼지는 않는다. 둘 중 하나라도 실패하면 워크플로가 실패로 끝나고,
-# 배포는 성공한 실행에서만 꾸러미를 내려받는다.
+# Verification and isolated DB integration must pass before building or publishing.
 
 env:
   PNPM_VERSION: 9.15.9
@@ -52,36 +41,38 @@ jobs:
       - name: Audit production dependencies
         shell: bash
         run: |
-          # 취약점이 있으면 막는다. 그건 우리 문제다.
-          #
-          # 그런데 `pnpm audit` 은 **감사 서버에 못 닿을 때도 같은 실패**를
-          # 낸다. 2026-09-04 registry.npmjs.org 가 응답하지 않아 배포가 두 번
-          # 막혔다 — 의존성에는 아무 문제가 없었는데도. 둘을 갈라 본다.
-          #
-          # 시간도 못 박는다. 같은 날 이 단계가 혼자 4분 11초를 썼다. 닿지
-          # 않는 서버를 하염없이 기다리느라 쓴 시간이다. 2분을 넘기면 「닿지
-          # 못했다」로 보고 넘어간다 — 취약점을 못 본 것과 서버가 죽은 것을
-          # 가르는 이 판단은 아래 문자열 검사와 같은 뜻이다.
-          set +e
-          out=$(timeout 120s pnpm audit --prod --audit-level=high 2>&1)
-          code=$?
-          echo "$out"
-          if [[ $code -eq 0 ]]; then exit 0; fi
-          if [[ $code -eq 124 ]]; then
-            echo "::warning::npm 감사 서버가 2분 안에 답하지 않아 취약점 검사를 건너뜁니다. 의존성 문제가 아닙니다."
-            exit 0
-          fi
-          if grep -qiE 'ERR_SOCKET_TIMEOUT|FetchError|socket timeout|ENOTFOUND|ECONNRESET|EAI_AGAIN|ERR_PNPM_AUDIT_ENDPOINT' <<<"$out"; then
-            echo "::warning::npm 감사 서버에 닿지 못해 취약점 검사를 건너뜁니다. 의존성 문제가 아닙니다."
-            exit 0
-          fi
-          exit $code
+          set -euo pipefail
+          timeout 120s pnpm audit --prod --audit-level=high
+
+      - name: Regression tests
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck
 
   # ── 빌드 ─────────────────────────────────────────────────────────
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Locate PostgreSQL binaries
+        shell: bash
+        run: |
+          pg_bin=$(pg_config --bindir)
+          test -x "$pg_bin/initdb"
+          echo "TEST_PG_BIN=$pg_bin" >> "$GITHUB_ENV"
+      - name: Isolated database and deployment integration
+        run: node --test scripts/tests/*.test.mjs
+
   build:
+    needs: [verify, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -128,6 +119,9 @@ jobs:
         shell: bash
         run: |
           test -f dist/ec2/apps/web/server.js
+          test -f dist/ec2/ops/generation-tick.mjs
+          node --check dist/ec2/ops/generation-tick.mjs
+          node scripts/verify-generation-release.mjs dist/ec2
           if find dist/ec2 -name '.env*' -print -quit | grep -q .; then
             echo 'Runtime artifact contains an .env file.' >&2
             exit 1
