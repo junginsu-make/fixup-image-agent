@@ -138,11 +138,6 @@ describe("시스템 겉모습을 입힌다", () => {
     expect(themed, "@theme 를 그대로 넣지 않는다").not.toContain("@theme");
   });
 
-  /** 도구가 스스로 그리는 상표 칸이 앱 머리말과 겹친다. */
-  it("도구의 상표 칸을 숨긴다", () => {
-    expect(themed).toContain("header.top .brand { display: none; }");
-  });
-
   /**
    * 사이드바 옆에서는 폭이 1270px 쯤으로 줄어든다. 오른쪽 칸이 열을 안 정한
    * 격자라 암시적 열이 **내용 크기**로 잡히고, 그 열이 제 부모를 넘어 **가로
@@ -150,6 +145,26 @@ describe("시스템 겉모습을 입힌다", () => {
    */
   it("좁은 폭에서 가로로 안 넘치게 열을 못 박는다", () => {
     expect(themed).toContain(".stack { grid-template-columns: minmax(0, 1fr); }");
+  });
+
+  /**
+   * 도구가 혼자 뜨는 한 장으로 만들어져 제 머리말과 넉넉한 여백을 들고 있다.
+   * 셸 안에서는 그것이 「대시보드 안에 또 대시보드」가 되어 볼 내용을 밀어낸다.
+   */
+  it("겉테두리 여백을 줄인다", () => {
+    expect(themed).toContain(".shell { max-width: none;");
+    expect(themed).toMatch(/h1 \{ font-size: 1\.[0-4]/);
+  });
+
+  /**
+   * 상표 칸을 통째로 숨겼더니 **화면 어디에도 「비용 전략실」이 없어졌다.**
+   * 도구의 큰 제목은 「어떤 가격이면 지속 가능할까?」라서 여기가 어디인지
+   * 말해 주지 않는다. 사이드바와 겹치는 것만 빼고 이름은 남긴다.
+   */
+  it("이름은 남기고 겹치는 것만 뺀다", () => {
+    expect(themed).toContain("header.top .brand .mark");
+    expect(themed).toContain(".meta { display: none; }");
+    expect(themed, "이름까지 숨기지 않는다").not.toContain("header.top .brand { display: none; }");
   });
 
   /** 어두운 화면에서 그 자리만 하얗게 남던 곳들. */
