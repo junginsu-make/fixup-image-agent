@@ -138,7 +138,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setBusy("planning");
     setMessage("");
     try {
-      const saved = await projectRequest(`/api/sns/projects/${projectId}/plan`, { method: "POST" });
+      const saved = await projectRequest(`/api/sns/projects/${projectId}/plan`, { method: "POST", headers: billableHeaders() });
       setProject(saved);
       setView("copy");
     } catch (error) {
@@ -199,7 +199,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setWritingCaption(true);
     setMessage("");
     try {
-      setProject(await projectRequest(`/api/sns/projects/${projectId}/caption`, { method: "POST" }));
+      setProject(await projectRequest(`/api/sns/projects/${projectId}/caption`, { method: "POST", headers: billableHeaders() }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "게시글 문구를 만들지 못했습니다.");
     } finally {

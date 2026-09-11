@@ -1,3 +1,4 @@
+import { billableFetch } from "../../lib/billable-fetch";
 // Deep import (not the package barrel): the barrel re-exports server-only modules
 // (node:crypto via knowledge-access/generate, @neondatabase via rag) which webpack
 // cannot bundle into this browser module. transcribe-batching.ts is pure/DOM-free.
@@ -111,7 +112,7 @@ export async function runTranscription(
   for (let i = 0; i < batches.length; i += 1) {
     if (opts.signal?.aborted) break;
     try {
-      const res = await fetch("/api/redesign/transcribe-strips", {
+      const res = await billableFetch("/api/redesign/transcribe-strips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ strips: batches[i], batchIndex: i, batchCount: batches.length, previousSectionHint: prevHint, provider: opts.provider }),

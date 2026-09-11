@@ -1,4 +1,5 @@
 import {
+  isExecutionControl,
   attachmentPlacementRule,
   designerPersona,
   imageLookDirective,
@@ -370,7 +371,8 @@ export async function writeImagePrompt(
   try {
     const generated = await provider.generate(buildSceneRequest(input));
     return { body: typeof generated === "string" ? generated : "", warnings };
-  } catch {
+  } catch (error) {
+    if (isExecutionControl(error)) throw error;
     return { body: "", warnings };
   }
 }

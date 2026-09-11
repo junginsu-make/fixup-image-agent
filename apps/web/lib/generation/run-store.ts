@@ -24,6 +24,7 @@ export function requestKey(request: Request) {
 export function generationFailureResponse(error:unknown):Response|undefined {
   const code=error instanceof Error?error.message:"";
   const messages:Record<string,[number,string]>={
+    draft_conflict:[409,"처리 중 원고가 변경되어 이전 결과를 덮어쓰지 않았습니다. 최신 원고를 확인해 주세요."],
     reload_required:[409,"화면을 새로고침한 뒤 다시 시도해 주세요."],
     idempotency_key_required:[400,"요청 식별자가 필요합니다. 화면을 새로고침해 주세요."],
     idempotency_conflict:[409,"같은 요청 식별자에 다른 내용이 전달됐습니다."],
@@ -36,7 +37,7 @@ export function generationFailureResponse(error:unknown):Response|undefined {
     not_owner:[403,"본인이 만든 작업만 변경할 수 있습니다."],inactive_member:[403,"이 계정으로 생성할 수 없습니다."],
     price_unavailable:[503,"생성 비용을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."],
   };
-  const mapped=messages[code];return mapped?Response.json({ok:false,code,message:mapped[1]},{status:mapped[0]}):undefined;
+  const mapped=messages[code];return mapped?Response.json({ok:false,code,message:mapped[1],error:mapped[1]},{status:mapped[0]}):undefined;
 }
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const {data,error}=await createSupabaseAdminClient().rpc(name,args);
@@ -47,11 +48,13 @@ export async function beginRun(input: {
   userId: string; key: string; operation: string; units: number;
   resourceType?: "sns" | "poster" | "character"; resourceId?: string;
   snapshot: Record<string, unknown>; identity: unknown; maxCostMicrousd: number;
+  inline?: boolean;
 }) {
   if(isLocalStoreEnabled())return localLedger().begin({...input,inputHash:inputHash(input.identity)});
-  return rpc<GenerationRun>("begin_generation_v2", {p_input:{...input,inputHash:inputHash(input.identity)}});
+  const { identity, ...metadata } = input;
+  return rpc<GenerationRun>("begin_generation_v2", {p_input:{...metadata,inputHash:inputHash(identity)}});
 }
-export async function existingRun(userId:string,key:string,resourceId:string,identity:unknown,operation:string) {
+export async function existingRun(userId:string,key:string,resourceId:string|null,identity:unknown,operation:string) {
   if(isLocalStoreEnabled()) {
     const data=await localLedger().existing(userId,key);if(!data)return null;
     if(data.resource_id!==resourceId||data.operation!==operation||data.input_hash!==inputHash(identity))throw new Error("idempotency_conflict");return data;
@@ -63,6 +66,11 @@ export async function existingRun(userId:string,key:string,resourceId:string,ide
   return data as GenerationRun;
 }
 export function claimRun(id?:string) { return isLocalStoreEnabled()?localLedger().claim(id):rpc<GenerationRun|null>("claim_generation_run",{p_id:id??null}); }
+export async function renewRun(run:GenerationRun) {
+  if(isLocalStoreEnabled())return localLedger().renew(run);
+  const ok=await rpc<boolean>("renew_generation_lease",{p_id:run.id,p_token:run.lease_token});
+  if(!ok)throw new Error("lease_lost");
+}
 export function executionStore(run:GenerationRun):ExecutionStore {
   if(!run.lease_token)throw new Error("lease_required");
   if(isLocalStoreEnabled())return localLedger().execution(run);

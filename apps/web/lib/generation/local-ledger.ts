@@ -22,11 +22,11 @@ function leased(data:LocalLedger,claimed:GenerationRun) {
 /** Development-only ledger in the existing atomic local JSON store. Not a substitute for PostgreSQL/RLS tests. */
 export function localLedger(database:LocalDatabase=getLocalDatabase()) {
   return {
-    async begin(input:{userId:string;key:string;operation:string;units:number;resourceType?:"sns"|"poster"|"character";resourceId?:string;snapshot:Record<string,unknown>;inputHash:string;maxCostMicrousd:number}) {
+    async begin(input:{userId:string;key:string;operation:string;units:number;resourceType?:"sns"|"poster"|"character";resourceId?:string;snapshot:Record<string,unknown>;inputHash:string;maxCostMicrousd:number;inline?:boolean}) {
       return database.update(raw=>{
         const data=raw as unknown as LocalLedger;
         const existing=runs(data).find(r=>r.user_id===input.userId&&r.idempotency_key===input.key);
-        if(existing){if(existing.input_hash!==input.inputHash||existing.operation!==input.operation||existing.resource_id!==(input.resourceId??null))throw new Error("idempotency_conflict");return existing;}
+        if(existing){if(existing.input_hash!==input.inputHash||existing.operation!==input.operation||existing.resource_id!==(input.resourceId??null))throw new Error("idempotency_conflict");return {...existing,lease_token:null,lease_until:null};}
         if(!Number.isInteger(input.units)||input.units<0||input.units>60||!Number.isSafeInteger(input.maxCostMicrousd)||input.maxCostMicrousd<=0)throw new Error("invalid_request");
         if(runs(data).some(r=>r.user_id===input.userId&&!isTerminal(r.state)&&imageOps.has(r.operation)===imageOps.has(input.operation)))throw new Error("concurrent_limit");
         const r:LocalRun={id:randomUUID(),user_id:input.userId,event_id:randomUUID(),operation:input.operation,idempotency_key:input.key,input_hash:input.inputHash,
@@ -34,8 +34,10 @@ export function localLedger(database:LocalDatabase=getLocalDatabase()) {
           lease_token:null,lease_epoch:0,lease_until:null,error_code:null,max_cost_microusd:input.maxCostMicrousd,result_manifest:{},created_at:now(),next_check_at:now(),units:input.units,consumed_units:0};
         if(input.resourceType==="sns"||input.resourceType==="poster"){
           const p=ownedProject(data,r);if(!p)throw new Error("not_owner");
-          p.status="generating";if(input.resourceType==="sns")p.data.executionFlow=input.snapshot.initialFlow;
+          if(imageOps.has(input.operation))p.status="generating";
+          if(input.operation==="sns_image")p.data.executionFlow=input.snapshot.initialFlow;
         }
+        if(input.inline){r.state="running";r.lease_token=randomUUID();r.lease_epoch=1;r.lease_until=new Date(Date.now()+210_000).toISOString();}
         runs(data).push(r);return r;
       });
     },
@@ -50,6 +52,7 @@ export function localLedger(database:LocalDatabase=getLocalDatabase()) {
       if(!r)return null;r.lease_token=randomUUID();r.lease_epoch++;r.lease_until=new Date(Date.now()+210_000).toISOString();return r;
     });},
     async stop(userId:string,id:string){return database.update(raw=>{const r=runs(raw as unknown as LocalLedger).find(r=>r.id===id&&r.user_id===userId);if(!r)throw new Error("not_owner");if(!isTerminal(r.state))r.stop_requested_at??=now();return r;});},
+    async renew(claimed:GenerationRun){return database.update(raw=>{const r=runs(raw as unknown as LocalLedger).find(r=>r.id===claimed.id&&r.lease_token===claimed.lease_token&&!isTerminal(r.state)&&r.state!=="needs_reconciliation");if(!r)throw new Error("lease_lost");r.lease_until=new Date(Date.now()+210_000).toISOString();});},
     execution(claimed:GenerationRun):ExecutionStore {
       const checkpoint=(value:Record<string,unknown>,state:"running"|"collecting"|"settlement_pending",delay:number,release:boolean)=>database.update(raw=>{
         const data=raw as unknown as LocalLedger;const r=leased(data,claimed);r.checkpoint=structuredClone(value);r.state=state;r.next_check_at=new Date(Date.now()+delay*1000).toISOString();
@@ -91,15 +94,16 @@ export function localLedger(database:LocalDatabase=getLocalDatabase()) {
           const list=attempts(data).filter(a=>a.run_id===r.id);if(list.some(a=>!["stored","failed","cancelled"].includes(a.state)))throw new Error("attempts_unresolved");
           let micros=list.reduce((sum,a)=>sum+(a.state==="stored"?(a.price_snapshot.chargeUnitMicrousd??0)*a.delivered_images+(a.price_snapshot.chargeFlatMicrousd??0):0),0);
           let successful=imageOps.has(r.operation)?list.reduce((sum,a)=>sum+a.delivered_images,0):list.filter(a=>a.state==="stored").length;
-          if(r.resource_type==="sns"){
+          if(r.operation==="sns_image"){
             const flow=r.checkpoint.flow as {generation?:{selectedCardIndexes?:number[]};cards?:Array<{index:number;status:string;falRequestId?:string;slotJobs?:Array<{status:string;falRequestId?:string}>}>};
             const made=(flow?.cards??[]).filter(c=>flow.generation?.selectedCardIndexes?.includes(c.index)&&["done","review_required"].includes(c.status));
             successful=made.length;const paid=made.filter(c=>c.falRequestId||c.slotJobs?.some(j=>j.status==="done"&&j.falRequestId)).length;
             if(paid)micros+=(1+paid)*Number(r.execution_snapshot.customerLlmUnitMicrousd??0);
           }
+          if(r.checkpoint.businessSuccess===false){successful=0;micros=0;}
           const units=Math.ceil(micros/50000);if(units>r.units){r.state="needs_reconciliation";r.error_code="credit_estimate_exceeded";return r;}
           r.consumed_units=units;r.state=successful?"succeeded":r.stop_requested_at?"cancelled":"failed";r.lease_until=null;
-          const p=ownedProject(data,r);if(p)p.status=r.resource_type==="poster"&&successful?"done":"ready";
+          const p=ownedProject(data,r);if(p&&imageOps.has(r.operation))p.status=r.resource_type==="poster"&&successful?"done":"ready";
           return r;
         });},
       };

@@ -1,3 +1,6 @@
+import { runLlmOperation } from "../../../../../../lib/generation/llm-operation";
+import { generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { snsModelSnapshot } from "../../../../../../lib/sns/providers";
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { reviewPoster, shouldReviewPoster } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
@@ -39,7 +42,7 @@ export async function POST(_request: Request, context: Context) {
     const reviewImageUrl = await createPosterFalClients().uploader.uploadReference(bytes, contentType);
 
     const providers = createPosterReviewProviders();
-    const result = await reviewPoster(
+    const result = await runLlmOperation(_request, auth.member.userId, {operation:"poster_review",resourceType:"poster",resourceId:id,identity:{imageId:target.id,slots:project.data.slots},models:Object.values(snsModelSnapshot()),maxCalls:1,isSuccess:value=>Boolean(value.review)}, () => reviewPoster(
       {
         slots: project.data.slots,
         // 검수 모델도 이 서버 밖에 있다. 우리 주소를 주면 401 을 받아 그림
@@ -48,7 +51,7 @@ export async function POST(_request: Request, context: Context) {
         preservedImageUrls: [],
       },
       providers.primary,
-    );
+    ));
 
     await stores.images.saveReview(target.id, result.review ?? { decision: "fail", summary: "검수하지 못했습니다.", issues: result.issues });
     return Response.json({
@@ -59,6 +62,8 @@ export async function POST(_request: Request, context: Context) {
       images: await stores.images.byProject(id),
     });
   } catch (error) {
+    const limited = generationFailureResponse(error);
+    if (limited) return limited;
     const writeDenied = projectWriteDeniedResponse(error);
     if (writeDenied) return writeDenied;
     if (error instanceof PosterProviderConfigurationError) {

@@ -302,7 +302,7 @@ export function PosterClient(
     setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     setError(null);
     try {
-      const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
+      const body = await (await billableFetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
       setList(body.images);
       if (body.issues?.length) setNotes(body.issues);

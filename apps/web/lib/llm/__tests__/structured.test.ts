@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { unwrapStringified } from "../structured";
 
 describe("문자열로 만들어 온 결과 되살리기", () => {

@@ -1,3 +1,4 @@
+import { recordedLlmCall } from "../llm/recorded-call";
 import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -106,8 +107,8 @@ const REVIEW_SPEC: StructuredSpec = {
 
 function clients(environment: Record<string, string | undefined>) {
   return {
-    anthropic: new Anthropic({ apiKey: environment.ANTHROPIC_API_KEY!, maxRetries: 2, timeout: 120_000 }),
-    openai: new OpenAI({ apiKey: environment.OPENAI_API_KEY!, maxRetries: 2, timeout: 120_000 }),
+    anthropic: new Anthropic({ apiKey: environment.ANTHROPIC_API_KEY!, maxRetries: 0, timeout: 120_000 }),
+    openai: new OpenAI({ apiKey: environment.OPENAI_API_KEY!, maxRetries: 0, timeout: 120_000 }),
     anthropicModel: environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL,
     openaiModel: environment.OPENAI_VISION_MODEL?.trim()
       || environment.OPENAI_DRAFT_MODEL?.trim()
@@ -156,13 +157,13 @@ export function createPosterPeopleReader(environment: Record<string, string | un
   const { anthropic, anthropicModel } = clients(environment);
   return {
     async read(input: { prompt: string; imageUrls: string[] }) {
-      const response = await anthropic.messages.create({
+      const response = await (async () => { const body = {
         model: anthropicModel,
         max_tokens: 2048,
         messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
         tools: [{ name: PEOPLE_SPEC.name, description: PEOPLE_SPEC.description, input_schema: PEOPLE_SPEC.schema as never }],
         tool_choice: { type: "tool", name: PEOPLE_SPEC.name, disable_parallel_tool_use: true },
-      });
+      } satisfies Parameters<typeof anthropic.messages.create>[0]; return recordedLlmCall("anthropic", anthropicModel, body, () => anthropic.messages.create(body), 2048); })();
       recordFrom(anthropicModel, response);
       const call = response.content.find((block) => block.type === "tool_use" && block.name === PEOPLE_SPEC.name);
       if (!call || call.type !== "tool_use") throw new Error("사람을 읽지 못했습니다.");
@@ -176,13 +177,13 @@ export function createPosterGrammarReader(environment: Record<string, string | u
   const { anthropic, anthropicModel } = clients(environment);
   return {
     async read(input: { prompt: string; imageUrls: string[] }) {
-      const response = await anthropic.messages.create({
+      const response = await (async () => { const body = {
         model: anthropicModel,
         max_tokens: 2048,
         messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
         tools: [{ name: GRAMMAR_SPEC.name, description: GRAMMAR_SPEC.description, input_schema: GRAMMAR_SPEC.schema as never }],
         tool_choice: { type: "tool", name: GRAMMAR_SPEC.name, disable_parallel_tool_use: true },
-      });
+      } satisfies Parameters<typeof anthropic.messages.create>[0]; return recordedLlmCall("anthropic", anthropicModel, body, () => anthropic.messages.create(body), 2048); })();
       recordFrom(anthropicModel, response);
       const call = response.content.find((block) => block.type === "tool_use" && block.name === GRAMMAR_SPEC.name);
       if (!call || call.type !== "tool_use") throw new Error("문법을 읽지 못했습니다.");
@@ -197,7 +198,7 @@ export function createPosterReviewProviders(environment: Record<string, string |
   return {
     primary: {
       async review(input: { prompt: string; imageUrl: string; preservedImageUrls: string[] }) {
-        const response = await anthropic.messages.create({
+        const response = await (async () => { const body = {
           model: anthropicModel,
           max_tokens: 2048,
           messages: [{
@@ -209,7 +210,7 @@ export function createPosterReviewProviders(environment: Record<string, string |
           }],
           tools: [{ name: REVIEW_SPEC.name, description: REVIEW_SPEC.description, input_schema: REVIEW_SPEC.schema as never }],
           tool_choice: { type: "tool", name: REVIEW_SPEC.name, disable_parallel_tool_use: true },
-        });
+        } satisfies Parameters<typeof anthropic.messages.create>[0]; return recordedLlmCall("anthropic", anthropicModel, body, () => anthropic.messages.create(body), 2048); })();
         recordFrom(anthropicModel, response);
         const call = response.content.find((block) => block.type === "tool_use" && block.name === REVIEW_SPEC.name);
         if (!call || call.type !== "tool_use") throw new Error("검수 결과를 받지 못했습니다.");

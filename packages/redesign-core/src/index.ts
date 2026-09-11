@@ -61,6 +61,7 @@ export {
 // transcribe route
 export {
   transcribeStrips,
+  transcribeModelInfo,
   GOOGLE_READING_MODEL,
   type TranscribeStripsInput,
   type TranscribeStripsResult

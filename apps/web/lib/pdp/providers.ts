@@ -1,3 +1,5 @@
+import { recordedLlmCall } from "../llm/recorded-call";
+import { isExecutionControl } from "@fixup/shared";
 import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -44,7 +46,7 @@ async function viaAnthropic(
   model: string,
   request: PdpLlmRequest,
 ): Promise<unknown> {
-  const response = await client.messages.create({
+  const response = await (async () => { const body = {
     model,
     max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
     messages: [
@@ -74,7 +76,7 @@ async function viaAnthropic(
     ],
     // 도구를 반드시 부르게 한다. 자유 문장으로 답하면 파싱이 깨진다.
     tool_choice: { type: "tool", name: request.name, disable_parallel_tool_use: true },
-  });
+  } satisfies Parameters<typeof client.messages.create>[0]; return recordedLlmCall("anthropic", model, body, () => client.messages.create(body), request.maxTokens ?? DEFAULT_MAX_TOKENS); })();
   recordFrom(model, response);
 
   const call = response.content.find(
@@ -90,7 +92,7 @@ async function viaOpenAI(
   model: string,
   request: PdpLlmRequest,
 ): Promise<unknown> {
-  const response = await client.responses.create({
+  const response = await (async () => { const body = {
     model,
     max_output_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
     input: [
@@ -117,7 +119,7 @@ async function viaOpenAI(
       },
     ],
     tool_choice: { type: "function", name: request.name },
-  });
+  } satisfies Parameters<typeof client.responses.create>[0]; return recordedLlmCall("openai", model, body, () => client.responses.create(body), request.maxTokens ?? DEFAULT_MAX_TOKENS); })();
   recordFrom(model, response);
 
   const call = response.output.find(
@@ -140,14 +142,14 @@ export function createPdpLlm(environment: Env = process.env): PdpLlm {
 
   const anthropic = new Anthropic({
     apiKey: environment.ANTHROPIC_API_KEY!,
-    maxRetries: 2,
+    maxRetries: 0,
     timeout: 120_000,
   });
   const anthropicModel = environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL;
 
   const openaiKey = environment.OPENAI_API_KEY?.trim();
   const openai = openaiKey
-    ? new OpenAI({ apiKey: openaiKey, maxRetries: 2, timeout: 120_000 })
+    ? new OpenAI({ apiKey: openaiKey, maxRetries: 0, timeout: 120_000 })
     : null;
   const openaiModel =
     environment.OPENAI_VISION_MODEL?.trim() ||
@@ -159,6 +161,7 @@ export function createPdpLlm(environment: Env = process.env): PdpLlm {
       try {
         return { text: JSON.stringify(await viaAnthropic(anthropic, anthropicModel, request)) };
       } catch (error) {
+        if (isExecutionControl(error)) throw error;
         if (!openai) throw error;
         console.warn(`[pdp] Claude 실패, OpenAI 로 넘어갑니다 (${request.name})`, error);
         return { text: JSON.stringify(await viaOpenAI(openai, openaiModel, request)) };

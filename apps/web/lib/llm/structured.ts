@@ -1,3 +1,4 @@
+import { recordedLlmCall } from "./recorded-call";
 import { recordFrom } from "./meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -64,7 +65,7 @@ export class AnthropicStructuredProvider implements StructuredProvider {
   ) {}
 
   async generate(prompt: string): Promise<unknown> {
-    const response = await this.client.messages.create({
+    const response = await (async () => { const body = {
       model: this.model,
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
@@ -75,7 +76,7 @@ export class AnthropicStructuredProvider implements StructuredProvider {
       }],
       // 도구를 반드시 부르게 한다. 자유 문장으로 답하면 파싱이 깨진다.
       tool_choice: { type: "tool", name: this.spec.name, disable_parallel_tool_use: true },
-    });
+    } satisfies Parameters<typeof this.client.messages.create>[0]; return recordedLlmCall("anthropic", this.model, body, () => this.client.messages.create(body), 4096); })();
     recordFrom(this.model, response);
     const call = response.content.find(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === this.spec.name,
@@ -93,7 +94,7 @@ export class OpenAIStructuredProvider implements StructuredProvider {
   ) {}
 
   async generate(prompt: string): Promise<unknown> {
-    const response = await this.client.responses.create({
+    const response = await (async () => { const body = { max_output_tokens: 16384,
       model: this.model,
       input: [
         { role: "developer", content: "Return only the requested structured result." },
@@ -107,7 +108,7 @@ export class OpenAIStructuredProvider implements StructuredProvider {
         strict: false,
       }],
       tool_choice: { type: "function", name: this.spec.name },
-    });
+    } satisfies Parameters<typeof this.client.responses.create>[0]; return recordedLlmCall("openai", this.model, body, () => this.client.responses.create(body), 16384); })();
     recordFrom(this.model, response);
     const call = response.output.find((item) => item.type === "function_call" && item.name === this.spec.name);
     if (!call || call.type !== "function_call") {

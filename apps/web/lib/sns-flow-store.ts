@@ -44,7 +44,7 @@ export function snsWriteDenied(error: unknown): Response | undefined {
 
 export interface SnsFlowStore {
   get(projectId: string): Promise<SnsProjectRecord | undefined>;
-  save(projectId: string, flow: SnsFlowState, status: SnsProjectRecord["status"]): Promise<SnsProjectRecord>;
+  save(projectId: string, flow: SnsFlowState, status: SnsProjectRecord["status"], expectedUpdatedAt?: string): Promise<SnsProjectRecord>;
   /**
    * 작업과 그 카드, 만들어 둔 그림 파일까지 지운다.
    *
@@ -74,7 +74,7 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
     const database = getLocalDatabase();
     return {
       get: (projectId) => getLocalSnsProject(database, userId, projectId),
-      save: (projectId, flow, status) => saveLocalSnsFlow(database, userId, projectId, flow, status),
+      save: (projectId, flow, status, expectedUpdatedAt) => saveLocalSnsFlow(database, userId, projectId, flow, status, expectedUpdatedAt),
       async remove(projectId) {
         const project = await getLocalSnsProject(database, userId, projectId);
         if (!project) return false;
@@ -105,7 +105,7 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
   };
   return {
     get: getProject,
-    async save(projectId, flow, status) {
+    async save(projectId, flow, status, expectedUpdatedAt) {
       const project = await getProject(projectId);
       if (!project) throw new Error("SNS 프로젝트를 찾을 수 없습니다.");
       if (project.userId !== userId) throw new SnsProjectNotWritable();
@@ -120,8 +120,9 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
        * 팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에
        * 실제 요청이 나간 뒤, 결과만 어디에도 안 남았다.
        */
-      const result = await createSupabaseAdminClient().rpc("save_sns_draft_v2", {
+      const result = await createSupabaseAdminClient().rpc(expectedUpdatedAt ? "save_sns_draft_checked" : "save_sns_draft_v2", {
         p_actor: userId, p_id: projectId, p_flow: flow, p_status: status,
+        ...(expectedUpdatedAt ? { p_expected_updated_at: expectedUpdatedAt } : {}),
       });
       if (result.error) throw new Error(result.error.message);
       const updated = await getProject(projectId);

@@ -1,10 +1,19 @@
 import { RedesignError } from "./errors.js";
 import type { RedesignStrip } from "./transcribe-batching.js";
+import type { InvokeProvider, ProviderInvocation } from "@fixup/shared";
 
 const OPENAI_ANALYSIS_MODEL = process.env.OPENAI_ANALYSIS_MODEL || "gpt-5.5";
 export const GOOGLE_READING_MODEL = process.env.GOOGLE_READING_MODEL || "gemini-3.1-pro-preview";
 const MAX_TRANSCRIBE_STRIPS_PER_BATCH = 8;
 const MAX_LONG_PAGE_TRANSCRIPT_CHARS = 60_000;
+
+// Official default-model limits, checked 2026-09-11. Do not shorten transcripts
+// to the small output budget used for captions or scene prompts.
+// https://developers.openai.com/api/docs/models/gpt-5.5
+// https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview
+export function transcribeModelInfo(provider:string) {
+  return provider==="google" ? {model:GOOGLE_READING_MODEL,maxOutputTokens:65536} : {model:OPENAI_ANALYSIS_MODEL,maxOutputTokens:128000};
+}
 
 export type TranscribeStripsInput = {
   strips: RedesignStrip[];
@@ -15,6 +24,7 @@ export type TranscribeStripsInput = {
   openaiKey?: string;
   googleKey?: string;
   signal?: AbortSignal;
+  onProviderCall?: InvokeProvider;
 };
 export type TranscribeStripsResult = { transcript: string; lastSectionType?: string };
 
@@ -33,8 +43,8 @@ export async function transcribeStrips(input: TranscribeStripsInput): Promise<Tr
   const prompt = buildTranscribeStripsPrompt(strips, batchIndex, batchCount, input.previousSectionHint);
 
   const raw = provider === "google"
-    ? await callGoogleReading({ apiKey, prompt, strips, signal: input.signal })
-    : await callOpenAiReading({ apiKey, prompt, strips, signal: input.signal });
+    ? await callGoogleReading({ apiKey, prompt, strips, signal: input.signal, invoke: input.onProviderCall })
+    : await callOpenAiReading({ apiKey, prompt, strips, signal: input.signal, invoke: input.onProviderCall });
   return parseTranscriptPayload(raw);
 }
 
@@ -98,38 +108,43 @@ export function parseTranscriptPayload(raw: string): TranscribeStripsResult {
   return { transcript: transcript.slice(0, MAX_LONG_PAGE_TRANSCRIPT_CHARS), lastSectionType: lastSectionType || undefined };
 }
 
-async function callOpenAiReading({ apiKey, prompt, strips, signal }: { apiKey: string; prompt: string; strips: RedesignStrip[]; signal?: AbortSignal }): Promise<string> {
+type ReadingInput = { apiKey:string;prompt:string;strips:RedesignStrip[];signal?:AbortSignal;invoke?:InvokeProvider };
+async function providerJson(meta:ProviderInvocation,url:string,init:RequestInit,invoke?:InvokeProvider) {
+  const call=async()=>{
+    const response=await fetch(url,init);const data=await readJson(response);
+    if(!response.ok)throw Object.assign(new RedesignError(data?.error?.message||"전사 요청 실패",502),{providerStatus:response.status});
+    return data;
+  };
+  return invoke?invoke(meta,call):call();
+}
+
+async function callOpenAiReading({ apiKey, prompt, strips, signal, invoke }: ReadingInput): Promise<string> {
   const content: Array<{ type: "input_text"; text: string } | { type: "input_image"; image_url: string }> = [{ type: "input_text", text: prompt }];
   for (const s of strips) content.push({ type: "input_image", image_url: `data:${s.mimeType};base64,${s.base64}` });
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const payload={model:OPENAI_ANALYSIS_MODEL,max_output_tokens:transcribeModelInfo("openai").maxOutputTokens,input:[
+    {role:"system",content:"You are a meticulous Korean ecommerce detail-page transcriber. Return only valid JSON { transcript, lastSectionType }."},
+    {role:"user",content},
+  ]};
+  const data = await providerJson({kind:"llm",provider:"openai",model:OPENAI_ANALYSIS_MODEL,request:payload,maxOutputTokens:payload.max_output_tokens},"https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     signal,
-    body: JSON.stringify({
-      model: OPENAI_ANALYSIS_MODEL,
-      input: [
-        { role: "system", content: "You are a meticulous Korean ecommerce detail-page transcriber. Return only valid JSON { transcript, lastSectionType }." },
-        { role: "user", content },
-      ],
-    }),
-  });
-  const data = await readJson(response);
-  if (!response.ok) throw new RedesignError(data?.error?.message || "OpenAI 전사 요청 실패", 502);
+    body: JSON.stringify(payload),
+  },invoke);
   return data.output_text || (data.output?.flatMap((i: any) => i.content || []).map((c: any) => c.text || "").join("\n") ?? "");
 }
 
-async function callGoogleReading({ apiKey, prompt, strips, signal }: { apiKey: string; prompt: string; strips: RedesignStrip[]; signal?: AbortSignal }): Promise<string> {
+async function callGoogleReading({ apiKey, prompt, strips, signal, invoke }: ReadingInput): Promise<string> {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
   for (const s of strips) parts.push({ inlineData: { mimeType: s.mimeType, data: s.base64 } });
   parts.push({ text: prompt });
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_READING_MODEL}:generateContent`, {
+  const payload={contents:[{parts}],generationConfig:{responseMimeType:"application/json",maxOutputTokens:transcribeModelInfo("google").maxOutputTokens}};
+  const data = await providerJson({kind:"llm",provider:"google",model:GOOGLE_READING_MODEL,request:payload,maxOutputTokens:payload.generationConfig.maxOutputTokens},`https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_READING_MODEL}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
     signal,
-    body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: "application/json" } }),
-  });
-  const data = await readJson(response);
-  if (!response.ok) throw new RedesignError(data?.error?.message || "Google 전사 요청 실패", 502);
+    body: JSON.stringify(payload),
+  },invoke);
   return data?.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text || "";
 }
 

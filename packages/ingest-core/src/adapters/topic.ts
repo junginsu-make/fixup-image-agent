@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { InvokeProvider } from "@fixup/shared";
 import { MAX_SEGMENT_LENGTH, splitIntoReadableChunks, toReadableProse } from "../prose";
 import { type SourceDocument, SourceInsufficientContentError } from "../types";
 
@@ -58,18 +59,27 @@ function outputCitations(response: unknown): TopicCitation[] {
 export function createOpenAITopicResearcher(
   environment: { OPENAI_API_KEY?: string; OPENAI_RESEARCH_MODEL?: string; OPENAI_DRAFT_MODEL?: string } = process.env as Record<string, string | undefined>,
   recordUsage: TopicUsageRecorder = () => undefined,
+  invoke?: InvokeProvider,
 ): TopicResearcher {
   if (!environment.OPENAI_API_KEY) throw new TopicResearchNotConfiguredError();
-  const client = new OpenAI({ apiKey: environment.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: environment.OPENAI_API_KEY, maxRetries: 0, timeout: 120_000 });
   const model = environment.OPENAI_RESEARCH_MODEL ?? environment.OPENAI_DRAFT_MODEL ?? "gpt-5.6-sol";
   return async (topic) => {
-    const response = await client.responses.create({
+    const payload = {
       model,
+      max_output_tokens: 16384,
+      max_tool_calls: 3,
       tools: [{ type: "web_search", search_context_size: "medium" }],
       tool_choice: "required",
       include: ["web_search_call.action.sources"],
       input: `다음 주제를 카드뉴스 자료로 조사하세요: ${topic}\n\n공식 기관, 논문, 기업 공식 발표, 신뢰할 수 있는 언론을 우선하세요. 최근 자료를 우선하되 날짜를 명시하세요. 서로 독립적인 출처를 최대 6개 사용하고, 숫자와 통계에는 반드시 인라인 출처를 붙이세요. 한국어로 1000자 이상 핵심 사실을 정리하세요. 과장하거나 추측하지 마세요.\n\n마크다운 기호(#, **, ---, 표)를 쓰지 말고 소제목과 문단으로 나눈 한국어 산문으로 쓰세요. 카드 번호를 매기거나 카드 구성을 짜지 마세요. 구성은 다음 단계에서 정합니다.`,
-    });
+    // The installed SDK omits this request field. It is supported by the API:
+    // https://developers.openai.com/api/reference/cli/resources/responses/methods/create
+    } satisfies OpenAI.Responses.ResponseCreateParamsNonStreaming & {max_tool_calls:number};
+    const call = () => client.responses.create(payload);
+    const response = await (invoke
+      ? invoke({ kind: "llm", provider: "openai", model, request: payload, maxOutputTokens: 16384 }, call)
+      : call());
     const toolCalls = response.output.filter((item) => item.type === "web_search_call").length;
     recordUsage({ provider: "openai", feature: "research", model, usage: response.usage, toolCalls, topic });
     return { text: response.output_text, citations: outputCitations(response) };

@@ -86,3 +86,12 @@ test('draft edits survive executor checkpoints for the same SNS project',async()
     SELECT settle_generation_v2('${run.id}','${claimed.lease_token}');`);
   assert.equal(await db.sql(`SELECT consumed_units FROM generation_events WHERE id='${run.event_id}';`),'3');
 });
+test('late planning output cannot overwrite a newer draft',async()=>{
+  const before=await db.sql(`SELECT updated_at FROM sns_projects WHERE id='${ids.project}';`);
+  await db.sql(`SELECT save_sns_draft_v2('${ids.a}','${ids.project}','{"cards":[],"caption":"manual edit"}','copy_ready');`);
+  await assert.rejects(db.sql(`SELECT save_sns_draft_checked('${ids.a}','${ids.project}','{"cards":[],"caption":"stale AI"}','copy_ready','${before}');`),/draft_conflict/);
+  assert.equal(await db.sql(`SELECT data#>>'{flow,caption}' FROM sns_projects WHERE id='${ids.project}';`),'manual edit');
+  const fresh=await db.sql(`SELECT updated_at FROM sns_projects WHERE id='${ids.project}';`);
+  await db.sql(`SELECT save_sns_draft_checked('${ids.a}','${ids.project}','{"cards":[],"caption":"fresh AI"}','copy_ready','${fresh}');`);
+  assert.equal(await db.sql(`SELECT data#>>'{flow,caption}' FROM sns_projects WHERE id='${ids.project}';`),'fresh AI');
+});

@@ -1,4 +1,5 @@
 import type { SourceResolverDependencies } from "./source-resolver";
+import { invokeRecordedLlm } from "../llm/recorded-call";
 
 /**
  * 실제 어댑터를 붙인다.
@@ -31,7 +32,7 @@ export function createSourceAdapters(
         OPENAI_API_KEY: key,
         OPENAI_DRAFT_MODEL: environment.OPENAI_DRAFT_MODEL,
         OPENAI_RESEARCH_MODEL: environment.OPENAI_RESEARCH_MODEL,
-      });
+      }, undefined, invokeRecordedLlm);
       return researcher(question);
     },
   };

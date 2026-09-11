@@ -39,6 +39,7 @@ export interface LibraryItem {
 export const UNIFIED_SETTINGS_STORAGE_KEY = "detail-page-studio-settings-v1";
 
 export * from "./provider-fallback";
+export * from "./provider-invocation";
 export * from "./attachment-role";
 export * from "./attachment-order";
 export * from "./attachment-restore";

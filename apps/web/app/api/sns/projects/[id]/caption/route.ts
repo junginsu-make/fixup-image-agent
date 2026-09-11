@@ -1,3 +1,6 @@
+import { runLlmOperation } from "../../../../../../lib/generation/llm-operation";
+import { generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { snsModelSnapshot } from "../../../../../../lib/sns/providers";
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { writeCaption } from "@fixup/sns-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
@@ -27,21 +30,23 @@ export async function POST(_request: Request, context: Context) {
     if (!project?.data.flow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
 
     const providers = createSnsPlanningProviders();
-    const result = await writeCaption(
+    const result = await runLlmOperation(_request, auth.member.userId, {operation:"sns_caption",resourceType:"sns",resourceId:id,identity:{cards:project.data.flow!.cards.map(c=>c.copy),language:project.language,title:project.title,toneNote:project.toneNote},models:Object.values(snsModelSnapshot()),maxCalls:2,isSuccess:value=>Boolean(value.captionResult.caption)}, async () => ({baseRevision:project.updatedAt,captionResult:await writeCaption(
       {
         title: project.title,
-        cards: project.data.flow.cards.map((card) => card.copy),
+        cards: project.data.flow!.cards.map((card) => card.copy),
         toneNote: project.toneNote,
         language: project.language,
       },
       providers.captionPrimary,
       providers.captionBackup,
-    );
+    )}));
 
-    const flow = { ...project.data.flow, caption: result.caption, captionIssues: result.issues };
-    const saved = await store.save(id, flow, project.status);
+    const flow = { ...project.data.flow, caption: result.captionResult.caption, captionIssues: result.captionResult.issues };
+    const saved = await store.save(id, flow, project.status, result.baseRevision);
     return Response.json({ ok: true, project: saved });
   } catch (error) {
+    const limited = generationFailureResponse(error);
+    if (limited) return limited;
     const writeDenied = projectWriteDeniedResponse(error);
     if (writeDenied) return writeDenied;
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.

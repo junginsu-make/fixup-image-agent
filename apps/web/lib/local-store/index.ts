@@ -405,10 +405,12 @@ export function saveLocalSnsFlow(
   id: string,
   flow: SnsFlowState,
   status: SnsProjectRecord["status"],
+  expectedUpdatedAt?: string,
 ): Promise<SnsProjectRecord> {
   return database.update((data) => {
     const project = data.snsProjects.find((entry) => entry.id === id && entry.userId === userId);
     if (!project) throw notFound("SNS 프로젝트");
+    if (expectedUpdatedAt !== undefined && project.updatedAt !== expectedUpdatedAt) throw new Error("draft_conflict");
     project.data.flow = flow;
     project.status = hasLocalActiveGeneration(data,"sns",id) ? "generating" : status;
     project.updatedAt = new Date().toISOString();
