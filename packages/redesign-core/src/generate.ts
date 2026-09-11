@@ -136,6 +136,18 @@ export type GenerateSectionsInput = {
    * 그림이면 그림이 나오는 것이 자연스럽다. 명시적으로 골랐을 때만 바꾼다.
    */
   look?: ImageLook | string;
+  /**
+   * 글 모델이 쓴 토큰을 **부르는 쪽에 알린다.**
+   *
+   * 이 꾸러미는 업체를 `fetch` 로 직접 부른다. 앱의 계량기(`llm/meter.ts`)는
+   * SDK 래퍼에 붙어 있어서 여기를 못 잡았고, **리디자인의 글값은 장부에 0원**
+   * 이었다.
+   *
+   * 계량기를 여기서 import 하지 않는 이유는 그것이 앱 쪽 물건이기 때문이다 —
+   * 꾸러미가 앱을 거꾸로 참조하면 둘이 엉킨다. 대신 값을 넘기고, 어디에 적을지는
+   * 라우트가 정한다.
+   */
+  onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
 };
 
 /** 아는 결인지 확인한다. 모르는 값은 원본을 따라가는 `auto` 로 되돌린다. */
@@ -280,7 +292,7 @@ export async function generateSections(input: GenerateSectionsInput) {
   console.info(`[generate] knowledge ready job=${jobId} useKnowledge=${useKnowledge} chars=${retrievedKnowledgeText.length}`);
   const payload = { request: requestText, rolloutRequest, knowledgeText: retrievedKnowledgeText, options: { channel, ratio, count } };
   console.info(`[generate] analysis start job=${jobId}`);
-  const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript });
+  const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage });
   console.info(`[generate] analysis done job=${jobId}`);
   // 분석에는 인물을 넣지 않는다. 분석은 원본 상세페이지를 읽어 제품을 파악하는
   // 일이라, 인물이 섞이면 제품 분석이 오염된다. 생성에만 넣는다.
@@ -456,7 +468,8 @@ async function analyzeSource({
   references,
   payload,
   modelInfo,
-  transcript
+  transcript,
+  onUsage
 }: {
   provider: Provider;
   apiKey: string;
@@ -464,14 +477,15 @@ async function analyzeSource({
   payload: { request: string; rolloutRequest: string; knowledgeText: string; options: { channel: string; ratio: string; count: number } };
   modelInfo: ReturnType<typeof modelMeta>;
   transcript?: string;
+  onUsage?: GenerateSectionsInput["onUsage"];
 }) {
   const prompt = buildAnalyzePrompt(payload, modelInfo, transcript);
 
   try {
     if (provider === "google") {
-      return await analyzeWithGoogle({ apiKey, prompt, references });
+      return await analyzeWithGoogle({ apiKey, prompt, references, onUsage });
     }
-    return await analyzeWithOpenAI({ apiKey, prompt, references });
+    return await analyzeWithOpenAI({ apiKey, prompt, references, onUsage });
   } catch (error) {
     return {
       product_inferred: { category: "업로드 자료 기반 추정", confidence: 0.4 },
@@ -484,7 +498,39 @@ async function analyzeSource({
   }
 }
 
-async function analyzeWithOpenAI({ apiKey, prompt, references }: { apiKey: string; prompt: string; references: ReferenceImage[] }) {
+/**
+ * 업체 응답에서 토큰 수를 꺼낸다.
+ *
+ * OpenAI 는 `usage.input_tokens`, Google 은 `usageMetadata.promptTokenCount` 다.
+ * **못 찾으면 0 이 아니라 아무 말도 하지 않는다** — 0원으로 적히면 「안 썼다」와
+ * 「못 쟀다」가 같은 모양이 된다.
+ */
+function reportUsage(
+  onUsage: GenerateSectionsInput["onUsage"],
+  model: string,
+  data: unknown,
+): void {
+  if (!onUsage || !data || typeof data !== "object") return;
+  const record = data as Record<string, unknown>;
+  const usage = (record.usage ?? record.usageMetadata) as Record<string, unknown> | undefined;
+  if (!usage || typeof usage !== "object") return;
+
+  const pick = (...names: string[]) => {
+    for (const name of names) {
+      const value = usage[name];
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+    }
+    return undefined;
+  };
+
+  const inputTokens = pick("input_tokens", "prompt_tokens", "promptTokenCount");
+  const outputTokens = pick("output_tokens", "completion_tokens", "candidatesTokenCount");
+  if (inputTokens === undefined && outputTokens === undefined) return;
+
+  onUsage({ model, inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 });
+}
+
+async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }) {
   const content: Array<{ type: "input_text"; text: string } | { type: "input_image"; image_url: string }> = [{ type: "input_text", text: prompt }];
   for (const reference of references.slice(0, MAX_REFERENCE_IMAGES)) {
     content.push({
@@ -507,11 +553,12 @@ async function analyzeWithOpenAI({ apiKey, prompt, references }: { apiKey: strin
 
   const data = await readJsonResponse(response);
   if (!response.ok) throw new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response));
+  reportUsage(onUsage, ANALYSIS_MODEL, data);
   const text = data.output_text || extractOpenAIText(data);
   return parseMaybeJson(text);
 }
 
-async function analyzeWithGoogle({ apiKey, prompt, references }: { apiKey: string; prompt: string; references: ReferenceImage[] }) {
+async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }) {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: prompt }];
   for (const reference of references.slice(0, MAX_REFERENCE_IMAGES)) {
     parts.push({
@@ -533,6 +580,7 @@ async function analyzeWithGoogle({ apiKey, prompt, references }: { apiKey: strin
 
   const data = await readJsonResponse(response);
   if (!response.ok) throw new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response));
+  reportUsage(onUsage, GOOGLE_READING_MODEL, data);
   const text = data?.candidates?.[0]?.content?.parts?.find((part: { text?: string }) => part.text)?.text || "";
   return parseMaybeJson(text);
 }
