@@ -1,3 +1,4 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";
@@ -36,6 +37,7 @@ async function plan(request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "poster", id);
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
@@ -133,6 +135,8 @@ async function plan(request: Request, context: Context) {
     });
     return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...crowd.issues, ...plan.issues] });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.
     if (reservation) await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");
     if (error instanceof PosterProviderConfigurationError) {

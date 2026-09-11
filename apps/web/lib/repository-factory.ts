@@ -7,6 +7,7 @@ import { createSourceService } from "../app/api/sources/source-service";
 import { createSupabaseSourceRepository } from "../app/api/sources/source-store";
 import { createProjectService } from "../app/api/sns/projects/project-service";
 import { createSupabaseSnsProjectRepository } from "../app/api/sns/projects/project-store";
+import { createSupabaseAdminClient } from "./supabase/admin";
 import {
   createLocalCandidateRepository,
   createLocalReferenceSetStore,
@@ -40,5 +41,5 @@ export async function snsProjectServiceForUser(userId: string) {
   if (isLocalStoreEnabled()) {
     return createProjectService(createLocalSnsProjectRepository(getLocalDatabase(), userId));
   }
-  return createProjectService(createSupabaseSnsProjectRepository(await createSupabaseServerClient()));
+  return createProjectService(createSupabaseSnsProjectRepository(await createSupabaseServerClient(), createSupabaseAdminClient()));
 }

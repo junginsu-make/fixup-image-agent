@@ -1,3 +1,4 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { estimateCost } from "../../../../../sns/cost-estimate";
@@ -21,6 +22,7 @@ export async function POST(request: Request, context: Context) {
   let reservation: { userId: string; requestId: string } | null = null;
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "sns", id);
     return await withSnsProjectLock(id, async () => {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
@@ -98,6 +100,8 @@ export async function POST(request: Request, context: Context) {
       return Response.json({ ok: true, project: saved });
     });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     // 제출이 실패했으면 돈이 안 나갔다. 묶어 둔 장을 돌려준다.
     // **응답을 정하기 전에 한다.** 여기서 일찍 빠져나가면 장이 묶인 채 남는다.
     if (reservation) {

@@ -10,7 +10,7 @@ import {
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
 import { createSupabaseAdminClient } from "../supabase/admin";
-import { createSupabaseServerClient } from "../supabase/server";
+import { assertProjectWrite, assertReadableAssetPaths } from "../generation/ownership";
 import {
   getLocalDatabase,
   isLocalStoreEnabled,
@@ -212,6 +212,7 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     if (card.thumbPath) paths.add(card.thumbPath);
   });
   if (!paths.size) return project;
+  await assertReadableAssetPaths(project.userId, [...paths]);
   // 경로는 RLS 를 지나 읽어 온 작업 행에서 꺼낸 것이다.
   const urls = await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS);
   const attachments = project.data.attachments.map((attachment) => ({ ...attachment, url: urls.get(attachment.assetPath) ?? attachment.url }));
@@ -248,7 +249,14 @@ export async function refreshProjectListAssetUrls(
     })));
   }
 
-  // 경로는 RLS 를 지나 읽어 온 목록에서 꺼낸 것이다.
+  // Reading a project row does not authorize every path embedded in its JSON.
+  const byOwner = new Map<string, Set<string>>();
+  for (const project of projects) {
+    const owned = byOwner.get(project.userId) ?? new Set<string>();
+    for (const value of collectCardPaths([project])) owned.add(value);
+    byOwner.set(project.userId, owned);
+  }
+  await Promise.all([...byOwner].map(([userId, values]) => assertReadableAssetPaths(userId, [...values])));
   return withCardUrls(projects, await signPaths(BUCKET, paths, SIGNED_URL_TTL_SECONDS));
 }
 
@@ -279,8 +287,9 @@ export async function replaceSnsCardRows(userId: string, projectId: string, flow
   if (isLocalStoreEnabled()) {
     return replaceLocalSnsCards(getLocalDatabase(), userId, projectId, flow);
   }
-  const client = await createSupabaseServerClient();
-  const removed = await client.from("sns_cards").delete().eq("project_id", projectId);
+  await assertProjectWrite(userId, "sns", projectId);
+  const client = createSupabaseAdminClient();
+  const removed = await client.from("sns_cards").delete().eq("project_id", projectId).eq("user_id", userId);
   if (removed.error) throw new Error(removed.error.message);
   if (!flow.cards.length) return;
   const inserted = await client.from("sns_cards").insert(flow.cards.map((card) => ({
@@ -302,7 +311,8 @@ export async function createQueuedGenerationDependencies(input: {
   providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falQueue" | "falUploader">;
 }): Promise<QueuedGenerationDependencies> {
   const local = isLocalStoreEnabled();
-  const client = local ? undefined : await createSupabaseServerClient();
+  await assertProjectWrite(input.userId, "sns", input.project.id);
+  const client = local ? undefined : createSupabaseAdminClient();
   const ratio = CARD_RATIOS.find((entry) => entry.id === input.project.ratio)?.pixel;
   if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${input.project.ratio}`);
 
@@ -319,7 +329,7 @@ export async function createQueuedGenerationDependencies(input: {
       ...(patch.review !== undefined ? { review: patch.review } : {}),
       ...(patch.error !== undefined ? { error: patch.error } : {}),
       ...(patch.copy !== undefined ? { copy: patch.copy } : {}),
-    }).eq("project_id", input.project.id).eq("index", cardIndex);
+    }).eq("project_id", input.project.id).eq("index", cardIndex).eq("user_id", input.userId);
     if (result.error) throw new Error(result.error.message);
   }
 

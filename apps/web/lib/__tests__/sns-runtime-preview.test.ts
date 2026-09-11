@@ -13,6 +13,7 @@ import type { SnsProjectRecord } from "../../app/api/sns/projects/project-servic
  */
 
 vi.mock("server-only", () => ({}));
+vi.mock("../generation/ownership", () => ({ assertProjectWrite: async () => {}, assertReadableAssetPaths: async () => {} }));
 
 const uploads: Array<{ path: string; contentType: string }> = [];
 const cardUpdates: Array<Record<string, unknown>> = [];
@@ -43,6 +44,11 @@ vi.mock("../local-store", () => ({
 
 vi.mock("../supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
+    from: () => ({ update: (patch: Record<string, unknown>) => {
+      cardUpdates.push(patch);
+      const query = { eq: (_name: string, _value: unknown) => query, then: (resolve: (value: { error: null }) => unknown) => resolve({ error: null }) };
+      return query;
+    } }),
     storage: {
       from: () => ({
         upload: async (path: string, _b: Buffer, o: { contentType: string }) => {

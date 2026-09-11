@@ -12,6 +12,8 @@ import {
   saveLocalSnsFlow,
 } from "./local-store";
 import { createSupabaseServerClient } from "./supabase/server";
+import { createSupabaseAdminClient } from "./supabase/admin";
+import { projectWriteDeniedResponse } from "./generation/ownership";
 import { snsCardPathsToRemove } from "./sns/thumbnail";
 
 /**
@@ -36,7 +38,7 @@ export class SnsProjectNotWritable extends Error {
  * 것이라 답이 분명해야 한다.
  */
 export function snsWriteDenied(error: unknown): Response | undefined {
-  if (!(error instanceof SnsProjectNotWritable)) return undefined;
+  if (!(error instanceof SnsProjectNotWritable)) return projectWriteDeniedResponse(error);
   return Response.json({ ok: false, message: error.message }, { status: 403 });
 }
 
@@ -106,6 +108,7 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
     async save(projectId, flow, status) {
       const project = await getProject(projectId);
       if (!project) throw new Error("SNS 프로젝트를 찾을 수 없습니다.");
+      if (project.userId !== userId) throw new SnsProjectNotWritable();
       const data = { ...project.data, flow };
       /**
        * **정말 써졌는지 세어 본다.**
@@ -118,7 +121,7 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
        * 팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에
        * 실제 요청이 나간 뒤, 결과만 어디에도 안 남았다.
        */
-      const result = await client.from("sns_projects")
+      const result = await createSupabaseAdminClient().from("sns_projects")
         .update({ data, status, updated_at: new Date().toISOString() })
         .eq("id", projectId).eq("user_id", userId)
         .select("id");

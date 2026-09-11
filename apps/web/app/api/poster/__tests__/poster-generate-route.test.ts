@@ -14,6 +14,9 @@ import { PosterChargedError } from "../../../../lib/poster/flow";
  */
 
 vi.mock("server-only", () => ({}));
+// These scenarios exercise generation after the ownership boundary. Denial is
+// covered by generation/ownership-routes and the real PostgreSQL role tests.
+vi.mock("../../../../lib/generation/ownership", () => ({ assertProjectWrite: async () => {}, projectWriteDeniedResponse: () => undefined }));
 
 let project: { id: string; ratio: string; status: string; updatedAt: string; modelId: string; data: Record<string, unknown> } | undefined;
 const measured: string[] = [];

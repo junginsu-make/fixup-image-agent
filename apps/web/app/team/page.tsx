@@ -169,7 +169,7 @@ export default async function TeamPage({
           {isAdmin && teams.length > 1 ? (
             <TeamSwitch teams={teams} focusTeamId={focusTeamId} tab="credit" />
           ) : null}
-          <CreditTab teamId={focusTeamId} credit={credit} canWrite={canWriteFocus} />
+          <CreditTab teamId={focusTeamId} credit={credit} canWrite={isAdmin} />
         </>
       ) : active === "works" ? (
         <>

@@ -1,3 +1,4 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { reviewPoster, shouldReviewPoster } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
@@ -20,6 +21,7 @@ export async function POST(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "poster", id);
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
@@ -57,6 +59,8 @@ export async function POST(_request: Request, context: Context) {
       images: await stores.images.byProject(id),
     });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
     }

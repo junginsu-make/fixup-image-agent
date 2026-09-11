@@ -8,7 +8,7 @@ import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { patchShowcaseItem, removeShowcaseItem, reorderShowcaseItem } from "../api/showcase/store";
-import { assignMember, removeMember, setMemberRole } from "../../lib/teams/store";
+import { assignMember, removeMember, setMemberRole, setPersonalQuota } from "../../lib/teams/store";
 
 function readUserId(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -67,9 +67,7 @@ export async function updateQuota(formData: FormData) {
   const userId = readUserId(formData);
   const quota = Number(formData.get("quota"));
   if (!Number.isInteger(quota) || quota < 0 || quota > 10000) throw new Error("한도는 0~10000 사이 정수여야 합니다.");
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin.from("profiles").update({ monthly_quota: quota, updated_at: new Date().toISOString() }).eq("id", userId);
-  if (error) throw error;
+  await setPersonalQuota(userId, quota);
   revalidatePath("/admin");
 }
 

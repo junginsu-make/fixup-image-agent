@@ -1,3 +1,4 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
 import { z } from "zod";
@@ -39,6 +40,7 @@ export async function POST(request: Request, context: Context) {
   }
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "poster", id);
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
@@ -115,6 +117,8 @@ export async function POST(request: Request, context: Context) {
     });
     return Response.json({ ok: true, submission });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     /**
      * **묶어 둔 장을 돌려준다.** 제출이 실패했으면 돈이 안 나갔다. 안 풀면
      * 만료될 때까지 그 사람 한도에서 빠져 있는다.

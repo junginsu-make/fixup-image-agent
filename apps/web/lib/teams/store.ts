@@ -4,8 +4,6 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { isLocalStoreEnabled } from "../local-store";
 import {
   TEAM_SCOPED_TABLES,
-  canDemote,
-  canRemove,
   normalizeTeamName,
   teamNameError,
   type TeamMemberRow,
@@ -271,183 +269,33 @@ export async function renameTeam(teamId: string, name: string): Promise<void> {
  */
 export async function archiveTeam(teamId: string): Promise<void> {
   if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
-  const admin = createSupabaseAdminClient();
-
-  const { data: members } = await admin
-    .from("team_members").select("user_id").eq("team_id", teamId);
-  for (const row of (members ?? []) as Array<{ user_id: string }>) {
-    await clearWorkTeam(row.user_id, teamId);
-  }
-
-  const removed = await admin.from("team_members").delete().eq("team_id", teamId);
-  if (removed.error) throw new Error(removed.error.message);
-
-  const { error } = await admin
-    .from("teams")
-    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq("id", teamId);
+  const { requireAdmin } = await import("../membership/server");
+  const actor = await requireAdmin();
+  const { error } = await createSupabaseAdminClient().rpc("archive_team_v2", { p_actor: actor.user.id, p_team: teamId });
   if (error) throw new Error(error.message);
 }
 
-/**
- * 이 회원이 만든 것에 팀을 단다. 배정과 함께 움직인다.
- *
- * `fromTeamId` 를 주면 **그 팀에 달려 있던 것도 함께 옮긴다.** 팀을 옮기는
- * 경우다.
- *
- * 예전에는 `team_id IS NULL` 인 것만 달았다. 주석은 「한 사람은 한 팀이라
- * 지금은 있을 수 없다」였지만, `assignMember` 가 `onConflict: "user_id"`
- * upsert 라 소속 변경이 실제로 일어난다. 그래서 옮긴 사람의 작업물이 옛 팀에
- * 그대로 남았다 — 새 팀장에게는 안 보이고 옛 팀장은 계속 보고 만질 수 있으며,
- * 그다음 「팀 없음」을 골라도 `clearWorkTeam` 은 현재 팀만 푸므로 화면으로는
- * 되돌릴 방법이 없었다.
- *
- * `fromTeamId` 가 없으면 지금까지처럼 팀 없는 것만 단다 — 규칙이 넓어지는 날
- * 조용히 남의 팀 것을 끌어오면 안 된다.
- */
-async function stampWorkTeam(
-  userId: string,
-  teamId: string,
-  fromTeamId?: string,
-): Promise<void> {
-  const admin = createSupabaseAdminClient();
-  for (const table of TEAM_SCOPED_TABLES) {
-    const { error } = await admin
-      .from(table)
-      .update({ team_id: teamId })
-      .eq("user_id", userId)
-      .is("team_id", null);
-    if (error) throw new Error(error.message);
-
-    if (!fromTeamId || fromTeamId === teamId) continue;
-    const moved = await admin
-      .from(table)
-      .update({ team_id: teamId })
-      .eq("user_id", userId)
-      .eq("team_id", fromTeamId);
-    if (moved.error) throw new Error(moved.error.message);
-  }
-}
-
-/** 팀에서 뺄 때 되돌린다. 그 팀에 매달린 것만 푼다. */
-async function clearWorkTeam(userId: string, teamId: string): Promise<void> {
-  const admin = createSupabaseAdminClient();
-  for (const table of TEAM_SCOPED_TABLES) {
-    const { error } = await admin
-      .from(table)
-      .update({ team_id: null })
-      .eq("user_id", userId)
-      .eq("team_id", teamId);
-    if (error) throw new Error(error.message);
-  }
-}
-
-/**
- * 팀에 넣는다. **만들어 둔 것도 함께 간다.**
- *
- * 회원 줄을 먼저 넣고 작업물에 도장을 찍는다. 순서가 중요하다 — 도장을 먼저
- * 찍고 회원 줄에서 실패하면, 아무 팀에도 없는 사람의 작업물에 팀이 붙어
- * 그 사람도 못 보고 팀장도 못 보는 것이 된다.
- */
-export async function assignMember(
-  userId: string,
-  teamId: string,
-  role: TeamRole = "member",
-): Promise<void> {
+/** Membership and work ownership move in one audited database transaction. */
+async function changeMembership(userId: string, action: "assign" | "remove" | "role", teamId: string | null, role: TeamRole) {
   if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
-  const admin = createSupabaseAdminClient();
-
-  /**
-   * **어디서 오는지 먼저 본다.**
-   *
-   * 두 가지가 여기에 달려 있다. 하나는 옛 팀에 남을 뻔한 작업물을 함께
-   * 옮기는 것이고, 다른 하나는 **마지막 팀장 보호**다.
-   *
-   * `removeMember` 와 `setMemberRole` 은 `canRemove`·`canDemote` 로 「팀장 없는
-   * 팀」을 막는데 이 함수만 검사가 없었다. 운영자가 고르개에서 A팀의 유일한
-   * 팀장을 B팀으로 옮기면 A팀은 팀장 0명이 되어, 운영자가 손대기 전에는
-   * 아무도 사람을 넣고 뺄 수 없는 굳은 팀이 됐다 — `core.ts` 가 명시적으로
-   * 없애려던 상태다. 팀을 옮기는 것은 옛 팀에서 빠지는 것이므로 같은 규칙을 건다.
-   *
-   * **제자리에 다시 넣는 것도 같은 규칙이다.** 배정은 자리뿐 아니라 맡은 자리
-   * (`role`)까지 덮어쓴다. 그래서 이미 이 팀인 사람을 `role: "member"` 로 다시
-   * 보내면 `setMemberRole` 을 거치지 않고 왕관이 벗겨진다 — 혼자뿐인 팀장이
-   * 자기 ID 를 그렇게 보내면 그 팀은 팀장 0명이 된다. 배정 폼과 역할 폼이
-   * 서로 다른 답을 내면 안 되므로 여기서 `canDemote` 를 같이 본다.
-   */
-  const { data: current, error: currentError } = await admin
-    .from("team_members").select("team_id").eq("user_id", userId).maybeSingle();
-  // 못 읽은 것을 「소속 없음」으로 넘기면 아래 두 검사가 통째로 건너뛰어진다.
-  if (currentError) throw new Error(currentError.message);
-  const fromTeamId = (current as { team_id: string } | null)?.team_id;
-
-  if (fromTeamId && fromTeamId !== teamId) {
-    const members = await membersOf(fromTeamId);
-    if (!canRemove(members, userId)) {
-      throw new Error("마지막 팀장은 다른 팀으로 옮길 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
-    }
-  }
-
-  if (fromTeamId === teamId && role === "member") {
-    const members = await membersOf(teamId);
-    if (!canDemote(members, userId)) {
-      throw new Error("마지막 팀장은 팀원으로 내릴 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
-    }
-  }
-
-  const { error } = await admin
-    .from("team_members")
-    .upsert({ user_id: userId, team_id: teamId, role }, { onConflict: "user_id" });
+  const { requireActiveMember } = await import("../membership/server");
+  const actor = await requireActiveMember();
+  const { error } = await createSupabaseAdminClient().rpc("change_team_membership_v2", {
+    p_actor: actor.user.id, p_target: userId, p_action: action, p_team: teamId, p_role: role,
+  });
   if (error) throw new Error(error.message);
-  await stampWorkTeam(userId, teamId, fromTeamId);
 }
 
-/** 팀에서 뺀다. 작업물은 개인 것으로 돌아간다. */
+export async function assignMember(userId: string, teamId: string, role: TeamRole = "member"): Promise<void> {
+  await changeMembership(userId, "assign", teamId, role);
+}
+
 export async function removeMember(userId: string): Promise<void> {
-  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
-  const admin = createSupabaseAdminClient();
-
-  const { data: current } = await admin
-    .from("team_members").select("team_id").eq("user_id", userId).maybeSingle();
-  if (!current) return;
-
-  const teamId = (current as { team_id: string }).team_id;
-  const members = await membersOf(teamId);
-  if (!canRemove(members, userId)) {
-    throw new Error("마지막 팀장은 뺄 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
-  }
-
-  // 작업물을 먼저 푼다. 회원 줄을 먼저 지우면 어느 팀에서 풀어야 할지
-  // 알 수 없어, 팀이 붙은 채 남는다.
-  await clearWorkTeam(userId, teamId);
-  const { error } = await admin.from("team_members").delete().eq("user_id", userId);
-  if (error) throw new Error(error.message);
+  await changeMembership(userId, "remove", null, "member");
 }
 
 export async function setMemberRole(userId: string, role: TeamRole): Promise<void> {
-  if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
-  const admin = createSupabaseAdminClient();
-
-  const { data: current } = await admin
-    .from("team_members").select("team_id").eq("user_id", userId).maybeSingle();
-  if (!current) throw new Error("팀에 속한 회원이 아닙니다.");
-
-  if (role === "member") {
-    const members = await membersOf((current as { team_id: string }).team_id);
-    if (!canDemote(members, userId)) {
-      throw new Error("마지막 팀장은 내릴 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
-    }
-  }
-
-  const { error } = await admin.from("team_members").update({ role }).eq("user_id", userId);
-  if (error) throw new Error(error.message);
-}
-
-async function membersOf(teamId: string): Promise<Array<{ userId: string; role: TeamRole }>> {
-  const { data } = await createSupabaseAdminClient()
-    .from("team_members").select("user_id,role").eq("team_id", teamId);
-  return ((data ?? []) as Array<{ user_id: string; role: TeamRole }>)
-    .map((row) => ({ userId: row.user_id, role: row.role }));
+  await changeMembership(userId, "role", null, role);
 }
 
 /* ── 크레딧 ───────────────────────────────────────────────────── */
@@ -565,20 +413,22 @@ function seoulPeriodStart(): string {
 /** 팀 한도를 정한다. 0 은 「안 정했다」로 남는다. */
 export async function setTeamQuota(teamId: string, quota: number): Promise<void> {
   if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
-  const { error } = await createSupabaseAdminClient()
-    .from("teams")
-    .update({ monthly_quota: quota, updated_at: new Date().toISOString() })
-    .eq("id", teamId);
+  const { requireAdmin } = await import("../membership/server");
+  const actor = await requireAdmin();
+  const { error } = await createSupabaseAdminClient().rpc("set_usage_quota_v2", {
+    p_actor: actor.user.id, p_kind: "team", p_target: teamId, p_quota: quota, p_reason: "관리자 팀 한도 변경",
+  });
   if (error) throw new Error(error.message);
 }
 
 /** 팀원 한 사람의 개인 상한. 팀 잔량 안에서의 천장이다. */
 export async function setPersonalQuota(userId: string, quota: number): Promise<void> {
   if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
-  const { error } = await createSupabaseAdminClient()
-    .from("profiles")
-    .update({ monthly_quota: quota, updated_at: new Date().toISOString() })
-    .eq("id", userId);
+  const { requireAdmin } = await import("../membership/server");
+  const actor = await requireAdmin();
+  const { error } = await createSupabaseAdminClient().rpc("set_usage_quota_v2", {
+    p_actor: actor.user.id, p_kind: "personal", p_target: userId, p_quota: quota, p_reason: "관리자 개인 한도 변경",
+  });
   if (error) throw new Error(error.message);
 }
 

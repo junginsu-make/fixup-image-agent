@@ -1,3 +1,4 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { writeCaption } from "@fixup/sns-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
@@ -20,6 +21,7 @@ export async function POST(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "sns", id);
     const store = await snsFlowStoreForUser(auth.member.userId);
     const project = await store.get(id);
     if (!project?.data.flow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
@@ -40,6 +42,8 @@ export async function POST(_request: Request, context: Context) {
     const saved = await store.save(id, flow, project.status);
     return Response.json({ ok: true, project: saved });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;

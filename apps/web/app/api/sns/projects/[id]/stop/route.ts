@@ -1,3 +1,4 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { stopQueuedGeneration } from "../../../../../../lib/sns/queued-flow";
@@ -18,8 +19,9 @@ export const dynamic = "force-dynamic";
 export async function POST(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
-  const { id } = await context.params;
   try {
+    const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "sns", id);
     return await withSnsProjectLock(id, async () => {
       const store = await snsFlowStoreForUser(auth.member.userId);
       const project = await store.get(id);
@@ -38,6 +40,8 @@ export async function POST(_request: Request, context: Context) {
       return Response.json({ ok: true, project: saved });
     });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;

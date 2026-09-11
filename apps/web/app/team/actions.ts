@@ -268,7 +268,7 @@ export async function selectProjectAction(formData: FormData) {
   redirect(String(formData.get("back") || "/library"));
 }
 
-/* ── 크레딧 — 운영자와 그 팀의 팀장 ────────────────────────────── */
+/* ── 크레딧 총한도 — 운영자만 ─────────────────────────────────── */
 
 function readQuota(
   formData: FormData,
@@ -288,8 +288,8 @@ function readQuota(
  * 지금까지의 동작이라, 값을 정하기 전까지는 아무도 갑자기 막히지 않는다.
  */
 export async function setTeamQuotaAction(formData: FormData) {
+  await requireAdmin();
   const teamId = readId(formData, "teamId");
-  await requireTeamWrite(teamId);
   await setTeamQuota(teamId, readQuota(formData, "quota", teamQuotaError));
   revalidatePath("/team");
   redirect(`/team?tab=credit&team=${teamId}&notice=team_quota_set`);
@@ -298,13 +298,12 @@ export async function setTeamQuotaAction(formData: FormData) {
 /**
  * 팀원 한 사람의 개인 상한.
  *
- * 팀장이 팀원의 상한을 만질 수 있다. 팀 잔량을 한 사람이 다 쓰는 것을 막는
- * 유일한 길이라, 이게 없으면 팀 한도를 정해도 나눌 방법이 없다.
+ * 예산을 부담하는 운영자만 바꾼다. 팀 편성 권한은 예산 증액 권한이 아니다.
  */
 export async function setPersonalQuotaAction(formData: FormData) {
+  await requireAdmin();
   const userId = readId(formData, "userId");
   const teamId = await teamOf(userId);
-  await requireTeamWrite(teamId);
   await setPersonalQuota(userId, readQuota(formData, "quota", personalQuotaError));
   revalidatePath("/team");
   redirect(`/team?tab=credit&team=${teamId}&notice=personal_quota_set`);
