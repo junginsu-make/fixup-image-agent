@@ -30,6 +30,13 @@ const nextConfig = {
         // 멀어서 찾기 어렵다. 통째로 넣으라고 못박는다.
         outputFileTracingIncludes: {
           "/**/*": ["../../node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/**/*"],
+          /*
+            비용 전략실은 **완성된 HTML 한 장을 그대로 읽어 내준다**
+            (`app/admin/cost-lab/route.ts`). `import` 되지 않으므로 Next 의
+            추적이 못 따라간다 — 안 적으면 **로컬에서는 되고 배포본에서만
+            404** 가 된다. 파일 이름은 `lib/admin/cost-lab.ts` 가 들고 있다.
+          */
+          "/admin/cost-lab": ["app/admin/cost-lab/lab.html"],
         },
       }
     : {}),
