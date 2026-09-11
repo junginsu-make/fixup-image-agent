@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 /**
  * **잘린 전사가 캐시에 박히면 안 된다.**
@@ -12,7 +12,16 @@ import { readFileSync } from "node:fs";
  * 계속 나왔다.
  */
 const client = readFileSync(new URL("../transcribe-client.ts", import.meta.url), "utf8");
-const wizard = readFileSync(new URL("../redesign-wizard.tsx", import.meta.url), "utf8");
+/**
+ * **화면 폴더를 통째로 읽는다.**
+ *
+ * 한 파일만 읽으면 코드가 옆 파일로 옮겨간 순간 시험이 조용히 통과하거나
+ * 엉뚱하게 빨개진다. 2,589줄짜리 화면을 여덟 파일로 쪼갤 때 실제로 그랬다.
+ */
+const wizard = readdirSync(new URL("..", import.meta.url))
+  .filter((name) => name.endsWith(".tsx") || name.endsWith(".ts"))
+  .map((name) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8"))
+  .join("\n");
 
 describe("전사 캐시", () => {
   it("끝까지 갔는지 알려 준다", () => {

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_REFERENCE_IMAGES, sizeForRatio } from "@fixup/redesign-core";
@@ -11,7 +11,20 @@ import { MAX_REFERENCE_IMAGES, sizeForRatio } from "@fixup/redesign-core";
  */
 
 const WEB = join(__dirname, "..", "..", "..");
-const wizard = readFileSync(join(WEB, "app/redesign/redesign-wizard.tsx"), "utf8");
+
+/**
+ * **화면 폴더를 통째로 읽는다.**
+ *
+ * 한 파일만 읽으면 코드가 옆 파일로 옮겨간 순간 시험이 조용히 통과하거나
+ * 엉뚱하게 빨개진다. 2,589줄짜리 화면을 여덟 파일로 쪼갤 때 실제로 그랬다 —
+ * 「화면이 몇 장까지 반영되는지 말한다」가 빨개졌는데, 말하기를 그만둔 것이
+ * 아니라 그 문장이 옆 파일로 옮겨 갔을 뿐이었다.
+ */
+const REDESIGN = join(WEB, "app/redesign");
+const wizard = readdirSync(REDESIGN)
+  .filter((name) => name.endsWith(".tsx") || name.endsWith(".ts"))
+  .map((name) => readFileSync(join(REDESIGN, name), "utf8"))
+  .join("\n");
 const route = readFileSync(join(WEB, "app/api/library/route.ts"), "utf8");
 const library = readFileSync(join(WEB, "lib/server-library.ts"), "utf8");
 
