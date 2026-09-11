@@ -12,7 +12,7 @@ export async function withRunLease<T>(run:GenerationRun,call:()=>Promise<T>):Pro
 
 /** Free-to-member planning still gets a durable, rate-limited and costed run. */
 export async function runLlmOperation<T>(request:Request,userId:string,options:{
-  operation:"sns_plan"|"sns_caption"|"layout_analyze"|"poster_review"|"redesign_transcribe";
+  operation:"sns_plan"|"sns_caption"|"layout_analyze"|"poster_review"|"redesign_transcribe"|"pdp_analyze";
   resourceType?:"sns"|"poster";resourceId?:string;identity:unknown;models:string[];maxCalls:number;maxOutputTokens?:number;
   maxToolCalls?:number;isSuccess?:(value:T)=>boolean;
 },call:()=>Promise<T>):Promise<T> {

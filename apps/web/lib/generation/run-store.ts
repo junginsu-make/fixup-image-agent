@@ -24,6 +24,8 @@ export function requestKey(request: Request) {
 export function generationFailureResponse(error:unknown):Response|undefined {
   const code=error instanceof Error?error.message:"";
   const messages:Record<string,[number,string]>={
+    request_too_large:[413,"첨부 자료가 너무 큽니다. 용량을 줄여 다시 시도해 주세요."],
+    invalid_json:[400,"요청 내용을 읽지 못했습니다."],
     draft_conflict:[409,"처리 중 원고가 변경되어 이전 결과를 덮어쓰지 않았습니다. 최신 원고를 확인해 주세요."],
     reload_required:[409,"화면을 새로고침한 뒤 다시 시도해 주세요."],
     idempotency_key_required:[400,"요청 식별자가 필요합니다. 화면을 새로고침해 주세요."],

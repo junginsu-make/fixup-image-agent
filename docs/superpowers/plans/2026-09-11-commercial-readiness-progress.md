@@ -24,6 +24,15 @@
 - PostgreSQL 전체 27개 통과 후 원고 충돌 1개와 LLM 동시 경쟁 1개를 추가하고 해당 suite를 각각 통과했다. 최초 경쟁 fixture는 SNS resource를 빠뜨려 두 요청이 모두 거절됐으므로 증거로 삼지 않았으며, resource가 필요 없는 두 실제 LLM operation으로 수정하여 하나만 승인되는 것을 확인했다.
 - 아직 단계 5 전체 완료가 아니다. PDP·리디자인·캐릭터 동기 이미지 생성의 v2 전환, 원본 응답 복구·실제 단가 일치, 포스터 기획과 나머지 LLM 경로 전환을 계속해야 한다. timer/대조 처리기와 운영 반영은 후속 단계다.
 
+### 후속: PDP 기획 전환과 재검토
+
+- PDP analyze/plan-from-text는 production/v2에서 별도의 내구성 있는 기획 경로를 사용한다. 기존 응답의 result 구조·긴 레퍼런스 분할·기획 재시도·텍스트 기본값을 유지한다. 크레딧은 기존대로 0이며 실제 LLM 호출은 run/attempt에 남긴다. 로컬 기존 경로는 유지한다.
+- 새 경로는 인증 후 최대 32 MiB의 JSON을 스트리밍 검사한다. Content-Length가 없어도 크기 제한을 적용한다. 해시에는 분석/텍스트 모드를 포함해 같은 키를 다른 경로에 재사용하지 못한다. 클라이언트에 v2 프로토콜 헤더를 연결했다.
+- 기존 도메인 함수가 통신 단절 예외를 잡고 계속하면 다음 LLM을 호출할 수 있는 RED를 재현했다. 한 실행의 계량 컨텍스트에 중단 상태를 보존하여 이후 유료 호출을 차단했다. 이 시험과 SNS 순차 생성 회귀를 통과했다.
+- 검증: 웹 169개 파일/1876개 시험 통과, 타입 검사·변경 파일 lint·diff 공백 검사 통과. 외부 AI 유료 호출은 실행하지 않았다. 운영 서버/DB에는 적용하지 않았다.
+- **새로 확인한 포스터 기획 경계:** 현재 코드의 poster plan은 0크레딧이 아니다. 레퍼런스 문법/인물 읽기를 먼저 유료 호출하고 그 뒤 poster_image로 확보한 후, 실제 LLM 금액을 크레딧으로 정산한다. 후속 전환 시 이 요금 정책을 유지하면서 모든 호출보다 admission을 앞세워야 한다. 다섯 무료 LLM 경로와 혼동해서 0으로 바꾸지 않는다.
+- **다른 작업과의 통합 경계:** 원본 master는 아직 57e9bee지만 캐릭터 API·characters.ts·pdp.character.ts 등에 미커밋 수정이 있다. 새 `202609110004_character_turnaround_sheet.sql`은 character_views.angle에 sheet를 추가한다. 이 다각도 한 장 기능의 호출 수·가격을 확인한 뒤 캐릭터 v2 변경과 합쳐 검증한다. 해당 원본 수정은 건드리지 않았다.
+
 운영 DB에서 mutation 회귀시험을 실행하지 않는다. test-postgres는 운영 URL/키를 읽지 않고 localhost 전용 임시 클러스터를 생성한다. Auth/Storage 최소 스키마는 fixture이며 실제 Supabase Auth E2E를 대신하지 않는다.
 
 실행: `node --test scripts/tests/usage-database.test.mjs`. PostgreSQL bin은 `TEST_PG_BIN`으로 지정 가능. Windows 기본값은 설치된 PostgreSQL 17 bin. CI는 PostgreSQL bin을 PATH에 제공한다.

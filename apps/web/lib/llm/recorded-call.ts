@@ -6,13 +6,19 @@ import type { ExecutionStore } from "../generation/types";
 import { inputHash } from "../generation/run-store";
 import { tokensFrom } from "./meter";
 
-interface Context { store: ExecutionStore; prefix: string; sequence: number; calls: number; maxCalls: number }
+interface Context { store: ExecutionStore; prefix: string; sequence: number; calls: number; maxCalls: number; halted?: ExecutionControlError }
 const context=new AsyncLocalStorage<Context>();
+function halt(code: ConstructorParameters<typeof ExecutionControlError>[0]) {
+  const current = context.getStore();
+  const error = current?.halted ?? new ExecutionControlError(code);
+  if (current) current.halted = error;
+  return error;
+}
 // Standard web_search call fee; content tokens are already in model usage.
 // https://developers.openai.com/api/docs/pricing (checked 2026-09-11)
 const WEB_SEARCH_CALL_MICROUSD=10000;
 async function ledger<T>(operation:()=>Promise<T>):Promise<T> {
-  try{return await operation();}catch{throw new ExecutionControlError("storage_unavailable");}
+  try{return await operation();}catch{throw halt("storage_unavailable");}
 }
 export const MAX_RECORDED_LLM_INPUT_BYTES=120_000;
 export const MAX_RECORDED_LLM_OUTPUT_TOKENS=4096;
@@ -26,7 +32,8 @@ export function withRecordedLlm<T>(store:ExecutionStore,prefix:string,run:()=>Pr
 export function claimPaidCall() {
   const current=context.getStore();
   if(!current)return;
-  if(current.calls>=current.maxCalls)throw new ExecutionControlError("execution_yield");
+  if(current.halted)throw current.halted;
+  if(current.calls>=current.maxCalls)throw halt("execution_yield");
   current.calls++;
 }
 function inputSummary(value:unknown,key=""):unknown {
@@ -42,10 +49,11 @@ function inputSummary(value:unknown,key=""):unknown {
 export async function recordedLlmCall<T>(provider:string,model:string,input:unknown,call:()=>Promise<T>,maxOutput=MAX_RECORDED_LLM_OUTPUT_TOKENS):Promise<T> {
   const current=context.getStore();
   if(!current)return call();
+  if(current.halted)throw current.halted;
   const summary=inputSummary(input);
   const payload=JSON.stringify(summary);
   const maxTools=input&&typeof input==="object"&&"max_tool_calls" in input?Number(input.max_tool_calls):0;
-  if(Buffer.byteLength(payload,"utf8")>MAX_RECORDED_LLM_INPUT_BYTES)throw new ExecutionControlError("input_limit");
+  if(Buffer.byteLength(payload,"utf8")>MAX_RECORDED_LLM_INPUT_BYTES)throw halt("input_limit");
   const sequence=current.sequence++;
   const step=`${current.prefix}:${provider}:${model}:${sequence}`;
   const existing=(await ledger(()=>current.store.attempts())).find(a=>a.logical_step===step);
@@ -57,15 +65,15 @@ export async function recordedLlmCall<T>(provider:string,model:string,input:unkn
   if(existing?.state==="failed")throw new Error(existing.logical_step+": provider rejected request");
   if(existing && existing.state!=="prepared") {
     if(existing.state==="submitting")await ledger(()=>current.store.advance(existing.id,{state:"unknown",errorCode:"llm_outcome_unknown"}));
-    throw new ExecutionControlError("outcome_unknown");
+    throw halt("outcome_unknown");
   }
-  if(current.calls>=current.maxCalls)throw new ExecutionControlError("execution_yield");
+  if(current.calls>=current.maxCalls)throw halt("execution_yield");
   let attempt;
   try {
     attempt=existing??await current.store.prepare({step,sequence,provider,model,endpoint:"llm",requestHash:inputHash(summary),payload:{input:summary,maxOutputTokens:maxOutput},
       price:{tokenPrice:priceOf(model),webSearchCallMicrousd:WEB_SEARCH_CALL_MICROUSD},maxCostMicrousd:llmCallUpperMicrousd(model,9,maxOutput)+Math.max(0,maxTools)*WEB_SEARCH_CALL_MICROUSD,requestedImages:0});
     await current.store.advance(attempt.id,{state:"submitting"});
-  } catch {throw new ExecutionControlError("storage_unavailable");}
+  } catch {throw halt("storage_unavailable");}
   claimPaidCall();
   let response:T;
   try {response=await call();}
@@ -76,7 +84,7 @@ export async function recordedLlmCall<T>(provider:string,model:string,input:unkn
       throw error;
     }
     await ledger(()=>current.store.advance(attempt.id,{state:"unknown",errorCode:"llm_outcome_unknown"}));
-    throw new ExecutionControlError("outcome_unknown");
+    throw halt("outcome_unknown");
   }
   try {
     const tokens=tokensFrom(response);
@@ -88,7 +96,7 @@ export async function recordedLlmCall<T>(provider:string,model:string,input:unkn
       costMicrousd:Math.round(llmUsdFromTokens(model,tokens.input,tokens.output)*1_000_000)+Math.max(0,toolCalls)*WEB_SEARCH_CALL_MICROUSD,inputTokens:tokens.input,outputTokens:tokens.output,meteringState:"observed" as const,
     }:{meteringState:"unknown" as const})});
     await current.store.advance(attempt.id,{state:"stored",output});
-  } catch {throw new ExecutionControlError("storage_unavailable");}
+  } catch {throw halt("storage_unavailable");}
   return response;
 }
 export const invokeRecordedLlm:InvokeProvider=(meta,call)=>recordedLlmCall(meta.provider,meta.model,meta.request,call,meta.maxOutputTokens);

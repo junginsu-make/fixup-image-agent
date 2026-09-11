@@ -1,4 +1,6 @@
 import { planFromText, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
+import { durablePdpPlanning } from "../../../../lib/pdp/planning-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 import type { CopyIntensity, GapPolicy, TextPlanRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { suggestStyleReference } from "../../../../lib/style-reference";
@@ -18,6 +20,7 @@ function isTransientBlueprintFailure(code: unknown, detail?: string) {
 }
 
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durablePdpPlanning(req, "text");
   // 이미지를 만들지 않는 단계라 크레딧은 소모하지 않는다(시간당 횟수 제한만 적용).
   const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
   if (!reservation.ok) return reservation.response;

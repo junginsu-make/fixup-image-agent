@@ -1,4 +1,6 @@
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { durablePdpPlanning } from "../../../../lib/pdp/planning-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
@@ -15,6 +17,7 @@ function isTransientBlueprintFailure(code: unknown, detail?: string) {
 }
 
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durablePdpPlanning(req, "analyze");
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 안쪽 어디서 부르든 여기로 모인다.
   return withLlmMeter(() => analyze(req));
 }

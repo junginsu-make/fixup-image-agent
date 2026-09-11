@@ -109,3 +109,12 @@ it("blocks another paid call once the operation call allowance is exhausted", as
   })).rejects.toThrow();
   expect(provider).toHaveBeenCalledTimes(1);
 });
+it("blocks later provider calls even if a domain helper swallows an uncertain error", async () => {
+  const uncertain = vi.fn(async () => { throw new Error("socket reset after send"); });
+  const later = vi.fn(async () => ({ usage: { input_tokens: 1, output_tokens: 1 } }));
+  await expect(runLlmOperation(request, "owner", { ...options, maxCalls: 2 }, async () => {
+    try { await recordedLlmCall("openai", "gpt-5.5", { input: "first" }, uncertain); } catch { /* legacy optional analysis */ }
+    return recordedLlmCall("openai", "gpt-5.5", { input: "second" }, later);
+  })).rejects.toThrow();
+  expect(uncertain).toHaveBeenCalledTimes(1); expect(later).not.toHaveBeenCalled();
+});
