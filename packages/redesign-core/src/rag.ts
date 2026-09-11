@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import OpenAI from "openai";
 import { createHash } from "node:crypto";
+import type { InvokeProvider } from "@fixup/shared";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
@@ -178,13 +179,14 @@ export async function retrieveKnowledge(
   query: string,
   limit = 8,
   options: RetrieveKnowledgeOptions = {},
+  invoke?: InvokeProvider,
 ): Promise<RetrievedKnowledge[]> {
   const sql = getSql();
   const openai = getOpenAI();
   if (!sql || !openai || !query.trim()) return [];
 
   await ensureRagSchema();
-  const embedding = await embedText(openai, query.slice(0, 8000));
+  const embedding = await embedText(openai, query.slice(0, 8000), invoke);
   const vector = toVector(embedding);
 
   // kind 가 없으면 전체에서 찾는다. 기존 리디자인 호출부가 그대로 돌아야 한다.
@@ -324,12 +326,14 @@ function splitBySize(section: string): string[] {
   return pieces;
 }
 
-async function embedText(openai: OpenAI, input: string) {
-  const response = await openai.embeddings.create({
+async function embedText(openai: OpenAI, input: string, invoke?: InvokeProvider) {
+  const payload = {
     model: EMBEDDING_MODEL,
     input,
     dimensions: EMBEDDING_DIMENSIONS
-  });
+  };
+  const call = () => openai.embeddings.create(payload, invoke ? { maxRetries: 0, timeout: 120_000 } : undefined);
+  const response = await (invoke ? invoke({ kind: "llm", provider: "openai", model: EMBEDDING_MODEL, request: payload, maxOutputTokens: 0 }, call) : call());
   return response.data[0].embedding;
 }
 

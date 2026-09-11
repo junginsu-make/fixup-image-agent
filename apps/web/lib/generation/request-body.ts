@@ -1,5 +1,5 @@
 /** Enforce the byte cap while reading, including requests without Content-Length. */
-export async function boundedJson(request: Request, maximumBytes = 32 * 1024 * 1024): Promise<unknown> {
+export async function boundedBytes(request: Request, maximumBytes: number): Promise<Buffer> {
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maximumBytes) throw new Error("request_too_large");
   if (!request.body) throw new Error("invalid_json");
@@ -15,6 +15,14 @@ export async function boundedJson(request: Request, maximumBytes = 32 * 1024 * 1
       chunks.push(value);
     }
   } finally { reader.releaseLock(); }
-  try { return JSON.parse(Buffer.concat(chunks, total).toString("utf8")); }
+  return Buffer.concat(chunks, total);
+}
+export async function boundedJson(request: Request, maximumBytes = 32 * 1024 * 1024): Promise<unknown> {
+  const bytes = await boundedBytes(request, maximumBytes);
+  try { return JSON.parse(bytes.toString("utf8")); }
   catch { throw new Error("invalid_json"); }
+}
+export async function boundedFormData(request: Request, maximumBytes = 64 * 1024 * 1024): Promise<FormData> {
+  const bytes = await boundedBytes(request, maximumBytes);
+  return new Request(request.url, { method: "POST", headers: request.headers, body: new Uint8Array(bytes) }).formData();
 }

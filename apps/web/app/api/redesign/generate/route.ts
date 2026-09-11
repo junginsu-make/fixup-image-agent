@@ -7,11 +7,14 @@ import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
 import { createRedesignImageGenerator } from "../../../../lib/redesign/image-generator";
+import { durableRedesignGenerate } from "../../../../lib/redesign/generate-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durableRedesignGenerate(req);
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 리디자인은 업체를 직접 부르므로
   // 꾸러미가 토큰을 알려 주면 여기서 받아 적는다.
   return withLlmMeter(() => generate(req));

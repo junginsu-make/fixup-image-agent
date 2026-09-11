@@ -304,7 +304,7 @@ export function RedesignWizard() {
 
       const response = await fetch("/api/redesign/generate", {
         method: "POST",
-        headers: { "x-idempotency-key": requestKey },
+        headers: { "x-idempotency-key": requestKey, "x-generation-protocol": "2" },
         body: form,
         signal: abortController.signal
       });
@@ -658,7 +658,7 @@ export function RedesignWizard() {
       });
       const response = await fetch("/api/redesign/edit-section", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-idempotency-key": requestKey },
+        headers: { "Content-Type": "application/json", "x-idempotency-key": requestKey, "x-generation-protocol": "2" },
         body: JSON.stringify({
           model,
           imageUrl: requestImageUrl,

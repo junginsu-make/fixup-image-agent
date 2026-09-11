@@ -1,4 +1,4 @@
-import { userInstructionHead, userInstructionTail } from "@fixup/shared";
+import { userInstructionHead, userInstructionTail, type InvokeProvider } from "@fixup/shared";
 import { RedesignError } from "./errors.js";
 
 /**
@@ -28,10 +28,15 @@ import { RedesignError } from "./errors.js";
 
 const OPENAI_IMAGE_MODEL = "gpt-image-2-2026-04-21";
 const GOOGLE_NANO_BANANA_2_MODEL = "gemini-3.1-flash-image-preview";
+const OPENAI_EDIT_CONFIG = { model: OPENAI_IMAGE_MODEL, size: "1152x2048", quality: "low" } as const;
+export function editSectionModelInfo(provider: string) {
+  return provider === "google" ? { provider: "google" as const, model: GOOGLE_NANO_BANANA_2_MODEL } : { provider: "openai" as const, ...OPENAI_EDIT_CONFIG };
+}
 
 type Provider = "openai" | "google";
 
 export type EditSectionInput = {
+  onProviderCall?: InvokeProvider;
   /** "openai" | "google" (anything not "google" becomes "openai") */
   model?: string;
   /** data URL string: data:<mime>;base64,<data> */
@@ -88,8 +93,8 @@ export async function editSection(input: EditSectionInput) {
     .join("\n");
 
   const edited = provider === "google"
-    ? await editWithGoogle({ apiKey, prompt, image })
-    : await editWithOpenAI({ apiKey, prompt, image });
+    ? await editWithGoogle({ apiKey, prompt, image }, input.onProviderCall)
+    : await editWithOpenAI({ apiKey, prompt, image }, input.onProviderCall);
 
   return {
     imageUrl: `data:${edited.mimeType};base64,${edited.buffer.toString("base64")}`,
@@ -106,23 +111,29 @@ async function editWithOpenAI({
   apiKey: string;
   prompt: string;
   image: { mimeType: string; buffer: Buffer };
-}) {
+}, invoke?: InvokeProvider) {
   const form = new FormData();
-  form.append("model", OPENAI_IMAGE_MODEL);
+  form.append("model", OPENAI_EDIT_CONFIG.model);
   form.append("prompt", prompt);
-  form.append("size", "1152x2048");
-  form.append("quality", "low");
+  form.append("size", OPENAI_EDIT_CONFIG.size);
+  form.append("quality", OPENAI_EDIT_CONFIG.quality);
   form.append("output_format", "png");
   form.append("image[]", new Blob([new Uint8Array(image.buffer)], { type: image.mimeType }), "section.png");
 
+  const call = async () => {
   const response = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
-    body: form
+    body: form,
+    signal: AbortSignal.timeout(120_000),
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "정밀형 섹션 수정 실패", response));
+  if (!response.ok) throw Object.assign(new Error(withRequestId(data?.error?.message || "정밀형 섹션 수정 실패", response)), { providerStatus: response.status });
+  return data;
+  };
+  const data = await (invoke ? invoke({ kind: "image", provider: "openai", model: OPENAI_IMAGE_MODEL,
+    request: { ...OPENAI_EDIT_CONFIG, prompt, image: image.buffer.toString("base64") } }, call) : call());
   const imageBase64 = data?.data?.[0]?.b64_json;
   if (!imageBase64) throw new Error("OpenAI 응답에 이미지 데이터가 없습니다.");
   return { mimeType: "image/png", buffer: Buffer.from(imageBase64, "base64") };
@@ -136,25 +147,26 @@ async function editWithGoogle({
   apiKey: string;
   prompt: string;
   image: { mimeType: string; buffer: Buffer };
-}) {
+}, invoke?: InvokeProvider) {
+  const payload = {
+    contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.buffer.toString("base64") } }] }],
+  };
+  const call = async () => {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_NANO_BANANA_2_MODEL}:generateContent`, {
     method: "POST",
     headers: {
       "x-goog-api-key": apiKey,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType: image.mimeType, data: image.buffer.toString("base64") } }
-        ]
-      }]
-    })
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(120_000),
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "속도형 섹션 수정 실패", response));
+  if (!response.ok) throw Object.assign(new Error(withRequestId(data?.error?.message || "속도형 섹션 수정 실패", response)), { providerStatus: response.status });
+  return data;
+  };
+  const data = await (invoke ? invoke({ kind: "image", provider: "google", model: GOOGLE_NANO_BANANA_2_MODEL, request: payload }, call) : call());
   const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData);
   if (!imagePart?.inlineData?.data) throw new Error("Google 응답에 이미지 데이터가 없습니다.");
   return {

@@ -1,6 +1,8 @@
-import { buildModelInput, modelById, resolveSize, type ImageModel } from "@fixup/sns-core";
+import { buildModelInput, modelById, resolveSize, unitPrice, type ImageModel } from "@fixup/sns-core";
 import type { RedesignImageGenerator } from "@fixup/redesign-core";
 import { createFalUploader } from "../fal/upload";
+import { createHash } from "node:crypto";
+import { recordedImageCall } from "../generation/recorded-image";
 
 /**
  * 리디자인이 **다른 도구와 같은 길로** 그림을 만든다.
@@ -29,6 +31,12 @@ import { createFalUploader } from "../fal/upload";
 
 /** 리디자인이 쓰는 모델. 다른 도구의 기본값(표준형)과 같은 것을 쓴다. */
 export const REDESIGN_FAL_MODEL = "gpt-image-2.5-flare";
+export function quoteRedesignFal(size: string) {
+  const model = modelById(REDESIGN_FAL_MODEL);
+  const pixel = pixelSizeOf(size) ?? resolveSize("9:16", model).pixel;
+  if (!pixel) throw new Error("price_unavailable");
+  return Math.ceil(unitPrice(model, "i2i", pixel) * 1_000_000);
+}
 
 const FAL_BASE_URL = "https://fal.run";
 
@@ -93,6 +101,11 @@ export function createRedesignImageGenerator(
   const model = modelById(REDESIGN_FAL_MODEL);
 
   return async ({ prompt, references, size }) => {
+    const unit = quoteRedesignFal(size);
+    const image = await recordedImageCall({ provider: "fal", model: model.id, endpoint: model.i2i.endpoint,
+      identity: { prompt, size, references: references.slice(0, model.maxReferenceImages).map(r => ({ mimeType: r.mimeType, digest: createHash("sha256").update(r.buffer).digest("hex") })) },
+      price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit },
+    }, async () => {
     /**
      * 첨부를 먼저 올린다. fal 은 바이트가 아니라 **주소**를 받는다.
      *
@@ -111,24 +124,29 @@ export function createRedesignImageGenerator(
       method: "POST",
       headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(120_000),
     });
 
     const text = await response.text();
     if (!response.ok) {
-      throw new RedesignFalError(
+      throw Object.assign(new RedesignFalError(
         response.status === 429
           ? "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요."
           : `이미지를 생성하지 못했습니다 (${response.status}).`,
-      );
+      ), { providerStatus: response.status });
     }
 
-    const url = imageUrlFrom(JSON.parse(text) as unknown);
-    const downloaded = await fetch(url);
+    return JSON.parse(text) as unknown;
+    }, async raw => {
+    const url = imageUrlFrom(raw);
+    const downloaded = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!downloaded.ok) throw new RedesignFalError("만든 이미지를 내려받지 못했습니다.");
 
     return {
-      buffer: Buffer.from(await downloaded.arrayBuffer()),
+      base64: Buffer.from(await downloaded.arrayBuffer()).toString("base64"),
       mimeType: downloaded.headers.get("content-type") || "image/png",
     };
+    });
+    return { buffer: Buffer.from(image.base64, "base64"), mimeType: image.mimeType };
   };
 }

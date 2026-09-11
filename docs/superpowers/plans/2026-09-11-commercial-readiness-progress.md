@@ -49,6 +49,16 @@
 - 실제 파일 저장소와 가짜 fal을 연결한 시험에서 정산 DB 실패, 원본 응답 DB 기록 실패, 다운로드 실패 후 복구를 확인했다. 동일 키 재요청의 외부 생성은 한 번이었다. 활성 lease는 재요청이 빼앗지 않으며, 만료를 모사한 후 복구를 검증했다. 운영 DB 권한 시험을 대신하는 증거는 아니다.
 - 웹 전체 173파일/1892시험, 타입 검사, 변경 파일 lint 통과. 자동 executor의 복구 연결은 단계 6에서 해야 한다. 단계 5의 리디자인·캐릭터 경로는 계속 진행 중이다.
 
+### 후속: §9 리디자인 생성/수정 처리
+
+- core에 선택적 provider 호출 hook을 주입하고 web adapter가 원본 응답·완성 이미지·정산을 기록한다. 기존 프롬프트·선택 경로·출력 품질은 유지한다. generate는 high 직접 호출과 fal max 경로를 구분하고, edit는 실제 low 설정을 유지한다.
+- edit 단가는 기존 저장소 이력 0d2efb8(low $0.02), e858b28(high $0.21)과 현재 Google $0.13을 구분한다. fal 새 모델의 $0.165를 low 수정에 덮어씌우지 않는다. 고정 1 정산 대신 실제 경로의 snapshot으로 계산한다.
+- T21 실제 로컬 장부+가짜 HTTP 시험: OpenAI low edit 1, Google edit 3, 재요청 외부 호출 1회. generate는 OpenAI 직접/Google 직접/fal 각각의 실제 단가와 부분 성공을 확인했다. 생성 중 지식 검색을 켠 경우의 embedding도 같은 호출 hook을 통과한다. 독립 지식 색인 API는 이번 범위에서 수정하지 않았다.
+- 입력은 인증 뒤에 최대 64 MiB multipart/32 MiB JSON으로 읽는다. 클라이언트의 기존 요청 식별자를 보존하고 v2 헤더를 붙였다. 실제 청구서는 별도 대조 대상이며 이 시험은 provider 요금 청구 검증이 아니다.
+- 웹 전체 175파일/1899시험, redesign-core 64시험, 타입 검사·변경 파일 lint·diff 검사 통과.
+- 별도 확인 대상(이번에 기능 변경하지 않음): 기존 generateImage 주입은 Google 선택에도 fal 이미지 생성기를 사용한다. 이번 장부는 실제 호출된 제공자를 기록하지만, 선택 UI/라우팅 정책 자체는 변경하지 않는다.
+- 진행 중 master에 사용자 기능 PR #98–#101이 병합되어 기준이 68b1082로 전진했다. 캐릭터를 수정하기 전에 격리 브랜치에 최신 기준을 통합한다. 새로운 사용자 기능을 이 작업에서 설계하거나 추가하는 것은 아니다.
+
 운영 DB에서 mutation 회귀시험을 실행하지 않는다. test-postgres는 운영 URL/키를 읽지 않고 localhost 전용 임시 클러스터를 생성한다. Auth/Storage 최소 스키마는 fixture이며 실제 Supabase Auth E2E를 대신하지 않는다.
 
 실행: `node --test scripts/tests/usage-database.test.mjs`. PostgreSQL bin은 `TEST_PG_BIN`으로 지정 가능. Windows 기본값은 설치된 PostgreSQL 17 bin. CI는 PostgreSQL bin을 PATH에 제공한다.

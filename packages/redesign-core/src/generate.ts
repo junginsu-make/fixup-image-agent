@@ -8,6 +8,7 @@ import {
   userInstructionHead,
   userInstructionTail,
   type ImageLook,
+  type InvokeProvider,
 } from "@fixup/shared";
 import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
@@ -83,6 +84,9 @@ export const MAX_REFERENCE_IMAGES = 4;
  * 그 둘이 어긋나지 않게 `redesign-quality.test.ts` 가 잡는다.
  */
 const IMAGE_QUALITY = "high";
+export function redesignGenerationModels() {
+  return { analysisOpenAI: ANALYSIS_MODEL, analysisGoogle: GOOGLE_READING_MODEL, imageOpenAI: OPENAI_IMAGE_MODEL, imageGoogle: GOOGLE_NANO_BANANA_2_MODEL, quality: IMAGE_QUALITY };
+}
 
 const DEFAULT_IMAGE_SIZE = "1152x2048";
 
@@ -172,6 +176,7 @@ export type GenerateSectionsInput = {
    * 라우트가 정한다.
    */
   onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
+  onProviderCall?: InvokeProvider;
   /**
    * 그림을 **실제로 만드는 사람.**
    *
@@ -331,13 +336,14 @@ export async function generateSections(input: GenerateSectionsInput) {
         requestText,
         rolloutRequest,
         channel,
-        fallbackText: knowledgeText
+        fallbackText: knowledgeText,
+        onProviderCall: input.onProviderCall,
       })
     : "";
   console.info(`[generate] knowledge ready job=${jobId} useKnowledge=${useKnowledge} chars=${retrievedKnowledgeText.length}`);
   const payload = { request: requestText, rolloutRequest, knowledgeText: retrievedKnowledgeText, options: { channel, ratio, count } };
   console.info(`[generate] analysis start job=${jobId}`);
-  const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage });
+  const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage, onProviderCall: input.onProviderCall });
   console.info(`[generate] analysis done job=${jobId}`);
   // 분석에는 인물을 넣지 않는다. 분석은 원본 상세페이지를 읽어 제품을 파악하는
   // 일이라, 인물이 섞이면 제품 분석이 오염된다. 생성에만 넣는다.
@@ -370,8 +376,8 @@ export async function generateSections(input: GenerateSectionsInput) {
             size: sizeForRatio(ratio),
           })
         : provider === "google"
-          ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences })
-          : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences, size: sizeForRatio(ratio) });
+          ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences }, input.onProviderCall)
+          : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences, size: sizeForRatio(ratio) }, input.onProviderCall);
 
       generatedSections.push({
         ...section,
@@ -442,12 +448,14 @@ async function buildKnowledgeContext({
   requestText,
   rolloutRequest,
   channel,
-  fallbackText
+  fallbackText,
+  onProviderCall
 }: {
   requestText: string;
   rolloutRequest: string;
   channel: string;
   fallbackText: string;
+  onProviderCall?: InvokeProvider;
 }) {
   const fallback = fallbackText.slice(0, 60000);
   if (!isRagConfigured()) return fallback;
@@ -459,7 +467,7 @@ async function buildKnowledgeContext({
       `추가 요청사항: ${requestText || "전환율 중심 리디자인"}`,
       rolloutRequest ? `히어로 검토 후 요청: ${rolloutRequest}` : ""
     ].filter(Boolean).join("\n");
-    const chunks = await retrieveKnowledge(query, 8);
+    const chunks = await retrieveKnowledge(query, 8, {}, onProviderCall);
     if (chunks.length === 0) return fallback;
 
     return chunks
@@ -520,7 +528,8 @@ async function analyzeSource({
   payload,
   modelInfo,
   transcript,
-  onUsage
+  onUsage,
+  onProviderCall
 }: {
   provider: Provider;
   apiKey: string;
@@ -529,14 +538,15 @@ async function analyzeSource({
   modelInfo: ReturnType<typeof modelMeta>;
   transcript?: string;
   onUsage?: GenerateSectionsInput["onUsage"];
+  onProviderCall?: InvokeProvider;
 }) {
   const prompt = buildAnalyzePrompt(payload, modelInfo, transcript);
 
   try {
     if (provider === "google") {
-      return await analyzeWithGoogle({ apiKey, prompt, references, onUsage });
+      return await analyzeWithGoogle({ apiKey, prompt, references, onUsage }, onProviderCall);
     }
-    return await analyzeWithOpenAI({ apiKey, prompt, references, onUsage });
+    return await analyzeWithOpenAI({ apiKey, prompt, references, onUsage }, onProviderCall);
   } catch (error) {
     return {
       product_inferred: { category: "업로드 자료 기반 추정", confidence: 0.4 },
@@ -581,7 +591,7 @@ function reportUsage(
   onUsage({ model, inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 });
 }
 
-async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }) {
+async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }, invoke?: InvokeProvider) {
   const content: Array<{ type: "input_text"; text: string } | { type: "input_image"; image_url: string }> = [{ type: "input_text", text: prompt }];
   for (const reference of references.slice(0, MAX_REFERENCE_IMAGES)) {
     content.push({
@@ -590,26 +600,32 @@ async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiK
     });
   }
 
+  const call = async () => {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
+    signal: AbortSignal.timeout(120_000),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
       model: ANALYSIS_MODEL,
+      max_output_tokens: 128000,
       input: [{ role: "user", content }]
     })
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response));
+  if (!response.ok) throw Object.assign(new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response)), { providerStatus: response.status });
+  return data;
+  };
+  const data = await (invoke ? invoke({ kind: "llm", provider: "openai", model: ANALYSIS_MODEL, request: { model: ANALYSIS_MODEL, input: [{role:"user",content}] }, maxOutputTokens: 128000 }, call) : call());
   reportUsage(onUsage, ANALYSIS_MODEL, data);
   const text = data.output_text || extractOpenAIText(data);
   return parseMaybeJson(text);
 }
 
-async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }) {
+async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }, invoke?: InvokeProvider) {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: prompt }];
   for (const reference of references.slice(0, MAX_REFERENCE_IMAGES)) {
     parts.push({
@@ -620,23 +636,28 @@ async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiK
     });
   }
 
+  const call = async () => {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_READING_MODEL}:generateContent`, {
     method: "POST",
+    signal: AbortSignal.timeout(120_000),
     headers: {
       "x-goog-api-key": apiKey,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ contents: [{ parts }] })
+    body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 65536 } })
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response));
+  if (!response.ok) throw Object.assign(new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response)), { providerStatus: response.status });
+  return data;
+  };
+  const data = await (invoke ? invoke({ kind: "llm", provider: "google", model: GOOGLE_READING_MODEL, request: { contents: [{parts}] }, maxOutputTokens: 65536 }, call) : call());
   reportUsage(onUsage, GOOGLE_READING_MODEL, data);
   const text = data?.candidates?.[0]?.content?.parts?.find((part: { text?: string }) => part.text)?.text || "";
   return parseMaybeJson(text);
 }
 
-async function generateOpenAIImage({ apiKey, prompt, references, size }: { apiKey: string; prompt: string; references: ReferenceImage[]; size: string }) {
+async function generateOpenAIImage({ apiKey, prompt, references, size }: { apiKey: string; prompt: string; references: ReferenceImage[]; size: string }, invoke?: InvokeProvider) {
   const form = new FormData();
   form.append("model", OPENAI_IMAGE_MODEL);
   form.append("prompt", prompt);
@@ -648,20 +669,25 @@ async function generateOpenAIImage({ apiKey, prompt, references, size }: { apiKe
     form.append("image[]", new Blob([new Uint8Array(reference.buffer)], { type: reference.mimeType }), reference.name);
   }
 
+  const call = async () => {
   const response = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
+    signal: AbortSignal.timeout(120_000),
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "정밀형 생성 실패", response));
+  if (!response.ok) throw Object.assign(new Error(withRequestId(data?.error?.message || "정밀형 생성 실패", response)), { providerStatus: response.status });
+  return data;
+  };
+  const data = await (invoke ? invoke({ kind: "image", provider: "openai", model: OPENAI_IMAGE_MODEL, request: { model: OPENAI_IMAGE_MODEL, quality: IMAGE_QUALITY, size, prompt, references: references.map(r=>({image:r.buffer.toString("base64"),mimeType:r.mimeType})) } }, call) : call());
   const imageBase64 = data?.data?.[0]?.b64_json;
   if (!imageBase64) throw new Error("OpenAI 응답에 이미지 데이터가 없습니다.");
   return { mimeType: "image/png", buffer: Buffer.from(imageBase64, "base64") };
 }
 
-async function generateGoogleImage({ apiKey, prompt, references }: { apiKey: string; prompt: string; references: ReferenceImage[] }) {
+async function generateGoogleImage({ apiKey, prompt, references }: { apiKey: string; prompt: string; references: ReferenceImage[] }, invoke?: InvokeProvider) {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: prompt }];
   for (const reference of references.slice(0, MAX_REFERENCE_IMAGES)) {
     parts.push({
@@ -672,8 +698,10 @@ async function generateGoogleImage({ apiKey, prompt, references }: { apiKey: str
     });
   }
 
+  const call = async () => {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_NANO_BANANA_2_MODEL}:generateContent`, {
     method: "POST",
+    signal: AbortSignal.timeout(120_000),
     headers: {
       "x-goog-api-key": apiKey,
       "Content-Type": "application/json"
@@ -682,7 +710,10 @@ async function generateGoogleImage({ apiKey, prompt, references }: { apiKey: str
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "속도형 생성 실패", response));
+  if (!response.ok) throw Object.assign(new Error(withRequestId(data?.error?.message || "속도형 생성 실패", response)), { providerStatus: response.status });
+  return data;
+  };
+  const data = await (invoke ? invoke({ kind: "image", provider: "google", model: GOOGLE_NANO_BANANA_2_MODEL, request: { contents: [{parts}] } }, call) : call());
   const imagePart = data?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData);
   if (!imagePart?.inlineData?.data) throw new Error("Google 응답에 이미지 데이터가 없습니다.");
   return {

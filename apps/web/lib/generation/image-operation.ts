@@ -18,6 +18,7 @@ async function settleSaved<T>(run: GenerationRun, saved: SavedResult<T>) {
 export async function runImageOperation<T>(request: Request, userId: string, options: {
   operation: "pdp_image" | "redesign_generate" | "redesign_edit";
   units: number; identity: unknown; models: string[]; maximumImages: number; maximumImageCostMicrousd: number; maximumLlmCalls: number;
+  maximumLlmOutputTokens?: number;
 }, call: () => Promise<ImageOperationResult<T>>): Promise<T> {
   if (!durableGenerationEnabled()) return (await call()).value;
   const key = requestKey(request);
@@ -38,7 +39,7 @@ export async function runImageOperation<T>(request: Request, userId: string, opt
     if (inputHash(claimed.execution_snapshot.models) !== inputHash(options.models)) throw new Error("execution_configuration_changed");
     run = claimed;
   } else {
-    const llmMaximum = options.maximumLlmCalls ? Math.max(...options.models.map(m => llmCallUpperMicrousd(m, 9, 16384))) * options.maximumLlmCalls : 0;
+    const llmMaximum = options.maximumLlmCalls ? Math.max(...options.models.map(m => llmCallUpperMicrousd(m, 9, options.maximumLlmOutputTokens ?? 16384))) * options.maximumLlmCalls : 0;
     run = await beginRun({ userId, key, operation: options.operation, units: options.units, identity: options.identity,
       snapshot: { kind: "sync_image", models: options.models, maximumImages: options.maximumImages, maximumLlmCalls: options.maximumLlmCalls },
       maxCostMicrousd: llmMaximum + options.maximumImages * options.maximumImageCostMicrousd, inline: true });

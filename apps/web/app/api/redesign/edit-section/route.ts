@@ -2,11 +2,14 @@ import { editSection, humanizeEditError, RedesignError, type EditSectionInput } 
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { durableRedesignEdit } from "../../../../lib/redesign/edit-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durableRedesignEdit(req);
   /**
    * **몸을 먼저 읽는다.** 어느 제공자로 고칠지에 따라 값이 다르다
    * ($0.19 vs $0.13). 전에는 무엇이든 1장이었다.

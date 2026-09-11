@@ -21,10 +21,10 @@ function halt(current: Context, code: ConstructorParameters<typeof ExecutionCont
   return current.halted ??= haltRecordedCalls(code);
 }
 /** Persist the provider response before downloading/converting its image. */
-export async function recordedImageCall<Raw>(meta: {
+export async function recordedImageCall<Raw, Image extends RecordedImage = RecordedImage>(meta: {
   provider: string; model: string; endpoint: string; identity: unknown;
   price: { providerUnitMicrousd: number; chargeUnitMicrousd: number };
-}, submit: () => Promise<Raw>, materialize: (raw: Raw) => Promise<RecordedImage>): Promise<RecordedImage> {
+}, submit: () => Promise<Raw>, materialize: (raw: Raw) => Promise<Image>): Promise<Image> {
   const current = context.getStore();
   if (!current) return materialize(await submit());
   assertRecordedLlmHealthy();
@@ -35,12 +35,12 @@ export async function recordedImageCall<Raw>(meta: {
   const step = `image:${hash}:${ordinal}`;
   let attempt = (await current.store.attempts()).find(a => a.logical_step === step);
   if (attempt?.state === "stored") {
-    const cached = await readCachedResult<RecordedImage>(current.run, `${attempt.id}-artifact`);
+    const cached = await readCachedResult<Image>(current.run, `${attempt.id}-artifact`);
     if (!cached) throw halt(current, "storage_unavailable");
     return cached;
   }
   if (attempt?.state === "result_ready") {
-    const cached = await readCachedResult<RecordedImage>(current.run, `${attempt.id}-artifact`);
+    const cached = await readCachedResult<Image>(current.run, `${attempt.id}-artifact`);
     if (cached) return cached;
   }
   if (attempt?.state === "submitting") {
