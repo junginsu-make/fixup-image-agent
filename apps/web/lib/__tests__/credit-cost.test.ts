@@ -36,7 +36,7 @@ describe("한 장이 얼마인가", () => {
      * 공개가로 저품질은 $0.01~0.02 대다. **고품질 값을 받고 저품질을 만들어
      * 주고 있었다.**
      */
-    expect(imageUnitUsd("redesign-openai")).toBe(0.02);
+    expect(imageUnitUsd("redesign-openai")).toBe(0.21);
     expect(imageUnitUsd("redesign-google")).toBe(0.13);
   });
 
@@ -67,16 +67,17 @@ describe("한 장이 얼마인가", () => {
 
 describe("몇 장을 만들면 몇 장인가", () => {
   it("장수만큼 곱한다", () => {
-    // $0.02 × 3 = $0.06 → 올림($0.06 / $0.05) = 2장
-    expect(imageCreditUnits("redesign-openai", 3)).toBe(2);
+    // $0.21 × 3 = $0.63 → 올림($0.63 / $0.05) = 13장
+    expect(imageCreditUnits("redesign-openai", 3)).toBe(13);
   });
 
   /**
-   * 한때 4장이었다. 그건 $0.19 를 믿었기 때문인데, 그 값이 열 배 가까이
-   * 과다였다. **저품질 한 장은 최소 단위인 1장이다.**
+   * 하루 사이 4장 → 1장 → 5장으로 움직였다. **숫자가 흔들린 것이 아니라
+   * 품질이 흔들렸다** — 값이 $0.19 인데 저품질로 부르고 있던 것을 바로잡느라
+   * 1장까지 내렸고, 품질을 `high` 로 올리면서 제자리를 찾았다.
    */
-  it("리디자인 한 장은 1장, Google 은 3장이다", () => {
-    expect(imageCreditUnits("redesign-openai", 1)).toBe(1);
+  it("리디자인 한 장은 5장, Google 은 3장이다", () => {
+    expect(imageCreditUnits("redesign-openai", 1)).toBe(5);
     expect(imageCreditUnits("redesign-google", 1)).toBe(3);
   });
 

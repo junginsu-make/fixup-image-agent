@@ -60,6 +60,24 @@ export const MAX_REFERENCE_IMAGES = 4;
  * 비율을 늘릴 때는 여기만 고치면 된다. 모르는 값이면 지금까지의 크기를
  * 그대로 쓴다 — 새 비율을 넣다가 옛 작업이 깨지지 않게.
  */
+/**
+ * 그림 품질. **`low` 였다가 `high` 로 올렸다(2026-09-11).**
+ *
+ * 이 저장소의 다른 도구는 전부 `high` 이상이다 — 카드뉴스·포스터·캐릭터는
+ * `model.quality ?? "high"` 로 보내고, 표준형·정밀형 플러스는 `max` 다.
+ * **리디자인만 `low`** 였다. 외부에서 코드를 그대로 옮겨 오면서 딸려 온
+ * 설정이고, 누가 골랐다는 흔적이 없다.
+ *
+ * 상세페이지는 글자가 많다. 저품질은 그 글자가 뭉개지는 자리라 가장 안 맞는
+ * 선택이었다.
+ *
+ * **값과 함께 움직인다.** 품질을 바꾸면 단가도 바뀐다 — `credit-cost.ts` 의
+ * `redesign-openai` 와 DB 의 `model_prices` 를 같이 고쳐야 한다. 한쪽만 고치면
+ * 전에 그랬듯 **고품질 값을 받고 저품질을 만들어 주거나 그 반대**가 된다.
+ * 그 둘이 어긋나지 않게 `redesign-quality.test.ts` 가 잡는다.
+ */
+const IMAGE_QUALITY = "high";
+
 const DEFAULT_IMAGE_SIZE = "1152x2048";
 
 const SIZE_BY_RATIO: Record<string, string> = {
@@ -590,7 +608,7 @@ async function generateOpenAIImage({ apiKey, prompt, references, size }: { apiKe
   form.append("model", OPENAI_IMAGE_MODEL);
   form.append("prompt", prompt);
   form.append("size", size);
-  form.append("quality", "low");
+  form.append("quality", IMAGE_QUALITY);
   form.append("output_format", "png");
 
   for (const reference of references.slice(0, MAX_REFERENCE_IMAGES)) {
