@@ -55,10 +55,13 @@ describe("단가가 품질을 따라간다", () => {
     expect(imageUnitUsd("redesign-openai")).toBeLessThanOrEqual(범위!.최대);
   });
 
-  /** 코드와 DB 가 갈라지면 차감과 원가 장부가 어긋난다. */
+  /**
+   * 코드와 DB 가 갈라지면 차감과 원가 장부가 어긋난다. **가장 나중
+   * 마이그레이션**이 지금 값이다.
+   */
   it("코드와 DB 가 같은 값을 본다", () => {
     const migration = readFileSync(
-      new URL("../../../../supabase/migrations/202609110002_redesign_high_quality_price.sql", import.meta.url),
+      new URL("../../../../supabase/migrations/202609110003_redesign_gpt_image_25.sql", import.meta.url),
       "utf8",
     );
     const db = /unit_cost_usd\s*=\s*([0-9.]+)/.exec(migration)?.[1];

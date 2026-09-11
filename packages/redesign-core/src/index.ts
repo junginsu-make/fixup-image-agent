@@ -12,6 +12,7 @@ export {
   MAX_REFERENCE_IMAGES,
   sizeForRatio,
   type GenerateSectionsInput,
+  type RedesignImageGenerator,
   type GenerateInputFile
 } from "./generate.js";
 
