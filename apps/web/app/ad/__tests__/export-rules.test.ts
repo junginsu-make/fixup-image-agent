@@ -265,6 +265,11 @@ describe("고를 수 있는 것을 고르는 규칙", () => {
   const references = [
     { id: "R1", title: "내가 올린 본보기", mine: true, thumbUrl: "r1" },
     { id: "R2", title: "남이 올린 본보기", mine: false, thumbUrl: "r2" },
+    // 캐릭터는 참고 이미지 쪽에 각도마다 한 줄씩 이 제목으로 쌓인다.
+    { id: "R3", title: "민수 (캐릭터) · 정면", mine: true, thumbUrl: "r3" },
+    { id: "R4", title: "민수 (캐릭터) · 좌측", mine: true, thumbUrl: "r4" },
+    // 사람이 손으로 이렇게 이름 붙인 그림은 캐릭터가 아니다.
+    { id: "R5", title: "내 캐릭터 스케치", mine: true, thumbUrl: "r5" },
   ];
   const posters = [
     { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ variantIndex: 0 }] },
@@ -275,7 +280,7 @@ describe("고를 수 있는 것을 고르는 규칙", () => {
 
   it("셋을 함께 보여 준다 — 포스터가 먼저다", () => {
     // 광고 마스터를 막 만들고 고르러 오는 길이다.
-    expect(all().map((item) => item.id)).toEqual(["P1", "W1", "W4", "R1"]);
+    expect(all().map((item) => item.id)).toEqual(["P1", "W1", "W4", "R1", "R5"]);
   });
 
   /**
@@ -304,8 +309,24 @@ describe("고를 수 있는 것을 고르는 규칙", () => {
     expect(items).toEqual([]);
   });
 
-  it("캐릭터는 뺀다", () => {
+  it("캐릭터는 뺀다 — 옛 작업물 쪽", () => {
     expect(all().map((item) => item.id)).not.toContain("W3");
+  });
+
+  /**
+   * **요즘 캐릭터는 작업물이 아니라 참고 이미지로 들어간다.** 각도마다 한 줄씩
+   * 「이름 (캐릭터) · 정면」으로 쌓인다(`lib/character-library.ts`).
+   * `source_type = "character"` 로 찍히는 것은 옛 줄뿐이라, 작업물만 걸러서는
+   * 캐릭터가 그대로 목록에 뜬다.
+   */
+  it("캐릭터는 뺀다 — 참고 이미지로 들어온 각도들", () => {
+    const ids = all().map((item) => item.id);
+    expect(ids).not.toContain("R3");
+    expect(ids).not.toContain("R4");
+  });
+
+  it("사람이 손으로 「캐릭터」라 이름 붙인 그림은 남긴다", () => {
+    expect(all().map((item) => item.id), "그건 캐릭터가 아니라 그냥 그림이다").toContain("R5");
   });
 
   it("결과가 없는 포스터는 안 보여 준다", () => {

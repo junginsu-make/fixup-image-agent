@@ -29,6 +29,21 @@ export function characterReferenceTitle(name: string, angle: string): string {
   return `${name} (캐릭터) · ${LABELS.get(migrateAngle(angle)) ?? angle}`;
 }
 
+/**
+ * 이 참고 이미지가 **캐릭터의 한 각도인가.**
+ *
+ * 판별을 제목을 만드는 함수 바로 옆에 둔다. **참고 이미지 쪽에는 캐릭터를
+ * 가리키는 칸이 없어서 제목이 유일한 손잡이인데**(`reference-images.ts` 의
+ * `removeReferenceImagesByTitle` 머리말), 그 사실을 아는 자리가 흩어지면
+ * 한쪽만 고쳐지는 날이 온다.
+ *
+ * 「(캐릭터) ·」 두 조각을 함께 본다. 사람이 「내 캐릭터」라고 손으로 이름
+ * 붙인 그림까지 끌려 들어가면 안 된다 — 그건 캐릭터가 아니라 그냥 그림이다.
+ */
+export function isCharacterReferenceTitle(title: string | null | undefined): boolean {
+  return typeof title === "string" && title.includes(" (캐릭터) · ");
+}
+
 /** 정면이 맨 앞이다 — 목록에서 대표로 보이는 것이 뒷모습이면 못 알아본다. */
 export function characterReferenceEntries(
   name: string,

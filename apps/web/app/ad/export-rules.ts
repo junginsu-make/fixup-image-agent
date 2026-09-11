@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
+import { isCharacterReferenceTitle } from "../../lib/character-library";
 
 /**
  * 광고 규격 화면의 순수한 규칙들.
@@ -281,7 +282,15 @@ export function adSourceItems(input: {
         : {}),
     }));
 
-  const fromReferences = onlyMine(input.references).map((reference) => ({
+  const fromReferences = onlyMine(input.references)
+    /*
+      **캐릭터도 여기로 들어온다.** 요즘 캐릭터는 `library_items` 가 아니라
+      참고 이미지 쪽에 **각도마다 한 줄씩** 「이름 (캐릭터) · 정면」으로 쌓인다
+      (`lib/character-library.ts`). `source_type = "character"` 로 찍히는 것은
+      옛 줄뿐이라, 작업물만 걸러서는 캐릭터가 그대로 목록에 뜬다.
+    */
+    .filter((reference) => !isCharacterReferenceTitle(reference.title))
+    .map((reference) => ({
     id: reference.id,
     title: reference.title || "참고 이미지",
     source: "reference" as const,
