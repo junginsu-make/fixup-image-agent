@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import { imageCreditUnits } from "./credit-cost";
 import {
   CHARACTER_ANGLES,
+  CHARACTER_SHEET,
+  CHARACTER_SHEET_ASPECT,
   buildCandidatePrompt,
   buildTurnaroundPrompt,
+  buildTurnaroundSheetPrompt,
   selectCharacterModel,
   type AspectRatio,
   type CharacterAngle,
@@ -11,6 +14,7 @@ import {
   type CharacterKind,
   type CharacterLook,
   type CharacterReferenceRole,
+  type CharacterViewId,
   DEFAULT_EXTRA_ANGLES,
   migrateAngle,
   type ImageModelId,
@@ -72,17 +76,25 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60;
  * 뒷모습으로 잡히는 일이 생긴다. 첫 이미지는 반드시 정면이어야 한다.
  */
 const ANGLE_ORDER = new Map<string, number>(
-  CHARACTER_ANGLES.map((angle: CharacterAngleInfo, index: number) => [angle.id, index]),
+  // 다각도 한 장은 각도가 아니라 일곱 번째 항목이다. 맨 뒤에 둔다.
+  [...CHARACTER_ANGLES.map((angle: CharacterAngleInfo) => angle.id as string), CHARACTER_SHEET.id]
+    .map((id: string, index: number) => [id, index]),
 );
 
 function byAngleOrder(a: { angle: string }, b: { angle: string }) {
   return (ANGLE_ORDER.get(migrateAngle(a.angle)) ?? 99) - (ANGLE_ORDER.get(migrateAngle(b.angle)) ?? 99);
 }
 
-/** 후보 수 — 사용자가 고른다. 늘리면 그만큼 크레딧이 든다. */
+/**
+ * 후보 수 — 사용자가 고른다. 늘리면 그만큼 크레딧이 든다.
+ *
+ * **기본이 하나다**(2026-09-11 사용자 결정). 전에는 둘이었는데, 처음에는
+ * 정면 하나만 보면 되는 사람이 매번 두 장 값을 내고 시작했다. 마음에 안 들면
+ * 「다른 후보 보기」가 있고, 그때는 고르는 것이 실제로 필요해서 누른 것이다.
+ */
 export const MIN_CANDIDATES = 1;
 export const MAX_CANDIDATES = 3;
-export const DEFAULT_CANDIDATES = 2;
+export const DEFAULT_CANDIDATES = 1;
 
 /** @deprecated 후보 수는 이제 고를 수 있다. 옛 화면이 읽던 값만 남긴다. */
 export const CANDIDATE_COUNT = DEFAULT_CANDIDATES;
@@ -93,7 +105,7 @@ function clampCandidates(count: number | undefined): number {
 }
 
 export interface CharacterView {
-  angle: CharacterAngle;
+  angle: CharacterViewId;
   url: string | null;
   /** 목록 격자에 거는 사본. 없으면 화면이 `url` 로 떨어진다. */
   thumbUrl?: string | null;
@@ -186,7 +198,8 @@ export async function generateCandidates(input: {
 }
 
 interface ViewBytes {
-  angle: CharacterAngle;
+  /** 저장되는 이름. 진짜 각도 여섯 + 다각도 한 장. */
+  angle: CharacterViewId;
   base64: string;
   mimeType: string;
 }
@@ -216,6 +229,36 @@ async function generateAngle(input: {
     ],
   });
   return { angle: input.angle, base64: image.base64, mimeType: image.mimeType };
+}
+
+/**
+ * 여섯 각도를 한 장에 담는다. 정면을 참조로 넣는 것은 낱장과 같다.
+ *
+ * **비율이 다르다.** 3:4 짜리 칸을 3×2 로 놓으면 전체가 9:8 이라, 세로 비율로
+ * 보내면 칸이 짓눌려 얼굴이 안 남는다. 화면이 무엇을 고르든 여기서 가로로
+ * 바꿔 보낸다.
+ */
+async function generateSheet(input: {
+  identityPrompt: string;
+  kind: CharacterKind;
+  look: CharacterLook;
+  model: ImageModelId;
+  frontBase64: string;
+  frontMimeType: string;
+}): Promise<ViewBytes> {
+  const image = await falImage(input.model, {
+    prompt: buildTurnaroundSheetPrompt({
+      identityPrompt: input.identityPrompt,
+      kind: input.kind,
+      look: input.look,
+    }),
+    systemPrompt: "",
+    aspectRatio: CHARACTER_SHEET_ASPECT,
+    references: [
+      { kind: "person", base64: input.frontBase64, mimeType: input.frontMimeType },
+    ],
+  });
+  return { angle: CHARACTER_SHEET.id, base64: image.base64, mimeType: image.mimeType };
 }
 
 function storagePathFor(userId: string, characterId: string, view: ViewBytes) {
@@ -282,8 +325,16 @@ export async function createCharacter(input: {
    * 하나도 안 고르면 정면 한 장짜리 캐릭터가 된다. 그것도 쓸모가 있다.
    */
   angles?: CharacterAngle[];
+  /**
+   * 여섯 각도를 한 그림에 담은 한 장을 같이 만들까.
+   *
+   * 각도와 **더하기**다. 낱장 없이 이것만 고를 수도 있다 — 한눈에 보려는
+   * 쓰임에는 그편이 싸다.
+   */
+  sheet?: boolean;
 }) {
   const extraAngles = (input.angles ?? DEFAULT_EXTRA_ANGLES).filter((angle) => angle !== "front");
+  const wantsSheet = Boolean(input.sheet);
   const model = input.modelId ?? selectCharacterModel(input.look);
   const characterId = randomUUID();
   const name = input.name.slice(0, 80);
@@ -327,8 +378,9 @@ export async function createCharacter(input: {
       mimeType: input.chosenMimeType,
     };
 
-    const others = await Promise.allSettled(
-      extraAngles.map((angle) =>
+    // 다각도 한 장도 같은 그물에 넣는다. 하나가 실패해도 나머지는 저장된다.
+    const others = await Promise.allSettled([
+      ...extraAngles.map((angle) =>
         generateAngle({
           angle,
           identityPrompt: input.description,
@@ -340,7 +392,17 @@ export async function createCharacter(input: {
           frontMimeType: input.chosenMimeType,
         }),
       ),
-    );
+      ...(wantsSheet
+        ? [generateSheet({
+            identityPrompt: input.description,
+            kind: input.kind,
+            look: input.look,
+            model,
+            frontBase64: input.chosenBase64,
+            frontMimeType: input.chosenMimeType,
+          })]
+        : []),
+    ]);
 
     // 정면을 맨 앞에 두고 나머지를 정해진 순서로 붙인다. Promise 완료 순서에
     // 맡기면 라이브러리 첫 장이 뒷모습이 되는 일이 생긴다.
@@ -395,8 +457,8 @@ export async function createCharacter(input: {
       ok: true as const,
       id: characterId,
       angleCount: rows.length,
-      // 정면 + 고른 각도 중 실제로 저장된 것을 뺀 수.
-      missingAngles: 1 + extraAngles.length - rows.length,
+      // 정면 + 고른 각도 + 다각도 중 실제로 저장된 것을 뺀 수.
+      missingAngles: 1 + extraAngles.length + (wantsSheet ? 1 : 0) - rows.length,
       referenceIssue,
     };
   } catch (caught) {
@@ -419,7 +481,8 @@ export async function createCharacter(input: {
 export async function regenerateAngle(input: {
   userId: string;
   characterId: string;
-  angle: CharacterAngle;
+  /** 진짜 각도 다섯(정면 제외) 또는 다각도 한 장. */
+  angle: CharacterViewId;
   aspectRatio?: AspectRatio;
   modelId?: ImageModelId;
 }) {
@@ -439,16 +502,26 @@ export async function regenerateAngle(input: {
   const model = input.modelId ?? selectCharacterModel(look);
 
   try {
-    const view = await generateAngle({
-      angle: input.angle,
-      identityPrompt: character.identityPrompt,
-      aspectRatio: input.aspectRatio ?? "3:4",
-      kind: character.kind,
-      look,
-      model,
-      frontBase64: front.base64,
-      frontMimeType: front.mimeType,
-    });
+    // 다각도 한 장은 각도가 아니다. 프롬프트도 비율도 다른 길로 간다.
+    const view = input.angle === CHARACTER_SHEET.id
+      ? await generateSheet({
+          identityPrompt: character.identityPrompt,
+          kind: character.kind,
+          look,
+          model,
+          frontBase64: front.base64,
+          frontMimeType: front.mimeType,
+        })
+      : await generateAngle({
+          angle: input.angle,
+          identityPrompt: character.identityPrompt,
+          aspectRatio: input.aspectRatio ?? "3:4",
+          kind: character.kind,
+          look,
+          model,
+          frontBase64: front.base64,
+          frontMimeType: front.mimeType,
+        });
 
     const storagePath = storagePathFor(input.userId, input.characterId, view);
     const thumbPath = await putView(storagePath, view);
@@ -762,11 +835,10 @@ export async function deleteCharacter(userId: string, characterId: string) {
   // 라이브러리에 남은 각도도 지운다. 안 지우면 캐릭터를 지워도 참고 이미지에
   // 그대로 남아, 지운 캐릭터가 다른 작업에 계속 끌려 들어온다.
   if (character) {
-    for (const angle of CHARACTER_ANGLES) {
-      await removeReferenceImagesByTitle(
-        userId,
-        characterReferenceTitle(character.name, angle.id),
-      );
+    // 다각도 한 장도 라이브러리에 한 줄로 들어가 있다. 빠뜨리면 캐릭터를
+    // 지워도 그 한 장이 남아 다른 작업에 끌려 들어온다.
+    for (const id of [...CHARACTER_ANGLES.map((angle) => angle.id as string), CHARACTER_SHEET.id]) {
+      await removeReferenceImagesByTitle(userId, characterReferenceTitle(character.name, id));
     }
   }
 
@@ -786,6 +858,7 @@ export function characterCreditCost(
 ) {
   const model = modelId ?? selectCharacterModel(look);
   const candidates = clampCandidates(counts?.candidates);
+  // 다각도 한 장도 「한 장」이라 부르는 쪽이 여기에 더해 보낸다.
   const angles = counts?.extraAngles ?? DEFAULT_EXTRA_ANGLES.length;
   /**
    * **장을 실제 단가에서 뽑는다**(2026-09-08 사용자 결정).

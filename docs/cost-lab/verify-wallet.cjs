@@ -1,0 +1,24 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync(require('node:path').join(__dirname,'../../apps/web/app/admin/cost-lab/assets/prepaid.html'),'utf8');
+for(const [,id,code]of html.matchAll(/<script id="(wallet-engine|wallet-ui)">([\s\S]*?)<\/script>/g))new vm.Script(code,{filename:id});
+const code=html.split('<script id="wallet-engine">')[1].split('</script>')[0];const ctx=vm.createContext({});vm.runInContext(code+';globalThis.api={WALLET_DEFAULT,MODELS,clone,walletTariff,walletCalculate,walletSanitize};',ctx);
+const {WALLET_DEFAULT,MODELS,clone,walletTariff,walletCalculate,walletSanitize}=ctx.api;
+const s=clone(WALLET_DEFAULT),r=walletCalculate(s);let checks=0;const ok=(x,m)=>{assert.ok(x,m);checks++},near=(a,b)=>ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
+near(r.charged,10000000);near(r.used,8000000);near(r.unspent,2000000);
+near(r.profit,r.net-r.pg-r.ai-r.support-s.fixed-s.freeCost);
+for(const t of r.tariffs)near(t.price,t.credits);
+for(const value of [10000,50000,200000]){const changed=walletCalculate({...s,topup:value});r.tariffs.forEach((t,i)=>near(t.price,changed.tariffs[i].price));}
+for(const changes of [{customers:200},{util:20},{frequency:2},{fixed:1000000},{freeCost:500000}])walletCalculate({...s,...changes}).tariffs.forEach((t,i)=>near(t.price,r.tariffs[i].price));
+ok(walletCalculate({...s,topup:200000}).tariffs[0].capacity>=r.tariffs[0].capacity*2,'more money buys more work');
+near(walletCalculate({...s,util:0}).net,0);near(walletCalculate({...s,util:0}).unspent,r.charged);
+ok(walletCalculate({...s,util:0}).profit<0,'unused cash is not profit');
+ok(walletCalculate({...s,customers:r.breakeven}).profit>=0,'break even covers costs');
+if(r.breakeven>0)ok(walletCalculate({...s,customers:r.breakeven-1}).profit<0,'below break even loses money');
+ok(!walletCalculate({...s,target:99,pg:50}).valid,'unachievable margin invalid');
+near(walletCalculate({...s,customers:0}).profit,-s.fixed-s.freeCost);
+ok(walletCalculate({...s,target:70}).tariffs[0].price>r.tariffs[0].price,'margin changes unit price');
+ok(walletCalculate({...s,regen:2}).tariffs[0].price>r.tariffs[0].price,'regeneration changes unit price');
+const saved=MODELS.nano.flat;MODELS.nano.flat=.4;const fractional=walletTariff({...s,topup:1,target:0,fx:1,pg:0,vat:0,regen:1,fail:0},{...s.rows[0],model:'nano',images:1,llm:0});near(fractional.price,.4);near(fractional.credits,.4);near(fractional.capacity,2);MODELS.nano.flat=saved;
+ok(!walletCalculate({...s,rows:s.rows.map(x=>({...x,mix:0}))}).valid,'zero mix invalid');
+near(walletSanitize({...s,topup:-1}).topup,1);
+console.log(JSON.stringify({checks,example:{monthlyProfit:r.profit,actualMargin:r.margin,breakEvenCustomers:r.breakeven,unspent:r.unspent,posterPrice:r.tariffs[0].price}},null,2));

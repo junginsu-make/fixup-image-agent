@@ -202,6 +202,36 @@ export const CHARACTER_ANGLES: CharacterAngleInfo[] = [
 ];
 
 /**
+ * 다각도 한 장 — **각도가 아니라 일곱 번째 항목이다.**
+ *
+ * 여섯 각도를 한 그림 안에 3×2 로 담은 한 장이다. 각도를 낱장으로 여섯 개
+ * 만들면 여섯 번 그리고 여섯 번 낸다. 인쇄물이나 자료로 한눈에 보려는
+ * 쓰임에는 한 장이면 되고, 그러면 한 장 값만 든다.
+ *
+ * **`CHARACTER_ANGLES` 에 넣지 않는다.** 거기 넣으면 `pickAngleForSection` 이
+ * 집어 갈 수 있게 되고, 상세페이지 섹션에 여섯 컷짜리 격자가 정체성 기준으로
+ * 들어간다 — 그 격자가 결과물에 그대로 따라 나온다.
+ */
+export const CHARACTER_SHEET = { id: "sheet", label: "다각도 한 장" } as const;
+
+/**
+ * 저장되는 한 장의 이름. 진짜 각도 여섯에 다각도 한 장을 더한 것이다.
+ *
+ * `CharacterAngle` 을 넓히지 않는 이유가 있다. 그 타입은 종류별 각도 지시 표
+ * (`Record<CharacterAngle, string>`) 의 열쇠라, 넓히면 세 표에 뜻 없는 칸을
+ * 하나씩 만들어야 한다. 저장·표시에만 쓰이는 이름은 여기서 따로 받는다.
+ */
+export type CharacterViewId = CharacterAngle | typeof CHARACTER_SHEET.id;
+
+/**
+ * 다각도 한 장의 비율.
+ *
+ * 3:4 짜리 칸을 3×2 로 놓으면 전체가 9:8 이다. 세로 비율로 보내면 칸이
+ * 짓눌려 얼굴이 안 남는다.
+ */
+export const CHARACTER_SHEET_ASPECT: AspectRatio = "4:3";
+
+/**
  * 정면 말고 기본으로 켜 두는 각도.
  *
  * 넷이 예전 기본값이고 대부분의 쓰임에 충분하다. 90도 측면은 얼굴이 반만
@@ -459,6 +489,51 @@ export function buildTurnaroundPrompt(input: {
     `${angleDirective(input.angle, kind)}. Preserve the same ${identity} exactly. ` +
     `Identity description: ${input.identityPrompt}. ` +
     `Generate exactly one ${noun}.` + PLAIN_BACKGROUND + SINGLE_POSE +
+    lookDirective(look, kind)
+  );
+}
+
+/**
+ * 여섯 각도를 한 장에 담는다.
+ *
+ * **`SINGLE_POSE` 를 쓰지 않는다.** 그 문구는 후보와 각도 한 장에서 캐릭터
+ * 시트가 나오는 것을 막으려고 낱낱이 이름 대어 넣은 것이라, 여기서는 정반대다.
+ * 한 프롬프트에 둘을 같이 넣으면 그리라는 말과 그리지 말라는 말이 함께 간다.
+ *
+ * 칸 이름은 **글자로 적지 않는다.** 모델이 한글 이름표를 깨뜨려 넣는다. 순서를
+ * 말로 정해 두는 것으로 갈음한다.
+ *
+ * 각도 지시는 낱장과 **같은 표**에서 가져온다. 여기에 따로 적으면 낱장과 시트의
+ * 왼쪽이 서로 다른 쪽을 보게 된다.
+ */
+export function buildTurnaroundSheetPrompt(input: {
+  identityPrompt: string;
+  kind?: CharacterKind;
+  look?: CharacterLook;
+  photoreal?: boolean;
+}) {
+  const { kind, look } = resolve(input);
+  const noun = kind === "object" ? "object" : "character";
+  const identity = kind === "object"
+    ? "shape, proportions, materials, colours and markings"
+    : "face, body proportions, hairstyle, outfit and colour palette";
+
+  const panels = CHARACTER_ANGLES
+    .map((angle, index) => `Panel ${index + 1}: ${angleDirective(angle.id, kind)}.`)
+    .join(" ");
+
+  return (
+    `The supplied reference image shows this ${noun} in a FRONT view. It defines identity ` +
+    `only — do not copy its camera angle or its framing. ` +
+    `Produce ONE single image laid out as a turnaround sheet: exactly six panels of equal ` +
+    `size arranged in a clean grid, three across and two down, evenly spaced on one plain ` +
+    `neutral background that runs behind all of them. ` +
+    `Fill the panels left to right, then top to bottom. ${panels} ` +
+    `Every panel shows the SAME ${noun} at the same scale, in the same neutral resting pose, ` +
+    `under the same lighting. Preserve the same ${identity} exactly across all six. ` +
+    `Identity description: ${input.identityPrompt}. ` +
+    `Do not write any text, labels, numbers, captions or watermarks anywhere in the image. ` +
+    `Do not add extra panels, close-ups, props or duplicate views.` +
     lookDirective(look, kind)
   );
 }
