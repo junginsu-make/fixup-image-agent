@@ -20,6 +20,8 @@ import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
+import { durablePdpSections } from "../../../../../lib/pdp/image-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +29,7 @@ export const dynamic = "force-dynamic";
 // 한 묶음이 이 안에 들어오도록 모델별 maxBatchSize 로 장수를 제한한다.
 export const maxDuration = 300;
 
-type BatchRequest = {
+export type BatchRequest = {
   originalImageBase64: string;
   sections: SectionBlueprint[];
   /**
@@ -56,6 +58,7 @@ type BatchRequest = {
 };
 
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durablePdpSections(req, "batch");
   let body: BatchRequest;
   try {
     body = (await req.json()) as BatchRequest;

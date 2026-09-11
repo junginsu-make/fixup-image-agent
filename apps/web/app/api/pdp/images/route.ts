@@ -21,7 +21,7 @@ import type {
  * 정하는 것은 `options` 다. 전에는 화면이 옵션을 다 지어서 보냈고, 일괄 쪽은
  * 라우트가 따로 지었다 — 그래서 인물 사진이 한쪽에만 실렸다.
  */
-type PdpImagesRequestBody = {
+export type PdpImagesRequestBody = {
   originalImageBase64: string;
   section: SectionBlueprint;
   aspectRatio: AspectRatio;
@@ -42,12 +42,15 @@ import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
+import { durablePdpSections } from "../../../../lib/pdp/image-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durablePdpSections(req, "single");
   let body: PdpImagesRequestBody;
   try {
     body = (await req.json()) as PdpImagesRequestBody;

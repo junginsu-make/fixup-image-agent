@@ -6,14 +6,16 @@ import type { ExecutionStore } from "../generation/types";
 import { inputHash } from "../generation/run-store";
 import { tokensFrom } from "./meter";
 
-interface Context { store: ExecutionStore; prefix: string; sequence: number; calls: number; maxCalls: number; halted?: ExecutionControlError }
+interface Context { store: ExecutionStore; prefix: string; sequence: number; calls: number; maxCalls: number; occurrences: Map<string,number>; halted?: ExecutionControlError }
 const context=new AsyncLocalStorage<Context>();
+export function assertRecordedLlmHealthy() { const halted=context.getStore()?.halted; if(halted)throw halted; }
 function halt(code: ConstructorParameters<typeof ExecutionControlError>[0]) {
   const current = context.getStore();
   const error = current?.halted ?? new ExecutionControlError(code);
   if (current) current.halted = error;
   return error;
 }
+export { halt as haltRecordedCalls };
 // Standard web_search call fee; content tokens are already in model usage.
 // https://developers.openai.com/api/docs/pricing (checked 2026-09-11)
 const WEB_SEARCH_CALL_MICROUSD=10000;
@@ -27,7 +29,7 @@ export function llmCallUpperMicrousd(model:string,images=9,maxOutput=MAX_RECORDE
   return Math.ceil(llmUsdFromTokens(model,MAX_RECORDED_LLM_INPUT_BYTES+images*65536,maxOutput)*1_000_000);
 }
 export function withRecordedLlm<T>(store:ExecutionStore,prefix:string,run:()=>Promise<T>,maxCalls=1) {
-  return context.run({store,prefix,sequence:0,calls:0,maxCalls},run);
+  return context.run({store,prefix,sequence:0,calls:0,maxCalls,occurrences:new Map()},run);
 }
 export function claimPaidCall() {
   const current=context.getStore();
@@ -55,7 +57,11 @@ export async function recordedLlmCall<T>(provider:string,model:string,input:unkn
   const maxTools=input&&typeof input==="object"&&"max_tool_calls" in input?Number(input.max_tool_calls):0;
   if(Buffer.byteLength(payload,"utf8")>MAX_RECORDED_LLM_INPUT_BYTES)throw halt("input_limit");
   const sequence=current.sequence++;
-  const step=`${current.prefix}:${provider}:${model}:${sequence}`;
+  const identity=inputHash(summary);
+  const occurrenceKey=`${provider}:${model}:${identity}`;
+  const ordinal=current.occurrences.get(occurrenceKey)??0;
+  current.occurrences.set(occurrenceKey,ordinal+1);
+  const step=`${current.prefix}:${occurrenceKey}:${ordinal}`;
   const existing=(await ledger(()=>current.store.attempts())).find(a=>a.logical_step===step);
   if(existing?.state==="stored" || existing?.state==="result_ready") {
     const value=existing.output_manifest?.response as T;
@@ -68,13 +74,15 @@ export async function recordedLlmCall<T>(provider:string,model:string,input:unkn
     throw halt("outcome_unknown");
   }
   if(current.calls>=current.maxCalls)throw halt("execution_yield");
+  // Claim the in-memory call slot before yielding to DB I/O; parallel sections
+  // must not both pass the allowance and leave an uncalled submitting intent.
+  claimPaidCall();
   let attempt;
   try {
     attempt=existing??await current.store.prepare({step,sequence,provider,model,endpoint:"llm",requestHash:inputHash(summary),payload:{input:summary,maxOutputTokens:maxOutput},
       price:{tokenPrice:priceOf(model),webSearchCallMicrousd:WEB_SEARCH_CALL_MICROUSD},maxCostMicrousd:llmCallUpperMicrousd(model,9,maxOutput)+Math.max(0,maxTools)*WEB_SEARCH_CALL_MICROUSD,requestedImages:0});
     await current.store.advance(attempt.id,{state:"submitting"});
   } catch {throw halt("storage_unavailable");}
-  claimPaidCall();
   let response:T;
   try {response=await call();}
   catch(error) {

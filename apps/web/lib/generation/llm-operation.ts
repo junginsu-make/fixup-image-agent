@@ -1,6 +1,6 @@
 import "server-only";
 import { ExecutionControlError } from "@fixup/shared";
-import { llmCallUpperMicrousd, withRecordedLlm } from "../llm/recorded-call";
+import { llmCallUpperMicrousd, withRecordedLlm, assertRecordedLlmHealthy } from "../llm/recorded-call";
 import { beginRun, claimRun, existingRun, executionStore, renewRun, requestKey, useDurableGeneration as durableGenerationEnabled } from "./run-store";
 import { readCachedResult, writeCachedResult } from "./result-cache";
 import { isTerminal, type GenerationRun } from "./types";
@@ -49,6 +49,7 @@ export async function runLlmOperation<T>(request:Request,userId:string,options:{
       }
       throw error;
     }
+    assertRecordedLlmHealthy();
     const businessSuccess=options.isSuccess?.(value)??true;
     if(!(await store.attempts()).length&&businessSuccess)throw new Error("unmetered_provider_result");
     const ref=await writeCachedResult(run,{value,businessSuccess});

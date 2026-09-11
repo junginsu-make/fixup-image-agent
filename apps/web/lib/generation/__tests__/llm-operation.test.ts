@@ -28,7 +28,7 @@ vi.mock("../result-cache", () => ({
   writeCachedResult: async (_run: unknown, value: unknown) => { state.cached = value; return "owner/run/result.json"; },
 }));
 import { runLlmOperation } from "../llm-operation";
-import { recordedLlmCall } from "../../llm/recorded-call";
+import { recordedLlmCall, withRecordedLlm } from "../../llm/recorded-call";
 const request = new Request("https://example.invalid/api/plan");
 const options = { operation: "sns_plan" as const, identity: { text: "hello" }, models: ["gpt-5.5"], maxCalls: 1 };
 beforeEach(() => {
@@ -37,7 +37,7 @@ beforeEach(() => {
   state.store = {
     attempts: async () => structuredClone(state.attempts),
     prepare: async spec => {
-      const attempt = { id: "attempt", logical_step: spec.step, state: "prepared" } as GenerationAttempt;
+      const attempt = { id: `attempt-${state.attempts.length}`, logical_step: spec.step, state: "prepared" } as GenerationAttempt;
       state.attempts.push(attempt); return attempt;
     },
     advance: async (id, patch) => {
@@ -117,4 +117,12 @@ it("blocks later provider calls even if a domain helper swallows an uncertain er
     return recordedLlmCall("openai", "gpt-5.5", { input: "second" }, later);
   })).rejects.toThrow();
   expect(uncertain).toHaveBeenCalledTimes(1); expect(later).not.toHaveBeenCalled();
+});
+it("replays each section's own LLM response when parallel completion order changes", async () => {
+  const provider = vi.fn(async (section: string) => ({ section, usage: { input_tokens: 1, output_tokens: 1 } }));
+  const call = (section: string) => recordedLlmCall("openai", "gpt-5.5", { section }, () => provider(section));
+  await withRecordedLlm(state.store!, "batch", async () => Promise.all([call("A"), call("B")]), 2);
+  const replayed = await withRecordedLlm(state.store!, "batch", async () => Promise.all([call("B"), call("A")]), 2);
+  expect(replayed.map(v => v.section)).toEqual(["B", "A"]);
+  expect(provider).toHaveBeenCalledTimes(2);
 });

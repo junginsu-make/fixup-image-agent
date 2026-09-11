@@ -5,6 +5,8 @@ import {
   resolveEndpoint,
   type ImageGenerator,
 } from "@fixup/pdp-core";
+import { recordedImageCall } from "../generation/recorded-image";
+import { imageUnitUsd } from "../credit-cost";
 
 /**
  * 상세페이지·캐릭터가 fal 로 그림을 만드는 **유일한 자리**.
@@ -20,6 +22,12 @@ import {
 const FAL_BASE_URL = "https://fal.run";
 
 type Env = Record<string, string | undefined>;
+
+export function quotePdpImage(model: Parameters<ImageGenerator>[0], input: Parameters<ImageGenerator>[1]) {
+  const payload = buildFalPayload(model, input);
+  const size = payload.image_size && typeof payload.image_size === "object" ? payload.image_size as { width: number; height: number } : undefined;
+  return Math.ceil(imageUnitUsd(model, { mode: input.references.length ? "i2i" : "t2i", size }) * 1_000_000);
+}
 
 function requireKey(environment: Env) {
   const apiKey = environment.FAL_KEY?.trim();
@@ -38,21 +46,27 @@ export function createPdpImageGenerator(environment: Env = process.env): ImageGe
 
   return async (model, input) => {
     const endpoint = resolveEndpoint(model, input.references);
+    const payload = buildFalPayload(model, input);
+    const unit = quotePdpImage(model, input);
+    return recordedImageCall({ provider: "fal", model, endpoint, identity: payload,
+      price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit },
+    }, async () => {
     const response = await fetch(`${FAL_BASE_URL}/${endpoint}`, {
       method: "POST",
       headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildFalPayload(model, input)),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(120_000),
     });
 
     const text = await response.text();
     if (!response.ok) {
-      throw new PdpServiceError(
+      throw Object.assign(new PdpServiceError(
         response.status === 429 ? "AI_QUOTA_EXCEEDED" : "PDP_IMAGE_GENERATION_FAILED",
         response.status === 429
           ? "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요."
           : "이미지를 생성하지 못했습니다.",
         `fal ${endpoint} responded ${response.status}: ${text.slice(0, 300)}`,
-      );
+      ), { providerStatus: response.status });
     }
 
     let parsed: unknown;
@@ -66,9 +80,11 @@ export function createPdpImageGenerator(environment: Env = process.env): ImageGe
       );
     }
 
-    // fal 은 호스팅 URL 로 돌려준다. 이 파이프라인은 base64 를 쓰므로 받아 바꾼다.
+    return parsed;
+    }, async (parsed) => {
+    // The paid response is durably recorded before this download starts.
     const image = falImageFrom(parsed);
-    const downloaded = await fetch(image.url);
+    const downloaded = await fetch(image.url, { signal: AbortSignal.timeout(30_000) });
     if (!downloaded.ok) {
       throw new PdpServiceError(
         "PDP_IMAGE_GENERATION_FAILED",
@@ -81,5 +97,6 @@ export function createPdpImageGenerator(environment: Env = process.env): ImageGe
       base64: Buffer.from(await downloaded.arrayBuffer()).toString("base64"),
       mimeType: image.mimeType,
     };
+    });
   };
 }

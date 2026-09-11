@@ -7,6 +7,8 @@ import {
 } from "@fixup/pdp-core";
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
+import { durableKeyVisual } from "../../../../lib/pdp/image-operation";
+import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";
@@ -24,6 +26,7 @@ export const maxDuration = 300;
  * 키비주얼 프롬프트가 섹션 카피를 읽기 시작하면 그때는 게이트가 필요하다.
  */
 export async function POST(req: Request) {
+  if (durableGenerationEnabled()) return durableKeyVisual(req);
   const reservation = await reserveAiUsage(req, "pdp_image", 1);
   if (!reservation.ok) return reservation.response;
 
