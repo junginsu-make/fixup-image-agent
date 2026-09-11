@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Download, Maximize2, Minimize2, Star, Trash2
 import { cn } from "@fixup/ui";
 import { downloadName } from "./download-name";
 import { parseViewerMeta, type ViewerMeta } from "./viewer-meta";
+import { stepIndex } from "./viewer-step";
 import { describeZoom, fitScale, type PixelSize } from "./image-viewer-scale";
 
 /**
@@ -115,23 +116,34 @@ export function ImageViewerHost() {
   const [actualSize, setActualSize] = React.useState(false);
   const [viewport, setViewport] = React.useState<PixelSize>({ width: 0, height: 0 });
 
+  /**
+   * 지금 벌의 장수. **ref 로 든다.**
+   *
+   * 전에는 `move` 가 `setRequest` 갱신자 안에서 장수를 읽고 거기서
+   * `setIndex` 를 불렀다. 갱신자는 순수해야 하고 React 는 개발 모드에서
+   * 그것을 **두 번** 부른다 — 그래서 한 번 눌러도 두 칸이 넘어갔고, 두
+   * 장짜리에서는 제자리로 돌아와 **아예 안 넘어가는 것처럼 보였다**
+   * (2026-09-11 사용자 신고). ref 는 갱신자 밖에서 읽어도 늘 지금 값이다.
+   */
+  const countRef = React.useRef(0);
+
   const open = React.useCallback((next: ViewerRequest) => {
     setRequest(next);
+    countRef.current = next.images.length;
     setIndex(Math.min(Math.max(next.index ?? 0, 0), next.images.length - 1));
     setNatural(null);
     setActualSize(false);
   }, []);
 
-  const close = React.useCallback(() => setRequest(null), []);
+  const close = React.useCallback(() => {
+    setRequest(null);
+    countRef.current = 0;
+  }, []);
 
   const move = React.useCallback((step: number) => {
-    setRequest((current) => {
-      if (!current) return current;
-      setIndex((at) => (at + step + current.images.length) % current.images.length);
-      setNatural(null);
-      setActualSize(false);
-      return current;
-    });
+    setIndex((at) => stepIndex(at, step, countRef.current));
+    setNatural(null);
+    setActualSize(false);
   }, []);
 
   // data-zoomable 그림을 누르면 연다. 잡아채는 단계에서 막아 카드의 다른

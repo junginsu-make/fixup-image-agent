@@ -11,22 +11,25 @@ import {
   listCharacters,
 } from "../../../lib/characters";
 import {
-  CHARACTER_ANGLES, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, selectCharacterModel,
+  CHARACTER_ANGLES, CHARACTER_SHEET, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, selectCharacterModel,
   type CharacterAngle,
 } from "@fixup/pdp-core";
 import { teamIdOf } from "../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// 후보 2장 또는 다각도 3장을 동시에 만든다. 서버리스 상한이 300초다.
+// 고른 각도를 동시에 만든다. 서버리스 상한이 300초다.
 export const maxDuration = 300;
 
 /**
  * 캐릭터 — 전부 사용자별이다.
  *
- * 두 단계로 나뉜다. 후보를 만드는 것(step=candidates)과, 고른 후보로
- * 다각도를 만들어 저장하는 것(step=create). 나눈 이유는 사이에 사용자의
+ * 두 단계로 나뉜다. 정면 후보를 만드는 것(step=candidates)과, 고른 정면으로
+ * 각도를 만들어 저장하는 것(step=create). 나눈 이유는 사이에 사용자의
  * 선택이 들어가기 때문이다.
+ *
+ * **「다각도」는 이제 딴 뜻이다.** 여섯 각도를 한 그림에 담은 한 장
+ * (`sheet`)을 가리킨다. 여러 각도를 만드는 일은 「각도」라고만 부른다.
  *
  * 크레딧은 각 단계에서 실제로 만든 장수만 차감한다.
  */
@@ -54,6 +57,13 @@ const BodySchema = z.object({
   candidates: z.number().int().min(MIN_CANDIDATES).max(MAX_CANDIDATES).optional(),
   /** 정면 말고 더 만들 각도. 빈 배열이면 정면 한 장짜리가 된다. */
   angles: z.array(z.enum(CHARACTER_ANGLES.map((angle) => angle.id) as [string, ...string[]])).optional(),
+  /**
+   * 여섯 각도를 한 그림에 담은 한 장도 같이 만들까.
+   *
+   * **각도와 더하기다.** 각도를 하나도 안 고르고 이것만 켤 수도 있다 —
+   * 한눈에 보려는 쓰임에는 낱장 여섯보다 한 장이 싸다.
+   */
+  sheet: z.boolean().optional(),
 });
 
 type Body = z.infer<typeof BodySchema>;
@@ -74,10 +84,27 @@ export async function GET() {
       candidateCount: DEFAULT_CANDIDATES,
       minCandidates: MIN_CANDIDATES,
       maxCandidates: MAX_CANDIDATES,
-      creditCost: characterCreditCost("photoreal"),
+      /**
+       * **정면 한 장 값이다.**
+       *
+       * 전에는 「후보 2 + 각도 3」 짜리 한 벌 값이었다. 화면이 이제 각도를
+       * 하나씩 골라 셈하므로, 한 벌 값을 「1개당」이라 적으면 실제로 드는 것과
+       * 몇 배씩 어긋난다. 여기서는 가장 작은 단위만 준다.
+       */
+      creditCost: characterCreditCost("photoreal", undefined, { candidates: 1, extraAngles: 0 }),
       // 화면이 체크상자를 그리려면 목록과 기본값이 필요하다.
       angles: CHARACTER_ANGLES.map((angle) => ({ id: angle.id, label: angle.label })),
-      defaultAngles: DEFAULT_EXTRA_ANGLES,
+      // 각도가 아니라 일곱 번째 항목이다. 이름표를 화면에 박아 두면 여기서
+      // 바뀔 때 화면만 옛말이 된다.
+      sheet: { id: CHARACTER_SHEET.id, label: CHARACTER_SHEET.label },
+      /**
+       * **더 만들 각도의 기본값은 이제 비었다**(2026-09-11 사용자 결정).
+       *
+       * 켜 둔 것을 못 보고 단추를 눌러 원치 않는 장을 만들고 돈을 내는 일이
+       * 있었다. 고르는 것은 사용자 몫이다. 서버가 안 받았을 때 쓰는 기본값
+       * (`DEFAULT_EXTRA_ANGLES`)은 옛 호출을 위해 그대로 둔다.
+       */
+      defaultAngles: [],
       // 화면이 모델을 고를 수 있어야 한다. 목록을 여기서 준다 —
       // 이미지 만들기와 같은 목록이다.
       models: IMAGE_MODELS.map((model) => ({
@@ -160,16 +187,18 @@ export async function POST(req: Request) {
   }
 
   const angles = (body.angles ?? DEFAULT_EXTRA_ANGLES).filter((angle) => angle !== "front");
-  // 만드는 것은 고른 각도뿐이다. 정면은 이미 있다.
+  // 만드는 것은 고른 각도와 다각도 한 장뿐이다. 정면은 이미 있다.
+  const extraImages = angles.length + (body.sheet ? 1 : 0);
   const reservation = await reserveAiUsage(
     req, "pdp_image",
-    characterCreditCost(body.look, modelId, { candidates: 0, extraAngles: angles.length }),
+    characterCreditCost(body.look, modelId, { candidates: 0, extraAngles: extraImages }),
   );
   if (!reservation.ok) return reservation.response;
 
   try {
     const result = await createCharacter({
       angles: angles as CharacterAngle[],
+      sheet: body.sheet,
       userId: auth.member.userId,
       name: (body.name || body.description).slice(0, 80),
       description: body.description,

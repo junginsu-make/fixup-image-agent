@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CHARACTER_ANGLES,
+  CHARACTER_SHEET,
+  CHARACTER_SHEET_ASPECT,
+  buildTurnaroundSheetPrompt,
   angleDirective,
   migrateAngle,
   buildCandidatePrompt,
@@ -636,5 +639,75 @@ describe("한 장에 한 자세만", () => {
     for (const kind of ["person", "character", "animal", "object"] as const) {
       expect(buildCandidatePrompt({ ...base, kind })).toMatch(/exactly ONE pose/i);
     }
+  });
+});
+
+/**
+ * 다각도 한 장.
+ *
+ * 여섯 각도를 따로 만들면 여섯 번 그리고 여섯 번 낸다. 한눈에 보려는 쓰임에는
+ * 한 장이면 되고, 그러면 한 장 값만 든다.
+ *
+ * **여기만 캐릭터 시트를 허락한다.** 나머지 자리는 전부 막는 것이라, 그 빗장이
+ * 이 프롬프트에 새어 들어오면 아무것도 안 나온다.
+ */
+describe("다각도 한 장", () => {
+  const prompt = buildTurnaroundSheetPrompt({ identityPrompt: "단발머리 30대 여성" });
+
+  it("진짜 각도 목록에는 끼지 않는다", () => {
+    // 끼면 상세페이지가 섹션 참조로 여섯 컷짜리 그림을 집어 간다.
+    expect(CHARACTER_ANGLES.some((angle) => (angle.id as string) === CHARACTER_SHEET.id)).toBe(false);
+    // 타입이 이미 막고 있지만, 표가 바뀌어도 값으로 다시 잰다.
+    expect(pickAngleForSection("아무 장면") as string).not.toBe(CHARACTER_SHEET.id);
+  });
+
+  it("한 장 안에 여섯 칸을 3×2 로 요구한다", () => {
+    expect(prompt).toMatch(/ONE single image/i);
+    expect(prompt).toMatch(/exactly six panels/i);
+    expect(prompt).toMatch(/three across and two down/i);
+  });
+
+  it("여섯 각도 지시가 각도 표와 같은 것으로 다 들어간다", () => {
+    for (const angle of CHARACTER_ANGLES) {
+      expect(prompt).toContain(angleDirective(angle.id, "person"));
+    }
+  });
+
+  it("한 자세 빗장을 걸지 않는다", () => {
+    // 이 빗장이 들어오면 시트를 그리지 말라는 말과 그리라는 말이 함께 간다.
+    expect(prompt).not.toMatch(/NOT a character sheet/i);
+    expect(prompt).not.toMatch(/exactly ONE pose/i);
+  });
+
+  it("참조가 정면이라는 것과 정체성을 함께 말한다", () => {
+    expect(prompt).toMatch(/FRONT view/);
+    expect(prompt).toContain("단발머리 30대 여성");
+  });
+
+  it("글자를 그리지 말라고 한다", () => {
+    // 칸 이름을 적게 두면 모델이 한글을 깨뜨려 넣는다.
+    expect(prompt).toMatch(/do not (write|render) any text/i);
+  });
+
+  it("종류를 따라 낱말과 각도 지시가 바뀐다", () => {
+    const object = buildTurnaroundSheetPrompt({ identityPrompt: "유리병", kind: "object" });
+    expect(object).toContain(angleDirective("back", "object"));
+    // 사물에는 얼굴 이야기를 하지 않는다.
+    expect(object).not.toMatch(/facial features/i);
+  });
+
+  it("결 지시가 함께 간다", () => {
+    const anime = buildTurnaroundSheetPrompt({ identityPrompt: "마스코트", look: "anime" });
+    expect(anime).not.toBe(prompt);
+    expect(anime.length).toBeGreaterThan(200);
+  });
+
+  it("격자를 담을 가로 비율을 정해 둔다", () => {
+    // 3:4 칸을 3×2 로 놓으면 9:8 이다. 세로 비율로 보내면 칸이 짓눌린다.
+    expect(CHARACTER_SHEET_ASPECT).toBe("4:3");
+  });
+
+  it("이름표가 있다", () => {
+    expect(CHARACTER_SHEET.label.length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,4 @@
-import { CHARACTER_ANGLES, migrateAngle } from "@fixup/pdp-core";
+import { CHARACTER_ANGLES, CHARACTER_SHEET, migrateAngle } from "@fixup/pdp-core";
 
 /**
  * 캐릭터를 라이브러리(참고 이미지)에 넣기 위한 이름과 순서.
@@ -9,8 +9,18 @@ import { CHARACTER_ANGLES, migrateAngle } from "@fixup/pdp-core";
  * 인물로 안 보인다.
  */
 
-const LABELS = new Map(CHARACTER_ANGLES.map((angle) => [angle.id as string, angle.label]));
-const ORDER = new Map(CHARACTER_ANGLES.map((angle, index) => [angle.id as string, index]));
+/**
+ * 저장되는 것은 각도 여섯에 **다각도 한 장**을 더한 일곱이다.
+ *
+ * 다각도는 각도가 아니라서 `CHARACTER_ANGLES` 에 없다. 여기 안 더하면 제목이
+ * 「이름 (캐릭터) · sheet」 로 나가고, 그 제목이 캐릭터 각도를 찾는 유일한
+ * 손잡이라 지울 때도 갈아 끼울 때도 못 찾는다. 맨 뒤에 둔다 — 목록 표지와
+ * 첫 장은 정면이어야 한다.
+ */
+const SAVED = [...CHARACTER_ANGLES, CHARACTER_SHEET];
+
+const LABELS = new Map(SAVED.map((angle) => [angle.id as string, angle.label]));
+const ORDER = new Map(SAVED.map((angle, index) => [angle.id as string, index]));
 
 export interface CharacterViewInput {
   angle: string;
