@@ -8,7 +8,8 @@
     "build:ec2": "node scripts/build-ec2.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --filter @fixup/web lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "test:db": "node --test scripts/tests/*.test.mjs"
   },
   "pnpm": {
     "overrides": {
