@@ -26,7 +26,11 @@ export async function testPostgres() {
   const control = (args) => new Promise((resolve, reject) => {
     const child = spawn(executable('pg_ctl'), args, { windowsHide: true, stdio: 'ignore' });
     child.on('error', reject);
-    child.on('exit', code => code === 0 ? resolve() : reject(new Error(`pg_ctl exited ${code}; inspect ${dir}`)));
+    child.on('exit', async code => {
+      if (code === 0) return resolve();
+      const log = await readFile(path.join(dir, 'postgres.log'), 'utf8').catch(() => 'No PostgreSQL log was created.');
+      reject(new Error(`pg_ctl exited ${code}: ${log.slice(-6000)}`));
+    });
   });
   let running = false;
   const sql = async (query) => {
@@ -50,7 +54,9 @@ export async function testPostgres() {
   }
   try {
     await exec(executable('initdb'), ['-D', data, '-U', 'postgres', '-A', 'trust', '--encoding=UTF8', '--locale=C'], options);
-    await control(['-D', data, '-l', path.join(dir, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start']);
+    // Tests connect over TCP only. Linux's packaged default socket directory is
+    // root/postgres-owned and is not writable by an ordinary CI runner.
+    await control(['-D', data, '-l', path.join(dir, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -c unix_socket_directories=`, '-w', 'start']);
     running = true;
     await sql(`
       CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;
