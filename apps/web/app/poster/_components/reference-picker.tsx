@@ -7,7 +7,7 @@ import {
   ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, personOverflow, type AttachmentRole,
 } from "@fixup/shared";
 import {
-  LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
+  LibraryPickerButton, type LibraryPickCharacterAngle, type LibraryPickSet,
 } from "../../_components/library-picker";
 import { attachmentNumber } from "@fixup/shared";
 import { openImageViewer } from "../../_components/image-viewer";
@@ -76,7 +76,6 @@ export function ReferencePicker({
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
-  const [characters, setCharacters] = React.useState<LibraryPickCharacter[]>([]);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
   /**
@@ -92,8 +91,6 @@ export function ReferencePicker({
       try {
         const body = await (await fetch("/api/reference-sets", { cache: "no-store" })).json();
         if (alive) setSets(body.ok ? (body.sets ?? []) : []);
-        const characterBody = await (await fetch("/api/characters", { cache: "no-store" })).json();
-        if (alive) setCharacters(characterBody.ok ? (characterBody.characters ?? []) : []);
       } catch {
         // 세트를 못 불러와도 낱장 고르기는 그대로 된다.
       }
@@ -116,18 +113,18 @@ export function ReferencePicker({
    * 지키려는 것이므로 「따라 만들기」로 들어가면 뜻이 반대가 된다. 사물
    * 캐릭터라면 화면에서 「제품 그대로 지키기」로 바꾸면 된다.
    */
-  function pickCharacter(character: LibraryPickCharacter) {
-    const prefix = `${character.name} (캐릭터)`;
-    const matched = references.filter((entry) => (entry.title ?? "").startsWith(prefix));
-    const front = matched.find((entry) => (entry.title ?? "").endsWith("정면")) ?? matched[0];
-    if (!front) {
-      setMessage("이 캐릭터의 각도를 라이브러리에서 찾지 못했습니다.");
-      return;
-    }
-    onRoleChange(front.id, "preserve_person");
-    setMessage(
-      `'${character.name}' 의 정면을 넣었습니다. 다른 각도가 필요하면 라이브러리 낱장에서 고르세요.`,
-    );
+  /**
+   * 캐릭터의 **고른 각도 한 장**을 넣는다.
+   *
+   * 전에는 무엇을 눌러도 정면이었다. 측면을 만들어 둬도 고를 수가 없어 각도를
+   * 만든 뜻이 사라졌다(2026-09-11 사용자 지적).
+   *
+   * 역할은 「인물 그대로 지키기」로 정한다. 캐릭터를 붙이는 이유가 그 대상을
+   * 지키려는 것이기 때문이다. 사물 캐릭터라면 화면에서 바꾸면 된다.
+   */
+  function pickCharacterAngle({ name, angle, image }: LibraryPickCharacterAngle) {
+    onRoleChange(image.id, "preserve_person");
+    setMessage(`'${name}' 의 ${angle}을(를) 넣었습니다.`);
   }
 
   function pickSet(set: LibraryPickSet) {
@@ -234,8 +231,7 @@ export function ReferencePicker({
           onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
           sets={sets}
           onPickSet={pickSet}
-          characters={characters}
-          onPickCharacter={pickCharacter}
+          onPickCharacterAngle={pickCharacterAngle}
           onReload={onUploaded}
           onDelete={(picked) => {
             const reference = references.find((entry) => entry.id === picked.id);
