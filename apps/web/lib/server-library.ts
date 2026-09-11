@@ -103,6 +103,13 @@ export interface SaveLibraryItemInput {
   /** 전용 원본의 id. 원본을 지워도 라이브러리 결과물은 보존하므로 FK로 묶지 않는다. */
   sourceId?: string;
   images: LibraryImageInput[];
+  /**
+   * 이미 있는 작업에 **이어 붙일 때**만 준다.
+   *
+   * 리디자인이 섹션을 한 장씩 만드는데, 장마다 새 작업을 만들면 목록에 같은
+   * 페이지가 여덟 줄로 흩어진다. `saveOrAppendLibraryItem` 이 채워 준다.
+   */
+  appendTo?: { itemId: string; startPosition: number };
 }
 
 export interface ServerLibraryItem {
@@ -169,22 +176,37 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
 
   const supabase = createSupabaseAdminClient();
 
-  const { data: item, error: itemError } = await supabase
-    .from("library_items")
-    .insert({
-      user_id: input.userId,
-      title: input.title.slice(0, 200),
-      tool: input.tool,
-      aspect_ratio: input.aspectRatio ?? null,
-      source_type: input.sourceType ?? "generation",
-      source_id: input.sourceId ?? null,
-      image_count: input.images.length,
-    })
-    .select("id")
-    .single();
+  /**
+   * **이미 있는 작업에 이어 붙이는 길.**
+   *
+   * 리디자인은 섹션을 한 장씩 만든다. 장마다 새 작업을 만들면 목록에 같은
+   * 페이지가 여덟 줄로 흩어진다. 그래서 이어 붙인다 — 자리 번호는 이미 있는
+   * 것 다음부터다.
+   */
+  const appendTo = input.appendTo;
+  const startPosition = appendTo?.startPosition ?? 0;
 
-  if (itemError || !item) {
-    return { ok: false as const, message: itemError?.message ?? "저장하지 못했습니다." };
+  const item = appendTo
+    ? { id: appendTo.itemId }
+    : await (async () => {
+        const { data, error } = await supabase
+          .from("library_items")
+          .insert({
+            user_id: input.userId,
+            title: input.title.slice(0, 200),
+            tool: input.tool,
+            aspect_ratio: input.aspectRatio ?? null,
+            source_type: input.sourceType ?? "generation",
+            source_id: input.sourceId ?? null,
+            image_count: input.images.length,
+          })
+          .select("id")
+          .single();
+        return error || !data ? { id: "", error: error?.message } : (data as { id: string });
+      })();
+
+  if (!item.id) {
+    return { ok: false as const, message: ("error" in item && item.error) || "저장하지 못했습니다." };
   }
 
   const uploaded: string[] = [];
@@ -192,7 +214,8 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
 
   try {
     const rows = [];
-    for (const [position, image] of input.images.entries()) {
+    for (const [offset, image] of input.images.entries()) {
+      const position = startPosition + offset;
       const original = Buffer.from(image.base64, "base64");
       const marked = input.origin === "ai" ? await markAsAi(original) : original;
       // 표기까지 새긴 뒤에 줄인다. 표기가 픽셀을 바꾸므로 순서가 뒤바뀌면
@@ -246,21 +269,68 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
     const { error: imagesError } = await supabase.from("library_images").insert(rows);
     if (imagesError) throw new Error(imagesError.message);
 
+    /**
+     * 표지는 **첫 장일 때만** 정한다. 이어 붙일 때 덮으면 두 번째 섹션이
+     * 표지가 되어, 목록에서 페이지가 중간부터 시작하는 것처럼 보인다.
+     */
     await supabase
       .from("library_items")
-      .update({ cover_path: rows[0]?.path ?? null, cover_thumb_path: coverThumbPath })
+      .update(
+        appendTo
+          ? { image_count: startPosition + rows.length }
+          : {
+              cover_path: rows[0]?.path ?? null,
+              cover_thumb_path: coverThumbPath,
+              image_count: rows.length,
+            },
+      )
       .eq("id", item.id);
 
     return { ok: true as const, id: item.id as string, imageCount: rows.length };
   } catch (error) {
     // 되돌린다. 파일부터 지우고 행을 지운다 — 순서가 반대면 경로를 잃는다.
     if (uploaded.length) await supabase.storage.from(BUCKET).remove(uploaded);
-    await supabase.from("library_items").delete().eq("id", item.id);
+    /**
+     * **이어 붙이다 실패했으면 작업 자체는 지우지 않는다.** 앞서 저장된
+     * 섹션들이 그 안에 있다. 이번에 올리던 것만 되돌린다.
+     */
+    if (!appendTo) await supabase.from("library_items").delete().eq("id", item.id);
     return {
       ok: false as const,
       message: error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.",
     };
   }
+}
+
+/**
+ * 같은 작업이면 **이어 붙이고**, 처음이면 새로 만든다.
+ *
+ * 리디자인은 섹션을 한 장씩 만든다. 그때마다 `saveLibraryItem` 을 부르면
+ * 목록에 같은 페이지가 여덟 줄로 흩어진다. 한 줄로 모으려면 「이 장이 어느
+ * 작업의 것인가」를 알아야 하는데, 그 열쇠가 `sourceId`(화면의 프로젝트 id)다.
+ *
+ * **`sourceId` 가 없으면 지금까지처럼 새로 만든다.** 상세페이지는 한 번에
+ * 여러 장을 올리므로 이어 붙일 일이 없다.
+ */
+export async function saveOrAppendLibraryItem(input: SaveLibraryItemInput) {
+  if (!input.sourceId) return saveLibraryItem(input);
+
+  const supabase = createSupabaseAdminClient();
+  const { data: existing } = await supabase
+    .from("library_items")
+    .select("id,image_count")
+    .eq("user_id", input.userId)
+    .eq("tool", input.tool)
+    .eq("source_id", input.sourceId)
+    .maybeSingle();
+
+  if (!existing) return saveLibraryItem(input);
+
+  const row = existing as { id: string; image_count: number | null };
+  return saveLibraryItem({
+    ...input,
+    appendTo: { itemId: row.id, startPosition: Math.max(0, row.image_count ?? 0) },
+  });
 }
 
 /**

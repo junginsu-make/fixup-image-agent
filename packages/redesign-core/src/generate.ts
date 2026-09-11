@@ -41,7 +41,36 @@ import { GOOGLE_READING_MODEL } from "./transcribe.js";
 const OPENAI_IMAGE_MODEL = "gpt-image-2-2026-04-21";
 const GOOGLE_NANO_BANANA_2_MODEL = "gemini-3.1-flash-image-preview";
 const ANALYSIS_MODEL = process.env.OPENAI_ANALYSIS_MODEL || "gpt-5.5";
-const MAX_REFERENCE_IMAGES = 4;
+/**
+ * 한 번에 함께 보낼 수 있는 원본 장수.
+ *
+ * **넘긴 장은 조용히 버려진다.** 긴 상세페이지를 조각으로 나눠 올리는 것이
+ * 이 도구의 정상 사용이라, 화면이 이 값을 알고 사용자에게 말해 줘야 한다.
+ * 그래서 내보낸다.
+ */
+export const MAX_REFERENCE_IMAGES = 4;
+
+/**
+ * 고른 비율이 **실제로 나오는 크기**를 정한다.
+ *
+ * 전에는 `size` 가 `"1152x2048"` 로 못 박혀 있었다. 비율은 프롬프트 글자로만
+ * 들어가서, 화면에서 무엇을 고르든 결과는 같았다. 지금 화면이 주는 두 선택지가
+ * 마침 둘 다 9:16 이라 **결과는 맞았지만 조작부가 거짓말을 하고 있었다.**
+ *
+ * 비율을 늘릴 때는 여기만 고치면 된다. 모르는 값이면 지금까지의 크기를
+ * 그대로 쓴다 — 새 비율을 넣다가 옛 작업이 깨지지 않게.
+ */
+const DEFAULT_IMAGE_SIZE = "1152x2048";
+
+const SIZE_BY_RATIO: Record<string, string> = {
+  "9:16": "1152x2048",
+  "1080×1920": "1152x2048",
+  "1080x1920": "1152x2048",
+};
+
+export function sizeForRatio(ratio: string): string {
+  return SIZE_BY_RATIO[String(ratio || "").trim()] ?? DEFAULT_IMAGE_SIZE;
+}
 
 type Provider = "openai" | "google";
 
@@ -279,7 +308,7 @@ export async function generateSections(input: GenerateSectionsInput) {
       console.info(`[generate] ${provider} ${section.section_id} start (${index + 1}/${sections.length})`);
       const image = provider === "google"
         ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences })
-        : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences });
+        : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences, size: sizeForRatio(ratio) });
 
       generatedSections.push({
         ...section,
@@ -296,6 +325,25 @@ export async function generateSections(input: GenerateSectionsInput) {
       });
       if (generatedSections.length === 0) {
         throw new Error(`${section.name} 생성 실패: ${humanizeProviderError(message)}`);
+      }
+
+      /**
+       * **시도조차 못 한 섹션도 적어 둔다.**
+       *
+       * 전에는 여기서 그냥 `break` 였다. 여덟 장 중 셋째가 실패하면 넷째부터
+       * 여덟째는 **시도도 기록도 안 된 채 사라졌다** — 화면은 「2장 만듦,
+       * 1장 실패」로 보여 주고, 사용자는 사라진 다섯 장을 다시 만들 방법이
+       * 없었다. 만든 만큼만 받으므로 돈 문제는 아니지만 **결과가 조용히
+       * 증발한다.**
+       *
+       * 이어서 시도하지 않는 이유는 그대로다 — 앞이 요청 제한으로 막혔으면
+       * 뒤도 막힌다. 다만 **무엇이 남았는지는 남긴다.**
+       */
+      for (const skipped of sections.slice(index + 1)) {
+        failedSections.push({
+          ...skipped,
+          error: "앞 섹션이 실패해 시도하지 않았습니다. 잠시 후 이 섹션만 다시 만들 수 있습니다.",
+        });
       }
       break;
     }
@@ -489,11 +537,11 @@ async function analyzeWithGoogle({ apiKey, prompt, references }: { apiKey: strin
   return parseMaybeJson(text);
 }
 
-async function generateOpenAIImage({ apiKey, prompt, references }: { apiKey: string; prompt: string; references: ReferenceImage[] }) {
+async function generateOpenAIImage({ apiKey, prompt, references, size }: { apiKey: string; prompt: string; references: ReferenceImage[]; size: string }) {
   const form = new FormData();
   form.append("model", OPENAI_IMAGE_MODEL);
   form.append("prompt", prompt);
-  form.append("size", "1152x2048");
+  form.append("size", size);
   form.append("quality", "low");
   form.append("output_format", "png");
 
