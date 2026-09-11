@@ -49,6 +49,18 @@ import { copyText, randomId } from "../../lib/browser-safe";
 type Model = "openai" | "google";
 type View = "dashboard" | "workspace" | "results";
 
+/**
+ * 그림 생성에 실제로 실리는 원본 장수.
+ *
+ * **`redesign-core` 의 `MAX_REFERENCE_IMAGES` 와 같은 값이어야 한다.** 여기서
+ * 가져오지 않는 이유는 그 꾸러미가 서버 전용이기 때문이다 — 화면이 import 하면
+ * `node:crypto` 와 업체 호출까지 브라우저 묶음에 딸려 온다.
+ *
+ * 두 값이 어긋나면 화면이 거짓말을 한다. `__tests__/reference-limit.test.ts`
+ * 가 둘을 맞춰 놓는다.
+ */
+const MAX_REFERENCE_IMAGES = 4;
+
 const REDESIGN_STEPS: StepDefinition[] = [
   { id: "dashboard", label: "대시보드", desc: "지난 작업" },
   { id: "workspace", label: "리디자인 작업", desc: "섹션 고치기" },
@@ -543,6 +555,20 @@ export function RedesignWizard() {
         finishedAt: Date.now(),
       });
       setToast(data.project.warning || `${models[selectedModel].label}로 ${succeeded}장 생성 완료 · 성공한 이미지만 차감됐습니다.`);
+
+      /**
+       * **만든 즉시 서버에 올린다.**
+       *
+       * 옆의 '작업 저장'은 브라우저 IndexedDB 라, 기기를 옮기거나 브라우저
+       * 데이터를 지우면 사라진다. 다른 도구는 전부 서버에 남는데 여기만
+       * 달랐다. 이번에 만든 섹션만 골라 올리고, 같은 작업의 것은 `sourceId`
+       * 로 라이브러리에서 한 줄에 모인다.
+       *
+       * **기다리지 않는다.** 올리기가 늦거나 실패해도 사용자는 방금 만든
+       * 그림을 바로 봐야 한다. 실패해도 '라이브러리에 저장' 버튼이 그대로
+       * 남아 있어 손으로 올릴 수 있다.
+       */
+      void autoSaveSections(finalProject, project.sections);
       return finalProject;
     } catch (error) {
       reportClientLog("generate:error", {
@@ -713,6 +739,40 @@ export function RedesignWizard() {
    *
    * 자동으로 올리지 않는다 — 실험 삼아 돌린 것까지 쌓이면 목록이 쓰레기로 찬다.
    */
+  /**
+   * 방금 만든 섹션만 서버 라이브러리에 올린다.
+   *
+   * 전체를 다시 올리지 않는다 — 여덟 섹션이면 같은 그림을 서른여섯 번
+   * 올리게 된다. `sourceId` 가 같으면 서버가 이어 붙인다.
+   *
+   * **조용히 실패한다.** 자동 저장이 사용자의 작업을 막아서는 안 된다.
+   * 못 올렸으면 '라이브러리에 저장' 버튼이 그대로 남아 있다.
+   */
+  async function autoSaveSections(project: Project, sections: SectionResult[]) {
+    const images = sections
+      .map((section) => /^data:([^;]+);base64,(.*)$/.exec(section.imageUrl || ""))
+      .filter((match): match is RegExpExecArray => Boolean(match))
+      .map((match) => ({ mimeType: match[1] ?? "image/png", base64: match[2] ?? "" }))
+      .filter((image) => image.base64.length > 0);
+
+    if (images.length === 0) return;
+
+    try {
+      await fetch("/api/library", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: projectDisplayTitle(project),
+          tool: "redesign",
+          sourceId: project.id,
+          images,
+        }),
+      });
+    } catch {
+      // 삼킨다. 손으로 올릴 길이 남아 있다.
+    }
+  }
+
   async function saveProjectToLibrary(project?: Project | null) {
     const target = project || currentProject;
     const withImages = (target?.sections ?? []).filter((section) => section.imageUrl);
@@ -735,6 +795,9 @@ export function RedesignWizard() {
         body: JSON.stringify({
           title: projectDisplayTitle(target),
           tool: "redesign",
+          // 같은 작업의 섹션은 라이브러리에서 한 줄로 모인다. 이 값이 없으면
+          // 섹션마다 새 줄이 되어 같은 페이지가 여덟 줄로 흩어진다.
+          sourceId: target.id,
           images,
         }),
       });
@@ -1757,6 +1820,17 @@ function Workspace(props: {
                     <Upload className="size-7" />
                   </span>
                   <strong>이미지 또는 PDF를 여기에 놓기</strong>
+                  {/*
+                    **몇 장까지 반영되는지 먼저 말한다.**
+
+                    서버는 앞 4장만 쓴다(`MAX_REFERENCE_IMAGES`). 그동안 화면은
+                    장수 제한 없이 받아 놓고 넘친 장을 조용히 버렸다 — 긴
+                    상세페이지를 조각으로 나눠 올리는 것이 이 도구의 정상
+                    사용이라, 버려진 줄 모른 채 결과만 이상해졌다.
+                  */}
+                  <span className="mt-1 block text-xs font-bold text-primary">
+                    앞 {MAX_REFERENCE_IMAGES}장까지 그림 생성에 반영됩니다
+                  </span>
                   <span className="mt-1 block text-xs text-muted-foreground">원본 제품컷, 수치, 리뷰, 인증, 오퍼 문구를 최대한 보존합니다.</span>
                 </span>
               </button>
