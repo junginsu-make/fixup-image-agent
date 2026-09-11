@@ -5,11 +5,18 @@ import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../..
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
+import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  // 이 요청에서 글 모델에 쓴 돈을 잰다. 리디자인은 업체를 직접 부르므로
+  // 꾸러미가 토큰을 알려 주면 여기서 받아 적는다.
+  return withLlmMeter(() => generate(req));
+}
+
+async function generate(req: Request) {
   let reservation: Awaited<ReturnType<typeof reserveAiUsage>> | undefined;
   try {
     const form = await req.formData();
@@ -76,6 +83,7 @@ export async function POST(req: Request) {
       look: String(form.get("look") || "auto"),
       count: requestedCount,
       startSection: Number(form.get("startSection") || 1),
+      onUsage: (usage) => recordLlmUsage(usage.model, usage.inputTokens, usage.outputTokens),
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
     });
@@ -86,7 +94,8 @@ export async function POST(req: Request) {
       // 만든 만큼만 받는다. 단가는 위에서 정한 제공자를 그대로 쓴다.
       imageCreditUnits(provider, consumed),
       consumed > 0 ? undefined : "no_image_generated",
-      { model: provider, billableImages: consumed },
+      // 글값도 함께 남긴다. 그동안 리디자인의 분석 비용은 장부에 0원이었다.
+      { model: provider, billableImages: consumed, llmUsd: readLlmMeter().usd },
     );
     return Response.json({ ...result, usage });
   } catch (err) {

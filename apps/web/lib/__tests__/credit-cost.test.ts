@@ -6,7 +6,7 @@ import { imageCreditUnits, imageUnitUsd, maxImageUnitUsd } from "../credit-cost"
  * 도구 넷이 **같은 곳에서** 단가를 본다 (2026-09-08 사용자 결정).
  *
  * 전에는 도구마다 따로 셌다. 상세페이지·캐릭터는 손으로 매긴 정수 가중치,
- * 리디자인은 무엇이든 1장 — $0.19 짜리를 1장으로 세어 **4배 덜 받았다.**
+ * 리디자인은 무엇이든 1장으로 세었다. 단가에 묶은 뒤로는 저절로 따라온다.
  */
 
 describe("한 장이 얼마인가", () => {
@@ -28,7 +28,15 @@ describe("한 장이 얼마인가", () => {
     // **$0.0675 였다가 고쳤다.** 재지도 읽지도 않고 seedream 등급에서 옮겨 적은
     // 값이라 11% 적게 차감하고 있었다. 공표값은 t2i·edit 두 페이지 모두 $0.075 다.
     expect(imageUnitUsd("qwen-image-2-pro")).toBe(0.075);
-    expect(imageUnitUsd("redesign-openai")).toBe(0.19);
+    /**
+     * **$0.19 였다가 $0.02 로 내렸다(2026-09-11).**
+     *
+     * $0.19 는 잰 값이 아니라 「청구서로 확인 후 조정」이라 적어 두고 굳은
+     * 값이었다. 그런데 리디자인은 그림을 `quality: "low"` 로 부른다 —
+     * 공개가로 저품질은 $0.01~0.02 대다. **고품질 값을 받고 저품질을 만들어
+     * 주고 있었다.**
+     */
+    expect(imageUnitUsd("redesign-openai")).toBe(0.02);
     expect(imageUnitUsd("redesign-google")).toBe(0.13);
   });
 
@@ -59,12 +67,16 @@ describe("한 장이 얼마인가", () => {
 
 describe("몇 장을 만들면 몇 장인가", () => {
   it("장수만큼 곱한다", () => {
-    // $0.19 × 3 = $0.57 → 올림($0.57 / $0.05) = 12장
-    expect(imageCreditUnits("redesign-openai", 3)).toBe(12);
+    // $0.02 × 3 = $0.06 → 올림($0.06 / $0.05) = 2장
+    expect(imageCreditUnits("redesign-openai", 3)).toBe(2);
   });
 
-  it("**리디자인 한 장이 4장이다** — 전에는 1장이었다", () => {
-    expect(imageCreditUnits("redesign-openai", 1)).toBe(4);
+  /**
+   * 한때 4장이었다. 그건 $0.19 를 믿었기 때문인데, 그 값이 열 배 가까이
+   * 과다였다. **저품질 한 장은 최소 단위인 1장이다.**
+   */
+  it("리디자인 한 장은 1장, Google 은 3장이다", () => {
+    expect(imageCreditUnits("redesign-openai", 1)).toBe(1);
     expect(imageCreditUnits("redesign-google", 1)).toBe(3);
   });
 
