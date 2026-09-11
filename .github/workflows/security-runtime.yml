@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      NEXT_PUBLIC_SITE_URL: https://studio.example.test
+      NEXT_PUBLIC_SITE_URL: https://studio.example.test:8443
       NEXT_PUBLIC_SUPABASE_URL: https://supabase.example.test
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: fixture-publishable-key
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: fixture-site-key

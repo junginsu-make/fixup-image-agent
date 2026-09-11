@@ -1,7 +1,10 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import https from 'node:https';
+import http from 'node:http';
 import path from 'node:path';
 import net from 'node:net';
 import assert from 'node:assert/strict';
@@ -9,24 +12,30 @@ const require=createRequire(import.meta.url);
 const {chromium}=require('../packages/ingest-core/node_modules/playwright');
 const {reply}=require('./fixtures/security-supabase.cjs');
 const root=path.resolve(process.argv[2]??'dist/ec2');
-const origin='https://studio.example.test';
+const origin='https://studio.example.test:8443';
 assert.equal(JSON.parse(readFileSync(path.join(root,'RELEASE_INFO.json'),'utf8')).publicSiteOrigin,origin,'Use only the isolated security build.');
 const listener=net.createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const port=listener.address().port;await new Promise(r=>listener.close(r));
 const child=spawn(process.execPath,['-r',path.resolve('scripts/fixtures/security-supabase.cjs'),'server.js'],{cwd:path.join(root,'apps/web'),stdio:['ignore','pipe','pipe'],env:{...process.env,NODE_ENV:'production',HOSTNAME:'127.0.0.1',PORT:String(port),CSP_MODE:'enforce',SUPABASE_SECRET_KEY:'fixture-only'}});
 let serverLog='';child.stdout.on('data',b=>{serverLog=(serverLog+b).slice(-8000);});child.stderr.on('data',b=>{serverLog=(serverLog+b).slice(-8000);});
-let browser;
+let browser;let proxy;
+const temporaryParent=realpathSync(tmpdir());const temporary=mkdtempSync(path.join(temporaryParent,'fixup-browser-tls-'));
 try{
   for(let i=0;;i++){
     try{if((await fetch(`http://127.0.0.1:${port}/api/health`,{signal:AbortSignal.timeout(1000)})).ok)break;}catch{}
     if(i>=120||child.exitCode!==null)throw new Error('Security runtime startup failed');await new Promise(r=>setTimeout(r,250));
   }
-  browser=await chromium.launch({headless:true});
-  const context=await browser.newContext();const authCalls=[];const pageErrors=[];
+  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(temporary,'key.pem'),'-out',path.join(temporary,'cert.pem'),'-subj','/CN=studio.example.test','-days','1'],{stdio:'ignore'});
+  proxy=https.createServer({key:readFileSync(path.join(temporary,'key.pem')),cert:readFileSync(path.join(temporary,'cert.pem'))},(request,response)=>{
+    const upstream=http.request({hostname:'127.0.0.1',port,path:request.url,method:request.method,headers:request.headers},received=>{response.writeHead(received.statusCode,received.headers);received.pipe(response);});
+    upstream.on('error',()=>{response.writeHead(502);response.end();});request.pipe(upstream);
+  });proxy.listen(8443,'127.0.0.1');await once(proxy,'listening');
+  browser=await chromium.launch({headless:true,args:['--host-resolver-rules=MAP studio.example.test 127.0.0.1','--no-proxy-server']});
+  const context=await browser.newContext({ignoreHTTPSErrors:true});const authCalls=[];const pageErrors=[];
   await context.addInitScript(()=>{window.__csp=[];document.addEventListener('securitypolicyviolation',event=>window.__csp.push({directive:event.effectiveDirective,blocked:event.blockedURI,disposition:event.disposition}));});
   await context.route('**/*',async route=>{
     const request=route.request();const url=new URL(request.url());
     if(url.origin===origin){
-      const response=await route.fetch({url:`http://127.0.0.1:${port}${url.pathname}${url.search}`,headers:{...request.headers(),host:url.host},maxRedirects:0});return route.fulfill({response});
+      return route.continue();
     }
     if(url.hostname==='supabase.example.test'){
       authCalls.push({path:url.pathname,method:request.method(),body:request.postDataJSON()});return route.fulfill(reply(url,request.method()));
@@ -51,10 +60,10 @@ try{
   const first=await go('/guide');const nonce=/nonce-([^']+)/.exec(first.headers()['content-security-policy'])?.[1];assert.ok(nonce);
   assert.ok(await page.locator('script').evaluateAll(scripts=>scripts.filter(s=>!s.src).every(s=>Boolean(s.nonce))));
   const second=await go('/guide');assert.notEqual(first.headers()['content-security-policy'],second.headers()['content-security-policy']);await healthy();
-  await go('/admin/cost-lab');const frame=page.frameLocator('iframe[title="비용 전략실"]');await frame.locator('body').waitFor();await frame.locator('a[href="prepaid.html"]').first().click();await frame.locator('#wallet-main-inputs input').first().waitFor();
+  await go('/admin/cost-lab');const frame=page.frameLocator('iframe[title="비용 전략실"]');await frame.locator('#tab-wallet').click();await frame.locator('#wallet-main-inputs input').first().waitFor();
   const input=frame.locator('#wallet-main-inputs input').first();await input.fill('123');await input.dispatchEvent('input');assert.notEqual(await frame.locator('#wallet-profit').innerText(),'—');await healthy();
   await page.evaluate(()=>{const script=document.createElement('script');script.textContent='window.__untrustedRan=true';document.body.append(script);});await page.waitForTimeout(100);
   assert.equal(await page.evaluate(()=>window.__untrustedRan),undefined);assert.ok((await page.evaluate(()=>window.__csp)).some(v=>v.disposition==='enforce'&&v.blocked==='inline'));
   console.log('T24 browser enforcement passed: signup, recovery, login, fresh nonces, theme bootstrap, cost calculator and injected-script denial. Auth and Turnstile transports are fixtures; no real mail or AI calls.');
 }catch(error){console.error(serverLog);throw error;}
-finally{await browser?.close();if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([once(child,'exit'),new Promise(r=>setTimeout(r,5000))]);}if(child.exitCode===null)child.kill('SIGKILL');}
+finally{await browser?.close();if(proxy){proxy.closeAllConnections();await new Promise(resolve=>proxy.close(resolve));}if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([once(child,'exit'),new Promise(r=>setTimeout(r,5000))]);}if(child.exitCode===null)child.kill('SIGKILL');const actual=realpathSync(temporary);assert.equal(path.dirname(actual),temporaryParent);assert.ok(path.basename(actual).startsWith('fixup-browser-tls-'));rmSync(actual,{recursive:true});}

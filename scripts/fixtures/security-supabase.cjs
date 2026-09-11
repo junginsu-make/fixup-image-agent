@@ -11,7 +11,7 @@ function reply(url,method='GET',headers={}){
   else if(path.startsWith('/rest/v1/profiles'))body={...user,status:'active',role:'admin',monthly_quota:30};
   else if(path.startsWith('/rest/v1/rpc/member_usage_summary'))body=[{used_units:0,reserved_units:0,quota:30,current_period_start:'2026-09-01',current_period_end:'2026-10-01'}];
   else if(path.startsWith('/rest/v1/'))body=[];
-  return {status:200,headers:{'content-type':'application/json','access-control-allow-origin':'https://studio.example.test','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,PUT,DELETE,OPTIONS'},body:JSON.stringify(body)};
+  return {status:200,headers:{'content-type':'application/json','access-control-allow-origin':'https://studio.example.test:8443','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,PUT,DELETE,OPTIONS'},body:JSON.stringify(body)};
 }
 module.exports={reply,user,session};
 const original=globalThis.fetch;
