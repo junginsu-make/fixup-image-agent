@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import { Check, Loader2, Maximize2, Trash2 } from "lucide-react";
 import { cn } from "@fixup/ui";
 import { openImageViewer } from "./image-viewer";
