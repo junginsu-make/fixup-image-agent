@@ -122,6 +122,7 @@ jobs:
           test -f dist/ec2/ops/generation-tick.mjs
           node --check dist/ec2/ops/generation-tick.mjs
           node scripts/verify-generation-release.mjs dist/ec2
+          node scripts/smoke-generation-release.mjs dist/ec2
           if find dist/ec2 -name '.env*' -print -quit | grep -q .; then
             echo 'Runtime artifact contains an .env file.' >&2
             exit 1
