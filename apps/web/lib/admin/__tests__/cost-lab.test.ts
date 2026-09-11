@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COST_LAB_FILE, COST_LAB_HEADERS, canOpenCostLab, costLabFilePath } from "../cost-lab";
@@ -11,7 +12,12 @@ import { PAGE_ACCESS } from "../../access/routes";
  * jsdom 이 없는 저장소라 화면을 그려 볼 수 없다. **판단 함수는 값으로,
  * 배선은 파일을 글자로 읽어** 맞댄다 — 갈리면 화면에서만 드러나는 것들이다.
  */
-const WEB = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, "")), "../../..");
+/*
+  **`fileURLToPath` 를 쓴다.** `new URL(...).pathname` 은 윈도에서 `/C:/...` 로
+  나와 맨 앞 `/` 를 떼야 하는데, 리눅스에서는 `/home/...` 이라 떼면 상대 경로가
+  된다. 그래서 **로컬에서는 되고 CI 에서만 ENOENT** 가 났다(2026-09-11).
+*/
+const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const read = (relative: string) => readFileSync(path.join(WEB, relative), "utf8");
 
 describe("누가 열 수 있나", () => {
