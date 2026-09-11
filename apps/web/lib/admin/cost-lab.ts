@@ -154,9 +154,26 @@ body { font-family: inherit; background: var(--background); color: var(--foregro
 /* 카드·패널은 앱의 카드 색을 따른다. 배경과 같은 색이면 경계가 사라진다. */
 .panel, .kpi, .control-group, .sheet, dialog { background: var(--card); }
 
-/* 앱 머리말과 겹친다. 도구의 상표 칸만 숨기고 버튼 줄은 남긴다. */
-header.top .brand { display: none; }
-header.top { justify-content: flex-end; background: var(--card); }
+/*
+  ── **겉테두리를 줄인다** ────────────────────────────────────
+
+  도구는 혼자 뜨는 한 장으로 만들어져서 제 머리말과 넉넉한 여백을 들고 있다.
+  앱 셸 안에 들어오면 그 머리말이 사이드바·앱 머리말과 겹쳐 「대시보드 안에 또
+  대시보드」가 되고, 정작 **볼 내용이 밀려난다**(2026-09-11 운영자 지적).
+
+  위아래 여백을 절반쯤으로 줄이고 제목 크기를 한 단 내린다.
+
+  **상표 칸은 이름만 남긴다.** 처음에는 통째로 숨겼는데, 그러면 화면 어디에도
+  「비용 전략실」이 없어진다 — 도구의 큰 제목은 「어떤 가격이면 지속 가능할까?」
+  라서 여기가 어디인지 말해 주지 않는다. 사이드바와 겹치는 MCS 네모와 영문
+  부제만 빼고, 이름은 버튼 줄 왼쪽의 빈자리에 그대로 둔다.
+*/
+header.top .brand .mark, header.top .brand .meta { display: none; }
+header.top .brand strong { font-size: .95rem; }
+header.top { background: var(--card); padding: 8px 16px; }
+.shell { max-width: none; padding: 12px 16px 20px; }
+.title-row { margin-bottom: 12px; }
+h1 { font-size: 1.35rem; letter-spacing: -0.02em; }
 
 /*
   ── **박아 둔 흰색과 옅은 색을 토큰으로** ─────────────────────
