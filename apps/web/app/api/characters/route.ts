@@ -17,7 +17,7 @@ import {
 import { teamIdOf } from "../../../lib/teams/store";
 import { durableCharacterRequest } from "../../../lib/generation/character-operation";
 import { boundedJson } from "../../../lib/generation/request-body";
-import { generationFailureResponse, useDurableGeneration as durableGenerationEnabled } from "../../../lib/generation/run-store";
+import { generationFailureResponse, isDurableGenerationEnabled as durableGenerationEnabled } from "../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

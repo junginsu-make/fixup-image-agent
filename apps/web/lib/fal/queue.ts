@@ -1,4 +1,5 @@
 import { createFalClient, type FalClient } from "@fal-ai/client";
+import { boundedProviderFetch } from "../generation/deadline";
 
 export type FalJobStatus = "queued" | "in_progress" | "completed";
 
@@ -8,14 +9,14 @@ export interface FalQueueClient {
   jobResult(endpoint: string, requestId: string): Promise<{ images: Array<{ url: string }> }>;
 }
 
-type FalClientFactory = (config: { credentials: string; retry: { maxRetries: number } }) => Pick<FalClient, "queue">;
+type FalClientFactory = (config: { credentials: string; retry: { maxRetries: number }; fetch: typeof fetch }) => Pick<FalClient, "queue">;
 
 /** 모델 도메인과 무관한 fal queue 제출·조회 계약. */
 export function createFalQueueClient(
   apiKey: string,
   factory: FalClientFactory = createFalClient,
 ): FalQueueClient {
-  const client = factory({ credentials: apiKey, retry: { maxRetries: 0 } });
+  const client = factory({ credentials: apiKey, retry: { maxRetries: 0 }, fetch: boundedProviderFetch });
   return {
     async submitJob(endpoint, input) {
       const submitted = await client.queue.submit(endpoint as never, { input } as never);

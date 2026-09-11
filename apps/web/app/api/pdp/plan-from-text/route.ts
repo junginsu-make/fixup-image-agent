@@ -1,6 +1,6 @@
 import { planFromText, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import { durablePdpPlanning } from "../../../../lib/pdp/planning-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 import type { CopyIntensity, GapPolicy, TextPlanRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { suggestStyleReference } from "../../../../lib/style-reference";

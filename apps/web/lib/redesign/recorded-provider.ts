@@ -18,7 +18,7 @@ export const invokeRecordedRedesign: InvokeProvider = async (meta, call) => {
   if (meta.kind === "llm") return recordedLlmCall(meta.provider, meta.model, meta.request, call, meta.maxOutputTokens);
   const unit = directRedesignImagePrice(meta);
   const image = await recordedImageCall({ provider: meta.provider, model: meta.model, endpoint: meta.model, identity: meta.request,
-    price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit } }, call, async raw => {
+    price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit, configuration: { mode:"edit",quality:meta.request.quality??null,size:meta.request.size??null,model:meta.model } } }, call, async raw => {
     const data = raw as { data?: Array<{ b64_json?: string }>; candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }> };
     const googleImage = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data)?.inlineData;
     const base64 = meta.provider === "google" ? googleImage?.data : data.data?.[0]?.b64_json;

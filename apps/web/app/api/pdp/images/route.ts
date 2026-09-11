@@ -43,7 +43,7 @@ import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { durablePdpSections } from "../../../../lib/pdp/image-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

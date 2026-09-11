@@ -47,6 +47,11 @@ fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+for unit in fixup-image-agent-generation-tick.service fixup-image-agent-generation-tick.timer; do
+  unit_state=$(systemctl is-enabled "${unit}" 2>/dev/null || true)
+  [[ ${unit_state} != masked* ]] || { echo "${unit} is masked; preserving the operator setting." >&2; exit 1; }
+done
+
 if ! id fixup-agent >/dev/null 2>&1; then
   useradd --system --home-dir /opt/fixup-image-agent --shell /usr/sbin/nologin fixup-agent
 fi
@@ -55,11 +60,18 @@ install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent
 install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent/releases
 install -d -o root -g fixup-agent -m 0750 /etc/fixup-image-agent
 install -m 0644 "${script_dir}/fixup-image-agent.service" /etc/systemd/system/fixup-image-agent.service
-install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+worker_state="$(systemctl is-enabled fixup-image-agent-worker.service 2>/dev/null || true)"
+if [[ ${worker_state} != masked* ]]; then
+  install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+fi
+install -m 0644 "${script_dir}/fixup-image-agent-generation-tick.service" /etc/systemd/system/fixup-image-agent-generation-tick.service
+install -m 0644 "${script_dir}/fixup-image-agent-generation-tick.timer" /etc/systemd/system/fixup-image-agent-generation-tick.timer
 install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixup-image-agent/app.env.example
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
 install -d -o caddy -g caddy -m 0750 /var/log/caddy
+touch /etc/caddy/fixup-generation-maintenance.caddy
+chmod 0644 /etc/caddy/fixup-generation-maintenance.caddy
 sed "s|{{SITE}}|${site_address}|g" "${script_dir}/Caddyfile.template" > /etc/caddy/sites/fixup-image-agent.caddy
 caddy fmt --overwrite /etc/caddy/sites/fixup-image-agent.caddy
 
@@ -72,7 +84,8 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 systemctl daemon-reload
 systemctl enable fixup-image-agent.service
-systemctl enable fixup-image-agent-worker.service
+if [[ ${worker_state} != masked* ]]; then systemctl enable fixup-image-agent-worker.service; fi
+systemctl enable fixup-image-agent-generation-tick.timer
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
 echo "Host files installed for ${site_address}."

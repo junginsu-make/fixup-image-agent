@@ -1,6 +1,6 @@
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { beginSnsRun } from "../../../../../../lib/generation/sns-execution";
-import { useDurableGeneration, generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled, generationFailureResponse } from "../../../../../../lib/generation/run-store";
 import { publicRun } from "../../../../../../lib/generation/types";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
@@ -30,7 +30,7 @@ export async function POST(request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "먼저 기획과 원고를 만들어 주세요." }, { status: 409 });
-      if (useDurableGeneration()) {
+      if (isDurableGenerationEnabled()) {
         const run = await beginSnsRun(request, auth.member.userId, project);
         return Response.json({ ok: true, project: await store.get(id), run: publicRun(run) });
       }

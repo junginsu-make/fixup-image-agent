@@ -89,6 +89,7 @@ export async function seedMembers(db) {
   await db.sql(`INSERT INTO auth.users(id,email,email_confirmed_at) VALUES
     ('${ids.a}','a@example.invalid',now()),('${ids.b}','b@example.invalid',now()),('${ids.c}','c@example.invalid',now());
     UPDATE public.profiles SET monthly_quota=100,status='active';
+    INSERT INTO public.generation_executor_health(executor_id,release_id,protocol_version,succeeded_at) VALUES ('fixture','test',2,now()) ON CONFLICT(executor_id) DO UPDATE SET succeeded_at=now(),error_code=null;
     INSERT INTO public.teams(id,name,monthly_quota) VALUES ('${ids.team}','test team',10),('${ids.otherTeam}','other team',10);
     INSERT INTO public.team_members(user_id,team_id) VALUES ('${ids.a}','${ids.team}'),('${ids.b}','${ids.team}'),('${ids.c}','${ids.otherTeam}');`);
 }

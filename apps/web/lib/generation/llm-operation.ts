@@ -1,7 +1,7 @@
 import "server-only";
 import { ExecutionControlError } from "@fixup/shared";
 import { llmCallUpperMicrousd, withRecordedLlm, assertRecordedLlmHealthy } from "../llm/recorded-call";
-import { beginRun, claimRun, existingRun, executionStore, renewRun, requestKey, useDurableGeneration as durableGenerationEnabled } from "./run-store";
+import { beginRun, claimRun, existingRun, executionStore, renewRun, requestKey, isDurableGenerationEnabled as durableGenerationEnabled } from "./run-store";
 import { readCachedResult, readCachedResultEntry, writeCachedResult } from "./result-cache";
 import { isTerminal, type GenerationRun } from "./types";
 

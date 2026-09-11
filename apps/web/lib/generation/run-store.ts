@@ -7,6 +7,7 @@ import { isLocalStoreEnabled } from "../local-store";
 import { localLedger } from "./local-ledger";
 import type { AttemptPatch, AttemptSpec, ExecutionStore, GenerationAttempt, GenerationRun } from "./types";
 import type { GenerationOperationV2 } from "./operations";
+import { assertNewProviderCall } from "./deadline";
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -14,7 +15,7 @@ function canonical(value: unknown): unknown {
   return value;
 }
 export function inputHash(value: unknown) { return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex"); }
-export function useDurableGeneration() { return process.env.NODE_ENV === "production" || process.env.GENERATION_EXECUTION_V2 === "1"; }
+export function isDurableGenerationEnabled() { return process.env.NODE_ENV === "production" || process.env.GENERATION_EXECUTION_V2 === "1"; }
 export function requestKey(request: Request) {
   if(request.headers.get("x-generation-protocol")!=="2")throw new Error("reload_required");
   const key=request.headers.get("x-idempotency-key");
@@ -25,6 +26,7 @@ export function requestKey(request: Request) {
 export function generationFailureResponse(error:unknown):Response|undefined {
   const code=error instanceof Error?error.message:"";
   const messages:Record<string,[number,string]>={
+    executor_unavailable:[503,"생성 처리기를 점검 중입니다. 잠시 후 다시 시도해 주세요."],
     invalid_image_input:[400,"이미지 형식이나 크기를 확인해 주세요."],
     generation_active:[409,"생성 작업이 끝난 뒤 삭제할 수 있습니다."],
     request_too_large:[413,"첨부 자료가 너무 큽니다. 용량을 줄여 다시 시도해 주세요."],
@@ -82,7 +84,7 @@ export function executionStore(run:GenerationRun):ExecutionStore {
   if(!run.lease_token)throw new Error("lease_required");
   if(isLocalStoreEnabled())return localLedger().execution(run);
   return {
-    prepare:(spec:AttemptSpec)=>rpc<GenerationAttempt>("prepare_generation_attempt",{p_run:run.id,p_token:run.lease_token,p_spec:spec}),
+    prepare:(spec:AttemptSpec)=>{assertNewProviderCall(0);return rpc<GenerationAttempt>("prepare_generation_attempt",{p_run:run.id,p_token:run.lease_token,p_spec:spec});},
     advance:(id:string,patch:AttemptPatch)=>rpc<GenerationAttempt>("advance_generation_attempt",{p_id:id,p_token:run.lease_token,p_patch:patch}),
     async attempts(){const {data,error}=await createSupabaseAdminClient().from("generation_attempts").select("*").eq("run_id",run.id).order("sequence");if(error)throw new Error(error.message);return data as GenerationAttempt[];},
     checkpoint:(data,state,delay=5)=>rpc<GenerationRun>("checkpoint_generation_run",{p_id:run.id,p_token:run.lease_token,p_checkpoint:data,p_state:state,p_delay_seconds:delay,p_release:true}),

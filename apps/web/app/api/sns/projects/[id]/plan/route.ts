@@ -1,5 +1,5 @@
 import { runLlmOperation } from "../../../../../../lib/generation/llm-operation";
-import { generationFailureResponse, useDurableGeneration as durableGenerationEnabled } from "../../../../../../lib/generation/run-store";
+import { generationFailureResponse, isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../../../lib/generation/run-store";
 import { snsModelSnapshot } from "../../../../../../lib/sns/providers";
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";

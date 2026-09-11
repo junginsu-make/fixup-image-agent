@@ -6,7 +6,7 @@ import { regenerateAngle } from "../../../../lib/characters";
 import { CHARACTER_SHEET, IMAGE_MODELS } from "@fixup/pdp-core";
 import { durableCharacterView } from "../../../../lib/generation/character-operation";
 import { boundedJson } from "../../../../lib/generation/request-body";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -13,7 +13,7 @@ export interface GenerationAttempt {
   state: AttemptState; endpoint: string; model: string; provider: string;
   provider_request_id: string | null; request_payload: Record<string, unknown>;
   price_snapshot: { chargeUnitMicrousd?: number; chargeFlatMicrousd?: number; providerUnitMicrousd?: number;
-    tokenPrice?:{inputPerMillion:number;outputPerMillion:number};webSearchCallMicrousd?:number };
+    tokenPrice?:{inputPerMillion:number;outputPerMillion:number};webSearchCallMicrousd?:number;configuration?:Record<string,unknown> };
   output_manifest: Record<string, unknown> | null;
   estimated_cost_microusd: number; requested_images: number; returned_images: number; delivered_images: number;
   measured_cost_microusd?: number; input_tokens?: number; output_tokens?: number; metering_state?: string;

@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
   settlements: 0,
 }));
 vi.mock("../run-store", () => ({
-  useDurableGeneration: () => true,
+  isDurableGenerationEnabled: () => true,
   requestKey: () => "request-key",
   inputHash: (value: unknown) => JSON.stringify(value),
   existingRun: async () => state.duplicate ? null : state.run,

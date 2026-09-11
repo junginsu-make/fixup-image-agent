@@ -1,0 +1,11 @@
+[Unit]
+Description=Advance Fixup generation without browser polling
+
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=fixup-image-agent-generation-tick.service
+
+[Install]
+WantedBy=timers.target

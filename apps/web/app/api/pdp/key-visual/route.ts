@@ -8,7 +8,7 @@ import {
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { durableKeyVisual } from "../../../../lib/pdp/image-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 
 export const runtime = "nodejs";

@@ -34,22 +34,29 @@
 
 ### 1. Supabase 에 표를 만든다
 
-상세페이지가 쓰는 **그 프로젝트**에 새 표만 더한다. 기존 표의 칸이나 제약은
-건드리지 않는다.
+상용화 개선의 최초 반영은
+`docs/superpowers/specs/2026-09-11-commercial-readiness-design.md`의 §14·§18을 따른다.
+이 설계에는 기존 함수·RLS·열 권한 변경도 포함된다. 아래의 일반 초기 설치 절차로
+이번 변경을 일괄 적용하지 않는다.
+
+운영에서 수동 적용한 이력이 있으므로 실제 스키마·함수·정책·GRANT를 비교하고,
+승인된 변경 중 아직 적용되지 않은 번호형 migration만 적용한다. 한글 수동 SQL이나
+이미 반영된 과거 파일을 함께 replay하지 않는다. 영향을 받는 정의와 운영 상태를
+백업하고, 공유 DB의 다른 소비 서비스에 대한 확인을 마친 뒤 적용한다.
 
 ```bash
 npx supabase link --project-ref <프로젝트-ref>
 npx supabase db diff --linked      # 먼저 무엇이 적용될지 본다
 ```
 
-출력에 기존 표에 대한 `alter table` 이나 `drop` 이 있으면 **멈춘다.** 새
-`create table` 과 거기 딸린 정책·권한만 있어야 한다.
+설계에 없는 기존 표 변경이나 데이터 삭제가 나오면 중단한다. 설계에 명시된
+ALTER·함수 교체·권한 변경은 변경 목록과 실스키마를 대조하여 검증한다.
 
 적용 전에 상세페이지에 로그인해 `/library` 를 열어 두고 눈으로 상태를
 기록한다. 그리고,
 
 ```bash
-npx supabase db push
+# 검증한 누락 migration 목록만 적용한다. 운영 이력 확인 없이 db push 하지 않는다.
 ```
 
 적용 뒤 같은 화면을 다시 연다. **하나라도 달라지면 멈추고 보고한다.**
@@ -88,8 +95,9 @@ sudo bash deploy/ec2/install-host.sh studio.example.com   # 도메인이 있으�
 sudo bash deploy/ec2/install-host.sh 54.180.68.212        # IP 로만 열 때
 ```
 
-사용자·디렉터리·systemd 유닛 두 개·Caddy 사이트를 만들고, 웹과 워커를
-`enable` 한다. 아직 시작하지는 않는다 — 환경변수가 없다.
+사용자·디렉터리·웹/수집/생성 처리기 systemd 유닛·Caddy 사이트를 만든다.
+생성 timer는 웹과 DB가 준비된 뒤 배포 스크립트가 시작한다. 기존 수집 워커가
+masked이면 유닛을 덮어쓰거나 활성화하지 않는다.
 
 **도메인이면 HTTPS, IP 면 평문 HTTP 다.** 공개 인증 기관은 IP 에 인증서를
 내주지 않는다. 스크립트가 IP 를 받으면 Caddy 사이트 주소에 `http://` 를
@@ -195,6 +203,23 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 | 아티팩트 업로드 실패를 배포 실패로 읽기 | 릴리스가 본 배송지다. `verify`·`build` 가 success 면 꾸러미는 나왔다 |
 
 ## 되돌리기
+
+### 생성 장부 v2의 첫 전환과 운영 순서
+
+상용화 설계의 §14·§18을 적용한다. 공유 Supabase를 쓰는 다른 앱의 목록과 호환성, 백업 범위를 먼저 확인한다. migration 이력만 보고 기존 SQL을 재실행하지 않는다. 실제 스키마와 비교한 승인된 변경분을 적용하며 가입 기본 한도 30을 유지한다.
+
+1. 새 릴리스와 같은 SHA의 검사·DB 통합시험·Linux 빌드가 모두 성공했는지 확인한다. 릴리스 자산이 있다는 사실만으로 배포하지 않는다.
+2. 기존 호스트의 Caddy 사이트에 템플릿의 내부 실행기 차단과 점검 파일 import를 반영하고 검증한다. `generation-maintenance.sh on`으로 새 생성 진입을 막는다. 첫 전환에서는 구형 status/stop도 비용을 발생시키므로 차단된다. 기존 결과 읽기는 유지한다.
+3. 기존 v1 활성 작업을 서버 기록과 제공자 기록으로 대조한다. 만료 실패를 일괄 성공 처리하거나 소급 차감하지 않는다. v1 reserved가 남으면 배포기는 중단한다. 확인한 DB 변경분을 적용하고 새 admission은 닫아 둔다.
+4. 새 배포기는 내부 인증키가 없으면 서버 환경 파일에 생성한다. 키를 화면에 출력하거나 저장소에 넣지 않는다. DB admission을 닫고 실행 중 tick과 동기 요청을 기다린 뒤 앱을 바꾼다.
+5. 기본 health 확인 → generation oneshot 실행 → 독립 timer 시작 → 같은 릴리스의 heartbeat·schema 확인 순으로 진행한다. collector가 masked면 그대로 보존한다. 실패하면 생성은 닫힌 상태를 유지한다.
+6. 기존에 열려 있던 정책만 검사 후 복원하며, 그 사이 운영자가 바꾼 정책은 덮어쓰지 않는다. 첫 배포의 기본 closed 상태는 자동으로 열지 않는다. HTTPS/Auth 검증과 운영자 예산 확정 후 관리자 화면에서 사유와 함께 연다.
+
+운영 확인은 `systemctl status fixup-image-agent-generation-tick.timer`와 `journalctl -u fixup-image-agent-generation-tick.service -n 50`을 사용한다. 실행기는 외부에서 접근할 수 없으며, readiness는 배포기의 비밀키를 사용하는 loopback 검사로 확인한다. 공개 health 성공만으로 자동 생성이 정상이라고 판단하지 않는다.
+
+관리자 화면의 비용은 제공자별 추정치이며 미확인·대기 건수를 함께 본다. 대조 대상은 근거와 실제 확인 비용을 남겨 처리한다. 수락 ID journal이나 private 결과를 복구할 때 새 제공자 요청을 대신 제출하지 않는다. journal 쓰기/읽기 장애와 heartbeat 만료 시에는 새 비용을 차단하고 기존 결과 회수를 유지한다.
+
+**v2를 이해하지 못하는 앱으로 롤백하지 않는다.** 호환 릴리스가 없으면 admission을 닫고 호환 버전을 배포한다. 롤백 때문에 새 테이블을 지우거나 브라우저 쓰기 권한을 다시 넓히지 않는다. 호환 버전도 웹 health와 generation heartbeat를 모두 통과해야 한다.
 
 ```bash
 ls /opt/fixup-image-agent/releases

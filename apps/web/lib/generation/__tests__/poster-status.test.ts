@@ -2,7 +2,7 @@ import { describe,it,expect,vi } from "vitest";
 vi.mock("server-only",()=>({}));
 const mock=vi.hoisted(()=>({ lookup:vi.fn(),provider:vi.fn(),finalize:vi.fn() }));
 vi.mock("../../membership/api",()=>({authenticateApiMember:async()=>({ok:true,member:{userId:"actor"}}),finalizeAiUsage:mock.finalize}));
-vi.mock("../run-store",()=>({useDurableGeneration:()=>true,runForResource:mock.lookup}));
+vi.mock("../run-store",()=>({isDurableGenerationEnabled:()=>true,runForResource:mock.lookup}));
 vi.mock("../../poster/stores",()=>({posterStoresForUser:()=>({images:{byProject:async()=>[]}})}));
 vi.mock("../../poster/providers",()=>({createPosterFalClients:mock.provider,PosterProviderConfigurationError:class extends Error{}}));
 import {POST} from "../../../app/api/poster/projects/[id]/status/route";

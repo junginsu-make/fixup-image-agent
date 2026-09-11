@@ -1,6 +1,6 @@
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { durablePdpPlanning } from "../../../../lib/pdp/planning-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";

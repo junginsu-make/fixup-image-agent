@@ -1,5 +1,5 @@
 import { beginPosterRun, replayPosterRun } from "../../../../../../lib/generation/poster-execution";
-import { useDurableGeneration, generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled, generationFailureResponse } from "../../../../../../lib/generation/run-store";
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
@@ -46,7 +46,7 @@ export async function POST(request: Request, context: Context) {
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
-    if (useDurableGeneration()) { const replay = await replayPosterRun(request, auth.member.userId, project, parsed.data); if (replay) return replay; }
+    if (isDurableGenerationEnabled()) { const replay = await replayPosterRun(request, auth.member.userId, project, parsed.data); if (replay) return replay; }
 
     const images = await stores.images.byProject(id);
     if (!canEdit(images)) {
@@ -99,7 +99,7 @@ export async function POST(request: Request, context: Context) {
       // 고친 기준 그림을 늘 레퍼런스로 넣는다 — i2i 단가다.
       hasReferences: true,
     });
-    if (useDurableGeneration()) return await beginPosterRun(request, auth.member.userId, project, job, parsed.data);
+    if (isDurableGenerationEnabled()) return await beginPosterRun(request, auth.member.userId, project, job, parsed.data);
     const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0));
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };

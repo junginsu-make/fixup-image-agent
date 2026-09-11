@@ -1,5 +1,5 @@
 import { beginPosterRun, replayPosterRun } from "../../../../../../lib/generation/poster-execution";
-import { useDurableGeneration, generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled, generationFailureResponse } from "../../../../../../lib/generation/run-store";
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import sharp from "sharp";
 import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
@@ -63,7 +63,7 @@ export async function POST(request: Request, context: Context) {
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
-    if (useDurableGeneration()) { const replay = await replayPosterRun(request, auth.member.userId, project); if (replay) return replay; }
+    if (isDurableGenerationEnabled()) { const replay = await replayPosterRun(request, auth.member.userId, project); if (replay) return replay; }
 
     /**
      * **같은 클릭이 두 번 오면 돈이 두 번 나간다.**
@@ -201,7 +201,7 @@ export async function POST(request: Request, context: Context) {
       sourceSize,
     });
     const units = creditUnits(estimate.totalUsd ?? 0);
-    if (useDurableGeneration()) return await beginPosterRun(request, auth.member.userId, project, job);
+    if (isDurableGenerationEnabled()) return await beginPosterRun(request, auth.member.userId, project, job);
     const reserved = await reserveAiUsage(request, "poster_image", units);
     /**
      * **거절이면 자리부터 돌려준다.**

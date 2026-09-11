@@ -1,5 +1,6 @@
 import type { FalQueueClient } from "../fal/queue";
 import type { ExecutionStore, GenerationAttempt } from "./types";
+import { assertNewProviderCall } from "./deadline";
 
 /** One durable network/storage step. Calling this again never resubmits a known or ambiguous request. */
 export async function advanceQueueAttempt(
@@ -9,6 +10,7 @@ export async function advanceQueueAttempt(
   save: (images: Array<{ url: string }>) => Promise<{ deliveredImages?: number; output?: Record<string, unknown> }>,
 ): Promise<GenerationAttempt> {
   if (attempt.state === "prepared") {
+    assertNewProviderCall(35_000);
     attempt = await store.advance(attempt.id, { state: "submitting" });
     let requestId: string;
     try { ({ requestId } = await queue.submitJob(attempt.endpoint, attempt.request_payload)); }

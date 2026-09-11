@@ -49,7 +49,7 @@ export function createPdpImageGenerator(environment: Env = process.env): ImageGe
     const payload = buildFalPayload(model, input);
     const unit = quotePdpImage(model, input);
     return recordedImageCall({ provider: "fal", model, endpoint, identity: payload,
-      price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit },
+      price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit, configuration: { mode: input.references.length?"i2i":"t2i",size:payload.image_size??input.aspectRatio,quality:payload.quality??null,resolution:payload.resolution??null } },
     }, async () => {
     const response = await fetch(`${FAL_BASE_URL}/${endpoint}`, {
       method: "POST",

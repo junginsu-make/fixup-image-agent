@@ -3,7 +3,7 @@ import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys"
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { durableRedesignEdit } from "../../../../lib/redesign/edit-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;

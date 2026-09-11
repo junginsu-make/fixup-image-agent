@@ -4,3 +4,4 @@ export const GENERATION_OPERATIONS = [
   "redesign_transcribe", "sns_plan", "sns_caption", "layout_analyze", "poster_review", "poster_plan"
 ] as const;
 export type GenerationOperationV2 = typeof GENERATION_OPERATIONS[number];
+export const GENERATION_SCHEMA_VERSION = 31;

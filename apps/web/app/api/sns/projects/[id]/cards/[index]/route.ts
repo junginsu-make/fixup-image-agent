@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { beginSnsRun } from "../../../../../../../lib/generation/sns-execution";
-import { useDurableGeneration, generationFailureResponse } from "../../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled, generationFailureResponse } from "../../../../../../../lib/generation/run-store";
 import { publicRun } from "../../../../../../../lib/generation/types";
 import { assertProjectWrite } from "../../../../../../../lib/generation/ownership";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
@@ -92,7 +92,7 @@ export async function POST(request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(params.id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
-      if (useDurableGeneration()) {
+      if (isDurableGenerationEnabled()) {
         await assertProjectWrite(auth.member.userId,"sns",params.id);
         const run = await beginSnsRun(request,auth.member.userId,project,{cardIndexes:[index],note:noteInput.data.note});
         return Response.json({ok:true,project:await store.get(params.id),run:publicRun(run)});

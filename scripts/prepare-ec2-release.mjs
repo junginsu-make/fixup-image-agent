@@ -17,6 +17,10 @@ const distDirName = process.env.NEXT_DIST_DIR || ".next";
 const buildRoot = path.join(webRoot, distDirName);
 const standaloneSource = path.join(buildRoot, "standalone");
 const releaseRoot = path.join(repoRoot, "dist", "ec2");
+const releaseId = process.env.GITHUB_SHA || spawnSync("git",["rev-parse","HEAD"],{cwd:repoRoot,encoding:"utf8"}).stdout?.trim();
+if (!/^[a-f0-9]{40}$/.test(releaseId ?? "")) throw new Error("A commit SHA is required for the generation executor release.");
+const generationSchemaVersion=Number(/GENERATION_SCHEMA_VERSION = (\d+)/.exec(readFileSync(path.join(webRoot,"lib/generation/operations.ts"),"utf8"))?.[1]);
+if(!Number.isInteger(generationSchemaVersion))throw new Error("Generation schema version is missing.");
 
 /** 워커를 묶을 때 빼는 것. 이유는 아래 bundleWorker 주석에 적었다. */
 const EXTERNAL = ["playwright", "jsdom", "@mozilla/readability"];
@@ -61,6 +65,9 @@ cpSync(path.join(webRoot, "assets"), path.join(runtimeRoot, "assets"), { recursi
 // 이름 밑에 둬야 standalone server.js 가 찾는다.
 mkdirSync(path.join(runtimeRoot, distDirName), { recursive: true });
 cpSync(path.join(buildRoot, "static"), path.join(runtimeRoot, distDirName, "static"), { recursive: true });
+writeFileSync(path.join(runtimeRoot,"generation-release.json"),JSON.stringify({protocol:2,schemaVersion:generationSchemaVersion,releaseId}));
+mkdirSync(path.join(releaseRoot,"ops"),{recursive:true});
+cpSync(path.join(repoRoot,"deploy","ec2","generation-tick.mjs"),path.join(releaseRoot,"ops","generation-tick.mjs"));
 
 await bundleWorker();
 placeSharpLibvips(releaseRoot);
@@ -74,6 +81,12 @@ writeFileSync(
   path.join(releaseRoot, "RELEASE_INFO.json"),
   `${JSON.stringify({
     generatedAt: new Date().toISOString(),
+    releaseId,
+    generationProtocol: 2,
+    generationSchemaVersion,
+    generationSchemaMin: generationSchemaVersion,
+    generationSchemaMax: generationSchemaVersion,
+    buildRunId: process.env.GITHUB_RUN_ID ?? null,
     runtimeEntry: path.relative(releaseRoot, path.join(runtimeRoot, "server.js")).replaceAll("\\", "/"),
   }, null, 2)}\n`,
   "utf8",

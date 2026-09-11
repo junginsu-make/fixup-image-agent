@@ -1,6 +1,6 @@
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { durablePosterPlanning } from "../../../../../../lib/poster/planning-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../../../lib/generation/run-store";
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";

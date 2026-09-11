@@ -104,7 +104,7 @@ export function createRedesignImageGenerator(
     const unit = quoteRedesignFal(size);
     const image = await recordedImageCall({ provider: "fal", model: model.id, endpoint: model.i2i.endpoint,
       identity: { prompt, size, references: references.slice(0, model.maxReferenceImages).map(r => ({ mimeType: r.mimeType, digest: createHash("sha256").update(r.buffer).digest("hex") })) },
-      price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit },
+      price: { providerUnitMicrousd: unit, chargeUnitMicrousd: unit, configuration: { mode:"i2i",size,quality:model.quality??null } },
     }, async () => {
     /**
      * 첨부를 먼저 올린다. fal 은 바이트가 아니라 **주소**를 받는다.

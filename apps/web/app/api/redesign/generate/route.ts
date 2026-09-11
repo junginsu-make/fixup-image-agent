@@ -8,7 +8,7 @@ import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
 import { createRedesignImageGenerator } from "../../../../lib/redesign/image-generator";
 import { durableRedesignGenerate } from "../../../../lib/redesign/generate-operation";
-import { useDurableGeneration as durableGenerationEnabled } from "../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../lib/generation/run-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;

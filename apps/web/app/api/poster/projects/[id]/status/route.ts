@@ -1,5 +1,5 @@
 import { savePosterResult } from "../../../../../../lib/poster/save-result";
-import { useDurableGeneration, runForResource } from "../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled, runForResource } from "../../../../../../lib/generation/run-store";
 import { isTerminal, publicRun } from "../../../../../../lib/generation/types";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
@@ -54,7 +54,7 @@ export async function POST(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   const body = await request.json().catch(() => ({}));
-  if (useDurableGeneration()) {
+  if (isDurableGenerationEnabled()) {
     const input = z.object({ runId: z.string().uuid() }).strict().safeParse(body);
     if (!input.success) return Response.json({ok:false,code:"reload_required",message:"화면을 새로고침한 뒤 실행 상태를 확인해 주세요."},{status:409});
     try {

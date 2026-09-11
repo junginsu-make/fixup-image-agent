@@ -1,5 +1,5 @@
 import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
-import { useDurableGeneration, runForResource, stopRun } from "../../../../../../lib/generation/run-store";
+import { isDurableGenerationEnabled, runForResource, stopRun } from "../../../../../../lib/generation/run-store";
 import { publicRun } from "../../../../../../lib/generation/types";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
@@ -28,7 +28,7 @@ export async function POST(_request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       const project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "생성 흐름을 찾을 수 없습니다." }, { status: 404 });
-      if (useDurableGeneration()) {
+      if (isDurableGenerationEnabled()) {
         const run = await runForResource(auth.member.userId,"sns",id);
         if (!run) return Response.json({ok:false,message:"진행 중인 생성을 찾지 못했습니다."},{status:404});
         const stopped = await stopRun(auth.member.userId,run.id);

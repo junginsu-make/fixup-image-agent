@@ -24,7 +24,7 @@ function halt(current: Context, code: ConstructorParameters<typeof ExecutionCont
 /** Persist the provider response before downloading/converting its image. */
 export async function recordedImageCall<Raw, Image extends RecordedImage = RecordedImage>(meta: {
   provider: string; model: string; endpoint: string; identity: unknown;
-  price: { providerUnitMicrousd: number; chargeUnitMicrousd: number };
+  price: { providerUnitMicrousd: number; chargeUnitMicrousd: number; configuration?: Record<string,unknown> };
 }, submit: () => Promise<Raw>, materialize: (raw: Raw) => Promise<Image>): Promise<Image> {
   const current = context.getStore();
   if (!current) return materialize(await submit());

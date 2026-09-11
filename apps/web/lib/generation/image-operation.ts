@@ -1,6 +1,6 @@
 import "server-only";
 import { ExecutionControlError } from "@fixup/shared";
-import { beginRun, claimRun, existingRun, executionStore, inputHash, requestKey, useDurableGeneration as durableGenerationEnabled } from "./run-store";
+import { beginRun, claimRun, existingRun, executionStore, inputHash, requestKey, isDurableGenerationEnabled as durableGenerationEnabled } from "./run-store";
 import { withRunLease } from "./llm-operation";
 import { withRecordedLlm, llmCallUpperMicrousd, assertRecordedLlmHealthy } from "../llm/recorded-call";
 import { withRecordedImages, finalizeImageArtifacts, assertRecordedImagesHealthy, type RecordedImage } from "./recorded-image";

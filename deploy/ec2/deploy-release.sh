@@ -5,6 +5,10 @@ if [[ ${EUID} -ne 0 ]]; then
   echo "Run as root: sudo bash deploy/ec2/deploy-release.sh <release.tar.gz> [release-id]" >&2
   exit 1
 fi
+exec 9>/run/fixup-image-agent-deploy.lock
+flock -n 9 || { echo "Another deployment or rollback is running." >&2; exit 1; }
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "${script_dir}/generation-release.sh"
 
 archive=${1:-}
 release_id=${2:-$(date -u +%Y%m%dT%H%M%SZ)}
@@ -57,6 +61,7 @@ for build_dir in "${release_root}/apps/web"/.next*; do
   install -d -o fixup-agent -g fixup-agent -m 0750 "${build_dir}/cache/images"
 done
 
+generation_prepare "${release_root}"
 ln -sfnT "${release_root}" "${current_link}"
 systemctl restart fixup-image-agent.service
 
@@ -72,8 +77,7 @@ done
 if [[ ${healthy} != true ]]; then
   echo "Liveness check failed. Rolling back." >&2
   if [[ -n ${previous_release} && -d ${previous_release} ]]; then
-    ln -sfnT "${previous_release}" "${current_link}"
-    systemctl restart fixup-image-agent.service
+    generation_restore_previous "${previous_release}" || true
   else
     systemctl stop fixup-image-agent.service
   fi
@@ -83,8 +87,7 @@ fi
 if ! curl --fail --silent --show-error http://127.0.0.1:3000/api/health/ready >/dev/null; then
   echo "Readiness check failed. Rolling back." >&2
   if [[ -n ${previous_release} && -d ${previous_release} ]]; then
-    ln -sfnT "${previous_release}" "${current_link}"
-    systemctl restart fixup-image-agent.service
+    generation_restore_previous "${previous_release}" || true
   else
     systemctl stop fixup-image-agent.service
   fi
@@ -102,6 +105,15 @@ fi
 #
 # `is-enabled` 는 잠겼으면 masked, 없으면 not-found 를 찍는다. 없는 것과
 # 잠근 것은 다른 이야기이므로 따로 가른다.
+if ! generation_start_current; then
+  echo "Generation readiness failed. Restoring the previous web release with admission paused." >&2
+  systemctl stop fixup-image-agent-generation-tick.timer
+  if [[ -n ${previous_release} && -d ${previous_release} ]]; then
+    generation_restore_previous "${previous_release}" || true
+  fi
+  exit 1
+fi
+generation_finish
 worker_state="$(systemctl is-enabled fixup-image-agent-worker.service 2>/dev/null || true)"
 if [[ ${worker_state} == masked* ]]; then
   echo "Worker is masked - skipping restart (수집을 쓰지 않는 서버)."

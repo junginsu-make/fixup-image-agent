@@ -5,6 +5,7 @@ import type { InvokeProvider } from "@fixup/shared";
 import type { ExecutionStore } from "../generation/types";
 import { inputHash } from "../generation/run-store";
 import { tokensFrom } from "./meter";
+import { assertNewProviderCall } from "../generation/deadline";
 
 interface Context { store: ExecutionStore; prefix: string; sequence: number; calls: number; maxCalls: number; occurrences: Map<string,number>; halted?: ExecutionControlError }
 const context=new AsyncLocalStorage<Context>();
@@ -32,6 +33,7 @@ export function withRecordedLlm<T>(store:ExecutionStore,prefix:string,run:()=>Pr
   return context.run({store,prefix,sequence:0,calls:0,maxCalls,occurrences:new Map()},run);
 }
 export function claimPaidCall() {
+  assertNewProviderCall();
   const current=context.getStore();
   if(!current)return;
   if(current.halted)throw current.halted;

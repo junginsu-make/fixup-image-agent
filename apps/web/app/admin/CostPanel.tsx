@@ -38,6 +38,7 @@ export function CostPanel({
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">청구서 대조 전 추정 원가입니다. 원가 미확인 {summary.unknownCalls ?? 0}건 · 처리 중 {summary.pendingCalls ?? 0}건</p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <CostMetric label="오늘 비용" usd={summary.todayUsd} usdKrw={usdKrw} sub={`${summary.todayImages}장`} />
         <CostMetric label="이번 달 비용" usd={summary.monthUsd} usdKrw={usdKrw} sub={`${summary.monthImages}장`} />
@@ -126,7 +127,7 @@ export function CostPanel({
           <div className="min-w-0 space-y-1.5">
             <CardTitle>모델별 사용량과 단가</CardTitle>
             <CardDescription>
-              단가는 <strong>운영자가 넣은 값</strong>입니다. 처음 값은 fal 공개 단가라 실제 청구서와
+              원가는 <strong>실행에 기록한 추정치</strong>입니다. 제공자 청구서와
               다를 수 있습니다 — 청구서를 보고 여기서 고치면 지난 기록의 금액도 함께 맞춰집니다.
             </CardDescription>
           </div>
@@ -199,7 +200,7 @@ export function CostPanel({
                   <tr key={row.model} className="border-b align-middle text-muted-foreground">
                     <td className="py-3 pr-3">{row.model}</td>
                     <td className="py-3 pr-3">{row.images.toLocaleString()}장</td>
-                    <td className="py-3 pr-3">단가 미등록 → 0원</td>
+                    <td className="py-3 pr-3">실행 기록 기준 · 대조 필요</td>
                     <td className="py-3">—</td>
                   </tr>
                 ))}

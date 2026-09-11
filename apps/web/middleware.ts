@@ -42,6 +42,8 @@ export async function middleware(request: NextRequest) {
   // EC2/Caddy와 배포 스크립트가 인증 설정과 무관하게 프로세스 상태를 확인한다.
   // readiness 상세 판단은 각 health route가 직접 수행한다.
   if (pathname === "/api/health" || pathname === "/api/health/ready") return response;
+  // The loopback executor authenticates its own server secret; it has no user session.
+  if (pathname.startsWith("/api/internal/generation/")) return response;
 
   if (!url || !publishableKey) {
     if (pathname.startsWith("/api/")) {
