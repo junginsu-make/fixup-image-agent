@@ -6,6 +6,7 @@ import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
+import { createRedesignImageGenerator } from "../../../../lib/redesign/image-generator";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -29,6 +30,23 @@ async function generate(req: Request) {
      * **4배 덜 받고 있었다.** Google($0.13)은 3배였다.
      */
     const provider = String(form.get("model") || "openai") === "google" ? "redesign-google" : "redesign-openai";
+
+    /**
+     * **다른 도구와 같은 길로 그린다.**
+     *
+     * 리디자인은 OpenAI 를 직접 불러 한 세대 이전 모델에 묶여 있었다. fal 을
+     * 거치면 카드뉴스·포스터가 쓰는 gpt-image-2.5 를 `max` 품질로 쓴다 —
+     * 더 나은 그림을 더 싸게 만든다.
+     *
+     * **키가 없으면 지금까지의 길로 떨어진다.** 이 하나 때문에 리디자인이
+     * 통째로 멎으면 안 된다.
+     */
+    let generateImage;
+    try {
+      generateImage = createRedesignImageGenerator();
+    } catch {
+      generateImage = undefined;
+    }
     reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(provider, requestedCount));
     if (!reservation.ok) return reservation.response;
     const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
@@ -83,6 +101,7 @@ async function generate(req: Request) {
       look: String(form.get("look") || "auto"),
       count: requestedCount,
       startSection: Number(form.get("startSection") || 1),
+      generateImage,
       onUsage: (usage) => recordLlmUsage(usage.model, usage.inputTokens, usage.outputTokens),
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),

@@ -61,7 +61,13 @@ export const MAX_REFERENCE_IMAGES = 4;
  * 그대로 쓴다 — 새 비율을 넣다가 옛 작업이 깨지지 않게.
  */
 /**
- * 그림 품질. **`low` 였다가 `high` 로 올렸다(2026-09-11).**
+ * 그림 품질. **이제는 대비책 전용이다(2026-09-11).**
+ *
+ * 주된 길은 `generateImage` 로 주입받는다 — 앱이 fal 을 거쳐 gpt-image-2.5 를
+ * `max` 품질로 부른다. 이 상수는 **그 주입이 없을 때**(fal 키가 없는 자리)만
+ * 쓰이는 옛 길의 값이다.
+ *
+ * `low` 였다가 `high` 로 올렸다.
  *
  * 이 저장소의 다른 도구는 전부 `high` 이상이다 — 카드뉴스·포스터·캐릭터는
  * `model.quality ?? "high"` 로 보내고, 표준형·정밀형 플러스는 `max` 다.
@@ -166,7 +172,28 @@ export type GenerateSectionsInput = {
    * 라우트가 정한다.
    */
   onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
+  /**
+   * 그림을 **실제로 만드는 사람.**
+   *
+   * 주면 이것을 쓰고, 없으면 지금까지처럼 업체를 직접 부른다.
+   *
+   * 왜 주입받나 — 이 저장소의 다른 코어(`pdp-core`·`poster-core`)가 그렇게
+   * 한다. **무엇을 보낼지는 코어가 알되 보내지는 않는다.** 바깥세상(키·업로드·
+   * 재시도)은 `apps/web` 이 맡는다. 그래야 코어를 시험할 때 업체를 안 부른다.
+   *
+   * 리디자인만 예외였다 — 포팅해 온 코드가 `fetch` 를 직접 들고 있었고, 그래서
+   * 다른 도구가 쓰는 fal 경로와 모델 목록을 함께 쓸 수 없었다.
+   */
+  generateImage?: RedesignImageGenerator;
 };
+
+/** 프롬프트와 첨부를 받아 그림 한 장을 돌려준다. */
+export type RedesignImageGenerator = (input: {
+  prompt: string;
+  references: Array<{ name: string; mimeType: string; buffer: Buffer }>;
+  /** `"1152x2048"` 꼴. 비율에서 나온다. */
+  size: string;
+}) => Promise<{ buffer: Buffer; mimeType: string }>;
 
 /** 아는 결인지 확인한다. 모르는 값은 원본을 따라가는 `auto` 로 되돌린다. */
 function normalizeLook(value: ImageLook | string | undefined): ImageLook {
@@ -336,9 +363,15 @@ export async function generateSections(input: GenerateSectionsInput) {
   for (const [index, section] of sections.entries()) {
     try {
       console.info(`[generate] ${provider} ${section.section_id} start (${index + 1}/${sections.length})`);
-      const image = provider === "google"
-        ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences })
-        : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences, size: sizeForRatio(ratio) });
+      const image = input.generateImage
+        ? await input.generateImage({
+            prompt: section.promptText,
+            references: drawReferences,
+            size: sizeForRatio(ratio),
+          })
+        : provider === "google"
+          ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences })
+          : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences, size: sizeForRatio(ratio) });
 
       generatedSections.push({
         ...section,

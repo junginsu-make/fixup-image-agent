@@ -36,7 +36,7 @@ describe("한 장이 얼마인가", () => {
      * 공개가로 저품질은 $0.01~0.02 대다. **고품질 값을 받고 저품질을 만들어
      * 주고 있었다.**
      */
-    expect(imageUnitUsd("redesign-openai")).toBe(0.21);
+    expect(imageUnitUsd("redesign-openai")).toBe(0.165);
     expect(imageUnitUsd("redesign-google")).toBe(0.13);
   });
 
@@ -67,17 +67,18 @@ describe("한 장이 얼마인가", () => {
 
 describe("몇 장을 만들면 몇 장인가", () => {
   it("장수만큼 곱한다", () => {
-    // $0.21 × 3 = $0.63 → 올림($0.63 / $0.05) = 13장
-    expect(imageCreditUnits("redesign-openai", 3)).toBe(13);
+    // $0.165 × 3 = $0.495 → 올림($0.495 / $0.05) = 10장
+    expect(imageCreditUnits("redesign-openai", 3)).toBe(10);
   });
 
   /**
-   * 하루 사이 4장 → 1장 → 5장으로 움직였다. **숫자가 흔들린 것이 아니라
-   * 품질이 흔들렸다** — 값이 $0.19 인데 저품질로 부르고 있던 것을 바로잡느라
-   * 1장까지 내렸고, 품질을 `high` 로 올리면서 제자리를 찾았다.
+   * 하루 사이 4장 → 1장 → 5장 → 4장으로 움직였다. **숫자가 흔들린 것이 아니라
+   * 무엇을 쓰는지가 흔들렸다** — 값이 $0.19 인데 저품질로 부르고 있던 것을
+   * 바로잡느라 1장까지 내렸고, 품질을 올리며 5장이 됐다가, gpt-image-2.5 로
+   * 옮기면서 더 좋은 그림을 더 싸게 만들게 되어 4장으로 돌아왔다.
    */
-  it("리디자인 한 장은 5장, Google 은 3장이다", () => {
-    expect(imageCreditUnits("redesign-openai", 1)).toBe(5);
+  it("리디자인 한 장은 4장, Google 은 3장이다", () => {
+    expect(imageCreditUnits("redesign-openai", 1)).toBe(4);
     expect(imageCreditUnits("redesign-google", 1)).toBe(3);
   });
 
