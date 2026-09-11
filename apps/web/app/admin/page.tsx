@@ -130,6 +130,33 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {notice ? <AdminNotice notice={notice} /> : null}
 
+      {/*
+        **비용 전략실로 가는 문.**
+
+        이 도구는 기존 시스템과 이어져 있지 않다 — 운영 DB 도 크레딧 장부도
+        건드리지 않고, 모델별 단가를 코드에서 읽어다 만든 **가상 계산기**다.
+        그래서 관리자 화면 안에 지표로 섞지 않고 **따로 선 화면**으로 둔다.
+
+        `<a>` 다. `next/link` 로 걸면 Next 가 React 화면을 기대하고 미리
+        가져오는데, 저쪽은 완성된 HTML 한 장이라 라우터가 다룰 물건이 아니다.
+      */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div className="grid gap-1">
+            <p className="text-sm font-bold">비용 전략실</p>
+            <p className="text-sm text-muted-foreground">
+              판매가·크레딧·마진을 바꿔 보는 <strong>가상 시뮬레이션</strong>입니다. 실제 요금이나 장부는
+              바뀌지 않습니다.
+            </p>
+          </div>
+          <Button asChild variant="secondary" size="sm">
+            <a href="/admin/cost-lab" target="_blank" rel="noreferrer">
+              열기
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric icon={<Users />} label="전체 회원" value={totalResult.count ?? 0} />
         <Metric icon={<Clock3 />} label="승인 대기" value={pendingResult.count ?? 0} />
