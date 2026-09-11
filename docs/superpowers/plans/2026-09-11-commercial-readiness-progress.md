@@ -14,9 +14,31 @@
 | 5 동기/LLM | 구현 및 단계 검증: LLM/PDP/리디자인/캐릭터 연결, 비공개 결과·입력 보존, 저장 fence | 웹 전체 1957시험, DB 전체 37시험 후 계약 시험 추가 통과; 운영 통합 검증은 후속 단계 | 미적용 |
 | 6 운영 처리기 | 실행기·timer·journal 복구·운영자 비용 대조·배포 점검 구현 | 전체 웹 1975시험, DB/배포 helper 49시험, 타입·lint 통과; 실제 systemd·배포 검증은 단계 8 | 미적용 |
 | 7 웹 보안 | canonical origin·공통 next/back·공개 health 축소·admin 진단·CSP 보고 모드 구현 | 웹 1980시험/타입/lint 통과, 실제 로컬 Next 내부 인증·Chromium 화면 확인; HTTPS/Auth·CSP 강제 모드 미완료 | 미적용 |
-| 8 출시 검증 | 미착수 | 미실행 | 미적용 |
+| 8 출시 검증 | CI의 DB 통합·감사 실패 차단·패키지 smoke 연결; 운영 입력 대기 중 사전 검증 | Linux 회귀/타입/lint/감사·DB 50시험·빌드/패키지 실행 성공; 추가 UI 통합 뒤 재검증 중 | 미적용 |
 
 ## 단계 5 진행 기록: LLM 경로
+
+### 단계 8 사전 검증 (운영 전환 승인으로 해석하지 않음)
+
+- 코드 기준 `f277d85`, Linux CI [34589440557](https://github.com/junginsu-make/fixup-image-agent/actions/runs/34589440557) 전체 성공. verify·별도 DB integration·Linux build·패키지 실제 Node 실행·artifact 업로드 성공. DB/배포 도구 50시험 성공. 이후 추가한 구형 롤백 차단 shell 시험은 Windows Git Bash에서 별도 1시험 성공이며 이 CI 수치에 포함하지 않는다.
+- 병행 UI의 완료 커밋 `39c4f5c`를 추가 통합했다. library-picker/pick-cell/SavedImagePicker 세 파일이며 API·DB 변경은 없다. 이 기능을 여기서 새로 설계하거나 수정하지 않았으며, 통합 뒤 타입 검사 성공. 최종 조합의 CI를 다시 실행한다.
+- 첫 Linux DB 실행은 pg_ctl 시작 실패였다. Linux 기본 Unix socket 디렉터리에 의존하지 않고 TCP만 사용하도록 시험 도구를 수정하고, 실패 시 원래 PostgreSQL 로그를 보존해 출력한다. 다시 실행한 Linux 50시험은 성공했다. 운영 PostgreSQL 설정을 바꾼 것이 아니다.
+- 별도 리뷰에서 §17의 fal 명시 실패/일시 조회 장애 구분 누락을 확인했다. SDK 422 및 명시 error 응답은 실패로 기록하고 비용은 미확인으로 남긴다. 503 등 일시 조회 장애는 확정 실패로 바꾸지 않는다. 관련 adapter/상태 전이 시험과 실패 원가 대조 DB RED→GREEN을 통과했다.
+- 운영 재조회: current는 `20260911T074130Z-68b10827`, 웹 active, collector masked, NRestarts 0, 메모리 약 171 MiB, 디스크 여유 5.6 GiB. v2 테이블/RPC 없음, 신규 기본 quota 30, v1 reserved 0. 확인 시점의 값이며 배포 직전 다시 확인한다.
+- 설치된 systemd의 `systemd-analyze verify`와 Caddy 2.11.4의 임시 설정 validate 성공. 별도 loopback 임시 Caddy 프로세스로 내부 tick 404, 생성/구형 status/stop 점검 503, 기존 health 읽기 200을 확인했다. 운영 사이트 설정·서비스는 수정하지 않았고 임시 프로세스/파일은 종료·정리했다.
+- 중간 브랜치의 릴리스 발행은 GitHub integration 권한 403으로 실패했다. 검증 브랜치는 패키지 빌드·검사까지 하고 production 릴리스 발행은 master로 제한했다. 실패했던 실행을 성공으로 표시하거나 GitHub 권한을 넓히지 않았다.
+
+남은 출시 게이트:
+
+| 구분 | 남은 일 |
+|---|---|
+| T24 | 실제 도메인 DNS/TLS·Auth redirect·Turnstile 및 가입/로그인/메일 확인/비밀번호 재설정, CSP 관측 후 강제 적용 |
+| T02/T19/T28 운영 계층 | staging의 브라우저 종료·timer/웹 재시작·장애·호환 롤백 실연과 결과/정산 대조 |
+| DB 적용 | 공유 page.mktinsight 소비 앱 확인, 실제 schema delta/백업·복구 범위 확정, 승인된 migration 0010–0031 적용 후 실제 역할/Storage 검증 |
+| 비용/부하 | 운영자 일일 비용·미해결 확보액 확정, 보수적인 run 최대비용으로 정상 요청이 허용되는지 확인, 메모리·디스크·처리 지연 측정 |
+| 최종 통합 | 최신 사용자 기능 변경과 master 통합 대조, 동작별 제한된 유료 smoke 및 제공자 기록 대조, 최종 출시 판정 |
+
+지금까지의 자체 설계/diff 재검토와 격리 시험을 실제 운영 적용·독립된 다른 리뷰어의 검증·상용화 완료로 표현하지 않는다. 운영 전환은 도메인·예산·공유 DB 소비 앱에 대한 사용자 입력을 기다린다.
 
 ### 단계 7: 코드 검증과 운영 확인 경계
 
