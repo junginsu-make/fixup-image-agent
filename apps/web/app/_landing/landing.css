@@ -1442,6 +1442,21 @@
 }
 
 /*
+  만든 사람 · 만든 날. 좁은 화면에서는 두 조각이 아래로 접힌다 — 한 줄에 밀어
+  넣으면 위 줄의 약관 링크가 밀려 나간다.
+*/
+.mcs-footer-by {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  text-align: right;
+}
+.mcs-footer-by em {
+  font-style: normal;
+  opacity: 0.66;
+}
+
+/*
   사업자 정보 (전자상거래법 제10조). 위 줄과 가는 선으로 나눠 둔다 — 링크와
   번호가 한 줄에 섞이면 둘 다 안 읽힌다.
 */
