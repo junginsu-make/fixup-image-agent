@@ -24,13 +24,19 @@ function code(name: string): string {
     .replace(/^\s*--.*$/gm, "");
 }
 
-/** 마지막으로 `reserve_generation` 을 정의한 마이그레이션. 그것이 실제 동작이다. */
-function latestReserveDefinition(): string {
+/**
+ * 어떤 것을 마지막으로 정의한 마이그레이션. **그것이 실제 동작이다.**
+ *
+ * 파일 이름을 박아 두지 않는 이유가 있다 — 2026-09-14 에 `ad_export` 를 들이면서
+ * check 제약을 새 파일에서 다시 걸었는데, 이 시험이 옛 파일만 보고 있어
+ * **넓힌 것을 못 봤다.** 마지막 것을 찾으면 그런 일이 안 난다.
+ */
+function latestDefining(needle: string): string {
   const files = readdirSync(migrationsDir)
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  const last = files.filter((name) => code(name).includes("function public.reserve_generation")).pop();
-  expect(last, "reserve_generation 을 정의한 마이그레이션이 없다").toBeTruthy();
+  const last = files.filter((name) => code(name).includes(needle)).pop();
+  expect(last, `${needle} 을 정의한 마이그레이션이 없다`).toBeTruthy();
   return code(last!);
 }
 
@@ -41,11 +47,13 @@ const OPERATIONS = [
   "redesign_edit",
   "poster_image",
   "sns_image",
+  // 광고 규격 내보내기 (2026-09-14). 원가가 0 인 요청도 예약은 거친다.
+  "ad_export",
 ];
 
 describe("예약이 받아들이는 작업 종류", () => {
   it("예약 함수의 화이트리스트가 모든 종류를 받는다", () => {
-    const sql = latestReserveDefinition();
+    const sql = latestDefining("function public.reserve_generation");
     const clause = sql.match(/p_operation not in \(([\s\S]*?)\)/);
     expect(clause, "화이트리스트를 찾지 못했다").toBeTruthy();
     for (const operation of OPERATIONS) {
@@ -54,7 +62,7 @@ describe("예약이 받아들이는 작업 종류", () => {
   });
 
   it("표의 check 제약도 같은 목록을 받는다", () => {
-    const sql = code("202609080001_poster_operation.sql");
+    const sql = latestDefining("generation_events_operation_check");
     const clause = sql.match(/check \(operation in \(([\s\S]*?)\)\)/);
     expect(clause, "check 제약을 찾지 못했다").toBeTruthy();
     for (const operation of OPERATIONS) {
