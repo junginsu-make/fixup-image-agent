@@ -60,10 +60,11 @@ try{
   await exec('sudo',['cp',path.join(root,'ops/generation-tick.mjs'),`${helperRoot}/ops/generation-tick.mjs`]);await exec('sudo',['cp',path.join(root,'RELEASE_INFO.json'),`${helperRoot}/RELEASE_INFO.json`]);
   const envFile=path.join(scratch,'helper.env');await writeFile(envFile,`GENERATION_EXECUTOR_SECRET=${secret}\nGENERATION_INTERNAL_PORT=${port}\n`,{mode:0o600});
   const user=(await exec('id',['-un'])).stdout.trim();const group=(await exec('id',['-gn'])).stdout.trim();
-  const service=(await readFile('deploy/ec2/fixup-image-agent-generation-tick.service','utf8')).replaceAll('fixup-agent',user).replace(`Group=${user}`,`Group=${group}`).replaceAll('/opt/fixup-image-agent/current',helperRoot).replace('/etc/fixup-image-agent/app.env',envFile);
+  const service=(await readFile('deploy/ec2/fixup-image-agent-generation-tick.service','utf8')).replaceAll('fixup-agent',user).replace(`Group=${user}`,`Group=${group}`).replaceAll('/opt/fixup-image-agent/current',helperRoot).replace('/etc/fixup-image-agent/app.env',envFile).replace('/usr/bin/node',process.execPath);
   const timer=(await readFile('deploy/ec2/fixup-image-agent-generation-tick.timer','utf8')).replaceAll('fixup-image-agent-generation-tick',unit).replace('OnBootSec=15s','OnActiveSec=1s').replace('OnUnitInactiveSec=5s','OnUnitInactiveSec=2s');
   await writeFile(path.join(scratch,'tick.service'),service);await writeFile(path.join(scratch,'tick.timer'),timer);
   await exec('sudo',['cp',path.join(scratch,'tick.service'),`/run/systemd/system/${unit}.service`]);await exec('sudo',['cp',path.join(scratch,'tick.timer'),`/run/systemd/system/${unit}.timer`]);installed=true;
+  await exec('sudo',['systemd-analyze','verify',`/run/systemd/system/${unit}.service`,`/run/systemd/system/${unit}.timer`]);
   await exec('sudo',['systemctl','mask','--runtime','fixup-image-agent-worker.service']);await exec('sudo',['systemctl','daemon-reload']);
   const project=randomUUID();const job={projectId:project,modelId:'gpt-image-2',ratioId:'2:3',variants:2,slots:{...EMPTY_SLOTS,headline:'fixture',scene:'fixture'},referenceUrls:[],preservedUrls:[]};const built=buildPosterJob(job);assert.ok(!built.rejected);
   await api.json('/rest/v1/poster_projects',{method:'POST',body:{id:project,user_id:owner.id,title:'Restart fixture',ratio:'2:3',model_id:job.modelId}});
