@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
 import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
+import { isUsableAccount } from "./lib/membership/usable";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
 
@@ -99,11 +100,20 @@ export async function middleware(request: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  const active = Boolean(profile?.email_confirmed_at && profile?.status === "active");
+  const active = isUsableAccount(profile);
   if (isAuthPage) {
     return NextResponse.redirect(new URL(active ? HOME_AFTER_LOGIN : "/access", base));
   }
-  if (pathname === "/access") return response;
+  /*
+    **여기가 막다른 길이었다.** `/access` 만 조건 없이 통과시켜서, 이메일 인증을
+    막 마쳐 이미 쓸 수 있게 된 사람도 「잠시만 기다려 주세요」 앞에 그대로 섰다.
+    다음 걸음이 저절로 오지 않으니 하염없이 기다리거나 스스로 새로고침해야 했다.
+
+    쓸 수 있는 사람은 들여보낸다. 기다릴 일이 남은 사람에게만 그 화면을 보인다.
+  */
+  if (pathname === "/access") {
+    return active ? NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base)) : response;
+  }
   if (matches(pathname, PUBLIC_PATHS)) return response;
   if (!active) return NextResponse.redirect(new URL("/access", base));
   // 어느 화면을 누가 여는지는 등록부(`lib/access/routes.ts`)가 정한다.
