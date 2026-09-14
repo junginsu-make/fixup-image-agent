@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Input, Label } from "@fixup/ui";
 import { MAX_CARDS, MIN_CARDS } from "@fixup/sns-core";
@@ -158,9 +159,13 @@ export function DeckPanel({ ratioId, modelId, copy, editing, templates, onRatioC
       });
       const payload = await response.json();
       if (!payload.ok) throw new Error(payload.message ?? "작업에 붙이지 못했습니다.");
-      setNotes([clear
-        ? `${payload.total}장에서 틀을 뺐습니다. 지금까지 방식으로 만듭니다.`
-        : `${payload.total}장 중 ${payload.applied}장에 이 세트를 붙였습니다. 이제 그 작업에서 만들면 이 틀대로 나옵니다.`]);
+      // 붙였다는 말과 **어긋난 것**을 함께 보여 준다. 장수·비율은 작업 쪽이 이긴다.
+      setNotes([
+        clear
+          ? `${payload.total}장에서 틀을 뺐습니다. 지금까지 방식으로 만듭니다.`
+          : `${payload.total}장 중 ${payload.applied}장에 이 세트를 붙였습니다. 이제 그 작업에서 만들면 이 틀대로 나옵니다.`,
+        ...((payload.notes ?? []) as string[]),
+      ]);
     } catch (error) {
       setNotes([error instanceof Error ? error.message : "작업에 붙이지 못했습니다."]);
     } finally {
@@ -325,7 +330,20 @@ export function DeckPanel({ ratioId, modelId, copy, editing, templates, onRatioC
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">아직 카드뉴스 작업이 없습니다. 먼저 카드뉴스를 만들어 주세요.</p>
+          /* 막다른 길로 두지 않는다. 여기까지 짠 틀은 「틀 저장」으로 남기고 돌아오면 된다. */
+          <div className="grid gap-2">
+            <p className="text-sm text-muted-foreground">
+              아직 붙일 카드뉴스 작업이 없습니다. 작업을 만들고 <strong>04 원고 확인</strong>까지 진행한 뒤 돌아오세요.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/sns/new">카드뉴스 작업 만들러 가기</Link>
+              </Button>
+              <span className="self-center text-xs text-muted-foreground">
+                지금 짠 틀은 왼쪽 「틀 저장」으로 남겨 두면 그대로 다시 쓸 수 있습니다.
+              </span>
+            </div>
+          </div>
         )}
       </section>
 

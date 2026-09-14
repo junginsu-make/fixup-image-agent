@@ -168,3 +168,43 @@ describe("다시 만들 때 두 번 받지 않는가", () => {
     expect(settle).toContain("costBaselineUsd: undefined");
   });
 });
+
+/**
+ * 「칸 읽어내기」도 장부에 남는가 (2026-09-14).
+ *
+ * 이 길은 fal 을 안 부르지만 **비전 모델은 부른다.** 그런데 계량기로 감싸지도
+ * 않고 예약도 안 해서, 값이 나가는 줄조차 아무도 몰랐다. 만들기를 한 번도
+ * 안 눌러도 부를 수 있어 `generate` 의 예약에도 안 묻어 들어간다.
+ */
+describe("레퍼런스 칸 읽어내기가 장부에 남는가", () => {
+  const analyze = readFileSync(new URL("../layout/analyze/route.ts", import.meta.url), "utf8");
+
+  it("부르기 전에 예약한다", () => {
+    expect(analyze).toContain('reserveAiUsage(request, "sns_image"');
+    expect(analyze.indexOf("reserveAiUsage")).toBeLessThan(analyze.indexOf("withLlmMeter"));
+  });
+
+  /**
+   * 새 operation 값을 만들지 않는다. 표의 check 제약과 `reserve_generation`
+   * 안의 목록을 **둘 다** 넓히는 마이그레이션이 필요한데, 한쪽만 넓히면
+   * 202609090001 과 똑같이 운영이 멈춘다. 카드뉴스 몫이 맞으니 그 칸에 넣는다.
+   */
+  it("카드뉴스 칸에 넣는다 — 마이그레이션이 필요한 새 값을 만들지 않는다", () => {
+    expect(analyze).not.toMatch(/reserveAiUsage\(request, "(?!sns_image)/);
+  });
+
+  it("계량기로 감싼다 — 감싸지 않으면 제공자가 적어도 아무 데도 안 쌓인다", () => {
+    expect(analyze).toContain("withLlmMeter(");
+  });
+
+  it("실제로 쓴 값으로 확정한다 — 추정이 아니라 계량기가 센 값이다", () => {
+    expect(analyze).toContain("readLlmMeter()");
+    expect(analyze).toContain("llmUsd: meter.usd");
+    expect(analyze).toContain("creditUnits(meter.usd)");
+  });
+
+  it("칸을 못 읽어도 확정한다 — 실패해도 값은 이미 나갔다", () => {
+    // 읽기 실패는 200 으로 나가는 길이라, 여기서 안 하면 예약이 만료까지 묶인다.
+    expect(analyze.match(/settleAiUsage\(|finalizeAiUsage\(/g) ?? []).not.toHaveLength(0);
+  });
+});

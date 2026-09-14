@@ -85,6 +85,36 @@ export function deckEstimate(deck: LayoutDeck, size: CardSize, modelId: string):
   };
 }
 
+/** 붙일 작업의 형편. 세트가 이것과 다를 수 있다. */
+export interface DeckTarget {
+  /** `CARD_RATIOS` 의 id. */
+  ratio: string;
+  /** 작업에 이미 있는 카드 수. */
+  cards: number;
+}
+
+/**
+ * 세트를 작업에 붙이기 전, **작업 쪽이 이기는 것**을 말해 준다.
+ *
+ * 세트는 장수와 비율을 자기 것으로 들고 다닌다. 그런데 붙일 때 쓰이는 것은
+ * 칸 배치뿐이고 장수·비율은 작업이 이미 정해 둔 것을 따른다. 말해 주지
+ * 않으면 8장으로 미리 본 사람이 6장을 받고 무엇이 어긋났는지 모른다.
+ *
+ * **막지 않는다.** 알고 붙이는 것은 사람의 몫이고, 6장 작업에 8장 세트의
+ * 배치를 쓰는 것 자체는 아무 문제가 없다.
+ */
+export function deckFitsProject(deck: LayoutDeck, target: DeckTarget): string[] {
+  const notes: string[] = [];
+  if (deck.total !== target.cards) {
+    notes.push(`세트는 ${deck.total}장으로 짰지만 이 작업은 ${target.cards}장입니다. 작업의 ${target.cards}장에 맞춰 붙입니다.`);
+  }
+  if (deck.ratio !== target.ratio) {
+    // 좌표가 비율이라 깨지지는 않는다. 다만 0.5×0.4 칸의 **실제 모양**이 달라진다.
+    notes.push(`세트는 ${deck.ratio} 로 짰지만 이 작업은 ${target.ratio} 입니다. 칸 자리는 그대로지만 칸 모양이 달라집니다.`);
+  }
+  return notes;
+}
+
 export function validateDeck(deck: LayoutDeck): TemplateIssue[] {
   const issues: TemplateIssue[] = [];
 

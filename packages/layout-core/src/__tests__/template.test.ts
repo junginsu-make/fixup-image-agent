@@ -3,6 +3,7 @@ import {
   DEFAULT_TEMPLATES,
   defaultTemplateForRole,
   templateById,
+  templateSummary,
   templatesForRole,
   validateTemplate,
 } from "../template";
@@ -101,9 +102,25 @@ describe("validateTemplate", () => {
 });
 
 describe("기본 템플릿", () => {
-  it("모두 검사를 통과한다", () => {
+  it("막히는 것은 하나도 없다", () => {
     for (const candidate of DEFAULT_TEMPLATES) {
-      expect({ id: candidate.id, issues: validateTemplate(candidate) }).toEqual({ id: candidate.id, issues: [] });
+      expect({ id: candidate.id, errors: errors(candidate) }).toEqual({ id: candidate.id, errors: [] });
+    }
+  });
+
+  /**
+   * **로고 틀만 살펴보기가 붙는다.**
+   *
+   * 예전에는 「지적 사항 0개」를 못 박았는데, 그 가정이 빈 로고를 가려
+   * 주고 있었다 — 「엔딩 · 문구와 로고」는 어느 그림을 놓을지 정하지 않은
+   * 채로 출고된다(정할 수가 없다). 가려 두지 말고 **그 한 틀만 알린다**로
+   * 바꾼다. 새 틀이 조용히 지적을 달고 들어오는 것은 여전히 막는다.
+   */
+  it("로고 틀 말고는 살펴볼 것도 없다", () => {
+    for (const candidate of DEFAULT_TEMPLATES) {
+      const expected = candidate.slots.some((slot) => slot.kind === "logo") ? 1 : 0;
+      expect({ id: candidate.id, 살펴보기: warnings(candidate).length })
+        .toEqual({ id: candidate.id, 살펴보기: expected });
     }
   });
 
@@ -153,5 +170,72 @@ describe("기본 템플릿", () => {
   it("모르는 id 를 물으면 undefined 를 돌려준다", () => {
     expect(templateById("없는-뼈대")).toBeUndefined();
     expect(templateById(DEFAULT_TEMPLATES[0]!.id)?.id).toBe(DEFAULT_TEMPLATES[0]!.id);
+  });
+});
+
+/**
+ * 로고 칸은 어느 그림을 놓을지 사람이 골라야 한다.
+ *
+ * 기본 틀 「엔딩 · 문구와 로고」도, 레퍼런스에서 읽어낸 로고 칸도 빈 id 로
+ * 나온다 — 모델이 그림을 고를 수는 없기 때문이다. 그대로 만들면 이름은
+ * 「문구와 로고」인데 로고 자리가 빈 채로 카드가 나온다. 만들기 전에 말한다.
+ */
+describe("빈 로고 칸", () => {
+  const logo = (referenceImageId: string): LayoutSlot => ({
+    kind: "logo",
+    box: { x: 0.35, y: 0.7, width: 0.3, height: 0.12 },
+    referenceImageId,
+    fit: "contain",
+  });
+
+  it("그림을 안 고른 로고 칸은 살펴보기로 알린다", () => {
+    expect(warnings(template([logo("")]))).toEqual([
+      "1번 로고 칸에 그림을 안 골랐습니다. 그대로 만들면 그 자리가 빕니다.",
+    ]);
+  });
+
+  it("공백만 적힌 것도 안 고른 것으로 본다", () => {
+    expect(warnings(template([logo("   ")]))).toHaveLength(1);
+  });
+
+  it("고른 로고 칸은 알리지 않는다", () => {
+    expect(warnings(template([logo("ref-1")]))).toEqual([]);
+  });
+
+  it("막지는 않는다 — 나중에 고르면 되는 일이다", () => {
+    expect(errors(template([logo("")]))).toEqual([]);
+  });
+})
+
+/**
+ * 틀을 고르는 사람에게 필요한 것은 「무엇이 몇 개인가」다.
+ *
+ * 이름만 보고 고르면 그림 칸이 둘이라 값이 두 배인 것도, 로고를 안 골라
+ * 그 자리가 빌 것도 모른 채 고른다. 그리는 일은 화면이 하고, 세는 일은
+ * 여기서 한다 — 세는 규칙은 폰트도 브라우저도 없이 시험할 수 있어야 한다.
+ */
+describe("templateSummary", () => {
+  const box = { x: 0, y: 0, width: 0.5, height: 0.5 };
+
+  it("칸 종류별로 센다", () => {
+    expect(templateSummary([
+      { kind: "background", box, fill: "#FFFFFF" },
+      { kind: "image", box },
+      { kind: "image", box },
+      { kind: "text", box, source: { from: "copy", field: "headline" }, style: STYLE },
+      { kind: "logo", box, referenceImageId: "ref", fit: "contain" },
+    ])).toEqual({ images: 2, texts: 1, logos: 1, emptyLogos: 0 });
+  });
+
+  it("그림을 안 고른 로고를 따로 센다", () => {
+    expect(templateSummary([
+      { kind: "logo", box, referenceImageId: "", fit: "contain" },
+      { kind: "logo", box, referenceImageId: "  ", fit: "contain" },
+      { kind: "logo", box, referenceImageId: "ref", fit: "contain" },
+    ])).toEqual({ images: 0, texts: 0, logos: 3, emptyLogos: 2 });
+  });
+
+  it("빈 틀은 전부 0 이다", () => {
+    expect(templateSummary([])).toEqual({ images: 0, texts: 0, logos: 0, emptyLogos: 0 });
   });
 });

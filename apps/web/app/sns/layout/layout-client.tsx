@@ -68,6 +68,26 @@ interface SavedTemplate extends CardTemplate {
   createdAt: string;
 }
 
+/** 이 안이면 같은 모양으로 본다. 1:1 과 4:5 는 이 밖이다. */
+const SHAPE_TOLERANCE = 0.05;
+
+/**
+ * 레퍼런스의 **실제 모양**을 브라우저에서 잰다.
+ *
+ * 서버에 묻지 않는다 — 그림은 이미 화면에 떠 있고, `naturalWidth` 가 정확하다.
+ * 이걸 위해 라우트에 sharp 를 들이면 읽기 하나가 그리기만큼 무거워진다.
+ *
+ * 못 재면 **아무 말도 안 한다.** 「모르겠다」를 경고로 띄우면 진짜 경고가 묻힌다.
+ */
+function measureShape(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image.naturalHeight > 0 ? image.naturalWidth / image.naturalHeight : undefined);
+    image.onerror = () => resolve(undefined);
+    image.src = url;
+  });
+}
+
 export function LayoutStudio() {
   const [ratioId, setRatioId] = useState(CARD_RATIOS[0]!.id);
   const [role, setRole] = useState<Role>("cover");
@@ -80,6 +100,14 @@ export function LayoutStudio() {
   /** 읽어낸 칸이 레퍼런스와 맞는지 눈으로 대 보는 그림. */
   const [compareId, setCompareId] = useState<string | undefined>();
   const [showCompare, setShowCompare] = useState(true);
+  /**
+   * 「칸 읽어내기」 **직전의 칸들.**
+   *
+   * 분석은 캔버스를 통째로 갈아 끼운다. 30분 짜 놓고 「이 레퍼런스는 어떻게
+   * 나오나」 눌러 본 사람이 그걸로 끝나면 안 된다. 한 걸음만 되돌린다 —
+   * 여러 걸음은 이 화면이 감당할 일이 아니고, 실제로 잃는 것은 이 한 번이다.
+   */
+  const [beforeAnalyze, setBeforeAnalyze] = useState<LayoutSlot[] | null>(null);
   const [saveName, setSaveName] = useState("");
   const [naming, setNaming] = useState(false);
   const [busy, setBusy] = useState<"preview" | "analyze" | "save" | null>(null);
@@ -160,6 +188,23 @@ export function LayoutStudio() {
     }
   }
 
+  /**
+   * 레퍼런스와 카드의 **모양이 다르면** 말해 준다.
+   *
+   * 좌표가 0~1 비율이라 깨지지는 않는다. 다만 1:1 레퍼런스에서 읽어낸
+   * 「정사각형 그림 칸」을 4:5 카드에 놓으면 그 칸은 더 이상 정사각형이
+   * 아니다. 읽어낸 대로 나올 줄 알았던 사람이 만들고 나서 알면 늦다.
+   */
+  const referenceShapeNote = useCallback(async (imageId: string): Promise<string[]> => {
+    const url = libraryImages.find((entry) => entry.id === imageId)?.signedUrl;
+    if (!url) return [];
+    const shape = await measureShape(url);
+    if (shape === undefined) return [];
+    const card = ratio.pixel.width / ratio.pixel.height;
+    if (Math.abs(shape - card) / card <= SHAPE_TOLERANCE) return [];
+    return [`레퍼런스와 카드(${ratioId})의 모양이 다릅니다. 칸 자리는 그대로지만 칸 모양이 달라집니다.`];
+  }, [libraryImages, ratio.pixel.height, ratio.pixel.width, ratioId]);
+
   async function runAnalyze() {
     if (!analyzeId) return;
     setBusy("analyze");
@@ -174,6 +219,8 @@ export function LayoutStudio() {
       if (!payload.ok) throw new Error(payload.message ?? "칸을 읽어내지 못했습니다.");
       // 초안이다. 그대로 쓰지 않는다 — 화면에서 고친 뒤 쓴다.
       if (payload.slots.length) {
+        // 갈아 끼우기 **전에** 챙긴다. 뒤에 하면 이미 덮인 것을 챙기게 된다.
+        setBeforeAnalyze(slots);
         setSlots(payload.slots as LayoutSlot[]);
         setSelected(null);
         setPreview(null);
@@ -182,7 +229,7 @@ export function LayoutStudio() {
         setCompareId(analyzeId);
         setShowCompare(true);
       }
-      setNotes(payload.issues as string[]);
+      setNotes([...(payload.issues as string[]), ...(await referenceShapeNote(analyzeId))]);
     } catch (error) {
       setNotes([error instanceof Error ? error.message : "칸을 읽어내지 못했습니다."]);
     } finally {
@@ -251,12 +298,32 @@ export function LayoutStudio() {
               </Button>
             ))}
           </div>
-          {compareUrl ? (
-            <label className="flex items-center gap-2 text-xs">
-              <input type="checkbox" checked={showCompare} onChange={(event) => setShowCompare(event.target.checked)} />
-              레퍼런스 위에 겹쳐 보기
-            </label>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-3">
+            {compareUrl ? (
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={showCompare} onChange={(event) => setShowCompare(event.target.checked)} />
+                레퍼런스 위에 겹쳐 보기
+              </label>
+            ) : null}
+            {/* 읽어내기는 캔버스를 통째로 갈아 끼운다. 돌아갈 길을 그 자리에 둔다. */}
+            {beforeAnalyze ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSlots(beforeAnalyze);
+                  setBeforeAnalyze(null);
+                  setSelected(null);
+                  setPreview(null);
+                  setShowCompare(false);
+                  setNotes(["읽어내기 전으로 되돌렸습니다."]);
+                }}
+              >
+                읽어내기 전으로 되돌리기
+              </Button>
+            ) : null}
+          </div>
 
           {/*
             설정과 버튼을 캔버스 아래에 둔다.
