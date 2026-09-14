@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "상세페이지 리디자인 — 사용 설명서" };
@@ -13,6 +14,33 @@ export default function RedesignGuidePage() {
         kicker="상세페이지 리디자인"
         title="이미 있는 페이지를 뜯어보고 다시 설계"
         lead="지금 쓰고 있는 상세페이지가 있는데 전환이 안 나올 때 씁니다. 이미지나 PDF를 올리면 거기 적힌 글자를 전부 옮겨 적고, 성분·인증·시험 수치 같은 사실만 골라낸 다음, 그것을 근거로 순서를 다시 짭니다."
+      />
+
+      <Summary
+        what="이미 있는 상세페이지를 뜯어보고 무엇이 문제인지 짚은 뒤 다시 설계합니다."
+        points={[
+          {
+            title: "먼저 진단합니다",
+            body: "지금 페이지의 어디가 약한지 항목별로 짚습니다. 그냥 새로 그리는 것과 다릅니다.",
+          },
+          {
+            title: "고칠 곳을 보여 줍니다",
+            body: "무엇을 왜 바꾸는지 먼저 말합니다. 결과만 받으면 왜 나아졌는지 알 수 없습니다.",
+          },
+          {
+            title: "기존 자산을 씁니다",
+            body: "쓸 만한 사진과 문구는 그대로 가져갑니다. 통째로 버리지 않습니다.",
+          },
+          {
+            title: "진단은 무료입니다",
+            body: "뜯어보고 계획을 세우는 데는 크레딧이 들지 않습니다.",
+          },
+        ]}
+        when={[
+          "이미 페이지가 있는데 성과가 안 나올 때",
+          "무엇을 고쳐야 할지부터 모를 때",
+          "기존 사진과 문구를 살리면서 개선하고 싶을 때",
+        ]}
       />
 
       <Section title="새로 만들기와 무엇이 다른가" hint="비슷해 보이지만 출발점이 다릅니다.">
@@ -73,7 +101,7 @@ export default function RedesignGuidePage() {
         />
       </Section>
 
-      <Section title="화면 읽기">
+      <Details title="화면 읽기">
         <Mock title="리디자인 · 올리기">
           <MockSteps steps={["대시보드", "리디자인 작업", "결과 확인"]} current={1} />
           <MockChoices
@@ -136,7 +164,7 @@ export default function RedesignGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
       <Section title="언제 무엇을 고르나">
         <ChoiceTable

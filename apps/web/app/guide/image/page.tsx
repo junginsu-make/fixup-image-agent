@@ -4,6 +4,7 @@ import { POSTER_RATIOS } from "@fixup/sns-core";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import {
   Callouts,
   Mock,
@@ -30,6 +31,33 @@ export default function ImageGuidePage() {
         kicker="이미지 만들기"
         title="한 장짜리 이미지 — 광고 소재 · 포스터"
         lead="여러 장으로 나누지 않고 한 장으로 끝내는 것들입니다. 광고 소재, 행사 포스터, 썸네일, 배너. 따라 만들 이미지 한 장을 고르고 한 줄만 적으면, 나머지 열 개 남짓한 칸은 AI가 초안으로 채웁니다. 사람은 틀린 칸만 고칩니다."
+      />
+
+      <Summary
+        what="광고 소재·포스터·일반 이미지를 한 장씩 만듭니다. 레퍼런스의 결을 따라갑니다."
+        points={[
+          {
+            title: "레퍼런스에서 결을 가져옵니다",
+            body: "마음에 드는 그림 한 장을 첨부하면 그 분위기를 따라갑니다. 프롬프트를 길게 쓰지 않아도 됩니다.",
+          },
+          {
+            title: "기획을 먼저 보여 줍니다",
+            body: "AI가 채운 칸을 사람이 고친 뒤에 그림을 부릅니다. 고칠 일은 돈이 들기 전에 고칩니다.",
+          },
+          {
+            title: "규격을 골라 둡니다",
+            body: "비율과 장수를 먼저 정합니다. 만든 뒤에 크기를 바꾸는 것은 다시 만드는 일입니다.",
+          },
+          {
+            title: "만든 것은 라이브러리로",
+            body: "결과물이 쌓여 다음 작업의 재료가 됩니다. 광고 규격 내보내기도 여기서 가져다 씁니다.",
+          },
+        ]}
+        when={[
+          "배너·포스터처럼 한 장짜리 그림이 필요할 때",
+          "참고할 그림은 있는데 프롬프트로 옮기기 어려울 때",
+          "같은 결로 여러 장을 뽑아 고르고 싶을 때",
+        ]}
       />
 
       <Section title="전체 흐름" hint="다섯 단계입니다.">
@@ -67,7 +95,7 @@ export default function ImageGuidePage() {
         />
       </Section>
 
-      <Section title="01 레퍼런스 — 화면 읽기" hint="여기서는 레퍼런스가 필수입니다. 한 장 이상 골라야 넘어갑니다.">
+      <Details title="01 레퍼런스 — 화면 읽기" hint="여기서는 레퍼런스가 필수입니다. 한 장 이상 골라야 넘어갑니다.">
         <Mock title="이미지 만들기 · 01 레퍼런스">
           <MockSteps steps={STEPS} current={0} />
           <MockChoices
@@ -110,9 +138,9 @@ export default function ImageGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section title="02 규격 · 03 지시 — 화면 읽기">
+      <Details title="02 규격 · 03 지시 — 화면 읽기">
         <Mock title="이미지 만들기 · 02 규격">
           <MockSteps steps={STEPS} current={1} />
           <MockChoices
@@ -178,9 +206,9 @@ export default function ImageGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section title="04 기획 확인 — AI가 채운 칸을 고치는 곳" hint="이 도구의 핵심 화면입니다.">
+      <Details title="04 기획 확인 — AI가 채운 칸을 고치는 곳" hint="이 도구의 핵심 화면입니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           한 줄만 적었는데 아래처럼 칸이 채워져 나옵니다. <strong className="text-foreground">전부 고칠 필요는
           없습니다.</strong> 눈에 걸리는 칸만 고치고 넘어가세요.
@@ -222,7 +250,7 @@ export default function ImageGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
       <Section title="언제 무엇을 고르나">
         <ChoiceTable

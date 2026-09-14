@@ -117,3 +117,113 @@ describe("설명서 내용", () => {
     expect(known).toContain("표준형");
   });
 });
+
+/**
+ * **도구가 늘었는데 설명서가 안 늘어난 일이 있었다** (2026-09-14).
+ *
+ * 「광고 규격으로 내보내기」와 「팀」이 사이드바에 있는데 설명서에는 한 줄도
+ * 없었다. 도구를 더할 때 설명서를 잊지 않게 여기서 맞대 본다.
+ */
+describe("도구와 설명서가 짝을 이룬다", () => {
+  /** 사이드바가 내는 도구의 주소. 설명이 필요한 것만 적는다. */
+  const TOOLS_NEEDING_GUIDE = [
+    "/sns",
+    "/poster",
+    "/ad",
+    "/create",
+    "/redesign",
+    "/characters",
+    "/library",
+    "/team",
+  ];
+
+  it("모든 도구에 설명서가 있다", () => {
+    const covered = new Set(
+      GUIDE_TOPICS.map((topic) => topic.toolHref).filter(Boolean),
+    );
+    for (const tool of TOOLS_NEEDING_GUIDE) {
+      expect(covered, `${tool} 를 설명하는 문서가 없다`).toContain(tool);
+    }
+  });
+
+  /**
+   * 사이드바에 있는 도구를 여기 적는 것을 잊으면 이 시험이 헛돈다.
+   * 셸의 목록을 글자로 읽어 맞대 본다.
+   */
+  it("사이드바의 도구를 빠짐없이 적었다", () => {
+    const shell = readFileSync(
+      join(__dirname, "..", "..", "..", "..", "..", "packages", "ui", "src", "components", "app-shell.tsx"),
+      "utf8",
+    );
+    const hrefs = [...shell.matchAll(/href: "(\/[a-z-]+)"/g)].map((found) => found[1]);
+    // 설명서·계정·관리자는 도구가 아니다.
+    const tools = hrefs.filter((href) => !["/guide", "/settings", "/admin"].includes(href));
+    for (const tool of new Set(tools)) {
+      expect(TOOLS_NEEDING_GUIDE, `${tool} 가 사이드바에 있는데 이 목록에 없다`).toContain(tool);
+    }
+  });
+});
+
+/**
+ * 요약 먼저 · 상세는 접기 (2026-09-14).
+ *
+ * 설명서가 화면을 처음부터 훑는 구조라, **이 도구가 무엇을 하는지 알려면
+ * 끝까지 읽어야 했다.** 도구를 고르러 온 사람과 쓰는 법을 찾으러 온 사람이
+ * 같은 글을 읽고 있었다.
+ */
+describe("요약이 먼저 나온다", () => {
+  /** 개요 페이지는 그 자체가 요약이라 뺀다. */
+  const TOOL_PAGES = GUIDE_TOPICS.filter((topic) => topic.toolHref).map((topic) =>
+    topic.href.replace("/guide/", ""),
+  );
+
+  it("도구 설명서마다 요약이 있다", () => {
+    const sources = new Map(guideSources().map((file) => [file.name, file.source]));
+    for (const page of TOOL_PAGES) {
+      expect(sources.get(page), `${page} 페이지가 없다`).toBeDefined();
+      expect(sources.get(page), `${page} 에 <Summary> 가 없다`).toContain("<Summary");
+    }
+  });
+
+  /** 요약은 머리말 바로 뒤다. 뒤로 밀리면 스크롤해야 보인다. */
+  it("요약이 머리말 바로 뒤에 온다", () => {
+    for (const file of guideSources()) {
+      const summary = file.source.indexOf("<Summary");
+      if (summary < 0) continue;
+      const firstSection = file.source.indexOf("<Section");
+      expect(summary, `${file.name}: 요약이 첫 섹션보다 뒤에 있다`).toBeLessThan(firstSection);
+    }
+  });
+
+  /**
+   * 접은 칸은 **닫혀 있어야 한다.** `open` 을 붙이면 접은 뜻이 없다.
+   */
+  it("상세 칸이 열린 채로 시작하지 않는다", () => {
+    for (const file of guideSources()) {
+      expect(file.source, `${file.name}: <Details open …> 이 있다`).not.toMatch(/<Details[^>]*\sopen[\s>]/);
+    }
+  });
+});
+
+/**
+ * 「내 카드뉴스 만들기」는 소개만 있고 쓰는 법이 없었다 (2026-09-14).
+ * 설명서 전체가 다른 갈래 기준이라고 못 박혀 있었다.
+ */
+describe("카드뉴스의 두 갈래를 모두 설명한다", () => {
+  const cardnews = () =>
+    guideSources().find((file) => file.name === "cardnews")!.source;
+
+  it("두 갈래가 모두 나온다", () => {
+    expect(cardnews()).toContain("내 카드뉴스 만들기");
+    expect(cardnews()).toContain("새 카드뉴스 만들기");
+  });
+
+  it("「내 카드뉴스 만들기」에 쓰는 법이 있다", () => {
+    const source = cardnews();
+    expect(source).toContain("「내 카드뉴스 만들기」는 이렇게 씁니다");
+    // 순서를 거꾸로 알면 다 짜 놓고 붙일 데가 없다는 것을 뒤늦게 안다.
+    expect(source).toContain("카드뉴스 작업 만들기");
+    // 칸 네 종류가 이 길을 고르는 이유다.
+    expect(source).toContain("칸은 네 종류입니다");
+  });
+});

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ChoiceTable, DiffList, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockTabs } from "../_components/mockup";
 
 /**
@@ -19,6 +20,33 @@ export default function LibraryGuidePage() {
         kicker="라이브러리"
         title="재료를 모아 두고 어느 도구에서든 불러 쓰기"
         lead="로그인하면 처음 열리는 화면이 라이브러리입니다. 만들기 도구부터 열지 않는 이유가 있습니다 — 무엇을 가지고 있는지 모르는 채로 시작하면 매번 재료를 새로 찾게 되기 때문입니다. 여기 쌓인 것은 다섯 도구가 모두 불러 쓸 수 있습니다."
+      />
+
+      <Summary
+        what="재료와 결과물을 모아 두는 곳입니다. 어느 도구에서든 여기서 불러 씁니다."
+        points={[
+          {
+            title: "세 가지가 들어 있습니다",
+            body: "만든 작업물, 등록한 캐릭터, 올려 둔 참고 이미지입니다.",
+          },
+          {
+            title: "한 바퀴가 닫힙니다",
+            body: "만든 결과물이 다시 다음 작업의 재료가 됩니다. 밖으로 내보냈다 다시 올리지 않습니다.",
+          },
+          {
+            title: "어느 도구에서든 불러 씁니다",
+            body: "카드뉴스·이미지 만들기·상세페이지·광고 규격이 같은 창고를 봅니다.",
+          },
+          {
+            title: "묶음 세트로 관리합니다",
+            body: "자주 같이 쓰는 참고 이미지를 묶어 두면 매번 고르지 않아도 됩니다.",
+          },
+        ]}
+        when={[
+          "만들기 전에 재료를 모아 둘 때",
+          "예전에 만든 것을 다시 꺼내 쓸 때",
+          "팀원과 참고 이미지를 나눠 쓸 때",
+        ]}
       />
 
       <Section title="한 바퀴가 닫힙니다" hint="만든 것이 다시 재료가 되는 자리입니다.">
@@ -94,13 +122,13 @@ export default function LibraryGuidePage() {
         />
       </Section>
 
-      <Section title="파일은 어디에 저장되나" hint="자주 받는 질문입니다.">
+      <Details title="파일은 어디에 저장되나" hint="자주 받는 질문입니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           모든 파일은 <strong className="text-foreground">소유자별 비공개 저장소</strong>에 들어갑니다. 짧은 수명의
           서명된 주소로만 열리고, 저장 경로의 첫 칸이 소유자라서 다른 회원의 것은 열리지 않습니다. 회원이 AI 키를
           브라우저에 입력하는 일도 없습니다 — 생성은 운영자 서버 키로 돕니다.
         </p>
-      </Section>
+      </Details>
 
       <Section title="언제 무엇을 쓰나">
         <ChoiceTable
