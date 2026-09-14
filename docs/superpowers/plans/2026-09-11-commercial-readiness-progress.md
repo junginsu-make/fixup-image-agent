@@ -4,6 +4,17 @@
 사용자 승인: 설계 대조, 순차 구현·검증·별도 리뷰·필요한 반영 승인. 클로드 동시 작업 범위 확인은 진행 중.
 범위 재확인: 사용자는 설계 밖의 발견 이슈를 이번에 수정하지 말라고 명시했다. 기준 설계의 항목과 연결되는 구현·검증만 진행한다. 추가 발견은 별도 확인 대상으로 남기며 자동으로 범위를 늘리지 않는다.
 
+## 2026-09-14 재개: 7·8단계
+
+사용자는 도메인과 AI 예산 결정을 이번 작업에서 제외하고, 나머지 7·8단계를 TDD·코드 대조·검증 순서로 진행하도록 지시했다. Supabase는 기존 시스템과 정상 연동되어 있고, 현재 앱은 상세페이지에 다른 기능을 통합한 것이라고 설명했다. 접속 키를 다시 요청하지 않는다. 운영 도메인/예산을 임의로 정하거나 출시 완료로 표현하지 않으며, 해당 결정 없이 가능한 구현과 격리 서비스 검증을 계속한다.
+
+- **7단계 CSP:** 강제 정책·테마 nonce·비용 전략실 nonce의 실패 시험 3개를 재현하고 수정했다. RootLayout은 request headers를 읽어 HTML을 요청별 렌더링하며, Next가 만든 nonce를 테마와 신뢰된 비용 전략실 스크립트에 전달한다. 개발 보고 모드와 운영 강제 모드를 구분하고 관측용 `CSP_MODE=report-only`를 지원한다.
+- 실제 Chromium에서 CDN 글꼴 중복 요청 차단을 발견했다. 이미 제공하는 로컬 Pretendard를 유지하고 중복 CDN import만 제거했다. 이어 Zod의 선택적 JIT가 eval 위반을 발생시키는 것을 확인해 client instrumentation에서 jitless를 먼저 설정했다. unsafe-eval은 허용하지 않는다.
+- 시험용 인증 서버에 Node preload만 적용하면 Edge middleware에는 전달되지 않는 문제가 있었다. 시험 VM의 별도 TLS 서버/hosts 설정으로 Node·Edge·브라우저를 같은 경로에 연결했다. 이 수정은 운영 DNS나 앱 인증 우회가 아니다.
+- **검증 성공:** [CI 34796428923](https://github.com/junginsu-make/fixup-image-agent/actions/runs/34796428923), 코드 `6aa17c6`: 웹 1985시험·타입·lint·DB 회귀와 Chromium CSP 강제 시험·Linux 빌드 성공. 브라우저 시험은 가입/복구/로그인, 매 요청 다른 nonce, 테마, 비용 계산기 입력 및 미허가 inline script 차단을 실제 배포 형식으로 검사한다. Auth/Turnstile 응답은 fixture이며 실제 메일·실제 CAPTCHA 인증 성공으로 세지 않는다.
+- **8단계 실제 서비스 TDD:** [CI 34796478818](https://github.com/junginsu-make/fixup-image-agent/actions/runs/34796478818)의 staging job에서 임시 Supabase Auth·PostgREST·Storage를 기동했다. 구형 schema에서 인증된 HTTP의 data 변경이 성공하는 RED를 확인하고, 승인된 hardening migration을 적용한 뒤 403을 확인했다. 제목 수정 허용, private run/RPC 거절, private 결과 파일 다운로드 거절까지 성공했다. 운영 DB 연결·파괴 시험은 하지 않았다.
+- **진행 중:** `801c00a`에서 동일 검증 artifact를 실제 systemd 타이머로 호출하는 시험을 추가했다. 공급자 수락 후 DB 쓰기 실패를 주입하고 웹을 강제 종료한 뒤 같은 ID로 회수/저장/1회 차감하는지, SNS 2장이 브라우저 없이 진행되는지, heartbeat 만료가 새 제출을 차단하는지 확인한다. 외부 AI는 독립된 fake provider이며, 죽은 작업자의 lease 시간만 앞당긴다. 성공 결과가 나오기 전에는 완료로 세지 않는다.
+
 | 단계 | 구현 | 검증/별도 리뷰 | 운영 적용 |
 |---|---|---|---|
 | 0 기준 고정/분리 | 별도 worktree 및 의존성 설치 | 최신 운영 관측 포함 설계 복사 | 변경 없음 |
@@ -172,3 +183,98 @@ T14 concurrent team quota: team quota 10, held 16
 - 자산 경로에 owner/../other 경로를 넣는 후속 RED를 추가해 canonical path 검사로 차단. 운영 데이터 변조 실험은 하지 않았다.
 - 최근 전체 기존 suite: shared 81개, web 1860개 포함 전부 성공. 이후 추가한 quota/경로 시험도 개별 성공. 최종 전체 재검증은 통합 단계에서 반복한다.
 - 미완료 경계: systemd 자동 실행, journal 소비/운영자 대조, 직접 호출 PDP/리디자인의 영속 완료 처리, 나머지 LLM 경로 계량/제한, HTTPS/CSP, 실제 배포와 운영 smoke. 이 단계만으로 상용화 완료라 하지 않는다.
+
+## 2026-09-14 독립 리뷰와 운영 읽기 전용 조사 (Claude)
+
+코덱스 작업이 끊긴 뒤 다른 세션이 코드를 바꾸지 않고 검토했다. 이 절은 **검토 결과와 사용자 결정**이며 새 구현이 아니다.
+
+### 재현한 검증
+
+`44374d0` 기준으로 직접 실행했다. 통과를 남의 기록으로 대신하지 않았다.
+
+| 무엇 | 결과 |
+|---|---|
+| 전 패키지 `pnpm test` | 웹 1,985시험 포함 전부 통과 (exit 0) |
+| `pnpm -r typecheck` | 전 패키지 통과 |
+| `node --test scripts/tests/*.test.mjs` (실제 PostgreSQL) | 51시험 통과·0 실패 |
+| CI [34797164576](https://github.com/junginsu-make/fixup-image-agent/actions/runs/34797164576) | verify·integration·security/browser·**staging/database**·build 다섯 잡 전부 성공 |
+
+직전 세 커밋(`7d5a300`·`b98f862`·`692448e`)의 CI 는 실패였고, `fdaf04b`~`44374d0` 에서 복구된 것을 확인했다. 실패를 성공으로 적지 않는다.
+
+### 설계 대조에서 확인한 것
+
+코드를 열어 위험한 자리만 골라 확인했다. 문자열 검사로 대신하지 않았다.
+
+- **불변조건 2**: 포스터 경로에 `project.data.reservationId` 가 남아 있으나, `isDurableGenerationEnabled()` 가 production 에서 참이고 그 분기가 앞에서 early-return 한다. 옛 경로는 로컬 전용이다.
+- **§11.3**: `usage_controls.admission_enabled` 기본값 `false`, 일 상한·미해결 상한이 `null` 이면 `admission_closed`. 설계의 「미설정이면 closed」가 그대로다. 미해결 run 이 자정을 넘겨도 당일 상한에서 빠지지 않는다.
+- **§12.4**: production 기본이 enforce 이고 report-only 는 명시해야 켜진다.
+- **T05**: 코드가 아니라 DB 권한으로 막는다 — `authenticated` 에서 `sns_cards` 의 해당 열 UPDATE 를 회수한다.
+- **T09/T18**: `runForResource` 범위 조회, `outcome_unknown` 상태 분리.
+
+### 운영 읽기 전용 조사 (사용자 승인, SELECT 만)
+
+| 항목 | 값 |
+|---|---|
+| current | `20260911T074130Z-68b10827` (master). **이 브랜치는 미배포** |
+| 자원 | 메모리 911MB 중 여유 372MB, web RSS 148MB / 디스크 여유 5.5GiB |
+| 프록시 | Caddy 2.11.4, listen `*:80` 만. 443 없음 |
+| 공개 origin | `http://54.180.68.212` |
+| Supabase | 노출 표 27개가 전부 이 앱 것. 다른 스키마 없음 |
+| `DATABASE_URL` | Supabase 가 아니라 Neon 이며 리디자인 pgvector 전용. 장부와 무관 |
+| 장부 | 2026-07-28~09-11 30건(성공 25·실패 5), **미해결 0건**, 성공인데 비용 null 0건, 청구 이미지 23장 |
+| 회원 | 9명(관리자 1·회원 8), 전원 active, monthly_quota 100 |
+
+과거 30건 중 13건은 `model` 이 비어 있어 원가를 역산할 수 없다. v2 가 앞으로를 고치지만 **과거는 복구 불가**이며 비용 대조에서 미확인으로 남는다.
+
+### 마이그레이션 위험 분류
+
+기존 27개 표를 건드리는 `revoke` 는 **`202609110014_usage_authority` 하나뿐**이다.
+
+```
+revoke insert(data),update(data,status,updated_at) on sns_projects  from authenticated
+revoke insert(data),update(data,status,updated_at) on poster_projects from authenticated
+revoke insert,update on sns_cards from authenticated
+```
+
+지금 앱은 브라우저에서 이 열을 쓴다. **0014 를 앱보다 먼저 적용하면 운영이 즉시 깨진다.** 설계 §14.2 7단계(새 앱과 같은 시점에 grants 강화)를 지켜야 한다. 나머지 21건은 추가형이거나 같은 마이그레이션에서 만든 객체의 권한만 조인다.
+
+### 배포 차단 사유 — 도메인
+
+`deploy-release.sh` → `generation-release.sh` → `configure-generation.mjs` 가 맨 처음 실행되며, origin 이 `https:` 가 아니면 `site_origin_invalid` 로 거절한다. 현재 운영은 HTTP 이므로 **이 브랜치는 배포 자체가 불가능하다.** 환경 파일·DB 변경 이전에 멈추는 의도된 가드다.
+
+**사용자 결정(2026-09-14): 도메인은 상용화 시점에 진행하며 지금은 범위에서 제외한다.** 따라서 이 작업은 완료 대기 상태로 둔다.
+
+**함께 내린 판단: 운영 DB 도 지금 적용하지 않는다.** 앱을 못 올리는 상태에서 DB 만 바꾸면 새 표는 쓰이지 않고 `0011`(v1 RPC 교체)·`0012`(RLS 교체)만 살아 있는 동작을 바꾼다. 이득 없이 위험만 남는다.
+
+### 비용 정책에 대한 사용자 결정
+
+**사용자는 일 비용 상한을 두고 싶지 않다고 밝혔다 — 회원 9명이 자유롭게 쓸 수 있어야 한다.**
+
+현재 계약에서는 상한을 비우면 `admission_closed` 로 전부 막히므로 「없음」을 그대로 구현할 수 없다. 대신 다음을 확인했다.
+
+- 실제 사용량 제한은 이미 **회원별 월 quota 100장**이 하고 있다.
+- 따라서 일 상한은 예산 조절이 아니라 **사고 차단기**로만 쓰면 사용자의 뜻과 충돌하지 않는다.
+- 제안값: 일 상한 **$50**, 미해결 노출 상한 **$20**. 9명이 몰아 써도 걸리지 않고(전원 quota 소진 시 월 약 $190) 무한 루프·악용만 잡는다.
+- 최종 값은 배포 직전에 다시 확인한다. 설계 게이트대로 **정상 요청이 실제로 통과하는지** 실측이 필요하다.
+
+이 절은 값을 운영에 적용했다는 뜻이 아니다. `usage_controls` 는 여전히 미설정이다.
+
+### 남은 위험
+
+- **메모리**: 여유 372MB 에서 6단계 timer 가 Node 프로세스를 주기적으로 더 띄운다. 배포 시 실측이 필요하고 모자라면 인스턴스 상향이나 tick 주기 조정이 필요하다.
+- **공유 소비 앱**: 이 Supabase 를 쓰는 다른 배포가 있는지는 표 목록만으로 완전히 배제할 수 없다. 0014 적용 전에 사용자 확인이 필요하다.
+
+### 도메인 확보 시 실행 순서 (확정)
+
+1. DNS A 레코드 → 탄력적 IP
+2. Caddy 사이트 주소를 도메인으로 (인증서 자동)
+3. GitHub Actions Variables `NEXT_PUBLIC_SITE_URL` = `https://도메인`
+4. EC2 `/etc/fixup-image-agent/app.env` 같은 값
+5. Supabase Auth Site URL + Redirect allow list
+6. Turnstile hostname 추가
+7. 마이그레이션 21건 적용 (**0014 제외**)
+8. 앱 배포 — admission 닫힌 채
+9. `0014` 적용 (앱과 같은 시점)
+10. `usage_controls` 값 입력 → 테스트 계정으로 각 경로 1회 → 장부 대조 → 개방
+
+3·4 가 다르면 배포가 거절되고, 5 가 빠지면 로그인·메일 확인이 실패하며, 6 이 빠지면 가입이 `110200` 으로 막힌다.
