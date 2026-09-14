@@ -1,13 +1,29 @@
+import { redirect } from "next/navigation";
 import { Clock3, MailCheck, ShieldAlert } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import { requireSignedIn } from "../../lib/membership/server";
+import { isTerminalWait, isUsableAccount } from "../../lib/membership/usable";
+import { HOME_AFTER_LOGIN } from "../../lib/routes";
 import { OnboardingSteps, PublicFooter, PublicHeader } from "../_components/public-shell";
 import { AccessActions } from "./access-actions";
 
 export default async function AccessPage() {
   const { profile } = await requireSignedIn();
+
+  /*
+    **쓸 수 있으면 세워 두지 않는다.**
+
+    미들웨어도 같은 것을 보지만 여기서 한 번 더 본다. 화면이 스스로 상태를
+    다시 물을 때(`router.refresh()`)는 이 서버 컴포넌트가 다시 그려지므로,
+    여기 문이 없으면 상태가 바뀌어도 그 자리에 남는다.
+
+    판단은 `isUsableAccount()` 한 곳에서 나온다. 미들웨어와 여기가 다르게
+    답하면 두 화면이 서로를 밀어내며 멈추지 않는다.
+  */
+  if (isUsableAccount(profile)) redirect(HOME_AFTER_LOGIN);
+
   const unconfirmed = !profile.email_confirmed_at;
-  const suspended = profile.status === "suspended";
+  const suspended = isTerminalWait(profile);
   return (
     <div className="min-h-screen bg-muted/25">
       <PublicHeader showGuestActions={false} />
@@ -27,8 +43,8 @@ export default async function AccessPage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-muted-foreground">
               <p className="break-all font-medium text-foreground">{profile.email}</p>
-              <p className="leading-6">{unconfirmed ? "이 주소로 보낸 메일에서 「이메일 인증 완료」 버튼을 눌러 주세요. 인증이 끝나면 바로 이용할 수 있습니다. 메일이 없으면 스팸함을 확인해 주세요." : suspended ? "계정 상태에 관한 문의는 서비스 운영자에게 연락해 주세요." : "계정 상태를 확인하고 있습니다. 이 화면을 새로고침하거나 다시 로그인해 주세요."}</p>
-              <AccessActions email={profile.email} unconfirmed={unconfirmed} />
+              <p className="leading-6">{unconfirmed ? "이 주소로 보낸 메일에서 「이메일 인증 완료」 버튼을 눌러 주세요. 인증이 끝나면 바로 이용할 수 있습니다. 메일이 없으면 스팸함을 확인해 주세요." : suspended ? "계정 상태에 관한 문의는 서비스 운영자에게 연락해 주세요." : "계정 상태를 확인하고 있습니다. 준비되면 이 화면이 스스로 넘어갑니다."}</p>
+              <AccessActions email={profile.email} unconfirmed={unconfirmed} suspended={suspended} />
             </CardContent>
           </Card>
         </div>

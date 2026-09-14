@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMembership, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import type { MemberProfile, MembershipContext, UsageSummary } from "./types";
+import { isUsableAccount } from "./usable";
 import { canAccessPage, viewerFrom } from "../access/core";
 import { PAGE_ACCESS } from "../access/routes";
 
@@ -36,9 +37,7 @@ export async function requireSignedIn() {
 
 export async function requireActiveMember() {
   const membership = await requireSignedIn();
-  if (!membership.profile.email_confirmed_at || membership.profile.status !== "active") {
-    redirect("/access");
-  }
+  if (!isUsableAccount(membership.profile)) redirect("/access");
   return membership;
 }
 

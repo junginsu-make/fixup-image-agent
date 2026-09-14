@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@fixup/ui";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import { Turnstile } from "../_components/turnstile";
+import { ACCESS_POLL_MS, pollExhaustedNotice, shouldPollAccess } from "./poll";
 
 /**
  * 인증 대기 화면의 버튼들.
@@ -13,8 +14,39 @@ import { Turnstile } from "../_components/turnstile";
  * 사용자가 할 수 있는 일이 없어서, 관리자에게 연락하는 수밖에 없었다.
  * 실제로 그렇게 막혔다(2026-09-04).
  */
-export function AccessActions({ email, unconfirmed }: { email: string; unconfirmed: boolean }) {
+export function AccessActions({
+  email,
+  unconfirmed,
+  suspended,
+}: {
+  email: string;
+  unconfirmed: boolean;
+  suspended: boolean;
+}) {
   const router = useRouter();
+  const [tries, setTries] = React.useState(0);
+  const [gaveUp, setGaveUp] = React.useState(false);
+
+  /*
+    **스스로 다시 묻는다.**
+
+    전에는 사용자가 「상태 새로고침」을 직접 눌러야 했다. 그런 단추가 있는 줄
+    모르면 이 화면에서 하염없이 기다린다. 상태가 풀리는 순간 화면이 알아서
+    다음으로 넘어간다 — 넘기는 일은 `/access` 자신이 한다.
+
+    영원히 묻지는 않는다. 2분 안에 안 풀리면 기다려서 풀릴 일이 아니다.
+  */
+  React.useEffect(() => {
+    if (!shouldPollAccess({ suspended, tries })) {
+      if (!suspended) setGaveUp(true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setTries((count) => count + 1);
+      router.refresh();
+    }, ACCESS_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [suspended, tries, router]);
   const [sending, setSending] = React.useState(false);
   const [notice, setNotice] = React.useState("");
   /**
@@ -89,9 +121,9 @@ export function AccessActions({ email, unconfirmed }: { email: string; unconfirm
           로그아웃
         </Button>
       </div>
-      {notice ? (
+      {notice || gaveUp ? (
         <p role="status" className="text-xs leading-5 text-muted-foreground">
-          {notice}
+          {notice || pollExhaustedNotice(unconfirmed)}
         </p>
       ) : null}
     </div>
