@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   SIDEBAR_DEFAULT_COLLAPSED,
+  SIDEBAR_RAIL_PX,
   SIDEBAR_STORE_KEY,
   collapsedFromStore,
   shellSideWidth,
@@ -72,9 +73,30 @@ describe("단추 이름", () => {
 });
 
 describe("너비", () => {
-  /** 접히면 왼쪽 칸이 0 이 되고, 본문이 그만큼 넓어진다. */
-  it("접히면 0 이다", () => {
-    expect(shellSideWidth(true)).toContain("--shell-side:0px");
+  /**
+   * **다 닫지 않는다.** 0 까지 닫으면 다시 펼 손잡이가 허공에 뜬 단추 하나만
+   * 남아 어디를 눌러야 할지 알기 어렵다. 얇은 띠를 남겨 손잡이가 물릴 자리를
+   * 만든다.
+   */
+  it("접혀도 얇은 띠가 남는다", () => {
+    expect(shellSideWidth(true)).toContain(`--shell-side:${SIDEBAR_RAIL_PX}px`);
+    expect(SIDEBAR_RAIL_PX).toBeGreaterThan(0);
+  });
+
+  /** 띠는 자리만 지킨다. 넓으면 접은 뜻이 없다. */
+  it("띠가 메뉴 너비보다 훨씬 좁다", () => {
+    expect(SIDEBAR_RAIL_PX).toBeLessThan(40);
+  });
+
+  /**
+   * **Tailwind 는 소스를 글자로 훑어 클래스를 만든다.** 너비를 변수로 조립하면
+   * 그 클래스가 아예 안 생겨서 화면에서만 드러난다. 숫자를 그대로 적되, 위의
+   * 상수와 어긋나지 않는지 여기서 본다.
+   */
+  it("적어 둔 숫자와 상수가 같다", () => {
+    const found = shellSideWidth(true).match(/--shell-side:(\d+)px/);
+    expect(found).not.toBeNull();
+    expect(Number(found![1])).toBe(SIDEBAR_RAIL_PX);
   });
 
   it("펴지면 원래 너비다", () => {
@@ -107,13 +129,54 @@ describe("화면에 실제로 걸려 있다", () => {
     expect(button).toBeGreaterThan(asideEnds);
   });
 
-  it("접힌 상태에서도 단추가 붙어 있다", () => {
-    // 단추가 걸린 줄은 `lg:flex` 라 넓은 화면에서 늘 보인다. 사이드바처럼
-    // `collapsed` 에 따라 사라지면 안 된다.
+  /**
+   * **접혀도 손잡이는 남는다.**
+   *
+   * 손잡이 자신은 `collapsed` 로 감추지 않는다. 감추면 접은 순간 다시 펼 길이
+   * 없어진다. 접힘 여부는 **어디에 놓일지**만 정한다.
+   */
+  it("접힌 상태에서도 손잡이가 남는다", () => {
     const at = shell.indexOf("onClick={toggleSidebar}");
-    const row = shell.lastIndexOf("<div className=\"hidden items-center justify-end", at);
+    const open = shell.lastIndexOf("<button", at);
+    const close = shell.indexOf("</button>", at);
+    const markup = shell.slice(open, close);
+
+    expect(markup).toContain("lg:grid");
+    expect(markup).not.toContain("lg:hidden");
+  });
+
+  /**
+   * 손잡이는 **사이드바 테두리를 따라다닌다.** 펴져 있으면 오른쪽 테두리에
+   * 물리고, 접히면 `--shell-side` 가 0 이 되며 화면 왼쪽 끝으로 내려온다.
+   */
+  it("손잡이가 사이드바 테두리에 붙어 있다", () => {
+    const at = shell.indexOf("onClick={toggleSidebar}");
+    const markup = shell.slice(shell.lastIndexOf("<button", at), shell.indexOf("</button>", at));
+
+    expect(markup).toContain("left-[var(--shell-side)]");
+  });
+
+  /**
+   * 접었을 때 남는 띠는 **사이드바를 좁힌 것이 아니라 따로 그린 것**이다.
+   * 좁혀서 감추면 그 안의 메뉴가 보이지 않은 채로 탭 순서에 남아, 키보드로
+   * 넘기다 안 보이는 링크에 걸린다.
+   */
+  it("접혔을 때 띠를 따로 그린다", () => {
+    expect(shell).toContain("h-screen border-r bg-card lg:block");
+    const rail = shell.indexOf("h-screen border-r bg-card lg:block");
+    const open = shell.lastIndexOf("<div", rail);
+    expect(shell.slice(open, rail)).toContain("aria-hidden");
+  });
+
+  /**
+   * 본문 윗줄(계정·테마)에는 손잡이를 두지 않는다. 거기 두면 사이드바에서
+   * 멀어져 본문 내용과 부딪힌다 — 2026-09-14 에 그래서 옮겼다.
+   */
+  it("본문 윗줄에 단추를 두지 않는다", () => {
+    const row = shell.indexOf('<div className="hidden items-center justify-end');
     expect(row).toBeGreaterThan(0);
-    expect(shell.slice(row, at)).toContain("lg:flex");
+    const rowEnd = shell.indexOf("</div>", row);
+    expect(shell.slice(row, rowEnd)).not.toContain("toggleSidebar");
   });
 
   it("접히면 사이드바가 자리를 안 차지한다", () => {
