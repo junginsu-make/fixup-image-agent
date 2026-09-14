@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 20
     env:
       NEXT_PUBLIC_SITE_URL: https://studio.example.test:8443
-      NEXT_PUBLIC_SUPABASE_URL: https://supabase.example.test
+      NEXT_PUBLIC_SUPABASE_URL: https://supabase.example.test:8443
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: fixture-publishable-key
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: fixture-site-key
     steps:
@@ -25,4 +25,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir packages/ingest-core exec playwright install --with-deps chromium
       - run: pnpm build:ec2
+      - name: Resolve isolated TLS fixtures for both Node and Edge runtimes
+        run: echo '127.0.0.1 studio.example.test supabase.example.test' | sudo tee -a /etc/hosts > /dev/null
       - run: node scripts/smoke-web-security.mjs dist/ec2

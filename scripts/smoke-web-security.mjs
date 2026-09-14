@@ -15,17 +15,21 @@ const root=path.resolve(process.argv[2]??'dist/ec2');
 const origin='https://studio.example.test:8443';
 assert.equal(JSON.parse(readFileSync(path.join(root,'RELEASE_INFO.json'),'utf8')).publicSiteOrigin,origin,'Use only the isolated security build.');
 const listener=net.createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const port=listener.address().port;await new Promise(r=>listener.close(r));
-const child=spawn(process.execPath,['-r',path.resolve('scripts/fixtures/security-supabase.cjs'),'server.js'],{cwd:path.join(root,'apps/web'),stdio:['ignore','pipe','pipe'],env:{...process.env,NODE_ENV:'production',HOSTNAME:'127.0.0.1',PORT:String(port),CSP_MODE:'enforce',SUPABASE_SECRET_KEY:'fixture-only'}});
+const temporaryParent=realpathSync(tmpdir());const temporary=mkdtempSync(path.join(temporaryParent,'fixup-browser-tls-'));
+execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(temporary,'key.pem'),'-out',path.join(temporary,'cert.pem'),'-subj','/CN=studio.example.test','-addext','subjectAltName=DNS:studio.example.test,DNS:supabase.example.test','-days','1'],{stdio:'ignore'});
+const child=spawn(process.execPath,['-r',path.resolve('scripts/fixtures/security-supabase.cjs'),'server.js'],{cwd:path.join(root,'apps/web'),stdio:['ignore','pipe','pipe'],env:{...process.env,NODE_ENV:'production',HOSTNAME:'127.0.0.1',PORT:String(port),CSP_MODE:'enforce',SUPABASE_SECRET_KEY:'fixture-only',NODE_EXTRA_CA_CERTS:path.join(temporary,'cert.pem')}});
 let serverLog='';child.stdout.on('data',b=>{serverLog=(serverLog+b).slice(-8000);});child.stderr.on('data',b=>{serverLog=(serverLog+b).slice(-8000);});
 let browser;let proxy;
-const temporaryParent=realpathSync(tmpdir());const temporary=mkdtempSync(path.join(temporaryParent,'fixup-browser-tls-'));
 try{
   for(let i=0;;i++){
     try{if((await fetch(`http://127.0.0.1:${port}/api/health`,{signal:AbortSignal.timeout(1000)})).ok)break;}catch{}
     if(i>=120||child.exitCode!==null)throw new Error('Security runtime startup failed');await new Promise(r=>setTimeout(r,250));
   }
-  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(temporary,'key.pem'),'-out',path.join(temporary,'cert.pem'),'-subj','/CN=studio.example.test','-days','1'],{stdio:'ignore'});
   proxy=https.createServer({key:readFileSync(path.join(temporary,'key.pem')),cert:readFileSync(path.join(temporary,'cert.pem'))},(request,response)=>{
+    if(request.headers.host?.startsWith('supabase.example.test:')){
+      const result=reply(`https://${request.headers.host}${request.url}`,request.method,request.headers);
+      response.writeHead(result.status,result.headers);request.resume();response.end(result.body);return;
+    }
     const upstream=http.request({hostname:'127.0.0.1',port,path:request.url,method:request.method,headers:request.headers},received=>{response.writeHead(received.statusCode,received.headers);received.pipe(response);});
     upstream.on('error',()=>{response.writeHead(502);response.end();});request.pipe(upstream);
   });proxy.listen(8443,'127.0.0.1');await once(proxy,'listening');
