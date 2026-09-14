@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
-import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "상세페이지 리디자인 — 사용 설명서" };
 
-export default async function RedesignGuidePage() {
-  const isAdmin = await isAdminReader();
+export default function RedesignGuidePage() {
   return (
     <>
       <GuideHeader
@@ -199,7 +197,7 @@ export default async function RedesignGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/redesign" toolHref="/redesign" toolLabel="리디자인 열기" isAdmin={isAdmin} />
+      <GuideFooter href="/guide/redesign" toolHref="/redesign" toolLabel="리디자인 열기" />
     </>
   );
 }

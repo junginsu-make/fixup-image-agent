@@ -4,9 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CARD_RATIOS, IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
 import { ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
-import { GUIDE_TOPICS, guideTopicsFor, neighborsOf } from "../_components/topics";
-import { PAGE_ACCESS } from "../../../lib/access/routes";
-import { canAccessPage } from "../../../lib/access/core";
+import { GUIDE_TOPICS, neighborsOf } from "../_components/topics";
 
 /**
  * 설명서가 실제와 어긋나지 않는지 잡는다.
@@ -227,69 +225,5 @@ describe("카드뉴스의 두 갈래를 모두 설명한다", () => {
     expect(source).toContain("카드뉴스 작업 만들기");
     // 칸 네 종류가 이 길을 고르는 이유다.
     expect(source).toContain("칸은 네 종류입니다");
-  });
-});
-
-/**
- * 크레딧과 모델은 관리자만 본다 (운영자 결정 2026-09-14).
- *
- * 회원이 알아야 하는 것은 「이번 달에 얼마나 남았나」뿐이고, 그것은 화면
- * 오른쪽 위와 `/settings` 에 늘 떠 있다. 모델마다 원가가 몇 배 차이인지는
- * 값을 정하는 사람만 본다.
- */
-describe("관리자 전용 장", () => {
-  const member = { userId: "u1", role: "member" as const };
-  const admin = { userId: "a1", role: "admin" as const };
-
-  it("등록부가 크레딧 장을 관리자에게만 연다", () => {
-    expect(canAccessPage("/guide/credits", admin, PAGE_ACCESS)).toBe(true);
-    expect(canAccessPage("/guide/credits", member, PAGE_ACCESS)).toBe(false);
-  });
-
-  /** 설명서 자체는 누구나 연다. 한 장만 막는 것이지 통째로 막는 것이 아니다. */
-  it("설명서의 나머지는 회원도 연다", () => {
-    for (const topic of guideTopicsFor(false)) {
-      expect(canAccessPage(topic.href, member, PAGE_ACCESS), `${topic.href} 가 막혔다`).toBe(true);
-    }
-  });
-
-  /**
-   * **메뉴와 문지기가 어긋나면 안 된다.** 목록에 남겨 두면 눌러서 막히고,
-   * 목록에서만 빼면 주소를 치면 열린다 — 등록부 머리말이 경계하는 둘이다.
-   */
-  it("회원 목차에 막힌 장이 없다", () => {
-    for (const topic of guideTopicsFor(false)) {
-      expect(canAccessPage(topic.href, member, PAGE_ACCESS), `${topic.href}`).toBe(true);
-    }
-    expect(guideTopicsFor(false).map((topic) => topic.href)).not.toContain("/guide/credits");
-  });
-
-  it("관리자 목차에는 남아 있다", () => {
-    expect(guideTopicsFor(true).map((topic) => topic.href)).toContain("/guide/credits");
-  });
-
-  /** 「다음」으로 걸면 눌러서 막힌다. 보이는 목록에서 찾아야 한다. */
-  it("앞뒤 이동이 막힌 장을 안 가리킨다", () => {
-    for (const topic of guideTopicsFor(false)) {
-      const { prev, next } = neighborsOf(topic.href, false);
-      for (const side of [prev, next]) {
-        if (!side) continue;
-        expect(canAccessPage(side.href, member, PAGE_ACCESS), `${topic.href} → ${side.href}`).toBe(true);
-      }
-    }
-  });
-
-  /**
-   * 본문 안의 링크도 같다. 회원이 읽는 장에서 그 장으로 거는 링크가 남으면
-   * 눌러서 막힌다.
-   */
-  it("회원이 읽는 장에 크레딧 장 링크가 없다", () => {
-    const memberPages = new Set(
-      guideTopicsFor(false).map((topic) => (topic.href === "/guide" ? "(home)" : topic.href.replace("/guide/", ""))),
-    );
-    for (const file of guideSources()) {
-      if (!memberPages.has(file.name)) continue;
-      expect(file.source, `${file.name} 에 /guide/credits 링크가 남아 있다`).not.toContain('"/guide/credits"');
-    }
   });
 });
