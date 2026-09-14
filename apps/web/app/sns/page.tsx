@@ -52,10 +52,17 @@ export default function SnsPage() {
             {/*
               한 줄로 편다. 버튼마다 설명을 달면 좁은 자리에서 두 덩이가 서로
               눌려 둘 다 안 읽힌다. 말해야 하는 것은 **어느 쪽이 먼저인가** 하나다.
+
+              **폭을 묶지 않는다.** `max-w-md`(448px)가 걸려 있어서 넓은 화면에서도
+              두 줄로 접혔다. 이 줄은 버튼 아래 오른쪽 끝에 붙는 꼬리라, 넓으면
+              넓은 대로 한 줄로 펴지는 편이 읽기 쉽다. 좁아지면 알아서 접힌다.
+
+              문장도 줄였다. 「칸을 직접 짜는 곳이라」는 설명서가 할 말이고,
+              여기서 필요한 것은 **무엇이 있어야 쓸 수 있는가** 하나다.
             */}
-            <p className="max-w-md text-right text-[11px] leading-4 text-muted-foreground">
+            <p className="text-right text-[11px] leading-4 text-muted-foreground">
               처음이라면 <strong className="text-foreground">새 카드뉴스 만들기</strong>부터.
-              「내 카드뉴스 만들기」는 칸을 직접 짜는 곳이라 작업과 원고가 있어야 붙일 수 있습니다.
+              「내 카드뉴스 만들기」는 작업과 원고가 있어야 붙일 수 있습니다.
             </p>
           </div>
         </header>
