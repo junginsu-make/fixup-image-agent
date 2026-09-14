@@ -13,6 +13,7 @@ import { listShowcaseForAdmin } from "../api/showcase/store";
 import type { ShowcaseAdminView } from "../api/showcase/core";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 import { CostPanel } from "./CostPanel";
+import { GenerationControls } from "./GenerationControls";
 import {
   formatKrw,
   getCostByMember,
@@ -176,6 +177,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       />
 
       <AiBadgePanel enabled={aiBadgeOn} />
+      <GenerationControls />
 
       <ShowcasePanel items={showcase} />
 

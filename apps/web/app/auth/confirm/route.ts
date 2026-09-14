@@ -1,7 +1,7 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
-import { publicOrigin } from "../../../lib/routes";
+import { publicOrigin, safeNext } from "../../../lib/routes";
 
 /**
  * 메일의 인증 링크가 도착하는 자리.
@@ -17,12 +17,12 @@ export async function GET(request: Request) {
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type") as EmailOtpType | null;
   const requestedNext = url.searchParams.get("next") || "/access";
-  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/access";
+  const next = safeNext(requestedNext, "/access");
+  const origin = publicOrigin(request.headers, url.origin);
   const supabase = await createSupabaseServerClient();
   let error: unknown;
   if (code) ({ error } = await supabase.auth.exchangeCodeForSession(code));
   else if (tokenHash && type) ({ error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type }));
   else error = new Error("missing token");
-  const origin = publicOrigin(request.headers, url.origin);
   return NextResponse.redirect(new URL(error ? "/login?error=invalid_confirmation" : next, origin));
 }

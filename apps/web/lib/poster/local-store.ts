@@ -9,7 +9,7 @@ import type {
   PosterReferenceStore,
   PosterRequestStore,
 } from "@fixup/poster-core";
-import { getLocalDatabase, type LocalDatabase } from "../local-store";
+import { getLocalDatabase, hasLocalActiveGeneration, type LocalDatabase } from "../local-store";
 import { posterImageUrl, posterThumbUrl } from "./supabase-store-core";
 
 /**
@@ -86,10 +86,11 @@ export function createLocalPosterProjectStore(
         return strip(row);
       });
     },
-    async update(id, patch) {
+    async update(id, patch, expectedUpdatedAt) {
       return database.update((data) => {
         const row = bucket(data, "posterProjects").find((entry) => entry.id === id && entry.userId === userId);
         if (!row) throw notFound("포스터 작업");
+        if (expectedUpdatedAt !== undefined && row.updatedAt !== expectedUpdatedAt) throw new Error("draft_conflict");
         Object.assign(row, patch, { updatedAt: new Date().toISOString() });
         return strip(row);
       });
@@ -101,6 +102,7 @@ export function createLocalPosterProjectStore(
         // 없으면 던지지 않고 false 를 준다 — 운영(RLS)과 같은 답을 내야
         // 부르는 쪽이 두 벌의 갈래를 안 만든다.
         if (index < 0) return false;
+        if(hasLocalActiveGeneration(data,"poster",id))throw new Error("generation_in_progress");
         list.splice(index, 1);
         return true;
       });
@@ -207,6 +209,8 @@ export function createLocalPosterImageStore(
     },
     async add(rows) {
       return database.update((data) => rows.map((row) => {
+        const existing=bucket(data,"posterImages").find(i=>i.userId===userId&&i.generationRequestId===row.generationRequestId&&i.variantIndex===row.variantIndex);
+        if(existing){if(existing.assetPath!==row.assetPath)throw new Error("같은 생성 회차의 결과 경로가 다릅니다.");return withUrls(strip(existing));}
         const saved = {
           ...row, userId, id: randomUUID(), selected: false,
           createdAt: new Date().toISOString(),

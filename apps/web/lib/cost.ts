@@ -21,6 +21,8 @@ export interface CostSummary {
   /** 만들어 놓고 회원에게 못 준 것. 우리는 돈을 냈고 회원은 안 썼다. */
   wastedUsd: number;
   wastedImages: number;
+  unknownCalls?: number;
+  pendingCalls?: number;
 }
 
 export interface ModelPrice {
@@ -35,6 +37,14 @@ const OPERATION_LABEL: Record<string, string> = {
   pdp_image: "새로 만들기 · 이미지",
   redesign_generate: "리디자인 · 생성",
   redesign_edit: "리디자인 · 수정",
+  poster_image: "포스터 · 이미지",
+  poster_plan: "포스터 · 기획",
+  poster_review: "포스터 · 검수",
+  sns_image: "카드뉴스 · 이미지",
+  sns_plan: "카드뉴스 · 기획",
+  sns_caption: "카드뉴스 · 게시글",
+  layout_analyze: "레이아웃 · 분석",
+  redesign_transcribe: "리디자인 · 전사",
 };
 
 export function operationLabel(operation: string) {
@@ -86,7 +96,8 @@ export async function setModelPrice(model: string, unitCostUsd: number) {
 
 export async function getCostSummary(): Promise<CostSummary> {
   const admin = createSupabaseAdminClient();
-  const { data } = await admin.rpc("admin_cost_summary");
+  const { data, error } = await admin.rpc("admin_cost_summary_v2");
+  if (error) throw new Error("Cost summary is unavailable.");
   const row = (data?.[0] ?? {}) as Record<string, unknown>;
   return {
     todayUsd: n(row.today_usd),
@@ -97,13 +108,16 @@ export async function getCostSummary(): Promise<CostSummary> {
     totalImages: n(row.total_images),
     wastedUsd: n(row.wasted_usd),
     wastedImages: n(row.wasted_images),
+    unknownCalls: n(row.unknown_calls),
+    pendingCalls: n(row.pending_calls),
   };
 }
 
 export async function getCostByMember(userIds: string[]) {
   if (!userIds.length) return new Map<string, { monthUsd: number; totalUsd: number; images: number }>();
   const admin = createSupabaseAdminClient();
-  const { data } = await admin.rpc("admin_cost_by_member", { p_user_ids: userIds });
+  const { data, error } = await admin.rpc("admin_cost_by_member_v2", { p_user_ids: userIds });
+  if (error) throw new Error("Cost summary is unavailable.");
   const map = new Map<string, { monthUsd: number; totalUsd: number; images: number }>();
   for (const row of (data ?? []) as Record<string, unknown>[]) {
     map.set(String(row.user_id), {
@@ -117,7 +131,8 @@ export async function getCostByMember(userIds: string[]) {
 
 export async function getCostByOperation(days = 30) {
   const admin = createSupabaseAdminClient();
-  const { data } = await admin.rpc("admin_cost_by_operation", { p_days: days });
+  const { data, error } = await admin.rpc("admin_cost_by_operation_v2", { p_days: days });
+  if (error) throw new Error("Cost summary is unavailable.");
   return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
     operation: String(row.operation),
     images: n(row.images),
@@ -127,7 +142,8 @@ export async function getCostByOperation(days = 30) {
 
 export async function getCostByModel(days = 30) {
   const admin = createSupabaseAdminClient();
-  const { data } = await admin.rpc("admin_cost_by_model", { p_days: days });
+  const { data, error } = await admin.rpc("admin_cost_by_model_v2", { p_days: days });
+  if (error) throw new Error("Cost summary is unavailable.");
   return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
     model: String(row.model),
     label: String(row.label),
@@ -139,7 +155,8 @@ export async function getCostByModel(days = 30) {
 
 export async function getCostDaily(days = 30) {
   const admin = createSupabaseAdminClient();
-  const { data } = await admin.rpc("admin_cost_daily", { p_days: days });
+  const { data, error } = await admin.rpc("admin_cost_daily_v2", { p_days: days });
+  if (error) throw new Error("Cost summary is unavailable.");
   return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
     date: String(row.usage_date),
     images: n(row.images),

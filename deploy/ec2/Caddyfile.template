@@ -1,5 +1,8 @@
 {{SITE}} {
+	import /etc/caddy/fixup-generation-maintenance.caddy
 	encode zstd gzip
+	# The systemd helper calls loopback directly. Never proxy this namespace publicly.
+	respond /api/internal/generation/* 404
 
 	header {
 		-Server

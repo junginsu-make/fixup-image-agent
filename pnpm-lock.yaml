@@ -154,6 +154,9 @@ importers:
 
   packages/ingest-core:
     dependencies:
+      '@fixup/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0

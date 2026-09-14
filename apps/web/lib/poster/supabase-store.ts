@@ -89,17 +89,20 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
       return row ? toProjectRecord(row) : undefined;
     },
     async create(input) {
-      const client = await createSupabaseServerClient();
+      const client = createSupabaseAdminClient();
       const { data, error } = await client.from("poster_projects")
         .insert(projectInsertRow(userId, input)).select(PROJECT_COLUMNS).single();
       return toProjectRecord(checked(data as PosterProjectRow, error, "포스터 작업 만들기"));
     },
-    async update(id, patch) {
-      const client = await createSupabaseServerClient();
-      const { data, error } = await client.from("poster_projects")
+    async update(id, patch, expectedUpdatedAt) {
+      const client = createSupabaseAdminClient();
+      let query = client.from("poster_projects")
         .update(projectPatchRow(patch, new Date().toISOString()))
-        .eq("id", id).eq("user_id", userId).select(PROJECT_COLUMNS).maybeSingle();
+        .eq("id", id).eq("user_id", userId);
+      if (expectedUpdatedAt !== undefined) query = query.eq("updated_at", expectedUpdatedAt);
+      const { data, error } = await query.select(PROJECT_COLUMNS).maybeSingle();
       const row = checked(data as PosterProjectRow | null, error, "포스터 작업 고치기");
+      if (!row && expectedUpdatedAt !== undefined) throw new Error("draft_conflict");
       if (!row) throw notFound("포스터 작업");
       return toProjectRecord(row);
     },

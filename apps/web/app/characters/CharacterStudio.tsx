@@ -696,6 +696,9 @@ export function CharacterStudio() {
                 // 표시가 안 나, 눌렀는지 아닌지 알 수 없다.
                 selectedIds={attached?.libraryId ? [attached.libraryId] : []}
                 onToggle={(image) => void attachFromLibrary(image)}
+                // 만들어 둔 캐릭터의 각도도 참고로 쓴다 — 「이 캐릭터 뽑아내기」로
+                // 같은 대상을 다른 결로 다시 만드는 길이다. 다른 도구와 같은 창이다.
+                onPickCharacterAngle={({ image }) => void attachFromLibrary(image)}
                 onReload={() => void loadLibrary()}
                 label="라이브러리"
                 title="참고할 그림 고르기"

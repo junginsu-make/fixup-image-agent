@@ -1,3 +1,7 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
+import { beginSnsRun } from "../../../../../../lib/generation/sns-execution";
+import { isDurableGenerationEnabled, generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { publicRun } from "../../../../../../lib/generation/types";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { estimateCost } from "../../../../../sns/cost-estimate";
@@ -21,10 +25,15 @@ export async function POST(request: Request, context: Context) {
   let reservation: { userId: string; requestId: string } | null = null;
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "sns", id);
     return await withSnsProjectLock(id, async () => {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "먼저 기획과 원고를 만들어 주세요." }, { status: 409 });
+      if (isDurableGenerationEnabled()) {
+        const run = await beginSnsRun(request, auth.member.userId, project);
+        return Response.json({ ok: true, project: await store.get(id), run: publicRun(run) });
+      }
       if (hasActiveQueuedGeneration(project.data.flow)) return Response.json({ ok: false, message: "이미 생성 중인 카드가 있습니다." }, { status: 409 });
       const providers = createSnsGenerationProviders();
       project = await refreshProjectAssetUrls(project);
@@ -98,6 +107,10 @@ export async function POST(request: Request, context: Context) {
       return Response.json({ ok: true, project: saved });
     });
   } catch (error) {
+    const generationFailure = generationFailureResponse(error);
+    if (generationFailure) return generationFailure;
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     // 제출이 실패했으면 돈이 안 나갔다. 묶어 둔 장을 돌려준다.
     // **응답을 정하기 전에 한다.** 여기서 일찍 빠져나가면 장이 묶인 채 남는다.
     if (reservation) {

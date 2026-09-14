@@ -19,7 +19,7 @@ import type { SnsProjectRecord } from "../../app/api/sns/projects/project-servic
 export function collectCardPaths(projects: SnsProjectRecord[]): string[] {
   const paths = new Set<string>();
   for (const project of projects) {
-    for (const card of project.data.flow?.cards ?? []) {
+    for (const card of (project.data.executionFlow ?? project.data.flow)?.cards ?? []) {
       if (card.assetPath) paths.add(card.assetPath);
       // **미리보기도 함께 서명한다.** 목록은 미리보기를 걸고, 확대·내려받기·
       // 라이브러리 저장은 원본을 쓴다 — 둘 다 필요하다. 한 번에 모아 서명하므로
@@ -35,13 +35,13 @@ export function withCardUrls(
   urls: Map<string, string>,
 ): SnsProjectRecord[] {
   return projects.map((project) => {
-    const flow = project.data.flow;
+    const flow = project.data.executionFlow ?? project.data.flow;
     if (!flow) return project;
     return {
       ...project,
       data: {
         ...project.data,
-        flow: {
+        [project.data.executionFlow ? "executionFlow" : "flow"]: {
           ...flow,
           cards: flow.cards.map((card) => {
             // 주소를 못 받은 카드는 그대로 둔다. 하나 실패했다고 나머지까지

@@ -1,0 +1,17 @@
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const root=path.resolve(process.argv[2]??'dist/ec2');
+const release=JSON.parse(readFileSync(path.join(root,'RELEASE_INFO.json'),'utf8'));
+const runtime=JSON.parse(readFileSync(path.join(root,'apps/web/generation-release.json'),'utf8'));
+assert.match(release.releaseId,/^[a-f0-9]{40}$/);
+assert.equal(release.generationProtocol,2);
+assert.equal(runtime.protocol,2);
+assert.equal(runtime.releaseId,release.releaseId);
+assert.equal(runtime.schemaVersion,release.generationSchemaVersion);
+assert.equal(release.generationSchemaMin,release.generationSchemaVersion);
+assert.ok(Number.isInteger(release.generationSchemaMax)&&release.generationSchemaMax>=release.generationSchemaMin);
+assert.ok(existsSync(path.join(root,'ops/generation-tick.mjs')));
+if(process.env.GITHUB_SHA)assert.equal(release.releaseId,process.env.GITHUB_SHA);
+if(process.env.GITHUB_RUN_ID)assert.equal(release.buildRunId,process.env.GITHUB_RUN_ID);
+console.log('Generation manifest, helper, schema range and build identity verified.');

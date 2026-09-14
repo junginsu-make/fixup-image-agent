@@ -1,3 +1,6 @@
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
+import { durablePosterPlanning } from "../../../../../../lib/poster/planning-operation";
+import { isDurableGenerationEnabled as durableGenerationEnabled } from "../../../../../../lib/generation/run-store";
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";
@@ -22,6 +25,7 @@ type Context = { params: Promise<{ id: string }> };
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
 export async function POST(request: Request, context: Context) {
+  if (durableGenerationEnabled()) return durablePosterPlanning(request, (await context.params).id);
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 문법 읽기·사람 읽기·기획이 모두 여기로 모인다.
   return withLlmMeter(() => plan(request, context));
 }
@@ -36,6 +40,7 @@ async function plan(request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "poster", id);
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
@@ -133,6 +138,8 @@ async function plan(request: Request, context: Context) {
     });
     return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...crowd.issues, ...plan.issues] });
   } catch (error) {
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.
     if (reservation) await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");
     if (error instanceof PosterProviderConfigurationError) {

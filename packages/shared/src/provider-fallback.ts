@@ -5,6 +5,17 @@ export interface IssueFallbackLabels {
   backupSuccess: string;
 }
 
+/** A durable executor decision is not a provider failure eligible for fallback. */
+export class ExecutionControlError extends Error {
+  readonly generationControl = true;
+  constructor(readonly code: "execution_yield" | "outcome_unknown" | "storage_unavailable" | "input_limit" | "lease_lost") {
+    super(code); this.name = "ExecutionControlError";
+  }
+}
+export function isExecutionControl(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "generationControl" in error && error.generationControl === true);
+}
+
 export interface IssueFallbackResult<T> {
   value?: T;
   issues: string[];
@@ -24,6 +35,7 @@ export async function withIssueFallback<T>(
   try {
     return { value: await primary(), issues: [] };
   } catch (primaryError) {
+    if (isExecutionControl(primaryError)) throw primaryError;
     const primaryReason = failureReason(primaryError);
     if (!backup) {
       return {
@@ -39,6 +51,7 @@ export async function withIssueFallback<T>(
         issues: [`${labels.backupSuccess}: ${primaryReason}`],
       };
     } catch (backupError) {
+      if (isExecutionControl(backupError)) throw backupError;
       return {
         issues: [
           `${labels.primaryFailure}: ${primaryReason}`,

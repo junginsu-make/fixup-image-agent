@@ -12,6 +12,8 @@ import {
   saveLocalSnsFlow,
 } from "./local-store";
 import { createSupabaseServerClient } from "./supabase/server";
+import { createSupabaseAdminClient } from "./supabase/admin";
+import { projectWriteDeniedResponse } from "./generation/ownership";
 import { snsCardPathsToRemove } from "./sns/thumbnail";
 
 /**
@@ -36,13 +38,13 @@ export class SnsProjectNotWritable extends Error {
  * 것이라 답이 분명해야 한다.
  */
 export function snsWriteDenied(error: unknown): Response | undefined {
-  if (!(error instanceof SnsProjectNotWritable)) return undefined;
+  if (!(error instanceof SnsProjectNotWritable)) return projectWriteDeniedResponse(error);
   return Response.json({ ok: false, message: error.message }, { status: 403 });
 }
 
 export interface SnsFlowStore {
   get(projectId: string): Promise<SnsProjectRecord | undefined>;
-  save(projectId: string, flow: SnsFlowState, status: SnsProjectRecord["status"]): Promise<SnsProjectRecord>;
+  save(projectId: string, flow: SnsFlowState, status: SnsProjectRecord["status"], expectedUpdatedAt?: string): Promise<SnsProjectRecord>;
   /**
    * 작업과 그 카드, 만들어 둔 그림 파일까지 지운다.
    *
@@ -61,7 +63,7 @@ export interface SnsFlowStore {
  * 포스터에서 세 번 반복해 잡힌 실수라 규칙을 한 곳에 두고 쓴다.
  */
 function assetPathsOf(project: SnsProjectRecord): string[] {
-  return snsCardPathsToRemove(project.data.flow?.cards ?? []);
+  return [...new Set([...snsCardPathsToRemove(project.data.flow?.cards ?? []), ...snsCardPathsToRemove(project.data.executionFlow?.cards ?? [])])];
 }
 
 /** 시험이 「삭제가 이 규칙을 부른다」를 확인할 수 있게 연다. */
@@ -72,7 +74,7 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
     const database = getLocalDatabase();
     return {
       get: (projectId) => getLocalSnsProject(database, userId, projectId),
-      save: (projectId, flow, status) => saveLocalSnsFlow(database, userId, projectId, flow, status),
+      save: (projectId, flow, status, expectedUpdatedAt) => saveLocalSnsFlow(database, userId, projectId, flow, status, expectedUpdatedAt),
       async remove(projectId) {
         const project = await getLocalSnsProject(database, userId, projectId);
         if (!project) return false;
@@ -103,10 +105,10 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
   };
   return {
     get: getProject,
-    async save(projectId, flow, status) {
+    async save(projectId, flow, status, expectedUpdatedAt) {
       const project = await getProject(projectId);
       if (!project) throw new Error("SNS 프로젝트를 찾을 수 없습니다.");
-      const data = { ...project.data, flow };
+      if (project.userId !== userId) throw new SnsProjectNotWritable();
       /**
        * **정말 써졌는지 세어 본다.**
        *
@@ -118,13 +120,14 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
        * 팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에
        * 실제 요청이 나간 뒤, 결과만 어디에도 안 남았다.
        */
-      const result = await client.from("sns_projects")
-        .update({ data, status, updated_at: new Date().toISOString() })
-        .eq("id", projectId).eq("user_id", userId)
-        .select("id");
+      const result = await createSupabaseAdminClient().rpc(expectedUpdatedAt ? "save_sns_draft_checked" : "save_sns_draft_v2", {
+        p_actor: userId, p_id: projectId, p_flow: flow, p_status: status,
+        ...(expectedUpdatedAt ? { p_expected_updated_at: expectedUpdatedAt } : {}),
+      });
       if (result.error) throw new Error(result.error.message);
-      if (!(result.data ?? []).length) throw new SnsProjectNotWritable();
-      return { ...project, data, status, updatedAt: new Date().toISOString() };
+      const updated = await getProject(projectId);
+      if (!updated) throw new SnsProjectNotWritable();
+      return updated;
     },
     async remove(projectId) {
       const project = await getProject(projectId);

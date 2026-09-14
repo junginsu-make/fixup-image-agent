@@ -1,3 +1,6 @@
+import { beginPosterRun, replayPosterRun } from "../../../../../../lib/generation/poster-execution";
+import { isDurableGenerationEnabled, generationFailureResponse } from "../../../../../../lib/generation/run-store";
+import { assertProjectWrite, projectWriteDeniedResponse } from "../../../../../../lib/generation/ownership";
 import { canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
 import { z } from "zod";
@@ -39,9 +42,11 @@ export async function POST(request: Request, context: Context) {
   }
   try {
     const { id } = await context.params;
+    await assertProjectWrite(auth.member.userId, "poster", id);
     const stores = posterStoresForUser(auth.member.userId);
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
+    if (isDurableGenerationEnabled()) { const replay = await replayPosterRun(request, auth.member.userId, project, parsed.data); if (replay) return replay; }
 
     const images = await stores.images.byProject(id);
     if (!canEdit(images)) {
@@ -94,6 +99,7 @@ export async function POST(request: Request, context: Context) {
       // 고친 기준 그림을 늘 레퍼런스로 넣는다 — i2i 단가다.
       hasReferences: true,
     });
+    if (isDurableGenerationEnabled()) return await beginPosterRun(request, auth.member.userId, project, job, parsed.data);
     const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0));
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
@@ -115,6 +121,10 @@ export async function POST(request: Request, context: Context) {
     });
     return Response.json({ ok: true, submission });
   } catch (error) {
+    const generationFailure = generationFailureResponse(error);
+    if (generationFailure) return generationFailure;
+    const writeDenied = projectWriteDeniedResponse(error);
+    if (writeDenied) return writeDenied;
     /**
      * **묶어 둔 장을 돌려준다.** 제출이 실패했으면 돈이 안 나갔다. 안 풀면
      * 만료될 때까지 그 사람 한도에서 빠져 있는다.

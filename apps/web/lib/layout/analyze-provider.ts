@@ -1,3 +1,4 @@
+import { recordedLlmCall } from "../llm/recorded-call";
 import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -56,7 +57,7 @@ class AnthropicLayoutAnalyst implements LayoutAnalysisProvider {
   constructor(private readonly client: Anthropic, private readonly model: string) {}
 
   async analyze(imageUrl: string): Promise<unknown> {
-    const response = await this.client.messages.create({
+    const response = await (async () => { const body = {
       model: this.model,
       max_tokens: 1800,
       messages: [{
@@ -69,7 +70,7 @@ class AnthropicLayoutAnalyst implements LayoutAnalysisProvider {
         input_schema: LAYOUT_ANALYSIS_SCHEMA as unknown as Anthropic.Tool.InputSchema,
       }],
       tool_choice: { type: "tool", name: TOOL_NAME, disable_parallel_tool_use: true },
-    });
+    } satisfies Parameters<typeof this.client.messages.create>[0]; return recordedLlmCall("anthropic", this.model, body, () => this.client.messages.create(body), 1800); })();
     recordFrom(this.model, response);
     const call = response.content.find(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use" && block.name === TOOL_NAME,
@@ -85,7 +86,7 @@ class OpenAILayoutAnalyst implements LayoutAnalysisProvider {
   constructor(private readonly client: OpenAI, private readonly model: string) {}
 
   async analyze(imageUrl: string): Promise<unknown> {
-    const response = await this.client.responses.create({
+    const response = await (async () => { const body = { max_output_tokens: 16384,
       model: this.model,
       input: [{
         role: "user",
@@ -102,7 +103,7 @@ class OpenAILayoutAnalyst implements LayoutAnalysisProvider {
         strict: false,
       }],
       tool_choice: { type: "function", name: TOOL_NAME },
-    });
+    } satisfies Parameters<typeof this.client.responses.create>[0]; return recordedLlmCall("openai", this.model, body, () => this.client.responses.create(body), 16384); })();
     recordFrom(this.model, response);
     const call = response.output.find((item) => item.type === "function_call" && item.name === TOOL_NAME);
     if (!call || call.type !== "function_call") throw new Error("OpenAI가 칸 목록을 돌려주지 않았습니다.");
@@ -130,12 +131,12 @@ export function createLayoutAnalysisProviders(
     || environment.OPENAI_DRAFT_MODEL?.trim()
     || DEFAULT_OPENAI_VISION_MODEL;
   const openai = openaiKey
-    ? new OpenAILayoutAnalyst(new OpenAI({ apiKey: openaiKey, maxRetries: 2, timeout: 120_000 }), openaiModel)
+    ? new OpenAILayoutAnalyst(new OpenAI({ apiKey: openaiKey, maxRetries: 0, timeout: 120_000 }), openaiModel)
     : undefined;
 
   if (!anthropicKey) return { primary: openai! };
   const anthropic = new AnthropicLayoutAnalyst(
-    new Anthropic({ apiKey: anthropicKey, maxRetries: 2, timeout: 120_000 }),
+    new Anthropic({ apiKey: anthropicKey, maxRetries: 0, timeout: 120_000 }),
     environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL,
   );
   return openai ? { primary: anthropic, backup: openai } : { primary: anthropic };

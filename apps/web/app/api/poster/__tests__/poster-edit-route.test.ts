@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 vi.mock("server-only", () => ({}));
+vi.mock("../../../../lib/generation/ownership", () => ({ assertProjectWrite: async () => {}, projectWriteDeniedResponse: () => undefined }));
 
 let project: { id: string; ratio: string; modelId: string; data: Record<string, unknown> };
 let parent: { id: string; assetPath: string; selected: boolean; width: number | null; height: number | null };

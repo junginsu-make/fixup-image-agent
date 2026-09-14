@@ -1,4 +1,5 @@
 "use client";
+import { billableFetch } from "../../../lib/billable-fetch";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input } from "@fixup/ui";
@@ -165,7 +166,7 @@ export function LayoutStudio() {
     setBusy("analyze");
     setNotes([]);
     try {
-      const response = await fetch("/api/sns/layout/analyze", {
+      const response = await billableFetch("/api/sns/layout/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ referenceImageId: analyzeId }),

@@ -25,6 +25,6 @@ export type GenerateFailureAction = "resync" | "show-error";
  * 그 밖의 실패는 그대로 말한다 — 다시 읽어 봐야 달라질 것이 없고, 읽는 동안
  * 오류 문구가 지워지면 무엇이 잘못됐는지 알 길이 없어진다.
  */
-export function afterGenerateFailure(status?: number): GenerateFailureAction {
-  return status === ALREADY_RUNNING ? "resync" : "show-error";
+export function afterGenerateFailure(status?: number, code?: string): GenerateFailureAction {
+  return status === ALREADY_RUNNING || (status === 429 && code === "concurrent_limit") ? "resync" : "show-error";
 }

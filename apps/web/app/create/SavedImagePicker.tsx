@@ -1,21 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FolderOpen, Loader2, Maximize2, Trash2 } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 import {
-  Badge,
   Button,
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   cn,
 } from "@fixup/ui";
-import { openImageViewer } from "../_components/image-viewer";
 import { toSavedLibraryImages } from "./saved-image-picker";
 import { deleteTargetFor } from "./saved-image-delete";
-import { ThumbImage } from "../_components/thumb-image";
+import { PickCell } from "../_components/pick-cell";
 
 /**
  * 계정에 저장해 둔 이미지에서 고른다.
@@ -70,6 +69,8 @@ export function SavedImagePicker({
   excludeCharacterItems = false,
 }: SavedImagePickerProps) {
   const [open, setOpen] = useState(false);
+  /** 출처가 섞일 때만 쓴다. 한쪽만 보여주는 자리에서는 무시된다. */
+  const [tab, setTab] = useState<"all" | "reference" | "library">("all");
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<SavedImage[]>([]);
   const [pickingId, setPickingId] = useState<string | null>(null);
@@ -192,12 +193,26 @@ export function SavedImagePicker({
   };
 
   /**
-   * **모달로 연다.**
+   * **라이브러리 불러오기 창과 같은 모양이다.**
    *
    * 전에는 고르는 격자를 화면에 그대로 깔았다. 세 칸(인물·캐릭터·레퍼런스)이
    * 동시에 펼쳐지면 설정이 저 아래로 밀려 무엇을 고르는 중인지 알기 어려웠다.
    * 이미지 만들기(`_components/library-picker.tsx`)가 먼저 같은 이유로 모달이 됐다.
+   *
+   * 2026-09-11 에 **칸과 껍데기를 그쪽과 함께 쓰기로** 했다. 같은 일을 하는
+   * 자리가 도구마다 다르게 생기면 쓰는 사람이 매번 다시 배운다 — 확대 단추가
+   * 어디 있는지, 이름이 어디 붙는지, 지우기가 어느 쪽인지.
+   *
+   * 출처가 섞일 때만 **탭**으로 가른다. 한쪽만 보여주는 자리(`origin`)는
+   * 가를 것이 없으므로 탭도 없다.
    */
+  const shown = origin ? images : tab === "all" ? images : images.filter((image) => image.origin === tab);
+  const counts = {
+    reference: images.filter((image) => image.origin === "reference").length,
+    library: images.filter((image) => image.origin === "library").length,
+  };
+  const mixed = !origin && counts.reference > 0 && counts.library > 0;
+
   return (
     <>
       <Button variant="outline" size="sm" className="mt-2" onClick={() => setOpen(true)}>
@@ -210,91 +225,80 @@ export function SavedImagePicker({
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>
-              {loading ? "불러오는 중입니다." : `저장해 둔 그림 ${images.length}장 · 눌러서 고릅니다`}
+              {loading ? "저장해 둔 그림을 찾는 중입니다" : "눌러서 고릅니다"}
             </DialogDescription>
           </DialogHeader>
 
-      {loading ? (
-        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          불러오는 중입니다.
-        </div>
-      ) : images.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {origin === "reference"
-            ? "등록한 레퍼런스가 없습니다. 이미지를 올리면 레퍼런스로 저장되고 여기에 나옵니다."
-            : origin === "library" && excludeCharacterItems
-              ? "라이브러리에 사용할 수 있는 인물 사진이 없습니다. 캐릭터는 아래 전용 버튼에서 고를 수 있습니다."
-              : origin === "library"
-                ? "라이브러리에 저장한 작업이 없습니다. 만든 결과를 저장하면 여기에 나옵니다."
-              : "저장된 이미지가 없습니다. 레퍼런스를 등록하거나 라이브러리에 작업을 보관하면 여기에 나옵니다."}
-        </p>
-      ) : (
-        <div className="grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 lg:grid-cols-5">
-          {images.map((image) => (
-            <div key={image.id} className="relative">
-            {/* 그림 자체는 고르기에 쓰이므로 확대는 돋보기로 따로 연다. */}
-            <div className="absolute right-1 top-1 z-10 flex gap-1">
-              <button
-                type="button"
-                aria-label={`${image.name} 크게 보기`}
-                onClick={() => openImageViewer(image.url, image.name)}
-                className="grid h-6 w-6 place-items-center rounded bg-background/85 text-subtle-foreground backdrop-blur hover:text-foreground"
-              >
-                <Maximize2 className="h-3 w-3" />
-              </button>
-              {/* 되돌릴 수 없는 일이라 눈에 덜 띄게 두고, 누르면 한 번 묻는다. */}
-              <button
-                type="button"
-                disabled={Boolean(deletingId)}
-                aria-label={`${image.name} 지우기`}
-                onClick={() => void handleDelete(image)}
-                className="grid h-6 w-6 place-items-center rounded bg-background/85 text-subtle-foreground backdrop-blur hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-              >
-                {deletingId === image.id ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
-              </button>
+          {mixed ? (
+            <div className="flex flex-wrap gap-1 rounded-lg bg-muted/50 p-1">
+              {([
+                { id: "all" as const, label: "전체", count: images.length },
+                { id: "reference" as const, label: "레퍼런스", count: counts.reference },
+                { id: "library" as const, label: "작업물", count: counts.library },
+              ]).map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setTab(entry.id)}
+                  aria-current={tab === entry.id ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    tab === entry.id
+                      ? "bg-background shadow-[var(--shadow-ring)]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {entry.label}
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground">
+                    {entry.count}
+                  </span>
+                </button>
+              ))}
             </div>
-            <button
-              type="button"
-              disabled={Boolean(pickingId)}
-              onClick={() => void handlePick(image)}
-              className={cn(
-                "group relative aspect-[3/4] overflow-hidden rounded-md bg-muted text-left",
-                "transition-opacity hover:opacity-90 disabled:opacity-50",
-              )}
-            >
-              {/*
-                object-cover 로 채우면 세로 긴 상세페이지 이미지가 위아래로 잘려
-                무엇을 고르는지 알 수 없다. 전체가 보이게 맞춘다.
-              */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {/* 격자는 사본을 쓴다. 고르기(위 handlePick)와 확대는 원본이다. */}
-              <ThumbImage alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
-              <Badge
-                variant="secondary"
-                className="absolute left-1 top-1 text-meta backdrop-blur"
-              >
-                {image.origin === "reference" ? "레퍼런스" : "작업물"}
-              </Badge>
-              {pickingId === image.id ? (
-                <div className="absolute inset-0 grid place-items-center bg-background/60">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                </div>
-              ) : null}
-              <span className="absolute inset-x-0 bottom-0 truncate bg-background/80 px-1.5 py-1 text-meta backdrop-blur">
-                {image.name}
-              </span>
-            </button>
-            </div>
-          ))}
-        </div>
-      )}
+          ) : null}
 
-      {message ? <p className="mt-2 text-sm text-muted-foreground">{message}</p> : null}
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              불러오는 중입니다.
+            </div>
+          ) : shown.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              {origin === "reference"
+                ? "등록한 레퍼런스가 없습니다. 이미지를 올리면 레퍼런스로 저장되고 여기에 나옵니다."
+                : origin === "library" && excludeCharacterItems
+                  ? "라이브러리에 사용할 수 있는 인물 사진이 없습니다. 캐릭터는 아래 전용 버튼에서 고를 수 있습니다."
+                  : origin === "library"
+                    ? "라이브러리에 저장한 작업이 없습니다. 만든 결과를 저장하면 여기에 나옵니다."
+                    : "저장된 이미지가 없습니다. 레퍼런스를 등록하거나 라이브러리에 작업을 보관하면 여기에 나옵니다."}
+            </p>
+          ) : (
+            <div className="grid max-h-[56vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3 md:grid-cols-4">
+              {shown.map((image) => (
+                <PickCell
+                  key={image.id}
+                  image={{ id: image.id, title: image.name, url: image.url, thumbUrl: image.thumbUrl }}
+                  // 출처를 말해 준다. 레퍼런스는 이미 분석이 끝나 있어 받는 쪽이
+                  // 한 번 더 돌리지 않는다.
+                  badge={mixed ? (image.origin === "reference" ? "레퍼런스" : "작업물") : undefined}
+                  // 세로로 긴 상세페이지 그림은 잘리면 무엇인지 알 수 없다.
+                  aspect="portrait"
+                  fit="contain"
+                  busy={pickingId === image.id}
+                  disabled={Boolean(pickingId) || Boolean(deletingId)}
+                  onPick={() => void handlePick(image)}
+                  onDelete={() => void handleDelete(image)}
+                />
+              ))}
+            </div>
+          )}
+
+          {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+
+          <DialogFooter className="sm:justify-between">
+            <Button type="button" variant="ghost" onClick={() => void load()}>새로고침</Button>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>닫기</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

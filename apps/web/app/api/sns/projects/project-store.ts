@@ -44,6 +44,7 @@ function record(row: ProjectRow): SnsProjectRecord {
       source: row.data.source,
       attachments: row.data.attachments,
       flow: row.data.flow,
+      executionFlow: row.data.executionFlow,
       look: row.data.look,
       userInstruction: row.data.userInstruction,
     // **화이트리스트는 빠뜨린다.** 이 줄이 없으면 목록 경로로 읽은 작업에서
@@ -56,10 +57,15 @@ function record(row: ProjectRow): SnsProjectRecord {
   };
 }
 
-export function createSupabaseSnsProjectRepository(client: SupabaseClient): SnsProjectRepository {
+export function createSupabaseSnsProjectRepository(client: SupabaseClient, writer: SupabaseClient = client): SnsProjectRepository {
   return {
     async create(row) {
-      const { data, error } = await client.from("sns_projects").insert({
+      if (row.candidateId) {
+        const { data: candidate, error: denied } = await client.from("ingest_candidates").select("id")
+          .eq("id", row.candidateId).eq("user_id", row.userId).maybeSingle();
+        if (denied || !candidate) throw new Error("사용할 수 없는 수집 자료입니다.");
+      }
+      const { data, error } = await writer.from("sns_projects").insert({
         user_id: row.userId,
         candidate_id: row.candidateId ?? null,
         title: row.title,

@@ -294,15 +294,19 @@ export function costLabThemeScript(): string {
  * 그 뒤여야 이긴다. 닫는 태그를 못 찾으면 **손대지 않는다** — 엉뚱한 자리에
  * 끼워 문서를 깨뜨리는 것보다, 겉모습이 예전 그대로인 편이 낫다.
  */
-export function costLabDocument(html: string, fontCss: string, tokenCss: string): string {
+export function costLabDocument(html: string, fontCss: string, tokenCss: string, nonce?: string): string {
   const patch =
     `<style>${fontCss}
 ${costLabThemeCss(tokenCss)}</style>` +
     `<script>${costLabThemeScript()}</script>`;
   const painted = recolorChart(html);
   const close = painted.lastIndexOf("</head>");
-  if (close < 0) return painted;
-  return `${painted.slice(0, close)}${patch}${painted.slice(close)}`;
+  const document = close < 0 ? painted : `${painted.slice(0, close)}${patch}${painted.slice(close)}`;
+  if (!nonce) return document;
+  if (!/^[A-Za-z0-9+/_=-]{16,128}$/.test(nonce)) throw new Error("invalid_csp_nonce");
+  // Only trusted repository HTML reaches this function; this is not an HTML sanitizer.
+  return document.replace(/<script\b([^>]*)>/gi, (_tag, attributes: string) =>
+    `<script nonce="${nonce}"${attributes.replace(/\snonce\s*=\s*(?:"[^"]*"|'[^']*')/gi, "")}>`);
 }
 
 /**

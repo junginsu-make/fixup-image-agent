@@ -29,6 +29,9 @@ export interface TokenPrice {
  * 모르면 이 숫자를 쓰는 쪽이 과신한다.
  */
 export const LLM_PRICES: Record<string, TokenPrice> = {
+  // Generation-time knowledge retrieval, checked 2026-09-11:
+  // https://developers.openai.com/api/docs/models/text-embedding-3-small
+  "text-embedding-3-small": { inputPerMillion: 0.02, outputPerMillion: 0 },
   "claude-sonnet-5": { inputPerMillion: 3, outputPerMillion: 15 },
   "claude-opus-5": { inputPerMillion: 15, outputPerMillion: 75 },
   "claude-haiku-4-5": { inputPerMillion: 1, outputPerMillion: 5 },

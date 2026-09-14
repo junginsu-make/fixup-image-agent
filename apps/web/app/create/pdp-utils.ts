@@ -34,6 +34,7 @@ export const TONE_OPTIONS = [
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   headers.set("Content-Type", "application/json");
+  if ((init?.method || "GET").toUpperCase() === "POST") headers.set("x-generation-protocol", "2");
 
   if ((init?.method || "GET").toUpperCase() === "POST" && !headers.has("x-idempotency-key")) {
     headers.set("x-idempotency-key", randomId());

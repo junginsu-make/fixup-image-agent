@@ -105,7 +105,7 @@ function snsIntent(source: Record<string, unknown> | undefined): string {
 function toSnsWork(project: Record<string, any>): Work {
   const cards: Array<{
     index: number; assetUrl?: string | null; thumbUrl?: string | null; copy?: { headline?: string };
-  }> = project.data?.flow?.cards ?? [];
+  }> = (project.data?.executionFlow ?? project.data?.flow)?.cards ?? [];
   const made = cards.filter((card) => card.assetUrl);
   const images = made
     .map((card) => ({ url: card.assetUrl as string, label: `${card.index}번 카드`, index: card.index }));

@@ -1,4 +1,5 @@
 "use client";
+import { billableFetch } from "../../lib/billable-fetch";
 
 import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -132,7 +133,7 @@ export function NewSnsClient() {
       });
       const payload = await response.json() as { ok?: boolean; project?: { id: string }; message?: string };
       if (!response.ok || !payload.project) throw new Error(payload.message ?? "프로젝트를 만들지 못했습니다.");
-      const planned = await fetch(`/api/sns/projects/${payload.project.id}/plan`, { method: "POST" });
+      const planned = await billableFetch(`/api/sns/projects/${payload.project.id}/plan`, { method: "POST" });
       await planned.json();
       router.push(`/sns/${payload.project.id}`);
     } catch (error) {

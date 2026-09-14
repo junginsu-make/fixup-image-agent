@@ -1,0 +1,38 @@
+name: Isolated Supabase staging
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: fixup-security-runtime-${{ github.sha }}
+          path: ${{ runner.temp }}/security-package
+      - name: Unpack the exact runtime that passed browser enforcement
+        run: |
+          mkdir -p "$RUNNER_TEMP/checked-runtime"
+          tar -xzf "$RUNNER_TEMP/security-package/security-runtime.tar.gz" -C "$RUNNER_TEMP/checked-runtime"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Real Auth, PostgREST and Storage RED to GREEN
+        run: node scripts/start-staging-supabase.mjs
+      - name: Actual systemd timer, web crash and stored-result recovery
+        run: node --import tsx scripts/staging-executor.mjs "$RUNNER_TEMP/checked-runtime"
+      - name: Stop only this disposable stack
+        if: always()
+        run: node scripts/stop-staging-supabase.mjs

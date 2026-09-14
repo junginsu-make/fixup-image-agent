@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { ThemeProvider, Toaster } from "@fixup/ui";
 import { ImageViewerHost } from "./_components/image-viewer";
 /*
@@ -73,11 +74,13 @@ export const viewport: Viewport = {
   themeColor: "#08080A",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Reading request headers makes HTML dynamic; a cached page cannot reuse a CSP nonce.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="ko" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
+        <ThemeProvider nonce={nonce}>
           {children}
           {/* 어느 화면에서 눌러도 같은 창이 뜨도록 한 곳에만 둔다. */}
           <ImageViewerHost />

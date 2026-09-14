@@ -11,13 +11,14 @@ export {
   // 화면이 「몇 장까지 반영되는지」를 말해 주려면 이 값을 알아야 한다.
   MAX_REFERENCE_IMAGES,
   sizeForRatio,
+  redesignGenerationModels,
   type GenerateSectionsInput,
   type RedesignImageGenerator,
   type GenerateInputFile
 } from "./generate.js";
 
 // edit-section route
-export { editSection, humanizeEditError, type EditSectionInput } from "./edit-section.js";
+export { editSection, editSectionModelInfo, humanizeEditError, type EditSectionInput } from "./edit-section.js";
 
 // knowledge route (GET / POST / DELETE)
 export {
@@ -61,6 +62,7 @@ export {
 // transcribe route
 export {
   transcribeStrips,
+  transcribeModelInfo,
   GOOGLE_READING_MODEL,
   type TranscribeStripsInput,
   type TranscribeStripsResult

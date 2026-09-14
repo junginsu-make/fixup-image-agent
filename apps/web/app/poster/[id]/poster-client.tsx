@@ -302,7 +302,7 @@ export function PosterClient(
     setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     setError(null);
     try {
-      const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
+      const body = await (await billableFetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
       setList(body.images);
       if (body.issues?.length) setNotes(body.issues);
@@ -340,9 +340,9 @@ export function PosterClient(
   }
 
   async function pollUntilDone(submission: {
-    requestRowId: string; falRequestId: string; endpoint: string; estimatedUsd?: number;
+    runId?: string; requestRowId?: string; falRequestId?: string; endpoint?: string; estimatedUsd?: number;
   }, variants: number) {
-    const body = {
+    const body = submission.runId ? { runId: submission.runId } : {
       requestRowId: submission.requestRowId,
       falRequestId: submission.falRequestId,
       endpoint: submission.endpoint,

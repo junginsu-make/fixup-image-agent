@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ ${EUID} -ne 0 ]]; then
-  echo "Run as root: sudo bash deploy/ec2/install-host.sh <도메인 또는 IP>" >&2
+  echo "Run as root: sudo bash deploy/ec2/install-host.sh <HTTPS 도메인>" >&2
   exit 1
 fi
 
@@ -15,20 +15,13 @@ if [[ -e /etc/systemd/system/detail-page-studio.service || -d /opt/detail-page-s
   exit 1
 fi
 
-# 도메인 또는 IP 를 받는다.
-#
-# 도메인이면 Caddy 가 인증서를 받아 HTTPS 로 연다. IP 면 받을 수 없다 —
-# 공개 인증 기관은 IP 에 인증서를 내주지 않는다. 그때는 평문 HTTP 로 연다.
-# 그러라고 `http://` 를 붙여 준다. 안 붙이면 Caddy 가 인증서를 받으려다
-# 실패하고 사이트가 아예 안 뜬다.
+# 상용화 설계의 canonical 도메인과 HTTPS를 사용한다.
+# IP 인증서 지원 여부를 추측해 HTTP로 자동 후퇴하지 않는다.
 site=${1:-}
 if [[ ${site} =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
   site_address=${site}
-elif [[ ${site} =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
-  site_address="http://${site}"
-  echo "IP 로 엽니다: ${site_address} — 인증서 없이 평문 HTTP 입니다." >&2
 else
-  echo "도메인(studio.example.com) 또는 IP(54.180.68.212) 가 필요합니다." >&2
+  echo "상용 설치에는 검증할 HTTPS 도메인(studio.example.com)이 필요합니다." >&2
   exit 1
 fi
 
@@ -47,6 +40,11 @@ fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+for unit in fixup-image-agent-generation-tick.service fixup-image-agent-generation-tick.timer; do
+  unit_state=$(systemctl is-enabled "${unit}" 2>/dev/null || true)
+  [[ ${unit_state} != masked* ]] || { echo "${unit} is masked; preserving the operator setting." >&2; exit 1; }
+done
+
 if ! id fixup-agent >/dev/null 2>&1; then
   useradd --system --home-dir /opt/fixup-image-agent --shell /usr/sbin/nologin fixup-agent
 fi
@@ -55,11 +53,18 @@ install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent
 install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent/releases
 install -d -o root -g fixup-agent -m 0750 /etc/fixup-image-agent
 install -m 0644 "${script_dir}/fixup-image-agent.service" /etc/systemd/system/fixup-image-agent.service
-install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+worker_state="$(systemctl is-enabled fixup-image-agent-worker.service 2>/dev/null || true)"
+if [[ ${worker_state} != masked* ]]; then
+  install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+fi
+install -m 0644 "${script_dir}/fixup-image-agent-generation-tick.service" /etc/systemd/system/fixup-image-agent-generation-tick.service
+install -m 0644 "${script_dir}/fixup-image-agent-generation-tick.timer" /etc/systemd/system/fixup-image-agent-generation-tick.timer
 install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixup-image-agent/app.env.example
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
 install -d -o caddy -g caddy -m 0750 /var/log/caddy
+touch /etc/caddy/fixup-generation-maintenance.caddy
+chmod 0644 /etc/caddy/fixup-generation-maintenance.caddy
 sed "s|{{SITE}}|${site_address}|g" "${script_dir}/Caddyfile.template" > /etc/caddy/sites/fixup-image-agent.caddy
 caddy fmt --overwrite /etc/caddy/sites/fixup-image-agent.caddy
 
@@ -72,7 +77,8 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 systemctl daemon-reload
 systemctl enable fixup-image-agent.service
-systemctl enable fixup-image-agent-worker.service
+if [[ ${worker_state} != masked* ]]; then systemctl enable fixup-image-agent-worker.service; fi
+systemctl enable fixup-image-agent-generation-tick.timer
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
 echo "Host files installed for ${site_address}."

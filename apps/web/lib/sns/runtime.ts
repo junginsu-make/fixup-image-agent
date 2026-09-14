@@ -10,7 +10,7 @@ import {
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
 import { createSupabaseAdminClient } from "../supabase/admin";
-import { createSupabaseServerClient } from "../supabase/server";
+import { assertProjectWrite, assertReadableAssetPaths } from "../generation/ownership";
 import {
   getLocalDatabase,
   isLocalStoreEnabled,
@@ -66,9 +66,9 @@ export function localResultUrlForTest(storagePath: string): string {
 
 function localResultUrl(storagePath: string): string {
   const parts = storagePath.split("/");
-  if (parts.length !== 4 || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
+  if (![4,5].includes(parts.length) || parts[1] !== "sns") throw new Error("SNS 결과 경로가 올바르지 않습니다.");
   const projectId = encodeURIComponent(parts[2]!);
-  const fileName = parts[3]!;
+  const fileName = parts.at(-1)!;
   const thumb = fileName.includes(".thumb.");
   const cardIndex = encodeURIComponent(fileName.replace(/\.thumb\.webp$/i, "").replace(/\.[a-z0-9]+$/i, ""));
   return `/api/sns/projects/${projectId}/cards/${cardIndex}/file${thumb ? "?size=thumb" : ""}`;
@@ -84,18 +84,18 @@ async function resultUrl(path: string): Promise<string> {
 }
 
 async function uploadResult(
-  userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string,
+  userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string, runId?: string,
 ): Promise<{ assetPath: string; thumbPath: string | null }> {
   if (isLocalStoreEnabled()) {
     const png = await sharp(bytes).png().toBuffer();
-    const assetPath = await writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
+    const assetPath = await writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png, runId);
     const preview = await makeSnsPreview(png);
     if (!preview) return { assetPath, thumbPath: null };
-    const thumbPath = await writeLocalSnsPreviewFile(localStoreRoot(), userId, projectId, cardIndex, preview);
+    const thumbPath = await writeLocalSnsPreviewFile(localStoreRoot(), userId, projectId, cardIndex, preview, runId);
     return { assetPath, thumbPath };
   }
 
-  const path = `${userId}/sns/${projectId}/${cardIndex}.${extensionFor(contentType)}`;
+  const path = `${userId}/sns/${projectId}/${runId ? `${runId}/` : ""}${cardIndex}.${extensionFor(contentType)}`;
   const storage = createSupabaseAdminClient().storage.from(BUCKET);
   const result = await storage.upload(path, bytes, { contentType, upsert: true });
   if (result.error) throw new Error(result.error.message);
@@ -107,7 +107,7 @@ async function uploadResult(
    * 20~40MB 가 오간다. **못 만들어도 저장을 막지 않는다.** 없으면 화면이
    * 원본으로 떨어진다.
    */
-  const thumbPath = snsPreviewPath(userId, projectId, cardIndex);
+  const thumbPath = runId ? `${userId}/sns/${projectId}/${runId}/${cardIndex}.thumb.webp` : snsPreviewPath(userId, projectId, cardIndex);
 
   /**
    * 못 만들거나 못 올리면 **같은 자리의 옛 파일을 지운다.**
@@ -183,6 +183,12 @@ async function fetchSlotImages(
 }
 
 export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promise<SnsProjectRecord> {
+  if (project.data.executionFlow) {
+    const { executionFlow, ...draft } = project.data;
+    const base = await refreshProjectAssetUrls({ ...project, data: draft });
+    const executed = await refreshProjectAssetUrls({ ...project, data: { ...draft, flow: executionFlow } });
+    return { ...base, data: { ...base.data, executionFlow: executed.data.flow } };
+  }
   if (isLocalStoreEnabled()) {
     const attachments = await Promise.all(project.data.attachments.map(async (attachment) => {
       const bytes = await readLocalReferenceFile(localStoreRoot(), attachment.assetPath);
@@ -212,6 +218,7 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     if (card.thumbPath) paths.add(card.thumbPath);
   });
   if (!paths.size) return project;
+  await assertReadableAssetPaths(project.userId, [...paths]);
   // 경로는 RLS 를 지나 읽어 온 작업 행에서 꺼낸 것이다.
   const urls = await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS);
   const attachments = project.data.attachments.map((attachment) => ({ ...attachment, url: urls.get(attachment.assetPath) ?? attachment.url }));
@@ -248,7 +255,14 @@ export async function refreshProjectListAssetUrls(
     })));
   }
 
-  // 경로는 RLS 를 지나 읽어 온 목록에서 꺼낸 것이다.
+  // Reading a project row does not authorize every path embedded in its JSON.
+  const byOwner = new Map<string, Set<string>>();
+  for (const project of projects) {
+    const owned = byOwner.get(project.userId) ?? new Set<string>();
+    for (const value of collectCardPaths([project])) owned.add(value);
+    byOwner.set(project.userId, owned);
+  }
+  await Promise.all([...byOwner].map(([userId, values]) => assertReadableAssetPaths(userId, [...values])));
   return withCardUrls(projects, await signPaths(BUCKET, paths, SIGNED_URL_TTL_SECONDS));
 }
 
@@ -279,8 +293,14 @@ export async function replaceSnsCardRows(userId: string, projectId: string, flow
   if (isLocalStoreEnabled()) {
     return replaceLocalSnsCards(getLocalDatabase(), userId, projectId, flow);
   }
-  const client = await createSupabaseServerClient();
-  const removed = await client.from("sns_cards").delete().eq("project_id", projectId);
+  await assertProjectWrite(userId, "sns", projectId);
+  const client = createSupabaseAdminClient();
+  const active = await client.from("generation_runs").select("id").eq("user_id",userId).eq("resource_type","sns").eq("resource_id",projectId)
+    .eq("operation","sns_image").not("state","in","(succeeded,failed,cancelled)").limit(1);
+  if(active.error)throw new Error(active.error.message);
+  // Planning can update the next draft while an immutable run owns these results.
+  if(active.data?.length)return;
+  const removed = await client.from("sns_cards").delete().eq("project_id", projectId).eq("user_id", userId);
   if (removed.error) throw new Error(removed.error.message);
   if (!flow.cards.length) return;
   const inserted = await client.from("sns_cards").insert(flow.cards.map((card) => ({
@@ -297,12 +317,14 @@ export async function replaceSnsCardRows(userId: string, projectId: string, flow
 
 export async function createQueuedGenerationDependencies(input: {
   userId: string;
+  runId?: string;
   project: SnsProjectRecord;
   requestStore: SubmittedGenerationRequestStore;
   providers: Pick<SnsProviders, "sceneProvider" | "reviewPrimary" | "reviewBackup" | "falQueue" | "falUploader">;
 }): Promise<QueuedGenerationDependencies> {
   const local = isLocalStoreEnabled();
-  const client = local ? undefined : await createSupabaseServerClient();
+  await assertProjectWrite(input.userId, "sns", input.project.id);
+  const client = local ? undefined : createSupabaseAdminClient();
   const ratio = CARD_RATIOS.find((entry) => entry.id === input.project.ratio)?.pixel;
   if (!ratio) throw new Error(`지원하지 않는 비율입니다: ${input.project.ratio}`);
 
@@ -319,7 +341,7 @@ export async function createQueuedGenerationDependencies(input: {
       ...(patch.review !== undefined ? { review: patch.review } : {}),
       ...(patch.error !== undefined ? { error: patch.error } : {}),
       ...(patch.copy !== undefined ? { copy: patch.copy } : {}),
-    }).eq("project_id", input.project.id).eq("index", cardIndex);
+    }).eq("project_id", input.project.id).eq("index", cardIndex).eq("user_id", input.userId);
     if (result.error) throw new Error(result.error.message);
   }
 
@@ -350,7 +372,7 @@ export async function createQueuedGenerationDependencies(input: {
             slotImages: await fetchSlotImages(images, card.index),
           })).png
         : await markAsAi((await fetchedImage(requireWholeImage(images, card.index))).bytes);
-      const saved = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png");
+      const saved = await uploadResult(input.userId, input.project.id, card.index, marked, "image/png", input.runId);
       const { assetPath, thumbPath } = saved;
       await updateCard(card.index, { assetPath, thumbPath, status: "done", error: null });
       return {
@@ -369,7 +391,7 @@ export async function createQueuedGenerationDependencies(input: {
       if (!card.assetUrl) throw new Error(`${card.index}번 사용자 원본 URL이 없습니다.`);
       const image = await fetchedImage(card.assetUrl);
       const rendered = await letterbox(image.bytes, ratio);
-      const saved = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
+      const saved = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png", input.runId);
       await updateCard(card.index, {
         assetPath: saved.assetPath, thumbPath: saved.thumbPath, status: "done", review: null, error: null,
       });

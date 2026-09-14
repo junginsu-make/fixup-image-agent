@@ -1,4 +1,4 @@
-import { failureReason } from "@fixup/shared";
+import { failureReason, isExecutionControl } from "@fixup/shared";
 import type { ProjectSource } from "../../app/api/sns/projects/schema";
 
 /**
@@ -71,6 +71,7 @@ export async function resolveSourceText(
       ? { text, citations: found.citations, issues: [] }
       : { text: "", issues: ["질문에 대한 근거를 찾지 못했습니다. 직접 적어 주세요."] };
   } catch (error) {
+    if(isExecutionControl(error))throw error;
     // 실패했는데 계속 진행하면 LLM 이 지어낸다.
     return { text: "", issues: [`내용을 가져오지 못했습니다: ${failureReason(error)}`] };
   }
