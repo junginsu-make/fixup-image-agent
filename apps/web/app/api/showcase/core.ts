@@ -31,6 +31,22 @@ export const ShowcasePatchSchema = z.object({
 
 export const ShowcaseDeleteSchema = z.object({ id: z.string().uuid() });
 
+/**
+ * 차례를 통째로 다시 적는다.
+ *
+ * **한 칸씩 밀지 않는다.** 끌어서 옮기면 7번이 2번으로 가고 그 사이 다섯이
+ * 한 칸씩 밀린다. 한 칸 이동을 여섯 번 부르면 왕복이 여섯 번이고, 중간에
+ * 하나가 실패하면 절반만 옮겨진 채로 남는다.
+ *
+ * 화면이 원하는 **최종 차례를 통째로** 보낸다. 서버는 그것과 지금 있는 것이
+ * 같은 묶음인지 보고 한 번에 적는다.
+ */
+export const ShowcaseReorderSchema = z.object({
+  order: z.array(z.string().uuid()).min(1).max(200),
+});
+
+export type ShowcaseReorderInput = z.infer<typeof ShowcaseReorderSchema>;
+
 export type ShowcaseCreateInput = z.infer<typeof ShowcaseCreateSchema>;
 export type ShowcasePatchInput = z.infer<typeof ShowcasePatchSchema>;
 

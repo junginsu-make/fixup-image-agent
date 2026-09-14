@@ -325,37 +325,40 @@ export async function addShowcaseItem(
   return { ok: true, id };
 }
 
+
 /**
- * 차례를 한 칸 옮긴다.
+ * 차례를 통째로 다시 적는다.
  *
- * 두 줄의 `position` 을 맞바꾸지 않고 **보이는 차례대로 전부 다시 매긴다.**
- * 처음 건 것들은 차례가 모두 0 이라, 맞바꾸기만 하면 0 과 0 을 바꿔 아무 일도
- * 일어나지 않는다. 관리자는 버튼을 눌렀는데 화면이 그대로인 것을 고장으로
- * 본다.
+ * **보낸 묶음이 지금 있는 묶음과 같은지 먼저 본다.** 화면이 낡은 목록을 들고
+ * 있는 사이에 다른 창에서 하나를 지웠다면, 그대로 적으면 **지워진 것을
+ * 되살리거나 남은 것을 빠뜨린다.** 같지 않으면 고치지 않고 돌려보낸다 —
+ * 화면이 다시 읽어 오면 된다.
  *
- * 목록은 화면이 보낸 것이 아니라 여기서 다시 읽는다. 화면이 보낸 차례를
- * 믿으면, 두 관리자가 동시에 만질 때 한쪽이 남의 순서를 통째로 덮어쓴다.
+ * 값이 그대로인 줄은 건너뛴다. 200줄짜리 갤러리에서 하나를 옮기면 실제로
+ * 바뀌는 것은 몇 줄뿐이다.
  */
-export async function reorderShowcaseItem(id: string, direction: "up" | "down") {
+export async function reorderShowcase(order: string[]) {
   const items = await listShowcaseForAdmin();
-  const at = items.findIndex((item) => item.id === id);
-  if (at < 0) return { ok: false as const, message: "갤러리 항목을 찾지 못했습니다." };
+  const now = new Set(items.map((item) => item.id));
+  const wanted = new Set(order);
 
-  const to = direction === "up" ? at - 1 : at + 1;
-  // 끝에 닿았으면 할 일이 없다. 오류가 아니다.
-  if (to < 0 || to >= items.length) return { ok: true as const };
+  if (wanted.size !== order.length) {
+    return { ok: false as const, message: "같은 항목이 두 번 들어 있습니다." };
+  }
+  if (now.size !== wanted.size || [...now].some((id) => !wanted.has(id))) {
+    return { ok: false as const, message: "목록이 그사이 바뀌었습니다. 새로고침 후 다시 옮겨 주세요." };
+  }
 
-  const ordered = items.map((item, index) =>
-    index === at ? items[to] : index === to ? items[at] : item,
-  );
-
+  const position = new Map(order.map((id, index) => [id, index]));
   const supabase = createSupabaseAdminClient();
-  const now = new Date().toISOString();
-  for (const [position, item] of ordered.entries()) {
-    if (item.position === position) continue;
+  const stamp = new Date().toISOString();
+
+  for (const item of items) {
+    const next = position.get(item.id)!;
+    if (item.position === next) continue;
     const { error } = await supabase
       .from("showcase_items")
-      .update({ position, updated_at: now })
+      .update({ position: next, updated_at: stamp })
       .eq("id", item.id);
     if (error) return { ok: false as const, message: error.message };
   }
