@@ -210,6 +210,9 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 
 ### 생성 장부 v2의 첫 전환과 운영 순서
 
+> **먼저 읽는다: `docs/superpowers/plans/2026-09-14-domain-cutover-runbook.md`**
+> 도메인 확보 이후의 차례, 어느 migration 이 위험한지, `usage_controls` 에 무엇을 넣는지가 거기 있다. 이 절은 그중 **배포 기계 절차**만 다룬다.
+
 상용화 설계의 §14·§18을 적용한다. 공유 Supabase를 쓰는 다른 앱의 목록과 호환성, 백업 범위를 먼저 확인한다. migration 이력만 보고 기존 SQL을 재실행하지 않는다. 실제 스키마와 비교한 승인된 변경분을 적용하며 가입 기본 한도 30을 유지한다.
 
 1. 새 릴리스와 같은 SHA의 검사·DB 통합시험·Linux 빌드가 모두 성공했는지 확인한다. 릴리스 자산이 있다는 사실만으로 배포하지 않는다.
