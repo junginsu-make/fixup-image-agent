@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
-import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 
@@ -28,8 +27,7 @@ const ANGLES = ["정면", "왼쪽 45°", "오른쪽 45°", "왼쪽", "오른쪽"
 /** 각도가 아니라 일곱 번째 항목이다. 화면과 같은 말을 쓴다. */
 const SHEET_LABEL = "다각도 한 장";
 
-export default async function CharacterGuidePage() {
-  const isAdmin = await isAdminReader();
+export default function CharacterGuidePage() {
   return (
     <>
       <GuideHeader
@@ -271,7 +269,7 @@ export default async function CharacterGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/character" toolHref="/characters" toolLabel="캐릭터 열기" isAdmin={isAdmin} />
+      <GuideFooter href="/guide/character" toolHref="/characters" toolLabel="캐릭터 열기" />
     </>
   );
 }

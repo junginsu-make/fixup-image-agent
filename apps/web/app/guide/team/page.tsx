@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChoiceTable, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
-import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "팀 — 사용 설명서" };
 
-export default async function TeamGuidePage() {
-  const isAdmin = await isAdminReader();
+export default function TeamGuidePage() {
   return (
     <>
       <GuideHeader
@@ -131,7 +129,11 @@ export default async function TeamGuidePage() {
               q: "내 한도는 남았는데 못 만듭니다",
               a: (
                 <>
-                  팀 잔액이 바닥났습니다. 내 한도를 올려 달라고 해도 안 풀립니다 — 팀장에게 말씀하세요.
+                  팀 잔액이 바닥났습니다. 팀장에게 말씀하시거나{" "}
+                  <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
+                    크레딧과 모델
+                  </Link>
+                  에서 한도 계산을 확인하세요.
                 </>
               ),
             },
@@ -139,7 +141,7 @@ export default async function TeamGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/team" toolHref="/team" toolLabel="팀 열기" isAdmin={isAdmin} />
+      <GuideFooter href="/guide/team" toolHref="/team" toolLabel="팀 열기" />
     </>
   );
 }
