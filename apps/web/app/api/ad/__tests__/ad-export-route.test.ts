@@ -52,6 +52,7 @@ vi.mock("../../../../lib/ad/batch", async () => {
     }) => {
       batchArgs.push({ specIds, options });
       if (batchThrows) throw batchThrows;
+      if (batchResult) return batchResult;
       return [{
         specId: specIds[0]!, label: "시험", portal: "google" as const, product: "p",
         required: true, sourceKind: "official" as const, format: "jpg" as const,
@@ -87,12 +88,44 @@ vi.mock("../../../../lib/poster/providers", () => ({
   }),
 }));
 
+/**
+ * 예약·정산이 실제로 불렸는지 본다.
+ *
+ * 2026-09-14 에 이 도구를 사용량 장부에 들였다. 장부를 여는 자리가 빠지면
+ * 크레딧이 안 깎이는데, 화면에서는 아무 표가 안 난다 — 시험이 봐야 한다.
+ */
+const reserveCalls: Array<{ operation: string; units: number }> = [];
+const settleCalls: Array<{ success: boolean; units: number; cost?: unknown }> = [];
+let reserveOk = true;
+
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => {
     authCalls.push(1);
     return authOk
       ? { ok: true as const, member: { userId: member.userId, profile: { role: member.role } } }
       : { ok: false as const, response: new Response("로그인이 필요합니다.", { status: 401 }) };
+  },
+  reserveAiUsage: async (_request: Request, operation: string, units: number) => {
+    reserveCalls.push({ operation, units });
+    return reserveOk
+      ? { ok: true as const, userId: member.userId, requestId: "test-request", usage: undefined }
+      : {
+          ok: false as const,
+          response: Response.json(
+            { ok: false, code: "quota_exceeded", message: "이번 달 이미지 생성 한도를 모두 사용했습니다." },
+            { status: 429 },
+          ),
+        };
+  },
+  settleAiUsage: async (
+    _reservation: unknown,
+    success: boolean,
+    units: number,
+    _errorCode?: string,
+    cost?: unknown,
+  ) => {
+    settleCalls.push({ success, units, cost });
+    return undefined;
   },
 }));
 
@@ -138,7 +171,13 @@ const { POST } = await import("../export/route");
 const call = (body: unknown) =>
   POST(new Request("http://x/api/ad/export", { method: "POST", body: JSON.stringify(body) }));
 
+/** 배치 결과를 갈아 끼울 자리. 실패만 돌아오는 경우를 만들 때 쓴다. */
+let batchResult: Array<Record<string, unknown>> | null = null;
+
 const good = { itemId: "item-1", position: 0, specIds: ["google-rda-square"] };
+
+/** 조립이 필요한 규격. 배경 제거를 부르게 만든다. */
+const assembling = { itemId: "item-1", position: 0, specIds: ["kakao-bizboard"] };
 
 /**
  * **덮어쓴 `fetch` 를 되돌린다.**
@@ -166,6 +205,10 @@ beforeEach(() => {
   order.length = 0;
   cutoutThrows = null;
   posterImages = [{ variantIndex: 0, assetPath: "u1/poster/p1/0.png" }];
+  reserveCalls.length = 0;
+  settleCalls.length = 0;
+  reserveOk = true;
+  batchResult = null;
 });
 
 describe("들어올 수 있는 사람인가", () => {
@@ -521,5 +564,118 @@ describe("내려받는 크기에 상한이 있다", () => {
     await call({ ...good, specIds: ["kakao-bizboard"] });
     const bytes = await batchArgs[0]!.options!.cutout!(Buffer.from("m"));
     expect(bytes.toString()).toBe("cut");
+  });
+});
+
+/**
+ * 사용량 장부 (2026-09-14).
+ *
+ * 이 도구는 **새로 그리지 않아서** 자르기·줄이기만 하면 원가가 0 이다. 그래도
+ * 예약은 거친다 — 「차감이 0」과 「검사를 안 한다」는 다르다.
+ */
+describe("쓸 때마다 장부를 연다", () => {
+  it("일을 시작하기 전에 예약한다", async () => {
+    await call(good);
+    expect(reserveCalls).toHaveLength(1);
+    expect(reserveCalls[0]!.operation).toBe("ad_export");
+  });
+
+  /** 밖에 낸 돈이 없으면 0장이다. 다른 도구와 같은 공식이다. */
+  it("파생만 뽑으면 0장으로 예약한다", async () => {
+    await call(good);
+    expect(reserveCalls[0]!.units).toBe(0);
+  });
+
+  /** 투명 배너는 배경 제거를 부르므로 돈이 나간다. */
+  it("조립이 섞이면 1장으로 예약한다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call(assembling);
+    expect(reserveCalls[0]!.units).toBe(1);
+  });
+
+  /**
+   * **막히면 아무 일도 안 한다.** 한도를 넘겼는데 파생을 돌리면 CPU 를 쓰고,
+   * 조립이 섞여 있으면 배경 제거 값까지 나간다.
+   */
+  it("한도에 막히면 뽑지 않는다", async () => {
+    reserveOk = false;
+    const response = await call(assembling);
+    expect(response.status).toBe(429);
+    expect(batchArgs, "예약이 막혔는데 일을 시작하면 안 된다").toEqual([]);
+    expect(order, "배경 제거도 부르면 안 된다").toEqual([]);
+  });
+
+  it("성공하면 장부를 닫는다", async () => {
+    await call(good);
+    expect(settleCalls).toHaveLength(1);
+    expect(settleCalls[0]!.success).toBe(true);
+  });
+
+  /** 실제로 부른 만큼만 낸다. 파생만 뽑았으면 0장이다. */
+  it("파생만 뽑으면 0장으로 확정한다", async () => {
+    await call(good);
+    expect(settleCalls[0]!.units).toBe(0);
+  });
+
+  it("조립을 부르면 1장으로 확정한다", async () => {
+    // 지운 그림을 내려받는 자리. 안 세우면 배경 제거가 실패해 0장이 된다.
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call(assembling);
+    expect(settleCalls[0]!.units).toBe(1);
+  });
+
+  /**
+   * **지정한 크기로 안 나온 것은 안 센다.** 규격 검증을 통과한 것만 `ok` 다.
+   * 한 장도 못 만들었으면 회원에게 안 물린다.
+   */
+  it("전부 규격에 걸리면 0장이고 실패다", async () => {
+    batchResult = [{
+      specId: "google-rda-square", label: "시험", portal: "google", product: "p",
+      required: true, sourceKind: "official", format: "jpg",
+      target: { width: 10, height: 10 }, status: "failed",
+      reason: "픽셀이 다릅니다", failures: ["픽셀이 다릅니다"],
+    }];
+    await call(assembling);
+    expect(settleCalls[0]!.success).toBe(false);
+    expect(settleCalls[0]!.units).toBe(0);
+  });
+
+  /**
+   * **돈이 나갔으면 실패해도 장부에 남긴다.** 「돈이 안 나갔다」와 「모른다」는
+   * 다르고, 낭비가 안 보이면 줄일 수도 없다.
+   */
+  it("실패해도 우리가 낸 돈은 남긴다", async () => {
+    batchResult = [{
+      specId: "kakao-bizboard", label: "시험", portal: "kakao", product: "p",
+      required: true, sourceKind: "official", format: "png-alpha",
+      target: { width: 10, height: 10 }, status: "failed",
+      reason: "알파가 없습니다", failures: ["알파가 없습니다"],
+    }];
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call(assembling);
+    expect(settleCalls[0]!.cost).toMatchObject({
+      model: "fal-ai/birefnet/v2",
+      billableImages: 1,
+    });
+  });
+
+  /**
+   * **터져도 예약을 풀어 준다.** 안 풀면 크레딧이 묶여, 다음 요청이
+   * `concurrent_limit` 으로 10분간 거절된다.
+   */
+  it("뽑다가 터져도 예약을 푼다", async () => {
+    batchThrows = new Error("터짐");
+    await call(good);
+    expect(settleCalls).toHaveLength(1);
+    expect(settleCalls[0]!.success).toBe(false);
+    expect(settleCalls[0]!.units).toBe(0);
+  });
+
+  /** 배경 제거가 실패하면 돈이 안 나갔다 — fal 은 결과 없는 호출을 청구하지 않는다. */
+  it("배경 제거가 실패하면 0장이다", async () => {
+    cutoutThrows = new Error("배경 제거 실패");
+    await call(assembling);
+    expect(settleCalls[0]!.units).toBe(0);
+    expect(settleCalls[0]!.cost).toMatchObject({ billableImages: 0 });
   });
 });

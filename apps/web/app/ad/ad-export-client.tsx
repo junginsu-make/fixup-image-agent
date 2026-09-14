@@ -11,6 +11,7 @@ import type { LibraryItem } from "@fixup/shared";
 import { getAccountItemImages } from "../../lib/library";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { AD_STEPS } from "./steps";
+import { randomId } from "../../lib/browser-safe";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
 import type { AdSpec } from "../../lib/ad/specs";
@@ -279,11 +280,35 @@ export function AdExportClient() {
     try {
       const response = await fetch("/api/ad/export", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          /**
+           * **장부를 여는 요청이라 식별자가 필요하다**(2026-09-14).
+           *
+           * 서버가 이 값으로 예약을 한 번만 잡는다. 없으면 400 으로 거절된다 —
+           * 다른 도구도 같은 머리를 단다(`app/create/pdp-utils.ts`).
+           *
+           * **누를 때마다 새로 만든다.** 같은 값을 다시 보내면 서버가
+           * `duplicate_request` 로 막는데, 여기서는 다시 누르는 것이 정상이다.
+           */
+          "x-idempotency-key": randomId(),
+        },
         body: JSON.stringify({ itemId: item.id, position, specIds: picked, source: item.source }),
       });
       const body = await response.json().catch(() => null);
       if (mine !== token.current) return;
+
+      /**
+       * **사용량 칸을 바로 고친다.**
+       *
+       * 안 고치면 상단의 「N/M장」이 옛 숫자를 들고 있다가, 화면을 옮기고서야
+       * 바뀐다. 한도에 가까운 사람은 그 사이에 남은 장수를 잘못 보고 판단한다.
+       * 거절된 응답에도 사용량이 실려 온다 — 한도 초과가 그렇다.
+       */
+      if (body?.usage) {
+        window.dispatchEvent(new CustomEvent("studio-usage-updated", { detail: body.usage }));
+      }
+
       if (!response.ok || !body?.ok) {
         // 본문 없는 404 도 온다(기능이 꺼짐·그림 없음). 상태로 갈라 말한다.
         setError(failureMessage(response.status, body?.message));

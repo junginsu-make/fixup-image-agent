@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { authenticateApiMember } from "../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { BACKGROUND_REMOVAL_MODEL, adExportUnits } from "../../../../lib/ad/cost";
 import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
 import { markAsAi } from "../../../../lib/watermark";
@@ -134,6 +135,28 @@ export async function POST(request: Request) {
     );
   }
 
+  /**
+   * **쓸 때마다 장부를 연다** (사용자 결정 2026-09-14).
+   *
+   * 이 도구는 새로 그리지 않아서 자르기·줄이기만 하면 원가가 0 이고, 그때는
+   * 0장으로 예약된다. **그래도 예약은 거친다** — 정지된 계정과 한도 초과는
+   * 0장짜리 요청도 막아야 하고, 「차감이 0」과 「검사를 안 한다」는 다르다.
+   *
+   * 밖에 돈을 내는 자리는 투명 배너의 배경 제거뿐이라, **고른 규격에 조립이
+   * 섞였는지로 미리 잡는다.** 실제로 몇 번 불렀는지는 아래에서 확정한다.
+   *
+   * 다른 도구와 같은 공식을 쓴다(`@fixup/shared` 의 `creditUnits`).
+   */
+  const planned = adExportUnits(needsCutout(parsed.data.specIds) ? 1 : 0);
+  const reserved = await reserveAiUsage(request, "ad_export", planned);
+  if (!reserved.ok) return reserved.response;
+
+  /**
+   * 실제로 부른 배경 제거 횟수. **마스터 한 장당 한 번이다** —
+   * 조립 규격을 여럿 골라도 `batch.ts` 가 같은 오브젝트를 나눠 쓴다.
+   */
+  let cutoutCalls = 0;
+
   try {
     /*
       **참고 이미지는 올린 사람만 뽑는다.** 목록은 공용 창고라 팀이 안 붙은
@@ -210,6 +233,9 @@ export async function POST(request: Request) {
     if (needsCutout(parsed.data.specIds)) {
       try {
         cutout = await cutoutForAd(file.bytes, file.mimeType);
+        // **부른 뒤에 센다.** 던지면 돈이 안 나갔다 — fal 은 결과를 못 준 호출을
+        // 청구하지 않는다. 성공한 것만 장부에 올린다.
+        cutoutCalls += 1;
       } catch (error) {
         /**
          * **내부 사정을 사용자 화면에 쓰지 않는다.**
@@ -254,8 +280,31 @@ export async function POST(request: Request) {
      * 파일로 따로 내려주면 화면이 규격마다 다시 요청하게 되고, 그때마다 서버가
      * 파생을 다시 돌린다.
      */
+    /**
+     * **장부를 닫는다.**
+     *
+     * 성공 여부는 「한 장이라도 규격대로 나왔는가」다. 규격 검증(`checkAgainstSpec`)을
+     * 통과한 것만 `ok` 라서, **지정한 크기로 안 나온 것은 여기 안 센다.**
+     *
+     * 차감은 **우리가 실제로 낸 돈**에서 나온다. 한 장도 못 만들었으면 0장이다 —
+     * 그래도 `cost` 는 남긴다. 「돈이 안 나갔다」와 「모른다」는 다르고, 낭비가
+     * 안 보이면 줄일 수도 없다(`finalizeAiUsage` 머리말).
+     *
+     * `settleAiUsage` 는 던지지 않는다. 여기서 던지면 이미 만들어 낸 결과가
+     * 아래 catch 로 빨려 들어가 **생성 실패인 척하는 오류**가 된다.
+     */
+    const made = results.filter((entry) => entry.status === "ok").length;
+    const usage = await settleAiUsage(
+      reserved,
+      made > 0,
+      made > 0 ? adExportUnits(cutoutCalls) : 0,
+      made > 0 ? undefined : "no_spec_produced",
+      { model: BACKGROUND_REMOVAL_MODEL, billableImages: cutoutCalls, llmUsd: 0 },
+    );
+
     return Response.json({
       ok: true,
+      usage,
       results: results.map(({ bytes, ...rest }) => ({
         ...rest,
         // **형식을 못 박지 않는다.** 규격마다 다르다 — jpg 로 고정하면 PNG 규격이
@@ -266,6 +315,20 @@ export async function POST(request: Request) {
       })),
     });
   } catch (error) {
+    /**
+     * **예약을 풀어 준다.**
+     *
+     * 안 풀면 그 회원의 크레딧이 예약된 채 묶이고, 다음 요청이 `concurrent_limit`
+     * 으로 거절된다 — 10분이 지나 만료될 때까지 그 도구를 못 쓴다.
+     *
+     * 배경 제거를 이미 불렀으면 그 돈은 나간 것이라 `cost` 에는 남긴다.
+     */
+    await settleAiUsage(reserved, false, 0, "ad_export_failed", {
+      model: BACKGROUND_REMOVAL_MODEL,
+      billableImages: cutoutCalls,
+      llmUsd: 0,
+    });
+
     // 붐비는 것은 사용자 잘못이 아니다. 다시 누르면 되는 상황이라 429 다.
     if (error instanceof RenderBusyError) {
       return Response.json({ ok: false, message: error.message }, { status: error.status });
