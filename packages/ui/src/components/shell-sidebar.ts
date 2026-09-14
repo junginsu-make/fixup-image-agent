@@ -48,11 +48,27 @@ export function sidebarToggleLabel(collapsed: boolean): string {
 }
 
 /**
+ * 접었을 때 왼쪽에 남기는 띠의 너비(px).
+ *
+ * **0 으로 완전히 닫지 않는다.** 다 닫으면 다시 펼 손잡이가 허공에 뜬 단추
+ * 하나만 남아서, 어디를 눌러야 하는지 알기 어렵다. 얇은 띠를 남겨 두면
+ * 손잡이가 그 띠에 물려 있어 「여기를 잡아당기면 열린다」가 눈에 보인다.
+ */
+export const SIDEBAR_RAIL_PX = 16;
+
+/**
  * 사이드바가 차지할 너비.
  *
- * 접히면 0 이 되고, 그만큼 본문이 넓어진다 — 본문은 남는 자리를 모두 쓰는
- * `minmax(0,1fr)` 이라 따로 늘려 줄 필요가 없다.
+ * 접히면 띠 하나만 남고, 나머지는 본문이 가져간다 — 본문은 남는 자리를 모두
+ * 쓰는 `minmax(0,1fr)` 이라 따로 늘려 줄 필요가 없다.
  */
 export function shellSideWidth(collapsed: boolean): string {
-  return collapsed ? "[--shell-side:0px]" : "[--shell-side:clamp(236px,15vw,300px)]";
+  /*
+    **숫자를 그대로 적는다.** Tailwind 는 소스를 글자로 훑어 클래스를 만들기
+    때문에, `${SIDEBAR_RAIL_PX}px` 처럼 조립하면 그 클래스가 아예 안 생긴다.
+    그러면 너비가 통째로 안 먹어 화면에서만 드러난다.
+
+    위의 `SIDEBAR_RAIL_PX` 와 어긋나지 않는지는 시험이 본다.
+  */
+  return collapsed ? "[--shell-side:16px]" : "[--shell-side:clamp(236px,15vw,300px)]";
 }

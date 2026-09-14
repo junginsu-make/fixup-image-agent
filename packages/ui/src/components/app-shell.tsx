@@ -456,6 +456,59 @@ export function AppShell({
         </aside>
 
         {/*
+          접었을 때 왼쪽에 남는 얇은 띠.
+
+          **다 닫지 않는 이유가 여기 있다.** 0 까지 닫으면 다시 펼 것이 허공에
+          뜬 단추 하나뿐이라 어디를 눌러야 할지 알기 어렵다. 띠가 남아 있으면
+          손잡이가 그 띠에 물려 보여서 「잡아당기면 열린다」가 눈에 들어온다.
+
+          사이드바를 좁히는 대신 **따로 그린다.** 좁혀서 감추면 그 안의 메뉴가
+          보이지 않은 채로 탭 순서에 남아, 키보드로 넘기다 안 보이는 링크에
+          걸린다.
+        */}
+        {collapsed ? (
+          <div
+            aria-hidden
+            className="sticky top-0 hidden h-screen border-r bg-card lg:block"
+          />
+        ) : null}
+
+        {/*
+          접기 손잡이. **사이드바 테두리 위에 얹되 사이드바 안에 넣지는 않는다.**
+
+          안에 넣으면 접히는 순간 손잡이까지 같이 사라져 다시 펼 길이 없어진다.
+          그래서 바깥에 두고 자리만 사이드바에 맞춘다 — 펴져 있으면 오른쪽
+          테두리에 물리고, 접히면 `--shell-side` 가 0 이 되면서 화면 왼쪽 끝으로
+          따라 내려온다. 눈으로는 사이드바에 달린 손잡이를 잡아당기는 것처럼
+          보인다.
+
+          높이는 로고 줄에 맞춘다(위 여백 16px + 로고 32px 의 한가운데).
+        */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={sidebarToggleLabel(collapsed)}
+          title={sidebarToggleLabel(collapsed)}
+          aria-expanded={!collapsed}
+          aria-controls="shell-sidebar"
+          className={cn(
+            "fixed top-8 z-50 hidden h-7 w-7 -translate-y-1/2 place-items-center",
+            "rounded-full border bg-card text-subtle-foreground shadow-sm",
+            "transition-colors hover:bg-background hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            // 두 상태가 같은 규칙을 쓴다. 접히면 `--shell-side` 가 띠 너비로
+            // 줄어들 뿐이라, 손잡이는 늘 그 테두리 한가운데에 얹힌다.
+            "lg:grid left-[var(--shell-side)] -ml-3.5",
+          )}
+        >
+          {collapsed ? (
+            <ChevronsRight className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <ChevronsLeft className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </button>
+
+        {/*
           **둘째 칸에 못 박는다.** 접히면 사이드바가 `display: none` 이라 그리드에서
           통째로 빠지는데, 그러면 본문이 자동으로 첫 칸(0px)에 들어가 짜부라진다.
           자리를 지정해 두면 사이드바가 있든 없든 본문은 늘 남는 칸을 쓴다.
@@ -465,30 +518,6 @@ export function AppShell({
               맨 아래에 있어서, 내가 누구로 접속했는지 보려면 눈이 왼쪽 아래로
               내려가야 했다. 좁은 화면은 위 상단바가 같은 것을 이미 보여준다. */}
           <div className="hidden items-center justify-end gap-2 px-[clamp(16px,2.2vw,52px)] pt-4 lg:flex">
-            {/*
-              접기 단추는 **한 자리에 붙박이로** 둔다. 사이드바 안에 두면 접힌
-              뒤에 단추까지 같이 사라져서 다시 펼 길이 없어진다. 이 줄은 접히든
-              펴지든 늘 같은 높이에 있으므로, 단추가 왼쪽으로 밀려날 뿐이다.
-
-              `mr-auto` 가 이 줄의 나머지(계정·테마)를 오른쪽 끝에 그대로 둔다.
-            */}
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={toggleSidebar}
-              aria-label={sidebarToggleLabel(collapsed)}
-              title={sidebarToggleLabel(collapsed)}
-              aria-expanded={!collapsed}
-              aria-controls="shell-sidebar"
-              className="mr-auto"
-            >
-              {collapsed ? (
-                <ChevronsRight className="h-4 w-4" aria-hidden />
-              ) : (
-                <ChevronsLeft className="h-4 w-4" aria-hidden />
-              )}
-            </Button>
             {actions}
             <ThemeToggle />
           </div>
