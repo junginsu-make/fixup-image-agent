@@ -4,6 +4,7 @@ import { CARD_RATIOS, IMAGE_MODELS, MAX_CARDS } from "@fixup/sns-core";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import {
   Callouts,
@@ -29,7 +30,8 @@ const ROLE_ITEMS = ROLES.map((role) => ({
   hint: ATTACHMENT_ROLE_HINT[role],
 }));
 
-export default function CardNewsGuidePage() {
+export default async function CardNewsGuidePage() {
+  const isAdmin = await isAdminReader();
   return (
     <>
       <GuideHeader
@@ -389,11 +391,8 @@ export default function CardNewsGuidePage() {
               title: "언어와 이미지 모델",
               body: (
                 <>
-                  언어는 카드에 그려질 글자의 언어입니다. 모델은 글자 정확도와 비용의 저울질입니다 — 자세한 것은{" "}
-                  <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
-                    크레딧과 모델
-                  </Link>
-                  에 있습니다. <strong className="text-foreground">모르겠으면 기본값(표준형)이 가장 안전합니다.</strong>
+                  언어는 카드에 그려질 글자의 언어입니다. 모델은 글자 정확도와 비용의 저울질이고, 고르는 자리에
+                  차감량이 함께 적혀 있습니다. <strong className="text-foreground">모르겠으면 기본값(표준형)이 가장 안전합니다.</strong>
                 </>
               ),
             },
@@ -476,7 +475,7 @@ export default function CardNewsGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/cardnews" toolHref="/sns" toolLabel="카드뉴스 열기" />
+      <GuideFooter href="/guide/cardnews" toolHref="/sns" toolLabel="카드뉴스 열기" isAdmin={isAdmin} />
     </>
   );
 }

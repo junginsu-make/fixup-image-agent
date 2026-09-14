@@ -4,6 +4,7 @@ import { POSTER_RATIOS } from "@fixup/sns-core";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import {
   Callouts,
@@ -24,7 +25,8 @@ const PRESERVE_ITEMS = (["preserve_product", "preserve_person"] as const).map((r
   hint: ATTACHMENT_ROLE_HINT[role],
 }));
 
-export default function ImageGuidePage() {
+export default async function ImageGuidePage() {
+  const isAdmin = await isAdminReader();
   return (
     <>
       <GuideHeader
@@ -298,7 +300,7 @@ export default function ImageGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/image" toolHref="/poster" toolLabel="이미지 만들기 열기" />
+      <GuideFooter href="/guide/image" toolHref="/poster" toolLabel="이미지 만들기 열기" isAdmin={isAdmin} />
     </>
   );
 }

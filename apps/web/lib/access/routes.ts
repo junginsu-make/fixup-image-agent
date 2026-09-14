@@ -71,6 +71,17 @@ export const APP_ROUTES: AppRoute[] = [
   // 「아직 팀이 없습니다」가 뜨고, 꾸미는 것은 서버 액션이 막는다.
   { path: "/team", label: "팀" },
   { path: "/settings", label: "계정" },
+  /**
+   * **크레딧 계산과 모델 단가는 회원에게 안 보인다** (운영자 결정 2026-09-14).
+   *
+   * 회원이 알아야 하는 것은 「이번 달에 얼마나 남았나」뿐이고, 그것은 화면
+   * 오른쪽 위와 `/settings` 에 늘 떠 있다. 모델마다 원가가 몇 배 차이인지는
+   * 운영 정보라 값을 정하는 사람만 본다.
+   *
+   * **설명서 안의 한 장에만 역할을 건다.** `/guide` 자체는 누구나 연다 —
+   * `canAccessPage()` 가 가장 긴 규칙을 고르므로 이 줄이 그 아래만 막는다.
+   */
+  { path: "/guide/credits", label: "크레딧과 모델", requiredRole: "admin" },
   { path: "/admin", label: "관리자", requiredRole: "admin" },
 ];
 
