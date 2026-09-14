@@ -3,6 +3,7 @@ import Link from "next/link";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps, MockTabs } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "상세페이지 만들기 — 사용 설명서" };
@@ -14,6 +15,33 @@ export default function DetailPageGuidePage() {
         kicker="상세페이지 만들기"
         title="사진 한 장 또는 글만으로 상세페이지를"
         lead="쇼핑몰 상품 페이지에 들어가는 긴 세로 이미지입니다. 상품 사진 한 장을 올리거나, 사진 없이 무엇을 파는지 글로만 적어도 됩니다. 구성안을 먼저 짜고 문구를 고친 뒤 섹션 이미지를 묶음으로 만듭니다."
+      />
+
+      <Summary
+        what="상품 사진 한 장 또는 글만으로 쇼핑몰 상세페이지를 만듭니다."
+        points={[
+          {
+            title: "사진으로도 글로도 시작합니다",
+            body: "상품 사진이 있으면 읽어서 시작하고, 없으면 설명 글만으로도 만듭니다.",
+          },
+          {
+            title: "글자를 따로 얹습니다",
+            body: "그림과 글자를 한 번에 그리지 않습니다. 편집 화면에서 글자를 얹어 한글이 깨지지 않습니다.",
+          },
+          {
+            title: "심사를 거칩니다",
+            body: "만든 결과를 정해진 항목으로 채점합니다. 통과하지 못한 것은 무엇이 걸렸는지 알려 줍니다.",
+          },
+          {
+            title: "분석은 무료입니다",
+            body: "사진을 읽고 구성안을 짜는 데는 크레딧이 들지 않습니다. 그림을 만들 때만 차감합니다.",
+          },
+        ]}
+        when={[
+          "쇼핑몰에 올릴 상세페이지가 필요할 때",
+          "상품 사진은 있는데 페이지 구성을 못 잡겠을 때",
+          "글자가 정확해야 해서 AI가 그린 글자를 못 믿을 때",
+        ]}
       />
 
       <Section title="들어가는 길이 둘입니다" hint="가진 것에서 시작하세요.">
@@ -91,7 +119,7 @@ export default function DetailPageGuidePage() {
         </p>
       </Section>
 
-      <Section title="사진으로 시작 — 화면 읽기">
+      <Details title="사진으로 시작 — 화면 읽기">
         <Mock title="상세페이지 만들기 · 이미지 업로드">
           <MockSteps steps={["이미지 업로드", "AI 분석", "섹션 생성", "편집 · 내보내기"]} current={0} />
           <MockTabs items={["사진으로 시작", "글로 시작"]} active={0} marker={1} />
@@ -151,9 +179,9 @@ export default function DetailPageGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section title="편집 화면 — 글자를 얹는 곳" hint="이미지가 나온 뒤에 문구를 올립니다.">
+      <Details title="편집 화면 — 글자를 얹는 곳" hint="이미지가 나온 뒤에 문구를 올립니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           섹션 이미지가 만들어지면 편집기가 열립니다. 여기서 <strong className="text-foreground">문구를 이미지 위에
           얹습니다.</strong> 이미지 안에 글자를 그려 넣는 것이 아니라 위에 올리는 것이라, 몇 번을 고쳐도 크레딧이
@@ -188,7 +216,7 @@ export default function DetailPageGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
       <Section title="언제 무엇을 고르나">
         <ChoiceTable

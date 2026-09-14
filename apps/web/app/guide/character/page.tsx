@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "캐릭터 만들기 — 사용 설명서" };
@@ -33,6 +34,33 @@ export default function CharacterGuidePage() {
         kicker="캐릭터 만들기"
         title="한 번 만들어 두고 계속 같은 얼굴로"
         lead="AI 이미지의 가장 큰 불편은 같은 사람이 두 번 나오지 않는다는 것입니다. 이 도구는 대상을 여섯 각도로 고정해 저장합니다. 그다음부터 카드뉴스나 상세페이지에 불러 쓰면 여러 장에 같은 대상이 일관되게 나옵니다."
+      />
+
+      <Summary
+        what="사람·동물·캐릭터·사물을 한 번 만들어 두고 여러 작업에서 같은 모습으로 씁니다."
+        points={[
+          {
+            title: "한 번 만들면 고정됩니다",
+            body: "다음 작업에서 불러 쓰면 같은 얼굴과 같은 옷이 나옵니다. 매번 다시 설명하지 않습니다.",
+          },
+          {
+            title: "사람만이 아닙니다",
+            body: "동물·마스코트·제품 같은 사물도 됩니다. 반복해서 등장해야 하는 것이면 무엇이든 됩니다.",
+          },
+          {
+            title: "여러 각도를 함께 만듭니다",
+            body: "정면만 있으면 옆을 보는 장면에서 쓸 수 없습니다. 각도를 미리 만들어 둡니다.",
+          },
+          {
+            title: "라이브러리에 쌓입니다",
+            body: "카드뉴스·이미지 만들기·상세페이지 어디서든 불러 씁니다.",
+          },
+        ]}
+        when={[
+          "같은 인물이 여러 장에 나와야 할 때",
+          "브랜드 마스코트를 반복해서 써야 할 때",
+          "제품 하나를 여러 장면에 넣어야 할 때",
+        ]}
       />
 
       <Section title="사람만 만드는 것이 아닙니다" hint="종류와 결을 따로 고릅니다.">
@@ -101,7 +129,7 @@ export default function CharacterGuidePage() {
         />
       </Section>
 
-      <Section title="화면 읽기">
+      <Details title="화면 읽기">
         <Mock title="캐릭터 만들기 · 무엇을 만들지">
           <MockSteps steps={["만들기", "결과"]} current={0} />
           <MockChoices label="종류" marker={1} items={KINDS} active={0} />
@@ -156,9 +184,9 @@ export default function CharacterGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section title="각도 여섯 면" hint="정면을 고른 뒤 나머지를 만듭니다.">
+      <Details title="각도 여섯 면" hint="정면을 고른 뒤 나머지를 만듭니다.">
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {ANGLES.map((angle, index) => (
             <div
@@ -178,7 +206,7 @@ export default function CharacterGuidePage() {
           <strong className="text-foreground">시작할 때는 아무 각도도 켜져 있지 않습니다.</strong> 만들 것만
           직접 고르세요 — 켜 둔 것을 못 보고 눌러 원치 않는 장을 만드는 일을 막으려는 것입니다.
         </p>
-      </Section>
+      </Details>
 
       <Section title={SHEET_LABEL} hint="여섯 면을 한 그림에 담습니다.">
         <p className="text-sm leading-6 text-muted-foreground">

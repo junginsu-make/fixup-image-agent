@@ -4,6 +4,7 @@ import { CARD_RATIOS, IMAGE_MODELS, MAX_CARDS } from "@fixup/sns-core";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import {
   Callouts,
   Mock,
@@ -37,6 +38,33 @@ export default function CardNewsGuidePage() {
         lead="인스타그램에서 옆으로 넘겨 보는 그 카드입니다. 글 한 편이나 영상 하나를 넣으면 표지부터 마지막 장까지 나눠 만듭니다. 만드는 길이 두 가지인데, 무엇을 더 중요하게 여기느냐에 따라 고릅니다."
       />
 
+      <Summary
+        what="글 한 편이나 영상 하나를 넣으면 표지부터 마지막 장까지 여러 장으로 나눠 만듭니다."
+        points={[
+          {
+            title: "이야기를 나눠 기획합니다",
+            body: "표지에 무엇을 걸고 속지를 몇 장으로 쪼갤지 먼저 짭니다. 장마다 프롬프트를 쓰지 않습니다.",
+          },
+          {
+            title: "글자를 먼저 확정합니다",
+            body: "원고를 사람이 고친 뒤에 그림을 부릅니다. 여기까지는 크레딧이 들지 않습니다.",
+          },
+          {
+            title: "만드는 길이 둘입니다",
+            body: "칸을 고정하는 「내 카드뉴스 만들기」와 레퍼런스를 따라 그리는 「새 카드뉴스 만들기」가 있습니다.",
+          },
+          {
+            title: "만든 그림을 검수합니다",
+            body: "원고에 없는 글자가 들어갔는지 별도 호출이 대조합니다. 만든 쪽이 스스로 채점하지 않습니다.",
+          },
+        ]}
+        when={[
+          "인스타그램에서 옆으로 넘겨 보는 카드를 만들 때",
+          "긴 글이나 영상 하나를 여러 장으로 쪼개고 싶을 때",
+          "장마다 글자 위치가 흔들리면 안 될 때 (「내 카드뉴스 만들기」)",
+        ]}
+      />
+
       <Section
         title="먼저 — 길이 두 가지입니다"
         hint="카드뉴스 첫 화면 오른쪽 위에 버튼 두 개가 나란히 있습니다."
@@ -60,10 +88,97 @@ export default function CardNewsGuidePage() {
           </div>
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          아래 설명은 <strong className="text-foreground">「새 카드뉴스 만들기」</strong> 기준입니다. 화면이 다섯 단계로
-          길어서 먼저 익혀 두면 다른 도구도 쉽습니다.
+          아래 <strong className="text-foreground">「전체 흐름」부터</strong>는{" "}
+          <strong className="text-foreground">「새 카드뉴스 만들기」</strong> 기준입니다. 화면이 다섯 단계로 길어서
+          먼저 익혀 두면 다른 도구도 쉽습니다. <strong className="text-foreground">「내 카드뉴스 만들기」</strong>의
+          쓰는 법은 바로 아래 칸에 있습니다.
         </p>
       </Section>
+
+      <Details
+        title="「내 카드뉴스 만들기」는 이렇게 씁니다"
+        hint="칸을 먼저 짜고, 이미 만들어 둔 작업에 그 틀을 붙입니다."
+      >
+        <p className="text-sm leading-7 text-muted-foreground">
+          <strong className="text-foreground">왜 이 길이 따로 있나.</strong> 카드를 통째로 AI 에게 그리게 하면 글자도
+          AI 가 그립니다. 그러면 한글이 깨지거나, 장마다 글자 자리가 조금씩 달라집니다. 브랜드 톤을 지켜야 하는
+          곳에서는 그 흔들림이 그대로 흠이 됩니다.
+        </p>
+        <p className="text-sm leading-7 text-muted-foreground">
+          그래서 <strong className="text-foreground">칸을 사람이 정하고 글자는 시스템이 직접 그립니다.</strong> AI 는
+          그림 칸만 채웁니다. 같은 틀을 여러 장에 쓰면 장마다 똑같은 자리에 글자가 앉습니다.
+        </p>
+
+        <Section title="순서가 거꾸로입니다" hint="틀부터 짜는 것이 아니라 작업부터 만듭니다.">
+          <Flow
+            nodes={[
+              { label: "① 카드뉴스 작업 만들기", sub: "/sns 에서 시작" },
+              { label: "② 04 원고 확인까지", sub: "글을 먼저 확정", human: true },
+              { label: "③ 틀 짜서 붙이기", sub: "여기가 이 화면" },
+            ]}
+          />
+          <p className="text-sm leading-6 text-muted-foreground">
+            <strong className="text-foreground">①·②가 끝나 있어야 붙일 수 있습니다.</strong> 틀은 원고가 들어갈 칸을
+            정하는 것이라, 원고가 없으면 붙일 데가 없습니다. 화면 맨 위에도 이 순서가 적혀 있습니다.
+          </p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            간단한 틀이면 <strong className="text-foreground">04 원고 확인 화면에서 바로</strong> 고를 수 있습니다. 이
+            화면은 칸을 직접 옮기고 싶을 때 옵니다.
+          </p>
+        </Section>
+
+        <Section title="칸은 네 종류입니다" hint="칸마다 무엇이 들어가는지 정해져 있습니다.">
+          <ChoiceTable
+            head={["칸", "무엇이 들어가나", "누가 채우나"]}
+            rows={[
+              ["배경", "카드 전체를 덮는 바탕색", "고른 색 그대로"],
+              ["그림", "사진이나 일러스트", "AI 또는 라이브러리에서 고른 것"],
+              ["로고", "브랜드 마크", "참고 이미지에서 고른 것 — 한 픽셀도 안 바뀝니다"],
+              ["글", "제목 · 본문", "원고가 그대로 들어갑니다"],
+            ]}
+          />
+          <p className="text-sm leading-6 text-muted-foreground">
+            <strong className="text-foreground">글 칸과 로고 칸은 AI 를 거치지 않습니다.</strong> 그래서 글자가 안
+            깨지고 로고가 안 바뀝니다. 이 둘이 이 길을 고르는 이유입니다.
+          </p>
+        </Section>
+
+        <Section title="화면 읽기" hint="왼쪽에서 칸을 옮기고 오른쪽에서 확인합니다.">
+          <Callouts
+            items={[
+              {
+                title: "칸을 끌어서 옮기고 크기를 바꿉니다",
+                body: "가운데 캔버스에서 직접 합니다. 칸을 고르면 오른쪽에 그 칸의 설정이 나옵니다.",
+              },
+              {
+                title: "겹치는 순서는 목록에서 바꿉니다",
+                body: "배경이 맨 아래, 글이 맨 위인 것이 보통입니다. 목록에서 끌어 올리고 내립니다.",
+              },
+              {
+                title: "표지 · 속지 · 끝장을 따로 짭니다",
+                body: "세 자리의 틀이 다릅니다. 표지는 제목이 크고, 속지는 본문이 길고, 끝장은 마무리 문구가 들어갑니다.",
+              },
+              {
+                title: "미리보기로 원고를 넣어 봅니다",
+                body: "실제 원고를 넣어 글이 칸을 넘치지 않는지 봅니다. 넘치면 칸을 키우거나 글을 줄입니다.",
+              },
+            ]}
+          />
+        </Section>
+
+        <Section title="언제 이 길을 고르나">
+          <ChoiceTable
+            head={["상황", "고를 것", "왜"]}
+            rows={[
+              ["브랜드 톤을 꼭 지켜야 한다", "내 카드뉴스 만들기", "칸을 고정하면 장마다 안 흔들립니다"],
+              ["로고가 정확해야 한다", "내 카드뉴스 만들기", "로고 칸은 원본을 그대로 얹습니다"],
+              ["한글이 깨지면 안 된다", "내 카드뉴스 만들기", "글자를 시스템이 직접 그립니다"],
+              ["디자인을 매번 새롭게 하고 싶다", "새 카드뉴스 만들기", "레퍼런스를 따라 자유롭게 그립니다"],
+              ["빨리 한 벌 뽑아 보고 싶다", "새 카드뉴스 만들기", "틀을 짜는 걸음이 없습니다"],
+            ]}
+          />
+        </Section>
+      </Details>
 
       <Section title="전체 흐름" hint="다섯 단계입니다. 03까지는 되돌아가 고칠 수 있습니다.">
         <Flow
@@ -100,7 +215,7 @@ export default function CardNewsGuidePage() {
         />
       </Section>
 
-      <Section title="01 내용 — 화면 읽기" hint="무엇으로 카드뉴스를 만들지 정합니다.">
+      <Details title="01 내용 — 화면 읽기" hint="무엇으로 카드뉴스를 만들지 정합니다.">
         <Mock title="카드뉴스 만들기 · 01 내용">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={0} />
           <MockField label="프로젝트 제목" placeholder="예: AI 자동화, 한 업무부터 시작하기" marker={1} />
@@ -159,9 +274,9 @@ export default function CardNewsGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section
+      <Details
         title="02 이미지 — 화면 읽기"
         hint="그림을 첨부하고, 그 그림을 어떻게 쓸지 정합니다. 이 단계를 건너뛰어도 만들어집니다."
       >
@@ -224,9 +339,9 @@ export default function CardNewsGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section title="03 규격 — 화면 읽기" hint="어디에 올릴지와 몇 장으로 만들지를 정합니다.">
+      <Details title="03 규격 — 화면 읽기" hint="어디에 올릴지와 몇 장으로 만들지를 정합니다.">
         <Mock title="카드뉴스 만들기 · 03 규격">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={2} />
           <MockChoices label="비율" marker={1} items={RATIO_ITEMS} active={0} note="픽셀은 묻지 않습니다. 비율에서 시스템이 정합니다." />
@@ -294,9 +409,9 @@ export default function CardNewsGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
-      <Section title="04 원고 확인 — 가장 중요한 화면" hint="여기서 고친 글자가 그대로 그림에 들어갑니다.">
+      <Details title="04 원고 확인 — 가장 중요한 화면" hint="여기서 고친 글자가 그대로 그림에 들어갑니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           기획이 끝나면 장마다 들어갈 글이 표로 나옵니다. <strong className="text-foreground">이 단계까지는 이미지
           크레딧이 한 장도 차감되지 않았습니다.</strong> 고칠 것이 있으면 지금 고치세요. 그림이 나온 뒤에 글자를 고치는
@@ -322,7 +437,7 @@ export default function CardNewsGuidePage() {
             },
           ]}
         />
-      </Section>
+      </Details>
 
       <Section title="언제 무엇을 고르나">
         <ChoiceTable

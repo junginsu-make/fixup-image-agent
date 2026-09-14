@@ -58,11 +58,25 @@ export const GUIDE_TOPICS: GuideTopic[] = [
     toolLabel: "캐릭터 열기",
   },
   {
+    href: "/guide/ad",
+    label: "광고 규격으로 내보내기",
+    desc: "만든 그림에서 포털 광고 규격 뽑기",
+    toolHref: "/ad",
+    toolLabel: "광고 규격으로 내보내기 열기",
+  },
+  {
     href: "/guide/library",
     label: "라이브러리",
     desc: "재료를 모아 두고 어느 도구에서든 불러 쓰기",
     toolHref: "/library",
     toolLabel: "라이브러리 열기",
+  },
+  {
+    href: "/guide/team",
+    label: "팀",
+    desc: "재료를 나눠 쓰고 크레딧을 함께 관리하기",
+    toolHref: "/team",
+    toolLabel: "팀 열기",
   },
   {
     href: "/guide/credits",

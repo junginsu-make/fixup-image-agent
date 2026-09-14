@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IMAGE_MODELS } from "@fixup/sns-core";
 import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockChoices, MockField, MockNote } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "크레딧과 모델 — 사용 설명서" };
@@ -27,6 +28,33 @@ export default function CreditsGuidePage() {
         kicker="크레딧과 모델"
         title="어디서 얼마나 차감되나"
         lead="이 시스템에서 돈이 드는 자리는 하나뿐입니다 — 그림을 만들 때입니다. 읽고, 분석하고, 구성안을 짜고, 원고를 쓰는 데는 이미지 크레딧이 차감되지 않습니다. 어디까지가 무료이고 어디부터 차감인지 알아 두면 마음 편히 여러 번 고칠 수 있습니다."
+      />
+
+      <Summary
+        what="무엇을 할 때 얼마가 차감되는지, 모델은 어떻게 고르는지 정리했습니다."
+        points={[
+          {
+            title: "돈이 드는 자리는 하나뿐",
+            body: "그림을 만들 때만 차감합니다. 분석·기획·원고 작성은 크레딧이 들지 않습니다.",
+          },
+          {
+            title: "성공한 것만 셉니다",
+            body: "실패한 이미지는 정산하지 않습니다. 예약해 둔 크레딧은 되돌아옵니다.",
+          },
+          {
+            title: "장은 실제 원가에서 나옵니다",
+            body: "모델과 크기에 따라 차감량이 다릅니다. 싼 모델을 쓰면 덜 깎입니다.",
+          },
+          {
+            title: "남은 양은 늘 보입니다",
+            body: "화면 오른쪽 위에 「쓴 양 / 한도」가 떠 있습니다. 만들 때마다 바로 바뀝니다.",
+          },
+        ]}
+        when={[
+          "이번 달에 얼마나 더 만들 수 있는지 알고 싶을 때",
+          "어떤 모델을 골라야 할지 모를 때",
+          "한도에 걸려 못 만들 때",
+        ]}
       />
 
       <Section title="무료 구간과 차감 구간" hint="경계는 언제나 「만들기」 버튼입니다.">
