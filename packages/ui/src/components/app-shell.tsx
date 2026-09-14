@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -14,6 +14,14 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "../lib/utils";
+import {
+  SIDEBAR_DEFAULT_COLLAPSED,
+  SIDEBAR_STORE_KEY,
+  collapsedFromStore,
+  shellSideWidth,
+  sidebarToggleLabel,
+  storeFromCollapsed,
+} from "./shell-sidebar";
 
 /**
  * 앱 셸 — 2026-07-21 개편.
@@ -307,6 +315,34 @@ export function AppShell({
   onSelectProject,
 }: AppShellProps) {
   const pathname = usePathname();
+  /*
+    접힘 여부는 **그린 뒤에 읽는다.** 처음 그릴 때 브라우저 저장소를 보면
+    서버가 그린 것과 달라져 React 가 화면을 통째로 다시 만든다. 첫 그림은 늘
+    기본값(펴짐)이고, 붙자마자 지난번 고른 상태로 맞춘다.
+  */
+  const [collapsed, setCollapsed] = React.useState(SIDEBAR_DEFAULT_COLLAPSED);
+
+  React.useEffect(() => {
+    try {
+      setCollapsed(collapsedFromStore(window.localStorage.getItem(SIDEBAR_STORE_KEY)));
+    } catch {
+      // 사생활 보호 모드처럼 저장소를 막아 둔 브라우저가 있다. 못 읽으면
+      // 기본값으로 둔다 — 이것 때문에 화면이 안 뜨면 안 된다.
+    }
+  }, []);
+
+  const toggleSidebar = React.useCallback(() => {
+    setCollapsed((was) => {
+      const next = !was;
+      try {
+        window.localStorage.setItem(SIDEBAR_STORE_KEY, storeFromCollapsed(next));
+      } catch {
+        // 못 적어도 이번 방문 동안은 접힌 채로 쓸 수 있다.
+      }
+      return next;
+    });
+  }, []);
+
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
   const visibleGroups = navGroupsFor(hasAd);
@@ -349,8 +385,24 @@ export function AppShell({
         </div>
       </header>
 
-      <div className="lg:grid lg:grid-cols-[var(--shell-side)_minmax(0,1fr)] [--shell-side:clamp(236px,15vw,300px)]">
-        <aside className="sticky top-0 hidden h-screen flex-col gap-6 border-r bg-card px-3.5 py-4 lg:flex">
+      {/*
+        접히면 왼쪽 칸이 0 이 된다. 본문 칸은 `minmax(0,1fr)` 이라 남는 자리를
+        스스로 다 차지하므로, 넓히는 코드를 따로 둘 필요가 없다.
+      */}
+      <div
+        className={cn(
+          "lg:grid lg:grid-cols-[var(--shell-side)_minmax(0,1fr)]",
+          "lg:transition-[grid-template-columns] lg:duration-200 motion-reduce:lg:transition-none",
+          shellSideWidth(collapsed),
+        )}
+      >
+        <aside
+          id="shell-sidebar"
+          className={cn(
+            "sticky top-0 hidden h-screen flex-col gap-6 border-r bg-card px-3.5 py-4",
+            collapsed ? "lg:hidden" : "lg:flex",
+          )}
+        >
           <Link href="/" className="flex items-center gap-3 px-1.5" aria-label="MCS 홈">
             <BrandMark className="h-8 w-8 flex-none" />
             <span className="flex flex-col gap-1 leading-none">
@@ -403,11 +455,40 @@ export function AppShell({
           </div>
         </aside>
 
-        <div className="min-w-0">
+        {/*
+          **둘째 칸에 못 박는다.** 접히면 사이드바가 `display: none` 이라 그리드에서
+          통째로 빠지는데, 그러면 본문이 자동으로 첫 칸(0px)에 들어가 짜부라진다.
+          자리를 지정해 두면 사이드바가 있든 없든 본문은 늘 남는 칸을 쓴다.
+        */}
+        <div className="min-w-0 lg:col-start-2">
           {/* 계정 상태와 테마 전환은 화면 오른쪽 위에 둔다. 예전에는 사이드바
               맨 아래에 있어서, 내가 누구로 접속했는지 보려면 눈이 왼쪽 아래로
               내려가야 했다. 좁은 화면은 위 상단바가 같은 것을 이미 보여준다. */}
           <div className="hidden items-center justify-end gap-2 px-[clamp(16px,2.2vw,52px)] pt-4 lg:flex">
+            {/*
+              접기 단추는 **한 자리에 붙박이로** 둔다. 사이드바 안에 두면 접힌
+              뒤에 단추까지 같이 사라져서 다시 펼 길이 없어진다. 이 줄은 접히든
+              펴지든 늘 같은 높이에 있으므로, 단추가 왼쪽으로 밀려날 뿐이다.
+
+              `mr-auto` 가 이 줄의 나머지(계정·테마)를 오른쪽 끝에 그대로 둔다.
+            */}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={toggleSidebar}
+              aria-label={sidebarToggleLabel(collapsed)}
+              title={sidebarToggleLabel(collapsed)}
+              aria-expanded={!collapsed}
+              aria-controls="shell-sidebar"
+              className="mr-auto"
+            >
+              {collapsed ? (
+                <ChevronsRight className="h-4 w-4" aria-hidden />
+              ) : (
+                <ChevronsLeft className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
             {actions}
             <ThemeToggle />
           </div>
