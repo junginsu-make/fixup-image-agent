@@ -13,12 +13,20 @@ export function GuideFooter({
   href,
   toolHref,
   toolLabel,
+  isAdmin = true,
 }: {
   href: string;
   toolHref?: string;
   toolLabel?: string;
+  /**
+   * 회원에게 안 보이는 장을 「다음」으로 걸지 않는다.
+   *
+   * 기본값이 `true` 인 것은 **관리자 전용 장 자체**가 이 값을 안 넘기기
+   * 때문이다. 그 장을 보고 있다는 것이 이미 관리자라는 뜻이다.
+   */
+  isAdmin?: boolean;
 }) {
-  const { prev, next } = neighborsOf(href);
+  const { prev, next } = neighborsOf(href, isAdmin);
 
   return (
     <div className="grid gap-5 border-t pt-6">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@fixup/ui";
-import { GUIDE_TOPICS } from "./topics";
+import { guideTopicsFor } from "./topics";
 
 /**
  * 설명서 안 목차.
@@ -12,8 +12,9 @@ import { GUIDE_TOPICS } from "./topics";
  * 칩 줄이 된다. 사이드바에 여덟 항목을 늘어놓으면 도구 목록보다 안내가
  * 길어지므로 여기서 나눈다.
  */
-export function GuideNav() {
+export function GuideNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  const topics = guideTopicsFor(isAdmin);
   // `/guide` 는 다른 항목의 접두사라 startsWith 로 보면 늘 켜진다. 정확히 비교한다.
   const isActive = (href: string) => pathname === href;
 
@@ -24,7 +25,7 @@ export function GuideNav() {
       <p className="hidden px-3 pb-2 text-meta text-subtle-foreground lg:block">설명서</p>
 
       <ul className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
-        {GUIDE_TOPICS.map((topic) => (
+        {topics.map((topic) => (
           <li key={topic.href} className="shrink-0 lg:shrink">
             <Link
               href={topic.href}

@@ -3,15 +3,18 @@ import type { Metadata } from "next";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import { Flow, FlowLegend, GuideHeader, Section } from "./_components/flow";
 import { GuideFooter } from "./_components/guide-footer";
-import { GUIDE_TOPICS } from "./_components/topics";
+import { guideTopicsFor } from "./_components/topics";
+import { isAdminReader } from "./_components/viewer";
 
 export const metadata: Metadata = { title: "사용 설명서" };
 
 /** 역할 어휘는 shared 에서 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "place_as_is"];
 
-export default function GuideHomePage() {
-  const topics = GUIDE_TOPICS.filter((topic) => topic.href !== "/guide");
+export default async function GuideHomePage() {
+  const isAdmin = await isAdminReader();
+  // 자기 자신은 지도에 안 건다. 관리자 전용 장은 회원에게 안 보인다.
+  const topics = guideTopicsFor(isAdmin).filter((topic) => topic.href !== "/guide");
 
   return (
     <>
@@ -115,13 +118,13 @@ export default function GuideHomePage() {
             실패한 이미지는 크레딧으로 정산하지 않습니다
           </li>
           <li>
-            · <strong className="text-foreground">모델마다 차감량이 다릅니다.</strong> 원가가 4.6배까지 벌어지기
-            때문입니다. 자세한 것은 <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">크레딧과 모델</Link>에 있습니다
+            · <strong className="text-foreground">모델마다 차감량이 다릅니다.</strong> 고르는 자리마다 차감량이 함께
+            적혀 있으니, 만들기 전에 그 숫자를 보세요. 이번 달 남은 양은 화면 오른쪽 위에 늘 떠 있습니다
           </li>
         </ul>
       </Section>
 
-      <GuideFooter href="/guide" />
+      <GuideFooter href="/guide" isAdmin={isAdmin} />
     </>
   );
 }

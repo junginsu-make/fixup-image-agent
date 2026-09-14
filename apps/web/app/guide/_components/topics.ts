@@ -14,6 +14,14 @@ export interface GuideTopic {
   /** 실제 도구로 가는 길. 설명만 있는 항목은 없다 */
   toolHref?: string;
   toolLabel?: string;
+  /**
+   * 관리자에게만 보이는 항목.
+   *
+   * **감추는 것은 안내일 뿐이다.** 실제 차단은 등록부(`lib/access/routes.ts`)를
+   * 보는 미들웨어가 한다 — 여기 한 줄을 빠뜨려도 주소를 치면 안 열린다.
+   * 다만 눌러서 막히는 메뉴를 만들지 않으려고 목록에서도 뺀다.
+   */
+  adminOnly?: true;
 }
 
 export const GUIDE_TOPICS: GuideTopic[] = [
@@ -84,15 +92,32 @@ export const GUIDE_TOPICS: GuideTopic[] = [
     desc: "무엇이 얼마나 차감되고 모델은 어떻게 고르나",
     toolHref: "/settings",
     toolLabel: "사용량 보기",
+    adminOnly: true,
   },
 ];
 
-/** 목차에서 현재 항목의 앞뒤. 페이지 맨 아래 이동에 쓴다. */
-export function neighborsOf(href: string): { prev?: GuideTopic; next?: GuideTopic } {
-  const index = GUIDE_TOPICS.findIndex((topic) => topic.href === href);
+/**
+ * 이 사람에게 보일 목차.
+ *
+ * 목차·개요 지도·앞뒤 이동이 모두 이것을 본다. 한 곳이라도 거르지 않으면
+ * **눌러서 막히는 메뉴**가 생긴다 — 등록부 머리말이 경계하는 그것이다.
+ */
+export function guideTopicsFor(isAdmin: boolean): GuideTopic[] {
+  return isAdmin ? GUIDE_TOPICS : GUIDE_TOPICS.filter((topic) => !topic.adminOnly);
+}
+
+/**
+ * 목차에서 현재 항목의 앞뒤. 페이지 맨 아래 이동에 쓴다.
+ *
+ * **보이는 목록에서 찾는다.** 회원에게 안 보이는 장을 「다음」으로 걸면 눌러서
+ * 막히는 자리가 된다.
+ */
+export function neighborsOf(href: string, isAdmin = true): { prev?: GuideTopic; next?: GuideTopic } {
+  const topics = guideTopicsFor(isAdmin);
+  const index = topics.findIndex((topic) => topic.href === href);
   if (index < 0) return {};
   return {
-    prev: index > 0 ? GUIDE_TOPICS[index - 1] : undefined,
-    next: index < GUIDE_TOPICS.length - 1 ? GUIDE_TOPICS[index + 1] : undefined,
+    prev: index > 0 ? topics[index - 1] : undefined,
+    next: index < topics.length - 1 ? topics[index + 1] : undefined,
   };
 }

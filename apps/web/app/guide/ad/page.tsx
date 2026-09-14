@@ -3,12 +3,14 @@ import Link from "next/link";
 import { AD_SPECS, adPortalSummary } from "./data";
 import { ChoiceTable, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockSteps } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "광고 규격으로 내보내기 — 사용 설명서" };
 
-export default function AdGuidePage() {
+export default async function AdGuidePage() {
+  const isAdmin = await isAdminReader();
   const portals = adPortalSummary();
 
   return (
@@ -147,11 +149,7 @@ export default function AdGuidePage() {
         />
         <p className="text-sm leading-6 text-muted-foreground">
           <strong className="text-foreground">0장이어도 한도는 검사합니다.</strong> 이번 달 한도를 다 쓴 계정은 0장짜리
-          요청도 막힙니다. 자세한 것은{" "}
-          <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
-            크레딧과 모델
-          </Link>
-          에 있습니다.
+          요청도 막힙니다. 남은 양은 화면 오른쪽 위에 늘 떠 있습니다.
         </p>
       </Section>
 
@@ -178,7 +176,7 @@ export default function AdGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/ad" toolHref="/ad" toolLabel="광고 규격으로 내보내기 열기" />
+      <GuideFooter href="/guide/ad" toolHref="/ad" toolLabel="광고 규격으로 내보내기 열기" isAdmin={isAdmin} />
     </>
   );
 }

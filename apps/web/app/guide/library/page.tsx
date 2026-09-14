@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ChoiceTable, DiffList, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockTabs } from "../_components/mockup";
 
@@ -13,7 +14,8 @@ import { Callouts, Mock, MockButtons, MockChoices, MockTabs } from "../_componen
  */
 export const metadata: Metadata = { title: "라이브러리 — 사용 설명서" };
 
-export default function LibraryGuidePage() {
+export default async function LibraryGuidePage() {
+  const isAdmin = await isAdminReader();
   return (
     <>
       <GuideHeader
@@ -151,7 +153,7 @@ export default function LibraryGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/library" toolHref="/library" toolLabel="라이브러리 열기" />
+      <GuideFooter href="/guide/library" toolHref="/library" toolLabel="라이브러리 열기" isAdmin={isAdmin} />
     </>
   );
 }

@@ -3,12 +3,14 @@ import Link from "next/link";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
+import { isAdminReader } from "../_components/viewer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps, MockTabs } from "../_components/mockup";
 
 export const metadata: Metadata = { title: "상세페이지 만들기 — 사용 설명서" };
 
-export default function DetailPageGuidePage() {
+export default async function DetailPageGuidePage() {
+  const isAdmin = await isAdminReader();
   return (
     <>
       <GuideHeader
@@ -254,7 +256,7 @@ export default function DetailPageGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/detail-page" toolHref="/create" toolLabel="상세페이지 만들기 열기" />
+      <GuideFooter href="/guide/detail-page" toolHref="/create" toolLabel="상세페이지 만들기 열기" isAdmin={isAdmin} />
     </>
   );
 }
