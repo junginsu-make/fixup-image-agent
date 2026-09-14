@@ -1,0 +1,23 @@
+name: Isolated Supabase staging
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Real Auth, PostgREST and Storage RED to GREEN
+        run: node scripts/start-staging-supabase.mjs
+      - name: Stop only this disposable stack
+        if: always()
+        run: node scripts/stop-staging-supabase.mjs
