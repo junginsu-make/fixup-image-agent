@@ -6,6 +6,7 @@ import * as React from "react";
 import { LogOut } from "lucide-react";
 import { Badge, Button } from "@fixup/ui";
 import type { UsageSummary } from "../../lib/membership/types";
+import { accountAriaLabel, emailLocalPart } from "./account-label";
 
 export function StudioActions({
   children,
@@ -36,6 +37,24 @@ export function StudioActions({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {/*
+        **지금 어느 계정으로 들어와 있는지 눈에 보여야 한다.**
+
+        전에는 주소가 사용량 배지의 마우스오버 설명에만 있었다. 올려 봐야 아는
+        것은 없는 것과 같고, 관리자 계정이 둘이 되면서 잘못된 쪽으로 들어온
+        줄 모르고 남의 자료를 만질 위험이 생겼다.
+
+        좁은 화면에서는 주소 전체가 안 들어간다. 그때는 앞부분만 보인다 —
+        전체는 마우스오버와 화면 낭독기에 그대로 남는다.
+      */}
+      <span
+        className="max-w-[14rem] truncate text-xs font-medium text-subtle-foreground"
+        title={email}
+        aria-label={accountAriaLabel(email)}
+      >
+        <span className="hidden lg:inline">{email}</span>
+        <span className="lg:hidden">{emailLocalPart(email)}</span>
+      </span>
       <Badge variant="secondary" title={`${email} · 예약 ${currentUsage.reserved}장`}>
         {currentUsage.used}/{currentUsage.quota}장
       </Badge>

@@ -9,6 +9,13 @@ import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { patchShowcaseItem, removeShowcaseItem, reorderShowcaseItem } from "../api/showcase/store";
 import { assignMember, removeMember, setMemberRole } from "../../lib/teams/store";
+import {
+  ADMIN_DELETE_MESSAGE,
+  OWNER_PROTECTED_MESSAGE,
+  canDeleteAdmin,
+  canManageTarget,
+  resolveOwnerEmail,
+} from "../../lib/membership/owner";
 
 function readUserId(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -16,10 +23,38 @@ function readUserId(formData: FormData) {
   return userId;
 }
 
-export async function approveMember(formData: FormData) {
-  const adminMember = await requireAdmin();
-  const userId = readUserId(formData);
+/**
+ * 회원 하나를 손대기 전에 거치는 문.
+ *
+ * **관리자라는 것만으로는 부족하다.** 관리자가 둘이 되면서 서로를 지우거나
+ * 정지시킬 수 있게 되었고, 그러면 한 번의 실수로 되돌릴 수 없는 사고가 난다 —
+ * 관리자를 되살리는 길은 화면에 없고 DB 를 직접 열어야 한다.
+ *
+ * 소유자 계정은 다른 관리자가 손대지 못한다. 화면에서 단추를 감추는 것으로는
+ * 못 막는다. 서버 액션은 주소만 알면 직접 부를 수 있다.
+ *
+ * 대상의 프로필을 함께 돌려준다. 부르는 쪽이 또 한 번 읽지 않게 한다.
+ */
+async function requireAdminFor(userId: string) {
+  const current = await requireAdmin();
   const admin = createSupabaseAdminClient();
+  const { data: target, error } = await admin
+    .from("profiles")
+    .select("email,role,status,email_confirmed_at")
+    .eq("id", userId)
+    .single();
+  if (error || !target) throw new Error("회원 정보를 찾지 못했습니다.");
+
+  const owner = resolveOwnerEmail(process.env.OWNER_EMAIL);
+  if (!canManageTarget({ actorEmail: current.profile.email, targetEmail: target.email, owner })) {
+    throw new Error(OWNER_PROTECTED_MESSAGE);
+  }
+  return { current, target, admin, owner };
+}
+
+export async function approveMember(formData: FormData) {
+  const userId = readUserId(formData);
+  const { current: adminMember, admin } = await requireAdminFor(userId);
   const { data: profile, error } = await admin
     .from("profiles")
     .update({ status: "active", approved_at: new Date().toISOString(), approved_by: adminMember.user.id, updated_at: new Date().toISOString() })
@@ -41,18 +76,12 @@ export async function approveMember(formData: FormData) {
 }
 
 export async function setMemberStatus(formData: FormData) {
-  const current = await requireAdmin();
   const userId = readUserId(formData);
+  const { current, admin, target } = await requireAdminFor(userId);
   const status = String(formData.get("status") || "");
   if (!['active', 'suspended'].includes(status)) throw new Error("올바르지 않은 상태입니다.");
   if (userId === current.user.id && status === "suspended") throw new Error("현재 관리자 계정은 정지할 수 없습니다.");
-  const admin = createSupabaseAdminClient();
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .select("status,email_confirmed_at")
-    .eq("id", userId)
-    .single();
-  if (profileError || !profile) throw new Error("회원 정보를 찾지 못했습니다.");
+  const profile = target;
   const validTransition =
     (profile.status === "active" && status === "suspended") ||
     (profile.status === "suspended" && status === "active" && profile.email_confirmed_at);
@@ -63,22 +92,19 @@ export async function setMemberStatus(formData: FormData) {
 }
 
 export async function updateQuota(formData: FormData) {
-  await requireAdmin();
   const userId = readUserId(formData);
+  const { admin } = await requireAdminFor(userId);
   const quota = Number(formData.get("quota"));
   if (!Number.isInteger(quota) || quota < 0 || quota > 10000) throw new Error("한도는 0~10000 사이 정수여야 합니다.");
-  const admin = createSupabaseAdminClient();
   const { error } = await admin.from("profiles").update({ monthly_quota: quota, updated_at: new Date().toISOString() }).eq("id", userId);
   if (error) throw error;
   revalidatePath("/admin");
 }
 
 export async function resendApproval(formData: FormData) {
-  await requireAdmin();
   const userId = readUserId(formData);
-  const admin = createSupabaseAdminClient();
-  const { data: profile, error } = await admin.from("profiles").select("email,status").eq("id", userId).single();
-  if (error || !profile || profile.status !== "active") throw error ?? new Error("승인된 회원을 찾지 못했습니다.");
+  const { admin, target: profile } = await requireAdminFor(userId);
+  if (profile.status !== "active") throw new Error("승인된 회원을 찾지 못했습니다.");
   await sendApprovalEmail(profile.email);
   await admin.from("profiles").update({ approval_notified_at: new Date().toISOString() }).eq("id", userId);
   revalidatePath("/admin");
@@ -217,21 +243,24 @@ export async function updateUsdKrw(formData: FormData) {
  * 3. **이메일을 그대로 입력해야 한다.** 표에서 줄을 잘못 짚는 일이 흔하다
  */
 export async function deleteMember(formData: FormData) {
-  const current = await requireAdmin();
   const userId = readUserId(formData);
   const typed = String(formData.get("confirmEmail") || "").trim().toLowerCase();
+  const { current, target: profile, admin, owner } = await requireAdminFor(userId);
 
   if (userId === current.user.id) throw new Error("자기 계정은 지울 수 없습니다.");
 
-  const admin = createSupabaseAdminClient();
-  const { data: profile, error: findError } = await admin
-    .from("profiles")
-    .select("email,role")
-    .eq("id", userId)
-    .single();
-  if (findError || !profile) throw new Error("회원 정보를 찾지 못했습니다.");
-  if (profile.role === "admin") {
-    throw new Error("관리자는 지울 수 없습니다. 먼저 일반 회원으로 내린 뒤 지워 주세요.");
+  /*
+    **관리자는 소유자만 지운다.**
+
+    전에는 관리자면 누구도 못 지웠다. 관리자가 하나뿐일 때는 그것으로 충분했지만,
+    둘이 되면서 잘못 만든 관리자 계정을 내릴 길이 아예 없어졌다 — 관리자를 일반
+    회원으로 내리는 기능이 화면에 없어서, DB 를 직접 열어야 했다.
+
+    소유자는 자기를 못 지우므로(바로 위 검사), 결과적으로 소유자 계정은
+    화면에서 사라지지 않는다.
+  */
+  if (profile.role === "admin" && !canDeleteAdmin(current.profile.email, owner)) {
+    throw new Error(ADMIN_DELETE_MESSAGE);
   }
   if (typed !== String(profile.email).trim().toLowerCase()) {
     throw new Error("지우려는 회원의 이메일을 그대로 입력해 주세요.");
@@ -263,16 +292,8 @@ export async function deleteMember(formData: FormData) {
  * 부작용**이 있다 — 인증 메일을 다시 보내려다 남의 비밀번호를 바꾸면 안 된다.
  */
 export async function resendConfirmation(formData: FormData) {
-  await requireAdmin();
   const userId = readUserId(formData);
-  const admin = createSupabaseAdminClient();
-
-  const { data: profile, error } = await admin
-    .from("profiles")
-    .select("email,email_confirmed_at")
-    .eq("id", userId)
-    .single();
-  if (error || !profile) throw new Error("회원 정보를 찾지 못했습니다.");
+  const { admin, target: profile } = await requireAdminFor(userId);
   if (profile.email_confirmed_at) throw new Error("이미 이메일 인증을 마친 회원입니다.");
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
@@ -307,8 +328,8 @@ export async function resendConfirmation(formData: FormData) {
  * 돌려보내기 때문이다. 명단에서 눌렀는데 팀 화면으로 튕기면 하던 일을 잃는다.
  */
 export async function assignTeamFromAdmin(formData: FormData) {
-  await requireAdmin();
   const userId = readUserId(formData);
+  await requireAdminFor(userId);
   const teamId = String(formData.get("teamId") || "");
 
   // 「팀 없음」을 고르면 뺀다. 고르개 하나로 넣고 빼는 것이 둘 다 된다.
@@ -326,8 +347,8 @@ export async function assignTeamFromAdmin(formData: FormData) {
 
 /** 팀장 · 팀원을 바꾼다. 마지막 팀장은 못 내린다 — `setMemberRole` 이 막는다. */
 export async function setTeamRoleFromAdmin(formData: FormData) {
-  await requireAdmin();
   const userId = readUserId(formData);
+  await requireAdminFor(userId);
   const role = formData.get("role") === "leader" ? "leader" : "member";
   await setMemberRole(userId, role);
   revalidatePath("/admin");
