@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deckCards, deckEstimate, validateDeck } from "../deck";
+import { deckCards, deckEstimate, deckFitsProject, validateDeck } from "../deck";
 import type { LayoutDeck } from "../deck";
 import type { LayoutSlot } from "../slots";
 
@@ -182,5 +182,45 @@ describe("validateDeck", () => {
     const issues = validateDeck(deck({ frames: { cover: TEXT_ONLY, body: outside, ending: TEXT_ONLY } }));
 
     expect(issues.some((issue) => issue.message.includes("속지") && issue.message.includes("카드 밖"))).toBe(true);
+  });
+});
+
+/**
+ * 세트가 자기 안에서 맞는 것과, 붙일 작업과 맞는 것은 다른 문제다.
+ *
+ * 세트는 장수·비율을 자기 것으로 들고 다니지만 붙일 때는 **작업 쪽이
+ * 이긴다.** 그 사실을 말해 주지 않으면 8장으로 미리 본 사람이 6장을 받고
+ * 무엇이 잘못됐는지 모른다.
+ */
+describe("deckFitsProject", () => {
+  const deck = (over: Partial<LayoutDeck> = {}): LayoutDeck => ({
+    name: "시험용", ratio: "4:5", total: 6,
+    frames: { cover: TEXT_ONLY, body: TEXT_ONLY, ending: TEXT_ONLY },
+    ...over,
+  });
+
+  it("장수와 비율이 같으면 할 말이 없다", () => {
+    expect(deckFitsProject(deck(), { ratio: "4:5", cards: 6 })).toEqual([]);
+  });
+
+  it("장수가 다르면 작업 쪽을 따른다고 알린다", () => {
+    expect(deckFitsProject(deck({ total: 8 }), { ratio: "4:5", cards: 6 })).toEqual([
+      "세트는 8장으로 짰지만 이 작업은 6장입니다. 작업의 6장에 맞춰 붙입니다.",
+    ]);
+  });
+
+  it("비율이 다르면 칸 모양이 달라진다고 알린다", () => {
+    expect(deckFitsProject(deck({ ratio: "1:1" }), { ratio: "4:5", cards: 6 })).toEqual([
+      "세트는 1:1 로 짰지만 이 작업은 4:5 입니다. 칸 자리는 그대로지만 칸 모양이 달라집니다.",
+    ]);
+  });
+
+  it("둘 다 다르면 둘 다 알린다", () => {
+    expect(deckFitsProject(deck({ ratio: "1:1", total: 4 }), { ratio: "9:16", cards: 7 })).toHaveLength(2);
+  });
+
+  /** 막지 않는다 — 알고 붙이는 것은 사람의 몫이다. */
+  it("살펴보기일 뿐 막지 않는다", () => {
+    expect(validateDeck(deck({ total: 8 })).filter((issue) => issue.severity === "error")).toEqual([]);
   });
 });

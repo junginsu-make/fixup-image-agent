@@ -52,6 +52,35 @@ const SLOT_LABEL: Record<LayoutSlot["kind"], string> = {
  * 겹침은 **글 칸끼리만** 따진다. 배경 위의 글, 그림 위의 띠는 이 뼈대가
  * 노리는 것이라 오류로 볼 수 없다.
  */
+/** 틀 하나에 무엇이 몇 개 들었나. 고르는 사람에게 보여 줄 숫자다. */
+export interface TemplateSummary {
+  /** fal 을 몇 번 부르나. 값이 그만큼 든다. */
+  images: number;
+  texts: number;
+  logos: number;
+  /** 그중 어느 그림을 놓을지 아직 안 고른 것. 그대로 만들면 그 자리가 빈다. */
+  emptyLogos: number;
+}
+
+/**
+ * 이름만 보고 고르지 않게 하려고 센다.
+ *
+ * 「엔딩 · 문구와 로고」라는 이름만으로는 그림 칸이 몇인지도, 로고를 아직
+ * 안 골랐는지도 알 수 없다. 그리는 일은 화면이 하고 **세는 일은 여기서**
+ * 한다 — 세는 규칙은 브라우저 없이 시험할 수 있어야 한다.
+ */
+export function templateSummary(slots: LayoutSlot[]): TemplateSummary {
+  return slots.reduce<TemplateSummary>((sum, slot) => {
+    if (slot.kind === "image") sum.images += 1;
+    if (slot.kind === "text") sum.texts += 1;
+    if (slot.kind === "logo") {
+      sum.logos += 1;
+      if (!slot.referenceImageId.trim()) sum.emptyLogos += 1;
+    }
+    return sum;
+  }, { images: 0, texts: 0, logos: 0, emptyLogos: 0 });
+}
+
 export function validateTemplate(template: CardTemplate): TemplateIssue[] {
   const issues: TemplateIssue[] = [];
   if (template.slots.length === 0) {
@@ -82,6 +111,22 @@ export function validateTemplate(template: CardTemplate): TemplateIssue[] {
       message: `그림 칸이 ${images}개라 카드 한 장에 그림을 ${images}번 만듭니다. 그만큼 값이 듭니다.`,
     });
   }
+
+  /**
+   * 로고 칸은 어느 그림을 놓을지 **사람이 고른다.**
+   *
+   * 기본 틀 「엔딩 · 문구와 로고」도, 레퍼런스에서 읽어낸 로고 칸도 빈 id 로
+   * 나온다 — 모델이 그림을 고를 수는 없기 때문이다. 안 고른 채로 만들면
+   * 이름은 「문구와 로고」인데 그 자리가 빈 카드가 나오고, 만들고 나서야
+   * 안다. 막지는 않는다 — 나중에 고르면 되는 일이다.
+   */
+  template.slots.forEach((slot, offset) => {
+    if (slot.kind !== "logo" || slot.referenceImageId.trim()) return;
+    issues.push({
+      severity: "warning",
+      message: `${offset + 1}번 ${SLOT_LABEL.logo} 칸에 그림을 안 골랐습니다. 그대로 만들면 그 자리가 빕니다.`,
+    });
+  });
 
   const texts = template.slots.flatMap((slot, offset) => (slot.kind === "text" ? [{ slot, offset }] : []));
   for (let first = 0; first < texts.length; first += 1) {

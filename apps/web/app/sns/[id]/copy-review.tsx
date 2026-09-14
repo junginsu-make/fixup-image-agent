@@ -7,10 +7,11 @@ import { CardLayoutPicker } from "./card-layout-picker";
 
 type CopyPatch = Partial<Pick<SnsFlowCard["copy"], "headline" | "body" | "accent" | "footnote">>;
 
-function CopyCardEditor({ card, saving, projectId, onSave, onLayoutChanged }: {
+function CopyCardEditor({ card, saving, projectId, ratioId, onSave, onLayoutChanged }: {
   card: SnsFlowCard;
   saving: boolean;
   projectId: string;
+  ratioId?: string;
   onSave(patch: CopyPatch): Promise<void>;
   onLayoutChanged(): void;
 }) {
@@ -45,7 +46,7 @@ function CopyCardEditor({ card, saving, projectId, onSave, onLayoutChanged }: {
         {card.kind !== "generated" ? (
           <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">이 카드는 사용자 이미지를 그대로 쓰므로 아래 원고가 이미지에 새로 그려지지는 않습니다.</p>
         ) : null}
-        <CardLayoutPicker projectId={projectId} card={card} onChanged={onLayoutChanged} />
+        <CardLayoutPicker projectId={projectId} card={card} ratioId={ratioId} onChanged={onLayoutChanged} />
         <label className="grid gap-2">
           <Label htmlFor={`headline-${card.index}`}>제목</Label>
           <Input id={`headline-${card.index}`} value={copy.headline} onChange={(event) => setCopy({ ...copy, headline: event.target.value })} />
@@ -77,10 +78,12 @@ function CopyCardEditor({ card, saving, projectId, onSave, onLayoutChanged }: {
   );
 }
 
-export function CopyReview({ flow, savingIndex, projectId, onSave, onLayoutChanged }: {
+export function CopyReview({ flow, savingIndex, projectId, ratioId, onSave, onLayoutChanged }: {
   flow: SnsFlowState;
   savingIndex?: number;
   projectId: string;
+  /** 작업의 비율. 틀 손톱 그림을 실제 카드 모양으로 그리는 데 쓴다. */
+  ratioId?: string;
   onSave(index: number, patch: CopyPatch): Promise<void>;
   onLayoutChanged(): void;
 }) {
@@ -104,6 +107,7 @@ export function CopyReview({ flow, savingIndex, projectId, onSave, onLayoutChang
             card={card}
             saving={savingIndex === card.index}
             projectId={projectId}
+            ratioId={ratioId}
             onSave={(patch) => onSave(card.index, patch)}
             onLayoutChanged={onLayoutChanged}
           />

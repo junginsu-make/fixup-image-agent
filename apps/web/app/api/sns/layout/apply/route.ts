@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LayoutDeckSchema, SlotListSchema, validateDeck, validateTemplate } from "@fixup/layout-core";
+import { LayoutDeckSchema, SlotListSchema, deckFitsProject, validateDeck, validateTemplate } from "@fixup/layout-core";
 import { authenticateApiMember } from "../../../../../lib/membership/api";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../lib/sns-flow-store";
 import { hasActiveQueuedGeneration } from "../../../../../lib/sns/queued-flow";
@@ -93,10 +93,20 @@ export async function POST(request: Request) {
     const cards = nextCards(flow.cards, parsed.data);
     const saved = await store.save(parsed.data.projectId, { ...flow, cards }, project.status);
 
+    /**
+     * 세트가 들고 온 장수·비율은 **여기서 안 쓰인다.** 쓰이는 것은 칸 배치뿐이고
+     * 장수와 비율은 작업이 이미 정해 둔 것을 따른다. 붙인 뒤에 말해 준다 —
+     * 막을 일은 아니지만, 8장으로 미리 본 사람이 6장을 받고 영문을 모르면 안 된다.
+     */
+    const notes = "deck" in parsed.data
+      ? deckFitsProject(parsed.data.deck, { ratio: project.ratio, cards: cards.length })
+      : [];
+
     return Response.json({
       ok: true,
       applied: cards.filter((card) => card.layout).length,
       total: cards.length,
+      notes,
       project: saved,
     });
   } catch (error) {
