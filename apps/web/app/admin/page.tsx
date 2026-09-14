@@ -8,7 +8,8 @@ import { listTeams, teamsOf } from "../../lib/teams/store";
 import { TeamCell } from "./team-cell";
 import { MoreActions } from "./member-actions";
 import { isAiBadgeEnabled } from "../../lib/ai-badge-setting";
-import { approveMember, deleteMember, moveShowcase, removeShowcase, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota, updateShowcase } from "./actions";
+import { approveMember, deleteMember, resendApproval, resendConfirmation, setMemberStatus, updateAiBadge, updateQuota } from "./actions";
+import { ShowcasePanel } from "./showcase-panel";
 import { listShowcaseForAdmin } from "../api/showcase/store";
 import type { ShowcaseAdminView } from "../api/showcase/core";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
@@ -483,103 +484,6 @@ function AiBadgePanel({ enabled }: { enabled: boolean }) {
  * 돌린 서버다. 그럴 때 빈 목록으로 보여주면 "아직 아무것도 안 걸었네"로
  * 읽혀, 걸어도 안 걸리는 이유를 영영 못 찾는다.
  */
-function ShowcasePanel({ items }: { items: ShowcaseAdminView[] | null }) {
-  return (
-    <Card>
-      <CardHeader><CardTitle>첫 화면 갤러리</CardTitle></CardHeader>
-      <CardContent className="grid gap-4">
-        <p className="text-xs text-muted-foreground">
-          첫 화면에 걸 그림은 <Link href="/library" className="underline">라이브러리 → 작업물</Link>에서 그림을 열고
-          「첫 화면에 걸기」로 고릅니다. 아무것도 안 걸면 첫 화면은 미리 넣어 둔 네 장을 그대로 보여줍니다.
-        </p>
-
-        {items === null ? (
-          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            갤러리 표를 읽지 못했습니다. <code>supabase/migrations/202609040011_showcase.sql</code> 을 아직 안 돌린 서버일 수 있습니다.
-            표가 없으면 그림을 걸어도 걸리지 않습니다.
-          </p>
-        ) : items.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            아직 아무것도 걸지 않았습니다. 첫 화면은 미리 넣어 둔 네 장을 보여주고 있습니다.
-          </p>
-        ) : (
-          <ul className="grid gap-3">
-            {items.map((item, index) => (
-              <ShowcaseRow key={item.id} item={item} first={index === 0} last={index === items.length - 1} />
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** 걸린 그림 한 줄. */
-function ShowcaseRow({ item, first, last }: { item: ShowcaseAdminView; first: boolean; last: boolean }) {
-  const kindName = item.sourceKind === "sns" ? "카드뉴스" : item.sourceKind === "poster" ? "이미지" : "라이브러리";
-
-  return (
-    <li className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-start">
-      <div className="grid aspect-square w-[88px] place-items-center overflow-hidden rounded-md bg-muted">
-        {item.visible ? (
-          // 88px 자리다. 원본을 넣으면 200장까지 내려받는다 — 이 변경이
-          // 줄이려던 바로 그 비용이다.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.thumbUrl}
-            alt={item.caption ?? "첫 화면에 걸린 그림"}
-            loading="lazy"
-            className="h-full w-full object-contain"
-          />
-        ) : (
-          // 끈 그림은 주소까지 막힌다 — 껐는데 주소를 아는 사람이 계속 볼 수
-          // 있으면 껐다고 할 수 없다. 그래서 여기서도 안 보인다.
-          <span className="px-1 text-center text-[11px] leading-tight text-muted-foreground">꺼 놓아<br />안 보입니다</span>
-        )}
-      </div>
-
-      <form action={updateShowcase} className="grid gap-2">
-        <input type="hidden" name="id" value={item.id} />
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={item.visible ? "default" : "secondary"}>{item.visible ? "걸림" : "내림"}</Badge>
-          <span className="text-xs text-muted-foreground">{kindName} · {item.sourceIndex + 1}번째 장 · {item.position + 1}번 자리</span>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_auto]">
-          <Input name="kindLabel" defaultValue={item.kindLabel ?? ""} placeholder="종류 (예: 카드뉴스)" maxLength={60} />
-          <Input name="caption" defaultValue={item.caption ?? ""} placeholder="설명 — 화면에는 안 보이고 검색엔진만 읽습니다" maxLength={200} />
-          <Button type="submit" size="sm" variant="outline">문구 저장</Button>
-        </div>
-      </form>
-
-      <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-        <form action={moveShowcase}>
-          <input type="hidden" name="id" value={item.id} />
-          <input type="hidden" name="direction" value="up" />
-          <Button type="submit" size="icon" variant="ghost" aria-label="앞으로" disabled={first}><ArrowUp /></Button>
-        </form>
-        <form action={moveShowcase}>
-          <input type="hidden" name="id" value={item.id} />
-          <input type="hidden" name="direction" value="down" />
-          <Button type="submit" size="icon" variant="ghost" aria-label="뒤로" disabled={last}><ArrowDown /></Button>
-        </form>
-        <form action={updateShowcase}>
-          <input type="hidden" name="id" value={item.id} />
-          <input type="hidden" name="visible" value={item.visible ? "off" : "on"} />
-          <Button type="submit" size="sm" variant="outline">{item.visible ? "내리기" : "다시 걸기"}</Button>
-        </form>
-        <form action={removeShowcase}>
-          <input type="hidden" name="id" value={item.id} />
-          <ConfirmSubmitButton
-            variant="ghost"
-            confirmMessage="첫 화면에서 지웁니다. 원본 작업물은 그대로 남습니다. 계속할까요?"
-            pendingLabel="지우는 중..."
-          >지우기</ConfirmSubmitButton>
-        </form>
-      </div>
-    </li>
-  );
-}
-
 function Metric({ icon, label, value, suffix = "명" }: { icon: ReactNode; label: string; value: number; suffix?: string }) {
   return <Card><CardContent className="flex items-center gap-3 pt-6"><span className="grid h-10 w-10 place-items-center rounded-lg bg-primary-soft text-primary [&>svg]:h-5 [&>svg]:w-5">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-extrabold">{value.toLocaleString()}{suffix}</p></div></CardContent></Card>;
 }

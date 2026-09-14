@@ -3,12 +3,14 @@ import {
   ShowcaseCreateSchema,
   ShowcaseDeleteSchema,
   ShowcasePatchSchema,
+  ShowcaseReorderSchema,
 } from "../core";
 import {
   addShowcaseItem,
   listShowcaseForAdmin,
   patchShowcaseItem,
   removeShowcaseItem,
+  reorderShowcase,
 } from "../store";
 
 export const runtime = "nodejs";
@@ -63,6 +65,25 @@ export async function PATCH(request: Request) {
     const input = ShowcasePatchSchema.parse(await request.json());
     const result = await patchShowcaseItem(input);
     return result.ok ? Response.json(result) : failed(result.message, 500);
+  } catch (error) {
+    return failed(messageOf(error));
+  }
+}
+
+/**
+ * 차례를 통째로 다시 적는다.
+ *
+ * `PATCH` 와 나눈 이유는 하나다 — 저쪽은 **한 줄의 칸**을 고치고 이쪽은
+ * **목록 전체의 순서**를 고친다. 한 주소에 섞으면 「차례만 바꾸려다 설명이
+ * 사라지는」 실수가 다시 열린다(`showcasePatchRow` 머리말이 경계하는 그것).
+ */
+export async function PUT(request: Request) {
+  const auth = await authenticateApiAdmin();
+  if (!auth.ok) return auth.response;
+  try {
+    const { order } = ShowcaseReorderSchema.parse(await request.json());
+    const result = await reorderShowcase(order);
+    return result.ok ? Response.json(result) : failed(result.message, 409);
   } catch (error) {
     return failed(messageOf(error));
   }
