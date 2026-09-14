@@ -88,15 +88,29 @@ describe("상단바 목록", () => {
   });
 
   /**
-   * **좁은 화면에서는 이 목록이 통째로 접힌다**(`.mcs-nav-links` 가 1080px
-   * 아래에서 `display: none`). 헤더에만 두면 휴대폰으로 온 사람은 그 화면에
-   * 닿을 길이 아예 없다 — 실제로 390px 에서 「MCS란」이 0개였다.
+   * **「MCS란」은 이제 넓은 화면에서만 닿는다** (운영자 요청 2026-09-14).
+   *
+   * 전에는 푸터에도 한 줄을 두었다. 좁은 화면에서 상단바 목록이 통째로 접히기
+   * 때문인데(`.mcs-nav-links` 가 1080px 아래에서 `display: none`), 그 줄이
+   * 휴대폰에서의 유일한 통로였다 — 실제로 390px 에서 「MCS란」이 0개였다.
+   *
+   * 운영자가 그 줄을 빼기로 했으므로 **1080px 아래에서는 주소를 직접 치지
+   * 않는 한 못 간다.** 시험을 지우지 않고 그 사실을 여기 남긴다 — 지우면
+   * 다음 사람이 이것이 판단이었는지 사고였는지 알 수 없다.
+   *
+   * 되살리려면 `cta-footer.tsx` 에 `/about` 링크 한 줄을 다시 두면 된다.
    */
-  it("좁은 화면에서도 MCS 란에 닿을 길이 있다", () => {
-    const footer = read("app/_landing/cta-footer.tsx");
-    expect(footer).toContain('href="/about"');
+  it("화면이 고아가 되지는 않았다 — 상단바에는 남아 있다", () => {
+    expect(navHrefs.map((item) => item.href)).toContain("/about");
+  });
 
-    // 접히는 것이 정말 헤더 목록인지 확인한다. 아니면 이 시험의 뜻이 달라진다.
+  it("푸터에서 뺀 상태가 유지된다", () => {
+    const footer = read("app/_landing/cta-footer.tsx");
+    expect(footer).not.toContain('href="/about"');
+  });
+
+  /** 접히는 것이 정말 헤더 목록인지. 아니면 위 두 시험의 뜻이 달라진다. */
+  it("좁은 화면에서 접히는 것은 상단바 목록이다", () => {
     const fold = landingCss.slice(landingCss.indexOf("@media (max-width: 1080px)"));
     expect(fold.slice(0, 120)).toContain(".mcs-nav-links");
     expect(fold.slice(0, 120)).toContain("display: none");
