@@ -97,17 +97,21 @@ export function SavedImagePicker({
 
       const fromRefs: SavedImage[] = (refs?.references ?? [])
         .filter((item: { url?: string }) => item.url)
-        .map((item: { id: string; name: string; url: string; description?: string }) => ({
+        .map((item: {
+          id: string; name: string; url: string;
+          thumbUrl?: string | null; description?: string;
+        }) => ({
           id: `ref-${item.id}`,
           name: item.name,
           url: item.url,
           /*
-            상세페이지 스타일 참고(`user_style_references`)에는 사본 칸이
-            **아직 없다.** 표에 칸을 더하고 옛 것을 채우는 일이 먼저다.
-            그때까지는 원본으로 떨어진다 — `ThumbImage` 가 화면 밖 것은
-            나중에 받고 펼치는 일도 따로 시키므로 창이 멎지는 않는다.
+            격자는 사본, 고르기(`handlePick`)와 생성 입력은 원본이다.
+
+            **옛 항목은 아직 비어 있다.** 백필
+            (`scripts/backfill-thumbnails.mjs --apply --after-style ""`)이
+            돌기 전까지는 `gridSrc` 가 원본으로 떨어뜨린다.
           */
-          thumbUrl: null,
+          thumbUrl: item.thumbUrl ?? null,
           origin: "reference" as const,
           referenceId: item.id,
           description: item.description ?? "",

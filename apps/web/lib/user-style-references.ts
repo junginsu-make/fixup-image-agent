@@ -3,6 +3,8 @@ import { createSupabaseAdminClient } from "./supabase/admin";
 import { createPdpLlmOrNull } from "./pdp/providers";
 import { sliceTallReference } from "./pdp/slice-image";
 import { isLocalStoreEnabled } from "./local-store";
+import { makeGridThumbnail } from "./grid-thumbnail";
+import { gridPathsToRemove, gridThumbPath } from "./grid-thumbnail-path";
 
 /**
  * 사용자별 스타일 레퍼런스.
@@ -43,6 +45,13 @@ export interface UserStyleReference {
   createdAt: string;
   /** 목록 표시용. 서명 URL 이라 수명이 있다. */
   url: string | null;
+  /**
+   * 격자에 거는 작은 사본. **없으면 `null` 이다 — 원본으로 떨어뜨리지 않는다.**
+   *
+   * 떨어뜨릴지는 거는 쪽(`app/_components/grid-src.ts`)이 정한다. 여기서
+   * 채워 버리면 화면이 사본인지 원본인지 구분할 수 없어진다.
+   */
+  thumbUrl: string | null;
 }
 
 function extensionFor(mimeType: string) {
@@ -111,9 +120,10 @@ export async function registerUserStyleReference(input: {
   }
 
   const path = `${input.userId}/${row.id}.${extensionFor(input.mimeType)}`;
+  const bytes = Buffer.from(input.imageBase64, "base64");
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(path, Buffer.from(input.imageBase64, "base64"), {
+    .upload(path, bytes, {
       contentType: input.mimeType,
       upsert: true,
     });
@@ -124,7 +134,33 @@ export async function registerUserStyleReference(input: {
     return { ok: false as const, message: uploadError.message };
   }
 
-  await supabase.from("style_references").update({ path }).eq("id", row.id);
+  /*
+    **목록용 작은 사본도 함께 올린다.**
+
+    여기 쌓이는 것은 AI 가 만든 상세페이지 조각이라 한 장이 2MB 안팎이고,
+    1080×15000 처럼 긴 것도 있다. 사본 없이 격자에 깔면 창 한 번에 수십 MB 가
+    오간다 — 라이브러리·포스터·참고 이미지가 이미 같은 이유로 사본을 쓴다.
+
+    **사본을 못 만들어도 등록은 막지 않는다.** 원본은 이미 올라가 있고,
+    화면은 사본이 없으면 원본으로 떨어뜨린다(`grid-src.ts`). 여기서 되돌리면
+    「분석이 실패해도 등록은 막지 않는다」는 이 함수의 판단과 어긋난다.
+  */
+  let thumbPath: string | null = null;
+  const thumbnail = await makeGridThumbnail(bytes);
+  if (thumbnail) {
+    const candidate = gridThumbPath(path);
+    const { error: thumbError } = await supabase.storage
+      .from(BUCKET)
+      .upload(candidate, thumbnail, { contentType: "image/webp", upsert: true });
+    if (thumbError) {
+      // 한 줄 남긴다. 조용히 넘어가면 사본이 안 생기는 것을 아무도 모른다.
+      console.error(`[style-reference] 작은 사본을 올리지 못했습니다: ${thumbError.message}`);
+    } else {
+      thumbPath = candidate;
+    }
+  }
+
+  await supabase.from("style_references").update({ path, thumb_path: thumbPath }).eq("id", row.id);
   return { ok: true as const, id: row.id as string, description };
 }
 
@@ -135,14 +171,22 @@ export async function listUserStyleReferences(userId: string): Promise<UserStyle
 
   const { data, error } = await supabase
     .from("style_references")
-    .select("id,name,source,description,path,created_at")
+    .select("id,name,source,description,path,thumb_path,created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(200);
 
   if (error || !data?.length) return [];
 
-  const paths = data.map((row: { path: string }) => row.path).filter(Boolean);
+  /**
+   * **원본과 사본을 둘 다 서명한다.**
+   *
+   * 격자는 사본을, 고르기와 생성 입력은 원본을 쓴다 — `lib/reference-images.ts`
+   * 와 같은 규약이다. 한 번에 모아 보내므로 왕복은 늘지 않는다.
+   */
+  const paths = data
+    .flatMap((row: { path: string; thumb_path?: string | null }) => [row.path, row.thumb_path])
+    .filter(Boolean) as string[];
   const signed = paths.length
     ? await supabase.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
@@ -159,6 +203,7 @@ export async function listUserStyleReferences(userId: string): Promise<UserStyle
     description: row.description as string,
     createdAt: String(row.created_at),
     url: urlByPath.get(row.path as string) ?? null,
+    thumbUrl: row.thumb_path ? urlByPath.get(row.thumb_path as string) ?? null : null,
   }));
 }
 
@@ -247,13 +292,22 @@ export async function deleteUserStyleReference(userId: string, id: string) {
 
   const { data: row } = await supabase
     .from("style_references")
-    .select("path")
+    .select("path,thumb_path")
     .eq("user_id", userId)
     .eq("id", id)
     .maybeSingle();
 
-  // 파일을 먼저 지운다. 행만 지우면 이미지가 서버에 남는다.
-  if (row?.path) await supabase.storage.from(BUCKET).remove([row.path as string]);
+  /*
+    파일을 먼저 지운다. 행만 지우면 이미지가 서버에 남는다.
+
+    **사본도 같이 지운다.** 행이 사라지면 사본의 자리를 아는 근거가 없어진다 —
+    앞선 작업에서 네 번 반복해 잡힌 실수라 `gridPathsToRemove` 로 모은다.
+  */
+  const toRemove = gridPathsToRemove([{
+    path: (row?.path as string | null) ?? null,
+    thumbPath: (row?.thumb_path as string | null) ?? null,
+  }]);
+  if (toRemove.length) await supabase.storage.from(BUCKET).remove(toRemove);
 
   const { error } = await supabase
     .from("style_references")

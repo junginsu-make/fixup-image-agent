@@ -546,7 +546,7 @@ async function main() {
   if (apply) console.log(`생성 — 사본이 없는 그림 ${rows.length}건 (상한 ${LIMIT})`);
   if (!apply) {
     console.log(`미리보기 — 사본을 받을 것 (한 번에 최대 ${LIMIT}건씩 처리)`);
-    // **여섯 갈래를 모두 센다.** 라이브러리 건수만 보여 주면 몇 번 돌려야 하는지
+    // **일곱 갈래를 모두 센다.** 라이브러리 건수만 보여 주면 몇 번 돌려야 하는지
     // 알 수 없고, 미리보기를 도는 목적이 규모 파악인데 반만 이룬다.
     for (const [table, label] of [
       ["library_images", "라이브러리"],
@@ -554,6 +554,7 @@ async function main() {
       ["poster_images", "포스터"],
       ["reference_images", "참고 이미지"],
       ["character_views", "캐릭터"],
+      ["style_references", "디자인 레퍼런스"],
     ]) {
       const { count, error: countError } = await supabase
         .from(table).select("id", { count: "exact", head: true }).is("thumb_path", null);
@@ -622,11 +623,14 @@ async function main() {
   // **캐릭터는 버킷이 다르다.** 경로 모양이 라이브러리와 똑같아 눈으로는
   // 안 걸리는데, 틀리면 전 건 실패한다.
   await backfillGrid("character_views", "path", "캐릭터", "--after-character", "characters");
+  // **디자인 레퍼런스도 버킷이 다르다**(`references`). 상세페이지·리디자인의
+  // 불러오기 창이 쓰는 것으로, 한 장이 2MB 안팎에 1080×15000 처럼 긴 것도 있다.
+  await backfillGrid("style_references", "path", "디자인 레퍼런스", "--after-style", "references");
   if (rows.length === LIMIT) {
     // 커서를 하나만 넘기면 다른 갈래가 처음부터 다시 돈다 — 건너뛴 건을
     // 매번 다시 내려받게 되어 커서를 둔 이유가 사라진다. 함께 안내한다.
-    console.log("상한에 걸렸습니다. 이어서 하려면 다섯 커서를 함께 넘기세요:");
-    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id> --after-reference <끝 id> --after-character <끝 id>`);
+    console.log("상한에 걸렸습니다. 이어서 하려면 여섯 커서를 함께 넘기세요:");
+    console.log(`  --apply --after ${rows[rows.length - 1].id} --after-poster <끝 id> --after-sns <끝 id> --after-reference <끝 id> --after-character <끝 id> --after-style <끝 id>`);
   }
 }
 

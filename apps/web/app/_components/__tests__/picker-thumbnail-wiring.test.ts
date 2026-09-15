@@ -82,4 +82,18 @@ describe("불러오기 창 — 사본 배선", () => {
       expect(sourceOf(caller), `${caller} 가 thumbUrl 을 안 넘긴다`).toContain("thumbUrl:");
     }
   });
+
+  it("저장된 이미지 창은 세 출처 모두 사본 주소를 넘긴다", () => {
+    /*
+      이 창은 **셋을 한 격자에 섞는다** — 디자인 레퍼런스 · 라이브러리 참고
+      이미지 · 작업물. 하나만 원본이어도 격자 전체가 그만큼 무거워지는데,
+      화면은 똑같이 뜨므로 어느 출처가 무거운지 눈으로는 못 가린다.
+
+      실제로 디자인 레퍼런스만 `thumbUrl: null` 로 박혀 있었다. 표에 사본
+      칸이 없던 시절의 주석이 그대로 남아 있었기 때문이다(2026-09-15).
+    */
+    const source = sourceOf("create/SavedImagePicker.tsx");
+    expect(source).not.toContain("thumbUrl: null");
+    expect(source).toContain("thumbUrl: item.thumbUrl ?? null");
+  });
 });
