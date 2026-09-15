@@ -124,17 +124,25 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
  */
 export function createSupabasePosterReferenceStore(userId: string): PosterReferenceStore {
   interface ReferenceRow {
-    id: string; storage_path: string; title: string | null;
+    id: string; storage_path: string; thumb_path: string | null; title: string | null;
     width: number | null; height: number | null; created_at: string;
   }
 
   const withUrls = async (rows: ReferenceRow[]) => {
     if (!rows.length) return [];
-    // 경로는 `user_id` 로 걸러 읽어 온 행에서 꺼낸 것이다. 서명을 서버
-    // 권한으로 하는 이유는 `lib/storage/signing.ts` 에 적어 두었다.
+    /**
+     * **원본과 사본을 둘 다 서명한다.**
+     *
+     * 격자는 사본을, 확대와 fal 참고 전달은 원본을 쓴다 —
+     * `lib/reference-images.ts` 와 같은 규약이다. 한 번에 모아 보내므로
+     * 왕복은 늘지 않는다.
+     *
+     * 경로는 `user_id` 로 걸러 읽어 온 행에서 꺼낸 것이다. 서명을 서버
+     * 권한으로 하는 이유는 `lib/storage/signing.ts` 에 적어 두었다.
+     */
     const urls = await signPaths(
       BUCKET,
-      rows.map((row) => row.storage_path),
+      rows.flatMap((row) => [row.storage_path, row.thumb_path].filter(Boolean) as string[]),
       SIGNED_URL_TTL_SECONDS,
     );
     return rows.map((row) => ({
@@ -146,10 +154,11 @@ export function createSupabasePosterReferenceStore(userId: string): PosterRefere
       height: row.height,
       createdAt: row.created_at,
       url: urls.get(row.storage_path),
+      thumbUrl: row.thumb_path ? urls.get(row.thumb_path) ?? null : null,
     }));
   };
 
-  const columns = "id,storage_path,title,width,height,created_at";
+  const columns = "id,storage_path,thumb_path,title,width,height,created_at";
   return {
     async list() {
       const client = await createSupabaseServerClient();

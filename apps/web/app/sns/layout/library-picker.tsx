@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchLibraryImages, uploadLibraryImage, type LibraryImage } from "./library-images";
+import { gridSrc } from "../../_components/grid-src";
+import { ThumbImage } from "../../_components/thumb-image";
 
 /**
  * 라이브러리의 참고 이미지에서 하나 고른다.
@@ -132,10 +134,9 @@ export function LibraryPicker({ value, onPick, emptyHint, size = "card", images:
             value === image.id ? "border-primary ring-2 ring-primary/40" : "border-transparent hover:border-muted-foreground/40"
           }`}
         >
-          {image.signedUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 서명 URL·data URL 이라 최적화 대상이 아니다.
-            <img
-              src={image.signedUrl}
+          {gridSrc(image) ? (
+            <ThumbImage
+              src={gridSrc(image) as string}
               alt={image.title ?? "참고 이미지"}
               /**
                * `contain` 이어야 카드 전체가 보인다 — `cover` 는 가장자리를 잘라

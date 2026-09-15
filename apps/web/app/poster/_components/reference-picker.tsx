@@ -9,6 +9,8 @@ import {
 import {
   LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
+import { gridSrc } from "../../_components/grid-src";
+import { ThumbImage } from "../../_components/thumb-image";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { attachMessage, characterIdByTitle, matchAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
@@ -33,7 +35,10 @@ import { randomId } from "../../../lib/browser-safe";
 export interface ReferenceItem {
   id: string;
   title: string | null;
+  /** 원본. 확대와 fal 참고 전달에 쓴다. */
   url?: string;
+  /** 격자에 거는 작은 사본. 없으면 원본으로 떨어진다(`_components/grid-src.ts`). */
+  thumbUrl?: string | null;
 }
 
 /** 공용 역할 어휘를 그대로 쓴다. none 은 '아직 안 골랐다'는 화면 상태다. */
@@ -242,7 +247,13 @@ export function ReferencePicker({
           {uploading ? "올리는 중…" : "새 이미지 올리기"}
         </Button>
         <LibraryPickerButton
-          images={references.map((reference) => ({ id: reference.id, title: reference.title, url: reference.url ?? null }))}
+          images={references.map((reference) => ({
+            id: reference.id,
+            title: reference.title,
+            url: reference.url ?? null,
+            // 격자는 사본을 쓴다. 안 넘기면 창 하나에 수십 MB 가 오간다.
+            thumbUrl: reference.thumbUrl ?? null,
+          }))}
           selectedIds={references.filter((reference) => (roles[reference.id] ?? "none") !== "none").map((reference) => reference.id)}
           onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
           sets={sets}
@@ -309,9 +320,9 @@ export function ReferencePicker({
                   onClick={() => openImageViewer(reference.url ?? "", title)}
                   className="block w-full"
                 >
-                  {reference.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={reference.url} alt={title} className="aspect-square w-full object-cover" />
+                  {gridSrc(reference) ? (
+                    // 고른 뒤 붙는 미리보기도 사본이다. 확대는 위 단추가 원본으로 연다.
+                    <ThumbImage src={gridSrc(reference) as string} alt={title} className="aspect-square w-full object-cover" />
                   ) : (
                     <div className="grid aspect-square w-full place-items-center bg-muted text-xs text-muted-foreground">
                       미리보기 없음

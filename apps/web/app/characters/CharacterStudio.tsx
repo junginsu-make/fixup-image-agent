@@ -99,7 +99,8 @@ interface Character {
 }
 
 interface ImageModel { id: string; label: string; description: string; untested?: boolean }
-interface LibraryImage { id: string; title: string | null; signedUrl: string | null }
+/** `thumbUrl` 은 격자용 사본이다. `/api/reference-images` 가 둘 다 준다. */
+interface LibraryImage { id: string; title: string | null; signedUrl: string | null; thumbUrl?: string | null }
 
 type Candidate = { base64: string; mimeType: string };
 type Attached = {
@@ -691,7 +692,11 @@ export function CharacterStudio() {
                 <ImagePlus className="size-4" />{attached ? "다른 그림" : "새 이미지 올리기"}
               </Button>
               <LibraryPickerButton
-                images={library.map((image) => ({ id: image.id, title: image.title, url: image.signedUrl }))}
+                // 격자는 사본, 골라서 실제로 쓸 때는 원본(`attachFromLibrary`)이다.
+                images={library.map((image) => ({
+                  id: image.id, title: image.title,
+                  url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
+                }))}
                 // 고른 것을 알려 준다. 안 넘기면 창 안에서 무엇을 골랐는지
                 // 표시가 안 나, 눌렀는지 아닌지 알 수 없다.
                 selectedIds={attached?.libraryId ? [attached.libraryId] : []}

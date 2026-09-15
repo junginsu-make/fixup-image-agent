@@ -14,6 +14,8 @@ import {
   cn,
 } from "@fixup/ui";
 import { openImageViewer } from "./image-viewer";
+import { gridSrc } from "./grid-src";
+import { ThumbImage } from "./thumb-image";
 import {
   SET_ROLE_LABEL,
   canAttachSet,
@@ -36,7 +38,17 @@ import {
 export interface LibraryPickImage {
   id: string;
   title: string | null;
+  /** 원본. 골라서 실제로 쓸 때와 확대해 볼 때 이것을 쓴다. */
   url: string | null;
+  /**
+   * 격자에 거는 작은 사본. 없으면 원본으로 떨어진다(`grid-src.ts`).
+   *
+   * **물음표를 붙이지 않는다.** 없을 수 있다는 뜻은 `null` 이 맡고, 적는
+   * 것 자체는 강제한다. 선택형으로 뒀더니 호출처 넷 중 하나가 통째로
+   * 빠졌는데 타입 검사·시험 2,084개·린트가 전부 통과했다(2026-09-15).
+   * 사본 주소가 없는 화면은 `null` 이라고 적어서 그렇다고 밝힌다.
+   */
+  thumbUrl: string | null;
 }
 
 /**
@@ -221,10 +233,9 @@ export function LibraryPickerButton({
                       )}
                     >
                       <span className="relative block aspect-square overflow-hidden bg-muted">
-                        {image.url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={image.url}
+                        {gridSrc(image) ? (
+                          <ThumbImage
+                            src={gridSrc(image) as string}
                             alt=""
                             className={cn(
                               "h-full w-full",
@@ -352,8 +363,7 @@ function SetGrid({
             <span className="relative flex gap-0.5 bg-muted p-0.5">
               {shots.length ? (
                 shots.map((image) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={image.id} alt="" src={image.url as string} className="aspect-[3/4] min-w-0 flex-1 object-cover" />
+                  <ThumbImage key={image.id} alt="" src={gridSrc(image) as string} className="aspect-[3/4] min-w-0 flex-1 object-cover" />
                 ))
               ) : (
                 <span className="grid aspect-[3/1] w-full place-items-center text-center text-xs text-subtle-foreground">
@@ -410,9 +420,8 @@ function SetContents({
               on ? "border-primary bg-primary-soft ring-2 ring-primary/40" : "border-transparent hover:border-muted-foreground/40",
             )}
           >
-            {image?.url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img alt="" src={image.url} className="aspect-[3/4] w-full object-cover" />
+            {gridSrc(image) ? (
+              <ThumbImage alt="" src={gridSrc(image) as string} className="aspect-[3/4] w-full object-cover" />
             ) : (
               <span className="grid aspect-[3/4] w-full place-items-center px-2 text-center text-xs text-subtle-foreground">
                 이 그림을 못 찾았습니다

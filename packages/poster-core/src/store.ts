@@ -18,6 +18,14 @@ export interface PosterReferenceRecord {
   createdAt: string;
   /** 조회 시점에 만들어 넣는다. 저장하지 않는다. */
   url?: string;
+  /**
+   * 격자에 거는 작은 사본. **없으면 `null` 이다 — 원본으로 떨어뜨리지 않는다.**
+   *
+   * 여기서 원본을 채워 넣으면 화면 쪽에서 사본인지 원본인지 구분할 수
+   * 없어지고, 그러면 "사본을 쓰고 있다"고 착각한 채 2MB 를 계속 받는다.
+   * 떨어뜨릴지는 거는 쪽이 정한다.
+   */
+  thumbUrl?: string | null;
 }
 
 export interface PosterProjectRecord {

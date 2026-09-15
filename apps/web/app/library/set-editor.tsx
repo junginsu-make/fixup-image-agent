@@ -5,8 +5,14 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogH
 import type { ReferencePurpose, ReferenceRole, ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { randomId } from "../../lib/browser-safe";
+import { gridSrc } from "../_components/grid-src";
+import { ThumbImage } from "../_components/thumb-image";
 
-type ImageOption = ReferenceImageRow & { signedUrl: string | null };
+type ImageOption = ReferenceImageRow & {
+  signedUrl: string | null;
+  /** 격자에 거는 사본. 없으면 `signedUrl` 로 떨어진다(`_components/grid-src.ts`). */
+  thumbUrl?: string | null;
+};
 
 /**
  * 묶음 세트 — **카드뉴스 한 벌**이다.
@@ -142,9 +148,8 @@ export function SetEditor({
               {compatibleImages.map((image) => (
                 <label key={image.id} className="grid gap-2 rounded-lg border p-2">
                   <div className="aspect-square overflow-hidden rounded-md bg-muted">
-                    {image.signedUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={image.signedUrl} alt={image.title ?? "참고 이미지"} className="h-full w-full object-cover" />
+                    {gridSrc(image) ? (
+                      <ThumbImage src={gridSrc(image) as string} alt={image.title ?? "참고 이미지"} className="h-full w-full object-cover" />
                     ) : null}
                   </div>
                   <span className="truncate text-xs font-medium">{image.title || "제목 없음"}</span>

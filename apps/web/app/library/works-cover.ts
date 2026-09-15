@@ -1,3 +1,5 @@
+import { gridSrc } from "../_components/grid-src";
+
 /**
  * 목록에 걸 표지를 고른다.
  *
@@ -7,11 +9,11 @@
  * 라이브러리를 열면 처음 보이는 자리라, 여기가 원본을 받으면 목록 한 번에
  * 수십 MB 가 오간다 — 미리보기를 만들어 둔 이유가 바로 이것이다.
  *
- * 카드뉴스는 `assetUrl`, 포스터는 `url` 로 이름이 달라 둘 다 받는다.
+ * 규칙 자체는 `_components/grid-src.ts` 에 있다. 불러오기 창도 같은 규칙을
+ * 쓰는데, 둘이 따로 적혀 있으면 한쪽만 고쳐진 채 끝난다.
  */
 export function coverOf(
   first: { url?: string | null; assetUrl?: string | null; thumbUrl?: string | null } | undefined,
 ): string | null {
-  if (!first) return null;
-  return first.thumbUrl ?? first.url ?? first.assetUrl ?? null;
+  return gridSrc(first);
 }
