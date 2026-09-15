@@ -236,8 +236,14 @@ export function AdExportClient() {
       const loaded = next.source === "poster"
         ? await posterItemImages(next.id)
         : next.source === "reference"
-          ? (next.thumbnail
-            ? [{ image: next.thumbnail, sectionName: next.title, position: 0 }]
+          ? (next.thumbnail || next.original
+            ? [{
+              // 80×80 자리라 사본을 건다. 확대는 아래에서 원본을 연다.
+              image: (next.thumbnail ?? next.original) as string,
+              original: (next.original ?? next.thumbnail) as string,
+              sectionName: next.title,
+              position: 0,
+            }]
             : [])
           : libraryImagePicks((await getAccountItemImages(
             { id: next.id, title: next.title } as LibraryItem,
@@ -464,19 +470,17 @@ export function AdExportClient() {
               description={`고를 수 있는 그림 ${items.length}장 · 눌러서 고릅니다`}
               fit="contain"
               /*
-                **이 화면은 사본만 들고 있다.** `export-rules.ts` 가 포스터·
-                작업물·참고 이미지를 `thumbnail` 한 칸으로 합쳐서 준다(원본
-                주소는 거기서 버려진다). 그래서 격자도 확대도 같은 사본이다 —
-                고쳐서 원본까지 들고 오려면 `export-rules.ts` 와 그 시험을
-                함께 고쳐야 하므로 여기서는 지금 동작을 그대로 둔다.
+                **격자는 사본, 확대는 원본이다.** 전에는 `export-rules.ts` 가
+                셋을 `thumbnail` 한 칸으로 합쳐 줘서 확대도 사본이 떴다
+                (2026-09-15). 이제 `original` 을 따로 준다.
 
-                내보내기 자체는 원본을 쓴다. 고른 뒤 `chooseItem` 이 자기
-                자료(`found`)에서 원본 경로를 다시 찾는다.
+                내보내기는 둘 다 안 본다. `api/ad/export` 는 id 만 받고 서버가
+                제 저장소에서 원본을 읽는다.
               */
               images={items.map((entry) => ({
                 id: pickerKey(entry),
                 title: entry.title,
-                url: entry.thumbnail ?? null,
+                url: entry.original ?? entry.thumbnail ?? null,
                 thumbUrl: entry.thumbnail ?? null,
               }))}
               selectedIds={item ? [pickerKey(item)] : []}
@@ -526,6 +530,7 @@ export function AdExportClient() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={image.image}
+                  data-viewer-src={image.original}
                   alt={image.sectionName}
                   data-zoomable
                   className="h-full w-full object-cover"

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AD_SPECS } from "../../../lib/ad/specs";
 import { planDerivation } from "../../../lib/ad/derive";
@@ -1029,7 +1031,7 @@ describe("어느 변형을 고를까", () => {
 
   /** 첫 장이 0번이라는 보장이 없다 — 서버 번호다. */
   it("첫 장의 서버 번호를 쓴다", () => {
-    expect(startingPosition([{ image: "/c", sectionName: "변형 4", position: 3 }], null)).toBe(3);
+    expect(startingPosition([{ position: 3 }], null)).toBe(3);
   });
 
   it("한 장도 없으면 0", () => {
@@ -1086,5 +1088,104 @@ describe("포털 하나를 켜고 끈다", () => {
     const withExtra = { ...on, picked: [...on.picked, "kakao-display-2x1"] };
     const again = togglePortal(rows, withExtra, "naver");
     expect(again.picked).toContain("kakao-display-2x1");
+  });
+});
+
+/**
+ * 격자에 거는 사본과 **확대해서 볼 원본을 따로 싣는다.**
+ *
+ * 이 화면은 셋을 `thumbnail` 한 칸으로 합쳐서 줬다. 그래서 불러오기 창의
+ * 확대가 사본을 띄웠다 — 「글자가 읽히는지 보세요」라고 적어 두고 정작 크게
+ * 보면 작은 그림이 뜬다. 내보내는 결과물은 서버가 원본에서 직접 만들므로
+ * (`api/ad/export` 는 id 만 받는다) 결과물 화질은 처음부터 무사했다.
+ * 새는 곳은 화면뿐이었다.
+ */
+describe("사본과 원본을 따로 싣는다", () => {
+  it("포스터는 사본과 원본 주소를 둘 다 준다", () => {
+    const items = adSourceItems({
+      works: [],
+      references: [],
+      posters: [{ id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] }],
+    });
+    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/2/file?size=thumb");
+    // `?size=thumb` 이 없으면 원본이다(파일 라우트 주석).
+    expect(items[0]!.original).toBe("/api/poster/projects/P1/images/2/file");
+  });
+
+  it("작업물은 표지 원본을 원본 칸에 싣는다", () => {
+    const items = adSourceItems({
+      works: [{ id: "L1", title: "가을", mine: true, coverThumbUrl: "thumb", coverUrl: "full" }],
+      references: [],
+      posters: [],
+    });
+    expect(items[0]!.thumbnail).toBe("thumb");
+    expect(items[0]!.original).toBe("full");
+  });
+
+  it("참고 이미지는 서명한 원본을 원본 칸에 싣는다", () => {
+    const items = adSourceItems({
+      works: [],
+      references: [{ id: "R1", title: "겨울", mine: true, thumbUrl: "thumb", signedUrl: "full" }],
+      posters: [],
+    });
+    expect(items[0]!.thumbnail).toBe("thumb");
+    expect(items[0]!.original).toBe("full");
+  });
+
+  it("사본이 없는 옛 항목은 원본만 싣는다", () => {
+    // `thumbnail` 이 원본으로 떨어지는 지금 동작은 그대로 둔다 — 격자가 빈다.
+    const items = adSourceItems({
+      works: [{ id: "L1", title: "가을", mine: true, coverUrl: "full" }],
+      references: [],
+      posters: [],
+    });
+    expect(items[0]!.thumbnail).toBe("full");
+    expect(items[0]!.original).toBe("full");
+  });
+
+  it("그림이 아예 없으면 두 칸 모두 비어 있다", () => {
+    const items = adSourceItems({
+      works: [{ id: "L1", title: "가을", mine: true }],
+      references: [],
+      posters: [],
+    });
+    expect(items[0]!.thumbnail).toBeUndefined();
+    expect(items[0]!.original).toBeUndefined();
+  });
+});
+
+describe("미리보기 줄도 확대는 원본으로 연다", () => {
+  it("포스터 변형은 원본을 걸고 원본으로 확대한다", () => {
+    const [pick] = posterImagePicks("P1", [{ variantIndex: 0 }]);
+    expect(pick!.image).toBe("/api/poster/projects/P1/images/0/file");
+    expect(pick!.original).toBe("/api/poster/projects/P1/images/0/file");
+  });
+
+  it("작업물 낱장은 받은 주소를 원본으로도 쓴다", () => {
+    const [pick] = libraryImagePicks([{ image: "full", sectionName: "1", position: 0 }]);
+    expect(pick!.image).toBe("full");
+    expect(pick!.original).toBe("full");
+  });
+});
+
+/**
+ * 화면이 실제로 원본을 거는가 — **글자로 지킨다.**
+ *
+ * `export-rules.ts` 가 `original` 을 아무리 잘 실어 줘도 화면이 안 쓰면
+ * 소용이 없다. 이 저장소가 반복해서 당한 방식이라(2026-09-15 불러오기 창)
+ * 자리 수를 세어 둔다.
+ */
+describe("광고 화면이 원본을 거는 자리", () => {
+  const source = readFileSync(join(__dirname, "..", "ad-export-client.tsx"), "utf8");
+
+  it("불러오기 창은 확대용으로 원본을 넘긴다", () => {
+    // 격자는 `thumbUrl`, 확대는 `url` 이다(`_components/library-picker.tsx`).
+    expect(source).toContain("url: entry.original ?? entry.thumbnail ?? null");
+    expect(source).toContain("thumbUrl: entry.thumbnail ?? null");
+  });
+
+  it("미리보기 줄은 data-viewer-src 로 원본을 알려 준다", () => {
+    // 이것이 없으면 `viewerSourceOf` 가 보이는 그림(사본)을 그대로 연다.
+    expect(source).toContain("data-viewer-src={image.original}");
   });
 });
