@@ -38,6 +38,14 @@ import {
 } from "@fixup/ui";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { SavedImagePicker } from "../create/SavedImagePicker";
+import { CharacterPickerButton, type PickableCharacter } from "../_components/character-picker";
+import {
+  chosenViews,
+  describeCharacterChoice,
+  isAutoChoice,
+  pickedFrom,
+} from "../_components/character-choice";
+import { characterAngleLabel } from "../../lib/character-library";
 import { MAX_REFERENCE_IMAGES, models, type Model, type Project, type ServerConfig } from "./redesign-model";
 import { buildImageFileName, downloadDataUrl, imageExtension } from "./redesign-files";
 import { ensureSectionRevisions, projectDisplayTitle, sectionSortNumber } from "./redesign-project";
@@ -177,7 +185,9 @@ export function Workspace(props: {
   channel: string;
   setChannel: (channel: string) => void;
   characterId: string;
-  setCharacterId: (id: string) => void;
+  /** 고른 각도. 비어 있으면 자동 — 서버가 좌측 45도 한 장을 쓴다. */
+  characterAngles: string[];
+  onCharacterChange: (id: string, angles: string[]) => void;
   count: number;
   setCount: (count: number) => void;
   ratio: string;
@@ -202,7 +212,8 @@ export function Workspace(props: {
     channel,
     setChannel,
     characterId,
-    setCharacterId,
+    characterAngles,
+    onCharacterChange,
     count,
     setCount,
     ratio,
@@ -408,7 +419,11 @@ export function Workspace(props: {
               <OptionGroup label="결과 장수" value={String(count)} options={[["1", "히어로 1장"], ["8", "기본 6~8장"]]} onChange={(value) => setCount(Number(value))} />
               <OptionGroup label="출력 비율" value={ratio} options={[["9:16", "9:16"], ["1080×1920", "1080×1920"]]} onChange={setRatio} />
               <ChannelOptionGroup value={channel} onChange={setChannel} />
-              <CharacterOptionGroup value={characterId} onChange={setCharacterId} />
+              <CharacterOptionGroup
+                value={characterId}
+                angles={characterAngles}
+                onChange={onCharacterChange}
+              />
               <div className="rounded-md bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
                 <strong className="text-foreground">예상 이미지 크레딧: 최대 {count}장</strong><br />
                 실제로 생성에 성공한 이미지 수만큼만 차감됩니다. 실패한 결과는 차감되지 않습니다.
@@ -422,67 +437,101 @@ export function Workspace(props: {
 }
 
 /**
- * 등장인물 고르기.
+ * 이 페이지에 등장할 인물과 **쓸 장면**을 고른다.
  *
- * 안 고르면 지금까지대로 돈다 — 사람이 나오는 섹션마다 다른 사람이 나온다.
- * 고르면 그 사람의 **정면 한 장**이 모든 섹션에 함께 간다. 여러 각도를 보내면
- * 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측).
+ * 예전에는 이름과 작은 썸네일 하나짜리 칩이었다. 무슨 장면이 있는지 볼 수조차
+ * 없었고, 서버는 늘 좌측 45도 한 장만 썼다 — 여기는 섹션이 만들어지기 전에
+ * 캐릭터를 정해서 각도 자동 선택에 넘길 섹션 설명이 없기 때문이다. 그래서
+ * 정면을 만들어 둬도 리디자인에서는 영영 안 쓰였다(2026-09-15 사용자 보고).
+ *
+ * 지금은 **다섯 도구가 같은 모달**을 쓴다. 같은 것을 곳마다 다르게 그리면 만든
+ * 사람이 자기 캐릭터를 못 알아본다.
  */
-export function CharacterOptionGroup({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [characters, setCharacters] = React.useState<Array<{
-    id: string; name: string; views: Array<{ angle: string; url: string | null }>;
-  }>>([]);
+export function CharacterOptionGroup({
+  value,
+  angles,
+  onChange,
+}: {
+  value: string;
+  angles: string[];
+  onChange: (value: string, angles: string[]) => void;
+}) {
+  const [characters, setCharacters] = React.useState<PickableCharacter[]>([]);
 
-  React.useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const body = await (await fetch("/api/characters", { cache: "no-store" })).json();
-        if (alive) setCharacters(body.ok ? (body.characters ?? []) : []);
-      } catch {
-        // 못 불러와도 리디자인은 그대로 된다. 등장인물은 선택이다.
-      }
-    })();
-    return () => { alive = false; };
+  const load = React.useCallback(async () => {
+    try {
+      const body = await (await fetch("/api/characters", { cache: "no-store" })).json();
+      setCharacters(body.ok ? (body.characters ?? []) : []);
+    } catch {
+      // 못 불러와도 리디자인은 그대로 된다. 등장인물은 선택이다.
+    }
   }, []);
 
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
   if (!characters.length) return null;
+
+  const selected = characters.find((character) => character.id === value);
+  const shown = selected ? chosenViews(angles, selected.views) : [];
 
   return (
     <div>
       <label className="mb-2 block text-xs font-bold text-muted-foreground">등장인물 · 선택</label>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={cn(
-            "min-h-9 rounded-md border border-border bg-card px-2 text-xs font-bold",
-            !value && "bg-foreground text-background",
-          )}
-          onClick={() => onChange("")}
-        >
-          안 씀
-        </button>
-        {characters.map((character) => {
-          const front = character.views.find((view) => view.url);
-          return (
-            <button
-              key={character.id}
-              type="button"
-              className={cn(
-                "flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-bold",
-                value === character.id && "bg-foreground text-background",
-              )}
-              onClick={() => onChange(value === character.id ? "" : character.id)}
-            >
-              {front?.url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={front.url} alt="" className="size-6 rounded-sm object-cover" />
-              ) : null}
-              <span className="max-w-24 truncate">{character.name}</span>
-            </button>
-          );
-        })}
-      </div>
+
+      {/*
+        고른 것을 **그림으로** 보여준다. 여기는 그림을 붙이는 화면이 아니라
+        이름표만 넘기는 화면이라, 말해 주지 않으면 무엇이 쓰이는지 알 길이 없다.
+      */}
+      {selected ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/25 bg-primary-soft/40 px-3 py-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-bold">{selected.name}</span>
+          <button
+            type="button"
+            className="text-xs font-bold text-destructive"
+            onClick={() => onChange("", [])}
+          >
+            안 씀
+          </button>
+          <div className="flex w-full flex-wrap items-center gap-1.5">
+            {shown.map((view) => (
+              <span
+                key={view.angle}
+                title={characterAngleLabel(view.angle)}
+                className={cn(
+                  "overflow-hidden rounded border",
+                  isAutoChoice(angles) ? "border-border opacity-60" : "border-primary/40",
+                )}
+              >
+                {view.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    alt={characterAngleLabel(view.angle)}
+                    src={view.url}
+                    className="size-10 object-cover"
+                  />
+                ) : null}
+              </span>
+            ))}
+            <span className="text-xs text-muted-foreground">
+              {describeCharacterChoice(angles, selected.views, characterAngleLabel)}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <CharacterPickerButton
+        characters={characters}
+        angleLabel={characterAngleLabel}
+        onReload={() => void load()}
+        label={selected ? "등장인물 바꾸기" : "등장인물 고르기"}
+        description="만들어 둔 캐릭터를 눌러 이 페이지에 쓸 장면을 고릅니다."
+        autoLabel="자동으로 맡기기"
+        autoHint="자동은 왼쪽 45도 한 장을 씁니다 — 두 눈이 보여 얼굴이 남습니다."
+        onPick={(pick) => onChange(pick.character.id, pickedFrom(pick))}
+      />
+
       <p className="mt-1.5 text-[11px] text-muted-foreground">
         고르면 사람이 나오는 섹션마다 같은 사람이 나옵니다. 안 고르면 섹션마다 다른 사람이 나옵니다.
       </p>

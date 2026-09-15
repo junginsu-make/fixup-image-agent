@@ -38,7 +38,14 @@ interface ScenarioEditorProps {
   preserveProduct: boolean;
   onPreserveProductChange: (preserve: boolean) => void;
   characterId?: string;
-  onCharacterChange: (id: string | undefined) => void;
+  /**
+   * 고른 각도. 비어 있으면 자동 — 서버가 섹션 설명에 맞춰 한 장 고른다.
+   *
+   * `characterId` 와 **따로 흐른다.** 한 덩어리로 묶으면 캐릭터만 바꾸는 자리마다
+   * 각도를 함께 신경 써야 한다.
+   */
+  characterAngles: string[];
+  onCharacterChange: (id: string | undefined, angles: string[]) => void;
   /**
    * 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」.
    *
@@ -240,6 +247,7 @@ export function ScenarioEditor({
   preserveProduct,
   onPreserveProductChange,
   characterId,
+  characterAngles,
   onCharacterChange,
   attachmentIntents,
   onIntentChange,
@@ -291,7 +299,11 @@ export function ScenarioEditor({
           아직 이미지를 만들지 않았습니다. 여기서 고친 내용이 그대로 이미지에 반영됩니다.
         </p>
 
-        <CharacterPicker selectedId={characterId} onSelect={onCharacterChange} />
+        <CharacterPicker
+          selectedId={characterId}
+          angles={characterAngles}
+          onSelect={onCharacterChange}
+        />
         {characterId || referenceModelName ? (
           <div className="mb-4 mt-2">
             <AttachmentIntentField

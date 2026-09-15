@@ -1,5 +1,6 @@
 import {
   attachmentPlacementRule,
+  characterAngleDirective,
   designerPersona,
   imageLookDirective,
   preserveDirective,
@@ -177,6 +178,23 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
     }
   });
   }
+  /*
+    **같은 캐릭터의 여러 각도**가 붙었으면 한 번만 말해 준다.
+
+    장마다 「PRESERVED PERSON」 이라고만 적으면 모델은 서로 다른 사람으로 읽고
+    얼굴을 절충한다. 이 문장이 넷을 한 사람으로 묶는다. 장마다 되풀이하지
+    않는 이유는 같다 — 같은 말이 넷이면 규칙이 아니라 소음이 된다.
+  */
+  const angleCounts = new Map<string, number>();
+  for (const image of images) {
+    if (image.kind !== "keep_identity" || image.subject !== "person") continue;
+    if (!image.characterId) continue;
+    angleCounts.set(image.characterId, (angleCounts.get(image.characterId) ?? 0) + 1);
+  }
+  for (const count of angleCounts.values()) {
+    if (count > 1) lines.push(characterAngleDirective(count));
+  }
+
   // 우선순위 문장은 다섯 도구가 같은 것을 쓴다(@fixup/shared). 여기서 따로
   // 쓰면 도구마다 순서가 갈리고, 같은 지시에 다른 그림이 나온다.
   //

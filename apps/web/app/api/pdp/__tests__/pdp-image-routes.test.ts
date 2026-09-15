@@ -78,8 +78,14 @@ vi.mock("../../../../lib/pdp/providers", () => ({
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 
 let character: { base64: string; mimeType: string; identityPrompt: string } | null = null;
+/**
+ * 각도마다 다른 그림을 준다. 그래야 **어느 각도를 읽었는지** 값으로 잴 수 있다.
+ * 전부 같은 그림을 주면 「고른 각도가 실제로 닿았는가」를 시험이 못 본다.
+ */
+let charactersByAngle: Record<string, { base64: string; mimeType: string; identityPrompt: string }> | null = null;
 vi.mock("../../../../lib/characters", () => ({
-  loadCharacterView: async () => character,
+  loadCharacterView: async (_userId: string, _id: string, angle: string) =>
+    charactersByAngle ? charactersByAngle[angle] ?? null : character,
 }));
 
 const { POST: single } = await import("../images/route");
@@ -106,6 +112,7 @@ beforeEach(() => {
   reserved.length = 0;
   finalized.length = 0;
   character = null;
+  charactersByAngle = null;
 });
 
 describe("일괄 생성도 인물 사진을 받는다", () => {
@@ -152,6 +159,7 @@ describe("일괄 생성도 인물 사진을 받는다", () => {
 
 describe("캐릭터를 붙이면 장면 지시도 사람을 요구한다", () => {
   it("일괄에서 캐릭터가 붙으면 withModel 이 참이다", async () => {
+    charactersByAngle = null;
     character = { base64: "CHAR", mimeType: "image/png", identityPrompt: "같은 사람" };
     await batch(
       post({
@@ -163,7 +171,7 @@ describe("캐릭터를 붙이면 장면 지시도 사람을 요구한다", () =>
       }),
     );
 
-    expect(calls[0]!.options.characterReference).toEqual(character);
+    expect(calls[0]!.options.characterReferences).toEqual([character]);
     expect(calls[0]!.options.withModel).toBe(true);
   });
 });
@@ -339,5 +347,86 @@ describe("레퍼런스 조각이 두 라우트 모두에서 나간다", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]!.options.styleReferenceImages).toEqual(calls[1]!.options.styleReferenceImages);
     expect((calls[0]!.options.styleReferenceImages as unknown[]).length).toBe(2);
+  });
+});
+
+
+/**
+ * 화면에서 고른 각도가 **엔진까지 닿는가.**
+ *
+ * 이 길이 끊기면 화면은 「정면·뒷모습 2장」이라고 말하는데 실제로는 한 장만
+ * 간다 — 예전과 똑같아지고, 사용자는 고쳤다고 믿는다. 그래서 라우트 경계에서
+ * 잰다(2026-09-15 사용자 보고).
+ */
+describe("고른 각도가 엔진까지 닿는다", () => {
+  const 각도별 = {
+    front: { base64: "FRONT", mimeType: "image/png", identityPrompt: "같은 사람" },
+    back: { base64: "BACK", mimeType: "image/png", identityPrompt: "같은 사람" },
+    left_45: { base64: "LEFT", mimeType: "image/png", identityPrompt: "같은 사람" },
+  };
+
+  beforeEach(() => {
+    charactersByAngle = 각도별;
+  });
+
+  it("일괄: 고른 각도가 고른 차례로 모두 간다", async () => {
+    await batch(
+      post({
+        originalImageBase64: "AAAA",
+        sections: [section("s1")],
+        aspectRatio: "3:4",
+        characterId: "c1",
+        characterAngles: ["back", "front"],
+        page: { imageModel: "nano-banana" },
+      }),
+    );
+
+    expect(calls[0]!.options.characterReferences).toEqual([각도별.back, 각도별.front]);
+  });
+
+  it("단건: 고른 각도가 고른 차례로 모두 간다", async () => {
+    await single(
+      post({
+        originalImageBase64: "AAAA",
+        section: section("s1"),
+        sectionIndex: 0,
+        aspectRatio: "3:4",
+        characterId: "c1",
+        characterAngles: ["front", "back"],
+        page: { imageModel: "nano-banana" },
+      }),
+    );
+
+    expect(calls[0]!.options.characterReferences).toEqual([각도별.front, 각도별.back]);
+  });
+
+  /** 안 고르면 지금까지대로다. 섹션 설명을 읽어 한 장. */
+  it("안 고르면 섹션 설명대로 한 장", async () => {
+    await batch(
+      post({
+        originalImageBase64: "AAAA",
+        sections: [{ ...section("s1"), layout_notes: "뒤돌아 걸어가는 뒷모습" }],
+        aspectRatio: "3:4",
+        characterId: "c1",
+        page: { imageModel: "nano-banana" },
+      }),
+    );
+
+    expect(calls[0]!.options.characterReferences).toEqual([각도별.back]);
+  });
+
+  /** 캐릭터를 안 골랐으면 각도를 보내도 아무 일도 없다. */
+  it("캐릭터가 없으면 각도만으로는 아무것도 안 간다", async () => {
+    await batch(
+      post({
+        originalImageBase64: "AAAA",
+        sections: [section("s1")],
+        aspectRatio: "3:4",
+        characterAngles: ["front", "back"],
+        page: { imageModel: "nano-banana" },
+      }),
+    );
+
+    expect(calls[0]!.options.characterReferences).toBeUndefined();
   });
 });

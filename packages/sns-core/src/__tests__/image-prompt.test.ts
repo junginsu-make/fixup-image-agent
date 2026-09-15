@@ -444,3 +444,53 @@ describe("적은 말이 프롬프트까지 가는가", () => {
     expect(mergedInstruction({ attachmentIntent: "   ", userInstruction: "  " })).toBe("");
   });
 });
+
+/**
+ * 같은 캐릭터의 여러 각도가 **한 사람으로 읽혀야** 한다.
+ *
+ * 장마다 「PRESERVED PERSON」 이라고만 적으면 모델은 서로 다른 사람으로 읽고
+ * 얼굴을 절충한다 — 그러면 카드마다 다른 얼굴이 나오고, 캐릭터를 만든 뜻이
+ * 사라진다(2026-07-30 실측).
+ */
+describe("캐릭터 여러 각도 지시", () => {
+  const 각도 = (characterId: string, id: string) =>
+    attachment({ id, kind: "keep_identity", subject: "person", characterId });
+
+  it("두 장 이상이면 같은 사람이라고 말한다", () => {
+    const block = buildAttachmentBlock([각도("tiger", "a"), 각도("tiger", "b")]);
+
+    expect(block).toMatch(/SAME character/i);
+    expect(block).toContain("2");
+  });
+
+  it("각도·자세·배경을 베끼지 말라고 못 박는다", () => {
+    const block = buildAttachmentBlock([각도("tiger", "a"), 각도("tiger", "b"), 각도("tiger", "c")]);
+
+    expect(block).toMatch(/poses/i);
+    expect(block).toMatch(/backgrounds/i);
+  });
+
+  /** 한 장뿐이면 할 말이 없다. 넣으면 규칙만 늘어난다. */
+  it("한 장이면 안 붙인다", () => {
+    expect(buildAttachmentBlock([각도("tiger", "a")])).not.toMatch(/SAME character/i);
+  });
+
+  /** 캐릭터가 아닌 낱장 사진에는 해당 없다. */
+  it("캐릭터에서 오지 않은 인물 사진에는 안 붙인다", () => {
+    const block = buildAttachmentBlock([
+      attachment({ id: "x", kind: "keep_identity", subject: "person" }),
+      attachment({ id: "y", kind: "keep_identity", subject: "person" }),
+    ]);
+
+    expect(block).not.toMatch(/SAME character/i);
+  });
+
+  it("캐릭터가 둘이면 각각 한 번씩 말한다", () => {
+    const block = buildAttachmentBlock([
+      각도("tiger", "a"), 각도("tiger", "b"),
+      각도("dog", "c"), 각도("dog", "d"),
+    ]);
+
+    expect(block.match(/SAME character/gi)).toHaveLength(2);
+  });
+});

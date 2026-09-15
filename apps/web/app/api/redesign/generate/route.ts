@@ -1,5 +1,5 @@
 import { generateSections, humanizeProviderError, RedesignError, type GenerateInputFile } from "@fixup/redesign-core";
-import { buildSceneWithCharacterDirective, pickAngleForSection } from "@fixup/pdp-core";
+import { buildSceneWithCharacterDirective, resolveCharacterAngles } from "@fixup/pdp-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
@@ -55,25 +55,30 @@ async function generate(req: Request) {
     /*
      * 등장인물을 고르면 섹션마다 같은 사람이 나온다.
      *
-     * 안 고르면 지금까지대로 돈다 — 이 블록 전체가 undefined 로 떨어진다.
-     * 여러 각도를 함께 보내지 않는다. 참조가 늘면 모델이 절충해 제3의 인물을
-     * 만든다(2026-07-30 실측). 상세페이지 섹션은 사용 장면이 많으므로
-     * 좌측 45도를 고른다 — 두 눈이 보여 얼굴이 남는다.
+     * 안 고르면 지금까지대로 돈다 — 이 블록 전체가 빈 배열로 떨어진다.
+     *
+     * **각도를 사람이 고른다.** 여기는 섹션이 만들어지기 전에 캐릭터를 정하므로
+     * 각도 자동 선택에 넘길 섹션 설명이 없다. 그래서 `pickAngleForSection("")` 이
+     * 늘 좌측 45도로 굳었고, 정면을 만들어 둬도 리디자인은 안 집어 갔다
+     * (2026-09-15 사용자 보고). 고른 것이 없으면 그 자동이 그대로 기본이다.
+     *
+     * 여러 장일 때 모델이 절충해 제3의 인물을 만드는 것(2026-07-30 실측)은
+     * `buildAttachmentRoleDirective` 가 말로 막는다. 첨부 상한 때문에 고른 것보다
+     * 적게 붙을 수 있고, 그 자름은 `characterSlots` 한 곳에서만 한다.
      */
     const characterId = String(form.get("characterId") || "");
-    let character: NonNullable<Parameters<typeof generateSections>[0]["character"]> | undefined;
+    const characters: NonNullable<Parameters<typeof generateSections>[0]["characters"]> = [];
     if (characterId) {
       const auth = await authenticateApiMember();
       if (!auth.ok) return auth.response;
-      const view = await loadCharacterView(
-        auth.member.userId,
-        characterId,
-        pickAngleForSection(""),
-        await teamIdOf(auth.member.userId),
-      );
-      if (view) {
-        character = {
-          name: "character.png",
+      const teamId = await teamIdOf(auth.member.userId);
+      const picked = form.getAll("characterAngles").map((value) => String(value));
+
+      for (const angle of resolveCharacterAngles(picked, "")) {
+        const view = await loadCharacterView(auth.member.userId, characterId, angle, teamId);
+        if (!view) continue;
+        characters.push({
+          name: `character-${angle}.png`,
           mimeType: view.mimeType,
           buffer: Buffer.from(view.base64, "base64"),
           directive: buildSceneWithCharacterDirective({
@@ -81,13 +86,13 @@ async function generate(req: Request) {
             // 원본 상세페이지가 늘 함께 간다. 그것이 색·구성을 정한다.
             hasStyleReference: files.length > 0,
           }),
-        };
+        });
       }
     }
 
     const result = await generateSections({
       files,
-      character,
+      characters,
       request: String(form.get("request") || ""),
       rolloutRequest: String(form.get("rolloutRequest") || ""),
       knowledgeText: String(form.get("knowledgeText") || ""),

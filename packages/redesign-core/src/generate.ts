@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
   attachmentPlacementRule,
+  characterAngleDirective,
   designerPersona,
   imageLookDirective,
   priorityLine,
@@ -152,7 +153,16 @@ export type GenerateSectionsInput = {
    * `directive` 는 그 인물을 지키라는 문장이다. 이미지만 보내면 모델이
    * 참조 중 하나로만 다루고 얼굴을 바꾼다.
    */
-  character?: { name: string; mimeType: string; buffer: Buffer; directive: string };
+  /**
+   * 등장인물 그림들. **한 사람의 여러 각도**다.
+   *
+   * 예전에는 한 장이었다. 그래서 정면을 만들어 둬도 리디자인은 늘 좌측 45도만
+   * 썼다(2026-09-15 사용자 보고) — 여기는 섹션이 만들어지기 전에 캐릭터를 정해서
+   * 각도 자동 선택이 빈 문자열로 돌기 때문이다. 이제 사람이 고른다.
+   *
+   * 지시문(`directive`)은 사람 하나에 하나다. 첫 장의 것을 쓴다.
+   */
+  characters?: Array<{ name: string; mimeType: string; buffer: Buffer; directive: string }>;
   /**
    * 그림의 결. 기본은 `auto` — 원본의 결을 따라간다.
    *
@@ -228,10 +238,15 @@ function normalizeLook(value: ImageLook | string | undefined): ImageLook {
 export function buildAttachmentRoleDirective(input: {
   /** 원본 상세페이지로 첨부되는 장수(잘린 뒤의 실제 장수). */
   originalCount: number;
-  /** 등장인물 기준컷이 맨 앞에 붙었는가. */
-  hasCharacter: boolean;
+  /**
+   * 맨 앞에 붙은 등장인물 그림 수. **한 사람의 여러 각도**다.
+   *
+   * 실제로 붙은 장수여야 한다 — `referencesWithCharacter` 가 원본 자리를 남기려고
+   * 잘라낸 뒤의 수다. 여기서 다르게 세면 프롬프트의 번호와 첨부 순서가 갈라진다.
+   */
+  characterCount: number;
 }): string {
-  if (input.originalCount <= 0 && !input.hasCharacter) return "";
+  if (input.originalCount <= 0 && input.characterCount <= 0) return "";
 
   const lines = [
     // 첨부가 있어도 모델은 "이런 종류의 페이지"를 기억에서 꺼내 그리는 쪽으로
@@ -243,12 +258,21 @@ export function buildAttachmentRoleDirective(input: {
   ];
 
   let index = 1;
-  if (input.hasCharacter) {
+  if (input.characterCount > 0) {
     // 인물을 지키라는 문장 자체는 buildSceneWithCharacterDirective 가 따로 붙인다.
     // 여기서는 몇 번째 그림이 그것인지만 밝힌다 — 같은 말을 두 번 하지 않는다.
-    lines.push(`[Image ${index} — PERSON] The character identity anchor for this page.`);
+    for (let count = 0; count < input.characterCount; count += 1) {
+      lines.push(`[Image ${index} — PERSON] The character identity anchor for this page.`);
+      index += 1;
+    }
+    /*
+     * 여러 장이면 **한 사람의 여러 각도**다. 그 말을 안 하면 모델이 서로 다른
+     * 사람 여럿으로 읽고 절충해 제3의 인물을 만든다(2026-07-30 실측). 카드뉴스·
+     * 포스터·상세페이지와 같은 문장을 쓴다 — 두 곳이 다른 말을 하면 같은 캐릭터가
+     * 도구마다 다르게 나온다.
+     */
+    if (input.characterCount > 1) lines.push(characterAngleDirective(input.characterCount));
     lines.push("");
-    index += 1;
   }
 
   if (input.originalCount > 0) {
@@ -277,11 +301,38 @@ export function buildAttachmentRoleDirective(input: {
   return lines.join("\n").trimEnd();
 }
 
+/**
+ * 등장인물 각도를 참조 목록 **맨 앞**에 놓되, 원본 자리를 남긴다.
+ *
+ * 앞이어야 하는 이유는 예전 그대로다 — 생성 함수가 `MAX_REFERENCE_IMAGES` 장에서
+ * 자르므로 뒤에 두면 원본이 많을 때 인물이 조용히 사라진다.
+ *
+ * **새로 생긴 걱정은 반대쪽이다.** 사람이 각도를 여러 장 고를 수 있게 되면서
+ * (2026-09-15), 고른 대로 다 넣으면 원본 상세페이지가 밀려난다. 그러면 리디자인이
+ * 아니라 기억으로 새로 그리기가 된다. 그래서 **원본이 있으면 최소 한 장은
+ * 남긴다** — 각도를 덜 쓰는 편이 대상을 잃는 것보다 낫다.
+ */
 export function referencesWithCharacter(
   originals: ReferenceImage[],
-  character: ReferenceImage | undefined,
+  characters: ReferenceImage[],
 ): ReferenceImage[] {
-  return (character ? [character, ...originals] : originals).slice(0, MAX_REFERENCE_IMAGES);
+  return [
+    ...characters.slice(0, characterSlots(originals.length, characters.length)),
+    ...originals,
+  ].slice(0, MAX_REFERENCE_IMAGES);
+}
+
+/**
+ * 인물 각도가 **실제로 몇 장** 붙는가.
+ *
+ * 프롬프트의 번호가 첨부 순서와 갈라지지 않으려면 자르는 규칙을 **한 곳**에서만
+ * 알아야 한다. `referencesWithCharacter` 와 `buildAttachmentRoleDirective` 가
+ * 따로 세면, 상한에 걸린 날 「Image 4 — PERSON」이라고 적어 놓고 4번에는 원본이
+ * 붙는다.
+ */
+export function characterSlots(originalCount: number, characterCount: number): number {
+  const room = originalCount > 0 ? MAX_REFERENCE_IMAGES - 1 : MAX_REFERENCE_IMAGES;
+  return Math.min(characterCount, room);
 }
 
 export async function generateSections(input: GenerateSectionsInput) {
@@ -341,16 +392,19 @@ export async function generateSections(input: GenerateSectionsInput) {
   console.info(`[generate] analysis done job=${jobId}`);
   // 분석에는 인물을 넣지 않는다. 분석은 원본 상세페이지를 읽어 제품을 파악하는
   // 일이라, 인물이 섞이면 제품 분석이 오염된다. 생성에만 넣는다.
-  const character = input.character;
+  const characters = input.characters ?? [];
+  const character = characters[0];
   const drawReferences = referencesWithCharacter(
     references,
-    character ? { name: character.name, mimeType: character.mimeType, buffer: character.buffer } : undefined,
+    characters.map((view) => ({ name: view.name, mimeType: view.mimeType, buffer: view.buffer })),
   );
+  // 실제로 붙은 인물 장수. 상한 때문에 고른 것보다 적을 수 있다.
+  const attachedCharacterCount = characterSlots(references.length, characters.length);
   // 실제로 fal 에 가는 첨부 구성 그대로 역할을 적는다. 여기서 다시 세면
   // 프롬프트의 번호와 첨부 순서가 갈라진다.
   const attachmentDirective = buildAttachmentRoleDirective({
-    originalCount: drawReferences.length - (character ? 1 : 0),
-    hasCharacter: Boolean(character),
+    originalCount: drawReferences.length - attachedCharacterCount,
+    characterCount: attachedCharacterCount,
   });
   const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive, {
     attachmentDirective,

@@ -145,6 +145,13 @@ interface PdpEditorProps {
   preserveProduct?: boolean;
   /** 이 페이지에 고정할 인물. 섹션마다 맞는 각도가 자동으로 들어간다. */
   characterId?: string;
+  /**
+   * 고른 각도. 비어 있으면 자동 — 서버가 섹션 설명에 맞춰 한 장 고른다.
+   *
+   * `characterId` 와 **따로 흐른다.** 한 덩어리로 묶으면 캐릭터만 바꾸는 자리마다
+   * 각도를 함께 신경 써야 한다.
+   */
+  characterAngles: string[];
   aspectRatio: AspectRatio;
   outputMode?: PdpOutputMode;
   /** 그림의 결. 상세페이지의 기본은 photoreal — 지금까지 늘 사진이었다. */
@@ -219,6 +226,7 @@ export function PdpEditor({
   styleReference,
   preserveProduct = true,
   characterId,
+  characterAngles,
   aspectRatio,
   outputMode,
   look = "photoreal",
@@ -1394,6 +1402,7 @@ export function PdpEditor({
           // 대상을 못 찾아 엉뚱한 곳이 강조된다.
           emphasisWords: keepWordsPresentIn(section.headline ?? "", options.emphasisWords ?? []),
           characterId,
+          characterAngles,
         }),
       });
       delete retryRequestKeysRef.current[sectionKey];
@@ -1544,6 +1553,7 @@ export function PdpEditor({
             aspectRatio,
             desiredTone: desiredTone || undefined,
             characterId,
+            characterAngles,
             page: pageWire(),
             // 사용자가 섹션마다 고른 값. 전에는 일괄이 이것을 통째로 무시하고
             // style 을 lifestyle 로 박아 보냈다 — 한 장만 다시 만들면 studio 라

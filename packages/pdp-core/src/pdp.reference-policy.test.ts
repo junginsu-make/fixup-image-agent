@@ -155,7 +155,7 @@ describe("정책이 실제 생성 호출에 닿는다", () => {
   it("첨부한 이미지와 프롬프트의 번호가 일치한다", async () => {
     const { prompt, kinds } = await generate({
       styleReferenceImages: [{ base64: "AAAA", mimeType: "image/png" }],
-      characterReference: { base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" },
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" }],
     });
 
     expect(kinds).toEqual(["anchor", "person", "style"]);
@@ -166,7 +166,7 @@ describe("정책이 실제 생성 호출에 닿는다", () => {
 
   it("캐릭터 생김새 서술도 함께 실린다", async () => {
     const { prompt } = await generate({
-      characterReference: { base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" },
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" }],
     });
     expect(prompt).toContain("20대 한국 여성");
   });
@@ -198,7 +198,7 @@ describe("인물 참조와 장면 지시가 어긋나지 않는다", () => {
   it("캐릭터를 쓰고 인물컷을 켜면 사람이 필수라고 말한다", async () => {
     const { prompt, kinds } = await generate({
       withModel: true,
-      characterReference: { base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" },
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" }],
     });
     expect(kinds).toContain("person");
     expect(peopleRule(prompt)).toContain("required");
@@ -209,7 +209,7 @@ describe("인물 참조와 장면 지시가 어긋나지 않는다", () => {
     // 섹션(제품 클로즈업)에 사람을 밀어 넣지 않아야 한다.
     const { prompt, kinds } = await generate({
       withModel: false,
-      characterReference: { base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" },
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" }],
     });
     expect(kinds).toContain("person");
     expect(peopleRule(prompt)).toContain("optional");
@@ -222,7 +222,7 @@ describe("인물 참조와 장면 지시가 어긋나지 않는다", () => {
       referenceModelImageBase64: "UUUU",
       referenceModelImageMimeType: "image/png",
       referenceModelProfile: { hairstyle: "단발", keepTraits: [], distinctiveFeatures: [] },
-      characterReference: { base64: "BBBB", mimeType: "image/png", identityPrompt: "40대 남성" },
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "40대 남성" }],
     });
     expect(kinds.filter((kind) => kind === "person")).toHaveLength(1);
     expect(prompt).not.toContain("40대 남성");
@@ -231,7 +231,7 @@ describe("인물 참조와 장면 지시가 어긋나지 않는다", () => {
   it("사람이 나온다고 단정하지 않는다", async () => {
     const { prompt } = await generate({
       withModel: false,
-      characterReference: { base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" },
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" }],
     });
     expect(prompt).toContain("Whenever a person appears");
   });
@@ -544,5 +544,65 @@ describe("레퍼런스 조각", () => {
     expect(directive).toContain("[Image 2 — PERSON]");
     expect(directive).toMatch(/part 1 of 2/i);
     expect(directive).toMatch(/part 2 of 2/i);
+  });
+});
+
+/**
+ * 캐릭터 각도를 **여러 장** 보낼 때.
+ *
+ * 2026-07-30 실측에서 얼굴 참조가 둘이면 모델이 절충해 제3의 인물을 만들었다.
+ * 그래서 한 장만 보냈고, 정면을 만들어 둬도 상세페이지·리디자인은 안 집어 갔다
+ * (2026-09-15 사용자 보고).
+ *
+ * 지금은 사람이 몇 장 보낼지 고른다. 대신 **「같은 사람의 다른 각도이고, 포즈·
+ * 배경은 베끼지 마라」**를 프롬프트가 함께 실어야 절충을 막는다. 그 문장이
+ * 빠지면 실측이 본 그 실패로 그대로 돌아간다.
+ */
+describe("캐릭터 각도를 여러 장 보낼 때", () => {
+  const 각도 = (base64: string) => ({ base64, mimeType: "image/png", identityPrompt: "20대 한국 여성" });
+
+  it("고른 장이 모두 첨부되고 번호가 이어진다", async () => {
+    const { prompt, kinds } = await generate({
+      characterReferences: [각도("AAAA"), 각도("BBBB"), 각도("CCCC")],
+    });
+
+    expect(kinds).toEqual(["anchor", "person", "person", "person"]);
+    expect(prompt).toContain("[Image 2 — PERSON]");
+    expect(prompt).toContain("[Image 3 — PERSON]");
+    expect(prompt).toContain("[Image 4 — PERSON]");
+  });
+
+  it("같은 사람의 다른 각도라고 말한다", async () => {
+    const { prompt } = await generate({
+      characterReferences: [각도("AAAA"), 각도("BBBB")],
+    });
+
+    expect(prompt).toContain("SAME character seen from different angles");
+  });
+
+  /** 참고 이미지지 베낄 장면이 아니다. 이 말이 빠지면 각도가 그대로 따라 나온다. */
+  it("포즈·배경을 베끼지 말라고 말한다", async () => {
+    const { prompt } = await generate({
+      characterReferences: [각도("AAAA"), 각도("BBBB")],
+    });
+
+    expect(prompt).toContain("Do NOT reproduce their poses");
+    expect(prompt).toContain("Generate exactly one person");
+  });
+
+  /** 한 장일 때는 할 말이 없다. 넣으면 없는 각도를 찾게 만든다. */
+  it("한 장이면 그 말을 안 한다", async () => {
+    const { prompt } = await generate({ characterReferences: [각도("AAAA")] });
+
+    expect(prompt).not.toContain("SAME character seen from different angles");
+  });
+
+  /** 생김새 서술은 사람 하나에 하나다. 각도마다 되풀이하면 규칙으로 찬다. */
+  it("생김새 서술은 한 번만 실린다", async () => {
+    const { prompt } = await generate({
+      characterReferences: [각도("AAAA"), 각도("BBBB"), 각도("CCCC")],
+    });
+
+    expect(prompt.split("20대 한국 여성").length - 1).toBe(1);
   });
 });

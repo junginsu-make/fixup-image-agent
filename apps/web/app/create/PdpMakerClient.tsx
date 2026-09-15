@@ -86,6 +86,19 @@ export function PdpMakerClient() {
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
   const [preserveProduct, setPreserveProduct] = useState(true);
   const [characterId, setCharacterId] = useState<string | undefined>(undefined);
+  /**
+   * 이 캐릭터에서 **쓸 각도**. 비어 있으면 자동 — 서버가 섹션에 맞춰 고른다.
+   *
+   * 기본이 자동인 이유는 하나다. 섹션마다 어울리는 각도를 고르는 그 자동이
+   * 실제로 쓸 만하고, 매번 손으로 고르는 것은 성가시다. 못 쓰던 것은 자동이
+   * 아니라 **직접 고르는 길이 없다는 것**이었다(2026-09-15 사용자 보고).
+   */
+  const [characterAngles, setCharacterAngles] = useState<string[]>([]);
+
+  const chooseCharacter = (id: string | undefined, angles: string[]) => {
+    setCharacterId(id);
+    setCharacterAngles(angles);
+  };
   const [preparedImage, setPreparedImage] = useState<PreparedImage | null>(null);
   const [modelImage, setModelImage] = useState<PreparedImage | null>(null);
   const [modelImageUsage, setModelImageUsage] = useState<ReferenceModelUsage | null>(null);
@@ -570,12 +583,14 @@ export function PdpMakerClient() {
     chosenStyleReference?: StyleReferenceView,
     chosenPreserveProduct?: boolean,
     chosenCharacterId?: string,
+    chosenCharacterAngles?: string[],
   ) => {
     setImageModel(model);
     setReview(blueprintReview);
     setStyleReference(chosenStyleReference);
     setPreserveProduct(chosenPreserveProduct ?? true);
     setCharacterId(chosenCharacterId);
+    setCharacterAngles(chosenCharacterAngles ?? []);
     setResult(generated);
     setEditorDraftState(null);
     setEditorSessionKey((current) => current + 1);
@@ -649,7 +664,8 @@ export function PdpMakerClient() {
           preserveProduct={preserveProduct}
           onPreserveProductChange={setPreserveProduct}
           characterId={characterId}
-          onCharacterChange={setCharacterId}
+          characterAngles={characterAngles}
+          onCharacterChange={chooseCharacter}
           outputMode={outputMode}
           imageModel={imageModel}
           isBusy={false}
@@ -682,6 +698,7 @@ export function PdpMakerClient() {
         styleReference={styleReferenceEnabled ? styleReference : undefined}
         preserveProduct={preserveProduct}
         characterId={characterId}
+        characterAngles={characterAngles}
         startMode={startMode}
         desiredTone={desiredTone}
         look={look}
@@ -1094,7 +1111,8 @@ export function PdpMakerClient() {
                   />
                   <CharacterPicker
                     selectedId={characterId}
-                    onSelect={setCharacterId}
+                    angles={characterAngles}
+                    onSelect={chooseCharacter}
                     ignoredReason={
                       modelImage
                         ? "올린 사진이 우선입니다. 이 캐릭터는 이번 생성에 쓰이지 않습니다."

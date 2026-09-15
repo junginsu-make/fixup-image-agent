@@ -133,15 +133,70 @@ export function fromPdpReference(kind: PdpKind): AttachmentRole {
 
 /* ── 불변식 ───────────────────────────────────────────────── */
 
+/** 지킬 얼굴 한 장이 어디서 왔나. 캐릭터에서 왔으면 그 캐릭터의 id. */
+export interface PersonEntry {
+  role: AttachmentRole;
+  /**
+   * 어느 캐릭터의 각도인가.
+   *
+   * 캐릭터 하나는 정면·측면·뒷모습이 **한 벌**이다. 그 넷을 붙이면 장은 넷이지만
+   * 사람은 하나다. 이 값이 없으면 낱장으로 올린 사진이라 각각을 한 사람으로 센다.
+   */
+  characterId?: string | null;
+}
+
+/** 지킬 얼굴인가. 그림 느낌을 바꾸든 안 바꾸든 지킬 얼굴이라는 점은 같다. */
+function isPerson(role: AttachmentRole): boolean {
+  return role === "preserve_person" || role === "preserve_person_restyled";
+}
+
+/**
+ * 지킬 **사람이 몇 명인가.** 장이 몇 장인가가 아니다.
+ *
+ * 같은 캐릭터의 여러 각도는 한 명으로 센다. 장으로 세면 캐릭터를 만든 뜻이
+ * 사라진다 — 각도를 쓰려고 넷을 만들어 놓고 붙이는 순간 「인물이 넷」으로
+ * 막히기 때문이다(2026-09-15 사용자 보고).
+ */
+export function countPreservedPeople(entries: PersonEntry[]): number {
+  const characters = new Set<string>();
+  let loose = 0;
+
+  for (const entry of entries) {
+    if (!isPerson(entry.role)) continue;
+    if (entry.characterId) characters.add(entry.characterId);
+    else loose += 1;
+  }
+
+  return characters.size + loose;
+}
+
 /**
  * 인물은 하나만.
  *
- * 얼굴이 둘이면 모델이 절충해 제3의 인물을 만든다
+ * 얼굴이 **서로 다른 사람으로** 둘이면 모델이 절충해 제3의 인물을 만든다
  * (pdp-core/src/pdp.reference-policy.ts). 제품은 여럿이어도 된다.
+ *
+ * 같은 캐릭터의 여러 각도는 걸리지 않는다 — 그건 한 사람이다.
  */
-export function personOverflow(roles: AttachmentRole[]): boolean {
-  // 그림 느낌을 바꾸든 안 바꾸든 지킬 얼굴이라는 점은 같다. 함께 센다.
-  return roles.filter(
-    (role) => role === "preserve_person" || role === "preserve_person_restyled",
-  ).length > 1;
+export function personOverflow(entries: Array<AttachmentRole | PersonEntry>): boolean {
+  return (
+    countPreservedPeople(
+      entries.map((entry) => (typeof entry === "string" ? { role: entry } : entry)),
+    ) > 1
+  );
+}
+
+/**
+ * 같은 인물의 여러 각도를 붙였을 때 **그림 모델에게 할 말.**
+ *
+ * 여러 장을 그냥 주면 모델은 서로 다른 사람으로 읽거나, 각도와 장면까지
+ * 그대로 베낀다. 다섯 도구가 같은 문장을 써야 도구를 옮겨도 같은 결과가 난다.
+ */
+export function characterAngleDirective(count: number): string {
+  return (
+    `Images of this person (${count} of them) are the SAME character seen from different angles. ` +
+    "They are identity references, not scenes to copy: use them together to keep one consistent " +
+    "face, body and hair. Do NOT reproduce their poses, camera angles, framing, clothing or " +
+    "backgrounds — compose the scene this card asks for. Generate exactly one person."
+  );
 }

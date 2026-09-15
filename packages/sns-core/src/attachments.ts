@@ -4,6 +4,8 @@
  * 2026-07-30 상세페이지 참조 정책을 카드뉴스에 옮긴 것이다.
  * 그대로 지키는 것(identity)과 비슷하게 따라가는 것(design language)을 가른다.
  */
+import { countPreservedPeople } from "@fixup/shared";
+
 export type AttachmentKind =
   | "keep_identity"    // 그대로 넣을 것 — 제품·인물·로고. 각도는 바뀌어도 정체성 유지
   | "place_as_is"      // 원본 그대로 쓸 장 — 표·포스터. AI 를 안 거치고 여백을 둬 배치
@@ -30,6 +32,14 @@ export interface Attachment {
   restyle?: boolean;
   /** place_as_is 를 넣을 속지 번호. 사람이 정하며, 비우면 입력 순서를 쓴다. */
   bodySlot?: number;
+  /**
+   * 어느 캐릭터의 각도인가.
+   *
+   * 캐릭터 하나는 정면·측면·뒷모습이 **한 벌**이다. 그 넷을 붙이면 장은 넷이지만
+   * 사람은 하나 — 이 값이 그것을 말한다. 없으면 낱장으로 올린 사진이라 각각을
+   * 한 사람으로 센다.
+   */
+  characterId?: string;
 }
 
 export interface GroupedAttachments {
@@ -114,7 +124,20 @@ export function validateAttachments(list: Attachment[], max: number, totalCards?
   if (list.filter((item) => item.kind === "ending").length > 1) {
     issues.push("마지막 장 이미지는 한 장만 넣을 수 있습니다.");
   }
-  if (grouped.keepIdentity.filter((item) => item.subject === "person").length > 1) {
+  /*
+    **장이 아니라 사람을 센다.**
+
+    같은 캐릭터의 네 각도를 붙이면 장은 넷이지만 사람은 하나다. 장으로 세던
+    때는 각도를 쓰려고 넷을 만들어 놓고 붙이는 순간 여기서 막혔다
+    (2026-09-15 사용자 보고).
+  */
+  if (
+    countPreservedPeople(
+      grouped.keepIdentity
+        .filter((item) => item.subject === "person")
+        .map((item) => ({ role: "preserve_person" as const, characterId: item.characterId })),
+    ) > 1
+  ) {
     issues.push("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
   }
   if (totalCards !== undefined) {

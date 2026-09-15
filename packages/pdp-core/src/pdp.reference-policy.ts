@@ -1,4 +1,4 @@
-import { attachmentPlacementRule, priorityLine } from "@fixup/shared";
+import { attachmentPlacementRule, characterAngleDirective, priorityLine } from "@fixup/shared";
 import type { ReferenceImage } from "./types";
 
 /**
@@ -224,6 +224,23 @@ export function buildReferenceRoleDirective(
     }
     lines.push("");
   });
+
+  /**
+   * 인물 참조가 여럿이면 **한 사람의 여러 각도**다.
+   *
+   * 2026-07-30 실측에서 얼굴 참조가 둘이면 모델이 절충해 제3의 인물을 만들었다.
+   * 그래서 오래 한 장만 보냈고, 정면을 만들어 둬도 상세페이지·리디자인은 안
+   * 집어 갔다(2026-09-15 사용자 보고).
+   *
+   * 지금은 몇 장 보낼지 사람이 고른다. 우리가 대신 판단하지 않는 대신 **말로**
+   * 막는다 — 같은 사람이고, 참고일 뿐이니 포즈·구도·배경은 베끼지 말고, 사람은
+   * 하나만 그려라. 카드뉴스·포스터와 **같은 문장**을 쓴다(`@fixup/shared`).
+   * 두 곳이 다른 말을 하면 같은 캐릭터가 도구마다 다르게 나온다.
+   *
+   * 한 장일 때는 안 적는다. 없는 각도를 찾게 만든다.
+   */
+  const personCount = references.filter((reference) => reference.kind === "person").length;
+  if (personCount > 1) lines.push(characterAngleDirective(personCount), "");
 
   // 지시를 적어 규칙을 뺀 자리는 더 이상 「지킨 대상」이 아니다. 그대로 세면
   // 「deliberately omitted」와 같은 단락에서 「preserved subject」가 부딪힌다.

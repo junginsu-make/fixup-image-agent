@@ -544,6 +544,40 @@ export function buildTurnaroundSheetPrompt(input: {
  * 캐릭터 4종을 모두 보내면 참조가 늘어 서로를 희석시킨다 — 앵커와 스타일
  * 레퍼런스 둘만으로도 절충이 일어나는 것을 실측했다. 그래서 한 장만 보낸다.
  */
+/**
+ * 이 섹션에 **실제로 보낼 각도들.**
+ *
+ * 사람이 고른 것이 있으면 그것이 이긴다. 없으면 지금까지대로 섹션 설명을 읽어
+ * 한 장을 고른다.
+ *
+ * **자동을 안 없앤다.** 섹션마다 어울리는 각도를 사람이 매번 고르는 것은
+ * 성가시고, 지금 그 자동이 쓸 만하게 돌고 있다. 못 쓰던 것은 자동이 아니라
+ * **직접 고르는 길이 없다는 것**이었다 — 정면을 만들어 둬도 상세페이지·리디자인은
+ * 집어 가지 않았다(2026-09-15 사용자 보고).
+ *
+ * 리디자인은 섹션이 만들어지기 전에 캐릭터를 정한다(`redesign-core/generate.ts`).
+ * 그래서 거기서는 `layoutNotes` 가 늘 비어 있고 자동은 좌측 45도 하나로 굳는다.
+ * 고르는 길이 생기면 그 굳음이 풀린다.
+ *
+ * 걸러 내는 것이 둘이다. **「다각도 한 장」**은 6컷 격자라 정체성 참조로 보내면
+ * 그 격자가 결과물에 따라 나온다(`CHARACTER_SHEET` 머리말). **모르는 이름**은
+ * 그림을 못 찾는다. 다 걸러져 빈 배열이 되면 캐릭터가 통째로 사라지므로
+ * 자동으로 돌아간다 — 고른 사람은 캐릭터를 쓰겠다는 뜻이었다.
+ */
+export function resolveCharacterAngles(picked: string[], layoutNotes: string): CharacterAngle[] {
+  const known = new Set<string>(CHARACTER_ANGLES.map((angle) => angle.id as string));
+  const chosen: CharacterAngle[] = [];
+
+  for (const raw of picked) {
+    const angle = migrateAngle(raw);
+    if (!known.has(angle)) continue;
+    if (chosen.includes(angle as CharacterAngle)) continue;
+    chosen.push(angle as CharacterAngle);
+  }
+
+  return chosen.length ? chosen : [pickAngleForSection(layoutNotes)];
+}
+
 export function pickAngleForSection(layoutNotes: string): CharacterAngle {
   const text = layoutNotes.toLowerCase();
 

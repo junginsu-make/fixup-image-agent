@@ -7,8 +7,11 @@ import {
   ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, personOverflow, type AttachmentRole,
 } from "@fixup/shared";
 import {
-  LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
+  LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
+import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
+import { attachMessage, characterIdByTitle, matchAngles } from "../../_components/character-attach";
+import { characterAngleLabel } from "../../../lib/character-library";
 import { attachmentNumber } from "@fixup/shared";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
@@ -76,7 +79,7 @@ export function ReferencePicker({
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
-  const [characters, setCharacters] = React.useState<LibraryPickCharacter[]>([]);
+  const [characters, setCharacters] = React.useState<PickableCharacter[]>([]);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
   /**
@@ -102,36 +105,34 @@ export function ReferencePicker({
   }, []);
 
   /**
-   * 캐릭터를 넣는다 — **정면 한 장만.**
+   * 캐릭터에서 **고른 장면을 전부** 넣는다.
    *
-   * 네 장을 다 넣으면 안 된다. 정체성 참조가 여러 장이면 모델이 그것들을
-   * 절충해 제3의 인물을 만든다(2026-07-30 실측, pdp.character.ts 의
-   * pickAngleForSection 주석). 화면의 「인물은 한 명만」 경고에도 걸린다 —
-   * 같은 사람인데 넷으로 세어진다.
+   * 전에는 정면 한 장만 넣었다. 각도를 쓰려고 넷을 만들어 두고도 옆모습이
+   * 필요한 장면에서 쓸 수 없었다(2026-09-15 사용자 보고). 어느 장을 쓸지는
+   * 사람이 고르고, 고른 것은 그대로 모델에 간다.
    *
-   * 다른 각도가 필요하면 라이브러리 낱장에 「이름 (캐릭터) · 좌측」 으로
-   * 그대로 있으니 거기서 고르면 된다.
+   * 여러 장이어도 「인물은 한 명만」에 안 걸린다 — 아래 `tooManyPeople` 이
+   * 장이 아니라 **사람을 센다.**
    *
    * 역할은 「인물 그대로 지키기」로 정한다. 캐릭터를 붙이는 이유가 그 대상을
    * 지키려는 것이므로 「따라 만들기」로 들어가면 뜻이 반대가 된다. 사물
    * 캐릭터라면 화면에서 「제품 그대로 지키기」로 바꾸면 된다.
    */
-  function pickCharacter(character: LibraryPickCharacter) {
-    const prefix = `${character.name} (캐릭터)`;
-    const matched = references.filter((entry) => (entry.title ?? "").startsWith(prefix));
-    const front = matched.find((entry) => (entry.title ?? "").endsWith("정면")) ?? matched[0];
-    if (!front) {
-      setMessage("이 캐릭터의 각도를 라이브러리에서 찾지 못했습니다.");
-      return;
-    }
-    onRoleChange(front.id, "preserve_person");
-    setMessage(
-      `'${character.name}' 의 정면을 넣었습니다. 다른 각도가 필요하면 라이브러리 낱장에서 고르세요.`,
-    );
+  function pickCharacter({ character, angles }: CharacterPick) {
+    const { matched, missing } = matchAngles(references, character.name, angles);
+    for (const entry of matched) onRoleChange(entry.image.id, "preserve_person");
+    setMessage(attachMessage(character.name, matched.length, missing, characterAngleLabel));
   }
 
-  function pickSet(set: LibraryPickSet) {
+  /**
+   * 세트에서 **고른 장만** 넣는다.
+   *
+   * 포스터에는 표지·속지 같은 자리가 없어 전부 「따라 만들기」로 들어간다 —
+   * 세트가 들고 온 자리는 여기서 쓸 데가 없다.
+   */
+  function pickSet(set: LibraryPickSet, pickedIds: string[]) {
     for (const item of set.items) {
+      if (!pickedIds.includes(item.referenceImageId)) continue;
       if ((roles[item.referenceImageId] ?? "none") === "none") {
         onRoleChange(item.referenceImageId, "style");
       }
@@ -209,9 +210,21 @@ export function ReferencePicker({
     .map((id) => references.find((reference) => reference.id === id))
     .filter((reference): reference is ReferenceItem => Boolean(reference));
 
-  // 사람과 물건을 가르는 이유: 지키는 방법이 다르고, 얼굴이 둘이면 모델이
-  // 절충해 제3의 인물을 만든다(2026-07-30 실측).
-  const tooManyPeople = personOverflow(picked.map((reference) => roles[reference.id] as AttachmentRole));
+  /*
+    사람과 물건을 가르는 이유: 지키는 방법이 다르고, 얼굴이 **서로 다른 사람으로**
+    둘이면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측).
+
+    **장이 아니라 사람을 센다.** 같은 캐릭터의 네 각도는 장은 넷이지만 사람은
+    하나다 — 장으로 세던 때는 각도를 쓰려고 만들어 둔 것을 붙이는 순간 경고가
+    떴다(2026-09-15 사용자 보고).
+  */
+  const characterByTitle = characterIdByTitle(characters);
+  const tooManyPeople = personOverflow(
+    picked.map((reference) => ({
+      role: roles[reference.id] as AttachmentRole,
+      characterId: characterByTitle.get(reference.title ?? ""),
+    })),
+  );
 
   return (
     <div className="grid gap-4">
@@ -234,13 +247,21 @@ export function ReferencePicker({
           onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
           sets={sets}
           onPickSet={pickSet}
-          characters={characters}
-          onPickCharacter={pickCharacter}
           onReload={onUploaded}
           onDelete={(picked) => {
             const reference = references.find((entry) => entry.id === picked.id);
             if (reference) void remove(reference);
           }}
+        />
+        {/*
+          캐릭터는 **따로 부른다.** 라이브러리 모달 안에 칸으로 두었더니 층이
+          쌓여 무엇을 누르는 자리인지 안 보였다(2026-09-15 사용자 보고).
+        */}
+        <CharacterPickerButton
+          characters={characters}
+          angleLabel={characterAngleLabel}
+          onPick={pickCharacter}
+          onReload={onUploaded}
         />
         <span className="text-sm text-muted-foreground">
           여기서 올린 그림도 라이브러리에 들어갑니다.

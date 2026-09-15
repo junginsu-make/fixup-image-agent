@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, FolderOpen, Maximize2, Trash2 } from "lucide-react";
+import { Check, FolderOpen, Layers, Maximize2, Trash2 } from "lucide-react";
 import {
   Badge,
   Button,
@@ -14,6 +14,14 @@ import {
   cn,
 } from "@fixup/ui";
 import { openImageViewer } from "./image-viewer";
+import {
+  SET_ROLE_LABEL,
+  canAttachSet,
+  defaultPickedSet,
+  orderedSetItems,
+  setPickSummary,
+  toggleSetItem,
+} from "./set-pick";
 
 /**
  * 라이브러리에서 그림을 불러오는 버튼.
@@ -43,19 +51,6 @@ export interface LibraryPickSet {
   items: Array<{ referenceImageId: string; role: "cover" | "body" | "ending" }>;
 }
 
-/**
- * 캐릭터 — 각도 네 장이 한 덩어리다.
- *
- * 낱장으로 섞어 두면 장이 늘수록 못 찾는다. 캐릭터 하나가 이미 네 장이고,
- * 그 넷은 늘 같이 쓰인다 — 옆모습이 필요한 장면에서 정면만 있으면 다시
- * 만들게 되고 그러면 같은 인물로 안 보인다.
- */
-export interface LibraryPickCharacter {
-  id: string;
-  name: string;
-  views: Array<{ angle: string; url: string | null }>;
-}
-
 export function LibraryPickerButton({
   images,
   selectedIds,
@@ -65,8 +60,6 @@ export function LibraryPickerButton({
   onDelete,
   sets,
   onPickSet,
-  characters,
-  onPickCharacter,
   label = "라이브러리에서 불러오기",
   fit = "cover",
   title = "라이브러리에서 불러오기",
@@ -77,12 +70,15 @@ export function LibraryPickerButton({
   loading?: boolean;
   onToggle(image: LibraryPickImage): void;
   onReload(): void;
-  /** 세트를 통째로 넣는다. 안 넘기면 세트 칸이 안 나온다. */
+  /** 세트를 넣는다. 안 넘기면 세트 탭이 안 나온다. */
   sets?: LibraryPickSet[];
-  onPickSet?(set: LibraryPickSet): void;
-  /** 캐릭터를 통째로 넣는다. 안 넘기면 캐릭터 칸이 안 나온다. */
-  characters?: LibraryPickCharacter[];
-  onPickCharacter?(character: LibraryPickCharacter): void;
+  /**
+   * 고른 장만 넘어온다.
+   *
+   * 전에는 세트를 통째로만 넣을 수 있었다. 세트에 든 장 하나가 이번 작업에 안
+   * 맞으면 세트를 새로 만들어야 했고, 그러면 만든 뜻이 사라진다.
+   */
+  onPickSet?(set: LibraryPickSet, pickedIds: string[]): void;
   /** 라이브러리에서 아주 지운다. 안 넘기면 지우기 버튼이 안 나온다. */
   onDelete?(image: LibraryPickImage): void;
   label?: string;
@@ -100,7 +96,40 @@ export function LibraryPickerButton({
   description?: string;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [tab, setTab] = React.useState<"images" | "sets">("images");
+  const [openedSetId, setOpenedSetId] = React.useState<string | null>(null);
+  const [setPicked, setSetPicked] = React.useState<string[]>([]);
+
   const picked = new Set(selectedIds);
+  // 그림이 하나도 없는 세트는 누를 이유가 없다. 목록에서 뺀다.
+  const shownSets = (sets ?? []).filter((set) => set.items.length > 0);
+  const hasSets = Boolean(shownSets.length && onPickSet);
+  const openedSet = shownSets.find((entry) => entry.id === openedSetId) ?? null;
+
+  /** 이미지를 id 로 찾는다. 세트는 id 만 들고 있어 그림을 여기서 짝짓는다. */
+  const imageById = React.useMemo(
+    () => new Map(images.map((image) => [image.id, image])),
+    [images],
+  );
+
+  /* 열 때마다 처음으로 돌린다. 지난번에 펼쳐 둔 세트가 남아 있으면 헷갈린다. */
+  React.useEffect(() => {
+    if (open) return;
+    setTab("images");
+    setOpenedSetId(null);
+    setSetPicked([]);
+  }, [open]);
+
+  const openSet = (set: LibraryPickSet) => {
+    setOpenedSetId(set.id);
+    setSetPicked(defaultPickedSet(set.items));
+  };
+
+  const attachSet = () => {
+    if (!openedSet || !onPickSet || !canAttachSet(setPicked)) return;
+    onPickSet(openedSet, setPicked);
+    setOpen(false);
+  };
 
   return (
     <>
@@ -119,63 +148,53 @@ export function LibraryPickerButton({
             </DialogDescription>
           </DialogHeader>
 
-          {sets?.length && onPickSet ? (
-            <section className="grid gap-2 rounded-lg border bg-muted/30 p-3">
-              <p className="text-meta text-subtle-foreground">묶음 세트 — 누르면 한 벌이 통째로 들어갑니다</p>
-              <div className="flex flex-wrap gap-2">
-                {sets.map((set) => (
-                  <Button
-                    key={set.id}
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => { onPickSet(set); setOpen(false); }}
-                  >
-                    {set.name}
-                    <Badge variant="secondary" className="ml-1">{set.items.length}장</Badge>
-                  </Button>
-                ))}
-              </div>
-            </section>
+          {/*
+            **탭으로 가른다.** 전에는 세트가 단추 한 줄로 위에 얹혀 있었다.
+            「실사/녹색 4장」이라고만 적혀 안에 무엇이 들었는지 알 수 없었고,
+            그래서 누를 이유가 없는 줄이 되었다(2026-09-15 사용자 보고).
+
+            빈 세트는 아예 안 낸다. 눌러도 아무 일이 없다.
+          */}
+          {hasSets ? (
+            <div className="flex gap-1 border-b">
+              <TabButton on={tab === "images"} onClick={() => setTab("images")}>
+                그림 <Badge variant="secondary" className="ml-1">{images.length}</Badge>
+              </TabButton>
+              <TabButton on={tab === "sets"} onClick={() => { setTab("sets"); setOpenedSetId(null); }}>
+                묶음 세트 <Badge variant="secondary" className="ml-1">{shownSets.length}</Badge>
+              </TabButton>
+            </div>
           ) : null}
 
-          {characters?.length && onPickCharacter ? (
-            <section className="grid gap-2 rounded-lg border bg-muted/30 p-3">
-              <p className="text-meta text-subtle-foreground">
-                캐릭터 — 누르면 정면이 「그대로 지키기」로 들어갑니다
-              </p>
-              <div className="flex flex-wrap gap-3">
-                {characters.map((character) => (
-                  <button
-                    key={character.id}
-                    type="button"
-                    onClick={() => { onPickCharacter(character); setOpen(false); }}
-                    className="flex items-center gap-2 rounded-md border bg-background p-2 text-left transition-colors hover:border-primary"
-                  >
-                    <span className="flex gap-0.5">
-                      {character.views.filter((view) => view.url).slice(0, 4).map((view) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={view.angle}
-                          src={view.url as string}
-                          alt=""
-                          className="h-12 w-9 rounded-sm object-cover"
-                        />
-                      ))}
-                    </span>
-                    <span className="grid">
-                      <span className="max-w-32 truncate text-sm font-bold">{character.name}</span>
-                      <span className="text-[11px] text-subtle-foreground">
-                        {character.views.filter((view) => view.url).length}장
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
+          {tab === "sets" && hasSets ? (
+            openedSet ? (
+              <>
+                <SetContents
+                  set={openedSet}
+                  picked={setPicked}
+                  imageById={imageById}
+                  onToggle={(id) => setSetPicked((current) => toggleSetItem(current, id, openedSet.items))}
+                />
+                <DialogFooter className="items-center gap-2 sm:justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {setPickSummary(setPicked, openedSet.items)}
+                  </span>
+                  <span className="flex gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setOpenedSetId(null)}>
+                      다른 세트
+                    </Button>
+                    <Button type="button" onClick={attachSet} disabled={!canAttachSet(setPicked)}>
+                      {canAttachSet(setPicked) ? "이 장들을 붙입니다" : "장을 고르세요"}
+                    </Button>
+                  </span>
+                </DialogFooter>
+              </>
+            ) : (
+              <SetGrid sets={shownSets} imageById={imageById} onOpen={openSet} />
+            )
           ) : null}
 
-          {loading ? (
+          {tab === "sets" && hasSets ? null : loading ? (
             <p className="py-12 text-center text-sm text-muted-foreground">불러오는 중입니다.</p>
           ) : images.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
@@ -256,14 +275,164 @@ export function LibraryPickerButton({
             </div>
           )}
 
-          <DialogFooter className="sm:justify-between">
-            <Button type="button" variant="ghost" onClick={onReload}>새로고침</Button>
-            <Button type="button" onClick={() => setOpen(false)}>
-              다 골랐습니다{selectedIds.length ? ` · ${selectedIds.length}장` : ""}
-            </Button>
-          </DialogFooter>
+          {/*
+            **세트를 펼쳤을 때는 이 줄을 안 낸다.** 그 아래에 세트 전용 단추 줄이
+            이미 있어서, 둘이 겹치면 어느 쪽을 눌러야 붙는지 알 수 없다.
+          */}
+          {openedSet ? null : (
+            <DialogFooter className="sm:justify-between">
+              <Button type="button" variant="ghost" onClick={onReload}>새로고침</Button>
+              <Button type="button" onClick={() => setOpen(false)}>
+                다 골랐습니다{selectedIds.length ? ` · ${selectedIds.length}장` : ""}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** 탭 하나. 눌린 쪽이 밑줄로 남는다. */
+function TabButton({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick(): void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cn(
+        "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+        on ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * 세트 목록.
+ *
+ * **안에 든 그림을 겹쳐 보여준다.** 이름과 장수만 적혀 있으면 무엇이 들었는지
+ * 눌러 봐야 알고, 그러면 누를 이유가 없는 줄이 된다 — 캐릭터 카드가 정면을
+ * 대표로 세우는 것과 같은 규칙이다.
+ */
+function SetGrid({
+  sets,
+  imageById,
+  onOpen,
+}: {
+  sets: LibraryPickSet[];
+  imageById: Map<string, LibraryPickImage>;
+  onOpen(set: LibraryPickSet): void;
+}) {
+  return (
+    <div className="grid max-h-[60vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3">
+      {sets.map((set) => {
+        const shots = orderedSetItems(set.items)
+          .map((item) => imageById.get(item.referenceImageId))
+          .filter((image): image is LibraryPickImage => Boolean(image?.url))
+          .slice(0, 4);
+
+        return (
+          <button
+            key={set.id}
+            type="button"
+            onClick={() => onOpen(set)}
+            className="flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card text-left transition-colors hover:border-primary"
+          >
+            <span className="relative flex gap-0.5 bg-muted p-0.5">
+              {shots.length ? (
+                shots.map((image) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={image.id} alt="" src={image.url as string} className="aspect-[3/4] min-w-0 flex-1 object-cover" />
+                ))
+              ) : (
+                <span className="grid aspect-[3/1] w-full place-items-center text-center text-xs text-subtle-foreground">
+                  그림을 못 불러왔습니다
+                </span>
+              )}
+
+              <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground shadow-[var(--shadow-ring)]">
+                <Layers className="size-3" />
+                {set.items.length}장
+              </span>
+            </span>
+
+            <span className="truncate p-2 text-sm font-bold">{set.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * 펼친 세트의 장들. **자리 이름을 함께** 단다.
+ *
+ * 세트의 값어치가 자리(표지·속지·엔딩)를 들고 있다는 것이라, 자리가 안 보이면
+ * 낱장을 여럿 고른 것과 구분이 안 된다.
+ */
+function SetContents({
+  set,
+  picked,
+  imageById,
+  onToggle,
+}: {
+  set: LibraryPickSet;
+  picked: string[];
+  imageById: Map<string, LibraryPickImage>;
+  onToggle(id: string): void;
+}) {
+  return (
+    <div className="grid max-h-[60vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3 md:grid-cols-4">
+      {orderedSetItems(set.items).map((item) => {
+        const image = imageById.get(item.referenceImageId);
+        const on = picked.includes(item.referenceImageId);
+
+        return (
+          <button
+            key={item.referenceImageId}
+            type="button"
+            onClick={() => onToggle(item.referenceImageId)}
+            aria-pressed={on}
+            aria-label={`${SET_ROLE_LABEL[item.role]} ${image?.title ?? ""} ${on ? "빼기" : "고르기"}`}
+            className={cn(
+              "relative block overflow-hidden rounded-lg border-2 text-left transition-colors",
+              on ? "border-primary bg-primary-soft ring-2 ring-primary/40" : "border-transparent hover:border-muted-foreground/40",
+            )}
+          >
+            {image?.url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="" src={image.url} className="aspect-[3/4] w-full object-cover" />
+            ) : (
+              <span className="grid aspect-[3/4] w-full place-items-center px-2 text-center text-xs text-subtle-foreground">
+                이 그림을 못 찾았습니다
+              </span>
+            )}
+
+            <span className="absolute left-2 top-2 rounded-full bg-background/90 px-2 py-0.5 text-[11px] font-bold shadow-[var(--shadow-ring)]">
+              {SET_ROLE_LABEL[item.role]}
+            </span>
+
+            {on ? (
+              <span className="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-ring)]">
+                <Check className="size-3.5" />
+              </span>
+            ) : null}
+
+            <span className="block truncate px-2 py-1.5 text-xs">{image?.title ?? "제목 없음"}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
