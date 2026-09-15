@@ -234,6 +234,17 @@ export interface AdSourceItem {
    * 없을 수 있다 — 옛 작업에는 사본이 없다. 화면이 자리표시를 그린다.
    */
   thumbnail?: string;
+  /**
+   * **크게 볼 때 쓸 원본.**
+   *
+   * 전에는 셋을 `thumbnail` 한 칸으로 합쳐서 줬다. 그래서 불러오기 창의
+   * 확대가 사본을 띄웠다 — 「글자가 읽히는지 보세요」라고 적어 두고 정작
+   * 크게 보면 작은 그림이 떴다(2026-09-15).
+   *
+   * 내보내는 결과물은 여기를 안 본다. `api/ad/export` 는 id 만 받고 서버가
+   * 제 저장소에서 원본을 읽는다 — 결과물 화질은 처음부터 무사했다.
+   */
+  original?: string;
 }
 
 /** 내가 만든 것만. 서버가 `mine` 을 안 보내는 길이 생기면 **빼는 쪽**으로 틀린다. */
@@ -260,13 +271,15 @@ export function adSourceItems(input: {
     .map((project) => {
       // 첫 변형의 사본을 쓴다. 원본은 2MB 를 넘어 목록에 깔 수 없다.
       const first = project.images?.[0];
+      const file = first
+        ? `/api/poster/projects/${project.id}/images/${first.variantIndex}/file`
+        : null;
       return {
         id: project.id,
         title: project.title || "제목 없음",
         source: "poster" as const,
-        ...(first
-          ? { thumbnail: `/api/poster/projects/${project.id}/images/${first.variantIndex}/file?size=thumb` }
-          : {}),
+        // `?size=thumb` 이 붙으면 사본, 안 붙으면 원본이다(파일 라우트 주석).
+        ...(file ? { thumbnail: `${file}?size=thumb`, original: file } : {}),
       };
     });
 
@@ -280,6 +293,7 @@ export function adSourceItems(input: {
       ...(work.coverThumbUrl || work.coverUrl
         ? { thumbnail: (work.coverThumbUrl || work.coverUrl) as string }
         : {}),
+      ...(work.coverUrl ? { original: work.coverUrl } : {}),
     }));
 
   const fromReferences = onlyMine(input.references)
@@ -297,6 +311,7 @@ export function adSourceItems(input: {
     ...(reference.thumbUrl || reference.signedUrl
       ? { thumbnail: (reference.thumbUrl || reference.signedUrl) as string }
       : {}),
+    ...(reference.signedUrl ? { original: reference.signedUrl } : {}),
   }));
 
   return [...fromPoster, ...fromWorks, ...fromReferences];
@@ -333,8 +348,15 @@ export const SOURCE_LABEL: Record<AdSourceItem["source"], string> = {
  * 다른 얼굴을 못 봤다.
  */
 export interface AdImagePick {
-  /** 화면에 그릴 주소. */
+  /** 화면에 그릴 주소. 80×80 자리라 사본이 있으면 사본이다. */
   image: string;
+  /**
+   * 크게 볼 때 쓸 원본. 미리보기 줄은 `data-viewer-src` 로 이것을 건넨다.
+   *
+   * 이 줄에 「글자가 읽히는지 보세요」라고 적어 두고 확대하면 작은 그림이
+   * 뜨던 자리다(2026-09-15). 사본이 없으면 `image` 와 같다.
+   */
+  original: string;
   sectionName: string;
   /** 서버에 보낼 값. **배열 번호가 아니다.** */
   position: number;
@@ -364,8 +386,11 @@ export function posterImagePicks(
   for (const image of images) {
     if (seen.has(image.variantIndex)) continue;
     seen.add(image.variantIndex);
+    const file = `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`;
     picks.push({
-      image: `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`,
+      // 포스터 변형은 전부터 원본을 걸었다. 확대도 같은 것을 연다.
+      image: file,
+      original: file,
       sectionName: `변형 ${image.variantIndex + 1}`,
       position: image.variantIndex,
     });
@@ -384,6 +409,8 @@ export function libraryImagePicks(
 ): AdImagePick[] {
   return images.map((image, index) => ({
     image: image.image,
+    // 작업물 낱장은 받은 주소 하나뿐이다. 확대도 그것을 연다.
+    original: image.image,
     sectionName: image.sectionName,
     position: image.position ?? index,
   }));
@@ -561,7 +588,12 @@ export function positionFromQuery(raw: string | null): number | null {
  * 않는다** — 아무것도 선택돼 보이지 않는 채로 뽑기 버튼이 켜지고, 사용자가
  * 본 적 없는 번호가 서버로 간다.
  */
-export function startingPosition(picks: AdImagePick[], preferred: number | null): number {
+export function startingPosition(
+  // 이 함수가 보는 것은 번호뿐이다. 주소 칸까지 요구하면 부르는 쪽과 시험이
+  // 안 쓰는 값을 지어내야 한다 — 그 지어낸 값이 나중에 진짜처럼 읽힌다.
+  picks: Array<Pick<AdImagePick, "position">>,
+  preferred: number | null,
+): number {
   if (preferred !== null && picks.some((pick) => pick.position === preferred)) return preferred;
   return picks[0]?.position ?? 0;
 }
