@@ -21,6 +21,8 @@ import {
   pickableViews,
   toggleAngle,
 } from "./character-pick";
+import { gridSrc } from "./grid-src";
+import { ThumbImage } from "./thumb-image";
 
 /**
  * 만들어 둔 캐릭터에서 **붙일 각도를 골라** 가져온다.
@@ -35,7 +37,15 @@ import {
 
 export interface CharacterPickView {
   angle: string;
+  /** 원본. 확대와 생성 입력에 쓴다. */
   url: string | null;
+  /**
+   * 격자에 거는 작은 사본. `lib/characters.ts` 가 원본과 함께 만들어 준다.
+   *
+   * 물음표를 안 붙이는 이유는 `library-picker.tsx` 의 같은 칸에 적어 두었다 —
+   * 선택형으로 두면 넘기기를 빠뜨려도 아무 데서도 안 걸린다.
+   */
+  thumbUrl: string | null;
 }
 
 export interface PickableCharacter {
@@ -219,9 +229,8 @@ function CharacterGrid({
             className="group flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card text-left transition-colors hover:border-primary"
           >
             <span className="relative block bg-muted">
-              {front?.url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt="" src={front.url} className="aspect-[3/4] w-full object-cover" />
+              {gridSrc(front) ? (
+                <ThumbImage alt="" src={gridSrc(front) as string} className="aspect-[3/4] w-full object-cover" />
               ) : (
                 <span className="grid aspect-[3/4] place-items-center px-2 text-center text-xs text-subtle-foreground">
                   그림을 못 불러왔습니다
@@ -279,8 +288,7 @@ function AngleGrid({
               on ? "border-primary bg-primary-soft ring-2 ring-primary/40" : "border-transparent hover:border-muted-foreground/40",
             )}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt="" src={view.url as string} className="aspect-[3/4] w-full object-cover" />
+            <ThumbImage alt="" src={gridSrc(view) as string} className="aspect-[3/4] w-full object-cover" />
 
             {on ? (
               <span className="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-ring)]">

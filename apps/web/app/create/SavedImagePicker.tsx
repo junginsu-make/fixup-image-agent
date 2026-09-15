@@ -16,6 +16,7 @@ import { openImageViewer } from "../_components/image-viewer";
 import { toSavedLibraryImages } from "./saved-image-picker";
 import { deleteTargetFor } from "./saved-image-delete";
 import { ThumbImage } from "../_components/thumb-image";
+import { gridSrc } from "../_components/grid-src";
 
 /**
  * 계정에 저장해 둔 이미지에서 고른다.
@@ -100,7 +101,12 @@ export function SavedImagePicker({
           id: `ref-${item.id}`,
           name: item.name,
           url: item.url,
-          // 참고 이미지에는 아직 사본이 없다. 원본으로 떨어진다.
+          /*
+            상세페이지 스타일 참고(`user_style_references`)에는 사본 칸이
+            **아직 없다.** 표에 칸을 더하고 옛 것을 채우는 일이 먼저다.
+            그때까지는 원본으로 떨어진다 — `ThumbImage` 가 화면 밖 것은
+            나중에 받고 펼치는 일도 따로 시키므로 창이 멎지는 않는다.
+          */
           thumbUrl: null,
           origin: "reference" as const,
           referenceId: item.id,
@@ -116,10 +122,16 @@ export function SavedImagePicker({
 
       const fromShared: SavedImage[] = (shared?.images ?? [])
         .filter((item: { signedUrl?: string | null; url?: string | null }) => item.signedUrl || item.url)
-        .map((item: { id: string; title?: string | null; signedUrl?: string | null; url?: string | null }) => ({
+        .map((item: {
+          id: string; title?: string | null;
+          signedUrl?: string | null; url?: string | null; thumbUrl?: string | null;
+        }) => ({
           id: `lib-${item.id}`,
           name: item.title ?? "참고 이미지",
           url: (item.signedUrl ?? item.url)!,
+          // `/api/reference-images` 는 사본 주소도 같이 준다. 받아 놓고 안 쓰면
+          // 격자 한 판에 수십 MB 가 오간다.
+          thumbUrl: item.thumbUrl ?? null,
           origin: "reference" as const,
           description: "라이브러리 참고 이미지",
         }));
@@ -271,9 +283,8 @@ export function SavedImagePicker({
                 object-cover 로 채우면 세로 긴 상세페이지 이미지가 위아래로 잘려
                 무엇을 고르는지 알 수 없다. 전체가 보이게 맞춘다.
               */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               {/* 격자는 사본을 쓴다. 고르기(위 handlePick)와 확대는 원본이다. */}
-              <ThumbImage alt={image.name} src={image.thumbUrl ?? image.url} className="h-full w-full object-contain" />
+              <ThumbImage alt={image.name} src={gridSrc(image) as string} className="h-full w-full object-contain" />
               <Badge
                 variant="secondary"
                 className="absolute left-1 top-1 text-meta backdrop-blur"

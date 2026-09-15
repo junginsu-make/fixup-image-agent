@@ -133,6 +133,8 @@ export function createLocalPosterReferenceStore(
     height: (row.height as number | null) ?? null,
     createdAt: String(row.createdAt),
     url: `/api/reference-images/${String(row.id)}/file`,
+    // 로컬 저장소는 사본을 만들지 않는다. 거는 쪽이 원본으로 떨어뜨린다.
+    thumbUrl: null,
   });
   return {
     async list() {

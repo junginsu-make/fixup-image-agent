@@ -1,7 +1,10 @@
 export interface LibraryImage {
   id: string;
   title: string | null;
+  /** 원본. 골라서 실제로 쓸 때 이것을 쓴다. */
   signedUrl: string | null;
+  /** 격자에 거는 작은 사본. `/api/reference-images` 가 원본과 함께 준다. */
+  thumbUrl?: string | null;
 }
 
 /**

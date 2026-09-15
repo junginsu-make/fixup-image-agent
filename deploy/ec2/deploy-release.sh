@@ -111,3 +111,18 @@ fi
 
 echo "Release active: ${release_root}"
 echo "Previous release retained: ${previous_release:-none}"
+
+# 오래된 릴리스를 지운다. **건강 확인을 다 통과한 뒤에만 한다.**
+#
+# 위에서 되돌리는 길이 전부 끝난 다음 자리다. 여기 오기 전에 지우면 되돌릴
+# 곳을 먼저 없애는 셈이 된다.
+#
+# 정리가 실패해도 배포는 성공이다. 새 릴리스는 이미 돌고 있고, 디스크가
+# 덜 치워진 것은 다음 배포에서 다시 시도된다 — 여기서 0 이 아닌 값을 내면
+# 멀쩡히 뜬 배포가 실패로 보이고, 부르는 쪽이 되돌리려 든다.
+prune=$(dirname "$0")/prune-releases.sh
+if [[ -f ${prune} ]]; then
+  bash "${prune}" "${KEEP_RELEASES:-5}" "${app_root}" || echo "릴리스 정리에 실패했습니다 (배포 자체는 성공)." >&2
+else
+  echo "prune-releases.sh 가 없어 릴리스 정리를 건너뜁니다." >&2
+fi

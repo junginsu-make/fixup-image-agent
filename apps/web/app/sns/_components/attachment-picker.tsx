@@ -8,6 +8,7 @@ import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, to
 import {
   LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
+import { ThumbImage } from "../../_components/thumb-image";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { attachMessage, matchAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
@@ -16,7 +17,8 @@ import { randomId } from "../../../lib/browser-safe";
 import { attachmentsForUploaded } from "./uploaded-attachments";
 import { SlotIntents, type SlotIntents as SlotIntentsValue } from "./slot-intents";
 
-type ImageView = ReferenceImageRow & { signedUrl: string | null };
+/** `thumbUrl` 은 격자용 사본. `/api/reference-images` 가 원본과 함께 준다. */
+type ImageView = ReferenceImageRow & { signedUrl: string | null; thumbUrl?: string | null };
 
 /** 선택 상자에 표시할 값. 마지막 장은 역할이 아니라 자리라 따로 둔다. */
 function roleOf(attachment: Attachment): string {
@@ -226,7 +228,11 @@ export function AttachmentPicker({
           {uploading ? "올리는 중…" : "새 참고 이미지 올리기"}
         </Button>
         <LibraryPickerButton
-          images={images.map((image) => ({ id: image.id, title: image.title, url: image.signedUrl }))}
+          // 격자는 사본, 골라서 실제로 붙일 때는 원본(`toggle`)이다.
+          images={images.map((image) => ({
+            id: image.id, title: image.title,
+            url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
+          }))}
           selectedIds={attachments.map((attachment) => attachment.id)}
           loading={loading}
           onToggle={(picked) => {
@@ -278,9 +284,18 @@ export function AttachmentPicker({
               >
                 <X className="size-3.5" />
               </button>
+              {/*
+                첨부한 뒤 붙는 미리보기도 사본이다. 확대는 `data-viewer-src`
+                로 원본을 따로 알려 준다 — 화질은 확대에서 그대로 나온다.
+              */}
               <div className="aspect-square overflow-hidden rounded-t-xl bg-muted">{url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={url} alt={title} data-zoomable className="h-full w-full cursor-zoom-in object-cover" />
+                <ThumbImage
+                  src={image?.thumbUrl ?? url}
+                  data-viewer-src={url}
+                  alt={title}
+                  data-zoomable
+                  className="h-full w-full cursor-zoom-in object-cover"
+                />
               ) : null}</div>
               <p className="truncate p-3 text-left text-sm font-medium">{title}</p>
               <CardContent className="grid gap-3 border-t p-3">
