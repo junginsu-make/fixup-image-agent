@@ -109,3 +109,53 @@ describe("첨부 검증", () => {
     expect(validateAttachments([item("style_reference", { role: "cover" })], 8)).toEqual([]);
   });
 });
+
+/**
+ * 캐릭터는 **한 벌**이다.
+ *
+ * 각도를 쓰려고 넷을 만들어 놓고, 붙이는 순간 「인물이 넷」으로 막히면 캐릭터를
+ * 만든 뜻이 사라진다(2026-09-15 사용자 보고). 장이 아니라 사람을 센다.
+ */
+describe("캐릭터 여러 각도", () => {
+  const 따라만들그림 = item("style_reference", { role: "cover" });
+  const 각도 = (characterId: string) =>
+    item("keep_identity", { subject: "person", characterId });
+
+  it("같은 캐릭터 네 각도는 막지 않는다", () => {
+    const issues = validateAttachments(
+      [따라만들그림, 각도("tiger"), 각도("tiger"), 각도("tiger"), 각도("tiger")],
+      10,
+    );
+    expect(issues).not.toContain("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
+  });
+
+  it("다른 캐릭터가 섞이면 막는다 — 얼굴이 둘이다", () => {
+    const issues = validateAttachments([따라만들그림, 각도("tiger"), 각도("dog")], 10);
+    expect(issues).toContain("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
+  });
+
+  /** 캐릭터에서 오지 않은 낱장 사진은 지금까지처럼 각각 한 사람이다. */
+  it("캐릭터가 아닌 인물 사진 둘은 여전히 막는다", () => {
+    const issues = validateAttachments(
+      [따라만들그림, item("keep_identity", { subject: "person" }), item("keep_identity", { subject: "person" })],
+      10,
+    );
+    expect(issues).toContain("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
+  });
+
+  it("캐릭터 한 벌에 낱장 사진이 끼면 막는다", () => {
+    const issues = validateAttachments(
+      [따라만들그림, 각도("tiger"), 각도("tiger"), item("keep_identity", { subject: "person" })],
+      10,
+    );
+    expect(issues).toContain("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
+  });
+
+  it("물건은 캐릭터가 붙어도 세지 않는다", () => {
+    const issues = validateAttachments(
+      [따라만들그림, item("keep_identity", { subject: "object", characterId: "tiger" }), 각도("dog")],
+      10,
+    );
+    expect(issues).not.toContain("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
+  });
+});

@@ -94,14 +94,14 @@ describe("withModel 은 인물 참조가 실제로 붙었을 때만 참이다", 
    * 캐릭터는 얼굴 참조로 붙는데 장면 지시는 「사람은 선택」이라고 말했다.
    */
   it("캐릭터만 붙어도 참이다", () => {
-    const built = buildSectionImageOptions({}, target({ characterReference: 캐릭터 }));
+    const built = buildSectionImageOptions({}, target({ characterReferences: [캐릭터] }));
     expect(built.withModel).toBe(true);
-    expect(built.characterReference).toEqual(캐릭터);
+    expect(built.characterReferences).toEqual([캐릭터]);
   });
 
   it("사진을 안 쓰는 섹션이어도 캐릭터가 있으면 참", () => {
     const page: PageImageInputs = { referenceModel: 인물사진, referenceModelUsage: "hero-only" };
-    const built = buildSectionImageOptions(page, target({ index: 3, characterReference: 캐릭터 }));
+    const built = buildSectionImageOptions(page, target({ index: 3, characterReferences: [캐릭터] }));
     expect(built.withModel).toBe(true);
     expect(built.referenceModelImageBase64).toBeUndefined();
   });

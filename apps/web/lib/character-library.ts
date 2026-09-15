@@ -32,11 +32,21 @@ export interface CharacterReferenceEntry extends CharacterViewInput {
   title: string;
 }
 
+/**
+ * 각도의 사람 이름표 — 「front」가 아니라 「정면」.
+ *
+ * 제목을 만드는 표와 **같은 표**를 쓴다. 두 곳이 따로 알면 한쪽만 바뀌는 날이
+ * 오고, 화면에 보이는 이름과 저장된 제목이 어긋나면 고른 장을 못 찾는다.
+ */
+export function characterAngleLabel(angle: string): string {
+  return LABELS.get(migrateAngle(angle)) ?? angle;
+}
+
 /** 라이브러리에는 온갖 그림이 섞인다. 누구의 어느 각도인지 제목에 다 적는다. */
 export function characterReferenceTitle(name: string, angle: string): string {
   // 옛 이름(left·right·three_quarter)으로 저장된 줄도 지금 이름표로 부른다.
   // 제목이 이 각도들을 찾는 유일한 손잡이라, 어긋나면 갈아 끼우지 못한다.
-  return `${name} (캐릭터) · ${LABELS.get(migrateAngle(angle)) ?? angle}`;
+  return `${name} (캐릭터) · ${characterAngleLabel(angle)}`;
 }
 
 /**

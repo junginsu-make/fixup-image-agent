@@ -1,5 +1,5 @@
 import {
-  pickAngleForSection,
+  resolveCharacterAngles,
   generateSectionImage,
   maxBatchSizeFor,
   toPdpErrorResponse,
@@ -40,6 +40,13 @@ type BatchRequest = {
   aspectRatio: AspectRatio;
   desiredTone?: string;
   characterId?: string;
+  /**
+   * 사람이 고른 각도. 비어 있으면 섹션 설명대로 자동으로 한 장 고른다.
+   *
+   * 화면에서 고른 것을 그대로 싣는다 — 어느 각도가 맞는지 우리가 대신 판단하지
+   * 않는다(`resolveCharacterAngles` 머리말).
+   */
+  characterAngles?: string[];
   /** 페이지 전체가 공유하는 값. **단건 라우트와 같은 모양이다.** */
   page?: PageImageWire;
   /** 사용자가 섹션마다 고른 값. 열쇠는 `section_id`. */
@@ -114,13 +121,22 @@ export async function POST(req: Request) {
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
 
-  // 캐릭터가 있으면 섹션마다 어울리는 각도를 하나씩 고른다. 3종을 다 보내면
-  // 참조가 늘어 서로를 희석시킨다 — 앵커와 스타일만으로도 절충이 일어난다.
+  /*
+   * 섹션마다 **실제로 보낼 각도**를 먼저 정하고, 필요한 그림만 한 번씩 읽는다.
+   *
+   * 사람이 고른 각도가 있으면 모든 섹션이 그것을 쓴다. 안 고르면 지금까지대로
+   * 섹션 설명대로 한 장씩이다(`resolveCharacterAngles`).
+   */
+  const picked = body.characterAngles ?? [];
+  const anglesBySection = sections.map((section) =>
+    body.characterId ? resolveCharacterAngles(picked, section.layout_notes ?? "") : [],
+  );
+
   const characterByAngle = new Map<string, Awaited<ReturnType<typeof loadCharacterView>>>();
   if (body.characterId) {
-    // 팀은 한 번만 묻는다. 각도마다 물으면 같은 질문이 세 번 간다.
+    // 팀은 한 번만 묻는다. 각도마다 물으면 같은 질문이 여러 번 간다.
     const teamId = await teamIdOf(reservation.userId);
-    for (const angle of new Set(sections.map((s) => pickAngleForSection(s.layout_notes ?? "")))) {
+    for (const angle of new Set(anglesBySection.flat())) {
       characterByAngle.set(
         angle,
         await loadCharacterView(reservation.userId, body.characterId, angle, teamId),
@@ -135,6 +151,13 @@ export async function POST(req: Request) {
     await withSlicedStyleReference({ ...body.page, imageModel: model }),
   );
 
+  const viewsFor = (position: number) => {
+    const views = anglesBySection[position]
+      .map((angle) => characterByAngle.get(angle))
+      .filter((view): view is NonNullable<typeof view> => Boolean(view));
+    return views.length ? views : undefined;
+  };
+
   const settled = await Promise.allSettled(
     sections.map((section, position) => {
       const options = buildSectionImageOptions(page, {
@@ -145,8 +168,12 @@ export async function POST(req: Request) {
         // 겹치면 두 섹션이 같은 강조어를 받는다. 옛 화면이 보내던 모양은
         // 자리 차례가 없을 때만 쓴다.
         emphasisWords: body.emphasisWordsList?.[position] ?? body.emphasisWordsBySection?.[section.section_id],
-        characterReference:
-          characterByAngle.get(pickAngleForSection(section.layout_notes ?? "")) ?? undefined,
+        // 못 읽힌 각도는 조용히 빠진다. 없는 각도를 고른 경우이고, 남은 각도로
+        // 그리는 편이 캐릭터를 통째로 잃는 것보다 낫다.
+        //
+        // 빈 배열이 아니라 `undefined` 로 떨어뜨린다. 단건 라우트와 **같은 옵션
+        // 객체**가 나와야 한다 — 한 장만 다시 만들었을 때 그 섹션만 달라지면 안 된다.
+        characterReferences: viewsFor(position),
       });
 
       return generateSectionImage(

@@ -66,6 +66,8 @@ export function RedesignWizard() {
   const [channel, setChannel] = React.useState("스마트스토어");
   // 캐릭터 만들기에서 만든 등장인물. 고르면 섹션마다 같은 사람이 나온다.
   const [characterId, setCharacterId] = React.useState("");
+  // 쓸 각도. 비어 있으면 자동 — 까닭은 `CharacterOptionGroup` 머리말에.
+  const [characterAngles, setCharacterAngles] = React.useState<string[]>([]);
   const [count, setCount] = React.useState(1);
   const [ratio, setRatio] = React.useState("9:16");
   // 기본은 원본의 결을 따라가는 auto. 리디자인은 남의 페이지를 다시 그리는 일이라
@@ -300,7 +302,9 @@ export function RedesignWizard() {
       form.append("startSection", String(startSection));
       form.append("rolloutRequest", outputRolloutRequest);
       if (transcript) form.append("transcript", transcript);
+      // 각도는 여러 번 넣는다 — 라우트가 `getAll` 로 받는다. 안 넣으면 자동이다.
       if (characterId) form.append("characterId", characterId);
+      if (characterId) for (const a of characterAngles) form.append("characterAngles", a);
 
       const response = await fetch("/api/redesign/generate", {
         method: "POST",
@@ -798,7 +802,8 @@ export function RedesignWizard() {
             channel={channel}
             setChannel={setChannel}
             characterId={characterId}
-            setCharacterId={setCharacterId}
+            characterAngles={characterAngles}
+            onCharacterChange={(id, a) => { setCharacterId(id); setCharacterAngles(a); }}
             count={count}
             setCount={setCount}
             ratio={ratio}

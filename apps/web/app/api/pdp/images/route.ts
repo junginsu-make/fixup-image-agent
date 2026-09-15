@@ -1,7 +1,8 @@
 import {
   DEFAULT_IMAGE_MODEL,
   generateSectionImage,
-  pickAngleForSection,
+  resolveCharacterAngles,
+  type CharacterImageReference,
   toPdpErrorResponse,
   mapPdpErrorCodeToStatus,
   buildSectionImageOptions,
@@ -29,6 +30,13 @@ type PdpImagesRequestBody = {
   /** 이 섹션이 페이지에서 몇 번째인지. 인물 사진을 「첫 섹션에만」 쓸 때 쓴다. */
   sectionIndex?: number;
   characterId?: string;
+  /**
+   * 사람이 고른 각도. 비어 있으면 섹션 설명대로 자동으로 한 장 고른다.
+   *
+   * 화면에서 고른 것을 그대로 싣는다 — 어느 각도가 맞는지 우리가 대신 판단하지
+   * 않는다(`resolveCharacterAngles` 머리말).
+   */
+  characterAngles?: string[];
   /** 페이지 전체가 공유하는 값. 일괄 라우트와 같은 모양이다. */
   page?: PageImageWire;
   /** 사용자가 이 섹션에 대해 고른 값. 빠진 칸은 조립기가 채운다. */
@@ -68,17 +76,25 @@ export async function POST(req: Request) {
   if (!reservation.ok) return reservation.response;
 
   try {
-    // 일괄과 같은 규칙으로 각도를 고른다. 없으면 한 장만 다시 만들었을 때
-    // 그 섹션만 다른 사람이 된다.
-    const characterReference = body.characterId
-      ? await loadCharacterView(
-          reservation.userId,
-          body.characterId,
-          pickAngleForSection(body.section?.layout_notes ?? ""),
-          // 팀원이 만든 캐릭터도 쓴다. 목록에 보이는데 못 쓰는 것이 없게.
-          await teamIdOf(reservation.userId),
-        )
-      : null;
+    /*
+     * 일괄과 같은 규칙으로 각도를 고른다. 없으면 한 장만 다시 만들었을 때
+     * 그 섹션만 다른 사람이 된다.
+     *
+     * 사람이 고른 각도가 있으면 그것이 이긴다(`resolveCharacterAngles`). 안 고르면
+     * 지금까지대로 섹션 설명대로 한 장이다.
+     */
+    const characterReferences: CharacterImageReference[] = [];
+    if (body.characterId) {
+      // 팀원이 만든 캐릭터도 쓴다. 목록에 보이는데 못 쓰는 것이 없게.
+      const teamId = await teamIdOf(reservation.userId);
+      for (const angle of resolveCharacterAngles(
+        body.characterAngles ?? [],
+        body.section?.layout_notes ?? "",
+      )) {
+        const view = await loadCharacterView(reservation.userId, body.characterId, angle, teamId);
+        if (view) characterReferences.push(view);
+      }
+    }
 
     // 긴 레퍼런스를 조각으로 나눈다. 일괄 라우트와 같아야 한다 — 한쪽만
     // 조각을 보내면 한 장만 다시 만들었을 때 디자인이 달라진다.
@@ -91,7 +107,7 @@ export async function POST(req: Request) {
         index: body.sectionIndex ?? 0,
         options: body.options,
         emphasisWords: body.emphasisWords ?? body.options?.emphasisWords,
-        characterReference: characterReference ?? undefined,
+        characterReferences: characterReferences.length ? characterReferences : undefined,
       },
     );
 

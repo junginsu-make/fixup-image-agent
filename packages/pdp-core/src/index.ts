@@ -48,6 +48,7 @@ export {
   buildTurnaroundPrompt,
   buildTurnaroundSheetPrompt,
   pickAngleForSection,
+  resolveCharacterAngles,
   selectCharacterModel,
   type CharacterAngle,
   type CharacterAngleInfo,

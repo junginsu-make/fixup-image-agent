@@ -4,6 +4,8 @@ import {
   ATTACHMENT_ROLE_LABEL,
   fromCardNewsAttachment,
   fromPdpReference,
+  characterAngleDirective,
+  countPreservedPeople,
   fromPosterImage,
   personOverflow,
   toCardNewsAttachment,
@@ -120,5 +122,98 @@ describe("그림 느낌만 바꾸는 사람", () => {
     // 카드뉴스·상세페이지는 설계 §3 3단계에서 배운다.
     expect(toCardNewsAttachment("preserve_person_restyled")).toEqual({ kind: "keep_identity", subject: "person" });
     expect(toPdpReference("preserve_person_restyled")).toBe("person");
+  });
+});
+
+/**
+ * **장을 세는 게 아니라 사람을 센다.**
+ *
+ * 캐릭터 하나는 정면·측면·뒷모습이 한 벌이다. 그 넷을 붙이면 장은 넷이지만
+ * 사람은 하나다. 장으로 세면 캐릭터를 만든 뜻이 사라진다 — 각도를 쓰려고
+ * 넷을 만들어 놓고, 붙이는 순간 「인물이 넷」으로 막힌다(2026-09-15 사용자).
+ */
+describe("지킬 사람 세기", () => {
+  const 호랑이 = "char-tiger";
+  const 강아지 = "char-dog";
+
+  it("같은 캐릭터의 네 각도는 한 명이다", () => {
+    const 네각도 = ["front", "left_45", "right_45", "back"].map(() => ({
+      role: "preserve_person" as const,
+      characterId: 호랑이,
+    }));
+
+    expect(countPreservedPeople(네각도)).toBe(1);
+    expect(personOverflow(네각도)).toBe(false);
+  });
+
+  it("다른 캐릭터가 섞이면 둘이다", () => {
+    const 섞임 = [
+      { role: "preserve_person" as const, characterId: 호랑이 },
+      { role: "preserve_person" as const, characterId: 호랑이 },
+      { role: "preserve_person" as const, characterId: 강아지 },
+    ];
+
+    expect(countPreservedPeople(섞임)).toBe(2);
+    expect(personOverflow(섞임)).toBe(true);
+  });
+
+  /** 캐릭터가 아닌 낱장 사진은 지금까지처럼 각각 한 사람이다. */
+  it("캐릭터에서 오지 않은 사진은 장마다 한 명이다", () => {
+    const 낱장둘 = [{ role: "preserve_person" as const }, { role: "preserve_person" as const }];
+
+    expect(countPreservedPeople(낱장둘)).toBe(2);
+    expect(personOverflow(낱장둘)).toBe(true);
+  });
+
+  it("캐릭터 한 벌에 낱장 사진이 끼면 둘이다", () => {
+    expect(
+      countPreservedPeople([
+        { role: "preserve_person", characterId: 호랑이 },
+        { role: "preserve_person", characterId: 호랑이 },
+        { role: "preserve_person" },
+      ]),
+    ).toBe(2);
+  });
+
+  it("그림 느낌만 바꾸는 각도도 같은 캐릭터로 센다", () => {
+    expect(
+      countPreservedPeople([
+        { role: "preserve_person", characterId: 호랑이 },
+        { role: "preserve_person_restyled", characterId: 호랑이 },
+      ]),
+    ).toBe(1);
+  });
+
+  it("사람이 아닌 것은 세지 않는다", () => {
+    expect(
+      countPreservedPeople([
+        { role: "preserve_product", characterId: 호랑이 },
+        { role: "style" },
+        { role: "place_as_is" },
+      ]),
+    ).toBe(0);
+  });
+
+  /** 옛 호출부는 역할 배열만 넘긴다. 그 모양도 계속 받아야 한다. */
+  it("역할만 넘겨도 지금까지처럼 센다", () => {
+    expect(personOverflow(["preserve_person", "preserve_person"])).toBe(true);
+    expect(personOverflow(["preserve_person"])).toBe(false);
+    expect(personOverflow([])).toBe(false);
+  });
+});
+
+describe("여러 각도 지시문", () => {
+  it("장수를 적고, 같은 사람이라고 말한다", () => {
+    const 지시 = characterAngleDirective(4);
+    expect(지시).toContain("4");
+    expect(지시).toMatch(/SAME character/i);
+  });
+
+  /** 각도를 베끼면 캐릭터 시트가 그대로 결과물이 된다. */
+  it("자세·구도·옷·배경을 베끼지 말라고 못 박는다", () => {
+    const 지시 = characterAngleDirective(3);
+    expect(지시).toMatch(/poses/i);
+    expect(지시).toMatch(/backgrounds/i);
+    expect(지시).toMatch(/exactly one person/i);
   });
 });

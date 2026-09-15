@@ -57,6 +57,8 @@ interface TextModeFlowProps {
     styleReference?: StyleReferenceView,
     preserveProduct?: boolean,
     characterId?: string,
+    /** 고른 각도. 비어 있으면 자동 — 서버가 섹션에 맞춰 고른다. */
+    characterAngles?: string[],
   ) => void;
 }
 
@@ -102,6 +104,8 @@ export function TextModeFlow({
   // 추론이 틀릴 수 있으므로 화면에서 바꿀 수 있게 둔다.
   const [preserveProduct, setPreserveProduct] = useState(true);
   const [characterId, setCharacterId] = useState<string | undefined>(undefined);
+  // 비어 있으면 자동이다. `create/CharacterPicker.tsx` 머리말 참조.
+  const [characterAngles, setCharacterAngles] = useState<string[]>([]);
   const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(null);
   const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL);
   const [isBusy, setIsBusy] = useState(false);
@@ -207,6 +211,7 @@ export function TextModeFlow({
         styleReferenceEnabled ? styleReference : undefined,
         preserveProduct,
         characterId,
+        characterAngles,
       );
     } catch (error) {
       setErrorMessage(`대표 이미지를 준비하지 못했습니다. ${errorText(error)}`);
@@ -249,7 +254,11 @@ export function TextModeFlow({
           preserveProduct={preserveProduct}
           onPreserveProductChange={setPreserveProduct}
           characterId={characterId}
-          onCharacterChange={setCharacterId}
+          characterAngles={characterAngles}
+          onCharacterChange={(id, angles) => {
+            setCharacterId(id);
+            setCharacterAngles(angles);
+          }}
           onStyleReferenceAttached={(reference) => {
             // 사용자가 직접 고른 것이다. 추천을 다시 돌려 다른 것이 뽑히면 배신이다.
             setStyleReference(reference);

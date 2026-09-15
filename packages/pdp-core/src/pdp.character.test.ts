@@ -10,6 +10,7 @@ import {
   buildSceneWithCharacterDirective,
   buildTurnaroundPrompt,
   pickAngleForSection,
+  resolveCharacterAngles,
   selectCharacterModel,
 } from "./pdp.character";
 import { readFileSync } from "node:fs";
@@ -709,5 +710,56 @@ describe("다각도 한 장", () => {
 
   it("이름표가 있다", () => {
     expect(CHARACTER_SHEET.label.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 사람이 고른 각도가 **섹션 자동 선택을 이긴다.**
+ *
+ * 지금까지 상세페이지는 섹션 설명을 읽어 각도를 하나 골랐고, 리디자인은 섹션
+ * 설명을 아예 안 넘겨 늘 좌측 45도였다. 정면을 만들어 둬도 쓸 길이 없었다
+ * (2026-09-15 사용자 보고).
+ *
+ * 그래서 **고르면 고른 것**, 안 고르면 지금까지대로 자동이다. 자동을 없애지
+ * 않는 이유는 하나다 — 섹션마다 어울리는 각도를 고르는 것은 사람이 매번 하기엔
+ * 성가시고, 지금 그 자동이 실제로 쓸 만하게 돌고 있다.
+ */
+describe("resolveCharacterAngles", () => {
+  it("안 고르면 섹션 설명대로 자동으로 한 장", () => {
+    expect(resolveCharacterAngles([], "뒤돌아 걸어가는 뒷모습")).toEqual(["back"]);
+    expect(resolveCharacterAngles([], "주방에서 제품을 쓰는 장면")).toEqual(["left_45"]);
+  });
+
+  it("고르면 고른 것이 그대로, 섹션 설명은 안 본다", () => {
+    expect(resolveCharacterAngles(["front", "back"], "주방에서 제품을 쓰는 장면"))
+      .toEqual(["front", "back"]);
+  });
+
+  /** 차례가 바뀌면 같은 선택에 다른 그림이 나온다. 고른 차례를 지킨다. */
+  it("고른 차례를 지킨다", () => {
+    expect(resolveCharacterAngles(["back", "front"], "")).toEqual(["back", "front"]);
+  });
+
+  /**
+   * 「다각도 한 장」은 6컷 격자다. 정체성 참조로 보내면 그 격자가 결과물에
+   * 그대로 따라 나온다 — `CHARACTER_SHEET` 머리말과 같은 이유다.
+   */
+  it("다각도 한 장은 걸러진다", () => {
+    expect(resolveCharacterAngles(["front", "sheet"], "")).toEqual(["front"]);
+  });
+
+  /** 빈 배열로 떨어지면 캐릭터가 통째로 사라진다. 자동으로 돌아간다. */
+  it("고른 것이 전부 걸러지면 자동으로 돌아간다", () => {
+    expect(resolveCharacterAngles(["sheet"], "뒤돌아 걸어가는 뒷모습")).toEqual(["back"]);
+    expect(resolveCharacterAngles(["없는각도"], "")).toEqual(["left_45"]);
+  });
+
+  /** 옛 이름으로 저장된 줄도 지금 이름으로 부른다. */
+  it("옛 각도 이름을 지금 이름으로 바꾼다", () => {
+    expect(resolveCharacterAngles(["three_quarter"], "")).toEqual([migrateAngle("three_quarter")]);
+  });
+
+  it("같은 각도를 두 번 골라도 한 번만 간다", () => {
+    expect(resolveCharacterAngles(["front", "front"], "")).toEqual(["front"]);
   });
 });

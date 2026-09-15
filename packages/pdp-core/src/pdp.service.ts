@@ -8,6 +8,7 @@ import {
 } from "@fixup/shared";
 import type {
   AspectRatio,
+  CharacterImageReference,
   CopyIntensity,
   GapPolicy,
   ImageGenOptions,
@@ -111,8 +112,16 @@ type InternalImageGenOptions = ImageGenOptions & {
   styleReferenceImages?: Array<{ base64: string; mimeType: string; description?: string }>;
   /** 제품 이미지를 지킬 것인가. 자세한 판단은 pdp.product-anchor 참조. */
   preserveProductImage?: boolean;
-  /** 이 페이지에 고정할 인물. 섹션에 맞는 각도 한 장. */
-  characterReference?: { base64: string; mimeType: string; identityPrompt: string };
+  /**
+   * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
+   *
+   * 여러 장이어도 사람은 하나다. 각도를 함께 보내면 모델이 절충해 제3의 인물을
+   * 만든다는 실측이 있었다(2026-07-30). 그래서 「같은 사람의 다른 각도이고,
+   * 포즈·배경은 베끼지 마라」를 프롬프트에 함께 싣는다
+   * (`buildReferenceRoleDirective`). 몇 장을 보낼지는 **사람이 고른다** —
+   * 우리가 대신 판단하지 않는다.
+   */
+  characterReferences?: CharacterImageReference[];
   /** 강조할 단어. 시나리오 단계에서 정한다. */
   emphasisWords?: string[];
 };
@@ -581,7 +590,8 @@ ${analyzePrompt}`
       // 얼굴은 하나만 보낸다. 둘을 넣으면 모델이 절충해 제3의 인물이 나온다.
       // 업로드한 사진이 캐릭터보다 우선이다 — 사용자가 방금 고른 쪽이다.
       const usesUploadedPerson = Boolean(normalizedReferenceModel && options.withModel);
-      const usesCharacter = !usesUploadedPerson && Boolean(options.characterReference);
+      const characterViews = options.characterReferences ?? [];
+      const usesCharacter = !usesUploadedPerson && characterViews.length > 0;
 
       if (usesUploadedPerson && normalizedReferenceModel) {
         references.push({
@@ -590,12 +600,19 @@ ${analyzePrompt}`
           mimeType: normalizedReferenceModel.mimeType,
           intent: options.attachmentIntents?.person,
         });
-      } else if (usesCharacter && options.characterReference) {
-        references.push({
-          kind: "person",
-          base64: options.characterReference.base64,
-          mimeType: options.characterReference.mimeType,
-          intent: options.attachmentIntents?.person,
+      } else if (usesCharacter) {
+        // 고른 각도를 **고른 차례 그대로** 담는다. 차례가 바뀌면 같은 선택에
+        // 다른 그림이 나온다 — 첫 장이 정체성 기준으로 가장 무겁게 읽힌다.
+        //
+        // 사용자가 적은 말은 **첫 장에만** 붙인다. 각도마다 되풀이하면 같은
+        // 문장이 넉 번 들어가 규칙으로 읽히고, 뒤 지시를 밀어낸다.
+        characterViews.forEach((view, viewIndex) => {
+          references.push({
+            kind: "person",
+            base64: view.base64,
+            mimeType: view.mimeType,
+            intent: viewIndex === 0 ? options.attachmentIntents?.person : undefined,
+          });
         });
       }
 
@@ -643,8 +660,8 @@ ${analyzePrompt}`
       // **캐릭터를 실제로 보냈을 때만** 싣는다. 사진이 우선해 캐릭터가 빠졌는데도
       // 서술을 실으면, 첨부된 얼굴과 다른 사람을 묘사하게 된다.
       const characterIdentity =
-        usesCharacter && options.characterReference?.identityPrompt
-          ? `The person's identity: ${options.characterReference.identityPrompt}.`
+        usesCharacter && characterViews[0]?.identityPrompt
+          ? `The person's identity: ${characterViews[0].identityPrompt}.`
           : "";
 
       // 재시도 지시(QA 결함 교정, 인물 불일치 교정)는 JSON 뒤에 덧붙인다.

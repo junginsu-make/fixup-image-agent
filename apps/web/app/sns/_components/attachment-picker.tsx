@@ -6,8 +6,11 @@ import { groupAttachments, modelById, referenceWarningsForRole, validateAttachme
 import { Badge, Button, Card, CardContent } from "@fixup/ui";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
 import {
-  LibraryPickerButton, type LibraryPickCharacter, type LibraryPickSet,
+  LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
+import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
+import { attachMessage, matchAngles } from "../../_components/character-attach";
+import { characterAngleLabel } from "../../../lib/character-library";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 import { randomId } from "../../../lib/browser-safe";
 import { attachmentsForUploaded } from "./uploaded-attachments";
@@ -53,7 +56,7 @@ export function AttachmentPicker({
 }) {
   const [images, setImages] = React.useState<ImageView[]>([]);
   const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
-  const [characters, setCharacters] = React.useState<LibraryPickCharacter[]>([]);
+  const [characters, setCharacters] = React.useState<PickableCharacter[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -122,9 +125,14 @@ export function AttachmentPicker({
     if (attach.length) onChange([...attachments, ...attach]);
   }
 
-  /** 세트를 통째로 넣는다. 표지·속지·엔딩 자리를 그대로 가져온다. */
-  function pickSet(set: LibraryPickSet) {
-    const added = set.items.flatMap((item) => {
+  /**
+   * 세트에서 **고른 장만** 넣는다. 표지·속지·엔딩 자리는 그대로 가져온다.
+   *
+   * 자리를 들고 온다는 것이 세트의 값어치다 — 그것 때문에 만들어 둔 것이라
+   * 낱장으로 고르면 자리를 다시 정해야 한다.
+   */
+  function pickSet(set: LibraryPickSet, pickedIds: string[]) {
+    const added = set.items.filter((item) => pickedIds.includes(item.referenceImageId)).flatMap((item) => {
       const image = images.find((entry) => entry.id === item.referenceImageId);
       if (!image || attachments.some((attachment) => attachment.id === image.id)) return [];
       return [{
@@ -141,30 +149,38 @@ export function AttachmentPicker({
   }
 
   /**
-   * 캐릭터를 넣는다 — **정면 한 장만.**
+   * 캐릭터에서 **고른 장면을 전부** 넣는다.
    *
-   * 네 장을 다 넣으면 정체성 참조가 넷이 되어 모델이 절충한다. 그러면 카드마다
-   * 다른 얼굴이 나오는데, 그건 캐릭터를 만든 이유 자체를 없앤다(2026-07-30
-   * 실측). 다른 각도가 필요하면 낱장으로 라이브러리에 그대로 있다.
+   * 전에는 정면 한 장만 넣었다. 각도를 쓰려고 넷을 만들어 두고도 옆모습이
+   * 필요한 장면에서 쓸 수 없었다(2026-09-15 사용자 보고). 어느 장을 쓸지는
+   * 사람이 고르고, 고른 것은 그대로 모델에 간다.
+   *
+   * **`characterId` 를 함께 단다.** 그것이 없으면 「그대로 넣을 인물은 한 명만」
+   * 에 걸려 넉 장이 네 사람으로 세어진다. 그 한 칸이 넷을 한 사람으로 묶는다.
+   *
+   * 역할은 「인물 그대로 지키기」다. 캐릭터를 붙이는 이유가 그 대상을 지키려는
+   * 것이므로 「따라 만들기」로 들어가면 뜻이 반대가 된다.
    */
-  function pickCharacter(character: LibraryPickCharacter) {
-    const prefix = `${character.name} (캐릭터)`;
-    const matched = images.filter((image) => (image.title ?? "").startsWith(prefix));
-    const front = matched.find((image) => (image.title ?? "").endsWith("정면")) ?? matched[0];
-    if (!front) return setMessage("이 캐릭터의 각도를 라이브러리에서 찾지 못했습니다.");
-    if (attachments.some((attachment) => attachment.id === front.id)) {
-      return setMessage("이미 들어 있습니다.");
+  function pickCharacter({ character, angles }: CharacterPick) {
+    const { matched, missing } = matchAngles(images, character.name, angles);
+    const fresh = matched.filter(
+      (entry) => !attachments.some((attachment) => attachment.id === entry.image.id),
+    );
+
+    if (fresh.length) {
+      onChange([...attachments, ...fresh.map((entry) => ({
+        id: entry.image.id,
+        // 인물은 카드마다 얼굴이 유지되어야 한다. 카드 자리는 없다 — 자리가 아니라
+        // 모든 카드에 함께 가는 정체성 기준이다.
+        kind: "keep_identity" as const,
+        subject: "person" as const,
+        characterId: character.id,
+        assetPath: entry.image.storagePath,
+        url: entry.image.signedUrl ?? "",
+      }))]);
     }
-    onChange([...attachments, {
-      id: front.id,
-      // 인물은 카드마다 얼굴이 유지되어야 한다. 카드 자리는 없다 — 자리가 아니라
-      // 모든 카드에 함께 가는 정체성 기준이다.
-      kind: "keep_identity",
-      subject: "person",
-      assetPath: front.storagePath,
-      url: front.signedUrl ?? "",
-    }]);
-    setMessage(`'${character.name}' 의 정면을 넣었습니다.`);
+
+    setMessage(attachMessage(character.name, fresh.length, missing, characterAngleLabel));
   }
 
   function toggle(image: ImageView) {
@@ -219,13 +235,23 @@ export function AttachmentPicker({
           }}
           sets={sets}
           onPickSet={pickSet}
-          characters={characters}
-          onPickCharacter={pickCharacter}
           onReload={() => void load()}
           onDelete={(picked) => {
             const image = images.find((entry) => entry.id === picked.id);
             if (image) void removeFromLibrary(image);
           }}
+        />
+        {/*
+          캐릭터는 **따로 부른다.** 라이브러리 모달 안에 칸으로 두었더니 층이
+          쌓여 무엇을 누르는 자리인지 안 보였다(2026-09-15 사용자 보고).
+          고르는 방식 자체가 다르다 — 낱장 격자가 아니라 묶음을 펼쳐 고른다.
+        */}
+        <CharacterPickerButton
+          characters={characters}
+          loading={loading}
+          angleLabel={characterAngleLabel}
+          onPick={pickCharacter}
+          onReload={() => void load()}
         />
         <span className="text-sm text-muted-foreground">여기서 올린 그림도 라이브러리에 들어갑니다.</span>
       </div>

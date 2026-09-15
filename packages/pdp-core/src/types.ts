@@ -3,6 +3,17 @@ import type { BlueprintReview } from "./pdp.review";
 import type { ProductReading } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
 
+/**
+ * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
+ *
+ * `identityPrompt` 는 생김새 서술이다. 이미지 한 장만으로는 옆·뒷모습을 만들
+ * 근거가 부족해 함께 보낸다. 여러 장을 보내도 사람은 하나이므로 서술도 하나다.
+ */
+export interface CharacterImageReference {
+  base64: string;
+  mimeType: string;
+  identityPrompt: string;
+}
 export type AspectRatio = "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
 export type PdpImageStyle = "studio" | "lifestyle" | "outdoor";
 export type PdpModelGender = "female" | "male";
@@ -372,10 +383,18 @@ export interface ImageGenOptions {
    */
   preserveProductImage?: boolean;
   /**
-   * 이 페이지에 고정할 인물. 섹션 구성에 맞는 각도 한 장만 넣는다 —
-   * 3종을 다 보내면 참조가 늘어 서로를 희석시킨다.
+   * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
+   *
+   * 예전에는 한 장만 넣었다 — 참조가 늘면 모델이 절충해 제3의 인물을 만든다는
+   * 실측(2026-07-30) 때문이었다. 그래서 정면을 만들어 둬도 상세페이지·리디자인은
+   * 집어 가지 않았다(2026-09-15 사용자 보고).
+   *
+   * 지금은 **몇 장을 보낼지 사람이 고른다.** 안 고르면 `resolveCharacterAngles` 가
+   * 섹션 설명대로 한 장을 골라 길이 1 로 온다 — 지금까지와 같다. 여러 장일 때는
+   * 「같은 사람의 다른 각도이고 포즈·배경은 베끼지 마라」를 프롬프트가 함께 싣는다
+   * (`buildReferenceRoleDirective`).
    */
-  characterReference?: { base64: string; mimeType: string; identityPrompt: string };
+  characterReferences?: CharacterImageReference[];
   /**
    * 그림의 결. 안 고르면 `photoreal` — 상세페이지는 지금까지 늘 사진이었다.
    *

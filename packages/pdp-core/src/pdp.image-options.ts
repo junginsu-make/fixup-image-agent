@@ -1,5 +1,6 @@
 import type {
   AttachmentIntents,
+  CharacterImageReference,
   ImageGenOptions,
   ImageGenOptionsInput,
   ImageModelId,
@@ -60,8 +61,13 @@ export interface SectionImageTarget {
   options?: ImageGenOptionsInput;
   /** 이 섹션 제목에서 강조할 단어. */
   emphasisWords?: string[];
-  /** 이 섹션 각도에 맞춰 이미 고른 캐릭터 한 장. */
-  characterReference?: { base64: string; mimeType: string; identityPrompt: string };
+  /**
+   * 이 섹션에 쓸 캐릭터 그림들. **한 사람의 여러 각도**다.
+   *
+   * 사람이 각도를 안 골랐으면 `resolveCharacterAngles` 가 섹션 설명대로 한 장을
+   * 고르므로 길이 1 이다 — 지금까지와 같다. 골랐으면 고른 만큼 들어온다.
+   */
+  characterReferences?: CharacterImageReference[];
 }
 
 /**
@@ -96,11 +102,11 @@ export function buildSectionImageOptions(
 
     // ── 섹션이 정하는 것 ────────────────────────────────
     style: target.options?.style ?? "studio",
-    withModel: usedPerson || Boolean(target.characterReference),
+    withModel: usedPerson || Boolean(target.characterReferences?.length),
     headline: target.section.headline,
     subheadline: target.section.subheadline,
     emphasisWords: target.emphasisWords?.length ? target.emphasisWords : undefined,
-    characterReference: target.characterReference,
+    characterReferences: target.characterReferences,
 
     // 이 섹션에 안 쓰는 사진은 아예 넘기지 않는다. 넘기면 pdp.service 가
     // 「업로드 사진이 캐릭터보다 우선」이라 캐릭터를 밀어낸다.
