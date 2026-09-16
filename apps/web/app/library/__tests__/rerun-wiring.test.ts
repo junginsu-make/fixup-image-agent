@@ -24,6 +24,7 @@ const TOOLS = [
     href: "/poster/new?from=",
     seed: "posterSeed(",
     adminRoute: "/api/admin/works/poster/",
+    memberRoute: "/api/poster/projects/${encodeURIComponent(rerunFrom)}",
   },
   {
     name: "카드뉴스",
@@ -32,6 +33,7 @@ const TOOLS = [
     href: "/sns/new?from=",
     seed: "snsSeed(",
     adminRoute: "/api/admin/works/sns/",
+    memberRoute: "/api/sns/projects/${encodeURIComponent(rerunFrom)}/plan",
   },
 ];
 
@@ -78,6 +80,16 @@ describe("지난 단계로 값을 들고 간다", () => {
     expect(source.slice(at, at + 900)).not.toContain("if (readOnly) return;");
   });
 
+  it.each(TOOLS)("$name 은 **있는** 회원용 길로 묻는다", ({ fresh, memberRoute }) => {
+    /*
+      카드뉴스의 작업 한 건은 `/plan` 이 준다 — `/api/sns/projects/{id}` 에는
+      GET 이 없다(DELETE 뿐). 그리로 보내면 405 가 오고, **404 가 아니라서
+      관리자 통로로 넘어가지도 못한다.** 값은 못 가져오면서 화면은 「불러오지
+      못했습니다」만 띄운다.
+    */
+    expect(read(fresh)).toContain(memberRoute);
+  });
+
   it.each(TOOLS)("$name 은 값을 들고 왔다고 화면에 적는다", ({ fresh }) => {
     /*
       안 적으면 사용자는 이 화면이 **원래 작업을 고치는 곳**인 줄 안다.
@@ -87,6 +99,15 @@ describe("지난 단계로 값을 들고 간다", () => {
 
     expect(source).toContain("값을 가져왔습니다");
     expect(source).toContain("새 작업");
+  });
+
+  it("이미지 만들기는 참고 이미지를 두 번 받지 않는다", () => {
+    /*
+      돌아온 길에서는 씨앗 효과가 목록을 읽는다. 기본 효과까지 읽으면 화면 한
+      번에 같은 목록을 두 번 받아 온다 — 사용자가 「끊긴다」고 말한 그 무게를
+      이 화면에 다시 얹는 셈이다.
+    */
+    expect(read("app/poster/new-client.tsx")).toContain("if (rerunFrom) return;");
   });
 
   it.each(TOOLS)("$name 은 못 가져온 그림 수를 말한다", ({ fresh }) => {

@@ -77,6 +77,18 @@ describe("snsSeed — 남의 작업", () => {
     expect(seed.droppedAttachments).toBe(2);
   });
 
+  it("팀원 것은 첨부를 살린다", () => {
+    /*
+      **팀원의 작업은 `mine` 이 참이다.** 회원용 길이 성공했다는 것은 내 것이거나
+      같은 팀이라는 뜻이고, 참고 이미지 목록도 팀 범위라 그 첨부는 내가 고를 수
+      있는 것이다(`rerun-seed.ts` 머리말). 빼면 팀 기능을 되돌리는 셈이다.
+
+      관리자 통로로 온 것만 `mine` 이 거짓이다 — 그건 팀 밖이라 목록에도 없다.
+    */
+    expect(snsSeed(project, true).attachments).toHaveLength(2);
+    expect(snsSeed(project, false).attachments).toHaveLength(0);
+  });
+
   it("글과 설정은 그대로 들고 온다", () => {
     // 글은 경로가 아니라 값이다. 들고 와도 남의 파일을 가리키지 않는다.
     const seed = snsSeed(project, false);
@@ -112,5 +124,47 @@ describe("snsSeed — 옛 작업", () => {
 
     expect(seed.source).toEqual({ kind: "text", text: "" });
     expect(seed.attachments).toEqual([]);
+  });
+});
+
+/**
+ * **원본 글은 네 종류다.**
+ *
+ * 글·유튜브·웹·질문(`_components/source-input.tsx` 의 `SourceDraft`). 전부
+ * 「글」로 만들면 유튜브로 시작한 작업이 **빈 칸**으로 돌아온다 — 고치려던
+ * 「다 초기화된다」와 똑같은 일이 다른 자리에서 일어난다.
+ */
+describe("snsSeed — 원본 글의 종류", () => {
+  const 작업 = (source: unknown) =>
+    snsSeed({ title: "t", data: { source } } as never, true).source;
+
+  it("유튜브는 유튜브로 돌아온다", () => {
+    expect(작업({ kind: "youtube", url: "https://youtu.be/abc" }))
+      .toEqual({ kind: "youtube", url: "https://youtu.be/abc" });
+  });
+
+  it("웹 주소는 웹으로 돌아온다", () => {
+    expect(작업({ kind: "web", url: "https://example.test/글" }))
+      .toEqual({ kind: "web", url: "https://example.test/글" });
+  });
+
+  it("질문은 질문으로 돌아온다", () => {
+    expect(작업({ kind: "question", question: "가을에 뭘 팔까요" }))
+      .toEqual({ kind: "question", question: "가을에 뭘 팔까요" });
+  });
+
+  it("글은 글로 돌아온다", () => {
+    expect(작업({ kind: "text", text: "올가을 신제품" }))
+      .toEqual({ kind: "text", text: "올가을 신제품" });
+  });
+
+  it("모르는 종류는 빈 글로 떨어진다", () => {
+    /*
+      새 종류가 생겼는데 여기를 안 고쳤거나, 값이 망가진 경우다. 넘어지는
+      대신 빈 글로 열어 사용자가 직접 채울 수 있게 한다.
+    */
+    expect(작업({ kind: "새것", 뭔가: "값" })).toEqual({ kind: "text", text: "" });
+    expect(작업(null)).toEqual({ kind: "text", text: "" });
+    expect(작업({ kind: "youtube" })).toEqual({ kind: "text", text: "" });
   });
 });

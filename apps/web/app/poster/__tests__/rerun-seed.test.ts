@@ -155,3 +155,82 @@ describe("옛 작업", () => {
     expect(seed.pickOrder).toEqual(["x"]);
   });
 });
+
+/**
+ * **한 바퀴 돌려도 같아야 한다.**
+ *
+ * 저장은 목록 넷으로 갈려 있고(`referenceIds`·`preservedIds`·`personIds`·
+ * `restyledIds`) 화면은 한 칸에 한 역할을 쓴다. 되짚었다가 다시 저장했을 때
+ * 원래와 다른 네 목록이 나오면, **다시 만든 그림이 원본과 달라진다** — 그런데
+ * 화면에는 아무 오류도 안 뜬다.
+ *
+ * 그래서 화면이 저장할 때 쓰는 셈(`new-client.tsx` 의 `styleIds` 등)을 여기서
+ * 그대로 다시 적어 맞대 본다.
+ */
+function 화면이_저장하는_목록(seed: ReturnType<typeof posterSeed>) {
+  const order = seed.pickOrder;
+  const role = (id: string) => seed.roles[id];
+  return {
+    referenceIds: order.filter((id) => role(id) === "style"),
+    preservedIds: order.filter((id) => role(id)?.startsWith("preserve")),
+    personIds: order.filter(
+      (id) => role(id) === "preserve_person" || role(id) === "preserve_person_restyled"),
+    restyledIds: order.filter((id) => role(id) === "preserve_person_restyled"),
+  };
+}
+
+describe("역할 한 바퀴", () => {
+  const 모두 = 볼수있음("s1", "p1", "person1", "restyle1");
+
+  it("네 역할이 섞여 있어도 그대로 돌아온다", () => {
+    const 원래 = {
+      referenceIds: ["s1"],
+      preservedIds: ["p1", "person1", "restyle1"],
+      personIds: ["person1", "restyle1"],
+      restyledIds: ["restyle1"],
+      attachmentOrder: ["s1", "p1", "person1", "restyle1"],
+    };
+
+    const 다시 = 화면이_저장하는_목록(
+      posterSeed({ title: "t", ratio: "2:3", modelId: "m", data: { ...원래, instruction: "i" } }, 모두));
+
+    expect(다시.referenceIds).toEqual(원래.referenceIds);
+    expect(다시.preservedIds).toEqual(원래.preservedIds);
+    expect(다시.personIds).toEqual(원래.personIds);
+    expect(다시.restyledIds).toEqual(원래.restyledIds);
+  });
+
+  it("사람이 없는 옛 작업도 그대로 돌아온다", () => {
+    // `personIds`·`restyledIds` 가 아예 없던 시절 작업이다.
+    const 원래 = { referenceIds: ["s1"], preservedIds: ["p1"] };
+
+    const 다시 = 화면이_저장하는_목록(
+      posterSeed({ title: "t", ratio: "2:3", modelId: "m", data: { ...원래, instruction: "i" } },
+        볼수있음("s1", "p1")));
+
+    expect(다시).toEqual({
+      referenceIds: ["s1"],
+      preservedIds: ["p1"],
+      personIds: [],
+      restyledIds: [],
+    });
+  });
+
+  it("못 보는 것을 뺀 만큼만 줄어든다", () => {
+    /*
+      남의 참고 이미지를 빼고 나면 목록도 그만큼 줄어야 한다. 역할만 지우고
+      목록에 남기면 저장할 때 **없는 그림을 가리키는 작업**이 된다.
+    */
+    const 다시 = 화면이_저장하는_목록(posterSeed({
+      title: "t", ratio: "2:3", modelId: "m",
+      data: {
+        instruction: "i",
+        referenceIds: ["s1"], preservedIds: ["p1"],
+        attachmentOrder: ["s1", "p1"],
+      },
+    }, 볼수있음("s1")));
+
+    expect(다시.referenceIds).toEqual(["s1"]);
+    expect(다시.preservedIds).toEqual([]);
+  });
+});

@@ -32,6 +32,14 @@ export interface SnsSeed {
   droppedAttachments: number;
 }
 
+/** 표에 저장된 원본 글. 종류마다 채워지는 칸이 다르다. */
+interface StoredSource {
+  kind?: string;
+  text?: string;
+  url?: string;
+  question?: string;
+}
+
 /** 이 작업이 읽는 모양. 옛 작업에는 없는 칸이 많아 전부 선택이다. */
 interface SourceProject {
   title?: string | null;
@@ -42,7 +50,7 @@ interface SourceProject {
   cardCount?: number | null;
   toneNote?: string | null;
   data?: {
-    source?: { kind?: string; text?: string } | null;
+    source?: StoredSource | null;
     attachments?: Attachment[] | null;
     attachmentIntents?: { cover?: string; body?: string; ending?: string } | null;
     look?: ImageLook | null;
@@ -59,8 +67,51 @@ interface SourceProject {
  * 작업이 되고, 그 회원이 지우면 내 것도 같이 사라진다. 복사 규칙
  * (`api/admin/works/copy-paths.ts`)이 막으려던 바로 그 깨짐이다.
  *
+ * ── `mine` 을 무엇으로 정하나 ─────────────────────────────────────
+ *
+ * 부르는 쪽이 **「회원용 길로 읽었나」**로 정한다. 팀원의 작업도 회원용 길이
+ * 성공하므로 `mine` 이 참인데, **그래도 맞다.**
+ *
+ *   작업이 회원용 길로 읽혔다  ⟹ 내 것이거나 같은 팀이다
+ *   참고 이미지 목록도 팀 범위다 (`lib/reference-images.ts` 의
+ *   `referenceVisibility` — `team_id.eq.내팀` 을 건다)
+ *   ⟹ 그 첨부는 **내가 고를 수 있는 것**이다
+ *
+ * 그래서 팀원의 첨부를 빼면 오히려 손해다 — 같은 창고를 쓰라고 만든 팀 기능을
+ * 되돌리는 셈이 된다. 이미지 만들기 쪽이 「내가 볼 수 있는 목록」으로 거르는
+ * 것과 **같은 판단이고, 결과도 같다.**
+ *
+ * 관리자 통로로 온 것만 다르다. 그건 팀 밖이라 목록에도 없다.
+ *
  * 글과 설정은 값이라 그대로 들고 온다 — 남의 파일을 가리키지 않는다.
  */
+/**
+ * 원본 글을 되살린다. **종류를 지킨다.**
+ *
+ * 글·유튜브·웹·질문 넷이다(`_components/source-input.tsx` 의 `SourceDraft`).
+ * 전부 「글」로 만들면 유튜브로 시작한 작업이 **빈 칸**으로 돌아온다 —
+ * 고치려던 「다 초기화된다」와 똑같은 일이 다른 자리에서 일어난다.
+ *
+ * 저장 모양이 화면 모양과 같아서 칸 이름만 맞춰 주면 된다
+ * (`api/sns/projects/schema.ts` 의 `SourceSchema`).
+ *
+ * **모르는 종류는 빈 글로 떨어진다.** 새 종류가 생겼는데 여기를 안 고쳤거나
+ * 값이 망가진 경우다 — 넘어지는 대신 사용자가 직접 채울 수 있게 연다.
+ */
+function sourceOf(source: StoredSource | null | undefined): SourceDraft {
+  const empty: SourceDraft = { kind: "text", text: "" };
+  if (!source || typeof source !== "object") return empty;
+
+  const text = typeof source.text === "string" ? source.text : "";
+  const url = typeof source.url === "string" ? source.url : "";
+  const question = typeof source.question === "string" ? source.question : "";
+
+  if (source.kind === "youtube" && url) return { kind: "youtube", url };
+  if (source.kind === "web" && url) return { kind: "web", url };
+  if (source.kind === "question" && question) return { kind: "question", question };
+  return { kind: "text", text };
+}
+
 export function snsSeed(project: SourceProject, mine: boolean): SnsSeed {
   const data = project.data ?? {};
   const attachments = Array.isArray(data.attachments) ? data.attachments : [];
@@ -69,10 +120,7 @@ export function snsSeed(project: SourceProject, mine: boolean): SnsSeed {
   return {
     title: project.title ?? "",
     toneNote: project.toneNote ?? "",
-    source: {
-      kind: "text",
-      text: typeof data.source?.text === "string" ? data.source.text : "",
-    },
+    source: sourceOf(data.source),
     attachments: mine ? attachments : [],
     droppedAttachments: mine ? 0 : attachments.length,
     intents: {

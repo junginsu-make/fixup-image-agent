@@ -115,7 +115,12 @@ export function NewSnsClient() {
         }
       };
 
-      let found = await read(`/api/sns/projects/${encodeURIComponent(rerunFrom)}`);
+      /*
+        **작업 한 건은 `/plan` 이 준다.** `/api/sns/projects/{id}` 에는 GET 이
+        없다(DELETE 뿐이다) — 그리로 보내면 405 가 오고, 404 가 아니라서
+        관리자 통로로 넘어가지도 못한다.
+      */
+      let found = await read(`/api/sns/projects/${encodeURIComponent(rerunFrom)}/plan`);
       let mine = true;
       if (!found.body?.ok && found.status === 404) {
         found = await read(`/api/admin/works/sns/${encodeURIComponent(rerunFrom)}`);

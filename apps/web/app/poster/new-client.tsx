@@ -229,7 +229,15 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     return [];
   }, []);
 
-  React.useEffect(() => { void loadReferences(); }, [loadReferences]);
+  /*
+    **지난 단계로 돌아온 길이면 여기서 안 읽는다.** 아래 효과가 어차피 읽는데,
+    둘 다 읽으면 화면 한 번에 같은 목록을 두 번 받아 온다 — 사용자가
+    「끊긴다」고 말한 그 무게를 이 화면에 다시 얹는 셈이다.
+  */
+  React.useEffect(() => {
+    if (rerunFrom) return;
+    void loadReferences();
+  }, [loadReferences, rerunFrom]);
 
   /**
    * 지난 단계로 돌아왔으면 **그때 쓰던 값을 심는다.**
