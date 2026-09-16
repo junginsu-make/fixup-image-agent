@@ -18,17 +18,25 @@ let snsRow: Record<string, unknown> | null = null;
 let posterRow: Record<string, unknown> | null = null;
 const queried: string[] = [];
 let signedPaths: string[] = [];
+let characterRows: Array<Record<string, unknown>> = [];
 
 function builderFor(table: string) {
   queried.push(table);
-  const row = table === "sns_projects" ? snsRow : posterRow;
+  const row = table === "sns_projects" ? snsRow
+    : table === "characters" ? (characterRows[0] ?? null)
+    : posterRow;
   const self: Record<string, unknown> = {
     select: () => self,
     eq: () => self,
     order: () => self,
+    limit: () => self,
+    in: () => self,
     maybeSingle: async () => ({ data: row, error: null }),
     then: (resolve: (x: unknown) => unknown) =>
-      Promise.resolve(resolve({ data: row ? [row] : [], error: null })),
+      Promise.resolve(resolve({
+        data: table === "characters" ? characterRows : row ? [row] : [],
+        error: null,
+      })),
   };
   return self;
 }
@@ -52,7 +60,7 @@ vi.mock("../../../../../lib/supabase/admin", () => ({
 
 vi.mock("../../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => false }));
 
-const { readAnyWork } = await import("../store");
+const { readAnyWork, readAnyCharacter } = await import("../store");
 
 /** 표에 실제로 있는 칸 이름 그대로. 화면이 쓰는 이름과 다르다. */
 function snsProjectRow(): Record<string, unknown> {
@@ -69,7 +77,7 @@ function snsProjectRow(): Record<string, unknown> {
   };
 }
 
-beforeEach(() => { snsRow = null; posterRow = null; queried.length = 0; signedPaths = []; });
+beforeEach(() => { snsRow = null; posterRow = null; queried.length = 0; signedPaths = []; characterRows = []; });
 
 describe("readAnyWork", () => {
   it("카드뉴스 한 건을 소유자와 무관하게 읽는다", async () => {
@@ -165,5 +173,27 @@ describe("readAnyWork — 카드뉴스 그림", () => {
     await readAnyWork("sns", "s1");
 
     expect(signedPaths).toEqual([]);
+  });
+});
+
+/**
+ * 관리자가 **남의 캐릭터**도 한 장 읽는다.
+ *
+ * 회원용 경로(`api/characters/[id]`)는 `listCharacters` 를 지나 팀 범위로
+ * 걸러지므로 남의 것은 404 다. 목록과 같은 방식(서비스 키)으로 따로 읽는다.
+ */
+describe("readAnyCharacter", () => {
+  it("소유자와 무관하게 한 장을 읽는다", async () => {
+    characterRows = [{ id: "c1", user_id: "남의-id", name: "호랑이" }];
+
+    const seen = await readAnyCharacter("c1");
+
+    expect(queried).toContain("characters");
+    expect(seen).toMatchObject({ id: "c1", name: "호랑이" });
+  });
+
+  it("없으면 null 이다 — 던지지 않는다", async () => {
+    characterRows = [];
+    expect(await readAnyCharacter("없는-id")).toBeNull();
   });
 });

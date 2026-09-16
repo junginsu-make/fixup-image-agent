@@ -1,7 +1,9 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
-import { posterCopyPlan, snsCopyPlan, type AssetMove } from "./copy-paths";
+import {
+  copiedCharacterAssetPath, posterCopyPlan, snsCopyPlan, type AssetMove,
+} from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import {
   createSupabaseSnsProjectRepository, record as toSnsRecord,
@@ -18,6 +20,7 @@ import {
 } from "../../../../lib/poster/supabase-store-core";
 import type { PosterProjectRecord } from "@fixup/poster-core";
 import type { SnsProjectCreateRecord, SnsProjectRecord } from "../../sns/projects/project-service";
+import { listCharacters } from "../../../../lib/characters";
 import { ownerIdsOf, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 
@@ -224,9 +227,10 @@ function contentTypeOf(path: string): string {
 async function moveAssets(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   moves: AssetMove[],
+  bucket: string = BUCKET,
 ): Promise<void> {
   for (const move of moves) {
-    const file = await admin.storage.from(BUCKET).download(move.from);
+    const file = await admin.storage.from(bucket).download(move.from);
     if (file.error || !file.data) {
       // 한 줄 남긴다. 조용히 걸러지면 그림이 왜 비었는지 알 길이 없다.
       console.error(`[admin-copy] 원본을 못 읽었습니다(${move.from}): ${file.error?.message ?? "알 수 없음"}`);
@@ -238,7 +242,7 @@ async function moveAssets(
       `text/plain` 을 붙인다 — 저장된 형식이 틀리면 내려받기·CDN·`nosniff`
       에서 갈린다. 이 저장소의 다른 업로드 자리는 전부 준다.
     */
-    const uploaded = await admin.storage.from(BUCKET)
+    const uploaded = await admin.storage.from(bucket)
       .upload(move.to, bytes, { contentType: contentTypeOf(move.to), upsert: true });
     if (uploaded.error) {
       console.error(`[admin-copy] 새 자리에 못 올렸습니다(${move.to}): ${uploaded.error.message}`);
@@ -300,6 +304,93 @@ export async function readAnyWorkImages(
     url: byPath.get(row.asset_path) ?? null,
     thumbUrl: row.thumb_path ? byPath.get(row.thumb_path) ?? null : null,
   }));
+}
+
+/**
+ * 남의 캐릭터 한 장.
+ *
+ * 회원용 경로(`api/characters/[id]`)는 팀 범위로 걸러져 남의 것은 404 다.
+ * 여기서는 **목록과 같은 함수**에 「전체」 범위를 주어 읽는다 — 각도 짝짓기와
+ * 서명 규칙을 다시 적지 않으려는 것이다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function readAnyCharacter(
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  // 범위가 「전체」라 `userId`·`teamId` 는 쓰이지 않는다. 빈 값을 넘긴다.
+  const characters = await listCharacters("", null, { allMembers: true });
+  return (characters.find((character) => character.id === id) ?? null) as
+    unknown as Record<string, unknown> | null;
+}
+
+/** 캐릭터 그림이 사는 버킷. 작업물(`library`)과 다르다. */
+const CHARACTER_BUCKET = "characters";
+
+/**
+ * 남의 캐릭터를 **내 것으로 복사한다.**
+ *
+ * 생성을 다시 부르지 않는다 — `createCharacter` 는 고른 그림에서 각도를
+ * **새로 만드는** 흐름이라 돈이 나가고 결과도 달라진다. 복사는 있는 것을
+ * 그대로 옮기는 일이다.
+ *
+ * 포스터와 같은 순서다. 행을 먼저 만들어 새 id 를 받고, 그림을 옮기고,
+ * 바뀐 경로를 적는다. **경로 첫 칸은 복사한 사람**이어야 버킷 정책이 소유를
+ * 맞게 판정한다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function copyCharacterToSelf(
+  id: string,
+  ownerUserId: string,
+): Promise<{ id: string }> {
+  const admin = createSupabaseAdminClient();
+
+  const { data: source, error: readError } = await admin
+    .from("characters").select("*").eq("id", id).maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (!source) throw new Error("원본을 찾을 수 없습니다.");
+
+  // 1) 행을 먼저. 그림 자리는 새 캐릭터 id 가 있어야 정해진다.
+  const { data: created, error: createError } = await admin.from("characters")
+    .insert({
+      user_id: ownerUserId,
+      name: source.name,
+      source_prompt: source.source_prompt,
+      identity_prompt: source.identity_prompt,
+      visual_style: source.visual_style,
+      kind: source.kind,
+      look: source.look,
+    })
+    .select("id").single();
+  if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+
+  // 2) 각도 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
+  const { data: views } = await admin.from("character_views")
+    .select("angle,path,thumb_path").eq("character_id", id);
+
+  const moves: AssetMove[] = [];
+  const rows: Array<Record<string, unknown>> = [];
+  for (const view of (views ?? []) as Array<{ angle: string; path: string; thumb_path: string | null }>) {
+    const path = copiedCharacterAssetPath(view.path, ownerUserId, created.id as string);
+    if (!path) continue;
+    const thumb = view.thumb_path
+      ? copiedCharacterAssetPath(view.thumb_path, ownerUserId, created.id as string) : null;
+    moves.push({ from: view.path, to: path });
+    if (view.thumb_path && thumb) moves.push({ from: view.thumb_path, to: thumb });
+    rows.push({
+      character_id: created.id, user_id: ownerUserId,
+      angle: view.angle, path, thumb_path: thumb,
+    });
+  }
+  await moveAssets(admin, moves, CHARACTER_BUCKET);
+
+  // 3) 옮긴 자리를 적는다.
+  if (rows.length) {
+    const { error } = await admin.from("character_views").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+  return { id: created.id as string };
 }
 
 export async function copyWorkToSelf(

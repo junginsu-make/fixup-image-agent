@@ -1,5 +1,5 @@
 import { authenticateApiAdmin } from "../../../../../../../lib/membership/api";
-import { copyWorkToSelf } from "../../../store";
+import { copyCharacterToSelf, copyWorkToSelf } from "../../../store";
 
 type Context = { params: Promise<{ kind: string; id: string }> };
 
@@ -23,12 +23,15 @@ export async function POST(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
 
   const { kind, id } = await context.params;
-  if (kind !== "sns" && kind !== "poster") {
+  if (kind !== "sns" && kind !== "poster" && kind !== "character") {
     return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
   }
 
   try {
-    const copied = await copyWorkToSelf(kind, id, auth.member.userId);
+    // 캐릭터는 표도 버킷도 달라 갈래를 따로 둔다.
+    const copied = kind === "character"
+      ? await copyCharacterToSelf(id, auth.member.userId)
+      : await copyWorkToSelf(kind, id, auth.member.userId);
     return Response.json({ ok: true, id: copied.id });
   } catch (error) {
     /*
