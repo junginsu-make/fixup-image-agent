@@ -2,12 +2,15 @@ import "server-only";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
-import { createSupabaseSnsProjectRepository } from "../../sns/projects/project-store";
+import {
+  createSupabaseSnsProjectRepository, record as toSnsRecord,
+  type ProjectRow as SnsProjectRow,
+} from "../../sns/projects/project-store";
 import { collectCardPaths, withCardUrls } from "../../../../lib/sns/list-urls";
 import {
   posterAssetPathsToRemove,
   toImageRecord,
-  toProjectRecord,
+  toProjectRecord as toPosterRecord,
   type PosterImageRow,
   type PosterProjectRow,
 } from "../../../../lib/poster/supabase-store-core";
@@ -84,7 +87,7 @@ async function listAllPosterProjects() {
   // 회원용 변환은 `user_id` 를 떨어뜨린다 — 자기 것만 보던 화면에는 필요가
   // 없었다. 여기서는 누구 것인지가 요점이라 줄에서 직접 가져와 되붙인다.
   const projects = ((projectRows ?? []) as PosterProjectRow[]).map((row) => ({
-    ...toProjectRecord(row),
+    ...toPosterRecord(row),
     userId: row.user_id,
   }));
   if (!projects.length) return [];
@@ -137,6 +140,41 @@ export async function listAllWorks(viewerId: string) {
  *
  * 없는 것을 지우라고 하면 `false` 를 준다 — 두 번 눌러도 오류가 아니다.
  */
+/**
+ * 작업 한 건을 **소유자와 무관하게** 읽는다.
+ *
+ * 목록(`listAllWorks`)과 같은 방식이다 — 서비스 키라 RLS 를 지나지 않는다.
+ * 회원용 길(`snsFlowStoreForUser`·`posterStoresForUser`)에 관리자 조건을
+ * 심지 않는 이유는 `deleteAnyWork` 와 같다.
+ *
+ * **없으면 `null` 이다. 던지지 않는다** — 부르는 쪽이 404 로 답해야 하는데
+ * 예외로 던지면 500 이 된다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function readAnyWork(
+  kind: "sns" | "poster",
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  const table = kind === "sns" ? "sns_projects" : "poster_projects";
+  const { data, error } = await createSupabaseAdminClient()
+    .from(table).select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  /*
+    **화면이 쓰는 모양으로 바꿔서 준다.** 행을 그대로 주면 `userId`·`modelId`
+    가 `undefined` 라 화면이 빈다.
+
+    바꾸는 규칙을 여기서 새로 적지 않는다 — 회원용 경로가 쓰는 그 함수를
+    그대로 부른다. 따로 적으면 칸 하나가 갈리는 날이 오고, 그때 조용히
+    사라지는 것이 `record()` 주석이 말하는 그 일이다.
+  */
+  return kind === "sns"
+    ? toSnsRecord(data as SnsProjectRow) as unknown as Record<string, unknown>
+    : toPosterRecord(data as PosterProjectRow) as unknown as Record<string, unknown>;
+}
+
 export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise<boolean> {
   const admin = createSupabaseAdminClient();
 

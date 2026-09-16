@@ -9,18 +9,20 @@ import { canOpenSteps } from "../work-steps";
  * 카드 본문 클릭은 그대로 그림 뷰어를 연다(2026-09-16 사용자 결정) —
  * 쓰던 동작을 뺏지 않는다. 단추만 따로 붙인다.
  *
- * **남의 작업에는 아직 안 낸다.** 지금 눌러 봐야 단계별 화면이 404 다 —
- * 상세 화면의 데이터 경로가 RLS 를 타고, `same_team` 에 관리자 예외가 없다.
- * 2단계에서 관리자 읽기 통로를 낸 뒤에 연다.
+ * **읽을 수 있는 사람에게만 낸다.** 상세 화면의 데이터 경로는 RLS 를 타고
+ * `same_team` 에 관리자 예외가 없어, 관리자는 별도 통로
+ * (`api/admin/works/[kind]/[id]`)로 읽는다. 그 통로가 없는 회원에게 내면
+ * 눌러서 「찾을 수 없습니다」를 보게 된다.
  */
 describe("canOpenSteps", () => {
   it("내 작업이면 낸다", () => {
     expect(canOpenSteps({ mine: true }, false)).toBe(true);
   });
 
-  it("관리자라도 남의 작업에는 아직 안 낸다", () => {
-    // 2단계에서 true 로 바뀐다. 그때 이 시험도 함께 고친다.
-    expect(canOpenSteps({ mine: false }, true)).toBe(false);
+  it("관리자는 남의 작업에도 낸다", () => {
+    // 관리자 읽기 통로(`api/admin/works/[kind]/[id]`)가 열렸다. 이제 눌러도
+    // 404 가 아니다.
+    expect(canOpenSteps({ mine: false }, true)).toBe(true);
   });
 
   it("남의 작업에는 안 낸다", () => {

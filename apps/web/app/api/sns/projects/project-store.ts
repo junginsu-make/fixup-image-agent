@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SnsProjectCreateRecord, SnsProjectRecord, SnsProjectRepository } from "./project-service";
 
-type ProjectRow = {
+export type ProjectRow = {
   id: string;
   user_id: string;
   candidate_id: string | null;
@@ -27,7 +27,14 @@ function checked<T>(data: T, error: { message: string } | null): T {
   return data;
 }
 
-function record(row: ProjectRow): SnsProjectRecord {
+/**
+ * 행을 화면이 쓰는 기록으로.
+ *
+ * **내보내는 이유** — 관리자 단건 읽기(`api/admin/works/store.ts`)가 같은
+ * 모양을 줘야 화면이 그대로 그린다. 저기서 따로 적으면 칸 하나가 갈리는 날이
+ * 오고, 그때 조용히 사라지는 것은 위 화이트리스트가 겪은 그 일이다.
+ */
+export function record(row: ProjectRow): SnsProjectRecord {
   return {
     id: row.id,
     userId: row.user_id,
