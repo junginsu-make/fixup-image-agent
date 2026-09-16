@@ -243,7 +243,15 @@ function sceneLines(slots: PosterSlots): string[] {
   return lines.length ? ["Scene:", ...lines] : [];
 }
 
-function copyLines(slots: PosterSlots): string[] {
+/**
+ * 적어 둔 문구, 그리고 **하나도 없을 때의 금지문.**
+ *
+ * `verbatim` 이면 금지문을 빼야 한다. 그 말은 「기획이 글자를 안 만들었다」를
+ * 전제로 하는데, 쓴 그대로에서는 **기획이 아예 안 돈다** — 슬롯이 빈 것은
+ * 「글자를 안 원한다」가 아니라 「우리가 안 물어봤다」는 뜻이다. 그때 금지하면
+ * 사용자 프롬프트가 글자를 요구해도 우리가 막는다(2026-09-16 실물 확인).
+ */
+function copyLines(slots: PosterSlots, verbatim = false): string[] {
   const all: Array<[string, string]> = [
     ["HEADLINE", slots.headline],
     ["SUBLINE", slots.subline],
@@ -270,6 +278,12 @@ function copyLines(slots: PosterSlots): string[] {
    * 카드뉴스·상세페이지는 글자가 있어야 하는 도구다.
    */
   if (!entries.length) {
+    /*
+     * **쓴 그대로면 아무 말도 안 한다.** 글자를 넣을지는 사용자 프롬프트가
+     * 정한다. 우리가 금지하면 그 프롬프트를 살리려고 만든 갈래에서 거꾸로
+     * 그것을 막는 꼴이 된다.
+     */
+    if (verbatim) return [];
     return [
       "No text was authored for this image. Render it with NO text.",
       "Do not add a headline, tagline, slogan, caption, title, label, watermark, signature,",
@@ -336,7 +350,7 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
       : sceneLines(input.slots)),
     ...(look ? [look] : []),
     "",
-    ...copyLines(input.slots),
+    ...copyLines(input.slots, Boolean(input.verbatimScene?.trim())),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
     // 맨 뒤에서 한 번 더 못 박는다. 긴 프롬프트에서 중간은 힘을 잃는다.
