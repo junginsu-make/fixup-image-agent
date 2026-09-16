@@ -34,6 +34,43 @@ export const IMAGE_LOOK_HINT: Record<ImageLook, string> = {
   illustration: "손그림 질감",
 };
 
+/**
+ * 첨부가 없을 때 **`auto` 대신 쓸 결.**
+ *
+ * 포스터는 지금까지 대부분 사진이었다. 첨부 없이 만들 때도 그쪽이 덜 놀랍다.
+ */
+const LOOK_WITHOUT_REFERENCE: ImageLook = "photoreal";
+
+/**
+ * 실제로 쓸 결을 정한다.
+ *
+ * **`auto` 는 따라갈 것이 있어야 뜻이 있다.** 그 뜻은 「첨부한 그림의 결을 그대로
+ * 따라감」이고 지시문은 빈 문자열이다. 첨부가 없으면 따라갈 것도 없는데 지시문도
+ * 비어서, 결을 정하는 말이 프롬프트에 **한 줄도 안 들어간다** — 결이 모델 기분대로
+ * 나온다.
+ *
+ * 화면이 `auto` 를 안 보여 주는 것(`looksFor`)만으로는 모자라다. 화면을 안 거치는
+ * 길이 있다 — API 직접 호출, 첨부를 다 뺀 옛 작업 다시 돌리기. **마지막 보루를
+ * 여기 둔다.**
+ *
+ * 사람이 고른 결은 첨부가 있든 없든 그대로 둔다. 고른 것을 덮는 것이 더 나쁘다.
+ */
+export function resolveLook(look: ImageLook, hasReferences: boolean): ImageLook {
+  if (look !== "auto") return look;
+  return hasReferences ? "auto" : LOOK_WITHOUT_REFERENCE;
+}
+
+/**
+ * 화면에 **고를 수 있게 보여 줄** 결.
+ *
+ * 첨부가 없으면 `auto` 를 뺀다. 남겨 두면 「레퍼런스 따라가기」라고 적힌 칸이
+ * 따라갈 레퍼런스가 없는 화면에 뜨고, 고르면 조용히 실사가 되는데 화면은 다른
+ * 말을 하고 있다.
+ */
+export function looksFor(hasReferences: boolean): ImageLook[] {
+  return hasReferences ? [...IMAGE_LOOKS] : IMAGE_LOOKS.filter((look) => look !== "auto");
+}
+
 /** 대상이 무엇이냐에 따라 실사 지시가 달라진다. 사람 피부와 동물 털은 다른 말이 필요하다. */
 export type LookSubject = "person" | "animal" | "generic";
 

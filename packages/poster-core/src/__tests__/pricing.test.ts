@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS } from "../pricing";
+import { modelById, pickEndpoint } from "@fixup/sns-core";
 
 describe("포스터 비용 추정", () => {
   it("레퍼런스가 있으면 i2i 단가를 쓴다", () => {
@@ -160,5 +161,58 @@ describe("첨부한 그림과 같은 비율", () => {
     const without = estimatePosterCost({ ...base, ratioId: "1:1" });
 
     expect(withSize.unitUsd).toBe(without.unitUsd);
+  });
+});
+
+/**
+ * **레퍼런스가 없으면 t2i, 있으면 i2i — 자동으로.**
+ *
+ * 사용자에게 묻지 않는다(`pickEndpoint` 머리말). 이 규칙이 세 군데를 한꺼번에
+ * 가른다: 부를 엔드포인트, 매길 단가, 그리고 fal 에 `image_urls` 를 실을지.
+ *
+ * 세 곳이 따로 판단하면 어느 날 하나가 어긋난다 — 그때는 t2i 로 부르면서 i2i
+ * 값을 청구하거나, 그 반대가 된다. 그래서 **같은 입력으로 셋을 함께 잰다.**
+ *
+ * 2026-09-16 에 레퍼런스를 선택으로 풀면서 이 갈래가 처음으로 실제 사용자
+ * 경로에 올랐다. 그전까지는 코드만 있고 한 번도 안 타던 길이었다.
+ */
+describe("첨부 유무가 모드를 가른다", () => {
+  const MODELS = ["nano-banana", "nano-banana-2", "nano-banana-pro", "gpt-image-2"];
+
+  for (const modelId of MODELS) {
+    it(`${modelId}: 첨부가 없으면 t2i 종점으로 간다`, () => {
+      const model = modelById(modelId);
+
+      expect(pickEndpoint(model, false)).toBe(model.t2i.endpoint);
+      expect(pickEndpoint(model, true)).toBe(model.i2i.endpoint);
+    });
+
+    it(`${modelId}: 두 종점이 실제로 다르다`, () => {
+      const model = modelById(modelId);
+      // 같으면 위 시험이 통과해도 아무것도 안 갈린 것이다.
+      expect(model.t2i.endpoint).not.toBe(model.i2i.endpoint);
+    });
+  }
+
+  /** 첨부 없이도 값이 나와야 한다. 못 내면 만들기 전에 거절된다. */
+  it("첨부가 없어도 값을 낸다", () => {
+    const estimate = estimatePosterCost({
+      modelId: "nano-banana-2", ratioId: "2:3", variants: 1, hasReferences: false,
+    });
+
+    expect(estimate.rejected).toBeUndefined();
+    expect(estimate.totalUsd).toBeGreaterThan(0);
+  });
+
+  /** 장수를 곱하는 것은 모드와 무관하다. 여기가 어긋나면 과금이 어긋난다. */
+  it("장수를 곱하는 것은 모드와 무관하다", () => {
+    const one = estimatePosterCost({
+      modelId: "nano-banana-2", ratioId: "2:3", variants: 1, hasReferences: false,
+    });
+    const three = estimatePosterCost({
+      modelId: "nano-banana-2", ratioId: "2:3", variants: 3, hasReferences: false,
+    });
+
+    expect(three.totalUsd).toBeCloseTo((one.totalUsd ?? 0) * 3, 6);
   });
 });

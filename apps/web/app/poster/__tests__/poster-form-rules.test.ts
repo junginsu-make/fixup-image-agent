@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MATCH_SOURCE } from "@fixup/sns-core";
 import {
-  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount, seedInstruction, showsTypeInteraction, splitFilledSlots,
+  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount, showsTypeInteraction, splitFilledSlots,
 } from "../poster-form-rules";
 
 /**
@@ -78,8 +78,26 @@ describe("만들기를 누를 수 있는가", () => {
     expect(canCreatePoster(ok)).toBe(true);
   });
 
-  it("따라 만들 그림이 없으면 못 누른다", () => {
-    expect(canCreatePoster({ ...ok, styleCount: 0 })).toBe(false);
+  /**
+   * **레퍼런스 없이도 만들 수 있다.**
+   *
+   * 예전에는 여기서 막혔다 — 「따라 만들 그림」이 첫 단계라 글만으로는 시작조차
+   * 못 했다(2026-09-16 사용자 보고). 그런데 엔진은 진작부터 할 줄 알았다:
+   * `pickEndpoint` 가 첨부 유무로 t2i·i2i 를 갈라 부르고, 값도 `pricing.ts` 가
+   * 따로 잡고, 프롬프트도 `if (!images.length) return []` 로 비워 보낸다.
+   * 막고 있던 것은 이 버튼과 스키마뿐이었다.
+   */
+  it("그림이 없어도 누를 수 있다", () => {
+    expect(canCreatePoster({ ...ok, styleCount: 0 })).toBe(true);
+  });
+
+  /**
+   * **광고 모드는 예외다.** 비율을 `match-source` 로 보내 첨부한 그림의 크기를
+   * 그대로 따라가는데(`effectiveRatio`), 맞출 원본이 없으면 성립하지 않는다.
+   */
+  it("광고 모드는 그림이 있어야 한다", () => {
+    expect(canCreatePoster({ ...ok, styleCount: 0, adMode: true, adReady: true })).toBe(false);
+    expect(canCreatePoster({ ...ok, styleCount: 1, adMode: true, adReady: true })).toBe(true);
   });
 
   it("지시가 비어 있으면 못 누른다", () => {
@@ -143,41 +161,6 @@ describe("무엇을 보내는가", () => {
   });
 });
 
-/**
- * 01에서 적은 말을 03에 미리 채운다.
- *
- * **01에서 이미 한 번 말했는데 03에서 또 쓰게 하고 있었다**(2026-09-08 사용자).
- * 한 줄 지시는 비면 다음으로 못 가는 칸이라, 같은 말을 옮겨 적어야 했다.
- */
-describe("한 줄 지시 미리 채우기", () => {
-  const intent = "1번 사진의 사람들을 2번 사진 느낌으로";
-
-  it("비어 있고 안 건드렸으면 01의 말을 채운다", () => {
-    expect(seedInstruction({ attachmentIntent: intent, instruction: "", touched: false })).toBe(intent);
-  });
-
-  it("**한 번이라도 건드렸으면 안 덮는다** — 그때부터 그 사람의 것이다", () => {
-    // 지웠을 수도 있다. 지운 것을 다시 채우면 지울 방법이 없어진다.
-    expect(seedInstruction({ attachmentIntent: intent, instruction: "", touched: true })).toBeNull();
-  });
-
-  it("이미 쓴 것이 있으면 안 덮는다", () => {
-    expect(seedInstruction({ attachmentIntent: intent, instruction: "가을 사진전", touched: false })).toBeNull();
-  });
-
-  it("01에 적은 말이 없으면 채울 것이 없다", () => {
-    expect(seedInstruction({ attachmentIntent: "", instruction: "", touched: false })).toBeNull();
-    expect(seedInstruction({ attachmentIntent: "   ", instruction: "", touched: false })).toBeNull();
-  });
-
-  it("공백만 있는 칸은 빈 칸으로 본다", () => {
-    expect(seedInstruction({ attachmentIntent: intent, instruction: "   ", touched: false })).toBe(intent);
-  });
-
-  it("앞뒤 공백은 떼고 채운다", () => {
-    expect(seedInstruction({ attachmentIntent: `  ${intent}  `, instruction: "", touched: false })).toBe(intent);
-  });
-});
 
 /**
  * 기획 확인에서 어떤 칸을 바로 보여줄까 (2026-09-08 사용자 결정).
