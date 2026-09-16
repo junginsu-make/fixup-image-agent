@@ -4,9 +4,12 @@ import {
   attachmentPlacementRule,
   designerPersona,
   imageLookDirective,
+  IMAGE_LOOK_HINT,
+  IMAGE_LOOK_LABEL,
   lookBlockedReason,
   lookNeedsReference,
   looksFor,
+  looksWithoutReference,
   resolveLook,
   preserveDirective,
   priorityLine,
@@ -232,5 +235,33 @@ describe("고를 수 있는 결", () => {
     expect(lookBlockedReason("auto", false)).toContain("붙이면");
     expect(lookBlockedReason("auto", true)).toBe("");
     expect(lookBlockedReason("photoreal", false)).toBe("");
+  });
+});
+
+/**
+ * **레퍼런스가 없는 도구도 같은 이름을 쓴다.**
+ *
+ * 캐릭터 만들기는 글로만 만드는 도구라 「레퍼런스 스타일」이 뜻이 없다. 그래서
+ * 제 목록을 따로 들고 있었는데, 2026-09-16 에 이름을 바꾸니 **거기만 옛 이름으로
+ * 남았다** — 같은 것을 두 벌로 두면 반드시 갈라진다.
+ *
+ * 목록은 하나로 두고, 「레퍼런스를 쓰는 도구인가」만 골라 쓴다.
+ */
+describe("레퍼런스를 안 쓰는 도구의 결", () => {
+  it("auto 를 뺀 넷이다", () => {
+    expect(looksWithoutReference()).toEqual(["photoreal", "anime", "3d", "illustration"]);
+  });
+
+  /** 이름표는 한 표에서만 온다. 두 벌로 두면 갈라진다. */
+  it("이름표를 따로 들지 않는다", () => {
+    for (const look of looksWithoutReference()) {
+      expect(IMAGE_LOOK_LABEL[look]).toBeTruthy();
+      expect(IMAGE_LOOK_HINT[look]).toBeTruthy();
+    }
+  });
+
+  /** 빈 목록이면 화면에 고를 것이 없어진다. */
+  it("비지 않는다", () => {
+    expect(looksWithoutReference().length).toBeGreaterThan(0);
   });
 });

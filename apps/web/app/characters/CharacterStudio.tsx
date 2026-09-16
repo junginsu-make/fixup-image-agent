@@ -9,6 +9,9 @@ import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
+import {
+  IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference, type ImageLook,
+} from "@fixup/shared";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { modelDisplayName } from "../../lib/model-name";
@@ -43,15 +46,19 @@ const KINDS = [
   { id: "object", label: "사물", hint: "제품·소품" },
 ] as const;
 
-const LOOKS = [
-  { id: "photoreal", label: "실사", hint: "사진처럼" },
-  { id: "anime", label: "애니", hint: "셀 셰이딩·굵은 선" },
-  { id: "3d", label: "3D", hint: "3D 렌더" },
-  { id: "illustration", label: "그림", hint: "손그림 질감" },
-] as const;
+/**
+ * **목록을 따로 들지 않는다.**
+ *
+ * 여기 제 표(`실사·애니·3D·그림`)를 갖고 있었더니 2026-09-16 에 결 이름을 바꿀 때
+ * **캐릭터만 옛 이름으로 남았다.** 같은 것을 두 벌로 두면 반드시 갈라진다.
+ *
+ * 캐릭터는 글로만 만드는 도구라 「레퍼런스 스타일」이 뜻이 없다. 그래서 그것만
+ * 빠진 목록을 쓴다(`looksWithoutReference`).
+ */
+const LOOKS = looksWithoutReference();
 
 type Kind = (typeof KINDS)[number]["id"];
-type Look = (typeof LOOKS)[number]["id"];
+type Look = ImageLook;
 
 /** 서버가 목록을 내려 주지만, 못 받았을 때도 화면이 서야 한다. */
 const ANGLE_FALLBACK = [
@@ -408,8 +415,15 @@ export function CharacterStudio() {
     }
   };
 
-  // 서버의 selectCharacterModel 과 같은 표다. 결을 바꾸면 모델도 따라온다.
+  /*
+   * 서버의 selectCharacterModel 과 같은 표다. 결을 바꾸면 모델도 따라온다.
+   *
+   * **`auto` 도 칸을 채운다.** 여기는 붙일 레퍼런스가 없어 고를 수 없지만
+   * (`looksWithoutReference`), 저장된 옛 값이나 화면 밖에서 들어온 값이 있을 수
+   * 있다. 그때 `resolveLook` 이 실사로 내리므로(첨부 0장) 같은 모델을 가리킨다.
+   */
   const MODEL_BY_LOOK: Record<Look, string> = {
+    auto: "nano-banana-pro",
     photoreal: "nano-banana-pro",
     anime: "gpt-image-2.5-flare",
     "3d": "gpt-image-2.5-flare",
@@ -520,17 +534,15 @@ export function CharacterStudio() {
                 <div className="flex flex-wrap gap-2">
                   {LOOKS.map((entry) => (
                     <Button
-                      key={entry.id} type="button" size="sm" disabled={locked}
-                      variant={look === entry.id ? "default" : "secondary"}
-                      onClick={() => { setLook(entry.id); setModelId(""); }}
+                      key={entry} type="button" size="sm" disabled={locked}
+                      variant={look === entry ? "default" : "secondary"}
+                      onClick={() => { setLook(entry); setModelId(""); }}
                     >
-                      {entry.label}
+                      {IMAGE_LOOK_LABEL[entry]}
                     </Button>
                   ))}
                 </div>
-                <p className="text-xs text-subtle-foreground">
-                  {LOOKS.find((entry) => entry.id === look)?.hint}
-                </p>
+                <p className="text-xs text-subtle-foreground">{IMAGE_LOOK_HINT[look]}</p>
               </fieldset>
 
               {models.length ? (
@@ -1053,7 +1065,7 @@ function CharacterCard({ character, angles, angleLabel, fresh, redoing, deleting
         ["캐릭터", character.name],
         ["장면", angleLabel(entry.angle)],
         ["종류", KINDS.find((k) => k.id === character.kind)?.label ?? "사람"],
-        ["결", LOOKS.find((l) => l.id === character.look)?.label ?? "실사"],
+        ["그림체", IMAGE_LOOK_LABEL[character.look as ImageLook] ?? IMAGE_LOOK_LABEL.photoreal],
         ["묘사", character.sourcePrompt],
       ] as Array<[string, string]>,
     })),
@@ -1125,7 +1137,7 @@ function CharacterCard({ character, angles, angleLabel, fresh, redoing, deleting
         <p className="text-[11px] text-subtle-foreground">
           {KINDS.find((entry) => entry.id === character.kind)?.label ?? "사람"}
           {" · "}
-          {LOOKS.find((entry) => entry.id === character.look)?.label ?? "실사"}
+          {IMAGE_LOOK_LABEL[character.look as ImageLook] ?? IMAGE_LOOK_LABEL.photoreal}
           {shown.length > 1 ? ` · ${shown.map((view) => angleLabel(view.angle)).join(", ")}` : ""}
         </p>
 
