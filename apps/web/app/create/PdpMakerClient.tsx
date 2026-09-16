@@ -1491,7 +1491,7 @@ export function PdpMakerClient() {
                 </div>
 
                 <div>
-                  <span className={fieldLabelClass}>결</span>
+                  <span className={fieldLabelClass}>그림체</span>
                   <div className="flex flex-wrap gap-1.5">
                     {IMAGE_LOOKS.map((option) => {
                       const isActive = look === option;

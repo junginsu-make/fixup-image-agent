@@ -81,7 +81,7 @@ export function SpecPicker({ spec, onChange, attachments }: {
       </div>
 
       <section className="grid gap-3">
-        <div><h3 className="font-semibold">결</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[spec.look]}</p></div>
+        <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[spec.look]}</p></div>
         <div className="flex flex-wrap gap-2">
           {IMAGE_LOOKS.map((look) => (
             <button

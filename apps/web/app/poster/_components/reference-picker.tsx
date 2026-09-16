@@ -288,7 +288,7 @@ export function ReferencePicker({
       {tooManyPeople ? (
         <div role="alert" className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 size-4 flex-none" />
-          인물을 지키는 그림이 둘 이상입니다. 모델이 얼굴을 섞어 없던 사람을 만듭니다 —
+          인물을 지키는 그림이 둘 이상입니다. 모델이 얼굴을 섞어 없던 사람을 만듭니다.
           한 명만 남기세요. 그대로 두면 첫 번째 인물만 씁니다.
         </div>
       ) : null}

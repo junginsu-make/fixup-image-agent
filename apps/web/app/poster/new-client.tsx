@@ -12,8 +12,10 @@ import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, RATIO_USES, chooseModelForRa
 import {
   DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS,
 } from "@fixup/poster-core";
-import { nextPickOrder, visibleOrder } from "@fixup/shared";
-import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksFor, resolveLook, type ImageLook } from "@fixup/shared";
+import { nextPickOrder, visibleOrder, withJosa } from "@fixup/shared";
+import {
+  IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, lookBlockedReason, looksFor, resolveLook, type ImageLook,
+} from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
@@ -37,6 +39,23 @@ const AdSpecPicker = dynamic(() => import("./ad-spec-picker"), {
 
 /** 아직 아무것도 못 만드는 상태. **닫힌 쪽으로 시작한다.** */
 const NO_AD_PLAN: AdSubmitPlan = { masters: [], ready: false };
+
+/**
+ * 「꼭 지킬 말」 칸의 예시.
+ *
+ * **그림 얘기만 적는 칸이 아니다.** 이 말은 프롬프트 맨 앞과 맨 뒤에 들어가
+ * 첨부한 그림보다도 세다(`userInstructionHead`). 글자 처리·구도·피할 것까지
+ * 무엇이든 적을 수 있는데, 예시가 「배경은 밤」 하나뿐이라 그렇게 안 읽혔다
+ * (2026-09-16 사용자 보고).
+ *
+ * 특히 한글은 이 프롬프트 어디에도 지시가 없어서, 사용자가 여기 적는 것이
+ * 유일한 길이다.
+ */
+const PROMPT_NAIL_EXAMPLES = [
+  "예: 한국어가 깨지지 않게",
+  "예: 포스터처럼 만들어 주세요",
+  "예: 사람 얼굴은 정면으로",
+].join("\n");
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
@@ -496,10 +515,10 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
           <CardHeader>
             <CardTitle>쓸 이미지를 고르세요</CardTitle>
             <CardDescription>
-              새로 올리거나 라이브러리에서 불러온 뒤, 그림마다 역할을 고르세요 —
+              새로 올리거나 라이브러리에서 불러온 뒤, 그림마다 역할을 고르세요.
               <strong className="text-foreground">따라 만들기</strong>는 레이아웃·서체·색만 가져오고,
               <strong className="text-foreground">제품/인물 그대로 지키기</strong>는 그 대상이 결과 그림에
-              그대로 들어갑니다. <strong className="text-foreground">안 붙여도 됩니다</strong> — 그때는
+              그대로 들어갑니다. <strong className="text-foreground">안 붙여도 됩니다</strong>. 그때는
               01에 적은 글만 보고 그립니다. 인물은 한 명만 쓸 수 있습니다.
             </CardDescription>
           </CardHeader>
@@ -516,7 +535,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             {overReferenceLimit ? (
               <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {choice.model.label} 은 참고 이미지를 {choice.model.maxReferenceImages}장까지 받습니다.
-                지금 {referenceCount}장입니다 — 빼거나 02 규격에서 다른 모델을 고르세요.
+                지금 {referenceCount}장입니다. 빼거나 02 규격에서 다른 모델을 고르세요.
               </div>
             ) : null}
             {/*
@@ -526,21 +545,42 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               (`looksFor`).
             */}
             <fieldset className="grid gap-2">
-              <legend className="text-meta text-subtle-foreground">결</legend>
+              <legend className="text-meta text-subtle-foreground">그림체 · 무엇으로 그릴까</legend>
               <div className="flex flex-wrap gap-2">
-                {looksFor(hasReferences).map((entry) => (
-                  <Button
-                    key={entry}
-                    type="button"
-                    size="sm"
-                    variant={shownLook === entry ? "default" : "secondary"}
-                    onClick={() => setLook(entry)}
-                  >
-                    {IMAGE_LOOK_LABEL[entry]}
-                  </Button>
-                ))}
+                {looksFor().map((entry) => {
+                  /*
+                    **빼지 않고 흐리게 둔다.**
+
+                    처음에는 첨부가 없으면 「레퍼런스 스타일」을 목록에서 뺐다.
+                    그랬더니 그런 기능이 있다는 것을 알 길이 없었다 — 사용자가
+                    화면을 보며 「auto 가 어디 있냐」고 물었다(2026-09-16).
+                    못 누르게만 막으면 배울 수 있다.
+                  */
+                  const blocked = lookBlockedReason(entry, hasReferences);
+                  return (
+                    <Button
+                      key={entry}
+                      type="button"
+                      size="sm"
+                      variant={shownLook === entry ? "default" : "secondary"}
+                      disabled={Boolean(blocked)}
+                      title={blocked || IMAGE_LOOK_HINT[entry]}
+                      onClick={() => setLook(entry)}
+                    >
+                      {IMAGE_LOOK_LABEL[entry]}
+                    </Button>
+                  );
+                })}
               </div>
               <p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[shownLook]}</p>
+              {/* 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적는다. */}
+              {lookBlockedReason("auto", hasReferences) ? (
+                <p className="text-xs text-subtle-foreground">
+                  {/* 받침에 따라 은/는이 갈린다. 저장소에 이미 도구가 있다. */}
+                  「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
+                  {lookBlockedReason("auto", hasReferences)}
+                </p>
+              ) : null}
             </fieldset>
 
             <div className="flex justify-end">
@@ -637,7 +677,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                   (2026-09-16 사용자 보고).
                 */}
                 <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                  여기서는 <strong className="text-foreground">규격마다 새로 그립니다</strong> — 고른 수만큼 값이 듭니다.
+                  여기서는 <strong className="text-foreground">규격마다 새로 그립니다</strong>. 고른 수만큼 값이 듭니다.
                   이미 만들어 둔 그림이 있으면{" "}
                   <Link href="/ad" className="font-bold text-primary underline-offset-2 hover:underline">
                     광고 규격으로 내보내기
@@ -772,6 +812,9 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               */}
               <p className="text-xs text-subtle-foreground">
                 편하게 쓰세요. AI 가 구도·색·문구를 정해 04 기획 확인에서 보여드립니다.
+                <br />
+                <strong className="text-muted-foreground">완성된 프롬프트가 있으면 여기에 그대로 넣으세요.</strong>
+                {" "}알아보고 여쭤봅니다.
               </p>
 
               {/*
@@ -788,7 +831,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 >
                   <p className="text-sm">
                     <strong className="text-foreground">완성된 프롬프트로 보입니다.</strong>{" "}
-                    AI 가 다시 쓰면 세부 지시가 사라질 수 있습니다.
+                    AI 가 다듬으면 세부 지시가 사라질 수 있습니다.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -796,7 +839,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                       size="sm"
                       onClick={() => { setPromptMode("verbatim"); setModeAnswered(true); }}
                     >
-                      쓴 그대로 생성
+                      그대로 생성
                     </Button>
                     <Button
                       type="button"
@@ -804,7 +847,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                       variant="secondary"
                       onClick={() => { setPromptMode("assisted"); setModeAnswered(true); }}
                     >
-                      다듬어서 생성
+                      AI가 다듬어서 생성
                     </Button>
                   </div>
                 </div>
@@ -817,7 +860,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               {modeAnswered ? (
                 <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   {promptMode === "verbatim"
-                    ? "쓴 그대로 모델에 보냅니다. AI 가 고치지 않습니다."
+                    ? "쓴 글을 그대로 모델에 보냅니다. AI 가 고치지 않습니다."
                     : "AI 가 다듬어 04 기획 확인에서 보여드립니다."}
                   <button
                     type="button"
@@ -854,22 +897,41 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             ) : null}
 
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-user-instruction">직접 쓴 프롬프트 · 선택</Label>
-              <Textarea
-                id="poster-user-instruction"
-                value={userInstruction}
-                onChange={(event) => setUserInstruction(event.target.value)}
-                rows={10}
-                placeholder="완성된 프롬프트가 있으면 여기에 그대로 붙여 넣으세요."
-              />
               {/*
-                우선순위를 화면에서 말해 둔다. 여기 적은 말은 프롬프트의 맨 앞과
-                맨 뒤 두 곳에 들어가고, 첨부한 레퍼런스보다 세다.
+                **접어 둔다.** 칸 둘이 나란히 펼쳐져 있으니 「둘 다 써야 하나」로
+                읽혔다(2026-09-16 사용자 보고). 이건 선택이고, 대부분은 위 칸
+                하나로 끝난다.
+
+                **이름도 바로잡는다.** 「직접 쓴 프롬프트」는 4번(쓴 그대로
+                생성)이 생기기 전 이름이다. 지금 완성 프롬프트의 자리는 위
+                칸이고, 이 칸은 프롬프트 **맨 앞과 맨 뒤 두 곳**에 들어가는
+                짧은 못이다(2026-09-04 실측. 긴 프롬프트에서 중간은 힘을
+                잃는다). 200자를 넣으면 400자가 실린다.
               */}
-              <p className="text-sm text-muted-foreground">
-                여기 적은 것은 <strong className="text-foreground">AI 가 고치지 않고 그대로</strong> 모델에 갑니다.
-                다른 모든 지시보다 우선합니다 — 완성된 프롬프트가 있으면 여기에 넣으세요.
-              </p>
+              <details className="rounded-md border border-border bg-muted/30">
+                <summary className="cursor-pointer px-4 py-2.5 text-sm">
+                  <span className="font-bold">꼭 지킬 말이 있나요?</span>{" "}
+                  <span className="text-muted-foreground">선택 · 눌러서 펼치기</span>
+                </summary>
+                <div className="grid gap-1.5 border-t border-border px-4 py-3">
+                  <Label htmlFor="poster-user-instruction">꼭 지킬 말</Label>
+                  <Textarea
+                    id="poster-user-instruction"
+                    value={userInstruction}
+                    onChange={(event) => setUserInstruction(event.target.value)}
+                    rows={4}
+                    placeholder={PROMPT_NAIL_EXAMPLES}
+                  />
+                  <p className="text-xs leading-5 text-subtle-foreground">
+                    무엇이든 적을 수 있습니다. 그림의 결, 글자 처리, 구도, 피해야 할 것.
+                    이 말은 프롬프트 <strong className="text-muted-foreground">맨 앞과 맨 뒤에 두 번</strong>{" "}
+                    들어가 첨부한 그림보다도 셉니다.
+                    <br />
+                    한두 줄만 적으세요. 길게 쓰면 두 번 다 길어집니다.
+                    완성된 프롬프트는 위 칸에 넣으세요.
+                  </p>
+                </div>
+              </details>
             </div>
 
             <div className="flex justify-end">

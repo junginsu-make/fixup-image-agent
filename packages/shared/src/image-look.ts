@@ -18,20 +18,26 @@
 export const IMAGE_LOOKS = ["auto", "photoreal", "anime", "3d", "illustration"] as const;
 export type ImageLook = (typeof IMAGE_LOOKS)[number];
 
+/**
+ * **한 단어로 뜻이 잡혀야 한다.**
+ *
+ * 「실사·애니·3D·그림」은 짧은 대신 무엇을 정하는 칸인지 안 알려 준다. 특히
+ * 「그림」은 넷 다 그림이라 뭐가 다른지 모른다(2026-09-16 사용자 보고).
+ */
 export const IMAGE_LOOK_LABEL: Record<ImageLook, string> = {
-  auto: "레퍼런스 따라가기",
-  photoreal: "실사",
-  anime: "애니",
+  auto: "레퍼런스 스타일",
+  photoreal: "실사 사진",
+  anime: "애니메이션",
   "3d": "3D",
-  illustration: "그림",
+  illustration: "손그림",
 };
 
 export const IMAGE_LOOK_HINT: Record<ImageLook, string> = {
-  auto: "첨부한 그림의 결을 그대로 따라갑니다. 안 고르면 이것입니다",
-  photoreal: "사진처럼",
-  anime: "셀 셰이딩·굵은 선",
-  "3d": "3D 렌더",
-  illustration: "손그림 질감",
+  auto: "붙인 그림의 화풍을 그대로 따라갑니다. 안 고르면 이것입니다",
+  photoreal: "사진으로 찍은 것처럼",
+  anime: "납작한 색과 또렷한 선",
+  "3d": "3D 애니메이션 한 장면처럼",
+  illustration: "붓이나 펜으로 그린 질감",
 };
 
 /**
@@ -61,14 +67,31 @@ export function resolveLook(look: ImageLook, hasReferences: boolean): ImageLook 
 }
 
 /**
- * 화면에 **고를 수 있게 보여 줄** 결.
+ * 화면에 보여 줄 결 — **언제나 다섯 가지 전부.**
  *
- * 첨부가 없으면 `auto` 를 뺀다. 남겨 두면 「레퍼런스 따라가기」라고 적힌 칸이
- * 따라갈 레퍼런스가 없는 화면에 뜨고, 고르면 조용히 실사가 되는데 화면은 다른
- * 말을 하고 있다.
+ * 처음에는 첨부가 없으면 `auto` 를 뺐다. 그랬더니 **그런 기능이 있다는 것을 알
+ * 길이 없었다** — 사용자가 화면을 보며 「auto 가 어디 있냐」고 물었다
+ * (2026-09-16). 빼는 대신 못 누르게만 막는다. 그러면 「조용히 실사가 된다」는
+ * 걱정은 없어지고, 대신 **배운다**: 「그림을 붙이면 저게 되는구나」.
  */
-export function looksFor(hasReferences: boolean): ImageLook[] {
-  return hasReferences ? [...IMAGE_LOOKS] : IMAGE_LOOKS.filter((look) => look !== "auto");
+export function looksFor(_hasReferences?: boolean): ImageLook[] {
+  return [...IMAGE_LOOKS];
+}
+
+/** 따라갈 것이 있어야 뜻이 있는 결. 지금은 `auto` 하나다. */
+export function lookNeedsReference(look: ImageLook): boolean {
+  return look === "auto";
+}
+
+/**
+ * 못 고르는 까닭. 고를 수 있으면 빈 문자열이다.
+ *
+ * **회색 버튼만 두면 고장으로 읽힌다.** 왜 못 누르는지, 무엇을 하면 눌리는지
+ * 그 자리에서 말한다.
+ */
+export function lookBlockedReason(look: ImageLook, hasReferences: boolean): string {
+  if (!lookNeedsReference(look) || hasReferences) return "";
+  return "따라 만들 그림을 붙이면 고를 수 있습니다.";
 }
 
 /** 대상이 무엇이냐에 따라 실사 지시가 달라진다. 사람 피부와 동물 털은 다른 말이 필요하다. */

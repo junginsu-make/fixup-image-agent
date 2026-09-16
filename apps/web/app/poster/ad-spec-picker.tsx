@@ -72,7 +72,7 @@ export default function AdSpecPicker({
                 <Badge variant="outline">참고</Badge>
               )}
               {!row.supported && (
-                <span className="text-meta text-subtle-foreground">— {row.unsupportedReason}</span>
+                <span className="text-meta text-subtle-foreground">{row.unsupportedReason}</span>
               )}
             </label>
           </li>
