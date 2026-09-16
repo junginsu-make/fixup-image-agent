@@ -163,3 +163,39 @@ describe("고른 차례와 첨부 목록이 맞는가", () => {
     }
   });
 });
+
+/**
+ * **쓴 그대로 보낼지, AI 가 다듬을지.**
+ *
+ * 01 에 완성된 프롬프트를 넣은 사용자가 그것을 잃었다(2026-09-16). 사용자가
+ * 고른 갈래를 저장해야 기획을 건너뛸지 판단할 수 있다.
+ */
+describe("프롬프트 갈래", () => {
+  const valid = {
+    title: "가을 사진전",
+    ratio: "2:3",
+    modelId: "gpt-image-2",
+    variants: 3,
+    instruction: "필름 카메라 감성의 사진전 포스터",
+  };
+
+  it("두 갈래를 받는다", () => {
+    for (const promptMode of ["verbatim", "assisted"]) {
+      expect(PosterProjectInputSchema.safeParse({ ...valid, promptMode }).success).toBe(true);
+    }
+  });
+
+  /**
+   * **옛 작업에는 이 값이 없다.** 없으면 지금까지의 동작(AI 가 다듬는다)이어야
+   * 한다 — 기본값이 반대면 쓰던 사람이 깨진다.
+   */
+  it("안 보내면 다듬어서다", () => {
+    const parsed = PosterProjectInputSchema.safeParse(valid);
+
+    expect(parsed.success && parsed.data.promptMode).toBe("assisted");
+  });
+
+  it("모르는 값은 안 받는다", () => {
+    expect(PosterProjectInputSchema.safeParse({ ...valid, promptMode: "raw" }).success).toBe(false);
+  });
+});

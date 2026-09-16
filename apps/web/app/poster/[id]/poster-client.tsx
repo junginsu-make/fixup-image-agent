@@ -58,6 +58,8 @@ interface PosterProject {
     personIds?: string[];
     restyledIds?: string[];
     look?: ImageLook;
+    /** 쓴 그대로 보낼지. 옛 작업에는 없다 — 없으면 지금까지대로 다듬는다. */
+    promptMode?: "verbatim" | "assisted";
   };
 }
 
@@ -263,9 +265,14 @@ export function PosterClient(
   React.useEffect(() => {
     if (openedOnce.current) return;
     if (images.length) return;
+    /*
+     * **쓴 그대로 보낼 작업은 기획 패널을 안 연다.** 고칠 칸이 없다 — 슬롯이
+     * 비어 있고 채울 일도 없다. 열면 빈 칸만 보여 무엇을 해야 할지 더 모른다.
+     */
+    if (project.data.promptMode === "verbatim") return;
     openedOnce.current = true;
     setPlanOpen(true);
-  }, [images.length]);
+  }, [images.length, project.data.promptMode]);
 
   /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
   const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
@@ -324,6 +331,15 @@ export function PosterClient(
   const planned = React.useRef(false);
   React.useEffect(() => {
     if (planned.current) return;
+    /*
+     * **쓴 그대로 보낼 작업은 기획을 안 부른다.**
+     *
+     * 사용자가 완성된 프롬프트를 들고 왔고 그대로 보내겠다고 골랐다. 여기서
+     * AI 를 돌리면 그 프롬프트를 슬롯 11칸으로 요약하게 되는데, 그것이 바로 이
+     * 갈래가 막으려던 일이다(2026-09-16 사용자 보고). 서버도 막지만
+     * (`plan/route.ts`), 값이 드는 부름은 **부르기 전에** 멈추는 편이 낫다.
+     */
+    if (project.data.promptMode === "verbatim") return;
     const empty = SLOT_LABELS.every(([field]) => !String(slots[field] ?? "").trim());
     if (!empty) return;
     planned.current = true;

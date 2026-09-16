@@ -282,3 +282,43 @@ describe("03 규격 길잡이", () => {
     expect(shown).toContain('href="/ad"');
   });
 });
+
+/**
+ * **알아채고 묻는 길이 실제로 이어져 있는가.**
+ *
+ * 판별 규칙(`prompt-mode.ts`)과 엔진(`verbatimScene`)을 아무리 만들어도, 화면이
+ * 이어 주지 않으면 사용자는 그 길로 못 간다(2026-09-16 설계 §3).
+ */
+describe("쓴 그대로 보내는 길", () => {
+  it("완성된 프롬프트인지 판별해 묻는다", () => {
+    expect(source).toContain("looksFinished(instruction)");
+    expect(source).toContain("쓴 그대로 생성");
+    expect(source).toContain("다듬어서 생성");
+  });
+
+  /** 규칙을 화면에 다시 적으면 둘이 갈린다. */
+  it("판별 규칙을 여기 다시 적지 않는다", () => {
+    expect(source).toContain('from "./prompt-mode"');
+    expect(source).not.toMatch(/JSON\.parse\(/);
+  });
+
+  /** 고른 갈래가 본문에 안 실리면 서버는 늘 다듬는다. */
+  it("고른 갈래를 본문에 싣는다", () => {
+    expect(source).toMatch(/title: title\.trim\(\)[\s\S]{0,200}promptMode,/);
+  });
+
+  /** 기본이 반대면 쓰던 사람이 깨진다. */
+  it("기본은 다듬어서다", () => {
+    expect(source).toContain('React.useState<PromptMode>("assisted")');
+  });
+
+  /** 같은 것을 되풀이해 물으면 알림을 안 읽게 된다. */
+  it("한 번 고르면 다시 안 묻는다", () => {
+    expect(source).toContain("!modeAnswered && looksFinished(instruction)");
+  });
+
+  /** 되돌릴 길이 없으면 잘못 누른 사람이 작업을 새로 만들어야 한다. */
+  it("고른 뒤에도 바꿀 수 있다", () => {
+    expect(source).toContain("setModeAnswered(false)");
+  });
+});

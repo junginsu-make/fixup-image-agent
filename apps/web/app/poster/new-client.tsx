@@ -17,6 +17,7 @@ import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksFor, resolveLook, type ImageLoo
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
+import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
   adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
@@ -94,6 +95,17 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 광고 UI 를 강요하지 않는다 — 켜야 보인다.
    */
   const [adMode, setAdMode] = React.useState(false);
+  /**
+   * **쓴 그대로 보낼지, AI 가 다듬을지.**
+   *
+   * 완성된 프롬프트를 01 에 넣은 사람이 그것을 잃었다(2026-09-16 사용자
+   * 보고). 알아채면 묻고(`looksFinished`), 고르는 것은 사람이 한다.
+   *
+   * 기본은 `assisted` 다 — 지금까지의 동작이라야 쓰던 사람이 안 깨진다.
+   */
+  const [promptMode, setPromptMode] = React.useState<PromptMode>("assisted");
+  /** 한 번 고르면 다시 안 묻는다. 같은 것을 되풀이해 물으면 안 읽게 된다. */
+  const [modeAnswered, setModeAnswered] = React.useState(false);
   /** 자식이 알려 주는 판단 결과. **규격 목록은 부모가 안 든다** — 들면 잘라 낸 뜻이 없다. */
   const [adPlan, setAdPlan] = React.useState<AdSubmitPlan>(NO_AD_PLAN);
   const [modelId, setModelId] = React.useState(
@@ -213,6 +225,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   function projectBody(extra: Record<string, unknown> = {}) {
     return {
       title: title.trim() || "이름 없는 이미지",
+      // 기획을 돌릴지가 여기서 갈린다. 서버도 이 값으로 판단한다.
+      promptMode,
       ratio: submitRatio,
       // **화면이 「GPT Image 2 로 만듭니다」라고 말했으면 그 모델을 보낸다.**
       // 초판은 사용자가 고른 모델을 실어서, 화면의 안내와 서버가 받는 값이
@@ -619,6 +633,61 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               <p className="text-xs text-subtle-foreground">
                 편하게 쓰세요. AI 가 구도·색·문구를 정해 04 기획 확인에서 보여드립니다.
               </p>
+
+              {/*
+                **알아채면 묻는다. 대신 정하지 않는다.**
+
+                오판해도 사용자가 고르므로 손해가 없다. 한 번 고르면 다시 안
+                묻는다 — 같은 것을 되풀이해 물으면 알림을 안 읽게 된다
+                (설계 §3.1).
+              */}
+              {!modeAnswered && looksFinished(instruction) ? (
+                <div
+                  role="status"
+                  className="grid gap-2 rounded-md border border-primary/30 bg-primary-soft/30 px-4 py-3"
+                >
+                  <p className="text-sm">
+                    <strong className="text-foreground">완성된 프롬프트로 보입니다.</strong>{" "}
+                    AI 가 다시 쓰면 세부 지시가 사라질 수 있습니다.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => { setPromptMode("verbatim"); setModeAnswered(true); }}
+                    >
+                      쓴 그대로 생성
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => { setPromptMode("assisted"); setModeAnswered(true); }}
+                    >
+                      다듬어서 생성
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {/*
+                고른 뒤에도 무엇을 골랐는지 보인다. 바꿀 수도 있다 — 되돌릴 길이
+                없으면 잘못 누른 사람이 작업을 새로 만들어야 한다.
+              */}
+              {modeAnswered ? (
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {promptMode === "verbatim"
+                    ? "쓴 그대로 모델에 보냅니다. AI 가 고치지 않습니다."
+                    : "AI 가 다듬어 04 기획 확인에서 보여드립니다."}
+                  <button
+                    type="button"
+                    className="font-bold text-primary underline-offset-2 hover:underline"
+                    onClick={() => setModeAnswered(false)}
+                  >
+                    바꾸기
+                  </button>
+                </p>
+              ) : null}
             </div>
 
             {/*

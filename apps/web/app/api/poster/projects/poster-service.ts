@@ -81,6 +81,8 @@ export function createPosterService(store: PosterProjectStore) {
           restyledIds: input.restyledIds,
           look: input.look,
           userInstruction: input.userInstruction,
+          // 쓴 그대로 보낼지, AI 가 다듬을지. 기획을 돌릴지가 여기서 갈린다.
+          promptMode: input.promptMode,
           // 고른 차례와 그림 지시. 옛 작업에는 없고, 읽는 쪽이 그때 만들어 준다.
           attachmentOrder: input.attachmentOrder,
           attachmentIntent: input.attachmentIntent,

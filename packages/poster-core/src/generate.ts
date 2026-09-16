@@ -57,6 +57,11 @@ export interface PosterJobInput {
   sourceSize?: { width: number; height: number };
   /** 사용자가 직접 친 추가 지시. 프롬프트의 양끝으로 간다. */
   userInstruction?: string;
+  /**
+   * 쓴 그대로 보낼 때의 ④ 장면 구역. 없으면 슬롯을 쓴다.
+   * 까닭은 `prompt.ts` 의 같은 이름 자리에 적어 두었다.
+   */
+  verbatimScene?: string;
   /** 첨부한 그림들을 어떻게 쓸지. 01에서 적는다. */
   attachmentIntent?: string;
   /** 그림의 결. 없으면 auto — 첨부한 그림의 결을 따라간다. */
@@ -150,6 +155,7 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     images,
     size: resolved.pixel,
     userInstruction: job.userInstruction,
+    verbatimScene: job.verbatimScene,
     attachmentIntent: job.attachmentIntent,
     look: job.look,
   });

@@ -48,9 +48,14 @@ describe("기획은 옆에서 나오고 결과가 페이지를 갖는다", () =>
     expect(source).toContain("<SidePanel open={planOpen} onOpenChange={setPlanOpen}>");
   });
 
+  /**
+   * 안 열면 「빈 결과 화면」만 보이고 다음에 뭘 해야 할지 알 수 없다.
+   *
+   * 2026-09-16 에 「쓴 그대로」 갈래가 생기면서 그 앞에 건너뛰기 한 줄이 끼었다.
+   * 거리를 넓힌 것은 그래서다 — **저절로 연다는 것 자체는 그대로 지킨다.**
+   */
   it("아직 아무것도 안 만들었으면 저절로 연다", () => {
-    // 안 열면 「빈 결과 화면」만 보이고 다음에 뭘 해야 할지 알 수 없다.
-    expect(source).toMatch(/if \(images\.length\) return;[\s\S]{0,120}setPlanOpen\(true\)/);
+    expect(source).toMatch(/if \(images\.length\) return;[\s\S]{0,600}setPlanOpen\(true\)/);
   });
 
   it("한 번만 연다 — 닫은 것을 다시 열면 성가시다", () => {

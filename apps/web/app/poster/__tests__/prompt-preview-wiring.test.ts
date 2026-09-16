@@ -45,3 +45,19 @@ describe("04 프롬프트 미리보기", () => {
     expect(source).toContain("<details");
   });
 });
+
+/**
+ * **쓴 그대로 보낼 작업은 04 가 조용해야 한다.**
+ *
+ * 기획을 부르면 사용자가 지키려던 프롬프트를 슬롯 11칸으로 요약하게 된다 —
+ * 그것이 이 갈래가 막으려던 일이다(2026-09-16). 패널을 열어도 고칠 칸이 없다.
+ */
+describe("04 는 쓴 그대로를 건드리지 않는다", () => {
+  it("기획을 저절로 안 부른다", () => {
+    expect(source).toMatch(/if \(planned\.current\) return;[\s\S]{0,700}promptMode === "verbatim"\) return;/);
+  });
+
+  it("기획 패널을 저절로 안 연다", () => {
+    expect(source).toMatch(/if \(images\.length\) return;[\s\S]{0,400}promptMode === "verbatim"\) return;/);
+  });
+});
