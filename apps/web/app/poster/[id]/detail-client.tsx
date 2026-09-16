@@ -41,9 +41,13 @@ export function PosterDetailClient(
           const seen = await admin.json().catch(() => null);
           if (!alive) return;
           if (seen?.ok && seen.work) {
-            // 남의 작업은 **낱장을 안 싣는다.** 그림 주소는 회원용 라우트가
-            // 흘려 주는데 그 길이 막혀 있다 — 설정과 과정만 보여 준다.
-            setState({ kind: "ready", project: seen.work, images: [], readOnly: true });
+            // 관리자 통로가 **서명 주소로 바꾼 그림**을 함께 준다. 처음엔 안
+            // 싣고 「안 보인다」고 띠에 적었는데, 과정을 본다면서 결과를 못
+            // 보면 보는 뜻이 없다(2026-09-16 신고).
+            setState({
+              kind: "ready", project: seen.work,
+              images: seen.images ?? [], readOnly: true,
+            });
             return;
           }
         }

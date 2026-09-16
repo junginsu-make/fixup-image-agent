@@ -139,6 +139,33 @@ describe("상세 화면이 막을 지나는가", () => {
     expect(source).toContain("if (!generationActive || readOnly) return;");
   });
 
+  it("보는 중이면 앞 단계로 튕기지 않는다", () => {
+    /*
+      포스터의 앞 세 단계(지시·레퍼런스·규격)는 **새로 만드는 화면**에 있어서
+      누르면 `/poster/new` 로 보낸다. 내 작업이면 말이 되지만, **남의 작업을
+      보는 중에 누르면 빈 화면이 뜬다** — 사용자는 설정이 다 사라졌다고 읽는다
+      (2026-09-16 실제 신고).
+
+      보는 중에는 아예 안 움직인다.
+    */
+    const at = poster.indexOf("onJump=");
+    expect(at).toBeGreaterThan(-1);
+    const jump = poster.slice(at, at + 400);
+    expect(jump).toContain("readOnly");
+  });
+
+  it("남의 작업도 만들어진 그림을 볼 수 있다", () => {
+    /*
+      처음엔 낱장을 안 실었다(`images: []`). 그런데 「과정을 본다」면서 결과를
+      못 보면 보는 뜻이 없다 — 「아직 만든 변형이 없습니다」로 보여서 지워진
+      줄 알았다는 신고를 받았다.
+    */
+    expect(posterLoader).not.toContain("images: []");
+    // 띠도 사실에 맞아야 한다 — 「안 보인다」고 적어 두면 그것도 거짓말이다.
+    expect(poster).not.toContain("그림은 여기서 안 보입니다");
+    expect(posterLoader).toContain("seen.images");
+  });
+
   it("막아만 두지 않고 복사할 길을 같은 자리에 낸다", () => {
     // 막아 두고 길을 안 내면 사용자는 무엇을 해야 할지 모른다.
     for (const [name, src] of [["카드뉴스", source], ["포스터", poster]] as const) {

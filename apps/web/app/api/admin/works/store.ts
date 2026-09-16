@@ -37,6 +37,9 @@ import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
  * 무엇을 첫 화면에 걸까 보려고 목록을 여는 일과 무게가 다르다.
  */
 
+const IMAGE_COLUMNS_FOR_ADMIN =
+  "id,project_id,generation_request_id,variant_index,selected,asset_path,thumb_path,width,height,review,created_at";
+
 const BUCKET = "library";
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
@@ -234,6 +237,47 @@ async function moveAssets(
  *
  * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
  */
+/**
+ * 남의 포스터 작업의 **그림까지** 준다.
+ *
+ * 회원용 기록의 `url` 은 우리 라우트(`/api/poster/projects/...`)를 가리키는데
+ * 그 길은 소유자만 지난다 — 관리자가 열면 그림 자리가 빈다. 처음엔 「안
+ * 보인다」고 띠에 적고 넘어갔는데, 「과정을 본다」면서 결과를 못 보면 보는
+ * 뜻이 없다(2026-09-16 신고: 「그림이 다 삭제됐다」로 읽혔다).
+ *
+ * 그래서 목록이 쓰는 방법을 그대로 쓴다 — 서비스 키로 **서명 주소**를 만든다.
+ */
+export async function readAnyWorkImages(
+  id: string,
+): Promise<Array<Record<string, unknown>>> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.from("poster_images")
+    .select(IMAGE_COLUMNS_FOR_ADMIN).eq("project_id", id)
+    .order("variant_index", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as PosterImageRow[];
+  const paths = rows
+    .flatMap((row) => [row.asset_path, row.thumb_path])
+    .filter(Boolean) as string[];
+  if (!paths.length) return rows.map((row) => ({ ...toImageRecord(row) }));
+
+  const signed = await admin.storage.from(BUCKET)
+    .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+  // 서명에 실패해도 목록은 준다. 그림이 빈 것과 목록이 통째로 없는 것은 다르다.
+  const byPath = new Map(
+    (signed.data ?? []).flatMap((entry) => (
+      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
+    )),
+  );
+
+  return rows.map((row) => ({
+    ...toImageRecord(row),
+    url: byPath.get(row.asset_path) ?? null,
+    thumbUrl: row.thumb_path ? byPath.get(row.thumb_path) ?? null : null,
+  }));
+}
+
 export async function copyWorkToSelf(
   kind: "sns" | "poster",
   id: string,
