@@ -104,6 +104,17 @@ export interface SaveLibraryItemInput {
   sourceId?: string;
   images: LibraryImageInput[];
   /**
+   * 이 작업을 **무엇으로 만들었는지**. 라이브러리의 「과정 보기」가 읽는다.
+   *
+   * 무엇을 담는지는 여기가 정하지 않는다 — `app/api/library/work-process.ts`
+   * 한 곳이 정하고, 이 표는 「json 한 칸」까지만 안다. 담을 것이 늘 때마다
+   * 저장 코드를 따라 고치지 않기 위해서다.
+   *
+   * 없으면 `null` 이다. `{}` 로 두면 과정이 남기 전에 만든 옛 작업과
+   * 구분되지 않아 화면이 빈 상자를 그린다.
+   */
+  process?: Record<string, unknown> | null;
+  /**
    * 이미 있는 작업에 **이어 붙일 때**만 준다.
    *
    * 리디자인이 섹션을 한 장씩 만드는데, 장마다 새 작업을 만들면 목록에 같은
@@ -199,6 +210,10 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
             source_type: input.sourceType ?? "generation",
             source_id: input.sourceId ?? null,
             image_count: input.images.length,
+            // 과정은 **만들 때 한 번만** 담는다. 이어 붙일 때(`appendTo`) 다시
+            // 쓰지 않는다 — 리디자인은 섹션마다 부르는데, 매번 덮으면 마지막
+            // 섹션이 보던 기획안이 작업 전체의 과정이 되어 버린다.
+            data: input.process ?? null,
           })
           .select("id")
           .single();
@@ -423,6 +438,52 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
     mine: row.user_id === viewer.userId,
     ownerEmail: emails.get(row.user_id as string) ?? null,
   }));
+}
+
+/**
+ * 계정 보관 작업 **한 건**. 과정과 낱장을 함께 준다.
+ *
+ * 목록(`listLibraryItems`)에 과정을 싣지 않는 이유는 무게다 — 한 줄마다
+ * 기획안이 딸려 오면 라이브러리를 여는 것만으로 수 MB 가 오간다. 열 때만
+ * 받는다.
+ *
+ * **보이는지는 `canSeeItem` 하나가 정한다.** 여기에 소유자 조건을 따로 적으면
+ * 그 둘이 언젠가 어긋나고, 어긋나는 쪽이 남의 작업이 새는 쪽이다.
+ *
+ * 없거나 못 볼 것이면 `null` 이다 — 부르는 쪽이 404 로 답해야 하는데 예외로
+ * 던지면 500 이 된다.
+ */
+export async function getLibraryItem(viewer: LibraryViewer, itemId: string) {
+  if (isLocalStoreEnabled()) return null;
+  if (!(await canSeeItem(viewer, itemId))) return null;
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("library_items")
+    .select("id,user_id,title,tool,aspect_ratio,image_count,created_at,data")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const row = data as Record<string, unknown>;
+  const ownerId = row.user_id as string;
+  // 만든 사람은 **남의 것일 때만** 붙인다. 자기 것이면 붙일 이유가 없고,
+  // 붙이면 회원끼리 이메일이 보이는 길이 하나 생긴다.
+  const mine = ownerId === viewer.userId;
+  const emails = mine ? new Map<string, string>() : await emailsByUserId([ownerId]);
+
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    tool: row.tool as "create" | "redesign",
+    aspectRatio: (row.aspect_ratio as string | null) ?? null,
+    imageCount: Number(row.image_count ?? 0),
+    createdAt: String(row.created_at),
+    mine,
+    ownerEmail: emails.get(ownerId) ?? null,
+    /** 만든 과정. 이 칸이 생기기 전 작업은 `null` 이다 — 소급되지 않는다. */
+    process: (row.data as Record<string, unknown> | null) ?? null,
+  };
 }
 
 /**

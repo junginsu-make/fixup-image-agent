@@ -2,7 +2,8 @@ import "server-only";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
-  copiedCharacterAssetPath, posterCopyPlan, snsCopyPlan, type AssetMove,
+  copiedCharacterAssetPath, copiedLibraryAssetPath,
+  posterCopyPlan, snsCopyPlan, type AssetMove,
 } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import {
@@ -340,6 +341,166 @@ const CHARACTER_BUCKET = "characters";
  *
  * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
  */
+/**
+ * 계정 보관 작업(상세페이지·리디자인) 한 건을 **소유자와 무관하게** 읽는다.
+ *
+ * 회원용 길(`lib/server-library.ts` 의 `getLibraryItem`)은 `canSeeItem` 을
+ * 지나므로 남의 것은 404 다. 거기에 「관리자면 조건을 뺀다」를 심지 않는다 —
+ * 그 조건이 언젠가 어긋나면 회원에게 남의 작업이 샌다. `readAnyWork` 와 같은
+ * 판단이다.
+ *
+ * **그림 주소도 채워서 준다.** 서명 주소는 수명이 있어 그때그때 발급한다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function readAnyLibraryWork(id: string) {
+  if (isLocalStoreEnabled()) return null;
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from("library_items")
+    .select("id,user_id,title,tool,aspect_ratio,image_count,created_at,data")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const row = data as Record<string, unknown>;
+  const ownerId = row.user_id as string;
+  const emails = await emailsByUserId([ownerId]);
+
+  const { data: imageRows } = await admin
+    .from("library_images")
+    .select("position,path")
+    .eq("item_id", id)
+    .order("position", { ascending: true });
+
+  const paths = ((imageRows ?? []) as Array<{ path: string }>).map((image) => image.path);
+  const signed = paths.length
+    ? await admin.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
+    : { data: [] };
+  const urlByPath = new Map(
+    ((signed.data ?? []) as Array<{ path: string | null; signedUrl: string | null }>)
+      .filter((entry) => entry.path && entry.signedUrl)
+      .map((entry) => [entry.path as string, entry.signedUrl as string]),
+  );
+
+  return {
+    work: {
+      id: row.id as string,
+      title: row.title as string,
+      tool: row.tool as "create" | "redesign",
+      aspectRatio: (row.aspect_ratio as string | null) ?? null,
+      imageCount: Number(row.image_count ?? 0),
+      createdAt: String(row.created_at),
+      // 관리자가 남의 것을 보는 길이라 **늘 남의 것이다.** 자기 것이면 회원용
+      // 길로 이미 열렸다.
+      mine: false,
+      ownerEmail: emails.get(ownerId) ?? null,
+      process: (row.data as Record<string, unknown> | null) ?? null,
+    },
+    images: ((imageRows ?? []) as Array<{ position: number; path: string }>)
+      .map((image) => ({
+        position: Number(image.position),
+        url: urlByPath.get(image.path) ?? null,
+      }))
+      .filter((image) => image.url),
+  };
+}
+
+/**
+ * 계정 보관 작업을 **내 것으로 복사한다.**
+ *
+ * 남의 작업을 고치는 대신 복사한다 — 회원의 자료를 관리자가 바꾸는 일이
+ * 없어야 한다(설계 3단계).
+ *
+ * **낱장 행은 파일을 다 옮긴 뒤에 적는다.** 먼저 적으면 그 사이에 실패했을 때
+ * **남의 파일을 가리키는 내 작업**이 남는다 — 원래 회원이 자기 작업을 지우면
+ * 내 복사본의 그림이 같이 사라진다. 이 순서면 최악이 「그림 없는 내 작업」이다.
+ */
+export async function copyLibraryWorkToSelf(
+  id: string,
+  ownerUserId: string,
+): Promise<{ id: string }> {
+  const admin = createSupabaseAdminClient();
+
+  const { data: source, error: readError } = await admin
+    .from("library_items")
+    .select("title,tool,aspect_ratio,data")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (!source) throw new Error("원본을 찾을 수 없습니다.");
+
+  const from = source as Record<string, unknown>;
+
+  // 1) 행을 먼저. 그림 자리는 새 작업 id 가 있어야 정해진다.
+  const { data: created, error: createError } = await admin
+    .from("library_items")
+    .insert({
+      user_id: ownerUserId,
+      title: from.title,
+      tool: from.tool,
+      aspect_ratio: from.aspect_ratio,
+      source_type: "generation",
+      // 과정은 그대로 가져온다. 참고용으로 쓰라고 여는 화면이다.
+      data: from.data ?? null,
+      image_count: 0,
+    })
+    .select("id")
+    .single();
+  if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+
+  const newId = created.id as string;
+
+  // 2) 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
+  const { data: imageRows } = await admin
+    .from("library_images")
+    .select("position,path,mime_type,thumb_path")
+    .eq("item_id", id)
+    .order("position", { ascending: true });
+
+  const moves: AssetMove[] = [];
+  const rows: Array<Record<string, unknown>> = [];
+  let coverPath: string | null = null;
+  let coverThumbPath: string | null = null;
+
+  for (const image of (imageRows ?? []) as Array<{
+    position: number; path: string; mime_type: string | null; thumb_path: string | null;
+  }>) {
+    const path = copiedLibraryAssetPath(image.path, ownerUserId, newId);
+    // 규약을 벗어난 경로는 옮기지 않고 그 장을 뺀다. 조용히 엉뚱한 자리를
+    // 가리키게 두는 것보다 낫다.
+    if (!path) continue;
+    const thumb = image.thumb_path
+      ? copiedLibraryAssetPath(image.thumb_path, ownerUserId, newId) : null;
+    moves.push({ from: image.path, to: path });
+    if (image.thumb_path && thumb) moves.push({ from: image.thumb_path, to: thumb });
+    if (Number(image.position) === 0) {
+      coverPath = path;
+      coverThumbPath = thumb;
+    }
+    rows.push({
+      item_id: newId, user_id: ownerUserId, position: Number(image.position),
+      path, mime_type: image.mime_type ?? "image/png", thumb_path: thumb,
+    });
+  }
+  await moveAssets(admin, moves, BUCKET);
+
+  // 3) 옮긴 자리를 적는다.
+  if (rows.length) {
+    const { error } = await admin.from("library_images").insert(rows);
+    if (error) throw new Error(error.message);
+    const { error: coverError } = await admin
+      .from("library_items")
+      .update({ image_count: rows.length, cover_path: coverPath, cover_thumb_path: coverThumbPath })
+      .eq("id", newId);
+    if (coverError) throw new Error(coverError.message);
+  }
+
+  return { id: newId };
+}
+
 export async function copyCharacterToSelf(
   id: string,
   ownerUserId: string,

@@ -134,6 +134,7 @@ import type {
   ImageColorRecommendations,
 } from "./pdp-canvas-utils";
 import { randomId } from "../../lib/browser-safe";
+import { pdpProcessSource } from "../api/library/work-process";
 
 interface PdpEditorProps {
   initialResult: GeneratedResult;
@@ -2026,7 +2027,15 @@ export function PdpEditor({
           "/library",
           {
             method: "POST",
-            body: JSON.stringify({ title, tool: "create", aspectRatio, images: batch }),
+            // 만든 과정을 함께 보낸다. **무엇을 남길지는 서버가 고른다**
+            // (`api/library/work-process.ts`) — 여기서 골라 보내면 화면마다
+            // 규칙이 갈리고, 언젠가 원본 사진이 섞여 들어간다.
+            body: JSON.stringify({
+              title,
+              tool: "create",
+              ...pdpProcessSource(initialResult, aspectRatio),
+              images: batch,
+            }),
           },
         );
         if (response.ok) savedCount += response.imageCount ?? batch.length;

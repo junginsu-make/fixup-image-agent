@@ -162,3 +162,19 @@ export function copiedCharacterAssetPath(
   if (!rest.length || rest.some((part) => !part)) return null;
   return [newOwnerId, newCharacterId, ...rest].join("/");
 }
+
+/**
+ * 라이브러리 작업(상세페이지·리디자인)의 그림 자리.
+ *
+ * **캐릭터와 모양이 같다** — `{소유자}/{묶음}/{남은 이름}` 이다
+ * (`lib/server-library.ts` 가 `${userId}/${itemId}/${position}.${ext}` 로 쓴다).
+ * 같은 규칙을 두 번 적지 않는다. 이름을 따로 두는 것은, 어느 날 한쪽 규약이
+ * 바뀌어도 **부르는 쪽을 안 건드리고** 여기만 갈라 놓을 수 있게 하려는 것이다.
+ */
+export function copiedLibraryAssetPath(
+  originalPath: string,
+  newOwnerId: string,
+  newItemId: string,
+): string | null {
+  return copiedCharacterAssetPath(originalPath, newOwnerId, newItemId);
+}

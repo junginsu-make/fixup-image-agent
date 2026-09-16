@@ -1,5 +1,5 @@
 import { authenticateApiAdmin } from "../../../../../../../lib/membership/api";
-import { copyCharacterToSelf, copyWorkToSelf } from "../../../store";
+import { copyCharacterToSelf, copyLibraryWorkToSelf, copyWorkToSelf } from "../../../store";
 
 type Context = { params: Promise<{ kind: string; id: string }> };
 
@@ -23,15 +23,20 @@ export async function POST(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
 
   const { kind, id } = await context.params;
-  if (kind !== "sns" && kind !== "poster" && kind !== "character") {
+  if (kind !== "sns" && kind !== "poster" && kind !== "character" && kind !== "library") {
     return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
   }
 
   try {
-    // 캐릭터는 표도 버킷도 달라 갈래를 따로 둔다.
+    /*
+      갈래마다 표가 다르다. 캐릭터는 버킷까지 다르고, 상세페이지·리디자인은
+      `library_items` 에 함께 있다 — `kind` 가 `library` 하나인 이유다.
+    */
     const copied = kind === "character"
       ? await copyCharacterToSelf(id, auth.member.userId)
-      : await copyWorkToSelf(kind, id, auth.member.userId);
+      : kind === "library"
+        ? await copyLibraryWorkToSelf(id, auth.member.userId)
+        : await copyWorkToSelf(kind, id, auth.member.userId);
     return Response.json({ ok: true, id: copied.id });
   } catch (error) {
     /*

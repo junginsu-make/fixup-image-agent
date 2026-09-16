@@ -1,0 +1,188 @@
+/**
+ * 상세페이지·리디자인 작업의 **과정**을 무엇으로 남길까.
+ *
+ * 카드뉴스·포스터는 작업 표의 `data` 칸에 과정이 통째로 남는데, 상세페이지는
+ * `library_items` 에 **제목·비율·표지**만 남았다. 그래서 「과정 보기」를
+ * 눌러도 보여줄 것이 없었다(2026-09-16 확인).
+ *
+ * **소급되지 않는다.** 여기서 남기기 시작하는 것뿐이고, 그전 작업은 영영
+ * 비어 있다 — 화면이 그 사실을 말해야 한다.
+ *
+ * **`server-only` 를 붙이지 않는다.** 순수한 규칙이라 값으로 잰다.
+ */
+
+/**
+ * 화면이 읽는 과정 한 벌. 없는 칸은 아예 안 넣는다.
+ *
+ * **`interface` 가 아니라 `type` 이다.** 이 값은 `library_items.data` 라는
+ * json 한 칸에 그대로 들어가는데, 저장 쪽은 모양을 모르고 `Record<string,
+ * unknown>` 으로만 받는다(`lib/server-library.ts`). 인터페이스에는 색인
+ * 서명이 안 붙어 그 자리에 못 들어간다.
+ */
+export type WorkProcess = {
+  summary?: string;
+  sections?: Array<{ title: string; role?: string; copy?: string }>;
+  review?: unknown;
+  aspectRatio?: string;
+};
+
+/** 문자열만 통과시킨다. 객체가 새면 화면이 `[object Object]` 를 그린다. */
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * 저장할 과정을 고른다.
+ *
+ * **원본 사진은 담지 않는다.** `originalImage` 는 base64 라 한 장이 수 MB 고,
+ * 결과 그림은 이미 `library_images` 에 따로 저장된다. 과정 칸에까지 넣으면
+ * 행 하나가 통째로 무거워진다.
+ *
+ * **빈 값은 칸을 만들지 않는다.** `{}` 로 남으면 화면이 「과정이 있다」고 읽고
+ * 빈 상자를 그린다 — 그럴 바에 없는 편이 낫다.
+ *
+ * **아무 값이나 와도 넘어지지 않는다.** 이 함수가 서버의 경계다. 과정은
+ * 화면이 보낸 기획안에서 골라 담는데, 화면을 믿고 그대로 넣으면 base64 한
+ * 장이 섞여 드는 길이 열리고 그때는 이미 표에 들어간 뒤다. 그래서 타입을
+ * 선언해 두고도 **값으로 다시 잰다** — 타입은 실행 중에 아무것도 막지 못한다.
+ */
+export function workProcessOf(input: {
+  blueprint?: {
+    executiveSummary?: string | null;
+    sections?: Array<{ title?: string | null; role?: string | null; copy?: string | null }> | null;
+  } | null;
+  review?: unknown;
+  aspectRatio?: string | null;
+}): WorkProcess | null {
+  const blueprint =
+    input.blueprint && typeof input.blueprint === "object" && !Array.isArray(input.blueprint)
+      ? input.blueprint
+      : null;
+
+  const sections = (Array.isArray(blueprint?.sections) ? blueprint.sections : [])
+    .filter((section): section is NonNullable<typeof section> =>
+      Boolean(section) && typeof section === "object")
+    .map((section) => {
+      const role = text(section.role);
+      const copy = text(section.copy);
+      return {
+        title: text(section.title),
+        ...(role ? { role } : {}),
+        ...(copy ? { copy } : {}),
+      };
+    })
+    .filter((section) => section.title || section.copy);
+
+  const summary = text(blueprint?.executiveSummary);
+  const aspectRatio = text(input.aspectRatio);
+
+  const process: WorkProcess = {
+    ...(summary ? { summary } : {}),
+    ...(sections.length ? { sections } : {}),
+    ...(input.review ? { review: input.review } : {}),
+    ...(aspectRatio ? { aspectRatio } : {}),
+  };
+
+  return Object.keys(process).length ? process : null;
+}
+
+/**
+ * 이 작업에 보여줄 과정이 있나.
+ *
+ * 옛 작업은 `null` 이다 — 남기기 전에 만든 것이라 소급되지 않는다. 화면은
+ * 「이 작업은 과정이 남아 있지 않습니다」라고 **말해야** 한다. 빈 화면만
+ * 내면 사라진 것으로 읽힌다(2026-09-16 포스터에서 실제로 그렇게 읽혔다).
+ */
+export function hasProcess(data: unknown): data is WorkProcess {
+  if (!data || typeof data !== "object") return false;
+  const process = data as WorkProcess;
+  return Boolean(
+    process.summary || process.sections?.length || process.review || process.aspectRatio,
+  );
+}
+
+/**
+ * 서버에 보내는 과정의 **재료**. `workProcessOf` 가 이것을 받아 골라 담는다.
+ *
+ * 화면은 이 모양까지만 맞춰 주면 된다. 무엇이 실제로 저장되는지는 여전히
+ * `workProcessOf` 한 곳이 정한다 — 화면을 믿지 않는다.
+ */
+export interface ProcessSource {
+  blueprint: {
+    executiveSummary?: string | null;
+    sections?: Array<{ title?: string | null; role?: string | null; copy?: string | null }>;
+  };
+  review?: unknown;
+  aspectRatio?: string | null;
+}
+
+/**
+ * 상세페이지 구성안을 과정의 모양으로 옮긴다.
+ *
+ * 칸 이름이 다르다 — 구성안은 `section_name`·`goal`·`headline` 이다. 화면마다
+ * 손으로 옮기면 이름이 갈리고 한쪽만 고쳐진 채로 남는다.
+ *
+ * **`generatedImage` 를 떨군다.** base64 data URL 이라 섹션마다 수 MB 다.
+ * 서버가 한 번 더 거르지만, 거기까지 가기 전에 회선을 태우는 것이 이미 손해다.
+ */
+export function pdpProcessSource(
+  result: {
+    blueprint?: {
+      executiveSummary?: string | null;
+      sections?: Array<{
+        section_name?: string | null;
+        goal?: string | null;
+        headline?: string | null;
+      }> | null;
+    } | null;
+    review?: unknown;
+  },
+  aspectRatio?: string | null,
+): ProcessSource {
+  return {
+    blueprint: {
+      executiveSummary: result.blueprint?.executiveSummary ?? null,
+      sections: (result.blueprint?.sections ?? []).map((section) => ({
+        title: section?.section_name ?? null,
+        role: section?.goal ?? null,
+        copy: section?.headline ?? null,
+      })),
+    },
+    review: result.review,
+    aspectRatio,
+  };
+}
+
+/**
+ * 리디자인 작업을 과정의 모양으로 옮긴다.
+ *
+ * **요청한 말이 요약이다.** 리디자인에는 구성안이 없다. 사용자가 적어 낸
+ * 요청이 곧 「무엇을 하려 했는가」라서 그것을 요약 자리에 둔다.
+ *
+ * `imageUrl` 은 떨군다 — 상세페이지의 `generatedImage` 와 같은 이유다.
+ *
+ * **리디자인은 섹션마다 저장을 부른다.** 그중 첫 번째만 표에 담기고 나머지는
+ * 이어 붙는다(`lib/server-library.ts`). 그래도 매번 이것을 보내는 이유는,
+ * 어느 호출이 첫 번째가 될지 화면에서 알 수 없기 때문이다.
+ */
+export function redesignProcessSource(project: {
+  request?: string | null;
+  ratio?: string | null;
+  sections?: Array<{
+    name?: string | null;
+    purpose?: string | null;
+    prompt?: string | null;
+  }> | null;
+}): ProcessSource {
+  return {
+    blueprint: {
+      executiveSummary: project.request ?? null,
+      sections: (project.sections ?? []).map((section) => ({
+        title: section?.name ?? null,
+        role: section?.purpose ?? null,
+        copy: section?.prompt ?? null,
+      })),
+    },
+    aspectRatio: project.ratio ?? null,
+  };
+}
