@@ -47,6 +47,9 @@ export type PosterSlots = z.infer<typeof PosterSlotsSchema>;
 /** 기획이 실패해도 사람이 채울 수 있어야 한다. 빈 슬롯이 유효한 상태다. */
 export const EMPTY_SLOTS: PosterSlots = PosterSlotsSchema.parse({});
 
+export const PROMPT_MODES = ["verbatim", "assisted"] as const;
+export type PromptMode = (typeof PROMPT_MODES)[number];
+
 const POSTER_RATIO_IDS = POSTER_RATIOS.map((ratio) => ratio.id) as [string, ...string[]];
 const MODEL_IDS = IMAGE_MODELS.map((model) => model.id) as [string, ...string[]];
 
@@ -126,6 +129,16 @@ export const PosterProjectInputSchema = z.object({
    * **`poster-core` 는 광고 규격을 모른다.** 아는 id 인지는 앱 쪽이 판단한다 —
    * 여기서 `z.enum` 을 걸면 이 꾸러미가 광고 목록에 묶인다.
    */
+  /**
+   * **쓴 그대로 보낼지, AI 가 다듬을지.**
+   *
+   * 01 에 완성된 프롬프트를 넣은 사용자가 그것을 잃었다 — 기획이 슬롯 11칸으로
+   * 요약했고, 칸에 자리가 없는 것은 소리 없이 버려졌다(2026-09-16 사용자 보고).
+   *
+   * **기본은 `assisted` 다.** 옛 작업에는 이 값이 없고, 없으면 지금까지의 동작
+   * 이어야 쓰던 사람이 안 깨진다.
+   */
+  promptMode: z.enum(PROMPT_MODES).default("assisted"),
   adMasterId: z.string().max(64).optional(),
   slots: PosterSlotsSchema.optional(),
 }).strict().superRefine((input, ctx) => {

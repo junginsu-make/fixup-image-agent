@@ -233,3 +233,92 @@ describe("글만으로 만드는 길", () => {
     expect(spec).toMatch(/onClick=\{\(\) => void submit\(\)\}/);
   });
 });
+
+/**
+ * **두 칸이 정반대로 동작한다는 것을 화면이 말하는가.**
+ *
+ * 「무엇을 만들까」는 AI 가 읽고 다시 쓰고, 「직접 쓴 프롬프트」는 손 안 대고
+ * 그대로 간다. 이름만으로는 알 길이 없어서, 완성된 JSON 프롬프트를 앞 칸에
+ * 넣은 사용자가 그것을 통째로 잃었다(2026-09-16 사용자 보고).
+ */
+describe("01 두 칸의 차이를 말한다", () => {
+  it("칸 이름이 무슨 칸인지 말한다", () => {
+    expect(source).toContain("무엇을 만들까 · 한두 줄");
+    expect(source).toContain("직접 쓴 프롬프트 · 선택");
+  });
+
+  /** 이 문장이 없으면 어느 칸이 원문을 지키는지 알 길이 없다. */
+  it("그대로 간다고 적는다", () => {
+    expect(source).toContain("AI 가 고치지 않고 그대로");
+  });
+
+  /** 3줄 창에서는 긴 프롬프트를 스크롤하며 봐야 한다. */
+  it("긴 글을 넣을 만큼 칸이 크다", () => {
+    const block = source.slice(source.indexOf("poster-user-instruction"));
+    expect(block.slice(0, 400)).toContain("rows={10}");
+    expect(source).not.toContain("rows={3}");
+  });
+});
+
+/**
+ * **03 규격에서 길을 잃지 않게.**
+ *
+ * 유튜브 썸네일은 16:9 로 이미 만들 수 있는데 버튼 이름이 「가로 배너」라
+ * 못 찾았다. 그리고 광고 규격은 여기서 새로 그리는데, 옆에 거의 공짜인 길이
+ * 있다는 것을 화면이 안 적었다(2026-09-16 사용자 보고).
+ */
+describe("03 규격 길잡이", () => {
+  /** 버튼을 늘리면 같은 픽셀이 다른 이름으로 둘 생긴다. 길잡이만 단다. */
+  it("용도 길잡이를 코드에서 가져온다", () => {
+    expect(source).toContain("RATIO_USES.map(");
+    expect(source).not.toContain('"유튜브 썸네일"');
+  });
+
+  it("광고 모드에 싼 길을 알린다", () => {
+    const block = source.slice(source.indexOf('sections.includes("ad-specs")'));
+    const shown = block.slice(0, 1200);
+
+    expect(shown).toContain("규격마다 새로 그립니다");
+    expect(shown).toContain('href="/ad"');
+  });
+});
+
+/**
+ * **알아채고 묻는 길이 실제로 이어져 있는가.**
+ *
+ * 판별 규칙(`prompt-mode.ts`)과 엔진(`verbatimScene`)을 아무리 만들어도, 화면이
+ * 이어 주지 않으면 사용자는 그 길로 못 간다(2026-09-16 설계 §3).
+ */
+describe("쓴 그대로 보내는 길", () => {
+  it("완성된 프롬프트인지 판별해 묻는다", () => {
+    expect(source).toContain("looksFinished(instruction)");
+    expect(source).toContain("쓴 그대로 생성");
+    expect(source).toContain("다듬어서 생성");
+  });
+
+  /** 규칙을 화면에 다시 적으면 둘이 갈린다. */
+  it("판별 규칙을 여기 다시 적지 않는다", () => {
+    expect(source).toContain('from "./prompt-mode"');
+    expect(source).not.toMatch(/JSON\.parse\(/);
+  });
+
+  /** 고른 갈래가 본문에 안 실리면 서버는 늘 다듬는다. */
+  it("고른 갈래를 본문에 싣는다", () => {
+    expect(source).toMatch(/title: title\.trim\(\)[\s\S]{0,200}promptMode,/);
+  });
+
+  /** 기본이 반대면 쓰던 사람이 깨진다. */
+  it("기본은 다듬어서다", () => {
+    expect(source).toContain('React.useState<PromptMode>("assisted")');
+  });
+
+  /** 같은 것을 되풀이해 물으면 알림을 안 읽게 된다. */
+  it("한 번 고르면 다시 안 묻는다", () => {
+    expect(source).toContain("!modeAnswered && looksFinished(instruction)");
+  });
+
+  /** 되돌릴 길이 없으면 잘못 누른 사람이 작업을 새로 만들어야 한다. */
+  it("고른 뒤에도 바꿀 수 있다", () => {
+    expect(source).toContain("setModeAnswered(false)");
+  });
+});

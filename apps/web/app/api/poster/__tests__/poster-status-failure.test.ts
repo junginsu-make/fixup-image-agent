@@ -190,3 +190,49 @@ describe("정상 완료", () => {
     expect((await response.json()).ok).toBe(true);
   });
 });
+
+/**
+ * **결과가 사라진 것은 거절과 다르게 말해야 한다.**
+ *
+ * fal 이 「This request has no output」을 돌려주는 경우다 — 만료·삭제·용량
+ * 한도(2026-09-16 사용자 보고). 오래된 작업을 다시 열 때 생긴다. 초판은 404 를
+ * 거절에 묶어 「지시 문구를 바꾸세요」라고 말했다. 문구는 멀쩡했다.
+ */
+describe("결과가 사라졌으면", () => {
+  const gone = () =>
+    Object.assign(new Error("This request has no output"), { name: "ApiError", status: 404 });
+
+  /**
+   * **404 를 그대로 돌려주지 않는다.** 셸 폴러가 404 를 「작업이 아예 없다」로
+   * 읽고 목록에서 지운다(`running-jobs.tsx:126`). 작업은 있고 결과만 없다.
+   */
+  it("410 으로 알린다", async () => {
+    resultThrows = gone();
+    expect((await call()).status).toBe(410);
+  });
+
+  it("다시 만들라고 말한다 — 문구를 고치라고 하지 않는다", async () => {
+    resultThrows = gone();
+    const body = await (await call()).json();
+
+    expect(body.kind).toBe("gone");
+    expect(body.message).toContain("다시 만들");
+    expect(body.message).not.toContain("문구를 바꾸");
+  });
+
+  it("묶어 둔 장을 돌려준다", async () => {
+    resultThrows = gone();
+    await call();
+
+    expect(finalized).toHaveLength(1);
+    expect(finalized[0]!.success).toBe(false);
+  });
+
+  /** 종류를 밝혀 보내야 셸이 「만드는 중」에서 지운다(`jobDone`). */
+  it("종류를 밝혀 보낸다", async () => {
+    resultThrows = gone();
+    const body = await (await call()).json();
+
+    expect(typeof body.kind).toBe("string");
+  });
+});

@@ -186,6 +186,16 @@ export async function POST(request: Request, context: Context) {
         sourceSize,
         variants: project.data.variants,
         slots: project.data.slots,
+        /*
+         * **쓴 그대로면 ④ 장면 구역을 사용자 원문으로 갈아 끼운다.**
+         *
+         * 첨부 번호·크기·역할 지시(①②③⑤⑥⑦)는 그대로 붙는다 — 그건
+         * 취향이 아니라 계약이고, 틀리면 결과가 나쁜 게 아니라 틀린
+         * 그림이 나온다(설계 §2.1).
+         */
+        verbatimScene: project.data.promptMode === "verbatim"
+          ? project.data.instruction
+          : undefined,
         // 사용자가 친 말과 고른 결. 옛 작업에는 없다 — 없으면 프롬프트가
         // 지금까지처럼(추가 지시 없음 · 레퍼런스의 결을 따라감) 조립된다.
         userInstruction: project.data.userInstruction,

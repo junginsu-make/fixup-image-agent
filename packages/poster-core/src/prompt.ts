@@ -58,6 +58,17 @@ export interface PosterPromptInput {
    */
   userInstruction?: string;
   /**
+   * **쓴 그대로 보낼 때의 ④ 장면 구역.**
+   *
+   * 완성된 프롬프트를 들고 온 사람은 AI 가 다시 쓰기를 바라지 않는다. 그렇다고
+   * 첨부 번호·크기·역할 지시까지 버리면 안 된다 — 그건 취향이 아니라 계약이고,
+   * 틀리면 결과가 나쁜 게 아니라 **틀린 그림**이 나온다(설계 §2.1).
+   *
+   * 그래서 여기 값이 있으면 **④ 구역만** 이것으로 갈아 끼운다. ①②③⑤⑥⑦ 은
+   * 그대로다. 비어 있으면 지금까지대로 슬롯을 쓴다 — 옛 작업이 안 깨진다.
+   */
+  verbatimScene?: string;
+  /**
    * 첨부한 그림들을 어떻게 쓸지 사용자가 01에서 적은 말.
    *
    * 03의 `userInstruction` 과 **뜻이 다르다** — 이쪽은 그림 얘기, 저쪽은
@@ -320,7 +331,9 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
     "",
     ...attachmentLines(input.images, Boolean(head), Boolean(input.attachmentIntent?.trim())),
     "",
-    ...sceneLines(input.slots),
+    ...(input.verbatimScene?.trim()
+      ? ["Scene:", input.verbatimScene.trim()]
+      : sceneLines(input.slots)),
     ...(look ? [look] : []),
     "",
     ...copyLines(input.slots),

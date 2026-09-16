@@ -15,7 +15,7 @@ export interface RatioSpec {
 
 /** 네 비율 모두 nano 11종 목록에 있어 대체가 일어나지 않는다. */
 export const CARD_RATIOS: RatioSpec[] = [
-  { id: "4:5",  label: "인스타 피드 4:5",   pixel: { width: 1088, height: 1360 } },
+  { id: "4:5",  label: "인스타그램 피드 4:5",   pixel: { width: 1088, height: 1360 } },
   { id: "1:1",  label: "정사각형 1:1",      pixel: { width: 1088, height: 1088 } },
   { id: "9:16", label: "스토리·릴스 9:16",  pixel: { width: 1152, height: 2048 } },
   { id: "16:9", label: "가로 16:9",         pixel: { width: 2048, height: 1152 } },
@@ -28,7 +28,7 @@ export const CARD_RATIOS: RatioSpec[] = [
  * 약 131dpi 다. 화면 시안에는 충분해도 인쇄물이라고 부르면 오해를 만든다.
  */
 export const POSTER_RATIOS: RatioSpec[] = [
-  { id: "4:5",  label: "인스타 피드 4:5",      pixel: { width: 1088, height: 1360 } },
+  { id: "4:5",  label: "인스타그램 피드 4:5",      pixel: { width: 1088, height: 1360 } },
   { id: "1:1",  label: "정사각형 1:1",         pixel: { width: 1088, height: 1088 } },
   { id: "9:16", label: "스토리·릴스 9:16",     pixel: { width: 1152, height: 2048 } },
   { id: "2:3",  label: "포스터 세로 2:3",      pixel: { width: 1024, height: 1536 } },

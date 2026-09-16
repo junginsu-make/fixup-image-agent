@@ -1,7 +1,8 @@
 import { MATCH_SOURCE, modelById, pickEndpoint, resolvePosterSize, sizeFromSource } from "@fixup/sns-core";
 import type { ImageLook } from "@fixup/shared";
 import { estimatePosterCost, type PosterCostEstimate } from "./pricing";
-import { buildPosterPrompt, type PosterPromptImage } from "./prompt";
+import { buildPosterPrompt } from "./prompt";
+import { promptImagesFrom } from "./prompt-images";
 import {
   attachmentUrls,
   orderFromLegacyLists,
@@ -56,6 +57,11 @@ export interface PosterJobInput {
   sourceSize?: { width: number; height: number };
   /** 사용자가 직접 친 추가 지시. 프롬프트의 양끝으로 간다. */
   userInstruction?: string;
+  /**
+   * 쓴 그대로 보낼 때의 ④ 장면 구역. 없으면 슬롯을 쓴다.
+   * 까닭은 `prompt.ts` 의 같은 이름 자리에 적어 두었다.
+   */
+  verbatimScene?: string;
   /** 첨부한 그림들을 어떻게 쓸지. 01에서 적는다. */
   attachmentIntent?: string;
   /** 그림의 결. 없으면 auto — 첨부한 그림의 결을 따라간다. */
@@ -100,17 +106,11 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
       job.referenceUrls, job.preservedUrls, job.personUrls ?? [], job.restyledUrls ?? [],
     );
 
-  const images: PosterPromptImage[] = attachments.map((attachment): PosterPromptImage => {
-    if (attachment.role === "style") return { kind: "style_reference" };
-    // 그림 느낌만 바꾸는 사람도 **사람**이다. 물건으로 보면 얼굴을 안 지킨다.
-    const person = attachment.role === "preserve_person"
-      || attachment.role === "preserve_person_restyled";
-    return {
-      kind: "preserved",
-      subject: person ? "person" : "object",
-      restyle: attachment.role === "preserve_person_restyled",
-    };
-  });
+  /*
+   * **조립은 한 곳에서만 한다.** 04 기획 확인의 미리보기가 같은 함수를 쓴다 —
+   * 두 벌로 두면 미리보기가 실제와 갈린다(`prompt-images.ts`).
+   */
+  const images = promptImagesFrom(attachments);
 
   if (estimate.rejected) {
     return {
@@ -155,6 +155,7 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     images,
     size: resolved.pixel,
     userInstruction: job.userInstruction,
+    verbatimScene: job.verbatimScene,
     attachmentIntent: job.attachmentIntent,
     look: job.look,
   });

@@ -458,3 +458,85 @@ describe("문구를 뺐다는 말과 실제가 맞는가", () => {
     expect(prompt).toContain("except where an instruction is spelled out below, which still applies");
   });
 });
+
+/**
+ * **쓴 그대로 보내기.**
+ *
+ * 완성된 프롬프트를 들고 온 사람은 AI 가 다시 쓰기를 바라지 않는다. 그런데
+ * 첨부 번호·크기·역할 지시까지 버리면 안 된다 — 그건 취향이 아니라 계약이고,
+ * 틀리면 결과가 나쁜 게 아니라 **틀린 그림**이 나온다(설계 §2.1).
+ *
+ * 그래서 **④ 장면 구역만** 원문으로 갈아 끼운다. ①②③⑤⑥⑦ 은 그대로 붙는다.
+ */
+describe("쓴 그대로 보내기", () => {
+  const 원문 = "A cat sitting on a wooden chair, morning light from the left window.";
+
+  it("원문이 그대로 들어간다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS, images: [], verbatimScene: 원문,
+    });
+
+    expect(prompt).toContain(원문);
+  });
+
+  /** 슬롯을 안 쓴다 — 기획이 안 돌았으니 채워진 것도 없다. */
+  it("슬롯 대신 원문을 쓴다", () => {
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, scene: "기획이 쓴 장면" },
+      images: [],
+      verbatimScene: 원문,
+    });
+
+    expect(prompt).toContain(원문);
+    expect(prompt).not.toContain("기획이 쓴 장면");
+  });
+
+  /** **이것이 핵심이다.** 첨부 번호가 빠지면 엉뚱한 그림에 지시가 붙는다. */
+  it("첨부 번호와 역할은 그대로 붙는다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS,
+      images: [{ kind: "preserved", subject: "person" }, { kind: "style_reference" }],
+      verbatimScene: 원문,
+    });
+
+    expect(prompt).toContain("Image 1");
+    expect(prompt).toContain("Image 2");
+  });
+
+  it("크기 줄도 그대로 붙는다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS, images: [], verbatimScene: 원문,
+      size: { width: 1024, height: 1536 },
+    });
+
+    expect(prompt).toContain("Output size 1024x1536");
+  });
+
+  /** 사용자가 따로 적은 말도 맨 앞·맨 뒤에 그대로 간다. */
+  it("추가로 적은 말도 살아 있다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS, images: [], verbatimScene: 원문,
+      userInstruction: "배경은 밤",
+    });
+
+    expect(prompt.split("배경은 밤").length - 1).toBe(2);
+  });
+
+  /** 안 넘기면 지금까지대로 슬롯을 쓴다. 옛 작업이 안 깨진다. */
+  it("안 넘기면 지금까지대로 슬롯을 쓴다", () => {
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, scene: "기획이 쓴 장면" }, images: [],
+    });
+
+    expect(prompt).toContain("기획이 쓴 장면");
+  });
+
+  /** 빈 문자열은 안 넘긴 것과 같다 — 빈 장면으로 보내면 모델이 스스로 채운다. */
+  it("빈 원문은 슬롯으로 떨어진다", () => {
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, scene: "기획이 쓴 장면" }, images: [], verbatimScene: "   ",
+    });
+
+    expect(prompt).toContain("기획이 쓴 장면");
+  });
+});

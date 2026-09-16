@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
-import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
+import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, RATIO_USES, chooseModelForRatio } from "@fixup/sns-core";
 import {
   DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS,
 } from "@fixup/poster-core";
@@ -16,6 +17,7 @@ import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksFor, resolveLook, type ImageLoo
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
+import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
   adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
@@ -93,6 +95,17 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 광고 UI 를 강요하지 않는다 — 켜야 보인다.
    */
   const [adMode, setAdMode] = React.useState(false);
+  /**
+   * **쓴 그대로 보낼지, AI 가 다듬을지.**
+   *
+   * 완성된 프롬프트를 01 에 넣은 사람이 그것을 잃었다(2026-09-16 사용자
+   * 보고). 알아채면 묻고(`looksFinished`), 고르는 것은 사람이 한다.
+   *
+   * 기본은 `assisted` 다 — 지금까지의 동작이라야 쓰던 사람이 안 깨진다.
+   */
+  const [promptMode, setPromptMode] = React.useState<PromptMode>("assisted");
+  /** 한 번 고르면 다시 안 묻는다. 같은 것을 되풀이해 물으면 안 읽게 된다. */
+  const [modeAnswered, setModeAnswered] = React.useState(false);
   /** 자식이 알려 주는 판단 결과. **규격 목록은 부모가 안 든다** — 들면 잘라 낸 뜻이 없다. */
   const [adPlan, setAdPlan] = React.useState<AdSubmitPlan>(NO_AD_PLAN);
   const [modelId, setModelId] = React.useState(
@@ -212,6 +225,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   function projectBody(extra: Record<string, unknown> = {}) {
     return {
       title: title.trim() || "이름 없는 이미지",
+      // 기획을 돌릴지가 여기서 갈린다. 서버도 이 값으로 판단한다.
+      promptMode,
       ratio: submitRatio,
       // **화면이 「GPT Image 2 로 만듭니다」라고 말했으면 그 모델을 보낸다.**
       // 초판은 사용자가 고른 모델을 실어서, 화면의 안내와 서버가 받는 값이
@@ -455,11 +470,42 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                     </Button>
                   ))}
                 </div>
+                {/*
+                  **버튼을 늘리지 않고 길잡이만 단다.**
+
+                  유튜브 썸네일은 1280x720 = 정확히 16:9 라 이미 만들 수 있는데,
+                  버튼이 「가로 배너 16:9」라 그게 그거인 줄 몰랐다(2026-09-16
+                  사용자 보고). 같은 픽셀을 새 항목으로 두면 목록에 같은 것이
+                  둘 생긴다 — `ratio-uses.ts` 머리말 참조.
+                */}
+                <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-subtle-foreground">
+                  {RATIO_USES.map((use) => (
+                    <span key={use.ratioId}>
+                      {use.label} → <strong className="font-bold text-muted-foreground">{use.ratioId}</strong>
+                    </span>
+                  ))}
+                </p>
               </fieldset>
             )}
 
             {sections.includes("ad-specs") && (
-              <AdSpecPicker onPlanChange={(plan) => setAdPlan(plan)} />
+              <div className="grid gap-3">
+                {/*
+                  **여기는 규격마다 새로 그린다.** 옆의 「광고 규격으로
+                  내보내기」는 이미 만든 그림에서 잘라 뽑아 거의 값이 안 든다.
+                  화면이 장수는 적었지만 싼 길이 있다는 것은 안 적었다
+                  (2026-09-16 사용자 보고).
+                */}
+                <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  여기서는 <strong className="text-foreground">규격마다 새로 그립니다</strong> — 고른 수만큼 값이 듭니다.
+                  이미 만들어 둔 그림이 있으면{" "}
+                  <Link href="/ad" className="font-bold text-primary underline-offset-2 hover:underline">
+                    광고 규격으로 내보내기
+                  </Link>
+                  가 거의 값이 안 듭니다.
+                </p>
+                <AdSpecPicker onPlanChange={(plan) => setAdPlan(plan)} />
+              </div>
             )}
 
             <fieldset className="grid gap-2">
@@ -555,8 +601,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       {step === "instruction" ? (
         <Card>
           <CardHeader>
-            <CardTitle>무엇을 만들지 한 줄로</CardTitle>
-            <CardDescription>나머지 칸은 AI 가 초안으로 채웁니다. 다음 화면에서 고칩니다.</CardDescription>
+            <CardTitle>무엇을 만들까</CardTitle>
+            <CardDescription>한두 줄이면 됩니다. 완성된 프롬프트가 있으면 아래 칸에 그대로 넣으세요.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-1.5">
@@ -569,14 +615,79 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-instruction">한 줄 지시</Label>
+              <Label htmlFor="poster-instruction">무엇을 만들까 · 한두 줄</Label>
               <Textarea
                 id="poster-instruction"
                 value={instruction}
                 onChange={(event) => setInstruction(event.target.value)}
-                rows={3}
+                rows={6}
                 placeholder="필름 카메라 감성의 사진전 포스터"
               />
+              {/*
+                **두 칸이 정반대로 동작한다는 것을 적는다.**
+
+                이 칸은 AI 가 읽고 다시 쓰고, 아래 칸은 손 안 대고 그대로 간다.
+                이름만으로는 알 길이 없어서 완성된 프롬프트를 여기 넣은 사람이
+                그것을 잃었다(2026-09-16 사용자 보고).
+              */}
+              <p className="text-xs text-subtle-foreground">
+                편하게 쓰세요. AI 가 구도·색·문구를 정해 04 기획 확인에서 보여드립니다.
+              </p>
+
+              {/*
+                **알아채면 묻는다. 대신 정하지 않는다.**
+
+                오판해도 사용자가 고르므로 손해가 없다. 한 번 고르면 다시 안
+                묻는다 — 같은 것을 되풀이해 물으면 알림을 안 읽게 된다
+                (설계 §3.1).
+              */}
+              {!modeAnswered && looksFinished(instruction) ? (
+                <div
+                  role="status"
+                  className="grid gap-2 rounded-md border border-primary/30 bg-primary-soft/30 px-4 py-3"
+                >
+                  <p className="text-sm">
+                    <strong className="text-foreground">완성된 프롬프트로 보입니다.</strong>{" "}
+                    AI 가 다시 쓰면 세부 지시가 사라질 수 있습니다.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => { setPromptMode("verbatim"); setModeAnswered(true); }}
+                    >
+                      쓴 그대로 생성
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => { setPromptMode("assisted"); setModeAnswered(true); }}
+                    >
+                      다듬어서 생성
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {/*
+                고른 뒤에도 무엇을 골랐는지 보인다. 바꿀 수도 있다 — 되돌릴 길이
+                없으면 잘못 누른 사람이 작업을 새로 만들어야 한다.
+              */}
+              {modeAnswered ? (
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {promptMode === "verbatim"
+                    ? "쓴 그대로 모델에 보냅니다. AI 가 고치지 않습니다."
+                    : "AI 가 다듬어 04 기획 확인에서 보여드립니다."}
+                  <button
+                    type="button"
+                    className="font-bold text-primary underline-offset-2 hover:underline"
+                    onClick={() => setModeAnswered(false)}
+                  >
+                    바꾸기
+                  </button>
+                </p>
+              ) : null}
             </div>
 
             {/*
@@ -603,20 +714,21 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             ) : null}
 
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-user-instruction">추가 지시 · 선택</Label>
+              <Label htmlFor="poster-user-instruction">직접 쓴 프롬프트 · 선택</Label>
               <Textarea
                 id="poster-user-instruction"
                 value={userInstruction}
                 onChange={(event) => setUserInstruction(event.target.value)}
-                rows={3}
-                placeholder="예: 배경은 밤, 창밖에 네온"
+                rows={10}
+                placeholder="완성된 프롬프트가 있으면 여기에 그대로 붙여 넣으세요."
               />
               {/*
                 우선순위를 화면에서 말해 둔다. 여기 적은 말은 프롬프트의 맨 앞과
                 맨 뒤 두 곳에 들어가고, 첨부한 레퍼런스보다 세다.
               */}
               <p className="text-sm text-muted-foreground">
-                여기 적은 말이 다른 모든 지시보다 우선합니다.
+                여기 적은 것은 <strong className="text-foreground">AI 가 고치지 않고 그대로</strong> 모델에 갑니다.
+                다른 모든 지시보다 우선합니다 — 완성된 프롬프트가 있으면 여기에 넣으세요.
               </p>
             </div>
 

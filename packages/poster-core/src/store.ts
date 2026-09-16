@@ -1,5 +1,5 @@
 import type { ImageLook } from "@fixup/shared";
-import type { PosterSlots, PosterStatus } from "./schemas";
+import type { PosterSlots, PosterStatus, PromptMode } from "./schemas";
 
 /**
  * 저장소는 **인터페이스만** 여기 둔다.
@@ -54,6 +54,11 @@ export interface PosterProjectRecord {
     look?: ImageLook;
     /** 사용자가 직접 친 추가 지시. 옛 작업에는 없다. */
     userInstruction?: string;
+    /**
+     * 쓴 그대로 보낼지, AI 가 다듬을지. 옛 작업에는 없다 — 없으면 `assisted`
+     * 로 읽는다(지금까지의 동작).
+     */
+    promptMode?: PromptMode;
     /**
      * 고른 차례 그대로의 첨부 id. 화면 ①②③ 이자 프롬프트의 `Image N`.
      *

@@ -7,6 +7,8 @@ export * from "./planning";
 export * from "./grammar";
 export * from "./people";
 export * from "./prompt";
+export * from "./prompt-images";
+export * from "./prompt-preview";
 export * from "./generate";
 export * from "./review";
 export * from "./selection";

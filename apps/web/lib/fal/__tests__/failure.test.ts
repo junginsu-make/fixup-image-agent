@@ -28,8 +28,13 @@ describe("제공자 거절", () => {
     expect(verdict.status).toBe(422);
   });
 
+  /**
+   * **404 는 여기 없다.** 결과가 사라진 것이라 거절과 다르다 — 아래
+   * 「결과가 사라졌을 때」가 따로 잰다. 초판은 404 를 여기 묶어 두었고,
+   * 그래서 「문구를 바꾸세요」라는 틀린 안내가 나갔다(2026-09-16).
+   */
   it("다른 4xx 도 거절이다", () => {
-    for (const status of [400, 403, 404, 413]) {
+    for (const status of [400, 403, 413]) {
       expect(classifyFalFailure(falError(status, "nope")).kind).toBe("rejected");
     }
   });
@@ -122,5 +127,50 @@ describe("돌려줄 HTTP 상태", () => {
 
   it("우리 고장은 500", () => {
     expect(classifyFalFailure(new Error("x")).httpStatus).toBe(500);
+  });
+});
+
+/**
+ * **결과가 사라진 것은 거절이 아니다.**
+ *
+ * fal 이 「This request has no output」을 돌려주는 경우가 있다 — 결과가
+ * 만료됐거나, 지워졌거나, 용량 한도로 저장되지 않은 것이다(2026-09-16
+ * 사용자 보고). 오래된 작업을 다시 열 때 생긴다.
+ *
+ * 그런데 4xx 를 한 덩어리로 묶어 두면 「지시 문구를 바꾸거나 다른 모델로
+ * 시도해 보세요」라고 말하게 된다. **문구는 멀쩡했고 결과만 사라진 것**이라
+ * 틀린 안내다. 맞는 말은 「다시 만들어 주세요」다.
+ */
+describe("결과가 사라졌을 때", () => {
+  const gone = (message: string) =>
+    Object.assign(new Error(message), { name: "ApiError", status: 404 });
+
+  it("거절과 다른 종류로 가른다", () => {
+    expect(classifyFalFailure(gone("Output not available")).kind).toBe("gone");
+  });
+
+  it("다시 만들라고 말한다 — 문구를 고치라고 하지 않는다", () => {
+    const verdict = classifyFalFailure(gone("This request has no output"));
+
+    expect(verdict.message).toContain("다시 만들");
+    expect(verdict.message).not.toContain("문구를 바꾸");
+  });
+
+  /** 돈이 안 나갔다. 묶어 둔 장을 돌려준다. */
+  it("묶어 둔 장을 돌려준다", () => {
+    expect(classifyFalFailure(gone("gone")).releaseReservation).toBe(true);
+  });
+
+  /** 404 를 그대로 돌려주면 화면이 「작업이 없다」로 읽고 목록에서 지운다. */
+  it("410 으로 알린다 — 작업 자체가 없어진 것이 아니다", () => {
+    expect(classifyFalFailure(gone("gone")).httpStatus).toBe(410);
+  });
+
+  /** 422 는 그대로 거절이어야 한다. 갈랐다고 앞의 것이 흔들리면 안 된다. */
+  it("422 는 그대로 거절이다", () => {
+    const rejected = Object.assign(new Error("flagged"), { name: "ApiError", status: 422 });
+
+    expect(classifyFalFailure(rejected).kind).toBe("rejected");
+    expect(classifyFalFailure(rejected).message).toContain("거절");
   });
 });
