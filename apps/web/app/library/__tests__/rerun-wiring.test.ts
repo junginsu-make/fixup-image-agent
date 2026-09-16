@@ -158,32 +158,42 @@ describe("지난 단계로 값을 들고 간다", () => {
       누르면 **새 작업**이 생기고 원래 작업은 안 바뀌므로 읽기 전용과 어긋나지
       않는다. 전에는 `if (readOnly) return;` 으로 막아 관리자가 남의 작업을
       다시 만들 길이 없었다.
+
+      ── 이 가늠자를 다섯 번 고쳤다 ─────────────────────────────────
+
+      1. `"if (readOnly) return;"` 문자열 완전 일치 →
+         `return undefined;` 를 못 잡았다
+      2. `` 를 쓴 정규식 → **그 `` 가 백스페이스 문자로 파일에 들어가**
+         아무것도 안 맞았다(같은 날 `copy-paths.test.ts` 에서도 당했다)
+      3. 파일 전체에서 찾기 → **다른 화면의 정당한 가드**까지 걸렸다
+         (`project-client.tsx` 의 상태 캐묻기 막이)
+      4. `onJump` 부터 자른 창 + `readOnly)` 뒤 `return` 모양 → 두 가지가 샜다.
+         `onJump={readOnly ? undefined : …}` 는 다음 글자가 `?` 라 안 물고,
+         `allowJump` 로 막으면 **`onJump` 앞에 있어 창에 아예 안 들어온다**
+      5. 지금 — **`<StepBar` 부터 `/>` 까지 열고, 모양 대신 낱말로 잰다**
+
+      4번의 삼항이 특히 위험했다. 카드뉴스가 이 기능 전에 쓰던 표기가 정확히
+      그것이라, 되돌리는 사람이 가장 자연스럽게 쓸 모양이 비껴갔다.
     */
     const source = read(detail);
-    const at = source.indexOf("onJump");
+    const at = source.indexOf("<StepBar");
     const end = source.indexOf("/>", at);
     expect(at, "단계 막대를 못 찾았다 — 가늠자를 고쳐라").toBeGreaterThan(-1);
     expect(end, "단계 막대가 어디서 끝나는지 못 찾았다").toBeGreaterThan(at);
     const stepBar = source.slice(at, end);
 
     /*
-      **글자 수로 자르지 않고 단계 막대의 끝까지 본다.** 처음에는 `onJump`
-      부터 900자를 잘라 `"if (readOnly) return;"` 이 있는지 봤는데, 세 가지가
-      차례로 틀렸다.
-
-      1. 문자열 완전 일치라 `if (readOnly) return undefined;` 를 못 잡았다
-         (2026-09-16 독립 리뷰가 실증)
-      2. 고치려고 `\b` 를 쓴 정규식을 넣었더니 **그 `\b` 가 백스페이스 문자로
-         들어가** 아무것도 안 맞았다 — 같은 날 `copy-paths.test.ts` 에서도
-         `"a\b"` 가 역슬래시가 아니라 백스페이스였다
-      3. 파일 전체에서 찾게 했더니 이번엔 **다른 화면의 정당한 가드**까지
-         걸렸다(`project-client.tsx` 의 상태 캐묻기 막이)
-
-      그래서 단계 막대 한 덩어리만 본다. 그 안에서 읽기 전용이라고 곧장
-      돌아서는 줄이 있으면 안 된다 — `{ return; }` 도 `return undefined;` 도
-      같이 걸린다.
+      **창이 비면 조용히 통과한다.** 창을 자르는 가늠자의 성질이라 안전핀을
+      둔다 — 오늘 `` 사고와 같은 실패 방식이다.
     */
-    expect(stepBar).not.toMatch(/readOnly\s*\)\s*\{?\s*return/);
+    expect(stepBar, "단계 막대 안에 onJump 가 없다").toContain("onJump");
+
+    /*
+      **단계 막대 안에서는 읽기 전용을 아예 안 본다.** 모양을 안 따지므로
+      삼항도 `allowJump` 도 `{ return; }` 도 앞으로 나올 표기도 같이 걸린다.
+      창이 한 덩어리로 좁아서 다른 화면의 정당한 가드는 애초에 안 들어온다.
+    */
+    expect(stepBar).not.toMatch(/readOnly/);
   });
 
   it.each(TOOLS)("$name 은 **있는** 회원용 길로 묻는다", ({ fresh, memberRoute }) => {

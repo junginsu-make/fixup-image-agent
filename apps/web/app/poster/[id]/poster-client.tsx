@@ -17,7 +17,7 @@ import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
-import { POSTER_STEPS } from "../steps";
+import { POSTER_STEPS, reachableBeforeCreate } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
@@ -539,6 +539,13 @@ export function PosterClient(
       <StepBar
         steps={POSTER_STEPS}
         current={current}
+        /*
+          **못 가는 곳은 눌리지 않게 한다.** 04·05 는 이 화면 안이라 오갈 데가
+          없는데, `onJump` 안에서 조용히 돌아서면 단추는 활성으로 보이고
+          hover 까지 먹는다 — 눌러도 아무 일이 없어 고장으로 읽힌다
+          (2026-09-16 독립 리뷰). 새로 만드는 화면도 같은 값을 쓴다.
+        */
+        allowJump={reachableBeforeCreate}
         onJump={(id) => {
           /*
             앞 세 단계는 새로 만드는 화면에 있다. **이 작업의 값을 들고** 간다.
