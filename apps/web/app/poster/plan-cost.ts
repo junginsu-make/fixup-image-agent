@@ -1,4 +1,4 @@
-import { LLM_PLAN_USD, LLM_VISION_READ_USD } from "@fixup/shared";
+import { creditUnits, llmCostUsd } from "@fixup/shared";
 import type { PromptMode } from "./prompt-mode";
 
 /**
@@ -15,8 +15,20 @@ import type { PromptMode } from "./prompt-mode";
  */
 
 export interface PlanCostInput {
-  /** 첨부한 그림 수. 기획이 한 장씩 비전으로 읽는다. */
-  referenceCount: number;
+  /**
+   * 「따라 만들기」로 고른 그림 수. 기획이 **한 장씩 비전으로** 읽는다
+   * (`plan/route.ts` 의 `readReferenceGrammar`).
+   */
+  styleCount: number;
+  /**
+   * 지킬 **사람** 사진 수 (`readPeople`).
+   *
+   * **제품 보존은 세지 않는다.** 붙인 그림 전부를 세면 화면이 실제보다 비싸게
+   * 말한다 — 라우트는 `personIds` 에 든 것만 읽고, 제품 보존 사진은 아무도
+   * 안 읽는다(2026-09-16 리뷰에서 걸렸다. 따라 만들기 1 + 제품 보존 1 이면
+   * 화면 $0.034, 실제 $0.024 로 42% 과대였다).
+   */
+  personCount: number;
   /** 안 넘기면 지금까지대로 다듬는다. */
   promptMode?: PromptMode;
   /** 광고 모드는 규격마다 작업이 따로 생기고 기획도 그만큼 돈다. */
@@ -24,20 +36,45 @@ export interface PlanCostInput {
 }
 
 /**
- * 기획 한 번에 드는 달러.
+ * 몇 장을 읽나. **읽기에 실패한 것은 라우트가 안 센다**(`grammar.issues`).
+ * 화면은 그것을 미리 알 수 없어 여기 값은 **가장 비싼 경우**다.
+ */
+function visionReads(input: PlanCostInput): number {
+  return Math.max(0, input.styleCount) + Math.max(0, input.personCount);
+}
+
+function projectCount(input: PlanCostInput): number {
+  return Math.max(1, input.projects ?? 1);
+}
+
+/**
+ * 기획에 드는 달러.
  *
- * 값의 근거는 `plan/route.ts` 가 예약할 때 쓰는 식과 같다 —
- * `llmCostUsd({ planCalls: 1, visionReads })`. 여기서 다시 세면 화면이 말하는
- * 값과 실제로 깎이는 값이 갈린다.
+ * **식을 다시 적지 않는다.** 라우트가 쓰는 `llmCostUsd` 를 그대로 부른다.
+ * 여기서 손으로 다시 세면 화면이 말하는 값과 실제로 깎이는 값이 갈린다.
  */
 export function planCostUsd(input: PlanCostInput): number {
   if (input.promptMode === "verbatim") return 0;
 
-  const projects = Math.max(1, input.projects ?? 1);
-  const reads = Math.max(0, input.referenceCount);
-  const once = LLM_PLAN_USD + reads * LLM_VISION_READ_USD;
+  const projects = projectCount(input);
+  return llmCostUsd({ planCalls: projects, visionReads: visionReads(input) * projects });
+}
 
-  return Number((once * projects).toFixed(4));
+/**
+ * 한도에서 실제로 빠지는 **장** 수.
+ *
+ * 달러가 아니라 장이 빠진다(`plan/route.ts` 가 `creditUnits` 로 바꿔 예약한다).
+ * $0.014 는 올림해서 **1장**(=$0.05)이라 3.5배 차이가 난다. 달러만 적으면
+ * 「그대로 생성이 얼마나 아끼나」를 견주라고 넣은 자리에서 실제보다 적게 말한다.
+ *
+ * **프로젝트마다 따로 올림한다.** 라우트가 프로젝트마다 한 번씩 예약하므로
+ * 합쳐서 올림하면 모자란다.
+ */
+export function planCostUnits(input: PlanCostInput): number {
+  if (input.promptMode === "verbatim") return 0;
+
+  const once = llmCostUsd({ planCalls: 1, visionReads: visionReads(input) });
+  return creditUnits(once) * projectCount(input);
 }
 
 /**
@@ -50,5 +87,5 @@ export function planCostNote(input: PlanCostInput): string {
   if (input.promptMode === "verbatim") {
     return "기획을 안 돌려서 기획 값이 안 듭니다.";
   }
-  return `기획에 약 $${planCostUsd(input).toFixed(3)}가 더 듭니다.`;
+  return `기획에 약 $${planCostUsd(input).toFixed(3)}(${planCostUnits(input)}장)가 더 듭니다.`;
 }

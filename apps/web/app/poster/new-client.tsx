@@ -785,7 +785,9 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 */}
                 <span className="mt-1 block text-meta text-subtle-foreground">
                   위는 그림 값입니다. {planCostNote({
-                    referenceCount,
+                    // 기획이 실제로 읽는 것만 센다. 제품 보존 사진은 아무도 안 읽는다.
+                    styleCount: styleIds.length,
+                    personCount: personIds.length,
                     promptMode,
                     projects,
                   })}
