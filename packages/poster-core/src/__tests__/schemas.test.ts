@@ -49,8 +49,39 @@ describe("포스터 프로젝트 입력", () => {
     referenceIds: ["11111111-1111-4111-8111-111111111111"],
   };
 
-  it("레퍼런스가 있어야 한다 — 따라 만들 기준이 없으면 못 만든다", () => {
-    expect(PosterProjectInputSchema.safeParse({ ...valid, referenceIds: [] }).success).toBe(false);
+  /**
+   * **글만으로도 만들 수 있다.**
+   *
+   * 예전에는 `min(1)` 로 막았다 — 「따라 만들 기준이 없으면 못 만든다」. 그래서
+   * 글만 들고 온 사람은 시작조차 못 했다(2026-09-16 사용자 보고). 엔진은 진작
+   * 할 줄 알았다: `pickEndpoint` 가 첨부 유무로 t2i·i2i 를 갈라 부르고, 값도
+   * `pricing.ts` 가 모드별로 따로 잡는다.
+   *
+   * 화면만 고치면 모자라다. 여기를 안 풀면 화면이 버튼을 열어 줘도 API 가
+   * 400 을 돌려준다.
+   */
+  it("레퍼런스가 없어도 받는다", () => {
+    expect(PosterProjectInputSchema.safeParse({ ...valid, referenceIds: [] }).success).toBe(true);
+  });
+
+  it("빠져 있어도 받는다 — 빈 목록과 같은 뜻이다", () => {
+    const { referenceIds: _omitted, ...withoutReferences } = valid;
+    const parsed = PosterProjectInputSchema.safeParse(withoutReferences);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.referenceIds).toEqual([]);
+  });
+
+  /**
+   * **광고 모드는 예외다.** 비율을 `match-source` 로 보내 첨부한 그림의 크기를
+   * 그대로 따라가는데, 맞출 원본이 없으면 성립하지 않는다. 화면도 막지만
+   * (`canCreatePoster`) 화면을 안 거치는 길이 있다.
+   */
+  it("광고 규격을 지정했으면 레퍼런스가 있어야 한다", () => {
+    const ad = { ...valid, adMasterId: "ad-191x1", ratio: "match-source" };
+
+    expect(PosterProjectInputSchema.safeParse({ ...ad, referenceIds: [] }).success).toBe(false);
+    expect(PosterProjectInputSchema.safeParse(ad).success).toBe(true);
   });
 
   it("포스터 비율만 받는다", () => {

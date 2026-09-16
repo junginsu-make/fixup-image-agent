@@ -12,13 +12,13 @@ import {
   DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS,
 } from "@fixup/poster-core";
 import { nextPickOrder, visibleOrder } from "@fixup/shared";
-import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
+import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksFor, resolveLook, type ImageLook } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
-  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount, seedInstruction } from "./poster-form-rules";
+  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
 
 /**
  * **광고 규격 칸은 켜졌을 때만 내려받는다.**
@@ -38,7 +38,8 @@ const NO_AD_PLAN: AdSubmitPlan = { masters: [], ready: false };
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
-  const [step, setStep] = React.useState("reference");
+  // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
+  const [step, setStep] = React.useState("instruction");
   const [roles, setRoles] = React.useState<Record<string, Role>>({});
   /**
    * **고른 차례.** 이것이 화면의 ①②③ 이고 프롬프트의 `Image N` 이다.
@@ -101,22 +102,15 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [variants, setVariants] = React.useState(DEFAULT_VARIANTS);
   const [title, setTitle] = React.useState("");
   const [instruction, setInstruction] = React.useState("");
-  /** 03 한 줄 지시를 사람이 한 번이라도 건드렸나. 건드렸으면 안 덮는다. */
-  const [instructionTouched, setInstructionTouched] = React.useState(false);
-
-  /**
-   * 03 에 들어갈 때 01에서 적은 말을 미리 채운다.
+  /*
+   * **미리 채워 주던 것을 걷어냈다.**
    *
-   * 규칙은 `poster-form-rules` 가 갖는다 — 여기 또 적으면 둘이 갈린다.
-   * `null` 이면 채우지 않는다는 뜻이다(사람이 건드렸거나, 쓰다 만 것이 있거나,
-   * 01에 적은 말이 없거나).
+   * 예전에는 01 레퍼런스에 적은 「이 그림을 어떻게 쓸까요」를 03 한 줄 지시에
+   * 옮겨 적어 줬다 — 같은 말을 두 번 쓰게 만들어서 생긴 땜질이었다
+   * (2026-09-08 사용자). 지시가 맨 앞으로 오면서 두 질문이 더 이상 겹치지
+   * 않는다: 01은 「무엇을 만들까」, 02는 「이 그림을 어떻게 쓸까」다.
    */
-  React.useEffect(() => {
-    if (step !== "instruction") return;
-    const seed = seedInstruction({ attachmentIntent, instruction, touched: instructionTouched });
-    if (seed !== null) setInstruction(seed);
-  }, [step, attachmentIntent, instruction, instructionTouched]);
-  // 기본은 auto — 지금까지처럼 첨부한 그림의 결을 따라간다.
+  // 기본은 auto — 첨부가 있으면 그 결을 따라간다. 없으면 `resolveLook` 이 내린다.
   const [look, setLook] = React.useState<ImageLook>("auto");
   // 기획이 채운 슬롯보다 센 말. 비워 두면 프롬프트에 들어가지 않는다.
   const [userInstruction, setUserInstruction] = React.useState("");
@@ -126,6 +120,20 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   // 세 목록도 고른 차례를 따른다. 서버가 옛 작업을 읽을 때 이 차례로 이어 붙인다.
   const styleIds = orderedIds.filter((id) => roles[id] === "style");
   const preservedIds = orderedIds.filter((id) => roles[id]?.startsWith("preserve"));
+  /**
+   * 따라 만들 그림이 있는가. **이 하나로 전부 갈린다** — 고를 수 있는 결
+   * (`looksFor`), 값 계산의 모드(t2i·i2i), 그리고 서버가 부를 엔드포인트
+   * (`pickEndpoint`)까지.
+   */
+  const hasReferences = styleIds.length + preservedIds.length > 0;
+  /**
+   * 화면에 켜 보일 결.
+   *
+   * 첨부가 없으면 `auto` 가 목록에서 빠지는데(`looksFor`), 상태에는 `auto` 가
+   * 남아 있을 수 있다 — 붙였다 뺀 경우다. 그때 아무 칸도 안 켜지면 「아무것도
+   * 안 골랐다」로 읽힌다. 실제로 갈 값을 그대로 켠다.
+   */
+  const shownLook = resolveLook(look, hasReferences);
   // 사람은 지키는 방법이 다르고, 얼굴이 둘이면 제3의 인물이 나온다.
   //
   // **그림 느낌만 바꾸는 사람도 사람 목록에 넣는다**(설계 §4-3). 얼굴을 지키는
@@ -155,7 +163,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const choice = chooseModelForRatio(submitRatio, modelId, IMAGE_MODELS);
   const estimate = estimatePosterCost({
     modelId: choice.model.id, ratioId: submitRatio, variants,
-    hasReferences: styleIds.length + preservedIds.length > 0,
+    hasReferences,
   });
 
   // 라이브러리에서 「이미지로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
@@ -218,7 +226,9 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       // **고른 차례 그대로.** 이것이 프롬프트의 Image 번호가 된다.
       attachmentOrder: orderedIds,
       attachmentIntent: attachmentIntent.trim(),
-      look,
+      // **화면에 켜 보인 것을 그대로 보낸다.** `auto` 는 따라갈 첨부가 있어야
+      // 뜻이 있어서, 첨부가 없으면 여기서 실사로 내려간다(`resolveLook`).
+      look: shownLook,
       userInstruction: userInstruction.trim(),
       ...extra,
     };
@@ -334,7 +344,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               새로 올리거나 라이브러리에서 불러온 뒤, 그림마다 역할을 고르세요 —
               <strong className="text-foreground">따라 만들기</strong>는 레이아웃·서체·색만 가져오고,
               <strong className="text-foreground">제품/인물 그대로 지키기</strong>는 그 대상이 결과 그림에
-              그대로 들어갑니다. 따라 만들 그림이 최소 한 장 필요하고, 인물은 한 명만 쓸 수 있습니다.
+              그대로 들어갑니다. <strong className="text-foreground">안 붙여도 됩니다</strong> — 그때는
+              01에 적은 글만 보고 그립니다. 인물은 한 명만 쓸 수 있습니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -353,8 +364,33 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 지금 {referenceCount}장입니다 — 빼거나 02 규격에서 다른 모델을 고르세요.
               </div>
             ) : null}
+            {/*
+              **결은 여기서 고른다.** 「레퍼런스 따라가기」가 뜻을 가지려면 따라갈
+              그림이 있어야 하는데, 그것이 정해지는 자리가 바로 여기다. 01에 두면
+              아직 모르는 것을 묻게 된다. 첨부가 없으면 목록에서 그 칸이 빠진다
+              (`looksFor`).
+            */}
+            <fieldset className="grid gap-2">
+              <legend className="text-meta text-subtle-foreground">결</legend>
+              <div className="flex flex-wrap gap-2">
+                {looksFor(hasReferences).map((entry) => (
+                  <Button
+                    key={entry}
+                    type="button"
+                    size="sm"
+                    variant={shownLook === entry ? "default" : "secondary"}
+                    onClick={() => setLook(entry)}
+                  >
+                    {IMAGE_LOOK_LABEL[entry]}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[shownLook]}</p>
+            </fieldset>
+
             <div className="flex justify-end">
-              <Button onClick={() => setStep("spec")} disabled={styleIds.length === 0 || overReferenceLimit}>
+              {/* 첨부는 선택이다. 넘치는 것만 막는다. */}
+              <Button onClick={() => setStep("spec")} disabled={overReferenceLimit}>
                 다음
               </Button>
             </div>
@@ -507,7 +543,10 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             )}
 
             <div className="flex justify-end">
-              <Button onClick={() => setStep("instruction")} disabled={Boolean(estimate.rejected)}>다음</Button>
+              {/* 마지막 칸이다. 값을 보여 준 자리에서 바로 만든다. */}
+              <Button onClick={() => void submit()} disabled={!canSubmit || busy}>
+                {busy ? "만드는 중…" : "만들기"}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -534,33 +573,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               <Textarea
                 id="poster-instruction"
                 value={instruction}
-                onChange={(event) => {
-                  // 한 번이라도 손대면 그때부터 이 칸은 그 사람의 것이다.
-                  setInstructionTouched(true);
-                  setInstruction(event.target.value);
-                }}
+                onChange={(event) => setInstruction(event.target.value)}
                 rows={3}
                 placeholder="필름 카메라 감성의 사진전 포스터"
               />
             </div>
-
-            <fieldset className="grid gap-2">
-              <legend className="text-meta text-subtle-foreground">결</legend>
-              <div className="flex flex-wrap gap-2">
-                {IMAGE_LOOKS.map((entry) => (
-                  <Button
-                    key={entry}
-                    type="button"
-                    size="sm"
-                    variant={look === entry ? "default" : "secondary"}
-                    onClick={() => setLook(entry)}
-                  >
-                    {IMAGE_LOOK_LABEL[entry]}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[look]}</p>
-            </fieldset>
 
             {/*
               01에서 적은 말을 여기서 다시 보여준다.
@@ -604,8 +621,12 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             </div>
 
             <div className="flex justify-end">
-              <Button onClick={() => void submit()} disabled={!canSubmit || busy}>
-                {busy ? "만드는 중…" : "만들기"}
+              {/* 제목과 지시가 있어야 다음이 뜻이 있다. 나머지는 다음 칸에서 정한다. */}
+              <Button
+                onClick={() => setStep("reference")}
+                disabled={!title.trim() || !instruction.trim()}
+              >
+                다음
               </Button>
             </div>
           </CardContent>

@@ -4,6 +4,8 @@ import {
   attachmentPlacementRule,
   designerPersona,
   imageLookDirective,
+  looksFor,
+  resolveLook,
   preserveDirective,
   priorityLine,
   userInstructionHead,
@@ -158,5 +160,65 @@ describe("첨부한 것을 어디에 놓을까", () => {
     // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다.
     expect(attachmentPlacementRule(true).length)
       .toBeGreaterThan(attachmentPlacementRule(false).length);
+  });
+});
+
+/**
+ * **`auto` 는 따라갈 것이 있어야 뜻이 있다.**
+ *
+ * `auto` 의 뜻은 「첨부한 그림의 결을 그대로 따라감」이고, 지시문은 빈 문자열이다.
+ * 첨부가 없으면 따라갈 것이 없는데 지시문도 비어 있으니, 결을 정하는 말이
+ * 프롬프트에 **한 줄도 안 들어간다** — 결이 모델 기분대로 나온다.
+ *
+ * 그래서 첨부가 없으면 실사로 내린다. 고르는 자리가 화면에 있지만 화면을
+ * 거치지 않는 길(API 직접 호출, 옛 작업 다시 돌리기)도 있어서, **마지막 보루를
+ * 여기 둔다.** 다섯 도구가 같은 `auto` 를 쓰므로 판단도 한 곳이어야 한다.
+ */
+describe("첨부가 없을 때의 결", () => {
+  it("첨부가 없고 auto 면 실사로 내린다", () => {
+    expect(resolveLook("auto", false)).toBe("photoreal");
+  });
+
+  it("첨부가 있으면 auto 그대로 — 따라갈 것이 있다", () => {
+    expect(resolveLook("auto", true)).toBe("auto");
+  });
+
+  /** 사람이 고른 것은 첨부가 있든 없든 그대로 간다. */
+  it("사람이 고른 결은 안 건드린다", () => {
+    for (const look of ["photoreal", "anime", "3d", "illustration"] as const) {
+      expect(resolveLook(look, false)).toBe(look);
+      expect(resolveLook(look, true)).toBe(look);
+    }
+  });
+
+  /**
+   * 이것이 이 함수의 존재 이유다 — 첨부 없이 만들 때 결 지시문이 **실제로
+   * 프롬프트에 실려야** 한다. 비면 아무 말도 안 보태진다.
+   */
+  it("내린 결은 지시문을 만들어 낸다", () => {
+    expect(imageLookDirective(resolveLook("auto", false))).not.toBe("");
+    expect(imageLookDirective("auto")).toBe("");
+  });
+});
+
+/**
+ * 첨부가 없으면 **고를 목록에서 `auto` 를 뺀다.**
+ *
+ * 남겨 두면 「레퍼런스 따라가기」라고 적힌 칸이 따라갈 레퍼런스가 없는 화면에
+ * 뜬다. 고르면 조용히 실사가 되는데, 화면은 다른 말을 하고 있다.
+ */
+describe("고를 수 있는 결", () => {
+  it("첨부가 있으면 다섯 가지 다", () => {
+    expect(looksFor(true)).toEqual(["auto", "photoreal", "anime", "3d", "illustration"]);
+  });
+
+  it("첨부가 없으면 auto 가 빠진다", () => {
+    expect(looksFor(false)).toEqual(["photoreal", "anime", "3d", "illustration"]);
+  });
+
+  /** 목록이 비면 화면에 고를 것이 없어진다. */
+  it("어느 쪽이든 비지 않는다", () => {
+    expect(looksFor(true).length).toBeGreaterThan(0);
+    expect(looksFor(false).length).toBeGreaterThan(0);
   });
 });
