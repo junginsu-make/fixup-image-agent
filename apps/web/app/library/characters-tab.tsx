@@ -120,6 +120,11 @@ export function CharactersTab() {
                 <CardContent className="grid gap-3 pt-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="min-w-0 flex-1 truncate font-semibold">{character.name}</p>
+                    {/* 「과정 보기」 — 무엇으로 만들었는지와 각도를 본다.
+                        작업물 카드와 같은 자리·같은 뜻이다. */}
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/characters/${character.id}`}>과정 보기</Link>
+                    </Button>
                     <Badge variant="secondary">{KIND_LABEL[character.kind] ?? character.kind}</Badge>
                     <Badge variant="secondary">{LOOK_LABEL[character.look] ?? character.look}</Badge>
                   </div>

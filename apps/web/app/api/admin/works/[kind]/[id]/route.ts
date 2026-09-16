@@ -1,5 +1,5 @@
 import { authenticateApiAdmin } from "../../../../../../lib/membership/api";
-import { readAnyWork, readAnyWorkImages } from "../../store";
+import { readAnyCharacter, readAnyWork, readAnyWorkImages } from "../../store";
 
 type Context = { params: Promise<{ kind: string; id: string }> };
 
@@ -26,11 +26,23 @@ export async function GET(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
 
   const { kind, id } = await context.params;
-  if (kind !== "sns" && kind !== "poster") {
+  if (kind !== "sns" && kind !== "poster" && kind !== "character") {
     return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
   }
 
   try {
+    /*
+      캐릭터는 작업이 아니라 **설정과 결과물**이라 모양이 다르다. 목록과 같은
+      함수에 「전체」 범위를 주어 읽으므로 그림 주소도 이미 채워져 온다.
+    */
+    if (kind === "character") {
+      const character = await readAnyCharacter(id);
+      if (!character) {
+        return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
+      }
+      return Response.json({ ok: true, work: character, images: [] });
+    }
+
     const work = await readAnyWork(kind, id);
     if (!work) return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
     /*

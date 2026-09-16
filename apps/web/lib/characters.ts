@@ -670,9 +670,23 @@ async function findCharacter(
   return data ? normalizeRecord(data as Record<string, unknown>) : null;
 }
 
+/**
+ * 캐릭터 목록.
+ *
+ * **범위를 인자로 받는다.** 관리자는 남의 것까지 봐야 하는데(라이브러리
+ * 「전체 회원 보기」), 그 조건을 이 함수 안에 심으면 언젠가 어긋나 회원이
+ * 남의 것을 읽는다 — `deleteAnyWork` 가 같은 이유로 갈라져 있다.
+ *
+ * 대신 **부르는 쪽이 밝히게** 한다. 기본값이 「내 것만」이라 빠뜨리면 좁아진다
+ * — 넓어지는 쪽으로 틀리지 않는다.
+ *
+ * 각도 짝짓기와 서명은 여기 한 곳에만 둔다. 단건용을 따로 만들면 그 규칙이
+ * 두 군데로 갈린다.
+ */
 export async function listCharacters(
   userId: string,
   teamId: string | null = null,
+  options: { allMembers?: boolean } = {},
 ): Promise<CharacterSummary[]> {
   if (isLocalStoreEnabled()) {
     const [rows, views] = await Promise.all([
@@ -697,7 +711,7 @@ export async function listCharacters(
   const supabase = createSupabaseAdminClient();
   const { data, error } = await scopedRead(
     supabase.from("characters").select("*").order("created_at", { ascending: false }).limit(100),
-    { userId, teamId, isAdmin: false },
+    { userId, teamId, isAdmin: options.allMembers === true },
   );
 
   if (error || !data?.length) return [];

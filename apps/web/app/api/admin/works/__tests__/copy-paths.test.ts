@@ -186,3 +186,39 @@ describe("posterCopyPlan", () => {
     expect(plan.rows).toEqual([]);
   });
 });
+
+import { copiedCharacterAssetPath } from "../copy-paths";
+
+/**
+ * 캐릭터는 **칸이 하나 적다** — `{소유자}/{캐릭터}/{각도}` 다. 작업물 규칙을
+ * 그대로 쓰면 전부 `null` 이 되어 그림이 한 장도 안 옮겨진다.
+ */
+describe("copiedCharacterAssetPath", () => {
+  it("첫 칸과 캐릭터 칸을 바꾼다", () => {
+    expect(copiedCharacterAssetPath("회원A/캐릭1/front.png", "관리자B", "캐릭2"))
+      .toBe("관리자B/캐릭2/front.png");
+  });
+
+  it("작은 사본의 이름을 지킨다", () => {
+    expect(copiedCharacterAssetPath("회원A/캐릭1/front.thumb.webp", "관리자B", "캐릭2"))
+      .toBe("관리자B/캐릭2/front.thumb.webp");
+  });
+
+  it("규약을 벗어난 경로는 null 이다", () => {
+    expect(copiedCharacterAssetPath("이상한경로.png", "관리자B", "캐릭2")).toBeNull();
+    expect(copiedCharacterAssetPath("회원A/캐릭1", "관리자B", "캐릭2")).toBeNull();
+    expect(copiedCharacterAssetPath("", "관리자B", "캐릭2")).toBeNull();
+  });
+
+  it("새 소유자나 새 캐릭터 id 가 비면 null 이다", () => {
+    expect(copiedCharacterAssetPath("회원A/캐릭1/front.png", "", "캐릭2")).toBeNull();
+    expect(copiedCharacterAssetPath("회원A/캐릭1/front.png", "관리자B", "")).toBeNull();
+  });
+
+  it("작업물 규칙과 섞이지 않는다", () => {
+    // 칸이 넷인 작업물 경로를 캐릭터 규칙에 넣으면 도구 칸이 각도로 밀린다.
+    // 그래서 부르는 쪽이 갈래를 정확히 골라야 한다 — 이 시험이 그 경계다.
+    expect(copiedCharacterAssetPath("회원A/sns/작업1/0.png", "관리자B", "캐릭2"))
+      .toBe("관리자B/캐릭2/작업1/0.png");
+  });
+});

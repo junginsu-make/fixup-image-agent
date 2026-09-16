@@ -138,3 +138,27 @@ export function posterCopyPlan(
 
   return { rows: next, moves };
 }
+
+/**
+ * 복사한 캐릭터의 그림이 놓일 자리.
+ *
+ * **캐릭터는 칸이 하나 적다** — `{소유자}/{캐릭터}/{각도}.{확장자}` 다
+ * (`lib/characters.ts` 의 `viewStoragePath`). 작업물은 도구 칸이 하나 더 있어
+ * `copiedAssetPath` 를 그대로 쓸 수 없다.
+ *
+ * 규칙은 같다: **첫 칸을 복사한 사람으로, 둘째 칸을 새 캐릭터 id 로.**
+ * 버킷 정책이 첫 칸으로 소유자를 판정하기 때문이다.
+ */
+export function copiedCharacterAssetPath(
+  originalPath: string,
+  newOwnerId: string,
+  newCharacterId: string,
+): string | null {
+  if (!newOwnerId || !newCharacterId) return null;
+  const parts = originalPath.split("/");
+  // `{소유자}/{캐릭터}/{남은 이름}` — 적어도 셋이어야 한다.
+  if (parts.length < 3) return null;
+  const rest = parts.slice(2);
+  if (!rest.length || rest.some((part) => !part)) return null;
+  return [newOwnerId, newCharacterId, ...rest].join("/");
+}
