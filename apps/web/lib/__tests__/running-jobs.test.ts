@@ -113,3 +113,53 @@ describe("저장해 둔 것 읽기", () => {
     expect(parseJobs([withBody])[0]!.poll.body).toEqual({ falRequestId: "r1" });
   });
 });
+
+/**
+ * **끝난 것에는 「거절당해 끝난 것」도 들어간다.**
+ *
+ * 2026-09-16 실측: fal 이 `422`(content checker)로 거절했는데 셸의 「만드는 중」
+ * 목록에서 그 작업이 안 사라졌다. `done === true` 만 봤기 때문이다 — 거절은
+ * `done` 을 영영 안 준다. `JOB_GIVE_UP_MS` 가 4시간이라 그동안 돌고 있는 것처럼
+ * 보였다.
+ *
+ * 서버는 이제 거절을 4xx 와 `ok:false` 로 알린다(`lib/fal/failure.ts`).
+ * **더 물어볼 이유가 없는 답**은 끝난 것으로 본다.
+ */
+describe("거절도 끝난 것이다", () => {
+  it("무엇 때문인지 밝힌 실패는 끝이다 — 더 물어봐도 같다", () => {
+    expect(jobDone({ ok: false, kind: "rejected", message: "거절됐습니다" })).toBe(true);
+  });
+
+  /**
+   * **까닭을 안 밝힌 `ok:false` 는 안 끝낸다.** 잠깐 끊긴 것일 수 있고, 그때
+   * 지우면 아직 그리고 있는 것을 놓친다. 이 저장소가 이미 내린 판단이다.
+   */
+  it("까닭을 안 밝혔으면 계속 물어본다", () => {
+    expect(jobDone({ ok: false, message: "잠깐 끊김" })).toBe(false);
+  });
+
+  it("제공자 고장·혼잡도 끝으로 본다", () => {
+    expect(jobDone({ ok: false, kind: "provider_fault" })).toBe(true);
+    expect(jobDone({ ok: false, kind: "busy" })).toBe(true);
+  });
+
+  /**
+   * **아직 도는 것은 그대로 둔다.** `done:false` 는 「아직」이라는 뜻이지
+   * 실패가 아니다. 여기서 끝내면 만들어 둔 그림을 못 본다.
+   */
+  it("아직 도는 것은 안 끝낸다", () => {
+    expect(jobDone({ ok: true, done: false })).toBe(false);
+  });
+
+  it("끝난 것은 그대로 끝이다", () => {
+    expect(jobDone({ ok: true, done: true })).toBe(true);
+    expect(jobDone({ active: false })).toBe(true);
+  });
+
+  /** 답이 이상하면 계속 물어본다 — 섣불리 지우면 만든 그림을 못 본다. */
+  it("모르는 모양이면 안 끝낸다", () => {
+    expect(jobDone(null)).toBe(false);
+    expect(jobDone({})).toBe(false);
+    expect(jobDone("문자열")).toBe(false);
+  });
+});

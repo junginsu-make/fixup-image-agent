@@ -93,8 +93,21 @@ export function pruneJobs(jobs: RunningJob[], now: number): RunningJob[] {
  * 스스로 판단하게 두면 판단 기준이 두 곳에 생긴다.
  */
 export function jobDone(payload: unknown): boolean {
-  const value = payload as { done?: unknown; active?: unknown } | null;
-  return value?.done === true || value?.active === false;
+  const value = payload as { ok?: unknown; kind?: unknown; done?: unknown; active?: unknown } | null;
+  if (value?.done === true || value?.active === false) return true;
+
+  /*
+   * **거절당해 끝난 것도 끝난 것이다.**
+   *
+   * 2026-09-16 실측: fal 이 422(content checker)로 거절했는데 「만드는 중」
+   * 목록에서 그 작업이 안 사라졌다. `done` 만 봤기 때문이다 — 거절은 `done` 을
+   * 영영 안 준다. `JOB_GIVE_UP_MS` 가 4시간이라 그동안 돌고 있는 것처럼 보였다.
+   *
+   * **`ok:false` 만으로는 안 끝낸다.** 잠깐 끊긴 것일 수 있고, 그때 지우면
+   * 아직 그리고 있는 것을 놓친다. 서버가 **무엇 때문인지 밝힌 것**(`kind`)만
+   * 끝으로 본다 — 그건 분류를 마쳤다는 뜻이고, 다시 물어도 같은 답이다.
+   */
+  return value?.ok === false && typeof value.kind === "string";
 }
 
 /** 브라우저에 저장해 둔 것은 믿지 않는다. 사람이 고칠 수 있고 옛 판이 남는다. */
