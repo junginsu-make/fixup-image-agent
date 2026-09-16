@@ -40,7 +40,8 @@ function guideSources(): Array<{ name: string; source: string }> {
  * 적어 두는 것이 주석에서는 정당하다. 그것까지 세면 까닭을 못 적는다.
  */
 function 주석을뺀다(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  // 코드 뒤에 붙은 것도 뗀다. 자리에 따라 정당함이 갈리지 않는다.
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
 describe("설명서 목차", () => {
@@ -146,8 +147,13 @@ describe("설명서 내용", () => {
         주석을뺀다(file.source),
       );
       for (const stale of 옛이름) {
-        // 뒤에 한글이 더 붙으면 다른 낱말이다(「애니풍」).
-        const 홀로쓰인것 = new RegExp(`(?<![가-힣])${stale}(?![가-힣])`);
+        /*
+         * 뒤에 한글이 더 붙으면 대개 다른 낱말이다(「애니풍」·「실사판」).
+         * **다만 조사는 다르다** — 산문에는 「실사로」·「애니가」처럼 나간다.
+         * 조사를 따로 받아 주지 않으면 정작 흔한 꼴을 다 놓친다.
+         */
+        const 조사 = "로|를|가|는|은|의|와|과|도|에|나|만|보다|처럼|부터|까지";
+        const 홀로쓰인것 = new RegExp(`(?<![가-힣])${stale}(?:(?:${조사})(?![가-힣])|(?![가-힣]))`);
         expect(
           홀로쓰인것.test(새이름을뺀글),
           `${file.name}/page.tsx 에 옛 그림체 이름이 남았다: ${stale}`,

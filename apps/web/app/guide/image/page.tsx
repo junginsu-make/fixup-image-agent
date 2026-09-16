@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { POSTER_RATIOS } from "@fixup/sns-core";
-import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference } from "@fixup/shared";
+import {
+  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference, withJosa,
+} from "@fixup/shared";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
@@ -142,8 +144,8 @@ export default function ImageGuidePage() {
               body: (
                 <>
                   <strong className="text-foreground">따라 만들 그림은 없어도 됩니다.</strong> 무엇을 만들지 한 줄만
-                  쓰면 그 글만 보고 그립니다. 그림을 붙이면 그 결을 따라가고, 안 붙이면 다음 화면에서 고른 결
-                  ({LOOK_NAMES})로 그립니다.
+                  쓰면 그 글만 보고 그립니다. 그림을 붙이면 그 그림체를 따라가고, 안 붙이면 다음 화면에서 고른
+                  그림체({withJosa(LOOK_NAMES, "으로로")}) 그립니다.
                 </>
               ),
             },

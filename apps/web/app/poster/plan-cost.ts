@@ -1,4 +1,4 @@
-import { creditUnits, llmCostUsd, withJosa } from "@fixup/shared";
+import { creditUnits, llmCostUsd, withJosa, type AttachmentRole } from "@fixup/shared";
 import type { PromptMode } from "./prompt-mode";
 
 /**
@@ -46,8 +46,12 @@ export interface PlanCostInput {
  *   · `style`                    → `readReferenceGrammar` (레이아웃 문법)
  *   · `preserve_person(_restyled)` → `readPeople` (인물 묘사)
  *   · 나머지(`preserve_product`·`place_as_is`) → **아무도 안 읽는다**
+ *
+ * **역할을 `AttachmentRole` 로 받는다.** `string` 으로 두면 `attachment-role.ts`
+ * 에서 이름을 바꿨을 때 tsc 도 시험도 조용하고, 값이 0 으로 떨어져 화면이
+ * 실제보다 **싸게** 말한다. 이번에 고친 버그와 같은 결의 구멍이다.
  */
-export function planCostCounts(roles: readonly string[]): {
+export function planCostCounts(roles: readonly (AttachmentRole | "none")[]): {
   styleCount: number;
   personCount: number;
 } {
