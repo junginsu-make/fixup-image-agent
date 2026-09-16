@@ -358,3 +358,29 @@ describe("쓴 그대로 보내는 길", () => {
     expect(source).toContain("setModeAnswered(false)");
   });
 });
+
+/**
+ * **상세페이지도 같은 규칙을 쓴다.**
+ *
+ * 이미지 만들기에서 「레퍼런스 스타일을 빼지 말고 흐리게 두자」를 배웠다.
+ * 상세페이지도 디자인 레퍼런스가 선택이라 같은 일이 생긴다(2026-09-16).
+ */
+describe("상세페이지 그림체", () => {
+  const pdp = readFileSync(
+    new URL("../../create/PdpMakerClient.tsx", import.meta.url), "utf8",
+  );
+
+  it("같은 판단을 가져다 쓴다", () => {
+    expect(pdp).toContain("lookBlockedReason(option, hasStyleReference)");
+    expect(pdp).toContain("disabled={Boolean(blocked)}");
+  });
+
+  /** 붙였어도 토글이 꺼져 있으면 안 보낸다. 그때는 따라갈 것이 없는 것과 같다. */
+  it("토글이 꺼져 있으면 레퍼런스가 없는 것으로 본다", () => {
+    expect(pdp).toContain("Boolean(styleReference) && styleReferenceEnabled");
+  });
+
+  it("못 고르는 까닭을 화면에 적는다", () => {
+    expect(pdp).toContain('lookBlockedReason("auto", hasStyleReference)');
+  });
+});
