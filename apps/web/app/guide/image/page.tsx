@@ -13,10 +13,17 @@ import {
   MockField,
   MockSteps,
 } from "../_components/mockup";
+import { POSTER_STEPS } from "../../poster/steps";
 
 export const metadata: Metadata = { title: "이미지 만들기 — 사용 설명서" };
 
-const STEPS = ["01 레퍼런스", "02 규격", "03 지시", "04 기획 확인", "05 결과"];
+/**
+ * **화면이 쓰는 목록을 그대로 쓴다.**
+ *
+ * 손으로 옮겨 적었더니 2026-09-16 에 차례를 바꾼 뒤 설명서만 옛 차례로 남았다.
+ * 설명서는 틀려도 아무도 안 아프다 — 화면은 멀쩡히 돌고 시험도 통과한다.
+ */
+const STEPS = POSTER_STEPS.map((step) => step.label);
 
 /** 역할 어휘는 코드가 단일 출처다. */
 const PRESERVE_ITEMS = (["preserve_product", "preserve_person"] as const).map((role) => ({
@@ -34,11 +41,11 @@ export default function ImageGuidePage() {
       />
 
       <Summary
-        what="광고 소재·포스터·일반 이미지를 한 장씩 만듭니다. 레퍼런스의 결을 따라갑니다."
+        what="광고 소재·포스터·일반 이미지를 한 장씩 만듭니다. 글만으로도 되고, 따라 만들 그림을 붙이면 그 결을 따라갑니다."
         points={[
           {
-            title: "레퍼런스에서 결을 가져옵니다",
-            body: "마음에 드는 그림 한 장을 첨부하면 그 분위기를 따라갑니다. 프롬프트를 길게 쓰지 않아도 됩니다.",
+            title: "글만으로도 됩니다",
+            body: "무엇을 만들지 한 줄만 쓰면 됩니다. 따라 만들 그림은 선택입니다 — 붙이면 그 결을 따라가고, 안 붙이면 글만 보고 그립니다.",
           },
           {
             title: "기획을 먼저 보여 줍니다",
@@ -63,9 +70,9 @@ export default function ImageGuidePage() {
       <Section title="전체 흐름" hint="다섯 단계입니다.">
         <Flow
           nodes={[
-            { label: "01 레퍼런스", sub: "따라 만들 이미지" },
-            { label: "02 규격", sub: "비율 · 모델 · 장수" },
-            { label: "03 지시", sub: "한 줄만" },
+            { label: "01 지시", sub: "무엇을 만들까" },
+            { label: "02 레퍼런스", sub: "따라 만들 이미지 · 선택" },
+            { label: "03 규격", sub: "비율 · 모델 · 장수" },
             { label: "04 기획 확인", sub: "틀린 칸만", human: true },
             { label: "05 결과", sub: "고르고 검수" },
           ]}
@@ -95,44 +102,45 @@ export default function ImageGuidePage() {
         />
       </Section>
 
-      <Details title="01 레퍼런스 — 화면 읽기" hint="여기서는 레퍼런스가 필수입니다. 한 장 이상 골라야 넘어갑니다.">
-        <Mock title="이미지 만들기 · 01 레퍼런스">
+      <Details title="01 지시 — 화면 읽기" hint="무엇을 만들지부터 씁니다. 그림은 다음 화면에서, 그것도 선택입니다.">
+        <Mock title="이미지 만들기 · 01 지시">
           <MockSteps steps={STEPS} current={0} />
-          <MockChoices
-            label="따라 만들 이미지"
+          <MockField label="작업 이름" placeholder="가을 사진전" />
+          <MockField
+            label="한 줄 지시"
+            placeholder="필름 카메라 감성의 사진전 포스터"
             marker={1}
-            columns={3}
-            active={0}
-            items={[{ title: "레퍼런스 A", hint: "선택됨" }, { title: "레퍼런스 B" }, { title: "+ 올리기" }]}
+            rows={2}
+            note="나머지 칸은 AI 가 초안으로 채웁니다. 04 기획 확인에서 고칩니다."
           />
-          <MockChoices
-            label="그대로 지킬 것 · 선택"
+          <MockField
+            label="추가 지시 · 선택"
+            placeholder="예: 배경은 밤, 창밖에 네온"
             marker={2}
-            columns={2}
-            items={PRESERVE_ITEMS}
+            rows={2}
+            note="여기 적은 말이 다른 모든 지시보다 우선합니다."
           />
-          <MockButtons items={[{ label: "규격 고르기" }]} />
+          <MockButtons items={[{ label: "다음" }]} />
         </Mock>
 
         <Callouts
           items={[
             {
-              title: "따라 만들 레퍼런스 — 한 장 이상 필수",
+              title: "한 줄 지시 — 이것만 있으면 시작됩니다",
               body: (
                 <>
-                  이 도구는 레퍼런스 없이 시작할 수 없습니다. <strong className="text-foreground">「무엇을 만들지」가
-                  아니라 「어떤 결로 만들지」를 그림으로 먼저 정하기</strong> 때문입니다. 마음에 드는 포스터나 광고
-                  이미지를 올리거나 라이브러리에서 고르세요.
+                  <strong className="text-foreground">따라 만들 그림은 없어도 됩니다.</strong> 무엇을 만들지 한 줄만
+                  쓰면 그 글만 보고 그립니다. 그림을 붙이면 그 결을 따라가고, 안 붙이면 다음 화면에서 고른 결
+                  (실사·애니·3D·그림)로 그립니다.
                 </>
               ),
             },
             {
-              title: "그대로 지킬 것 — 필요할 때만",
+              title: "추가 지시 — 가장 센 말",
               body: (
                 <>
-                  실제 제품 사진이나 특정 인물이 결과에 그대로 나와야 할 때 추가합니다. 레퍼런스와는 다른 자리입니다 —
-                  레퍼런스는 <strong className="text-foreground">결</strong>을, 이쪽은{" "}
-                  <strong className="text-foreground">생김새</strong>를 가져옵니다.
+                  여기 적은 말은 프롬프트의 <strong className="text-foreground">맨 앞과 맨 뒤 두 곳</strong>에 들어가고,
+                  첨부한 그림보다도 셉니다. 긴 프롬프트에서 가운데 문장은 힘을 잃기 때문입니다.
                 </>
               ),
             },
@@ -140,9 +148,34 @@ export default function ImageGuidePage() {
         />
       </Details>
 
-      <Details title="02 규격 · 03 지시 — 화면 읽기">
-        <Mock title="이미지 만들기 · 02 규격">
+      <Details title="02 레퍼런스 · 03 규격 — 화면 읽기" hint="그림은 선택입니다. 안 붙이면 01에 적은 글만 보고 그립니다.">
+        <Mock title="이미지 만들기 · 02 레퍼런스">
           <MockSteps steps={STEPS} current={1} />
+          <MockChoices
+            label="따라 만들 이미지 · 선택"
+            marker={1}
+            columns={3}
+            items={[{ title: "레퍼런스 A" }, { title: "레퍼런스 B" }, { title: "+ 올리기" }]}
+          />
+          <MockChoices
+            label="그대로 지킬 것 · 선택"
+            marker={2}
+            columns={2}
+            items={PRESERVE_ITEMS}
+          />
+          <MockChoices
+            label="결"
+            marker={3}
+            columns={4}
+            active={0}
+            items={[{ title: "실사" }, { title: "애니" }, { title: "3D" }, { title: "그림" }]}
+            note="그림을 붙이면 「레퍼런스 따라가기」가 하나 더 생깁니다 — 따라갈 것이 있을 때만 뜻이 있어서입니다."
+          />
+          <MockButtons items={[{ label: "이전", variant: "quiet" }, { label: "다음" }]} />
+        </Mock>
+
+        <Mock title="이미지 만들기 · 03 규격">
+          <MockSteps steps={STEPS} current={2} />
           <MockChoices
             label="비율"
             marker={1}
@@ -157,20 +190,8 @@ export default function ImageGuidePage() {
             active={2}
             items={[{ title: "1장" }, { title: "2장" }, { title: "3장" }]}
           />
-          <MockButtons items={[{ label: "이전", variant: "quiet" }, { label: "지시 쓰기" }]} />
-        </Mock>
-
-        <Mock title="이미지 만들기 · 03 지시">
-          <MockSteps steps={STEPS} current={2} />
-          <MockField label="작업 이름" placeholder="가을 사진전" />
-          <MockField
-            label="한 줄 지시"
-            placeholder="필름 카메라 감성의 사진전 포스터"
-            marker={3}
-            rows={2}
-            note="나머지 칸은 AI 가 초안으로 채웁니다. 다음 화면에서 고칩니다."
-          />
-          <MockButtons items={[{ label: "이전", variant: "quiet" }, { label: "기획 시작" }]} />
+          {/* 값을 보여 준 자리에서 바로 만든다. 여기가 마지막 칸이다. */}
+          <MockButtons items={[{ label: "이전", variant: "quiet" }, { label: "만들기" }]} />
         </Mock>
 
         <Callouts
@@ -270,8 +291,12 @@ export default function ImageGuidePage() {
         <Pitfalls
           items={[
             {
-              q: "레퍼런스를 안 골랐는데 다음으로 안 넘어갑니다",
-              a: "이 도구는 레퍼런스가 필수입니다. 한 장 이상 골라야 합니다. 참고할 이미지가 아예 없다면 카드뉴스나 상세페이지 도구가 더 맞을 수 있습니다.",
+              q: "따라 만들 그림이 없어도 되나요",
+              a: "됩니다. 01에 무엇을 만들지 한 줄만 쓰면 그 글만 보고 그립니다. 그림을 안 붙이면 02에서 결(실사·애니·3D·그림)을 고르게 되어 있습니다 — 따라갈 그림이 없으니 어떤 결로 그릴지는 직접 정해야 합니다.",
+            },
+            {
+              q: "광고 규격으로 만들려는데 막힙니다",
+              a: "광고 규격만은 따라 만들 그림이 한 장 이상 필요합니다. 첨부한 그림의 크기를 그대로 따라가는 방식이라 맞출 원본이 없으면 만들 수 없습니다.",
             },
             {
               q: "A4 인쇄용이 회색으로 안 눌립니다",
@@ -285,7 +310,7 @@ export default function ImageGuidePage() {
               q: "레퍼런스와 너무 똑같이 나옵니다",
               a: (
                 <>
-                  「따라 만들기」는 레이아웃·서체·색 문법을 가져오는 역할입니다. 더 달라지길 원하면 03 한 줄 지시를 더
+                  「따라 만들기」는 레이아웃·서체·색 문법을 가져오는 역할입니다. 더 달라지길 원하면 01 한 줄 지시를 더
                   구체적으로 쓰거나, 04에서 장면·색 칸을 직접 바꾸세요. 역할 설명은{" "}
                   <Link href="/guide" className="font-bold text-primary underline underline-offset-4">
                     처음 오셨다면
