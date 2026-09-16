@@ -106,6 +106,14 @@ describe("상세 화면이 막을 지나는가", () => {
     expect(source).toContain("if (!generationActive || readOnly) return;");
   });
 
+  it("막아만 두지 않고 복사할 길을 같은 자리에 낸다", () => {
+    // 막아 두고 길을 안 내면 사용자는 무엇을 해야 할지 모른다.
+    for (const [name, src] of [["카드뉴스", source], ["포스터", poster]] as const) {
+      expect(src, `${name} 에 복사 단추가 없다`).toContain("내 작업으로 복사");
+      expect(src, `${name} 이 복사 통로를 안 부른다`).toContain("/copy");
+    }
+  });
+
   it("남의 작업이면 보는 중이라고 말한다", () => {
     expect(source).toContain("setReadOnly(true)");
     expect(source).toContain("다른 회원의 작업");

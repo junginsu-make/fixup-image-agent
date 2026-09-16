@@ -117,6 +117,30 @@ export function PosterClient(
   const [list, setList] = React.useState(images);
   const [editText, setEditText] = React.useState("");
   const router = useRouter();
+
+  const [copying, setCopying] = React.useState(false);
+
+  /**
+   * 남의 작업을 **내 것으로 복사한다.**
+   *
+   * 고치는 대신 복사한다 — 그래야 회원의 작업이 안 바뀌고, 크레딧과 소유가
+   * 복사한 사람 하나로 맞아떨어진다(2026-09-16 사용자 결정).
+   */
+  const copyToSelf = React.useCallback(async () => {
+    setCopying(true);
+    try {
+      const body = await (await fetch(`/api/admin/works/poster/${project.id}/copy`, {
+        method: "POST",
+      })).json() as { ok?: boolean; id?: string; message?: string };
+      if (!body.ok || !body.id) throw new Error(body.message ?? "복사하지 못했습니다.");
+      router.push(`/poster/${body.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "복사하지 못했습니다.");
+    } finally {
+      setCopying(false);
+    }
+  }, [project.id, router]);
+
   /** 지금 고치는 중인 변형. 한 번에 한 장만 고친다. */
   const [editing, setEditing] = React.useState<string | null>(null);
 
@@ -416,9 +440,15 @@ export function PosterClient(
         흘려 주는데 남의 것은 그 길이 막혀 있다.
       */}
       {readOnly ? (
-        <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-          <b>다른 회원의 작업</b>을 보는 중입니다. 설정과 과정은 볼 수 있지만
-          고칠 수 없고, 만들어진 그림은 여기서 안 보입니다.
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <span>
+            <b>다른 회원의 작업</b>을 보는 중입니다. 설정과 과정은 볼 수 있지만
+            고칠 수 없고, 만들어진 그림은 여기서 안 보입니다.
+          </span>
+          {/* 무엇을 하면 되는지 같은 자리에 둔다. 막아만 두면 길이 없다. */}
+          <Button size="sm" disabled={copying} onClick={() => void copyToSelf()}>
+            {copying ? "복사하는 중…" : "내 작업으로 복사"}
+          </Button>
         </div>
       ) : null}
 

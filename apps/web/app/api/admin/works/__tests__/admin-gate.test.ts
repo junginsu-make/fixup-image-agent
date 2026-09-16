@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(__dirname, "..", "[kind]", "[id]");
 
 /** 관리자 통로의 라우트. 늘릴 때 여기 한 줄을 더한다. */
-const ROUTES = ["route.ts"];
+const ROUTES = ["route.ts", "copy/route.ts"];
 
 function sourceOf(file: string): string {
   return readFileSync(join(ROOT, file), "utf8");

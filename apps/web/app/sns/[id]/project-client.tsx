@@ -15,6 +15,7 @@ import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
+import { useRouter } from "next/navigation";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -88,6 +89,34 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
    * 부르는 자리마다 `readOnly` 를 손으로 넘기면 언젠가 한 곳을 빠뜨리고,
    * 그 한 곳이 곧 구멍이다. 감싸개를 하나 두면 빠뜨릴 자리가 없다.
    */
+  const router = useRouter();
+  const [copying, setCopying] = React.useState(false);
+
+  /**
+   * 남의 작업을 **내 것으로 복사한다.**
+   *
+   * 고치는 대신 복사한다 — 그래야 회원의 작업이 안 바뀌고, 크레딧과 소유가
+   * 복사한 사람 하나로 맞아떨어진다(2026-09-16 사용자 결정).
+   *
+   * 복사가 끝나면 그 작업으로 옮겨 간다. 자기 것이므로 그때부터는 전부
+   * 기존 동작이다.
+   */
+  const copyToSelf = React.useCallback(async () => {
+    setCopying(true);
+    setMessage("");
+    try {
+      const body = await (await fetch(`/api/admin/works/sns/${projectId}/copy`, {
+        method: "POST",
+      })).json() as { ok?: boolean; id?: string; message?: string };
+      if (!body.ok || !body.id) throw new Error(body.message ?? "복사하지 못했습니다.");
+      router.push(`/sns/${body.id}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "복사하지 못했습니다.");
+    } finally {
+      setCopying(false);
+    }
+  }, [projectId, router]);
+
   const request = React.useCallback(
     (url: string, init?: RequestInit) => projectRequest(url, init, readOnly),
     [readOnly],
@@ -317,8 +346,15 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         무엇을 하면 되는지(복사)까지 같은 자리에 적는다.
       */}
       {readOnly ? (
-        <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-          <b>다른 회원의 작업</b>을 보는 중입니다. 과정은 볼 수 있지만 고칠 수는 없습니다.
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <span>
+            <b>다른 회원의 작업</b>을 보는 중입니다. 과정은 볼 수 있지만 고칠 수는 없습니다.
+          </span>
+          {/* 무엇을 하면 되는지 같은 자리에 둔다. 막아만 두면 길이 없다. */}
+          <Button size="sm" disabled={copying} onClick={() => void copyToSelf()}>
+            {copying ? <Loader2 className="animate-spin" /> : null}
+            {copying ? "복사하는 중…" : "내 작업으로 복사"}
+          </Button>
         </div>
       ) : null}
 
