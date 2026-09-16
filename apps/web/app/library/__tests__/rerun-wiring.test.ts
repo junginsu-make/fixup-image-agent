@@ -59,12 +59,84 @@ describe("지난 단계로 값을 들고 간다", () => {
       `posterSeed(project, new Set())` 으로 바꿔도 통과한다 — 참고 이미지가
       매번 통째로 사라지는 회귀인데 초록이다(2026-09-16 독립 리뷰가 실증).
     */
-    expect(read("app/poster/new-client.tsx")).toContain("posterSeed(project, visible)");
+    const source = read("app/poster/new-client.tsx");
+
+    expect(source).toContain("posterSeed(project, visible)");
+    /*
+      **인자 이름만 재면 그 인자를 만드는 줄을 바꾸는 것을 못 잡는다.**
+      `const visible = new Set<string>()` 으로 비워 놔도 위 줄은 그대로다 —
+      참고 이미지가 매번 통째로 사라지는데 초록이다.
+    */
+    expect(source).toContain("new Set((await loadReferences()).map((item) => item.id))");
   });
 
   it("카드뉴스는 **주인 여부**를 넘겨서 심는다", () => {
     // 같은 이유다. `snsSeed(project, true)` 로 굳어지면 남의 첨부까지 들고 온다.
     expect(read("app/sns/new-client.tsx")).toContain("snsSeed(project, mine)");
+  });
+
+  it("카드뉴스의 **주인 여부가 관리자 통로에서만 뒤집힌다**", () => {
+    /*
+      **인자 이름을 재는 것으로는 모자란다.** `snsSeed(project, mine)` 는 그대로
+      두고 `let mine = true` 를 `false` 로만 바꿔도 앞 시험은 통과한다 — 바뀐
+      것은 호출부 글자가 아니라 **값**이기 때문이다. 그러면 자기 작업을 다시
+      만드는데도 첨부가 통째로 빠지고 「다른 회원의 것이라」가 뜬다. 고치려던
+      바로 그 신고가 02 에서 재현된다(2026-09-16 독립 리뷰가 실증 — 전체
+      2,436개가 하나도 안 울렸다).
+
+      값을 못 재니 **순서**를 잰다. 참으로 시작해서 관리자 통로 안에서만 거짓이
+      되어야 한다 — 시작값을 뒤집는 것도, 거짓으로 만드는 줄을 통로 밖으로
+      빼는 것도 걸린다.
+    */
+    const source = read("app/sns/new-client.tsx");
+
+    expect(source).toMatch(/let mine = true;[\s\S]{0,400}mine = false;/);
+    // 거짓이 되는 자리는 관리자 통로 안이어야 한다.
+    const adminAt = source.indexOf("/api/admin/works/sns/");
+    const falseAt = source.indexOf("mine = false;");
+    expect(adminAt).toBeGreaterThan(-1);
+    expect(falseAt).toBeGreaterThan(adminAt);
+  });
+
+  it("이미지 만들기는 **심어야 할 값을 하나도 안 빠뜨린다**", () => {
+    /*
+      **배선 시험은 원문만 훑어서 상태를 못 본다.** 그래서 심는 줄이 하나
+      사라져도 안 울린다 — `setPickOrder(seed.pickOrder)` 를 지우면 참고
+      이미지가 하나도 안 실리는데 전체가 초록이었다(2026-09-16 독립 리뷰).
+
+      값을 못 재니 **줄을 센다.** 씨앗이 들고 온 것마다 심는 자리가 있어야 한다.
+    */
+    const source = read("app/poster/new-client.tsx");
+
+    for (const 심을것 of [
+      "setTitle(seed.title)",
+      "setInstruction(seed.instruction)",
+      "setRatio(seed.ratio)",
+      "setVariants(seed.variants)",
+      "setLook(seed.look)",
+      "setPromptMode(seed.promptMode)",
+      "setUserInstruction(seed.userInstruction)",
+      "setAttachmentIntent(seed.attachmentIntent)",
+      "setRoles(seed.roles)",
+      "setPickOrder(seed.pickOrder)",
+    ]) {
+      expect(source, `${심을것} 이 빠졌다`).toContain(심을것);
+    }
+  });
+
+  it("카드뉴스도 심어야 할 값을 하나도 안 빠뜨린다", () => {
+    const source = read("app/sns/new-client.tsx");
+
+    for (const 심을것 of [
+      "setTitle(seed.title)",
+      "setToneNote(seed.toneNote)",
+      "setSource(seed.source)",
+      "setAttachments(seed.attachments)",
+      "setIntents(seed.intents)",
+      "setSpec(seed.spec)",
+    ]) {
+      expect(source, `${심을것} 이 빠졌다`).toContain(심을것);
+    }
   });
 
   it.each(TOOLS)("$name 은 **관리자도** 남의 작업을 다시 만들 수 있다", ({ fresh, adminRoute }) => {
