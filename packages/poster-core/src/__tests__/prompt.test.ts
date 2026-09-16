@@ -594,3 +594,44 @@ describe("쓴 그대로일 때의 글자", () => {
     expect(prompt).toContain("가을 사진전");
   });
 });
+
+/**
+ * **서버도 화면과 같은 규칙을 지켜야 한다.**
+ *
+ * 화면은 「레퍼런스가 없으면 레퍼런스 스타일을 못 쓴다」고 말한다. 그런데
+ * 서버가 안 막으면 화면을 안 거치는 길로 `auto` 가 그대로 들어온다 — API 직접
+ * 호출, 첨부를 다 뺀 옛 작업 다시 돌리기(2026-09-16 실측으로 구멍 확인).
+ *
+ * `auto` 의 지시문은 빈 문자열이다. 첨부도 없고 지시문도 비면 **그림을 무엇으로
+ * 그릴지 정하는 말이 프롬프트에 한 줄도 안 들어간다.**
+ */
+describe("첨부가 없는데 auto 가 들어오면", () => {
+  it("결을 정하는 말이 반드시 실린다", () => {
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, scene: "해 질 녘 바닷가" },
+      images: [],
+      look: "auto",
+    });
+
+    // 실사로 내려가 사진 지시가 붙는다.
+    expect(prompt).toMatch(/photograph|photographic|skin|pore/i);
+  });
+
+  /** 첨부가 있으면 지금까지대로 아무 말도 안 보탠다. */
+  it("첨부가 있으면 auto 는 그대로 아무 말도 안 보탠다", () => {
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, scene: "해 질 녘 바닷가" },
+      images: [{ kind: "style_reference" }],
+      look: "auto",
+    });
+
+    expect(prompt).not.toMatch(/subsurface scattering|cel-shaded|brush or ink/i);
+  });
+
+  /** 사람이 고른 결은 첨부가 있든 없든 그대로다. */
+  it("사람이 고른 결은 안 건드린다", () => {
+    const prompt = buildPosterPrompt({ slots: EMPTY_SLOTS, images: [], look: "anime" });
+
+    expect(prompt).toMatch(/cel-shaded/i);
+  });
+});

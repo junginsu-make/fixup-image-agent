@@ -317,7 +317,7 @@ export function Workspace(props: {
                 </div>
               )}
               <div className="mt-4">
-                <label className="mb-2 block text-xs font-bold text-muted-foreground">결</label>
+                <label className="mb-2 block text-xs font-bold text-muted-foreground">그림체</label>
                 <div className="flex flex-wrap gap-2">
                   {IMAGE_LOOKS.map((option) => (
                     <button

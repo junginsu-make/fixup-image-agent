@@ -213,9 +213,22 @@ describe("글만으로 만드는 길", () => {
     expect(source).toMatch(/estimatePosterCost\(\{[\s\S]*?hasReferences,/);
   });
 
-  /** 첨부가 없으면 「레퍼런스 따라가기」가 목록에서 빠져야 한다. */
-  it("고를 수 있는 결을 첨부 유무로 정한다", () => {
-    expect(source).toContain("looksFor(hasReferences)");
+  /**
+   * **빼지 않고 흐리게 둔다.**
+   *
+   * 처음에는 첨부가 없으면 「레퍼런스 스타일」을 목록에서 뺐다. 그랬더니 그런
+   * 기능이 있다는 것을 알 길이 없었다 — 사용자가 화면을 보며 「auto 가 어디
+   * 있냐」고 물었다(2026-09-16). 못 누르게만 막으면 배울 수 있다.
+   */
+  it("결은 다 보여 주되 못 고르는 것은 막는다", () => {
+    expect(source).toContain("looksFor()");
+    expect(source).toContain("lookBlockedReason(entry, hasReferences)");
+    expect(source).toContain("disabled={Boolean(blocked)}");
+  });
+
+  /** 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적는다. */
+  it("못 고르는 까닭을 화면에 적는다", () => {
+    expect(source).toContain('lookBlockedReason("auto", hasReferences)');
   });
 
   /**
@@ -244,19 +257,42 @@ describe("글만으로 만드는 길", () => {
 describe("01 두 칸의 차이를 말한다", () => {
   it("칸 이름이 무슨 칸인지 말한다", () => {
     expect(source).toContain("무엇을 만들까 · 한두 줄");
-    expect(source).toContain("직접 쓴 프롬프트 · 선택");
+    expect(source).toContain("꼭 지킬 말");
   });
 
-  /** 이 문장이 없으면 어느 칸이 원문을 지키는지 알 길이 없다. */
-  it("그대로 간다고 적는다", () => {
-    expect(source).toContain("AI 가 고치지 않고 그대로");
+  /**
+   * **접어 둔다.** 칸 둘이 나란히 펼쳐져 있으니 「둘 다 써야 하나」로 읽혔다
+   * (2026-09-16 사용자 보고). 이건 선택이고 대부분은 위 칸 하나로 끝난다.
+   */
+  it("두 번째 칸은 접혀 있다", () => {
+    const block = source.slice(source.indexOf("꼭 지킬 말이 있나요?"));
+    expect(source).toMatch(/<details[\s\S]{0,400}꼭 지킬 말이 있나요\?/);
+    expect(block.slice(0, 200)).toContain("눌러서 펼치기");
   });
 
-  /** 3줄 창에서는 긴 프롬프트를 스크롤하며 봐야 한다. */
-  it("긴 글을 넣을 만큼 칸이 크다", () => {
-    const block = source.slice(source.indexOf("poster-user-instruction"));
-    expect(block.slice(0, 400)).toContain("rows={10}");
-    expect(source).not.toContain("rows={3}");
+  /**
+   * **이 칸은 완성 프롬프트를 넣는 자리가 아니다.** 여기 적은 말은 프롬프트
+   * 맨 앞과 맨 뒤 **두 번** 들어간다(2026-09-04 실측). 200자를 넣으면 400자가
+   * 실린다. 완성 프롬프트의 자리는 위 칸이다.
+   */
+  it("두 번 들어간다는 것을 적는다", () => {
+    expect(source).toContain("맨 앞과 맨 뒤에 두 번");
+    expect(source).toContain("완성된 프롬프트는 위 칸에 넣으세요");
+  });
+
+  /**
+   * 예시가 「배경은 밤」 하나뿐이라 그림 얘기만 적는 칸으로 읽혔다. 글자 처리·
+   * 구도까지 무엇이든 적을 수 있고, 특히 한글은 이 칸이 유일한 길이다.
+   */
+  it("무엇을 적을 수 있는지 예시로 보여 준다", () => {
+    expect(source).toContain("한국어가 깨지지 않게");
+    expect(source).toContain("무엇이든 적을 수 있습니다");
+  });
+
+  /** 접었으니 완성 프롬프트의 자리는 위 칸 설명이 말해야 한다. */
+  it("완성 프롬프트의 자리를 위 칸이 알려 준다", () => {
+    const block = source.slice(source.indexOf("poster-instruction"));
+    expect(block.slice(0, 1400)).toContain("완성된 프롬프트가 있으면 여기에 그대로 넣으세요");
   });
 });
 
@@ -292,8 +328,8 @@ describe("03 규격 길잡이", () => {
 describe("쓴 그대로 보내는 길", () => {
   it("완성된 프롬프트인지 판별해 묻는다", () => {
     expect(source).toContain("looksFinished(instruction)");
-    expect(source).toContain("쓴 그대로 생성");
-    expect(source).toContain("다듬어서 생성");
+    expect(source).toContain("그대로 생성");
+    expect(source).toContain("AI가 다듬어서 생성");
   });
 
   /** 규칙을 화면에 다시 적으면 둘이 갈린다. */

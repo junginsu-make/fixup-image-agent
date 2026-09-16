@@ -4,6 +4,8 @@ import {
   attachmentPlacementRule,
   designerPersona,
   imageLookDirective,
+  lookBlockedReason,
+  lookNeedsReference,
   looksFor,
   resolveLook,
   preserveDirective,
@@ -202,23 +204,33 @@ describe("첨부가 없을 때의 결", () => {
 });
 
 /**
- * 첨부가 없으면 **고를 목록에서 `auto` 를 뺀다.**
+ * **빼지 않는다. 흐리게 두고 왜 못 고르는지 적는다.**
  *
- * 남겨 두면 「레퍼런스 따라가기」라고 적힌 칸이 따라갈 레퍼런스가 없는 화면에
- * 뜬다. 고르면 조용히 실사가 되는데, 화면은 다른 말을 하고 있다.
+ * 처음에는 첨부가 없으면 `auto` 를 목록에서 뺐다. 그랬더니 **그런 기능이
+ * 있다는 것을 알 길이 없었다** — 사용자가 화면을 보며 「auto 가 어디 있냐」고
+ * 물었다(2026-09-16).
+ *
+ * 못 누르게만 막으면 「조용히 실사가 된다」는 걱정은 없어지고, 대신 **배울 수
+ * 있다**: 「02 에서 그림을 붙이면 저게 되는구나」.
  */
 describe("고를 수 있는 결", () => {
-  it("첨부가 있으면 다섯 가지 다", () => {
+  it("첨부가 있든 없든 다섯 가지를 다 보여 준다", () => {
     expect(looksFor(true)).toEqual(["auto", "photoreal", "anime", "3d", "illustration"]);
+    expect(looksFor(false)).toEqual(["auto", "photoreal", "anime", "3d", "illustration"]);
   });
 
-  it("첨부가 없으면 auto 가 빠진다", () => {
-    expect(looksFor(false)).toEqual(["photoreal", "anime", "3d", "illustration"]);
+  /** 레퍼런스를 따라가려면 따라갈 것이 있어야 한다. */
+  it("레퍼런스 따라가기만 첨부가 필요하다", () => {
+    expect(lookNeedsReference("auto")).toBe(true);
+    for (const look of ["photoreal", "anime", "3d", "illustration"] as const) {
+      expect(lookNeedsReference(look), look).toBe(false);
+    }
   });
 
-  /** 목록이 비면 화면에 고를 것이 없어진다. */
-  it("어느 쪽이든 비지 않는다", () => {
-    expect(looksFor(true).length).toBeGreaterThan(0);
-    expect(looksFor(false).length).toBeGreaterThan(0);
+  /** 왜 못 고르는지 그 자리에서 말한다. 회색 버튼만 두면 고장으로 읽힌다. */
+  it("못 고르는 까닭을 말해 준다", () => {
+    expect(lookBlockedReason("auto", false)).toContain("붙이면");
+    expect(lookBlockedReason("auto", true)).toBe("");
+    expect(lookBlockedReason("photoreal", false)).toBe("");
   });
 });

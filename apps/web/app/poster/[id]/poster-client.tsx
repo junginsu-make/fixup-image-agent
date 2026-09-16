@@ -603,7 +603,7 @@ export function PosterClient(
             {userWords.length ? (
               <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
                 <span className="text-meta text-subtle-foreground">
-                  내가 적은 말 — 아래 칸보다 우선합니다
+                  내가 적은 말. 아래 칸보다 우선합니다
                 </span>
                 {userWords.map(([label, text]) => (
                   <p key={label} className="text-sm">
