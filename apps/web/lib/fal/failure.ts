@@ -19,6 +19,8 @@
 export type FalFailureKind =
   /** 요청 자체가 거절됐다. 내용 정책·잘못된 입력 등. 다시 눌러도 같다. */
   | "rejected"
+  /** 결과가 사라졌다. 만료·삭제·용량 한도. 다시 만들면 된다. */
+  | "gone"
   /** 한도·혼잡. 그대로 다시 하면 된다. */
   | "busy"
   /** 제공자가 터졌다. 우리 잘못이 아니다. */
@@ -82,6 +84,31 @@ export function classifyFalFailure(error: unknown): FalFailureVerdict {
       status,
       httpStatus: 429,
       message: "지금 요청이 몰려 있습니다. 잠시 뒤 다시 눌러 주세요.",
+      detail,
+      releaseReservation: true,
+    };
+  }
+
+  /*
+   * **결과가 사라진 것은 거절이 아니다.**
+   *
+   * fal 이 「This request has no output」을 돌려주는 경우다 — 만료됐거나,
+   * 지워졌거나, 용량 한도로 저장되지 않았다(2026-09-16 사용자 보고). 오래된
+   * 작업을 다시 열 때 생긴다.
+   *
+   * 거절로 묶으면 「지시 문구를 바꾸세요」라고 말하게 되는데, **문구는 멀쩡했고
+   * 결과만 사라진 것**이라 틀린 안내다.
+   *
+   * **404 를 그대로 돌려주지 않는다.** 화면의 셸 폴러가 404 를 「작업이 아예
+   * 없다」로 읽고 목록에서 지운다(`running-jobs.tsx` 의 `if (response.status
+   * === 404) finish(job.id)`). 작업은 있고 결과만 없으므로 410 으로 알린다.
+   */
+  if (status === 404 || status === 410) {
+    return {
+      kind: "gone",
+      status,
+      httpStatus: 410,
+      message: "만든 그림이 남아 있지 않습니다. 시간이 지나 지워진 것이라 다시 만들어 주세요.",
       detail,
       releaseReservation: true,
     };
