@@ -14,6 +14,7 @@ import { listShowcaseForAdmin } from "../api/showcase/store";
 import type { ShowcaseAdminView } from "../api/showcase/core";
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 import { CostPanel } from "./CostPanel";
+import { ModelCatalogPanel } from "./ModelCatalogPanel";
 import {
   formatKrw,
   getCostByMember,
@@ -175,6 +176,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         daily={costDaily}
         prices={modelPrices}
       />
+
+      {/* 값이 왜 그런지 바로 위 표에서 궁금해진다. 그 답을 옆에 둔다. */}
+      <ModelCatalogPanel />
 
       <AiBadgePanel enabled={aiBadgeOn} />
 
