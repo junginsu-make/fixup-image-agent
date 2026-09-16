@@ -18,6 +18,12 @@ import { createHash } from "node:crypto";
  *   `randomId()` 가 다 4 다(운영 74장 전부 4 확인)
  * - 화면이 id 를 정해 보내는 올리기 주소는 **4 만 받는다**(`isOrdinaryReferenceId`)
  *   — 그래야 5 가 복사본만의 표시로 남는다
+ * - 회원이 표에 **직접** 넣는 권한은 거뒀다(`202609160002_revoke_member_reference_insert.sql`)
+ *   — 열려 있으면 이 검사를 안 거치고 아무 판의 id 로 넣을 수 있었다
+ *
+ * **이 검사를 안 거치는 길이 하나 남아 있다** — `scripts/migrate-local-to-supabase.mjs`
+ * 가 로컬 id 를 그대로 넣는다. 로컬 id 도 `randomUUID()`(4)로 만들어져 실제 위험은
+ * 없지만, 그 스크립트로 다른 곳의 자료를 옮길 일이 생기면 먼저 여기를 보라.
  *
  * `server-only` 를 붙이지 않는다 — 시험에서 값으로 잰다. `node:crypto` 를 쓰므로
  * 화면 쪽에서 부르면 안 된다.

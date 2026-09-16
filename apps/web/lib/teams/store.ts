@@ -360,18 +360,39 @@ export async function moveFollowingWork(
     return;
   }
 
-  const select = admin.from(table).select("id").eq("user_id", userId);
-  const { data, error: readError } = await (from === null ? select.is("team_id", null) : select.eq("team_id", from));
-  if (readError) throw new Error(readError.message);
+  /*
+    **끝까지 나눠 읽는다.** 한 번에 읽으면 프로젝트의 최대 행 수(기본 1000)에서
+    조용히 잘려, 그 뒤 그림은 팀을 따라가지 않는다(2026-09-16 리뷰).
+  */
+  const ids: string[] = [];
+  for (let start = 0; ; start += READ_PAGE) {
+    const select = admin.from(table).select("id").eq("user_id", userId);
+    const { data, error: readError } = await (from === null ? select.is("team_id", null) : select.eq("team_id", from))
+      .order("id")
+      .range(start, start + READ_PAGE - 1);
+    if (readError) throw new Error(readError.message);
+    const page = (data ?? []) as Array<{ id: string }>;
+    ids.push(...page.map((row) => row.id).filter((id) => !isAdoptedReferenceId(id)));
+    if (page.length < READ_PAGE) break;
+  }
 
-  const ids = ((data ?? []) as Array<{ id: string }>)
-    .map((row) => row.id)
-    .filter((id) => !isAdoptedReferenceId(id));
-  if (!ids.length) return;
-
-  const { error } = await admin.from(table).update({ team_id: to }).in("id", ids);
-  if (error) throw new Error(error.message);
+  /*
+    **100장씩 나눠 옮긴다.** `in` 필터는 PATCH 여도 주소 뒤에 실려, 한꺼번에 넣으면
+    수백 장부터 게이트웨이의 요청줄 한계(흔히 8KB)에 걸릴 수 있다(2026-09-16 리뷰).
+  */
+  for (let start = 0; start < ids.length; start += UPDATE_CHUNK) {
+    const { error } = await admin
+      .from(table)
+      .update({ team_id: to })
+      .in("id", ids.slice(start, start + UPDATE_CHUNK));
+    if (error) throw new Error(error.message);
+  }
 }
+
+/** 한 번에 읽는 줄 수. 프로젝트의 최대 행 수(기본 1000)를 넘지 않게. */
+const READ_PAGE = 1000;
+/** 한 번에 옮기는 그림 수. uuid 하나가 주소에서 약 39바이트다. */
+const UPDATE_CHUNK = 100;
 
 /**
  * 팀에 넣는다. **만들어 둔 것도 함께 간다.**

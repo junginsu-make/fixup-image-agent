@@ -18,24 +18,53 @@ vi.mock("../../local-store", () => ({ isLocalStoreEnabled: () => false }));
 interface Row { id: string; user_id: string; team_id: string | null }
 let tables: Record<string, Row[]> = {};
 
+/** 한 번의 update 에 실린 `in` id 수. 나눠 옮기는지 본다. */
+const updateSizes: number[] = [];
+/** 가짜 프로젝트의 최대 행 수. 진짜처럼 한 번에 이보다 많이 안 준다. */
+const MAX_ROWS = 1000;
+
 function query(table: string) {
   const filters: Array<(row: Row) => boolean> = [];
   let patch: Partial<Row> | null = null;
   let selecting = false;
+  let window: [number, number] | null = null;
+  let ordered = false;
+  let inSize: number | null = null;
   const rows = () => (tables[table] ?? []).filter((row) => filters.every((keep) => keep(row)));
   const run = () => {
     if (patch) {
+      if (inSize !== null) updateSizes.push(inSize);
       for (const row of rows()) Object.assign(row, patch);
       return { data: null, error: null };
     }
-    return { data: selecting ? rows().map((row) => ({ ...row })) : null, error: null };
+    if (!selecting) return { data: null, error: null };
+    let found = rows().map((row) => ({ ...row }));
+    if (ordered) found.sort((left, right) => left.id.localeCompare(right.id));
+    found = window ? found.slice(window[0], window[1] + 1) : found;
+    // 진짜 PostgREST 처럼 최대 행 수에서 조용히 자른다.
+    return { data: found.slice(0, MAX_ROWS), error: null };
   };
   const self: Record<string, unknown> = {
     select: () => { selecting = true; return self; },
+    order: () => { ordered = true; return self; },
+    range: (from: number, to: number) => { window = [from, to]; return self; },
     update: (value: Partial<Row>) => { patch = value; return self; },
-    eq: (column: keyof Row, value: string) => { filters.push((row) => row[column] === value); return self; },
+    eq: (column: keyof Row, value: string | null) => {
+      /*
+        **진짜보다 너그러우면 안 된다.** PostgREST 의 `eq.null` 은 null 과 맞지 않는다
+        — `is` 를 써야 한다. 여기서 맞춰 주면 `is` 분기를 지워도 초록이었다
+        (2026-09-16 리뷰가 실증).
+      */
+      if (value === null) throw new Error("eq(null) 은 PostgREST 에서 아무것도 안 맞는다 — is 를 써라");
+      filters.push((row) => row[column] === value);
+      return self;
+    },
     is: (column: keyof Row, value: null) => { filters.push((row) => row[column] === value); return self; },
-    in: (column: keyof Row, values: string[]) => { filters.push((row) => values.includes(row[column] as string)); return self; },
+    in: (column: keyof Row, values: string[]) => {
+      inSize = values.length;
+      filters.push((row) => values.includes(row[column] as string));
+      return self;
+    },
     then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(run())),
   };
   return self;
@@ -131,5 +160,53 @@ describe("「작업물 N건이 팀에 함께 들어갑니다」", () => {
     const counts = await countWorkFor([관리자]);
 
     expect(counts.get(관리자)).toBe(1);
+  });
+});
+
+describe("그림이 아주 많을 때", () => {
+  /*
+    한 번에 읽으면 최대 행 수(기본 1000)에서 조용히 잘리고, 한 번에 옮기면 `in`
+    필터가 주소 길이 한계에 걸린다(2026-09-16 리뷰).
+  */
+  const 많이 = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      user_id: 관리자,
+      team_id: "팀X" as string | null,
+    }));
+
+  it("**1000장을 넘어도 전부 옮긴다** — 잘린 뒤쪽이 옛 팀에 남지 않는다", async () => {
+    tables.reference_images = [...많이(1001), { id: 복사본, user_id: 관리자, team_id: "팀X" }];
+    updateSizes.length = 0;
+
+    await moveFollowingWork("reference_images", 관리자, "팀X", "팀Y");
+
+    const left = tables.reference_images.filter((row) => row.id !== 복사본 && row.team_id === "팀X");
+    expect(left).toHaveLength(0);
+    expect(범위(복사본)).toBe("팀X");
+  });
+
+  it("**100장씩 나눠 옮긴다**", async () => {
+    tables.reference_images = 많이(250);
+    updateSizes.length = 0;
+
+    await moveFollowingWork("reference_images", 관리자, "팀X", "팀Y");
+
+    expect(updateSizes).toEqual([100, 100, 50]);
+  });
+});
+
+describe("참고 이미지가 아닌 표를 「팀 없음」에서 옮길 때", () => {
+  it("**`is(null)` 로 찾는다** — `eq(null)` 은 진짜 저장소에서 아무것도 안 맞는다", async () => {
+    /*
+      배정할 때 가장 먼저 도는 길이다(`stampWorkTeam` 의 첫 호출). 이 분기를
+      `eq` 하나로 합쳐도 초록이었다 — 이 경우를 재는 시험이 없었다(2026-09-16 확인).
+      가짜 `eq` 는 null 을 받으면 던지므로, 그렇게 바뀌면 여기서 멈춘다.
+    */
+    tables.library_items = [{ id: "작업1", user_id: 관리자, team_id: null }];
+
+    await moveFollowingWork("library_items", 관리자, null, "팀X");
+
+    expect(tables.library_items[0]!.team_id).toBe("팀X");
   });
 });

@@ -27,6 +27,9 @@ describe("팀을 옮기면", () => {
     // `moveFollowingWork` 한 곳이 한다(관리자 복사본을 빼야 해서 모았다).
     expect(store).toContain("await moveFollowingWork(table, userId, null, teamId);");
     expect(store).toContain("await moveFollowingWork(table, userId, fromTeamId, teamId);");
+    // 팀에서 뺄 때는 **그 팀에 달린 것만** 푼다. `from` 을 null 로 바꾸면 팀에서 빠진
+    // 사람의 작업물이 옛 팀에 그대로 남는다(2026-09-16 리뷰가 실증 — 초록이었다).
+    expect(store).toContain("await moveFollowingWork(table, userId, teamId, null);");
   });
 
   it("남의 팀 것을 끌어오지는 않는다", () => {

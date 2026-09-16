@@ -70,6 +70,25 @@ describe("복사 주소 — 무엇을 누구 기준으로 복사하나", () => {
     expect(response.status).toBe(200);
   });
 
+  it("**진짜 본문에 남의 그림 id 를 실어 보내도** 복사 대상에 안 섞인다", async () => {
+    /*
+      건드리면 터지는 요청만으로는 모자랐다. 라우트가 본문 읽기를 try 로 감싸면
+      터져도 삼켜서 초록이었다(2026-09-16 리뷰가 실증). 그래서 **읽을 수 있는 진짜
+      본문**을 주고, 그것이 결과에 안 섞이는지 본다.
+    */
+    const tempting = new Request("http://localhost/api/admin/works/poster/w1/references", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: ["남의그림"], referenceIds: ["남의그림"] }),
+    });
+
+    const response = await POST(tempting, context("poster"));
+
+    expect(response.status).toBe(200);
+    expect(copyReferencesToSelf.mock.calls[0]![0]).not.toContain("남의그림");
+    expect([...copyReferencesToSelf.mock.calls[0]![0]].sort()).toEqual(["그림1", "그림2"]);
+  });
+
   it("카드뉴스는 첨부의 id 를 쓴다", async () => {
     readAnyWork.mockResolvedValue({ userId: "회원A", data: { attachments: [{ id: "첨부1" }] } });
 

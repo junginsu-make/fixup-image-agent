@@ -40,8 +40,13 @@ describe("이미지 만들기 새 작업 화면", () => {
     */
     once(source, "...fetchRerunDeps(),");
     once(source, "loadVisible: async () => new Set((await loadReferences()).map((item) => item.id)),");
-    expect(source).not.toContain("async get(url)");
-    expect(source).not.toContain("async post(url)");
+    /*
+      **어떤 모양으로도 요청 함수를 덮어쓰지 않는다.** `async post(url)` 만 금지했더니
+      `...fetchRerunDeps(),` 다음에 `post: async () => null,` 을 넣어도 초록이었다
+      (2026-09-16 리뷰가 실증). 이 화면 파일에는 `get`·`post` 라는 키도, 그 이름의 메서드 정의도 없다.
+      `searchParams.get("from")` 같은 **호출**은 앞에 점이 붙어 안 걸린다.
+    */
+    expect(source).not.toMatch(/(^|[\s{,])(get|post)\s*(:|\([^)]*\)\s*\{)/m);
   });
 
   it("옛 흐름이 화면에 남아 있지 않다", () => {
@@ -67,8 +72,7 @@ describe("카드뉴스 새 작업 화면", () => {
     once(source, "const result = await loadSnsRerun(rerunFrom, fetchRerunDeps());");
     once(source, "if (!result.ok) {");
     once(source, "const { seed } = result;");
-    expect(source).not.toContain("async get(url)");
-    expect(source).not.toContain("async post(url)");
+    expect(source).not.toMatch(/(^|[\s{,])(get|post)\s*(:|\([^)]*\)\s*\{)/m);
   });
 
   it("옛 흐름이 화면에 남아 있지 않다", () => {

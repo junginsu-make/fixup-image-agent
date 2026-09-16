@@ -36,37 +36,62 @@ let failScopeUpdate = false;
 let raceWinner: Row | null = null;
 /** 파일 목록 조회가 실패하는 경우. */
 let failList = false;
+/** 범위를 고치기 직전에 행 주인을 이 사람으로 바꾼다. 두 번째 방어선을 잰다. */
+let swapOwnerBeforeUpdate: string | null = null;
 /** insert 에 실제로 실린 값. 트리거가 손대기 전이다. */
 let insertedRows: Row[] = [];
 
 function query(table: string) {
-  const state: { ids?: string[]; id?: string; op?: "select" | "update" | "delete"; patch?: Record<string, unknown> } = {};
+  const state: {
+    ids?: string[];
+    filters: Array<[string, unknown]>;
+    op: "select" | "update" | "delete";
+    patch?: Record<string, unknown>;
+  } = { filters: [], op: "select" };
+  const matches = (row: Row) =>
+    state.filters.every(([column, value]) => (row as unknown as Record<string, unknown>)[column] === value);
+  const target = () => [...rows.values()].filter(matches);
+
+  const run = () => {
+    if (state.op === "update") {
+      if (failScopeUpdate) return { data: null, error: { message: "범위를 못 고쳤습니다" } };
+      if (swapOwnerBeforeUpdate) {
+        // 검사를 통과한 뒤, 고치기 직전에 행 주인이 바뀐 것처럼 꾸민다.
+        const id = state.filters.find(([column]) => column === "id")?.[1] as string | undefined;
+        const row = id ? rows.get(id) : undefined;
+        if (row) row.user_id = swapOwnerBeforeUpdate;
+        swapOwnerBeforeUpdate = null;
+      }
+      const hit = target();
+      for (const row of hit) {
+        row.team_id = state.patch!.team_id as string | null;
+        scopeUpdates.push({ id: row.id, team_id: row.team_id });
+      }
+      return { data: hit.map((row) => ({ id: row.id })), error: null };
+    }
+    if (state.op === "delete") {
+      for (const row of target()) rows.delete(row.id);
+      return { data: null, error: null };
+    }
+    return {
+      data: table === "reference_images" ? (state.ids ?? []).map((id) => rows.get(id)).filter(Boolean) : [],
+      error: null,
+    };
+  };
+
   const self: Record<string, unknown> = {
-    select: () => { state.op = state.op ?? "select"; return self; },
+    select: () => self,
     in: (_col: string, ids: string[]) => { state.ids = ids; return self; },
-    eq: (_col: string, id: string) => {
-      state.id = id;
-      if (state.op === "update") {
-        if (failScopeUpdate) return Promise.resolve({ error: { message: "범위를 못 고쳤습니다" } });
-        const row = rows.get(id);
-        if (row) row.team_id = state.patch!.team_id as string | null;
-        scopeUpdates.push({ id, team_id: state.patch!.team_id as string | null });
-        return Promise.resolve({ error: null });
-      }
-      if (state.op === "delete") {
-        rows.delete(id);
-        return Promise.resolve({ error: null });
-      }
-      return self;
-    },
+    eq: (column: string, value: unknown) => { state.filters.push([column, value]); return self; },
     update: (patch: Record<string, unknown>) => { state.op = "update"; state.patch = patch; return self; },
     delete: () => { state.op = "delete"; return self; },
     maybeSingle: async () => {
-      if (failFindOnce && state.id === failFindOnce) {
+      const id = state.filters.find(([column]) => column === "id")?.[1] as string | undefined;
+      if (failFindOnce && id === failFindOnce) {
         failFindOnce = null;
         return { data: null, error: { message: "잠깐 못 읽었습니다" } };
       }
-      return { data: rows.get(state.id!) ?? null, error: null };
+      return { data: id ? rows.get(id) ?? null : null, error: null };
     },
     insert: async (row: Row) => {
       insertedRows.push({ ...row });
@@ -75,14 +100,12 @@ function query(table: string) {
         raceWinner = null;
         return { error: { message: "duplicate key", code: "23505" } };
       }
+      if (rows.has(row.id)) return { error: { message: "duplicate key", code: "23505" } };
       // 팀 도장 트리거: 명시한 팀은 그대로 두고, 없으면 관리자 팀을 찍는다.
       rows.set(row.id, { ...row, team_id: row.team_id ?? "관리자팀" });
       return { error: null };
     },
-    then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve({
-      data: table === "reference_images" ? (state.ids ?? []).map((id) => rows.get(id)).filter(Boolean) : [],
-      error: null,
-    })),
+    then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(run())),
   };
   return self;
 }
@@ -148,6 +171,7 @@ beforeEach(() => {
   raceWinner = null;
   관리자팀 = null;
   failList = false;
+  swapOwnerBeforeUpdate = null;
   insertedRows = [];
 });
 
@@ -362,5 +386,85 @@ describe("넣는 순간의 범위", () => {
 
     expect(insertedRows).toHaveLength(1);
     expect(insertedRows[0]!.team_id).toBe("팀X");
+  });
+});
+
+/**
+ * **남이 복사본 id 를 먼저 차지해 둔 경우.**
+ *
+ * 복사본 id 는 누구나 계산할 수 있고, 회원에게는 이 표에 직접 넣는 권한이 열려
+ * 있었다. 그러면 회원 B 가 그 id 로 자기 행을 먼저 넣어 두고, 관리자의 복사가
+ * **B 의 행을 재사용하고 팀 범위까지 바꿨다** — B 의 그림이 남의 팀 라이브러리에
+ * 들어가고, 관리자의 생성 입력이 B 가 고른 그림으로 바뀌었다(2026-09-16 리뷰).
+ */
+describe("남이 차지한 id", () => {
+  const 가로챈행 = (): Row => {
+    const newId = adoptedReferenceId("a", 관리자);
+    return {
+      id: newId, user_id: "회원B", team_id: "팀B",
+      storage_path: `회원B/references/${newId}.png`, thumb_path: null,
+      title: "가로챔", purpose: "poster", width: 1, height: 1,
+    };
+  };
+
+  it("**재사용하지 않고, 그 회원 행의 범위도 안 바꾼다**", async () => {
+    넣기(원본("a"));
+    넣기(가로챈행());
+
+    const copies = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(copies).toEqual([]);
+    expect(rows.get(가로챈행().id)!.team_id).toBe("팀B");
+    expect(rows.get(가로챈행().id)!.user_id).toBe("회원B");
+  });
+
+  it("그 회원의 파일을 지우지 않는다", async () => {
+    넣기(원본("a"));
+    넣기(가로챈행());
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(files.has(가로챈행().storage_path)).toBe(true);
+    expect(removed).not.toContain(가로챈행().storage_path);
+  });
+
+  it("**넣으려는 순간 남이 차지했으면** 우리 파일만 치우고 남의 행은 그대로 둔다", async () => {
+    넣기(원본("a"));
+    raceWinner = 가로챈행();
+
+    const copies = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(copies).toEqual([]);
+    expect(rows.get(가로챈행().id)!.team_id).toBe("팀B");
+    const ours = `관리자/references/${adoptedReferenceId("a", 관리자)}.png`;
+    expect(files.has(ours)).toBe(false);
+  });
+
+  it("주인은 같은데 경로가 다르면 우리 복사본이 아니다", async () => {
+    넣기(원본("a"));
+    const newId = adoptedReferenceId("a", 관리자);
+    넣기({ ...가로챈행(), user_id: 관리자, storage_path: `관리자/references/엉뚱한.png`, team_id: "관리자팀" });
+
+    expect(await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀)).toEqual([]);
+    expect(rows.get(newId)!.team_id).toBe("관리자팀");
+  });
+});
+
+describe("두 번째 방어선 — 범위를 고칠 때도 주인을 본다", () => {
+  it("**검사 뒤에 주인이 바뀌었으면** 그 행의 범위를 안 바꾼다", async () => {
+    /*
+      재사용 전에 `isOurCopy` 로 걸렀더라도, 고치는 순간 주인이 바뀌었을 수 있다.
+      `id` 만 걸고 고치면 그때 남의 행 범위가 바뀐다. 고치는 질의 자체에 주인을
+      건다 — 첫 방어선이 뚫려도 여기서 막힌다.
+    */
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    rows.get(copy!.id)!.team_id = "관리자팀";
+    swapOwnerBeforeUpdate = "회원B";
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀).catch(() => {});
+
+    expect(rows.get(copy!.id)!.user_id).toBe("회원B");
+    expect(rows.get(copy!.id)!.team_id).toBe("관리자팀");
   });
 });
