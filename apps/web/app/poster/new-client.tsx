@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -19,6 +19,7 @@ import {
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
+import { posterSeed } from "./rerun-seed";
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
@@ -58,6 +59,27 @@ const PROMPT_NAIL_EXAMPLES = [
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
+  /**
+   * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
+   *
+   * `/poster/new?from={작업}` 으로 온다. 전에는 이 화면이 늘 비어 있어서,
+   * 01~03 을 누른 사람은 「다 초기화됐다」고 읽었다(2026-09-16 사용자 보고).
+   */
+  const rerunFrom = useSearchParams().get("from") ?? "";
+  /** 첫 그림에서부터 잠가야 한다 — 상태 기본값으로 쓴다. */
+  const rerunFromInitial = rerunFrom;
+  /** 값을 들고 왔다고 화면에 적을 것. 못 가져온 참고 이미지 수까지 말한다. */
+  const [rerun, setRerun] = React.useState<
+    { title: string; missing: number; adWork: boolean } | null
+  >(null);
+  /**
+   * 지난 값을 **아직 기다리는 중인가.**
+   *
+   * 기다리는 동안 01 이 빈 채로 입력을 받으면, 값이 닿는 순간 친 글이
+   * 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다(2026-09-16 독립
+   * 리뷰). 그래서 닿을 때까지 화면을 안 내준다.
+   */
+  const [seeding, setSeeding] = React.useState(Boolean(rerunFromInitial));
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
   const [step, setStep] = React.useState("instruction");
@@ -238,7 +260,80 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     return [];
   }, []);
 
-  React.useEffect(() => { void loadReferences(); }, [loadReferences]);
+  /*
+    **지난 단계로 돌아온 길이면 여기서 안 읽는다.** 아래 효과가 어차피 읽는데,
+    둘 다 읽으면 화면 한 번에 같은 목록을 두 번 받아 온다 — 사용자가
+    「끊긴다」고 말한 그 무게를 이 화면에 다시 얹는 셈이다.
+  */
+  React.useEffect(() => {
+    if (rerunFrom) return;
+    void loadReferences();
+  }, [loadReferences, rerunFrom]);
+
+  /**
+   * 지난 단계로 돌아왔으면 **그때 쓰던 값을 심는다.**
+   *
+   * **참고 이미지를 먼저 읽는다.** 무엇을 볼 수 있는지 알아야 못 가져오는 것을
+   * 가려낼 수 있다 — 골라 둔 채로 두면 화면에는 ①②③ 이 서는데 실제로는 아무
+   * 그림도 없다.
+   *
+   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
+   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정). 회원용 길에
+   * 관리자 예외를 심지 않는 것은 이 저장소의 규칙이다.
+   */
+  React.useEffect(() => {
+    if (!rerunFrom) return;
+    let alive = true;
+    void (async () => {
+      const visible = new Set((await loadReferences()).map((item) => item.id));
+      if (!alive) return;
+
+      const read = async (url: string) => {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          return { status: response.status, body: await response.json().catch(() => null) };
+        } catch {
+          return { status: 0, body: null };
+        }
+      };
+
+      let found = await read(`/api/poster/projects/${encodeURIComponent(rerunFrom)}`);
+      if (!found.body?.ok && found.status === 404) {
+        found = await read(`/api/admin/works/poster/${encodeURIComponent(rerunFrom)}`);
+      }
+      const project = found.body?.project ?? found.body?.work;
+      if (!alive) return;
+      if (!project) {
+        setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
+        setSeeding(false);
+        return;
+      }
+
+      const seed = posterSeed(project, visible);
+      setTitle(seed.title);
+      setInstruction(seed.instruction);
+      setRatio(seed.ratio);
+      if (seed.modelId) setModelId(seed.modelId);
+      setVariants(seed.variants);
+      setLook(seed.look);
+      setPromptMode(seed.promptMode);
+      // 한 번 고른 것으로 친다. 값을 들고 왔는데 또 물으면 성가시다.
+      setModeAnswered(true);
+      setUserInstruction(seed.userInstruction);
+      setAttachmentIntent(seed.attachmentIntent);
+      setRoles(seed.roles);
+      setPickOrder(seed.pickOrder);
+      setRerun({
+        title: seed.title,
+        missing: seed.missingReferences,
+        // 광고 작업은 비율이 `match-source` 고 마스터 픽셀을 따로 든다.
+        adWork: seed.ratio === "match-source",
+      });
+      setSeeding(false);
+    })();
+    return () => { alive = false; };
+  }, [rerunFrom, loadReferences]);
 
   /** 한 벌의 공통 값. 광고 모드는 여기에 마스터만 얹는다. */
   function projectBody(extra: Record<string, unknown> = {}) {
@@ -364,13 +459,58 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         <StepBar steps={POSTER_STEPS} current={step} onJump={setStep} allowJump={reachableBeforeCreate} />
       </div>
 
+      {/*
+        **값을 들고 왔다고 말한다.** 안 적으면 사용자는 이 화면이 원래 작업을
+        고치는 곳인 줄 안다 — 만들기를 누르면 새 작업이 하나 더 생긴다.
+      */}
+      {/*
+        **기다리는 동안 칸을 안 내준다.** 빈 채로 입력을 받으면 값이 닿는
+        순간 친 글이 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다
+        (2026-09-16 독립 리뷰). 아래 단계 내용도 이 값으로 함께 막는다.
+      */}
+      {seeding ? (
+        <div role="status" className="rounded-lg border border-border bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+          지난 값을 불러오는 중입니다…
+        </div>
+      ) : null}
+
+      {rerun ? (
+        <div role="status" className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+          <b>「{rerun.title || "이름 없는 이미지"}」</b> 의 값을 가져왔습니다. 고쳐서 만들면
+          <b> 새 작업</b>이 하나 더 생기고 원래 작업은 그대로 남습니다.
+          {rerun.missing ? (
+            <span className="mt-1 block text-muted-foreground">
+              {/*
+                **원인을 단정하지 않는다.** 이 수는 「지금 내 목록에 없는 것」일
+                뿐이다 — 내가 그 그림을 지웠거나 팀을 옮겨 범위 밖으로 나간
+                경우에도 여기에 센다(2026-09-16 독립 리뷰).
+              */}
+              참고 이미지 {rerun.missing}장은 지금 내 목록에 없어 가져오지 못했습니다.
+              다른 회원의 것이거나, 지운 그림일 수 있습니다.
+            </span>
+          ) : null}
+          {/*
+            **광고 작업은 규격을 못 들고 온다.** 광고는 `ratio: "match-source"` 와
+            마스터 픽셀(`data.adMaster`)로 저장되는데 씨앗은 비율만 들고 온다.
+            말 안 하면 「값을 가져왔습니다」를 믿고 그대로 만들어, 마스터 크기가
+            아니라 첨부 그림 크기로 나온다(2026-09-16 독립 리뷰).
+          */}
+          {rerun.adWork ? (
+            <span className="mt-1 block text-muted-foreground">
+              이 작업은 <b>광고 규격</b>으로 만든 것입니다. 규격은 가져오지 못했으니
+              03에서 다시 골라 주세요.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       {error ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
-      {step === "reference" ? (
+      {!seeding && step === "reference" ? (
         <Card>
           <CardHeader>
             <CardTitle>쓸 이미지를 고르세요</CardTitle>
@@ -453,7 +593,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         </Card>
       ) : null}
 
-      {step === "spec" ? (
+      {!seeding && step === "spec" ? (
         <Card>
           <CardHeader>
             <CardTitle>규격</CardTitle>
@@ -638,7 +778,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         </Card>
       ) : null}
 
-      {step === "instruction" ? (
+      {!seeding && step === "instruction" ? (
         <Card>
           <CardHeader>
             <CardTitle>무엇을 만들까</CardTitle>

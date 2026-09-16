@@ -17,7 +17,7 @@ import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
-import { POSTER_STEPS } from "../steps";
+import { POSTER_STEPS, reachableBeforeCreate } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
@@ -539,17 +539,28 @@ export function PosterClient(
       <StepBar
         steps={POSTER_STEPS}
         current={current}
+        /*
+          **못 가는 곳은 눌리지 않게 한다.** 04·05 는 이 화면 안이라 오갈 데가
+          없는데, `onJump` 안에서 조용히 돌아서면 단추는 활성으로 보이고
+          hover 까지 먹는다 — 눌러도 아무 일이 없어 고장으로 읽힌다
+          (2026-09-16 독립 리뷰). 새로 만드는 화면도 같은 값을 쓴다.
+        */
+        allowJump={reachableBeforeCreate}
         onJump={(id) => {
           /*
-            앞 세 단계는 새로 만드는 화면에 있다. 거기로 보낸다.
+            앞 세 단계는 새로 만드는 화면에 있다. **이 작업의 값을 들고** 간다.
 
-            **남의 작업을 보는 중이면 안 움직인다.** 보내 봐야 빈 화면이 뜨고,
-            사용자는 **설정이 다 사라졌다고 읽는다**(2026-09-16 실제 신고).
-            보는 중에 갈 곳은 그 작업 안뿐이다.
+            전에는 그냥 `/poster/new` 로 보냈다. 값이 지워진 것이 아니라 다른
+            화면으로 간 것인데, 사용자에게는 「다 초기화됐다」로 읽혔다
+            (2026-09-16 사용자 보고).
+
+            **남의 작업이어도 간다.** 관리자는 모든 회원의 작업을 다시 만들 수
+            있어야 한다(2026-09-16 사용자 결정). 거기서 만들기를 누르면 **새
+            작업**이 생기고 원래 작업은 안 바뀐다 — 그래서 읽기 전용과
+            어긋나지 않는다.
           */
           if (id === "plan" || id === "result") return;
-          if (readOnly) return;
-          router.push("/poster/new");
+          router.push(`/poster/new?from=${encodeURIComponent(project.id)}`);
         }}
       />
 

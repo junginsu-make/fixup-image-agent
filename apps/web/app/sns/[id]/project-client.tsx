@@ -374,7 +374,33 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         <WorkingBanner label="그림을 만드는 중입니다" hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다" />
       ) : null}
 
-      <StepBar steps={STEPS} current={view} onJump={view === "result" ? (id) => id === "copy" && setView("copy") : undefined} />
+      {/*
+        **앞 세 단계는 새로 만드는 화면에 있다.** 이 작업의 값을 들고 간다.
+
+        전에는 아예 못 누르게 막아 두어서, 지난 단계를 보려면 길이 없었다
+        (2026-09-16 사용자 보고). 04 는 이 화면 안이라 그대로 오간다.
+
+        **남의 작업이어도 간다.** 관리자는 모든 회원의 작업을 다시 만들 수
+        있어야 한다. 거기서 만들기를 누르면 **새 작업**이 생기고 원래 작업은
+        안 바뀐다 — 그래서 읽기 전용과 어긋나지 않는다.
+      */}
+      <StepBar
+        steps={STEPS}
+        current={view}
+        /*
+          **못 가는 곳은 눌리지 않게 한다.** `onJump` 안에서 조용히 돌아서면
+          단추는 활성으로 보이고 hover 까지 먹는데 눌러도 아무 일이 없다 —
+          원고를 다 고친 사람이 「05 결과」를 누르고 고장으로 읽는다
+          (2026-09-16 독립 리뷰). 전에는 `onJump` 자체가 없어서 다섯 단추가
+          전부 비활성이었다. 이미지 쪽도 `allowJump` 로 막는다.
+        */
+        allowJump={(id) => id !== "result" || view === "result"}
+        onJump={(id) => {
+          if (id === "copy") return view === "result" ? setView("copy") : undefined;
+          if (id === "result") return undefined;
+          router.push(`/sns/new?from=${encodeURIComponent(projectId)}`);
+        }}
+      />
 
       {message ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{message}</p> : null}
 
