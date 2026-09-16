@@ -540,3 +540,57 @@ describe("쓴 그대로 보내기", () => {
     expect(prompt).toContain("기획이 쓴 장면");
   });
 });
+
+/**
+ * **쓴 그대로일 때 글자를 우리가 금지하면 안 된다.**
+ *
+ * 「글자를 하나도 안 적었으면 넣지 마라」는 2026-09-08 실측으로 넣은 말이다 —
+ * 기획이 글자를 안 만들었는데 모델이 「BEST DAY EVER!」를 박아 넣었다.
+ *
+ * 그런데 쓴 그대로에서는 **기획이 아예 안 돈다.** 슬롯이 빈 것은 「글자를 안
+ * 원한다」가 아니라 **「우리가 안 물어봤다」**는 뜻이다. 그때 금지하면 사용자
+ * 프롬프트가 글자를 요구해도 우리가 막는다 — 그 프롬프트를 살리려고 만든
+ * 갈래에서(2026-09-16 실물 확인).
+ *
+ * 글자를 넣을지는 **사용자 프롬프트가 정한다.** 우리는 아무 말도 안 한다.
+ */
+describe("쓴 그대로일 때의 글자", () => {
+  const 원문 = "A movie poster with the title THE LONG NIGHT in large type at the top.";
+
+  it("글자를 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS, images: [], verbatimScene: 원문,
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).not.toContain("Do not add a headline");
+  });
+
+  /** 사용자가 적은 글자 요구는 그대로 남는다. */
+  it("원문의 글자 요구는 그대로다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS, images: [], verbatimScene: 원문,
+    });
+
+    expect(prompt).toContain("THE LONG NIGHT");
+  });
+
+  /**
+   * **다듬어서일 때는 그대로 금지한다.** 2026-09-08 실측이 정한 것이고,
+   * 이 변경으로 흔들리면 안 된다.
+   */
+  it("다듬어서일 때는 지금까지대로 금지한다", () => {
+    const prompt = buildPosterPrompt({ slots: EMPTY_SLOTS, images: [] });
+
+    expect(prompt).toContain("Render it with NO text");
+  });
+
+  /** 쓴 그대로여도 사람이 04 에서 문구를 적었으면 그것은 실린다. */
+  it("적어 둔 문구가 있으면 그것은 실린다", () => {
+    const prompt = buildPosterPrompt({
+      slots: { ...EMPTY_SLOTS, headline: "가을 사진전" }, images: [], verbatimScene: 원문,
+    });
+
+    expect(prompt).toContain("가을 사진전");
+  });
+});
