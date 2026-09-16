@@ -23,6 +23,7 @@ import {
 } from "./character-pick";
 import { gridSrc } from "./grid-src";
 import { ThumbImage } from "./thumb-image";
+import Link from "next/link";
 
 /**
  * 만들어 둔 캐릭터에서 **붙일 각도를 골라** 가져온다.
@@ -156,9 +157,9 @@ export function CharacterPickerButton({
           ) : characters.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
               만들어 둔 캐릭터가 없습니다.{" "}
-              <a href="/characters" className="font-medium text-primary underline-offset-2 hover:underline">
+              <Link href="/characters" className="font-medium text-primary underline-offset-2 hover:underline">
                 캐릭터 만들기
-              </a>
+              </Link>
               에서 먼저 만들어 주세요.
             </p>
           ) : opened ? (

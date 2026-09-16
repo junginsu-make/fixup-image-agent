@@ -11,6 +11,7 @@ import {
   pickedFrom,
 } from "../_components/character-choice";
 import { characterAngleLabel } from "../../lib/character-library";
+import Link from "next/link";
 
 /**
  * 이 페이지에 등장할 인물과 **쓸 장면**을 고른다.
@@ -142,12 +143,12 @@ export function CharacterPicker({
       {characters.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           사람이 나오면 섹션마다 다른 사람이 됩니다.{" "}
-          <a
+          <Link
             href="/characters"
             className="font-medium text-primary underline-offset-2 hover:underline"
           >
             캐릭터를 만들어 두면
-          </a>{" "}
+          </Link>{" "}
           같은 사람이 계속 나옵니다.
         </p>
       ) : (
