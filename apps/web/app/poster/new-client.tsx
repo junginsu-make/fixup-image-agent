@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
   Input, Label, StepBar, Textarea, cn,
 } from "@fixup/ui";
-import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, chooseModelForRatio } from "@fixup/sns-core";
+import { IMAGE_MODELS, MATCH_SOURCE, POSTER_RATIOS, RATIO_USES, chooseModelForRatio } from "@fixup/sns-core";
 import {
   DEFAULT_VARIANTS, estimatePosterCost, MAX_VARIANTS, MIN_VARIANTS,
 } from "@fixup/poster-core";
@@ -455,11 +456,42 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                     </Button>
                   ))}
                 </div>
+                {/*
+                  **버튼을 늘리지 않고 길잡이만 단다.**
+
+                  유튜브 썸네일은 1280x720 = 정확히 16:9 라 이미 만들 수 있는데,
+                  버튼이 「가로 배너 16:9」라 그게 그거인 줄 몰랐다(2026-09-16
+                  사용자 보고). 같은 픽셀을 새 항목으로 두면 목록에 같은 것이
+                  둘 생긴다 — `ratio-uses.ts` 머리말 참조.
+                */}
+                <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-subtle-foreground">
+                  {RATIO_USES.map((use) => (
+                    <span key={use.ratioId}>
+                      {use.label} → <strong className="font-bold text-muted-foreground">{use.ratioId}</strong>
+                    </span>
+                  ))}
+                </p>
               </fieldset>
             )}
 
             {sections.includes("ad-specs") && (
-              <AdSpecPicker onPlanChange={(plan) => setAdPlan(plan)} />
+              <div className="grid gap-3">
+                {/*
+                  **여기는 규격마다 새로 그린다.** 옆의 「광고 규격으로
+                  내보내기」는 이미 만든 그림에서 잘라 뽑아 거의 값이 안 든다.
+                  화면이 장수는 적었지만 싼 길이 있다는 것은 안 적었다
+                  (2026-09-16 사용자 보고).
+                */}
+                <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  여기서는 <strong className="text-foreground">규격마다 새로 그립니다</strong> — 고른 수만큼 값이 듭니다.
+                  이미 만들어 둔 그림이 있으면{" "}
+                  <Link href="/ad" className="font-bold text-primary underline-offset-2 hover:underline">
+                    광고 규격으로 내보내기
+                  </Link>
+                  가 거의 값이 안 듭니다.
+                </p>
+                <AdSpecPicker onPlanChange={(plan) => setAdPlan(plan)} />
+              </div>
             )}
 
             <fieldset className="grid gap-2">
@@ -555,8 +587,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       {step === "instruction" ? (
         <Card>
           <CardHeader>
-            <CardTitle>무엇을 만들지 한 줄로</CardTitle>
-            <CardDescription>나머지 칸은 AI 가 초안으로 채웁니다. 다음 화면에서 고칩니다.</CardDescription>
+            <CardTitle>무엇을 만들까</CardTitle>
+            <CardDescription>한두 줄이면 됩니다. 완성된 프롬프트가 있으면 아래 칸에 그대로 넣으세요.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-1.5">
@@ -569,14 +601,24 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-instruction">한 줄 지시</Label>
+              <Label htmlFor="poster-instruction">무엇을 만들까 · 한두 줄</Label>
               <Textarea
                 id="poster-instruction"
                 value={instruction}
                 onChange={(event) => setInstruction(event.target.value)}
-                rows={3}
+                rows={6}
                 placeholder="필름 카메라 감성의 사진전 포스터"
               />
+              {/*
+                **두 칸이 정반대로 동작한다는 것을 적는다.**
+
+                이 칸은 AI 가 읽고 다시 쓰고, 아래 칸은 손 안 대고 그대로 간다.
+                이름만으로는 알 길이 없어서 완성된 프롬프트를 여기 넣은 사람이
+                그것을 잃었다(2026-09-16 사용자 보고).
+              */}
+              <p className="text-xs text-subtle-foreground">
+                편하게 쓰세요. AI 가 구도·색·문구를 정해 04 기획 확인에서 보여드립니다.
+              </p>
             </div>
 
             {/*
@@ -603,20 +645,21 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             ) : null}
 
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-user-instruction">추가 지시 · 선택</Label>
+              <Label htmlFor="poster-user-instruction">직접 쓴 프롬프트 · 선택</Label>
               <Textarea
                 id="poster-user-instruction"
                 value={userInstruction}
                 onChange={(event) => setUserInstruction(event.target.value)}
-                rows={3}
-                placeholder="예: 배경은 밤, 창밖에 네온"
+                rows={10}
+                placeholder="완성된 프롬프트가 있으면 여기에 그대로 붙여 넣으세요."
               />
               {/*
                 우선순위를 화면에서 말해 둔다. 여기 적은 말은 프롬프트의 맨 앞과
                 맨 뒤 두 곳에 들어가고, 첨부한 레퍼런스보다 세다.
               */}
               <p className="text-sm text-muted-foreground">
-                여기 적은 말이 다른 모든 지시보다 우선합니다.
+                여기 적은 것은 <strong className="text-foreground">AI 가 고치지 않고 그대로</strong> 모델에 갑니다.
+                다른 모든 지시보다 우선합니다 — 완성된 프롬프트가 있으면 여기에 넣으세요.
               </p>
             </div>
 

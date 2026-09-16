@@ -12,7 +12,8 @@ import {
   SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
   SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
-import { TYPE_INTERACTIONS, type PosterSlots } from "@fixup/poster-core";
+import { TYPE_INTERACTIONS, previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
+import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
@@ -47,6 +48,16 @@ interface PosterProject {
     attachmentIntent?: string;
     /** 03에서 결과물에 대해 적은 말. 옛 작업에는 없다. */
     userInstruction?: string;
+    /*
+     * 아래 넷은 **「모델에 보낼 프롬프트」 미리보기**가 쓴다. 전에는 이 화면이
+     * 슬롯만 보면 됐다. 옛 작업에는 없을 수 있으므로 전부 선택이다 —
+     * 없으면 미리보기에서 그 줄이 빠질 뿐 화면은 멀쩡히 돈다.
+     */
+    attachmentOrder?: string[];
+    preservedIds?: string[];
+    personIds?: string[];
+    restyledIds?: string[];
+    look?: ImageLook;
   };
 }
 
@@ -200,6 +211,37 @@ export function PosterClient(
     비율: project.ratio,
     모델: project.modelId,
   });
+
+  /**
+   * **모델에 보낼 프롬프트.**
+   *
+   * 지금까지 최종 프롬프트가 무엇이었는지 아무도 못 봤다. 그래서 「AI 가 과하게
+   * 부풀렸나, 모자라나」를 판단할 근거가 화면에 없었다(2026-09-16 설계 §4.2).
+   *
+   * **여기서 새로 짓지 않는다.** 제출 때와 같은 함수를 부른다 — 두 벌로 두면
+   * 미리보기가 거짓말을 하고, 그건 안 보여 주느니만 못하다.
+   *
+   * 지금 화면의 슬롯을 쓴다. 저장 전에 고친 것도 바로 비쳐야 「고쳤더니 이렇게
+   * 바뀐다」를 볼 수 있다.
+   */
+  const promptPreview = React.useMemo(() => previewPosterPrompt({
+    slots,
+    /*
+     * **URL 은 미리보기에 필요 없다.** 프롬프트는 번호와 역할만 쓰고, 그림
+     * 자체는 fal 에 따로 간다. 그래서 제출 때와 **같은 함수**로 차례를 세우되
+     * 주소는 자리표시를 넣는다 — 차례를 여기서 새로 짜면 미리보기의 ①이 실제
+     * ①과 달라질 수 있다.
+     */
+    attachments: restoreAttachments(
+      project.data,
+      Object.fromEntries((project.data.attachmentOrder ?? []).map((id: string) => [id, id])),
+    ),
+    ratioId: project.ratio,
+    modelId: project.modelId,
+    look: project.data.look,
+    userInstruction: project.data.userInstruction,
+    attachmentIntent: project.data.attachmentIntent,
+  }), [slots, project]);
 
   /**
    * 사용자가 직접 친 말 — 있는 것만.
@@ -605,6 +647,27 @@ export function PosterClient(
               />
               <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>
             </div>
+
+            {/*
+              **모델에 보낼 프롬프트를 그대로 보여 준다.**
+
+              접어 둔다 — 늘 펼쳐 두면 고칠 칸이 밀린다. 읽기 전용이다: 여기서
+              고치게 하면 첨부 번호·크기 같은 **기계적으로 정확해야 하는 부분**의
+              보장이 깨진다(설계 §2.1).
+            */}
+            <details className="rounded-md border border-border bg-muted/40">
+              <summary className="cursor-pointer px-4 py-2.5 text-sm font-bold">
+                모델에 보낼 프롬프트 보기
+              </summary>
+              <div className="border-t border-border px-4 py-3">
+                <p className="mb-2 text-xs text-subtle-foreground">
+                  위 칸을 고치면 여기도 바뀝니다. 읽기 전용입니다.
+                </p>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-muted-foreground">
+                  {promptPreview}
+                </pre>
+              </div>
+            </details>
           </SidePanelBody>
           <SidePanelFooter className="flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>

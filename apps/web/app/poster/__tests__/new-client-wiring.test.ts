@@ -233,3 +233,52 @@ describe("글만으로 만드는 길", () => {
     expect(spec).toMatch(/onClick=\{\(\) => void submit\(\)\}/);
   });
 });
+
+/**
+ * **두 칸이 정반대로 동작한다는 것을 화면이 말하는가.**
+ *
+ * 「무엇을 만들까」는 AI 가 읽고 다시 쓰고, 「직접 쓴 프롬프트」는 손 안 대고
+ * 그대로 간다. 이름만으로는 알 길이 없어서, 완성된 JSON 프롬프트를 앞 칸에
+ * 넣은 사용자가 그것을 통째로 잃었다(2026-09-16 사용자 보고).
+ */
+describe("01 두 칸의 차이를 말한다", () => {
+  it("칸 이름이 무슨 칸인지 말한다", () => {
+    expect(source).toContain("무엇을 만들까 · 한두 줄");
+    expect(source).toContain("직접 쓴 프롬프트 · 선택");
+  });
+
+  /** 이 문장이 없으면 어느 칸이 원문을 지키는지 알 길이 없다. */
+  it("그대로 간다고 적는다", () => {
+    expect(source).toContain("AI 가 고치지 않고 그대로");
+  });
+
+  /** 3줄 창에서는 긴 프롬프트를 스크롤하며 봐야 한다. */
+  it("긴 글을 넣을 만큼 칸이 크다", () => {
+    const block = source.slice(source.indexOf("poster-user-instruction"));
+    expect(block.slice(0, 400)).toContain("rows={10}");
+    expect(source).not.toContain("rows={3}");
+  });
+});
+
+/**
+ * **03 규격에서 길을 잃지 않게.**
+ *
+ * 유튜브 썸네일은 16:9 로 이미 만들 수 있는데 버튼 이름이 「가로 배너」라
+ * 못 찾았다. 그리고 광고 규격은 여기서 새로 그리는데, 옆에 거의 공짜인 길이
+ * 있다는 것을 화면이 안 적었다(2026-09-16 사용자 보고).
+ */
+describe("03 규격 길잡이", () => {
+  /** 버튼을 늘리면 같은 픽셀이 다른 이름으로 둘 생긴다. 길잡이만 단다. */
+  it("용도 길잡이를 코드에서 가져온다", () => {
+    expect(source).toContain("RATIO_USES.map(");
+    expect(source).not.toContain('"유튜브 썸네일"');
+  });
+
+  it("광고 모드에 싼 길을 알린다", () => {
+    const block = source.slice(source.indexOf('sections.includes("ad-specs")'));
+    const shown = block.slice(0, 1200);
+
+    expect(shown).toContain("규격마다 새로 그립니다");
+    expect(shown).toContain('href="/ad"');
+  });
+});
