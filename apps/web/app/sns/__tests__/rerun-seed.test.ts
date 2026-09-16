@@ -168,3 +168,46 @@ describe("snsSeed — 원본 글의 종류", () => {
     expect(작업({ kind: "youtube" })).toEqual({ kind: "text", text: "" });
   });
 });
+
+/**
+ * **관리자가 다른 회원의 카드뉴스를 다시 만들 때 첨부를 복사해 온다.**
+ *
+ * 남의 첨부는 경로 첫 칸이 그 회원 id 라 그대로 못 싣는다. 관리자 라이브러리로
+ * 복사한 것만 **복사본의 id·경로·주소로 바꿔서** 싣는다.
+ */
+describe("snsSeed — 관리자가 복사해 온 첨부", () => {
+  const 복사본 = [
+    { from: "a1", id: "내a1", storagePath: "관리자/references/내a1.png", url: "signed:내a1" },
+  ];
+
+  it("복사한 첨부는 복사본으로 바꿔 싣는다", () => {
+    const seed = snsSeed(project, false, 복사본);
+
+    expect(seed.attachments).toHaveLength(1);
+    expect(seed.attachments[0]).toMatchObject({
+      id: "내a1",
+      assetPath: "관리자/references/내a1.png",
+      url: "signed:내a1",
+      // 역할 같은 것은 원래 것을 그대로 지킨다.
+      kind: "style_reference",
+      role: "cover",
+    });
+  });
+
+  it("복사 못 한 첨부만 빠진 수로 센다", () => {
+    expect(snsSeed(project, false, 복사본).droppedAttachments).toBe(1);
+  });
+
+  it("내 작업이면 복사본을 안 본다", () => {
+    // 내 것은 그대로 쓸 수 있다. 복사본 목록이 섞여 와도 원래 첨부를 싣는다.
+    const seed = snsSeed(project, true, 복사본);
+
+    expect(seed.attachments.map((attachment) => attachment.id)).toEqual(["a1", "a2"]);
+    expect(seed.droppedAttachments).toBe(0);
+  });
+
+  it("원본 첨부를 건드리지 않는다", () => {
+    snsSeed(project, false, 복사본);
+    expect(project.data.attachments[0]!.id).toBe("a1");
+  });
+});

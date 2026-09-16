@@ -150,3 +150,43 @@ export function posterSeed(
     missingReferences: everything.size - picked.length,
   };
 }
+
+/** 복사해 온 참고 이미지 하나. 원래 id 에서 새 id 로. */
+export interface AdoptedReference {
+  from: string;
+  id: string;
+}
+
+/**
+ * 작업이 가리키는 참고 이미지 id 를 **복사본 id 로 바꿔 끼운다.**
+ *
+ * 관리자가 다른 회원의 작업을 다시 만들면 02 가 비었다 — 붙였던 그림이 그
+ * 회원 것이라 관리자 목록에 없어서, `posterSeed` 의 「못 보는 것은 뺀다」에
+ * 전부 걸렸다(2026-09-16 운영 데이터로 확인). 그림을 관리자 라이브러리로
+ * 복사한 뒤 이것으로 id 를 바꾸면, 복사본은 볼 수 있는 목록에 있으므로 역할과
+ * 차례까지 그대로 살아난다.
+ *
+ * **다섯 목록을 모두 바꾼다.** 하나라도 빠지면 역할 되짚기(`roleOf`)가 그 갈래를
+ * 못 찾아 역할이 바뀐다 — 사람을 지키던 그림이 물건 지키기로 돌아온다.
+ *
+ * **복사 못 한 id 는 그대로 둔다.** 라이브러리에서 이미 지워진 그림이 실제로
+ * 있다. 그대로 두면 볼 수 있는 목록에 없어서 빠진 수로 세어지고, 화면이
+ * 「가져오지 못했습니다」라고 말한다.
+ */
+export function adoptPosterReferences<
+  T extends NonNullable<SourceProject["data"]>,
+>(data: T, adopted: readonly AdoptedReference[]): T {
+  if (!adopted.length) return data;
+  const byOriginal = new Map(adopted.map((entry) => [entry.from, entry.id]));
+  const swap = (ids: string[] | null | undefined) =>
+    Array.isArray(ids) ? ids.map((id) => byOriginal.get(id) ?? id) : ids;
+
+  return {
+    ...data,
+    referenceIds: swap(data.referenceIds),
+    preservedIds: swap(data.preservedIds),
+    personIds: swap(data.personIds),
+    restyledIds: swap(data.restyledIds),
+    attachmentOrder: swap(data.attachmentOrder),
+  };
+}

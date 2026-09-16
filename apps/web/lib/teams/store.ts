@@ -14,6 +14,7 @@ import {
   type UnassignedRow,
 } from "./core";
 import type { TeamCredit } from "./credit";
+import { isAdoptedReferenceId } from "../reference-copy-id";
 
 /**
  * 팀 편성 — 저장소를 만지는 쪽.
@@ -221,10 +222,13 @@ export async function countWorkFor(
     TEAM_SCOPED_TABLES.map(async (table) => {
       const { data } = await admin
         .from(table)
-        .select("user_id")
+        .select("id,user_id")
         .in("user_id", ids)
         .is("team_id", null);
-      for (const row of (data ?? []) as Array<{ user_id: string }>) {
+      for (const row of (data ?? []) as Array<{ id: string; user_id: string }>) {
+        // 관리자 복사본은 팀을 따라가지 않는다(`moveFollowingWork`). 세지도 않는다 —
+        // 「함께 들어갑니다」에 세면 화면이 거짓말을 한다.
+        if (table === "reference_images" && isAdoptedReferenceId(row.id)) continue;
         counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
       }
     }),
@@ -310,37 +314,85 @@ async function stampWorkTeam(
   teamId: string,
   fromTeamId?: string,
 ): Promise<void> {
-  const admin = createSupabaseAdminClient();
   for (const table of TEAM_SCOPED_TABLES) {
-    const { error } = await admin
-      .from(table)
-      .update({ team_id: teamId })
-      .eq("user_id", userId)
-      .is("team_id", null);
-    if (error) throw new Error(error.message);
+    await moveFollowingWork(table, userId, null, teamId);
 
     if (!fromTeamId || fromTeamId === teamId) continue;
-    const moved = await admin
-      .from(table)
-      .update({ team_id: teamId })
-      .eq("user_id", userId)
-      .eq("team_id", fromTeamId);
-    if (moved.error) throw new Error(moved.error.message);
+    await moveFollowingWork(table, userId, fromTeamId, teamId);
   }
 }
 
 /** 팀에서 뺄 때 되돌린다. 그 팀에 매달린 것만 푼다. */
 async function clearWorkTeam(userId: string, teamId: string): Promise<void> {
-  const admin = createSupabaseAdminClient();
   for (const table of TEAM_SCOPED_TABLES) {
+    await moveFollowingWork(table, userId, teamId, null);
+  }
+}
+
+/**
+ * 한 사람의 작업물 중 팀이 `from` 인 것을 `to` 로 옮긴다. **관리자 복사본은 뺀다.**
+ *
+ * 관리자가 다른 회원의 참고 이미지를 복사해 오면, 그 복사본은 관리자 소유이면서
+ * **원본의 팀 범위**를 따른다(`api/admin/works/store.ts` 의 `matchReferenceScope`).
+ * 여기서 `user_id` 로 통째로 옮기면 그 범위가 관리자의 팀 따라 바뀐다 —
+ * 관리자가 팀에서 빠지면 복사본이 **전 회원 공개**(`team_id = null`)가 되고,
+ * 다른 팀으로 옮기면 원래 팀 그림이 새 팀에 보인다(2026-09-16 독립 리뷰. 운영에
+ * 팀에 든 관리자가 실제로 있다).
+ *
+ * 복사본은 id 형식으로 가려낸다(`lib/reference-copy-id.ts`). 표에 칸을 더하지
+ * 않으려고 참고 이미지 표에서만 id 를 먼저 읽어 거른 뒤 옮긴다 — 한 사람의
+ * 참고 이미지는 많아야 수백 장이다.
+ *
+ * **밖에서 부르지 않는다.** 시험에서 값으로 재려고 내보낸다.
+ */
+export async function moveFollowingWork(
+  table: (typeof TEAM_SCOPED_TABLES)[number],
+  userId: string,
+  from: string | null,
+  to: string | null,
+): Promise<void> {
+  const admin = createSupabaseAdminClient();
+
+  if (table !== "reference_images") {
+    const base = admin.from(table).update({ team_id: to }).eq("user_id", userId);
+    const { error } = await (from === null ? base.is("team_id", null) : base.eq("team_id", from));
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  /*
+    **끝까지 나눠 읽는다.** 한 번에 읽으면 프로젝트의 최대 행 수(기본 1000)에서
+    조용히 잘려, 그 뒤 그림은 팀을 따라가지 않는다(2026-09-16 리뷰).
+  */
+  const ids: string[] = [];
+  for (let start = 0; ; start += READ_PAGE) {
+    const select = admin.from(table).select("id").eq("user_id", userId);
+    const { data, error: readError } = await (from === null ? select.is("team_id", null) : select.eq("team_id", from))
+      .order("id")
+      .range(start, start + READ_PAGE - 1);
+    if (readError) throw new Error(readError.message);
+    const page = (data ?? []) as Array<{ id: string }>;
+    ids.push(...page.map((row) => row.id).filter((id) => !isAdoptedReferenceId(id)));
+    if (page.length < READ_PAGE) break;
+  }
+
+  /*
+    **100장씩 나눠 옮긴다.** `in` 필터는 PATCH 여도 주소 뒤에 실려, 한꺼번에 넣으면
+    수백 장부터 게이트웨이의 요청줄 한계(흔히 8KB)에 걸릴 수 있다(2026-09-16 리뷰).
+  */
+  for (let start = 0; start < ids.length; start += UPDATE_CHUNK) {
     const { error } = await admin
       .from(table)
-      .update({ team_id: null })
-      .eq("user_id", userId)
-      .eq("team_id", teamId);
+      .update({ team_id: to })
+      .in("id", ids.slice(start, start + UPDATE_CHUNK));
     if (error) throw new Error(error.message);
   }
 }
+
+/** 한 번에 읽는 줄 수. 프로젝트의 최대 행 수(기본 1000)를 넘지 않게. */
+const READ_PAGE = 1000;
+/** 한 번에 옮기는 그림 수. uuid 하나가 주소에서 약 39바이트다. */
+const UPDATE_CHUNK = 100;
 
 /**
  * 팀에 넣는다. **만들어 둔 것도 함께 간다.**

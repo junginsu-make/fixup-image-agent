@@ -11,7 +11,8 @@ import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
-import { snsSeed } from "./rerun-seed";
+import { loadSnsRerun, snsRerunJump } from "./rerun-load";
+import { fetchRerunDeps } from "../_components/rerun-fetch";
 
 /**
  * **손으로 박지 않는다.**
@@ -29,8 +30,10 @@ const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
   { id: "images", label: "02 이미지", desc: "종류·역할·자리" },
   { id: "spec", label: "03 규격", desc: "비율·장수·언어·모델" },
-  { id: "copy", label: "04 원고 확인", desc: "Task 13" },
-  { id: "result", label: "05 결과", desc: "Task 13" },
+  // 설명은 작업 화면(`[id]/project-client.tsx`)과 같게 둔다. 개발 중 임시 글자
+  // 작업 번호가 그대로 사용자에게 보이고 있었다.
+  { id: "copy", label: "04 원고 확인", desc: "글자 직접 수정" },
+  { id: "result", label: "05 결과", desc: "검수·내려받기" },
 ];
 
 type Step = "content" | "images" | "spec";
@@ -107,46 +110,25 @@ export function NewSnsClient() {
   /**
    * 지난 단계로 돌아왔으면 **그때 쓰던 값을 심는다.**
    *
-   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
-   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정).
-   *
-   * 남의 작업이면 첨부를 못 들고 온다 — 까닭은 `rerun-seed.ts` 에 적었다.
+   * **무엇을 어떤 차례로 부를지는 `loadSnsRerun` 이 정한다.** 회원용 길(`/plan`)
+   * → (404 면) 관리자 통로 → (남의 작업이면) 첨부 복사 차례다. 화면 안에 적어
+   * 두었을 때는 조건을 뒤집어도 시험이 못 잡았다(2026-09-16 리뷰) — 그래서 빼서
+   * 값으로 잰다(`__tests__/rerun-load.test.ts`).
    */
   React.useEffect(() => {
     if (!rerunFrom) return;
     let alive = true;
     void (async () => {
-      const read = async (url: string) => {
-        try {
-          const response = await fetch(url, { cache: "no-store" });
-          return { status: response.status, body: await response.json().catch(() => null) };
-        } catch {
-          return { status: 0, body: null };
-        }
-      };
-
-      /*
-        **작업 한 건은 `/plan` 이 준다.** `/api/sns/projects/{id}` 에는 GET 이
-        없다(DELETE 뿐이다) — 그리로 보내면 405 가 오고, 404 가 아니라서
-        관리자 통로로 넘어가지도 못한다.
-      */
-      let found = await read(`/api/sns/projects/${encodeURIComponent(rerunFrom)}/plan`);
-      let mine = true;
-      if (!found.body?.ok && found.status === 404) {
-        found = await read(`/api/admin/works/sns/${encodeURIComponent(rerunFrom)}`);
-        // 관리자 통로로 온 것은 늘 남의 것이다. 내 것이면 회원용 길에서 열렸다.
-        mine = false;
-      }
-      const project = found.body?.project ?? found.body?.work;
+      const result = await loadSnsRerun(rerunFrom, fetchRerunDeps());
       if (!alive) return;
-      if (!project) {
+      if (!result.ok) {
         setMessage("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
       }
 
-      const seed = snsSeed(project, mine);
+      const { seed } = result;
       setTitle(seed.title);
       setToneNote(seed.toneNote);
       setSource(seed.source);
@@ -217,6 +199,12 @@ export function NewSnsClient() {
     }
   }
 
+  /*
+    **어디로 갈 수 있는지는 `snsRerunJump` 가 정한다.** 값을 못 불러왔으면
+    04·05 를 안 연다 — 열면 열 수 없는 작업으로 간다(2026-09-16 리뷰).
+  */
+  const jumpContext = { rerunFrom, seeded: rerun !== null };
+
   return (
     <div className="grid gap-8">
       <header>
@@ -225,7 +213,21 @@ export function NewSnsClient() {
         <p className="mt-2 max-w-3xl text-body text-muted-foreground">내용을 정하고, 레퍼런스와 원본 장의 역할·자리를 고른 뒤 게시 규격을 선택합니다.</p>
       </header>
 
-      <StepBar steps={STEPS} current={step} onJump={(id) => setStep(id as Step)} />
+      {/*
+        **04·05 는 작업이 있어야 간다.** 전에는 그냥 눌려서 없는 단계로 바뀌고
+        화면이 비었다. 지난 단계로 넘어온 길이면 원래 작업으로 돌아간다 —
+        그 작업의 원고와 결과가 거기 있다(2026-09-16 사용자 보고).
+      */}
+      <StepBar
+        steps={STEPS}
+        current={step}
+        allowJump={(id) => snsRerunJump(id, jumpContext) !== null}
+        onJump={(id) => {
+          const jump = snsRerunJump(id, jumpContext);
+          if (jump?.kind === "step") setStep(jump.id as Step);
+          if (jump?.kind === "go") router.push(jump.href);
+        }}
+      />
 
       {/*
         **값을 들고 왔다고 말한다.** 안 적으면 사용자는 이 화면이 원래 작업을

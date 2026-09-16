@@ -1,3 +1,5 @@
+import { canSeeReference, referenceVisibility } from "../../../../lib/teams/reference-scope";
+
 /**
  * 복사본의 그림이 놓일 자리.
  *
@@ -193,4 +195,112 @@ export function copiedLibraryAssetPath(
   newItemId: string,
 ): string | null {
   return copiedCharacterAssetPath(originalPath, newOwnerId, newItemId);
+}
+
+/**
+ * 참고 이미지를 **내 라이브러리로** 복사할 때의 자리.
+ *
+ * 관리자가 다른 회원의 작업을 다시 만들면 02 가 비었다 — 붙였던 그림이 그
+ * 회원 것이라 관리자 목록에 없어서다(2026-09-16 운영 데이터로 확인).
+ *
+ * **새 id 를 먼저 정해서 넘긴다.** 표가 경로를 직접 검사한다 —
+ * `storage_path ~ ^{user_id}/references/{id}\.[^/]+$`
+ * (`202608310003_references.sql`). 작업물처럼 원래 경로의 칸을 물려받으면
+ * 그 검사를 못 지난다.
+ *
+ * 사본 이름은 `gridThumbPath` 가 정한 규칙(`{원본 줄기}.thumb.webp`)을 따른다.
+ * 확장자가 없는 경로는 표의 검사를 못 지나므로 처음부터 `null` 이다.
+ */
+export function copiedReferencePath(
+  originalPath: string,
+  newOwnerId: string,
+  newId: string,
+): { path: string; thumb: string } | null {
+  if (!originalPath || !newOwnerId || !newId) return null;
+  const parts = originalPath.split("/");
+  if (!parts.every(usablePart)) return null;
+
+  const fileName = parts[parts.length - 1] ?? "";
+  const dot = fileName.lastIndexOf(".");
+  const extension = dot > 0 ? fileName.slice(dot + 1) : "";
+  if (!extension || !usablePart(extension)) return null;
+
+  return {
+    path: `${newOwnerId}/references/${newId}.${extension}`,
+    thumb: `${newOwnerId}/references/${newId}.thumb.webp`,
+  };
+}
+
+/**
+ * 복사본의 id. **규칙은 `lib/reference-copy-id.ts` 한 곳에 있다** — 만드는 규칙과
+ * 알아보는 규칙(팀 이동에서 복사본을 빼는 데 쓴다)이 갈리면 안 된다.
+ */
+export { adoptedReferenceId } from "../../../../lib/reference-copy-id";
+
+/**
+ * 작업이 가리키는 참고 이미지 id.
+ *
+ * 복사 주소는 화면이 보낸 id 를 안 받는다 — 받으면 관리자 권한으로 아무 회원의
+ * 아무 그림이나 복사하는 길이 열린다. 그래서 작업 기록에서 직접 뽑는다.
+ *
+ * 이미지 작업은 **네 목록과 차례를 다 본다.** 앞뒤가 안 맞는 옛 행이 실제로
+ * 있다(2026-09-07~09-08 사이) — 어느 한쪽만 보면 그림을 놓친다.
+ */
+export function referenceIdsOfWork(kind: "sns" | "poster", data: unknown): string[] {
+  if (!data || typeof data !== "object") return [];
+  const record = data as Record<string, unknown>;
+  const ids = (value: unknown) =>
+    Array.isArray(value) ? value.filter((id): id is string => typeof id === "string" && Boolean(id)) : [];
+
+  if (kind === "sns") {
+    const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+    return [...new Set(attachments
+      .map((attachment) => (attachment && typeof attachment === "object"
+        ? (attachment as { id?: unknown }).id : undefined))
+      .filter((id): id is string => typeof id === "string" && Boolean(id)))];
+  }
+
+  return [...new Set([
+    ...ids(record.referenceIds),
+    ...ids(record.preservedIds),
+    ...ids(record.personIds),
+    ...ids(record.restyledIds),
+    ...ids(record.attachmentOrder),
+  ])];
+}
+
+const COPY_MARK = " (복사)";
+
+/**
+ * 복사본의 제목. **원본과 달라야 한다.**
+ *
+ * 캐릭터 각도 그림은 제목이 유일한 손잡이다 — 붙일 때 제목으로 찾고
+ * (`app/_components/character-attach.ts`), 지우거나 다시 만들 때 제목으로
+ * 지운다(`lib/reference-images.ts` 의 `removeReferenceImagesByTitle`). 복사본이
+ * 같은 제목이면 관리자가 같은 이름의 캐릭터를 붙일 때 남의 각도 그림이 붙고,
+ * 자기 캐릭터를 지울 때 복사본까지 지워진다(2026-09-16 리뷰).
+ */
+export function copiedReferenceTitle(title: string | null): string | null {
+  if (!title) return null;
+  return title.endsWith(COPY_MARK) ? title : `${title}${COPY_MARK}`;
+}
+
+/**
+ * 작업 주인이 **원래 볼 수 있던** 그림인가.
+ *
+ * 작업 기록의 그림 id 는 주인이 소유 검사 없이 적을 수 있다 — 포스터 저장은
+ * uuid 모양만 본다. 주인이 남의 팀 그림 id 를 심어 두면, 관리자가 그 작업을
+ * 다시 만들 때 그 그림이 관리자 손을 거쳐 새어 나올 수 있다(2026-09-16 리뷰).
+ *
+ * 판단은 목록과 같은 규칙(`canSeeReference`)으로 한다 — 두 곳이 갈리면 목록에는
+ * 보이는데 복사는 안 되거나 그 반대가 된다.
+ */
+export function ownerCouldSeeReference(
+  owner: { userId: string; teamId: string | null },
+  row: { userId: string; teamId: string | null },
+): boolean {
+  return canSeeReference(
+    referenceVisibility({ userId: owner.userId, teamId: owner.teamId, isAdmin: false }),
+    row,
+  );
 }

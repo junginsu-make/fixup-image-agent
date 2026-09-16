@@ -19,7 +19,8 @@ import {
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
-import { posterSeed } from "./rerun-seed";
+import { loadPosterRerun, posterRerunJump } from "./rerun-load";
+import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
@@ -277,40 +278,28 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 가려낼 수 있다 — 골라 둔 채로 두면 화면에는 ①②③ 이 서는데 실제로는 아무
    * 그림도 없다.
    *
-   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
-   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정). 회원용 길에
-   * 관리자 예외를 심지 않는 것은 이 저장소의 규칙이다.
+   * **무엇을 어떤 차례로 부를지는 `loadPosterRerun` 이 정한다.** 회원용 길 →
+   * (404 면) 관리자 통로 → (남의 작업이면) 그림 복사 → 목록 읽기 차례다. 화면
+   * 안에 적어 두었을 때는 조건을 뒤집어도 시험이 못 잡았다(2026-09-16 리뷰) —
+   * 그래서 빼서 값으로 잰다(`__tests__/rerun-load.test.ts`).
    */
   React.useEffect(() => {
     if (!rerunFrom) return;
     let alive = true;
     void (async () => {
-      const visible = new Set((await loadReferences()).map((item) => item.id));
+      const result = await loadPosterRerun(rerunFrom, {
+        ...fetchRerunDeps(),
+        loadVisible: async () => new Set((await loadReferences()).map((item) => item.id)),
+      });
       if (!alive) return;
-
-      const read = async (url: string) => {
-        try {
-          const response = await fetch(url, { cache: "no-store" });
-          return { status: response.status, body: await response.json().catch(() => null) };
-        } catch {
-          return { status: 0, body: null };
-        }
-      };
-
-      let found = await read(`/api/poster/projects/${encodeURIComponent(rerunFrom)}`);
-      if (!found.body?.ok && found.status === 404) {
-        found = await read(`/api/admin/works/poster/${encodeURIComponent(rerunFrom)}`);
-      }
-      const project = found.body?.project ?? found.body?.work;
-      if (!alive) return;
-      if (!project) {
+      if (!result.ok) {
         setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
       }
 
-      const seed = posterSeed(project, visible);
+      const { seed } = result;
       setTitle(seed.title);
       setInstruction(seed.instruction);
       setRatio(seed.ratio);
@@ -453,10 +442,34 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     adReady: adPlan.ready,
   });
 
+  /*
+    **어디로 갈 수 있는지는 `posterRerunJump` 가 정한다.** 값을 못 불러왔으면
+    04·05 를 안 연다 — 남의 id 를 주소에 친 회원이 누르면 열 수 없는 작업으로
+    간다(2026-09-16 리뷰).
+  */
+  const jumpContext = { rerunFrom, seeded: rerun !== null };
+
   return (
     <div className="grid gap-6">
       <div className="mb-4">
-        <StepBar steps={POSTER_STEPS} current={step} onJump={setStep} allowJump={reachableBeforeCreate} />
+        {/*
+          **지난 단계로 넘어온 길이면 04·05 로 원래 작업에 돌아간다.**
+
+          작업을 만들기 전에는 04·05 가 열리지 않는다 — AI 초안도 결과도 만든
+          뒤에 생긴다. 그런데 이미 만든 작업에서 넘어온 사람에게는 그 작업의
+          기획과 결과가 **있다.** 막아 두니 돌아갈 길이 없었다(2026-09-16 사용자
+          보고). 04 로 가면 기획 칸을 열어 준다.
+        */}
+        <StepBar
+          steps={POSTER_STEPS}
+          current={step}
+          allowJump={(id) => posterRerunJump(id, jumpContext) !== null}
+          onJump={(id) => {
+            const jump = posterRerunJump(id, jumpContext);
+            if (jump?.kind === "step") setStep(jump.id);
+            if (jump?.kind === "go") router.push(jump.href);
+          }}
+        />
       </div>
 
       {/*

@@ -98,27 +98,44 @@ beforeEach(() => {
 });
 
 describe("saveReferenceImage — 사본 배선", () => {
+  /*
+    **실제 모양의 id 를 쓴다.** 창고는 uuid 4 만 받는다 — 5 는 관리자 복사본만의
+    표시다(`lib/reference-copy-id.ts`). 올리기 주소는 원래부터 uuid 만 받았으니
+    `"r1"` 같은 id 는 운영에 들어온 적이 없다.
+  */
+  const R1 = "3f2b6c1e-9a4d-4e7b-8c21-5d0f6a9b7e14";
+
   it("원본과 사본을 함께 올리고 자리를 표에 적는다", async () => {
     await saveReferenceImage({
-      userId: "u1", id: "r1", title: "겨울", purpose: "cardnews",
+      userId: "u1", id: R1, title: "겨울", purpose: "cardnews",
       bytes: await photo(), mimeType: "image/png",
     });
 
-    expect(uploads.map((u) => u.path)).toEqual(["u1/references/r1.png", "u1/references/r1.thumb.webp"]);
+    expect(uploads.map((u) => u.path)).toEqual([`u1/references/${R1}.png`, `u1/references/${R1}.thumb.webp`]);
     expect(uploads[1]!.contentType).toBe("image/webp");
     // **자리를 안 적으면 기능이 통째로 죽는다.** 파일은 쌓이는데 아무도 못 찾는다.
-    expect(inserted!.thumb_path).toBe("u1/references/r1.thumb.webp");
+    expect(inserted!.thumb_path).toBe(`u1/references/${R1}.thumb.webp`);
   });
 
   it("표 쓰기가 엎어지면 사본도 같이 지운다", async () => {
     failInsert = true;
 
     await saveReferenceImage({
-      userId: "u1", id: "r1", title: "겨울", purpose: "cardnews",
+      userId: "u1", id: R1, title: "겨울", purpose: "cardnews",
       bytes: await photo(), mimeType: "image/png",
     }).catch(() => {});
 
-    expect(removed.flat().sort()).toEqual(["u1/references/r1.png", "u1/references/r1.thumb.webp"]);
+    expect(removed.flat().sort()).toEqual([`u1/references/${R1}.png`, `u1/references/${R1}.thumb.webp`]);
+  });
+});
+
+describe("saveReferenceImage — id 형식", () => {
+  it("**uuid 5 는 받지 않는다** — 관리자 복사본 표시를 흉내 내지 못하게", async () => {
+    await expect(saveReferenceImage({
+      userId: "u1", id: "a0c3b2d4-1e5f-5a6b-9c7d-8e9f0a1b2c3d", title: "겨울", purpose: "cardnews",
+      bytes: await photo(), mimeType: "image/png",
+    })).rejects.toThrow();
+    expect(uploads).toEqual([]);
   });
 });
 

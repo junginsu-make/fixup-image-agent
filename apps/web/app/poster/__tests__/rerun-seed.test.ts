@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { posterSeed } from "../rerun-seed";
+import { adoptPosterReferences, posterSeed } from "../rerun-seed";
 
 /**
  * 이미 만든 작업의 **지난 단계로 돌아간다.**
@@ -309,5 +309,77 @@ describe("차례와 목록이 어긋난 작업", () => {
     }, 볼수있음("a", "b"));
 
     expect(seed.missingReferences).toBe(0);
+  });
+});
+
+/**
+ * **관리자가 다른 회원의 작업을 다시 만들 때 그림을 복사해 온다.**
+ *
+ * 02 가 비었다 — 붙였던 그림이 그 회원 것이라 관리자 목록에 없어서, 「못 보는
+ * 것은 뺀다」 규칙에 전부 걸렸다(2026-09-16 운영 데이터로 확인). 관리자는
+ * 모든 작업이 작동해야 하므로(사용자 결정) 그림을 **관리자 라이브러리로
+ * 복사하고**, 작업이 가리키는 id 를 복사본 id 로 바꿔 끼운다.
+ */
+describe("adoptPosterReferences", () => {
+  const 원래 = {
+    instruction: "i",
+    referenceIds: ["남A"],
+    preservedIds: ["남B", "남C"],
+    personIds: ["남C"],
+    restyledIds: ["남C"],
+    attachmentOrder: ["남C", "남A", "남B"],
+  };
+  const 복사본 = [
+    { from: "남A", id: "내A" },
+    { from: "남B", id: "내B" },
+    { from: "남C", id: "내C" },
+  ];
+
+  it("다섯 목록의 id 를 모두 복사본으로 바꾼다", () => {
+    const data = adoptPosterReferences(원래, 복사본);
+
+    expect(data.referenceIds).toEqual(["내A"]);
+    expect(data.preservedIds).toEqual(["내B", "내C"]);
+    expect(data.personIds).toEqual(["내C"]);
+    expect(data.restyledIds).toEqual(["내C"]);
+    // 차례가 화면의 ①②③ 이다. 바꿔 끼워도 차례는 그대로여야 한다.
+    expect(data.attachmentOrder).toEqual(["내C", "내A", "내B"]);
+  });
+
+  it("복사하고 나면 볼 수 있는 목록에 들어 역할까지 그대로 살아난다", () => {
+    const seed = posterSeed(
+      { title: "t", ratio: "2:3", modelId: "m", data: adoptPosterReferences(원래, 복사본) },
+      볼수있음("내A", "내B", "내C"),
+    );
+
+    expect(seed.pickOrder).toEqual(["내C", "내A", "내B"]);
+    expect(seed.roles).toEqual({
+      내A: "style",
+      내B: "preserve_product",
+      내C: "preserve_person_restyled",
+    });
+    expect(seed.missingReferences).toBe(0);
+  });
+
+  it("복사 못 한 그림은 그대로 두어 빠진 것으로 센다", () => {
+    /*
+      라이브러리에서 이미 지워진 그림이 실제로 있다(운영 데이터). 그건 복사할
+      원본이 없다. id 를 그대로 두면 볼 수 있는 목록에 없어서 빠진 수로 잡히고,
+      화면이 「가져오지 못했습니다」라고 말한다.
+    */
+    const data = adoptPosterReferences(원래, [{ from: "남A", id: "내A" }]);
+    const seed = posterSeed({ title: "t", ratio: "2:3", modelId: "m", data }, 볼수있음("내A"));
+
+    expect(seed.pickOrder).toEqual(["내A"]);
+    expect(seed.missingReferences).toBe(2);
+  });
+
+  it("원본을 건드리지 않는다", () => {
+    adoptPosterReferences(원래, 복사본);
+    expect(원래.referenceIds).toEqual(["남A"]);
+  });
+
+  it("복사본이 없으면 그대로 돌려준다", () => {
+    expect(adoptPosterReferences(원래, [])).toEqual(원래);
   });
 });

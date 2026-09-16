@@ -14,6 +14,7 @@ import {
 } from "./local-store";
 import { persistReferenceImage, type ReferenceImageRow } from "../app/library/reference-upload";
 import { gridPathsToRemove, gridThumbPath } from "./grid-thumbnail-path";
+import { isOrdinaryReferenceId } from "./reference-copy-id";
 import { makeGridThumbnail } from "./grid-thumbnail";
 import type { ReferencePurpose } from "../app/api/reference-sets/schema";
 import type { UserRole } from "./membership/types";
@@ -298,6 +299,13 @@ export async function saveReferenceImage(input: {
   bytes: Uint8Array;
   mimeType: string;
 }): Promise<ReferenceImageRow> {
+  /*
+    **uuid 4 만 받는다.** 5 는 관리자 복사본만의 표시다(`lib/reference-copy-id.ts`)
+    — 복사본은 팀 이동을 따라가지 않는다. 화면이 id 를 정해 보내는 올리기에서
+    5 를 받으면, 누구나 자기 그림을 「복사본」으로 꾸며 팀 이동을 비껴갈 수 있다.
+    주소 한 곳이 아니라 여기서 막는다 — 창고에 넣는 길이 늘어도 함께 막힌다.
+  */
+  if (!isOrdinaryReferenceId(input.id)) throw new Error("그림 id 형식이 올바르지 않습니다.");
   const extension = EXTENSIONS[input.mimeType];
   if (!extension) throw new Error("PNG, JPG, WEBP 이미지만 보관할 수 있습니다.");
   const file = new File([new Uint8Array(input.bytes)], `${input.id}.${extension}`, { type: input.mimeType });

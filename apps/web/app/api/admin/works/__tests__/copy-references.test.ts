@@ -1,0 +1,471 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * 관리자가 다른 회원의 작업을 다시 만들 때 **참고 이미지를 복사해 온다.**
+ *
+ * 잘 될 때보다 **틀어질 때**를 잰다. 독립 리뷰(2026-09-16)가 배포 전에 짚은
+ * 것들이다.
+ *
+ * 1. 복사본의 팀을 지우면 이 표에서는 **전 회원 공개**가 된다 — 원본 팀을 물려받는다
+ * 2. 동시에 두 번 불리면 진 쪽이 **이긴 쪽 파일을 지운다** — 충돌하면 이긴 쪽을 쓴다
+ * 3. 조회 오류를 「없음」으로 읽으면 같은 길로 멀쩡한 파일을 지운다 — 던진다
+ * 4. 행만 있고 파일이 없는 복사본은 스스로 안 낫는다 — 다시 올린다
+ * 5. 작업 기록의 id 는 주인이 아무거나 적을 수 있다 — 주인이 보던 것만 옮긴다
+ * 6. 범위를 못 맞추면 관리자 팀에 열린 채 남는다 — 되감는다
+ */
+vi.mock("server-only", () => ({}));
+vi.mock("../../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => false }));
+
+interface Row {
+  id: string; user_id: string; team_id: string | null; storage_path: string;
+  thumb_path: string | null; title: string | null; purpose: string;
+  width: number | null; height: number | null;
+}
+
+/** 표 안의 줄. id 로 찾는다. */
+let rows = new Map<string, Row>();
+/** 저장소에 있는 파일 경로. */
+let files = new Set<string>();
+const removed: string[] = [];
+const scopeUpdates: Array<{ id: string; team_id: string | null }> = [];
+
+/** 한 번만 낼 오류들. */
+let failFindOnce: string | null = null;
+let failScopeUpdate = false;
+/** insert 직전에 다른 요청이 같은 행을 먼저 만든 것처럼 꾸민다. */
+let raceWinner: Row | null = null;
+/** 파일 목록 조회가 실패하는 경우. */
+let failList = false;
+/** 범위를 고치기 직전에 행 주인을 이 사람으로 바꾼다. 두 번째 방어선을 잰다. */
+let swapOwnerBeforeUpdate: string | null = null;
+/** insert 에 실제로 실린 값. 트리거가 손대기 전이다. */
+let insertedRows: Row[] = [];
+
+function query(table: string) {
+  const state: {
+    ids?: string[];
+    filters: Array<[string, unknown]>;
+    op: "select" | "update" | "delete";
+    patch?: Record<string, unknown>;
+  } = { filters: [], op: "select" };
+  const matches = (row: Row) =>
+    state.filters.every(([column, value]) => (row as unknown as Record<string, unknown>)[column] === value);
+  const target = () => [...rows.values()].filter(matches);
+
+  const run = () => {
+    if (state.op === "update") {
+      if (failScopeUpdate) return { data: null, error: { message: "범위를 못 고쳤습니다" } };
+      if (swapOwnerBeforeUpdate) {
+        // 검사를 통과한 뒤, 고치기 직전에 행 주인이 바뀐 것처럼 꾸민다.
+        const id = state.filters.find(([column]) => column === "id")?.[1] as string | undefined;
+        const row = id ? rows.get(id) : undefined;
+        if (row) row.user_id = swapOwnerBeforeUpdate;
+        swapOwnerBeforeUpdate = null;
+      }
+      const hit = target();
+      for (const row of hit) {
+        row.team_id = state.patch!.team_id as string | null;
+        scopeUpdates.push({ id: row.id, team_id: row.team_id });
+      }
+      return { data: hit.map((row) => ({ id: row.id })), error: null };
+    }
+    if (state.op === "delete") {
+      for (const row of target()) rows.delete(row.id);
+      return { data: null, error: null };
+    }
+    return {
+      data: table === "reference_images" ? (state.ids ?? []).map((id) => rows.get(id)).filter(Boolean) : [],
+      error: null,
+    };
+  };
+
+  const self: Record<string, unknown> = {
+    select: () => self,
+    in: (_col: string, ids: string[]) => { state.ids = ids; return self; },
+    eq: (column: string, value: unknown) => { state.filters.push([column, value]); return self; },
+    update: (patch: Record<string, unknown>) => { state.op = "update"; state.patch = patch; return self; },
+    delete: () => { state.op = "delete"; return self; },
+    maybeSingle: async () => {
+      const id = state.filters.find(([column]) => column === "id")?.[1] as string | undefined;
+      if (failFindOnce && id === failFindOnce) {
+        failFindOnce = null;
+        return { data: null, error: { message: "잠깐 못 읽었습니다" } };
+      }
+      return { data: id ? rows.get(id) ?? null : null, error: null };
+    },
+    insert: async (row: Row) => {
+      insertedRows.push({ ...row });
+      if (raceWinner && raceWinner.id === row.id) {
+        rows.set(raceWinner.id, raceWinner);
+        raceWinner = null;
+        return { error: { message: "duplicate key", code: "23505" } };
+      }
+      if (rows.has(row.id)) return { error: { message: "duplicate key", code: "23505" } };
+      // 팀 도장 트리거: 명시한 팀은 그대로 두고, 없으면 관리자 팀을 찍는다.
+      rows.set(row.id, { ...row, team_id: row.team_id ?? "관리자팀" });
+      return { error: null };
+    },
+    then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(run())),
+  };
+  return self;
+}
+
+vi.mock("../../../../../lib/supabase/admin", () => ({
+  createSupabaseAdminClient: () => ({
+    from: (table: string) => query(table),
+    storage: {
+      from: () => ({
+        download: async (path: string) => (files.has(path)
+          ? { data: { arrayBuffer: async () => new ArrayBuffer(8) }, error: null }
+          : { data: null, error: { message: "없음" } }),
+        upload: async (path: string) => { files.add(path); return { error: null }; },
+        remove: async (paths: string[]) => {
+          for (const path of paths) { files.delete(path); removed.push(path); }
+          return { error: null };
+        },
+        list: async (dir: string, options: { search: string }) => (failList ? { data: null, error: { message: "목록 실패" } } : {
+          data: [...files]
+            .filter((path) => path.startsWith(`${dir}/`) && path.slice(dir.length + 1).includes(options.search))
+            .map((path) => ({ name: path.slice(dir.length + 1) })),
+          error: null,
+        }),
+        createSignedUrls: async (paths: string[]) => ({
+          data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+          error: null,
+        }),
+      }),
+    },
+  }),
+}));
+
+const { copyReferencesToSelf } = await import("../store");
+const { adoptedReferenceId } = await import("../copy-paths");
+
+const 관리자 = "관리자";
+const 주인 = { userId: "회원A", teamId: "팀X" };
+/** 복사하는 관리자의 팀. 기본은 없음 — 시험마다 바꾼다. */
+let 관리자팀: string | null = null;
+
+function 원본(id: string, patch: Partial<Row> = {}): Row {
+  return {
+    id, user_id: "회원A", team_id: "팀X",
+    storage_path: `회원A/references/${id}.png`, thumb_path: `회원A/references/${id}.thumb.webp`,
+    title: "가을 포스터", purpose: "poster", width: 1024, height: 1024,
+    ...patch,
+  };
+}
+
+function 넣기(row: Row) {
+  rows.set(row.id, row);
+  files.add(row.storage_path);
+  if (row.thumb_path) files.add(row.thumb_path);
+}
+
+beforeEach(() => {
+  rows = new Map();
+  files = new Set();
+  removed.length = 0;
+  scopeUpdates.length = 0;
+  failFindOnce = null;
+  failScopeUpdate = false;
+  raceWinner = null;
+  관리자팀 = null;
+  failList = false;
+  swapOwnerBeforeUpdate = null;
+  insertedRows = [];
+});
+
+describe("복사본의 범위", () => {
+  it("**팀 X 만 보던 그림은 복사본도 팀 X 다** — 전 회원에게 안 열린다", async () => {
+    넣기(원본("a"));
+
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.team_id).toBe("팀X");
+    // 이 표에서 null 은 「누구나 본다」다. 절대 null 로 두면 안 된다.
+    expect(rows.get(copy!.id)!.team_id).not.toBeNull();
+  });
+
+  it("공용 그림은 복사본도 공용이다 — 원래도 모두 봤다", async () => {
+    넣기(원본("a", { team_id: null }));
+
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.team_id).toBeNull();
+  });
+
+  it("관리자 팀 도장이 남지 않는다", async () => {
+    넣기(원본("a"));
+
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.team_id).not.toBe("관리자팀");
+  });
+
+  it("범위를 못 맞추면 행과 파일을 되감는다", async () => {
+    넣기(원본("a"));
+    failScopeUpdate = true;
+
+    const copies = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    const newId = adoptedReferenceId("a", 관리자);
+    expect(copies).toEqual([]);
+    expect(rows.has(newId)).toBe(false);
+    expect(files.has(`관리자/references/${newId}.png`)).toBe(false);
+  });
+});
+
+describe("동시에 두 번 불릴 때", () => {
+  it("**다른 요청이 먼저 만들었으면 그 행을 쓰고 파일은 안 지운다**", async () => {
+    넣기(원본("a"));
+    const newId = adoptedReferenceId("a", 관리자);
+    // 이 요청이 행이 없다고 본 뒤, insert 직전에 다른 요청이 먼저 만들었다.
+    raceWinner = {
+      ...원본("a"), id: newId, user_id: 관리자,
+      storage_path: `관리자/references/${newId}.png`, thumb_path: `관리자/references/${newId}.thumb.webp`,
+    };
+
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(copy!.id).toBe(newId);
+    // 두 요청이 같은 경로에 올렸다. 지우면 이긴 쪽 행이 빈 그림이 된다.
+    expect(removed).toEqual([]);
+    expect(files.has(`관리자/references/${newId}.png`)).toBe(true);
+  });
+
+  it("조회가 잠깐 실패하면 **던진다** — 없다고 읽고 다시 올리지 않는다", async () => {
+    넣기(원본("a"));
+    const newId = adoptedReferenceId("a", 관리자);
+    failFindOnce = newId;
+
+    await expect(copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀)).rejects.toThrow();
+    expect(removed).toEqual([]);
+  });
+});
+
+describe("이미 복사한 적이 있을 때", () => {
+  it("다시 복사하지 않고 그대로 쓴다", async () => {
+    넣기(원본("a"));
+    const first = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    const rowCount = rows.size;
+
+    const second = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(second[0]!.id).toBe(first[0]!.id);
+    expect(rows.size).toBe(rowCount);
+  });
+
+  it("**행만 있고 파일이 없으면 다시 올린다**", async () => {
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    files.delete(copy!.storagePath);
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(files.has(copy!.storagePath)).toBe(true);
+  });
+
+  it("범위를 다시 맞춘다 — 전에 틀어진 것도 낫는다", async () => {
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    rows.get(copy!.id)!.team_id = "관리자팀";
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.team_id).toBe("팀X");
+  });
+});
+
+describe("무엇을 복사하나", () => {
+  it("**작업 주인이 못 보던 남의 팀 그림은 안 옮긴다**", async () => {
+    // 주인이 남의 팀 그림 id 를 작업 기록에 심어 둔 경우다.
+    넣기(원본("남의팀", { user_id: "회원B", team_id: "팀Y" }));
+
+    expect(await copyReferencesToSelf(["남의팀"], 관리자, 주인, 관리자팀)).toEqual([]);
+    expect(rows.size).toBe(1);
+  });
+
+  it("주인 팀원의 그림은 옮긴다", async () => {
+    넣기(원본("팀원것", { user_id: "팀원", team_id: "팀X" }));
+
+    expect(await copyReferencesToSelf(["팀원것"], 관리자, 주인, 관리자팀)).toHaveLength(1);
+  });
+
+  it("이미 관리자 것이면 복사하지 않고 그대로 준다", async () => {
+    넣기(원본("내것", { user_id: 관리자, team_id: null, storage_path: `${관리자}/references/내것.png` }));
+
+    const [copy] = await copyReferencesToSelf(["내것"], 관리자, 주인, 관리자팀);
+
+    expect(copy!.id).toBe("내것");
+    expect(rows.size).toBe(1);
+  });
+
+  it("지워져서 표에 없는 그림은 빼고 넘어간다", async () => {
+    넣기(원본("a"));
+
+    const copies = await copyReferencesToSelf(["a", "지워진것"], 관리자, 주인, 관리자팀);
+
+    expect(copies.map((entry) => entry.from)).toEqual(["a"]);
+  });
+
+  it("복사본 제목에 (복사) 가 붙는다 — 캐릭터 제목 맞추기와 안 섞인다", async () => {
+    넣기(원본("각도", { title: "하루 (캐릭터) · 정면" }));
+
+    const [copy] = await copyReferencesToSelf(["각도"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.title).toBe("하루 (캐릭터) · 정면 (복사)");
+  });
+});
+
+describe("리뷰 LOW 반영", () => {
+  it("**공용 원본의 복사본은 관리자 팀 안에 둔다** — 전 회원에게 하나 더 안 뜬다", async () => {
+    넣기(원본("공용", { team_id: null }));
+    관리자팀 = "관리자팀";
+
+    const [copy] = await copyReferencesToSelf(["공용"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.team_id).toBe("관리자팀");
+  });
+
+  it("관리자가 팀이 없으면 공용 원본의 복사본은 공용 그대로다", async () => {
+    넣기(원본("공용", { team_id: null }));
+
+    const [copy] = await copyReferencesToSelf(["공용"], 관리자, 주인, null);
+
+    expect(rows.get(copy!.id)!.team_id).toBeNull();
+  });
+
+  it("팀에 묶인 원본은 관리자 팀이 있어도 **원본 팀**을 따른다", async () => {
+    넣기(원본("a"));
+    관리자팀 = "관리자팀";
+
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(rows.get(copy!.id)!.team_id).toBe("팀X");
+  });
+
+  it("**다시 올리기에 실패하면 그 복사본을 돌려주지 않는다** — 깨진 그림이 안 선다", async () => {
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    // 복사본 파일도, 원본 파일도 사라졌다.
+    files.delete(copy!.storagePath);
+    files.delete("회원A/references/a.png");
+
+    expect(await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀)).toEqual([]);
+  });
+
+  it("파일 목록 조회가 실패하면 **없다고 보고 다시 올린다**", async () => {
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    files.delete(copy!.storagePath);
+    failList = true;
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(files.has(copy!.storagePath)).toBe(true);
+  });
+
+  it("**이름이 비슷한 파일만 있으면 없다고 본다** — 정확히 같은 이름인지 본다", async () => {
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    files.delete(copy!.storagePath);
+    files.add(`${copy!.storagePath}.bak`);
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(files.has(copy!.storagePath)).toBe(true);
+  });
+});
+
+describe("넣는 순간의 범위", () => {
+  it("**원본이 팀에 묶였으면 넣을 때부터 그 팀을 싣는다** — 관리자 팀이 잠깐 보는 틈이 없다", async () => {
+    넣기(원본("a"));
+    관리자팀 = "관리자팀";
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(insertedRows).toHaveLength(1);
+    expect(insertedRows[0]!.team_id).toBe("팀X");
+  });
+});
+
+/**
+ * **남이 복사본 id 를 먼저 차지해 둔 경우.**
+ *
+ * 복사본 id 는 누구나 계산할 수 있고, 회원에게는 이 표에 직접 넣는 권한이 열려
+ * 있었다. 그러면 회원 B 가 그 id 로 자기 행을 먼저 넣어 두고, 관리자의 복사가
+ * **B 의 행을 재사용하고 팀 범위까지 바꿨다** — B 의 그림이 남의 팀 라이브러리에
+ * 들어가고, 관리자의 생성 입력이 B 가 고른 그림으로 바뀌었다(2026-09-16 리뷰).
+ */
+describe("남이 차지한 id", () => {
+  const 가로챈행 = (): Row => {
+    const newId = adoptedReferenceId("a", 관리자);
+    return {
+      id: newId, user_id: "회원B", team_id: "팀B",
+      storage_path: `회원B/references/${newId}.png`, thumb_path: null,
+      title: "가로챔", purpose: "poster", width: 1, height: 1,
+    };
+  };
+
+  it("**재사용하지 않고, 그 회원 행의 범위도 안 바꾼다**", async () => {
+    넣기(원본("a"));
+    넣기(가로챈행());
+
+    const copies = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(copies).toEqual([]);
+    expect(rows.get(가로챈행().id)!.team_id).toBe("팀B");
+    expect(rows.get(가로챈행().id)!.user_id).toBe("회원B");
+  });
+
+  it("그 회원의 파일을 지우지 않는다", async () => {
+    넣기(원본("a"));
+    넣기(가로챈행());
+
+    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(files.has(가로챈행().storage_path)).toBe(true);
+    expect(removed).not.toContain(가로챈행().storage_path);
+  });
+
+  it("**넣으려는 순간 남이 차지했으면** 우리 파일만 치우고 남의 행은 그대로 둔다", async () => {
+    넣기(원본("a"));
+    raceWinner = 가로챈행();
+
+    const copies = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+
+    expect(copies).toEqual([]);
+    expect(rows.get(가로챈행().id)!.team_id).toBe("팀B");
+    const ours = `관리자/references/${adoptedReferenceId("a", 관리자)}.png`;
+    expect(files.has(ours)).toBe(false);
+  });
+
+  it("주인은 같은데 경로가 다르면 우리 복사본이 아니다", async () => {
+    넣기(원본("a"));
+    const newId = adoptedReferenceId("a", 관리자);
+    넣기({ ...가로챈행(), user_id: 관리자, storage_path: `관리자/references/엉뚱한.png`, team_id: "관리자팀" });
+
+    expect(await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀)).toEqual([]);
+    expect(rows.get(newId)!.team_id).toBe("관리자팀");
+  });
+});
+
+describe("두 번째 방어선 — 범위를 고칠 때도 주인을 본다", () => {
+  it("**검사 뒤에 주인이 바뀌었으면** 그 행의 범위를 안 바꾼다", async () => {
+    /*
+      재사용 전에 `isOurCopy` 로 걸렀더라도, 고치는 순간 주인이 바뀌었을 수 있다.
+      `id` 만 걸고 고치면 그때 남의 행 범위가 바뀐다. 고치는 질의 자체에 주인을
+      건다 — 첫 방어선이 뚫려도 여기서 막힌다.
+    */
+    넣기(원본("a"));
+    const [copy] = await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀);
+    rows.get(copy!.id)!.team_id = "관리자팀";
+    swapOwnerBeforeUpdate = "회원B";
+
+    // 0 줄이 바뀌면 조용히 넘어가지 않고 던진다 — 범위를 못 맞춘 행을 결과로 돌려주면 안 된다.
+    await expect(copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀)).rejects.toThrow();
+
+    expect(rows.get(copy!.id)!.user_id).toBe("회원B");
+    expect(rows.get(copy!.id)!.team_id).toBe("관리자팀");
+  });
+});
