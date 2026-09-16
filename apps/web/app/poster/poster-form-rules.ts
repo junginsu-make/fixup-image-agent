@@ -70,7 +70,21 @@ export function canCreatePoster(input: {
   adMode: boolean;
   adReady: boolean;
 }): boolean {
-  if (input.styleCount <= 0) return false;
+  /*
+   * **글만으로도 만들 수 있다.**
+   *
+   * 예전에는 `styleCount <= 0` 이면 무조건 막았다. 「따라 만들 그림」이 첫
+   * 단계라 글만 들고 온 사람은 시작조차 못 했다(2026-09-16 사용자 보고).
+   *
+   * 엔진은 진작부터 할 줄 알았다 — `pickEndpoint` 가 첨부 유무로 t2i·i2i 를
+   * 갈라 부르고, 값도 `poster-core/pricing.ts` 가 모드별로 따로 잡고, 프롬프트도
+   * `if (!images.length) return []` 로 첨부 블록을 비워 보낸다. 막고 있던 것은
+   * 이 줄과 `PosterProjectInputSchema` 둘뿐이었다.
+   *
+   * **광고 모드만 예외다.** 비율을 `match-source` 로 보내 첨부한 그림의 크기를
+   * 그대로 따라가는데(`effectiveRatio`), 맞출 원본이 없으면 성립하지 않는다.
+   */
+  if (input.adMode && input.styleCount <= 0) return false;
   if (input.instruction.trim().length === 0) return false;
   if (input.estimateRejected || input.overReferenceLimit) return false;
   return !input.adMode || input.adReady;
@@ -116,33 +130,6 @@ export function placeholderRatio(ratio: string): string {
   const [width, height] = parts.map(Number);
   const usable = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
   return usable ? `${width} / ${height}` : "2 / 3";
-}
-
-/**
- * 03 「한 줄 지시」에 01에서 적은 말을 미리 채워 둘까.
- *
- * **01에서 이미 한 번 말했는데 03에서 또 쓰게 하고 있었다**(2026-09-08 사용자).
- * 한 줄 지시는 비면 다음으로 못 가는 칸이라, 「1번 사진의 사람들을 2번 느낌으로」를
- * 그대로 한 번 더 옮겨 적어야 했다.
- *
- * 채워 두기만 한다 — **고치든 지우든 더 쓰든 사용자 마음이다.** 그래서 조건이
- * 셋이다.
- *
- *   손댄 적 없다   한 번이라도 고쳤으면 그 사람의 것이다. 덮지 않는다
- *   비어 있다      쓰다 만 것을 지우고 덮으면 남의 글을 지우는 것이다
- *   01에 말이 있다  없으면 채울 것이 없다
- *
- * 되돌아가서 01을 고치면 그때 다시 채워진다 — 03을 아직 안 건드렸을 때만.
- */
-export function seedInstruction(input: {
-  attachmentIntent: string;
-  instruction: string;
-  touched: boolean;
-}): string | null {
-  if (input.touched) return null;
-  if (input.instruction.trim()) return null;
-  const seed = input.attachmentIntent.trim();
-  return seed ? seed : null;
 }
 
 /**

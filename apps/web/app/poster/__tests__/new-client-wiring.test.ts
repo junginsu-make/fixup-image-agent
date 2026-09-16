@@ -134,26 +134,27 @@ describe("01에 적은 말이 03에서 보이는가", () => {
 });
 
 /**
- * 01에서 적은 말이 03 한 줄 지시에 미리 채워지는가.
+ * **미리 채워 주던 것이 사라진 자리.**
  *
- * 규칙(`seedInstruction`)은 잠겨 있는데 **그것을 부르는 줄**은 아무도 안 본다.
+ * 예전에는 01 레퍼런스에 적은 「이 그림을 어떻게 쓸까요」를 03 한 줄 지시에
+ * 옮겨 적어 줬다(`seedInstruction`). 같은 말을 두 번 쓰게 만들어서 생긴
+ * 땜질이었다(2026-09-08 사용자).
+ *
+ * 지시가 맨 앞으로 오면서 **두 질문이 더 이상 겹치지 않는다** — 01은 「무엇을
+ * 만들까」, 02는 「이 그림을 어떻게 쓸까」다. 땜질의 이유가 사라졌으므로 걷어냈다.
+ *
+ * **이 시험은 되돌아오지 않게 막는다.** 다시 넣으면 첨부에 대해 적은 말이 한 줄
+ * 지시를 덮어써서, 01에서 쓴 글이 소리 없이 바뀐다.
  */
-describe("한 줄 지시 미리 채우기가 이어져 있는가", () => {
-  it("규칙을 여기 다시 적지 않고 부른다", () => {
-    expect(source).toContain("seedInstruction({ attachmentIntent, instruction, touched: instructionTouched })");
+describe("한 줄 지시를 대신 채우지 않는다", () => {
+  it("미리 채우는 장치가 없다", () => {
+    expect(source).not.toContain("seedInstruction");
+    expect(source).not.toContain("instructionTouched");
   });
 
-  it("03 에 들어갈 때만 채운다", () => {
-    // 01·02 에서 미리 채우면 아직 안 본 칸이 채워져 있다.
-    expect(source).toMatch(/if \(step !== "instruction"\) return;/);
-  });
-
-  it("null 이면 안 채운다 — 빈 문자열로 덮으면 남의 글을 지운다", () => {
-    expect(source).toContain("if (seed !== null) setInstruction(seed);");
-  });
-
-  it("사람이 고치면 표시를 남긴다", () => {
-    expect(source).toMatch(/setInstructionTouched\(true\);[\s\S]{0,80}setInstruction\(event\.target\.value\)/);
+  /** 입력 칸은 하나이고, 거기 쓴 것이 그대로 남는다. */
+  it("사람이 친 것을 그대로 넣는다", () => {
+    expect(source).toContain("onChange={(event) => setInstruction(event.target.value)}");
   });
 });
 
@@ -181,5 +182,54 @@ describe("기본 장수가 이어져 있는가", () => {
     // 박아 두면 상수를 고쳐도 화면이 안 따라온다.
     expect(source).toContain("React.useState(DEFAULT_VARIANTS)");
     expect(source, "3장으로 되돌아가면 안 된다").not.toContain("useState(3)");
+  });
+});
+
+/**
+ * **글만으로 만드는 길이 실제로 이어져 있는가.**
+ *
+ * 규칙(`canCreatePoster`·`resolveLook`·`PosterProjectInputSchema`)을 아무리 풀어
+ * 놔도, 화면이 이어 주지 않으면 사용자는 그 길로 못 간다. 되돌리기 쉬운 줄들이라
+ * 문자열로 못 박는다 — 이 시험이 없으면 「다음」 버튼에 `styleIds.length === 0`
+ * 한 줄만 되살려도 아무도 모른다(2026-09-16).
+ */
+describe("글만으로 만드는 길", () => {
+  it("첫 화면이 지시다", () => {
+    expect(source).toContain('React.useState("instruction")');
+  });
+
+  /** 첨부는 선택이다. 여기에 장수 조건이 돌아오면 길이 다시 막힌다. */
+  it("레퍼런스 「다음」이 장수를 안 본다", () => {
+    const next = source.match(/onClick=\{\(\) => setStep\("spec"\)\}[^>]*/);
+
+    expect(next).not.toBeNull();
+    expect(next![0]).toContain("disabled={overReferenceLimit}");
+    expect(next![0]).not.toContain("styleIds.length");
+  });
+
+  /** 첨부 유무 하나로 결·값·엔드포인트가 갈린다. 화면이 그 하나를 들고 있어야 한다. */
+  it("첨부 유무를 한 자리에서 판단한다", () => {
+    expect(source).toContain("const hasReferences = styleIds.length + preservedIds.length > 0;");
+    expect(source).toMatch(/estimatePosterCost\(\{[\s\S]*?hasReferences,/);
+  });
+
+  /** 첨부가 없으면 「레퍼런스 따라가기」가 목록에서 빠져야 한다. */
+  it("고를 수 있는 결을 첨부 유무로 정한다", () => {
+    expect(source).toContain("looksFor(hasReferences)");
+  });
+
+  /**
+   * **켜 보인 것과 보내는 것이 같아야 한다.** 화면이 「실사」를 켜 두고 본문에
+   * `auto` 를 실으면, 결을 정하는 말이 프롬프트에 한 줄도 안 들어간다.
+   */
+  it("켜 보인 결을 그대로 보낸다", () => {
+    expect(source).toContain("const shownLook = resolveLook(look, hasReferences);");
+    expect(source).toContain("look: shownLook,");
+  });
+
+  /** 값을 보여 준 자리에서 만든다. 규격이 마지막 칸이다. */
+  it("만들기 버튼이 규격 칸에 있다", () => {
+    const spec = source.slice(source.indexOf('step === "spec"'));
+    expect(spec).toMatch(/onClick=\{\(\) => void submit\(\)\}/);
   });
 });

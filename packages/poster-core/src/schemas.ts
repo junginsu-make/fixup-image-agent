@@ -57,8 +57,21 @@ export const PosterProjectInputSchema = z.object({
   variants: z.number().int().min(MIN_VARIANTS).max(MAX_VARIANTS),
   /** 사용자가 적는 한 줄. 나머지는 기획이 채운다. */
   instruction: z.string().trim().min(1),
-  /** 따라 만들 기준. 없으면 만들 수 없다. */
-  referenceIds: z.array(z.string().uuid()).min(1, "따라 만들 레퍼런스를 한 장 이상 골라 주세요."),
+  /**
+   * 따라 만들 기준. **없어도 된다.**
+   *
+   * 예전에는 `min(1)` 이었다 — 「없으면 만들 수 없다」. 그래서 글만 들고 온
+   * 사람은 시작조차 못 했다(2026-09-16 사용자 보고).
+   *
+   * 엔진은 진작부터 할 줄 알았다. `pickEndpoint` 가 첨부 유무로 t2i·i2i 를 갈라
+   * 부르고, 값도 `pricing.ts` 가 모드별로 따로 잡고, 프롬프트도
+   * `if (!images.length) return []` 로 첨부 블록을 비워 보내고, 기획도 `(없음)`
+   * 으로 이어 간다. 막고 있던 것은 이 한 줄과 화면의 `canCreatePoster` 뿐이었다.
+   *
+   * 빠져 있으면 빈 목록으로 읽는다 — 옛 화면이 이 칸을 안 보낼 수도 있고,
+   * 「안 골랐다」와 「없다」는 같은 뜻이다.
+   */
+  referenceIds: z.array(z.string().uuid()).default([]),
   /** 그대로 지킬 제품·인물. 선택이다. */
   preservedIds: z.array(z.string().uuid()).default([]),
   /**
@@ -116,6 +129,23 @@ export const PosterProjectInputSchema = z.object({
   adMasterId: z.string().max(64).optional(),
   slots: PosterSlotsSchema.optional(),
 }).strict().superRefine((input, ctx) => {
+  /**
+   * **광고 규격은 따라 만들 그림이 있어야 한다.**
+   *
+   * 광고 모드는 비율을 `match-source` 로 보내 첨부한 그림의 크기를 그대로
+   * 따라간다(`poster-form-rules.ts` 의 `effectiveRatio`). 맞출 원본이 없으면
+   * 성립하지 않는다 — 레퍼런스를 선택으로 푼 뒤에 생긴 구멍이다.
+   *
+   * 화면도 막지만(`canCreatePoster`) 화면을 안 거치는 길이 있다.
+   */
+  if (input.adMasterId && input.referenceIds.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["referenceIds"],
+      message: "광고 규격으로 만들려면 따라 만들 그림을 한 장 이상 골라 주세요.",
+    });
+  }
+
   /**
    * **차례는 첨부 전부를 담아야 한다.**
    *
