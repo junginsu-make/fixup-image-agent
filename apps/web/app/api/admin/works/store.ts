@@ -2,7 +2,8 @@ import "server-only";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
-  copiedCharacterAssetPath, posterCopyPlan, snsCopyPlan, type AssetMove,
+  copiedCharacterAssetPath, copiedLibraryAssetPath,
+  posterCopyPlan, snsCopyPlan, type AssetMove,
 } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import {
@@ -222,13 +223,18 @@ function contentTypeOf(path: string): string {
  *
  * 한 장이 실패해도 나머지는 옮긴다 — 한 장 때문에 복사 전체를 무르면 이미
  * 만든 행과 올린 파일을 되감아야 하고, 그 되감기가 또 실패할 수 있다.
- * 못 옮긴 장은 화면에서 빈 칸으로 보인다.
+ *
+ * **무엇을 옮겼는지 돌려준다.** 전에는 실패를 로그에만 남기고 조용히
+ * 넘어갔는데, 부르는 쪽이 그것을 모른 채 행을 전부 적었다. 그러면 행 다섯에
+ * 파일 넷이 되어 카드에는 「5장 묶음」인데 열면 넷이다 — 「그림 없는 내
+ * 작업」보다 한 단계 나쁜 **거짓말하는 작업**이다(2026-09-16 독립 리뷰).
  */
 async function moveAssets(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   moves: AssetMove[],
   bucket: string = BUCKET,
-): Promise<void> {
+): Promise<Set<string>> {
+  const moved = new Set<string>();
   for (const move of moves) {
     const file = await admin.storage.from(bucket).download(move.from);
     if (file.error || !file.data) {
@@ -246,8 +252,11 @@ async function moveAssets(
       .upload(move.to, bytes, { contentType: contentTypeOf(move.to), upsert: true });
     if (uploaded.error) {
       console.error(`[admin-copy] 새 자리에 못 올렸습니다(${move.to}): ${uploaded.error.message}`);
+      continue;
     }
+    moved.add(move.to);
   }
+  return moved;
 }
 
 /**
@@ -340,6 +349,247 @@ const CHARACTER_BUCKET = "characters";
  *
  * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
  */
+/**
+ * 복사본을 **팀에서 떼어 낸다.**
+ *
+ * 이 표들에는 `stamp_team` 트리거가 걸려 있어(`202609070004_team_stamp.sql`),
+ * 넣을 때 팀을 안 적으면 **행 주인의 팀**을 찾아 찍는다. 그러면 관리자가
+ * 회원 A 의 작업을 복사하는 순간 관리자가 속한 팀 전원이 A 의 기획안 전문과
+ * 결과 그림을 자기 팀 작업물로 보게 된다 — A 는 그런 일이 있었는지도 모른다.
+ * 출시 전 상업용 기획물이라 무게가 다르다.
+ *
+ * **넣을 때 `team_id: null` 을 적는 것으로는 안 된다.** 트리거의 관문이
+ * `if new.team_id is not null then return new` 라서, 명시한 `null` 은
+ * 「안 정했다」와 구분되지 않는다. 그래서 **넣은 직후에 지운다.**
+ *
+ * 그림을 다 옮긴 뒤로 미루지 않는다. 한 작업에 스무 장이면 몇 초인데, 그
+ * 동안 내내 팀에 열려 있다 — 짧다고 없는 것이 아니다.
+ *
+ * 못 지우면 **던진다.** 조용히 넘어가면 팀에 열린 채로 남는데, 그 사실은
+ * 아무 화면에도 안 나타난다.
+ */
+async function keepCopyPrivate(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  table: "library_items" | "characters" | "sns_projects" | "poster_projects",
+  id: string,
+): Promise<void> {
+  const { error } = await admin.from(table).update({ team_id: null }).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * 계정 보관 작업(상세페이지·리디자인) 한 건을 **소유자와 무관하게** 읽는다.
+ *
+ * 회원용 길(`lib/server-library.ts` 의 `getLibraryItem`)은 `canSeeItem` 을
+ * 지나므로 남의 것은 404 다. 거기에 「관리자면 조건을 뺀다」를 심지 않는다 —
+ * 그 조건이 언젠가 어긋나면 회원에게 남의 작업이 샌다. `readAnyWork` 와 같은
+ * 판단이다.
+ *
+ * **그림 주소도 채워서 준다.** 서명 주소는 수명이 있어 그때그때 발급한다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function readAnyLibraryWork(id: string) {
+  if (isLocalStoreEnabled()) return null;
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from("library_items")
+    .select("id,user_id,title,tool,aspect_ratio,image_count,created_at,data")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const row = data as Record<string, unknown>;
+  const ownerId = row.user_id as string;
+  const emails = await emailsByUserId([ownerId]);
+
+  const { data: imageRows } = await admin
+    .from("library_images")
+    .select("position,path")
+    .eq("item_id", id)
+    .order("position", { ascending: true });
+
+  const paths = ((imageRows ?? []) as Array<{ path: string }>).map((image) => image.path);
+  const signed = paths.length
+    ? await admin.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
+    : { data: [] };
+  const urlByPath = new Map(
+    ((signed.data ?? []) as Array<{ path: string | null; signedUrl: string | null }>)
+      .filter((entry) => entry.path && entry.signedUrl)
+      .map((entry) => [entry.path as string, entry.signedUrl as string]),
+  );
+
+  return {
+    work: {
+      id: row.id as string,
+      title: row.title as string,
+      tool: row.tool as "create" | "redesign",
+      aspectRatio: (row.aspect_ratio as string | null) ?? null,
+      imageCount: Number(row.image_count ?? 0),
+      createdAt: String(row.created_at),
+      // 관리자가 남의 것을 보는 길이라 **늘 남의 것이다.** 자기 것이면 회원용
+      // 길로 이미 열렸다.
+      mine: false,
+      ownerEmail: emails.get(ownerId) ?? null,
+      process: (row.data as Record<string, unknown> | null) ?? null,
+    },
+    images: ((imageRows ?? []) as Array<{ position: number; path: string }>)
+      .map((image) => ({
+        position: Number(image.position),
+        url: urlByPath.get(image.path) ?? null,
+      }))
+      .filter((image) => image.url),
+  };
+}
+
+/**
+ * 계정 보관 작업을 **내 것으로 복사한다.**
+ *
+ * 남의 작업을 고치는 대신 복사한다 — 회원의 자료를 관리자가 바꾸는 일이
+ * 없어야 한다(설계 3단계).
+ *
+ * **낱장 행은 파일을 다 옮긴 뒤에 적는다.** 먼저 적으면 그 사이에 실패했을 때
+ * **남의 파일을 가리키는 내 작업**이 남는다 — 원래 회원이 자기 작업을 지우면
+ * 내 복사본의 그림이 같이 사라진다. 이 순서면 최악이 「그림 없는 내 작업」이다.
+ */
+export async function copyLibraryWorkToSelf(
+  id: string,
+  ownerUserId: string,
+): Promise<{ id: string }> {
+  const admin = createSupabaseAdminClient();
+
+  const { data: source, error: readError } = await admin
+    .from("library_items")
+    .select("title,tool,aspect_ratio,data")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (!source) throw new Error("원본을 찾을 수 없습니다.");
+
+  const from = source as Record<string, unknown>;
+
+  // 1) 행을 먼저. 그림 자리는 새 작업 id 가 있어야 정해진다.
+  const { data: created, error: createError } = await admin
+    .from("library_items")
+    .insert({
+      user_id: ownerUserId,
+      title: from.title,
+      tool: from.tool,
+      aspect_ratio: from.aspect_ratio,
+      source_type: "generation",
+      // 과정은 그대로 가져온다. 참고용으로 쓰라고 여는 화면이다.
+      data: from.data ?? null,
+      image_count: 0,
+    })
+    .select("id")
+    .single();
+  if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+
+  const newId = created.id as string;
+
+  /*
+    여기서부터는 **깨지면 되돌린다.**
+
+    되돌리지 않으면 `image_count: 0` 에 표지도 없는 행이 남는데, 목록이 그런
+    행을 걸러 내므로(`app/library/library-works.ts`) **아무 화면에도 안 보인다.**
+    지울 손잡이가 없어 복사해 둔 파일까지 영영 남는다. 같은 표를 쓰는
+    `saveLibraryItem` 은 이미 되돌린다 — 한 표에 규칙이 둘이면 안 된다
+    (2026-09-16 독립 리뷰).
+  */
+  const uploaded: string[] = [];
+  try {
+    await keepCopyPrivate(admin, "library_items", newId);
+
+    // 2) 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
+    const { data: imageRows, error: imagesError } = await admin
+      .from("library_images")
+      .select("position,path,mime_type,thumb_path")
+      .eq("item_id", id)
+      .order("position", { ascending: true });
+    /*
+      **못 읽으면 성공이라고 하지 않는다.** 오류를 안 받으면 빈 배열로 읽혀
+      아무것도 안 적은 채 새 id 를 돌려주게 된다 — 화면은 새 작업으로 옮겨
+      가서 「볼 수 있는 그림이 없습니다」를 보여 주는데 원본에는 그림이
+      멀쩡히 있다. `deleteLibraryItem` 이 같은 함정을 이미 막아 두었다.
+    */
+    if (imagesError) throw new Error(imagesError.message);
+
+    const source = (imageRows ?? []) as Array<{
+      position: number; path: string; mime_type: string | null; thumb_path: string | null;
+    }>;
+
+    const moves: AssetMove[] = [];
+    const planned: Array<{ position: number; path: string; mime: string; thumb: string | null }> = [];
+
+    for (const image of source) {
+      const path = copiedLibraryAssetPath(image.path, ownerUserId, newId);
+      // 규약을 벗어난 경로는 옮기지 않고 그 장을 뺀다. 조용히 엉뚱한 자리를
+      // 가리키게 두는 것보다 낫다.
+      if (!path) continue;
+      const thumb = image.thumb_path
+        ? copiedLibraryAssetPath(image.thumb_path, ownerUserId, newId) : null;
+      moves.push({ from: image.path, to: path });
+      if (image.thumb_path && thumb) moves.push({ from: image.thumb_path, to: thumb });
+      planned.push({
+        position: Number(image.position), path,
+        mime: image.mime_type ?? "image/png", thumb,
+      });
+    }
+
+    const moved = await moveAssets(admin, moves, BUCKET);
+    uploaded.push(...moved);
+
+    /*
+      **못 옮긴 장은 행도 안 적는다.** 있다고 적어 두면 카드에는 「5장 묶음」
+      인데 열면 넷이다. 작은 사본만 실패한 장은 살린다 — 사본이 없으면 화면이
+      원본으로 떨어질 뿐이다(`_components/grid-src.ts`).
+    */
+    const rows = planned
+      .filter((image) => moved.has(image.path))
+      .map((image) => ({
+        item_id: newId, user_id: ownerUserId, position: image.position,
+        path: image.path, mime_type: image.mime,
+        thumb_path: image.thumb && moved.has(image.thumb) ? image.thumb : null,
+      }));
+
+    /*
+      **한 장도 못 옮겼으면 빈 작업을 남기지 않는다.** 원본에 그림이 있었는데
+      전부 실패한 것은 저장소가 앓는 중이라는 뜻이다 — 그때 「복사했다」고
+      말하면 사용자는 빈 작업을 보고 자기 것이 사라졌다고 읽는다.
+    */
+    if (source.length && !rows.length) throw new Error("그림을 옮기지 못했습니다.");
+
+    // 3) 옮긴 자리를 적는다.
+    if (rows.length) {
+      const { error } = await admin.from("library_images").insert(rows);
+      if (error) throw new Error(error.message);
+
+      const cover = rows.find((row) => row.position === 0) ?? rows[0];
+      const { error: coverError } = await admin
+        .from("library_items")
+        .update({
+          image_count: rows.length,
+          cover_path: cover?.path ?? null,
+          cover_thumb_path: cover?.thumb_path ?? null,
+        })
+        .eq("id", newId);
+      if (coverError) throw new Error(coverError.message);
+    }
+
+    return { id: newId };
+  } catch (error) {
+    /*
+      **파일부터 지우고 행을 지운다.** 순서가 반대면 경로를 잃는다 —
+      `saveLibraryItem` 이 같은 순서로 되돌린다.
+    */
+    if (uploaded.length) await admin.storage.from(BUCKET).remove(uploaded);
+    await admin.from("library_items").delete().eq("id", newId);
+    throw error;
+  }
+}
+
 export async function copyCharacterToSelf(
   id: string,
   ownerUserId: string,
@@ -364,6 +614,7 @@ export async function copyCharacterToSelf(
     })
     .select("id").single();
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+  await keepCopyPrivate(admin, "characters", created.id as string);
 
   // 2) 각도 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
   const { data: views } = await admin.from("character_views")
@@ -425,6 +676,7 @@ export async function copyWorkToSelf(
       data: blank.data,
       slotPlan: from.slotPlan,
     } as SnsProjectCreateRecord);
+    await keepCopyPrivate(admin, "sns_projects", created.id);
 
     // 2) 그림을 옮기고 3) 바뀐 경로를 적는다.
     const plan = snsCopyPlan(
@@ -455,6 +707,7 @@ export async function copyWorkToSelf(
     }))
     .select("id").single();
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+  await keepCopyPrivate(admin, "poster_projects", created.id as string);
 
   const { data: images } = await admin.from("poster_images")
     .select("variant_index,selected,width,height,review,asset_path,thumb_path")

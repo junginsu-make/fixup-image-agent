@@ -1,5 +1,7 @@
 import { authenticateApiAdmin } from "../../../../../../lib/membership/api";
-import { readAnyCharacter, readAnyWork, readAnyWorkImages } from "../../store";
+import {
+  readAnyCharacter, readAnyLibraryWork, readAnyWork, readAnyWorkImages,
+} from "../../store";
 
 type Context = { params: Promise<{ kind: string; id: string }> };
 
@@ -26,7 +28,7 @@ export async function GET(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
 
   const { kind, id } = await context.params;
-  if (kind !== "sns" && kind !== "poster" && kind !== "character") {
+  if (kind !== "sns" && kind !== "poster" && kind !== "character" && kind !== "library") {
     return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
   }
 
@@ -41,6 +43,19 @@ export async function GET(_request: Request, context: Context) {
         return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
       }
       return Response.json({ ok: true, work: character, images: [] });
+    }
+
+    /*
+      상세페이지·리디자인은 `library_items` 에 함께 있어 갈래가 하나다. 그림
+      주소도 그 함수가 채워서 준다 — 회원용 기록의 주소는 소유자만 지나는
+      서명이라 관리자가 열면 빈다.
+    */
+    if (kind === "library") {
+      const found = await readAnyLibraryWork(id);
+      if (!found) {
+        return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
+      }
+      return Response.json({ ok: true, work: found.work, images: found.images });
     }
 
     const work = await readAnyWork(kind, id);

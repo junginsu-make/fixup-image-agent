@@ -21,6 +21,22 @@
  * 조용히 엉뚱한 자리에 쓰는 것보다 **그 한 장을 못 옮겼다고 알리는 편**이
  * 낫다. 부르는 쪽은 그 칸을 비우고 나머지를 옮긴다.
  */
+/**
+ * 이 칸을 경로에 써도 되나.
+ *
+ * 빈 칸, **위로 올라가는 칸**(`.`·`..`), 역슬래시를 막는다.
+ *
+ * 지금은 경로를 서버가 조립하므로 사용자가 `..` 를 넣을 길이 없다. 그래도
+ * 거르는 까닭은, 이 함수가 만든 문자열이 그대로 저장소 주소가 되고 업로드가
+ * `upsert: true` 이기 때문이다 — 언젠가 경로를 받아 쓰는 자리가 하나 생기면
+ * 그날 남의 파일을 조용히 덮어쓴다. 막는 값이 싸서 미리 막는다.
+ *
+ * **칸 전체가 점일 때만 막는다.** `0.thumb.webp` 는 정상적인 이름이다.
+ */
+function usablePart(part: string): boolean {
+  return Boolean(part) && part !== "." && part !== ".." && !part.includes("\\");
+}
+
 export function copiedAssetPath(
   originalPath: string,
   newOwnerId: string,
@@ -31,7 +47,7 @@ export function copiedAssetPath(
   // `{소유자}/{도구}/{작업}/{남은 이름}` — 적어도 넷이어야 한다.
   if (parts.length < 4) return null;
   const [, tool, , ...rest] = parts;
-  if (!tool || !rest.length || rest.some((part) => !part)) return null;
+  if (!usablePart(tool ?? "") || !rest.length || !rest.every(usablePart)) return null;
   return [newOwnerId, tool, newProjectId, ...rest].join("/");
 }
 
@@ -159,6 +175,22 @@ export function copiedCharacterAssetPath(
   // `{소유자}/{캐릭터}/{남은 이름}` — 적어도 셋이어야 한다.
   if (parts.length < 3) return null;
   const rest = parts.slice(2);
-  if (!rest.length || rest.some((part) => !part)) return null;
+  if (!rest.length || !rest.every(usablePart)) return null;
   return [newOwnerId, newCharacterId, ...rest].join("/");
+}
+
+/**
+ * 라이브러리 작업(상세페이지·리디자인)의 그림 자리.
+ *
+ * **캐릭터와 모양이 같다** — `{소유자}/{묶음}/{남은 이름}` 이다
+ * (`lib/server-library.ts` 가 `${userId}/${itemId}/${position}.${ext}` 로 쓴다).
+ * 같은 규칙을 두 번 적지 않는다. 이름을 따로 두는 것은, 어느 날 한쪽 규약이
+ * 바뀌어도 **부르는 쪽을 안 건드리고** 여기만 갈라 놓을 수 있게 하려는 것이다.
+ */
+export function copiedLibraryAssetPath(
+  originalPath: string,
+  newOwnerId: string,
+  newItemId: string,
+): string | null {
+  return copiedCharacterAssetPath(originalPath, newOwnerId, newItemId);
 }

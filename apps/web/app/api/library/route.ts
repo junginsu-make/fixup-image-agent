@@ -9,6 +9,7 @@ import { authenticateApiMember } from "../../../lib/membership/api";
 import { teamIdOf } from "../../../lib/teams/store";
 import { selectedProjectFor } from "../../../lib/teams/current-project";
 import { originOf } from "./core";
+import { workProcessOf } from "./work-process";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,10 +59,13 @@ export async function GET(req: Request) {
     }
     return Response.json({ ok: true, items: await listLibraryItems(viewer) });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "라이브러리를 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
+      그대로 나간다(`security.md`). 형제 라우트(`[id]/route.ts`)는 이미 이렇게
+      한다 — 한쪽만 막혀 있으면 막은 줄 알고 넘어가게 된다.
+    */
+    console.error("[library:list]", error);
+    return Response.json({ ok: false, message: "라이브러리를 불러오지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -82,6 +86,15 @@ export async function POST(req: Request) {
        * 이어 붙고, 없으면 지금까지처럼 새 작업이 된다.
        */
       sourceId?: string;
+      /**
+       * 이 작업을 만든 **기획안과 심사**. 「과정 보기」가 이것으로 산다.
+       *
+       * 화면이 보낸 것을 그대로 담지 않는다 — `workProcessOf` 가 여기서 골라
+       * 낸다. 그러지 않으면 base64 한 장이 섞여 들어오는 길이 열리고, 그때는
+       * 이미 표에 들어간 뒤다. 고르는 규칙이 화면에 있으면 화면마다 갈린다.
+       */
+      blueprint?: unknown;
+      review?: unknown;
       images?: Array<{ base64?: string; mimeType?: string }>;
     };
 
@@ -105,6 +118,11 @@ export async function POST(req: Request) {
       origin: originOf(body.origin, tool),
       aspectRatio: body.aspectRatio,
       sourceId: body.sourceId ? String(body.sourceId).slice(0, 120) : undefined,
+      process: workProcessOf({
+        blueprint: body.blueprint as never,
+        review: body.review,
+        aspectRatio: body.aspectRatio,
+      }),
       images,
     });
 
@@ -112,10 +130,13 @@ export async function POST(req: Request) {
       ? Response.json(result)
       : Response.json(result, { status: 500 });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "저장하지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
+      그대로 나간다(`security.md`). 형제 라우트(`[id]/route.ts`)는 이미 이렇게
+      한다 — 한쪽만 막혀 있으면 막은 줄 알고 넘어가게 된다.
+    */
+    console.error("[library:save]", error);
+    return Response.json({ ok: false, message: "저장하지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -133,9 +154,12 @@ export async function DELETE(req: Request) {
     const status = result.ok ? 200 : ("denied" in result && result.denied ? 403 : 500);
     return Response.json(result, { status });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "삭제하지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
+      그대로 나간다(`security.md`). 형제 라우트(`[id]/route.ts`)는 이미 이렇게
+      한다 — 한쪽만 막혀 있으면 막은 줄 알고 넘어가게 된다.
+    */
+    console.error("[library:delete]", error);
+    return Response.json({ ok: false, message: "삭제하지 못했습니다." }, { status: 500 });
   }
 }

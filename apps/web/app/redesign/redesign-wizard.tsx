@@ -55,6 +55,7 @@ import {
 import { Dashboard, Workspace } from "./redesign-panels";
 import { GenerationProgressPanel, Results, estimateGenerationSeconds, generationPhase, isAbortError } from "./redesign-results";
 import { requestIdentityOf } from "./redesign-request";
+import { redesignProcessSource } from "../api/library/work-process";
 
 
 
@@ -572,6 +573,7 @@ export function RedesignWizard() {
           title: projectDisplayTitle(project),
           tool: "redesign",
           sourceId: project.id,
+          ...redesignProcessSource(project),
           images,
         }),
       });
@@ -605,6 +607,7 @@ export function RedesignWizard() {
           // 같은 작업의 섹션은 라이브러리에서 한 줄로 모인다. 이 값이 없으면
           // 섹션마다 새 줄이 되어 같은 페이지가 여덟 줄로 흩어진다.
           sourceId: target.id,
+          ...redesignProcessSource(target),
           images,
         }),
       });

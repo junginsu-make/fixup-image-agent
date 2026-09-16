@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copiedAssetPath } from "../copy-paths";
+import { copiedAssetPath, copiedLibraryAssetPath } from "../copy-paths";
 
 /**
  * 복사본의 그림이 놓일 자리.
@@ -220,5 +220,38 @@ describe("copiedCharacterAssetPath", () => {
     // 그래서 부르는 쪽이 갈래를 정확히 골라야 한다 — 이 시험이 그 경계다.
     expect(copiedCharacterAssetPath("회원A/sns/작업1/0.png", "관리자B", "캐릭2"))
       .toBe("관리자B/캐릭2/작업1/0.png");
+  });
+});
+
+/**
+ * **규약을 벗어난 칸은 처음부터 자른다.**
+ *
+ * 지금은 경로를 서버가 조립하므로 사용자가 `..` 를 넣을 길이 없다. 그래도
+ * 거르는 까닭은, 이 함수가 만든 문자열이 그대로 저장소 주소가 되고 업로드가
+ * `upsert: true` 이기 때문이다 — 언젠가 경로를 받아 쓰는 자리가 하나 생기면
+ * 그날 남의 파일을 덮어쓴다. 막는 값이 싸서 미리 막는다.
+ */
+describe("경로에 위로 올라가는 칸이 있으면 옮기지 않는다", () => {
+  // 마지막은 **역슬래시가 든 칸**이다. `"a\b"` 로 적으면 백스페이스 문자가 된다.
+  const 나쁜칸 = ["..", ".", "a\\b"];
+
+  it.each(나쁜칸)("작업 경로에 %s 가 있으면 null", (part) => {
+    expect(copiedAssetPath(`남/도구/작업/${part}/x.png`, "나", "새작업")).toBeNull();
+  });
+
+  it.each(나쁜칸)("캐릭터 경로에 %s 가 있으면 null", (part) => {
+    expect(copiedCharacterAssetPath(`남/캐릭터/${part}/x.png`, "나", "새캐릭터")).toBeNull();
+  });
+
+  it.each(나쁜칸)("라이브러리 경로에 %s 가 있으면 null", (part) => {
+    expect(copiedLibraryAssetPath(`남/작업/${part}/0.png`, "나", "새작업")).toBeNull();
+  });
+
+  it("점이 **들어간** 이름은 멀쩡하다", () => {
+    // `0.thumb.webp` 는 정상이다. 칸 전체가 점일 때만 막는다.
+    expect(copiedLibraryAssetPath("남/작업/0.thumb.webp", "나", "새작업"))
+      .toBe("나/새작업/0.thumb.webp");
+    expect(copiedAssetPath("남/도구/작업/0.thumb.webp", "나", "새작업"))
+      .toBe("나/도구/새작업/0.thumb.webp");
   });
 });

@@ -70,9 +70,17 @@ describe("화면이 규칙을 부르는가", () => {
   });
 
   it("카드 본문 클릭은 그대로 뷰어를 연다", () => {
-    // 이 줄이 바뀌면 지금 쓰던 동작을 뺏은 것이다.
+    /*
+      이 줄이 사라지면 지금 쓰던 동작을 뺏은 것이다.
+
+      **판단은 `imageCount` 로 한다.** 처음에는 `images.length` 였는데, 계정
+      보관 작업(상세페이지·리디자인)은 낱장을 열 때 받아서 목록에서는 늘
+      0장이다 — 그 값으로 가르면 그런 작업은 영영 뷰어가 안 열리고 화면으로
+      튕긴다(2026-09-16).
+    */
     expect(source).toContain(
-      "work.images.length ? openWork(work) : router.push(work.href)");
+      "work.imageCount ? void openWork(work) : router.push(work.href)");
+    expect(source).not.toContain("work.images.length ? openWork(work)");
   });
 
   it("과정 보기 단추에 빨간 hover 가 묻지 않는다", () => {

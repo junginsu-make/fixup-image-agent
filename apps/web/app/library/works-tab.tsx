@@ -10,6 +10,10 @@ import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
 import { coverOf } from "./works-cover";
 import { canOpenSteps } from "./work-steps";
 import {
+  isWorkShowcased, libraryWorks, showcaseKindOf, TOOL_LABEL,
+  type LibraryWork, type WorkTool,
+} from "./library-works";
+import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
   cn,
@@ -32,7 +36,13 @@ import { ThumbImage } from "../_components/thumb-image";
  * 누가 만들었는지를 편다.
  */
 
-type Tool = "sns" | "poster";
+/**
+ * 이 탭이 싣는 도구.
+ *
+ * 카드뉴스·포스터는 각자 표가 있고, 상세페이지·리디자인은 **한 표에 함께**
+ * 있다(`library_items`). 이름표와 갤러리 갈래는 `library-works.ts` 가 정한다.
+ */
+type Tool = WorkTool;
 
 /**
  * 한 장.
@@ -67,6 +77,13 @@ interface Work {
    * 작은 것으로 바꾼다.
    */
   cover: string | null;
+  /**
+   * 그림이 몇 장인가. **`images` 가 비어 있어도 안다.**
+   *
+   * 계정 보관 작업은 낱장을 열 때 받으므로 목록에서는 늘 0장이다. 카드가
+   * `images.length` 로 판단하면 그런 작업은 눌러도 뷰어가 안 열린다.
+   */
+  imageCount: number;
   images: WorkImage[];
   /** 무엇을 만들려던 것인가. 카드뉴스는 원본 글, 포스터는 한 줄 지시. */
   intent: string;
@@ -84,8 +101,6 @@ const STATUS: Record<string, { label: string; tone: "green" | "secondary" | "des
   done: { label: "완료", tone: "green" },
   failed: { label: "실패", tone: "destructive" },
 };
-
-const TOOL_LABEL: Record<Tool, string> = { sns: "카드뉴스", poster: "이미지" };
 
 function when(value: string): string {
   if (!value) return "";
@@ -123,6 +138,7 @@ function toSnsWork(project: Record<string, any>): Work {
     // 회원용 목록은 자기 것만 주므로 `mine` 을 싣지 않는다. 그때는 전부 내 것이다.
     mine: project.mine ?? true,
     cover: coverOf(coverCard),
+    imageCount: images.length,
     images,
     intent: snsIntent(project.data?.source),
     settings: [
@@ -155,6 +171,7 @@ function toPosterWork(project: Record<string, any>): Work {
     ownerEmail: project.ownerEmail ?? null,
     mine: project.mine ?? true,
     cover: coverOf(coverShot),
+    imageCount: images.length,
     images,
     intent: project.data?.instruction ?? "",
     settings: [
@@ -168,12 +185,63 @@ function toPosterWork(project: Record<string, any>): Work {
   };
 }
 
+/**
+ * 계정에 보관된 상세페이지·리디자인 작업.
+ *
+ * **관리자용 주소가 따로 없다.** 이 목록은 한 주소가 관리자에게 전부를 준다
+ * (`lib/server-library.ts` 의 `readScope`). 카드뉴스·포스터처럼 길이 갈려
+ * 있지 않아서, 「내 것만 보기」는 여기서 좁힌다.
+ *
+ * **못 읽어도 목록을 비우지 않는다.** 카드뉴스·포스터가 이미 와 있는데 이것
+ * 하나 때문에 화면이 통째로 비면, 사용자는 작업이 사라진 줄 안다.
+ */
+async function readLibraryWorks(allMembers: boolean) {
+  try {
+    const body = await (await fetch("/api/library", { cache: "no-store" })).json();
+    if (!body?.ok) return [];
+    return libraryWorks(body.items ?? []).filter((work) => allMembers || work.mine);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 계정 보관 작업의 낱장을 받는다. **열 때만.**
+ *
+ * 카드뉴스·포스터는 목록이 낱장까지 싣고 오지만, 이쪽은 표지만 온다
+ * (`library-works.ts` 에 이유를 적었다).
+ */
+async function readWorkImages(work: LibraryWork | { id: string; title: string }) {
+  try {
+    const body = await (await fetch(`/api/library?id=${encodeURIComponent(work.id)}`, { cache: "no-store" })).json();
+    if (!body?.ok) return [];
+    const rows = (body.images ?? []) as Array<{ url?: string | null; position: number }>;
+    return rows
+      .filter((image): image is { url: string; position: number } => Boolean(image.url))
+      .map((image) => ({
+        url: image.url,
+        label: `${image.position + 1}번째`,
+        index: image.position,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export function WorksTab() {
   const router = useRouter();
   const [works, setWorks] = React.useState<Work[] | null>(null);
   const [message, setMessage] = React.useState("");
   const [confirming, setConfirming] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  /**
+   * 지금 여는 중인 작업.
+   *
+   * 계정 보관 작업은 낱장을 **누를 때** 받아 오므로 사이에 틈이 생긴다. 그
+   * 틈에 한 번 더 누르면 같은 것을 두 번 받아 창이 두 번 열린다 — 아무 반응이
+   * 없으니 사용자는 한 번 더 누르게 된다.
+   */
+  const [opening, setOpening] = React.useState<string | null>(null);
   /**
    * 첫 화면에 걸린 것들. **null 이면 관리자가 아니다.**
    *
@@ -211,7 +279,28 @@ export function WorksTab() {
    * 만들기 화면이 쓰는 그 창을 그대로 쓴다 — 크게 보면서 설명도 보고,
    * 넘기고, 내려받고, 지운다.
    */
-  function openWork(work: Work) {
+  async function openWork(work: Work) {
+    /*
+      **계정 보관 작업은 낱장을 여기서 받는다.** 목록에 미리 실으면 한 작업에
+      스무 장씩, 화면 한 번에 수십 MB 가 오간다 — 사용자가 「끊긴다」고 말한
+      그 증상이다. 서명 주소는 수명이 있어 어차피 그때그때 받아야 한다.
+    */
+    if (opening) return;
+
+    let images = work.images;
+    if (!images.length) {
+      setOpening(work.id);
+      try {
+        images = await readWorkImages(work);
+      } finally {
+        setOpening(null);
+      }
+    }
+    if (!images.length) {
+      setNotice("이 작업에는 볼 수 있는 그림이 없습니다.");
+      return;
+    }
+
     const meta: Array<[string, string]> = [
       ["만든 때", when(work.createdAt || work.updatedAt)],
       ["도구", TOOL_LABEL[work.tool]],
@@ -220,7 +309,7 @@ export function WorksTab() {
       ["만든 사람", work.ownerEmail ?? work.userId ?? "확인할 수 없음"],
     ];
     openImageGallery({
-      images: work.images.map((image) => ({
+      images: images.map((image) => ({
         src: image.url,
         alt: `${work.title} · ${image.label}`,
         name: `${work.title} ${image.label}.png`,
@@ -236,10 +325,10 @@ export function WorksTab() {
             label: "첫 화면에 걸기",
             doneLabel: "첫 화면에 걸림",
             doneAt: (position) => {
-              const image = work.images[position];
-              return image ? isShowcased(showcase, work.tool, work.id, image.index) : false;
+              const image = images[position];
+              return image ? isShowcased(showcase, showcaseKindOf(work.tool), work.id, image.index) : false;
             },
-            run: (position) => void feature(work, position),
+            run: (position) => void feature(work, images, position),
           }
         : undefined,
     });
@@ -254,8 +343,8 @@ export function WorksTab() {
    * 설명은 여기서 붙이지 않는다. 작업 제목은 회원이 자기 편하려고 쓴 말이라
    * 그대로 첫 화면에 내걸 말이 아니다 — 문구는 관리자 화면에서 따로 쓴다.
    */
-  async function feature(work: Work, position: number) {
-    const image = work.images[position];
+  async function feature(work: Work, images: WorkImage[], position: number) {
+    const image = images[position];
     if (!image || featuring) return;
     setFeaturing(work.id);
     setNotice("");
@@ -264,7 +353,7 @@ export function WorksTab() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          sourceKind: work.tool,
+          sourceKind: showcaseKindOf(work.tool),
           sourceId: work.id,
           imageIndex: image.index,
           kindLabel: TOOL_LABEL[work.tool],
@@ -283,7 +372,7 @@ export function WorksTab() {
           height: null,
           caption: null,
           kindLabel: TOOL_LABEL[work.tool],
-          sourceKind: work.tool,
+          sourceKind: showcaseKindOf(work.tool),
           sourceId: work.id,
           sourceIndex: image.index,
           position: 0,
@@ -303,10 +392,23 @@ export function WorksTab() {
     setDeleting(work.id);
     setMessage("");
     try {
-      const endpoint = work.tool === "sns"
-        ? `/api/sns/projects/${work.id}`
-        : `/api/poster/projects/${work.id}`;
-      const body = await (await fetch(endpoint, { method: "DELETE" })).json();
+      /*
+        **계정 보관 작업은 다른 표에 있다.** 도구 주소로 보내면 아무것도 안
+        지워지고 사라진 것처럼 보인다 — `lib/library.ts` 가 레퍼런스에서 같은
+        실수를 겪고 남긴 주석이다.
+      */
+      const account = work.tool === "create" || work.tool === "redesign";
+      const endpoint = account
+        ? "/api/library"
+        : work.tool === "sns"
+          ? `/api/sns/projects/${work.id}`
+          : `/api/poster/projects/${work.id}`;
+      const body = await (await fetch(endpoint, {
+        method: "DELETE",
+        ...(account
+          ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ id: work.id }) }
+          : {}),
+      })).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
       setWorks((current) => (current ?? []).filter((entry) => entry.id !== work.id));
     } catch (error) {
@@ -357,22 +459,28 @@ export function WorksTab() {
         // 그 조건이 어긋나 남의 작업이 회원에게 새 나간다.
         const merged = allMembers
           ? await (async () => {
-              const body = await (await fetch("/api/admin/works", { cache: "no-store" })).json();
+              const [body, library] = await Promise.all([
+                (await fetch("/api/admin/works", { cache: "no-store" })).json(),
+                readLibraryWorks(true),
+              ]);
               if (!body.ok) throw new Error(body.message ?? "작업물을 불러오지 못했습니다.");
               return [
                 ...(body.sns ?? []).map(toSnsWork),
                 ...(body.poster ?? []).map(toPosterWork),
+                ...library,
               ];
             })()
           : await (async () => {
               // 두 도구를 함께 읽어 한 목록으로 만든다. 사용자에게는 "내가 만든 것"이 하나다.
-              const [sns, poster] = await Promise.all([
+              const [sns, poster, library] = await Promise.all([
                 fetch("/api/sns/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
                 fetch("/api/poster/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+                readLibraryWorks(false),
               ]);
               return [
                 ...(sns.ok ? (sns.projects ?? []).map(toSnsWork) : []),
                 ...(poster.ok ? (poster.projects ?? []).map(toPosterWork) : []),
+                ...library,
               ];
             })();
         if (!alive) return;
@@ -421,7 +529,7 @@ export function WorksTab() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {works.map((work) => (
-          <Card key={`${work.tool}-${work.id}`} className="relative cursor-pointer overflow-hidden" onClick={() => (work.images.length ? openWork(work) : router.push(work.href))}>
+          <Card key={`${work.tool}-${work.id}`} className="relative cursor-pointer overflow-hidden" onClick={() => (work.imageCount ? void openWork(work) : router.push(work.href))}>
             {/* 지우기를 카드 모서리에 둔다.
 
                 전에는 큰 창을 열어야만 지울 수 있었다. 그런데 **그림이 없는
@@ -476,11 +584,12 @@ export function WorksTab() {
               <p className="truncate text-sm font-bold">{work.title}</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary">{TOOL_LABEL[work.tool]}</Badge>
-                {work.images.length > 1 ? <Badge variant="secondary">{work.images.length}장 묶음</Badge> : null}
-                {showcase && work.images.some((image) => isShowcased(showcase, work.tool, work.id, image.index))
+                {work.imageCount > 1 ? <Badge variant="secondary">{work.imageCount}장 묶음</Badge> : null}
+                {showcase && isWorkShowcased(showcase, work.tool, work.id)
                   ? <Badge>첫 화면</Badge>
                   : null}
                 {allMembers && !work.mine ? <Badge variant="secondary">{work.ownerEmail ?? "다른 회원"}</Badge> : null}
+                {opening === work.id ? <Badge variant="secondary">여는 중…</Badge> : null}
                 <Badge variant={(STATUS[work.status] ?? { tone: "secondary" as const }).tone}>
                   {(STATUS[work.status] ?? { label: work.status }).label}
                 </Badge>

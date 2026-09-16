@@ -24,6 +24,8 @@ interface Character {
   look?: string | null;
   createdAt?: string | null;
   views?: CharacterView[];
+  /** 내가 만든 것인가. 서버가 정한다(`lib/characters.ts`). */
+  mine?: boolean;
 }
 
 /**
@@ -49,11 +51,19 @@ export function CharacterDetailClient({ characterId }: { characterId: string }) 
     let alive = true;
     void (async () => {
       try {
-        const response = await fetch(`/api/characters/${characterId}`, { cache: "no-store" });
+        const response = await fetch(`/api/characters/${encodeURIComponent(characterId)}`, { cache: "no-store" });
         const body = await response.json().catch(() => null);
         if (!alive) return;
         if (body?.ok && body.character) {
-          setState({ kind: "ready", character: body.character, readOnly: false });
+          /*
+            **주인이 아니면 읽기 전용이다.** 회원용 목록은 팀 범위라 같은 팀
+            사람의 캐릭터도 성공으로 온다 — 404 로 가르면 팀원의 캐릭터를
+            자기 것으로 보게 된다.
+          */
+          setState({
+            kind: "ready", character: body.character,
+            readOnly: !body.character.mine,
+          });
           return;
         }
         /*
@@ -61,7 +71,7 @@ export function CharacterDetailClient({ characterId }: { characterId: string }) 
           관리자에게는 별도 통로가 있으므로 한 번 더 묻는다.
         */
         if (response.status === 404) {
-          const admin = await fetch(`/api/admin/works/character/${characterId}`, { cache: "no-store" });
+          const admin = await fetch(`/api/admin/works/character/${encodeURIComponent(characterId)}`, { cache: "no-store" });
           const seen = await admin.json().catch(() => null);
           if (!alive) return;
           if (seen?.ok && seen.work) {
@@ -81,11 +91,11 @@ export function CharacterDetailClient({ characterId }: { characterId: string }) 
   const copyToSelf = React.useCallback(async () => {
     setCopying(true);
     try {
-      const body = await (await fetch(`/api/admin/works/character/${characterId}/copy`, {
+      const body = await (await fetch(`/api/admin/works/character/${encodeURIComponent(characterId)}/copy`, {
         method: "POST",
       })).json() as { ok?: boolean; id?: string; message?: string };
       if (!body.ok || !body.id) throw new Error(body.message ?? "복사하지 못했습니다.");
-      router.push(`/characters/${body.id}`);
+      router.push(`/characters/${encodeURIComponent(body.id)}`);
     } catch (cause) {
       setState((current) => (current.kind === "ready" ? current : current));
       window.alert(cause instanceof Error ? cause.message : "복사하지 못했습니다.");
