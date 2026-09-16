@@ -5,7 +5,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockChoices, MockField, MockNote } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "크레딧과 모델 — 사용 설명서" };
+export const metadata: Metadata = { title: "크레딧과 모델 · 사용 설명서" };
 
 /**
  * 가중치는 README §이미지 모델의 표와 같다. 모델 목록 자체는 코드에서 가져와
@@ -27,7 +27,7 @@ export default function CreditsGuidePage() {
       <GuideHeader
         kicker="크레딧과 모델"
         title="어디서 얼마나 차감되나"
-        lead="이 시스템에서 돈이 드는 자리는 하나뿐입니다 — 그림을 만들 때입니다. 읽고, 분석하고, 구성안을 짜고, 원고를 쓰는 데는 이미지 크레딧이 차감되지 않습니다. 어디까지가 무료이고 어디부터 차감인지 알아 두면 마음 편히 여러 번 고칠 수 있습니다."
+        lead="이 시스템에서 돈이 드는 자리는 하나뿐입니다. 그림을 만들 때입니다. 읽고, 분석하고, 구성안을 짜고, 원고를 쓰는 데는 이미지 크레딧이 차감되지 않습니다. 어디까지가 무료이고 어디부터 차감인지 알아 두면 마음 편히 여러 번 고칠 수 있습니다."
       />
 
       <Summary

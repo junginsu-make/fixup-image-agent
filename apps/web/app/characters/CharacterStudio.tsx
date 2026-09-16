@@ -359,7 +359,7 @@ export function CharacterStudio() {
 
       // 조용히 넘어가지 않는다. 빠진 장도 라이브러리 실패도 알린다.
       setMessage([
-        body.missingAngles ? `${body.missingAngles}장이 실패했습니다 — 「내 캐릭터」에서 다시 만드세요.` : "",
+        body.missingAngles ? `${body.missingAngles}장이 실패했습니다. 「내 캐릭터」에서 다시 만드세요.` : "",
         body.referenceIssue ?? "",
       ].filter(Boolean).join(" "));
 
@@ -569,7 +569,7 @@ export function CharacterStudio() {
                   </p>
                   {chosenModel?.untested ? (
                     <p className="text-xs text-amber-700">
-                      「시험」 표시가 붙은 모델입니다. 이 쓰임에서 더 나은지 아직 재지 않았습니다 —
+                      「시험」 표시가 붙은 모델입니다. 이 쓰임에서 더 나은지 아직 재지 않았습니다.
                       같은 캐릭터를 기본 모델로도 만들어 견줘 보세요.
                     </p>
                   ) : null}
@@ -737,7 +737,7 @@ export function CharacterStudio() {
                   : busy === "create"
                     ? "고른 것을 만드는 중입니다. 다 되면 2단계 「결과」로 넘어갑니다."
                     : chosen
-                      ? "정면은 다시 그리지 않고 그대로 씁니다 — 다시 그리면 얼굴이 달라집니다."
+                      ? "정면은 다시 그리지 않고 그대로 씁니다. 다시 그리면 얼굴이 달라집니다."
                       : "왼쪽에서 만들면 여기에 정면이 나옵니다. 각도는 그다음에 고릅니다."}
               </CardDescription>
             </CardHeader>
@@ -848,7 +848,7 @@ export function CharacterStudio() {
                       캐릭터를 활용하려면 「{sheetItem.label}」으로 만드세요. 비용이 절약됩니다.
                     </strong>
                     <span className="text-muted-foreground">
-                      {" "}여섯 각도를 <strong>한 그림</strong>에 3×2 로 담아 <strong>한 장 값</strong>만 듭니다 —
+                      {" "}여섯 각도를 <strong>한 그림</strong>에 3×2 로 담아 <strong>한 장 값</strong>만 듭니다.
                       낱장으로 여섯 번 만들면 여섯 번 냅니다.
                     </span>
                     {pickedAngles.some((id) => id.endsWith("_90")) ? (

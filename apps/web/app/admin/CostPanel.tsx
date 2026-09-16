@@ -127,7 +127,7 @@ export function CostPanel({
             <CardTitle>모델별 사용량과 단가</CardTitle>
             <CardDescription>
               단가는 <strong>운영자가 넣은 값</strong>입니다. 처음 값은 fal 공개 단가라 실제 청구서와
-              다를 수 있습니다 — 청구서를 보고 여기서 고치면 지난 기록의 금액도 함께 맞춰집니다.
+              다를 수 있습니다. 청구서를 보고 여기서 고치면 지난 기록의 금액도 함께 맞춰집니다.
             </CardDescription>
           </div>
           <form action={updateUsdKrw} className="flex flex-none items-center gap-2">

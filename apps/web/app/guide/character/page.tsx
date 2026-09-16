@@ -5,7 +5,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "캐릭터 만들기 — 사용 설명서" };
+export const metadata: Metadata = { title: "캐릭터 만들기 · 사용 설명서" };
 
 /** 화면(`app/characters/CharacterStudio.tsx`)의 목록과 같은 말을 쓴다. */
 const KINDS = [
@@ -66,7 +66,7 @@ export default function CharacterGuidePage() {
       <Section title="사람만 만드는 것이 아닙니다" hint="종류와 결을 따로 고릅니다.">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지 — 종류</h3>
+            <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지. 종류</h3>
             <ul className="grid gap-2">
               {KINDS.map((kind) => (
                 <li key={kind.title} className="rounded-lg border bg-card px-3 py-2">
@@ -77,7 +77,7 @@ export default function CharacterGuidePage() {
             </ul>
           </div>
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">어떤 결로 — 화풍</h3>
+            <h3 className="mb-2 text-sm font-extrabold">어떤 결로. 화풍</h3>
             <ul className="grid gap-2">
               {TONES.map((tone) => (
                 <li key={tone.title} className="rounded-lg border bg-card px-3 py-2">
@@ -156,15 +156,15 @@ export default function CharacterGuidePage() {
         <Callouts
           items={[
             {
-              title: "종류 — 무엇을 만드는지",
-              body: "사람·동물·캐릭터·사물 중에서 고릅니다. 종류에 따라 각도의 뜻이 달라집니다 — 사물의 「뒷면」은 제품 뒤쪽입니다.",
+              title: "종류 · 무엇을 만드는지",
+              body: "사람·동물·캐릭터·사물 중에서 고릅니다. 종류에 따라 각도의 뜻이 달라집니다. 사물의 「뒷면」은 제품 뒤쪽입니다.",
             },
             {
-              title: "결 — 어떤 화풍으로",
+              title: "그림체 · 어떤 화풍으로",
               body: "실사는 사진처럼, 애니는 굵은 선, 3D는 렌더, 그림은 손그림 질감입니다. 결에 따라 기본 모델이 달라집니다.",
             },
             {
-              title: "어떤 대상인가 — 구체적일수록 좋습니다",
+              title: "어떤 대상인가 · 구체적일수록 좋습니다",
               body: (
                 <>
                   나이·차림새·인상까지 적으세요. 여기가 두루뭉술하면 후보가 다 비슷비슷하게 나옵니다.{" "}
@@ -173,7 +173,7 @@ export default function CharacterGuidePage() {
               ),
             },
             {
-              title: "참고 그림 — 두 가지 역할",
+              title: "참고 그림 · 두 가지 역할",
               body: (
                 <>
                   <strong className="text-foreground">결만 따라 만들기</strong>는 화풍만 가져오고 대상은 새로 만듭니다.{" "}
@@ -199,12 +199,12 @@ export default function CharacterGuidePage() {
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           먼저 <strong className="text-foreground">정면</strong>이 나옵니다. 그 정면을 기준으로 나머지 다섯 면을
-          만듭니다. 여섯 면을 다 만들 필요는 없습니다 — 정면 한 장으로 끝내도 저장되고, 나중에 「내 캐릭터」에서
+          만듭니다. 여섯 면을 다 만들 필요는 없습니다. 정면 한 장으로 끝내도 저장되고, 나중에 「내 캐릭터」에서
           빈 각도를 채울 수 있습니다. 다만 각도가 많을수록 다른 도구에서 쓸 때 자연스럽습니다.
         </p>
         <p className="text-sm leading-6 text-muted-foreground">
           <strong className="text-foreground">시작할 때는 아무 각도도 켜져 있지 않습니다.</strong> 만들 것만
-          직접 고르세요 — 켜 둔 것을 못 보고 눌러 원치 않는 장을 만드는 일을 막으려는 것입니다.
+          직접 고르세요. 켜 둔 것을 못 보고 눌러 원치 않는 장을 만드는 일을 막으려는 것입니다.
         </p>
       </Details>
 
@@ -223,7 +223,7 @@ export default function CharacterGuidePage() {
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           다만 <strong className="text-foreground">다른 도구에는 이 한 장이 안 나갑니다.</strong> 카드뉴스나
-          상세페이지가 인물 기준으로 집어 가는 것은 낱장 각도뿐입니다 — 여섯 컷짜리 격자를 기준으로 넣으면
+          상세페이지가 인물 기준으로 집어 가는 것은 낱장 각도뿐입니다. 여섯 컷짜리 격자를 기준으로 넣으면
           그 격자가 결과물에 그대로 따라 나옵니다. 두 쓰임이 다르니 필요하면 둘 다 만들어 두세요.
         </p>
       </Section>

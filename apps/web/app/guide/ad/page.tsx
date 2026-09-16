@@ -6,7 +6,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockSteps } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "광고 규격으로 내보내기 — 사용 설명서" };
+export const metadata: Metadata = { title: "광고 규격으로 내보내기 · 사용 설명서" };
 
 export default function AdGuidePage() {
   const portals = adPortalSummary();
@@ -68,7 +68,7 @@ export default function AdGuidePage() {
         <FlowLegend />
       </Section>
 
-      <Details title="01 그림 고르기 — 화면 읽기" hint="세 곳에서 가져올 수 있습니다.">
+      <Details title="01 그림 고르기 · 화면 읽기" hint="세 곳에서 가져올 수 있습니다.">
         <Mock title="광고 규격으로 내보내기 · 01 그림 고르기">
           <MockSteps steps={["01 그림 고르기", "02 어디에 올릴까요", "03 확인하고 내려받기"]} current={0} />
           <MockButtons items={[{ label: "라이브러리" }, { label: "이미지 만들기" }, { label: "참고 이미지" }]} />
@@ -81,13 +81,13 @@ export default function AdGuidePage() {
             },
             {
               title: "남의 그림은 안 됩니다",
-              body: "내가 만든 것과 내가 올린 참고 이미지만 뽑힙니다. 관리자도 마찬가지입니다 — 보는 것과 파일로 빼내는 것은 다른 일입니다.",
+              body: "내가 만든 것과 내가 올린 참고 이미지만 뽑힙니다. 관리자도 마찬가지입니다. 보는 것과 파일로 빼내는 것은 다른 일입니다.",
             },
           ]}
         />
       </Details>
 
-      <Details title="02 어디에 올릴까요 — 규격 고르기" hint="포털을 고르면 그 상품의 규격이 펼쳐집니다.">
+      <Details title="02 어디에 올릴까요 · 규격 고르기" hint="포털을 고르면 그 상품의 규격이 펼쳐집니다.">
         <Callouts
           items={[
             {
@@ -128,7 +128,7 @@ export default function AdGuidePage() {
         </p>
         <p className="text-sm leading-7 text-muted-foreground">
           그래서 <strong className="text-foreground">배경을 지워 물체만 떼어낸 뒤 투명한 캔버스에 얹습니다.</strong>{" "}
-          물체는 오른쪽에 놓고 왼쪽을 비웁니다 — 광고주가 글자를 넣을 자리입니다. 캔버스를 우리가 만드니까 모델의
+          물체는 오른쪽에 놓고 왼쪽을 비웁니다. 광고주가 글자를 넣을 자리입니다. 캔버스를 우리가 만드니까 모델의
           비율 제한이 상관없어집니다.
         </p>
         <p className="text-sm leading-7 text-muted-foreground">

@@ -16,7 +16,7 @@ import {
   MockTabs,
 } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "카드뉴스 만들기 — 사용 설명서" };
+export const metadata: Metadata = { title: "카드뉴스 만들기 · 사용 설명서" };
 
 /** 화면에 뜨는 목록을 그대로 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const RATIO_ITEMS = CARD_RATIOS.map((ratio) => ({ title: ratio.id, hint: ratio.label }));
@@ -66,7 +66,7 @@ export default function CardNewsGuidePage() {
       />
 
       <Section
-        title="먼저 — 길이 두 가지입니다"
+        title="먼저 · 길이 두 가지입니다"
         hint="카드뉴스 첫 화면 오른쪽 위에 버튼 두 개가 나란히 있습니다."
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -133,7 +133,7 @@ export default function CardNewsGuidePage() {
             rows={[
               ["배경", "카드 전체를 덮는 바탕색", "고른 색 그대로"],
               ["그림", "사진이나 일러스트", "AI 또는 라이브러리에서 고른 것"],
-              ["로고", "브랜드 마크", "참고 이미지에서 고른 것 — 한 픽셀도 안 바뀝니다"],
+              ["로고", "브랜드 마크", "참고 이미지에서 고른 것. 한 픽셀도 안 바뀝니다"],
               ["글", "제목 · 본문", "원고가 그대로 들어갑니다"],
             ]}
           />
@@ -215,7 +215,7 @@ export default function CardNewsGuidePage() {
         />
       </Section>
 
-      <Details title="01 내용 — 화면 읽기" hint="무엇으로 카드뉴스를 만들지 정합니다.">
+      <Details title="01 내용 · 화면 읽기" hint="무엇으로 카드뉴스를 만들지 정합니다.">
         <Mock title="카드뉴스 만들기 · 01 내용">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={0} />
           <MockField label="프로젝트 제목" placeholder="예: AI 자동화, 한 업무부터 시작하기" marker={1} />
@@ -246,18 +246,18 @@ export default function CardNewsGuidePage() {
               body: (
                 <ul className="grid gap-1.5">
                   <li>
-                    <strong className="text-foreground">직접 쓰기</strong> — 이미 쓴 글이나 메모를 붙여 넣습니다
+                    <strong className="text-foreground">직접 쓰기</strong>. 이미 쓴 글이나 메모를 붙여 넣습니다
                   </li>
                   <li>
-                    <strong className="text-foreground">유튜브 주소</strong> — 영상의 자막을 가져와 내용으로 씁니다.
+                    <strong className="text-foreground">유튜브 주소</strong>. 영상의 자막을 가져와 내용으로 씁니다.
                     자막이 없는 영상은 가져올 것이 없습니다
                   </li>
                   <li>
-                    <strong className="text-foreground">웹 주소</strong> — 공개된 기사·블로그의 본문을 추출합니다.
+                    <strong className="text-foreground">웹 주소</strong>. 공개된 기사·블로그의 본문을 추출합니다.
                     로그인이 필요한 페이지는 열지 못합니다
                   </li>
                   <li>
-                    <strong className="text-foreground">질문해서 찾기</strong> — 재료가 아예 없을 때 씁니다. 궁금한 것을
+                    <strong className="text-foreground">질문해서 찾기</strong>. 재료가 아예 없을 때 씁니다. 궁금한 것을
                     쓰면 웹에서 근거를 찾아옵니다. 공식 자료를 우선합니다
                   </li>
                 </ul>
@@ -277,7 +277,7 @@ export default function CardNewsGuidePage() {
       </Details>
 
       <Details
-        title="02 이미지 — 화면 읽기"
+        title="02 이미지 · 화면 읽기"
         hint="그림을 첨부하고, 그 그림을 어떻게 쓸지 정합니다. 이 단계를 건너뛰어도 만들어집니다."
       >
         <Mock title="카드뉴스 만들기 · 02 이미지">
@@ -305,7 +305,7 @@ export default function CardNewsGuidePage() {
         <Callouts
           items={[
             {
-              title: "역할 — 그림을 어떻게 쓸지",
+              title: "역할 · 그림을 어떻게 쓸지",
               body: (
                 <>
                   같은 사진이라도 역할이 다르면 결과가 완전히 달라집니다. 제품 사진을 「따라 만들기」로 두면 그
@@ -319,7 +319,7 @@ export default function CardNewsGuidePage() {
               ),
             },
             {
-              title: "자리 — 어느 장에 넣을지",
+              title: "자리 · 어느 장에 넣을지",
               body: (
                 <>
                   카드뉴스는 <strong className="text-foreground">표지 1장 + 속지 여러 장 + 마지막 1장</strong> 구조입니다.
@@ -341,7 +341,7 @@ export default function CardNewsGuidePage() {
         />
       </Details>
 
-      <Details title="03 규격 — 화면 읽기" hint="어디에 올릴지와 몇 장으로 만들지를 정합니다.">
+      <Details title="03 규격 · 화면 읽기" hint="어디에 올릴지와 몇 장으로 만들지를 정합니다.">
         <Mock title="카드뉴스 만들기 · 03 규격">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={2} />
           <MockChoices label="비율" marker={1} items={RATIO_ITEMS} active={0} note="픽셀은 묻지 않습니다. 비율에서 시스템이 정합니다." />
@@ -367,7 +367,7 @@ export default function CardNewsGuidePage() {
         <Callouts
           items={[
             {
-              title: "비율 — 올릴 자리에서 고르세요",
+              title: "비율 · 올릴 자리에서 고르세요",
               body: (
                 <>
                   픽셀을 몰라도 됩니다. 올릴 곳만 고르면 시스템이 픽셀을 정합니다.{" "}
@@ -376,7 +376,7 @@ export default function CardNewsGuidePage() {
               ),
             },
             {
-              title: "전체 장수 — 모르겠으면 AI 추천",
+              title: "전체 장수 · 모르겠으면 AI 추천",
               body: (
                 <>
                   기본은 <strong className="text-foreground">AI 추천</strong>입니다. 내용의 길이를 보고 알아서 정합니다.
@@ -389,7 +389,7 @@ export default function CardNewsGuidePage() {
               title: "언어와 이미지 모델",
               body: (
                 <>
-                  언어는 카드에 그려질 글자의 언어입니다. 모델은 글자 정확도와 비용의 저울질입니다 — 자세한 것은{" "}
+                  언어는 카드에 그려질 글자의 언어입니다. 모델은 글자 정확도와 비용의 저울질입니다. 자세한 것은{" "}
                   <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
                     크레딧과 모델
                   </Link>
@@ -411,7 +411,7 @@ export default function CardNewsGuidePage() {
         />
       </Details>
 
-      <Details title="04 원고 확인 — 가장 중요한 화면" hint="여기서 고친 글자가 그대로 그림에 들어갑니다.">
+      <Details title="04 원고 확인 · 가장 중요한 화면" hint="여기서 고친 글자가 그대로 그림에 들어갑니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           기획이 끝나면 장마다 들어갈 글이 표로 나옵니다. <strong className="text-foreground">이 단계까지는 이미지
           크레딧이 한 장도 차감되지 않았습니다.</strong> 고칠 것이 있으면 지금 고치세요. 그림이 나온 뒤에 글자를 고치는
@@ -466,11 +466,11 @@ export default function CardNewsGuidePage() {
             },
             {
               q: "만든 그림의 글자가 원고와 다릅니다",
-              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 정밀형을 쓰세요 — 글자가 가장 정확합니다.",
+              a: "05 결과의 검수가 그것을 잡아 알려 줍니다. 지적이 남아 있으면 화면에 그대로 띄웁니다. 글자가 많이 들어가는 장이라면 정밀형을 쓰세요. 글자가 가장 정확합니다.",
             },
             {
               q: "만드는 중에 다른 화면으로 가도 되나요",
-              a: "됩니다. 만드는 중인 목록은 사이드바가 들고 있어서 화면을 옮겨도 받아 오는 일이 멈추지 않습니다. 다만 중지는 되돌리기가 아닙니다 — 이미 만든 장은 차감된 채로 남습니다.",
+              a: "됩니다. 만드는 중인 목록은 사이드바가 들고 있어서 화면을 옮겨도 받아 오는 일이 멈추지 않습니다. 다만 중지는 되돌리기가 아닙니다. 이미 만든 장은 차감된 채로 남습니다.",
             },
           ]}
         />

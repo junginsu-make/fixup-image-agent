@@ -24,7 +24,7 @@ export function ModelCatalogPanel() {
         <CardTitle>이미지 모델 대조표</CardTitle>
         <CardDescription>
           회원 화면은 모델 이름을 가립니다. 「표준형」처럼 보이는 것이 실제로 무엇인지 여기서 봅니다.
-          이 표는 코드(<code className="text-xs">sns-core/models.ts</code>)를 그대로 읽습니다 — 따로 적어 두지
+          이 표는 코드(<code className="text-xs">sns-core/models.ts</code>)를 그대로 읽습니다. 따로 적어 두지
           않으므로 모델이 늘거나 값이 바뀌면 여기도 함께 바뀝니다.
         </CardDescription>
       </CardHeader>

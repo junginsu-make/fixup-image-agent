@@ -6,7 +6,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps, MockTabs } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "상세페이지 만들기 — 사용 설명서" };
+export const metadata: Metadata = { title: "상세페이지 만들기 · 사용 설명서" };
 
 export default function DetailPageGuidePage() {
   return (
@@ -115,11 +115,11 @@ export default function DetailPageGuidePage() {
         </ul>
         <p className="text-sm leading-6 text-muted-foreground">
           하나라도 미달이면 지적사항을 담아 구성안을 다시 만듭니다(최대 2회). 끝까지 남은 지적은 감추지 않고 화면에
-          띄웁니다 — <strong className="text-foreground">통과하지 못한 채로 넘어갔다는 사실을 아는 편이 낫습니다.</strong>
+          띄웁니다. <strong className="text-foreground">통과하지 못한 채로 넘어갔다는 사실을 아는 편이 낫습니다.</strong>
         </p>
       </Section>
 
-      <Details title="사진으로 시작 — 화면 읽기">
+      <Details title="사진으로 시작 · 화면 읽기">
         <Mock title="상세페이지 만들기 · 이미지 업로드">
           <MockSteps steps={["이미지 업로드", "AI 분석", "섹션 생성", "편집 · 내보내기"]} current={0} />
           <MockTabs items={["사진으로 시작", "글로 시작"]} active={0} marker={1} />
@@ -148,15 +148,15 @@ export default function DetailPageGuidePage() {
         <Callouts
           items={[
             {
-              title: "사진 / 글 — 어느 쪽으로 시작할지",
+              title: "사진 / 글 · 어느 쪽으로 시작할지",
               body: "사진이 있으면 사진 쪽이 정확합니다. 제품에서 확인되는 것을 근거로 삼기 때문입니다. 사진이 없으면 글로 시작해도 되고, 나중에 사진을 더할 수 있습니다.",
             },
             {
-              title: "상품 사진 — 한 장이면 충분",
-              body: "여러 장 올려도 되지만 한 장으로도 됩니다. 라벨 글자가 읽히는 사진일수록 좋습니다 — 거기서 근거를 가져옵니다.",
+              title: "상품 사진 · 한 장이면 충분",
+              body: "여러 장 올려도 되지만 한 장으로도 됩니다. 라벨 글자가 읽히는 사진일수록 좋습니다. 거기서 근거를 가져옵니다.",
             },
             {
-              title: "스타일 레퍼런스 — 페이지당 한 장만",
+              title: "스타일 레퍼런스 · 페이지당 한 장만",
               body: (
                 <>
                   따라 만들고 싶은 상세페이지가 있으면 넣습니다.{" "}
@@ -166,7 +166,7 @@ export default function DetailPageGuidePage() {
               ),
             },
             {
-              title: "등장인물 — 같은 사람을 여러 섹션에",
+              title: "등장인물 · 같은 사람을 여러 섹션에",
               body: (
                 <>
                   저장해 둔 캐릭터를 붙이면 섹션이 바뀌어도 같은 사람이 나옵니다. 캐릭터를 만드는 법은{" "}
@@ -181,7 +181,7 @@ export default function DetailPageGuidePage() {
         />
       </Details>
 
-      <Details title="편집 화면 — 글자를 얹는 곳" hint="이미지가 나온 뒤에 문구를 올립니다.">
+      <Details title="편집 화면 · 글자를 얹는 곳" hint="이미지가 나온 뒤에 문구를 올립니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           섹션 이미지가 만들어지면 편집기가 열립니다. 여기서 <strong className="text-foreground">문구를 이미지 위에
           얹습니다.</strong> 이미지 안에 글자를 그려 넣는 것이 아니라 위에 올리는 것이라, 몇 번을 고쳐도 크레딧이
@@ -208,7 +208,7 @@ export default function DetailPageGuidePage() {
             },
             {
               title: "강조할 낱말",
-              body: "제목에서 크게 보이고 싶은 낱말만 고릅니다. 조사가 붙은 덩어리 그대로 고르세요 — 「수분이」를 「수분」과 「이」로 나누면 어긋납니다.",
+              body: "제목에서 크게 보이고 싶은 낱말만 고릅니다. 조사가 붙은 덩어리 그대로 고르세요. 「수분이」를 「수분」과 「이」로 나누면 어긋납니다.",
             },
             {
               title: "구매 버튼은 만들지 않습니다",

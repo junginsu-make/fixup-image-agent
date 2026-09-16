@@ -480,7 +480,7 @@ export function cropNotice(
   const spec = AD_SPECS.find((entry) => entry.id === specId);
   if (!spec) return undefined;
   return plan(spec).kind === "crop"
-    ? "비율이 달라 좌우를 잘랐습니다 — 주인공이 남았는지 보세요"
+    ? "비율이 달라 좌우를 잘랐습니다. 주인공이 남았는지 보세요"
     : undefined;
 }
 
@@ -723,7 +723,7 @@ export function actionNotices(
       `${PORTAL_LABEL[spec.portal]} ${spec.product}`))].join(" · ");
     notices.push({
       key: "assemble",
-      title: "투명 배너에는 글자가 없습니다 — 관리자에서 직접 입력하세요",
+      title: "투명 배너에는 글자가 없습니다. 관리자에서 직접 입력하세요",
       body: `${where} 광고 관리자에서 소재를 등록할 때 문구를 직접 입력하세요.`
         + " 이 규격은 모델이 만들 수 없는 비율이라 배경을 지운 그림만 얹어"
         + " 만드는데, 배경을 지울 때 글자도 함께 지워집니다. 그림은 그대로"

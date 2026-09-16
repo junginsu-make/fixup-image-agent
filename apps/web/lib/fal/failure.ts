@@ -137,7 +137,7 @@ export function classifyFalFailure(error: unknown): FalFailureVerdict {
     status,
     httpStatus: status,
     message:
-      "그림 생성 쪽에서 이 요청을 거절했습니다. 같은 내용으로 다시 눌러도 같은 결과입니다 — "
+      "그림 생성 쪽에서 이 요청을 거절했습니다. 같은 내용으로 다시 눌러도 같은 결과입니다. "
       + "지시 문구를 바꾸거나 다른 모델로 시도해 보세요.",
     detail,
     releaseReservation: true,
