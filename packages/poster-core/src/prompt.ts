@@ -1,6 +1,6 @@
 import {
   attachmentPlacementRule, designerPersona, imageLookDirective, preserveDirective,
-  priorityLine, restyledPersonDirective, userInstructionHead, userInstructionTail,
+  priorityLine, resolveLook, restyledPersonDirective, userInstructionHead, userInstructionTail,
   type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
@@ -335,7 +335,19 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
   const hasPerson = input.images.some(
     (image) => image.kind === "preserved" && image.subject === "person",
   );
-  const look = imageLookDirective(input.look ?? "auto", hasPerson ? "person" : "generic");
+  /*
+   * **첨부가 없으면 `auto` 를 실사로 내린다.**
+   *
+   * 화면은 「레퍼런스가 없으면 레퍼런스 스타일을 못 쓴다」고 말하지만, 화면을
+   * 안 거치는 길이 있다 — API 직접 호출, 첨부를 다 뺀 옛 작업 다시 돌리기
+   * (2026-09-16 실측으로 구멍 확인).
+   *
+   * `auto` 의 지시문은 빈 문자열이라, 첨부도 없고 지시문도 비면 **그림을 무엇으로
+   * 그릴지 정하는 말이 프롬프트에 한 줄도 안 들어간다.** 여기가 모든 길이 지나는
+   * 마지막 자리라 여기서 막는다.
+   */
+  const resolvedLook = resolveLook(input.look ?? "auto", input.images.length > 0);
+  const look = imageLookDirective(resolvedLook, hasPerson ? "person" : "generic");
   return [
     // 사람이 친 말이 맨 앞이다. 아래를 다 읽기 전에 무엇이 가장 센지 안다.
     ...(head ? [head, ""] : []),

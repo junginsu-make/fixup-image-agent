@@ -516,7 +516,7 @@ export function CharacterStudio() {
               </fieldset>
 
               <fieldset className="grid flex-none gap-1.5">
-                <legend className="text-meta text-subtle-foreground">결</legend>
+                <legend className="text-meta text-subtle-foreground">그림체</legend>
                 <div className="flex flex-wrap gap-2">
                   {LOOKS.map((entry) => (
                     <Button
