@@ -139,19 +139,30 @@ describe("상세 화면이 막을 지나는가", () => {
     expect(source).toContain("if (!generationActive || readOnly) return;");
   });
 
-  it("보는 중이면 앞 단계로 튕기지 않는다", () => {
+  it("앞 단계로 가도 빈 화면이 안 뜬다", () => {
     /*
-      포스터의 앞 세 단계(지시·레퍼런스·규격)는 **새로 만드는 화면**에 있어서
-      누르면 `/poster/new` 로 보낸다. 내 작업이면 말이 되지만, **남의 작업을
-      보는 중에 누르면 빈 화면이 뜬다** — 사용자는 설정이 다 사라졌다고 읽는다
-      (2026-09-16 실제 신고).
+      **막는 것으로 풀던 문제를, 값을 들고 가는 것으로 푼다.**
 
-      보는 중에는 아예 안 움직인다.
+      포스터의 앞 세 단계(지시·레퍼런스·규격)는 새로 만드는 화면에 있어서
+      누르면 `/poster/new` 로 보냈다. 빈 화면이 떠서 사용자는 설정이 다
+      사라졌다고 읽었고(2026-09-16 신고), 그때는 **보는 중에 아예 안 움직이게**
+      막아 두었다.
+
+      그런데 그 막이 「내 작업인데도 초기화된다」는 다음 신고를 못 막았다
+      (같은 날). 이제 `?from=` 으로 그 작업의 값을 들고 가므로 빈 화면 자체가
+      안 생기고, **관리자는 남의 작업도 다시 만들 수 있어야 한다**는 결정에
+      따라 막을 걷어냈다. 거기서 만들기를 누르면 새 작업이 생기고 원래 작업은
+      안 바뀐다 — 그래서 읽기 전용과 어긋나지 않는다.
+
+      값을 들고 가는지는 `app/library/__tests__/rerun-wiring.test.ts` 가 센다.
     */
     const at = poster.indexOf("onJump=");
     expect(at).toBeGreaterThan(-1);
-    const jump = poster.slice(at, at + 400);
-    expect(jump).toContain("readOnly");
+    const jump = poster.slice(at, at + 900);
+
+    expect(jump).toContain("/poster/new?from=");
+    // 옛 막이 되살아나면 관리자가 남의 작업을 다시 만들 길이 없어진다.
+    expect(jump).not.toContain("if (readOnly) return;");
   });
 
   it("카드뉴스도 남의 작업 그림이 보인다", () => {

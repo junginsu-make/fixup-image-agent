@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -17,6 +17,7 @@ import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksFor, resolveLook, type ImageLoo
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
+import { posterSeed } from "./rerun-seed";
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
@@ -39,6 +40,15 @@ const NO_AD_PLAN: AdSubmitPlan = { masters: [], ready: false };
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
+  /**
+   * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
+   *
+   * `/poster/new?from={작업}` 으로 온다. 전에는 이 화면이 늘 비어 있어서,
+   * 01~03 을 누른 사람은 「다 초기화됐다」고 읽었다(2026-09-16 사용자 보고).
+   */
+  const rerunFrom = useSearchParams().get("from") ?? "";
+  /** 값을 들고 왔다고 화면에 적을 것. 못 가져온 참고 이미지 수까지 말한다. */
+  const [rerun, setRerun] = React.useState<{ title: string; missing: number } | null>(null);
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
   const [step, setStep] = React.useState("instruction");
@@ -221,6 +231,63 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
 
   React.useEffect(() => { void loadReferences(); }, [loadReferences]);
 
+  /**
+   * 지난 단계로 돌아왔으면 **그때 쓰던 값을 심는다.**
+   *
+   * **참고 이미지를 먼저 읽는다.** 무엇을 볼 수 있는지 알아야 못 가져오는 것을
+   * 가려낼 수 있다 — 골라 둔 채로 두면 화면에는 ①②③ 이 서는데 실제로는 아무
+   * 그림도 없다.
+   *
+   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
+   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정). 회원용 길에
+   * 관리자 예외를 심지 않는 것은 이 저장소의 규칙이다.
+   */
+  React.useEffect(() => {
+    if (!rerunFrom) return;
+    let alive = true;
+    void (async () => {
+      const visible = new Set((await loadReferences()).map((item) => item.id));
+      if (!alive) return;
+
+      const read = async (url: string) => {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          return { status: response.status, body: await response.json().catch(() => null) };
+        } catch {
+          return { status: 0, body: null };
+        }
+      };
+
+      let found = await read(`/api/poster/projects/${encodeURIComponent(rerunFrom)}`);
+      if (!found.body?.ok && found.status === 404) {
+        found = await read(`/api/admin/works/poster/${encodeURIComponent(rerunFrom)}`);
+      }
+      const project = found.body?.project ?? found.body?.work;
+      if (!alive) return;
+      if (!project) {
+        setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        return;
+      }
+
+      const seed = posterSeed(project, visible);
+      setTitle(seed.title);
+      setInstruction(seed.instruction);
+      setRatio(seed.ratio);
+      if (seed.modelId) setModelId(seed.modelId);
+      setVariants(seed.variants);
+      setLook(seed.look);
+      setPromptMode(seed.promptMode);
+      // 한 번 고른 것으로 친다. 값을 들고 왔는데 또 물으면 성가시다.
+      setModeAnswered(true);
+      setUserInstruction(seed.userInstruction);
+      setAttachmentIntent(seed.attachmentIntent);
+      setRoles(seed.roles);
+      setPickOrder(seed.pickOrder);
+      setRerun({ title: seed.title, missing: seed.missingReferences });
+    })();
+    return () => { alive = false; };
+  }, [rerunFrom, loadReferences]);
+
   /** 한 벌의 공통 값. 광고 모드는 여기에 마스터만 얹는다. */
   function projectBody(extra: Record<string, unknown> = {}) {
     return {
@@ -344,6 +411,23 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       <div className="mb-4">
         <StepBar steps={POSTER_STEPS} current={step} onJump={setStep} allowJump={reachableBeforeCreate} />
       </div>
+
+      {/*
+        **값을 들고 왔다고 말한다.** 안 적으면 사용자는 이 화면이 원래 작업을
+        고치는 곳인 줄 안다 — 만들기를 누르면 새 작업이 하나 더 생긴다.
+      */}
+      {rerun ? (
+        <div role="status" className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+          <b>「{rerun.title || "이름 없는 이미지"}」</b> 의 값을 가져왔습니다. 고쳐서 만들면
+          <b> 새 작업</b>이 하나 더 생기고 원래 작업은 그대로 남습니다.
+          {rerun.missing ? (
+            <span className="mt-1 block text-muted-foreground">
+              참고 이미지 {rerun.missing}장은 다른 회원의 것이라 가져오지 못했습니다.
+              필요하면 02에서 다시 골라 주세요.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {error ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

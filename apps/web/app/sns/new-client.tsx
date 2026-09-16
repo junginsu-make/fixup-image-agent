@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { IMAGE_MODELS, MAX_CARDS, groupAttachments, modelById, planSlots, validateAttachments, type Attachment } from "@fixup/sns-core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StepBar, type StepDefinition } from "@fixup/ui";
 import { AttachmentPicker } from "./_components/attachment-picker";
@@ -11,6 +11,7 @@ import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
+import { snsSeed } from "./rerun-seed";
 
 /**
  * **손으로 박지 않는다.**
@@ -60,6 +61,15 @@ export function NewSnsClient() {
   const [message, setMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [fromLibrary, setFromLibrary] = React.useState<string | null>(null);
+  /**
+   * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
+   *
+   * `/sns/new?from={작업}` 으로 온다. 전에는 01~03 을 **아예 못 누르게** 막아
+   * 두어서, 지난 단계를 보려면 길이 없었다(2026-09-16 사용자 보고).
+   */
+  const rerunFrom = useSearchParams().get("from") ?? "";
+  /** 값을 들고 왔다고 화면에 적을 것. 못 들고 온 첨부 수까지 말한다. */
+  const [rerun, setRerun] = React.useState<{ title: string; dropped: number } | null>(null);
 
   // 라이브러리에서 「카드뉴스로」를 눌러 왔으면 내용이 이미 들어가 있어야 한다.
   // 복사해 붙이게 만들면 라이브러리에 모아 둔 뜻이 없다.
@@ -83,6 +93,53 @@ export function NewSnsClient() {
     }
     setFromLibrary(handoff.title);
   }, []);
+
+  /**
+   * 지난 단계로 돌아왔으면 **그때 쓰던 값을 심는다.**
+   *
+   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
+   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정).
+   *
+   * 남의 작업이면 첨부를 못 들고 온다 — 까닭은 `rerun-seed.ts` 에 적었다.
+   */
+  React.useEffect(() => {
+    if (!rerunFrom) return;
+    let alive = true;
+    void (async () => {
+      const read = async (url: string) => {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          return { status: response.status, body: await response.json().catch(() => null) };
+        } catch {
+          return { status: 0, body: null };
+        }
+      };
+
+      let found = await read(`/api/sns/projects/${encodeURIComponent(rerunFrom)}`);
+      let mine = true;
+      if (!found.body?.ok && found.status === 404) {
+        found = await read(`/api/admin/works/sns/${encodeURIComponent(rerunFrom)}`);
+        // 관리자 통로로 온 것은 늘 남의 것이다. 내 것이면 회원용 길에서 열렸다.
+        mine = false;
+      }
+      const project = found.body?.project ?? found.body?.work;
+      if (!alive) return;
+      if (!project) {
+        setMessage("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        return;
+      }
+
+      const seed = snsSeed(project, mine);
+      setTitle(seed.title);
+      setToneNote(seed.toneNote);
+      setSource(seed.source);
+      setAttachments(seed.attachments);
+      setIntents(seed.intents);
+      setSpec(seed.spec);
+      setRerun({ title: seed.title, dropped: seed.droppedAttachments });
+    })();
+    return () => { alive = false; };
+  }, [rerunFrom]);
 
   const totalCards = spec.cardCountMode === "fixed" ? spec.cardCount! : MAX_CARDS;
   const attachmentIssues = validateAttachments(attachments, modelById(spec.modelId).maxReferenceImages, totalCards);
@@ -151,6 +208,23 @@ export function NewSnsClient() {
       </header>
 
       <StepBar steps={STEPS} current={step} onJump={(id) => setStep(id as Step)} />
+
+      {/*
+        **값을 들고 왔다고 말한다.** 안 적으면 사용자는 이 화면이 원래 작업을
+        고치는 곳인 줄 안다 — 만들기를 누르면 새 작업이 하나 더 생긴다.
+      */}
+      {rerun ? (
+        <div role="status" className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+          <b>「{rerun.title || "이름 없는 작업"}」</b> 의 값을 가져왔습니다. 고쳐서 만들면
+          <b> 새 작업</b>이 하나 더 생기고 원래 작업은 그대로 남습니다.
+          {rerun.dropped ? (
+            <span className="mt-1 block text-muted-foreground">
+              붙였던 그림 {rerun.dropped}장은 다른 회원의 것이라 가져오지 못했습니다.
+              필요하면 02에서 다시 골라 주세요.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
