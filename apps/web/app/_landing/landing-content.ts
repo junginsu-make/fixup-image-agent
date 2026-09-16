@@ -100,7 +100,7 @@ export const KO = {
     { kicker: "보관", title: "파일은 비공개 버킷에만 둡니다", desc: "짧은 수명의 서명 URL 로만 열립니다. 경로 첫 칸이 소유자이고, 버킷 정책이 그 칸으로 남의 것을 막습니다. 회원은 AI 키를 브라우저에 입력하지 않습니다." }
   ],
   presets: [
-    { kind: "카드뉴스 · /sns", title: "월세 계약 체크리스트", prompt: "이 기사로 3단계 체크리스트 카드뉴스 만들어 줘", role: "따라 만들기", refNote: "레퍼런스 1장 + 기사 URL 1개 · 카드 구성 · 원고 · 색 배분은 시스템이 채웠습니다.", model: "정밀형 · 가중치 4", ratio: "1 / 1", src: "/landing/result-cardnews-lease.png", chips: ["소재: URL 1개", "프롬프트: 한 줄", "원고 확정 후 생성"] },
+    { kind: "카드뉴스 · /sns", title: "월세 계약 체크리스트", prompt: "이 기사로 3단계 체크리스트 카드뉴스 만들어 줘", role: "따라 만들기", refNote: "레퍼런스 1장 + 기사 URL 1개. 카드 구성 · 원고 · 색 배분은 시스템이 채웠습니다.", model: "정밀형 · 가중치 4", ratio: "1 / 1", src: "/landing/result-cardnews-lease.png", chips: ["소재: URL 1개", "프롬프트: 한 줄", "원고 확정 후 생성"] },
     { kind: "포스터 · /poster", title: "가을 운동회 포스터", prompt: "고촌초등학교 가을 운동회 포스터", role: "따라 만들기", refNote: "레퍼런스 1장 + 한 줄. 레이아웃 문법과 색 대비를 가져오고 소재만 운동회로 바꿨습니다.", model: "정밀형 · 가중치 4", ratio: "2 / 3", src: "/landing/result-poster-sports.png", chips: ["프롬프트: 한 줄", "나머지 칸은 AI 초안", "변형 3장"] },
     { kind: "이미지 · /poster", title: "윈터 트렌드 리포트", prompt: "2026 윈터 트렌드 리포트 커버", role: "따라 만들기", refNote: "레퍼런스 1장 + 한 줄. 세로 세리프 타이포와 여백 문법을 유지하고 시즌만 겨울로 옮겼습니다.", model: "속도형 · 가중치 3", ratio: "1232 / 2192", src: "/landing/result-winter-trend.png", chips: ["프롬프트: 한 줄", "9:16", "변형 3장"] }
   ],

@@ -5,7 +5,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "팀. 사용 설명서" };
+export const metadata: Metadata = { title: "팀 · 사용 설명서" };
 
 export default function TeamGuidePage() {
   return (

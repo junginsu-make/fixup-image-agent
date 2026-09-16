@@ -66,7 +66,7 @@ export default function CharacterGuidePage() {
       <Section title="사람만 만드는 것이 아닙니다" hint="종류와 결을 따로 고릅니다.">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지. 종류</h3>
+            <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지 · 종류</h3>
             <ul className="grid gap-2">
               {KINDS.map((kind) => (
                 <li key={kind.title} className="rounded-lg border bg-card px-3 py-2">
@@ -77,7 +77,7 @@ export default function CharacterGuidePage() {
             </ul>
           </div>
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">어떤 결로. 화풍</h3>
+            <h3 className="mb-2 text-sm font-extrabold">어떤 결로 · 화풍</h3>
             <ul className="grid gap-2">
               {TONES.map((tone) => (
                 <li key={tone.title} className="rounded-lg border bg-card px-3 py-2">

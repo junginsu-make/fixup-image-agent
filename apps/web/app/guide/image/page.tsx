@@ -149,7 +149,7 @@ export default function ImageGuidePage() {
         />
       </Details>
 
-      <Details title="02 레퍼런스 · 03 규격 화면 읽기" hint="그림은 선택입니다. 안 붙이면 01에 적은 글만 보고 그립니다.">
+      <Details title="02 레퍼런스와 03 규격 · 화면 읽기" hint="그림은 선택입니다. 안 붙이면 01에 적은 글만 보고 그립니다.">
         <Mock title="이미지 만들기 · 02 레퍼런스">
           <MockSteps steps={STEPS} current={1} />
           <MockChoices

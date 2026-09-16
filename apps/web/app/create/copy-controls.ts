@@ -16,7 +16,7 @@ export const COPY_INTENSITIES: ReadonlyArray<{
   /** 이걸 고르면 무엇이 달라지는지. 이름만으로는 고를 수 없다. */
   hint: string;
 }> = [
-  { value: "plain", label: "담백", hint: "짧고 직접적으로 · 후킹 표현을 뺍니다" },
+  { value: "plain", label: "담백", hint: "짧고 직접적으로. 후킹 표현을 뺍니다" },
   { value: "normal", label: "보통", hint: "읽기 쉬운 판매 문장" },
   { value: "strong", label: "강함", hint: "문제와 결과의 대비를 선명하게" },
   { value: "max", label: "최대 후킹", hint: "긴박감과 대비를 최대로" },
