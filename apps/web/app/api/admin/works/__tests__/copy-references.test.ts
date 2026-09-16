@@ -462,7 +462,8 @@ describe("두 번째 방어선 — 범위를 고칠 때도 주인을 본다", ()
     rows.get(copy!.id)!.team_id = "관리자팀";
     swapOwnerBeforeUpdate = "회원B";
 
-    await copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀).catch(() => {});
+    // 0 줄이 바뀌면 조용히 넘어가지 않고 던진다 — 범위를 못 맞춘 행을 결과로 돌려주면 안 된다.
+    await expect(copyReferencesToSelf(["a"], 관리자, 주인, 관리자팀)).rejects.toThrow();
 
     expect(rows.get(copy!.id)!.user_id).toBe("회원B");
     expect(rows.get(copy!.id)!.team_id).toBe("관리자팀");

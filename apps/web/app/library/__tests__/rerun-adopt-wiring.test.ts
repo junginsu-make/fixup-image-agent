@@ -46,7 +46,7 @@ describe("이미지 만들기 새 작업 화면", () => {
       (2026-09-16 리뷰가 실증). 이 화면 파일에는 `get`·`post` 라는 키도, 그 이름의 메서드 정의도 없다.
       `searchParams.get("from")` 같은 **호출**은 앞에 점이 붙어 안 걸린다.
     */
-    expect(source).not.toMatch(/(^|[\s{,])(get|post)\s*(:|\([^)]*\)\s*\{)/m);
+    expect(source).not.toMatch(/(^|[\s{,])\[?["'`]?(get|post)["'`]?\]?\s*(:|\([^)]*\)\s*\{)/m);
   });
 
   it("옛 흐름이 화면에 남아 있지 않다", () => {
@@ -72,7 +72,7 @@ describe("카드뉴스 새 작업 화면", () => {
     once(source, "const result = await loadSnsRerun(rerunFrom, fetchRerunDeps());");
     once(source, "if (!result.ok) {");
     once(source, "const { seed } = result;");
-    expect(source).not.toMatch(/(^|[\s{,])(get|post)\s*(:|\([^)]*\)\s*\{)/m);
+    expect(source).not.toMatch(/(^|[\s{,])\[?["'`]?(get|post)["'`]?\]?\s*(:|\([^)]*\)\s*\{)/m);
   });
 
   it("옛 흐름이 화면에 남아 있지 않다", () => {
