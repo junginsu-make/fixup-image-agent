@@ -1,5 +1,5 @@
 import { authenticateApiAdmin } from "../../../../../../lib/membership/api";
-import { readAnyWork } from "../../store";
+import { readAnyWork, readAnyWorkImages } from "../../store";
 
 type Context = { params: Promise<{ kind: string; id: string }> };
 
@@ -33,7 +33,15 @@ export async function GET(_request: Request, context: Context) {
   try {
     const work = await readAnyWork(kind, id);
     if (!work) return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
-    return Response.json({ ok: true, work });
+    /*
+      **그림도 함께 준다.** 회원용 기록의 `url` 은 소유자만 지나는 라우트를
+      가리켜 관리자가 열면 빈다 — 서명 주소로 바꿔서 싣는다.
+
+      카드뉴스는 카드 주소가 흐름 JSON 안에 있어 모양이 다르다. 여기서는
+      포스터만 싣고, 카드뉴스는 별건으로 남긴다.
+    */
+    const images = kind === "poster" ? await readAnyWorkImages(id) : [];
+    return Response.json({ ok: true, work, images });
   } catch (error) {
     /*
       **DB 오류 문구를 화면에 흘리지 않는다.** 제약 이름·칼럼명이 그대로

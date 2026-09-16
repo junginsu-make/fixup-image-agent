@@ -462,8 +462,8 @@ export function PosterClient(
       {readOnly ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
           <span>
-            <b>다른 회원의 작업</b>을 보는 중입니다. 설정과 과정은 볼 수 있지만
-            고칠 수 없고, 만들어진 그림은 여기서 안 보입니다.
+            <b>다른 회원의 작업</b>을 보는 중입니다. 설정·과정·결과는 볼 수 있고
+            고칠 수는 없습니다. 고치려면 내 작업으로 복사하세요.
           </span>
           {/* 무엇을 하면 되는지 같은 자리에 둔다. 막아만 두면 길이 없다. */}
           <Button size="sm" disabled={copying} onClick={() => void copyToSelf()}>
@@ -476,8 +476,15 @@ export function PosterClient(
         steps={POSTER_STEPS}
         current={current}
         onJump={(id) => {
-          // 앞 세 단계는 새로 만드는 화면에 있다. 거기로 보낸다.
+          /*
+            앞 세 단계는 새로 만드는 화면에 있다. 거기로 보낸다.
+
+            **남의 작업을 보는 중이면 안 움직인다.** 보내 봐야 빈 화면이 뜨고,
+            사용자는 **설정이 다 사라졌다고 읽는다**(2026-09-16 실제 신고).
+            보는 중에 갈 곳은 그 작업 안뿐이다.
+          */
           if (id === "plan" || id === "result") return;
+          if (readOnly) return;
           router.push("/poster/new");
         }}
       />
