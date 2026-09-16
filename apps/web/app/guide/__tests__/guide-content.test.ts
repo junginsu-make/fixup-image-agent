@@ -33,6 +33,16 @@ function guideSources(): Array<{ name: string; source: string }> {
   return files;
 }
 
+/**
+ * 주석 자리를 지운다. **개발자에게 하는 설명은 화면이 아니다.**
+ *
+ * 「전에는 「실사」라고 적어 뒀는데 화면은 「실사 사진」이었다」처럼, 옛 이름을
+ * 적어 두는 것이 주석에서는 정당하다. 그것까지 세면 까닭을 못 적는다.
+ */
+function 주석을뺀다(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+}
+
 describe("설명서 목차", () => {
   it("목차의 모든 항목에 실제 페이지 파일이 있다", () => {
     const names = new Set(guideSources().map((file) => file.name));
@@ -117,14 +127,36 @@ describe("설명서 내용", () => {
     // 목록 자체가 비면 위 검사가 무의미해진다.
     expect(Object.keys(IMAGE_LOOK_LABEL).length).toBeGreaterThan(3);
 
-    // 이름을 손으로 적은 흔적. 지금 화면에 없는 이름들이다.
+    /*
+     * **구문이 아니라 이름을 센다.**
+     *
+     * 처음에는 `{ title: "실사"` 같은 구문 통째로 찾았는데, 그러면 목록을 그리는
+     * 자리만 잡고 **산문에 늘어놓은 것**을 못 본다. 실제로 「(실사·애니·3D·그림)
+     * 로 그립니다」 두 줄이 그렇게 살아남았다(2026-09-16 재검토).
+     *
+     * 세 가지를 가려낸다.
+     *   · **주석은 뺀다.** 「전에는 「실사·애니」라고 적어 뒀다」는 설명이 정당하다
+     *   · **새 이름을 먼저 지운다.** 옛 이름이 새 이름의 앞토막이다(「실사」⊂「실사 사진」)
+     *   · **낱말 경계를 본다.** 「애니풍 강아지」는 사용자가 칠 법한 말이지 칸 이름이 아니다
+     */
+    const 옛이름 = ["실사", "애니"];
     for (const file of guideSources()) {
-      for (const stale of ['{ title: "실사"', '{ title: "애니"', '{ title: "그림"', 'label="결"']) {
+      const 새이름을뺀글 = Object.values(IMAGE_LOOK_LABEL).reduce(
+        (text, label) => text.split(label).join(""),
+        주석을뺀다(file.source),
+      );
+      for (const stale of 옛이름) {
+        // 뒤에 한글이 더 붙으면 다른 낱말이다(「애니풍」).
+        const 홀로쓰인것 = new RegExp(`(?<![가-힣])${stale}(?![가-힣])`);
         expect(
-          file.source.includes(stale),
+          홀로쓰인것.test(새이름을뺀글),
           `${file.name}/page.tsx 에 옛 그림체 이름이 남았다: ${stale}`,
         ).toBe(false);
       }
+      expect(
+        file.source.includes('label="결"'),
+        `${file.name}/page.tsx 가 그림체 칸을 「결」이라 부른다. 화면은 「그림체」다`,
+      ).toBe(false);
     }
   });
 

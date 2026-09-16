@@ -43,7 +43,10 @@ const 건너뛸곳 = new Set(["node_modules", ".next", ".next-local", ".next-bui
  * `## 제목 — 단서` 는 모델이 구역을 가르는 신호다. 마침표로 바꾸면 그 신호가
  * 흐려진다(2026-09-16 리뷰에서 걸렸다. 한 번 바꿨다가 되돌렸다).
  *
- * **화면 문구를 여기 넣지 말 것.** 넣으면 이 시험이 그만큼 못 지킨다.
+ * **면제가 파일 단위라 새는 곳이 있다.** `turn.ts` 에는 채팅 첫 화면에 그대로
+ * 나가는 `OPENING_MESSAGE` 도 들어 있다(2026-09-16 재검토). 그 하나는 아래에서
+ * 따로 잰다. 채팅 스튜디오를 화면에 붙이는 날 프롬프트 상수를 제 파일로 떼면
+ * 이 예외가 필요 없어진다.
  */
 const 프롬프트파일 = new Set(["lib/studio/turn.ts"]);
 
@@ -60,14 +63,45 @@ const 값없음표시 = /(["'`])—\1|>—</g;
  *
  * **코드 뒤에 붙은 주석도 뗀다.** 전에는 줄 맨 앞 주석만 뗐다. 그래서
  * `const x = 1; // 설명 — 어쩌고` 가 「화면 문구에 줄표가 남았다」로 걸렸다.
- * 주석은 개발자가 읽는 글이라 자리와 상관없이 안 센다.
- *
- * `://` 는 안 자른다. 주소(`https://…`)가 통째로 날아간다.
+ * 주석은 개발자가 읽는 글이라 자리와 상관없이 안 센다. 이런 줄이 저장소에
+ * 19개 있고 한글이 든 것도 있다(`_landing/landing-content.ts:249`).
  */
 function 주석을뺀다(text: string): string {
   return text
     .replace(/\/\*[\s\S]*?\*\//g, (block) => "\n".repeat((block.match(/\n/g) ?? []).length))
-    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    .split("\n")
+    .map(주석부터잘라낸다)
+    .join("\n");
+}
+
+/**
+ * 한 줄에서 주석이 시작되는 자리를 찾아 잘라낸다.
+ *
+ * **따옴표 안의 `//` 는 주석이 아니다.** 정규식 하나로 자르면
+ * `startsWith("//")` 나 `"https://…"` 에서 **줄 뒷부분이 통째로 날아가**, 거기
+ * 있던 줄표를 조용히 못 보게 된다(2026-09-16 재검토에서 걸렸다). 시험을 약하게
+ * 만드는 쪽으로 틀리는 것이라 빨개지지 않아 눈에 안 띈다.
+ *
+ * 그래서 앞에서부터 읽으며 따옴표 안인지 밖인지를 센다.
+ */
+function 주석부터잘라낸다(line: string): string {
+  let 따옴표: string | null = null;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const 글자 = line[i]!;
+
+    if (따옴표) {
+      if (글자 === "\\") i += 1;
+      else if (글자 === 따옴표) 따옴표 = null;
+      continue;
+    }
+    if (글자 === '"' || 글자 === "'" || 글자 === "`") {
+      따옴표 = 글자;
+      continue;
+    }
+    if (글자 === "/" && line[i + 1] === "/") return line.slice(0, i);
+  }
+  return line;
 }
 
 interface 걸린줄 {
@@ -119,5 +153,22 @@ describe("화면 문구의 줄표", () => {
       .join("\n");
 
     expect(걸린것.length, `줄표가 남은 화면 문구 ${걸린것.length}줄\n${보고}`).toBe(0);
+  });
+
+  /**
+   * **면제한 파일 안의 화면 문구는 따로 잰다.**
+   *
+   * `프롬프트파일` 이 파일 통째를 빼는데 `turn.ts` 에는 채팅 첫 화면에 그대로
+   * 나가는 인사말도 들어 있다. 면제가 그것까지 덮어 버린다.
+   */
+  it("면제한 파일의 화면 문구에도 줄표가 없다", () => {
+    const turn = readFileSync(join(WEB, "lib", "studio", "turn.ts"), "utf8");
+    const 인사말 = turn.slice(
+      turn.indexOf("export const OPENING_MESSAGE"),
+      turn.indexOf("export const TURN_SCHEMA"),
+    );
+
+    expect(인사말.length, "OPENING_MESSAGE 를 못 찾았다").toBeGreaterThan(50);
+    expect(인사말, "채팅 첫 인사에 줄표가 있다").not.toContain("—");
   });
 });

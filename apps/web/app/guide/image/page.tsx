@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { POSTER_RATIOS } from "@fixup/sns-core";
-import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL } from "@fixup/shared";
+import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference } from "@fixup/shared";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
@@ -15,6 +15,17 @@ import {
   MockSteps,
 } from "../_components/mockup";
 import { POSTER_STEPS } from "../../poster/steps";
+
+/**
+ * 산문에서 그림체를 늘어놓을 때 쓰는 이름들.
+ *
+ * **손으로 적지 않는다.** 「실사·애니·3D·그림」이라고 박아 뒀더니 이름을 바꾼
+ * 뒤 설명서만 옛 이름으로 남았다(2026-09-16 리뷰. 목록을 그리는 자리는 고쳤는데
+ * 산문 두 줄이 남아 있었다).
+ *
+ * 따라갈 그림이 없을 때 고르는 것들이라 「레퍼런스 스타일」은 뺀다.
+ */
+const LOOK_NAMES = looksWithoutReference().map((look) => IMAGE_LOOK_LABEL[look]).join("·");
 
 export const metadata: Metadata = { title: "이미지 만들기 · 사용 설명서" };
 
@@ -132,7 +143,7 @@ export default function ImageGuidePage() {
                 <>
                   <strong className="text-foreground">따라 만들 그림은 없어도 됩니다.</strong> 무엇을 만들지 한 줄만
                   쓰면 그 글만 보고 그립니다. 그림을 붙이면 그 결을 따라가고, 안 붙이면 다음 화면에서 고른 결
-                  (실사·애니·3D·그림)로 그립니다.
+                  ({LOOK_NAMES})로 그립니다.
                 </>
               ),
             },
@@ -301,7 +312,7 @@ export default function ImageGuidePage() {
           items={[
             {
               q: "따라 만들 그림이 없어도 되나요",
-              a: "됩니다. 01에 무엇을 만들지 한 줄만 쓰면 그 글만 보고 그립니다. 그림을 안 붙이면 02에서 결(실사·애니·3D·그림)을 고르게 되어 있습니다. 따라갈 그림이 없으니 어떤 결로 그릴지는 직접 정해야 합니다.",
+              a: `됩니다. 01에 무엇을 만들지 한 줄만 쓰면 그 글만 보고 그립니다. 그림을 안 붙이면 02에서 그림체(${LOOK_NAMES})를 고르게 되어 있습니다. 따라갈 그림이 없으니 어떤 그림체로 그릴지는 직접 정해야 합니다.`,
             },
             {
               q: "광고 규격으로 만들려는데 막힙니다",
