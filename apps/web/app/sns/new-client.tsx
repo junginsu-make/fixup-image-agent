@@ -12,6 +12,7 @@ import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/s
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
 import { loadSnsRerun, snsRerunJump } from "./rerun-load";
+import { fetchRerunDeps } from "../_components/rerun-fetch";
 
 /**
  * **손으로 박지 않는다.**
@@ -118,20 +119,7 @@ export function NewSnsClient() {
     if (!rerunFrom) return;
     let alive = true;
     void (async () => {
-      const result = await loadSnsRerun(rerunFrom, {
-        async get(url) {
-          try {
-            const response = await fetch(url, { cache: "no-store" });
-            return { status: response.status, body: await response.json().catch(() => null) };
-          } catch {
-            return { status: 0, body: null };
-          }
-        },
-        async post(url) {
-          const response = await fetch(url, { method: "POST" });
-          return response.json().catch(() => null);
-        },
-      });
+      const result = await loadSnsRerun(rerunFrom, fetchRerunDeps());
       if (!alive) return;
       if (!result.ok) {
         setMessage("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");

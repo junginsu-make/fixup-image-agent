@@ -20,6 +20,7 @@ import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
+import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
@@ -287,18 +288,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     let alive = true;
     void (async () => {
       const result = await loadPosterRerun(rerunFrom, {
-        async get(url) {
-          try {
-            const response = await fetch(url, { cache: "no-store" });
-            return { status: response.status, body: await response.json().catch(() => null) };
-          } catch {
-            return { status: 0, body: null };
-          }
-        },
-        async post(url) {
-          const response = await fetch(url, { method: "POST" });
-          return response.json().catch(() => null);
-        },
+        ...fetchRerunDeps(),
         loadVisible: async () => new Set((await loadReferences()).map((item) => item.id)),
       });
       if (!alive) return;

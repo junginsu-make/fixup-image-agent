@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { canSeeReference, referenceVisibility } from "../../../../lib/teams/reference-scope";
 
 /**
@@ -233,26 +232,10 @@ export function copiedReferencePath(
 }
 
 /**
- * 복사본의 id — **같은 그림을 같은 사람이 복사하면 늘 같다.**
- *
- * 01 을 누를 때마다 새로 복사하면 관리자 라이브러리에 같은 그림이 계속 쌓인다.
- * 표에 「어디서 복사했나」 칸을 더하면 마이그레이션이 따라붙으므로, 대신
- * id 를 「원래 그림 + 복사한 사람」에서 만든다. 두 번째부터는 그 id 의 행이
- * 이미 있어 그대로 쓴다.
- *
- * uuid 5 모양으로 만든다 — 표의 id 칸(uuid)과 경로 검사를 지나야 한다.
+ * 복사본의 id. **규칙은 `lib/reference-copy-id.ts` 한 곳에 있다** — 만드는 규칙과
+ * 알아보는 규칙(팀 이동에서 복사본을 빼는 데 쓴다)이 갈리면 안 된다.
  */
-export function adoptedReferenceId(originalId: string, ownerId: string): string {
-  const hex = createHash("sha1").update(`adopted-reference:${ownerId}:${originalId}`).digest("hex");
-  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    `5${hex.slice(13, 16)}`,
-    `${variant}${hex.slice(17, 20)}`,
-    hex.slice(20, 32),
-  ].join("-");
-}
+export { adoptedReferenceId } from "../../../../lib/reference-copy-id";
 
 /**
  * 작업이 가리키는 참고 이미지 id.

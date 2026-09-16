@@ -32,9 +32,16 @@ describe("이미지 만들기 새 작업 화면", () => {
     once(source, "const { seed } = result;");
   });
 
-  it("복사 요청은 POST 로, 목록 읽기는 **복사 뒤에 부르게** 넘긴다", () => {
-    once(source, 'const response = await fetch(url, { method: "POST" });');
+  it("서버에 묻는 일은 검증된 함수에 맡기고, 목록 읽기는 **복사 뒤에 부르게** 넘긴다", () => {
+    /*
+      요청 코드를 화면에 적어 두었을 때는 `status` 를 200 으로 박거나 POST 응답을
+      버려도 초록이었다(2026-09-16 리뷰). 이제 `fetchRerunDeps` 가 하고, 그 함수는
+      가짜 fetch 로 값을 잰다(`_components/__tests__/rerun-fetch.test.ts`).
+    */
+    once(source, "...fetchRerunDeps(),");
     once(source, "loadVisible: async () => new Set((await loadReferences()).map((item) => item.id)),");
+    expect(source).not.toContain("async get(url)");
+    expect(source).not.toContain("async post(url)");
   });
 
   it("옛 흐름이 화면에 남아 있지 않다", () => {
@@ -57,10 +64,11 @@ describe("카드뉴스 새 작업 화면", () => {
   const source = read("app/sns/new-client.tsx");
 
   it("값 불러오기를 함수에 맡기고, 결과를 그대로 따른다", () => {
-    once(source, "const result = await loadSnsRerun(rerunFrom, {");
+    once(source, "const result = await loadSnsRerun(rerunFrom, fetchRerunDeps());");
     once(source, "if (!result.ok) {");
     once(source, "const { seed } = result;");
-    once(source, 'const response = await fetch(url, { method: "POST" });');
+    expect(source).not.toContain("async get(url)");
+    expect(source).not.toContain("async post(url)");
   });
 
   it("옛 흐름이 화면에 남아 있지 않다", () => {
@@ -103,35 +111,9 @@ describe("원래 작업 화면 — `?view=plan` 으로 오면 기획을 연다",
   });
 });
 
-describe("복사 주소", () => {
-  const route = read("app/api/admin/works/[kind]/[id]/references/route.ts");
-
-  it("**요청 본문을 아예 안 쓴다**", () => {
-    /*
-      화면이 보낸 id 를 받으면 관리자 권한으로 아무 회원의 아무 그림이나 복사하는
-      길이 열린다. 처음에는 `request.json(` 같은 부분 글자를 금지했는데 `.text()`
-      로 바꾸자 뚫렸다(2026-09-16 리뷰). 그래서 **인자 이름이 선언 한 번뿐인지**
-      센다 — 어떤 방식으로 읽든 이름을 한 번 더 써야 한다.
-    */
-    expect(route.split("_request").length - 1).toBe(1);
-    expect(route).not.toMatch(/\brequest\b/);
-  });
-
-  it("관문 → 작업 읽기 → 작업 기록에서 id 뽑기 → 주인 기준으로 복사 차례다", () => {
-    const marks = [
-      "await authenticateApiAdmin()",
-      "const work = await readAnyWork(kind, id);",
-      "const ids = referenceIdsOfWork(kind, (work as { data?: unknown }).data);",
-      "const copies = await copyReferencesToSelf(ids, auth.member.userId, {",
-    ];
-    const positions = marks.map((mark) => route.indexOf(mark));
-    marks.forEach((mark, index) => expect(positions[index], `「${mark}」 를 못 찾았다`).toBeGreaterThan(-1));
-    for (let index = 1; index < positions.length; index += 1) {
-      expect(positions[index]!).toBeGreaterThan(positions[index - 1]!);
-    }
-  });
-
-  it("주인을 모르면 복사하지 않는다", () => {
-    once(route, 'if (typeof ownerId !== "string" || !ownerId) {');
-  });
-});
+/*
+  **복사 주소는 여기서 안 잰다.** 글자로 재던 가늠자가 두 번 뚫렸다 — `.text()`,
+  `arguments[0]` 로 본문을 읽어도 초록이었다(2026-09-16 리뷰). 이제 라우트를 실제로
+  불러서, 건드리면 터지는 요청과 복사 함수의 인자로 잰다
+  (`api/admin/works/__tests__/references-route.test.ts`).
+*/

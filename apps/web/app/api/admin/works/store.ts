@@ -624,7 +624,13 @@ async function findReferenceRow(
   return (data as { id: string; storage_path: string } | null) ?? null;
 }
 
-/** 그 자리에 파일이 실제로 있나. 못 물어봤으면 있다고 본다. */
+/**
+ * 그 자리에 파일이 실제로 있나. **못 물어봤으면 없다고 본다.**
+ *
+ * 없다고 보면 같은 원본 바이트를 다시 올릴 뿐이라(덮어쓰기) 해가 없고 스스로
+ * 낫는다. 있다고 보면 파일이 사라진 복사본이 그 요청에서 안 낫는다(2026-09-16 리뷰).
+ * 이름은 정확히 같은지 본다 — `search` 는 비슷한 이름도 돌려준다.
+ */
 async function fileExists(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   path: string,
@@ -634,8 +640,7 @@ async function fileExists(
   const { data, error } = await admin.storage
     .from(BUCKET)
     .list(path.slice(0, slash), { search: name, limit: 5 });
-  // 못 물어봤으면 있다고 본다 — 멀쩡한 파일을 괜히 다시 올리지 않는다.
-  if (error) return true;
+  if (error) return false;
   return ((data ?? []) as Array<{ name: string }>).some((entry) => entry.name === name);
 }
 
@@ -688,6 +693,8 @@ export async function copyReferencesToSelf(
   ids: readonly string[],
   ownerUserId: string,
   workOwner: { userId: string; teamId: string | null },
+  /** 복사하는 관리자의 팀. 공용 원본의 복사본을 여기 안에 둔다. */
+  adminTeamId: string | null,
 ): Promise<AdoptedReferenceCopy[]> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return [];
@@ -715,6 +722,14 @@ export async function copyReferencesToSelf(
     const newId = adoptedReferenceId(row.id, ownerUserId);
     const target = copiedReferencePath(row.storage_path, ownerUserId, newId);
     if (!target) continue;
+    /*
+      **복사본의 범위.** 원본이 팀에 묶였으면 그 팀(원래 보던 사람만). 원본이
+      공용이면 **관리자 팀 안**에 둔다 — 원래 청중(전원)보다 좁다. 그대로 공용에
+      두면 관리자 소유의 같은 그림이 「(복사)」로 전 회원 라이브러리에 하나씩
+      늘고, 올린 사람도 관리자로 보인다(2026-09-16 리뷰). 관리자가 팀이 없으면
+      공용 그대로다.
+    */
+    const scope = row.team_id ?? adminTeamId;
 
     const moves: AssetMove[] = [{ from: row.storage_path, to: target.path }];
     if (row.thumb_path) moves.push({ from: row.thumb_path, to: target.thumb });
@@ -722,9 +737,17 @@ export async function copyReferencesToSelf(
     const existing = await findReferenceRow(admin, newId);
     if (existing) {
       // 재사용하기 전에 파일을 본다. 행만 있고 파일이 없으면 다시 올린다.
-      if (!(await fileExists(admin, existing.storage_path))) await moveAssets(admin, moves, BUCKET);
+      if (!(await fileExists(admin, existing.storage_path))) {
+        const again = await moveAssets(admin, moves, BUCKET);
+        /*
+          **다시 올리지 못했으면 이 복사본은 쓰지 않는다.** 원본까지 지워진
+          경우다. 돌려주면 목록에 있으니 「빠진 것」으로 안 세어지고, 깨진 그림이
+          ①②③ 에 선다(2026-09-16 리뷰).
+        */
+        if (!again.has(target.path)) continue;
+      }
       // 범위도 다시 맞춘다 — 전에 맞추다 실패한 것이 있어도 여기서 낫는다.
-      await matchReferenceScope(admin, newId, row.team_id);
+      await matchReferenceScope(admin, newId, scope);
       results.push({ from: row.id, id: newId, storagePath: existing.storage_path });
       continue;
     }
@@ -742,6 +765,12 @@ export async function copyReferencesToSelf(
       purpose: row.purpose,
       width: row.width,
       height: row.height,
+      /*
+        **넣을 때부터 범위를 싣는다.** 트리거는 명시한 팀을 그대로 두므로, 그 사이
+        관리자 팀이 잠깐 보는 틈이 없다(2026-09-16 리뷰). 팀이 없어야 하는 경우는
+        트리거가 null 을 「안 정함」으로 읽으므로 아래에서 다시 맞춘다.
+      */
+      ...(scope ? { team_id: scope } : {}),
     });
     if (insertError) {
       /*
@@ -751,7 +780,7 @@ export async function copyReferencesToSelf(
       */
       const winner = await findReferenceRow(admin, newId);
       if (winner) {
-        await matchReferenceScope(admin, newId, row.team_id);
+        await matchReferenceScope(admin, newId, scope);
         results.push({ from: row.id, id: newId, storagePath: winner.storage_path });
         continue;
       }
@@ -762,7 +791,7 @@ export async function copyReferencesToSelf(
     }
 
     try {
-      await matchReferenceScope(admin, newId, row.team_id);
+      await matchReferenceScope(admin, newId, scope);
     } catch (error) {
       /*
         **범위를 못 맞췄으면 되감는다.** 트리거가 찍은 관리자 팀에 열린 채 남는다.

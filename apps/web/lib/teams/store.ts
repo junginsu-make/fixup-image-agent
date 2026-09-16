@@ -14,6 +14,7 @@ import {
   type UnassignedRow,
 } from "./core";
 import type { TeamCredit } from "./credit";
+import { isAdoptedReferenceId } from "../reference-copy-id";
 
 /**
  * 팀 편성 — 저장소를 만지는 쪽.
@@ -221,10 +222,13 @@ export async function countWorkFor(
     TEAM_SCOPED_TABLES.map(async (table) => {
       const { data } = await admin
         .from(table)
-        .select("user_id")
+        .select("id,user_id")
         .in("user_id", ids)
         .is("team_id", null);
-      for (const row of (data ?? []) as Array<{ user_id: string }>) {
+      for (const row of (data ?? []) as Array<{ id: string; user_id: string }>) {
+        // 관리자 복사본은 팀을 따라가지 않는다(`moveFollowingWork`). 세지도 않는다 —
+        // 「함께 들어갑니다」에 세면 화면이 거짓말을 한다.
+        if (table === "reference_images" && isAdoptedReferenceId(row.id)) continue;
         counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
       }
     }),
@@ -310,36 +314,63 @@ async function stampWorkTeam(
   teamId: string,
   fromTeamId?: string,
 ): Promise<void> {
-  const admin = createSupabaseAdminClient();
   for (const table of TEAM_SCOPED_TABLES) {
-    const { error } = await admin
-      .from(table)
-      .update({ team_id: teamId })
-      .eq("user_id", userId)
-      .is("team_id", null);
-    if (error) throw new Error(error.message);
+    await moveFollowingWork(table, userId, null, teamId);
 
     if (!fromTeamId || fromTeamId === teamId) continue;
-    const moved = await admin
-      .from(table)
-      .update({ team_id: teamId })
-      .eq("user_id", userId)
-      .eq("team_id", fromTeamId);
-    if (moved.error) throw new Error(moved.error.message);
+    await moveFollowingWork(table, userId, fromTeamId, teamId);
   }
 }
 
 /** 팀에서 뺄 때 되돌린다. 그 팀에 매달린 것만 푼다. */
 async function clearWorkTeam(userId: string, teamId: string): Promise<void> {
-  const admin = createSupabaseAdminClient();
   for (const table of TEAM_SCOPED_TABLES) {
-    const { error } = await admin
-      .from(table)
-      .update({ team_id: null })
-      .eq("user_id", userId)
-      .eq("team_id", teamId);
-    if (error) throw new Error(error.message);
+    await moveFollowingWork(table, userId, teamId, null);
   }
+}
+
+/**
+ * 한 사람의 작업물 중 팀이 `from` 인 것을 `to` 로 옮긴다. **관리자 복사본은 뺀다.**
+ *
+ * 관리자가 다른 회원의 참고 이미지를 복사해 오면, 그 복사본은 관리자 소유이면서
+ * **원본의 팀 범위**를 따른다(`api/admin/works/store.ts` 의 `matchReferenceScope`).
+ * 여기서 `user_id` 로 통째로 옮기면 그 범위가 관리자의 팀 따라 바뀐다 —
+ * 관리자가 팀에서 빠지면 복사본이 **전 회원 공개**(`team_id = null`)가 되고,
+ * 다른 팀으로 옮기면 원래 팀 그림이 새 팀에 보인다(2026-09-16 독립 리뷰. 운영에
+ * 팀에 든 관리자가 실제로 있다).
+ *
+ * 복사본은 id 형식으로 가려낸다(`lib/reference-copy-id.ts`). 표에 칸을 더하지
+ * 않으려고 참고 이미지 표에서만 id 를 먼저 읽어 거른 뒤 옮긴다 — 한 사람의
+ * 참고 이미지는 많아야 수백 장이다.
+ *
+ * **밖에서 부르지 않는다.** 시험에서 값으로 재려고 내보낸다.
+ */
+export async function moveFollowingWork(
+  table: (typeof TEAM_SCOPED_TABLES)[number],
+  userId: string,
+  from: string | null,
+  to: string | null,
+): Promise<void> {
+  const admin = createSupabaseAdminClient();
+
+  if (table !== "reference_images") {
+    const base = admin.from(table).update({ team_id: to }).eq("user_id", userId);
+    const { error } = await (from === null ? base.is("team_id", null) : base.eq("team_id", from));
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const select = admin.from(table).select("id").eq("user_id", userId);
+  const { data, error: readError } = await (from === null ? select.is("team_id", null) : select.eq("team_id", from));
+  if (readError) throw new Error(readError.message);
+
+  const ids = ((data ?? []) as Array<{ id: string }>)
+    .map((row) => row.id)
+    .filter((id) => !isAdoptedReferenceId(id));
+  if (!ids.length) return;
+
+  const { error } = await admin.from(table).update({ team_id: to }).in("id", ids);
+  if (error) throw new Error(error.message);
 }
 
 /**

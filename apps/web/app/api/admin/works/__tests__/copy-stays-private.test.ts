@@ -127,7 +127,9 @@ describe("참고 이미지 복사본은 원본의 팀을 물려받는다", () =>
   });
 
   it("원본 줄의 팀으로 맞춘다", () => {
-    const calls = body.match(/matchReferenceScope\(admin, newId, row\.team_id\)/g) ?? [];
+    // 원본이 팀에 묶였으면 그 팀, 공용이면 관리자 팀(원래 청중보다 좁다).
+    expect(body).toContain("const scope = row.team_id ?? adminTeamId;");
+    const calls = body.match(/matchReferenceScope\(admin, newId, scope\)/g) ?? [];
     // 새로 만들 때, 이미 있을 때, 다른 요청이 먼저 만들었을 때 — 세 갈래 모두.
     expect(calls.length).toBe(3);
   });

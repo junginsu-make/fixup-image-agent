@@ -49,10 +49,12 @@ export async function POST(_request: Request, context: Context) {
       console.error("[admin-works:references] 작업 주인을 알 수 없습니다", kind, id);
       return Response.json({ ok: false, message: "그림을 가져오지 못했습니다." }, { status: 500 });
     }
-    const copies = await copyReferencesToSelf(ids, auth.member.userId, {
-      userId: ownerId,
-      teamId: await teamIdOf(ownerId),
-    });
+    const copies = await copyReferencesToSelf(
+      ids,
+      auth.member.userId,
+      { userId: ownerId, teamId: await teamIdOf(ownerId) },
+      await teamIdOf(auth.member.userId),
+    );
     return Response.json({ ok: true, copies });
   } catch (error) {
     // DB 오류 문구를 화면에 흘리지 않는다. 서버 로그에 남긴다.

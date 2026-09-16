@@ -23,8 +23,10 @@ describe("팀을 옮기면", () => {
   it("옛 팀에 달린 작업물도 함께 옮긴다", () => {
     expect(store).toContain("async function stampWorkTeam(");
     expect(store).toContain("fromTeamId?: string,");
-    // 「팀 없음」에 더해, 떠나는 팀에 달린 것도 새 팀으로 옮긴다.
-    expect(store).toMatch(/\.eq\("team_id", fromTeamId\)/);
+    // 「팀 없음」에 더해, 떠나는 팀에 달린 것도 새 팀으로 옮긴다. 옮기는 일은
+    // `moveFollowingWork` 한 곳이 한다(관리자 복사본을 빼야 해서 모았다).
+    expect(store).toContain("await moveFollowingWork(table, userId, null, teamId);");
+    expect(store).toContain("await moveFollowingWork(table, userId, fromTeamId, teamId);");
   });
 
   it("남의 팀 것을 끌어오지는 않는다", () => {
