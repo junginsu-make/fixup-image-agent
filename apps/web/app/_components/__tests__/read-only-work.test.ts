@@ -62,6 +62,26 @@ describe("blockedByReadOnly", () => {
 describe("상세 화면이 막을 지나는가", () => {
   const source = readFileSync(
     join(__dirname, "..", "..", "sns", "[id]", "project-client.tsx"), "utf8");
+  const poster = readFileSync(
+    join(__dirname, "..", "..", "poster", "[id]", "poster-client.tsx"), "utf8");
+  const posterLoader = readFileSync(
+    join(__dirname, "..", "..", "poster", "[id]", "detail-client.tsx"), "utf8");
+
+  it("포스터도 길목에서 막는다", () => {
+    const gates = poster.match(/blockedByReadOnly\(readOnly, init\)/g) ?? [];
+    expect(gates.length).toBe(1);
+  });
+
+  it("포스터의 쓰는 요청이 모두 길목을 지난다", () => {
+    // 직접 `fetch` 로 나가면 막이 비껴간다.
+    const direct = poster.match(/await fetch\(`\/api\/poster\/projects/g) ?? [];
+    expect(direct.length).toBe(0);
+  });
+
+  it("포스터도 남의 작업이면 관리자 통로로 한 번 더 묻는다", () => {
+    expect(posterLoader).toContain("/api/admin/works/poster/");
+    expect(posterLoader).toContain("readOnly: true");
+  });
 
   it("요청 길목이 blockedByReadOnly 를 한 번 부른다", () => {
     const gates = source.match(/if \(blockedByReadOnly\(readOnly, init\)\)/g) ?? [];

@@ -22,10 +22,32 @@ export function PosterDetailClient(
     let alive = true;
     void (async () => {
       try {
-        const body = await (await fetch(`/api/poster/projects/${projectId}`)).json();
+        const response = await fetch(`/api/poster/projects/${projectId}`);
+        const body = await response.json();
         if (!alive) return;
-        if (body.ok) setState({ kind: "ready", project: body.project, images: body.images ?? [] });
-        else setState({ kind: "error", message: body.message ?? "작업을 불러오지 못했습니다." });
+        if (body.ok) {
+          setState({ kind: "ready", project: body.project, images: body.images ?? [] });
+          return;
+        }
+        /*
+          **404 면 남의 작업일 수 있다.** 회원용 경로는 RLS 를 타서 내 것과
+          같은 팀 것만 준다. 관리자에게는 별도 통로가 있으므로 한 번 더 묻는다.
+          거기서도 막히면 관리자가 아니거나 정말 없는 작업이다.
+
+          카드뉴스(`sns/[id]/project-client.tsx`)와 같은 판단이다.
+        */
+        if (response.status === 404) {
+          const admin = await fetch(`/api/admin/works/poster/${projectId}`, { cache: "no-store" });
+          const seen = await admin.json().catch(() => null);
+          if (!alive) return;
+          if (seen?.ok && seen.work) {
+            // 남의 작업은 **낱장을 안 싣는다.** 그림 주소는 회원용 라우트가
+            // 흘려 주는데 그 길이 막혀 있다 — 설정과 과정만 보여 준다.
+            setState({ kind: "ready", project: seen.work, images: [], readOnly: true });
+            return;
+          }
+        }
+        setState({ kind: "error", message: body.message ?? "작업을 불러오지 못했습니다." });
       } catch {
         if (alive) setState({ kind: "error", message: "작업을 불러오지 못했습니다." });
       }
@@ -43,5 +65,5 @@ export function PosterDetailClient(
       </div>
     );
   }
-  return <PosterClient project={state.project} images={state.images} adEnabled={adEnabled} />;
+  return <PosterClient project={state.project} images={state.images} adEnabled={adEnabled} readOnly={state.readOnly} />;
 }

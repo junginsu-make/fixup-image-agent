@@ -20,6 +20,7 @@ import { POSTER_STEPS } from "../steps";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
+import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 
 interface PosterImage {
   id: string;
@@ -75,9 +76,33 @@ const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
 ];
 
 export function PosterClient(
-  { project, images, adEnabled = false }:
-  { project: PosterProject; images: PosterImage[]; adEnabled?: boolean },
+  { project, images, adEnabled = false, readOnly = false }:
+  {
+    project: PosterProject; images: PosterImage[]; adEnabled?: boolean;
+    /**
+     * 남의 작업을 **보는 중**인가. 관리자만 여기까지 온다.
+     *
+     * 볼 수는 있고 고치지는 못한다 — 고치려면 자기 것으로 복사한다
+     * (2026-09-16 사용자 결정).
+     */
+    readOnly?: boolean;
+  },
 ) {
+  /**
+   * 이 화면에서 나가는 모든 요청은 **이것을 지난다.**
+   *
+   * 단추를 하나씩 `disabled` 로 잠그지 않는다 — 이 화면은 682줄이고 단추가
+   * 열둘이라 **빠뜨린 하나가 곧 구멍**이다. 길목을 막으면 새 단추가 생겨도
+   * 저절로 막힌다. 카드뉴스와 같은 방식이다.
+   */
+  const request = React.useCallback(
+    async (url: string, init?: RequestInit) => {
+      if (blockedByReadOnly(readOnly, init)) throw new Error(READ_ONLY_MESSAGE);
+      return fetch(url, init);
+    },
+    [readOnly],
+  );
+
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
   /**
@@ -229,7 +254,7 @@ export function PosterClient(
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/poster/projects/${project.id}`, {
+      const response = await request(`/api/poster/projects/${project.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(slots),
@@ -284,7 +309,7 @@ export function PosterClient(
   async function select(imageId: string) {
     setError(null);
     try {
-      const response = await fetch(`/api/poster/projects/${project.id}/select`, {
+      const response = await request(`/api/poster/projects/${project.id}/select`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ imageId }),
@@ -302,7 +327,7 @@ export function PosterClient(
     setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     setError(null);
     try {
-      const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
+      const body = await (await request(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
       setList(body.images);
       if (body.issues?.length) setNotes(body.issues);
@@ -364,7 +389,7 @@ export function PosterClient(
     for (;;) {
       if (!alive.current) return false;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
-      const poll = await (await fetch(`/api/poster/projects/${project.id}/status`, {
+      const poll = await (await request(`/api/poster/projects/${project.id}/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -383,6 +408,20 @@ export function PosterClient(
 
   return (
     <div className="grid gap-6">
+      {/*
+        **남의 작업을 보는 중이라고 먼저 말한다.**
+
+        안 적으면 자기 작업인 줄 알고 고치려다 「고칠 수 없습니다」만 본다.
+        낱장이 안 보이는 까닭도 같이 적는다 — 그림 주소는 회원용 라우트가
+        흘려 주는데 남의 것은 그 길이 막혀 있다.
+      */}
+      {readOnly ? (
+        <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <b>다른 회원의 작업</b>을 보는 중입니다. 설정과 과정은 볼 수 있지만
+          고칠 수 없고, 만들어진 그림은 여기서 안 보입니다.
+        </div>
+      ) : null}
+
       <StepBar
         steps={POSTER_STEPS}
         current={current}
