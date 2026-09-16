@@ -21,7 +21,9 @@ const STORE = join(__dirname, "..", "store.ts");
 const source = readFileSync(STORE, "utf8");
 
 /** 남의 것을 내 것으로 옮기는 함수들. 늘어나면 여기도 늘어야 한다. */
-const COPIERS = ["copyLibraryWorkToSelf", "copyCharacterToSelf", "copyWorkToSelf"] as const;
+const COPIERS = [
+  "copyLibraryWorkToSelf", "copyCharacterToSelf", "copyWorkToSelf", "copyReferencesToSelf",
+] as const;
 
 /**
  * 팀 도장이 찍히는 표 중 **복사가 건드리는 것**.
@@ -29,7 +31,15 @@ const COPIERS = ["copyLibraryWorkToSelf", "copyCharacterToSelf", "copyWorkToSelf
  * 함수 수와 다르다 — `copyWorkToSelf` 하나가 카드뉴스와 포스터 두 표를
  * 다룬다. 그래서 함수를 세면 한 갈래가 빠져도 못 잡는다.
  */
-const STAMPED_TABLES = ["library_items", "characters", "sns_projects", "poster_projects"] as const;
+const STAMPED_TABLES = [
+  "library_items", "characters", "sns_projects", "poster_projects",
+  /*
+    참고 이미지에도 도장이 찍힌다(`stamp_team_reference_images`). 관리자가
+    다른 회원의 그림을 복사해 오면 관리자 팀 전원의 라이브러리에 그 그림이
+    뜬다 — 원래 회원은 모른다(2026-09-16 추가).
+  */
+  "reference_images",
+] as const;
 
 describe("복사본은 팀에 열지 않는다", () => {
   it("옮기는 함수를 하나도 빠짐없이 센다", () => {

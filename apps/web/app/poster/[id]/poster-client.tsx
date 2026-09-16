@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Download, Loader2, Megaphone, Wand2 } from "lucide-react";
 // 잎 모듈이다 — 규격 목록을 이 화면 번들로 끌고 오지 않는다.
@@ -268,6 +268,20 @@ export function PosterClient(
    * 보이고 다음에 뭘 해야 할지 알 수 없다. 한 번만 연다 — 닫은 것을 다시 열면
    * 성가시다.
    */
+  /**
+   * **새 작업 화면에서 「04 기획 확인」을 눌러 돌아온 것인가.**
+   *
+   * 지난 단계(01~03)로 넘어간 사람은 04·05 가 막혀 원래 작업으로 돌아올 길이
+   * 없었다(2026-09-16 사용자 보고). 돌아올 때 `?view=plan` 을 달아 오면 기획을
+   * 바로 연다 — 결과가 이미 있어도 연다. 05 로 왔으면 결과 화면 그대로다.
+   */
+  const askedForPlan = useSearchParams().get("view") === "plan";
+  React.useEffect(() => {
+    if (!askedForPlan || project.data.promptMode === "verbatim") return;
+    openedOnce.current = true;
+    setPlanOpen(true);
+  }, [askedForPlan, project.data.promptMode]);
+
   React.useEffect(() => {
     if (openedOnce.current) return;
     if (images.length) return;

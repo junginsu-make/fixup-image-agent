@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 /**
  * 복사본의 그림이 놓일 자리.
  *
@@ -193,4 +195,92 @@ export function copiedLibraryAssetPath(
   newItemId: string,
 ): string | null {
   return copiedCharacterAssetPath(originalPath, newOwnerId, newItemId);
+}
+
+/**
+ * 참고 이미지를 **내 라이브러리로** 복사할 때의 자리.
+ *
+ * 관리자가 다른 회원의 작업을 다시 만들면 02 가 비었다 — 붙였던 그림이 그
+ * 회원 것이라 관리자 목록에 없어서다(2026-09-16 운영 데이터로 확인).
+ *
+ * **새 id 를 먼저 정해서 넘긴다.** 표가 경로를 직접 검사한다 —
+ * `storage_path ~ ^{user_id}/references/{id}\.[^/]+$`
+ * (`202608310003_references.sql`). 작업물처럼 원래 경로의 칸을 물려받으면
+ * 그 검사를 못 지난다.
+ *
+ * 사본 이름은 `gridThumbPath` 가 정한 규칙(`{원본 줄기}.thumb.webp`)을 따른다.
+ * 확장자가 없는 경로는 표의 검사를 못 지나므로 처음부터 `null` 이다.
+ */
+export function copiedReferencePath(
+  originalPath: string,
+  newOwnerId: string,
+  newId: string,
+): { path: string; thumb: string } | null {
+  if (!originalPath || !newOwnerId || !newId) return null;
+  const parts = originalPath.split("/");
+  if (!parts.every(usablePart)) return null;
+
+  const fileName = parts[parts.length - 1] ?? "";
+  const dot = fileName.lastIndexOf(".");
+  const extension = dot > 0 ? fileName.slice(dot + 1) : "";
+  if (!extension || !usablePart(extension)) return null;
+
+  return {
+    path: `${newOwnerId}/references/${newId}.${extension}`,
+    thumb: `${newOwnerId}/references/${newId}.thumb.webp`,
+  };
+}
+
+/**
+ * 복사본의 id — **같은 그림을 같은 사람이 복사하면 늘 같다.**
+ *
+ * 01 을 누를 때마다 새로 복사하면 관리자 라이브러리에 같은 그림이 계속 쌓인다.
+ * 표에 「어디서 복사했나」 칸을 더하면 마이그레이션이 따라붙으므로, 대신
+ * id 를 「원래 그림 + 복사한 사람」에서 만든다. 두 번째부터는 그 id 의 행이
+ * 이미 있어 그대로 쓴다.
+ *
+ * uuid 5 모양으로 만든다 — 표의 id 칸(uuid)과 경로 검사를 지나야 한다.
+ */
+export function adoptedReferenceId(originalId: string, ownerId: string): string {
+  const hex = createHash("sha1").update(`adopted-reference:${ownerId}:${originalId}`).digest("hex");
+  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `5${hex.slice(13, 16)}`,
+    `${variant}${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
+}
+
+/**
+ * 작업이 가리키는 참고 이미지 id.
+ *
+ * 복사 주소는 화면이 보낸 id 를 안 받는다 — 받으면 관리자 권한으로 아무 회원의
+ * 아무 그림이나 복사하는 길이 열린다. 그래서 작업 기록에서 직접 뽑는다.
+ *
+ * 이미지 작업은 **네 목록과 차례를 다 본다.** 앞뒤가 안 맞는 옛 행이 실제로
+ * 있다(2026-09-07~09-08 사이) — 어느 한쪽만 보면 그림을 놓친다.
+ */
+export function referenceIdsOfWork(kind: "sns" | "poster", data: unknown): string[] {
+  if (!data || typeof data !== "object") return [];
+  const record = data as Record<string, unknown>;
+  const ids = (value: unknown) =>
+    Array.isArray(value) ? value.filter((id): id is string => typeof id === "string" && Boolean(id)) : [];
+
+  if (kind === "sns") {
+    const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+    return [...new Set(attachments
+      .map((attachment) => (attachment && typeof attachment === "object"
+        ? (attachment as { id?: unknown }).id : undefined))
+      .filter((id): id is string => typeof id === "string" && Boolean(id)))];
+  }
+
+  return [...new Set([
+    ...ids(record.referenceIds),
+    ...ids(record.preservedIds),
+    ...ids(record.personIds),
+    ...ids(record.restyledIds),
+    ...ids(record.attachmentOrder),
+  ])];
 }

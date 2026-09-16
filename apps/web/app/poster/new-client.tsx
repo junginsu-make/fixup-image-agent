@@ -19,7 +19,7 @@ import {
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
-import { posterSeed } from "./rerun-seed";
+import { adoptPosterReferences, posterSeed, type AdoptedReference } from "./rerun-seed";
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
@@ -56,6 +56,24 @@ const PROMPT_NAIL_EXAMPLES = [
   "예: 포스터처럼 만들어 주세요",
   "예: 사람 얼굴은 정면으로",
 ].join("\n");
+
+/**
+ * 다른 회원의 작업이 붙였던 그림을 **관리자 라이브러리로 복사해 온다.**
+ *
+ * 무엇을 복사할지는 서버가 작업 기록에서 정한다 — 여기서 id 를 보내지 않는다.
+ * 실패하면 빈 목록이다. 멈추지 않고, 빠진 그림은 화면이 센다.
+ */
+async function adoptReferences(workId: string): Promise<AdoptedReference[]> {
+  try {
+    const response = await fetch(`/api/admin/works/poster/${encodeURIComponent(workId)}/references`, {
+      method: "POST",
+    });
+    const body = await response.json().catch(() => null);
+    return body?.ok && Array.isArray(body.copies) ? body.copies : [];
+  } catch {
+    return [];
+  }
+}
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
@@ -285,8 +303,6 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     if (!rerunFrom) return;
     let alive = true;
     void (async () => {
-      const visible = new Set((await loadReferences()).map((item) => item.id));
-      if (!alive) return;
 
       const read = async (url: string) => {
         try {
@@ -298,18 +314,37 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       };
 
       let found = await read(`/api/poster/projects/${encodeURIComponent(rerunFrom)}`);
+      /** 관리자 라이브러리로 복사해 온 그림. 남의 작업일 때만 채워진다. */
+      let adopted: AdoptedReference[] = [];
       if (!found.body?.ok && found.status === 404) {
         found = await read(`/api/admin/works/poster/${encodeURIComponent(rerunFrom)}`);
+        /*
+          **남의 작업이면 그림을 복사해 온다.** 붙였던 그림이 그 회원 것이라
+          관리자 목록에 없어서 02 가 통째로 비었다(2026-09-16 운영 데이터로
+          확인). 복사본은 관리자 목록에 들어가므로 아래에서 다시 읽으면 보인다.
+          실패해도 멈추지 않는다 — 그 그림들이 빠진 수로 세어져 화면이 말한다.
+        */
+        if (found.body?.ok) adopted = await adoptReferences(rerunFrom);
       }
-      const project = found.body?.project ?? found.body?.work;
+      const original = found.body?.project ?? found.body?.work;
       if (!alive) return;
-      if (!project) {
+      if (!original) {
         setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
       }
 
+      /*
+        **복사한 뒤에 목록을 읽는다.** 먼저 읽으면 복사본이 목록에 없어서 방금
+        복사해 온 그림이 전부 「못 가져온 것」으로 빠진다.
+      */
+      const visible = new Set((await loadReferences()).map((item) => item.id));
+      if (!alive) return;
+      const project = {
+        ...original,
+        data: adoptPosterReferences(original.data ?? {}, adopted),
+      };
       const seed = posterSeed(project, visible);
       setTitle(seed.title);
       setInstruction(seed.instruction);
@@ -456,7 +491,25 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   return (
     <div className="grid gap-6">
       <div className="mb-4">
-        <StepBar steps={POSTER_STEPS} current={step} onJump={setStep} allowJump={reachableBeforeCreate} />
+        {/*
+          **지난 단계로 넘어온 길이면 04·05 로 원래 작업에 돌아간다.**
+
+          작업을 만들기 전에는 04·05 가 열리지 않는다 — AI 초안도 결과도 만든
+          뒤에 생긴다. 그런데 이미 만든 작업에서 넘어온 사람에게는 그 작업의
+          기획과 결과가 **있다.** 막아 두니 돌아갈 길이 없었다(2026-09-16 사용자
+          보고). 04 로 가면 기획 칸을 열어 준다.
+        */}
+        <StepBar
+          steps={POSTER_STEPS}
+          current={step}
+          allowJump={(id) => reachableBeforeCreate(id) || Boolean(rerunFrom)}
+          onJump={(id) => {
+            if (reachableBeforeCreate(id)) return setStep(id);
+            if (!rerunFrom) return;
+            const back = `/poster/${encodeURIComponent(rerunFrom)}`;
+            router.push(id === "plan" ? `${back}?view=plan` : back);
+          }}
+        />
       </div>
 
       {/*

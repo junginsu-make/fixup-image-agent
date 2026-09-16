@@ -11,7 +11,7 @@ import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
-import { snsSeed } from "./rerun-seed";
+import { snsSeed, type AdoptedAttachment } from "./rerun-seed";
 
 /**
  * **손으로 박지 않는다.**
@@ -29,11 +29,31 @@ const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
   { id: "images", label: "02 이미지", desc: "종류·역할·자리" },
   { id: "spec", label: "03 규격", desc: "비율·장수·언어·모델" },
-  { id: "copy", label: "04 원고 확인", desc: "Task 13" },
-  { id: "result", label: "05 결과", desc: "Task 13" },
+  // 설명은 작업 화면(`[id]/project-client.tsx`)과 같게 둔다. 개발 중 임시 글자
+  // 작업 번호가 그대로 사용자에게 보이고 있었다.
+  { id: "copy", label: "04 원고 확인", desc: "글자 직접 수정" },
+  { id: "result", label: "05 결과", desc: "검수·내려받기" },
 ];
 
 type Step = "content" | "images" | "spec";
+
+/**
+ * 다른 회원의 카드뉴스가 붙였던 그림을 **관리자 라이브러리로 복사해 온다.**
+ *
+ * 무엇을 복사할지는 서버가 작업 기록에서 정한다 — 여기서 id 를 보내지 않는다.
+ * 실패하면 빈 목록이다. 멈추지 않고, 빠진 첨부는 화면이 센다.
+ */
+async function adoptAttachments(workId: string): Promise<AdoptedAttachment[]> {
+  try {
+    const response = await fetch(`/api/admin/works/sns/${encodeURIComponent(workId)}/references`, {
+      method: "POST",
+    });
+    const body = await response.json().catch(() => null);
+    return body?.ok && Array.isArray(body.copies) ? body.copies : [];
+  } catch {
+    return [];
+  }
+}
 
 export function NewSnsClient() {
   const router = useRouter();
@@ -132,10 +152,17 @@ export function NewSnsClient() {
       */
       let found = await read(`/api/sns/projects/${encodeURIComponent(rerunFrom)}/plan`);
       let mine = true;
+      let adopted: AdoptedAttachment[] = [];
       if (!found.body?.ok && found.status === 404) {
         found = await read(`/api/admin/works/sns/${encodeURIComponent(rerunFrom)}`);
         // 관리자 통로로 온 것은 늘 남의 것이다. 내 것이면 회원용 길에서 열렸다.
         mine = false;
+        /*
+          **남의 작업이면 첨부를 관리자 라이브러리로 복사해 온다.** 그대로는
+          못 싣고(경로 첫 칸이 그 회원 id 다), 빼기만 하면 02 가 통째로 빈다
+          (2026-09-16 사용자 보고). 복사본으로 바꿔 싣는다.
+        */
+        if (found.body?.ok) adopted = await adoptAttachments(rerunFrom);
       }
       const project = found.body?.project ?? found.body?.work;
       if (!alive) return;
@@ -146,7 +173,7 @@ export function NewSnsClient() {
         return;
       }
 
-      const seed = snsSeed(project, mine);
+      const seed = snsSeed(project, mine, adopted);
       setTitle(seed.title);
       setToneNote(seed.toneNote);
       setSource(seed.source);
@@ -225,7 +252,20 @@ export function NewSnsClient() {
         <p className="mt-2 max-w-3xl text-body text-muted-foreground">내용을 정하고, 레퍼런스와 원본 장의 역할·자리를 고른 뒤 게시 규격을 선택합니다.</p>
       </header>
 
-      <StepBar steps={STEPS} current={step} onJump={(id) => setStep(id as Step)} />
+      {/*
+        **04·05 는 작업이 있어야 간다.** 전에는 그냥 눌려서 없는 단계로 바뀌고
+        화면이 비었다. 지난 단계로 넘어온 길이면 원래 작업으로 돌아간다 —
+        그 작업의 원고와 결과가 거기 있다(2026-09-16 사용자 보고).
+      */}
+      <StepBar
+        steps={STEPS}
+        current={step}
+        allowJump={(id) => id === "content" || id === "images" || id === "spec" || Boolean(rerunFrom)}
+        onJump={(id) => {
+          if (id === "content" || id === "images" || id === "spec") return setStep(id);
+          if (rerunFrom) router.push(`/sns/${encodeURIComponent(rerunFrom)}`);
+        }}
+      />
 
       {/*
         **값을 들고 왔다고 말한다.** 안 적으면 사용자는 이 화면이 원래 작업을

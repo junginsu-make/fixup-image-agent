@@ -72,7 +72,7 @@ describe("지난 단계로 값을 들고 간다", () => {
 
   it("카드뉴스는 **주인 여부**를 넘겨서 심는다", () => {
     // 같은 이유다. `snsSeed(project, true)` 로 굳어지면 남의 첨부까지 들고 온다.
-    expect(read("app/sns/new-client.tsx")).toContain("snsSeed(project, mine)");
+    expect(read("app/sns/new-client.tsx")).toContain("snsSeed(project, mine, adopted)");
   });
 
   it("카드뉴스의 **주인 여부가 관리자 통로에서만 뒤집힌다**", () => {

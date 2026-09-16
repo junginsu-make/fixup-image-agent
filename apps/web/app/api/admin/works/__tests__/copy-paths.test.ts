@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { copiedAssetPath, copiedLibraryAssetPath } from "../copy-paths";
+import {
+  adoptedReferenceId, copiedAssetPath, copiedLibraryAssetPath, copiedReferencePath,
+  referenceIdsOfWork,
+} from "../copy-paths";
 
 /**
  * 복사본의 그림이 놓일 자리.
@@ -253,5 +256,106 @@ describe("경로에 위로 올라가는 칸이 있으면 옮기지 않는다", (
       .toBe("나/새작업/0.thumb.webp");
     expect(copiedAssetPath("남/도구/작업/0.thumb.webp", "나", "새작업"))
       .toBe("나/도구/새작업/0.thumb.webp");
+  });
+});
+
+/**
+ * **참고 이미지를 내 라이브러리로 복사할 때의 자리.**
+ *
+ * 관리자가 다른 회원의 작업을 다시 만들면 02 가 비었다 — 붙였던 그림이 그
+ * 회원 것이라 관리자 목록에 없어서다(2026-09-16 운영 데이터로 확인). 그림을
+ * 관리자 라이브러리로 **복사해** 온다.
+ *
+ * 표가 경로를 직접 검사한다 — `storage_path ~ ^{user_id}/references/{id}\.[^/]+$`
+ * (`202608310003_references.sql`). 그래서 **새 id 를 먼저 정하고** 그 id 로
+ * 경로를 만든다. 원래 경로의 `{작업}` 칸 같은 것을 물려받는 규칙과 다르다.
+ */
+describe("copiedReferencePath", () => {
+  it("주인과 id 를 새 것으로, 확장자는 그대로", () => {
+    expect(copiedReferencePath("남/references/옛id.png", "나", "새id"))
+      .toEqual({ path: "나/references/새id.png", thumb: "나/references/새id.thumb.webp" });
+  });
+
+  it("확장자가 달라도 그대로 옮긴다", () => {
+    expect(copiedReferencePath("남/references/옛id.jpeg", "나", "새id")?.path)
+      .toBe("나/references/새id.jpeg");
+  });
+
+  it("규약을 벗어난 경로는 옮기지 않는다", () => {
+    // 확장자가 없으면 표의 검사를 못 지난다. 넣어 봐야 거절당한다.
+    expect(copiedReferencePath("남/references/옛id", "나", "새id")).toBeNull();
+    expect(copiedReferencePath("", "나", "새id")).toBeNull();
+    expect(copiedReferencePath("남/references/옛id.png", "", "새id")).toBeNull();
+    expect(copiedReferencePath("남/references/옛id.png", "나", "")).toBeNull();
+  });
+
+  it("위로 올라가는 칸이 든 경로는 옮기지 않는다", () => {
+    expect(copiedReferencePath("남/../references/옛id.png", "나", "새id")).toBeNull();
+  });
+});
+
+/**
+ * **복사본 id 는 늘 같다.**
+ *
+ * 01 을 누를 때마다 새로 복사하면 관리자 라이브러리에 같은 그림이 계속 쌓인다.
+ * 「원래 그림 + 복사한 사람」에서 id 를 만들면 두 번째부터는 이미 있는 복사본을
+ * 그대로 쓴다 — 표에 칸을 더하지 않고(마이그레이션 없이) 중복을 막는다.
+ */
+describe("adoptedReferenceId", () => {
+  it("같은 그림을 같은 사람이 복사하면 늘 같은 id 다", () => {
+    expect(adoptedReferenceId("원래", "관리자")).toBe(adoptedReferenceId("원래", "관리자"));
+  });
+
+  it("그림이나 사람이 다르면 다른 id 다", () => {
+    const base = adoptedReferenceId("원래", "관리자");
+    expect(adoptedReferenceId("다른그림", "관리자")).not.toBe(base);
+    expect(adoptedReferenceId("원래", "다른사람")).not.toBe(base);
+  });
+
+  it("uuid 모양이다 — 표의 id 칸과 경로 검사를 지난다", () => {
+    expect(adoptedReferenceId("원래", "관리자"))
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("원래 id 와 같아지지 않는다", () => {
+    // 같아지면 복사본이 원본 행과 부딪친다.
+    const original = "61d9bb82-d1e8-4f11-96c5-eac6766348f0";
+    expect(adoptedReferenceId(original, "관리자")).not.toBe(original);
+  });
+});
+
+/**
+ * **작업이 가리키는 그림만** 복사한다.
+ *
+ * 복사 주소는 화면이 보낸 id 를 안 받는다 — 받으면 관리자 권한으로 아무 회원의
+ * 아무 그림이나 복사하는 길이 열린다. 그래서 작업 기록에서 직접 뽑는다.
+ */
+describe("referenceIdsOfWork", () => {
+  it("이미지 작업은 네 목록과 차례를 다 본다", () => {
+    /*
+      차례만 보면 차례가 없던 옛 작업의 그림을 놓치고, 목록만 보면 차례에만
+      있는 그림을 놓친다. 앞뒤가 안 맞는 옛 행이 실제로 있다(09-07~09-08).
+    */
+    expect(referenceIdsOfWork("poster", {
+      referenceIds: ["a"], preservedIds: ["b"], personIds: ["b"], restyledIds: [],
+      attachmentOrder: ["b", "a", "c"],
+    }).sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("카드뉴스 작업은 첨부의 id 를 본다", () => {
+    expect(referenceIdsOfWork("sns", {
+      attachments: [{ id: "a1", kind: "style_reference" }, { id: "a2", kind: "keep_identity" }],
+    })).toEqual(["a1", "a2"]);
+  });
+
+  it("같은 id 는 한 번만", () => {
+    expect(referenceIdsOfWork("poster", { referenceIds: ["x"], preservedIds: ["x"], attachmentOrder: ["x"] }))
+      .toEqual(["x"]);
+  });
+
+  it("모양이 망가져도 넘어지지 않는다", () => {
+    expect(referenceIdsOfWork("poster", null)).toEqual([]);
+    expect(referenceIdsOfWork("poster", { referenceIds: "a" })).toEqual([]);
+    expect(referenceIdsOfWork("sns", { attachments: [null, { kind: "x" }, { id: 3 }] })).toEqual([]);
   });
 });

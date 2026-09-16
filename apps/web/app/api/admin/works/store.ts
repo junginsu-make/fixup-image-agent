@@ -2,7 +2,7 @@ import "server-only";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
-  copiedCharacterAssetPath, copiedLibraryAssetPath,
+  adoptedReferenceId, copiedCharacterAssetPath, copiedLibraryAssetPath, copiedReferencePath,
   posterCopyPlan, snsCopyPlan, type AssetMove,
 } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
@@ -370,7 +370,7 @@ const CHARACTER_BUCKET = "characters";
  */
 async function keepCopyPrivate(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  table: "library_items" | "characters" | "sns_projects" | "poster_projects",
+  table: "library_items" | "characters" | "sns_projects" | "poster_projects" | "reference_images",
   id: string,
 ): Promise<void> {
   const { error } = await admin.from(table).update({ team_id: null }).eq("id", id);
@@ -588,6 +588,108 @@ export async function copyLibraryWorkToSelf(
     await admin.from("library_items").delete().eq("id", newId);
     throw error;
   }
+}
+
+/** 복사해 온 참고 이미지 하나. 화면이 작업의 id 를 이것으로 바꿔 끼운다. */
+export interface AdoptedReferenceCopy {
+  from: string;
+  id: string;
+  storagePath: string;
+  url: string | null;
+}
+
+/**
+ * 다른 회원의 참고 이미지를 **내 라이브러리로 복사한다.**
+ *
+ * 관리자가 다른 회원의 작업을 다시 만들면 02 가 비었다 — 붙였던 그림이 그
+ * 회원 것이라 관리자 목록에 없었다(2026-09-16 운영 데이터로 확인). 관리자는
+ * 모든 작업이 작동해야 하므로(사용자 결정) 그림을 복사해 온다. **원래 회원의
+ * 그림은 읽기만 한다.**
+ *
+ * **같은 그림은 한 번만 복사한다.** 복사본 id 가 「원래 그림 + 복사한 사람」에서
+ * 정해지므로(`adoptedReferenceId`), 01 을 여러 번 눌러도 이미 있는 복사본을
+ * 그대로 쓴다. 안 그러면 관리자 라이브러리에 같은 그림이 계속 쌓인다.
+ *
+ * **이미 내 것이면 복사하지 않는다.** 그대로 돌려준다.
+ *
+ * **파일을 다 옮긴 뒤에만 행을 적는다.** 원본을 못 읽었으면 그 장은 빼고
+ * 넘어간다 — 라이브러리에서 이미 지워진 그림이 실제로 있다. 빠진 장은 화면이
+ * 「가져오지 못했습니다」로 센다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function copyReferencesToSelf(
+  ids: readonly string[],
+  ownerUserId: string,
+): Promise<AdoptedReferenceCopy[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return [];
+  const admin = createSupabaseAdminClient();
+
+  const { data: sourceRows, error: readError } = await admin
+    .from("reference_images")
+    .select("id,user_id,storage_path,thumb_path,title,purpose,width,height")
+    .in("id", unique);
+  if (readError) throw new Error(readError.message);
+
+  const results: Array<{ from: string; id: string; storagePath: string }> = [];
+  for (const row of (sourceRows ?? []) as Array<{
+    id: string; user_id: string; storage_path: string; thumb_path: string | null;
+    title: string | null; purpose: string; width: number | null; height: number | null;
+  }>) {
+    if (row.user_id === ownerUserId) {
+      results.push({ from: row.id, id: row.id, storagePath: row.storage_path });
+      continue;
+    }
+
+    const newId = adoptedReferenceId(row.id, ownerUserId);
+    const target = copiedReferencePath(row.storage_path, ownerUserId, newId);
+    if (!target) continue;
+
+    // 이미 복사한 적이 있으면 그대로 쓴다.
+    const { data: existing } = await admin
+      .from("reference_images").select("id,storage_path").eq("id", newId).maybeSingle();
+    if (existing) {
+      results.push({ from: row.id, id: newId, storagePath: (existing as { storage_path: string }).storage_path });
+      continue;
+    }
+
+    const moves: AssetMove[] = [{ from: row.storage_path, to: target.path }];
+    if (row.thumb_path) moves.push({ from: row.thumb_path, to: target.thumb });
+    const moved = await moveAssets(admin, moves, BUCKET);
+    // 원본을 못 옮겼으면 그 장은 뺀다. 사본만 실패한 것은 살린다.
+    if (!moved.has(target.path)) continue;
+
+    const { error: insertError } = await admin.from("reference_images").insert({
+      id: newId,
+      user_id: ownerUserId,
+      storage_path: target.path,
+      thumb_path: moved.has(target.thumb) ? target.thumb : null,
+      title: row.title,
+      purpose: row.purpose,
+      width: row.width,
+      height: row.height,
+    });
+    if (insertError) {
+      // 행을 못 적었으면 올린 파일을 치운다. 안 치우면 아무도 못 찾는 파일이 남는다.
+      await admin.storage.from(BUCKET).remove([...moved]);
+      console.error(`[admin-copy] 참고 이미지 행을 못 적었습니다(${row.id}): ${insertError.message}`);
+      continue;
+    }
+    await keepCopyPrivate(admin, "reference_images", newId);
+    results.push({ from: row.id, id: newId, storagePath: target.path });
+  }
+
+  if (!results.length) return [];
+  const { data: signed } = await admin.storage
+    .from(BUCKET)
+    .createSignedUrls(results.map((entry) => entry.storagePath), SIGNED_URL_TTL_SECONDS);
+  const urlByPath = new Map(
+    ((signed ?? []) as Array<{ path: string | null; signedUrl: string | null }>)
+      .filter((entry) => entry.path && entry.signedUrl)
+      .map((entry) => [entry.path as string, entry.signedUrl as string]),
+  );
+  return results.map((entry) => ({ ...entry, url: urlByPath.get(entry.storagePath) ?? null }));
 }
 
 export async function copyCharacterToSelf(

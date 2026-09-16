@@ -121,17 +121,48 @@ function sourceOf(source: StoredSource | null | undefined): SourceDraft {
   return { kind: "text", text };
 }
 
-export function snsSeed(project: SourceProject, mine: boolean): SnsSeed {
+/** 관리자 라이브러리로 복사해 온 첨부 하나. */
+export interface AdoptedAttachment {
+  from: string;
+  id: string;
+  storagePath: string;
+  url: string | null;
+}
+
+export function snsSeed(
+  project: SourceProject,
+  mine: boolean,
+  /**
+   * **남의 작업일 때만** 쓴다. 관리자는 모든 회원의 작업을 다시 만들 수 있어야
+   * 하므로(2026-09-16 사용자 결정) 첨부를 관리자 라이브러리로 복사해 오고, 그
+   * 복사본으로 바꿔 싣는다. 복사 못 한 것만 빠진 수로 센다.
+   */
+  adopted: readonly AdoptedAttachment[] = [],
+): SnsSeed {
   const data = project.data ?? {};
   const attachments = Array.isArray(data.attachments) ? data.attachments : [];
   const intents = data.attachmentIntents ?? {};
+  /*
+    남의 첨부는 **복사본으로 바꿔서만** 싣는다. 원래 경로의 첫 칸이 그 회원
+    id 라, 그대로 실으면 남의 파일을 가리키는 내 작업이 된다. 역할·자리 같은
+    나머지 칸은 원래 것을 지킨다.
+  */
+  const copies = new Map(adopted.map((entry) => [entry.from, entry]));
+  const usable = mine
+    ? attachments
+    : attachments.flatMap((attachment) => {
+        const copy = copies.get(attachment.id);
+        return copy
+          ? [{ ...attachment, id: copy.id, assetPath: copy.storagePath, url: copy.url ?? attachment.url }]
+          : [];
+      });
 
   return {
     title: project.title ?? "",
     toneNote: project.toneNote ?? "",
     source: sourceOf(data.source),
-    attachments: mine ? attachments : [],
-    droppedAttachments: mine ? 0 : attachments.length,
+    attachments: usable,
+    droppedAttachments: attachments.length - usable.length,
     intents: {
       cover: intents.cover ?? "",
       body: intents.body ?? "",
