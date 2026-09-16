@@ -423,9 +423,11 @@ describe("기획에 드는 값", () => {
    * 나뉘어 있는지를 여기서 지킨다.
    */
   it("따라 만들기와 지킬 사람을 따로 넘긴다", () => {
-    expect(호출).toContain("styleCount: styleIds.length,");
-    expect(호출).toContain("personCount: personIds.length,");
+    expect(호출).toContain("planCostCounts(");
     expect(호출).not.toContain("referenceCount");
+    // 무엇을 세는지는 plan-cost 가 정한다. 여기서 세면 그 판단이 또 안 재어진다.
+    expect(호출).not.toContain("styleIds.length");
+    expect(호출).not.toContain("preservedIds.length");
   });
 
   /** 「그대로 생성」이면 기획이 안 돈다. 그 갈래를 안 넘기면 늘 든다고 말한다. */

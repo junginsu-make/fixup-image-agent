@@ -22,7 +22,7 @@ import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { looksFinished, type PromptMode } from "./prompt-mode";
-import { planCostNote } from "./plan-cost";
+import { planCostCounts, planCostNote } from "./plan-cost";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
   adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
@@ -785,9 +785,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 */}
                 <span className="mt-1 block text-meta text-subtle-foreground">
                   위는 그림 값입니다. {planCostNote({
-                    // 기획이 실제로 읽는 것만 센다. 제품 보존 사진은 아무도 안 읽는다.
-                    styleCount: styleIds.length,
-                    personCount: personIds.length,
+                    // 무엇을 세는지는 `plan-cost` 가 정한다. 여기서 정하면 시험이 못 간다.
+                    ...planCostCounts(orderedIds.map((id) => roles[id] ?? "none")),
                     promptMode,
                     projects,
                   })}

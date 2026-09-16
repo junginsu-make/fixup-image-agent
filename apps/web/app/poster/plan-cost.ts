@@ -1,4 +1,4 @@
-import { creditUnits, llmCostUsd } from "@fixup/shared";
+import { creditUnits, llmCostUsd, withJosa } from "@fixup/shared";
 import type { PromptMode } from "./prompt-mode";
 
 /**
@@ -33,6 +33,30 @@ export interface PlanCostInput {
   promptMode?: PromptMode;
   /** 광고 모드는 규격마다 작업이 따로 생기고 기획도 그만큼 돈다. */
   projects?: number;
+}
+
+/**
+ * 붙인 그림의 **역할**에서 셈할 칸 둘을 뽑는다.
+ *
+ * **이 판단이 `.tsx` 안에 있으면 시험이 못 간다.** 실제로 그래서 「제품 보존을
+ * 세느냐」가 값 시험을 다 통과한 채로 틀려 있었다(2026-09-16). 화면이 무엇을
+ * 세는지가 이 함수 하나로 모이고, 그 하나를 값으로 잰다.
+ *
+ * 라우트가 읽는 것과 짝이 맞아야 한다.
+ *   · `style`                    → `readReferenceGrammar` (레이아웃 문법)
+ *   · `preserve_person(_restyled)` → `readPeople` (인물 묘사)
+ *   · 나머지(`preserve_product`·`place_as_is`) → **아무도 안 읽는다**
+ */
+export function planCostCounts(roles: readonly string[]): {
+  styleCount: number;
+  personCount: number;
+} {
+  return {
+    styleCount: roles.filter((role) => role === "style").length,
+    personCount: roles.filter(
+      (role) => role === "preserve_person" || role === "preserve_person_restyled",
+    ).length,
+  };
 }
 
 /**
@@ -87,5 +111,7 @@ export function planCostNote(input: PlanCostInput): string {
   if (input.promptMode === "verbatim") {
     return "기획을 안 돌려서 기획 값이 안 듭니다.";
   }
-  return `기획에 약 $${planCostUsd(input).toFixed(3)}(${planCostUnits(input)}장)가 더 듭니다.`;
+  // 「장」은 받침이 있어 「이」다. 앞말이 바뀌어도 안 틀리게 저장소 함수를 쓴다.
+  const 장 = `${planCostUnits(input)}장`;
+  return `기획에 약 $${planCostUsd(input).toFixed(3)}(${withJosa(장, "이가")}) 더 듭니다.`;
 }

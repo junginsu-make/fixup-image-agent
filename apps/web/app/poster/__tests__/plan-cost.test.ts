@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
-import { planCostUsd, planCostUnits, planCostNote } from "../plan-cost";
+import { planCostCounts, planCostUsd, planCostUnits, planCostNote } from "../plan-cost";
 
 /**
  * **「그대로 생성」은 기획 LLM 값이 안 든다.**
@@ -39,16 +39,39 @@ describe("기획에 드는 값", () => {
    * 라우트는 $0.024 만 예약했다 — 42% 과대(2026-09-16 리뷰). 화면이 값을
    * **비싸게** 말하면 「그대로 생성」 쪽으로 잘못 몰게 된다.
    *
-   * 칸이 `styleCount`·`personCount` 둘로 나뉘어 있어야 제품 보존이 셈에서
-   * 빠진다. 하나로 도로 합치면 이 시험이 빨개진다.
+   * **역할 목록을 그대로 넣어 잰다.** 처음에는 `styleCount` 를 직접 넘겨
+   * 견줬는데 두 호출의 인자가 같아 항등식이었다 — 무엇을 세는지가 틀려도 안
+   * 빨개졌다(2026-09-16 재검토). 화면이 실제로 부르는 `planCostCounts` 를
+   * 거쳐야 그 판단이 재어진다.
    */
   it("제품 보존을 더해도 값이 안 오른다", () => {
-    // 화면에서 제품 보존을 한 장 더 붙여도 두 칸 중 어느 쪽도 안 는다.
-    const 붙이기전 = planCostUsd({ styleCount: 1, personCount: 0 });
-    const 붙인뒤 = planCostUsd({ styleCount: 1, personCount: 0 });
+    const 따라만들기만 = planCostUsd(planCostCounts(["style"]));
+    const 제품보존을더함 = planCostUsd(planCostCounts(["style", "preserve_product"]));
 
-    expect(붙인뒤).toBeCloseTo(붙이기전, 4);
-    expect(붙이기전).toBeCloseTo(0.024, 4);
+    expect(제품보존을더함).toBeCloseTo(따라만들기만, 4);
+    expect(따라만들기만).toBeCloseTo(0.024, 4);
+  });
+
+  /** 원본 그대로 넣는 그림도 모델을 안 거친다. 읽을 것이 없다. */
+  it("원본 그대로 넣기도 값이 안 붙는다", () => {
+    expect(planCostUsd(planCostCounts(["style", "place_as_is"]))).toBeCloseTo(0.024, 4);
+  });
+
+  /**
+   * **지킬 사람은 두 역할이다.** 「그림 느낌만」 쪽을 빠뜨리면 실제보다 싸게
+   * 말한다 — 라우트는 `personIds` 에 둘 다 넣는다(`new-client.tsx`).
+   */
+  it("사람 지키기 두 역할을 모두 센다", () => {
+    const 둘다 = planCostCounts(["preserve_person", "preserve_person_restyled"]);
+
+    expect(둘다.personCount).toBe(2);
+    expect(둘다.styleCount).toBe(0);
+    expect(planCostUsd(둘다)).toBeCloseTo(0.034, 4);
+  });
+
+  /** 아무 역할도 안 준 그림은 안 붙는다. */
+  it("역할 없는 그림은 안 센다", () => {
+    expect(planCostCounts(["none", "none"])).toEqual({ styleCount: 0, personCount: 0 });
   });
 
   /** 쓴 그대로면 기획이 아예 안 돈다. */
@@ -160,6 +183,14 @@ describe("화면에 할 말", () => {
 
     expect(note).toContain("0.014");
     expect(note).toContain("1장");
+  });
+
+  /** 「장」은 받침이 있어 「이」다. 「1장가」로 나가면 안 된다. */
+  it("조사가 맞다", () => {
+    const note = planCostNote({ styleCount: 0, personCount: 0, promptMode: "assisted" });
+
+    expect(note).toContain("1장이");
+    expect(note).not.toContain("장가");
   });
 
   it("첨부가 있으면 그 몫까지 더해 적는다", () => {
