@@ -22,6 +22,7 @@ import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { looksFinished, type PromptMode } from "./prompt-mode";
+import { planCostNote } from "./plan-cost";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
   adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
@@ -777,6 +778,18 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                   ? ` · 그림 ${adPlan.masters.length}장 × 변형 ${variants}장 = ${adPlan.masters.length * variants}장`
                   : ` · ${variants}장`}
                 {estimate.approximate ? " (공표 가격표에 없는 크기라 넉넉히 잡은 값입니다)" : ""}
+                {/*
+                  **기획 값은 여기 안 들어 있다.** 기획은 따로 돌고 따로 차감된다
+                  (`plan/route.ts`). 「그대로 생성」은 그것이 아예 안 도는데,
+                  화면이 안 말하면 두 갈래를 견줄 수 없었다(설계 §9).
+                */}
+                <span className="mt-1 block text-meta text-subtle-foreground">
+                  위는 그림 값입니다. {planCostNote({
+                    referenceCount,
+                    promptMode,
+                    projects,
+                  })}
+                </span>
               </p>
             )
             )}

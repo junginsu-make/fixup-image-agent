@@ -384,3 +384,28 @@ describe("상세페이지 그림체", () => {
     expect(pdp).toContain('lookBlockedReason("auto", hasStyleReference)');
   });
 });
+
+/**
+ * **기획 값을 화면이 말하는가.**
+ *
+ * 03 의 「예상 비용」은 그림 값만이다. 기획은 따로 돌고 따로 차감되는데
+ * (`plan/route.ts`) 화면이 한 줄도 안 했다. 「그대로 생성」은 그것이 아예 안
+ * 도는데 그 사실을 모르면 두 갈래를 견줄 수 없다(설계 §9).
+ */
+describe("기획에 드는 값", () => {
+  it("규격 칸에서 말한다", () => {
+    expect(source).toContain("planCostNote({");
+    expect(source).toContain("위는 그림 값입니다");
+  });
+
+  /** 규칙을 화면에 다시 적으면 실제 차감액과 갈린다. */
+  it("계산을 여기 다시 적지 않는다", () => {
+    expect(source).toContain('from "./plan-cost"');
+    expect(source).not.toContain("LLM_PLAN_USD");
+  });
+
+  /** 광고 모드는 규격마다 작업이 생기고 기획도 그만큼 돈다. */
+  it("작업 수를 함께 넘긴다", () => {
+    expect(source).toMatch(/planCostNote\(\{[\s\S]{0,120}projects,/);
+  });
+});
