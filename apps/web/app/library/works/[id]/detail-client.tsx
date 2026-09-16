@@ -41,7 +41,7 @@ export function WorkDetailClient({ workId }: { workId: string }) {
     let alive = true;
     void (async () => {
       try {
-        const response = await fetch(`/api/library/${workId}`, { cache: "no-store" });
+        const response = await fetch(`/api/library/${encodeURIComponent(workId)}`, { cache: "no-store" });
         const body = await response.json().catch(() => null);
         if (!alive) return;
         if (body?.ok && body.work) {
@@ -53,7 +53,7 @@ export function WorkDetailClient({ workId }: { workId: string }) {
           관리자에게는 별도 통로가 있으므로 한 번 더 묻는다.
         */
         if (response.status === 404) {
-          const admin = await fetch(`/api/admin/works/library/${workId}`, { cache: "no-store" });
+          const admin = await fetch(`/api/admin/works/library/${encodeURIComponent(workId)}`, { cache: "no-store" });
           const seen = await admin.json().catch(() => null);
           if (!alive) return;
           if (seen?.ok && seen.work) {
@@ -73,11 +73,11 @@ export function WorkDetailClient({ workId }: { workId: string }) {
   const copyToSelf = React.useCallback(async () => {
     setCopying(true);
     try {
-      const body = await (await fetch(`/api/admin/works/library/${workId}/copy`, {
+      const body = await (await fetch(`/api/admin/works/library/${encodeURIComponent(workId)}/copy`, {
         method: "POST",
       })).json() as { ok?: boolean; id?: string; message?: string };
       if (!body.ok || !body.id) throw new Error(body.message ?? "복사하지 못했습니다.");
-      router.push(`/library/works/${body.id}`);
+      router.push(`/library/works/${encodeURIComponent(body.id)}`);
     } catch (cause) {
       window.alert(cause instanceof Error ? cause.message : "복사하지 못했습니다.");
     } finally {

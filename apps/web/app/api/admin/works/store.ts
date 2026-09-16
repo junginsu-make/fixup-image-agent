@@ -342,6 +342,34 @@ const CHARACTER_BUCKET = "characters";
  * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
  */
 /**
+ * 복사본을 **팀에서 떼어 낸다.**
+ *
+ * 이 표들에는 `stamp_team` 트리거가 걸려 있어(`202609070004_team_stamp.sql`),
+ * 넣을 때 팀을 안 적으면 **행 주인의 팀**을 찾아 찍는다. 그러면 관리자가
+ * 회원 A 의 작업을 복사하는 순간 관리자가 속한 팀 전원이 A 의 기획안 전문과
+ * 결과 그림을 자기 팀 작업물로 보게 된다 — A 는 그런 일이 있었는지도 모른다.
+ * 출시 전 상업용 기획물이라 무게가 다르다.
+ *
+ * **넣을 때 `team_id: null` 을 적는 것으로는 안 된다.** 트리거의 관문이
+ * `if new.team_id is not null then return new` 라서, 명시한 `null` 은
+ * 「안 정했다」와 구분되지 않는다. 그래서 **넣은 직후에 지운다.**
+ *
+ * 그림을 다 옮긴 뒤로 미루지 않는다. 한 작업에 스무 장이면 몇 초인데, 그
+ * 동안 내내 팀에 열려 있다 — 짧다고 없는 것이 아니다.
+ *
+ * 못 지우면 **던진다.** 조용히 넘어가면 팀에 열린 채로 남는데, 그 사실은
+ * 아무 화면에도 안 나타난다.
+ */
+async function keepCopyPrivate(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  table: "library_items" | "characters" | "sns_projects" | "poster_projects",
+  id: string,
+): Promise<void> {
+  const { error } = await admin.from(table).update({ team_id: null }).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * 계정 보관 작업(상세페이지·리디자인) 한 건을 **소유자와 무관하게** 읽는다.
  *
  * 회원용 길(`lib/server-library.ts` 의 `getLibraryItem`)은 `canSeeItem` 을
@@ -452,6 +480,7 @@ export async function copyLibraryWorkToSelf(
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
 
   const newId = created.id as string;
+  await keepCopyPrivate(admin, "library_items", newId);
 
   // 2) 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
   const { data: imageRows } = await admin
@@ -525,6 +554,7 @@ export async function copyCharacterToSelf(
     })
     .select("id").single();
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+  await keepCopyPrivate(admin, "characters", created.id as string);
 
   // 2) 각도 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
   const { data: views } = await admin.from("character_views")
@@ -586,6 +616,7 @@ export async function copyWorkToSelf(
       data: blank.data,
       slotPlan: from.slotPlan,
     } as SnsProjectCreateRecord);
+    await keepCopyPrivate(admin, "sns_projects", created.id);
 
     // 2) 그림을 옮기고 3) 바뀐 경로를 적는다.
     const plan = snsCopyPlan(
@@ -616,6 +647,7 @@ export async function copyWorkToSelf(
     }))
     .select("id").single();
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+  await keepCopyPrivate(admin, "poster_projects", created.id as string);
 
   const { data: images } = await admin.from("poster_images")
     .select("variant_index,selected,width,height,review,asset_path,thumb_path")

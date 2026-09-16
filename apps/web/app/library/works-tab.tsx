@@ -213,7 +213,7 @@ async function readLibraryWorks(allMembers: boolean) {
  */
 async function readWorkImages(work: LibraryWork | { id: string; title: string }) {
   try {
-    const body = await (await fetch(`/api/library?id=${work.id}`, { cache: "no-store" })).json();
+    const body = await (await fetch(`/api/library?id=${encodeURIComponent(work.id)}`, { cache: "no-store" })).json();
     if (!body?.ok) return [];
     const rows = (body.images ?? []) as Array<{ url?: string | null; position: number }>;
     return rows
@@ -234,6 +234,14 @@ export function WorksTab() {
   const [message, setMessage] = React.useState("");
   const [confirming, setConfirming] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  /**
+   * 지금 여는 중인 작업.
+   *
+   * 계정 보관 작업은 낱장을 **누를 때** 받아 오므로 사이에 틈이 생긴다. 그
+   * 틈에 한 번 더 누르면 같은 것을 두 번 받아 창이 두 번 열린다 — 아무 반응이
+   * 없으니 사용자는 한 번 더 누르게 된다.
+   */
+  const [opening, setOpening] = React.useState<string | null>(null);
   /**
    * 첫 화면에 걸린 것들. **null 이면 관리자가 아니다.**
    *
@@ -277,7 +285,17 @@ export function WorksTab() {
       스무 장씩, 화면 한 번에 수십 MB 가 오간다 — 사용자가 「끊긴다」고 말한
       그 증상이다. 서명 주소는 수명이 있어 어차피 그때그때 받아야 한다.
     */
-    const images = work.images.length ? work.images : await readWorkImages(work);
+    if (opening) return;
+
+    let images = work.images;
+    if (!images.length) {
+      setOpening(work.id);
+      try {
+        images = await readWorkImages(work);
+      } finally {
+        setOpening(null);
+      }
+    }
     if (!images.length) {
       setNotice("이 작업에는 볼 수 있는 그림이 없습니다.");
       return;
@@ -571,6 +589,7 @@ export function WorksTab() {
                   ? <Badge>첫 화면</Badge>
                   : null}
                 {allMembers && !work.mine ? <Badge variant="secondary">{work.ownerEmail ?? "다른 회원"}</Badge> : null}
+                {opening === work.id ? <Badge variant="secondary">여는 중…</Badge> : null}
                 <Badge variant={(STATUS[work.status] ?? { tone: "secondary" as const }).tone}>
                   {(STATUS[work.status] ?? { label: work.status }).label}
                 </Badge>

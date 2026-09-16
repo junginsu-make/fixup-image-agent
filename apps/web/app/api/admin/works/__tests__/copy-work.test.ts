@@ -52,9 +52,15 @@ function builderFor(table: string) {
     */
     then: (resolve: (x: unknown) => unknown) =>
       Promise.resolve(resolve({
-        data: updatedRows
-          ? [{ id: "새작업" }]
-          : table === "poster_images" ? imageRows : [],
+        /*
+          **표를 먼저 본다.** 전에는 「한 번이라도 update 했으면 갱신된 줄」로
+          답했는데, 그 깃발은 표를 안 가린다 — 복사가 프로젝트를 먼저 고치면
+          그 뒤의 `poster_images` 조회까지 갱신된 줄을 받아 그림이 통째로
+          사라졌다. 실제 DB 는 표마다 따로 답한다.
+        */
+        data: table === "poster_images"
+          ? imageRows
+          : updatedRows ? [{ id: "새작업" }] : [],
         error: null,
       })),
   };

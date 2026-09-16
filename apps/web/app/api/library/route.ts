@@ -59,10 +59,13 @@ export async function GET(req: Request) {
     }
     return Response.json({ ok: true, items: await listLibraryItems(viewer) });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "라이브러리를 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
+      그대로 나간다(`security.md`). 형제 라우트(`[id]/route.ts`)는 이미 이렇게
+      한다 — 한쪽만 막혀 있으면 막은 줄 알고 넘어가게 된다.
+    */
+    console.error("[library:list]", error);
+    return Response.json({ ok: false, message: "라이브러리를 불러오지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -127,10 +130,13 @@ export async function POST(req: Request) {
       ? Response.json(result)
       : Response.json(result, { status: 500 });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "저장하지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
+      그대로 나간다(`security.md`). 형제 라우트(`[id]/route.ts`)는 이미 이렇게
+      한다 — 한쪽만 막혀 있으면 막은 줄 알고 넘어가게 된다.
+    */
+    console.error("[library:save]", error);
+    return Response.json({ ok: false, message: "저장하지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -148,9 +154,12 @@ export async function DELETE(req: Request) {
     const status = result.ok ? 200 : ("denied" in result && result.denied ? 403 : 500);
     return Response.json(result, { status });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "삭제하지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
+      그대로 나간다(`security.md`). 형제 라우트(`[id]/route.ts`)는 이미 이렇게
+      한다 — 한쪽만 막혀 있으면 막은 줄 알고 넘어가게 된다.
+    */
+    console.error("[library:delete]", error);
+    return Response.json({ ok: false, message: "삭제하지 못했습니다." }, { status: 500 });
   }
 }

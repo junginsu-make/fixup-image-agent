@@ -221,7 +221,14 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
       })();
 
   if (!item.id) {
-    return { ok: false as const, message: ("error" in item && item.error) || "저장하지 못했습니다." };
+    /*
+      **PostgREST 문구를 그대로 올려 보내지 않는다.** 라우트가 이 값을
+      `result.ok === false` 경로로 그대로 화면에 싣는다 — 라우트의 `catch` 만
+      막으면 이 길로 샌다. 칼럼이 없을 때의 `PGRST204` 가 표·칼럼 이름을
+      통째로 들고 나가는 것이 그 예다.
+    */
+    if ("error" in item && item.error) console.error("[library:create]", item.error);
+    return { ok: false as const, message: "저장하지 못했습니다." };
   }
 
   const uploaded: string[] = [];
