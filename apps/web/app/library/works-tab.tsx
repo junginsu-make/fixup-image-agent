@@ -3,11 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { modelDisplayName } from "../../lib/model-name";
-import { Loader2, Trash2 } from "lucide-react";
+import { ListOrdered, Loader2, Trash2 } from "lucide-react";
 import { openImageGallery } from "../_components/image-viewer";
-import { DELETE_CORNER_BUTTON } from "../_components/delete-work-button";
+import { CORNER_BUTTON, DELETE_CORNER_BUTTON } from "../_components/delete-work-button";
 import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
 import { coverOf } from "./works-cover";
+import { canOpenSteps } from "./work-steps";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -441,6 +442,26 @@ export function WorksTab() {
                 }}
                 className={cn(DELETE_CORNER_BUTTON, "disabled:opacity-50")}
               ><Trash2 className="size-3.5" /></button>
+            ) : null}
+            {/* 「과정 보기」 — 카드 본문 클릭은 그대로 그림 뷰어를 연다.
+
+                완성된 작업은 그림이 있어 언제나 뷰어가 열렸고, 단계별 화면으로
+                가는 길이 거기 가려져 있었다(위 `onClick` 이 「그림이 있으면
+                뷰어, 없으면 이동」이다). 쓰던 동작을 뺏지 않고 길만 따로 낸다.
+
+                지우기의 반대편에 둔다. 같은 편에 두면 여는 것과 지우는 것이
+                나란히 서서 잘못 누른다. */}
+            {canOpenSteps(work, isAdmin) ? (
+              <button
+                type="button"
+                aria-label={`${work.title} 과정 보기`}
+                onClick={(event) => {
+                  // 카드를 누른 것으로도 읽히면 뷰어와 이동이 함께 일어난다.
+                  event.stopPropagation();
+                  router.push(work.href);
+                }}
+                className={cn(CORNER_BUTTON, "left-1.5 hover:text-foreground")}
+              ><ListOrdered className="size-3.5" /></button>
             ) : null}
             {/* 칸은 참고 이미지와 같은 정사각형, 그림은 잘라 내지 않는다.
                 비율이 제각각이라 잘라 놓으면 무엇을 만들었는지 모른다. */}

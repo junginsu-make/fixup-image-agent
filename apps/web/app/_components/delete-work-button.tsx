@@ -14,9 +14,19 @@ import {
  * 작업물은 자기 확인 창이 따로 있어(누가 만든 것인지까지 말해야 한다) 단추만
  * 가져다 쓴다. 생김새가 두 곳에 갈려 있으면 한쪽만 고치는 날이 온다.
  */
+export const CORNER_BUTTON =
+  "absolute top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md " +
+  "bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)]";
+
+/**
+ * 지우기 단추의 모양 — 공통 모양에 **빨간 hover 만** 더한다.
+ *
+ * 나눠 둔 이유는 모서리에 서는 단추가 지우기뿐이 아니게 됐기 때문이다.
+ * 통째로 가져다 쓰면 「과정 보기」 같은 단추도 누를 때 빨개져 **지우는 것으로
+ * 읽힌다.** 자리(`right-1.5`)도 여기서 정한다 — 다른 단추는 반대편에 선다.
+ */
 export const DELETE_CORNER_BUTTON =
-  "absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded-md " +
-  "bg-background/90 text-subtle-foreground shadow-[var(--shadow-ring)] hover:text-destructive";
+  `${CORNER_BUTTON} right-1.5 hover:text-destructive`;
 
 /**
  * 만든 것을 지우는 버튼.

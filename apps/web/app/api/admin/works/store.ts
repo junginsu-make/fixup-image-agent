@@ -1,16 +1,23 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
+import { posterCopyPlan, snsCopyPlan, type AssetMove } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
-import { createSupabaseSnsProjectRepository } from "../../sns/projects/project-store";
+import {
+  createSupabaseSnsProjectRepository, record as toSnsRecord,
+  type ProjectRow as SnsProjectRow,
+} from "../../sns/projects/project-store";
 import { collectCardPaths, withCardUrls } from "../../../../lib/sns/list-urls";
 import {
   posterAssetPathsToRemove,
+  projectInsertRow,
   toImageRecord,
-  toProjectRecord,
+  toProjectRecord as toPosterRecord,
   type PosterImageRow,
   type PosterProjectRow,
 } from "../../../../lib/poster/supabase-store-core";
+import type { PosterProjectRecord } from "@fixup/poster-core";
+import type { SnsProjectCreateRecord, SnsProjectRecord } from "../../sns/projects/project-service";
 import { ownerIdsOf, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 
@@ -84,7 +91,7 @@ async function listAllPosterProjects() {
   // 회원용 변환은 `user_id` 를 떨어뜨린다 — 자기 것만 보던 화면에는 필요가
   // 없었다. 여기서는 누구 것인지가 요점이라 줄에서 직접 가져와 되붙인다.
   const projects = ((projectRows ?? []) as PosterProjectRow[]).map((row) => ({
-    ...toProjectRecord(row),
+    ...toPosterRecord(row),
     userId: row.user_id,
   }));
   if (!projects.length) return [];
@@ -137,6 +144,211 @@ export async function listAllWorks(viewerId: string) {
  *
  * 없는 것을 지우라고 하면 `false` 를 준다 — 두 번 눌러도 오류가 아니다.
  */
+/**
+ * 작업 한 건을 **소유자와 무관하게** 읽는다.
+ *
+ * 목록(`listAllWorks`)과 같은 방식이다 — 서비스 키라 RLS 를 지나지 않는다.
+ * 회원용 길(`snsFlowStoreForUser`·`posterStoresForUser`)에 관리자 조건을
+ * 심지 않는 이유는 `deleteAnyWork` 와 같다.
+ *
+ * **없으면 `null` 이다. 던지지 않는다** — 부르는 쪽이 404 로 답해야 하는데
+ * 예외로 던지면 500 이 된다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function readAnyWork(
+  kind: "sns" | "poster",
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  const table = kind === "sns" ? "sns_projects" : "poster_projects";
+  const { data, error } = await createSupabaseAdminClient()
+    .from(table).select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  /*
+    **화면이 쓰는 모양으로 바꿔서 준다.** 행을 그대로 주면 `userId`·`modelId`
+    가 `undefined` 라 화면이 빈다.
+
+    바꾸는 규칙을 여기서 새로 적지 않는다 — 회원용 경로가 쓰는 그 함수를
+    그대로 부른다. 따로 적으면 칸 하나가 갈리는 날이 오고, 그때 조용히
+    사라지는 것이 `record()` 주석이 말하는 그 일이다.
+  */
+  return kind === "sns"
+    ? toSnsRecord(data as SnsProjectRow) as unknown as Record<string, unknown>
+    : toPosterRecord(data as PosterProjectRow) as unknown as Record<string, unknown>;
+}
+
+/** 확장자에서 형식을 읽는다. 복사에 나오는 것은 png·webp·jpg 셋뿐이다. */
+function contentTypeOf(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  return "image/png";
+}
+
+/**
+ * 파일들을 새 자리로 옮긴다. **원본은 읽기만 한다.**
+ *
+ * 한 장이 실패해도 나머지는 옮긴다 — 한 장 때문에 복사 전체를 무르면 이미
+ * 만든 행과 올린 파일을 되감아야 하고, 그 되감기가 또 실패할 수 있다.
+ * 못 옮긴 장은 화면에서 빈 칸으로 보인다.
+ */
+async function moveAssets(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  moves: AssetMove[],
+): Promise<void> {
+  for (const move of moves) {
+    const file = await admin.storage.from(BUCKET).download(move.from);
+    if (file.error || !file.data) {
+      // 한 줄 남긴다. 조용히 걸러지면 그림이 왜 비었는지 알 길이 없다.
+      console.error(`[admin-copy] 원본을 못 읽었습니다(${move.from}): ${file.error?.message ?? "알 수 없음"}`);
+      continue;
+    }
+    const bytes = Buffer.from(await file.data.arrayBuffer());
+    /*
+      **`contentType` 을 반드시 준다.** 안 주면 supabase-js 가 Buffer 본문에
+      `text/plain` 을 붙인다 — 저장된 형식이 틀리면 내려받기·CDN·`nosniff`
+      에서 갈린다. 이 저장소의 다른 업로드 자리는 전부 준다.
+    */
+    const uploaded = await admin.storage.from(BUCKET)
+      .upload(move.to, bytes, { contentType: contentTypeOf(move.to), upsert: true });
+    if (uploaded.error) {
+      console.error(`[admin-copy] 새 자리에 못 올렸습니다(${move.to}): ${uploaded.error.message}`);
+    }
+  }
+}
+
+/**
+ * 남의 작업을 **내 것으로 복사한다.**
+ *
+ * 고치는 대신 복사하는 이유 — 쓰기 경로를 안 넓혀도 되기 때문이다. 그 방어선은
+ * 「팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에 실제 요청이
+ * 나간 뒤 결과만 어디에도 안 남았다」는 사고를 겪고 세운 것이다
+ * (`lib/sns-flow-store.ts` 머리말).
+ *
+ * **소유자는 부르는 쪽이 준 값만 쓴다.** 원본 행의 `user_id` 는 버린다.
+ *
+ * 순서가 중요하다 — **행을 먼저** 만들어야 새 작업 id 가 나오고, 그래야 그림을
+ * 어디에 둘지 정할 수 있다.
+ *
+ * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
+ */
+export async function copyWorkToSelf(
+  kind: "sns" | "poster",
+  id: string,
+  ownerUserId: string,
+): Promise<{ id: string }> {
+  const admin = createSupabaseAdminClient();
+  const source = await readAnyWork(kind, id);
+  if (!source) throw new Error("원본을 찾을 수 없습니다.");
+
+  if (kind === "sns") {
+    const from = source as unknown as SnsProjectRecord;
+    /*
+      1) 행을 먼저. 그림 자리는 새 작업 id 가 있어야 정해진다.
+
+      **경로를 비운 채로 만든다.** 원본 경로를 실어 두고 나중에 고치면, 그
+      사이에 무엇이든 실패했을 때 **남의 파일을 가리키는 내 작업**이 남는다 —
+      설계가 막겠다고 적은 바로 그 깨짐이다(소유 판정 어긋남, 원래 회원이
+      지우면 같이 사라짐). 빈 경로로 두면 최악이 「그림 없는 내 작업」이다.
+    */
+    const blank = snsCopyPlan(from.data as unknown as Record<string, unknown>, "", "");
+    const created = await createSupabaseSnsProjectRepository(admin).create({
+      userId: ownerUserId,
+      title: from.title,
+      ratio: from.ratio,
+      language: from.language,
+      modelId: from.modelId,
+      cardCountMode: from.cardCountMode,
+      cardCount: from.cardCount,
+      toneNote: from.toneNote,
+      data: blank.data,
+      slotPlan: from.slotPlan,
+    } as SnsProjectCreateRecord);
+
+    // 2) 그림을 옮기고 3) 바뀐 경로를 적는다.
+    const plan = snsCopyPlan(
+      from.data as unknown as Record<string, unknown>, ownerUserId, created.id);
+    await moveAssets(admin, plan.moves);
+    /*
+      **갱신 행 수를 센다.** `update` 는 한 줄도 안 맞아도 오류가 아니다 —
+      `sns-flow-store.ts` 가 같은 함정으로 사고를 겪고 `select("id")` 로 세고
+      있다. 여기서 안 세면 경로가 빈 채로 「복사 성공」이 된다.
+    */
+    const { data: touched, error } = await admin.from("sns_projects")
+      .update({ data: { ...plan.data, slotPlan: from.slotPlan }, status: from.status })
+      .eq("id", created.id)
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (!(touched ?? []).length) throw new Error("복사본에 그림 자리를 적지 못했습니다.");
+    return { id: created.id };
+  }
+
+  const from = source as unknown as PosterProjectRecord;
+  const { data: created, error: createError } = await admin.from("poster_projects")
+    .insert(projectInsertRow(ownerUserId, {
+      title: from.title,
+      status: from.status,
+      ratio: from.ratio,
+      modelId: from.modelId,
+      data: from.data,
+    }))
+    .select("id").single();
+  if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
+
+  const { data: images } = await admin.from("poster_images")
+    .select("variant_index,selected,width,height,review,asset_path,thumb_path")
+    .eq("project_id", id);
+
+  /*
+    **변형 행은 생성 요청을 가리켜야 한다** — 그 칸이 `not null` 이다
+    (`202608310004_poster.sql:47`). 남의 장부 줄을 가리킬 수는 없으므로
+    복사한 사람 소유로 하나 만든다.
+
+    **비용은 0 이다.** 복사는 AI 를 안 부른다 — 0 이 아닌 값을 적으면 장부가
+    쓰지 않은 돈을 세게 된다.
+  */
+  const { data: request, error: requestError } = await admin
+    .from("poster_generation_requests")
+    .insert({
+      user_id: ownerUserId,
+      project_id: created.id,
+      model_id: from.modelId,
+      ratio_id: from.ratio,
+      mode: "t2i",
+      size: {},
+      requested_images: Math.min(Math.max((images ?? []).length, 1), 3),
+      returned_images: (images ?? []).length,
+      unit_cost_usd: 0,
+      cost_usd: 0,
+    })
+    .select("id").single();
+  if (requestError || !request) {
+    throw new Error(requestError?.message ?? "복사하지 못했습니다.");
+  }
+
+  /*
+    **`status` 를 따로 되살린다.** `projectInsertRow` 는 그 칸을 안 싣는다
+    (회원에게 INSERT 권한이 없어 기본 `draft` 다). 그대로 두면 복사본이
+    「쓰는 중」으로 시작해, 결과 그림을 참고용으로 보려던 뜻이 사라진다.
+  */
+  if (from.status && from.status !== "draft") {
+    await admin.from("poster_projects")
+      .update({ status: from.status }).eq("id", created.id);
+  }
+
+  const plan = posterCopyPlan(
+    (images ?? []) as Array<{ variant_index: number; asset_path: string; thumb_path: string | null }>,
+    ownerUserId, created.id as string, request.id as string);
+  await moveAssets(admin, plan.moves);
+  if (plan.rows.length) {
+    const { error } = await admin.from("poster_images").insert(plan.rows);
+    if (error) throw new Error(error.message);
+  }
+  return { id: created.id as string };
+}
+
 export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise<boolean> {
   const admin = createSupabaseAdminClient();
 

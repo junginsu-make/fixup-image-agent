@@ -20,6 +20,7 @@ import { POSTER_STEPS } from "../steps";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
+import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 
 interface PosterImage {
   id: string;
@@ -75,9 +76,53 @@ const SLOT_LABELS: Array<[TextSlot, string, "line" | "area"]> = [
 ];
 
 export function PosterClient(
-  { project, images, adEnabled = false }:
-  { project: PosterProject; images: PosterImage[]; adEnabled?: boolean },
+  { project, images, adEnabled = false, readOnly = false }:
+  {
+    project: PosterProject; images: PosterImage[]; adEnabled?: boolean;
+    /**
+     * 남의 작업을 **보는 중**인가. 관리자만 여기까지 온다.
+     *
+     * 볼 수는 있고 고치지는 못한다 — 고치려면 자기 것으로 복사한다
+     * (2026-09-16 사용자 결정).
+     */
+    readOnly?: boolean;
+  },
 ) {
+  /**
+   * 이 화면에서 나가는 모든 요청은 **이것을 지난다.**
+   *
+   * 단추를 하나씩 `disabled` 로 잠그지 않는다 — 이 화면은 682줄이고 단추가
+   * 열둘이라 **빠뜨린 하나가 곧 구멍**이다. 길목을 막으면 새 단추가 생겨도
+   * 저절로 막힌다. 카드뉴스와 같은 방식이다.
+   */
+  const request = React.useCallback(
+    async (url: string, init?: RequestInit) => {
+      if (blockedByReadOnly(readOnly, init)) throw new Error(READ_ONLY_MESSAGE);
+      return fetch(url, init);
+    },
+    [readOnly],
+  );
+
+  /**
+   * 크레딧이 깎이는 요청. **길목을 지나야 한다.**
+   *
+   * 처음엔 `request` 만 만들고 `billableFetch` 를 그대로 뒀는데, 그것이
+   * **기본 POST** 라 보기 전용에서 기획·만들기·고치기 셋이 그냥 나갔다
+   * (리뷰가 잡음). 하필 막으려던 이유가 「크레딧은 요청이 나간 시점에 이미
+   * 나간다」였다.
+   *
+   * **길목이 둘이면 길목이 아니다.** 하나로 합친다.
+   */
+  const billableRequest = React.useCallback(
+    async (url: string, init?: RequestInit) => {
+      if (blockedByReadOnly(readOnly, { method: "POST", ...init })) {
+        throw new Error(READ_ONLY_MESSAGE);
+      }
+      return billableFetch(url, init);
+    },
+    [readOnly],
+  );
+
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
   /**
@@ -92,6 +137,30 @@ export function PosterClient(
   const [list, setList] = React.useState(images);
   const [editText, setEditText] = React.useState("");
   const router = useRouter();
+
+  const [copying, setCopying] = React.useState(false);
+
+  /**
+   * 남의 작업을 **내 것으로 복사한다.**
+   *
+   * 고치는 대신 복사한다 — 그래야 회원의 작업이 안 바뀌고, 크레딧과 소유가
+   * 복사한 사람 하나로 맞아떨어진다(2026-09-16 사용자 결정).
+   */
+  const copyToSelf = React.useCallback(async () => {
+    setCopying(true);
+    try {
+      const body = await (await fetch(`/api/admin/works/poster/${project.id}/copy`, {
+        method: "POST",
+      })).json() as { ok?: boolean; id?: string; message?: string };
+      if (!body.ok || !body.id) throw new Error(body.message ?? "복사하지 못했습니다.");
+      router.push(`/poster/${body.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "복사하지 못했습니다.");
+    } finally {
+      setCopying(false);
+    }
+  }, [project.id, router]);
+
   /** 지금 고치는 중인 변형. 한 번에 한 장만 고친다. */
   const [editing, setEditing] = React.useState<string | null>(null);
 
@@ -229,7 +298,7 @@ export function PosterClient(
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/poster/projects/${project.id}`, {
+      const response = await request(`/api/poster/projects/${project.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(slots),
@@ -248,7 +317,7 @@ export function PosterClient(
     setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     setError(null);
     try {
-      const body = await (await billableFetch(`/api/poster/projects/${project.id}/plan`)).json();
+      const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
       setNotes(body.issues ?? []);
@@ -269,7 +338,7 @@ export function PosterClient(
     setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
-      const start = await (await billableFetch(`/api/poster/projects/${project.id}/generate`)).json();
+      const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
       setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
@@ -284,7 +353,7 @@ export function PosterClient(
   async function select(imageId: string) {
     setError(null);
     try {
-      const response = await fetch(`/api/poster/projects/${project.id}/select`, {
+      const response = await request(`/api/poster/projects/${project.id}/select`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ imageId }),
@@ -302,7 +371,7 @@ export function PosterClient(
     setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     setError(null);
     try {
-      const body = await (await fetch(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
+      const body = await (await request(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
       setList(body.images);
       if (body.issues?.length) setNotes(body.issues);
@@ -324,7 +393,7 @@ export function PosterClient(
     setError(null);
     try {
       // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
-      const start = await (await billableFetch(`/api/poster/projects/${project.id}/edit`, {
+      const start = await (await billableRequest(`/api/poster/projects/${project.id}/edit`, {
         body: JSON.stringify({ instruction }),
       })).json();
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
@@ -364,7 +433,7 @@ export function PosterClient(
     for (;;) {
       if (!alive.current) return false;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
-      const poll = await (await fetch(`/api/poster/projects/${project.id}/status`, {
+      const poll = await (await request(`/api/poster/projects/${project.id}/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -383,6 +452,26 @@ export function PosterClient(
 
   return (
     <div className="grid gap-6">
+      {/*
+        **남의 작업을 보는 중이라고 먼저 말한다.**
+
+        안 적으면 자기 작업인 줄 알고 고치려다 「고칠 수 없습니다」만 본다.
+        낱장이 안 보이는 까닭도 같이 적는다 — 그림 주소는 회원용 라우트가
+        흘려 주는데 남의 것은 그 길이 막혀 있다.
+      */}
+      {readOnly ? (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <span>
+            <b>다른 회원의 작업</b>을 보는 중입니다. 설정과 과정은 볼 수 있지만
+            고칠 수 없고, 만들어진 그림은 여기서 안 보입니다.
+          </span>
+          {/* 무엇을 하면 되는지 같은 자리에 둔다. 막아만 두면 길이 없다. */}
+          <Button size="sm" disabled={copying} onClick={() => void copyToSelf()}>
+            {copying ? "복사하는 중…" : "내 작업으로 복사"}
+          </Button>
+        </div>
+      ) : null}
+
       <StepBar
         steps={POSTER_STEPS}
         current={current}
