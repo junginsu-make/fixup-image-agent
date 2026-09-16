@@ -348,7 +348,8 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       {readOnly ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
           <span>
-            <b>다른 회원의 작업</b>을 보는 중입니다. 과정은 볼 수 있지만 고칠 수는 없습니다.
+            <b>다른 회원의 작업</b>을 보는 중입니다. 원고·설정·결과는 볼 수 있고
+            고칠 수는 없습니다. 고치려면 내 작업으로 복사하세요.
           </span>
           {/* 무엇을 하면 되는지 같은 자리에 둔다. 막아만 두면 길이 없다. */}
           <Button size="sm" disabled={copying} onClick={() => void copyToSelf()}>
