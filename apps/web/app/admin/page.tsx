@@ -126,7 +126,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         */}
         <p className="mt-1 text-meta text-subtle-foreground">
           팀에 속한 회원의 월 한도는 <strong>팀 잔량 안에서의 천장</strong>입니다. 팀 잔량이 더 적으면
-          그쪽이 먼저 걸립니다 — 팀 한도는 <Link href="/team?tab=credit" className="underline underline-offset-4">팀 · 크레딧</Link>에서 정합니다.
+          그쪽이 먼저 걸립니다. 팀 한도는 <Link href="/team?tab=credit" className="underline underline-offset-4">팀 · 크레딧</Link>에서 정합니다.
         </p>
       </div>
 

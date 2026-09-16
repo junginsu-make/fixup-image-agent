@@ -384,3 +384,54 @@ describe("상세페이지 그림체", () => {
     expect(pdp).toContain('lookBlockedReason("auto", hasStyleReference)');
   });
 });
+
+/**
+ * **기획 값을 화면이 말하는가.**
+ *
+ * 03 의 「예상 비용」은 그림 값만이다. 기획은 따로 돌고 따로 차감되는데
+ * (`plan/route.ts`) 화면이 한 줄도 안 했다. 「그대로 생성」은 그것이 아예 안
+ * 도는데 그 사실을 모르면 두 갈래를 견줄 수 없다(설계 §9).
+ */
+describe("기획에 드는 값", () => {
+  /** 넘기는 칸만 따로 떼어 본다. 파일 전체에서 찾으면 남의 줄을 잡는다. */
+  const 호출 = source.slice(
+    source.indexOf("planCostNote({"),
+    source.indexOf("})}", source.indexOf("planCostNote({")),
+  );
+
+  it("규격 칸에서 말한다", () => {
+    expect(source).toContain("planCostNote({");
+    expect(source).toContain("위는 그림 값입니다");
+  });
+
+  /** 규칙을 화면에 다시 적으면 실제 차감액과 갈린다. */
+  it("계산을 여기 다시 적지 않는다", () => {
+    expect(source).toContain('from "./plan-cost"');
+    expect(source).not.toContain("LLM_PLAN_USD");
+  });
+
+  /** 광고 모드는 규격마다 작업이 생기고 기획도 그만큼 돈다. */
+  it("작업 수를 함께 넘긴다", () => {
+    expect(호출).toContain("projects,");
+  });
+
+  /**
+   * **기획이 실제로 읽는 것만 넘긴다.**
+   *
+   * 전에는 붙인 그림 전부(`referenceCount`)를 넘겼다. 라우트는 제품 보존 사진을
+   * 안 읽는데 화면이 값을 매겨 42% 비싸게 말했다(2026-09-16 리뷰). 두 칸으로
+   * 나뉘어 있는지를 여기서 지킨다.
+   */
+  it("따라 만들기와 지킬 사람을 따로 넘긴다", () => {
+    expect(호출).toContain("planCostCounts(");
+    expect(호출).not.toContain("referenceCount");
+    // 무엇을 세는지는 plan-cost 가 정한다. 여기서 세면 그 판단이 또 안 재어진다.
+    expect(호출).not.toContain("styleIds.length");
+    expect(호출).not.toContain("preservedIds.length");
+  });
+
+  /** 「그대로 생성」이면 기획이 안 돈다. 그 갈래를 안 넘기면 늘 든다고 말한다. */
+  it("고른 갈래를 함께 넘긴다", () => {
+    expect(호출).toContain("promptMode,");
+  });
+});

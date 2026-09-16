@@ -528,7 +528,7 @@ export function CharacterOptionGroup({
         label={selected ? "등장인물 바꾸기" : "등장인물 고르기"}
         description="만들어 둔 캐릭터를 눌러 이 페이지에 쓸 장면을 고릅니다."
         autoLabel="자동으로 맡기기"
-        autoHint="자동은 왼쪽 45도 한 장을 씁니다 — 두 눈이 보여 얼굴이 남습니다."
+        autoHint="자동은 왼쪽 45도 한 장을 씁니다. 두 눈이 보여 얼굴이 남습니다."
         onPick={(pick) => onChange(pick.character.id, pickedFrom(pick))}
       />
 

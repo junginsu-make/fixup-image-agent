@@ -86,7 +86,7 @@ export default async function SettingsPage() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              모델에 따라 한 장이 여러 장으로 차감됩니다 — 고급 모델일수록 크게
+              모델에 따라 한 장이 여러 장으로 차감됩니다. 고급 모델일수록 크게
               차감됩니다. 생성 화면에 모델별 차감량이 표시됩니다.
             </p>
           </CardContent>

@@ -723,7 +723,7 @@ export function AdExportClient() {
           */}
           <p className="text-sm text-muted-foreground">
             <strong>눈으로 확인해 주세요.</strong> 글자가 읽히는지, 주인공이 잘리지 않았는지는
-            자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다 —
+            자동 검증이 못 잡습니다. 띠로 덮인 곳은 포털이 가릴 수 있는 자리입니다.
             <strong>안전영역이 공개된 규격에만 띠가 붙습니다.</strong> 띠가 없다고 제약이
             없는 것은 아닙니다.
           </p>
@@ -817,7 +817,7 @@ export function AdExportClient() {
                   {entry.shrink && entry.shrink > SHRINK_WARNING && (
                     <span className="flex items-center gap-1 text-destructive">
                       <AlertTriangle className="h-3 w-3" />
-                      {entry.shrink}배 줄임 — 글자가 읽히는지 보세요
+                      {entry.shrink}배 줄임. 글자가 읽히는지 보세요
                     </span>
                   )}
                   {/*
@@ -830,7 +830,7 @@ export function AdExportClient() {
                   {entry.tooSmall && (
                     <span className="flex items-center gap-1 text-destructive">
                       <AlertTriangle className="h-3 w-3" />
-                      그림이 너무 작게 들어갔습니다 — 다른 그림을 골라 보세요
+                      그림이 너무 작게 들어갔습니다. 다른 그림을 골라 보세요
                     </span>
                   )}
                   {entry.status === "failed" && (

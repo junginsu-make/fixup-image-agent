@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CARD_RATIOS, IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
-import { ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
+import { ATTACHMENT_ROLE_LABEL, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { GUIDE_TOPICS, neighborsOf } from "../_components/topics";
 
 /**
@@ -31,6 +31,17 @@ function guideSources(): Array<{ name: string; source: string }> {
   }
   files.push({ name: "(home)", source: readFileSync(join(GUIDE_DIR, "page.tsx"), "utf8") });
   return files;
+}
+
+/**
+ * 주석 자리를 지운다. **개발자에게 하는 설명은 화면이 아니다.**
+ *
+ * 「전에는 「실사」라고 적어 뒀는데 화면은 「실사 사진」이었다」처럼, 옛 이름을
+ * 적어 두는 것이 주석에서는 정당하다. 그것까지 세면 까닭을 못 적는다.
+ */
+function 주석을뺀다(source: string): string {
+  // 코드 뒤에 붙은 것도 뗀다. 자리에 따라 정당함이 갈리지 않는다.
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
 describe("설명서 목차", () => {
@@ -91,6 +102,68 @@ describe("설명서 내용", () => {
     // 목록 자체가 비어 있으면 위 검사가 무의미해진다.
     expect(CARD_RATIOS.length).toBeGreaterThan(0);
     expect(POSTER_RATIOS.length).toBeGreaterThan(CARD_RATIOS.length);
+  });
+
+  /**
+   * **그림체 이름을 손으로 적지 않는다.**
+   *
+   * 이미지 설명서에서 한 번 겪은 일이다 — 이름을 바꿨는데 설명서만 옛 이름으로
+   * 남았고, 배포한 빌드를 뒤져 보고서야 찾았다. 캐릭터 설명서가 **같은 실수를
+   * 그대로 안고 있었다**(2026-09-16 리뷰). 화면은 「실사 사진」인데 설명서는
+   * 「실사」라고 적어, 사용자가 화면에서 그 이름을 찾다가 못 찾는 상태였다.
+   *
+   * 한 페이지짜리 검사로는 다음 페이지가 또 새긴다. **목록을 그리는 페이지
+   * 전부**를 여기서 잰다.
+   */
+  it("그림체 목록을 그리는 페이지는 코드에서 가져온다", () => {
+    const byName = new Map(guideSources().map((file) => [file.name, file.source]));
+    for (const name of ["image", "character"]) {
+      expect(byName.get(name), `${name} 설명서가 없다`).toBeTruthy();
+      expect(
+        byName.get(name),
+        `${name}/page.tsx 가 그림체 이름을 손으로 적었다. IMAGE_LOOK_LABEL 에서 가져온다`,
+      ).toContain("IMAGE_LOOK_LABEL");
+    }
+
+    // 목록 자체가 비면 위 검사가 무의미해진다.
+    expect(Object.keys(IMAGE_LOOK_LABEL).length).toBeGreaterThan(3);
+
+    /*
+     * **구문이 아니라 이름을 센다.**
+     *
+     * 처음에는 `{ title: "실사"` 같은 구문 통째로 찾았는데, 그러면 목록을 그리는
+     * 자리만 잡고 **산문에 늘어놓은 것**을 못 본다. 실제로 「(실사·애니·3D·그림)
+     * 로 그립니다」 두 줄이 그렇게 살아남았다(2026-09-16 재검토).
+     *
+     * 세 가지를 가려낸다.
+     *   · **주석은 뺀다.** 「전에는 「실사·애니」라고 적어 뒀다」는 설명이 정당하다
+     *   · **새 이름을 먼저 지운다.** 옛 이름이 새 이름의 앞토막이다(「실사」⊂「실사 사진」)
+     *   · **낱말 경계를 본다.** 「애니풍 강아지」는 사용자가 칠 법한 말이지 칸 이름이 아니다
+     */
+    const 옛이름 = ["실사", "애니"];
+    for (const file of guideSources()) {
+      const 새이름을뺀글 = Object.values(IMAGE_LOOK_LABEL).reduce(
+        (text, label) => text.split(label).join(""),
+        주석을뺀다(file.source),
+      );
+      for (const stale of 옛이름) {
+        /*
+         * 뒤에 한글이 더 붙으면 대개 다른 낱말이다(「애니풍」·「실사판」).
+         * **다만 조사는 다르다** — 산문에는 「실사로」·「애니가」처럼 나간다.
+         * 조사를 따로 받아 주지 않으면 정작 흔한 꼴을 다 놓친다.
+         */
+        const 조사 = "로|를|가|는|은|의|와|과|도|에|나|만|보다|처럼|부터|까지";
+        const 홀로쓰인것 = new RegExp(`(?<![가-힣])${stale}(?:(?:${조사})(?![가-힣])|(?![가-힣]))`);
+        expect(
+          홀로쓰인것.test(새이름을뺀글),
+          `${file.name}/page.tsx 에 옛 그림체 이름이 남았다: ${stale}`,
+        ).toBe(false);
+      }
+      expect(
+        file.source.includes('label="결"'),
+        `${file.name}/page.tsx 가 그림체 칸을 「결」이라 부른다. 화면은 「그림체」다`,
+      ).toBe(false);
+    }
   });
 
   it("설명서가 말하는 생성 방식은 실제로 고를 수 있는 것이다", () => {

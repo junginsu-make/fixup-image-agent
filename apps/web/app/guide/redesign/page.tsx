@@ -5,7 +5,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "상세페이지 리디자인 — 사용 설명서" };
+export const metadata: Metadata = { title: "상세페이지 리디자인 · 사용 설명서" };
 
 export default function RedesignGuidePage() {
   return (
@@ -60,7 +60,7 @@ export default function RedesignGuidePage() {
           </div>
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          기존 페이지에는 대개 <strong className="text-foreground">힘들게 모은 사실</strong>이 들어 있습니다 — 성분표,
+          기존 페이지에는 대개 <strong className="text-foreground">힘들게 모은 사실</strong>이 들어 있습니다. 성분표,
           인증 번호, 시험 성적서 수치, 실제 후기. 이걸 버리고 새로 만들면 그 정보를 다시 모아야 합니다. 리디자인은 그걸
           먼저 꺼내 놓고 시작합니다.
         </p>
@@ -119,7 +119,7 @@ export default function RedesignGuidePage() {
         <Mock title="리디자인 · 사실 확인">
           <MockField label="확인된 성분" value="히알루론산 2% · 나이아신아마이드 2%" marker={3} />
           <MockField label="인증 · 시험" value="인증 제2024-…호 · 임상 수분 68%↑" />
-          <MockField label="새 구성안 · 3번째 섹션" value="문제 공감 — 겨울철 당김" marker={4} />
+          <MockField label="새 구성안 · 3번째 섹션" value="문제 공감 · 겨울철 당김" marker={4} />
           <MockButtons items={[{ label: "섹션 만들기" }]} />
         </Mock>
 
@@ -130,7 +130,7 @@ export default function RedesignGuidePage() {
               body: "쇼핑몰에서 내려받은 긴 세로 이미지를 그대로 올리면 됩니다. 여러 장으로 나뉘어 있으면 여러 장 올려도 됩니다.",
             },
             {
-              title: "전사 — 글자를 옮겨 적는 단계",
+              title: "전사 · 글자를 옮겨 적는 단계",
               body: (
                 <>
                   이미지 안의 글자를 텍스트로 꺼냅니다.{" "}
@@ -140,7 +140,7 @@ export default function RedesignGuidePage() {
               ),
             },
             {
-              title: "사실 추출 — 틀리면 안 되는 것들",
+              title: "사실 추출 · 틀리면 안 되는 것들",
               body: (
                 <>
                   성분, 함량, 인증 번호, 시험 수치를 따로 모읍니다.{" "}
@@ -150,7 +150,7 @@ export default function RedesignGuidePage() {
               ),
             },
             {
-              title: "새 구성안 — 순서가 바뀝니다",
+              title: "새 구성안 · 순서가 바뀝니다",
               body: (
                 <>
                   원본의 섹션 순서를 그대로 두지 않습니다. 전환을 기준으로 다시 배치합니다. 원하지 않는 순서면 여기서
@@ -187,7 +187,7 @@ export default function RedesignGuidePage() {
             },
             {
               q: "전사가 오래 걸립니다",
-              a: "페이지가 길수록 오래 걸립니다. 다른 화면으로 옮겨도 계속 진행됩니다 — 사이드바가 진행 중인 작업을 들고 있습니다.",
+              a: "페이지가 길수록 오래 걸립니다. 다른 화면으로 옮겨도 계속 진행됩니다. 사이드바가 진행 중인 작업을 들고 있습니다.",
             },
             {
               q: "새 구성이 원본과 너무 다릅니다",

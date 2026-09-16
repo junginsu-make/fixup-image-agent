@@ -5,7 +5,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "팀 — 사용 설명서" };
+export const metadata: Metadata = { title: "팀 · 사용 설명서" };
 
 export default function TeamGuidePage() {
   return (
@@ -33,7 +33,7 @@ export default function TeamGuidePage() {
           },
           {
             title: "팀장은 자기 팀만",
-            body: "남의 팀은 못 건드립니다. 이미 다른 팀에 있는 사람도 못 데려옵니다 — 팀 사이를 옮기는 것은 운영자가 합니다.",
+            body: "남의 팀은 못 건드립니다. 이미 다른 팀에 있는 사람도 못 데려옵니다. 팀 사이를 옮기는 것은 운영자가 합니다.",
           },
         ]}
         when={[
@@ -50,8 +50,8 @@ export default function TeamGuidePage() {
             ["팀 재료 불러 쓰기", "가능", "가능"],
             ["팀원 넣기 · 빼기", "가능 (자기 팀만)", "불가"],
             ["팀장 세우기 · 내리기", "가능", "불가"],
-            ["팀 한도 정하기", "불가 — 운영자", "불가"],
-            ["팀 만들기 · 지우기", "불가 — 운영자", "불가"],
+            ["팀 한도 정하기", "불가 (운영자만)", "불가"],
+            ["팀 만들기 · 지우기", "불가 (운영자만)", "불가"],
           ]}
         />
         <p className="text-sm leading-6 text-muted-foreground">
@@ -73,7 +73,7 @@ export default function TeamGuidePage() {
           items={[
             {
               title: "팀 때문에 막히면 그렇게 말해 줍니다",
-              body: "「팀의 이번 달 생성 한도를 모두 사용했습니다」가 뜨면 내 한도가 아니라 팀 잔액이 바닥난 것입니다. 내 한도를 올려 달라고 해도 안 풀립니다 — 팀장에게 말씀하세요.",
+              body: "「팀의 이번 달 생성 한도를 모두 사용했습니다」가 뜨면 내 한도가 아니라 팀 잔액이 바닥난 것입니다. 내 한도를 올려 달라고 해도 안 풀립니다. 팀장에게 말씀하세요.",
             },
             {
               title: "팀을 옮겨도 쓴 양은 따라갑니다",
@@ -106,7 +106,7 @@ export default function TeamGuidePage() {
         <p className="text-sm leading-7 text-muted-foreground">
           사이드바에서 프로젝트를 고르면 라이브러리·카드뉴스·이미지 만들기가 그 갈래만 보여 줍니다.{" "}
           <strong className="text-foreground">들어가는 곳이 아니라 거르는 장치입니다.</strong> 골라 둔 동안에는 본문 위에
-          「○○만 보고 있습니다」가 뜹니다 — 없으면 비어 있는 화면을 보고 작업물이 사라졌다고 여기게 됩니다.
+          「○○만 보고 있습니다」가 뜹니다. 없으면 비어 있는 화면을 보고 작업물이 사라졌다고 여기게 됩니다.
         </p>
       </Details>
 
@@ -119,7 +119,7 @@ export default function TeamGuidePage() {
             },
             {
               q: "팀원을 넣으려는데 목록에 없습니다",
-              a: "그 사람이 이미 다른 팀에 있습니다. 팀장은 아직 팀이 없는 사람만 데려올 수 있습니다 — 팀 사이를 옮기는 것은 운영자 몫입니다.",
+              a: "그 사람이 이미 다른 팀에 있습니다. 팀장은 아직 팀이 없는 사람만 데려올 수 있습니다. 팀 사이를 옮기는 것은 운영자 몫입니다.",
             },
             {
               q: "팀장을 팀원으로 못 내립니다",

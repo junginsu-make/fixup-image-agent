@@ -1,3 +1,5 @@
+import { IMAGE_LOOK_LABEL } from "@fixup/shared";
+
 /**
  * 캐릭터 한 장을 **무엇으로 만들었는지** 보여줄 때 쓰는 규칙들.
  *
@@ -22,10 +24,17 @@ const KIND_LABEL: Record<string, string> = {
   character: "캐릭터",
 };
 
-const LOOK_LABEL: Record<string, string> = {
-  photoreal: "실사",
-  illustration: "그림",
-};
+/**
+ * 그림체 이름표. **손으로 적지 않는다.**
+ *
+ * 전에는 여기서 둘만 적어 뒀다 — `anime`·`3d` 가 표에 없어 그 캐릭터의 상세
+ * 화면에는 **영문 원값이 그대로** 나왔다(2026-09-16 검토). 「실사 사진」을 골라
+ * 만든 캐릭터도 여기서는 「실사」로 보였다.
+ *
+ * 만들 때 고른 이름과 같아야 한다. 스튜디오도 `IMAGE_LOOK_LABEL` 을 쓴다
+ * (`CharacterStudio.tsx`).
+ */
+const LOOK_LABEL: Record<string, string> = IMAGE_LOOK_LABEL;
 
 /**
  * 「어떻게 만들었습니다」에 적을 줄들.
