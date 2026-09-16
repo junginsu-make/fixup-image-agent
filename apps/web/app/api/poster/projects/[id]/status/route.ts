@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
+import { classifyFalFailure } from "../../../../../../lib/fal/failure";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local-store";
 import { makePosterThumbnail } from "../../../../../../lib/poster/thumbnail";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
@@ -122,9 +123,11 @@ export async function POST(request: Request, context: Context) {
   if (!parsed.success) {
     return Response.json({ ok: false, message: "조회할 요청을 알려 주세요." }, { status: 400 });
   }
+  /** `catch` 에서도 봐야 한다 — 거절이면 묶인 장을 돌려줘야 한다. */
+  const { id } = await context.params;
+  const stores = posterStoresForUser(auth.member.userId);
+
   try {
-    const { id } = await context.params;
-    const stores = posterStoresForUser(auth.member.userId);
     const fal = createPosterFalClients();
 
     const result = await collectPoster(
@@ -202,9 +205,54 @@ export async function POST(request: Request, context: Context) {
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
     }
+
+    /**
+     * **제공자가 거절한 것을 우리 고장처럼 말하지 않는다.**
+     *
+     * 2026-09-16 실측: fal 이 `422`(내용 검사)로 거절했는데 화면에는 「500
+     * Internal Server Error」만 떴다. 사용자는 자기 요청이 거절된 것인지 우리
+     * 서버가 죽은 것인지 알 수 없었다. fal 클라이언트는 4xx·5xx 를 `status` 를
+     * 실은 예외로 던지므로, 그 하나로 갈린다(`lib/fal/failure.ts`).
+     */
+    const verdict = classifyFalFailure(error);
+
+    /**
+     * **돈이 안 나갔으면 묶어 둔 장을 바로 돌려준다.**
+     *
+     * 거절은 fal 이 청구하지 않는다($0.00 실측). 안 풀면 예약이 만료될 때까지
+     * 10분 동안 그 사람 한도가 줄어든 채로 있다 — 쓰지도 않은 장 때문에.
+     *
+     * 확정이 또 실패해도 원래 오류를 덮지 않는다. 만료되면 어차피 풀린다.
+     */
+    if (verdict.releaseReservation) {
+      try {
+        const project = await stores.projects.get(id);
+        const reservationId = project?.data.reservationId;
+        if (reservationId) {
+          await finalizeAiUsage(
+            { userId: auth.member.userId, requestId: reservationId },
+            false,
+            0,
+            `poster_${verdict.kind}`,
+          );
+          await stores.projects.update(id, {
+            // 자리를 돌려준다. 안 그러면 창이 지날 때까지 다시 못 누른다.
+            status: "ready",
+            ...(project ? { data: { ...project.data, reservationId: undefined } } : {}),
+          });
+        }
+      } catch {
+        // 삼킨다. 아래 원인을 알리는 것이 먼저다.
+      }
+    }
+
+    /**
+     * 제공자가 준 원문을 함께 싣는다. 운영자가 이것으로 fal 기록을 찾는다 —
+     * 사용자에게 보여 줄지는 화면이 정한다.
+     */
     return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "상태를 확인하지 못했습니다." },
-      { status: 500 },
+      { ok: false, kind: verdict.kind, message: verdict.message, detail: verdict.detail },
+      { status: verdict.httpStatus },
     );
   }
 }
