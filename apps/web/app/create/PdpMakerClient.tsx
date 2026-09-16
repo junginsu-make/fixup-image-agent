@@ -16,7 +16,9 @@ import { AttachmentIntentField } from "./AttachmentIntentField";
 import { attachedSlotsOf, intentsOrUndefined } from "./attachment-intents";
 import { buildAnalyzeRequest } from "./analyze-request";
 import { buildDraftInput as buildDraftPayload } from "./draft-input";
-import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
+import {
+  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, lookBlockedReason, withJosa, type ImageLook,
+} from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import { canReachStep } from "./step-jump";
@@ -81,6 +83,13 @@ export function PdpMakerClient() {
   const [styleReference, setStyleReference] = useState<StyleReferenceView | undefined>(undefined);
   // 붙인 레퍼런스를 이번 생성에 쓸지. 껐다 켜기를 반복해도 첨부는 남는다.
   const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(true);
+  /**
+   * 따라갈 디자인 레퍼런스가 **실제로 쓰이는가.**
+   *
+   * 붙였더라도 토글이 꺼져 있으면 안 보낸다(`styleReferenceEnabled ? … : undefined`).
+   * 그때는 따라갈 것이 없는 것과 같으므로 「레퍼런스 스타일」도 못 쓴다.
+   */
+  const hasStyleReference = Boolean(styleReference) && styleReferenceEnabled;
   const [sellerBrief, setSellerBrief] = useState<SellerBrief>({});
   const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
@@ -1495,16 +1504,30 @@ export function PdpMakerClient() {
                   <div className="flex flex-wrap gap-1.5">
                     {IMAGE_LOOKS.map((option) => {
                       const isActive = look === option;
+                      /*
+                        **빼지 않고 흐리게 둔다.**
+
+                        「레퍼런스 스타일」은 따라갈 디자인 레퍼런스가 있어야
+                        뜻이 있다. 목록에서 빼면 그런 기능이 있다는 것을 알 길이
+                        없다(2026-09-16 이미지 만들기에서 겪은 일). 못 누르게만
+                        막고 왜 못 누르는지 아래에 적는다.
+
+                        **토글이 꺼져 있어도 못 쓴다.** 껐으면 레퍼런스를 안
+                        보내므로 따라갈 것이 없는 것과 같다.
+                      */
+                      const blocked = lookBlockedReason(option, hasStyleReference);
 
                       return (
                         <button
                           key={option}
                           type="button"
-                          title={IMAGE_LOOK_HINT[option]}
+                          title={blocked || IMAGE_LOOK_HINT[option]}
                           aria-pressed={isActive}
+                          disabled={Boolean(blocked)}
                           onClick={() => setLook(option)}
                           className={cn(
                             "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                            blocked && "cursor-not-allowed opacity-40",
                             isActive
                               ? "bg-primary text-primary-foreground"
                               : "bg-background text-muted-foreground shadow-[var(--shadow-ring)] hover:bg-muted"
@@ -1516,6 +1539,13 @@ export function PdpMakerClient() {
                     })}
                   </div>
                   <span className="mt-1 block text-meta text-subtle-foreground">{IMAGE_LOOK_HINT[look]}</span>
+                  {/* 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적는다. */}
+                  {lookBlockedReason("auto", hasStyleReference) ? (
+                    <span className="mt-1 block text-meta text-subtle-foreground">
+                      「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
+                      디자인 레퍼런스를 붙이면 고를 수 있습니다.
+                    </span>
+                  ) : null}
                 </div>
 
                 <div>

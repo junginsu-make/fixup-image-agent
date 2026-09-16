@@ -78,6 +78,20 @@ export function looksFor(_hasReferences?: boolean): ImageLook[] {
   return [...IMAGE_LOOKS];
 }
 
+/**
+ * **레퍼런스를 아예 안 쓰는 도구의 결.**
+ *
+ * 캐릭터 만들기는 글로만 만든다. 「레퍼런스 스타일」이 뜻이 없으니 아예 안
+ * 보여 준다 — 못 누르는 버튼을 두는 것과 다르다. 저쪽은 붙이면 눌리지만,
+ * 여기는 붙일 자리 자체가 없다.
+ *
+ * **목록을 따로 들지 않는다.** 캐릭터가 제 표를 갖고 있었더니 2026-09-16 에
+ * 이름을 바꾸자 거기만 옛 이름으로 남았다. 같은 것을 두 벌로 두면 갈라진다.
+ */
+export function looksWithoutReference(): ImageLook[] {
+  return IMAGE_LOOKS.filter((look) => !lookNeedsReference(look));
+}
+
 /** 따라갈 것이 있어야 뜻이 있는 결. 지금은 `auto` 하나다. */
 export function lookNeedsReference(look: ImageLook): boolean {
   return look === "auto";
