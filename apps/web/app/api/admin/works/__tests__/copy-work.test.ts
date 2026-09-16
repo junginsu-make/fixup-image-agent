@@ -71,6 +71,14 @@ vi.mock("../../../../../lib/supabase/admin", () => ({
           return { data: { arrayBuffer: async () => new ArrayBuffer(8) }, error: null };
         },
         upload: async (path: string) => { uploads.push(path); return { error: null }; },
+        /*
+          `readAnyWork` 가 카드 주소를 채우느라 서명을 부른다. 안 흉내 내면
+          복사 시험이 거기서 넘어진다 — 실제 저장소는 늘 이 함수를 가진다.
+        */
+        createSignedUrls: async (paths: string[]) => ({
+          data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+          error: null,
+        }),
       }),
     },
   }),

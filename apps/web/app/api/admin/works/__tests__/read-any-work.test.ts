@@ -17,6 +17,7 @@ vi.mock("server-only", () => ({}));
 let snsRow: Record<string, unknown> | null = null;
 let posterRow: Record<string, unknown> | null = null;
 const queried: string[] = [];
+let signedPaths: string[] = [];
 
 function builderFor(table: string) {
   queried.push(table);
@@ -33,7 +34,20 @@ function builderFor(table: string) {
 }
 
 vi.mock("../../../../../lib/supabase/admin", () => ({
-  createSupabaseAdminClient: () => ({ from: (table: string) => builderFor(table) }),
+  createSupabaseAdminClient: () => ({
+    from: (table: string) => builderFor(table),
+    storage: {
+      from: () => ({
+        createSignedUrls: async (paths: string[]) => {
+          signedPaths = [...paths];
+          return {
+            data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+            error: null,
+          };
+        },
+      }),
+    },
+  }),
 }));
 
 vi.mock("../../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => false }));
@@ -55,7 +69,7 @@ function snsProjectRow(): Record<string, unknown> {
   };
 }
 
-beforeEach(() => { snsRow = null; posterRow = null; queried.length = 0; });
+beforeEach(() => { snsRow = null; posterRow = null; queried.length = 0; signedPaths = []; });
 
 describe("readAnyWork", () => {
   it("카드뉴스 한 건을 소유자와 무관하게 읽는다", async () => {
@@ -106,5 +120,50 @@ describe("readAnyWork", () => {
   it("없으면 null 이다 — 던지지 않는다", async () => {
     // 부르는 쪽이 404 로 답할 수 있어야 한다. 예외로 던지면 500 이 된다.
     expect(await readAnyWork("sns", "없는-id")).toBeNull();
+  });
+});
+
+/**
+ * 남의 카드뉴스도 **만들어진 카드가 보여야 한다.**
+ *
+ * 회원용 경로는 `refreshProjectAssetUrls` 를 지나 주소를 채우는데, 관리자
+ * 통로는 안 지난다 — 그대로 주면 카드 자리가 빈다. 포스터에서 같은 것을
+ * 겪었고 「그림이 다 삭제됐다」로 읽혔다(2026-09-16 신고).
+ *
+ * 주소를 만드는 규칙은 새로 적지 않는다. 목록(`listAllSnsProjects`)이 쓰는
+ * `collectCardPaths`·`withCardUrls` 를 그대로 부른다.
+ */
+describe("readAnyWork — 카드뉴스 그림", () => {
+  it("카드 원본과 사본을 함께 서명해 주소를 채운다", async () => {
+    snsRow = snsProjectRow();
+    (snsRow.data as Record<string, unknown>).flow = {
+      stage: "result",
+      cards: [{
+        assetPath: "회원A/sns/s1/0.png",
+        thumbPath: "회원A/sns/s1/0.thumb.webp",
+      }],
+    };
+
+    const work = await readAnyWork("sns", "s1") as {
+      data: { flow: { cards: Array<{ assetUrl?: string; thumbUrl?: string }> } };
+    };
+
+    expect(signedPaths.sort()).toEqual([
+      "회원A/sns/s1/0.png",
+      "회원A/sns/s1/0.thumb.webp",
+    ]);
+    const card = work.data.flow.cards[0]!;
+    expect(card.assetUrl).toBe("signed:회원A/sns/s1/0.png");
+    expect(card.thumbUrl).toBe("signed:회원A/sns/s1/0.thumb.webp");
+  });
+
+  it("그림이 없는 작업은 서명하지 않는다", async () => {
+    // 빈 목록으로 서명을 부르면 왕복만 늘고 얻는 것이 없다.
+    snsRow = snsProjectRow();
+    (snsRow.data as Record<string, unknown>).flow = { stage: "copy", cards: [] };
+
+    await readAnyWork("sns", "s1");
+
+    expect(signedPaths).toEqual([]);
   });
 });

@@ -177,9 +177,33 @@ export async function readAnyWork(
     그대로 부른다. 따로 적으면 칸 하나가 갈리는 날이 오고, 그때 조용히
     사라지는 것이 `record()` 주석이 말하는 그 일이다.
   */
-  return kind === "sns"
-    ? toSnsRecord(data as SnsProjectRow) as unknown as Record<string, unknown>
-    : toPosterRecord(data as PosterProjectRow) as unknown as Record<string, unknown>;
+  if (kind !== "sns") {
+    return toPosterRecord(data as PosterProjectRow) as unknown as Record<string, unknown>;
+  }
+
+  /*
+    **카드 주소까지 채워서 준다.**
+
+    회원용 경로는 `refreshProjectAssetUrls` 를 지나 주소를 채우는데 관리자
+    통로는 안 지난다 — 그대로 주면 카드 자리가 빈다. 포스터에서 같은 것을
+    겪었고 「그림이 다 삭제됐다」로 읽혔다(2026-09-16 신고).
+
+    주소를 만드는 규칙은 새로 적지 않는다. 목록(`listAllSnsProjects`)이 쓰는
+    함수를 그대로 부른다 — 따로 적으면 한쪽만 고쳐지는 날이 온다.
+  */
+  const record = toSnsRecord(data as SnsProjectRow);
+  const paths = collectCardPaths([record]);
+  if (!paths.length) return record as unknown as Record<string, unknown>;
+
+  const signed = await createSupabaseAdminClient().storage
+    .from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+  // 서명에 실패해도 작업은 준다. 그림이 빈 것과 화면이 통째로 안 뜨는 것은 다르다.
+  const [withUrls] = withCardUrls([record], new Map(
+    (signed.data ?? []).flatMap((entry) => (
+      entry.path && entry.signedUrl ? [[entry.path, entry.signedUrl] as const] : []
+    )),
+  ));
+  return (withUrls ?? record) as unknown as Record<string, unknown>;
 }
 
 /** 확장자에서 형식을 읽는다. 복사에 나오는 것은 png·webp·jpg 셋뿐이다. */
