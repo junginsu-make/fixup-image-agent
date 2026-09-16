@@ -20,10 +20,22 @@ import { describe, expect, it } from "vitest";
 const STORE = join(__dirname, "..", "store.ts");
 const source = readFileSync(STORE, "utf8");
 
-/** 남의 것을 내 것으로 옮기는 함수들. 늘어나면 여기도 늘어야 한다. */
-const COPIERS = [
-  "copyLibraryWorkToSelf", "copyCharacterToSelf", "copyWorkToSelf", "copyReferencesToSelf",
-] as const;
+/**
+ * 남의 것을 내 것으로 옮기는 함수들 중 **팀을 지우는 것.** 늘어나면 여기도
+ * 늘어야 한다.
+ */
+const COPIERS = ["copyLibraryWorkToSelf", "copyCharacterToSelf", "copyWorkToSelf"] as const;
+
+/**
+ * **팀을 지우면 안 되는 복사 함수.**
+ *
+ * 참고 이미지 표에서는 `team_id = null` 이 「주인만」이 아니라 **「누구나 본다」**
+ * 다(`202609070006_reference_team_scope.sql`). 처음에 이 함수도 위 목록에 넣고
+ * 팀을 지우게 했더니, 팀 X 만 보던 회원의 그림이 **전 회원에게 공개**됐다 —
+ * 그리고 이 가늠자가 그 잘못을 굳혀 버렸다(2026-09-16 독립 리뷰가 배포 전에
+ * 잡음). 이쪽은 **원본의 팀을 물려받아야** 한다.
+ */
+const INHERITS_SCOPE = ["copyReferencesToSelf"] as const;
 
 /**
  * 팀 도장이 찍히는 표 중 **복사가 건드리는 것**.
@@ -31,15 +43,7 @@ const COPIERS = [
  * 함수 수와 다르다 — `copyWorkToSelf` 하나가 카드뉴스와 포스터 두 표를
  * 다룬다. 그래서 함수를 세면 한 갈래가 빠져도 못 잡는다.
  */
-const STAMPED_TABLES = [
-  "library_items", "characters", "sns_projects", "poster_projects",
-  /*
-    참고 이미지에도 도장이 찍힌다(`stamp_team_reference_images`). 관리자가
-    다른 회원의 그림을 복사해 오면 관리자 팀 전원의 라이브러리에 그 그림이
-    뜬다 — 원래 회원은 모른다(2026-09-16 추가).
-  */
-  "reference_images",
-] as const;
+const STAMPED_TABLES = ["library_items", "characters", "sns_projects", "poster_projects"] as const;
 
 describe("복사본은 팀에 열지 않는다", () => {
   it("옮기는 함수를 하나도 빠짐없이 센다", () => {
@@ -49,7 +53,7 @@ describe("복사본은 팀에 열지 않는다", () => {
     */
     const found = [...source.matchAll(/export async function (copy\w+ToSelf)/g)]
       .map((match) => match[1] as string);
-    expect(found.sort()).toEqual([...COPIERS].sort());
+    expect(found.sort()).toEqual([...COPIERS, ...INHERITS_SCOPE].sort());
   });
 
   it("넣은 만큼 지운다", () => {
@@ -104,5 +108,35 @@ describe("복사본은 팀에 열지 않는다", () => {
     expect(created).toBeGreaterThan(-1);
     expect(cleared).toBeGreaterThan(created);
     expect(cleared).toBeLessThan(moved);
+  });
+});
+
+describe("참고 이미지 복사본은 원본의 팀을 물려받는다", () => {
+  const at = source.indexOf("export async function copyReferencesToSelf");
+  const next = source.indexOf("export async function", at + 10);
+  const body = source.slice(at, next > at ? next : source.length);
+
+  it("함수를 찾는다", () => {
+    expect(at, "copyReferencesToSelf 를 못 찾았다 — 가늠자를 고쳐라").toBeGreaterThan(-1);
+  });
+
+  it("**팀을 지우지 않는다**", () => {
+    // 이 표에서 팀을 지우면 전 회원 공개다.
+    expect(body).not.toContain("keepCopyPrivate(");
+    expect(body).not.toMatch(/team_id:\s*null/);
+  });
+
+  it("원본 줄의 팀으로 맞춘다", () => {
+    const calls = body.match(/matchReferenceScope\(admin, newId, row\.team_id\)/g) ?? [];
+    // 새로 만들 때, 이미 있을 때, 다른 요청이 먼저 만들었을 때 — 세 갈래 모두.
+    expect(calls.length).toBe(3);
+  });
+
+  it("팀을 맞추는 함수가 원본 팀 값을 그대로 쓴다", () => {
+    const helper = source.slice(
+      source.indexOf("async function matchReferenceScope"),
+      source.indexOf("export async function copyReferencesToSelf"),
+    );
+    expect(helper).toContain(".update({ team_id: teamId })");
   });
 });

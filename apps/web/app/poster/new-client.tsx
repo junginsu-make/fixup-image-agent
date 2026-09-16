@@ -19,7 +19,7 @@ import {
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
-import { adoptPosterReferences, posterSeed, type AdoptedReference } from "./rerun-seed";
+import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
@@ -56,24 +56,6 @@ const PROMPT_NAIL_EXAMPLES = [
   "예: 포스터처럼 만들어 주세요",
   "예: 사람 얼굴은 정면으로",
 ].join("\n");
-
-/**
- * 다른 회원의 작업이 붙였던 그림을 **관리자 라이브러리로 복사해 온다.**
- *
- * 무엇을 복사할지는 서버가 작업 기록에서 정한다 — 여기서 id 를 보내지 않는다.
- * 실패하면 빈 목록이다. 멈추지 않고, 빠진 그림은 화면이 센다.
- */
-async function adoptReferences(workId: string): Promise<AdoptedReference[]> {
-  try {
-    const response = await fetch(`/api/admin/works/poster/${encodeURIComponent(workId)}/references`, {
-      method: "POST",
-    });
-    const body = await response.json().catch(() => null);
-    return body?.ok && Array.isArray(body.copies) ? body.copies : [];
-  } catch {
-    return [];
-  }
-}
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
   const router = useRouter();
@@ -295,57 +277,39 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 가려낼 수 있다 — 골라 둔 채로 두면 화면에는 ①②③ 이 서는데 실제로는 아무
    * 그림도 없다.
    *
-   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
-   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정). 회원용 길에
-   * 관리자 예외를 심지 않는 것은 이 저장소의 규칙이다.
+   * **무엇을 어떤 차례로 부를지는 `loadPosterRerun` 이 정한다.** 회원용 길 →
+   * (404 면) 관리자 통로 → (남의 작업이면) 그림 복사 → 목록 읽기 차례다. 화면
+   * 안에 적어 두었을 때는 조건을 뒤집어도 시험이 못 잡았다(2026-09-16 리뷰) —
+   * 그래서 빼서 값으로 잰다(`__tests__/rerun-load.test.ts`).
    */
   React.useEffect(() => {
     if (!rerunFrom) return;
     let alive = true;
     void (async () => {
-
-      const read = async (url: string) => {
-        try {
-          const response = await fetch(url, { cache: "no-store" });
-          return { status: response.status, body: await response.json().catch(() => null) };
-        } catch {
-          return { status: 0, body: null };
-        }
-      };
-
-      let found = await read(`/api/poster/projects/${encodeURIComponent(rerunFrom)}`);
-      /** 관리자 라이브러리로 복사해 온 그림. 남의 작업일 때만 채워진다. */
-      let adopted: AdoptedReference[] = [];
-      if (!found.body?.ok && found.status === 404) {
-        found = await read(`/api/admin/works/poster/${encodeURIComponent(rerunFrom)}`);
-        /*
-          **남의 작업이면 그림을 복사해 온다.** 붙였던 그림이 그 회원 것이라
-          관리자 목록에 없어서 02 가 통째로 비었다(2026-09-16 운영 데이터로
-          확인). 복사본은 관리자 목록에 들어가므로 아래에서 다시 읽으면 보인다.
-          실패해도 멈추지 않는다 — 그 그림들이 빠진 수로 세어져 화면이 말한다.
-        */
-        if (found.body?.ok) adopted = await adoptReferences(rerunFrom);
-      }
-      const original = found.body?.project ?? found.body?.work;
+      const result = await loadPosterRerun(rerunFrom, {
+        async get(url) {
+          try {
+            const response = await fetch(url, { cache: "no-store" });
+            return { status: response.status, body: await response.json().catch(() => null) };
+          } catch {
+            return { status: 0, body: null };
+          }
+        },
+        async post(url) {
+          const response = await fetch(url, { method: "POST" });
+          return response.json().catch(() => null);
+        },
+        loadVisible: async () => new Set((await loadReferences()).map((item) => item.id)),
+      });
       if (!alive) return;
-      if (!original) {
+      if (!result.ok) {
         setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
       }
 
-      /*
-        **복사한 뒤에 목록을 읽는다.** 먼저 읽으면 복사본이 목록에 없어서 방금
-        복사해 온 그림이 전부 「못 가져온 것」으로 빠진다.
-      */
-      const visible = new Set((await loadReferences()).map((item) => item.id));
-      if (!alive) return;
-      const project = {
-        ...original,
-        data: adoptPosterReferences(original.data ?? {}, adopted),
-      };
-      const seed = posterSeed(project, visible);
+      const { seed } = result;
       setTitle(seed.title);
       setInstruction(seed.instruction);
       setRatio(seed.ratio);
@@ -488,6 +452,13 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     adReady: adPlan.ready,
   });
 
+  /*
+    **어디로 갈 수 있는지는 `posterRerunJump` 가 정한다.** 값을 못 불러왔으면
+    04·05 를 안 연다 — 남의 id 를 주소에 친 회원이 누르면 열 수 없는 작업으로
+    간다(2026-09-16 리뷰).
+  */
+  const jumpContext = { rerunFrom, seeded: rerun !== null };
+
   return (
     <div className="grid gap-6">
       <div className="mb-4">
@@ -502,12 +473,11 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         <StepBar
           steps={POSTER_STEPS}
           current={step}
-          allowJump={(id) => reachableBeforeCreate(id) || Boolean(rerunFrom)}
+          allowJump={(id) => posterRerunJump(id, jumpContext) !== null}
           onJump={(id) => {
-            if (reachableBeforeCreate(id)) return setStep(id);
-            if (!rerunFrom) return;
-            const back = `/poster/${encodeURIComponent(rerunFrom)}`;
-            router.push(id === "plan" ? `${back}?view=plan` : back);
+            const jump = posterRerunJump(id, jumpContext);
+            if (jump?.kind === "step") setStep(jump.id);
+            if (jump?.kind === "go") router.push(jump.href);
           }}
         />
       </div>

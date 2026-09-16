@@ -153,7 +153,7 @@ export function snsSeed(
     : attachments.flatMap((attachment) => {
         const copy = copies.get(attachment.id);
         return copy
-          ? [{ ...attachment, id: copy.id, assetPath: copy.storagePath, url: copy.url ?? attachment.url }]
+          ? [{ ...attachment, id: copy.id, assetPath: copy.storagePath, url: copy.url ?? "" }]
           : [];
       });
 

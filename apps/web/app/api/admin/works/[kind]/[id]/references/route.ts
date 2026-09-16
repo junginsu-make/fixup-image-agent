@@ -1,6 +1,7 @@
 import { authenticateApiAdmin } from "../../../../../../../lib/membership/api";
 import { copyReferencesToSelf, readAnyWork } from "../../../store";
 import { referenceIdsOfWork } from "../../../copy-paths";
+import { teamIdOf } from "../../../../../../../lib/teams/store";
 
 type Context = { params: Promise<{ kind: string; id: string }> };
 
@@ -34,7 +35,24 @@ export async function POST(_request: Request, context: Context) {
     if (!work) return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
 
     const ids = referenceIdsOfWork(kind, (work as { data?: unknown }).data);
-    const copies = await copyReferencesToSelf(ids, auth.member.userId);
+    /*
+      **작업 주인이 볼 수 있던 그림만** 옮기려면 주인과 그 팀을 알아야 한다.
+      작업 기록의 id 는 주인이 소유 검사 없이 적을 수 있는 값이다.
+    */
+    const ownerId = (work as { userId?: unknown }).userId;
+    /*
+      **주인을 모르면 복사하지 않는다.** 모르는 채로 판단하면 「아무도 아닌
+      사람이 볼 수 있던 것」 — 공용 그림만 — 이 되어, 주인 자기 팀 그림은
+      조용히 빠진다. 빠진 채로 성공이라고 하느니 멈춘다.
+    */
+    if (typeof ownerId !== "string" || !ownerId) {
+      console.error("[admin-works:references] 작업 주인을 알 수 없습니다", kind, id);
+      return Response.json({ ok: false, message: "그림을 가져오지 못했습니다." }, { status: 500 });
+    }
+    const copies = await copyReferencesToSelf(ids, auth.member.userId, {
+      userId: ownerId,
+      teamId: await teamIdOf(ownerId),
+    });
     return Response.json({ ok: true, copies });
   } catch (error) {
     // DB 오류 문구를 화면에 흘리지 않는다. 서버 로그에 남긴다.

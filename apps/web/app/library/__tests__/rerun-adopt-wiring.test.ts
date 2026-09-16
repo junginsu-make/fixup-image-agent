@@ -3,133 +3,135 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * **관리자가 다른 회원의 작업을 다시 만들 때 그림까지 들어 있어야 한다.**
+ * **화면이 판단 함수를 정확히 그 모양으로 쓰는가.**
  *
- * 01 은 채워지는데 02 가 통째로 비었다(2026-09-16 사용자 보고). 운영 데이터를
- * 보니 붙였던 그림이 그 회원 것이라 관리자 목록에 없어, 「못 보는 것은 뺀다」
- * 규칙에 전부 걸렸다. 그래서 그림을 관리자 라이브러리로 **복사해 와서** 채운다.
+ * 무엇을 어떤 차례로 부를지(`loadPosterRerun`·`loadSnsRerun`)와 단계 막대에서
+ * 어디로 갈지(`posterRerunJump`·`snsRerunJump`)는 **값으로** 잰다
+ * (`poster/__tests__/rerun-load.test.ts`, `sns/__tests__/rerun-load.test.ts`).
  *
- * 원문만 훑는 시험이라 값을 직접 못 잰다. 그래서 **순서**를 잰다 — 오늘 이
- * 파일의 형제(`rerun-wiring.test.ts`)가 글자만 세다가 여러 번 뚫렸다.
+ * 여기서는 화면이 그 함수를 **그대로** 부르는지만 본다. 부분 글자로 재면 뚫린다 —
+ * 독립 리뷰가 `if (found.body?.ok)` → `if (!found.body?.ok)`,
+ * `Boolean(rerunFrom)` → `!Boolean(rerunFrom)` 으로 바꿔도 초록인 것을 실증했다
+ * (2026-09-16). 그래서 **문장 전체**를 요구한다. 한 글자라도 바뀌면 멈춘다.
  */
 const web = join(__dirname, "..", "..", "..");
 const read = (path: string) => readFileSync(join(web, path), "utf8");
 
-/** `source` 안에서 `marks` 가 **이 차례대로** 나오는지. 못 찾으면 -1 로 실패한다. */
-function inOrder(source: string, marks: string[]) {
-  const positions = marks.map((mark) => source.indexOf(mark));
-  marks.forEach((mark, index) => {
-    expect(positions[index], `「${mark}」 를 못 찾았다 — 가늠자를 고쳐라`).toBeGreaterThan(-1);
-  });
-  for (let index = 1; index < positions.length; index += 1) {
-    expect(
-      positions[index]!,
-      `「${marks[index]}」 가 「${marks[index - 1]}」 보다 앞에 있다`,
-    ).toBeGreaterThan(positions[index - 1]!);
-  }
+/** 문장이 **정확히 한 번** 있는가. 두 번 있으면 한쪽이 옛 것일 수 있다. */
+function once(source: string, sentence: string) {
+  const count = source.split(sentence).length - 1;
+  expect(count, `「${sentence}」 가 ${count}번 있다 — 정확히 한 번이어야 한다`).toBe(1);
 }
 
-describe("이미지 만들기 — 남의 그림을 복사해 채운다", () => {
+describe("이미지 만들기 새 작업 화면", () => {
   const source = read("app/poster/new-client.tsx");
 
-  it("관리자 통로로 읽은 **다음에** 복사하고, 복사한 **다음에** 목록을 읽는다", () => {
-    /*
-      목록을 먼저 읽으면 복사본이 목록에 없어서, 방금 복사해 온 그림이 전부
-      「못 가져온 것」으로 빠진다 — 고치려던 02 빈칸이 그대로 남는다.
-    */
-    inOrder(source, [
-      "found = await read(`/api/admin/works/poster/",
-      "adopted = await adoptReferences(rerunFrom)",
-      "const visible = new Set((await loadReferences()).map((item) => item.id))",
-      "posterSeed(project, visible)",
-    ]);
+  it("값 불러오기를 함수에 맡기고, 결과를 그대로 따른다", () => {
+    once(source, "const result = await loadPosterRerun(rerunFrom, {");
+    once(source, "if (!result.ok) {");
+    once(source, "const { seed } = result;");
   });
 
-  it("작업의 id 를 복사본으로 바꿔 끼운 것을 심는다", () => {
-    // 복사만 하고 안 바꿔 끼우면 작업은 여전히 남의 id 를 가리켜 빠진다.
-    expect(source).toContain("adoptPosterReferences(original.data ?? {}, adopted)");
+  it("복사 요청은 POST 로, 목록 읽기는 **복사 뒤에 부르게** 넘긴다", () => {
+    once(source, 'const response = await fetch(url, { method: "POST" });');
+    once(source, "loadVisible: async () => new Set((await loadReferences()).map((item) => item.id)),");
   });
 
-  it("복사는 **남의 작업일 때만** 한다", () => {
-    /*
-      내 작업에서까지 부르면 관리자가 아닌 회원은 403 을 받고, 관리자는 자기
-      그림을 쓸데없이 한 번 더 부른다. 회원용 길이 404 인 가지 안이어야 한다.
-    */
-    const guard = source.indexOf("found.status === 404");
-    const adopt = source.indexOf("adopted = await adoptReferences(rerunFrom)");
-    expect(guard).toBeGreaterThan(-1);
-    expect(adopt).toBeGreaterThan(guard);
-    expect(source.split("adoptReferences(rerunFrom)").length - 1).toBe(1);
+  it("옛 흐름이 화면에 남아 있지 않다", () => {
+    // 화면 안에 흐름이 다시 적히면 값 시험이 못 본다.
+    expect(source).not.toContain("adoptReferences(");
+    expect(source).not.toContain("/api/admin/works/poster/");
+    expect(source).not.toContain("found.status === 404");
+  });
+
+  it("단계 막대는 `posterRerunJump` 가 정한 대로만 움직인다", () => {
+    once(source, "const jumpContext = { rerunFrom, seeded: rerun !== null };");
+    once(source, "allowJump={(id) => posterRerunJump(id, jumpContext) !== null}");
+    once(source, "const jump = posterRerunJump(id, jumpContext);");
+    once(source, 'if (jump?.kind === "step") setStep(jump.id);');
+    once(source, 'if (jump?.kind === "go") router.push(jump.href);');
   });
 });
 
-describe("카드뉴스 — 남의 첨부를 복사해 채운다", () => {
+describe("카드뉴스 새 작업 화면", () => {
   const source = read("app/sns/new-client.tsx");
 
-  it("남의 것으로 정한 **다음에** 복사하고, 그 복사본으로 심는다", () => {
-    inOrder(source, [
-      "found = await read(`/api/admin/works/sns/",
-      "mine = false;",
-      "adopted = await adoptAttachments(rerunFrom)",
-      "snsSeed(project, mine, adopted)",
-    ]);
-    expect(source.split("adoptAttachments(rerunFrom)").length - 1).toBe(1);
+  it("값 불러오기를 함수에 맡기고, 결과를 그대로 따른다", () => {
+    once(source, "const result = await loadSnsRerun(rerunFrom, {");
+    once(source, "if (!result.ok) {");
+    once(source, "const { seed } = result;");
+    once(source, 'const response = await fetch(url, { method: "POST" });');
+  });
+
+  it("옛 흐름이 화면에 남아 있지 않다", () => {
+    expect(source).not.toContain("adoptAttachments(");
+    expect(source).not.toContain("/api/admin/works/sns/");
+    expect(source).not.toContain("let mine =");
+  });
+
+  it("단계 막대는 `snsRerunJump` 가 정한 대로만 움직인다", () => {
+    once(source, "const jumpContext = { rerunFrom, seeded: rerun !== null };");
+    once(source, "allowJump={(id) => snsRerunJump(id, jumpContext) !== null}");
+    once(source, "const jump = snsRerunJump(id, jumpContext);");
+    once(source, 'if (jump?.kind === "step") setStep(jump.id as Step);');
+    once(source, 'if (jump?.kind === "go") router.push(jump.href);');
+  });
+
+  it("개발 중 임시 글자가 사용자에게 안 보인다", () => {
+    expect(source).not.toContain("Task 13");
+  });
+});
+
+describe("원래 작업 화면 — `?view=plan` 으로 오면 기획을 연다", () => {
+  const source = read("app/poster/[id]/poster-client.tsx");
+  /*
+    **그 효과 한 덩어리만 본다.** 파일 전체에서 `setPlanOpen(true)` 를 찾으면 바로
+    아래 다른 효과의 것이 잡혀, 이 효과에서 지워도 초록이었다(2026-09-16 리뷰).
+  */
+  const start = source.indexOf('const askedForPlan = useSearchParams().get("view") === "plan";');
+  const end = source.indexOf("React.useEffect(() => {", source.indexOf("React.useEffect(() => {", start) + 1);
+  const effect = source.slice(start, end);
+
+  it("효과를 찾는다", () => {
+    expect(start, "기획 열기 효과를 못 찾았다 — 가늠자를 고쳐라").toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+  });
+
+  it("주소를 읽어 기획 칸을 연다", () => {
+    once(effect, 'if (!askedForPlan || project.data.promptMode === "verbatim") return;');
+    once(effect, "setPlanOpen(true);");
   });
 });
 
 describe("복사 주소", () => {
   const route = read("app/api/admin/works/[kind]/[id]/references/route.ts");
 
-  it("화면이 보낸 id 를 받지 않는다", () => {
+  it("**요청 본문을 아예 안 쓴다**", () => {
     /*
-      받으면 관리자 권한으로 아무 회원의 아무 그림이나 복사하는 길이 열린다.
-      무엇을 복사할지는 작업 기록에서만 뽑는다.
+      화면이 보낸 id 를 받으면 관리자 권한으로 아무 회원의 아무 그림이나 복사하는
+      길이 열린다. 처음에는 `request.json(` 같은 부분 글자를 금지했는데 `.text()`
+      로 바꾸자 뚫렸다(2026-09-16 리뷰). 그래서 **인자 이름이 선언 한 번뿐인지**
+      센다 — 어떤 방식으로 읽든 이름을 한 번 더 써야 한다.
     */
-    expect(route).not.toMatch(/request\.json\(|request\.formData\(|searchParams/);
-    inOrder(route, [
+    expect(route.split("_request").length - 1).toBe(1);
+    expect(route).not.toMatch(/\brequest\b/);
+  });
+
+  it("관문 → 작업 읽기 → 작업 기록에서 id 뽑기 → 주인 기준으로 복사 차례다", () => {
+    const marks = [
       "await authenticateApiAdmin()",
-      "readAnyWork(kind, id)",
-      "referenceIdsOfWork(kind,",
-      "copyReferencesToSelf(ids, auth.member.userId)",
-    ]);
-  });
-});
-
-describe("새 작업 화면에서 04·05 로 원래 작업에 돌아간다", () => {
-  /*
-    결과물에서 지난 단계로 넘어오면 04 기획 확인·05 결과가 막혀 돌아갈 길이
-    없었다(2026-09-16 사용자 보고).
-  */
-  it("이미지 만들기는 돌아온 길에서만 04·05 를 열고 원래 작업으로 보낸다", () => {
-    const source = read("app/poster/new-client.tsx");
-    const bar = source.slice(source.indexOf("<StepBar"), source.indexOf("/>", source.indexOf("<StepBar")));
-
-    expect(bar).toContain("reachableBeforeCreate(id) || Boolean(rerunFrom)");
-    expect(bar).toContain("`/poster/${encodeURIComponent(rerunFrom)}`");
-    expect(bar).toContain('id === "plan" ? `${back}?view=plan` : back');
+      "const work = await readAnyWork(kind, id);",
+      "const ids = referenceIdsOfWork(kind, (work as { data?: unknown }).data);",
+      "const copies = await copyReferencesToSelf(ids, auth.member.userId, {",
+    ];
+    const positions = marks.map((mark) => route.indexOf(mark));
+    marks.forEach((mark, index) => expect(positions[index], `「${mark}」 를 못 찾았다`).toBeGreaterThan(-1));
+    for (let index = 1; index < positions.length; index += 1) {
+      expect(positions[index]!).toBeGreaterThan(positions[index - 1]!);
+    }
   });
 
-  it("원래 작업 화면은 `?view=plan` 으로 오면 기획을 연다", () => {
-    const source = read("app/poster/[id]/poster-client.tsx");
-
-    inOrder(source, [
-      'useSearchParams().get("view") === "plan"',
-      "if (!askedForPlan",
-      "setPlanOpen(true);",
-    ]);
-  });
-
-  it("카드뉴스는 돌아온 길에서만 04·05 를 열고 원래 작업으로 보낸다", () => {
-    const source = read("app/sns/new-client.tsx");
-    const bar = source.slice(source.indexOf("<StepBar"), source.indexOf("/>", source.indexOf("<StepBar")));
-
-    expect(bar).toContain("Boolean(rerunFrom)");
-    expect(bar).toContain("`/sns/${encodeURIComponent(rerunFrom)}`");
-    // 전에는 04·05 가 그냥 눌려 없는 단계로 바뀌고 화면이 비었다.
-    expect(bar).not.toContain("setStep(id as Step)");
-  });
-
-  it("개발 중 임시 글자가 사용자에게 안 보인다", () => {
-    expect(read("app/sns/new-client.tsx")).not.toContain("Task 13");
+  it("주인을 모르면 복사하지 않는다", () => {
+    once(route, 'if (typeof ownerId !== "string" || !ownerId) {');
   });
 });

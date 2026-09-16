@@ -11,7 +11,7 @@ import { visibleIntents } from "./_components/slot-rows";
 import { SourceInput, sourceDraftValid, type SourceDraft } from "./_components/source-input";
 import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-picker";
 import { takeHandoff } from "../../lib/handoff";
-import { snsSeed, type AdoptedAttachment } from "./rerun-seed";
+import { loadSnsRerun, snsRerunJump } from "./rerun-load";
 
 /**
  * **손으로 박지 않는다.**
@@ -36,24 +36,6 @@ const STEPS: StepDefinition[] = [
 ];
 
 type Step = "content" | "images" | "spec";
-
-/**
- * 다른 회원의 카드뉴스가 붙였던 그림을 **관리자 라이브러리로 복사해 온다.**
- *
- * 무엇을 복사할지는 서버가 작업 기록에서 정한다 — 여기서 id 를 보내지 않는다.
- * 실패하면 빈 목록이다. 멈추지 않고, 빠진 첨부는 화면이 센다.
- */
-async function adoptAttachments(workId: string): Promise<AdoptedAttachment[]> {
-  try {
-    const response = await fetch(`/api/admin/works/sns/${encodeURIComponent(workId)}/references`, {
-      method: "POST",
-    });
-    const body = await response.json().catch(() => null);
-    return body?.ok && Array.isArray(body.copies) ? body.copies : [];
-  } catch {
-    return [];
-  }
-}
 
 export function NewSnsClient() {
   const router = useRouter();
@@ -127,53 +109,38 @@ export function NewSnsClient() {
   /**
    * 지난 단계로 돌아왔으면 **그때 쓰던 값을 심는다.**
    *
-   * **회원용 길이 404 면 관리자 통로에 한 번 더 묻는다.** 관리자는 모든 회원의
-   * 작업을 다시 만들 수 있어야 한다(2026-09-16 사용자 결정).
-   *
-   * 남의 작업이면 첨부를 못 들고 온다 — 까닭은 `rerun-seed.ts` 에 적었다.
+   * **무엇을 어떤 차례로 부를지는 `loadSnsRerun` 이 정한다.** 회원용 길(`/plan`)
+   * → (404 면) 관리자 통로 → (남의 작업이면) 첨부 복사 차례다. 화면 안에 적어
+   * 두었을 때는 조건을 뒤집어도 시험이 못 잡았다(2026-09-16 리뷰) — 그래서 빼서
+   * 값으로 잰다(`__tests__/rerun-load.test.ts`).
    */
   React.useEffect(() => {
     if (!rerunFrom) return;
     let alive = true;
     void (async () => {
-      const read = async (url: string) => {
-        try {
-          const response = await fetch(url, { cache: "no-store" });
-          return { status: response.status, body: await response.json().catch(() => null) };
-        } catch {
-          return { status: 0, body: null };
-        }
-      };
-
-      /*
-        **작업 한 건은 `/plan` 이 준다.** `/api/sns/projects/{id}` 에는 GET 이
-        없다(DELETE 뿐이다) — 그리로 보내면 405 가 오고, 404 가 아니라서
-        관리자 통로로 넘어가지도 못한다.
-      */
-      let found = await read(`/api/sns/projects/${encodeURIComponent(rerunFrom)}/plan`);
-      let mine = true;
-      let adopted: AdoptedAttachment[] = [];
-      if (!found.body?.ok && found.status === 404) {
-        found = await read(`/api/admin/works/sns/${encodeURIComponent(rerunFrom)}`);
-        // 관리자 통로로 온 것은 늘 남의 것이다. 내 것이면 회원용 길에서 열렸다.
-        mine = false;
-        /*
-          **남의 작업이면 첨부를 관리자 라이브러리로 복사해 온다.** 그대로는
-          못 싣고(경로 첫 칸이 그 회원 id 다), 빼기만 하면 02 가 통째로 빈다
-          (2026-09-16 사용자 보고). 복사본으로 바꿔 싣는다.
-        */
-        if (found.body?.ok) adopted = await adoptAttachments(rerunFrom);
-      }
-      const project = found.body?.project ?? found.body?.work;
+      const result = await loadSnsRerun(rerunFrom, {
+        async get(url) {
+          try {
+            const response = await fetch(url, { cache: "no-store" });
+            return { status: response.status, body: await response.json().catch(() => null) };
+          } catch {
+            return { status: 0, body: null };
+          }
+        },
+        async post(url) {
+          const response = await fetch(url, { method: "POST" });
+          return response.json().catch(() => null);
+        },
+      });
       if (!alive) return;
-      if (!project) {
+      if (!result.ok) {
         setMessage("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
       }
 
-      const seed = snsSeed(project, mine, adopted);
+      const { seed } = result;
       setTitle(seed.title);
       setToneNote(seed.toneNote);
       setSource(seed.source);
@@ -244,6 +211,12 @@ export function NewSnsClient() {
     }
   }
 
+  /*
+    **어디로 갈 수 있는지는 `snsRerunJump` 가 정한다.** 값을 못 불러왔으면
+    04·05 를 안 연다 — 열면 열 수 없는 작업으로 간다(2026-09-16 리뷰).
+  */
+  const jumpContext = { rerunFrom, seeded: rerun !== null };
+
   return (
     <div className="grid gap-8">
       <header>
@@ -260,10 +233,11 @@ export function NewSnsClient() {
       <StepBar
         steps={STEPS}
         current={step}
-        allowJump={(id) => id === "content" || id === "images" || id === "spec" || Boolean(rerunFrom)}
+        allowJump={(id) => snsRerunJump(id, jumpContext) !== null}
         onJump={(id) => {
-          if (id === "content" || id === "images" || id === "spec") return setStep(id);
-          if (rerunFrom) router.push(`/sns/${encodeURIComponent(rerunFrom)}`);
+          const jump = snsRerunJump(id, jumpContext);
+          if (jump?.kind === "step") setStep(jump.id as Step);
+          if (jump?.kind === "go") router.push(jump.href);
         }}
       />
 

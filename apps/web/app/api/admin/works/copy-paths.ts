@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canSeeReference, referenceVisibility } from "../../../../lib/teams/reference-scope";
 
 /**
  * 복사본의 그림이 놓일 자리.
@@ -283,4 +284,40 @@ export function referenceIdsOfWork(kind: "sns" | "poster", data: unknown): strin
     ...ids(record.restyledIds),
     ...ids(record.attachmentOrder),
   ])];
+}
+
+const COPY_MARK = " (복사)";
+
+/**
+ * 복사본의 제목. **원본과 달라야 한다.**
+ *
+ * 캐릭터 각도 그림은 제목이 유일한 손잡이다 — 붙일 때 제목으로 찾고
+ * (`app/_components/character-attach.ts`), 지우거나 다시 만들 때 제목으로
+ * 지운다(`lib/reference-images.ts` 의 `removeReferenceImagesByTitle`). 복사본이
+ * 같은 제목이면 관리자가 같은 이름의 캐릭터를 붙일 때 남의 각도 그림이 붙고,
+ * 자기 캐릭터를 지울 때 복사본까지 지워진다(2026-09-16 리뷰).
+ */
+export function copiedReferenceTitle(title: string | null): string | null {
+  if (!title) return null;
+  return title.endsWith(COPY_MARK) ? title : `${title}${COPY_MARK}`;
+}
+
+/**
+ * 작업 주인이 **원래 볼 수 있던** 그림인가.
+ *
+ * 작업 기록의 그림 id 는 주인이 소유 검사 없이 적을 수 있다 — 포스터 저장은
+ * uuid 모양만 본다. 주인이 남의 팀 그림 id 를 심어 두면, 관리자가 그 작업을
+ * 다시 만들 때 그 그림이 관리자 손을 거쳐 새어 나올 수 있다(2026-09-16 리뷰).
+ *
+ * 판단은 목록과 같은 규칙(`canSeeReference`)으로 한다 — 두 곳이 갈리면 목록에는
+ * 보이는데 복사는 안 되거나 그 반대가 된다.
+ */
+export function ownerCouldSeeReference(
+  owner: { userId: string; teamId: string | null },
+  row: { userId: string; teamId: string | null },
+): boolean {
+  return canSeeReference(
+    referenceVisibility({ userId: owner.userId, teamId: owner.teamId, isAdmin: false }),
+    row,
+  );
 }

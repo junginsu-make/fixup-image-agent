@@ -3,6 +3,7 @@ import "server-only";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
   adoptedReferenceId, copiedCharacterAssetPath, copiedLibraryAssetPath, copiedReferencePath,
+  copiedReferenceTitle, ownerCouldSeeReference,
   posterCopyPlan, snsCopyPlan, type AssetMove,
 } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
@@ -182,7 +183,16 @@ export async function readAnyWork(
     사라지는 것이 `record()` 주석이 말하는 그 일이다.
   */
   if (kind !== "sns") {
-    return toPosterRecord(data as PosterProjectRow) as unknown as Record<string, unknown>;
+    /*
+      **주인을 되붙인다.** 회원용 변환은 `user_id` 를 떨어뜨린다 — 자기 것만 보던
+      화면에는 필요가 없었다(`listAllPosterProjects` 가 같은 이유로 되붙인다).
+      그림 복사가 「작업 주인이 볼 수 있던 것만」을 판단하려면 주인이 있어야
+      한다. 없으면 주인 자기 팀 그림까지 「못 보던 것」으로 빠진다.
+    */
+    return {
+      ...toPosterRecord(data as PosterProjectRow),
+      userId: (data as PosterProjectRow).user_id,
+    } as unknown as Record<string, unknown>;
   }
 
   /*
@@ -370,7 +380,7 @@ const CHARACTER_BUCKET = "characters";
  */
 async function keepCopyPrivate(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  table: "library_items" | "characters" | "sns_projects" | "poster_projects" | "reference_images",
+  table: "library_items" | "characters" | "sns_projects" | "poster_projects",
   id: string,
 ): Promise<void> {
   const { error } = await admin.from(table).update({ team_id: null }).eq("id", id);
@@ -598,6 +608,59 @@ export interface AdoptedReferenceCopy {
   url: string | null;
 }
 
+/** 복사본 행이 이미 있는지. **조회 오류는 삼키지 않는다.** */
+async function findReferenceRow(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  id: string,
+): Promise<{ id: string; storage_path: string } | null> {
+  const { data, error } = await admin
+    .from("reference_images").select("id,storage_path").eq("id", id).maybeSingle();
+  /*
+    **오류를 「없음」으로 읽지 않는다.** 그렇게 읽으면 다시 올리고 insert 가
+    기본키 충돌로 실패한 뒤, 되감기가 **멀쩡하던 복사본의 파일을 지운다** —
+    요청이 하나뿐이어도 일어난다(2026-09-16 리뷰).
+  */
+  if (error) throw new Error(error.message);
+  return (data as { id: string; storage_path: string } | null) ?? null;
+}
+
+/** 그 자리에 파일이 실제로 있나. 못 물어봤으면 있다고 본다. */
+async function fileExists(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  path: string,
+): Promise<boolean> {
+  const slash = path.lastIndexOf("/");
+  const name = path.slice(slash + 1);
+  const { data, error } = await admin.storage
+    .from(BUCKET)
+    .list(path.slice(0, slash), { search: name, limit: 5 });
+  // 못 물어봤으면 있다고 본다 — 멀쩡한 파일을 괜히 다시 올리지 않는다.
+  if (error) return true;
+  return ((data ?? []) as Array<{ name: string }>).some((entry) => entry.name === name);
+}
+
+/**
+ * 복사본을 **원본과 같은 범위**에 둔다.
+ *
+ * **다른 표와 반대다.** 이 표에서는 `team_id = null` 이 「주인만」이 아니라
+ * **「공용 창고, 누구나 본다」**다(`202609070006_reference_team_scope.sql` 의
+ * `when row_team_id is null then true`). 처음에 `keepCopyPrivate` 로 팀을 지웠더니
+ * 팀 X 만 보던 회원의 그림이 **전 회원에게 공개**됐다 — 2026-09-16 독립 리뷰가
+ * 배포 전에 잡았다.
+ *
+ * 그래서 원본의 팀을 그대로 물려받는다. 원본이 공용이면 공용(원래도 모두 봤다),
+ * 팀 X 면 팀 X(원래 보던 사람 + 주인인 관리자). 넣은 **다음에** 고친다 — 팀 도장
+ * 트리거가 null 을 「안 정함」으로 읽어 관리자 팀을 찍기 때문이다.
+ */
+async function matchReferenceScope(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  id: string,
+  teamId: string | null,
+): Promise<void> {
+  const { error } = await admin.from("reference_images").update({ team_id: teamId }).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * 다른 회원의 참고 이미지를 **내 라이브러리로 복사한다.**
  *
@@ -606,21 +669,25 @@ export interface AdoptedReferenceCopy {
  * 모든 작업이 작동해야 하므로(사용자 결정) 그림을 복사해 온다. **원래 회원의
  * 그림은 읽기만 한다.**
  *
- * **같은 그림은 한 번만 복사한다.** 복사본 id 가 「원래 그림 + 복사한 사람」에서
- * 정해지므로(`adoptedReferenceId`), 01 을 여러 번 눌러도 이미 있는 복사본을
- * 그대로 쓴다. 안 그러면 관리자 라이브러리에 같은 그림이 계속 쌓인다.
+ * - **작업 주인이 볼 수 있던 그림만** 옮긴다(`ownerCouldSeeReference`). 작업
+ *   기록의 id 는 주인이 소유 검사 없이 적을 수 있는 값이다
+ * - **같은 그림은 한 번만** — 복사본 id 가 결정적이라(`adoptedReferenceId`)
+ *   두 번째부터 재사용한다
+ * - **복사본은 원본과 같은 범위**에 둔다(`matchReferenceScope`)
+ * - **동시에 두 번 불려도 이긴 쪽 파일을 안 지운다** — 두 요청이 같은 경로에
+ *   올리므로, 충돌하면 이긴 쪽 행을 쓰고 파일은 그대로 둔다
+ * - **파일이 사라진 복사본은 다시 올린다** — 안 그러면 영영 빈 그림이다
+ * - **범위를 못 맞추면 되감는다** — 관리자 팀에 열린 채 남지 않게
  *
- * **이미 내 것이면 복사하지 않는다.** 그대로 돌려준다.
- *
- * **파일을 다 옮긴 뒤에만 행을 적는다.** 원본을 못 읽었으면 그 장은 빼고
- * 넘어간다 — 라이브러리에서 이미 지워진 그림이 실제로 있다. 빠진 장은 화면이
- * 「가져오지 못했습니다」로 센다.
+ * 원본을 못 읽은 장은 빼고 넘어간다 — 라이브러리에서 이미 지워진 그림이 실제로
+ * 있다. 빠진 장은 화면이 「가져오지 못했습니다」로 센다.
  *
  * **부르는 쪽이 관리자인지 먼저 확인해야 한다.** 이 함수는 묻지 않는다.
  */
 export async function copyReferencesToSelf(
   ids: readonly string[],
   ownerUserId: string,
+  workOwner: { userId: string; teamId: string | null },
 ): Promise<AdoptedReferenceCopy[]> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return [];
@@ -628,15 +695,18 @@ export async function copyReferencesToSelf(
 
   const { data: sourceRows, error: readError } = await admin
     .from("reference_images")
-    .select("id,user_id,storage_path,thumb_path,title,purpose,width,height")
+    .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height")
     .in("id", unique);
   if (readError) throw new Error(readError.message);
 
   const results: Array<{ from: string; id: string; storagePath: string }> = [];
   for (const row of (sourceRows ?? []) as Array<{
-    id: string; user_id: string; storage_path: string; thumb_path: string | null;
-    title: string | null; purpose: string; width: number | null; height: number | null;
+    id: string; user_id: string; team_id: string | null; storage_path: string;
+    thumb_path: string | null; title: string | null; purpose: string;
+    width: number | null; height: number | null;
   }>) {
+    if (!ownerCouldSeeReference(workOwner, { userId: row.user_id, teamId: row.team_id })) continue;
+
     if (row.user_id === ownerUserId) {
       results.push({ from: row.id, id: row.id, storagePath: row.storage_path });
       continue;
@@ -646,16 +716,19 @@ export async function copyReferencesToSelf(
     const target = copiedReferencePath(row.storage_path, ownerUserId, newId);
     if (!target) continue;
 
-    // 이미 복사한 적이 있으면 그대로 쓴다.
-    const { data: existing } = await admin
-      .from("reference_images").select("id,storage_path").eq("id", newId).maybeSingle();
+    const moves: AssetMove[] = [{ from: row.storage_path, to: target.path }];
+    if (row.thumb_path) moves.push({ from: row.thumb_path, to: target.thumb });
+
+    const existing = await findReferenceRow(admin, newId);
     if (existing) {
-      results.push({ from: row.id, id: newId, storagePath: (existing as { storage_path: string }).storage_path });
+      // 재사용하기 전에 파일을 본다. 행만 있고 파일이 없으면 다시 올린다.
+      if (!(await fileExists(admin, existing.storage_path))) await moveAssets(admin, moves, BUCKET);
+      // 범위도 다시 맞춘다 — 전에 맞추다 실패한 것이 있어도 여기서 낫는다.
+      await matchReferenceScope(admin, newId, row.team_id);
+      results.push({ from: row.id, id: newId, storagePath: existing.storage_path });
       continue;
     }
 
-    const moves: AssetMove[] = [{ from: row.storage_path, to: target.path }];
-    if (row.thumb_path) moves.push({ from: row.thumb_path, to: target.thumb });
     const moved = await moveAssets(admin, moves, BUCKET);
     // 원본을 못 옮겼으면 그 장은 뺀다. 사본만 실패한 것은 살린다.
     if (!moved.has(target.path)) continue;
@@ -665,18 +738,41 @@ export async function copyReferencesToSelf(
       user_id: ownerUserId,
       storage_path: target.path,
       thumb_path: moved.has(target.thumb) ? target.thumb : null,
-      title: row.title,
+      title: copiedReferenceTitle(row.title),
       purpose: row.purpose,
       width: row.width,
       height: row.height,
     });
     if (insertError) {
-      // 행을 못 적었으면 올린 파일을 치운다. 안 치우면 아무도 못 찾는 파일이 남는다.
+      /*
+        **다른 요청이 먼저 만들었으면 그것을 쓴다. 파일은 지우지 않는다.**
+        두 요청이 같은 경로에 올렸으니, 여기서 지우면 이긴 쪽 행이 가리키는
+        파일이 사라진다(2026-09-16 리뷰).
+      */
+      const winner = await findReferenceRow(admin, newId);
+      if (winner) {
+        await matchReferenceScope(admin, newId, row.team_id);
+        results.push({ from: row.id, id: newId, storagePath: winner.storage_path });
+        continue;
+      }
+      // 행이 정말 없을 때만 이 요청이 올린 파일을 치운다.
       await admin.storage.from(BUCKET).remove([...moved]);
       console.error(`[admin-copy] 참고 이미지 행을 못 적었습니다(${row.id}): ${insertError.message}`);
       continue;
     }
-    await keepCopyPrivate(admin, "reference_images", newId);
+
+    try {
+      await matchReferenceScope(admin, newId, row.team_id);
+    } catch (error) {
+      /*
+        **범위를 못 맞췄으면 되감는다.** 트리거가 찍은 관리자 팀에 열린 채 남는다.
+        행을 먼저, 파일을 나중에 — 파일이 먼저 사라지면 목록에 빈 그림이 선다.
+      */
+      await admin.from("reference_images").delete().eq("id", newId);
+      await admin.storage.from(BUCKET).remove([...moved]);
+      console.error(`[admin-copy] 참고 이미지 범위를 못 맞췄습니다(${row.id}):`, error);
+      continue;
+    }
     results.push({ from: row.id, id: newId, storagePath: target.path });
   }
 

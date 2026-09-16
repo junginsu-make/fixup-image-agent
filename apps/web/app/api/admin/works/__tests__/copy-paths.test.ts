@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adoptedReferenceId, copiedAssetPath, copiedLibraryAssetPath, copiedReferencePath,
-  referenceIdsOfWork,
+  copiedReferenceTitle, ownerCouldSeeReference, referenceIdsOfWork,
 } from "../copy-paths";
 
 /**
@@ -357,5 +357,68 @@ describe("referenceIdsOfWork", () => {
     expect(referenceIdsOfWork("poster", null)).toEqual([]);
     expect(referenceIdsOfWork("poster", { referenceIds: "a" })).toEqual([]);
     expect(referenceIdsOfWork("sns", { attachments: [null, { kind: "x" }, { id: 3 }] })).toEqual([]);
+  });
+});
+
+/**
+ * **복사본의 제목은 원본과 달라야 한다.**
+ *
+ * 캐릭터 각도 그림은 제목(「이름 (캐릭터) · 정면」)이 유일한 손잡이다 —
+ * 붙일 때 제목으로 찾고, 캐릭터를 지우거나 다시 만들 때 제목으로 지운다.
+ * 복사본이 같은 제목이면 관리자가 같은 이름의 캐릭터를 붙일 때 남의 각도
+ * 그림이 붙고, 자기 캐릭터를 지울 때 복사본까지 같이 지워진다(2026-09-16 리뷰).
+ */
+describe("copiedReferenceTitle", () => {
+  it("뒤에 (복사) 를 단다", () => {
+    expect(copiedReferenceTitle("가을 포스터")).toBe("가을 포스터 (복사)");
+  });
+
+  it("캐릭터 각도 제목도 더는 그 캐릭터와 맞지 않는다", () => {
+    const title = "하루 (캐릭터) · 정면";
+    expect(copiedReferenceTitle(title)).not.toBe(title);
+    expect(copiedReferenceTitle(title)).toBe("하루 (캐릭터) · 정면 (복사)");
+  });
+
+  it("제목이 없으면 없는 채로 둔다", () => {
+    expect(copiedReferenceTitle(null)).toBeNull();
+    expect(copiedReferenceTitle("")).toBeNull();
+  });
+
+  it("두 번 복사해도 (복사) 가 겹치지 않는다", () => {
+    expect(copiedReferenceTitle("가을 포스터 (복사)")).toBe("가을 포스터 (복사)");
+  });
+});
+
+/**
+ * **작업 주인이 볼 수 있던 그림만 복사한다.**
+ *
+ * 작업 기록의 그림 id 는 주인이 소유 검사 없이 적을 수 있는 값이다 — 포스터
+ * 저장은 uuid 모양만 본다. 그래서 주인이 남의 팀 그림 id 를 심어 두고 관리자가
+ * 그 작업을 다시 만들면, 그 그림이 관리자 손을 거쳐 새어 나올 수 있다
+ * (2026-09-16 리뷰). 주인이 원래 볼 수 있던 것만 옮긴다.
+ */
+describe("ownerCouldSeeReference", () => {
+  const 주인 = { userId: "주인", teamId: "팀X" };
+
+  it("주인 것은 된다", () => {
+    expect(ownerCouldSeeReference(주인, { userId: "주인", teamId: null })).toBe(true);
+    expect(ownerCouldSeeReference(주인, { userId: "주인", teamId: "팀Y" })).toBe(true);
+  });
+
+  it("주인 팀 것은 된다", () => {
+    expect(ownerCouldSeeReference(주인, { userId: "팀원", teamId: "팀X" })).toBe(true);
+  });
+
+  it("공용(팀 없음)은 된다", () => {
+    expect(ownerCouldSeeReference(주인, { userId: "아무개", teamId: null })).toBe(true);
+  });
+
+  it("**남의 팀 것은 안 된다**", () => {
+    expect(ownerCouldSeeReference(주인, { userId: "남", teamId: "팀Y" })).toBe(false);
+  });
+
+  it("팀이 없는 주인은 남의 팀 것을 못 본다", () => {
+    expect(ownerCouldSeeReference({ userId: "주인", teamId: null }, { userId: "남", teamId: "팀Y" }))
+      .toBe(false);
   });
 });
