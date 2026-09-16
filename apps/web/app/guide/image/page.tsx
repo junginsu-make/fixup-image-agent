@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { POSTER_RATIOS } from "@fixup/sns-core";
+import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
@@ -163,13 +164,21 @@ export default function ImageGuidePage() {
             columns={2}
             items={PRESERVE_ITEMS}
           />
+          {/*
+            **이름을 손으로 적지 않는다.** 결 이름표는 `@fixup/shared` 가 갖고
+            다섯 도구가 함께 쓴다. 손으로 적었더니 2026-09-16 에 이름을 바꾼 뒤
+            설명서만 옛 이름으로 남았다.
+          */}
           <MockChoices
-            label="결"
+            label="그림체 · 무엇으로 그릴까"
             marker={3}
-            columns={4}
-            active={0}
-            items={[{ title: "실사" }, { title: "애니" }, { title: "3D" }, { title: "그림" }]}
-            note="그림을 붙이면 「레퍼런스 따라가기」가 하나 더 생깁니다 — 따라갈 것이 있을 때만 뜻이 있어서입니다."
+            columns={3}
+            active={1}
+            items={IMAGE_LOOKS.map((look) => ({
+              title: IMAGE_LOOK_LABEL[look],
+              hint: IMAGE_LOOK_HINT[look],
+            }))}
+            note={`「${IMAGE_LOOK_LABEL.auto}」는 따라 만들 그림을 붙여야 고를 수 있습니다. 안 붙였으면 흐리게 보입니다.`}
           />
           <MockButtons items={[{ label: "이전", variant: "quiet" }, { label: "다음" }]} />
         </Mock>
