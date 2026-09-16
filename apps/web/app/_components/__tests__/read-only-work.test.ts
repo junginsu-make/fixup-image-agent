@@ -1,0 +1,93 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../read-only-work";
+
+/**
+ * 남의 작업을 **보는 중**일 때 쓰는 요청을 막는다.
+ *
+ * 단추를 하나씩 `disabled` 로 잠그는 방법도 있지만, 그러면 **빠뜨린 단추가
+ * 곧 구멍이다.** 화면은 크고(포스터 상세만 682줄) 단추는 계속 늘어난다.
+ *
+ * 그래서 요청이 나가는 **길목 하나**를 막는다. 새 단추가 생겨도 같은 길로
+ * 나가므로 저절로 막힌다.
+ *
+ * 관리자는 남의 작업을 고치지 못한다 — 고치고 싶으면 자기 것으로 복사한다
+ * (2026-09-16 사용자 결정). 서버의 쓰기 경로는 손대지 않았으므로 설령 이
+ * 막이 뚫려도 DB 는 안 바뀌지만, 그때 크레딧은 이미 나간 뒤다.
+ */
+describe("blockedByReadOnly", () => {
+  it("보는 중이 아니면 아무것도 막지 않는다", () => {
+    expect(blockedByReadOnly(false, { method: "POST" })).toBe(false);
+    expect(blockedByReadOnly(false, undefined)).toBe(false);
+  });
+
+  it("보는 중이면 쓰는 요청을 막는다", () => {
+    expect(blockedByReadOnly(true, { method: "POST" })).toBe(true);
+    expect(blockedByReadOnly(true, { method: "PUT" })).toBe(true);
+    expect(blockedByReadOnly(true, { method: "PATCH" })).toBe(true);
+    expect(blockedByReadOnly(true, { method: "DELETE" })).toBe(true);
+  });
+
+  it("보는 중이어도 읽는 요청은 통과시킨다", () => {
+    // 막아 버리면 화면이 아예 안 뜬다.
+    expect(blockedByReadOnly(true, undefined)).toBe(false);
+    expect(blockedByReadOnly(true, {})).toBe(false);
+    expect(blockedByReadOnly(true, { method: "GET" })).toBe(false);
+    expect(blockedByReadOnly(true, { method: "HEAD" })).toBe(false);
+  });
+
+  it("소문자로 적은 method 도 같게 본다", () => {
+    // `fetch` 는 소문자를 받아 준다. 대소문자로 갈리면 그 길이 곧 구멍이다.
+    expect(blockedByReadOnly(true, { method: "post" })).toBe(true);
+    expect(blockedByReadOnly(true, { method: "get" })).toBe(false);
+  });
+
+  it("모르는 method 는 막는 쪽으로 틀린다", () => {
+    // 새 method 가 생겼을 때 통과시키는 쪽으로 틀리면 그게 사고다.
+    expect(blockedByReadOnly(true, { method: "MERGE" })).toBe(true);
+  });
+
+  it("막았을 때 쓸 말이 있다", () => {
+    expect(READ_ONLY_MESSAGE).toContain("복사");
+  });
+});
+
+/**
+ * 화면이 이 막을 실제로 지나는가.
+ *
+ * 규칙을 만들어 놓고 안 부르면 소용이 없다 — 이 저장소가 두 번 겪었다
+ * (2026-09-08·2026-09-15). **찾지 말고 센다.**
+ */
+describe("상세 화면이 막을 지나는가", () => {
+  const source = readFileSync(
+    join(__dirname, "..", "..", "sns", "[id]", "project-client.tsx"), "utf8");
+
+  it("요청 길목이 blockedByReadOnly 를 한 번 부른다", () => {
+    const gates = source.match(/if \(blockedByReadOnly\(readOnly, init\)\)/g) ?? [];
+    expect(gates.length).toBe(1);
+  });
+
+  it("쓰는 요청이 모두 감싸개를 지난다", () => {
+    /*
+      `projectRequest` 를 직접 부르면 `readOnly` 가 안 실려 막이 비껴간다.
+      첫 적재(GET) 하나만 예외다 — 그건 막으면 화면이 아예 안 뜬다.
+    */
+    const direct = source.match(/await projectRequest\(/g) ?? [];
+    expect(direct.length).toBe(0);
+  });
+
+  it("보는 중이면 상태를 캐묻지 않는다", () => {
+    /*
+      캐묻기는 `POST /status` 라 막이 걸린다. 그런데 실패하면 다시 캐묻으므로
+      막힌 채로 두면 **오류 → 재시도 → 오류**가 끝없이 돈다. 화면에는 빨간
+      글씨만 계속 뜬다. 린트의 deps 경고가 이 버그를 가리켜서 찾았다.
+    */
+    expect(source).toContain("if (!generationActive || readOnly) return;");
+  });
+
+  it("남의 작업이면 보는 중이라고 말한다", () => {
+    expect(source).toContain("setReadOnly(true)");
+    expect(source).toContain("다른 회원의 작업");
+  });
+});

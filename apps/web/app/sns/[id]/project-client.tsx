@@ -14,6 +14,7 @@ import { WorkingBanner } from "../../poster/_components/working-banner";
 import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
+import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -40,7 +41,20 @@ class ProjectRequestError extends Error {
   }
 }
 
-async function projectRequest(url: string, init?: RequestInit): Promise<SnsProjectRecord> {
+async function projectRequest(
+  url: string,
+  init?: RequestInit,
+  readOnly = false,
+): Promise<SnsProjectRecord> {
+  /*
+    **남의 작업을 보는 중이면 쓰는 요청을 여기서 막는다.**
+
+    단추를 하나씩 잠그지 않는 이유는 빠뜨린 단추가 곧 구멍이기 때문이다.
+    요청이 나가는 길목이 이 함수 하나라, 새 단추가 생겨도 저절로 막힌다.
+  */
+  if (blockedByReadOnly(readOnly, init)) {
+    throw new ProjectRequestError(READ_ONLY_MESSAGE, 403);
+  }
   const response = await fetch(url, init);
   const payload = await response.json() as Payload;
   if (!response.ok || !payload.project) {
@@ -57,11 +71,32 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   const [regeneratingIndex, setRegeneratingIndex] = React.useState<number>();
   const [writingCaption, setWritingCaption] = React.useState(false);
   const [message, setMessage] = React.useState("");
+  /**
+   * **남의 작업을 보는 중인가.**
+   *
+   * 회원용 경로가 404 를 주면 관리자 통로로 한 번 더 물어본다. 거기서 오면
+   * 남의 작업이다 — 볼 수는 있고 고치지는 못한다.
+   *
+   * 따로 「나는 관리자인가」를 묻지 않는다. 관리자 통로가 주면 관리자고,
+   * 막히면 아니다 — 두 번 물으면 두 대답이 어긋날 수 있다(`works-tab` 과 같은 판단).
+   */
+  const [readOnly, setReadOnly] = React.useState(false);
+
+  /**
+   * 이 화면에서 나가는 모든 요청은 **이것을 지난다.**
+   *
+   * 부르는 자리마다 `readOnly` 를 손으로 넘기면 언젠가 한 곳을 빠뜨리고,
+   * 그 한 곳이 곧 구멍이다. 감싸개를 하나 두면 빠뜨릴 자리가 없다.
+   */
+  const request = React.useCallback(
+    (url: string, init?: RequestInit) => projectRequest(url, init, readOnly),
+    [readOnly],
+  );
 
   /** 뼈대를 바꾸면 서버가 고친 카드를 다시 받아 온다. */
   const reload = React.useCallback(async () => {
     try {
-      const loaded = await projectRequest(`/api/sns/projects/${projectId}/plan`);
+      const loaded = await request(`/api/sns/projects/${projectId}/plan`);
       setProject(loaded);
       // **첫 적재와 같은 규칙을 쓴다.** 다시 읽고도 화면 단계를 안 맞추면,
       // 서버가 「생성 중」이라고 알려 줘도 사용자는 04 에 그대로 남는다.
@@ -69,7 +104,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.");
     }
-  }, [projectId]);
+  }, [projectId, request]);
 
   React.useEffect(() => {
     projectRequest(`/api/sns/projects/${projectId}/plan`)
@@ -77,7 +112,24 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         setProject(loaded);
         if (loaded.data.flow) setView(loaded.data.flow.stage);
       })
-      .catch((error) => setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다."))
+      .catch(async (error) => {
+        /*
+          **404 면 남의 작업일 수 있다.** 회원용 경로는 RLS 를 타서 내 것과
+          같은 팀 것만 준다. 관리자에게는 별도 통로가 있으므로 한 번 더 묻는다.
+          거기서도 막히면 관리자가 아니거나 정말 없는 작업이다.
+        */
+        if (error instanceof ProjectRequestError && error.status === 404) {
+          const response = await fetch(`/api/admin/works/sns/${projectId}`, { cache: "no-store" });
+          const body = await response.json().catch(() => null) as { ok?: boolean; work?: SnsProjectRecord } | null;
+          if (body?.ok && body.work) {
+            setReadOnly(true);
+            setProject(body.work);
+            if (body.work.data.flow) setView(body.work.data.flow.stage);
+            return;
+          }
+        }
+        setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.");
+      })
       .finally(() => setBusy(undefined));
   }, [projectId]);
 
@@ -109,13 +161,23 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }, [generationActive, projectId, startedAt, title, start, finish]);
 
   React.useEffect(() => {
-    if (!generationActive) return;
+    /*
+      **남의 작업을 보는 중이면 캐지 않는다.**
+
+      이 캐묻기는 `POST /status` 다 — 쓰는 요청이라 막이 걸린다. 그런데 아래
+      `catch` 가 실패하면 다시 캐묻으므로, 막힌 채로 두면 **오류 → 재시도 →
+      오류**가 끝없이 돈다. 화면에는 빨간 글씨만 계속 뜬다.
+
+      남의 작업이 지금 만들어지는 중이어도 그것을 지켜보는 것은 그 주인의
+      화면이 할 일이다.
+    */
+    if (!generationActive || readOnly) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       timer = setTimeout(async () => {
         try {
-          const saved = await projectRequest(`/api/sns/projects/${projectId}/status`, { method: "POST" });
+          const saved = await request(`/api/sns/projects/${projectId}/status`, { method: "POST" });
           if (stopped) return;
           setProject(saved);
           setView("result");
@@ -130,13 +192,13 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     };
     void poll();
     return () => { stopped = true; if (timer) clearTimeout(timer); };
-  }, [generationActive, projectId]);
+  }, [generationActive, projectId, readOnly, request]);
 
   async function plan() {
     setBusy("planning");
     setMessage("");
     try {
-      const saved = await projectRequest(`/api/sns/projects/${projectId}/plan`, { method: "POST" });
+      const saved = await request(`/api/sns/projects/${projectId}/plan`, { method: "POST" });
       setProject(saved);
       setView("copy");
     } catch (error) {
@@ -150,7 +212,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setSavingIndex(index);
     setMessage("");
     try {
-      const saved = await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, {
+      const saved = await request(`/api/sns/projects/${projectId}/cards/${index}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(patch),
@@ -169,7 +231,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setMessage("");
     try {
       // 크레딧이 깎이는 요청이다 — 열쇠 없이 보내면 서버가 예약을 거절한다.
-      const saved = await projectRequest(`/api/sns/projects/${projectId}/generate`, {
+      const saved = await request(`/api/sns/projects/${projectId}/generate`, {
         method: "POST",
         headers: billableHeaders(),
       });
@@ -197,7 +259,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setWritingCaption(true);
     setMessage("");
     try {
-      setProject(await projectRequest(`/api/sns/projects/${projectId}/caption`, { method: "POST" }));
+      setProject(await request(`/api/sns/projects/${projectId}/caption`, { method: "POST" }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "게시글 문구를 만들지 못했습니다.");
     } finally {
@@ -218,7 +280,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     try {
       // 다시 만들기도 크레딧이 깎인다 — 열쇠가 없으면 예약이 거절된다.
       // 적은 말은 이번 한 번만 쓴다. 안 적으면 지금까지와 똑같이 돈다.
-      setProject(await projectRequest(`/api/sns/projects/${projectId}/cards/${index}`, {
+      setProject(await request(`/api/sns/projects/${projectId}/cards/${index}`, {
         method: "POST",
         headers: billableHeaders(),
         body: JSON.stringify({ note }),
@@ -247,6 +309,18 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         <h1 className="mt-1 text-h1">{project.title}</h1>
         <p className="mt-2 max-w-3xl text-body text-muted-foreground">원고를 직접 확인한 뒤 이미지를 만들고, 검수 결과를 보고 사람이 다시 만들지 결정합니다.</p>
       </header>
+
+      {/*
+        **남의 작업을 보는 중이라고 먼저 말한다.**
+
+        안 적으면 자기 작업인 줄 알고 고치려다 「고칠 수 없습니다」만 본다.
+        무엇을 하면 되는지(복사)까지 같은 자리에 적는다.
+      */}
+      {readOnly ? (
+        <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <b>다른 회원의 작업</b>을 보는 중입니다. 과정은 볼 수 있지만 고칠 수는 없습니다.
+        </div>
+      ) : null}
 
       {/*
         **돌고 있다는 것을 눈에 띄게 말한다**(사용자 요청 2026-09-09).
