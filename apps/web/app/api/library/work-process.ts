@@ -26,9 +26,50 @@ export type WorkProcess = {
   aspectRatio?: string;
 };
 
-/** 문자열만 통과시킨다. 객체가 새면 화면이 `[object Object]` 를 그린다. */
-function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+/**
+ * 얼마나 담을 수 있나.
+ *
+ * 과정은 화면이 보낸 글에서 만들어져 `library_items.data` 한 칸에 들어간다.
+ * 상한이 없으면 한 요청으로 표에 수십 MB 를 밀어 넣을 수 있고, 그 행은
+ * 라이브러리를 열 때마다 따라 나온다. 그림은 세는 자리가 있었는데
+ * (`MAX_IMAGES`) 글은 아무도 안 세던 자리였다.
+ *
+ * 값은 **실제로 쓰는 것보다 넉넉하게** 잡았다. 요약은 보통 한두 문장이고
+ * 섹션은 4~7개다 — 자르는 일이 정상 작업에서는 일어나지 않는다.
+ */
+const LIMIT = {
+  summary: 1000,
+  sections: 50,
+  title: 200,
+  role: 200,
+  copy: 1000,
+  /** 심사 전체를 JSON 으로 쟀을 때의 글자 수. */
+  review: 100_000,
+} as const;
+
+/**
+ * 문자열만 통과시키고 **길면 자른다.**
+ *
+ * 객체가 새면 화면이 `[object Object]` 를 그린다.
+ */
+function text(value: unknown, limit: number): string {
+  return typeof value === "string" ? value.trim().slice(0, limit) : "";
+}
+
+/**
+ * 심사를 담을 수 있나.
+ *
+ * 심사는 모양을 모르는 값이라 칸마다 자를 수 없다. 통째로 재서 넘치면
+ * **아예 안 담는다** — 반만 담으면 화면이 그걸 심사 결과라고 그린다.
+ */
+function fitsReview(review: unknown): boolean {
+  if (!review) return false;
+  try {
+    return JSON.stringify(review).length <= LIMIT.review;
+  } catch {
+    // 순환 참조 같은 것. 담을 수 없으면 안 담는다.
+    return false;
+  }
 }
 
 /**
@@ -63,23 +104,27 @@ export function workProcessOf(input: {
     .filter((section): section is NonNullable<typeof section> =>
       Boolean(section) && typeof section === "object")
     .map((section) => {
-      const role = text(section.role);
-      const copy = text(section.copy);
+      const role = text(section.role, LIMIT.role);
+      const copy = text(section.copy, LIMIT.copy);
       return {
-        title: text(section.title),
+        title: text(section.title, LIMIT.title),
         ...(role ? { role } : {}),
         ...(copy ? { copy } : {}),
       };
     })
-    .filter((section) => section.title || section.copy);
+    .filter((section) => section.title || section.copy)
+    // 자르는 것은 **거른 뒤**다. 먼저 자르면 빈 섹션이 자리를 차지해 실제로
+    // 담기는 것이 50개보다 적어진다.
+    .slice(0, LIMIT.sections);
 
-  const summary = text(blueprint?.executiveSummary);
-  const aspectRatio = text(input.aspectRatio);
+  const summary = text(blueprint?.executiveSummary, LIMIT.summary);
+  // 비율은 `4:5` 같은 짧은 말이다. 길면 값이 아니라 다른 것이 온 것이다.
+  const aspectRatio = text(input.aspectRatio, 20);
 
   const process: WorkProcess = {
     ...(summary ? { summary } : {}),
     ...(sections.length ? { sections } : {}),
-    ...(input.review ? { review: input.review } : {}),
+    ...(fitsReview(input.review) ? { review: input.review } : {}),
     ...(aspectRatio ? { aspectRatio } : {}),
   };
 

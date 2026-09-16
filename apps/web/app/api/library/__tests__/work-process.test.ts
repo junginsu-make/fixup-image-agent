@@ -234,3 +234,50 @@ describe("redesignProcessSource", () => {
     expect(workProcessOf(redesignProcessSource({}))).toBeNull();
   });
 });
+
+/**
+ * **크기를 자른다.**
+ *
+ * 과정은 화면이 보낸 글에서 만들어져 `library_items.data` 한 칸에 들어간다.
+ * 상한이 없으면 한 요청으로 표에 수십 MB 를 밀어 넣을 수 있고, 그 행은
+ * 라이브러리를 열 때마다 따라 나온다. 그림과 달리 이 글은 아무도 안 세던
+ * 자리였다.
+ */
+describe("workProcessOf — 크기", () => {
+  it("요약이 너무 길면 자른다", () => {
+    const process = workProcessOf({ blueprint: { executiveSummary: "가".repeat(5000) } })!;
+    expect(process.summary!.length).toBe(1000);
+  });
+
+  it("섹션 수를 넘기면 뒤를 버린다", () => {
+    const many = Array.from({ length: 200 }, (_, index) => ({ title: `${index}번` }));
+    const process = workProcessOf({ blueprint: { sections: many } })!;
+    expect(process.sections).toHaveLength(50);
+    expect(process.sections![0]!.title).toBe("0번");
+  });
+
+  it("섹션 안의 글도 자른다", () => {
+    const process = workProcessOf({
+      blueprint: { sections: [{ title: "가".repeat(500), role: "나".repeat(500), copy: "다".repeat(5000) }] },
+    })!;
+    const [section] = process.sections!;
+    expect(section!.title.length).toBe(200);
+    expect(section!.role!.length).toBe(200);
+    expect(section!.copy!.length).toBe(1000);
+  });
+
+  it("심사가 너무 크면 담지 않는다", () => {
+    /*
+      심사는 모양을 모르는 값이라 칸마다 자를 수 없다. 통째로 재서 넘치면
+      **아예 안 담는다** — 반만 담으면 화면이 그걸 심사 결과라고 그린다.
+    */
+    const huge = { items: Array.from({ length: 5000 }, () => ({ evidence: "가".repeat(200) })) };
+    expect(workProcessOf({ blueprint: { executiveSummary: "요약" }, review: huge }))
+      .toEqual({ summary: "요약" });
+  });
+
+  it("보통 크기의 심사는 그대로 담는다", () => {
+    const review = { items: [{ criterion: "hook", rating: "pass", evidence: "첫 문장이 붙잡는다" }] };
+    expect(workProcessOf({ blueprint: { executiveSummary: "요약" }, review })!.review).toEqual(review);
+  });
+});
