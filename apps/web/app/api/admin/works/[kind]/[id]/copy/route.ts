@@ -31,9 +31,11 @@ export async function POST(_request: Request, context: Context) {
     const copied = await copyWorkToSelf(kind, id, auth.member.userId);
     return Response.json({ ok: true, id: copied.id });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "복사하지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 제약 이름·칼럼명이 그대로
+      나간다(`security.md`). 서버 로그에 남기고 화면에는 고정 문구를 준다.
+    */
+    console.error("[admin-works]", error);
+    return Response.json({ ok: false, message: "복사하지 못했습니다." }, { status: 500 });
   }
 }

@@ -35,9 +35,11 @@ export async function GET(_request: Request, context: Context) {
     if (!work) return Response.json({ ok: false, message: "찾을 수 없습니다." }, { status: 404 });
     return Response.json({ ok: true, work });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "불러오지 못했습니다." },
-      { status: 500 },
-    );
+    /*
+      **DB 오류 문구를 화면에 흘리지 않는다.** 제약 이름·칼럼명이 그대로
+      나간다(`security.md`). 서버 로그에 남기고 화면에는 고정 문구를 준다.
+    */
+    console.error("[admin-works]", error);
+    return Response.json({ ok: false, message: "불러오지 못했습니다." }, { status: 500 });
   }
 }

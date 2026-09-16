@@ -179,6 +179,14 @@ export async function readAnyWork(
     : toPosterRecord(data as PosterProjectRow) as unknown as Record<string, unknown>;
 }
 
+/** 확장자에서 형식을 읽는다. 복사에 나오는 것은 png·webp·jpg 셋뿐이다. */
+function contentTypeOf(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  return "image/png";
+}
+
 /**
  * 파일들을 새 자리로 옮긴다. **원본은 읽기만 한다.**
  *
@@ -198,8 +206,13 @@ async function moveAssets(
       continue;
     }
     const bytes = Buffer.from(await file.data.arrayBuffer());
+    /*
+      **`contentType` 을 반드시 준다.** 안 주면 supabase-js 가 Buffer 본문에
+      `text/plain` 을 붙인다 — 저장된 형식이 틀리면 내려받기·CDN·`nosniff`
+      에서 갈린다. 이 저장소의 다른 업로드 자리는 전부 준다.
+    */
     const uploaded = await admin.storage.from(BUCKET)
-      .upload(move.to, bytes, { upsert: true });
+      .upload(move.to, bytes, { contentType: contentTypeOf(move.to), upsert: true });
     if (uploaded.error) {
       console.error(`[admin-copy] 새 자리에 못 올렸습니다(${move.to}): ${uploaded.error.message}`);
     }
@@ -232,7 +245,15 @@ export async function copyWorkToSelf(
 
   if (kind === "sns") {
     const from = source as unknown as SnsProjectRecord;
-    // 1) 행을 먼저. 그림 자리는 새 작업 id 가 있어야 정해진다.
+    /*
+      1) 행을 먼저. 그림 자리는 새 작업 id 가 있어야 정해진다.
+
+      **경로를 비운 채로 만든다.** 원본 경로를 실어 두고 나중에 고치면, 그
+      사이에 무엇이든 실패했을 때 **남의 파일을 가리키는 내 작업**이 남는다 —
+      설계가 막겠다고 적은 바로 그 깨짐이다(소유 판정 어긋남, 원래 회원이
+      지우면 같이 사라짐). 빈 경로로 두면 최악이 「그림 없는 내 작업」이다.
+    */
+    const blank = snsCopyPlan(from.data as unknown as Record<string, unknown>, "", "");
     const created = await createSupabaseSnsProjectRepository(admin).create({
       userId: ownerUserId,
       title: from.title,
@@ -242,7 +263,7 @@ export async function copyWorkToSelf(
       cardCountMode: from.cardCountMode,
       cardCount: from.cardCount,
       toneNote: from.toneNote,
-      data: from.data,
+      data: blank.data,
       slotPlan: from.slotPlan,
     } as SnsProjectCreateRecord);
 
@@ -250,10 +271,17 @@ export async function copyWorkToSelf(
     const plan = snsCopyPlan(
       from.data as unknown as Record<string, unknown>, ownerUserId, created.id);
     await moveAssets(admin, plan.moves);
-    const { error } = await admin.from("sns_projects")
+    /*
+      **갱신 행 수를 센다.** `update` 는 한 줄도 안 맞아도 오류가 아니다 —
+      `sns-flow-store.ts` 가 같은 함정으로 사고를 겪고 `select("id")` 로 세고
+      있다. 여기서 안 세면 경로가 빈 채로 「복사 성공」이 된다.
+    */
+    const { data: touched, error } = await admin.from("sns_projects")
       .update({ data: { ...plan.data, slotPlan: from.slotPlan }, status: from.status })
-      .eq("id", created.id);
+      .eq("id", created.id)
+      .select("id");
     if (error) throw new Error(error.message);
+    if (!(touched ?? []).length) throw new Error("복사본에 그림 자리를 적지 못했습니다.");
     return { id: created.id };
   }
 
@@ -272,9 +300,47 @@ export async function copyWorkToSelf(
   const { data: images } = await admin.from("poster_images")
     .select("variant_index,selected,width,height,review,asset_path,thumb_path")
     .eq("project_id", id);
+
+  /*
+    **변형 행은 생성 요청을 가리켜야 한다** — 그 칸이 `not null` 이다
+    (`202608310004_poster.sql:47`). 남의 장부 줄을 가리킬 수는 없으므로
+    복사한 사람 소유로 하나 만든다.
+
+    **비용은 0 이다.** 복사는 AI 를 안 부른다 — 0 이 아닌 값을 적으면 장부가
+    쓰지 않은 돈을 세게 된다.
+  */
+  const { data: request, error: requestError } = await admin
+    .from("poster_generation_requests")
+    .insert({
+      user_id: ownerUserId,
+      project_id: created.id,
+      model_id: from.modelId,
+      ratio_id: from.ratio,
+      mode: "t2i",
+      size: {},
+      requested_images: Math.min(Math.max((images ?? []).length, 1), 3),
+      returned_images: (images ?? []).length,
+      unit_cost_usd: 0,
+      cost_usd: 0,
+    })
+    .select("id").single();
+  if (requestError || !request) {
+    throw new Error(requestError?.message ?? "복사하지 못했습니다.");
+  }
+
+  /*
+    **`status` 를 따로 되살린다.** `projectInsertRow` 는 그 칸을 안 싣는다
+    (회원에게 INSERT 권한이 없어 기본 `draft` 다). 그대로 두면 복사본이
+    「쓰는 중」으로 시작해, 결과 그림을 참고용으로 보려던 뜻이 사라진다.
+  */
+  if (from.status && from.status !== "draft") {
+    await admin.from("poster_projects")
+      .update({ status: from.status }).eq("id", created.id);
+  }
+
   const plan = posterCopyPlan(
     (images ?? []) as Array<{ variant_index: number; asset_path: string; thumb_path: string | null }>,
-    ownerUserId, created.id as string);
+    ownerUserId, created.id as string, request.id as string);
   await moveAssets(admin, plan.moves);
   if (plan.rows.length) {
     const { error } = await admin.from("poster_images").insert(plan.rows);

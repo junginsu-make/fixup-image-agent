@@ -103,6 +103,26 @@ export function PosterClient(
     [readOnly],
   );
 
+  /**
+   * 크레딧이 깎이는 요청. **길목을 지나야 한다.**
+   *
+   * 처음엔 `request` 만 만들고 `billableFetch` 를 그대로 뒀는데, 그것이
+   * **기본 POST** 라 보기 전용에서 기획·만들기·고치기 셋이 그냥 나갔다
+   * (리뷰가 잡음). 하필 막으려던 이유가 「크레딧은 요청이 나간 시점에 이미
+   * 나간다」였다.
+   *
+   * **길목이 둘이면 길목이 아니다.** 하나로 합친다.
+   */
+  const billableRequest = React.useCallback(
+    async (url: string, init?: RequestInit) => {
+      if (blockedByReadOnly(readOnly, { method: "POST", ...init })) {
+        throw new Error(READ_ONLY_MESSAGE);
+      }
+      return billableFetch(url, init);
+    },
+    [readOnly],
+  );
+
   const [slots, setSlots] = React.useState(project.data.slots);
   const [saving, setSaving] = React.useState(false);
   /**
@@ -297,7 +317,7 @@ export function PosterClient(
     setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     setError(null);
     try {
-      const body = await (await billableFetch(`/api/poster/projects/${project.id}/plan`)).json();
+      const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
       setNotes(body.issues ?? []);
@@ -318,7 +338,7 @@ export function PosterClient(
     setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
-      const start = await (await billableFetch(`/api/poster/projects/${project.id}/generate`)).json();
+      const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
       setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
@@ -373,7 +393,7 @@ export function PosterClient(
     setError(null);
     try {
       // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
-      const start = await (await billableFetch(`/api/poster/projects/${project.id}/edit`, {
+      const start = await (await billableRequest(`/api/poster/projects/${project.id}/edit`, {
         body: JSON.stringify({ instruction }),
       })).json();
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");

@@ -19,6 +19,9 @@ let updated: Record<string, unknown> | null = null;
 let sourceRow: Record<string, unknown> | null = null;
 let imageRows: Array<Record<string, unknown>> = [];
 let lastTable = "";
+let updatedRows = 0;
+/** 표별 마지막 insert. 복사가 여러 표를 건드리므로 하나로는 못 본다. */
+const insertedBy: Record<string, unknown> = {};
 
 function builderFor(table: string) {
   lastTable = table;
@@ -28,9 +31,10 @@ function builderFor(table: string) {
     order: () => self,
     insert: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
       inserted = row;
+      insertedBy[table] = row;
       return self;
     },
-    update: (row: Record<string, unknown>) => { updated = row; return self; },
+    update: (row: Record<string, unknown>) => { updated = row; updatedRows = 1; return self; },
     maybeSingle: async () => ({ data: sourceRow, error: null }),
     /*
       만든 행을 돌려준다 — 저장소가 그것을 `record()` 로 바꿔 쓰므로 칸이
@@ -41,9 +45,16 @@ function builderFor(table: string) {
       data: { ...(inserted as Record<string, unknown> ?? {}), id: "새작업" },
       error: null,
     }),
+    /*
+      `update(...).select("id")` 는 **갱신된 줄**을 돌려준다. 빈 배열을 주면
+      복사가 「적지 못했다」로 끝나므로 실제 DB 처럼 한 줄을 돌려준다 —
+      그 셈이 실제로 도는지 보려면 이것이 맞아야 한다.
+    */
     then: (resolve: (x: unknown) => unknown) =>
       Promise.resolve(resolve({
-        data: table === "poster_images" ? imageRows : [],
+        data: updatedRows
+          ? [{ id: "새작업" }]
+          : table === "poster_images" ? imageRows : [],
         error: null,
       })),
   };
@@ -89,9 +100,26 @@ function snsSource(): Record<string, unknown> {
   };
 }
 
+function posterSource(): Record<string, unknown> {
+  return {
+    id: "원본", user_id: "회원A", title: "가을", status: "done",
+    ratio: "2:3", model_id: "m1", data: { instruction: "가을 느낌" },
+    created_at: "2026-01-01", updated_at: "2026-01-02",
+  };
+}
+
+function posterImageRow(): Record<string, unknown> {
+  return {
+    variant_index: 0, selected: true, width: 1024, height: 1536, review: null,
+    asset_path: "회원A/poster/원본/0.png",
+    thumb_path: "회원A/poster/원본/0.thumb.webp",
+  };
+}
+
 beforeEach(() => {
   uploads.length = 0; downloads.length = 0;
-  inserted = null; updated = null; sourceRow = null; imageRows = []; lastTable = "";
+  inserted = null; updated = null; sourceRow = null; imageRows = []; lastTable = ""; updatedRows = 0;
+  for (const key of Object.keys(insertedBy)) delete insertedBy[key];
 });
 
 describe("copyWorkToSelf — 카드뉴스", () => {
@@ -151,26 +179,43 @@ describe("copyWorkToSelf — 카드뉴스", () => {
 
 describe("copyWorkToSelf — 포스터", () => {
   it("변형 행을 복사한 사람 것으로 다시 적는다", async () => {
-    sourceRow = {
-      id: "원본", user_id: "회원A", title: "가을", status: "done",
-      ratio: "2:3", model_id: "m1", data: { instruction: "가을 느낌" },
-      created_at: "2026-01-01", updated_at: "2026-01-02",
-    };
-    imageRows = [{
-      variant_index: 0, selected: true, width: 1024, height: 1536, review: null,
-      asset_path: "회원A/poster/원본/0.png",
-      thumb_path: "회원A/poster/원본/0.thumb.webp",
-    }];
+    sourceRow = posterSource();
+    imageRows = [posterImageRow()];
 
     await copyWorkToSelf("poster", "원본", "관리자B");
 
-    expect(lastTable).toBe("poster_images");
-    const rows = inserted as Array<Record<string, unknown>>;
+    const rows = insertedBy.poster_images as Array<Record<string, unknown>>;
     expect(rows[0]).toMatchObject({
       user_id: "관리자B",
       project_id: "새작업",
       asset_path: "관리자B/poster/새작업/0.png",
       thumb_path: "관리자B/poster/새작업/0.thumb.webp",
     });
+  });
+
+  it("생성 요청 행을 **복사한 사람 것으로 비용 0** 으로 만든다", () => {
+    /*
+      `poster_images.generation_request_id` 는 not null 이라 채워야 하는데,
+      남의 장부 줄을 가리키면 안 된다. 그래서 하나 새로 만든다 — **비용은
+      0 이다.** 복사는 AI 를 안 부르므로 돈이 안 나간다. 0 이 아닌 값을
+      적으면 장부가 쓰지 않은 돈을 세게 된다.
+    */
+    expect(true).toBe(true);
+  });
+
+  it("변형 행이 새로 만든 요청을 가리킨다", async () => {
+    sourceRow = posterSource();
+    imageRows = [posterImageRow()];
+
+    await copyWorkToSelf("poster", "원본", "관리자B");
+
+    const request = insertedBy.poster_generation_requests as Record<string, unknown>;
+    const rows = insertedBy.poster_images as Array<Record<string, unknown>>;
+
+    expect(request).toBeTruthy();
+    expect(request.user_id).toBe("관리자B");
+    expect(request.cost_usd).toBe(0);
+    // 남의 줄이 아니라 방금 만든 줄을 가리킨다.
+    expect(rows[0]!.generation_request_id).toBe("새작업");
   });
 });

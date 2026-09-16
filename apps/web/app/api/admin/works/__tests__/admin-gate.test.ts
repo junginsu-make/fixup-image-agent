@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -15,14 +15,26 @@ import { describe, expect, it } from "vitest";
  */
 const ROOT = join(__dirname, "..", "[kind]", "[id]");
 
-/** 관리자 통로의 라우트. 늘릴 때 여기 한 줄을 더한다. */
-const ROUTES = ["route.ts", "copy/route.ts"];
+/**
+ * 관리자 통로의 라우트 — **손으로 적지 않고 훑는다.**
+ *
+ * 손으로 적었더니 관문 없는 라우트를 새로 만들어 넣어도 통과했다(리뷰가
+ * 실증). 새 형제가 생기면 저절로 걸려야 한다.
+ */
+const ROUTES = readdirSync(ROOT, { recursive: true, encoding: "utf8" })
+  .filter((entry) => entry.endsWith("route.ts"))
+  .map((entry) => entry.split("\\").join("/"));
 
 function sourceOf(file: string): string {
   return readFileSync(join(ROOT, file), "utf8");
 }
 
 describe("관리자 통로 관문", () => {
+  it("라우트를 하나도 빠짐없이 훑는다", () => {
+    // 0 개면 아래 검사가 전부 저절로 통과한다.
+    expect(ROUTES.length).toBeGreaterThanOrEqual(2);
+  });
+
   it.each(ROUTES)("%s 가 authenticateApiAdmin 으로 한 번 막는다", (file) => {
     const source = sourceOf(file);
     const gates = source.match(/await authenticateApiAdmin\(\)/g) ?? [];

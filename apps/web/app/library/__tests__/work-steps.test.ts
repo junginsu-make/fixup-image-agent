@@ -51,8 +51,22 @@ describe("화면이 규칙을 부르는가", () => {
     expect(wired.length).toBe(1);
   });
 
-  it("단추가 그 작업의 주소로 간다", () => {
-    expect(source).toContain("router.push(work.href)");
+  it("단추가 그 작업의 주소로 가고, 카드 클릭으로도 읽히지 않는다", () => {
+    /*
+      **단추의 `onClick` 안에서만 센다.** 처음엔 파일 전체에서
+      `router.push(work.href)` 를 찾았는데, 같은 문자열이 카드 본문
+      `onClick` 에도 있어 **단추를 엉뚱한 곳으로 보내도 통과했다**
+      (리뷰가 변이로 실증).
+
+      `stopPropagation` 도 같은 덩어리 안에서 본다 — 빠지면 한 번 눌렀는데
+      뷰어와 이동이 같이 일어난다.
+    */
+    const at = source.indexOf("canOpenSteps(work, isAdmin)");
+    expect(at).toBeGreaterThan(-1);
+    const button = source.slice(at, at + 700);
+
+    expect(button).toContain("event.stopPropagation()");
+    expect(button).toContain("router.push(work.href)");
   });
 
   it("카드 본문 클릭은 그대로 뷰어를 연다", () => {

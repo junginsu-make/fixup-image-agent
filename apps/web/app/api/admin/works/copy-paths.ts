@@ -92,9 +92,14 @@ type PosterImageRow = {
 /**
  * 포스터 복사 계획.
  *
- * **`id`·`created_at`·`generation_request_id` 는 옮겨 적지 않는다.** id 는 새로
- * 받아야 하고, 만든 시각은 복사한 때가 맞고, 생성 요청은 그 회원의 장부에
- * 달린 줄이라 남의 것을 가리키면 안 된다.
+ * **`id`·`created_at` 은 옮겨 적지 않는다.** id 는 새로 받아야 하고 만든 시각은
+ * 복사한 때가 맞다.
+ *
+ * **생성 요청은 새로 만든 것을 가리킨다.** 남의 장부에 달린 줄을 가리키면 안
+ * 되는데, 그 칸은 `not null` 이다(`202608310004_poster.sql:47`). 처음엔 통째로
+ * 뺐다가 insert 가 23502 로 **무조건** 실패하는 것을 리뷰에서 잡았다 — 그리고
+ * 그때는 행과 파일이 이미 올라간 뒤였다. 원칙은 지키고 값은 채운다: 복사한
+ * 사람 소유의 **비용 0** 짜리 요청 행을 하나 만들어 그것을 가리킨다.
  *
  * 규약을 벗어난 경로의 행은 **아예 싣지 않는다.** 그림 없는 변형 행을 남기면
  * 목록에 빈 칸이 생긴다.
@@ -103,6 +108,7 @@ export function posterCopyPlan(
   rows: PosterImageRow[],
   newOwnerId: string,
   newProjectId: string,
+  newRequestId: string,
 ): { rows: Array<Record<string, unknown>>; moves: AssetMove[] } {
   const moves: AssetMove[] = [];
   const next: Array<Record<string, unknown>> = [];
@@ -119,6 +125,7 @@ export function posterCopyPlan(
     next.push({
       user_id: newOwnerId,
       project_id: newProjectId,
+      generation_request_id: newRequestId,
       variant_index: row.variant_index,
       selected: row.selected ?? false,
       width: row.width ?? null,

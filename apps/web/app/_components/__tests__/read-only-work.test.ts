@@ -72,15 +72,48 @@ describe("상세 화면이 막을 지나는가", () => {
     expect(gates.length).toBe(1);
   });
 
-  it("포스터의 쓰는 요청이 모두 길목을 지난다", () => {
-    // 직접 `fetch` 로 나가면 막이 비껴간다.
-    const direct = poster.match(/await fetch\(`\/api\/poster\/projects/g) ?? [];
-    expect(direct.length).toBe(0);
+  it("포스터의 쓰는 요청이 **하나도 빠짐없이** 길목을 지난다", () => {
+    /*
+      **찾지 말고 센다.** 처음엔 `await fetch(` 만 셌는데, 크레딧이 깎이는
+      요청은 `billableFetch` 로 나가서 그 셋이 통째로 비껴갔다(리뷰가 변이로
+      실증). 이제 그 주소로 나가는 **모든** 호출을 찾아, 앞에 붙은 이름이
+      길목 둘 중 하나인지 본다.
+
+      정규식 대신 글자로 센다 — 여기서 정규식이 한 번 조용히 0 을 내서,
+      「빠짐없이 센다」는 이 시험 자체가 아무것도 안 세고 있었다.
+    */
+    const needle = "(`/api/poster/projects";
+    const callers: string[] = [];
+    for (let at = poster.indexOf(needle); at >= 0; at = poster.indexOf(needle, at + 1)) {
+      const head = poster.slice(0, at);
+      callers.push(head.slice(head.search(/[A-Za-z_$][\w$]*$/)));
+    }
+
+    expect(callers.length, "포스터 작업 요청을 하나도 못 찾았다").toBeGreaterThan(0);
+    const outside = callers.filter((name) => name !== "request" && name !== "billableRequest");
+    expect(outside, `길목 밖으로 나가는 요청: ${outside.join(", ")}`).toEqual([]);
   });
 
   it("포스터도 남의 작업이면 관리자 통로로 한 번 더 묻는다", () => {
     expect(posterLoader).toContain("/api/admin/works/poster/");
     expect(posterLoader).toContain("readOnly: true");
+  });
+
+  it("**받은 readOnly 를 자식에게 실제로 넘긴다**", () => {
+    /*
+      상태를 세팅하는 줄만 보면 안 된다. 그 값이 자식에게 안 넘어가면
+      **보기 전용이 통째로 꺼지는데** 시험은 전부 초록이다(리뷰가 변이로
+      실증했다). 넘기는 줄을 따로 센다.
+    */
+    const passed = posterLoader.match(/readOnly=\{state\.readOnly\}/g) ?? [];
+    expect(passed.length).toBe(1);
+  });
+
+  it("포스터 화면이 받은 readOnly 를 막에 쓴다", () => {
+    // prop 으로 받아 놓고 안 쓰면 그것도 꺼진 것이다.
+    expect(poster).toContain("readOnly = false }");
+    const used = poster.match(/blockedByReadOnly\(readOnly/g) ?? [];
+    expect(used.length).toBe(2);
   });
 
   it("요청 길목이 blockedByReadOnly 를 한 번 부른다", () => {

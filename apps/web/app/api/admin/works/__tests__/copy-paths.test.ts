@@ -134,7 +134,7 @@ describe("posterCopyPlan", () => {
   ];
 
   it("원본과 사본을 모두 옮길 목록에 넣는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
 
     expect(plan.moves.map((move) => move.to)).toEqual([
       "관리자B/poster/작업2/0.png",
@@ -144,7 +144,7 @@ describe("posterCopyPlan", () => {
   });
 
   it("새 행은 소유자와 작업이 복사한 사람 것이다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
 
     expect(plan.rows[0]).toMatchObject({
       user_id: "관리자B",
@@ -156,16 +156,31 @@ describe("posterCopyPlan", () => {
   });
 
   it("id 와 만든 시각은 새로 받는다 — 옮겨 적지 않는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
 
     expect(plan.rows[0]).not.toHaveProperty("id");
     expect(plan.rows[0]).not.toHaveProperty("created_at");
-    expect(plan.rows[0]).not.toHaveProperty("generation_request_id");
+  });
+
+  it("생성 요청은 **새로 만든 것**을 가리킨다 — 남의 장부 줄이 아니다", () => {
+    /*
+      `poster_images.generation_request_id` 는 **not null** 이다
+      (`202608310004_poster.sql:47`). 처음엔 「남의 장부를 안 가리킨다」는
+      뜻으로 이 칸을 통째로 뺐는데, 그러면 insert 가 23502 로 **무조건**
+      실패한다 — 그리고 그때는 행과 파일이 이미 올라간 뒤다.
+
+      원칙은 그대로 두되(남의 줄을 안 가리킨다) 값은 채운다. 복사한 사람
+      소유의 **비용 0** 짜리 요청 행을 하나 만들어 그것을 가리킨다.
+    */
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
+
+    expect(plan.rows[0]!.generation_request_id).toBe("새요청");
+    expect(plan.rows[0]!.generation_request_id).not.toBe("회원A-요청");
   });
 
   it("규약을 벗어난 경로의 행은 싣지 않는다", () => {
     // 그림 없는 변형 행을 남기면 목록에 빈 칸이 생긴다.
-    const plan = posterCopyPlan([{ variant_index: 0, asset_path: "이상한경로.png", thumb_path: null }], "관리자B", "작업2");
+    const plan = posterCopyPlan([{ variant_index: 0, asset_path: "이상한경로.png", thumb_path: null }], "관리자B", "작업2", "새요청");
 
     expect(plan.moves).toEqual([]);
     expect(plan.rows).toEqual([]);
