@@ -387,6 +387,14 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       <StepBar
         steps={STEPS}
         current={view}
+        /*
+          **못 가는 곳은 눌리지 않게 한다.** `onJump` 안에서 조용히 돌아서면
+          단추는 활성으로 보이고 hover 까지 먹는데 눌러도 아무 일이 없다 —
+          원고를 다 고친 사람이 「05 결과」를 누르고 고장으로 읽는다
+          (2026-09-16 독립 리뷰). 전에는 `onJump` 자체가 없어서 다섯 단추가
+          전부 비활성이었다. 이미지 쪽도 `allowJump` 로 막는다.
+        */
+        allowJump={(id) => id !== "result" || view === "result"}
         onJump={(id) => {
           if (id === "copy") return view === "result" ? setView("copy") : undefined;
           if (id === "result") return undefined;

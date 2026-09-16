@@ -234,3 +234,80 @@ describe("역할 한 바퀴", () => {
     expect(다시.preservedIds).toEqual([]);
   });
 });
+
+/**
+ * **차례와 목록이 어긋난 옛 작업.**
+ *
+ * `attachmentOrder` 는 2026-09-07 에 생겼고 정합성 검사(`superRefine`)는
+ * 09-08 에 붙었다 — **그 사이에 만들어진 행은 검사를 안 받았다.** 차례에 안
+ * 담긴 참고 이미지가 있을 수 있다.
+ *
+ * 그때 세는 기준이 차례뿐이면 **빠진 것을 아예 안 센다.** 화면은 「다
+ * 가져왔습니다」라고 말하는데 실제로는 한 장이 사라진 상태다 — 「조용히 빠지면
+ * 사용자는 자기가 안 고른 줄 안다」는 이 파일의 원칙이 바로 여기서 깨진다
+ * (2026-09-16 독립 리뷰).
+ */
+describe("차례와 목록이 어긋난 작업", () => {
+  it("차례에 안 담긴 참고 이미지도 빠진 것으로 센다", () => {
+    const seed = posterSeed({
+      title: "t", ratio: "2:3", modelId: "m",
+      data: {
+        instruction: "i",
+        referenceIds: ["a", "b"],
+        preservedIds: [],
+        attachmentOrder: ["a"],
+      },
+    }, 볼수있음("a", "b"));
+
+    expect(seed.pickOrder).toEqual(["a"]);
+    // b 는 사라졌다. 0 이라고 말하면 거짓말이다.
+    expect(seed.missingReferences).toBe(1);
+  });
+
+  it("차례에 안 담긴 **지킬 그림**도 센다", () => {
+    const seed = posterSeed({
+      title: "t", ratio: "2:3", modelId: "m",
+      data: {
+        instruction: "i",
+        referenceIds: [],
+        preservedIds: ["p1", "p2"],
+        attachmentOrder: ["p1"],
+      },
+    }, 볼수있음("p1", "p2"));
+
+    expect(seed.missingReferences).toBe(1);
+  });
+
+  it("차례에만 있고 역할이 없는 것도 센다", () => {
+    /*
+      `pickOrder` 에는 남지만 역할이 안 붙어 저장 때 빠진다. 화면에는 ①이
+      서는데 만들면 없다.
+    */
+    const seed = posterSeed({
+      title: "t", ratio: "2:3", modelId: "m",
+      data: {
+        instruction: "i",
+        referenceIds: ["a"],
+        preservedIds: [],
+        attachmentOrder: ["a", "떠도는것"],
+      },
+    }, 볼수있음("a", "떠도는것"));
+
+    expect(seed.pickOrder).toEqual(["a"]);
+    expect(seed.missingReferences).toBe(1);
+  });
+
+  it("앞뒤가 맞는 작업은 여전히 0 이다", () => {
+    const seed = posterSeed({
+      title: "t", ratio: "2:3", modelId: "m",
+      data: {
+        instruction: "i",
+        referenceIds: ["a"],
+        preservedIds: ["b"],
+        attachmentOrder: ["a", "b"],
+      },
+    }, 볼수있음("a", "b"));
+
+    expect(seed.missingReferences).toBe(0);
+  });
+});

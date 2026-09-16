@@ -53,6 +53,20 @@ describe("지난 단계로 값을 들고 간다", () => {
     expect(source).toContain(seed);
   });
 
+  it("이미지 만들기는 **내가 볼 수 있는 목록**을 넘겨서 심는다", () => {
+    /*
+      **중요한 것이 인자면 인자를 재야 한다.** `posterSeed(` 만 세면
+      `posterSeed(project, new Set())` 으로 바꿔도 통과한다 — 참고 이미지가
+      매번 통째로 사라지는 회귀인데 초록이다(2026-09-16 독립 리뷰가 실증).
+    */
+    expect(read("app/poster/new-client.tsx")).toContain("posterSeed(project, visible)");
+  });
+
+  it("카드뉴스는 **주인 여부**를 넘겨서 심는다", () => {
+    // 같은 이유다. `snsSeed(project, true)` 로 굳어지면 남의 첨부까지 들고 온다.
+    expect(read("app/sns/new-client.tsx")).toContain("snsSeed(project, mine)");
+  });
+
   it.each(TOOLS)("$name 은 **관리자도** 남의 작업을 다시 만들 수 있다", ({ fresh, adminRoute }) => {
     /*
       회원은 자기 작업에, 관리자(`9843ohs@gmail.com`)는 **모든 작업**에 같게
@@ -75,9 +89,29 @@ describe("지난 단계로 값을 들고 간다", () => {
     */
     const source = read(detail);
     const at = source.indexOf("onJump");
-    expect(at).toBeGreaterThan(-1);
+    const end = source.indexOf("/>", at);
+    expect(at, "단계 막대를 못 찾았다 — 가늠자를 고쳐라").toBeGreaterThan(-1);
+    expect(end, "단계 막대가 어디서 끝나는지 못 찾았다").toBeGreaterThan(at);
+    const stepBar = source.slice(at, end);
 
-    expect(source.slice(at, at + 900)).not.toContain("if (readOnly) return;");
+    /*
+      **글자 수로 자르지 않고 단계 막대의 끝까지 본다.** 처음에는 `onJump`
+      부터 900자를 잘라 `"if (readOnly) return;"` 이 있는지 봤는데, 세 가지가
+      차례로 틀렸다.
+
+      1. 문자열 완전 일치라 `if (readOnly) return undefined;` 를 못 잡았다
+         (2026-09-16 독립 리뷰가 실증)
+      2. 고치려고 `\b` 를 쓴 정규식을 넣었더니 **그 `\b` 가 백스페이스 문자로
+         들어가** 아무것도 안 맞았다 — 같은 날 `copy-paths.test.ts` 에서도
+         `"a\b"` 가 역슬래시가 아니라 백스페이스였다
+      3. 파일 전체에서 찾게 했더니 이번엔 **다른 화면의 정당한 가드**까지
+         걸렸다(`project-client.tsx` 의 상태 캐묻기 막이)
+
+      그래서 단계 막대 한 덩어리만 본다. 그 안에서 읽기 전용이라고 곧장
+      돌아서는 줄이 있으면 안 된다 — `{ return; }` 도 `return undefined;` 도
+      같이 걸린다.
+    */
+    expect(stepBar).not.toMatch(/readOnly\s*\)\s*\{?\s*return/);
   });
 
   it.each(TOOLS)("$name 은 **있는** 회원용 길로 묻는다", ({ fresh, memberRoute }) => {

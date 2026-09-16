@@ -70,6 +70,16 @@ export function NewSnsClient() {
   const rerunFrom = useSearchParams().get("from") ?? "";
   /** 값을 들고 왔다고 화면에 적을 것. 못 들고 온 첨부 수까지 말한다. */
   const [rerun, setRerun] = React.useState<{ title: string; dropped: number } | null>(null);
+  /**
+   * 지난 값을 **아직 기다리는 중인가.**
+   *
+   * 기다리는 동안 01 이 빈 채로 입력을 받으면, 값이 닿는 순간 친 글이
+   * 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다(2026-09-16 독립
+   * 리뷰).
+   */
+  const [seeding, setSeeding] = React.useState(
+    Boolean(new URLSearchParams(typeof window === "undefined" ? "" : window.location.search).get("from")),
+  );
 
   // 라이브러리에서 「카드뉴스로」를 눌러 왔으면 내용이 이미 들어가 있어야 한다.
   // 복사해 붙이게 만들면 라이브러리에 모아 둔 뜻이 없다.
@@ -131,6 +141,8 @@ export function NewSnsClient() {
       if (!alive) return;
       if (!project) {
         setMessage("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
+        setSeeding(false);
         return;
       }
 
@@ -142,6 +154,7 @@ export function NewSnsClient() {
       setIntents(seed.intents);
       setSpec(seed.spec);
       setRerun({ title: seed.title, dropped: seed.droppedAttachments });
+      setSeeding(false);
     })();
     return () => { alive = false; };
   }, [rerunFrom]);
@@ -224,7 +237,7 @@ export function NewSnsClient() {
           <b> 새 작업</b>이 하나 더 생기고 원래 작업은 그대로 남습니다.
           {rerun.dropped ? (
             <span className="mt-1 block text-muted-foreground">
-              붙였던 그림 {rerun.dropped}장은 다른 회원의 것이라 가져오지 못했습니다.
+              붙였던 그림 {rerun.dropped}장은 지금 내 목록에 없어 가져오지 못했습니다.
               필요하면 02에서 다시 골라 주세요.
             </span>
           ) : null}
@@ -237,14 +250,23 @@ export function NewSnsClient() {
           <CardDescription>{step === "content" ? "내용을 넣는 네 가지 길 중 하나를 고릅니다." : step === "images" ? "이미지를 고르고 생성 모델이 다룰 방법을 지정합니다." : "해상도 대신 게시 비율과 장수·언어·모델만 고릅니다."}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-8">
+          {/*
+            **기다리는 동안 칸을 안 내준다.** 빈 채로 입력을 받으면 값이 닿는
+            순간 친 글이 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다.
+          */}
+          {seeding ? (
+            <p role="status" className="rounded-md border border-border bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+              지난 값을 불러오는 중입니다…
+            </p>
+          ) : null}
           {step === "content" && fromLibrary ? (
             <p role="status" className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
               라이브러리의 <strong className="text-foreground">{fromLibrary}</strong> 을(를) 가져왔습니다. 고쳐서 쓰셔도 됩니다.
             </p>
           ) : null}
-          {step === "content" ? <SourceInput title={title} onTitleChange={setTitle} source={source} onSourceChange={setSource} toneNote={toneNote} onToneNoteChange={setToneNote} /> : null}
-          {step === "images" ? <AttachmentPicker attachments={attachments} onChange={setAttachments} modelId={spec.modelId} totalCards={totalCards} intents={intents} onIntentsChange={setIntents} /> : null}
-          {step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}
+          {!seeding && step === "content" ? <SourceInput title={title} onTitleChange={setTitle} source={source} onSourceChange={setSource} toneNote={toneNote} onToneNoteChange={setToneNote} /> : null}
+          {!seeding && step === "images" ? <AttachmentPicker attachments={attachments} onChange={setAttachments} modelId={spec.modelId} totalCards={totalCards} intents={intents} onIntentsChange={setIntents} /> : null}
+          {!seeding && step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}
 
           {message ? <p role="alert" className="whitespace-pre-line rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{message}</p> : null}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6">

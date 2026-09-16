@@ -101,15 +101,37 @@ export function posterSeed(
   const data = project.data ?? {};
   const wanted = orderOf(data);
   /*
+    **빠진 것을 셀 때는 네 목록을 다 본다.**
+
+    `attachmentOrder` 가 있으면 차례는 그것만 따르는데(`orderOf`), 차례에 안
+    담긴 참고 이미지가 있는 옛 작업이 있다 — 그 칸은 2026-09-07 에 생겼고
+    정합성 검사는 09-08 에 붙어서 **그 사이 행은 검사를 안 받았다.**
+
+    차례만 세면 그런 작업에서 **빠진 것을 아예 안 센다.** 화면은 「다
+    가져왔습니다」라고 말하는데 실제로는 한 장이 사라진 상태다 — 「조용히
+    빠지면 사용자는 자기가 안 고른 줄 안다」는 이 파일의 원칙이 거기서 깨진다.
+  */
+  const everything = new Set([
+    ...wanted, ...list(data.referenceIds), ...list(data.preservedIds),
+  ]);
+  /*
     **못 보는 것은 뺀다.** 골라 둔 채로 두면 화면에는 ①②③ 이 서는데 실제로는
     아무 그림도 없어, 만들기를 눌러야 그제서야 이상해진다.
   */
   const pickOrder = wanted.filter((id) => visibleReferenceIds.has(id));
 
+  /*
+    **역할이 없는 것은 고른 것으로 치지 않는다.** 차례에만 있고 네 목록 어디에도
+    없는 id 가 옛 작업에 있다 — 그대로 두면 화면에는 ①이 서는데 저장할 때
+    빠져서 만들면 없다.
+  */
   const roles: Record<string, Role> = {};
+  const picked: string[] = [];
   for (const id of pickOrder) {
     const role = roleOf(id, data);
-    if (role) roles[id] = role;
+    if (!role) continue;
+    roles[id] = role;
+    picked.push(id);
   }
 
   return {
@@ -123,8 +145,8 @@ export function posterSeed(
     promptMode: data.promptMode ?? "assisted",
     userInstruction: data.userInstruction ?? "",
     attachmentIntent: data.attachmentIntent ?? "",
-    pickOrder,
+    pickOrder: picked,
     roles,
-    missingReferences: wanted.length - pickOrder.length,
+    missingReferences: everything.size - picked.length,
   };
 }

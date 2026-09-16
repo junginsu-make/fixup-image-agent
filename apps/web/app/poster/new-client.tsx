@@ -47,8 +47,20 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * 01~03 을 누른 사람은 「다 초기화됐다」고 읽었다(2026-09-16 사용자 보고).
    */
   const rerunFrom = useSearchParams().get("from") ?? "";
+  /** 첫 그림에서부터 잠가야 한다 — 상태 기본값으로 쓴다. */
+  const rerunFromInitial = rerunFrom;
   /** 값을 들고 왔다고 화면에 적을 것. 못 가져온 참고 이미지 수까지 말한다. */
-  const [rerun, setRerun] = React.useState<{ title: string; missing: number } | null>(null);
+  const [rerun, setRerun] = React.useState<
+    { title: string; missing: number; adWork: boolean } | null
+  >(null);
+  /**
+   * 지난 값을 **아직 기다리는 중인가.**
+   *
+   * 기다리는 동안 01 이 빈 채로 입력을 받으면, 값이 닿는 순간 친 글이
+   * 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다(2026-09-16 독립
+   * 리뷰). 그래서 닿을 때까지 화면을 안 내준다.
+   */
+  const [seeding, setSeeding] = React.useState(Boolean(rerunFromInitial));
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
   const [step, setStep] = React.useState("instruction");
@@ -274,6 +286,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       if (!alive) return;
       if (!project) {
         setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
+        setSeeding(false);
         return;
       }
 
@@ -291,7 +305,13 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       setAttachmentIntent(seed.attachmentIntent);
       setRoles(seed.roles);
       setPickOrder(seed.pickOrder);
-      setRerun({ title: seed.title, missing: seed.missingReferences });
+      setRerun({
+        title: seed.title,
+        missing: seed.missingReferences,
+        // 광고 작업은 비율이 `match-source` 고 마스터 픽셀을 따로 든다.
+        adWork: seed.ratio === "match-source",
+      });
+      setSeeding(false);
     })();
     return () => { alive = false; };
   }, [rerunFrom, loadReferences]);
@@ -424,14 +444,42 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         **값을 들고 왔다고 말한다.** 안 적으면 사용자는 이 화면이 원래 작업을
         고치는 곳인 줄 안다 — 만들기를 누르면 새 작업이 하나 더 생긴다.
       */}
+      {/*
+        **기다리는 동안 칸을 안 내준다.** 빈 채로 입력을 받으면 값이 닿는
+        순간 친 글이 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다
+        (2026-09-16 독립 리뷰). 아래 단계 내용도 이 값으로 함께 막는다.
+      */}
+      {seeding ? (
+        <div role="status" className="rounded-lg border border-border bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+          지난 값을 불러오는 중입니다…
+        </div>
+      ) : null}
+
       {rerun ? (
         <div role="status" className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
           <b>「{rerun.title || "이름 없는 이미지"}」</b> 의 값을 가져왔습니다. 고쳐서 만들면
           <b> 새 작업</b>이 하나 더 생기고 원래 작업은 그대로 남습니다.
           {rerun.missing ? (
             <span className="mt-1 block text-muted-foreground">
-              참고 이미지 {rerun.missing}장은 다른 회원의 것이라 가져오지 못했습니다.
-              필요하면 02에서 다시 골라 주세요.
+              {/*
+                **원인을 단정하지 않는다.** 이 수는 「지금 내 목록에 없는 것」일
+                뿐이다 — 내가 그 그림을 지웠거나 팀을 옮겨 범위 밖으로 나간
+                경우에도 여기에 센다(2026-09-16 독립 리뷰).
+              */}
+              참고 이미지 {rerun.missing}장은 지금 내 목록에 없어 가져오지 못했습니다.
+              다른 회원의 것이거나, 지운 그림일 수 있습니다.
+            </span>
+          ) : null}
+          {/*
+            **광고 작업은 규격을 못 들고 온다.** 광고는 `ratio: "match-source"` 와
+            마스터 픽셀(`data.adMaster`)로 저장되는데 씨앗은 비율만 들고 온다.
+            말 안 하면 「값을 가져왔습니다」를 믿고 그대로 만들어, 마스터 크기가
+            아니라 첨부 그림 크기로 나온다(2026-09-16 독립 리뷰).
+          */}
+          {rerun.adWork ? (
+            <span className="mt-1 block text-muted-foreground">
+              이 작업은 <b>광고 규격</b>으로 만든 것입니다. 규격은 가져오지 못했으니
+              03에서 다시 골라 주세요.
             </span>
           ) : null}
         </div>
@@ -443,7 +491,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         </div>
       ) : null}
 
-      {step === "reference" ? (
+      {!seeding && step === "reference" ? (
         <Card>
           <CardHeader>
             <CardTitle>쓸 이미지를 고르세요</CardTitle>
@@ -505,7 +553,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         </Card>
       ) : null}
 
-      {step === "spec" ? (
+      {!seeding && step === "spec" ? (
         <Card>
           <CardHeader>
             <CardTitle>규격</CardTitle>
@@ -690,7 +738,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         </Card>
       ) : null}
 
-      {step === "instruction" ? (
+      {!seeding && step === "instruction" ? (
         <Card>
           <CardHeader>
             <CardTitle>무엇을 만들까</CardTitle>
