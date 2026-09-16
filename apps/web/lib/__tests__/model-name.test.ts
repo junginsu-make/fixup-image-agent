@@ -199,3 +199,37 @@ describe("목록 두 개가 같은 이름을 쓴다", () => {
     }
   });
 });
+
+/**
+ * **화면이 모델 id 를 그대로 그리지 않는다.**
+ *
+ * 이름을 가려 둔 까닭은 회원에게 업체·모델 이름을 보이지 않으려는 것인데
+ * (`model-name.ts` 머리말), 한 화면만 원본을 그리면 가린 이유가 통째로
+ * 사라진다. 실제로 이미지 만들기 화면이 결과물 옆 설명에 `modelId` 를
+ * 그대로 실어 「gpt-image-2.5-flare」가 찍히고 있었다(2026-09-16 사용자 보고).
+ *
+ * **찾지 말고 센다.** 「`modelDisplayName` 이 있나」로 보면 한 자리만 고쳐도
+ * 통과한다.
+ */
+describe("화면이 모델 id 를 그대로 안 쓴다", () => {
+  const web = join(__dirname, "..", "..");
+
+  /** 회원에게 보여 줄 값을 만드는 화면들. */
+  const SCREENS = [
+    "app/poster/[id]/poster-client.tsx",
+    "app/library/works-tab.tsx",
+  ];
+
+  it.each(SCREENS)("%s 는 보일 이름으로 바꿔서 쓴다", (file) => {
+    const source = readFileSync(join(web, file), "utf8");
+
+    /*
+      `모델: project.modelId` 처럼 **이름표 옆에 id 를 그대로** 놓는 자리를
+      찾는다. 값으로 넘기는 것(`modelId={...}`)은 화면에 안 보이므로 뺀다.
+    */
+    const raw = source.match(/모델["']?\s*:\s*[A-Za-z_$][\w.$]*\.modelId/g) ?? [];
+    expect(raw, `${file} 이 모델 id 를 그대로 그린다: ${raw.join(", ")}`).toEqual([]);
+
+    expect(source).toContain("modelDisplayName(");
+  });
+});

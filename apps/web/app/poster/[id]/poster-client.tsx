@@ -17,6 +17,7 @@ import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
 import { POSTER_STEPS } from "../steps";
+import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
@@ -198,7 +199,12 @@ export function PosterClient(
     강조색: slots.accentColor,
     "넣지 말 것": slots.forbidden,
     비율: project.ratio,
-    모델: project.modelId,
+    /*
+      **보일 이름으로 바꿔서 싣는다.** 여기만 원본 id 를 그리고 있었다 —
+      「모델: gpt-image-2.5-flare」(2026-09-16 사용자 보고). 이름을 가려 둔
+      까닭이 한 자리에서 통째로 사라진다(`lib/model-name.ts` 머리말).
+    */
+    모델: modelDisplayName(project.modelId),
   });
 
   /**
