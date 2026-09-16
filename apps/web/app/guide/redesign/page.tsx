@@ -119,7 +119,7 @@ export default function RedesignGuidePage() {
         <Mock title="리디자인 · 사실 확인">
           <MockField label="확인된 성분" value="히알루론산 2% · 나이아신아마이드 2%" marker={3} />
           <MockField label="인증 · 시험" value="인증 제2024-…호 · 임상 수분 68%↑" />
-          <MockField label="새 구성안 · 3번째 섹션" value="문제 공감. 겨울철 당김" marker={4} />
+          <MockField label="새 구성안 · 3번째 섹션" value="문제 공감 · 겨울철 당김" marker={4} />
           <MockButtons items={[{ label: "섹션 만들기" }]} />
         </Mock>
 

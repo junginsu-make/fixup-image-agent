@@ -245,10 +245,10 @@ export default function ImageGuidePage() {
         </p>
         <Mock title="이미지 만들기 · 04 기획 확인">
           <MockSteps steps={STEPS} current={3} />
-          <MockField label="헤드라인. 가장 크게 들어갈 말" value="가을, 필름에 담다" marker={1} />
+          <MockField label="헤드라인 · 가장 크게 들어갈 말" value="가을, 필름에 담다" marker={1} />
           <MockField label="보조 문구" value="10.1 – 10.30 · 시청 갤러리" />
           <MockField label="장면" value="빛바랜 필름 사진이 벽에 걸린 전시장" marker={2} />
-          <MockField label="등장. 사람 / 제품" value="관람객 뒷모습 한 명" />
+          <MockField label="등장 · 사람 / 제품" value="관람객 뒷모습 한 명" />
           <MockField label="주조색 · 강조색" value="따뜻한 베이지 · 짙은 갈색" marker={3} />
           <MockField label="넣지 말 것" value="현대적인 디지털 카메라" marker={4} />
           <MockButtons items={[{ label: "이미지 만들기" }]} />
@@ -261,7 +261,7 @@ export default function ImageGuidePage() {
               body: "여기 적은 글자가 그대로 이미지에 들어갑니다. 짧을수록 잘 읽힙니다. 이 칸을 비우면 글자 없는 이미지가 나옵니다.",
             },
             {
-              title: "장면 · 등장 · 무엇이 그려질지",
+              title: "장면과 등장 · 무엇이 그려질지",
               body: "배경과 등장 대상입니다. 사람을 넣을 거라면 나이·관계·차림새까지 적으면 더 정확합니다. 특정 인물이어야 한다면 01에서 「인물 그대로 지키기」로 사진을 넣으세요.",
             },
             {
