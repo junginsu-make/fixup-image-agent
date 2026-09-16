@@ -24,6 +24,8 @@ interface Character {
   look?: string | null;
   createdAt?: string | null;
   views?: CharacterView[];
+  /** 내가 만든 것인가. 서버가 정한다(`lib/characters.ts`). */
+  mine?: boolean;
 }
 
 /**
@@ -53,7 +55,15 @@ export function CharacterDetailClient({ characterId }: { characterId: string }) 
         const body = await response.json().catch(() => null);
         if (!alive) return;
         if (body?.ok && body.character) {
-          setState({ kind: "ready", character: body.character, readOnly: false });
+          /*
+            **주인이 아니면 읽기 전용이다.** 회원용 목록은 팀 범위라 같은 팀
+            사람의 캐릭터도 성공으로 온다 — 404 로 가르면 팀원의 캐릭터를
+            자기 것으로 보게 된다.
+          */
+          setState({
+            kind: "ready", character: body.character,
+            readOnly: !body.character.mine,
+          });
           return;
         }
         /*

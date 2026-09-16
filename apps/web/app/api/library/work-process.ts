@@ -36,6 +36,9 @@ export type WorkProcess = {
  *
  * 값은 **실제로 쓰는 것보다 넉넉하게** 잡았다. 요약은 보통 한두 문장이고
  * 섹션은 4~7개다 — 자르는 일이 정상 작업에서는 일어나지 않는다.
+ *
+ * 심사는 크기를 따로 안 잰다. `reviewOf` 가 칸과 개수를 고르면서 이미
+ * 잘린다 — 두 군데서 재면 그 둘이 어긋난다.
  */
 const LIMIT = {
   summary: 1000,
@@ -43,9 +46,12 @@ const LIMIT = {
   title: 200,
   role: 200,
   copy: 1000,
-  /** 심사 전체를 JSON 으로 쟀을 때의 글자 수. */
-  review: 100_000,
 } as const;
+
+/** 심사 한 줄이 쓰는 칸. 그 밖은 버린다. */
+const REVIEW_KEYS = ["criterion", "rating", "evidence", "fix"] as const;
+
+type ReviewRow = Partial<Record<(typeof REVIEW_KEYS)[number], string>>;
 
 /**
  * 문자열만 통과시키고 **길면 자른다.**
@@ -57,19 +63,41 @@ function text(value: unknown, limit: number): string {
 }
 
 /**
- * 심사를 담을 수 있나.
+ * 심사를 **모양까지** 골라 담는다.
  *
- * 심사는 모양을 모르는 값이라 칸마다 자를 수 없다. 통째로 재서 넘치면
- * **아예 안 담는다** — 반만 담으면 화면이 그걸 심사 결과라고 그린다.
+ * 크기만 재면 10만 자 안에 무엇이든 들어간다 — 예를 들어
+ * `{"items":[{"evidence":"data:image/png;base64,…"}]}` 가 그대로 표에 들어간다.
+ * 이 파일이 내건 「화면이 보낸 것을 그대로 담지 않는다」가 이 가지에서만
+ * 열려 있었다(2026-09-16 독립 리뷰).
+ *
+ * 심사 한 줄이 쓰는 칸은 넷뿐이다(`packages/pdp-core/src/pdp.review.ts` 의
+ * `ReviewItem`) — `criterion`·`rating`·`evidence`·`fix`. 그 밖은 버린다.
+ *
+ * **`normalizeReview` 를 부르지 않는다.** 그 함수는 `@fixup/pdp-core` 에
+ * 있는데, 이 파일은 상세페이지와 리디자인 **양쪽 화면**이 불러 쓴다. 여기서
+ * 끌어오면 리디자인 묶음에까지 그 꾸러미가 딸려 온다. 칸 넷을 고르는 일에
+ * 그만한 값을 치를 이유가 없다.
  */
-function fitsReview(review: unknown): boolean {
-  if (!review) return false;
-  try {
-    return JSON.stringify(review).length <= LIMIT.review;
-  } catch {
-    // 순환 참조 같은 것. 담을 수 없으면 안 담는다.
-    return false;
-  }
+function reviewOf(review: unknown): { items: ReviewRow[] } | null {
+  if (!review || typeof review !== "object") return null;
+  const items = (review as { items?: unknown }).items;
+  if (!Array.isArray(items)) return null;
+
+  const rows = items
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => {
+      const row: ReviewRow = {};
+      for (const key of REVIEW_KEYS) {
+        const value = text(item[key], LIMIT.copy);
+        if (value) row[key] = value;
+      }
+      return row;
+    })
+    // 빈 껍데기를 담으면 화면이 「심사했다」고 읽는다.
+    .filter((row) => Object.keys(row).length)
+    .slice(0, LIMIT.sections);
+
+  return rows.length ? { items: rows } : null;
 }
 
 /**
@@ -117,6 +145,7 @@ export function workProcessOf(input: {
     // 담기는 것이 50개보다 적어진다.
     .slice(0, LIMIT.sections);
 
+  const review = reviewOf(input.review);
   const summary = text(blueprint?.executiveSummary, LIMIT.summary);
   // 비율은 `4:5` 같은 짧은 말이다. 길면 값이 아니라 다른 것이 온 것이다.
   const aspectRatio = text(input.aspectRatio, 20);
@@ -124,7 +153,7 @@ export function workProcessOf(input: {
   const process: WorkProcess = {
     ...(summary ? { summary } : {}),
     ...(sections.length ? { sections } : {}),
-    ...(fitsReview(input.review) ? { review: input.review } : {}),
+    ...(review ? { review } : {}),
     ...(aspectRatio ? { aspectRatio } : {}),
   };
 

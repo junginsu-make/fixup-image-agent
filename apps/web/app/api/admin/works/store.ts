@@ -223,13 +223,18 @@ function contentTypeOf(path: string): string {
  *
  * 한 장이 실패해도 나머지는 옮긴다 — 한 장 때문에 복사 전체를 무르면 이미
  * 만든 행과 올린 파일을 되감아야 하고, 그 되감기가 또 실패할 수 있다.
- * 못 옮긴 장은 화면에서 빈 칸으로 보인다.
+ *
+ * **무엇을 옮겼는지 돌려준다.** 전에는 실패를 로그에만 남기고 조용히
+ * 넘어갔는데, 부르는 쪽이 그것을 모른 채 행을 전부 적었다. 그러면 행 다섯에
+ * 파일 넷이 되어 카드에는 「5장 묶음」인데 열면 넷이다 — 「그림 없는 내
+ * 작업」보다 한 단계 나쁜 **거짓말하는 작업**이다(2026-09-16 독립 리뷰).
  */
 async function moveAssets(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   moves: AssetMove[],
   bucket: string = BUCKET,
-): Promise<void> {
+): Promise<Set<string>> {
+  const moved = new Set<string>();
   for (const move of moves) {
     const file = await admin.storage.from(bucket).download(move.from);
     if (file.error || !file.data) {
@@ -247,8 +252,11 @@ async function moveAssets(
       .upload(move.to, bytes, { contentType: contentTypeOf(move.to), upsert: true });
     if (uploaded.error) {
       console.error(`[admin-copy] 새 자리에 못 올렸습니다(${move.to}): ${uploaded.error.message}`);
+      continue;
     }
+    moved.add(move.to);
   }
+  return moved;
 }
 
 /**
@@ -480,54 +488,106 @@ export async function copyLibraryWorkToSelf(
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");
 
   const newId = created.id as string;
-  await keepCopyPrivate(admin, "library_items", newId);
 
-  // 2) 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
-  const { data: imageRows } = await admin
-    .from("library_images")
-    .select("position,path,mime_type,thumb_path")
-    .eq("item_id", id)
-    .order("position", { ascending: true });
+  /*
+    여기서부터는 **깨지면 되돌린다.**
 
-  const moves: AssetMove[] = [];
-  const rows: Array<Record<string, unknown>> = [];
-  let coverPath: string | null = null;
-  let coverThumbPath: string | null = null;
+    되돌리지 않으면 `image_count: 0` 에 표지도 없는 행이 남는데, 목록이 그런
+    행을 걸러 내므로(`app/library/library-works.ts`) **아무 화면에도 안 보인다.**
+    지울 손잡이가 없어 복사해 둔 파일까지 영영 남는다. 같은 표를 쓰는
+    `saveLibraryItem` 은 이미 되돌린다 — 한 표에 규칙이 둘이면 안 된다
+    (2026-09-16 독립 리뷰).
+  */
+  const uploaded: string[] = [];
+  try {
+    await keepCopyPrivate(admin, "library_items", newId);
 
-  for (const image of (imageRows ?? []) as Array<{
-    position: number; path: string; mime_type: string | null; thumb_path: string | null;
-  }>) {
-    const path = copiedLibraryAssetPath(image.path, ownerUserId, newId);
-    // 규약을 벗어난 경로는 옮기지 않고 그 장을 뺀다. 조용히 엉뚱한 자리를
-    // 가리키게 두는 것보다 낫다.
-    if (!path) continue;
-    const thumb = image.thumb_path
-      ? copiedLibraryAssetPath(image.thumb_path, ownerUserId, newId) : null;
-    moves.push({ from: image.path, to: path });
-    if (image.thumb_path && thumb) moves.push({ from: image.thumb_path, to: thumb });
-    if (Number(image.position) === 0) {
-      coverPath = path;
-      coverThumbPath = thumb;
+    // 2) 그림을 새 자리로 옮긴다. 원본은 읽기만 한다.
+    const { data: imageRows, error: imagesError } = await admin
+      .from("library_images")
+      .select("position,path,mime_type,thumb_path")
+      .eq("item_id", id)
+      .order("position", { ascending: true });
+    /*
+      **못 읽으면 성공이라고 하지 않는다.** 오류를 안 받으면 빈 배열로 읽혀
+      아무것도 안 적은 채 새 id 를 돌려주게 된다 — 화면은 새 작업으로 옮겨
+      가서 「볼 수 있는 그림이 없습니다」를 보여 주는데 원본에는 그림이
+      멀쩡히 있다. `deleteLibraryItem` 이 같은 함정을 이미 막아 두었다.
+    */
+    if (imagesError) throw new Error(imagesError.message);
+
+    const source = (imageRows ?? []) as Array<{
+      position: number; path: string; mime_type: string | null; thumb_path: string | null;
+    }>;
+
+    const moves: AssetMove[] = [];
+    const planned: Array<{ position: number; path: string; mime: string; thumb: string | null }> = [];
+
+    for (const image of source) {
+      const path = copiedLibraryAssetPath(image.path, ownerUserId, newId);
+      // 규약을 벗어난 경로는 옮기지 않고 그 장을 뺀다. 조용히 엉뚱한 자리를
+      // 가리키게 두는 것보다 낫다.
+      if (!path) continue;
+      const thumb = image.thumb_path
+        ? copiedLibraryAssetPath(image.thumb_path, ownerUserId, newId) : null;
+      moves.push({ from: image.path, to: path });
+      if (image.thumb_path && thumb) moves.push({ from: image.thumb_path, to: thumb });
+      planned.push({
+        position: Number(image.position), path,
+        mime: image.mime_type ?? "image/png", thumb,
+      });
     }
-    rows.push({
-      item_id: newId, user_id: ownerUserId, position: Number(image.position),
-      path, mime_type: image.mime_type ?? "image/png", thumb_path: thumb,
-    });
-  }
-  await moveAssets(admin, moves, BUCKET);
 
-  // 3) 옮긴 자리를 적는다.
-  if (rows.length) {
-    const { error } = await admin.from("library_images").insert(rows);
-    if (error) throw new Error(error.message);
-    const { error: coverError } = await admin
-      .from("library_items")
-      .update({ image_count: rows.length, cover_path: coverPath, cover_thumb_path: coverThumbPath })
-      .eq("id", newId);
-    if (coverError) throw new Error(coverError.message);
-  }
+    const moved = await moveAssets(admin, moves, BUCKET);
+    uploaded.push(...moved);
 
-  return { id: newId };
+    /*
+      **못 옮긴 장은 행도 안 적는다.** 있다고 적어 두면 카드에는 「5장 묶음」
+      인데 열면 넷이다. 작은 사본만 실패한 장은 살린다 — 사본이 없으면 화면이
+      원본으로 떨어질 뿐이다(`_components/grid-src.ts`).
+    */
+    const rows = planned
+      .filter((image) => moved.has(image.path))
+      .map((image) => ({
+        item_id: newId, user_id: ownerUserId, position: image.position,
+        path: image.path, mime_type: image.mime,
+        thumb_path: image.thumb && moved.has(image.thumb) ? image.thumb : null,
+      }));
+
+    /*
+      **한 장도 못 옮겼으면 빈 작업을 남기지 않는다.** 원본에 그림이 있었는데
+      전부 실패한 것은 저장소가 앓는 중이라는 뜻이다 — 그때 「복사했다」고
+      말하면 사용자는 빈 작업을 보고 자기 것이 사라졌다고 읽는다.
+    */
+    if (source.length && !rows.length) throw new Error("그림을 옮기지 못했습니다.");
+
+    // 3) 옮긴 자리를 적는다.
+    if (rows.length) {
+      const { error } = await admin.from("library_images").insert(rows);
+      if (error) throw new Error(error.message);
+
+      const cover = rows.find((row) => row.position === 0) ?? rows[0];
+      const { error: coverError } = await admin
+        .from("library_items")
+        .update({
+          image_count: rows.length,
+          cover_path: cover?.path ?? null,
+          cover_thumb_path: cover?.thumb_path ?? null,
+        })
+        .eq("id", newId);
+      if (coverError) throw new Error(coverError.message);
+    }
+
+    return { id: newId };
+  } catch (error) {
+    /*
+      **파일부터 지우고 행을 지운다.** 순서가 반대면 경로를 잃는다 —
+      `saveLibraryItem` 이 같은 순서로 되돌린다.
+    */
+    if (uploaded.length) await admin.storage.from(BUCKET).remove(uploaded);
+    await admin.from("library_items").delete().eq("id", newId);
+    throw error;
+  }
 }
 
 export async function copyCharacterToSelf(

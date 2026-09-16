@@ -21,7 +21,7 @@ describe("workProcessOf", () => {
         { title: "성분", role: "evidence", copy: "둘째 문장" },
       ],
     },
-    review: { verdict: "ok" },
+    review: { items: [{ criterion: "hook", rating: "pass" }] },
     aspectRatio: "4:5",
   };
 
@@ -31,7 +31,7 @@ describe("workProcessOf", () => {
     expect(process.summary).toBe("전통 방식의 진정성으로 설득한다");
     expect(process.sections).toHaveLength(2);
     expect(process.sections![0]).toEqual({ title: "히어로", role: "hook", copy: "첫 문장" });
-    expect(process.review).toEqual({ verdict: "ok" });
+    expect(process.review).toEqual({ items: [{ criterion: "hook", rating: "pass" }] });
     expect(process.aspectRatio).toBe("4:5");
   });
 
@@ -266,18 +266,70 @@ describe("workProcessOf — 크기", () => {
     expect(section!.copy!.length).toBe(1000);
   });
 
-  it("심사가 너무 크면 담지 않는다", () => {
+  it("심사가 아무리 커도 잘려서 들어간다", () => {
     /*
-      심사는 모양을 모르는 값이라 칸마다 자를 수 없다. 통째로 재서 넘치면
-      **아예 안 담는다** — 반만 담으면 화면이 그걸 심사 결과라고 그린다.
+      전에는 통째로 재서 넘치면 아예 안 담았다. 지금은 `reviewOf` 가 칸과
+      개수를 고르면서 이미 잘리므로 크기를 따로 안 잰다 — 두 군데서 재면
+      그 둘이 어긋난다.
     */
-    const huge = { items: Array.from({ length: 5000 }, () => ({ evidence: "가".repeat(200) })) };
-    expect(workProcessOf({ blueprint: { executiveSummary: "요약" }, review: huge }))
-      .toEqual({ summary: "요약" });
+    const huge = { items: Array.from({ length: 5000 }, () => ({ evidence: "가".repeat(2000) })) };
+    const review = workProcessOf({ blueprint: { executiveSummary: "요약" }, review: huge })!
+      .review as { items: Array<{ evidence: string }> };
+
+    expect(review.items).toHaveLength(50);
+    expect(review.items[0]!.evidence.length).toBe(1000);
+    // 50 × 1000자 + 껍데기. 표 한 줄이 감당할 무게다.
+    expect(JSON.stringify(review).length).toBeLessThan(100_000);
   });
 
   it("보통 크기의 심사는 그대로 담는다", () => {
     const review = { items: [{ criterion: "hook", rating: "pass", evidence: "첫 문장이 붙잡는다" }] };
     expect(workProcessOf({ blueprint: { executiveSummary: "요약" }, review })!.review).toEqual(review);
+  });
+});
+
+/**
+ * **심사도 모양을 본다.**
+ *
+ * 크기만 재면 10만 자 안에 무엇이든 들어간다 — 예를 들어
+ * `{"items":[{"evidence":"data:image/png;base64,…9만자"}]}` 가 그대로 표에
+ * 들어간다. 설계가 내건 「화면이 보낸 것을 그대로 담지 않는다」가 이 가지에서만
+ * 열려 있었다(2026-09-16 독립 리뷰).
+ *
+ * 심사 한 줄이 쓰는 칸은 넷뿐이다(`packages/pdp-core/src/pdp.review.ts`) —
+ * `criterion`·`rating`·`evidence`·`fix`. 그 밖은 버린다.
+ */
+describe("workProcessOf — 심사 모양", () => {
+  const 심사 = (items: unknown) =>
+    workProcessOf({ blueprint: { executiveSummary: "요약" }, review: { items } })?.review;
+
+  it("네 칸만 남긴다", () => {
+    expect(심사([{
+      criterion: "hook", rating: "pass", evidence: "첫 문장이 붙잡는다", fix: "",
+      원본사진: "data:image/png;base64,AAAA",
+    }])).toEqual({ items: [{ criterion: "hook", rating: "pass", evidence: "첫 문장이 붙잡는다" }] });
+  });
+
+  it("칸 안의 글도 자른다", () => {
+    const review = 심사([{ criterion: "hook", evidence: "가".repeat(5000) }]) as
+      { items: Array<{ evidence: string }> };
+    expect(review.items[0]!.evidence.length).toBe(1000);
+  });
+
+  it("항목 수를 넘기면 뒤를 버린다", () => {
+    const many = Array.from({ length: 200 }, (_, index) => ({ criterion: `${index}` }));
+    expect((심사(many) as { items: unknown[] }).items).toHaveLength(50);
+  });
+
+  it("항목이 배열이 아니면 심사가 없는 것으로 본다", () => {
+    expect(심사("통과")).toBeUndefined();
+    expect(workProcessOf({ blueprint: { executiveSummary: "요약" }, review: "통과" })?.review)
+      .toBeUndefined();
+  });
+
+  it("남는 칸이 하나도 없으면 담지 않는다", () => {
+    // 빈 껍데기를 담으면 화면이 「심사했다」고 읽는다.
+    expect(심사([{ 엉뚱한칸: 1 }])).toBeUndefined();
+    expect(심사([])).toBeUndefined();
   });
 });

@@ -56,9 +56,17 @@ describe("작업을 저장할 때 과정도 함께 보낸다", () => {
     const store = read("lib/server-library.ts");
 
     expect(store.match(/data:\s*input\.process/g)?.length).toBe(1);
-    // 이어 붙일 때는 과정을 덮지 않는다. 덮으면 마지막 섹션이 보던 것이
-    // 작업 전체의 과정이 되어 버린다.
-    const update = store.slice(store.indexOf("appendTo\n          ? { image_count"));
-    expect(update.slice(0, 400)).not.toContain("data:");
+    /*
+      이어 붙일 때는 과정을 덮지 않는다. 덮으면 마지막 섹션이 보던 것이
+      작업 전체의 과정이 되어 버린다.
+
+      **기준점을 못 찾으면 먼저 실패한다.** 처음에는 `\n` 을 넣어 찾았는데,
+      이 저장소는 CRLF 로 체크아웃되어(673줄) 그 문자열이 절대 안 잡혔다.
+      `indexOf` 가 -1 을 주고 `slice(-1)` 이 마지막 한 글자만 넘기니 **무엇을
+      넣어도 통과하는** 가드였다 — 2026-09-16 독립 리뷰가 실증했다.
+    */
+    const at = store.search(/appendTo\r?\n\s*\? \{ image_count/);
+    expect(at, "이어 붙이는 자리를 못 찾았다 — 가늠자를 고쳐라").toBeGreaterThan(-1);
+    expect(store.slice(at, at + 400)).not.toContain("data:");
   });
 });

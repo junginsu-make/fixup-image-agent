@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { libraryWorks, showcaseKindOf, TOOL_LABEL } from "../library-works";
+import {
+  isWorkShowcased, libraryWorks, showcaseKindOf, TOOL_LABEL,
+} from "../library-works";
 
 /**
  * 계정에 보관된 상세페이지·리디자인 작업을 **작업물 탭에 싣는다.**
@@ -113,5 +115,41 @@ describe("TOOL_LABEL", () => {
     // 빠지면 카드에 `undefined` 가 그대로 찍힌다.
     expect(Object.keys(TOOL_LABEL).sort()).toEqual(["create", "poster", "redesign", "sns"]);
     for (const label of Object.values(TOOL_LABEL)) expect(label).not.toBe("");
+  });
+});
+
+/**
+ * 카드에 **「첫 화면」 배지**를 언제 다나.
+ *
+ * 처음에는 낱장을 훑어 판단했다(`work.images.some(...)`). 그런데 계정 보관
+ * 작업의 낱장은 설계상 **늘 빈 배열**이라(열 때 받는다) 배지가 영영 안 떴다.
+ * 관리자가 걸어 놓고 새로고침하면 안 걸린 줄 알고 또 걸려 한다 — 정작 카드를
+ * 열면 갤러리 안쪽은 「걸림」이라고 맞게 뜬다. 화면 두 곳이 다른 답을 냈다
+ * (2026-09-16 독립 리뷰).
+ */
+describe("isWorkShowcased", () => {
+  const 걸린것: Parameters<typeof isWorkShowcased>[0] = [
+    { sourceKind: "library", sourceId: "item-1" },
+    { sourceKind: "sns", sourceId: "sns-1" },
+  ];
+
+  it("낱장을 몰라도 이 작업이 걸렸는지는 안다", () => {
+    // 몇 번째 장인지는 배지에 안 쓴다. 걸렸나만 알면 된다.
+    expect(isWorkShowcased(걸린것, "create", "item-1")).toBe(true);
+    expect(isWorkShowcased(걸린것, "redesign", "item-1")).toBe(true);
+  });
+
+  it("갈래가 다르면 아니다", () => {
+    /*
+      id 만 보면 카드뉴스와 상세페이지의 id 가 우연히 같을 때 엉뚱한 카드에
+      배지가 붙는다. DB 의 중복 방지 열쇠도 갈래를 함께 본다.
+    */
+    expect(isWorkShowcased(걸린것, "sns", "item-1")).toBe(false);
+    expect(isWorkShowcased(걸린것, "poster", "sns-1")).toBe(false);
+  });
+
+  it("안 걸린 작업은 아니다", () => {
+    expect(isWorkShowcased(걸린것, "create", "item-2")).toBe(false);
+    expect(isWorkShowcased([], "create", "item-1")).toBe(false);
   });
 });

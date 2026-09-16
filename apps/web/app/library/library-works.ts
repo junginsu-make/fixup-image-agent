@@ -1,4 +1,4 @@
-import type { ShowcaseSourceKind } from "../api/showcase/core";
+import type { ShowcaseSourceKind, ShowcaseAdminView } from "../api/showcase/core";
 import { coverOf } from "./works-cover";
 
 /**
@@ -31,6 +31,26 @@ export const TOOL_LABEL: Record<WorkTool, string> = {
  */
 export function showcaseKindOf(tool: WorkTool): ShowcaseSourceKind {
   return tool === "sns" || tool === "poster" ? tool : "library";
+}
+
+/**
+ * 이 작업이 첫 화면 갤러리에 **걸려 있나.**
+ *
+ * **몇 번째 장인지는 안 본다.** 카드의 배지는 「이 작업의 무언가가 걸렸다」만
+ * 말하면 된다. 처음에는 낱장을 훑어 판단했는데(`work.images.some(...)`),
+ * 계정 보관 작업의 낱장은 설계상 늘 빈 배열이라 배지가 영영 안 떴다 —
+ * 걸어 놓고 새로고침하면 안 걸린 줄 알고 또 걸려 하게 된다.
+ *
+ * **갈래는 본다.** id 만 보면 카드뉴스와 상세페이지의 id 가 우연히 같을 때
+ * 엉뚱한 카드에 배지가 붙는다. DB 의 중복 방지 열쇠도 갈래를 함께 본다.
+ */
+export function isWorkShowcased(
+  items: ReadonlyArray<Pick<ShowcaseAdminView, "sourceKind" | "sourceId">>,
+  tool: WorkTool,
+  workId: string,
+): boolean {
+  const kind = showcaseKindOf(tool);
+  return items.some((item) => item.sourceKind === kind && item.sourceId === workId);
 }
 
 /** 목록이 주는 한 줄. `lib/server-library.ts` 의 `ServerLibraryItem` 을 따른다. */

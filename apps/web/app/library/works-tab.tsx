@@ -10,7 +10,7 @@ import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
 import { coverOf } from "./works-cover";
 import { canOpenSteps } from "./work-steps";
 import {
-  libraryWorks, showcaseKindOf, TOOL_LABEL,
+  isWorkShowcased, libraryWorks, showcaseKindOf, TOOL_LABEL,
   type LibraryWork, type WorkTool,
 } from "./library-works";
 import {
@@ -585,7 +585,7 @@ export function WorksTab() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary">{TOOL_LABEL[work.tool]}</Badge>
                 {work.imageCount > 1 ? <Badge variant="secondary">{work.imageCount}장 묶음</Badge> : null}
-                {showcase && work.images.some((image) => isShowcased(showcase, showcaseKindOf(work.tool), work.id, image.index))
+                {showcase && isWorkShowcased(showcase, work.tool, work.id)
                   ? <Badge>첫 화면</Badge>
                   : null}
                 {allMembers && !work.mine ? <Badge variant="secondary">{work.ownerEmail ?? "다른 회원"}</Badge> : null}

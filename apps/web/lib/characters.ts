@@ -120,6 +120,14 @@ export interface CharacterSummary {
   look: CharacterLook;
   createdAt: string;
   views: CharacterView[];
+  /**
+   * 내가 만든 것인가.
+   *
+   * **서버가 정한다.** 목록은 팀 범위라 같은 팀 사람의 캐릭터가 섞여 오고,
+   * 관리자에게는 전체가 온다. 화면이 스스로 판단하면 남의 캐릭터를 자기 것으로
+   * 보게 된다 — 상세 화면이 「다른 회원의 것」이라고 말하는 근거가 이 칸이다.
+   */
+  mine: boolean;
 }
 
 /** 후보를 만들 때 함께 보내는 그림 한 장. 없어도 된다. */
@@ -697,6 +705,8 @@ export async function listCharacters(
       const record = normalizeRecord(row as unknown as Record<string, unknown>);
       return {
         ...record,
+        // 파일 저장소는 한 사람 것만 담는다. 남의 것이 섞일 길이 없다.
+        mine: true,
         views: views
           .filter((view) => view.characterId === row.id)
           .sort(byAngleOrder)
@@ -740,6 +750,7 @@ export async function listCharacters(
 
   return data.map((row: Record<string, unknown>) => ({
     ...normalizeRecord(row),
+    mine: row.user_id === userId,
     views: (viewRows ?? [])
       .filter((view: { character_id: string }) => view.character_id === String(row.id))
       .sort(byAngleOrder)

@@ -45,7 +45,16 @@ export function WorkDetailClient({ workId }: { workId: string }) {
         const body = await response.json().catch(() => null);
         if (!alive) return;
         if (body?.ok && body.work) {
-          setState({ kind: "ready", work: body.work, images: body.images ?? [], readOnly: false });
+          /*
+            **주인이 아니면 읽기 전용이다.** 「회원용 길이 성공했나」로 가르면
+            안 된다 — 같은 팀 사람의 작업은 회원용 길이 **성공한다**
+            (`lib/teams/scope.ts`). 그러면 팀원의 작업을 열어도 아무 표시가
+            없어 자기 것인 줄 알고 고치려 하게 된다.
+          */
+          setState({
+            kind: "ready", work: body.work, images: body.images ?? [],
+            readOnly: !body.work.mine,
+          });
           return;
         }
         /*
