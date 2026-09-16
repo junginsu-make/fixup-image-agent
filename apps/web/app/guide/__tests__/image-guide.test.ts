@@ -51,3 +51,28 @@ describe("이미지 만들기 설명서", () => {
     expect(source).toMatch(/글만|없어도|선택입니다/);
   });
 });
+
+/**
+ * **결 이름을 손으로 적지 않는다.**
+ *
+ * 이름표는 `@fixup/shared` 가 갖고 다섯 도구가 함께 쓴다. 설명서가 손으로
+ * 적었더니 2026-09-16 에 이름을 바꾼 뒤 **설명서만 옛 이름으로 남았다** —
+ * 배포한 빌드를 뒤져 보고서야 찾았다. 단계 이름에서 이미 한 번 겪은 일이다.
+ */
+describe("그림체 이름", () => {
+  it("코드에서 가져온다", () => {
+    expect(source).toContain('from "@fixup/shared"');
+    expect(source).toContain("IMAGE_LOOK_LABEL[look]");
+  });
+
+  it("옛 이름이 남아 있지 않다", () => {
+    for (const stale of ["레퍼런스 따라가기", '{ title: "실사" }', '{ title: "애니" }']) {
+      expect(source).not.toContain(stale);
+    }
+  });
+
+  /** 첨부가 있어야 고를 수 있다는 것을 설명서도 말해야 한다. */
+  it("레퍼런스가 있어야 고를 수 있다고 적는다", () => {
+    expect(source).toContain("따라 만들 그림을 붙여야 고를 수 있습니다");
+  });
+});
