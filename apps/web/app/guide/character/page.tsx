@@ -4,6 +4,7 @@ import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
+import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference } from "@fixup/shared";
 
 export const metadata: Metadata = { title: "캐릭터 만들기 · 사용 설명서" };
 
@@ -15,12 +16,21 @@ const KINDS = [
   { title: "사물", hint: "제품·소품" },
 ];
 
-const TONES = [
-  { title: "실사", hint: "사진처럼" },
-  { title: "애니", hint: "셀 셰이딩·굵은 선" },
-  { title: "3D", hint: "3D 렌더" },
-  { title: "그림", hint: "손그림 질감" },
-];
+/**
+ * 고를 수 있는 **그림체.**
+ *
+ * **손으로 적지 않는다.** 전에는 「실사·애니·3D·그림」이라고 적어 뒀는데 화면은
+ * 「실사 사진·애니메이션·3D·손그림」이었다. 설명서가 없는 이름을 부르면 사용자는
+ * 화면에서 그것을 찾다가 못 찾는다(2026-09-16 리뷰. 같은 일이 이미지 설명서에서
+ * 한 번 있었다).
+ *
+ * 화면(`app/characters/CharacterStudio.tsx`)도 `looksWithoutReference()` 를
+ * 쓴다. 캐릭터는 따라 만들 그림 없이도 만들 수 있어 「레퍼런스 스타일」이 빠진다.
+ */
+const TONES = looksWithoutReference().map((look) => ({
+  title: IMAGE_LOOK_LABEL[look],
+  hint: IMAGE_LOOK_HINT[look],
+}));
 
 const ANGLES = ["정면", "왼쪽 45°", "오른쪽 45°", "왼쪽", "오른쪽", "뒷면"];
 
@@ -63,7 +73,7 @@ export default function CharacterGuidePage() {
         ]}
       />
 
-      <Section title="사람만 만드는 것이 아닙니다" hint="종류와 결을 따로 고릅니다.">
+      <Section title="사람만 만드는 것이 아닙니다" hint="종류와 그림체를 따로 고릅니다.">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지 · 종류</h3>
@@ -77,7 +87,7 @@ export default function CharacterGuidePage() {
             </ul>
           </div>
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">어떤 결로 · 화풍</h3>
+            <h3 className="mb-2 text-sm font-extrabold">어떤 그림체로 · 화풍</h3>
             <ul className="grid gap-2">
               {TONES.map((tone) => (
                 <li key={tone.title} className="rounded-lg border bg-card px-3 py-2">
@@ -89,7 +99,7 @@ export default function CharacterGuidePage() {
           </div>
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          둘을 조합합니다. <strong className="text-foreground">「애니풍 강아지」</strong>는 종류 = 동물, 결 = 애니입니다.
+          둘을 조합합니다. <strong className="text-foreground">「애니풍 강아지」</strong>는 종류 = 동물, 그림체 = 애니메이션입니다.
           제품 소품을 여러 장면에 똑같이 넣고 싶다면 종류 = 사물로 만들어 두면 됩니다.
         </p>
       </Section>
@@ -97,7 +107,7 @@ export default function CharacterGuidePage() {
       <Section title="전체 흐름" hint="화면은 두 단계입니다.">
         <Flow
           nodes={[
-            { label: "무엇을 만들지", sub: "종류 · 결 · 설명" },
+            { label: "무엇을 만들지", sub: "종류 · 그림체 · 설명" },
             { label: "정면 보기", sub: "이대로 갈지 정합니다", human: true },
             { label: "이어서 더 만들기", sub: "각도 또는 다각도 한 장", human: true },
             { label: "결과", sub: "라이브러리에도 들어갑니다" },
@@ -133,7 +143,7 @@ export default function CharacterGuidePage() {
         <Mock title="캐릭터 만들기 · 무엇을 만들지">
           <MockSteps steps={["만들기", "결과"]} current={0} />
           <MockChoices label="종류" marker={1} items={KINDS} active={0} />
-          <MockChoices label="결" marker={2} items={TONES} active={0} />
+          <MockChoices label="그림체" marker={2} items={TONES} active={0} />
           <MockField
             label="어떤 대상인가"
             marker={3}
@@ -161,7 +171,7 @@ export default function CharacterGuidePage() {
             },
             {
               title: "그림체 · 어떤 화풍으로",
-              body: "실사는 사진처럼, 애니는 굵은 선, 3D는 렌더, 그림은 손그림 질감입니다. 결에 따라 기본 모델이 달라집니다.",
+              body: "그림체마다 기본 모델이 달라집니다. 고른 그림체가 캐릭터의 모든 각도에 그대로 갑니다.",
             },
             {
               title: "어떤 대상인가 · 구체적일수록 좋습니다",

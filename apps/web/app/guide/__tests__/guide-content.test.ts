@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CARD_RATIOS, IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
-import { ATTACHMENT_ROLE_LABEL } from "@fixup/shared";
+import { ATTACHMENT_ROLE_LABEL, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { GUIDE_TOPICS, neighborsOf } from "../_components/topics";
 
 /**
@@ -91,6 +91,41 @@ describe("설명서 내용", () => {
     // 목록 자체가 비어 있으면 위 검사가 무의미해진다.
     expect(CARD_RATIOS.length).toBeGreaterThan(0);
     expect(POSTER_RATIOS.length).toBeGreaterThan(CARD_RATIOS.length);
+  });
+
+  /**
+   * **그림체 이름을 손으로 적지 않는다.**
+   *
+   * 이미지 설명서에서 한 번 겪은 일이다 — 이름을 바꿨는데 설명서만 옛 이름으로
+   * 남았고, 배포한 빌드를 뒤져 보고서야 찾았다. 캐릭터 설명서가 **같은 실수를
+   * 그대로 안고 있었다**(2026-09-16 리뷰). 화면은 「실사 사진」인데 설명서는
+   * 「실사」라고 적어, 사용자가 화면에서 그 이름을 찾다가 못 찾는 상태였다.
+   *
+   * 한 페이지짜리 검사로는 다음 페이지가 또 새긴다. **목록을 그리는 페이지
+   * 전부**를 여기서 잰다.
+   */
+  it("그림체 목록을 그리는 페이지는 코드에서 가져온다", () => {
+    const byName = new Map(guideSources().map((file) => [file.name, file.source]));
+    for (const name of ["image", "character"]) {
+      expect(byName.get(name), `${name} 설명서가 없다`).toBeTruthy();
+      expect(
+        byName.get(name),
+        `${name}/page.tsx 가 그림체 이름을 손으로 적었다. IMAGE_LOOK_LABEL 에서 가져온다`,
+      ).toContain("IMAGE_LOOK_LABEL");
+    }
+
+    // 목록 자체가 비면 위 검사가 무의미해진다.
+    expect(Object.keys(IMAGE_LOOK_LABEL).length).toBeGreaterThan(3);
+
+    // 이름을 손으로 적은 흔적. 지금 화면에 없는 이름들이다.
+    for (const file of guideSources()) {
+      for (const stale of ['{ title: "실사"', '{ title: "애니"', '{ title: "그림"', 'label="결"']) {
+        expect(
+          file.source.includes(stale),
+          `${file.name}/page.tsx 에 옛 그림체 이름이 남았다: ${stale}`,
+        ).toBe(false);
+      }
+    }
   });
 
   it("설명서가 말하는 생성 방식은 실제로 고를 수 있는 것이다", () => {
