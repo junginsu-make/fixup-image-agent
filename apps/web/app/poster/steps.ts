@@ -1,4 +1,5 @@
 import type { StepDefinition } from "@fixup/ui";
+import type { PromptMode } from "./prompt-mode";
 
 /**
  * 이미지 만들기의 단계 — **한 벌뿐이다.**
@@ -38,4 +39,36 @@ const BEFORE_CREATE = new Set(["instruction", "reference", "spec"]);
 
 export function reachableBeforeCreate(id: string): boolean {
   return BEFORE_CREATE.has(id);
+}
+
+/**
+ * 이 작업이 실제로 지나는 단계들.
+ *
+ * **「그대로 생성」은 04 를 건너뛴다**(설계 §3.2). 그 갈래는 기획 LLM 을 안
+ * 돌리므로 슬롯이 비어 있고 채울 일도 없다. 고칠 것이 없는 자리를 막대에
+ * 내보이면, 눌러 들어간 사람이 **빈 칸만 보고** 무엇을 해야 할지 모른다.
+ *
+ * **번호는 다시 매기지 않는다.** 04 를 빼고 결과를 「04」로 바꾸면 같은 화면을
+ * 두 사람이 다른 번호로 부르게 된다. 이름표는 무엇을 하는 자리인지 가리키는
+ * 것이지 몇 번째인지 세는 것이 아니다.
+ *
+ * 안 고른 작업(옛 작업)은 지금까지대로 다섯 단계다(설계 §9).
+ */
+export function posterSteps(promptMode?: PromptMode): StepDefinition[] {
+  if (promptMode !== "verbatim") return POSTER_STEPS;
+  return POSTER_STEPS.filter((step) => step.id !== "plan");
+}
+
+/**
+ * 작업을 연 사람이 **지금 서 있는 단계.**
+ *
+ * 그대로 생성은 04 가 없으므로 만든 직후에도 05 에 선다. 없는 단계를 가리키면
+ * 막대가 아무 곳도 안 밝혀 어디쯤 왔는지 알 수 없다.
+ */
+export function currentPosterStep(input: {
+  hasImages: boolean;
+  promptMode?: PromptMode;
+}): string {
+  if (input.hasImages) return "result";
+  return input.promptMode === "verbatim" ? "result" : "plan";
 }

@@ -18,7 +18,7 @@ import {
 } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
-import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
+import { posterSteps, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { looksFinished, type PromptMode } from "./prompt-mode";
@@ -462,7 +462,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
           보고). 04 로 가면 기획 칸을 열어 준다.
         */}
         <StepBar
-          steps={POSTER_STEPS}
+          // 「그대로 생성」을 고르면 04 가 빠진다. 고를 때 바로 보여야 한다.
+          steps={posterSteps(promptMode)}
           current={step}
           allowJump={(id) => posterRerunJump(id, jumpContext) !== null}
           onJump={(id) => {

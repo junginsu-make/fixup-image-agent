@@ -98,3 +98,29 @@ describe("칸을 걸러서 보여주는가", () => {
     expect(source).toMatch(/function renderSlot\(field: TextSlot\)/);
   });
 });
+
+/**
+ * **단계 막대가 「그대로 생성」을 안다.**
+ *
+ * 그 갈래는 04 에 고칠 것이 없는데 막대가 「04 기획 확인」을 그대로 내보이고
+ * 있었다(2026-09-17 설계 대조). 부름을 막는 쪽은 화면·서버 둘 다 하고 있어
+ * 값이 새지는 않았고, 어긋난 것은 **사용자에게 보이는 차례**뿐이었다.
+ *
+ * 판단은 `steps.ts` 에 있다. 화면이 목록을 도로 박아 넣으면 값으로 잰 것이
+ * 화면에 안 닿는다.
+ */
+describe("단계 막대", () => {
+  it("차례를 steps 에서 받아 온다", () => {
+    expect(source).toContain("posterSteps(project.data.promptMode)");
+    expect(source).toContain("currentPosterStep(");
+  });
+
+  it("목록을 화면에 도로 박지 않는다", () => {
+    expect(source).not.toContain("steps={POSTER_STEPS}");
+  });
+
+  /** 서 있는 단계도 화면이 정하면 안 된다. 없는 칸을 가리키게 된다. */
+  it("서 있는 단계를 화면이 정하지 않는다", () => {
+    expect(source).not.toContain('list.length ? "result" : "plan"');
+  });
+});

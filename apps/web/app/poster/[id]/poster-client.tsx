@@ -17,7 +17,7 @@ import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
-import { POSTER_STEPS, reachableBeforeCreate } from "../steps";
+import { currentPosterStep, posterSteps, reachableBeforeCreate } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
@@ -526,7 +526,14 @@ export function PosterClient(
 
   // 앞 화면(01~03)에서 이어지는 단계다. 어디쯤 왔는지 보여준다 —
   // 카드뉴스가 쓰는 것과 같은 막대다.
-  const current = list.length ? "result" : "plan";
+  //
+  // **그대로 생성은 04 가 없다.** 판단은 `steps.ts` 가 한다 — 여기서 정하면
+  // 새로 만드는 화면과 갈리고, 값으로 잴 수도 없다.
+  const 단계 = posterSteps(project.data.promptMode);
+  const current = currentPosterStep({
+    hasImages: list.length > 0,
+    promptMode: project.data.promptMode,
+  });
 
   return (
     <div className="grid gap-6">
@@ -551,7 +558,7 @@ export function PosterClient(
       ) : null}
 
       <StepBar
-        steps={POSTER_STEPS}
+        steps={단계}
         current={current}
         /*
           **못 가는 곳은 눌리지 않게 한다.** 04·05 는 이 화면 안이라 오갈 데가
