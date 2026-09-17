@@ -204,6 +204,47 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
     }));
   }
 
+  return readReferences(viewer, (query) => query
+    .order("created_at", { ascending: false })
+    // 400장 상한에 걸리기 전에 거른다. 뽑아 놓고 코드에서 버리면, 남의 팀 것이
+    // 상한을 다 차지해 내 것이 잘려 나갈 수 있다.
+    .limit(400));
+}
+
+/**
+ * 고른 그림 **낱개**를 같은 규칙으로 읽는다.
+ *
+ * 목록과 규칙이 갈리면 안 된다 — **목록에서 보이는데 쓰지는 못하는** 일이
+ * 생긴다(2026-09-17 사용자 확인 요청으로 드러났다. 이미지 만들기가 저만의
+ * 규칙으로 목록을 읽어, 다른 화면에서 보이는 공용 그림이 거기서는 없었다).
+ *
+ * **차례는 물어본 차례 그대로 돌려준다.** 프롬프트의 `Image 1·2·3` 이 이
+ * 차례고, DB 가 주는 차례는 정해져 있지 않다.
+ */
+export async function referenceImagesByIds(
+  viewer: ReferenceViewer,
+  ids: string[],
+): Promise<ReferenceImageView[]> {
+  if (!ids.length) return [];
+  const found = isLocalStoreEnabled()
+    ? (await listReferenceImages(viewer)).filter((image) => ids.includes(image.id))
+    : await readReferences(viewer, (query) => query.in("id", ids));
+  const byId = new Map(found.map((image) => [image.id, image]));
+  return ids.map((id) => byId.get(id)).filter((image): image is ReferenceImageView => Boolean(image));
+}
+
+/** 서명까지 하려면 한 client 로 이어야 한다 — 질의와 저장소가 같은 것을 쓴다. */
+function referenceQuery(supabase: ReturnType<typeof createSupabaseAdminClient>) {
+  return supabase
+    .from("reference_images")
+    .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height,created_at");
+}
+
+/** 목록과 낱개가 **같은 규칙**을 타는 한 곳. 갈리면 한쪽이 조용히 넓어진다. */
+async function readReferences(
+  viewer: ReferenceViewer,
+  narrow: (query: ReturnType<typeof referenceQuery>) => ReturnType<typeof referenceQuery>,
+): Promise<ReferenceImageView[]> {
   const visibility = referenceVisibility({
     userId: viewer.userId,
     teamId: viewer.teamId ?? null,
@@ -211,13 +252,7 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   });
 
   const supabase = createSupabaseAdminClient();
-  let query = supabase
-    .from("reference_images")
-    .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height,created_at")
-    .order("created_at", { ascending: false })
-    .limit(400);
-  // 400장 상한에 걸리기 전에 거른다. 뽑아 놓고 코드에서 버리면, 남의 팀 것이
-  // 상한을 다 차지해 내 것이 잘려 나갈 수 있다.
+  let query = narrow(referenceQuery(supabase));
   if (visibility.kind === "team") {
     query = query.or(
       `team_id.is.null,team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`,

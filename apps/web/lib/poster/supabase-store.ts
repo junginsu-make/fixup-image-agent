@@ -116,78 +116,6 @@ export function createSupabasePosterProjectStore(userId: string): PosterProjectS
   };
 }
 
-/**
- * 포스터 레퍼런스는 **라이브러리의 참고 이미지를 그대로 쓴다.**
- *
- * 용도로 거르지 않는다. 올린 곳이 어디든 세 도구가 다 쓴다 — 거르면
- * "분명 올렸는데 여기선 안 보인다" 가 생긴다. 로컬 구현과 같은 판단이다.
- */
-export function createSupabasePosterReferenceStore(userId: string): PosterReferenceStore {
-  interface ReferenceRow {
-    id: string; storage_path: string; thumb_path: string | null; title: string | null;
-    width: number | null; height: number | null; created_at: string;
-  }
-
-  const withUrls = async (rows: ReferenceRow[]) => {
-    if (!rows.length) return [];
-    /**
-     * **원본과 사본을 둘 다 서명한다.**
-     *
-     * 격자는 사본을, 확대와 fal 참고 전달은 원본을 쓴다 —
-     * `lib/reference-images.ts` 와 같은 규약이다. 한 번에 모아 보내므로
-     * 왕복은 늘지 않는다.
-     *
-     * 경로는 `user_id` 로 걸러 읽어 온 행에서 꺼낸 것이다. 서명을 서버
-     * 권한으로 하는 이유는 `lib/storage/signing.ts` 에 적어 두었다.
-     */
-    const urls = await signPaths(
-      BUCKET,
-      rows.flatMap((row) => [row.storage_path, row.thumb_path].filter(Boolean) as string[]),
-      SIGNED_URL_TTL_SECONDS,
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      storagePath: row.storage_path,
-      fileName: row.storage_path.split("/").pop() ?? "",
-      title: row.title,
-      width: row.width,
-      height: row.height,
-      createdAt: row.created_at,
-      url: urls.get(row.storage_path),
-      thumbUrl: row.thumb_path ? urls.get(row.thumb_path) ?? null : null,
-    }));
-  };
-
-  const columns = "id,storage_path,thumb_path,title,width,height,created_at";
-  return {
-    async list() {
-      const client = await createSupabaseServerClient();
-      const { data, error } = await scopedRead(
-        client.from("reference_images").select(columns).order("created_at", { ascending: false }),
-        await viewScope(userId),
-      );
-      return withUrls(checked((data ?? []) as ReferenceRow[], error, "참고 이미지 목록"));
-    },
-    async byIds(ids) {
-      if (!ids.length) return [];
-      const client = await createSupabaseServerClient();
-      /**
-       * **여기서는 조건이 유일한 방어선이다.**
-       *
-       * `reference_images` 의 RLS 는 아직 `using (true)` 다 — 회원 전원이
-       * 읽는다. 그래서 이 조건을 빼면 남의 id 를 섞어 보내는 것만으로 남의
-       * 참고 이미지가 나온다. 포스터 작업(`poster_projects`)과 달리 RLS 가
-       * 받쳐 주지 않는다.
-       */
-      const { data, error } = await scopedRead(
-        client.from("reference_images").select(columns).in("id", ids),
-        await viewScope(userId),
-      );
-      return withUrls(checked((data ?? []) as ReferenceRow[], error, "참고 이미지"));
-    },
-  };
-}
-
 /** 비용 장부. 회원 권한으로는 못 쓴다 — 서버가 쓴다. */
 export function createSupabasePosterRequestStore(userId: string): PosterRequestStore {
   return {
@@ -281,7 +209,6 @@ export function createSupabasePosterImageStore(userId: string): PosterImageStore
 export function supabasePosterStores(userId: string) {
   return {
     projects: createSupabasePosterProjectStore(userId),
-    references: createSupabasePosterReferenceStore(userId),
     requests: createSupabasePosterRequestStore(userId),
     images: createSupabasePosterImageStore(userId),
   };

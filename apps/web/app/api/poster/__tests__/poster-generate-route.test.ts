@@ -71,16 +71,23 @@ vi.mock("../../../../lib/poster/stores", () => ({
         return project;
       },
     },
-    /**
-     * **id 로 걸러 준다.** 늘 같은 한 줄을 돌려주면 차례를 보는 시험을 못 쓴다 —
-     * 어떤 id 를 물어도 답이 같으니 순서가 뒤바뀌어도 티가 안 난다.
-     */
-    references: {
-      byIds: async (ids: string[]) => LIBRARY.filter((row) => ids.includes(row.id)),
-    },
     requests: {}, images: {},
   }),
 }));
+
+/**
+ * 참고 이미지는 **라이브러리와 같은 규칙**으로 읽는다(2026-09-17). 라우트가
+ * 스토어 대신 이 함수를 부른다.
+ *
+ * **물어본 차례 그대로 돌려준다.** 진짜 함수가 그렇게 약속한다 — 목록 차례로
+ * 돌려주는 가짜를 쓰면 차례를 보는 아래 시험이 통과해도 뜻이 없다.
+ */
+vi.mock("../../../../lib/poster/references", () => ({
+  posterReferencesByIds: async (_viewer: unknown, ids: string[]) =>
+    ids.map((id) => LIBRARY.find((row) => row.id === id)).filter(Boolean),
+}));
+
+vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 
 vi.mock("../../../../lib/poster/providers", () => ({
   createPosterFalClients: () => ({ queue: {} }),

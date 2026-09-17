@@ -54,7 +54,8 @@ vi.mock("../watermark", () => ({ markAsAi: async (bytes: Buffer) => bytes }));
 
 const { libraryScope, listLibraryItems, getLibraryItemImages, deleteLibraryItem, sniffImageMime } =
   await import("../server-library");
-const { canModifyReferenceImage, listReferenceImages } = await import("../reference-images");
+const { canModifyReferenceImage, listReferenceImages, referenceImagesByIds } =
+  await import("../reference-images");
 
 const MEMBER = { userId: "member-1", role: "member" as const };
 const ADMIN = { userId: "admin-1", role: "admin" as const };
@@ -287,5 +288,45 @@ describe("내보내기 범위", () => {
   it("보기와 지우기는 관리자에게 열린 채로 둔다", () => {
     expect(libraryScope({ userId: "admin-1", role: "admin" }, "read")).toBeUndefined();
     expect(libraryScope({ userId: "admin-1", role: "admin" }, "delete")).toBeUndefined();
+  });
+});
+
+/**
+ * 고른 낱개도 **목록과 같은 규칙**을 탄다.
+ *
+ * 갈리면 「목록에는 보이는데 쓰지는 못하는」 그림이 생긴다 — 고른 그림이
+ * 조용히 빠진 채로 만들어진다. 2026-09-17 에 이미지 만들기가 정확히 그랬다:
+ * 목록도 낱개도 저만의 질의를 써서 공용 그림을 아예 못 봤다.
+ */
+describe("고른 참고 이미지 낱개", () => {
+  const 줄 = (id: string, user_id: string, team_id: string | null) => ({
+    id, user_id, team_id,
+    storage_path: `${user_id}/references/${id}.png`,
+    title: id, purpose: "both", width: null, height: null,
+    created_at: "2026-09-01T00:00:00.000Z",
+  });
+
+  it("팀이 안 붙은 남의 것도 읽는다 — 목록에서 보였으면 쓸 수 있어야 한다", async () => {
+    tableRows.reference_images = [줄("r1", "member-9", null)];
+    const [image] = await referenceImagesByIds(MEMBER, ["r1"]);
+    expect(image?.id).toBe("r1");
+    expect(image?.mine).toBe(false);
+  });
+
+  it("남의 팀 것은 id 를 알아도 안 읽힌다", async () => {
+    tableRows.reference_images = [줄("r2", "stranger", "team-9")];
+    expect(await referenceImagesByIds(MEMBER, ["r2"])).toEqual([]);
+  });
+
+  it("**물어본 차례 그대로 돌려준다** — 프롬프트의 Image 번호가 이 차례다", async () => {
+    tableRows.reference_images = [줄("a", "member-1", null), 줄("b", "member-1", null)];
+    const images = await referenceImagesByIds(MEMBER, ["b", "a"]);
+    expect(images.map((image) => image.id)).toEqual(["b", "a"]);
+  });
+
+  it("빈 목록이면 질의를 안 던진다", async () => {
+    tableRows.reference_images = [줄("a", "member-1", null)];
+    expect(await referenceImagesByIds(MEMBER, [])).toEqual([]);
+    expect(recorded.some((entry) => entry.table === "reference_images")).toBe(false);
   });
 });
