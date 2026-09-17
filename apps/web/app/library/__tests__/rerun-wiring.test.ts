@@ -22,14 +22,14 @@ const TOOLS = [
     detail: "app/poster/[id]/poster-client.tsx",
     fresh: "app/poster/new-client.tsx",
     base: "/poster/new",
-    steps: '["instruction", "reference", "spec"]',
+    first: "instruction",
   },
   {
     name: "카드뉴스",
     detail: "app/sns/[id]/project-client.tsx",
     fresh: "app/sns/new-client.tsx",
     base: "/sns/new",
-    steps: '["content", "images", "spec"]',
+    first: "content",
   },
 ];
 
@@ -55,13 +55,37 @@ describe("지난 단계로 값을 들고 간다", () => {
     expect(source).toMatch(new RegExp(`router\\.push\\(rerunHref\\("${base}", \\w+(\\.id)?, id\\)\\)`));
   });
 
-  it.each(TOOLS)("$name 은 값을 다 심은 뒤 누른 단계로 연다", ({ fresh, steps }) => {
+  it.each(TOOLS)("$name 은 값을 다 심은 뒤 누른 단계로 연다", ({ fresh, first }) => {
     const source = read(fresh);
-    expect(source).toContain('rerunStep = searchParams.get("step")');
-    // 아는 단계만 연다 — 04·05 는 이 화면에 없다.
-    expect(source).toContain(steps);
-    // 심은 뒤, 잠금을 풀기 바로 전에 옮긴다. 먼저 옮기면 빈 칸이 한 번 보인다.
-    expect(source).toMatch(/setStep\(rerunStartStep(<Step>)?\(rerunStep, RERUN_STEPS, "\w+"\)\);\s*setSeeding\(false\);/);
+    // 처음 값만 잡는다. 주소 값을 그대로 의존성에 두면 나중에 불러오기가 다시 돈다.
+    expect(source).toContain('rerunStep = React.useRef(searchParams.get("step")).current');
+    /*
+      심은 뒤, 잠금을 풀기 바로 전에 옮긴다. 먼저 옮기면 빈 칸이 한 번 보인다.
+
+      **모를 때 여는 단계를 값으로 박는다.** `"\w+"` 로 받았더니 첫 단계를 03 으로
+      바꿔도 초록이었다 — 단계 없는 옛 주소가 03 으로 열린다(2026-09-17 독립 리뷰).
+    */
+    expect(source).toMatch(new RegExp(
+      `setStep\\(rerunStartStep(<Step>)?\\(rerunStep, RERUN_STEPS, "${first}"\\)\\);\\s*setSeeding\\(false\\);`,
+    ));
+  });
+
+  it.each(TOOLS)("$name 은 **불러오기에 실패하면 단계를 안 옮긴다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh }) => {
+    const source = read(fresh);
+    // 성공 갈래 한 곳에만 있어야 한다. 실패 갈래에도 있으면 빈 03 이 열린다
+    // (2026-09-17 독립 리뷰가 뮤테이션으로 실증 — 그때는 초록이었다).
+    expect(source.split("setStep(rerunStartStep").length - 1).toBe(1);
+  });
+
+  it("이미지 만들기는 단계 목록을 **다시 적지 않는다** — 단계 id 는 한 곳이 갖는다", () => {
+    const source = read("app/poster/new-client.tsx");
+    expect(source).toContain(
+      "const RERUN_STEPS = POSTER_STEPS.map((entry) => entry.id).filter(reachableBeforeCreate);",
+    );
+  });
+
+  it("카드뉴스는 04·05 를 목록에 안 넣는다 — 이 화면에 없는 단계다", () => {
+    expect(read("app/sns/new-client.tsx")).toContain('const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];');
   });
 
   it("이미지 만들기는 **심어야 할 값을 하나도 안 빠뜨린다**", () => {

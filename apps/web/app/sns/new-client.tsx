@@ -76,8 +76,13 @@ export function NewSnsClient() {
    */
   const searchParams = useSearchParams();
   const rerunFrom = searchParams.get("from") ?? "";
-  /** 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다. */
-  const rerunStep = searchParams.get("step");
+  /**
+   * 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다.
+   *
+   * **처음 값만 잡는다.** 주소 값을 그대로 의존성에 넣으면, 나중에 단계를 주소에
+   * 반영하는 날 단계를 옮길 때마다 불러오기가 다시 돌아 고친 값을 덮는다.
+   */
+  const rerunStep = React.useRef(searchParams.get("step")).current;
   /** 값을 들고 왔다고 화면에 적을 것. 못 들고 온 첨부 수까지 말한다. */
   const [rerun, setRerun] = React.useState<{ title: string; dropped: number } | null>(null);
   /**

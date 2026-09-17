@@ -22,14 +22,19 @@ import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { rerunStartStep } from "../_components/rerun-step";
-
-/** 새로 만드는 화면에 있는 단계. 04·05 는 만든 작업 화면에 있다. */
-const RERUN_STEPS = ["instruction", "reference", "spec"] as const;
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import { planCostCounts, planCostNote } from "./plan-cost";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
   adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
+
+/**
+ * 새로 만드는 화면에 있는 단계. 04·05 는 만든 작업 화면에 있다.
+ *
+ * **손으로 다시 적지 않는다.** 단계 id 는 `POSTER_STEPS` 가 갖고, 이 화면에서
+ * 갈 수 있는지는 `reachableBeforeCreate` 가 정한다 — 두 곳에 적으면 갈린다.
+ */
+const RERUN_STEPS = POSTER_STEPS.map((entry) => entry.id).filter(reachableBeforeCreate);
 
 /**
  * **광고 규격 칸은 켜졌을 때만 내려받는다.**
@@ -73,8 +78,13 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    */
   const searchParams = useSearchParams();
   const rerunFrom = searchParams.get("from") ?? "";
-  /** 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다. */
-  const rerunStep = searchParams.get("step");
+  /**
+   * 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다.
+   *
+   * **처음 값만 잡는다.** 효과의 의존성에 주소 값을 그대로 넣으면, 나중에 단계를
+   * 주소에 반영하는 날 단계를 옮길 때마다 불러오기가 다시 돌아 고친 값을 덮는다.
+   */
+  const rerunStep = React.useRef(searchParams.get("step")).current;
   /** 첫 그림에서부터 잠가야 한다 — 상태 기본값으로 쓴다. */
   const rerunFromInitial = rerunFrom;
   /** 값을 들고 왔다고 화면에 적을 것. 못 가져온 참고 이미지 수까지 말한다. */
