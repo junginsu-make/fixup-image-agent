@@ -100,6 +100,7 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
       idle: gl.getUniformLocation(program, "uIdle"),
       texture: gl.getUniformLocation(program, "uTexture"),
       opacity: gl.getUniformLocation(program, "uOpacity"),
+      centerDepth: gl.getUniformLocation(program, "uCenterDepth"),
       focus: gl.getUniformLocation(program, "uFocus"),
       // 이 판이 고리 위 어디에 있는가. 물결이 판 경계를 넘어 이어지려면
       // 셰이더가 판 안 좌표가 아니라 이 값을 알아야 한다.
@@ -215,6 +216,9 @@ export function HeroCarousel({ slides: source }: { slides: Slide[] }) {
       gl.uniform1f(uniform.time, seconds);
       gl.uniform1f(uniform.idle, reduceMotion ? 0 : IDLE_AMPLITUDE);
       gl.uniform1i(uniform.texture, 0);
+      // 가운데 판은 z = 0 에 서고 카메라가 distance 만큼 물러나 있다. 어둡게 하는
+      // 기준을 여기로 옮겨야 가운데 판이 원본 밝기로 보인다(`shaders.ts`).
+      gl.uniform1f(uniform.centerDepth, -distance);
       gl.activeTexture(gl.TEXTURE0);
 
       for (const item of visibleItems(widthsOf(), state.scroll)) {

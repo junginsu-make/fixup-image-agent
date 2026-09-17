@@ -92,6 +92,8 @@ precision mediump float;
 uniform sampler2D uTexture;
 uniform float uOpacity;
 uniform float uFocus;
+// 가운데 판이 서는 깊이. 어둡게 하는 기준이 카메라가 아니라 이 자리다.
+uniform float uCenterDepth;
 
 varying vec2 vUv;
 varying float vDepth;
@@ -99,12 +101,21 @@ varying float vDepth;
 void main() {
   vec4 color = texture2D(uTexture, vUv);
 
-  // 뒤로 물러난 판일수록 어둡게. 조명 대신 이걸로 깊이를 만든다 —
+  // 뒤로 물러난 판일수록 어둡게. 조명 대신 이걸로 깊이를 만든다.
   // 전부 같은 밝기면 종이 조각을 늘어놓은 것처럼 납작해 보인다.
-  float depthFade = clamp(1.0 + vDepth * 0.05, 0.62, 1.0);
+  //
+  // **깊이는 가운데 판에서부터 잰다.** 전에는 카메라에서부터 재서, 맨 앞에
+  // 선 가운데 판도 카메라와 7 만큼 떨어졌다는 이유로 65% 밝기로 깎였다 —
+  // 원본보다 잿빛으로 보였다(2026-09-17 사용자 보고). 이제 가운데 판은 1.0 이다.
+  float depthFade = clamp(1.0 + (vDepth - uCenterDepth) * 0.05, 0.62, 1.0);
 
   // 가운데 판만 또렷하게. 양옆은 배경으로 물러난다.
-  float focus = mix(0.72, 1.0, uFocus);
+  //
+  // 양옆 바닥을 0.72 에서 0.35 로 내린다. 깊이 기준을 바로잡으면서 양옆도
+  // 함께 밝아졌는데(약 0.63 → 첫 이웃 기준), 사용자는 **양옆은 전처럼 물러나
+  // 있고 가운데만** 살아나기를 바랐다. 0.35 면 첫 이웃이 전과 거의 같은 밝기
+  // (약 0.5)로 돌아온다. 가운데(uFocus = 1)는 여전히 1.0 이다.
+  float focus = mix(0.35, 1.0, uFocus);
 
   gl_FragColor = vec4(color.rgb * depthFade * focus, color.a * uOpacity);
 }
