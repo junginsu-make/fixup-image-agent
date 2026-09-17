@@ -71,6 +71,8 @@ export interface PosterJobInput {
    * 말라」가 붙는다(`prompt.ts` 의 `copyLines`). 옛 작업에는 없다.
    */
   invented?: string[];
+  /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. */
+  referenceHasText?: boolean;
   /** 그림의 결. 없으면 auto — 첨부한 그림의 결을 따라간다. */
   look?: ImageLook;
 }
@@ -167,6 +169,7 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     look: job.look,
     // 글자 칸이 전부 AI 것이면 「글자를 넣지 말라」가 붙는다(`copyLines`).
     invented: job.invented,
+    referenceHasText: job.referenceHasText,
   });
 
   const input: Record<string, unknown> = { prompt, num_images: job.variants };

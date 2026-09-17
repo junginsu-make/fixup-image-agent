@@ -106,14 +106,6 @@ export function referenceWarningsForRole(
   return [`${label} 레퍼런스가 없습니다. ${label} 카드가 다른 역할과 다른 모양으로 나올 수 있습니다.`];
 }
 
-/** 사용자가 고른 역할의 이름. **규칙은 안 붙인다** (설계 §4-1 A안). */
-function shortRole(image: Attachment): string {
-  if (image.kind === "style_reference") return "reference to imitate";
-  if (image.kind !== "keep_identity") return "place as is";
-  if (image.subject !== "person") return "subject to keep";
-  return image.restyle ? "person to keep, redrawn in another style" : "person to keep";
-}
-
 export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning = {}): string {
   const lines: string[] = [];
   if (images.length > 0) lines.push(ATTACHMENT_DECLARATION);
@@ -130,31 +122,19 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
   const intent = tuning.attachmentIntent?.trim() ?? "";
 
   /**
-   * 지시를 적었으면 **부딪히는 고정 문구를 통째로 뺀다** (설계 §4-1 A안).
+   * 지시를 적었으면 **고정 문구를 남기고, 사용자의 말이 그것을 이긴다.**
    *
-   * 이미지 만들기에서 실측으로 정한 것이다. 역할 문구가 여섯 문장이고 전부
-   * 구체적이라, 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼다.
+   * 2026-09-08 에는 통째로 뺐다(설계 §4-1 A안). 역할 문구가 여섯 문장이고
+   * 전부 구체적이라 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼기
+   * 때문이다.
    *
-   * **번호와 역할 이름은 남긴다.** 빼면 「①번」이 가리킬 것이 없어진다.
+   * **그런데 지우는 것이 과했다.** 2026-09-17 이미지 만들기에서 부딪히지도
+   * 않는 905자가 함께 사라져, 모자도 포스터 느낌도 결과에 안 나왔다.
+   *
+   * 지우기와 우선하기는 다른 일이다. 규칙은 남기고 「사용자의 말이 이긴다」는
+   * 한 줄을 **뒤에** 둔다 — 뒤에 온 말이 앞말을 덮는 것은 이 저장소가 여러 번
+   * 확인한 순서다(2026-09-04 실측).
    */
-  if (intent && images.length) {
-    lines.push(
-      "The user wrote what to do with these images. Their words replace the usual rules for each "
-      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
-      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
-    );
-    images.forEach((image, offset) => {
-      const number = offset + 1;
-      const person = image.kind === "keep_identity" && image.subject === "person";
-      // 「사람은 그대로, 그림 느낌만」은 안 지운다 — 부딪히지 않고, 지우면
-      // 사람을 하나하나 옮기라는 말이 사라져 작은 것(안경 같은)이 빠진다.
-      if (person && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      lines.push(`Image ${number}: the user marked this "${shortRole(image)}".`);
-    });
-  } else {
   images.forEach((image, offset) => {
     const number = offset + 1;
     if (image.kind === "style_reference") {
@@ -191,6 +171,25 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
       );
     }
   });
+
+  /*
+   * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**
+   *
+   * 전에는 지시를 적으면 위 역할 문구를 통째로 뺐다. 이미지 만들기에서
+   * 실측으로 정한 것을 옮겨 온 것인데, 2026-09-17 에 그것이 과하다는 것이
+   * 실물로 드러났다 — 첨부 셋(포스터·인물·모자)에 「힙하고 자유로운 느낌」
+   * 이라고 적었더니 부딪히지도 않는 905자가 함께 사라지고, 모자도 포스터
+   * 느낌도 결과에 안 나왔다.
+   *
+   * **남기고, 이긴다고 말하고, 뒤에 둔다.** 뒤에 온 말이 앞말을 덮는 것은
+   * 이 저장소가 여러 번 확인한 순서다. 지우기와 우선하기는 다른 일이다.
+   */
+  if (intent && images.length) {
+    lines.push(
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that "
+      + "contradicts them — where a rule and the user disagree, follow the user. Rules the user "
+      + "did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
+    );
   }
   /*
     **같은 캐릭터의 여러 각도**가 붙었으면 한 번만 말해 준다.

@@ -81,7 +81,7 @@ describe("기획은 옆에서 나오고 결과가 페이지를 갖는다", () =>
 describe("칸을 걸러서 보여주는가", () => {
   it("규칙을 여기 다시 적지 않고 부른다", () => {
     expect(source).toContain("splitFilledSlots(");
-    expect(source).toContain("showsTypeInteraction(slots)");
+    // showsTypeInteraction 은 04 에서 그 칸을 빼면서 안 쓰게 됐다(2026-09-17).
   });
 
   /**
@@ -249,5 +249,45 @@ describe("지어낸 칸 표시", () => {
    */
   it("고치면 표가 사라진다", () => {
     expect(source).toContain('setInvented((current) => current.filter((name) => name !== field))');
+  });
+});
+
+/**
+ * **「글자와 피사체의 관계」를 04 에서 뺐다.**
+ *
+ * 2026-09-17 사용자 판단. 세 가지 까닭이 있다.
+ *
+ * **① 사용자가 판단할 수 없는 것을 묻는다.** 「통과 / 뒤로 / 가림 / 감쌈」은
+ * 타이포그래피 용어다. 레퍼런스를 붙인 사람은 답이 그림에 있고, 안 붙인
+ * 사람은 고를 근거가 없다.
+ *
+ * **② 04 를 한 칸 가볍게 한다.** 「틀린 칸만 고치기」가 이 화면의 강점인데
+ * 칸이 많을수록 그 강점이 준다(2026-09-08 결정).
+ *
+ * **③ 레퍼런스가 없으면 모델이 정하는 편이 낫다.** 우리가 한 낱말로 못 박으면
+ * 오히려 좁힌다.
+ *
+ * **값은 남는다.** 레퍼런스에서 읽은 값을 담을 자리가 필요하고, 프롬프트의 그
+ * 한 줄이 「타이포가 인물을 가로지른다」를 모델에 전한다. 다만 그 값은 이제
+ * 읽어서만 들어온다(`mergeGrammar`).
+ */
+describe("글자와 피사체의 관계", () => {
+  it("04 에서 고르는 칸이 없다", () => {
+    /*
+      **주석은 빼고 본다.** 왜 뺐는지 적어 둔 자리에 그 이름이 나온다 —
+      까닭을 적을수록 시험이 화를 내면 다음 사람이 까닭을 안 적는다.
+    */
+    const 그린것 = source
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+
+    expect(그린것).not.toContain("글자와 피사체의 관계");
+    expect(그린것).not.toContain("TYPE_INTERACTIONS");
+  });
+
+  /** 화면이 그 값을 손으로 바꾸는 길도 없어야 한다. */
+  it("화면이 그 값을 안 바꾼다", () => {
+    expect(source).not.toContain("typeInteraction: current.typeInteraction");
   });
 });

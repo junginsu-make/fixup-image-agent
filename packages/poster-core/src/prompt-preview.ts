@@ -34,6 +34,8 @@ export interface PosterPromptPreviewInput {
    * 보기」가 거짓말을 한다.
    */
   invented?: string[];
+  /** 붙인 그림에 글자가 있나. 안 넘기면 미리보기가 실제와 달라진다. */
+  referenceHasText?: boolean;
 }
 
 export function previewPosterPrompt(input: PosterPromptPreviewInput): string {
@@ -65,5 +67,6 @@ export function previewPosterPrompt(input: PosterPromptPreviewInput): string {
     attachmentIntent: input.attachmentIntent,
     look: input.look,
     invented: input.invented,
+    referenceHasText: input.referenceHasText,
   });
 }

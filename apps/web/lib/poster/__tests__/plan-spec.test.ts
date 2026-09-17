@@ -66,3 +66,35 @@ describe("기획 응답 틀", () => {
     expect([...이름들].sort()).toEqual(Object.keys(EMPTY_SLOTS).sort());
   });
 });
+
+/**
+ * **문법 읽기 틀도 같은 사고를 겪을 수 있다.**
+ *
+ * `hasText` 를 여기서 지우면 모델이 그 값을 안 보내고, zod 가 `.default(false)`
+ * 로 조용히 채우고, `referenceHasText` 가 영원히 거짓이 된다. 붙인 그림에
+ * 글자가 있어도 결과에서 글자가 빠진다 — **예외도 없고 시험도 다 초록이다.**
+ *
+ * 위 `PLAN_SPEC` 이 이 사고를 겪고 여기에 가드를 세웠는데, 그 가드는
+ * `GRAMMAR_SPEC` 을 **경계로만 쓰고 검사하지 않았다**(2026-09-17 리뷰).
+ */
+const grammarSpec = source.slice(
+  source.indexOf("const GRAMMAR_SPEC"),
+  source.indexOf("const REVIEW_SPEC"),
+);
+
+describe("문법 읽기 응답 틀", () => {
+  it("떼어 낸 자리가 맞다", () => {
+    expect(grammarSpec).toContain("poster_grammar");
+    expect(grammarSpec.length).toBeGreaterThan(100);
+  });
+
+  /** 글자를 넣을지는 규칙이 아니라 이 값이 정한다. 틀에 없으면 안 온다. */
+  it("글자가 있는지를 받는다", () => {
+    expect(grammarSpec).toContain("hasText");
+  });
+
+  /** 안 받아도 되는 칸으로 두면 모델이 빼먹는다. `invented` 가 그랬다. */
+  it("반드시 받는 칸으로 둔다", () => {
+    expect(grammarSpec).toContain('required: ["hasText"');
+  });
+});

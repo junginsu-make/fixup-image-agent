@@ -352,17 +352,44 @@ describe("자리마다 적은 말", () => {
     expect(intentForRole({ cover: "   " }, "cover")).toBe("");
   });
 
-  it("지시를 적으면 역할 고정 문구가 사라진다", () => {
+  /**
+   * **적은 말이 이긴다 — 역할 규칙을 지우지는 않는다.**
+   *
+   * 전에는 지시를 적으면 역할 문구를 통째로 뺐다. 2026-09-17 에 이미지
+   * 만들기에서 그것이 과하다는 것이 실물로 드러났다 — 첨부 셋(포스터·인물·모자)에
+   * 「힙하고 자유로운 느낌」이라고 적었더니 부딪히지도 않는 905자가 함께
+   * 사라지고, 모자도 포스터 느낌도 결과에 안 나왔다.
+   *
+   * 카드뉴스도 같은 코드였다. 같이 고친다.
+   */
+  it("지시를 적어도 역할 규칙이 남는다", () => {
     const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번 사람을 만화로" });
-    expect(block).not.toContain("Do NOT copy anything else from it");
-    expect(block).not.toContain("Reproduce this exact person");
-    expect(block).toContain("deliberately omitted");
+
+    expect(block).toContain("Do NOT copy anything else from it");
+    expect(block).toContain("Reproduce this exact person");
   });
 
-  it("**번호와 역할 이름은 남는다** — 빼면 「①번」이 가리킬 것이 없다", () => {
+  it("사용자 말이 이긴다고 못 박고 규칙 뒤에 온다", () => {
+    const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번 사람을 만화로" });
+    const 규칙 = block.indexOf("Reproduce this exact person");
+    const 이긴다 = block.indexOf("Their words OVERRIDE any rule above");
+
+    expect(규칙).toBeGreaterThan(-1);
+    expect(이긴다).toBeGreaterThan(규칙);
+  });
+
+  it("뺐다는 말이 안 남았다", () => {
     const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번을 크게" });
-    expect(block).toContain('Image 1: the user marked this "reference to imitate".');
-    expect(block).toContain('Image 2: the user marked this "person to keep".');
+
+    expect(block).not.toContain("deliberately omitted");
+    expect(block).not.toContain("replace the usual rules");
+  });
+
+  it("**번호와 역할 이름도 남는다** — 빼면 「①번」이 가리킬 것이 없다", () => {
+    const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번을 크게" });
+
+    expect(block).toContain("Image 1 is the cover CARD-NEWS REFERENCE");
+    expect(block).toContain("Image 2 is a PRESERVED PERSON");
   });
 
   it("안 적었으면 지금까지 그대로다", () => {

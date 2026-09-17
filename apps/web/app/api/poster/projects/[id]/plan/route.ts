@@ -1,5 +1,5 @@
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
-import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
+import { mergeGrammar, planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { posterReferencesByIds } from "../../../../../../lib/poster/references";
@@ -134,19 +134,24 @@ async function plan(request: Request, context: Context) {
           project.data, [...references, ...preserved], grammar.summaries, crowd.people,
         ),
         attachmentIntent: project.data.attachmentIntent,
+        // 붙인 그림에 글자가 있으면 지어난 글자도 안 지워진다.
+        // 그때는 「장면에서 글자 얘기를 하지 말라」고 시키면 안 된다.
+        referenceHasText: Object.values(grammar.grammars).some((one) => one.hasText),
       },
       providers.primary,
       providers.backup,
     );
 
-    // 문법에서 읽은 "어떻게 보이나" 를 초기값으로 깔고, 기획이 채운 값이 이긴다.
-    const seed = Object.values(grammar.grammars)[0];
-    const slots = {
-      ...plan.slots,
-      typeInteraction: plan.slots.typeInteraction ?? seed?.typeInteraction ?? null,
-      dominantColor: plan.slots.dominantColor || seed?.dominantColor || "",
-      accentColor: plan.slots.accentColor || seed?.accentColor || "",
-    };
+    /*
+     * **레퍼런스에서 읽은 값이 기획의 추측을 이긴다.**
+     *
+     * 전에는 반대였다. 그래서 2026-09-17 사고에서 레퍼런스를 실제로 읽어
+     * 「가림」을 얻어 놓고도 기획이 추측한 「통과」가 프롬프트로 갔다. 그림을
+     * 읽는 비전 호출은 돈을 내고 하는 일인데 그 결과가 버려지고 있었다.
+     *
+     * 합치는 규칙은 `mergeGrammar` 가 갖는다 — 라우트 안에 두면 값으로 못 잰다.
+     */
+    const slots = mergeGrammar(plan.slots, Object.values(grammar.grammars)[0]);
 
     const saved = await stores.projects.update(id, {
       status: "ready",
@@ -161,6 +166,12 @@ async function plan(request: Request, context: Context) {
          * `invented` 에 안 적으므로 저절로 빠진다.
          */
         inventedSlots: plan.invented,
+        /*
+         * **붙인 그림에 글자가 있나.** 글자를 넣을지는 규칙이 아니라 이 값이
+         * 정한다(2026-09-17 사용자 판단). 한 장이라도 글자가 있으면 넣는다 —
+         * 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수 있다.
+         */
+        referenceHasText: Object.values(grammar.grammars).some((one) => one.hasText),
         grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues],
       },
     });

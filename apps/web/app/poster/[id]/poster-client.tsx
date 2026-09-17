@@ -12,7 +12,7 @@ import {
   SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
   SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
-import { TYPE_INTERACTIONS, previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
+import { previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
 import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -21,7 +21,7 @@ import { currentPosterStep, posterSteps, reachableBeforeCreate } from "../steps"
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import {
-  placeholderRatio, planSlotRows, showsTypeInteraction, splitFilledSlots, type PlanSlotRow,
+  placeholderRatio, planSlotRows, splitFilledSlots, type PlanSlotRow,
 } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
 import { rerunHref } from "../../_components/rerun-step";
@@ -67,6 +67,8 @@ interface PosterProject {
     promptMode?: "verbatim" | "assisted";
     /** 기획이 근거 없이 채웠다고 밝힌 칸들. 옛 작업에는 없다. */
     inventedSlots?: string[];
+    /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. */
+    referenceHasText?: boolean;
   };
 }
 
@@ -275,6 +277,7 @@ export function PosterClient(
      * 화면 state 를 쓴다. 사람이 방금 고친 칸이 곧바로 반영돼야 한다.
      */
     invented,
+    referenceHasText: project.data.referenceHasText,
   }), [slots, project, invented]);
 
   /**
@@ -325,7 +328,8 @@ export function PosterClient(
    * **화면에 표를 붙일 수 있는 칸만 센다.**
    *
    * 기획은 열한 칸을 채우는데 이 화면이 그리는 것은 아홉이다(`SLOT_LABELS`).
-   * `sideTexts`·`typeInteraction` 은 제 칸이 따로 있어 `renderSlot` 을 안 지난다.
+   * `sideTexts` 는 제 칸이 따로 있어 `renderSlot` 을 안 지나고, `typeInteraction` 은
+   * 04 에 칸이 아예 없다 — 레퍼런스에서 읽은 것이 바로 프롬프트로 간다.
    * 그 둘까지 세면 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
    *
    * 배지·숫자·띠가 **같은 목록**을 봐야 서로 어긋나지 않는다.
@@ -962,28 +966,16 @@ export function PosterClient(
               </Button>
             ) : null}
 
-            {/* **글자가 없으면 관계도 없다.** 판단이 아니라 규칙이다. */}
-            {showsTypeInteraction(slots) ? (
-              <fieldset className="grid gap-2">
-                <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
-                <div className="flex flex-wrap gap-2">
-                  {TYPE_INTERACTIONS.map((value) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      size="sm"
-                      variant={slots.typeInteraction === value ? "default" : "secondary"}
-                      onClick={() => setSlots((current: PosterSlots) => ({
-                        ...current,
-                        typeInteraction: current.typeInteraction === value ? null : value,
-                      }))}
-                    >
-                      {value}
-                    </Button>
-                  ))}
-                </div>
-              </fieldset>
-            ) : null}
+            {/*
+              **「글자와 피사체의 관계」는 04 에서 뺐다**(2026-09-17 사용자 판단).
+
+              「통과 / 뒤로 / 가림 / 감쌈」은 타이포그래피 용어라 사용자가 고를
+              근거가 없다. 레퍼런스를 붙였으면 답이 그 그림에 있고, 안 붙였으면
+              모델이 정하는 편이 낫다 — 한 낱말로 못 박으면 오히려 좁힌다.
+
+              **값은 남는다.** 레퍼런스에서 읽은 것이 들어와 프롬프트로 간다
+              (`mergeGrammar`). 화면이 그 값을 손대지 않을 뿐이다.
+            */}
 
             <div className="grid gap-1.5">
               <Label htmlFor="slot-side">곁텍스트</Label>

@@ -77,12 +77,14 @@ const GRAMMAR_SPEC: StructuredSpec = {
   schema: {
     type: "object",
     properties: {
+      // 글자를 넣을지는 붙인 그림이 정한다. 응답 틀에 없으면 프롬프트로 시켜도 안 온다.
+      hasText: { type: "boolean" },
       typeInteraction: { type: ["string", "null"], enum: [...TYPE_INTERACTIONS, null] },
       dominantColor: { type: "string" },
       accentColor: { type: "string" },
       note: { type: "string" },
     },
-    required: ["typeInteraction", "dominantColor"],
+    required: ["hasText", "typeInteraction", "dominantColor"],
   },
 };
 
