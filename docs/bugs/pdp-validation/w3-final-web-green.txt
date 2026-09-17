@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 C:/Users/PC/Desktop/coding/fixup-image-agent/.worktrees/pdp-integrated-improvement/apps/web
+
+
+ Test Files  227 passed | 1 skipped (228)
+      Tests  2730 passed | 6 skipped (2736)
+   Start at  14:49:50
+   Duration  14.01s (transform 18.10s, setup 0ms, import 39.74s, tests 73.07s, environment 25ms)
+

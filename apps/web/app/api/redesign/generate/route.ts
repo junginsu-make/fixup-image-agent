@@ -7,7 +7,7 @@ import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
-import { createRedesignImageGenerator } from "../../../../lib/redesign/image-generator";
+import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,6 +22,8 @@ async function generate(req: Request) {
   const parsed = await readRedesignForm(req);
   if (!parsed.ok) return parsed.response;
   let reservation: Awaited<ReturnType<typeof reserveAiUsage>> | undefined;
+  // 실패 경로에서도 「무엇으로 그리려 했는지」를 장부에 남겨야 한다.
+  let billedModel = "redesign-openai";
   try {
     const form = parsed.form;
     const parsedCount = Number(form.get("count") || 1);
@@ -44,13 +46,23 @@ async function generate(req: Request) {
      * **키가 없으면 지금까지의 길로 떨어진다.** 이 하나 때문에 리디자인이
      * 통째로 멎으면 안 된다.
      */
+    /*
+      **고른 것으로 그린다.** 화면의 선택이 값에만 쓰이고 그림은 늘 한 모델이
+      그리던 것을 고쳤다(2026-09-17 리뷰 F-7-4).
+    */
+    const falModel = redesignFalModelFor(String(form.get("model") || "openai"));
     let generateImage;
     try {
-      generateImage = createRedesignImageGenerator();
+      generateImage = createRedesignImageGenerator(process.env, falModel);
     } catch {
       generateImage = undefined;
     }
-    reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(provider, requestedCount));
+    /*
+      **값은 실제로 그리는 모델에서 뽑는다.** fal 로 그리면 그 모델의 단가,
+      키가 없어 옛 직접 호출로 떨어지면 그쪽 단가다.
+    */
+    billedModel = generateImage ? falModel : provider;
+    reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(billedModel, requestedCount));
     if (!reservation.ok) return reservation.response;
     const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
     const files: GenerateInputFile[] = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, type: f.type, buffer: Buffer.from(await f.arrayBuffer()) })));
@@ -118,15 +130,28 @@ async function generate(req: Request) {
     const usage = await settleAiUsage(
       reservation,
       consumed > 0,
-      // 만든 만큼만 받는다. 단가는 위에서 정한 제공자를 그대로 쓴다.
-      imageCreditUnits(provider, consumed),
+      // 만든 만큼만 받는다. 단가는 **실제로 그린 모델**에서 뽑는다 — 예약과
+      // 같은 값이어야 한다. 전에는 예약만 실행 모델이고 차감은 옛 이름이었다.
+      imageCreditUnits(billedModel, consumed),
       consumed > 0 ? undefined : "no_image_generated",
       // 글값도 함께 남긴다. 그동안 리디자인의 분석 비용은 장부에 0원이었다.
-      { model: provider, billableImages: consumed, llmUsd: readLlmMeter().usd },
+      { model: billedModel, billableImages: consumed, llmUsd: readLlmMeter().usd },
     );
     return Response.json({ ...result, usage });
   } catch (err) {
-    if (reservation?.ok) await settleAiUsage(reservation, false, 0, err instanceof RedesignError ? `redesign_${err.status}` : "redesign_failed");
+    if (reservation?.ok) {
+      /*
+        **실패해도 글값은 이미 나갔다.** 분석은 끝났는데 첫 그림이 실패한 경우가
+        그렇다. 여기서 안 남기면 그 요청은 장부에서 0원으로 보인다.
+      */
+      await settleAiUsage(
+        reservation,
+        false,
+        0,
+        err instanceof RedesignError ? `redesign_${err.status}` : "redesign_failed",
+        { model: billedModel, billableImages: 0, llmUsd: readLlmMeter().usd },
+      );
+    }
     if (err instanceof RedesignError) return Response.json({ error: err.message }, { status: err.status });
     const message = err instanceof Error ? humanizeProviderError(err.message) : "이미지 생성 중 오류가 발생했습니다.";
     return Response.json({ error: message }, { status: 500 });

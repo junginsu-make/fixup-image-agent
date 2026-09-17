@@ -22,6 +22,8 @@ import type {
 export type PeopleMode = "auto" | "none";
 
 export interface ImagePromptOptions {
+  /** 화면에서 고른 화면비. 프롬프트의 방향이 여기서 나온다. */
+  aspectRatio?: string;
   style: PdpImageStyle;
   withModel: boolean;
   outputMode: PdpOutputMode;
@@ -192,11 +194,25 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     .join(" ");
 }
 
+/**
+ * 화면비가 방향을 정한다.
+ *
+ * 전에는 `"vertical"` 이 박혀 있었다. 가로(4:3·16:9)를 고르면 **크기는 가로로
+ * 가는데 글은 세로라고 말했다** — 모델이 둘 중 하나를 버린다(2026-09-17 리뷰 U-07).
+ */
+function orientationOf(aspectRatio?: string): "vertical" | "horizontal" | "square" {
+  if (!aspectRatio) return "vertical";
+  const [width, height] = aspectRatio.split(":").map(Number);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || height === 0) return "vertical";
+  if (width === height) return "square";
+  return width > height ? "horizontal" : "vertical";
+}
+
 export function buildImageJson(section: SectionBlueprint, options: ImagePromptOptions) {
   const look = lookOf(options);
   const brief: Record<string, unknown> = {
     task: "korean_ecommerce_detail_page_section",
-    format: { orientation: "vertical", target: "mobile", static_image: true },
+    format: { orientation: orientationOf(options.aspectRatio), target: "mobile", static_image: true },
     scene: {
       subject: section.prompt_en || section.prompt_ko || section.headline,
       setting: STYLE_SETTING[options.style],

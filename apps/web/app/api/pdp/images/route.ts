@@ -66,7 +66,13 @@ export async function POST(req: Request) {
 
   // 장은 실제 단가에서 뽑는다. 전에는 여기만 무조건 1 이었고 일괄 쪽만 제대로
   // 셌다 — 같은 그림 한 장이 어느 버튼으로 들어왔느냐에 따라 값이 달랐다.
-  const model = body.page?.imageModel ?? body.options?.imageModel ?? DEFAULT_IMAGE_MODEL;
+  /*
+    **모델은 페이지가 정한다.** 전에는 여기만 `options.imageModel` 도 봤는데,
+    조립기(`buildSectionImageOptions`)는 어차피 `page.imageModel` 로 덮어쓴다 —
+    그래서 섹션 옵션에 다른 모델을 실으면 **값은 그 모델로 매기고 그림은 페이지
+    모델로 그렸다.** 배치 라우트는 처음부터 페이지만 봤다(2026-09-17 리뷰 D-9).
+  */
+  const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1));
   if (!reservation.ok) return reservation.response;
 

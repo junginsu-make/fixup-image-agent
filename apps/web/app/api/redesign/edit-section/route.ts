@@ -1,6 +1,6 @@
 import { editSection, humanizeEditError, RedesignError, type EditSectionInput } from "@fixup/redesign-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
-import { createRedesignImageGenerator } from "../../../../lib/redesign/image-generator";
+import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { readPdpRequest } from "../../../../lib/pdp/request";
@@ -21,20 +21,24 @@ export async function POST(req: Request) {
     : "redesign-openai";
   // **예약과 차감이 같은 값에서 나온다.** 전에는 예약만 단가에서 뽑고 차감은
   // 손으로 적은 1 이었다 — 사용량은 1장 줄고 장부에는 4장이 남았다.
-  const units = imageCreditUnits(provider, 1);
+  // 고친 그림도 새로 만든 그림과 같은 모델로 그린다. 한 페이지 안에서 섹션마다
+  // 다른 모델이 그리면 이어 붙였을 때 결이 갈린다.
+  const falModel = redesignFalModelFor(String((body as { model?: string }).model || "openai"));
+  let generateImage;
+  try {
+    generateImage = createRedesignImageGenerator(process.env, falModel);
+  } catch {
+    generateImage = undefined;
+  }
+  const billedModel = generateImage ? falModel : provider;
+  const units = imageCreditUnits(billedModel, 1);
   const reservation = await reserveAiUsage(req, "redesign_edit", units);
   if (!reservation.ok) return reservation.response;
   try {
     /*
-      새로 만들 때와 같은 길(fal · gpt-image-2.5 `max`)로 고친다. 키가 없을 때만
-      지금까지의 직접 호출로 떨어진다 — 그 길 하나 때문에 수정이 통째로 멎으면 안 된다.
+      새로 만들 때와 같은 길(fal)로 고친다. 키가 없을 때만 지금까지의 직접
+      호출로 떨어진다 — 그 길 하나 때문에 수정이 통째로 멎으면 안 된다.
     */
-    let generateImage;
-    try {
-      generateImage = createRedesignImageGenerator();
-    } catch {
-      generateImage = undefined;
-    }
     const result = await editSection({
       ...body,
       openaiKey: resolveOpenaiKey(),
@@ -42,7 +46,7 @@ export async function POST(req: Request) {
       generateImage,
     });
     const usage = await settleAiUsage(reservation, true, units, undefined, {
-      model: provider,
+      model: billedModel,
       billableImages: 1,
     });
     return Response.json({ ...result, usage });

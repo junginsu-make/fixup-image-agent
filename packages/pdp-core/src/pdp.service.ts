@@ -643,6 +643,9 @@ ${analyzePrompt}`
       });
 
       const promptOptions: ImagePromptOptions = {
+        // 화면비가 프롬프트의 방향을 정한다. 안 넘기면 가로로 뽑으면서 글로는
+        // 세로라고 말한다(2026-09-17 리뷰 U-07).
+        aspectRatio: request.aspectRatio,
         style: options.style,
         // "이 섹션에 인물컷이 필요하다"는 뜻이다. 사용자가 켰고 **인물 참조가 실제로
         // 붙었을 때만** 참이다. 예전에는 업로드 사진만 셌다 — 그래서 캐릭터를 골라

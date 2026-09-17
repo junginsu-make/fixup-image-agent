@@ -133,3 +133,42 @@ describe("T-COST: 대표 이미지", () => {
     expect(state.reserve.mock.calls[0]![2]).toBe(1);
   });
 });
+
+/**
+ * **어느 버튼으로 들어와도 같은 모델이 그린다.**
+ *
+ * 2026-09-17 리뷰(D-9): 단건은 `options.imageModel` 도 봤고 배치는 `page` 만 봤다.
+ * 값을 매기는 쪽과 그리는 쪽이 갈리면 「한 장만 다시 만들었더니 결이 달라졌다」가 된다.
+ */
+describe("T-COST: 단건과 배치의 모델 선택", () => {
+  it("페이지가 정한 모델을 두 라우트가 똑같이 쓴다", async () => {
+    await single(request({ ...body(), page: { imageModel: "nano-banana" } }));
+    const 단건 = state.reserve.mock.calls[0]![2] as number;
+
+    vi.clearAllMocks();
+    state.reserve.mockResolvedValue({ ok: true, userId: "u1", requestId: "r1" });
+    state.settle.mockResolvedValue(undefined);
+    state.generate.mockResolvedValue({ imageBase64: "R", mimeType: "image/png", generatedImages: 1 });
+
+    await batch(request({ ...body(), page: { imageModel: "nano-banana" } }));
+
+    expect(state.reserve.mock.calls[0]![2]).toBe(단건);
+    expect(단건).toBe(1);
+  });
+
+  it("섹션 옵션에만 모델이 있으면 두 라우트가 같은 값을 쓴다", async () => {
+    const 모델 = "nano-banana";
+    await single(request({ ...body(), options: { imageModel: 모델 } }));
+    const 단건예약 = state.reserve.mock.calls[0]![2] as number;
+
+    vi.clearAllMocks();
+    state.reserve.mockResolvedValue({ ok: true, userId: "u1", requestId: "r1" });
+    state.settle.mockResolvedValue(undefined);
+    state.generate.mockResolvedValue({ imageBase64: "R", mimeType: "image/png", generatedImages: 1 });
+
+    await batch(request({ ...body(), optionsBySection: { s1: { imageModel: 모델 } } }));
+    const 배치예약 = state.reserve.mock.calls[0]![2] as number;
+
+    expect(배치예약).toBe(단건예약);
+  });
+});

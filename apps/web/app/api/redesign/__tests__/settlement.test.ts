@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), reserve: vi.fn(), finalize: vi.fn(), settle: vi.fn(), generate: vi.fn(), edit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), reserve: vi.fn(), finalize: vi.fn(), settle: vi.fn(), generate: vi.fn(), edit: vi.fn(), makeGenerator: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../../../../lib/membership/api", () => ({ authenticateApiMember: mocks.auth, reserveAiUsage: mocks.reserve,
   finalizeAiUsage: mocks.finalize, settleAiUsage: mocks.settle }));
 vi.mock("../../../../lib/server-keys", () => ({ resolveOpenaiKey: () => "test", resolveGoogleKey: () => "test" }));
-vi.mock("../../../../lib/redesign/image-generator", () => ({ createRedesignImageGenerator: () => async () => ({}) }));
+vi.mock("../../../../lib/redesign/image-generator", async () => {
+  const actual = await vi.importActual<typeof import("../../../../lib/redesign/image-generator")>("../../../../lib/redesign/image-generator");
+  return {
+    ...actual,
+    createRedesignImageGenerator: (...args: unknown[]) => {
+      mocks.makeGenerator(...args);
+      return async () => ({ buffer: Buffer.from("IMG"), mimeType: "image/png" });
+    },
+  };
+});
 vi.mock("../../../../lib/characters", () => ({ loadCharacterView: async () => null }));
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 vi.mock("@fixup/redesign-core", async () => ({ ...(await vi.importActual("@fixup/redesign-core")), generateSections: mocks.generate, editSection: mocks.edit }));
@@ -77,5 +86,56 @@ describe("T-COST: 리디자인 섹션 수정", () => {
     // 사용자는 비싼 값을 내고 뭉개진 글자를 받는다.
     const 넘긴인자 = mocks.edit.mock.calls[0]![0] as { generateImage?: unknown };
     expect(넘긴인자.generateImage).toBeTypeOf("function");
+  });
+});
+
+/**
+ * **고른 모델로 그리고, 그린 모델로 값을 매긴다.**
+ *
+ * 2026-09-17 리뷰(F-7-4): fal 통로가 붙은 뒤로 「속도형」을 골라도 늘
+ * `gpt-image-2.5-flare` 가 그렸다. 선택은 **값에만** 쓰였다 — 사용자는 고른 적
+ * 없는 모델의 그림을 받고, 회사는 실제 원가와 다른 값을 받았다.
+ */
+describe("T-COST: 리디자인 모델 선택", () => {
+  const 폼 = (model: string) => {
+    const form = new FormData();
+    form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+    form.append("model", model);
+    return new Request("http://local/api/redesign/generate", { method: "POST", body: form });
+  };
+
+  it("속도형을 고르면 그 계열 모델로 그린다", async () => {
+    await generate(폼("google"));
+    await generate(폼("openai"));
+
+    const 속도형 = mocks.makeGenerator.mock.calls[0]!.at(-1);
+    const 정밀형 = mocks.makeGenerator.mock.calls[1]!.at(-1);
+    expect(속도형).toMatch(/nano-banana/);
+    expect(정밀형).toMatch(/gpt-image/);
+  });
+
+  it.each(["google", "openai"])("%s: 예약과 차감이 같은 모델 단가에서 나온다", async (선택) => {
+    await generate(폼(선택));
+
+    const 예약한장 = mocks.reserve.mock.calls[0]![2] as number;
+    const 차감한장 = mocks.settle.mock.calls[0]![2] as number;
+    expect(차감한장).toBe(예약한장);
+  });
+
+  it("실패해도 이미 나간 글값은 장부에 남긴다", async () => {
+    mocks.generate.mockRejectedValue(new Error("fal down"));
+
+    await generate(폼("openai"));
+
+    const 기록 = mocks.settle.mock.calls[0]!.at(-1);
+    expect(기록).toMatchObject({ billableImages: 0 });
+    expect(기록).toHaveProperty("llmUsd");
+  });
+
+  it("장부에는 실제로 그린 모델을 남긴다", async () => {
+    await generate(폼("google"));
+
+    const 기록 = mocks.settle.mock.calls[0]!.at(-1) as { model: string };
+    expect(기록.model).toMatch(/nano-banana/);
   });
 });
