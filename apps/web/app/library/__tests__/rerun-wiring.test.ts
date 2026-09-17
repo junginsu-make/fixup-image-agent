@@ -92,12 +92,23 @@ describe("지난 단계로 값을 들고 간다", () => {
    */
   it.each(TOOLS)("$name 은 **불러오기에 실패하면 첫 단계로 돌린다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh, first }) => {
     const source = read(fresh);
-    const failStart = source.indexOf("if (!result.ok) {");
-    const failEnd = source.indexOf("return;", failStart);
-    const success = source.slice(source.indexOf("const { seed } = result;"), source.indexOf("setSeeding(false);", source.indexOf("const { seed } = result;")));
+    /*
+      **불러오기 효과 전체를 잘라, 그 안의 `setStep` 이 딱 하나이고 그게 실패 갈래 안인지
+      잰다.** 성공 갈래를 `const { seed }` 부터 첫 `setSeeding(false)` 까지만 잘랐더니, 그
+      앞(실패 블록과 `const { seed }` 사이)이나 뒤에 넣으면 안 잡혔다(2026-09-17 재리뷰가
+      뮤테이션으로 실증). 효과 본문 전체를 보면 어디에 더해도 개수가 늘어 걸린다.
+    */
+    const bodyStart = source.indexOf("if (!rerunFrom) return;");
+    const bodyEnd = source.indexOf("})();", bodyStart);
+    const body = source.slice(bodyStart, bodyEnd);
+    const failStart = body.indexOf("if (!result.ok) {");
+    const failEnd = body.indexOf("return;", failStart);
+    expect(bodyStart, "불러오기 효과를 못 찾았다").toBeGreaterThan(-1);
     expect(failStart, "실패 갈래를 못 찾았다").toBeGreaterThan(-1);
-    expect(source.slice(failStart, failEnd), "실패 갈래에서 첫 단계로 돌린다").toContain(`setStep("${first}");`);
-    expect(success, "성공 갈래는 단계를 건드리지 않는다 — 건드리면 값이 오는 순간 단계가 튄다").not.toContain("setStep(");
+    expect(body.split("setStep(").length - 1, "불러오기 효과 안에서 단계를 옮기는 자리는 하나다").toBe(1);
+    const at = body.indexOf(`setStep("${first}");`);
+    expect(at, "실패 갈래에서 첫 단계로 돌린다").toBeGreaterThan(failStart);
+    expect(at, "그 자리는 실패 갈래 안이다 — 밖이면 값이 오는 순간 단계가 튄다").toBeLessThan(failEnd);
     // 여는 단계를 정하는 자리는 하나다. 여기저기서 옮기면 어디서 바뀌는지 못 쫓는다.
     expect(source.split("rerunStartStep").length - 1).toBe(2);
   });
