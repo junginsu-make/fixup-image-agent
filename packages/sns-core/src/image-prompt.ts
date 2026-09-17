@@ -3,7 +3,6 @@ import {
   characterAngleDirective,
   designerPersona,
   imageLookDirective,
-  resolveLook,
   preserveDirective,
   restyledPersonDirective,
   priorityLine,
@@ -65,16 +64,18 @@ const ATTACHMENT_DECLARATION =
 /**
  * 이 카드를 **무엇으로 그릴지** 정하는 줄.
  *
- * `auto` 의 지시문은 빈 문자열이다 — 따라갈 그림이 정해 주기 때문이다. 그런데
- * 따라갈 그림이 **하나도 없으면** 무엇으로 그릴지 정하는 말이 프롬프트에 한
- * 줄도 안 들어간다. 모델이 제멋대로 고른다.
+ * `auto` 면 빈 문자열이다 — 따라갈 그림이 정해 주기 때문이다.
  *
- * 화면은 그 칸을 흐리게 막지만(`spec-picker.tsx`) 화면을 안 거치는 길이 있다 —
- * 옛 작업 다시 돌리기, API 직접 호출. 포스터에서 실제로 그렇게 새는 것을
- * 찾았다(2026-09-16). **여기가 모든 길이 지나는 자리라 여기서 막는다.**
+ * **여기서 내리지 않는다.** 한 번 그렇게 했다가 되돌렸다(2026-09-17 리뷰).
+ * 이 자리가 아는 것은 **이 카드 역할에 맞는 레퍼런스** 뿐인데
+ * (`selectReferencesForRole`), 「따라갈 그림이 있나」는 **작업 단위** 물음이다.
+ * 표지 레퍼런스만 붙인 사람에게 속지·엔딩이 실사로 나갔다 — 화면은 그때도
+ * 「붙인 그림의 화풍을 따라갑니다」라고 적고 있었다.
+ *
+ * 내리는 일은 `apps/web/lib/sns/queued-flow.ts` 가 작업 단위로 **한 번** 한다.
  */
-function lookBlock(look: ImageLook | undefined, hasReferences: boolean): string {
-  const directive = imageLookDirective(resolveLook(look ?? "auto", hasReferences));
+function lookBlock(look: ImageLook | undefined): string {
+  const directive = imageLookDirective(look ?? "auto");
   if (!directive) return "";
   return "Rendering style for this card — this overrides the rendering style of the" +
     ` CARD-NEWS REFERENCE:\n${directive}`;
@@ -241,7 +242,7 @@ export function buildFrame(input: {
     ["ACCENT", input.copy.accent],
     ["FOOTNOTE", input.copy.footnote],
   ].filter(([, value]) => Boolean(value?.trim()));
-  const look = lookBlock(input.look, input.images.length > 0);
+  const look = lookBlock(input.look);
 
   return [
     buildAttachmentBlock(input.images, {
@@ -374,7 +375,7 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
         // 이 카드의 자리에 적은 말만 간다 — 표지 지시가 속지에 새면 안 된다.
         attachmentIntent: intentForRole(input.attachmentIntents, input.role),
       }),
-      lookBlock(input.look, references.length > 0),
+      lookBlock(input.look),
       `Card role: ${input.role}`,
       `Planner intent: ${input.plan.intent}`,
       `Planner visual brief: ${input.plan.visualBrief}`,

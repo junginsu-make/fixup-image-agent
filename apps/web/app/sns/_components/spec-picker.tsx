@@ -8,6 +8,7 @@ import {
   IMAGE_MODELS,
   hasStyleSource,
   lookBlockedReason,
+  resolveLook,
   withJosa,
   modelById,
   planSlots,
@@ -55,6 +56,15 @@ export function SpecPicker({ spec, onChange, attachments }: {
   onChange(value: SnsSpec): void;
   attachments: Attachment[];
 }) {
+  /*
+   * **켜 보이는 결.**
+   *
+   * 붙인 그림을 뺀 뒤에도 상태에는 「레퍼런스 스타일」이 남아 있을 수 있다.
+   * 그러면 회색 버튼이 선택된 채로 서 있고, 힌트는 「붙인 그림의 화풍을
+   * 따라갑니다」라고 말하는데 서버는 실사로 내린다(`queued-flow.ts`).
+   * **실제로 갈 값을 그대로 켠다** — 포스터가 같은 판단을 한다.
+   */
+  const shownLook = resolveLook(spec.look, hasStyleSource(attachments));
   const placeAsIsCount = attachments.filter((attachment) => attachment.kind === "place_as_is").length;
   const hasEndingImage = attachments.some((attachment) => attachment.kind === "ending");
   const plan = planSlots({
@@ -84,7 +94,7 @@ export function SpecPicker({ spec, onChange, attachments }: {
       </div>
 
       <section className="grid gap-3">
-        <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[spec.look]}</p></div>
+        <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[shownLook]}</p></div>
         <div className="flex flex-wrap gap-2">
           {IMAGE_LOOKS.map((look) => {
             /*
@@ -102,8 +112,8 @@ export function SpecPicker({ spec, onChange, attachments }: {
                 disabled={Boolean(blocked)}
                 title={blocked || IMAGE_LOOK_HINT[look]}
                 onClick={() => onChange({ ...spec, look })}
-                aria-pressed={spec.look === look}
-                className={`rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-40 ${spec.look === look ? "border-primary bg-primary-soft" : "bg-card"}`}
+                aria-pressed={shownLook === look}
+                className={`rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-40 ${shownLook === look ? "border-primary bg-primary-soft" : "bg-card"}`}
               >
                 {IMAGE_LOOK_LABEL[look]}
               </button>

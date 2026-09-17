@@ -15,9 +15,16 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("../_components/spec-picker.tsx", import.meta.url), "utf8");
 
 describe("카드뉴스 그림체 고르기", () => {
+  /**
+   * **인자까지 한 덩이로 잰다.**
+   *
+   * 처음에는 `lookBlockedReason(` 과 `hasStyleSource(attachments)` 를 따로
+   * 찾았다. 그러면 `lookBlockedReason(look, true)` 로 바꿔 아무것도 안 막게
+   * 만들어도 통과했다 — 둘 다 아래 안내 문단에 남아 있기 때문이다
+   * (2026-09-17 리뷰의 변이 시험). 포스터 시험이 이미 나은 꼴이었다.
+   */
   it("막을 까닭을 코드에서 받아 온다", () => {
-    expect(source).toContain("lookBlockedReason(");
-    expect(source).toContain("hasStyleSource(attachments)");
+    expect(source).toContain("lookBlockedReason(look, hasStyleSource(attachments))");
   });
 
   it("막힌 것은 못 누르게 한다", () => {
@@ -35,6 +42,19 @@ describe("카드뉴스 그림체 고르기", () => {
   /** 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적어야 한다. */
   it("무엇을 하면 눌리는지 적는다", () => {
     expect(source).toContain('lookBlockedReason("auto"');
+  });
+
+  /**
+   * **켜 보이는 것이 실제로 갈 값이어야 한다.**
+   *
+   * 붙인 그림을 뺀 뒤에도 상태에는 「레퍼런스 스타일」이 남는다. 날값을 켜면
+   * 회색 버튼이 선택된 채로 서 있고, 힌트는 「붙인 그림의 화풍을 따라갑니다」
+   * 라고 말하는데 서버는 실사로 내린다(2026-09-17 리뷰).
+   */
+  it("실제로 갈 값을 켠다", () => {
+    expect(source).toContain("resolveLook(spec.look, hasStyleSource(attachments))");
+    expect(source).not.toContain("spec.look === look");
+    expect(source).not.toContain("IMAGE_LOOK_HINT[spec.look]");
   });
 
   /** 어느 첨부가 따라갈 결을 갖는지 화면이 제 손으로 세면 안 된다. */
