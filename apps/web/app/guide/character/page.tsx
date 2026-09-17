@@ -4,8 +4,9 @@ import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
+import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference } from "@fixup/shared";
 
-export const metadata: Metadata = { title: "캐릭터 만들기 — 사용 설명서" };
+export const metadata: Metadata = { title: "캐릭터 만들기 · 사용 설명서" };
 
 /** 화면(`app/characters/CharacterStudio.tsx`)의 목록과 같은 말을 쓴다. */
 const KINDS = [
@@ -15,12 +16,21 @@ const KINDS = [
   { title: "사물", hint: "제품·소품" },
 ];
 
-const TONES = [
-  { title: "실사", hint: "사진처럼" },
-  { title: "애니", hint: "셀 셰이딩·굵은 선" },
-  { title: "3D", hint: "3D 렌더" },
-  { title: "그림", hint: "손그림 질감" },
-];
+/**
+ * 고를 수 있는 **그림체.**
+ *
+ * **손으로 적지 않는다.** 전에는 「실사·애니·3D·그림」이라고 적어 뒀는데 화면은
+ * 「실사 사진·애니메이션·3D·손그림」이었다. 설명서가 없는 이름을 부르면 사용자는
+ * 화면에서 그것을 찾다가 못 찾는다(2026-09-16 리뷰. 같은 일이 이미지 설명서에서
+ * 한 번 있었다).
+ *
+ * 화면(`app/characters/CharacterStudio.tsx`)도 `looksWithoutReference()` 를
+ * 쓴다. 캐릭터는 따라 만들 그림 없이도 만들 수 있어 「레퍼런스 스타일」이 빠진다.
+ */
+const TONES = looksWithoutReference().map((look) => ({
+  title: IMAGE_LOOK_LABEL[look],
+  hint: IMAGE_LOOK_HINT[look],
+}));
 
 const ANGLES = ["정면", "왼쪽 45°", "오른쪽 45°", "왼쪽", "오른쪽", "뒷면"];
 
@@ -63,10 +73,10 @@ export default function CharacterGuidePage() {
         ]}
       />
 
-      <Section title="사람만 만드는 것이 아닙니다" hint="종류와 결을 따로 고릅니다.">
+      <Section title="사람만 만드는 것이 아닙니다" hint="종류와 그림체를 따로 고릅니다.">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지 — 종류</h3>
+            <h3 className="mb-2 text-sm font-extrabold">무엇을 만들지 · 종류</h3>
             <ul className="grid gap-2">
               {KINDS.map((kind) => (
                 <li key={kind.title} className="rounded-lg border bg-card px-3 py-2">
@@ -77,7 +87,7 @@ export default function CharacterGuidePage() {
             </ul>
           </div>
           <div>
-            <h3 className="mb-2 text-sm font-extrabold">어떤 결로 — 화풍</h3>
+            <h3 className="mb-2 text-sm font-extrabold">어떤 그림체로 · 화풍</h3>
             <ul className="grid gap-2">
               {TONES.map((tone) => (
                 <li key={tone.title} className="rounded-lg border bg-card px-3 py-2">
@@ -89,7 +99,7 @@ export default function CharacterGuidePage() {
           </div>
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          둘을 조합합니다. <strong className="text-foreground">「애니풍 강아지」</strong>는 종류 = 동물, 결 = 애니입니다.
+          둘을 조합합니다. <strong className="text-foreground">「애니풍 강아지」</strong>는 종류 = 동물, 그림체 = 애니메이션입니다.
           제품 소품을 여러 장면에 똑같이 넣고 싶다면 종류 = 사물로 만들어 두면 됩니다.
         </p>
       </Section>
@@ -97,7 +107,7 @@ export default function CharacterGuidePage() {
       <Section title="전체 흐름" hint="화면은 두 단계입니다.">
         <Flow
           nodes={[
-            { label: "무엇을 만들지", sub: "종류 · 결 · 설명" },
+            { label: "무엇을 만들지", sub: "종류 · 그림체 · 설명" },
             { label: "정면 보기", sub: "이대로 갈지 정합니다", human: true },
             { label: "이어서 더 만들기", sub: "각도 또는 다각도 한 장", human: true },
             { label: "결과", sub: "라이브러리에도 들어갑니다" },
@@ -133,7 +143,7 @@ export default function CharacterGuidePage() {
         <Mock title="캐릭터 만들기 · 무엇을 만들지">
           <MockSteps steps={["만들기", "결과"]} current={0} />
           <MockChoices label="종류" marker={1} items={KINDS} active={0} />
-          <MockChoices label="결" marker={2} items={TONES} active={0} />
+          <MockChoices label="그림체" marker={2} items={TONES} active={0} />
           <MockField
             label="어떤 대상인가"
             marker={3}
@@ -156,15 +166,15 @@ export default function CharacterGuidePage() {
         <Callouts
           items={[
             {
-              title: "종류 — 무엇을 만드는지",
-              body: "사람·동물·캐릭터·사물 중에서 고릅니다. 종류에 따라 각도의 뜻이 달라집니다 — 사물의 「뒷면」은 제품 뒤쪽입니다.",
+              title: "종류 · 무엇을 만드는지",
+              body: "사람·동물·캐릭터·사물 중에서 고릅니다. 종류에 따라 각도의 뜻이 달라집니다. 사물의 「뒷면」은 제품 뒤쪽입니다.",
             },
             {
-              title: "결 — 어떤 화풍으로",
-              body: "실사는 사진처럼, 애니는 굵은 선, 3D는 렌더, 그림은 손그림 질감입니다. 결에 따라 기본 모델이 달라집니다.",
+              title: "그림체 · 어떤 화풍으로",
+              body: "그림체마다 기본 모델이 달라집니다. 고른 그림체가 캐릭터의 모든 각도에 그대로 갑니다.",
             },
             {
-              title: "어떤 대상인가 — 구체적일수록 좋습니다",
+              title: "어떤 대상인가 · 구체적일수록 좋습니다",
               body: (
                 <>
                   나이·차림새·인상까지 적으세요. 여기가 두루뭉술하면 후보가 다 비슷비슷하게 나옵니다.{" "}
@@ -173,7 +183,7 @@ export default function CharacterGuidePage() {
               ),
             },
             {
-              title: "참고 그림 — 두 가지 역할",
+              title: "참고 그림 · 두 가지 역할",
               body: (
                 <>
                   <strong className="text-foreground">결만 따라 만들기</strong>는 화풍만 가져오고 대상은 새로 만듭니다.{" "}
@@ -199,12 +209,12 @@ export default function CharacterGuidePage() {
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           먼저 <strong className="text-foreground">정면</strong>이 나옵니다. 그 정면을 기준으로 나머지 다섯 면을
-          만듭니다. 여섯 면을 다 만들 필요는 없습니다 — 정면 한 장으로 끝내도 저장되고, 나중에 「내 캐릭터」에서
+          만듭니다. 여섯 면을 다 만들 필요는 없습니다. 정면 한 장으로 끝내도 저장되고, 나중에 「내 캐릭터」에서
           빈 각도를 채울 수 있습니다. 다만 각도가 많을수록 다른 도구에서 쓸 때 자연스럽습니다.
         </p>
         <p className="text-sm leading-6 text-muted-foreground">
           <strong className="text-foreground">시작할 때는 아무 각도도 켜져 있지 않습니다.</strong> 만들 것만
-          직접 고르세요 — 켜 둔 것을 못 보고 눌러 원치 않는 장을 만드는 일을 막으려는 것입니다.
+          직접 고르세요. 켜 둔 것을 못 보고 눌러 원치 않는 장을 만드는 일을 막으려는 것입니다.
         </p>
       </Details>
 
@@ -223,7 +233,7 @@ export default function CharacterGuidePage() {
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           다만 <strong className="text-foreground">다른 도구에는 이 한 장이 안 나갑니다.</strong> 카드뉴스나
-          상세페이지가 인물 기준으로 집어 가는 것은 낱장 각도뿐입니다 — 여섯 컷짜리 격자를 기준으로 넣으면
+          상세페이지가 인물 기준으로 집어 가는 것은 낱장 각도뿐입니다. 여섯 컷짜리 격자를 기준으로 넣으면
           그 격자가 결과물에 그대로 따라 나옵니다. 두 쓰임이 다르니 필요하면 둘 다 만들어 두세요.
         </p>
       </Section>
@@ -232,7 +242,7 @@ export default function CharacterGuidePage() {
         <ChoiceTable
           head={["이런 상황이면", "이렇게", "왜"]}
           rows={[
-            ["상세페이지에 모델이 여러 번 나온다", "사람 · 실사", "섹션이 바뀌어도 같은 사람이 유지됩니다"],
+            ["상세페이지에 모델이 여러 번 나온다", `사람 · ${IMAGE_LOOK_LABEL.photoreal}`, "섹션이 바뀌어도 같은 사람이 유지됩니다"],
             ["브랜드 마스코트가 있다", "이 캐릭터 뽑아내기", "기존 그림의 캐릭터를 그대로 살립니다"],
             ["제품 소품을 여러 장면에 넣는다", "사물", "같은 물건이 각 장면에 나옵니다"],
             ["화풍만 참고하고 싶다", "결만 따라 만들기", "그림은 새로 만들되 결을 맞춥니다"],

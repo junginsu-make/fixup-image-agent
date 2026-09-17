@@ -11,7 +11,7 @@ import { Callouts, Mock, MockButtons, MockChoices, MockTabs } from "../_componen
  * 설명서에 남겨 두면 **설명서에는 있는데 눌러도 없는 화면**이 된다.
  * 되살릴 때는 이 파일의 git 이력에서 그 절을 그대로 되가져오면 된다.
  */
-export const metadata: Metadata = { title: "라이브러리 — 사용 설명서" };
+export const metadata: Metadata = { title: "라이브러리 · 사용 설명서" };
 
 export default function LibraryGuidePage() {
   return (
@@ -19,7 +19,7 @@ export default function LibraryGuidePage() {
       <GuideHeader
         kicker="라이브러리"
         title="재료를 모아 두고 어느 도구에서든 불러 쓰기"
-        lead="로그인하면 처음 열리는 화면이 라이브러리입니다. 만들기 도구부터 열지 않는 이유가 있습니다 — 무엇을 가지고 있는지 모르는 채로 시작하면 매번 재료를 새로 찾게 되기 때문입니다. 여기 쌓인 것은 다섯 도구가 모두 불러 쓸 수 있습니다."
+        lead="로그인하면 처음 열리는 화면이 라이브러리입니다. 만들기 도구부터 열지 않는 이유가 있습니다. 무엇을 가지고 있는지 모르는 채로 시작하면 매번 재료를 새로 찾게 되기 때문입니다. 여기 쌓인 것은 다섯 도구가 모두 불러 쓸 수 있습니다."
       />
 
       <Summary
@@ -65,7 +65,7 @@ export default function LibraryGuidePage() {
         </p>
       </Section>
 
-      <Section title="라이브러리 — 세 가지가 들어 있습니다">
+      <Section title="라이브러리 · 세 가지가 들어 있습니다">
         <Mock title="라이브러리">
           <MockTabs items={["작업물", "참고 이미지", "캐릭터"]} active={0} marker={1} />
           <MockChoices
@@ -86,14 +86,14 @@ export default function LibraryGuidePage() {
               body: (
                 <ul className="grid gap-1.5">
                   <li>
-                    <strong className="text-foreground">작업물</strong> — 이 시스템이 만든 결과물. 도구별로 쌓입니다
+                    <strong className="text-foreground">작업물</strong>. 이 시스템이 만든 결과물. 도구별로 쌓입니다
                   </li>
                   <li>
-                    <strong className="text-foreground">참고 이미지</strong> — 직접 올린 그림. 「낱장」과 「묶음 세트」로
+                    <strong className="text-foreground">참고 이미지</strong>. 직접 올린 그림. 「낱장」과 「묶음 세트」로
                     나뉩니다
                   </li>
                   <li>
-                    <strong className="text-foreground">캐릭터</strong> — 캐릭터 만들기로 각도를 고정해 둔 인물·동물·사물
+                    <strong className="text-foreground">캐릭터</strong>. 캐릭터 만들기로 각도를 고정해 둔 인물·동물·사물
                   </li>
                 </ul>
               ),
@@ -126,7 +126,7 @@ export default function LibraryGuidePage() {
         <p className="text-sm leading-7 text-muted-foreground">
           모든 파일은 <strong className="text-foreground">소유자별 비공개 저장소</strong>에 들어갑니다. 짧은 수명의
           서명된 주소로만 열리고, 저장 경로의 첫 칸이 소유자라서 다른 회원의 것은 열리지 않습니다. 회원이 AI 키를
-          브라우저에 입력하는 일도 없습니다 — 생성은 운영자 서버 키로 돕니다.
+          브라우저에 입력하는 일도 없습니다. 생성은 운영자 서버 키로 돕니다.
         </p>
       </Details>
 

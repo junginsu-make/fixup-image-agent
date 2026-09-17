@@ -22,9 +22,10 @@ import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { looksFinished, type PromptMode } from "./prompt-mode";
+import { planCostCounts, planCostNote } from "./plan-cost";
 import type { AdSubmitPlan } from "./ad-mode";
 import {
-  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections } from "./poster-form-rules";
+  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount } from "./poster-form-rules";
 
 /**
  * **광고 규격 칸은 켜졌을 때만 내려받는다.**
@@ -427,6 +428,13 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const referenceCount = styleIds.length + preservedIds.length;
   const overReferenceLimit = referenceCount > choice.model.maxReferenceImages;
 
+  /**
+   * 이번 클릭이 만드는 **작업 수.** 광고 모드는 마스터마다 작업이 따로 생긴다.
+   *
+   * 금액 표시는 뺐지만(2026-09-17 사용자 결정) 기획 값 안내가 이 수를 쓴다 —
+   * 기획도 작업마다 한 번씩 돌기 때문이다.
+   */
+  const projects = projectCount(adMode, adPlan.masters.length);
   // 무엇을 그릴지는 순수 규칙이 정한다 — 컴포넌트 안에 두면 시험이 못 간다.
   const sections = posterSpecSections({ adEnabled, adMode });
 
@@ -771,6 +779,19 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                 {adMode
                   ? ` · 그림 ${adPlan.masters.length}장 × 변형 ${variants}장 = ${adPlan.masters.length * variants}장`
                   : ` · ${variants}장`}
+                {/*
+                  **기획 값은 여기 안 들어 있다.** 기획은 따로 돌고 따로 차감된다
+                  (`plan/route.ts`). 「그대로 생성」은 그것이 아예 안 도는데,
+                  화면이 안 말하면 두 갈래를 견줄 수 없었다(설계 §9).
+                */}
+                <span className="mt-1 block text-meta text-subtle-foreground">
+                  위는 그림 값입니다. {planCostNote({
+                    // 무엇을 세는지는 `plan-cost` 가 정한다. 여기서 정하면 시험이 못 간다.
+                    ...planCostCounts(orderedIds.map((id) => roles[id] ?? "none")),
+                    promptMode,
+                    projects,
+                  })}
+                </span>
               </p>
             )
             )}

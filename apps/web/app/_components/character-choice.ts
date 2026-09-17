@@ -50,7 +50,7 @@ export function describeCharacterChoice(
   views: PickableView[],
   angleLabel: (angle: string) => string,
 ): string {
-  if (isAutoChoice(picked)) return "각도 자동 — 섹션에 맞는 장면을 골라 씁니다";
+  if (isAutoChoice(picked)) return "각도 자동. 섹션에 맞는 장면을 골라 씁니다";
   return chosenViews(picked, views)
     .map((view) => angleLabel(view.angle))
     .join(" · ");

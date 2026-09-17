@@ -1,5 +1,6 @@
 "use client";
 
+import { IMAGE_LOOK_LABEL } from "@fixup/shared";
 import * as React from "react";
 import Link from "next/link";
 import { Loader2, UserRound } from "lucide-react";
@@ -38,9 +39,8 @@ const KIND_LABEL: Record<string, string> = {
   person: "사람", animal: "동물", character: "캐릭터", object: "사물",
 };
 
-const LOOK_LABEL: Record<string, string> = {
-  photoreal: "실사", anime: "애니", "3d": "3D", illustration: "일러스트",
-};
+/** 만들 때 고른 이름과 같아야 한다. 손으로 적으면 갈린다(2026-09-16 검토). */
+const LOOK_LABEL: Record<string, string> = IMAGE_LOOK_LABEL;
 
 function formatDate(value: string): string {
   const date = new Date(value);

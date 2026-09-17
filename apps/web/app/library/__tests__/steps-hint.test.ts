@@ -13,7 +13,7 @@ const source = readFileSync(new URL("../works-tab.tsx", import.meta.url), "utf8"
 
 describe("과정 보기 단추", () => {
   it("올려 놓으면 무엇이 되는지 말한다", () => {
-    expect(source).toContain('title="과정 보기 — 만들 때 쓴 값 그대로 단계 화면을 엽니다"');
+    expect(source).toContain('title="과정 보기. 만들 때 쓴 값 그대로 단계 화면을 엽니다"');
   });
 
   it("읽어 주는 이름도 그대로 둔다 — 화면 낭독기는 `title` 을 늦게 읽는다", () => {

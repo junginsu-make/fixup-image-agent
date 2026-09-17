@@ -94,10 +94,10 @@ export default function GuideHomePage() {
 
           {/* 상단에 늘 떠 있는데 설명이 없었다. 눌러 보기 전에는 무엇인지 모른다. */}
           <div>
-            <h3 className="text-sm font-extrabold">참고할 그림이 없을 때 — 「레퍼런스 찾기」</h3>
+            <h3 className="text-sm font-extrabold">참고할 그림이 없을 때 · 「레퍼런스 찾기」</h3>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               화면 <strong className="text-foreground">오른쪽 위 청록색 버튼</strong>입니다. 어느 도구에서든 보입니다.
-              누르면 새 탭에서 핀터레스트가 열립니다 — 만들기 전에 결을 잡을 그림을 찾는 자리입니다.
+              누르면 새 탭에서 핀터레스트가 열립니다. 만들기 전에 결을 잡을 그림을 찾는 자리입니다.
               마음에 드는 그림을 내려받아 라이브러리에 올려 두면 어느 도구에서든 불러 씁니다.
             </p>
           </div>

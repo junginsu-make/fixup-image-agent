@@ -155,7 +155,7 @@ export const AD_SPECS: AdSpec[] = [
     required: false, format: "png", supply: "upload", maxBytes: 5_242_880,
     verifiedAt: "2026-09-06", sourceKind: "official", source: GOOGLE_RDA,
     note: "안 넣으면 구글이 기본 아이콘을 넣는다. 등록은 된다."
-      + " 만들지 않고 받지만 **받은 바이트도 규격 검사를 거친다**(2단계) — 그래서 상한이 필요하다.",
+      + " 만들지 않고 받지만 **받은 바이트도 규격 검사를 거친다**(2단계). 그래서 상한이 필요하다.",
   },
 
   // ── 카카오 (공식 가이드 확인됨) ─────────────────────────────────────
@@ -232,7 +232,7 @@ export const AD_SPECS: AdSpec[] = [
     target: { width: 456, height: 304 },
     required: true, format: "jpg",
     verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
-    note: "출처는 「228×152 **이상**, 비율 유지」다. 그 두 배로 둔다 — 최소값으로"
+    note: "출처는 「228×152 **이상**, 비율 유지」다. 그 두 배로 둔다. 최소값으로"
       + " 두면 마스터에서 7.1배를 줄여야 해서 **결과물 중 가장 흐려진다.**"
       + " 「이상」이라는 읽기에 기대는 값이므로 콘솔 확인 목록에 있다. 테두리 불가.",
   },
@@ -242,7 +242,7 @@ export const AD_SPECS: AdSpec[] = [
     target: { width: 376, height: 220 },
     required: true, format: "jpg",
     verifiedAt: "2026-09-06", sourceKind: "reference", source: NAVER_REF,
-    note: "출처는 「188×110 **이상**, 비율 유지」다. 그 두 배로 둔다 — 최소값이면"
+    note: "출처는 「188×110 **이상**, 비율 유지」다. 그 두 배로 둔다. 최소값이면"
       + " 9.7배 축소로 가장 흐려진다. 「이상」이라는 읽기에 기대는 값이다.",
   },
   {

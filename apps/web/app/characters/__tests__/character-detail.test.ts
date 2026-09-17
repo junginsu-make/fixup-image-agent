@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IMAGE_LOOKS, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { characterDetailRows, shownViews } from "../character-detail";
 
 /**
@@ -29,7 +30,24 @@ describe("characterDetailRows", () => {
     const byLabel = new Map(rows.map((row) => [row.label, row.value]));
 
     expect(byLabel.get("종류")).toBe("캐릭터");
-    expect(byLabel.get("화풍")).toBe("그림");
+    expect(byLabel.get("화풍")).toBe(IMAGE_LOOK_LABEL.illustration);
+  });
+
+  /**
+   * **네 그림체가 다 이름으로 나온다.**
+   *
+   * 전에는 표에 둘만 적혀 있어 애니·3D 캐릭터의 상세에 `anime`·`3d` 라는
+   * 영문이 그대로 나왔다(2026-09-16 검토). 「모르는 값은 그대로 낸다」는
+   * 아래 규칙이 그 사고를 **감싸 주고 있었다** — 빨개지지 않았다.
+   */
+  it("고를 수 있는 그림체는 모두 우리말로 나온다", () => {
+    for (const look of IMAGE_LOOKS) {
+      const rows = characterDetailRows({ ...full, look });
+      const 화풍 = new Map(rows.map((row) => [row.label, row.value])).get("화풍");
+
+      expect(화풍, `${look} 이 우리말로 안 나온다`).toBe(IMAGE_LOOK_LABEL[look]);
+      expect(화풍, `${look} 이 영문 그대로 나온다`).not.toBe(look);
+    }
   });
 
   it("모르는 값은 저장된 그대로 낸다 — 숨기지 않는다", () => {

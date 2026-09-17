@@ -1859,7 +1859,7 @@ function createDefaultEditorDraftState(result: GeneratedResult, outputMode?: Pdp
     defaultCopyLanguage: "ko",
     notice:
       outputMode === "full-image"
-        ? "통이미지 모드 — 문구가 이미지에 포함돼 있어요. 확인하고 바로 다운로드하세요."
+        ? "통이미지 모드. 문구가 이미지에 포함돼 있어요. 확인하고 바로 다운로드하세요."
         : "섹션 컷을 고르고 텍스트를 배치한 뒤 바로 다운로드할 수 있습니다.",
     workbenchTab: "image",
     workbenchState: {

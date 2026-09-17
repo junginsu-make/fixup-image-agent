@@ -276,7 +276,7 @@ export function RedesignWizard() {
           });
           transcript = r.transcript;
           complete = r.complete;
-          if (r.failedBatches) setToast(`일부 구간 전사 실패(${r.failedBatches}) — 가능한 범위로 진행합니다.`);
+          if (r.failedBatches) setToast(`일부 구간 전사 실패(${r.failedBatches}). 가능한 범위로 진행합니다.`);
         } catch {
           transcript = null; // graceful degradation
         }
