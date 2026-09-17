@@ -1,6 +1,7 @@
 import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
 import { PdpServiceError } from "./pdp.service";
+import { purposeOfCall } from "./pdp.llm";
 import type { PdpProviders } from "./pdp.image-provider";
 import type { ImageModelId } from "./types";
 import {
@@ -611,7 +612,12 @@ export function textPlanDepsFrom(providers: PdpProviders): TextPlanDeps {
 function depsFrom(providers: PdpProviders): TextPlanDeps {
   return {
     async generateJson(prompt, schema, name) {
-      const response = await providers.llm.generate({ name, prompt, schema, maxTokens: 8192 });
+      /*
+        **길이 상한은 제공자가 정한다.** 여기서 8192 를 실으면 모델별 정책을
+        덮는다 — 2026-09-17 실호출에서 기획이 그 8192 에 걸려 잘렸고, 조각난
+        값이 「섹션 0개」로 둔갑했다(`docs/bugs/pdp-validation/w3-live-planning.txt`).
+      */
+      const response = await providers.llm.generate({ name, prompt, schema, purpose: purposeOfCall(name) });
       return parseJsonText(response.text);
     },
 

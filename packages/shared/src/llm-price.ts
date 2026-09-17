@@ -29,6 +29,8 @@ export interface TokenPrice {
  * 모르면 이 숫자를 쓰는 쪽이 과신한다.
  */
 export const LLM_PRICES: Record<string, TokenPrice> = {
+  // 2026-09-17 확인: https://platform.claude.com/docs/en/about-claude/pricing
+  "claude-fable-5": { inputPerMillion: 10, outputPerMillion: 50 },
   "claude-sonnet-5": { inputPerMillion: 3, outputPerMillion: 15 },
   "claude-opus-5": { inputPerMillion: 15, outputPerMillion: 75 },
   "claude-haiku-4-5": { inputPerMillion: 1, outputPerMillion: 5 },

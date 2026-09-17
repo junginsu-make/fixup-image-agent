@@ -1,4 +1,4 @@
-import type { LandingPageBlueprint, SectionBlueprint, BlueprintReview } from "@fixup/pdp-core";
+import type { LandingPageBlueprint, SectionBlueprint, BlueprintReview, PdpLlmExecution } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
 import type { PdpDraftInput, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
@@ -26,6 +26,7 @@ export interface PdpDocumentV3 {
   blueprint: Omit<LandingPageBlueprint, "sections">;
   analyzedBlueprint?: LandingPageBlueprint | null;
   planningReview?: BlueprintReview;
+  planningExecutions?: PdpLlmExecution[];
   styleReference?: Omit<NonNullable<PdpDraftInput["styleReference"]>, "imageBase64" | "mimeType">;
   editor: Omit<PdpEditorDraftState, "sections" | "sectionKeys"> | null;
   approved?: { revision: number; approvedAt: string };
@@ -107,6 +108,7 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
       preserveProduct: input.preserveProduct ?? true },
     references, assets, originalAssetId: input.result ? addAsset({ base64: input.result.originalImage, mimeType: "image/jpeg" }) : undefined,
     sections, blueprint, analyzedBlueprint: input.analyzedBlueprint, planningReview: input.result?.review,
+    planningExecutions: input.result?.planningExecutions ?? input.textDraft?.planningExecutions,
     styleReference: style ? { id: style.id, name: style.name, description: style.description, reason: style.reason } : undefined,
     editor, previousRevision: previous?.revision, createdAt: input.createdAt ?? previous?.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(), notice: input.notice, snapshotOf: input.snapshotOf, recoveryNotes: [...recoveryNotes],
@@ -127,7 +129,7 @@ export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
     appState: doc.stage === "planning" ? "processing" : doc.stage === "editor" ? "editor"
       : doc.stage === "outline" && doc.originalAssetId ? "scenario" : "upload",
     preparedImage: prepared("product"), modelImage: prepared("person"), modelImageUsage: doc.inputs.modelImageUsage,
-    result: doc.originalAssetId ? { originalImage: doc.assets[doc.originalAssetId].base64, blueprint, review: doc.planningReview } : null,
+    result: doc.originalAssetId ? { originalImage: doc.assets[doc.originalAssetId].base64, blueprint, review: doc.planningReview, planningExecutions: doc.planningExecutions } : null,
     additionalInfo: doc.inputs.additionalInfo, sellerBrief: doc.inputs.sellerBrief, textDraft: doc.inputs.textDraft,
     startMode: doc.sourceMode === "text" ? "text" : "image", characterId: find("character")?.characterId,
     characterAngles: find("character")?.angles ?? [],

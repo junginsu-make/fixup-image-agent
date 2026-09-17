@@ -31,6 +31,8 @@ const GOOGLE_NANO_BANANA_2_MODEL = "gemini-3.1-flash-image-preview";
 
 type Provider = "openai" | "google";
 
+import type { RedesignImageGenerator } from "./generate";
+
 export type EditSectionInput = {
   /** "openai" | "google" (anything not "google" becomes "openai") */
   model?: string;
@@ -41,6 +43,14 @@ export type EditSectionInput = {
   project?: { title?: string; channel?: string } & Record<string, unknown>;
   openaiKey?: string;
   googleKey?: string;
+  /**
+   * 그림 통로. **새로 만들 때와 같은 길로 고친다.**
+   *
+   * 없으면 지금까지의 길(OpenAI·Google 직접 호출)로 떨어진다. 그 길은
+   * `quality: "low"` 라 글자가 뭉개지는데 값은 `gpt-image-2.5` `max` 기준으로
+   * 받고 있었다(2026-09-17 리뷰 F-7-5). 키가 있으면 늘 이쪽이 쓰인다.
+   */
+  generateImage?: RedesignImageGenerator;
 };
 
 export async function editSection(input: EditSectionInput) {
@@ -87,15 +97,32 @@ export async function editSection(input: EditSectionInput) {
     .filter(Boolean)
     .join("\n");
 
-  const edited = provider === "google"
-    ? await editWithGoogle({ apiKey, prompt, image })
-    : await editWithOpenAI({ apiKey, prompt, image });
+  const edited = input.generateImage
+    ? await editViaGenerator(input.generateImage, prompt, image)
+    : provider === "google"
+      ? await editWithGoogle({ apiKey, prompt, image })
+      : await editWithOpenAI({ apiKey, prompt, image });
 
   return {
     imageUrl: `data:${edited.mimeType};base64,${edited.buffer.toString("base64")}`,
     mimeType: edited.mimeType,
     prompt
   };
+}
+
+/** 주입받은 통로로 고친다. 크기는 생성 경로와 같은 9:16 상세페이지 규격이다. */
+async function editViaGenerator(
+  generateImage: RedesignImageGenerator,
+  prompt: string,
+  image: { mimeType: string; buffer: Buffer },
+) {
+  return generateImage({
+    prompt,
+    // 고칠 그림 자체가 유일한 참조다. 원본을 안 보내면 「같은 제품을 유지한다」가
+    // 지킬 대상 없이 떠 버린다.
+    references: [{ name: "section.png", mimeType: image.mimeType, buffer: image.buffer }],
+    size: "1152x2048",
+  });
 }
 
 async function editWithOpenAI({

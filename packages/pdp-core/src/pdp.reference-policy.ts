@@ -167,6 +167,7 @@ export function buildReferenceRoleDirective(
     );
     const intent = reference.intent?.trim();
     if (intent) {
+      if (isIdentityReference(reference.kind)) lines.push(...ROLE_RULES[reference.kind]);
       /**
        * **설계 4-1 A안 — 자리별로.**
        *
@@ -182,9 +183,9 @@ export function buildReferenceRoleDirective(
       lines.push(
         // 이름을 붙인다. 우선순위 줄이 「USER INSTRUCTION 이 1등」이라고 말하는데
         // 그 이름의 블록이 없으면, 없는 것을 1등으로 올려 둔 셈이 된다.
-        "USER INSTRUCTION for this image. The user wrote what to do with it. Their words " +
-          "replace the usual rules for this role, so those rules are deliberately omitted. " +
-          "Follow this exactly:",
+        isIdentityReference(reference.kind)
+          ? "USER INSTRUCTION for composition and pose. Keep all identity constraints above; never change the product or character to satisfy this instruction:"
+          : "USER INSTRUCTION for this design reference. Follow the requested design treatment only; do not import its product or people:",
       );
       lines.push(intent);
       /**
@@ -245,7 +246,7 @@ export function buildReferenceRoleDirective(
   // 지시를 적어 규칙을 뺀 자리는 더 이상 「지킨 대상」이 아니다. 그대로 세면
   // 「deliberately omitted」와 같은 단락에서 「preserved subject」가 부딪힌다.
   const hasIdentity = references.some(
-    (reference) => isIdentityReference(reference.kind) && !reference.intent?.trim(),
+    (reference) => isIdentityReference(reference.kind),
   );
   // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
   lines.push(attachmentPlacementRule(hasIdentity), "");
@@ -261,7 +262,7 @@ export function buildReferenceRoleDirective(
   // 있어도 서열을 밝혀야 한다 — 안 그러면 적은 말이 규칙 아래로 읽힌다.
   const hasSlotIntent = references.some((reference) => Boolean(reference.intent?.trim()));
   if (options?.hasUserInstruction || hasSlotIntent) {
-    const ranking = priorityLine({ hasUserInstruction: true, hasPreserved: hasIdentity });
+    const ranking = priorityLine({ hasUserInstruction: true, hasPreserved: hasIdentity, identityFirst: true });
     if (ranking) lines.push(ranking);
   }
 

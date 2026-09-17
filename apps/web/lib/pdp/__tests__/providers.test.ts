@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 const anthropicCalls: Array<Record<string, unknown>> = [];
 const openaiCalls: Array<Record<string, unknown>> = [];
 let anthropicThrows: Error | null = null;
+let anthropicReply: { input: unknown; stop_reason?: string } | null = null;
 
 vi.mock("server-only", () => ({}));
 
@@ -22,7 +23,14 @@ vi.mock("@anthropic-ai/sdk", () => ({
         anthropicCalls.push(args);
         if (anthropicThrows) throw anthropicThrows;
         return {
-          content: [{ type: "tool_use", name: (args.tools as Array<{ name: string }>)[0]!.name, input: { from: "claude" } }],
+          stop_reason: anthropicReply?.stop_reason ?? "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              name: (args.tools as Array<{ name: string }>)[0]!.name,
+              input: anthropicReply ? anthropicReply.input : { from: "claude" },
+            },
+          ],
         };
       },
     };
@@ -62,6 +70,7 @@ function reset() {
   anthropicCalls.length = 0;
   openaiCalls.length = 0;
   anthropicThrows = null;
+  anthropicReply = null;
 }
 
 describe("Claude 가 먼저다", () => {
@@ -151,15 +160,74 @@ describe("키가 없을 때", () => {
 });
 
 describe("모델 이름", () => {
-  it("환경변수가 있으면 그것을 쓴다", async () => {
+  it("검수는 기존 공통 환경변수를 쓴다", async () => {
     reset();
-    await createPdpLlm({ ...환경, ANTHROPIC_MODEL: "claude-opus-5" }).generate(요청);
+    await createPdpLlm({ ...환경, ANTHROPIC_MODEL: "claude-opus-5" }).generate({ ...요청, name: "pdp_review" });
     expect(anthropicCalls[0]!.model).toBe("claude-opus-5");
   });
 
-  it("없으면 기본값을 쓴다", async () => {
+  it("기획의 기본은 Fable이다", async () => {
     reset();
     await createPdpLlm(환경).generate(요청);
-    expect(anthropicCalls[0]!.model).toBe("claude-sonnet-5");
+    expect(anthropicCalls[0]!.model).toBe("claude-fable-5");
+  });
+  it("공통 Sonnet 설정이 있어도 상세페이지 기획은 Fable을 쓴다", async () => {
+    reset();
+    await createPdpLlm({ ...환경, ANTHROPIC_MODEL: "claude-sonnet-5" }).generate(요청);
+    expect(anthropicCalls[0]!.model).toBe("claude-fable-5");
+  });
+  it("기획 전용 override는 검수 모델을 바꾸지 않는다", async () => {
+    reset(); const llm = createPdpLlm({ ...환경, PDP_PLANNING_MODEL: "test-fable", ANTHROPIC_MODEL: "test-review" });
+    await llm.generate(요청); await llm.generate({ ...요청, name: "pdp_qa" });
+    expect(anthropicCalls.map(call => call.model)).toEqual(["test-fable", "test-review"]);
+  });
+  it("알 수 없는 모델 404를 조용한 대체 실행으로 숨기지 않는다", async () => {
+    reset(); anthropicThrows = Object.assign(new Error("model not found"), { status: 404 });
+    await expect(createPdpLlm(환경).generate(요청)).rejects.toThrow("model not found");
+    expect(openaiCalls).toHaveLength(0);
+  });
+  it("대체 실행 모델과 사유를 호출 결과에 남긴다", async () => {
+    reset(); anthropicThrows = Object.assign(new Error("overloaded"), { status: 529 });
+    const result = await createPdpLlm(환경).generate(요청);
+    expect(result).toMatchObject({ execution: { purpose: "planning", provider: "openai", model: "gpt-5.6-sol", fallbackFrom: "claude-fable-5", fallbackReason: "provider_529" } });
+  });
+});
+
+/**
+ * **답이 잘렸으면 잘렸다고 말한다.**
+ *
+ * 2026-09-17 W3 실호출 검증에서 텍스트 기획이 111초를 쓰고
+ * `INVALID_REQUEST`(「구성안을 만들지 못했습니다」)로 죽었다. 원인은 모델이
+ * `max_tokens` 에 걸려 도구 인자를 끝까지 못 쓴 것이고, 그 조각난 값이
+ * 조용히 아래로 흘러 「섹션이 0개」가 됐다. 값은 이미 다 치렀다.
+ *
+ * 종료 사유를 보면 그 자리에서 알 수 있다.
+ */
+describe("잘린 답을 결과로 쓰지 않는다", () => {
+  it("max_tokens 로 끝났으면 조각난 값을 돌려주지 않는다", async () => {
+    reset();
+    anthropicReply = { input: { sections: [] }, stop_reason: "max_tokens" };
+
+    await expect(createPdpLlm(환경).generate(요청)).rejects.toThrow(/잘렸|truncat/i);
+  });
+
+  it("잘림은 예비 모델로 넘기지 않는다 — 같은 길이를 또 치른다", async () => {
+    reset();
+    anthropicReply = { input: {}, stop_reason: "max_tokens" };
+
+    await expect(createPdpLlm(환경).generate(요청)).rejects.toThrow();
+    expect(openaiCalls).toHaveLength(0);
+  });
+
+  it("기획 호출은 검수보다 길게 답할 자리를 준다", async () => {
+    reset();
+    const llm = createPdpLlm(환경);
+    await llm.generate({ ...요청, name: "pdp_blueprint", purpose: "planning" });
+    await llm.generate({ ...요청, name: "pdp_review", purpose: "review" });
+
+    const 기획 = anthropicCalls[0]!.max_tokens as number;
+    const 검수 = anthropicCalls[1]!.max_tokens as number;
+    expect(기획).toBeGreaterThan(8192);
+    expect(기획).toBeGreaterThan(검수);
   });
 });

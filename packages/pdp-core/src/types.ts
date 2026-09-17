@@ -2,6 +2,7 @@ import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { ProductReading } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
+import type { PdpLlmExecution } from "./pdp.llm";
 
 /**
  * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
@@ -132,6 +133,7 @@ export interface LandingPageBlueprint {
 }
 
 export interface GeneratedResult {
+  planningExecutions?: PdpLlmExecution[];
   originalImage: string;
   blueprint: LandingPageBlueprint;
   /**
@@ -462,6 +464,7 @@ export interface TextPlanRequest {
 }
 
 export interface TextPlanResult {
+  planningExecutions?: PdpLlmExecution[];
   brief: ProductBrief;
   blueprint: LandingPageBlueprint;
   /**

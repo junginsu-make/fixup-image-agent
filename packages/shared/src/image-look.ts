@@ -210,10 +210,12 @@ export function imageLookDirective(look: ImageLook, subject: LookSubject = "gene
  * 사용자가 "배경을 밤으로"라고 적어도 첨부한 레퍼런스가 낮이면 레퍼런스가
  * 이겼다. 뒤집는다 — 사람이 직접 친 말이 가장 세다.
  */
-export function userInstructionHead(instruction: string): string {
+export function userInstructionHead(instruction: string, options?: { identityFirst?: boolean }): string {
   const trimmed = instruction.trim();
   if (!trimmed) return "";
-  return `USER INSTRUCTION (highest priority — follow exactly):\n${trimmed}`;
+  return options?.identityFirst
+    ? `USER INSTRUCTION (composition and scene only; preserved identity constraints remain mandatory):\n${trimmed}`
+    : `USER INSTRUCTION (highest priority — follow exactly):\n${trimmed}`;
 }
 
 /**
@@ -235,10 +237,14 @@ export function userInstructionTail(instruction: string): string {
  * 사용자 지시가 맨 위다. 그 다음이 지켜야 할 대상(제품·인물) — 이건 정체성이라
  * 양보하면 다른 물건이 된다. 레퍼런스는 그 아래다.
  */
-export function priorityLine(options: { hasUserInstruction: boolean; hasPreserved: boolean }): string {
-  const ranks = [
+export function priorityLine(options: { hasUserInstruction: boolean; hasPreserved: boolean; identityFirst?: boolean }): string {
+  const first = [
     options.hasUserInstruction ? "the USER INSTRUCTION" : "",
     options.hasPreserved ? "the PRESERVED SUBJECT" : "",
+  ];
+  if (options.identityFirst) first.reverse();
+  const ranks = [
+    ...first,
     "the REFERENCE image",
     "the scene description",
   ].filter(Boolean);

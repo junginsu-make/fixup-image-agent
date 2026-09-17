@@ -4,6 +4,7 @@ import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { suggestStyleReference } from "../../../../lib/style-reference";
 import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { readPdpRequest } from "../../../../lib/pdp/request";
+import { withLlmMeter, readLlmMeter } from "../../../../lib/llm/meter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ function isTransientBlueprintFailure(code: unknown, detail?: string) {
 }
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => plan(req));
+}
+
+async function plan(req: Request) {
   const parsed = await readPdpRequest<TextPlanRequest>(req, "plan");
   if (!parsed.ok) return parsed.response;
   // 이미지를 만들지 않는 단계라 크레딧은 소모하지 않는다(시간당 횟수 제한만 적용).
@@ -40,10 +45,11 @@ export async function POST(req: Request) {
 
     for (let attempt = 1; attempt <= MAX_PLAN_ATTEMPTS; attempt++) {
       try {
-        const result = await planFromText(body, providers);
+        const planned = await planFromText(body, providers);
+        const result = { ...planned, planningExecutions: providers.llm.executions?.filter((entry) => entry.purpose === "planning") };
         // 레퍼런스 추천은 곁다리다. 실패해도 구성안은 그대로 돌려준다.
         const suggestion = await suggestStyleReference(reservation.userId, result.brief);
-        const usage = await settleAiUsage(reservation, true, 0);
+        const usage = await settleAiUsage(reservation, true, 0, undefined, { model: "", billableImages: 0, llmUsd: readLlmMeter().usd });
         return Response.json({
           ok: true,
           result: suggestion.reference
@@ -70,7 +76,7 @@ export async function POST(req: Request) {
       }
     }
 
-    await settleAiUsage(reservation, false, 0, String(lastEnvelope?.code || "plan_from_text_failed"));
+    await settleAiUsage(reservation, false, 0, String(lastEnvelope?.code || "plan_from_text_failed"), { model: "", billableImages: 0, llmUsd: readLlmMeter().usd });
     return Response.json(lastEnvelope, { status: lastStatus });
   } catch (err) {
     await settleAiUsage(reservation, false, 0, "invalid_request");

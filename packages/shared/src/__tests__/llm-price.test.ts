@@ -8,6 +8,10 @@ import { LLM_PLAN_USD } from "../credit";
  */
 
 describe("토큰으로 값 매기기", () => {
+  it("Fable 기획 원가는 확인한 공표 단가로 센다", () => {
+    expect(llmUsdFromTokens("claude-fable-5", 1_000_000, 0)).toBe(10);
+    expect(llmUsdFromTokens("claude-fable-5", 0, 1_000_000)).toBe(50);
+  });
   it("입력과 출력에 다른 값을 매긴다", () => {
     // 출력이 다섯 배 비싸다. 같은 토큰 수라도 값이 다르다.
     const 입력만 = llmUsdFromTokens("claude-sonnet-5", 1_000_000, 0);

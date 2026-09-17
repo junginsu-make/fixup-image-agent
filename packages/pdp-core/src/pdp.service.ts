@@ -1,4 +1,4 @@
-import { Type } from "./pdp.llm";
+import { Type, purposeOfCall } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
@@ -204,11 +204,19 @@ function legacyContentsClient(llm: PdpLlm): LegacyContentsClient {
               mimeType: part.inlineData!.mimeType,
             })),
           schema: args.config?.responseSchema,
-          maxTokens: args.config?.maxOutputTokens ?? 8192,
+          purpose: purposeOfCall(args.name),
+          // 부르는 쪽이 정했으면 그것을 쓴다. 안 정했으면 제공자가 목적을 보고
+          // 정한다 — 기획은 길게, 검수는 짧게.
+          maxTokens: args.config?.maxOutputTokens,
         });
       },
     },
   };
+}
+
+/** 사진 경로의 어댑터를 시험에서 그대로 재기 위한 출구. 제품 코드는 안 쓴다. */
+export function legacyClientForTest(llm: PdpLlm): LegacyContentsClient {
+  return legacyContentsClient(llm);
 }
 
 export class PdpService {
@@ -670,7 +678,7 @@ ${analyzePrompt}`
       // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 — 긴
       // 프롬프트에서 중간 문장은 힘을 잃는다. 가장 중요한 것은 양끝에 둔다.
       const prompt = [
-        userInstructionHead(options.userInstruction),
+        userInstructionHead(options.userInstruction, { identityFirst: true }),
         buildImageJson(section, promptOptions),
         buildReferenceRoleDirective(references, {
           hasUserInstruction: Boolean(options.userInstruction),
@@ -936,6 +944,20 @@ export function toPdpErrorResponse(error: unknown): {
     없는지는 접힌 detail 안에만 있었다. 이름으로 가른다(엔진은 웹 쪽 클래스를
     import 하지 않는다).
   */
+  /*
+    모델이 답을 끝까지 못 쓴 경우. 「처리 중 오류」로 떨어지면 운영자도 사용자도
+    무엇을 줄여야 하는지 모른다 — 2026-09-17 텍스트 기획이 그렇게 111초를 쓰고
+    죽었다. 이름으로 가른다(엔진은 웹 쪽 클래스를 import 하지 않는다).
+  */
+  if (error instanceof Error && error.name === "PdpResponseTruncatedError") {
+    return {
+      ok: false as const,
+      code: "AI_RESPONSE_INVALID" as const,
+      message: "AI 가 답을 끝까지 쓰지 못하고 잘렸습니다. 입력을 줄이거나 섹션 수를 줄여 다시 시도해 주세요.",
+      detail
+    };
+  }
+
   if (error instanceof Error && error.name === "PdpProviderConfigurationError") {
     return {
       ok: false as const,

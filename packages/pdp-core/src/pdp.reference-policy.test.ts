@@ -328,9 +328,9 @@ describe("첨부 선언과 우선순위", () => {
     expect(buildReferenceRoleDirective([], { hasUserInstruction: true })).toBe("");
   });
 
-  it("사용자 지시가 있으면 그것이 맨 위라고 적는다", () => {
+  it("사용자 연출 지시보다 정체성 보존이 우선한다", () => {
     const directive = buildReferenceRoleDirective([anchor, style], { hasUserInstruction: true });
-    expect(directive).toContain("Priority when instructions conflict: the USER INSTRUCTION");
+    expect(directive).toContain("Priority when instructions conflict: the PRESERVED SUBJECT > the USER INSTRUCTION");
     expect(directive).toContain("the PRESERVED SUBJECT");
   });
 
@@ -401,7 +401,7 @@ describe("자리별 지시 (설계 4-1 A안)", () => {
       { ...person, intent: "안경을 꼭 씌워 주세요" },
     ]);
     expect(directive).toContain("Never redesign, restyle or substitute the product");
-    expect(directive).not.toContain("Do not beautify, slim, age, de-age or restyle them");
+    expect(directive).toContain("Do not beautify, slim, age, de-age or restyle them");
     expect(directive).toContain("안경을 꼭 씌워 주세요");
   });
 
@@ -410,9 +410,9 @@ describe("자리별 지시 (설계 4-1 A안)", () => {
     expect(blank).toContain("Imitate its design language only:");
   });
 
-  it("지시가 있으면 그 말이 규칙을 대신한다고 밝힌다", () => {
+  it("디자인 지시는 스타일에만 적용한다고 밝힌다", () => {
     const directive = buildReferenceRoleDirective([{ ...style, intent: "색만 가져와" }]);
-    expect(directive).toMatch(/replace the usual rules/i);
+    expect(directive).toContain("design treatment only");
   });
 
   it("지시가 없으면 그 안내도 없다 — 뺀 것이 없는데 뺐다고 말하지 않는다", () => {
@@ -436,7 +436,7 @@ describe("자리별 지시 (설계 4-1 A안)", () => {
     expect(directive).toContain("라벨 글씨는 그대로");
     expect(directive).toContain("안경을 씌워 주세요");
     expect(directive).toContain("색만 가져와");
-    expect(directive).not.toContain("Never redesign, restyle or substitute the product");
+    expect(directive).toContain("Never redesign, restyle or substitute the product");
   });
 
   it("자리 지시만 있어도 우선순위 줄이 나온다", () => {
@@ -479,11 +479,11 @@ describe("프롬프트가 스스로 모순되지 않는다", () => {
     expect(directive).not.toMatch(/instruction above wins/i);
   });
 
-  it("보호를 푼 그림을 계속 「지킨 대상」이라 부르지 않는다", () => {
+  it("연출을 바꿔도 보존 대상이라는 조건은 유지한다", () => {
     const 안풂 = buildReferenceRoleDirective([anchor]);
     const 품 = buildReferenceRoleDirective([{ ...anchor, intent: "만화풍으로 다시 그려 주세요" }]);
     expect(안풂).toMatch(/preserved subject/i);
-    expect(품).not.toMatch(/preserved subject/i);
+    expect(품).toMatch(/preserved subject/i);
   });
 
   it("하나만 풀면 나머지는 여전히 지킨 대상이다", () => {
@@ -494,11 +494,11 @@ describe("프롬프트가 스스로 모순되지 않는다", () => {
     expect(directive).toMatch(/preserved subject/i);
   });
 
-  it("보호를 푼 자리는 레퍼런스를 이긴다고 말하지 않는다", () => {
+  it("제품의 정체성은 연출 지시와 관계없이 레퍼런스보다 우선한다", () => {
     const 안풂 = buildReferenceRoleDirective([anchor, style]);
     const 품 = buildReferenceRoleDirective([{ ...anchor, intent: "만화풍으로" }, style]);
     expect(안풂).toContain("the product and the person win over the design reference");
-    expect(품).not.toContain("the product and the person win over the design reference");
+    expect(품).toContain("the product and the person win over the design reference");
   });
 });
 

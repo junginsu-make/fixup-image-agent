@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   auth: vi.fn(), reserve: vi.fn(), finalize: vi.fn(), settle: vi.fn(),
-  generate: vi.fn(), plan: vi.fn(), loadCharacter: vi.fn(),
+  generate: vi.fn(), plan: vi.fn(), loadCharacter: vi.fn(), keyVisual: vi.fn(),
   failSection: "",
 }));
 vi.mock("server-only", () => ({}));
@@ -10,18 +10,20 @@ vi.mock("../../../../lib/membership/api", () => ({ authenticateApiMember: state.
 vi.mock("@fixup/pdp-core", async () => {
   const actual = await vi.importActual<typeof import("@fixup/pdp-core")>("@fixup/pdp-core");
   return { ...actual, generateSectionImage: state.generate, planFromText: state.plan,
+    generateKeyVisual: state.keyVisual,
     buildSectionImageOptions: (...args: Parameters<typeof actual.buildSectionImageOptions>) => {
       if (args[1].section.section_id === state.failSection) throw new Error("option assembly failed");
       return actual.buildSectionImageOptions(...args);
     } };
 });
-vi.mock("../../../../lib/pdp/providers", () => ({ createPdpProviders: () => ({}) }));
+vi.mock("../../../../lib/pdp/providers", () => ({ createPdpProviders: () => ({ llm: { executions: [], generate: vi.fn() } }) }));
 vi.mock("../../../../lib/characters", () => ({ loadCharacterView: state.loadCharacter }));
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 vi.mock("../../../../lib/style-reference", () => ({ suggestStyleReference: async () => ({ reference: null }) }));
 const { POST: batch } = await import("../images/batch/route");
 const { POST: single } = await import("../images/route");
 const { POST: plan } = await import("../plan-from-text/route");
+const { POST: keyVisual } = await import("../key-visual/route");
 const section = { section_id: "s1", headline: "제품", bullets: [], prompt_en: "a product", layout_notes: "" };
 const body = () => ({ originalImageBase64: "AAAA", aspectRatio: "3:4", sections: [section], section });
 const request = (data: unknown) => new Request("http://local/api/pdp", { method: "POST", body: JSON.stringify(data) });
@@ -34,6 +36,7 @@ beforeEach(() => {
   state.settle.mockResolvedValue(undefined);
   state.generate.mockResolvedValue({ imageBase64: "RESULT", mimeType: "image/png", generatedImages: 1 });
   state.plan.mockResolvedValue({ brief: { offeringName: "제품" }, blueprint: { sections: [section] } });
+  state.keyVisual.mockResolvedValue({ imageBase64: "KV", mimeType: "image/png" });
 });
 
 describe("T-INPUT: 예약 전 검증", () => {
@@ -95,5 +98,38 @@ describe("T-SETTLE: 원인과 결과 보존", () => {
     const response = await single(request(body()));
     expect(response.status).toBe(400); expect((await response.json()).message).toBe("원래 실패");
     expect(state.settle).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * **같은 그림 한 장은 어느 버튼으로 들어와도 같은 값이다.**
+ *
+ * 2026-09-17 리뷰(C-3·E-6-1): 대표 이미지만 모델과 무관하게 1장을 예약·확정했다.
+ * `gpt-image-2.5-flare` 섹션 한 장은 5장인데 대표 한 장은 1장이었다 — 같은
+ * 모델로 같은 크기를 만들면서.
+ */
+describe("T-COST: 대표 이미지", () => {
+  it("모델 단가로 예약하고 같은 값으로 차감한다", async () => {
+    const response = await keyVisual(
+      request({
+        brief: { offeringName: "제품" },
+        blueprint: { sections: [section] },
+        imageModel: "gpt-image-2.5-flare",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const 예약한장 = state.reserve.mock.calls[0]![2] as number;
+    const 차감한장 = state.settle.mock.calls[0]![2] as number;
+    expect(예약한장).toBeGreaterThan(1);
+    expect(차감한장).toBe(예약한장);
+  });
+
+  it("싼 모델은 그만큼만 받는다", async () => {
+    await keyVisual(
+      request({ brief: { offeringName: "제품" }, blueprint: { sections: [section] }, imageModel: "nano-banana" }),
+    );
+
+    expect(state.reserve.mock.calls[0]![2]).toBe(1);
   });
 });

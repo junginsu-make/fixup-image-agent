@@ -733,6 +733,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         {notice ? (
           <p className="rounded-md bg-primary-soft p-3.5 text-sm text-foreground">{notice}</p>
         ) : null}
+        {result.planningExecutions?.some((entry) => entry.fallbackFrom) ? <p role="status" className="text-sm text-muted-foreground">대체 기획 모델로 작성한 구성안입니다. 내용을 확인해 주세요.</p> : null}
         <ScenarioEditor
           attachmentIntents={attachmentIntents}
           onIntentChange={setIntent}

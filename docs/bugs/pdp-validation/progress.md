@@ -170,3 +170,72 @@
 - 실제 브라우저: `w2-browser.cjs` / `w2-browser.txt` — 분리 worktree의 Next dev(3107), Edge headless, 두 모드의 입력→수정/추가→생성→왕복→v3 저장/새로고침, 이미지 3장과 수정 문구 복구 통과. 유료 `/api/pdp` 호출은 전부 mock이며 실제 AI 품질 시험은 아니다.
 - 코드 리뷰는 구현자 자체 diff 리뷰다. 새 문서의 서버 저장/승인 snapshot/QA 상태·원가 모델은 각각 W4/W5/W3에서 확장한다. v3의 보관기간 및 자산 GC·용량 측정은 E-6-3/W8 검증 과제이며 기존 v2 이관 전에 청소하지 않는다.
 - 레거시에 원래 기록되지 않았던 원문·모델 선택은 복원할 수 없다. 새 필드 기본값과 보존된 결과를 사용한다.
+
+
+## W3 — 기획 모델·참조·원가 (이어받아 진행)
+
+코덱스가 실호출 검증에서 멈춘 지점을 이어받았다. 멈춘 원인부터 밝히고 고쳤다.
+
+### 멈춘 원인 — 텍스트 기획이 잘려 죽었다
+
+`w3-live-planning.txt` 의 두 줄이 그대로 증거다.
+
+```
+image : passed  (섹션 6개, 4호출, $1.00, 241초)
+text  : failed  (INVALID_REQUEST, 111초)
+```
+
+추적 결과 `normalizeTextBlueprint`(`pdp.text-plan.ts:409`)의 「섹션이 0개」였다.
+그 앞을 거슬러 가면 원인은 **모델이 답을 끝까지 못 썼는데 아무도 안 봤다**는 것이다.
+
+- `viaAnthropic`(`apps/web/lib/pdp/providers.ts`)이 `stop_reason` 을 확인하지 않았다.
+  `max_tokens` 로 끊긴 조각난 도구 인자가 정상 응답처럼 아래로 흘렀다.
+- 코어가 `maxTokens: 8192` 를 손으로 실어 보내 제공자의 모델별 정책을 덮었다
+  (`pdp.text-plan.ts` 의 `depsFrom`, `pdp.service.ts` 의 `legacyContentsClient`).
+- 그래서 사용자는 111초를 기다리고 값을 다 치른 뒤 「구성안을 만들지 못했습니다」만 받았다.
+
+이는 설계 §10.1 「잘림은 명시 오류다. 모델 종료 이유·응답 크기를 남긴다」와
+Claude 리뷰 D-7 에 해당한다.
+
+### 고친 것
+
+| 항목 | 내용 | 증거 |
+|---|---|---|
+| D-7 | `stop_reason === "max_tokens"` 를 `PdpResponseTruncatedError` 로 즉시 던진다. 잘림은 예비 모델로 넘기지 않는다 — 같은 길이를 또 치르고 또 잘린다 | `providers.test.ts` 3건 RED→GREEN |
+| D-7 | 기획 호출의 길이 상한을 목적별로 나눴다(`PLANNING_MAX_TOKENS = 32768`, 검수는 8192 유지) | 같은 시험 |
+| D-7 | 잘림을 `AI_RESPONSE_INVALID` 로 매핑해 「처리 중 오류」로 뭉개지 않는다 | `pdp.planning-call.test.ts` |
+| §3 | 이름→목적 표(`purposeOfCall`)를 **코어 한 곳**에 두고 제공자가 그것을 쓴다. 코어는 길이 상한을 손으로 정하지 않는다 | `pdp.planning-call.test.ts` 3건 |
+| C-3 / E-6-1 | 대표 이미지가 `imageCreditUnits(model, 1)` 로 예약하고 **같은 값**으로 확정한다. flare 기준 1장 → 5장 | `route-reliability.test.ts` 2건 |
+| F-7-6 | 섹션 수정의 예약과 차감이 같은 값에서 나온다(전에는 예약 4장·차감 1장) | `redesign/settlement.test.ts` |
+| F-7-5 | 섹션 수정도 생성과 같은 길(fal · gpt-image-2.5 `max`)로 그린다. 키가 없을 때만 옛 직접 호출로 떨어진다 | 같은 시험 |
+
+`finalize-safety.test.ts` 의 대표 이미지 행은 장수 리터럴 대신 **던지지 않는 갈래**를
+쓰는지만 보도록 고쳤다. 장수는 `route-reliability.test.ts` 가 값으로 잰다 — 설계가 경계한
+「소스 문자열 검사를 그대로 늘리는 방식」을 피한다.
+
+### 이어받기 전에 이미 되어 있던 것 (코덱스 작업, 미커밋분에 포함)
+
+- D-1: 참조 상한 초과를 `.slice()` 로 버리지 않고 `assertReferenceBudget` 이 거절한다
+- D-2: `withModel` 이면 시스템 프롬프트도 「required」로 갈라진다
+- U-01: 사용자 연출 지시가 정체성 보존을 이기지 못한다
+- Fable 배선(`PDP_PLANNING_MODEL`), 기획 4xx 는 폴백으로 숨기지 않음, 실행 모델·폴백 사유 기록
+
+### 검증
+
+- `w3-continue-core-green.txt` — pdp-core 628 통과
+- `w3-continue-web-green.txt` — 웹 2,723 통과 / 6 skip
+- redesign-core 74 통과. 타입 검사 web·pdp-core·redesign-core 모두 0건
+- **실호출은 다시 돌리지 않았다.** 텍스트 기획이 실제로 통과하는지는 W3 종료 전
+  `w3-live-planning.cjs` 를 한 번 더 돌려 확인해야 한다(이미지 1회 $1 수준)
+
+### 남은 W3 항목
+
+D-9(단건·배치 모델 선택 규칙 통일), F-7-4(속도형 선택이 fal 고정 모델에 무시됨),
+F-7-7(1장씩 분할로 올림 반복), F-7-9·F-7-10-a(전사·실패 경로 원가 기록),
+C-4-a/b(기획·레퍼런스 분석 원가 기록), U-04~U-07, A-10·A-11·A-14, D-11-d/e.
+
+D-1 은 **예약 전에 알리지 못한다.** `assertReferenceBudget` 이 제공자 안에서 던지므로
+사용자는 예약을 잡은 뒤 오류를 본다(크레딧은 0장 확정으로 풀린다). 설계 §6.2 의
+「예약/유료 제출 전에 알린다」를 채우려면 각도·조각 수를 예약 앞에서 세야 하는데,
+캐릭터 조회가 `reservation.userId` 를 필요로 해 인증·예약 분리가 선행돼야 한다.
+W4 의 job 계약에서 함께 처리하는 것이 맞다.

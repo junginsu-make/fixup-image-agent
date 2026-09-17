@@ -173,7 +173,9 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     designerPersona(),
     "You are art-directing Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
-    `People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as ${whoAppears(options)}.`,
+    options.withModel
+      ? `Required subject: ${whoAppears(options)} must appear. Preserve their identity exactly.`
+      : `People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as ${whoAppears(options)}.`,
     // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용
     // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
     look === "photoreal"

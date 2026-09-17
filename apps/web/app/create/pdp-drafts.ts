@@ -15,6 +15,7 @@ import type {
   LandingPageBlueprint,
   ProductBrief,
   BlueprintReview,
+  PdpLlmExecution,
 } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
@@ -117,6 +118,7 @@ export interface PreparedImageDraft {
 
 /** 텍스트 경로의 중간 상태도 초안의 일부다. 컴포넌트 수명과 분리한다. */
 export interface PdpTextDraftState {
+  planningExecutions?: PdpLlmExecution[];
   stage: "input" | "scenario" | "unverifiedReview" | "keyVisual";
   text: string;
   brief: ProductBrief | null;
@@ -452,6 +454,7 @@ function normalizeGeneratedResult(
 ): GeneratedResult | null {
   if (result?.blueprint?.sections?.length) {
     return {
+      planningExecutions: result.planningExecutions,
       originalImage: result.originalImage || preparedImage?.previewUrl || toDataUrl(preparedImage),
       blueprint: {
         ...result.blueprint,

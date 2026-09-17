@@ -22,6 +22,7 @@ import type {
   PdpOutputMode,
   ProductBrief,
   TextPlanResponse,
+  PdpLlmExecution,
 } from "@fixup/pdp-core";
 import { KeyVisualGate } from "./KeyVisualGate";
 import { ScenarioEditor } from "./ScenarioEditor";
@@ -118,14 +119,15 @@ export function TextModeFlow({
   const [imageModel, setImageModel] = useState<ImageModelId>(initialDraft?.imageModel ?? DEFAULT_IMAGE_MODEL);
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [planningExecutions, setPlanningExecutions] = useState<PdpLlmExecution[] | undefined>(initialDraft?.planningExecutions);
 
   useEffect(() => {
     onDraftChange?.({ stage, text, brief, blueprint, originalBlueprint, review, styleReference,
       styleReferenceEnabled, preserveProduct, characterId, characterAngles, keyVisual,
-      imageModel, copyIntensity, gapPolicy });
+      imageModel, copyIntensity, gapPolicy, planningExecutions });
   }, [onDraftChange, stage, text, brief, blueprint, originalBlueprint, review, styleReference,
     styleReferenceEnabled, preserveProduct, characterId, characterAngles, keyVisual,
-    imageModel, copyIntensity, gapPolicy]);
+    imageModel, copyIntensity, gapPolicy, planningExecutions]);
 
   const handlePlan = async () => {
     setIsBusy(true);
@@ -152,6 +154,7 @@ export function TextModeFlow({
       }
 
       setBrief(response.result.brief);
+      setPlanningExecutions(response.result.planningExecutions);
       const replacement = replaceBlueprintState({ ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) });
       setOriginalBlueprint(replacement.originalBlueprint);
       setBlueprint(replacement.blueprint);
@@ -227,6 +230,8 @@ export function TextModeFlow({
         {
           originalImage: anchor.base64,
           blueprint: mergeArtDirection(originalBlueprint, blueprint),
+          review,
+          planningExecutions,
         },
         imageModel,
         review,
@@ -243,6 +248,7 @@ export function TextModeFlow({
 
   return (
     <div className="grid gap-4">
+      {planningExecutions?.some((entry) => entry.fallbackFrom) ? <p role="status" className="text-sm text-muted-foreground">대체 기획 모델로 구성안을 만들었습니다. 내용을 확인해 주세요.</p> : null}
       {errorMessage ? (
         <div className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
           <AlertCircle size={16} className="mt-0.5 flex-none text-destructive" />

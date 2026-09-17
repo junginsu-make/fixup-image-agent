@@ -42,3 +42,40 @@ describe("T-SETTLE: 리디자인 생성과 수정", () => {
     expect(response.status).toBe(400); expect(mocks.reserve).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * **예약과 차감이 같은 계산기에서 나와야 한다.**
+ *
+ * 2026-09-17 리뷰(F-7-5·F-7-6): 섹션 수정이 `imageCreditUnits`(4장)로 예약하고
+ * 확정은 손으로 적은 1장을 넘겼다. 사용량은 1장 줄고 장부에는 4장이 남는다.
+ */
+describe("T-COST: 리디자인 섹션 수정", () => {
+  it("예약한 장수와 차감한 장수가 같다", async () => {
+    const response = await edit(
+      new Request("http://local/api/redesign/edit", {
+        method: "POST",
+        body: JSON.stringify({ imageUrl: "data:image/png;base64,AAAA", request: "밝게" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const 예약한장 = mocks.reserve.mock.calls[0]![2] as number;
+    const 차감한장 = mocks.settle.mock.calls[0]![2] as number;
+    expect(차감한장).toBe(예약한장);
+    expect(예약한장).toBeGreaterThan(1);
+  });
+
+  it("고친 그림도 새로 만든 그림과 같은 품질로 그린다", async () => {
+    await edit(
+      new Request("http://local/api/redesign/edit", {
+        method: "POST",
+        body: JSON.stringify({ imageUrl: "data:image/png;base64,AAAA", request: "밝게" }),
+      }),
+    );
+
+    // 값은 gpt-image-2.5 `max` 기준으로 받는다. 실제로 저품질로 그리면
+    // 사용자는 비싼 값을 내고 뭉개진 글자를 받는다.
+    const 넘긴인자 = mocks.edit.mock.calls[0]![0] as { generateImage?: unknown };
+    expect(넘긴인자.generateImage).toBeTypeOf("function");
+  });
+});
