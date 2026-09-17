@@ -83,6 +83,7 @@ import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
+import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
   BASIC_SOLID_COLORS,
@@ -140,6 +141,13 @@ import { pdpProcessSource } from "../api/library/work-process";
 
 interface PdpEditorProps {
   initialResult: GeneratedResult;
+  /**
+   * 이 작업의 초안 id. 생성 결과를 서버에 적을 때 **무엇의 것인지** 묶는 값이다.
+   *
+   * 아직 저장 안 한 작업은 `null` 이다 — 그때는 서버가 예약 식별자로 대신하고
+   * 그 요청 한 건만 묶인다(`job-recovery.ts`).
+   */
+  draftId?: string | null;
   /** 텍스트 경로의 구성안 심사 결과. 있으면 자기채점 점수표 대신 이것을 보여준다. */
   review?: BlueprintReview;
   /** 이 페이지의 디자인 언어를 정하는 참조 이미지. 모든 섹션이 같은 것을 쓴다. */
@@ -229,6 +237,7 @@ type ImageGenerationOutcome = {
 
 export function PdpEditor({
   initialResult,
+  draftId = null,
   review,
   styleReference,
   preserveProduct = true,
@@ -1560,6 +1569,8 @@ export function PdpEditor({
           method: "POST",
           body: JSON.stringify({
             originalImageBase64: initialResult.originalImage,
+            // 결과를 서버에 적을 때 무엇의 것인지 묶는다. 저장 전이면 안 싣는다.
+            ...jobRequestFields(draftId, 0),
             sections: chunk.map(({ section }) => section),
             // 묶음 안 순서가 아니라 **페이지에서의 자리**를 보낸다. 인물 사진을
             // 「첫 섹션에만」 쓸 때 두 번째 묶음의 첫 장은 히어로가 아니다.
