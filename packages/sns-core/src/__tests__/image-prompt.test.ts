@@ -9,6 +9,7 @@ import {
   mergedInstruction,
   referenceWarningsForRole,
   selectReferencesForRole,
+  stripModelMentions,
   writeImagePrompt,
 } from "../image-prompt";
 import type { ScenePromptRequest } from "../image-prompt";
@@ -492,5 +493,119 @@ describe("캐릭터 여러 각도 지시", () => {
     ]);
 
     expect(block.match(/SAME character/gi)).toHaveLength(2);
+  });
+});
+
+/**
+ * **장면을 쓰는 LLM 이 어떤 모델이 그릴지 알아야 한다.**
+ *
+ * 카드뉴스는 포스터와 다르다. 포스터의 기획은 **칸에 내용을 채우고** 문장은
+ * 코드가 짜지만, 여기서는 LLM 이 **프롬프트 본문을 직접 쓴다**
+ * (`Return only the image prompt body`).
+ *
+ * 그래서 「이 모델에 맞게 쓰라」가 실제로 손댈 자리가 있다 — 문장이 LLM 것이다.
+ * 포스터에서 같은 것을 해 봤을 때 아무 차이가 없었던 까닭이 이것이다
+ * (2026-09-17 실측, 설계 §11-7).
+ *
+ * **우리가 모델별 요령을 지어내지 않는다.** 재 보지 않은 것을 적으면 그것이
+ * 그대로 그림에 간다. 이름만 주고 판단은 LLM 이 한다.
+ */
+describe("어떤 모델이 그리는가", () => {
+  const base = {
+    role: "cover" as const,
+    copy: { index: 1, headline: "제목" },
+    plan: { index: 1, role: "cover" as const, intent: "x", visualBrief: "y" },
+    grouped: groupAttachments([]),
+    size: { width: 1088, height: 1360 },
+    language: "ko" as const,
+  };
+
+  it("모델 이름을 싣는다", () => {
+    const request = buildSceneRequest({ ...base, modelId: "nano-banana-pro (fal-ai/nano-banana-pro)" });
+
+    expect(request.prompt).toContain("fal-ai/nano-banana-pro");
+  });
+
+  /** 이름만 주면 안 쓴다. 무엇을 하라고 함께 말해야 한다(설계 §11-5). */
+  it("그 이름으로 무엇을 할지 함께 말한다", () => {
+    const request = buildSceneRequest({ ...base, modelId: "gpt-image-2.5-flare" });
+
+    expect(request.prompt).toMatch(/rendered by|target model/i);
+  });
+
+  /** 옛 작업·화면 밖 경로에는 없다. 없으면 지금까지대로 아무 말도 안 한다. */
+  it("안 넘기면 그 줄이 없다", () => {
+    expect(buildSceneRequest(base).prompt).not.toMatch(/target model/i);
+  });
+
+  /**
+   * **길이를 줄이라는 뜻이 아니다.**
+   *
+   * 처음에는 「그 모델이 가장 잘 따르는 대로 쓰라」고만 했다. 그랬더니 LLM 이
+   * gpt 계열에는 **짧게** 썼다(992자 대 1,850자). 그런데 긴 프롬프트도 잘
+   *반영되는 것을 확인했다(2026-09-17 사용자) — 자세할수록 그림에 더 들어간다.
+   *
+   * 모델에 맞추는 것은 **말투**이지 분량이 아니다. 둘을 갈라 말한다.
+   */
+  it("자세히 쓰라고 함께 말한다", () => {
+    const request = buildSceneRequest({ ...base, modelId: "gpt-image-2.5-flare" });
+
+    expect(request.prompt).toMatch(/as much (useful )?detail|do not shorten|length limit/i);
+  });
+
+  /** 모델을 안 알려 줘도 자세히 쓰는 것은 마찬가지다. */
+  it("모델을 몰라도 자세히 쓰라고 한다", () => {
+    expect(buildSceneRequest(base).prompt).toMatch(/as much (useful )?detail|length limit/i);
+  });
+});
+
+/**
+ * **모델·업체 이름이 사용자 화면에 새면 안 된다.**
+ *
+ * 장면 LLM 이 쓴 본문은 그대로 저장돼 결과 화면의 「그림 지시(프롬프트)」에
+ * 보인다(`result-board.tsx`). 그 LLM 은 방금 `fal-ai/nano-banana-pro` 를 읽었고,
+ * 답 첫 줄에 「Optimized for fal-ai/…」 한 번만 적으면 사용자가 그것을 본다
+ * (2026-09-17 리뷰).
+ *
+ * 화면에는 「표준형」 같은 **우리 이름**만 나가야 한다
+ * (`apps/web/lib/__tests__/model-name.test.ts` 가 지키는 규칙).
+ *
+ * **프롬프트로도 막고 여기서도 막는다.** 「쓰지 말라」는 지킬 수도 안 지킬 수도
+ * 있는 부탁이고, 안 지켰을 때 아무도 모른다.
+ */
+describe("모델 이름이 새지 않는다", () => {
+  it("업체 엔드포인트가 든 줄을 뺀다", () => {
+    const body = "Optimized for fal-ai/nano-banana-pro:\n\nA wooden desk in warm light.";
+
+    expect(stripModelMentions(body)).toBe("A wooden desk in warm light.");
+  });
+
+  it("openai 엔드포인트도 뺀다", () => {
+    const body = "(openai/gpt-image-2.5/flare/edit)\nA desk.";
+
+    expect(stripModelMentions(body)).toBe("A desk.");
+  });
+
+  /** 우리 id 도 화면에 안 나가는 이름이다. */
+  it("우리 id 가 든 줄도 뺀다", () => {
+    expect(stripModelMentions("For nano-banana-pro:\nA desk.")).toBe("A desk.");
+  });
+
+  /** 멀쩡한 본문은 그대로 둔다. 애먼 줄을 지우면 그림이 달라진다. */
+  it("멀쩡한 본문은 안 건드린다", () => {
+    const body = "A wooden desk in warm light.\nA key rests on the contract.";
+
+    expect(stripModelMentions(body)).toBe(body);
+  });
+
+  /** 「banana」가 장면에 나올 수도 있다. 낱말이 아니라 모델 id 로 본다. */
+  it("장면에 나온 바나나는 안 지운다", () => {
+    const body = "A banana on the desk, lit from the left.";
+
+    expect(stripModelMentions(body)).toBe(body);
+  });
+
+  it("빈 본문은 빈 본문이다", () => {
+    expect(stripModelMentions("")).toBe("");
   });
 });

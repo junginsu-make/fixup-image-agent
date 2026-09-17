@@ -166,7 +166,18 @@ class AnthropicSceneProvider implements ImagePromptProvider {
     const images = await Promise.all(request.imageUrls.map(imageBlock));
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 1800,
+      /*
+       * **장면 프롬프트는 길어도 된다.**
+       *
+       * 1800 이면 영어로 7,000자 남짓이라 지금 나오는 2,000자에는 여유가
+       * 있었다. 그런데 프롬프트에 「길이 제한 없이 자세히 쓰라」를 넣으면서
+       * 천장이 가까워진다 — 자세히 쓰라고 해 놓고 중간에 자르면 **문장이
+       * 끊긴 채로** 그림 모델에 간다. 끊긴 것은 눈에도 잘 안 띈다.
+       *
+       * 검수(`AnthropicReviewProvider`)는 안 올린다 — 거기는 정해진 칸을
+       * 채우는 일이라 길어질 까닭이 없다.
+       */
+      max_tokens: 8000,
       messages: [{ role: "user", content: [{ type: "text", text: request.prompt }, ...images] }],
     });
     recordFrom(this.model, response);

@@ -635,3 +635,99 @@ describe("첨부가 없는데 auto 가 들어오면", () => {
     expect(prompt).toMatch(/cel-shaded/i);
   });
 });
+
+/**
+ * **글자 칸이 전부 「AI 가 골라 채운 것」이면 사용자는 글자를 안 시킨 것이다.**
+ *
+ * 전에는 「빈 칸이면 글자를 안 시킨 것」으로 읽었다. 기획이 근거 없는 칸을 비워
+ * 뒀기 때문이다. 그런데 기획을 「다 채우게」 바꾸면서 그 신호가 사라졌다 —
+ * headline 이 늘 차서 **「글자를 넣지 말라」에 도달할 길이 없어졌다**
+ * (2026-09-17 리뷰).
+ *
+ * 그 자리를 `invented` 가 대신한다. 실측으로 갈리는 것을 확인했다(각 4·3회):
+ *
+ *   「…헤드라인은 「가을, 셔터를 누르다」」 → headline 은 그대로 옮겨 적고
+ *                                        invented 에 **안** 넣는다
+ *   「벚꽃 아래에서 손을 흔드는 학생」      → 글자 칸 **셋 다** invented
+ *
+ * **하나라도 사람 것이면 금지하지 않는다.** 나머지는 기획의 제안이고, 04 에
+ * 표가 붙어 있어 사람이 지울 수 있다.
+ */
+describe("글자가 전부 AI 가 고른 것일 때", () => {
+  const 글자칸 = ["headline", "subline", "sideTexts"];
+
+  it("셋 다 AI 것이면 글자를 넣지 말라고 한다", () => {
+    const prompt = buildPosterPrompt({ slots, images, size, invented: 글자칸 });
+
+    expect(prompt).toContain("Render it with NO text");
+  });
+
+  /** 금지하면서 그 글자를 같이 실으면 앞뒤가 안 맞는다. */
+  it("그때 그 글자를 싣지 않는다", () => {
+    const prompt = buildPosterPrompt({ slots, images, size, invented: 글자칸 });
+
+    expect(prompt).not.toContain("가을, 셔터를 누르다");
+  });
+
+  it("헤드라인이 사람 것이면 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: ["subline", "sideTexts"],
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("가을, 셔터를 누르다");
+  });
+
+  /**
+   * **헤드라인 하나로만 재면 안 된다.**
+   *
+   * 여섯 시험이 전부 헤드라인으로 갈려서, 「곁텍스트를 아예 안 센다」거나
+   * 「headline 만 본다」는 변이가 다 통과했다(2026-09-17 리뷰). 셋을 각각
+   * 사람 것으로 두고 재야 그 판단이 재어진다.
+   */
+  it("받침 문구만 사람 것이어도 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: ["headline", "sideTexts"],
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("필름으로 담은 도시의 온도");
+  });
+
+  it("곁텍스트만 사람 것이어도 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: ["headline", "subline"],
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("28MM F2.0");
+  });
+
+  /** 글자 아닌 칸이 AI 것인 건 상관없다. 그림 이야기다. */
+  it("글자 아닌 칸만 AI 것이면 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: ["scene", "dominantColor"],
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+  });
+
+  /** 옛 작업에는 이 값이 없다. 지금까지대로 칸이 비었는지로만 본다. */
+  it("안 넘기면 지금까지대로다", () => {
+    expect(buildPosterPrompt({ slots, images, size })).toContain("가을, 셔터를 누르다");
+    expect(buildPosterPrompt({ slots: EMPTY_SLOTS, images, size }))
+      .toContain("Render it with NO text");
+  });
+
+  /**
+   * **쓴 그대로는 여전히 아무 말도 안 한다.** 글자를 넣을지는 사용자 프롬프트가
+   * 정한다. 그 갈래는 기획을 안 돌리므로 `invented` 도 비어 있다.
+   */
+  it("쓴 그대로면 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots: EMPTY_SLOTS, images, size, verbatimScene: "직접 쓴 프롬프트",
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+  });
+});

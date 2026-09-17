@@ -135,3 +135,119 @@ describe("칸을 걸러서 보여주는가", () => {
     expect(source).toMatch(/busy\?\.kind === "plan" \? \(\s*<PlanWriting/);
   });
 });
+
+/**
+ * **단계 막대가 「그대로 생성」을 안다.**
+ *
+ * 그 갈래는 04 에 고칠 것이 없는데 막대가 「04 기획 확인」을 그대로 내보이고
+ * 있었다(2026-09-17 설계 대조). 부름을 막는 쪽은 화면·서버 둘 다 하고 있어
+ * 값이 새지는 않았고, 어긋난 것은 **사용자에게 보이는 차례**뿐이었다.
+ *
+ * 판단은 `steps.ts` 에 있다. 화면이 목록을 도로 박아 넣으면 값으로 잰 것이
+ * 화면에 안 닿는다.
+ */
+describe("단계 막대", () => {
+  it("차례를 steps 에서 받아 온다", () => {
+    expect(source).toContain("posterSteps(project.data.promptMode)");
+    expect(source).toContain("currentPosterStep(");
+  });
+
+  it("목록을 화면에 도로 박지 않는다", () => {
+    expect(source).not.toContain("steps={POSTER_STEPS}");
+  });
+
+  /** 서 있는 단계도 화면이 정하면 안 된다. 없는 칸을 가리키게 된다. */
+  it("서 있는 단계를 화면이 정하지 않는다", () => {
+    expect(source).not.toContain('list.length ? "result" : "plan"');
+  });
+});
+
+/**
+ * **AI 가 지어낸 칸을 사용자가 알아볼 수 있어야 한다.**
+ *
+ * 전에는 기획이 근거 없는 칸을 아예 비웠다. 뜻은 분명했지만 너무 잘 들어서
+ * 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다(2026-09-16 실측) — 초보일수록 빈
+ * 칸을 못 채우는데 그 사람이 도움을 받으러 왔다.
+ *
+ * 지금은 채우게 하고 표를 붙인다. **표가 안 보이면 이 바꿈이 그냥 나빠지기만
+ * 한다** — AI 가 지어낸 설정이 조용히 그림에 들어가고 사용자는 왜 그게 나왔는지
+ * 모른다(2026-09-17 사용자 결정).
+ */
+describe("지어낸 칸 표시", () => {
+  it("저장된 목록을 읽어 온다", () => {
+    expect(source).toContain("project.data.inventedSlots ?? []");
+  });
+
+  /**
+   * **새로 기획한 뒤에도 받아야 한다.**
+   *
+   * 새로 만든 작업은 초기값이 늘 비어 있다. 기획을 돌린 뒤 목록을 안 받으면
+   * 칸은 AI 가 다 채웠는데 **표가 하나도 안 붙는다** — 주 경로에서 이 기능이
+   * 한 번도 안 보인다(2026-09-17 리뷰).
+   */
+  it("기획한 뒤 새 목록을 받는다", () => {
+    expect(source).toContain("setInvented(body.project.data.inventedSlots ?? [])");
+  });
+
+  /** 저장 뒤에는 서버가 정리한 것을 받는다. 무엇을 뺄지는 서버가 정한다. */
+  it("저장한 뒤에도 맞춘다", () => {
+    expect(source).toContain("setInvented(body.project?.data?.inventedSlots ?? [])");
+  });
+
+  it("그 칸에 표를 붙인다", () => {
+    expect(source).toContain("표붙은칸.includes(field)");
+    expect(source).toContain("AI 가 골라 채움");
+  });
+
+  /**
+   * **화면에 표를 붙일 수 있는 칸만 센다.**
+   *
+   * 기획은 열한 칸을 채우는데 이 화면은 아홉을 그린다. 그 둘을 섞어 빼면
+   * 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
+   */
+  it("셀 때도 같은 목록을 쓴다", () => {
+    expect(source).toContain("const 표붙은칸 = invented.filter(");
+    expect(source).toContain("filledFields.length - 표붙은칸.length");
+    // 날 목록으로 세면 음수가 난다.
+    expect(source).not.toContain("filledFields.length - invented.length");
+  });
+
+  /**
+   * **만들기 전에 먼저 저장한다.**
+   *
+   * 미리보기는 화면 state 를 보고 생성은 저장값을 본다. 전에는 값이 **내용**만
+   * 갈랐는데, 이제 「글자를 넣지 말라」라는 **분기**까지 가른다. 그래서 칸을
+   * 고치고 저장 안 한 채 만들면 미리보기에는 글자가 보이는데 **글자 하나 없는
+   * 그림**이 나온다(2026-09-17 리뷰).
+   *
+   * 고친 것을 버리는 쪽이 아니라 **살리는 쪽**으로 맞춘다 — 사람이 방금 한 일이다.
+   */
+  it("만들기 전에 저장한다", () => {
+    const 만들기 = source.slice(
+      source.indexOf("async function generate()"),
+      source.indexOf("async function pollUntilDone"),
+    );
+
+    expect(만들기.length, "generate 를 못 찾았다").toBeGreaterThan(50);
+    expect(만들기).toContain("if (!await saveSlots()) return;");
+  });
+
+  /** 저장이 실패했는데 만들면 틀린 값으로 그림을 만든다 — 값이 드는 일이다. */
+  it("저장 실패를 삼키지 않는다", () => {
+    const 저장 = source.slice(
+      source.indexOf("async function saveSlots"),
+      source.indexOf("async function runPlan"),
+    );
+
+    expect(저장).toContain("return true;");
+    expect(저장).toContain("return false;");
+  });
+
+  /**
+   * **손댄 칸은 더 이상 AI 것이 아니다.** 표를 그대로 두면 자기가 쓴 글에
+   * 「확인하세요」가 붙어 있는 꼴이 된다.
+   */
+  it("고치면 표가 사라진다", () => {
+    expect(source).toContain('setInvented((current) => current.filter((name) => name !== field))');
+  });
+});

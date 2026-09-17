@@ -14,6 +14,7 @@ import {
   CHARACTER_ANGLES, CHARACTER_SHEET, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, selectCharacterModel,
   type CharacterAngle,
 } from "@fixup/pdp-core";
+import { IMAGE_LOOKS } from "@fixup/shared";
 import { teamIdOf } from "../../../lib/teams/store";
 
 export const runtime = "nodejs";
@@ -35,7 +36,13 @@ export const maxDuration = 300;
  */
 
 const KINDS = ["person", "animal", "character", "object"] as const;
-const LOOKS = ["photoreal", "anime", "3d", "illustration"] as const;
+/*
+ * **결 목록을 여기 베껴 적지 않는다.**
+ *
+ * 네 개를 적어 뒀더니 공용 목록에 「레퍼런스 스타일」이 들어간 뒤에도 이 라우트만
+ * 그것을 몰라, 화면이 보내는 값을 **타입 단계에서 거부**했다(2026-09-17 대조).
+ */
+const LOOKS = IMAGE_LOOKS;
 const ASPECTS = ["1:1", "3:4", "4:3", "9:16", "16:9"] as const;
 
 /** 입력은 전부 여기서 거른다. 아래 코드는 값이 맞다고 믿는다. */

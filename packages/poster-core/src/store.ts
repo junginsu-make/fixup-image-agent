@@ -79,6 +79,12 @@ export interface PosterProjectRecord {
     /** 첨부한 그림들을 어떻게 쓸지. 옛 작업에는 없다. */
     attachmentIntent?: string;
     slots: PosterSlots;
+    /**
+     * 기획이 **근거 없이 채웠다고 밝힌** 칸 이름들. 04 가 여기에 표를 붙인다.
+     *
+     * 옛 작업에는 없다. 없으면 「지어낸 것이 없다」로 읽는다.
+     */
+    inventedSlots?: string[];
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];
     /**

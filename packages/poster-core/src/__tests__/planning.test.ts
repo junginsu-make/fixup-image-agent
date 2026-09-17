@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildPlanPrompt, planPoster, PRIMARY_POSTER_MODEL } from "../planning";
-import { EMPTY_SLOTS } from "../schemas";
+import { EMPTY_SLOTS, keepInvented } from "../schemas";
 
 const input = {
   instruction: "필름 카메라 감성의 사진전 포스터",
@@ -45,7 +45,9 @@ describe("슬롯 기획", () => {
   });
 
   it("채워진 슬롯을 돌려준다", async () => {
-    const result = await planPoster(input, { plan: async () => ({ slots: filled }) });
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: [] }),
+    });
     expect(result.slots.headline).toBe("가을, 셔터를 누르다");
     expect(result.slots.sideTexts).toEqual(["28MM F2.0", "ISO 400"]);
     expect(result.issues).toEqual([]);
@@ -192,5 +194,217 @@ describe("사람을 한 명씩 넘긴다", () => {
     const prompt = buildPlanPrompt(input);
     expect(prompt).toContain("1. SNAP 포스터");
     expect(prompt).not.toContain("       · ");
+  });
+});
+
+/**
+ * **빈 칸을 남기지 않는다. 대신 지어낸 것을 밝힌다.**
+ *
+ * 전에는 「알 수 없는 칸은 지어내지 말고 비워 두세요」였다. 뜻은 분명했다 — AI 가
+ * 지어낸 설정이 그림에 섞이면 사용자는 왜 그게 나왔는지 모른다.
+ *
+ * **그런데 너무 잘 들었다.** 「벚꽃 아래에서 손을 흔드는 교복 입은 학생」에 칸을
+ * 0개 채운다(2026-09-16 실측). 벚꽃에서 분홍을 읽는 것은 날조가 아니라 당연한
+ * 읽기인데, 「지어내지 말라」를 성실히 따르면 그것까지 비운다. AI 가 추론과 날조를
+ * 구분하지 못하고 둘 다 피하는 것으로 보인다.
+ *
+ * 초보일수록 빈 칸을 못 채운다. 그 사람이 도움을 받으러 왔다.
+ *
+ * **그래서 채우게 하고, 지어낸 칸을 표시한다**(2026-09-17 사용자 결정). 사용자가
+ * 04 에서 그 표를 보고 지우거나 고친다. 판단은 사람이 하되, 판단할 거리는
+ * AI 가 만들어 준다.
+ */
+describe("지어낸 칸", () => {
+  it("기획이 돌려준 목록을 그대로 낸다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["dominantColor", "action"] }),
+    });
+
+    expect(result.invented).toEqual(["dominantColor", "action"]);
+  });
+
+  /**
+   * 안 돌려주면 빈 목록으로 읽되 **그 사실을 남긴다.**
+   *
+   * 빈 목록과 「안 줬다」는 다르다. 안 줬는데 빈 목록으로만 읽으면 글자 칸이
+   * 전부 사람 것으로 보여, 2026-09-08 사고를 막던 금지문이 영영 안 붙는다
+   * (2026-09-17 리뷰). 옛 신호(빈 칸)는 결정적이었는데 새 신호는 자기신고라,
+   * 못 받았을 때 기본값이 위험한 쪽으로 떨어진다.
+   */
+  it("안 돌려주면 빈 목록이되 그 사실을 남긴다", async () => {
+    const result = await planPoster(input, { plan: async () => ({ slots: filled }) });
+
+    expect(result.invented).toEqual([]);
+    expect(result.issues.join("\n")).toMatch(/안 알려/);
+  });
+
+  /**
+   * **모르는 칸 이름은 버린다.** 화면은 이름으로 칸을 찾으므로, 없는 이름이
+   * 섞이면 조용히 아무 데도 표시가 안 붙는다. 들어올 때 걸러 낸다.
+   */
+  it("없는 칸 이름은 버린다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["scene", "없는칸", "mood"] }),
+    });
+
+    expect(result.invented).toEqual(["scene"]);
+  });
+
+  it("목록이 아니면 빈 목록이다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: "dominantColor" }),
+    });
+
+    expect(result.invented).toEqual([]);
+  });
+
+  /** 기획이 통째로 실패하면 지어낸 것도 없다. */
+  it("실패하면 빈 목록이다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => { throw new Error("주 실패"); },
+    });
+
+    expect(result.invented).toEqual([]);
+  });
+});
+
+describe("기획 프롬프트의 규칙", () => {
+  const prompt = buildPlanPrompt(input);
+
+  it("빈 칸을 남기지 말라고 한다", () => {
+    expect(prompt).toContain("비워 두지 말고");
+  });
+
+  /** 「지어내지 마세요」가 남아 있으면 둘이 부딪혀 AI 가 안전한 쪽으로 쏠린다. */
+  it("지어내지 말라는 말이 안 남았다", () => {
+    expect(prompt).not.toContain("지어내지 말고 비워");
+  });
+
+  it("지어낸 칸을 적으라고 한다", () => {
+    expect(prompt).toContain("invented");
+  });
+});
+
+
+/**
+ * **사람이 고친 칸은 더 이상 「AI 가 골라 채운 것」이 아니다.**
+ *
+ * 표를 그대로 두면 자기가 쓴 글에 「AI 가 골라 채움」이 붙어 있는 꼴이 된다.
+ *
+ * **화면이 아니라 서버가 뺀다.** 화면 state 에서만 지우면 새로고침에 되살아난다
+ * (2026-09-17 리뷰). 저장은 옛 값과 새 값을 둘 다 아는 자리라, 무엇이 바뀌었는지
+ * 여기서 알 수 있다. 화면을 안 믿어도 되는 쪽이 안전하다.
+ */
+describe("고친 칸은 표에서 뺀다", () => {
+  const 옛값 = { ...EMPTY_SLOTS, headline: "AI 가 쓴 말", dominantColor: "주황" };
+
+  it("바꾼 칸이 빠진다", () => {
+    const 남은것 = keepInvented(["headline", "dominantColor"], 옛값, {
+      ...옛값, headline: "사람이 고친 말",
+    });
+
+    expect(남은것).toEqual(["dominantColor"]);
+  });
+
+  it("안 바꾼 칸은 남는다", () => {
+    expect(keepInvented(["headline"], 옛값, 옛값)).toEqual(["headline"]);
+  });
+
+  /** 지우는 것도 고치는 것이다. 사람이 「이건 빼자」고 판단한 것이다. */
+  it("지운 칸도 빠진다", () => {
+    expect(keepInvented(["headline"], 옛값, { ...옛값, headline: "" })).toEqual([]);
+  });
+
+  /** 배열 칸도 본다. 곁텍스트는 문자열이 아니다. */
+  it("곁텍스트가 바뀌어도 빠진다", () => {
+    const 있음 = { ...EMPTY_SLOTS, sideTexts: ["가", "나"] };
+    expect(keepInvented(["sideTexts"], 있음, { ...있음, sideTexts: ["가"] })).toEqual([]);
+    expect(keepInvented(["sideTexts"], 있음, 있음)).toEqual(["sideTexts"]);
+  });
+
+  it("옛 목록이 없으면 빈 목록이다", () => {
+    expect(keepInvented(undefined, 옛값, 옛값)).toEqual([]);
+  });
+});
+
+/**
+ * **평평하게 돌려줘도 읽는다.**
+ *
+ * 전에는 `{ slots: … }` 로 안 감싸고 칸을 바로 올려도 `?? raw` 가 받아 냈다.
+ * 그런데 `invented` 를 더하면서 그 응답에 낯선 칸이 하나 섞이게 됐고,
+ * `PosterSlotsSchema` 가 `.strict()` 라 「Unrecognized key」로 던진다 — 예비
+ * 제공자까지 부르고(돈·시간) 결국 빈 슬롯이 된다(2026-09-17 리뷰).
+ */
+describe("평평한 응답", () => {
+  it("칸을 바로 올려도 읽는다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ ...filled, invented: ["dominantColor"] }),
+    });
+
+    expect(result.slots.headline).toBe("가을, 셔터를 누르다");
+    expect(result.invented).toEqual(["dominantColor"]);
+    expect(result.issues).toEqual([]);
+  });
+});
+
+describe("못 알아들은 칸 이름", () => {
+  it("몇 개를 버렸는지 남긴다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["지배색", "slots.scene", "scene"] }),
+    });
+
+    expect(result.invented).toEqual(["scene"]);
+    expect(result.issues.join("\n")).toMatch(/2개/);
+  });
+
+  /** 다 알아들었으면 아무 말도 안 한다. 쓸데없는 경고는 다음 경고를 흐린다. */
+  it("다 알아들으면 조용하다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["scene"] }),
+    });
+
+    expect(result.issues).toEqual([]);
+  });
+
+  /** 같은 이름을 두 번 적어도 한 번만 센다. */
+  it("겹친 이름은 하나로 본다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["scene", "scene"] }),
+    });
+
+    expect(result.invented).toEqual(["scene"]);
+  });
+});
+
+/**
+ * **장면 칸을 자세히 쓰게 한다.**
+ *
+ * 최종 프롬프트의 ④ 구역은 이 칸들에서 나온다(`prompt.ts` 의 `sceneLines`).
+ * 칸이 「해 질 녘 바닷가」면 그림 모델이 받는 것도 딱 그만큼이고, 나머지는
+ * 모델이 알아서 정한다 — 사용자가 바란 것이 아닌 쪽으로 갈 수 있다.
+ *
+ * 실측에서 포스터 슬롯은 다 합쳐 260자였다. 같은 일을 하는 카드뉴스의 장면
+ * 문장은 1,850자다(2026-09-17). **긴 프롬프트도 잘 반영되는 것을 확인했다**
+ * (사용자) — 자세할수록 그림에 더 들어간다.
+ *
+ * **글자 칸은 다르다.** 거기는 사람이 시킨 글자만 쓴다 — 길게 쓰라고 하면
+ * 없는 문구를 지어낸다.
+ */
+describe("장면을 자세히", () => {
+  const prompt = buildPlanPrompt(input);
+
+  it("자세히 쓰라고 말한다", () => {
+    expect(prompt).toMatch(/자세히|구체적으로/);
+  });
+
+  /** 무엇을 적을지 알려 줘야 한다. 「자세히」만으로는 무엇을 더 쓸지 모른다. */
+  it("무엇을 적을지 짚어 준다", () => {
+    expect(prompt).toMatch(/빛|조명/);
+    expect(prompt).toMatch(/재질|질감/);
+  });
+
+  /** 길이를 스스로 줄이지 말라고 못 박는다. */
+  it("길이를 스스로 줄이지 말라고 한다", () => {
+    expect(prompt).toMatch(/줄이지|길어도/);
   });
 });

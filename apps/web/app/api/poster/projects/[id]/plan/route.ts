@@ -150,7 +150,19 @@ async function plan(request: Request, context: Context) {
 
     const saved = await stores.projects.update(id, {
       status: "ready",
-      data: { ...project.data, slots, grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues] },
+      data: {
+        ...project.data,
+        slots,
+        /*
+         * **기획이 근거 없이 채운 칸.** 04 가 여기에 표를 붙인다.
+         *
+         * 문법에서 깔아 준 값(`seed`)은 지어낸 것이 아니다 — 붙인 그림을 실제로
+         * 읽어서 나온 값이다. 기획이 안 채워 `seed` 가 들어간 칸은 기획도
+         * `invented` 에 안 적으므로 저절로 빠진다.
+         */
+        inventedSlots: plan.invented,
+        grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues],
+      },
     });
     /**
      * **어림 대신 실측으로 닫는다.** 예약은 부르기 전이라 어림일 수밖에 없지만,

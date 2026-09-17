@@ -69,6 +69,14 @@ export interface PosterPromptInput {
    */
   verbatimScene?: string;
   /**
+   * 기획이 **근거 없이 채웠다고 밝힌** 칸 이름들.
+   *
+   * 글자 칸이 전부 여기 들어 있으면 사용자가 글자를 안 시킨 것이라, 아래에서
+   * 「글자를 넣지 말라」를 붙인다. 옛 작업에는 없다 — 없으면 지금까지대로
+   * 칸이 비었는지로만 본다.
+   */
+  invented?: string[];
+  /**
    * 첨부한 그림들을 어떻게 쓸지 사용자가 01에서 적은 말.
    *
    * 03의 `userInstruction` 과 **뜻이 다르다** — 이쪽은 그림 얘기, 저쪽은
@@ -251,12 +259,31 @@ function sceneLines(slots: PosterSlots): string[] {
  * 「글자를 안 원한다」가 아니라 「우리가 안 물어봤다」는 뜻이다. 그때 금지하면
  * 사용자 프롬프트가 글자를 요구해도 우리가 막는다(2026-09-16 실물 확인).
  */
-function copyLines(slots: PosterSlots, verbatim = false): string[] {
-  const all: Array<[string, string]> = [
+function copyLines(slots: PosterSlots, verbatim = false, invented: string[] = []): string[] {
+  /*
+   * **글자 칸이 전부 「AI 가 골라 채운 것」이면 사용자는 글자를 안 시킨 것이다.**
+   *
+   * 전에는 「빈 칸이면 안 시킨 것」으로 읽었다 — 기획이 근거 없는 칸을 비웠기
+   * 때문이다. 기획을 「다 채우게」 바꾸면서 그 신호가 사라졌다(2026-09-17).
+   * headline 이 늘 차서 아래 금지문에 **도달할 길이 없어졌다.**
+   *
+   * 그 자리를 `invented` 가 대신한다. 실측으로 갈리는 것을 확인했다(각 4·3회) —
+   * 「헤드라인은 「가을, 셔터를 누르다」」라고 적으면 그대로 옮겨 적고 `invented`
+   * 에 안 넣는다. 글자 얘기가 없으면 셋 다 넣는다.
+   *
+   * **하나라도 사람 것이면 금지하지 않는다.** 나머지는 기획의 제안이고 04 에
+   * 표가 붙어 있어 사람이 지울 수 있다.
+   */
+  const 사람이적은칸 = (["headline", "subline"] as const)
+    .filter((field) => slots[field].trim().length > 0 && !invented.includes(field));
+  const 곁텍스트도적었나 = slots.sideTexts.length > 0 && !invented.includes("sideTexts");
+  const 사람이시킨글자 = 사람이적은칸.length > 0 || 곁텍스트도적었나;
+
+  const all: Array<[string, string]> = 사람이시킨글자 ? [
     ["HEADLINE", slots.headline],
     ["SUBLINE", slots.subline],
     ...slots.sideTexts.map((value, index): [string, string] => [`SIDE ${index + 1}`, value]),
-  ];
+  ] : [];
   const entries = all.filter(([, value]) => value.trim().length > 0);
 
   /**
@@ -362,7 +389,7 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
       : sceneLines(input.slots)),
     ...(look ? [look] : []),
     "",
-    ...copyLines(input.slots, Boolean(input.verbatimScene?.trim())),
+    ...copyLines(input.slots, Boolean(input.verbatimScene?.trim()), input.invented),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
     // 맨 뒤에서 한 번 더 못 박는다. 긴 프롬프트에서 중간은 힘을 잃는다.

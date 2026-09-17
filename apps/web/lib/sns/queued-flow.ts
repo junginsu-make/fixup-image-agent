@@ -7,6 +7,9 @@ import {
   intentForRole,
   mergedInstruction,
   groupAttachments,
+  modelEndpointLabel,
+  hasStyleSource,
+  resolveLook,
   modelById,
   pickEndpoint,
   resolveSize,
@@ -261,7 +264,23 @@ export async function startQueuedFlow(
   // 빈 문자열로 읽힌다 — 그러면 지금까지와 똑같이 동작한다.
   const note = options.note?.trim();
   const tuning: PromptTuning = {
-    look: project.data.look,
+    /*
+     * **결은 여기서 한 번 내린다.**
+     *
+     * 「레퍼런스 스타일」의 지시문은 빈 문자열이다 — 따라갈 그림이 정해 주기
+     * 때문이다. 그런데 따라갈 그림이 **하나도 없으면** 무엇으로 그릴지 정하는
+     * 말이 프롬프트에 한 줄도 안 들어가고 모델이 제멋대로 고른다. 화면은 그
+     * 칸을 흐리게 막지만 화면을 안 거치는 길이 있다(옛 작업 다시 돌리기).
+     *
+     * **카드마다 재면 안 된다.** 프롬프트 만드는 자리에서 역할별 레퍼런스 수로
+     * 재 봤더니, 표지 레퍼런스만 붙인 사람의 속지·엔딩이 실사로 나갔다
+     * (2026-09-17 리뷰). 역할이 빈 것은 다른 문제고
+     * `referenceWarningsForRole` 이 이미 경고한다.
+     *
+     * **여기가 모든 길이 지나는 자리다.** 아래 레이아웃 칸 갈래
+     * (`buildSlotPrompt`)도 이 값을 받는다 — 거기는 `buildFrame` 을 안 지난다.
+     */
+    look: resolveLook(project.data.look ?? "auto", hasStyleSource(project.data.attachments)),
     // 적은 말을 **뒤에** 붙인다. 뒤에 온 말이 앞말을 덮는 것이 사람의 기대다.
     userInstruction: [project.data.userInstruction?.trim(), note].filter(Boolean).join(NOTE_SEPARATOR) || undefined,
   };
@@ -361,6 +380,13 @@ export async function startQueuedFlow(
       language: project.language,
       ...tuning,
       attachmentIntents: intents,
+      /*
+       * 어떤 모델이 그릴지 알려 준다. 여기서는 LLM 이 프롬프트 본문을 직접 쓴다.
+       *
+       * **이 카드가 실제로 부를 엔드포인트를 준다.** 레퍼런스가 있으면 `edit`
+       * 쪽으로 가는데 늘 `t2i` 를 알려 주면 틀린 이름이 간다(2026-09-17 리뷰).
+       */
+      modelId: modelEndpointLabel(project.modelId, selectReferencesForRole(grouped, card.role).length > 0),
     }, dependencies.sceneProvider);
     const images = selectReferencesForRole(grouped, card.role);
     /**

@@ -17,7 +17,7 @@ import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
-import { POSTER_STEPS, reachableBeforeCreate } from "../steps";
+import { currentPosterStep, posterSteps, reachableBeforeCreate } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import {
@@ -65,6 +65,8 @@ interface PosterProject {
     look?: ImageLook;
     /** 쓴 그대로 보낼지. 옛 작업에는 없다 — 없으면 지금까지대로 다듬는다. */
     promptMode?: "verbatim" | "assisted";
+    /** 기획이 근거 없이 채웠다고 밝힌 칸들. 옛 작업에는 없다. */
+    inventedSlots?: string[];
   };
 }
 
@@ -236,6 +238,18 @@ export function PosterClient(
    * 지금 화면의 슬롯을 쓴다. 저장 전에 고친 것도 바로 비쳐야 「고쳤더니 이렇게
    * 바뀐다」를 볼 수 있다.
    */
+  /**
+   * 기획이 **근거 없이 채웠다고 밝힌** 칸들.
+   *
+   * 전에는 기획이 그런 칸을 아예 비웠다. 뜻은 분명했지만 너무 잘 들어서
+   * 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다(2026-09-16 실측) — 초보일수록
+   * 빈 칸을 못 채우는데 그 사람이 도움을 받으러 왔다.
+   *
+   * 지금은 채우게 하고 **여기에 표를 붙인다.** 판단은 사람이 하되 판단할
+   * 거리는 AI 가 만들어 준다(2026-09-17 사용자 결정).
+   */
+  const [invented, setInvented] = React.useState<string[]>(project.data.inventedSlots ?? []);
+
   const promptPreview = React.useMemo(() => previewPosterPrompt({
     slots,
     /*
@@ -253,7 +267,15 @@ export function PosterClient(
     look: project.data.look,
     userInstruction: project.data.userInstruction,
     attachmentIntent: project.data.attachmentIntent,
-  }), [slots, project]);
+    /*
+     * **미리보기도 같은 값을 봐야 한다.** 안 넘기면 실제로 갈 프롬프트에는
+     * 「글자를 넣지 말라」가 붙는데 미리보기에는 안 붙는다 — 「모델에 보낼
+     * 프롬프트 보기」가 거짓말을 한다.
+     *
+     * 화면 state 를 쓴다. 사람이 방금 고친 칸이 곧바로 반영돼야 한다.
+     */
+    invented,
+  }), [slots, project, invented]);
 
   /**
    * 사용자가 직접 친 말 — 있는 것만.
@@ -298,8 +320,20 @@ export function PosterClient(
     setPlanOpen(true);
   }, [images.length, project.data.promptMode]);
 
+
+  /**
+   * **화면에 표를 붙일 수 있는 칸만 센다.**
+   *
+   * 기획은 열한 칸을 채우는데 이 화면이 그리는 것은 아홉이다(`SLOT_LABELS`).
+   * `sideTexts`·`typeInteraction` 은 제 칸이 따로 있어 `renderSlot` 을 안 지난다.
+   * 그 둘까지 세면 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
+   *
+   * 배지·숫자·띠가 **같은 목록**을 봐야 서로 어긋나지 않는다.
+   */
+  const 표붙은칸 = invented.filter((name) => SLOT_LABELS.some(([field]) => field === name));
+
   /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
-  const { empty: emptyFields } = splitFilledSlots(
+  const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
     SLOT_LABELS.map(([field]) => field),
     (field) => String(slots[field] ?? ""),
   );
@@ -365,12 +399,27 @@ export function PosterClient(
     const entry = SLOT_LABELS.find(([name]) => name === field);
     if (!entry) return null;
     const [, label, kind] = entry;
+    const 지어냄 = 표붙은칸.includes(field);
     const look = empty ? "border-dashed bg-muted/30" : "";
     return (
       <div key={field} className="grid gap-1.5">
-        <Label htmlFor={`slot-${field}`} className="flex items-center gap-1.5">
+        {/*
+          **두 표시가 한 줄에 같이 설 수 있다.** 「비어 있음」은 값이 없다는
+          것이고 「AI 가 골라 채움」은 값의 출처다 — 서로 다른 것을 말한다.
+          좁은 패널이라 `flex-wrap` 으로 넘긴다.
+        */}
+        <Label htmlFor={`slot-${field}`} className="flex flex-wrap items-center gap-1.5">
           {label}
           {empty ? <span className="text-meta font-normal text-subtle-foreground">비어 있음</span> : null}
+          {/*
+            **눈에 띄게 적는다.** 이 표가 안 보이면 AI 가 지어낸 설정이 그대로
+            그림에 들어가고, 사용자는 왜 그게 나왔는지 모른다. 고치면 사라진다.
+          */}
+          {지어냄 ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+              AI 가 골라 채움
+            </span>
+          ) : null}
         </Label>
         {kind === "area" ? (
           <Textarea
@@ -534,9 +583,23 @@ export function PosterClient(
 
   function setField(field: TextSlot, value: string) {
     setSlots((current: PosterSlots) => ({ ...current, [field]: value }));
+    /*
+     * **손댄 칸은 더 이상 「AI 가 지어낸 것」이 아니다.**
+     *
+     * 사람이 읽고 고쳤으면 그 값은 사람 것이다. 표를 그대로 두면 자기가 쓴
+     * 글에 「확인하세요」가 붙어 있는 꼴이 된다.
+     */
+    setInvented((current) => current.filter((name) => name !== field));
   }
 
-  async function saveSlots() {
+  /**
+   * 고친 칸을 저장한다.
+   *
+   * **성공했는지 돌려준다.** 만들기가 이것을 먼저 부르는데, 실패를 삼키면
+   * **틀린 값으로 그림을 만든다** — 값이 드는 일이다. 단추로 누를 때는
+   * 돌려준 값을 안 봐도 된다(화면에 오류가 뜬다).
+   */
+  async function saveSlots(): Promise<boolean> {
     setSaving(true);
     setError(null);
     try {
@@ -545,10 +608,14 @@ export function PosterClient(
         headers: { "content-type": "application/json" },
         body: JSON.stringify(slots),
       });
+      // 무엇을 표에서 뺄지는 서버가 정한다. 화면 state 와 어긋나지 않게 받는다.
       const body = await response.json();
       if (!body.ok) throw new Error(body.message ?? "슬롯을 저장하지 못했습니다.");
+      setInvented(body.project?.data?.inventedSlots ?? []);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "슬롯을 저장하지 못했습니다.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -563,6 +630,9 @@ export function PosterClient(
       if (stopped.current) return;
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
+      // **새 목록도 받는다.** 안 받으면 방금 채운 칸에 표가 하나도 안 붙는다 —
+      // 새로 만든 작업은 초기값이 늘 비어 있다(2026-09-17 리뷰).
+      setInvented(body.project.data.inventedSlots ?? []);
       setNotes(body.issues ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "기획하지 못했습니다.");
@@ -580,6 +650,19 @@ export function PosterClient(
   async function generate() {
     beginWork({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     try {
+      /*
+       * **고친 칸을 먼저 저장한다.**
+       *
+       * 미리보기는 화면 state 를, 생성은 저장값을 본다. 전에는 그 둘이 갈려도
+       * **내용**만 달랐는데, 이제 「글자를 넣지 말라」라는 **분기**까지 가른다
+       * (`prompt.ts` 의 `copyLines`). 칸을 고치고 저장 안 한 채 만들면
+       * 미리보기에는 글자가 보이는데 글자 하나 없는 그림이 나온다
+       * (2026-09-17 리뷰).
+       *
+       * 고친 것을 버리는 쪽이 아니라 **살리는 쪽**으로 맞춘다 — 사람이 방금
+       * 한 일이다. 저장이 실패하면 아래 `catch` 가 받아 만들기를 안 한다.
+       */
+      if (!await saveSlots()) return;
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
       if (stopped.current) return;
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
@@ -699,7 +782,14 @@ export function PosterClient(
 
   // 앞 화면(01~03)에서 이어지는 단계다. 어디쯤 왔는지 보여준다 —
   // 카드뉴스가 쓰는 것과 같은 막대다.
-  const current = list.length ? "result" : "plan";
+  //
+  // **그대로 생성은 04 가 없다.** 판단은 `steps.ts` 가 한다 — 여기서 정하면
+  // 새로 만드는 화면과 갈리고, 값으로 잴 수도 없다.
+  const 단계 = posterSteps(project.data.promptMode);
+  const current = currentPosterStep({
+    hasImages: list.length > 0,
+    promptMode: project.data.promptMode,
+  });
 
   return (
     <div className="grid gap-6">
@@ -724,7 +814,7 @@ export function PosterClient(
       ) : null}
 
       <StepBar
-        steps={POSTER_STEPS}
+        steps={단계}
         current={current}
         /*
           **못 가는 곳은 눌리지 않게 한다.** 04·05 는 이 화면 안이라 오갈 데가
@@ -816,6 +906,28 @@ export function PosterClient(
             {busy?.kind === "plan" ? (
               <PlanWriting label="AI 가 기획을 쓰는 중입니다" hint="10~30초 걸립니다" />
             ) : null}
+            {/*
+              **「몇 개가 지어낸 것인가」로 적지 않는다.**
+
+              칸마다 붙은 표는 작아서 놓치기 쉽다. 그래서 맨 위에서 한 번 더
+              말해 주되, 세는 방향을 뒤집는다.
+
+              짧은 지시로 만들면 열한 칸 중 아홉에 표가 붙는다(2026-09-17 실측).
+              그게 정상이다 — 한 줄만 적었으니 나머지는 AI 가 고른 것이 맞다.
+              그런데 「9개가 지어낸 것」이라고 적으면 고장처럼 읽힌다.
+            */}
+            {표붙은칸.length ? (
+              <div className="grid gap-1 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+                <span className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                  표가 붙은 칸은 AI 가 골라 채운 것입니다
+                </span>
+                <span className="text-sm text-amber-900/80 dark:text-amber-200/80">
+                  적어 주신 말로 채운 칸은 {filledFields.length - 표붙은칸.length}개이고,
+                  나머지 {표붙은칸.length}개는 AI 가 어울릴 만한 것으로 골랐습니다.
+                  마음에 안 들면 지우거나 고치세요. 고치면 표가 사라집니다.
+                </span>
+              </div>
+            ) : null}
             {userWords.length ? (
               <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
                 <span className="text-meta text-subtle-foreground">
@@ -879,10 +991,21 @@ export function PosterClient(
                 id="slot-side"
                 rows={2}
                 value={slots.sideTexts.join("\n")}
-                onChange={(event) => setSlots((current: PosterSlots) => ({
-                  ...current,
-                  sideTexts: event.target.value.split("\n"),
-                }))}
+                onChange={(event) => {
+                  /*
+                    **곁텍스트도 손대면 사람 것이다.**
+
+                    이 칸은 `renderSlot` 을 안 지나서 `setField` 의 표 지우기를
+                    못 탄다. 그래서 고쳐도 화면 목록에 「sideTexts」가 남아,
+                    저장 전까지 미리보기가 방금 친 글을 「AI 것」으로 보고
+                    금지문을 붙인다(2026-09-17 리뷰).
+                  */
+                  setInvented((current) => current.filter((name) => name !== "sideTexts"));
+                  setSlots((current: PosterSlots) => ({
+                    ...current,
+                    sideTexts: event.target.value.split("\n"),
+                  }));
+                }}
                 placeholder={"28MM F2.0\nISO 400"}
               />
               <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>

@@ -1,6 +1,7 @@
 import {
   estimatePosterCost,
   EMPTY_SLOTS,
+  keepInvented,
   type PosterProjectInput,
   type PosterProjectRecord,
   type PosterProjectStore,
@@ -95,7 +96,15 @@ export function createPosterService(store: PosterProjectStore) {
     async updateSlots(id: string, slots: PosterProjectRecord["data"]["slots"]): Promise<PosterProjectRecord> {
       const project = await store.get(id);
       if (!project) throw new PosterValidationError(["포스터 작업을 찾을 수 없습니다."]);
-      return store.update(id, { data: { ...project.data, slots }, status: "ready" });
+      /*
+       * **고친 칸은 표에서 뺀다.** 사람이 읽고 손댔으면 그 값은 사람 것이다.
+       *
+       * 화면도 지우지만(`poster-client.tsx`) 그것은 state 일 뿐이라 새로고침에
+       * 되살아난다. 여기가 옛 값과 새 값을 둘 다 아는 자리다 — 화면이 뭘 보냈든
+       * 실제로 바뀐 것만 뺀다(2026-09-17 리뷰).
+       */
+      const inventedSlots = keepInvented(project.data.inventedSlots, project.data.slots, slots);
+      return store.update(id, { data: { ...project.data, slots, inventedSlots }, status: "ready" });
     },
   };
 }

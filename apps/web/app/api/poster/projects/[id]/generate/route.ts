@@ -212,6 +212,12 @@ export async function POST(request: Request, context: Context) {
         userInstruction: project.data.userInstruction,
         attachmentIntent: project.data.attachmentIntent,
         look: project.data.look,
+        /*
+         * **글자 칸이 전부 AI 것이면 「글자를 넣지 말라」가 붙는다**
+         * (`prompt.ts` 의 `copyLines`). 전에는 「칸이 비었으면」으로 봤는데
+         * 기획이 다 채우게 되면서 그 신호가 사라졌다(2026-09-17).
+         */
+        invented: project.data.inventedSlots,
         /**
          * **고른 차례 그대로** 넘긴다. 이것이 프롬프트의 `Image N` 이 된다.
          *

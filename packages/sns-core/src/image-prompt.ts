@@ -12,6 +12,7 @@ import {
 } from "@fixup/shared";
 import type { Attachment, GroupedAttachments, StyleRole } from "./attachments";
 import type { CardCopy, CopyLanguage } from "./copy";
+import { IMAGE_MODELS } from "./models";
 import type { CardPlan } from "./planning";
 
 const LANGUAGE_LABEL: Record<CopyLanguage, string> = {
@@ -60,6 +61,19 @@ const ATTACHMENT_DECLARATION =
  * `texture and rendering style` 까지 따라 하라고 시킨다. 사용자가 실사
  * 레퍼런스를 올려 두고 「애니」를 고르면 두 지시가 정면으로 부딪히는데, 이
  * 한 마디가 없으면 어느 쪽이 이길지 모델이 매번 다르게 정한다.
+ */
+/**
+ * 이 카드를 **무엇으로 그릴지** 정하는 줄.
+ *
+ * `auto` 면 빈 문자열이다 — 따라갈 그림이 정해 주기 때문이다.
+ *
+ * **여기서 내리지 않는다.** 한 번 그렇게 했다가 되돌렸다(2026-09-17 리뷰).
+ * 이 자리가 아는 것은 **이 카드 역할에 맞는 레퍼런스** 뿐인데
+ * (`selectReferencesForRole`), 「따라갈 그림이 있나」는 **작업 단위** 물음이다.
+ * 표지 레퍼런스만 붙인 사람에게 속지·엔딩이 실사로 나갔다 — 화면은 그때도
+ * 「붙인 그림의 화풍을 따라갑니다」라고 적고 있었다.
+ *
+ * 내리는 일은 `apps/web/lib/sns/queued-flow.ts` 가 작업 단위로 **한 번** 한다.
  */
 function lookBlock(look: ImageLook | undefined): string {
   const directive = imageLookDirective(look ?? "auto");
@@ -322,6 +336,17 @@ export interface ImagePromptInput {
   userInstruction?: string;
   /** 자리마다 적은 말. 이 카드의 자리에 해당하는 것만 쓴다. */
   attachmentIntents?: AttachmentIntents;
+  /**
+   * 이 카드를 **그릴 모델.** `modelEndpointLabel` 이 만든 이름이다.
+   *
+   * 여기서는 LLM 이 프롬프트 본문을 직접 쓰므로 「이 모델에 맞게」가 손댈
+   * 자리가 있다. 포스터는 기획이 칸만 채우고 문장은 코드가 짜서 같은 것을
+   * 해도 아무 차이가 없었다(2026-09-17 실측, 설계 §11-7).
+   *
+   * **우리가 모델별 요령을 지어내지 않는다.** 재 보지 않은 것을 적으면 그것이
+   * 그대로 그림에 간다. 이름만 주고 판단은 LLM 이 한다.
+   */
+  modelId?: string;
 }
 
 export interface ScenePromptRequest {
@@ -355,6 +380,22 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
         attachmentIntent: intentForRole(input.attachmentIntents, input.role),
       })),
       "Write the visual scene prompt for one card-news image.",
+      /*
+       * **길이를 스스로 줄이지 말라고 못 박는다.**
+       *
+       * 모델 이름만 주고 「그 모델이 잘 따르는 대로」라고 했더니 LLM 이 gpt
+       * 계열에 **짧게** 썼다(992자 대 1,850자, 2026-09-17 실측). 그런데 긴
+       * 프롬프트도 잘 반영되는 것을 확인했다(사용자) — 자세할수록 그림에 더
+       * 들어간다. 안 적은 것은 모델이 알아서 정하고, 그러면 사용자가 바란 것이
+       * 아닌 쪽으로 갈 수 있다.
+       *
+       * **모델에 맞추는 것은 말투이지 분량이 아니다.** 둘을 갈라 말한다.
+       */
+      "Write with as much useful detail as the scene warrants: subject, placement,"
+      + " camera angle, lens feel, lighting direction and quality, materials, textures,"
+      + " colour relationships, background depth, mood. There is no length limit —"
+      + " do not shorten or summarise to save space. Only leave out what would be"
+      + " guessing rather than describing.",
       "Inspect the attached reference images directly. Use them as the visual source; do not replace them with a textual reconstruction.",
       buildAttachmentBlock(references, {
         look: input.look,
@@ -372,11 +413,62 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
       "Do not omit, summarize, paraphrase, or replace any copy field with shorter labels.",
       "Do not invent greetings, slogans, CTAs, footer copy, copyright notices, trademark claims, dates, or brand names that are absent from the confirmed copy.",
       "Incidental environmental words on signs, signboards, and props are allowed when natural to the scene, but they must not become new card copy or claims.",
+      /*
+       * **모델 얘기는 원고 규칙 뒤에 둔다.**
+       *
+       * 앞에 두었더니 gpt 계열에서 길이가 40% 줄었다(2026-09-17 실측). 그
+       * 압축이 바로 위의 「원고 필드를 줄이지 말라」를 갉는 방향이다 — 앞에
+       * 온 말이 뒤의 규칙을 덮는다(2026-09-17 리뷰). 규칙을 먼저 읽히고
+       * 그 다음에 말투를 말한다.
+       *
+       * **이름을 답에 쓰지 말라고 못 박는다.** 여기서 쓴 본문은 그대로
+       * 저장돼 04·05 화면의 「그림 지시」에 보인다. 모델이 답 첫 줄에
+       * 「Optimized for fal-ai/…」 한 번만 적으면 사용자가 그것을 본다.
+       * 화면에는 「표준형」 같은 우리 이름만 나가야 한다.
+       */
+      ...(input.modelId
+        ? [`The prompt you write will be rendered by this target model: ${input.modelId}.`
+          + " Phrase it the way that model reads best — wording, ordering and sentence"
+          + " shape. This is about phrasing, NOT about writing less: keep the same"
+          + " level of detail whichever model it is, and keep every copy rule above"
+          + " exactly as stated regardless of model."
+          + " Never mention the model, its vendor or its endpoint anywhere in your"
+          + " answer — write only the image prompt itself."]
+        : []),
       "Decide the scene, composition, visual emphasis, and how to follow the matching reference. Return only the image prompt body.",
       userInstructionTail(input.userInstruction ?? ""),
     ].filter(Boolean).join("\n\n"),
     imageUrls: references.map((image) => image.url),
   };
+}
+
+/**
+ * 장면 LLM 이 쓴 본문에서 **모델·업체 이름이 든 줄을 뺀다.**
+ *
+ * 이 본문은 그대로 저장돼 결과 화면의 「그림 지시(프롬프트)」에 보인다
+ * (`result-board.tsx`). 그런데 그 LLM 은 방금 `fal-ai/nano-banana-pro` 를
+ * 읽었고, 답 첫 줄에 「Optimized for fal-ai/…」 한 번만 적으면 사용자가 그것을
+ * 본다(2026-09-17 리뷰). 화면에는 「표준형」 같은 우리 이름만 나가야 한다.
+ *
+ * **프롬프트로도 막고 여기서도 막는다.** 「쓰지 말라」는 지킬 수도 안 지킬 수도
+ * 있는 부탁이고, 안 지켰을 때 아무도 모른다.
+ *
+ * **줄 단위로 뺀다.** 낱말만 지우면 「Optimized for :」 같은 부스러기가 남고,
+ * 그런 줄은 애초에 장면 묘사가 아니다. 거꾸로 낱말로만 찾으면 장면에 나온
+ * 바나나까지 지운다 — 모델 id 와 엔드포인트라는 **온전한 꼴**로만 본다.
+ */
+export function stripModelMentions(body: string): string {
+  if (!body) return "";
+  const 찾을것 = IMAGE_MODELS.flatMap((model) => [
+    model.id,
+    model.t2i.endpoint,
+    model.i2i.endpoint,
+  ]);
+  return body
+    .split("\n")
+    .filter((line) => !찾을것.some((name) => line.includes(name)))
+    .join("\n")
+    .trim();
 }
 
 /** LLM 실패가 이미지 생성 전체를 멈추지 않게 빈 본문을 돌려준다. */
@@ -387,7 +479,8 @@ export async function writeImagePrompt(
   const warnings = referenceWarningsForRole(input.grouped, input.role);
   try {
     const generated = await provider.generate(buildSceneRequest(input));
-    return { body: typeof generated === "string" ? generated : "", warnings };
+    // 모델 이름이 답에 섞여 나오면 화면까지 간다. 여기서 한 번 더 막는다.
+    return { body: typeof generated === "string" ? stripModelMentions(generated) : "", warnings };
   } catch {
     return { body: "", warnings };
   }

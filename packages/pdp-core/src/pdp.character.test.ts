@@ -13,6 +13,7 @@ import {
   resolveCharacterAngles,
   selectCharacterModel,
 } from "./pdp.character";
+import { IMAGE_LOOKS, imageLookDirective } from "@fixup/shared";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { IMAGE_MODELS } from "./types";
@@ -266,7 +267,8 @@ describe("결이 질감을 정한다", () => {
     expect(start, "화면에서 MODEL_BY_LOOK 를 못 찾았다").toBeGreaterThan(-1);
     const table = studio.slice(start, studio.indexOf("};", start));
 
-    for (const look of ["photoreal", "anime", "3d", "illustration"] as const) {
+    // **손으로 적지 않는다.** 새로 넣은 결이 대조 밖으로 빠진다(2026-09-17 리뷰).
+    for (const look of IMAGE_LOOKS) {
       // 화면 표는 `3d` 만 따옴표가 붙는다(식별자로 못 쓰는 이름이라).
       const key = /^[a-z]/.test(look) ? look : `"${look}"`;
       expect(table, `화면 표에 ${look} 가 없다`).toContain(`${key}: "`);
@@ -761,5 +763,119 @@ describe("resolveCharacterAngles", () => {
 
   it("같은 각도를 두 번 골라도 한 번만 간다", () => {
     expect(resolveCharacterAngles(["front", "front"], "")).toEqual(["front"]);
+  });
+});
+
+/**
+ * **캐릭터도 「레퍼런스 스타일」을 고를 수 있다.**
+ *
+ * 전에는 캐릭터의 결 목록에서 그것만 빼 뒀다 — 코드 주석이 「캐릭터는 글로만
+ * 만드는 도구」라고 적고 있었다. 그런데 캐릭터는 **그림을 받는다.** 역할이 둘
+ * 있고(「이 캐릭터 뽑아내기」·「레퍼런스 스타일」) 그 그림은 모델에 들어간다.
+ * 주석이 옛말이 된 것이다(2026-09-17 대조).
+ *
+ * `CharacterLook` 이 `ImageLook` 을 제 손으로 베껴 적고 있었던 것도 함께
+ * 고친다 — 같은 것을 두 벌로 두면 반드시 갈라진다. 실제로 갈라져서 서버가
+ * `auto` 를 타입 단계에서 거부하고 있었다.
+ */
+describe("레퍼런스 스타일", () => {
+  /** 표에 칸이 없으면 `?? NON_PHOTOREAL` 로 조용히 떨어진다. 값으로 못 잰다. */
+  it("모델 표에 칸이 있다", () => {
+    expect(selectCharacterModel("auto")).toBe("nano-banana-pro");
+  });
+
+  /**
+   * **첨부가 결을 정한다.** 우리가 결 지시를 덧붙이면 그 결을 덮어, 「이 그림처럼」
+   * 이라고 고른 사람에게 다른 화풍이 나간다.
+   */
+  it("첨부가 있으면 결 지시를 안 덧붙인다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "auto", referenceRole: "style",
+    });
+
+    expect(prompt).not.toContain(imageLookDirective("photoreal", "person"));
+  });
+
+  /**
+   * **첨부가 없으면 그릴 결을 정해 준다.**
+   *
+   * `auto` 의 지시문은 빈 문자열이라, 첨부도 없고 지시문도 비면 무엇으로 그릴지
+   * 정하는 말이 프롬프트에 한 줄도 안 들어간다. 화면은 흐리게 막지만 화면을 안
+   * 거치는 길이 있다(옛 작업·API 직접 호출). 포스터에서 실제로 새는 것을
+   * 찾았다(2026-09-16).
+   */
+  it("첨부가 없으면 실사로 내려 준다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "auto",
+    });
+
+    expect(prompt).toContain(imageLookDirective("photoreal", "person"));
+  });
+
+  /**
+   * 각도는 이미 만든 정면 그림에서 뽑는다. 그 그림이 결을 갖고 있으므로
+   * 덧붙이면 각도마다 화풍이 흔들린다.
+   */
+  it("각도는 만든 정면 그림의 결을 따른다", () => {
+    const prompt = buildTurnaroundPrompt({
+      identityPrompt: "x", angle: "left_90", look: "auto",
+    });
+
+    expect(prompt).not.toContain(imageLookDirective("photoreal", "person"));
+  });
+
+  /** 고른 결이 따로 있으면 첨부가 있든 없든 그대로 간다. */
+  it("고른 결은 첨부가 있어도 그대로다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "anime", referenceRole: "style",
+    });
+
+    expect(prompt.toLowerCase()).toContain("anime");
+  });
+});
+
+/**
+ * **짝맞춤은 서버에도 있어야 한다.**
+ *
+ * 화면은 그림체와 역할을 한 스위치로 묶는다(`look-role.ts`). 그런데 그 규칙이
+ * 단추의 `onClick` 안에만 살면 화면을 안 거치는 길로 다 샌다 — API 직접 호출,
+ * 첨부를 뺐다 다시 붙이기(그때 역할이 기본값 `extract` 로 돌아오는데 그림체는
+ * `auto` 로 남는다).
+ *
+ * `extract` 의 지시문이 「화풍은 **아래에서 따로 정한다**」고 못 박으므로, 그
+ * 조합이 오면 아래에 아무 말도 없는 프롬프트가 나간다(2026-09-17 리뷰).
+ */
+describe("뽑아내기와 레퍼런스 스타일은 짝이 안 맞는다", () => {
+  it("그 조합이 와도 그릴 결을 정해 준다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "auto", referenceRole: "extract",
+    });
+
+    /*
+     * **「photo」로 재면 안 된다.** `extract` 지시문 자체가 「photographic,
+     * illustrated, anime or 3D」라고 적고 있어, 결 지시가 하나도 없어도
+     * 통과한다(2026-09-17 실제로 그렇게 거짓 통과했다). 실사 지시문에만 있는
+     * 말로 잰다.
+     */
+    expect(prompt).toContain(imageLookDirective("photoreal", "person"));
+  });
+
+  /** 「레퍼런스 스타일」 역할일 때만 첨부가 결을 정한다. */
+  it("결만 따라갈 때는 덧붙이지 않는다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "auto", referenceRole: "style",
+    });
+
+    expect(prompt).not.toContain(imageLookDirective("photoreal", "person"));
+  });
+
+  /**
+   * **다각도 한 장도 만든 정면 그림을 본다**(`lib/characters.ts` 가 i2i 로
+   * 부른다). 여기서 결을 덧붙이면 여섯 칸의 화풍이 흔들린다.
+   */
+  it("다각도 한 장은 만든 정면 그림의 결을 따른다", () => {
+    const prompt = buildTurnaroundSheetPrompt({ identityPrompt: "x", look: "auto" });
+
+    expect(prompt).not.toContain(imageLookDirective("photoreal", "person"));
   });
 });

@@ -6,6 +6,10 @@ import {
   IMAGE_LOOK_LABEL,
   IMAGE_LOOKS,
   IMAGE_MODELS,
+  hasStyleSource,
+  lookBlockedReason,
+  resolveLook,
+  withJosa,
   modelById,
   planSlots,
   type Attachment,
@@ -52,6 +56,15 @@ export function SpecPicker({ spec, onChange, attachments }: {
   onChange(value: SnsSpec): void;
   attachments: Attachment[];
 }) {
+  /*
+   * **켜 보이는 결.**
+   *
+   * 붙인 그림을 뺀 뒤에도 상태에는 「레퍼런스 스타일」이 남아 있을 수 있다.
+   * 그러면 회색 버튼이 선택된 채로 서 있고, 힌트는 「붙인 그림의 화풍을
+   * 따라갑니다」라고 말하는데 서버는 실사로 내린다(`queued-flow.ts`).
+   * **실제로 갈 값을 그대로 켠다** — 포스터가 같은 판단을 한다.
+   */
+  const shownLook = resolveLook(spec.look, hasStyleSource(attachments));
   const placeAsIsCount = attachments.filter((attachment) => attachment.kind === "place_as_is").length;
   const hasEndingImage = attachments.some((attachment) => attachment.kind === "ending");
   const plan = planSlots({
@@ -81,20 +94,40 @@ export function SpecPicker({ spec, onChange, attachments }: {
       </div>
 
       <section className="grid gap-3">
-        <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[spec.look]}</p></div>
+        <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[shownLook]}</p></div>
         <div className="flex flex-wrap gap-2">
-          {IMAGE_LOOKS.map((look) => (
-            <button
-              key={look}
-              type="button"
-              onClick={() => onChange({ ...spec, look })}
-              aria-pressed={spec.look === look}
-              className={`rounded-md border px-4 py-2 text-sm font-medium ${spec.look === look ? "border-primary bg-primary-soft" : "bg-card"}`}
-            >
-              {IMAGE_LOOK_LABEL[look]}
-            </button>
-          ))}
+          {IMAGE_LOOKS.map((look) => {
+            /*
+              **빼지 않고 흐리게 둔다.**
+
+              목록에서 없애면 그런 기능이 있다는 것을 알 길이 없다 — 포스터에서
+              한 번 그렇게 했다가 사용자가 「그게 어디 있냐」고 물었다
+              (2026-09-16). 못 누르게만 막으면 배울 수 있다.
+            */
+            const blocked = lookBlockedReason(look, hasStyleSource(attachments));
+            return (
+              <button
+                key={look}
+                type="button"
+                disabled={Boolean(blocked)}
+                title={blocked || IMAGE_LOOK_HINT[look]}
+                onClick={() => onChange({ ...spec, look })}
+                aria-pressed={shownLook === look}
+                className={`rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-40 ${shownLook === look ? "border-primary bg-primary-soft" : "bg-card"}`}
+              >
+                {IMAGE_LOOK_LABEL[look]}
+              </button>
+            );
+          })}
         </div>
+        {/* 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적는다. */}
+        {lookBlockedReason("auto", hasStyleSource(attachments)) ? (
+          <p className="text-xs text-muted-foreground">
+            {/* 받침에 따라 은/는이 갈린다. 저장소에 이미 도구가 있다. */}
+            「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
+            {lookBlockedReason("auto", hasStyleSource(attachments))}
+          </p>
+        ) : null}
       </section>
 
       <section className="grid gap-3">

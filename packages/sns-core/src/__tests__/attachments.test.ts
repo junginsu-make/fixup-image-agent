@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupAttachments, validateAttachments } from "../attachments";
+import { groupAttachments, hasStyleSource, validateAttachments } from "../attachments";
 import type { Attachment, AttachmentKind } from "../attachments";
 
 const item = (kind: AttachmentKind, patch: Partial<Attachment> = {}): Attachment => ({
@@ -157,5 +157,47 @@ describe("캐릭터 여러 각도", () => {
       10,
     );
     expect(issues).not.toContain("그대로 넣을 인물은 한 명만 지정해 주세요. 둘이면 얼굴이 섞입니다.");
+  });
+});
+
+/**
+ * **「레퍼런스 스타일」을 고를 수 있는가.**
+ *
+ * 그 결은 「붙인 그림을 따라간다」는 뜻이라, 따라갈 그림이 없으면 아무 뜻이 없다.
+ * 포스터는 그것을 흐리게 막는데 **카드뉴스는 안 막고 있었다** — 첨부를 하나도
+ * 안 붙여도 눌렸다(2026-09-17 대조). 누르면 결 지시가 한 줄도 안 붙은 채로
+ * 그림이 나간다.
+ *
+ * **모델에 실제로 들어가는 그림만 센다.** `selectReferencesForRole` 이 고르는
+ * 것과 같아야 한다 — 따라 만들 카드뉴스와 그대로 지킬 것 둘이다.
+ *
+ * 「원본 그대로」는 AI 를 아예 안 거치고, 「마지막 장」도 장면 프롬프트에 안
+ * 실린다. 그것만 붙여 놓고 「레퍼런스 스타일」을 고르면 따라갈 것이 없다.
+ */
+describe("따라갈 그림이 있는가", () => {
+  it("따라 만들 카드뉴스가 있으면 있다", () => {
+    expect(hasStyleSource([item("style_reference", { role: "cover" })])).toBe(true);
+  });
+
+  it("그대로 지킬 것이 있어도 있다", () => {
+    expect(hasStyleSource([item("keep_identity")])).toBe(true);
+  });
+
+  it("아무것도 안 붙이면 없다", () => {
+    expect(hasStyleSource([])).toBe(false);
+  });
+
+  /** AI 를 안 거치는 장이다. 따라갈 결이 없다. */
+  it("원본 그대로만 붙이면 없다", () => {
+    expect(hasStyleSource([item("place_as_is")])).toBe(false);
+  });
+
+  /** 마지막 장은 장면 프롬프트에 안 실린다(`selectReferencesForRole`). */
+  it("마지막 장만 붙이면 없다", () => {
+    expect(hasStyleSource([item("ending")])).toBe(false);
+  });
+
+  it("섞여 있으면 있다", () => {
+    expect(hasStyleSource([item("place_as_is"), item("keep_identity")])).toBe(true);
   });
 });

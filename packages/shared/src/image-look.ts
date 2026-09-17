@@ -33,7 +33,15 @@ export const IMAGE_LOOK_LABEL: Record<ImageLook, string> = {
 };
 
 export const IMAGE_LOOK_HINT: Record<ImageLook, string> = {
-  auto: "붙인 그림의 화풍을 그대로 따라갑니다. 안 고르면 이것입니다",
+  /*
+   * **「안 고르면 이것입니다」를 뺐다.**
+   *
+   * 도구마다 기본값이 다르다 — 포스터·카드뉴스는 `auto` 지만 캐릭터는 실사다
+   * (2026-09-17 리뷰). 다섯 도구가 함께 쓰는 이름표에 한 도구에서만 맞는 말을
+   * 적으면, 나머지 도구에서 거짓말이 된다. 이름표는 **그것이 무엇인지**만
+   * 말한다.
+   */
+  auto: "붙인 그림의 화풍을 그대로 따라갑니다",
   photoreal: "사진으로 찍은 것처럼",
   anime: "납작한 색과 또렷한 선",
   "3d": "3D 애니메이션 한 장면처럼",

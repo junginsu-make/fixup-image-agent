@@ -141,6 +141,18 @@ export const PosterProjectInputSchema = z.object({
   promptMode: z.enum(PROMPT_MODES).default("assisted"),
   adMasterId: z.string().max(64).optional(),
   slots: PosterSlotsSchema.optional(),
+  /**
+   * 기획이 **근거 없이 채웠다고 밝힌** 칸 이름들.
+   *
+   * 04 가 여기에 표를 붙여 사람이 지우거나 고치게 한다. 전에는 기획이 그런 칸을
+   * 아예 비웠는데, 너무 잘 들어서 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다
+   * (2026-09-16 실측). 채우게 하고 밝히는 쪽으로 바꿨다(2026-09-17).
+   *
+   * **사람이 고친 칸은 여기서 빠진다.** 손댄 순간 그 값은 사람 것이다.
+   *
+   * 옛 작업에는 없다. 없으면 「지어낸 것이 없다」로 읽는다.
+   */
+  inventedSlots: z.array(z.string()).default([]),
 }).strict().superRefine((input, ctx) => {
   /**
    * **광고 규격은 따라 만들 그림이 있어야 한다.**
@@ -192,3 +204,27 @@ export type PosterProjectInput = z.infer<typeof PosterProjectInputSchema>;
 
 export const PosterStatusSchema = z.enum(["draft", "planning", "ready", "generating", "done", "failed"]);
 export type PosterStatus = z.infer<typeof PosterStatusSchema>;
+
+/**
+ * 고친 칸을 뺀 「AI 가 골라 채운 칸」 목록.
+ *
+ * **사람이 손댄 칸은 더 이상 AI 것이 아니다.** 표를 그대로 두면 자기가 쓴 글에
+ * 「AI 가 골라 채움」이 붙어 있는 꼴이 된다. 지우는 것도 고치는 것이다 —
+ * 「이건 빼자」는 사람의 판단이다.
+ *
+ * **화면이 아니라 저장이 뺀다.** 화면 state 에서만 지우면 새로고침에 되살아난다
+ * (2026-09-17 리뷰). 저장은 옛 값과 새 값을 둘 다 아는 자리라 무엇이 바뀌었는지
+ * 여기서 알 수 있고, 화면을 안 믿어도 된다.
+ */
+export function keepInvented(
+  invented: string[] | undefined,
+  before: PosterSlots,
+  after: PosterSlots,
+): string[] {
+  if (!invented?.length) return [];
+  return invented.filter((name) => {
+    const key = name as keyof PosterSlots;
+    // 곁텍스트는 배열이다. 글자로 견주면 늘 같아 보인다.
+    return JSON.stringify(before[key] ?? null) === JSON.stringify(after[key] ?? null);
+  });
+}
