@@ -19,19 +19,42 @@
       ],
       "meter": {
         "metered": true,
-        "usd": 1.000415,
-        "inputTokens": 41111,
-        "outputTokens": 17433,
+        "usd": 0.829588,
+        "inputTokens": 40229,
+        "outputTokens": 13395,
         "calls": 4
       },
-      "elapsedMs": 240781
+      "elapsedMs": 188553
     },
     {
       "mode": "text",
-      "passed": false,
-      "errorType": "PdpServiceError",
-      "code": "INVALID_REQUEST",
-      "elapsedMs": 110918
+      "passed": true,
+      "sectionCount": 6,
+      "planning": [
+        {
+          "purpose": "planning",
+          "provider": "anthropic",
+          "model": "claude-fable-5"
+        },
+        {
+          "purpose": "planning",
+          "provider": "anthropic",
+          "model": "claude-fable-5"
+        },
+        {
+          "purpose": "planning",
+          "provider": "anthropic",
+          "model": "claude-fable-5"
+        }
+      ],
+      "meter": {
+        "metered": true,
+        "usd": 1.221518,
+        "inputTokens": 34527,
+        "outputTokens": 22696,
+        "calls": 5
+      },
+      "elapsedMs": 264224
     }
   ],
   "results": {
@@ -39,97 +62,94 @@
       "originalImage": "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",
       "blueprint": {
         "productReading": {
-          "category": "검증용 가상 제품: 파란 몸체에 검은 스크류 뚜껑, 흰 TEST 라벨이 붙은 원통형 물병 시안",
+          "category": "검증용 가상 제품으로 설계된 파란 몸체·검은 스크류 뚜껑의 원통형 물병",
           "visibleFacts": [
-            "몸체 전체가 진한 파란색 단색",
-            "상단에 검은색 뚜껑(돌려 닫는 형태로 보이는 낮은 원통형)",
-            "몸체 중앙에 흰색 사각 라벨",
-            "라벨에 검은 글자 TEST",
-            "어깨가 둥글게 떨어지는 원통형 실루엣",
-            "부속품 없이 병·뚜껑·라벨 세 요소로만 구성"
+            "몸체 전체가 단일한 파란색",
+            "뚜껑은 검은색이며 몸체보다 좁은 스크류형",
+            "몸체 중앙에 흰색 사각 라벨 1장",
+            "라벨에 TEST 한 단어만 인쇄",
+            "몸체는 어깨가 둥근 원통형",
+            "몸체에 라벨 외 다른 인쇄·장식 없음"
           ],
           "labelText": [
             "TEST"
           ],
           "distinctiveTraits": [
-            "흰 라벨에 TEST 한 단어만 인쇄된 검증용 시안 표기",
-            "파란 몸체·검은 뚜껑·흰 라벨의 3색 단순 구성"
+            "단색 파랑 몸체와 검은 뚜껑의 강한 색 대비",
+            "라벨에 글자 하나(TEST)만 있는 최소 구성",
+            "장식·패턴이 전혀 없는 무지 몸체"
           ],
           "unknowns": [
-            "용량·크기 규격",
-            "소재(플라스틱/스테인리스 등)와 보온·보냉 성능",
-            "뚜껑 밀폐력·누수 여부",
+            "용량·실측 크기",
+            "몸체·뚜껑 소재",
+            "보온·보냉 성능",
+            "밀폐 성능·누수 여부",
             "가격",
-            "실사용 후기·판매 이력",
-            "출시 일정·판매 여부(판매자 고지: 실제 판매용 아님)"
+            "무게",
+            "세척 방법·식기세척기 가능 여부"
           ]
         },
-        "executiveSummary": "전날 밤 뚜껑과 병을 따로 챙겨두고도 아침마다 한쪽을 빠뜨렸던, 출근 시간이 촉박한 직장인 한 명을 대상으로 한 검증용 가상 물병(파란 몸체·검은 뚜껑·TEST 라벨)의 기획 검증 시안. 심사 지적을 반영해 (1) 페르소나의 시도·제약을 헤드라인·서브에 명시하고, (2) 문제 장면에 구체 동작과 감정을 넣고, (3) 근거 없는 차별점 주장 대신 '사진 확인 범위'를 먼저 밝힌 뒤 확인 가능한 사실만 서술하며, (4) 반론 섹션을 '적합성 고지'로 재정의해 안 맞는 사람을 밝히고, (5) 근거 섹션을 사실 서술 섹션보다 앞에 배치해 주장 강도와 근거 강도를 일치시키고, (6) 마무리를 문제→해결이 연결된 감각 한 줄로 끝낸다. 판매·결제 없음, 기획 검증 시안임을 전 구간에 유지한다.",
+        "executiveSummary": "검증용 가상 물병(파란 몸체·검은 뚜껑·TEST 라벨)의 기획 검증 시안. 심사 지적을 반영해 대상을 '작은 백팩으로 지하철 출근하며, 스테인리스 텀블러를 쓰다가 가방 속에서 매번 뒤지던 30대 직장인'으로 좁히고, 문제를 '현관에서 신발 신다 방으로 되돌아가는 장면'으로 재생 가능하게 구체화했다. 차별점은 브리프에서 확인 가능한 사실(단색 파랑·검은 뚜껑·흰 라벨 외 장식을 넣지 않은 검증용 최소 구성)을 '뺀 것' 프레임으로 세웠고, 반론 섹션은 메타 질문 대신 '내 가방·습관에 맞을까'라는 실제 적합성 반론을 다루며 안 맞는 사람을 명시했다. 전 섹션에 '실제 판매용이 아닌 기획 검증 시안' 고지를 유지한다.",
         "scorecard": [
           {
             "category": "대상 구체성",
-            "score": "개선 반영",
-            "reason": "S1·S2에서 '전날 밤 뚜껑 따로 병 따로 챙겨놓고도 아침에 한쪽을 빠뜨린 사람'으로 시도·제약을 명시"
+            "score": "4/5",
+            "reason": "상황(지하철 출근·작은 백팩)+시도(스테인리스 텀블러를 써봤으나 가방 속에서 안 보여 뒤짐)+제약(출발 전 여유 1분)의 세 축을 모두 반영해 한 사람이 그려짐"
           },
           {
-            "category": "문제 장면",
-            "score": "개선 반영",
-            "reason": "가방을 뒤집어 바닥까지 뒤졌는데 뚜껑만 나오는 동작과 지각 걱정·짜증 감정을 문장으로 삽입"
+            "category": "문제 장면성",
+            "score": "4/5",
+            "reason": "'현관에서 운동화 뒤축을 구겨 신다가 다시 방으로 뛰어간다'처럼 시간·장소·동작이 한 문장에 들어간 재생 가능한 장면으로 재작성"
           },
           {
-            "category": "차별점 정직성",
-            "score": "개선 반영",
-            "reason": "'단순해서 챙기기 쉽다'류 미검증 주장 삭제, S4를 색상·형태 확인용 시안 고지로 축소"
+            "category": "차별점",
+            "score": "3/5",
+            "reason": "가상 제품 제약 안에서 브리프 확인 가능 사실(검증용으로 색·뚜껑·라벨만 남긴 최소 구성)을 '뺀 것' 프레임으로 세움. 실제 소재·수치 근거는 여전히 부재"
           },
           {
             "category": "반론 처리",
-            "score": "개선 반영",
-            "reason": "S5를 '적합성·검증 단계 고지'로 재정의하고 '이런 분께는 안 맞습니다'를 명시"
+            "score": "4/5",
+            "reason": "메타 반론 대신 '내 가방·습관에 맞을까'라는 적합성 반론을 정면으로 다루고, 안 맞는 사람(보온 필요·성능 수치 필요)을 명시"
           },
           {
-            "category": "흐름 일관성",
-            "score": "개선 반영",
-            "reason": "근거(사진 확인 범위)를 사실 서술보다 먼저 배치해 '이래서 이만큼만 말한다'가 자연스럽게 이어짐"
-          },
-          {
-            "category": "마무리",
-            "score": "개선 반영",
-            "reason": "'뚜껑을 찾는 시간이 사라진 만큼 아침이 짧아진다'는 문제→해결 연결 감각으로 종결"
+            "category": "근거 정직성",
+            "score": "5/5",
+            "reason": "unknowns(용량·소재·성능)를 사실로 단정한 문장이 없고, '기획 검증 시안' 고지를 전 섹션에 유지"
           }
         ],
         "blueprintList": [
-          "S1 히어로: 전날 밤 챙겨놓고도 아침에 한쪽을 빠뜨렸던 사람에게 — 페르소나(시도·제약) 명시",
-          "S2 문제 장면: 가방을 뒤집어 바닥까지 뒤졌는데 뚜껑만 나온 아침 — 동작·감정 구체화",
-          "S3 확인 범위(근거): 사진과 판매자 고지에서 확인된 것만 말한다 — 결과→조건→해석 3단",
-          "S4 사실 서술(축소된 베네핏): 색상·형태 확인용 시안 — 파란 몸체·검은 뚜껑·TEST 라벨 사실만",
-          "S5 적합성 고지(반론 재정의): 지금 살 수 없고, 이런 분께는 안 맞습니다",
-          "S6 마무리: 뚜껑을 다시 찾을 필요가 없다면, 그만큼 아침이 짧아집니다 — 문제→해결 감각"
+          "S1 히어로: 출근 1분 전 현관 장면 + 파란 보틀의 시인성",
+          "S2 문제: 신발 신다 방으로 되돌아가는 아침, 텀블러가 실패한 이유",
+          "S3 전환·베네핏: 색으로 찾고 눈으로 닫힘 확인, 아침 동선이 한 번에 끝남",
+          "S4 근거: 결과→조건→해석 — 왜 최소 구성이 '찾는 시간'을 줄이는가",
+          "S5 반론: 이런 분께는 권하지 않습니다 — 적합성 반론 정면 처리",
+          "S6 마무리: 달라지는 아침 장면 + 검증 시안 고지"
         ],
         "sections": [
           {
             "section_id": "S1",
             "section_name": "히어로",
-            "goal": "시도와 제약이 드러나는 한 사람을 첫 화면에서 지목해 스크롤을 멈추게 한다",
-            "headline": "전날 밤 챙겨놔도, 아침엔 한쪽만 남던 분께",
-            "headline_en": "For the one who packed it the night before, yet left half behind every morning",
-            "subheadline": "뚜껑 따로, 병 따로 챙기다 매번 하나를 빠뜨렸던 출근길 — 그 아침을 위한 검증 시안입니다",
-            "subheadline_en": "Cap in one place, bottle in another, and one always missing on the commute — a test mock-up made for that morning",
+            "goal": "출근 직전 1분의 긴장 속에서 파란 보틀이 바로 눈에 걸리는 첫 장면으로 스크롤을 멈추게 한다",
+            "headline": "신발 신다 다시 방으로 뛰나요",
+            "headline_en": "Running back for your bottle, shoes half on?",
+            "subheadline": "검은 가방 속에서도 한눈에 걸리는 파란 몸체",
+            "subheadline_en": "A blue body that catches your eye even inside a dark bag",
             "bullets": [
-              "전날 밤: 뚜껑과 병을 따로 놓아둠",
-              "출근 5분 전: 한쪽만 손에 잡힘",
-              "이 시안: 병·뚜껑·라벨, 세 가지뿐"
+              "온몸이 파랑, 가방 안에서 바로 보임",
+              "검은 뚜껑, 닫힘이 눈으로 확인",
+              "라벨은 TEST 한 단어뿐"
             ],
             "bullets_en": [
-              "Night before: cap and bottle set out separately",
-              "5 minutes to leave: only one in hand",
-              "This mock-up: bottle, cap, label — nothing else"
+              "All-blue body, instantly visible in a bag",
+              "Black cap, closure you can see at a glance",
+              "One word on the label: TEST"
             ],
-            "trust_or_objection_line": "본 페이지는 기획 검증용 시안이며 실제 판매 페이지가 아닙니다",
-            "trust_or_objection_line_en": "This page is a planning test mock-up, not an actual sales page",
+            "trust_or_objection_line": "본 제품은 실제 판매용이 아닌 기획 검증 시안입니다",
+            "trust_or_objection_line_en": "This is a planning validation mock-up, not a product for sale",
             "CTA": "",
             "CTA_en": "",
-            "layout_notes": "상단 헤드라인·서브 좌측 정렬, 우측에 제품+모델 컷, 하단에 포인트 칩 3개 가로 배열, 최하단 얇은 고지 바",
-            "compliance_notes": "검증용 시안 고지를 첫 화면에 명시. 성능·효능 주장 없음",
+            "layout_notes": "상단 헤드라인·서브 좌측 정렬, 중앙에 모델+보틀 컷 크게, 하단 포인트 카드 3개 가로 배치, 최하단 소형 고지 칩",
+            "compliance_notes": "보온·밀폐·용량 등 미확인 성능 주장 금지, 검증 시안 고지 유지",
             "image_id": "IMG_S1",
             "purpose": "",
             "prompt_ko": "",
@@ -140,28 +160,28 @@
           },
           {
             "section_id": "S2",
-            "section_name": "문제 장면",
-            "goal": "가방을 뒤지는 구체 동작과 지각 걱정이라는 감정으로 '내 얘기다'를 만든다",
-            "headline": "가방을 뒤집었는데, 뚜껑만 나온 적 있으세요?",
-            "headline_en": "Ever flipped your bag upside down and found only the cap?",
-            "subheadline": "출근 5분 전, 싱크대와 가방 사이를 오가며 바닥까지 뒤지다 결국 뚜껑만 들고 나선 그 아침",
-            "subheadline_en": "Five minutes before leaving, digging to the bottom of the bag between sink and door — and walking out with just the cap",
+            "section_name": "문제 공감",
+            "goal": "출근 아침의 실패 장면을 시간·장소·동작으로 재생시켜 '내 얘기'로 만든다",
+            "headline": "8시 20분, 현관에서 멈추는 아침",
+            "headline_en": "8:20 AM, stopped at the front door",
+            "subheadline": "운동화 뒤축을 구겨 신다 물병 찾으러 방으로 되돌아갑니다",
+            "subheadline_en": "Shoes half on, you run back to the room for your bottle",
             "bullets": [
-              "가방을 뒤집어 바닥까지 뒤진다",
-              "손에 잡히는 건 뚜껑 하나",
-              "지각 걱정에 그냥 두고 나온다"
+              "은색 텀블러는 가방 속에서 안 보여 손으로 뒤짐",
+              "전날 밤 챙겨둔 자리를 아침엔 기억 못 함",
+              "작은 백팩, 뒤질 여유는 1분도 없음"
             ],
             "bullets_en": [
-              "Flip the bag, dig to the bottom",
-              "All you find is the cap",
-              "Late already — you leave it behind"
+              "A silver tumbler hides in the bag, so you dig by hand",
+              "You forget where you left it the night before",
+              "Small backpack, not even a minute to search"
             ],
-            "trust_or_objection_line": "매일 반복되면 짜증보다 먼저 포기가 옵니다 — 그 장면에서 이 시안이 시작됐습니다",
-            "trust_or_objection_line_en": "Repeat it daily and resignation comes before irritation — that scene is where this mock-up began",
+            "trust_or_objection_line": "물병 하나 때문에 지하철 한 대를 놓쳐본 분이라면 아실 겁니다",
+            "trust_or_objection_line_en": "If you've ever missed a train over a bottle, you know",
             "CTA": "",
             "CTA_en": "",
-            "layout_notes": "어두운 톤 배경에 가방 속 시점 컷, 헤드라인 중앙 상단, 동작 3단계를 세로 타임라인 카드로",
-            "compliance_notes": "과장·비난 없이 상황 묘사만. 통계·일반화 표현 금지",
+            "layout_notes": "현관 장면 사진 상단 배치, 어두운 톤이되 무겁지 않게, 카드 3개 세로 스택, 하단 공감 한 줄",
+            "compliance_notes": "사용자 비난 어조 금지, 과장된 고통 연출 금지",
             "image_id": "IMG_S2",
             "purpose": "",
             "prompt_ko": "",
@@ -172,28 +192,28 @@
           },
           {
             "section_id": "S3",
-            "section_name": "확인 범위(근거)",
-            "goal": "무엇을 근거로 말하는지 먼저 밝혀 뒤 섹션의 주장 강도를 정당화한다",
-            "headline": "이 페이지가 말할 수 있는 건 여기까지입니다",
-            "headline_en": "Here is exactly how far this page can speak",
-            "subheadline": "결과: 사진과 판매자 고지에서 확인된 사실만 적었습니다 · 조건: 검증용 가상 제품 · 해석: 그래서 성능 주장은 하지 않습니다",
-            "subheadline_en": "Result: only facts confirmed in the photo and seller's note · Condition: a test mock-up product · Interpretation: so no performance claims are made",
+            "section_name": "베네핏",
+            "goal": "문제가 사라진 상태를 세 가지 확인 가능한 특징으로 보여준다",
+            "headline": "찾는 물병이 아니라, 보이는 물병",
+            "headline_en": "Not a bottle you search for — one you see",
+            "subheadline": "가방을 여는 순간 파랑이 먼저 눈에 들어옵니다",
+            "subheadline_en": "Open your bag and the blue is the first thing you see",
             "bullets": [
-              "결과 — 사진에서 보이는 것만 적음",
-              "조건 — 검증용 가상 제품, 규격 미정",
-              "해석 — 밀폐력·소재는 말하지 않음"
+              "단색 파랑 몸체, 어두운 가방 속에서 구분됨",
+              "검은 뚜껑과의 색 대비, 잠긴 상태가 한눈에",
+              "무지 몸체에 흰 라벨 하나, 헷갈릴 게 없음"
             ],
             "bullets_en": [
-              "Result — only what the photo shows",
-              "Condition — test mock-up, specs undecided",
-              "Interpretation — no claims on seal or material"
+              "Solid blue body stands out in a dark bag",
+              "Black-cap contrast shows it's closed at a glance",
+              "Plain body, one white label — nothing to confuse"
             ],
-            "trust_or_objection_line": "확인되지 않은 것은 쓰지 않는다 — 이 원칙이 이 페이지의 유일한 근거입니다",
-            "trust_or_objection_line_en": "Nothing unverified goes on this page — that principle is its only proof",
+            "trust_or_objection_line": "여기 적힌 것은 모두 사진에서 직접 확인할 수 있는 특징입니다",
+            "trust_or_objection_line_en": "Everything here is a feature you can verify in the photo itself",
             "CTA": "",
             "CTA_en": "",
-            "layout_notes": "밝은 배경, 제품 사진 옆에 결과→조건→해석 3단 카드 세로 배열, 체크/엑스 아이콘으로 확인·미확인 구분",
-            "compliance_notes": "미확인 항목(소재·밀폐·용량)을 명시적으로 '말하지 않음' 처리해 표시광고 리스크 차단",
+            "layout_notes": "밝은 톤 전환, 보틀이 가방 안에서 보이는 컷 중앙, 베네핏 카드 3개 아이콘+한 줄, 하단 신뢰 문구",
+            "compliance_notes": "시간 단축 수치·성능 수치 등 미검증 숫자 사용 금지",
             "image_id": "IMG_S3",
             "purpose": "",
             "prompt_ko": "",
@@ -204,28 +224,28 @@
           },
           {
             "section_id": "S4",
-            "section_name": "사실 서술(색상·형태 확인)",
-            "goal": "차별점 주장 없이 사진에서 확인되는 색상·형태만 담담하게 보여준다",
-            "headline": "색상·형태 확인용 시안입니다",
-            "headline_en": "A mock-up for checking color and form",
-            "subheadline": "파란 몸체, 검은 뚜껑, TEST 라벨 — 사진에서 그대로 확인되는 세 가지가 이 시안의 전부입니다",
-            "subheadline_en": "Blue body, black cap, TEST label — the three things you can see in the photo are all this mock-up is",
+            "section_name": "근거",
+            "goal": "결과→조건→해석 3단으로, 왜 이 최소 구성이 '찾는 문제'를 푸는지 설명한다",
+            "headline": "장식을 다 뺐습니다, 검증을 위해",
+            "headline_en": "We stripped everything off — on purpose",
+            "subheadline": "이 시안은 색·뚜껑·라벨 세 요소만 남긴 최소 구성입니다",
+            "subheadline_en": "This mock-up keeps only three elements: color, cap, label",
             "bullets": [
-              "몸체 — 진한 파란색 원통형",
-              "뚜껑 — 검은색, 돌려 닫는 형태",
-              "라벨 — 흰 바탕에 TEST 표기"
+              "결과: 가방 속에서 파랑 하나만 눈에 걸림",
+              "조건: 패턴·인쇄·장식을 전부 뺀 무지 몸체",
+              "해석: 요소가 적을수록 눈이 빨리 찾습니다"
             ],
             "bullets_en": [
-              "Body — deep blue cylinder",
-              "Cap — black, screw-on type",
-              "Label — TEST on a white field"
+              "Result: only the blue catches your eye in the bag",
+              "Condition: a plain body with zero patterns or prints",
+              "Why: fewer elements mean your eye finds it faster"
             ],
-            "trust_or_objection_line": "'챙기기 쉽다' 같은 장점 주장은 하지 않습니다 — 확인된 형태만 보여드립니다",
-            "trust_or_objection_line_en": "No claims like 'easy to carry' — we only show the confirmed form",
+            "trust_or_objection_line": "소재·용량·보온 성능은 확정 전이라 이 페이지에서 약속하지 않습니다",
+            "trust_or_objection_line_en": "Material, capacity, and insulation aren't finalized, so we don't promise them here",
             "CTA": "",
             "CTA_en": "",
-            "layout_notes": "제품 크게 중앙 배치, 몸체·뚜껑·라벨에서 뻗는 지시선+미니 카드 3개, 여백 넉넉히",
-            "compliance_notes": "베네핏 언어(쉽다·좋다·편하다) 사용 금지, 사실 서술만",
+            "layout_notes": "결과→조건→해석 3단 세로 카드, 번호 칩으로 순서 표시, 제품 디테일 클로즈업 병치",
+            "compliance_notes": "미확정 스펙을 사실처럼 쓰지 않음을 문구로 명시, '검증용' 맥락 유지",
             "image_id": "IMG_S4",
             "purpose": "",
             "prompt_ko": "",
@@ -236,28 +256,28 @@
           },
           {
             "section_id": "S5",
-            "section_name": "적합성 고지",
-            "goal": "구매 가능 여부와 안 맞는 사람을 먼저 밝혀 솔직함으로 신뢰를 만든다",
-            "headline": "지금 살 수 있는 제품이 아닙니다",
-            "headline_en": "This is not a product you can buy right now",
-            "subheadline": "판매·결제가 없는 검증 단계입니다 — 그리고 이런 분께는 이 시안 자체가 맞지 않습니다",
-            "subheadline_en": "It's a validation stage with no sales or checkout — and for some, this mock-up simply isn't a fit",
+            "section_name": "반론 처리",
+            "goal": "'나한테도 맞을까'라는 실제 적합성 반론을 먼저 꺼내고, 안 맞는 사람을 밝힌다",
+            "headline": "솔직히, 안 맞는 분도 있습니다",
+            "headline_en": "Honestly, this isn't for everyone",
+            "subheadline": "사기 전에 스스로 확인해볼 세 가지입니다",
+            "subheadline_en": "Three things to check for yourself before deciding",
             "bullets": [
-              "보온·보냉이 필요한 분 — 미확인",
-              "용량·규격이 중요한 분 — 미정",
-              "당장 구매하실 분 — 판매 없음"
+              "보온·보냉이 꼭 필요하면 권하지 않습니다",
+              "용량·무게 수치가 기준이라면 확정 후 확인하세요",
+              "가방 속 물건이 뒤섞여 매번 뒤진다면, 맞습니다"
             ],
             "bullets_en": [
-              "Need insulation — unverified",
-              "Need exact capacity — undecided",
-              "Want to buy today — not for sale"
+              "If you need insulation, this isn't for you",
+              "If specs matter, wait for the finalized numbers",
+              "If you dig through a messy bag daily — this fits"
             ],
-            "trust_or_objection_line": "맞지 않는 분을 먼저 말씀드리는 것이, 확인된 사실만 적는다는 약속의 일부입니다",
-            "trust_or_objection_line_en": "Telling you who this isn't for is part of our promise to state only confirmed facts",
+            "trust_or_objection_line": "안 맞는 경우를 먼저 말씀드리는 것이 검증 시안의 역할이라 믿습니다",
+            "trust_or_objection_line_en": "Telling you who it doesn't fit is exactly what a validation mock-up is for",
             "CTA": "",
             "CTA_en": "",
-            "layout_notes": "차분한 중명도 배경, '맞지 않는 경우' 3카드를 명확한 아이콘과 함께, 하단에 검증 단계 고지 배너",
-            "compliance_notes": "가격·출시일·예약 조건을 지어내지 않음. 판매 없음 고지 유지",
+            "layout_notes": "체크리스트형 카드 3개, 권하지 않는 항목은 차분한 회색, 맞는 항목은 파랑 강조, 하단 정직 고백 한 줄",
+            "compliance_notes": "환불·가격 조건은 미확정이므로 언급하지 않음, 부정 조건 명시로 신뢰 확보",
             "image_id": "IMG_S5",
             "purpose": "",
             "prompt_ko": "",
@@ -268,28 +288,28 @@
           },
           {
             "section_id": "S6",
-            "section_name": "마무리",
-            "goal": "문제(뚜껑 찾기)가 사라진 상태의 감각 한 줄로 페이지를 닫는다",
-            "headline": "뚜껑을 찾는 시간이 사라지면, 아침이 짧아집니다",
-            "headline_en": "When the hunt for the cap disappears, mornings get shorter",
-            "subheadline": "가방을 뒤집던 그 5분이 없는 아침 — 이 시안은 그 아침을 검증하기 위해 만들어졌습니다",
-            "subheadline_en": "A morning without those five minutes of digging — this mock-up exists to test for that morning",
+            "section_name": "마무리 장면",
+            "goal": "달라진 아침 장면 하나로 결정을 쉽게 만들고 검증 시안 고지를 남긴다",
+            "headline": "내일 아침, 현관에서 안 멈춥니다",
+            "headline_en": "Tomorrow morning, no stopping at the door",
+            "subheadline": "가방을 열면 파랑이 먼저 보이고, 그대로 문을 나섭니다",
+            "subheadline_en": "Open the bag, see the blue, walk straight out",
             "bullets": [
-              "뒤지지 않는 가방",
-              "돌아가지 않는 싱크대 앞",
-              "그만큼 일찍 닫히는 현관문"
+              "신발 신다 되돌아가는 동선이 사라짐",
+              "검은 뚜껑 한 번 보고 닫힘 확인 끝",
+              "TEST 라벨 그대로, 지금은 검증 단계"
             ],
             "bullets_en": [
-              "A bag you don't dig through",
-              "No second trip to the sink",
-              "A front door that closes sooner"
+              "No more running back with shoes half on",
+              "One glance at the black cap confirms it's closed",
+              "TEST label as-is — this is the validation stage"
             ],
-            "trust_or_objection_line": "본 시안은 기획 검증용이며 실제 판매 페이지가 아닙니다",
-            "trust_or_objection_line_en": "This mock-up is for planning validation and is not an actual sales page",
+            "trust_or_objection_line": "본 페이지는 실제 판매용이 아닌 기획 검증 시안이며, 확정 스펙은 이후 공개됩니다",
+            "trust_or_objection_line_en": "This page is a planning validation mock-up; final specs will follow",
             "CTA": "",
             "CTA_en": "",
-            "layout_notes": "밝은 아침 톤, 현관 앞 장면 컷 위에 헤드라인 크게, 3개 짧은 문구를 가로 칩으로, 최하단 고지 1줄",
-            "compliance_notes": "배송·마감·구매 유도 문구 금지, 검증 시안 고지로 종결",
+            "layout_notes": "가장 밝은 톤, 문을 나서는 장면 상단 크게, 카드 3개 가로, 최하단 고지 문구를 또렷한 크기로",
+            "compliance_notes": "구매 유도 버튼·배송 약속 금지, 검증 시안 고지를 가장 명확하게 배치",
             "image_id": "IMG_S6",
             "purpose": "",
             "prompt_ko": "",
@@ -304,45 +324,633 @@
         "items": [
           {
             "criterion": "audience",
-            "rating": "weak",
-            "evidence": "헤드라인 '전날 밤 챙겨놔도, 아침엔 한쪽만 남던 분께'와 서브 '뚜껑 따로, 병 따로 챙기다 매번 하나를 빠뜨렸던 출근길'은 상황은 구체적이나, 이 사람이 '무엇을 이미 해봤고 왜 실패했는가(시도)'와 '시간·체력 중 무엇이 부족한가(제약)'가 명시적으로 서술되지 않았다. 요약에서는 '페르소나의 시도·제약을 명시했다'고 주장하지만 실제 카피에는 '전날 밤 따로 챙겨둠'이라는 행동만 있을 뿐, 예를 들어 '알람을 여러 개 맞춰봤다', '현관에 미리 내놓아봤다' 같은 실패한 시도가 드러나지 않는다. 출근이 촉박하다는 제약은 '출근 5분 전'으로 시간 제약은 드러나지만 단발적이다.",
-            "fix": "시도(예: 전날 미리 현관에 내놓기, 알람 맞추기 등 이미 해본 방법과 왜 안 됐는지)를 헤드라인이나 서브에 한 문장 더 넣어 페르소나를 한 사람으로 못박는다."
+            "rating": "pass",
+            "evidence": "요약에서 '작은 백팩으로 지하철 출근하며, 스테인리스 텀블러를 쓰다가 가방 속에서 매번 뒤지던 30대 직장인'으로 좁혔고, [2]에서 '작은 백팩, 뒤질 여유는 1분도 없음'처럼 상황·제약이 구체적으로 드러난다. '누구나', '바쁜 현대인' 식 표현이 없다.",
+            "fix": ""
           },
           {
             "criterion": "problem",
             "rating": "pass",
-            "evidence": "'가방을 뒤집었는데, 뚜껑만 나온 적 있으세요?', '출근 5분 전, 싱크대와 가방 사이를 오가며 바닥까지 뒤지다 결국 뚜껑만 들고 나선 그 아침'은 시간(출근 5분 전)·장소(싱크대, 가방)·동작(뒤집는다, 오간다, 뒤진다)이 모두 들어간 장면이다.",
+            "evidence": "[2] 헤드라인 '8시 20분, 현관에서 멈추는 아침'과 서브 '운동화 뒤축을 구겨 신다 물병 찾으러 방으로 되돌아갑니다'는 시간(8시 20분)·장소(현관)·동작(신발 신다 되돌아감)이 갖춰진 장면이다.",
             "fix": ""
           },
           {
             "criterion": "differentiator",
-            "rating": "fail",
-            "evidence": "[3][4] 섹션은 '성능 주장은 하지 않습니다', '챙기기 쉽다 같은 장점 주장은 하지 않습니다'라며 의도적으로 차별점을 제시하지 않는다. 이는 검증 시안이라는 목적상 불가피할 수 있으나, 판매 원칙 기준으로는 방식·포기한 것·검증 가능한 숫자 중 어느 것도 없어 경쟁 상품과 구별되는 지점이 전혀 없다. '색상·형태 확인용 시안입니다'는 어떤 제품에도 붙일 수 있는 말이다.",
-            "fix": "이 구성안이 기획 검증 단계임을 감안하더라도, 최소한 '병·뚜껑·라벨 세 가지뿐'이라는 구성의 단순함처럼 형태에서 확인 가능한 특징 중 경쟁사와 다른 지점(예: 뚜껑 결합 구조, 라벨 위치 등 사진에서 확인되는 구조적 차이)이 있다면 그것을 차별점으로 끌어올려야 한다. 없다면 이 구성안 자체가 '차별점 없음'을 인정하고 상품 기획 단계에서 재검토해야 한다."
+            "rating": "weak",
+            "evidence": "[4] '이 시안은 색·뚜껑·라벨 세 요소만 남긴 최소 구성입니다', '패턴·인쇄·장식을 전부 뺀 무지 몸체'는 '포기한 것' 프레임으로 방향은 맞다. 하지만 이건 실제 판매 제품의 설계 철학이 아니라 '검증용 가상 시안이라 단순하게 만들었다'는 사정에서 나온 단순함이다. 경쟁 텀블러 페이지에 '눈에 잘 띄는 단색+대비색 뚜껑' 정도는 그대로 옮겨 붙여도 말이 되는 수준이라, 검증되지 않은 상태에서는 강한 차별점이라기보다 '색상 대비가 잘 보인다'는 일반적 장점에 가깝다.",
+            "fix": "'검증을 위해 뺐다'는 사정 설명에 머물지 말고, 실제 제품화 시에도 지켜질 방식(예: 특정 색 조합을 계속 유지한다, 인쇄를 넣지 않는 게 원칙이다 등)으로 연결해 '검증이 끝나도 유지되는 포기'임을 밝히거나, 혹은 지금은 차별점 섹션으로 강하게 내세우기보다 '시안의 설계 원칙'으로 톤을 낮추는 것이 정직하다."
           },
           {
             "criterion": "objection",
             "rating": "pass",
-            "evidence": "[5] 적합성 고지에서 '보온·보냉이 필요한 분 — 미확인', '용량·규격이 중요한 분 — 미정', '당장 구매하실 분 — 판매 없음'으로 안 맞는 사람을 먼저 밝히고 있다. '맞지 않는 분을 먼저 말씀드리는 것이, 확인된 사실만 적는다는 약속의 일부입니다'는 원칙에서 말한 '안 맞는 사람을 밝히는 것'에 부합한다.",
+            "evidence": "[5]에서 '보온·보냉이 꼭 필요하면 권하지 않습니다', '용량·무게 수치가 기준이라면 확정 후 확인하세요'처럼 실제 망설임 지점(성능 미확정, 적합성)을 먼저 꺼내고 안 맞는 사람을 명시했다. 좋은 점만 나열하지 않았다.",
             "fix": ""
           },
           {
             "criterion": "flow",
-            "rating": "weak",
-            "evidence": "히어로→문제→근거→사실서술→적합성고지→마무리 순서는 문제 제기 후 전환(해결된 상태) 없이 바로 '확인 범위(근거)'와 '사실 서술'로 넘어간다. 판매 원칙의 순서는 '문제→전환(그 불편이 사라진 상태)→근거'인데, 이 구성안은 전환 섹션이 통째로 빠져 있고 문제 다음 바로 '이 페이지가 말할 수 있는 건 여기까지입니다'라는 면책성 근거로 건너뛴다. 마지막에서야 '뚜껑을 찾는 시간이 사라지면, 아침이 짧아집니다'로 전환이 등장해 흐름상 너무 늦다.",
-            "fix": "문제 장면 다음에 짧게라도 '이 시안이 해결하려는 상태(전환)'를 배치해 문제→전환→근거의 순서를 지키도록 재배열한다."
+            "rating": "pass",
+            "evidence": "히어로(멈춰세우기)→문제(현관 장면)→베네핏(보이는 물병)→근거(최소구성 이유)→반론(안 맞는 경우)→마무리(내일 아침 장면) 순으로 흐름이 원칙의 6단계 구조를 그대로 따르고 있고, 각 섹션이 앞 섹션의 문장을 이어받는다(예: [2]의 '가방 속에서 안 보여'→[3]의 '가방을 여는 순간 파랑이 먼저').",
+            "fix": ""
           },
           {
             "criterion": "grounding",
             "rating": "pass",
-            "evidence": "[3],[4]에서 '결과 — 사진에서 보이는 것만 적음', '몸체 — 진한 파란색 원통형 / 뚜껑 — 검은색, 돌려 닫는 형태 / 라벨 — 흰 바탕에 TEST 표기'처럼 형태·색·구조만 서술하고, '밀폐력·소재는 말하지 않음'이라고 명시적으로 선을 그었다. 확인되지 않은 효능·수치·인증 주장이 없다.",
+            "evidence": "전 섹션에 '본 제품은 실제 판매용이 아닌 기획 검증 시안입니다', '소재·용량·보온 성능은 확정 전이라 이 페이지에서 약속하지 않습니다' 등으로 미확정 스펙을 명시적으로 배제했고, 언급된 사실은 색·뚜껑·라벨 등 사진으로 확인 가능한 것뿐이다.",
             "fix": ""
           },
           {
             "criterion": "action",
             "rating": "pass",
-            "evidence": "마무리 '뚜껑을 찾는 시간이 사라지면, 아침이 짧아집니다', '뒤지지 않는 가방 / 돌아가지 않는 싱크대 앞 / 그만큼 일찍 닫히는 현관문'은 지어낸 배송·재고·마감 조건 없이 문제→해결의 감각을 담았고, 버튼 문구도 요구하지 않았다. '본 시안은 기획 검증용이며 실제 판매 페이지가 아닙니다'로 판매 아님을 명확히 유지한다.",
+            "evidence": "[6] '가방을 열면 파랑이 먼저 보이고, 그대로 문을 나섭니다'는 버튼 문구나 지어낸 배송·마감 조건 없이 사용 장면으로 마무리했고, '확정 스펙은 이후 공개됩니다'로 현재 단계를 정직하게 밝혔다.",
             "fix": ""
+          }
+        ]
+      }
+    },
+    "text": {
+      "brief": {
+        "offeringName": "직장인을 위한 온라인 문서 작성 강의",
+        "offeringKind": "course",
+        "oneLiner": "주제 정리부터 목차 작성, 문장 다듬기까지 한 번에 배우는 직장인 문서 작성 온라인 강의",
+        "audience": "보고서·기획서 등 업무 문서를 자주 작성해야 하는 직장인",
+        "problem": "문서를 쓸 때 무엇부터 정리해야 할지 막막하고, 구조가 잡히지 않아 작성 시간이 오래 걸리며 문장이 매끄럽지 않다",
+        "outcome": "주제 정리→목차 작성→문장 다듬기의 3단계 프로세스를 익혀 빠르고 명확한 업무 문서를 스스로 완성할 수 있다",
+        "differentiators": [
+          "문서 작성 과정을 주제 정리·목차 작성·문장 다듬기 3단계로 체계화한 커리큘럼",
+          "직장인의 실제 업무 문서 상황에 맞춘 실용 중심 구성",
+          "온라인으로 시간과 장소에 구애받지 않고 수강 가능"
+        ],
+        "objections": [
+          "강의만 듣고 실제 문서 작성 실력이 늘지 의문이다",
+          "바쁜 업무 중 수강 시간을 낼 수 있을지 걱정된다",
+          "무료 글쓰기 자료와 무엇이 다른지 모르겠다"
+        ],
+        "pricePositioning": "동종 온라인 실무 강의 대비 중간 가격대의 합리적 포지셔닝",
+        "tone": "신뢰감 있고 실용적인 톤, 과장 없이 담백하게",
+        "assumptions": [
+          "대상 고객을 보고서·기획서 등 업무 문서를 작성하는 일반 직장인으로 추정함",
+          "고객의 문제를 문서 작성의 막막함과 시간 소요, 문장력 부족으로 추정함",
+          "기대 성과를 3단계 프로세스 습득을 통한 문서 작성 능력 향상으로 추정함",
+          "차별점(3단계 체계화, 실무 중심, 온라인 편의성)은 입력 구성을 바탕으로 추정함",
+          "예상 구매 저항(효과 의문, 시간 부족, 무료 대안)은 일반적인 온라인 강의 구매 패턴에서 추정함",
+          "가격 포지셔닝은 입력에 없어 중간 가격대로 추정함",
+          "톤은 후기·성과 숫자를 배제하라는 요청에 맞춰 과장 없는 신뢰감 있는 톤으로 추정함",
+          "요청에 따라 후기와 성과 숫자는 브리프에 포함하지 않음"
+        ],
+        "sourceText": "직장인을 위한 온라인 문서 작성 강의. 구성은 주제 정리, 목차 작성, 문장 다듬기입니다. 구매 목적의 상세페이지 시안을 만들되 후기나 성과 숫자는 만들지 마세요. 실제 판매가 아닌 검증용 입력입니다."
+      },
+      "blueprint": {
+        "designSystem": {
+          "headlineFont": "굵은 기하학적 산세리프",
+          "bodyFont": "가늘고 단정한 산세리프",
+          "palette": [
+            "밝은 아이보리 배경",
+            "짙은 차콜 본문",
+            "차분한 청록 강조"
+          ],
+          "cast": "30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림"
+        },
+        "executiveSummary": "보고서·기획서를 자주 쓰는 직장인을 대상으로, '무엇부터 정리해야 할지 막막한' 문제 장면에서 출발해 주제 정리→목차 작성→문장 다듬기 3단계 프로세스를 해결책으로 제시하는 6섹션 구성. 후기·성과 숫자는 일절 만들지 않고, 사실 주장은 브리프 원문 범위 안에서만 사용. 마지막은 강의 수강 후 달라지는 업무 장면으로 마무리하며 CTA 문구는 이미지에 넣지 않는다.",
+        "scorecard": [
+          {
+            "category": "흐름(설득 순서)",
+            "score": "A",
+            "reason": "멈춰 세우기→문제→전환→근거(3단계 커리큘럼)→반론 해소→행동 장면의 순서를 지킴"
+          },
+          {
+            "category": "대상 구체성",
+            "score": "B+",
+            "reason": "보고서·기획서를 자주 쓰는 직장인으로 좁혔으나 브리프 범위 밖의 세부 상황은 추가하지 않음"
+          },
+          {
+            "category": "근거 정합성",
+            "score": "A",
+            "reason": "모든 사실 주장을 브리프 원문에서 quoted로 연결, 후기·숫자 미생성"
+          },
+          {
+            "category": "반론 대응",
+            "score": "A-",
+            "reason": "브리프의 예상 반론 3가지(실력 향상 의문, 시간 부족, 무료 자료와의 차이)를 정면으로 다룸"
+          },
+          {
+            "category": "법적 안전성",
+            "score": "A",
+            "reason": "지어낸 수치·배송·마감 조건 없음, 그림 버튼 CTA 미사용"
+          }
+        ],
+        "blueprintList": [
+          "주의 환기",
+          "문제 제기",
+          "해결 전환",
+          "차별점 근거",
+          "반론 해소",
+          "마무리 행동"
+        ],
+        "sections": [
+          {
+            "section_id": "s1",
+            "section_name": "주의 환기",
+            "goal": "문서 앞에서 막막한 순간을 자기 얘기로 인식하게 한다",
+            "headline": "빈 문서 앞, 또 멈추셨나요",
+            "headline_en": "Stuck in front of a blank document again?",
+            "subheadline": "쓸 내용은 있는데 시작이 안 되는 날",
+            "subheadline_en": "You know what to say, but you can't start",
+            "bullets": [],
+            "bullets_en": [],
+            "trust_or_objection_line": "",
+            "trust_or_objection_line_en": "",
+            "CTA": "",
+            "CTA_en": "",
+            "layout_notes": "이미지 전면에 텍스트 오버레이, 헤드라인 좌측 상단 정렬",
+            "compliance_notes": "사실 주장 없음, 감정 환기만",
+            "image_id": "s1_hero",
+            "purpose": "스크롤을 멈추게 하는 공감 장면 제시",
+            "prompt_ko": "사무실 책상에서 빈 모니터 화면을 바라보며 멈춰 있는 30대 한국인 여성 직장인",
+            "prompt_en": "Over-the-shoulder shot of a Korean woman in her early 30s with shoulder-length black hair, wearing a beige shirt, sitting at a desk in a modern Korean office, staring at a blank document on her monitor, cursor blinking, hands resting motionless on the keyboard, soft window light, muted calm tones, realistic photography",
+            "negative_prompt": "3d render, illustration, stock photo look, text on screen, watermark",
+            "style_guide": "차분하고 약간 어두운 톤, 여백을 크게 [페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다] 헤드라인 서체: 굵은 기하학적 산세리프 본문 서체: 가늘고 단정한 산세리프 색 팔레트: 밝은 아이보리 배경 / 짙은 차콜 본문 / 차분한 청록 강조 반복 등장 인물: 30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림 — 모든 섹션에 같은 사람이 나온다 이 값들은 섹션마다 바뀌면 안 된다.",
+            "reference_usage": "없음",
+            "evidenceVersion": 1,
+            "evidence": [
+              {
+                "target": {
+                  "slot": "headline"
+                },
+                "value": "빈 문서 앞, 또 멈추셨나요",
+                "kind": "rhetoric",
+                "note": "감정 환기용 질문, 사실 주장 아님"
+              },
+              {
+                "target": {
+                  "slot": "subheadline"
+                },
+                "value": "쓸 내용은 있는데 시작이 안 되는 날",
+                "kind": "rhetoric",
+                "note": "공감 유도 문구, 사실 주장 아님"
+              },
+              {
+                "target": {
+                  "slot": "prompt_ko"
+                },
+                "value": "사무실 책상에서 빈 모니터 화면을 바라보며 멈춰 있는 30대 한국인 여성 직장인",
+                "kind": "rhetoric",
+                "note": "장면 묘사"
+              }
+            ]
+          },
+          {
+            "section_id": "s2",
+            "section_name": "문제 제기",
+            "goal": "'내 얘기다'라는 인식을 만든다",
+            "headline": "",
+            "headline_en": "You don't know where to start organizing",
+            "subheadline": "",
+            "subheadline_en": "Without structure, writing takes far too long",
+            "bullets": [
+              "",
+              ""
+            ],
+            "bullets_en": [
+              "Office workers who frequently write reports and proposals",
+              "Sentences don't read smoothly"
+            ],
+            "trust_or_objection_line": "",
+            "trust_or_objection_line_en": "",
+            "CTA": "",
+            "CTA_en": "",
+            "layout_notes": "상단 텍스트 블록·하단 이미지의 2단 구성",
+            "compliance_notes": "문제 서술은 모두 브리프 원문 인용 범위 내",
+            "image_id": "s2_problem",
+            "purpose": "대상의 문제를 장면으로 구체화",
+            "prompt_ko": "메모와 출력물이 흩어진 책상을 위에서 내려다본 장면, 정리되지 않은 초안",
+            "prompt_en": "Top-down shot of a Korean office desk cluttered with scattered sticky notes, printed draft pages with pen marks, and a laptop showing a half-written document, a coffee cup pushed aside, overcast daylight, slightly desaturated tones, realistic photography",
+            "negative_prompt": "3d render, illustration, stock photo look, watermark, readable text",
+            "style_guide": "차분한 톤 유지, 어수선함을 절제되게 표현 [페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다] 헤드라인 서체: 굵은 기하학적 산세리프 본문 서체: 가늘고 단정한 산세리프 색 팔레트: 밝은 아이보리 배경 / 짙은 차콜 본문 / 차분한 청록 강조 반복 등장 인물: 30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림 — 모든 섹션에 같은 사람이 나온다 이 값들은 섹션마다 바뀌면 안 된다.",
+            "reference_usage": "없음",
+            "evidenceVersion": 1,
+            "evidence": [
+              {
+                "target": {
+                  "slot": "prompt_ko"
+                },
+                "value": "메모와 출력물이 흩어진 책상을 위에서 내려다본 장면, 정리되지 않은 초안",
+                "kind": "rhetoric",
+                "note": "장면 묘사"
+              },
+              {
+                "target": {
+                  "slot": "headline"
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "헤드라인에 넣을 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "subheadline"
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "서브헤드라인에 넣을 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 0
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "1번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 1
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "2번째 항목의 실제 내용"
+              }
+            ]
+          },
+          {
+            "section_id": "s3",
+            "section_name": "해결 전환",
+            "goal": "3단계 프로세스라는 해법의 존재를 각인",
+            "headline": "",
+            "headline_en": "Topic organizing → Outlining → Sentence polishing",
+            "subheadline": "쓰는 순서가 잡히면 문서가 잡힙니다",
+            "subheadline_en": "When the order is clear, the document follows",
+            "bullets": [
+              "",
+              "",
+              ""
+            ],
+            "bullets_en": [
+              "Learn topic organizing, outlining, and sentence polishing in one course",
+              "Master the 3-step process",
+              "Complete fast, clear business documents on your own"
+            ],
+            "trust_or_objection_line": "",
+            "trust_or_objection_line_en": "",
+            "CTA": "",
+            "CTA_en": "",
+            "layout_notes": "좌우 2단 분할, 좌측 3단계 텍스트·우측 이미지",
+            "compliance_notes": "커리큘럼 구성은 브리프 원문 인용",
+            "image_id": "s3_solution",
+            "purpose": "문제가 사라진 상태와 해결 방식 제시",
+            "prompt_ko": "밝은 사무실에서 노트에 문서 구조를 차분히 적어 내려가는 여성 직장인의 손 클로즈업",
+            "prompt_en": "Close-up of a Korean woman's hands in a beige shirt writing a clean three-part outline in a notebook beside a laptop, bright airy Korean office with warm morning light, organized desk, shallow depth of field, realistic photography",
+            "negative_prompt": "3d render, illustration, stock photo look, watermark, readable text",
+            "style_guide": "톤이 밝아지는 전환점, 청록 강조색으로 3단계 표기 [페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다] 헤드라인 서체: 굵은 기하학적 산세리프 본문 서체: 가늘고 단정한 산세리프 색 팔레트: 밝은 아이보리 배경 / 짙은 차콜 본문 / 차분한 청록 강조 반복 등장 인물: 30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림 — 모든 섹션에 같은 사람이 나온다 이 값들은 섹션마다 바뀌면 안 된다.",
+            "reference_usage": "없음",
+            "evidenceVersion": 1,
+            "evidence": [
+              {
+                "target": {
+                  "slot": "subheadline"
+                },
+                "value": "쓰는 순서가 잡히면 문서가 잡힙니다",
+                "kind": "rhetoric",
+                "note": "전환 문구, 사실 주장 아님"
+              },
+              {
+                "target": {
+                  "slot": "prompt_ko"
+                },
+                "value": "밝은 사무실에서 노트에 문서 구조를 차분히 적어 내려가는 여성 직장인의 손 클로즈업",
+                "kind": "rhetoric",
+                "note": "장면 묘사"
+              },
+              {
+                "target": {
+                  "slot": "headline"
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "헤드라인에 넣을 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 0
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "1번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 1
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "2번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 2
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "3번째 항목의 실제 내용"
+              }
+            ]
+          },
+          {
+            "section_id": "s4",
+            "section_name": "차별점 근거",
+            "goal": "체계·실용·접근성 세 축의 근거 제시",
+            "headline": "",
+            "headline_en": "A curriculum systemized into 3 steps",
+            "subheadline": "",
+            "subheadline_en": "Practical design built around real workplace documents",
+            "bullets": [
+              "",
+              "",
+              ""
+            ],
+            "bullets_en": [
+              "A curriculum that systemizes writing into topic organizing, outlining, and sentence polishing",
+              "Practical structure built around real workplace document situations",
+              "Take the course online, anytime, anywhere"
+            ],
+            "trust_or_objection_line": "",
+            "trust_or_objection_line_en": "",
+            "CTA": "",
+            "CTA_en": "",
+            "layout_notes": "중앙 이미지 위 3개 카드형 불릿을 세로로 배치",
+            "compliance_notes": "차별점 3개 모두 브리프 원문 인용, 수치 미사용",
+            "image_id": "s4_evidence",
+            "purpose": "왜 이 강의가 그 결과를 만드는지 설명",
+            "prompt_ko": "노트북으로 강의를 수강하며 메모하는 여성 직장인, 정돈된 밝은 홈오피스",
+            "prompt_en": "Wide environmental shot of a Korean woman in her early 30s in a beige shirt watching an online lecture on a laptop in a tidy bright Korean home office, taking notes in a notebook, plants and bookshelf in background, natural daylight, clean composition, realistic photography",
+            "negative_prompt": "3d render, illustration, stock photo look, watermark, readable screen text",
+            "style_guide": "밝고 정돈된 톤, 강조색은 불릿 번호에만 사용 [페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다] 헤드라인 서체: 굵은 기하학적 산세리프 본문 서체: 가늘고 단정한 산세리프 색 팔레트: 밝은 아이보리 배경 / 짙은 차콜 본문 / 차분한 청록 강조 반복 등장 인물: 30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림 — 모든 섹션에 같은 사람이 나온다 이 값들은 섹션마다 바뀌면 안 된다.",
+            "reference_usage": "없음",
+            "evidenceVersion": 1,
+            "evidence": [
+              {
+                "target": {
+                  "slot": "prompt_ko"
+                },
+                "value": "노트북으로 강의를 수강하며 메모하는 여성 직장인, 정돈된 밝은 홈오피스",
+                "kind": "rhetoric",
+                "note": "장면 묘사"
+              },
+              {
+                "target": {
+                  "slot": "headline"
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "헤드라인에 넣을 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "subheadline"
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "서브헤드라인에 넣을 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 0
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "1번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 1
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "2번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 2
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "3번째 항목의 실제 내용"
+              }
+            ]
+          },
+          {
+            "section_id": "s5",
+            "section_name": "반론 해소",
+            "goal": "세 가지 예상 반론을 먼저 꺼내 솔직함을 전달",
+            "headline": "이런 걱정, 먼저 말씀드립니다",
+            "headline_en": "Let us address your concerns first",
+            "subheadline": "",
+            "subheadline_en": "",
+            "bullets": [
+              "",
+              "",
+              ""
+            ],
+            "bullets_en": [
+              "Will just watching lectures actually improve my writing?",
+              "Can I find time to take the course during busy work weeks?",
+              "How is this different from free writing resources?"
+            ],
+            "trust_or_objection_line": "",
+            "trust_or_objection_line_en": "Take the course online, free from time and place constraints",
+            "CTA": "",
+            "CTA_en": "",
+            "layout_notes": "질문형 불릿을 좌측에 세로 스택, 우측 하단에 이미지와 답변 한 줄",
+            "compliance_notes": "반론은 브리프 원문 인용, 답변도 브리프 범위 내에서만 제시",
+            "image_id": "s5_objection",
+            "purpose": "구매 직전의 망설임을 정면으로 다룸",
+            "prompt_ko": "퇴근길 지하철에서 스마트폰으로 강의를 보는 여성 직장인",
+            "prompt_en": "Low-angle candid shot of a Korean woman in her early 30s in a beige shirt standing in a Seoul subway car during evening commute, watching a lecture on her smartphone with earphones, warm interior lighting, gentle focused expression, realistic photography",
+            "negative_prompt": "3d render, illustration, stock photo look, watermark, readable screen text",
+            "style_guide": "따뜻하고 솔직한 톤, 질문은 본문색·답변은 강조색 [페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다] 헤드라인 서체: 굵은 기하학적 산세리프 본문 서체: 가늘고 단정한 산세리프 색 팔레트: 밝은 아이보리 배경 / 짙은 차콜 본문 / 차분한 청록 강조 반복 등장 인물: 30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림 — 모든 섹션에 같은 사람이 나온다 이 값들은 섹션마다 바뀌면 안 된다.",
+            "reference_usage": "없음",
+            "evidenceVersion": 1,
+            "evidence": [
+              {
+                "target": {
+                  "slot": "headline"
+                },
+                "value": "이런 걱정, 먼저 말씀드립니다",
+                "kind": "rhetoric",
+                "note": "반론 도입 문구, 사실 주장 아님"
+              },
+              {
+                "target": {
+                  "slot": "prompt_ko"
+                },
+                "value": "퇴근길 지하철에서 스마트폰으로 강의를 보는 여성 직장인",
+                "kind": "rhetoric",
+                "note": "장면 묘사"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 0
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "1번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 1
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "2번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 2
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "3번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "trust_or_objection_line"
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "신뢰·반론 문장에 넣을 실제 내용"
+              }
+            ]
+          },
+          {
+            "section_id": "s6",
+            "section_name": "마무리 행동",
+            "goal": "이 강의로 무엇을 하게 되는지 그려준다",
+            "headline": "문서가 나를 기다리지 않게",
+            "headline_en": "So documents stop waiting on you",
+            "subheadline": "쓰는 순서를 아는 사람의 하루는 다릅니다",
+            "subheadline_en": "A day is different when you know how to write in order",
+            "bullets": [
+              "",
+              ""
+            ],
+            "bullets_en": [
+              "Complete fast, clear business documents on your own",
+              "Reasonably positioned at a mid-range price among comparable online courses"
+            ],
+            "trust_or_objection_line": "",
+            "trust_or_objection_line_en": "",
+            "CTA": "",
+            "CTA_en": "",
+            "layout_notes": "이미지 배경 전면, 하단 중앙에 텍스트 캡션 블록",
+            "compliance_notes": "CTA 버튼 문구 미사용(사용자 결정 2026-07-30), 배송·마감·후기·숫자 미생성, 가격 서술은 브리프 인용 범위",
+            "image_id": "s6_close",
+            "purpose": "수강 후 달라지는 장면으로 결정을 돕는다",
+            "prompt_ko": "완성한 문서를 보내고 개운하게 자리에서 일어나는 여성 직장인, 밝은 오후 사무실",
+            "prompt_en": "Medium shot of a Korean woman in her early 30s in a beige shirt closing her laptop with a relieved satisfied smile and standing up from her desk in a bright Korean office, late afternoon sunlight streaming through windows, light airy tones, realistic photography",
+            "negative_prompt": "3d render, illustration, stock photo look, watermark, buttons, price tags",
+            "style_guide": "페이지에서 가장 밝고 개운한 톤으로 마무리 [페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다] 헤드라인 서체: 굵은 기하학적 산세리프 본문 서체: 가늘고 단정한 산세리프 색 팔레트: 밝은 아이보리 배경 / 짙은 차콜 본문 / 차분한 청록 강조 반복 등장 인물: 30대 초반 한국인 여성 직장인, 어깨 길이의 단정한 검은 머리, 옅은 베이지 셔츠에 슬랙스 차림 — 모든 섹션에 같은 사람이 나온다 이 값들은 섹션마다 바뀌면 안 된다.",
+            "reference_usage": "없음",
+            "evidenceVersion": 1,
+            "evidence": [
+              {
+                "target": {
+                  "slot": "headline"
+                },
+                "value": "문서가 나를 기다리지 않게",
+                "kind": "rhetoric",
+                "note": "감정 마무리 문구, 사실 주장 아님"
+              },
+              {
+                "target": {
+                  "slot": "subheadline"
+                },
+                "value": "쓰는 순서를 아는 사람의 하루는 다릅니다",
+                "kind": "rhetoric",
+                "note": "전환 문구, 사실 주장 아님"
+              },
+              {
+                "target": {
+                  "slot": "prompt_ko"
+                },
+                "value": "완성한 문서를 보내고 개운하게 자리에서 일어나는 여성 직장인, 밝은 오후 사무실",
+                "kind": "rhetoric",
+                "note": "장면 묘사"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 0
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "1번째 항목의 실제 내용"
+              },
+              {
+                "target": {
+                  "slot": "bullet",
+                  "index": 1
+                },
+                "value": "",
+                "kind": "ask",
+                "note": "2번째 항목의 실제 내용"
+              }
+            ]
+          }
+        ]
+      },
+      "review": {
+        "items": [
+          {
+            "criterion": "audience",
+            "rating": "weak",
+            "evidence": "'보고서·기획서 등 업무 문서를 자주 작성해야 하는 직장인'이라는 대상 규정은 '누구나'보다는 낫지만, 어떤 업종·직급·상황에서 문서를 쓰는지(예: 주간보고를 매주 써야 하는 대리급, 기획안을 급하게 써야 하는 상황 등) 구체적 장면이 없어 여전히 넓은 집단을 지칭한다. '이미 무엇을 해봤고 왜 실패했는가' 축이 전혀 없다.",
+            "fix": "대상을 상황·시도·제약 축으로 한 번 더 좁혀라. 예: '매주 팀장에게 보고서를 올려야 하는데, 목차 잡는 데만 30분씩 날리는 3년차 직장인' 처럼 시간·빈도·기존 시도 실패 지점을 넣어야 한 사람이 떠오른다."
+          },
+          {
+            "criterion": "problem",
+            "rating": "weak",
+            "evidence": "'빈 문서 앞, 또 멈추셨나요', '무엇부터 정리해야 할지 막막하다', '구조가 잡히지 않아 작성 시간이 오래 걸린다'는 상황을 짚었지만 시간·장소·동작이 구체적으로 들어간 장면이 아니라 상태를 서술한 수준이다. '월요일 아침 보고서 마감 30분 전, 커서만 깜빡이는 빈 문서를 본다' 같은 재생 가능한 장면이 아니다.",
+            "fix": "언제(퇴근 전, 마감 직전), 어디서(자리, 회의 직후), 무엇을 하다가(제목만 쓰고 멈췄다) 겪는지 구체적 동작을 넣어 장면화하라."
+          },
+          {
+            "criterion": "differentiator",
+            "rating": "fail",
+            "evidence": "'주제 정리·목차 작성·문장 다듬기 3단계로 체계화한 커리큘럼', '직장인의 실제 업무 문서 상황에 맞춘 실용 중심 구성', '온라인으로 시간과 장소에 구애받지 않고 수강 가능' 모두 경쟁 강의 페이지에 그대로 붙여도 말이 되는 문장이다. 방식이 왜 다른지(예: 기존 글쓰기 강의는 문장론 위주인데 이건 순서 자체를 가르친다는 식의 포기한 것/방식 차이), 검증 가능한 숫자(강좌 수, 실습 예시 수)가 전혀 없다.",
+            "fix": "타 강의가 하는 것과 이 강의가 '안 하는 것' 또는 '다르게 하는 방식'을 명시하라. 예: '이론 강의 없이 실제 보고서 예시로만 실습한다' 처럼 대체 불가능한 방식을 말하거나, 확인 가능한 숫자(회차, 실습 문서 개수)를 넣어라."
+          },
+          {
+            "criterion": "objection",
+            "rating": "weak",
+            "evidence": "반론 항목으로 '강의만 듣고 실제 문서 작성 실력이 늘지 의문이다', '바쁜 업무 중 수강 시간을 낼 수 있을지 걱정된다', '무료 글쓰기 자료와 무엇이 다른지 모르겠다'를 나열했으나, 그 아래 '신뢰·반론'에는 '온라인으로 시간과 장소에 구애받지 않고 수강 가능'이라는 한 문장만 있어 세 반론 중 두 개(실력이 느는지, 무료 자료와 차이)에 대한 답이 없다. 반론을 꺼내놓고 정면으로 다루지 않은 셈이다.",
+            "fix": "세 반론 각각에 대응하는 답을 따로 써라. '실력이 늘지 의문' → 실습 방식이나 결과물 예시로 답하고, '무료 자료와 차이' → 차별점 섹션의 근거를 여기서 다시 연결해 답해야 한다."
+          },
+          {
+            "criterion": "flow",
+            "rating": "weak",
+            "evidence": "1→2→3까지는 문제→전환 흐름이 자연스럽지만 [4] 차별점에서 '온라인으로 시간과 장소에 구애받지 않고 수강 가능'이 등장하고 [5]에서 같은 문장이 '신뢰·반론' 근거로 재사용되며, [6] 마무리에도 '동종 온라인 실무 강의 대비 중간 가격대의 합리적 포지셔닝'이라는 새로운 정보(가격 반론)가 갑자기 등장한다. 가격에 대한 반론이 반론 섹션이 아니라 마무리에 뒤늦게 붙어 흐름이 끊긴다.",
+            "fix": "가격 관련 반론('비싸다')은 [5] 반론 섹션에서 다뤄야 한다. 마무리 섹션에 새로운 반론용 정보를 넣지 말고, 마무리는 전환된 장면 묘사로만 채워라."
+          },
+          {
+            "criterion": "grounding",
+            "rating": "weak",
+            "evidence": "'동종 온라인 실무 강의 대비 중간 가격대의 합리적 포지셔닝'은 비교 대상과 기준이 브리프에 명시되지 않았다면 확인 불가능한 비교 주장이다. 시장 조사 근거 없이 '중간 가격대'라 단정하면 근거 없는 주장에 해당한다.",
+            "fix": "브리프에 실제 비교 데이터(경쟁사 가격 목록, 산출 근거)가 있을 때만 쓰고, 없다면 이 문장을 빼거나 '가격을 감추지 않고 왜 이 값인지 설명'하는 방식(예: 강의 시간당 비용 환산)으로 대체하라."
+          },
+          {
+            "criterion": "action",
+            "rating": "weak",
+            "evidence": "마무리 헤드라인 '문서가 나를 기다리지 않게', 서브 '쓰는 순서를 아는 사람의 하루는 다릅니다'는 장면 전환 시도로 방향은 맞으나, 구체적인 '무엇을 하게 되는지'(예: 목차부터 30분 만에 잡는다 등) 장면이 없이 추상적 문장에 머문다. 또한 '동종 온라인 실무 강의 대비 중간 가격대의 합리적 포지셔닝'이라는 근거 미확인 비교 문구가 마무리에 섞여 있어 망설임을 덜기보다 새로운 의문(정말 중간 가격인가?)을 만든다.",
+            "fix": "마무리는 수강 후의 구체적 업무 장면(예: '목차부터 잡고 30분 만에 초안을 씁니다')으로 채우고, 가격 비교 주장은 반론 섹션으로 옮기거나 근거가 없으면 삭제하라."
           }
         ]
       }

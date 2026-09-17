@@ -41,8 +41,8 @@ const PLANNING_MAX_TOKENS = 32768;
  */
 export class PdpResponseTruncatedError extends Error {
   readonly code = "AI_RESPONSE_TRUNCATED";
-  constructor(readonly model: string, readonly name: string) {
-    super(`${model} 이(가) ${name} 답을 끝까지 쓰지 못하고 잘렸습니다. 요청을 줄이거나 상한을 올려 주세요.`);
+  constructor(readonly model: string, readonly call: string) {
+    super(`${model} 이(가) ${call} 답을 끝까지 쓰지 못하고 잘렸습니다. 요청을 줄이거나 상한을 올려 주세요.`);
     this.name = "PdpResponseTruncatedError";
   }
 }
