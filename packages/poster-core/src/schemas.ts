@@ -141,6 +141,18 @@ export const PosterProjectInputSchema = z.object({
   promptMode: z.enum(PROMPT_MODES).default("assisted"),
   adMasterId: z.string().max(64).optional(),
   slots: PosterSlotsSchema.optional(),
+  /**
+   * 기획이 **근거 없이 채웠다고 밝힌** 칸 이름들.
+   *
+   * 04 가 여기에 표를 붙여 사람이 지우거나 고치게 한다. 전에는 기획이 그런 칸을
+   * 아예 비웠는데, 너무 잘 들어서 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다
+   * (2026-09-16 실측). 채우게 하고 밝히는 쪽으로 바꿨다(2026-09-17).
+   *
+   * **사람이 고친 칸은 여기서 빠진다.** 손댄 순간 그 값은 사람 것이다.
+   *
+   * 옛 작업에는 없다. 없으면 「지어낸 것이 없다」로 읽는다.
+   */
+  inventedSlots: z.array(z.string()).default([]),
 }).strict().superRefine((input, ctx) => {
   /**
    * **광고 규격은 따라 만들 그림이 있어야 한다.**

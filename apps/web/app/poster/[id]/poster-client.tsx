@@ -61,6 +61,8 @@ interface PosterProject {
     look?: ImageLook;
     /** 쓴 그대로 보낼지. 옛 작업에는 없다 — 없으면 지금까지대로 다듬는다. */
     promptMode?: "verbatim" | "assisted";
+    /** 기획이 근거 없이 채웠다고 밝힌 칸들. 옛 작업에는 없다. */
+    inventedSlots?: string[];
   };
 }
 
@@ -294,6 +296,18 @@ export function PosterClient(
     setPlanOpen(true);
   }, [images.length, project.data.promptMode]);
 
+  /**
+   * 기획이 **근거 없이 채웠다고 밝힌** 칸들.
+   *
+   * 전에는 기획이 그런 칸을 아예 비웠다. 뜻은 분명했지만 너무 잘 들어서
+   * 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다(2026-09-16 실측) — 초보일수록
+   * 빈 칸을 못 채우는데 그 사람이 도움을 받으러 왔다.
+   *
+   * 지금은 채우게 하고 **여기에 표를 붙인다.** 판단은 사람이 하되 판단할
+   * 거리는 AI 가 만들어 준다(2026-09-17 사용자 결정).
+   */
+  const [invented, setInvented] = React.useState<string[]>(project.data.inventedSlots ?? []);
+
   /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
   const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
     SLOT_LABELS.map(([field]) => field),
@@ -305,9 +319,21 @@ export function PosterClient(
     const entry = SLOT_LABELS.find(([name]) => name === field);
     if (!entry) return null;
     const [, label, kind] = entry;
+    const 지어냄 = invented.includes(field);
     return (
       <div key={field} className="grid gap-1.5">
-        <Label htmlFor={`slot-${field}`}>{label}</Label>
+        <Label htmlFor={`slot-${field}`} className="flex flex-wrap items-center gap-2">
+          {label}
+          {/*
+            **눈에 띄게 적는다.** 이 표가 안 보이면 AI 가 지어낸 설정이 그대로
+            그림에 들어가고, 사용자는 왜 그게 나왔는지 모른다. 고치면 사라진다.
+          */}
+          {지어냄 ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+              AI 가 골라 채움
+            </span>
+          ) : null}
+        </Label>
         {kind === "area" ? (
           <Textarea
             id={`slot-${field}`}
@@ -370,6 +396,13 @@ export function PosterClient(
 
   function setField(field: TextSlot, value: string) {
     setSlots((current: PosterSlots) => ({ ...current, [field]: value }));
+    /*
+     * **손댄 칸은 더 이상 「AI 가 지어낸 것」이 아니다.**
+     *
+     * 사람이 읽고 고쳤으면 그 값은 사람 것이다. 표를 그대로 두면 자기가 쓴
+     * 글에 「확인하세요」가 붙어 있는 꼴이 된다.
+     */
+    setInvented((current) => current.filter((name) => name !== field));
   }
 
   async function saveSlots() {
@@ -632,6 +665,32 @@ export function PosterClient(
             (2026-09-08 화면에서 138px 벌어짐).
           */}
           <SidePanelBody className="grid content-start gap-5">
+            {/*
+              **칸마다 붙은 표를 놓칠 수 있다.** 칸이 아홉이고 표는 작다.
+              몇 개가 지어낸 것인지 맨 위에서 한 번 더 말해 준다.
+            */}
+            {/*
+              **「몇 개가 지어낸 것인가」로 적지 않는다.**
+
+              짧은 지시로 만들면 열한 칸 중 아홉에 표가 붙는다(2026-09-17 실측).
+              그게 정상이다 — 한 줄만 적었으니 나머지는 AI 가 고른 것이 맞다.
+              그런데 「9개가 지어낸 것」이라고 적으면 고장처럼 읽힌다.
+
+              **거꾸로 말한다.** 적어 주신 말에서 나온 칸이 몇 개인지 알려 주고,
+              나머지는 확인할 거리라고 안내한다.
+            */}
+            {invented.length ? (
+              <div className="grid gap-1 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
+                <span className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                  표가 붙은 칸은 AI 가 골라 채운 것입니다
+                </span>
+                <span className="text-sm text-amber-900/80 dark:text-amber-200/80">
+                  적어 주신 말로 채운 칸은 {filledFields.length - invented.length}개이고,
+                  나머지 {invented.length}개는 AI 가 어울릴 만한 것으로 골랐습니다.
+                  마음에 안 들면 지우거나 고치세요. 고치면 표가 사라집니다.
+                </span>
+              </div>
+            ) : null}
             {userWords.length ? (
               <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
                 <span className="text-meta text-subtle-foreground">

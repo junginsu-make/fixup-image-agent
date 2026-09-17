@@ -194,3 +194,83 @@ describe("사람을 한 명씩 넘긴다", () => {
     expect(prompt).not.toContain("       · ");
   });
 });
+
+/**
+ * **빈 칸을 남기지 않는다. 대신 지어낸 것을 밝힌다.**
+ *
+ * 전에는 「알 수 없는 칸은 지어내지 말고 비워 두세요」였다. 뜻은 분명했다 — AI 가
+ * 지어낸 설정이 그림에 섞이면 사용자는 왜 그게 나왔는지 모른다.
+ *
+ * **그런데 너무 잘 들었다.** 「벚꽃 아래에서 손을 흔드는 교복 입은 학생」에 칸을
+ * 0개 채운다(2026-09-16 실측). 벚꽃에서 분홍을 읽는 것은 날조가 아니라 당연한
+ * 읽기인데, 「지어내지 말라」를 성실히 따르면 그것까지 비운다. AI 가 추론과 날조를
+ * 구분하지 못하고 둘 다 피하는 것으로 보인다.
+ *
+ * 초보일수록 빈 칸을 못 채운다. 그 사람이 도움을 받으러 왔다.
+ *
+ * **그래서 채우게 하고, 지어낸 칸을 표시한다**(2026-09-17 사용자 결정). 사용자가
+ * 04 에서 그 표를 보고 지우거나 고친다. 판단은 사람이 하되, 판단할 거리는
+ * AI 가 만들어 준다.
+ */
+describe("지어낸 칸", () => {
+  it("기획이 돌려준 목록을 그대로 낸다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["dominantColor", "action"] }),
+    });
+
+    expect(result.invented).toEqual(["dominantColor", "action"]);
+  });
+
+  /** 옛 기획 결과에는 이 칸이 없다. 없으면 「지어낸 것이 없다」로 읽는다. */
+  it("안 돌려주면 빈 목록이다", async () => {
+    const result = await planPoster(input, { plan: async () => ({ slots: filled }) });
+
+    expect(result.invented).toEqual([]);
+  });
+
+  /**
+   * **모르는 칸 이름은 버린다.** 화면은 이름으로 칸을 찾으므로, 없는 이름이
+   * 섞이면 조용히 아무 데도 표시가 안 붙는다. 들어올 때 걸러 낸다.
+   */
+  it("없는 칸 이름은 버린다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["scene", "없는칸", "mood"] }),
+    });
+
+    expect(result.invented).toEqual(["scene"]);
+  });
+
+  it("목록이 아니면 빈 목록이다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: "dominantColor" }),
+    });
+
+    expect(result.invented).toEqual([]);
+  });
+
+  /** 기획이 통째로 실패하면 지어낸 것도 없다. */
+  it("실패하면 빈 목록이다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => { throw new Error("주 실패"); },
+    });
+
+    expect(result.invented).toEqual([]);
+  });
+});
+
+describe("기획 프롬프트의 규칙", () => {
+  const prompt = buildPlanPrompt(input);
+
+  it("빈 칸을 남기지 말라고 한다", () => {
+    expect(prompt).toContain("비워 두지 말고");
+  });
+
+  /** 「지어내지 마세요」가 남아 있으면 둘이 부딪혀 AI 가 안전한 쪽으로 쏠린다. */
+  it("지어내지 말라는 말이 안 남았다", () => {
+    expect(prompt).not.toContain("지어내지 말고 비워");
+  });
+
+  it("지어낸 칸을 적으라고 한다", () => {
+    expect(prompt).toContain("invented");
+  });
+});

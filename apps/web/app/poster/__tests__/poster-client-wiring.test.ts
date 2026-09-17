@@ -124,3 +124,38 @@ describe("단계 막대", () => {
     expect(source).not.toContain('list.length ? "result" : "plan"');
   });
 });
+
+/**
+ * **AI 가 지어낸 칸을 사용자가 알아볼 수 있어야 한다.**
+ *
+ * 전에는 기획이 근거 없는 칸을 아예 비웠다. 뜻은 분명했지만 너무 잘 들어서
+ * 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다(2026-09-16 실측) — 초보일수록 빈
+ * 칸을 못 채우는데 그 사람이 도움을 받으러 왔다.
+ *
+ * 지금은 채우게 하고 표를 붙인다. **표가 안 보이면 이 바꿈이 그냥 나빠지기만
+ * 한다** — AI 가 지어낸 설정이 조용히 그림에 들어가고 사용자는 왜 그게 나왔는지
+ * 모른다(2026-09-17 사용자 결정).
+ */
+describe("지어낸 칸 표시", () => {
+  it("저장된 목록을 읽어 온다", () => {
+    expect(source).toContain("project.data.inventedSlots ?? []");
+  });
+
+  it("그 칸에 표를 붙인다", () => {
+    expect(source).toContain("invented.includes(field)");
+    expect(source).toContain("AI 가 골라 채움");
+  });
+
+  /** 칸이 아홉이고 표는 작다. 맨 위에서 한 번 더 말해 준다. */
+  it("몇 개인지 맨 위에서도 말한다", () => {
+    expect(source).toContain("invented.length");
+  });
+
+  /**
+   * **손댄 칸은 더 이상 AI 것이 아니다.** 표를 그대로 두면 자기가 쓴 글에
+   * 「확인하세요」가 붙어 있는 꼴이 된다.
+   */
+  it("고치면 표가 사라진다", () => {
+    expect(source).toContain('setInvented((current) => current.filter((name) => name !== field))');
+  });
+});

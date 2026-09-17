@@ -50,11 +50,24 @@ const SLOT_PROPERTIES = {
 
 const PLAN_SPEC: StructuredSpec = {
   name: "poster_plan",
-  description: "포스터 기획 슬롯을 채운다. 모르는 칸은 빈 문자열로 둔다.",
+  description: "포스터 기획 칸을 채우고, 근거 없이 채운 칸을 밝힌다.",
   schema: {
     type: "object",
-    properties: { slots: { type: "object", properties: SLOT_PROPERTIES } },
-    required: ["slots"],
+    properties: {
+      slots: { type: "object", properties: SLOT_PROPERTIES },
+      /*
+       * **여기 없으면 프롬프트로 아무리 시켜도 안 온다.**
+       *
+       * 구조화 응답은 이 틀에 없는 칸을 버린다. 프롬프트에만 「invented 에
+       * 적으세요」를 써 뒀더니 실제 호출에서 **여섯 번 모두 빈 목록**이 왔다
+       * (2026-09-17 실측). 모델이 안 따른 것이 아니라 틀이 막고 있었다.
+       */
+      invented: {
+        type: "array",
+        items: { type: "string", enum: Object.keys(SLOT_PROPERTIES) },
+      },
+    },
+    required: ["slots", "invented"],
   },
 };
 
