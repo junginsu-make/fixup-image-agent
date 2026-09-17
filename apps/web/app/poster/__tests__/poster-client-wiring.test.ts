@@ -176,6 +176,37 @@ describe("지어낸 칸 표시", () => {
   });
 
   /**
+   * **만들기 전에 먼저 저장한다.**
+   *
+   * 미리보기는 화면 state 를 보고 생성은 저장값을 본다. 전에는 값이 **내용**만
+   * 갈랐는데, 이제 「글자를 넣지 말라」라는 **분기**까지 가른다. 그래서 칸을
+   * 고치고 저장 안 한 채 만들면 미리보기에는 글자가 보이는데 **글자 하나 없는
+   * 그림**이 나온다(2026-09-17 리뷰).
+   *
+   * 고친 것을 버리는 쪽이 아니라 **살리는 쪽**으로 맞춘다 — 사람이 방금 한 일이다.
+   */
+  it("만들기 전에 저장한다", () => {
+    const 만들기 = source.slice(
+      source.indexOf("async function generate()"),
+      source.indexOf("async function pollUntilDone"),
+    );
+
+    expect(만들기.length, "generate 를 못 찾았다").toBeGreaterThan(50);
+    expect(만들기).toContain("if (!await saveSlots()) return;");
+  });
+
+  /** 저장이 실패했는데 만들면 틀린 값으로 그림을 만든다 — 값이 드는 일이다. */
+  it("저장 실패를 삼키지 않는다", () => {
+    const 저장 = source.slice(
+      source.indexOf("async function saveSlots"),
+      source.indexOf("async function runPlan"),
+    );
+
+    expect(저장).toContain("return true;");
+    expect(저장).toContain("return false;");
+  });
+
+  /**
    * **손댄 칸은 더 이상 AI 것이 아니다.** 표를 그대로 두면 자기가 쓴 글에
    * 「확인하세요」가 붙어 있는 꼴이 된다.
    */

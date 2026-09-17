@@ -425,7 +425,14 @@ export function PosterClient(
     setInvented((current) => current.filter((name) => name !== field));
   }
 
-  async function saveSlots() {
+  /**
+   * 고친 칸을 저장한다.
+   *
+   * **성공했는지 돌려준다.** 만들기가 이것을 먼저 부르는데, 실패를 삼키면
+   * **틀린 값으로 그림을 만든다** — 값이 드는 일이다. 단추로 누를 때는
+   * 돌려준 값을 안 봐도 된다(화면에 오류가 뜬다).
+   */
+  async function saveSlots(): Promise<boolean> {
     setSaving(true);
     setError(null);
     try {
@@ -438,8 +445,10 @@ export function PosterClient(
       const body = await response.json();
       if (!body.ok) throw new Error(body.message ?? "슬롯을 저장하지 못했습니다.");
       setInvented(body.project?.data?.inventedSlots ?? []);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "슬롯을 저장하지 못했습니다.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -474,6 +483,19 @@ export function PosterClient(
     setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
+      /*
+       * **고친 칸을 먼저 저장한다.**
+       *
+       * 미리보기는 화면 state 를, 생성은 저장값을 본다. 전에는 그 둘이 갈려도
+       * **내용**만 달랐는데, 이제 「글자를 넣지 말라」라는 **분기**까지 가른다
+       * (`prompt.ts` 의 `copyLines`). 칸을 고치고 저장 안 한 채 만들면
+       * 미리보기에는 글자가 보이는데 글자 하나 없는 그림이 나온다
+       * (2026-09-17 리뷰).
+       *
+       * 고친 것을 버리는 쪽이 아니라 **살리는 쪽**으로 맞춘다 — 사람이 방금
+       * 한 일이다. 저장이 실패하면 아래 `catch` 가 받아 만들기를 안 한다.
+       */
+      if (!await saveSlots()) return;
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
@@ -777,10 +799,21 @@ export function PosterClient(
                 id="slot-side"
                 rows={2}
                 value={slots.sideTexts.join("\n")}
-                onChange={(event) => setSlots((current: PosterSlots) => ({
-                  ...current,
-                  sideTexts: event.target.value.split("\n"),
-                }))}
+                onChange={(event) => {
+                  /*
+                    **곁텍스트도 손대면 사람 것이다.**
+
+                    이 칸은 `renderSlot` 을 안 지나서 `setField` 의 표 지우기를
+                    못 탄다. 그래서 고쳐도 화면 목록에 「sideTexts」가 남아,
+                    저장 전까지 미리보기가 방금 친 글을 「AI 것」으로 보고
+                    금지문을 붙인다(2026-09-17 리뷰).
+                  */
+                  setInvented((current) => current.filter((name) => name !== "sideTexts"));
+                  setSlots((current: PosterSlots) => ({
+                    ...current,
+                    sideTexts: event.target.value.split("\n"),
+                  }));
+                }}
                 placeholder={"28MM F2.0\nISO 400"}
               />
               <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>

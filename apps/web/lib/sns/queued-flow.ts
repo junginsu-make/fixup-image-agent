@@ -380,8 +380,13 @@ export async function startQueuedFlow(
       language: project.language,
       ...tuning,
       attachmentIntents: intents,
-      // 어떤 모델이 그릴지 알려 준다. 여기서는 LLM 이 프롬프트 본문을 직접 쓴다.
-      modelId: modelEndpointLabel(project.modelId),
+      /*
+       * 어떤 모델이 그릴지 알려 준다. 여기서는 LLM 이 프롬프트 본문을 직접 쓴다.
+       *
+       * **이 카드가 실제로 부를 엔드포인트를 준다.** 레퍼런스가 있으면 `edit`
+       * 쪽으로 가는데 늘 `t2i` 를 알려 주면 틀린 이름이 간다(2026-09-17 리뷰).
+       */
+      modelId: modelEndpointLabel(project.modelId, selectReferencesForRole(grouped, card.role).length > 0),
     }, dependencies.sceneProvider);
     const images = selectReferencesForRole(grouped, card.role);
     /**

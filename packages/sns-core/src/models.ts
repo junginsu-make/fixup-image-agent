@@ -267,8 +267,14 @@ export function priceCoverage(
  * **모르는 id 에 던지지 않는다.** 기획은 그림을 만들기 전 단계라 여기서 터지면
  * 04 가 통째로 멎는다. 저장된 옛 작업이 없는 id 를 들고 있을 수 있다.
  */
-export function modelEndpointLabel(id: string): string {
+export function modelEndpointLabel(id: string, hasReferences = false): string {
   if (!id) return "";
   const found = IMAGE_MODELS.find((model) => model.id === id);
-  return found ? `${found.id} (${found.t2i.endpoint})` : id;
+  if (!found) return id;
+  /*
+   * **실제로 부를 엔드포인트를 알려 준다.** 늘 `t2i` 를 주면 레퍼런스가 있는
+   * 카드에서 틀린 이름을 알려 주게 된다 — 카드뉴스는 그쪽이 보통이다
+   * (2026-09-17 리뷰). 계열은 같지만, 맞는 것을 줄 수 있으면 맞는 것을 준다.
+   */
+  return `${found.id} (${pickEndpoint(found, hasReferences)})`;
 }

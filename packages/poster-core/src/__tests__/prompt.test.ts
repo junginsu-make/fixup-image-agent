@@ -678,6 +678,31 @@ describe("글자가 전부 AI 가 고른 것일 때", () => {
     expect(prompt).toContain("가을, 셔터를 누르다");
   });
 
+  /**
+   * **헤드라인 하나로만 재면 안 된다.**
+   *
+   * 여섯 시험이 전부 헤드라인으로 갈려서, 「곁텍스트를 아예 안 센다」거나
+   * 「headline 만 본다」는 변이가 다 통과했다(2026-09-17 리뷰). 셋을 각각
+   * 사람 것으로 두고 재야 그 판단이 재어진다.
+   */
+  it("받침 문구만 사람 것이어도 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: ["headline", "sideTexts"],
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("필름으로 담은 도시의 온도");
+  });
+
+  it("곁텍스트만 사람 것이어도 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: ["headline", "subline"],
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("28MM F2.0");
+  });
+
   /** 글자 아닌 칸이 AI 것인 건 상관없다. 그림 이야기다. */
   it("글자 아닌 칸만 AI 것이면 금지하지 않는다", () => {
     const prompt = buildPosterPrompt({

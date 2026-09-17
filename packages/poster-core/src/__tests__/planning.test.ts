@@ -45,7 +45,9 @@ describe("슬롯 기획", () => {
   });
 
   it("채워진 슬롯을 돌려준다", async () => {
-    const result = await planPoster(input, { plan: async () => ({ slots: filled }) });
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: [] }),
+    });
     expect(result.slots.headline).toBe("가을, 셔터를 누르다");
     expect(result.slots.sideTexts).toEqual(["28MM F2.0", "ISO 400"]);
     expect(result.issues).toEqual([]);
@@ -221,11 +223,19 @@ describe("지어낸 칸", () => {
     expect(result.invented).toEqual(["dominantColor", "action"]);
   });
 
-  /** 옛 기획 결과에는 이 칸이 없다. 없으면 「지어낸 것이 없다」로 읽는다. */
-  it("안 돌려주면 빈 목록이다", async () => {
+  /**
+   * 안 돌려주면 빈 목록으로 읽되 **그 사실을 남긴다.**
+   *
+   * 빈 목록과 「안 줬다」는 다르다. 안 줬는데 빈 목록으로만 읽으면 글자 칸이
+   * 전부 사람 것으로 보여, 2026-09-08 사고를 막던 금지문이 영영 안 붙는다
+   * (2026-09-17 리뷰). 옛 신호(빈 칸)는 결정적이었는데 새 신호는 자기신고라,
+   * 못 받았을 때 기본값이 위험한 쪽으로 떨어진다.
+   */
+  it("안 돌려주면 빈 목록이되 그 사실을 남긴다", async () => {
     const result = await planPoster(input, { plan: async () => ({ slots: filled }) });
 
     expect(result.invented).toEqual([]);
+    expect(result.issues.join("\n")).toMatch(/안 알려/);
   });
 
   /**
@@ -363,5 +373,38 @@ describe("못 알아들은 칸 이름", () => {
     });
 
     expect(result.invented).toEqual(["scene"]);
+  });
+});
+
+/**
+ * **장면 칸을 자세히 쓰게 한다.**
+ *
+ * 최종 프롬프트의 ④ 구역은 이 칸들에서 나온다(`prompt.ts` 의 `sceneLines`).
+ * 칸이 「해 질 녘 바닷가」면 그림 모델이 받는 것도 딱 그만큼이고, 나머지는
+ * 모델이 알아서 정한다 — 사용자가 바란 것이 아닌 쪽으로 갈 수 있다.
+ *
+ * 실측에서 포스터 슬롯은 다 합쳐 260자였다. 같은 일을 하는 카드뉴스의 장면
+ * 문장은 1,850자다(2026-09-17). **긴 프롬프트도 잘 반영되는 것을 확인했다**
+ * (사용자) — 자세할수록 그림에 더 들어간다.
+ *
+ * **글자 칸은 다르다.** 거기는 사람이 시킨 글자만 쓴다 — 길게 쓰라고 하면
+ * 없는 문구를 지어낸다.
+ */
+describe("장면을 자세히", () => {
+  const prompt = buildPlanPrompt(input);
+
+  it("자세히 쓰라고 말한다", () => {
+    expect(prompt).toMatch(/자세히|구체적으로/);
+  });
+
+  /** 무엇을 적을지 알려 줘야 한다. 「자세히」만으로는 무엇을 더 쓸지 모른다. */
+  it("무엇을 적을지 짚어 준다", () => {
+    expect(prompt).toMatch(/빛|조명/);
+    expect(prompt).toMatch(/재질|질감/);
+  });
+
+  /** 길이를 스스로 줄이지 말라고 못 박는다. */
+  it("길이를 스스로 줄이지 말라고 한다", () => {
+    expect(prompt).toMatch(/줄이지|길어도/);
   });
 });

@@ -231,3 +231,24 @@ describe("사용자가 적은 말이 프롬프트까지 간다", () => {
     expect(job.prompt).not.toContain("USER INSTRUCTION");
   });
 });
+
+/**
+ * **실제 생성도 「글자를 넣지 말라」를 받아야 한다.**
+ *
+ * 이 배선을 지워도 시험이 다 초록이었다(2026-09-17 리뷰). 미리보기만 맞고
+ * 실제가 틀리면 보이는 것과 다른 그림이 나온다.
+ */
+describe("지어낸 칸이 실제 생성에도 닿는다", () => {
+  it("글자가 전부 AI 것이면 금지문이 붙는다", () => {
+    const job = buildPosterJob({
+      ...base,
+      invented: ["headline", "subline", "sideTexts"],
+    });
+
+    expect(job.prompt).toContain("Render it with NO text");
+  });
+
+  it("안 넘기면 지금까지대로다", () => {
+    expect(buildPosterJob(base).prompt).not.toContain("Render it with NO text");
+  });
+});

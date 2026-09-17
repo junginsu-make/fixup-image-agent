@@ -274,12 +274,10 @@ function copyLines(slots: PosterSlots, verbatim = false, invented: string[] = []
    * **하나라도 사람 것이면 금지하지 않는다.** 나머지는 기획의 제안이고 04 에
    * 표가 붙어 있어 사람이 지울 수 있다.
    */
-  const 사람이시킨글자 = ["headline", "subline", "sideTexts"]
-    .some((field) => {
-      const value = slots[field as "headline" | "subline"];
-      const 있다 = field === "sideTexts" ? slots.sideTexts.length > 0 : Boolean(value?.trim());
-      return 있다 && !invented.includes(field);
-    });
+  const 사람이적은칸 = (["headline", "subline"] as const)
+    .filter((field) => slots[field].trim().length > 0 && !invented.includes(field));
+  const 곁텍스트도적었나 = slots.sideTexts.length > 0 && !invented.includes("sideTexts");
+  const 사람이시킨글자 = 사람이적은칸.length > 0 || 곁텍스트도적었나;
 
   const all: Array<[string, string]> = 사람이시킨글자 ? [
     ["HEADLINE", slots.headline],

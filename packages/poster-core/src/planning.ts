@@ -120,6 +120,25 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
     "  글자 길이를 스스로 제한하지 마세요. 내용에 맞는 길이로 쓰고,",
     "  길어지면 그림 단계에서 작게 넣어 소화합니다.",
     /*
+     * **장면 칸을 자세히 쓰게 한다.**
+     *
+     * 최종 프롬프트의 ④ 구역이 이 칸들에서 나온다(`prompt.ts` 의 `sceneLines`).
+     * 칸이 「해 질 녘 바닷가」면 그림 모델이 받는 것도 딱 그만큼이고 나머지는
+     * 모델이 알아서 정한다 — 사용자가 바란 것이 아닌 쪽으로 갈 수 있다.
+     *
+     * 실측에서 포스터 슬롯은 다 합쳐 260자였다. 같은 일을 하는 카드뉴스의 장면
+     * 문장은 1,850자다(2026-09-17). **긴 프롬프트도 잘 반영되는 것을 확인했다**
+     * (사용자) — 자세할수록 그림에 더 들어간다.
+     *
+     * **무엇을 적을지 짚어 준다.** 「자세히」만으로는 무엇을 더 쓸지 모른다.
+     *
+     * **글자 칸에는 안 건다.** 거기는 사람이 시킨 글자만 쓴다 — 길게 쓰라고
+     * 하면 없는 문구를 지어낸다.
+     */
+    "  scene·subject·action 은 **자세히** 씁니다. 빛의 방향과 성질, 재질과 질감,",
+    "  카메라 각도와 거리, 앞뒤 배치, 색의 관계까지 적으세요. **길어도 됩니다** —",
+    "  분량을 아끼려고 줄이지 마세요. 다만 지어내는 것이 될 만한 것은 빼세요.",
+    /*
      * **빈 칸을 남기지 않는다. 대신 지어낸 것을 밝힌다.**
      *
      * 전에는 「알 수 없는 칸은 지어내지 말고 비워 두세요」였다(2026-09-01).
@@ -197,19 +216,29 @@ const SLOT_NAMES = new Set(Object.keys(EMPTY_SLOTS));
  * **안 돌려줘도 실패가 아니다.** 옛 기획 결과에는 이 칸이 없고, 없으면
  * 「지어낸 것이 없다」로 읽는다.
  */
-function parseInvented(raw: unknown): { names: string[]; dropped: number } {
+function parseInvented(raw: unknown): { names: string[]; dropped: number; 안줬다: boolean } {
   const list = (raw as { invented?: unknown } | null)?.invented;
-  if (!Array.isArray(list)) return { names: [], dropped: 0 };
+  /*
+   * **키 자체가 없으면 그것도 말한다.**
+   *
+   * 빈 목록과 「안 줬다」는 다르다. 안 줬는데 빈 목록으로 읽으면 글자 칸이
+   * 전부 사람 것으로 보여, 2026-09-08 사고를 막던 금지문이 영원히 안 붙는다
+   * (`prompt.ts` 의 `copyLines`, 2026-09-17 리뷰).
+   *
+   * 옛 신호(빈 칸)는 결정적이었는데 새 신호는 LLM 자기신고라, 못 받았을 때
+   * 기본값이 「글자 있음」 쪽으로 떨어진다. 그 사실을 사람이 봐야 한다.
+   */
+  if (!Array.isArray(list)) return { names: [], dropped: 0, 안줬다: true };
 
   const names = [...new Set(
     list.filter((name): name is string => typeof name === "string" && SLOT_NAMES.has(name)),
   )];
-  return { names, dropped: list.length - names.length };
+  return { names, dropped: list.length - names.length, 안줬다: false };
 }
 
 /** 칸과 「지어낸 칸」을 함께 읽는다. 둘 중 하나만 읽으면 부름이 두 번 된다. */
 function readPlan(raw: unknown): { slots: PosterSlots; invented: string[]; issues: string[] } {
-  const { names, dropped } = parseInvented(raw);
+  const { names, dropped, 안줬다 } = parseInvented(raw);
   /*
    * **버렸으면 말한다.** 모르는 이름을 조용히 버리면 세 경우가 똑같은 빈
    * 목록으로 수렴한다 — 정말 지어낸 것이 없다 / 다른 표기로 적었다 / 아예
@@ -218,7 +247,10 @@ function readPlan(raw: unknown): { slots: PosterSlots; invented: string[]; issue
   return {
     slots: parseSlots(raw),
     invented: names,
-    issues: dropped ? [`기획이 알려준 칸 이름 ${dropped}개를 못 알아들었습니다.`] : [],
+    issues: [
+      ...(안줬다 ? ["기획이 「지어낸 칸」을 안 알려 줬습니다. 칸을 직접 확인해 주세요."] : []),
+      ...(dropped ? [`기획이 알려준 칸 이름 ${dropped}개를 못 알아들었습니다.`] : []),
+    ],
   };
 }
 
