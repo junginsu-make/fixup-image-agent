@@ -281,10 +281,18 @@ export function ImageViewerHost() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-4 px-4 pb-2">
+      <div className="flex min-h-0 flex-1 gap-4 px-4 pb-3">
+        {/*
+          **그림과 안내 문구를 한 기둥에 둔다.**
+
+          전에는 안내 문구가 화면 전체의 가운데에 있었는데, 그림은 오른쪽 설명
+          칸을 뺀 자리의 가운데에 섰다. 설명 칸 너비만큼 둘이 어긋나 보였다
+          (2026-09-17 사용자 보고).
+        */}
+        <div className="flex min-w-0 flex-1 flex-col">
         <div
           className={cn(
-            "relative flex min-w-0 flex-1",
+            "relative flex min-h-0 flex-1",
             actualSize ? "items-start justify-start overflow-auto" : "items-center justify-center",
           )}
           onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
@@ -316,8 +324,24 @@ export function ImageViewerHost() {
               height: event.currentTarget.naturalHeight,
             })}
             style={width ? { width, maxWidth: "none" } : undefined}
-            className={cn("select-none rounded-md", actualSize ? "flex-none" : "max-h-full max-w-full object-contain")}
+            className={cn(
+              "select-none rounded-md",
+              /*
+                **원본 크기에서도 가운데에 둔다.** `justify-center` 로 가운데에 두면
+                자리보다 큰 그림의 왼쪽이 잘려 스크롤로도 못 닿는다. `m-auto` 는
+                남는 자리가 있을 때만 가운데로 밀고, 넘치면 0 이 되어 안 잘린다
+                (2026-09-17 사용자 보고: 원본 크기에서 그림이 왼쪽에 붙었다).
+              */
+              actualSize ? "m-auto flex-none" : "max-h-full max-w-full object-contain",
+            )}
           />
+        </div>
+
+        <p className="flex-none pt-2 text-center text-xs text-white/60">
+          {many ? "← → 로 넘깁니다 · " : ""}
+          {oversized ? "원본 크기에서는 끌어서 옮겨 볼 수 있습니다 · " : ""}
+          Esc 또는 바깥을 눌러 닫습니다
+        </p>
         </div>
 
         {/* 어떻게 만든 것인지. 그림 옆에 두어 같이 본다. */}
@@ -336,11 +360,6 @@ export function ImageViewerHost() {
         ) : null}
       </div>
 
-      <p className="flex-none pb-3 text-center text-xs text-white/60">
-        {many ? "← → 로 넘깁니다 · " : ""}
-        {oversized ? "원본 크기에서는 끌어서 옮겨 볼 수 있습니다 · " : ""}
-        Esc 또는 바깥을 눌러 닫습니다
-      </p>
     </div>
   );
 }
