@@ -51,6 +51,20 @@ describe("포스터 레퍼런스 — 사본 규약", () => {
   it("파일 이름은 경로 끝에서 뽑는다", () => {
     expect(toPosterReference(그림).fileName).toBe("r1.png");
   });
+
+  /**
+   * **주인 표시를 떨어뜨리면 안 된다**(2026-09-17 독립 리뷰).
+   *
+   * 목록이 공용이 되면서 02 고르는 창에 남의 그림이 들어왔다. 이 값이 없으면
+   * 창은 내 것과 남의 것을 못 가리고, 관리자는 남의 것인 줄 모른 채 지운다 —
+   * 그 그림을 쓰던 다른 회원의 작업이 함께 깨진다.
+   */
+  it("내 것인지와 올린 사람을 그대로 싣는다", () => {
+    const 남의것 = toPosterReference({ ...그림, mine: false, ownerEmail: "him@example.com" });
+    expect(남의것.mine).toBe(false);
+    expect(남의것.ownerEmail).toBe("him@example.com");
+    expect(toPosterReference(그림).mine).toBe(true);
+  });
 });
 
 describe("포스터 레퍼런스 — 라이브러리와 같은 규칙", () => {

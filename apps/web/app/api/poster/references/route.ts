@@ -1,3 +1,4 @@
+import { hasFullScope, viewerFrom } from "../../../../lib/access/core";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import { posterReferences } from "../../../../lib/poster/references";
 import { teamIdOf } from "../../../../lib/teams/store";
@@ -24,7 +25,17 @@ export async function GET() {
       role: auth.member.profile.role,
       teamId: await teamIdOf(auth.member.userId),
     });
-    return Response.json({ ok: true, references });
+    /*
+      **「남의 것에도 지우기를 낼까」를 서버가 정한다.** 라이브러리 목록이 이미
+      같은 값을 준다(`api/reference-images/route.ts`). 화면이 스스로 판단하면
+      서버의 실제 판정(`canModifyReferenceImage`)과 갈려, 눌러도 안 되는 단추가
+      뜬다.
+    */
+    return Response.json({
+      ok: true,
+      references,
+      isAdmin: hasFullScope(viewerFrom(auth.member), "delete"),
+    });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "레퍼런스를 불러오지 못했습니다." },

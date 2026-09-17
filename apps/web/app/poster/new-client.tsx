@@ -82,6 +82,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    */
   const [seeding, setSeeding] = React.useState(Boolean(rerunFromInitial));
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
+  /** 관리자인가. 참고 이미지 목록과 함께 서버가 준다. */
+  const [isAdmin, setIsAdmin] = React.useState(false);
   // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
   const [step, setStep] = React.useState("instruction");
   const [roles, setRoles] = React.useState<Record<string, Role>>({});
@@ -252,6 +254,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       if (body.ok) {
         const fresh = (body.references ?? []) as ReferenceItem[];
         setReferences(fresh);
+        // 「남의 것에도 지우기를 낼까」는 서버가 정한다. 화면이 판단하면 갈린다.
+        setIsAdmin(Boolean(body.isAdmin));
         return fresh;
       }
       setError(body.message ?? "참고 이미지를 불러오지 못했습니다.");
@@ -537,6 +541,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               onUploaded={loadReferences}
               intent={attachmentIntent}
               onIntentChange={setAttachmentIntent}
+              isAdmin={isAdmin}
             />
             {overReferenceLimit ? (
               <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

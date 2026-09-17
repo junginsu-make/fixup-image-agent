@@ -33,6 +33,9 @@ export function toPosterReference(image: ReferenceImageView): PosterReferenceRec
     width: image.width,
     height: image.height,
     createdAt: image.createdAt,
+    // 주인 표시를 떨어뜨리면 고르는 창이 남의 그림에도 지우기를 단다.
+    mine: image.mine,
+    ownerEmail: image.ownerEmail,
     url: image.signedUrl ?? undefined,
     // 격자에 거는 작은 사본. 없으면 `null` 이다 — 원본으로 채우지 않는다.
     thumbUrl: image.thumbUrl,

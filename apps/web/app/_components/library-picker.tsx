@@ -16,6 +16,7 @@ import {
 import { openImageViewer } from "./image-viewer";
 import { gridSrc } from "./grid-src";
 import { ThumbImage } from "./thumb-image";
+import { canDeleteReference } from "./reference-delete-prompt";
 import {
   SET_ROLE_LABEL,
   canAttachSet,
@@ -49,6 +50,16 @@ export interface LibraryPickImage {
    * 사본 주소가 없는 화면은 `null` 이라고 적어서 그렇다고 밝힌다.
    */
   thumbUrl: string | null;
+  /**
+   * 내가 올린 것인가. **`false` 면 남의 것이다.**
+   *
+   * 창고가 공용이라 목록에 남의 그림이 섞여 있다. 안 실으면 화면이 내 것과
+   * 남의 것을 가를 방법이 없고, 그러면 지우기 단추가 아무 데나 붙는다
+   * (2026-09-17 독립 리뷰). 모르면 `undefined` — 그때는 안 가른다.
+   */
+  mine?: boolean;
+  /** 누가 올렸는가. 관리자에게만 온다. 지우기 전에 밝히는 데 쓴다. */
+  ownerEmail?: string | null;
 }
 
 /**
@@ -70,6 +81,7 @@ export function LibraryPickerButton({
   onToggle,
   onReload,
   onDelete,
+  canDeleteOthers = false,
   sets,
   onPickSet,
   label = "라이브러리에서 불러오기",
@@ -82,6 +94,12 @@ export function LibraryPickerButton({
   loading?: boolean;
   onToggle(image: LibraryPickImage): void;
   onReload(): void;
+  /**
+   * 남이 올린 것에도 지우기를 낼까. **관리자만 참이다.**
+   *
+   * 기본은 거짓 — 넘기는 것을 잊은 화면은 좁은 쪽으로 틀린다.
+   */
+  canDeleteOthers?: boolean;
   /** 세트를 넣는다. 안 넘기면 세트 탭이 안 나온다. */
   sets?: LibraryPickSet[];
   /**
@@ -270,7 +288,7 @@ export function LibraryPickerButton({
                     >
                       <Maximize2 className="size-3.5" />
                     </button>
-                    {onDelete ? (
+                    {onDelete && canDeleteReference(image, { isAdmin: canDeleteOthers }) ? (
                       <button
                         type="button"
                         aria-label={`${image.title ?? "참고 이미지"} 라이브러리에서 지우기`}
