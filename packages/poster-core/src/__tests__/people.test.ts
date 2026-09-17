@@ -120,6 +120,12 @@ describe("없는 것을 적지 않는다", () => {
     const 항목 = prompt.split("\n").filter((line) => line.startsWith("  ") && line.includes("—"));
 
     expect(항목.length, "항목 목록을 못 찾았다").toBeGreaterThan(4);
+    // 수만 세면 빨개질 수 없다 — master 도 여섯 줄이다(2026-09-17 리뷰).
+    // 이 커밋이 실제로 한 일은 항목에서 그 말을 **떼어낸** 것이다.
+    expect(
+      항목.filter((line) => line.includes("없으면 적지 않습니다")),
+      "한 항목에만 붙으면 나머지는 「없음」이 적힐다",
+    ).toHaveLength(0);
   });
 
   it("「없음」이라고 적지 말라고 못 박는다", () => {
