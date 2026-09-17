@@ -43,6 +43,11 @@ describe("원본 크기에서도 그림이 가운데에 온다", () => {
     expect(source).toContain('actualSize ? "m-auto flex-none" : "max-h-full max-w-full object-contain"');
   });
 
+  it("**그림 칸이 기둥보다 커지지 않는다** — 없으면 긴 그림이 칸을 키워 아래쪽에 스크롤로 못 닿는다", () => {
+    // flex 자식의 기본 최소 높이는 내용 크기다. `min-h-0` 이 있어야 넘친 만큼 스크롤된다(2026-09-17 독립 리뷰).
+    expect(source).toContain("\"relative flex min-h-0 flex-1\"");
+  });
+
   it("**원본 크기의 칸은 `justify-center` 를 쓰지 않는다** — 넘친 왼쪽이 잘려 스크롤로 못 닿는다", () => {
     expect(source).toContain('actualSize ? "items-start justify-start overflow-auto"');
   });

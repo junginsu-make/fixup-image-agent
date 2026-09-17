@@ -36,6 +36,9 @@ describe("히어로 가운데 판의 밝기", () => {
   it("기준 깊이를 카메라 거리로 넘긴다 — 가운데 판은 z = 0 에 선다", () => {
     expect(carousel).toContain('centerDepth: gl.getUniformLocation(program, "uCenterDepth")');
     expect(carousel).toContain("gl.uniform1f(uniform.centerDepth, -distance);");
+    // **판을 놓는 자리와 기준이 같은 거리에서 나와야 한다.** 한쪽만 바뀌면 가운데 판이
+    // 다시 어두워지는데, 아래 값 시험은 식만 보므로 못 잡는다(2026-09-17 독립 리뷰).
+    expect(carousel).toContain("translation(item.x, 0, item.z - distance),");
   });
 
   it("**가운데 판은 원본 밝기다** — 넓은 화면·좁은 화면 둘 다", () => {
