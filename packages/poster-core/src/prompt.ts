@@ -152,40 +152,40 @@ function attachmentLines(
     + "never substitute a generic stand-in.",
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
-images.forEach((image, index) => {
-  const number = attachmentNumber(index);
-  if (image.kind === "preserved") {
-    /**
-     * **그림 느낌만 바꾸는 사람은 다른 말을 쓴다**(설계 §4-3).
-     *
-     * `preserveDirective("preserve-person")` 은 `restyle` 을 금지한다. 그 말을
-     * 그대로 보내면 「이 사람들을 만화로」가 처음부터 막힌다.
-     */
-    if (image.subject === "person" && image.restyle) {
-      lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+  images.forEach((image, index) => {
+    const number = attachmentNumber(index);
+    if (image.kind === "preserved") {
+      /**
+       * **그림 느낌만 바꾸는 사람은 다른 말을 쓴다**(설계 §4-3).
+       *
+       * `preserveDirective("preserve-person")` 은 `restyle` 을 금지한다. 그 말을
+       * 그대로 보내면 「이 사람들을 만화로」가 처음부터 막힌다.
+       */
+      if (image.subject === "person" && image.restyle) {
+        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+        return;
+      }
+      // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
+      // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
+      const role = image.subject === "person" ? "preserve-person" : "preserve-object";
+      const label = image.subject === "person" ? "PRESERVED PERSON" : "PRESERVED SUBJECT";
+      lines.push(`Image ${number} is a ${label}. ${preserveDirective(role)}`);
       return;
     }
-    // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
-    // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
-    const role = image.subject === "person" ? "preserve-person" : "preserve-object";
-    const label = image.subject === "person" ? "PRESERVED PERSON" : "PRESERVED SUBJECT";
-    lines.push(`Image ${number} is a ${label}. ${preserveDirective(role)}`);
-    return;
-  }
-  // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
-  // "as closely as possible" 만 쓰면 레퍼런스의 아이콘·제품이 그대로 나온다.
-  // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
-  lines.push(
-    `Image ${number} is a POSTER REFERENCE. Imitate its design language only:`,
-    "  · layout and composition, typography (weight, width, character), text treatment, texture "
-    + "and rendering style (photographic / illustrated / 3D)",
-    "  · how each colour is used — which colours fill surfaces and bands, which are only type, "
-    + "which are accents. Reproduce that usage, not just the colours themselves.",
-    "Do NOT copy anything else from it — not its product, not its people, not its icons or "
-    + "illustrations, not its text content. Draw new icons and imagery in the same style so they "
-    + "match what is described below.",
-  );
-});
+    // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
+    // "as closely as possible" 만 쓰면 레퍼런스의 아이콘·제품이 그대로 나온다.
+    // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
+    lines.push(
+      `Image ${number} is a POSTER REFERENCE. Imitate its design language only:`,
+      "  · layout and composition, typography (weight, width, character), text treatment, texture "
+      + "and rendering style (photographic / illustrated / 3D)",
+      "  · how each colour is used — which colours fill surfaces and bands, which are only type, "
+      + "which are accents. Reproduce that usage, not just the colours themselves.",
+      "Do NOT copy anything else from it — not its product, not its people, not its icons or "
+      + "illustrations, not its text content. Draw new icons and imagery in the same style so they "
+      + "match what is described below.",
+    );
+  });
 
   /*
    * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**
@@ -208,7 +208,9 @@ images.forEach((image, index) => {
    */
   if (hasAttachmentIntent) {
     lines.push(
-      "The user wrote how to use these images. Their words OVERRIDE any rule above that contradicts them — where a rule and the user disagree, follow the user. Rules the user did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that "
+      + "contradicts them — where a rule and the user disagree, follow the user. Rules the user "
+      + "did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
     );
   }
   // 순서는 공용 어휘(@fixup/shared)가 정한다. 다섯 도구가 갈리면 안 된다.

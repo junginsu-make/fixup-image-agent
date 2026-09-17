@@ -188,7 +188,9 @@ images.forEach((image, offset) => {
    */
   if (intent && images.length) {
     lines.push(
-      "The user wrote how to use these images. Their words OVERRIDE any rule above that contradicts them — where a rule and the user disagree, follow the user. Rules the user did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that "
+      + "contradicts them — where a rule and the user disagree, follow the user. Rules the user "
+      + "did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
     );
   }
   /*
