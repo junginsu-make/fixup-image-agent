@@ -289,7 +289,12 @@ export function ImageViewerHost() {
           칸을 뺀 자리의 가운데에 섰다. 설명 칸 너비만큼 둘이 어긋나 보였다
           (2026-09-17 사용자 보고).
         */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div
+          className="flex min-w-0 flex-1 flex-col"
+          // 기둥을 한 겹 더 감쌌으니 여기서도 바깥 누르기를 받는다. 안 받으면 문구
+          // 옆 빈 곳을 눌러도 안 닫혀, 문구가 말하는 「바깥을 눌러 닫습니다」와 어긋난다.
+          onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
+        >
         <div
           className={cn(
             "relative flex min-h-0 flex-1",
@@ -337,7 +342,10 @@ export function ImageViewerHost() {
           />
         </div>
 
-        <p className="flex-none pt-2 text-center text-xs text-white/60">
+        <p
+          className="flex-none pt-2 text-center text-xs text-white/60"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
+        >
           {many ? "← → 로 넘깁니다 · " : ""}
           {oversized ? "원본 크기에서는 끌어서 옮겨 볼 수 있습니다 · " : ""}
           Esc 또는 바깥을 눌러 닫습니다

@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("../image-viewer.tsx", import.meta.url), "utf8");
 
 describe("안내 문구는 그림과 같은 기둥에 있다", () => {
-  const column = source.indexOf('<div className="flex min-w-0 flex-1 flex-col">');
+  const column = source.indexOf('className="flex min-w-0 flex-1 flex-col"');
   const caption = source.indexOf("Esc 또는 바깥을 눌러 닫습니다");
   const aside = source.indexOf("<aside");
 
@@ -24,6 +24,13 @@ describe("안내 문구는 그림과 같은 기둥에 있다", () => {
   it("문구가 그림 기둥 안, 설명 칸보다 앞에 온다 — 기둥 밖이면 화면 가운데로 간다", () => {
     expect(caption).toBeGreaterThan(column);
     expect(caption).toBeLessThan(aside);
+  });
+
+  it("기둥의 빈 곳을 눌러도 닫힌다 — 문구가 「바깥을 눌러 닫습니다」라고 말한다", () => {
+    // 여는 태그만 본다. `>` 는 화살표 함수 안에도 있어 끝을 못 찾으므로, 기둥의
+    // 칸 이름 바로 뒤 몇 줄(그 사이에 그림 칸이 시작되기 전)을 잘라 본다.
+    const opening = source.slice(column, source.indexOf('"relative flex min-h-0 flex-1"', column));
+    expect(opening).toContain("onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}");
   });
 
   it("문구는 한 번만 있다 — 옛 자리에 남으면 두 줄로 보인다", () => {
