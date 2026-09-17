@@ -18,7 +18,7 @@ import {
 } from "@fixup/shared";
 import { takeHandoff } from "../../lib/handoff";
 import { ReferencePicker, type ReferenceItem, type Role } from "./_components/reference-picker";
-import { posterSteps, reachableBeforeCreate } from "./steps";
+import { POSTER_STEPS, posterSteps, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { rerunStartStep } from "../_components/rerun-step";
