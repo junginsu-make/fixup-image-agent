@@ -234,6 +234,18 @@ export function PosterClient(
    * 지금 화면의 슬롯을 쓴다. 저장 전에 고친 것도 바로 비쳐야 「고쳤더니 이렇게
    * 바뀐다」를 볼 수 있다.
    */
+  /**
+   * 기획이 **근거 없이 채웠다고 밝힌** 칸들.
+   *
+   * 전에는 기획이 그런 칸을 아예 비웠다. 뜻은 분명했지만 너무 잘 들어서
+   * 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다(2026-09-16 실측) — 초보일수록
+   * 빈 칸을 못 채우는데 그 사람이 도움을 받으러 왔다.
+   *
+   * 지금은 채우게 하고 **여기에 표를 붙인다.** 판단은 사람이 하되 판단할
+   * 거리는 AI 가 만들어 준다(2026-09-17 사용자 결정).
+   */
+  const [invented, setInvented] = React.useState<string[]>(project.data.inventedSlots ?? []);
+
   const promptPreview = React.useMemo(() => previewPosterPrompt({
     slots,
     /*
@@ -251,7 +263,15 @@ export function PosterClient(
     look: project.data.look,
     userInstruction: project.data.userInstruction,
     attachmentIntent: project.data.attachmentIntent,
-  }), [slots, project]);
+    /*
+     * **미리보기도 같은 값을 봐야 한다.** 안 넘기면 실제로 갈 프롬프트에는
+     * 「글자를 넣지 말라」가 붙는데 미리보기에는 안 붙는다 — 「모델에 보낼
+     * 프롬프트 보기」가 거짓말을 한다.
+     *
+     * 화면 state 를 쓴다. 사람이 방금 고친 칸이 곧바로 반영돼야 한다.
+     */
+    invented,
+  }), [slots, project, invented]);
 
   /**
    * 사용자가 직접 친 말 — 있는 것만.
@@ -296,17 +316,6 @@ export function PosterClient(
     setPlanOpen(true);
   }, [images.length, project.data.promptMode]);
 
-  /**
-   * 기획이 **근거 없이 채웠다고 밝힌** 칸들.
-   *
-   * 전에는 기획이 그런 칸을 아예 비웠다. 뜻은 분명했지만 너무 잘 들어서
-   * 「벚꽃 아래 교복 입은 학생」에 0칸을 채웠다(2026-09-16 실측) — 초보일수록
-   * 빈 칸을 못 채우는데 그 사람이 도움을 받으러 왔다.
-   *
-   * 지금은 채우게 하고 **여기에 표를 붙인다.** 판단은 사람이 하되 판단할
-   * 거리는 AI 가 만들어 준다(2026-09-17 사용자 결정).
-   */
-  const [invented, setInvented] = React.useState<string[]>(project.data.inventedSlots ?? []);
 
   /**
    * **화면에 표를 붙일 수 있는 칸만 센다.**

@@ -26,6 +26,14 @@ export interface PosterPromptPreviewInput {
   look?: ImageLook;
   userInstruction?: string;
   attachmentIntent?: string;
+  /**
+   * 기획이 근거 없이 채웠다고 밝힌 칸들.
+   *
+   * **미리보기도 받아야 한다.** 안 넘기면 실제로 갈 프롬프트에는 「글자를 넣지
+   * 말라」가 붙는데 미리보기에는 안 붙는다 — 04 의 「모델에 보낼 프롬프트
+   * 보기」가 거짓말을 한다.
+   */
+  invented?: string[];
 }
 
 export function previewPosterPrompt(input: PosterPromptPreviewInput): string {
@@ -56,5 +64,6 @@ export function previewPosterPrompt(input: PosterPromptPreviewInput): string {
     userInstruction: input.userInstruction,
     attachmentIntent: input.attachmentIntent,
     look: input.look,
+    invented: input.invented,
   });
 }

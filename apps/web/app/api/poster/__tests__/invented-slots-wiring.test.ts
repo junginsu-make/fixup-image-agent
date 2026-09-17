@@ -23,6 +23,35 @@ describe("기획이 낸다", () => {
   });
 });
 
+/**
+ * **글자 칸이 전부 AI 것이면 「글자를 넣지 말라」가 붙는다.**
+ *
+ * 전에는 「칸이 비었으면」으로 봤다. 기획을 「다 채우게」 바꾸면서 그 신호가
+ * 사라졌고, 그 금지문은 2026-09-08 사고(「BEST DAY EVER!」)의 대응이다.
+ *
+ * **세 자리가 같은 값을 봐야 한다** — 실제 생성, 미리보기, 그리고 프롬프트를
+ * 짜는 `copyLines`. 하나라도 빠지면 「모델에 보낼 프롬프트 보기」가 거짓말을
+ * 하거나, 보이는 것과 다른 그림이 나온다.
+ */
+describe("글자 금지가 끝까지 간다", () => {
+  const generate = readFileSync(
+    new URL("../projects/[id]/generate/route.ts", import.meta.url), "utf8",
+  );
+  const client = readFileSync(
+    new URL("../../../poster/[id]/poster-client.tsx", import.meta.url), "utf8",
+  );
+
+  it("실제 생성이 넘긴다", () => {
+    expect(generate).toContain("invented: project.data.inventedSlots");
+  });
+
+  /** 미리보기는 화면 state 를 쓴다. 방금 고친 칸이 곧바로 반영돼야 한다. */
+  it("미리보기도 넘긴다", () => {
+    expect(client).toContain("previewPosterPrompt({");
+    expect(client).toMatch(/invented,\s*\}\), \[slots, project, invented\]\)/);
+  });
+});
+
 describe("저장이 쓴다", () => {
   it("고친 칸을 서버가 뺀다", () => {
     expect(service).toContain(
