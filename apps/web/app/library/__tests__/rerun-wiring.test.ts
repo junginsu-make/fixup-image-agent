@@ -21,13 +21,15 @@ const TOOLS = [
     name: "이미지 만들기",
     detail: "app/poster/[id]/poster-client.tsx",
     fresh: "app/poster/new-client.tsx",
-    href: "/poster/new?from=",
+    base: "/poster/new",
+    steps: '["instruction", "reference", "spec"]',
   },
   {
     name: "카드뉴스",
     detail: "app/sns/[id]/project-client.tsx",
     fresh: "app/sns/new-client.tsx",
-    href: "/sns/new?from=",
+    base: "/sns/new",
+    steps: '["content", "images", "spec"]',
   },
 ];
 
@@ -42,12 +44,24 @@ describe("지난 단계로 값을 들고 간다", () => {
     초록이었다(2026-09-16 독립 리뷰가 실증). 화면이 그 함수를 정확히 쓰는지는
     `rerun-adopt-wiring.test.ts` 가 문장 전체로 본다.
   */
-  it.each(TOOLS)("$name 은 작업 id 를 붙여 보낸다", ({ detail, href }) => {
+  /**
+   * **작업 id 와 누른 단계를 함께 싣는다**(2026-09-17 사용자 보고).
+   *
+   * 단계를 안 실어서 03 을 눌러도 01 이 열렸다. 주소는 한 곳(`rerunHref`)이
+   * 만든다 — 인코딩까지 거기서 값으로 잰다(`_components/__tests__/rerun-step.test.ts`).
+   */
+  it.each(TOOLS)("$name 은 작업 id 와 누른 단계를 싣고 보낸다", ({ detail, base }) => {
     const source = read(detail);
+    expect(source).toMatch(new RegExp(`router\\.push\\(rerunHref\\("${base}", \\w+(\\.id)?, id\\)\\)`));
+  });
 
-    expect(source).toContain(href);
-    // 주소 조각은 인코딩해서 붙인다.
-    expect(source).toMatch(new RegExp(`${href.replace("?", "\\?")}\\$\\{encodeURIComponent\\(`));
+  it.each(TOOLS)("$name 은 값을 다 심은 뒤 누른 단계로 연다", ({ fresh, steps }) => {
+    const source = read(fresh);
+    expect(source).toContain('rerunStep = searchParams.get("step")');
+    // 아는 단계만 연다 — 04·05 는 이 화면에 없다.
+    expect(source).toContain(steps);
+    // 심은 뒤, 잠금을 풀기 바로 전에 옮긴다. 먼저 옮기면 빈 칸이 한 번 보인다.
+    expect(source).toMatch(/setStep\(rerunStartStep(<Step>)?\(rerunStep, RERUN_STEPS, "\w+"\)\);\s*setSeeding\(false\);/);
   });
 
   it("이미지 만들기는 **심어야 할 값을 하나도 안 빠뜨린다**", () => {

@@ -21,6 +21,10 @@ import { ReferencePicker, type ReferenceItem, type Role } from "./_components/re
 import { POSTER_STEPS, reachableBeforeCreate } from "./steps";
 import { loadPosterRerun, posterRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
+import { rerunStartStep } from "../_components/rerun-step";
+
+/** 새로 만드는 화면에 있는 단계. 04·05 는 만든 작업 화면에 있다. */
+const RERUN_STEPS = ["instruction", "reference", "spec"] as const;
 import { looksFinished, type PromptMode } from "./prompt-mode";
 import { planCostCounts, planCostNote } from "./plan-cost";
 import type { AdSubmitPlan } from "./ad-mode";
@@ -67,7 +71,10 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    * `/poster/new?from={작업}` 으로 온다. 전에는 이 화면이 늘 비어 있어서,
    * 01~03 을 누른 사람은 「다 초기화됐다」고 읽었다(2026-09-16 사용자 보고).
    */
-  const rerunFrom = useSearchParams().get("from") ?? "";
+  const searchParams = useSearchParams();
+  const rerunFrom = searchParams.get("from") ?? "";
+  /** 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다. */
+  const rerunStep = searchParams.get("step");
   /** 첫 그림에서부터 잠가야 한다 — 상태 기본값으로 쓴다. */
   const rerunFromInitial = rerunFrom;
   /** 값을 들고 왔다고 화면에 적을 것. 못 가져온 참고 이미지 수까지 말한다. */
@@ -324,10 +331,16 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         // 광고 작업은 비율이 `match-source` 고 마스터 픽셀을 따로 든다.
         adWork: seed.ratio === "match-source",
       });
+      /*
+        **누른 단계로 연다.** 값을 다 심은 **뒤에** 옮긴다 — 먼저 옮기면 빈
+        칸이 한 번 보였다가 채워진다. 못 불러왔을 때는 옮기지 않는다: 빈 03 을
+        열면 무엇을 채워야 할지 모른다.
+      */
+      setStep(rerunStartStep(rerunStep, RERUN_STEPS, "instruction"));
       setSeeding(false);
     })();
     return () => { alive = false; };
-  }, [rerunFrom, loadReferences]);
+  }, [rerunFrom, rerunStep, loadReferences]);
 
   /** 한 벌의 공통 값. 광고 모드는 여기에 마스터만 얹는다. */
   function projectBody(extra: Record<string, unknown> = {}) {

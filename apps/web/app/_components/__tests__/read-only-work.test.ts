@@ -160,7 +160,7 @@ describe("상세 화면이 막을 지나는가", () => {
     expect(at).toBeGreaterThan(-1);
     const jump = poster.slice(at, at + 900);
 
-    expect(jump).toContain("/poster/new?from=");
+    expect(jump).toContain('rerunHref("/poster/new", project.id, id)');
     // 옛 막이 되살아나면 관리자가 남의 작업을 다시 만들 길이 없어진다.
     expect(jump).not.toContain("if (readOnly) return;");
   });
