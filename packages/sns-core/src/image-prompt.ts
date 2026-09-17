@@ -106,14 +106,6 @@ export function referenceWarningsForRole(
   return [`${label} 레퍼런스가 없습니다. ${label} 카드가 다른 역할과 다른 모양으로 나올 수 있습니다.`];
 }
 
-/** 사용자가 고른 역할의 이름. **규칙은 안 붙인다** (설계 §4-1 A안). */
-function shortRole(image: Attachment): string {
-  if (image.kind === "style_reference") return "reference to imitate";
-  if (image.kind !== "keep_identity") return "place as is";
-  if (image.subject !== "person") return "subject to keep";
-  return image.restyle ? "person to keep, redrawn in another style" : "person to keep";
-}
-
 export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning = {}): string {
   const lines: string[] = [];
   if (images.length > 0) lines.push(ATTACHMENT_DECLARATION);
@@ -130,49 +122,55 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
   const intent = tuning.attachmentIntent?.trim() ?? "";
 
   /**
-   * 지시를 적었으면 **부딪히는 고정 문구를 통째로 뺀다** (설계 §4-1 A안).
+   * 지시를 적었으면 **고정 문구를 남기고, 사용자의 말이 그것을 이긴다.**
    *
-   * 이미지 만들기에서 실측으로 정한 것이다. 역할 문구가 여섯 문장이고 전부
-   * 구체적이라, 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼다.
+   * 2026-09-08 에는 통째로 뺐다(설계 §4-1 A안). 역할 문구가 여섯 문장이고
+   * 전부 구체적이라 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼기
+   * 때문이다.
    *
-   * **번호와 역할 이름은 남긴다.** 빼면 「①번」이 가리킬 것이 없어진다.
+   * **그런데 지우는 것이 과했다.** 2026-09-17 이미지 만들기에서 부딪히지도
+   * 않는 905자가 함께 사라져, 모자도 포스터 느낌도 결과에 안 나왔다.
+   *
+   * 지우기와 우선하기는 다른 일이다. 규칙은 남기고 「사용자의 말이 이긴다」는
+   * 한 줄을 **뒤에** 둔다 — 뒤에 온 말이 앞말을 덮는 것은 이 저장소가 여러 번
+   * 확인한 순서다(2026-09-04 실측).
    */
-images.forEach((image, offset) => {
-  const number = offset + 1;
-  if (image.kind === "style_reference") {
-    // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
-    //
-    // 전에는 "as closely as possible, replace only the content" 라고만 했다.
-    // 그러면 레퍼런스의 아이콘이 '꼴'인지 '내용'인지 모델이 알 수 없어,
-    // 있던 아이콘을 그대로 베끼거나 반대로 아이콘 없는 허전한 카드가 나왔다.
-    // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
-    lines.push(
-      `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. ` +
-      "Imitate its design language only:",
-      "  · layout and composition, typography (weight, width, character), text treatment, " +
-      "texture and rendering style (photographic / illustrated / 3D)",
-      "  · how each colour is used — which colours fill surfaces and bands, which are only type, " +
-      "which are accents. Reproduce that usage, not just the colours themselves.",
-      "Do NOT copy anything else from it — not its product, not its people, not its icons or " +
-      "illustrations, not its text content. Draw new icons and imagery in the same style so they " +
-      "match the text of THIS card.",
-    );
-  } else if (image.kind === "keep_identity") {
-    const person = image.subject === "person";
-    // 사람을 그대로 두고 그림 느낌만 바꾸는 경우는 다른 말을 쓴다 (설계 §4-3).
-    // `preserveDirective` 는 restyle 을 금지해서, 그 말이 가면 처음부터 막힌다.
-    if (person && image.restyle) {
-      lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-      return;
+  images.forEach((image, offset) => {
+    const number = offset + 1;
+    if (image.kind === "style_reference") {
+      // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
+      //
+      // 전에는 "as closely as possible, replace only the content" 라고만 했다.
+      // 그러면 레퍼런스의 아이콘이 '꼴'인지 '내용'인지 모델이 알 수 없어,
+      // 있던 아이콘을 그대로 베끼거나 반대로 아이콘 없는 허전한 카드가 나왔다.
+      // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
+      lines.push(
+        `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. ` +
+        "Imitate its design language only:",
+        "  · layout and composition, typography (weight, width, character), text treatment, " +
+        "texture and rendering style (photographic / illustrated / 3D)",
+        "  · how each colour is used — which colours fill surfaces and bands, which are only type, " +
+        "which are accents. Reproduce that usage, not just the colours themselves.",
+        "Do NOT copy anything else from it — not its product, not its people, not its icons or " +
+        "illustrations, not its text content. Draw new icons and imagery in the same style so they " +
+        "match the text of THIS card.",
+      );
+    } else if (image.kind === "keep_identity") {
+      const person = image.subject === "person";
+      // 사람을 그대로 두고 그림 느낌만 바꾸는 경우는 다른 말을 쓴다 (설계 §4-3).
+      // `preserveDirective` 는 restyle 을 금지해서, 그 말이 가면 처음부터 막힌다.
+      if (person && image.restyle) {
+        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+        return;
+      }
+      // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
+      // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
+      lines.push(
+        `Image ${number} is a ${person ? "PRESERVED PERSON" : "PRESERVED SUBJECT"}. ` +
+        preserveDirective(person ? "preserve-person" : "preserve-object"),
+      );
     }
-    // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
-    // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
-    lines.push(
-      `Image ${number} is a ${person ? "PRESERVED PERSON" : "PRESERVED SUBJECT"}. ` +
-      preserveDirective(person ? "preserve-person" : "preserve-object"),
-    );
-  }
-});
+  });
 
   /*
    * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**

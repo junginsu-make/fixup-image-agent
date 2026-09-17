@@ -328,7 +328,8 @@ export function PosterClient(
    * **화면에 표를 붙일 수 있는 칸만 센다.**
    *
    * 기획은 열한 칸을 채우는데 이 화면이 그리는 것은 아홉이다(`SLOT_LABELS`).
-   * `sideTexts`·`typeInteraction` 은 제 칸이 따로 있어 `renderSlot` 을 안 지난다.
+   * `sideTexts` 는 제 칸이 따로 있어 `renderSlot` 을 안 지나고, `typeInteraction` 은
+   * 04 에 칸이 아예 없다 — 레퍼런스에서 읽은 것이 바로 프롬프트로 간다.
    * 그 둘까지 세면 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
    *
    * 배지·숫자·띠가 **같은 목록**을 봐야 서로 어긋나지 않는다.

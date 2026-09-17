@@ -47,10 +47,18 @@ describe("글자 금지가 끝까지 간다", () => {
 
   /** 미리보기는 화면 state 를 쓴다. 방금 고친 칸이 곧바로 반영돼야 한다. */
   it("미리보기도 넘긴다", () => {
-    expect(client).toContain("previewPosterPrompt({");
+    /*
+     * **한 덩어리로 본다.** 따로 찾으면 `invented,` 가 파일 어디에 있어도
+     * 통과한다 — 이 파일에는 그 문자열이 여러 군데 있다(2026-09-17 리뷰).
+     */
+    const 미리보기 = client.slice(
+      client.indexOf("previewPosterPrompt({"),
+      client.indexOf("}), [slots, project, invented]);"),
+    );
+
+    expect(미리보기, "previewPosterPrompt 호출을 못 찾았다").not.toBe("");
     // 미리보기가 화면 state 를 본다. 저장값을 보면 방금 고친 칸이 안 비친다.
-    expect(client).toContain("invented,");
-    expect(client).toContain("}), [slots, project, invented]);");
+    expect(미리보기).toContain("invented,");
   });
 });
 
