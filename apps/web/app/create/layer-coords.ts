@@ -119,3 +119,14 @@ export function canvasFitFor(availableWidth: number | undefined): number {
   if (!availableWidth) return 1;
   return Math.min(1, availableWidth / LEGACY_CANVAS_WIDTH);
 }
+
+/**
+ * 미리보기에서 레이어를 얼마나 키우거나 줄일 것인가.
+ *
+ * `canvasFitFor` 와 달리 **1 을 넘을 수 있다.** 편집 캔버스는 460 이 상한이지만
+ * 이어보기는 그보다 넓게 보여 줄 수 있고, 그때는 글자도 함께 커져야 같은 자리다.
+ */
+export function previewFitFor(displayWidth: number | undefined): number {
+  if (!displayWidth) return 1;
+  return displayWidth / LEGACY_CANVAS_WIDTH;
+}

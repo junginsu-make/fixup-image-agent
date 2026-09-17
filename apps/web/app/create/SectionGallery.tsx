@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { GeneratedResult, SectionBlueprint } from "@fixup/pdp-core";
 import { apiJson } from "./pdp-utils";
+import { SectionPreview } from "./SectionPreview";
+import type { CanvasLayer } from "./pdp-drafts";
 // **서버가 차감할 때 쓰는 그 함수다.** 화면이 장수를 따로 세면 안내와 실제가 갈린다.
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { Badge, Button, cn } from "@fixup/ui";
@@ -53,6 +55,14 @@ const SIZE_LABEL: Array<{ value: GalleryCardSize; label: string }> = [
 interface SectionGalleryProps {
   sections: Section[];
   sectionKeys: string[];
+  /**
+   * 섹션마다 얹은 글자·도형.
+   *
+   * **개수만 받으면 그릴 수 없다.** 전에는 `layerCounts` 만 받아 「레이어 3」
+   * 배지로 개수만 알려 줬고, 정작 이어보기는 「최종 모습 그대로」라고 적어 두고
+   * 얹은 글자를 하나도 안 보여 줬다.
+   */
+  overlaysBySection?: Record<string, CanvasLayer[]>;
   /** 지금 고른 그림 모델. 차감 장수를 서버와 같은 식으로 세는 데 쓴다. */
   imageModel: string;
   generatingKeys: string[];
@@ -107,6 +117,7 @@ function SegmentedControl<T extends string>({
 export function SectionGallery({
   sections,
   sectionKeys,
+  overlaysBySection,
   imageModel,
   generatingKeys,
   layerCounts,
@@ -283,10 +294,12 @@ export function SectionGallery({
                   )}
                 >
                   {section.generatedImage ? (
-                    <img
+                    <SectionPreview
                       alt={getName(section)}
                       src={section.generatedImage}
-                      className="h-full w-full object-cover"
+                      layers={overlaysBySection?.[key] ?? []}
+                      className="h-full w-full"
+                      imageClassName="h-full w-full object-cover"
                     />
                   ) : (
                     <span className="grid h-full place-items-center text-subtle-foreground">
@@ -407,7 +420,13 @@ export function SectionGallery({
                   className="block w-full cursor-zoom-in"
                   aria-label={`${getName(section)} 크게 보기`}
                 >
-                  <img alt={getName(section)} src={section.generatedImage} className="block w-full" />
+                  <SectionPreview
+                    alt={getName(section)}
+                    src={section.generatedImage}
+                    layers={overlaysBySection?.[key] ?? []}
+                    className="block w-full"
+                    imageClassName="block w-full"
+                  />
                 </button>
               ) : (
                 <div

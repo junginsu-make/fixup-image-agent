@@ -2409,6 +2409,8 @@ export function PdpEditor({
             imageModel={imageModel}
             generatingKeys={generatingKeys}
             layerCounts={layerCounts}
+            // 개수만 넘기면 갤러리가 얹은 글자를 못 그린다.
+            overlaysBySection={overlaysBySection}
             onGenerate={(index) => void handleGenerateImage(index)}
             onGenerateAllMissing={() => void handleGenerateAllMissing()}
             onEdit={(index) => {
