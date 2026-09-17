@@ -67,6 +67,8 @@ interface PosterProject {
     promptMode?: "verbatim" | "assisted";
     /** 기획이 근거 없이 채웠다고 밝힌 칸들. 옛 작업에는 없다. */
     inventedSlots?: string[];
+    /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. */
+    referenceHasText?: boolean;
   };
 }
 
@@ -275,6 +277,7 @@ export function PosterClient(
      * 화면 state 를 쓴다. 사람이 방금 고친 칸이 곧바로 반영돼야 한다.
      */
     invented,
+    referenceHasText: project.data.referenceHasText,
   }), [slots, project, invented]);
 
   /**

@@ -218,6 +218,7 @@ export async function POST(request: Request, context: Context) {
          * 기획이 다 채우게 되면서 그 신호가 사라졌다(2026-09-17).
          */
         invented: project.data.inventedSlots,
+        referenceHasText: project.data.referenceHasText,
         /**
          * **고른 차례 그대로** 넘긴다. 이것이 프롬프트의 `Image N` 이 된다.
          *

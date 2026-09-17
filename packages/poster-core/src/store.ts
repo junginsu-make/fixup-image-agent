@@ -85,6 +85,8 @@ export interface PosterProjectRecord {
      * 옛 작업에는 없다. 없으면 「지어낸 것이 없다」로 읽는다.
      */
     inventedSlots?: string[];
+    /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. 옛 작업에는 없다. */
+    referenceHasText?: boolean;
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];
     /**

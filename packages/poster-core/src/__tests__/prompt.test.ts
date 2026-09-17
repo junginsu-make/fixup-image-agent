@@ -741,6 +741,40 @@ describe("글자가 전부 AI 가 고른 것일 때", () => {
     expect(prompt).toContain("28MM F2.0");
   });
 
+  /**
+   * **붙인 그림에 글자가 있으면 넣는다.**
+   *
+   * 2026-09-17 사용자 판단 — 글자를 넣을지는 규칙이 아니라 붙인 그림과 사용자가
+   * 적은 말이 정한다. VOGUE 표지를 붙였는데 결과에 글자가 하나도 없었다.
+   * 거대한 타이포그래피가 그 포스터의 핵심인데도 그랬다.
+   *
+   * 금지문은 2026-09-08 「BEST DAY EVER!」 사고의 대응이고, **그때는 첨부
+   * 어디에도 글자가 없었다.** 두 경우가 다른데 같은 규칙을 받고 있었다.
+   */
+  it("붙인 그림에 글자가 있으면 금지하지 않는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: 글자칸, referenceHasText: true,
+    });
+
+    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("가을, 셔터를 누르다");
+  });
+
+  /** 글자가 없는 그림이면 지금까지대로 막는다. 그것이 2026-09-08 의 경우다. */
+  it("붙인 그림에 글자가 없으면 지금까지대로 막는다", () => {
+    const prompt = buildPosterPrompt({
+      slots, images, size, invented: 글자칸, referenceHasText: false,
+    });
+
+    expect(prompt).toContain("Render it with NO text");
+  });
+
+  /** 옛 작업에는 이 값이 없다. 없으면 지금까지대로다. */
+  it("안 넘기면 지금까지대로다", () => {
+    expect(buildPosterPrompt({ slots, images, size, invented: 글자칸 }))
+      .toContain("Render it with NO text");
+  });
+
   /** 글자 아닌 칸이 AI 것인 건 상관없다. 그림 이야기다. */
   it("글자 아닌 칸만 AI 것이면 금지하지 않는다", () => {
     const prompt = buildPosterPrompt({

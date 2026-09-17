@@ -161,6 +161,12 @@ async function plan(request: Request, context: Context) {
          * `invented` 에 안 적으므로 저절로 빠진다.
          */
         inventedSlots: plan.invented,
+        /*
+         * **붙인 그림에 글자가 있나.** 글자를 넣을지는 규칙이 아니라 이 값이
+         * 정한다(2026-09-17 사용자 판단). 한 장이라도 글자가 있으면 넣는다 —
+         * 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수 있다.
+         */
+        referenceHasText: Object.values(grammar.grammars).some((one) => one.hasText),
         grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues],
       },
     });

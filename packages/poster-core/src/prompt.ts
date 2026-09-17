@@ -77,6 +77,13 @@ export interface PosterPromptInput {
    */
   invented?: string[];
   /**
+   * 붙인 그림에 **글자가 있나**(`grammar.ts` 의 `hasText`).
+   *
+   * 있으면 글자를 넣는다 — 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수
+   * 있다. 없으면 지금까지대로 막는다. 옛 작업에는 이 값이 없다.
+   */
+  referenceHasText?: boolean;
+  /**
    * 첨부한 그림들을 어떻게 쓸지 사용자가 01에서 적은 말.
    *
    * 03의 `userInstruction` 과 **뜻이 다르다** — 이쪽은 그림 얘기, 저쪽은
@@ -251,7 +258,12 @@ function sceneLines(slots: PosterSlots): string[] {
  * 「글자를 안 원한다」가 아니라 「우리가 안 물어봤다」는 뜻이다. 그때 금지하면
  * 사용자 프롬프트가 글자를 요구해도 우리가 막는다(2026-09-16 실물 확인).
  */
-function copyLines(slots: PosterSlots, verbatim = false, invented: string[] = []): string[] {
+function copyLines(
+  slots: PosterSlots,
+  verbatim = false,
+  invented: string[] = [],
+  referenceHasText = false,
+): string[] {
   /*
    * **글자 칸이 전부 「AI 가 골라 채운 것」이면 사용자는 글자를 안 시킨 것이다.**
    *
@@ -271,7 +283,20 @@ function copyLines(slots: PosterSlots, verbatim = false, invented: string[] = []
   const 곁텍스트도적었나 = slots.sideTexts.length > 0 && !invented.includes("sideTexts");
   const 사람이시킨글자 = 사람이적은칸.length > 0 || 곁텍스트도적었나;
 
-  const all: Array<[string, string]> = 사람이시킨글자 ? [
+  /*
+   * **붙인 그림에 글자가 있으면 그것도 「시킨 것」이다.**
+   *
+   * 글자를 넣을지는 규칙이 아니라 **붙인 그림과 사용자가 적은 말**이 정한다
+   * (2026-09-17 사용자 판단). VOGUE 표지를 붙였는데 결과에 글자가 하나도
+   * 없었다 — 거대한 타이포그래피가 그 포스터의 핵심인데도 그랬다.
+   *
+   * 아래 금지문은 2026-09-08 「BEST DAY EVER!」 사고의 대응이고, **그때는
+   * 첨부 어디에도 글자가 없었다.** 두 경우가 다른데 같은 규칙을 받고 있었다.
+   * 이제는 읽어서 가른다(`grammar.ts` 의 `hasText`) — 우리가 정하지 않는다.
+   */
+  const 글자를원한다 = 사람이시킨글자 || referenceHasText;
+
+  const all: Array<[string, string]> = 글자를원한다 ? [
     ["HEADLINE", slots.headline],
     ["SUBLINE", slots.subline],
     ...slots.sideTexts.map((value, index): [string, string] => [`SIDE ${index + 1}`, value]),
@@ -381,7 +406,12 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
       : sceneLines(input.slots)),
     ...(look ? [look] : []),
     "",
-    ...copyLines(input.slots, Boolean(input.verbatimScene?.trim()), input.invented),
+    ...copyLines(
+      input.slots,
+      Boolean(input.verbatimScene?.trim()),
+      input.invented,
+      input.referenceHasText,
+    ),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
     // 맨 뒤에서 한 번 더 못 박는다. 긴 프롬프트에서 중간은 힘을 잃는다.
