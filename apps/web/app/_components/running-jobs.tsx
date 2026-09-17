@@ -47,12 +47,22 @@ function read(): RunningJob[] {
   }
 }
 
-/** 카드뉴스는 서버에도 멈췄다고 알린다. 안 그러면 그 화면에 돌아갔을 때 또 붙는다. */
+/**
+ * 서버에도 멈췄다고 알린다.
+ *
+ * 안 알리면 그 화면에 돌아갔을 때 또 붙고, **예약한 장이 만료까지 묶인다** —
+ * 이미지 쪽은 확정이 캐묻기 안에만 있어서 멈추면 아무도 안 닫았다
+ * (2026-09-17 독립 리뷰). 두 도구 다 같은 이름의 주소를 갖는다.
+ */
 async function tellServerToStop(job: RunningJob): Promise<void> {
-  if (job.tool !== "sns") return;
-  const projectId = job.id.slice("sns:".length);
+  const prefix = `${job.tool}:`;
+  const projectId = job.id.startsWith(prefix) ? job.id.slice(prefix.length) : "";
+  if (!projectId) return;
+  const url = job.tool === "sns"
+    ? `/api/sns/projects/${projectId}/stop`
+    : `/api/poster/projects/${projectId}/stop`;
   try {
-    await fetch(`/api/sns/projects/${projectId}/stop`, { method: "POST" });
+    await fetch(url, { method: "POST" });
   } catch {
     // 못 알려도 목록에서는 뺀다. 화면이 멈춘 것이 사용자가 원한 결과다.
   }

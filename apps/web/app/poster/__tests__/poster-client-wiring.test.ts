@@ -100,6 +100,23 @@ describe("칸을 걸러서 보여주는가", () => {
     expect(source).toMatch(/planSlotRows\([\s\S]{0,160}\{ showEmpty, keep: keptFields \}/);
   });
 
+  /**
+   * **기획이 도착한 뒤에도 쌓아야 한다**(2026-09-17 독립 리뷰가 실증).
+   *
+   * 04 는 빈 채로 열리고 기획이 그 뒤에 칸을 채운다. 열 때 한 번만 잡으면
+   * 목록이 빈 채로 굳어, 채워진 칸의 글자를 다 지우는 순간 그 칸이 사라진다 —
+   * 막으려던 바로 그 일이 기본 흐름에서 그대로 일어났다.
+   */
+  it("값이 들어오면 그때그때 더한다 — 열 때 한 번이 아니다", () => {
+    expect(source).toMatch(/setKeptFields\(\(current\) => \{[\s\S]{0,400}next\.add\(field\)/);
+    // 효과가 slots 를 봐야 기획이 채운 칸을 잡는다.
+    expect(source).toMatch(/setKeptFields\(\(current\) => \{[\s\S]{0,600}\}, \[planOpen, slots\]\);/);
+  });
+
+  it("접으면 지금 빈 칸은 놓아 준다 — 접었는데 남아 있으면 접은 것이 아니다", () => {
+    expect(source).toMatch(/if \(!planOpen \|\| showEmpty\) return;[\s\S]{0,200}filter\(\(field\) => String\(slots\[field\]/);
+  });
+
   it("빈 칸을 접는 단추는 남는다 — 없으면 고를 방법이 사라진다", () => {
     expect(source).toContain("setShowEmpty((current) => !current)");
     expect(source).toContain("비어 있는 칸 {emptyFields.length}개");

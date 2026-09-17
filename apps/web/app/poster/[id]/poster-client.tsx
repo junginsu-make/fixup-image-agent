@@ -311,14 +311,39 @@ export function PosterClient(
    * (2026-09-17 사용자 보고).
    */
   const [keptFields, setKeptFields] = React.useState<TextSlot[]>([]);
+
+  /**
+   * **값이 들어온 칸은 그때그때 더한다.**
+   *
+   * 열 때 한 번만 잡으면 안 된다 — 04 는 **빈 채로 열리고** 기획이 그 뒤에
+   * 칸을 채운다. 그 사이에 잡아 두면 목록이 빈 채로 굳어, 채워진 칸의 글자를
+   * 다 지우는 순간 그 칸이 사라진다(2026-09-17 독립 리뷰가 실증). 「초안 다시
+   * 채우기」 뒤에도 같다.
+   *
+   * 더하기만 하므로 **자리는 안 움직인다** — 차례는 `SLOT_LABELS` 가 정한다.
+   */
   React.useEffect(() => {
     if (!planOpen) return;
-    setKeptFields(
-      SLOT_LABELS.map(([field]) => field).filter(
-        (field) => showEmpty || String(slots[field] ?? "").trim(),
-      ),
-    );
-    // 열 때·펼칠 때만. slots 를 넣으면 한 글자마다 다시 잡는다.
+    setKeptFields((current) => {
+      const next = new Set(current);
+      for (const [field] of SLOT_LABELS) {
+        if (String(slots[field] ?? "").trim()) next.add(field);
+      }
+      // 같은 집합이면 같은 배열을 돌려준다 — 안 그러면 효과가 자기를 다시 부른다.
+      return next.size === current.length ? current : [...next];
+    });
+  }, [planOpen, slots]);
+
+  /**
+   * 접을 때는 **지금 빈 칸을 놓아 준다.**
+   *
+   * 「비어 있는 칸 N개」를 접었는데 아까 보이던 빈 칸이 남아 있으면 접은 것이
+   * 아니다. 펼칠 때는 어차피 다 보이므로 아무것도 안 한다.
+   */
+  React.useEffect(() => {
+    if (!planOpen || showEmpty) return;
+    setKeptFields((current) => current.filter((field) => String(slots[field] ?? "").trim()));
+    // 접는 그 순간만. slots 를 넣으면 치는 동안 칸이 사라진다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planOpen, showEmpty]);
 
@@ -382,6 +407,21 @@ export function PosterClient(
   const [stopping, setStopping] = React.useState(false);
 
   /**
+   * 일을 **시작한다.** 도는 표시를 세우고 지난 중지를 푼다.
+   *
+   * **푸는 자리를 갈래마다 적으면 안 된다.** 기획·만들기에만 적고 고치기에
+   * 빠뜨렸더니, 한 번 중지한 뒤 고치기를 누르면 요청은 나가고(돈은 나간다)
+   * 캐묻기는 첫 줄에서 되돌아 나와 결과가 영영 안 들어왔다 — 화면에는
+   * 「눌렀는데 아무 일도 안 일어난다」로 보인다(2026-09-17 독립 리뷰).
+   * 갈래가 하나 늘 때마다 같은 구멍이 다시 생기므로 한 곳에 둔다.
+   */
+  function beginWork(state: { kind: "plan" | "generate" | "review"; label: string; hint?: string }) {
+    stopped.current = false;
+    setBusy(state);
+    setError(null);
+  }
+
+  /**
    * 지금 돌고 있는 것을 **강제로 끝낸다.**
    *
    * 사이드바에 있던 목록과 중지를 여기 하나로 합쳤다(2026-09-17 사용자 결정).
@@ -393,8 +433,19 @@ export function PosterClient(
     const id = jobId("poster", project.id);
     const job = jobs.find((entry) => entry.id === id);
     try {
-      if (job) await stop(job);
-      else finish(id);
+      if (job) {
+        // 셸이 서버에도 알린다(`running-jobs.tsx` 의 `tellServerToStop`).
+        await stop(job);
+      } else {
+        finish(id);
+        /*
+          **일감으로 안 잡힌 것도 서버에 알린다.** 기획이나 「보내는 중」에서
+          누르면 아직 목록에 안 올라 있는데, 예약은 이미 잡혀 있다. 안 닫으면
+          만료(10분)까지 그 사람 한도가 묶이고 다시 만들기도 막힌다
+          (2026-09-17 독립 리뷰).
+        */
+        await request(`/api/poster/projects/${project.id}/stop`, { method: "POST" }).catch(() => {});
+      }
     } finally {
       setStopping(false);
       setBusy(null);
@@ -463,9 +514,7 @@ export function PosterClient(
 
   /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
   async function runPlan() {
-    stopped.current = false;
-    setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
-    setError(null);
+    beginWork({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     try {
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
       // 중지를 눌렀으면 도착한 초안을 안 쓴다 — 멈춘 뒤에 칸이 채워지면 안 된다.
@@ -487,9 +536,7 @@ export function PosterClient(
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
-    stopped.current = false;
-    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
-    setError(null);
+    beginWork({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     try {
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
       if (stopped.current) return;
@@ -522,8 +569,7 @@ export function PosterClient(
 
   /** 고른 것만 검수한다. 반려해도 이미지는 남고 다시 만들지는 사람이 누른다. */
   async function review() {
-    setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
-    setError(null);
+    beginWork({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     try {
       const body = await (await request(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
@@ -543,8 +589,7 @@ export function PosterClient(
       setError("무엇을 고칠지 적어 주세요. 비어 있으면 같은 것을 또 만듭니다.");
       return;
     }
-    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
-    setError(null);
+    beginWork({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
     try {
       // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/edit`, {
@@ -589,11 +634,19 @@ export function PosterClient(
       // 중지를 눌렀으면 더 캐묻지 않는다. 일감은 이미 목록에서 뺐다.
       if (stopped.current) return false;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
+      /*
+        **자는 동안 누른 중지도 여기서 걸린다.** 잠들기 전에만 보면, 자는 사이에
+        멈춘 사람에게 최대 10초 뒤 결과가 도착해 화면이 되살아난다
+        (2026-09-17 독립 리뷰).
+      */
+      if (stopped.current) return false;
       const poll = await (await request(`/api/poster/projects/${project.id}/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       })).json();
+      // 물어보는 사이에 눌렀을 수도 있다. 도착한 답을 화면에 쓰기 전에 본다.
+      if (stopped.current) return false;
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
       if (poll.done) {
         setList(poll.images);
