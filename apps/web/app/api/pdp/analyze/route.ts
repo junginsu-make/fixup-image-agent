@@ -3,7 +3,8 @@ import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fi
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { sliceTallReference } from "../../../../lib/pdp/slice-image";
-import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,10 +21,12 @@ export async function POST(req: Request) {
 }
 
 async function analyze(req: Request) {
+  const parsed = await readPdpRequest<PdpAnalyzeRequest>(req, "analyze");
+  if (!parsed.ok) return parsed.response;
   const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
   if (!reservation.ok) return reservation.response;
   try {
-    const body = (await req.json()) as PdpAnalyzeRequest;
+    const body = parsed.body;
     const providers = createPdpProviders();
 
     /*
@@ -67,14 +70,14 @@ async function analyze(req: Request) {
       }
     }
     // 실패해도 글 모델 값은 이미 나갔다. 낭비가 안 보이면 줄일 수도 없다.
-    await finalizeAiUsage(reservation, false, 0, String(lastEnvelope?.code || "analyze_failed"), {
+    await settleAiUsage(reservation, false, 0, String(lastEnvelope?.code || "analyze_failed"), {
       model: "",
       billableImages: 0,
       llmUsd: readLlmMeter().usd,
     });
     return Response.json(lastEnvelope, { status: lastStatus });
   } catch (err) {
-    await finalizeAiUsage(reservation, false, 0, "invalid_request");
+    await settleAiUsage(reservation, false, 0, "invalid_request");
     const envelope = toPdpErrorResponse(err);
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }

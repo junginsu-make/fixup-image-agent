@@ -7,7 +7,8 @@ import {
 } from "@fixup/pdp-core";
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
-import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,11 +25,13 @@ export const maxDuration = 300;
  * 키비주얼 프롬프트가 섹션 카피를 읽기 시작하면 그때는 게이트가 필요하다.
  */
 export async function POST(req: Request) {
+  const parsed = await readPdpRequest<KeyVisualRequest>(req, "keyVisual");
+  if (!parsed.ok) return parsed.response;
   const reservation = await reserveAiUsage(req, "pdp_image", 1);
   if (!reservation.ok) return reservation.response;
 
   try {
-    const body = (await req.json()) as KeyVisualRequest;
+    const body = parsed.body;
     const { imageBase64, mimeType } = await generateKeyVisual(body, textPlanDepsFrom(createPdpProviders()));
     // 섹션 이미지와 똑같이 fal 에서 한 장을 만든다. 모델을 안 남기면 이 한 장은
     // 비용 집계에서 0원으로 사라진다.
@@ -40,7 +43,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, imageBase64, mimeType, usage });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
-    await finalizeAiUsage(reservation, false, 0, String(envelope.code || "key_visual_failed"));
+    await settleAiUsage(reservation, false, 0, String(envelope.code || "key_visual_failed"));
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }
 }

@@ -11,7 +11,12 @@ import type {
   ReferenceModelUsage,
   SectionBlueprint,
   AttachmentIntents,
+  ImageModelId,
+  LandingPageBlueprint,
+  ProductBrief,
+  BlueprintReview,
 } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 
 import { selectExpiredDraftIds } from "./draft-retention";
@@ -110,6 +115,25 @@ export interface PreparedImageDraft {
   fileName: string;
 }
 
+/** 텍스트 경로의 중간 상태도 초안의 일부다. 컴포넌트 수명과 분리한다. */
+export interface PdpTextDraftState {
+  stage: "input" | "scenario" | "unverifiedReview" | "keyVisual";
+  text: string;
+  brief: ProductBrief | null;
+  blueprint: LandingPageBlueprint | null;
+  originalBlueprint: LandingPageBlueprint | null;
+  review?: BlueprintReview;
+  styleReference?: StyleReferenceDraft;
+  styleReferenceEnabled: boolean;
+  preserveProduct: boolean;
+  characterId?: string;
+  characterAngles: string[];
+  keyVisual: { base64: string; mimeType: string } | null;
+  imageModel: ImageModelId;
+  copyIntensity: CopyIntensity;
+  gapPolicy: GapPolicy;
+}
+
 export interface PdpDraftRecord {
   id: string;
   title: string;
@@ -148,6 +172,14 @@ export interface PdpDraftRecord {
   aspectRatio: AspectRatio;
   notice: string;
   editorState: PdpEditorDraftState | null;
+  imageModel?: ImageModelId;
+  characterId?: string;
+  characterAngles?: string[];
+  preserveProduct?: boolean;
+  startMode?: "image" | "text";
+  analyzedBlueprint?: LandingPageBlueprint | null;
+  textDraft?: PdpTextDraftState | null;
+  snapshotOf?: string;
 }
 
 export interface PdpDraftSummary {
@@ -241,8 +273,9 @@ export async function getPdpDraft(id: string): Promise<PdpDraftRecord | null> {
 export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord> {
   const now = new Date().toISOString();
   const nextRecord: PdpDraftRecord = {
+    ...input,
     id: input.id ?? randomId(),
-    title: buildDraftTitle(input),
+    title: `${input.snapshotOf ? "[보관] " : ""}${buildDraftTitle(input)}`,
     createdAt: input.createdAt ?? now,
     updatedAt: now,
     appState: input.appState,
@@ -266,6 +299,12 @@ export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord
 
   await withStore("readwrite", (store) => requestAsPromise(store.put(normalizedRecord)));
   return normalizedRecord;
+}
+
+/** 유료 결과를 바꾸기 전에 다른 ID로 저장한다. 실패하면 호출자가 변경을 중단한다. */
+export function preservePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord> {
+  return savePdpDraft({ ...input, id: undefined, createdAt: undefined,
+    snapshotOf: input.id ?? "unsaved", notice: "변경 전 보관한 작업입니다. 이 초안을 열면 이전 상태로 돌아갑니다." });
 }
 
 export async function deletePdpDraft(id: string): Promise<void> {
@@ -376,6 +415,17 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     aspectRatio: normalizeAspectRatio(record.aspectRatio),
     notice: record.notice ?? "저장된 작업을 불러왔습니다.",
     editorState: normalizeEditorState(record.editorState, result),
+    attachmentIntents: record.attachmentIntents,
+    styleReference: record.styleReference,
+    styleReferenceEnabled: record.styleReferenceEnabled ?? true,
+    imageModel: IMAGE_MODELS.some((model) => model.id === record.imageModel) ? record.imageModel : DEFAULT_IMAGE_MODEL,
+    characterId: record.characterId,
+    characterAngles: record.characterAngles ?? [],
+    preserveProduct: record.preserveProduct ?? true,
+    startMode: record.startMode === "text" ? "text" : "image",
+    analyzedBlueprint: record.analyzedBlueprint ?? null,
+    textDraft: record.textDraft ?? null,
+    snapshotOf: record.snapshotOf,
   };
 }
 

@@ -32,6 +32,7 @@ vi.mock("@fixup/pdp-core", async () => {
 });
 
 vi.mock("../../../../lib/membership/api", () => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
   reserveAiUsage: async (_req: Request, _op: string, units: number) => {
     reserved.push(units);
     return { ok: true as const, userId: "u1", requestId: "r1", usage: {} };

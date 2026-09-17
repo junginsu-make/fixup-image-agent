@@ -55,6 +55,7 @@ import {
 import { Dashboard, Workspace } from "./redesign-panels";
 import { GenerationProgressPanel, Results, estimateGenerationSeconds, generationPhase, isAbortError } from "./redesign-results";
 import { requestIdentityOf } from "./redesign-request";
+import { persistRedesignResult } from "./result-persistence";
 import { redesignProcessSource } from "../api/library/work-process";
 
 
@@ -95,6 +96,7 @@ export function RedesignWizard() {
   const [generationSummary, setGenerationSummary] = React.useState<GenerationSummary | null>(null);
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState("");
+  const [saveWarning, setSaveWarning] = React.useState("");
   const [rolloutRequest, setRolloutRequest] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const knowledgeInputRef = React.useRef<HTMLInputElement>(null);
@@ -539,23 +541,7 @@ export function RedesignWizard() {
     }
   }
 
-  /**
-   * 결과물을 계정 라이브러리에 올린다.
-   *
-   * 옆의 '작업 저장'은 브라우저 IndexedDB 에 두는 것이라 기기를 옮기면 안 보이고
-   * 브라우저를 지우면 사라진다. 이쪽은 서버의 내 계정에 남는다.
-   *
-   * 자동으로 올리지 않는다 — 실험 삼아 돌린 것까지 쌓이면 목록이 쓰레기로 찬다.
-   */
-  /**
-   * 방금 만든 섹션만 서버 라이브러리에 올린다.
-   *
-   * 전체를 다시 올리지 않는다 — 여덟 섹션이면 같은 그림을 서른여섯 번
-   * 올리게 된다. `sourceId` 가 같으면 서버가 이어 붙인다.
-   *
-   * **조용히 실패한다.** 자동 저장이 사용자의 작업을 막아서는 안 된다.
-   * 못 올렸으면 '라이브러리에 저장' 버튼이 그대로 남아 있다.
-   */
+  // 전체 작업은 브라우저에, 이번 섹션만 라이브러리에 보관한다. 실패 상태는 남긴다.
   async function autoSaveSections(project: Project, sections: SectionResult[]) {
     const images = sections
       .map((section) => /^data:([^;]+);base64,(.*)$/.exec(section.imageUrl || ""))
@@ -565,8 +551,9 @@ export function RedesignWizard() {
 
     if (images.length === 0) return;
 
-    try {
-      await fetch("/api/library", {
+    const stored = await persistRedesignResult(
+      () => saveProjectToDb({ ...project, savedAt: new Date().toISOString() }),
+      () => fetch("/api/library", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -576,9 +563,14 @@ export function RedesignWizard() {
           ...redesignProcessSource(project),
           images,
         }),
-      });
-    } catch {
-      // 삼킨다. 손으로 올릴 길이 남아 있다.
+      }),
+    );
+    if (!stored.librarySaved || !stored.localSaved) {
+      setSaveWarning(stored.localSaved
+        ? "생성 결과는 이 브라우저에 보관했지만 라이브러리 저장에 실패했습니다. ‘라이브러리에 저장’으로 다시 저장해 주세요."
+        : stored.librarySaved
+          ? "이미지는 라이브러리에 저장했지만 브라우저 작업 저장에 실패했습니다. ‘작업 저장’을 다시 시도해 주세요."
+          : "생성 결과를 저장하지 못했습니다. 화면을 닫기 전에 다운로드하거나 다시 저장해 주세요.");
     }
   }
 
@@ -761,6 +753,7 @@ export function RedesignWizard() {
         </div>
       </div>
 
+      {saveWarning ? <div role="alert" className="mb-4 rounded-lg border border-warning/30 p-3 text-sm">{saveWarning}</div> : null}
       {generationSummary ? (
         <div
           className={cn(

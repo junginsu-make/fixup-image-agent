@@ -2,7 +2,8 @@ import { planFromText, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixu
 import type { CopyIntensity, GapPolicy, TextPlanRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { suggestStyleReference } from "../../../../lib/style-reference";
-import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,12 +19,14 @@ function isTransientBlueprintFailure(code: unknown, detail?: string) {
 }
 
 export async function POST(req: Request) {
+  const parsed = await readPdpRequest<TextPlanRequest>(req, "plan");
+  if (!parsed.ok) return parsed.response;
   // 이미지를 만들지 않는 단계라 크레딧은 소모하지 않는다(시간당 횟수 제한만 적용).
   const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
   if (!reservation.ok) return reservation.response;
 
   try {
-    const rawBody = (await req.json()) as TextPlanRequest;
+    const rawBody = parsed.body;
     const copyIntensity = INTENSITIES.includes(rawBody.copyIntensity as CopyIntensity)
       ? (rawBody.copyIntensity as CopyIntensity)
       : "normal";
@@ -40,7 +43,7 @@ export async function POST(req: Request) {
         const result = await planFromText(body, providers);
         // 레퍼런스 추천은 곁다리다. 실패해도 구성안은 그대로 돌려준다.
         const suggestion = await suggestStyleReference(reservation.userId, result.brief);
-        const usage = await finalizeAiUsage(reservation, true, 0);
+        const usage = await settleAiUsage(reservation, true, 0);
         return Response.json({
           ok: true,
           result: suggestion.reference
@@ -67,10 +70,10 @@ export async function POST(req: Request) {
       }
     }
 
-    await finalizeAiUsage(reservation, false, 0, String(lastEnvelope?.code || "plan_from_text_failed"));
+    await settleAiUsage(reservation, false, 0, String(lastEnvelope?.code || "plan_from_text_failed"));
     return Response.json(lastEnvelope, { status: lastStatus });
   } catch (err) {
-    await finalizeAiUsage(reservation, false, 0, "invalid_request");
+    await settleAiUsage(reservation, false, 0, "invalid_request");
     const envelope = toPdpErrorResponse(err);
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }

@@ -1,7 +1,8 @@
 import { editSection, humanizeEditError, RedesignError, type EditSectionInput } from "@fixup/redesign-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
-import { finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -11,7 +12,9 @@ export async function POST(req: Request) {
    * **몸을 먼저 읽는다.** 어느 제공자로 고칠지에 따라 값이 다르다
    * ($0.19 vs $0.13). 전에는 무엇이든 1장이었다.
    */
-  const body = (await req.json()) as EditSectionInput;
+  const parsed = await readPdpRequest<EditSectionInput>(req, "redesignEdit");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   const provider = String((body as { model?: string }).model || "openai") === "google"
     ? "redesign-google"
     : "redesign-openai";
@@ -23,13 +26,13 @@ export async function POST(req: Request) {
       String((body as { model?: string }).model || "openai") === "google"
         ? "redesign-google"
         : "redesign-openai";
-    const usage = await finalizeAiUsage(reservation, true, 1, undefined, {
+    const usage = await settleAiUsage(reservation, true, 1, undefined, {
       model: provider,
       billableImages: 1,
     });
     return Response.json({ ...result, usage });
   } catch (err) {
-    await finalizeAiUsage(reservation, false, 0, err instanceof RedesignError ? `edit_${err.status}` : "edit_failed");
+    await settleAiUsage(reservation, false, 0, err instanceof RedesignError ? `edit_${err.status}` : "edit_failed");
     if (err instanceof RedesignError) return Response.json({ error: err.message }, { status: err.status });
     const message = err instanceof Error ? humanizeEditError(err.message) : "섹션 수정 중 오류가 발생했습니다.";
     return Response.json({ error: message }, { status: 500 });

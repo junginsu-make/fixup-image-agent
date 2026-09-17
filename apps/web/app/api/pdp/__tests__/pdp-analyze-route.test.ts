@@ -24,6 +24,7 @@ vi.mock("@fixup/pdp-core", async () => {
 });
 
 vi.mock("../../../../lib/membership/api", () => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
   reserveAiUsage: async () => ({ ok: true as const, userId: "u1", requestId: "r1", usage: {} }),
   finalizeAiUsage: async () => ({}),
   // 장부가 안 닫혀도 결과를 돌려주는 쪽(2026-09-09 master). 없으면 성공 경로가

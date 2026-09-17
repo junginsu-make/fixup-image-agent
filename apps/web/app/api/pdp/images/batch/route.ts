@@ -1,11 +1,11 @@
 import {
   resolveCharacterAngles,
   generateSectionImage,
-  maxBatchSizeFor,
   toPdpErrorResponse,
   buildSectionImageOptions,
   pageInputsFromWire,
   DEFAULT_IMAGE_MODEL,
+  mapPdpErrorCodeToStatus,
 } from "@fixup/pdp-core";
 import type {
   AspectRatio,
@@ -20,6 +20,7 @@ import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
+import { readPdpRequest } from "../../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,21 +64,14 @@ type BatchRequest = {
 };
 
 export async function POST(req: Request) {
-  let body: BatchRequest;
-  try {
-    body = (await req.json()) as BatchRequest;
-  } catch {
-    return Response.json(
-      { ok: false, code: "INVALID_REQUEST", message: "요청을 해석하지 못했습니다." },
-      { status: 400 },
-    );
-  }
+  const parsed = await readPdpRequest<BatchRequest>(req, "batch");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
 
-  // 클라이언트가 이미 나눠 보내지만, 여기서도 자른다. 넘겨받은 장수를 그대로
-  // 믿으면 함수가 300초에 걸려 죽고, 예약한 크레딧이 finalize 되지 못한다.
-  const sections = (body.sections ?? []).slice(0, maxBatchSizeFor(model));
+  // 장수와 형식은 readPdpRequest에서 예약 전에 검사했다. 조용히 자르지 않는다.
+  const sections = body.sections;
   if (sections.length === 0) {
     return Response.json(
       { ok: false, code: "INVALID_REQUEST", message: "생성할 섹션이 없습니다." },
@@ -121,6 +115,8 @@ export async function POST(req: Request) {
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
 
+  try {
+
   /*
    * 섹션마다 **실제로 보낼 각도**를 먼저 정하고, 필요한 그림만 한 번씩 읽는다.
    *
@@ -158,8 +154,8 @@ export async function POST(req: Request) {
     return views.length ? views : undefined;
   };
 
-  const settled = await Promise.allSettled(
-    sections.map((section, position) => {
+  // 동기 조립을 모두 끝낸 뒤 제출한다. 뒤 섹션 조립 실패로 앞쪽 유료 결과를 잃지 않는다.
+  const requests = sections.map((section, position) => {
       const options = buildSectionImageOptions(page, {
         section,
         index: body.sectionIndexes?.[position] ?? position,
@@ -176,18 +172,15 @@ export async function POST(req: Request) {
         characterReferences: viewsFor(position),
       });
 
-      return generateSectionImage(
-        {
+      return {
           originalImageBase64: body.originalImageBase64,
           section,
           aspectRatio: body.aspectRatio,
           desiredTone: body.desiredTone,
           options,
-        },
-        providers,
-      );
-    }),
-  );
+        };
+    });
+  const settled = await Promise.allSettled(requests.map((request) => generateSectionImage(request, providers)));
 
   const results = settled.map((outcome, index) => {
     const section = sections[index];
@@ -236,11 +229,19 @@ export async function POST(req: Request) {
   );
 
   return Response.json({
-    ok: true,
+    ok: succeeded > 0,
+    status: succeeded === sections.length ? "completed" : succeeded > 0 ? "partial" : "failed",
+    stopBatch: results.some((result) => !result.ok && ["AI_KEY_MISSING", "AI_QUOTA_EXCEEDED"].includes(result.code)),
+    ...(succeeded === 0 ? { message: "모든 섹션 생성에 실패했습니다. 오류를 확인한 뒤 다시 시도해 주세요." } : {}),
     model,
     requested: sections.length,
     succeeded,
     results,
     usage,
   });
+  } catch (error) {
+    const envelope = toPdpErrorResponse(error);
+    await settleAiUsage(reservation, false, 0, envelope.code);
+    return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
+  }
 }

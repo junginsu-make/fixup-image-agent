@@ -185,6 +185,7 @@ interface PdpEditorProps {
    */
   onJumpStep?: (id: "upload" | "analyze") => void;
   saveState?: "idle" | "saving" | "saved" | "error";
+  onBeforeReplace?: () => Promise<boolean>;
 }
 
 /** /api/pdp/images/batch 응답. 실패한 섹션은 ok:false 로 개별 표시된다. */
@@ -197,6 +198,7 @@ type BatchImagesResponse =
         | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[] } }
         | { sectionId: string; ok: false; code?: string; message?: string }
       >;
+      stopBatch?: boolean;
       message?: string;
     }
   | { ok: false; code?: string; message?: string; requested?: number; succeeded?: number; results?: never };
@@ -248,6 +250,7 @@ export function PdpEditor({
   pageContext,
   onJumpStep,
   saveState = "idle",
+  onBeforeReplace,
 }: PdpEditorProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
   const [sections, setSections] = useState(() =>
@@ -1456,6 +1459,13 @@ export function PdpEditor({
     if (!section) return;
 
     generationLockRef.current = true;
+    if (section.generatedImage && onBeforeReplace) {
+      try {
+        if (!(await onBeforeReplace())) { generationLockRef.current = false; setErrorMessage("이전 결과를 보관하지 못했습니다. 다시 시도해 주세요."); return; }
+      } catch {
+        generationLockRef.current = false; setErrorMessage("이전 결과를 보관하지 못했습니다."); return;
+      }
+    }
     const startedAt = Date.now();
     setGenerationRun({
       mode: "single",
@@ -1627,6 +1637,10 @@ export function PdpEditor({
         setGenerationRun(
           describeRun("running", getDisplaySectionName(chunk[chunk.length - 1].section)),
         );
+        if (response.stopBatch) {
+          setErrorMessage("공급자 연결 또는 한도 문제로 남은 묶음을 중단했습니다. 성공한 이미지는 보관했습니다.");
+          break;
+        }
       }
     } catch (error) {
       failed += targets.length - processed;
@@ -1657,6 +1671,7 @@ export function PdpEditor({
    * 키와 섹션의 짝이 어긋나 레이어가 남의 섹션에 붙는다.
    */
   const handleMoveSection = (from: number, to: number) => {
+    if (generationLockRef.current) return;
     if (to < 0 || to >= sections.length || from === to) {
       return;
     }
@@ -1681,12 +1696,17 @@ export function PdpEditor({
   };
 
   /** 섹션을 삭제한다. 그 섹션의 레이어·설정도 함께 지운다(남기면 유령 데이터). */
-  const handleDeleteSection = (index: number) => {
+  const handleDeleteSection = async (index: number) => {
+    if (generationLockRef.current) return;
     if (sections.length <= 1) {
       setErrorMessage("섹션은 최소 한 개는 있어야 합니다.");
       return;
     }
 
+    generationLockRef.current = true;
+    try {
+      if (onBeforeReplace && !(await onBeforeReplace())) { setErrorMessage("이전 섹션을 보관하지 못해 삭제를 중단했습니다."); return; }
+    } finally { generationLockRef.current = false; }
     const key = sectionKeys[index];
     setSections((current) => current.filter((_, i) => i !== index));
     setSectionKeys((current) => current.filter((_, i) => i !== index));
@@ -1706,6 +1726,7 @@ export function PdpEditor({
 
   /** 빈 섹션을 뒤에 추가한다. 키는 기존과 겹치지 않게 만든다. */
   const handleAddSection = () => {
+    if (generationLockRef.current) return;
     const used = new Set(sectionKeys);
     let n = sections.length + 1;
     let key = `S${n}`;

@@ -30,6 +30,7 @@ import { TextBriefInput } from "./TextBriefInput";
 import { UnverifiedReview } from "./UnverifiedReview";
 import { apiJson, toAnchorImage, toDataUrl } from "./pdp-utils";
 import { replaceBlueprintState } from "./text-plan-state";
+import type { PdpTextDraftState } from "./pdp-drafts";
 
 /**
  * 텍스트 진입 경로 전체를 담는다.
@@ -42,6 +43,9 @@ import { replaceBlueprintState } from "./text-plan-state";
 export type TextStage = "input" | "scenario" | "unverifiedReview" | "keyVisual";
 
 interface TextModeFlowProps {
+  initialDraft?: PdpTextDraftState | null;
+  onDraftChange?: (draft: PdpTextDraftState) => void;
+  onBeforeReplace?: () => Promise<boolean>;
   /** 첨부 자리별 지시. 글로 시작해도 레퍼런스·캐릭터는 붙일 수 있다. */
   attachmentIntents: AttachmentIntents;
   onIntentChange: (slot: keyof AttachmentIntents, value: string) => void;
@@ -69,6 +73,9 @@ function errorText(error: unknown) {
 }
 
 export function TextModeFlow({
+  initialDraft,
+  onDraftChange,
+  onBeforeReplace,
   attachmentIntents,
   onIntentChange,
   aspectRatio,
@@ -78,7 +85,7 @@ export function TextModeFlow({
   onStageChange,
   onComplete,
 }: TextModeFlowProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialDraft?.text ?? "");
   const [fromLibrary, setFromLibrary] = useState<string | null>(null);
 
   // 라이브러리에서 「상세페이지로」를 눌러 왔으면 글이 이미 들어가 있어야 한다.
@@ -88,33 +95,44 @@ export function TextModeFlow({
     setText(handoff.text);
     setFromLibrary(handoff.title);
   }, []);
-  const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
-  const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
-  const [brief, setBrief] = useState<ProductBrief | null>(null);
+  const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>(initialDraft?.copyIntensity ?? "normal");
+  const [gapPolicy, setGapPolicy] = useState<GapPolicy>(initialDraft?.gapPolicy ?? "ask");
+  const [brief, setBrief] = useState<ProductBrief | null>(initialDraft?.brief ?? null);
   // 이미지 방향을 사용자가 고쳤는지 비교하려면 최초 시나리오를 그대로 들고 있어야 한다.
-  const [originalBlueprint, setOriginalBlueprint] = useState<LandingPageBlueprint | null>(null);
-  const [blueprint, setBlueprint] = useState<LandingPageBlueprint | null>(null);
+  const [originalBlueprint, setOriginalBlueprint] = useState<LandingPageBlueprint | null>(initialDraft?.originalBlueprint ?? null);
+  const [blueprint, setBlueprint] = useState<LandingPageBlueprint | null>(initialDraft?.blueprint ?? null);
   // 판매 원칙 심사 결과. 두 번 다시 만들고도 남은 지적은 숨기지 않고 화면에 띄운다.
-  const [review, setReview] = useState<BlueprintReview | undefined>(undefined);
+  const [review, setReview] = useState<BlueprintReview | undefined>(initialDraft?.review);
   // 추천된 디자인 레퍼런스와 그것을 쓸지 여부. 반영 강도가 "디자인 전체"라
   // 무엇이 씌워지는지 보여주고 끌 수 있어야 한다.
-  const [styleReference, setStyleReference] = useState<StyleReferenceView | undefined>(undefined);
-  const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(true);
+  const [styleReference, setStyleReference] = useState<StyleReferenceView | undefined>(initialDraft?.styleReference);
+  const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(initialDraft?.styleReferenceEnabled ?? true);
   // 처음 위치는 상품 유형으로 잡는다 — 무형 상품은 지킬 실물이 없다.
   // 추론이 틀릴 수 있으므로 화면에서 바꿀 수 있게 둔다.
-  const [preserveProduct, setPreserveProduct] = useState(true);
-  const [characterId, setCharacterId] = useState<string | undefined>(undefined);
+  const [preserveProduct, setPreserveProduct] = useState(initialDraft?.preserveProduct ?? true);
+  const [characterId, setCharacterId] = useState<string | undefined>(initialDraft?.characterId);
   // 비어 있으면 자동이다. `create/CharacterPicker.tsx` 머리말 참조.
-  const [characterAngles, setCharacterAngles] = useState<string[]>([]);
-  const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(null);
-  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL);
+  const [characterAngles, setCharacterAngles] = useState<string[]>(initialDraft?.characterAngles ?? []);
+  const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(initialDraft?.keyVisual ?? null);
+  const [imageModel, setImageModel] = useState<ImageModelId>(initialDraft?.imageModel ?? DEFAULT_IMAGE_MODEL);
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    onDraftChange?.({ stage, text, brief, blueprint, originalBlueprint, review, styleReference,
+      styleReferenceEnabled, preserveProduct, characterId, characterAngles, keyVisual,
+      imageModel, copyIntensity, gapPolicy });
+  }, [onDraftChange, stage, text, brief, blueprint, originalBlueprint, review, styleReference,
+    styleReferenceEnabled, preserveProduct, characterId, characterAngles, keyVisual,
+    imageModel, copyIntensity, gapPolicy]);
 
   const handlePlan = async () => {
     setIsBusy(true);
     setErrorMessage("");
     try {
+      if ((blueprint || keyVisual) && onBeforeReplace && !(await onBeforeReplace())) {
+        setErrorMessage("이전 작업을 보관하지 못해 다시 기획하기를 중단했습니다."); return;
+      }
       const response = await apiJson<TextPlanResponse>("/pdp/plan-from-text", {
         method: "POST",
         body: JSON.stringify({
@@ -159,6 +177,9 @@ export function TextModeFlow({
     setIsBusy(true);
     setErrorMessage("");
     try {
+      if (keyVisual && onBeforeReplace && !(await onBeforeReplace())) {
+        setErrorMessage("이전 대표 이미지를 보관하지 못해 재생성을 중단했습니다."); return;
+      }
       const response = await apiJson<KeyVisualResponse>("/pdp/key-visual", {
         method: "POST",
         body: JSON.stringify({ brief, blueprint: source, aspectRatio, imageModel }),

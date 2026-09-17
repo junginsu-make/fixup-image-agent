@@ -47,24 +47,19 @@ import { loadCharacterView } from "../../../../lib/characters";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { withSlicedStyleReference } from "../../../../lib/pdp/slice-image";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
-import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  let body: PdpImagesRequestBody;
-  try {
-    body = (await req.json()) as PdpImagesRequestBody;
-  } catch {
-    return Response.json(
-      { ok: false, code: "INVALID_REQUEST", message: "요청을 해석하지 못했습니다." },
-      { status: 400 },
-    );
-  }
+  const parsed = await readPdpRequest<PdpImagesRequestBody>(req, "single");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   const gateResponse = rejectIfUnverified(body.section ? [body.section] : []);
   if (gateResponse) return gateResponse;
@@ -131,7 +126,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
-    await finalizeAiUsage(
+    await settleAiUsage(
       reservation,
       false,
       0,

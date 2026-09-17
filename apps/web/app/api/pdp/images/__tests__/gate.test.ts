@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SectionBlueprint } from "@fixup/pdp-core";
 
 const membership = vi.hoisted(() => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
+  settleAiUsage: vi.fn(async () => ({})),
   reserveAiUsage: vi.fn(),
   finalizeAiUsage: vi.fn(),
 }));

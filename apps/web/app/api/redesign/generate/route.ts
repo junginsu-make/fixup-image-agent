@@ -1,7 +1,8 @@
 import { generateSections, humanizeProviderError, RedesignError, type GenerateInputFile } from "@fixup/redesign-core";
 import { buildSceneWithCharacterDirective, resolveCharacterAngles } from "@fixup/pdp-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
-import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { authenticateApiMember, settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { readRedesignForm } from "../../../../lib/pdp/request";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
@@ -18,9 +19,11 @@ export async function POST(req: Request) {
 }
 
 async function generate(req: Request) {
+  const parsed = await readRedesignForm(req);
+  if (!parsed.ok) return parsed.response;
   let reservation: Awaited<ReturnType<typeof reserveAiUsage>> | undefined;
   try {
-    const form = await req.formData();
+    const form = parsed.form;
     const parsedCount = Number(form.get("count") || 1);
     const requestedCount = Number.isFinite(parsedCount) ? Math.max(1, Math.min(10, Math.trunc(parsedCount))) : 1;
     /**
@@ -112,7 +115,7 @@ async function generate(req: Request) {
       googleKey: resolveGoogleKey(),
     });
     const consumed = Math.min(requestedCount, result.project.sections.length);
-    const usage = await finalizeAiUsage(
+    const usage = await settleAiUsage(
       reservation,
       consumed > 0,
       // 만든 만큼만 받는다. 단가는 위에서 정한 제공자를 그대로 쓴다.
@@ -123,7 +126,7 @@ async function generate(req: Request) {
     );
     return Response.json({ ...result, usage });
   } catch (err) {
-    if (reservation?.ok) await finalizeAiUsage(reservation, false, 0, err instanceof RedesignError ? `redesign_${err.status}` : "redesign_failed");
+    if (reservation?.ok) await settleAiUsage(reservation, false, 0, err instanceof RedesignError ? `redesign_${err.status}` : "redesign_failed");
     if (err instanceof RedesignError) return Response.json({ error: err.message }, { status: err.status });
     const message = err instanceof Error ? humanizeProviderError(err.message) : "이미지 생성 중 오류가 발생했습니다.";
     return Response.json({ error: message }, { status: 500 });
