@@ -131,8 +131,11 @@ describe("내 그림만 보기", () => {
     expect(picker).toContain("setMineOnly(false)");
   });
 
-  it("주인을 모르는 줄은 남긴다 — 옛 화면은 이 값을 안 싣는다", () => {
-    expect(picker).toContain('images.filter((image) => image.mine !== false)');
+  it("**거르개와 지우기 판정이 같은 방향이다** — 모르면 「내 것」이 아니다", () => {
+    // 한쪽은 모르면 남기고 다른 쪽은 모르면 닫으면, 같은 줄이 「내 그림」에
+    // 들어 있으면서 지울 수는 없게 된다(2026-09-17 독립 리뷰).
+    expect(picker).toContain("images.filter((image) => image.mine === true)");
+    expect(picker, "모르면 남기던 옛 방향").not.toContain("image.mine !== false");
   });
 
   it("**남의 것이 섞였을 때만 낸다** — 혼자 쓰는 사람에게는 뜻이 없다", () => {

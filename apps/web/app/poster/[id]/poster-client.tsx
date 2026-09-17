@@ -480,7 +480,8 @@ export function PosterClient(
     if (!job?.poll.body) return;
     resumed.current = true;
     // 이어받는 것도 「일을 시작하는」 자리다. 같은 문을 지난다.
-    beginWork({ kind: "generate", label: "그리는 중입니다", hint: "이어서 받아 오는 중입니다" });
+    // **무엇이 돌던 것인지는 모른다** — 그릴 수도, 고칠 수도 있다. 아는 만큼만 말한다.
+    beginWork({ kind: "generate", label: "만들던 것을 이어받는 중입니다", hint: "잠시 기다려 주세요" });
     void (async () => {
       try {
         if (await collect(job.poll.body as Record<string, unknown>)) finish(job.id);

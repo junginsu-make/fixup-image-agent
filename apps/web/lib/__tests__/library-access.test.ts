@@ -12,29 +12,46 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const recorded: Array<{ table: string; column: string; value: unknown }> = [];
 let tableRows: Record<string, Array<Record<string, unknown>>> = {};
 
+/**
+ * 가짜 질의 만들개.
+ *
+ * **조건을 기록만 하면 안 된다.** 무동작으로 두었더니 `.in`·`.or`·`.eq` 를
+ * 지워도 시험이 전부 초록이었다(2026-09-17 독립 리뷰가 뮤테이션으로 실증).
+ * 그래서 **가진 칸에 한해 실제로 거른다** — 그 칸이 없는 줄은 그대로 남긴다
+ * (작업물 표의 줄들은 `user_id` 를 안 싣고 오는 시험이 많다).
+ */
 function builderFor(table: string) {
+  const eqs: Array<[string, unknown]> = [];
+  let cap: number | undefined;
+  const rows = () => {
+    const kept = (tableRows[table] ?? []).filter((row) => eqs.every(
+      // 그 칸이 없는 줄은 이 조건의 대상이 아니다.
+      ([column, value]) => row[column] === undefined || row[column] === value,
+    ));
+    return cap === undefined ? kept : kept.slice(0, cap);
+  };
   const builder: Record<string, unknown> = {
     select: () => builder,
     delete: () => builder,
     order: () => builder,
-    limit: () => builder,
+    limit: (count: number) => { cap = count; return builder; },
     not: () => builder,
-    // **무동작으로 두면 조건을 지워도 초록이다**(2026-09-17 독립 리뷰가 실증).
     in: (column: string, value: unknown) => {
       recorded.push({ table, column: `in:${column}`, value });
       return builder;
     },
     eq: (column: string, value: unknown) => {
       recorded.push({ table, column, value });
+      eqs.push([column, value]);
       return builder;
     },
     or: (filter: string) => {
       recorded.push({ table, column: "or", value: filter });
       return builder;
     },
-    maybeSingle: async () => ({ data: (tableRows[table] ?? [])[0] ?? null, error: null }),
+    maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
     then: (resolve: (result: unknown) => unknown) =>
-      Promise.resolve(resolve({ data: tableRows[table] ?? [], error: null })),
+      Promise.resolve(resolve({ data: rows(), error: null })),
   };
   return builder;
 }
@@ -197,6 +214,17 @@ describe("참고 이미지는 회원 공용", () => {
     );
     // 내 것 질의 하나에만 붙는다. 둘 다 붙으면 공용 그림이 안 보인다.
     expect(owner.map((entry) => entry.value)).toEqual(["member-1"]);
+  });
+
+  it("**두 질의 모두에 팀 조건이 붙는다** — 한쪽만 걸면 400장 자리를 남의 팀이 차지한다", async () => {
+    tableRows.reference_images = [];
+    await listReferenceImages({ ...MEMBER, teamId: "team-1" });
+    // 뒤의 `canSeeReference` 가 걸러 누수는 없지만, 상한 앞에서 못 걸러
+    // 「내 옛 그림이 사라진다」가 그대로 돌아온다(2026-09-17 독립 리뷰).
+    const ors = recorded.filter(
+      (entry) => entry.table === "reference_images" && entry.column === "or",
+    );
+    expect(ors.length).toBe(2);
   });
 
   it("내 그림이 앞자리를 갖는다 — 상한에 걸려도 안 밀린다", async () => {

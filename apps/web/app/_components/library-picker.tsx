@@ -144,8 +144,14 @@ export function LibraryPickerButton({
   const hasSets = Boolean(shownSets.length && onPickSet);
   const openedSet = shownSets.find((entry) => entry.id === openedSetId) ?? null;
 
-  /** 내 것만 보기를 켰을 때 실제로 그릴 목록. 주인을 모르는 줄은 남긴다. */
-  const shownImages = mineOnly ? images.filter((image) => image.mine !== false) : images;
+  /**
+   * 내 것만 보기를 켰을 때 실제로 그릴 목록.
+   *
+   * **주인을 모르는 줄은 「내 것」이 아니다.** 지우기 판정(`canDeleteReference`)도
+   * 모르면 닫는 쪽이다 — 두 값이 서로 다른 방향으로 틀리면 안 된다
+   * (2026-09-17 독립 리뷰).
+   */
+  const shownImages = mineOnly ? images.filter((image) => image.mine === true) : images;
   /** 남이 올린 것이 하나라도 있나. 없으면 거를 것도 없어 단추를 안 낸다. */
   const hasOthers = images.some((image) => image.mine === false);
 
@@ -254,7 +260,7 @@ export function LibraryPickerButton({
                   <TabButton on={mineOnly} onClick={() => setMineOnly(true)}>
                     내 그림
                     <Badge variant="secondary" className="ml-1">
-                      {images.filter((image) => image.mine !== false).length}
+                      {images.filter((image) => image.mine === true).length}
                     </Badge>
                   </TabButton>
                 </div>
