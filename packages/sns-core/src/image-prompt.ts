@@ -137,60 +137,59 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
    *
    * **번호와 역할 이름은 남긴다.** 빼면 「①번」이 가리킬 것이 없어진다.
    */
+images.forEach((image, offset) => {
+  const number = offset + 1;
+  if (image.kind === "style_reference") {
+    // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
+    //
+    // 전에는 "as closely as possible, replace only the content" 라고만 했다.
+    // 그러면 레퍼런스의 아이콘이 '꼴'인지 '내용'인지 모델이 알 수 없어,
+    // 있던 아이콘을 그대로 베끼거나 반대로 아이콘 없는 허전한 카드가 나왔다.
+    // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
+    lines.push(
+      `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. ` +
+      "Imitate its design language only:",
+      "  · layout and composition, typography (weight, width, character), text treatment, " +
+      "texture and rendering style (photographic / illustrated / 3D)",
+      "  · how each colour is used — which colours fill surfaces and bands, which are only type, " +
+      "which are accents. Reproduce that usage, not just the colours themselves.",
+      "Do NOT copy anything else from it — not its product, not its people, not its icons or " +
+      "illustrations, not its text content. Draw new icons and imagery in the same style so they " +
+      "match the text of THIS card.",
+    );
+  } else if (image.kind === "keep_identity") {
+    const person = image.subject === "person";
+    // 사람을 그대로 두고 그림 느낌만 바꾸는 경우는 다른 말을 쓴다 (설계 §4-3).
+    // `preserveDirective` 는 restyle 을 금지해서, 그 말이 가면 처음부터 막힌다.
+    if (person && image.restyle) {
+      lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
+      return;
+    }
+    // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
+    // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
+    lines.push(
+      `Image ${number} is a ${person ? "PRESERVED PERSON" : "PRESERVED SUBJECT"}. ` +
+      preserveDirective(person ? "preserve-person" : "preserve-object"),
+    );
+  }
+});
+
+  /*
+   * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**
+   *
+   * 전에는 지시를 적으면 위 역할 문구를 통째로 뺐다. 이미지 만들기에서
+   * 실측으로 정한 것을 옮겨 온 것인데, 2026-09-17 에 그것이 과하다는 것이
+   * 실물로 드러났다 — 첨부 셋(포스터·인물·모자)에 「힙하고 자유로운 느낌」
+   * 이라고 적었더니 부딪히지도 않는 905자가 함께 사라지고, 모자도 포스터
+   * 느낌도 결과에 안 나왔다.
+   *
+   * **남기고, 이긴다고 말하고, 뒤에 둔다.** 뒤에 온 말이 앞말을 덮는 것은
+   * 이 저장소가 여러 번 확인한 순서다. 지우기와 우선하기는 다른 일이다.
+   */
   if (intent && images.length) {
     lines.push(
-      "The user wrote what to do with these images. Their words replace the usual rules for each "
-      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
-      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that contradicts them — where a rule and the user disagree, follow the user. Rules the user did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
     );
-    images.forEach((image, offset) => {
-      const number = offset + 1;
-      const person = image.kind === "keep_identity" && image.subject === "person";
-      // 「사람은 그대로, 그림 느낌만」은 안 지운다 — 부딪히지 않고, 지우면
-      // 사람을 하나하나 옮기라는 말이 사라져 작은 것(안경 같은)이 빠진다.
-      if (person && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      lines.push(`Image ${number}: the user marked this "${shortRole(image)}".`);
-    });
-  } else {
-  images.forEach((image, offset) => {
-    const number = offset + 1;
-    if (image.kind === "style_reference") {
-      // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
-      //
-      // 전에는 "as closely as possible, replace only the content" 라고만 했다.
-      // 그러면 레퍼런스의 아이콘이 '꼴'인지 '내용'인지 모델이 알 수 없어,
-      // 있던 아이콘을 그대로 베끼거나 반대로 아이콘 없는 허전한 카드가 나왔다.
-      // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
-      lines.push(
-        `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. ` +
-        "Imitate its design language only:",
-        "  · layout and composition, typography (weight, width, character), text treatment, " +
-        "texture and rendering style (photographic / illustrated / 3D)",
-        "  · how each colour is used — which colours fill surfaces and bands, which are only type, " +
-        "which are accents. Reproduce that usage, not just the colours themselves.",
-        "Do NOT copy anything else from it — not its product, not its people, not its icons or " +
-        "illustrations, not its text content. Draw new icons and imagery in the same style so they " +
-        "match the text of THIS card.",
-      );
-    } else if (image.kind === "keep_identity") {
-      const person = image.subject === "person";
-      // 사람을 그대로 두고 그림 느낌만 바꾸는 경우는 다른 말을 쓴다 (설계 §4-3).
-      // `preserveDirective` 는 restyle 을 금지해서, 그 말이 가면 처음부터 막힌다.
-      if (person && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
-      // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
-      lines.push(
-        `Image ${number} is a ${person ? "PRESERVED PERSON" : "PRESERVED SUBJECT"}. ` +
-        preserveDirective(person ? "preserve-person" : "preserve-object"),
-      );
-    }
-  });
   }
   /*
     **같은 캐릭터의 여러 각도**가 붙었으면 한 번만 말해 준다.

@@ -296,15 +296,26 @@ describe("글자를 안 적었을 때", () => {
 });
 
 /**
- * 첨부 지시를 적으면 부딪히는 고정 문구를 통째로 뺀다 — 설계 §4-1 A안.
+ * **첨부 지시는 역할 규칙을 이긴다 — 지우지는 않는다.**
  *
- * 2026-09-08 사용자가 실제로 돌려 보고 정한 것이다. 두 장 다 「따라 만들기」로
- * 고르고 「1번 사진의 사람들을 2번 그림 느낌으로」라고 적었는데, 프롬프트는 두
- * 장 모두에 대해 `not its people` 을 보내고 있었다. 우선순위 줄이 이미 있었지만
- * **한 줄로는 못 이겼다** — 반대편이 여섯 문장이고 전부 구체적이기 때문이다.
+ * 2026-09-08 에는 지시를 적으면 역할 문구를 **통째로 뺐다**(설계 §4-1 A안).
+ * 까닭이 있었다 — 「1번 사진의 사람들을 2번 느낌으로」라고 적었는데 프롬프트가
+ * 두 장 모두에 `not its people` 을 보내 사람이 새로 만들어졌다. 우선순위 한
+ * 줄로는 못 이겼다. 반대편이 여섯 문장이고 전부 구체적이기 때문이다.
  *
- * **위험을 알고 고른 것이다.** 지키기 문구도 함께 사라져 얼굴이 딴사람이 될 수
- * 있다. 그때는 사용자가 그 말을 직접 적으면 된다.
+ * **그런데 지우는 것이 과했다.** 2026-09-17 에 실물로 드러났다 — 첨부 셋
+ * (포스터·인물·모자)에 「카메라의 주목을 받는 힙하고 자유로운 느낌」이라고
+ * 적었더니, 부딪히지도 않는 **905자**가 함께 사라졌다.
+ *
+ *   · 모자 → 「이 물건을 그대로. 실루엣·색·재질·라벨까지」 사라짐
+ *   · 포스터 → 「배치·타이포·색 쓰임새를 따라가라」 사라짐
+ *
+ * 결과에 모자도 포스터 느낌도 안 나왔다. 적은 말은 역할과 **부딪히지도 않는
+ * 말**이었는데, 부딪힐 것까지 통째로 지워진 것이다.
+ *
+ * **고친 방향:** 역할 규칙은 늘 보낸다. 대신 사용자 말이 **이긴다**고 못 박고
+ * 그것을 역할 규칙 **뒤에** 둔다 — 뒤에 온 말이 앞말을 덮는 것이 이 저장소가
+ * 여러 번 확인한 순서다(2026-09-04 실측, 2026-09-17 카드뉴스).
  */
 describe("첨부 지시를 적었을 때", () => {
   const intent = "1번 사진의 사람들을 2번 그림 느낌(만화)으로";
@@ -316,49 +327,66 @@ describe("첨부 지시를 적었을 때", () => {
     ],
   };
 
-  it("사람을 복사하지 말라는 말이 사라진다 — 바로 사용자가 시킨 것이다", () => {
-    expect(buildPosterPrompt({ ...base, attachmentIntent: intent })).not.toContain("not its people");
-  });
-
-  it("화풍을 바꾸지 말라는 말도 사라진다", () => {
-    // `preserveDirective` 가 restyle 을 금지한다. 사용자가 요청한 것이 restyle 이다.
-    expect(buildPosterPrompt({ ...base, attachmentIntent: intent })).not.toContain("restyle");
-  });
-
-  it("역할 고정 문구 전체가 사라진다", () => {
+  /** 지우면 모자가 안 나온다. 2026-09-17 에 실제로 그랬다. */
+  it("역할 규칙이 남는다", () => {
     const prompt = buildPosterPrompt({ ...base, attachmentIntent: intent });
-    for (const gone of ["Imitate its design language only", "Reproduce this exact person", "PRESERVED PERSON"]) {
-      expect(prompt, `${gone} 가 남아 있으면 안 된다`).not.toContain(gone);
-    }
+
+    expect(prompt).toContain("Reproduce this exact person");
+    expect(prompt).toContain("Imitate its design language only");
   });
 
-  it("**번호와 역할 이름은 남는다** — 빼면 「1번」이 가리킬 것이 없다", () => {
+  it("지킬 물건의 규칙도 남는다", () => {
+    const prompt = buildPosterPrompt({
+      slots: base.slots,
+      images: [{ kind: "preserved" as const, subject: "object" as const }],
+      attachmentIntent: "힙하고 자유로운 느낌",
+    });
+
+    expect(prompt).toContain("Reproduce this exact object");
+    expect(prompt).toContain("it is not a similar product, it is this product");
+  });
+
+  /**
+   * **이긴다고 말해 줘야 이긴다.** 규칙을 남기기만 하면 2026-09-08 의 사고가
+   * 되돌아온다 — 여섯 문장짜리 구체적인 규칙이 한 줄을 이긴다.
+   */
+  it("사용자 말이 이긴다고 못 박는다", () => {
     const prompt = buildPosterPrompt({ ...base, attachmentIntent: intent });
-    expect(prompt).toContain('Image 1: the user marked this "person to keep".');
-    expect(prompt).toContain('Image 2: the user marked this "reference to imitate".');
+
+    expect(prompt).toContain("Their words OVERRIDE any rule above");
   });
 
-  it("왜 규칙이 없는지 모델에게 말해 준다", () => {
-    // 안 말하면 모델이 「빠뜨렸구나」 하고 자기가 아는 기본값을 채운다.
-    expect(buildPosterPrompt({ ...base, attachmentIntent: intent }))
-      .toContain("deliberately omitted");
+  /**
+   * **뒤에 둔다.** 앞에 두면 규칙이 그것을 덮는다. 이 저장소가 여러 번 확인한
+   * 순서다 — 2026-09-04 실측, 2026-09-17 카드뉴스 모델 문구.
+   */
+  it("역할 규칙 뒤에 온다", () => {
+    const prompt = buildPosterPrompt({ ...base, attachmentIntent: intent });
+    const 규칙 = prompt.indexOf("Reproduce this exact person");
+    const 이긴다 = prompt.indexOf("Their words OVERRIDE any rule above");
+
+    expect(규칙).toBeGreaterThan(-1);
+    expect(이긴다).toBeGreaterThan(규칙);
+  });
+
+  it("**번호와 역할 이름도 남는다** — 빼면 「1번」이 가리킬 것이 없다", () => {
+    const prompt = buildPosterPrompt({ ...base, attachmentIntent: intent });
+
+    expect(prompt).toContain("Image 1 is a PRESERVED PERSON");
+    expect(prompt).toContain("Image 2 is a POSTER REFERENCE");
+  });
+
+  /** 적은 말은 그대로 실린다. 요약하면 그 말이 시킨 것이 사라진다. */
+  it("적은 말이 그대로 실린다", () => {
+    expect(buildPosterPrompt({ ...base, attachmentIntent: intent })).toContain(intent);
   });
 
   it("지시를 안 적었으면 지금까지 그대로다", () => {
     const prompt = buildPosterPrompt(base);
+
     expect(prompt).toContain("Reproduce this exact person");
     expect(prompt).toContain("not its people");
-    expect(prompt).not.toContain("deliberately omitted");
-  });
-
-  it("공백만 적은 것은 안 적은 것이다", () => {
-    expect(buildPosterPrompt({ ...base, attachmentIntent: "   " })).toContain("not its people");
-  });
-
-  it("사용자 말은 맨 앞과 맨 뒤 두 곳에 그대로 남는다", () => {
-    const prompt = buildPosterPrompt({ ...base, attachmentIntent: intent });
-    expect(prompt.startsWith("USER INSTRUCTION")).toBe(true);
-    expect(prompt).toContain(`re-read the USER INSTRUCTION and make sure it is satisfied: 첨부한 그림에 대해: ${intent}`);
+    expect(prompt).not.toContain("Their words OVERRIDE any rule above");
   });
 });
 
@@ -424,13 +452,14 @@ describe("사람은 그대로 두고 그림 느낌만 바꿀 때", () => {
   });
 
   /**
-   * **4-1 A안이 이 역할까지 지우면 안 된다.**
+   * **첨부 지시를 적어도 역할 규칙은 남는다.**
    *
-   * A안이 지우는 것은 사용자가 적은 말과 **부딪히는** 문구다. 이 역할의 말은
-   * 「사람은 그대로 + 그림 느낌은 바꿔도 된다」이고, 이 역할을 고른 사람이 적는
-   * 지시가 바로 그것이다 — 부딪히지 않는다.
+   * 전에는 지시를 적으면 다른 역할의 문구가 사라졌고(§4-1 A안), 이 역할만
+   * 예외로 남겼다. 2026-09-17 에 그 「사라짐」이 과하다는 것이 실물로 드러나
+   * 전부 남기는 쪽으로 바꿨다 — 사용자 말은 지우는 대신 **이긴다**.
    *
-   * 지우면 4-3 을 만든 이유가 사라진다. 안경이 또 사라진다.
+   * 이 역할(사람은 그대로, 그림 느낌만)의 말은 여전히 남아야 한다. 지우면
+   * 4-3 을 만든 이유가 사라지고 안경이 또 사라진다.
    */
   it("첨부 지시를 적어도 이 말은 남는다", () => {
     const prompt = buildPosterPrompt({
@@ -440,22 +469,31 @@ describe("사람은 그대로 두고 그림 느낌만 바꿀 때", () => {
     });
     expect(prompt).toContain("PRESERVED PERSON, REDRAWN");
     expect(prompt).toContain("glasses");
-    // 다른 역할의 고정 문구는 그대로 사라진다.
-    expect(prompt).not.toContain("not its people");
-    expect(prompt).toContain('Image 2: the user marked this "reference to imitate".');
+    // 다른 역할의 규칙도 이제 남는다. 부딪히면 사용자 말이 이긴다.
+    expect(prompt).toContain("not its people");
+    expect(prompt).toContain("Their words OVERRIDE any rule above");
   });
 });
 
-describe("문구를 뺐다는 말과 실제가 맞는가", () => {
-  it("남는 지시가 있으면 있다고 함께 말한다", () => {
-    // 「규칙은 전부 뺐다」고만 적으면, 바로 아래 남아 있는 4-3 지시를 모델이
-    // 「빼려다 만 것」으로 읽을 수 있다.
+/**
+ * **말과 실제가 맞는가.**
+ *
+ * 전에는 「규칙을 뺐다」고 적어 두고 실제로는 일부를 남겼다. 모델이 남은 것을
+ * 「빼려다 만 것」으로 읽을 수 있어 「남는 것도 있다」를 함께 적었다.
+ *
+ * 2026-09-17 에 **빼지 않기로** 바꿨다. 그러니 「뺐다」는 말도 없어야 한다 —
+ * 프롬프트가 자기 자신에 대해 거짓말을 하면 모델이 무엇을 믿을지 모른다.
+ */
+describe("말과 실제가 맞는가", () => {
+  it("뺐다는 말이 안 남았다", () => {
     const prompt = buildPosterPrompt({
       slots: { ...EMPTY_SLOTS, scene: "강가" },
       images: [{ kind: "preserved", subject: "person", restyle: true }],
       attachmentIntent: "1번 사람들을 만화로",
     });
-    expect(prompt).toContain("except where an instruction is spelled out below, which still applies");
+
+    expect(prompt).not.toContain("deliberately omitted");
+    expect(prompt).not.toContain("replace the usual rules");
   });
 });
 

@@ -145,72 +145,64 @@ function attachmentLines(
     + "never substitute a generic stand-in.",
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
-  if (hasAttachmentIntent) {
+images.forEach((image, index) => {
+  const number = attachmentNumber(index);
+  if (image.kind === "preserved") {
     /**
-     * **문구를 뺐다는 말과 실제가 어긋나면 안 된다.**
+     * **그림 느낌만 바꾸는 사람은 다른 말을 쓴다**(설계 §4-3).
      *
-     * 4-3 역할(사람은 그대로, 그림 느낌만)의 지시는 남는다. 그런데 「규칙은 전부
-     * 뺐다」고 적어 두면 모델이 바로 아래 남아 있는 그 지시를 「빼려다 만 것」으로
-     * 읽을 수 있다. 남는 것이 있다고 함께 말한다.
+     * `preserveDirective("preserve-person")` 은 `restyle` 을 금지한다. 그 말을
+     * 그대로 보내면 「이 사람들을 만화로」가 처음부터 막힌다.
      */
-    lines.push(
-      "The user wrote what to do with these images. Their words replace the usual rules for each "
-      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
-      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
-    );
-    images.forEach((image, index) => {
-      const number = attachmentNumber(index);
-      /**
-       * **「그림 느낌만 바꾸기」는 지우지 않는다**(설계 §4-3).
-       *
-       * 4-1 A안이 지우는 것은 사용자가 적은 말과 **부딪히는** 문구다. 이 역할의
-       * 말은 「사람은 그대로 + 그림 느낌은 바꿔도 된다」이고, 이 역할을 고른
-       * 사람이 적는 지시가 바로 그것이다 — 부딪히지 않는다.
-       *
-       * 이것까지 지우면 4-3 을 만든 이유가 사라진다. 사람을 하나하나 옮기라는
-       * 말이 다시 프롬프트에서 없어져 안경이 또 사라진다.
-       */
-      if (image.kind === "preserved" && image.subject === "person" && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      lines.push(`Image ${number}: the user marked this "${roleName(image)}".`);
-    });
-  } else {
-  images.forEach((image, index) => {
-    const number = attachmentNumber(index);
-    if (image.kind === "preserved") {
-      /**
-       * **그림 느낌만 바꾸는 사람은 다른 말을 쓴다**(설계 §4-3).
-       *
-       * `preserveDirective("preserve-person")` 은 `restyle` 을 금지한다. 그 말을
-       * 그대로 보내면 「이 사람들을 만화로」가 처음부터 막힌다.
-       */
-      if (image.subject === "person" && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
-      // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
-      const role = image.subject === "person" ? "preserve-person" : "preserve-object";
-      const label = image.subject === "person" ? "PRESERVED PERSON" : "PRESERVED SUBJECT";
-      lines.push(`Image ${number} is a ${label}. ${preserveDirective(role)}`);
+    if (image.subject === "person" && image.restyle) {
+      lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
       return;
     }
-    // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
-    // "as closely as possible" 만 쓰면 레퍼런스의 아이콘·제품이 그대로 나온다.
-    // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
+    // 지키는 말은 공용 어휘가 정한다. 도구마다 다르게 적으면 어느 도구에서는
+    // 지켜지고 어느 도구에서는 조금씩 바뀐다 — 2026-09-04 사용자 보고.
+    const role = image.subject === "person" ? "preserve-person" : "preserve-object";
+    const label = image.subject === "person" ? "PRESERVED PERSON" : "PRESERVED SUBJECT";
+    lines.push(`Image ${number} is a ${label}. ${preserveDirective(role)}`);
+    return;
+  }
+  // 2026-07-30 실측 정책(pdp.reference-policy.ts)을 그대로 옮긴 문구다.
+  // "as closely as possible" 만 쓰면 레퍼런스의 아이콘·제품이 그대로 나온다.
+  // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
+  lines.push(
+    `Image ${number} is a POSTER REFERENCE. Imitate its design language only:`,
+    "  · layout and composition, typography (weight, width, character), text treatment, texture "
+    + "and rendering style (photographic / illustrated / 3D)",
+    "  · how each colour is used — which colours fill surfaces and bands, which are only type, "
+    + "which are accents. Reproduce that usage, not just the colours themselves.",
+    "Do NOT copy anything else from it — not its product, not its people, not its icons or "
+    + "illustrations, not its text content. Draw new icons and imagery in the same style so they "
+    + "match what is described below.",
+  );
+});
+
+  /*
+   * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**
+   *
+   * 2026-09-08 에는 지시를 적으면 위 역할 문구를 **통째로 뺐다**(설계 §4-1
+   * A안). 까닭이 있었다 — 「1번 사진의 사람들을 2번 느낌으로」라고 적었는데
+   * 두 장 모두에 `not its people` 이 가서 사람이 새로 만들어졌다. 우선순위
+   * 한 줄로는 못 이겼다. 반대편이 여섯 문장이고 전부 구체적이기 때문이다.
+   *
+   * **그런데 지우는 것이 과했다.** 2026-09-17 에 실물로 드러났다 — 첨부 셋
+   * (포스터·인물·모자)에 「카메라의 주목을 받는 힙하고 자유로운 느낌」이라고
+   * 적었더니 부딪히지도 않는 **905자**가 함께 사라졌다. 모자를 그대로
+   * 지키라는 말도, 포스터의 배치·타이포를 따라가라는 말도 없어졌고, 결과에
+   * 둘 다 안 나왔다.
+   *
+   * **그래서 남기고, 이긴다고 말하고, 뒤에 둔다.** 뒤에 온 말이 앞말을 덮는
+   * 것은 이 저장소가 여러 번 확인한 순서다(2026-09-04 실측, 2026-09-17
+   * 카드뉴스). 부딪히는 말은 사용자 것이 이기고, 안 부딪히는 규칙은 살아
+   * 남는다 — 지우기와 우선하기는 다른 일이다.
+   */
+  if (hasAttachmentIntent) {
     lines.push(
-      `Image ${number} is a POSTER REFERENCE. Imitate its design language only:`,
-      "  · layout and composition, typography (weight, width, character), text treatment, texture "
-      + "and rendering style (photographic / illustrated / 3D)",
-      "  · how each colour is used — which colours fill surfaces and bands, which are only type, "
-      + "which are accents. Reproduce that usage, not just the colours themselves.",
-      "Do NOT copy anything else from it — not its product, not its people, not its icons or "
-      + "illustrations, not its text content. Draw new icons and imagery in the same style so they "
-      + "match what is described below.",
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that contradicts them — where a rule and the user disagree, follow the user. Rules the user did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
     );
-  });
   }
   // 순서는 공용 어휘(@fixup/shared)가 정한다. 다섯 도구가 갈리면 안 된다.
   //
