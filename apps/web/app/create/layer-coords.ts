@@ -9,103 +9,29 @@
  *
  * ── 어떻게 고치나 ────────────────────────────────────────────
  *
- * 설계 §11: 「문서 좌표계를 원본 이미지 픽셀 또는 정규화 좌표로 고정한다.
- * 화면 크기는 viewport scale 일 뿐 저장 좌표가 아니다.」
+ * **이 저장소는 460px 고정 좌표계다.** 비율로 저장하지 않는다 — 안쪽 캔버스
+ * 폭을 460 으로 못 박고, 좁은 화면에서는 겉껍데기만 줄인다. 저장된 좌표의
+ * 뜻이 화면 폭과 무관해지므로 설계 §11 이 요구한 것과 결과가 같다(고정 기준폭은
+ * 비율 좌표를 460 배 해 둔 것과 수학적으로 같다).
  *
- * **저장은 비율(0~1)로, 화면은 지금 폭을 곱해서** 쓴다. 글자 크기도 비율이다 —
- * 안 그러면 좁은 화면에서만 글자가 상대적으로 커 보인다.
+ * **비율 변환 함수를 두지 않는다.** 한때 `toStoredLayer`/`toCanvasLayer` 를
+ * 만들어 뒀는데 아무도 안 불렀다. 그 상태로 시험이 초록이면 다음 사람이
+ * 「좌표가 정규화돼 있다」고 읽는다 — 안 돼 있다. 거짓 자신감만 남는다.
  *
  * ── 옛 레이어 ────────────────────────────────────────────────
  *
- * 비율 칸이 없던 시절에 저장된 것은 **460px 에서 놓은 것으로 읽는다**
- * (설계 §5.1). 그때 대부분의 사람이 그 폭에서 작업했다. 원래 좁은 화면에서
- * 놓았다면 완벽히 복원되지 않는다 — 그 사실을 숨기지 않는다.
+ * 비율이 없던 시절에 저장된 것도 **460px 에서 놓은 것으로 읽는다**(설계 §5.1).
+ * 그때 대부분이 그 폭에서 작업했다. 원래 좁은 화면에서 놓았다면 완벽히
+ * 복원되지 않는다 — 그 사실을 숨기지 않는다.
  */
 
-/** 비율이 없던 시절의 기준 폭. 그때 캔버스 상한이 이 값이었다. */
+/**
+ * 캔버스의 기준 폭. **CSS 의 `.imageCanvas{width}` 와 같아야 한다.**
+ *
+ * 한쪽만 고치면 좁은 화면에서 축소가 모자라 캔버스가 삐져나가고, 저장된 모든
+ * 레이어가 밀린다. `__tests__/layer-coords.test.ts` 가 CSS 를 읽어 대조한다.
+ */
 export const LEGACY_CANVAS_WIDTH = 460;
-
-/** 화면에 그릴 때 쓰는 값. 지금 캔버스 폭 기준 픽셀이다. */
-export interface CanvasGeometry {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-}
-
-/** 저장할 때 쓰는 값. 캔버스 폭에 대한 비율이라 화면 크기와 무관하다. */
-export interface StoredGeometry {
-  xRatio: number;
-  yRatio: number;
-  widthRatio: number;
-  heightRatio: number;
-  fontSizeRatio: number;
-}
-
-/** 옛 저장본. 비율 칸이 없고 픽셀만 있다. */
-interface LegacyGeometry {
-  x: number;
-  y: number;
-  width: number | string;
-  height: number | string;
-  fontSize?: number;
-}
-
-/** `"50%"` 처럼 적힌 값을 픽셀로. 숫자면 그대로. */
-function toPixels(value: number | string, base: number): number {
-  if (typeof value === "number") return value;
-  const percent = /^(-?[\d.]+)%$/.exec(value.trim());
-  if (percent) return (Number(percent[1]) / 100) * base;
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function hasRatios(value: StoredGeometry | LegacyGeometry): value is StoredGeometry {
-  return typeof (value as StoredGeometry).xRatio === "number";
-}
-
-export function toStoredLayer(
-  geometry: { x: number; y: number; width: number | string; height: number | string; fontSize?: number },
-  canvasWidth: number,
-): StoredGeometry {
-  const width = Math.max(1, canvasWidth);
-  return {
-    xRatio: geometry.x / width,
-    yRatio: geometry.y / width,
-    widthRatio: toPixels(geometry.width, width) / width,
-    heightRatio: toPixels(geometry.height, width) / width,
-    fontSizeRatio: (geometry.fontSize ?? 0) / width,
-  };
-}
-
-export function toCanvasLayer(
-  stored: StoredGeometry | LegacyGeometry,
-  canvasWidth: number,
-): CanvasGeometry {
-  const width = Math.max(1, canvasWidth);
-
-  const ratios = hasRatios(stored)
-    ? stored
-    : // 비율이 없으면 옛 저장본이다. 460px 에서 놓은 것으로 읽는다.
-      toStoredLayer(stored, LEGACY_CANVAS_WIDTH);
-
-  const layerWidth = ratios.widthRatio * width;
-  const layerHeight = ratios.heightRatio * width;
-
-  /*
-    **캔버스 밖으로 못 나가게 한다**(설계 §11).
-    비율이 1 을 넘거나 음수인 값이 들어와도 잘린 그림을 만들지 않는다.
-  */
-  const maxX = Math.max(0, width - layerWidth);
-  return {
-    x: Math.min(Math.max(0, ratios.xRatio * width), maxX),
-    y: Math.max(0, ratios.yRatio * width),
-    width: layerWidth,
-    height: layerHeight,
-    fontSize: ratios.fontSizeRatio * width,
-  };
-}
 
 /**
  * 좁은 화면에서 캔버스 겉을 얼마나 줄일 것인가.
@@ -167,23 +93,54 @@ const OFFSET = 24;
  *
  * 빈자리를 찾아 대각선으로 비켜 놓되 **캔버스 밖으로는 안 나간다.**
  */
-export function nextLayerOrigin(existing: LayerOrigin[], base: LayerOrigin): LayerOrigin {
-  const limit = LEGACY_CANVAS_WIDTH - 60;
+export function nextLayerOrigin(
+  existing: LayerOrigin[],
+  base: LayerOrigin,
+  box: { width: number; height: number; canvasHeight: number } = {
+    width: 0,
+    height: 0,
+    canvasHeight: LEGACY_CANVAS_WIDTH,
+  },
+): LayerOrigin {
+  /*
+    **상자가 들어갈 자리까지 본다.** 전에는 자리(x)만 460-60 으로 묶었는데,
+    헤드라인 기본 폭이 360 이라 x=124 면 오른쪽 끝이 484 로 넘쳤다.
+
+    **세로 한계는 캔버스 높이다.** 전에는 여기에도 폭에서 온 400 을 썼다.
+    1:1 은 높이가 460, 9:16 은 818 이라 뜻이 전혀 다르다 — 1:1 작업에서
+    열일곱째쯤부터 새 레이어가 캔버스 아래로 나가 안 보였다.
+  */
+  const maxX = Math.max(0, LEGACY_CANVAS_WIDTH - box.width);
+  const maxY = Math.max(0, box.canvasHeight - box.height);
   let { x, y } = base;
 
   for (let step = 0; step < 40; step += 1) {
     const taken = existing.some(
       (one) => Math.abs(one.x - x) < OVERLAP && Math.abs(one.y - y) < OVERLAP,
     );
-    if (!taken) return { x, y };
+    if (!taken && x <= maxX && y <= maxY) return { x, y };
 
     x += OFFSET;
     y += OFFSET;
-    // 오른쪽 끝에 닿으면 기본 자리로 돌아와 아래로 내려간다.
-    if (x > limit) {
-      x = base.x;
-      y = Math.min(y, limit);
+    // 한쪽 끝에 닿으면 기본 자리로 돌아온다. 밖으로 밀어내지 않는다.
+    if (x > maxX || y > maxY) {
+      x = Math.min(base.x, maxX);
+      y = Math.min(base.y, maxY);
+      // 기본 자리도 이미 찼으면 더 볼 것이 없다.
+      break;
     }
   }
-  return { x: base.x, y: base.y };
+  return { x: Math.min(base.x, maxX), y: Math.min(base.y, maxY) };
+}
+
+/**
+ * 460 기준 좌표계에서 이 화면비의 캔버스 높이.
+ *
+ * 1:1 은 460, 3:4 는 613, 9:16 은 818 이다. **세로 한계를 폭으로 대신하면**
+ * 1:1 작업에서 새 레이어가 캔버스 아래로 나가 안 보인다.
+ */
+export function canvasHeightFor(aspectRatio: string | undefined): number {
+  const [w, h] = String(aspectRatio ?? "3:4").split(":").map(Number);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || !w) return LEGACY_CANVAS_WIDTH;
+  return Math.round((LEGACY_CANVAS_WIDTH * h) / w);
 }

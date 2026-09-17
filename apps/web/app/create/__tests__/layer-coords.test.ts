@@ -1,134 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
-  LEGACY_CANVAS_WIDTH,
-  toCanvasLayer,
-  toStoredLayer,
-  canvasFitFor,
-  type StoredGeometry,
-} from "../layer-coords";
+import { LEGACY_CANVAS_WIDTH, canvasFitFor } from "../layer-coords";
 
 /**
- * **레이어가 어느 화면에서 봐도 같은 자리에 있어야 한다.**
+ * **이 저장소는 460px 고정 좌표계다.**
  *
- * 레이어 좌표가 캔버스 CSS 픽셀 절대값이고, 캔버스는 `min(100%, 460px)` 이라
- * 창이 좁으면 함께 줄어든다. 데스크톱(460px)에서 오른쪽에 붙여 배치한 글자가
- * 휴대폰(300px)에서는 **캔버스 밖으로 나가 잘린다.** 저장해 뒀다가 다른
- * 기기에서 열면 그대로 드러난다.
+ * 레이어 좌표가 캔버스 CSS 픽셀 절대값인데 캔버스가 화면 따라 줄면, 데스크톱
+ * 에서 오른쪽에 붙인 글자가 휴대폰에서 **잘린 채 구워진다.** 그래서 안쪽 폭을
+ * 460 으로 못 박고 겉껍데기만 줄인다.
  *
- * 설계 §11: 「문서 좌표계를 원본 이미지 픽셀 또는 정규화 좌표로 고정한다.
- * 화면 크기는 viewport scale 일 뿐 저장 좌표가 아니다.」
- *
- * 그래서 **저장은 비율(0~1)로, 화면은 지금 폭을 곱해서** 쓴다.
+ * 비율 변환 함수는 두지 않는다 — 한때 만들어 뒀다가 아무도 안 불러서 지웠다.
+ * 안 쓰는 모듈이 초록이면 다음 사람이 「정규화돼 있다」고 잘못 읽는다.
  */
-const 데스크톱 = 460;
-const 휴대폰 = 300;
-
-describe("저장 — 지금 폭으로 나눈다", () => {
-  it("캔버스 폭의 비율로 적는다", () => {
-    const 저장본 = toStoredLayer(
-      { x: 230, y: 115, width: 184, height: 46, fontSize: 42 },
-      데스크톱,
-    );
-
-    expect(저장본.xRatio).toBeCloseTo(0.5);
-    expect(저장본.yRatio).toBeCloseTo(0.25);
-    expect(저장본.widthRatio).toBeCloseTo(0.4);
-  });
-
-  it("**글자 크기도 비율이다** — 안 그러면 좁은 화면에서만 글자가 커 보인다", () => {
-    const 저장본 = toStoredLayer({ x: 0, y: 0, width: 100, height: 40, fontSize: 46 }, 데스크톱);
-
-    expect(저장본.fontSizeRatio).toBeCloseTo(0.1);
-  });
-
-  it("퍼센트로 적힌 폭은 그대로 비율이 된다", () => {
-    const 저장본 = toStoredLayer({ x: 0, y: 0, width: "50%", height: 40, fontSize: 20 }, 데스크톱);
-
-    expect(저장본.widthRatio).toBeCloseTo(0.5);
-  });
-});
-
-describe("표시 — 지금 폭을 곱한다", () => {
-  const 저장본: StoredGeometry = {
-    xRatio: 0.5, yRatio: 0.25, widthRatio: 0.4, heightRatio: 0.1, fontSizeRatio: 0.0913,
-  };
-
-  it("데스크톱에서는 원래 자리다", () => {
-    const 화면 = toCanvasLayer(저장본, 데스크톱);
-
-    expect(화면.x).toBeCloseTo(230);
-    expect(화면.width).toBeCloseTo(184);
-  });
-
-  it("**좁은 화면에서도 같은 비율 자리다** — 밖으로 안 나간다", () => {
-    const 화면 = toCanvasLayer(저장본, 휴대폰);
-
-    expect(화면.x).toBeCloseTo(150);
-    expect(화면.width).toBeCloseTo(120);
-    // 오른쪽 끝이 캔버스 안이다.
-    expect(화면.x + 화면.width).toBeLessThanOrEqual(휴대폰);
-  });
-
-  it("글자 크기도 함께 줄어든다", () => {
-    const 좁게 = toCanvasLayer(저장본, 휴대폰);
-    const 넓게 = toCanvasLayer(저장본, 데스크톱);
-
-    expect(좁게.fontSize).toBeLessThan(넓게.fontSize);
-    expect(좁게.fontSize / 넓게.fontSize).toBeCloseTo(휴대폰 / 데스크톱);
-  });
-
-  it("**왕복해도 값이 안 변한다**", () => {
-    const 처음 = { x: 52, y: 52, width: 336, height: 120, fontSize: 42 };
-    const 돌아온것 = toCanvasLayer(toStoredLayer(처음, 데스크톱), 데스크톱);
-
-    expect(돌아온것.x).toBeCloseTo(처음.x);
-    expect(돌아온것.width).toBeCloseTo(처음.width);
-    expect(돌아온것.fontSize).toBeCloseTo(처음.fontSize);
-  });
-});
-
-describe("옛 레이어 — 비율이 없던 시절", () => {
-  it("**460px 에서 놓은 것으로 읽는다**(설계 §5.1)", () => {
-    // 비율 칸이 없으면 옛 저장본이다. 그때 기준 폭은 460 이었다.
-    const 화면 = toCanvasLayer({ x: 230, y: 115, width: 184, height: 46, fontSize: 42 } as never, 데스크톱);
-
-    expect(화면.x).toBeCloseTo(230);
-    expect(화면.width).toBeCloseTo(184);
-  });
-
-  it("옛 레이어도 좁은 화면에서는 줄여 보여 준다", () => {
-    const 화면 = toCanvasLayer({ x: 230, y: 0, width: 184, height: 46, fontSize: 42 } as never, 휴대폰);
-
-    expect(화면.x).toBeCloseTo(230 * (휴대폰 / LEGACY_CANVAS_WIDTH));
-  });
-
-  it("기준 폭은 460 이다", () => {
-    expect(LEGACY_CANVAS_WIDTH).toBe(460);
-  });
-});
-
-describe("캔버스 밖으로 못 나간다", () => {
-  it("오른쪽으로 밀어도 안에 머문다", () => {
-    const 화면 = toCanvasLayer(
-      { xRatio: 0.95, yRatio: 0, widthRatio: 0.4, heightRatio: 0.1, fontSizeRatio: 0.05 },
-      데스크톱,
-    );
-
-    expect(화면.x + 화면.width).toBeLessThanOrEqual(데스크톱);
-  });
-
-  it("음수 자리는 0 으로 당긴다", () => {
-    const 화면 = toCanvasLayer(
-      { xRatio: -0.2, yRatio: -0.1, widthRatio: 0.4, heightRatio: 0.1, fontSizeRatio: 0.05 },
-      데스크톱,
-    );
-
-    expect(화면.x).toBe(0);
-    expect(화면.y).toBe(0);
-  });
-});
-
 describe("겉을 줄이는 배율", () => {
   it("넓으면 줄이지 않는다", () => {
     expect(canvasFitFor(600)).toBe(1);
@@ -185,5 +68,39 @@ describe("화면이 실제로 쓰는가", () => {
   it("관찰자를 치운다 — 섹션을 옮길 때마다 쌓이면 안 된다", () => {
     expect(editor).toContain("fitObserverRef.current?.disconnect()");
     expect(editor).toContain("heightObserverRef.current?.disconnect()");
+  });
+});
+
+/**
+ * **460 이 서로 모르는 네 곳에 흩어져 있다.**
+ *
+ * CSS 의 `.imageCanvas{width}`·`.imageCanvasFit{width}`, TS 의
+ * `LEGACY_CANVAS_WIDTH`, 그리고 내보내기의 기본 폭. 하나만 고치면 좁은 화면에서
+ * 축소가 모자라 캔버스가 삐져나가고 저장된 레이어가 전부 밀린다.
+ *
+ * `canvasFitFor(460) === 1` 같은 검사는 **같은 상수를 자기 자신과 대조**하는
+ * 것이라 빨개지지 않는다. 실제 파일을 읽어 대조한다 — `editor-fonts.test.ts` 가
+ * `pretendard.css` 를 읽는 것과 같은 수법이다.
+ */
+describe("기준 폭이 한 값인가", () => {
+  const css = readFileSync(new URL("../pdp-maker.module.css", import.meta.url), "utf8");
+  const editor = readFileSync(new URL("../PdpEditor.tsx", import.meta.url), "utf8");
+
+  const 폭 = (선택자: string) => {
+    const 블록 = new RegExp(String.raw`\.${선택자}\s*\{([^}]*)\}`).exec(css)?.[1] ?? "";
+    return Number(/width:[^;]*?(\d+)px/.exec(블록)?.[1]);
+  };
+
+  it("CSS 의 안쪽 캔버스 폭과 코드의 기준이 같다", () => {
+    expect(폭("imageCanvas")).toBe(LEGACY_CANVAS_WIDTH);
+  });
+
+  it("겉껍데기 상한도 같다", () => {
+    expect(폭("imageCanvasFit")).toBe(LEGACY_CANVAS_WIDTH);
+  });
+
+  it("**내보내기의 마지막 기본값도 같다** — 다르면 그때만 좌표가 어긋난다", () => {
+    const 기본값 = /lastCanvasWidthRef\.current \|\| (\d+)/.exec(editor)?.[1];
+    expect(Number(기본값)).toBe(LEGACY_CANVAS_WIDTH);
   });
 });

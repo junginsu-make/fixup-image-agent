@@ -48,20 +48,36 @@ describe("B-11 — 새 레이어가 겹쳐 쌓이지 않는다", () => {
     expect(있는것.some((one) => one.x === 다음.x && one.y === 다음.y)).toBe(false);
   });
 
-  it("**캔버스 밖까지 밀어내지 않는다**", () => {
-    // 대각선 줄만 채운다. 빈 자리는 남아 있으므로 반드시 안쪽에서 찾아야 한다.
-    const 대각선 = Array.from({ length: 15 }, (_, i) => ({ x: 52 + i * 24, y: 52 + i * 24 }));
+  it("**상자가 캔버스 안에 들어간다** — 자리만 보면 오른쪽이 넘친다", () => {
+    // 헤드라인 기본 폭이 360 이다. 자리만 460-60 으로 묶으면 끝이 760 이 된다.
+    const 상자 = { width: 360, height: 120, canvasHeight: 613 };
+    const 대각선 = Array.from({ length: 4 }, (_, i) => ({ x: 52 + i * 24, y: 52 + i * 24 }));
+    const 다음 = nextLayerOrigin(대각선, { x: 52, y: 52 }, 상자);
+
+    expect(다음.x + 상자.width).toBeLessThanOrEqual(LEGACY_CANVAS_WIDTH);
+    expect(다음.y + 상자.height).toBeLessThanOrEqual(상자.canvasHeight);
+  });
+
+  it("**세로 한계는 캔버스 높이다** — 폭에서 온 값을 쓰면 아래로 새어 나간다", () => {
+    // 1:1 은 높이가 460, 9:16 은 818 이다. 뜻이 전혀 다르다.
+    const 정사각 = { width: 280, height: 100, canvasHeight: 460 };
+    const 많이 = Array.from({ length: 20 }, (_, i) => ({ x: 52 + i * 24, y: 52 + i * 24 }));
+    const 다음 = nextLayerOrigin(많이, { x: 52, y: 52 }, 정사각);
+
+    expect(다음.y + 정사각.height).toBeLessThanOrEqual(정사각.canvasHeight);
+  });
+
+  it("빈 자리가 있으면 겹치지 않는 자리를 준다", () => {
+    const 대각선 = Array.from({ length: 4 }, (_, i) => ({ x: 52 + i * 24, y: 52 + i * 24 }));
     const 다음 = nextLayerOrigin(대각선, { x: 52, y: 52 });
 
-    expect(다음.x).toBeLessThan(LEGACY_CANVAS_WIDTH - 60);
-    expect(다음.x).toBeGreaterThanOrEqual(0);
-    // 그리고 실제로 빈 자리여야 한다.
     expect(대각선.some((one) => Math.abs(one.x - 다음.x) < 8 && Math.abs(one.y - 다음.y) < 8)).toBe(false);
   });
 });
 
 /** 줄 나누기·주석 거르기. 정규식을 본문에 적으면 셸을 거치며 깨진다. */
-const NEWLINE_RE = new RegExp(String.raw`?
+const NEWLINE_RE = new RegExp(String.raw`
+?
 `);
 const COMMENT_RE = new RegExp(String.raw`^\s*(\*|/\*|//|})`);
 
@@ -97,5 +113,13 @@ describe("배선", () => {
 
   it("B-8 — 앞 섹션을 지워도 보던 섹션을 따라간다", () => {
     expect(editor).toContain("index < current ? current - 1 : current");
+  });
+});
+
+describe("화면이 상자 크기를 넘기는가", () => {
+  const editor = readFileSync(new URL("../PdpEditor.tsx", import.meta.url), "utf8");
+
+  it("**두 곳 모두 상자와 캔버스 높이를 넘긴다** — 안 넘기면 기본값(460)으로 떨어진다", () => {
+    expect([...editor.matchAll(/canvasHeight: canvasHeightFor\(aspectRatio\)/g)]).toHaveLength(2);
   });
 });

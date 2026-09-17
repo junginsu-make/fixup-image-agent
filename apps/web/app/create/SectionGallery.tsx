@@ -289,8 +289,17 @@ export function SectionGallery({
                   disabled={!section.generatedImage}
                   aria-label={`${getName(section)} 크게 보기`}
                   className={cn(
-                    "relative block aspect-[3/4] w-full overflow-hidden bg-canvas",
-                    section.generatedImage ? "cursor-zoom-in" : "cursor-default"
+                    /*
+                      **그림을 자르지 않는다.** 전에는 `aspect-[3/4]` 칸에
+                      `object-cover` 로 담았는데, 그림은 잘리고 얹은 글자는 안
+                      잘린 좌표로 그려져 **9:16·1:1 작업에서 글자가 딴 자리에
+                      떴다**(3:4 만 우연히 맞았다). 사용자가 그 썸네일을 보고
+                      멀쩡한 배치를 옮기게 된다 — 미리보기가 틀렸는데 원본을 고친다.
+
+                      빈 섹션만 3:4 자리를 잡아 목록이 들쭉날쭉해지지 않게 한다.
+                    */
+                    "relative block w-full overflow-hidden bg-canvas",
+                    section.generatedImage ? "cursor-zoom-in" : "aspect-[3/4] cursor-default"
                   )}
                 >
                   {section.generatedImage ? (
@@ -298,8 +307,8 @@ export function SectionGallery({
                       alt={getName(section)}
                       src={section.generatedImage}
                       layers={overlaysBySection?.[key] ?? []}
-                      className="h-full w-full"
-                      imageClassName="h-full w-full object-cover"
+                      className="block w-full"
+                      imageClassName="block w-full"
                     />
                   ) : (
                     <span className="grid h-full place-items-center text-subtle-foreground">

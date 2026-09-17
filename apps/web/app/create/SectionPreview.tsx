@@ -103,6 +103,9 @@ export function SectionPreview({
             transformOrigin: "top left",
             transform: `scale(${fit})`,
             pointerEvents: "none",
+            // 그림 밖으로 안 새게 한다. 내보내기 노드도 잘라 낸다 — 안 맞추면
+            // 미리보기와 구운 결과가 또 달라진다.
+            overflow: "hidden",
           }}
         >
           {[...layers.filter(isShapeLayer), ...layers.filter(isTextLayer)].map((layer) => (
@@ -120,10 +123,24 @@ export function SectionPreview({
                 <div style={buildShapeLayerStyle(layer)} />
               ) : (
                 <div style={buildOverlayShellStyle(layer)}>
+                  {/*
+                    **쌓임 순서를 편집기와 맞춘다.**
+
+                    편집기는 CSS 클래스로 `z-index` 를 준다
+                    (`.overlayBackdrop{z-index:0}` · `.overlayTextLayer{z-index:1}`).
+                    여기서 빠뜨리면 자리잡힌 배경이 static 인 글자보다 위에 칠해져
+                    **배경이 글자를 덮는다** — 「최종 모습 확인」이 정반대가 된다.
+                  */}
                   {layer.backgroundEnabled ? (
-                    <div style={{ position: "absolute", inset: 0, ...buildOverlayBackgroundStyle(layer) }} />
+                    <div
+                      style={{ position: "absolute", inset: 0, zIndex: 0, ...buildOverlayBackgroundStyle(layer) }}
+                    />
                   ) : null}
-                  <span style={buildOverlayTextStyle(layer) as CSSProperties}>{layer.text}</span>
+                  <span
+                    style={{ position: "relative", zIndex: 1, ...buildOverlayTextStyle(layer) } as CSSProperties}
+                  >
+                    {layer.text}
+                  </span>
                 </div>
               )}
             </div>

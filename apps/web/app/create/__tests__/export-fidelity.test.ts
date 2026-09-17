@@ -77,6 +77,11 @@ describe("파일 이름", () => {
  * 위 함수들이 맞아도 화면이 안 부르면 아무 일도 안 일어난다. 그 한 줄은 지워도
  * 나머지가 전부 통과한다 — 이 저장소가 겪은 그 구멍이다(`page-wire.ts` 머리말).
  */
+/** 줄 나누기·주석 거르기. 정규식을 본문에 적으면 셸을 거치며 깨진다. */
+const NEWLINE_RE = new RegExp(String.raw`?
+`);
+const COMMENT_LINE_RE = new RegExp(String.raw`^\s*(\*|/\*|//)`);
+
 describe("화면이 실제로 쓰는가", () => {
   const editor = readFileSync(new URL("../PdpEditor.tsx", import.meta.url), "utf8");
 
@@ -94,8 +99,34 @@ describe("화면이 실제로 쓰는가", () => {
       editor.indexOf("const handleSaveToLibrary"),
       editor.indexOf("const handleDownloadAll"),
     );
+
     expect(저장함수).toContain("captureSectionBlob");
-    expect(저장함수).not.toContain("section.generatedImage ?? \"\"");
+  });
+
+  it("**한 장씩 굽는다** — 동시에 돌리면 휴대폰에서 탭이 죽는다", () => {
+    /*
+      **주석을 걷어내고 본다.** 「전에는 `Promise.all` 이었다」고 적어 둔 설명이
+      검사에 걸리면, 고쳐 놓고도 빨개진다. 리뷰가 같은 함정을 지적했다.
+    */
+    const 저장함수 = editor
+      .slice(editor.indexOf("const handleSaveToLibrary"), editor.indexOf("const handleDownloadAll"))
+      .split(NEWLINE_RE)
+      .filter((line) => !COMMENT_LINE_RE.test(line))
+      .join(String.fromCharCode(10));
+
+    expect(저장함수).not.toContain("Promise.all");
+    expect(저장함수).toContain("for (const section of saved)");
+  });
+
+  it("**한 장이 실패해도 나머지를 살린다**", () => {
+    const 저장함수 = editor.slice(
+      editor.indexOf("const handleSaveToLibrary"),
+      editor.indexOf("const handleDownloadAll"),
+    );
+
+    // 굽기에 실패하면 원본 바이트로 떨어뜨린다.
+    expect(저장함수).toContain("} catch {");
+    expect(저장함수).toContain("원본으로.push(");
   });
 
   it("파일 이름을 형식에 맞춰 짓는다", () => {
@@ -114,11 +145,31 @@ describe("참고용 저장은 원본을 유지한다", () => {
   const editor = readFileSync(new URL("../PdpEditor.tsx", import.meta.url), "utf8");
   const gallery = readFileSync(new URL("../SectionGallery.tsx", import.meta.url), "utf8");
 
-  it("참고 이미지 저장은 원본을 쓴다", () => {
-    expect(editor).toContain("SaveImagesToLibrary");
+  /*
+    **함수 구간을 잘라 「합성을 안 한다」를 잰다.**
+
+    전에는 `expect(gallery).toContain("generatedImage")` 였는데, 그 낱말은
+    화면 표시용으로만 스물여섯 군데 있어 **참고용 저장을 합성본으로 바꿔 놓아도
+    통과했다.** 지킨다고 적어 두고 아무것도 안 지키는 시험이었다.
+  */
+  const 구간 = (source: string, 시작: string, 끝: string) => {
+    const at = source.indexOf(시작);
+    if (at < 0) throw new Error(`${시작} 을 못 찾음`);
+    const to = source.indexOf(끝, at);
+    return source.slice(at, to > at ? to : at + 1500);
+  };
+
+  it("참고 이미지 저장은 원본을 쓴다 — 합성본을 올리지 않는다", () => {
+    const 블록 = 구간(editor, "<SaveImagesToLibrary", "/>");
+
+    expect(블록).toContain("section.generatedImage as string");
+    expect(블록).not.toContain("captureSectionBlob");
   });
 
   it("레퍼런스로 저장도 원본을 쓴다", () => {
-    expect(gallery).toContain("generatedImage");
+    const 함수 = 구간(gallery, "const saveAsReference", "const ");
+
+    expect(함수).toContain("section.generatedImage");
+    expect(함수).not.toContain("captureSectionBlob");
   });
 });

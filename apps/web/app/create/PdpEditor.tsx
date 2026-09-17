@@ -84,7 +84,7 @@ import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
-import { alignedWidthFor, canvasFitFor, nextLayerOrigin } from "./layer-coords";
+import { alignedWidthFor, canvasFitFor, canvasHeightFor, nextLayerOrigin } from "./layer-coords";
 import { restoreSectionKeys } from "./section-keys-restore";
 import { jobRequestFields } from "./job-recovery";
 import {
@@ -132,7 +132,6 @@ import {
   normalizeSectionOptions,
   normalizeShapeLayer,
   normalizeTextOverlay,
-  sanitizeSectionFileName,
   sortColorsByContrast,
   toNumericSize,
   uniqueColors,
@@ -610,7 +609,8 @@ export function PdpEditor({
 
     setWorkbenchState((current) => ({
       ...current,
-      ...anchorWorkbenchToOverlay(selectedLayer, imageContainerRef.current, previewStageRef.current, current),
+      // 축소 배율을 함께 넘긴다. 안 넘기면 좁은 화면에서 엉뚱한 자리에 붙는다.
+      ...anchorWorkbenchToOverlay(selectedLayer, imageContainerRef.current, previewStageRef.current, current, canvasFit),
       isOpen: true,
     }));
   };
@@ -1801,7 +1801,12 @@ export function PdpEditor({
       language: defaultCopyLanguage,
       translations: normalizedTranslations,
       // 이미 있는 것과 안 겹치게 비켜 놓는다. 전에는 늘 같은 자리라 포개졌다.
-      ...nextLayerOrigin(currentLayers, { x: 52, y: 52 }),
+      // 상자 크기와 캔버스 높이까지 넘긴다. 자리만 보면 오른쪽·아래가 넘친다.
+      ...nextLayerOrigin(currentLayers, { x: 52, y: 52 }, {
+        width: estimatedBox.width,
+        height: estimatedBox.height,
+        canvasHeight: canvasHeightFor(aspectRatio),
+      }),
       width: estimatedBox.width,
       height: estimatedBox.height,
       fontSize: defaultFontSize,
@@ -1842,7 +1847,11 @@ export function PdpEditor({
     const newShape: ShapeLayer = normalizeShapeLayer({
       id: randomId(),
       kind: "shape",
-      ...nextLayerOrigin(currentLayers, { x: 64, y: 64 }),
+      ...nextLayerOrigin(currentLayers, { x: 64, y: 64 }, {
+        width: 260,
+        height: 120,
+        canvasHeight: canvasHeightFor(aspectRatio),
+      }),
       width: 260,
       height: 120,
       fillColor: shapeColorRecommendations[0] ?? colorRecommendations.darkColor,
@@ -2015,9 +2024,13 @@ export function PdpEditor({
     // 붙어 있으면 지금 값을, 아니면 마지막으로 잰 값을 쓴다. 둘 다 없을 때만
     // 기본 폭으로 떨어진다(레이어를 한 번도 안 놓은 작업이라 어긋날 것도 없다).
     const width = imageContainerRef.current?.clientWidth || lastCanvasWidthRef.current || 460;
-    const exportNode = await buildExportNode({ imageSrc: section.generatedImage, width, layers });
-    // 원본이 몇 픽셀인지는 그림에게 묻는다. 비율 표를 또 적으면 갈린다.
-    const source = await loadImage(section.generatedImage);
+    // **한 번만 읽는다.** 전에는 `buildExportNode` 안에서 한 번, 여기서 또 한 번
+    // 같은 4~5MB data URL 을 디코드했다.
+    const { node: exportNode, naturalWidth } = await buildExportNode({
+      imageSrc: section.generatedImage,
+      width,
+      layers,
+    });
 
     document.body.appendChild(exportNode);
 
@@ -2032,7 +2045,7 @@ export function PdpEditor({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        scale: exportScaleFor({ naturalWidth: source.naturalWidth, canvasWidth: width }),
+        scale: exportScaleFor({ naturalWidth, canvasWidth: width }),
       });
 
       const blob = await new Promise<Blob | null>((resolve) => {
@@ -2095,13 +2108,33 @@ export function PdpEditor({
         라이브러리만 안 합쳐서, 같은 작업인데 **내려받은 것과 저장된 것이
         달랐다.** 여기는 「완성본 보관」이고 참고용 원본 저장과는 다른 동작이다.
       */
-      const images = await Promise.all(
-        saved.map(async (section) => {
-          const index = sections.indexOf(section);
+      /*
+        **한 장씩 굽는다.** 전에는 `Promise.all` 이라 여덟 장이 동시에
+        html2canvas 를 탔다. 그 라이브러리는 호출마다 문서 전체를 iframe 으로
+        복제하고 1536×2752 짜리 캔버스를 만든다 — 휴대폰에서는 탭이 죽고
+        사용자에게는 「저장이 안 된다」로만 보인다. ZIP 경로는 처음부터 순차였다.
+
+        **한 장이 실패해도 나머지를 살린다.** 동시에 돌릴 때는 하나만 터져도
+        여덟 장 전부가 저장되지 않았다. 못 구운 것은 원본 바이트로 올리고,
+        어느 섹션이 그랬는지 알린다.
+      */
+      const images: Array<{ base64: string; mimeType: string }> = [];
+      const 원본으로 : string[] = [];
+
+      for (const section of saved) {
+        const index = sections.indexOf(section);
+        try {
           const captured = await captureSectionBlob(index);
-          return { base64: await blobToBase64(captured.blob), mimeType: captured.mimeType };
-        }),
-      );
+          images.push({ base64: await blobToBase64(captured.blob), mimeType: captured.mimeType });
+        } catch {
+          // 굽기에 실패했다. 얹은 글자는 없지만 그림은 남긴다.
+          const [, mimeType = "image/png", base64 = ""] =
+            /^data:([^;]+);base64,(.*)$/.exec(section.generatedImage ?? "") ?? [];
+          if (!base64) continue;
+          images.push({ base64, mimeType });
+          원본으로.push(getDisplaySectionName(section));
+        }
+      }
 
       // 섹션 이미지 한 장이 4~5MB다. 전부 한 요청에 담으면 서버가 파싱하다
       // 죽을 수 있다(운영 여유 메모리 445MB). 예산에 맞춰 나눠 보낸다.
@@ -2136,7 +2169,10 @@ export function PdpEditor({
       }
 
       if (savedCount) {
-        setNotice(`라이브러리에 ${savedCount}장을 저장했습니다. 다른 기기에서도 보입니다.`);
+        const 덧붙임 = 원본으로.length
+          ? ` (${원본으로.join(", ")}은(는) 얹은 글자 없이 원본으로 저장했습니다)`
+          : "";
+        setNotice(`라이브러리에 ${savedCount}장을 저장했습니다. 다른 기기에서도 보입니다.${덧붙임}`);
       }
       if (failure) setErrorMessage(failure);
     } catch (error) {
