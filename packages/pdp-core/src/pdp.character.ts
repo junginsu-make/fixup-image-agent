@@ -470,7 +470,18 @@ export function buildCandidatePrompt(input: {
     ` Show it as ${angleDirective("front", kind)}.` +
     PLAIN_BACKGROUND +
     SINGLE_POSE +
-    lookDirective(look, kind, Boolean(input.referenceRole)) +
+    /*
+     * **「레퍼런스 스타일」 역할일 때만 첨부가 결을 정한다.**
+     *
+     * 첨부가 있다고 다 그런 것이 아니다. 「이 캐릭터 뽑아내기」의 지시문은
+     * 「화풍은 **아래에서 따로 정한다**」고 못 박으므로(`referenceDirective`),
+     * 거기에 `auto` 가 오면 아래에 아무 말도 없는 프롬프트가 나간다.
+     *
+     * 화면이 그 조합을 안 만들지만(`look-role.ts`) 그 규칙이 단추 안에만
+     * 살면 화면을 안 거치는 길로 샌다 — API 직접 호출, 첨부를 뺐다 다시
+     * 붙이기(2026-09-17 리뷰).
+     */
+    lookDirective(look, kind, input.referenceRole === "style") +
     // 첨부가 있을 때만 순위를 밝힌다. 없는데 「레퍼런스보다 세다」고 말하면
     // 모델이 있지도 않은 첨부를 찾는다.
     (input.referenceRole

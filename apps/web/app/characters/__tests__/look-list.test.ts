@@ -58,8 +58,8 @@ describe("캐릭터 그림체", () => {
    * **실제로 버튼을 막는지**까지 봐야 한다.
    */
   it("붙인 그림이 없으면 막는다", () => {
-    expect(source).toContain("lookBlockedReason(");
-    expect(source).toContain("Boolean(attached)");
+    // 인자까지 한 덩이로 잰다. 따로 찾으면 인자를 true 로 박아도 통과한다.
+    expect(source).toContain("lookBlockedReason(entry, Boolean(attached))");
     expect(source).toContain("disabled={locked || Boolean(blocked)}");
   });
 
@@ -80,9 +80,29 @@ describe("캐릭터 그림체", () => {
     expect(source).toContain("IMAGE_LOOK_LABEL.auto");
   });
 
-  /** 두 자리가 따로 움직이면 부딪히는 짝이 생긴다. 판단은 `look-role.ts` 에 있다. */
+  /**
+   * **두 자리가 따로 움직이면 부딪히는 짝이 생긴다.** 판단은 `look-role.ts` 에
+   * 있고, 화면은 그것을 **부르기만** 한다.
+   *
+   * 이름만 찾으면 인자를 틀리게 넘겨도 통과한다 — `roleAfterLook(look)` 처럼
+   * 한 박자 늦은 값을 넘기는 변이가 실제로 안 잡혔다(2026-09-17 리뷰).
+   * 부르는 꼴 전체를 잰다.
+   */
   it("두 자리를 이어 둔다", () => {
-    expect(source).toContain("roleAfterLook(");
-    expect(source).toContain("lookAfterRole(");
+    expect(source).toContain("roleAfterLook(entry)");
+    expect(source).toContain("lookAfterRole(role.id, look)");
+  });
+
+  /**
+   * **첨부가 바뀌면 그림체도 따라 맞춘다.**
+   *
+   * 첨부를 빼도 「레퍼런스 스타일」이 켜진 채 남았다 — 흐려진 단추가 선택된
+   * 색으로 서고, 그대로 만들면 서버가 조용히 실사로 내렸다(2026-09-17 리뷰).
+   * 첨부를 바꾸는 길이 넷이라 한 자리로 모은다.
+   */
+  it("첨부를 바꾸는 길이 한 자리로 모인다", () => {
+    expect(source).toContain('lookAfterRole(next?.role ?? "extract", current)');
+    // 날것을 화면 곳곳에서 부르면 그 한 자리를 비껴간다.
+    expect(source.split("setAttachedRaw(").length - 1).toBeLessThanOrEqual(3);
   });
 });

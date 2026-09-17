@@ -152,7 +152,25 @@ export function CharacterStudio() {
   const [kind, setKind] = useState<Kind>("person");
   const [look, setLook] = useState<Look>("photoreal");
   const [modelId, setModelId] = useState("");
-  const [attached, setAttached] = useState<Attached | null>(null);
+  const [attached, setAttachedRaw] = useState<Attached | null>(null);
+
+  /**
+   * 붙인 그림이 바뀌면 **그림체도 따라 맞춘다.**
+   *
+   * 「레퍼런스 스타일」은 그림체와 역할 두 자리에 나오는 한 스위치인데, 그
+   * 짝맞춤이 단추의 `onClick` 안에만 살았다. 그래서 **첨부를 빼면** 그림체가
+   * 「레퍼런스 스타일」로 남았다 — 흐려진 단추가 선택된 색으로 서 있고, 그대로
+   * 만들면 서버가 조용히 실사로 내린다. 화면이 켜 보인 것과 그리는 것이
+   * 갈렸다(2026-09-17 리뷰).
+   *
+   * **첨부를 바꾸는 길이 넷이다**(올리기·라이브러리에서 고르기·빼기·처음부터).
+   * 각자 고치면 언젠가 한 곳이 빠진다. 여기 하나로 모은다.
+   */
+  function setAttached(next: Attached | null) {
+    setAttachedRaw(next);
+    // 첨부가 없으면 「뽑아내기」와 같다 — 따라갈 그림이 없다.
+    setLook((current) => lookAfterRole(next?.role ?? "extract", current));
+  }
   const [library, setLibrary] = useState<LibraryImage[]>([]);
 
   const [angleList, setAngleList] = useState(ANGLE_FALLBACK);
@@ -564,7 +582,8 @@ export function CharacterStudio() {
                           setLook(entry);
                           setModelId("");
                           // 「이 그림의 역할」은 같은 스위치다. 함께 움직인다.
-                          if (attached) setAttached({ ...attached, role: roleAfterLook(entry) });
+                          // 여기서는 그림체가 이미 정해졌으니 날것을 쓴다.
+                          if (attached) setAttachedRaw({ ...attached, role: roleAfterLook(entry) });
                         }}
                       >
                         {IMAGE_LOOK_LABEL[entry]}
@@ -708,8 +727,10 @@ export function CharacterStudio() {
                           onClick={() => {
                             setAttached({ ...attached, role: role.id });
                             // 그림체와 같은 스위치다. 함께 움직인다.
-                            setLook(lookAfterRole(role.id, look));
-                            setModelId("");
+                            const 새그림체 = lookAfterRole(role.id, look);
+                            setLook(새그림체);
+                            // 그림체가 그대로면 고른 모델을 지울 까닭이 없다.
+                            if (새그림체 !== look) setModelId("");
                           }}
                         >
                           {role.label}
