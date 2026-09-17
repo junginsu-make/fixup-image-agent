@@ -1,204 +1,56 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLocalJobRepository } from "../local-repository";
-import type { PdpJobRepository } from "../repository";
-import { fingerprintOf } from "../claim";
+import { describe, expect, it } from "vitest";
+import { describeJobRepositoryContract, 만들기 } from "./repository-contract";
 
 /**
- * **작업 저장소가 지켜야 하는 것.**
+ * 로컬 파일 구현이 계약을 지키는가.
  *
- * 여기 있는 시험은 저장 방식과 무관한 **계약**이다. 로컬 파일 구현으로 돌리지만
- * Supabase 구현도 같은 답을 내야 한다 — 그래야 로컬에서 본 동작을 운영에서
- * 믿을 수 있다.
- *
- * 지키는 것 넷:
- *   1. 같은 요청을 두 번 받아도 한 번만 만든다
- *   2. 남의 작업은 못 본다
- *   3. 두 워커가 동시에 잡아도 하나만 잡는다
- *   4. 결과는 어떤 실패에도 안 사라진다
+ * `LOCAL_STORE=1` 에서 쓰는 구현이다. 같은 계약 시험을 Supabase 구현에도 돌린다
+ * (`supabase-repository.test.ts`).
  */
-let dir = "";
-let repo: PdpJobRepository;
-
-const 요청 = {
-  documentId: "doc-1",
-  revision: 3,
-  operation: "pdp_image",
-  sectionIds: ["s1", "s2"],
-  imageModel: "nano-banana",
-  aspectRatio: "3:4",
-};
-
-const 만들기 = (userId = "u1", key = "key-1", patch: Partial<typeof 요청> = {}) => ({
-  userId,
-  teamId: null,
-  idempotencyKey: key,
-  fingerprint: fingerprintOf({ ...요청, ...patch }),
-  documentId: 요청.documentId,
-  revision: 요청.revision,
-  operation: 요청.operation,
-  sectionIds: 요청.sectionIds,
-  reservationRequestId: "res-1",
-});
-
-/**
- * 만들어진 작업의 id. **conflict 였으면 시험을 여기서 멈춘다.**
- *
- * `result.jobId` 로 눌러 쓰면 conflict 가 와도 `undefined` 로 조용히 흘러
- * 엉뚱한 자리에서 깨진다. 무엇이 잘못됐는지 그 줄에서 말하게 한다.
- */
-async function 만들고id(input: Parameters<PdpJobRepository["createOrGet"]>[0]): Promise<string> {
-  const result = await repo.createOrGet(input);
-  if (result.kind === "conflict") throw new Error("작업을 만들지 못했습니다: conflict");
-  return result.jobId;
-}
-
-beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), "pdp-jobs-"));
-  repo = createLocalJobRepository(dir);
-});
-afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
-});
-
-describe("1. 같은 요청은 한 번만", () => {
-  it("처음 오면 만든다", async () => {
-    const 결과 = await repo.createOrGet(만들기());
-
-    expect(결과.kind).toBe("created");
-  });
-
-  it("같은 key 로 또 오면 **같은 작업**을 돌려준다", async () => {
-    const 처음 = await 만들고id(만들기());
-    const 다시 = await repo.createOrGet(만들기());
-
-    expect(다시.kind).toBe("existing");
-    expect(다시.kind === "existing" && 다시.jobId).toBe(처음);
-  });
-
-  it("**내용이 다르면 거절한다** — 옛 결과를 새 요청의 답으로 주지 않는다", async () => {
-    await repo.createOrGet(만들기());
-    const 다른내용 = await repo.createOrGet(만들기("u1", "key-1", { revision: 4 }));
-
-    expect(다른내용.kind).toBe("conflict");
-  });
-
-  it("다른 사람의 같은 key 는 남남이다", async () => {
-    const 내것 = await 만들고id(만들기("u1", "key-1"));
-    const 남의것 = await 만들고id(만들기("u2", "key-1"));
-
-    expect(남의것).not.toBe(내것);
-  });
-});
-
-describe("2. 남의 작업은 못 본다", () => {
-  it("**job ID 만 알아서는 못 읽는다**", async () => {
-    const jobId = await 만들고id(만들기("u1"));
-
-    expect(await repo.get(jobId, "u2")).toBeNull();
-    expect(await repo.get(jobId, "u1")).not.toBeNull();
-  });
-
-  it("남의 작업 상태를 바꿀 수 없다", async () => {
-    const jobId = await 만들고id(만들기("u1"));
-
-    await expect(repo.advance(jobId, "u2", { type: "reserved" })).rejects.toThrow(/찾지|권한/);
-  });
-});
-
-describe("3. 두 워커가 동시에 잡아도 하나만", () => {
-  it("먼저 잡은 쪽만 가져간다", async () => {
-    const jobId = await 만들고id(만들기());
-    await repo.advance(jobId, "u1", { type: "reserved" });
-
-    const 첫째 = await repo.claimNext("worker-a", 60_000);
-    const 둘째 = await repo.claimNext("worker-b", 60_000);
-
-    expect(첫째?.id).toBe(jobId);
-    expect(둘째).toBeNull();
-  });
-
-  it("**잡은 워커가 죽으면 시간이 지나 풀린다** — 작업이 영영 멈추면 안 된다", async () => {
-    const jobId = await 만들고id(만들기());
-    await repo.advance(jobId, "u1", { type: "reserved" });
-    await repo.claimNext("worker-a", 1);
-
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    const 이어받음 = await repo.claimNext("worker-b", 60_000);
-
-    expect(이어받음?.id).toBe(jobId);
-  });
-
-  it("끝난 작업은 아무도 안 잡는다", async () => {
-    const jobId = await 만들고id(만들기());
-    for (const type of ["reserved", "submitting", "submitted", "result_available", "persisted"] as const) {
-      await repo.advance(jobId, "u1", { type });
-    }
-    await repo.advance(jobId, "u1", { type: "settled" });
-    await repo.advance(jobId, "u1", { type: "reviewed", passed: true });
-
-    expect(await repo.claimNext("worker-a", 60_000)).toBeNull();
-  });
-});
-
-describe("4. 결과는 안 사라진다", () => {
-  const 결과까지 = async () => {
-    const jobId = await 만들고id(만들기());
-    for (const type of ["reserved", "submitting", "submitted", "result_available"] as const) {
-      await repo.advance(jobId, "u1", { type });
-    }
-    return jobId;
+describeJobRepositoryContract("로컬 파일 저장소", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "pdp-jobs-"));
+  return {
+    repo: createLocalJobRepository(dir),
+    cleanup: async () => {
+      await rm(dir, { recursive: true, force: true });
+    },
   };
+});
 
-  it("정산이 실패해도 결과 자리는 그대로다", async () => {
-    const jobId = await 결과까지();
-    await repo.advance(jobId, "u1", { type: "settlement_failed" });
+/**
+ * 로컬 구현에만 있는 검사.
+ *
+ * **저장한 파일 안을 직접 들여다본다.** 「무엇을 안 담는지」는 계약으로 못 잰다 —
+ * 운영 구현에서는 원문을 꺼낼 길이 없어서, 계약에 넣으면 거기서는 빈 문자열을
+ * 보고 조용히 통과한다. 그런 시험은 지켜 주는 것이 없다.
+ */
+describe("로컬 파일에 무엇이 들어가나", () => {
+  it("**base64 원본을 담지 않는다** — 경로만 남긴다", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pdp-jobs-raw-"));
+    try {
+      const repo = createLocalJobRepository(dir);
+      const created = await repo.createOrGet(만들기());
+      if (created.kind === "conflict") throw new Error("작업을 만들지 못했습니다");
 
-    const job = await repo.get(jobId, "u1");
-    expect(job!.state.generation).toBe("result_available");
-    expect(job!.state.settlement).toBe("retry_required");
-  });
+      for (const type of ["reserved", "submitting", "submitted", "result_available"] as const) {
+        await repo.advance(created.jobId, "u1", { type });
+      }
+      await repo.recordItem(created.jobId, {
+        sectionId: "s1",
+        attempt: 1,
+        model: "nano-banana",
+        outputPath: "u1/pdp/doc-1/s1.png",
+      });
 
-  it("섹션별 결과를 적어 두면 다시 읽을 수 있다", async () => {
-    const jobId = await 결과까지();
-    await repo.recordItem(jobId, {
-      sectionId: "s1",
-      attempt: 1,
-      providerRequestId: "fal-123",
-      model: "nano-banana",
-      outputPath: "u1/pdp/doc-1/s1.png",
-      costUsd: 0.039,
-    });
-
-    const job = await repo.get(jobId, "u1");
-    expect(job!.items).toHaveLength(1);
-    expect(job!.items[0]!.outputPath).toBe("u1/pdp/doc-1/s1.png");
-  });
-
-  it("**같은 섹션의 같은 시도는 두 줄이 되지 않는다**", async () => {
-    const jobId = await 결과까지();
-    const item = { sectionId: "s1", attempt: 1, providerRequestId: "fal-123", model: "nano-banana" };
-    await repo.recordItem(jobId, item);
-    await repo.recordItem(jobId, { ...item, outputPath: "u1/pdp/doc-1/s1.png" });
-
-    const job = await repo.get(jobId, "u1");
-    expect(job!.items).toHaveLength(1);
-    // 나중 것이 이긴다 — 저장이 끝난 뒤에 경로가 생긴다.
-    expect(job!.items[0]!.outputPath).toBe("u1/pdp/doc-1/s1.png");
-  });
-
-  it("**base64 원본을 저장소에 담지 않는다** — 경로만 남긴다", async () => {
-    const jobId = await 결과까지();
-    await repo.recordItem(jobId, {
-      sectionId: "s1",
-      attempt: 1,
-      model: "nano-banana",
-      outputPath: "u1/pdp/doc-1/s1.png",
-    });
-
-    const raw = await repo.debugRaw();
-    expect(raw).not.toMatch(/base64|imageBase64/i);
+      const raw = await repo.debugRaw();
+      expect(raw).toContain("u1/pdp/doc-1/s1.png");
+      expect(raw).not.toMatch(/base64|imageBase64/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

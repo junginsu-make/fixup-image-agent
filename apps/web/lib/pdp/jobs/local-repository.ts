@@ -33,7 +33,12 @@ interface LocalJobsFile {
   jobs: JobRecord[];
 }
 
-export function createLocalJobRepository(root: string): PdpJobRepository {
+/** 로컬 구현만 가진 출구. 시험이 「무엇을 안 담는지」를 재는 데 쓴다. */
+export interface LocalJobRepository extends PdpJobRepository {
+  debugRaw(): Promise<string>;
+}
+
+export function createLocalJobRepository(root: string): LocalJobRepository {
   const file = path.join(root, "pdp-jobs.json");
 
   function read(): LocalJobsFile {

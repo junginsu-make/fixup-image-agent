@@ -89,6 +89,4 @@ export interface PdpJobRepository {
   claimNext(workerId: string, leaseMs: number): Promise<JobRecord | null>;
   /** 섹션 결과를 적는다. 같은 (섹션, 시도)는 덮어쓴다. */
   recordItem(jobId: string, item: JobItemRecord): Promise<void>;
-  /** 저장된 원문. **시험이 「무엇을 안 담는지」를 재는 데만 쓴다.** */
-  debugRaw(): Promise<string>;
 }
