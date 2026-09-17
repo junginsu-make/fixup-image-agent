@@ -13,6 +13,7 @@ import { estimateCostLabel, SpecPicker, type SnsSpec } from "./_components/spec-
 import { takeHandoff } from "../../lib/handoff";
 import { loadSnsRerun, snsRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
+import { rerunStartStep } from "../_components/rerun-step";
 
 /**
  * **손으로 박지 않는다.**
@@ -37,6 +38,9 @@ const STEPS: StepDefinition[] = [
 ];
 
 type Step = "content" | "images" | "spec";
+
+/** 새로 만드는 화면에 있는 단계. 04·05 는 만든 작업 화면에 있다. */
+const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];
 
 export function NewSnsClient() {
   const router = useRouter();
@@ -70,7 +74,15 @@ export function NewSnsClient() {
    * `/sns/new?from={작업}` 으로 온다. 전에는 01~03 을 **아예 못 누르게** 막아
    * 두어서, 지난 단계를 보려면 길이 없었다(2026-09-16 사용자 보고).
    */
-  const rerunFrom = useSearchParams().get("from") ?? "";
+  const searchParams = useSearchParams();
+  const rerunFrom = searchParams.get("from") ?? "";
+  /**
+   * 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다.
+   *
+   * **처음 값만 잡는다.** 주소 값을 그대로 의존성에 넣으면, 나중에 단계를 주소에
+   * 반영하는 날 단계를 옮길 때마다 불러오기가 다시 돌아 고친 값을 덮는다.
+   */
+  const rerunStep = React.useRef(searchParams.get("step")).current;
   /** 값을 들고 왔다고 화면에 적을 것. 못 들고 온 첨부 수까지 말한다. */
   const [rerun, setRerun] = React.useState<{ title: string; dropped: number } | null>(null);
   /**
@@ -136,10 +148,15 @@ export function NewSnsClient() {
       setIntents(seed.intents);
       setSpec(seed.spec);
       setRerun({ title: seed.title, dropped: seed.droppedAttachments });
+      /*
+        **누른 단계로 연다.** 값을 다 심은 **뒤에** 옮긴다. 못 불러왔을 때는
+        옮기지 않는다 — 빈 03 을 열면 무엇을 채워야 할지 모른다.
+      */
+      setStep(rerunStartStep<Step>(rerunStep, RERUN_STEPS, "content"));
       setSeeding(false);
     })();
     return () => { alive = false; };
-  }, [rerunFrom]);
+  }, [rerunFrom, rerunStep]);
 
   const totalCards = spec.cardCountMode === "fixed" ? spec.cardCount! : MAX_CARDS;
   const attachmentIssues = validateAttachments(attachments, modelById(spec.modelId).maxReferenceImages, totalCards);

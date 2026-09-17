@@ -24,6 +24,7 @@ import {
   placeholderRatio, planSlotRows, showsTypeInteraction, splitFilledSlots, type PlanSlotRow,
 } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
+import { rerunHref } from "../../_components/rerun-step";
 import { PlanWriting } from "../_components/plan-writing";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 
@@ -836,7 +837,9 @@ export function PosterClient(
             어긋나지 않는다.
           */
           if (id === "plan" || id === "result") return;
-          router.push(`/poster/new?from=${encodeURIComponent(project.id)}`);
+          // **누른 단계도 함께 싣는다.** 안 실으면 03 을 눌러도 01 이 열린다
+          // (2026-09-17 사용자 보고).
+          router.push(rerunHref("/poster/new", project.id, id));
         }}
       />
 

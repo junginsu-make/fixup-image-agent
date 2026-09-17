@@ -11,6 +11,7 @@ import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/
 import { afterGenerateFailure } from "../generate-recovery";
 // 이미지 만들기가 같은 문제를 이미 풀었다 — 새 조각을 만들지 않는다.
 import { WorkingBanner } from "../../poster/_components/working-banner";
+import { rerunHref } from "../../_components/rerun-step";
 import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -464,7 +465,9 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         onJump={(id) => {
           if (id === "copy") return view === "result" ? setView("copy") : undefined;
           if (id === "result") return undefined;
-          router.push(`/sns/new?from=${encodeURIComponent(projectId)}`);
+          // **누른 단계도 함께 싣는다.** 안 실으면 03 을 눌러도 01 이 열린다
+          // (2026-09-17 사용자 보고).
+          router.push(rerunHref("/sns/new", projectId, id));
         }}
       />
 

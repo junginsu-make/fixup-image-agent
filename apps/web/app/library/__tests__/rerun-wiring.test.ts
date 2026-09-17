@@ -21,13 +21,15 @@ const TOOLS = [
     name: "이미지 만들기",
     detail: "app/poster/[id]/poster-client.tsx",
     fresh: "app/poster/new-client.tsx",
-    href: "/poster/new?from=",
+    base: "/poster/new",
+    first: "instruction",
   },
   {
     name: "카드뉴스",
     detail: "app/sns/[id]/project-client.tsx",
     fresh: "app/sns/new-client.tsx",
-    href: "/sns/new?from=",
+    base: "/sns/new",
+    first: "content",
   },
 ];
 
@@ -42,12 +44,48 @@ describe("지난 단계로 값을 들고 간다", () => {
     초록이었다(2026-09-16 독립 리뷰가 실증). 화면이 그 함수를 정확히 쓰는지는
     `rerun-adopt-wiring.test.ts` 가 문장 전체로 본다.
   */
-  it.each(TOOLS)("$name 은 작업 id 를 붙여 보낸다", ({ detail, href }) => {
+  /**
+   * **작업 id 와 누른 단계를 함께 싣는다**(2026-09-17 사용자 보고).
+   *
+   * 단계를 안 실어서 03 을 눌러도 01 이 열렸다. 주소는 한 곳(`rerunHref`)이
+   * 만든다 — 인코딩까지 거기서 값으로 잰다(`_components/__tests__/rerun-step.test.ts`).
+   */
+  it.each(TOOLS)("$name 은 작업 id 와 누른 단계를 싣고 보낸다", ({ detail, base }) => {
     const source = read(detail);
+    expect(source).toMatch(new RegExp(`router\\.push\\(rerunHref\\("${base}", \\w+(\\.id)?, id\\)\\)`));
+  });
 
-    expect(source).toContain(href);
-    // 주소 조각은 인코딩해서 붙인다.
-    expect(source).toMatch(new RegExp(`${href.replace("?", "\\?")}\\$\\{encodeURIComponent\\(`));
+  it.each(TOOLS)("$name 은 값을 다 심은 뒤 누른 단계로 연다", ({ fresh, first }) => {
+    const source = read(fresh);
+    // 처음 값만 잡는다. 주소 값을 그대로 의존성에 두면 나중에 불러오기가 다시 돈다.
+    expect(source).toContain('rerunStep = React.useRef(searchParams.get("step")).current');
+    /*
+      심은 뒤, 잠금을 풀기 바로 전에 옮긴다. 먼저 옮기면 빈 칸이 한 번 보인다.
+
+      **모를 때 여는 단계를 값으로 박는다.** `"\w+"` 로 받았더니 첫 단계를 03 으로
+      바꿔도 초록이었다 — 단계 없는 옛 주소가 03 으로 열린다(2026-09-17 독립 리뷰).
+    */
+    expect(source).toMatch(new RegExp(
+      `setStep\\(rerunStartStep(<Step>)?\\(rerunStep, RERUN_STEPS, "${first}"\\)\\);\\s*setSeeding\\(false\\);`,
+    ));
+  });
+
+  it.each(TOOLS)("$name 은 **불러오기에 실패하면 단계를 안 옮긴다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh }) => {
+    const source = read(fresh);
+    // 성공 갈래 한 곳에만 있어야 한다. 실패 갈래에도 있으면 빈 03 이 열린다
+    // (2026-09-17 독립 리뷰가 뮤테이션으로 실증 — 그때는 초록이었다).
+    expect(source.split("setStep(rerunStartStep").length - 1).toBe(1);
+  });
+
+  it("이미지 만들기는 단계 목록을 **다시 적지 않는다** — 단계 id 는 한 곳이 갖는다", () => {
+    const source = read("app/poster/new-client.tsx");
+    expect(source).toContain(
+      "const RERUN_STEPS = POSTER_STEPS.map((entry) => entry.id).filter(reachableBeforeCreate);",
+    );
+  });
+
+  it("카드뉴스는 04·05 를 목록에 안 넣는다 — 이 화면에 없는 단계다", () => {
+    expect(read("app/sns/new-client.tsx")).toContain('const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];');
   });
 
   it("이미지 만들기는 **심어야 할 값을 하나도 안 빠뜨린다**", () => {
