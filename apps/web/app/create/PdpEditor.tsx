@@ -84,7 +84,7 @@ import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
-import { canvasFitFor } from "./layer-coords";
+import { alignedWidthFor, canvasFitFor, nextLayerOrigin } from "./layer-coords";
 import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
@@ -553,8 +553,8 @@ export function PdpEditor({
 
   const handleTextAlignChange = (overlay: TextOverlay, nextAlign: OverlayTextAlign) => {
     const currentWidth = toNumericSize(overlay.width, 320);
-    const recommendedWidth = clampValue(Math.round(overlay.fontSize * 10), 220, 520);
-    const nextWidth = Math.max(currentWidth, recommendedWidth);
+    // 캔버스를 벗어나지 않는 만큼만 넓힌다. 전에는 안 봐서 오른쪽이 잘렸다.
+    const nextWidth = alignedWidthFor({ x: overlay.x, width: currentWidth, fontSize: overlay.fontSize });
 
     updateOverlay(overlay.id, {
       textAlign: nextAlign,
@@ -1801,8 +1801,8 @@ export function PdpEditor({
       text: displayText,
       language: defaultCopyLanguage,
       translations: normalizedTranslations,
-      x: 52,
-      y: 52,
+      // 이미 있는 것과 안 겹치게 비켜 놓는다. 전에는 늘 같은 자리라 포개졌다.
+      ...nextLayerOrigin(currentLayers, { x: 52, y: 52 }),
       width: estimatedBox.width,
       height: estimatedBox.height,
       fontSize: defaultFontSize,
@@ -1843,8 +1843,7 @@ export function PdpEditor({
     const newShape: ShapeLayer = normalizeShapeLayer({
       id: randomId(),
       kind: "shape",
-      x: 64,
-      y: 64,
+      ...nextLayerOrigin(currentLayers, { x: 64, y: 64 }),
       width: 260,
       height: 120,
       fillColor: shapeColorRecommendations[0] ?? colorRecommendations.darkColor,

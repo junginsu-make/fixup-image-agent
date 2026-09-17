@@ -130,3 +130,60 @@ export function previewFitFor(displayWidth: number | undefined): number {
   if (!displayWidth) return 1;
   return displayWidth / LEGACY_CANVAS_WIDTH;
 }
+
+/**
+ * 줄맞춤을 바꿀 때 상자를 얼마나 넓힐 것인가.
+ *
+ * 줄맞춤(가운데·오른쪽)은 상자가 좁으면 티가 안 나서 함께 넓혀 준다. 그런데
+ * 전에는 **캔버스를 벗어나는지 안 봤다** — 42px 글자를 왼쪽(x=52)에 두고
+ * 가운데 정렬로 바꾸면 폭 420 이 되어 오른쪽 끝이 472 가 됐다. 460 짜리
+ * 캔버스에서 잘린다.
+ *
+ * **이미 넓으면 줄이지 않는다.** 사용자가 정한 폭이다.
+ */
+export function alignedWidthFor(layer: { x: number; width: number; fontSize: number }): number {
+  const recommended = Math.min(520, Math.max(220, Math.round(layer.fontSize * 10)));
+  // 지금 자리에서 오른쪽 끝까지 남은 만큼이 상한이다.
+  const room = Math.max(40, LEGACY_CANVAS_WIDTH - layer.x);
+  return Math.max(layer.width, Math.min(recommended, room));
+}
+
+/** 새 레이어를 놓을 자리 하나. */
+export interface LayerOrigin {
+  x: number;
+  y: number;
+}
+
+/** 겹쳤다고 볼 거리. 이보다 가까우면 같은 자리로 친다. */
+const OVERLAP = 8;
+/** 비켜 놓는 간격. */
+const OFFSET = 24;
+
+/**
+ * 새 레이어를 어디에 놓을 것인가.
+ *
+ * 전에는 **늘 같은 자리**(52, 52)였다. 문구를 여러 개 얹으면 정확히 포개져,
+ * 사용자는 하나만 생긴 줄 알고 또 누른다.
+ *
+ * 빈자리를 찾아 대각선으로 비켜 놓되 **캔버스 밖으로는 안 나간다.**
+ */
+export function nextLayerOrigin(existing: LayerOrigin[], base: LayerOrigin): LayerOrigin {
+  const limit = LEGACY_CANVAS_WIDTH - 60;
+  let { x, y } = base;
+
+  for (let step = 0; step < 40; step += 1) {
+    const taken = existing.some(
+      (one) => Math.abs(one.x - x) < OVERLAP && Math.abs(one.y - y) < OVERLAP,
+    );
+    if (!taken) return { x, y };
+
+    x += OFFSET;
+    y += OFFSET;
+    // 오른쪽 끝에 닿으면 기본 자리로 돌아와 아래로 내려간다.
+    if (x > limit) {
+      x = base.x;
+      y = Math.min(y, limit);
+    }
+  }
+  return { x: base.x, y: base.y };
+}

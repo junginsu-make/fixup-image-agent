@@ -488,12 +488,17 @@ export function SectionGallery({
               <ChevronLeft size={22} />
             </button>
 
-            {/* 여기는 화면에 맞춘 크기다. 한 번 더 누르면 원본 크기로 본다. */}
+            {/*
+              **`data-zoomable` 을 붙이지 않는다.** 붙이면 전역 뷰어가 이 모달
+              위에 한 겹 더 열리고, 두 keydown 이 함께 돌아 Esc 한 번에 둘 다
+              닫힌다. 화살표를 누르면 뒤에 가려진 이 모달만 조용히 넘어간다.
+              이 화면은 자기 뷰어를 이미 갖고 있다(설계 §11: 「확대보기는 한
+              뷰어만 소유한다」).
+            */}
             <img
               alt={getName(zoomSection)}
               src={zoomSection.generatedImage}
-              data-zoomable
-              className="max-h-full max-w-full cursor-zoom-in rounded-md object-contain shadow-[var(--shadow-elevate)]"
+              className="max-h-full max-w-full rounded-md object-contain shadow-[var(--shadow-elevate)]"
             />
 
             <button
