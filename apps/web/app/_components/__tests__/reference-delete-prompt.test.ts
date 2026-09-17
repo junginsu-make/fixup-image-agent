@@ -57,8 +57,19 @@ describe("지우기 단추를 낼까", () => {
     expect(canDeleteReference({ mine: false }, { isAdmin: true })).toBe(true);
   });
 
-  it("모르면 낸다 — 옛 화면은 이 값을 안 싣는다", () => {
-    expect(canDeleteReference({}, { isAdmin: false })).toBe(true);
+  /**
+   * **모르면 안 낸다**(2026-09-17 독립 리뷰).
+   *
+   * 열린 쪽으로 틀리면 주인을 안 실은 새 화면에서 이번 버그가 조용히
+   * 되살아난다. 잘못 닫히면 라이브러리 탭에서 지우면 되고, 잘못 열리면 남의
+   * 그림이 사라진다 — 틀릴 방향은 하나뿐이다.
+   */
+  it("주인을 모르면 안 낸다 — 닫힌 쪽으로 틀린다", () => {
+    expect(canDeleteReference({}, { isAdmin: false })).toBe(false);
+  });
+
+  it("관리자에게는 주인을 몰라도 낸다", () => {
+    expect(canDeleteReference({}, { isAdmin: true })).toBe(true);
   });
 });
 
@@ -90,6 +101,19 @@ describe("고르는 창 셋이 같은 규칙을 탄다", () => {
 
   it("관리자 여부는 **서버가 준 값**이다 — 화면이 판단하면 서버와 갈린다", () => {
     expect(sns).toContain("setIsAdmin(Boolean(payload.isAdmin))");
+  });
+
+  /**
+   * **지우기를 넘기는 창은 주인도 함께 싣는다.**
+   *
+   * 판정이 닫힌 쪽으로 틀리므로 안 실으면 내 그림도 못 지운다 — 조용히 새는
+   * 것보다 낫지만, 그 화면은 고장으로 보인다. 그래서 여기서 함께 잰다.
+   */
+  it("`onDelete` 를 넘기는 창은 `mine` 도 넘긴다", () => {
+    for (const [이름, 소스] of [["이미지", poster], ["카드뉴스", sns]] as const) {
+      if (!소스.includes("onDelete={")) continue;
+      expect(소스, 이름).toMatch(/mine: (reference|image)\.mine/);
+    }
   });
 });
 

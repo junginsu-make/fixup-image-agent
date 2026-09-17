@@ -92,6 +92,16 @@ describe("포스터 레퍼런스 — 라이브러리와 같은 규칙", () => {
     expect(generate).toContain("posterReferencesByIds(viewer, project.data.referenceIds)");
   });
 
+  /**
+   * **`isAdmin` 을 박아 두면 회원 전원에게 지우기 단추가 붙는다**(2026-09-17
+   * 독립 리뷰가 뮤테이션으로 실증 — 그때는 시험이 초록이었다).
+   *
+   * 서버의 실제 판정과 같은 자리(`hasFullScope`)에서 나와야 한다.
+   */
+  it("관리자 여부를 목록과 함께 주되, 서버 판정에서 가져온다", () => {
+    expect(route).toContain('isAdmin: hasFullScope(viewerFrom(auth.member), "delete")');
+  });
+
   it("보는 사람은 **세션에서 꺼낸다** — 팀을 본문으로 받으면 남의 것이 열린다", () => {
     for (const [이름, 소스] of [["목록", route], ["기획", plan], ["만들기", generate]] as const) {
       expect(소스, 이름).toContain("role: auth.member.profile.role");

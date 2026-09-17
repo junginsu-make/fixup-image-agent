@@ -26,10 +26,17 @@ export function referenceDeletePrompt(image: {
  * **못 할 일은 단추부터 없는 편이 낫다** — 회원이 남의 것을 누르면 서버가 막아
  * 「지우지 못했습니다」만 떴다. 관리자는 할 수 있으므로 둔다. 공용 창고에 잘못
  * 올라온 것을 내릴 사람이 아무도 없으면 그대로 남는다.
+ *
+ * **모르면 안 낸다.** 처음에는 `mine !== false` 로 적었는데, 그러면 주인을 안
+ * 실은 화면이 열린 쪽으로 틀린다 — 새 고르는 창이 그 값을 빠뜨리는 날 이번
+ * 버그가 조용히 되살아난다(2026-09-17 독립 리뷰). 같은 파일의 `canDeleteOthers`
+ * 도 닫힌 쪽이 기본이다. 두 값이 **같은 방향으로** 틀려야 한다.
+ *
+ * 잘못 닫히면 라이브러리 탭에서 지울 수 있다. 잘못 열리면 남의 그림이 사라진다.
  */
 export function canDeleteReference(
   image: { mine?: boolean },
   viewer: { isAdmin?: boolean },
 ): boolean {
-  return image.mine !== false || Boolean(viewer.isAdmin);
+  return image.mine === true || Boolean(viewer.isAdmin);
 }
