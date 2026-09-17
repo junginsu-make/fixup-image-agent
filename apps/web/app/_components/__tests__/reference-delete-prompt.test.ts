@@ -92,3 +92,31 @@ describe("고르는 창 셋이 같은 규칙을 탄다", () => {
     expect(sns).toContain("setIsAdmin(Boolean(payload.isAdmin))");
   });
 });
+
+/**
+ * **내 그림을 찾기 쉬워야 한다**(2026-09-17 사용자 결정).
+ *
+ * 창고가 공용이라 남이 올린 그림이 함께 보인다. 목록은 내 것을 앞에 두고
+ * 오지만(`lib/reference-images.ts`), 많아지면 그것만으로는 부족하다.
+ */
+describe("내 그림만 보기", () => {
+  const picker = readFileSync(new URL("../library-picker.tsx", import.meta.url), "utf8");
+
+  it("거르는 단추가 있다", () => {
+    expect(picker).toContain("setMineOnly(true)");
+    expect(picker).toContain("setMineOnly(false)");
+  });
+
+  it("주인을 모르는 줄은 남긴다 — 옛 화면은 이 값을 안 싣는다", () => {
+    expect(picker).toContain('images.filter((image) => image.mine !== false)');
+  });
+
+  it("**남의 것이 섞였을 때만 낸다** — 혼자 쓰는 사람에게는 뜻이 없다", () => {
+    expect(picker).toContain("const hasOthers = images.some((image) => image.mine === false)");
+    expect(picker).toMatch(/hasOthers \? \(/);
+  });
+
+  it("걸러서 비면 무엇을 하면 되는지 말한다", () => {
+    expect(picker).toContain("「전체」를 누르면 함께 쓰는 그림이 보입니다");
+  });
+});

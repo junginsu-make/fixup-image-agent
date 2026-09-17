@@ -129,12 +129,25 @@ export function LibraryPickerButton({
   const [tab, setTab] = React.useState<"images" | "sets">("images");
   const [openedSetId, setOpenedSetId] = React.useState<string | null>(null);
   const [setPicked, setSetPicked] = React.useState<string[]>([]);
+  /**
+   * **내 그림만 볼까.**
+   *
+   * 창고가 공용이라 남이 올린 그림이 함께 보인다. 쓸 만한 본보기를 같이 쓰자는
+   * 뜻이지만, 내가 올린 것을 찾을 때는 남의 것이 방해가 된다(2026-09-17 사용자
+   * 결정). 목록 자체는 이미 **내 것을 앞에** 두고 온다.
+   */
+  const [mineOnly, setMineOnly] = React.useState(false);
 
   const picked = new Set(selectedIds);
   // 그림이 하나도 없는 세트는 누를 이유가 없다. 목록에서 뺀다.
   const shownSets = (sets ?? []).filter((set) => set.items.length > 0);
   const hasSets = Boolean(shownSets.length && onPickSet);
   const openedSet = shownSets.find((entry) => entry.id === openedSetId) ?? null;
+
+  /** 내 것만 보기를 켰을 때 실제로 그릴 목록. 주인을 모르는 줄은 남긴다. */
+  const shownImages = mineOnly ? images.filter((image) => image.mine !== false) : images;
+  /** 남이 올린 것이 하나라도 있나. 없으면 거를 것도 없어 단추를 안 낸다. */
+  const hasOthers = images.some((image) => image.mine === false);
 
   /** 이미지를 id 로 찾는다. 세트는 id 만 들고 있어 그림을 여기서 짝짓는다. */
   const imageById = React.useMemo(
@@ -231,8 +244,28 @@ export function LibraryPickerButton({
               라이브러리가 비어 있습니다. 먼저 그림을 올려 주세요.
             </p>
           ) : (
+            <>
+              {/* 남의 것이 섞여 있을 때만 낸다. 혼자 쓰는 사람에게는 뜻이 없다. */}
+              {hasOthers ? (
+                <div className="flex items-center gap-1.5">
+                  <TabButton on={!mineOnly} onClick={() => setMineOnly(false)}>
+                    전체 <Badge variant="secondary" className="ml-1">{images.length}</Badge>
+                  </TabButton>
+                  <TabButton on={mineOnly} onClick={() => setMineOnly(true)}>
+                    내 그림
+                    <Badge variant="secondary" className="ml-1">
+                      {images.filter((image) => image.mine !== false).length}
+                    </Badge>
+                  </TabButton>
+                </div>
+              ) : null}
+              {shownImages.length === 0 ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  내가 올린 그림이 없습니다. 「전체」를 누르면 함께 쓰는 그림이 보입니다.
+                </p>
+              ) : (
             <div className="grid max-h-[60vh] grid-cols-2 gap-4 overflow-y-auto p-1 sm:grid-cols-3 md:grid-cols-4">
-              {images.map((image) => {
+              {shownImages.map((image) => {
                 const selected = picked.has(image.id);
                 return (
                   <div key={image.id} className="relative">
@@ -302,6 +335,8 @@ export function LibraryPickerButton({
                 );
               })}
             </div>
+              )}
+            </>
           )}
 
           {/*

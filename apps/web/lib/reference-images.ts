@@ -204,11 +204,25 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
     }));
   }
 
-  return readReferences(viewer, (query) => query
-    .order("created_at", { ascending: false })
-    // 400장 상한에 걸리기 전에 거른다. 뽑아 놓고 코드에서 버리면, 남의 팀 것이
-    // 상한을 다 차지해 내 것이 잘려 나갈 수 있다.
-    .limit(400));
+  /**
+   * **내 그림을 먼저, 그리고 절대 안 밀리게.**
+   *
+   * 공용이 되면서 400장 상한을 전 회원이 나눠 쓰게 됐다. 한 번에 다 읽으면
+   * 남이 최근에 많이 올린 날 **내 오래된 그림이 목록에서 사라진다**
+   * (2026-09-17 독립 리뷰). 그래서 두 번 읽는다 — 내 것 400, 나머지 400.
+   * 둘 다 색인을 타는 가벼운 질의다.
+   *
+   * 차례도 이 순서다. 고르는 창은 내 그림부터 보게 된다(사용자 결정).
+   */
+  return readReferences(viewer, [
+    (query) => query
+      .eq("user_id", viewer.userId)
+      .order("created_at", { ascending: false })
+      .limit(400),
+    (query) => query
+      .order("created_at", { ascending: false })
+      .limit(400),
+  ]);
 }
 
 /**
@@ -228,7 +242,7 @@ export async function referenceImagesByIds(
   if (!ids.length) return [];
   const found = isLocalStoreEnabled()
     ? (await listReferenceImages(viewer)).filter((image) => ids.includes(image.id))
-    : await readReferences(viewer, (query) => query.in("id", ids));
+    : await readReferences(viewer, [(query) => query.in("id", ids)]);
   const byId = new Map(found.map((image) => [image.id, image]));
   return ids.map((id) => byId.get(id)).filter((image): image is ReferenceImageView => Boolean(image));
 }
@@ -240,10 +254,19 @@ function referenceQuery(supabase: ReturnType<typeof createSupabaseAdminClient>) 
     .select("id,user_id,team_id,storage_path,thumb_path,title,purpose,width,height,created_at");
 }
 
-/** 목록과 낱개가 **같은 규칙**을 타는 한 곳. 갈리면 한쪽이 조용히 넓어진다. */
+type ReferenceNarrow = (
+  query: ReturnType<typeof referenceQuery>,
+) => ReturnType<typeof referenceQuery>;
+
+/**
+ * 목록과 낱개가 **같은 규칙**을 타는 한 곳. 갈리면 한쪽이 조용히 넓어진다.
+ *
+ * 질의를 여럿 받는다. 앞에서 온 줄이 앞자리를 갖고 같은 줄은 한 번만 남는다 —
+ * 「내 것 먼저, 그다음 공용」을 그렇게 만든다.
+ */
 async function readReferences(
   viewer: ReferenceViewer,
-  narrow: (query: ReturnType<typeof referenceQuery>) => ReturnType<typeof referenceQuery>,
+  narrows: ReferenceNarrow[],
 ): Promise<ReferenceImageView[]> {
   const visibility = referenceVisibility({
     userId: viewer.userId,
@@ -252,19 +275,30 @@ async function readReferences(
   });
 
   const supabase = createSupabaseAdminClient();
-  let query = narrow(referenceQuery(supabase));
-  if (visibility.kind === "team") {
-    query = query.or(
-      `team_id.is.null,team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`,
-    );
-  } else if (visibility.kind === "loose") {
-    query = query.or(`team_id.is.null,user_id.eq.${visibility.userId}`);
+  const scoped = (narrow: ReferenceNarrow) => {
+    const query = narrow(referenceQuery(supabase));
+    if (visibility.kind === "team") {
+      return query.or(
+        `team_id.is.null,team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`,
+      );
+    }
+    if (visibility.kind === "loose") {
+      return query.or(`team_id.is.null,user_id.eq.${visibility.userId}`);
+    }
+    return query;
+  };
+
+  const results = await Promise.all(narrows.map((narrow) => scoped(narrow)));
+  const byId = new Map<string, ReferenceImageDbRow & { team_id: string | null }>();
+  for (const { data, error } of results) {
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as Array<ReferenceImageDbRow & { team_id: string | null }>) {
+      // 먼저 온 줄이 앞자리를 지킨다. 같은 줄이 두 질의에 다 나올 수 있다.
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
   }
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const rows = ((data ?? []) as Array<ReferenceImageDbRow & { team_id: string | null }>).filter(
+  const rows = [...byId.values()].filter(
     // 질의와 같은 규칙을 한 번 더 본다. 조건을 빠뜨린 채로 배포되면 남의
     // 본보기가 조용히 새 나가는데, 그건 화면에서 티가 안 난다.
     (row) => canSeeReference(visibility, { userId: row.user_id, teamId: row.team_id }),

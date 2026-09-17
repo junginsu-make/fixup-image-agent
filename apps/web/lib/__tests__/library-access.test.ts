@@ -182,11 +182,38 @@ describe("관리자는 지우기도 전체", () => {
 });
 
 describe("참고 이미지는 회원 공용", () => {
-  it("소유자 조건을 곧바로 붙이지 않는다", async () => {
-    // 참고 이미지는 공용 창고다. 팀이 안 붙은 것은 누구나 본다.
+  /**
+   * **두 번 읽는다 — 내 것 먼저, 그다음 공용**(2026-09-17 사용자 결정).
+   *
+   * 공용이 되면서 400장 상한을 전 회원이 나눠 쓰게 됐다. 한 번에 다 읽으면
+   * 남이 많이 올린 날 내 오래된 그림이 목록에서 사라진다. 그래서 내 것을
+   * 따로 한 번 더 읽어 앞자리에 둔다.
+   */
+  it("한 질의는 내 것만, 다른 질의는 소유자 조건 없이 읽는다", async () => {
     tableRows.reference_images = [];
     await listReferenceImages(MEMBER);
-    expect(ownerConditionOn("reference_images")).toBeUndefined();
+    const owner = recorded.filter(
+      (entry) => entry.table === "reference_images" && entry.column === "user_id",
+    );
+    // 내 것 질의 하나에만 붙는다. 둘 다 붙으면 공용 그림이 안 보인다.
+    expect(owner.map((entry) => entry.value)).toEqual(["member-1"]);
+  });
+
+  it("내 그림이 앞자리를 갖는다 — 상한에 걸려도 안 밀린다", async () => {
+    tableRows.reference_images = [
+      { id: "mine", user_id: "member-1", team_id: null,
+        storage_path: "member-1/references/mine.png",
+        title: "내 것", purpose: "both", width: null, height: null,
+        created_at: "2026-09-01T00:00:00.000Z" },
+      { id: "theirs", user_id: "member-9", team_id: null,
+        storage_path: "member-9/references/theirs.png",
+        title: "남의 것", purpose: "both", width: null, height: null,
+        created_at: "2026-09-02T00:00:00.000Z" },
+    ];
+
+    const images = await listReferenceImages(MEMBER);
+    // 같은 줄이 두 질의에 다 나와도 한 번만 남는다.
+    expect(images.map((image) => image.id)).toEqual(["mine", "theirs"]);
   });
 
   it("**팀 조건은 질의에 붙는다** — 코드의 이중 확인에만 기대지 않는다", async () => {
