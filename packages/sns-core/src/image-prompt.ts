@@ -335,6 +335,17 @@ export interface ImagePromptInput {
   userInstruction?: string;
   /** 자리마다 적은 말. 이 카드의 자리에 해당하는 것만 쓴다. */
   attachmentIntents?: AttachmentIntents;
+  /**
+   * 이 카드를 **그릴 모델.** `modelEndpointLabel` 이 만든 이름이다.
+   *
+   * 여기서는 LLM 이 프롬프트 본문을 직접 쓰므로 「이 모델에 맞게」가 손댈
+   * 자리가 있다. 포스터는 기획이 칸만 채우고 문장은 코드가 짜서 같은 것을
+   * 해도 아무 차이가 없었다(2026-09-17 실측, 설계 §11-7).
+   *
+   * **우리가 모델별 요령을 지어내지 않는다.** 재 보지 않은 것을 적으면 그것이
+   * 그대로 그림에 간다. 이름만 주고 판단은 LLM 이 한다.
+   */
+  modelId?: string;
 }
 
 export interface ScenePromptRequest {
@@ -368,6 +379,11 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
         attachmentIntent: intentForRole(input.attachmentIntents, input.role),
       })),
       "Write the visual scene prompt for one card-news image.",
+      ...(input.modelId
+        ? [`The prompt you write will be rendered by this target model: ${input.modelId}.`
+          + " Phrase it the way that model follows best — if you know it, use what you know"
+          + " about how it reads prompts; otherwise write plainly."]
+        : []),
       "Inspect the attached reference images directly. Use them as the visual source; do not replace them with a textual reconstruction.",
       buildAttachmentBlock(references, {
         look: input.look,

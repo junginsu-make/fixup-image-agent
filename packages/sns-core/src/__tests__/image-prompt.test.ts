@@ -494,3 +494,46 @@ describe("캐릭터 여러 각도 지시", () => {
     expect(block.match(/SAME character/gi)).toHaveLength(2);
   });
 });
+
+/**
+ * **장면을 쓰는 LLM 이 어떤 모델이 그릴지 알아야 한다.**
+ *
+ * 카드뉴스는 포스터와 다르다. 포스터의 기획은 **칸에 내용을 채우고** 문장은
+ * 코드가 짜지만, 여기서는 LLM 이 **프롬프트 본문을 직접 쓴다**
+ * (`Return only the image prompt body`).
+ *
+ * 그래서 「이 모델에 맞게 쓰라」가 실제로 손댈 자리가 있다 — 문장이 LLM 것이다.
+ * 포스터에서 같은 것을 해 봤을 때 아무 차이가 없었던 까닭이 이것이다
+ * (2026-09-17 실측, 설계 §11-7).
+ *
+ * **우리가 모델별 요령을 지어내지 않는다.** 재 보지 않은 것을 적으면 그것이
+ * 그대로 그림에 간다. 이름만 주고 판단은 LLM 이 한다.
+ */
+describe("어떤 모델이 그리는가", () => {
+  const base = {
+    role: "cover" as const,
+    copy: { index: 1, headline: "제목" },
+    plan: { index: 1, role: "cover" as const, intent: "x", visualBrief: "y" },
+    grouped: groupAttachments([]),
+    size: { width: 1088, height: 1360 },
+    language: "ko" as const,
+  };
+
+  it("모델 이름을 싣는다", () => {
+    const request = buildSceneRequest({ ...base, modelId: "nano-banana-pro (fal-ai/nano-banana-pro)" });
+
+    expect(request.prompt).toContain("fal-ai/nano-banana-pro");
+  });
+
+  /** 이름만 주면 안 쓴다. 무엇을 하라고 함께 말해야 한다(설계 §11-5). */
+  it("그 이름으로 무엇을 할지 함께 말한다", () => {
+    const request = buildSceneRequest({ ...base, modelId: "gpt-image-2.5-flare" });
+
+    expect(request.prompt).toMatch(/rendered by|target model/i);
+  });
+
+  /** 옛 작업·화면 밖 경로에는 없다. 없으면 지금까지대로 아무 말도 안 한다. */
+  it("안 넘기면 그 줄이 없다", () => {
+    expect(buildSceneRequest(base).prompt).not.toMatch(/target model/i);
+  });
+});

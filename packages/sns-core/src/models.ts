@@ -253,3 +253,22 @@ export function priceCoverage(
   if (requested <= matched * 2) return { covered: true, usd: row.usd };
   return { covered: false, usd: Math.max(...spec.table.map((entry) => entry.usd)) };
 }
+
+/**
+ * 기획 LLM 에게 **어느 업체의 무슨 모델인지** 알려 줄 때 쓰는 이름.
+ *
+ * 우리 id(`nano-banana-pro`)만으로는 알 수 없다 — 우리가 붙인 이름이다.
+ * 엔드포인트에는 업체와 계열이 들어 있다(`fal-ai/nano-banana-pro`,
+ * `openai/gpt-image-2.5/flare/...`).
+ *
+ * **사용자에게 보이는 이름이 아니다.** 화면은 「표준형」처럼 우리 이름으로
+ * 부른다. 이건 모델에게 보내는 글이라 반대로 진짜 이름이 필요하다.
+ *
+ * **모르는 id 에 던지지 않는다.** 기획은 그림을 만들기 전 단계라 여기서 터지면
+ * 04 가 통째로 멎는다. 저장된 옛 작업이 없는 id 를 들고 있을 수 있다.
+ */
+export function modelEndpointLabel(id: string): string {
+  if (!id) return "";
+  const found = IMAGE_MODELS.find((model) => model.id === id);
+  return found ? `${found.id} (${found.t2i.endpoint})` : id;
+}

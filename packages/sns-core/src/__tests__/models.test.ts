@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IMAGE_MODELS, pickEndpoint, unitPrice, modelById } from "../models";
+import { IMAGE_MODELS, pickEndpoint, unitPrice, modelById, modelEndpointLabel } from "../models";
 
 describe("모델 목록", () => {
   /**
@@ -98,5 +98,48 @@ describe("참고 이미지 상한", () => {
     expect(modelById("gpt-image-2").maxReferenceImages).toBe(16);
     expect(modelById("nano-banana-2").maxReferenceImages).toBe(14);
     expect(modelById("nano-banana-pro").maxReferenceImages).toBe(14);
+  });
+});
+
+/**
+ * **기획 LLM 에게 「어느 업체의 무슨 모델인가」를 알려 줄 때 쓰는 이름.**
+ *
+ * 우리 id(`nano-banana-pro`)만으로는 알 수 없다 — 우리가 붙인 이름이기 때문이다.
+ * 엔드포인트에는 업체와 모델 계열이 들어 있다(`fal-ai/nano-banana-pro`,
+ * `openai/gpt-image-2.5/flare/...`).
+ *
+ * **사용자에게 보이는 이름이 아니다.** 화면은 「표준형」처럼 우리 이름으로
+ * 부른다(`lib/__tests__/model-name.test.ts` 가 그것을 지킨다). 이건 모델에게
+ * 보내는 글이라 반대로 진짜 이름이 필요하다.
+ */
+describe("모델을 LLM 에게 소개하는 이름", () => {
+  it("우리 id 와 엔드포인트를 함께 낸다", () => {
+    const label = modelEndpointLabel("nano-banana-pro");
+
+    expect(label).toContain("nano-banana-pro");
+    expect(label).toContain("fal-ai/nano-banana-pro");
+  });
+
+  it("gpt 계열도 업체가 드러난다", () => {
+    expect(modelEndpointLabel("gpt-image-2.5-flare")).toContain("openai/");
+  });
+
+  /**
+   * **모르는 id 에 던지지 않는다.** 기획은 그림을 만들기 전 단계라, 여기서
+   * 터지면 04 가 통째로 멎는다. 저장된 옛 작업이 없는 id 를 들고 있을 수 있다.
+   */
+  it("모르는 id 면 그 id 만 낸다", () => {
+    expect(modelEndpointLabel("없는-모델")).toBe("없는-모델");
+  });
+
+  it("빈 값이면 빈 값이다", () => {
+    expect(modelEndpointLabel("")).toBe("");
+  });
+
+  /** 모든 모델이 이름을 낼 수 있어야 한다. 하나라도 터지면 그 작업이 멎는다. */
+  it("모든 모델이 이름을 낸다", () => {
+    for (const model of IMAGE_MODELS) {
+      expect(modelEndpointLabel(model.id), `${model.id} 가 비었다`).toContain(model.id);
+    }
   });
 });

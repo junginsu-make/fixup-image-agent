@@ -7,6 +7,7 @@ import {
   intentForRole,
   mergedInstruction,
   groupAttachments,
+  modelEndpointLabel,
   hasStyleSource,
   resolveLook,
   modelById,
@@ -379,6 +380,8 @@ export async function startQueuedFlow(
       language: project.language,
       ...tuning,
       attachmentIntents: intents,
+      // 어떤 모델이 그릴지 알려 준다. 여기서는 LLM 이 프롬프트 본문을 직접 쓴다.
+      modelId: modelEndpointLabel(project.modelId),
     }, dependencies.sceneProvider);
     const images = selectReferencesForRole(grouped, card.role);
     /**

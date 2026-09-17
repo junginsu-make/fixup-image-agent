@@ -87,3 +87,36 @@ describe("내린 결과", () => {
     }
   });
 });
+
+/**
+ * **장면을 쓰는 LLM 이 어떤 모델이 그릴지 알아야 한다.**
+ *
+ * 카드뉴스는 LLM 이 **프롬프트 본문을 직접 쓴다.** 그래서 「이 모델에 맞게
+ * 쓰라」가 손댈 자리가 있다 — 실측에서 문장 길이가 갈렸다(2026-09-17,
+ * 각 2회): 이름 없음 1,674자 · gpt 계열 992자 · nano 계열 1,850자.
+ *
+ * 포스터에서 같은 것을 해 봤을 때는 아무 차이가 없었다. 거기서는 기획이 칸에
+ * **내용만** 채우고 문장은 코드가 짜서, 모델 얘기가 손댈 자리가 없다(§11-7).
+ */
+describe("장면 LLM 이 아는 모델", () => {
+  it("흐름이 모델 이름을 넘긴다", () => {
+    expect(source).toContain("modelId: modelEndpointLabel(project.modelId)");
+  });
+
+  /**
+   * **장면 LLM 에게는 날 id 를 주면 안 된다.** 우리가 붙인 이름이라
+   * 어느 업체의 무슨 모델인지 알 수 없다.
+   *
+   * 값 계산 쪽(`estimateCost`)은 날 id 가 맞다 — 우리 표를 찾는 열쇠다.
+   * 그래서 파일 전체가 아니라 **이 부름의 인자만** 본다.
+   */
+  it("장면 LLM 에는 날 id 를 안 준다", () => {
+    const 부름 = source.slice(
+      source.indexOf("await writeImagePrompt({"),
+      source.indexOf("dependencies.sceneProvider)"),
+    );
+
+    expect(부름.length, "writeImagePrompt 부름을 못 찾았다").toBeGreaterThan(50);
+    expect(부름).not.toContain("modelId: project.modelId");
+  });
+});
