@@ -189,8 +189,17 @@ describe("기본 장수가 이어져 있는가", () => {
  * 한 줄만 되살려도 아무도 모른다(2026-09-16).
  */
 describe("글만으로 만드는 길", () => {
+  /**
+   * 그냥 들어오면 **01 지시부터**다.
+   *
+   * 돌아온 길(`?step=`)만 그 단계에서 시작한다 — 주소에 단계가 없으면 늘 첫
+   * 단계다(`rerunStartStep` 의 기본값). 2026-09-17 에 「열 때부터 그 단계로」로
+   * 바꾸면서 표현이 바뀌었고, 성질은 그대로다.
+   */
   it("첫 화면이 지시다", () => {
-    expect(source).toContain('React.useState("instruction")');
+    expect(source).toContain('rerunStartStep(rerunFrom ? rerunStep : null, RERUN_STEPS, "instruction")');
+    expect(source, "단계가 없는 주소가 다른 단계로 열리면 안 된다")
+      .not.toMatch(/RERUN_STEPS, "(reference|spec)"/);
   });
 
   /** 첨부는 선택이다. 여기에 장수 조건이 돌아오면 길이 다시 막힌다. */

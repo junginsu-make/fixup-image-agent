@@ -44,7 +44,29 @@ const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];
 
 export function NewSnsClient() {
   const router = useRouter();
-  const [step, setStep] = React.useState<Step>("content");
+  /**
+   * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
+   *
+   * `/sns/new?from={작업}` 으로 온다. 전에는 01~03 을 **아예 못 누르게** 막아
+   * 두어서, 지난 단계를 보려면 길이 없었다(2026-09-16 사용자 보고).
+   */
+  const searchParams = useSearchParams();
+  const rerunFrom = searchParams.get("from") ?? "";
+  /**
+   * 결과 화면에서 누른 단계.
+   *
+   * **처음 값만 잡는다.** 주소 값을 그대로 의존성에 넣으면, 나중에 단계를 주소에
+   * 반영하는 날 단계를 옮길 때마다 불러오기가 다시 돌아 고친 값을 덮는다.
+   */
+  const rerunStep = React.useRef(searchParams.get("step")).current;
+  /*
+    **돌아온 길이면 처음부터 그 단계로 연다.** 값을 다 불러온 뒤에 옮겼더니 01 이
+    잠깐 보였다가 03 으로 넘어갔다 — 누른 사람에게는 「굳이 01 을 들렀다 온다」로
+    읽힌다(2026-09-17 사용자 보고).
+  */
+  // **돌아온 길(`?from=`)일 때만 따른다.** `?step=` 만 있는 주소에서 따르면 불러올
+  // 값이 없어 빈 03 이 열린다.
+  const [step, setStep] = React.useState<Step>(() => rerunStartStep<Step>(rerunFrom ? rerunStep : null, RERUN_STEPS, "content"));
   const [title, setTitle] = React.useState("");
   const [source, setSource] = React.useState<SourceDraft>({ kind: "text", text: "" });
   const [toneNote, setToneNote] = React.useState("");
@@ -68,21 +90,6 @@ export function NewSnsClient() {
   const [message, setMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [fromLibrary, setFromLibrary] = React.useState<string | null>(null);
-  /**
-   * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
-   *
-   * `/sns/new?from={작업}` 으로 온다. 전에는 01~03 을 **아예 못 누르게** 막아
-   * 두어서, 지난 단계를 보려면 길이 없었다(2026-09-16 사용자 보고).
-   */
-  const searchParams = useSearchParams();
-  const rerunFrom = searchParams.get("from") ?? "";
-  /**
-   * 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다.
-   *
-   * **처음 값만 잡는다.** 주소 값을 그대로 의존성에 넣으면, 나중에 단계를 주소에
-   * 반영하는 날 단계를 옮길 때마다 불러오기가 다시 돌아 고친 값을 덮는다.
-   */
-  const rerunStep = React.useRef(searchParams.get("step")).current;
   /** 값을 들고 왔다고 화면에 적을 것. 못 들고 온 첨부 수까지 말한다. */
   const [rerun, setRerun] = React.useState<{ title: string; dropped: number } | null>(null);
   /**
@@ -135,6 +142,8 @@ export function NewSnsClient() {
       if (!alive) return;
       if (!result.ok) {
         setMessage("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        // 빈 03 을 열면 무엇을 채워야 할지 모른다. 값이 없으면 첫 단계로 돌린다.
+        setStep("content");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
@@ -148,11 +157,6 @@ export function NewSnsClient() {
       setIntents(seed.intents);
       setSpec(seed.spec);
       setRerun({ title: seed.title, dropped: seed.droppedAttachments });
-      /*
-        **누른 단계로 연다.** 값을 다 심은 **뒤에** 옮긴다. 못 불러왔을 때는
-        옮기지 않는다 — 빈 03 을 열면 무엇을 채워야 할지 모른다.
-      */
-      setStep(rerunStartStep<Step>(rerunStep, RERUN_STEPS, "content"));
       setSeeding(false);
     })();
     return () => { alive = false; };

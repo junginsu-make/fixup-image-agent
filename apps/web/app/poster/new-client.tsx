@@ -102,8 +102,18 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
   /** 관리자인가. 참고 이미지 목록과 함께 서버가 준다. */
   const [isAdmin, setIsAdmin] = React.useState(false);
-  // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
-  const [step, setStep] = React.useState("instruction");
+  /*
+    「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
+
+    **돌아온 길이면 처음부터 그 단계로 연다.** 값을 다 불러온 뒤에 옮겼더니 01 이
+    잠깐 보였다가 03 으로 넘어갔다 — 누른 사람에게는 「굳이 01 을 들렀다 온다」로
+    읽힌다(2026-09-17 사용자 보고). 값이 아직 없는 동안에는 아래 `seeding` 이
+    화면을 안 내주므로, 단계만 먼저 맞춰 둬도 빈 칸이 보이지 않는다.
+  */
+  //
+  // **돌아온 길(`?from=`)일 때만 따른다.** `?step=` 만 있는 주소(옛 링크·손으로 친
+  // 주소)에서 따르면 불러올 값이 없어 **빈 03** 이 열린다.
+  const [step, setStep] = React.useState(() => rerunStartStep(rerunFrom ? rerunStep : null, RERUN_STEPS, "instruction"));
   const [roles, setRoles] = React.useState<Record<string, Role>>({});
   /**
    * **고른 차례.** 이것이 화면의 ①②③ 이고 프롬프트의 `Image N` 이다.
@@ -316,6 +326,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       if (!alive) return;
       if (!result.ok) {
         setError("지난 단계의 값을 불러오지 못했습니다. 처음부터 채워 주세요.");
+        // 빈 03 을 열면 무엇을 채워야 할지 모른다. 값이 없으면 첫 단계로 돌린다.
+        setStep("instruction");
         // 못 불러와도 화면은 내준다 — 잠긴 채로 두면 아무것도 못 한다.
         setSeeding(false);
         return;
@@ -341,12 +353,6 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         // 광고 작업은 비율이 `match-source` 고 마스터 픽셀을 따로 든다.
         adWork: seed.ratio === "match-source",
       });
-      /*
-        **누른 단계로 연다.** 값을 다 심은 **뒤에** 옮긴다 — 먼저 옮기면 빈
-        칸이 한 번 보였다가 채워진다. 못 불러왔을 때는 옮기지 않는다: 빈 03 을
-        열면 무엇을 채워야 할지 모른다.
-      */
-      setStep(rerunStartStep(rerunStep, RERUN_STEPS, "instruction"));
       setSeeding(false);
     })();
     return () => { alive = false; };

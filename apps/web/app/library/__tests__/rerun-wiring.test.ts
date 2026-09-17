@@ -55,26 +55,41 @@ describe("지난 단계로 값을 들고 간다", () => {
     expect(source).toMatch(new RegExp(`router\\.push\\(rerunHref\\("${base}", \\w+(\\.id)?, id\\)\\)`));
   });
 
-  it.each(TOOLS)("$name 은 값을 다 심은 뒤 누른 단계로 연다", ({ fresh, first }) => {
+  /**
+   * **열 때부터 그 단계로 선다**(2026-09-17 사용자 보고).
+   *
+   * 값을 다 불러온 **뒤에** 옮겼더니 01 이 잠깐 보였다가 03 으로 넘어갔다 — 누른
+   * 사람에게는 「굳이 01 을 들렀다 온다」로 읽힌다. 값이 아직 없는 동안에는
+   * `seeding` 이 화면을 안 내주므로, 단계만 먼저 맞춰도 빈 칸이 안 보인다.
+   */
+  it.each(TOOLS)("$name 은 열 때부터 누른 단계로 선다", ({ fresh, first }) => {
     const source = read(fresh);
     // 처음 값만 잡는다. 주소 값을 그대로 의존성에 두면 나중에 불러오기가 다시 돈다.
     expect(source).toContain('rerunStep = React.useRef(searchParams.get("step")).current');
     /*
-      심은 뒤, 잠금을 풀기 바로 전에 옮긴다. 먼저 옮기면 빈 칸이 한 번 보인다.
-
       **모를 때 여는 단계를 값으로 박는다.** `"\w+"` 로 받았더니 첫 단계를 03 으로
       바꿔도 초록이었다 — 단계 없는 옛 주소가 03 으로 열린다(2026-09-17 독립 리뷰).
     */
     expect(source).toMatch(new RegExp(
-      `setStep\\(rerunStartStep(<Step>)?\\(rerunStep, RERUN_STEPS, "${first}"\\)\\);\\s*setSeeding\\(false\\);`,
+      `useState(<Step>)?\\(\\(\\) => rerunStartStep(<Step>)?\\(rerunFrom \\? rerunStep : null, RERUN_STEPS, "${first}"\\)\\)`,
     ));
   });
 
-  it.each(TOOLS)("$name 은 **불러오기에 실패하면 단계를 안 옮긴다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh }) => {
+  /**
+   * **돌아온 길일 때만 단계를 따른다.** `?step=spec` 만 있는 주소(옛 링크·손으로 친
+   * 주소)에서 따르면 불러올 값이 없어 빈 03 이 열린다(2026-09-17 확인).
+   */
+  it.each(TOOLS)("$name 은 ?from= 없이 온 단계는 따르지 않는다", ({ fresh }) => {
     const source = read(fresh);
-    // 성공 갈래 한 곳에만 있어야 한다. 실패 갈래에도 있으면 빈 03 이 열린다
-    // (2026-09-17 독립 리뷰가 뮤테이션으로 실증 — 그때는 초록이었다).
-    expect(source.split("setStep(rerunStartStep").length - 1).toBe(1);
+    expect(source).toContain("rerunFrom ? rerunStep : null");
+    expect(source, "단계를 조건 없이 따르면 빈 03 이 열린다").not.toMatch(/rerunStartStep(<Step>)?\(rerunStep,/);
+  });
+
+  it.each(TOOLS)("$name 은 **불러오기에 실패하면 첫 단계로 돌린다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh, first }) => {
+    const source = read(fresh);
+    expect(source).toMatch(new RegExp(`불러오지 못했습니다[\\s\\S]{0,240}setStep\\("${first}"\\);`));
+    // 여는 단계를 정하는 자리는 하나다. 여기저기서 옮기면 어디서 바뀌는지 못 쫓는다.
+    expect(source.split("rerunStartStep").length - 1).toBe(2);
   });
 
   it("이미지 만들기는 단계 목록을 **다시 적지 않는다** — 단계 id 는 한 곳이 갖는다", () => {
