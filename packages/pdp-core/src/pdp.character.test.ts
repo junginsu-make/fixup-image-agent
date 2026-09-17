@@ -763,3 +763,72 @@ describe("resolveCharacterAngles", () => {
     expect(resolveCharacterAngles(["front", "front"], "")).toEqual(["front"]);
   });
 });
+
+/**
+ * **캐릭터도 「레퍼런스 스타일」을 고를 수 있다.**
+ *
+ * 전에는 캐릭터의 결 목록에서 그것만 빼 뒀다 — 코드 주석이 「캐릭터는 글로만
+ * 만드는 도구」라고 적고 있었다. 그런데 캐릭터는 **그림을 받는다.** 역할이 둘
+ * 있고(「이 캐릭터 뽑아내기」·「레퍼런스 스타일」) 그 그림은 모델에 들어간다.
+ * 주석이 옛말이 된 것이다(2026-09-17 대조).
+ *
+ * `CharacterLook` 이 `ImageLook` 을 제 손으로 베껴 적고 있었던 것도 함께
+ * 고친다 — 같은 것을 두 벌로 두면 반드시 갈라진다. 실제로 갈라져서 서버가
+ * `auto` 를 타입 단계에서 거부하고 있었다.
+ */
+describe("레퍼런스 스타일", () => {
+  /** 표에 칸이 없으면 `?? NON_PHOTOREAL` 로 조용히 떨어진다. 값으로 못 잰다. */
+  it("모델 표에 칸이 있다", () => {
+    expect(selectCharacterModel("auto")).toBe("nano-banana-pro");
+  });
+
+  /**
+   * **첨부가 결을 정한다.** 우리가 결 지시를 덧붙이면 그 결을 덮어, 「이 그림처럼」
+   * 이라고 고른 사람에게 다른 화풍이 나간다.
+   */
+  it("첨부가 있으면 결 지시를 안 덧붙인다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "auto", referenceRole: "style",
+    });
+
+    expect(prompt).not.toContain("photograph");
+    expect(prompt).not.toContain("anime");
+  });
+
+  /**
+   * **첨부가 없으면 그릴 결을 정해 준다.**
+   *
+   * `auto` 의 지시문은 빈 문자열이라, 첨부도 없고 지시문도 비면 무엇으로 그릴지
+   * 정하는 말이 프롬프트에 한 줄도 안 들어간다. 화면은 흐리게 막지만 화면을 안
+   * 거치는 길이 있다(옛 작업·API 직접 호출). 포스터에서 실제로 새는 것을
+   * 찾았다(2026-09-16).
+   */
+  it("첨부가 없으면 실사로 내려 준다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "auto",
+    });
+
+    expect(prompt.toLowerCase()).toContain("photo");
+  });
+
+  /**
+   * 각도는 이미 만든 정면 그림에서 뽑는다. 그 그림이 결을 갖고 있으므로
+   * 덧붙이면 각도마다 화풍이 흔들린다.
+   */
+  it("각도는 만든 정면 그림의 결을 따른다", () => {
+    const prompt = buildTurnaroundPrompt({
+      identityPrompt: "x", angle: "left_90", look: "auto",
+    });
+
+    expect(prompt).not.toContain("photograph");
+  });
+
+  /** 고른 결이 따로 있으면 첨부가 있든 없든 그대로 간다. */
+  it("고른 결은 첨부가 있어도 그대로다", () => {
+    const prompt = buildCandidatePrompt({
+      description: "단발머리 여성", aspectRatio: "3:4", look: "anime", referenceRole: "style",
+    });
+
+    expect(prompt.toLowerCase()).toContain("anime");
+  });
+});

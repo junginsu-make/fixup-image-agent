@@ -1,7 +1,9 @@
 import {
+  type ImageLook,
   type LookSubject,
   designerPersona,
   imageLookDirective,
+  resolveLook,
   priorityLine,
   userInstructionHead,
   userInstructionTail,
@@ -48,7 +50,14 @@ export type CharacterAngle =
 export type CharacterKind = "person" | "animal" | "character" | "object";
 
 /** 어떤 결로 만드는가. 질감과 기본 모델이 여기서 갈린다. */
-export type CharacterLook = "photoreal" | "anime" | "3d" | "illustration";
+/**
+ * 캐릭터를 **무엇으로 그릴까.**
+ *
+ * **제 손으로 베껴 적지 않는다.** 전에는 여기 네 개를 적어 뒀는데, 공용 목록에
+ * 「레퍼런스 스타일」(`auto`)이 들어간 뒤에도 캐릭터만 그것을 몰랐다 — 서버가
+ * 타입 단계에서 거부했다(2026-09-17 대조). 같은 것을 두 벌로 두면 갈라진다.
+ */
+export type CharacterLook = ImageLook;
 
 /**
  * 첨부한 그림을 어떻게 쓰는가. **둘은 정반대다.**
@@ -323,9 +332,18 @@ function framingDirective(aspectRatio: AspectRatio, kind: CharacterKind) {
  * 실사 문구는 2026-09-04 실측으로 한 번 더 다듬어졌다. 여기서 바꾸지 말고
  * `packages/shared/src/image-look.ts` 에서 바꾼다.
  */
-function lookDirective(look: CharacterLook, kind: CharacterKind) {
+function lookDirective(look: CharacterLook, kind: CharacterKind, hasReference: boolean) {
   const subject: LookSubject = kind === "person" || kind === "animal" ? kind : "generic";
-  return ` ${imageLookDirective(look, subject)}`;
+  /*
+   * **첨부가 없으면 그릴 결을 정해 준다.**
+   *
+   * `auto` 의 지시문은 빈 문자열이다 — 따라갈 그림이 정해 주기 때문이다.
+   * 그런데 따라갈 그림이 없으면 무엇으로 그릴지 정하는 말이 프롬프트에 한
+   * 줄도 안 들어가고 모델이 제멋대로 고른다. 화면은 흐리게 막지만 화면을 안
+   * 거치는 길이 있다(옛 작업·API 직접 호출). 포스터에서 실제로 그렇게 새는
+   * 것을 찾았다(2026-09-16).
+   */
+  return ` ${imageLookDirective(resolveLook(look, hasReference), subject)}`;
 }
 
 /**
@@ -452,7 +470,7 @@ export function buildCandidatePrompt(input: {
     ` Show it as ${angleDirective("front", kind)}.` +
     PLAIN_BACKGROUND +
     SINGLE_POSE +
-    lookDirective(look, kind) +
+    lookDirective(look, kind, Boolean(input.referenceRole)) +
     // 첨부가 있을 때만 순위를 밝힌다. 없는데 「레퍼런스보다 세다」고 말하면
     // 모델이 있지도 않은 첨부를 찾는다.
     (input.referenceRole
@@ -489,7 +507,8 @@ export function buildTurnaroundPrompt(input: {
     `${angleDirective(input.angle, kind)}. Preserve the same ${identity} exactly. ` +
     `Identity description: ${input.identityPrompt}. ` +
     `Generate exactly one ${noun}.` + PLAIN_BACKGROUND + SINGLE_POSE +
-    lookDirective(look, kind)
+    // 각도는 이미 만든 정면 그림에서 뽑는다. 그 그림이 늘 결을 갖고 있다.
+    lookDirective(look, kind, true)
   );
 }
 
@@ -534,7 +553,8 @@ export function buildTurnaroundSheetPrompt(input: {
     `Identity description: ${input.identityPrompt}. ` +
     `Do not write any text, labels, numbers, captions or watermarks anywhere in the image. ` +
     `Do not add extra panels, close-ups, props or duplicate views.` +
-    lookDirective(look, kind)
+    // 각도는 이미 만든 정면 그림에서 뽑는다. 그 그림이 늘 결을 갖고 있다.
+    lookDirective(look, kind, true)
   );
 }
 
@@ -646,6 +666,15 @@ export function buildSceneWithCharacterDirective(input: {
  * 옛 호출이 `boolean` 을 넘긴다. 같이 받는다.
  */
 const MODEL_BY_LOOK: Record<CharacterLook, ImageModelId> = {
+  /*
+   * **`auto` 도 칸을 채운다.** 표에 없으면 `?? NON_PHOTOREAL` 로 조용히
+   * 떨어져, 「이 그림처럼」을 고른 사람에게 실사 아닌 모델이 붙는다.
+   *
+   * 첨부를 따라갈 때는 i2i 라 어느 모델이든 그 그림을 본다. 첨부가 없으면
+   * `resolveLook` 이 실사로 내리므로(`lookDirective`) 실사와 같은 모델을
+   * 가리키는 것이 앞뒤가 맞는다. 화면도 같은 표를 쓴다(`CharacterStudio`).
+   */
+  auto: "nano-banana-pro",
   photoreal: "nano-banana-pro",
   anime: "gpt-image-2.5-flare",
   "3d": "gpt-image-2.5-flare",

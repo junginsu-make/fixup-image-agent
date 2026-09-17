@@ -10,13 +10,14 @@ import {
   Input, StepBar, Textarea, cn, type StepDefinition,
 } from "@fixup/ui";
 import {
-  IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference, type ImageLook,
+  IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, lookBlockedReason, withJosa, type ImageLook,
 } from "@fixup/shared";
 import { openImageGallery, openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { modelDisplayName } from "../../lib/model-name";
 import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
+import { lookAfterRole, roleAfterLook } from "./look-role";
 
 /**
  * 캐릭터 만들기.
@@ -52,10 +53,17 @@ const KINDS = [
  * 여기 제 표(`실사·애니·3D·그림`)를 갖고 있었더니 2026-09-16 에 결 이름을 바꿀 때
  * **캐릭터만 옛 이름으로 남았다.** 같은 것을 두 벌로 두면 반드시 갈라진다.
  *
- * 캐릭터는 글로만 만드는 도구라 「레퍼런스 스타일」이 뜻이 없다. 그래서 그것만
- * 빠진 목록을 쓴다(`looksWithoutReference`).
  */
-const LOOKS = looksWithoutReference();
+/*
+ * **「레퍼런스 스타일」도 목록에 둔다.**
+ *
+ * 전에는 그것만 뺐다 — 주석이 「캐릭터는 글로만 만드는 도구」라고 적고 있었다.
+ * 그런데 캐릭터는 **그림을 받는다**(`REFERENCE_ROLES`). 주석이 옛말이 된 것이다
+ * (2026-09-17 사용자 요청).
+ *
+ * 붙인 그림이 없으면 흐리게 막는다. 포스터·카드뉴스와 같다.
+ */
+const LOOKS = IMAGE_LOOKS;
 
 type Kind = (typeof KINDS)[number]["id"];
 type Look = ImageLook;
@@ -85,7 +93,14 @@ const REFERENCE_ROLES = [
   // 사람은 대개 그 안의 대상을 살리려고 붙인다. 결만 가져오려는 쪽이 오히려
   // 드물어서, 기본을 결로 두면 붙인 대상이 사라진 결과를 보고 놀란다.
   { id: "extract", label: "이 캐릭터 뽑아내기", hint: "그림 속 그 대상을 그대로 살립니다. 그림 느낌은 위 「그림체」에서 따로 고릅니다" },
-  { id: "style", label: "결만 따라 만들기", hint: "화풍·색·질감만 가져오고 대상은 새로 만듭니다" },
+  /*
+   * **그림체 쪽과 같은 이름을 쓴다.**
+   *
+   * 「결만 따라 만들기」는 무슨 말인지 알기 어려웠고, 같은 것을 그림체 쪽은
+   * 「레퍼런스 스타일」이라 부르고 있었다 — 한 스위치가 두 이름을 갖고 있었다
+   * (2026-09-17 사용자 요청). 이름표는 공용에서 가져온다.
+   */
+  { id: "style", label: IMAGE_LOOK_LABEL.auto, hint: "화풍·색·질감만 가져오고 대상은 새로 만듭니다" },
 ] as const;
 
 type ReferenceRole = (typeof REFERENCE_ROLES)[number]["id"];
@@ -418,9 +433,9 @@ export function CharacterStudio() {
   /*
    * 서버의 selectCharacterModel 과 같은 표다. 결을 바꾸면 모델도 따라온다.
    *
-   * **`auto` 도 칸을 채운다.** 여기는 붙일 레퍼런스가 없어 고를 수 없지만
-   * (`looksWithoutReference`), 저장된 옛 값이나 화면 밖에서 들어온 값이 있을 수
-   * 있다. 그때 `resolveLook` 이 실사로 내리므로(첨부 0장) 같은 모델을 가리킨다.
+   * **`auto` 도 칸을 채운다.** 붙인 그림을 따라갈 때는 i2i 라 어느 모델이든 그
+   * 그림을 본다. 첨부가 없으면 `resolveLook` 이 실사로 내리므로 실사와 같은
+   * 모델을 가리키는 것이 앞뒤가 맞는다.
    */
   const MODEL_BY_LOOK: Record<Look, string> = {
     auto: "nano-banana-pro",
@@ -532,17 +547,39 @@ export function CharacterStudio() {
               <fieldset className="grid flex-none gap-1.5">
                 <legend className="text-meta text-subtle-foreground">그림체</legend>
                 <div className="flex flex-wrap gap-2">
-                  {LOOKS.map((entry) => (
-                    <Button
-                      key={entry} type="button" size="sm" disabled={locked}
-                      variant={look === entry ? "default" : "secondary"}
-                      onClick={() => { setLook(entry); setModelId(""); }}
-                    >
-                      {IMAGE_LOOK_LABEL[entry]}
-                    </Button>
-                  ))}
+                  {LOOKS.map((entry) => {
+                    /*
+                      **빼지 않고 흐리게 둔다.** 목록에서 없애면 그런 기능이
+                      있다는 것을 알 길이 없다 — 포스터에서 그렇게 했다가
+                      사용자가 「그게 어디 있냐」고 물었다(2026-09-16).
+                    */
+                    const blocked = lookBlockedReason(entry, Boolean(attached));
+                    return (
+                      <Button
+                        key={entry} type="button" size="sm"
+                        disabled={locked || Boolean(blocked)}
+                        title={blocked || IMAGE_LOOK_HINT[entry]}
+                        variant={look === entry ? "default" : "secondary"}
+                        onClick={() => {
+                          setLook(entry);
+                          setModelId("");
+                          // 「이 그림의 역할」은 같은 스위치다. 함께 움직인다.
+                          if (attached) setAttached({ ...attached, role: roleAfterLook(entry) });
+                        }}
+                      >
+                        {IMAGE_LOOK_LABEL[entry]}
+                      </Button>
+                    );
+                  })}
                 </div>
                 <p className="text-xs text-subtle-foreground">{IMAGE_LOOK_HINT[look]}</p>
+                {/* 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적는다. */}
+                {lookBlockedReason("auto", Boolean(attached)) ? (
+                  <p className="text-[11px] leading-snug text-subtle-foreground">
+                    「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
+                    {lookBlockedReason("auto", Boolean(attached))}
+                  </p>
+                ) : null}
               </fieldset>
 
               {models.length ? (
@@ -668,7 +705,12 @@ export function CharacterStudio() {
                         <Button
                           key={role.id} type="button" size="sm" disabled={locked}
                           variant={attached.role === role.id ? "default" : "secondary"}
-                          onClick={() => setAttached({ ...attached, role: role.id })}
+                          onClick={() => {
+                            setAttached({ ...attached, role: role.id });
+                            // 그림체와 같은 스위치다. 함께 움직인다.
+                            setLook(lookAfterRole(role.id, look));
+                            setModelId("");
+                          }}
                         >
                           {role.label}
                         </Button>
