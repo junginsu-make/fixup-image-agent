@@ -3,6 +3,7 @@
 import { Rnd } from "react-rnd";
 import type { LayoutSlot } from "@fixup/layout-core";
 import { SLOT_LABEL, roundBox } from "./slot-defaults";
+import { canvasSize } from "./fit-screen";
 
 /**
  * 칸을 손으로 고치는 자리. **편집기는 이것 하나뿐이다.**
@@ -12,21 +13,11 @@ import { SLOT_LABEL, roundBox } from "./slot-defaults";
  * 하나는 반드시 낡는다.
  */
 
-/**
- * 화면에 그리는 카드 크기의 한계.
- *
- * 좌표는 비율이라 이 값이 바뀌어도 틀은 그대로다. **남는 자리에 맞춰 키운다** —
- * 세로가 긴 9:16 을 가로 기준으로 그리면 화면 밖으로 넘치고, 가로가 긴 16:9 를
- * 세로 기준으로 그리면 손톱만 해진다.
- */
-export const CANVAS_MAX_WIDTH = 560;
-export const CANVAS_MAX_HEIGHT = 620;
-
-/** 카드 비율을 지키면서 한계 안에 들어가는 가장 큰 크기. */
-export function canvasSize(card: { width: number; height: number }): { width: number; height: number } {
-  const scale = Math.min(CANVAS_MAX_WIDTH / card.width, CANVAS_MAX_HEIGHT / card.height);
-  return { width: Math.round(card.width * scale), height: Math.round(card.height * scale) };
-}
+/*
+  카드 크기는 `fit-screen.ts` 가 정한다. **남은 자리에 맞춰 줄어든다** — 전에는
+  560×620 고정이라 작은 화면에서 안 줄고 스크롤을 만들었다(2026-09-17 사용자 요청).
+  좌표는 비율이라 크기가 바뀌어도 틀은 그대로다.
+*/
 
 const KIND_STYLE: Record<LayoutSlot["kind"], string> = {
   background: "border-slate-400/70",
@@ -79,6 +70,8 @@ const HANDLE_DOTS = [
 export interface SlotCanvasProps {
   slots: LayoutSlot[];
   size: { width: number; height: number };
+  /** 이 칸이 쓸 수 있는 자리. 못 쟀으면(첫 그림·좁은 화면) 한계 크기로 그린다. */
+  space?: { width: number; height: number };
   selected: number | null;
   /**
    * 칸 뒤에 깔아 볼 그림. 읽어낸 칸이 레퍼런스와 맞는지 눈으로 대 보는 자리다.
@@ -89,8 +82,8 @@ export interface SlotCanvasProps {
   onChange(offset: number, slot: LayoutSlot): void;
 }
 
-export function SlotCanvas({ slots, size, selected, backdrop, onSelect, onChange }: SlotCanvasProps) {
-  const { width, height } = canvasSize(size);
+export function SlotCanvas({ slots, size, space, selected, backdrop, onSelect, onChange }: SlotCanvasProps) {
+  const { width, height } = canvasSize(size, space);
 
   return (
     <div
