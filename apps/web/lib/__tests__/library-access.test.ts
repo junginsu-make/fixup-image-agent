@@ -12,25 +12,46 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const recorded: Array<{ table: string; column: string; value: unknown }> = [];
 let tableRows: Record<string, Array<Record<string, unknown>>> = {};
 
+/**
+ * 가짜 질의 만들개.
+ *
+ * **조건을 기록만 하면 안 된다.** 무동작으로 두었더니 `.in`·`.or`·`.eq` 를
+ * 지워도 시험이 전부 초록이었다(2026-09-17 독립 리뷰가 뮤테이션으로 실증).
+ * 그래서 **가진 칸에 한해 실제로 거른다** — 그 칸이 없는 줄은 그대로 남긴다
+ * (작업물 표의 줄들은 `user_id` 를 안 싣고 오는 시험이 많다).
+ */
 function builderFor(table: string) {
+  const eqs: Array<[string, unknown]> = [];
+  let cap: number | undefined;
+  const rows = () => {
+    const kept = (tableRows[table] ?? []).filter((row) => eqs.every(
+      // 그 칸이 없는 줄은 이 조건의 대상이 아니다.
+      ([column, value]) => row[column] === undefined || row[column] === value,
+    ));
+    return cap === undefined ? kept : kept.slice(0, cap);
+  };
   const builder: Record<string, unknown> = {
     select: () => builder,
     delete: () => builder,
     order: () => builder,
-    limit: () => builder,
+    limit: (count: number) => { cap = count; return builder; },
     not: () => builder,
-    in: () => builder,
+    in: (column: string, value: unknown) => {
+      recorded.push({ table, column: `in:${column}`, value });
+      return builder;
+    },
     eq: (column: string, value: unknown) => {
       recorded.push({ table, column, value });
+      eqs.push([column, value]);
       return builder;
     },
     or: (filter: string) => {
       recorded.push({ table, column: "or", value: filter });
       return builder;
     },
-    maybeSingle: async () => ({ data: (tableRows[table] ?? [])[0] ?? null, error: null }),
+    maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
     then: (resolve: (result: unknown) => unknown) =>
-      Promise.resolve(resolve({ data: tableRows[table] ?? [], error: null })),
+      Promise.resolve(resolve({ data: rows(), error: null })),
   };
   return builder;
 }
@@ -54,7 +75,8 @@ vi.mock("../watermark", () => ({ markAsAi: async (bytes: Buffer) => bytes }));
 
 const { libraryScope, listLibraryItems, getLibraryItemImages, deleteLibraryItem, sniffImageMime } =
   await import("../server-library");
-const { canModifyReferenceImage, listReferenceImages } = await import("../reference-images");
+const { canModifyReferenceImage, listReferenceImages, referenceImagesByIds } =
+  await import("../reference-images");
 
 const MEMBER = { userId: "member-1", role: "member" as const };
 const ADMIN = { userId: "admin-1", role: "admin" as const };
@@ -177,11 +199,60 @@ describe("관리자는 지우기도 전체", () => {
 });
 
 describe("참고 이미지는 회원 공용", () => {
-  it("소유자 조건을 곧바로 붙이지 않는다", async () => {
-    // 참고 이미지는 공용 창고다. 팀이 안 붙은 것은 누구나 본다.
+  /**
+   * **두 번 읽는다 — 내 것 먼저, 그다음 공용**(2026-09-17 사용자 결정).
+   *
+   * 공용이 되면서 400장 상한을 전 회원이 나눠 쓰게 됐다. 한 번에 다 읽으면
+   * 남이 많이 올린 날 내 오래된 그림이 목록에서 사라진다. 그래서 내 것을
+   * 따로 한 번 더 읽어 앞자리에 둔다.
+   */
+  it("한 질의는 내 것만, 다른 질의는 소유자 조건 없이 읽는다", async () => {
     tableRows.reference_images = [];
     await listReferenceImages(MEMBER);
-    expect(ownerConditionOn("reference_images")).toBeUndefined();
+    const owner = recorded.filter(
+      (entry) => entry.table === "reference_images" && entry.column === "user_id",
+    );
+    // 내 것 질의 하나에만 붙는다. 둘 다 붙으면 공용 그림이 안 보인다.
+    expect(owner.map((entry) => entry.value)).toEqual(["member-1"]);
+  });
+
+  it("**두 질의 모두에 팀 조건이 붙는다** — 한쪽만 걸면 400장 자리를 남의 팀이 차지한다", async () => {
+    tableRows.reference_images = [];
+    await listReferenceImages({ ...MEMBER, teamId: "team-1" });
+    // 뒤의 `canSeeReference` 가 걸러 누수는 없지만, 상한 앞에서 못 걸러
+    // 「내 옛 그림이 사라진다」가 그대로 돌아온다(2026-09-17 독립 리뷰).
+    const ors = recorded.filter(
+      (entry) => entry.table === "reference_images" && entry.column === "or",
+    );
+    expect(ors.length).toBe(2);
+  });
+
+  it("내 그림이 앞자리를 갖는다 — 상한에 걸려도 안 밀린다", async () => {
+    tableRows.reference_images = [
+      { id: "mine", user_id: "member-1", team_id: null,
+        storage_path: "member-1/references/mine.png",
+        title: "내 것", purpose: "both", width: null, height: null,
+        created_at: "2026-09-01T00:00:00.000Z" },
+      { id: "theirs", user_id: "member-9", team_id: null,
+        storage_path: "member-9/references/theirs.png",
+        title: "남의 것", purpose: "both", width: null, height: null,
+        created_at: "2026-09-02T00:00:00.000Z" },
+    ];
+
+    const images = await listReferenceImages(MEMBER);
+    // 같은 줄이 두 질의에 다 나와도 한 번만 남는다.
+    expect(images.map((image) => image.id)).toEqual(["mine", "theirs"]);
+  });
+
+  it("**팀 조건은 질의에 붙는다** — 코드의 이중 확인에만 기대지 않는다", async () => {
+    // 조건이 빠져도 뒤의 `canSeeReference` 가 걸러 누수는 없다. 그래서 지워도
+    // 1,631개가 초록이었다(2026-09-17 독립 리뷰). 하지만 400장 상한에 걸리기
+    // 전에 거르려면 질의가 먼저 좁혀야 한다.
+    tableRows.reference_images = [];
+    await listReferenceImages({ ...MEMBER, teamId: "team-1" });
+    expect(teamConditionOn("reference_images")).toBe(
+      "team_id.is.null,team_id.eq.team-1,user_id.eq.member-1",
+    );
   });
 
   it("팀이 안 붙은 남의 것도 보이되 내 것이 아니라고 표시한다", async () => {
@@ -287,5 +358,47 @@ describe("내보내기 범위", () => {
   it("보기와 지우기는 관리자에게 열린 채로 둔다", () => {
     expect(libraryScope({ userId: "admin-1", role: "admin" }, "read")).toBeUndefined();
     expect(libraryScope({ userId: "admin-1", role: "admin" }, "delete")).toBeUndefined();
+  });
+});
+
+/**
+ * 고른 낱개도 **목록과 같은 규칙**을 탄다.
+ *
+ * 갈리면 「목록에는 보이는데 쓰지는 못하는」 그림이 생긴다 — 고른 그림이
+ * 조용히 빠진 채로 만들어진다. 2026-09-17 에 이미지 만들기가 정확히 그랬다:
+ * 목록도 낱개도 저만의 질의를 써서 공용 그림을 아예 못 봤다.
+ */
+describe("고른 참고 이미지 낱개", () => {
+  const 줄 = (id: string, user_id: string, team_id: string | null) => ({
+    id, user_id, team_id,
+    storage_path: `${user_id}/references/${id}.png`,
+    title: id, purpose: "both", width: null, height: null,
+    created_at: "2026-09-01T00:00:00.000Z",
+  });
+
+  it("팀이 안 붙은 남의 것도 읽는다 — 목록에서 보였으면 쓸 수 있어야 한다", async () => {
+    tableRows.reference_images = [줄("r1", "member-9", null)];
+    const [image] = await referenceImagesByIds(MEMBER, ["r1"]);
+    expect(image?.id).toBe("r1");
+    expect(image?.mine).toBe(false);
+    // **id 로 걸러 읽는다.** 빠지면 보이는 행을 전부 읽고 전부 서명한다.
+    expect(recorded.find((entry) => entry.column === "in:id")?.value).toEqual(["r1"]);
+  });
+
+  it("남의 팀 것은 id 를 알아도 안 읽힌다", async () => {
+    tableRows.reference_images = [줄("r2", "stranger", "team-9")];
+    expect(await referenceImagesByIds(MEMBER, ["r2"])).toEqual([]);
+  });
+
+  it("**물어본 차례 그대로 돌려준다** — 프롬프트의 Image 번호가 이 차례다", async () => {
+    tableRows.reference_images = [줄("a", "member-1", null), 줄("b", "member-1", null)];
+    const images = await referenceImagesByIds(MEMBER, ["b", "a"]);
+    expect(images.map((image) => image.id)).toEqual(["b", "a"]);
+  });
+
+  it("빈 목록이면 질의를 안 던진다", async () => {
+    tableRows.reference_images = [줄("a", "member-1", null)];
+    expect(await referenceImagesByIds(MEMBER, [])).toEqual([]);
+    expect(recorded.some((entry) => entry.table === "reference_images")).toBe(false);
   });
 });

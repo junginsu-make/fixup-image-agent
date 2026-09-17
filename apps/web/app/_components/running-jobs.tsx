@@ -1,10 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Loader2, Square, Trash2 } from "lucide-react";
-import { Button } from "@fixup/ui";
 import {
   JOB_POLL_INTERVAL_MS,
   RUNNING_JOBS_KEY,
@@ -15,7 +12,6 @@ import {
   upsertJob,
   type RunningJob,
 } from "../../lib/running-jobs";
-import { ElapsedTime } from "./elapsed-time";
 
 /**
  * 만드는 중인 것들을 셸이 들고 있는다.
@@ -33,7 +29,6 @@ interface RunningJobsValue {
   start(job: RunningJob): void;
   finish(id: string): void;
   stop(job: RunningJob): Promise<void>;
-  stopAll(): Promise<void>;
 }
 
 const RunningJobsContext = React.createContext<RunningJobsValue | undefined>(undefined);
@@ -52,12 +47,22 @@ function read(): RunningJob[] {
   }
 }
 
-/** 카드뉴스는 서버에도 멈췄다고 알린다. 안 그러면 그 화면에 돌아갔을 때 또 붙는다. */
+/**
+ * 서버에도 멈췄다고 알린다.
+ *
+ * 안 알리면 그 화면에 돌아갔을 때 또 붙고, **예약한 장이 만료까지 묶인다** —
+ * 이미지 쪽은 확정이 캐묻기 안에만 있어서 멈추면 아무도 안 닫았다
+ * (2026-09-17 독립 리뷰). 두 도구 다 같은 이름의 주소를 갖는다.
+ */
 async function tellServerToStop(job: RunningJob): Promise<void> {
-  if (job.tool !== "sns") return;
-  const projectId = job.id.slice("sns:".length);
+  const prefix = `${job.tool}:`;
+  const projectId = job.id.startsWith(prefix) ? job.id.slice(prefix.length) : "";
+  if (!projectId) return;
+  const url = job.tool === "sns"
+    ? `/api/sns/projects/${projectId}/stop`
+    : `/api/poster/projects/${projectId}/stop`;
   try {
-    await fetch(`/api/sns/projects/${projectId}/stop`, { method: "POST" });
+    await fetch(url, { method: "POST" });
   } catch {
     // 못 알려도 목록에서는 뺀다. 화면이 멈춘 것이 사용자가 원한 결과다.
   }
@@ -85,12 +90,6 @@ export function RunningJobsProvider({ children }: { children: React.ReactNode })
     setJobs((current) => removeJob(current, job.id));
     await tellServerToStop(job);
   }, []);
-
-  const stopAll = React.useCallback(async () => {
-    const stopping = jobs;
-    setJobs([]);
-    await Promise.all(stopping.map(tellServerToStop));
-  }, [jobs]);
 
   // 지금 보고 있지 않은 일감만 대신 물어본다.
   const away = jobs.filter((job) => job.href !== pathname);
@@ -141,62 +140,8 @@ export function RunningJobsProvider({ children }: { children: React.ReactNode })
   }, [awayKey, finish]);
 
   return (
-    <RunningJobsContext.Provider value={{ jobs, start, finish, stop, stopAll }}>
+    <RunningJobsContext.Provider value={{ jobs, start, finish, stop }}>
       {children}
     </RunningJobsContext.Provider>
-  );
-}
-
-const TOOL_LABEL: Record<RunningJob["tool"], string> = { sns: "카드뉴스", poster: "이미지" };
-
-/** 사이드바 아래 칸. 만드는 중인 것이 없으면 아무것도 안 보인다. */
-export function RunningJobsPanel() {
-  const { jobs, stop, stopAll } = useRunningJobs();
-  if (!jobs.length) return null;
-
-  return (
-    <section aria-label="만드는 중" className="grid gap-2 rounded-lg border bg-background p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-meta text-subtle-foreground">
-          <Loader2 className="size-3 animate-spin" />만드는 중 {jobs.length}
-        </p>
-        <button
-          type="button"
-          onClick={() => void stopAll()}
-          className="flex items-center gap-1 text-meta text-subtle-foreground hover:text-destructive"
-        >
-          <Trash2 className="size-3" />전체 중지
-        </button>
-      </div>
-
-      <ul className="grid gap-1.5">
-        {jobs.map((job) => (
-          <li key={job.id} className="grid gap-1 rounded-md bg-muted/60 p-2">
-            <Link href={job.href} className="block truncate text-xs font-bold hover:underline">
-              {job.title || TOOL_LABEL[job.tool]}
-            </Link>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-meta text-subtle-foreground">
-                {TOOL_LABEL[job.tool]} · <ElapsedTime startedAt={job.startedAt} prefix="" />
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-meta"
-                onClick={() => void stop(job)}
-              >
-                <Square className="size-3" />중지
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      {/* fal 에 이미 보낸 요청은 취소하지 못한다. 숨기면 사용자가 오해한다. */}
-      <p className="text-meta leading-5 text-subtle-foreground">
-        중지하면 결과를 더 받지 않습니다. 이미 보낸 요청의 비용은 나갈 수 있습니다.
-      </p>
-    </section>
   );
 }

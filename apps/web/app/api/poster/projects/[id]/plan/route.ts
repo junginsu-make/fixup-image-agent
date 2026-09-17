@@ -2,6 +2,8 @@ import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
 import { planReferences } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { posterReferencesByIds } from "../../../../../../lib/poster/references";
+import { teamIdOf } from "../../../../../../lib/teams/store";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import {
@@ -66,8 +68,17 @@ async function plan(request: Request, context: Context) {
      * 기획에는 **첨부한 것 전부**를 넘긴다. 지켜야 할 인물이 있는지도 알아야
      * 칸을 제대로 채운다.
      */
-    const references = await stores.references.byIds(project.data.referenceIds);
-    const preserved = await stores.references.byIds(project.data.preservedIds ?? []);
+    /*
+      **라이브러리와 같은 규칙으로 읽는다**(2026-09-17). 목록에서 보이는데
+      여기서 안 읽히면, 고른 그림이 조용히 빠진 채로 만들어진다.
+    */
+    const viewer = {
+      userId: auth.member.userId,
+      role: auth.member.profile.role,
+      teamId: await teamIdOf(auth.member.userId),
+    };
+    const references = await posterReferencesByIds(viewer, project.data.referenceIds);
+    const preserved = await posterReferencesByIds(viewer, project.data.preservedIds ?? []);
     const grammar = await readReferenceGrammar(
       references
         .filter((reference) => Boolean(reference.url))

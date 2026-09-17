@@ -83,6 +83,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
    */
   const [seeding, setSeeding] = React.useState(Boolean(rerunFromInitial));
   const [references, setReferences] = React.useState<ReferenceItem[]>([]);
+  /** 관리자인가. 참고 이미지 목록과 함께 서버가 준다. */
+  const [isAdmin, setIsAdmin] = React.useState(false);
   // 「무엇을 만들까」부터 묻는다. 까닭은 `steps.ts` 머리말에.
   const [step, setStep] = React.useState("instruction");
   const [roles, setRoles] = React.useState<Record<string, Role>>({});
@@ -253,6 +255,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       if (body.ok) {
         const fresh = (body.references ?? []) as ReferenceItem[];
         setReferences(fresh);
+        // 「남의 것에도 지우기를 낼까」는 서버가 정한다. 화면이 판단하면 갈린다.
+        setIsAdmin(Boolean(body.isAdmin));
         return fresh;
       }
       setError(body.message ?? "참고 이미지를 불러오지 못했습니다.");
@@ -425,10 +429,10 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const overReferenceLimit = referenceCount > choice.model.maxReferenceImages;
 
   /**
-   * **생성 전에 막는다**(설계 §4.4). 3단계는 생성이 **먼저**라, 만들 수 없는
-   * 규격을 그냥 두면 돈을 쓰고 나서 「이건 못 뽑습니다」를 보게 된다.
+   * 이번 클릭이 만드는 **작업 수.** 광고 모드는 마스터마다 작업이 따로 생긴다.
    *
-   * 광고 모드가 아니면 언제나 닫힌 값이라 `canCreatePoster` 가 무시한다.
+   * 금액 표시는 뺐지만(2026-09-17 사용자 결정) 기획 값 안내가 이 수를 쓴다 —
+   * 기획도 작업마다 한 번씩 돌기 때문이다.
    */
   const projects = projectCount(adMode, adPlan.masters.length);
   // 무엇을 그릴지는 순수 규칙이 정한다 — 컴포넌트 안에 두면 시험이 못 간다.
@@ -546,6 +550,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               onUploaded={loadReferences}
               intent={attachmentIntent}
               onIntentChange={setAttachmentIntent}
+              isAdmin={isAdmin}
             />
             {overReferenceLimit ? (
               <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -749,14 +754,13 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             ) : (
               adMode && adPlan.masters.length === 0 ? (
               /*
-                **「0장 만드는데 $0.657」을 보이면 안 된다.** `projectCount` 가
-                0 을 곱하지 않는 것은 「무료로 보이면 안 된다」는 이유인데, 만들
-                것이 없을 때 금액만 남기면 그 판단이 화면에서 거꾸로 읽힌다.
+                **만들 것이 없으면 장수 대신 까닭을 적는다.** 고른 규격으로
+                뽑을 그림이 하나도 없는데 「0장」만 남기면 무엇이 잘못됐는지
+                모른다.
 
                 **까닭은 여기서 되풀이하지 않는다.** 규격 칸이 이미 같은 문장을
                 말하고 있고(`ad-spec-picker.tsx`), 두 곳에 다른 크기로 적으면
-                한 화면에서 같은 말이 두 번 보인다. 고칠 수 있는 자리는 규격
-                칸이므로 사유는 거기 맡기고 여기서는 금액이 없는 이유만 말한다.
+                한 화면에서 같은 말이 두 번 보인다.
               */
               <p className="text-sm text-muted-foreground">
                 고른 규격으로는 아직 만들 그림이 없습니다. 위에서 규격을 확인해 주세요.
@@ -764,28 +768,25 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             ) : (
               <p className="text-sm text-muted-foreground">
                 {/*
-                  **프로젝트 수를 곱한다.** 광고 모드의 한 번 클릭은 마스터마다
-                  프로젝트를 만든다(설계 3-0). 안 곱하면 「만들 그림 2장」 바로
-                  아래에서 한 장 값을 보여 주게 된다 — §9 원칙 2 가 「10배 과금을
-                  걱정하지 않게 하려고」 넣은 자리에서 **실제보다 낮은 금액**을
-                  보여 주는 셈이다.
+                  **금액은 안 적는다**(2026-09-17 사용자 결정). 회원이 쓰는 단위는
+                  달러가 아니라 장수다 — 사용량도 상단에 「N/M장」으로 나온다.
+                  여기만 달러를 적으면 한 화면에서 단위가 둘이 된다.
 
-                  모델도 **실제로 쓸 모델**을 적는다. 고른 모델을 적으면 화면이
-                  「GPT Image 2 로 만듭니다」라고 말해 놓고 그 옆에서 다른 이름을
+                  모델은 **실제로 쓸 모델**을 적는다. 고른 모델을 적으면 화면이
+                  「표준형으로 만듭니다」라고 말해 놓고 그 옆에서 다른 이름을
                   보여 준다.
                 */}
-                예상 비용 ${((estimate.totalUsd ?? 0) * projects).toFixed(3)} · {choice.model.label}
+                {choice.model.label}
                 {adMode
                   ? ` · 그림 ${adPlan.masters.length}장 × 변형 ${variants}장 = ${adPlan.masters.length * variants}장`
                   : ` · ${variants}장`}
-                {estimate.approximate ? " (공표 가격표에 없는 크기라 넉넉히 잡은 값입니다)" : ""}
                 {/*
                   **기획 값은 여기 안 들어 있다.** 기획은 따로 돌고 따로 차감된다
                   (`plan/route.ts`). 「그대로 생성」은 그것이 아예 안 도는데,
                   화면이 안 말하면 두 갈래를 견줄 수 없었다(설계 §9).
                 */}
                 <span className="mt-1 block text-meta text-subtle-foreground">
-                  위는 그림 값입니다. {planCostNote({
+                  위는 그림 장수입니다. {planCostNote({
                     // 무엇을 세는지는 `plan-cost` 가 정한다. 여기서 정하면 시험이 못 간다.
                     ...planCostCounts(orderedIds.map((id) => roles[id] ?? "none")),
                     promptMode,

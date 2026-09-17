@@ -568,8 +568,34 @@ export function WorksTab() {
                   event.stopPropagation();
                   router.push(work.href);
                 }}
-                className={cn(CORNER_BUTTON, "left-1.5 hover:text-foreground")}
-              ><ListOrdered className="size-3.5" /></button>
+                className={cn(CORNER_BUTTON, "group left-1.5 hover:text-foreground")}
+              >
+                <ListOrdered className="size-3.5" />
+                {/*
+                  **아이콘만 있으면 무엇인지 모른다**(2026-09-17 사용자 보고).
+
+                  처음에는 브라우저 기본 말풍선(`title`)을 달았다. 그런데 그것은
+                  마우스를 1초쯤 가만히 둬야 뜨고 환경에 따라 아예 안 떠서,
+                  사용자에게는 「올려도 아무것도 안 뜬다」였다(같은 날 운영 확인).
+                  그래서 **올리는 즉시** 뜨는 말풍선을 직접 그린다. 키보드로
+                  옮겨 와도 뜬다.
+
+                  읽어 주는 이름은 `aria-label` 이 맡는다. 말풍선까지 읽으면
+                  같은 말을 두 번 한다.
+                */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute left-0 top-full z-20 mt-1.5 grid w-max max-w-[9rem] gap-0.5",
+                    // 카드가 overflow-hidden 이라 넘치면 잘린다. 카드 왼쪽 6px + 144px 로, 가장 좁은 2열·4열 경계(약 166px)에도 여유를 둔다.
+                    "rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-5 text-background shadow-md",
+                    "opacity-0 transition-opacity duration-100 group-hover:opacity-100 group-focus-visible:opacity-100",
+                  )}
+                >
+                  <b>과정 보기</b>
+                  <span>만들 때 쓴 값이 채워진 단계 화면으로 갑니다. 고쳐서 다시 만들 수 있습니다.</span>
+                </span>
+              </button>
             ) : null}
             {/* 칸은 참고 이미지와 같은 정사각형, 그림은 잘라 내지 않는다.
                 비율이 제각각이라 잘라 놓으면 무엇을 만들었는지 모른다. */}

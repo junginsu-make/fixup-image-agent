@@ -11,7 +11,7 @@ import { myMembership } from "../../lib/teams/store";
 import { listProjectsWithCounts } from "../../lib/teams/project-store";
 import { currentProjectId } from "../../lib/teams/current-project";
 import { selectProjectAction } from "../team/actions";
-import { RunningJobsPanel, RunningJobsProvider } from "./running-jobs";
+import { RunningJobsProvider } from "./running-jobs";
 import { StudioActions } from "./studio-actions";
 
 export async function StudioLayout({ children }: { children: ReactNode }) {
@@ -45,7 +45,14 @@ export async function StudioLayout({ children }: { children: ReactNode }) {
         }))}
         currentProjectId={currentProject}
         onSelectProject={selectProjectAction}
-        sidebarFooter={<RunningJobsPanel />}
+        /*
+          **사이드바에는 「진행 중」을 안 둔다**(2026-09-17 사용자 결정). 뒤에
+          화면 위쪽에도 같은 표시를 넣으면서 만드는 동안 두 군데에 보였다.
+          표시는 위쪽 띠 하나, 중지도 그 띠에서 한다.
+
+          받아 오는 일은 그대로 셸이 한다 — 아래 `RunningJobsProvider` 는
+          남는다. 없앤 것은 칸(화면)뿐이다.
+        */
         actions={
           <StudioActions email={membership.profile.email} usage={usage}>
             {/* 앱 밖으로 나가는 문. 홈·랜딩에는 이 셸이 안 붙으므로 거기엔 안 나온다. */}

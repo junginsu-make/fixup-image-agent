@@ -6,7 +6,6 @@ import type {
   PosterProjectRecord,
   PosterProjectStore,
   PosterReferenceRecord,
-  PosterReferenceStore,
   PosterRequestStore,
 } from "@fixup/poster-core";
 import { getLocalDatabase, type LocalDatabase } from "../local-store";
@@ -109,45 +108,6 @@ export function createLocalPosterProjectStore(
 }
 
 /**
- * 포스터 레퍼런스는 **라이브러리의 참고 이미지를 그대로 쓴다.**
- *
- * 따로 테이블을 두면 올리는 곳이 둘이 되어 사용자가 어디에 뒀는지 못 찾는다.
- * `reference_images` 가 이미 `purpose('cardnews'|'poster'|'both')` 를 갖고 있다.
- */
-export function createLocalPosterReferenceStore(
-  database: LocalDatabase,
-  userId: string,
-): PosterReferenceStore {
-  const mine = (data: unknown) => {
-    const store = data as { referenceImages?: Array<Record<string, unknown>> };
-    // 용도로 거르지 않는다. 올린 곳이 어디든 세 도구가 다 쓴다 —
-    // 거르면 "분명 올렸는데 여기선 안 보인다" 가 생긴다.
-    return (store.referenceImages ?? []).filter((row) => row.userId === userId);
-  };
-  const toRecord = (row: Record<string, unknown>): PosterReferenceRecord => ({
-    id: String(row.id),
-    storagePath: String(row.storagePath),
-    fileName: String(row.storagePath).split("/").pop() ?? "",
-    title: (row.title as string | null) ?? null,
-    width: (row.width as number | null) ?? null,
-    height: (row.height as number | null) ?? null,
-    createdAt: String(row.createdAt),
-    url: `/api/reference-images/${String(row.id)}/file`,
-    // 로컬 저장소는 사본을 만들지 않는다. 거는 쪽이 원본으로 떨어뜨린다.
-    thumbUrl: null,
-  });
-  return {
-    async list() {
-      return database.read((data) => mine(data).map(toRecord));
-    },
-    async byIds(ids) {
-      // 남의 id 를 섞어 보내도 자기 것만 돌아온다.
-      return database.read((data) => mine(data).filter((row) => ids.includes(String(row.id))).map(toRecord));
-    },
-  };
-}
-
-/**
  * 비용 장부.
  *
  * `create` 입력에 `userId` 칸이 없다. 세션에 미리 묶여 있으므로 요청 본문의
@@ -241,7 +201,6 @@ export function localPosterStores(userId: string) {
   const database = getLocalDatabase();
   return {
     projects: createLocalPosterProjectStore(database, userId),
-    references: createLocalPosterReferenceStore(database, userId),
     requests: createLocalPosterRequestStore(database, userId),
     images: createLocalPosterImageStore(database, userId),
   };
