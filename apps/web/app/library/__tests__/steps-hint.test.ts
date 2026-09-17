@@ -34,6 +34,20 @@ describe("과정 보기 단추", () => {
     expect(button).not.toMatch(/\btitle=/);
   });
 
+  /**
+   * **안 가리고 안 잘린다**를 정하는 값 셋(2026-09-17 독립 리뷰: 셋 다 지워도 초록이었다).
+   *
+   *   opacity-0    없으면 말풍선이 늘 떠서 모든 카드 그림을 가린다
+   *   top-full     bottom 으로 바뀌면 카드 위로 넘어가 잘린다(카드가 overflow-hidden)
+   *   max-w-[9rem] 없으면 한 줄로 길어져 오른쪽이 잘린다
+   */
+  it("평소에는 숨어 있고, 단추 아래로, 카드 폭 안에서 뜬다", () => {
+    expect(button).toContain("opacity-0");
+    expect(button).toContain("top-full");
+    expect(button).not.toContain("bottom-full");
+    expect(button).toContain("max-w-[9rem]");
+  });
+
   it("말풍선이 누르기를 가로채지 않는다", () => {
     // 카드 위에 겹쳐 뜨므로, 가로채면 그 아래 그림을 못 누른다.
     expect(button).toContain("pointer-events-none");

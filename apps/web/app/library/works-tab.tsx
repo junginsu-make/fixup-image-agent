@@ -586,8 +586,8 @@ export function WorksTab() {
                 <span
                   aria-hidden
                   className={cn(
-                    "pointer-events-none absolute left-0 top-full z-20 mt-1.5 grid w-max max-w-[10rem] gap-0.5",
-                    // 카드가 overflow-hidden 이라 넘치면 잘린다. 2열(약 170px)에도 들어가게 좁힌다.
+                    "pointer-events-none absolute left-0 top-full z-20 mt-1.5 grid w-max max-w-[9rem] gap-0.5",
+                    // 카드가 overflow-hidden 이라 넘치면 잘린다. 카드 왼쪽 6px + 144px 로, 가장 좁은 2열·4열 경계(약 166px)에도 여유를 둔다.
                     "rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-5 text-background shadow-md",
                     "opacity-0 transition-opacity duration-100 group-hover:opacity-100 group-focus-visible:opacity-100",
                   )}
