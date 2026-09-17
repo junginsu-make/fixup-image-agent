@@ -83,6 +83,7 @@ import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
+import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
 import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
@@ -101,6 +102,7 @@ import {
   anchorWorkbenchToOverlay,
   applyLanguageToTextOverlay,
   buildExportNode,
+  loadImage,
   buildOverlayBackgroundStyle,
   buildOverlayShellStyle,
   buildOverlayTextStyle,
@@ -1932,17 +1934,38 @@ export function PdpEditor({
     updateOverlay(overlay.id, { x, y });
   };
 
+  /**
+   * 섹션 한 장을 파일로 굽는다.
+   *
+   * **얹은 것이 없으면 다시 굽지 않는다.** 원본 바이트를 그대로 준다 — 다시
+   * 구우면 JPEG 로 바뀌며 손실이 나는데, 글자도 도형도 없으면 그럴 이유가 없다.
+   *
+   * 얹은 것이 있으면 **원본 해상도로** 합친다. 전에는 캔버스 폭(최대 460px)에
+   * 2를 곱해 구웠다 — 1536px 로 만든 것이 920px 로 나갔다(폭 60%, 넓이 36%).
+   * 레이어 좌표가 캔버스 폭 기준이라, 배율만 원본에 맞추면 배치는 그대로 두고
+   * 해상도만 되찾는다.
+   */
   const captureSectionBlob = async (sectionIndex: number) => {
     const section = sections[sectionIndex];
     if (!section?.generatedImage) {
       throw new Error("이미지가 없는 섹션은 다운로드할 수 없습니다.");
     }
 
+    const layers = overlaysBySection[sectionKeys[sectionIndex] ?? String(sectionIndex)] ?? [];
+    const mimeType = mimeTypeOfDataUrl(section.generatedImage);
+
+    if (!needsRecomposite(layers)) {
+      // 원본 그대로. 형식도 바꾸지 않는다.
+      const response = await fetch(section.generatedImage);
+      return { blob: await response.blob(), mimeType, recomposited: false };
+    }
+
     // 붙어 있으면 지금 값을, 아니면 마지막으로 잰 값을 쓴다. 둘 다 없을 때만
     // 기본 폭으로 떨어진다(레이어를 한 번도 안 놓은 작업이라 어긋날 것도 없다).
     const width = imageContainerRef.current?.clientWidth || lastCanvasWidthRef.current || 460;
-    const layers = overlaysBySection[sectionKeys[sectionIndex] ?? String(sectionIndex)] ?? [];
     const exportNode = await buildExportNode({ imageSrc: section.generatedImage, width, layers });
+    // 원본이 몇 픽셀인지는 그림에게 묻는다. 비율 표를 또 적으면 갈린다.
+    const source = await loadImage(section.generatedImage);
 
     document.body.appendChild(exportNode);
 
@@ -1957,7 +1980,7 @@ export function PdpEditor({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        scale: 2,
+        scale: exportScaleFor({ naturalWidth: source.naturalWidth, canvasWidth: width }),
       });
 
       const blob = await new Promise<Blob | null>((resolve) => {
@@ -1968,7 +1991,7 @@ export function PdpEditor({
         throw new Error("다운로드용 이미지를 만들지 못했습니다.");
       }
 
-      return blob;
+      return { blob, mimeType: "image/jpeg", recomposited: true };
     } finally {
       exportNode.remove();
     }
@@ -1983,8 +2006,13 @@ export function PdpEditor({
       setSelectedOverlayId(null);
       setEditingOverlayId(null);
       setActiveColorPalette(null);
-      const blob = await captureSectionBlob(currentSectionIndex);
-      downloadBlob(blob, `pdp-${sanitizeSectionFileName(currentSection.section_id)}.jpg`);
+      const captured = await captureSectionBlob(currentSectionIndex);
+      // 원본 그대로 줄 때는 원래 형식의 확장자를 쓴다. png 를 .jpg 로 저장하면
+      // 여는 프로그램이 헷갈린다.
+      downloadBlob(
+        captured.blob,
+        exportFileName(currentSection.section_id, captured.mimeType, captured.recomposited),
+      );
       setNotice(`${getDisplaySectionName(currentSection)} 컷을 다운로드했습니다.`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "이미지를 다운로드하지 못했습니다.");
@@ -2008,11 +2036,20 @@ export function PdpEditor({
     setIsSavingToLibrary(true);
     setErrorMessage("");
     try {
-      const images = saved.map((section) => {
-        const [, mimeType = "image/png", base64 = ""] =
-          /^data:([^;]+);base64,(.*)$/.exec(section.generatedImage ?? "") ?? [];
-        return { base64, mimeType };
-      });
+      /*
+        **얹은 글자와 도형을 함께 저장한다.**
+
+        전에는 `generatedImage` 원본만 올렸다. 다운로드·ZIP 은 합쳐서 굽는데
+        라이브러리만 안 합쳐서, 같은 작업인데 **내려받은 것과 저장된 것이
+        달랐다.** 여기는 「완성본 보관」이고 참고용 원본 저장과는 다른 동작이다.
+      */
+      const images = await Promise.all(
+        saved.map(async (section) => {
+          const index = sections.indexOf(section);
+          const captured = await captureSectionBlob(index);
+          return { base64: await blobToBase64(captured.blob), mimeType: captured.mimeType };
+        }),
+      );
 
       // 섹션 이미지 한 장이 4~5MB다. 전부 한 요청에 담으면 서버가 파싱하다
       // 죽을 수 있다(운영 여유 메모리 445MB). 예산에 맞춰 나눠 보낸다.
@@ -2078,8 +2115,10 @@ export function PdpEditor({
       const zip = new JSZip();
 
       for (const { section, index } of downloadableSections) {
-        const blob = await captureSectionBlob(index);
-        zip.file(`pdp-${String(index + 1).padStart(2, "0")}-${sanitizeSectionFileName(section.section_id)}.jpg`, blob);
+        const captured = await captureSectionBlob(index);
+        const name = exportFileName(section.section_id, captured.mimeType, captured.recomposited);
+        // 순서를 앞에 붙인다. 이어 붙일 때 차례가 섞이면 안 된다.
+        zip.file(`${String(index + 1).padStart(2, "0")}-${name}`, captured.blob);
       }
 
       const archive = await zip.generateAsync({ type: "blob" });
