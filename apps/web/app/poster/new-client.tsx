@@ -785,7 +785,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                   화면이 안 말하면 두 갈래를 견줄 수 없었다(설계 §9).
                 */}
                 <span className="mt-1 block text-meta text-subtle-foreground">
-                  위는 그림 값입니다. {planCostNote({
+                  위는 그림 장수입니다. {planCostNote({
                     // 무엇을 세는지는 `plan-cost` 가 정한다. 여기서 정하면 시험이 못 간다.
                     ...planCostCounts(orderedIds.map((id) => roles[id] ?? "none")),
                     promptMode,

@@ -396,7 +396,7 @@ describe("기획에 드는 값", () => {
 
   it("규격 칸에서 말한다", () => {
     expect(source).toContain("planCostNote({");
-    expect(source).toContain("위는 그림 값입니다");
+    expect(source).toContain("위는 그림 장수입니다");
   });
 
   /** 규칙을 화면에 다시 적으면 실제 차감액과 갈린다. */
