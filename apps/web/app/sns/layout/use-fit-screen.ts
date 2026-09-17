@@ -11,6 +11,13 @@ const MIN_HEIGHT = 420;
 const WIDE = "(min-width: 1024px)";
 /** 캔버스와 그 아래 묶음 사이 틈(`gap-2`). */
 const CANVAS_GAP = 8;
+/** 열 사이 틈(`gap-3`). 네 열이라 셋이다. */
+const COLUMN_GAPS = 3 * 12;
+/**
+ * 나머지 세 열의 최소 폭(rem) — `layout-client.tsx` 의 `minmax(11rem…)·(14rem…)·(15rem…)`.
+ * 캔버스가 쓸 수 있는 가로는 격자 폭에서 이것을 뺀 만큼이다.
+ */
+export const OTHER_COLUMNS_MIN_REM = 11 + 14 + 15;
 
 /**
  * 작업 영역과 카드 칸이 **실제로 쓸 수 있는 자리**를 잰다.
@@ -47,11 +54,31 @@ export function useFitScreen() {
 
       const column = columnRef.current;
       const below = belowRef.current;
-      if (column && below) {
-        setCanvasSpace({
-          width: Infinity,
+      /*
+        **캔버스에 따라 안 변하는 폭으로 잰다 — 작업 영역을 감싼 본문 폭.**
+
+        처음에는 격자 자신의 폭을 쟀다. 그러면 캔버스가 크게 그려진 첫 순간 격자가
+        본문(1029px)보다 넓은 1172px 로 밀려나고, 그 폭으로 다시 재니 캔버스가 다시
+        크게 나와 **스스로를 키운 채 굳었다**(1280×1024 실측). 바깥 폭은 안쪽이
+        넘쳐도 안 늘어난다.
+      */
+      const outer = root.parentElement;
+      if (column && below && outer) {
+        /*
+          **가로도 잰다.** 높이로만 정했더니, 세로가 넉넉하고 가로가 좁은 화면
+          (1280×1024)에서 캔버스가 첫 열보다 넓어져 그 열에 가로 스크롤이 생겼다
+          (2026-09-17 독립 리뷰). 첫 열의 폭을 그대로 쓰면 안 된다 — 열이
+          max-content 라 캔버스를 따라가서, 한 번 줄면 다시 안 커진다. 격자 폭에서
+          **나머지 세 열의 최소 폭**을 뺀 자리가 캔버스가 쓸 수 있는 가로다.
+        */
+        const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        const next = {
+          width: Math.floor(outer.clientWidth - COLUMN_GAPS - OTHER_COLUMNS_MIN_REM * rem),
           height: column.clientHeight - below.offsetHeight - CANVAS_GAP,
-        });
+        };
+        // 같은 값이면 안 넣는다. 새 객체를 넣으면 크기가 같아도 한 번 더 그린다.
+        setCanvasSpace((current) =>
+          current && current.width === next.width && current.height === next.height ? current : next);
       }
     };
 

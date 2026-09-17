@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Button, Input } from "@fixup/ui";
 import { CARD_RATIOS, IMAGE_MODELS } from "@fixup/sns-core";
 import {
@@ -14,6 +14,7 @@ import {
   type SlotKind,
 } from "@fixup/layout-core";
 import { SlotCanvas } from "./slot-canvas";
+import { canvasSize } from "./fit-screen";
 import { useFitScreen } from "./use-fit-screen";
 import { SlotInspector } from "./slot-inspector";
 import { LibraryPicker, LibraryUploadButton, useLibraryImages } from "./library-picker";
@@ -284,7 +285,7 @@ export function LayoutStudio() {
       위에 놓인 것이 어림보다 두꺼워 아래로 넘쳤고, 레퍼런스의 「칸 읽어내기」
       버튼이 반만 보였다.
     */
-    <div ref={fit.rootRef} className="flex flex-col gap-3" style={{ height: fit.rootHeight }}>
+    <div ref={fit.rootRef} className="flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}>
       {/*
         **네 열이 다 조금씩 줄어든다.** 고정 폭이면 줄어드는 곳이 레퍼런스 열
         하나뿐이라 그 칸만 손톱만 해졌다.
@@ -293,8 +294,19 @@ export function LayoutStudio() {
         짜부라져, 그 아래 설정 묶음이 세로로 327px 까지 늘어나고 카드 칸이 설
         자리가 사라졌다(1280×650 실측). 바닥 합(17+11+14+15rem)이 1280 폭 본문
         안에 들어가게 잡았다.
+
+        **뒤 세 열의 최소 폭을 바꾸면 `use-fit-screen.ts` 의
+        `OTHER_COLUMNS_MIN_REM` 도 바꾼다.** 캔버스 가로 한계를 거기서 셈한다.
+
+        **첫 열 폭은 캔버스 폭으로 못 박는다.** `max-content` 로 두었더니 격자가
+        남는 폭을 가운데 두 열에 먼저 나눠 줘, 첫 열이 캔버스보다 27px 좁아져
+        가로로 넘쳤다(1280×1024 실측). 캔버스 폭은 이미 나머지 세 열의 최소
+        폭을 뺀 자리 안이라, 못 박아도 뒤 열들은 자기 최소 폭을 지킨다.
       */}
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(17rem,max-content)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]">
+      <div
+        className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]"
+        style={{ "--first-column": `max(17rem, ${canvasSize(ratio.pixel, fit.canvasSpace).width}px)` } as CSSProperties}
+      >
         <section ref={fit.columnRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           <SlotCanvas
             slots={slots}
@@ -457,10 +469,15 @@ export function LayoutStudio() {
 
         <section className="flex min-h-0 flex-col gap-2 rounded-lg border bg-card p-3">
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="font-semibold">레퍼런스에서 칸 읽어내기</h3>
+            {/* 제목은 짧게(2026-09-17 사용자 결정). 무엇을 하는지는 아래 버튼이 말한다. */}
+            <h3 className="font-semibold">레퍼런스</h3>
             <span className="text-xs text-muted-foreground">읽어낸 것은 초안입니다. 화면에서 고쳐 쓰세요.</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
+          {/*
+            좁은 폭(열이 쌓일 때)에는 높이를 재지 않아 격자가 끝없이 길어진다. 그림이
+            수십 장이면 「칸 읽어내기」가 목록 맨 아래로 밀리므로 높이를 막아 둔다.
+          */}
+          <div className="min-h-0 flex-1 overflow-hidden max-lg:max-h-[60vh]">
             <LibraryPicker value={analyzeId} onPick={setAnalyzeId} size="card" images={libraryImages} />
           </div>
           <div className="flex shrink-0 gap-2">
