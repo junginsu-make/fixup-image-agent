@@ -12,7 +12,7 @@ import {
   SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
   SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
-import { TYPE_INTERACTIONS, previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
+import { previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
 import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -21,7 +21,7 @@ import { currentPosterStep, posterSteps, reachableBeforeCreate } from "../steps"
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import {
-  placeholderRatio, planSlotRows, showsTypeInteraction, splitFilledSlots, type PlanSlotRow,
+  placeholderRatio, planSlotRows, splitFilledSlots, type PlanSlotRow,
 } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
 import { rerunHref } from "../../_components/rerun-step";
@@ -965,28 +965,16 @@ export function PosterClient(
               </Button>
             ) : null}
 
-            {/* **글자가 없으면 관계도 없다.** 판단이 아니라 규칙이다. */}
-            {showsTypeInteraction(slots) ? (
-              <fieldset className="grid gap-2">
-                <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
-                <div className="flex flex-wrap gap-2">
-                  {TYPE_INTERACTIONS.map((value) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      size="sm"
-                      variant={slots.typeInteraction === value ? "default" : "secondary"}
-                      onClick={() => setSlots((current: PosterSlots) => ({
-                        ...current,
-                        typeInteraction: current.typeInteraction === value ? null : value,
-                      }))}
-                    >
-                      {value}
-                    </Button>
-                  ))}
-                </div>
-              </fieldset>
-            ) : null}
+            {/*
+              **「글자와 피사체의 관계」는 04 에서 뺐다**(2026-09-17 사용자 판단).
+
+              「통과 / 뒤로 / 가림 / 감쌈」은 타이포그래피 용어라 사용자가 고를
+              근거가 없다. 레퍼런스를 붙였으면 답이 그 그림에 있고, 안 붙였으면
+              모델이 정하는 편이 낫다 — 한 낱말로 못 박으면 오히려 좁힌다.
+
+              **값은 남는다.** 레퍼런스에서 읽은 것이 들어와 프롬프트로 간다
+              (`mergeGrammar`). 화면이 그 값을 손대지 않을 뿐이다.
+            */}
 
             <div className="grid gap-1.5">
               <Label htmlFor="slot-side">곁텍스트</Label>

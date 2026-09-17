@@ -104,3 +104,34 @@ export async function readReferenceGrammar(
 
   return { grammars, summaries, issues };
 }
+
+/**
+ * 레퍼런스에서 **읽은 값**과 기획이 **채운 값**을 합친다.
+ *
+ * **읽은 것이 이긴다.** 전에는 반대였다 — 라우트 주석이 「기획이 채운 값이
+ * 이긴다」고 적고 있었다. 그래서 2026-09-17 사고에서 레퍼런스를 실제로 읽어
+ * 「가림」을 얻어 놓고도 기획이 추측한 「통과」가 프롬프트로 갔다.
+ *
+ * 그림을 읽는 비전 호출은 **돈을 내고** 하는 일이다. 그 결과가 근거 없는
+ * 추측에 밀리면 그 돈이 버려진다.
+ *
+ * **글자 관계는 읽은 것만 쓴다.** 못 읽었으면 비운다 — 그 줄이 프롬프트에서
+ * 빠지고 모델이 정한다. 사용자가 판단할 수 있는 값이 아니고(「통과 / 뒤로 /
+ * 가림 / 감쌈」은 타이포그래피 용어다), 우리가 한 낱말로 못 박으면 오히려
+ * 좁힌다(2026-09-17 사용자 판단).
+ *
+ * **색은 다르다.** 사용자가 판단할 수 있고 실제로 고치고 싶어 하는 값이라
+ * 04 에 칸이 남는다. 읽은 것이 비었으면 기획 값이 들어온다.
+ */
+export function mergeGrammar<T extends {
+  typeInteraction?: (typeof TYPE_INTERACTIONS)[number] | null;
+  dominantColor?: string;
+  accentColor?: string;
+}>(planned: T, read: ReferenceGrammar | undefined): T {
+  return {
+    ...planned,
+    typeInteraction: read?.typeInteraction ?? null,
+    dominantColor: read?.dominantColor?.trim() || planned.dominantColor || "",
+    accentColor: read?.accentColor?.trim() || planned.accentColor || "",
+  };
+}

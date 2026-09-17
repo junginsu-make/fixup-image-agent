@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildGrammarPrompt, readReferenceGrammar } from "../grammar";
+import { buildGrammarPrompt, mergeGrammar, readReferenceGrammar } from "../grammar";
 
 const references = [
   { id: "r1", title: "SAY IT", url: "https://example.com/say-it.png" },
@@ -117,5 +117,67 @@ describe("붙인 그림에 글자가 있나", () => {
 
   it("무엇을 글자로 볼지 짚어 준다", () => {
     expect(prompt).toMatch(/제목|헤드라인|타이포/);
+  });
+});
+
+/**
+ * **읽은 값이 추측을 이긴다.**
+ *
+ * 전에는 반대였다 — 「기획이 채운 값이 이긴다」. 그래서 2026-09-17 사고에서
+ * 레퍼런스를 실제로 읽어 「가림」을 얻어 놓고도 기획이 추측한 「통과」가
+ * 프롬프트로 갔다.
+ *
+ * 그림을 읽는 비전 호출은 **돈을 내고** 하는 일이다. 그 결과가 근거 없는
+ * 추측에 밀리면 그 돈이 버려진다.
+ *
+ * **글자 관계는 읽은 것만 쓴다.** 사용자가 판단할 수 있는 값이 아니고
+ * (「통과 / 뒤로 / 가림 / 감쌈」은 타이포그래피 용어다), 레퍼런스가 없으면
+ * 그 줄을 아예 안 보내는 편이 낫다 — 모델이 정한다.
+ *
+ * **색은 다르다.** 사용자가 판단할 수 있고 실제로 고치고 싶어 하는 값이라
+ * 04 에 칸이 남는다. 다만 처음 값은 읽은 것이 이긴다.
+ */
+describe("읽은 값과 기획이 채운 값", () => {
+  const 읽음 = { hasText: true, typeInteraction: "가림" as const, dominantColor: "아이보리", accentColor: "검정", note: "" };
+  const 기획 = { typeInteraction: "통과" as const, dominantColor: "주황", accentColor: "남색" };
+
+  it("글자 관계는 읽은 것이 이긴다", () => {
+    expect(mergeGrammar(기획, 읽음).typeInteraction).toBe("가림");
+  });
+
+  it("색도 읽은 것이 이긴다", () => {
+    const merged = mergeGrammar(기획, 읽음);
+
+    expect(merged.dominantColor).toBe("아이보리");
+    expect(merged.accentColor).toBe("검정");
+  });
+
+  /** 안 읽혔으면 기획이 채운다. 읽기는 실패할 수 있다. */
+  it("못 읽었으면 기획 값을 쓴다", () => {
+    const merged = mergeGrammar(기획, undefined);
+
+    expect(merged.dominantColor).toBe("주황");
+  });
+
+  /**
+   * **글자 관계만은 기획 추측을 안 쓴다.** 레퍼런스가 없으면 그 줄을 안 보낸다 —
+   * 모델이 정하는 편이 낫다. 우리가 한 낱말로 못 박으면 오히려 좁힌다.
+   */
+  it("못 읽었으면 글자 관계는 비운다", () => {
+    expect(mergeGrammar(기획, undefined).typeInteraction).toBeNull();
+  });
+
+  it("읽었는데 글자 관계가 없으면 비운다", () => {
+    const 글자없는그림 = { ...읽음, typeInteraction: null };
+
+    expect(mergeGrammar(기획, 글자없는그림).typeInteraction).toBeNull();
+  });
+
+  /** 읽은 색이 비어 있으면 기획 값이 들어온다. 빈 값은 값이 아니다. */
+  it("읽은 색이 비면 기획 값을 쓴다", () => {
+    const merged = mergeGrammar(기획, { ...읽음, dominantColor: "", accentColor: "" });
+
+    expect(merged.dominantColor).toBe("주황");
+    expect(merged.accentColor).toBe("남색");
   });
 });
