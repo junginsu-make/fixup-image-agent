@@ -28,7 +28,7 @@ describe("내가 적은 말이 기획 확인 화면에 보이는가", () => {
   it("기획 칸보다 위에 둔다 — 무엇이 더 센지 그 자리에서 말한다", () => {
     expect(source).toContain("아래 칸보다 우선합니다");
     // 그리는 차례로 본다. `SLOT_LABELS.map` 은 위쪽 유도에도 나와서 기준이 안 된다.
-    expect(source.indexOf("userWords.map")).toBeLessThan(source.indexOf("filledFields.map(renderSlot)"));
+    expect(source.indexOf("userWords.map")).toBeLessThan(source.indexOf("planRows.map(renderSlot)"));
   });
 
   it("고칠 수 없다 — 이 화면은 기획 칸만 고친다", () => {
@@ -84,17 +84,37 @@ describe("칸을 걸러서 보여주는가", () => {
     expect(source).toContain("showsTypeInteraction(slots)");
   });
 
-  it("채운 칸을 먼저 그린다", () => {
-    expect(source).toContain("filledFields.map(renderSlot)");
+  /**
+   * **칸을 두 무더기로 나눠 그리지 않는다**(2026-09-17 사용자 보고).
+   *
+   * 채운 칸을 위에, 빈 칸을 아래에 그렸더니 빈 칸에 한 글자를 넣는 순간 그
+   * 칸이 위 무더기로 옮겨 가 커서가 빠졌다. 한 목록으로 그려야 자리가 안 움직인다.
+   */
+  it("한 목록으로 그린다 — 차례는 `planSlotRows` 가 정한다", () => {
+    expect(source).toContain("planRows.map(renderSlot)");
+    expect(source, "두 무더기로 돌아가면 안 된다").not.toContain("filledFields.map(renderSlot)");
+    expect(source, "두 무더기로 돌아가면 안 된다").not.toContain("emptyFields.map(renderSlot)");
   });
 
-  it("빈 칸은 접어 두되 없애지 않는다 — 없으면 고를 방법이 사라진다", () => {
-    expect(source).toContain("emptyFields.map(renderSlot)");
-    expect(source).toMatch(/showEmpty \? <div[\s\S]{0,80}emptyFields\.map/);
+  it("**한 번 보인 칸은 지켜 준다** — 글자를 지우는 중에 칸이 사라지면 안 된다", () => {
+    expect(source).toMatch(/planSlotRows\([\s\S]{0,160}\{ showEmpty, keep: keptFields \}/);
   });
 
-  it("채운 칸과 접힌 칸이 같은 모양이다", () => {
-    // 두 벌로 그리면 한쪽만 고쳐져 모양이 갈린다.
-    expect(source).toMatch(/function renderSlot\(field: TextSlot\)/);
+  it("빈 칸을 접는 단추는 남는다 — 없으면 고를 방법이 사라진다", () => {
+    expect(source).toContain("setShowEmpty((current) => !current)");
+    expect(source).toContain("비어 있는 칸 {emptyFields.length}개");
+  });
+
+  it("빈 칸인지는 **모양으로** 말한다 — 자리로 말하면 커서가 튄다", () => {
+    expect(source).toMatch(/function renderSlot\(\{ field, empty \}: PlanSlotRow<TextSlot>\)/);
+    expect(source).toContain('const look = empty ? "border-dashed bg-muted/30" : "";');
+  });
+
+  /**
+   * 기획이 도는 동안 패널이 **멈춘 화면으로 보이면 안 된다**(2026-09-17 사용자
+   * 보고). 04 에 들어오면 기획이 저절로 도는데, 그때 패널에는 빈 칸만 있었다.
+   */
+  it("쓰는 중에는 패널을 덮는다", () => {
+    expect(source).toMatch(/busy\?\.kind === "plan" \? \(\s*<PlanWriting/);
   });
 });

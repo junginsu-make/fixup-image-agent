@@ -563,6 +563,12 @@ export function WorksTab() {
               <button
                 type="button"
                 aria-label={`${work.title} 과정 보기`}
+                /*
+                  **아이콘만 있으면 무엇인지 모른다**(2026-09-17 사용자 보고).
+                  줄 세 개짜리 그림이 「과정 보기」로 읽히지 않는다. 올려 놓으면
+                  무슨 단추이고 누르면 무엇이 되는지 한 줄로 말한다.
+                */
+                title="과정 보기 — 만들 때 쓴 값 그대로 단계 화면을 엽니다"
                 onClick={(event) => {
                   // 카드를 누른 것으로도 읽히면 뷰어와 이동이 함께 일어난다.
                   event.stopPropagation();

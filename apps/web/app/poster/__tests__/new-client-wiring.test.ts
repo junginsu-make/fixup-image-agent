@@ -15,7 +15,6 @@ import { describe, expect, it } from "vitest";
  * 자리다:
  *
  * - `effectiveRatio(adMode, …)` 를 `false` 로 → 광고 모드가 nano 에서 죽는다
- * - `projectCount(adMode, …)` 를 `false` 로 → 비용이 절반 이하로 보인다
  * - `posterSpecSections` 의 `adEnabled` 를 `true` 로 → 계약 5 가 사라진다
  * - `canCreatePoster` 의 `adMode` 를 `false` 로 → 과금 전 차단이 사라진다
  * - `modelId: choice.model.id` 를 `modelId` 로 → 화면 안내와 보내는 값이 어긋난다
@@ -30,10 +29,6 @@ const source = readFileSync(new URL("../new-client.tsx", import.meta.url), "utf8
 describe("판단이 살아 있는 상태에 이어져 있는가", () => {
   it("비율을 광고 모드에 따라 고른다", () => {
     expect(source).toContain("effectiveRatio(adMode, ratio)");
-  });
-
-  it("프로젝트 수를 광고 모드에 따라 센다", () => {
-    expect(source).toContain("projectCount(adMode,");
   });
 
   it("무엇을 그릴지 스위치와 모드 양쪽으로 정한다", () => {

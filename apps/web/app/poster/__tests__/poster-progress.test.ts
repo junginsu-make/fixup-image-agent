@@ -33,10 +33,28 @@ describe("빈 칸이 잡을 모양", () => {
 
 describe("진행 표시가 화면에 이어져 있는가", () => {
   it("조용한 회색 띠 대신 강조 띠를 쓴다", () => {
-    expect(source).toContain("<WorkingBanner label={busy.label} hint={busy.hint} />");
+    expect(source).toMatch(/<WorkingBanner\s+label=\{busy\.label\}\s+hint=\{busy\.hint\}/);
     expect(source, "회색 띠로 되돌아가면 안 된다").not.toMatch(
       /busy \? \(\s*<div role="status" className="rounded-md border border-border bg-muted\/40/,
     );
+  });
+
+  /**
+   * **멈추는 자리는 띠 하나다**(2026-09-17 사용자 결정).
+   *
+   * 사이드바 아래에도 같은 목록과 중지가 있어서, 만드는 동안 「진행 중」이 두
+   * 군데에 보였다. 표시가 있는 자리에서 바로 멈춘다.
+   */
+  it("띠에서 바로 멈출 수 있다", () => {
+    expect(source).toMatch(/<WorkingBanner[\s\S]{0,120}onStop=\{\(\) => void stopNow\(\)\}/);
+    expect(source).toContain("stopping={stopping}");
+  });
+
+  it("중지를 누르면 **캐묻기와 도착한 응답을 둘 다 끊는다**", () => {
+    // 하나만 끊으면 멈춘 뒤에 결과가 들어와 화면이 되살아난다.
+    expect(source).toContain("if (stopped.current) return false;");
+    expect(source).toContain("stopped.current = true;");
+    expect(source).toMatch(/const body = await \(await billableRequest\([\s\S]{0,120}if \(stopped\.current\) return;/);
   });
 
   it("무엇을 하는 중인지 종류로 구분한다", () => {

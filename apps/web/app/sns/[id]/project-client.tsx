@@ -170,7 +170,32 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
    * 이 화면을 떠나도 셸이 대신 결과를 받아 오고, 무엇이 돌고 있는지 어디서든
    * 보인다. 이미 만드는 중인 프로젝트를 열었을 때도 같은 자리에 붙는다.
    */
-  const { start, finish } = useRunningJobs();
+  const { jobs, start, finish, stop } = useRunningJobs();
+
+  /**
+   * 지금 돌고 있는 것을 **강제로 끝낸다.**
+   *
+   * 사이드바에 있던 목록과 중지를 상단 표시 하나로 합쳤다(2026-09-17 사용자
+   * 결정). 카드뉴스는 서버에도 멈췄다고 알린다 — 안 그러면 다시 열었을 때
+   * 그 흐름에 또 붙는다(`running-jobs.tsx` 의 `tellServerToStop`).
+   */
+  const [stopping, setStopping] = React.useState(false);
+  async function stopNow() {
+    setStopping(true);
+    const id = jobId("sns", projectId);
+    const job = jobs.find((entry) => entry.id === id);
+    try {
+      if (job) await stop(job);
+      else finish(id);
+      // 서버가 멈춘 것을 화면에도 반영한다. 안 하면 「만드는 중」이 그대로 남는다.
+      await reload();
+    } catch {
+      setMessage("중지했지만 상태를 다시 읽지 못했습니다. 새로고침해 주세요.");
+    } finally {
+      setStopping(false);
+      setBusy(undefined);
+    }
+  }
   const startedAt = project?.data.flow?.generation?.startedAt;
   const title = project?.title;
   React.useEffect(() => {
@@ -365,13 +390,28 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         지적을 받고 이 띠를 만들었다(`working-banner.tsx` 머리말).
       */}
       {busy === "planning" ? (
-        <WorkingBanner label="기획과 원고를 만드는 중입니다" hint="1~2분 걸립니다. 이 화면을 닫아도 계속됩니다" />
+        <WorkingBanner
+          label="기획과 원고를 만드는 중입니다"
+          hint="1~2분 걸립니다. 이 화면을 닫아도 계속됩니다"
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
       ) : null}
       {busy === "generating" ? (
-        <WorkingBanner label="그림을 만드는 중입니다" hint="장수만큼 차례로 만듭니다. 이 화면을 닫아도 계속됩니다" />
+        <WorkingBanner
+          label="그림을 만드는 중입니다"
+          hint="장수만큼 차례로 만듭니다. 이 화면을 닫아도 계속됩니다"
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
       ) : null}
       {generationActive && busy !== "generating" ? (
-        <WorkingBanner label="그림을 만드는 중입니다" hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다" />
+        <WorkingBanner
+          label="그림을 만드는 중입니다"
+          hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다"
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
       ) : null}
 
       {/*

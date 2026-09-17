@@ -20,8 +20,11 @@ import { jobId } from "../../../lib/running-jobs";
 import { POSTER_STEPS, reachableBeforeCreate } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
-import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
+import {
+  placeholderRatio, planSlotRows, showsTypeInteraction, splitFilledSlots, type PlanSlotRow,
+} from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
+import { PlanWriting } from "../_components/plan-writing";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 
 interface PosterImage {
@@ -295,29 +298,66 @@ export function PosterClient(
   }, [images.length, project.data.promptMode]);
 
   /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
-  const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
+  const { empty: emptyFields } = splitFilledSlots(
     SLOT_LABELS.map(([field]) => field),
     (field) => String(slots[field] ?? ""),
   );
 
-  /** 칸 하나를 그린다. 채운 칸과 접힌 칸이 같은 모양이어야 한다. */
-  function renderSlot(field: TextSlot) {
+  /**
+   * **한 번 보인 칸은 그 자리에 머문다.**
+   *
+   * 열 때와 빈 칸을 펼칠 때만 다시 잡는다. 치는 동안 다시 잡으면 글자를 지운
+   * 칸이 사라지고, 그게 바로 자리가 움직여 커서가 빠지던 일의 반대쪽이다
+   * (2026-09-17 사용자 보고).
+   */
+  const [keptFields, setKeptFields] = React.useState<TextSlot[]>([]);
+  React.useEffect(() => {
+    if (!planOpen) return;
+    setKeptFields(
+      SLOT_LABELS.map(([field]) => field).filter(
+        (field) => showEmpty || String(slots[field] ?? "").trim(),
+      ),
+    );
+    // 열 때·펼칠 때만. slots 를 넣으면 한 글자마다 다시 잡는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planOpen, showEmpty]);
+
+  /** 패널에 그릴 칸. **차례는 언제나 `SLOT_LABELS` 그대로다.** */
+  const planRows = planSlotRows(
+    SLOT_LABELS.map(([field]) => field),
+    (field) => String(slots[field] ?? ""),
+    { showEmpty, keep: keptFields },
+  );
+
+  /**
+   * 칸 하나를 그린다.
+   *
+   * **빈 칸은 자리를 옮기지 않고 모양으로 가른다** — 점선 테두리와 「비어
+   * 있음」. 채워지면 그 자리에서 실선이 된다(2026-09-17 사용자 보고).
+   */
+  function renderSlot({ field, empty }: PlanSlotRow<TextSlot>) {
     const entry = SLOT_LABELS.find(([name]) => name === field);
     if (!entry) return null;
     const [, label, kind] = entry;
+    const look = empty ? "border-dashed bg-muted/30" : "";
     return (
       <div key={field} className="grid gap-1.5">
-        <Label htmlFor={`slot-${field}`}>{label}</Label>
+        <Label htmlFor={`slot-${field}`} className="flex items-center gap-1.5">
+          {label}
+          {empty ? <span className="text-meta font-normal text-subtle-foreground">비어 있음</span> : null}
+        </Label>
         {kind === "area" ? (
           <Textarea
             id={`slot-${field}`}
             rows={2}
+            className={look}
             value={String(slots[field] ?? "")}
             onChange={(event) => setField(field, event.target.value)}
           />
         ) : (
           <Input
             id={`slot-${field}`}
+            className={look}
             value={String(slots[field] ?? "")}
             onChange={(event) => setField(field, event.target.value)}
           />
@@ -330,7 +370,38 @@ export function PosterClient(
     const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
     void downloadImage({ src, name: `${project.title} 변형 ${image.variantIndex + 1}.png` });
   }
-  const { start, finish } = useRunningJobs();
+  const { jobs, start, finish, stop } = useRunningJobs();
+
+  /**
+   * 사용자가 **중지**를 눌렀나.
+   *
+   * 누른 순간부터 캐묻기를 끊고, 이미 날아간 요청의 응답도 버린다. 안 버리면
+   * 멈춘 뒤에 결과가 도착해 화면이 되살아난다 — 「중지가 안 먹는다」로 읽힌다.
+   */
+  const stopped = React.useRef(false);
+  const [stopping, setStopping] = React.useState(false);
+
+  /**
+   * 지금 돌고 있는 것을 **강제로 끝낸다.**
+   *
+   * 사이드바에 있던 목록과 중지를 여기 하나로 합쳤다(2026-09-17 사용자 결정).
+   * 표시가 두 군데 나던 것을 없애고, 멈추는 자리는 표시가 있는 자리에 둔다.
+   */
+  async function stopNow() {
+    setStopping(true);
+    stopped.current = true;
+    const id = jobId("poster", project.id);
+    const job = jobs.find((entry) => entry.id === id);
+    try {
+      if (job) await stop(job);
+      else finish(id);
+    } finally {
+      setStopping(false);
+      setBusy(null);
+      // fal 은 이미 받은 요청을 물리지 않는다. 숨기면 비용을 오해한다.
+      setNotes(["중지했습니다. 이미 보낸 요청은 값이 나갈 수 있고, 결과가 나중에 들어올 수 있습니다."]);
+    }
+  }
 
   // 화면을 떠나면 여기서 물어보기를 그만둔다. 셸이 이어받으므로 결과는 안 놓친다.
   const alive = React.useRef(true);
@@ -392,10 +463,13 @@ export function PosterClient(
 
   /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
   async function runPlan() {
+    stopped.current = false;
     setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     setError(null);
     try {
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
+      // 중지를 눌렀으면 도착한 초안을 안 쓴다 — 멈춘 뒤에 칸이 채워지면 안 된다.
+      if (stopped.current) return;
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
       setNotes(body.issues ?? []);
@@ -413,10 +487,12 @@ export function PosterClient(
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
+    stopped.current = false;
     setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     setError(null);
     try {
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
+      if (stopped.current) return;
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
       setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
@@ -510,6 +586,8 @@ export function PosterClient(
   async function collect(body: Record<string, unknown>): Promise<boolean> {
     for (;;) {
       if (!alive.current) return false;
+      // 중지를 눌렀으면 더 캐묻지 않는다. 일감은 이미 목록에서 뺐다.
+      if (stopped.current) return false;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
       const poll = await (await request(`/api/poster/projects/${project.id}/status`, {
         method: "POST",
@@ -593,7 +671,15 @@ export function PosterClient(
         </div>
       ) : null}
 
-      {busy ? <WorkingBanner label={busy.label} hint={busy.hint} /> : null}
+      {/* 멈추는 자리는 여기 하나다 — 사이드바 칸은 없앴다(2026-09-17 사용자 결정). */}
+      {busy ? (
+        <WorkingBanner
+          label={busy.label}
+          hint={busy.hint}
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
+      ) : null}
 
       {/*
         **기획은 패널, 결과는 페이지.**
@@ -624,7 +710,15 @@ export function PosterClient(
             grid 가 남는 높이를 줄마다 나눠 늘려, 칸 사이가 제멋대로 벌어진다
             (2026-09-08 화면에서 138px 벌어짐).
           */}
-          <SidePanelBody className="grid content-start gap-5">
+          <SidePanelBody className="relative grid content-start gap-5">
+            {/*
+              **쓰는 중에는 패널을 덮는다.** 덮지 않으면 빈 칸이 그대로 보여
+              멈춘 화면으로 읽히고, 그 사이 고친 값은 도착한 초안이 덮어쓴다
+              (2026-09-17 사용자 보고).
+            */}
+            {busy?.kind === "plan" ? (
+              <PlanWriting label="AI 가 기획을 쓰는 중입니다" hint="10~30초 걸립니다" />
+            ) : null}
             {userWords.length ? (
               <div className="grid gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
                 <span className="text-meta text-subtle-foreground">
@@ -639,22 +733,24 @@ export function PosterClient(
               </div>
             ) : null}
 
-            {/* 기획이 값을 넣은 칸이 이 그림에 필요한 칸이다. */}
-            <div className="grid gap-4">{filledFields.map(renderSlot)}</div>
+            {/*
+              **칸 차례는 늘 `SLOT_LABELS` 그대로다.** 채운 칸을 위로 모아
+              두었더니 빈 칸에 한 글자를 넣는 순간 그 칸이 위로 올라가고 커서가
+              빠졌다(2026-09-17 사용자 보고). 채웠는지는 자리가 아니라 모양이
+              말한다 — 점선과 「비어 있음」.
+            */}
+            <div className="grid gap-4">{planRows.map(renderSlot)}</div>
 
             {emptyFields.length ? (
-              <div className="grid gap-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="justify-start px-0 text-muted-foreground"
-                  onClick={() => setShowEmpty((current) => !current)}
-                >
-                  {showEmpty ? "▾" : "▸"} 비어 있는 칸 {emptyFields.length}개 · 필요하면 채우세요
-                </Button>
-                {showEmpty ? <div className="grid gap-4">{emptyFields.map(renderSlot)}</div> : null}
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="justify-start px-0 text-muted-foreground"
+                onClick={() => setShowEmpty((current) => !current)}
+              >
+                {showEmpty ? "▾" : "▸"} 비어 있는 칸 {emptyFields.length}개 · 필요하면 채우세요
+              </Button>
             ) : null}
 
             {/* **글자가 없으면 관계도 없다.** 판단이 아니라 규칙이다. */}
