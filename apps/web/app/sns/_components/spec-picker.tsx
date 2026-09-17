@@ -6,6 +6,9 @@ import {
   IMAGE_LOOK_LABEL,
   IMAGE_LOOKS,
   IMAGE_MODELS,
+  hasStyleSource,
+  lookBlockedReason,
+  withJosa,
   modelById,
   planSlots,
   type Attachment,
@@ -83,18 +86,38 @@ export function SpecPicker({ spec, onChange, attachments }: {
       <section className="grid gap-3">
         <div><h3 className="font-semibold">그림체</h3><p className="text-sm text-muted-foreground">{IMAGE_LOOK_HINT[spec.look]}</p></div>
         <div className="flex flex-wrap gap-2">
-          {IMAGE_LOOKS.map((look) => (
-            <button
-              key={look}
-              type="button"
-              onClick={() => onChange({ ...spec, look })}
-              aria-pressed={spec.look === look}
-              className={`rounded-md border px-4 py-2 text-sm font-medium ${spec.look === look ? "border-primary bg-primary-soft" : "bg-card"}`}
-            >
-              {IMAGE_LOOK_LABEL[look]}
-            </button>
-          ))}
+          {IMAGE_LOOKS.map((look) => {
+            /*
+              **빼지 않고 흐리게 둔다.**
+
+              목록에서 없애면 그런 기능이 있다는 것을 알 길이 없다 — 포스터에서
+              한 번 그렇게 했다가 사용자가 「그게 어디 있냐」고 물었다
+              (2026-09-16). 못 누르게만 막으면 배울 수 있다.
+            */
+            const blocked = lookBlockedReason(look, hasStyleSource(attachments));
+            return (
+              <button
+                key={look}
+                type="button"
+                disabled={Boolean(blocked)}
+                title={blocked || IMAGE_LOOK_HINT[look]}
+                onClick={() => onChange({ ...spec, look })}
+                aria-pressed={spec.look === look}
+                className={`rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-40 ${spec.look === look ? "border-primary bg-primary-soft" : "bg-card"}`}
+              >
+                {IMAGE_LOOK_LABEL[look]}
+              </button>
+            );
+          })}
         </div>
+        {/* 회색 버튼만 두면 고장으로 읽힌다. 무엇을 하면 눌리는지 적는다. */}
+        {lookBlockedReason("auto", hasStyleSource(attachments)) ? (
+          <p className="text-xs text-muted-foreground">
+            {/* 받침에 따라 은/는이 갈린다. 저장소에 이미 도구가 있다. */}
+            「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
+            {lookBlockedReason("auto", hasStyleSource(attachments))}
+          </p>
+        ) : null}
       </section>
 
       <section className="grid gap-3">

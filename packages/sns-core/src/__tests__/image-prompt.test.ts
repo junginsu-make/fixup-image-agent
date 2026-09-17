@@ -494,3 +494,45 @@ describe("캐릭터 여러 각도 지시", () => {
     expect(block.match(/SAME character/gi)).toHaveLength(2);
   });
 });
+
+/**
+ * **첨부가 없는데 「레퍼런스 스타일」이면 그릴 결이 없다.**
+ *
+ * `auto` 의 지시문은 빈 문자열이다 — 따라갈 그림이 정해 주기 때문이다. 그런데
+ * 따라갈 그림이 하나도 없으면, **무엇으로 그릴지 정하는 말이 프롬프트에 한
+ * 줄도 안 들어간다.** 모델이 제멋대로 고른다.
+ *
+ * 화면은 이제 그 칸을 흐리게 막지만(`spec-picker.tsx`), 화면을 안 거치는 길이
+ * 있다 — 옛 작업 다시 돌리기, API 직접 호출. 포스터에서 실제로 그렇게 새는 것을
+ * 찾았다(2026-09-16). **모든 길이 지나는 자리에서** 막는다.
+ */
+describe("따라갈 그림이 없을 때의 결", () => {
+  const base = {
+    copy: { index: 1, headline: "제목" },
+    size: { width: 1088, height: 1360 },
+    language: "ko" as const,
+  };
+
+  it("첨부가 없으면 그릴 결을 정해 준다", () => {
+    const frame = buildFrame({ ...base, images: [], look: "auto" });
+
+    expect(frame).toContain("Rendering style");
+  });
+
+  /** 따라갈 그림이 있으면 그것이 정한다. 우리가 덧붙이면 그 결을 덮는다. */
+  it("첨부가 있으면 덧붙이지 않는다", () => {
+    const images: Attachment[] = [
+      { id: "a", kind: "style_reference", role: "cover", assetPath: "p", url: "u" },
+    ];
+    const frame = buildFrame({ ...base, images, look: "auto" });
+
+    expect(frame).not.toContain("Rendering style");
+  });
+
+  /** 고른 결이 따로 있으면 첨부가 있든 없든 그대로 간다. */
+  it("고른 결은 그대로 간다", () => {
+    for (const images of [[], [{ id: "a", kind: "style_reference", role: "cover", assetPath: "p", url: "u" }]] as Attachment[][]) {
+      expect(buildFrame({ ...base, images, look: "anime" })).toContain("Rendering style");
+    }
+  });
+});

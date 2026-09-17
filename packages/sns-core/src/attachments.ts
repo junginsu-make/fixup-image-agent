@@ -145,3 +145,23 @@ export function validateAttachments(list: Attachment[], max: number, totalCards?
   }
   return issues;
 }
+
+/**
+ * **따라갈 결을 가진 그림이 붙어 있는가.**
+ *
+ * 「레퍼런스 스타일」은 붙인 그림을 따라간다는 뜻이라, 따라갈 그림이 없으면
+ * 아무 뜻이 없다 — 고르면 결 지시가 **한 줄도 안 붙은 채로** 그림이 나간다.
+ * 포스터는 그것을 흐리게 막는데 카드뉴스는 안 막고 있었다(2026-09-17 대조).
+ *
+ * **모델에 실제로 들어가는 것만 센다.** `selectReferencesForRole` 이 고르는
+ * 것과 같다 — 따라 만들 카드뉴스(`style_reference`)와 그대로 지킬 것
+ * (`keep_identity`). 「원본 그대로」는 AI 를 아예 안 거치고 「마지막 장」도
+ * 장면 프롬프트에 안 실리므로, 그것만 붙여 놓으면 따라갈 것이 없다.
+ *
+ * **화면 밖에서 잰다.** `.tsx` 안에 두면 어느 종류를 세는지 값으로 못 잰다.
+ */
+export function hasStyleSource(attachments: readonly Attachment[]): boolean {
+  return attachments.some(
+    (attachment) => attachment.kind === "style_reference" || attachment.kind === "keep_identity",
+  );
+}
