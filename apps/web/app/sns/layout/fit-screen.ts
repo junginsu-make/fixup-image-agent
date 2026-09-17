@@ -19,10 +19,14 @@ export const CANVAS_MAX_WIDTH = 560;
 export const CANVAS_MAX_HEIGHT = 620;
 
 /**
- * 아무리 좁아도 남기는 높이. 이보다 작으면 칸 테두리를 손으로 잡기 어렵다.
- * 그때는 열 안에서 스크롤하는 편이 낫다.
+ * 아무리 좁아도 남기는 **짧은 변** 길이. 이보다 작으면 칸 테두리를 손으로 잡기
+ * 어렵다. 그때는 열 안에서 스크롤하는 편이 낫다.
+ *
+ * 처음엔 「높이 200」이었다. 그러면 가로형(16:9)은 폭이 356 이 되어 좁은 화면에서
+ * 옆으로 넘쳤다(1093×590 실측). 짧은 변으로 잡으면 세로형·가로형 모두 같은 정도로
+ * 작아진다.
  */
-const CANVAS_MIN_HEIGHT = 200;
+const CANVAS_MIN_SIDE = 160;
 
 /**
  * 작업 영역이 쓸 높이 — **화면 높이에서 위에 실제로 놓인 것과 아래 여백을 뺀다.**
@@ -44,8 +48,45 @@ export function canvasSize(
   card: { width: number; height: number },
   space: { width: number; height: number } = { width: Infinity, height: Infinity },
 ): { width: number; height: number } {
+  /*
+    **가로·세로 어느 쪽이 좁아도 바닥 아래로는 안 준다.** 세로에만 바닥이 있었더니,
+    가로 한계가 좁은 화면(폭 1024)에서 캔버스가 67×84 로 쪼그라들고, 가로 한계가
+    음수가 되면 크기도 음수가 나왔다(2026-09-17 독립 리뷰). 그 구간에서는 조금
+    넘치더라도 손으로 칸을 잡을 수 있는 크기를 지킨다.
+  */
   const maxWidth = Math.min(CANVAS_MAX_WIDTH, space.width);
-  const maxHeight = Math.max(CANVAS_MIN_HEIGHT, Math.min(CANVAS_MAX_HEIGHT, space.height));
-  const scale = Math.min(maxWidth / card.width, maxHeight / card.height);
+  const maxHeight = Math.min(CANVAS_MAX_HEIGHT, space.height);
+  const fit = Math.min(maxWidth / card.width, maxHeight / card.height);
+  const floor = CANVAS_MIN_SIDE / Math.min(card.width, card.height);
+  const scale = Math.max(floor, fit);
   return { width: Math.round(card.width * scale), height: Math.round(card.height * scale) };
+}
+
+/**
+ * 열 배치. **넓은 화면은 네 열, 그보다 좁으면 세 열**(레이어 목록과 칸 설정을 한 열에
+ * 위아래로 쌓는다).
+ *
+ * 네 열의 최소 폭 합(17+11+14+15rem = 912px)은 1280 보다 좁은 화면의 본문에 안
+ * 들어간다. 1366 노트북을 125% 로 쓰면 폭이 약 1093 인데, 거기서 네 열을 고집하면
+ * 캔버스가 손톱만 해지거나 가로로 넘쳤다(2026-09-17 독립 리뷰).
+ *
+ * `otherRem` 은 캔버스 열을 뺀 나머지 열의 최소 폭 합, `gaps` 는 열 사이 틈 수다.
+ * **화면의 열 정의(`layout-client.tsx`)를 바꾸면 여기도 바꾼다.**
+ */
+export const COLUMN_LAYOUTS = {
+  four: { otherRem: 11 + 14 + 15, gaps: 3 },
+  // 17+13+14rem + 틈 둘 = 728px — 폭 1024 창의 본문(743px)에 들어간다(실측).
+  three: { otherRem: 13 + 14, gaps: 2 },
+} as const;
+
+/** 열 사이 틈(`gap-3`). */
+export const COLUMN_GAP_PX = 12;
+
+/**
+ * 캔버스가 쓸 수 있는 가로 — **캔버스에 따라 안 변하는 바깥 폭**에서 나머지 열의
+ * 최소 폭과 틈을 뺀다.
+ */
+export function canvasWidthLimit(outerWidth: number, rem: number, layout: keyof typeof COLUMN_LAYOUTS): number {
+  const { otherRem, gaps } = COLUMN_LAYOUTS[layout];
+  return Math.floor(outerWidth - gaps * COLUMN_GAP_PX - otherRem * rem);
 }

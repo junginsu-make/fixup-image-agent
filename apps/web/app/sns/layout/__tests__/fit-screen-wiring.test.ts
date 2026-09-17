@@ -42,7 +42,7 @@ describe("카드 칸", () => {
 
 describe("열 폭", () => {
   it("**첫 열에 바닥이 있다** — 없으면 좁은 화면에서 짜부라져 설정 묶음이 세로로 길어졌다", () => {
-    expect(client).toContain("lg:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]");
+    expect(client).toContain("xl:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]");
     expect(client).toContain("max(17rem, ${canvasSize(ratio.pixel, fit.canvasSpace).width}px)");
   });
 
@@ -60,7 +60,8 @@ describe("사이드바", () => {
 
 describe("레퍼런스 열 제목", () => {
   it("짧게 「레퍼런스」라고만 쓴다 — 무엇을 하는지는 아래 버튼이 말한다", () => {
-    expect(client).toContain("<h3 className=\"font-semibold\">레퍼런스</h3>");
+    // 좁은 열에서 옆 설명에 밀려 「레퍼런」/「스」로 꺾였다(1093×590 실측). 한 줄로 둔다.
+    expect(client).toContain("<h3 className=\"shrink-0 whitespace-nowrap font-semibold\">레퍼런스</h3>");
     expect(client).not.toContain("레퍼런스에서 칸 읽어내기");
     expect(client).toContain("\"칸 읽어내기\"");
   });
@@ -72,6 +73,7 @@ describe("레퍼런스 열 제목", () => {
  */
 describe("재는 코드", () => {
   const hook = readFileSync(new URL("../use-fit-screen.ts", import.meta.url), "utf8");
+  const rules = readFileSync(new URL("../fit-screen.ts", import.meta.url), "utf8");
 
   it("열이 쌓이는 좁은 폭에서는 재지 않는다 — 한 화면에 못 넣으니 페이지가 흐르게 둔다", () => {
     expect(hook).toContain('const WIDE = "(min-width: 1024px)";');
@@ -90,12 +92,23 @@ describe("재는 코드", () => {
   });
 
   it("**가로는 캔버스에 따라 안 변하는 바깥 폭으로 잰다** — 격자 폭으로 재면 스스로를 키운 채 굳었다", () => {
-    expect(hook).toContain("outer.clientWidth - COLUMN_GAPS - OTHER_COLUMNS_MIN_REM * rem");
-    expect(hook).not.toMatch(/grid\.clientWidth/);
+    expect(hook).toContain("width: canvasWidthLimit(outer.clientWidth, rem, layout)");
+    expect(hook).not.toMatch(/grid.clientWidth/);
   });
 
-  it("뒤 세 열의 최소 폭이 화면의 열 정의와 같다", () => {
-    expect(hook).toContain("OTHER_COLUMNS_MIN_REM = 11 + 14 + 15");
-    expect(client).toContain("_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]");
+  it("1280 부터 네 열, 그보다 좁으면 세 열로 셈한다 — 화면의 xl 과 같은 경계다", () => {
+    expect(hook).toContain("const FOUR_COLUMNS = \"(min-width: 1280px)\";");
+    expect(hook).toContain("window.matchMedia(FOUR_COLUMNS).matches ? \"four\" : \"three\"");
+  });
+
+  it("**열 정의와 틈이 셈과 같다** — 틈을 gap-4 로 바꾸면 뒤 열이 넘친다", () => {
+    expect(rules).toContain("four: { otherRem: 11 + 14 + 15, gaps: 3 }");
+    expect(rules).toContain("three: { otherRem: 13 + 14, gaps: 2 }");
+    expect(rules).toContain("export const COLUMN_GAP_PX = 12;");
+    expect(client).toContain("className=\"grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[var(--first-column)_minmax(13rem,18rem)_minmax(14rem,1fr)] xl:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]\"");
+  });
+
+  it("세 열일 때 레이어 목록과 칸 설정을 한 열에 쌓고, 네 열이면 풀어 준다", () => {
+    expect(client).toContain("<div className=\"grid min-h-0 gap-3 lg:grid-rows-[minmax(0,2fr)_minmax(0,3fr)] xl:contents\">");
   });
 });

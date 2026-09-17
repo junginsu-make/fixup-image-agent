@@ -295,8 +295,11 @@ export function LayoutStudio() {
         자리가 사라졌다(1280×650 실측). 바닥 합(17+11+14+15rem)이 1280 폭 본문
         안에 들어가게 잡았다.
 
-        **뒤 세 열의 최소 폭을 바꾸면 `use-fit-screen.ts` 의
-        `OTHER_COLUMNS_MIN_REM` 도 바꾼다.** 캔버스 가로 한계를 거기서 셈한다.
+        **열 정의나 틈(`gap-3`)을 바꾸면 `fit-screen.ts` 의 `COLUMN_LAYOUTS`·
+        `COLUMN_GAP_PX` 도 바꾼다.** 캔버스 가로 한계를 거기서 셈한다.
+
+        **1280 보다 좁으면 세 열이다.** 네 열의 최소 폭 합이 그 본문에 안 들어가,
+        레이어 목록과 칸 설정을 한 열에 위아래로 쌓는다(2026-09-17 독립 리뷰).
 
         **첫 열 폭은 캔버스 폭으로 못 박는다.** `max-content` 로 두었더니 격자가
         남는 폭을 가운데 두 열에 먼저 나눠 줘, 첫 열이 캔버스보다 27px 좁아져
@@ -304,7 +307,7 @@ export function LayoutStudio() {
         폭을 뺀 자리 안이라, 못 박아도 뒤 열들은 자기 최소 폭을 지킨다.
       */}
       <div
-        className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]"
+        className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[var(--first-column)_minmax(13rem,18rem)_minmax(14rem,1fr)] xl:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]"
         style={{ "--first-column": `max(17rem, ${canvasSize(ratio.pixel, fit.canvasSpace).width}px)` } as CSSProperties}
       >
         <section ref={fit.columnRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
@@ -433,6 +436,11 @@ export function LayoutStudio() {
           </div>
         </section>
 
+        {/*
+          레이어 목록과 칸 설정. 네 열일 때는 `contents` 로 풀려 각자 한 열을 쓰고,
+          세 열일 때는 한 열에 위아래로 쌓여 각자 안에서 스크롤한다.
+        */}
+        <div className="grid min-h-0 gap-3 lg:grid-rows-[minmax(0,2fr)_minmax(0,3fr)] xl:contents">
         <section className="min-h-0 overflow-y-auto">
           <LayerList
             slots={slots}
@@ -466,11 +474,12 @@ export function LayoutStudio() {
             </p>
           )}
         </section>
+        </div>
 
         <section className="flex min-h-0 flex-col gap-2 rounded-lg border bg-card p-3">
           <div className="flex items-baseline justify-between gap-2">
             {/* 제목은 짧게(2026-09-17 사용자 결정). 무엇을 하는지는 아래 버튼이 말한다. */}
-            <h3 className="font-semibold">레퍼런스</h3>
+            <h3 className="shrink-0 whitespace-nowrap font-semibold">레퍼런스</h3>
             <span className="text-xs text-muted-foreground">읽어낸 것은 초안입니다. 화면에서 고쳐 쓰세요.</span>
           </div>
           {/*

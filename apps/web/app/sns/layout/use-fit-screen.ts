@@ -1,23 +1,24 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { fillHeight } from "./fit-screen";
+import { canvasWidthLimit, fillHeight } from "./fit-screen";
 
 /** 셸의 `<main>` 아래 여백(`pb-6`). 이만큼은 비워 둬야 바닥에 안 붙는다. */
 const BOTTOM_GAP = 24;
-/** 이보다 작은 창에서는 줄이지 않는다. 그때는 열 안에서 스크롤한다. */
-const MIN_HEIGHT = 420;
+/**
+ * 이보다 작은 창에서는 줄이지 않는다. 그때는 열 안에서 스크롤한다.
+ *
+ * 420 이었는데 1366 노트북을 125% 로 쓰면 창 높이가 590 가량이라 **페이지**가
+ * 넘쳤다(실측). 낮게 두면 넘친 만큼을 열이 자기 안에서 스크롤해, 페이지는 늘
+ * 한 화면이다.
+ */
+const MIN_HEIGHT = 300;
 /** 여러 열로 서는 폭(`lg`). 그보다 좁으면 열이 위아래로 쌓여 화면 한 장에 못 넣는다. */
 const WIDE = "(min-width: 1024px)";
+/** 네 열로 서는 폭(`xl`). 그보다 좁으면 세 열이다(`fit-screen.ts` 의 `COLUMN_LAYOUTS`). */
+const FOUR_COLUMNS = "(min-width: 1280px)";
 /** 캔버스와 그 아래 묶음 사이 틈(`gap-2`). */
 const CANVAS_GAP = 8;
-/** 열 사이 틈(`gap-3`). 네 열이라 셋이다. */
-const COLUMN_GAPS = 3 * 12;
-/**
- * 나머지 세 열의 최소 폭(rem) — `layout-client.tsx` 의 `minmax(11rem…)·(14rem…)·(15rem…)`.
- * 캔버스가 쓸 수 있는 가로는 격자 폭에서 이것을 뺀 만큼이다.
- */
-export const OTHER_COLUMNS_MIN_REM = 11 + 14 + 15;
 
 /**
  * 작업 영역과 카드 칸이 **실제로 쓸 수 있는 자리**를 잰다.
@@ -72,8 +73,9 @@ export function useFitScreen() {
           **나머지 세 열의 최소 폭**을 뺀 자리가 캔버스가 쓸 수 있는 가로다.
         */
         const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        const layout = window.matchMedia(FOUR_COLUMNS).matches ? "four" : "three";
         const next = {
-          width: Math.floor(outer.clientWidth - COLUMN_GAPS - OTHER_COLUMNS_MIN_REM * rem),
+          width: canvasWidthLimit(outer.clientWidth, rem, layout),
           height: column.clientHeight - below.offsetHeight - CANVAS_GAP,
         };
         // 같은 값이면 안 넣는다. 새 객체를 넣으면 크기가 같아도 한 번 더 그린다.
