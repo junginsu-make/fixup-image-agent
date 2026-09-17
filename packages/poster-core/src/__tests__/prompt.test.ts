@@ -388,6 +388,20 @@ describe("첨부 지시를 적었을 때", () => {
     expect(prompt).toContain("not its people");
     expect(prompt).not.toContain("Their words OVERRIDE any rule above");
   });
+
+  /**
+   * **공백만 적은 것은 안 적은 것이다.**
+   *
+   * master 에도 같은 이름의 시험이 있었는데, 「규칙이 남는가」를 재고
+   * 있었다. 이제 규칙은 **항상** 남아 그 문장이 헛수고가 돼서 뻐다.
+   * 지금 재야 하는 것은 **덮어쓰기 줄이 안 나오는가** 이다 — 공백을
+   * 지시로 읽으면 사용자가 아무 말도 안 했는데 규칙을 물러나게 한다.
+   */
+  it("공백만 적은 것은 안 적은 것이다", () => {
+    const prompt = buildPosterPrompt({ ...base, attachmentIntent: "   \n  " });
+
+    expect(prompt).not.toContain("Their words OVERRIDE any rule above");
+  });
 });
 
 /**
