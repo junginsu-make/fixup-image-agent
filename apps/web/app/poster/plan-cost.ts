@@ -108,14 +108,18 @@ export function planCostUnits(input: PlanCostInput): number {
 /**
  * 화면에 붙일 한 줄.
  *
- * **숫자로 말한다.** 「추가로 듭니다」만으로는 두 갈래를 견줄 수 없다 — 얼마가
+ * **숫자로 말한다.** 「추가로 듭니다」만으로는 두 갈래를 견줄 수 없다. 얼마가
  * 빠지는지 알아야 「그대로 생성」을 고를 값어치가 있는지 판단한다.
+ *
+ * **단위는 장이다. 달러를 안 적는다**(2026-09-17 사용자 결정). 회원이 쓰는
+ * 단위는 장이고 사용량도 상단에 「N/M장」으로 나온다 — 한 화면에 단위가 둘이면
+ * 무엇과 견주는지가 흐려진다. 달러는 관리자 화면(원가 장부)이 갖는다.
  */
 export function planCostNote(input: PlanCostInput): string {
   if (input.promptMode === "verbatim") {
-    return "기획을 안 돌려서 기획 값이 안 듭니다.";
+    return "기획을 안 돌려서 기획 몫이 안 듭니다.";
   }
   // 「장」은 받침이 있어 「이」다. 앞말이 바뀌어도 안 틀리게 저장소 함수를 쓴다.
   const 장 = `${planCostUnits(input)}장`;
-  return `기획에 약 $${planCostUsd(input).toFixed(3)}(${withJosa(장, "이가")}) 더 듭니다.`;
+  return `기획에 ${withJosa(장, "이가")} 더 듭니다.`;
 }

@@ -2,6 +2,8 @@ import sharp from "sharp";
 import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { posterReferencesByIds } from "../../../../../../lib/poster/references";
+import { teamIdOf } from "../../../../../../lib/teams/store";
 import { creditUnits } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
@@ -100,8 +102,17 @@ export async function POST(request: Request, context: Context) {
     const fal = createPosterFalClients();
     // 따라 만들 것과 그대로 지킬 것을 함께 올린다. 순서가 프롬프트의
     // Image 번호와 같아야 하므로 레퍼런스를 먼저 둔다.
-    const references = await stores.references.byIds(project.data.referenceIds);
-    const preserved = await stores.references.byIds(project.data.preservedIds ?? []);
+    /*
+      **라이브러리와 같은 규칙으로 읽는다**(2026-09-17). 목록에서 보이는데
+      여기서 안 읽히면, 고른 그림이 조용히 빠진 채로 만들어진다.
+    */
+    const viewer = {
+      userId: auth.member.userId,
+      role: auth.member.profile.role,
+      teamId: await teamIdOf(auth.member.userId),
+    };
+    const references = await posterReferencesByIds(viewer, project.data.referenceIds);
+    const preserved = await posterReferencesByIds(viewer, project.data.preservedIds ?? []);
     // 같은 배치에서 같은 파일은 한 번만 올린다.
     const urls = await uploadUniqueReferences(
       [...references, ...preserved],

@@ -12,6 +12,7 @@ import {
 import { gridSrc } from "../../_components/grid-src";
 import { ThumbImage } from "../../_components/thumb-image";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
+import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
 import { attachMessage, characterIdByTitle, matchAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
 import { attachmentNumber } from "@fixup/shared";
@@ -39,6 +40,10 @@ export interface ReferenceItem {
   url?: string;
   /** 격자에 거는 작은 사본. 없으면 원본으로 떨어진다(`_components/grid-src.ts`). */
   thumbUrl?: string | null;
+  /** 내가 올린 것인가. `false` 면 남의 것 — 지우기 단추를 가르는 값이다. */
+  mine?: boolean;
+  /** 누가 올렸는가. 관리자에게만 온다. */
+  ownerEmail?: string | null;
 }
 
 /** 공용 역할 어휘를 그대로 쓴다. none 은 '아직 안 골랐다'는 화면 상태다. */
@@ -63,7 +68,7 @@ const POSTER_ROLES: AttachmentRole[] = [
 ];
 
 export function ReferencePicker({
-  references, roles, order, onRoleChange, onUploaded, intent, onIntentChange,
+  references, roles, order, onRoleChange, onUploaded, intent, onIntentChange, isAdmin = false,
 }: {
   references: ReferenceItem[];
   roles: Record<string, Role>;
@@ -80,6 +85,13 @@ export function ReferencePicker({
   /** 첨부한 그림들을 어떻게 쓸지. 드롭다운으로 못 만드는 조합을 여기서 연다. */
   intent: string;
   onIntentChange(value: string): void;
+  /**
+   * 남이 올린 그림에도 지우기를 낼까. **관리자만 참이다.**
+   *
+   * 서버가 정해서 보낸 값을 그대로 받는다(`/api/poster/references` 의
+   * `isAdmin`). 화면이 스스로 판단하면 서버의 실제 판정과 갈린다.
+   */
+  isAdmin?: boolean;
 }) {
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
@@ -146,7 +158,8 @@ export function ReferencePicker({
 
   /** 라이브러리에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
   async function remove(item: ReferenceItem) {
-    if (!window.confirm(`'${item.title ?? "이 이미지"}' 를 라이브러리에서 지울까요?`)) return;
+    // 남의 것이면 누구 것인지 밝히고 묻는다. 규칙은 한 곳에 있다.
+    if (!window.confirm(referenceDeletePrompt(item))) return;
     try {
       const body = await (await fetch(`/api/reference-images/${item.id}`, { method: "DELETE" })).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
@@ -253,7 +266,11 @@ export function ReferencePicker({
             url: reference.url ?? null,
             // 격자는 사본을 쓴다. 안 넘기면 창 하나에 수십 MB 가 오간다.
             thumbUrl: reference.thumbUrl ?? null,
+            // 주인 표시. 떨어뜨리면 남의 그림에도 지우기가 붙는다.
+            mine: reference.mine,
+            ownerEmail: reference.ownerEmail,
           }))}
+          canDeleteOthers={isAdmin}
           selectedIds={references.filter((reference) => (roles[reference.id] ?? "none") !== "none").map((reference) => reference.id)}
           onToggle={(picked) => onRoleChange(picked.id, (roles[picked.id] ?? "none") === "none" ? "style" : "none")}
           sets={sets}

@@ -9,6 +9,7 @@ import {
   LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
 import { ThumbImage } from "../../_components/thumb-image";
+import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { attachMessage, matchAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
@@ -18,7 +19,13 @@ import { attachmentsForUploaded } from "./uploaded-attachments";
 import { SlotIntents, type SlotIntents as SlotIntentsValue } from "./slot-intents";
 
 /** `thumbUrl` 은 격자용 사본. `/api/reference-images` 가 원본과 함께 준다. */
-type ImageView = ReferenceImageRow & { signedUrl: string | null; thumbUrl?: string | null };
+type ImageView = ReferenceImageRow & {
+  signedUrl: string | null; thumbUrl?: string | null;
+  /** 내가 올린 것인가. 지우기 단추를 가르는 값이다(`/api/reference-images` 가 준다). */
+  mine?: boolean;
+  /** 누가 올렸는가. 관리자에게만 온다. */
+  ownerEmail?: string | null;
+};
 
 /** 선택 상자에 표시할 값. 마지막 장은 역할이 아니라 자리라 따로 둔다. */
 function roleOf(attachment: Attachment): string {
@@ -57,6 +64,8 @@ export function AttachmentPicker({
   totalCards: number;
 }) {
   const [images, setImages] = React.useState<ImageView[]>([]);
+  /** 관리자인가. 서버가 목록과 함께 준다 — 남의 것에도 지우기를 낼지 정한다. */
+  const [isAdmin, setIsAdmin] = React.useState(false);
   const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
   const [characters, setCharacters] = React.useState<PickableCharacter[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -70,10 +79,14 @@ export function AttachmentPicker({
     try {
       // 로컬이든 운영이든 같은 길로 읽는다. 서버가 모드를 가른다.
       const response = await fetch("/api/reference-images", { cache: "no-store" });
-      const payload = await response.json() as { ok?: boolean; images?: ImageView[]; message?: string };
+      const payload = await response.json() as {
+        ok?: boolean; images?: ImageView[]; message?: string; isAdmin?: boolean;
+      };
       if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 불러오지 못했습니다.");
       const fresh = payload.images ?? [];
       setImages(fresh);
+      // 「남의 것에도 지우기를 낼까」는 서버가 정한다. 화면이 판단하면 갈린다.
+      setIsAdmin(Boolean(payload.isAdmin));
       // 세트도 함께 읽는다. 한 벌로 만들어 뒀으면 한 벌로 부를 수 있어야 한다.
       const setsBody = await (await fetch("/api/reference-sets", { cache: "no-store" })).json();
       setSets(setsBody.ok ? (setsBody.sets ?? []) : []);
@@ -208,7 +221,8 @@ export function AttachmentPicker({
 
   /** 라이브러리에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
   async function removeFromLibrary(image: ImageView) {
-    if (!window.confirm(`'${image.title ?? "이 이미지"}' 를 라이브러리에서 지울까요?`)) return;
+    // 남의 것이면 누구 것인지 밝히고 묻는다. 규칙은 한 곳에 있다.
+    if (!window.confirm(referenceDeletePrompt(image))) return;
     try {
       const body = await (await fetch(`/api/reference-images/${image.id}`, { method: "DELETE" })).json();
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
@@ -232,7 +246,10 @@ export function AttachmentPicker({
           images={images.map((image) => ({
             id: image.id, title: image.title,
             url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
+            // 주인 표시. 떨어뜨리면 남의 그림에도 지우기가 붙는다.
+            mine: image.mine, ownerEmail: image.ownerEmail,
           }))}
+          canDeleteOthers={isAdmin}
           selectedIds={attachments.map((attachment) => attachment.id)}
           loading={loading}
           onToggle={(picked) => {

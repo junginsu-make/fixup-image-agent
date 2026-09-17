@@ -157,7 +157,8 @@ describe("라우트가 실제로 읽는 것", () => {
 
   /** 문법은 「따라 만들기」(`referenceIds`)에서만 읽는다. */
   it("문법은 referenceIds 에서만 읽는다", () => {
-    expect(라우트).toContain("stores.references.byIds(project.data.referenceIds)");
+    // 참고 이미지를 읽는 길이 라이브러리와 한 곳으로 합쳐졌다(2026-09-17).
+    expect(라우트).toContain("posterReferencesByIds(viewer, project.data.referenceIds)");
   });
 
   /** 달러가 아니라 장으로 예약한다. */
@@ -177,12 +178,18 @@ describe("화면에 할 말", () => {
     expect(note).toContain("안 듭니다");
   });
 
-  /** 다듬어서면 얼마가 더 드는지 숫자로 말한다. 「추가로 든다」만으로는 못 견준다. */
-  it("다듬어서면 달러와 장을 함께 적는다", () => {
+  /**
+   * 다듬어서면 얼마가 더 드는지 숫자로 말한다. 「추가로 든다」만으로는 못 견준다.
+   *
+   * **단위는 장이다**(2026-09-17 사용자 결정). 회원이 쓰는 단위가 장이고
+   * 사용량도 「N/M장」으로 나온다 — 한 화면에 달러가 섞이면 무엇과 견주는지가
+   * 흐려진다. 달러는 관리자 화면이 갖는다.
+   */
+  it("다듬어서면 몇 장이 더 드는지 적는다", () => {
     const note = planCostNote({ styleCount: 0, personCount: 0, promptMode: "assisted" });
 
-    expect(note).toContain("0.014");
     expect(note).toContain("1장");
+    expect(note, "회원 화면에는 달러를 안 적는다").not.toContain("$");
   });
 
   /** 「장」은 받침이 있어 「이」다. 「1장가」로 나가면 안 된다. */
@@ -194,16 +201,18 @@ describe("화면에 할 말", () => {
   });
 
   it("첨부가 있으면 그 몫까지 더해 적는다", () => {
-    const note = planCostNote({ styleCount: 1, personCount: 1, promptMode: "assisted" });
-
-    expect(note).toContain("0.034");
+    // 그림을 읽는 몫이 더해져 값이 커진다. 장으로도 그 차이가 보여야 한다.
+    expect(planCostUsd({ styleCount: 1, personCount: 1, promptMode: "assisted" }))
+      .toBeGreaterThan(planCostUsd({ styleCount: 0, personCount: 0, promptMode: "assisted" }));
+    expect(planCostNote({ styleCount: 1, personCount: 1, promptMode: "assisted" }))
+      .toContain(`${planCostUnits({ styleCount: 1, personCount: 1, promptMode: "assisted" })}장`);
   });
 
   /** 광고 모드는 규격마다 작업이 따로 생긴다. 기획도 그만큼 돈다. */
   it("작업이 여럿이면 곱해서 적는다", () => {
     const note = planCostNote({ styleCount: 0, personCount: 0, promptMode: "assisted", projects: 3 });
 
-    expect(note).toContain("0.042");
     expect(note).toContain("3장");
+    expect(note).not.toContain("$");
   });
 });
