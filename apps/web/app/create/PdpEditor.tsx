@@ -1,6 +1,7 @@
 "use client";
 
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
+import { createSectionFor } from "./scenario-sections";
 import { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
@@ -40,6 +41,7 @@ import type {
   PdpOutputMode,
   ReferenceModelUsage,
   QaDefect,
+  SectionBlueprint,
 } from "@fixup/pdp-core";
 import { isBlockingDefect } from "@fixup/pdp-core";
 import type {
@@ -186,6 +188,8 @@ interface PdpEditorProps {
   onJumpStep?: (id: "upload" | "analyze") => void;
   saveState?: "idle" | "saving" | "saved" | "error";
   onBeforeReplace?: () => Promise<boolean>;
+  onSectionsChange: Dispatch<SetStateAction<SectionBlueprint[]>>;
+  onUndo?: () => void;
 }
 
 /** /api/pdp/images/batch 응답. 실패한 섹션은 ok:false 로 개별 표시된다. */
@@ -251,13 +255,12 @@ export function PdpEditor({
   onJumpStep,
   saveState = "idle",
   onBeforeReplace,
+  onSectionsChange,
+  onUndo,
 }: PdpEditorProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
-  const [sections, setSections] = useState(() =>
-    initialDraftState?.sections?.length
-      ? initialDraftState.sections.map((section) => normalizeSectionCopyFields({ ...section }))
-      : initialResult.blueprint.sections.map((section) => normalizeSectionCopyFields({ ...section }))
-  );
+  const sections = initialResult.blueprint.sections;
+  const setSections = onSectionsChange;
   /* 격자에서 여러 장을 동시에 만들 수 있으므로 '생성 중'을 섹션 키 집합으로 둔다. */
   const [generatingKeys, setGeneratingKeys] = useState<string[]>([]);
   const [generationRun, setGenerationRun] = useState<GenerationRun | null>(null);
@@ -1720,51 +1723,16 @@ export function PdpEditor({
       delete next[key];
       return next;
     });
-    setCurrentSectionIndex((current) => Math.max(0, Math.min(current, sections.length - 2)));
+    setCurrentSectionIndex((current) => Math.max(0, Math.min(index < current ? current - 1 : current, sections.length - 2)));
     setNotice("섹션을 삭제했습니다.");
   };
 
   /** 빈 섹션을 뒤에 추가한다. 키는 기존과 겹치지 않게 만든다. */
   const handleAddSection = () => {
     if (generationLockRef.current) return;
-    const used = new Set(sectionKeys);
-    let n = sections.length + 1;
-    let key = `S${n}`;
-    while (used.has(key)) {
-      n += 1;
-      key = `S${n}`;
-    }
-
-    setSections((current) => [
-      ...current,
-      // 타입 단언으로 때우지 않고 스키마의 모든 필드를 채운다.
-      // 빠뜨리면 편집기 곳곳에서 undefined 를 만난다.
-      normalizeSectionCopyFields({
-        section_id: key,
-        section_name: `새 섹션 ${current.length + 1}`,
-        goal: "",
-        headline: "",
-        headline_en: "",
-        subheadline: "",
-        subheadline_en: "",
-        bullets: [],
-        bullets_en: [],
-        trust_or_objection_line: "",
-        trust_or_objection_line_en: "",
-        CTA: "",
-        CTA_en: "",
-        layout_notes: "",
-        compliance_notes: "",
-        image_id: key,
-        purpose: "",
-        prompt_ko: "",
-        prompt_en: "",
-        negative_prompt: "",
-        style_guide: "",
-        reference_usage: "",
-      }),
-    ]);
-    setSectionKeys((current) => [...current, key]);
+    const section = createSectionFor(sections);
+    setSections((current) => [...current, section]);
+    setSectionKeys((current) => [...current, section.section_id]);
     setNotice("빈 섹션을 추가했습니다. 문구를 넣고 이미지를 만들어 보세요.");
   };
 
@@ -2199,6 +2167,7 @@ export function PdpEditor({
             설정
           </Button>
         ) : null}
+        {onUndo ? <Button variant="ghost" size="sm" disabled={isGenerating} onClick={onUndo}>변경 전으로 되돌리기</Button> : null}
         {onManualSave ? (
           <Button variant="ghost" size="sm" disabled={saveState === "saving"} onClick={onManualSave}>
             {saveState === "saving" ? (

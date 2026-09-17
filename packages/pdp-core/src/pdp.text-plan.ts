@@ -445,14 +445,11 @@ export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
 
 // ── 이미지 방향 병합 ────────────────────────────────────────────
 
-const ART_DIRECTION_MARKER = "\n\nArt direction override (Korean, follow this): ";
-
 /**
  * 시나리오에서 고친 한국어 이미지 방향을 실제 생성에 쓰이는 prompt_en 에 반영한다.
  *
- * 이미지 생성은 prompt_en 만 본다. 사용자가 한국어 방향을 고쳤는데 무시되면
- * 막다른 길이 되므로, 원본과 달라진 섹션에만 추가 지시를 덧붙인다.
- * 여러 번 고쳐도 지시가 쌓이지 않도록 이전 지시는 잘라내고 다시 붙인다.
+ * 현재 장면이 정본이다. 새 장면과 충돌하는 예전 영문을 덧붙이지 않는다.
+ * 수정하지 않은 장면만 모델이 처음 작성한 영문 표현을 유지한다.
  */
 export function mergeArtDirection(
   original: LandingPageBlueprint,
@@ -468,19 +465,16 @@ export function mergeArtDirection(
 
       // 사용자가 새로 추가한 섹션. 한국어 방향이 유일한 단서다.
       if (!base) {
-        return section.prompt_en.trim()
-          ? section
-          : { ...section, prompt_en: promptKo };
+        return { ...section, prompt_en: promptKo || section.prompt_en };
       }
 
       if (promptKo === base.prompt_ko.trim()) {
         return { ...section, prompt_en: base.prompt_en };
       }
 
-      const basePromptEn = base.prompt_en.split(ART_DIRECTION_MARKER)[0];
       return {
         ...section,
-        prompt_en: promptKo ? `${basePromptEn}${ART_DIRECTION_MARKER}${promptKo}` : basePromptEn,
+        prompt_en: promptKo || base.prompt_en,
       };
     }),
   };

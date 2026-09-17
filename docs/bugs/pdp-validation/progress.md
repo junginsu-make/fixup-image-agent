@@ -16,22 +16,22 @@
 |---|---|---|---|
 | A-1 | W1 구현·검증 완료 | f82b21d | W1 / T-SAVE |
 | A-2 | W1 보호 완료, 후속 단계 남음 | f82b21d | W1→W2 / T-STATE, 되돌리기 |
-| A-3 | 미착수 | f82b21d | W2 / T-STATE |
-| A-4 | 미착수 | f82b21d | W2 / T-SECTION |
-| A-5 | 미착수 | f82b21d | W2 / T-MIGRATE, T-SECTION |
-| A-6 | 미착수 | f82b21d | W2 / T-STATE, 두 제품 교차 |
-| A-7 | 미착수 | f82b21d | W2 / T-STATE |
+| A-3 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE |
+| A-4 | W2 구현·검증 완료 | f82b21d | W2 / T-SECTION |
+| A-5 | W2 구현·검증 완료 | f82b21d | W2 / T-MIGRATE, T-SECTION |
+| A-6 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE, 두 제품 교차 |
+| A-7 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE |
 | A-8 | W1 구현·검증 완료 | f82b21d | W1→W2 / T-SAVE |
 | A-9 | W1 구현·검증 완료 | f82b21d | W1 / T-SAVE, fake timers |
 | A-10 | 미착수 | f82b21d | W3 / T-REF, 설정 복구 |
 | A-11 | 미착수 | f82b21d | W2/W3 / T-STATE, T-REF |
-| A-12 | 미착수 | f82b21d | W2 / T-STATE |
-| A-13 | 미착수 | f82b21d | W2/W7 / 모드별 재기획·busy·오류 표시 |
+| A-12 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE |
+| A-13 | W2 구현·검증 완료 | f82b21d | W2/W7 / 모드별 재기획·busy·오류 표시 |
 | A-14 | 미착수 | f82b21d | W3 / 목록 오류와 현재 참조 표시, 제출 검증 |
-| A-15 | 미착수 | f82b21d | W2 / T-SECTION |
+| A-15 | W2 구현·검증 완료 | f82b21d | W2 / T-SECTION |
 | A-16 | 미착수 | f82b21d | W2/W4 / 생성 중 reorder 대역 |
-| A-17 | 미착수 | f82b21d | W2 / T-STATE |
-| A-18 | 미착수 | f82b21d | W2 / T-MIGRATE |
+| A-17 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE |
+| A-18 | W2 구현·검증 완료 | f82b21d | W2 / T-MIGRATE |
 | B-1 | 미착수 | f82b21d | W6 / T-EXPORT |
 | B-2 | 미착수 | f82b21d | W6 / 실제 width/height·원본 보존 |
 | B-3 | 미착수 | f82b21d | W6 / T-EXPORT |
@@ -39,7 +39,7 @@
 | B-5 | 미착수 | f82b21d | W6 / T-EDITOR |
 | B-6 | 미착수 | f82b21d | W6 / T-EDITOR |
 | B-7 | W1 보호 완료, 후속 단계 남음 | f82b21d | W1 보존→W2 undo / T-STATE |
-| B-8 | 미착수 | f82b21d | W2 / 선택 UUID 유지 |
+| B-8 | W2 구현·검증 완료 | f82b21d | W2 / 선택 UUID 유지 |
 | B-9 | 미착수 | f82b21d | W6 / 공통 완성본 렌더 |
 | B-10 | 미착수 | f82b21d | W6 / T-EXPORT, 미재현이면 증거로 종결 |
 | B-11 | 미착수 | f82b21d | W6 / T-EDITOR |
@@ -96,9 +96,9 @@
 | F-7-9 | 미착수 | f82b21d | W3/W8 / 성공·실패 meter와 limit |
 | F-7-10-a | 미착수 | f82b21d | W3/W4 / T-COST |
 | F-7-10-b | W1 보호 완료, 후속 단계 남음 | f82b21d | W1/W8 / T-INPUT, T-LIMIT |
-| K-01 | 미착수 | f82b21d | W2 / T-STATE |
+| K-01 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE |
 | K-02 | W1 보호 완료, 후속 단계 남음 | f82b21d | W1/W2 |
-| K-03 | 미착수 | f82b21d | W2 / T-STATE |
+| K-03 | W2 구현·검증 완료 | f82b21d | W2 / T-STATE |
 | K-04 | 미착수 | f82b21d | W4 / T-JOB |
 | K-05 | W1 보호 완료, 후속 단계 남음 | f82b21d | W1 보호/W4 완료 |
 | K-06 | W1 보호 완료, 후속 단계 남음 | f82b21d | W1/W4 |
@@ -117,7 +117,7 @@
 | U-06 | 미착수 | f82b21d | W3/W7 / T-PLAN |
 | U-07 | 미착수 | f82b21d | W3 / 모든 ratio payload |
 | U-08 | 미착수 | f82b21d | W1/W7 |
-| U-09 | 미착수 | f82b21d | W2 / T-SECTION |
+| U-09 | W2 구현·검증 완료 | f82b21d | W2 / T-SECTION |
 | U-10 | 미착수 | f82b21d | W5/W7 |
 | U-11 | 미착수 | f82b21d | W2/W7 |
 | U-12 | 미착수 | f82b21d | W5/W7 |
@@ -127,7 +127,7 @@
 | U-16 | 미착수 | f82b21d | W9 보고. 전환율 개선을 출시 합격으로 위장하지 않음 |
 | U-17 | 미착수 | f82b21d | W3 / T-MODEL |
 | U-18 | 미착수 | f82b21d | W3/W5/W9 |
-| X-01 | W1 보호 완료, 후속 단계 남음 | f82b21d | T-SAVE/T-STATE |
+| X-01 | W2 구현·검증 완료 | f82b21d | T-SAVE/T-STATE |
 | X-02 | W1 보호 완료, 후속 단계 남음 | f82b21d | T-SETTLE/T-COST |
 | X-03 | 미착수 | f82b21d | T-MODEL/T-COST |
 | X-04 | W1 보호 완료, 후속 단계 남음 | f82b21d | T-INPUT/T-JOB |
@@ -152,3 +152,21 @@
 - 정산 실패는 결과/원래 오류를 보존하지만 기존 만료 정책·late settlement/중복 정산의 DB 수준 검증은 W4에 남는다.
 - 인증 후 bounded body 읽기 및 예약 전 구조 검증. MIME signature·픽셀/파일 상한 실측·rate-limit 정책 DB 변경은 W8이다. C-9는 입력 오류의 예약 방지만 해결했고 전체 분석 한도 정책은 미완이다.
 - W1 회귀/리뷰를 통과한 뒤에만 W2를 착수한다. Fable·모델 단가·제품 보존 정책은 W3까지 변경하지 않았다.
+
+
+## W2 — 작업 정본·단계·v3 초안
+
+- TDD RED: `w2-state-red.txt`(구성안 왕복·새 장면), `w2-scenario-save-red.txt`(확정 전 자동 저장에 옛 편집본), `w2-metadata-red.txt`(공통 디자인 소실), `w2-review-red.txt`(동시 수정 사본·이미지 중복), `w2-retention-red.txt`, `w2-delete-red.txt`, `w2-scene-red.txt`.
+- `w2-document-red.txt`, `w2-migration-red.txt`, `w2-revision-red.txt`는 새 계약/함수 부재 RED와 구분해 보관했다.
+- `PdpEditor`는 부모 구성안의 sections를 controlled 값으로 사용한다. 저장과 재진입도 같은 섹션 배열을 사용하며 배치·옵션은 section ID로 따라간다.
+- 신규 섹션·AI 응답에 안정된 UUID를 부여한다. 장면 수정은 이전 영문 장면과 섞지 않고 현재 장면을 사용한다. 기존 영어를 그대로 유지하라는 옛 시험은 새 설계 계약에 맞춰 RED→수정했다.
+- 실제 IndexedDB v3 저장소(documents/revisions/assets), 낙관적 revision 검사, 충돌 사본 보관, copy-on-write 이관, 원본 v2 유지. 생성 이미지·대표 이미지·텍스트 참조를 revision JSON에 반복 저장하지 않고 assets에서 복구한다.
+- `PDP_DOCUMENT_V3=1`에서 새 저장 경로. 기본값은 off이며 이미 v3로 저장한 작업은 off에서도 읽을 수 있다. 다른 프로젝트의 환경변수는 변경하지 않았다.
+- 새 revision 저장은 이전 저장소의 원본을 삭제하지 않는다. quota/쓰기 실패, 다른 탭 충돌, 보관된 이미지·레이어 복구 시험 통과.
+- 입력 필드 나열 대신 저장 snapshot의 변경값으로 revision을 관측한다. ID/알림 갱신은 dirty로 만들지 않는다.
+- 데이터가 없는 텍스트 stage는 입력으로 복구한다. 01 버튼은 실제 텍스트 입력으로 돌아간다. 구성안에서 유료 결과 섹션을 삭제할 때도 보관하고 이전 초안으로 되돌릴 수 있다.
+- 리뷰 보완: 확정 전 자동 저장도 편집기 사본과 구성안이 일치하도록 `editorForSections`를 공유했다. 원문 디자인 metadata를 정규화가 버리는 문제도 실제 저장 시험으로 고쳤다. 공개되지 않은 새로운 기능은 추가하지 않았다.
+- GREEN: `w2-web-regression.txt` — 웹 2712 passed / 6 skipped. `w2-core.txt` — pdp-core 620 passed. `w2-typecheck.txt` 통과. `w2-lint.txt` 오류 0, 기존 img 경고 4.
+- 실제 브라우저: `w2-browser.cjs` / `w2-browser.txt` — 분리 worktree의 Next dev(3107), Edge headless, 두 모드의 입력→수정/추가→생성→왕복→v3 저장/새로고침, 이미지 3장과 수정 문구 복구 통과. 유료 `/api/pdp` 호출은 전부 mock이며 실제 AI 품질 시험은 아니다.
+- 코드 리뷰는 구현자 자체 diff 리뷰다. 새 문서의 서버 저장/승인 snapshot/QA 상태·원가 모델은 각각 W4/W5/W3에서 확장한다. v3의 보관기간 및 자산 GC·용량 측정은 E-6-3/W8 검증 과제이며 기존 v2 이관 전에 청소하지 않는다.
+- 레거시에 원래 기록되지 않았던 원문·모델 선택은 복원할 수 없다. 새 필드 기본값과 보존된 결과를 사용한다.

@@ -1,10 +1,10 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deletePdpDraft, getPdpDraft, savePdpDraft, preservePdpDraft, type PdpDraftInput } from "../pdp-drafts";
+import { deletePdpDraft, getPdpDraft, savePdpDraft, preservePdpDraft, purgeExpiredPdpDrafts, type PdpDraftInput } from "../pdp-drafts";
 import { createSectionFor } from "../scenario-sections";
 
 const ids: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); await Promise.all(ids.splice(0).map(deletePdpDraft)); });
+afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); await Promise.all(ids.splice(0).map(deletePdpDraft)); });
 
 function fixture(): PdpDraftInput {
   const section = { ...createSectionFor([]), headline: "원고", generatedImage: "data:image/png;base64,AAAA" };
@@ -32,6 +32,18 @@ function fixture(): PdpDraftInput {
 }
 
 describe("T-SAVE: 화면 입력부터 IndexedDB 왕복", () => {
+  it("지금 여는 초안은 오래됐어도 이관 전에 만료 삭제하지 않는다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-07-01T00:00:00Z"));
+    const input = fixture(); ids.push(input.id!); await savePdpDraft(input);
+    await purgeExpiredPdpDrafts(new Date("2026-09-17T00:00:00Z"), [input.id!]);
+    expect(await getPdpDraft(input.id!)).not.toBeNull();
+  });
+  it("구성안의 공통 디자인과 제품 판독도 이관 전에 보존한다", async () => {
+    const input = fixture(); ids.push(input.id!);
+    input.result!.blueprint.designSystem = { headlineFont: "굵게", bodyFont: "보통", palette: ["파랑"], cast: "없음" };
+    await savePdpDraft(input);
+    expect((await getPdpDraft(input.id!))?.result?.blueprint.designSystem).toEqual(input.result!.blueprint.designSystem);
+  });
   it("참조·지시·꺼진 토글과 이미지·레이어를 보존한다", async () => {
     const input = fixture(); ids.push(input.id!);
     await savePdpDraft(input);

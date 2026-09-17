@@ -31,6 +31,7 @@ import { UnverifiedReview } from "./UnverifiedReview";
 import { apiJson, toAnchorImage, toDataUrl } from "./pdp-utils";
 import { replaceBlueprintState } from "./text-plan-state";
 import type { PdpTextDraftState } from "./pdp-drafts";
+import { stableSections } from "./document-state";
 
 /**
  * 텍스트 진입 경로 전체를 담는다.
@@ -151,7 +152,7 @@ export function TextModeFlow({
       }
 
       setBrief(response.result.brief);
-      const replacement = replaceBlueprintState(response.result.blueprint);
+      const replacement = replaceBlueprintState({ ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) });
       setOriginalBlueprint(replacement.originalBlueprint);
       setBlueprint(replacement.blueprint);
       setReview(response.result.review);

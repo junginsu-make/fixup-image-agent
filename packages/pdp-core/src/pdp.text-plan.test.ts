@@ -239,14 +239,14 @@ describe("이미지 방향 병합", () => {
     expect(merged.sections[0].prompt_en).toBe("living room at dusk");
   });
 
-  it("고쳤으면 원본 prompt_en을 유지한 채 지시를 덧붙인다", () => {
+  it("고쳤으면 이전 장면을 섞지 않고 현재 장면을 쓴다", () => {
     const edited = {
       ...original,
       sections: [{ ...original.sections[0], prompt_ko: "아침 사무실" }],
     };
     const merged = mergeArtDirection(original, edited);
 
-    expect(merged.sections[0].prompt_en).toContain("living room at dusk");
+    expect(merged.sections[0].prompt_en).not.toContain("living room at dusk");
     expect(merged.sections[0].prompt_en).toContain("아침 사무실");
     expect(merged.sections[0].prompt_ko).toBe("아침 사무실");
   });

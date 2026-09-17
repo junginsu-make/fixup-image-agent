@@ -341,12 +341,13 @@ export async function deleteAllPdpDrafts(): Promise<number> {
  * **실패해도 조용히 넘어간다.** 청소는 곁다리다. 이것 때문에 목록이 안 뜨면
  * 본말이 뒤집힌다.
  */
-export async function purgeExpiredPdpDrafts(now: Date = new Date()): Promise<number> {
+export async function purgeExpiredPdpDrafts(now: Date = new Date(), protectedIds: readonly string[] = []): Promise<number> {
   try {
     const records = await withStore("readonly", (store) =>
       requestAsPromise<PdpDraftRecord[]>(store.getAll()),
     );
-    const expired = selectExpiredDraftIds(records, now);
+    const protectedSet = new Set(protectedIds);
+    const expired = selectExpiredDraftIds(records, now).filter((id) => !protectedSet.has(id));
     if (expired.length === 0) return 0;
 
     await withStore("readwrite", async (store) => {
@@ -453,6 +454,7 @@ function normalizeGeneratedResult(
     return {
       originalImage: result.originalImage || preparedImage?.previewUrl || toDataUrl(preparedImage),
       blueprint: {
+        ...result.blueprint,
         executiveSummary: result.blueprint.executiveSummary ?? "",
         scorecard: Array.isArray(result.blueprint.scorecard) ? result.blueprint.scorecard : [],
         blueprintList: Array.isArray(result.blueprint.blueprintList) ? result.blueprint.blueprintList : [],

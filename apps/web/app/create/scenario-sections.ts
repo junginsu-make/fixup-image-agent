@@ -1,4 +1,5 @@
 import type { SectionBlueprint } from "@fixup/pdp-core";
+import { randomId } from "../../lib/browser-safe";
 
 /**
  * 사용자가 시나리오에서 새로 추가하는 섹션.
@@ -54,8 +55,8 @@ export function createEmptySection(index: number): SectionBlueprint {
  * 커지지 않는다.
  */
 export function createSectionFor(sections: readonly SectionBlueprint[]): SectionBlueprint {
-  const taken = new Set(sections.map((section) => section.section_id));
-  let number = 1;
-  while (taken.has(`S${number}`)) number += 1;
-  return createEmptySection(number - 1);
+  const id = randomId();
+  return { ...createEmptySection(sections.length), section_id: id, image_id: `IMG_${id}`,
+    style_guide: sections.find((section) => section.style_guide)?.style_guide ?? "",
+    reference_usage: sections.find((section) => section.reference_usage)?.reference_usage ?? "" };
 }

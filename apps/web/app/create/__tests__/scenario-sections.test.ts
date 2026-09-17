@@ -42,21 +42,21 @@ describe("이미 있는 섹션과 겹치지 않게 추가", () => {
   it("중간을 지우고 추가해도 안 겹친다", () => {
     // S1~S6 에서 S2 를 지운 상태. 길이는 5 지만 S6 는 이미 쓰였다.
     const sections = of("S1", "S3", "S4", "S5", "S6");
-    expect(createSectionFor(sections).section_id).toBe("S2");
+    expect(sections.map((section) => section.section_id)).not.toContain(createSectionFor(sections).section_id);
   });
 
-  it("빈 목록에서는 S1 이다", () => {
-    expect(createSectionFor([]).section_id).toBe("S1");
+  it("빈 목록에서도 UUID를 발급한다", () => {
+    expect(createSectionFor([]).section_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("끝까지 차 있으면 다음 번호로 간다", () => {
-    expect(createSectionFor(of("S1", "S2", "S3")).section_id).toBe("S4");
+    const existing = of("S1", "S2", "S3");
+    expect(existing.map((section) => section.section_id)).not.toContain(createSectionFor(existing).section_id);
   });
 
   it("이름과 이미지 id 도 그 번호를 따른다", () => {
     const section = createSectionFor(of("S1", "S3"));
-    expect(section.section_id).toBe("S2");
-    expect(section.section_name).toContain("2");
-    expect(section.image_id).toBe("IMG_S2");
+    expect(section.section_name).toContain("3");
+    expect(section.image_id).toBe(`IMG_${section.section_id}`);
   });
 });

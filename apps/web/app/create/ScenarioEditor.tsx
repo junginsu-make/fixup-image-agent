@@ -281,7 +281,7 @@ export function ScenarioEditor({
   };
 
   return (
-    <section className="grid gap-4">
+    <fieldset disabled={isBusy} className="grid min-w-0 gap-4">
       <div className="rounded-lg bg-card p-5 shadow-[var(--shadow-ring)]">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="min-w-0">
@@ -296,7 +296,9 @@ export function ScenarioEditor({
           </Button>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          아직 이미지를 만들지 않았습니다. 여기서 고친 내용이 그대로 이미지에 반영됩니다.
+          {blueprint.sections.some((section) => section.generatedImage)
+            ? "이미 만든 이미지가 있습니다. 구성안을 고쳐도 기존 이미지는 바뀌지 않으므로 해당 섹션을 다시 생성해 주세요."
+            : "아직 이미지를 만들지 않았습니다. 여기서 고친 내용이 이후 이미지 생성에 반영됩니다."}
         </p>
 
         <CharacterPicker
@@ -431,6 +433,6 @@ export function ScenarioEditor({
           </Button>
         </div>
       </div>
-    </section>
+    </fieldset>
   );
 }

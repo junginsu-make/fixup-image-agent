@@ -6,8 +6,11 @@ import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, Re
 import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL, mergeArtDirection } from "@fixup/pdp-core";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft, PdpTextDraftState } from "./pdp-drafts";
-import { DraftSaveClock, startDraftAutosave } from "./draft-save-clock";
-import { buildSectionKeys, deleteAllPdpDrafts, deletePdpDraft, getPdpDraft, listPdpDrafts, purgeExpiredPdpDrafts, savePdpDraft, preservePdpDraft } from "./pdp-drafts";
+import { DraftSaveClock, startDraftAutosave, draftChangeValues } from "./draft-save-clock";
+import { createDraftRepository } from "./draft-repository";
+import { stableSections } from "./document-state";
+import { editorForSections } from "./editor-state";
+import { buildSectionKeys, purgeExpiredPdpDrafts } from "./pdp-drafts";
 import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
@@ -42,7 +45,8 @@ const START_MODES: Array<{ value: CreateMode; label: string; desc: string }> = [
   { value: "text", label: "텍스트로 시작", desc: "사진이 없습니다. 설명을 적으면 구성과 이미지를 만듭니다." },
 ];
 
-export function PdpMakerClient() {
+export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enabled?: boolean }) {
+  const draftRepository = useMemo(() => createDraftRepository(documentV3Enabled), [documentV3Enabled]);
   const router = useRouter();
   const searchParams = useSearchParams();
   // 라이브러리에서 ?draft=<id> 로 넘어오면 그 작업을 한 번만 자동으로 연다.
@@ -161,7 +165,18 @@ export function PdpMakerClient() {
   const [draftCreatedAt, setDraftCreatedAt] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [editorDraftState, setEditorDraftState] = useState<PdpEditorDraftState | null>(null);
+  // 섹션 내용의 정본은 result.blueprint다. 편집기의 결과도 같은 곳으로 합류한다.
+  const handleEditorDraftStateChange = useCallback((state: PdpEditorDraftState) => {
+    setEditorDraftState(state);
+  }, []);
+  const handleSectionsChange = useCallback((update: React.SetStateAction<LandingPageBlueprint["sections"]>) => {
+    setResult((current) => current ? { ...current, blueprint: { ...current.blueprint,
+      sections: typeof update === "function" ? update(current.blueprint.sections) : update } } : current);
+  }, []);
   const [editorSessionKey, setEditorSessionKey] = useState(0);
+  const [undoDraftId, setUndoDraftId] = useState<string | null>(null);
+  const [scenarioBusy, setScenarioBusy] = useState(false);
+  const scenarioBusyRef = useRef(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [manualSaveToastToken, setManualSaveToastToken] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
@@ -177,34 +192,26 @@ export function PdpMakerClient() {
   const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage));
 
   const goToSettings = useCallback(() => router.push("/settings"), [router]);
+  const protectedDraftId = activeDraftId ?? searchParams.get("draft");
 
   const refreshDrafts = useCallback(async () => {
     setIsLoadingDrafts(true);
     try {
       // 목록을 읽을 때 만료된 것을 함께 치운다. 따로 도는 청소 작업을 두면
       // 언제 도는지 알 수 없고, 브라우저를 안 열면 영영 안 돈다.
-      await purgeExpiredPdpDrafts();
-      setDrafts(await listPdpDrafts());
+      // v3 이관 전에 원본을 만료 청소하지 않는다. 새 저장소의 보관 정책은 별도 적용한다.
+      if (!documentV3Enabled) await purgeExpiredPdpDrafts(new Date(), protectedDraftId ? [protectedDraftId] : []);
+      setDrafts(await draftRepository.list());
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "저장된 작업 목록을 불러오지 못했습니다.");
     } finally {
       setIsLoadingDrafts(false);
     }
-  }, []);
+  }, [draftRepository, documentV3Enabled, protectedDraftId]);
 
   useEffect(() => {
     void refreshDrafts();
   }, [refreshDrafts]);
-
-  useEffect(() => {
-    if (isApplyingDraftRef.current || !hasDraftContent) {
-      return;
-    }
-
-    saveClockRef.current.changed();
-    setIsDirty(true);
-    setSaveState((current) => (current === "saved" ? "idle" : current));
-  }, [additionalInfo, appState, aspectRatio, desiredTone, editorDraftState, hasDraftContent, modelImage, modelImageUsage, preparedImage, result, sellerBrief, copyIntensity, gapPolicy, look, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, startMode, analyzedBlueprint, textDraft]);
 
   const handlePreparedImage = async (file: File) => {
     try {
@@ -283,6 +290,16 @@ export function PdpMakerClient() {
     [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, startMode, analyzedBlueprint, textDraft],
   );
 
+  const draftSnapshot = useMemo(() => buildDraftInput(), [buildDraftInput]);
+  useEffect(() => {
+    if (!draftSnapshot) return;
+    const clock = saveClockRef.current;
+    clock.observe(draftChangeValues({ ...draftSnapshot, editorState: editorDraftState }));
+    if (isApplyingDraftRef.current) clock.acknowledge(clock.revision);
+    setIsDirty(clock.dirty);
+    if (clock.dirty) setSaveState((current) => current === "saved" ? "idle" : current);
+  }, [draftSnapshot, editorDraftState]);
+
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
       const input = buildDraftInput();
@@ -296,7 +313,7 @@ export function PdpMakerClient() {
       setSaveState("saving");
 
       try {
-        const savedDraft = await savePdpDraft(input);
+        const savedDraft = await draftRepository.save(input);
         // 저장을 기다리는 동안 다른 작업을 열었으면 그 화면의 ID/dirty를 덮지 않는다.
         if (saveClockRef.current !== savingClock) return savedDraft;
         setActiveDraftId(savedDraft.id);
@@ -325,7 +342,7 @@ export function PdpMakerClient() {
         });
       }
     },
-    [buildDraftInput, refreshDrafts]
+    [buildDraftInput, refreshDrafts, draftRepository]
   );
 
   const confirmSaveBeforeLeaving = useCallback(async () => {
@@ -346,7 +363,8 @@ export function PdpMakerClient() {
     const input = buildDraftInput();
     if (!input) return true;
     try {
-      await preservePdpDraft(input);
+      const backup = await draftRepository.preserve(input);
+      setUndoDraftId(backup.id);
       await refreshDrafts();
       return true;
     } catch (error) {
@@ -354,7 +372,7 @@ export function PdpMakerClient() {
       setErrorDetail(error instanceof Error ? error.message : String(error));
       return false;
     }
-  }, [buildDraftInput, refreshDrafts]);
+  }, [buildDraftInput, refreshDrafts, draftRepository]);
 
   const resetWorkspace = useCallback(() => {
     isApplyingDraftRef.current = true;
@@ -363,6 +381,7 @@ export function PdpMakerClient() {
     setModelImage(null);
     setModelImageUsage(null);
     setResult(null);
+    setUndoDraftId(null);
     setAnalyzedBlueprint(null);
     setTextDraft(null);
     setTextStage("input");
@@ -416,7 +435,7 @@ export function PdpMakerClient() {
       setShowErrorDetail(false);
 
       try {
-        const draft = await getPdpDraft(draftId);
+        const draft = await draftRepository.get(draftId);
         if (!draft) {
           setErrorMessage("저장된 작업을 찾지 못했습니다.");
           await refreshDrafts();
@@ -430,7 +449,9 @@ export function PdpMakerClient() {
         setPreparedImage(draft.preparedImage);
         setModelImage(draft.modelImage ?? null);
         setModelImageUsage(draft.modelImageUsage ?? null);
-        setResult(draft.result);
+        setResult(draft.result && draft.editorState?.sections.length
+          ? { ...draft.result, blueprint: { ...draft.result.blueprint, sections: draft.editorState.sections } }
+          : draft.result);
         setImageModel(draft.imageModel ?? DEFAULT_IMAGE_MODEL);
         setCharacterId(draft.characterId);
         setCharacterAngles(draft.characterAngles ?? []);
@@ -472,7 +493,7 @@ export function PdpMakerClient() {
         });
       }
     },
-    [confirmSaveBeforeLeaving, refreshDrafts]
+    [confirmSaveBeforeLeaving, refreshDrafts, draftRepository]
   );
 
   // 라이브러리에서 '이어서 편집'으로 넘어오면 ?draft=<id> 를 읽어 그 작업을 연다.
@@ -502,7 +523,7 @@ export function PdpMakerClient() {
     }
 
     try {
-      await deleteAllPdpDrafts();
+      for (const draft of drafts) await draftRepository.remove(draft.id);
       resetWorkspace();
       await refreshDrafts();
       setNotice("저장된 작업을 모두 삭제했습니다.");
@@ -510,7 +531,7 @@ export function PdpMakerClient() {
       setErrorMessage("저장된 작업을 삭제하지 못했습니다.");
       setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     }
-  }, [drafts.length, refreshDrafts, resetWorkspace]);
+  }, [drafts, draftRepository, refreshDrafts, resetWorkspace]);
 
   const handleDeleteDraft = useCallback(
     async (draftId: string) => {
@@ -520,7 +541,7 @@ export function PdpMakerClient() {
       }
 
       try {
-        await deletePdpDraft(draftId);
+        await draftRepository.remove(draftId);
         if (activeDraftId === draftId) {
           resetWorkspace();
         }
@@ -530,7 +551,7 @@ export function PdpMakerClient() {
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       }
     },
-    [activeDraftId, refreshDrafts, resetWorkspace]
+    [activeDraftId, draftRepository, refreshDrafts, resetWorkspace]
   );
 
   useEffect(() => {
@@ -603,8 +624,9 @@ export function PdpMakerClient() {
         return;
       }
 
-      setResult(response.result);
-      setAnalyzedBlueprint(response.result.blueprint);
+      const blueprint = { ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) };
+      setResult({ ...response.result, blueprint });
+      setAnalyzedBlueprint(blueprint);
       // 심사 결과를 시나리오 화면에 넘긴다. 사진 경로에도 심사가 붙었는데
       // 받아 두지 않으면 화면은 늘 비어 있다.
       setReview(response.result.review);
@@ -641,6 +663,7 @@ export function PdpMakerClient() {
     setCharacterId(chosenCharacterId);
     setCharacterAngles(chosenCharacterAngles ?? []);
     setResult(generated);
+    setAnalyzedBlueprint(generated.blueprint);
     setEditorDraftState(null);
     setEditorSessionKey((current) => current + 1);
     setNotice("시나리오와 대표 이미지를 정했습니다. 이제 섹션별 이미지를 만들어 보세요.");
@@ -664,6 +687,21 @@ export function PdpMakerClient() {
 
     resetWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleScenarioChange = async (blueprint: LandingPageBlueprint) => {
+    if (!result || scenarioBusyRef.current) return;
+    const before = result;
+    const removedImage = before.blueprint.sections.some((section) => section.generatedImage &&
+      !blueprint.sections.some((next) => next.section_id === section.section_id));
+    if (removedImage) {
+      scenarioBusyRef.current = true; setScenarioBusy(true);
+      try { if (!(await preserveBeforeReplacement())) return; }
+      finally { scenarioBusyRef.current = false; setScenarioBusy(false); }
+    }
+    setResult((current) => current === before ? { ...before, blueprint: mergeArtDirection(
+      analyzedBlueprint ?? { ...blueprint, sections: [] }, blueprint,
+    ) } : current);
   };
 
   /**
@@ -717,15 +755,15 @@ export function PdpMakerClient() {
           onCharacterChange={chooseCharacter}
           outputMode={outputMode}
           imageModel={imageModel}
-          isBusy={false}
-          onChange={(blueprint: LandingPageBlueprint) => setResult({ ...result, blueprint })}
+          isBusy={scenarioBusy}
+          onChange={handleScenarioChange}
           onModelChange={setImageModel}
-          onRegenerate={() => void handleAnalyze()}
+          onRegenerate={() => { setAppState("upload"); if (startMode === "text") setTextStage("input"); }}
           onConfirm={() => {
             // 고친 한국어 이미지 방향을 실제 생성에 쓰이는 prompt_en 에 실어 보낸다.
-            if (analyzedBlueprint) {
-              setResult({ ...result, blueprint: mergeArtDirection(analyzedBlueprint, result.blueprint) });
-            }
+            setResult({ ...result, blueprint: mergeArtDirection(
+              analyzedBlueprint ?? { ...result.blueprint, sections: [] }, result.blueprint,
+            ) });
             setNotice("섹션별 이미지를 만들어 보세요.");
             setAppState("editor");
           }}
@@ -752,17 +790,22 @@ export function PdpMakerClient() {
         desiredTone={desiredTone}
         look={look}
         userInstruction={userInstruction}
-        initialDraftState={editorDraftState}
+        initialDraftState={editorDraftState ? editorForSections(editorDraftState, result.blueprint.sections) : null}
         initialResult={result}
         lastSavedAt={lastSavedAt}
         manualSaveToastToken={manualSaveToastToken}
-        onDraftStateChange={setEditorDraftState}
+        onDraftStateChange={handleEditorDraftStateChange}
+        onSectionsChange={handleSectionsChange}
         onBeforeReplace={preserveBeforeReplacement}
+        onUndo={undoDraftId ? () => void handleLoadDraft(undoDraftId) : undefined}
         onManualSave={() => void persistDraft("manual", { showToast: true })}
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
         pageContext={additionalInfo}
-        onJumpStep={(id) => setAppState(id === "upload" ? "upload" : "scenario")}
+        onJumpStep={(id) => {
+          setAppState(id === "upload" ? "upload" : "scenario");
+          if (id === "upload" && startMode === "text") setTextStage("input");
+        }}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
         attachmentIntents={intentsOrUndefined(

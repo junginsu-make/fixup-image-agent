@@ -52,14 +52,7 @@ describe("차감 장수를 서버와 같은 식으로 세는가", () => {
   });
 });
 
-describe("사진 경로의 이미지 방향이 생성까지 가는가", () => {
-  it("확정할 때 한국어 방향을 prompt_en 에 싣는다", () => {
-    // 시나리오 화면의 「이미지 방향」은 prompt_ko 만 고치는데 생성은 prompt_en
-    // 만 본다. 글 경로만 이 일을 하고 있었다.
-    expect(maker).toContain("mergeArtDirection(analyzedBlueprint, result.blueprint)");
-    expect(maker).toContain("setAnalyzedBlueprint(response.result.blueprint);");
-  });
-});
+// 이미지 방향은 draft-ui/new-section-direction의 실제 상태·함수 시험이 검사한다.
 
 describe("초안을 다시 열 때", () => {
   it("심사 결과를 버리지 않는다", () => {
