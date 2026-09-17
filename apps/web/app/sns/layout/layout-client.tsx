@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Button, Input } from "@fixup/ui";
 import { CARD_RATIOS, IMAGE_MODELS } from "@fixup/sns-core";
 import {
@@ -14,6 +14,8 @@ import {
   type SlotKind,
 } from "@fixup/layout-core";
 import { SlotCanvas } from "./slot-canvas";
+import { canvasSize } from "./fit-screen";
+import { useFitScreen } from "./use-fit-screen";
 import { SlotInspector } from "./slot-inspector";
 import { LibraryPicker, LibraryUploadButton, useLibraryImages } from "./library-picker";
 import { PreviewPanel, type PreviewCopy, type PreviewResult } from "./preview-panel";
@@ -52,7 +54,14 @@ const EMPTY_COPY: PreviewCopy = {
   footnote: "2026-09-03",
 };
 
-const BAR_SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
+/**
+ * 설정 칸의 선택 상자.
+ *
+ * **칸 폭을 넘지 않는다**(`w-full min-w-0`). 안 막으면 가장 긴 선택지(「인스타그램
+ * 피드 4:5」) 폭으로 늘어나, 좁은 화면에서 왼쪽 열에 가로 스크롤이 생겼다
+ * (1280×650 실측).
+ */
+const BAR_SELECT = "h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm";
 
 /**
  * 견적을 셀 때 쓰는 모델.
@@ -89,6 +98,8 @@ function measureShape(url: string): Promise<number | undefined> {
 }
 
 export function LayoutStudio() {
+  /** 화면 한 장에 맞추려고 실제로 남은 자리를 잰다(`use-fit-screen.ts`). */
+  const fit = useFitScreen();
   const [ratioId, setRatioId] = useState(CARD_RATIOS[0]!.id);
   const [role, setRole] = useState<Role>("cover");
   const [slots, setSlots] = useState<LayoutSlot[]>(defaultTemplateForRole("cover").slots);
@@ -266,18 +277,53 @@ export function LayoutStudio() {
   ];
 
   return (
-    /* 화면 높이 안에서 끝낸다. 열마다 자기 안에서만 스크롤한다. */
-    <div className="flex h-[calc(100vh-9rem)] flex-col gap-3">
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[auto_15rem_22rem_1fr]">
-        <section className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+    /*
+      **화면 한 장 안에서 끝낸다**(2026-09-17 사용자 요청). 열마다 자기 안에서만
+      스크롤한다.
+
+      높이를 어림값(`100vh - 9rem`)으로 두지 않고 **실제로 남은 자리를 잰다.**
+      위에 놓인 것이 어림보다 두꺼워 아래로 넘쳤고, 레퍼런스의 「칸 읽어내기」
+      버튼이 반만 보였다.
+    */
+    <div ref={fit.rootRef} className="flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}>
+      {/*
+        **네 열이 다 조금씩 줄어든다.** 고정 폭이면 줄어드는 곳이 레퍼런스 열
+        하나뿐이라 그 칸만 손톱만 해졌다.
+
+        **첫 열에는 바닥을 준다.** `auto` 로만 두면 좁은 화면에서 69px 까지
+        짜부라져, 그 아래 설정 묶음이 세로로 327px 까지 늘어나고 카드 칸이 설
+        자리가 사라졌다(1280×650 실측). 바닥 합(17+11+14+15rem)이 1280 폭 본문
+        안에 들어가게 잡았다.
+
+        **열 정의나 틈(`gap-3`)을 바꾸면 `fit-screen.ts` 의 `COLUMN_LAYOUTS`·
+        `COLUMN_GAP_PX` 도 바꾼다.** 캔버스 가로 한계를 거기서 셈한다.
+
+        **1280 보다 좁으면 세 열이다.** 네 열의 최소 폭 합이 그 본문에 안 들어가,
+        레이어 목록과 칸 설정을 한 열에 위아래로 쌓는다(2026-09-17 독립 리뷰).
+
+        **첫 열 폭은 캔버스 폭으로 못 박는다.** `max-content` 로 두었더니 격자가
+        남는 폭을 가운데 두 열에 먼저 나눠 줘, 첫 열이 캔버스보다 27px 좁아져
+        가로로 넘쳤다(1280×1024 실측). 캔버스 폭은 이미 나머지 세 열의 최소
+        폭을 뺀 자리 안이라, 못 박아도 뒤 열들은 자기 최소 폭을 지킨다.
+      */}
+      <div
+        className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[var(--first-column)_minmax(13rem,18rem)_minmax(14rem,1fr)] xl:grid-cols-[var(--first-column)_minmax(11rem,15rem)_minmax(14rem,22rem)_minmax(15rem,1fr)]"
+        style={{ "--first-column": `max(17rem, ${canvasSize(ratio.pixel, fit.canvasSpace).width}px)` } as CSSProperties}
+      >
+        <section ref={fit.columnRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           <SlotCanvas
             slots={slots}
             size={ratio.pixel}
+            space={fit.canvasSpace}
             selected={selected}
             backdrop={showCompare ? (compareUrl ?? preview?.image) : preview?.image}
             onSelect={setSelected}
             onChange={(offset, slot) => setSlots((current) => replaceSlot(current, offset, slot))}
           />
+          {/*
+            캔버스 아래 묶음. **이 높이를 재서** 캔버스가 남은 자리에 맞게 줄어든다.
+          */}
+          <div ref={fit.belowRef} className="grid shrink-0 gap-2">
           <div className="flex flex-wrap gap-1">
             {ADD_KINDS.map((kind) => (
               <Button
@@ -332,13 +378,13 @@ export function LayoutStudio() {
           */}
           <div className="grid gap-2 rounded-lg border bg-card p-3">
             <div className="grid grid-cols-2 gap-2">
-              <label className="grid gap-1">
+              <label className="grid min-w-0 gap-1">
                 <span className="text-[11px] text-muted-foreground">자리</span>
                 <select className={BAR_SELECT} value={role} onChange={(event) => changeRole(event.target.value as Role)}>
                   {ROLES.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
                 </select>
               </label>
-              <label className="grid gap-1">
+              <label className="grid min-w-0 gap-1">
                 <span className="text-[11px] text-muted-foreground">비율</span>
                 <select className={BAR_SELECT} value={ratioId} onChange={(event) => { setRatioId(event.target.value); setPreview(null); }}>
                   {CARD_RATIOS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
@@ -387,8 +433,14 @@ export function LayoutStudio() {
               {alerts.map((alert) => <li key={alert}>{alert}</li>)}
             </ul>
           ) : null}
+          </div>
         </section>
 
+        {/*
+          레이어 목록과 칸 설정. 네 열일 때는 `contents` 로 풀려 각자 한 열을 쓰고,
+          세 열일 때는 한 열에 위아래로 쌓여 각자 안에서 스크롤한다.
+        */}
+        <div className="grid min-h-0 gap-3 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] xl:contents">
         <section className="min-h-0 overflow-y-auto">
           <LayerList
             slots={slots}
@@ -422,13 +474,19 @@ export function LayoutStudio() {
             </p>
           )}
         </section>
+        </div>
 
         <section className="flex min-h-0 flex-col gap-2 rounded-lg border bg-card p-3">
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="font-semibold">레퍼런스에서 칸 읽어내기</h3>
+            {/* 제목은 짧게(2026-09-17 사용자 결정). 무엇을 하는지는 아래 버튼이 말한다. */}
+            <h3 className="shrink-0 whitespace-nowrap font-semibold">레퍼런스</h3>
             <span className="text-xs text-muted-foreground">읽어낸 것은 초안입니다. 화면에서 고쳐 쓰세요.</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
+          {/*
+            좁은 폭(열이 쌓일 때)에는 높이를 재지 않아 격자가 끝없이 길어진다. 그림이
+            수십 장이면 「칸 읽어내기」가 목록 맨 아래로 밀리므로 높이를 막아 둔다.
+          */}
+          <div className="min-h-0 flex-1 overflow-hidden max-lg:max-h-[60vh]">
             <LibraryPicker value={analyzeId} onPick={setAnalyzeId} size="card" images={libraryImages} />
           </div>
           <div className="flex shrink-0 gap-2">
