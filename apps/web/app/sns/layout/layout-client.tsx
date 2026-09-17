@@ -15,6 +15,7 @@ import {
 } from "@fixup/layout-core";
 import { SlotCanvas } from "./slot-canvas";
 import { canvasSize } from "./fit-screen";
+import { billableFetch } from "../../../lib/billable-fetch";
 import { useFitScreen } from "./use-fit-screen";
 import { SlotInspector } from "./slot-inspector";
 import { LibraryPicker, LibraryUploadButton, useLibraryImages } from "./library-picker";
@@ -221,9 +222,13 @@ export function LayoutStudio() {
     setBusy("analyze");
     setNotes([]);
     try {
-      const response = await fetch("/api/sns/layout/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      /*
+        **크레딧이 깎이는 요청이라 식별자가 필요하다.** 맨 `fetch` 로 부르면 서버가
+        예약 전에 400 「요청 식별자가 올바르지 않습니다」로 막는다 — 운영에서 이
+        버튼이 그래서 안 됐다(2026-09-17 사용자 보고). 로컬은 인증 우회가 검사보다
+        먼저 지나가 안 드러난다. 캐릭터 화면이 2026-09-04 에 같은 사고를 냈다.
+      */
+      const response = await billableFetch("/api/sns/layout/analyze", {
         body: JSON.stringify({ referenceImageId: analyzeId }),
       });
       const payload = await response.json();
