@@ -13,10 +13,17 @@ const BOTTOM_GAP = 24;
  * 한 화면이다.
  */
 const MIN_HEIGHT = 300;
-/** 여러 열로 서는 폭(`lg`). 그보다 좁으면 열이 위아래로 쌓여 화면 한 장에 못 넣는다. */
-const WIDE = "(min-width: 1024px)";
+/**
+ * 여러 열로 서는 폭(`lg`). 그보다 좁으면 열이 위아래로 쌓여 화면 한 장에 못 넣는다.
+ *
+ * **CSS 와 같은 단위(rem)로 적는다.** Tailwind v4 의 `lg`·`xl` 은 `64rem`·`80rem`
+ * 이고, 미디어 쿼리의 rem 은 브라우저 기본 글꼴 설정을 따른다. px 로 적으면 글꼴을
+ * 「크게」(20px) 둔 사람에게 훅과 화면의 판단이 갈려, 열이 쌓였는데 높이를 박아
+ * 넘치거나 세 열인데 네 열로 셈했다(2026-09-17 독립 리뷰).
+ */
+const WIDE = "(min-width: 64rem)";
 /** 네 열로 서는 폭(`xl`). 그보다 좁으면 세 열이다(`fit-screen.ts` 의 `COLUMN_LAYOUTS`). */
-const FOUR_COLUMNS = "(min-width: 1280px)";
+const FOUR_COLUMNS = "(min-width: 80rem)";
 /** 캔버스와 그 아래 묶음 사이 틈(`gap-2`). */
 const CANVAS_GAP = 8;
 
@@ -94,6 +101,8 @@ export function useFitScreen() {
     if (root.parentElement) observer.observe(root.parentElement);
     if (columnRef.current) observer.observe(columnRef.current);
     if (belowRef.current) observer.observe(belowRef.current);
+    // 창 **높이만** 바뀌면 지켜보는 요소들의 크기는 그대로다(높이를 박아 뒀다).
+    // 그때 다시 재는 길은 이것뿐이다.
     window.addEventListener("resize", measure);
     wide.addEventListener("change", measure);
     return () => {

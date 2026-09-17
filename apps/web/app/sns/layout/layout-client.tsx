@@ -440,7 +440,7 @@ export function LayoutStudio() {
           레이어 목록과 칸 설정. 네 열일 때는 `contents` 로 풀려 각자 한 열을 쓰고,
           세 열일 때는 한 열에 위아래로 쌓여 각자 안에서 스크롤한다.
         */}
-        <div className="grid min-h-0 gap-3 lg:grid-rows-[minmax(0,2fr)_minmax(0,3fr)] xl:contents">
+        <div className="grid min-h-0 gap-3 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] xl:contents">
         <section className="min-h-0 overflow-y-auto">
           <LayerList
             slots={slots}

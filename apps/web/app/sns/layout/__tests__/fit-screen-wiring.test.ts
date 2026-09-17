@@ -76,7 +76,8 @@ describe("재는 코드", () => {
   const rules = readFileSync(new URL("../fit-screen.ts", import.meta.url), "utf8");
 
   it("열이 쌓이는 좁은 폭에서는 재지 않는다 — 한 화면에 못 넣으니 페이지가 흐르게 둔다", () => {
-    expect(hook).toContain('const WIDE = "(min-width: 1024px)";');
+    // CSS(Tailwind v4 의 lg = 64rem)와 같은 단위여야 글꼴 설정이 달라도 판단이 안 갈린다.
+    expect(hook).toContain('const WIDE = "(min-width: 64rem)";');
     expect(hook).toMatch(/if \(!wide\.matches\) \{\s*setRootHeight\(undefined\);\s*setCanvasSpace\(undefined\);\s*return;/);
   });
 
@@ -89,6 +90,8 @@ describe("재는 코드", () => {
     expect(hook).toContain("observer.observe(root.parentElement)");
     expect(hook).toContain("observer.observe(columnRef.current)");
     expect(hook).toContain("observer.observe(belowRef.current)");
+    // 창 높이만 바뀔 때 다시 재는 유일한 길이다.
+    expect(hook).toContain('window.addEventListener("resize", measure);');
   });
 
   it("**가로는 캔버스에 따라 안 변하는 바깥 폭으로 잰다** — 격자 폭으로 재면 스스로를 키운 채 굳었다", () => {
@@ -97,7 +100,7 @@ describe("재는 코드", () => {
   });
 
   it("1280 부터 네 열, 그보다 좁으면 세 열로 셈한다 — 화면의 xl 과 같은 경계다", () => {
-    expect(hook).toContain("const FOUR_COLUMNS = \"(min-width: 1280px)\";");
+    expect(hook).toContain("const FOUR_COLUMNS = \"(min-width: 80rem)\";");
     expect(hook).toContain("window.matchMedia(FOUR_COLUMNS).matches ? \"four\" : \"three\"");
   });
 
@@ -109,6 +112,6 @@ describe("재는 코드", () => {
   });
 
   it("세 열일 때 레이어 목록과 칸 설정을 한 열에 쌓고, 네 열이면 풀어 준다", () => {
-    expect(client).toContain("<div className=\"grid min-h-0 gap-3 lg:grid-rows-[minmax(0,2fr)_minmax(0,3fr)] xl:contents\">");
+    expect(client).toContain("<div className=\"grid min-h-0 gap-3 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] xl:contents\">");
   });
 });
