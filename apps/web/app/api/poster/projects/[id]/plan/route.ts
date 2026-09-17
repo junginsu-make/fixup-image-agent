@@ -134,6 +134,9 @@ async function plan(request: Request, context: Context) {
           project.data, [...references, ...preserved], grammar.summaries, crowd.people,
         ),
         attachmentIntent: project.data.attachmentIntent,
+        // 붙인 그림에 글자가 있으면 지어난 글자도 안 지워진다.
+        // 그때는 「장면에서 글자 얘기를 하지 말라」고 시키면 안 된다.
+        referenceHasText: Object.values(grammar.grammars).some((one) => one.hasText),
       },
       providers.primary,
       providers.backup,
