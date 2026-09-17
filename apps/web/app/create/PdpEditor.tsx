@@ -1,8 +1,8 @@
 "use client";
 
-import type { MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
 import { createSectionFor } from "./scenario-sections";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
@@ -84,6 +84,7 @@ import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
+import { canvasFitFor } from "./layer-coords";
 import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
@@ -343,6 +344,17 @@ export function PdpEditor({
   // 라이브러리 저장은 브라우저 초안 저장과 다르다. 계정에 올려 기기를 옮겨도 남는다.
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
+  /*
+    **겉을 줄이는 배율.** 안쪽 캔버스는 늘 460px 이라 레이어 좌표의 뜻이
+    화면 폭과 무관해진다. 좁은 화면에서는 이 값만 작아진다.
+  */
+  const canvasFitRef = useRef<HTMLDivElement | null>(null);
+  const [canvasFit, setCanvasFit] = useState(1);
+  /*
+    줄인 만큼 **자리도 줄여야** 아래에 빈 공간이 생기지 않는다.
+    `transform: scale()` 은 보이는 크기만 줄이고 레이아웃 높이는 그대로다.
+  */
+  const [canvasHeight, setCanvasHeight] = useState<number | null>(null);
   /**
    * 편집 캔버스의 마지막 실제 폭.
    *
@@ -1945,6 +1957,48 @@ export function PdpEditor({
    * 레이어 좌표가 캔버스 폭 기준이라, 배율만 원본에 맞추면 배치는 그대로 두고
    * 해상도만 되찾는다.
    */
+  /*
+    **붙는 순간에 관찰을 시작한다.**
+
+    `useEffect` 로 하면 갤러리↔편집을 오갈 때 딸림값이 안 바뀌어 **다시 돌지
+    않는다.** 그때 캔버스는 아직 없었으므로 관찰자가 한 번도 안 붙고, 창을
+    줄여도 배율이 1 그대로다 — 2026-09-17 실제 브라우저로 그렇게 확인했다.
+    ref 콜백은 실제로 붙고 떨어질 때마다 불린다.
+  */
+  const fitObserverRef = useRef<ResizeObserver | null>(null);
+  const attachCanvasFit = useCallback((node: HTMLDivElement | null) => {
+    fitObserverRef.current?.disconnect();
+    fitObserverRef.current = null;
+    canvasFitRef.current = node;
+    if (!node || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasFit(canvasFitFor(entry?.contentRect.width));
+    });
+    observer.observe(node);
+    fitObserverRef.current = observer;
+    setCanvasFit(canvasFitFor(node.clientWidth));
+  }, []);
+
+  /** 안쪽 높이는 그림 비율이 정한다. 줄인 만큼 자리도 줄이려면 이 값이 필요하다. */
+  const heightObserverRef = useRef<ResizeObserver | null>(null);
+  const attachCanvas = useCallback((node: HTMLDivElement | null) => {
+    heightObserverRef.current?.disconnect();
+    heightObserverRef.current = null;
+    imageContainerRef.current = node;
+    if (!node) return;
+    // 안쪽 폭은 늘 460 이다. 내보내기가 이 값을 기준으로 굽는다.
+    if (node.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasHeight(entry?.contentRect.height ?? null);
+    });
+    observer.observe(node);
+    heightObserverRef.current = observer;
+    setCanvasHeight(node.clientHeight || null);
+  }, []);
+
   const captureSectionBlob = async (sectionIndex: number) => {
     const section = sections[sectionIndex];
     if (!section?.generatedImage) {
@@ -2582,14 +2636,26 @@ export function PdpEditor({
 
               <div className={styles.previewStage} ref={previewStageRef}>
                 {currentSection.generatedImage ? (
+                  /*
+                    **겉은 줄고 안은 고정이다.**
+
+                    안쪽 캔버스는 늘 460px 이고, 좁은 화면에서는 이 겉껍데기가
+                    그만큼 줄인 배율(`--canvas-fit`)을 넣어 준다. 레이어 좌표가
+                    460 기준으로 고정되므로 **어느 기기에서 열어도 같은 자리**다.
+
+                    전에는 캔버스 자체가 줄어 좌표의 뜻이 화면마다 달랐다 —
+                    데스크톱에서 오른쪽에 붙인 글자가 휴대폰에서 잘렸다.
+                  */
+                  <div
+                    className={styles.imageCanvasFit}
+                    ref={attachCanvasFit}
+                    // 줄인 만큼 자리도 줄인다. 안 그러면 아래에 빈 공간이 남는다.
+                    style={canvasHeight ? { height: `${canvasHeight * canvasFit}px` } : undefined}
+                  >
                   <div
                     className={styles.imageCanvas}
-                    ref={(node) => {
-                      imageContainerRef.current = node;
-                      // 붙거나 크기가 바뀔 때 기준 폭을 적어 둔다. 갤러리에서
-                      // 내려받을 때 이 값이 없으면 좌표가 어긋난다.
-                      if (node?.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
-                    }}
+                    ref={attachCanvas}
+                    style={{ "--canvas-fit": canvasFit } as CSSProperties}
                   >
                     <img
                       alt={currentSection.section_name}
@@ -2600,6 +2666,9 @@ export function PdpEditor({
 
                     {[...currentShapeLayers, ...currentTextLayers].map((overlay) => (
                       <Rnd
+                        // 겉이 줄어 있으면 마우스 움직임도 그만큼 환산해야
+                        // 잡은 자리와 실제 자리가 어긋나지 않는다.
+                        scale={canvasFit}
                         bounds="parent"
                         className={`${styles.overlayBox} ${isShapeLayer(overlay) ? styles.shapeLayerBox : styles.textLayerBox} ${selectedOverlayId === overlay.id ? styles.overlaySelected : ""}`}
                         enableUserSelectHack={false}
@@ -2699,6 +2768,7 @@ export function PdpEditor({
                         )}
                       </Rnd>
                     ))}
+                  </div>
                   </div>
                 ) : (
                   <div className={styles.placeholderPanel}>
