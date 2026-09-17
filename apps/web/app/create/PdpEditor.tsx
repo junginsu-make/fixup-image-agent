@@ -85,6 +85,7 @@ import { buildPageWire } from "./page-wire";
 import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
 import { alignedWidthFor, canvasFitFor, nextLayerOrigin } from "./layer-coords";
+import { restoreSectionKeys } from "./section-keys-restore";
 import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
@@ -287,15 +288,13 @@ export function PdpEditor({
   );
   /* 레이어·설정은 섹션 순서가 아니라 고유 키로 저장한다.
      순서로 저장하면 섹션 순서를 바꿨을 때 다른 섹션의 레이어가 딸려온다. */
-  const [sectionKeys, setSectionKeys] = useState<string[]>(
-    () =>
-      initialDraftState?.sectionKeys?.length === (initialDraftState?.sections?.length ?? -1)
-        ? initialDraftState.sectionKeys
-        : buildSectionKeys(
-            initialDraftState?.sections?.length
-              ? initialDraftState.sections
-              : initialResult.blueprint.sections
-          )
+  const [sectionKeys, setSectionKeys] = useState<string[]>(() =>
+    restoreSectionKeys({
+      draftKeys: initialDraftState?.sectionKeys,
+      draftSections: initialDraftState?.sections,
+      // **지금 그리는 섹션**과 짝이 맞는지 본다. 초안끼리 비교하면 어긋난 채 통과한다.
+      renderedSections: initialResult.blueprint.sections,
+    }),
   );
   const [sectionOptions, setSectionOptions] = useState<Record<string, ImageGenOptions>>(
     () =>
@@ -303,11 +302,11 @@ export function PdpEditor({
         initialDraftState?.sectionOptions ?? {},
         referenceModelUsage,
         // '첫 섹션'은 순서가 아니라 키로 가린다.
-        (initialDraftState?.sectionKeys?.length === (initialDraftState?.sections?.length ?? -1)
-          ? initialDraftState.sectionKeys
-          : buildSectionKeys(
-              initialDraftState?.sections?.length ? initialDraftState.sections : initialResult.blueprint.sections
-            ))[0]
+        restoreSectionKeys({
+          draftKeys: initialDraftState?.sectionKeys,
+          draftSections: initialDraftState?.sections,
+          renderedSections: initialResult.blueprint.sections,
+        })[0]
       )
   );
   const [overlaysBySection, setOverlaysBySection] = useState<Record<string, CanvasLayer[]>>(
