@@ -163,13 +163,30 @@ export function applyInlineStyle(target: HTMLElement, style: CSSProperties) {
   });
 }
 
+/**
+ * 파일 하나를 내려받게 한다.
+ *
+ * **앵커를 문서에 붙였다가 치운다.** 안 붙이면 일부 브라우저가 클릭을
+ * 무시한다. 이 저장소의 다른 다운로드(`image-viewer.tsx`)도 붙인다 —
+ * 두 곳이 다르면 한쪽만 고쳐지는 날이 온다.
+ *
+ * **주소는 한 박자 뒤에 거둔다.** `0ms` 는 너무 일러서, 큰 ZIP 은 받기가
+ * 시작도 못 하고 주소가 사라질 수 있다. 그렇다고 안 거두면 그 파일이
+ * 메모리에 계속 남는다.
+ */
 export function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
+  link.rel = "noopener";
+  link.style.display = "none";
+
+  document.body.appendChild(link);
   link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  document.body.removeChild(link);
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function sanitizeSectionFileName(value: string) {

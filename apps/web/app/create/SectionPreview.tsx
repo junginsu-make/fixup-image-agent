@@ -45,6 +45,8 @@ export function SectionPreview({
   imageClassName?: string;
 }) {
   const [fit, setFit] = useState(1);
+  /** 못 읽은 그림. 빈 자리만 남기면 사용자는 무엇이 잘못됐는지 모른다. */
+  const [broken, setBroken] = useState(false);
   const observerRef = useRef<ResizeObserver | null>(null);
 
   /*
@@ -67,7 +69,22 @@ export function SectionPreview({
 
   return (
     <div ref={attach} className={className} style={{ position: "relative" }}>
-      <img alt={alt} src={src} className={imageClassName} draggable={false} />
+      <img
+        alt={alt}
+        src={src}
+        className={imageClassName}
+        draggable={false}
+        onError={() => setBroken(true)}
+      />
+
+      {broken ? (
+        <span
+          className="absolute inset-0 grid place-items-center bg-canvas/80 p-2 text-center text-xs text-subtle-foreground"
+          role="status"
+        >
+          이미지를 불러오지 못했습니다
+        </span>
+      ) : null}
 
       {layers.length > 0 ? (
         /*

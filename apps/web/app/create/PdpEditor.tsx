@@ -2663,6 +2663,16 @@ export function PdpEditor({
                       className={styles.sectionImage}
                       draggable={false}
                       src={currentSection.generatedImage}
+                      /*
+                        **못 읽으면 그렇다고 말한다.** 손상된 초안을 열면 빈
+                        자리 위에 글자만 떠 있었고, 사용자는 무엇이 잘못됐는지
+                        모른 채 이미지가 사라졌다고 본다.
+                      */
+                      onError={() =>
+                        setErrorMessage(
+                          `${getDisplaySectionName(currentSection)} 이미지를 불러오지 못했습니다. 다시 만들어 주세요.`,
+                        )
+                      }
                     />
 
                     {[...currentShapeLayers, ...currentTextLayers].map((overlay) => (
