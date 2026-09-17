@@ -87,6 +87,7 @@ import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
   BASIC_SOLID_COLORS,
+  DEFAULT_FONT_FAMILY,
   FONT_OPTIONS,
   FONT_WEIGHT_OPTIONS,
   MODEL_AGE_OPTIONS,
@@ -1775,7 +1776,7 @@ export function PdpEditor({
     const estimatedBox = estimateOverlayBox(displayText, {
       fontSize: defaultFontSize,
       fontWeight: defaultFontWeight,
-      fontFamily: "'Pretendard', sans-serif",
+      fontFamily: DEFAULT_FONT_FAMILY,
       lineHeight: 1.2,
       maxWidth: style.maxWidth,
     });
@@ -1796,7 +1797,7 @@ export function PdpEditor({
       backgroundEnabled: false,
       backgroundOpacity: 0.72,
       backgroundRadius: 18,
-      fontFamily: "'Pretendard', sans-serif",
+      fontFamily: DEFAULT_FONT_FAMILY,
       fontWeight: defaultFontWeight,
       textAlign: "left",
       lineHeight: 1.2,

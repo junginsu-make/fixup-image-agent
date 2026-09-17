@@ -12,6 +12,7 @@
 
 import type { CSSProperties } from "react";
 import html2canvas from "html2canvas";
+import { normalizeFontFamily } from "./editor-options";
 import type {
   AspectRatio,
   GeneratedResult,
@@ -246,6 +247,12 @@ export function normalizeTextOverlay(
     text: translations[language] || translations.ko,
     translations,
     color: overlay.color ?? "#ffffff",
+    /*
+      **없는 글꼴로 저장된 레이어를 되살린다.**
+      목록을 고쳐도 이미 저장된 작업은 계속 깨진 채로 있다 — 고친 보람이 새
+      작업에만 돌아간다. 읽을 때 한 번 고쳐 두면 옛 초안도 제대로 찍힌다.
+    */
+    fontFamily: normalizeFontFamily(overlay.fontFamily),
     backgroundColor: overlay.backgroundColor === "transparent" ? "#102532" : overlay.backgroundColor,
     backgroundEnabled: overlay.backgroundEnabled ?? hasLegacyBackground,
     backgroundOpacity: overlay.backgroundOpacity ?? 0.72,

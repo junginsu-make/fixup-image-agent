@@ -9,12 +9,48 @@ import type { OverlayTextAlign } from "./pdp-drafts";
  * 읽을 때마다 스크롤을 지나쳐야 한다.
  */
 
+/**
+ * 고를 수 있는 글꼴.
+ *
+ * **여기 적는 이름은 실제로 부르는 이름이어야 한다.** 전에는 `'Pretendard'` 와
+ * `'Noto Sans KR'` 이 있었는데, 이 저장소가 `@font-face` 로 부르는 이름은
+ * `Pretendard Variable` 하나뿐이고 Noto 는 파일도 선언도 없었다. 고른 대로 안
+ * 찍히고 OS 기본 글꼴로 떨어졌다 — 화면에도, 내려받은 그림에도.
+ *
+ * 같은 사고가 이미 있었다(`layout.tsx` 머리말). `packages/ui` 의 `--font-sans`
+ * 가 "Pretendard" 를 맨 앞에 적어 두고도 불러오지 않아 맑은 고딕으로 떨어졌다.
+ *
+ * 글꼴을 더할 때는 **부르는 자리(`pretendard.css` 같은 곳)를 먼저 만들고**
+ * 여기에 적는다. `__tests__/editor-fonts.test.ts` 가 값으로 잰다.
+ */
 export const FONT_OPTIONS = [
-  { label: "Pretendard", value: "'Pretendard', sans-serif" },
-  { label: "Noto Sans KR", value: "'Noto Sans KR', sans-serif" },
-  { label: "Georgia", value: "Georgia, serif" },
-  { label: "Monospace", value: "monospace" },
+  // 본문과 같은 글꼴. 한글이 제대로 찍히는 유일한 선택지다.
+  { label: "프리텐다드", value: "'Pretendard Variable', system-ui, sans-serif" },
+  // 아래 둘은 어느 기계에나 있는 것이라 부르지 않아도 된다. 한글은 OS 기본으로 간다.
+  { label: "Georgia (영문)", value: "Georgia, 'Times New Roman', serif" },
+  { label: "고정폭 (영문)", value: "monospace" },
 ];
+
+/**
+ * 새 글자 레이어가 쓰는 글꼴.
+ *
+ * **목록 안의 값이어야 한다.** 목록에 없는 값이 기본이면 고르는 칸이 빈 채로
+ * 뜨고, 사용자는 그것을 고칠 방법이 없다. 전에는 기본이 `'Pretendard'` 였는데
+ * 그 이름은 부르는 자리가 없어 **모든 새 레이어가 OS 기본 글꼴로 찍혔다.**
+ */
+export const DEFAULT_FONT_FAMILY = FONT_OPTIONS[0]!.value;
+
+/**
+ * 저장돼 있던 글꼴 값을 지금 쓸 수 있는 것으로 되돌린다.
+ *
+ * **옛 초안을 버리지 않기 위해서다.** 목록을 고쳤다고 이미 저장된 레이어가
+ * 계속 깨진 채로 있으면, 고친 보람이 새 작업에만 돌아간다.
+ */
+export function normalizeFontFamily(value: string | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return DEFAULT_FONT_FAMILY;
+  return FONT_OPTIONS.some((option) => option.value === trimmed) ? trimmed : DEFAULT_FONT_FAMILY;
+}
 
 export const STYLE_OPTIONS: Array<{ value: NonNullable<ImageGenOptions["style"]>; label: string; description: string }> = [
   { value: "studio", label: "스튜디오컷", description: "정제된 배경과 집중도 높은 제품 연출" },
