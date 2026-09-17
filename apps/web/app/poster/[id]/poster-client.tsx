@@ -308,6 +308,17 @@ export function PosterClient(
    */
   const [invented, setInvented] = React.useState<string[]>(project.data.inventedSlots ?? []);
 
+  /**
+   * **화면에 표를 붙일 수 있는 칸만 센다.**
+   *
+   * 기획은 열한 칸을 채우는데 이 화면이 그리는 것은 아홉이다(`SLOT_LABELS`).
+   * `sideTexts`·`typeInteraction` 은 제 칸이 따로 있어 `renderSlot` 을 안 지난다.
+   * 그 둘까지 세면 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
+   *
+   * 배지·숫자·띠가 **같은 목록**을 봐야 서로 어긋나지 않는다.
+   */
+  const 표붙은칸 = invented.filter((name) => SLOT_LABELS.some(([field]) => field === name));
+
   /** 기획이 채운 칸과 안 채운 칸. 채운 것이 이 그림에 필요한 칸이다. */
   const { filled: filledFields, empty: emptyFields } = splitFilledSlots(
     SLOT_LABELS.map(([field]) => field),
@@ -319,7 +330,7 @@ export function PosterClient(
     const entry = SLOT_LABELS.find(([name]) => name === field);
     if (!entry) return null;
     const [, label, kind] = entry;
-    const 지어냄 = invented.includes(field);
+    const 지어냄 = 표붙은칸.includes(field);
     return (
       <div key={field} className="grid gap-1.5">
         <Label htmlFor={`slot-${field}`} className="flex flex-wrap items-center gap-2">
@@ -414,8 +425,10 @@ export function PosterClient(
         headers: { "content-type": "application/json" },
         body: JSON.stringify(slots),
       });
+      // 무엇을 표에서 뺄지는 서버가 정한다. 화면 state 와 어긋나지 않게 받는다.
       const body = await response.json();
       if (!body.ok) throw new Error(body.message ?? "슬롯을 저장하지 못했습니다.");
+      setInvented(body.project?.data?.inventedSlots ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "슬롯을 저장하지 못했습니다.");
     } finally {
@@ -431,6 +444,9 @@ export function PosterClient(
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
+      // **새 목록도 받는다.** 안 받으면 방금 채운 칸에 표가 하나도 안 붙는다 —
+      // 새로 만든 작업은 초기값이 늘 비어 있다(2026-09-17 리뷰).
+      setInvented(body.project.data.inventedSlots ?? []);
       setNotes(body.issues ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "기획하지 못했습니다.");
@@ -679,14 +695,14 @@ export function PosterClient(
               **거꾸로 말한다.** 적어 주신 말에서 나온 칸이 몇 개인지 알려 주고,
               나머지는 확인할 거리라고 안내한다.
             */}
-            {invented.length ? (
+            {표붙은칸.length ? (
               <div className="grid gap-1 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
                 <span className="text-sm font-bold text-amber-900 dark:text-amber-200">
                   표가 붙은 칸은 AI 가 골라 채운 것입니다
                 </span>
                 <span className="text-sm text-amber-900/80 dark:text-amber-200/80">
-                  적어 주신 말로 채운 칸은 {filledFields.length - invented.length}개이고,
-                  나머지 {invented.length}개는 AI 가 어울릴 만한 것으로 골랐습니다.
+                  적어 주신 말로 채운 칸은 {filledFields.length - 표붙은칸.length}개이고,
+                  나머지 {표붙은칸.length}개는 AI 가 어울릴 만한 것으로 골랐습니다.
                   마음에 안 들면 지우거나 고치세요. 고치면 표가 사라집니다.
                 </span>
               </div>

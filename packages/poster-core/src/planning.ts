@@ -138,6 +138,33 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
      * 판단할 거리는 AI 가 만들어 준다.
      */
     "  칸을 비워 두지 말고 채우세요. 사용자가 안 적은 것은 어울리는 것으로 고릅니다.",
+    /*
+     * **글자 칸만 예외다.**
+     *
+     * 이 저장소에서 빈 글자 칸은 「아직 안 채움」이 아니라 **입력값**이다.
+     * headline·subline·sideTexts 가 전부 비었을 때만 최종 프롬프트가 「글자를
+     * 넣지 말라」를 붙인다(`prompt.ts` 의 `copyLines`). 그 여섯 줄은
+     * 2026-09-08 사고의 대응이다 — 첨부에 글자가 없고 사용자도 안 시켰는데
+     * 「BEST DAY EVER!」가 박혀 나왔다.
+     *
+     * 다 채우게 하면 **그 분기에 도달할 길이 사라진다.** 글자 없는 포스터를
+     * 만들려면 사람이 04 에서 세 칸을 손수 지워야 하고, 그러면 기본값이
+     * 뒤집힌다(2026-09-17 리뷰에서 걸렸다).
+     */
+    /*
+     * **글자 칸을 규칙으로 가르려다 실패했다.** 「사용자가 적은 글자만 쓰세요」를
+     * 문구를 셋으로 바꿔 가며 다섯 번씩 돌렸는데, 대놓고 「헤드라인은 「가을,
+     * 셔터를 누르다」」라고 적은 지시에서도 **헤드라인을 안 썼다**
+     * (2026-09-17 실측). 앞의 「다 채우세요」와 뒤의 「사용자 것만」이 한
+     * 프롬프트에서 부딪혀 안전한 쪽(안 쓰기)으로 쏠린다.
+     *
+     * 그래서 **말이 아니라 코드로 가른다** — `copyLines` 가 글자 칸 셋이 다
+     * 비었을 때만 금지문을 붙이는데, 그 판단을 여기서 흔들지 않는다.
+     * 기획은 글자도 채우고, 글자 없는 그림을 원하면 사람이 04 에서 지운다.
+     * 표가 붙어 있으니 무엇을 지울지는 보인다.
+     *
+     * 남은 구멍은 §11-6 에 적었다 — 「글자 없는 포스터」의 기본값이 뒤집혔다.
+     */
     "  **다만 사용자 지시·레퍼런스에 근거가 없는 칸은** `invented` 에 그 칸 이름을",
     "  적으세요. 화면이 그것을 표시해 사람이 지우거나 고칩니다. 밝히면 되니",
     "  숨기지 말고, 근거가 있는 칸은 넣지 마세요.",
@@ -146,8 +173,16 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
 }
 
 function parseSlots(raw: unknown): PosterSlots {
-  const slots = (raw as { slots?: unknown } | null)?.slots ?? raw;
-  return PosterSlotsSchema.parse(slots);
+  const wrapped = (raw as { slots?: unknown } | null)?.slots;
+  if (wrapped !== undefined) return PosterSlotsSchema.parse(wrapped);
+  /*
+   * **평평하게 올려도 읽는다.** `{ slots: … }` 로 안 감싸고 칸을 바로 올리는
+   * 응답이 있다. 그때 `invented` 가 같이 실려 오는데, 스키마가 `.strict()` 라
+   * 낯선 칸 하나에 통째로 던진다 — 예비 제공자까지 부르고(돈·시간) 결국 빈
+   * 슬롯이 된다(2026-09-17 리뷰). 우리가 아는 칸이니 여기서 떼어 낸다.
+   */
+  const { invented: _버림, ...flat } = (raw ?? {}) as Record<string, unknown>;
+  return PosterSlotsSchema.parse(flat);
 }
 
 /** 화면이 표를 붙일 수 있는 칸 이름들. */
@@ -162,15 +197,29 @@ const SLOT_NAMES = new Set(Object.keys(EMPTY_SLOTS));
  * **안 돌려줘도 실패가 아니다.** 옛 기획 결과에는 이 칸이 없고, 없으면
  * 「지어낸 것이 없다」로 읽는다.
  */
-function parseInvented(raw: unknown): string[] {
+function parseInvented(raw: unknown): { names: string[]; dropped: number } {
   const list = (raw as { invented?: unknown } | null)?.invented;
-  if (!Array.isArray(list)) return [];
-  return list.filter((name): name is string => typeof name === "string" && SLOT_NAMES.has(name));
+  if (!Array.isArray(list)) return { names: [], dropped: 0 };
+
+  const names = [...new Set(
+    list.filter((name): name is string => typeof name === "string" && SLOT_NAMES.has(name)),
+  )];
+  return { names, dropped: list.length - names.length };
 }
 
 /** 칸과 「지어낸 칸」을 함께 읽는다. 둘 중 하나만 읽으면 부름이 두 번 된다. */
-function readPlan(raw: unknown): { slots: PosterSlots; invented: string[] } {
-  return { slots: parseSlots(raw), invented: parseInvented(raw) };
+function readPlan(raw: unknown): { slots: PosterSlots; invented: string[]; issues: string[] } {
+  const { names, dropped } = parseInvented(raw);
+  /*
+   * **버렸으면 말한다.** 모르는 이름을 조용히 버리면 세 경우가 똑같은 빈
+   * 목록으로 수렴한다 — 정말 지어낸 것이 없다 / 다른 표기로 적었다 / 아예
+   * 무시했다. 가장 위험한 마지막 경우가 가장 조용하다(2026-09-17 리뷰).
+   */
+  return {
+    slots: parseSlots(raw),
+    invented: names,
+    issues: dropped ? [`기획이 알려준 칸 이름 ${dropped}개를 못 알아들었습니다.`] : [],
+  };
 }
 
 export async function planPoster(
@@ -189,5 +238,9 @@ export async function planPoster(
       backupSuccess: `주 모델이 실패해 ${BACKUP_POSTER_PROVIDER} 예비로 기획했습니다`,
     },
   );
-  return { slots: value?.slots ?? EMPTY_SLOTS, invented: value?.invented ?? [], issues };
+  return {
+    slots: value?.slots ?? EMPTY_SLOTS,
+    invented: value?.invented ?? [],
+    issues: [...issues, ...(value?.issues ?? [])],
+  };
 }

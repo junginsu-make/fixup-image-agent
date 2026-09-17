@@ -45,8 +45,24 @@ describe("기획 응답 틀", () => {
     expect(planSpec).toContain("enum: Object.keys(SLOT_PROPERTIES)");
   });
 
-  /** 슬롯 목록 자체가 비면 위 검사가 무의미해진다. */
-  it("셀 칸이 있다", () => {
-    expect(Object.keys(EMPTY_SLOTS).length).toBeGreaterThan(5);
+  /**
+   * **두 목록이 갈리면 조용히 다 버려진다.**
+   *
+   * `SLOT_PROPERTIES`(여기)와 `PosterSlotsSchema`(poster-core)가 손으로 적은
+   * 두 벌이다. 갈라지면 응답 틀의 enum 과 `parseInvented` 의 허용 목록이
+   * 어긋나, 모델이 옳게 신고해도 전부 걸러져 표가 하나도 안 붙는다. 그런데
+   * 아무 데도 빨개지지 않는다(2026-09-17 리뷰).
+   *
+   * 「셀 칸이 있다」 같은 검사는 그 자리를 채우는 척만 한다. 실제로 맞대 본다.
+   */
+  it("칸 목록이 poster-core 와 같다", () => {
+    const 틀 = source.slice(
+      source.indexOf("const SLOT_PROPERTIES"),
+      source.indexOf("const PLAN_SPEC"),
+    );
+    const 이름들 = [...틀.matchAll(/^\s{2}"?([A-Za-z]+)"?:/gm)].map((found) => found[1]);
+
+    expect(이름들.length, "SLOT_PROPERTIES 를 못 읽었다").toBeGreaterThan(5);
+    expect([...이름들].sort()).toEqual(Object.keys(EMPTY_SLOTS).sort());
   });
 });

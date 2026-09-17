@@ -141,14 +141,38 @@ describe("지어낸 칸 표시", () => {
     expect(source).toContain("project.data.inventedSlots ?? []");
   });
 
+  /**
+   * **새로 기획한 뒤에도 받아야 한다.**
+   *
+   * 새로 만든 작업은 초기값이 늘 비어 있다. 기획을 돌린 뒤 목록을 안 받으면
+   * 칸은 AI 가 다 채웠는데 **표가 하나도 안 붙는다** — 주 경로에서 이 기능이
+   * 한 번도 안 보인다(2026-09-17 리뷰).
+   */
+  it("기획한 뒤 새 목록을 받는다", () => {
+    expect(source).toContain("setInvented(body.project.data.inventedSlots ?? [])");
+  });
+
+  /** 저장 뒤에는 서버가 정리한 것을 받는다. 무엇을 뺄지는 서버가 정한다. */
+  it("저장한 뒤에도 맞춘다", () => {
+    expect(source).toContain("setInvented(body.project?.data?.inventedSlots ?? [])");
+  });
+
   it("그 칸에 표를 붙인다", () => {
-    expect(source).toContain("invented.includes(field)");
+    expect(source).toContain("표붙은칸.includes(field)");
     expect(source).toContain("AI 가 골라 채움");
   });
 
-  /** 칸이 아홉이고 표는 작다. 맨 위에서 한 번 더 말해 준다. */
-  it("몇 개인지 맨 위에서도 말한다", () => {
-    expect(source).toContain("invented.length");
+  /**
+   * **화면에 표를 붙일 수 있는 칸만 센다.**
+   *
+   * 기획은 열한 칸을 채우는데 이 화면은 아홉을 그린다. 그 둘을 섞어 빼면
+   * 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
+   */
+  it("셀 때도 같은 목록을 쓴다", () => {
+    expect(source).toContain("const 표붙은칸 = invented.filter(");
+    expect(source).toContain("filledFields.length - 표붙은칸.length");
+    // 날 목록으로 세면 음수가 난다.
+    expect(source).not.toContain("filledFields.length - invented.length");
   });
 
   /**

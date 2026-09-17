@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildPlanPrompt, planPoster, PRIMARY_POSTER_MODEL } from "../planning";
-import { EMPTY_SLOTS } from "../schemas";
+import { EMPTY_SLOTS, keepInvented } from "../schemas";
 
 const input = {
   instruction: "필름 카메라 감성의 사진전 포스터",
@@ -272,5 +272,96 @@ describe("기획 프롬프트의 규칙", () => {
 
   it("지어낸 칸을 적으라고 한다", () => {
     expect(prompt).toContain("invented");
+  });
+});
+
+
+/**
+ * **사람이 고친 칸은 더 이상 「AI 가 골라 채운 것」이 아니다.**
+ *
+ * 표를 그대로 두면 자기가 쓴 글에 「AI 가 골라 채움」이 붙어 있는 꼴이 된다.
+ *
+ * **화면이 아니라 서버가 뺀다.** 화면 state 에서만 지우면 새로고침에 되살아난다
+ * (2026-09-17 리뷰). 저장은 옛 값과 새 값을 둘 다 아는 자리라, 무엇이 바뀌었는지
+ * 여기서 알 수 있다. 화면을 안 믿어도 되는 쪽이 안전하다.
+ */
+describe("고친 칸은 표에서 뺀다", () => {
+  const 옛값 = { ...EMPTY_SLOTS, headline: "AI 가 쓴 말", dominantColor: "주황" };
+
+  it("바꾼 칸이 빠진다", () => {
+    const 남은것 = keepInvented(["headline", "dominantColor"], 옛값, {
+      ...옛값, headline: "사람이 고친 말",
+    });
+
+    expect(남은것).toEqual(["dominantColor"]);
+  });
+
+  it("안 바꾼 칸은 남는다", () => {
+    expect(keepInvented(["headline"], 옛값, 옛값)).toEqual(["headline"]);
+  });
+
+  /** 지우는 것도 고치는 것이다. 사람이 「이건 빼자」고 판단한 것이다. */
+  it("지운 칸도 빠진다", () => {
+    expect(keepInvented(["headline"], 옛값, { ...옛값, headline: "" })).toEqual([]);
+  });
+
+  /** 배열 칸도 본다. 곁텍스트는 문자열이 아니다. */
+  it("곁텍스트가 바뀌어도 빠진다", () => {
+    const 있음 = { ...EMPTY_SLOTS, sideTexts: ["가", "나"] };
+    expect(keepInvented(["sideTexts"], 있음, { ...있음, sideTexts: ["가"] })).toEqual([]);
+    expect(keepInvented(["sideTexts"], 있음, 있음)).toEqual(["sideTexts"]);
+  });
+
+  it("옛 목록이 없으면 빈 목록이다", () => {
+    expect(keepInvented(undefined, 옛값, 옛값)).toEqual([]);
+  });
+});
+
+/**
+ * **평평하게 돌려줘도 읽는다.**
+ *
+ * 전에는 `{ slots: … }` 로 안 감싸고 칸을 바로 올려도 `?? raw` 가 받아 냈다.
+ * 그런데 `invented` 를 더하면서 그 응답에 낯선 칸이 하나 섞이게 됐고,
+ * `PosterSlotsSchema` 가 `.strict()` 라 「Unrecognized key」로 던진다 — 예비
+ * 제공자까지 부르고(돈·시간) 결국 빈 슬롯이 된다(2026-09-17 리뷰).
+ */
+describe("평평한 응답", () => {
+  it("칸을 바로 올려도 읽는다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ ...filled, invented: ["dominantColor"] }),
+    });
+
+    expect(result.slots.headline).toBe("가을, 셔터를 누르다");
+    expect(result.invented).toEqual(["dominantColor"]);
+    expect(result.issues).toEqual([]);
+  });
+});
+
+describe("못 알아들은 칸 이름", () => {
+  it("몇 개를 버렸는지 남긴다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["지배색", "slots.scene", "scene"] }),
+    });
+
+    expect(result.invented).toEqual(["scene"]);
+    expect(result.issues.join("\n")).toMatch(/2개/);
+  });
+
+  /** 다 알아들었으면 아무 말도 안 한다. 쓸데없는 경고는 다음 경고를 흐린다. */
+  it("다 알아들으면 조용하다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["scene"] }),
+    });
+
+    expect(result.issues).toEqual([]);
+  });
+
+  /** 같은 이름을 두 번 적어도 한 번만 센다. */
+  it("겹친 이름은 하나로 본다", async () => {
+    const result = await planPoster(input, {
+      plan: async () => ({ slots: filled, invented: ["scene", "scene"] }),
+    });
+
+    expect(result.invented).toEqual(["scene"]);
   });
 });
