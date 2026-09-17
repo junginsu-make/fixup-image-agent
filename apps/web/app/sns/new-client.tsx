@@ -99,9 +99,18 @@ export function NewSnsClient() {
    * 덮어써진다 — 고치려던 「다 초기화됐다」와 똑같이 읽힌다(2026-09-16 독립
    * 리뷰).
    */
-  const [seeding, setSeeding] = React.useState(
-    Boolean(new URLSearchParams(typeof window === "undefined" ? "" : window.location.search).get("from")),
-  );
+  /*
+    **주소는 `useSearchParams` 로 읽는다. `window` 로 읽으면 안 된다.**
+
+    `window.location` 으로 읽었더니 두 경우 모두 `false` 로 시작해 빈 칸이 보였다
+    (2026-09-17 독립 리뷰가 실측).
+    - 서버에서 그릴 때는 `window` 가 없다
+    - 결과 화면에서 눌러 올 때는 주소 바꾸기가 커밋 단계에서 일어나, 첫 렌더는
+      아직 옛 주소(`/sns/{id}`)를 읽는다
+    단계는 `useSearchParams` 로 정하므로, 둘이 어긋나 **빈 03** 이 보이고 손도 댈 수
+    있었다. 이미지 만들기와 같은 방식으로 맞춘다.
+  */
+  const [seeding, setSeeding] = React.useState(Boolean(rerunFrom));
 
   // 라이브러리에서 「카드뉴스로」를 눌러 왔으면 내용이 이미 들어가 있어야 한다.
   // 복사해 붙이게 만들면 라이브러리에 모아 둔 뜻이 없다.
@@ -160,7 +169,7 @@ export function NewSnsClient() {
       setSeeding(false);
     })();
     return () => { alive = false; };
-  }, [rerunFrom, rerunStep]);
+  }, [rerunFrom]);
 
   const totalCards = spec.cardCountMode === "fixed" ? spec.cardCount! : MAX_CARDS;
   const attachmentIssues = validateAttachments(attachments, modelById(spec.modelId).maxReferenceImages, totalCards);
@@ -292,6 +301,12 @@ export function NewSnsClient() {
           {!seeding && step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}
 
           {message ? <p role="alert" className="whitespace-pre-line rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{message}</p> : null}
+          {/*
+            **기다리는 동안 단추 줄도 안 낸다.** 값이 오기 전에는 03 이 기본값이라, 여기서
+            「기획 시작」을 누르면 **빈 규격으로 새 작업이 만들어진다.** 결과 화면에서 03 을
+            누르면 처음부터 03 으로 서게 바꾸면서 생긴 길이다(2026-09-17).
+          */}
+          {seeding ? null : (
           <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6">
             <div>{step !== "content" ? <Button variant="secondary" onClick={() => setStep(step === "spec" ? "images" : "content")}><ArrowLeft className="size-4" />이전</Button> : null}</div>
             <div className="flex flex-wrap items-center justify-end gap-3">
@@ -301,6 +316,7 @@ export function NewSnsClient() {
               {step === "spec" ? <Button onClick={() => void createProject()} disabled={saving}>{saving ? "저장 중…" : "기획 시작"}</Button> : null}
             </div>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

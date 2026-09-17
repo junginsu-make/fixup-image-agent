@@ -79,7 +79,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
   const searchParams = useSearchParams();
   const rerunFrom = searchParams.get("from") ?? "";
   /**
-   * 결과 화면에서 누른 단계. 값을 다 심은 뒤 그 단계로 연다.
+   * 결과 화면에서 누른 단계. 화면을 열 때부터 그 단계로 선다(아래 `step`).
    *
    * **처음 값만 잡는다.** 효과의 의존성에 주소 값을 그대로 넣으면, 나중에 단계를
    * 주소에 반영하는 날 단계를 옮길 때마다 불러오기가 다시 돌아 고친 값을 덮는다.
@@ -356,7 +356,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
       setSeeding(false);
     })();
     return () => { alive = false; };
-  }, [rerunFrom, rerunStep, loadReferences]);
+  }, [rerunFrom, loadReferences]);
 
   /** 한 벌의 공통 값. 광고 모드는 여기에 마스터만 얹는다. */
   function projectBody(extra: Record<string, unknown> = {}) {

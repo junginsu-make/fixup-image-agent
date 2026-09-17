@@ -85,11 +85,34 @@ describe("지난 단계로 값을 들고 간다", () => {
     expect(source, "단계를 조건 없이 따르면 빈 03 이 열린다").not.toMatch(/rerunStartStep(<Step>)?\(rerunStep,/);
   });
 
+  /**
+   * **두 갈래를 잘라서 잰다.** 글자 수로 창을 잡았더니 그 창이 `return; }` 너머 성공
+   * 갈래까지 닿아, `setStep` 을 성공 갈래로 옮겨도 초록이었다(2026-09-17 독립 리뷰가
+   * 뮤테이션으로 실증). 그렇게 옮기면 값이 오는 순간 01 로 튄다 — 원래 버그보다 나쁘다.
+   */
   it.each(TOOLS)("$name 은 **불러오기에 실패하면 첫 단계로 돌린다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh, first }) => {
     const source = read(fresh);
-    expect(source).toMatch(new RegExp(`불러오지 못했습니다[\\s\\S]{0,240}setStep\\("${first}"\\);`));
+    const failStart = source.indexOf("if (!result.ok) {");
+    const failEnd = source.indexOf("return;", failStart);
+    const success = source.slice(source.indexOf("const { seed } = result;"), source.indexOf("setSeeding(false);", source.indexOf("const { seed } = result;")));
+    expect(failStart, "실패 갈래를 못 찾았다").toBeGreaterThan(-1);
+    expect(source.slice(failStart, failEnd), "실패 갈래에서 첫 단계로 돌린다").toContain(`setStep("${first}");`);
+    expect(success, "성공 갈래는 단계를 건드리지 않는다 — 건드리면 값이 오는 순간 단계가 튄다").not.toContain("setStep(");
     // 여는 단계를 정하는 자리는 하나다. 여기저기서 옮기면 어디서 바뀌는지 못 쫓는다.
     expect(source.split("rerunStartStep").length - 1).toBe(2);
+  });
+
+  /**
+   * **값을 기다리는 잠금은 주소를 `useSearchParams` 로 읽은 값에서 정한다.**
+   *
+   * 카드뉴스가 `window.location` 으로 읽었더니, 서버에서 그릴 때(window 없음)와 결과
+   * 화면에서 눌러 올 때(첫 렌더가 아직 옛 주소) 모두 잠금이 풀린 채로 시작했다. 단계는
+   * 이미 03 이라 **빈 03** 이 보이고 손도 댈 수 있었다(2026-09-17 독립 리뷰가 실측).
+   */
+  it.each(TOOLS)("$name 은 값을 기다리는 동안 화면을 잠근다 — 단계와 같은 주소 값으로", ({ fresh }) => {
+    const source = read(fresh);
+    expect(source).toMatch(/React\.useState\(Boolean\((rerunFrom|rerunFromInitial)\)\)/);
+    expect(source, "주소를 window 로 읽으면 첫 렌더에서 어긋난다").not.toContain("window.location.search");
   });
 
   it("이미지 만들기는 단계 목록을 **다시 적지 않는다** — 단계 id 는 한 곳이 갖는다", () => {
@@ -213,5 +236,34 @@ describe("지난 단계로 값을 들고 간다", () => {
     const source = read(fresh);
 
     expect(source).toContain("가져오지 못했습니다");
+  });
+});
+
+/**
+ * **값을 기다리는 동안 누를 단추가 없다**(2026-09-17).
+ *
+ * 결과 화면에서 03 을 누르면 이제 처음부터 03 으로 선다. 그런데 카드뉴스는 단추 줄이
+ * 잠금 밖에 있어, 값이 오기 전에 「기획 시작」을 누르면 **빈 규격으로 새 작업**이
+ * 만들어졌다. 이미지 만들기의 「만들기」는 원래 규격 칸 안이라 이미 잠겨 있다.
+ */
+describe("기다리는 동안의 단추", () => {
+  it("카드뉴스는 단추 줄 전체를 잠금 안에 둔다", () => {
+    const source = read("app/sns/new-client.tsx");
+    const guard = source.indexOf("{seeding ? null : (");
+    expect(guard, "단추 줄 잠금을 못 찾았다").toBeGreaterThan(-1);
+    const start = source.indexOf("createProject()", guard);
+    const close = source.indexOf(")}", source.indexOf("</div>", source.indexOf("기획 시작", guard)));
+    expect(start, "「기획 시작」이 잠금 안에 있어야 한다").toBeGreaterThan(guard);
+    expect(start).toBeLessThan(close);
+  });
+
+  it("이미지 만들기의 「만들기」는 규격 칸 안이다 — 규격 칸은 기다리는 동안 안 그린다", () => {
+    const source = read("app/poster/new-client.tsx");
+    const spec = source.indexOf('{!seeding && step === "spec" ? (');
+    const submit = source.indexOf("onClick={() => void submit()}");
+    const next = source.indexOf('{!seeding && step === "instruction" ? (');
+    expect(spec).toBeGreaterThan(-1);
+    expect(submit).toBeGreaterThan(spec);
+    expect(submit).toBeLessThan(next);
   });
 });
