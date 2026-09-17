@@ -396,10 +396,16 @@ export function AppShell({
           shellSideWidth(collapsed),
         )}
       >
+        {/*
+          **사이드바는 자기 안에서만 스크롤한다.** 높이는 화면 높이에 못 박혀 있는데
+          메뉴가 그보다 길면(노트북·윈도우 배율 125% 이상) 아래 메뉴가 화면 밖으로
+          넘쳐 **페이지 전체**에 스크롤을 만들었다. 한 화면에 맞춘 작업 화면까지
+          그 때문에 스크롤이 생겼다(2026-09-17 사용자 요청).
+        */}
         <aside
           id="shell-sidebar"
           className={cn(
-            "sticky top-0 hidden h-screen flex-col gap-6 border-r bg-card px-3.5 py-4",
+            "sticky top-0 hidden h-screen flex-col gap-6 overflow-y-auto border-r bg-card px-3.5 py-4",
             collapsed ? "lg:hidden" : "lg:flex",
           )}
         >
