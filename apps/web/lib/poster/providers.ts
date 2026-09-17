@@ -88,6 +88,69 @@ const GRAMMAR_SPEC: StructuredSpec = {
   },
 };
 
+/**
+ * 붙인 그림을 **한 번에** 읽는 틀 (설계 §5-1).
+ *
+ * 문법 읽기와 사람 읽기를 합친 것이고, **`staging` 한 칸이 새로 생겼다.**
+ * 그 칸이 1단계의 전부다 — 없으면 기획이 레퍼런스의 연출을 볼 방법이 없다.
+ *
+ * **틀에 없는 칸은 조용히 버려진다.** 프롬프트로 시켜도 안 온다. 이 저장소가
+ * 두 번 겪었다(`invented` 가 여섯 번 다 빈 목록, `hasText` 가 안 옴).
+ */
+const ATTACHMENT_READ_SPEC: StructuredSpec = {
+  name: "attachment_read",
+  description: "붙인 그림에 무엇이 있는지. 사람·연출·글자·색을 한 번에 읽는다.",
+  schema: {
+    type: "object",
+    properties: {
+      people: { type: "array", items: { type: "string" } },
+      // 이 칸이 1단계가 더하는 것이다. 없으면 연출이 통째로 사라진다.
+      staging: { type: "string" },
+      hasText: { type: "boolean" },
+      typeInteraction: { type: ["string", "null"], enum: [...TYPE_INTERACTIONS, null] },
+      dominantColor: { type: "string" },
+      accentColor: { type: "string" },
+      note: { type: "string" },
+    },
+    required: ["people", "staging", "hasText"],
+  },
+};
+
+/**
+ * 그림을 보고 틀대로 답하게 하는 눈.
+ *
+ * **셋이 같은 열다섯 줄을 쓰고 있었다.** 새 읽기를 더하면서 네 번째 사본이
+ * 생길 자리라 여기서 합친다 — 고칠 곳이 하나여야 한다.
+ */
+function imageToolReader(
+  spec: StructuredSpec,
+  whenMissing: string,
+  environment: Record<string, string | undefined>,
+) {
+  requireKeys(["ANTHROPIC_API_KEY"], environment);
+  const { anthropic, anthropicModel } = clients(environment);
+  return {
+    async read(input: { prompt: string; imageUrls: string[] }) {
+      const response = await anthropic.messages.create({
+        model: anthropicModel,
+        max_tokens: 2048,
+        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
+        tools: [{ name: spec.name, description: spec.description, input_schema: spec.schema as never }],
+        tool_choice: { type: "tool", name: spec.name, disable_parallel_tool_use: true },
+      });
+      recordFrom(anthropicModel, response);
+      const call = response.content.find((block) => block.type === "tool_use" && block.name === spec.name);
+      if (!call || call.type !== "tool_use") throw new Error(whenMissing);
+      return call.input;
+    },
+  };
+}
+
+/** 붙인 그림을 한 번에 읽는다 — 역할을 안 본다(설계 §5-1). */
+export function createPosterAttachmentReader(environment: Record<string, string | undefined> = process.env) {
+  return imageToolReader(ATTACHMENT_READ_SPEC, "붙인 그림을 읽지 못했습니다.", environment);
+}
+
 const REVIEW_SPEC: StructuredSpec = {
   name: "poster_review",
   description: "완성된 포스터를 원고와 대조한다. 양방향으로 본다.",
@@ -167,43 +230,11 @@ const PEOPLE_SPEC: StructuredSpec = {
 };
 
 export function createPosterPeopleReader(environment: Record<string, string | undefined> = process.env) {
-  requireKeys(["ANTHROPIC_API_KEY"], environment);
-  const { anthropic, anthropicModel } = clients(environment);
-  return {
-    async read(input: { prompt: string; imageUrls: string[] }) {
-      const response = await anthropic.messages.create({
-        model: anthropicModel,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
-        tools: [{ name: PEOPLE_SPEC.name, description: PEOPLE_SPEC.description, input_schema: PEOPLE_SPEC.schema as never }],
-        tool_choice: { type: "tool", name: PEOPLE_SPEC.name, disable_parallel_tool_use: true },
-      });
-      recordFrom(anthropicModel, response);
-      const call = response.content.find((block) => block.type === "tool_use" && block.name === PEOPLE_SPEC.name);
-      if (!call || call.type !== "tool_use") throw new Error("사람을 읽지 못했습니다.");
-      return call.input;
-    },
-  };
+  return imageToolReader(PEOPLE_SPEC, "사람을 읽지 못했습니다.", environment);
 }
 
 export function createPosterGrammarReader(environment: Record<string, string | undefined> = process.env) {
-  requireKeys(["ANTHROPIC_API_KEY"], environment);
-  const { anthropic, anthropicModel } = clients(environment);
-  return {
-    async read(input: { prompt: string; imageUrls: string[] }) {
-      const response = await anthropic.messages.create({
-        model: anthropicModel,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
-        tools: [{ name: GRAMMAR_SPEC.name, description: GRAMMAR_SPEC.description, input_schema: GRAMMAR_SPEC.schema as never }],
-        tool_choice: { type: "tool", name: GRAMMAR_SPEC.name, disable_parallel_tool_use: true },
-      });
-      recordFrom(anthropicModel, response);
-      const call = response.content.find((block) => block.type === "tool_use" && block.name === GRAMMAR_SPEC.name);
-      if (!call || call.type !== "tool_use") throw new Error("문법을 읽지 못했습니다.");
-      return call.input;
-    },
-  };
+  return imageToolReader(GRAMMAR_SPEC, "문법을 읽지 못했습니다.", environment);
 }
 
 export function createPosterReviewProviders(environment: Record<string, string | undefined> = process.env) {

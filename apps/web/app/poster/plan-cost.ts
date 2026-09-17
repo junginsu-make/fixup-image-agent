@@ -16,19 +16,19 @@ import type { PromptMode } from "./prompt-mode";
 
 export interface PlanCostInput {
   /**
-   * 「따라 만들기」로 고른 그림 수. 기획이 **한 장씩 비전으로** 읽는다
-   * (`plan/route.ts` 의 `readReferenceGrammar`).
-   */
-  styleCount: number;
-  /**
-   * 지킬 **사람** 사진 수 (`readPeople`).
+   * 기획이 **비전으로 읽는** 첨부 수.
    *
-   * **제품 보존은 세지 않는다.** 붙인 그림 전부를 세면 화면이 실제보다 비싸게
-   * 말한다 — 라우트는 `personIds` 에 든 것만 읽고, 제품 보존 사진은 아무도
-   * 안 읽는다(2026-09-16 리뷰에서 걸렸다. 따라 만들기 1 + 제품 보존 1 이면
-   * 화면 $0.034, 실제 $0.024 로 42% 과대였다).
+   * 2026-09-17 까지는 역할이 이것을 갈랐다 — 「따라 만들기」면 문법만, 「인물
+   * 지키기」면 사람만, 제품 보존은 **아무도 안 읽었다.** 그래서 칸이 둘이었다
+   * (`styleCount`·`personCount`).
+   *
+   * 읽기를 역할에서 떼어내면서(설계 §5-1) **붙인 것을 전부 한 번씩** 읽는다.
+   * 세는 칸도 하나면 된다.
+   *
+   * **`place_as_is` 만은 빠진다.** 그림 모델을 아예 안 거치고, 라우트도
+   * `referenceIds`·`preservedIds` 어느 쪽에도 안 담는다(설계 §7).
    */
-  personCount: number;
+  attachmentCount: number;
   /** 안 넘기면 지금까지대로 다듬는다. */
   promptMode?: PromptMode;
   /** 광고 모드는 규격마다 작업이 따로 생기고 기획도 그만큼 돈다. */
@@ -36,39 +36,36 @@ export interface PlanCostInput {
 }
 
 /**
- * 붙인 그림의 **역할**에서 셈할 칸 둘을 뽑는다.
+ * 붙인 그림의 **역할**에서 읽을 장수를 센다.
  *
  * **이 판단이 `.tsx` 안에 있으면 시험이 못 간다.** 실제로 그래서 「제품 보존을
  * 세느냐」가 값 시험을 다 통과한 채로 틀려 있었다(2026-09-16). 화면이 무엇을
  * 세는지가 이 함수 하나로 모이고, 그 하나를 값으로 잰다.
  *
- * 라우트가 읽는 것과 짝이 맞아야 한다.
- *   · `style`                    → `readReferenceGrammar` (레이아웃 문법)
- *   · `preserve_person(_restyled)` → `readPeople` (인물 묘사)
- *   · 나머지(`preserve_product`·`place_as_is`) → **아무도 안 읽는다**
+ * 라우트가 읽는 것과 짝이 맞아야 한다(`plan/route.ts` 의 `readAttachments`).
+ *   · `style`·`preserve_*`  →  **한 장씩 읽는다**
+ *   · `place_as_is`·역할 없음 →  라우트가 안 담는다. 안 읽는다
  *
  * **역할을 `AttachmentRole` 로 받는다.** `string` 으로 두면 `attachment-role.ts`
  * 에서 이름을 바꿨을 때 tsc 도 시험도 조용하고, 값이 0 으로 떨어져 화면이
- * 실제보다 **싸게** 말한다. 이번에 고친 버그와 같은 결의 구멍이다.
+ * 실제보다 **싸게** 말한다.
  */
 export function planCostCounts(roles: readonly (AttachmentRole | "none")[]): {
-  styleCount: number;
-  personCount: number;
+  attachmentCount: number;
 } {
   return {
-    styleCount: roles.filter((role) => role === "style").length,
-    personCount: roles.filter(
-      (role) => role === "preserve_person" || role === "preserve_person_restyled",
+    attachmentCount: roles.filter(
+      (role) => role === "style" || role.startsWith("preserve"),
     ).length,
   };
 }
 
 /**
- * 몇 장을 읽나. **읽기에 실패한 것은 라우트가 안 센다**(`grammar.issues`).
+ * 몇 장을 읽나. **읽기에 실패한 것은 라우트가 안 센다**(`read.issues`).
  * 화면은 그것을 미리 알 수 없어 여기 값은 **가장 비싼 경우**다.
  */
 function visionReads(input: PlanCostInput): number {
-  return Math.max(0, input.styleCount) + Math.max(0, input.personCount);
+  return Math.max(0, input.attachmentCount);
 }
 
 function projectCount(input: PlanCostInput): number {
