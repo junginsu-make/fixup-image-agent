@@ -73,9 +73,10 @@ describe("진행 표시가 화면에 이어져 있는가", () => {
    * **푸는 자리는 한 곳이다.** 갈래마다 적으면 하나를 빠뜨리고, 빠뜨린 갈래는
    * 요청만 나가고(돈은 나간다) 결과는 안 들어온다 — 고치기가 그랬다.
    */
-  it("일을 시작하는 네 갈래가 모두 같은 문을 지난다", () => {
+  it("일을 시작하는 다섯 자리가 모두 같은 문을 지난다", () => {
+    // 기획·만들기·고치기·검수, 그리고 돌아와서 이어받을 때.
     expect(source).toMatch(/stopped\.current = false;\s*setBusy\(state\);/);
-    expect((source.match(/beginWork\(\{ kind:/g) ?? []).length).toBe(4);
+    expect((source.match(/beginWork\(\{ kind:/g) ?? []).length).toBe(5);
     // 갈래 안에서 따로 풀면 그 자리만 또 달라진다.
     expect(source.match(/stopped\.current = false;/g)?.length).toBe(1);
   });

@@ -449,10 +449,50 @@ export function PosterClient(
     } finally {
       setStopping(false);
       setBusy(null);
-      // fal 은 이미 받은 요청을 물리지 않는다. 숨기면 비용을 오해한다.
-      setNotes(["중지했습니다. 이미 보낸 요청은 값이 나갈 수 있고, 결과가 나중에 들어올 수 있습니다."]);
+      /*
+        **덧붙인다. 덮어쓰지 않는다.** 여기에는 기획이 남긴 경고가 들어 있는데,
+        중지 한 번에 그것이 사라졌다(2026-09-17 독립 리뷰).
+
+        **「나중에 들어올 수 있다」고 말하지 않는다.** 중지는 장부를 닫고
+        예약을 지우므로 그 요청의 결과는 영영 저장되지 않는다 — 값은 나간다.
+      */
+      setNotes((current) => [
+        ...current,
+        "중지했습니다. 이미 보낸 요청은 값이 나갈 수 있고, 그 결과는 저장되지 않습니다.",
+      ]);
     }
   }
+
+  /**
+   * **돌아오면 화면이 캐묻기를 이어받는다.**
+   *
+   * 셸은 「지금 보고 있지 않은」 일감만 캐묻는다(`running-jobs.tsx`). 그래서
+   * 만들다가 다른 화면에 갔다 돌아오면 셸은 쉬고, 새로 뜬 화면은 `busy` 가
+   * 없어 스스로도 안 캐물어 **아무도 안 받아 왔다.** 사이드바 칸이 없어지면서
+   * 화면에 흔적조차 안 남는다(2026-09-17 독립 리뷰).
+   *
+   * 일감이 물어볼 곳과 몸통을 들고 있으므로(`job.poll`), 그대로 이어서 묻는다.
+   */
+  const resumed = React.useRef(false);
+  React.useEffect(() => {
+    if (resumed.current || busy) return;
+    const job = jobs.find((entry) => entry.id === jobId("poster", project.id));
+    if (!job?.poll.body) return;
+    resumed.current = true;
+    // 이어받는 것도 「일을 시작하는」 자리다. 같은 문을 지난다.
+    beginWork({ kind: "generate", label: "그리는 중입니다", hint: "이어서 받아 오는 중입니다" });
+    void (async () => {
+      try {
+        if (await collect(job.poll.body as Record<string, unknown>)) finish(job.id);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "상태를 확인하지 못했습니다.");
+      } finally {
+        setBusy(null);
+      }
+    })();
+    // 한 번만 이어받는다. `jobs` 가 바뀔 때마다 돌면 캐묻기가 겹친다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, busy]);
 
   // 화면을 떠나면 여기서 물어보기를 그만둔다. 셸이 이어받으므로 결과는 안 놓친다.
   const alive = React.useRef(true);

@@ -21,8 +21,13 @@ import { Skeleton } from "@fixup/ui";
 export function PlanWriting({ label, hint }: { label: string; hint?: string }) {
   return (
     <div
-      role="status"
-      aria-live="polite"
+      /*
+        **읽어 주지 않는다.** 같은 때 화면 위 띠(`working-banner.tsx`)가 이미
+        `role="status"` 로 「기획하는 중입니다」를 읽는다. 둘 다 읽으면 낭독기가
+        같은 말을 두 번 한다(2026-09-17 독립 리뷰). 이 덮개는 **눈으로 보는
+        쪽**을 맡는다.
+      */
+      aria-hidden
       className="absolute inset-0 z-10 grid content-start gap-4 bg-background/85 p-5 backdrop-blur-sm"
     >
       <div className="flex flex-wrap items-center gap-2">

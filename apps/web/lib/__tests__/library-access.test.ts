@@ -19,7 +19,11 @@ function builderFor(table: string) {
     order: () => builder,
     limit: () => builder,
     not: () => builder,
-    in: () => builder,
+    // **무동작으로 두면 조건을 지워도 초록이다**(2026-09-17 독립 리뷰가 실증).
+    in: (column: string, value: unknown) => {
+      recorded.push({ table, column: `in:${column}`, value });
+      return builder;
+    },
     eq: (column: string, value: unknown) => {
       recorded.push({ table, column, value });
       return builder;
@@ -185,6 +189,17 @@ describe("참고 이미지는 회원 공용", () => {
     expect(ownerConditionOn("reference_images")).toBeUndefined();
   });
 
+  it("**팀 조건은 질의에 붙는다** — 코드의 이중 확인에만 기대지 않는다", async () => {
+    // 조건이 빠져도 뒤의 `canSeeReference` 가 걸러 누수는 없다. 그래서 지워도
+    // 1,631개가 초록이었다(2026-09-17 독립 리뷰). 하지만 400장 상한에 걸리기
+    // 전에 거르려면 질의가 먼저 좁혀야 한다.
+    tableRows.reference_images = [];
+    await listReferenceImages({ ...MEMBER, teamId: "team-1" });
+    expect(teamConditionOn("reference_images")).toBe(
+      "team_id.is.null,team_id.eq.team-1,user_id.eq.member-1",
+    );
+  });
+
   it("팀이 안 붙은 남의 것도 보이되 내 것이 아니라고 표시한다", async () => {
     tableRows.reference_images = [
       {
@@ -311,6 +326,8 @@ describe("고른 참고 이미지 낱개", () => {
     const [image] = await referenceImagesByIds(MEMBER, ["r1"]);
     expect(image?.id).toBe("r1");
     expect(image?.mine).toBe(false);
+    // **id 로 걸러 읽는다.** 빠지면 보이는 행을 전부 읽고 전부 서명한다.
+    expect(recorded.find((entry) => entry.column === "in:id")?.value).toEqual(["r1"]);
   });
 
   it("남의 팀 것은 id 를 알아도 안 읽힌다", async () => {

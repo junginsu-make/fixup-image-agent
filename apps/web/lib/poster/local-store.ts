@@ -6,7 +6,6 @@ import type {
   PosterProjectRecord,
   PosterProjectStore,
   PosterReferenceRecord,
-  PosterReferenceStore,
   PosterRequestStore,
 } from "@fixup/poster-core";
 import { getLocalDatabase, type LocalDatabase } from "../local-store";

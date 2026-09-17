@@ -49,6 +49,44 @@ describe("카드뉴스도 띠에서 멈춘다", () => {
 
   it("서버에도 멈췄다고 알리고 화면을 다시 읽는다", () => {
     // 서버에 안 알리면 다시 열었을 때 그 흐름에 또 붙는다.
-    expect(sns).toMatch(/if \(job\) await stop\(job\);[\s\S]{0,200}await reload\(\);/);
+    expect(sns).toMatch(/if \(job\) \{\s*await stop\(job\);[\s\S]{0,600}await reload\(\);/);
+  });
+});
+
+describe("중지가 실제로 멈추는가", () => {
+  const poster = readFileSync(new URL("../../poster/[id]/poster-client.tsx", import.meta.url), "utf8");
+
+  /**
+   * **기획 중에도 멈춰야 한다**(2026-09-17 독립 리뷰).
+   *
+   * 기획 단계에는 일감이 목록에 없어 멈출 것이 없었다. 그런데 그사이 기획
+   * 응답이 도착하면 화면이 혼자 다음 단계로 넘어갔다 — 띠에 적힌 「결과를 더
+   * 받지 않습니다」와 어긋난다.
+   */
+  it("카드뉴스도 누른 뒤에 도착한 답을 버린다", () => {
+    expect(sns).toContain("stopped.current = true;");
+    expect(sns).toMatch(/plan\(\) \{[\s\S]{0,400}if \(stopped\.current\) return;/);
+    expect(sns).toMatch(/generate\(\) \{[\s\S]{0,600}if \(stopped\.current\) return;/);
+  });
+
+  it("카드뉴스도 일감이 없을 때 서버에 알린다", () => {
+    expect(sns).toMatch(/finish\(id\);[\s\S]{0,400}\/api\/sns\/projects\/\$\{projectId\}\/stop/);
+  });
+
+  /**
+   * **돌아오면 화면이 이어받는다**(2026-09-17 독립 리뷰).
+   *
+   * 셸은 보고 있지 않은 일감만 캐묻는다. 만들다가 나갔다 돌아오면 셸은 쉬고
+   * 새 화면은 `busy` 가 없어 스스로도 안 캐물어, 아무도 안 받아 왔다.
+   */
+  it("이미지 화면이 남은 일감의 캐묻기를 이어받는다", () => {
+    expect(poster).toContain('jobs.find((entry) => entry.id === jobId("poster", project.id))');
+    expect(poster).toMatch(/if \(await collect\(job\.poll\.body as Record<string, unknown>\)\) finish\(job\.id\);/);
+  });
+
+  it("중지 안내가 기획 경고를 덮어쓰지 않는다", () => {
+    // 덮어쓰면 기획이 남긴 경고가 중지 한 번에 사라진다.
+    expect(poster).toMatch(/setNotes\(\(current\) => \[\s*\.\.\.current,/);
+    expect(poster, "닫은 요청의 결과는 저장되지 않는다").toContain("그 결과는 저장되지 않습니다");
   });
 });

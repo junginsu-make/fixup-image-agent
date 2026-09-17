@@ -180,13 +180,38 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
    * 그 흐름에 또 붙는다(`running-jobs.tsx` 의 `tellServerToStop`).
    */
   const [stopping, setStopping] = React.useState(false);
+  /**
+   * 사용자가 **중지**를 눌렀나.
+   *
+   * 기획 단계에는 일감이 목록에 없어 멈출 것도 없었다 — 그런데 그사이 기획
+   * 응답이 도착하면 화면이 혼자 다음 단계로 넘어갔다(2026-09-17 독립 리뷰).
+   * 이미지 쪽과 같은 방식으로, 누른 뒤에 도착한 답을 버린다.
+   */
+  const stopped = React.useRef(false);
+
+  /** 일을 시작한다. 지난 중지를 여기서 푼다 — 갈래마다 적으면 하나를 빠뜨린다. */
+  function beginWork(state: "planning" | "generating") {
+    stopped.current = false;
+    setBusy(state);
+    setMessage("");
+  }
+
   async function stopNow() {
     setStopping(true);
+    stopped.current = true;
     const id = jobId("sns", projectId);
     const job = jobs.find((entry) => entry.id === id);
     try {
-      if (job) await stop(job);
-      else finish(id);
+      if (job) {
+        await stop(job);
+      } else {
+        finish(id);
+        /*
+          **일감으로 안 잡힌 것도 서버에 알린다.** 기획 중에는 아직 목록에
+          없는데, 흐름과 예약은 서버에 있다. 안 알리면 그대로 남는다.
+        */
+        await request(`/api/sns/projects/${projectId}/stop`, { method: "POST" }).catch(() => {});
+      }
       // 서버가 멈춘 것을 화면에도 반영한다. 안 하면 「만드는 중」이 그대로 남는다.
       await reload();
     } catch {
@@ -249,10 +274,11 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }, [generationActive, projectId, readOnly, request]);
 
   async function plan() {
-    setBusy("planning");
-    setMessage("");
+    beginWork("planning");
     try {
       const saved = await request(`/api/sns/projects/${projectId}/plan`, { method: "POST" });
+      // 중지를 눌렀으면 도착한 기획을 안 쓴다 — 멈춘 화면이 혼자 넘어가면 안 된다.
+      if (stopped.current) return;
       setProject(saved);
       setView("copy");
     } catch (error) {
@@ -281,14 +307,14 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }
 
   async function generate() {
-    setBusy("generating");
-    setMessage("");
+    beginWork("generating");
     try {
       // 크레딧이 깎이는 요청이다 — 열쇠 없이 보내면 서버가 예약을 거절한다.
       const saved = await request(`/api/sns/projects/${projectId}/generate`, {
         method: "POST",
         headers: billableHeaders(),
       });
+      if (stopped.current) return;
       setProject(saved);
       setView("result");
     } catch (error) {
