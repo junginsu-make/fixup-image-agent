@@ -20,6 +20,8 @@ import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
+import { createJobRecorder } from "../../../../../lib/pdp/jobs/recorder";
+import { fingerprintOf, isPdpJobsEnabled } from "../../../../../lib/pdp/jobs";
 import { readPdpRequest } from "../../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
@@ -29,6 +31,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 type BatchRequest = {
+  /** 어느 작업의 것인가. 없으면 예약 식별자로 대신한다 — 그때는 이 요청 한 건만 묶인다. */
+  documentId?: string;
+  revision?: number;
   originalImageBase64: string;
   sections: SectionBlueprint[];
   /**
@@ -115,6 +120,42 @@ export async function POST(req: Request) {
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
   if (!reservation.ok) return reservation.response;
 
+  /*
+    **화면 밖에서도 되찾을 수 있게 적어 둔다**(설계 §8).
+
+    지금은 그림이 브라우저로만 간다. 탭을 닫으면 이미 값을 치른 그림이 사라지고
+    사용자는 다시 눌러 두 번 낸다.
+
+    **스위치가 꺼져 있으면 여기부터 아무 일도 없다.** 기록기가 빈 껍데기라
+    호출은 전부 즉시 돌아온다. 켜져 있어도 기록 실패는 밖으로 안 나온다 —
+    기록하려다 그림을 잃으면 고치려던 것과 같은 손실이 된다.
+  */
+  const jobs = isPdpJobsEnabled()
+    ? await createJobRecorder({
+        enabled: true,
+        input: {
+          userId: reservation.userId,
+          teamId: await teamIdOf(reservation.userId),
+          // 화면이 쥔 요청 식별자. 같은 눌림이면 같은 값이다.
+          idempotencyKey: req.headers.get("x-idempotency-key") ?? reservation.requestId,
+          fingerprint: fingerprintOf({
+            documentId: body.documentId ?? reservation.requestId,
+            revision: body.revision ?? 0,
+            operation: "pdp_image",
+            sectionIds: sections.map((section) => section.section_id),
+            imageModel: model,
+            aspectRatio: body.aspectRatio,
+          }),
+          documentId: body.documentId ?? reservation.requestId,
+          revision: body.revision ?? 0,
+          operation: "pdp_image",
+          sectionIds: sections.map((section) => section.section_id),
+          // **예약 식별자는 서버가 정한다.** 클라이언트가 제출하지 않는다.
+          reservationRequestId: reservation.requestId,
+        },
+      }).catch(() => null)
+    : null;
+
   try {
 
   /*
@@ -180,6 +221,7 @@ export async function POST(req: Request) {
           options,
         };
     });
+  await jobs?.started();
   const settled = await Promise.allSettled(requests.map((request) => generateSectionImage(request, providers)));
 
   const results = settled.map((outcome, index) => {
@@ -205,6 +247,18 @@ export async function POST(req: Request) {
     };
   });
 
+  // 나온 그림을 한 장씩 적는다. 실패한 섹션은 적을 그림이 없다.
+  for (const result of results) {
+    if (!result.ok) continue;
+    await jobs?.sectionDone({
+      sectionId: result.sectionId,
+      attempt: 1,
+      imageBase64: result.imageBase64,
+      mimeType: result.mimeType,
+      model,
+    });
+  }
+
   // 실패한 장은 차감하지 않는다. finalizeAiUsage 가 consumedUnits 를 인자로 받아
   // 부분 성공이 그대로 처리된다.
   const succeeded = results.filter((r) => r.ok).length;
@@ -227,6 +281,8 @@ export async function POST(req: Request) {
     succeeded > 0 ? undefined : "batch_all_failed",
     { model, billableImages },
   );
+
+  await jobs?.finished({ succeeded, requested: sections.length, settled: Boolean(usage) });
 
   return Response.json({
     ok: succeeded > 0,

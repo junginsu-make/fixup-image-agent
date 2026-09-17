@@ -40,6 +40,8 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   look: z.enum(IMAGE_LOOKS).optional(), userInstruction: text.optional(), pageContext: text.max(500).optional(),
   attachmentIntents: intents.optional() }).passthrough();
 const common = {
+  // 어느 작업의 것인가. 결과를 되찾을 때 이 값으로 묶는다(설계 §8).
+  documentId: text.max(120).optional(), revision: z.number().int().nonnegative().optional(),
   aspectRatio: ratio.optional(), desiredTone: text.optional(),
   characterId: text.optional(), characterAngles: z.array(text).optional(),
   page: page.optional(), options: options.optional(), sectionIndex: z.number().int().nonnegative().optional(),
