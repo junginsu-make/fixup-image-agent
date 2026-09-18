@@ -127,10 +127,15 @@ export function EasyModelBar({
   disabled?: boolean;
 }) {
   return (
+    /*
+      **좁은 화면에서는 라벨을 숨긴다.** 「글」·「그림」까지 넣으면 두 줄로
+      감겨 입력창이 밀린다(2026-09-18 확인). 모델 이름 자체가 무엇인지
+      말해 주므로 좁을 때는 그것으로 충분하다.
+    */
     <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
-      <span className="text-meta text-subtle-foreground">글</span>
+      <span className="hidden text-meta text-subtle-foreground sm:inline">글</span>
       <TextModelMenu value={textModel} onChange={onTextModel} disabled={disabled} />
-      <span className="ml-2 text-meta text-subtle-foreground">그림</span>
+      <span className="ml-2 hidden text-meta text-subtle-foreground sm:inline">그림</span>
       <ImageModelMenu
         models={imageModels}
         value={imageModel}
