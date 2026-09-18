@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone, ChevronsLeft, ChevronsRight, Zap } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -56,6 +56,16 @@ const navGroups: NavGroup[] = [
   {
     label: "도구",
     items: [
+      /*
+        **맨 위에 둔다.** 처음 온 사람을 위한 것이라(설계 §2) 도구 목록 아래에
+        묻히면 뜻이 없다. 나머지 도구는 다섯 단계에 칸이 열한 개인데, 무엇을
+        적어야 할지 모르는 사람에게는 그것이 벽이다.
+
+        누르면 **이 셸이 사라진다.** `app/easy` 는 `StudioLayout` 을 안 감싸고
+        제 레이아웃을 쓴다 — 사이드바에 도구가 여섯 개 걸려 있으면 「쉬운
+        모드」가 아니다(2026-09-17 사용자 결정).
+      */
+      { href: "/easy", label: "Easy 모드", desc: "말로 만들기", icon: Zap },
       // 「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라
       // 도구 목록에 나란히 두면 별개의 도구로 보인다. 카드뉴스 첫 화면
       // 오른쪽 위에 「내 카드뉴스 만들기」로 둔다.

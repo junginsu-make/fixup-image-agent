@@ -200,6 +200,7 @@ describe("설명서 내용", () => {
 describe("도구와 설명서가 짝을 이룬다", () => {
   /** 사이드바가 내는 도구의 주소. 설명이 필요한 것만 적는다. */
   const TOOLS_NEEDING_GUIDE = [
+    "/easy",
     "/sns",
     "/poster",
     "/ad",

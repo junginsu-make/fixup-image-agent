@@ -22,6 +22,17 @@ export const GUIDE_TOPICS: GuideTopic[] = [
     label: "처음 오셨다면",
     desc: "이 시스템이 무엇이고 도구가 어떻게 이어지는지",
   },
+  /*
+    **Easy 모드가 도구 목록 맨 위에 있으므로 설명서도 맨 앞이다.** 처음 온
+    사람이 「처음 오셨다면」 다음에 보는 것이 이것이어야 한다(설계 §2).
+  */
+  {
+    href: "/guide/easy",
+    label: "Easy 모드",
+    desc: "말로 만들기. 고를 것이 하나다",
+    toolHref: "/easy",
+    toolLabel: "Easy 모드 열기",
+  },
   {
     href: "/guide/cardnews",
     label: "카드뉴스 만들기",

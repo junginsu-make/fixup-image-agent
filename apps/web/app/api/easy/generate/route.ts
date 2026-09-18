@@ -134,6 +134,17 @@ export async function POST(request: Request) {
       "그림 만들기",
     );
 
+    /*
+     * **그림 자리를 대화에 남긴다.** `work_id` 는 포스터 **작업**을 가리킨다 —
+     * 라이브러리의 작업물 탭이 세는 단위가 그것이고, 그림은 그 아래 달린다.
+     * 그림 id 를 적으면 대화를 다시 열 때 그것만으로 주소를 찾을 길이 없다
+     * (`PosterImageStore` 에 `byIds` 가 없다).
+     *
+     * **제출한 직후에 남긴다.** 결과를 기다려 남기면, 화면을 떠난 사람의 대화에
+     * 그 그림이 안 들어간다.
+     */
+    await store.appendMessage({ conversationId, role: "image", workId: projectId });
+
     return Response.json({
       ok: true,
       projectId,
