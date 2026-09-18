@@ -16,6 +16,7 @@ import type {
   ProductBrief,
   BlueprintReview,
   PdpLlmExecution,
+  ProductReadingStatus,
 } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
@@ -447,6 +448,9 @@ function normalizePreparedImage(image: PreparedImageDraft | null | undefined) {
   };
 }
 
+/** 깨진/옛 레코드가 모르는 값을 물고 오면 화면이 엉뚱한 경고를 띄운다. */
+const READING_STATUSES: ProductReadingStatus[] = ["usable", "thin", "unfounded"];
+
 function normalizeGeneratedResult(
   result: GeneratedResult | null | undefined,
   preparedImage: PreparedImageDraft | null,
@@ -471,6 +475,17 @@ function normalizeGeneratedResult(
        * 이 기능의 목적인데 재적재 한 번에 무너졌다.
        */
       ...(result.review ? { review: result.review } : {}),
+      /**
+       * **판독 상태도 버리지 않는다.** 바로 위와 같은 이유다.
+       *
+       * 초안을 다시 열면 「사진에서 제품을 읽지 못했습니다」가 사라져, 근거 없는
+       * 카피가 확인된 것처럼 보였다. 필드를 하나씩 나열하는 자리는 새 필드가
+       * 생길 때마다 이렇게 샌다.
+       */
+      ...(READING_STATUSES.includes(result.productReadingStatus as ProductReadingStatus)
+        ? { productReadingStatus: result.productReadingStatus }
+        : {}),
+      ...(result.copyGapOutcome ? { copyGapOutcome: result.copyGapOutcome } : {}),
     };
   }
 

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PdpService } from "./pdp.service";
-import { photoSourceText } from "./pdp.photo-evidence";
+import { photoSourceText, productFactText } from "./pdp.photo-evidence";
 import { normalizeSectionEvidence, verifyEvidenceStructure } from "./pdp.evidence";
 import type { LandingPageBlueprint } from "./types";
 
@@ -105,15 +105,16 @@ describe("사진 경로가 실제로 검사하는가", () => {
 
   it("구성안이 나온 뒤 근거를 검사한다", () => {
     expect(service).toContain("verifyEvidenceStructure(");
-    expect(service).toContain("photoSourceText({");
+    expect(service).toContain("photoSourceText(");
   });
 
   it("**같은 원문으로 잰다** — 사진에서 읽은 것을 원문으로 쓰지 않는다", () => {
-    const 호출 = /photoSourceText\(\{([^}]*)\}/.exec(service)?.[1] ?? "";
+    const 원문 = /photoSourceInput = \{([^}]*)\}/.exec(service)?.[1] ?? "";
 
-    expect(호출).toContain("sellerBrief");
-    expect(호출).toContain("additionalInfo");
-    expect(호출).not.toContain("productReading");
+    expect(원문).toContain("sellerBrief");
+    expect(원문).toContain("additionalInfo");
+    // 사진에서 읽은 것은 추정이다. 인용의 근거가 될 수 없다(설계 §9.2).
+    expect(원문).not.toContain("productReading");
   });
 
   it("실패하면 정책대로 메운다 — 글 경로와 같은 함수다", () => {
@@ -219,5 +220,40 @@ describe("근거 종류 손질", () => {
 
   it("모양이 틀린 항목은 버린다", () => {
     expect(normalizeSectionEvidence([{ target: { slot: "없는자리" } }, null, "글자"])).toHaveLength(0);
+  });
+});
+
+/**
+ * **「제품에 대해 아는 것이 있는가」는 다른 물음이다.**
+ *
+ * `photoSourceText` 는 인용을 대조할 원문이라 판매자가 적은 칸을 모두 잇는다.
+ * 그런데 그것으로 근거 유무를 재면 「대상: 30대 여성」 한 줄만 채워도 「근거가
+ * 있다」가 된다 — 제품에 대한 근거는 여전히 0인데. 대상 칸은 화면 흐름상 가장
+ * 채우기 쉬운 자리라 이 구멍이 늘 열린다.
+ */
+describe("제품을 말하는 칸만 센다", () => {
+  it("**대상·문제·강조점은 제품 사실이 아니다**", () => {
+    expect(
+      productFactText({
+        sellerBrief: { audience: "30대 여성", problem: "건조함", emphasis: "가격을 강조" },
+      }),
+    ).toBe("");
+  });
+
+  it("특징·차별점·추가 정보는 센다", () => {
+    const 글 = productFactText({
+      sellerBrief: { audience: "30대 여성", features: "3단 높이 조절", differentiator: "원목 캡" },
+      additionalInfo: "여름 신상",
+    });
+
+    expect(글).toContain("3단 높이 조절");
+    expect(글).toContain("원목 캡");
+    expect(글).toContain("여름 신상");
+    expect(글).not.toContain("30대 여성");
+  });
+
+  it("원문은 여전히 전부 잇는다 — 두 물음은 다르다", () => {
+    // 대상 칸도 사용자가 한 말이니 인용의 근거는 된다.
+    expect(photoSourceText({ sellerBrief: { audience: "30대 여성" } })).toContain("30대 여성");
   });
 });

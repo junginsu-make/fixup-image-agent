@@ -745,6 +745,12 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
             setNotice("인물 이미지를 뺐습니다. 이후 생성에는 반영되지 않습니다.");
           }}
           review={review}
+          // 사진에서 제품을 충분히 읽었는가. 못 읽었으면 화면이 말해야 한다(U-13).
+          productReadingStatus={result.productReadingStatus}
+          // **화면 토글값이 아니라 그 실행에 실제로 쓰인 것**을 넘긴다. 사용자는
+          // 결과를 본 뒤에도 정책을 바꿀 수 있어, 지금 값으로는 「무엇을 했는가」를
+          // 되짚을 수 없다.
+          gapOutcome={result.copyGapOutcome}
           styleReference={styleReference}
           styleReferenceEnabled={styleReferenceEnabled}
           onStyleReferenceToggle={setStyleReferenceEnabled}

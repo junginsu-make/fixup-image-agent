@@ -39,3 +39,26 @@ export function photoSourceText(input: PhotoSourceInput): string {
     .filter((value): value is string => Boolean(value))
     .join("\n");
 }
+
+/**
+ * 판매자가 적은 것 중 **제품에 관한 것만.**
+ *
+ * ── 왜 따로 세나 ─────────────────────────────────────────────
+ *
+ * `photoSourceText` 는 인용을 대조할 원문이라 판매자가 적은 칸을 모두 잇는다 —
+ * 「대상: 30대 여성」도 사용자가 한 말이니 인용의 근거가 된다.
+ *
+ * 그런데 **「제품에 대해 아는 것이 있는가」를 재는 데는 못 쓴다.** 대상 칸 한 줄만
+ * 채워도 「근거가 있다」가 되어 버리는데, 제품에 대한 근거는 여전히 0이다.
+ * 화면 흐름상 대상 칸은 가장 채우기 쉬운 자리라 이 구멍이 늘 열린다.
+ *
+ * 그래서 **제품을 말하는 칸만** 센다. 문제·대상·강조점은 제품 사실이 아니다.
+ */
+export function productFactText(input: PhotoSourceInput): string {
+  const brief = input.sellerBrief ?? {};
+
+  return [brief.features, brief.differentiator, input.additionalInfo]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join("\n");
+}

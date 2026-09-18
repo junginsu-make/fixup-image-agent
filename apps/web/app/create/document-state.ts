@@ -1,4 +1,4 @@
-import type { LandingPageBlueprint, SectionBlueprint, BlueprintReview, PdpLlmExecution } from "@fixup/pdp-core";
+import type { CopyGapOutcome, LandingPageBlueprint, SectionBlueprint, BlueprintReview, PdpLlmExecution, ProductReadingStatus } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
 import type { PdpDraftInput, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
@@ -26,6 +26,15 @@ export interface PdpDocumentV3 {
   blueprint: Omit<LandingPageBlueprint, "sections">;
   analyzedBlueprint?: LandingPageBlueprint | null;
   planningReview?: BlueprintReview;
+  /**
+   * 사진에서 제품을 충분히 읽었는가, 그리고 빈자리 정책으로 실제로 무엇을 했는가.
+   *
+   * **여기 자리를 안 내주면 초안을 다시 열 때 사라진다.** 화면은 초안을 늘 이
+   * 문서로 바꿨다가 되돌려 읽는다(`draft-repository`) — `pdp-drafts` 쪽에만
+   * 넣어 두면 아무도 지나지 않는 길에 넣은 것이다.
+   */
+  planningReadingStatus?: ProductReadingStatus;
+  planningGapOutcome?: CopyGapOutcome;
   planningExecutions?: PdpLlmExecution[];
   styleReference?: Omit<NonNullable<PdpDraftInput["styleReference"]>, "imageBase64" | "mimeType">;
   editor: Omit<PdpEditorDraftState, "sections" | "sectionKeys"> | null;
@@ -108,6 +117,7 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
       preserveProduct: input.preserveProduct ?? true },
     references, assets, originalAssetId: input.result ? addAsset({ base64: input.result.originalImage, mimeType: "image/jpeg" }) : undefined,
     sections, blueprint, analyzedBlueprint: input.analyzedBlueprint, planningReview: input.result?.review,
+    planningReadingStatus: input.result?.productReadingStatus, planningGapOutcome: input.result?.copyGapOutcome,
     planningExecutions: input.result?.planningExecutions ?? input.textDraft?.planningExecutions,
     styleReference: style ? { id: style.id, name: style.name, description: style.description, reason: style.reason } : undefined,
     editor, previousRevision: previous?.revision, createdAt: input.createdAt ?? previous?.createdAt ?? new Date().toISOString(),
@@ -129,7 +139,8 @@ export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
     appState: doc.stage === "planning" ? "processing" : doc.stage === "editor" ? "editor"
       : doc.stage === "outline" && doc.originalAssetId ? "scenario" : "upload",
     preparedImage: prepared("product"), modelImage: prepared("person"), modelImageUsage: doc.inputs.modelImageUsage,
-    result: doc.originalAssetId ? { originalImage: doc.assets[doc.originalAssetId].base64, blueprint, review: doc.planningReview, planningExecutions: doc.planningExecutions } : null,
+    result: doc.originalAssetId ? { originalImage: doc.assets[doc.originalAssetId].base64, blueprint, review: doc.planningReview, planningExecutions: doc.planningExecutions,
+      productReadingStatus: doc.planningReadingStatus, copyGapOutcome: doc.planningGapOutcome } : null,
     additionalInfo: doc.inputs.additionalInfo, sellerBrief: doc.inputs.sellerBrief, textDraft: doc.inputs.textDraft,
     startMode: doc.sourceMode === "text" ? "text" : "image", characterId: find("character")?.characterId,
     characterAngles: find("character")?.angles ?? [],

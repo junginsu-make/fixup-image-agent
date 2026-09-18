@@ -170,3 +170,44 @@ ${base}
 - 효능·성분·인증·수치를 확인 없이 단정하지 않는다.`;
   }
 }
+
+/**
+ * 읽어낸 것이 **카피가 딛고 설 만한가.**
+ *
+ * ── 왜 필요한가 ──────────────────────────────────────────────
+ *
+ * `isProductReadingUsable` 은 만들어만 두고 **아무도 부르지 않았다** — 내보내기
+ * 목록에만 있었다(U-13). 사진이 흐릿하든 제품이 안 보이든 결과는 똑같이
+ * 「완성」으로 나왔다.
+ *
+ * ── 세 낱말인 이유 ───────────────────────────────────────────
+ *
+ * 「읽었다/못 읽었다」 둘로는 부족하다. 사진을 못 읽어도 **판매자가 직접 적은
+ * 것**이 있으면 카피는 그쪽에 기댈 수 있다. 정말 위험한 것은 **둘 다 없는**
+ * 경우다 — 그때 나오는 문장은 전부 지어낸 것이다.
+ *
+ * **사용자가 적은 글의 품질은 재지 않는다.** 잴 수 없다. 있는가 없는가만 본다.
+ */
+export type ProductReadingStatus = "usable" | "thin" | "unfounded";
+
+export function productReadingStatus(input: {
+  reading?: ProductReading;
+  sellerSourceText?: string;
+}): ProductReadingStatus {
+  // 같은 기준을 쓴다. 두 벌로 적으면 한쪽만 고치는 날이 온다.
+  if (isProductReadingUsable(input.reading)) return "usable";
+  return input.sellerSourceText?.trim() ? "thin" : "unfounded";
+}
+
+/**
+ * 근거가 아예 없을 때 **「예시로 채우기」를 내린다.**
+ *
+ * 그 정책은 「사용자가 확인하고 고칠 것을 전제로」 한다. 그런데 근거가 아예
+ * 없으면 예시가 곧 페이지 전체가 된다 — 통째로 지어낸 페이지를 건네고 사용자에게
+ * 검수를 떠넘기는 꼴이다.
+ *
+ * **내리기만 한다.** 「빼기」를 고른 사람에게 지어낸 문장을 주는 일은 없어야 한다.
+ */
+export function effectiveGapPolicy(status: ProductReadingStatus, policy: GapPolicy): GapPolicy {
+  return status === "unfounded" && policy === "sample" ? "ask" : policy;
+}

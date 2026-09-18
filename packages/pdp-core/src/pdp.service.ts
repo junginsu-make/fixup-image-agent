@@ -33,8 +33,8 @@ import {
   type ImagePromptOptions,
 } from "./pdp.image-prompt";
 import { shouldSendAnchor } from "./pdp.product-anchor";
-import { normalizeSectionEvidence, resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
-import { photoSourceText } from "./pdp.photo-evidence";
+import { countClearedCopy, normalizeSectionEvidence, resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
+import { photoSourceText, productFactText } from "./pdp.photo-evidence";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { buildSellerBriefPrompt, type SellerBrief } from "./pdp.seller-brief";
 import { intensityRules } from "./pdp.copy-intensity";
@@ -51,7 +51,9 @@ import {
   PRODUCT_GROUNDING_RULES,
   PRODUCT_READING_RULES,
   PRODUCT_READING_SCHEMA,
+  effectiveGapPolicy,
   normalizeProductReading,
+  productReadingStatus,
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 
@@ -422,10 +424,32 @@ ${analyzePrompt}`
       원문은 **사용자가 직접 적은 것**이다(`photoSourceText`). 사진에서 읽은
       것은 추정이라 인용의 근거가 될 수 없다(설계 §9.2).
     */
-    const photoEvidenceFailures = verifyEvidenceStructure(
-      blueprint,
-      photoSourceText({ sellerBrief: request.sellerBrief, additionalInfo: request.additionalInfo }),
-    );
+    const photoSourceInput = {
+      sellerBrief: request.sellerBrief,
+      additionalInfo: request.additionalInfo,
+    };
+    const photoSource = photoSourceText(photoSourceInput);
+
+    /*
+      **제품을 충분히 읽었는지 본다**(U-13).
+
+      `isProductReadingUsable` 은 만들어만 두고 아무도 부르지 않았다. 사진이
+      흐릿하든 제품이 안 보이든 결과는 똑같이 「완성」으로 나왔다.
+
+      판단은 **그 자리에서 쓰인다** — 근거가 아예 없으면 「예시로 채우기」를
+      내린다. 이름표만 붙이고 아무것도 안 바꾸면 안 부르던 때와 같다.
+    */
+    const readingStatus = productReadingStatus({
+      reading: blueprint.productReading,
+      // **제품을 말하는 칸만 센다.** 「대상: 30대 여성」한 줄로 근거가 생기지
+      // 않는다 — 그 칸은 인용의 원문이지 제품 사실이 아니다.
+      sellerSourceText: productFactText(photoSourceInput),
+    });
+    const requestedGapPolicy = request.gapPolicy ?? "ask";
+    const gapPolicy = effectiveGapPolicy(readingStatus, requestedGapPolicy);
+
+    const beforeGapPolicy = blueprint;
+    const photoEvidenceFailures = verifyEvidenceStructure(blueprint, photoSource);
     if (photoEvidenceFailures.length > 0) {
       // 정책을 넘긴다. 글 경로와 같은 처리다 — 예시로 채우기를 고른 사용자에게
       // 빈 페이지를 주지 않는다.
@@ -433,7 +457,7 @@ ${analyzePrompt}`
       // 제품 판독(`productReading`)이 떨어져 나간다.
       blueprint = {
         ...blueprint,
-        sections: resolveStructureFailures(blueprint, photoEvidenceFailures, request.gapPolicy ?? "ask").sections,
+        sections: resolveStructureFailures(blueprint, photoEvidenceFailures, gapPolicy).sections,
       };
     }
 
@@ -487,7 +511,22 @@ ${analyzePrompt}`
       blueprint,
       // 심사 결과를 함께 돌려준다. 화면이 이미 받을 준비가 돼 있는데
       // (ScenarioEditor 의 review) 사진 경로만 늘 비어 있었다.
-      review: review ?? undefined
+      review: review ?? undefined,
+      // 못 읽었으면 화면이 말할 수 있어야 한다. 조용히 넘기면 사용자는 근거
+      // 없는 카피를 확인된 것으로 읽는다.
+      productReadingStatus: readingStatus,
+      /*
+        **정한 것이 아니라 한 것을 적는다.**
+
+        정책을 엄하게 내려도 한 칸도 안 비워질 수 있다 — 모델이 근거 딱지를 안
+        붙인 섹션은 검사가 통째로 건너뛴다. 그때 화면이 「치웠습니다」라고 하면
+        사용자는 위험한 문장이 사라진 줄 알고 그대로 발행한다.
+      */
+      copyGapOutcome: {
+        requested: requestedGapPolicy,
+        applied: gapPolicy,
+        cleared: countClearedCopy(beforeGapPolicy, blueprint)
+      }
     };
   }
 

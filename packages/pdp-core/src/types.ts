@@ -1,6 +1,6 @@
 import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
-import type { ProductReading } from "./pdp.product-reading";
+import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
 import type { PdpLlmExecution } from "./pdp.llm";
 
@@ -139,10 +139,33 @@ export interface LandingPageBlueprint {
   designSystem?: DesignSystem;
 }
 
+export interface CopyGapOutcome {
+  /** 사용자가 고른 정책. */
+  requested: GapPolicy;
+  /** 실제로 적용한 정책. 근거가 아예 없으면 `sample` 이 `ask` 로 내려간다. */
+  applied: GapPolicy;
+  /** 그 결과 실제로 비운 칸 수. 0 이면 아무것도 안 치웠다는 뜻이다. */
+  cleared: number;
+}
+
 export interface GeneratedResult {
   planningExecutions?: PdpLlmExecution[];
   originalImage: string;
   blueprint: LandingPageBlueprint;
+  /**
+   * 사진에서 제품을 **충분히 읽었는가**(→ `pdp.product-reading.ts`).
+   *
+   * 사진 경로에만 있다. 글 경로는 사용자가 친 글이 곧 근거라 물을 것이 없다.
+   */
+  productReadingStatus?: ProductReadingStatus;
+  /**
+   * 빈자리 정책을 **실제로 어떻게 적용했는가.**
+   *
+   * 고른 것(`requested`)과 쓴 것(`applied`)이 다를 수 있고, 정책이 엄해도
+   * **한 칸도 안 비워질 수 있다**(모델이 근거 딱지를 안 붙인 섹션은 검사에서
+   * 건너뛴다). 화면이 「치웠습니다」를 말하려면 이 값을 봐야 한다.
+   */
+  copyGapOutcome?: CopyGapOutcome;
   /**
    * 구성안 심사 결과. 선택 필드다 — 심사가 실패하면 없이 진행한다.
    * 저장해 둔 초안에도 없다.

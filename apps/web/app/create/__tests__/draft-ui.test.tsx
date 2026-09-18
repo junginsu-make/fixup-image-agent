@@ -84,3 +84,37 @@ it("T-STATE: 구성안에서 생성된 섹션을 삭제할 때도 이전 이미�
   expect(backup?.editorState?.sections[0].generatedImage).toBe("data:image/png;base64,AAAA");
   if (backup) await deletePdpDraft(backup.id);
 });
+
+/**
+ * **판독 경고가 초안을 다시 열어도 화면까지 닿는가.**
+ *
+ * 저장소를 직접 부르는 시험은 이것을 못 잡았다. 화면은 초안을 늘 문서로
+ * 바꿨다가 되돌려 읽는데(`draft-repository`), 그 길에 `productReadingStatus`
+ * 자리가 없어 **조용히 사라졌다.** 값을 보존하는 코드는 아무도 지나지 않는
+ * 길에 있었다.
+ *
+ * 그래서 화면이 실제로 받는 값을 본다 — 소스에 그 낱말이 있는지가 아니라.
+ */
+it.each([false, true])("T-SAVE UI(v3=%s): 「제품을 읽지 못했다」가 재적재에서 살아남는다", async (documentV3Enabled) => {
+  const input: PdpDraftInput = {
+    id: "ui-draft", appState: "scenario",
+    preparedImage: { base64: "AAAA", mimeType: "image/png", fileName: "p.png", previewUrl: "data:image/png;base64,AAAA" },
+    modelImage: null, modelImageUsage: null,
+    result: {
+      originalImage: "AAAA",
+      blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [createSectionFor([])] },
+      productReadingStatus: "unfounded",
+      copyGapOutcome: { requested: "sample", applied: "ask", cleared: 2 },
+    },
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
+    imageModel: "nano-banana", characterId: undefined, characterAngles: [], preserveProduct: false,
+  };
+  await savePdpDraft(input);
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
+  await flush();
+
+  // 사라지면 근거 없는 카피가 확인된 것처럼 보인다.
+  expect(captured.scenario.productReadingStatus).toBe("unfounded");
+  // 화면 토글값이 아니라 **그 실행에 실제로 쓰인 것**이 와야 한다.
+  expect(captured.scenario.gapOutcome).toEqual({ requested: "sample", applied: "ask", cleared: 2 });
+});

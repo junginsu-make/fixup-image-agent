@@ -406,3 +406,44 @@ export function normalizeSectionEvidence(value: unknown): CopyEvidence[] {
     .map((entry) => normalizeEvidenceEntry(entry))
     .filter((entry): entry is CopyEvidence => entry !== null);
 }
+
+/**
+ * 정책을 적용한 결과 **실제로 몇 칸을 비웠는가.**
+ *
+ * ── 왜 세는가 ────────────────────────────────────────────────
+ *
+ * 「빈칸으로 두었습니다」를 화면에 띄우려면 **정말 비웠는지** 알아야 한다.
+ * 정책을 정하는 것과 그 정책이 무언가를 바꾸는 것은 다른 일이다 —
+ * `verifyEvidenceStructure` 는 `evidenceVersion !== 1` 인 섹션을 통째로
+ * 건너뛴다. 모델이 근거 딱지를 안 붙이면 정책을 아무리 엄하게 정해도 **한 칸도
+ * 안 비워진다.**
+ *
+ * 그때 「치웠습니다」라고 말하면 사용자는 위험한 문장이 사라진 줄 알고 그대로
+ * 발행한다. 원래 문제보다 나쁘다.
+ */
+export function countClearedCopy(
+  before: LandingPageBlueprint,
+  after: LandingPageBlueprint,
+): number {
+  let cleared = 0;
+
+  after.sections.forEach((section, index) => {
+    const original = before.sections[index];
+    // 섹션이 밀렸으면 셀 수 없다. `resolveStructureFailures` 는 1:1 로 돌려주므로
+    // 여기 걸리면 부르는 쪽이 잘못한 것이다. 세지 않는 편이 부풀리는 것보다 낫다.
+    if (!original || original.section_id !== section.section_id) return;
+
+    const 비었나 = (was: string | undefined, now: string | undefined) =>
+      Boolean(was?.trim()) && !now?.trim();
+
+    for (const slot of ["headline", "subheadline", "trust_or_objection_line", "CTA"] as const) {
+      if (비었나(original[slot], section[slot])) cleared += 1;
+    }
+
+    (original.bullets ?? []).forEach((bullet, bulletIndex) => {
+      if (비었나(bullet, section.bullets?.[bulletIndex])) cleared += 1;
+    });
+  });
+
+  return cleared;
+}

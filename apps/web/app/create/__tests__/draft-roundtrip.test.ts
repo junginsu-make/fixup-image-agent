@@ -76,3 +76,33 @@ describe("T-SAVE: 화면 입력부터 IndexedDB 왕복", () => {
     expect(restored?.editorState?.overlaysBySection.S1).toEqual(input.editorState!.overlaysBySection.S1);
   });
 });
+
+/**
+ * **결과에 새로 붙은 것이 재적재에서 사라지지 않는다.**
+ *
+ * `normalizeGeneratedResult` 는 필드를 하나씩 나열한다. 새 필드가 생길 때마다
+ * 그 목록에 넣지 않으면 조용히 버려진다 — 심사 결과(`review`)로 한 번 겪었고,
+ * 같은 주 `normalizeSection` 의 근거(`evidence`)로 또 겪었다.
+ */
+describe("T-SAVE: 판독 상태도 왕복에서 살아남는다", () => {
+  it("**초안을 다시 열어도 「제품을 읽지 못했다」가 남는다**", async () => {
+    const input = fixture();
+    ids.push(input.id!);
+    input.result = { ...input.result!, productReadingStatus: "unfounded" };
+
+    await savePdpDraft(input);
+    const 되살린것 = await getPdpDraft(input.id!);
+
+    // 사라지면 근거 없는 카피가 확인된 것처럼 보인다.
+    expect(되살린것?.result?.productReadingStatus).toBe("unfounded");
+  });
+
+  it("없던 초안은 없는 채로 둔다", async () => {
+    const input = fixture();
+    ids.push(input.id!);
+
+    await savePdpDraft(input);
+
+    expect((await getPdpDraft(input.id!))?.result?.productReadingStatus).toBeUndefined();
+  });
+});

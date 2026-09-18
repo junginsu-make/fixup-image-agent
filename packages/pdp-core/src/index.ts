@@ -92,9 +92,12 @@ export {
 export {
   PRODUCT_GROUNDING_RULES,
   PRODUCT_READING_RULES,
+  effectiveGapPolicy,
   isProductReadingUsable,
   normalizeProductReading,
+  productReadingStatus,
   type ProductReading,
+  type ProductReadingStatus,
 } from "./pdp.product-reading";
 export {
   buildSellerBriefPrompt,
@@ -118,6 +121,7 @@ export {
   acknowledgeAll,
   applyUserEdit,
   collectUnverified,
+  countClearedCopy,
   findUncoveredFactTargets,
   resolveStructureFailures,
   removeTarget,

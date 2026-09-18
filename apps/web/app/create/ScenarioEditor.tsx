@@ -2,17 +2,20 @@
 import { ArrowDown, ArrowUp, Info, Plus, Trash2, UserRound, Wand2 } from "lucide-react";
 import type {
   BlueprintReview,
+  CopyGapOutcome,
   CopyTarget,
   ImageModelId,
   LandingPageBlueprint,
   PdpOutputMode,
   ProductBrief,
+  ProductReadingStatus,
   SectionBlueprint,
 } from "@fixup/pdp-core";
 import { applyUserEdit, validateEvidenceBinding } from "@fixup/pdp-core";
 import { Badge, Button, Textarea, cn } from "@fixup/ui";
 import { ModelPicker } from "./ModelPicker";
 import { ReviewPanel } from "./ReviewPanel";
+import { ProductReadingNotice } from "./ProductReadingNotice";
 import { StyleReferenceCard, type StyleReferenceView } from "./StyleReferenceCard";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { CharacterPicker } from "./CharacterPicker";
@@ -31,6 +34,16 @@ interface ScenarioEditorProps {
   onReferenceModelRemove?: () => void;
   blueprint: LandingPageBlueprint;
   review?: BlueprintReview;
+  /**
+   * 사진에서 제품을 충분히 읽었는가. **사진 경로에서만 온다** — 글 경로는
+   * 사용자가 친 글이 곧 근거라 물을 것이 없다.
+   */
+  productReadingStatus?: ProductReadingStatus;
+  /**
+   * 서버가 빈자리 정책으로 **실제로 무엇을 했는지**. 화면의 현재 토글값을
+   * 넘기면 안 된다 — 사용자는 결과를 본 뒤에도 그 값을 바꿀 수 있다.
+   */
+  gapOutcome?: CopyGapOutcome;
   styleReference?: StyleReferenceView;
   styleReferenceEnabled: boolean;
   onStyleReferenceToggle: (enabled: boolean) => void;
@@ -254,6 +267,8 @@ export function ScenarioEditor({
   onReferenceModelRemove,
   blueprint,
   review,
+  productReadingStatus,
+  gapOutcome,
   styleReference,
   styleReferenceEnabled,
   onStyleReferenceToggle,
@@ -386,6 +401,9 @@ export function ScenarioEditor({
             </Button>
           </div>
         ) : null}
+
+        {/* 심사보다 먼저 온다. 무엇을 보고 쓴 카피인지가 심사 결과보다 앞선 물음이다. */}
+        <ProductReadingNotice status={productReadingStatus} gapOutcome={gapOutcome} />
 
         {review ? <ReviewPanel review={review} /> : null}
 
