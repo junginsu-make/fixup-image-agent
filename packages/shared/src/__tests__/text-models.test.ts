@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TEXT_MODEL, TEXT_MODELS, textModelChoices } from "../text-models";
+import {
+  DEFAULT_TEXT_MODEL,
+  TEXT_MODELS,
+  textModelChoices,
+  textModelVendor,
+} from "../text-models";
 import { LLM_PRICES } from "../llm-price";
 
 /**
@@ -81,5 +86,37 @@ describe("화면에 낼 목록", () => {
 
     expect(기본).toHaveLength(1);
     expect(기본[0]!.id).toBe(DEFAULT_TEXT_MODEL);
+  });
+});
+
+describe("어느 업체로 부르나", () => {
+  /**
+   * **고른 모델을 실제로 부르려면 SDK 를 갈라야 한다.**
+   *
+   * 목록에 Anthropic 과 OpenAI 가 섞여 있다. 업체를 안 가르면 드롭다운이
+   * **모양만 있고** 아무것도 안 한다 — 2026-09-18 에 실제로 그랬다.
+   */
+  it("claude 는 anthropic 으로", () => {
+    expect(textModelVendor("claude-sonnet-5")).toBe("anthropic");
+    expect(textModelVendor("claude-opus-5")).toBe("anthropic");
+  });
+
+  it("gpt 는 openai 로", () => {
+    expect(textModelVendor("gpt-5.6-sol")).toBe("openai");
+  });
+
+  /** 목록에 있는 것은 **모두** 업체가 정해져 있어야 한다. 하나라도 모르면 못 부른다. */
+  it("목록의 모든 모델에 업체가 있다", () => {
+    for (const model of TEXT_MODELS) {
+      expect(textModelVendor(model.id), `${model.id} 의 업체를 모른다`).toBeTruthy();
+    }
+  });
+
+  /**
+   * **모르는 이름은 기본으로 떨어진다.** 지어내면 없는 SDK 를 부르고, 그
+   * 실패가 「기획이 안 됐다」로만 보인다.
+   */
+  it("모르는 이름은 기본 모델의 업체로", () => {
+    expect(textModelVendor("어디서-온-모델-9")).toBe(textModelVendor(DEFAULT_TEXT_MODEL));
   });
 });

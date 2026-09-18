@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { EasyClient } from "../easy-client";
-import { defaultEasyImageModel, easyImageModels, loadEasyConversation } from "../_components/load";
+import { EASY_RATIO, defaultEasyImageModel, easyImageModels, loadEasyConversation } from "../_components/load";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +27,7 @@ export default async function EasyConversationPage({
       initialUrls={loaded.urls}
       imageModels={easyImageModels()}
       defaultImageModel={defaultEasyImageModel()}
+      ratioId={EASY_RATIO}
     />
   );
 }

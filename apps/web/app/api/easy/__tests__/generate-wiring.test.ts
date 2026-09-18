@@ -63,6 +63,17 @@ describe("고른 모델을 믿지 않는다", () => {
   it("글 모델을 목록으로 거른다", () => {
     expect(generate).toContain("resolveTextModel(");
   });
+
+  /**
+   * **고른 것을 실제로 넘긴다.**
+   *
+   * 2026-09-18 에 이것이 빠져 있었다. 드롭다운은 값을 받아 되돌려주기만 하고,
+   * 기획은 환경변수가 정한 모델로 갔다 — **고르는 척만 하는 화면**이었다.
+   * 타입도 시험도 조용했다. 「고른 값을 쓴다」는 어디에도 안 적혀 있었으니까.
+   */
+  it("고른 글 모델을 기획에 넘긴다", () => {
+    expect(generate).toMatch(/runPlan\([\s\S]{0,200}textModel/);
+  });
 });
 
 describe("실패를 가려 말한다", () => {
@@ -99,5 +110,30 @@ describe("대화에 남긴다", () => {
   it("제목이 비어 있을 때만 짓는다", () => {
     expect(generate).toContain("if (!conversation.title)");
     expect(generate).toContain("easyTitle(prompt)");
+  });
+});
+
+describe("화면과 서버가 같은 기본값을 쓴다", () => {
+  const load = readFileSync(new URL("../../../easy/_components/load.ts", import.meta.url), "utf8");
+
+  /**
+   * **비율이 두 벌이면 값이 갈린다.**
+   *
+   * 화면은 `EASY_RATIO` 로 값을 세고(`cost.ts`), 서버는 `RATIO` 로 만든다.
+   * 갈리면 **화면이 말하는 값과 실제로 깎이는 값이 다르다** — 사용자가 보는
+   * 유일한 값 정보가 거짓이 된다.
+   */
+  it("비율이 같다", () => {
+    const 서버 = generate.match(/const RATIO = "([^"]+)"/)?.[1];
+    const 화면 = load.match(/export const EASY_RATIO = "([^"]+)"/)?.[1];
+
+    expect(서버, "서버의 비율을 못 찾았다").toBeTruthy();
+    expect(화면, "화면의 비율을 못 찾았다").toBeTruthy();
+    expect(화면).toBe(서버);
+  });
+
+  /** 한 줄에 한 장이다(설계 §9). 값 셈도 그 수로 한다. */
+  it("장수가 하나다", () => {
+    expect(generate).toContain("const VARIANTS = 1;");
   });
 });

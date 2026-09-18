@@ -126,7 +126,14 @@ export async function POST(request: Request) {
     const params = Promise.resolve({ id: projectId });
 
     // ② 기획 — 붙인 그림을 읽고 칸을 채운다
-    await read(await runPlan(relay(request, `/api/poster/projects/${projectId}/plan`, {}), { params }), "기획");
+    /*
+     * **고른 글 모델을 넘긴다.** 안 넘기면 드롭다운이 모양만 있고 환경변수가
+     * 정한 모델로 간다 — 2026-09-18 에 실제로 그랬다(설계 §5-4).
+     */
+    await read(
+      await runPlan(relay(request, `/api/poster/projects/${projectId}/plan`, { textModel }), { params }),
+      "기획",
+    );
 
     // ③ 제출 — 그림은 화면이 `status` 로 받아 간다
     const submitted = await read(

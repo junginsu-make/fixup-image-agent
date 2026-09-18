@@ -1,6 +1,6 @@
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { mergeGrammar, planPoster, readAttachments } from "@fixup/poster-core";
-import { planReferences } from "@fixup/shared";
+import { planReferences, resolveTextModel } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { posterReferencesByIds } from "../../../../../../lib/poster/references";
 import { teamIdOf } from "../../../../../../lib/teams/store";
@@ -23,11 +23,21 @@ type Context = { params: Promise<{ id: string }> };
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
 export async function POST(request: Request, context: Context) {
+  /*
+   * **본문을 여기서 한 번만 읽는다.** `Request` 의 몸은 한 번만 읽을 수 있어
+   * 아래에서 또 읽으면 빈 값이 온다.
+   *
+   * **고른 글 모델은 Easy 모드만 보낸다**(설계 §5-4). 다른 화면 넷은 본문이
+   * 비어 있고, 그때는 `undefined` 라 지금까지대로 간다.
+   */
+  const 고른글모델 = await request.json()
+    .then((body) => (typeof body?.textModel === "string" ? body.textModel : undefined))
+    .catch(() => undefined);
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 문법 읽기·사람 읽기·기획이 모두 여기로 모인다.
-  return withLlmMeter(() => plan(request, context));
+  return withLlmMeter(() => plan(request, context, 고른글모델));
 }
 
-async function plan(request: Request, context: Context) {
+async function plan(request: Request, context: Context, 고른글모델?: string) {
   /**
    * **`catch` 에서도 봐야 한다.** 안에서 선언하면 실패했을 때 예약을 못 풀고,
    * 묶인 장이 만료될 때까지 그 사람 한도에서 빠져 있는다.
@@ -116,7 +126,13 @@ async function plan(request: Request, context: Context) {
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
-    const providers = createPosterPlanningProviders();
+    /*
+     * **고른 글 모델로 기획한다**(Easy 모드의 드롭다운, 설계 §5-4).
+     *
+     * 다른 화면은 이 칸을 안 보낸다 — 그때는 지금까지대로 환경변수·기본값으로
+     * 간다. `resolveTextModel` 이 목록에 없는 id 를 기본으로 떨어뜨린다.
+     */
+    const providers = createPosterPlanningProviders(process.env, resolveTextModel(고른글모델));
     const plan = await planPoster(
       {
         instruction: project.data.instruction,

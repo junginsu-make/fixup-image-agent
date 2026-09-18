@@ -8,6 +8,8 @@ import { DEFAULT_TEXT_MODEL } from "@fixup/shared";
 import { EasyMessageRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
+import { easyCost } from "./cost";
+import { EasyAttachChoice } from "./_components/attach-choice";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -31,6 +33,8 @@ interface EasyClientProps {
   initialUrls?: Record<string, string>;
   imageModels: ImageModelChoice[];
   defaultImageModel: string;
+  /** 값 셈에 쓴다. 화면이 바꿀 수 없다(설계 §9). */
+  ratioId: string;
 }
 
 /** 첨부 한 장. 올린 뒤의 모습이다. */
@@ -52,6 +56,7 @@ export function EasyClient({
   initialUrls,
   imageModels,
   defaultImageModel,
+  ratioId,
 }: EasyClientProps) {
   const router = useRouter();
   const [messages, setMessages] = React.useState<EasyMessage[]>(initialMessages);
@@ -72,6 +77,19 @@ export function EasyClient({
 
   const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
   const shown = messages.length ? messages : [인사];
+
+  /*
+   * **이번 한 장에 얼마 드나**(설계 §5-2).
+   *
+   * 채팅은 돌이킬 수 없다 — 엔터가 곧 생성이고 04 같은 확인 단계가 없다.
+   * 누르기 전에 아는 것이 누른 뒤에 아는 것보다 낫다.
+   *
+   * 셈은 `cost.ts` 가 한다. 화면 안에 두면 값으로 못 잰다.
+   */
+  const cost = React.useMemo(
+    () => easyCost({ modelId: imageModel, ratioId, attachmentCount: attachments.length }),
+    [imageModel, ratioId, attachments.length],
+  );
 
   // 새 줄이 붙으면 아래로 따라간다. 대화가 위에 멈춰 있으면 답이 온 줄 모른다.
   React.useEffect(() => {
@@ -103,6 +121,19 @@ export function EasyClient({
         });
       }
     }
+  }
+
+  /**
+   * 라이브러리에서 고른다 (설계 §3 의 「라이브러리에서」).
+   *
+   * **올리지 않는다.** 이미 우리 저장소에 있는 그림이라 id 만 받으면 된다 —
+   * 다시 올리면 같은 그림이 두 벌이 되고 라이브러리가 지저분해진다.
+   */
+  function pickFromLibrary(picked: { id: string; url: string; title: string }[]) {
+    setAttachments((current) => {
+      const 있는것 = new Set(current.map((one) => one.id));
+      return [...current, ...picked.filter((one) => !있는것.has(one.id))];
+    });
   }
 
   /**
@@ -222,14 +253,12 @@ export function EasyClient({
             붙일지 묻는 단추. **첫 화면에서 한 번만**이다 — 되묻지 않는다(§6).
           */}
           {turn.showsAttachChoice ? (
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => file.current?.click()}>
-                직접 첨부
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setStartedWithout(true)}>
-                없이 시작
-              </Button>
-            </div>
+            <EasyAttachChoice
+              selectedIds={attachments.map((one) => one.id)}
+              onUpload={() => file.current?.click()}
+              onPick={pickFromLibrary}
+              onSkip={() => setStartedWithout(true)}
+            />
           ) : null}
 
           {error ? (
@@ -324,7 +353,18 @@ export function EasyClient({
             **대화는 남고 그림은 라이브러리에 저장된다.** 설계 §11-③ 이 「그
             사실을 화면에 적어야 한다」고 적었다 — 안 적으면 잃어버렸다고 느낀다.
           */}
+          {/*
+            **값을 누르기 전에 적는다**(설계 §5-2). 이 모드에서 사용자가 보는
+            유일한 값 정보다. 못 셀 때는 지어내지 않고 그 까닭을 적는다.
+          */}
           <p className="pt-2 text-meta text-subtle-foreground">
+            {cost.units !== undefined ? (
+              <>
+                보내면 <strong>약 {cost.units}장</strong>이 듭니다.{" "}
+              </>
+            ) : (
+              <>{cost.rejected} </>
+            )}
             만든 그림은 라이브러리에 저장됩니다. 세밀하게 만들려면 왼쪽 아래
             「자세한 모드로」를 누르세요.
           </p>

@@ -28,9 +28,20 @@ import { LLM_PRICES, priceOf, type TokenPrice } from "./llm-price";
  * 단가 수정이 들어오면 여기에 한 줄씩 더한다.
  */
 
+/** 어느 SDK 로 부르나. 목록에 업체가 섞여 있으므로 갈라야 한다. */
+export type TextModelVendor = "anthropic" | "openai";
+
 export interface TextModel {
   /** `LLM_PRICES` 의 열쇠와 같아야 한다. 시험이 지킨다. */
   id: string;
+  /**
+   * **부를 SDK.**
+   *
+   * 이 칸이 없으면 고른 모델이 실제로 안 불린다 — 2026-09-18 에 실제로 그랬다.
+   * 드롭다운은 값을 받아 되돌려주기만 하고, 기획은 환경변수가 정한 모델로
+   * 갔다. **고르는 척만 하는 화면**이었다.
+   */
+  vendor: TextModelVendor;
   /** 드롭다운에 보이는 이름. **진짜 이름을 낸다**(설계 §5-1). */
   label: string;
   /** 한 줄 설명. 왜 이것을 고를까. */
@@ -54,21 +65,25 @@ export interface TextModel {
 export const TEXT_MODELS: readonly TextModel[] = [
   {
     id: "claude-haiku-4-5",
+    vendor: "anthropic",
     label: "Claude Haiku 4.5",
     note: "가장 싸고 빠릅니다. 간단한 지시에",
   },
   {
     id: "claude-sonnet-5",
+    vendor: "anthropic",
     label: "Claude Sonnet 5",
     note: "기본. 지금 기획이 쓰는 모델입니다",
   },
   {
     id: "gpt-5.6-sol",
+    vendor: "openai",
     label: "GPT-5.6 Sol",
     note: "다른 업체의 눈으로 씁니다",
   },
   {
     id: "claude-opus-5",
+    vendor: "anthropic",
     label: "Claude Opus 5",
     note: "가장 비쌉니다. 복잡한 지시에",
   },
@@ -116,4 +131,16 @@ export function resolveTextModel(id: string | undefined): string {
   return TEXT_MODELS.some((model) => model.id === id) && LLM_PRICES[id]
     ? id
     : DEFAULT_TEXT_MODEL;
+}
+
+/**
+ * 이 모델을 **어느 SDK 로** 부르나.
+ *
+ * **모르는 이름은 기본 모델의 업체로 떨어진다.** 지어내면 없는 SDK 를 부르고,
+ * 그 실패가 화면에는 「기획이 안 됐다」로만 보인다.
+ */
+export function textModelVendor(id: string): TextModelVendor {
+  const found = TEXT_MODELS.find((model) => model.id === id);
+  if (found) return found.vendor;
+  return TEXT_MODELS.find((model) => model.id === DEFAULT_TEXT_MODEL)!.vendor;
 }
