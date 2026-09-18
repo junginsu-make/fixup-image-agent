@@ -33,6 +33,8 @@ import {
   type ImagePromptOptions,
 } from "./pdp.image-prompt";
 import { shouldSendAnchor } from "./pdp.product-anchor";
+import { normalizeSectionEvidence, resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
+import { photoSourceText } from "./pdp.photo-evidence";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { buildSellerBriefPrompt, type SellerBrief } from "./pdp.seller-brief";
 import { intensityRules } from "./pdp.copy-intensity";
@@ -408,6 +410,31 @@ ${analyzePrompt}`
         blueprint = revised;
         review = revisedReview;
       }
+    }
+
+    /*
+      **사진 경로도 근거를 검사한다**(K-09).
+
+      전에는 글 경로에서만 돌았다. 사진 경로는 같은 스키마로 `evidence` 를
+      받으면서 아무도 안 봐서, 지어낸 인용·금지된 주장·안 채운 질문이 그대로
+      통과했다. 같은 함수를 쓴다 — 두 벌로 적으면 한쪽만 고치는 날이 온다.
+
+      원문은 **사용자가 직접 적은 것**이다(`photoSourceText`). 사진에서 읽은
+      것은 추정이라 인용의 근거가 될 수 없다(설계 §9.2).
+    */
+    const photoEvidenceFailures = verifyEvidenceStructure(
+      blueprint,
+      photoSourceText({ sellerBrief: request.sellerBrief, additionalInfo: request.additionalInfo }),
+    );
+    if (photoEvidenceFailures.length > 0) {
+      // 정책을 넘긴다. 글 경로와 같은 처리다 — 예시로 채우기를 고른 사용자에게
+      // 빈 페이지를 주지 않는다.
+      // 섹션만 갈아 끼운다. 구성안 전체를 바꾸면 사진 경로가 함께 들고 있는
+      // 제품 판독(`productReading`)이 떨어져 나간다.
+      blueprint = {
+        ...blueprint,
+        sections: resolveStructureFailures(blueprint, photoEvidenceFailures, request.gapPolicy ?? "ask").sections,
+      };
     }
 
     const firstSection = blueprint.sections[0];
@@ -1580,7 +1607,20 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
     negative_prompt: asString(section.negative_prompt),
     style_guide: asString(section.style_guide),
     reference_usage: asString(section.reference_usage),
-    generatedImage: section.generatedImage
+    generatedImage: section.generatedImage,
+    /*
+      **근거를 버리지 않는다.**
+
+      이 함수는 필드를 하나씩 나열하는데 `evidence`·`evidenceVersion` 이 목록에
+      없어, 모델이 근거를 보내도 통째로 사라졌다. 그래서 근거 검사를 붙여도
+      **볼 것이 없었다** — 지어낸 인용이 그대로 나갔다.
+
+      글 경로와 같은 손질 함수를 쓴다(`pdp.evidence`). 두 벌로 적으면 한쪽만
+      고치는 날이 온다.
+    */
+    ...(section.evidenceVersion === 1
+      ? { evidenceVersion: 1 as const, evidence: normalizeSectionEvidence(section.evidence) }
+      : {}),
   };
 }
 
