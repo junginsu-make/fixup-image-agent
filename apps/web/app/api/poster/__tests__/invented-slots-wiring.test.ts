@@ -101,7 +101,7 @@ describe("붙인 그림에 글자가 있나", () => {
   );
 
   it("기획이 읽어서 저장한다", () => {
-    expect(plan).toContain("referenceHasText: Object.values(grammar.grammars).some((one) => one.hasText)");
+    expect(plan).toContain("referenceHasText: Object.values(read.reads).some((one) => one.hasText)");
   });
 
   it("실제 생성이 넘긴다", () => {

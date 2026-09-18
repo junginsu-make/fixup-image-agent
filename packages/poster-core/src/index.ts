@@ -6,6 +6,7 @@ export * from "./store";
 export * from "./planning";
 export * from "./grammar";
 export * from "./people";
+export * from "./read-attachment";
 export * from "./prompt";
 export * from "./prompt-images";
 export * from "./prompt-preview";
