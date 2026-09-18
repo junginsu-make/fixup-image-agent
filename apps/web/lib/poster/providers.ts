@@ -2,6 +2,7 @@ import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { TYPE_INTERACTIONS } from "@fixup/poster-core";
+import { textModelVendor } from "@fixup/shared";
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
@@ -198,16 +199,50 @@ async function imageBlocks(urls: string[]) {
   return urls.map((url) => ({ type: "image" as const, source: { type: "url" as const, url } }));
 }
 
-export function createPosterPlanningProviders(environment: Record<string, string | undefined> = process.env) {
-  requireKeys(["ANTHROPIC_API_KEY"], environment);
+/**
+ * 기획을 돌릴 제공자.
+ *
+ * ── 고른 글 모델을 실제로 쓴다 ────────────────────────────────
+ *
+ * `textModel` 을 주면 그 모델로 부른다(Easy 모드의 드롭다운, 설계 §5-4).
+ * **안 주면 지금까지대로** 환경변수·기본값으로 간다 — 다른 화면 넷이 이 함수를
+ * 부르고 있고, 그 화면들은 글 모델을 고르지 않는다.
+ *
+ * 업체를 `textModelVendor` 가 가른다. **안 가르면 고른 모델이 안 불린다** —
+ * 2026-09-18 에 실제로 그랬다. Easy 의 드롭다운이 값을 받아 되돌려주기만 하고,
+ * 기획은 환경변수가 정한 모델로 갔다. **고르는 척만 하는 화면**이었다.
+ *
+ * ── 예비는 그대로 둔다 ───────────────────────────────────────
+ *
+ * 주 모델이 실패하면 예비가 받는다. 고른 모델이 OpenAI 면 예비도 OpenAI 라
+ * 같은 업체가 두 번 실패할 수 있는데, 그래도 둔다 — 예비를 반대 업체로
+ * 뒤집으면 「내가 고른 것과 다른 모델로 만들어졌다」가 조용히 일어난다.
+ */
+export function createPosterPlanningProviders(
+  environment: Record<string, string | undefined> = process.env,
+  textModel?: string,
+) {
+  const vendor = textModel ? textModelVendor(textModel) : "anthropic";
+  // 고른 것이 OpenAI 면 그 열쇠가 있어야 한다. 없으면 무엇이 없는지 알린다.
+  requireKeys(vendor === "openai" ? ["OPENAI_API_KEY"] : ["ANTHROPIC_API_KEY"], environment);
+
   const { anthropic, openai, anthropicModel, openaiModel } = clients(environment);
   const backup = environment.OPENAI_API_KEY?.trim()
     ? { plan: (prompt: string) => new OpenAIStructuredProvider(openai, openaiModel, PLAN_SPEC).generate(prompt) }
     : undefined;
-  return {
-    primary: { plan: (prompt: string) => new AnthropicStructuredProvider(anthropic, anthropicModel, PLAN_SPEC).generate(prompt) },
-    backup,
-  };
+
+  const primary = vendor === "openai"
+    ? { plan: (prompt: string) => new OpenAIStructuredProvider(openai, textModel!, PLAN_SPEC).generate(prompt) }
+    : {
+      plan: (prompt: string) => new AnthropicStructuredProvider(
+        anthropic,
+        // 고른 것이 있으면 그것으로. 없으면 지금까지대로.
+        textModel ?? anthropicModel,
+        PLAN_SPEC,
+      ).generate(prompt),
+    };
+
+  return { primary, backup };
 }
 
 /**
