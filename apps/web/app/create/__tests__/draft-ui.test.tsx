@@ -118,3 +118,35 @@ it.each([false, true])("T-SAVE UI(v3=%s): 「제품을 읽지 못했다」가 �
   // 화면 토글값이 아니라 **그 실행에 실제로 쓰인 것**이 와야 한다.
   expect(captured.scenario.gapOutcome).toEqual({ requested: "sample", applied: "ask", cleared: 2 });
 });
+
+/**
+ * **공용 디자인이 초안을 다시 열어도 화면까지 닿는가**(U-15).
+ *
+ * 문서 왕복은 지금 펼치기(`...doc.blueprint`)로 옮기므로 살아남는다. 그런데 이
+ * 세션에서 **필드를 하나씩 나열하는 자리에 세 번 걸렸다**(심사 결과·근거·판독
+ * 상태). 누군가 이 자리도 나열로 바꾸는 날, 새 섹션이 조용히 다른 서체로
+ * 만들어지기 시작한다.
+ */
+it.each([false, true])("T-SAVE UI(v3=%s): 페이지 공용 디자인이 재적재에서 살아남는다", async (documentV3Enabled) => {
+  const designSystem = {
+    headlineFont: "굵은 기하학적 산세리프", bodyFont: "가늘고 단정한 산세리프",
+    palette: ["아이보리", "남색"], cast: "30대 한국인 여성, 단발",
+  };
+  const input: PdpDraftInput = {
+    id: "ui-draft", appState: "scenario",
+    preparedImage: { base64: "AAAA", mimeType: "image/png", fileName: "p.png", previewUrl: "data:image/png;base64,AAAA" },
+    modelImage: null, modelImageUsage: null,
+    result: {
+      originalImage: "AAAA",
+      blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], designSystem, sections: [createSectionFor([])] },
+    },
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
+    imageModel: "nano-banana", characterId: undefined, characterAngles: [], preserveProduct: false,
+  };
+  await savePdpDraft(input);
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
+  await flush();
+
+  // 사라지면 여기서 더한 섹션만 다른 서체·다른 인물로 만들어진다.
+  expect(captured.scenario.blueprint.designSystem).toEqual(designSystem);
+});

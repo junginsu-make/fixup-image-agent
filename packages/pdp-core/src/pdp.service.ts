@@ -57,6 +57,7 @@ import {
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 import { clampSections, sectionCountRules } from "./pdp.section-plan";
+import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, designSystemPartOf, normalizeDesignSystem } from "./pdp.design-system";
 
 const DEFAULT_IMAGE_MIME = "image/jpeg";
 
@@ -321,6 +322,8 @@ ${analyzePrompt}`
             // 제품 사실이 뒤에 쓰는 카피의 조건이 된다 — 호출을 늘리지 않고 순서를 만든다.
             properties: {
               productReading: PRODUCT_READING_SCHEMA,
+              // 섹션보다 앞이다. 먼저 정한 디자인이 뒤에 쓰는 장면의 조건이 된다.
+              designSystem: DESIGN_SYSTEM_SCHEMA,
               executiveSummary: { type: Type.STRING },
               scorecard: {
                 type: Type.ARRAY,
@@ -1233,13 +1236,18 @@ export function buildAnalyzePrompt(
    * 말했다. 이 파일 자신의 규칙대로면 **뒤에 있는 쪽이 이긴다** — 레퍼런스를
    * 보여 준 의미가 조용히 희석된다.
    *
-   * 「디자인 가이드 우선 모드에서만 강하게」도 뺐다. `pdp.image-prompt.ts` 는
-   * `design_system = style_guide` 를 조건 없이 한다. 기획에게 스스로 힘을
-   * 빼라고 말할 이유가 없다.
+   * **같은 함정에 또 걸렸다**(U-15, 2026-09-18). 앞에 `DESIGN_SYSTEM_RULES` 를
+   * 놓아 「서체·색·등장인물은 designSystem 이 정한다」고 해 놓고, 여기가 여전히
+   * 「전체 통일 스타일 … 서체 인상을 적을 것」이라 말했다. 뒤에 있는 이쪽이
+   * 이기므로, 섹션마다 서체를 또 정하고 그 제각각인 글이 공용 서술 **앞에**
+   * 남았다 — 통일하려고 만든 장치가 통일을 못 시켰다.
+   *
+   * 그래서 이 자리는 **그 섹션만의 연출**로 좁힌다. 페이지 정체성(서체·색·인물)은
+   * 앞에서 한 번만 정한다.
    */
   const styleGuideFieldRule = extras?.styleReference
-    ? "- style_guide: 전체 통일 스타일. **위에 첨부된 디자인 레퍼런스를 기준으로** 레이아웃·여백·색 쓰임·서체 인상을 적을 것."
-    : "- style_guide: 전체 통일 스타일. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것.";
+    ? "- style_guide: **이 섹션만의 연출**(세트·조명·구도·질감·여백)을 적을 것. **위에 첨부된 디자인 레퍼런스를 기준으로** 적되, 서체·색·등장인물은 designSystem 이 이미 정했으니 다시 적지 말 것."
+    : "- style_guide: **이 섹션만의 연출**(세트·조명·구도·질감)을 적을 것. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것. 서체·색·등장인물은 designSystem 이 이미 정했으니 다시 적지 말 것.";
 
   const outputModePrompt =
     outputMode === "full-image"
@@ -1268,6 +1276,8 @@ ${photoGapPolicyRules(gapPolicy)}
 ${PRODUCT_READING_RULES}
 
 ${PRODUCT_GROUNDING_RULES}
+
+${DESIGN_SYSTEM_RULES}
 
 ${sectionCountRules()}
 
@@ -1603,11 +1613,22 @@ function sanitizeBlueprint(input: Partial<LandingPageBlueprint>) {
     문구는 부탁이지 강제가 아니다 — 모델이 서른 장을 내놓으면 서른 장이 그대로
     생성 대기열에 들어가고 한 장마다 값이 나간다.
   */
+  /*
+    **공용 디자인을 모든 섹션에 싣는다**(U-15).
+
+    전에는 사진 경로에 이 장치가 없었다. 프롬프트가 「전체 통일 스타일」이라고
+    적어 두긴 했지만 여섯 섹션이 각자 자기 문장을 쓰면 통일될 수가 없다.
+    글 경로와 **같은 함수**를 쓴다.
+  */
+  const designSystem = normalizeDesignSystem(input.designSystem);
   const sections = Array.isArray(input.sections)
-    ? clampSections(input.sections).map((section, index) => normalizeSection(section, index))
+    ? clampSections(input.sections)
+        .map((section, index) => normalizeSection(section, index))
+        .map((section) => applyDesignSystem(section, designSystem))
     : [];
 
   return {
+    designSystem,
     // 여기서 빠뜨리면 읽어낸 제품 사실이 조용히 사라진다. 필드를 하나씩 나열하는
     // 함수는 새 값을 삼킨다 — 이 저장소에서 이미 두 번 겪었다.
     productReading: normalizeProductReading(input.productReading),
@@ -1756,11 +1777,26 @@ function getBaseSceneDirection(section: SectionBlueprint, mode: PdpGuidePriority
       .join(" ");
   }
 
+  /*
+    **컷 타입이 이겨도 페이지 정체성은 안 바뀐다**(U-15).
+
+    전에는 `style_guide` 를 통째로 버렸다. 그 안에 페이지 공용 디자인(서체·색·
+    등장인물)이 함께 실려 있어서, **한 섹션만 컷 타입 우선으로 두면 그 섹션만
+    다른 서체·다른 사람으로 만들어졌다.** 토글은 섹션마다 따로다.
+
+    컷 타입이 덮어야 하는 것은 그 섹션의 구도·연출이지 페이지 전체의 서체가
+    아니다. 그래서 공용 서술만 남긴다.
+  */
+  const shared = designSystemPartOf(section.style_guide);
+
   return [
     `Communicate this purpose clearly: ${section.purpose}.`,
     "Build a fresh scene from the selected shot type.",
-    "Do not inherit conflicting layout or style-guide assumptions from the section metadata."
-  ].join(" ");
+    "Do not inherit conflicting layout or style-guide assumptions from the section metadata.",
+    shared
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function buildValidationPrompt(profile: ReferenceModelProfile, expectedStyle: NonNullable<ImageGenOptions["style"]>) {

@@ -316,7 +316,11 @@ export function ScenarioEditor({
   const canAddSection = blueprint.sections.length < MAX_PLANNED_SECTIONS;
   const addSection = () => {
     if (!canAddSection) return;
-    onChange({ ...blueprint, sections: [...blueprint.sections, createSectionFor(blueprint.sections)] });
+    // 공용 디자인을 **직접** 물려준다. 형제를 베끼면 그 형제가 고쳐질 때 끊긴다.
+    onChange({
+      ...blueprint,
+      sections: [...blueprint.sections, createSectionFor(blueprint.sections, blueprint.designSystem)],
+    });
   };
 
   return (
@@ -420,7 +424,11 @@ export function ScenarioEditor({
           따로 본다 — 서버가 준 값이 아니라 **지금 화면의 구성안**을 보므로,
           사용자가 고치면 저절로 사라진다.
         */}
-        <SectionPlanGaps sections={blueprint.sections} />
+        <SectionPlanGaps
+          sections={blueprint.sections}
+          designSystem={blueprint.designSystem}
+          onSectionsChange={(sections) => onChange({ ...blueprint, sections })}
+        />
 
         {review ? <ReviewPanel review={review} /> : null}
 

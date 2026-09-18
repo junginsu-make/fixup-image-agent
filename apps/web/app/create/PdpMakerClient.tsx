@@ -789,6 +789,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         outputMode={outputMode}
         imageModel={imageModel}
         review={review}
+        // 편집기에서 섹션을 더할 때도 같은 디자인을 물려준다(U-15).
+        designSystem={result.blueprint.designSystem}
         // 시나리오 화면의 '디자인 레퍼런스 쓰기' 토글을 여기서 지켜야 한다.
         // 그냥 styleReference 를 넘기면 껐는데도 반영된다 — 토글이 거짓말이 된다.
         styleReference={styleReferenceEnabled ? styleReference : undefined}

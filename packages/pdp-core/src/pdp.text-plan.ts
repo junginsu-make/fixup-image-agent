@@ -14,6 +14,7 @@ import {
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 import { clampSections, sectionCountRules } from "./pdp.section-plan";
+import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, normalizeDesignSystem } from "./pdp.design-system";
 import { resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
 import type { StructureFailure } from "./pdp.evidence";
 import { DEFAULT_IMAGE_MODEL } from "./types";
@@ -141,14 +142,13 @@ function outputModeRules(outputMode: PdpOutputMode) {
   (사용자 결정 2026-07-30). 실제 구매 버튼은 쇼핑몰이 붙인다.`;
 }
 
+/*
+  **공용 디자인 규칙은 여기 없다.** `DESIGN_SYSTEM_RULES`(pdp.design-system.ts)가
+  프롬프트 앞쪽에 실린다 — 전에는 이 목록 안에 같은 말을 따로 적어, 사진
+  경로에만 있던 「사람이 안 나오는 페이지면 cast 는 빈 문자열」이 글 경로에는
+  없었다. 두 벌로 적으면 한쪽만 고치는 날이 온다.
+*/
 const BLUEPRINT_RULES = `규칙:
-- designSystem 은 페이지 전체가 공유하는 디자인 규칙이다. **한 번만** 정하고 전체 섹션이 공유한다.
-  섹션 이미지는 각각 따로 생성되므로 여기서 정하지 않으면 섹션마다 폰트와 인물이 달라진다.
-  · headlineFont / bodyFont: 한국어 서체 성격을 한국어로 묘사한다(예: "굵은 기하학적 산세리프",
-    "가늘고 단정한 산세리프"). 그림처럼 쓰는 레터링이 아닌 한 페이지 안에서 서체는 바뀌지 않는다.
-  · palette: 배경·본문·강조 3색을 한국어로 적는다.
-  · cast: 페이지에 반복 등장할 인물 한 명을 구체적으로 묘사한다(나이대, 성별, 머리, 옷차림).
-    한국인으로 쓴다. 모든 섹션에 같은 사람이 나온다는 전제로 작성한다.
 - 무형 상품이다. 만질 수 있는 제품 사진을 전제하지 마라.
   이미지 방향은 사용 장면·결과 장면·감정·은유로 잡는다.
 - 앞 섹션의 감정을 다음 섹션이 이어받아 하나의 흐름을 만든다.
@@ -205,6 +205,8 @@ ${revision}${outputModeRules(outputMode)}
 ${intensityRules(copyIntensity)}
 
 ${gapPolicyRules(gapPolicy)}
+
+${DESIGN_SYSTEM_RULES}
 
 ${sectionCountRules()}
 
@@ -377,37 +379,6 @@ function normalizeSection(raw: Record<string, unknown>, index: number): SectionB
   };
 }
 
-function normalizeDesignSystem(raw: unknown): DesignSystem | undefined {
-  const input = (raw ?? {}) as Record<string, unknown>;
-  const system: DesignSystem = {
-    headlineFont: asString(input.headlineFont),
-    bodyFont: asString(input.bodyFont),
-    palette: asStringArray(input.palette),
-    cast: asString(input.cast),
-  };
-  const empty =
-    !system.headlineFont && !system.bodyFont && !system.palette.length && !system.cast;
-  return empty ? undefined : system;
-}
-
-/**
- * 공용 디자인 규칙을 모든 섹션이 똑같이 받도록 문장으로 만든다.
- * buildImagePrompt 가 style_guide 를 그대로 프롬프트에 넣으므로(pdp.service.ts:1177)
- * 별도 배관 없이 전 섹션에 같은 지시가 전달된다.
- */
-function describeDesignSystem(system: DesignSystem) {
-  return [
-    "[페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다]",
-    system.headlineFont ? `헤드라인 서체: ${system.headlineFont}` : "",
-    system.bodyFont ? `본문 서체: ${system.bodyFont}` : "",
-    system.palette.length ? `색 팔레트: ${system.palette.join(" / ")}` : "",
-    system.cast ? `반복 등장 인물: ${system.cast} — 모든 섹션에 같은 사람이 나온다` : "",
-    "이 값들은 섹션마다 바뀌면 안 된다.",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
 export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
   const input = (raw ?? {}) as Record<string, unknown>;
   const rawSections = Array.isArray(input.sections) ? input.sections : [];
@@ -421,17 +392,13 @@ export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
   }
 
   const designSystem = normalizeDesignSystem(input.designSystem);
-  const shared = designSystem ? describeDesignSystem(designSystem) : "";
 
   // 상한은 코드가 지킨다. 프롬프트 문구는 부탁이지 강제가 아니다 — 한 장이 곧
   // 이미지 한 장이고 값이 나간다.
   const sections = clampSections(rawSections)
     .map((section, index) => normalizeSection((section ?? {}) as Record<string, unknown>, index))
-    .map((section) =>
-      shared
-        ? { ...section, style_guide: [section.style_guide, shared].filter(Boolean).join(" ") }
-        : section,
-    );
+    // 사진 경로와 **같은 함수**를 쓴다. 두 벌로 적으면 한쪽만 고치는 날이 온다.
+    .map((section) => applyDesignSystem(section, designSystem));
   const scorecard = Array.isArray(input.scorecard) ? input.scorecard : [];
   const blueprintList = asStringArray(input.blueprintList);
 
@@ -552,16 +519,6 @@ const SECTION_SCHEMA = {
         },
       },
     },
-  },
-};
-
-const DESIGN_SYSTEM_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    headlineFont: { type: Type.STRING },
-    bodyFont: { type: Type.STRING },
-    palette: { type: Type.ARRAY, items: { type: Type.STRING } },
-    cast: { type: Type.STRING },
   },
 };
 

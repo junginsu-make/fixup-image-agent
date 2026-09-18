@@ -34,6 +34,7 @@ import { Rnd } from "react-rnd";
 import type {
   AspectRatio,
   BlueprintReview,
+  DesignSystem,
   GeneratedResult,
   ImageGenOptions,
   PdpCopyLanguage,
@@ -154,6 +155,13 @@ interface PdpEditorProps {
   draftId?: string | null;
   /** 텍스트 경로의 구성안 심사 결과. 있으면 자기채점 점수표 대신 이것을 보여준다. */
   review?: BlueprintReview;
+  /**
+   * 페이지 공용 디자인. 여기서 섹션을 더할 때도 **같은 것을 물려준다**(U-15).
+   *
+   * 없으면 새 섹션만 다른 서체·다른 인물로 만들어지고, 그 사실은 이미지가
+   * 나온 뒤에야 보인다.
+   */
+  designSystem?: DesignSystem;
   /** 이 페이지의 디자인 언어를 정하는 참조 이미지. 모든 섹션이 같은 것을 쓴다. */
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   /** 제품 이미지를 지킬 것인가. 레퍼런스가 있을 때만 의미가 있다. */
@@ -243,6 +251,7 @@ export function PdpEditor({
   initialResult,
   draftId = null,
   review,
+  designSystem,
   styleReference,
   preserveProduct = true,
   characterId,
@@ -1767,7 +1776,7 @@ export function PdpEditor({
       setNotice(`한 페이지에 ${MAX_PLANNED_SECTIONS}장까지 만들 수 있습니다.`);
       return;
     }
-    const section = createSectionFor(sections);
+    const section = createSectionFor(sections, designSystem);
     setSections((current) => [...current, section]);
     setSectionKeys((current) => [...current, section.section_id]);
     setNotice("빈 섹션을 추가했습니다. 문구를 넣고 이미지를 만들어 보세요.");

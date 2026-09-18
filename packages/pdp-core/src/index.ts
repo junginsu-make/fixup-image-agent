@@ -134,6 +134,14 @@ export {
 } from "./pdp.evidence";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
+  DESIGN_SYSTEM_MARKER,
+  applyDesignSystem,
+  describeDesignSystem,
+  designSystemPartOf,
+  normalizeDesignSystem,
+  sectionsMissingDesignSystem,
+} from "./pdp.design-system";
+export {
   MAX_PLANNED_SECTIONS,
   clampSections,
   sectionCountRules,
