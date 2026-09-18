@@ -218,6 +218,20 @@ function SectionCard({
         />
         <BulletList bullets={section.bullets} onChange={onBulletsChange} />
         {/*
+          **신뢰문구도 그림에 그려진다.** 「허리가 약해도 부담 없이」처럼 망설임을
+          덮는 한 줄이라, 장점만 나열된 페이지를 광고가 아니게 만드는 자리다
+          (`pdp.image-prompt.ts` 의 `reassurance_line`).
+
+          그런데 이 칸이 없어서, 사용자는 자기 페이지에 뭐라고 적힐지 **보지도
+          고치지도 못한 채** 생성 버튼을 눌렀다. 보여 주지 않으면 승인이 아니다.
+        */}
+        <EditableField
+          label="신뢰·반론 문구"
+          placeholder="구매를 망설이게 하는 점을 덮는 한 줄 (예: 민감한 피부도 부담 없이)"
+          value={section.trust_or_objection_line}
+          onChange={(line) => onTargetChange({ slot: "trust_or_objection_line" }, line)}
+        />
+        {/*
           CTA 칸은 두지 않는다. 두 모드 모두 CTA 를 만들지 않고(pdp.service.ts / pdp.text-plan.ts),
           편집기에 얹는 길도 없다 — 채울 수 있는데 쓰이지 않는 칸은 거짓말이다.
           실제 구매 버튼은 쇼핑몰이 붙인다(사용자 결정 2026-07-30).

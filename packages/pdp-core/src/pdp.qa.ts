@@ -1,6 +1,7 @@
 import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
-import type { QaDefect, QaDefectType, QaSeverity, QaTextLocation, SectionBlueprint } from "./types";
+import { approvedCopyOf } from "./pdp.approved-copy";
+import type { PdpOutputMode, QaDefect, QaDefectType, QaSeverity, QaTextLocation, SectionBlueprint } from "./types";
 
 // 풀이미지 QA 게이트: 생성된 이미지를 승인 카피와 대조해 결함을 판정한다.
 // 순수 함수(buildQaPrompt/parseQaResponse/classifyOutcome/qaRetryDirective)와
@@ -76,13 +77,24 @@ export function classifyOutcome(verdict: { defects: QaDefect[] }): QaOutcome {
   return { blocking, warnings };
 }
 
-export function buildQaPrompt(section: SectionBlueprint): string {
-  const bullets = (section.bullets ?? []).filter(Boolean);
+export function buildQaPrompt(
+  section: SectionBlueprint,
+  options: { outputMode?: PdpOutputMode } = {},
+): string {
+  /*
+    **그림에 그리는 글자와 같은 목록을 본다**(`approvedCopyOf`).
+
+    전에는 여기서 따로 지었고, 그 바람에 두 가지가 어긋났다 — 신뢰문구는 그림에
+    그리는데 QA 가 몰라 「승인 안 된 글자」로 잡았고, CTA 는 안 그리는데 QA 가
+    기준으로 삼았다. 목록을 두 벌 두면 한쪽만 고치는 날이 온다.
+  */
+  const approved = approvedCopyOf(section, options);
   const copyBlock = [
-    `headline: ${sanitizeCopy(section.headline)}`,
-    `subheadline: ${sanitizeCopy(section.subheadline)}`,
-    ...bullets.map((bullet, index) => `bullet[${index}]: ${sanitizeCopy(bullet)}`),
-    section.CTA ? `CTA: ${sanitizeCopy(section.CTA)}` : ""
+    approved.headline ? `headline: ${sanitizeCopy(approved.headline)}` : "",
+    approved.subheadline ? `subheadline: ${sanitizeCopy(approved.subheadline)}` : "",
+    ...approved.bullets.map((bullet, index) => `bullet[${index}]: ${sanitizeCopy(bullet)}`),
+    // 작게 그리지만 **그리는 글자**다. 빠뜨리면 QA 가 오탐한다.
+    approved.reassurance ? `reassurance: ${sanitizeCopy(approved.reassurance)}` : ""
   ]
     .filter(Boolean)
     .join("\n");
