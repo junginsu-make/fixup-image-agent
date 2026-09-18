@@ -20,6 +20,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { ProductReadingNotice } from "./ProductReadingNotice";
 import { SectionPlanGaps } from "./SectionPlanGaps";
 import { PersonSourceChoice } from "./PersonSourceChoice";
+import { SectionAngleNote } from "./SectionAngleNote";
 import { StyleReferenceCard, type StyleReferenceView } from "./StyleReferenceCard";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { CharacterPicker } from "./CharacterPicker";
@@ -186,6 +187,8 @@ function SectionCard({
   onBulletsChange,
   onMove,
   onRemove,
+  characterId,
+  characterAngles,
 }: {
   section: SectionBlueprint;
   index: number;
@@ -195,6 +198,15 @@ function SectionCard({
   onBulletsChange: (bullets: string[]) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
+  /**
+   * 캐릭터를 골랐는가. 안 골랐으면 각도 이야기를 할 것이 없다(U-05).
+   *
+   * **선택 프로퍼티로 두지 않는다.** 그러면 바깥에서 안 넘겨도 타입이 통과해,
+   * 기능이 통째로 사라져도 컴파일러도 시험도 안 빨개진다.
+   */
+  characterId: string | undefined;
+  /** 직접 고른 각도. 있으면 자동이 안 돈다. */
+  characterAngles: string[];
 }) {
   const counts = (section.evidence ?? []).reduce(
     (value, evidence) => {
@@ -280,6 +292,25 @@ function SectionCard({
           placeholder="어떤 장면을 만들지 한국어로 적어주세요."
           value={section.prompt_ko}
           onChange={(prompt_ko) => onTargetChange({ slot: "prompt_ko" }, prompt_ko)}
+        />
+        {/*
+          **자동이 읽는 칸을 화면에 낸다**(U-05, 설계 §9.3).
+
+          각도 자동은 `layout_notes` 를 본다. 그런데 이 칸이 화면에 없어서,
+          사용자가 바로 위 「이미지 방향」에 「뒷모습」을 적고도 각도가 안 바뀌는
+          것을 이해할 수 없었다 — 쪽지가 막겠다던 그 헛수고를 쪽지가 만들었다.
+        */}
+        <EditableField
+          label="레이아웃 메모 (각도 자동이 읽는 칸)"
+          placeholder="예: 인물이 뒷모습으로 걸어가고 왼쪽에 여백"
+          value={section.layout_notes ?? ""}
+          onChange={(layout_notes) => onPatch({ layout_notes })}
+        />
+
+        <SectionAngleNote
+          layoutNotes={section.layout_notes}
+          characterId={characterId}
+          pickedAngles={characterAngles}
         />
       </div>
     </article>
@@ -552,6 +583,8 @@ export function ScenarioEditor({
             onBulletsChange={(bullets) => onChange(updateScenarioBullets(blueprint, index, bullets))}
             onMove={(direction) => moveSection(index, direction)}
             onRemove={() => removeSection(index)}
+            characterId={characterId}
+            characterAngles={characterAngles}
           />
         ))}
       </div>

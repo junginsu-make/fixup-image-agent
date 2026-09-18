@@ -44,8 +44,12 @@ export {
 } from "./pdp.image-options";
 export { MAX_UPLOAD_BYTES, base64Bytes, planUploadBatches } from "./pdp.upload-budget";
 export {
+  ANGLE_KEYWORD_RULES,
   CHARACTER_ANGLES,
   CHARACTER_SHEET,
+  DEFAULT_SECTION_ANGLE,
+  explainAngleForSection,
+  type AngleChoice,
   CHARACTER_SHEET_ASPECT,
   angleDirective,
   migrateAngle,

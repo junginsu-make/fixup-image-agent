@@ -10,21 +10,26 @@ import {
   isAutoChoice,
   pickedFrom,
 } from "../_components/character-choice";
+import { AUTO_ANGLE_HINT } from "./auto-angle-hint";
 import { characterAngleLabel } from "../../lib/character-library";
 import Link from "next/link";
 
 /**
  * 이 페이지에 등장할 인물과 **쓸 장면**을 고른다.
  *
- * 예전에는 캐릭터 이름만 골랐고, 어느 각도가 가는지는 서버가 섹션 설명을 읽어
+ * 예전에는 캐릭터 이름만 골랐고, 어느 각도가 가는지는 서버가 낱말을 대조해
  * 혼자 정했다. 그래서 정면·옆·뒷모습을 넉 장 만들어 둬도 화면에서는 무엇이
  * 쓰이는지 볼 수 없었고, 특정 장면을 쓰고 싶어도 길이 없었다
  * (2026-09-15 사용자 보고).
  *
  * 지금은 **카드뉴스·포스터와 같은 모달**을 쓴다 — 같은 것을 두 곳에서 다르게
  * 그리면 만든 사람이 자기 캐릭터를 못 알아본다. 대신 여기에만 「자동으로
- * 맡기기」가 붙는다. 섹션마다 어울리는 각도를 고르는 그 자동이 실제로 쓸 만하고,
+ * 맡기기」가 붙는다. 섹션마다 각도를 고르는 그 자동이 실제로 쓸 만하고,
  * 매번 손으로 고르는 것은 성가시기 때문이다.
+ *
+ * **다만 그것이 판단인 척하지 않는다**(U-05). 자동은 낱말 대조이고 아무것도 안
+ * 걸리면 한 각도로 굳는다. 「읽어서 어울리는 것을 고른다」고 말하면 사용자는
+ * AI 가 봤다고 믿고 **왜 이 각도인지 물을 생각을 못 한다.**
  *
  * 무엇이 쓰이는지는 **그림으로** 보여준다. 여기는 그림을 붙이는 화면이 아니라
  * 이름표만 넘기는 화면이라, 말해 주지 않으면 알 길이 없다.
@@ -159,7 +164,7 @@ export function CharacterPicker({
           label={selected ? "캐릭터 바꾸기" : "캐릭터 고르기"}
           description="만들어 둔 캐릭터를 눌러 이 페이지에 쓸 장면을 고릅니다."
           autoLabel="자동으로 맡기기"
-          autoHint="자동은 섹션 설명을 읽어 어울리는 각도를 하나씩 고릅니다."
+          autoHint={AUTO_ANGLE_HINT}
           onPick={(pick) => onSelect(pick.character.id, pickedFrom(pick))}
         />
       )}
