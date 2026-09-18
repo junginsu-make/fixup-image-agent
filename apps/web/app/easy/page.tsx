@@ -19,6 +19,22 @@ export const dynamic = "force-dynamic";
  */
 export default async function EasyNewPage() {
   const membership = await requireActiveMember();
-  const conversation = await easyStoreForUser(membership.user.id).createConversation("");
+  const store = easyStoreForUser(membership.user.id);
+
+  /*
+   * **빈 대화가 이미 있으면 그것으로 간다.**
+   *
+   * 누를 때마다 새로 만들었더니 「제목 없는 대화」가 넷 쌓였다(2026-09-18
+   * 확인). 아무 말도 안 하고 나갔다 다시 들어오기만 해도 하나씩 는다.
+   *
+   * 제목은 첫 프롬프트가 붙이므로, **제목이 비었다 = 아직 아무 말도 안 했다**
+   * 이다. 그런 대화가 둘일 이유가 없다.
+   *
+   * 목록은 최근 것부터 오므로 맨 앞의 빈 것을 쓴다.
+   */
+  const 비어있던것 = (await store.listConversations()).find((one) => !one.title);
+  if (비어있던것) redirect(`/easy/${비어있던것.id}`);
+
+  const conversation = await store.createConversation("");
   redirect(`/easy/${conversation.id}`);
 }

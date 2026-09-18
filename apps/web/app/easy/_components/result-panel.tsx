@@ -26,14 +26,23 @@ import { Button } from "@fixup/ui";
 
 export function EasyResultPanel({
   url,
+  width,
   onOpen,
 }: {
   /** 마지막으로 만든 그림. 아직 없으면 비어 있다. */
   url?: string;
+  /**
+   * 끌어서 정한 너비. `null` 이면 아직 안 쟀다는 뜻이라 기본 너비로 둔다 —
+   * 서버가 그린 것과 같아야 화면이 한 번 튀지 않는다(`split-handle.tsx`).
+   */
+  width: number | null;
   onOpen: () => void;
 }) {
   return (
-    <aside className="hidden w-[22rem] shrink-0 flex-col border-l border-border lg:flex">
+    <aside
+      style={width === null ? undefined : { width }}
+      className="hidden w-[22rem] shrink-0 flex-col lg:flex"
+    >
       <div className="flex shrink-0 items-center justify-between px-4 py-3">
         <span className="text-meta text-subtle-foreground">결과</span>
         {url ? (
