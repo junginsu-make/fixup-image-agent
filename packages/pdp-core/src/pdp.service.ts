@@ -34,6 +34,8 @@ import {
 } from "./pdp.image-prompt";
 import { anchorRoleFor, shouldSendAnchor } from "./pdp.product-anchor";
 import type { AnchorKind } from "./pdp.product-anchor";
+import { resolvePersonSource } from "./pdp.person-source";
+import type { PersonSource } from "./pdp.person-source";
 import { countClearedCopy, normalizeSectionEvidence, resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
 import { photoSourceText, productFactText } from "./pdp.photo-evidence";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
@@ -128,6 +130,7 @@ type InternalImageGenOptions = ImageGenOptions & {
   /** 제품 이미지를 지킬 것인가. 자세한 판단은 pdp.product-anchor 참조. */
   preserveProductImage?: boolean;
   anchorKind?: AnchorKind;
+  personSource?: PersonSource;
   /**
    * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
    *
@@ -555,10 +558,22 @@ ${analyzePrompt}`
       request.options?.referenceModelImageBase64,
       request.options?.referenceModelImageMimeType
     );
-    const referenceModelProfile =
-      normalizedReferenceModel && request.options?.withModel
-        ? await this.extractReferenceModelProfile(client, normalizedReferenceModel)
-        : null;
+    /*
+      **안 쓸 얼굴의 프로필을 뽑지 않는다**(U-04).
+
+      캐릭터를 골랐으면 업로드 사진은 그림에 안 들어간다. 그런데 프로필을 뽑으면
+      LLM 호출 한 번이 그냥 나가고, 그 프로필로 나온 그림을 대조하면 **당연히
+      불일치**라 멀쩡한 그림을 세 번까지 다시 만든다.
+    */
+    const usesUploadedPerson =
+      resolvePersonSource({
+        hasUploadedPerson: Boolean(normalizedReferenceModel && request.options?.withModel),
+        hasCharacter: (request.options?.characterReferences ?? []).length > 0,
+        choice: request.options?.personSource,
+      }) === "uploaded";
+    const referenceModelProfile = usesUploadedPerson && normalizedReferenceModel
+      ? await this.extractReferenceModelProfile(client, normalizedReferenceModel)
+      : null;
 
     const image = await this.generateSectionImageInternal({
       ...request,
@@ -613,10 +628,22 @@ ${analyzePrompt}`
       request.options?.referenceModelImageMimeType
     );
     const options = normalizeImageOptions(request.options);
-    const referenceModelProfile =
-      normalizedReferenceModel && options.withModel
-        ? request.options?.referenceModelProfile ?? (await this.extractReferenceModelProfile(client, normalizedReferenceModel))
-        : null;
+    /*
+      **누구를 쓸지 한 번만 정하고 네 자리가 함께 쓴다**(U-04).
+
+      전에는 참조를 담는 자리만 고쳤다. 프로필 뽑기·재시도 상한·동일 인물 검증은
+      옛 조건을 그대로 써서, 캐릭터를 고르면 **그림은 캐릭터로 그려 놓고 검증은
+      업로드 얼굴과 대조**했다 — 당연히 불일치라 세 장을 태우고 요청이 실패한다.
+    */
+    const usesUploadedPerson =
+      resolvePersonSource({
+        hasUploadedPerson: Boolean(normalizedReferenceModel && options.withModel),
+        hasCharacter: (options.characterReferences ?? []).length > 0,
+        choice: options.personSource,
+      }) === "uploaded";
+    const referenceModelProfile = usesUploadedPerson && normalizedReferenceModel
+      ? request.options?.referenceModelProfile ?? (await this.extractReferenceModelProfile(client, normalizedReferenceModel))
+      : null;
 
     if (!section.prompt_en) {
       throw new PdpServiceError(
@@ -627,7 +654,7 @@ ${analyzePrompt}`
     }
 
     const qaEnabled = options.outputMode === "full-image";
-    const refMaxAttempts = normalizedReferenceModel && options.withModel ? REFERENCE_MODEL_MAX_ATTEMPTS : 1;
+    const refMaxAttempts = usesUploadedPerson ? REFERENCE_MODEL_MAX_ATTEMPTS : 1;
     // qa+ref 동시면 속도 우선(결정 #4)으로 QA_MAX_ATTEMPTS(2)를 상한으로 쓴다.
     const maxAttempts = qaEnabled ? QA_MAX_ATTEMPTS : refMaxAttempts;
     let lastGeneratedImage: GeneratedImagePayload | null = null;
@@ -695,10 +722,16 @@ ${analyzePrompt}`
         });
       }
 
-      // 얼굴은 하나만 보낸다. 둘을 넣으면 모델이 절충해 제3의 인물이 나온다.
-      // 업로드한 사진이 캐릭터보다 우선이다 — 사용자가 방금 고른 쪽이다.
-      const usesUploadedPerson = Boolean(normalizedReferenceModel && options.withModel);
+      /*
+        얼굴은 하나만 보낸다. 둘을 넣으면 모델이 절충해 제3의 인물이 나온다.
+
+        **누구를 쓸지는 사용자가 정한다**(U-04). 전에는 업로드가 말없이 이겼다 —
+        「사용자가 방금 고른 쪽」이라 적어 뒀지만, 구성안 화면에서는 캐릭터가 더
+        나중일 수도 있다. 어느 쪽이든 사용자는 **이미지가 나온 뒤에야** 자기
+        선택이 무시된 것을 안다.
+      */
       const characterViews = options.characterReferences ?? [];
+      // 위에서 한 번 정했다. 여기서 또 부르면 두 벌이 되고, 한쪽만 고치는 날이 온다.
       const usesCharacter = !usesUploadedPerson && characterViews.length > 0;
 
       if (usesUploadedPerson && normalizedReferenceModel) {
@@ -823,7 +856,7 @@ ${analyzePrompt}`
 
       let refOk = true;
       let refDirective = "";
-      if (normalizedReferenceModel && options.withModel && referenceModelProfile) {
+      if (usesUploadedPerson && normalizedReferenceModel && referenceModelProfile) {
         const validation = await this.validateGeneratedImage(client, {
           generatedImage,
           referenceModelImage: normalizedReferenceModel,

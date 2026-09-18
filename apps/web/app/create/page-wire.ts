@@ -1,4 +1,4 @@
-import type { AnchorKind, AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
+import type { AnchorKind, AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
 
 /**
  * 페이지 전체가 공유하는 값을 **한 번만** 짓는다.
@@ -25,6 +25,13 @@ export interface PageWireInputs {
    * 전체에 되풀이된다.
    */
   anchorKind?: AnchorKind;
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   *
+   * 전에는 서버가 말없이 업로드 쪽을 썼다. 사용자는 이미지가 나온 뒤에야
+   * 자기 선택이 무시된 것을 안다.
+   */
+  personSource?: PersonSource;
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   referenceModel?: { base64: string; mimeType: string; fileName?: string } | null;
   referenceModelUsage?: ReferenceModelUsage | null;
@@ -43,6 +50,7 @@ export function buildPageWire(input: PageWireInputs): PageImageWire {
     userInstruction: input.userInstruction.trim() || undefined,
     preserveProduct: input.preserveProduct,
     anchorKind: input.anchorKind,
+    personSource: input.personSource,
     styleReference: input.styleReference,
     referenceModel: input.referenceModel
       ? {

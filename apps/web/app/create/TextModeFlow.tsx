@@ -17,6 +17,7 @@ import type {
   GapPolicy,
   GeneratedResult,
   ImageModelId,
+  PersonSource,
   KeyVisualResponse,
   LandingPageBlueprint,
   PdpOutputMode,
@@ -56,6 +57,8 @@ interface TextModeFlowProps {
   desiredTone: string;
   stage: TextStage;
   onStageChange: (stage: TextStage) => void;
+  /** 사진 모드에서 올린 인물 사진의 이름. 있으면 캐릭터와 충돌한다(U-04). */
+  referenceModelName?: string;
   onComplete: (
     result: GeneratedResult,
     imageModel: ImageModelId,
@@ -65,6 +68,13 @@ interface TextModeFlowProps {
     characterId?: string,
     /** 고른 각도. 비어 있으면 자동 — 서버가 섹션에 맞춰 고른다. */
     characterAngles?: string[],
+    /**
+     * 인물 사진과 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+     *
+     * 글 경로에도 이 충돌이 온다 — 사진 모드에서 인물을 올린 뒤 글 모드로
+     * 바꾸면 그 사진이 남는다.
+     */
+    personSource?: PersonSource,
   ) => void;
 }
 
@@ -85,6 +95,7 @@ export function TextModeFlow({
   desiredTone,
   stage,
   onStageChange,
+  referenceModelName,
   onComplete,
 }: TextModeFlowProps) {
   const [text, setText] = useState(initialDraft?.text ?? "");
@@ -112,6 +123,7 @@ export function TextModeFlow({
   // 처음 위치는 상품 유형으로 잡는다 — 무형 상품은 지킬 실물이 없다.
   // 추론이 틀릴 수 있으므로 화면에서 바꿀 수 있게 둔다.
   const [preserveProduct, setPreserveProduct] = useState(initialDraft?.preserveProduct ?? true);
+  const [personSource, setPersonSource] = useState(initialDraft?.personSource);
   const [characterId, setCharacterId] = useState<string | undefined>(initialDraft?.characterId);
   // 비어 있으면 자동이다. `create/CharacterPicker.tsx` 머리말 참조.
   const [characterAngles, setCharacterAngles] = useState<string[]>(initialDraft?.characterAngles ?? []);
@@ -123,10 +135,10 @@ export function TextModeFlow({
 
   useEffect(() => {
     onDraftChange?.({ stage, text, brief, blueprint, originalBlueprint, review, styleReference,
-      styleReferenceEnabled, preserveProduct, characterId, characterAngles, keyVisual,
+      styleReferenceEnabled, preserveProduct, personSource, characterId, characterAngles, keyVisual,
       imageModel, copyIntensity, gapPolicy, planningExecutions });
   }, [onDraftChange, stage, text, brief, blueprint, originalBlueprint, review, styleReference,
-    styleReferenceEnabled, preserveProduct, characterId, characterAngles, keyVisual,
+    styleReferenceEnabled, preserveProduct, personSource, characterId, characterAngles, keyVisual,
     imageModel, copyIntensity, gapPolicy, planningExecutions]);
 
   const handlePlan = async () => {
@@ -239,6 +251,7 @@ export function TextModeFlow({
         preserveProduct,
         characterId,
         characterAngles,
+        personSource,
       );
     } catch (error) {
       setErrorMessage(`대표 이미지를 준비하지 못했습니다. ${errorText(error)}`);
@@ -280,6 +293,9 @@ export function TextModeFlow({
           styleReferenceEnabled={styleReferenceEnabled}
           onStyleReferenceToggle={setStyleReferenceEnabled}
           preserveProduct={preserveProduct}
+          referenceModelName={referenceModelName}
+          personSource={personSource}
+          onPersonSourceChange={setPersonSource}
           onPreserveProductChange={setPreserveProduct}
           characterId={characterId}
           characterAngles={characterAngles}

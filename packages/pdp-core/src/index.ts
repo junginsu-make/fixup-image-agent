@@ -139,6 +139,11 @@ export {
   type UnverifiedItem,
 } from "./pdp.evidence";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
+export {
+  personSourceConflict,
+  resolvePersonSource,
+  type PersonSource,
+} from "./pdp.person-source";
 export { sanitizePromptText } from "./pdp.claim-policy";
 export { MAX_STRATEGY_LENGTH, buildStrategyDirective } from "./pdp.replan";
 export {

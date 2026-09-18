@@ -39,6 +39,8 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   preserveProduct: z.boolean().optional(), outputMode: z.enum(["editable", "full-image"]).optional(),
   // 앵커가 실물 사진인가, 우리가 만든 대표 이미지인가(U-03). 안 오면 실물로 본다.
   anchorKind: z.enum(["product-photo", "key-visual"]).optional(),
+  // 인물 사진과 저장 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04).
+  personSource: z.enum(["uploaded", "character"]).optional(),
   look: z.enum(IMAGE_LOOKS).optional(), userInstruction: text.optional(), pageContext: text.max(500).optional(),
   attachmentIntents: intents.optional() }).passthrough();
 const common = {

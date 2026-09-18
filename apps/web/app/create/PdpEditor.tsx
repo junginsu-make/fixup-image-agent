@@ -40,6 +40,7 @@ import type {
   PdpCopyLanguage,
   PdpGenerateImageResponse,
   PdpOutputMode,
+  PersonSource,
   ReferenceModelUsage,
   QaDefect,
   SectionBlueprint,
@@ -166,6 +167,11 @@ interface PdpEditorProps {
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   /** 제품 이미지를 지킬 것인가. 레퍼런스가 있을 때만 의미가 있다. */
   preserveProduct?: boolean;
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   * 구성안 화면에서 사용자가 고른다.
+   */
+  personSource?: PersonSource;
   /** 이 페이지에 고정할 인물. 섹션마다 맞는 각도가 자동으로 들어간다. */
   characterId?: string;
   /**
@@ -254,6 +260,7 @@ export function PdpEditor({
   designSystem,
   styleReference,
   preserveProduct = true,
+  personSource,
   characterId,
   characterAngles,
   aspectRatio,
@@ -1395,6 +1402,8 @@ export function PdpEditor({
       pageContext,
       referenceModel: referenceModelImage,
       referenceModelUsage,
+      // 둘 다 골랐을 때 누구를 쓸지. 안 넘기면 서버가 말없이 업로드를 쓴다(U-04).
+      personSource,
     });
 
   /**

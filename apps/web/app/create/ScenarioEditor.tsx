@@ -7,7 +7,9 @@ import type {
   ImageModelId,
   LandingPageBlueprint,
   PdpOutputMode,
+  PersonSource,
   ProductBrief,
+  ReferenceModelUsage,
   ProductReadingStatus,
   SectionBlueprint,
 } from "@fixup/pdp-core";
@@ -17,6 +19,7 @@ import { ModelPicker } from "./ModelPicker";
 import { ReviewPanel } from "./ReviewPanel";
 import { ProductReadingNotice } from "./ProductReadingNotice";
 import { SectionPlanGaps } from "./SectionPlanGaps";
+import { PersonSourceChoice } from "./PersonSourceChoice";
 import { StyleReferenceCard, type StyleReferenceView } from "./StyleReferenceCard";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { CharacterPicker } from "./CharacterPicker";
@@ -32,6 +35,8 @@ interface ScenarioEditorProps {
   brief?: ProductBrief;
   /** 사진 경로에서 올린 인물 이미지. 여기서 뺄 수 있어야 한다. */
   referenceModelName?: string;
+  /** 올린 사진을 어디에 쓰는가. 「누가 나오나요」가 범위를 정확히 말하려면 필요하다. */
+  referenceModelUsage?: ReferenceModelUsage | null;
   onReferenceModelRemove?: () => void;
   blueprint: LandingPageBlueprint;
   review?: BlueprintReview;
@@ -60,6 +65,12 @@ interface ScenarioEditorProps {
    */
   characterAngles: string[];
   onCharacterChange: (id: string | undefined, angles: string[]) => void;
+  /**
+   * 인물 사진과 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   * 없으면 고르는 칸을 안 띄운다.
+   */
+  personSource?: PersonSource;
+  onPersonSourceChange?: (next: PersonSource) => void;
   /**
    * 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」.
    *
@@ -278,6 +289,7 @@ function SectionCard({
 export function ScenarioEditor({
   brief,
   referenceModelName,
+  referenceModelUsage,
   onReferenceModelRemove,
   blueprint,
   review,
@@ -292,6 +304,8 @@ export function ScenarioEditor({
   characterId,
   characterAngles,
   onCharacterChange,
+  personSource,
+  onPersonSourceChange,
   attachmentIntents,
   onIntentChange,
   outputMode,
@@ -364,6 +378,22 @@ export function ScenarioEditor({
           angles={characterAngles}
           onSelect={onCharacterChange}
         />
+
+        {/*
+          **둘 다 고르면 조용히 하나를 버리지 않는다**(U-04).
+
+          얼굴을 둘 보내면 모델이 섞어 제3의 인물을 만든다. 그래서 하나만 쓰는데,
+          전에는 서버가 말없이 골랐다 — 사용자는 이미지가 나온 뒤에야 안다.
+        */}
+        {onPersonSourceChange ? (
+          <PersonSourceChoice
+            uploadedName={referenceModelName}
+            characterId={characterId}
+            uploadedUsage={referenceModelUsage}
+            value={personSource}
+            onSelect={onPersonSourceChange}
+          />
+        ) : null}
         {characterId || referenceModelName ? (
           <div className="mb-4 mt-2">
             <AttachmentIntentField

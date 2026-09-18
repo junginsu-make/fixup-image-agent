@@ -18,6 +18,9 @@
  * 것**이지 「똑같다」를 증명하는 것이 아니다. 불확실하면 불확실하다고 말한다.
  */
 
+import { resolvePersonSource } from "./pdp.person-source";
+import type { PersonSource } from "./pdp.person-source";
+
 export interface IdentityReference {
   base64: string;
   mimeType: string;
@@ -39,6 +42,8 @@ export interface IdentityCheckInput {
   uploadedPerson?: IdentityReference;
   characters?: IdentityReference[];
   /** 제품 원형을 지키기로 했는가. */
+  /** 둘 다 있을 때 누구를 쓰기로 했는가(U-04). */
+  personSource?: PersonSource;
   preserveProduct?: boolean;
   productImage?: IdentityReference;
 }
@@ -48,12 +53,19 @@ export function identityCheckPlan(input: IdentityCheckInput): IdentityCheckTarge
 
   if (input.withModel) {
     /*
-      **업로드 사진이 캐릭터를 밀어낸다.**
+      **그림에 실제로 들어간 쪽과 대조한다.**
 
-      둘 다 있으면 그림에는 업로드한 사람이 나온다(`pdp.service` 의 첨부 순서).
-      그런데 캐릭터로 대조하면 「다른 사람」이 나와 멀쩡한 그림을 다시 만든다.
+      둘 다 있으면 사용자가 고른다(U-04, `resolvePersonSource`). 안 고르면
+      업로드가 쓰인다. 어느 쪽이든 **그림에 안 들어간 얼굴로 대조하면** 「다른
+      사람」이 나와 멀쩡한 그림을 다시 만든다 — 실제로 그렇게 3장을 태웠다.
     */
-    if (input.uploadedPerson) {
+    if (
+      resolvePersonSource({
+        hasUploadedPerson: Boolean(input.uploadedPerson),
+        hasCharacter: Boolean(input.characters?.length),
+        choice: input.personSource,
+      }) === "uploaded" && input.uploadedPerson
+    ) {
       targets.push({
         kind: "person",
         reference: { base64: input.uploadedPerson.base64, mimeType: input.uploadedPerson.mimeType },

@@ -1,6 +1,7 @@
 import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { AnchorKind } from "./pdp.product-anchor";
+import type { PersonSource } from "./pdp.person-source";
 import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
 import type { PdpLlmExecution } from "./pdp.llm";
@@ -416,6 +417,7 @@ export interface ImageGenOptions {
    */
   preserveProductImage?: boolean;
   anchorKind?: AnchorKind;
+  personSource?: PersonSource;
   /**
    * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
    *

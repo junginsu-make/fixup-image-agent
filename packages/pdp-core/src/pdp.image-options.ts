@@ -1,4 +1,5 @@
 import type { AnchorKind } from "./pdp.product-anchor";
+import type { PersonSource } from "./pdp.person-source";
 import type {
   AttachmentIntents,
   CharacterImageReference,
@@ -47,6 +48,11 @@ export interface PageImageInputs {
    * 선언하면 그 안의 글자가 페이지 전체에 되풀이된다(U-03).
    */
   anchorKind?: AnchorKind;
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   * 안 오면 업로드가 이긴다 — 옛 초안이 조용히 달라지지 않게.
+   */
+  personSource?: PersonSource;
   /**
    * 페이지의 디자인 언어를 정하는 참조. 모든 섹션이 같은 것을 쓴다.
    *
@@ -102,7 +108,13 @@ export function buildSectionImageOptions(
   page: PageImageInputs,
   target: SectionImageTarget,
 ): ImageGenOptions {
-  const usedPerson = usesUploadedPerson(page, target);
+  /*
+    **캐릭터를 골랐으면 업로드 사진을 아예 안 넘긴다**(U-04).
+
+    바로 아래 주석이 이미 말한다 — 「이 섹션에 안 쓰는 사진은 아예 넘기지
+    않는다」. 사용자가 캐릭터를 골랐을 때도 같다.
+  */
+  const usedPerson = page.personSource === "character" ? false : usesUploadedPerson(page, target);
 
   return {
     // 받은 것을 먼저 펼친다. 하나씩 나열하면 새 옵션이 늘 때 조용히 사라진다.
@@ -131,6 +143,7 @@ export function buildSectionImageOptions(
     attachmentIntents: page.attachmentIntents,
     preserveProductImage: page.preserveProduct ?? true,
     anchorKind: page.anchorKind,
+    personSource: page.personSource,
     styleReferenceImages: page.styleReferenceImages?.length ? page.styleReferenceImages : undefined,
   };
 }
@@ -154,6 +167,11 @@ export interface PageImageWire {
    * 선언하면 그 안의 글자가 페이지 전체에 되풀이된다(U-03).
    */
   anchorKind?: AnchorKind;
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   * 안 오면 업로드가 이긴다 — 옛 초안이 조용히 달라지지 않게.
+   */
+  personSource?: PersonSource;
   styleReference?: {
     imageBase64: string;
     mimeType: string;
@@ -178,6 +196,7 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     userInstruction: wire.userInstruction,
     preserveProduct: wire.preserveProduct,
     anchorKind: wire.anchorKind,
+    personSource: wire.personSource,
     pageContext: wire.pageContext,
     attachmentIntents: wire.attachmentIntents,
     styleReferenceImages: wire.styleReference

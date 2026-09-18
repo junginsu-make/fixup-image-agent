@@ -3,7 +3,7 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
-import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
+import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL, mergeArtDirection } from "@fixup/pdp-core";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft, PdpTextDraftState } from "./pdp-drafts";
 import { DraftSaveClock, startDraftAutosave, draftChangeValues } from "./draft-save-clock";
@@ -100,6 +100,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
   const [preserveProduct, setPreserveProduct] = useState(true);
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   *
+   * 비어 있으면 서버가 업로드를 쓴다 — 지금까지의 동작이다. 화면은 그 사실을
+   * 보여 주고 바꿀 수 있게 한다.
+   */
+  const [personSource, setPersonSource] = useState<PersonSource | undefined>(undefined);
   const [characterId, setCharacterId] = useState<string | undefined>(undefined);
   /**
    * 이 캐릭터에서 **쓸 각도**. 비어 있으면 자동 — 서버가 섹션에 맞춰 고른다.
@@ -293,6 +300,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           characterId,
           characterAngles,
           preserveProduct,
+          personSource,
           startMode,
           analyzedBlueprint,
           textDraft,
@@ -303,7 +311,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         },
         hasDraftContent,
       ),
-    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, startMode, analyzedBlueprint, textDraft],
+    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, personSource, startMode, analyzedBlueprint, textDraft],
   );
 
   const draftSnapshot = useMemo(() => buildDraftInput(), [buildDraftInput]);
@@ -476,6 +484,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         setCharacterId(draft.characterId);
         setCharacterAngles(draft.characterAngles ?? []);
         setPreserveProduct(draft.preserveProduct ?? true);
+        setPersonSource(draft.personSource);
         setStartMode(draft.startMode ?? "image");
         setAnalyzedBlueprint(draft.analyzedBlueprint ?? null);
         setTextDraft(draft.textDraft ?? null);
@@ -696,6 +705,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     chosenPreserveProduct?: boolean,
     chosenCharacterId?: string,
     chosenCharacterAngles?: string[],
+    chosenPersonSource?: PersonSource,
   ) => {
     setImageModel(model);
     setReview(blueprintReview);
@@ -703,6 +713,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setPreserveProduct(chosenPreserveProduct ?? true);
     setCharacterId(chosenCharacterId);
     setCharacterAngles(chosenCharacterAngles ?? []);
+    // 글 경로에서 고른 것도 편집기로 이어진다(U-04).
+    setPersonSource(chosenPersonSource);
     setResult(generated);
     setAnalyzedBlueprint(generated.blueprint);
     setEditorDraftState(null);
@@ -780,6 +792,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           onIntentChange={setIntent}
           blueprint={result.blueprint}
           referenceModelName={modelImage ? modelImageDisplayName : undefined}
+          referenceModelUsage={modelImageUsage}
           onReferenceModelRemove={() => {
             setModelImage(null);
             setModelImageUsage(null);
@@ -801,6 +814,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           characterId={characterId}
           characterAngles={characterAngles}
           onCharacterChange={chooseCharacter}
+          personSource={personSource}
+          onPersonSourceChange={setPersonSource}
           outputMode={outputMode}
           imageModel={imageModel}
           isBusy={scenarioBusy}
@@ -864,6 +879,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         review={review}
         // 편집기에서 섹션을 더할 때도 같은 디자인을 물려준다(U-15).
         designSystem={result.blueprint.designSystem}
+        // 둘 다 골랐을 때 누구를 쓸지. 구성안 화면에서 고른 것이 여기로 온다(U-04).
+        personSource={personSource}
         // 시나리오 화면의 '디자인 레퍼런스 쓰기' 토글을 여기서 지켜야 한다.
         // 그냥 styleReference 를 넘기면 껐는데도 반영된다 — 토글이 거짓말이 된다.
         styleReference={styleReferenceEnabled ? styleReference : undefined}
@@ -1026,6 +1043,11 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           desiredTone={desiredTone}
           stage={textStage}
           onStageChange={setTextStage}
+          /*
+            **글 모드에도 이 충돌이 온다**(U-04). 사진 모드에서 인물을 올린 뒤
+            모드를 바꾸면 그 사진이 남고, 여기서 캐릭터를 고르면 둘이 된다.
+          */
+          referenceModelName={modelImage ? modelImageDisplayName : undefined}
           onComplete={handleTextModeComplete}
         />
       ) : (
@@ -1249,7 +1271,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                     <Badge variant="secondary">그대로 지킵니다</Badge>
                     <strong className="mt-1.5 block text-sm">인물 · 캐릭터</strong>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      인물 사진 1장 또는 다각도 캐릭터 중 하나만 씁니다. 둘 다 고르면 사진이 우선합니다.
+                      인물 사진 1장 또는 다각도 캐릭터 중 하나만 씁니다. 둘 다 고르면 다음 화면에서 누구를 쓸지 고를 수 있습니다.
                     </p>
                   </div>
                   {/*

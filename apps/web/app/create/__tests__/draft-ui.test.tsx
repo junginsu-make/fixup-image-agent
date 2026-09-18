@@ -150,3 +150,56 @@ it.each([false, true])("T-SAVE UI(v3=%s): 페이지 공용 디자인이 재적�
   // 사라지면 여기서 더한 섹션만 다른 서체·다른 인물로 만들어진다.
   expect(captured.scenario.blueprint.designSystem).toEqual(designSystem);
 });
+
+/**
+ * **둘 다 골랐을 때의 선택이 살아남는가**(U-04).
+ *
+ * 이 세션에서 필드를 하나씩 나열하는 자리에 세 번 걸렸다. 사라지면 서버가
+ * 말없이 업로드를 쓰고, 사용자는 이미지가 나온 뒤에야 안다.
+ */
+it.each([false, true])("T-SAVE UI(v3=%s): 인물 선택이 재적재에서 살아남는다", async (documentV3Enabled) => {
+  const input: PdpDraftInput = {
+    id: "ui-draft", appState: "scenario",
+    preparedImage: { base64: "AAAA", mimeType: "image/png", fileName: "p.png", previewUrl: "data:image/png;base64,AAAA" },
+    // 인물 사진까지 실으면 초안 적용이 8틱을 넘겨 unmount 뒤에 콜백이 깨어난다.
+    // 여기서 재는 것은 선택값의 왕복이라 `characterId` 만으로 충분하다.
+    modelImage: null, modelImageUsage: null,
+    result: {
+      originalImage: "AAAA",
+      blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [createSectionFor([])] },
+    },
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
+    imageModel: "nano-banana", characterId: "chosen-character", characterAngles: ["front"],
+    preserveProduct: false, personSource: "character",
+  };
+  await savePdpDraft(input);
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
+  await flush();
+
+  expect(captured.scenario.personSource).toBe("character");
+});
+
+
+/**
+ * **고른 값이 편집기까지 닿는가**(U-04).
+ *
+ * 섹션 이미지는 **편집기에서만** 만들어진다. 이 칸이 빠지면 구성안에서 골라도
+ * 아무것도 안 바뀐다 — 그런데 시험 3,014건이 전부 통과했다.
+ */
+it.each([false, true])("T-SAVE UI(v3=%s): 인물 선택이 편집기까지 간다", async (documentV3Enabled) => {
+  const input: PdpDraftInput = {
+    id: "ui-draft", appState: "editor", preparedImage: null, modelImage: null, modelImageUsage: null,
+    result: {
+      originalImage: "AAAA",
+      blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [createSectionFor([])] },
+    },
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
+    imageModel: "nano-banana", characterId: "chosen-character", characterAngles: ["front"],
+    preserveProduct: false, personSource: "character",
+  };
+  await savePdpDraft(input);
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
+  await flush();
+
+  expect(captured.editor.personSource).toBe("character");
+});

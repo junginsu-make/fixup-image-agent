@@ -16,6 +16,7 @@ import type {
   ProductBrief,
   BlueprintReview,
   PdpLlmExecution,
+  PersonSource,
   ProductReadingStatus,
 } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
@@ -129,6 +130,8 @@ export interface PdpTextDraftState {
   styleReference?: StyleReferenceDraft;
   styleReferenceEnabled: boolean;
   preserveProduct: boolean;
+  /** 인물 사진과 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04). */
+  personSource?: PersonSource;
   characterId?: string;
   characterAngles: string[];
   keyVisual: { base64: string; mimeType: string } | null;
@@ -179,6 +182,7 @@ export interface PdpDraftRecord {
   characterId?: string;
   characterAngles?: string[];
   preserveProduct?: boolean;
+  personSource?: PersonSource;
   startMode?: "image" | "text";
   analyzedBlueprint?: LandingPageBlueprint | null;
   textDraft?: PdpTextDraftState | null;
@@ -426,6 +430,8 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     characterId: record.characterId,
     characterAngles: record.characterAngles ?? [],
     preserveProduct: record.preserveProduct ?? true,
+    // 안 고른 상태(undefined)와 고른 상태를 구분해야 한다. 모르는 값은 버린다.
+    personSource: PERSON_SOURCES.includes(record.personSource as PersonSource) ? record.personSource : undefined,
     startMode: record.startMode === "text" ? "text" : "image",
     analyzedBlueprint: record.analyzedBlueprint ?? null,
     textDraft: record.textDraft ?? null,
@@ -450,6 +456,7 @@ function normalizePreparedImage(image: PreparedImageDraft | null | undefined) {
 
 /** 깨진/옛 레코드가 모르는 값을 물고 오면 화면이 엉뚱한 경고를 띄운다. */
 const READING_STATUSES: ProductReadingStatus[] = ["usable", "thin", "unfounded"];
+const PERSON_SOURCES: PersonSource[] = ["uploaded", "character"];
 
 function normalizeGeneratedResult(
   result: GeneratedResult | null | undefined,

@@ -113,3 +113,28 @@ describe("앵커가 무엇인지 알린다", () => {
     expect(editor).toContain('anchorKind: startMode === "text" ? "key-visual" : "product-photo"');
   });
 });
+
+/**
+ * **둘 다 골랐을 때의 선택이 서버까지 간다**(U-04).
+ *
+ * 안 보내면 서버가 말없이 업로드를 쓴다. 캐릭터를 고른 사용자는 이미지가 나온
+ * 뒤에야 안다.
+ */
+describe("인물 선택을 실어 보낸다", () => {
+  it("실린다", () => {
+    expect(buildPageWire({ ...기본, personSource: "character" }).personSource).toBe("character");
+    expect(buildPageWire({ ...기본, personSource: "uploaded" }).personSource).toBe("uploaded");
+  });
+
+  it("안 골랐으면 안 싣는다 — 서버가 지금까지의 동작을 쓴다", () => {
+    expect(buildPageWire(기본).personSource).toBeUndefined();
+  });
+
+  it("**편집기가 넘긴다** — 화면에서 골라도 안 보내면 소용없다", () => {
+    const editor = readFileSync(new URL("../PdpEditor.tsx", import.meta.url), "utf8");
+    const start = editor.indexOf("buildPageWire({");
+    const wire = editor.slice(start, editor.indexOf("});", start));
+
+    expect(wire).toContain("personSource,");
+  });
+});
