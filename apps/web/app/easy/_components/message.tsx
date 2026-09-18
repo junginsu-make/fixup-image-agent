@@ -1,15 +1,38 @@
 "use client";
 
 import * as React from "react";
+import { Sparkles } from "lucide-react";
 import { cn } from "@fixup/ui";
 import type { EasyMessage } from "../turn";
 
 /**
- * 대화 한 줄 — 내 말 · 시스템 · 그림 (설계 §4).
+ * 대화 한 줄 (설계 §4).
  *
- * **셋이 다르게 보여야 한다.** 내 말은 오른쪽에 붙은 말풍선, 시스템은 가운데
- * 옅은 글, 그림은 눌러서 크게 볼 수 있는 판이다.
+ * ── 채팅처럼 보이게 ──────────────────────────────────────────
+ *
+ * 처음에는 시스템 말이 **가운데 옅은 글**이었고 그림은 맨몸으로 왼쪽에 떴다.
+ * 그래서 「채팅 같지 않다」는 말을 들었다(2026-09-18 사용자).
+ *
+ * 채팅으로 읽히려면 **주고받는 두 쪽이 보여야** 한다.
+ *
+ *   내 말    오른쪽, 색 있는 말풍선
+ *   AI 말    왼쪽, 표식이 붙은 말풍선 — 그림도 그 말풍선 안에 담긴다
+ *
+ * 그림을 말풍선 안에 담는 것이 핵심이다. 맨몸으로 두면 「대화에 끼어든 그림」이
+ * 아니라 「대화가 끊기고 나온 결과물」로 보인다.
  */
+
+/** AI 쪽 표식. 말풍선 왼쪽에 붙어 누가 한 말인지 알린다. */
+function AssistantMark() {
+  return (
+    <span
+      aria-hidden
+      className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary"
+    >
+      <Sparkles className="size-3.5" />
+    </span>
+  );
+}
 
 export function EasyMessageRow({
   message,
@@ -21,18 +44,27 @@ export function EasyMessageRow({
   imageUrl?: string;
   onOpenImage?: () => void;
 }) {
-  if (message.role === "system") {
-    return (
-      <p className="mx-auto max-w-prose text-center text-sm text-subtle-foreground">
-        {message.body}
-      </p>
-    );
-  }
-
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary-soft px-4 py-2.5 text-sm">
+        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary-soft px-4 py-2.5 text-sm leading-6">
+          {message.body}
+        </p>
+      </div>
+    );
+  }
+
+  /*
+    **시스템 말도 AI 쪽 말풍선이다.**
+
+    가운데 옅은 글로 두면 「누가 한 말인지 모르는 안내문」이 된다. 인사도
+    대화의 한 줄이므로 같은 자리에서 같은 모양으로 온다.
+  */
+  if (message.role === "system") {
+    return (
+      <div className="flex items-start gap-2">
+        <AssistantMark />
+        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm leading-6">
           {message.body}
         </p>
       </div>
@@ -44,20 +76,21 @@ export function EasyMessageRow({
     대화가 아래로 튀어 사용자가 읽던 자리를 잃는다.
   */
   return (
-    <div className="flex justify-start">
+    <div className="flex items-start gap-2">
+      <AssistantMark />
       {imageUrl ? (
         <button
           type="button"
           onClick={onOpenImage}
-          className="overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
+          className="max-w-[85%] overflow-hidden rounded-2xl rounded-bl-md border border-border transition-opacity hover:opacity-90"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="만든 그림" className="block max-h-[60vh] w-auto" />
+          <img src={imageUrl} alt="만든 그림" className="block max-h-[55vh] w-auto" />
         </button>
       ) : (
         <div
           className={cn(
-            "grid h-64 w-64 place-items-center rounded-xl border border-border bg-muted",
+            "grid h-56 w-56 place-items-center rounded-2xl rounded-bl-md border border-border bg-muted",
             "animate-pulse text-meta text-subtle-foreground",
           )}
         >

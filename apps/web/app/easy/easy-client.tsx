@@ -11,6 +11,7 @@ import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyResultPanel } from "./_components/result-panel";
+import { EasySplitHandle, useResultWidth } from "./_components/split-handle";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -70,6 +71,13 @@ export function EasyClient({
   const [imageModel, setImageModel] = React.useState(defaultImageModel);
   const [urls, setUrls] = React.useState<Record<string, string>>(initialUrls ?? {});
   const [lightbox, setLightbox] = React.useState<string | null>(null);
+
+  /*
+   * **구분선을 끌면 이 너비가 바뀐다**(2026-09-18 사용자 요청). 가두는 판단은
+   * `split.ts` 가 값으로 한다.
+   */
+  const split = React.useRef<HTMLDivElement>(null);
+  const { width: resultWidth, apply: setResultWidth } = useResultWidth(split);
 
   const file = React.useRef<HTMLInputElement>(null);
   const bottom = React.useRef<HTMLDivElement>(null);
@@ -253,7 +261,7 @@ export function EasyClient({
   }
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div ref={split} className="flex min-h-0 flex-1">
       {/* ── 가운데: 대화와 입력 ── */}
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ── 대화 ── 자기 안에서만 스크롤한다. 입력창이 아래에 붙어 있어야 한다. */}
@@ -346,7 +354,14 @@ export function EasyClient({
             onImageModel={setImageModel}
             disabled={turn.busy}
           />
-          <div className="flex items-end gap-2">
+          {/*
+            **한 덩이로 감싼다**(2026-09-18 사용자 — 「채팅창처럼 안 느껴진다」).
+
+            전에는 단추와 입력칸이 각자 테두리를 갖고 흩어져 있어 **입력 도구
+            모음**처럼 보였다. 채팅의 입력창은 하나의 판이고, 그 안에 붙이기와
+            보내기가 들어 있다.
+          */}
+          <div className="flex items-end gap-1 rounded-2xl border border-border bg-background p-1.5 focus-within:border-primary">
             {/*
               **대화 목록 손잡이가 여기 있다**(2026-09-18 사용자).
 
@@ -394,11 +409,12 @@ export function EasyClient({
               }
               disabled={!turn.canSend}
               rows={1}
-              className="max-h-32 min-h-10 resize-none"
+              className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
             />
             <Button
               size="icon"
               aria-label="보내기"
+              className="size-9 shrink-0 rounded-full"
               disabled={!turn.canSend || !draft.trim()}
               onClick={() => void send()}
             >
@@ -432,8 +448,29 @@ export function EasyClient({
       {/*
         **오른쪽 결과 칸.** 첫 기획(2026-09-02)의 4분할 중 「결과」를 되살린
         것이다. 뺐던 것은 **작업판**(칸 여럿)이고, 이건 보여 주기만 한다.
+
+        **너비를 끌어서 바꾼다.** `resultWidth` 가 0 이면 넣을 자리가 없다는
+        뜻이라 구분선과 함께 통째로 빠진다(`split.ts`).
+
+        `null` 은 아직 안 쟀다는 뜻이다. 그때는 서버가 그린 것과 같은 기본
+        너비로 두어 화면이 튀지 않게 한다.
       */}
-      <EasyResultPanel url={lastImage} onOpen={() => setLightbox(lastImage ?? null)} />
+      {resultWidth === null || resultWidth > 0 ? (
+        <>
+          {resultWidth === null ? null : (
+            <EasySplitHandle
+              width={resultWidth}
+              onChange={setResultWidth}
+              containerRef={split}
+            />
+          )}
+          <EasyResultPanel
+            url={lastImage}
+            width={resultWidth}
+            onOpen={() => setLightbox(lastImage ?? null)}
+          />
+        </>
+      ) : null}
 
       <input
         ref={file}
