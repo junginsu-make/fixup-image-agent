@@ -57,6 +57,7 @@ import {
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 import { clampSections, sectionCountRules } from "./pdp.section-plan";
+import { buildStrategyDirective } from "./pdp.replan";
 import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, designSystemPartOf, normalizeDesignSystem } from "./pdp.design-system";
 
 const DEFAULT_IMAGE_MIME = "image/jpeg";
@@ -403,7 +404,12 @@ ${analyzePrompt}`
       }
     };
 
-    let blueprint = await makeBlueprint("");
+    /*
+      **고친 전략이 있으면 그것에서 출발한다**(U-11).
+
+      없으면 빈 문자열이라 평소 기획과 한 글자도 다르지 않다.
+    */
+    let blueprint = await makeBlueprint(buildStrategyDirective(request.strategyDirective));
     let review = await runReview(blueprint);
 
     // 사진 경로는 텍스트 경로보다 상한을 좁게 잡는다. 여기는 "사진 한 장 넣고 빨리

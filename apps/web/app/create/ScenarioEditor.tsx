@@ -1,5 +1,5 @@
 "use client";
-import { ArrowDown, ArrowUp, Info, Plus, Trash2, UserRound, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Info, Plus, Trash2, Undo2, UserRound, Wand2 } from "lucide-react";
 import type {
   BlueprintReview,
   CopyGapOutcome,
@@ -11,7 +11,7 @@ import type {
   ProductReadingStatus,
   SectionBlueprint,
 } from "@fixup/pdp-core";
-import { MAX_PLANNED_SECTIONS, applyUserEdit, validateEvidenceBinding } from "@fixup/pdp-core";
+import { MAX_PLANNED_SECTIONS, MAX_STRATEGY_LENGTH, applyUserEdit, validateEvidenceBinding } from "@fixup/pdp-core";
 import { Badge, Button, Textarea, cn } from "@fixup/ui";
 import { ModelPicker } from "./ModelPicker";
 import { ReviewPanel } from "./ReviewPanel";
@@ -74,6 +74,15 @@ interface ScenarioEditorProps {
   onChange: (blueprint: LandingPageBlueprint) => void;
   onModelChange: (model: ImageModelId) => void;
   onRegenerate: () => void;
+  /**
+   * **고친 전략으로 구성만 다시 짠다**(U-11).
+   *
+   * 전략 칸을 고치는 것은 요약 수정일 뿐 섹션을 바꾸지 않는다(설계 §4.2).
+   * 없으면 버튼을 안 띄운다 — 글 경로는 아직 이 동작이 없다.
+   */
+  onReplanFromStrategy?: (strategy: string) => void;
+  /** 다시 짜기 전 구성으로 되돌린다. 재기획 직후에만 온다. */
+  onRestorePreviousPlan?: () => void | Promise<void>;
   onConfirm: () => void;
 }
 
@@ -92,6 +101,7 @@ function EditableField({
   rows = 1,
   placeholder,
   emphasis = false,
+  maxLength,
   onChange,
 }: {
   label: string;
@@ -99,6 +109,8 @@ function EditableField({
   rows?: number;
   placeholder?: string;
   emphasis?: boolean;
+  /** 서버가 막는 길이와 **같은 값**을 준다. 화면이 모르면 저장 때 400 이 난다. */
+  maxLength?: number;
   onChange: (value: string) => void;
 }) {
   return (
@@ -108,6 +120,7 @@ function EditableField({
         rows={rows}
         value={value}
         placeholder={placeholder}
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         className={cn(quietFieldClass, emphasis ? "text-base font-bold" : "text-sm")}
       />
@@ -287,6 +300,8 @@ export function ScenarioEditor({
   onChange,
   onModelChange,
   onRegenerate,
+  onReplanFromStrategy,
+  onRestorePreviousPlan,
   onConfirm,
 }: ScenarioEditorProps) {
   const patchSection = (index: number, patch: Partial<SectionBlueprint>) => {
@@ -449,9 +464,50 @@ export function ScenarioEditor({
         <EditableField
           label="전체 전략"
           rows={3}
+          // 서버가 막는 길이와 같다. 넘으면 400 이 나고 구성 화면을 떠난다.
+          maxLength={MAX_STRATEGY_LENGTH}
           value={blueprint.executiveSummary}
           onChange={(executiveSummary) => onChange({ ...blueprint, executiveSummary })}
         />
+
+        {/*
+          **전략을 고치는 것과 구성을 다시 짜는 것은 다른 일이다**(U-11).
+
+          전에는 이 칸이 그냥 글상자였다. 고쳐도 섹션은 그대로인데 화면이 그
+          사실을 말하지 않아, 사용자는 고친 전략이 반영된 줄 알고 이미지를
+          만들었다 — 한 장에 값이 드는데 나온 그림은 옛 전략을 따른다.
+        */}
+        {/*
+          **안내는 두 경로 모두 띄운다.** 단추는 사진 경로에만 있지만, 「전략만
+          고치면 섹션은 그대로」라는 사실은 글 경로에서도 똑같이 참이다 — 그것을
+          모르는 것이 U-11 이 고치려던 오해다.
+        */}
+        <div className="mt-2 grid justify-items-start gap-1.5">
+          <p className="text-sm text-muted-foreground">
+            {onReplanFromStrategy
+              ? "전략만 고치면 아래 섹션은 그대로입니다. 고친 전략으로 구성을 다시 짜려면 눌러 주세요. 지금까지 고친 문구와 만든 이미지는 새 구성으로 바뀌고, 이전 구성은 저장된 작업에 보관됩니다."
+              : "전략만 고치면 아래 섹션은 그대로입니다. 구성을 다시 짜려면 위의 「설정 바꿔 다시 만들기」로 돌아가 주세요."}
+          </p>
+          {onReplanFromStrategy ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!blueprint.executiveSummary.trim()}
+                onClick={() => onReplanFromStrategy(blueprint.executiveSummary)}
+              >
+                이 전략으로 구성 다시 만들기
+              </Button>
+              {onRestorePreviousPlan ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => void onRestorePreviousPlan()}>
+                  <Undo2 size={14} className="mr-1.5" />
+                  이전 구성으로 되돌리기
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-3">

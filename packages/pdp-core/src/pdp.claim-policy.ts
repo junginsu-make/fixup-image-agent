@@ -81,3 +81,25 @@ export function containsFactualMarker(text: string): boolean {
   if (/(?:무료|유료|가격|구독료|원\s*(?:대|부터|이하|이상))/u.test(text)) return true;
   return scanBannedClaims(text).length > 0;
 }
+
+/**
+ * 사용자가 쓴 글이 **프롬프트 지시를 흉내내지 못하게** 한다.
+ *
+ * 두 가지를 지운다.
+ * - `=== ... ===` 구분자 — 블록을 닫고 나와 새 지시를 여는 데 쓰인다
+ * - 줄머리의 `[...]` 라벨 — 이 저장소의 지시문이 `[사용자 추가 정보]:` 처럼
+ *   생겨서, 같은 꼴을 흉내내면 사용자 글이 시스템 지시로 읽힌다
+ *
+ * **막아 주는 것이지 증명해 주는 것이 아니다.** 마지막 지시를 사용자 글 뒤에
+ * 두는 것과 함께 써야 한다.
+ */
+const NEWLINE = String.fromCharCode(10);
+
+export function sanitizePromptText(value: string): string {
+  return value
+    .replace(/={3,}/g, "")
+    .split(NEWLINE)
+    .map((line) => line.replace(/^\s*\[[^\]]*\]\s*:?/, "").trimEnd())
+    .join(NEWLINE)
+    .trim();
+}

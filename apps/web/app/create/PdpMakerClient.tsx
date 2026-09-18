@@ -130,6 +130,22 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 먹었는지 알 방법이 없었다.
    */
   const [analyzedBlueprint, setAnalyzedBlueprint] = useState<LandingPageBlueprint | null>(null);
+  /**
+   * 재기획 **직전** 구성안. 되돌리기 한 번을 위해 들고 있다(설계 §4.2:
+   * 「이전 revision을 보존한다」).
+   *
+   * 초안에 저장하지 않는다 — 화면을 다시 열면 「방금 다시 짰다」는 맥락이
+   * 사라지고, 그때 되돌리기 단추만 남으면 무엇으로 돌아가는지 알 수 없다.
+   * (새로고침 뒤의 보존은 `preserveBeforeReplacement` 가 판 보관 초안이 맡는다.)
+   *
+   * **작업을 갈아 끼울 때 버린다**(`resetWorkspace`·`handleLoadDraft`). 안
+   * 버리면 A 를 다시 짠 뒤 B 를 열었을 때 A 의 되돌리기 단추가 살아 있고,
+   * 누르면 **B 위에 A 의 유료 이미지가 앉는다.**
+   *
+   * 작업 id 로 대조하지는 않는다 — 저장 안 한 작업이 자동 저장으로 id 를 받는
+   * 순간, 같은 작업인데도 단추가 사라진다.
+   */
+  const [previousPlan, setPreviousPlan] = useState<GeneratedResult | null>(null);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [desiredTone, setDesiredTone] = useState("");
   /*
@@ -376,6 +392,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
 
   const resetWorkspace = useCallback(() => {
     isApplyingDraftRef.current = true;
+    // 다른 작업으로 간다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
+    setPreviousPlan(null);
     setAppState("upload");
     setPreparedImage(null);
     setModelImage(null);
@@ -443,6 +461,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         }
 
         isApplyingDraftRef.current = true;
+        // 다른 작업을 연다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
+        setPreviousPlan(null);
         setActiveDraftId(draft.id);
         setDraftCreatedAt(draft.createdAt);
         setLastSavedAt(draft.updatedAt);
@@ -574,7 +594,15 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   };
   useEffect(() => startDraftAutosave(() => autosaveRef.current()), []);
 
-  const handleAnalyze = async () => {
+  /**
+   * 구성안을 짓는다.
+   *
+   * `strategyDirective` 가 있으면 **고친 전략으로 다시 짜는 것**이다(U-11).
+   * 없으면 처음 기획이다.
+   */
+  const handleAnalyze = async (strategyDirective?: string) => {
+    // 실패하면 여기로 돌려보낸다. 구성 화면에서 눌렀는데 편집기로 가면 안 된다.
+    const enteredFrom = appState;
     if (!preparedImage) {
       setErrorMessage("먼저 제품 이미지를 업로드해 주세요.");
       return;
@@ -593,8 +621,14 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setAnalysisStartedAt(Date.now());
 
     try {
-      // 재기획이 기존 유료 이미지와 레이어의 유일한 저장본을 덮어쓰지 않게 한다.
-      if (result && !(await preserveBeforeReplacement())) { setAppState("editor"); return; }
+      /*
+        재기획이 기존 유료 이미지와 레이어의 유일한 저장본을 덮어쓰지 않게 한다.
+
+        **왔던 화면으로 돌려보낸다.** 전에는 늘 편집기로 보냈는데, 구성 화면에서
+        누르는 길(전략 재기획)이 생기면서 어긋났다 — 게다가 오류 문구는 업로드
+        화면에서만 그려져 편집기에서는 아무 설명이 없다.
+      */
+      if (result && !(await preserveBeforeReplacement())) { setAppState(enteredFrom); return; }
       setLoadingStep("제품을 분석하고 상세페이지 구조를 설계하는 중입니다.");
 
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
@@ -613,6 +647,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
             styleReference,
             styleReferenceEnabled,
             attachmentIntents,
+            strategyDirective,
           }),
         })
       });
@@ -625,6 +660,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       }
 
       const blueprint = { ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) };
+      // 다시 짠 것이면 직전 구성을 들고 있는다. 처음 기획이면 되돌릴 것이 없다.
+      setPreviousPlan(strategyDirective ? result : null);
       setResult({ ...response.result, blueprint });
       setAnalyzedBlueprint(blueprint);
       // 심사 결과를 시나리오 화면에 넘긴다. 사진 경로에도 심사가 붙었는데
@@ -634,7 +671,11 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       setEditorSessionKey((current) => current + 1);
       // 바로 편집기로 보내면 구성안을 볼 기회가 없다. 이미지는 한 장에 돈이 드니
       // 만들기 전에 카피·장면·레퍼런스를 확인할 수 있어야 한다.
-      setNotice("구성안이 나왔습니다. 문구와 장면을 확인하고 필요하면 고쳐 주세요.");
+      setNotice(
+        strategyDirective
+          ? "고친 전략으로 구성을 다시 짰습니다. 이전 구성은 저장된 작업에 보관했습니다."
+          : "구성안이 나왔습니다. 문구와 장면을 확인하고 필요하면 고쳐 주세요.",
+      );
       setAppState("scenario");
     } catch (error) {
       setAppState("upload");
@@ -766,6 +807,38 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           onChange={handleScenarioChange}
           onModelChange={setImageModel}
           onRegenerate={() => { setAppState("upload"); if (startMode === "text") setTextStage("input"); }}
+          // 고친 전략으로 **구성만** 다시 짠다. 업로드까지 되돌리지 않는다(U-11).
+          onReplanFromStrategy={(strategy) => void handleAnalyze(strategy)}
+          onRestorePreviousPlan={
+            previousPlan
+              ? async () => {
+                  /*
+                    **되돌리기도 보관을 먼저 지난다.**
+
+                    다시 짠 뒤 이미지를 만들고 돌아와 되돌리면, 그 유료 이미지가
+                    통째로 사라진다. 다른 모든 덮어쓰기 자리는 보관본을 판다 —
+                    여기만 빠져 있었다.
+                  */
+                  if (!(await preserveBeforeReplacement())) return;
+
+                  const restoring = previousPlan;
+                  setPreviousPlan(null);
+                  setResult(restoring);
+                  setAnalyzedBlueprint(restoring.blueprint);
+                  setReview(restoring.review);
+                  /*
+                    **편집기를 새로 연다.**
+
+                    되돌리면 섹션 묶음이 통째로 바뀐다. 편집기가 옛 세션을 들고
+                    있으면 레이어가 **남의 섹션에 붙는다** — 이 저장소가 섹션 키
+                    어긋남으로 이미 겪은 일이다. 기획 직후와 같은 처리를 한다.
+                  */
+                  setEditorDraftState(null);
+                  setEditorSessionKey((current) => current + 1);
+                  setNotice("이전 구성으로 되돌렸습니다. 되돌리기 전 작업은 저장된 작업에 보관했습니다.");
+                }
+              : undefined
+          }
           onConfirm={() => {
             // 고친 한국어 이미지 방향을 실제 생성에 쓰이는 prompt_en 에 실어 보낸다.
             setResult({ ...result, blueprint: mergeArtDirection(
@@ -1035,6 +1108,10 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                         size="sm"
                         className="flex-1"
                         disabled={isLoadingDraft}
+                        // 어느 작업의 단추인지 남긴다. 화면 시험이 이것으로
+                        // 「다른 작업을 열면 앞 작업의 되돌리기가 사라지는가」를
+                        // 잰다 — 글자로 찾으면 React 트리가 순환이라 못 찾는다.
+                        data-draft-id={draft.id}
                         onClick={() => void handleLoadDraft(draft.id)}
                       >
                         <FolderOpen size={14} className="mr-1.5" />
@@ -1721,7 +1798,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
             </div>
 
             <div>
-              <Button className="w-full" size="lg" disabled={!canAnalyze} onClick={handleAnalyze}>
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={!canAnalyze}
+                // **인자 없이 부른다.** 그냥 넘기면 클릭 이벤트가 전략 지시가 된다.
+                onClick={() => void handleAnalyze()}
+              >
                 <Wand2 size={16} className="mr-1.5" />
                 AI 분석 시작하기
               </Button>

@@ -542,6 +542,14 @@ export interface PdpAnalyzeRequest {
    * 사진으로는 대상·불편·차별점을 알 수 없어서 받는다.
    */
   sellerBrief?: SellerBrief;
+  /**
+   * 사용자가 고친 **전체 전략**. 있으면 이 전략에서 출발해 구성을 다시 짠다
+   * (→ `pdp.replan.ts`).
+   *
+   * 전략 칸을 고치는 것과 구성을 다시 짜는 것은 다른 일이다. 전자는 요약 수정일
+   * 뿐이고, 섹션은 사용자가 「이 전략으로 구성 다시 만들기」를 누를 때만 바뀐다.
+   */
+  strategyDirective?: string;
   /** 표현 강도. 텍스트 경로와 같은 손잡이다. */
   copyIntensity?: CopyIntensity;
   /** 근거가 없는 자리를 어떻게 할 것인가. */

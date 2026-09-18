@@ -133,6 +133,8 @@ export {
   type UnverifiedItem,
 } from "./pdp.evidence";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
+export { sanitizePromptText } from "./pdp.claim-policy";
+export { MAX_STRATEGY_LENGTH, buildStrategyDirective } from "./pdp.replan";
 export {
   DESIGN_SYSTEM_MARKER,
   applyDesignSystem,

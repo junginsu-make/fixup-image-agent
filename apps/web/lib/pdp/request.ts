@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, maxBatchSizeFor } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, MAX_STRATEGY_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember } from "../membership/api";
@@ -63,6 +63,10 @@ const schemas = {
     sellerBrief: z.object({ audience: text.max(500).optional(), problem: text.max(500).optional(), features: text.max(500).optional(), differentiator: text.max(500).optional(), emphasis: text.max(500).optional() }).optional(),
     copyIntensity: z.enum(["plain", "normal", "strong", "max"]).optional(), gapPolicy: z.enum(["omit", "ask", "sample"]).optional(),
     styleReference: image.optional(), outputMode: z.enum(["editable", "full-image"]).optional(),
+    // 「이 전략으로 구성 다시 만들기」가 보내는 고친 전략(U-11).
+    // **화면도 같은 상수를 쓴다** — 화면이 모르면 긴 글을 붙여넣은 사용자가
+    // 설명 없는 400 을 만난다.
+    strategyDirective: text.max(MAX_STRATEGY_LENGTH).optional(),
   }).passthrough(),
   plan: z.object({ ...common, text: text.trim().min(1), outputMode: z.enum(["editable", "full-image"]).optional(),
     copyIntensity: z.enum(["plain", "normal", "strong", "max"]).optional(), gapPolicy: z.enum(["omit", "ask", "sample"]).optional() }).passthrough(),
