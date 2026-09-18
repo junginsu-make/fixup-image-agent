@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, MAX_STRATEGY_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember } from "../membership/api";
@@ -41,7 +41,7 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   anchorKind: z.enum(["product-photo", "key-visual"]).optional(),
   // 인물 사진과 저장 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04).
   personSource: z.enum(["uploaded", "character"]).optional(),
-  look: z.enum(IMAGE_LOOKS).optional(), userInstruction: text.optional(), pageContext: text.max(500).optional(),
+  look: z.enum(IMAGE_LOOKS).optional(), userInstruction: text.optional(), pageContext: text.max(PAGE_CONTEXT_MAX_LENGTH).optional(),
   attachmentIntents: intents.optional() }).passthrough();
 const common = {
   // 어느 작업의 것인가. 결과를 되찾을 때 이 값으로 묶는다(설계 §8).
@@ -63,8 +63,23 @@ const schemas = {
   batch: z.object({ ...common, originalImageBase64: text.trim().min(1), sections: z.array(section).min(1) }).passthrough()
     .refine((body) => body.sections.length <= maxBatchSizeFor(body.page?.imageModel ?? DEFAULT_IMAGE_MODEL), "한 번에 생성할 수 있는 장수를 초과했습니다."),
   analyze: z.object({ ...common, imageBase64: text.trim().min(1), mimeType: text,
-    modelImageBase64: text.optional(), modelImageMimeType: text.optional(), additionalInfo: text.optional(),
-    sellerBrief: z.object({ audience: text.max(500).optional(), problem: text.max(500).optional(), features: text.max(500).optional(), differentiator: text.max(500).optional(), emphasis: text.max(500).optional() }).optional(),
+    modelImageBase64: text.optional(), modelImageMimeType: text.optional(),
+    /*
+      **기획과 이미지 생성이 같은 상한을 쓴다**(U-08).
+
+      전에는 여기만 제한이 없었다. 같은 화면 칸인데 기획은 501자를 받고 이미지
+      생성(`pageContext`)이 막아서, 구성안을 다 손본 뒤에야 400 을 만났다.
+    */
+    additionalInfo: text.max(PAGE_CONTEXT_MAX_LENGTH).optional(),
+    // 화면이 쓰는 상한과 **같은 상수**다(U-08). 두 벌로 적으면 화면은 허용하는데
+    // 서버가 막는 날이 온다 — 그때 뜨는 말은 「요청이 올바르지 않습니다」뿐이다.
+    sellerBrief: z.object({
+      audience: text.max(SELLER_BRIEF_MAX_LENGTH).optional(),
+      problem: text.max(SELLER_BRIEF_MAX_LENGTH).optional(),
+      features: text.max(SELLER_BRIEF_MAX_LENGTH).optional(),
+      differentiator: text.max(SELLER_BRIEF_MAX_LENGTH).optional(),
+      emphasis: text.max(SELLER_BRIEF_MAX_LENGTH).optional(),
+    }).optional(),
     copyIntensity: z.enum(["plain", "normal", "strong", "max"]).optional(), gapPolicy: z.enum(["omit", "ask", "sample"]).optional(),
     styleReference: image.optional(), outputMode: z.enum(["editable", "full-image"]).optional(),
     // 「이 전략으로 구성 다시 만들기」가 보내는 고친 전략(U-11).

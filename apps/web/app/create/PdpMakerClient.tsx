@@ -4,7 +4,8 @@ import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
 import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL, mergeArtDirection } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, mergeArtDirection, overLimitFields } from "@fixup/pdp-core";
+import { InputLengthHint } from "./InputLengthHint";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft, PdpTextDraftState } from "./pdp-drafts";
 import { DraftSaveClock, startDraftAutosave, draftChangeValues } from "./draft-save-clock";
 import { createDraftRepository } from "./draft-repository";
@@ -212,7 +213,21 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const preparedImageDisplayName = preparedImage ? formatCompactFileName(preparedImage.fileName) : "";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
   const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || Object.values(sellerBrief).some(Boolean));
-  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage));
+  /**
+   * 넘친 입력 칸. **막기 전에 어느 칸인지 말한다**(U-08).
+   *
+   * 전에는 서버가 「요청이 올바르지 않습니다」 한 줄로 되돌려보냈다 — 어느 칸이
+   * 왜 걸렸는지 알 길이 없었다.
+   */
+  const overLimit = useMemo(
+    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS),
+    [sellerBrief, additionalInfo],
+  );
+  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && overLimit.length === 0);
+  /** 넘친 칸을 사용자 말로. 단추 아래와 오류 문구가 **같은 말**을 쓴다. */
+  const overLimitMessage = overLimit.length
+    ? `${overLimit.map((field) => `${field.label} ${field.length - field.limit}자 초과`).join(", ")}. 줄인 뒤 다시 눌러 주세요.`
+    : "";
 
   const goToSettings = useCallback(() => router.push("/settings"), [router]);
   const protectedDraftId = activeDraftId ?? searchParams.get("draft");
@@ -612,6 +627,21 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const handleAnalyze = async (strategyDirective?: string) => {
     // 실패하면 여기로 돌려보낸다. 구성 화면에서 눌렀는데 편집기로 가면 안 된다.
     const enteredFrom = appState;
+    /*
+      **입구가 둘이다**(U-08).
+
+      업로드 화면 단추는 `canAnalyze` 로 막히는데, 구성안 화면의 「이 전략으로
+      구성 다시 만들기」는 그 문지기를 안 지난다. 501자를 담은 옛 초안 —
+      전에는 기획에 상한이 없어 그런 초안이 생길 수 있었다 — 을 열어 거기서
+      누르면 **조용한 400** 이 난다. 없애려던 바로 그 화면이다.
+
+      그래서 함수 머리에서 막는다. 문구도 단추 아래와 **같은 것**을 쓴다.
+    */
+    if (overLimit.length > 0) {
+      setErrorMessage(overLimitMessage);
+      setAppState("upload");
+      return;
+    }
     if (!preparedImage) {
       setErrorMessage("먼저 제품 이미지를 업로드해 주세요.");
       return;
@@ -1603,6 +1633,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                           placeholder={field.placeholder}
                           className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
                         />
+                        {/* 제한을 보이게 한다. 몰래 자르거나 말없이 막지 않는다(U-08). */}
+                        <InputLengthHint value={sellerBrief[field.key] ?? ""} limit={SELLER_BRIEF_MAX_LENGTH} />
                       </div>
                     ))}
                   </div>
@@ -1620,6 +1652,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                     placeholder="예: 네이버 스마트스토어용, 여름 시즌, 프리미엄 보습 이미지 강조"
                     className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
                   />
+                  <InputLengthHint value={additionalInfo} limit={PAGE_CONTEXT_MAX_LENGTH} />
                 </div>
 
                 {/*
@@ -1824,12 +1857,24 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                 className="w-full"
                 size="lg"
                 disabled={!canAnalyze}
+                // 왜 못 누르는지 읽어 주게 잇는다. 안 이으면 화면을 못 보는
+                // 사용자에게는 그냥 안 눌리는 단추다.
+                aria-describedby={overLimit.length ? "analyze-blocked" : undefined}
                 // **인자 없이 부른다.** 그냥 넘기면 클릭 이벤트가 전략 지시가 된다.
                 onClick={() => void handleAnalyze()}
               >
                 <Wand2 size={16} className="mr-1.5" />
                 AI 분석 시작하기
               </Button>
+              {/*
+                **왜 못 누르는지 말한다**(U-08). 막기만 하면 서버가 「요청이
+                올바르지 않습니다」로 되돌려보내던 때와 다를 것이 없다.
+              */}
+              {overLimit.length > 0 ? (
+                <p id="analyze-blocked" role="status" className="mt-2 text-sm text-warning">
+                  {overLimitMessage}
+                </p>
+              ) : null}
               <div className="mt-2 rounded-md bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
                 <strong className="text-foreground">이 단계의 이미지 크레딧: 0장</strong><br />
                 상세 구조만 분석합니다. 분석이 끝난 뒤 필요한 섹션 이미지를 선택해 생성하며, 성공한 이미지마다 1장씩 차감됩니다.
@@ -1887,6 +1932,17 @@ const SELLER_BRIEF_FIELDS: ReadonlyArray<{
     placeholder: "예: 2026 우수제품 선정 / 무료 반품 30일",
   },
 ];
+
+/**
+ * 넘친 칸을 짚을 때 쓸 **화면 이름.** 코어는 짧은 이름을 들고 있는데, 사용자가
+ * 보는 것은 이 질문형 이름이라 그대로 말해야 어느 칸인지 안다(U-08).
+ */
+const SELLER_BRIEF_LABELS: Partial<Record<keyof SellerBrief | "pageContext", string>> = {
+  ...Object.fromEntries(SELLER_BRIEF_FIELDS.map((field) => [field.key, field.label])),
+  // 화면 이름을 함께 넘긴다. 안 넘기면 초과 문구만 코어의 짧은 이름으로 남는다.
+  pageContext: "그 밖에 · 채널과 시즌",
+};
+
 
 const previewCardClass =
   "mt-3 flex flex-wrap gap-3 rounded-md bg-background p-3 shadow-[var(--shadow-ring)]";

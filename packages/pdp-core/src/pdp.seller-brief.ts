@@ -47,7 +47,13 @@ export interface SellerBrief {
   emphasis?: string;
 }
 
-const FIELDS: ReadonlyArray<{
+/**
+ * 판매자 브리프의 칸 목록. **화면도 이 열쇠를 쓴다**(`pdp.input-limits`).
+ *
+ * `label` 은 짧은 이름이고, 화면은 질문형 이름을 따로 들고 있다 — 용도가 다르다.
+ * 갈리면 안 되는 것은 **열쇠**다.
+ */
+export const SELLER_BRIEF_FIELDS: ReadonlyArray<{
   key: keyof SellerBrief;
   label: string;
   /** 이 값이 원칙의 어느 대목에 쓰이는지. 모델에게 용도를 알려준다. */
@@ -73,8 +79,16 @@ export function normalizeSellerBrief(input: SellerBrief | undefined): SellerBrie
   if (!input) return {};
   const clean = (value: string | undefined) => {
     const trimmed = String(value ?? "").trim();
-    // 너무 길면 프롬프트를 밀어낸다. 한 칸에 필요한 만큼만 받는다.
-    return trimmed ? trimmed.slice(0, 500) : undefined;
+    /*
+      **여기서 자르지 않는다**(U-08).
+
+      전에는 말없이 500자에서 잘랐다. 사용자는 **무엇을 잃었는지 모른다** —
+      501번째 글자부터 사라진 문장이 페이지에 안 나와도 원인을 짐작할 수 없다.
+
+      길이는 **경계에서** 막는다(`pdp.input-limits` 의 상한을 zod 와 화면이 함께
+      쓴다). 여기까지 온 값은 이미 통과한 값이다.
+    */
+    return trimmed ? trimmed : undefined;
   };
   return {
     audience: clean(input.audience),
@@ -87,7 +101,7 @@ export function normalizeSellerBrief(input: SellerBrief | undefined): SellerBrie
 
 /** 채운 칸이 하나라도 있는가. */
 export function hasSellerBrief(brief: SellerBrief): boolean {
-  return FIELDS.some((field) => Boolean(brief[field.key]));
+  return SELLER_BRIEF_FIELDS.some((field) => Boolean(brief[field.key]));
 }
 
 /**
@@ -110,7 +124,7 @@ export function buildSellerBriefPrompt(input: SellerBrief | undefined): string {
     "",
   ];
 
-  for (const field of FIELDS) {
+  for (const field of SELLER_BRIEF_FIELDS) {
     const value = brief[field.key];
     if (!value) continue;
     lines.push(`- ${field.label}: ${value}`);

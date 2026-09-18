@@ -1,4 +1,5 @@
 import { designerPersona, imageLookDirective, type ImageLook } from "@fixup/shared";
+import { PAGE_CONTEXT_MAX_LENGTH } from "./pdp.input-limits";
 import type {
   PdpGuidePriorityMode,
   PdpImageStyle,
@@ -154,17 +155,25 @@ function peopleRule(options: ImagePromptOptions) {
 }
 
 /**
- * 배경 설명의 상한. 「그 밖에」는 자유 서술 칸이라 문단째로 붙여 넣는다.
+ * 배경 설명을 프롬프트에 실을 만큼만.
  *
- * 판매자 브리프가 같은 이유로 칸마다 500자에서 자른다(`normalizeSellerBrief`).
- * 여기만 무제한이면 배경 설명이 그 뒤의 지시들을 밀어낸다.
+ * ── 여기는 마지막 그물이다 ───────────────────────────────────
+ *
+ * 길이는 **경계에서** 막는다 — 화면이 제한을 보여 주고(`InputLengthHint`),
+ * zod 가 같은 상수(`PAGE_CONTEXT_MAX_LENGTH`)로 거른다. 여기까지 온 값은 이미
+ * 통과한 값이라 이 자르기는 **발동하지 않는다.**
+ *
+ * 그래도 남겨 둔다. 코어를 직접 부르는 길이 생기면 배경 설명 하나가 그 뒤의
+ * 지시를 통째로 밀어낼 수 있다.
+ *
+ * **상한을 여기 또 적지 않는다**(U-08). 전에는 `MAX_PAGE_CONTEXT = 500` 을 따로
+ * 들고 있었고, 주석은 「판매자 브리프도 같은 이유로 자른다」고 했는데 그 자르기는
+ * 없앴다 — 주석이 없는 동작을 근거로 들고 있었다.
  */
-const MAX_PAGE_CONTEXT = 500;
-
 function pageContextOf(options: ImagePromptOptions) {
   const trimmed = options.pageContext?.trim() ?? "";
   // 코드 단위로 자르면 500번째가 이모지일 때 서러게이트 쌍이 갈린다.
-  return Array.from(trimmed).slice(0, MAX_PAGE_CONTEXT).join("");
+  return Array.from(trimmed).slice(0, PAGE_CONTEXT_MAX_LENGTH).join("");
 }
 
 export function buildImageSystemPrompt(options: ImagePromptOptions) {

@@ -272,3 +272,35 @@ describe("되돌리기가 남의 작업을 덮지 않는다", () => {
     expect((await listPdpDrafts()).length).toBeGreaterThan(되돌리기전);
   });
 });
+
+/**
+ * **입구가 둘인데 문지기가 하나였다**(U-08).
+ *
+ * 업로드 화면 단추는 `canAnalyze` 로 막히는데, 구성안 화면의 「이 전략으로
+ * 구성 다시 만들기」는 그 문지기를 안 지났다. 501자를 담은 옛 초안을 열어
+ * 거기서 누르면 **조용한 400** 이 난다.
+ */
+describe("넘친 입력은 재기획도 막는다", () => {
+  it("**넘쳤으면 기획 요청을 아예 안 보낸다**", async () => {
+    await savePdpDraft({ ...초안(), additionalInfo: "가".repeat(600) } as PdpDraftInput);
+    await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={false} />); });
+    await flush();
+
+    await act(async () => { captured.scenario.onReplanFromStrategy("다른 이야기"); });
+    await flush();
+
+    // 보냈다면 조용한 400 이 났을 것이다.
+    expect(captured.bodies.some((body) => body.includes("strategyDirective"))).toBe(false);
+  });
+
+  it("넘치지 않으면 평소대로 보낸다", async () => {
+    await savePdpDraft(초안());
+    await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={false} />); });
+    await flush();
+
+    await act(async () => { captured.scenario.onReplanFromStrategy("다른 이야기"); });
+    await flush();
+
+    expect(captured.bodies.some((body) => body.includes("strategyDirective"))).toBe(true);
+  });
+});

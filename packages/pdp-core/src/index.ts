@@ -142,6 +142,12 @@ export {
   type StructureFailureReason,
   type UnverifiedItem,
 } from "./pdp.evidence";
+export {
+  PAGE_CONTEXT_MAX_LENGTH,
+  SELLER_BRIEF_MAX_LENGTH,
+  overLimitFields,
+  type OverLimitField,
+} from "./pdp.input-limits";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
   personSourceConflict,
