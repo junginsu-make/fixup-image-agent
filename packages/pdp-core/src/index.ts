@@ -134,6 +134,14 @@ export {
 } from "./pdp.evidence";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
+  MAX_PLANNED_SECTIONS,
+  clampSections,
+  sectionCountRules,
+  sectionPlanGaps,
+  type SectionPlanGap,
+  type SectionPlanGapKind,
+} from "./pdp.section-plan";
+export {
   generateKeyVisual,
   textPlanDepsFrom,
   planFromText,

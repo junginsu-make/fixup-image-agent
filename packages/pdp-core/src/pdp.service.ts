@@ -56,6 +56,7 @@ import {
   productReadingStatus,
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
+import { clampSections, sectionCountRules } from "./pdp.section-plan";
 
 const DEFAULT_IMAGE_MIME = "image/jpeg";
 
@@ -1256,7 +1257,7 @@ export function buildAnalyzePrompt(
 - 편집 텍스트가 올라갈 좌/우/하단 여백을 남기고, 인물 얼굴·제품 핵심이 예상 헤드라인 영역과 겹치지 않게 섹션별 구도를 설계할 것.`;
 
   return `
-이 제품 이미지를 분석하여 5~6개의 핵심 섹션으로 구성된 상세페이지 전체 블루프린트를 설계해주세요.
+이 제품 이미지를 분석하여 상세페이지 전체 블루프린트를 설계해주세요.
 
 ${buildSellerBriefPrompt(sellerBrief)}
 
@@ -1268,6 +1269,8 @@ ${PRODUCT_READING_RULES}
 
 ${PRODUCT_GROUNDING_RULES}
 
+${sectionCountRules()}
+
 ${SALES_PRINCIPLES}
 ${outputModePrompt}
 ${additionalInfo ? `[사용자 추가 정보]: ${additionalInfo}` : ""}
@@ -1276,15 +1279,15 @@ ${referenceModelPrompt}
 ${styleReferencePrompt}
 
 # 섹션 템플릿(필수 필드)
-- section_id: S1~S6
-- section_name: (예: 히어로/체크리스트/베네핏/근거/사용법/후기 등)
+- section_id: S1 부터 차례로
+- section_name: 이 섹션이 하는 일을 가리키는 내부 이름 (예: 히어로/근거/사용법)
 - goal: 이 섹션의 역할(짧은 한 문장)
 - headline: 한국어 1줄(강하게)
 - headline_en: headline의 자연스러운 영어 번역 1줄
 - subheadline: 한국어 1줄(명확하게)
 - subheadline_en: subheadline의 자연스러운 영어 번역 1줄
-- bullets: 한국어 3개(스캔용, 각 1줄)
-- bullets_en: bullets의 자연스러운 영어 번역 3개
+- bullets: 한국어 2~4개(스캔용, 각 1줄). 할 말이 있는 만큼만 — 수를 채우려고 지어내지 말 것
+- bullets_en: bullets와 같은 개수의 자연스러운 영어 번역
 - trust_or_objection_line: 한국어 불안 제거/신뢰 1문장
 - trust_or_objection_line_en: trust_or_objection_line의 자연스러운 영어 번역 1문장
 - CTA: 빈 문자열
@@ -1295,15 +1298,14 @@ ${styleReferencePrompt}
 # 섹션 구성 원칙(강제)
 - 작성 전에 내부적으로 한 줄 판매 스레드를 먼저 고정할 것: 고객이 원하는 결과 → 지금 막는 불편 → 이 제품의 해결 메커니즘 → 구매해야 하는 구체적 이유. 전체 섹션은 이 스레드를 따라 하나의 판매 영화처럼 이어질 것.
 - 각 섹션의 headline/subheadline은 앞 섹션의 감정·판단을 받아 다음 장면으로 넘기고, 같은 문구를 반복하지 말 것.
-- 베네핏은 3개 고정
 - **반론 섹션은 반드시 넣는다.** 살까 말까 망설이는 이유(가격, 나한테도 될까, 실패하면, 효과가 약하지 않을까)를 페이지가 먼저 꺼내 다루는 섹션이다. 좋은 점만 나열하면 읽는 사람은 속으로 반박하며 읽는다.
   강도를 세게 잡을수록 이 섹션을 빼기 쉬운데, 그때 이탈이 가장 크다. 표현을 강하게 하되 **섹션을 줄여서 강해지려 하지 않는다.**
 - 근거 섹션은 반드시 결과→조건→해석 3단으로 작성
-- 리뷰 섹션은 전/후 사진보다 사용감 문장 후기 카드 6~12개 우선
+- 후기를 쓰는 섹션은 **실제 근거가 있을 때만** 넣는다. 판매자가 알려준 후기가 없으면 그 섹션을 만들지 않는다. 개수를 채우려고 사용감 문장을 지어내지 말 것.
 - 사용법/루틴은 선택지를 2~3개로 줄여 선택 피로를 없앨 것
 - CTA 필드는 모든 섹션에서 빈 문자열로 둘 것. 통이미지는 링크를 걸 수 없어 눌리지 않는 그림 버튼이 되고, 텍스트편집 모드에서도 이 값을 쓰지 않는다. 실제 구매 버튼은 쇼핑몰이 붙인다(사용자 결정 2026-07-30).
 - 각 섹션의 이미지는 단순한 제품 누끼나 그래픽이 아닌 소비자의 구매 전환을 유도할 수 있는 고품질 광고 사진 느낌으로 기획할 것
-- 첫 번째 섹션은 구매 전환에 가장 중요하므로 반드시 매력적인 모델이 제품과 함께 연출된 컷으로 프롬프트를 작성할 것
+- 첫 번째 섹션은 구매 전환에 가장 중요하다. 이 제품을 가장 잘 보여 주는 장면으로 만들 것 — 사람이 쓰는 모습이 그 장면이면 사람을 넣고, 제품 자체가 주인공이면 제품을 크게 보여줄 것. **모든 상품에 사람이 나와야 하는 것은 아니다.**
 - 각 섹션 이미지는 해당 헤드라인과 서브헤드라인의 메시지를 시각적으로 전달해야 함
 
 # 카피 작성 원칙(강제)
@@ -1316,7 +1318,7 @@ ${styleReferencePrompt}
 - 모든 섹션 CTA와 CTA_en은 빈 문자열로 두고, '구매하기/자세히 보기/지금 확인하기/클릭/버튼/>' 같은 링크·버튼 유도 문구를 visible copy에 쓰지 말 것.
 
 # 섹션별 이미지 생성 프롬프트
-- image_id: IMG_S1~IMG_S6
+- image_id: 섹션 번호에 맞춰 IMG_S1 부터 차례로
 - purpose: 이 이미지가 전달해야 하는 메시지(짧은 한 문장)
 - prompt_ko: 한국어 이미지 생성 프롬프트(1~2문장). 구도, 거리감, 시선 높이, 제품이 프레임에서 차지하는 비중을 함께 명시할 것.
 - prompt_en: 영어 프롬프트(실제 이미지 생성용). Include composition, framing distance, camera angle, product prominence, and the key subject action. Keep it neutral enough that studio/lifestyle/outdoor priority can still be controlled at generation time.
@@ -1594,8 +1596,15 @@ function parseBlueprintResponse(response: { text?: string }) {
 }
 
 function sanitizeBlueprint(input: Partial<LandingPageBlueprint>) {
+  /*
+    **상한은 코드가 지킨다.**
+
+    장수를 프롬프트에서 풀었으니, 막는 것이 문구뿐이면 아무것도 막지 못한다.
+    문구는 부탁이지 강제가 아니다 — 모델이 서른 장을 내놓으면 서른 장이 그대로
+    생성 대기열에 들어가고 한 장마다 값이 나간다.
+  */
   const sections = Array.isArray(input.sections)
-    ? input.sections.map((section, index) => normalizeSection(section, index))
+    ? clampSections(input.sections).map((section, index) => normalizeSection(section, index))
     : [];
 
   return {

@@ -43,7 +43,7 @@ import type {
   QaDefect,
   SectionBlueprint,
 } from "@fixup/pdp-core";
-import { isBlockingDefect } from "@fixup/pdp-core";
+import { MAX_PLANNED_SECTIONS, isBlockingDefect } from "@fixup/pdp-core";
 import type {
   CanvasLayer,
   FloatingWorkbenchState,
@@ -1762,6 +1762,11 @@ export function PdpEditor({
   /** 빈 섹션을 뒤에 추가한다. 키는 기존과 겹치지 않게 만든다. */
   const handleAddSection = () => {
     if (generationLockRef.current) return;
+    // 서버와 같은 상한을 쓴다(설계 §9.1). 넘겨 만들면 다시 기획할 때 잘린다.
+    if (sections.length >= MAX_PLANNED_SECTIONS) {
+      setNotice(`한 페이지에 ${MAX_PLANNED_SECTIONS}장까지 만들 수 있습니다.`);
+      return;
+    }
     const section = createSectionFor(sections);
     setSections((current) => [...current, section]);
     setSectionKeys((current) => [...current, section.section_id]);

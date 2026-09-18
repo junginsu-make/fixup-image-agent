@@ -13,6 +13,7 @@ import {
 } from "./pdp.review";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
+import { clampSections, sectionCountRules } from "./pdp.section-plan";
 import { resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
 import type { StructureFailure } from "./pdp.evidence";
 import { DEFAULT_IMAGE_MODEL } from "./types";
@@ -150,7 +151,10 @@ const BLUEPRINT_RULES = `규칙:
     한국인으로 쓴다. 모든 섹션에 같은 사람이 나온다는 전제로 작성한다.
 - 무형 상품이다. 만질 수 있는 제품 사진을 전제하지 마라.
   이미지 방향은 사용 장면·결과 장면·감정·은유로 잡는다.
-- 섹션은 4~7개. 앞 섹션의 감정을 다음 섹션이 이어받아 하나의 흐름을 만든다.
+- 앞 섹션의 감정을 다음 섹션이 이어받아 하나의 흐름을 만든다.
+- **반론 섹션은 반드시 넣는다.** 살까 말까 망설이는 이유(가격, 나한테도 될까, 실패하면,
+  효과가 약하지 않을까)를 페이지가 먼저 꺼내 다루는 섹션이다. 좋은 점만 나열하면
+  읽는 사람은 속으로 반박하며 읽는다.
 - section_name 은 내부 역할명이며 한국어로 쓴다("문제 제기", "반론 해소" 처럼).
   화면에 그대로 라벨로 표시되므로 Intro/Solution 같은 영어를 쓰지 마라.
   단, 이 역할명을 headline/subheadline/bullets 안에 그대로 옮겨 쓰지는 마라.
@@ -201,6 +205,8 @@ ${revision}${outputModeRules(outputMode)}
 ${intensityRules(copyIntensity)}
 
 ${gapPolicyRules(gapPolicy)}
+
+${sectionCountRules()}
 
 ${SALES_PRINCIPLES}
 
@@ -417,7 +423,9 @@ export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
   const designSystem = normalizeDesignSystem(input.designSystem);
   const shared = designSystem ? describeDesignSystem(designSystem) : "";
 
-  const sections = rawSections
+  // 상한은 코드가 지킨다. 프롬프트 문구는 부탁이지 강제가 아니다 — 한 장이 곧
+  // 이미지 한 장이고 값이 나간다.
+  const sections = clampSections(rawSections)
     .map((section, index) => normalizeSection((section ?? {}) as Record<string, unknown>, index))
     .map((section) =>
       shared

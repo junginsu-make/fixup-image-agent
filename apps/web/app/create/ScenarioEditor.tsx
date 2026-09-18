@@ -11,11 +11,12 @@ import type {
   ProductReadingStatus,
   SectionBlueprint,
 } from "@fixup/pdp-core";
-import { applyUserEdit, validateEvidenceBinding } from "@fixup/pdp-core";
+import { MAX_PLANNED_SECTIONS, applyUserEdit, validateEvidenceBinding } from "@fixup/pdp-core";
 import { Badge, Button, Textarea, cn } from "@fixup/ui";
 import { ModelPicker } from "./ModelPicker";
 import { ReviewPanel } from "./ReviewPanel";
 import { ProductReadingNotice } from "./ProductReadingNotice";
+import { SectionPlanGaps } from "./SectionPlanGaps";
 import { StyleReferenceCard, type StyleReferenceView } from "./StyleReferenceCard";
 import { StyleReferenceAttach } from "./StyleReferenceAttach";
 import { CharacterPicker } from "./CharacterPicker";
@@ -305,7 +306,16 @@ export function ScenarioEditor({
     onChange({ ...blueprint, sections: blueprint.sections.filter((_, position) => position !== index) });
   };
 
+  /*
+    **화면도 서버와 같은 상한을 쓴다**(설계 §9.1).
+
+    서버는 상한을 넘은 구성안을 자른다(`clampSections`). 화면이 그것을 모르면
+    사용자는 열한 번째 섹션을 만들어 문구까지 채운 뒤, 다시 기획할 때 그것이
+    사라지는 것을 본다.
+  */
+  const canAddSection = blueprint.sections.length < MAX_PLANNED_SECTIONS;
   const addSection = () => {
+    if (!canAddSection) return;
     onChange({ ...blueprint, sections: [...blueprint.sections, createSectionFor(blueprint.sections)] });
   };
 
@@ -405,6 +415,13 @@ export function ScenarioEditor({
         {/* 심사보다 먼저 온다. 무엇을 보고 쓴 카피인지가 심사 결과보다 앞선 물음이다. */}
         <ProductReadingNotice status={productReadingStatus} gapOutcome={gapOutcome} />
 
+        {/*
+          장수 강제를 풀었으니(U-14) 모자란 구성도 통과한다. 무엇이 빠졌는지는
+          따로 본다 — 서버가 준 값이 아니라 **지금 화면의 구성안**을 보므로,
+          사용자가 고치면 저절로 사라진다.
+        */}
+        <SectionPlanGaps sections={blueprint.sections} />
+
         {review ? <ReviewPanel review={review} /> : null}
 
         {brief && brief.assumptions.length > 0 ? (
@@ -445,10 +462,17 @@ export function ScenarioEditor({
         ))}
       </div>
 
-      <Button variant="outline" className="justify-self-start" onClick={addSection}>
-        <Plus size={16} className="mr-1.5" />
-        섹션 추가
-      </Button>
+      <div className="grid justify-items-start gap-1">
+        <Button variant="outline" onClick={addSection} disabled={!canAddSection}>
+          <Plus size={16} className="mr-1.5" />
+          섹션 추가
+        </Button>
+        {canAddSection ? null : (
+          <p className="text-sm text-muted-foreground">
+            한 페이지에 {MAX_PLANNED_SECTIONS}장까지 만들 수 있습니다.
+          </p>
+        )}
+      </div>
 
       {/* 대표 이미지부터 이 모델로 만들므로 생성 시작 전에 고른다. */}
       <div className="rounded-lg bg-card p-5 shadow-[var(--shadow-ring)]">
