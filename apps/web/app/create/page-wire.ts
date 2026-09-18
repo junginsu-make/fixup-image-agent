@@ -1,4 +1,4 @@
-import type { AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
+import type { AnchorKind, AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
 
 /**
  * 페이지 전체가 공유하는 값을 **한 번만** 짓는다.
@@ -17,6 +17,14 @@ export interface PageWireInputs {
   look?: string;
   userInstruction: string;
   preserveProduct?: boolean;
+  /**
+   * 앵커가 실물 사진인가, 우리가 만든 대표 이미지인가(U-03).
+   *
+   * 글 경로의 앵커는 `TextModeFlow` 가 만든 대표 이미지다. 그것을 「판매 중인
+   * 제품, 라벨 글자까지 지켜라」로 선언하면 그 안의 헤드라인 글자가 페이지
+   * 전체에 되풀이된다.
+   */
+  anchorKind?: AnchorKind;
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   referenceModel?: { base64: string; mimeType: string; fileName?: string } | null;
   referenceModelUsage?: ReferenceModelUsage | null;
@@ -34,6 +42,7 @@ export function buildPageWire(input: PageWireInputs): PageImageWire {
     // 우선순위 줄이 없는 블록을 가리킨다.
     userInstruction: input.userInstruction.trim() || undefined,
     preserveProduct: input.preserveProduct,
+    anchorKind: input.anchorKind,
     styleReference: input.styleReference,
     referenceModel: input.referenceModel
       ? {

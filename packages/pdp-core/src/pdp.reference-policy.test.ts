@@ -171,14 +171,17 @@ describe("정책이 실제 생성 호출에 닿는다", () => {
     expect(prompt).toContain("20대 한국 여성");
   });
 
-  it("제품 보존을 끄고 레퍼런스가 있으면 앵커가 빠지고 번호도 당겨진다", async () => {
+  it("**제품 보존을 꺼도 앵커는 간다. 대신 색을 레퍼런스에 넘긴다**", async () => {
+    // 전에는 앵커를 뺐다. 그러면 모델이 제품을 지어낸다(U-03).
     const { prompt, kinds } = await generate({
       preserveProductImage: false,
       styleReferenceImages: [{ base64: "AAAA", mimeType: "image/png" }],
     });
-    expect(kinds).toEqual(["style"]);
-    expect(prompt).toContain("[Image 1 — DESIGN REFERENCE]");
-    expect(prompt).not.toContain("PRODUCT");
+    expect(kinds).toEqual(["anchor", "style"]);
+    expect(prompt).toContain("[Image 1 — PRODUCT]");
+    expect(prompt).toContain("may be restyled to match the design reference");
+    // 지켜야 할 것의 목록에서는 색이 빠진다.
+    expect(prompt).not.toContain("· colour, finish and material");
   });
 
   it("첨부가 제품 하나뿐이면 그것만 설명한다", async () => {

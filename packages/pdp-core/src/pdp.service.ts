@@ -32,7 +32,8 @@ import {
   buildImageSystemPrompt,
   type ImagePromptOptions,
 } from "./pdp.image-prompt";
-import { shouldSendAnchor } from "./pdp.product-anchor";
+import { anchorRoleFor, shouldSendAnchor } from "./pdp.product-anchor";
+import type { AnchorKind } from "./pdp.product-anchor";
 import { countClearedCopy, normalizeSectionEvidence, resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
 import { photoSourceText, productFactText } from "./pdp.photo-evidence";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
@@ -126,6 +127,7 @@ type InternalImageGenOptions = ImageGenOptions & {
   styleReferenceImages?: Array<{ base64: string; mimeType: string; description?: string }>;
   /** 제품 이미지를 지킬 것인가. 자세한 판단은 pdp.product-anchor 참조. */
   preserveProductImage?: boolean;
+  anchorKind?: AnchorKind;
   /**
    * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
    *
@@ -664,12 +666,25 @@ ${analyzePrompt}`
       const styleReferences = options.styleReferenceImages ?? [];
       const styleReference = styleReferences[0];
 
-      // 참조가 둘이면 모델이 절충한다. 제품 보존을 끄면 앵커를 빼서
-      // 레퍼런스의 디자인을 온전히 받는다.
+      /*
+        **제품 사진은 언제나 보낸다**(U-03).
+
+        전에는 제품 보존을 끄면 앵커를 통째로 뺐다. 그러면 모델은 레퍼런스만
+        보고 **제품을 지어낸다** — 화면이 말한 「조금씩 달라질 수 있습니다」가
+        아니라 다른 제품이 나온다.
+
+        참조가 둘이면 모델이 절충하는 것은 여전하다. 그것은 **앵커를 빼서가
+        아니라 지시로** 푼다(`anchorRole`).
+      */
+      const anchorRole = anchorRoleFor({
+        anchorKind: options.anchorKind,
+        hasStyleReference: Boolean(styleReference),
+        preserveProduct: options.preserveProductImage ?? true,
+      });
       if (
         shouldSendAnchor({
+          anchorKind: options.anchorKind,
           hasStyleReference: Boolean(styleReference),
-          preserveProduct: options.preserveProductImage ?? true,
         })
       ) {
         references.push({
@@ -770,6 +785,8 @@ ${analyzePrompt}`
         buildImageJson(section, promptOptions),
         buildReferenceRoleDirective(references, {
           hasUserInstruction: Boolean(options.userInstruction),
+          // 얼마나 지킬지를 함께 넘긴다. 안 넘기면 토글이 아무것도 안 바꾼다.
+          anchorRole,
         }),
         characterIdentity,
         retryDirective ? `Correction required: ${retryDirective}` : "",

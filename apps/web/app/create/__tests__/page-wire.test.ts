@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildPageWire } from "../page-wire";
 
@@ -86,5 +87,29 @@ describe("빈 값은 안 싣는다", () => {
     expect(wire.imageModel).toBe("nano-banana");
     expect(wire.attachmentIntents).toBeUndefined();
     expect(wire.styleReference).toBeUndefined();
+  });
+});
+
+/**
+ * **앵커가 실물인지 만들어 낸 것인지 실어 보낸다**(U-03).
+ *
+ * 글 경로의 앵커는 `TextModeFlow` 가 만든 대표 이미지다. 그것을 「판매 중인
+ * 제품, 라벨 글자까지 지켜라」로 선언하면 그 안의 헤드라인 글자가 페이지
+ * 전체에 되풀이된다.
+ */
+describe("앵커가 무엇인지 알린다", () => {
+  it("실린다", () => {
+    expect(buildPageWire({ ...기본, anchorKind: "key-visual" }).anchorKind).toBe("key-visual");
+    expect(buildPageWire({ ...기본, anchorKind: "product-photo" }).anchorKind).toBe("product-photo");
+  });
+
+  it("안 주면 안 싣는다 — 서버가 실물로 본다", () => {
+    expect(buildPageWire(기본).anchorKind).toBeUndefined();
+  });
+
+  it("**편집기가 시작 방식으로 정한다** — 글 경로를 실물로 보고하면 안 된다", () => {
+    const editor = readFileSync(new URL("../PdpEditor.tsx", import.meta.url), "utf8");
+
+    expect(editor).toContain('anchorKind: startMode === "text" ? "key-visual" : "product-photo"');
   });
 });

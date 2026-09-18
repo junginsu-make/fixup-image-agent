@@ -26,7 +26,13 @@ export {
   type ImageProviderInput,
 } from "./pdp.image-provider";
 export { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
-export { defaultPreserveProduct, shouldSendAnchor } from "./pdp.product-anchor";
+export {
+  anchorRoleFor,
+  defaultPreserveProduct,
+  shouldSendAnchor,
+  type AnchorKind,
+  type AnchorRole,
+} from "./pdp.product-anchor";
 export { Type, purposeOfCall, type PdpLlm, type PdpLlmImage, type PdpLlmPurpose, type PdpLlmRequest, type PdpLlmResponse, type PdpLlmExecution } from "./pdp.llm";
 export {
   buildSectionImageOptions,

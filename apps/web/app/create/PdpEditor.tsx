@@ -1383,6 +1383,8 @@ export function PdpEditor({
    */
   const pageWire = (): PageImageWire =>
     buildPageWire({
+      // 글 경로의 앵커는 우리가 만든 대표 이미지다. 실물 제품이 아니다(U-03).
+      anchorKind: startMode === "text" ? "key-visual" : "product-photo",
       imageModel,
       outputMode,
       look,

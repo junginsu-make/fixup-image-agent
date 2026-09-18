@@ -1,3 +1,4 @@
+import type { AnchorKind } from "./pdp.product-anchor";
 import type {
   AttachmentIntents,
   CharacterImageReference,
@@ -39,6 +40,13 @@ export interface PageImageInputs {
   attachmentIntents?: AttachmentIntents;
   /** 제품 이미지를 지킬 것인가. */
   preserveProduct?: boolean;
+  /**
+   * 앵커가 **무엇인가**(→ `pdp.product-anchor.ts`). 안 오면 실물 사진으로 본다.
+   *
+   * 글 경로의 앵커는 우리가 만든 대표 이미지다. 그것을 「판매 중인 제품」으로
+   * 선언하면 그 안의 글자가 페이지 전체에 되풀이된다(U-03).
+   */
+  anchorKind?: AnchorKind;
   /**
    * 페이지의 디자인 언어를 정하는 참조. 모든 섹션이 같은 것을 쓴다.
    *
@@ -122,6 +130,7 @@ export function buildSectionImageOptions(
     pageContext: page.pageContext,
     attachmentIntents: page.attachmentIntents,
     preserveProductImage: page.preserveProduct ?? true,
+    anchorKind: page.anchorKind,
     styleReferenceImages: page.styleReferenceImages?.length ? page.styleReferenceImages : undefined,
   };
 }
@@ -138,6 +147,13 @@ export interface PageImageWire {
   look?: string;
   userInstruction?: string;
   preserveProduct?: boolean;
+  /**
+   * 앵커가 **무엇인가**(→ `pdp.product-anchor.ts`). 안 오면 실물 사진으로 본다.
+   *
+   * 글 경로의 앵커는 우리가 만든 대표 이미지다. 그것을 「판매 중인 제품」으로
+   * 선언하면 그 안의 글자가 페이지 전체에 되풀이된다(U-03).
+   */
+  anchorKind?: AnchorKind;
   styleReference?: {
     imageBase64: string;
     mimeType: string;
@@ -161,6 +177,7 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     look: wire.look,
     userInstruction: wire.userInstruction,
     preserveProduct: wire.preserveProduct,
+    anchorKind: wire.anchorKind,
     pageContext: wire.pageContext,
     attachmentIntents: wire.attachmentIntents,
     styleReferenceImages: wire.styleReference

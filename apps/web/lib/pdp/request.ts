@@ -37,6 +37,8 @@ const section = z.object({
 const page = z.object({ imageModel: model.optional(), styleReference: image.optional(), referenceModel: image.optional(),
   referenceModelUsage: z.enum(["hero-only", "all-sections"]).nullable().optional(),
   preserveProduct: z.boolean().optional(), outputMode: z.enum(["editable", "full-image"]).optional(),
+  // 앵커가 실물 사진인가, 우리가 만든 대표 이미지인가(U-03). 안 오면 실물로 본다.
+  anchorKind: z.enum(["product-photo", "key-visual"]).optional(),
   look: z.enum(IMAGE_LOOKS).optional(), userInstruction: text.optional(), pageContext: text.max(500).optional(),
   attachmentIntents: intents.optional() }).passthrough();
 const common = {
