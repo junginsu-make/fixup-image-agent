@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Library, Menu, Plus, Settings, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
 import { BrandMark } from "@fixup/ui";
 import type { EasyConversationRecord } from "../../../lib/easy/store-core";
@@ -19,16 +19,23 @@ import type { EasyConversationRecord } from "../../../lib/easy/store-core";
  * 길이다.**
  */
 
-export function EasyRail({
-  conversations,
-  email,
-}: {
-  conversations: EasyConversationRecord[];
-  email: string;
-}) {
+export function EasyRail({ conversations }: { conversations: EasyConversationRecord[] }) {
   const pathname = usePathname();
   const router = useRouter();
+  /*
+   * **좁은 화면에서만 접힌다.** 여는 손잡이는 입력창 옆에 있다 — 화면 위에
+   * 떠 있던 것을 거기로 옮겼다(2026-09-18 사용자). 상단바가 생겨 그 자리에
+   * 두 개가 겹쳤다.
+   */
   const [open, setOpen] = React.useState(false);
+
+  // 입력창 옆 손잡이가 이 값을 올린다. 창 하나에 레일 하나라 id 로 찾는다.
+  React.useEffect(() => {
+    const toggle = () => setOpen((current) => !current);
+    window.addEventListener("easy-rail-toggle", toggle);
+    return () => window.removeEventListener("easy-rail-toggle", toggle);
+  }, []);
+
   const [list, setList] = React.useState(conversations);
   const [removing, setRemoving] = React.useState<string | null>(null);
 
@@ -63,16 +70,6 @@ export function EasyRail({
 
   return (
     <>
-      {/* 좁은 화면 전용 손잡이. 넓은 화면에서는 레일이 늘 보인다. */}
-      <button
-        type="button"
-        aria-label="대화 목록"
-        onClick={() => setOpen(true)}
-        className="fixed left-3 top-3 z-30 rounded-md border border-border bg-background p-2 md:hidden"
-      >
-        <Menu className="h-4 w-4" />
-      </button>
-
       {/* 좁은 화면에서 레일을 열면 뒤를 덮는다. 눌러서 닫는다. */}
       {open ? (
         <button
@@ -85,8 +82,13 @@ export function EasyRail({
 
       <nav
         className={cn(
-          "z-40 flex h-dvh w-64 shrink-0 flex-col border-r border-border bg-muted/30",
-          // 좁은 화면에서는 떠 있는 판이 된다. 넓은 화면에서는 자리를 차지한다.
+          "z-40 flex h-dvh w-64 shrink-0 flex-col border-r border-border",
+          /*
+            **좁은 화면에서는 불투명해야 한다.** 떠 있는 판이라 반투명이면 뒤의
+            대화가 그대로 비쳐 글자가 겹쳐 보인다(2026-09-18 확인). 넓은
+            화면에서는 자리를 차지하므로 옅은 바탕이 낫다.
+          */
+          "bg-background md:bg-muted/30",
           "fixed inset-y-0 left-0 -translate-x-full transition-transform md:static md:translate-x-0",
           open && "translate-x-0",
         )}
@@ -148,26 +150,17 @@ export function EasyRail({
         </div>
 
         {/*
-          **출구.** 설계 §11-④ — 고를 것을 없애면 원하는 것을 못 만드는 사람이
-          생긴다. 출구가 없으면 Easy 는 막다른 길이다.
+          **출구 하나만 둔다.** 설계 §11-④ — 고를 것을 없애면 원하는 것을 못
+          만드는 사람이 생긴다. 출구가 없으면 Easy 는 막다른 길이다.
+
+          **라이브러리와 계정은 뺐다**(2026-09-18 사용자). 라이브러리는 첨부
+          고르는 창이 이미 열고, 계정은 상단바에 있다 — 둘 다 **중복**이었다.
         */}
-        <div className="grid gap-0.5 border-t border-border p-2">
+        <div className="border-t border-border p-2">
           <Button asChild variant="ghost" className="w-full justify-start gap-2 text-sm">
             <Link href="/poster">
               <ArrowLeft className="h-4 w-4" />
               자세한 모드로
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-sm">
-            <Link href="/library">
-              <Library className="h-4 w-4" />
-              라이브러리
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-sm">
-            <Link href="/settings">
-              <Settings className="h-4 w-4" />
-              <span className="truncate">{email}</span>
             </Link>
           </Button>
         </div>

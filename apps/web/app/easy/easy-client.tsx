@@ -2,14 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Send } from "lucide-react";
-import { Button, ImageLightbox, Textarea } from "@fixup/ui";
+import { ImagePlus, PanelLeft, Send } from "lucide-react";
+import { Button, ImageLightbox, Textarea, cn } from "@fixup/ui";
 import { DEFAULT_TEXT_MODEL } from "@fixup/shared";
 import { EasyMessageRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { EasyAttachChoice } from "./_components/attach-choice";
+import { EasyResultPanel } from "./_components/result-panel";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -77,6 +78,8 @@ export function EasyClient({
 
   const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
   const shown = messages.length ? messages : [인사];
+  // 인사말만 있는 첫 화면인가. 정렬이 갈린다.
+  const 말을걸었나 = messages.some((message) => message.role !== "system");
 
   /*
    * **이번 한 장에 얼마 드나**(설계 §5-2).
@@ -86,6 +89,20 @@ export function EasyClient({
    *
    * 셈은 `cost.ts` 가 한다. 화면 안에 두면 값으로 못 잰다.
    */
+  /*
+   * **오른쪽 칸에 걸 마지막 그림.**
+   *
+   * 대화 속 그림은 길어질수록 위로 사라진다. 방금 만든 것이 늘 같은 자리에
+   * 있어야 한다(2026-09-18 사용자).
+   */
+  const lastImage = React.useMemo(() => {
+    for (let index = shown.length - 1; index >= 0; index -= 1) {
+      const found = urls[shown[index]!.id];
+      if (found) return found;
+    }
+    return undefined;
+  }, [shown, urls]);
+
   const cost = React.useMemo(
     () => easyCost({ modelId: imageModel, ratioId, attachmentCount: attachments.length }),
     [imageModel, ratioId, attachments.length],
@@ -236,10 +253,24 @@ export function EasyClient({
   }
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1">
+      {/* ── 가운데: 대화와 입력 ── */}
+      <div className="flex min-w-0 flex-1 flex-col">
       {/* ── 대화 ── 자기 안에서만 스크롤한다. 입력창이 아래에 붙어 있어야 한다. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-2xl gap-4 px-4 py-8 pt-14 md:pt-8">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/*
+          **첫 화면은 가운데에 모은다.**
+
+          아직 아무것도 없을 때 인사말이 맨 위에 붙어 있으면 아래가 통째로 빈
+          공간이 되어 고장처럼 보인다(2026-09-18 확인). 대화가 시작되면 위에서
+          부터 쌓인다 — 그때는 가운데 정렬이 오히려 튄다.
+        */}
+        <div
+          className={cn(
+            "mx-auto grid w-full max-w-2xl gap-4 px-4 py-8",
+            말을걸었나 ? "" : "my-auto",
+          )}
+        >
           {shown.map((message) => (
             <EasyMessageRow
               key={message.id}
@@ -282,7 +313,7 @@ export function EasyClient({
 
       {/* ── 붙인 그림 ── */}
       {attachments.length ? (
-        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 px-4 pb-2">
+        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 px-4 pb-2 pt-1">
           {attachments.map((one) => (
             <div key={one.id} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -316,6 +347,22 @@ export function EasyClient({
             disabled={turn.busy}
           />
           <div className="flex items-end gap-2">
+            {/*
+              **대화 목록 손잡이가 여기 있다**(2026-09-18 사용자).
+
+              전에는 화면 왼쪽 위에 떠 있었는데, 상단바가 생기면서 그 자리에
+              둘이 겹쳤다. 누르는 것들이 한 줄에 모이는 편이 찾기도 쉽다.
+              넓은 화면에서는 레일이 늘 보이므로 이 단추가 없다.
+            */}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="대화 목록"
+              className="md:hidden"
+              onClick={() => window.dispatchEvent(new Event("easy-rail-toggle"))}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -335,7 +382,16 @@ export function EasyClient({
                   void send();
                 }
               }}
-              placeholder={turn.canSend ? "무엇을 만들까요?" : "위에서 먼저 골라 주세요"}
+              /*
+                **못 쓰는 까닭을 그대로 적는다.** 보내는 중인데 「위에서 먼저
+                골라 주세요」라고 하면 고른 것이 안 먹힌 줄 안다
+                (2026-09-18 확인).
+              */
+              placeholder={
+                turn.busy ? "만드는 중입니다"
+                  : turn.canSend ? "무엇을 만들까요?"
+                    : "위에서 먼저 골라 주세요"
+              }
               disabled={!turn.canSend}
               rows={1}
               className="max-h-32 min-h-10 resize-none"
@@ -371,6 +427,14 @@ export function EasyClient({
         </div>
       </div>
 
+      </div>
+
+      {/*
+        **오른쪽 결과 칸.** 첫 기획(2026-09-02)의 4분할 중 「결과」를 되살린
+        것이다. 뺐던 것은 **작업판**(칸 여럿)이고, 이건 보여 주기만 한다.
+      */}
+      <EasyResultPanel url={lastImage} onOpen={() => setLightbox(lastImage ?? null)} />
+
       <input
         ref={file}
         type="file"
@@ -392,6 +456,6 @@ export function EasyClient({
           onClose={() => setLightbox(null)}
         />
       ) : null}
-    </>
+    </div>
   );
 }

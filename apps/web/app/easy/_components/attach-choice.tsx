@@ -9,10 +9,21 @@ import { LibraryPickerButton } from "../../_components/library-picker";
  *
  * **한 번만 묻는다.** 되묻지 않는 것이 이 모드의 뜻이다(설계 §6).
  *
- * ── 라이브러리에서 고른 것은 다시 올리지 않는다 ───────────────
+ * ── 이미지 만들기와 **같은 길로** 불러온다 ────────────────────
  *
- * 이미 우리 저장소에 있는 그림이라 id 만 받으면 된다. 다시 올리면 같은 그림이
- * 두 벌이 되고 라이브러리가 지저분해진다.
+ * 처음에는 `/api/reference-images` 를 눌렀을 때 불렀는데 둘이 어긋났다
+ * (2026-09-18 사용자 보고).
+ *
+ *   ① 창을 열어도 비어 있고 **새로고침을 눌러야** 목록이 왔다
+ *   ② 새로고침해도 **그림이 하나도 안 보였다**
+ *
+ * ②의 까닭은 응답 모양이다. 그 라우트는 `{ images }` 가 아니라 **`{ references }`**
+ * 로 준다. `body.images` 를 읽으니 늘 빈 배열이었고, 새로고침이 화면을 다시
+ * 그려 「불러온 것처럼」 보였을 뿐이다.
+ *
+ * `/api/poster/references` 로 옮긴다. 이미지 만들기(02)가 쓰는 그 라우트다 —
+ * **같은 그림이 같은 모양으로** 온다. 사본(`thumbUrl`)과 주인 표시(`mine`)도
+ * 함께 오는데, 사본이 없으면 창 하나에 수십 MB 가 오간다.
  */
 
 interface Picked {
@@ -21,11 +32,14 @@ interface Picked {
   title: string;
 }
 
+/** `/api/poster/references` 가 주는 줄. `ReferenceItem` 과 같은 모양이다. */
 interface ReferenceRow {
   id: string;
   title?: string | null;
-  url?: string | null;
+  url?: string;
+  thumbUrl?: string | null;
   mine?: boolean;
+  ownerEmail?: string | null;
 }
 
 export function EasyAttachChoice({
@@ -40,29 +54,30 @@ export function EasyAttachChoice({
   onSkip: () => void;
 }) {
   const [rows, setRows] = React.useState<ReferenceRow[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [loaded, setLoaded] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
 
-  /**
-   * **누를 때 불러온다.**
-   *
-   * 첫 화면을 그릴 때 미리 불러오면, 라이브러리를 안 쓰는 사람에게도 목록을
-   * 받아 온다. 이 모드는 그림 없이 시작하는 사람이 많다.
-   */
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const body = await (await fetch("/api/reference-images")).json();
-      setRows(Array.isArray(body.images) ? body.images : []);
-      setLoaded(true);
+      const body = await (await fetch("/api/poster/references", { cache: "no-store" })).json();
+      // **`references` 다.** `images` 로 읽으면 늘 빈 배열이 온다.
+      setRows(body.ok && Array.isArray(body.references) ? body.references : []);
     } catch {
       // 못 불러오면 빈 목록이다. 창이 「고를 그림이 없습니다」를 보여 준다.
       setRows([]);
-      setLoaded(true);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  /*
+   * **화면이 뜰 때 불러온다.**
+   *
+   * 누를 때 부르면 창이 빈 채로 열리고 사용자가 새로고침을 눌러야 한다 —
+   * 이미지 만들기(02)는 화면이 뜰 때 미리 읽어 두므로 창이 곧바로 찬다.
+   * 같은 길로 간다.
+   */
+  React.useEffect(() => { void load(); }, [load]);
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
@@ -77,33 +92,28 @@ export function EasyAttachChoice({
       <LibraryPickerButton
         label="라이브러리에서"
         title="라이브러리에서 고르기"
-        description="눌러서 고릅니다. 고른 그림이 대화에 붙습니다"
+        description={`고를 수 있는 그림 ${rows.length}장 · 눌러서 고릅니다`}
         loading={loading}
         images={rows.map((row) => ({
           id: row.id,
           title: row.title ?? "",
           url: row.url ?? null,
-          // 격자는 사본, 확대는 원본. 참고 이미지는 사본을 따로 안 두므로 같다.
-          thumbUrl: row.url ?? null,
+          // 격자는 사본을 쓴다. 안 넘기면 창 하나에 수십 MB 가 오간다.
+          thumbUrl: row.thumbUrl ?? null,
+          // 주인 표시. 떨어뜨리면 남의 그림에도 지우기가 붙는다.
           mine: row.mine,
+          ownerEmail: row.ownerEmail,
         }))}
         selectedIds={selectedIds}
-        onReload={() => void load()}
+        onReload={load}
         onToggle={(image) => {
-          if (!image.url) return;
-          onPick([{ id: image.id, url: image.url, title: image.title ?? "" }]);
+          const url = image.url ?? image.thumbUrl;
+          if (!url) return;
+          onPick([{ id: image.id, url, title: image.title ?? "" }]);
         }}
       />
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => {
-          // 목록을 안 불러왔으면 처음 눌렀을 때 받아 둔다.
-          if (!loaded) void load();
-          onSkip();
-        }}
-      >
+      <Button variant="ghost" size="sm" onClick={onSkip}>
         없이 시작
       </Button>
     </div>
