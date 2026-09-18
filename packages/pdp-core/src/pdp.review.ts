@@ -106,8 +106,25 @@ export interface ReviewItem {
   fix: string;
 }
 
+/**
+ * 심사를 실제로 받았는가.
+ *
+ * **`complete` 가 아니면 통과로 볼 수 없다**(설계 §10.1). 모델이 엉뚱한 이름만
+ * 내면 `items` 가 비는데, 그 빈 결과는 fail 이 없으므로 통과처럼 보인다.
+ */
+export type ReviewCompleteness = "complete" | "incomplete" | "unavailable";
+
 export interface BlueprintReview {
   items: ReviewItem[];
+  /**
+   * 모르는 이름이라 버린 항목 수.
+   *
+   * 안 남기면 「모델이 전부 엉뚱한 이름을 냈다」와 「아무것도 안 냈다」가 같은
+   * 빈 목록이 되어 구별할 수 없다.
+   */
+  droppedCount?: number;
+  /** 응답이 목록 모양조차 아니었다. */
+  malformed?: boolean;
 }
 
 export interface ReviewSummary {
@@ -174,13 +191,23 @@ function asRating(value: unknown): ReviewRating {
 
 export function normalizeReview(raw: unknown): BlueprintReview {
   const rawItems = (raw as { items?: unknown })?.items;
-  if (!Array.isArray(rawItems)) return { items: [] };
+  // 목록이 아니면 응답 모양 자체가 틀린 것이다. 그 사실을 남긴다.
+  if (!Array.isArray(rawItems)) return { items: [], malformed: true };
 
   const items: ReviewItem[] = [];
+  let droppedCount = 0;
   for (const entry of rawItems) {
     const criterion = asText((entry as { criterion?: unknown })?.criterion);
-    // 모르는 항목은 버린다. 심사 기준은 여기서 정하지, 모델이 늘리는 게 아니다.
-    if (!CRITERION_IDS.has(criterion)) continue;
+    /*
+      모르는 항목은 버린다. 심사 기준은 여기서 정하지, 모델이 늘리는 게 아니다.
+
+      **몇 개를 버렸는지 남긴다.** 안 남기면 「모델이 전부 엉뚱한 이름을 냈다」와
+      「모델이 아무것도 안 냈다」가 같은 빈 목록이 되어 구별할 수 없다.
+    */
+    if (!CRITERION_IDS.has(criterion)) {
+      droppedCount += 1;
+      continue;
+    }
 
     items.push({
       criterion,
@@ -190,7 +217,21 @@ export function normalizeReview(raw: unknown): BlueprintReview {
     });
   }
 
-  return { items };
+  return droppedCount ? { items, droppedCount } : { items };
+}
+
+/**
+ * 일곱 항목이 정확히 한 번씩 왔는가.
+ *
+ * 모르는 값·중복·누락은 전부 `incomplete` 다 — **안 본 항목이 있다는 뜻**이고,
+ * 그것을 통과로 바꾸면 심사가 있으나 마나다.
+ */
+export function reviewCompleteness(review: BlueprintReview | null): ReviewCompleteness {
+  if (!review) return "unavailable";
+
+  const seen = new Set(review.items.map((item) => item.criterion));
+  const 온전함 = seen.size === REVIEW_CRITERIA.length && review.items.length === REVIEW_CRITERIA.length;
+  return 온전함 ? "complete" : "incomplete";
 }
 
 /**
@@ -204,9 +245,19 @@ export function normalizeReview(raw: unknown): BlueprintReview {
 export function reviewPenalty(review: BlueprintReview | null): number {
   // 심사를 못 받았으면 판단할 근거가 없다. 있는 것보다 나쁘게 본다.
   if (!review) return Number.POSITIVE_INFINITY;
+
   const fails = review.items.filter((item) => item.rating === "fail").length;
   const weaks = review.items.filter((item) => item.rating === "weak").length;
-  return fails * 100 + weaks;
+
+  /*
+    **안 본 항목은 fail 보다 무겁게 센다.**
+
+    전에는 빈 심사가 0 이라, 「fail 하나 있는 온전한 심사」보다 좋아 보였다.
+    재작성 루프가 그 빈 결과를 「가장 좋은 것」으로 채택했다 — 아무도 안 본
+    구성안이 이겼다.
+  */
+  const missing = REVIEW_CRITERIA.length - new Set(review.items.map((item) => item.criterion)).size;
+  return missing * 1000 + fails * 100 + weaks;
 }
 
 /**
@@ -216,6 +267,8 @@ export function reviewPenalty(review: BlueprintReview | null): number {
  * 남고, 그걸 조건으로 걸면 최대 횟수까지 매번 돌게 된다.
  */
 export function needsRevision(review: BlueprintReview) {
+  // 불완전한 심사도 다시 받는다. 안 본 항목을 통과로 넘기지 않는다.
+  if (reviewCompleteness(review) !== "complete") return true;
   return review.items.some((item) => item.rating === "fail");
 }
 

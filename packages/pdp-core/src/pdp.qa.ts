@@ -201,3 +201,23 @@ export async function runQaGate(llm: PdpLlm, input: RunQaGateInput): Promise<QaV
     return { defects: [], parseError: true };
   }
 }
+
+/**
+ * 검수 결과를 한 낱말로.
+ *
+ * **검수를 못 돌린 것과 통과한 것은 다르다**(설계 §10.2). `runQaGate` 는
+ * 호출·파싱이 실패하면 빈 결함을 돌려주는데(fail-open), 그것을 `blocking` 만
+ * 보고 판단하면 **검수가 한 번도 안 돌았는데 「통과」로 적힌다.**
+ *
+ * fail-open 자체는 맞는 선택이다 — 검수 인프라가 흔들린다고 이미 값을 치른
+ * 그림을 버릴 수는 없다. 다만 **그 사실을 숨기면 안 된다.**
+ */
+export type QaStatus = "passed" | "failed" | "review_required" | "unavailable";
+
+export function qaStatusOf(verdict: QaVerdict, outcome: QaOutcome): QaStatus {
+  // 못 돌린 것이 가장 먼저다. 결함이 없는 것은 「없다」가 아니라 「모른다」다.
+  if (verdict.parseError) return "unavailable";
+  if (outcome.blocking.length) return "failed";
+  if (outcome.warnings.length) return "review_required";
+  return "passed";
+}

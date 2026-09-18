@@ -105,11 +105,21 @@ describe("generateSectionImageInternal QA gate (full-image)", () => {
     expect(result.qa.attempts).toBe(1);
   });
 
-  it("QA 호출이 실패하면 fail-open(이미지 반환, 결함 0)", async () => {
+  it("QA 호출이 실패하면 fail-open — **그림은 주되 통과로 적지 않는다**", async () => {
+    /*
+      fail-open 자체는 맞다. 검수 인프라가 흔들린다고 이미 값을 치른 그림을
+      버릴 수는 없다.
+
+      그런데 전에는 그 경우에도 `passed: true` 였다 — **한 번도 검사 안 한
+      그림이 통과 도장을 받았다.** 설계 §10.2 가 「검수 실패는 통과가 아니다」
+      라고 못 박은 자리다. 그림은 그대로 주고, 상태만 사실대로 적는다.
+    */
     const { promise, counts } = runInternal(["throw"]);
     const result = await promise;
+
     expect(counts.image).toBe(1);
-    expect(result.qa.passed).toBe(true);
+    expect(result.qa.status).toBe("unavailable");
+    expect(result.qa.passed).toBe(false);
     expect(result.qa.blocking).toHaveLength(0);
     expect(result.qa.warnings).toHaveLength(0);
   });

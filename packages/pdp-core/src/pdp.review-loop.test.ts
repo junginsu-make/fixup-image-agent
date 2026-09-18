@@ -214,11 +214,19 @@ describe("심사가 실패해도 생성은 살린다", () => {
   });
 
   it("심사 응답이 엉뚱해도 구성안을 돌려준다", async () => {
+    /*
+      **엉뚱한 심사는 「통과」가 아니라 「못 받았다」다.**
+
+      전에는 여기서 호출이 셋(브리프·구성안·심사)에서 멈추길 기대했다 — 빈
+      심사에 fail 이 없으니 통과로 읽혔기 때문이다. 이제는 한 번 더 받아 본다.
+      그래도 못 받으면 **있는 구성안을 그대로 돌려준다** — 사용자가 기다린 값을
+      버리지 않는다는 원래 뜻은 그대로다.
+    */
     const { deps, prompts } = scriptedDeps([brief, blueprintPayload("첫판"), { 이상한: "응답" }]);
     const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
 
-    expect(prompts).toHaveLength(3);
-    expect(result.blueprint.executiveSummary).toBe("첫판");
+    expect(prompts.length).toBeGreaterThan(3);
+    expect(result.blueprint.sections.length).toBeGreaterThan(0);
   });
 });
 

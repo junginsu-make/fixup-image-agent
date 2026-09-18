@@ -24,7 +24,7 @@ import type {
   SectionBlueprint
 } from "./types";
 import { DEFAULT_IMAGE_MODEL } from "./types";
-import { classifyOutcome, qaRetryDirective, runQaGate, type QaOutcome } from "./pdp.qa";
+import { classifyOutcome, qaRetryDirective, qaStatusOf, runQaGate, type QaOutcome, type QaStatus, type QaVerdict } from "./pdp.qa";
 import type { ImageGenerator, PdpProviders } from "./pdp.image-provider";
 import {
   DEFAULT_PDP_LOOK,
@@ -65,6 +65,13 @@ type GeneratedImagePayload = {
 };
 
 type QaResult = {
+  /**
+   * 검수가 어떻게 끝났는가.
+   *
+   * `passed` 만으로는 **못 돌린 것과 통과한 것을 구별할 수 없다**. 부르는 쪽이
+   * 「검사를 안 했다」를 알아야 사용자에게 그대로 알릴 수 있다(설계 §10.2).
+   */
+  status?: QaStatus;
   passed: boolean;
   blocking: QaDefect[];
   warnings: QaDefect[];
@@ -550,6 +557,8 @@ ${analyzePrompt}`
     // 번 치른다. 오류로 끝난 호출은 이미지가 없으므로 세지 않는다.
     let generatedImages = 0;
     let retryDirective = options.retryDirective;
+    /** 마지막 검수 판정. 「못 돌렸다」와 「결함이 없다」를 가리는 데 쓴다. */
+    let lastQaVerdict: QaVerdict | null = null;
     let lastQaOutcome: QaOutcome = { blocking: [], warnings: [] };
     /**
      * 마지막 시도에서 인물 검증이 통과했나.
@@ -745,6 +754,7 @@ ${analyzePrompt}`
           qaOk = false;
           qaDirective = qaRetryDirective({ defects: sawBlockingOutcome.blocking });
         } else {
+          lastQaVerdict = verdict;
           lastQaOutcome = classifyOutcome(verdict);
           qaOk = lastQaOutcome.blocking.length === 0;
           if (lastQaOutcome.blocking.length) {
@@ -757,11 +767,30 @@ ${analyzePrompt}`
       }
 
       if (refOk && qaOk) {
+        /*
+          **검수를 못 돌린 것을 「통과」로 적지 않는다**(설계 §10.2).
+
+          `runQaGate` 는 호출·파싱이 실패하면 빈 결함을 돌려준다(fail-open).
+          그 자체는 맞는 선택이다 — 검수가 흔들린다고 이미 값을 치른 그림을
+          버릴 수는 없다. 다만 전에는 그 경우도 `passed: true` 로 나가서,
+          **한 번도 검사 안 한 그림이 통과 도장을 받았다.**
+        */
+        const status = lastQaVerdict ? qaStatusOf(lastQaVerdict, lastQaOutcome) : "unavailable";
         return {
           ...generatedImage,
           generatedImages,
           qa: qaEnabled
-            ? { passed: true, blocking: [], warnings: lastQaOutcome.warnings, attempts: attempt + 1 }
+            ? {
+                /*
+                  경고(minor)는 지금까지대로 통과다 — 사람이 보면 좋지만 다시
+                  만들 일은 아니다. **못 돌린 것만** 통과에서 뺀다.
+                */
+                passed: status !== "unavailable" && status !== "failed",
+                status,
+                blocking: [],
+                warnings: lastQaOutcome.warnings,
+                attempts: attempt + 1,
+              }
             : undefined
         };
       }

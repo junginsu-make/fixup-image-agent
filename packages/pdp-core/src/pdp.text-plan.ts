@@ -738,7 +738,24 @@ export async function planFromText(
     const revisionDirective = structureFailures.length
       ? buildEvidenceRevisionDirective(structureFailures)
       : buildRevisionDirective(review!);
-    blueprint = await makeBlueprint(revisionDirective);
+
+    /*
+      **다시 만들다 실패해도 앞의 것을 잃지 않는다.**
+
+      재작성은 품질을 올리려는 시도다. 그 시도가 빈 응답을 받아 던지면, 이미
+      만들어 둔 멀쩡한 구성안까지 함께 날아가고 사용자는 몇 분을 기다린 끝에
+      「구성안을 만들지 못했습니다」만 본다. 값도 이미 치렀다.
+
+      심사가 실패해도 진행하는 바로 아래 `runReview` 와 같은 판단이다.
+    */
+    let revised;
+    try {
+      revised = await makeBlueprint(revisionDirective);
+    } catch {
+      break;
+    }
+
+    blueprint = revised;
     structureFailures = verifyEvidenceStructure(blueprint, sourceText);
     review = await runReview(blueprint);
   }

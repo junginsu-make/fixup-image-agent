@@ -97,7 +97,14 @@ export interface SectionBlueprint {
   style_guide: string;
   reference_usage: string;
   generatedImage?: string;
-  qaWarnings?: QaDefect[]; // analyze 첫 이미지의 QA 결함(경고로 표기, blueprint는 보존).
+  qaWarnings?: QaDefect[];
+  /**
+   * 검수가 어떻게 끝났는가.
+   *
+   * **경고가 없는 것과 검수를 못 돌린 것은 다르다.** 상태를 안 남기면 화면이
+   * 그 둘을 구별할 수 없어, 한 번도 검사 안 한 그림이 「이상 없음」으로 보인다.
+   */
+  qaStatus?: "passed" | "failed" | "review_required" | "unavailable";
   /** 글기반 생성의 근거 스키마. 없으면 이 기능 도입 전 구성안이다. */
   evidenceVersion?: 1;
   evidence?: CopyEvidence[];
@@ -583,7 +590,7 @@ export interface PdpGenerateImageSuccessResponse {
   ok: true;
   imageBase64: string;
   mimeType: string;
-  qa?: { warnings: QaDefect[] };
+  qa?: { warnings: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" };
 }
 
 export interface PdpValidateApiKeySuccessResponse {

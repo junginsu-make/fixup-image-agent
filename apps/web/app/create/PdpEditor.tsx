@@ -211,7 +211,7 @@ type BatchImagesResponse =
       requested: number;
       succeeded: number;
       results: Array<
-        | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[] } }
+        | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" } }
         | { sectionId: string; ok: false; code?: string; message?: string }
       >;
       stopBatch?: boolean;
@@ -1460,7 +1460,13 @@ export function PdpEditor({
       setSections((current) =>
         current.map((item, itemIndex) =>
           sectionKeys[itemIndex] === sectionKey
-            ? { ...item, generatedImage: toDataUrl(response.mimeType, response.imageBase64), qaWarnings: response.qa?.warnings }
+            ? {
+                ...item,
+                generatedImage: toDataUrl(response.mimeType, response.imageBase64),
+                qaWarnings: response.qa?.warnings,
+                // 「경고가 없다」와 「검수를 못 돌렸다」는 다르다.
+                qaStatus: response.qa?.status,
+              }
             : item
         )
       );
@@ -1656,6 +1662,7 @@ export function PdpEditor({
               ...item,
               generatedImage: toDataUrl(outcome.mimeType, outcome.imageBase64),
               qaWarnings: outcome.qa?.warnings,
+              qaStatus: outcome.qa?.status,
             };
           }),
         );
@@ -2945,6 +2952,15 @@ export function PdpEditor({
                 <Badge variant={currentSection.generatedImage ? "green" : "outline"}>
                   {currentSection.generatedImage ? "이미지 준비 완료" : "이미지 생성 필요"}
                 </Badge>
+                {currentSection.qaStatus === "unavailable" ? (
+                  /*
+                    **검수를 못 돌린 것을 숨기지 않는다.** 그림은 나왔지만
+                    아무도 안 봤다 — 「이상 없음」과 구별해 알린다(설계 §10.2).
+                  */
+                  <Badge variant="outline" title="검수 호출이 실패해 이미지를 확인하지 못했습니다.">
+                    검수 못 함
+                  </Badge>
+                ) : null}
                 {currentSection.qaWarnings && currentSection.qaWarnings.length > 0 ? (
                   <Badge
                     variant={currentSection.qaWarnings.some(isBlockingDefect) ? "destructive" : "secondary"}
