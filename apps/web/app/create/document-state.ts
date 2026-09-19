@@ -5,7 +5,7 @@ import type { PdpDraftInput, PdpEditorDraftState, PreparedImageDraft } from "./p
 
 export interface PdpSection extends SectionBlueprint { id: string; sourceSectionId: string; generatedAssetId?: string }
 type Settings = Pick<PdpDraftInput, "imageModel" | "copyIntensity" | "gapPolicy" | "desiredTone" | "look" |
-  "userInstruction" | "aspectRatio" | "preserveProduct" | "personSource">;
+  "userInstruction" | "planInstruction" | "aspectRatio" | "preserveProduct" | "personSource">;
 type Asset = { id: string; base64: string; mimeType: string; fileName?: string; previewUrl?: string };
 export interface PdpDocumentV3 {
   schemaVersion: 3;
@@ -113,7 +113,7 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
       modelImageUsage: input.modelImageUsage, textDraft: input.textDraft, attachmentIntents: input.attachmentIntents,
       styleReferenceEnabled: input.styleReferenceEnabled },
     settings: { imageModel: input.imageModel ?? DEFAULT_IMAGE_MODEL, copyIntensity: input.copyIntensity ?? "normal", gapPolicy: input.gapPolicy ?? "ask",
-      desiredTone: input.desiredTone, look: input.look ?? "photoreal", userInstruction: input.userInstruction ?? "", aspectRatio: input.aspectRatio,
+      desiredTone: input.desiredTone, look: input.look ?? "photoreal", userInstruction: input.userInstruction ?? "", planInstruction: input.planInstruction, aspectRatio: input.aspectRatio,
       preserveProduct: input.preserveProduct ?? true, personSource: input.personSource },
     references, assets, originalAssetId: input.result ? addAsset({ base64: input.result.originalImage, mimeType: "image/jpeg" }) : undefined,
     sections, blueprint, analyzedBlueprint: input.analyzedBlueprint, planningReview: input.result?.review,

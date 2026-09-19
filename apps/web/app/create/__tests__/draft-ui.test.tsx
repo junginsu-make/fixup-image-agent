@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import { readFileSync } from "node:fs";
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -202,4 +203,63 @@ it.each([false, true])("T-SAVE UI(v3=%s): 인물 선택이 편집기까지 간�
   await flush();
 
   expect(captured.editor.personSource).toBe("character");
+});
+
+/**
+ * **구성 요청이 재적재에서 살아남는다**(U-06).
+ *
+ * 사라지면 다시 기획할 때 그 요청이 빠진 채로 나간다 — 사용자는 적어 둔 말이
+ * 왜 안 먹는지 모른다.
+ */
+it.each([false, true])("T-SAVE UI(v3=%s): 구성·문구 요청이 재적재에서 살아남는다", async (documentV3Enabled) => {
+  const input: PdpDraftInput = {
+    id: "ui-draft", appState: "upload",
+    preparedImage: { base64: "AAAA", mimeType: "image/png", fileName: "p.png", previewUrl: "data:image/png;base64,AAAA" },
+    modelImage: null, modelImageUsage: null, result: null,
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
+    imageModel: "nano-banana", characterId: undefined, characterAngles: [], preserveProduct: false,
+    userInstruction: "배경은 밤", planInstruction: "섹션을 다섯 개로",
+  };
+  await savePdpDraft(input);
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
+  await flush();
+
+  const 구성요청 = renderer.root.findAll((node) => node.props?.id === "planInstruction");
+  const 연출요청 = renderer.root.findAll((node) => node.props?.id === "userInstruction");
+
+  expect(구성요청[0]!.props.value).toBe("섹션을 다섯 개로");
+  // 옛 초안의 말이 구성 요청으로 둔갑하지 않는다.
+  expect(연출요청[0]!.props.value).toBe("배경은 밤");
+});
+
+/**
+ * **새로 시작하면 앞 작업의 구성 요청이 안 남는다**(U-06).
+ *
+ * 이 값은 이제 **유료 기획 결과**를 바꾼다. 스크롤 아래에 있어 사용자가 못 보는
+ * 채로 실려 나가면, B 제품이 A 제품의 요청대로 기획된다. 이 저장소가
+ * `attachmentIntents`·`previousPlan` 에서 이미 두 번 겪은 자리다.
+ */
+it("T-STATE: 새로 시작하면 두 지시 칸이 모두 빈다", async () => {
+  await savePdpDraft({
+    id: "ui-draft", appState: "upload",
+    preparedImage: { base64: "AAAA", mimeType: "image/png", fileName: "p.png", previewUrl: "data:image/png;base64,AAAA" },
+    modelImage: null, modelImageUsage: null, result: null,
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
+    imageModel: "nano-banana", characterId: undefined, characterAngles: [], preserveProduct: false,
+    userInstruction: "배경은 밤", planInstruction: "섹션을 다섯 개로",
+  } as PdpDraftInput);
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={false} />); });
+  await flush();
+  expect(renderer.root.findAll((node) => node.props?.id === "planInstruction")[0]!.props.value).toBe("섹션을 다섯 개로");
+
+  /*
+    초기화 함수는 화면에서 부르는 길이 여럿이라(새 작업·모드 전환) 단추 하나로
+    재기 어렵다. **두 칸을 함께 비우는지**를 그 함수 안에서 본다 — 하나만
+    비우면 앞 작업의 구성 요청이 다음 제품 기획에 실려 나간다.
+  */
+  const client = readFileSync(new URL("../PdpMakerClient.tsx", import.meta.url), "utf8");
+  const 시작 = client.indexOf("const resetWorkspace");
+  const 초기화 = client.slice(시작, 시작 + 3000);
+  expect(초기화).toContain('setUserInstruction("")');
+  expect(초기화).toContain('setPlanInstruction("")');
 });

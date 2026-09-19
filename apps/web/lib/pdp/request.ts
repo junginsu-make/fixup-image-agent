@@ -86,6 +86,9 @@ const schemas = {
     // **화면도 같은 상수를 쓴다** — 화면이 모르면 긴 글을 붙여넣은 사용자가
     // 설명 없는 400 을 만난다.
     strategyDirective: text.max(MAX_STRATEGY_LENGTH).optional(),
+    // 구성·문구 요청과 그림체도 기획이 본다(U-06). 길이는 장면 지시와 같게 둔다.
+    planInstruction: text.max(MAX_STRATEGY_LENGTH).optional(),
+    look: z.enum(IMAGE_LOOKS).optional(),
   }).passthrough(),
   plan: z.object({ ...common, text: text.trim().min(1), outputMode: z.enum(["editable", "full-image"]).optional(),
     copyIntensity: z.enum(["plain", "normal", "strong", "max"]).optional(), gapPolicy: z.enum(["omit", "ask", "sample"]).optional() }).passthrough(),

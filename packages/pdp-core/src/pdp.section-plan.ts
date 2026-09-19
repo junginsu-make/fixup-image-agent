@@ -49,8 +49,21 @@ export function clampSections<T>(sections: T[]): T[] {
   return sections.length > MAX_PLANNED_SECTIONS ? sections.slice(0, MAX_PLANNED_SECTIONS) : sections;
 }
 
-/** 몇 장으로 만들지 **무엇으로 정하는지** 모델에게 말한다. */
-export function sectionCountRules(): string {
+/**
+ * 몇 장으로 만들지 **무엇으로 정하는지** 모델에게 말한다.
+ *
+ * `hasPlanInstruction` 이면 **사용자가 장수를 지정했을 수 있다**고 말한다.
+ * 안 그러면 이 블록이 「장수를 먼저 정하지 않는다」고 하고, 사용자가 적은
+ * 「섹션을 다섯 개로」를 **뒤에서 덮는다** — 적었는데 아무 일도 안 일어나는
+ * 그 증상이 새 칸에서 되살아난다(U-06).
+ */
+export function sectionCountRules(options: { hasPlanInstruction?: boolean } = {}): string {
+  const 사용자지정 = options.hasPlanInstruction
+    ? `
+- **사용자가 구성 요청에서 장수를 지정했으면 그 수를 따른다.** 위 원칙보다 앞선다.
+  다만 기술 상한(${MAX_PLANNED_SECTIONS}장)은 넘을 수 없다.`
+    : "";
+
   return `# 몇 장으로 만들 것인가
 
 **장수를 먼저 정하지 않는다.** 전달해야 할 제품 사실과 구매자가 실제로 던질
@@ -61,7 +74,7 @@ export function sectionCountRules(): string {
 - 한 섹션이 한 가지 일을 한다. 두 가지를 담아야 하면 나누고, 나눌 것이 없으면 합친다.
 - 기술 상한은 ${MAX_PLANNED_SECTIONS}장이다. 넘기면 뒤가 잘린다.
 - 사람이 나오는 장면, 후기, 혜택 나열은 **이 제품에 필요할 때만** 넣는다. 모든
-  상품에 들어가야 하는 고정 구성이 아니다.`;
+  상품에 들어가야 하는 고정 구성이 아니다.${사용자지정}`;
 }
 
 export type SectionPlanGapKind = "no_sections" | "no_headline" | "no_reassurance";

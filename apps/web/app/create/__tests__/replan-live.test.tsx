@@ -304,3 +304,27 @@ describe("넘친 입력은 재기획도 막는다", () => {
     expect(captured.bodies.some((body) => body.includes("strategyDirective"))).toBe(true);
   });
 });
+
+/**
+ * **화면에 적은 것이 서버까지 가는가**(U-06).
+ *
+ * `buildAnalyzeRequest` 는 따로 재고 라우트도 따로 재는데, **화면이 그 함수에
+ * 넘기는 두 줄**은 아무도 안 봤다. 지우면 사용자는 적고 저장되고 새로고침해도
+ * 보이는데 **서버로는 안 간다.** 두 인자 모두 optional 이라 타입도 안 잡는다.
+ */
+describe("구성 요청과 그림체가 요청 본문까지 간다", () => {
+  it("**적은 말이 실려 나간다**", async () => {
+    await savePdpDraft({ ...초안(), planInstruction: "섹션을 다섯 개로", look: "illustration" } as PdpDraftInput);
+    await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={false} />); });
+    await flush();
+
+    await act(async () => { captured.scenario.onReplanFromStrategy("다른 이야기"); });
+    await flush();
+
+    const 본문 = captured.bodies.find((body) => body.includes("strategyDirective"));
+    expect(본문).toBeTruthy();
+    const parsed = JSON.parse(본문!);
+    expect(parsed.planInstruction).toBe("섹션을 다섯 개로");
+    expect(parsed.look).toBe("illustration");
+  });
+});

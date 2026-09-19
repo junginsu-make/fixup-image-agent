@@ -1,3 +1,4 @@
+import type { ImageLook } from "@fixup/shared";
 import type {
   AspectRatio,
   AttachmentIntents,
@@ -43,6 +44,13 @@ export interface AnalyzeRequestInputs {
    * 아니다(설계 §4.2).
    */
   strategyDirective?: string;
+  /**
+   * 사용자가 적은 **구성·문구 요청**(U-06). 장면 지시와 다른 물건이라 기획이
+   * 본다.
+   */
+  planInstruction?: string;
+  /** 그림체. 설계 §6.3 이 「기획과 생성 양쪽 전달」이라 적은 값이다. */
+  look?: ImageLook;
 }
 
 export function buildAnalyzeRequest(input: AnalyzeRequestInputs): PdpAnalyzeRequest {
@@ -57,6 +65,8 @@ export function buildAnalyzeRequest(input: AnalyzeRequestInputs): PdpAnalyzeRequ
 
   return {
     strategyDirective: input.strategyDirective?.trim() || undefined,
+    planInstruction: input.planInstruction?.trim() || undefined,
+    look: input.look,
     imageBase64: input.preparedImage.base64,
     mimeType: input.preparedImage.mimeType,
     modelImageBase64: input.modelImage?.base64,

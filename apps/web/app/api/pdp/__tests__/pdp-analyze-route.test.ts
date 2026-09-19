@@ -138,3 +138,31 @@ describe("입력 길이 상한", () => {
     expect(response.status).toBe(200);
   });
 });
+
+/**
+ * **구성 요청과 그림체가 기획까지 닿는가**(U-06).
+ *
+ * 화면이 보내도 라우트가 안 넘기면 소용없다. `analyzeProduct` 가 받는 값을 본다.
+ */
+describe("구성·문구 요청과 그림체", () => {
+  const 기본 = { imageBase64: "PRODUCT", mimeType: "image/png" };
+
+  it("**구성 요청이 기획에 닿는다**", async () => {
+    await POST(요청({ ...기본, planInstruction: "섹션을 다섯 개로" }));
+
+    expect(analyzed).toHaveLength(1);
+    expect((analyzed[0] as Record<string, unknown>).planInstruction).toBe("섹션을 다섯 개로");
+  });
+
+  it("**그림체가 기획에 닿는다**", async () => {
+    await POST(요청({ ...기본, look: "illustration" }));
+
+    expect((analyzed[0] as Record<string, unknown>).look).toBe("illustration");
+  });
+
+  it("모르는 그림체는 막는다", async () => {
+    const response = await POST(요청({ ...기본, look: "크레용" }));
+
+    expect(response.status).toBe(400);
+  });
+});

@@ -4,7 +4,7 @@ import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
 import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, mergeArtDirection, overLimitFields } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, mergeArtDirection, overLimitFields } from "@fixup/pdp-core";
 import { InputLengthHint } from "./InputLengthHint";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft, PdpTextDraftState } from "./pdp-drafts";
 import { DraftSaveClock, startDraftAutosave, draftChangeValues } from "./draft-save-clock";
@@ -165,6 +165,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    */
   const [look, setLook] = useState<ImageLook>("photoreal");
   const [userInstruction, setUserInstruction] = useState("");
+  /**
+   * **구성·문구 요청**(U-06). 장면 지시(`userInstruction`)와 다른 물건이다.
+   *
+   * 옛 초안에는 없다. 그때 적힌 말은 장면 지시로 남는다 — 지금 와서 구성
+   * 요청으로 읽으면 사용자가 적은 적 없는 뜻이 생긴다.
+   */
+  const [planInstruction, setPlanInstruction] = useState("");
   /** 첨부 자리마다 적는 「이 그림을 어떻게 쓸까요」. 적은 자리의 고정 문구만 빠진다. */
   const [attachmentIntents, setAttachmentIntents] = useState<AttachmentIntents>({});
   const setIntent = useCallback(
@@ -212,7 +219,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const selectedToneLabel = desiredTone || "AI 자동 추천";
   const preparedImageDisplayName = preparedImage ? formatCompactFileName(preparedImage.fileName) : "";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
-  const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || Object.values(sellerBrief).some(Boolean));
+  const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || planInstruction.trim() || Object.values(sellerBrief).some(Boolean));
   /**
    * 넘친 입력 칸. **막기 전에 어느 칸인지 말한다**(U-08).
    *
@@ -308,6 +315,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           desiredTone,
           look,
           userInstruction,
+          planInstruction,
           attachmentIntents,
           styleReference,
           styleReferenceEnabled,
@@ -326,7 +334,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         },
         hasDraftContent,
       ),
-    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, personSource, startMode, analyzedBlueprint, textDraft],
+    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, planInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, personSource, startMode, analyzedBlueprint, textDraft],
   );
 
   const draftSnapshot = useMemo(() => buildDraftInput(), [buildDraftInput]);
@@ -432,6 +440,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setPreserveProduct(true);
     setLook("photoreal");
     setUserInstruction("");
+    // 새 제품이다. 앞 작업의 구성 요청을 들고 가면 유료 기획 결과가 그 말로 바뀐다.
+    setPlanInstruction("");
     saveClockRef.current = new DraftSaveClock();
     setAdditionalInfo("");
     setSellerBrief({});
@@ -514,6 +524,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         setDesiredTone(draft.desiredTone);
         setLook(draft.look ?? "photoreal");
         setUserInstruction(draft.userInstruction ?? "");
+        setPlanInstruction(draft.planInstruction ?? "");
         // 안 되돌리면 앞 작업의 제품 지시가 새 제품에 그대로 붙는다.
         setAttachmentIntents(draft.attachmentIntents ?? {});
         // 그림과 그 그림에 적은 말은 함께 움직여야 짝이 안 어긋난다.
@@ -687,6 +698,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
             styleReferenceEnabled,
             attachmentIntents,
             strategyDirective,
+            planInstruction,
+            look,
           }),
         })
       });
@@ -1779,9 +1792,36 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                   ) : null}
                 </div>
 
+                {/*
+                  **구성 요청과 장면 요청을 가른다**(U-06).
+
+                  전에는 칸이 하나뿐이었고 그 값은 이미지 생성에만 갔다. 예시도
+                  장면 지시라, 「섹션을 다섯 개로」를 적은 사용자는 **아무 일도
+                  안 일어나는 이유를 알 수 없었다.**
+                */}
+                <div>
+                  <label className={fieldLabelClass} htmlFor="planInstruction">
+                    구성·문구 요청 · 선택
+                  </label>
+                  <textarea
+                    id="planInstruction"
+                    rows={2}
+                    value={planInstruction}
+                    onChange={(event) => setPlanInstruction(event.target.value)}
+                    placeholder="예: 섹션을 다섯 개로, 존댓말로 써 주세요"
+                    maxLength={MAX_STRATEGY_LENGTH}
+                    className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
+                  />
+                  {/* 서버가 막는 길이와 같다. 화면이 모르면 설명 없는 400 을 만난다(U-08). */}
+                  <InputLengthHint value={planInstruction} limit={MAX_STRATEGY_LENGTH} />
+                  <span className="mt-1 block text-meta text-subtle-foreground">
+                    섹션 구성과 문구에 반영합니다. 없는 사실을 새로 만들지는 않습니다.
+                  </span>
+                </div>
+
                 <div>
                   <label className={fieldLabelClass} htmlFor="userInstruction">
-                    추가 지시 · 선택
+                    이미지 연출 요청 · 선택
                   </label>
                   <textarea
                     id="userInstruction"
@@ -1793,7 +1833,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                   />
                   {/* 프롬프트 맨 앞과 맨 뒤에 두 번 들어간다. 중간에 두면 힘을 잃는다. */}
                   <span className="mt-1 block text-meta text-subtle-foreground">
-                    여기 적은 말이 다른 모든 지시보다 우선합니다.
+                    그림에만 반영합니다. 여기 적은 말이 다른 모든 연출 지시보다 우선합니다.
                   </span>
                 </div>
 

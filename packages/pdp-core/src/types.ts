@@ -554,6 +554,15 @@ export interface PdpAnalyzeRequest {
    * 뿐이고, 섹션은 사용자가 「이 전략으로 구성 다시 만들기」를 누를 때만 바뀐다.
    */
   strategyDirective?: string;
+  /**
+   * 사용자가 적은 **구성·문구 요청**(U-06). 장면 지시와 다른 물건이다.
+   *
+   * 전에는 「추가 지시」 칸이 하나뿐이었고 그 값은 이미지 생성에만 갔다 —
+   * 구성 요청을 적어도 기획이 본 적이 없었다.
+   */
+  planInstruction?: string;
+  /** 그림체. 설계 §6.3 이 「기획과 생성 양쪽 전달」이라 적은 값이다. */
+  look?: ImageLook;
   /** 표현 강도. 텍스트 경로와 같은 손잡이다. */
   copyIntensity?: CopyIntensity;
   /** 근거가 없는 자리를 어떻게 할 것인가. */

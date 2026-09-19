@@ -138,3 +138,34 @@ describe("전략 재기획", () => {
     expect(buildAnalyzeRequest({ ...기본, strategyDirective: "   " }).strategyDirective).toBeUndefined();
   });
 });
+
+/**
+ * **구성 요청과 그림체가 기획까지 간다**(U-06).
+ *
+ * 전에는 둘 다 이미지 생성에만 갔다. 사용자가 「섹션을 다섯 개로」를 적어도
+ * 기획은 그 말을 본 적이 없고, 기획은 사진인지 그림인지 모른 채 장면을 썼다.
+ */
+describe("구성·문구 요청과 그림체", () => {
+  it("**적었으면 실어 보낸다**", () => {
+    const 요청 = buildAnalyzeRequest({ ...기본, planInstruction: "섹션을 다섯 개로" });
+
+    expect(요청.planInstruction).toBe("섹션을 다섯 개로");
+  });
+
+  it("**그림체도 실어 보낸다**", () => {
+    expect(buildAnalyzeRequest({ ...기본, look: "illustration" }).look).toBe("illustration");
+  });
+
+  it("안 적었으면 안 보낸다", () => {
+    expect(buildAnalyzeRequest(기본).planInstruction).toBeUndefined();
+  });
+
+  it("공백만 적은 것은 안 보낸다", () => {
+    expect(buildAnalyzeRequest({ ...기본, planInstruction: "   " }).planInstruction).toBeUndefined();
+  });
+
+  it("**장면 지시는 여전히 기획에 안 간다** — 다른 물건이다", () => {
+    // 「배경은 밤」은 그림을 정하지 섹션 구성을 정하지 않는다.
+    expect(Object.keys(buildAnalyzeRequest(기본))).not.toContain("userInstruction");
+  });
+});

@@ -159,6 +159,8 @@ export interface PdpDraftRecord {
   /** 그림의 결과 사용자가 직접 친 지시. 예전 초안에는 없다. */
   look?: ImageLook;
   userInstruction?: string;
+  /** 구성·문구 요청(U-06). 장면 지시와 다른 물건이다. 옛 초안에는 없다. */
+  planInstruction?: string;
   /**
    * 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 예전 초안에는 없다.
    *
@@ -297,6 +299,7 @@ export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord
     desiredTone: input.desiredTone,
     look: input.look,
     userInstruction: input.userInstruction,
+    planInstruction: input.planInstruction,
     aspectRatio: input.aspectRatio,
     notice: input.notice,
     editorState: input.editorState,
@@ -420,6 +423,7 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
       ? (record.look as ImageLook)
       : "photoreal",
     userInstruction: record.userInstruction ?? "",
+    planInstruction: record.planInstruction,
     aspectRatio: normalizeAspectRatio(record.aspectRatio),
     notice: record.notice ?? "저장된 작업을 불러왔습니다.",
     editorState: normalizeEditorState(record.editorState, result),

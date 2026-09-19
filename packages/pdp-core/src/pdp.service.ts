@@ -4,6 +4,7 @@ import {
   IMAGE_LOOKS,
   userInstructionHead,
   userInstructionTail,
+  resolveLook,
   type ImageLook,
 } from "@fixup/shared";
 import type {
@@ -61,6 +62,7 @@ import {
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
 import { clampSections, sectionCountRules } from "./pdp.section-plan";
 import { buildStrategyDirective } from "./pdp.replan";
+import { adPolishRule, buildPlanInstructionRules, lookPlanningRule } from "./pdp.plan-instruction";
 import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, designSystemPartOf, normalizeDesignSystem } from "./pdp.design-system";
 
 const DEFAULT_IMAGE_MIME = "image/jpeg";
@@ -286,15 +288,27 @@ export class PdpService {
       request.sellerBrief,
       request.copyIntensity,
       request.gapPolicy,
-      styleReferenceForPlan
-        ? {
-            styleReference: {
-              description: styleReferenceForPlan.description,
-              intent: styleReferenceForPlan.intent,
-              sliceCount: styleReferenceImages.length,
-            },
-          }
-        : undefined,
+      {
+        ...(styleReferenceForPlan
+          ? {
+              styleReference: {
+                description: styleReferenceForPlan.description,
+                intent: styleReferenceForPlan.intent,
+                sliceCount: styleReferenceImages.length,
+              },
+            }
+          : {}),
+        // 구성·문구 요청과 그림체도 기획이 본다(U-06).
+        planInstruction: request.planInstruction,
+        /*
+          **없는 레퍼런스를 따르라고 하지 않는다.**
+
+          `auto` 는 붙인 레퍼런스의 결을 따르는 값이다. 레퍼런스를 뺐는데 값이
+          `auto` 로 남으면, 기획 프롬프트에 그림 한 장 없이 「첨부한 레퍼런스를
+          따르라」가 실린다 — 모델은 없는 것을 상상해 `style_guide` 를 채운다.
+        */
+        look: resolveLook(request.look ?? "photoreal", Boolean(styleReferenceForPlan)),
+      },
     );
 
     const makeBlueprint = (revisionDirective: string) => retryOperation(async () => {
@@ -1234,6 +1248,21 @@ export function buildAnalyzePrompt(
       /** 조각으로 나눠 보냈으면 몇 장인지. 모델이 순서를 알아야 이어 읽는다. */
       sliceCount?: number;
     };
+    /**
+     * 사용자가 적은 **구성·문구 요청**(U-06).
+     *
+     * 장면 지시(`userInstruction`)와 다른 물건이다 — 저쪽은 그림을 정하고
+     * 이쪽은 섹션과 카피를 정한다. 전에는 칸이 하나뿐이라 구성 요청을 적어도
+     * **기획이 그 말을 본 적이 없었다.**
+     */
+    planInstruction?: string;
+    /**
+     * 그림체. **기획도 알아야 한다**(설계 §6.3: 「기획과 생성 양쪽 전달」).
+     *
+     * 모르면 사진을 전제로 장면을 써서, 일러스트를 고른 사용자가 그릴 수 없는
+     * 지시를 받는다.
+     */
+    look?: ImageLook;
   },
 ) {
   const referenceModelPrompt = referenceModelProfile
@@ -1333,9 +1362,13 @@ ${PRODUCT_READING_RULES}
 
 ${PRODUCT_GROUNDING_RULES}
 
+${lookPlanningRule(extras?.look)}
+
+${buildPlanInstructionRules(extras?.planInstruction)}
+
 ${DESIGN_SYSTEM_RULES}
 
-${sectionCountRules()}
+${sectionCountRules({ hasPlanInstruction: Boolean(extras?.planInstruction?.trim()) })}
 
 ${SALES_PRINCIPLES}
 ${outputModePrompt}
@@ -1370,7 +1403,7 @@ ${styleReferencePrompt}
 - 후기를 쓰는 섹션은 **실제 근거가 있을 때만** 넣는다. 판매자가 알려준 후기가 없으면 그 섹션을 만들지 않는다. 개수를 채우려고 사용감 문장을 지어내지 말 것.
 - 사용법/루틴은 선택지를 2~3개로 줄여 선택 피로를 없앨 것
 - CTA 필드는 모든 섹션에서 빈 문자열로 둘 것. 통이미지는 링크를 걸 수 없어 눌리지 않는 그림 버튼이 되고, 텍스트편집 모드에서도 이 값을 쓰지 않는다. 실제 구매 버튼은 쇼핑몰이 붙인다(사용자 결정 2026-07-30).
-- 각 섹션의 이미지는 단순한 제품 누끼나 그래픽이 아닌 소비자의 구매 전환을 유도할 수 있는 고품질 광고 사진 느낌으로 기획할 것
+${adPolishRule(extras?.look)}
 - 첫 번째 섹션은 구매 전환에 가장 중요하다. 이 제품을 가장 잘 보여 주는 장면으로 만들 것 — 사람이 쓰는 모습이 그 장면이면 사람을 넣고, 제품 자체가 주인공이면 제품을 크게 보여줄 것. **모든 상품에 사람이 나와야 하는 것은 아니다.**
 - 각 섹션 이미지는 해당 헤드라인과 서브헤드라인의 메시지를 시각적으로 전달해야 함
 
