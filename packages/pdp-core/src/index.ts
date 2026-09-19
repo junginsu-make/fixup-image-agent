@@ -148,6 +148,7 @@ export {
   overLimitFields,
   type OverLimitField,
 } from "./pdp.input-limits";
+export { identityConflictOf, type IdentityConflict } from "./pdp.identity-conflict";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
   personSourceConflict,

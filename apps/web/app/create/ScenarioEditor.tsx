@@ -13,7 +13,7 @@ import type {
   ProductReadingStatus,
   SectionBlueprint,
 } from "@fixup/pdp-core";
-import { MAX_PLANNED_SECTIONS, MAX_STRATEGY_LENGTH, applyUserEdit, validateEvidenceBinding } from "@fixup/pdp-core";
+import { MAX_PLANNED_SECTIONS, MAX_STRATEGY_LENGTH, applyUserEdit, identityConflictOf, validateEvidenceBinding } from "@fixup/pdp-core";
 import { Badge, Button, Textarea, cn } from "@fixup/ui";
 import { ModelPicker } from "./ModelPicker";
 import { ReviewPanel } from "./ReviewPanel";
@@ -373,6 +373,8 @@ export function ScenarioEditor({
     사용자는 열한 번째 섹션을 만들어 문구까지 채운 뒤, 다시 기획할 때 그것이
     사라지는 것을 본다.
   */
+  // 업로드 화면에서 적은 제품 지시. 여기 칸은 없지만 지시는 살아 있다(U-18).
+  const anchorConflict = identityConflictOf(attachmentIntents.anchor, "anchor");
   const canAddSection = blueprint.sections.length < MAX_PLANNED_SECTIONS;
   const addSection = () => {
     if (!canAddSection) return;
@@ -404,6 +406,19 @@ export function ScenarioEditor({
             : "아직 이미지를 만들지 않았습니다. 여기서 고친 내용이 이후 이미지 생성에 반영됩니다."}
         </p>
 
+        {/*
+          **제품 지시의 충돌은 구성안에도 남는다**(U-18).
+
+          그 칸은 업로드 화면에 있고 여기로 넘어오면 화면째 사라진다. 그런데
+          **지시는 그대로 실려** 이미지 생성까지 간다 — 인물·레퍼런스는 여기에도
+          칸이 있어 경고가 따라오는데 제품만 안 따라왔다.
+        */}
+        {anchorConflict ? (
+          <p className="mb-4 rounded-md border border-warning/30 bg-warning/5 p-3.5 text-sm text-warning">
+            {`제품 그림에 적으신 「${anchorConflict.matched}」 요청은 그림에 반영되지 않습니다. ${anchorConflict.message}`}
+          </p>
+        ) : null}
+
         <CharacterPicker
           selectedId={characterId}
           angles={characterAngles}
@@ -431,6 +446,7 @@ export function ScenarioEditor({
               id="scenario-intent-person"
               value={attachmentIntents.person ?? ""}
               onChange={(next) => onIntentChange("person", next)}
+              role="person"
               placeholder="예: 안경을 꼭 씌워 주세요"
             />
           </div>
@@ -452,6 +468,7 @@ export function ScenarioEditor({
                 id="scenario-intent-style"
                 value={attachmentIntents.style ?? ""}
                 onChange={(next) => onIntentChange("style", next)}
+                role="style"
                 placeholder="예: 색만 가져오고 배치는 무시해 주세요"
               />
             </div>

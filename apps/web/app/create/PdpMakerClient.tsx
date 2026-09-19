@@ -1304,6 +1304,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                   id="intent-anchor"
                   value={attachmentIntents.anchor ?? ""}
                   onChange={(next) => setIntent("anchor", next)}
+                  // 지켜야 할 것이 있는 자리다. 바꿔 달라는 말은 알려 준다(U-18).
+                  role="anchor"
                   placeholder="예: 뚜껑 색은 그대로 두고 각도만 바꿔 주세요"
                 />
               </div>
@@ -1375,6 +1377,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                       id="intent-person"
                       value={attachmentIntents.person ?? ""}
                       onChange={(next) => setIntent("person", next)}
+                      role="person"
                       placeholder="예: 안경을 꼭 씌워 주세요"
                     />
                   ) : null}
@@ -1422,6 +1425,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                       id="intent-style"
                       value={attachmentIntents.style ?? ""}
                       onChange={(next) => setIntent("style", next)}
+                      // 모방만 하는 자리라 지킬 정체성이 없다. 무엇을 바꾸라 해도 충돌이 아니다.
+                      role="style"
                       placeholder="예: 색만 가져오고 배치는 무시해 주세요"
                     />
                   ) : null}
