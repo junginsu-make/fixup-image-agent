@@ -269,8 +269,9 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 왜 걸렸는지 알 길이 없었다.
    */
   const overLimit = useMemo(
-    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS),
-    [sellerBrief, additionalInfo],
+    // 긴 지시 두 칸도 함께 본다. 상한이 늦게 붙어서 옛 초안이 넘칠 수 있다(D-8).
+    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS, { userInstruction, planInstruction }),
+    [sellerBrief, additionalInfo, userInstruction, planInstruction],
   );
   const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && overLimit.length === 0);
   /** 넘친 칸을 사용자 말로. 단추 아래와 오류 문구가 **같은 말**을 쓴다. */
@@ -1895,8 +1896,11 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                     value={userInstruction}
                     onChange={(event) => setUserInstruction(event.target.value)}
                     placeholder="예: 배경은 밤, 창밖에 네온"
+                    maxLength={MAX_STRATEGY_LENGTH}
                     className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
                   />
+                  {/* 서버가 막는 길이와 같다. 화면이 모르면 설명 없는 400 을 만난다(D-8). */}
+                  <InputLengthHint value={userInstruction} limit={MAX_STRATEGY_LENGTH} />
                   {/* 프롬프트 맨 앞과 맨 뒤에 두 번 들어간다. 중간에 두면 힘을 잃는다. */}
                   <span className="mt-1 block text-meta text-subtle-foreground">
                     그림에만 반영합니다. 여기 적은 말이 다른 모든 연출 지시보다 우선합니다.

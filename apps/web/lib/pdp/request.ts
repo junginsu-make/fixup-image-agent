@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember } from "../membership/api";
@@ -56,12 +56,29 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   anchorKind: z.enum(["product-photo", "key-visual"]).optional(),
   // 인물 사진과 저장 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04).
   personSource: z.enum(["uploaded", "character"]).optional(),
-  look: z.enum(IMAGE_LOOKS).optional(), userInstruction: text.optional(), pageContext: text.max(PAGE_CONTEXT_MAX_LENGTH).optional(),
+  look: z.enum(IMAGE_LOOKS).optional(),
+  /*
+    **옆 칸과 같은 상한을 쓴다**(D-8).
+
+    「구성·문구 요청」은 화면과 서버가 같은 상한을 쓰는데 이 칸만 양쪽 다
+    없었다. 게다가 이 값은 프롬프트 **맨 앞과 맨 뒤에 두 번** 들어간다.
+  */
+  userInstruction: text.max(MAX_STRATEGY_LENGTH).optional(),
+  pageContext: text.max(PAGE_CONTEXT_MAX_LENGTH).optional(),
   attachmentIntents: intents.optional() }).passthrough();
 const common = {
   // 어느 작업의 것인가. 결과를 되찾을 때 이 값으로 묶는다(설계 §8).
   documentId: text.max(120).optional(), revision: z.number().int().nonnegative().optional(),
-  aspectRatio: ratio.optional(), desiredTone: text.optional(),
+  aspectRatio: ratio.optional(),
+  /*
+    **화면이 고른 것만 받는다**(D-8).
+
+    전에는 아무 글자나 받았고, 그 값이 이미지 프롬프트에 그대로 실렸다
+    (`Overall tone: ${…}`). 화면을 거치지 않은 요청이 프롬프트에 아무 문장이나
+    심을 수 있었다. 목록은 **코어에 한 벌**이다 — 두 벌이면 화면이 보여 주는
+    값을 서버가 거절하는 날이 온다.
+  */
+  desiredTone: z.enum(IMAGE_TONES).optional(),
   characterId: text.optional(), characterAngles: z.array(text).optional(),
   page: page.optional(), options: options.optional(), sectionIndex: z.number().int().nonnegative().optional(),
   sectionIndexes: z.array(z.number().int().nonnegative()).optional(),

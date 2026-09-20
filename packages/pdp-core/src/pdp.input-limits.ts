@@ -1,3 +1,4 @@
+import { MAX_STRATEGY_LENGTH } from "./pdp.replan";
 import { SELLER_BRIEF_FIELDS } from "./pdp.seller-brief";
 import type { SellerBrief } from "./pdp.seller-brief";
 
@@ -28,8 +29,22 @@ export const SELLER_BRIEF_MAX_LENGTH = 500;
 /** 「그 밖에 · 채널과 시즌」. 이미지 생성이 이 값으로 막는다. */
 export const PAGE_CONTEXT_MAX_LENGTH = 500;
 
-/** 길이를 재는 칸의 열쇠. 판매자 브리프 다섯 칸과 배경 한 칸이다. */
-export type InputLimitKey = keyof SellerBrief | "pageContext";
+/**
+ * 길이를 재는 칸의 열쇠.
+ *
+ * 판매자 브리프 다섯 칸, 배경 한 칸, 그리고 **긴 지시 두 칸**(D-8)이다.
+ * 뒤의 둘은 상한이 늦게 붙어서, 그 전에 저장된 초안이 넘친 값을 담고 있을 수
+ * 있다.
+ */
+export type InputLimitKey = keyof SellerBrief | "pageContext" | LongInstructionKey;
+
+/** 프롬프트로 가는 긴 지시 칸. 둘 다 `MAX_STRATEGY_LENGTH` 를 쓴다. */
+export type LongInstructionKey = "userInstruction" | "planInstruction";
+
+const LONG_INSTRUCTIONS: Array<{ key: LongInstructionKey; label: string }> = [
+  { key: "userInstruction", label: "이미지 연출 요청" },
+  { key: "planInstruction", label: "구성·문구 요청" },
+];
 
 export interface OverLimitField {
   key: InputLimitKey;
@@ -55,6 +70,14 @@ export function overLimitFields(
    * 떨어져 화면이 엉뚱한 이름을 보여 준다.
    */
   labels?: Partial<Record<InputLimitKey, string>>,
+  /**
+   * 프롬프트로 가는 긴 지시 칸.
+   *
+   * **상한이 늦게 붙은 칸이다**(D-8). 그 전에 저장된 초안이 넘친 값을 담은 채
+   * 복원되면 화면은 멀쩡해 보이고 만들기를 누를 때 설명 없는 400 이 난다.
+   * U-08 에서 똑같이 당했다.
+   */
+  instructions?: Partial<Record<LongInstructionKey, string>>,
 ): OverLimitField[] {
   const over: OverLimitField[] = [];
 
@@ -77,6 +100,18 @@ export function overLimitFields(
       length: pageContext.length,
       limit: PAGE_CONTEXT_MAX_LENGTH,
     });
+  }
+
+  for (const field of LONG_INSTRUCTIONS) {
+    const value = instructions?.[field.key];
+    if (value && value.length > MAX_STRATEGY_LENGTH) {
+      over.push({
+        key: field.key,
+        label: labels?.[field.key] ?? field.label,
+        length: value.length,
+        limit: MAX_STRATEGY_LENGTH,
+      });
+    }
   }
 
   return over;

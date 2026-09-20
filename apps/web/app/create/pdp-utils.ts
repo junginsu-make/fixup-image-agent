@@ -1,5 +1,6 @@
 import type { AspectRatio } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
+import { IMAGE_TONES, TONE_AUTO_LABEL } from "@fixup/pdp-core";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
@@ -16,16 +17,13 @@ export const RATIO_OPTIONS: Array<{
   { value: "16:9", label: "와이드(16:9)", description: "히어로 배너형", icon: "wide" },
 ];
 
-export const TONE_OPTIONS = [
-  "AI 자동 추천",
-  "프리미엄",
-  "모던",
-  "테크",
-  "미니멀",
-  "팝아트",
-  "인스타감성",
-  "레트로",
-];
+/**
+ * 칩 목록. **값은 코어에 한 벌**이다(D-8).
+ *
+ * 전에는 여기에만 있었고 서버는 아무 글자나 받았다. 목록을 두 벌로 두면
+ * 화면이 보여 주는 값을 서버가 거절하는 날이 온다.
+ */
+export const TONE_OPTIONS: string[] = [TONE_AUTO_LABEL, ...IMAGE_TONES];
 
 /**
  * Studio API wrapper. Billable POSTs receive a unique request id so the server

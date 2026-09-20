@@ -4,6 +4,7 @@ import {
   SELLER_BRIEF_MAX_LENGTH,
   overLimitFields,
 } from "./pdp.input-limits";
+import { MAX_STRATEGY_LENGTH } from "./pdp.replan";
 import { normalizeSellerBrief } from "./pdp.seller-brief";
 
 /**
@@ -86,5 +87,57 @@ describe("몰래 자르지 않는다", () => {
 
   it("공백만 있으면 없는 것으로 본다", () => {
     expect(normalizeSellerBrief({ audience: "   " }).audience).toBeUndefined();
+  });
+});
+
+/**
+ * **상한을 새로 거는 자리는 옛 초안을 만난다**(D-8).
+ *
+ * 「이미지 연출 요청」과 「구성·문구 요청」에는 상한이 없었다(전자는 양쪽 다,
+ * 후자는 화면 `maxLength` 만). 그 시절에 저장된 초안이 그대로 복원되면, 화면
+ * 칸은 넘친 값을 담은 채 멀쩡해 보이고 **만들기를 누를 때 설명 없는 400** 이
+ * 난다.
+ *
+ * U-08 에서 똑같이 당했다 — 그때 얻은 규칙이 이것이다: **상한을 새로 걸면
+ * 넘친 값을 먼저 짚어 준다.**
+ */
+describe("긴 지시 칸도 짚는다", () => {
+  const 빈브리프 = {} as never;
+
+  it("**연출 요청이 넘치면 짚는다**", () => {
+    const 넘침 = "가".repeat(MAX_STRATEGY_LENGTH + 5);
+
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      userInstruction: 넘침,
+    });
+
+    expect(over).toHaveLength(1);
+    expect(over[0]!.key).toBe("userInstruction");
+    expect(over[0]!.length - over[0]!.limit).toBe(5);
+  });
+
+  it("**구성 요청이 넘쳐도 짚는다**", () => {
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      planInstruction: "가".repeat(MAX_STRATEGY_LENGTH + 1),
+    });
+
+    expect(over.map((field) => field.key)).toEqual(["planInstruction"]);
+  });
+
+  it("상한 안쪽은 안 짚는다", () => {
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      userInstruction: "가".repeat(MAX_STRATEGY_LENGTH),
+      planInstruction: "짧다",
+    });
+
+    expect(over).toHaveLength(0);
+  });
+
+  it("**사용자가 읽을 칸 이름을 준다** — 열쇠로는 어느 칸인지 모른다", () => {
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      userInstruction: "가".repeat(MAX_STRATEGY_LENGTH + 1),
+    });
+
+    expect(over[0]!.label).toContain("연출");
   });
 });
