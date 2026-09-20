@@ -116,13 +116,23 @@ export async function reserveAiUsage(
         100)에 걸린 것은 할 일이 정반대다. reason 까지 같으면 구분할 길이 없다.
       */
       analysis_abuse_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
-      duplicate_request: "이미 처리된 요청입니다. 새로고침 후 다시 시도해 주세요.",
     };
+    /*
+      **중복일 때만 표를 한 번 더 읽는다**(E-6-2-b).
+
+      한 문장으로 뭉뚱그리던 자리다. 무엇이 일어났는지는 그 행의 상태가 안다.
+      다른 거절 사유에는 이 왕복을 걸지 않는다 — 한도에 걸린 것은 표를 안
+      읽어도 할 말이 정해져 있다.
+    */
+    const message =
+      row.reason === "duplicate_request"
+        ? await duplicateRequestMessage(admin, auth.member.userId, requestId)
+        : messages[row.reason] ?? "요청을 처리할 수 없습니다.";
     const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit", "analysis_abuse_limit"]
       .includes(row.reason) ? 429 : 409;
     return {
       ok: false,
-      response: membershipApiError(status, row.reason, messages[row.reason] ?? "요청을 처리할 수 없습니다.", usage),
+      response: membershipApiError(status, row.reason, message, usage),
     };
   }
   return { ok: true, userId: auth.member.userId, requestId, usage };
@@ -164,6 +174,58 @@ export async function settleAiUsage(
     // 이미 `logUsageFailure` 가 사용자 id 와 요청 id 를 남겼다. 손으로 풀 수 있다.
     return undefined;
   }
+}
+
+/**
+ * **같은 식별자로 다시 왔을 때 무슨 말을 할 것인가**(E-6-2-b).
+ *
+ * ── 무엇이 문제였나 ──────────────────────────────────────────
+ *
+ * 화면은 같은 섹션을 다시 만들 때 **같은 요청 식별자**를 쓴다
+ * (`PdpEditor` 의 `retryRequestKeysRef`). 두 번 과금되지 않게 하려는 장치다.
+ *
+ * 그 식별자로 다시 오면 `reserve_generation` 은 무조건 `duplicate_request` 를
+ * 준다. 앱은 한 문장으로 답했다 — 「이미 처리된 요청입니다. **새로고침 후 다시
+ * 시도해 주세요.**」
+ *
+ * 그 한 문장이 서로 다른 세 상황을 덮고 있었고, **셋 중 무엇도 새로고침으로
+ * 안 풀린다.** 특히 이미 끝난 요청이면 「다시 시도」가 **값을 한 번 더** 내게
+ * 만든다 — 단건 생성은 결과를 되찾는 길이 아예 없다(일괄만 job 을 남기고,
+ * 그 job 도 `PDP_JOBS_ENABLED` 가 꺼져 있다).
+ *
+ * 설계 §14.5(E-6-2-b): 「header 존재 = **결과 복구 아님**」.
+ *
+ * ── 표가 아는 것을 말한다 ────────────────────────────────────
+ *
+ * 마이그레이션은 안 건드린다. `generation_events` 의 그 행을 한 번 더 읽으면
+ * 상태를 알 수 있다.
+ */
+async function duplicateRequestMessage(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  requestId: string,
+): Promise<string> {
+  const { data } = await admin
+    .from("generation_events")
+    .select("status")
+    .eq("user_id", userId)
+    .eq("request_id", requestId)
+    .maybeSingle();
+
+  const status = (data as { status?: string } | null)?.status;
+
+  if (status === "reserved") {
+    return "같은 요청이 아직 처리 중입니다. 잠시 기다리면 결과가 나타납니다.";
+  }
+  if (status === "succeeded") {
+    // **여기가 제일 나쁘다.** 값은 나갔고 그림도 만들어졌는데 화면에 못 왔다.
+    return "이 요청은 이미 끝났습니다. 결과가 화면에 안 보이면 다시 만들면 되지만, 다시 만들면 값이 한 번 더 나갑니다.";
+  }
+  if (status === "failed") {
+    return "이 요청은 실패로 끝났습니다. 새로 만들어 주세요.";
+  }
+  // 표를 못 읽었다. **모르는 것을 안다고 하지 않는다.**
+  return "같은 요청이 이미 접수돼 있습니다. 잠시 뒤에도 결과가 안 보이면 새로 만들어 주세요.";
 }
 
 export async function finalizeAiUsage(
