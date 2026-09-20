@@ -634,6 +634,15 @@ export interface PdpGenerateImageSuccessResponse {
   ok: true;
   imageBase64: string;
   mimeType: string;
+  /**
+   * fal 이 **실제로 만든** 장수. 재시도로 버린 것까지 센다.
+   *
+   * **돈이 걸린 값이다.** 라우트가 이것으로 과금한다
+   * (`billableImages: generatedImages`). 그런데 이 칸이 공개 계약에 없어서,
+   * 부르는 쪽은 서비스 안의 **사설 타입**에만 있는 값을 믿고 썼다(D-11-e).
+   * 누가 그 칸을 빼도 타입 검사가 조용했다.
+   */
+  generatedImages: number;
   qa?: { warnings: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" };
 }
 

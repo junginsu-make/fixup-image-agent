@@ -21,7 +21,6 @@ export interface ReviewCriterion {
   question: string;
 }
 
-/** 상세페이지가 실패하는 지점에서 뽑은 여섯 가지. */
 /**
  * 심사 응답 스키마. 사진 경로와 텍스트 경로가 함께 쓴다.
  *
@@ -46,6 +45,12 @@ export const REVIEW_SCHEMA = {
   },
 } as const;
 
+/**
+ * 상세페이지가 실패하는 지점에서 뽑은 심사 기준.
+ *
+ * **수는 여기서만 읽는다**(`REVIEW_CRITERIA.length`). 늘리거나 줄여도 판정이
+ * 따라온다.
+ */
 export const REVIEW_CRITERIA: ReviewCriterion[] = [
   {
     id: "audience",
@@ -221,7 +226,11 @@ export function normalizeReview(raw: unknown): BlueprintReview {
 }
 
 /**
- * 일곱 항목이 정확히 한 번씩 왔는가.
+ * **있는 항목이 정확히 한 번씩** 왔는가.
+ *
+ * **수를 글로 적지 않는다.** 전에는 이 파일의 두 주석이 서로 다른 수를 말하고
+ * 있었다(D-11-e). 그런 주석은 항목이 늘거나 줄 때 조용히 거짓이 되고, 다음
+ * 사람이 하나를 지우고도 「맞다」고 읽는다. 세는 것은 `REVIEW_CRITERIA` 뿐이다.
  *
  * 모르는 값·중복·누락은 전부 `incomplete` 다 — **안 본 항목이 있다는 뜻**이고,
  * 그것을 통과로 바꾸면 심사가 있으나 마나다.
