@@ -88,6 +88,7 @@ import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
 import { alignedWidthFor, canvasFitFor, canvasHeightFor, nextLayerOrigin } from "./layer-coords";
 import { restoreSectionKeys } from "./section-keys-restore";
+import { applyToSectionByKey } from "./section-result";
 import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
@@ -311,6 +312,22 @@ export function PdpEditor({
       renderedSections: initialResult.blueprint.sections,
     }),
   );
+  /**
+   * **지금** 키 배열(A-16).
+   *
+   * 비동기 결과를 붙일 때 클로저의 `sectionKeys` 를 쓰면 **생성을 시작할 때의
+   * 배열**이다. 도는 동안 순서가 바뀌면 인덱스와 키의 짝이 달라져 엉뚱한
+   * 섹션에 이미지가 박힌다.
+   *
+   * 지금은 순서 변경·삭제가 잠겨 있어 그 창이 안 열린다. 다만 **잠금이 유일한
+   * 방어**이면 잠금을 안 거는 길이 하나 생길 때 조용히 되살아난다.
+   */
+  const sectionKeysRef = useRef<string[]>(sectionKeys);
+  // 렌더 중에 대입하지 않는다 — 버려지는 렌더에서도 대입된다.
+  useEffect(() => {
+    sectionKeysRef.current = sectionKeys;
+  }, [sectionKeys]);
+
   const [sectionOptions, setSectionOptions] = useState<Record<string, ImageGenOptions>>(
     () =>
       normalizeSectionOptions(
@@ -1478,17 +1495,12 @@ export function PdpEditor({
       }
 
       setSections((current) =>
-        current.map((item, itemIndex) =>
-          sectionKeys[itemIndex] === sectionKey
-            ? {
-                ...item,
-                generatedImage: toDataUrl(response.mimeType, response.imageBase64),
-                qaWarnings: response.qa?.warnings,
-                // 「경고가 없다」와 「검수를 못 돌렸다」는 다르다.
-                qaStatus: response.qa?.status,
-              }
-            : item
-        )
+        applyToSectionByKey(current, sectionKeysRef.current, sectionKey, {
+          generatedImage: toDataUrl(response.mimeType, response.imageBase64),
+          qaWarnings: response.qa?.warnings,
+          // 「경고가 없다」와 「검수를 못 돌렸다」는 다르다.
+          qaStatus: response.qa?.status,
+        }),
       );
       setNotice(`${getDisplaySectionName(section)} 이미지를 만들었습니다.`);
       return { ok: true };
@@ -1670,13 +1682,14 @@ export function PdpEditor({
          */
         const byKey = new Map<string, (typeof response.results)[number]>();
         chunk.forEach(({ index }, position) => {
-          const key = sectionKeys[index];
+          // 지금 배열을 본다. 오래된 것을 쓰면 짝이 어긋난다(A-16).
+          const key = sectionKeysRef.current[index];
           const outcome = response.results[position];
           if (key && outcome) byKey.set(key, outcome);
         });
         setSections((current) =>
           current.map((item, position) => {
-            const outcome = byKey.get(sectionKeys[position] ?? String(position));
+            const outcome = byKey.get(sectionKeysRef.current[position] ?? String(position));
             if (!outcome?.ok) return item;
             return {
               ...item,

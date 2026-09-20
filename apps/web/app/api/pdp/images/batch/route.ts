@@ -1,4 +1,5 @@
 import {
+  PdpServiceError,
   resolveCharacterAngles,
   generateSectionImage,
   toPdpErrorResponse,
@@ -177,6 +178,20 @@ export async function POST(req: Request) {
       characterByAngle.set(
         angle,
         await loadCharacterView(reservation.userId, body.characterId, angle, teamId),
+      );
+    }
+
+    /*
+      **못 불러온 캐릭터로 조용히 만들지 않는다**(A-14, 설계 §6.2).
+
+      단건 라우트와 같은 규칙이다. 한쪽만 막으면 다른 쪽으로 샌다 — 여기는
+      **여러 장을 한 번에** 만드는 자리라 조용히 넘어가면 값이 그만큼 나간다.
+    */
+    if ([...characterByAngle.values()].every((view) => !view)) {
+      throw new PdpServiceError(
+        "INVALID_REQUEST",
+        "고른 캐릭터를 불러오지 못했습니다. 캐릭터를 다시 고르거나 빼고 만들어 주세요.",
+        `character ${body.characterId} has no usable view`,
       );
     }
   }

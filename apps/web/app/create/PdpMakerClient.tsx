@@ -4,7 +4,7 @@ import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
 import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, mergeArtDirection, overLimitFields } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, recoverLookWithoutReference, SELLER_BRIEF_MAX_LENGTH, mergeArtDirection, overLimitFields } from "@fixup/pdp-core";
 import { InputLengthHint } from "./InputLengthHint";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft, PdpTextDraftState } from "./pdp-drafts";
 import { DraftSaveClock, startDraftAutosave, draftChangeValues } from "./draft-save-clock";
@@ -97,6 +97,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 그때는 따라갈 것이 없는 것과 같으므로 「레퍼런스 스타일」도 못 쓴다.
    */
   const hasStyleReference = Boolean(styleReference) && styleReferenceEnabled;
+
   const [sellerBrief, setSellerBrief] = useState<SellerBrief>({});
   const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
@@ -164,6 +165,47 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 쓰던 사람의 결과물이 조용히 바뀐다.
    */
   const [look, setLook] = useState<ImageLook>("photoreal");
+
+  /**
+   * 레퍼런스가 **없어지면 그림체를 되돌리고 알린다**(A-10).
+   *
+   * `auto` 는 「붙인 레퍼런스의 결을 따른다」는 뜻이라, 따를 그림이 없어지면
+   * 값이 뜻을 잃는다. 화면은 그 단추를 흐리게 만들 뿐이라 사용자는 여전히
+   * `auto` 가 골라진 것을 본다.
+   *
+   * **없어지는 길이 둘이다** — 토글을 끄는 것과 레퍼런스를 빼는 것. 설계도
+   * 「제거/비활성화」라고 둘을 함께 적었다. 처음에는 토글만 막았고, 그래서
+   * 「레퍼런스 빼기」를 누르면 아무 말도 없었다.
+   */
+  const recoverLook = useCallback((hasReference: boolean) => {
+    const recovery = recoverLookWithoutReference(look, hasReference);
+    if (!recovery) return;
+    setLook(recovery.look);
+    // 조용히 바꾸면 고른 것이 혼자 사라진 것처럼 보인다.
+    setNotice(recovery.notice);
+  }, [look]);
+
+  const toggleStyleReference = useCallback((enabled: boolean) => {
+    setStyleReferenceEnabled(enabled);
+    recoverLook(enabled && Boolean(styleReference));
+  }, [recoverLook, styleReference]);
+
+  /** 레퍼런스를 뺀다. **A-10 의 제목이 가리키는 바로 그 길이다.** */
+  const removeStyleReference = useCallback(() => {
+    setStyleReference(undefined);
+    recoverLook(false);
+  }, [recoverLook]);
+
+  /**
+   * 새 레퍼런스는 **켜진 채로 시작한다**(A-11, 설계 §6.3).
+   *
+   * 전에는 값만 갈아 끼웠다. 앞 레퍼런스에서 토글을 꺼 뒀다면 새로 붙인
+   * 레퍼런스도 **꺼진 채로** 들어와, 붙여 놓고 안 쓰이는 일이 생긴다.
+   */
+  const attachStyleReference = useCallback((reference: StyleReferenceView) => {
+    setStyleReference(reference);
+    setStyleReferenceEnabled(true);
+  }, []);
   const [userInstruction, setUserInstruction] = useState("");
   /**
    * **구성·문구 요청**(U-06). 장면 지시(`userInstruction`)와 다른 물건이다.
@@ -530,6 +572,20 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         // 그림과 그 그림에 적은 말은 함께 움직여야 짝이 안 어긋난다.
         setStyleReference(draft.styleReference ?? undefined);
         setStyleReferenceEnabled(draft.styleReferenceEnabled ?? true);
+        /*
+          **이미 깨진 초안이 되살아나지 않게 한다**(A-10).
+
+          이 변경 전에 저장된 초안은 「`auto` + 레퍼런스 없음」인 채로 남아
+          있다. 복구 없이 불러오면 A-10 이 고치려던 상태가 그대로 화면에 오른다.
+        */
+        const 복구 = recoverLookWithoutReference(
+          draft.look ?? "photoreal",
+          Boolean(draft.styleReference) && (draft.styleReferenceEnabled ?? true),
+        );
+        if (복구) {
+          setLook(복구.look);
+          setNotice(복구.notice);
+        }
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
@@ -752,7 +808,9 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   ) => {
     setImageModel(model);
     setReview(blueprintReview);
-    setStyleReference(chosenStyleReference);
+    // 붙이면 켜진다 — A-11 의 불변식은 여기도 같다.
+    if (chosenStyleReference) attachStyleReference(chosenStyleReference);
+    else setStyleReference(undefined);
     setPreserveProduct(chosenPreserveProduct ?? true);
     setCharacterId(chosenCharacterId);
     setCharacterAngles(chosenCharacterAngles ?? []);
@@ -850,8 +908,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           gapOutcome={result.copyGapOutcome}
           styleReference={styleReference}
           styleReferenceEnabled={styleReferenceEnabled}
-          onStyleReferenceToggle={setStyleReferenceEnabled}
-          onStyleReferenceAttached={setStyleReference}
+          onStyleReferenceToggle={toggleStyleReference}
+          onStyleReferenceAttached={attachStyleReference}
           preserveProduct={preserveProduct}
           onPreserveProductChange={setPreserveProduct}
           characterId={characterId}
@@ -1404,7 +1462,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                       <StyleReferenceCard
                         reference={styleReference}
                         enabled={styleReferenceEnabled}
-                        onToggle={setStyleReferenceEnabled}
+                        onToggle={toggleStyleReference}
                         preserveProduct={preserveProduct}
                         onPreserveProductChange={setPreserveProduct}
                       />
@@ -1412,14 +1470,14 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                         variant="ghost"
                         size="sm"
                         className="justify-self-start text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => setStyleReference(undefined)}
+                        onClick={removeStyleReference}
                       >
                         <Trash2 size={14} className="mr-1.5" />
                         레퍼런스 빼기
                       </Button>
                     </>
                   ) : null}
-                  <StyleReferenceAttach onAttached={setStyleReference} />
+                  <StyleReferenceAttach onAttached={attachStyleReference} />
                   {styleReference ? (
                     <AttachmentIntentField
                       id="intent-style"
@@ -1771,6 +1829,9 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                           key={option}
                           type="button"
                           title={blocked || IMAGE_LOOK_HINT[option]}
+                          // 어느 결의 단추인지 남긴다. 시험이 **눌린 상태**를
+                          // 값으로 재려면 자리를 가리킬 것이 있어야 한다(A-10).
+                          data-look={option}
                           aria-pressed={isActive}
                           disabled={Boolean(blocked)}
                           onClick={() => setLook(option)}

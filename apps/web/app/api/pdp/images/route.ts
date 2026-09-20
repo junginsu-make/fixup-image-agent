@@ -3,6 +3,7 @@ import {
   generateSectionImage,
   resolveCharacterAngles,
   type CharacterImageReference,
+  PdpServiceError,
   toPdpErrorResponse,
   mapPdpErrorCodeToStatus,
   buildSectionImageOptions,
@@ -95,6 +96,24 @@ export async function POST(req: Request) {
         const view = await loadCharacterView(reservation.userId, body.characterId, angle, teamId);
         if (view) characterReferences.push(view);
       }
+    }
+
+    /*
+      **못 불러온 캐릭터로 조용히 만들지 않는다**(A-14, 설계 §6.2).
+
+      전에는 한 장도 못 불러오면 `undefined` 를 넘겨 **그 캐릭터 없이** 그림을
+      만들고 값을 받았다. 사용자는 캐릭터를 골라 뒀으니 나올 줄 알고, 나온
+      그림에는 다른 사람이 있다.
+
+      화면도 같은 것을 알린다(`CharacterPicker` 의 「고른 캐릭터를 불러오지
+      못했습니다」). 여기서 막는 것은 그 화면을 못 본 채 들어온 요청이다.
+    */
+    if (body.characterId && characterReferences.length === 0) {
+      throw new PdpServiceError(
+        "INVALID_REQUEST",
+        "고른 캐릭터를 불러오지 못했습니다. 캐릭터를 다시 고르거나 빼고 만들어 주세요.",
+        `character ${body.characterId} has no usable view`,
+      );
     }
 
     // 긴 레퍼런스를 조각으로 나눈다. 일괄 라우트와 같아야 한다 — 한쪽만
