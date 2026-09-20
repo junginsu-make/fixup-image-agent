@@ -1,4 +1,6 @@
 import { Type, purposeOfCall } from "./pdp.llm";
+import { extractJsonCandidate } from "./pdp.response-parse";
+import { isRetriableModelFailure } from "./pdp.retry-policy";
 import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
@@ -490,15 +492,11 @@ ${analyzePrompt}`
       };
     }
 
-    const firstSection = blueprint.sections[0];
-
-    if (!firstSection) {
-      throw new PdpServiceError(
-        "AI_RESPONSE_INVALID",
-        "상세페이지 섹션을 생성하지 못했습니다.",
-        "No sections returned from analyze response."
-      );
-    }
+    /*
+      섹션이 비었는지는 **파싱 자리에서** 본다(D-3). 여기서 보면 재시도 바깥이라
+      빈 답이 그대로 끝난다.
+    */
+    const firstSection = blueprint.sections[0]!;
 
     if (!options?.skipFirstImage) {
       const firstImage = await this.generateSectionImageInternal({
@@ -1716,9 +1714,10 @@ function getModelAgeDescriptor(ageRange?: ImageGenOptions["modelAgeRange"]) {
 }
 
 function parseBlueprintResponse(response: { text?: string }) {
+  let blueprint: LandingPageBlueprint;
   try {
     const parsed = JSON.parse(extractResponseText(response)) as Partial<LandingPageBlueprint>;
-    return sanitizeBlueprint(parsed);
+    blueprint = sanitizeBlueprint(parsed);
   } catch (error) {
     throw new PdpServiceError(
       "AI_RESPONSE_INVALID",
@@ -1726,6 +1725,25 @@ function parseBlueprintResponse(response: { text?: string }) {
       stringifyError(error)
     );
   }
+
+  /*
+    **섹션이 하나도 없으면 여기서 끝낸다**(D-3).
+
+    전에는 이 판정이 **재시도 바깥**에 있었다. 빈 답이 오면 그대로 끝났고,
+    라우트가 다시 부르라고 둔 장치는 코드가 안 맞아 한 번도 안 걸렸다.
+
+    여기로 옮기면 같은 코드(`AI_RESPONSE_INVALID`)로 **다시 묻게 된다** —
+    `retryOperation` 이 이 갈래를 재시도 대상으로 안다(`pdp.retry-policy`).
+  */
+  if (!blueprint.sections.length) {
+    throw new PdpServiceError(
+      "AI_RESPONSE_INVALID",
+      "상세페이지 섹션을 생성하지 못했습니다.",
+      "No sections returned from analyze response."
+    );
+  }
+
+  return blueprint;
 }
 
 function sanitizeBlueprint(input: Partial<LandingPageBlueprint>) {
@@ -2043,39 +2061,6 @@ function extractResponseText(response: { text?: string }) {
   return extractedJson ?? normalized;
 }
 
-function extractJsonCandidate(input: string) {
-  if (!input) {
-    return null;
-  }
-
-  const objectStart = input.indexOf("{");
-  const arrayStart = input.indexOf("[");
-  const startIndexCandidates = [objectStart, arrayStart].filter((value) => value >= 0);
-
-  if (!startIndexCandidates.length) {
-    return null;
-  }
-
-  const startIndex = Math.min(...startIndexCandidates);
-
-  for (let endIndex = input.length; endIndex > startIndex; endIndex -= 1) {
-    const candidate = input.slice(startIndex, endIndex).trim();
-
-    if (!candidate) {
-      continue;
-    }
-
-    try {
-      JSON.parse(candidate);
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
 function buildHighResolutionInlinePart(mimeType: string, data: string) {
   return {
     inlineData: {
@@ -2155,7 +2140,19 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
       ? (error as { status: number }).status
       : undefined;
 
-    if (retries > 0 && (isQuotaError(message, status) || isJsonError(message))) {
+    /*
+      **코드로 정한다**(D-6).
+
+      전에는 `error.message` 에서 「JSON」 같은 엔진 글자를 찾았다. 그런데
+      설계도 파싱은 그 오류를 잡아 **한국어 문장으로 바꿔** 던진다 — 찾는 글자가
+      사라져서 한 번도 안 걸렸다. 다시 물으면 될 일을 한 번에 포기했다.
+
+      글자 대조도 남겨 둔다. `PdpServiceError` 로 감싸이지 않은 채 올라오는
+      자리(공급자 SDK 가 직접 던지는 경우)가 아직 있다.
+    */
+    const retriableCode = error instanceof PdpServiceError && isRetriableModelFailure(error.code);
+
+    if (retries > 0 && (retriableCode || isQuotaError(message, status) || isJsonError(message))) {
       await wait(delay);
       return retryOperation(operation, retries - 1, delay * 2);
     }

@@ -15,11 +15,13 @@ import { consumesAnalysisQuota } from "@fixup/pdp-core";
 vi.mock("server-only", () => ({}));
 
 let analyze: () => Promise<unknown> = async () => ({ sections: [] });
+/** 코어를 몇 번 불렀는지. 라우트가 재시도를 겹쳐 걸면 여기서 드러난다. */
+let 부른횟수 = 0;
 let slice: (input: { imageBase64: string }) => Promise<unknown[]> = async () => [];
 
 vi.mock("@fixup/pdp-core", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("@fixup/pdp-core");
-  return { ...actual, analyzeProduct: () => analyze() };
+  return { ...actual, analyzeProduct: () => { 부른횟수 += 1; return analyze(); } };
 });
 
 /** 장부에 실제로 적힌 것. */
@@ -57,6 +59,7 @@ const 기본요청 = { imageBase64: "PRODUCT", mimeType: "image/png" };
 
 beforeEach(() => {
   닫은것.length = 0;
+  부른횟수 = 0;
   analyze = async () => ({ sections: [] });
   slice = async () => [];
 });
@@ -138,5 +141,33 @@ describe("모델이 답한 뒤의 실패는 한도를 먹는다", () => {
     expect(response.status).toBe(200);
     expect(닫은것[0]!.success).toBe(true);
     expect(consumesAnalysisQuota(닫은것[0]!.errorCode)).toBe(true);
+  });
+});
+
+/**
+ * **다시 묻는 일은 한 곳에서만 한다**(D-3).
+ *
+ * 라우트에는 「INVALID_REQUEST 이고 detail 에 section 이 있으면 다시 부른다」는
+ * 장치가 있었다. 그런데 분석 경로는 그 코드를 던지는 자리가 없어 **한 번도 안
+ * 걸렸다** — 있는 줄 알았던 그물이 없었다.
+ *
+ * 지금은 코어의 `retryOperation` 이 `AI_RESPONSE_INVALID` 를 두 번까지 다시
+ * 묻는다. 라우트가 그 위에 또 걸면 **한 요청에 모델을 여섯 번** 부르게 된다.
+ * 값이 여섯 배다.
+ */
+describe("재시도는 겹쳐 걸지 않는다", () => {
+  it("**설계도가 깨져도 라우트는 한 번만 부른다**", async () => {
+    const { PdpServiceError } = await vi.importActual<Record<string, never>>("@fixup/pdp-core");
+    analyze = async () => {
+      throw new (PdpServiceError as never as new (c: string, m: string, d?: string) => Error)(
+        "AI_RESPONSE_INVALID",
+        "AI 응답을 해석하지 못했습니다.",
+        "No sections returned from analyze response.",
+      );
+    };
+
+    await POST(요청(기본요청));
+
+    expect(부른횟수).toBe(1);
   });
 });

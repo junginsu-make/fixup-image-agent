@@ -151,6 +151,8 @@ export {
 export { identityConflictOf, type IdentityConflict } from "./pdp.identity-conflict";
 export { recoverLookWithoutReference, type LookRecovery } from "./pdp.look-recovery";
 export { ANALYSIS_QUOTA_EXEMPT_CODES, consumesAnalysisQuota } from "./pdp.analysis-quota";
+export { RETRIABLE_MODEL_CODES, isRetriableModelFailure } from "./pdp.retry-policy";
+export { extractJsonCandidate } from "./pdp.response-parse";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
   personSourceConflict,
