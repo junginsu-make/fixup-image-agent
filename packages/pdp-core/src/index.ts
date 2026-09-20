@@ -194,7 +194,23 @@ export {
 } from "./pdp.text-plan";
 export * from "./types";
 
-const controller = new PdpController();
+/**
+ * **부를 때 만든다**(D-4).
+ *
+ * 전에는 여기서 바로 `new PdpController()` 를 했다. 그것은 **이 파일을 불러오는
+ * 순간 실행되는 부작용**이라, 번들러가 「이 배럴에서 상수 하나만 쓴다」는 것을
+ * 알아도 서비스와 **프롬프트 전체를 지우지 못한다.**
+ *
+ * 실측(2026-09-20, `next build`): 브라우저 청크 하나(96KB)에
+ * 「never change the product…」·「USER INSTRUCTION for composition」·
+ * 「Overall tone:」 같은 **서버 프롬프트 문장이 그대로** 들어 있었다. 화면
+ * 컴포넌트 열다섯이 이 배럴을 들이기 때문이다.
+ *
+ * 프롬프트는 우리가 무엇을 어떻게 시키는지가 적힌 글이다. 브라우저로 내려보낼
+ * 이유가 없다.
+ */
+let controllerInstance: PdpController | null = null;
+const controllerOf = () => (controllerInstance ??= new PdpController());
 
 /**
  * Maps a PdpErrorCode to the HTTP status used by the original Next.js
@@ -264,7 +280,7 @@ export async function analyzeProduct(
   providers?: PdpProviders,
   options?: { skipFirstImage?: boolean }
 ): Promise<PdpAnalyzeSuccessResponse["result"]> {
-  const response = await controller.analyze(input, providers, options);
+  const response = await controllerOf().analyze(input, providers, options);
 
   if (response.ok) {
     return response.result;
@@ -293,7 +309,7 @@ export async function generateSectionImage(
   generatedImages: number;
   qa?: { warnings: QaDefect[] };
 }> {
-  const response = await controller.generateImage(input, providers);
+  const response = await controllerOf().generateImage(input, providers);
 
   if (response.ok) {
     return {
