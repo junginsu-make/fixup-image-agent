@@ -36,6 +36,7 @@ import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
 
@@ -280,8 +281,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       기획을 엉뚱하게 막으면서 정작 그 칸을 싣는 만들기는 안 막았다.
       만들기 쪽 문지기는 `PdpEditor` 에 따로 있다.
     */
-    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS, { planInstruction }),
-    [sellerBrief, additionalInfo, planInstruction],
+    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS, {
+      planInstruction,
+      // 기획은 첨부 지시 중 **디자인 레퍼런스 것만** 싣는다
+      // (`buildAnalyzeRequest` 의 `styleReference.intent`).
+      styleIntent: attachmentIntents.style,
+    }),
+    [sellerBrief, additionalInfo, planInstruction, attachmentIntents.style],
   );
   const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && overLimit.length === 0);
   /** 넘친 칸을 사용자 말로. 단추 아래와 오류 문구가 **같은 말**을 쓴다. */
@@ -1794,7 +1800,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                   <span className={fieldLabelClass}>원하는 톤</span>
                   <div className="flex flex-wrap gap-1.5">
                     {TONE_OPTIONS.map((tone) => {
-                      const value = tone === "AI 자동 추천" ? "" : tone;
+                      // 상수를 쓴다. 손으로 다시 적으면 오타를 tsc 가 못 잡는다.
+                      const value = tone === TONE_AUTO_LABEL ? "" : tone;
                       const isActive = desiredTone === value;
 
                       return (

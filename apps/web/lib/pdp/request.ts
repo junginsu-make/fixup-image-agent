@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember } from "../membership/api";
@@ -7,10 +7,29 @@ import { authenticateApiMember } from "../membership/api";
 // 기존 decoded 업로드 예산 20MiB + base64 팽창 + JSON 메타데이터 여유.
 export const PDP_JSON_LIMIT = Math.ceil(20 * 1024 * 1024 * 4 / 3) + 1024 * 1024;
 const text = z.string();
+/*
+  **첨부 지시는 힘이 세다**(D-8).
+
+  사용자가 적으면 `pdp.reference-policy` 가 **그 자리의 고정 규칙 문구를 통째로
+  빼고** 대신 앉힌다. 즉 여기 적힌 만큼 역할 규칙이 사라진다 — 화면을 거치지
+  않은 요청이 규칙을 지우고 아무 문장이나 넣을 수 있었다.
+*/
+const intent = text.max(ATTACHMENT_INTENT_MAX_LENGTH);
 const model = text.refine((value) => IMAGE_MODELS.some((entry) => entry.id === value), "지원하지 않는 이미지 모델입니다.")
   .transform((value) => value as ImageModelId);
 const ratio = z.enum(["1:1", "3:4", "4:3", "9:16", "16:9"]);
-const image = z.object({ imageBase64: text.trim().min(1), mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]) }).passthrough();
+/*
+  `.passthrough()` 라 **선언하지 않은 칸은 무검증으로 지나간다.** 그래서 이
+  그림에 붙는 말 두 칸을 여기서 못 박는다 — `intent` 는 규칙을 밀어내고,
+  `description` 은 프롬프트에 그대로 실린다.
+*/
+const image = z.object({
+  imageBase64: text.trim().min(1),
+  mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  intent: intent.optional(),
+  // 우리가 만든 서술이 되돌아오는 칸이다. 넉넉히 두되 무한정은 아니다.
+  description: text.max(MAX_STRATEGY_LENGTH).optional(),
+}).passthrough();
 /*
   **깨진 그림은 예약 전에 되돌려 보낸다**(C-9 리뷰).
 
@@ -26,7 +45,7 @@ const imageMime = text.regex(new RegExp(String.raw`^image/[a-z0-9.+-]+$`, "i"), 
 const imagePayload = text.trim().min(1)
   .regex(new RegExp(String.raw`^(?:data:[^;]+;base64,)?[A-Za-z0-9+/\s]+=*$`), "이미지 데이터가 올바르지 않습니다.");
 
-const intents = z.object({ anchor: text.optional(), person: text.optional(), style: text.optional() });
+const intents = z.object({ anchor: intent.optional(), person: intent.optional(), style: intent.optional() });
 const options = z.object({
   imageModel: model.optional(), style: z.enum(["studio", "lifestyle", "outdoor"]).optional(),
   modelCountry: z.enum(["korea", "japan", "usa", "france", "germany", "africa"]).optional(),

@@ -2,6 +2,8 @@
 
 import { identityConflictOf } from "@fixup/pdp-core";
 import type { ReferenceImage } from "@fixup/pdp-core";
+import { ATTACHMENT_INTENT_MAX_LENGTH } from "@fixup/pdp-core";
+import { InputLengthHint } from "./InputLengthHint";
 
 /**
  * 「이 그림을 어떻게 쓸까요」 한 칸.
@@ -54,8 +56,14 @@ export function AttachmentIntentField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        maxLength={ATTACHMENT_INTENT_MAX_LENGTH}
         className="mt-1 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
       />
+      {/*
+        서버가 막는 길이와 같다(D-8). 이 말은 그 자리의 역할 규칙을 통째로
+        밀어내므로 짧게 잡는다 — 화면이 모르면 설명 없는 400 을 만난다.
+      */}
+      <InputLengthHint value={value} limit={ATTACHMENT_INTENT_MAX_LENGTH} />
       {conflict ? (
         <p className="mt-1 text-sm text-warning">
           {`「${conflict.matched}」을 바꿔 달라고 적으셨습니다. ${conflict.message}`}

@@ -143,9 +143,10 @@ export {
   type UnverifiedItem,
 } from "./pdp.evidence";
 export {
-  PAGE_CONTEXT_MAX_LENGTH,
+  ATTACHMENT_INTENT_MAX_LENGTH, PAGE_CONTEXT_MAX_LENGTH,
   SELLER_BRIEF_MAX_LENGTH,
   overLimitFields,
+  type LongInstructionKey,
   type OverLimitField,
 } from "./pdp.input-limits";
 export { identityConflictOf, type IdentityConflict } from "./pdp.identity-conflict";

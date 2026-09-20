@@ -30,6 +30,18 @@ export const SELLER_BRIEF_MAX_LENGTH = 500;
 export const PAGE_CONTEXT_MAX_LENGTH = 500;
 
 /**
+ * 「이 그림을 어떻게 쓸까요」 한 칸.
+ *
+ * **짧게 잡는다.** 이 말은 `pdp.reference-policy` 에서 **그 자리의 고정 규칙
+ * 문구를 통째로 밀어내고** 대신 앉는다 — 「우선순위 한 줄로는 못 이긴다」는
+ * 판단 때문이다. 즉 여기 적힌 만큼 역할 규칙이 사라진다.
+ *
+ * 칸의 예시가 「뚜껑 색은 그대로 두고 각도만 바꿔 주세요」 한 줄이라, 배경 한
+ * 칸과 같은 500자면 넉넉하다.
+ */
+export const ATTACHMENT_INTENT_MAX_LENGTH = 500;
+
+/**
  * 길이를 재는 칸의 열쇠.
  *
  * 판매자 브리프 다섯 칸, 배경 한 칸, 그리고 **긴 지시 두 칸**(D-8)이다.
@@ -38,12 +50,25 @@ export const PAGE_CONTEXT_MAX_LENGTH = 500;
  */
 export type InputLimitKey = keyof SellerBrief | "pageContext" | LongInstructionKey;
 
-/** 프롬프트로 가는 긴 지시 칸. 둘 다 `MAX_STRATEGY_LENGTH` 를 쓴다. */
-export type LongInstructionKey = "userInstruction" | "planInstruction";
+/**
+ * 프롬프트로 가는 지시 칸.
+ *
+ * **상한이 칸마다 다르다.** 첨부 지시는 그 자리의 역할 규칙을 통째로 밀어내므로
+ * 짧게 잡는다(`ATTACHMENT_INTENT_MAX_LENGTH`).
+ */
+export type LongInstructionKey =
+  | "userInstruction"
+  | "planInstruction"
+  | "anchorIntent"
+  | "personIntent"
+  | "styleIntent";
 
-const LONG_INSTRUCTIONS: Array<{ key: LongInstructionKey; label: string }> = [
-  { key: "userInstruction", label: "이미지 연출 요청" },
-  { key: "planInstruction", label: "구성·문구 요청" },
+const LONG_INSTRUCTIONS: Array<{ key: LongInstructionKey; label: string; limit: number }> = [
+  { key: "userInstruction", label: "이미지 연출 요청", limit: MAX_STRATEGY_LENGTH },
+  { key: "planInstruction", label: "구성·문구 요청", limit: MAX_STRATEGY_LENGTH },
+  { key: "anchorIntent", label: "제품 사진에 적은 말", limit: ATTACHMENT_INTENT_MAX_LENGTH },
+  { key: "personIntent", label: "인물 사진에 적은 말", limit: ATTACHMENT_INTENT_MAX_LENGTH },
+  { key: "styleIntent", label: "디자인 레퍼런스에 적은 말", limit: ATTACHMENT_INTENT_MAX_LENGTH },
 ];
 
 export interface OverLimitField {
@@ -104,12 +129,12 @@ export function overLimitFields(
 
   for (const field of LONG_INSTRUCTIONS) {
     const value = instructions?.[field.key];
-    if (value && value.length > MAX_STRATEGY_LENGTH) {
+    if (value && value.length > field.limit) {
       over.push({
         key: field.key,
         label: labels?.[field.key] ?? field.label,
         length: value.length,
-        limit: MAX_STRATEGY_LENGTH,
+        limit: field.limit,
       });
     }
   }

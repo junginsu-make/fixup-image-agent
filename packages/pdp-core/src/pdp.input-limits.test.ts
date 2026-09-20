@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTACHMENT_INTENT_MAX_LENGTH,
   PAGE_CONTEXT_MAX_LENGTH,
   SELLER_BRIEF_MAX_LENGTH,
   overLimitFields,
@@ -139,5 +140,45 @@ describe("긴 지시 칸도 짚는다", () => {
     });
 
     expect(over[0]!.label).toContain("연출");
+  });
+});
+
+/**
+ * **첨부 지시는 더 짧게 막는다**(D-8 의 「등」).
+ *
+ * 이 말은 `pdp.reference-policy` 에서 **그 자리의 고정 규칙 문구를 통째로
+ * 밀어내고** 대신 앉는다. 적힌 만큼 역할 규칙이 사라지므로, 긴 지시 칸과 같은
+ * 상한을 주면 안 된다.
+ */
+describe("첨부 지시는 칸마다 제 상한을 쓴다", () => {
+  const 빈브리프 = {} as never;
+
+  it.each([["anchorIntent"], ["personIntent"], ["styleIntent"]])("**%s 이 넘치면 짚는다**", (key) => {
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      [key]: "가".repeat(ATTACHMENT_INTENT_MAX_LENGTH + 1),
+    });
+
+    expect(over).toHaveLength(1);
+    expect(over[0]!.limit).toBe(ATTACHMENT_INTENT_MAX_LENGTH);
+  });
+
+  it("**긴 지시 칸보다 짧다** — 같은 상한이면 규칙이 그만큼 사라진다", () => {
+    expect(ATTACHMENT_INTENT_MAX_LENGTH).toBeLessThan(MAX_STRATEGY_LENGTH);
+  });
+
+  it("**첨부 지시 상한만큼은 받는다**", () => {
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      anchorIntent: "가".repeat(ATTACHMENT_INTENT_MAX_LENGTH),
+    });
+
+    expect(over).toHaveLength(0);
+  });
+
+  it("**어느 그림에 적은 말인지 말한다**", () => {
+    const over = overLimitFields(빈브리프, undefined, undefined, {
+      personIntent: "가".repeat(ATTACHMENT_INTENT_MAX_LENGTH + 1),
+    });
+
+    expect(over[0]!.label).toContain("인물");
   });
 });

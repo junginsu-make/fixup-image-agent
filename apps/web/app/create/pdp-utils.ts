@@ -23,7 +23,7 @@ export const RATIO_OPTIONS: Array<{
  * 전에는 여기에만 있었고 서버는 아무 글자나 받았다. 목록을 두 벌로 두면
  * 화면이 보여 주는 값을 서버가 거절하는 날이 온다.
  */
-export const TONE_OPTIONS: string[] = [TONE_AUTO_LABEL, ...IMAGE_TONES];
+export const TONE_OPTIONS = [TONE_AUTO_LABEL, ...IMAGE_TONES] as const;
 
 /**
  * Studio API wrapper. Billable POSTs receive a unique request id so the server

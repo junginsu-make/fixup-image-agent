@@ -31,7 +31,7 @@ import {
   User,
 } from "lucide-react";
 import { Rnd } from "react-rnd";
-import { MAX_STRATEGY_LENGTH } from "@fixup/pdp-core";
+import { imageRequestLengthBlock } from "./image-request-length";
 import type {
   AspectRatio,
   BlueprintReview,
@@ -1417,10 +1417,12 @@ export function PdpEditor({
    *
    * 그래서 여기서 먼저 막고, **어디서 고치는지**까지 말한다.
    */
-  const lengthBlockedMessage =
-    userInstruction.length > MAX_STRATEGY_LENGTH
-      ? `이미지 연출 요청이 ${userInstruction.length - MAX_STRATEGY_LENGTH}자 초과입니다. 기획 화면에서 줄인 뒤 다시 눌러 주세요.`
-      : "";
+  const lengthBlockedMessage = imageRequestLengthBlock({
+    userInstruction,
+    anchorIntent: attachmentIntents?.anchor,
+    personIntent: attachmentIntents?.person,
+    styleIntent: attachmentIntents?.style,
+  });
 
   const pageWire = (): PageImageWire =>
     buildPageWire({
