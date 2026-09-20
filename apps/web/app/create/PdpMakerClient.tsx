@@ -12,6 +12,8 @@ import { createDraftRepository } from "./draft-repository";
 import { stableSections } from "./document-state";
 import { editorForSections } from "./editor-state";
 import { buildSectionKeys, purgeExpiredPdpDrafts } from "./pdp-drafts";
+import { purgeExpiredPdpDocuments } from "./document-store";
+import { draftSaveFailureMessage } from "./draft-save-failure";
 import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
@@ -304,7 +306,19 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       // 목록을 읽을 때 만료된 것을 함께 치운다. 따로 도는 청소 작업을 두면
       // 언제 도는지 알 수 없고, 브라우저를 안 열면 영영 안 돈다.
       // v3 이관 전에 원본을 만료 청소하지 않는다. 새 저장소의 보관 정책은 별도 적용한다.
-      if (!documentV3Enabled) await purgeExpiredPdpDrafts(new Date(), protectedDraftId ? [protectedDraftId] : []);
+      /*
+        **저장소를 갈아도 약속은 그대로다**(E-6-3-b).
+
+        전에는 `if (!documentV3Enabled)` 가 붙어 있었다. 새 저장소를 켜는 순간
+        청소가 멈추는데, 화면은 「30일이 지나면 자동으로 삭제됩니다」를 그대로
+        띄운다 — **지키는 코드가 없는 약속**이 된다.
+
+        둘 다 부른다. 새 저장소를 켜도 옛 초안이 남아 있을 수 있고(이관 전에
+        만든 것), 둘 다 그 약속의 대상이다.
+      */
+      const 지킬것 = protectedDraftId ? [protectedDraftId] : [];
+      await purgeExpiredPdpDrafts(new Date(), 지킬것);
+      await purgeExpiredPdpDocuments(new Date(), 지킬것);
       setDrafts(await draftRepository.list());
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "저장된 작업 목록을 불러오지 못했습니다.");
@@ -438,7 +452,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         return savedDraft;
       } catch (error) {
         setSaveState("error");
-        setErrorMessage("작업을 저장하지 못했습니다.");
+        // 용량이 찬 것과 그냥 실패한 것은 할 일이 다르다(E-6-3-a).
+        setErrorMessage(draftSaveFailureMessage(error));
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
         return null;
       } finally {

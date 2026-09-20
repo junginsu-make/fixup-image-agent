@@ -1,6 +1,7 @@
 import { createPdpDocument, type PdpDocumentV3 } from "./document-state";
 import { getPdpDraft, type PdpDraftSummary } from "./pdp-drafts";
 import { randomId } from "../../lib/browser-safe";
+import { selectExpiredDraftIds } from "./draft-retention";
 
 // v2 저장소는 건드리지 않는다. 이관 완료 여부와 무관하게 원본으로 돌아갈 수 있다.
 const DB = "hanirum-pdp-documents";
@@ -127,6 +128,36 @@ export async function listPdpDocuments(): Promise<PdpDraftSummary[]> {
       thumbnailUrl: asset ? `data:${asset.mimeType};base64,${asset.base64}` : doc.sections[0]?.generatedImage ?? null };
     }));
   } finally { db.close(); }
+}
+
+/**
+ * 보관 기간이 지난 문서를 지운다. 지운 개수를 돌려준다.
+ *
+ * ── 왜 이것이 없었나 ─────────────────────────────────────────
+ *
+ * 옛 저장소에는 `purgeExpiredPdpDrafts` 가 있었는데, 새 저장소로 이관하면서
+ * **청소만 뒤에 남았다.** 부르는 줄도 `if (!documentV3Enabled)` 로 막혀 있어서,
+ * 새 저장소를 켜는 순간 「30일이 지나면 자동 삭제」라는 **화면의 약속이 거짓**이
+ * 된다(E-6-3-b).
+ *
+ * 옛 것과 같은 판단을 쓴다 — 기준은 `updatedAt`, 열어 둔 작업은 남기고,
+ * **실패해도 조용히 넘어간다**(청소 때문에 목록이 안 뜨면 본말이 뒤집힌다).
+ */
+export async function purgeExpiredPdpDocuments(
+  now: Date = new Date(),
+  protectedIds: readonly string[] = [],
+): Promise<number> {
+  try {
+    const summaries = await listPdpDocuments();
+    const protectedSet = new Set(protectedIds);
+    const expired = selectExpiredDraftIds(summaries, now).filter((id) => !protectedSet.has(id));
+    if (!expired.length) return 0;
+
+    for (const id of expired) await deletePdpDocument(id);
+    return expired.length;
+  } catch {
+    return 0;
+  }
 }
 
 export async function deletePdpDocument(id: string): Promise<void> {
