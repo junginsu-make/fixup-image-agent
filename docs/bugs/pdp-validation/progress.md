@@ -2531,3 +2531,43 @@ JSON 이 아니다」에 똑같이 `AI_RESPONSE_INVALID` 를 던진다. 코드�
 - 변이 5종이 모두 잡힌다 — 톤을 다시 자유 글자로 · 연출 요청 상한 제거 ·
   화면이 목록을 따로 적음 · 화면 칸의 maxLength 제거 · 긴 지시 칸을 안 짚음
 - pdp-core 986 통과. 웹 3,211 통과 / 6 skip. 양쪽 타입 0건
+
+### 리뷰가 잡은 것 — 문지기가 반대쪽 문에 걸렸다 (D-8 후속)
+
+**`userInstruction` 은 기획 요청에 아예 안 실린다.** `buildAnalyzeRequest` 가
+싣는 것은 `planInstruction`·`additionalInfo`·`sellerBrief`·`desiredTone` 이고,
+「이미지 연출 요청」은 `buildPageWire` 를 거쳐 **만들기 요청에만** 간다.
+
+그래서 내가 건 문지기는 정확히 어긋나 있었다.
+
+- **잘못 막았다**: 그 칸 하나가 넘치면 기획이 중단되고 화면이 「올리기」로
+  되돌아갔다. 그 요청은 그 칸을 싣지도 않는다
+- **못 막았다**: 정작 그 칸을 싣는 만들기·일괄은 그대로 서버까지 가서
+  「요청이 올바르지 않습니다」 한 줄로 400 이 났다. **그 화면에는 그 칸을
+  고칠 입력란조차 없다** — 사용자는 어느 칸인지도 모르고 그 자리에서 풀 수도
+  없다
+
+기획 쪽 문지기는 기획이 싣는 칸만 보게 좁혔고, 만들기 쪽에 따로 문지기를 뒀다.
+**어디서 고치는지까지 말한다** — 「기획 화면에서 줄인 뒤 다시 눌러 주세요」.
+
+돈은 안 샜다. `readPdpRequest` 가 `reserveAiUsage` 앞이라 크레딧은 예약 전에
+되돌아간다. 손해는 과금이 아니라 막다른 골목이었다.
+
+### 남은 것 (리뷰가 짚은 후속)
+
+- **첨부 지시 네 칸이 무경계다.** `intents.anchor·person·style` 에 `.max()` 가
+  없고, `styleReference.intent`·`description` 은 스키마에 **선언조차 없다**
+  (`image` 가 `.passthrough()`). 화면(`AttachmentIntentField`)도 안 막는다.
+  이 값들은 `pdp.reference-policy.ts` 에서 **그 자리의 고정 규칙 문구를 통째로
+  밀어내고** 대신 앉는다 — `userInstruction` 보다 힘이 세다. **D-8 의 「등」에
+  이쪽이 더 어울린다.** 같은 U-08 함정(옛 초안)이 있으므로 `overLimitFields`
+  와 함께 다뤄야 한다
+- **만들기 쪽 문지기에 시험이 없다.** 이번에 넣은 `lengthBlockedMessage` 는
+  변이로 확인하지 않았다. 다음 차례에 `react-test-renderer` 로 실제 렌더해
+  값으로 재야 한다
+- **`InputLengthHint` 도 아직 소스 문자열 대조다.** 리뷰 실측으로 변이 3종이
+  살아남는다 — 속성을 같은 글자의 주석으로 바꾸기 · 힌트 삭제 · 힌트의
+  `limit` 바꾸기
+- **`TONE_OPTIONS: string[]`** 로 타입이 넓어져, 칩 비교(`tone === "AI 자동
+  추천"`)의 오타를 tsc 가 못 잡는다. 그 비교가 `TONE_AUTO_LABEL` 을 안 쓰고
+  문자열을 손으로 다시 적은 자리다

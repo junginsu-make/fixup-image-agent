@@ -31,6 +31,7 @@ import {
   User,
 } from "lucide-react";
 import { Rnd } from "react-rnd";
+import { MAX_STRATEGY_LENGTH } from "@fixup/pdp-core";
 import type {
   AspectRatio,
   BlueprintReview,
@@ -1405,6 +1406,22 @@ export function PdpEditor({
    * 전에는 두 호출이 각자 몸통을 지었고, 그래서 「배치와 같은 값을 보내야 한다」는
    * 주석이 네 군데 붙어 있었다. 주석으로 지키던 것을 여기 한 곳으로 옮겼다.
    */
+  /**
+   * **만들기가 싣는 칸이 넘쳤는가.**
+   *
+   * 「이미지 연출 요청」은 이 화면이 아니라 **기획 화면**에 있는 칸인데,
+   * 요청에 싣는 것은 여기다(`buildPageWire`). 상한이 늦게 붙어서, 그 전에
+   * 저장된 초안이 넘친 값을 담은 채 복원되면 서버가 「요청이 올바르지
+   * 않습니다」 한 줄로 거절한다 — **어느 칸인지도 모르고 이 화면에는 그
+   * 칸을 고칠 입력란도 없다.**
+   *
+   * 그래서 여기서 먼저 막고, **어디서 고치는지**까지 말한다.
+   */
+  const lengthBlockedMessage =
+    userInstruction.length > MAX_STRATEGY_LENGTH
+      ? `이미지 연출 요청이 ${userInstruction.length - MAX_STRATEGY_LENGTH}자 초과입니다. 기획 화면에서 줄인 뒤 다시 눌러 주세요.`
+      : "";
+
   const pageWire = (): PageImageWire =>
     buildPageWire({
       // 글 경로의 앵커는 우리가 만든 대표 이미지다. 실물 제품이 아니다(U-03).
@@ -1444,6 +1461,11 @@ export function PdpEditor({
       sectionOptions[sectionKey],
       referenceModelUsage === "all-sections" ? true : index === 0
     );
+
+    if (lengthBlockedMessage) {
+      setErrorMessage(lengthBlockedMessage);
+      return { ok: false, stopBatch: true };
+    }
 
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setErrorMessage("");
@@ -1566,6 +1588,10 @@ export function PdpEditor({
   /** 아직 이미지가 없는 섹션을 한 번에 만든다. */
   const handleGenerateAllMissing = async () => {
     if (generationLockRef.current) return;
+    if (lengthBlockedMessage) {
+      setErrorMessage(lengthBlockedMessage);
+      return;
+    }
     const targets = sections
       .map((section, index) => ({ section, index }))
       .filter(({ section }) => !section.generatedImage);

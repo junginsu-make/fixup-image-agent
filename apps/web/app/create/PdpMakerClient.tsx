@@ -269,9 +269,19 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 왜 걸렸는지 알 길이 없었다.
    */
   const overLimit = useMemo(
-    // 긴 지시 두 칸도 함께 본다. 상한이 늦게 붙어서 옛 초안이 넘칠 수 있다(D-8).
-    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS, { userInstruction, planInstruction }),
-    [sellerBrief, additionalInfo, userInstruction, planInstruction],
+    /*
+      **이 문이 막는 것은 기획 요청이다.**
+
+      그래서 기획 요청이 **실제로 싣는 칸만** 본다(`buildAnalyzeRequest`).
+      「이미지 연출 요청」(`userInstruction`)은 여기 안 실린다 — 그 칸은
+      `buildPageWire` 를 거쳐 **만들기** 요청에만 간다.
+
+      처음엔 그 칸도 여기서 봤다. 리뷰가 잡았다: **반대쪽 문에 걸려 있었다** —
+      기획을 엉뚱하게 막으면서 정작 그 칸을 싣는 만들기는 안 막았다.
+      만들기 쪽 문지기는 `PdpEditor` 에 따로 있다.
+    */
+    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS, { planInstruction }),
+    [sellerBrief, additionalInfo, planInstruction],
   );
   const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && overLimit.length === 0);
   /** 넘친 칸을 사용자 말로. 단추 아래와 오류 문구가 **같은 말**을 쓴다. */
