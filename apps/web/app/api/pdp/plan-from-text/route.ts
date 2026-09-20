@@ -10,7 +10,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// analyze 라우트와 같은 정책. 구성안 스키마 결손은 모델을 한 번 더 불러 해결한다.
+/*
+  **여기는 analyze 와 갈라졌다**(D-3 이후).
+
+  전에는 두 라우트가 같은 고리를 썼다. 그런데 analyze 쪽은 **죽어 있었다** —
+  기다리던 `INVALID_REQUEST` 를 그 경로가 안 던진다. 그래서 거기서는 걷어냈고,
+  다시 묻는 일을 코어(`pdp.retry-policy`)로 옮겼다.
+
+  **이쪽은 죽어 있지 않다.** `pdp.text-plan.ts` 가 섹션 0개에 `INVALID_REQUEST`
+  와 「no sections returned from blueprint model」을 실어 던지므로 아래 정규식에
+  실제로 걸린다. 그래서 안 걷어냈다.
+
+  남은 격차: 같은 「섹션 0개」가 두 경로에서 **다른 코드·다른 횟수**로 갈린다
+  (분석은 코어가 3회, 텍스트는 라우트가 2회). 텍스트 경로에는 `retryOperation`
+  도 `extractResponseText` 도 없어서 한 번에 못 맞춘다 — 그쪽을 손댈 때 함께
+  정리한다.
+*/
 const MAX_PLAN_ATTEMPTS = 2;
 const INTENSITIES: CopyIntensity[] = ["plain", "normal", "strong", "max"];
 const POLICIES: GapPolicy[] = ["omit", "ask", "sample"];

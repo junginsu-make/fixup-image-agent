@@ -313,7 +313,17 @@ export class PdpService {
       },
     );
 
-    const makeBlueprint = (revisionDirective: string) => retryOperation(async () => {
+    /**
+     * 설계도를 한 벌 받아 온다.
+     *
+     * **코드 재시도를 켜는 유일한 자리다**(D-6). 글 모델은 같은 것을 다시
+     * 물으면 다른 답을 준다.
+     *
+     * `retries` 를 받는 이유는 **재작성이 덤이기 때문**이다. 호출 하나가
+     * 60~110초라, 재시도(3회) × 재작성(2번 호출) = 여섯 번이면 라우트
+     * 상한(300초)을 넘고 그때는 정산이 아예 안 돌아 예약이 묶인 채 남는다.
+     */
+    const makeBlueprint = (revisionDirective: string, retries = 2) => retryOperation(async () => {
       const response = await client.models.generateContent({
         name: "pdp_blueprint",
         contents: [
@@ -404,7 +414,7 @@ ${analyzePrompt}`
       });
 
       return parseBlueprintResponse(response);
-    });
+    }, retries, 1500, true);
 
     /**
      * 심사는 품질을 올리려는 장치다. 그것 때문에 생성 자체가 죽으면 손해가 더 크다.
@@ -436,12 +446,28 @@ ${analyzePrompt}`
     // 사진 경로는 텍스트 경로보다 상한을 좁게 잡는다. 여기는 "사진 한 장 넣고 빨리
     // 받는" 길이라, 품질을 올리자고 대기 시간을 두 배로 만들면 길의 성격이 바뀐다.
     if (review && needsRevision(review)) {
-      const revised = await makeBlueprint(buildRevisionDirective(review));
-      const revisedReview = await runReview(revised);
-      // 고친 것이 더 나쁘면 원래 것을 쓴다. 재작성이 늘 개선은 아니다.
-      if (reviewPenalty(revisedReview) < reviewPenalty(review)) {
-        blueprint = revised;
-        review = revisedReview;
+      /*
+        **고치기가 실패하면 안 고친 것과 같은 상태로 둔다.**
+
+        전에는 여기에 그물이 없었다. 빈 섹션 판정을 파싱 자리로 옮긴 뒤로는
+        재작성이 빈 답을 받으면 던지는데, 그러면 **첫 번째로 이미 받아 둔
+        멀쩡한 설계도까지 같이 죽는다**(리뷰 HIGH-1).
+
+        바로 위 심사(`runReview`)가 같은 상황을 일부러 삼키는 것과 같은 결이다
+        — 「덤 때문에 생성 자체가 죽으면 손해가 더 크다」.
+
+        되묻지도 않는다(`retries = 0`). 덤에 값을 세 배로 쓰지 않는다.
+      */
+      try {
+        const revised = await makeBlueprint(buildRevisionDirective(review), 0);
+        const revisedReview = await runReview(revised);
+        // 고친 것이 더 나쁘면 원래 것을 쓴다. 재작성이 늘 개선은 아니다.
+        if (reviewPenalty(revisedReview) < reviewPenalty(review)) {
+          blueprint = revised;
+          review = revisedReview;
+        }
+      } catch (error) {
+        console.warn("[pdp] 구성안 재작성 실패 — 처음 만든 것을 그대로 씁니다", error);
       }
     }
 
@@ -495,8 +521,19 @@ ${analyzePrompt}`
     /*
       섹션이 비었는지는 **파싱 자리에서** 본다(D-3). 여기서 보면 재시도 바깥이라
       빈 답이 그대로 끝난다.
+
+      그래도 단정(`!`)은 안 쓴다. 이 사이에 `resolveStructureFailures` 가 끼는데,
+      지금은 `.map` 이라 수를 안 줄이지만 **언젠가 `.filter` 가 되면 단정이
+      조용히 거짓말을 한다.** 여기 닿으면 진짜 버그라는 뜻이므로 그렇게 말한다.
     */
-    const firstSection = blueprint.sections[0]!;
+    const firstSection = blueprint.sections[0];
+    if (!firstSection) {
+      throw new PdpServiceError(
+        "AI_RESPONSE_INVALID",
+        "상세페이지 섹션을 생성하지 못했습니다.",
+        "Sections disappeared between parse and image generation."
+      );
+    }
 
     if (!options?.skipFirstImage) {
       const firstImage = await this.generateSectionImageInternal({
@@ -2129,7 +2166,22 @@ function extractGeneratedImage(response: {
   return null;
 }
 
-async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay = 1500): Promise<T> {
+/**
+ * 다시 불러 본다.
+ *
+ * **`retriableByCode` 는 부르는 쪽이 켠다.** 기본은 꺼짐이다 — 이 함수는 글
+ * 모델 호출만 감싸지 않는다. **그림 만드는 호출도** 감싸고, 그쪽은 fal 이 200 을
+ * 준 뒤라 **이미 값을 치렀다.** 몸통을 못 읽었다고 다시 그리면 한 장 값이 세 장
+ * 값이 되고, 성공한 장수만 세는 장부에는 0장으로 남는다(리뷰 HIGH-2).
+ *
+ * 「같은 것을 다시 물으면 다른 답이 온다」는 근거는 **글 모델에만** 참이다.
+ */
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  retries = 2,
+  delay = 1500,
+  retriableByCode = false,
+): Promise<T> {
   try {
     return await operation();
   } catch (error) {
@@ -2150,11 +2202,11 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
       글자 대조도 남겨 둔다. `PdpServiceError` 로 감싸이지 않은 채 올라오는
       자리(공급자 SDK 가 직접 던지는 경우)가 아직 있다.
     */
-    const retriableCode = error instanceof PdpServiceError && isRetriableModelFailure(error.code);
+    const retriableCode = retriableByCode && error instanceof PdpServiceError && isRetriableModelFailure(error.code);
 
     if (retries > 0 && (retriableCode || isQuotaError(message, status) || isJsonError(message))) {
       await wait(delay);
-      return retryOperation(operation, retries - 1, delay * 2);
+      return retryOperation(operation, retries - 1, delay * 2, retriableByCode);
     }
 
     if (error instanceof PdpServiceError) {
