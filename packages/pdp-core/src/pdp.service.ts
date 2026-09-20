@@ -1109,6 +1109,17 @@ export function toPdpErrorResponse(error: unknown): {
 
   const detail = stringifyError(error);
   const message = error instanceof Error ? error.message : "상세페이지 마법사 처리 중 오류가 발생했습니다.";
+  /*
+    **상태 코드가 있으면 그것이 답이다.**
+
+    SDK 는 공급자 본문을 그대로 `error.message` 에 싣는다. 그래서 본문에 섞인
+    숫자로 짐작하면 「400 prompt is too long: 214297 tokens」가 사용량 초과로
+    분류됐다 — 분석 한도 면제가 생긴 지금은 그것이 **입력 길이로 만들 수 있는
+    우회로**다(C-9 리뷰).
+  */
+  const status = typeof (error as { status?: unknown })?.status === "number"
+    ? (error as { status: number }).status
+    : undefined;
 
   /*
     운영자가 키를 안 넣은 채 배포한 경우. 라우트가 공급자를 만들다 던진다.
@@ -1158,7 +1169,7 @@ export function toPdpErrorResponse(error: unknown): {
     };
   }
 
-  if (isQuotaError(message)) {
+  if (isQuotaError(message, status)) {
     return {
       ok: false as const,
       code: "AI_QUOTA_EXCEEDED" as const,
@@ -1167,11 +1178,34 @@ export function toPdpErrorResponse(error: unknown): {
     };
   }
 
+  /*
+    **「모델이 답을 보냈다」가 「공급자가 죽었다」보다 강한 신호다.**
+
+    아래 장애 판정은 본문 글자도 본다. 모델이 쓴 조각이 그 글자에 닿으면
+    과금이 나간 뒤인데도 장애로 분류돼 한도를 면제받는다. 그래서 JSON 오류를
+    먼저 가른다(C-9 리뷰).
+  */
   if (isJsonError(message)) {
     return {
       ok: false as const,
       code: "AI_RESPONSE_INVALID" as const,
       message: "AI 응답을 해석하지 못했습니다. 같은 이미지로 다시 시도해 주세요.",
+      detail
+    };
+  }
+
+  /*
+    공급자가 손도 안 댄 실패. 그동안 전부 「처리 중 오류」로 떨어져서,
+    **분석 한도를 면제할 방법이 없었다**(C-9) — 그 통에는 우리 쪽 버그도 함께
+    담기기 때문이다. 장애만 따로 이름 붙여야 갈라 셀 수 있다.
+
+    사용량 초과(429)보다 **뒤에** 둔다. 429 는 장애가 아니라 우리 몫을 다 쓴 것이다.
+  */
+  if (isProviderUnavailableError(message, status)) {
+    return {
+      ok: false as const,
+      code: "AI_PROVIDER_UNAVAILABLE" as const,
+      message: "AI 공급자가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.",
       detail
     };
   }
@@ -2115,8 +2149,13 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
     return await operation();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // 여기도 본문 숫자로 짐작하지 않는다. 이 자리가 `AI_QUOTA_EXCEEDED` 를
+    // 직접 던지므로, 느슨하면 분석 한도 면제가 그대로 뚫린다(C-9 리뷰).
+    const status = typeof (error as { status?: unknown })?.status === "number"
+      ? (error as { status: number }).status
+      : undefined;
 
-    if (retries > 0 && (isQuotaError(message) || isJsonError(message))) {
+    if (retries > 0 && (isQuotaError(message, status) || isJsonError(message))) {
       await wait(delay);
       return retryOperation(operation, retries - 1, delay * 2);
     }
@@ -2125,7 +2164,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
       throw error;
     }
 
-    if (isQuotaError(message)) {
+    if (isQuotaError(message, status)) {
       throw new PdpServiceError(
         "AI_QUOTA_EXCEEDED",
         "AI 사용량이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
@@ -2145,9 +2184,23 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
   }
 }
 
-function isQuotaError(message: string) {
+/**
+ * 공급자가 **우리 몫이 다 됐다**고 한 경우.
+ *
+ * `"429"` 부분일치를 버렸다. 토큰 수·바이트 수에 그 세 글자가 들어가면
+ * 「400 prompt is too long: 214297 tokens」가 사용량 초과가 됐다. 그동안은 모든
+ * 실패가 분석 한도를 먹어서 무해했지만, 이제 이 코드가 **면제**라 사용자가
+ * 입력 길이로 만들 수 있는 우회로가 된다(C-9 리뷰).
+ */
+function isQuotaError(message: string, status?: number) {
+  // 상태 코드가 있으면 그것이 답이다. 본문 숫자로 짐작하지 않는다.
+  if (typeof status === "number") return status === 429;
   const lowered = message.toLowerCase();
-  return lowered.includes("429") || lowered.includes("quota") || lowered.includes("resource_exhausted");
+  return (
+    new RegExp(String.raw`\b429\b`).test(lowered) ||
+    lowered.includes("quota") ||
+    lowered.includes("resource_exhausted")
+  );
 }
 
 function isInvalidApiKeyError(message: string) {
@@ -2168,6 +2221,33 @@ function isPermissionError(message: string) {
     lowered.includes("forbidden") ||
     lowered.includes("model access") ||
     lowered.includes("not found for api version")
+  );
+}
+
+/**
+ * 공급자에 **닿지 못했거나** 공급자가 **답을 못 준** 경우.
+ *
+ * 모델이 일한 흔적이 없는 실패다. 우리 쪽 버그(`PDP_ANALYZE_FAILED`)와 갈라
+ * 두어야 분석 한도를 면제할 수 있다.
+ */
+function isProviderUnavailableError(message: string, status?: number) {
+  // 4xx 는 장애가 아니라 우리 요청 문제다. 본문 글자로 뒤집지 않는다.
+  if (typeof status === "number" && status < 500) return false;
+  if (status === 502 || status === 503 || status === 504) return true;
+  const lowered = message.toLowerCase();
+  return (
+    lowered.includes("fetch failed") ||
+    lowered.includes("econnrefused") ||
+    lowered.includes("econnreset") ||
+    lowered.includes("etimedout") ||
+    lowered.includes("enotfound") ||
+    lowered.includes("socket hang up") ||
+    lowered.includes("network error") ||
+    lowered.includes("overloaded") ||
+    lowered.includes("service unavailable") ||
+    lowered.includes("bad gateway") ||
+    lowered.includes("gateway timeout") ||
+    new RegExp(String.raw`\b(502|503|504)\b`).test(lowered)
   );
 }
 

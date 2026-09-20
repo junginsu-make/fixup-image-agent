@@ -11,6 +11,21 @@ const model = text.refine((value) => IMAGE_MODELS.some((entry) => entry.id === v
   .transform((value) => value as ImageModelId);
 const ratio = z.enum(["1:1", "3:4", "4:3", "9:16", "16:9"]);
 const image = z.object({ imageBase64: text.trim().min(1), mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]) }).passthrough();
+/*
+  **깨진 그림은 예약 전에 되돌려 보낸다**(C-9 리뷰).
+
+  `analyze` 스키마의 `mimeType` 은 그냥 문자열이었다. 그래서 `"x"` 한 글자면
+  예약을 통과하고, 라우트가 sharp 로 최대 20MiB 를 다 간 뒤에야 코어의
+  `normalizeMimeType` 이 `INVALID_IMAGE_PAYLOAD` 로 끝냈다. 그 코드는 **분석
+  한도 면제**라, 값싼 실패를 천장(100회/시간)까지 반복할 수 있었다.
+
+  기준은 코어와 **같다** — `normalizeMimeType` 은 `image/` 로 시작하는지만 보고,
+  `sanitizeBase64Payload` 는 base64 글자만 있는지 본다. 새로 막히는 그림은 없다.
+*/
+const imageMime = text.regex(new RegExp(String.raw`^image/[a-z0-9.+-]+$`, "i"), "이미지 파일만 올릴 수 있습니다.");
+const imagePayload = text.trim().min(1)
+  .regex(new RegExp(String.raw`^(?:data:[^;]+;base64,)?[A-Za-z0-9+/\s]+=*$`), "이미지 데이터가 올바르지 않습니다.");
+
 const intents = z.object({ anchor: text.optional(), person: text.optional(), style: text.optional() });
 const options = z.object({
   imageModel: model.optional(), style: z.enum(["studio", "lifestyle", "outdoor"]).optional(),
@@ -62,7 +77,7 @@ const schemas = {
   single: z.object({ ...common, originalImageBase64: text.trim().min(1), section }).passthrough(),
   batch: z.object({ ...common, originalImageBase64: text.trim().min(1), sections: z.array(section).min(1) }).passthrough()
     .refine((body) => body.sections.length <= maxBatchSizeFor(body.page?.imageModel ?? DEFAULT_IMAGE_MODEL), "한 번에 생성할 수 있는 장수를 초과했습니다."),
-  analyze: z.object({ ...common, imageBase64: text.trim().min(1), mimeType: text,
+  analyze: z.object({ ...common, imageBase64: imagePayload, mimeType: imageMime,
     modelImageBase64: text.optional(), modelImageMimeType: text.optional(),
     /*
       **기획과 이미지 생성이 같은 상한을 쓴다**(U-08).

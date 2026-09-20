@@ -105,9 +105,15 @@ export async function reserveAiUsage(
       team_quota_exceeded: "팀의 이번 달 생성 한도를 모두 사용했습니다. 팀장에게 문의해 주세요.",
       concurrent_limit: "이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.",
       analysis_rate_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+      /*
+        **같은 말, 다른 reason**(C-9). 사용자가 할 일은 「잠시 후 다시」로 같다.
+        가른 이유는 운영이다 — 한도(시간당 10)에 걸린 것과 남용 천장(시간당
+        100)에 걸린 것은 할 일이 정반대다. reason 까지 같으면 구분할 길이 없다.
+      */
+      analysis_abuse_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
       duplicate_request: "이미 처리된 요청입니다. 새로고침 후 다시 시도해 주세요.",
     };
-    const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit"]
+    const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit", "analysis_abuse_limit"]
       .includes(row.reason) ? 429 : 409;
     return {
       ok: false,

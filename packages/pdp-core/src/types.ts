@@ -648,6 +648,14 @@ export type PdpErrorCode =
   | "AI_KEY_MISSING"
   | "AI_KEY_INVALID"
   | "AI_MODEL_ACCESS_DENIED"
+  /**
+   * 공급자가 손도 안 댄 실패. 연결이 끊겼거나 502·503, 또는 과부하다.
+   *
+   * `PDP_ANALYZE_FAILED` 와 갈라 둔 이유는 **분석 한도** 때문이다. 그 통은 우리
+   * 쪽 버그도 함께 담아서, 통째로 면제하면 모델 값을 다 쓰고 터진 경우까지
+   * 공짜가 된다(`pdp.analysis-quota`).
+   */
+  | "AI_PROVIDER_UNAVAILABLE"
   | "INVALID_IMAGE_PAYLOAD"
   | "INVALID_REQUEST"
   | "AI_QUOTA_EXCEEDED"

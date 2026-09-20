@@ -78,8 +78,19 @@ async function analyze(req: Request) {
     });
     return Response.json(lastEnvelope, { status: lastStatus });
   } catch (err) {
-    await settleAiUsage(reservation, false, 0, "invalid_request");
+    /*
+      **무슨 코드로 닫느냐가 한도를 가른다**(C-9).
+
+      여기는 그동안 `"invalid_request"` 한 줄로 닫았다. 그런데 이 자리에 오는
+      것은 요청 모양 문제가 아니다 — 요청 모양은 `readPdpRequest` 가 예약
+      **전에** 되돌려 보낸다. 실제로 오는 것은 키가 없거나(`AI_KEY_MISSING`)
+      레퍼런스를 자르다 터진 경우다.
+
+      SQL 은 이 코드를 보고 분석 한도를 먹일지 정한다(`pdp.analysis-quota`).
+      뭉뚱그려 적으면 공급자 장애가 사용자 한도를 먹는다.
+    */
     const envelope = toPdpErrorResponse(err);
+    await settleAiUsage(reservation, false, 0, String(envelope.code));
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }
 }

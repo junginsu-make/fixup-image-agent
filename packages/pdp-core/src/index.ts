@@ -150,6 +150,7 @@ export {
 } from "./pdp.input-limits";
 export { identityConflictOf, type IdentityConflict } from "./pdp.identity-conflict";
 export { recoverLookWithoutReference, type LookRecovery } from "./pdp.look-recovery";
+export { ANALYSIS_QUOTA_EXEMPT_CODES, consumesAnalysisQuota } from "./pdp.analysis-quota";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
 export {
   personSourceConflict,
@@ -207,6 +208,9 @@ export function mapPdpErrorCodeToStatus(code?: PdpErrorCode | string): number {
       return 403;
     case "AI_QUOTA_EXCEEDED":
       return 429;
+    // 우리 잘못이 아니라 위쪽이 못 받는 상태다. 503 이어야 재시도가 말이 된다.
+    case "AI_PROVIDER_UNAVAILABLE":
+      return 503;
     case "PDP_IMAGE_QA_REJECTED":
       return 422;
     default:

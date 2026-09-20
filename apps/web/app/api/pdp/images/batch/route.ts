@@ -302,7 +302,13 @@ export async function POST(req: Request) {
   return Response.json({
     ok: succeeded > 0,
     status: succeeded === sections.length ? "completed" : succeeded > 0 ? "partial" : "failed",
-    stopBatch: results.some((result) => !result.ok && ["AI_KEY_MISSING", "AI_QUOTA_EXCEEDED"].includes(result.code)),
+    /*
+      **더 때려도 같은 답이 온다.** 공급자가 죽은 것에 이름을 붙인 김에 여기도
+      넣는다(C-9) — 전에는 장애가 「처리 중 오류」라 멈출 근거가 없어, 죽은
+      공급자를 섹션 수만큼 계속 때렸다.
+    */
+    stopBatch: results.some((result) => !result.ok &&
+      ["AI_KEY_MISSING", "AI_QUOTA_EXCEEDED", "AI_PROVIDER_UNAVAILABLE"].includes(result.code)),
     ...(succeeded === 0 ? { message: "모든 섹션 생성에 실패했습니다. 오류를 확인한 뒤 다시 시도해 주세요." } : {}),
     model,
     requested: sections.length,

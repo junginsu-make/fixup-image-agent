@@ -181,7 +181,7 @@ describe("종류가 몸을 정한다", () => {
     // 뒤통수에 얼굴을 그리지 말라는 지시는 물건에 뜻이 없다.
     const back = angleDirective("back", "object");
     // 단어 경계가 필요하다 — surface 안의 face 가 걸린다.
-    expect(back).not.toMatch(/faces?|eyes|hairstyle/i);
+    expect(back).not.toMatch(new RegExp(String.raw`\bfaces?\b|\beyes\b|hairstyle`, "i"));
   });
 
   it("동물은 얼굴 대신 주둥이와 털로 말한다", () => {
