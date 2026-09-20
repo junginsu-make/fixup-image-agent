@@ -524,6 +524,61 @@ export function PdpEditor({
       : "히어로우 전용 업로드 모델이 적용되어 타깃 페르소나가 비활성화되었습니다."
     : "";
 
+  /*
+    **훅은 early return 앞에 둔다.**
+
+    아래 넷은 원래 이 파일 한참 뒤(캡처 함수들 사이)에 있었다. 그런데 바로
+    밑에 `if (!currentSection) return …` 이 있어서, 섹션이 있다가 없어지는
+    순간 **훅 개수가 달라진다** — React 가 「Rendered more hooks than during
+    the previous render」로 죽는다.
+
+    `next build` 가 이것을 lint 오류(`react-hooks/rules-of-hooks`) 넷으로
+    막고 있었다. 운영 빌드가 통째로 안 됐다.
+
+    쓰는 자리(ref 콜백)는 그대로다. 선언 자리만 위로 옮긴다.
+  */
+  /*
+    **붙는 순간에 관찰을 시작한다.**
+
+    `useEffect` 로 하면 갤러리↔편집을 오갈 때 딸림값이 안 바뀌어 **다시 돌지
+    않는다.** 그때 캔버스는 아직 없었으므로 관찰자가 한 번도 안 붙고, 창을
+    줄여도 배율이 1 그대로다 — 2026-09-17 실제 브라우저로 그렇게 확인했다.
+    ref 콜백은 실제로 붙고 떨어질 때마다 불린다.
+  */
+  const fitObserverRef = useRef<ResizeObserver | null>(null);
+  const attachCanvasFit = useCallback((node: HTMLDivElement | null) => {
+    fitObserverRef.current?.disconnect();
+    fitObserverRef.current = null;
+    canvasFitRef.current = node;
+    if (!node || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasFit(canvasFitFor(entry?.contentRect.width));
+    });
+    observer.observe(node);
+    fitObserverRef.current = observer;
+    setCanvasFit(canvasFitFor(node.clientWidth));
+  }, []);
+
+  /** 안쪽 높이는 그림 비율이 정한다. 줄인 만큼 자리도 줄이려면 이 값이 필요하다. */
+  const heightObserverRef = useRef<ResizeObserver | null>(null);
+  const attachCanvas = useCallback((node: HTMLDivElement | null) => {
+    heightObserverRef.current?.disconnect();
+    heightObserverRef.current = null;
+    imageContainerRef.current = node;
+    if (!node) return;
+    // 안쪽 폭은 늘 460 이다. 내보내기가 이 값을 기준으로 굽는다.
+    if (node.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasHeight(entry?.contentRect.height ?? null);
+    });
+    observer.observe(node);
+    heightObserverRef.current = observer;
+    setCanvasHeight(node.clientHeight || null);
+  }, []);
+
   if (!currentSection) {
     return (
       <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
@@ -2037,47 +2092,6 @@ export function PdpEditor({
    * 레이어 좌표가 캔버스 폭 기준이라, 배율만 원본에 맞추면 배치는 그대로 두고
    * 해상도만 되찾는다.
    */
-  /*
-    **붙는 순간에 관찰을 시작한다.**
-
-    `useEffect` 로 하면 갤러리↔편집을 오갈 때 딸림값이 안 바뀌어 **다시 돌지
-    않는다.** 그때 캔버스는 아직 없었으므로 관찰자가 한 번도 안 붙고, 창을
-    줄여도 배율이 1 그대로다 — 2026-09-17 실제 브라우저로 그렇게 확인했다.
-    ref 콜백은 실제로 붙고 떨어질 때마다 불린다.
-  */
-  const fitObserverRef = useRef<ResizeObserver | null>(null);
-  const attachCanvasFit = useCallback((node: HTMLDivElement | null) => {
-    fitObserverRef.current?.disconnect();
-    fitObserverRef.current = null;
-    canvasFitRef.current = node;
-    if (!node || typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(([entry]) => {
-      setCanvasFit(canvasFitFor(entry?.contentRect.width));
-    });
-    observer.observe(node);
-    fitObserverRef.current = observer;
-    setCanvasFit(canvasFitFor(node.clientWidth));
-  }, []);
-
-  /** 안쪽 높이는 그림 비율이 정한다. 줄인 만큼 자리도 줄이려면 이 값이 필요하다. */
-  const heightObserverRef = useRef<ResizeObserver | null>(null);
-  const attachCanvas = useCallback((node: HTMLDivElement | null) => {
-    heightObserverRef.current?.disconnect();
-    heightObserverRef.current = null;
-    imageContainerRef.current = node;
-    if (!node) return;
-    // 안쪽 폭은 늘 460 이다. 내보내기가 이 값을 기준으로 굽는다.
-    if (node.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
-    if (typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(([entry]) => {
-      setCanvasHeight(entry?.contentRect.height ?? null);
-    });
-    observer.observe(node);
-    heightObserverRef.current = observer;
-    setCanvasHeight(node.clientHeight || null);
-  }, []);
 
   const captureSectionBlob = async (sectionIndex: number) => {
     const section = sections[sectionIndex];

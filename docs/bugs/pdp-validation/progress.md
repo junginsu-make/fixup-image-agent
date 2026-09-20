@@ -2704,3 +2704,56 @@ JSON 이 아니다」에 똑같이 `AI_RESPONSE_INVALID` 를 던진다. 코드�
   `cd apps/web && NEXT_DIST_DIR=.next-d4 npx next build` 뒤
   `grep -rl "never change the product" .next-d4/static/chunks/`
 - pdp-core 996 통과. 웹 3,236 통과 / 6 skip. 양쪽 타입 0건
+
+---
+
+## 운영 빌드가 안 되고 있었다 (배포 선행 조건)
+
+### 커밋 45개가 쌓이는 동안 아무도 몰랐다
+
+`next build` 가 lint 오류로 exit 1 이었다. D-4 를 재려고 처음 빌드를 돌려 보고
+알았다 — **이 저장소의 시험·타입 검사는 전부 통과하는데 운영 빌드만 안 된다.**
+
+```
+./app/create/PdpEditor.tsx
+2048:26  Error: React Hook "useRef" is called conditionally.  react-hooks/rules-of-hooks  (4건)
+```
+
+### lint 투정이 아니라 진짜 버그였다
+
+이 화면 527행에 `if (!currentSection) return …` 이 있고, 문제의 훅 넷이 그
+**뒤**에 있었다. 섹션이 있다가 없어지는 순간 **훅 개수가 달라진다** — React 가
+「Rendered more hooks than during the previous render」로 죽는다.
+
+의존값(`imageContainerRef`·`canvasFitRef`·`setCanvasFit`)은 전부 378~384행에
+있어서, **선언 자리만 early return 앞으로 옮기면** 된다. 쓰는 자리(ref 콜백)는
+한 글자도 안 바뀐다.
+
+### 결과
+
+```
+✓ Compiled successfully in 27.8s
+exit=0
+```
+
+**처음으로 운영 빌드가 된다.** 112개 경로가 나온다.
+
+그리고 D-4 측정을 **온전한 빌드로 다시 했다.** 네 표식 모두 0이다 — 앞선
+측정(lint 실패 빌드)과 같은 값이라, 그때 「청크는 lint 전에 나온다」고 한 판단도
+맞았다.
+
+### 왜 시험이 못 잡았나
+
+이 저장소는 `next build` 를 시험에 안 돌린다(빌드 한 번이 30초 넘는다).
+그래서 **lint 만 잡는 오류는 아무도 안 본다.**
+
+훅 순서를 `pdp-editor-wiring.test.ts` 에서도 재도록 했다. lint 가 이미 잡지만,
+**`next build` 를 돌려야 보이는 것과 시험 한 번에 보이는 것은 발견까지 걸리는
+시간이 다르다.**
+
+### 검증
+
+- 변이 1종이 잡힌다 — 훅 하나를 early return 뒤로 되돌림
+- `npx eslint app/create/PdpEditor.tsx` rules-of-hooks **0건**
+- `NEXT_DIST_DIR=.next-build-check npx next build` **exit 0**
+- 웹 3,237 통과 / 6 skip. 타입 0건

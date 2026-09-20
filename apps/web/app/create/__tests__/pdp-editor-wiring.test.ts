@@ -65,3 +65,33 @@ describe("초안을 다시 열 때", () => {
     expect(maker).toContain('setAppState(draft.result ? draft.appState : "upload");');
   });
 });
+
+/**
+ * **훅은 early return 앞에 있어야 한다.**
+ *
+ * 이 화면에는 `if (!currentSection) return …` 이 있다. 그 뒤에 훅이 있으면
+ * 섹션이 있다가 없어지는 순간 **훅 개수가 달라져** React 가 죽는다
+ * (「Rendered more hooks than during the previous render」).
+ *
+ * 실제로 그랬다. `useRef`·`useCallback` 넷이 그 뒤에 있었고, **`next build` 가
+ * lint 오류로 막혀 운영 빌드가 통째로 안 됐다.** 이 가지에 커밋 45개가 쌓이는
+ * 동안 아무도 몰랐다.
+ *
+ * lint 가 이미 잡지만 여기서도 잰다 — `next build` 를 돌려야 보이는 것과,
+ * 시험 한 번에 보이는 것은 발견까지 걸리는 시간이 다르다.
+ */
+describe("훅 순서", () => {
+  it("**early return 뒤에 훅이 없다**", () => {
+    const lines = editor.split("\n");
+    const guard = lines.findIndex((line) => line.startsWith("  if (!currentSection) {"));
+    expect(guard, "early return 을 못 찾았다").toBeGreaterThan(-1);
+
+    // 컴포넌트 몸통 안(두 칸 들여쓰기)에서 부르는 훅만 본다.
+    const 늦은훅 = lines
+      .slice(guard)
+      .map((line, index) => ({ line, at: guard + index + 1 }))
+      .filter(({ line }) => /^ {2}const .*= use(Ref|State|Callback|Memo|Effect)\b/.test(line));
+
+    expect(늦은훅.map((hit) => `${hit.at}: ${hit.line.trim()}`)).toEqual([]);
+  });
+});
