@@ -22,10 +22,20 @@ let signedPaths: string[] = [];
 let deleteRow: Record<string, unknown> | null = null;
 /** 어떤 칸으로 좁혔는지. 「내 것만」이 빠지면 여기서 드러난다. */
 const eqCalls: Array<[string, unknown]> = [];
+/** 어느 구간을 달라고 했는지. 쪽 나누기가 실제로 질의까지 가는지 본다. */
+let rangeCall: [number, number] | null = null;
+/** 표에 실제로 있는 행 수. 화면에 보이는 수와 다를 수 있다. */
+let totalCount = 0;
+/** 표가 대답을 못 한 경우. 「없다」와 다르다. */
+let listError: { message: string } | null = null;
+let selectOptions: Record<string, unknown> | undefined;
 
 function builderFor(table: string) {
   const self: Record<string, unknown> = {
-    select: (columns: string) => { selectedColumns = columns; return self; },
+    select: (columns: string, options?: Record<string, unknown>) => {
+      selectedColumns = columns; selectOptions = options; return self;
+    },
+    range: (from: number, to: number) => { rangeCall = [from, to]; return self; },
     insert: () => self,
     update: (row: Record<string, unknown>) => { updated = { ...(updated ?? {}), ...row }; return self; },
     delete: () => self,
@@ -37,7 +47,11 @@ function builderFor(table: string) {
     single: async () => ({ data: { id: "s1" }, error: null }),
     maybeSingle: async () => ({ data: deleteRow, error: null }),
     then: (resolve: (x: unknown) => unknown) =>
-      Promise.resolve(resolve({ data: table === "style_references" ? listRows : [], error: null })),
+      Promise.resolve(resolve({
+        data: table === "style_references" ? listRows : [],
+        count: totalCount,
+        error: listError,
+      })),
   };
   return self;
 }
@@ -90,6 +104,7 @@ beforeEach(() => {
   uploads.length = 0; removed.length = 0;
   updated = null; listRows = []; signedPaths = [];
   selectedColumns = ""; deleteRow = null; eqCalls.length = 0;
+  rangeCall = null; totalCount = 0; selectOptions = undefined; listError = null;
 });
 
 describe("디자인 레퍼런스를 저장할 때 — 사본 배선", () => {
@@ -128,7 +143,7 @@ describe("디자인 레퍼런스 목록 — 사본 주소", () => {
       path: "u1/s1.png", thumb_path: "u1/s1.thumb.webp", created_at: "2026-01-01",
     }];
 
-    const [row] = await mod.listUserStyleReferences("u1");
+    const { references: [row] } = await mod.listUserStyleReferences("u1");
 
     expect(signedPaths.sort()).toEqual(["u1/s1.png", "u1/s1.thumb.webp"]);
     // 격자는 사본, 고르기와 생성 입력은 원본이다.
@@ -144,7 +159,7 @@ describe("디자인 레퍼런스 목록 — 사본 주소", () => {
       path: "u1/s1.png", thumb_path: null, created_at: "2026-01-01",
     }];
 
-    const [row] = await mod.listUserStyleReferences("u1");
+    const { references: [row] } = await mod.listUserStyleReferences("u1");
 
     expect(row!.thumbUrl).toBeNull();
     expect(row!.url).toBe("signed:u1/s1.png");
@@ -236,5 +251,107 @@ describe("행의 주인을 물을 때", () => {
     await mod.ownerOfStyleReference("s1");
 
     expect(eqCalls.map(([column]) => column)).not.toContain("user_id");
+  });
+});
+
+/**
+ * **200개 뒤를 조용히 숨기고 있었다**(C-7).
+ *
+ * 목록은 `.limit(200)` 으로 잘렸고, 라우트는 그 길이를 `total` 이라 불렀다.
+ * 레퍼런스가 240장이면 화면은 **「200장」이라고 말하면서 40장을 안 보여 준다.**
+ * 사용자는 올린 것이 사라진 줄 안다.
+ *
+ * 설계 §12: 「레퍼런스 목록은 pagination 을 제공한다. **200개 이후 보이지 않게
+ * 숨기지 않는다.**」
+ */
+describe("디자인 레퍼런스 목록 — 쪽 나누기", () => {
+  const 행 = (id: string) => ({
+    id, name: id, source: "upload", description: "d",
+    path: `u1/${id}.png`, thumb_path: null, created_at: "2026-01-01",
+  });
+
+  it("**전체 수를 사실대로 센다** — 보이는 수와 가진 수는 다르다", async () => {
+    listRows = [행("s1"), 행("s2")];
+    totalCount = 240;
+
+    const page = await mod.listUserStyleReferences("u1");
+
+    expect(page.references).toHaveLength(2);
+    expect(page.total).toBe(240);
+    // 세어 달라고 말해야 센다.
+    expect(selectOptions).toMatchObject({ count: "exact" });
+  });
+
+  it("**달라는 구간을 질의에 싣는다**", async () => {
+    listRows = [행("s1")];
+    totalCount = 240;
+
+    await mod.listUserStyleReferences("u1", { limit: 50, offset: 100 });
+
+    expect(rangeCall).toEqual([100, 149]);
+  });
+
+  it("**다음 쪽이 있으면 어디부터인지 말한다**", async () => {
+    listRows = [행("s1")];
+    totalCount = 240;
+
+    const page = await mod.listUserStyleReferences("u1", { limit: 100, offset: 0 });
+
+    expect(page.nextOffset).toBe(100);
+  });
+
+  it("**마지막 쪽이면 다음이 없다**", async () => {
+    listRows = [행("s1")];
+    totalCount = 40;
+
+    const page = await mod.listUserStyleReferences("u1", { limit: 100, offset: 0 });
+
+    expect(page.nextOffset).toBeNull();
+  });
+
+  /**
+   * **한 번에 다 달라고 해도 상한이 있다.** 서명 URL 을 그 수만큼 만들어야
+   * 하므로, 막지 않으면 목록 한 번이 창고를 때린다.
+   */
+  it("**터무니없는 크기는 조인다**", async () => {
+    listRows = [];
+    totalCount = 0;
+
+    await mod.listUserStyleReferences("u1", { limit: 99999, offset: 0 });
+
+    expect(rangeCall![1] - rangeCall![0] + 1).toBeLessThanOrEqual(200);
+  });
+
+  it("**음수 자리는 처음으로 본다**", async () => {
+    listRows = [];
+
+    await mod.listUserStyleReferences("u1", { limit: 10, offset: -5 });
+
+    expect(rangeCall).toEqual([0, 9]);
+  });
+});
+
+/**
+ * **「못 불러왔다」와 「없다」는 다르다.**
+ *
+ * 전에는 표가 대답을 못 해도 빈 배열이었다. 이제 화면이 그 수를 「N장」이라고
+ * 단언하므로, 같은 모양으로 두면 **레퍼런스가 사라진 것처럼 보인다.**
+ */
+describe("목록을 못 불러왔을 때", () => {
+  it("**못 불러왔다고 말한다**", async () => {
+    listError = { message: "연결 실패" };
+
+    const page = await mod.listUserStyleReferences("u1");
+
+    expect(page.failed).toBe(true);
+  });
+
+  it("비어 있는 것은 실패가 아니다", async () => {
+    listRows = [];
+    totalCount = 0;
+
+    const page = await mod.listUserStyleReferences("u1");
+
+    expect(page.failed).toBe(false);
   });
 });

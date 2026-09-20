@@ -25,9 +25,14 @@ let member: { ok: boolean; member?: { userId: string }; response?: Response } = 
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => member,
+  // 장부는 여기서 재지 않는다. `style-references-usage.test.ts` 가 잰다.
+  reserveAiUsage: async () => ({ ok: true as const, userId: "u1", requestId: "r1", usage: {} }),
+  settleAiUsage: async () => ({}),
 }));
 
 const 등록된것: Array<{ imageBase64: string; mimeType: string }> = [];
+/** 목록이 어떤 쪽을 달라고 받았는지. 주소 한 줄이 여기까지 온다. */
+const 물어본쪽: Array<{ limit?: number; offset?: number } | undefined> = [];
 /** 표에 실제로 있는 행. `userId` 가 주인이다. */
 const 있는행 = new Map<string, string>();
 
@@ -36,7 +41,10 @@ vi.mock("../../../../lib/user-style-references", () => ({
     등록된것.push(input);
     return { ok: true as const, id: "new-id", description: "설명" };
   },
-  listUserStyleReferences: async () => [],
+  listUserStyleReferences: async (_userId: string, page?: { limit?: number; offset?: number }) => {
+    물어본쪽.push(page);
+    return { references: [], total: 0, nextOffset: null };
+  },
   deleteUserStyleReference: async (userId: string, id: string) => {
     if (있는행.get(id) === userId) {
       있는행.delete(id);
@@ -47,7 +55,7 @@ vi.mock("../../../../lib/user-style-references", () => ({
   ownerOfStyleReference: async (id: string) => 있는행.get(id) ?? null,
 }));
 
-const { POST, DELETE } = await import("../style-references/route");
+const { GET, POST, DELETE } = await import("../style-references/route");
 
 const 요청 = (method: string, body: unknown) =>
   new Request("http://localhost/api/pdp/style-references", {
@@ -65,6 +73,7 @@ async function png(width = 8, height = 8) {
 
 beforeEach(() => {
   등록된것.length = 0;
+  물어본쪽.length = 0;
   있는행.clear();
   member = { ok: true, member: { userId: "u1" } };
 });
@@ -257,5 +266,38 @@ describe("상한을 사용자에게 말한다", () => {
     expect(source).toContain("STYLE_REFERENCE_LIMIT_HINT");
     // 수를 손으로 적어 두면 상수가 바뀐 날 화면만 옛말을 한다.
     expect(source).not.toMatch(new RegExp(String.raw`\d+MB 이하`));
+  });
+});
+
+/**
+ * **기본값이 안 먹으면 「200개 뒤를 숨기지 않겠다」가 1개 뒤를 숨긴다**(C-7).
+ *
+ * `searchParams.get()` 은 없을 때 `null` 이고 `Number(null)` 은 **0** 이다.
+ * `?? 200` 은 0 을 「준 값」으로 보므로 기본값이 안 먹고, 아래 조이기가 1 로
+ * 만든다. 부르는 화면 셋이 전부 `limit` 을 안 붙이므로 **목록이 통째로 한 장**
+ * 이 된다. 고치기 전(`.limit(200)`)보다 나쁘다.
+ *
+ * 쿼리를 만드는 쪽과 읽는 쪽 사이에 시험이 없어서 87건이 다 통과했다. 여기가
+ * 그 자리다.
+ */
+describe("목록 쪽 크기", () => {
+  const 목록 = (query = "") =>
+    GET(new Request(`http://localhost/api/pdp/style-references${query}`));
+
+  it.each([
+    ["아무것도 안 붙임", ""],
+    ["자리만 붙임", "?offset=100"],
+    ["빈 값을 붙임", "?limit="],
+    ["숫자가 아님", "?limit=abc"],
+  ])("**%s → 한 쪽은 200장이다**", async (_label, query) => {
+    await 목록(query);
+
+    expect(물어본쪽[0]?.limit ?? 200).toBe(200);
+  });
+
+  it("**달라는 크기가 있으면 그것을 쓴다**", async () => {
+    await 목록("?limit=50&offset=100");
+
+    expect(물어본쪽[0]).toMatchObject({ limit: 50, offset: 100 });
   });
 });

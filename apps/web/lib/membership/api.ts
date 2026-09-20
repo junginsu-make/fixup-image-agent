@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { hasFullScope, viewerFrom } from "../access/core";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
+import { hourlyLimitFor } from "./hourly-limit";
 import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
 
 type ApiMember = { userId: string; profile: MemberProfile };
@@ -70,10 +71,14 @@ export async function reserveAiUsage(
   }
 
   const admin = createSupabaseAdminClient();
-  const configuredAnalysisLimit = Number(process.env.ANALYZE_HOURLY_LIMIT || 10);
-  const analysisLimit = Number.isFinite(configuredAnalysisLimit)
-    ? Math.min(1000, Math.max(1, Math.floor(configuredAnalysisLimit)))
-    : 10;
+  /*
+    **작업마다 제 한도를 본다**(C-7).
+
+    전에는 `ANALYZE_HOURLY_LIMIT` 하나였다. 레퍼런스 분석이 같은 칸을 쓰면
+    레퍼런스를 정리하다가 그날 상세페이지를 못 만들게 된다 — 한자리에서 스무
+    장을 올리는 일이 정상이기 때문이다. 표는 `hourly-limit.ts` 에 있다.
+  */
+  const analysisLimit = hourlyLimitFor(operation);
   const { data, error } = await admin.rpc("reserve_generation", {
     p_user_id: auth.member.userId,
     p_request_id: requestId,

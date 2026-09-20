@@ -1,4 +1,5 @@
-import { authenticateApiMember } from "../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
 import { STYLE_REFERENCE_JSON_LIMIT, STYLE_REFERENCE_MAX_MB } from "../../../../lib/pdp/reference-limits";
@@ -65,13 +66,48 @@ async function readBody(req: Request): Promise<
   }
 }
 
-export async function GET() {
+/**
+ * **200개 뒤를 조용히 숨기지 않는다**(C-7).
+ *
+ * 전에는 앞 200장만 돌려주면서 그 길이를 `total` 이라 불렀다. 240장을 올린
+ * 사용자는 「200장」이라는 말과 함께 40장을 잃어버린다.
+ *
+ * 설계 §12: 「레퍼런스 목록은 pagination 을 제공한다. 200개 이후 보이지 않게
+ * 숨기지 않는다.」
+ *
+ * `?limit=&offset=` 으로 쪽을 넘기고, `total` 은 **가진 수**를 말한다.
+ * `nextOffset` 이 있으면 더 있다는 뜻이다.
+ */
+export async function GET(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
   try {
-    const references = await listUserStyleReferences(auth.member.userId);
-    return Response.json({ ok: true, total: references.length, references });
+    const url = new URL(req.url);
+    /*
+      **안 준 것과 0 을 가른다.**
+
+      `searchParams.get()` 은 없을 때 `null` 이고 `Number(null)` 은 **0** 이다.
+      그대로 내려보내면 `?? 200` 이 0 을 「준 값」으로 보아 기본값이 안 먹고,
+      조이기가 한 쪽을 **1장**으로 만든다. 화면 셋이 전부 `limit` 을 안 붙이므로
+      목록이 통째로 한 장이 됐다 — 「200개 뒤를 숨기지 않겠다」던 변경이 1개
+      뒤를 숨겼다(리뷰가 잡았다).
+
+      빈 글자(`?limit=`)도 `Number("")` 가 0 이라 같이 막는다.
+    */
+    const asNumber = (name: string) => {
+      const raw = url.searchParams.get(name);
+      if (raw === null || raw.trim() === "") return undefined;
+      const value = Number(raw);
+      return Number.isFinite(value) ? value : undefined;
+    };
+    const { failed, ...page } = await listUserStyleReferences(auth.member.userId, {
+      limit: asNumber("limit"),
+      offset: asNumber("offset"),
+    });
+    // **못 불러온 것을 「0장」이라고 하지 않는다.** 사라진 줄 알게 된다.
+    if (failed) return fail(500, "레퍼런스를 불러오지 못했습니다.");
+    return Response.json({ ok: true, ...page });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "레퍼런스를 불러오지 못했습니다." },
@@ -80,7 +116,19 @@ export async function GET() {
   }
 }
 
+/**
+ * **글 모델에 쓴 돈을 잰다**(C-4-b).
+ *
+ * 서술을 만드는 호출은 `registerUserStyleReference` 안쪽에서 일어난다. 계량기가
+ * 감싸지 않으면 제공자가 적은 토큰이 **갈 곳이 없어 조용히 버려진다**
+ * (`lib/llm/meter.ts`). 그동안 이 길이 그랬고, 레퍼런스만 올리는 사용은 원가
+ * 집계에서 $0 으로 보였다.
+ */
 export async function POST(req: Request) {
+  return withLlmMeter(() => register(req));
+}
+
+async function register(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
@@ -105,6 +153,19 @@ export async function POST(req: Request) {
     return fail(inspected.reason === "too_many_pixels" ? 413 : 400, inspected.message);
   }
 
+  /*
+    **문지기를 지난 뒤에 예약한다**(C-9 와 같은 판단).
+
+    깨진 입력은 모델을 부르기 전에 끝난다. 예약을 먼저 하면 값싼 실패로 한도를
+    태울 수 있다. 크레딧은 0 이다 — 새로 그리는 것이 없다.
+
+    칸은 상세페이지 분석과 **다르다**. 레퍼런스는 한자리에서 여러 장을 올리는
+    일이 정상이라, 같은 칸을 쓰면 정리하다가 그날 기획이 막힌다
+    (`lib/membership/hourly-limit.ts`).
+  */
+  const reservation = await reserveAiUsage(req, "reference_analyze", 0);
+  if (!reservation.ok) return reservation.response;
+
   try {
     const result = await registerUserStyleReference({
       userId: auth.member.userId,
@@ -115,8 +176,38 @@ export async function POST(req: Request) {
       mimeType: inspected.mimeType,
     });
 
-    return Response.json(result, { status: result.ok ? 200 : 422 });
+    /*
+      **장부에는 분석이 됐는지를 적는다.**
+
+      열쇠가 없으면 `analyzeStyleImage` 는 모델을 **안 부르고** 빈 서술을 준다.
+      그대로 성공으로 닫으면, 운영자가 키를 빠뜨린 날 사용자는 시간당 칸을 전부
+      잃고도 서술을 하나도 못 받는다 — C-9 가 막으려던 바로 그 상황이다.
+
+      `finalize_generation` 은 **성공으로 닫으면서 오류 코드를 남길 수 없다**
+      (`p_success` 면 `error_code` 를 null 로 덮는다). 그래서 모델이 안 돈
+      경우는 「분석 실패」로 적는다. 레퍼런스 자체는 저장됐고 크레딧도 0 이라
+      사용자가 잃는 것은 없다 — 응답은 200 이다.
+
+      **계량기가 안 감싼 경우는 먹는 쪽으로 둔다.** 「안 돌았다」와 「못 쟀다」는
+      다르고, 모르는 것은 먹는 쪽이 안전하다(C-9 와 같은 판단).
+    */
+    const meter = readLlmMeter();
+    const 모델이안돌았다 = result.ok && meter.metered && meter.calls === 0;
+    const usage = await settleAiUsage(
+      reservation,
+      result.ok && !모델이안돌았다,
+      0,
+      result.ok ? (모델이안돌았다 ? "AI_KEY_MISSING" : undefined) : "register_failed",
+      { model: "", billableImages: 0, llmUsd: meter.usd },
+    );
+
+    return Response.json({ ...result, usage }, { status: result.ok ? 200 : 422 });
   } catch (error) {
+    await settleAiUsage(reservation, false, 0, "register_failed", {
+      model: "",
+      billableImages: 0,
+      llmUsd: readLlmMeter().usd,
+    });
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "레퍼런스를 등록하지 못했습니다." },
       { status: 500 },

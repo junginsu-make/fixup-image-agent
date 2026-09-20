@@ -5,6 +5,7 @@ import { ImagePlus, Loader2 } from "lucide-react";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { SavedImagePicker, type SavedImageSource } from "./SavedImagePicker";
 import { STYLE_REFERENCE_LIMIT_HINT } from "../../lib/pdp/reference-limits";
+import { randomId } from "../../lib/browser-safe";
 
 /**
  * 시나리오 화면에서 레퍼런스를 바로 첨부한다.
@@ -64,9 +65,14 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
         return;
       }
 
+      /*
+        **요청 식별자를 붙인다.** 이 길이 크레딧 장부를 거치게 되면서(C-4-b)
+        예약이 이 값을 요구한다. 없으면 등록이 통째로 400 으로 막힌다.
+        매번 새로 만든다 — 고정하면 두 번째 등록이 중복으로 거절된다.
+      */
       const response = await fetch("/api/pdp/style-references", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-idempotency-key": randomId() },
         body: JSON.stringify({ name, source: "upload", imageBase64: base64, mimeType }),
       });
       const body = (await response.json()) as {
