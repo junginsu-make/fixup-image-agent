@@ -20,6 +20,8 @@ let listRows: Array<Record<string, unknown>> = [];
 let selectedColumns = "";
 let signedPaths: string[] = [];
 let deleteRow: Record<string, unknown> | null = null;
+/** 어떤 칸으로 좁혔는지. 「내 것만」이 빠지면 여기서 드러난다. */
+const eqCalls: Array<[string, unknown]> = [];
 
 function builderFor(table: string) {
   const self: Record<string, unknown> = {
@@ -27,7 +29,7 @@ function builderFor(table: string) {
     insert: () => self,
     update: (row: Record<string, unknown>) => { updated = { ...(updated ?? {}), ...row }; return self; },
     delete: () => self,
-    eq: () => self,
+    eq: (column: string, value: unknown) => { eqCalls.push([column, value]); return self; },
     or: () => self,
     in: () => self,
     order: () => self,
@@ -87,7 +89,7 @@ async function photo(): Promise<Buffer> {
 beforeEach(() => {
   uploads.length = 0; removed.length = 0;
   updated = null; listRows = []; signedPaths = [];
-  selectedColumns = ""; deleteRow = null;
+  selectedColumns = ""; deleteRow = null; eqCalls.length = 0;
 });
 
 describe("디자인 레퍼런스를 저장할 때 — 사본 배선", () => {
@@ -166,5 +168,73 @@ describe("디자인 레퍼런스를 지울 때", () => {
     await mod.deleteUserStyleReference("u1", "s1");
 
     expect(removed.flat()).toEqual(["u1/s1.png"]);
+  });
+
+  /**
+   * **지운 것과 없던 것을 갈라 답한다**(C-10-c).
+   *
+   * 라우트는 이 값 하나로 200 멱등과 404 를 가른다. 라우트 시험은 이 함수를
+   * 통째로 흉내 내므로, **여기서 안 재면 「멱등이다」의 실제 근거가 무방비**다.
+   */
+  it("**있던 것을 지웠으면 그렇게 말한다**", async () => {
+    deleteRow = { path: "u1/s1.png", thumb_path: null };
+
+    expect((await mod.deleteUserStyleReference("u1", "s1")).deleted).toBe(true);
+  });
+
+  it("**지울 것이 없었으면 그렇게 말한다**", async () => {
+    deleteRow = null;
+
+    const result = await mod.deleteUserStyleReference("u1", "없는것");
+
+    expect(result.ok).toBe(true);
+    expect(result.deleted).toBe(false);
+    // 지울 것이 없으면 창고도 안 건드린다.
+    expect(removed).toHaveLength(0);
+  });
+
+  it("**내 것만 지운다** — 남의 행이 섞이면 사용자별 분리가 무너진다", async () => {
+    deleteRow = { path: "u1/s1.png", thumb_path: null };
+
+    await mod.deleteUserStyleReference("u1", "s1");
+
+    expect(eqCalls).toContainEqual(["user_id", "u1"]);
+    expect(eqCalls).toContainEqual(["id", "s1"]);
+  });
+});
+
+/**
+ * **주인을 묻는 길**(C-10-c).
+ *
+ * 「남의 것 404 / 없는 것 200 멱등」을 함께 만족하려면 사용자 범위 밖의 조회가
+ * 필요하다. 라우트는 **지울 것이 없었을 때만** 이것을 부른다.
+ */
+describe("행의 주인을 물을 때", () => {
+  it("**있으면 주인을 돌려준다**", async () => {
+    deleteRow = { user_id: "다른사람" };
+
+    expect(await mod.ownerOfStyleReference("s1")).toBe("다른사람");
+  });
+
+  it("없으면 null 이다", async () => {
+    deleteRow = null;
+
+    expect(await mod.ownerOfStyleReference("s1")).toBeNull();
+  });
+
+  it("**그 id 만 본다** — 좁히지 않으면 아무 행의 주인이나 답한다", async () => {
+    deleteRow = { user_id: "u1" };
+
+    await mod.ownerOfStyleReference("s9");
+
+    expect(eqCalls).toContainEqual(["id", "s9"]);
+  });
+
+  it("**사용자로는 안 좁힌다** — 좁히면 남의 것과 없는 것을 못 가른다", async () => {
+    deleteRow = { user_id: "다른사람" };
+
+    await mod.ownerOfStyleReference("s1");
+
+    expect(eqCalls.map(([column]) => column)).not.toContain("user_id");
   });
 });

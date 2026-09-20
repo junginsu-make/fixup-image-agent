@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { Badge, Button, Card, ImageLightbox, cn } from "@fixup/ui";
+import { STYLE_REFERENCE_LIMIT_HINT } from "../../lib/pdp/reference-limits";
 
 /**
  * 내 디자인 레퍼런스 관리.
@@ -142,6 +143,13 @@ export function StyleReferenceManager() {
         </Button>
         <span className="text-xs text-muted-foreground">
           잘 만든 상세페이지나 마음에 드는 디자인을 올리면 됩니다. 여러 장을 한 번에 고를 수 있습니다.
+          {/*
+            **상한을 먼저 말한다.** 전에는 413 을 받고 나서야 얼마까지 되는지
+            알았다. 서버와 **같은 상수**를 읽는다 — 두 벌로 적으면 화면만
+            옛말을 하는 날이 온다(설계 §12 「정책 상수와 UI 에서 일치」).
+          */}
+          <br />
+          {STYLE_REFERENCE_LIMIT_HINT}
         </span>
       </div>
 

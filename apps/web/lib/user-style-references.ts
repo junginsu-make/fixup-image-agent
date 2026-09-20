@@ -287,6 +287,27 @@ async function loadLibraryReferences(
   return loaded.filter(Boolean) as StyleReferenceMatch[];
 }
 
+/**
+ * 이 행의 주인은 누구인가. 없으면 `null`.
+ *
+ * **삭제가 세 가지를 갈라 답하려면 필요하다**(C-10-c). 남의 것(404)과 이미 지운
+ * 것(멱등 성공)은 사용자 범위로만 찾으면 **둘 다 「없음」으로 같아 보인다.**
+ * 그래서 주인을 한 번 묻는다.
+ *
+ * 이것이 UUID 하나의 존재 여부를 알려 주기는 한다. UUIDv4 는 찍어서 맞힐 수
+ * 없으므로 실질적인 값이 없고, 대신 사용자가 두 번 눌러도 오류를 안 본다.
+ */
+export async function ownerOfStyleReference(id: string): Promise<string | null> {
+  if (isLocalStoreEnabled()) return null;
+  const supabase = createSupabaseAdminClient();
+  const { data } = await supabase
+    .from("style_references")
+    .select("user_id")
+    .eq("id", id)
+    .maybeSingle();
+  return (data?.user_id as string | undefined) ?? null;
+}
+
 export async function deleteUserStyleReference(userId: string, id: string) {
   const supabase = createSupabaseAdminClient();
 
@@ -315,5 +336,11 @@ export async function deleteUserStyleReference(userId: string, id: string) {
     .eq("user_id", userId)
     .eq("id", id);
 
-  return { ok: !error, message: error?.message };
+  /*
+    **지운 것과 없던 것을 갈라 답한다**(C-10-c).
+
+    전에는 둘 다 `ok: true` 였다. 두 번 눌러도 같은 답이라는 점은 맞지만,
+    부르는 쪽이 「정말 있었나」를 알 길이 없었다.
+  */
+  return { ok: !error, deleted: Boolean(row) && !error, message: error?.message };
 }

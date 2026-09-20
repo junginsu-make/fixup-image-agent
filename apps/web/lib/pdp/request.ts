@@ -115,8 +115,16 @@ export function invalidPdpRequest(message = "요청 형식이 올바르지 않�
   return Response.json({ ok: false, code: "INVALID_REQUEST", message }, { status });
 }
 
-class BodyLimitError extends Error {}
-async function readBodyBytes(req: Request): Promise<Buffer> {
+/** 본문이 상한을 넘었다. 읽다가 끊은 것이라 남은 바이트는 안 받는다. */
+export class BodyLimitError extends Error {}
+
+/**
+ * 본문을 **상한까지만** 읽는다.
+ *
+ * `req.json()` 은 끝까지 읽는다. Content-Length 를 믿지도 않는다 — 스트림으로
+ * 오면 그 값이 없거나 거짓일 수 있다. 그래서 세면서 읽고 넘으면 끊는다.
+ */
+export async function readBoundedBody(req: Request, limit = PDP_JSON_LIMIT): Promise<Buffer> {
   const reader = req.body?.getReader();
   if (!reader) throw new Error("본문이 없습니다.");
   const chunks: Uint8Array[] = []; let bytes = 0;
@@ -125,7 +133,7 @@ async function readBodyBytes(req: Request): Promise<Buffer> {
       const { value, done } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > PDP_JSON_LIMIT) { await reader.cancel(); throw new BodyLimitError(); }
+      if (bytes > limit) { await reader.cancel(); throw new BodyLimitError(); }
       chunks.push(value);
     }
     return Buffer.concat(chunks);
@@ -140,7 +148,7 @@ export async function readRedesignForm(req: Request): Promise<{ ok: true; form: 
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
   try {
-    const bytes = await readBodyBytes(req);
+    const bytes = await readBoundedBody(req);
     const form = await new Response(Uint8Array.from(bytes), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
     const count = Number(form.get("count") ?? 1);
     const start = Number(form.get("startSection") ?? 1);
@@ -161,7 +169,7 @@ export async function readPdpRequest<T>(req: Request, kind: keyof typeof schemas
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
   try {
-    const bytes = await readBodyBytes(req);
+    const bytes = await readBoundedBody(req);
     const parsed = schemas[kind].safeParse(JSON.parse(bytes.toString("utf8")));
     if (!parsed.success) return { ok: false, response: invalidPdpRequest() };
     return { ok: true, body: parsed.data as T };

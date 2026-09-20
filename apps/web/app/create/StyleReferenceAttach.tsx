@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ImagePlus, Loader2 } from "lucide-react";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { SavedImagePicker, type SavedImageSource } from "./SavedImagePicker";
+import { STYLE_REFERENCE_LIMIT_HINT } from "../../lib/pdp/reference-limits";
 
 /**
  * 시나리오 화면에서 레퍼런스를 바로 첨부한다.
@@ -131,6 +132,12 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
         origin="reference"
         onPick={(file, source) => void attach(file, source)}
       />
+
+      {/*
+        **상한을 먼저 말한다.** 전에는 413 을 받고 나서야 얼마까지 되는지 알았다.
+        서버와 같은 상수를 읽는다(설계 §12 「정책 상수와 UI 에서 일치」).
+      */}
+      <p className="text-xs text-muted-foreground">{STYLE_REFERENCE_LIMIT_HINT}</p>
 
       {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
     </div>
