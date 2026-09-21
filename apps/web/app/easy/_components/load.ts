@@ -5,6 +5,7 @@ import { requireActiveMember } from "../../../lib/membership/server";
 import { easyStoreForUser } from "../../../lib/easy/store";
 import { posterStoresForUser } from "../../../lib/poster/stores";
 import type { EasyMessage } from "../turn";
+import type { EasyImageOptions } from "../options";
 
 /**
  * 화면 둘이 함께 쓰는 **읽기**.
@@ -54,11 +55,14 @@ export function defaultEasyImageModel(): string {
 }
 
 /**
- * 지난 대화의 줄들과 **그림 주소**.
+ * 지난 대화의 줄들과 **그림 주소 · 만든 조건**.
  *
  * 그림 줄은 포스터 작업을 가리킬 뿐이다(`work_id`). 다시 열 때 보이게 하려면
  * 그 작업의 그림을 찾아 주소를 붙여야 한다 — **대화 표에 그림을 넣지 않기로 한
  * 대가**다(설계 §4-1). 두 곳에 두면 하나는 곧 어긋난다.
+ *
+ * **조건도 같은 자리에서 읽는다**(2026-09-21 사용자). 어느 모델로 어느 비율로
+ * 만들었는지는 그 작업이 갖고 있다. 대화 표에 베껴 두면 같은 까닭으로 어긋난다.
  */
 export async function loadEasyConversation(id: string) {
   const membership = await requireActiveMember();
@@ -75,13 +79,36 @@ export async function loadEasyConversation(id: string) {
    * 「고른 변형」이 대개 비어 있다.
    */
   const urls: Record<string, string> = {};
+  const options: Record<string, EasyImageOptions> = {};
   if (projectIds.length) {
-    const images = await posterStoresForUser(membership.user.id).images.byProjects(projectIds);
+    const stores = posterStoresForUser(membership.user.id);
+    const images = await stores.images.byProjects(projectIds);
+    /*
+      작업마다 한 번씩 묻는다. 한 대화의 그림은 많아야 몇 장이라 묶어 묻는 길을
+      새로 낼 값어치가 없다 — **없는 길을 만들면 그 길도 지켜야 한다.**
+    */
+    const projects = new Map(
+      (await Promise.all(projectIds.map((id) => stores.projects.get(id))))
+        .filter(Boolean)
+        .map((project) => [project!.id, project!]),
+    );
+
     for (const row of rows) {
       if (!row.workId) continue;
       const mine = images.filter((image) => image.projectId === row.workId);
       const pick = mine.find((image) => image.selected) ?? mine[0];
       if (pick?.url) urls[row.id] = pick.url;
+
+      const project = projects.get(row.workId);
+      if (!project) continue;
+      options[row.id] = {
+        model: project.modelId,
+        ratio: project.ratio,
+        width: pick?.width ?? null,
+        height: pick?.height ?? null,
+        references:
+          (project.data.referenceIds?.length ?? 0) + (project.data.preservedIds?.length ?? 0),
+      };
     }
   }
 
@@ -92,5 +119,5 @@ export async function loadEasyConversation(id: string) {
     ...(row.workId ? { workId: row.workId } : {}),
   }));
 
-  return { conversation, messages, urls };
+  return { conversation, messages, urls, options };
 }

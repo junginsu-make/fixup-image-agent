@@ -268,3 +268,66 @@ describe("결과 칸", () => {
     expect(머리).not.toContain("내려받기");
   });
 });
+
+/**
+ * **조건을 지어내지 않는다** (2026-09-21 사용자 — 「해당 이미지가 어떤 조건으로
+ * 만들어졌는지 쉽게 알게」).
+ *
+ * 크게 보기 창이 「글 모델 · 이미지 모델 · 비율」을 **입력창 위 드롭다운의 지금
+ * 값**으로 적고 있었다. 그래서 어제 만든 그림을 오늘 열면 오늘 골라 둔 모델
+ * 이름이 붙었다 — 틀린 값을 자신 있게 적는 자리였다.
+ */
+describe("만든 조건", () => {
+  const load = 화면("../_components/load.ts");
+
+  it("만든 작업에서 읽어 온다", () => {
+    expect(load).toContain("options[row.id]");
+    expect(load).toContain("project.modelId");
+    expect(load).toContain("project.ratio");
+  });
+
+  it("결과 밑에 적는다", () => {
+    // **그려야 잡힌다.** 이름만 보면 안 쓰이는 import 하나로도 통과한다.
+    expect(panel).toContain("easyOptionLines(image.options).map(");
+    expect(panel).toContain("easyOptionLines(image.options).length ?");
+  });
+
+  /** 무엇을 적을지는 값으로 정한다. 화면 안에 두면 못 잰다. */
+  it("무엇을 적을지 화면이 정하지 않는다", () => {
+    const 코드만 = 코드("../_components/result-panel.tsx");
+
+    expect(코드만).not.toContain("참고 ");
+    expect(코드만).not.toContain(" × ");
+  });
+
+  /**
+   * **드롭다운의 지금 값을 베끼지 않는다.** 그것이 틀린 값을 적던 자리다.
+   */
+  it("크게 보기 창에 드롭다운 값을 그대로 넣지 않는다", () => {
+    const 코드만 = 코드("../easy-client.tsx");
+
+    expect(코드만).not.toContain('["글 모델", textModel]');
+    expect(코드만).not.toContain('["이미지 모델", imageModel]');
+  });
+});
+
+/**
+ * **대화 속 이미지는 작다** (2026-09-21 사용자 — 「채팅 기록이 오히려
+ * 안보입니다」).
+ *
+ * 화면 높이의 절반까지 차지해서 한 장만 나와도 오간 말이 위아래로 밀렸다.
+ * 대화는 말을 읽는 곳이고, 크게 보는 자리는 오른쪽 칸과 크게 보기 창이다.
+ */
+describe("대화 속 이미지 크기", () => {
+  it("화면 높이를 기준으로 삼지 않는다", () => {
+    expect(코드("../_components/message.tsx")).not.toContain("vh]");
+  });
+
+  /** 「만들고 있습니다」 판과 같은 크기라, 만들던 자리에 그대로 앉는다. */
+  it("만드는 중 판과 같은 크기다", () => {
+    const message = 화면("../_components/message.tsx");
+
+    expect(message).toContain("max-h-64");
+    expect(message).toContain("w-64");
+  });
+});
