@@ -179,13 +179,24 @@ export function EasyMessageRow({
     <div className="flex items-start gap-2">
       <AssistantMark />
       {imageUrl ? (
+        /*
+          **대화 속 이미지는 작다**(2026-09-21 사용자 — 「채팅 기록이 오히려
+          안보입니다… 채팅창에 생성된 결과 이미지 크기를 줄이세요」).
+
+          전에는 화면 높이의 절반(`max-h-[55vh]`)까지 차지해서, 한 장만 나와도
+          **오간 말이 위아래로 밀려 안 보였다.** 대화는 말을 읽는 곳이고 크게
+          보는 자리는 따로 있다 — 오른쪽 결과 칸과 크게 보기 창이다.
+
+          크기를 **「만들고 있습니다」 판과 같게** 맞춘다(16rem). 만들던 자리에
+          그대로 결과가 앉는 것처럼 보여서 줄이 튀지 않는다.
+        */
         <button
           type="button"
           onClick={onOpenImage}
-          className="max-w-[85%] overflow-hidden rounded-2xl rounded-bl-md border border-border transition-opacity hover:opacity-90"
+          className="max-w-64 overflow-hidden rounded-2xl rounded-bl-md border border-border transition-opacity hover:opacity-90"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="만든 이미지" className="block max-h-[55vh] w-auto" />
+          <img src={imageUrl} alt="만든 이미지" className="block max-h-64 w-auto" />
         </button>
       ) : (
         <EasyImageWorking />

@@ -11,6 +11,7 @@ import { EasyMessageRow, EasyThinkingRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
+import { easyOptionMeta, type EasyImageOptions } from "./options";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
@@ -37,6 +38,12 @@ interface EasyClientProps {
   initialMessages: EasyMessage[];
   /** 다시 열었을 때 그림이 보이게. 줄 id → 주소(`load.ts` 가 찾아 준다). */
   initialUrls?: Record<string, string>;
+  /**
+   * 줄 id → **그 이미지를 만든 조건**.
+   *
+   * 지어내지 않는다 — 만든 작업에서 읽어 온 값이다(`options.ts`).
+   */
+  initialOptions?: Record<string, EasyImageOptions>;
   imageModels: ImageModelChoice[];
   defaultImageModel: string;
   /** 값 셈에 쓴다. 화면이 바꿀 수 없다(설계 §9). */
@@ -60,6 +67,7 @@ export function EasyClient({
   conversationId,
   initialMessages,
   initialUrls,
+  initialOptions,
   imageModels,
   defaultImageModel,
   ratioId,
@@ -74,6 +82,11 @@ export function EasyClient({
   const [textModel, setTextModel] = React.useState(DEFAULT_TEXT_MODEL);
   const [imageModel, setImageModel] = React.useState(defaultImageModel);
   const [urls, setUrls] = React.useState<Record<string, string>>(initialUrls ?? {});
+  /*
+   * **만든 조건.** 다시 열 때는 서버가 읽어 주고, 지금 만든 것은 만들면서 적는다.
+   * 새로고침을 기다렸다 보여 주면 방금 만든 것만 조건이 비어 보인다.
+   */
+  const [options, setOptions] = React.useState<Record<string, EasyImageOptions>>(initialOptions ?? {});
 
   /*
    * **구분선을 끌면 이 너비가 바뀐다**(2026-09-18 사용자 요청). 가두는 판단은
@@ -114,9 +127,9 @@ export function EasyClient({
   const results = React.useMemo(
     () => shown.flatMap((message) =>
       message.role === "image" && urls[message.id]
-        ? [{ id: message.id, url: urls[message.id]! }]
+        ? [{ id: message.id, url: urls[message.id]!, options: options[message.id] }]
         : []),
-    [shown, urls],
+    [shown, urls, options],
   );
 
   const cost = React.useMemo(
@@ -189,11 +202,12 @@ export function EasyClient({
         alt: "만든 이미지",
         // 여러 장이 한 벌이라 이름이 같으면 내려받을 때 덮어쓴다.
         name: `easy-${번째 + 1}.png`,
-        meta: [
-          ["글 모델", textModel],
-          ["이미지 모델", imageModel],
-          ["비율", ratioId],
-        ],
+        /*
+          **그 장을 만든 조건**이다. 전에는 입력창 위 드롭다운의 **지금 값**을
+          적어서, 어제 만든 그림을 열면 오늘 골라 둔 모델 이름이 붙었다
+          (2026-09-21). 틀린 값을 자신 있게 적고 있었다.
+        */
+        meta: easyOptionMeta(one.options),
       })),
     });
   }
@@ -287,6 +301,15 @@ export function EasyClient({
       if (!alive.current) return;
       if (image) {
         setUrls((current) => ({ ...current, [자리]: image.url }));
+        /*
+          **만들면서 적는다.** 서버에서 다시 읽어 오길 기다리면 방금 만든 것만
+          조건이 빈 채로 뜬다. 여기서 아는 값은 고른 모델과 비율, 붙인 장수다 —
+          실제 픽셀 크기는 서버가 안다(다시 열 때 채워진다).
+        */
+        setOptions((current) => ({
+          ...current,
+          [자리]: { model: imageModel, ratio: ratioId, references: attachments.length },
+        }));
         setMessages((current) => current.map((one) =>
           one.id === 자리 ? { ...one, workId: image.id } : one));
       }

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { EasyImageWorking } from "./message";
+import { easyOptionLines, type EasyImageOptions } from "../options";
 
 /**
  * 오른쪽 **결과 칸** — 이 대화에서 만든 것만 모은다.
@@ -35,6 +36,8 @@ import { EasyImageWorking } from "./message";
 export interface EasyResult {
   id: string;
   url: string;
+  /** 이 장을 만든 조건. 모르면 비어 있다 — 지어내지 않는다. */
+  options?: EasyImageOptions;
 }
 
 export function EasyResultPanel({
@@ -102,24 +105,44 @@ export function EasyResultPanel({
           [...images].reverse().map((image, 뒤에서) => {
             const at = images.length - 1 - 뒤에서;
             return (
-              <button
-                key={image.id}
-                type="button"
-                onClick={() => onOpen(at)}
-                className="group relative block w-full overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.url} alt={`만든 이미지 ${at + 1}`} className="block w-full" />
+              <div key={image.id} className="grid gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpen(at)}
+                  className="group relative block w-full overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image.url} alt={`만든 이미지 ${at + 1}`} className="block w-full" />
+                  {/*
+                    여러 장이면 몇 번째인지 말한다. 한 장뿐일 때는 셀 것이 없어
+                    번호가 오히려 묻는다 — 「1 은 무엇에 견준 1 인가」.
+                  */}
+                  {images.length > 1 ? (
+                    <span className="absolute left-2 top-2 rounded-full bg-background/85 px-2 py-0.5 text-meta tabular-nums text-subtle-foreground">
+                      {at + 1}
+                    </span>
+                  ) : null}
+                </button>
+
                 {/*
-                  여러 장이면 몇 번째인지 말한다. 한 장뿐일 때는 셀 것이 없어
-                  번호가 오히려 묻는다 — 「1 은 무엇에 견준 1 인가」.
+                  **어떤 조건으로 만든 것인지 그 자리에서 읽힌다**(2026-09-21
+                  사용자 — 「결과물 밑에 바로 보이게해서 해당 이미지가 어떤
+                  조건으로 만들어졌는지 쉽게 알게」).
+
+                  크게 보기 창을 열어야만 알 수 있었다. 여러 장을 견주는 칸인데
+                  **무엇이 다른지 보려면 한 장씩 열었다 닫아야** 했다.
+
+                  무엇을 적을지는 `options.ts` 가 값으로 정한다. 모르는 칸은
+                  아예 안 나온다 — 빈 대시는 읽는 사람을 한 번 더 멈춰 세운다.
                 */}
-                {images.length > 1 ? (
-                  <span className="absolute left-2 top-2 rounded-full bg-background/85 px-2 py-0.5 text-meta tabular-nums text-subtle-foreground">
-                    {at + 1}
-                  </span>
+                {easyOptionLines(image.options).length ? (
+                  <p className="flex flex-wrap gap-x-2 gap-y-0.5 px-1 text-meta text-subtle-foreground">
+                    {easyOptionLines(image.options).map((줄) => (
+                      <span key={줄}>{줄}</span>
+                    ))}
+                  </p>
                 ) : null}
-              </button>
+              </div>
             );
           })
         ) : working ? null : (
