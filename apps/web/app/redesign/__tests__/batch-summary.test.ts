@@ -105,9 +105,38 @@ describe("마법사가 그 조립기를 쓴다", () => {
     expect(실패자리.slice(0, 900)).toMatch(/lastGenerateErrorRef\.current = isAbortError\(error\) \? ""/);
   });
 
-  it("**옛 숫자 문구를 직접 짓지 않는다** — 두 벌이면 한쪽만 고치는 날 갈린다", () => {
-    const 바깥 = wizard.slice(wizard.indexOf("generate-sequence:start"));
+  /**
+   * **한 자리만 보면 나머지가 샌다.**
+   *
+   * 처음에는 일괄 생성 자리만 2,000자 잘라 봤다. 그런데 「나머지 섹션 생성」이
+   * **같은 문구를 손으로 또 짓고 있었다** — 그 경로에서는 왜 멈췄는지가
+   * 여전히 안 보였다(2026-09-21 조사에서 드러남). 화면 전체를 본다.
+   */
+  it("**옛 숫자 문구를 직접 짓는 자리가 없다** — 두 벌이면 한쪽만 고치는 날 갈린다", () => {
+    expect(wizard).not.toMatch(/setToast\(`[^`]*결과: 성공 \$\{/);
+  });
 
-    expect(바깥.slice(0, 2000)).not.toMatch(/setToast\(`일괄 생성 결과/);
+  it("**결과를 알리는 자리는 모두 조립기를 쓴다**", () => {
+    const 부른횟수 = [...wizard.matchAll(/batchSummaryMessage\(/g)].length;
+
+    // 일괄 생성과 나머지 섹션 생성. 둘 다 여러 장을 한 장씩 만든다.
+    expect(부른횟수).toBeGreaterThanOrEqual(2);
+  });
+
+  /**
+   * **부른다는 것만으로는 모자라다.** 이유를 안 실으면 전과 똑같이 숫자만
+   * 뜬다 — 이 항목이 막으려던 바로 그 꼴이다.
+   */
+  it("**나머지 섹션 생성도 이유를 실어 부른다**", () => {
+    const 나머지 = wizard.slice(wizard.indexOf("generate-rest:start"));
+    const 부른자리 = 나머지.slice(나머지.indexOf("batchSummaryMessage({"));
+
+    expect(부른자리.slice(0, 300)).toContain("reason: lastGenerateErrorRef.current");
+  });
+
+  it("**나머지 섹션 생성도 지난 실패를 지우고 시작한다**", () => {
+    const 나머지 = wizard.slice(wizard.indexOf("generate-rest:start"));
+
+    expect(나머지.slice(0, 1200)).toContain('lastGenerateErrorRef.current = ""');
   });
 });

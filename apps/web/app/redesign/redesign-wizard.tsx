@@ -423,6 +423,7 @@ export function RedesignWizard() {
     }
 
     let completed = 0;
+    lastGenerateErrorRef.current = ""; // 지난 번 실패가 이번 요약에 따라붙으면 안 된다.
     for (const [index, sectionNumber] of missingSections.entries()) {
       setToast(`S${sectionNumber} 섹션을 생성합니다.`);
       const nextProject = await generate(1, rolloutRequest, sectionNumber, workingProject, missingSections.length, index + 1, FULL_PAGE_SECTIONS);
@@ -439,7 +440,11 @@ export function RedesignWizard() {
       skipped: Math.max(0, missingSections.length - completed - (completed < missingSections.length ? 1 : 0)),
       finishedAt: Date.now(),
     });
-    setToast(`나머지 섹션 결과: 성공 ${completed}장${completed < missingSections.length ? ` · 확인 필요 1장 · 미시도 ${Math.max(0, missingSections.length - completed - 1)}장` : ""}. 성공한 이미지만 차감됐습니다.`);
+    setToast(batchSummaryMessage({
+      requested: missingSections.length,
+      completed,
+      reason: lastGenerateErrorRef.current,
+    }));
   }
 
   function openProject(project: Project) {

@@ -4,6 +4,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, Dispatch, SetStateAc
 import { createSectionFor } from "./scenario-sections";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewedLayer, type LayerPreview } from "./layer-preview";
+import { batchRetryKeyId } from "./batch-retry-key";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
@@ -1711,8 +1712,21 @@ export function PdpEditor({
 
     try {
       for (const chunk of chunks) {
+        /*
+          **다시 눌러도 같은 열쇠로 간다**(K-05).
+
+          `apiJson` 은 머리글이 없으면 POST 마다 새 열쇠를 만든다. 그래서
+          통신이 끊겨 다시 누르면 **새 예약**이 되어 이미 만든 것을 또 만들고
+          또 받았다. 단건 경로는 섹션마다 열쇠를 붙잡아 두는데 일괄만 빠져
+          있었다.
+        */
+        const chunkKeyId = batchRetryKeyId(chunk.map(({ section }) => section.section_id));
+        const chunkRequestKey = retryRequestKeysRef.current[chunkKeyId] ?? randomId();
+        retryRequestKeysRef.current[chunkKeyId] = chunkRequestKey;
+
         const response = await apiJson<BatchImagesResponse>("/pdp/images/batch", {
           method: "POST",
+          headers: { "x-idempotency-key": chunkRequestKey },
           body: JSON.stringify({
             originalImageBase64: initialResult.originalImage,
             // 결과를 서버에 적을 때 무엇의 것인지 묶는다. 저장 전이면 안 싣는다.
