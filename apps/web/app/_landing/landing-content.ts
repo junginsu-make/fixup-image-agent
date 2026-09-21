@@ -4,6 +4,13 @@
 // - presets[].src 는 public/landing/ 기준 경로입니다 (next/image 로 그대로 사용 가능)
 // - 문구는 저장소의 README.md · docs/service-introduction.md · docs/overview/README.md
 //   에 기재된 실제 구현 내용에 근거합니다. 사실이 바뀌면 이 파일만 고치면 됩니다.
+//
+// - **차감 장수와 원가 배수는 손으로 적지 않습니다.** `credit-facts.ts` 가 모델
+//   표에서 셈합니다. 2026-09-21 에 이 파일이 「가중치 4」·「4.6배」로 남아
+//   있었는데 실제는 5장 · 5.4배였고, 가중치 방식 자체를 2026-09-08 에 그만둔
+//   뒤였습니다. 로그인도 필요 없는 화면이라 **틀린 값이 가장 멀리 가는 자리**입니다.
+
+import { LANDING_COST_SPREAD, LANDING_CREDITS } from "./credit-facts";
 
 export type Locale = "ko" | "en";
 
@@ -28,7 +35,7 @@ export const KO = {
   h1a: "모아 두고, 만들고,", h1b: "다시 재료로 쓴다",
   heroLead: "카드뉴스 · 광고 소재 · 포스터 · 상세페이지 · 캐릭터를 한 곳에서 만듭니다. 등록한 모든 것이 라이브러리에 쌓이고, 어느 도구에서든 그것을 불러 쓰고, 만든 결과물이 다시 다음 작업의 재료가 됩니다.",
   ctaPrimary: "무료 체험 신청", ctaSecondary: "결과물 먼저 보기",
-  consoleTitle: "생성 콘솔", consoleModel: "정밀형 · 가중치 4",
+  consoleTitle: "생성 콘솔", consoleModel: `정밀형 · ${LANDING_CREDITS.정밀형}장`,
   promptLabel: "프롬프트", rendering: "이미지 생성 중",
   qaPass: "원고 대조 검수 통과",
   galleryKicker: "실제 결과물", galleryTitle: "이 시스템이 만든 것들",
@@ -57,7 +64,7 @@ export const KO = {
   diffKicker: "차별점", diffTitle: "이미지를 뽑는 도구가 아니라, 콘텐츠를 끝내는 도구",
   diffLead: "생성 자체는 어디서나 됩니다. 문제는 글자가 맞는지, 다시 만들 때 돈이 얼마나 드는지, 그리고 만든 것을 다음에 다시 쓸 수 있는지입니다.",
   diffColItem: "항목", diffColA: "일반 AI 이미지 도구", diffColB: "템플릿 디자인 도구",
-  diffFootnote: "비교 항목은 이 시스템이 실제로 구현한 장치를 기준으로 정리한 것입니다. 이미지 생성은 fal.ai 를 경유하며 모델별 원가 차이(최대 4.6배)를 크레딧 가중치로 반영합니다.",
+  diffFootnote: `비교 항목은 이 시스템이 실제로 구현한 장치를 기준으로 정리한 것입니다. 이미지 생성은 fal.ai 를 경유하며, 모델별 원가 차이(최대 ${LANDING_COST_SPREAD}배)를 실제 원가 그대로 크레딧에 반영합니다.`,
   ctaTitle: "결과물을 먼저 보고, 그다음에 시작하세요",
   ctaLead: "회원이 따로 AI 서비스에 가입하거나 API 키를 준비할 필요는 없습니다. 가입 신청 후 이메일 인증과 관리자 승인을 거치면 바로 씁니다.",
   footerNote: "Marketing Content Studio · 승인 회원 전용",
@@ -95,14 +102,14 @@ export const KO = {
     { kicker: "품질 장치 ②", title: "심사는 만든 호출과 다른 호출이 합니다", desc: "같은 호출 안에서 매기는 점수는 방금 쓴 글을 스스로 칭찬하는 것에 가깝습니다. 심사자에게는 구성안과 판매 원칙만 주고 브리프 원문은 주지 않습니다. 사는 사람은 브리프를 못 보기 때문입니다." },
     { kicker: "심사 항목", title: "대상 · 문제 · 차별점 · 반론 · 흐름 · 행동 유도", desc: "여섯 항목 중 fail 이 하나라도 있으면 지적사항을 담아 다시 만듭니다(최대 2회). 끝까지 남은 지적은 숨기지 않고 화면에 띄웁니다." },
     { kicker: "레퍼런스", title: "참고 이미지를 어떻게 쓸지 말로 못박습니다", desc: "따라 만들기 / 제품 그대로 지키기 / 인물 그대로 지키기 / 원본 그대로 넣기. 네 가지 역할로 통일했습니다. 상세페이지 스타일 레퍼런스는 통일이 깨지지 않게 페이지당 한 장만 씁니다." },
-    { kicker: "모델 선택", title: "글자 정확도와 단가를 저울질합니다", desc: "정밀형(가중치 4, 글자가 가장 정확 · 명조 계열도 표현), 속도형(3, 빠름 · 고딕 계열), 경제형(1, 글자가 적은 장면에). 원가가 4.6배까지 벌어져 크레딧에 가중치를 둡니다." },
+    { kicker: "모델 선택", title: "글자 정확도와 단가를 저울질합니다", desc: `정밀형(${LANDING_CREDITS.정밀형}장, 글자가 가장 정확 · 명조 계열도 표현), 속도형(${LANDING_CREDITS.속도형}장, 빠름 · 고딕 계열), 경제형(${LANDING_CREDITS.경제형}장, 글자가 적은 장면에). 원가가 ${LANDING_COST_SPREAD}배까지 벌어지고, 차감은 그 원가를 그대로 따릅니다.` },
     { kicker: "동시성", title: "만드는 도중에 화면을 옮겨도 됩니다", desc: "생성 목록을 셸(사이드바)이 들고 있어 화면을 옮겨도 받아 오는 일이 멈추지 않습니다. 무엇이 돌고 있고 얼마나 됐는지 보이고 중지할 수 있습니다. 다만 중지는 되돌리기가 아니라는 것도 그 자리에 적어 뒀습니다." },
     { kicker: "보관", title: "파일은 비공개 버킷에만 둡니다", desc: "짧은 수명의 서명 URL 로만 열립니다. 경로 첫 칸이 소유자이고, 버킷 정책이 그 칸으로 남의 것을 막습니다. 회원은 AI 키를 브라우저에 입력하지 않습니다." }
   ],
   presets: [
-    { kind: "카드뉴스 · /sns", title: "월세 계약 체크리스트", prompt: "이 기사로 3단계 체크리스트 카드뉴스 만들어 줘", role: "따라 만들기", refNote: "레퍼런스 1장 + 기사 URL 1개. 카드 구성 · 원고 · 색 배분은 시스템이 채웠습니다.", model: "정밀형 · 가중치 4", ratio: "1 / 1", src: "/landing/result-cardnews-lease.png", chips: ["소재: URL 1개", "프롬프트: 한 줄", "원고 확정 후 생성"] },
-    { kind: "포스터 · /poster", title: "가을 운동회 포스터", prompt: "고촌초등학교 가을 운동회 포스터", role: "따라 만들기", refNote: "레퍼런스 1장 + 한 줄. 레이아웃 문법과 색 대비를 가져오고 소재만 운동회로 바꿨습니다.", model: "정밀형 · 가중치 4", ratio: "2 / 3", src: "/landing/result-poster-sports.png", chips: ["프롬프트: 한 줄", "나머지 칸은 AI 초안", "변형 3장"] },
-    { kind: "이미지 · /poster", title: "윈터 트렌드 리포트", prompt: "2026 윈터 트렌드 리포트 커버", role: "따라 만들기", refNote: "레퍼런스 1장 + 한 줄. 세로 세리프 타이포와 여백 문법을 유지하고 시즌만 겨울로 옮겼습니다.", model: "속도형 · 가중치 3", ratio: "1232 / 2192", src: "/landing/result-winter-trend.png", chips: ["프롬프트: 한 줄", "9:16", "변형 3장"] }
+    { kind: "카드뉴스 · /sns", title: "월세 계약 체크리스트", prompt: "이 기사로 3단계 체크리스트 카드뉴스 만들어 줘", role: "따라 만들기", refNote: "레퍼런스 1장 + 기사 URL 1개. 카드 구성 · 원고 · 색 배분은 시스템이 채웠습니다.", model: `정밀형 · ${LANDING_CREDITS.정밀형}장`, ratio: "1 / 1", src: "/landing/result-cardnews-lease.png", chips: ["소재: URL 1개", "프롬프트: 한 줄", "원고 확정 후 생성"] },
+    { kind: "포스터 · /poster", title: "가을 운동회 포스터", prompt: "고촌초등학교 가을 운동회 포스터", role: "따라 만들기", refNote: "레퍼런스 1장 + 한 줄. 레이아웃 문법과 색 대비를 가져오고 소재만 운동회로 바꿨습니다.", model: `정밀형 · ${LANDING_CREDITS.정밀형}장`, ratio: "2 / 3", src: "/landing/result-poster-sports.png", chips: ["프롬프트: 한 줄", "나머지 칸은 AI 초안", "변형 3장"] },
+    { kind: "이미지 · /poster", title: "윈터 트렌드 리포트", prompt: "2026 윈터 트렌드 리포트 커버", role: "따라 만들기", refNote: "레퍼런스 1장 + 한 줄. 세로 세리프 타이포와 여백 문법을 유지하고 시즌만 겨울로 옮겼습니다.", model: `속도형 · ${LANDING_CREDITS.속도형}장`, ratio: "1232 / 2192", src: "/landing/result-winter-trend.png", chips: ["프롬프트: 한 줄", "9:16", "변형 3장"] }
   ],
   logs: [
     "레퍼런스 해석. 레이아웃 · 서체 · 색을 읽어 옵니다",
@@ -119,7 +126,7 @@ export const KO = {
     { item: "인물 일관성", a: "장마다 다른 사람이 나옵니다", b: "쓰던 사진을 계속 씁니다", c: "인물·캐릭터를 정면·좌·우·후면으로 고정해 두고 불러 씁니다. 여러 장에 같은 사람이 나옵니다" },
     { item: "광고 규격", a: "규격마다 다시 만들거나 직접 자릅니다", b: "규격마다 템플릿을 다시 맞춥니다", c: "만든 그림 하나에서 네이버 · 구글 · 카카오 규격을 뽑습니다. 새로 만들지 않으므로 크레딧이 안 듭니다" },
     { item: "결과물 재사용", a: "내려받고 끝", b: "파일로 관리", c: "라이브러리로 돌아와 다음 작업의 레퍼런스가 됩니다" },
-    { item: "비용", a: "실패한 결과도 과금", b: "정액", c: "분석은 무료, 성공한 이미지만 차감. 모델별 가중치 4 / 3 / 1" }
+    { item: "비용", a: "실패한 결과도 과금", b: "정액", c: `분석은 무료, 성공한 이미지만 차감. 모델별 ${LANDING_CREDITS.정밀형} / ${LANDING_CREDITS.속도형} / ${LANDING_CREDITS.경제형}장` }
   ],
   ctaFacts: [
     { n: "01", title: "AI 키를 준비하지 않습니다", desc: "운영자 서버 키로 생성합니다. 브라우저에 키를 입력할 일이 없습니다." },
@@ -141,7 +148,7 @@ export const EN: LandingCopy = {
   h1a: "Collect it, make it,", h1b: "then use it again",
   heroLead: "Card news, ad creative, posters, product detail pages and characters in one place. Everything you register lands in the library, every tool can pull from it, and every output goes back in as material for the next job.",
   ctaPrimary: "Request free access", ctaSecondary: "See the output first",
-  consoleTitle: "Generation console", consoleModel: "High-accuracy · weight 4",
+  consoleTitle: "Generation console", consoleModel: `High-accuracy · ${LANDING_CREDITS.정밀형} credits`,
   promptLabel: "Prompt", rendering: "Generating image",
   qaPass: "Copy-match QA passed",
   galleryKicker: "Real output", galleryTitle: "Made by this system",
@@ -170,7 +177,7 @@ export const EN: LandingCopy = {
   diffKicker: "Difference", diffTitle: "Not a tool that outputs images, but one that finishes content",
   diffLead: "Generation happens anywhere. The questions are whether the text is right, what a re-run costs, and whether you can reuse what you made.",
   diffColItem: "Item", diffColA: "Generic AI image tools", diffColB: "Template design tools",
-  diffFootnote: "Comparison items are drawn from gates this system actually implements. Generation routes through fal.ai, and per-model cost differences (up to 4.6×) are reflected as credit weights.",
+  diffFootnote: `Comparison items are drawn from gates this system actually implements. Generation routes through fal.ai, and per-model cost differences (up to ${LANDING_COST_SPREAD}×) pass straight through to credits at real cost.`,
   ctaTitle: "See the output first, then start",
   ctaLead: "Members do not sign up for a separate AI service or bring an API key. Request access, confirm your email, get admin approval, and you are in.",
   footerNote: "Marketing Content Studio · approved members only",
@@ -208,14 +215,14 @@ export const EN: LandingCopy = {
     { kicker: "Quality gate ②", title: "Judging is done by a different call than making", desc: "A score given inside the same call is close to praising your own writing. The judge receives only the structure and the selling principles, never the original brief, because the buyer never sees the brief either." },
     { kicker: "Judging criteria", title: "Audience · problem · differentiation · objection · flow · call to action", desc: "If any of the six fails, the structure is rebuilt with the criticism attached, up to twice. Criticism that survives to the end is shown on screen rather than hidden." },
     { kicker: "References", title: "How a reference gets used is stated in words", desc: "Follow it / keep the product as-is / keep the person as-is / place the original untouched. Four roles, one vocabulary. A detail page uses a single style reference per page so consistency does not break." },
-    { kicker: "Model choice", title: "Text accuracy weighed against unit cost", desc: "High-accuracy (weight 4, most accurate text, handles serif Korean), Fast (3, gothic text), Economy (1, for scenes with little text). Costs differ by up to 4.6×, so credits are weighted." },
+    { kicker: "Model choice", title: "Text accuracy weighed against unit cost", desc: `High-accuracy (${LANDING_CREDITS.정밀형} credits, most accurate text, handles serif Korean), Fast (${LANDING_CREDITS.속도형}, gothic text), Economy (${LANDING_CREDITS.경제형}, for scenes with little text). Costs differ by up to ${LANDING_COST_SPREAD}×, and credits follow that cost directly.` },
     { kicker: "Concurrency", title: "You can move around while it generates", desc: "The running-job list is held by the shell, so navigating away never stops collection. You can see what is running and how far along it is, and stop it, with a note that stopping is not undoing." },
     { kicker: "Storage", title: "Files live only in a private bucket", desc: "They open only through short-lived signed URLs. The first path segment is the owner, and bucket policy blocks anyone else. Members never type an AI key into the browser." }
   ],
   presets: [
-    { kind: "Card news · /sns", title: "Lease checklist", prompt: "Make a 3-step checklist card set from this article", role: "Follow it", refNote: "One reference + one article URL. Card structure, copy and colour balance were filled in by the system.", model: "High-accuracy · weight 4", ratio: "1 / 1", src: "/landing/result-cardnews-lease.png", chips: ["Material: one URL", "Prompt: one line", "Generated after copy approval"] },
-    { kind: "Poster · /poster", title: "Autumn sports day poster", prompt: "Autumn sports day poster for Gochon Elementary", role: "Follow it", refNote: "One reference + one line. The layout grammar and colour contrast carry over; only the subject changes.", model: "High-accuracy · weight 4", ratio: "2 / 3", src: "/landing/result-poster-sports.png", chips: ["Prompt: one line", "AI drafts the rest", "3 variants"] },
-    { kind: "Image · /poster", title: "Winter trend report", prompt: "2026 winter trend report cover", role: "Follow it", refNote: "One reference + one line. The vertical serif lockup and negative-space grammar stay; the season moves to winter.", model: "Fast · weight 3", ratio: "1232 / 2192", src: "/landing/result-winter-trend.png", chips: ["Prompt: one line", "9:16", "3 variants"] }
+    { kind: "Card news · /sns", title: "Lease checklist", prompt: "Make a 3-step checklist card set from this article", role: "Follow it", refNote: "One reference + one article URL. Card structure, copy and colour balance were filled in by the system.", model: `High-accuracy · ${LANDING_CREDITS.정밀형} credits`, ratio: "1 / 1", src: "/landing/result-cardnews-lease.png", chips: ["Material: one URL", "Prompt: one line", "Generated after copy approval"] },
+    { kind: "Poster · /poster", title: "Autumn sports day poster", prompt: "Autumn sports day poster for Gochon Elementary", role: "Follow it", refNote: "One reference + one line. The layout grammar and colour contrast carry over; only the subject changes.", model: `High-accuracy · ${LANDING_CREDITS.정밀형} credits`, ratio: "2 / 3", src: "/landing/result-poster-sports.png", chips: ["Prompt: one line", "AI drafts the rest", "3 variants"] },
+    { kind: "Image · /poster", title: "Winter trend report", prompt: "2026 winter trend report cover", role: "Follow it", refNote: "One reference + one line. The vertical serif lockup and negative-space grammar stay; the season moves to winter.", model: `Fast · ${LANDING_CREDITS.속도형} credits`, ratio: "1232 / 2192", src: "/landing/result-winter-trend.png", chips: ["Prompt: one line", "9:16", "3 variants"] }
   ],
   logs: [
     "Reading the reference. Layout, type and colour",
