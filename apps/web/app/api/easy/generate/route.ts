@@ -1,6 +1,8 @@
 import { DEFAULT_TEXT_MODEL, resolveTextModel } from "@fixup/shared";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import { easyStoreForUser } from "../../../../lib/easy/store";
+import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
+import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
 import { easyTitle } from "../../../easy/title";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
@@ -10,7 +12,18 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Easy 모드: 한 줄 → 그림 한 장 (설계 §8).
+ * Easy 모드: 한 줄 → **말 또는 그림** (설계 §8).
+ *
+ * ── 친 말이 전부 주문은 아니다 ────────────────────────────────
+ *
+ * 2026-09-21 사용자 — 「이지 모드 채팅창은 기본 LLM 이 탑재되어 꼭 이미지만이
+ * 아니라 사용자와 AI 가 대화 할 수 있어야 합니다.」
+ *
+ * 그전에는 친 말이 **전부** 그림 주문이었다. 「안녕하세요」도 그림을 만들었다 —
+ * 값이 나가고, 엉뚱한 그림이 나오고, 물어본 것에는 아무도 답하지 않았다.
+ *
+ * 이제 **먼저 가른다.** 주문이면 아래 세 라우트로 가고, 아니면 답만 적는다.
+ * 가르는 판단은 `app/easy/chat.ts` 가 값으로 재고, 부르는 일은 여기서 한다.
  *
  * ── 새 생성 경로를 만들지 않는다 ──────────────────────────────
  *
@@ -105,6 +118,44 @@ export async function POST(request: Request) {
 
     // 제목이 비어 있으면 이 말로 짓는다. 첫 프롬프트 한 번만이다(설계 §4-1).
     if (!conversation.title) await store.renameConversation(conversationId, easyTitle(prompt));
+
+    /*
+     * ⓪ **말인가 주문인가.**
+     *
+     * 값이 나가기 전에 가른다. 여기서 안 가르면 「안녕하세요」 한 마디에
+     * 그림값이 나간다.
+     *
+     * **지난 대화를 같이 준다.** 「그거 말고 다른 걸로」 같은 말은 앞을 봐야
+     * 뜻이 선다. 방금 남긴 이 말은 빼고 준다 — 프롬프트가 따로 싣는다.
+     */
+    const 지난줄 = (await store.listMessages(conversationId)).slice(0, -1);
+    const decision = readEasyDecision(
+      await createEasyChatProvider(process.env, textModel).decide(
+        easyChatPrompt(
+          지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
+          prompt,
+          /*
+           * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
+           * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
+           * (2026-09-21 실측).
+           */
+          referenceIds.length + preservedIds.length + personIds.length,
+        ),
+      ),
+    );
+
+    if (decision.wants === "talk") {
+      /*
+       * **답만 적고 끝낸다.** 그림을 안 만들었으므로 값도 거의 안 든다 —
+       * 화면이 「약 N장」을 적던 자리도 그래서 「그림을 만들면」으로 바뀌었다.
+       */
+      const saved = await store.appendMessage({
+        conversationId,
+        role: "assistant",
+        body: decision.reply || "무엇을 만들어 드릴까요?",
+      });
+      return Response.json({ ok: true, talked: true, message: saved, textModel });
+    }
 
     // ① 프로젝트
     const created = await read(await createProject(relay(request, "/api/poster/projects", {

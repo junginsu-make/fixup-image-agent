@@ -81,17 +81,21 @@ export function EasyAttachChoice({
 
   return (
     /*
-      **셋 다 테두리를 준다**(2026-09-21 사용자 — 「밝은 화면에서 더 안 보인다」).
+      **무게를 셋으로 가른다**(2026-09-21 사용자 — 「꼭 해야 하는거라면 더 눈에
+      띄게 하고 없이 시작은 다른 버튼색으로 구분하세요」).
 
-      전에는 「직접 첨부」가 `secondary`, 「없이 시작」이 `ghost` 였다. `ghost` 는
-      바탕색이 없어 **밝은 화면에서 글자만 떠 있는 것처럼** 보였고, 누를 수 있는
-      자리인지 알 수 없었다.
+      한 번은 셋 다 `ghost`·`secondary` 로 흩어져 있어 **밝은 화면에서 안
+      보였고**, 그래서 셋 다 `outline` 으로 맞췄다. 이번에는 반대 문제다 —
+      셋이 똑같이 생겨서 **무엇이 다음 걸음인지** 알 수 없다.
 
-      여기는 첫 화면에서 **처음 마주치는 단추 셋**이다. 어느 것을 눌러도 되는
-      자리이므로 셋이 같은 무게로 보여야 한다.
+        직접 첨부       채운 색. 여기가 본 길이다
+        라이브러리에서   옅게 채운 색. 같은 길의 다른 문
+        없이 시작       테두리만. **붙이지 않고 지나가는 길**이라 색이 다르다
+
+      크기도 키운다. 첫 화면에서 처음 마주치는 단추라 작으면 안내문처럼 보인다.
     */
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Button variant="outline" size="sm" onClick={onUpload}>
+      <Button onClick={onUpload}>
         직접 첨부
       </Button>
 
@@ -101,8 +105,9 @@ export function EasyAttachChoice({
       */}
       <LibraryPickerButton
         label="라이브러리에서"
+        triggerVariant="secondary"
         title="라이브러리에서 고르기"
-        description={`고를 수 있는 그림 ${rows.length}장 · 눌러서 고릅니다`}
+        description={`고를 수 있는 이미지 ${rows.length}장 · 눌러서 고릅니다`}
         loading={loading}
         images={rows.map((row) => ({
           id: row.id,
@@ -123,7 +128,7 @@ export function EasyAttachChoice({
         }}
       />
 
-      <Button variant="outline" size="sm" onClick={onSkip}>
+      <Button variant="outline" onClick={onSkip}>
         없이 시작
       </Button>
     </div>

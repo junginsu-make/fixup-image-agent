@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, PanelLeft, Send } from "lucide-react";
+import { ImagePlus, PanelLeft, Send, Sparkles } from "lucide-react";
 import { Button, Textarea, cn } from "@fixup/ui";
 import { DEFAULT_TEXT_MODEL } from "@fixup/shared";
+import { randomId } from "../../lib/browser-safe";
 import { EasyMessageRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
@@ -51,7 +52,7 @@ interface Attachment {
 const 인사: EasyMessage = {
   id: "greeting",
   role: "system",
-  body: "그림을 붙이시겠어요? 없어도 만들 수 있습니다.",
+  body: "이미지를 붙이시겠어요? 없어도 만들 수 있습니다.",
 };
 
 export function EasyClient({
@@ -87,8 +88,6 @@ export function EasyClient({
 
   const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
   const shown = messages.length ? messages : [인사];
-  // 인사말만 있는 첫 화면인가. 정렬이 갈린다.
-  const 말을걸었나 = messages.some((message) => message.role !== "system");
 
   /*
    * **이번 한 장에 얼마 드나**(설계 §5-2).
@@ -126,9 +125,9 @@ export function EasyClient({
   async function upload(files: FileList) {
     setError(null);
     for (const one of Array.from(files)) {
-      const id = crypto.randomUUID();
       const form = new FormData();
-      form.append("id", id);
+      // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`browser-safe.ts`).
+      form.append("id", randomId());
       form.append("title", one.name);
       // 역할은 여기서 묻지 않는다. 기획이 판단한다 — 붙인 것을 전부 읽는다.
       form.append("purpose", "style");
@@ -173,12 +172,12 @@ export function EasyClient({
    * 원본 크기 보기·넘기기·내려받기·「이렇게 만들었습니다」가 다 거기 있다.
    */
   function openViewer(url: string) {
-    openImageViewer(url, "만든 그림", {
+    openImageViewer(url, "만든 이미지", {
       name: "easy.png",
       // 오른쪽 칸에 걸 설명. 무엇으로 만든 것인지 그림 옆에서 같이 본다.
       meta: [
         ["글 모델", textModel],
-        ["그림 모델", imageModel],
+        ["이미지 모델", imageModel],
         ["비율", ratioId],
       ],
     });
@@ -194,18 +193,29 @@ export function EasyClient({
     const prompt = draft.trim();
     if (!prompt || !turn.canSend) return;
 
+    /*
+     * **잠그기 전에 id 부터 만든다**(2026-09-21 사용자 보고).
+     *
+     * 전에는 `setSending(true)` 뒤, `try` 앞에서 `crypto.randomUUID()` 를
+     * 불렀다. 그것은 **HTTPS·localhost 에서만 있는 함수**라 IP 로 연 화면
+     * (`http://54.180.68.212`)에서 그 자리에서 터졌다.
+     *
+     *   Uncaught (in promise) TypeError: crypto.randomUUID is not a function
+     *
+     * 터진 자리가 `try` 밖이라 `finally` 가 안 돌았고, **입력창이 「만드는
+     * 중입니다」인 채로 영영 잠겼다.** 한 번 실패하면 새로고침 전까지 아무것도
+     * 못 했다. 터지는 것도 문제지만 **잠긴 채로 남는 것**이 더 문제였다.
+     *
+     * 이제 `randomId()`(`browser-safe.ts`)를 쓰고, 잠그기 전에 만든다.
+     */
+    const 자리 = `pending-${randomId()}`;
+
     setSending(true);
     setError(null);
     setDraft("");
 
-    // 내 말과 그림 자리를 먼저 그린다. 자리가 없으면 결과가 도착할 때 대화가
-    // 아래로 튀어 읽던 자리를 잃는다.
-    const 자리 = `pending-${crypto.randomUUID()}`;
-    setMessages((current) => [
-      ...current,
-      { id: `user-${자리}`, role: "user", body: prompt },
-      { id: 자리, role: "image", body: "" },
-    ]);
+    // 내 말을 먼저 그린다. 답이 말일지 그림일지는 아직 모른다 — 서버가 가른다.
+    setMessages((current) => [...current, { id: `user-${자리}`, role: "user", body: prompt }]);
 
     try {
       const response = await fetch("/api/easy/generate", {
@@ -220,6 +230,18 @@ export function EasyClient({
         }),
       });
       const body = await response.json().catch(() => ({}));
+      if (body.ok && body.talked) {
+        /*
+         * **말로 답한 턴.** 그림을 안 만들었으므로 기다릴 것도 없다.
+         * 2026-09-21 사용자 — 「그냥 ChatGPT · Gemini · Claude 처럼」.
+         */
+        setMessages((current) => [
+          ...current,
+          { id: body.message?.id ?? `talk-${자리}`, role: "assistant", body: body.message?.body ?? "" },
+        ]);
+        router.refresh();
+        return;
+      }
       if (!body.ok) {
         /*
          * **오류를 뭉개지 않는다**(설계 §5-3). 서버가 준 말을 그대로 보이고,
@@ -229,6 +251,9 @@ export function EasyClient({
           retryable: body.retryable !== false,
         });
       }
+
+      // 그림 자리를 잡아 둔다. 자리가 없으면 도착하는 순간 대화가 아래로 튄다.
+      setMessages((current) => [...current, { id: 자리, role: "image", body: "" }]);
 
       // 결과는 기존 status 라우트에 물어 받는다. 포스터 화면과 같은 길이다.
       const image = await collect(body.projectId, body.submission);
@@ -290,18 +315,16 @@ export function EasyClient({
       {/* ── 대화 ── 자기 안에서만 스크롤한다. 입력창이 아래에 붙어 있어야 한다. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {/*
-          **첫 화면은 가운데에 모은다.**
+          **언제나 위에서부터 쌓인다**(2026-09-21 사용자 — 「대화가 가운데
+          중간부터 시작하는데 채팅은 상단에서부터 내려오게 하고… 그냥 ChatGPT ·
+          Gemini · Claude 처럼 쓸 수 있어야 된다고 보면 됩니다」).
 
-          아직 아무것도 없을 때 인사말이 맨 위에 붙어 있으면 아래가 통째로 빈
-          공간이 되어 고장처럼 보인다(2026-09-18 확인). 대화가 시작되면 위에서
-          부터 쌓인다 — 그때는 가운데 정렬이 오히려 튄다.
+          한동안 첫 화면만 가운데로 모았다(2026-09-18). 「아래가 통째로 빈
+          공간이라 고장처럼 보인다」는 까닭이었는데, 써 보니 **말을 걸 때마다
+          글이 위로 튀어 올라가** 그쪽이 더 이상했다. 채팅은 처음부터 위에서
+          시작하는 것이 관례다.
         */}
-        <div
-          className={cn(
-            "mx-auto grid w-full max-w-2xl gap-4 px-4 py-8",
-            말을걸었나 ? "" : "my-auto",
-          )}
-        >
+        <div className="mx-auto grid w-full max-w-2xl gap-4 px-4 py-6">
           {shown.map((message) => (
             <EasyMessageRow
               key={message.id}
@@ -310,6 +333,29 @@ export function EasyClient({
               onOpenImage={() => { const url = urls[message.id]; if (url) openViewer(url); }}
             />
           ))}
+
+          {/*
+            **생각하는 중.**
+
+            답이 말일지 그림일지 서버가 가르는 동안은 화면에 아무 일도 안
+            일어난다. 그 사이가 비어 있으면 보낸 것이 먹혔는지 알 수 없다 —
+            그림 자리는 가른 **뒤에** 생긴다.
+
+            그림이 이미 자리를 잡았으면 안 낸다. 기다리는 표시가 둘이 된다.
+          */}
+          {turn.busy && shown[shown.length - 1]?.role === "user" ? (
+            <div className="flex items-start gap-2">
+              <span
+                aria-hidden
+                className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary"
+              >
+                <Sparkles className="size-3.5" />
+              </span>
+              <p className="animate-pulse rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm leading-6 text-subtle-foreground">
+                생각하는 중입니다
+              </p>
+            </div>
+          ) : null}
 
           {/*
             붙일지 묻는 단추. **첫 화면에서 한 번만**이다 — 되묻지 않는다(§6).
@@ -404,7 +450,7 @@ export function EasyClient({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="그림 붙이기"
+              aria-label="이미지 붙이기"
               disabled={turn.busy}
               onClick={() => file.current?.click()}
             >
@@ -426,8 +472,8 @@ export function EasyClient({
                 (2026-09-18 확인).
               */
               placeholder={
-                turn.busy ? "만드는 중입니다"
-                  : turn.canSend ? "무엇을 만들까요?"
+                turn.busy ? "답을 기다리는 중입니다"
+                  : turn.canSend ? "무엇이든 물어보거나, 만들 것을 적어 주세요"
                     : "위에서 먼저 골라 주세요"
               }
               disabled={!turn.canSend}
@@ -453,14 +499,19 @@ export function EasyClient({
             유일한 값 정보다. 못 셀 때는 지어내지 않고 그 까닭을 적는다.
           */}
           <p className="pt-2 text-meta text-subtle-foreground">
+            {/*
+              **보낸다고 늘 값이 드는 것이 아니다**(2026-09-21). 말로 묻는 턴은
+              그림을 안 만든다. 「보내면 듭니다」라고 적어 두면 인사 한 마디도
+              값이 나가는 줄 알고 못 친다.
+            */}
             {cost.units !== undefined ? (
               <>
-                보내면 <strong>약 {cost.units}장</strong>이 듭니다.{" "}
+                이미지를 만들면 <strong>약 {cost.units}장</strong>이 듭니다.{" "}
               </>
             ) : (
               <>{cost.rejected} </>
             )}
-            만든 그림은 라이브러리에 저장됩니다. 세밀하게 만들려면 왼쪽
+            만든 이미지는 라이브러리에 저장됩니다. 세밀하게 만들려면 왼쪽
             「이미지 만들기」를 누르세요.
           </p>
         </div>

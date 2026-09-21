@@ -8,8 +8,18 @@
  * `server-only` 를 안 붙인다. 순수 변환이라 시험이 그대로 부른다.
  */
 
-/** 대화 한 줄의 갈래. 표의 `check` 제약과 같아야 한다. */
-export const EASY_ROLES = ["user", "system", "image"] as const;
+/**
+ * 대화 한 줄의 갈래. 표의 `check` 제약과 같아야 한다.
+ *
+ *   user       내가 친 말
+ *   system     우리가 넣은 안내(인사)
+ *   image      만든 그림 — 본체는 라이브러리에 있고 여기는 가리키기만 한다
+ *   assistant  **도우미가 말로 한 답** (2026-09-21)
+ *
+ * `assistant` 를 `system` 으로 대신 쓰지 않는다. 인사는 우리가 적은 안내문이고
+ * 이것은 모델이 한 말이라, 한 갈래에 섞으면 나중에 둘을 갈라낼 길이 없다.
+ */
+export const EASY_ROLES = ["user", "system", "image", "assistant"] as const;
 export type EasyRole = (typeof EASY_ROLES)[number];
 
 export interface EasyConversationRecord {

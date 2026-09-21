@@ -198,15 +198,28 @@ export function EasySplitHandle({
       }}
       className={cn(
         // 보이는 선은 1px 이지만 잡는 자리는 넓다. 얇으면 잡기가 어렵다.
-        "group relative w-2 shrink-0 cursor-col-resize",
+        // **옆 칸 위에 얹힌다.** 손잡이가 선 밖으로 나오므로 아래 깔리면 잘린다.
+        "group relative z-10 w-2 shrink-0 cursor-col-resize",
         "focus-visible:outline-none",
         className,
       )}
     >
+      {/*
+        **`border` 색으로는 안 보인다**(2026-09-21 사용자 — 「선을 조금 더 잘
+        보이게 해주세요. 전체적으로 구분선이 매우 잘 안보입니다」).
+
+        `--border`(#e8e6dc)는 바탕(#f7f6f1)과 거의 같은 값이라, 칸을 **나누는
+        선**으로는 약하다. 그 색은 카드 테두리처럼 **있는 듯 없는 듯해야 하는
+        자리**의 색이다. 여기는 반대다 — 잡아서 끄는 자리라 눈에 걸려야 한다.
+
+        글자색(`--subtle-foreground`)을 옅게 깔아 쓴다. 두 테마 모두에서
+        바탕과 충분히 갈린다.
+      */}
       <span
         aria-hidden
         className={cn(
-          "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors",
+          "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors",
+          "bg-subtle-foreground/45",
           "group-hover:bg-primary group-focus-visible:bg-primary",
           dragging && "bg-primary",
         )}
@@ -225,14 +238,20 @@ export function EasySplitHandle({
       <span
         aria-hidden
         className={cn(
-          "absolute left-1/2 top-1/2 grid h-7 w-4 -translate-x-1/2 -translate-y-1/2 place-items-center",
-          "rounded-full border border-border bg-background text-subtle-foreground transition-colors",
+          "absolute left-1/2 top-1/2 grid h-9 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center",
+          /*
+            **작고 옅어서 안 보였다**(2026-09-21 사용자 — 「아이콘이 안보입니다」).
+            16×28 에 `--border` 테두리였다. 키우고, 테두리와 화살표에 글자색을
+            쓰고, 그림자로 바탕에서 떼어 낸다 — 눌러서 잡는 것처럼 보여야 한다.
+          */
+          "rounded-full border border-subtle-foreground/45 bg-background shadow-sm",
+          "text-muted-foreground transition-colors",
           "group-hover:border-primary group-hover:text-primary",
           "group-focus-visible:border-primary group-focus-visible:text-primary",
           dragging && "border-primary text-primary",
         )}
       >
-        <MoveHorizontal className="h-3 w-3" />
+        <MoveHorizontal className="h-3.5 w-3.5" />
       </span>
     </div>
   );

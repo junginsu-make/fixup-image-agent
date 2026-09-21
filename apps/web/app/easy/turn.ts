@@ -19,7 +19,7 @@
 
 export interface EasyMessage {
   id: string;
-  role: "user" | "system" | "image";
+  role: "user" | "system" | "image" | "assistant";
   body: string;
   /** 그림 줄이면 라이브러리의 결과물을 가리킨다(설계 §4-1). */
   workId?: string;
