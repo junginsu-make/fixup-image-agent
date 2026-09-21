@@ -1,6 +1,7 @@
 // Deep import (not the package barrel): the barrel re-exports server-only modules
 // (node:crypto via knowledge-access/generate, @neondatabase via rag) which webpack
 // cannot bundle into this browser module. transcribe-batching.ts is pure/DOM-free.
+import { randomId } from "../../lib/browser-safe";
 import { planTranscribeBatches, stitchTranscripts, type RedesignStrip } from "@fixup/redesign-core/src/transcribe-batching";
 
 const STRIP_TARGET_WIDTH_MAX = 2048;
@@ -113,7 +114,14 @@ export async function runTranscription(
     try {
       const res = await fetch("/api/redesign/transcribe-strips", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        /*
+          **배치마다 새 열쇠를 준다**(F-7-9).
+
+          전사도 예약을 거친다 — 없으면 400 이고, 이 길의 실패는 조용하다
+          (아래 catch 가 자리표시로 바꾼다). 같은 값을 돌려 쓰면 두 번째부터
+          `duplicate_request` 로 거절된다.
+        */
+        headers: { "Content-Type": "application/json", "x-idempotency-key": randomId() },
         body: JSON.stringify({ strips: batches[i], batchIndex: i, batchCount: batches.length, previousSectionHint: prevHint, provider: opts.provider }),
         signal: opts.signal,
       });

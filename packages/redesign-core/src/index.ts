@@ -68,5 +68,7 @@ export {
 export {
   planTranscribeBatches,
   stitchTranscripts,
+  TRANSCRIBE_MAX_BASE64_CHARS,
   type RedesignStrip
 } from "./transcribe-batching.js";
+export { reportUsage, type LlmUsage, type UsageReporter } from "./usage.js";

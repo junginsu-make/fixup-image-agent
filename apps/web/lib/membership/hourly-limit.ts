@@ -18,7 +18,7 @@ import type { GenerationOperation } from "./types";
  * ── SQL 과 짝이다 ────────────────────────────────────────────
  *
  * 여기 있는 작업만 `reserve_generation` 이 시간당으로 센다
- * (`202609200002_reference_analyze_operation.sql`). 한쪽만 늘리면 한도가 없는
+ * (`202609210001_transcribe_operation.sql`). 한쪽만 늘리면 한도가 없는
  * 채로 돌거나, 앱이 엉뚱한 수를 넣는다.
  */
 
@@ -37,6 +37,18 @@ export const HOURLY_LIMITS = {
    * 번은 되어야 한다.** 그보다 넉넉히 잡았다.
    */
   reference_analyze: { env: "REFERENCE_ANALYZE_HOURLY_LIMIT", fallback: 60 },
+  /**
+   * 전사.
+   *
+   * **한 번 전사가 호출 한 번이 아니다.** 화면이 원본을 스트립 마흔 장까지
+   * 자르고(`MAX_STRIPS_TOTAL`) 배치당 여덟 장씩 보내므로, 한 페이지를 전사하면
+   * 호출이 **다섯 번까지** 간다. 한 시간에 열 번 전사하는 것을 정상으로 보면
+   * 50 이고, 거기에 여유를 얹었다.
+   *
+   * 칸을 `pdp_analyze` 와 나눈 이유도 이것이다 — 전사 한 번이 시간당 열 번짜리
+   * 칸의 절반을 먹으면 그날 기획을 못 한다.
+   */
+  redesign_transcribe: { env: "TRANSCRIBE_HOURLY_LIMIT", fallback: 60 },
 } as const satisfies Partial<Record<GenerationOperation, { env: string; fallback: number }>>;
 
 type LimitedOperation = keyof typeof HOURLY_LIMITS;

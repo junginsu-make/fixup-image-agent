@@ -13,6 +13,7 @@ import {
 import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
 import { RedesignError } from "./errors.js";
+import { reportUsage } from "./usage.js";
 import { GOOGLE_READING_MODEL } from "./transcribe.js";
 
 /**
@@ -682,38 +683,6 @@ async function analyzeSource({
       502,
     );
   }
-}
-
-/**
- * 업체 응답에서 토큰 수를 꺼낸다.
- *
- * OpenAI 는 `usage.input_tokens`, Google 은 `usageMetadata.promptTokenCount` 다.
- * **못 찾으면 0 이 아니라 아무 말도 하지 않는다** — 0원으로 적히면 「안 썼다」와
- * 「못 쟀다」가 같은 모양이 된다.
- */
-function reportUsage(
-  onUsage: GenerateSectionsInput["onUsage"],
-  model: string,
-  data: unknown,
-): void {
-  if (!onUsage || !data || typeof data !== "object") return;
-  const record = data as Record<string, unknown>;
-  const usage = (record.usage ?? record.usageMetadata) as Record<string, unknown> | undefined;
-  if (!usage || typeof usage !== "object") return;
-
-  const pick = (...names: string[]) => {
-    for (const name of names) {
-      const value = usage[name];
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-    }
-    return undefined;
-  };
-
-  const inputTokens = pick("input_tokens", "prompt_tokens", "promptTokenCount");
-  const outputTokens = pick("output_tokens", "completion_tokens", "candidatesTokenCount");
-  if (inputTokens === undefined && outputTokens === undefined) return;
-
-  onUsage({ model, inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 });
 }
 
 async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }) {
