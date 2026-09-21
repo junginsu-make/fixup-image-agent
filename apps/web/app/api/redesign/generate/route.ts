@@ -3,7 +3,7 @@ import { buildSceneWithCharacterDirective, resolveCharacterAngles } from "@fixup
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { readRedesignForm } from "../../../../lib/pdp/request";
-import { imageCreditUnits } from "../../../../lib/credit-cost";
+import { chunkCreditUnits } from "../../../../lib/redesign/chunk-billing";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
@@ -62,7 +62,32 @@ async function generate(req: Request) {
       키가 없어 옛 직접 호출로 떨어지면 그쪽 단가다.
     */
     billedModel = generateImage ? falModel : provider;
-    reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(billedModel, requestedCount));
+
+    /*
+      **쪼갠 것은 우리 사정인데 값은 사용자가 냈다**(F-7-7).
+
+      화면의 「나머지 섹션 생성」은 자기 자신을 한 장씩 다시 부른다. 그래서
+      여덟 장 채우기는 요청 여덟 번이고, 요청마다 `creditUnits` 가 따로
+      올림했다.
+
+        한 장   $0.165 → ceil(3.3)  = 4장   ← 여덟 번이면 32장
+        여덟 장 $1.32  → ceil(26.4) = 27장
+
+      열 장이면 21% 를 더 낸다.
+
+      설계 §7.2: 「한 번의 '전체 생성'은 **논리 작업 단위**로 예상 금액을
+      계산한다. 내부 청크/섹션 분할 때문에 **올림이 반복되지 않는다.**」
+
+      그래서 청크마다 **논리 작업의 누적 금액에서 앞서 청구한 만큼을 뺀 것**을
+      받는다. 합치면 올림이 딱 한 번 일어난 것과 같고, 중간에 멈춰도 그때까지의
+      논리 금액만 낸다 — 개별 생성 resume 이 이 성질 위에 선다.
+    */
+    const 청구 = chunkCreditUnits({
+      modelId: billedModel,
+      jobIndex: Number(form.get("jobIndex") ?? 0),
+      chunkCount: requestedCount,
+    });
+    reservation = await reserveAiUsage(req, "redesign_generate", 청구(requestedCount));
     if (!reservation.ok) return reservation.response;
     const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
     const files: GenerateInputFile[] = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, type: f.type, buffer: Buffer.from(await f.arrayBuffer()) })));
@@ -112,6 +137,14 @@ async function generate(req: Request) {
       rolloutRequest: String(form.get("rolloutRequest") || ""),
       knowledgeText: String(form.get("knowledgeText") || ""),
       transcript: String(form.get("transcript") || ""),
+      /*
+        **이미 한 기획을 도로 준다**(F-7-7). 청크마다 다시 분석하면 글 모델
+        값이 청크 수만큼 늘고, 무엇보다 **청크마다 다른 계획**이 나온다.
+
+        화면이 준 것이라 믿지 않는다 — 코어가 `isUsableAnalysis` 로 다시 보고,
+        쓸 만하지 않으면 제가 분석한다. 여기서는 **모양만** 본다.
+      */
+      analysis: readReusableAnalysis(form.get("analysis")),
       useKnowledge: String(form.get("useKnowledge") || "") === "true",
       knowledgeAccessAuthorized: true,
       model: String(form.get("model") || "openai"),
@@ -132,7 +165,7 @@ async function generate(req: Request) {
       consumed > 0,
       // 만든 만큼만 받는다. 단가는 **실제로 그린 모델**에서 뽑는다 — 예약과
       // 같은 값이어야 한다. 전에는 예약만 실행 모델이고 차감은 옛 이름이었다.
-      imageCreditUnits(billedModel, consumed),
+      청구(consumed),
       consumed > 0 ? undefined : "no_image_generated",
       // 글값도 함께 남긴다. 그동안 리디자인의 분석 비용은 장부에 0원이었다.
       { model: billedModel, billableImages: consumed, llmUsd: readLlmMeter().usd },
@@ -155,5 +188,26 @@ async function generate(req: Request) {
     if (err instanceof RedesignError) return Response.json({ error: err.message }, { status: err.status });
     const message = err instanceof Error ? humanizeProviderError(err.message) : "이미지 생성 중 오류가 발생했습니다.";
     return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * 화면이 돌려준 기획을 읽는다.
+ *
+ * **깨졌거나 너무 크면 그냥 안 싣는다.** 생성이 멎는 쪽이 더 나쁘다 — 안
+ * 실으면 코어가 전과 같이 제가 분석한다.
+ *
+ * 분석은 몇 KB 짜리 요약이다. 그보다 크면 화면이 보낸 것이 분석이 아니다.
+ */
+const REUSABLE_ANALYSIS_MAX_CHARS = 60_000;
+
+function readReusableAnalysis(raw: FormDataEntryValue | null): unknown {
+  const text = typeof raw === "string" ? raw : "";
+  if (!text || text.length > REUSABLE_ANALYSIS_MAX_CHARS) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : undefined;
+  } catch {
+    return undefined;
   }
 }

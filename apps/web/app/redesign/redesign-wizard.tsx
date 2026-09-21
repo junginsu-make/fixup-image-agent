@@ -21,6 +21,7 @@ import {
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
 import { randomId } from "../../lib/browser-safe";
 import { batchSummaryMessage } from "./batch-summary";
+import { appendGenerateFields } from "./generate-form";
 import {
   REDESIGN_STEPS,
   commerceTips,
@@ -297,21 +298,15 @@ export function RedesignWizard() {
             .join("\n\n")
             .slice(0, 60000)
         : "";
-      uploadFiles.forEach((file) => form.append("files", file));
-      form.append("knowledgeText", knowledgeText);
-      form.append("useKnowledge", String(useSharedKnowledge));
-      form.append("request", request);
-      form.append("model", selectedModel);
-      form.append("channel", channel);
-      form.append("ratio", ratio);
-      form.append("look", look);
-      form.append("count", String(outputCount));
-      form.append("startSection", String(startSection));
-      form.append("rolloutRequest", outputRolloutRequest);
-      if (transcript) form.append("transcript", transcript);
-      // 각도는 여러 번 넣는다 — 라우트가 `getAll` 로 받는다. 안 넣으면 자동이다.
-      if (characterId) form.append("characterId", characterId);
-      if (characterId) for (const a of characterAngles) form.append("characterAngles", a);
+      appendGenerateFields(form, {
+        uploadFiles, knowledgeText, useKnowledge: useSharedKnowledge, request,
+        model: selectedModel, channel, ratio, look,
+        count: outputCount, startSection, rolloutRequest: outputRolloutRequest, transcript,
+        characterId, characterAngles,
+        // 쪼개 부르는 자리와, 앞 청크가 이미 한 기획(F-7-7).
+        jobIndex: displayIndex, jobTotal: displayCount,
+        analysis: baseProject?.analysis, analysisFiles: baseProject?.files,
+      });
 
       const response = await fetch("/api/redesign/generate", {
         method: "POST",

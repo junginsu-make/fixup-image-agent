@@ -185,6 +185,37 @@ function bodyError(error: unknown) {
   return error instanceof BodyLimitError ? invalidPdpRequest("요청 이미지 용량이 너무 큽니다.", 413) : invalidPdpRequest();
 }
 
+/** 논리 작업 하나가 가질 수 있는 최대 청크 수. 섹션 상한과 같다. */
+const MAX_JOB_CHUNKS = 10;
+
+/**
+ * **자리를 꾸며 보내면 금액이 따라온다**(F-7-7 리뷰, 2026-09-21).
+ *
+ * 청크 금액은 「여기까지의 논리 누적 − 앞서 청구한 만큼」이라, **앞자리를
+ * 크게 부르면 이번 청구가 0 이 된다.** 실측으로 `jobIndex=1e17` 이면 예약도
+ * 차감도 0 이었다.
+ *
+ * 0 은 그냥 싼 것이 아니다. `reserve_generation` 의 동시 생성 검사는
+ * `elsif p_units > 0 then` 안에 있고 월 한도 검사도 `+ 0` 이라 늘 통과한다 —
+ * **한도를 다 쓴 계정이 무제한으로 유료 이미지를 만든다.**
+ *
+ * 그래서 경계에서 막는다. 안 보내는 것은 괜찮다(쪼개지 않은 요청).
+ * 보냈으면 **둘 다** 있어야 하고, `1 <= jobIndex <= jobTotal <= 10` 이어야 한다.
+ */
+function validJobPosition(form: FormData): boolean {
+  const hasIndex = form.has("jobIndex");
+  const hasTotal = form.has("jobTotal");
+  if (!hasIndex && !hasTotal) return true;
+  if (!hasIndex || !hasTotal) return false;
+
+  // `Number("")` 은 0 이라 그냥 쓰면 빈 칸이 숫자로 통과한다.
+  const index = Number(String(form.get("jobIndex")).trim() || "x");
+  const total = Number(String(form.get("jobTotal")).trim() || "x");
+  return Number.isInteger(index) && Number.isInteger(total)
+    && index >= 1 && total >= 1
+    && total <= MAX_JOB_CHUNKS && index <= total;
+}
+
 export async function readRedesignForm(req: Request): Promise<{ ok: true; form: FormData } | { ok: false; response: Response }> {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
@@ -193,7 +224,8 @@ export async function readRedesignForm(req: Request): Promise<{ ok: true; form: 
     const form = await new Response(Uint8Array.from(bytes), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
     const count = Number(form.get("count") ?? 1);
     const start = Number(form.get("startSection") ?? 1);
-    if (!Number.isInteger(count) || count < 1 || count > 10 || !Number.isInteger(start) || start < 1 ||
+    if (!validJobPosition(form) ||
+      !Number.isInteger(count) || count < 1 || count > 10 || !Number.isInteger(start) || start < 1 ||
       !form.getAll("files").some((file) => file instanceof File && file.size > 0) ||
       (form.has("model") && !["openai", "google"].includes(String(form.get("model")))) ||
       (form.has("ratio") && !ratio.safeParse(form.get("ratio")).success) ||

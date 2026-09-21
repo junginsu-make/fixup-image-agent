@@ -184,6 +184,21 @@ export type GenerateSectionsInput = {
    */
   onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
   /**
+   * **이미 한 기획.** 있으면 다시 안 한다(F-7-7).
+   *
+   * 화면의 「나머지 섹션 생성」은 자기 자신을 한 장씩 다시 부른다. 그래서
+   * 여덟 장 채우기는 **분석도 여덟 번** 돌았다 — 글 모델 값이 여덟 배고,
+   * 그만큼 더 기다리고, 무엇보다 **청크마다 다른 계획**이 나왔다.
+   *
+   * 분석 결과는 이미 응답에 실려 돌아간다(`project.analysis`). 그것을 도로
+   * 주면 된다.
+   *
+   * **쓸 만한 것만 믿는다.** 화면이 가진 사본이 낡았거나 비었으면 무시하고
+   * 다시 분석한다 — 그대로 쓰면 F-7-3 이 막은 「빈 분석으로 유료 생성」이
+   * 뒷문으로 되살아난다.
+   */
+  analysis?: unknown;
+  /**
    * 그림을 **실제로 만드는 사람.**
    *
    * 주면 이것을 쓰고, 없으면 지금까지처럼 업체를 직접 부른다.
@@ -388,8 +403,11 @@ export async function generateSections(input: GenerateSectionsInput) {
     : "";
   console.info(`[generate] knowledge ready job=${jobId} useKnowledge=${useKnowledge} chars=${retrievedKnowledgeText.length}`);
   const payload = { request: requestText, rolloutRequest, knowledgeText: retrievedKnowledgeText, options: { channel, ratio, count } };
-  console.info(`[generate] analysis start job=${jobId}`);
-  const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage });
+  // 이미 한 기획이 있으면 다시 안 한다(F-7-7). 쓸 만한 것만 믿는다.
+  const reusedAnalysis = isUsableAnalysis(input.analysis) ? input.analysis : undefined;
+  console.info(`[generate] analysis start job=${jobId} reused=${Boolean(reusedAnalysis)}`);
+  const analysis = reusedAnalysis
+    ?? await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage });
   console.info(`[generate] analysis done job=${jobId}`);
   // 분석에는 인물을 넣지 않는다. 분석은 원본 상세페이지를 읽어 제품을 파악하는
   // 일이라, 인물이 섞이면 제품 분석이 오염된다. 생성에만 넣는다.
