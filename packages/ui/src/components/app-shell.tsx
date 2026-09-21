@@ -123,13 +123,17 @@ const navGroups: NavGroup[] = [
 ];
 
 // '계정'과 '설정'이 같은 화면(/settings)을 가리켜 메뉴가 둘로 보였다. 하나로 둔다.
-const bottomItems = [
+//
+// **`NavLink` 로 못 박는다.** 안 박으면 갈래 없는 모양으로 좁게 잡히고,
+// 위아래를 합친 `allLinks` 가 `section` 을 모르는 갈래를 품는다 — CI 의
+// 타입 검사가 그것을 잡았다(2026-09-21).
+const bottomItems: NavLink[] = [
   { href: "/settings", label: "계정", desc: "사용량·레퍼런스", icon: Settings },
 ];
 
 // 팀은 소속이 있는 사람에게만 낸다. 팀이 하나도 없는 회사에서 모두에게
 // 「팀」이 보이면, 눌러 봐야 빈 화면이라 메뉴만 늘어난다.
-const teamItem = {
+const teamItem: NavLink = {
   href: "/team",
   label: "팀",
   desc: "팀원·소속 관리",
@@ -138,7 +142,7 @@ const teamItem = {
 
 // 관리자는 다른 메뉴와 같은 자리에 둔다. 우측 상단 버튼으로 있을 때는 회원
 // 상태 표시에 섞여, 회원 관리·비용을 보러 갈 곳이 있다는 걸 알기 어려웠다.
-const adminItem = {
+const adminItem: NavLink = {
   href: "/admin",
   label: "관리자",
   desc: "회원·비용 관리",
