@@ -93,10 +93,19 @@ export function EasyRail({ conversations }: { conversations: EasyConversationRec
           open && "translate-x-0",
         )}
       >
-        <div className="flex items-center gap-2 px-3 py-3">
-          <BrandMark className="h-5" />
-          <span className="text-meta text-subtle-foreground">Easy</span>
-        </div>
+        {/*
+          **플랫폼 이름을 낸다**(2026-09-21 사용자).
+
+          전에는 「Easy」라고 적어 사이트 이름을 덮고 있었다. 여기는 어느
+          제품인지 말하는 자리이고, 지금 어느 모드인지는 사이드바 내용이
+          이미 말한다.
+
+          이름은 셸과 같은 것을 쓴다 — 두 화면에서 다른 이름이 보이면 안 된다.
+        */}
+        <Link href="/poster" className="flex items-center gap-2 px-3 py-3">
+          <BrandMark className="h-6 w-6 flex-none" />
+          <span className="text-sm font-bold tracking-[-0.02em]">MCS</span>
+        </Link>
 
         <div className="px-3 pb-2">
           <Button asChild className="w-full justify-start gap-2" variant="secondary">

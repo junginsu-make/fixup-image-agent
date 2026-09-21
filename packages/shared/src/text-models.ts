@@ -23,9 +23,9 @@ import { LLM_PRICES, priceOf, type TokenPrice } from "./llm-price";
  * 쪽으로는 안전하지만 **화면에는 그 값이 진짜인 것처럼 보인다.** 설계 §5-4 가
  * 「값을 모르는 채로 넣지 않는다」고 못 박은 이유다. 시험이 이것을 지킨다.
  *
- * 그래서 이 목록은 **단가표에 있는 것만** 담는다. 설계 §5-4 는 여덟 개를
- * 적었는데, 그 중 넷(fable-5·gpt-6-astra·terra·luna)은 단가표에 아직 없다 —
- * 단가 수정이 들어오면 여기에 한 줄씩 더한다.
+ * 그래서 이 목록은 **단가표에 있는 것만** 담는다. 설계 §5-4 가 적은 여덟 개가
+ * 2026-09-21 에 다 들어왔다 — 단가표를 공식 문서로 대조해 고치면서 넷
+ * (fable-5·gpt-6-astra·terra·luna)을 함께 채웠다.
  */
 
 /** 어느 SDK 로 부르나. 목록에 업체가 섞여 있으므로 갈라야 한다. */
@@ -42,6 +42,14 @@ export interface TextModel {
    * 갔다. **고르는 척만 하는 화면**이었다.
    */
   vendor: TextModelVendor;
+  /**
+   * 그 업체 안에서의 **등급**.
+   *
+   * 값을 화면에서 뺐으므로(2026-09-21 사용자) 무엇이 위인지 알 길이 이것뿐이다.
+   * 업체마다 이름 규칙이 달라 이름만으로는 못 가린다 — 「Sol」과 「Opus」 중
+   * 어느 쪽이 위인지는 아무도 모른다.
+   */
+  tier: "빠름" | "표준" | "고급" | "최상";
   /** 드롭다운에 보이는 이름. **진짜 이름을 낸다**(설계 §5-1). */
   label: string;
   /** 한 줄 설명. 왜 이것을 고를까. */
@@ -63,29 +71,70 @@ export interface TextModel {
  * 실제로 있었다(`stripModelMentions` 로 막았다).
  */
 export const TEXT_MODELS: readonly TextModel[] = [
+  /*
+    ── Anthropic ────────────────────────────────────────────
+    **업체별로 묶고, 그 안에서 등급 순으로 둔다**(2026-09-21 사용자).
+
+    값 순으로 섞어 놓으면 「Claude 중에 뭐가 있나」를 찾을 수 없다. 사람은
+    업체를 먼저 떠올리고 그 안에서 고른다.
+  */
   {
     id: "claude-haiku-4-5",
     vendor: "anthropic",
+    tier: "빠름",
     label: "Claude Haiku 4.5",
-    note: "가장 싸고 빠릅니다. 간단한 지시에",
+    note: "가장 빠릅니다. 간단한 지시에",
   },
   {
     id: "claude-sonnet-5",
     vendor: "anthropic",
+    tier: "표준",
     label: "Claude Sonnet 5",
     note: "기본. 지금 기획이 쓰는 모델입니다",
   },
   {
-    id: "gpt-5.6-sol",
-    vendor: "openai",
-    label: "GPT-5.6 Sol",
-    note: "다른 업체의 눈으로 씁니다",
+    id: "claude-fable-5",
+    vendor: "anthropic",
+    tier: "고급",
+    label: "Claude Fable 5",
+    note: "글을 길고 짜임새 있게 씁니다",
   },
   {
     id: "claude-opus-5",
     vendor: "anthropic",
+    tier: "최상",
     label: "Claude Opus 5",
-    note: "가장 비쌉니다. 복잡한 지시에",
+    note: "가장 깊이 생각합니다. 복잡한 지시에",
+  },
+
+  /* ── OpenAI ─────────────────────────────────────────────── */
+  {
+    id: "gpt-5.6-luna",
+    vendor: "openai",
+    tier: "빠름",
+    label: "GPT-5.6 Luna",
+    note: "가장 빠릅니다",
+  },
+  {
+    id: "gpt-5.6-terra",
+    vendor: "openai",
+    tier: "표준",
+    label: "GPT-5.6 Terra",
+    note: "고르게 씁니다",
+  },
+  {
+    id: "gpt-5.6-sol",
+    vendor: "openai",
+    tier: "고급",
+    label: "GPT-5.6 Sol",
+    note: "지시를 꼼꼼히 따릅니다",
+  },
+  {
+    id: "gpt-6-astra",
+    vendor: "openai",
+    tier: "최상",
+    label: "GPT-6 Astra",
+    note: "가장 깊이 생각합니다",
   },
 ];
 
@@ -104,20 +153,24 @@ export interface TextModelChoice extends TextModel {
 }
 
 /**
- * 드롭다운에 낼 목록. **싼 것부터** 낸다.
+ * 드롭다운에 낼 목록. **적어 둔 차례 그대로** 낸다.
  *
- * 사용자가 값을 보고 고르는 자리이므로 목록의 차례가 그 판단을 돕는다. 출력
- * 단가로 세운다 — 이미지 프롬프트는 받는 글이 길고, 그쪽이 값을 가른다.
+ * 전에는 값 순으로 세웠는데, 값을 화면에서 빼면서(2026-09-21 사용자) 그 차례가
+ * 아무 뜻이 없어졌다. 업체가 섞여 「Claude 중에 뭐가 있나」를 찾을 수 없었다.
+ *
+ * 이제 `TEXT_MODELS` 에 적힌 차례가 그대로 화면의 차례다 — 업체별로 묶이고
+ * 그 안에서 등급 순이다.
+ *
+ * **값은 여전히 붙여 준다.** 화면이 안 보일 뿐이고, 원가를 세는 쪽
+ * (`cost.ts`)은 이 값을 쓴다.
  */
 export function textModelChoices(): TextModelChoice[] {
-  return TEXT_MODELS
-    .map((model): TextModelChoice => ({
-      ...model,
-      // 표에서 가져온다. 여기서 손으로 적으면 두 벌이 된다.
-      price: priceOf(model.id),
-      isDefault: model.id === DEFAULT_TEXT_MODEL,
-    }))
-    .sort((a, b) => a.price.outputPerMillion - b.price.outputPerMillion);
+  return TEXT_MODELS.map((model): TextModelChoice => ({
+    ...model,
+    // 표에서 가져온다. 여기서 손으로 적으면 두 벌이 된다.
+    price: priceOf(model.id),
+    isDefault: model.id === DEFAULT_TEXT_MODEL,
+  }));
 }
 
 /**

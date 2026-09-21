@@ -54,26 +54,48 @@ function TextModelMenu({
           <ChevronDown className="h-3 w-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
-        {choices.map((choice: TextModelChoice) => (
-          <DropdownMenuItem
-            key={choice.id}
-            onSelect={() => onChange(choice.id)}
-            className="grid gap-0.5 py-2"
-          >
-            <span className="flex w-full items-center justify-between gap-3">
-              <span className="font-medium">{choice.label}</span>
-              {/*
-                **단가를 표에서 가져온다**(`text-models.ts` 가 `priceOf` 로
-                읽는다). 여기서 손으로 적으면 두 벌이 되고 낡은 쪽이 보인다.
-              */}
-              <span className="shrink-0 text-meta text-subtle-foreground">
-                ${choice.price.inputPerMillion} / ${choice.price.outputPerMillion}
-              </span>
-            </span>
-            <span className="text-meta text-subtle-foreground">{choice.note}</span>
-          </DropdownMenuItem>
-        ))}
+      <DropdownMenuContent align="start" className="w-64">
+        {/*
+          **값을 안 적는다**(2026-09-21 사용자). 고를 때마다 숫자를 견주게 하면
+          모델을 고르는 것이 아니라 값을 고르게 된다. 이번 생성에 얼마 드는지는
+          입력창 아래에 한 줄로 이미 나온다.
+
+          **대신 등급을 적는다.** 업체마다 이름 규칙이 달라 「Sol」과 「Opus」
+          중 어느 쪽이 위인지 이름만으로는 아무도 모른다.
+        */}
+        {choices.map((choice: TextModelChoice, at: number) => {
+          // 업체가 바뀌는 자리에 이름표를 끼운다. 목록이 어디서 갈리는지 보인다.
+          const 업체가바뀌나 = at === 0 || choice.vendor !== choices[at - 1]!.vendor;
+          return (
+            <React.Fragment key={choice.id}>
+              {업체가바뀌나 ? (
+                /*
+                  **업체 이름이 아니라 제품 이름으로 묶는다.**
+
+                  아래 항목이 「Claude Sonnet 5」인데 머리말이 「Anthropic」이면
+                  둘이 어긋난다. 머리말은 그 아래 것들의 **공통 부분**이어야 한다.
+
+                  덤으로 `model-name.test.ts` 의 업체 이름 금지에도 안 걸린다.
+                  「Claude」는 이미 항목마다 적혀 있어 새로 드러나는 것이 없다 —
+                  예외를 넓히지 않고 끝난다(설계 §11-⑤).
+                */
+                <div className="px-2 pb-1 pt-2 text-meta uppercase tracking-wide text-subtle-foreground">
+                  {choice.vendor === "anthropic" ? "Claude" : "GPT"}
+                </div>
+              ) : null}
+              <DropdownMenuItem
+                onSelect={() => onChange(choice.id)}
+                className="grid cursor-pointer gap-0.5 py-2"
+              >
+                <span className="flex w-full items-center justify-between gap-3">
+                  <span className="font-medium">{choice.label}</span>
+                  <span className="shrink-0 text-meta text-subtle-foreground">{choice.tier}</span>
+                </span>
+                <span className="text-meta text-subtle-foreground">{choice.note}</span>
+              </DropdownMenuItem>
+            </React.Fragment>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -102,7 +124,11 @@ function ImageModelMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {models.map((model) => (
-          <DropdownMenuItem key={model.id} onSelect={() => onChange(model.id)}>
+          <DropdownMenuItem
+            key={model.id}
+            className="cursor-pointer"
+            onSelect={() => onChange(model.id)}
+          >
             {model.label}
           </DropdownMenuItem>
         ))}

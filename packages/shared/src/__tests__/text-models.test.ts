@@ -72,13 +72,36 @@ describe("화면에 낼 목록", () => {
   });
 
   /**
-   * **싼 것부터 낸다.** 사용자가 값을 보고 고르는 자리이므로, 목록의 차례가
-   * 그 판단을 돕는다.
+   * **적어 둔 차례 그대로 낸다**(2026-09-21 사용자).
+   *
+   * 전에는 값 순이었는데 화면에서 값을 빼면서 그 차례가 뜻을 잃었다. 업체가
+   * 섞여 「Claude 중에 뭐가 있나」를 찾을 수 없었다.
    */
-  it("싼 것부터 낸다", () => {
-    const outputs = choices.map((choice) => choice.price.outputPerMillion);
+  it("적어 둔 차례 그대로 낸다", () => {
+    expect(choices.map((choice) => choice.id)).toEqual(TEXT_MODELS.map((model) => model.id));
+  });
 
-    expect([...outputs].sort((a, b) => a - b)).toEqual(outputs);
+  /** 업체별로 묶여 있어야 한다. 섞이면 찾을 수 없다. */
+  it("업체가 안 섞인다", () => {
+    const 업체들 = choices.map((choice) => choice.vendor);
+    const 바뀐횟수 = 업체들.filter((vendor, at) => at > 0 && vendor !== 업체들[at - 1]).length;
+
+    // 업체가 둘이면 한 번만 바뀌어야 한다. 여러 번 바뀌면 섞인 것이다.
+    expect(바뀐횟수).toBe(new Set(업체들).size - 1);
+  });
+
+  /**
+   * **등급이 그 업체 안에서 오름차순이어야 한다.**
+   *
+   * 값을 화면에서 뺐으므로 무엇이 위인지 알 길이 등급뿐이다. 차례가 뒤섞이면
+   * 그 등급도 못 읽는다.
+   */
+  it("업체 안에서 등급 순이다", () => {
+    const 순서 = ["빠름", "표준", "고급", "최상"];
+    for (const vendor of new Set(choices.map((c) => c.vendor))) {
+      const 등급들 = choices.filter((c) => c.vendor === vendor).map((c) => 순서.indexOf(c.tier));
+      expect([...등급들].sort((a, b) => a - b), `${vendor} 의 등급 차례가 어긋났다`).toEqual(등급들);
+    }
   });
 
   it("기본 모델을 표시한다", () => {
