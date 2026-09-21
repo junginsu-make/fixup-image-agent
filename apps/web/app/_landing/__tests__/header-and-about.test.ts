@@ -270,3 +270,46 @@ describe("만들기 버튼", () => {
     expect(block).toContain("box-shadow: 0 0 0 3px var(--mcs-accent-soft)");
   });
 });
+
+/**
+ * **공개 홈이 말하는 차감이 실제와 같아야 한다** (2026-09-21).
+ *
+ * 설명서의 크레딧 표가 틀린 것을 고쳤는데 **같은 옛 숫자가 홈에 그대로 남아
+ * 있었다.**
+ *
+ *   「정밀형 · 가중치 4」        실제 5장
+ *   「원가 차이 최대 4.6배」      실제 5.4배
+ *   가중치 방식 자체              2026-09-08 에 그만뒀다
+ *
+ * 로그인도 필요 없는 화면이라 검색엔진도 읽는다. **틀린 값이 가장 멀리 가는
+ * 자리**다. 그래서 홈은 숫자를 손으로 안 적는다.
+ */
+describe("공개 홈의 크레딧 사실", () => {
+  const 카피 = read("app/_landing/landing-content.ts");
+  /** 설명(주석)에는 옛 숫자를 인용할 수 있다. 막아야 하는 것은 화면에 나가는 글이다. */
+  const 코드만 = 카피.replace(/^\s*\/\/.*$/gm, "");
+
+  it("차감 장수를 모델 표에서 셈한다", () => {
+    expect(코드만).toContain("LANDING_CREDITS");
+    expect(코드만).toContain("LANDING_COST_SPREAD");
+  });
+
+  /** 2026-09-08 에 그만둔 방식이다. 그 말이 남으면 없는 장치를 설명하는 셈이다. */
+  it("「가중치」라는 말을 쓰지 않는다", () => {
+    expect(코드만).not.toContain("가중치");
+    expect(코드만).not.toMatch(/weight \d/);
+  });
+
+  it("옛 숫자를 손으로 적지 않는다", () => {
+    expect(코드만).not.toContain("4.6");
+  });
+
+  /** 한국어와 영어가 같은 값을 말해야 한다. 한쪽만 고치면 갈린다. */
+  it("두 말이 같은 값을 쓴다", () => {
+    const 한국어 = KO.consoleModel.match(/\d+/)?.[0];
+    const 영어 = EN.consoleModel.match(/\d+/)?.[0];
+
+    expect(한국어, "한국어 콘솔 라벨에 숫자가 없다").toBeTruthy();
+    expect(영어).toBe(한국어);
+  });
+});
