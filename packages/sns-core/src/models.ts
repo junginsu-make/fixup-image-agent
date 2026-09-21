@@ -20,6 +20,25 @@ export interface ImageModel {
    * 이유는 `pdp-core/types.ts` 의 같은 자리에 적어 두었다.
    */
   label: string;
+  /**
+   * 어느 업체 계열인가. **화면이 묶어 보일 때 쓴다.**
+   *
+   * id 만으로도 읽을 수 있지만(`gpt-image-*`, `nano-banana-*`) 그것을 화면이
+   * 문자열로 가르면 id 가 바뀔 때 조용히 틀린다.
+   */
+  family?: "gpt-image" | "nano-banana";
+  /**
+   * 한 줄 설명. **고르는 사람이 읽는 말이다.**
+   *
+   * `lib/studio/model-choice.ts` 의 `NOTES` 는 **기획 LLM 에게 보내는 글**이라
+   * 길고 자세하다. 드롭다운 한 줄에는 안 들어간다 — 그래서 따로 둔다.
+   */
+  note?: string;
+  /**
+   * **옛 모델.** 저장된 작업이 이 id 를 들고 있어 지울 수 없지만, 새로 고를
+   * 까닭은 없다. 고르는 화면에서 뺀다.
+   */
+  legacy?: true;
   isDefault?: boolean;
   t2i: ModeSpec;
   i2i: ModeSpec;
@@ -110,6 +129,8 @@ export const IMAGE_MODELS: ImageModel[] = [
      */
     id: "gpt-image-2.5-flare",
     label: "표준형",
+    family: "gpt-image",
+    note: "빠르고 값이 낮습니다. 참고 그림을 가장 많이 받습니다",
     isDefault: true,
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/flare/text-to-image", table: GPT25_MAX },
@@ -134,6 +155,8 @@ export const IMAGE_MODELS: ImageModel[] = [
      */
     id: "gpt-image-2.5-sunburst",
     label: "정밀형 플러스",
+    family: "gpt-image",
+    note: "글자 배치 지시를 더 잘 지킵니다. 대신 두 배 느립니다",
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/sunburst/text-to-image", table: GPT25_MAX },
     i2i: { endpoint: "openai/gpt-image-2.5/sunburst/edit", table: GPT25_MAX },
@@ -148,6 +171,9 @@ export const IMAGE_MODELS: ImageModel[] = [
      */
     id: "gpt-image-2",
     label: "정밀형",
+    family: "gpt-image",
+    note: "이전 판입니다. 저장된 작업을 위해 남겨 둡니다",
+    legacy: true,
     t2i: { endpoint: "openai/gpt-image-2", table: GPT_T2I },
     i2i: { endpoint: "openai/gpt-image-2/edit", table: GPT_I2I },
     maxReferenceImages: 16,
@@ -157,6 +183,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "nano-banana-pro",
     label: "속도형",
+    family: "nano-banana",
+    note: "인물 실사에 강한 편입니다. 값이 한 장에 고정입니다",
     t2i: { endpoint: "fal-ai/nano-banana-pro", flatUsd: 0.15 },
     i2i: { endpoint: "fal-ai/nano-banana-pro/edit", flatUsd: 0.15 },
     maxReferenceImages: 14,
@@ -168,6 +196,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "nano-banana-2",
     label: "속도형 라이트",
+    family: "nano-banana",
+    note: "지원하는 비율이 가장 넓습니다. 띠 모양까지 됩니다",
     t2i: { endpoint: "fal-ai/nano-banana-2", flatUsd: 0.08 },
     i2i: { endpoint: "fal-ai/nano-banana-2/edit", flatUsd: 0.08 },
     maxReferenceImages: 14,
@@ -179,6 +209,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "nano-banana",
     label: "경제형",
+    family: "nano-banana",
+    note: "가장 쌉니다. 대신 참고 그림 7장까지입니다",
     t2i: { endpoint: "fal-ai/nano-banana", flatUsd: 0.039 },
     i2i: { endpoint: "fal-ai/nano-banana/edit", flatUsd: 0.039 },
     maxReferenceImages: 7,

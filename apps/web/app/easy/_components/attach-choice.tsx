@@ -80,8 +80,18 @@ export function EasyAttachChoice({
   React.useEffect(() => { void load(); }, [load]);
 
   return (
+    /*
+      **셋 다 테두리를 준다**(2026-09-21 사용자 — 「밝은 화면에서 더 안 보인다」).
+
+      전에는 「직접 첨부」가 `secondary`, 「없이 시작」이 `ghost` 였다. `ghost` 는
+      바탕색이 없어 **밝은 화면에서 글자만 떠 있는 것처럼** 보였고, 누를 수 있는
+      자리인지 알 수 없었다.
+
+      여기는 첫 화면에서 **처음 마주치는 단추 셋**이다. 어느 것을 눌러도 되는
+      자리이므로 셋이 같은 무게로 보여야 한다.
+    */
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Button variant="secondary" size="sm" onClick={onUpload}>
+      <Button variant="outline" size="sm" onClick={onUpload}>
         직접 첨부
       </Button>
 
@@ -113,7 +123,7 @@ export function EasyAttachChoice({
         }}
       />
 
-      <Button variant="ghost" size="sm" onClick={onSkip}>
+      <Button variant="outline" size="sm" onClick={onSkip}>
         없이 시작
       </Button>
     </div>

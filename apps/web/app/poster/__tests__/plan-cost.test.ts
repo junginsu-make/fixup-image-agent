@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { creditUnits, llmCostUsd } from "@fixup/shared";
+import { LLM_PLAN_USD, LLM_VISION_READ_USD, creditUnits, llmCostUsd } from "@fixup/shared";
 import { planCostCounts, planCostUsd, planCostUnits, planCostNote } from "../plan-cost";
 
 /**
@@ -19,17 +19,17 @@ import { planCostCounts, planCostUsd, planCostUnits, planCostNote } from "../pla
 describe("기획에 드는 값", () => {
   /** 기획 LLM 한 번. 첨부를 안 읽으면 이것뿐이다. */
   it("첨부가 없으면 기획 한 번 값이다", () => {
-    expect(planCostUsd({ attachmentCount: 0 })).toBeCloseTo(0.014, 4);
+    expect(planCostUsd({ attachmentCount: 0 })).toBeCloseTo(LLM_PLAN_USD, 4);
   });
 
   /** 따라 만들기 그림은 레이아웃 문법을 한 장씩 읽는다. */
   it("따라 만들기 그림 수만큼 붙는다", () => {
-    expect(planCostUsd({ attachmentCount: 2 })).toBeCloseTo(0.014 + 0.02, 4);
+    expect(planCostUsd({ attachmentCount: 2 })).toBeCloseTo(LLM_PLAN_USD + 2 * LLM_VISION_READ_USD, 4);
   });
 
   /** 지킬 사람 사진도 한 장씩 읽는다(`readPeople`). */
   it("지킬 사람 사진 수만큼 붙는다", () => {
-    expect(planCostUsd({ attachmentCount: 2 })).toBeCloseTo(0.014 + 0.02, 4);
+    expect(planCostUsd({ attachmentCount: 2 })).toBeCloseTo(LLM_PLAN_USD + 2 * LLM_VISION_READ_USD, 4);
   });
 
   /**
@@ -49,8 +49,8 @@ describe("기획에 드는 값", () => {
     const 따라만들기만 = planCostUsd(planCostCounts(["style"]));
     const 제품보존을더함 = planCostUsd(planCostCounts(["style", "preserve_product"]));
 
-    expect(제품보존을더함).toBeCloseTo(0.034, 4);
-    expect(따라만들기만).toBeCloseTo(0.024, 4);
+    expect(제품보존을더함).toBeCloseTo(LLM_PLAN_USD + 2 * LLM_VISION_READ_USD, 4);
+    expect(따라만들기만).toBeCloseTo(LLM_PLAN_USD + LLM_VISION_READ_USD, 4);
   });
 
   /**
@@ -60,7 +60,7 @@ describe("기획에 드는 값", () => {
    * `preservedIds` 어느 쪽에도 안 담아서 읽지 않는다.
    */
   it("원본 그대로 넣기는 값이 안 붙는다", () => {
-    expect(planCostUsd(planCostCounts(["style", "place_as_is"]))).toBeCloseTo(0.024, 4);
+    expect(planCostUsd(planCostCounts(["style", "place_as_is"]))).toBeCloseTo(LLM_PLAN_USD + LLM_VISION_READ_USD, 4);
   });
 
   /**
@@ -71,7 +71,7 @@ describe("기획에 드는 값", () => {
     const 둘다 = planCostCounts(["preserve_person", "preserve_person_restyled"]);
 
     expect(둘다.attachmentCount).toBe(2);
-    expect(planCostUsd(둘다)).toBeCloseTo(0.034, 4);
+    expect(planCostUsd(둘다)).toBeCloseTo(LLM_PLAN_USD + 2 * LLM_VISION_READ_USD, 4);
   });
 
   /** 아무 역할도 안 준 그림은 안 붙는다. */
@@ -109,7 +109,7 @@ describe("기획에 드는 값", () => {
       llmCostUsd({ planCalls: 3, visionReads: 6 }),
       4,
     );
-    expect(planCostUsd({ attachmentCount: 2, projects: 3 })).toBeCloseTo(0.102, 4);
+    expect(planCostUsd({ attachmentCount: 2, projects: 3 })).toBeCloseTo(3 * (LLM_PLAN_USD + 2 * LLM_VISION_READ_USD), 4);
   });
 });
 
@@ -119,7 +119,7 @@ describe("한도에서 빠지는 장", () => {
    * 달러만 적으면 실제보다 3.5배 적게 말한다.
    */
   it("기획 한 번은 1장이다", () => {
-    expect(planCostUnits({ attachmentCount: 0 })).toBe(creditUnits(0.014));
+    expect(planCostUnits({ attachmentCount: 0 })).toBe(creditUnits(LLM_PLAN_USD));
     expect(planCostUnits({ attachmentCount: 0 })).toBe(1);
   });
 

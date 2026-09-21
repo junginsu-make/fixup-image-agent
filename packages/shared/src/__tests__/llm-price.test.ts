@@ -13,12 +13,12 @@ describe("토큰으로 값 매기기", () => {
     const 입력만 = llmUsdFromTokens("claude-sonnet-5", 1_000_000, 0);
     const 출력만 = llmUsdFromTokens("claude-sonnet-5", 0, 1_000_000);
 
-    expect(입력만).toBe(3);
-    expect(출력만).toBe(15);
+    expect(입력만).toBe(2);
+    expect(출력만).toBe(10);
   });
 
   it("100만 토큰을 기준으로 비례한다", () => {
-    expect(llmUsdFromTokens("claude-sonnet-5", 1500, 600)).toBeCloseTo(0.0045 + 0.009, 6);
+    expect(llmUsdFromTokens("claude-sonnet-5", 1500, 600)).toBeCloseTo(0.003 + 0.006, 6);
   });
 
   it("음수는 0으로 본다", () => {
@@ -48,7 +48,7 @@ describe("옛 어림값과 견주기", () => {
    * 확인해 둔다 — 크게 어긋나면 지금까지의 계산이 크게 틀렸다는 뜻이다.
    */
   it("가정한 토큰 수를 넣으면 옛 어림값 언저리가 나온다", () => {
-    const 실측식 = llmUsdFromTokens("claude-sonnet-5", 1500, 600); // $0.0135
+    const 실측식 = llmUsdFromTokens("claude-sonnet-5", 1500, 600); // $0.009
     // 어림값($0.014)과 10% 안쪽이면 지금까지의 계산이 크게 틀리지는 않았다는 뜻이다.
     expect(Math.abs(실측식 - LLM_PLAN_USD) / LLM_PLAN_USD).toBeLessThan(0.1);
   });

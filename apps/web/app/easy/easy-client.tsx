@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, PanelLeft, Send } from "lucide-react";
-import { Button, ImageLightbox, Textarea, cn } from "@fixup/ui";
+import { Button, Textarea, cn } from "@fixup/ui";
 import { DEFAULT_TEXT_MODEL } from "@fixup/shared";
 import { EasyMessageRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
@@ -12,6 +12,7 @@ import { easyCost } from "./cost";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useResultWidth } from "./_components/split-handle";
+import { openImageViewer } from "../_components/image-viewer";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -70,7 +71,6 @@ export function EasyClient({
   const [textModel, setTextModel] = React.useState(DEFAULT_TEXT_MODEL);
   const [imageModel, setImageModel] = React.useState(defaultImageModel);
   const [urls, setUrls] = React.useState<Record<string, string>>(initialUrls ?? {});
-  const [lightbox, setLightbox] = React.useState<string | null>(null);
 
   /*
    * **구분선을 끌면 이 너비가 바뀐다**(2026-09-18 사용자 요청). 가두는 판단은
@@ -158,6 +158,28 @@ export function EasyClient({
     setAttachments((current) => {
       const 있는것 = new Set(current.map((one) => one.id));
       return [...current, ...picked.filter((one) => !있는것.has(one.id))];
+    });
+  }
+
+  /**
+   * 그림을 크게 본다.
+   *
+   * **다른 화면과 같은 뷰어를 쓴다**(2026-09-21 사용자 — 「라이브러리에서
+   * 클릭할 때처럼」). 전에는 `ImageLightbox` 를 썼는데 그것은 그림과
+   * 내려받기뿐이고, **오른쪽 옵션 칸이 없었다.**
+   *
+   * `openImageViewer` 는 뿌리 레이아웃의 `ImageViewerHost` 가 받는다 —
+   * 원본 크기 보기·넘기기·내려받기·「이렇게 만들었습니다」가 다 거기 있다.
+   */
+  function openViewer(url: string) {
+    openImageViewer(url, "만든 그림", {
+      name: "easy.png",
+      // 오른쪽 칸에 걸 설명. 무엇으로 만든 것인지 그림 옆에서 같이 본다.
+      meta: [
+        ["글 모델", textModel],
+        ["그림 모델", imageModel],
+        ["비율", ratioId],
+      ],
     });
   }
 
@@ -284,7 +306,7 @@ export function EasyClient({
               key={message.id}
               message={message}
               imageUrl={urls[message.id]}
-              onOpenImage={() => setLightbox(urls[message.id] ?? null)}
+              onOpenImage={() => { const url = urls[message.id]; if (url) openViewer(url); }}
             />
           ))}
 
@@ -467,7 +489,7 @@ export function EasyClient({
           <EasyResultPanel
             url={lastImage}
             width={resultWidth}
-            onOpen={() => setLightbox(lastImage ?? null)}
+            onOpen={() => { if (lastImage) openViewer(lastImage); }}
           />
         </>
       ) : null}
@@ -484,15 +506,6 @@ export function EasyClient({
         }}
       />
 
-      {lightbox ? (
-        <ImageLightbox
-          title="만든 그림"
-          images={[{ label: "만든 그림", src: lightbox, fileName: "easy.png" }]}
-          index={0}
-          onIndexChange={() => undefined}
-          onClose={() => setLightbox(null)}
-        />
-      ) : null}
     </div>
   );
 }

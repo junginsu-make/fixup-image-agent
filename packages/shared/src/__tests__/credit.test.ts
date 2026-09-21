@@ -57,7 +57,9 @@ describe("글 모델 몫", () => {
   });
 
   it("첨부가 늘면 그만큼 는다 — 한 번으로 안 센다", () => {
-    expect(llmCostUsd({ planCalls: 1, visionReads: 3 })).toBeCloseTo(0.014 + 0.030, 4);
+    // 숫자를 다시 적지 않는다 — 단가가 바뀔 때 여기까지 고치게 된다(2026-09-21).
+    expect(llmCostUsd({ planCalls: 1, visionReads: 3 }))
+      .toBeCloseTo(LLM_PLAN_USD + 3 * LLM_VISION_READ_USD, 4);
   });
 
   it("아무것도 안 했으면 0원", () => {
@@ -68,8 +70,21 @@ describe("글 모델 몫", () => {
     expect(llmCostUsd({ planCalls: -5, visionReads: -2 })).toBe(0);
   });
 
-  it("**그림값에 견주면 작지만 공짜는 아니다**", () => {
-    // 첨부 넉 장에 기획 한 번이면 nano-banana 그림 한 장보다 비싸다.
-    expect(llmCostUsd({ planCalls: 1, visionReads: 4 })).toBeGreaterThan(0.039);
+  /**
+   * **2026-09-21 에 이 주장이 뒤집혔다.**
+   *
+   * 전에는 「첨부 넉 장 + 기획 한 번이면 nano-banana 한 장($0.039)보다 비싸다」고
+   * 재고 있었는데, 그것은 단가표가 sonnet-5 를 $3/$15 로 잘못 적어 부풀려
+   * 있었기 때문이다. 실제 단가($2/$10)로는 $0.037 로 **살짝 싸다.**
+   *
+   * 그래도 재는 것은 그대로다 — 글 모델 몫이 **그림 한 장 값에 육박하는**
+   * 크기라는 사실은 그대로고, 공짜로 여기면 안 된다는 것도 그대로다.
+   */
+  it("그림값에 견주면 작지만 공짜는 아니다", () => {
+    const 녤장과기획 = llmCostUsd({ planCalls: 1, visionReads: 4 });
+
+    // nano-banana 한 장이 $0.039 다(`credit.ts` 의 표).
+    expect(녤장과기획).toBeGreaterThan(0.039 * 0.8);
+    expect(녤장과기획).toBeLessThan(0.039);
   });
 });
