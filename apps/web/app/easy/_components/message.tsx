@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { cn } from "@fixup/ui";
+import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
 
 /**
@@ -21,6 +22,104 @@ import type { EasyMessage } from "../turn";
  * 그림을 말풍선 안에 담는 것이 핵심이다. 맨몸으로 두면 「대화에 끼어든 그림」이
  * 아니라 「대화가 끊기고 나온 결과물」로 보인다.
  */
+
+/**
+ * **점 셋이 차례로 뛴다** (2026-09-21 사용자 — 「모션을 줘서 실제 로딩되는
+ * 표시로 해줘」).
+ *
+ * 전에는 `animate-pulse` 로 글자만 옅어졌다 진해졌다 했다. **멈춘 것과 구분이
+ * 안 됐다** — 천천히 바뀌는 데다 글자 자체는 그대로라, 화면이 멎은 것인지
+ * 기다리는 것인지 알 수 없었다.
+ *
+ * 늦추는 몫을 여기서 준다. 셋이 같이 뛰면 그냥 깜빡이는 것이고, **차례로**
+ * 뛰어야 흐르는 것으로 읽힌다. 움직임을 줄여 달라는 설정이면 CSS 가 멈춘다.
+ */
+export function EasyTypingDots() {
+  return (
+    <span aria-hidden className="flex items-center gap-1 py-1">
+      {[0, 160, 320].map((늦출몫) => (
+        <span
+          key={늦출몫}
+          style={{ animationDelay: `${늦출몫}ms` }}
+          className="fixup-typing-dot block size-1.5 rounded-full bg-subtle-foreground"
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * **답을 기다리는 줄.**
+ *
+ * 말일지 이미지일지 가르는 동안은 화면에 아무 일도 안 일어난다. 그 사이가
+ * 비어 있으면 보낸 것이 먹혔는지 알 수 없다 — 이미지 자리는 가른 **뒤에**
+ * 생긴다.
+ */
+export function EasyThinkingRow() {
+  return (
+    <div className="flex items-start gap-2" role="status" aria-live="polite">
+      <AssistantMark />
+      <span className="rounded-2xl rounded-bl-md bg-muted px-4 py-2.5">
+        <span className="sr-only">답을 기다리는 중입니다</span>
+        <EasyTypingDots />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * **이미지를 만드는 중.**
+ *
+ * 2026-09-21 사용자 — 「이미지 생성 중에도 생성 중이라는 표시를 정확히 알 수
+ * 있게 해야해」. 전에는 회색 판이 옅어졌다 진해졌다 할 뿐이라, 무엇을 하는
+ * 중인지도 얼마나 걸릴지도 알 수 없었다.
+ *
+ * 셋을 함께 낸다.
+ *
+ *   도는 표시  지금 돌고 있다
+ *   흐르는 막대 멀리서도 보인다 — 포스터 화면이 쓰는 그 막대다
+ *   지난 시간   **살아 있다는 증거.** 이미지는 30초에서 1분이 걸린다
+ *
+ * **진행률이 아니다.** fal 은 얼마나 갔는지 알려 주지 않는다. 채웠다 비우는
+ * 막대를 그리면 거짓말이 된다(`globals.css` 의 같은 주석).
+ */
+export function EasyImageWorking({ className }: {
+  /**
+   * 자리에 맞춘 너비.
+   *
+   * 대화 속에서는 말풍선만 한 판이라 좁고(`w-64`), 결과 칸에서는 그 칸을 다
+   * 쓴다. **같은 판을 두 자리에 쓰되 너비만 자리가 정한다** — 판을 둘로 만들면
+   * 한쪽만 고쳐질 날이 온다.
+   */
+  className?: string;
+} = {}) {
+  /* 이 줄이 생긴 때가 곧 시작한 때다. 줄은 id 로 묶여 있어 다시 안 만들어진다. */
+  const 시작 = React.useRef(Date.now());
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "grid gap-3 rounded-2xl rounded-bl-md border border-border bg-muted px-4 py-4",
+        className ?? "w-64",
+      )}
+    >
+      <span className="flex items-center gap-2 text-sm text-foreground">
+        <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
+        이미지를 만들고 있습니다
+      </span>
+
+      <span aria-hidden className="fixup-working-track block h-1 rounded-full bg-primary/15">
+        <span className="fixup-working-bar block h-full w-1/3 rounded-full bg-primary/70" />
+      </span>
+
+      <span className="text-meta text-subtle-foreground">
+        <ElapsedTime startedAt={시작.current} /> · 보통 30초에서 1분이 걸립니다
+      </span>
+    </div>
+  );
+}
 
 /** AI 쪽 표식. 말풍선 왼쪽에 붙어 누가 한 말인지 알린다. */
 function AssistantMark() {
@@ -89,14 +188,7 @@ export function EasyMessageRow({
           <img src={imageUrl} alt="만든 이미지" className="block max-h-[55vh] w-auto" />
         </button>
       ) : (
-        <div
-          className={cn(
-            "grid h-56 w-56 place-items-center rounded-2xl rounded-bl-md border border-border bg-muted",
-            "animate-pulse text-meta text-subtle-foreground",
-          )}
-        >
-          만들고 있습니다
-        </div>
+        <EasyImageWorking />
       )}
     </div>
   );
