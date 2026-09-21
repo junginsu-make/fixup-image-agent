@@ -4,9 +4,13 @@
  * PdpEditor.tsx(2,802줄) 안에서 UI 와 뒤엉켜 있던 것을 2026-07-21 UI 개편 때
  * 그대로 옮겼다. 로직은 한 줄도 바꾸지 않았다.
  *
- * ⚠️ buildOverlayShellStyle / buildOverlayBackgroundStyle / buildOverlayTextStyle /
- *    buildShapeLayerStyle 네 개는 화면 표시와 buildExportNode(html2canvas 내보내기)가
- *    함께 쓴다. 보기 좋게 고치면 사용자가 내려받는 결과물이 바뀐다.
+ * ⚠️ buildOverlayShellStyle / buildOverlayBackgroundStyle / buildOverlayTextStyle
+ *    **세 개**는 화면 표시와 buildExportNode(html2canvas 내보내기)가 함께 쓴다.
+ *    보기 좋게 고치면 사용자가 내려받는 결과물이 바뀐다.
+ *
+ *    `buildShapeLayerStyle` 은 **아직 공유가 아니다** — 내보내기가 도형 스타일을
+ *    직접 적는다(X-07 에서 확인). 지금은 두 곳이 같은 값을 내지만 한쪽만 고치면
+ *    조용히 갈린다. 합칠 때 `mapping-and-export-style.test.ts` 를 함께 고친다.
  *    zIndex 계산도 레이어 쌓임 모델이라 장식이 아니다.
  */
 
