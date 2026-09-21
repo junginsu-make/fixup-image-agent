@@ -15,7 +15,7 @@ import { EasyAttachChoice } from "./_components/attach-choice";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
-import { openImageViewer } from "../_components/image-viewer";
+import { openImageGallery } from "../_components/image-viewer";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -98,19 +98,26 @@ export function EasyClient({
    *
    * 셈은 `cost.ts` 가 한다. 화면 안에 두면 값으로 못 잰다.
    */
-  /*
-   * **오른쪽 칸에 걸 마지막 그림.**
+  /**
+   * **이 대화에서 만든 것 전부** (2026-09-21 사용자 — 「결과 섹션은 딱 결과물만
+   * 모아서 보이는거죠」).
    *
-   * 대화 속 그림은 길어질수록 위로 사라진다. 방금 만든 것이 늘 같은 자리에
-   * 있어야 한다(2026-09-18 사용자).
+   * 오른쪽 칸은 **마지막 한 장**만 걸고 있었다. 그러면 대화에 이미 있는 그
+   * 그림이 옆에 한 번 더 뜰 뿐이라 자리를 두 배로 쓰고 아무것도 더 알려 주지
+   * 않는다 — 사용자가 짚은 그대로다(「그냥 오른쪽과 중복이 되니까」).
+   *
+   * 칸을 가른다. **왼쪽은 오가는 말, 오른쪽은 만든 것.** 오른쪽에 모아 두면
+   * 대화가 길어져도 결과만 훑을 수 있고, 여러 장을 나란히 견줄 수 있다.
+   *
+   * 대화 차례대로 담는다. 화면이 새것을 위에 둘지는 그쪽이 정한다.
    */
-  const lastImage = React.useMemo(() => {
-    for (let index = shown.length - 1; index >= 0; index -= 1) {
-      const found = urls[shown[index]!.id];
-      if (found) return found;
-    }
-    return undefined;
-  }, [shown, urls]);
+  const results = React.useMemo(
+    () => shown.flatMap((message) =>
+      message.role === "image" && urls[message.id]
+        ? [{ id: message.id, url: urls[message.id]! }]
+        : []),
+    [shown, urls],
+  );
 
   const cost = React.useMemo(
     () => easyCost({ modelId: imageModel, ratioId, attachmentCount: attachments.length }),
@@ -163,24 +170,31 @@ export function EasyClient({
   }
 
   /**
-   * 그림을 크게 본다.
+   * 크게 본다. **한 벌을 통째로 연다** (2026-09-21 사용자 — 「클릭시 슬라이드로
+   * 나오게」).
    *
-   * **다른 화면과 같은 뷰어를 쓴다**(2026-09-21 사용자 — 「라이브러리에서
-   * 클릭할 때처럼」). 전에는 `ImageLightbox` 를 썼는데 그것은 그림과
-   * 내려받기뿐이고, **오른쪽 옵션 칸이 없었다.**
+   * 한 장씩 열면 열 때마다 닫고 다시 눌러야 다음 장을 본다. 이 대화의 결과를
+   * 다 넘겨 주면 창 안에서 ‹ › 로 넘긴다 — 뷰어가 이미 할 줄 아는 일이다.
    *
-   * `openImageViewer` 는 뿌리 레이아웃의 `ImageViewerHost` 가 받는다 —
-   * 원본 크기 보기·넘기기·내려받기·「이렇게 만들었습니다」가 다 거기 있다.
+   * **다른 화면과 같은 뷰어다**(2026-09-21 사용자 — 「라이브러리에서 클릭할
+   * 때처럼」). 뿌리 레이아웃의 `ImageViewerHost` 가 받는다 — 원본 크기 보기·
+   * 내려받기·「이렇게 만들었습니다」가 다 거기 있다.
    */
-  function openViewer(url: string) {
-    openImageViewer(url, "만든 이미지", {
-      name: "easy.png",
-      // 오른쪽 칸에 걸 설명. 무엇으로 만든 것인지 그림 옆에서 같이 본다.
-      meta: [
-        ["글 모델", textModel],
-        ["이미지 모델", imageModel],
-        ["비율", ratioId],
-      ],
+  function openViewer(at: number) {
+    if (!results.length) return;
+    openImageGallery({
+      index: Math.max(0, Math.min(at, results.length - 1)),
+      images: results.map((one, 번째) => ({
+        src: one.url,
+        alt: "만든 이미지",
+        // 여러 장이 한 벌이라 이름이 같으면 내려받을 때 덮어쓴다.
+        name: `easy-${번째 + 1}.png`,
+        meta: [
+          ["글 모델", textModel],
+          ["이미지 모델", imageModel],
+          ["비율", ratioId],
+        ],
+      })),
     });
   }
 
@@ -355,7 +369,8 @@ export function EasyClient({
               key={message.id}
               message={message}
               imageUrl={urls[message.id]}
-              onOpenImage={() => { const url = urls[message.id]; if (url) openViewer(url); }}
+              /* 대화에서 눌러도 같은 벌이 열린다. 그 자리에서 시작할 뿐이다. */
+              onOpenImage={() => openViewer(results.findIndex((one) => one.id === message.id))}
             />
           ))}
 
@@ -561,11 +576,11 @@ export function EasyClient({
             />
           )}
           <EasyResultPanel
-            url={lastImage}
+            images={results}
             width={resultWidth}
             /* 자리는 잡혔는데 주소가 아직 없으면 만드는 중이다. */
             working={shown.some((one) => one.role === "image" && !urls[one.id])}
-            onOpen={() => { if (lastImage) openViewer(lastImage); }}
+            onOpen={openViewer}
           />
         </>
       ) : null}
