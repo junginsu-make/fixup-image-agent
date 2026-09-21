@@ -166,6 +166,26 @@ describe("설명서 내용", () => {
     }
   });
 
+  /**
+   * **차감량을 손으로 적지 않는다** (2026-09-21).
+   *
+   * 크레딧 설명서가 가중치를 적어 두고 있었다(표준형 4장). 그런데 차감은
+   * 2026-09-08 부터 **원가에서 나온다** — 가중치를 안 쓴다. 그 사이 설명서만
+   * 옛 셈법으로 남아 실제(5장)와 어긋났고, 「6장이면 24장」이라는 예도 실제로는
+   * 30장이었다.
+   *
+   * **값 안내가 틀리면 없는 것만 못하다.** 쓰는 그 함수로 그 자리에서 셈한다.
+   */
+  it("크레딧 설명서는 차감량을 셈해서 낸다", () => {
+    const credits = guideSources().find((file) => file.name === "credits")!.source;
+
+    expect(credits).toContain("creditUnits(unitPrice(");
+    // 가중치 표가 되살아나면 또 어긋난다.
+    expect(주석을뺀다(credits)).not.toMatch(/weight:\s*\d/);
+    // 예도 셈해서 적는다. 손으로 적은 곱셈은 표가 바뀌면 그대로 낡는다.
+    expect(주석을뺀다(credits)).not.toContain("6 × 4 = 24장");
+  });
+
   it("설명서가 말하는 생성 방식은 실제로 고를 수 있는 것이다", () => {
     // 설명서는 방식을 이름으로 언급한다(무엇을 고르라는 안내). 그 이름이
     // 목록에 없으면 없는 것을 고르라고 말하는 셈이다.
@@ -299,5 +319,69 @@ describe("카드뉴스의 두 갈래를 모두 설명한다", () => {
     expect(source).toContain("카드뉴스 작업 만들기");
     // 칸 네 종류가 이 길을 고르는 이유다.
     expect(source).toContain("칸은 네 종류입니다");
+  });
+});
+
+/**
+ * **설명서가 부르는 이름이 사이드바와 같아야 한다** (2026-09-21).
+ *
+ * 사이드바를 갈래로 묶고 이름을 줄였는데(이미지 > 쉽게 · 다양하게 …) 설명서
+ * 목차가 옛 이름 그대로였다. 그러면 **메뉴에서 본 이름을 설명서에서 못 찾는다** —
+ * 「어디를 누르는지 말해 주는」 것이 이 문서의 일인데 그 이름이 다르면 안 된다.
+ *
+ * 글로는 못 지킨다. 다음에 이름을 또 바꿀 때 여기가 잡는다.
+ */
+describe("설명서와 사이드바가 같은 이름을 쓴다", () => {
+  const shell = readFileSync(
+    join(GUIDE_DIR, "..", "..", "..", "..", "packages", "ui", "src", "components", "app-shell.tsx"),
+    "utf8",
+  );
+
+  /** 사이드바가 그 주소를 무엇이라 부르나. */
+  const 사이드바이름 = new Map(
+    [...shell.matchAll(/\{\s*href:\s*"(\/[a-z-]+)",\s*label:\s*"([^"]+)"[\s\S]*?\}/g)]
+      .map((found) => [found[1]!, found[2]!]),
+  );
+
+  it("사이드바에서 이름을 읽어 왔다 — 못 읽으면 아래가 헛돈다", () => {
+    expect(사이드바이름.get("/easy"), "/easy 의 이름을 못 읽었다").toBeTruthy();
+    expect(사이드바이름.size).toBeGreaterThan(5);
+  });
+
+  /**
+   * **「크레딧과 모델」은 도구 문서가 아니다.** 사이드바의 「계정」으로 가는 길을
+   * 달고 있을 뿐, 그 화면을 설명하는 문서가 아니라 **값 이야기**를 모은 곳이다.
+   * 이름이 같아야 하는 것은 도구 문서다.
+   */
+  const 도구가아닌곳 = new Set(["/settings"]);
+
+  it("도구를 부르는 이름이 같다", () => {
+    for (const topic of GUIDE_TOPICS) {
+      if (!topic.toolHref || 도구가아닌곳.has(topic.toolHref)) continue;
+      const 메뉴 = 사이드바이름.get(topic.toolHref);
+      // 사이드바에 없는 도구(설정 등)는 맞댈 것이 없다.
+      if (!메뉴) continue;
+      expect(topic.label, `${topic.toolHref} 를 설명서는 「${topic.label}」, 사이드바는 「${메뉴}」라 부른다`)
+        .toBe(메뉴);
+    }
+  });
+
+  /** 갈래도 같아야 한다. 한쪽만 묶여 있으면 차례가 어긋난다. */
+  it("갈래 이름이 같다", () => {
+    const 사이드바갈래 = new Set([...shell.matchAll(/section:\s*([A-Z]+)/g)].map((found) => found[1]));
+    expect(사이드바갈래.size, "사이드바에서 갈래를 못 읽었다").toBeGreaterThan(0);
+
+    /*
+      **사이드바의 갈래가 설명서에도 있어야 한다.** 설명서가 더 가질 수는 있다 —
+      「크레딧과 모델」처럼 메뉴에 없는 문서를 묶을 말이 필요하다.
+    */
+    const 설명서갈래 = new Set(GUIDE_TOPICS.map((topic) => topic.section).filter(Boolean));
+    for (const 갈래 of ["이미지", "상세페이지"]) {
+      expect(설명서갈래, `설명서에 「${갈래}」 갈래가 없다`).toContain(갈래);
+    }
+
+    /** 머리말 없는 항목이 앞 갈래에 붙어 보인다 — 처음 한 줄만 그럴 수 있다. */
+    const 머리말없는것 = GUIDE_TOPICS.filter((topic) => !topic.section);
+    expect(머리말없는것.map((topic) => topic.href)).toEqual(["/guide"]);
   });
 });
