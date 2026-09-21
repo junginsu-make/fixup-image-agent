@@ -3,37 +3,54 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
-import { BrandMark } from "@fixup/ui";
 import type { EasyConversationRecord } from "../../../lib/easy/store-core";
 
 /**
- * 왼쪽 레일 — 새 대화 · 지난 대화 · 출구 (설계 §4).
+ * 지난 대화 목록.
  *
- * ChatGPT·Claude·Gemini 가 모두 여기에 지난 대화를 쌓는다. **그것이 없으면
- * 모양만 채팅이고 돌아갈 곳이 없다** — 그래서 대화를 표에 남기기로 했다(§4-1).
+ * ── 사이드바가 아니라 **대시보드 안**이다 ────────────────────
  *
- * **「자세한 모드로」가 맨 아래에 있다.** 설계 §11-④ 의 출구다. 고를 것을
- * 없애면 원하는 것을 못 만드는 사람이 생기고, **출구가 없으면 Easy 는 막다른
- * 길이다.**
+ * 2026-09-21 사용자가 짚었다 — 「이지모드만 페이지가 완전히 바뀝니다. 채팅
+ * 목록도 대시보드에서 표시해도 충분한 공간이라고 생각이 들어서요.」
+ *
+ * 전에는 이 목록이 **제 사이드바**였고, 그 사이드바가 셸의 사이드바를 밀어냈다.
+ * 다른 도구(카드뉴스·이미지 만들기)는 사이드바와 상단바가 고정된 채 오른쪽
+ * 대시보드만 바뀌는데 **Easy 만 화면을 통째로 갈아엎었다.**
+ *
+ * 이제는 셸 안이다. 왼쪽 사이드바는 도구 목록, 이 칸은 대화 목록이다.
+ *
+ * ── 그래서 여기 없는 것 둘 ───────────────────────────────────
+ *
+ *   로고         셸이 이미 낸다. 두 개가 세로로 서면 무엇이 제품 이름인지 모른다
+ *   자세한 모드   셸 사이드바의 **「이미지 만들기」가 그것이다**. 중복이다
+ *
+ * ChatGPT·Claude·Gemini 가 모두 지난 대화를 쌓는다. **그것이 없으면 모양만
+ * 채팅이고 돌아갈 곳이 없다** — 그래서 대화를 표에 남긴다(설계 §4-1).
  */
 
-export function EasyRail({ conversations }: { conversations: EasyConversationRecord[] }) {
+/** 좁은 화면에서 이 칸을 여닫는 신호. 입력창 옆 손잡이가 보낸다. */
+export const TOGGLE_EVENT = "easy-conversations-toggle";
+
+export function EasyConversationList({
+  conversations,
+}: {
+  conversations: EasyConversationRecord[];
+}) {
   const pathname = usePathname();
   const router = useRouter();
+
   /*
    * **좁은 화면에서만 접힌다.** 여는 손잡이는 입력창 옆에 있다 — 화면 위에
-   * 떠 있던 것을 거기로 옮겼다(2026-09-18 사용자). 상단바가 생겨 그 자리에
-   * 두 개가 겹쳤다.
+   * 떠 있던 것을 거기로 옮겼다(2026-09-18 사용자).
    */
   const [open, setOpen] = React.useState(false);
 
-  // 입력창 옆 손잡이가 이 값을 올린다. 창 하나에 레일 하나라 id 로 찾는다.
   React.useEffect(() => {
     const toggle = () => setOpen((current) => !current);
-    window.addEventListener("easy-rail-toggle", toggle);
-    return () => window.removeEventListener("easy-rail-toggle", toggle);
+    window.addEventListener(TOGGLE_EVENT, toggle);
+    return () => window.removeEventListener(TOGGLE_EVENT, toggle);
   }, []);
 
   const [list, setList] = React.useState(conversations);
@@ -70,7 +87,7 @@ export function EasyRail({ conversations }: { conversations: EasyConversationRec
 
   return (
     <>
-      {/* 좁은 화면에서 레일을 열면 뒤를 덮는다. 눌러서 닫는다. */}
+      {/* 좁은 화면에서 목록을 열면 뒤를 덮는다. 눌러서 닫는다. */}
       {open ? (
         <button
           type="button"
@@ -80,34 +97,20 @@ export function EasyRail({ conversations }: { conversations: EasyConversationRec
         />
       ) : null}
 
-      <nav
+      <div
         className={cn(
-          "z-40 flex h-dvh w-64 shrink-0 flex-col border-r border-border",
+          "z-40 flex w-56 shrink-0 flex-col border-r border-border bg-background",
           /*
-            **좁은 화면에서는 불투명해야 한다.** 떠 있는 판이라 반투명이면 뒤의
-            대화가 그대로 비쳐 글자가 겹쳐 보인다(2026-09-18 확인). 넓은
-            화면에서는 자리를 차지하므로 옅은 바탕이 낫다.
+            **좁은 화면에서는 떠 있는 판이다.** 넓은 화면에서는 대시보드의 첫
+            칸으로 자리를 차지한다 — 그때는 셸이 이미 화면 높이를 정해 줬으므로
+            제 높이를 다시 못 박지 않는다(`h-dvh` 가 남아 있으면 셸 안에서 넘친다).
           */
-          "bg-background md:bg-muted/30",
-          "fixed inset-y-0 left-0 -translate-x-full transition-transform md:static md:translate-x-0",
+          "fixed inset-y-0 left-0 h-dvh -translate-x-full transition-transform",
+          "md:static md:h-auto md:translate-x-0",
           open && "translate-x-0",
         )}
       >
-        {/*
-          **플랫폼 이름을 낸다**(2026-09-21 사용자).
-
-          전에는 「Easy」라고 적어 사이트 이름을 덮고 있었다. 여기는 어느
-          제품인지 말하는 자리이고, 지금 어느 모드인지는 사이드바 내용이
-          이미 말한다.
-
-          이름은 셸과 같은 것을 쓴다 — 두 화면에서 다른 이름이 보이면 안 된다.
-        */}
-        <Link href="/poster" className="flex items-center gap-2 px-3 py-3">
-          <BrandMark className="h-6 w-6 flex-none" />
-          <span className="text-sm font-bold tracking-[-0.02em]">MCS</span>
-        </Link>
-
-        <div className="px-3 pb-2">
+        <div className="p-2">
           <Button asChild className="w-full justify-start gap-2" variant="secondary">
             <Link href="/easy" onClick={() => setOpen(false)}>
               <Plus className="h-4 w-4" />
@@ -116,11 +119,8 @@ export function EasyRail({ conversations }: { conversations: EasyConversationRec
           </Button>
         </div>
 
-        {/*
-          **지난 대화.** 자기 안에서만 스크롤한다 — 레일 전체가 늘어나면 아래의
-          출구가 화면 밖으로 밀린다.
-        */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
+        {/* **자기 안에서만 스크롤한다.** 이 칸이 늘어나면 대화가 밀린다. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {list.length === 0 ? (
             <p className="px-2 py-3 text-meta text-subtle-foreground">
               아직 대화가 없습니다.
@@ -136,7 +136,7 @@ export function EasyRail({ conversations }: { conversations: EasyConversationRec
                       onClick={() => setOpen(false)}
                       className={cn(
                         "block truncate rounded-md py-2 pl-2 pr-8 text-sm",
-                        active ? "bg-background font-medium" : "hover:bg-background/60",
+                        active ? "bg-muted font-medium" : "hover:bg-muted/60",
                       )}
                     >
                       {/* 제목은 코드가 지어내지 않는다(`title.ts`). 화면이 정한다. */}
@@ -157,23 +157,7 @@ export function EasyRail({ conversations }: { conversations: EasyConversationRec
             </ul>
           )}
         </div>
-
-        {/*
-          **출구 하나만 둔다.** 설계 §11-④ — 고를 것을 없애면 원하는 것을 못
-          만드는 사람이 생긴다. 출구가 없으면 Easy 는 막다른 길이다.
-
-          **라이브러리와 계정은 뺐다**(2026-09-18 사용자). 라이브러리는 첨부
-          고르는 창이 이미 열고, 계정은 상단바에 있다 — 둘 다 **중복**이었다.
-        */}
-        <div className="border-t border-border p-2">
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-sm">
-            <Link href="/poster">
-              <ArrowLeft className="h-4 w-4" />
-              자세한 모드로
-            </Link>
-          </Button>
-        </div>
-      </nav>
+      </div>
     </>
   );
 }

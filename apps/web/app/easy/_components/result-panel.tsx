@@ -39,9 +39,24 @@ export function EasyResultPanel({
   onOpen: () => void;
 }) {
   return (
+    /*
+      **처음 너비를 CSS 가 먼저 맞춘다.**
+
+      `width` 는 붙고 나서 한 번 재야 나온다(`split-handle.tsx`). 그동안 쓰는
+      값이 재고 난 값과 다르면 화면이 한 번 튄다 — 기본값이 352 에서 상한으로
+      올라가면서(2026-09-21) 그 튐이 눈에 띄게 커졌다.
+
+      그래서 `split.ts` 의 규칙을 **클래스로 한 번 더 적는다.**
+
+        w-[45rem]                 RESULT_MAX 720px
+        max-w-[calc(100%-360px)]  CHAT_MIN 360px 을 대화 쪽에 남긴다
+
+      `clampResultWidth(available, RESULT_MAX)` 와 같은 값이 나온다. 두 벌이
+      되는 값이라 `__tests__/result-panel-width.test.ts` 가 둘을 묶어 둔다.
+    */
     <aside
       style={width === null ? undefined : { width }}
-      className="hidden w-[22rem] shrink-0 flex-col lg:flex"
+      className="hidden w-[45rem] max-w-[calc(100%-360px)] shrink-0 flex-col lg:flex"
     >
       <div className="flex shrink-0 items-center justify-between px-4 py-3">
         <span className="text-meta text-subtle-foreground">결과</span>

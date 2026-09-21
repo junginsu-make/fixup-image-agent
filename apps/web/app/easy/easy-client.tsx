@@ -10,6 +10,7 @@ import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { EasyAttachChoice } from "./_components/attach-choice";
+import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useResultWidth } from "./_components/split-handle";
 import { openImageViewer } from "../_components/image-viewer";
@@ -283,7 +284,7 @@ export function EasyClient({
   }
 
   return (
-    <div ref={split} className="flex min-h-0 flex-1">
+    <div ref={split} className="flex min-h-0 min-w-0 flex-1">
       {/* ── 가운데: 대화와 입력 ── */}
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ── 대화 ── 자기 안에서만 스크롤한다. 입력창이 아래에 붙어 있어야 한다. */}
@@ -389,14 +390,14 @@ export function EasyClient({
 
               전에는 화면 왼쪽 위에 떠 있었는데, 상단바가 생기면서 그 자리에
               둘이 겹쳤다. 누르는 것들이 한 줄에 모이는 편이 찾기도 쉽다.
-              넓은 화면에서는 레일이 늘 보이므로 이 단추가 없다.
+              넓은 화면에서는 목록 칸이 늘 보이므로 이 단추가 없다.
             */}
             <Button
               variant="ghost"
               size="icon"
               aria-label="대화 목록"
               className="md:hidden"
-              onClick={() => window.dispatchEvent(new Event("easy-rail-toggle"))}
+              onClick={() => window.dispatchEvent(new Event(TOGGLE_EVENT))}
             >
               <PanelLeft className="h-4 w-4" />
             </Button>
@@ -459,8 +460,8 @@ export function EasyClient({
             ) : (
               <>{cost.rejected} </>
             )}
-            만든 그림은 라이브러리에 저장됩니다. 세밀하게 만들려면 왼쪽 아래
-            「자세한 모드로」를 누르세요.
+            만든 그림은 라이브러리에 저장됩니다. 세밀하게 만들려면 왼쪽
+            「이미지 만들기」를 누르세요.
           </p>
         </div>
       </div>
