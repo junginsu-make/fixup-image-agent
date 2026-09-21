@@ -5,6 +5,8 @@ import { createLocalJobRepository } from "./local-repository";
 import { createSupabaseJobRepository } from "./supabase-repository";
 import type { PdpJobRepository } from "./repository";
 
+/** 깃발은 잎 모듈에 있다. 한 줄 읽으려고 저장소 구현을 끌어오지 않게. */
+export { isPdpJobsEnabled } from "./flags";
 export * from "./state";
 export * from "./claim";
 export type { CreateJobInput, CreateJobResult, JobItemRecord, JobRecord, PdpJobRepository } from "./repository";
@@ -26,17 +28,4 @@ export function createPdpJobRepository(
     return createLocalJobRepository(path.join(localStoreRoot(environment), "pdp-jobs"));
   }
   return createSupabaseJobRepository(createSupabaseAdminClient());
-}
-
-/**
- * 작업 경로를 켰는가.
- *
- * **기본은 꺼짐이다**(설계 §15). 표가 없거나 워커가 안 떠 있는 상태에서 켜지면
- * 사용자는 만들기를 아예 못 한다. 운영에 표와 실행기가 모두 준비된 것을 확인한
- * 뒤에 켠다.
- */
-export function isPdpJobsEnabled(
-  environment: NodeJS.ProcessEnv = process.env,
-): boolean {
-  return environment.PDP_JOBS_ENABLED === "1";
 }

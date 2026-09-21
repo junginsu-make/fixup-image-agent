@@ -195,3 +195,91 @@ describe("**어떤 실패도 생성을 막지 않는다**", () => {
     expect(job!.items[0]!.errorCode).toBe("artifact_upload_failed");
   });
 });
+
+/**
+ * **어느 장이 왜 안 만들어졌는지 적는다**(F-7-8).
+ *
+ * 설계 §14.6: 「failedSections 미표시·토스트만 존재 | **영구 상태·섹션별
+ * 실패/미시도 이유 표시** | W4 / T-JOB」.
+ *
+ * ── 무엇이 빠져 있었나 ─────────────────────────────────────
+ *
+ * 묶음 라우트는 성공한 섹션만 적었다(`if (!result.ok) continue`). 그래서
+ * 되찾을 때 서버가 아는 것은 「만들어진 것」뿐이고, **왜 빠졌는지는 아무
+ * 데도 안 남았다.**
+ *
+ * 사용자가 보는 것은 집계 숫자뿐이다 — 「성공 4장 · 실패 1장」. 어느 장이 왜
+ * 빠졌는지 알 길이 없어 여덟 장을 통째로 다시 만들고, 그때 이미 만든 넉 장
+ * 값이 또 나간다. 리디자인 쪽은 이미 닫았고(`failed-sections.ts`) PDP 만
+ * 남아 있었다.
+ *
+ * `JobItemRecord` 에는 `errorCode` 칸이 처음부터 있었다. 적지를 않았을 뿐이다.
+ */
+describe("안 만들어진 섹션도 적는다", () => {
+  it("**까닭과 함께 적는다** — 그래야 그 섹션만 다시 만든다", async () => {
+    const repo = createLocalJobRepository(dir);
+    const recorder = await createJobRecorder({ enabled: true, input: 입력, repository: () => repo, putObject: 잘올라감 });
+    await recorder.started();
+
+    await recorder.sectionFailed({ sectionId: "s1", attempt: 1, errorCode: "AI_QUOTA_EXCEEDED" });
+
+    const job = await repo.get(recorder.jobId!, "u1");
+    expect(job!.items[0]!.sectionId).toBe("s1");
+    expect(job!.items[0]!.errorCode).toBe("AI_QUOTA_EXCEEDED");
+  });
+
+  /**
+   * **없는 자리를 가리키지 않는다.** 실패한 섹션에는 올린 그림이 없다.
+   * 경로를 적으면 되찾을 때 그 자리를 읽으러 갔다가 빈손으로 온다.
+   */
+  it("**그림 경로는 안 적는다**", async () => {
+    const repo = createLocalJobRepository(dir);
+    const recorder = await createJobRecorder({ enabled: true, input: 입력, repository: () => repo, putObject: 잘올라감 });
+    await recorder.started();
+
+    await recorder.sectionFailed({ sectionId: "s1", attempt: 1, errorCode: "AI_PROVIDER_UNAVAILABLE" });
+
+    const job = await repo.get(recorder.jobId!, "u1");
+    expect(job!.items[0]!.outputPath).toBeUndefined();
+    // 올리러 가지도 않는다. 올릴 것이 없다.
+    expect(올린것).toEqual([]);
+  });
+
+  it("**까닭을 모르면 그렇게 적는다** — 빈 칸으로 두면 왜 빠졌는지 모른다", async () => {
+    const repo = createLocalJobRepository(dir);
+    const recorder = await createJobRecorder({ enabled: true, input: 입력, repository: () => repo, putObject: 잘올라감 });
+    await recorder.started();
+
+    await recorder.sectionFailed({ sectionId: "s1", attempt: 1 });
+
+    const job = await repo.get(recorder.jobId!, "u1");
+    expect(job!.items[0]!.errorCode).toBeTruthy();
+  });
+
+  /**
+   * **기록이 생성을 망치면 안 된다.** 이 파일의 다른 묶음이 지키는 것과 같은
+   * 규칙이다 — 실패를 적다가 던지면 성공한 그림까지 못 받는다.
+   */
+  it("**적다가 터져도 안 던진다**", async () => {
+    const 터지는저장소 = {
+      createOrGet: async () => ({ kind: "created" as const, jobId: "job-1" }),
+      get: async () => null,
+      findLatestForDocument: async () => null,
+      advance: async () => { throw new Error("터졌다"); },
+      claimNext: async () => null,
+      recordItem: async () => { throw new Error("터졌다"); },
+    };
+    const recorder = await createJobRecorder({ enabled: true, input: 입력, repository: () => 터지는저장소, putObject: 잘올라감 });
+
+    await expect(recorder.sectionFailed({ sectionId: "s1", attempt: 1, errorCode: "X" })).resolves.toBeUndefined();
+  });
+
+  it("**꺼져 있으면 아무것도 안 한다**", async () => {
+    const 만들기 = vi.fn();
+    const recorder = await createJobRecorder({ enabled: false, input: 입력, repository: 만들기 });
+
+    await recorder.sectionFailed({ sectionId: "s1", attempt: 1, errorCode: "X" });
+
+    expect(만들기).not.toHaveBeenCalled();
+  });
+});

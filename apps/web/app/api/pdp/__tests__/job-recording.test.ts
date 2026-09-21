@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   auth: vi.fn(), reserve: vi.fn(), settle: vi.fn(), generate: vi.fn(),
-  recorder: vi.fn(), makeRecorder: vi.fn(),
+  recorder: vi.fn(), failed: vi.fn(), makeRecorder: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("../../../../lib/membership/api", () => ({
@@ -36,6 +36,7 @@ beforeEach(() => {
     jobId: "job-1",
     started: state.recorder,
     sectionDone: state.recorder,
+    sectionFailed: state.failed,
     finished: state.recorder,
   }));
 });
@@ -91,15 +92,35 @@ describe("스위치가 켜졌을 때", () => {
     expect(state.recorder).toHaveBeenCalledTimes(4);
   });
 
-  it("**실패한 섹션은 적지 않는다** — 적을 그림이 없다", async () => {
+  /**
+   * **안 나온 장도 적는다**(F-7-8).
+   *
+   * 전에는 성공한 것만 적었다. 그래서 되찾을 때 서버가 아는 것은 「만들어진
+   * 것」뿐이고 **왜 빠졌는지는 아무 데도 안 남았다** — 사용자는 집계 숫자만
+   * 보고 여덟 장을 통째로 다시 만든다.
+   *
+   * 설계 §14.6: 「failedSections 미표시 | **영구 상태·섹션별 실패/미시도 이유
+   * 표시**」.
+   */
+  it("**안 나온 섹션은 까닭과 함께 적는다**", async () => {
     state.generate
       .mockResolvedValueOnce({ imageBase64: "OK", mimeType: "image/png", generatedImages: 1 })
       .mockRejectedValueOnce(new Error("fal down"));
 
     await 켜고({ ...body(), sections: [section, { ...section, section_id: "s2" }] });
 
-    // started 1 + sectionDone 1(성공한 것만) + finished 1
-    expect(state.recorder).toHaveBeenCalledTimes(3);
+    // 성공한 것은 그림으로, 실패한 것은 까닭으로.
+    expect(state.recorder).toHaveBeenCalledTimes(3); // started + sectionDone 1 + finished
+    expect(state.failed).toHaveBeenCalledTimes(1);
+    expect(state.failed).toHaveBeenCalledWith(
+      expect.objectContaining({ sectionId: "s2", errorCode: expect.any(String) }),
+    );
+  });
+
+  it("**다 나오면 실패는 안 적는다**", async () => {
+    await 켜고({ ...body(), sections: [section, { ...section, section_id: "s2" }] });
+
+    expect(state.failed).not.toHaveBeenCalled();
   });
 
   it("응답은 꺼져 있을 때와 같다 — 기록은 곁다리다", async () => {

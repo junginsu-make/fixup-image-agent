@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { isPdpJobsEnabled } from "../pdp/jobs/flags";
 import { hasFullScope, viewerFrom } from "../access/core";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
@@ -126,7 +127,7 @@ export async function reserveAiUsage(
     */
     const message =
       row.reason === "duplicate_request"
-        ? await duplicateRequestMessage(admin, auth.member.userId, requestId)
+        ? await duplicateRequestMessage(admin, auth.member.userId, requestId, operation)
         : messages[row.reason] ?? "요청을 처리할 수 없습니다.";
     const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit", "analysis_abuse_limit"]
       .includes(row.reason) ? 429 : 409;
@@ -200,10 +201,26 @@ export async function settleAiUsage(
  * 마이그레이션은 안 건드린다. `generation_events` 의 그 행을 한 번 더 읽으면
  * 상태를 알 수 있다.
  */
+/**
+ * **작업을 적는 갈래**(K-05 리뷰 HIGH).
+ *
+ * `reserveAiUsage` 는 열여섯 곳이 쓰는데 `createJobRecorder` 를 부르는 것은
+ * `api/pdp/images/batch/route.ts` 하나뿐이다. 나머지에 「되찾을 수 있다」고
+ * 말하면 **구성안 분석 중복에도 「만들어 둔 이미지」를 말하게 된다.**
+ *
+ * 단건 `/pdp/images` 도 같은 `pdp_image` 다. 그쪽은 작업을 안 남기지만,
+ * 되찾기는 요청 식별자가 아니라 **문서 번호로** 찾으므로 앞선 묶음이 남긴
+ * 작업을 찾아 빈 섹션을 채울 수 있다.
+ *
+ * 작업을 적는 라우트가 늘면 여기도 함께 는다. 한 곳에 적어 둔다.
+ */
+const KEEPS_JOBS = new Set<GenerationOperation>(["pdp_image"]);
+
 async function duplicateRequestMessage(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
   requestId: string,
+  operation: GenerationOperation,
 ): Promise<string> {
   const { data } = await admin
     .from("generation_events")
@@ -218,7 +235,24 @@ async function duplicateRequestMessage(
     return "같은 요청이 아직 처리 중입니다. 잠시 기다리면 결과가 나타납니다.";
   }
   if (status === "succeeded") {
-    // **여기가 제일 나쁘다.** 값은 나갔고 그림도 만들어졌는데 화면에 못 왔다.
+    /*
+      **되찾을 수 있게 됐으면 그렇게 말한다**(K-05).
+
+      설계 §14.5(E-6-2-b) 의 처리는 「header 만 아닌 **동일 결과 회수**」다.
+      작업 경로가 켜져 있으면 서버가 그 그림을 들고 있으므로
+      (`GET /api/pdp/jobs?documentId=`) 값을 안 내고 되찾을 수 있다.
+
+      **꺼져 있으면 옛 말이 맞다.** 값은 나갔고 그림도 만들어졌는데 화면에 못
+      왔고, 되찾을 길이 없다 — 여기가 제일 나쁘다.
+    */
+    if (isPdpJobsEnabled() && KEEPS_JOBS.has(operation)) {
+      /*
+        **단정하지 않는다.** 깃발이 켜져 있어도 그 요청의 작업이 실제로
+        있다는 보장은 없다 — 기록기가 조용히 실패했을 수 있고, 저장 안 한
+        초안은 찾을 열쇠조차 없다. 「모르는 것을 안다고 하지 않는다」.
+      */
+      return "이 요청은 이미 끝났습니다. 만들어 둔 이미지가 남아 있으면 화면이 되찾아 옵니다. 잠시 뒤에도 안 보이면 새로 만들어 주세요.";
+    }
     return "이 요청은 이미 끝났습니다. 결과가 화면에 안 보이면 다시 만들면 되지만, 다시 만들면 값이 한 번 더 나갑니다.";
   }
   if (status === "failed") {

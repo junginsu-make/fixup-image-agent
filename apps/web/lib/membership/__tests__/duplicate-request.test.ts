@@ -117,6 +117,76 @@ describe("같은 식별자로 다시 오면", () => {
     expect(body.message).not.toContain("새로고침");
   });
 
+  /**
+   * **되찾을 수 있게 됐으면 그렇게 말한다**(K-05).
+   *
+   * 설계 §14.5(E-6-2-b) 의 처리는 「header 만 아닌 **동일 결과 회수**」다.
+   * 작업 경로가 켜져 있으면 서버가 그림을 들고 있으므로
+   * (`GET /api/pdp/jobs?documentId=`), 「다시 만들면 값이 또 나간다」는 이제
+   * 틀린 말이다 — 값을 안 내고 되찾을 수 있다.
+   *
+   * **꺼져 있으면 옛 말이 맞다.** 그때는 되찾을 것이 없다.
+   */
+  it("**작업 경로가 켜져 있으면 되찾을 수 있다고 말한다**", async () => {
+    existingRow = { status: "succeeded" };
+    process.env.PDP_JOBS_ENABLED = "1";
+    try {
+      const { body } = await 거절();
+
+      expect(body.message).toContain("되찾");
+      // 값이 또 나간다는 말은 이제 하지 않는다. 안 나가니까.
+      expect(body.message).not.toContain("한 번 더");
+    } finally {
+      delete process.env.PDP_JOBS_ENABLED;
+    }
+  });
+
+  /**
+   * **되찾을 길이 없는 요청에 되찾으라고 하지 않는다.**
+   *
+   * `reserveAiUsage` 는 열여섯 곳이 쓰는데 **작업을 적는 것은 상세페이지
+   * 이미지 생성 하나뿐**이다(`images/batch/route.ts`). 깃발을 켜는 날 나머지
+   * 열다섯 경로의 중복 거절이 전부 「만들어 둔 이미지를 되찾을 수
+   * 있습니다」를 받는다 — 구성안 분석에는 이미지가 한 장도 없다.
+   *
+   * 이 저장소는 「모르는 것을 안다고 하지 않는다」를 지킨다.
+   */
+  it.each([
+    ["pdp_analyze", "구성안 분석에는 이미지가 없다"],
+    ["redesign_generate", "리디자인은 작업을 안 적는다"],
+    ["sns_image", "다른 도구다"],
+  ])("**%s 에는 되찾으라고 안 한다** — %s", async (operation) => {
+    existingRow = { status: "succeeded" };
+    process.env.PDP_JOBS_ENABLED = "1";
+    try {
+      const result = await reserveAiUsage(요청(), operation as never, 1);
+      if (result.ok) throw new Error("거절되지 않았다");
+      const body = await result.response.json();
+
+      expect(body.message).not.toContain("되찾");
+    } finally {
+      delete process.env.PDP_JOBS_ENABLED;
+    }
+  });
+
+  /**
+   * **단정하지 않는다.** 깃발이 켜져 있어도 그 요청의 작업이 실제로 있다는
+   * 보장은 없다 — 기록기가 조용히 실패했을 수 있고, 저장 안 한 초안은 찾을
+   * 열쇠조차 없다.
+   */
+  it("**있으면 되찾는다고 하지, 있다고 하지 않는다**", async () => {
+    existingRow = { status: "succeeded" };
+    process.env.PDP_JOBS_ENABLED = "1";
+    try {
+      const { body } = await 거절();
+
+      // 안 보이면 무엇을 하면 되는지도 말한다. 안 그러면 사용자는 멈춘다.
+      expect(body.message).toContain("안 보이면");
+    } finally {
+      delete process.env.PDP_JOBS_ENABLED;
+    }
+  });
+
   it("**실패로 끝났으면 새로 만들라고 한다**", async () => {
     existingRow = { status: "failed" };
 

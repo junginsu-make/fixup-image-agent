@@ -32,6 +32,15 @@ export interface SectionResult {
   costUsd?: number;
 }
 
+/** 안 만들어진 섹션(F-7-8). 적을 그림은 없고 까닭만 있다. */
+export interface SectionFailure {
+  sectionId: string;
+  attempt: number;
+  /** 왜 안 만들어졌나. 모르면 비워 두지 말고 아래에서 그렇게 적는다. */
+  errorCode?: string;
+  model?: string;
+}
+
 export interface JobRecorder {
   /** 만들어진 작업의 id. 꺼져 있거나 못 만들었으면 `null`. */
   readonly jobId: string | null;
@@ -39,6 +48,14 @@ export interface JobRecorder {
   started(): Promise<void>;
   /** 섹션 한 장이 나왔을 때. 그림을 저장소에 옮기고 경로를 적는다. */
   sectionDone(result: SectionResult): Promise<void>;
+  /**
+   * 섹션 한 장이 **안 나왔을 때**(F-7-8).
+   *
+   * 전에는 성공한 것만 적었다. 그래서 되찾을 때 서버가 아는 것은 「만들어진
+   * 것」뿐이고 **왜 빠졌는지는 아무 데도 안 남았다** — 사용자는 집계 숫자만
+   * 보고 여덟 장을 통째로 다시 만든다.
+   */
+  sectionFailed(failure: SectionFailure): Promise<void>;
   /** 다 끝났을 때. 성공 수와 정산 결과로 마무리한다. */
   finished(outcome: { succeeded: number; requested: number; settled: boolean }): Promise<void>;
 }
@@ -66,6 +83,7 @@ const NOOP: JobRecorder = {
   jobId: null,
   async started() {},
   async sectionDone() {},
+  async sectionFailed() {},
   async finished() {},
 };
 
@@ -147,6 +165,22 @@ export async function createJobRecorder(options: JobRecorderOptions): Promise<Jo
           errorCode: stored ? undefined : "artifact_upload_failed",
         });
         if (!stored) await repo.advance(id, userId, { type: "persist_failed" });
+      });
+    },
+
+    async sectionFailed(failure) {
+      await quietly("실패 기록", async () => {
+        await repo.recordItem(id, {
+          sectionId: failure.sectionId,
+          attempt: failure.attempt,
+          model: failure.model,
+          /*
+            **까닭을 모르면 그렇게 적는다.** 빈 칸으로 두면 「적었는데 까닭이
+            없다」와 「아예 안 적혔다」가 구별되지 않는다.
+          */
+          errorCode: failure.errorCode?.trim() || "unknown_error",
+          // 경로는 안 적는다. 올린 그림이 없다 — 없는 자리를 가리키면 안 된다.
+        });
       });
     },
 

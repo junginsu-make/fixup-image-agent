@@ -5,6 +5,8 @@ import { createSectionFor } from "./scenario-sections";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewedLayer, type LayerPreview } from "./layer-preview";
 import { batchRetryKeyId } from "./batch-retry-key";
+import { shouldRecoverAfter } from "./job-recovery";
+import type { RecoveredFailureLine } from "./recovered-failures";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
@@ -206,6 +208,27 @@ interface PdpEditorProps {
    * 부모가 하고(`job-recovery.ts`), 여기서는 그 말을 보여 주기만 한다.
    */
   recoveredNotice?: string;
+  /**
+   * 안 만들어진 장과 그 까닭(F-7-8).
+   *
+   * 무엇을 보여 줄지 고르는 판단은 화면 밖에 있다(`recovered-failures.ts`).
+   * 여기서는 받은 줄을 그린다.
+   */
+  recoveredFailures?: RecoveredFailureLine[];
+  /**
+   * 같은 요청이 **중복으로 막혔다**(K-05).
+   *
+   * 그 식별자로 이미 만들어진 것이 서버에 있을 수 있다. 부모가 되찾으러
+   * 간다 — 여기서는 「막혔다」는 사실만 알린다.
+   *
+   * **일괄과 단건이 막히는 사정이 다르다.** 일괄은 같은 묶음을 다시 누를 때
+   * 같은 열쇠가 가서 막힌다. 단건은 응답을 받으면 열쇠를 놓으므로
+   * (`delete retryRequestKeysRef.current[sectionKey]`), **던져서 catch 로
+   * 빠진 뒤 다시 누른 경우**에만 막힌다. 그래도 부를 값어치는 있다 —
+   * 되찾기는 요청 식별자가 아니라 문서 번호로 찾으므로 앞선 묶음이 남긴
+   * 작업을 찾아 빈 섹션을 채울 수 있다.
+   */
+  onDuplicateRequest?: () => void;
   lastSavedAt?: string | null;
   manualSaveToastToken?: number;
   onOpenSettings?: () => void;
@@ -284,6 +307,8 @@ export function PdpEditor({
   desiredTone,
   initialDraftState,
   recoveredNotice,
+  recoveredFailures,
+  onDuplicateRequest,
   lastSavedAt,
   manualSaveToastToken = 0,
   onOpenSettings,
@@ -1577,6 +1602,8 @@ export function PdpEditor({
       if (!response.ok) {
         setErrorMessage(response.message);
         const responseCode = String(response.code || "");
+        // 같은 요청이 막혔다. 이미 만들어진 것이 서버에 있을 수 있다(K-05).
+        if (shouldRecoverAfter(responseCode)) onDuplicateRequest?.();
         return {
           ok: false,
           stopBatch: [
@@ -1782,6 +1809,8 @@ export function PdpEditor({
           // 계속 밀어붙이면 같은 오류만 반복하므로 여기서 멈춘다.
           failed += chunk.length;
           setErrorMessage(response.message ?? "일괄 생성에 실패했습니다.");
+          // 같은 묶음이 막혔다. 이미 만들어진 것이 서버에 있을 수 있다(K-05).
+          if (shouldRecoverAfter(response.code)) onDuplicateRequest?.();
           break;
         }
 
@@ -2566,6 +2595,25 @@ export function PdpEditor({
             <p className="mt-2 text-xs text-muted-foreground">
               성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 차감되며 {generationRun.completed}장이면 {imageCreditUnits(imageModel, generationRun.completed)}장입니다.
             </p>
+          </div>
+        ) : null}
+        {recoveredFailures?.length ? (
+          <div className="rounded-md border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-sm">
+            <p className="font-bold">만들어지지 않은 섹션 {recoveredFailures.length}장</p>
+            <p className="mt-0.5 text-muted-foreground">
+              아래 섹션만 다시 만들면 됩니다. 이미 만든 이미지는 그대로 있고 다시 차감되지 않습니다.
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {recoveredFailures.map((line) => (
+                <li key={line.label}>
+                  <span className="font-bold">{line.label}</span>{" "}
+                  <Badge variant={line.retryable ? "secondary" : "destructive"}>
+                    {line.retryable ? "다시 해 보세요" : "조치가 필요합니다"}
+                  </Badge>
+                  <p className="mt-0.5 text-muted-foreground">{line.reason}</p>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
         {recoveredNotice ? (

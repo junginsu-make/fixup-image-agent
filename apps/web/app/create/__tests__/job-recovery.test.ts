@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { recoverableSections, jobRequestFields, shouldAskForRecovery, bakeRecoveredImages } from "../job-recovery";
+import { recoverableSections, jobRequestFields, shouldAskForRecovery, bakeRecoveredImages, shouldRecoverAfter } from "../job-recovery";
 
 /**
  * **돌아온 사용자가 무엇을 되찾는가.**
@@ -207,3 +207,41 @@ describe("되찾은 그림을 구워 들인다", () => {
     expect(구운것).toEqual([]);
   });
 });
+
+/**
+ * **같은 요청이 막히면 만들어 둔 것을 되찾는다**(K-05).
+ *
+ * 설계 §14.5(E-6-2-b): 처리는 「header 만 아닌 **동일 결과 회수**」.
+ */
+describe("어떤 오류에 되찾으러 가나", () => {
+  it("**중복으로 막히면 간다** — 그 식별자의 그림이 서버에 있을 수 있다", () => {
+    expect(shouldRecoverAfter("duplicate_request")).toBe(true);
+  });
+
+  it.each([
+    ["quota_exceeded", "한도를 다 썼다"],
+    ["team_quota_exceeded", "팀 한도를 다 썼다"],
+    ["concurrent_limit", "동시에 너무 많이 돈다"],
+    ["unauthenticated", "로그인이 안 돼 있다"],
+    ["AI_PROVIDER_UNAVAILABLE", "제공자가 죽었다"],
+  ])("**%s 에는 안 간다** — %s", (code) => {
+    // 만들어진 것이 없다. 되찾으러 가면 값 없는 질의만 는다.
+    expect(shouldRecoverAfter(code)).toBe(false);
+  });
+
+  it("**코드가 없어도 안 터진다**", () => {
+    expect(shouldRecoverAfter(undefined)).toBe(false);
+    expect(shouldRecoverAfter(null)).toBe(false);
+    expect(shouldRecoverAfter("")).toBe(false);
+  });
+});
+
+/*
+  **편집기가 그 판단을 쓰는지는 여기서 안 잰다.**
+
+  한때 소스 문자열로 쟀다 — 편집기가 2,800줄이라 못 띄운다고 보았다. 그
+  판단이 틀렸다. 그리고 그 시험으로는 **배선을 통째로 끊어도 636건이 전부
+  초록**이었다(조건 뒤집기, 성공 가지로 옮기기, 엉뚱한 값 넘기기도 마찬가지).
+
+  `duplicate-recovery-live.test.tsx` 가 진짜 편집기를 띄워 단추를 누르고 잰다.
+*/

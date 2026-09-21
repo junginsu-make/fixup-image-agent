@@ -347,3 +347,131 @@ describe("돌아오면 만들어 둔 그림을 되찾는다", () => {
     expect(알림).not.toContain("—");
   });
 });
+
+/**
+ * **같은 요청이 막히면 만들어 둔 것을 되찾는다**(K-05).
+ *
+ * 설계 §14.5(E-6-2-b): 「유지하되 … **header 존재 = 결과 복구 아님**」,
+ * 처리는 「header 만 아닌 **동일 결과 회수**」.
+ *
+ * ── 무엇이 막혀 있었나 ─────────────────────────────────────
+ *
+ * 화면은 같은 묶음을 다시 누를 때 **같은 요청 식별자**를 쓴다. 두 번 과금을
+ * 막는 장치다. 그런데 그 식별자로 다시 오면 서버는 `duplicate_request` 로
+ * 거절하고 끝이었다 — 사용자는 **이미 값을 치른 그림을 못 받은 채** 막힌다.
+ *
+ * 서버는 그 그림을 들고 있다(K-04 가 낸 길). 막혔을 때 **되찾으러 간다.**
+ */
+describe("같은 요청이 막히면 되찾는다", () => {
+  it("**중복으로 막히면 되찾기를 다시 돌린다**", async () => {
+    // 처음에는 서버가 아무것도 안 들고 있다.
+    captured.job = { ok: false, code: "NOT_FOUND" };
+    await savePdpDraft(빈장두개());
+
+    await 띄운다();
+    expect(captured.asked.filter((path) => path.includes("/pdp/jobs"))).toHaveLength(1);
+    expect(섹션들()[0]!.generatedImage).toBeUndefined();
+
+    // 그 사이에 작업이 끝나 서버가 그림을 들게 됐다.
+    captured.job = 서버가들고있는것([{ sectionId: 첫섹션.section_id, url: "https://signed/s1" }]);
+
+    // 다시 누르니 중복으로 막혔다.
+    await act(async () => { captured.editor.onDuplicateRequest(); });
+    await flush();
+
+    expect(captured.asked.filter((path) => path.includes("/pdp/jobs"))).toHaveLength(2);
+    expect(String(섹션들()[0]!.generatedImage).startsWith("data:")).toBe(true);
+  });
+
+  /**
+   * **연달아 막히면 그때마다 되찾으러 간다.**
+   *
+   * 표를 같은 값으로 두면 React 가 재렌더를 건너뛰어 효과가 안 돈다. 그러면
+   * **두 번째 중복부터는 조회가 아예 안 나가고**, 사용자는 그동안 만들어진
+   * 그림을 영영 못 받는다.
+   */
+  it("**연달아 막히면 그때마다 되찾으러 간다**", async () => {
+    captured.job = { ok: false, code: "NOT_FOUND" };
+    await savePdpDraft(빈장두개());
+
+    await 띄운다();
+    await act(async () => { captured.editor.onDuplicateRequest(); });
+    await flush();
+    await act(async () => { captured.editor.onDuplicateRequest(); });
+    await flush();
+
+    // 처음 한 번 + 막힐 때마다 한 번씩.
+    expect(captured.asked.filter((path) => path.includes("/pdp/jobs"))).toHaveLength(3);
+  });
+
+  it("**되찾을 것이 없으면 아무 일도 없다** — 막힌 것은 막힌 대로 둔다", async () => {
+    captured.job = { ok: false, code: "NOT_FOUND" };
+    await savePdpDraft(빈장두개());
+
+    await 띄운다();
+    await act(async () => { captured.editor.onDuplicateRequest(); });
+    await flush();
+
+    expect(섹션들()[0]!.generatedImage).toBeUndefined();
+    expect(섹션들()).toHaveLength(2);
+  });
+});
+
+/**
+ * **어느 장이 왜 안 만들어졌는지 화면이 말한다**(F-7-8).
+ *
+ * 설계 §14.6: 「failedSections 미표시·토스트만 존재 | **영구 상태·섹션별
+ * 실패/미시도 이유 표시** | W4 / T-JOB」.
+ *
+ * 서버는 실패한 섹션도 까닭과 함께 적어 둔다(`recorder.ts` 의
+ * `sectionFailed`). 그 까닭이 화면까지 오는지 값으로 본다.
+ */
+describe("안 만들어진 장을 화면이 말한다", () => {
+  const 실패로끝난작업 = (items: Array<{ sectionId: string; url: string | null; errorCode?: string }>) => ({
+    ok: true,
+    job: {
+      id: "job-1", documentId: "recover-draft", revision: 0, operation: "pdp_image",
+      outcome: "partial", state: {}, createdAt: "", updatedAt: "",
+      items: items.map((item) => ({ attempt: 1, errorCode: null, ...item })),
+    },
+  });
+
+  it("**까닭이 화면까지 온다**", async () => {
+    captured.job = 실패로끝난작업([
+      { sectionId: 첫섹션.section_id, url: "https://signed/s1" },
+      { sectionId: 둘째섹션.section_id, url: null, errorCode: "AI_QUOTA_EXCEEDED" },
+    ]);
+    await savePdpDraft(빈장두개());
+
+    await 띄운다();
+
+    const 줄 = (captured.editor.recoveredFailures ?? []) as Array<{ label: string; reason: string }>;
+    expect(줄).toHaveLength(1);
+    expect(줄[0]!.reason).toContain("한도");
+  });
+
+  it("**다 만들어졌으면 아무 줄도 안 그린다**", async () => {
+    captured.job = 실패로끝난작업([
+      { sectionId: 첫섹션.section_id, url: "https://signed/s1" },
+      { sectionId: 둘째섹션.section_id, url: "https://signed/s2" },
+    ]);
+    await savePdpDraft(빈장두개());
+
+    await 띄운다();
+
+    expect(captured.editor.recoveredFailures ?? []).toEqual([]);
+  });
+
+  it("**새로 시작하면 실패 목록도 사라진다**", async () => {
+    captured.job = 실패로끝난작업([{ sectionId: 첫섹션.section_id, url: null, errorCode: "AI_QUOTA_EXCEEDED" }]);
+    await savePdpDraft(빈장두개());
+
+    await 띄운다();
+    expect((captured.editor.recoveredFailures ?? []).length).toBeGreaterThan(0);
+
+    await act(async () => { await captured.editor.onReset(); });
+    await flush();
+
+    expect(captured.editor.recoveredFailures ?? []).toEqual([]);
+  });
+});

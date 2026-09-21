@@ -149,3 +149,20 @@ function bytesToBase64(bytes: Uint8Array): string {
   // 브라우저에는 `btoa`, 시험(node)에는 `Buffer` 가 있다.
   return typeof btoa === "function" ? btoa(글자) : Buffer.from(글자, "binary").toString("base64");
 }
+
+/**
+ * 이 오류를 만났을 때 **만들어 둔 것을 되찾으러 가야 하는가**(K-05).
+ *
+ * 설계 §14.5(E-6-2-b) 의 처리는 「header 만 아닌 **동일 결과 회수**」다.
+ *
+ * 화면은 같은 묶음을 다시 누를 때 **같은 요청 식별자**를 쓴다 — 두 번 과금을
+ * 막는 장치다. 그런데 그 식별자로 다시 오면 서버는 중복으로 거절하고 끝이라,
+ * 사용자는 **이미 값을 치른 그림을 못 받은 채** 막혔다. 서버는 그 그림을
+ * 들고 있다.
+ *
+ * **중복일 때만이다.** 한도 초과나 인증 실패는 만들어진 것이 없다 — 그때
+ * 되찾으러 가면 값 없는 질의만 늘고, 사용자에게는 아무 일도 안 일어난다.
+ */
+export function shouldRecoverAfter(code: string | undefined | null): boolean {
+  return String(code ?? "") === "duplicate_request";
+}

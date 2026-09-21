@@ -262,16 +262,34 @@ export async function POST(req: Request) {
     };
   });
 
-  // 나온 그림을 한 장씩 적는다. 실패한 섹션은 적을 그림이 없다.
+  /*
+    한 장씩 적는다. **안 나온 장도 적는다**(F-7-8).
+
+    전에는 성공한 것만 적었다(`if (!result.ok) continue`). 그래서 되찾을 때
+    서버가 아는 것은 「만들어진 것」뿐이고 **왜 빠졌는지는 아무 데도 안
+    남았다** — 사용자는 집계 숫자만 보고 여덟 장을 통째로 다시 만들고, 그때
+    이미 만든 넉 장 값이 또 나간다.
+
+    설계 §14.6: 「failedSections 미표시 | **영구 상태·섹션별 실패/미시도 이유
+    표시**」. 리디자인 쪽은 이미 닫았고 PDP 만 남아 있었다.
+  */
   for (const result of results) {
-    if (!result.ok) continue;
-    await jobs?.sectionDone({
-      sectionId: result.sectionId,
-      attempt: 1,
-      imageBase64: result.imageBase64,
-      mimeType: result.mimeType,
-      model,
-    });
+    if (result.ok) {
+      await jobs?.sectionDone({
+        sectionId: result.sectionId,
+        attempt: 1,
+        imageBase64: result.imageBase64,
+        mimeType: result.mimeType,
+        model,
+      });
+    } else {
+      await jobs?.sectionFailed({
+        sectionId: result.sectionId,
+        attempt: 1,
+        errorCode: result.code,
+        model,
+      });
+    }
   }
 
   // 실패한 장은 차감하지 않는다. finalizeAiUsage 가 consumedUnits 를 인자로 받아

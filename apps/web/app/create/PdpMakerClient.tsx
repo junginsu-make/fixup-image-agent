@@ -39,6 +39,7 @@ import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
 import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
+import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
@@ -284,8 +285,24 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 있으면 사용자는 자기가 만든 것인지 아닌지 가릴 수 없다.
    */
   const [recoveredNotice, setRecoveredNotice] = useState("");
-  /** 되찾기를 물어본 초안. 안 적어 두면 질의가 끝없이 돈다. */
+  /**
+   * **어느 장이 왜 안 만들어졌나**(F-7-8).
+   *
+   * 서버가 실패한 섹션도 까닭과 함께 적어 둔다(`lib/pdp/jobs/recorder.ts` 의
+   * `sectionFailed`). 전에는 성공한 것만 적어서 **왜 빠졌는지가 아무 데도 안
+   * 남았고**, 사용자는 집계 숫자만 보고 여덟 장을 통째로 다시 만들었다.
+   */
+  const [recoveredFailures, setRecoveredFailures] = useState<RecoveredFailureLine[]>([]);
+  /** 되찾기를 물어본 초안. 안 적어 두면 질의가 두 번 나간다. */
   const askedRecoveryRef = useRef<string | null>(null);
+  /**
+   * 되찾기를 **다시 물어보게 하는 표**(K-05).
+   *
+   * 평소에는 초안을 열 때 한 번만 묻는다. 그런데 **같은 요청이 중복으로
+   * 막혔을 때**는 다시 물어야 한다 — 그 사이에 작업이 끝나 서버가 그림을
+   * 들게 됐을 수 있고, 그것이 사용자가 지금 못 받고 있는 바로 그 그림이다.
+   */
+  const [recoveryNonce, setRecoveryNonce] = useState(0);
   const [undoDraftId, setUndoDraftId] = useState<string | null>(null);
   const [scenarioBusy, setScenarioBusy] = useState(false);
   const scenarioBusyRef = useRef(false);
@@ -538,6 +555,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     // 되찾기도 앞 작업의 것이다. 안 비우면 아무것도 안 되찾은 새 작업에
     // 「2장을 되찾았습니다」가 그대로 떠 있는다.
     setRecoveredNotice("");
+    setRecoveredFailures([]);
     askedRecoveryRef.current = null;
     setAppState("upload");
     setPreparedImage(null);
@@ -612,6 +630,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         setPreviousPlan(null);
         // 되찾기 알림도 앞 작업의 것이다.
         setRecoveredNotice("");
+        setRecoveredFailures([]);
         askedRecoveryRef.current = null;
         setActiveDraftId(draft.id);
         setDraftCreatedAt(draft.createdAt);
@@ -719,8 +738,10 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   useEffect(() => {
     const sections = result?.blueprint.sections ?? [];
     if (!shouldAskForRecovery(activeDraftId, sections)) return;
-    if (askedRecoveryRef.current === activeDraftId) return;
-    askedRecoveryRef.current = activeDraftId;
+    // 다시 물어보라는 표가 올라오면 그때는 또 묻는다(K-05).
+    const 표 = `${activeDraftId}#${recoveryNonce}`;
+    if (askedRecoveryRef.current === 표) return;
+    askedRecoveryRef.current = 표;
 
     void (async () => {
       try {
@@ -729,6 +750,19 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           `/pdp/jobs?documentId=${encodeURIComponent(String(activeDraftId))}&revision=${RECOVERY_REVISION}`,
         );
         if (!answer?.ok || !answer.job) return;
+
+        /*
+          **안 만들어진 장을 먼저 말한다**(F-7-8).
+
+          되찾을 그림이 하나도 없는 경우가 **바로 이 항목이 고치려는 경우**다 —
+          다 실패했으면 사용자는 까닭을 가장 알고 싶다. 아래 조기 반환 뒤에
+          두면 그때 아무 말도 안 하게 된다.
+
+          지금 화면에 그림이 있는 섹션은 그 뒤 다시 만들어 성공한 것이므로
+          `recoveredFailureLines` 가 뺀다 — 안 빼면 **다 만들고도 「실패
+          1장」이 남는다**.
+        */
+        setRecoveredFailures(recoveredFailureLines(answer.job.items, sections));
 
         const 고른것 = recoverableSections(answer.job, sections);
         if (!고른것.length) return;
@@ -772,7 +806,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         // 되찾기는 덤이다. 실패해도 만들기를 막지 않는다.
       }
     })();
-  }, [activeDraftId, result]);
+  }, [activeDraftId, result, recoveryNonce]);
 
   /**
    * 저장된 작업을 모두 지운다.
@@ -1170,6 +1204,16 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         initialDraftState={editorDraftState ? editorForSections(editorDraftState, result.blueprint.sections) : null}
         initialResult={result}
         recoveredNotice={recoveredNotice}
+        recoveredFailures={recoveredFailures}
+        /*
+          **같은 요청이 막히면 만들어 둔 것을 되찾으러 간다**(K-05).
+
+          화면은 같은 묶음을 다시 누를 때 같은 요청 식별자를 쓴다 — 두 번
+          과금을 막는 장치다. 그런데 그 식별자로 다시 오면 서버는 중복으로
+          거절하고 끝이라, 사용자는 **이미 값을 치른 그림을 못 받은 채**
+          막혔다. 서버는 그 그림을 들고 있다.
+        */
+        onDuplicateRequest={() => setRecoveryNonce((current) => current + 1)}
         lastSavedAt={lastSavedAt}
         manualSaveToastToken={manualSaveToastToken}
         onDraftStateChange={handleEditorDraftStateChange}
