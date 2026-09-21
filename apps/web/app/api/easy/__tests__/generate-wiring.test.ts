@@ -172,3 +172,25 @@ describe("말과 주문을 가르는 자리", () => {
     expect(말갈래).toContain("return Response.json");
   });
 });
+
+/**
+ * **대신 부르는 단계마다 다른 요청 식별자** (2026-09-21 운영 409).
+ *
+ * 세 라우트 중 **둘이 각자 예약한다.** 예약은 같은 식별자를 두 번 받으면
+ * `duplicate_request` 로 거절하므로, 원래 헤더를 그대로 물려주면 두 번째
+ * 단계가 반드시 막힌다. 로컬에서는 인증 우회가 예약보다 먼저 지나가 안
+ * 드러난다 — 글자로 잰다.
+ */
+describe("대신 부를 때의 요청 식별자", () => {
+  it("헤더를 통째로 넘기지 않는다", () => {
+    expect(generate).not.toContain("headers: request.headers");
+    expect(generate).toContain("stepIdempotencyKey");
+  });
+
+  it("세 단계에 서로 다른 이름을 준다", () => {
+    const 단계들 = [...generate.matchAll(/relay\([\s\S]*?\}?,\s*"([a-z]+)"\)/g)].map((found) => found[1]);
+
+    expect(단계들.length).toBe(3);
+    expect(new Set(단계들).size).toBe(3);
+  });
+});

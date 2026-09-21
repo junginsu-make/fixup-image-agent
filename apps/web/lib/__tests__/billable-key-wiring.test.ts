@@ -74,7 +74,15 @@ const relayingPaths = files
   .filter(isRoute)
   .filter((path) => {
     const source = readFileSync(path, "utf8");
-    return /headers:\s*request\.headers/.test(source) && /from "[^"]*\/route"/.test(source);
+    /*
+      **모양이 아니라 뜻으로 찾는다.** 처음에는 `headers: request.headers` 라는
+      글자를 찾았는데, 열쇠를 갈아 끼우려고 `new Headers(request.headers)` 로
+      바꾸자 **고친 그 순간 검사가 이 주소를 놓쳤다**(2026-09-21).
+
+      대신 부르는 자리의 뜻은 둘이다 — 남의 라우트 처리기를 들여오고,
+      그 처리기에 넘길 요청을 손수 만든다.
+    */
+    return /from "[^"]*\/route"/.test(source) && /new Request\(/.test(source);
   })
   .map((path) => path.slice(path.indexOf(join("app", "api")) + 3).replace(/\\/g, "/").replace(/\/route\.tsx?$/, ""));
 

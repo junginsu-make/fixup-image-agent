@@ -2,6 +2,7 @@ import { DEFAULT_TEXT_MODEL, resolveTextModel } from "@fixup/shared";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
+import { stepIdempotencyKey } from "../../../../lib/easy/step-key";
 import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
 import { easyTitle } from "../../../easy/title";
 import { POST as createProject } from "../../poster/projects/route";
@@ -56,11 +57,26 @@ function fail(message: string, status = 500) {
  * **쿠키를 물려준다.** 세 라우트가 각자 `authenticateApiMember` 로 회원을
  * 확인하고 저장소도 회원 권한으로 연다. 원래 요청의 헤더를 그대로 넘겨야 그
  * 확인이 같은 사람으로 통과한다.
+ *
+ * **요청 식별자만 갈아 끼운다**(2026-09-21 운영 409).
+ *
+ * 세 라우트 중 **둘이 각자 예약한다** — 기획과 생성이다. 예약은 같은 식별자를
+ * 두 번 받으면 `duplicate_request` 로 거절하므로, 그대로 물려주면 **두 번째
+ * 단계가 반드시 막힌다.**
+ *
+ * 포스터 화면은 이 함정에 안 빠진다. 기획과 생성이 사용자의 서로 다른 누름이고
+ * 누를 때마다 새 열쇠가 나가기 때문이다. Easy 는 한 번 누르면 셋이 이어 도는
+ * 구조라 **우리가 갈라 줘야 한다.**
  */
-function relay(request: Request, url: string, body: unknown): Request {
+function relay(request: Request, url: string, body: unknown, step: string): Request {
+  const headers = new Headers(request.headers);
+  const 바깥열쇠 = headers.get("x-idempotency-key");
+  // 바깥 열쇠가 없으면 갈라 줄 것도 없다. 안쪽이 400 으로 막고 그것이 맞다.
+  if (바깥열쇠) headers.set("x-idempotency-key", stepIdempotencyKey(바깥열쇠, step));
+
   return new Request(new URL(url, request.url), {
     method: "POST",
-    headers: request.headers,
+    headers,
     body: JSON.stringify(body),
   });
 }
@@ -170,7 +186,7 @@ export async function POST(request: Request) {
       // AI 가 다듬는다. 그것이 이 모드의 값어치다(설계 §9).
       promptMode: "assisted",
       attachmentOrder: [...referenceIds, ...preservedIds],
-    })), "기획 준비");
+    }, "project")), "기획 준비");
 
     const projectId = created.project?.id as string | undefined;
     if (!projectId) throw new EasyStepError("기획 준비", "작업을 만들지 못했습니다.", 500);
@@ -182,14 +198,14 @@ export async function POST(request: Request) {
      * 정한 모델로 간다 — 2026-09-18 에 실제로 그랬다(설계 §5-4).
      */
     await read(
-      await runPlan(relay(request, `/api/poster/projects/${projectId}/plan`, { textModel }), { params }),
+      await runPlan(relay(request, `/api/poster/projects/${projectId}/plan`, { textModel }, "plan"), { params }),
       "기획",
     );
 
     // ③ 제출 — 그림은 화면이 `status` 로 받아 간다
     const submitted = await read(
-      await submitGenerate(relay(request, `/api/poster/projects/${projectId}/generate`, {}), { params }),
-      "그림 만들기",
+      await submitGenerate(relay(request, `/api/poster/projects/${projectId}/generate`, {}, "generate"), { params }),
+      "이미지 만들기",
     );
 
     /*
