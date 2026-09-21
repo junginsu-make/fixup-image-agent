@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Download, Maximize2 } from "lucide-react";
 import { Button } from "@fixup/ui";
+import { EasyImageWorking } from "./message";
 
 /**
  * 오른쪽 **결과 칸** (2026-09-18 사용자 결정).
@@ -27,10 +28,20 @@ import { Button } from "@fixup/ui";
 export function EasyResultPanel({
   url,
   width,
+  working,
   onOpen,
 }: {
-  /** 마지막으로 만든 그림. 아직 없으면 비어 있다. */
+  /** 마지막으로 만든 이미지. 아직 없으면 비어 있다. */
   url?: string;
+  /**
+   * 지금 이미지를 만드는 중인가.
+   *
+   * **여기도 알려 줘야 한다**(2026-09-21 사용자 — 「이미지 생성 중에도 생성
+   * 중이라는 표시를 정확히 알 수 있게」). 결과가 앉을 자리가 여기인데, 만드는
+   * 동안 「만들면 여기에 나옵니다」가 그대로면 **아무 일도 안 하는 것처럼**
+   * 보인다.
+   */
+  working?: boolean;
   /**
    * 끌어서 정한 너비. `null` 이면 아직 안 쟀다는 뜻이라 기본 너비로 둔다 —
    * 서버가 그린 것과 같아야 화면이 한 번 튀지 않는다(`split-handle.tsx`).
@@ -88,6 +99,9 @@ export function EasyResultPanel({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt="만든 이미지" className="block w-full" />
           </button>
+        ) : working ? (
+          // 대화 쪽과 **같은 판**을 쓴다. 두 자리가 다르게 생기면 다른 일로 보인다.
+          <EasyImageWorking className="w-full" />
         ) : (
           /*
             **빈 칸에도 말을 적는다.** 아무것도 없으면 고장인 줄 안다.

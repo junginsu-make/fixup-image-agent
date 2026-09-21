@@ -23,6 +23,19 @@ import { CHAT_MIN, HANDLE, LIST_DEFAULT, RESULT_DEFAULT, RESULT_MAX } from "../s
 
 const 화면 = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
+/**
+ * 주석을 걷어낸 코드만.
+ *
+ * **이 저장소의 주석은 길고, 고친 까닭을 적느라 옛 클래스 이름을 그대로
+ * 인용한다.** 「`animate-pulse` 로 때우지 않는다」를 설명하는 주석 때문에
+ * 「`animate-pulse` 가 없다」는 검사가 실패했다(2026-09-21). 없어야 하는 것을
+ * 잴 때는 코드만 봐야 한다.
+ */
+const 코드 = (path: string) =>
+  화면(path)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
 const layout = 화면("../layout.tsx");
 const dashboard = 화면("../_components/dashboard.tsx");
 const list = 화면("../_components/conversation-list.tsx");
@@ -154,5 +167,58 @@ describe("결과 칸의 처음 너비", () => {
 
     const 남길것 = Number(/max-w-\[calc\(100%-(\d+)px\)\]/.exec(panel)?.[1]);
     expect(남길것).toBe(CHAT_MIN + HANDLE);
+  });
+});
+
+/**
+ * **기다리는 동안 움직이는 것이 보여야 한다** (2026-09-21 사용자 — 「모션을
+ * 줘서 실제 로딩되는 표시로 해줘… 이미지 생성 중에도 생성 중이라는 표시를
+ * 정확히 알 수 있게」).
+ *
+ * 전에는 둘 다 `animate-pulse` 였다. 옅어졌다 진해지는 것은 **멈춘 것과 구분이
+ * 안 된다** — 천천히 바뀌는 데다 내용은 그대로라 화면이 멎은 것인지 기다리는
+ * 것인지 알 수 없다.
+ */
+describe("기다리는 표시", () => {
+  const message = 화면("../_components/message.tsx");
+
+  it("답을 기다릴 때 점이 뛴다", () => {
+    expect(message).toContain("fixup-typing-dot");
+    // 셋이 **차례로** 뛰어야 흐르는 것으로 읽힌다. 같이 뛰면 깜빡이는 것이다.
+    expect(message).toContain("animationDelay");
+  });
+
+  /**
+   * 이미지는 30초에서 1분이 걸린다. 도는 표시만으로는 **살아 있는지** 알 수
+   * 없어서 지난 시간을 같이 낸다.
+   */
+  it("이미지를 만들 때 도는 표시·흐르는 막대·지난 시간을 함께 낸다", () => {
+    expect(message).toContain("animate-spin");
+    expect(message).toContain("fixup-working-bar");
+    expect(message).toContain("<ElapsedTime");
+  });
+
+  it("옅어졌다 진해지는 것으로 때우지 않는다", () => {
+    expect(코드("../_components/message.tsx")).not.toContain("animate-pulse");
+  });
+
+  /** 결과가 앉을 자리에서도 같은 판을 쓴다. 다르게 생기면 다른 일로 보인다. */
+  it("결과 칸에서도 같은 판으로 알린다", () => {
+    // **그려야 잡힌다.** 이름만 보면 안 쓰이는 import 하나로도 통과한다.
+    expect(panel).toContain("<EasyImageWorking");
+    expect(client).toContain("working={");
+  });
+});
+
+/**
+ * **칸이 주는 너비를 다 쓴다**(2026-09-21 사용자 — 「텍스트가 표시되는 영역이
+ * 작아보이는데… 양쪽 여백을 조금만 남기고」).
+ *
+ * `max-w-2xl`(672px)로 가운데에 묶어 뒀더니, 대화 칸을 넓혀 놔도 글은 그 너비에
+ * 갇혀 **양옆이 통째로 비었다.** 넓힐지는 구분선을 끄는 사람이 정한다.
+ */
+describe("대화 칸의 글 너비", () => {
+  it("글을 좁은 단에 가두지 않는다", () => {
+    expect(코드("../easy-client.tsx")).not.toContain("max-w-2xl");
   });
 });

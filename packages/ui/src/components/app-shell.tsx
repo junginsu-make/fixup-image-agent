@@ -33,17 +33,34 @@ import {
  * 설계: docs/superpowers/specs/2026-07-21-ui-overhaul-design.md §2
  */
 
+interface NavLink {
+  href: string;
+  label: string;
+  desc?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  /**
+   * 갈래 머리말 (2026-09-21 사용자).
+   *
+   * **목록을 평평하게 둔다.** 갈래를 중첩된 자료로 만들면 `navGroupsFor` 도
+   * 모바일 메뉴도 시험도 전부 두 겹을 알아야 한다. 앞 항목과 이름이 다를 때
+   * 머리말을 내면 화면만 두 겹으로 보인다.
+   */
+  section?: string;
+}
+
 interface NavGroup {
   label: string;
   /** 다른 메뉴와 다르게 보여야 하는 그룹. 지금은 설명서 하나뿐이다. */
   highlight?: boolean;
-  items: Array<{
-    href: string;
-    label: string;
-    desc?: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }>;
+  items: NavLink[];
 }
+
+/**
+ * 갈래 이름. **한 곳에서 정한다** — 항목마다 손으로 적으면 한 글자 달라진
+ * 순간 머리말이 둘로 쪼개진다.
+ */
+const IMAGE = "이미지";
+const PAGE = "상세페이지";
 
 const navGroups: NavGroup[] = [
   {
@@ -54,6 +71,16 @@ const navGroups: NavGroup[] = [
     items: [{ href: "/guide", label: "사용 설명서", desc: "도구마다 무엇을 하는지", icon: BookOpen }],
   },
   {
+    /*
+      **도구를 만드는 것으로 묶는다** (2026-09-21 사용자).
+
+      전에는 여섯이 한 줄로 늘어서 있었고, 이름이 전부 「○○ 만들기」로 끝나
+      **무엇이 무엇과 같은 일인지** 알 수 없었다. 「이미지 만들기」와 「Easy
+      모드」가 같은 것을 만든다는 사실이 이름에 없었다.
+
+      갈래로 묶으면 이름이 짧아진다 — 「상세페이지 > 만들기」는 「상세페이지
+      만들기」와 같은 말이고, 머리말이 그 절반을 대신 말한다.
+    */
     label: "도구",
     items: [
       /*
@@ -67,15 +94,22 @@ const navGroups: NavGroup[] = [
         고정인데 **Easy 만 화면이 통째로 바뀌어** 어디 와 있는지 알 수 없었다
         (2026-09-21). 지금은 `fill` 만 켜고 나머지는 다른 도구와 똑같다.
       */
-      { href: "/easy", label: "Easy 모드", desc: "말로 만들기", icon: Zap },
-      // 「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라
-      // 도구 목록에 나란히 두면 별개의 도구로 보인다. 카드뉴스 첫 화면
-      // 오른쪽 위에 「내 카드뉴스 만들기」로 둔다.
-      { href: "/sns", label: "카드뉴스 만들기", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft },
-      { href: "/poster", label: "이미지 만들기", desc: "광고 소재·포스터·일반 이미지", icon: Frame },
-      { href: "/create", label: "상세페이지 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },
-      { href: "/redesign", label: "상세 페이지 리디자인", desc: "기존 페이지 개선", icon: RefreshCw },
-      { href: "/characters", label: "캐릭터 만들기", desc: "인물을 고정해 재사용", icon: UserRound },
+      { href: "/easy", label: "쉽게", desc: "말로 만들기", icon: Zap, section: IMAGE },
+      { href: "/poster", label: "다양하게", desc: "광고 소재·포스터·일반 이미지", icon: Frame, section: IMAGE },
+      /*
+        **카드뉴스가 여기 있는 것은 우리 판단이다.** 2026-09-21 에 받은 차례에는
+        네 개(쉽게·다양하게·캐릭터·광고소재)뿐이고 카드뉴스가 없었다. 빼면
+        **메뉴에서 갈 길이 사라지므로** 같은 갈래에 둔다 — 여러 장이어도 나오는
+        것은 이미지다. 자리를 옮기라고 하면 한 줄이다.
+
+        「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라 도구
+        목록에 나란히 두면 별개의 도구로 보인다. 카드뉴스 첫 화면 오른쪽 위에
+        「내 카드뉴스 만들기」로 둔다.
+      */
+      { href: "/sns", label: "카드뉴스", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft, section: IMAGE },
+      { href: "/characters", label: "캐릭터", desc: "인물을 고정해 재사용", icon: UserRound, section: IMAGE },
+      { href: "/create", label: "만들기", desc: "사진 또는 텍스트로", icon: Sparkles, section: PAGE },
+      { href: "/redesign", label: "리디자인", desc: "기존 페이지 개선", icon: RefreshCw, section: PAGE },
     ],
   },
   // 「수집」 묶음(수집함 · 수집 리스트)은 2026-09-10 에 뺐다. 운영자 판단으로
@@ -114,17 +148,20 @@ const adminItem = {
 /**
  * 광고 규격 내보내기. **스위치가 켜졌을 때만 낸다.**
  *
- * 「만들고 → 뽑는」 차례가 눈에 보이게 `이미지 만들기` 바로 뒤에 둔다. 그
- * 도구의 설명이 이미 「광고 소재·포스터·일반 이미지」다.
+ * **이미지 갈래의 맨 끝에 둔다**(2026-09-21 사용자가 정한 차례 — 쉽게 ·
+ * 다양하게 · 캐릭터 · 광고소재). 전에는 「만들고 → 뽑는」 차례가 보이게
+ * `/poster` 바로 뒤였는데, 갈래가 생기면서 **갈래 안의 자리**가 그 뜻을 대신
+ * 한다 — 같은 묶음에 있는 것이 곧 이어지는 일이라는 말이다.
  *
  * **새로 만드는 곳이 아니다.** 이미 있는 그림에서 규격을 뽑으므로 비용이 0 이고,
  * 그래서 「도구」에 있어도 여기를 먼저 눌러 돈이 나가는 일이 없다.
  */
-const adItem = {
+const adItem: NavLink = {
   href: "/ad",
-  label: "광고 규격으로 내보내기",
-  desc: "만든 그림에서 포털 규격 뽑기",
+  label: "광고소재",
+  desc: "만든 이미지에서 포털 규격 뽑기",
   icon: Megaphone,
+  section: IMAGE,
 };
 
 /**
@@ -137,10 +174,15 @@ const adItem = {
 export function navGroupsFor(hasAd: boolean): NavGroup[] {
   if (!hasAd) return navGroups;
   return navGroups.map((group) => {
-    const at = group.items.findIndex((item) => item.href === "/poster");
-    if (at < 0) return group;
+    /*
+      **이미지 갈래의 맨 끝에 끼운다.** 갈래 한가운데에 넣으면 머리말이
+      쪼개진다 — 화면은 「앞 항목과 갈래가 다르면 머리말」로 그리므로,
+      갈래가 섞이는 순간 같은 이름의 머리말이 두 번 뜬다.
+    */
+    const last = group.items.map((item) => item.section).lastIndexOf(IMAGE);
+    if (last < 0) return group;
     const items = [...group.items];
-    items.splice(at + 1, 0, adItem);
+    items.splice(last + 1, 0, adItem);
     return { ...group, items };
   });
 }
@@ -398,13 +440,17 @@ export function AppShell({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                {/*
+                  **여기서는 갈래를 이름 앞에 붙인다.** 한 줄로 늘어놓는 목록이라
+                  「만들기」·「리디자인」만으로는 무엇의 만들기인지 알 수 없다.
+                */}
                 {allLinks.map((link) => (
                   <DropdownMenuItem key={link.href} asChild>
                     <Link
                       href={link.href}
                       className={cn("w-full", isActive(link.href) && "font-bold")}
                     >
-                      {link.label}
+                      {link.section ? `${link.section} · ${link.label}` : link.label}
                     </Link>
                   </DropdownMenuItem>
                 ))}
@@ -458,14 +504,27 @@ export function AppShell({
               >
                 {group.label}
               </p>
+              {/*
+                **갈래가 바뀌면 머리말을 낸다.** 목록은 평평하고 화면만 두 겹으로
+                보인다 — 자료를 중첩시키면 메뉴를 읽는 곳 셋이 전부 두 겹을
+                알아야 한다(2026-09-21).
+              */}
               <div className="grid gap-0.5">
-                {group.items.map((item) => (
-                  <NavItem
-                    key={item.href}
-                    {...item}
-                    active={isActive(item.href)}
-                    highlight={group.highlight}
-                  />
+                {group.items.map((item, at) => (
+                  <React.Fragment key={item.href}>
+                    {item.section && item.section !== group.items[at - 1]?.section ? (
+                      <p className="mb-1 mt-3 px-1.5 text-meta font-bold text-foreground first:mt-0">
+                        {item.section}
+                      </p>
+                    ) : null}
+                    <div className={cn(item.section && "pl-2")}>
+                      <NavItem
+                        {...item}
+                        active={isActive(item.href)}
+                        highlight={group.highlight}
+                      />
+                    </div>
+                  </React.Fragment>
                 ))}
               </div>
             </div>

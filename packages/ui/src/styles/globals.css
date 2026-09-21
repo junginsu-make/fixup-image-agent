@@ -294,6 +294,43 @@
   }
 }
 
+/* 말이 오는 중이라는 표시 — 점 셋이 차례로 뛴다.
+
+   2026-09-21 사용자 — 「생각하는 중.. 뭐 이런식으로만 텍스트로 보여도 되지만
+   뭔가 저기에 모션을 줘서 실제 로딩되는 표시로 해줘」.
+
+   전에는 `animate-pulse` 로 글자만 옅어졌다 진해졌다 했다. 그건 **멈춘 것과
+   구분이 안 된다** — 천천히 바뀌는 데다 글자 자체는 그대로라, 화면이 멎은
+   것인지 기다리는 것인지 알 수 없었다.
+
+   점이 뛰는 것은 채팅의 관례다. 셋이 **차례로** 뛰어야 「흐르고 있다」로
+   읽힌다 — 같이 뛰면 그냥 깜빡이는 것이다. 늦추는 몫은 화면이 준다.
+
+   **진행률이 아니다.** 얼마나 갔는지는 모른다. 살아 있다는 뜻만 있다. */
+@keyframes fixup-typing {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  35% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.fixup-typing-dot {
+  animation: fixup-typing 1200ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixup-typing-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
 /* 「지금 돌고 있다」고 말하는 막대.
 
    도는 표시(`animate-spin`)만으로는 멀리서 안 보인다. 04 에서 기획이 저절로

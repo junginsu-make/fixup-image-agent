@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, PanelLeft, Send, Sparkles } from "lucide-react";
+import { ImagePlus, PanelLeft, Send } from "lucide-react";
 import { Button, Textarea, cn } from "@fixup/ui";
 import { DEFAULT_TEXT_MODEL } from "@fixup/shared";
 import { randomId } from "../../lib/browser-safe";
-import { EasyMessageRow } from "./_components/message";
+import { EasyMessageRow, EasyThinkingRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
@@ -324,7 +324,16 @@ export function EasyClient({
           글이 위로 튀어 올라가** 그쪽이 더 이상했다. 채팅은 처음부터 위에서
           시작하는 것이 관례다.
         */}
-        <div className="mx-auto grid w-full max-w-2xl gap-4 px-4 py-6">
+        {/*
+          **칸이 주는 너비를 다 쓴다**(2026-09-21 사용자 — 「텍스트가 표시되는
+          영역이 작아보이는데 굳이 이렇게 할 필요가 있을까? 양쪽 여백을 조금만
+          남기고」).
+
+          `max-w-2xl`(672px)로 가운데에 묶어 뒀다. 대화 칸을 넓혀 놔도 글은 그
+          너비에 갇혀서, **양옆이 통째로 빈 채로** 좁은 단에 글이 흘렀다.
+          넓힐지 말지는 구분선을 끄는 사람이 정한다 — 여기서 미리 정하지 않는다.
+        */}
+        <div className="grid w-full gap-4 px-6 py-6">
           {shown.map((message) => (
             <EasyMessageRow
               key={message.id}
@@ -343,19 +352,7 @@ export function EasyClient({
 
             그림이 이미 자리를 잡았으면 안 낸다. 기다리는 표시가 둘이 된다.
           */}
-          {turn.busy && shown[shown.length - 1]?.role === "user" ? (
-            <div className="flex items-start gap-2">
-              <span
-                aria-hidden
-                className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary"
-              >
-                <Sparkles className="size-3.5" />
-              </span>
-              <p className="animate-pulse rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm leading-6 text-subtle-foreground">
-                생각하는 중입니다
-              </p>
-            </div>
-          ) : null}
+          {turn.busy && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
 
           {/*
             붙일지 묻는 단추. **첫 화면에서 한 번만**이다 — 되묻지 않는다(§6).
@@ -390,7 +387,7 @@ export function EasyClient({
 
       {/* ── 붙인 그림 ── */}
       {attachments.length ? (
-        <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-2 px-4 pb-2 pt-1">
+        <div className="flex w-full flex-wrap gap-2 px-6 pb-2 pt-1">
           {attachments.map((one) => (
             <div key={one.id} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -414,7 +411,8 @@ export function EasyClient({
 
       {/* ── 입력 ── */}
       <div className="border-t border-border bg-background">
-        <div className="mx-auto w-full max-w-2xl px-4 py-3">
+        {/* 글과 **같은 폭**이라야 한 단으로 읽힌다. 위는 넓고 아래만 좁으면 어긋난다. */}
+        <div className="w-full px-6 py-3">
           <EasyModelBar
             textModel={textModel}
             imageModel={imageModel}
@@ -549,6 +547,8 @@ export function EasyClient({
           <EasyResultPanel
             url={lastImage}
             width={resultWidth}
+            /* 자리는 잡혔는데 주소가 아직 없으면 만드는 중이다. */
+            working={shown.some((one) => one.role === "image" && !urls[one.id])}
             onOpen={() => { if (lastImage) openViewer(lastImage); }}
           />
         </>
