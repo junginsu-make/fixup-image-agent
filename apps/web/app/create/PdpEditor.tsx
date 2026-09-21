@@ -3,6 +3,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
 import { createSectionFor } from "./scenario-sections";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { previewedLayer, type LayerPreview } from "./layer-preview";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
@@ -342,6 +343,8 @@ export function PdpEditor({
         })[0]
       )
   );
+  /** 끄는(크기를 바꾸는) 중인 레이어의 임시 값. 사연은 `layer-preview.ts`. */
+  const [layerPreview, setLayerPreview] = useState<LayerPreview>(null);
   const [overlaysBySection, setOverlaysBySection] = useState<Record<string, CanvasLayer[]>>(
     () => normalizeOverlayRecord(initialDraftState?.overlaysBySection ?? {})
   );
@@ -415,7 +418,15 @@ export function PdpEditor({
   const currentLayers = overlaysBySection[currentSectionKey] ?? [];
   const currentTextLayers = currentLayers.filter(isTextLayer);
   const currentShapeLayers = currentLayers.filter(isShapeLayer);
-  const selectedLayer = currentLayers.find((overlay) => overlay.id === selectedOverlayId) ?? null;
+  /*
+    **옆 숫자도 같이 움직여야 한다**(B-12-c 리뷰).
+
+    크기 손잡이를 끄는 동안 캔버스의 글자는 임시 글자 크기로 실시간으로
+    커지는데, 작업대의 「폭」·「크기」 칸은 확정값을 읽어 **손을 뗄 때까지
+    멈춰 있다가 한 번에 튀었다.** 같은 화면에 두 값이 어긋나 보인다.
+  */
+  const committedLayer = currentLayers.find((overlay) => overlay.id === selectedOverlayId) ?? null;
+  const selectedLayer = committedLayer ? previewedLayer(committedLayer, layerPreview) : null;
   const selectedTextLayer = selectedLayer && isTextLayer(selectedLayer) ? selectedLayer : null;
   const selectedShapeLayer = selectedLayer && isShapeLayer(selectedLayer) ? selectedLayer : null;
   const generatedCount = sections.filter((section) => Boolean(section.generatedImage)).length;
@@ -2029,12 +2040,21 @@ export function PdpEditor({
     };
   };
 
-  const handleResize = (
+  /** 크기 조절이 실제로 바꾸는 칸들. `Partial<CanvasLayer>` 로 그대로 쓰인다. */
+  type ResizeUpdates = { x?: number; y?: number; width?: number; height?: number; fontSize?: number };
+
+  /**
+   * 이 크기 조절이 만드는 값.
+   *
+   * **계산과 확정을 갈랐다**(B-12-c). 끄는 동안은 이 값을 임시 자리에만 담고,
+   * 놓을 때 한 번 확정한다. 전에는 프레임마다 확정했다.
+   */
+  const resizeUpdates = (
     overlay: CanvasLayer,
     direction: string,
     ref: HTMLElement,
     position: { x: number; y: number }
-  ) => {
+  ): ResizeUpdates => {
     const base = resizeSessionRef.current[overlay.id] ?? {
       width: toNumericSize(overlay.width, 320),
       height: toNumericSize(overlay.height, 92),
@@ -2046,31 +2066,47 @@ export function PdpEditor({
     const isHorizontalOnly = direction === "left" || direction === "right";
     const isVerticalOnly = direction === "top" || direction === "bottom";
 
-    if (isHorizontalOnly) {
-      updateOverlay(overlay.id, { width: nextWidth, x: position.x });
-      return;
-    }
-
-    if (isVerticalOnly) {
-      updateOverlay(overlay.id, { height: nextHeight, y: position.y });
-      return;
-    }
-
+    if (isHorizontalOnly) return { width: nextWidth, x: position.x };
+    if (isVerticalOnly) return { height: nextHeight, y: position.y };
     if (isShapeLayer(overlay)) {
-      updateOverlay(overlay.id, { width: nextWidth, height: nextHeight, x: position.x, y: position.y });
-      return;
+      return { width: nextWidth, height: nextHeight, x: position.x, y: position.y };
     }
 
     const scale = Math.max(nextWidth / Math.max(base.width, 1), nextHeight / Math.max(base.height, 1));
-    const nextFontSize = clampValue(Math.round(base.fontSize * scale), 10, 180);
-
-    updateOverlay(overlay.id, {
+    return {
       width: nextWidth,
       height: nextHeight,
       x: position.x,
       y: position.y,
-      fontSize: nextFontSize,
-    });
+      fontSize: clampValue(Math.round(base.fontSize * scale), 10, 180),
+    };
+  };
+
+  const handleResize = (
+    overlay: CanvasLayer,
+    direction: string,
+    ref: HTMLElement,
+    position: { x: number; y: number }
+  ) => {
+    updateOverlay(overlay.id, resizeUpdates(overlay, direction, ref, position));
+  };
+
+  /** 크기를 바꾸는 중에 보여 줄 값. 확정하지 않는다. */
+  const previewResize = (
+    overlay: CanvasLayer,
+    direction: string,
+    ref: HTMLElement,
+    position: { x: number; y: number }
+  ): LayerPreview => {
+    const updates = resizeUpdates(overlay, direction, ref, position);
+    return {
+      id: overlay.id,
+      x: updates.x ?? toNumericSize(overlay.x, 0),
+      y: updates.y ?? toNumericSize(overlay.y, 0),
+      width: updates.width,
+      height: updates.height,
+      fontSize: updates.fontSize,
+    };
   };
 
   const handleResizeStop = (overlayId: string) => {
@@ -2797,7 +2833,10 @@ export function PdpEditor({
                       }
                     />
 
-                    {[...currentShapeLayers, ...currentTextLayers].map((overlay) => (
+                    {[...currentShapeLayers, ...currentTextLayers].map((layer) => {
+                      // 끄는 중이면 임시 자리로 보여 준다. 확정은 놓을 때 한다.
+                      const overlay = previewedLayer(layer, layerPreview);
+                      return (
                       <Rnd
                         // 겉이 줄어 있으면 마우스 움직임도 그만큼 환산해야
                         // 잡은 자리와 실제 자리가 어긋나지 않는다.
@@ -2828,15 +2867,33 @@ export function PdpEditor({
                           setSelectedOverlayId(overlay.id);
                           setActiveColorPalette(null);
                         }}
-                        onDrag={(_, data) => handleOverlayDrag(overlay, data.x, data.y)}
-                        onDragStop={(_, data) => handleOverlayDrag(overlay, data.x, data.y)}
-                        onResize={(_, direction, ref, __, position) => handleResize(overlay, direction, ref, position)}
+                        /*
+                          **끄는 동안은 임시 자리에만 담는다**(B-12-c).
+
+                          전에는 프레임마다 확정해서, 60fps 드래그가 부모
+                          (`PdpMakerClient`)를 초당 60번 다시 그리고 저장
+                          시계를 61번 움직였다. 놓기 전의 중간 좌표는 저장할
+                          값이 아니다.
+                        */
+                        onDrag={(_, data) => setLayerPreview({ id: layer.id, x: data.x, y: data.y })}
+                        onDragStop={(_, data) => {
+                          // **확정은 언제나 `layer`.** 임시 객체를 넘기면 언젠가
+                          // 임시값을 확정하게 된다.
+                          handleOverlayDrag(layer, data.x, data.y);
+                          // 안 비우면 다음 렌더가 임시 자리를 계속 보여 준다.
+                          setLayerPreview(null);
+                        }}
+                        // 크기 조절도 같은 기계다. 놓을 때 한 번 확정한다.
+                        onResize={(_, direction, ref, __, position) =>
+                          setLayerPreview(previewResize(layer, direction, ref, position))
+                        }
                         onResizeStart={() => {
-                          handleResizeStart(overlay);
+                          handleResizeStart(layer);
                         }}
                         onResizeStop={(_, direction, ref, __, position) => {
-                          handleResize(overlay, direction, ref, position);
-                          handleResizeStop(overlay.id);
+                          handleResize(layer, direction, ref, position);
+                          handleResizeStop(layer.id);
+                          setLayerPreview(null);
                         }}
                         position={{ x: overlay.x, y: overlay.y }}
                         resizeHandleClasses={{
@@ -2900,7 +2957,8 @@ export function PdpEditor({
                           </div>
                         )}
                       </Rnd>
-                    ))}
+                      );
+                    })}
                   </div>
                   </div>
                 ) : (
