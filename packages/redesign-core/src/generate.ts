@@ -567,6 +567,30 @@ export function buildAnalyzePrompt(
   ].join("\n");
 }
 
+/**
+ * **쓸 만한 분석인가.**
+ *
+ * 기획이 쓰는 칸 중 하나라도 차 있으면 쓸 만하다고 본다. 넷 다 비면 모델이
+ * 아무 말도 안 한 것이고, 그 상태로 그리면 자료를 한 번도 안 읽은 페이지가
+ * 나온다.
+ *
+ * **엄하게 잡지 않는다.** 모델이 칸 이름을 조금 다르게 줘도 사람이 보기에
+ * 쓸 만한 답이면 통과해야 한다 — 여기서 과하게 막으면 멀쩡한 생성이 죽는다.
+ */
+function isUsableAnalysis(analysis: unknown): boolean {
+  if (!analysis || typeof analysis !== "object") return false;
+  const value = analysis as Record<string, unknown>;
+
+  if (value.product_inferred || value.design_language) return true;
+  if (typeof value.strategy === "string" && value.strategy.trim()) return true;
+  if (typeof value.diagnostic_summary === "string" && value.diagnostic_summary.trim()) return true;
+  if (Array.isArray(value.page_blueprint) && value.page_blueprint.length > 0) return true;
+  // 모델이 JSON 이 아닌 글로 답한 경우. 내용이 있으면 프롬프트에 실을 값이 된다.
+  if (typeof value.summary === "string" && value.summary.trim()) return true;
+
+  return false;
+}
+
 async function analyzeSource({
   provider,
   apiKey,
@@ -587,19 +611,76 @@ async function analyzeSource({
   const prompt = buildAnalyzePrompt(payload, modelInfo, transcript);
 
   try {
-    if (provider === "google") {
-      return await analyzeWithGoogle({ apiKey, prompt, references, onUsage });
+    const analysis = provider === "google"
+      ? await analyzeWithGoogle({ apiKey, prompt, references, onUsage })
+      : await analyzeWithOpenAI({ apiKey, prompt, references, onUsage });
+
+    /*
+      **터지는 실패만 실패가 아니다.**
+
+      분석이 비는 길은 둘인데 catch 는 던지는 쪽만 잡는다. 다른 하나는
+      **200 인데 본문이 빈 경우**다 — `parseMaybeJson` 은 절대 안 던지고
+      `{ summary: "" }` 를 정상 반환한다. 그대로 흐르면 프롬프트에
+      `분석 요약: {"summary":""}` 가 박힌 채 장마다 값이 나간다. 설계 §14.5 가
+      쓴 말 그대로의 「**빈 분석**으로 유료 생성」이다.
+
+      지어낼 수 있는 상황이 아니다. 기획 모델은 추론 모델이라 추론 토큰을 다
+      쓰면 200 에 빈 `output_text` 를 주고, Google 쪽은 안전차단이면
+      `candidates` 가 비어 빈 글자로 떨어진다.
+
+      **던져서 아래 catch 로 합류시킨다.** 사용자가 보는 말도, 상태도, 크레딧도
+      터진 실패와 똑같아야 한다.
+    */
+    if (!isUsableAnalysis(analysis)) {
+      throw new Error(`분석 응답이 비었습니다: ${JSON.stringify(analysis).slice(0, 200)}`);
     }
-    return await analyzeWithOpenAI({ apiKey, prompt, references, onUsage });
+    return analysis;
   } catch (error) {
-    return {
-      product_inferred: { category: "업로드 자료 기반 추정", confidence: 0.4 },
-      diagnostic_summary: `AI 분석 호출 실패: ${error instanceof Error ? error.message : "unknown"}`,
-      strategy: "원본 자료의 제품컷/USP/근거를 보존하고, 6~8장 섹션 구조로 전환 설계를 적용합니다.",
-      page_blueprint: [],
-      compliance_notes: "근거 없는 수치, 리뷰, 인증, 효과 표현은 생성하지 않습니다.",
-      verified_facts: []
-    };
+    /*
+      **여기서 멈춘다**(F-7-3).
+
+      전에는 지어낸 결과를 돌려줬다 — `page_blueprint: []` 에 만들어 낸 제품
+      추정과 일반론 전략이었다. 그 상태로 생성이 그대로 돌고 **장마다 값이
+      나간다.** 사용자는 자기 자료를 한 번도 안 읽은 페이지를 받고 그 값을 낸다.
+
+      더 나빴던 것은 **아무도 그 사실을 몰랐다**는 점이다. 실패는
+      `diagnostic_summary` 라는 글에만 남는데 그것을 화면에 띄우는 곳이 한
+      군데도 없었다.
+
+      예약은 생성 **앞**에 있다. 여기서 멈추면 크레딧은 0으로 닫히고 사용자는
+      아무것도 잃지 않는다.
+
+      **5xx 로 준다.** 4xx 면 화면이 「입력이 잘못됐다」로 읽어, 멀쩡한 자료를
+      다시 만들려고 애쓰게 된다.
+
+      **「이 요청에는」을 뺄 수 없다.** 일괄 생성은 한 장씩 여러 번 부르므로,
+      다섯째에서 멈췄으면 앞 네 장은 이미 차감됐다. 그냥 「크레딧은 사용되지
+      않았습니다」라고 하면 사용자가 읽는 단위(여덟 장 만들기)에서 거짓이 된다.
+    */
+    const detail = error instanceof Error ? error.message : String(error);
+    const status = typeof (error as { status?: unknown })?.status === "number"
+      ? (error as { status: number }).status
+      : undefined;
+    console.error(`[generate] 분석 실패로 중단 status=${status ?? "none"}`, error);
+
+    /*
+      **고칠 수 있는 실패를 「잠시 후 다시」로 뭉개지 않는다.**
+
+      제공자가 4xx 로 거절한 것은 **다시 시도해도 영원히 안 된다** — 키가
+      틀렸거나, 조직 인증이 안 됐거나, 올린 그림 형식이 안 맞는 경우다.
+      `humanizeProviderError` 가 그 셋에 대해 무엇을 하면 되는지 적어 두었는데,
+      전부 502 로 덮으면 그 안내가 **도달할 수 없는 글**이 된다.
+
+      429(한도)는 뺀다. 그것은 진짜로 잠시 후 다시다.
+    */
+    if (status !== undefined && status >= 400 && status < 500 && status !== 429) {
+      throw new RedesignError(humanizeProviderError(detail), 400);
+    }
+
+    throw new RedesignError(
+      "업로드한 자료를 분석하지 못했습니다. 잠시 후 다시 시도해 주세요. 이 요청에는 크레딧이 사용되지 않았습니다.",
+      502,
+    );
   }
 }
 
@@ -657,7 +738,12 @@ async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiK
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response));
+  // **상태를 싣는다.** 4xx 는 다시 시도해도 안 된다 — 아래 catch 가 갈라 준다.
+  if (!response.ok) {
+    throw Object.assign(new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response)), {
+      status: response.status,
+    });
+  }
   reportUsage(onUsage, ANALYSIS_MODEL, data);
   const text = data.output_text || extractOpenAIText(data);
   return parseMaybeJson(text);
@@ -684,7 +770,11 @@ async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiK
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response));
+  if (!response.ok) {
+    throw Object.assign(new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response)), {
+      status: response.status,
+    });
+  }
   reportUsage(onUsage, GOOGLE_READING_MODEL, data);
   const text = data?.candidates?.[0]?.content?.parts?.find((part: { text?: string }) => part.text)?.text || "";
   return parseMaybeJson(text);

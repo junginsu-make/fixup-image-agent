@@ -20,6 +20,7 @@ import {
 } from "@fixup/shared";
 import { splitFilesToStrips, runTranscription } from "./transcribe-client";
 import { randomId } from "../../lib/browser-safe";
+import { batchSummaryMessage } from "./batch-summary";
 import {
   REDESIGN_STEPS,
   commerceTips,
@@ -102,6 +103,8 @@ export function RedesignWizard() {
   const knowledgeInputRef = React.useRef<HTMLInputElement>(null);
   const generationAbortRef = React.useRef<AbortController | null>(null);
   const retryRequestKeysRef = React.useRef<Record<string, string>>({});
+  /** 안쪽이 남기고 바깥 요약이 실어 보낸다. 사연은 `batch-summary.ts`. */
+  const lastGenerateErrorRef = React.useRef("");
   const transcriptCacheRef = React.useRef<{ key: string; transcript: string | null } | null>(null);
 
   React.useEffect(() => {
@@ -196,6 +199,7 @@ export function RedesignWizard() {
       });
       let workingProject: Project | null = null;
       let completed = 0;
+      lastGenerateErrorRef.current = ""; // 지난 번 실패가 이번 요약에 따라붙으면 안 된다.
       for (let sectionNumber = startSection; sectionNumber < startSection + outputCount; sectionNumber += 1) {
         const nextProject = await generate(1, outputRolloutRequest, sectionNumber, workingProject, outputCount, sectionNumber - startSection + 1);
         if (!nextProject) break;
@@ -211,7 +215,7 @@ export function RedesignWizard() {
         skipped: Math.max(0, outputCount - completed - (completed < outputCount ? 1 : 0)),
         finishedAt: Date.now(),
       });
-      setToast(`일괄 생성 결과: 성공 ${completed}장${completed < outputCount ? ` · 확인 필요 1장 · 미시도 ${Math.max(0, outputCount - completed - 1)}장` : ""}. 성공한 이미지만 차감됐습니다.`);
+      setToast(batchSummaryMessage({ requested: outputCount, completed, reason: lastGenerateErrorRef.current }));
       return workingProject;
     }
 
@@ -396,8 +400,10 @@ export function RedesignWizard() {
         skipped: 0,
         finishedAt: Date.now(),
       });
+      const 사유 = error instanceof Error ? error.message : "이미지 생성 중 오류가 발생했습니다.";
+      lastGenerateErrorRef.current = isAbortError(error) ? "" : 사유; // 바깥 요약이 덮기 전에 남긴다.
       if (isAbortError(error)) setToast("생성 요청을 취소했습니다. 서버 처리 여부는 사용량에서 확인해 주세요.");
-      else setToast(error instanceof Error ? error.message : "이미지 생성 중 오류가 발생했습니다.");
+      else setToast(사유);
       return null;
     } finally {
       if (generationAbortRef.current === abortController) generationAbortRef.current = null;
