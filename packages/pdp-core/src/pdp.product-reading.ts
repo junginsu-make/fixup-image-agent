@@ -1,3 +1,4 @@
+import { GROUNDING_RULE } from "@fixup/shared";
 import { Type } from "./pdp.llm";
 import type { GapPolicy } from "./types";
 
@@ -94,7 +95,7 @@ export const PRODUCT_GROUNDING_RULES = `# 카피는 제품에서 나와야 한�
   "원목 캡을 열면" 은 이 제품에만 붙는다.
 - 제품의 **형태·재질·구조**를 카피에 적극적으로 끌어들인다. 사진에 보이는 것이
   가장 확실한 근거이고, 읽는 사람도 사진에서 바로 확인할 수 있다.
-- unknowns 에 있는 것을 사실로 주장하지 않는다. 효능·수치·인증·후기를 지어내지 않는다.
+- unknowns 에 있는 것을 사실로 주장하지 않는다. ${GROUNDING_RULE}
 - labelText 에 있는 브랜드명·제품명은 **그 표기 그대로** 쓴다. 새 이름을 만들지 않는다.`;
 
 /**

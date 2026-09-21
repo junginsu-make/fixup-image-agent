@@ -4,6 +4,7 @@ import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys"
 import { authenticateApiMember, settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { readRedesignForm } from "../../../../lib/pdp/request";
 import { chunkCreditUnits } from "../../../../lib/redesign/chunk-billing";
+import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
@@ -87,10 +88,28 @@ async function generate(req: Request) {
       jobIndex: Number(form.get("jobIndex") ?? 0),
       chunkCount: requestedCount,
     });
+    /*
+      **문지기를 먼저 지난다**(F-7-1, C-9 와 같은 판단).
+
+      상세페이지는 낯선 바이트를 받는 문에 문지기가 있는데(`lib/pdp/image-gate.ts`)
+      리디자인에는 없었다. 코어의 `prepareReferenceImages` 는
+      `file.type || guessMimeType(이름)` 으로 **딱지를 믿는다** — `.png` 라는
+      이름의 글자가 참조로 모델에 가고, 16383×16383 단색 PNG(수백 KB)가 통과해
+      펼치면 1GB 가 넘는다.
+
+      같은 회사의 같은 위험인데 한쪽 문만 잠겨 있었다. **도메인을 합치는 것이
+      아니라 문지기 계약을 함께 쓴다.**
+
+      예약보다 앞이다. 깨진 입력은 모델을 부르기 전에 끝나므로, 예약을 먼저
+      하면 값싼 실패로 한도를 태운다.
+    */
+    const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
+    const inspected = await inspectRedesignReferences(fileEntries);
+    if (!inspected.ok) return inspected.response;
+    const files: GenerateInputFile[] = inspected.files;
+
     reservation = await reserveAiUsage(req, "redesign_generate", 청구(requestedCount));
     if (!reservation.ok) return reservation.response;
-    const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
-    const files: GenerateInputFile[] = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, type: f.type, buffer: Buffer.from(await f.arrayBuffer()) })));
 
     /*
      * 등장인물을 고르면 섹션마다 같은 사람이 나온다.
@@ -210,4 +229,34 @@ function readReusableAnalysis(raw: FormDataEntryValue | null): unknown {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * 올린 원본이 정말 그림인가.
+ *
+ * **한 장이라도 나쁘면 막는다.** 남은 것으로 조용히 진행하면 사용자는 자기가
+ * 올린 것 중 하나가 빠진 줄 모른 채 값을 낸다.
+ *
+ * 바이트로 정한 종류를 그대로 넘긴다 — 딱지가 틀렸으면 고쳐서 넘겨야 모델이
+ * 받는 `data:` 앞머리가 실제와 맞는다.
+ */
+async function inspectRedesignReferences(
+  entries: File[],
+): Promise<{ ok: true; files: GenerateInputFile[] } | { ok: false; response: Response }> {
+  const files: GenerateInputFile[] = [];
+  for (const entry of entries) {
+    const buffer = Buffer.from(await entry.arrayBuffer());
+    const gate = await inspectUploadedImage(buffer);
+    if (!gate.ok) {
+      return {
+        ok: false,
+        response: Response.json(
+          { error: `${entry.name}: ${gate.message}` },
+          { status: gate.reason === "too_many_pixels" ? 413 : 400 },
+        ),
+      };
+    }
+    files.push({ name: entry.name, type: gate.mimeType, buffer });
+  }
+  return { ok: true, files };
 }

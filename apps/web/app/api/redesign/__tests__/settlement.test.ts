@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { referencePng } from "../../../../lib/__tests__/fixtures/reference-png";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), reserve: vi.fn(), finalize: vi.fn(), settle: vi.fn(), generate: vi.fn(), edit: vi.fn(), makeGenerator: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../../../../lib/membership/api", () => ({ authenticateApiMember: mocks.auth, reserveAiUsage: mocks.reserve,
@@ -18,6 +19,9 @@ vi.mock("../../../../lib/characters", () => ({ loadCharacterView: async () => nu
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 vi.mock("@fixup/redesign-core", async () => ({ ...(await vi.importActual("@fixup/redesign-core")), generateSections: mocks.generate, editSection: mocks.edit }));
 const { POST: generate } = await import("../generate/route");
+/** 진짜 PNG 바이트. 라우트 문지기가 딱지가 아니라 바이트를 본다(F-7-1). */
+const 진짜png = await referencePng();
+const 원본 = () => new File([Uint8Array.from(진짜png)], "p.png", { type: "image/png" });
 const { POST: edit } = await import("../edit-section/route");
 beforeEach(() => {
   vi.resetAllMocks();
@@ -30,7 +34,7 @@ beforeEach(() => {
 });
 describe("T-SETTLE: 리디자인 생성과 수정", () => {
   it("정산 실패가 생성 결과를 버리지 않는다", async () => {
-    const form = new FormData(); form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+    const form = new FormData(); form.append("files", 원본());
     const response = await generate(new Request("http://local/api/redesign/generate", { method: "POST", body: form }));
     expect(response.status).toBe(200); expect((await response.json()).project.sections).toHaveLength(1);
     expect(mocks.settle).toHaveBeenCalledTimes(1); expect(mocks.finalize).not.toHaveBeenCalled();
@@ -99,7 +103,7 @@ describe("T-COST: 리디자인 섹션 수정", () => {
 describe("T-COST: 리디자인 모델 선택", () => {
   const 폼 = (model: string) => {
     const form = new FormData();
-    form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+    form.append("files", 원본());
     form.append("model", model);
     return new Request("http://local/api/redesign/generate", { method: "POST", body: form });
   };

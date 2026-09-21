@@ -1,6 +1,7 @@
 import { RedesignError } from "./errors.js";
 import type { RedesignStrip } from "./transcribe-batching.js";
 import { reportUsage, type UsageReporter } from "./usage.js";
+import { assertNotTruncated } from "./truncation.js";
 
 const OPENAI_ANALYSIS_MODEL = process.env.OPENAI_ANALYSIS_MODEL || "gpt-5.5";
 export const GOOGLE_READING_MODEL = process.env.GOOGLE_READING_MODEL || "gemini-3.1-pro-preview";
@@ -126,6 +127,14 @@ async function callOpenAiReading({ apiKey, prompt, strips, signal, onUsage }: { 
   // **실패해도 적는다.** 모델이 돌다가 끊긴 경우에도 값은 이미 나갔다.
   reportUsage(onUsage, OPENAI_ANALYSIS_MODEL, data);
   if (!response.ok) throw new RedesignError(data?.error?.message || "OpenAI 전사 요청 실패", 502);
+  /*
+    **끝까지 못 쓴 전사를 온전한 것처럼 쓰지 않는다**(F-7-1).
+
+    잘리면 JSON 이 깨져 화면이 그 배치를 「[구간 전사 실패]」 자리표시로
+    바꾼다 — 그것이 맞다. 여기서 안 보면 **조각난 전사가 온전한 것처럼**
+    기획으로 흘러간다.
+  */
+  assertNotTruncated(data, OPENAI_ANALYSIS_MODEL);
   return data.output_text || (data.output?.flatMap((i: any) => i.content || []).map((c: any) => c.text || "").join("\n") ?? "");
 }
 
@@ -142,6 +151,7 @@ async function callGoogleReading({ apiKey, prompt, strips, signal, onUsage }: { 
   const data = await readJson(response);
   reportUsage(onUsage, GOOGLE_READING_MODEL, data);
   if (!response.ok) throw new RedesignError(data?.error?.message || "Google 전사 요청 실패", 502);
+  assertNotTruncated(data, GOOGLE_READING_MODEL);
   return data?.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text || "";
 }
 

@@ -72,3 +72,8 @@ export {
   type RedesignStrip
 } from "./transcribe-batching.js";
 export { reportUsage, type LlmUsage, type UsageReporter } from "./usage.js";
+/*
+  프롬프트 조립기. **근거 계약을 실제로 싣는지 밖에서 재려면** 나와 있어야 한다
+  (F-7-1, `apps/web/lib/__tests__/grounding-contract.test.ts`).
+*/
+export { buildAnalyzePrompt, buildSections } from "./generate.js";

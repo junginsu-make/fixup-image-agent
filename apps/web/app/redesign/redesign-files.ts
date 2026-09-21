@@ -220,6 +220,31 @@ export function loadImageElement(file: File) {
   });
 }
 
+/**
+ * **참조 그림의 크기 한도**(F-7-1).
+ *
+ * 화면이 올리는 참조는 여기서 줄여 왔다. 그런데 **PDF 갈래만 줄이지 않았다** —
+ * `renderPdfToImages` 가 `scale: 1.6` 을 그대로 캔버스로 썼다.
+ *
+ * 그래서 **같은 원본이 확장자에 따라 갈렸다.** 1080×15000 을 PNG 로 올리면
+ * 조각내고 줄여 518×1800 로 가지만, 같은 것을 PDF 로 올리면 1728×24000
+ * (41.5백만 화소)로 올라갔다. 서버 문지기가 생긴 뒤로는 **그 갈래가 413 으로
+ * 막힌다** — 사용자에게는 「줄여서 올려 주세요」라고 하는데 PDF 라 줄일 방법이
+ * 없다(2026-09-21 리뷰).
+ *
+ * 한 곳에서 정한다. 이미지는 키우지 않으므로 기준 배율이 1 이고, PDF 는 글씨를
+ * 읽히려고 1.6 까지 키운 뒤 이 한도로 다시 조인다.
+ */
+export const REFERENCE_MAX_WIDTH = 1200;
+export const REFERENCE_MAX_HEIGHT = 1800;
+
+export function referenceRenderScale(sourceWidth: number, sourceHeight: number, baseScale = 1): number {
+  const width = Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : 1;
+  const height = Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : 1;
+  const base = Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1;
+  return Math.min(base, REFERENCE_MAX_WIDTH / width, REFERENCE_MAX_HEIGHT / height);
+}
+
 export async function cropImageToPngFile({
   image,
   sourceX,
@@ -237,9 +262,7 @@ export async function cropImageToPngFile({
   fileName: string;
   index: number;
 }) {
-  const maxWidth = 1200;
-  const maxHeight = 1800;
-  const scale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
+  const scale = referenceRenderScale(sourceWidth, sourceHeight);
   const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
   const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
   const canvas = document.createElement("canvas");
@@ -272,7 +295,13 @@ export async function renderPdfToImages(file: File) {
 
   for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 1.6 });
+    /*
+      **여기도 줄인다.** 전에는 1.6 을 그대로 썼다 — 한 장짜리 긴 상세페이지
+      PDF 가 41.5백만 화소로 올라가 서버 문지기에 막혔다. 이미지 갈래와 같은
+      한도로 조인다.
+    */
+    const raw = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: referenceRenderScale(raw.width, raw.height, 1.6) });
     const canvas = document.createElement("canvas");
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);

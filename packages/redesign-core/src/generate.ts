@@ -14,6 +14,8 @@ import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
 import { RedesignError } from "./errors.js";
 import { reportUsage } from "./usage.js";
+import { GROUNDING_RULE } from "@fixup/shared";
+import { assertNotTruncated, TRUNCATED_CODE } from "./truncation.js";
 import { GOOGLE_READING_MODEL } from "./transcribe.js";
 
 /**
@@ -567,7 +569,8 @@ export function buildAnalyzePrompt(
   return [
     "너는 전환율 중심 CRO 카피라이터 + 상세페이지 UX 디자이너 + 커머스 리서처다.",
     "업로드된 기존 상세페이지와 전사를 근거로 카테고리, USP, 타겟, 전환 저해 요소, 유지할 장점, 리디자인 전략을 한국어 JSON으로 요약하라.",
-    "근거 없는 수치/효과/리뷰/인증을 만들지 말고, 위험 표현은 안전하게 완화하라.",
+    // 지어내면 안 되는 것의 목록은 두 도구가 한 벌로 쓴다(F-7-1).
+    GROUNDING_RULE,
     `판매 채널: ${payload.options.channel}`,
     `추가 요청사항: ${payload.request || "전환율 중심으로 리디자인"}`,
     payload.rolloutRequest ? `히어로 검토 후 나머지 섹션에 반영할 요청: ${payload.rolloutRequest}` : "히어로 검토 후 요청: 없음",
@@ -696,6 +699,23 @@ async function analyzeSource({
       throw new RedesignError(humanizeProviderError(detail), 400);
     }
 
+    /*
+      **잘린 것도 「잠시 후 다시」가 아니다**(F-7-1).
+
+      다시 불러도 같은 길이를 쓴다. 할 일은 원본 장수를 줄이거나 상한을 올리는
+      것이고, 그 말이 이미 오류에 적혀 있다. 일반 문구로 덮으면 사용자가
+      같은 요청을 계속 다시 보낸다.
+    */
+    if ((error as { code?: unknown })?.code === TRUNCATED_CODE) {
+      /*
+        `error.message` 는 **이미 사용자에게 보일 말**이다. 모델 이름과
+        finishReason 은 `error.detail` 에만 있고 위 `console.error` 로만 나간다
+        — 상세페이지가 공급자 문구를 한 겹 번역해 내보내는 것과 같은 계약이다
+        (`pdp.service.ts`).
+      */
+      throw new RedesignError(detail, 422);
+    }
+
     throw new RedesignError(
       "업로드한 자료를 분석하지 못했습니다. 잠시 후 다시 시도해 주세요. 이 요청에는 크레딧이 사용되지 않았습니다.",
       502,
@@ -718,6 +738,22 @@ async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiK
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
+    /*
+      **출력 상한을 씌우지 않는다**(F-7-1 리뷰, 2026-09-21).
+
+      처음에는 상세페이지의 기획 상한(32,768)을 그대로 가져왔다. 리뷰가 잡았다 —
+      **여기는 원래 상한이 없었으므로 그것을 씌우는 것은 추가가 아니라 축소**다.
+      게다가 Responses 의 `max_output_tokens` 는 보이는 출력 **더하기 추론
+      토큰**이고, 이 모델은 추론 모델이다(추론을 다 쓰면 200 에 빈 `output_text`
+      가 온다는 사실이 이 파일에 이미 적혀 있다).
+
+      상세페이지의 32,768 은 **그쪽 기획 응답 10,463토큰을 재고** 정한 값이다.
+      리디자인 분석은 입력도 출력도 다른 작업이라 그 근거를 빌려 쓸 수 없다.
+
+      **구멍은 상한이 아니라 검사가 막는다.** 잘리면 `assertNotTruncated` 가
+      잡아 값이 나가기 전에 멈춘다. 상한은 장부의 `output_tokens` 분포를 보고
+      값으로 정한 뒤에 넣는다(`usage.ts` 가 그 값을 이미 보내고 있다).
+    */
     body: JSON.stringify({
       model: ANALYSIS_MODEL,
       input: [{ role: "user", content }]
@@ -732,6 +768,7 @@ async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiK
     });
   }
   reportUsage(onUsage, ANALYSIS_MODEL, data);
+  assertNotTruncated(data, ANALYSIS_MODEL);
   const text = data.output_text || extractOpenAIText(data);
   return parseMaybeJson(text);
 }
@@ -763,6 +800,7 @@ async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiK
     });
   }
   reportUsage(onUsage, GOOGLE_READING_MODEL, data);
+  assertNotTruncated(data, GOOGLE_READING_MODEL);
   const text = data?.candidates?.[0]?.content?.parts?.find((part: { text?: string }) => part.text)?.text || "";
   return parseMaybeJson(text);
 }
@@ -907,7 +945,7 @@ export function buildSections(
       "브랜드 사용 규칙: 제품 브랜드명과 제품명은 업로드된 원본 상세페이지 또는 제품 패키지에서 확인되는 이름만 사용한다. 원본에서 확인되지 않는 새 브랜드명, 새 제품명, 새 로고를 만들지 않는다.",
       "전체 연결 규칙: 8장을 이어 붙였을 때 하나의 상세페이지처럼 보여야 한다. 동일한 브랜드 색, 폰트 감각, 제품 사진 톤은 유지하되 각 섹션의 레이아웃은 반드시 다르게 구성한다. 모든 섹션이 큰 상단 헤드라인+중앙 제품컷으로 반복되면 안 된다.",
       "섹션별 변화 규칙: 제품 위치, 정보 카드 모양, 아이콘 밀도, 배경 분할, CTA 위치, 타이포 크기 리듬을 섹션마다 다르게 한다. 같은 헤드라인 문구를 반복하지 말고, 섹션 목적에 맞는 새로운 제목을 쓴다.",
-      "안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. 근거 없는 수치, 리뷰, 인증, 효과를 만들지 않는다. 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다. 규제 리스크가 있으면 안전한 표현으로 완화한다.",
+      `안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. ${GROUNDING_RULE} 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다.`,
       factsBlock,
       lookDirective,
       characterDirective ?? "",

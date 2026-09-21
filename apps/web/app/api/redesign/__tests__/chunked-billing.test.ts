@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { referencePng } from "../../../../lib/__tests__/fixtures/reference-png";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 
 /**
@@ -47,10 +48,14 @@ vi.mock("@fixup/redesign-core", async () => ({
 
 const { POST: generate } = await import("../generate/route");
 
+/** 진짜 PNG 바이트. 라우트 문지기가 딱지가 아니라 바이트를 본다(F-7-1). */
+const 진짜png = await referencePng();
+const 원본 = () => new File([Uint8Array.from(진짜png)], "p.png", { type: "image/png" });
+
 /** 한 청크(1장)를 부른다. `jobIndex` 는 논리 작업 안에서 몇 번째인가. */
 const 청크 = async (jobIndex: number, jobTotal: number, extra: Record<string, string> = {}) => {
   const form = new FormData();
-  form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+  form.append("files", 원본());
   form.append("model", "openai");
   form.append("count", "1");
   form.append("startSection", String(jobIndex));
@@ -119,7 +124,7 @@ describe("쪼개 불러도 한 번에 부른 값과 같다", () => {
    */
   it("**작업 정보가 없으면 한 장 값이다**", async () => {
     const form = new FormData();
-    form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+    form.append("files", 원본());
     form.append("count", "1");
     await generate(new Request("http://local/api/redesign/generate", { method: "POST", body: form }));
 
@@ -220,7 +225,7 @@ describe("자리를 꾸며 보내면 거절한다", () => {
 
   it.each(거절되는자리)("**%s 는 거절한다**", async (_label, jobIndex, jobTotal) => {
     const form = new FormData();
-    form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+    form.append("files", 원본());
     form.append("count", "1");
     form.append("jobIndex", jobIndex);
     form.append("jobTotal", jobTotal);
@@ -234,7 +239,7 @@ describe("자리를 꾸며 보내면 거절한다", () => {
 
   it("**모두 몇 장인지 없이 자리만 보내면 거절한다**", async () => {
     const form = new FormData();
-    form.append("files", new File(["image"], "p.png", { type: "image/png" }));
+    form.append("files", 원본());
     form.append("count", "1");
     form.append("jobIndex", "5");
 

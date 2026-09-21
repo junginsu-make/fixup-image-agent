@@ -97,3 +97,93 @@ describe("전사가 쓴 토큰을 받아 적는다", () => {
     expect(받은것).toHaveLength(0);
   });
 });
+
+/**
+ * **끝까지 못 쓴 전사를 온전한 것처럼 쓰지 않는다**(F-7-1).
+ *
+ * 같은 꾸러미의 분석 호출은 잘림을 보는데 전사는 안 봤다. 잘리면 JSON 이
+ * 깨져 화면이 그 배치를 「[구간 전사 실패]」 자리표시로 바꾸는데, **안 보면
+ * 조각난 전사가 온전한 것처럼** 기획으로 흘러간다.
+ */
+describe("잘린 전사를 온전한 것처럼 쓰지 않는다", () => {
+  /**
+   * **본문이 멀쩡해 보여도 표시를 믿는다.**
+   *
+   * 처음 시험은 몸통을 깨진 JSON 으로 줬는데, 그러면 **검사를 지워도 파싱이
+   * 먼저 터져** 시험이 빨개졌다 — 검사가 있는지 없는지를 가르지 못했다
+   * (2026-09-21 변이에서 드러남). 파싱되는 몸통으로 준다.
+   */
+  it("**OpenAI 가 잘렸다고 하면 던진다**", async () => {
+    답한다({
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      output_text: JSON.stringify({ transcript: "### 구간 1 앞부분만" }),
+    });
+
+    try {
+      await expect(transcribeStrips({
+        strips: [스트립], batchIndex: 0, batchCount: 1,
+        provider: "openai", openaiKey: "sk-test",
+      } as never)).rejects.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("**Google 이 정상(STOP)이 아니면 던진다**", async () => {
+    답한다({
+      candidates: [{
+        finishReason: "MAX_TOKENS",
+        content: { parts: [{ text: JSON.stringify({ transcript: "앞부분만" }) }] },
+      }],
+    });
+
+    try {
+      await expect(transcribeStrips({
+        strips: [스트립], batchIndex: 0, batchCount: 1,
+        provider: "google", googleKey: "g-test",
+      } as never)).rejects.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("**모델 이름을 사용자 문구에 넣지 않는다**", async () => {
+    답한다({
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      output_text: JSON.stringify({ transcript: "앞부분만" }),
+    });
+
+    try {
+      const 오류 = await transcribeStrips({
+        strips: [스트립], batchIndex: 0, batchCount: 1,
+        provider: "openai", openaiKey: "sk-test",
+      } as never).catch((e: unknown) => e) as Error;
+
+      for (const 조각 of ["gpt-", "gemini", "preview"]) {
+        expect(오류.message.toLowerCase()).not.toContain(조각);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("**정상 응답은 그대로 지나간다**", async () => {
+    답한다({
+      candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ transcript: "### 구간 1" }) }] } }],
+    });
+
+    try {
+      const result = await transcribeStrips({
+        strips: [스트립], batchIndex: 0, batchCount: 1,
+        provider: "google", googleKey: "g-test",
+      } as never);
+
+      expect(result.transcript).toContain("구간 1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
