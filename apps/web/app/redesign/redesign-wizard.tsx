@@ -327,6 +327,8 @@ export function RedesignWizard() {
         ...data.project,
         title: projectDisplayTitle(data.project),
         // 어느 장이 왜 빠졌는지(F-7-8). 사연은 `failed-sections.ts`.
+        // 안 쓰인 참조가 있으면 그 사실을 들고 간다(N-9).
+        referenceNotice: data.project?.referenceNotice,
         failedSections: mergeFailedSections(
           baseProject?.failedSections,
           data.project?.failedSections,

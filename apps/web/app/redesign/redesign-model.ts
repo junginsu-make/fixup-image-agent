@@ -72,6 +72,14 @@ export type Project = {
    * 여덟 장을 통째로 다시 만들었다.
    */
   failedSections?: FailedSection[];
+  /**
+   * **안 쓰인 참조가 있으면 그 사실**(N-9, 설계 §1 불변조건 7).
+   *
+   * 참조를 상한에서 자르는 것 자체는 맞다. 문제는 **안 알리는 것**이었다 —
+   * 각도를 넷 고르고 원본이 세 장이면 각도 하나가 말없이 빠지고, 사용자는
+   * 결과가 왜 다른지 알 길이 없다.
+   */
+  referenceNotice?: string;
   analysis?: unknown;
   savedAt?: string;
 };

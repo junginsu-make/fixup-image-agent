@@ -1,3 +1,4 @@
+import { referenceBudgetNotice } from "./reference-budget";
 import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
@@ -514,6 +515,20 @@ export async function generateSections(input: GenerateSectionsInput) {
       analysis,
       sections: generatedSections,
       failedSections,
+      /*
+        **안 쓰인 참조를 말한다**(N-9, 설계 §1 불변조건 7).
+
+        참조를 상한에서 자르는 것 자체는 맞다 — 모델이 받을 수 있는 장수가
+        정해져 있다. 문제는 **안 알리는 것**이었다. 각도를 넷 고르고 원본이
+        세 장이면 각도 하나가 말없이 빠지고, 사용자는 결과가 왜 다른지
+        알 길이 없다.
+      */
+      referenceNotice: referenceBudgetNotice({
+        characterCount: characters.length,
+        attachedCharacterCount,
+        originalCount: references.length,
+        attachedCount: drawReferences.length,
+      }),
       warning: failedSections.length > 0
         ? `${generatedSections.length}장은 생성됐고 ${failedSections.length}장 이후는 실패했습니다. 정밀형 요청 제한이면 잠시 후 섹션별 재생성을 실행하세요.`
         : ""

@@ -77,3 +77,6 @@ export { reportUsage, type LlmUsage, type UsageReporter } from "./usage.js";
   (F-7-1, `apps/web/lib/__tests__/grounding-contract.test.ts`).
 */
 export { buildAnalyzePrompt, buildSections } from "./generate.js";
+
+/** 안 쓰인 참조를 말한다(N-9, 설계 §1 불변조건 7). */
+export { referenceBudgetNotice, type ReferenceBudgetInput } from "./reference-budget";

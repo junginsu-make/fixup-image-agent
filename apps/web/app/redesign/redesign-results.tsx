@@ -119,6 +119,15 @@ export function Results({
         <Button onClick={downloadAllImages} disabled={downloadableSections.length === 0}><Download className="size-4" />전체 다운로드</Button>
       </Topbar>
 
+      {project.referenceNotice ? (
+        <Card className="mb-4 border-warning/30">
+          <CardHeader>
+            <CardTitle>참고 이미지 일부가 쓰이지 않았습니다</CardTitle>
+            <CardDescription>{project.referenceNotice}</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
       {빠진장.length > 0 && (
         <Card className="mb-4 border-warning/30">
           <CardHeader>

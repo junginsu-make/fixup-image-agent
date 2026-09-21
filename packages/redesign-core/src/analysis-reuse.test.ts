@@ -121,3 +121,47 @@ describe("이미 한 기획을 다시 하지 않는다", () => {
     expect(나간것).toHaveLength(1);
   });
 });
+
+/**
+ * **안 쓰인 참조를 응답에 싣는다**(N-9, 설계 §1 불변조건 7).
+ *
+ * 참조를 상한에서 자르는 것 자체는 맞다. 문제는 **안 알리는 것**이었다 —
+ * 각도를 넷 고르고 원본이 세 장이면 각도 하나가 말없이 빠지고, 사용자는
+ * 결과가 왜 다른지 알 길이 없다.
+ *
+ * 말을 만들어 두고 응답에 안 실으면 아무것도 안 고친 것이다.
+ */
+describe("안 쓰인 참조를 응답에 싣는다", () => {
+  const 각도 = (name: string) => ({ name, mimeType: "image/png", buffer: Buffer.from("C") });
+
+  it("**덜 붙었으면 그 사실이 실린다**", async () => {
+    분석을센다();
+
+    let result: { project?: { referenceNotice?: string } };
+    try {
+      // 원본 한 장 + 각도 넷. 상한(4장) 때문에 각도는 셋만 붙는다.
+      result = await generateSections(입력({
+        analysis: 쓸만한분석,
+        characters: [각도("정면"), 각도("측면"), 각도("후면"), 각도("상단")],
+      }) as never) as never;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(result.project?.referenceNotice).toBeTruthy();
+    expect(result.project?.referenceNotice).toContain("4장");
+  });
+
+  it("**다 붙었으면 아무 말도 안 실린다**", async () => {
+    분석을센다();
+
+    let result: { project?: { referenceNotice?: string } };
+    try {
+      result = await generateSections(입력({ analysis: 쓸만한분석 }) as never) as never;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(result.project?.referenceNotice).toBe("");
+  });
+});

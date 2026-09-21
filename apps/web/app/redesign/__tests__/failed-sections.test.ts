@@ -141,3 +141,38 @@ describe("화면이 그것을 쓴다", () => {
     expect(results).toContain("failedSectionLines(");
   });
 });
+
+/**
+ * **안 쓰인 참조를 화면이 말한다**(N-9, 설계 §1 불변조건 7).
+ *
+ * 리디자인은 참조를 상한에서 자른다. 그 자체는 맞다 — 모델이 받을 수 있는
+ * 장수가 정해져 있고, 자르는 차례에도 까닭이 있다(인물이 먼저, 원본 자리는
+ * 최소 한 장). **문제는 안 알리는 것이었다.**
+ *
+ * 각도를 넷 고르고 원본이 세 장이면 각도 하나가 말없이 빠진다. 사용자는
+ * 결과가 왜 다른지 알 길이 없다.
+ *
+ * 설계 §1 불변 조건 7: 「**참조를 조용히 버리거나**, 검사하지 못한 결과를
+ * 통과로 표시하지 않는다」.
+ */
+describe("안 쓰인 참조를 화면이 말한다", () => {
+  const 읽기2 = (name: string) =>
+    readFileSync(new URL(`../${name}`, import.meta.url), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+
+  it("**작업에 그 칸이 있다**", () => {
+    expect(읽기2("redesign-model.ts")).toContain("referenceNotice");
+  });
+
+  it("**응답의 값을 작업에 싣는다**", () => {
+    expect(읽기2("redesign-wizard.tsx")).toContain("referenceNotice");
+  });
+
+  it("**결과 화면이 그린다**", () => {
+    const results = 읽기2("redesign-results.tsx");
+
+    expect(results).toContain("project.referenceNotice");
+    expect(results).toContain("쓰이지 않았습니다");
+  });
+});
