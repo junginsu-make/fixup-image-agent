@@ -13,6 +13,12 @@ import { describe, expect, it } from "vitest";
  *
  *   2026-09-04  캐릭터 화면이 생 `fetch` 를 써서 만들기가 통째로 400
  *   2026-09-17  「내 카드뉴스 만들기」의 「칸 읽어내기」가 같은 이유로 400
+ *   2026-09-21  Easy 모드의 이미지 만들기가 같은 이유로 400
+ *
+ * 세 번째는 **이 검사도 비켜 갔다.** Easy 의 주소는 제가 예약하지 않는다 —
+ * 안에서 포스터 생성 라우트를 대신 부르며 원래 요청의 헤더를 그대로 넘긴다.
+ * 밖에서 보이는 주소는 Easy 것뿐이라, 열쇠를 안 붙이면 안쪽이 400 이 된다.
+ * 그래서 **대신 부르는 자리**도 목록에 넣는다.
  *
  * 둘 다 **로컬에서는 안 드러난다** — 인증 우회가 헤더 검사보다 먼저 지나간다.
  * 그래서 화면을 열어 보는 것으로는 못 잡는다.
@@ -56,6 +62,21 @@ const reservingPaths = files
   // 화면마다 「길목 하나만 쓴다」로 따로 잠가 두었다(`poster-client` 의
   // `billableRequest`, `sns/[id]` 의 `billableHeaders`).
   .filter((url) => !url.includes("["));
+
+/**
+ * **남의 라우트를 대신 부르는 주소.**
+ *
+ * 헤더를 그대로 넘겨 다른 라우트의 처리기를 부르면, 그 안쪽의 요구가 이 주소의
+ * 요구가 된다. 안쪽 주소는 칸(`[id]`)이 들어 원문으로 못 짝짓는데, **밖에서
+ * 부르는 주소는 짝지을 수 있다.**
+ */
+const relayingPaths = files
+  .filter(isRoute)
+  .filter((path) => {
+    const source = readFileSync(path, "utf8");
+    return /headers:\s*request\.headers/.test(source) && /from "[^"]*\/route"/.test(source);
+  })
+  .map((path) => path.slice(path.indexOf(join("app", "api")) + 3).replace(/\\/g, "/").replace(/\/route\.tsx?$/, ""));
 
 /** 열쇠를 붙이는 길. 어느 것이든 하나면 된다. */
 const ATTACHES_KEY = /billableFetch|billableHeaders|x-idempotency-key|apiJson/;
@@ -119,7 +140,12 @@ describe("크레딧이 깎이는 주소를 부르는 자리", () => {
     expect(reservingPaths.length).toBeGreaterThan(5);
   });
 
-  it.each(reservingPaths)("%s 를 쓰는 부름은 식별자를 붙인다", (url) => {
+  /** 못 찾으면 대신 부르는 자리가 통째로 검사 밖에 남는다. */
+  it("대신 부르는 주소도 찾았다", () => {
+    expect(relayingPaths).toContain("/api/easy/generate");
+  });
+
+  it.each([...new Set([...reservingPaths, ...relayingPaths])])("%s 를 쓰는 부름은 식별자를 붙인다", (url) => {
     let checked = 0;
     for (const path of files.filter((entry) => !isRoute(entry))) {
       const source = readFileSync(path, "utf8");

@@ -34,11 +34,6 @@ export interface ImageModel {
    * 길고 자세하다. 드롭다운 한 줄에는 안 들어간다 — 그래서 따로 둔다.
    */
   note?: string;
-  /**
-   * **옛 모델.** 저장된 작업이 이 id 를 들고 있어 지울 수 없지만, 새로 고를
-   * 까닭은 없다. 고르는 화면에서 뺀다.
-   */
-  legacy?: true;
   isDefault?: boolean;
   t2i: ModeSpec;
   i2i: ModeSpec;
@@ -172,8 +167,15 @@ export const IMAGE_MODELS: ImageModel[] = [
     id: "gpt-image-2",
     label: "정밀형",
     family: "gpt-image",
-    note: "이전 판입니다. 저장된 작업을 위해 남겨 둡니다",
-    legacy: true,
+    /*
+      **고르는 목록에 있다**(2026-09-21 사용자 — 「쉽게 만들기 모드에서 이미지
+      모델에 gpt-image-2 모델들도 추가해주세요」).
+
+      한 번 뺐었다. 「이전 판이라 새로 고를 까닭이 없다」고 봤는데, 실제로는
+      **글자가 가장 정확한 판**이라 고를 까닭이 있다. 그래서 설명도 「옛것」이
+      아니라 **무엇에 좋은지**로 적는다.
+    */
+    note: "한글 글자가 가장 정확합니다. 명조 계열도 표현합니다",
     t2i: { endpoint: "openai/gpt-image-2", table: GPT_T2I },
     i2i: { endpoint: "openai/gpt-image-2/edit", table: GPT_I2I },
     maxReferenceImages: 16,

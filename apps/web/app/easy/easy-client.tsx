@@ -6,6 +6,7 @@ import { ImagePlus, PanelLeft, Send } from "lucide-react";
 import { Button, Textarea, cn } from "@fixup/ui";
 import { DEFAULT_TEXT_MODEL } from "@fixup/shared";
 import { randomId } from "../../lib/browser-safe";
+import { billableFetch } from "../../lib/billable-fetch";
 import { EasyMessageRow, EasyThinkingRow } from "./_components/message";
 import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
@@ -218,9 +219,21 @@ export function EasyClient({
     setMessages((current) => [...current, { id: `user-${자리}`, role: "user", body: prompt }]);
 
     try {
-      const response = await fetch("/api/easy/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      /*
+        **`billableFetch` 로 보낸다**(2026-09-21 사용자 — 「이미지 생성이
+        안되는데?」 400).
+
+        크레딧이 깎이는 요청에는 서버가 `x-idempotency-key` 를 요구한다. 이
+        주소는 **직접 예약하지 않지만**, 안에서 포스터 생성 라우트를 부르며
+        원래 요청의 헤더를 그대로 넘긴다. 그래서 여기서 안 붙이면 그 안쪽이
+        400 「요청 식별자가 올바르지 않습니다」로 막는다.
+
+        **로컬에서는 안 드러난다.** 인증 우회가 헤더 검사보다 먼저 지나간다 —
+        `billable-fetch.ts` 주석이 적어 둔 그 함정에 2026-09-04(캐릭터) ·
+        09-17(카드뉴스)에 이어 **세 번째로 빠졌다.** 이번에는 대신 부르는
+        자리라 검사도 비켜 갔다. 그 구멍도 같이 막았다.
+      */
+      const response = await billableFetch("/api/easy/generate", {
         body: JSON.stringify({
           conversationId,
           prompt,
@@ -295,9 +308,12 @@ export function EasyClient({
       if (!alive.current) return undefined;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
       if (!alive.current) return undefined;
-      const poll = await (await fetch(`/api/poster/projects/${projectId}/status`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      /*
+        결과를 묻는 자리다. 예약이 아니라 **정산**이라 열쇠를 요구하지 않지만,
+        포스터 화면과 같은 길(`billableFetch`)로 보내 둔다 — 한 화면에서 두
+        길을 쓰면 어느 쪽이 무엇이었는지 다음 사람이 다시 알아봐야 한다.
+      */
+      const poll = await (await billableFetch(`/api/poster/projects/${projectId}/status`, {
         body: JSON.stringify(body),
       })).json();
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
