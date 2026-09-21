@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Menu, Sparkles, RefreshCw, Library, Settings, ShieldCheck, UserRound, Users, PanelsTopLeft, Frame, BookOpen, Megaphone, ChevronsLeft, ChevronsRight, Zap } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
@@ -33,17 +33,34 @@ import {
  * 설계: docs/superpowers/specs/2026-07-21-ui-overhaul-design.md §2
  */
 
+interface NavLink {
+  href: string;
+  label: string;
+  desc?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  /**
+   * 갈래 머리말 (2026-09-21 사용자).
+   *
+   * **목록을 평평하게 둔다.** 갈래를 중첩된 자료로 만들면 `navGroupsFor` 도
+   * 모바일 메뉴도 시험도 전부 두 겹을 알아야 한다. 앞 항목과 이름이 다를 때
+   * 머리말을 내면 화면만 두 겹으로 보인다.
+   */
+  section?: string;
+}
+
 interface NavGroup {
   label: string;
   /** 다른 메뉴와 다르게 보여야 하는 그룹. 지금은 설명서 하나뿐이다. */
   highlight?: boolean;
-  items: Array<{
-    href: string;
-    label: string;
-    desc?: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }>;
+  items: NavLink[];
 }
+
+/**
+ * 갈래 이름. **한 곳에서 정한다** — 항목마다 손으로 적으면 한 글자 달라진
+ * 순간 머리말이 둘로 쪼개진다.
+ */
+const IMAGE = "이미지";
+const PAGE = "상세페이지";
 
 const navGroups: NavGroup[] = [
   {
@@ -54,16 +71,45 @@ const navGroups: NavGroup[] = [
     items: [{ href: "/guide", label: "사용 설명서", desc: "도구마다 무엇을 하는지", icon: BookOpen }],
   },
   {
+    /*
+      **도구를 만드는 것으로 묶는다** (2026-09-21 사용자).
+
+      전에는 여섯이 한 줄로 늘어서 있었고, 이름이 전부 「○○ 만들기」로 끝나
+      **무엇이 무엇과 같은 일인지** 알 수 없었다. 「이미지 만들기」와 「Easy
+      모드」가 같은 것을 만든다는 사실이 이름에 없었다.
+
+      갈래로 묶으면 이름이 짧아진다 — 「상세페이지 > 만들기」는 「상세페이지
+      만들기」와 같은 말이고, 머리말이 그 절반을 대신 말한다.
+    */
     label: "도구",
     items: [
-      // 「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라
-      // 도구 목록에 나란히 두면 별개의 도구로 보인다. 카드뉴스 첫 화면
-      // 오른쪽 위에 「내 카드뉴스 만들기」로 둔다.
-      { href: "/sns", label: "카드뉴스 만들기", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft },
-      { href: "/poster", label: "이미지 만들기", desc: "광고 소재·포스터·일반 이미지", icon: Frame },
-      { href: "/create", label: "상세페이지 만들기", desc: "사진 또는 텍스트로", icon: Sparkles },
-      { href: "/redesign", label: "상세 페이지 리디자인", desc: "기존 페이지 개선", icon: RefreshCw },
-      { href: "/characters", label: "캐릭터 만들기", desc: "인물을 고정해 재사용", icon: UserRound },
+      /*
+        **맨 위에 둔다.** 처음 온 사람을 위한 것이라(설계 §2) 도구 목록 아래에
+        묻히면 뜻이 없다. 나머지 도구는 다섯 단계에 칸이 열한 개인데, 무엇을
+        적어야 할지 모르는 사람에게는 그것이 벽이다.
+
+        **이 셸 안에 산다.** 한때는 아니었다 — 「사이드바에 도구가 여섯 개
+        걸려 있으면 「쉬운 모드」가 아니다」라고 보고 `app/easy` 가 제 레이아웃을
+        썼다(2026-09-17). 써 보고 사용자가 뒤집었다: 다른 도구는 사이드바·상단바가
+        고정인데 **Easy 만 화면이 통째로 바뀌어** 어디 와 있는지 알 수 없었다
+        (2026-09-21). 지금은 `fill` 만 켜고 나머지는 다른 도구와 똑같다.
+      */
+      { href: "/easy", label: "쉽게", desc: "말로 만들기", icon: Zap, section: IMAGE },
+      { href: "/poster", label: "다양하게", desc: "광고 소재·포스터·일반 이미지", icon: Frame, section: IMAGE },
+      /*
+        **카드뉴스가 여기 있는 것은 우리 판단이다.** 2026-09-21 에 받은 차례에는
+        네 개(쉽게·다양하게·캐릭터·광고소재)뿐이고 카드뉴스가 없었다. 빼면
+        **메뉴에서 갈 길이 사라지므로** 같은 갈래에 둔다 — 여러 장이어도 나오는
+        것은 이미지다. 자리를 옮기라고 하면 한 줄이다.
+
+        「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라 도구
+        목록에 나란히 두면 별개의 도구로 보인다. 카드뉴스 첫 화면 오른쪽 위에
+        「내 카드뉴스 만들기」로 둔다.
+      */
+      { href: "/sns", label: "카드뉴스", desc: "여러 장으로 이야기하기", icon: PanelsTopLeft, section: IMAGE },
+      { href: "/characters", label: "캐릭터", desc: "인물을 고정해 재사용", icon: UserRound, section: IMAGE },
+      { href: "/create", label: "만들기", desc: "사진 또는 텍스트로", icon: Sparkles, section: PAGE },
+      { href: "/redesign", label: "리디자인", desc: "기존 페이지 개선", icon: RefreshCw, section: PAGE },
     ],
   },
   // 「수집」 묶음(수집함 · 수집 리스트)은 2026-09-10 에 뺐다. 운영자 판단으로
@@ -77,13 +123,17 @@ const navGroups: NavGroup[] = [
 ];
 
 // '계정'과 '설정'이 같은 화면(/settings)을 가리켜 메뉴가 둘로 보였다. 하나로 둔다.
-const bottomItems = [
+//
+// **`NavLink` 로 못 박는다.** 안 박으면 갈래 없는 모양으로 좁게 잡히고,
+// 위아래를 합친 `allLinks` 가 `section` 을 모르는 갈래를 품는다 — CI 의
+// 타입 검사가 그것을 잡았다(2026-09-21).
+const bottomItems: NavLink[] = [
   { href: "/settings", label: "계정", desc: "사용량·레퍼런스", icon: Settings },
 ];
 
 // 팀은 소속이 있는 사람에게만 낸다. 팀이 하나도 없는 회사에서 모두에게
 // 「팀」이 보이면, 눌러 봐야 빈 화면이라 메뉴만 늘어난다.
-const teamItem = {
+const teamItem: NavLink = {
   href: "/team",
   label: "팀",
   desc: "팀원·소속 관리",
@@ -92,7 +142,7 @@ const teamItem = {
 
 // 관리자는 다른 메뉴와 같은 자리에 둔다. 우측 상단 버튼으로 있을 때는 회원
 // 상태 표시에 섞여, 회원 관리·비용을 보러 갈 곳이 있다는 걸 알기 어려웠다.
-const adminItem = {
+const adminItem: NavLink = {
   href: "/admin",
   label: "관리자",
   desc: "회원·비용 관리",
@@ -102,17 +152,20 @@ const adminItem = {
 /**
  * 광고 규격 내보내기. **스위치가 켜졌을 때만 낸다.**
  *
- * 「만들고 → 뽑는」 차례가 눈에 보이게 `이미지 만들기` 바로 뒤에 둔다. 그
- * 도구의 설명이 이미 「광고 소재·포스터·일반 이미지」다.
+ * **이미지 갈래의 맨 끝에 둔다**(2026-09-21 사용자가 정한 차례 — 쉽게 ·
+ * 다양하게 · 캐릭터 · 광고소재). 전에는 「만들고 → 뽑는」 차례가 보이게
+ * `/poster` 바로 뒤였는데, 갈래가 생기면서 **갈래 안의 자리**가 그 뜻을 대신
+ * 한다 — 같은 묶음에 있는 것이 곧 이어지는 일이라는 말이다.
  *
  * **새로 만드는 곳이 아니다.** 이미 있는 그림에서 규격을 뽑으므로 비용이 0 이고,
  * 그래서 「도구」에 있어도 여기를 먼저 눌러 돈이 나가는 일이 없다.
  */
-const adItem = {
+const adItem: NavLink = {
   href: "/ad",
-  label: "광고 규격으로 내보내기",
-  desc: "만든 그림에서 포털 규격 뽑기",
+  label: "광고소재",
+  desc: "만든 이미지에서 포털 규격 뽑기",
   icon: Megaphone,
+  section: IMAGE,
 };
 
 /**
@@ -125,10 +178,15 @@ const adItem = {
 export function navGroupsFor(hasAd: boolean): NavGroup[] {
   if (!hasAd) return navGroups;
   return navGroups.map((group) => {
-    const at = group.items.findIndex((item) => item.href === "/poster");
-    if (at < 0) return group;
+    /*
+      **이미지 갈래의 맨 끝에 끼운다.** 갈래 한가운데에 넣으면 머리말이
+      쪼개진다 — 화면은 「앞 항목과 갈래가 다르면 머리말」로 그리므로,
+      갈래가 섞이는 순간 같은 이름의 머리말이 두 번 뜬다.
+    */
+    const last = group.items.map((item) => item.section).lastIndexOf(IMAGE);
+    if (last < 0) return group;
     const items = [...group.items];
-    items.splice(at + 1, 0, adItem);
+    items.splice(last + 1, 0, adItem);
     return { ...group, items };
   });
 }
@@ -173,6 +231,17 @@ interface AppShellProps {
    * (`NEXT_PUBLIC_` 을 새로 만들면 스위치가 둘이 된다).
    */
   hasAd?: boolean;
+  /**
+   * **한 화면에 꽉 채운다.** 본문이 제 안에서 스크롤하고 **페이지는 안 늘어난다.**
+   *
+   * 기본은 꺼짐이다. 대부분의 화면은 내용만큼 길어지고 페이지가 스크롤된다 —
+   * 그게 맞다. 켜야 하는 것은 **입력창이 아래에 붙어 있어야 하는 화면**뿐이다
+   * (2026-09-21 사용자 — Easy 모드도 다른 도구처럼 셸 안에 넣어 달라).
+   *
+   * 그런 화면을 셸 밖에 따로 만들면 사이드바와 상단바가 갈린다. 셸이 한 칸을
+   * 더 받는 편이 **두 벌로 사는 것보다 낫다.**
+   */
+  fill?: boolean;
   /**
    * 사이드바에 걸 프로젝트 목록.
    *
@@ -310,6 +379,7 @@ export function AppShell({
   isAdmin = false,
   hasTeam = false,
   hasAd = false,
+  fill = false,
   projects = [],
   currentProjectId = null,
   onSelectProject,
@@ -351,7 +421,12 @@ export function AppShell({
   const allLinks = [...visibleGroups.flatMap((g) => g.items), ...visibleBottomItems];
 
   return (
-    <div className="min-h-screen bg-background">
+    /*
+      `fill` 일 때만 화면 높이에 못 박는다. **넓은 화면에서만이다** — 좁은
+      화면은 위에 상단바가 있고, 거기서까지 높이를 못 박으면 상단바 높이만큼
+      본문이 넘쳐 페이지에 스크롤이 생긴다.
+    */
+    <div className={cn("min-h-screen bg-background", fill && "lg:h-dvh lg:overflow-hidden")}>
       {/* 좁은 화면 전용 상단바. 넓은 화면에서는 사이드바가 그 역할을 한다. */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur lg:hidden">
         <div className="flex h-14 items-center justify-between px-4">
@@ -369,13 +444,17 @@ export function AppShell({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                {/*
+                  **여기서는 갈래를 이름 앞에 붙인다.** 한 줄로 늘어놓는 목록이라
+                  「만들기」·「리디자인」만으로는 무엇의 만들기인지 알 수 없다.
+                */}
                 {allLinks.map((link) => (
                   <DropdownMenuItem key={link.href} asChild>
                     <Link
                       href={link.href}
                       className={cn("w-full", isActive(link.href) && "font-bold")}
                     >
-                      {link.label}
+                      {link.section ? `${link.section} · ${link.label}` : link.label}
                     </Link>
                   </DropdownMenuItem>
                 ))}
@@ -396,10 +475,16 @@ export function AppShell({
           shellSideWidth(collapsed),
         )}
       >
+        {/*
+          **사이드바는 자기 안에서만 스크롤한다.** 높이는 화면 높이에 못 박혀 있는데
+          메뉴가 그보다 길면(노트북·윈도우 배율 125% 이상) 아래 메뉴가 화면 밖으로
+          넘쳐 **페이지 전체**에 스크롤을 만들었다. 한 화면에 맞춘 작업 화면까지
+          그 때문에 스크롤이 생겼다(2026-09-17 사용자 요청).
+        */}
         <aside
           id="shell-sidebar"
           className={cn(
-            "sticky top-0 hidden h-screen flex-col gap-6 border-r bg-card px-3.5 py-4",
+            "sticky top-0 hidden h-screen flex-col gap-6 overflow-y-auto border-r bg-card px-3.5 py-4",
             collapsed ? "lg:hidden" : "lg:flex",
           )}
         >
@@ -423,14 +508,27 @@ export function AppShell({
               >
                 {group.label}
               </p>
+              {/*
+                **갈래가 바뀌면 머리말을 낸다.** 목록은 평평하고 화면만 두 겹으로
+                보인다 — 자료를 중첩시키면 메뉴를 읽는 곳 셋이 전부 두 겹을
+                알아야 한다(2026-09-21).
+              */}
               <div className="grid gap-0.5">
-                {group.items.map((item) => (
-                  <NavItem
-                    key={item.href}
-                    {...item}
-                    active={isActive(item.href)}
-                    highlight={group.highlight}
-                  />
+                {group.items.map((item, at) => (
+                  <React.Fragment key={item.href}>
+                    {item.section && item.section !== group.items[at - 1]?.section ? (
+                      <p className="mb-1 mt-3 px-1.5 text-meta font-bold text-foreground first:mt-0">
+                        {item.section}
+                      </p>
+                    ) : null}
+                    <div className={cn(item.section && "pl-2")}>
+                      <NavItem
+                        {...item}
+                        active={isActive(item.href)}
+                        highlight={group.highlight}
+                      />
+                    </div>
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -513,11 +611,22 @@ export function AppShell({
           통째로 빠지는데, 그러면 본문이 자동으로 첫 칸(0px)에 들어가 짜부라진다.
           자리를 지정해 두면 사이드바가 있든 없든 본문은 늘 남는 칸을 쓴다.
         */}
-        <div className="min-w-0 lg:col-start-2">
+        <div
+          className={cn(
+            "min-w-0 lg:col-start-2",
+            /*
+              **본문이 높이를 나눠 갖는다.** 상단바 줄은 제 키만 쓰고(`shrink-0`),
+              남는 자리를 `main` 이 다 가진다. 좁은 화면에서는 위 상단바를 뺀
+              만큼이다 — **`h-14`(3.5rem)에 아래 테두리 1px 을 더한 값이다.**
+              테두리를 빼먹어 900px 폭에서 1px 씩 페이지가 스크롤됐다(2026-09-21 실측).
+            */
+            fill && "flex h-[calc(100dvh-3.5rem-1px)] flex-col lg:h-dvh",
+          )}
+        >
           {/* 계정 상태와 테마 전환은 화면 오른쪽 위에 둔다. 예전에는 사이드바
               맨 아래에 있어서, 내가 누구로 접속했는지 보려면 눈이 왼쪽 아래로
               내려가야 했다. 좁은 화면은 위 상단바가 같은 것을 이미 보여준다. */}
-          <div className="hidden items-center justify-end gap-2 px-[clamp(16px,2.2vw,52px)] pt-4 lg:flex">
+          <div className="hidden shrink-0 items-center justify-end gap-2 px-[clamp(16px,2.2vw,52px)] pt-4 lg:flex">
             {actions}
             <ThemeToggle />
           </div>
@@ -531,7 +640,7 @@ export function AppShell({
             찾게 하지 않는다.
           */}
           {current ? (
-            <div className="mx-[clamp(16px,2.2vw,52px)] mt-4 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-sm">
+            <div className="mx-[clamp(16px,2.2vw,52px)] mt-4 flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-sm">
               <span className="font-bold text-primary">{current.name}</span>
               <span className="text-subtle-foreground">만 보고 있습니다</span>
               {onSelectProject ? (
@@ -546,8 +655,22 @@ export function AppShell({
             </div>
           ) : null}
 
-          {/* 페이지가 자기 <main> 을 또 열지 않도록 셸이 하나만 제공한다. */}
-          <main className="min-w-0 px-[clamp(16px,2.2vw,52px)] pb-6 pt-4">{children}</main>
+          {/*
+            페이지가 자기 <main> 을 또 열지 않도록 셸이 하나만 제공한다.
+
+            **`fill` 이면 여백을 안 준다.** 꽉 채우는 화면은 제 안에서 칸을
+            나누므로(대화 · 구분선 · 결과) 바깥 여백이 그 계산을 어긋나게 한다.
+          */}
+          <main
+            className={cn(
+              "min-w-0",
+              fill
+                ? "flex min-h-0 flex-1 flex-col"
+                : "px-[clamp(16px,2.2vw,52px)] pb-6 pt-4",
+            )}
+          >
+            {children}
+          </main>
         </div>
       </div>
     </div>

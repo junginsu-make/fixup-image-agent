@@ -1,3 +1,4 @@
+import { randomId } from "../../../lib/browser-safe";
 export interface LibraryImage {
   id: string;
   title: string | null;
@@ -49,7 +50,9 @@ export function fetchLibraryImages(fetcher: typeof fetch = fetch): Promise<Libra
  */
 export async function uploadLibraryImage(file: File): Promise<LibraryImage> {
   const form = new FormData();
-  form.append("id", crypto.randomUUID());
+  // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`lib/browser-safe.ts`).
+  // IP 로 연 화면에서는 이 줄이 그 자리에서 터진다 — Easy 에서 실제로 그랬다.
+  form.append("id", randomId());
   form.append("title", file.name.replace(/\.[^.]+$/, "").slice(0, 200));
   // 카드뉴스에서 쓸 그림이다. 라이브러리의 갈래와 같은 말을 쓴다.
   form.append("purpose", "cardnews");

@@ -15,7 +15,6 @@ import { describe, expect, it } from "vitest";
  * 자리다:
  *
  * - `effectiveRatio(adMode, …)` 를 `false` 로 → 광고 모드가 nano 에서 죽는다
- * - `projectCount(adMode, …)` 를 `false` 로 → 비용이 절반 이하로 보인다
  * - `posterSpecSections` 의 `adEnabled` 를 `true` 로 → 계약 5 가 사라진다
  * - `canCreatePoster` 의 `adMode` 를 `false` 로 → 과금 전 차단이 사라진다
  * - `modelId: choice.model.id` 를 `modelId` 로 → 화면 안내와 보내는 값이 어긋난다
@@ -30,10 +29,6 @@ const source = readFileSync(new URL("../new-client.tsx", import.meta.url), "utf8
 describe("판단이 살아 있는 상태에 이어져 있는가", () => {
   it("비율을 광고 모드에 따라 고른다", () => {
     expect(source).toContain("effectiveRatio(adMode, ratio)");
-  });
-
-  it("프로젝트 수를 광고 모드에 따라 센다", () => {
-    expect(source).toContain("projectCount(adMode,");
   });
 
   it("무엇을 그릴지 스위치와 모드 양쪽으로 정한다", () => {
@@ -194,8 +189,17 @@ describe("기본 장수가 이어져 있는가", () => {
  * 한 줄만 되살려도 아무도 모른다(2026-09-16).
  */
 describe("글만으로 만드는 길", () => {
+  /**
+   * 그냥 들어오면 **01 지시부터**다.
+   *
+   * 돌아온 길(`?step=`)만 그 단계에서 시작한다 — 주소에 단계가 없으면 늘 첫
+   * 단계다(`rerunStartStep` 의 기본값). 2026-09-17 에 「열 때부터 그 단계로」로
+   * 바꾸면서 표현이 바뀌었고, 성질은 그대로다.
+   */
   it("첫 화면이 지시다", () => {
-    expect(source).toContain('React.useState("instruction")');
+    expect(source).toContain('rerunStartStep(rerunFrom ? rerunStep : null, RERUN_STEPS, "instruction")');
+    expect(source, "단계가 없는 주소가 다른 단계로 열리면 안 된다")
+      .not.toMatch(/RERUN_STEPS, "(reference|spec)"/);
   });
 
   /** 첨부는 선택이다. 여기에 장수 조건이 돌아오면 길이 다시 막힌다. */
@@ -401,7 +405,7 @@ describe("기획에 드는 값", () => {
 
   it("규격 칸에서 말한다", () => {
     expect(source).toContain("planCostNote({");
-    expect(source).toContain("위는 그림 값입니다");
+    expect(source).toContain("위는 그림 장수입니다");
   });
 
   /** 규칙을 화면에 다시 적으면 실제 차감액과 갈린다. */

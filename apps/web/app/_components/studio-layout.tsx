@@ -11,10 +11,23 @@ import { myMembership } from "../../lib/teams/store";
 import { listProjectsWithCounts } from "../../lib/teams/project-store";
 import { currentProjectId } from "../../lib/teams/current-project";
 import { selectProjectAction } from "../team/actions";
-import { RunningJobsPanel, RunningJobsProvider } from "./running-jobs";
+import { RunningJobsProvider } from "./running-jobs";
 import { StudioActions } from "./studio-actions";
 
-export async function StudioLayout({ children }: { children: ReactNode }) {
+export async function StudioLayout({
+  children,
+  fill = false,
+}: {
+  children: ReactNode;
+  /**
+   * 한 화면에 꽉 채울지. **셸이 그대로 넘겨받는다**(`AppShell` 의 같은 칸).
+   *
+   * 여기까지 뚫어 두는 까닭은 Easy 모드 때문이다. 입력창이 아래에 붙어 있어야
+   * 해서 페이지가 늘어나면 안 되는데, 그것 하나 때문에 셸을 두 벌로 만들면
+   * 사이드바와 상단바가 갈린다(2026-09-21 사용자).
+   */
+  fill?: boolean;
+}) {
   const membership = await requireActiveMember();
   const usage = await getUsageSummary(membership.user.id);
   // 팀 메뉴는 소속이 있을 때만 낸다. 팀이 하나도 없는 회사에서 모두에게
@@ -38,6 +51,7 @@ export async function StudioLayout({ children }: { children: ReactNode }) {
         hasTeam={Boolean(team)}
         // 꺼져 있으면 메뉴에도 없다. 눌러서 404 를 만나는 메뉴는 안 만든다.
         hasAd={isAdExportEnabled()}
+        fill={fill}
         projects={projects.map((project) => ({
           id: project.id,
           name: project.name,
@@ -45,7 +59,14 @@ export async function StudioLayout({ children }: { children: ReactNode }) {
         }))}
         currentProjectId={currentProject}
         onSelectProject={selectProjectAction}
-        sidebarFooter={<RunningJobsPanel />}
+        /*
+          **사이드바에는 「진행 중」을 안 둔다**(2026-09-17 사용자 결정). 뒤에
+          화면 위쪽에도 같은 표시를 넣으면서 만드는 동안 두 군데에 보였다.
+          표시는 위쪽 띠 하나, 중지도 그 띠에서 한다.
+
+          받아 오는 일은 그대로 셸이 한다 — 아래 `RunningJobsProvider` 는
+          남는다. 없앤 것은 칸(화면)뿐이다.
+        */
         actions={
           <StudioActions email={membership.profile.email} usage={usage}>
             {/* 앱 밖으로 나가는 문. 홈·랜딩에는 이 셸이 안 붙으므로 거기엔 안 나온다. */}

@@ -13,6 +13,16 @@ export interface PosterReferenceRecord {
   storagePath: string;
   fileName: string;
   title: string | null;
+  /**
+   * 내가 올린 것인가. **`false` 면 남의 것이다.**
+   *
+   * 창고가 공용이라 목록에 남의 그림이 섞여 있다(2026-09-17 규칙 통일). 안
+   * 실으면 고르는 창이 내 것과 남의 것을 못 가려 지우기 단추가 아무 데나
+   * 붙는다. 서버가 읽어 줄 때만 채워진다.
+   */
+  mine?: boolean;
+  /** 누가 올렸는가. **관리자에게만** 채운다. 지우기 전에 밝히는 데 쓴다. */
+  ownerEmail?: string | null;
   width: number | null;
   height: number | null;
   createdAt: string;
@@ -75,6 +85,8 @@ export interface PosterProjectRecord {
      * 옛 작업에는 없다. 없으면 「지어낸 것이 없다」로 읽는다.
      */
     inventedSlots?: string[];
+    /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. 옛 작업에는 없다. */
+    referenceHasText?: boolean;
     /** 레퍼런스에서 읽어낸 문법. 실패하면 비어 있다. */
     grammarIssues?: string[];
     /**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MATCH_SOURCE } from "@fixup/sns-core";
 import {
-  adProjectBodies, canCreatePoster, effectiveRatio, posterSpecSections, projectCount, showsTypeInteraction, splitFilledSlots,
+  adProjectBodies, canCreatePoster, effectiveRatio, planSlotRows, posterSpecSections, projectCount, showsTypeInteraction, splitFilledSlots,
 } from "../poster-form-rules";
 
 /**
@@ -217,5 +217,45 @@ describe("글자와 피사체의 관계를 보여줄까", () => {
 
   it("빈 곁텍스트 줄은 글자로 안 본다", () => {
     expect(showsTypeInteraction({ sideTexts: ["", "  "] })).toBe(false);
+  });
+});
+
+/**
+ * 기획 확인 패널의 칸 차례 (2026-09-17 사용자 보고).
+ *
+ * 채운 칸을 위로 모아 놓았더니, **빈 칸에 글자를 넣는 순간 그 칸이 위로
+ * 올라가고 커서가 빠졌다.** 한 글자 적을 때마다 화면이 뒤집히는 셈이다.
+ *
+ * 차례는 언제나 정해진 순서 그대로 두고, 채운 칸과 빈 칸은 **자리가 아니라
+ * 모양으로** 가른다.
+ */
+describe("기획 확인 패널에 그릴 칸", () => {
+  const FIELDS = ["kind", "headline", "subline", "scene"] as const;
+  const value: Record<string, string> = { kind: "포스터", subline: "가을 밤", headline: "  " };
+  const valueOf = (field: (typeof FIELDS)[number]) => value[field] ?? "";
+
+  it("**차례가 정해진 순서 그대로다** — 채웠다고 위로 오지 않는다", () => {
+    const rows = planSlotRows([...FIELDS], valueOf, { showEmpty: true });
+    expect(rows.map((row) => row.field)).toEqual(["kind", "headline", "subline", "scene"]);
+  });
+
+  it("빈 칸인지 함께 알려준다 — 모양으로 가르는 쪽이 화면의 일이다", () => {
+    const rows = planSlotRows([...FIELDS], valueOf, { showEmpty: true });
+    expect(rows.map((row) => row.empty)).toEqual([false, true, false, true]);
+  });
+
+  it("접어 두면 빈 칸은 빠지되, 남는 칸의 차례는 그대로다", () => {
+    const rows = planSlotRows([...FIELDS], valueOf, { showEmpty: false });
+    expect(rows.map((row) => row.field)).toEqual(["kind", "subline"]);
+  });
+
+  it("**한 번 보인 칸은 비워도 안 사라진다** — 지우는 중에 칸이 없어지면 안 된다", () => {
+    const rows = planSlotRows([...FIELDS], valueOf, { showEmpty: false, keep: ["headline"] });
+    expect(rows.map((row) => row.field)).toEqual(["kind", "headline", "subline"]);
+    expect(rows.find((row) => row.field === "headline")?.empty).toBe(true);
+  });
+
+  it("칸이 없으면 빈 목록", () => {
+    expect(planSlotRows([], () => "", { showEmpty: true })).toEqual([]);
   });
 });

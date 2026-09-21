@@ -77,6 +77,13 @@ export interface PosterPromptInput {
    */
   invented?: string[];
   /**
+   * 붙인 그림에 **글자가 있나**(`grammar.ts` 의 `hasText`).
+   *
+   * 있으면 글자를 넣는다 — 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수
+   * 있다. 없으면 지금까지대로 막는다. 옛 작업에는 이 값이 없다.
+   */
+  referenceHasText?: boolean;
+  /**
    * 첨부한 그림들을 어떻게 쓸지 사용자가 01에서 적은 말.
    *
    * 03의 `userInstruction` 과 **뜻이 다르다** — 이쪽은 그림 얘기, 저쪽은
@@ -103,7 +110,7 @@ const TYPE_INTERACTION_EN: Record<string, string> = {
 /**
  * 첨부 그림마다 무엇을 하라고 말하는 줄들.
  *
- * ── 사용자가 첨부 지시를 적었으면 고정 문구를 빼고 그 말만 남긴다 ──
+ * ── 사용자가 첨부 지시를 적으면, 규칙은 남고 그 말이 규칙을 이긴다 ──
  *
  * 역할 셋에는 각각 여섯 문장쯤 되는 고정 문구가 붙는다. 그 문구가 사용자가
  * 적은 한 줄과 **정면으로 부딪히는 경우가 있다.**
@@ -114,23 +121,17 @@ const TYPE_INTERACTION_EN: Record<string, string> = {
  * (`USER INSTRUCTION > …`)이 이미 있었지만 **한 줄로는 못 이겼다** — 반대편이
  * 여섯 문장이고 전부 구체적이기 때문이다.
  *
- * 그래서 지시를 적었으면 고정 문구를 **통째로 뺀다**(설계 §4-1 A안,
- * 2026-09-08 사용자 결정).
+ * 그래서 2026-09-08 에는 고정 문구를 **통째로 뺐다**(설계 §4-1 A안).
  *
- * **번호와 역할 이름은 남긴다.** 그것까지 빼면 「1번」이 가리킬 것이 없어져
- * 이 기능 자체가 무너진다. 남기는 것은 이름뿐이고 규칙은 안 붙인다.
+ * **그런데 지우는 것이 과했다.** 2026-09-17 에 실물로 드러났다 — 첨부 셋
+ * (포스터·인물·모자)에 「카메라의 주목을 받는 힙하고 자유로운 느낌」이라고
+ * 적었더니 부딪히지도 않는 **905자**가 함께 사라졌다. 모자를 그대로 지키라는
+ * 말도, 포스터의 배치·타이포를 따라가라는 말도 없어졌고, 결과에 둘 다 안 나왔다.
  *
- * **위험을 알고 고른 것이다.** 「얼굴 특징을 하나하나 맞춰라」도 함께 사라져
- * 얼굴이 딴사람이 될 수 있다. 그때는 사용자가 그 말을 직접 적으면 된다 —
- * 이제 그 한 줄이 프롬프트에서 가장 센 말이다.
+ * **지금은 남기고, 이긴다고 말하고, 뒤에 둔다.** 뒤에 온 말이 앞말을 덮는
+ * 것은 이 저장소가 여러 번 확인한 순서다(2026-09-04 실측). 부딪히는 말은
+ * 사용자 것이 이기고, 안 부딪히는 규칙은 살아남는다.
  */
-/** 사용자가 화면에서 고른 역할의 이름. **규칙은 안 붙인다.** */
-function roleName(image: PosterPromptImage): string {
-  if (image.kind !== "preserved") return "reference to imitate";
-  if (image.subject !== "person") return "subject to keep";
-  return image.restyle ? "person to keep, redrawn in another style" : "person to keep";
-}
-
 function attachmentLines(
   images: PosterPromptImage[],
   hasUserInstruction: boolean,
@@ -145,38 +146,6 @@ function attachmentLines(
     + "never substitute a generic stand-in.",
     "Follow the instruction for each attached image separately. Image numbers match attachment order.",
   ];
-  if (hasAttachmentIntent) {
-    /**
-     * **문구를 뺐다는 말과 실제가 어긋나면 안 된다.**
-     *
-     * 4-3 역할(사람은 그대로, 그림 느낌만)의 지시는 남는다. 그런데 「규칙은 전부
-     * 뺐다」고 적어 두면 모델이 바로 아래 남아 있는 그 지시를 「빼려다 만 것」으로
-     * 읽을 수 있다. 남는 것이 있다고 함께 말한다.
-     */
-    lines.push(
-      "The user wrote what to do with these images. Their words replace the usual rules for each "
-      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
-      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
-    );
-    images.forEach((image, index) => {
-      const number = attachmentNumber(index);
-      /**
-       * **「그림 느낌만 바꾸기」는 지우지 않는다**(설계 §4-3).
-       *
-       * 4-1 A안이 지우는 것은 사용자가 적은 말과 **부딪히는** 문구다. 이 역할의
-       * 말은 「사람은 그대로 + 그림 느낌은 바꿔도 된다」이고, 이 역할을 고른
-       * 사람이 적는 지시가 바로 그것이다 — 부딪히지 않는다.
-       *
-       * 이것까지 지우면 4-3 을 만든 이유가 사라진다. 사람을 하나하나 옮기라는
-       * 말이 다시 프롬프트에서 없어져 안경이 또 사라진다.
-       */
-      if (image.kind === "preserved" && image.subject === "person" && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      lines.push(`Image ${number}: the user marked this "${roleName(image)}".`);
-    });
-  } else {
   images.forEach((image, index) => {
     const number = attachmentNumber(index);
     if (image.kind === "preserved") {
@@ -211,6 +180,32 @@ function attachmentLines(
       + "match what is described below.",
     );
   });
+
+  /*
+   * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**
+   *
+   * 2026-09-08 에는 지시를 적으면 위 역할 문구를 **통째로 뺐다**(설계 §4-1
+   * A안). 까닭이 있었다 — 「1번 사진의 사람들을 2번 느낌으로」라고 적었는데
+   * 두 장 모두에 `not its people` 이 가서 사람이 새로 만들어졌다. 우선순위
+   * 한 줄로는 못 이겼다. 반대편이 여섯 문장이고 전부 구체적이기 때문이다.
+   *
+   * **그런데 지우는 것이 과했다.** 2026-09-17 에 실물로 드러났다 — 첨부 셋
+   * (포스터·인물·모자)에 「카메라의 주목을 받는 힙하고 자유로운 느낌」이라고
+   * 적었더니 부딪히지도 않는 **905자**가 함께 사라졌다. 모자를 그대로
+   * 지키라는 말도, 포스터의 배치·타이포를 따라가라는 말도 없어졌고, 결과에
+   * 둘 다 안 나왔다.
+   *
+   * **그래서 남기고, 이긴다고 말하고, 뒤에 둔다.** 뒤에 온 말이 앞말을 덮는
+   * 것은 이 저장소가 여러 번 확인한 순서다(2026-09-04 실측, 2026-09-17
+   * 카드뉴스). 부딪히는 말은 사용자 것이 이기고, 안 부딪히는 규칙은 살아
+   * 남는다 — 지우기와 우선하기는 다른 일이다.
+   */
+  if (hasAttachmentIntent) {
+    lines.push(
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that "
+      + "contradicts them — where a rule and the user disagree, follow the user. Rules the user "
+      + "did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
+    );
   }
   // 순서는 공용 어휘(@fixup/shared)가 정한다. 다섯 도구가 갈리면 안 된다.
   //
@@ -259,7 +254,12 @@ function sceneLines(slots: PosterSlots): string[] {
  * 「글자를 안 원한다」가 아니라 「우리가 안 물어봤다」는 뜻이다. 그때 금지하면
  * 사용자 프롬프트가 글자를 요구해도 우리가 막는다(2026-09-16 실물 확인).
  */
-function copyLines(slots: PosterSlots, verbatim = false, invented: string[] = []): string[] {
+function copyLines(
+  slots: PosterSlots,
+  verbatim = false,
+  invented: string[] = [],
+  referenceHasText = false,
+): string[] {
   /*
    * **글자 칸이 전부 「AI 가 골라 채운 것」이면 사용자는 글자를 안 시킨 것이다.**
    *
@@ -274,14 +274,25 @@ function copyLines(slots: PosterSlots, verbatim = false, invented: string[] = []
    * **하나라도 사람 것이면 금지하지 않는다.** 나머지는 기획의 제안이고 04 에
    * 표가 붙어 있어 사람이 지울 수 있다.
    */
-  const 사람이시킨글자 = ["headline", "subline", "sideTexts"]
-    .some((field) => {
-      const value = slots[field as "headline" | "subline"];
-      const 있다 = field === "sideTexts" ? slots.sideTexts.length > 0 : Boolean(value?.trim());
-      return 있다 && !invented.includes(field);
-    });
+  const 사람이적은칸 = (["headline", "subline"] as const)
+    .filter((field) => slots[field].trim().length > 0 && !invented.includes(field));
+  const 곁텍스트도적었나 = slots.sideTexts.length > 0 && !invented.includes("sideTexts");
+  const 사람이시킨글자 = 사람이적은칸.length > 0 || 곁텍스트도적었나;
 
-  const all: Array<[string, string]> = 사람이시킨글자 ? [
+  /*
+   * **붙인 그림에 글자가 있으면 그것도 「시킨 것」이다.**
+   *
+   * 글자를 넣을지는 규칙이 아니라 **붙인 그림과 사용자가 적은 말**이 정한다
+   * (2026-09-17 사용자 판단). VOGUE 표지를 붙였는데 결과에 글자가 하나도
+   * 없었다 — 거대한 타이포그래피가 그 포스터의 핵심인데도 그랬다.
+   *
+   * 아래 금지문은 2026-09-08 「BEST DAY EVER!」 사고의 대응이고, **그때는
+   * 첨부 어디에도 글자가 없었다.** 두 경우가 다른데 같은 규칙을 받고 있었다.
+   * 이제는 읽어서 가른다(`grammar.ts` 의 `hasText`) — 우리가 정하지 않는다.
+   */
+  const 글자를원한다 = 사람이시킨글자 || referenceHasText;
+
+  const all: Array<[string, string]> = 글자를원한다 ? [
     ["HEADLINE", slots.headline],
     ["SUBLINE", slots.subline],
     ...slots.sideTexts.map((value, index): [string, string] => [`SIDE ${index + 1}`, value]),
@@ -391,7 +402,12 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
       : sceneLines(input.slots)),
     ...(look ? [look] : []),
     "",
-    ...copyLines(input.slots, Boolean(input.verbatimScene?.trim()), input.invented),
+    ...copyLines(
+      input.slots,
+      Boolean(input.verbatimScene?.trim()),
+      input.invented,
+      input.referenceHasText,
+    ),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
     // 맨 뒤에서 한 번 더 못 박는다. 긴 프롬프트에서 중간은 힘을 잃는다.

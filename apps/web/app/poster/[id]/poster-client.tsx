@@ -12,7 +12,7 @@ import {
   SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
   SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
-import { TYPE_INTERACTIONS, previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
+import { previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
 import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -20,8 +20,12 @@ import { jobId } from "../../../lib/running-jobs";
 import { currentPosterStep, posterSteps, reachableBeforeCreate } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
-import { placeholderRatio, showsTypeInteraction, splitFilledSlots } from "../poster-form-rules";
+import {
+  placeholderRatio, planSlotRows, splitFilledSlots, type PlanSlotRow,
+} from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
+import { rerunHref } from "../../_components/rerun-step";
+import { PlanWriting } from "../_components/plan-writing";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 
 interface PosterImage {
@@ -63,6 +67,8 @@ interface PosterProject {
     promptMode?: "verbatim" | "assisted";
     /** 기획이 근거 없이 채웠다고 밝힌 칸들. 옛 작업에는 없다. */
     inventedSlots?: string[];
+    /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. */
+    referenceHasText?: boolean;
   };
 }
 
@@ -271,6 +277,7 @@ export function PosterClient(
      * 화면 state 를 쓴다. 사람이 방금 고친 칸이 곧바로 반영돼야 한다.
      */
     invented,
+    referenceHasText: project.data.referenceHasText,
   }), [slots, project, invented]);
 
   /**
@@ -321,7 +328,8 @@ export function PosterClient(
    * **화면에 표를 붙일 수 있는 칸만 센다.**
    *
    * 기획은 열한 칸을 채우는데 이 화면이 그리는 것은 아홉이다(`SLOT_LABELS`).
-   * `sideTexts`·`typeInteraction` 은 제 칸이 따로 있어 `renderSlot` 을 안 지난다.
+   * `sideTexts` 는 제 칸이 따로 있어 `renderSlot` 을 안 지나고, `typeInteraction` 은
+   * 04 에 칸이 아예 없다 — 레퍼런스에서 읽은 것이 바로 프롬프트로 간다.
    * 그 둘까지 세면 「적어 주신 말로 채운 칸은 -1개」가 뜬다(2026-09-17 리뷰).
    *
    * 배지·숫자·띠가 **같은 목록**을 봐야 서로 어긋나지 않는다.
@@ -334,16 +342,79 @@ export function PosterClient(
     (field) => String(slots[field] ?? ""),
   );
 
-  /** 칸 하나를 그린다. 채운 칸과 접힌 칸이 같은 모양이어야 한다. */
-  function renderSlot(field: TextSlot) {
+  /**
+   * **한 번 보인 칸은 그 자리에 머문다.**
+   *
+   * 열 때와 빈 칸을 펼칠 때만 다시 잡는다. 치는 동안 다시 잡으면 글자를 지운
+   * 칸이 사라지고, 그게 바로 자리가 움직여 커서가 빠지던 일의 반대쪽이다
+   * (2026-09-17 사용자 보고).
+   */
+  const [keptFields, setKeptFields] = React.useState<TextSlot[]>([]);
+
+  /**
+   * **값이 들어온 칸은 그때그때 더한다.**
+   *
+   * 열 때 한 번만 잡으면 안 된다 — 04 는 **빈 채로 열리고** 기획이 그 뒤에
+   * 칸을 채운다. 그 사이에 잡아 두면 목록이 빈 채로 굳어, 채워진 칸의 글자를
+   * 다 지우는 순간 그 칸이 사라진다(2026-09-17 독립 리뷰가 실증). 「초안 다시
+   * 채우기」 뒤에도 같다.
+   *
+   * 더하기만 하므로 **자리는 안 움직인다** — 차례는 `SLOT_LABELS` 가 정한다.
+   */
+  React.useEffect(() => {
+    if (!planOpen) return;
+    setKeptFields((current) => {
+      const next = new Set(current);
+      for (const [field] of SLOT_LABELS) {
+        if (String(slots[field] ?? "").trim()) next.add(field);
+      }
+      // 같은 집합이면 같은 배열을 돌려준다 — 안 그러면 효과가 자기를 다시 부른다.
+      return next.size === current.length ? current : [...next];
+    });
+  }, [planOpen, slots]);
+
+  /**
+   * 접을 때는 **지금 빈 칸을 놓아 준다.**
+   *
+   * 「비어 있는 칸 N개」를 접었는데 아까 보이던 빈 칸이 남아 있으면 접은 것이
+   * 아니다. 펼칠 때는 어차피 다 보이므로 아무것도 안 한다.
+   */
+  React.useEffect(() => {
+    if (!planOpen || showEmpty) return;
+    setKeptFields((current) => current.filter((field) => String(slots[field] ?? "").trim()));
+    // 접는 그 순간만. slots 를 넣으면 치는 동안 칸이 사라진다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planOpen, showEmpty]);
+
+  /** 패널에 그릴 칸. **차례는 언제나 `SLOT_LABELS` 그대로다.** */
+  const planRows = planSlotRows(
+    SLOT_LABELS.map(([field]) => field),
+    (field) => String(slots[field] ?? ""),
+    { showEmpty, keep: keptFields },
+  );
+
+  /**
+   * 칸 하나를 그린다.
+   *
+   * **빈 칸은 자리를 옮기지 않고 모양으로 가른다** — 점선 테두리와 「비어
+   * 있음」. 채워지면 그 자리에서 실선이 된다(2026-09-17 사용자 보고).
+   */
+  function renderSlot({ field, empty }: PlanSlotRow<TextSlot>) {
     const entry = SLOT_LABELS.find(([name]) => name === field);
     if (!entry) return null;
     const [, label, kind] = entry;
     const 지어냄 = 표붙은칸.includes(field);
+    const look = empty ? "border-dashed bg-muted/30" : "";
     return (
       <div key={field} className="grid gap-1.5">
-        <Label htmlFor={`slot-${field}`} className="flex flex-wrap items-center gap-2">
+        {/*
+          **두 표시가 한 줄에 같이 설 수 있다.** 「비어 있음」은 값이 없다는
+          것이고 「AI 가 골라 채움」은 값의 출처다 — 서로 다른 것을 말한다.
+          좁은 패널이라 `flex-wrap` 으로 넘긴다.
+        */}
+        <Label htmlFor={`slot-${field}`} className="flex flex-wrap items-center gap-1.5">
           {label}
+          {empty ? <span className="text-meta font-normal text-subtle-foreground">비어 있음</span> : null}
           {/*
             **눈에 띄게 적는다.** 이 표가 안 보이면 AI 가 지어낸 설정이 그대로
             그림에 들어가고, 사용자는 왜 그게 나왔는지 모른다. 고치면 사라진다.
@@ -358,12 +429,14 @@ export function PosterClient(
           <Textarea
             id={`slot-${field}`}
             rows={2}
+            className={look}
             value={String(slots[field] ?? "")}
             onChange={(event) => setField(field, event.target.value)}
           />
         ) : (
           <Input
             id={`slot-${field}`}
+            className={look}
             value={String(slots[field] ?? "")}
             onChange={(event) => setField(field, event.target.value)}
           />
@@ -376,7 +449,105 @@ export function PosterClient(
     const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
     void downloadImage({ src, name: `${project.title} 변형 ${image.variantIndex + 1}.png` });
   }
-  const { start, finish } = useRunningJobs();
+  const { jobs, start, finish, stop } = useRunningJobs();
+
+  /**
+   * 사용자가 **중지**를 눌렀나.
+   *
+   * 누른 순간부터 캐묻기를 끊고, 이미 날아간 요청의 응답도 버린다. 안 버리면
+   * 멈춘 뒤에 결과가 도착해 화면이 되살아난다 — 「중지가 안 먹는다」로 읽힌다.
+   */
+  const stopped = React.useRef(false);
+  const [stopping, setStopping] = React.useState(false);
+
+  /**
+   * 일을 **시작한다.** 도는 표시를 세우고 지난 중지를 푼다.
+   *
+   * **푸는 자리를 갈래마다 적으면 안 된다.** 기획·만들기에만 적고 고치기에
+   * 빠뜨렸더니, 한 번 중지한 뒤 고치기를 누르면 요청은 나가고(돈은 나간다)
+   * 캐묻기는 첫 줄에서 되돌아 나와 결과가 영영 안 들어왔다 — 화면에는
+   * 「눌렀는데 아무 일도 안 일어난다」로 보인다(2026-09-17 독립 리뷰).
+   * 갈래가 하나 늘 때마다 같은 구멍이 다시 생기므로 한 곳에 둔다.
+   */
+  function beginWork(state: { kind: "plan" | "generate" | "review"; label: string; hint?: string }) {
+    stopped.current = false;
+    setBusy(state);
+    setError(null);
+  }
+
+  /**
+   * 지금 돌고 있는 것을 **강제로 끝낸다.**
+   *
+   * 사이드바에 있던 목록과 중지를 여기 하나로 합쳤다(2026-09-17 사용자 결정).
+   * 표시가 두 군데 나던 것을 없애고, 멈추는 자리는 표시가 있는 자리에 둔다.
+   */
+  async function stopNow() {
+    setStopping(true);
+    stopped.current = true;
+    const id = jobId("poster", project.id);
+    const job = jobs.find((entry) => entry.id === id);
+    try {
+      if (job) {
+        // 셸이 서버에도 알린다(`running-jobs.tsx` 의 `tellServerToStop`).
+        await stop(job);
+      } else {
+        finish(id);
+        /*
+          **일감으로 안 잡힌 것도 서버에 알린다.** 기획이나 「보내는 중」에서
+          누르면 아직 목록에 안 올라 있는데, 예약은 이미 잡혀 있다. 안 닫으면
+          만료(10분)까지 그 사람 한도가 묶이고 다시 만들기도 막힌다
+          (2026-09-17 독립 리뷰).
+        */
+        await request(`/api/poster/projects/${project.id}/stop`, { method: "POST" }).catch(() => {});
+      }
+    } finally {
+      setStopping(false);
+      setBusy(null);
+      /*
+        **덧붙인다. 덮어쓰지 않는다.** 여기에는 기획이 남긴 경고가 들어 있는데,
+        중지 한 번에 그것이 사라졌다(2026-09-17 독립 리뷰).
+
+        **「나중에 들어올 수 있다」고 말하지 않는다.** 중지는 장부를 닫고
+        예약을 지우므로 그 요청의 결과는 영영 저장되지 않는다 — 값은 나간다.
+      */
+      setNotes((current) => [
+        ...current,
+        "중지했습니다. 이미 보낸 요청은 값이 나갈 수 있고, 그 결과는 저장되지 않습니다.",
+      ]);
+    }
+  }
+
+  /**
+   * **돌아오면 화면이 캐묻기를 이어받는다.**
+   *
+   * 셸은 「지금 보고 있지 않은」 일감만 캐묻는다(`running-jobs.tsx`). 그래서
+   * 만들다가 다른 화면에 갔다 돌아오면 셸은 쉬고, 새로 뜬 화면은 `busy` 가
+   * 없어 스스로도 안 캐물어 **아무도 안 받아 왔다.** 사이드바 칸이 없어지면서
+   * 화면에 흔적조차 안 남는다(2026-09-17 독립 리뷰).
+   *
+   * 일감이 물어볼 곳과 몸통을 들고 있으므로(`job.poll`), 그대로 이어서 묻는다.
+   */
+  const resumed = React.useRef(false);
+  React.useEffect(() => {
+    if (resumed.current || busy) return;
+    const job = jobs.find((entry) => entry.id === jobId("poster", project.id));
+    if (!job?.poll.body) return;
+    resumed.current = true;
+    // 이어받는 것도 「일을 시작하는」 자리다. 같은 문을 지난다.
+    // **무엇이 돌던 것인지는 모른다** — 그릴 수도, 고칠 수도 있다. 아는 만큼만 말한다.
+    beginWork({ kind: "generate", label: "만들던 것을 이어받는 중입니다", hint: "잠시 기다려 주세요" });
+    void (async () => {
+      try {
+        if (await collect(job.poll.body as Record<string, unknown>)) finish(job.id);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "상태를 확인하지 못했습니다.");
+      } finally {
+        setBusy(null);
+      }
+    })();
+    // 한 번만 이어받는다. `jobs` 가 바뀔 때마다 돌면 캐묻기가 겹친다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, busy]);
 
   // 화면을 떠나면 여기서 물어보기를 그만둔다. 셸이 이어받으므로 결과는 안 놓친다.
   const alive = React.useRef(true);
@@ -425,7 +596,14 @@ export function PosterClient(
     setInvented((current) => current.filter((name) => name !== field));
   }
 
-  async function saveSlots() {
+  /**
+   * 고친 칸을 저장한다.
+   *
+   * **성공했는지 돌려준다.** 만들기가 이것을 먼저 부르는데, 실패를 삼키면
+   * **틀린 값으로 그림을 만든다** — 값이 드는 일이다. 단추로 누를 때는
+   * 돌려준 값을 안 봐도 된다(화면에 오류가 뜬다).
+   */
+  async function saveSlots(): Promise<boolean> {
     setSaving(true);
     setError(null);
     try {
@@ -438,8 +616,10 @@ export function PosterClient(
       const body = await response.json();
       if (!body.ok) throw new Error(body.message ?? "슬롯을 저장하지 못했습니다.");
       setInvented(body.project?.data?.inventedSlots ?? []);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "슬롯을 저장하지 못했습니다.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -447,10 +627,11 @@ export function PosterClient(
 
   /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
   async function runPlan() {
-    setBusy({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
-    setError(null);
+    beginWork({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     try {
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
+      // 중지를 눌렀으면 도착한 초안을 안 쓴다 — 멈춘 뒤에 칸이 채워지면 안 된다.
+      if (stopped.current) return;
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
       // **새 목록도 받는다.** 안 받으면 방금 채운 칸에 표가 하나도 안 붙는다 —
@@ -471,10 +652,23 @@ export function PosterClient(
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
-    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
-    setError(null);
+    beginWork({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
     try {
+      /*
+       * **고친 칸을 먼저 저장한다.**
+       *
+       * 미리보기는 화면 state 를, 생성은 저장값을 본다. 전에는 그 둘이 갈려도
+       * **내용**만 달랐는데, 이제 「글자를 넣지 말라」라는 **분기**까지 가른다
+       * (`prompt.ts` 의 `copyLines`). 칸을 고치고 저장 안 한 채 만들면
+       * 미리보기에는 글자가 보이는데 글자 하나 없는 그림이 나온다
+       * (2026-09-17 리뷰).
+       *
+       * 고친 것을 버리는 쪽이 아니라 **살리는 쪽**으로 맞춘다 — 사람이 방금
+       * 한 일이다. 저장이 실패하면 아래 `catch` 가 받아 만들기를 안 한다.
+       */
+      if (!await saveSlots()) return;
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
+      if (stopped.current) return;
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
       setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
@@ -504,8 +698,7 @@ export function PosterClient(
 
   /** 고른 것만 검수한다. 반려해도 이미지는 남고 다시 만들지는 사람이 누른다. */
   async function review() {
-    setBusy({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
-    setError(null);
+    beginWork({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     try {
       const body = await (await request(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
@@ -525,8 +718,7 @@ export function PosterClient(
       setError("무엇을 고칠지 적어 주세요. 비어 있으면 같은 것을 또 만듭니다.");
       return;
     }
-    setBusy({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
-    setError(null);
+    beginWork({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
     try {
       // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/edit`, {
@@ -568,12 +760,22 @@ export function PosterClient(
   async function collect(body: Record<string, unknown>): Promise<boolean> {
     for (;;) {
       if (!alive.current) return false;
+      // 중지를 눌렀으면 더 캐묻지 않는다. 일감은 이미 목록에서 뺐다.
+      if (stopped.current) return false;
       await new Promise((resolve) => setTimeout(resolve, 10_000));
+      /*
+        **자는 동안 누른 중지도 여기서 걸린다.** 잠들기 전에만 보면, 자는 사이에
+        멈춘 사람에게 최대 10초 뒤 결과가 도착해 화면이 되살아난다
+        (2026-09-17 독립 리뷰).
+      */
+      if (stopped.current) return false;
       const poll = await (await request(`/api/poster/projects/${project.id}/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       })).json();
+      // 물어보는 사이에 눌렀을 수도 있다. 도착한 답을 화면에 쓰기 전에 본다.
+      if (stopped.current) return false;
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
       if (poll.done) {
         setList(poll.images);
@@ -639,7 +841,9 @@ export function PosterClient(
             어긋나지 않는다.
           */
           if (id === "plan" || id === "result") return;
-          router.push(`/poster/new?from=${encodeURIComponent(project.id)}`);
+          // **누른 단계도 함께 싣는다.** 안 실으면 03 을 눌러도 01 이 열린다
+          // (2026-09-17 사용자 보고).
+          router.push(rerunHref("/poster/new", project.id, id));
         }}
       />
 
@@ -658,7 +862,15 @@ export function PosterClient(
         </div>
       ) : null}
 
-      {busy ? <WorkingBanner label={busy.label} hint={busy.hint} /> : null}
+      {/* 멈추는 자리는 여기 하나다 — 사이드바 칸은 없앴다(2026-09-17 사용자 결정). */}
+      {busy ? (
+        <WorkingBanner
+          label={busy.label}
+          hint={busy.hint}
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
+      ) : null}
 
       {/*
         **기획은 패널, 결과는 페이지.**
@@ -689,20 +901,24 @@ export function PosterClient(
             grid 가 남는 높이를 줄마다 나눠 늘려, 칸 사이가 제멋대로 벌어진다
             (2026-09-08 화면에서 138px 벌어짐).
           */}
-          <SidePanelBody className="grid content-start gap-5">
+          <SidePanelBody className="relative grid content-start gap-5">
             {/*
-              **칸마다 붙은 표를 놓칠 수 있다.** 칸이 아홉이고 표는 작다.
-              몇 개가 지어낸 것인지 맨 위에서 한 번 더 말해 준다.
+              **쓰는 중에는 패널을 덮는다.** 덮지 않으면 빈 칸이 그대로 보여
+              멈춘 화면으로 읽히고, 그 사이 고친 값은 도착한 초안이 덮어쓴다
+              (2026-09-17 사용자 보고).
             */}
+            {busy?.kind === "plan" ? (
+              <PlanWriting label="AI 가 기획을 쓰는 중입니다" hint="10~30초 걸립니다" />
+            ) : null}
             {/*
               **「몇 개가 지어낸 것인가」로 적지 않는다.**
+
+              칸마다 붙은 표는 작아서 놓치기 쉽다. 그래서 맨 위에서 한 번 더
+              말해 주되, 세는 방향을 뒤집는다.
 
               짧은 지시로 만들면 열한 칸 중 아홉에 표가 붙는다(2026-09-17 실측).
               그게 정상이다 — 한 줄만 적었으니 나머지는 AI 가 고른 것이 맞다.
               그런데 「9개가 지어낸 것」이라고 적으면 고장처럼 읽힌다.
-
-              **거꾸로 말한다.** 적어 주신 말에서 나온 칸이 몇 개인지 알려 주고,
-              나머지는 확인할 거리라고 안내한다.
             */}
             {표붙은칸.length ? (
               <div className="grid gap-1 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
@@ -730,46 +946,36 @@ export function PosterClient(
               </div>
             ) : null}
 
-            {/* 기획이 값을 넣은 칸이 이 그림에 필요한 칸이다. */}
-            <div className="grid gap-4">{filledFields.map(renderSlot)}</div>
+            {/*
+              **칸 차례는 늘 `SLOT_LABELS` 그대로다.** 채운 칸을 위로 모아
+              두었더니 빈 칸에 한 글자를 넣는 순간 그 칸이 위로 올라가고 커서가
+              빠졌다(2026-09-17 사용자 보고). 채웠는지는 자리가 아니라 모양이
+              말한다 — 점선과 「비어 있음」.
+            */}
+            <div className="grid gap-4">{planRows.map(renderSlot)}</div>
 
             {emptyFields.length ? (
-              <div className="grid gap-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="justify-start px-0 text-muted-foreground"
-                  onClick={() => setShowEmpty((current) => !current)}
-                >
-                  {showEmpty ? "▾" : "▸"} 비어 있는 칸 {emptyFields.length}개 · 필요하면 채우세요
-                </Button>
-                {showEmpty ? <div className="grid gap-4">{emptyFields.map(renderSlot)}</div> : null}
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="justify-start px-0 text-muted-foreground"
+                onClick={() => setShowEmpty((current) => !current)}
+              >
+                {showEmpty ? "▾" : "▸"} 비어 있는 칸 {emptyFields.length}개 · 필요하면 채우세요
+              </Button>
             ) : null}
 
-            {/* **글자가 없으면 관계도 없다.** 판단이 아니라 규칙이다. */}
-            {showsTypeInteraction(slots) ? (
-              <fieldset className="grid gap-2">
-                <legend className="text-meta text-subtle-foreground">글자와 피사체의 관계</legend>
-                <div className="flex flex-wrap gap-2">
-                  {TYPE_INTERACTIONS.map((value) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      size="sm"
-                      variant={slots.typeInteraction === value ? "default" : "secondary"}
-                      onClick={() => setSlots((current: PosterSlots) => ({
-                        ...current,
-                        typeInteraction: current.typeInteraction === value ? null : value,
-                      }))}
-                    >
-                      {value}
-                    </Button>
-                  ))}
-                </div>
-              </fieldset>
-            ) : null}
+            {/*
+              **「글자와 피사체의 관계」는 04 에서 뺐다**(2026-09-17 사용자 판단).
+
+              「통과 / 뒤로 / 가림 / 감쌈」은 타이포그래피 용어라 사용자가 고를
+              근거가 없다. 레퍼런스를 붙였으면 답이 그 그림에 있고, 안 붙였으면
+              모델이 정하는 편이 낫다 — 한 낱말로 못 박으면 오히려 좁힌다.
+
+              **값은 남는다.** 레퍼런스에서 읽은 것이 들어와 프롬프트로 간다
+              (`mergeGrammar`). 화면이 그 값을 손대지 않을 뿐이다.
+            */}
 
             <div className="grid gap-1.5">
               <Label htmlFor="slot-side">곁텍스트</Label>
@@ -777,10 +983,21 @@ export function PosterClient(
                 id="slot-side"
                 rows={2}
                 value={slots.sideTexts.join("\n")}
-                onChange={(event) => setSlots((current: PosterSlots) => ({
-                  ...current,
-                  sideTexts: event.target.value.split("\n"),
-                }))}
+                onChange={(event) => {
+                  /*
+                    **곁텍스트도 손대면 사람 것이다.**
+
+                    이 칸은 `renderSlot` 을 안 지나서 `setField` 의 표 지우기를
+                    못 탄다. 그래서 고쳐도 화면 목록에 「sideTexts」가 남아,
+                    저장 전까지 미리보기가 방금 친 글을 「AI 것」으로 보고
+                    금지문을 붙인다(2026-09-17 리뷰).
+                  */
+                  setInvented((current) => current.filter((name) => name !== "sideTexts"));
+                  setSlots((current: PosterSlots) => ({
+                    ...current,
+                    sideTexts: event.target.value.split("\n"),
+                  }));
+                }}
                 placeholder={"28MM F2.0\nISO 400"}
               />
               <p className="text-xs text-subtle-foreground">한 줄에 하나씩 적습니다.</p>

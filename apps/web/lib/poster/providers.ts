@@ -2,6 +2,7 @@ import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { TYPE_INTERACTIONS } from "@fixup/poster-core";
+import { textModelVendor } from "@fixup/shared";
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
@@ -77,14 +78,79 @@ const GRAMMAR_SPEC: StructuredSpec = {
   schema: {
     type: "object",
     properties: {
+      // 글자를 넣을지는 붙인 그림이 정한다. 응답 틀에 없으면 프롬프트로 시켜도 안 온다.
+      hasText: { type: "boolean" },
       typeInteraction: { type: ["string", "null"], enum: [...TYPE_INTERACTIONS, null] },
       dominantColor: { type: "string" },
       accentColor: { type: "string" },
       note: { type: "string" },
     },
-    required: ["typeInteraction", "dominantColor"],
+    required: ["hasText", "typeInteraction", "dominantColor"],
   },
 };
+
+/**
+ * 붙인 그림을 **한 번에** 읽는 틀 (설계 §5-1).
+ *
+ * 문법 읽기와 사람 읽기를 합친 것이고, **`staging` 한 칸이 새로 생겼다.**
+ * 그 칸이 1단계의 전부다 — 없으면 기획이 레퍼런스의 연출을 볼 방법이 없다.
+ *
+ * **틀에 없는 칸은 조용히 버려진다.** 프롬프트로 시켜도 안 온다. 이 저장소가
+ * 두 번 겪었다(`invented` 가 여섯 번 다 빈 목록, `hasText` 가 안 옴).
+ */
+const ATTACHMENT_READ_SPEC: StructuredSpec = {
+  name: "attachment_read",
+  description: "붙인 그림에 무엇이 있는지. 사람·연출·글자·색을 한 번에 읽는다.",
+  schema: {
+    type: "object",
+    properties: {
+      people: { type: "array", items: { type: "string" } },
+      // 이 칸이 1단계가 더하는 것이다. 없으면 연출이 통째로 사라진다.
+      staging: { type: "string" },
+      hasText: { type: "boolean" },
+      typeInteraction: { type: ["string", "null"], enum: [...TYPE_INTERACTIONS, null] },
+      dominantColor: { type: "string" },
+      accentColor: { type: "string" },
+      note: { type: "string" },
+    },
+    required: ["people", "staging", "hasText"],
+  },
+};
+
+/**
+ * 그림을 보고 틀대로 답하게 하는 눈.
+ *
+ * **셋이 같은 열다섯 줄을 쓰고 있었다.** 새 읽기를 더하면서 네 번째 사본이
+ * 생길 자리라 여기서 합친다 — 고칠 곳이 하나여야 한다.
+ */
+function imageToolReader(
+  spec: StructuredSpec,
+  whenMissing: string,
+  environment: Record<string, string | undefined>,
+) {
+  requireKeys(["ANTHROPIC_API_KEY"], environment);
+  const { anthropic, anthropicModel } = clients(environment);
+  return {
+    async read(input: { prompt: string; imageUrls: string[] }) {
+      const response = await anthropic.messages.create({
+        model: anthropicModel,
+        max_tokens: 2048,
+        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
+        tools: [{ name: spec.name, description: spec.description, input_schema: spec.schema as never }],
+        tool_choice: { type: "tool", name: spec.name, disable_parallel_tool_use: true },
+      });
+      recordFrom(anthropicModel, response);
+      const call = response.content.find((block) => block.type === "tool_use" && block.name === spec.name);
+      if (!call || call.type !== "tool_use") throw new Error(whenMissing);
+      return call.input;
+    },
+  };
+}
+
+/** 붙인 그림을 한 번에 읽는다 — 역할을 안 본다(설계 §5-1). */
+export function createPosterAttachmentReader(environment: Record<string, string | undefined> = process.env) {
+  return imageToolReader(ATTACHMENT_READ_SPEC, "붙인 그림을 읽지 못했습니다.", environment);
+}
 
 const REVIEW_SPEC: StructuredSpec = {
   name: "poster_review",
@@ -133,16 +199,50 @@ async function imageBlocks(urls: string[]) {
   return urls.map((url) => ({ type: "image" as const, source: { type: "url" as const, url } }));
 }
 
-export function createPosterPlanningProviders(environment: Record<string, string | undefined> = process.env) {
-  requireKeys(["ANTHROPIC_API_KEY"], environment);
+/**
+ * 기획을 돌릴 제공자.
+ *
+ * ── 고른 글 모델을 실제로 쓴다 ────────────────────────────────
+ *
+ * `textModel` 을 주면 그 모델로 부른다(Easy 모드의 드롭다운, 설계 §5-4).
+ * **안 주면 지금까지대로** 환경변수·기본값으로 간다 — 다른 화면 넷이 이 함수를
+ * 부르고 있고, 그 화면들은 글 모델을 고르지 않는다.
+ *
+ * 업체를 `textModelVendor` 가 가른다. **안 가르면 고른 모델이 안 불린다** —
+ * 2026-09-18 에 실제로 그랬다. Easy 의 드롭다운이 값을 받아 되돌려주기만 하고,
+ * 기획은 환경변수가 정한 모델로 갔다. **고르는 척만 하는 화면**이었다.
+ *
+ * ── 예비는 그대로 둔다 ───────────────────────────────────────
+ *
+ * 주 모델이 실패하면 예비가 받는다. 고른 모델이 OpenAI 면 예비도 OpenAI 라
+ * 같은 업체가 두 번 실패할 수 있는데, 그래도 둔다 — 예비를 반대 업체로
+ * 뒤집으면 「내가 고른 것과 다른 모델로 만들어졌다」가 조용히 일어난다.
+ */
+export function createPosterPlanningProviders(
+  environment: Record<string, string | undefined> = process.env,
+  textModel?: string,
+) {
+  const vendor = textModel ? textModelVendor(textModel) : "anthropic";
+  // 고른 것이 OpenAI 면 그 열쇠가 있어야 한다. 없으면 무엇이 없는지 알린다.
+  requireKeys(vendor === "openai" ? ["OPENAI_API_KEY"] : ["ANTHROPIC_API_KEY"], environment);
+
   const { anthropic, openai, anthropicModel, openaiModel } = clients(environment);
   const backup = environment.OPENAI_API_KEY?.trim()
     ? { plan: (prompt: string) => new OpenAIStructuredProvider(openai, openaiModel, PLAN_SPEC).generate(prompt) }
     : undefined;
-  return {
-    primary: { plan: (prompt: string) => new AnthropicStructuredProvider(anthropic, anthropicModel, PLAN_SPEC).generate(prompt) },
-    backup,
-  };
+
+  const primary = vendor === "openai"
+    ? { plan: (prompt: string) => new OpenAIStructuredProvider(openai, textModel!, PLAN_SPEC).generate(prompt) }
+    : {
+      plan: (prompt: string) => new AnthropicStructuredProvider(
+        anthropic,
+        // 고른 것이 있으면 그것으로. 없으면 지금까지대로.
+        textModel ?? anthropicModel,
+        PLAN_SPEC,
+      ).generate(prompt),
+    };
+
+  return { primary, backup };
 }
 
 /**
@@ -165,43 +265,11 @@ const PEOPLE_SPEC: StructuredSpec = {
 };
 
 export function createPosterPeopleReader(environment: Record<string, string | undefined> = process.env) {
-  requireKeys(["ANTHROPIC_API_KEY"], environment);
-  const { anthropic, anthropicModel } = clients(environment);
-  return {
-    async read(input: { prompt: string; imageUrls: string[] }) {
-      const response = await anthropic.messages.create({
-        model: anthropicModel,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
-        tools: [{ name: PEOPLE_SPEC.name, description: PEOPLE_SPEC.description, input_schema: PEOPLE_SPEC.schema as never }],
-        tool_choice: { type: "tool", name: PEOPLE_SPEC.name, disable_parallel_tool_use: true },
-      });
-      recordFrom(anthropicModel, response);
-      const call = response.content.find((block) => block.type === "tool_use" && block.name === PEOPLE_SPEC.name);
-      if (!call || call.type !== "tool_use") throw new Error("사람을 읽지 못했습니다.");
-      return call.input;
-    },
-  };
+  return imageToolReader(PEOPLE_SPEC, "사람을 읽지 못했습니다.", environment);
 }
 
 export function createPosterGrammarReader(environment: Record<string, string | undefined> = process.env) {
-  requireKeys(["ANTHROPIC_API_KEY"], environment);
-  const { anthropic, anthropicModel } = clients(environment);
-  return {
-    async read(input: { prompt: string; imageUrls: string[] }) {
-      const response = await anthropic.messages.create({
-        model: anthropicModel,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: [...(await imageBlocks(input.imageUrls)), { type: "text", text: input.prompt }] }],
-        tools: [{ name: GRAMMAR_SPEC.name, description: GRAMMAR_SPEC.description, input_schema: GRAMMAR_SPEC.schema as never }],
-        tool_choice: { type: "tool", name: GRAMMAR_SPEC.name, disable_parallel_tool_use: true },
-      });
-      recordFrom(anthropicModel, response);
-      const call = response.content.find((block) => block.type === "tool_use" && block.name === GRAMMAR_SPEC.name);
-      if (!call || call.type !== "tool_use") throw new Error("문법을 읽지 못했습니다.");
-      return call.input;
-    },
-  };
+  return imageToolReader(GRAMMAR_SPEC, "문법을 읽지 못했습니다.", environment);
 }
 
 export function createPosterReviewProviders(environment: Record<string, string | undefined> = process.env) {

@@ -153,6 +153,34 @@ export function splitFilledSlots<T extends string>(
   return { filled, empty };
 }
 
+export interface PlanSlotRow<T extends string> {
+  field: T;
+  /** 값이 없는 칸. 화면은 자리를 옮기지 말고 **모양으로** 가른다. */
+  empty: boolean;
+}
+
+/**
+ * 기획 확인 패널에 그릴 칸 목록.
+ *
+ * **차례는 언제나 `fields` 그대로다**(2026-09-17 사용자 보고). 채운 칸을 위로
+ * 모아 두었더니 빈 칸에 한 글자를 넣는 순간 그 칸이 위로 올라갔고, 커서가
+ * 빠져 이어서 칠 수가 없었다. 채웠는지 안 채웠는지는 `empty` 로 알려 주고,
+ * 가르는 일은 자리가 아니라 모양에 맡긴다.
+ *
+ * `keep` 은 **한 번 보인 칸**이다. 지우는 도중에 칸이 사라지면 같은 일이
+ * 거꾸로 일어난다 — 글자를 다 지운 순간 칸이 없어져 다시 쓸 수가 없다.
+ */
+export function planSlotRows<T extends string>(
+  fields: T[],
+  valueOf: (field: T) => string,
+  options: { showEmpty: boolean; keep?: Iterable<T> },
+): PlanSlotRow<T>[] {
+  const keep = new Set(options.keep ?? []);
+  return fields
+    .map((field) => ({ field, empty: !valueOf(field).trim() }))
+    .filter((row) => options.showEmpty || !row.empty || keep.has(row.field));
+}
+
 /**
  * 「글자와 피사체의 관계」를 보여줄까.
  *

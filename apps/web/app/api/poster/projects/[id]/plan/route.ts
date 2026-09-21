@@ -1,12 +1,13 @@
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
-import { planPoster, readPeople, readReferenceGrammar } from "@fixup/poster-core";
-import { planReferences } from "@fixup/shared";
+import { mergeGrammar, planPoster, readAttachments } from "@fixup/poster-core";
+import { planReferences, resolveTextModel } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { posterReferencesByIds } from "../../../../../../lib/poster/references";
+import { teamIdOf } from "../../../../../../lib/teams/store";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import {
-  createPosterGrammarReader,
-  createPosterPeopleReader,
+  createPosterAttachmentReader,
   createPosterPlanningProviders,
   PosterProviderConfigurationError,
 } from "../../../../../../lib/poster/providers";
@@ -22,11 +23,21 @@ type Context = { params: Promise<{ id: string }> };
  * 둘 다 실패해도 던지지 않는다. 빈 슬롯과 이유를 저장하고 사람이 채운다.
  */
 export async function POST(request: Request, context: Context) {
+  /*
+   * **본문을 여기서 한 번만 읽는다.** `Request` 의 몸은 한 번만 읽을 수 있어
+   * 아래에서 또 읽으면 빈 값이 온다.
+   *
+   * **고른 글 모델은 Easy 모드만 보낸다**(설계 §5-4). 다른 화면 넷은 본문이
+   * 비어 있고, 그때는 `undefined` 라 지금까지대로 간다.
+   */
+  const 고른글모델 = await request.json()
+    .then((body) => (typeof body?.textModel === "string" ? body.textModel : undefined))
+    .catch(() => undefined);
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 문법 읽기·사람 읽기·기획이 모두 여기로 모인다.
-  return withLlmMeter(() => plan(request, context));
+  return withLlmMeter(() => plan(request, context, 고른글모델));
 }
 
-async function plan(request: Request, context: Context) {
+async function plan(request: Request, context: Context, 고른글모델?: string) {
   /**
    * **`catch` 에서도 봐야 한다.** 안에서 선언하면 실패했을 때 예약을 못 풀고,
    * 묶인 장이 만료될 때까지 그 사람 한도에서 빠져 있는다.
@@ -66,33 +77,34 @@ async function plan(request: Request, context: Context) {
      * 기획에는 **첨부한 것 전부**를 넘긴다. 지켜야 할 인물이 있는지도 알아야
      * 칸을 제대로 채운다.
      */
-    const references = await stores.references.byIds(project.data.referenceIds);
-    const preserved = await stores.references.byIds(project.data.preservedIds ?? []);
-    const grammar = await readReferenceGrammar(
-      references
-        .filter((reference) => Boolean(reference.url))
-        .map((reference) => ({ id: reference.id, title: reference.title ?? "레퍼런스", url: reference.url! })),
-      createPosterGrammarReader(),
-    );
+    /*
+      **라이브러리와 같은 규칙으로 읽는다**(2026-09-17). 목록에서 보이는데
+      여기서 안 읽히면, 고른 그림이 조용히 빠진 채로 만들어진다.
+    */
+    const viewer = {
+      userId: auth.member.userId,
+      role: auth.member.profile.role,
+      teamId: await teamIdOf(auth.member.userId),
+    };
+    const references = await posterReferencesByIds(viewer, project.data.referenceIds);
+    const preserved = await posterReferencesByIds(viewer, project.data.preservedIds ?? []);
 
-    /**
-     * **지킬 사람의 사진에서 누가 있는지 읽는다.**
+    /*
+     * **붙인 것을 역할과 무관하게 한 번씩 읽는다**(설계 §5-1).
      *
-     * 전에는 기획이 사람을 볼 방법이 아예 없었다. 문법 읽기는 「어떻게 보이나」만
-     * 읽고 「따라 만들기」 그림에만 도는데, 지킬 사람의 사진은 아무도 안 봤다.
-     * 그래서 기획이 인물을 한 줄로 뭉뚱그렸고 — 「1번 사진에 등장하는 사람들(흰색
-     * 티셔츠 착용)」 — 그 요약에 없는 안경이 몇 번을 돌려도 안 나왔다
-     * (2026-09-08 실측).
+     * 전에는 역할이 읽기를 갈랐다 — 「따라 만들기」면 색·글자만, 「인물
+     * 지키기」면 사람만, 「제품 지키기」면 아무도 안 읽었다. **그림을 보기도
+     * 전에 고른 버튼 하나가 그 그림에서 배울 수 있는 것을 잘라 버렸다.**
      *
-     * **실패해도 계속한다.** 사람 묘사가 없어도 포스터는 만들 수 있고, 그림
-     * 모델은 사진 자체를 여전히 본다.
+     * 2026-09-17 실측에서 드러났다 — 손 여섯이 핸드폰으로 인물을 둘러싸 찍는
+     * 표지를 붙였는데 기획이 그 연출을 볼 방법이 없어 「배경은 거의 무지에
+     * 가깝게」라고 쓰고 「다른 인물 추가」를 금지했다.
      */
-    const personIds = new Set(project.data.personIds ?? []);
-    const crowd = await readPeople(
-      preserved
-        .filter((reference) => Boolean(reference.url) && personIds.has(reference.id))
-        .map((reference) => ({ id: reference.id, title: reference.title ?? "사진", url: reference.url! })),
-      createPosterPeopleReader(),
+    const read = await readAttachments(
+      [...references, ...preserved]
+        .filter((reference) => Boolean(reference.url))
+        .map((reference) => ({ id: reference.id, title: reference.title ?? "첨부", url: reference.url! })),
+      createPosterAttachmentReader(),
     );
 
     /**
@@ -103,39 +115,51 @@ async function plan(request: Request, context: Context) {
      * 안 남겼다.
      *
      * **읽기가 끝난 뒤에 센다.** 실제로 몇 장을 읽었는지는 그때 알 수 있고,
-     * 실패한 읽기는 세지 않는다(`grammar.issues`·`crowd.issues` 로 빠진다).
+     * 실패한 읽기는 세지 않는다(`read.issues` 로 빠진다).
      *
      * 저절로 도는 것이 걱정되지 않는다 — 자동 기획은 **칸이 전부 빈 첫 회에만**
      * 돈다. 다시 채우려면 사람이 눌러야 한다.
      */
-    const visionReads = Object.keys(grammar.grammars).length + Object.keys(crowd.people).length;
+    const visionReads = Object.keys(read.reads).length;
     const units = creditUnits(llmCostUsd({ planCalls: 1, visionReads }));
     const reserved = await reserveAiUsage(request, "poster_image", units);
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
-    const providers = createPosterPlanningProviders();
+    /*
+     * **고른 글 모델로 기획한다**(Easy 모드의 드롭다운, 설계 §5-4).
+     *
+     * 다른 화면은 이 칸을 안 보낸다 — 그때는 지금까지대로 환경변수·기본값으로
+     * 간다. `resolveTextModel` 이 목록에 없는 id 를 기본으로 떨어뜨린다.
+     */
+    const providers = createPosterPlanningProviders(process.env, resolveTextModel(고른글모델));
     const plan = await planPoster(
       {
         instruction: project.data.instruction,
         ratio: project.ratio,
         references: planReferences(
-          project.data, [...references, ...preserved], grammar.summaries, crowd.people,
+          project.data, [...references, ...preserved], read.summaries, read.people,
         ),
         attachmentIntent: project.data.attachmentIntent,
+        // 붙인 그림에 글자가 있으면 지어난 글자도 안 지워진다.
+        // 그때는 「장면에서 글자 얘기를 하지 말라」고 시키면 안 된다.
+        referenceHasText: Object.values(read.reads).some((one) => one.hasText),
       },
       providers.primary,
       providers.backup,
     );
 
-    // 문법에서 읽은 "어떻게 보이나" 를 초기값으로 깔고, 기획이 채운 값이 이긴다.
-    const seed = Object.values(grammar.grammars)[0];
-    const slots = {
-      ...plan.slots,
-      typeInteraction: plan.slots.typeInteraction ?? seed?.typeInteraction ?? null,
-      dominantColor: plan.slots.dominantColor || seed?.dominantColor || "",
-      accentColor: plan.slots.accentColor || seed?.accentColor || "",
-    };
+    /*
+     * **레퍼런스에서 읽은 값이 기획의 추측을 이긴다.**
+     *
+     * 전에는 반대였다. 그래서 2026-09-17 사고에서 레퍼런스를 실제로 읽어
+     * 「가림」을 얻어 놓고도 기획이 추측한 「통과」가 프롬프트로 갔다. 그림을
+     * 읽는 비전 호출은 돈을 내고 하는 일인데 그 결과가 버려지고 있었다.
+     *
+     * 합치는 규칙은 `mergeGrammar` 가 갖는다 — 라우트 안에 두면 값으로 못 잰다.
+     */
+    const 레퍼런스 = project.data.referenceIds.map((id) => read.reads[id]).find(Boolean);
+    const slots = mergeGrammar(plan.slots, 레퍼런스);
 
     const saved = await stores.projects.update(id, {
       status: "ready",
@@ -150,7 +174,13 @@ async function plan(request: Request, context: Context) {
          * `invented` 에 안 적으므로 저절로 빠진다.
          */
         inventedSlots: plan.invented,
-        grammarIssues: [...grammar.issues, ...crowd.issues, ...plan.issues],
+        /*
+         * **붙인 그림에 글자가 있나.** 글자를 넣을지는 규칙이 아니라 이 값이
+         * 정한다(2026-09-17 사용자 판단). 한 장이라도 글자가 있으면 넣는다 —
+         * 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수 있다.
+         */
+        referenceHasText: Object.values(read.reads).some((one) => one.hasText),
+        grammarIssues: [...read.issues, ...plan.issues],
       },
     });
     /**
@@ -164,7 +194,7 @@ async function plan(request: Request, context: Context) {
       billableImages: 0,
       llmUsd: 실제,
     });
-    return Response.json({ ok: true, project: saved, issues: [...grammar.issues, ...crowd.issues, ...plan.issues] });
+    return Response.json({ ok: true, project: saved, issues: [...read.issues, ...plan.issues] });
   } catch (error) {
     // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.
     if (reservation) await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");

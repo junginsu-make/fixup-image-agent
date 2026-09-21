@@ -28,7 +28,7 @@ describe("내가 적은 말이 기획 확인 화면에 보이는가", () => {
   it("기획 칸보다 위에 둔다 — 무엇이 더 센지 그 자리에서 말한다", () => {
     expect(source).toContain("아래 칸보다 우선합니다");
     // 그리는 차례로 본다. `SLOT_LABELS.map` 은 위쪽 유도에도 나와서 기준이 안 된다.
-    expect(source.indexOf("userWords.map")).toBeLessThan(source.indexOf("filledFields.map(renderSlot)"));
+    expect(source.indexOf("userWords.map")).toBeLessThan(source.indexOf("planRows.map(renderSlot)"));
   });
 
   it("고칠 수 없다 — 이 화면은 기획 칸만 고친다", () => {
@@ -81,21 +81,58 @@ describe("기획은 옆에서 나오고 결과가 페이지를 갖는다", () =>
 describe("칸을 걸러서 보여주는가", () => {
   it("규칙을 여기 다시 적지 않고 부른다", () => {
     expect(source).toContain("splitFilledSlots(");
-    expect(source).toContain("showsTypeInteraction(slots)");
+    // showsTypeInteraction 은 04 에서 그 칸을 빼면서 안 쓰게 됐다(2026-09-17).
   });
 
-  it("채운 칸을 먼저 그린다", () => {
-    expect(source).toContain("filledFields.map(renderSlot)");
+  /**
+   * **칸을 두 무더기로 나눠 그리지 않는다**(2026-09-17 사용자 보고).
+   *
+   * 채운 칸을 위에, 빈 칸을 아래에 그렸더니 빈 칸에 한 글자를 넣는 순간 그
+   * 칸이 위 무더기로 옮겨 가 커서가 빠졌다. 한 목록으로 그려야 자리가 안 움직인다.
+   */
+  it("한 목록으로 그린다 — 차례는 `planSlotRows` 가 정한다", () => {
+    expect(source).toContain("planRows.map(renderSlot)");
+    expect(source, "두 무더기로 돌아가면 안 된다").not.toContain("filledFields.map(renderSlot)");
+    expect(source, "두 무더기로 돌아가면 안 된다").not.toContain("emptyFields.map(renderSlot)");
   });
 
-  it("빈 칸은 접어 두되 없애지 않는다 — 없으면 고를 방법이 사라진다", () => {
-    expect(source).toContain("emptyFields.map(renderSlot)");
-    expect(source).toMatch(/showEmpty \? <div[\s\S]{0,80}emptyFields\.map/);
+  it("**한 번 보인 칸은 지켜 준다** — 글자를 지우는 중에 칸이 사라지면 안 된다", () => {
+    expect(source).toMatch(/planSlotRows\([\s\S]{0,160}\{ showEmpty, keep: keptFields \}/);
   });
 
-  it("채운 칸과 접힌 칸이 같은 모양이다", () => {
-    // 두 벌로 그리면 한쪽만 고쳐져 모양이 갈린다.
-    expect(source).toMatch(/function renderSlot\(field: TextSlot\)/);
+  /**
+   * **기획이 도착한 뒤에도 쌓아야 한다**(2026-09-17 독립 리뷰가 실증).
+   *
+   * 04 는 빈 채로 열리고 기획이 그 뒤에 칸을 채운다. 열 때 한 번만 잡으면
+   * 목록이 빈 채로 굳어, 채워진 칸의 글자를 다 지우는 순간 그 칸이 사라진다 —
+   * 막으려던 바로 그 일이 기본 흐름에서 그대로 일어났다.
+   */
+  it("값이 들어오면 그때그때 더한다 — 열 때 한 번이 아니다", () => {
+    expect(source).toMatch(/setKeptFields\(\(current\) => \{[\s\S]{0,400}next\.add\(field\)/);
+    // 효과가 slots 를 봐야 기획이 채운 칸을 잡는다.
+    expect(source).toMatch(/setKeptFields\(\(current\) => \{[\s\S]{0,600}\}, \[planOpen, slots\]\);/);
+  });
+
+  it("접으면 지금 빈 칸은 놓아 준다 — 접었는데 남아 있으면 접은 것이 아니다", () => {
+    expect(source).toMatch(/if \(!planOpen \|\| showEmpty\) return;[\s\S]{0,200}filter\(\(field\) => String\(slots\[field\]/);
+  });
+
+  it("빈 칸을 접는 단추는 남는다 — 없으면 고를 방법이 사라진다", () => {
+    expect(source).toContain("setShowEmpty((current) => !current)");
+    expect(source).toContain("비어 있는 칸 {emptyFields.length}개");
+  });
+
+  it("빈 칸인지는 **모양으로** 말한다 — 자리로 말하면 커서가 튄다", () => {
+    expect(source).toMatch(/function renderSlot\(\{ field, empty \}: PlanSlotRow<TextSlot>\)/);
+    expect(source).toContain('const look = empty ? "border-dashed bg-muted/30" : "";');
+  });
+
+  /**
+   * 기획이 도는 동안 패널이 **멈춘 화면으로 보이면 안 된다**(2026-09-17 사용자
+   * 보고). 04 에 들어오면 기획이 저절로 도는데, 그때 패널에는 빈 칸만 있었다.
+   */
+  it("쓰는 중에는 패널을 덮는다", () => {
+    expect(source).toMatch(/busy\?\.kind === "plan" \? \(\s*<PlanWriting/);
   });
 });
 
@@ -176,10 +213,81 @@ describe("지어낸 칸 표시", () => {
   });
 
   /**
+   * **만들기 전에 먼저 저장한다.**
+   *
+   * 미리보기는 화면 state 를 보고 생성은 저장값을 본다. 전에는 값이 **내용**만
+   * 갈랐는데, 이제 「글자를 넣지 말라」라는 **분기**까지 가른다. 그래서 칸을
+   * 고치고 저장 안 한 채 만들면 미리보기에는 글자가 보이는데 **글자 하나 없는
+   * 그림**이 나온다(2026-09-17 리뷰).
+   *
+   * 고친 것을 버리는 쪽이 아니라 **살리는 쪽**으로 맞춘다 — 사람이 방금 한 일이다.
+   */
+  it("만들기 전에 저장한다", () => {
+    const 만들기 = source.slice(
+      source.indexOf("async function generate()"),
+      source.indexOf("async function pollUntilDone"),
+    );
+
+    expect(만들기.length, "generate 를 못 찾았다").toBeGreaterThan(50);
+    expect(만들기).toContain("if (!await saveSlots()) return;");
+  });
+
+  /** 저장이 실패했는데 만들면 틀린 값으로 그림을 만든다 — 값이 드는 일이다. */
+  it("저장 실패를 삼키지 않는다", () => {
+    const 저장 = source.slice(
+      source.indexOf("async function saveSlots"),
+      source.indexOf("async function runPlan"),
+    );
+
+    expect(저장).toContain("return true;");
+    expect(저장).toContain("return false;");
+  });
+
+  /**
    * **손댄 칸은 더 이상 AI 것이 아니다.** 표를 그대로 두면 자기가 쓴 글에
    * 「확인하세요」가 붙어 있는 꼴이 된다.
    */
   it("고치면 표가 사라진다", () => {
     expect(source).toContain('setInvented((current) => current.filter((name) => name !== field))');
+  });
+});
+
+/**
+ * **「글자와 피사체의 관계」를 04 에서 뺐다.**
+ *
+ * 2026-09-17 사용자 판단. 세 가지 까닭이 있다.
+ *
+ * **① 사용자가 판단할 수 없는 것을 묻는다.** 「통과 / 뒤로 / 가림 / 감쌈」은
+ * 타이포그래피 용어다. 레퍼런스를 붙인 사람은 답이 그림에 있고, 안 붙인
+ * 사람은 고를 근거가 없다.
+ *
+ * **② 04 를 한 칸 가볍게 한다.** 「틀린 칸만 고치기」가 이 화면의 강점인데
+ * 칸이 많을수록 그 강점이 준다(2026-09-08 결정).
+ *
+ * **③ 레퍼런스가 없으면 모델이 정하는 편이 낫다.** 우리가 한 낱말로 못 박으면
+ * 오히려 좁힌다.
+ *
+ * **값은 남는다.** 레퍼런스에서 읽은 값을 담을 자리가 필요하고, 프롬프트의 그
+ * 한 줄이 「타이포가 인물을 가로지른다」를 모델에 전한다. 다만 그 값은 이제
+ * 읽어서만 들어온다(`mergeGrammar`).
+ */
+describe("글자와 피사체의 관계", () => {
+  it("04 에서 고르는 칸이 없다", () => {
+    /*
+      **주석은 빼고 본다.** 왜 뺐는지 적어 둔 자리에 그 이름이 나온다 —
+      까닭을 적을수록 시험이 화를 내면 다음 사람이 까닭을 안 적는다.
+    */
+    const 그린것 = source
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+
+    expect(그린것).not.toContain("글자와 피사체의 관계");
+    expect(그린것).not.toContain("TYPE_INTERACTIONS");
+  });
+
+  /** 화면이 그 값을 손으로 바꾸는 길도 없어야 한다. */
+  it("화면이 그 값을 안 바꾼다", () => {
+    expect(source).not.toContain("typeInteraction: current.typeInteraction");
   });
 });

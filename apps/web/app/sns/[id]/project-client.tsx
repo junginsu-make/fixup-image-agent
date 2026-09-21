@@ -11,6 +11,7 @@ import { hasActiveQueuedGeneration, QUEUE_POLL_INTERVAL_MS } from "../../../lib/
 import { afterGenerateFailure } from "../generate-recovery";
 // 이미지 만들기가 같은 문제를 이미 풀었다 — 새 조각을 만들지 않는다.
 import { WorkingBanner } from "../../poster/_components/working-banner";
+import { rerunHref } from "../../_components/rerun-step";
 import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -170,7 +171,57 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
    * 이 화면을 떠나도 셸이 대신 결과를 받아 오고, 무엇이 돌고 있는지 어디서든
    * 보인다. 이미 만드는 중인 프로젝트를 열었을 때도 같은 자리에 붙는다.
    */
-  const { start, finish } = useRunningJobs();
+  const { jobs, start, finish, stop } = useRunningJobs();
+
+  /**
+   * 지금 돌고 있는 것을 **강제로 끝낸다.**
+   *
+   * 사이드바에 있던 목록과 중지를 상단 표시 하나로 합쳤다(2026-09-17 사용자
+   * 결정). 카드뉴스는 서버에도 멈췄다고 알린다 — 안 그러면 다시 열었을 때
+   * 그 흐름에 또 붙는다(`running-jobs.tsx` 의 `tellServerToStop`).
+   */
+  const [stopping, setStopping] = React.useState(false);
+  /**
+   * 사용자가 **중지**를 눌렀나.
+   *
+   * 기획 단계에는 일감이 목록에 없어 멈출 것도 없었다 — 그런데 그사이 기획
+   * 응답이 도착하면 화면이 혼자 다음 단계로 넘어갔다(2026-09-17 독립 리뷰).
+   * 이미지 쪽과 같은 방식으로, 누른 뒤에 도착한 답을 버린다.
+   */
+  const stopped = React.useRef(false);
+
+  /** 일을 시작한다. 지난 중지를 여기서 푼다 — 갈래마다 적으면 하나를 빠뜨린다. */
+  function beginWork(state: "planning" | "generating") {
+    stopped.current = false;
+    setBusy(state);
+    setMessage("");
+  }
+
+  async function stopNow() {
+    setStopping(true);
+    stopped.current = true;
+    const id = jobId("sns", projectId);
+    const job = jobs.find((entry) => entry.id === id);
+    try {
+      if (job) {
+        await stop(job);
+      } else {
+        finish(id);
+        /*
+          **일감으로 안 잡힌 것도 서버에 알린다.** 기획 중에는 아직 목록에
+          없는데, 흐름과 예약은 서버에 있다. 안 알리면 그대로 남는다.
+        */
+        await request(`/api/sns/projects/${projectId}/stop`, { method: "POST" }).catch(() => {});
+      }
+      // 서버가 멈춘 것을 화면에도 반영한다. 안 하면 「만드는 중」이 그대로 남는다.
+      await reload();
+    } catch {
+      setMessage("중지했지만 상태를 다시 읽지 못했습니다. 새로고침해 주세요.");
+    } finally {
+      setStopping(false);
+      setBusy(undefined);
+    }
+  }
   const startedAt = project?.data.flow?.generation?.startedAt;
   const title = project?.title;
   React.useEffect(() => {
@@ -224,10 +275,11 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }, [generationActive, projectId, readOnly, request]);
 
   async function plan() {
-    setBusy("planning");
-    setMessage("");
+    beginWork("planning");
     try {
       const saved = await request(`/api/sns/projects/${projectId}/plan`, { method: "POST" });
+      // 중지를 눌렀으면 도착한 기획을 안 쓴다 — 멈춘 화면이 혼자 넘어가면 안 된다.
+      if (stopped.current) return;
       setProject(saved);
       setView("copy");
     } catch (error) {
@@ -256,14 +308,14 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }
 
   async function generate() {
-    setBusy("generating");
-    setMessage("");
+    beginWork("generating");
     try {
       // 크레딧이 깎이는 요청이다 — 열쇠 없이 보내면 서버가 예약을 거절한다.
       const saved = await request(`/api/sns/projects/${projectId}/generate`, {
         method: "POST",
         headers: billableHeaders(),
       });
+      if (stopped.current) return;
       setProject(saved);
       setView("result");
     } catch (error) {
@@ -365,13 +417,28 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         지적을 받고 이 띠를 만들었다(`working-banner.tsx` 머리말).
       */}
       {busy === "planning" ? (
-        <WorkingBanner label="기획과 원고를 만드는 중입니다" hint="1~2분 걸립니다. 이 화면을 닫아도 계속됩니다" />
+        <WorkingBanner
+          label="기획과 원고를 만드는 중입니다"
+          hint="1~2분 걸립니다. 이 화면을 닫아도 계속됩니다"
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
       ) : null}
       {busy === "generating" ? (
-        <WorkingBanner label="그림을 만드는 중입니다" hint="장수만큼 차례로 만듭니다. 이 화면을 닫아도 계속됩니다" />
+        <WorkingBanner
+          label="그림을 만드는 중입니다"
+          hint="장수만큼 차례로 만듭니다. 이 화면을 닫아도 계속됩니다"
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
       ) : null}
       {generationActive && busy !== "generating" ? (
-        <WorkingBanner label="그림을 만드는 중입니다" hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다" />
+        <WorkingBanner
+          label="그림을 만드는 중입니다"
+          hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다"
+          onStop={() => void stopNow()}
+          stopping={stopping}
+        />
       ) : null}
 
       {/*
@@ -398,7 +465,9 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         onJump={(id) => {
           if (id === "copy") return view === "result" ? setView("copy") : undefined;
           if (id === "result") return undefined;
-          router.push(`/sns/new?from=${encodeURIComponent(projectId)}`);
+          // **누른 단계도 함께 싣는다.** 안 실으면 03 을 눌러도 01 이 열린다
+          // (2026-09-17 사용자 보고).
+          router.push(rerunHref("/sns/new", projectId, id));
         }}
       />
 

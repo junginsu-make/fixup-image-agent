@@ -33,10 +33,57 @@ describe("빈 칸이 잡을 모양", () => {
 
 describe("진행 표시가 화면에 이어져 있는가", () => {
   it("조용한 회색 띠 대신 강조 띠를 쓴다", () => {
-    expect(source).toContain("<WorkingBanner label={busy.label} hint={busy.hint} />");
+    expect(source).toMatch(/<WorkingBanner\s+label=\{busy\.label\}\s+hint=\{busy\.hint\}/);
     expect(source, "회색 띠로 되돌아가면 안 된다").not.toMatch(
       /busy \? \(\s*<div role="status" className="rounded-md border border-border bg-muted\/40/,
     );
+  });
+
+  /**
+   * **멈추는 자리는 띠 하나다**(2026-09-17 사용자 결정).
+   *
+   * 사이드바 아래에도 같은 목록과 중지가 있어서, 만드는 동안 「진행 중」이 두
+   * 군데에 보였다. 표시가 있는 자리에서 바로 멈춘다.
+   */
+  it("띠에서 바로 멈출 수 있다", () => {
+    expect(source).toMatch(/<WorkingBanner[\s\S]{0,120}onStop=\{\(\) => void stopNow\(\)\}/);
+    expect(source).toContain("stopping={stopping}");
+  });
+
+  it("중지를 누르면 **캐묻기와 도착한 응답을 둘 다 끊는다**", () => {
+    // 하나만 끊으면 멈춘 뒤에 결과가 들어와 화면이 되살아난다.
+    expect(source).toContain("stopped.current = true;");
+    expect(source).toMatch(/const body = await \(await billableRequest\([\s\S]{0,120}if \(stopped\.current\) return;/);
+  });
+
+  /**
+   * **자는 사이에 누른 중지도 걸려야 한다**(2026-09-17 독립 리뷰).
+   *
+   * 잠들기 전에만 보면, 자는 동안 멈춘 사람에게 최대 10초 뒤 결과가 도착해
+   * 화면이 되살아난다. 그래서 세 자리에서 본다 — 자기 전 · 깬 뒤 · 답이 온 뒤.
+   */
+  it("캐묻기 한 바퀴에서 세 번 본다", () => {
+    const loop = source.slice(source.indexOf("async function collect("));
+    const checks = loop.slice(0, loop.indexOf("if (poll.done)"))
+      .match(/if \(stopped\.current\) return false;/g) ?? [];
+    expect(checks.length).toBe(3);
+  });
+
+  /**
+   * **푸는 자리는 한 곳이다.** 갈래마다 적으면 하나를 빠뜨리고, 빠뜨린 갈래는
+   * 요청만 나가고(돈은 나간다) 결과는 안 들어온다 — 고치기가 그랬다.
+   */
+  it("일을 시작하는 다섯 자리가 모두 같은 문을 지난다", () => {
+    // 기획·만들기·고치기·검수, 그리고 돌아와서 이어받을 때.
+    expect(source).toMatch(/stopped\.current = false;\s*setBusy\(state\);/);
+    expect((source.match(/beginWork\(\{ kind:/g) ?? []).length).toBe(5);
+    // 갈래 안에서 따로 풀면 그 자리만 또 달라진다.
+    expect(source.match(/stopped\.current = false;/g)?.length).toBe(1);
+  });
+
+  it("일감으로 안 잡힌 것도 서버에 멈췄다고 알린다", () => {
+    // 기획·보내는 중에 누르면 일감이 아직 목록에 없다. 그래도 예약은 잡혀 있다.
+    expect(source).toMatch(/finish\(id\);[\s\S]{0,400}\/api\/poster\/projects\/\$\{project\.id\}\/stop/);
   });
 
   it("무엇을 하는 중인지 종류로 구분한다", () => {

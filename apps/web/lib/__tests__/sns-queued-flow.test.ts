@@ -244,14 +244,24 @@ describe("자리별 지시가 새지 않는가", () => {
     expect(body.prompt, "속지 프롬프트에 표지 지시가 새면 안 된다").not.toContain("표지전용문구");
   });
 
-  it("지시를 적으면 그 자리의 역할 고정 문구가 사라진다", async () => {
+  /**
+   * **지시를 적어도 역할 규칙은 남는다** — 대신 적은 말이 이긴다.
+   *
+   * 전에는 적은 자리의 역할 문구를 통째로 뺐다. 2026-09-17 에 이미지
+   * 만들기에서 그것이 과하다는 것이 실물로 드러나(부딪히지도 않는 905자가
+   * 함께 사라져 모자와 포스터 느낌이 안 나왔다) 카드뉴스도 같이 고쳤다.
+   */
+  it("지시를 적어도 역할 규칙이 남고, 적은 말이 이긴다", async () => {
     const deps = dependencies([]);
     const started = await startQueuedFlow(mixedProject(), mixedFlow(), deps, { now: "2026-09-01T00:00:00.000Z" });
     const cover = started.cards.find((card) => card.index === 1)!;
     const body = started.cards.find((card) => card.index === 2)!;
-    expect(cover.prompt).not.toContain("Do NOT copy anything else from it");
-    // 속지는 안 적었으므로 지금까지 그대로다.
+
+    expect(cover.prompt).toContain("Do NOT copy anything else from it");
+    expect(cover.prompt).toContain("Their words OVERRIDE any rule above");
+    // 속지는 안 적었으므로 「이긴다」 줄이 안 붙는다.
     expect(body.prompt).toContain("Do NOT copy anything else from it");
+    expect(body.prompt).not.toContain("Their words OVERRIDE any rule above");
   });
 
   it("안 적었으면 어느 카드에도 USER INSTRUCTION 이 안 붙는다", async () => {

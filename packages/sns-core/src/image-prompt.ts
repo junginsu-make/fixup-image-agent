@@ -12,6 +12,7 @@ import {
 } from "@fixup/shared";
 import type { Attachment, GroupedAttachments, StyleRole } from "./attachments";
 import type { CardCopy, CopyLanguage } from "./copy";
+import { IMAGE_MODELS } from "./models";
 import type { CardPlan } from "./planning";
 
 const LANGUAGE_LABEL: Record<CopyLanguage, string> = {
@@ -105,14 +106,6 @@ export function referenceWarningsForRole(
   return [`${label} 레퍼런스가 없습니다. ${label} 카드가 다른 역할과 다른 모양으로 나올 수 있습니다.`];
 }
 
-/** 사용자가 고른 역할의 이름. **규칙은 안 붙인다** (설계 §4-1 A안). */
-function shortRole(image: Attachment): string {
-  if (image.kind === "style_reference") return "reference to imitate";
-  if (image.kind !== "keep_identity") return "place as is";
-  if (image.subject !== "person") return "subject to keep";
-  return image.restyle ? "person to keep, redrawn in another style" : "person to keep";
-}
-
 export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning = {}): string {
   const lines: string[] = [];
   if (images.length > 0) lines.push(ATTACHMENT_DECLARATION);
@@ -129,31 +122,19 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
   const intent = tuning.attachmentIntent?.trim() ?? "";
 
   /**
-   * 지시를 적었으면 **부딪히는 고정 문구를 통째로 뺀다** (설계 §4-1 A안).
+   * 지시를 적었으면 **고정 문구를 남기고, 사용자의 말이 그것을 이긴다.**
    *
-   * 이미지 만들기에서 실측으로 정한 것이다. 역할 문구가 여섯 문장이고 전부
-   * 구체적이라, 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼다.
+   * 2026-09-08 에는 통째로 뺐다(설계 §4-1 A안). 역할 문구가 여섯 문장이고
+   * 전부 구체적이라 우선순위 한 줄로는 사용자가 적은 한 줄을 못 이겼기
+   * 때문이다.
    *
-   * **번호와 역할 이름은 남긴다.** 빼면 「①번」이 가리킬 것이 없어진다.
+   * **그런데 지우는 것이 과했다.** 2026-09-17 이미지 만들기에서 부딪히지도
+   * 않는 905자가 함께 사라져, 모자도 포스터 느낌도 결과에 안 나왔다.
+   *
+   * 지우기와 우선하기는 다른 일이다. 규칙은 남기고 「사용자의 말이 이긴다」는
+   * 한 줄을 **뒤에** 둔다 — 뒤에 온 말이 앞말을 덮는 것은 이 저장소가 여러 번
+   * 확인한 순서다(2026-09-04 실측).
    */
-  if (intent && images.length) {
-    lines.push(
-      "The user wrote what to do with these images. Their words replace the usual rules for each "
-      + "role, so those rules are deliberately omitted — except where an instruction is spelled out "
-      + "below, which still applies. Read the USER INSTRUCTION and follow it.",
-    );
-    images.forEach((image, offset) => {
-      const number = offset + 1;
-      const person = image.kind === "keep_identity" && image.subject === "person";
-      // 「사람은 그대로, 그림 느낌만」은 안 지운다 — 부딪히지 않고, 지우면
-      // 사람을 하나하나 옮기라는 말이 사라져 작은 것(안경 같은)이 빠진다.
-      if (person && image.restyle) {
-        lines.push(`Image ${number} is a PRESERVED PERSON, REDRAWN. ${restyledPersonDirective()}`);
-        return;
-      }
-      lines.push(`Image ${number}: the user marked this "${shortRole(image)}".`);
-    });
-  } else {
   images.forEach((image, offset) => {
     const number = offset + 1;
     if (image.kind === "style_reference") {
@@ -190,6 +171,25 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
       );
     }
   });
+
+  /*
+   * **적은 말이 이긴다 — 규칙을 지우지는 않는다.**
+   *
+   * 전에는 지시를 적으면 위 역할 문구를 통째로 뺐다. 이미지 만들기에서
+   * 실측으로 정한 것을 옮겨 온 것인데, 2026-09-17 에 그것이 과하다는 것이
+   * 실물로 드러났다 — 첨부 셋(포스터·인물·모자)에 「힙하고 자유로운 느낌」
+   * 이라고 적었더니 부딪히지도 않는 905자가 함께 사라지고, 모자도 포스터
+   * 느낌도 결과에 안 나왔다.
+   *
+   * **남기고, 이긴다고 말하고, 뒤에 둔다.** 뒤에 온 말이 앞말을 덮는 것은
+   * 이 저장소가 여러 번 확인한 순서다. 지우기와 우선하기는 다른 일이다.
+   */
+  if (intent && images.length) {
+    lines.push(
+      "The user wrote how to use these images. Their words OVERRIDE any rule above that "
+      + "contradicts them — where a rule and the user disagree, follow the user. Rules the user "
+      + "did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
+    );
   }
   /*
     **같은 캐릭터의 여러 각도**가 붙었으면 한 번만 말해 준다.
@@ -379,11 +379,22 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
         attachmentIntent: intentForRole(input.attachmentIntents, input.role),
       })),
       "Write the visual scene prompt for one card-news image.",
-      ...(input.modelId
-        ? [`The prompt you write will be rendered by this target model: ${input.modelId}.`
-          + " Phrase it the way that model follows best — if you know it, use what you know"
-          + " about how it reads prompts; otherwise write plainly."]
-        : []),
+      /*
+       * **길이를 스스로 줄이지 말라고 못 박는다.**
+       *
+       * 모델 이름만 주고 「그 모델이 잘 따르는 대로」라고 했더니 LLM 이 gpt
+       * 계열에 **짧게** 썼다(992자 대 1,850자, 2026-09-17 실측). 그런데 긴
+       * 프롬프트도 잘 반영되는 것을 확인했다(사용자) — 자세할수록 그림에 더
+       * 들어간다. 안 적은 것은 모델이 알아서 정하고, 그러면 사용자가 바란 것이
+       * 아닌 쪽으로 갈 수 있다.
+       *
+       * **모델에 맞추는 것은 말투이지 분량이 아니다.** 둘을 갈라 말한다.
+       */
+      "Write with as much useful detail as the scene warrants: subject, placement,"
+      + " camera angle, lens feel, lighting direction and quality, materials, textures,"
+      + " colour relationships, background depth, mood. There is no length limit —"
+      + " do not shorten or summarise to save space. Only leave out what would be"
+      + " guessing rather than describing.",
       "Inspect the attached reference images directly. Use them as the visual source; do not replace them with a textual reconstruction.",
       buildAttachmentBlock(references, {
         look: input.look,
@@ -401,11 +412,62 @@ export function buildSceneRequest(input: ImagePromptInput): ScenePromptRequest {
       "Do not omit, summarize, paraphrase, or replace any copy field with shorter labels.",
       "Do not invent greetings, slogans, CTAs, footer copy, copyright notices, trademark claims, dates, or brand names that are absent from the confirmed copy.",
       "Incidental environmental words on signs, signboards, and props are allowed when natural to the scene, but they must not become new card copy or claims.",
+      /*
+       * **모델 얘기는 원고 규칙 뒤에 둔다.**
+       *
+       * 앞에 두었더니 gpt 계열에서 길이가 40% 줄었다(2026-09-17 실측). 그
+       * 압축이 바로 위의 「원고 필드를 줄이지 말라」를 갉는 방향이다 — 앞에
+       * 온 말이 뒤의 규칙을 덮는다(2026-09-17 리뷰). 규칙을 먼저 읽히고
+       * 그 다음에 말투를 말한다.
+       *
+       * **이름을 답에 쓰지 말라고 못 박는다.** 여기서 쓴 본문은 그대로
+       * 저장돼 04·05 화면의 「그림 지시」에 보인다. 모델이 답 첫 줄에
+       * 「Optimized for fal-ai/…」 한 번만 적으면 사용자가 그것을 본다.
+       * 화면에는 「표준형」 같은 우리 이름만 나가야 한다.
+       */
+      ...(input.modelId
+        ? [`The prompt you write will be rendered by this target model: ${input.modelId}.`
+          + " Phrase it the way that model reads best — wording, ordering and sentence"
+          + " shape. This is about phrasing, NOT about writing less: keep the same"
+          + " level of detail whichever model it is, and keep every copy rule above"
+          + " exactly as stated regardless of model."
+          + " Never mention the model, its vendor or its endpoint anywhere in your"
+          + " answer — write only the image prompt itself."]
+        : []),
       "Decide the scene, composition, visual emphasis, and how to follow the matching reference. Return only the image prompt body.",
       userInstructionTail(input.userInstruction ?? ""),
     ].filter(Boolean).join("\n\n"),
     imageUrls: references.map((image) => image.url),
   };
+}
+
+/**
+ * 장면 LLM 이 쓴 본문에서 **모델·업체 이름이 든 줄을 뺀다.**
+ *
+ * 이 본문은 그대로 저장돼 결과 화면의 「그림 지시(프롬프트)」에 보인다
+ * (`result-board.tsx`). 그런데 그 LLM 은 방금 `fal-ai/nano-banana-pro` 를
+ * 읽었고, 답 첫 줄에 「Optimized for fal-ai/…」 한 번만 적으면 사용자가 그것을
+ * 본다(2026-09-17 리뷰). 화면에는 「표준형」 같은 우리 이름만 나가야 한다.
+ *
+ * **프롬프트로도 막고 여기서도 막는다.** 「쓰지 말라」는 지킬 수도 안 지킬 수도
+ * 있는 부탁이고, 안 지켰을 때 아무도 모른다.
+ *
+ * **줄 단위로 뺀다.** 낱말만 지우면 「Optimized for :」 같은 부스러기가 남고,
+ * 그런 줄은 애초에 장면 묘사가 아니다. 거꾸로 낱말로만 찾으면 장면에 나온
+ * 바나나까지 지운다 — 모델 id 와 엔드포인트라는 **온전한 꼴**로만 본다.
+ */
+export function stripModelMentions(body: string): string {
+  if (!body) return "";
+  const 찾을것 = IMAGE_MODELS.flatMap((model) => [
+    model.id,
+    model.t2i.endpoint,
+    model.i2i.endpoint,
+  ]);
+  return body
+    .split("\n")
+    .filter((line) => !찾을것.some((name) => line.includes(name)))
+    .join("\n")
+    .trim();
 }
 
 /** LLM 실패가 이미지 생성 전체를 멈추지 않게 빈 본문을 돌려준다. */
@@ -416,7 +478,8 @@ export async function writeImagePrompt(
   const warnings = referenceWarningsForRole(input.grouped, input.role);
   try {
     const generated = await provider.generate(buildSceneRequest(input));
-    return { body: typeof generated === "string" ? generated : "", warnings };
+    // 모델 이름이 답에 섞여 나오면 화면까지 간다. 여기서 한 번 더 막는다.
+    return { body: typeof generated === "string" ? stripModelMentions(generated) : "", warnings };
   } catch {
     return { body: "", warnings };
   }

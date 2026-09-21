@@ -20,6 +20,20 @@ export interface ImageModel {
    * 이유는 `pdp-core/types.ts` 의 같은 자리에 적어 두었다.
    */
   label: string;
+  /**
+   * 어느 업체 계열인가. **화면이 묶어 보일 때 쓴다.**
+   *
+   * id 만으로도 읽을 수 있지만(`gpt-image-*`, `nano-banana-*`) 그것을 화면이
+   * 문자열로 가르면 id 가 바뀔 때 조용히 틀린다.
+   */
+  family?: "gpt-image" | "nano-banana";
+  /**
+   * 한 줄 설명. **고르는 사람이 읽는 말이다.**
+   *
+   * `lib/studio/model-choice.ts` 의 `NOTES` 는 **기획 LLM 에게 보내는 글**이라
+   * 길고 자세하다. 드롭다운 한 줄에는 안 들어간다 — 그래서 따로 둔다.
+   */
+  note?: string;
   isDefault?: boolean;
   t2i: ModeSpec;
   i2i: ModeSpec;
@@ -110,6 +124,8 @@ export const IMAGE_MODELS: ImageModel[] = [
      */
     id: "gpt-image-2.5-flare",
     label: "표준형",
+    family: "gpt-image",
+    note: "빠르고 값이 낮습니다. 참고 그림을 가장 많이 받습니다",
     isDefault: true,
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/flare/text-to-image", table: GPT25_MAX },
@@ -134,6 +150,8 @@ export const IMAGE_MODELS: ImageModel[] = [
      */
     id: "gpt-image-2.5-sunburst",
     label: "정밀형 플러스",
+    family: "gpt-image",
+    note: "글자 배치 지시를 더 잘 지킵니다. 대신 두 배 느립니다",
     quality: "max",
     t2i: { endpoint: "openai/gpt-image-2.5/sunburst/text-to-image", table: GPT25_MAX },
     i2i: { endpoint: "openai/gpt-image-2.5/sunburst/edit", table: GPT25_MAX },
@@ -148,6 +166,16 @@ export const IMAGE_MODELS: ImageModel[] = [
      */
     id: "gpt-image-2",
     label: "정밀형",
+    family: "gpt-image",
+    /*
+      **고르는 목록에 있다**(2026-09-21 사용자 — 「쉽게 만들기 모드에서 이미지
+      모델에 gpt-image-2 모델들도 추가해주세요」).
+
+      한 번 뺐었다. 「이전 판이라 새로 고를 까닭이 없다」고 봤는데, 실제로는
+      **글자가 가장 정확한 판**이라 고를 까닭이 있다. 그래서 설명도 「옛것」이
+      아니라 **무엇에 좋은지**로 적는다.
+    */
+    note: "한글 글자가 가장 정확합니다. 명조 계열도 표현합니다",
     t2i: { endpoint: "openai/gpt-image-2", table: GPT_T2I },
     i2i: { endpoint: "openai/gpt-image-2/edit", table: GPT_I2I },
     maxReferenceImages: 16,
@@ -157,6 +185,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "nano-banana-pro",
     label: "속도형",
+    family: "nano-banana",
+    note: "인물 실사에 강한 편입니다. 값이 한 장에 고정입니다",
     t2i: { endpoint: "fal-ai/nano-banana-pro", flatUsd: 0.15 },
     i2i: { endpoint: "fal-ai/nano-banana-pro/edit", flatUsd: 0.15 },
     maxReferenceImages: 14,
@@ -168,6 +198,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "nano-banana-2",
     label: "속도형 라이트",
+    family: "nano-banana",
+    note: "지원하는 비율이 가장 넓습니다. 띠 모양까지 됩니다",
     t2i: { endpoint: "fal-ai/nano-banana-2", flatUsd: 0.08 },
     i2i: { endpoint: "fal-ai/nano-banana-2/edit", flatUsd: 0.08 },
     maxReferenceImages: 14,
@@ -179,6 +211,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "nano-banana",
     label: "경제형",
+    family: "nano-banana",
+    note: "가장 쌉니다. 대신 참고 그림 7장까지입니다",
     t2i: { endpoint: "fal-ai/nano-banana", flatUsd: 0.039 },
     i2i: { endpoint: "fal-ai/nano-banana/edit", flatUsd: 0.039 },
     maxReferenceImages: 7,
@@ -267,8 +301,14 @@ export function priceCoverage(
  * **모르는 id 에 던지지 않는다.** 기획은 그림을 만들기 전 단계라 여기서 터지면
  * 04 가 통째로 멎는다. 저장된 옛 작업이 없는 id 를 들고 있을 수 있다.
  */
-export function modelEndpointLabel(id: string): string {
+export function modelEndpointLabel(id: string, hasReferences = false): string {
   if (!id) return "";
   const found = IMAGE_MODELS.find((model) => model.id === id);
-  return found ? `${found.id} (${found.t2i.endpoint})` : id;
+  if (!found) return id;
+  /*
+   * **실제로 부를 엔드포인트를 알려 준다.** 늘 `t2i` 를 주면 레퍼런스가 있는
+   * 카드에서 틀린 이름을 알려 주게 된다 — 카드뉴스는 그쪽이 보통이다
+   * (2026-09-17 리뷰). 계열은 같지만, 맞는 것을 줄 수 있으면 맞는 것을 준다.
+   */
+  return `${found.id} (${pickEndpoint(found, hasReferences)})`;
 }

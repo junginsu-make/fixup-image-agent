@@ -21,13 +21,15 @@ const TOOLS = [
     name: "이미지 만들기",
     detail: "app/poster/[id]/poster-client.tsx",
     fresh: "app/poster/new-client.tsx",
-    href: "/poster/new?from=",
+    base: "/poster/new",
+    first: "instruction",
   },
   {
     name: "카드뉴스",
     detail: "app/sns/[id]/project-client.tsx",
     fresh: "app/sns/new-client.tsx",
-    href: "/sns/new?from=",
+    base: "/sns/new",
+    first: "content",
   },
 ];
 
@@ -42,12 +44,97 @@ describe("지난 단계로 값을 들고 간다", () => {
     초록이었다(2026-09-16 독립 리뷰가 실증). 화면이 그 함수를 정확히 쓰는지는
     `rerun-adopt-wiring.test.ts` 가 문장 전체로 본다.
   */
-  it.each(TOOLS)("$name 은 작업 id 를 붙여 보낸다", ({ detail, href }) => {
+  /**
+   * **작업 id 와 누른 단계를 함께 싣는다**(2026-09-17 사용자 보고).
+   *
+   * 단계를 안 실어서 03 을 눌러도 01 이 열렸다. 주소는 한 곳(`rerunHref`)이
+   * 만든다 — 인코딩까지 거기서 값으로 잰다(`_components/__tests__/rerun-step.test.ts`).
+   */
+  it.each(TOOLS)("$name 은 작업 id 와 누른 단계를 싣고 보낸다", ({ detail, base }) => {
     const source = read(detail);
+    expect(source).toMatch(new RegExp(`router\\.push\\(rerunHref\\("${base}", \\w+(\\.id)?, id\\)\\)`));
+  });
 
-    expect(source).toContain(href);
-    // 주소 조각은 인코딩해서 붙인다.
-    expect(source).toMatch(new RegExp(`${href.replace("?", "\\?")}\\$\\{encodeURIComponent\\(`));
+  /**
+   * **열 때부터 그 단계로 선다**(2026-09-17 사용자 보고).
+   *
+   * 값을 다 불러온 **뒤에** 옮겼더니 01 이 잠깐 보였다가 03 으로 넘어갔다 — 누른
+   * 사람에게는 「굳이 01 을 들렀다 온다」로 읽힌다. 값이 아직 없는 동안에는
+   * `seeding` 이 화면을 안 내주므로, 단계만 먼저 맞춰도 빈 칸이 안 보인다.
+   */
+  it.each(TOOLS)("$name 은 열 때부터 누른 단계로 선다", ({ fresh, first }) => {
+    const source = read(fresh);
+    // 처음 값만 잡는다. 주소 값을 그대로 의존성에 두면 나중에 불러오기가 다시 돈다.
+    expect(source).toContain('rerunStep = React.useRef(searchParams.get("step")).current');
+    /*
+      **모를 때 여는 단계를 값으로 박는다.** `"\w+"` 로 받았더니 첫 단계를 03 으로
+      바꿔도 초록이었다 — 단계 없는 옛 주소가 03 으로 열린다(2026-09-17 독립 리뷰).
+    */
+    expect(source).toMatch(new RegExp(
+      `useState(<Step>)?\\(\\(\\) => rerunStartStep(<Step>)?\\(rerunFrom \\? rerunStep : null, RERUN_STEPS, "${first}"\\)\\)`,
+    ));
+  });
+
+  /**
+   * **돌아온 길일 때만 단계를 따른다.** `?step=spec` 만 있는 주소(옛 링크·손으로 친
+   * 주소)에서 따르면 불러올 값이 없어 빈 03 이 열린다(2026-09-17 확인).
+   */
+  it.each(TOOLS)("$name 은 ?from= 없이 온 단계는 따르지 않는다", ({ fresh }) => {
+    const source = read(fresh);
+    expect(source).toContain("rerunFrom ? rerunStep : null");
+    expect(source, "단계를 조건 없이 따르면 빈 03 이 열린다").not.toMatch(/rerunStartStep(<Step>)?\(rerunStep,/);
+  });
+
+  /**
+   * **두 갈래를 잘라서 잰다.** 글자 수로 창을 잡았더니 그 창이 `return; }` 너머 성공
+   * 갈래까지 닿아, `setStep` 을 성공 갈래로 옮겨도 초록이었다(2026-09-17 독립 리뷰가
+   * 뮤테이션으로 실증). 그렇게 옮기면 값이 오는 순간 01 로 튄다 — 원래 버그보다 나쁘다.
+   */
+  it.each(TOOLS)("$name 은 **불러오기에 실패하면 첫 단계로 돌린다** — 빈 03 은 무엇을 채울지 모른다", ({ fresh, first }) => {
+    const source = read(fresh);
+    /*
+      **불러오기 효과 전체를 잘라, 그 안의 `setStep` 이 딱 하나이고 그게 실패 갈래 안인지
+      잰다.** 성공 갈래를 `const { seed }` 부터 첫 `setSeeding(false)` 까지만 잘랐더니, 그
+      앞(실패 블록과 `const { seed }` 사이)이나 뒤에 넣으면 안 잡혔다(2026-09-17 재리뷰가
+      뮤테이션으로 실증). 효과 본문 전체를 보면 어디에 더해도 개수가 늘어 걸린다.
+    */
+    const bodyStart = source.indexOf("if (!rerunFrom) return;");
+    const bodyEnd = source.indexOf("})();", bodyStart);
+    const body = source.slice(bodyStart, bodyEnd);
+    const failStart = body.indexOf("if (!result.ok) {");
+    const failEnd = body.indexOf("return;", failStart);
+    expect(bodyStart, "불러오기 효과를 못 찾았다").toBeGreaterThan(-1);
+    expect(failStart, "실패 갈래를 못 찾았다").toBeGreaterThan(-1);
+    expect(body.split("setStep(").length - 1, "불러오기 효과 안에서 단계를 옮기는 자리는 하나다").toBe(1);
+    const at = body.indexOf(`setStep("${first}");`);
+    expect(at, "실패 갈래에서 첫 단계로 돌린다").toBeGreaterThan(failStart);
+    expect(at, "그 자리는 실패 갈래 안이다 — 밖이면 값이 오는 순간 단계가 튄다").toBeLessThan(failEnd);
+    // 여는 단계를 정하는 자리는 하나다. 여기저기서 옮기면 어디서 바뀌는지 못 쫓는다.
+    expect(source.split("rerunStartStep").length - 1).toBe(2);
+  });
+
+  /**
+   * **값을 기다리는 잠금은 주소를 `useSearchParams` 로 읽은 값에서 정한다.**
+   *
+   * 카드뉴스가 `window.location` 으로 읽었더니, 서버에서 그릴 때(window 없음)와 결과
+   * 화면에서 눌러 올 때(첫 렌더가 아직 옛 주소) 모두 잠금이 풀린 채로 시작했다. 단계는
+   * 이미 03 이라 **빈 03** 이 보이고 손도 댈 수 있었다(2026-09-17 독립 리뷰가 실측).
+   */
+  it.each(TOOLS)("$name 은 값을 기다리는 동안 화면을 잠근다 — 단계와 같은 주소 값으로", ({ fresh }) => {
+    const source = read(fresh);
+    expect(source).toMatch(/React\.useState\(Boolean\((rerunFrom|rerunFromInitial)\)\)/);
+    expect(source, "주소를 window 로 읽으면 첫 렌더에서 어긋난다").not.toContain("window.location.search");
+  });
+
+  it("이미지 만들기는 단계 목록을 **다시 적지 않는다** — 단계 id 는 한 곳이 갖는다", () => {
+    const source = read("app/poster/new-client.tsx");
+    expect(source).toContain(
+      "const RERUN_STEPS = POSTER_STEPS.map((entry) => entry.id).filter(reachableBeforeCreate);",
+    );
+  });
+
+  it("카드뉴스는 04·05 를 목록에 안 넣는다 — 이 화면에 없는 단계다", () => {
+    expect(read("app/sns/new-client.tsx")).toContain('const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];');
   });
 
   it("이미지 만들기는 **심어야 할 값을 하나도 안 빠뜨린다**", () => {
@@ -160,5 +247,34 @@ describe("지난 단계로 값을 들고 간다", () => {
     const source = read(fresh);
 
     expect(source).toContain("가져오지 못했습니다");
+  });
+});
+
+/**
+ * **값을 기다리는 동안 누를 단추가 없다**(2026-09-17).
+ *
+ * 결과 화면에서 03 을 누르면 이제 처음부터 03 으로 선다. 그런데 카드뉴스는 단추 줄이
+ * 잠금 밖에 있어, 값이 오기 전에 「기획 시작」을 누르면 **빈 규격으로 새 작업**이
+ * 만들어졌다. 이미지 만들기의 「만들기」는 원래 규격 칸 안이라 이미 잠겨 있다.
+ */
+describe("기다리는 동안의 단추", () => {
+  it("카드뉴스는 단추 줄 전체를 잠금 안에 둔다", () => {
+    const source = read("app/sns/new-client.tsx");
+    const guard = source.indexOf("{seeding ? null : (");
+    expect(guard, "단추 줄 잠금을 못 찾았다").toBeGreaterThan(-1);
+    const start = source.indexOf("createProject()", guard);
+    const close = source.indexOf(")}", source.indexOf("</div>", source.indexOf("기획 시작", guard)));
+    expect(start, "「기획 시작」이 잠금 안에 있어야 한다").toBeGreaterThan(guard);
+    expect(start).toBeLessThan(close);
+  });
+
+  it("이미지 만들기의 「만들기」는 규격 칸 안이다 — 규격 칸은 기다리는 동안 안 그린다", () => {
+    const source = read("app/poster/new-client.tsx");
+    const spec = source.indexOf('{!seeding && step === "spec" ? (');
+    const submit = source.indexOf("onClick={() => void submit()}");
+    const next = source.indexOf('{!seeding && step === "instruction" ? (');
+    expect(spec).toBeGreaterThan(-1);
+    expect(submit).toBeGreaterThan(spec);
+    expect(submit).toBeLessThan(next);
   });
 });

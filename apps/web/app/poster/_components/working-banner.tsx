@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
-import { cn } from "@fixup/ui";
+import { Loader2, Square } from "lucide-react";
+import { Button, cn } from "@fixup/ui";
 
 /**
  * 「지금 돌고 있다」를 눈에 띄게 말한다.
@@ -20,7 +20,19 @@ import { cn } from "@fixup/ui";
  * **막대는 진행률이 아니다.** fal 이 얼마나 갔는지 알려 주지 않는다.
  * 흐르기만 하는 막대는 「살아 있다」는 뜻이고, 남은 시간은 글자가 말한다.
  */
-export function WorkingBanner({ label, hint }: { label: string; hint?: string }) {
+export function WorkingBanner({ label, hint, onStop, stopping }: {
+  label: string;
+  hint?: string;
+  /**
+   * 「중지」를 누르면 할 일. 없으면 단추가 안 나온다.
+   *
+   * **멈추는 자리는 여기 하나다**(2026-09-17 사용자 결정). 전에는 사이드바
+   * 아래에도 같은 목록과 중지가 있어서, 만드는 중에 「진행 중」이 두 군데에
+   * 보였다. 표시가 있는 자리에서 바로 멈추는 편이 맞다.
+   */
+  onStop?: () => void;
+  stopping?: boolean;
+}) {
   return (
     <div
       role="status"
@@ -34,11 +46,31 @@ export function WorkingBanner({ label, hint }: { label: string; hint?: string })
         <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
         <span className="text-sm font-medium text-primary">{label}</span>
         {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+        {onStop ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="ml-auto shrink-0"
+            disabled={stopping}
+            onClick={onStop}
+          >
+            <Square className="size-3.5" />
+            {stopping ? "멈추는 중…" : "중지"}
+          </Button>
+        ) : null}
       </div>
       {/* 띠 아래를 흐르는 가는 막대. 도는 표시만으로는 멀리서 안 보인다. */}
       <span aria-hidden className="fixup-working-track mt-2.5 block h-1 rounded-full bg-primary/15">
         <span className="fixup-working-bar block h-full w-1/3 rounded-full bg-primary/70" />
       </span>
+      {/* fal 에 이미 보낸 요청은 취소하지 못한다. 숨기면 사용자가 오해한다 —
+          사이드바 칸에 있던 말을 중지 단추와 함께 여기로 옮겼다. */}
+      {onStop ? (
+        <p className="mt-2 text-meta leading-5 text-muted-foreground">
+          중지하면 결과를 더 받지 않습니다. 이미 보낸 요청의 비용은 나갈 수 있습니다.
+        </p>
+      ) : null}
     </div>
   );
 }

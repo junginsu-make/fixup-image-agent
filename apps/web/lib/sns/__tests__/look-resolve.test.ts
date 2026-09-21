@@ -100,7 +100,7 @@ describe("내린 결과", () => {
  */
 describe("장면 LLM 이 아는 모델", () => {
   it("흐름이 모델 이름을 넘긴다", () => {
-    expect(source).toContain("modelId: modelEndpointLabel(project.modelId)");
+    expect(source).toContain("modelId: modelEndpointLabel(project.modelId,");
   });
 
   /**

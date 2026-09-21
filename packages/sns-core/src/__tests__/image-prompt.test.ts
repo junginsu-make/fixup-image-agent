@@ -9,6 +9,7 @@ import {
   mergedInstruction,
   referenceWarningsForRole,
   selectReferencesForRole,
+  stripModelMentions,
   writeImagePrompt,
 } from "../image-prompt";
 import type { ScenePromptRequest } from "../image-prompt";
@@ -351,17 +352,44 @@ describe("자리마다 적은 말", () => {
     expect(intentForRole({ cover: "   " }, "cover")).toBe("");
   });
 
-  it("지시를 적으면 역할 고정 문구가 사라진다", () => {
+  /**
+   * **적은 말이 이긴다 — 역할 규칙을 지우지는 않는다.**
+   *
+   * 전에는 지시를 적으면 역할 문구를 통째로 뺐다. 2026-09-17 에 이미지
+   * 만들기에서 그것이 과하다는 것이 실물로 드러났다 — 첨부 셋(포스터·인물·모자)에
+   * 「힙하고 자유로운 느낌」이라고 적었더니 부딪히지도 않는 905자가 함께
+   * 사라지고, 모자도 포스터 느낌도 결과에 안 나왔다.
+   *
+   * 카드뉴스도 같은 코드였다. 같이 고친다.
+   */
+  it("지시를 적어도 역할 규칙이 남는다", () => {
     const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번 사람을 만화로" });
-    expect(block).not.toContain("Do NOT copy anything else from it");
-    expect(block).not.toContain("Reproduce this exact person");
-    expect(block).toContain("deliberately omitted");
+
+    expect(block).toContain("Do NOT copy anything else from it");
+    expect(block).toContain("Reproduce this exact person");
   });
 
-  it("**번호와 역할 이름은 남는다** — 빼면 「①번」이 가리킬 것이 없다", () => {
+  it("사용자 말이 이긴다고 못 박고 규칙 뒤에 온다", () => {
+    const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번 사람을 만화로" });
+    const 규칙 = block.indexOf("Reproduce this exact person");
+    const 이긴다 = block.indexOf("Their words OVERRIDE any rule above");
+
+    expect(규칙).toBeGreaterThan(-1);
+    expect(이긴다).toBeGreaterThan(규칙);
+  });
+
+  it("뺐다는 말이 안 남았다", () => {
     const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번을 크게" });
-    expect(block).toContain('Image 1: the user marked this "reference to imitate".');
-    expect(block).toContain('Image 2: the user marked this "person to keep".');
+
+    expect(block).not.toContain("deliberately omitted");
+    expect(block).not.toContain("replace the usual rules");
+  });
+
+  it("**번호와 역할 이름도 남는다** — 빼면 「①번」이 가리킬 것이 없다", () => {
+    const block = buildAttachmentBlock([cover, person], { attachmentIntent: "①번을 크게" });
+
+    expect(block).toContain("Image 1 is the cover CARD-NEWS REFERENCE");
+    expect(block).toContain("Image 2 is a PRESERVED PERSON");
   });
 
   it("안 적었으면 지금까지 그대로다", () => {
@@ -535,5 +563,76 @@ describe("어떤 모델이 그리는가", () => {
   /** 옛 작업·화면 밖 경로에는 없다. 없으면 지금까지대로 아무 말도 안 한다. */
   it("안 넘기면 그 줄이 없다", () => {
     expect(buildSceneRequest(base).prompt).not.toMatch(/target model/i);
+  });
+
+  /**
+   * **길이를 줄이라는 뜻이 아니다.**
+   *
+   * 처음에는 「그 모델이 가장 잘 따르는 대로 쓰라」고만 했다. 그랬더니 LLM 이
+   * gpt 계열에는 **짧게** 썼다(992자 대 1,850자). 그런데 긴 프롬프트도 잘
+   *반영되는 것을 확인했다(2026-09-17 사용자) — 자세할수록 그림에 더 들어간다.
+   *
+   * 모델에 맞추는 것은 **말투**이지 분량이 아니다. 둘을 갈라 말한다.
+   */
+  it("자세히 쓰라고 함께 말한다", () => {
+    const request = buildSceneRequest({ ...base, modelId: "gpt-image-2.5-flare" });
+
+    expect(request.prompt).toMatch(/as much (useful )?detail|do not shorten|length limit/i);
+  });
+
+  /** 모델을 안 알려 줘도 자세히 쓰는 것은 마찬가지다. */
+  it("모델을 몰라도 자세히 쓰라고 한다", () => {
+    expect(buildSceneRequest(base).prompt).toMatch(/as much (useful )?detail|length limit/i);
+  });
+});
+
+/**
+ * **모델·업체 이름이 사용자 화면에 새면 안 된다.**
+ *
+ * 장면 LLM 이 쓴 본문은 그대로 저장돼 결과 화면의 「그림 지시(프롬프트)」에
+ * 보인다(`result-board.tsx`). 그 LLM 은 방금 `fal-ai/nano-banana-pro` 를 읽었고,
+ * 답 첫 줄에 「Optimized for fal-ai/…」 한 번만 적으면 사용자가 그것을 본다
+ * (2026-09-17 리뷰).
+ *
+ * 화면에는 「표준형」 같은 **우리 이름**만 나가야 한다
+ * (`apps/web/lib/__tests__/model-name.test.ts` 가 지키는 규칙).
+ *
+ * **프롬프트로도 막고 여기서도 막는다.** 「쓰지 말라」는 지킬 수도 안 지킬 수도
+ * 있는 부탁이고, 안 지켰을 때 아무도 모른다.
+ */
+describe("모델 이름이 새지 않는다", () => {
+  it("업체 엔드포인트가 든 줄을 뺀다", () => {
+    const body = "Optimized for fal-ai/nano-banana-pro:\n\nA wooden desk in warm light.";
+
+    expect(stripModelMentions(body)).toBe("A wooden desk in warm light.");
+  });
+
+  it("openai 엔드포인트도 뺀다", () => {
+    const body = "(openai/gpt-image-2.5/flare/edit)\nA desk.";
+
+    expect(stripModelMentions(body)).toBe("A desk.");
+  });
+
+  /** 우리 id 도 화면에 안 나가는 이름이다. */
+  it("우리 id 가 든 줄도 뺀다", () => {
+    expect(stripModelMentions("For nano-banana-pro:\nA desk.")).toBe("A desk.");
+  });
+
+  /** 멀쩡한 본문은 그대로 둔다. 애먼 줄을 지우면 그림이 달라진다. */
+  it("멀쩡한 본문은 안 건드린다", () => {
+    const body = "A wooden desk in warm light.\nA key rests on the contract.";
+
+    expect(stripModelMentions(body)).toBe(body);
+  });
+
+  /** 「banana」가 장면에 나올 수도 있다. 낱말이 아니라 모델 id 로 본다. */
+  it("장면에 나온 바나나는 안 지운다", () => {
+    const body = "A banana on the desk, lit from the left.";
+
+    expect(stripModelMentions(body)).toBe(body);
+  });
+
+  it("빈 본문은 빈 본문이다", () => {
+    expect(stripModelMentions("")).toBe("");
   });
 });

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { IMAGE_MODELS } from "@fixup/sns-core";
+import { IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
+import { creditUnits } from "@fixup/shared";
 import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -8,18 +9,50 @@ import { Callouts, Mock, MockChoices, MockField, MockNote } from "../_components
 export const metadata: Metadata = { title: "크레딧과 모델 · 사용 설명서" };
 
 /**
- * 가중치는 README §이미지 모델의 표와 같다. 모델 목록 자체는 코드에서 가져와
- * 이름이 바뀌면 여기도 따라 바뀌게 둔다.
+ * 모델마다 한 줄 설명. **차감량은 여기 안 적는다.**
+ *
+ * ── 손으로 적던 숫자가 틀려 있었다 (2026-09-21) ──────────────
+ *
+ * 전에는 이 표가 가중치를 들고 있었다(표준형 4장). 그런데 차감은 **2026-09-08
+ * 부터 원가에서 나온다** — 가중치를 쓰지 않는다. 그 사이 설명서만 옛 셈법으로
+ * 남아 있었다.
+ *
+ *   표준형    설명서 4장 → 실제 **5장**
+ *   정밀형    설명서 4장 → 실제 **5장**
+ *
+ * 「정밀형으로 카드 6장이면 24장」도 실제로는 30장이었다. **값 안내가 틀리면
+ * 없는 것만 못하다.**
+ *
+ * 그래서 숫자를 안 적는다. 쓰는 그 함수로 그 자리에서 셈한다.
  */
-const WEIGHTS: Record<string, { weight: number; note: string }> = {
-  // 빠진 모델은 표에 「—」로 나온다. 막히지 않고 빈칸으로 새는 쪽이라 잊기 쉽다.
-  "gpt-image-2.5-flare": { weight: 4, note: "글자가 정확하면서 빠릅니다. 대부분 이것으로 충분합니다" },
-  "gpt-image-2.5-sunburst": { weight: 4, note: "글자 배치 지시를 더 잘 지킵니다. 대신 느립니다" },
-  "gpt-image-2": { weight: 4, note: "글자가 가장 정확합니다. 명조 계열도 표현합니다" },
-  "nano-banana-pro": { weight: 3, note: "빠릅니다. 글자는 고딕 계열입니다" },
-  "nano-banana-2": { weight: 3, note: "속도형보다 빠르고 저렴합니다" },
-  "nano-banana": { weight: 1, note: "가장 저렴합니다. 글자가 적은 장면에" },
+const NOTES: Record<string, string> = {
+  // 빠진 모델은 설명이 빈 칸으로 나온다. 차감량은 코드가 세므로 안 비어 있다.
+  "gpt-image-2.5-flare": "글자가 정확하면서 빠릅니다. 대부분 이것으로 충분합니다",
+  "gpt-image-2.5-sunburst": "글자 배치 지시를 더 잘 지킵니다. 대신 느립니다",
+  "gpt-image-2": "한글 글자가 가장 정확합니다. 명조 계열도 표현합니다",
+  "nano-banana-pro": "빠릅니다. 글자는 고딕 계열입니다",
+  "nano-banana-2": "속도형보다 빠르고 저렴합니다",
+  "nano-banana": "가장 저렴합니다. 글자가 적은 장면에",
 };
+
+/** 표가 기준으로 삼는 크기. 정사각 1024 는 가장 흔한 한 장이다. */
+const 기준크기 = { width: 1024, height: 1024 };
+
+/** 그 모델로 이 크기 한 장을 만들면 몇 장이 깎이나. **쓰는 그 함수로 센다.** */
+function 한장당(model: (typeof IMAGE_MODELS)[number]): number {
+  return creditUnits(unitPrice(model, "t2i", 기준크기));
+}
+
+/**
+ * 가장 비싼 모델이 가장 싼 모델의 몇 배인가.
+ *
+ * **여기도 손으로 적혀 있었다** — 「4.6배」. 모델이 드나드는 사이 실제는
+ * 달라졌는데 글만 남았다(2026-09-21).
+ */
+function 원가차이(): string {
+  const 값 = IMAGE_MODELS.map((model) => unitPrice(model, "t2i", 기준크기));
+  return (Math.max(...값) / Math.min(...값)).toFixed(1);
+}
 
 export default function CreditsGuidePage() {
   return (
@@ -87,7 +120,7 @@ export default function CreditsGuidePage() {
         </ul>
       </Section>
 
-      <Section title="모델마다 차감량이 다릅니다" hint="원가가 4.6배까지 벌어지기 때문입니다.">
+      <Section title="모델마다 차감량이 다릅니다" hint={`원가가 ${원가차이()}배까지 벌어지기 때문입니다.`}>
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[520px] border-collapse text-sm">
             <thead>
@@ -99,7 +132,7 @@ export default function CreditsGuidePage() {
             </thead>
             <tbody>
               {IMAGE_MODELS.map((model) => {
-                const info = WEIGHTS[model.id];
+                const note = NOTES[model.id];
                 return (
                   <tr key={model.id} className="border-b align-top last:border-b-0">
                     <th scope="row" className="px-4 py-3 text-left font-bold">
@@ -110,8 +143,8 @@ export default function CreditsGuidePage() {
                         </span>
                       ) : null}
                     </th>
-                    <td className="px-4 py-3 font-extrabold text-primary">{info ? `${info.weight}장` : "—"}</td>
-                    <td className="px-4 py-3 leading-6 text-muted-foreground">{info?.note ?? ""}</td>
+                    <td className="px-4 py-3 font-extrabold text-primary">{한장당(model)}장</td>
+                    <td className="px-4 py-3 leading-6 text-muted-foreground">{note ?? ""}</td>
                   </tr>
                 );
               })}
@@ -119,9 +152,26 @@ export default function CreditsGuidePage() {
           </table>
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          「한 장당 차감」은 이미지 한 장을 만들 때 월 한도에서 빠지는 양입니다. 정밀형으로 카드 6장을 만들면{" "}
-          <strong className="text-foreground">6 × 4 = 24장</strong>이 차감됩니다. 경제형으로 같은 6장을 만들면
-          6장입니다.
+          「한 장당 차감」은 <strong className="text-foreground">정사각형 한 장</strong>을 만들 때 월 한도에서
+          빠지는 양입니다. 세로로 길거나 큰 그림은 원가가 달라 이보다 많거나 적을 수 있습니다.
+        </p>
+        <p className="text-sm leading-6 text-muted-foreground">
+          {(() => {
+            /*
+              **예를 들 때도 셈해서 적는다.** 전에는 「정밀형 6장이면 24장」이라고
+              적어 뒀는데, 차감이 원가에서 나오게 바뀐 뒤로 실제는 30장이었다.
+              값 안내가 틀리면 없는 것만 못하다(2026-09-21).
+            */
+            const 정밀 = IMAGE_MODELS.find((model) => model.id === "gpt-image-2")!;
+            const 경제 = IMAGE_MODELS.find((model) => model.id === "nano-banana")!;
+            return (
+              <>
+                {정밀.label}으로 카드 6장을 만들면{" "}
+                <strong className="text-foreground">6 × {한장당(정밀)} = {6 * 한장당(정밀)}장</strong>이
+                차감됩니다. {경제.label}으로 같은 6장을 만들면 {6 * 한장당(경제)}장입니다.
+              </>
+            );
+          })()}
         </p>
       </Section>
 

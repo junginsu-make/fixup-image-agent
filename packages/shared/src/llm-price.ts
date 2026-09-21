@@ -23,18 +23,37 @@ export interface TokenPrice {
 }
 
 /**
- * 공표 단가. **2026-09-10 기준이고 청구서로 대조한 값이 아니다.**
+ * 공표 단가. **2026-09-17 에 각 업체 공식 문서로 대조했다.**
  *
- * 대조하기 전까지는 이 주석을 지우지 않는다. 「어디까지 믿을 값인가」를
- * 모르면 이 숫자를 쓰는 쪽이 과신한다.
+ * 그 전 표는 2026-09-10 에 「청구서로 대조한 값이 아니다」라고 적어 둔
+ * 어림이었고, **네 줄 중 셋이 틀려 있었다.** 그 경고가 맞았다.
+ *
+ * **정산은 실제로 잰 토큰을 쓴다**(`meter.ts` → `llmUsdFromTokens`). 그래서
+ * 이 표가 곧 청구 금액이다.
+ *
+ * 값이 바뀌면 **여기만** 고친다. `credit.ts` 의 어림값도 이 표에서 나온
+ * 것이므로 함께 본다.
  */
 export const LLM_PRICES: Record<string, TokenPrice> = {
-  // 2026-09-17 확인: https://platform.claude.com/docs/en/about-claude/pricing
+  /*
+    ── Anthropic ────────────────────────────────────────────
+    2026-09-17 에 공식 문서로 대조했다. 넷 중 셋이 틀려 있었다.
+  */
+  // 2026-08-10 에 도입가가 영구 확정됐다. $3/$15 인상은 취소됐는데 표가
+  // 그대로였다 — 원가를 50% 비싸게 세고 있었다.
+  "claude-sonnet-5": { inputPerMillion: 2, outputPerMillion: 10 },
   "claude-fable-5": { inputPerMillion: 10, outputPerMillion: 50 },
-  "claude-sonnet-5": { inputPerMillion: 3, outputPerMillion: 15 },
-  "claude-opus-5": { inputPerMillion: 15, outputPerMillion: 75 },
+  // 세 배 비싸게 적혀 있었다.
+  "claude-opus-5": { inputPerMillion: 5, outputPerMillion: 25 },
   "claude-haiku-4-5": { inputPerMillion: 1, outputPerMillion: 5 },
-  "gpt-5.6-sol": { inputPerMillion: 3, outputPerMillion: 15 },
+
+  /* ── OpenAI ─────────────────────────────────────────────── */
+  "gpt-6-astra": { inputPerMillion: 10, outputPerMillion: 50 },
+  // **싸게** 적혀 있었다($3/$15). 이쪽이 더 위험하다 — 원가를 싸게 보면
+  // 요금을 그만큼 낮게 잡는다. 2026-11-21 까지의 할인가다.
+  "gpt-5.6-sol": { inputPerMillion: 4, outputPerMillion: 20 },
+  "gpt-5.6-terra": { inputPerMillion: 2, outputPerMillion: 12 },
+  "gpt-5.6-luna": { inputPerMillion: 0.2, outputPerMillion: 1.2 },
 };
 
 /**

@@ -130,6 +130,55 @@ describe("회원 화면에 모델 이름이 없다", () => {
    *
    * 그래서 id 가 나오는 문자열은 **id 하나로만 이루어져 있어야** 한다.
    */
+  /**
+   * **Easy 모드는 예외다 — 그리고 그 예외를 여기서 잠근다.**
+   *
+   * `app/easy` 와 `packages/shared/src/text-models.ts` 는 **진짜 모델 이름을
+   * 일부러 낸다**(설계 `2026-09-17-easy-mode-design.md` §5-1, 2026-09-17 사용자
+   * 결정). 글 모델을 고르게 하려면 무엇을 고르는지 보여야 하고, 값이 다섯 배
+   * 벌어지는데 이름을 감추면 고를 근거가 없다.
+   *
+   * **맞바꾼 것을 적어 둔다.** 고르게 하면 아는 사람은 잘 고르고, 우리가 무엇을
+   * 쓰는지는 드러난다. 사용자가 그 값을 택했다.
+   *
+   * ── 왜 이 검사가 필요한가 ───────────────────────────────────
+   *
+   * 위 검사들은 이 예외를 **우연히** 통과시킨다 — 금지 목록이 그림 모델 이름
+   * (「GPT Image」·「Nano Banana」)과 업체 이름이고, 「Claude Sonnet 5」는
+   * 거기 없다. 그래서 아무 데서나 「Claude Sonnet 5」를 적어도 안 걸린다.
+   *
+   * 설계 §11-⑤ 가 적은 위험이 그것이다 — **예외는 번지기 쉽다.** 「거기서
+   * 되니까 여기서도」가 되고, 조용히 하나씩 느는 것이 가장 나쁘다.
+   *
+   * 그래서 **반대로 잠근다.** 글 모델 이름은 정해진 자리에서만 나온다.
+   */
+  it("글 모델 이름은 Easy 모드에서만 나온다", () => {
+    const 글모델이름 = ["Claude Sonnet", "Claude Haiku", "Claude Opus", "Claude Fable", "GPT-5.6", "GPT-6"];
+    // 이 셋만 낼 수 있다. 늘리려면 사용자 결정이 있어야 한다.
+    const 허락된곳 = ["app/easy/", "app/guide/easy/", "packages/shared/src/text-models.ts"];
+
+    const 새어나간곳 = 화면들
+      .filter((file) => !허락된곳.some((allowed) => file.path.includes(allowed)))
+      .filter((file) => 문자열들(file.source).some((글) => 글모델이름.some((이름) => 글.includes(이름))))
+      .map((file) => file.path);
+
+    expect(새어나간곳, "글 모델 이름이 Easy 모드 밖으로 새어 나갔다").toEqual([]);
+  });
+
+  /**
+   * **예외가 살아 있는지도 본다.**
+   *
+   * 위 검사는 「밖으로 안 샜다」만 본다. 그런데 Easy 모드에서 이름을 우리 이름
+   * (「표준형」)으로 되돌려 버리면 그 검사는 여전히 통과한다 — **고르게 하려고
+   * 예외를 둔 뜻이 사라지는데 아무 데도 안 빨개진다.**
+   */
+  it("Easy 모드는 진짜 이름을 낸다", () => {
+    const 목록 = 화면들.find((file) => file.path.includes("text-models.ts"));
+
+    expect(목록, "글 모델 목록을 못 찾았다").toBeTruthy();
+    expect(문자열들(목록!.source)).toContain("Claude Sonnet 5");
+  });
+
   it("id 가 문장에 섞여 있지 않다", () => {
     const 섞인곳: string[] = [];
 
