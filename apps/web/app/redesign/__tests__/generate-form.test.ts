@@ -46,6 +46,30 @@ describe("쪼개 부르는 자리를 말한다", () => {
   });
 });
 
+/**
+ * **페이지 장수는 이 요청의 장수와 다르다**(2026-09-21 리뷰 회귀).
+ *
+ * 화면은 장마다 따로 부르므로 `count` 는 늘 1이다. 그것으로 프롬프트의
+ * 「N장을 이어 붙였을 때」를 적으면 모든 요청이 **「1장」**이 되어, 「한
+ * 페이지로 이어져야 한다」는 요구가 유료 이미지마다 무의미해진다.
+ */
+describe("페이지가 몇 장짜리인지 보낸다", () => {
+  it("**이 요청의 장수와 따로 보낸다**", () => {
+    const form = 채운다({ count: 1, pageTotal: 8 });
+
+    expect(form.get("count")).toBe("1");
+    expect(form.get("pageTotal")).toBe("8");
+  });
+
+  it("**한 장짜리 페이지면 안 보낸다** — 이어 붙일 것이 없다", () => {
+    expect(채운다({ pageTotal: 1 }).get("pageTotal")).toBeNull();
+  });
+
+  it("**모르면 안 보낸다** — 코어가 숫자 없이 말한다", () => {
+    expect(채운다().get("pageTotal")).toBeNull();
+  });
+});
+
 describe("이미 한 기획을 도로 보낸다", () => {
   const 분석 = { strategy: "효능을 앞세운다", product_inferred: { category: "크림" } };
 
@@ -165,5 +189,28 @@ describe("마법사가 이 조립기를 쓴다", () => {
     expect(부른자리).toMatch(/analysis:\s*baseProject\?\.analysis/);
     // 분석이 어느 원본에서 나왔는지도 함께 가야 묶을 수 있다.
     expect(부른자리).toMatch(/analysisFiles:\s*baseProject\?\.files/);
+  });
+
+  /**
+   * **`count` 를 페이지 장수로 넘기면 회귀가 되살아난다.** 한 장씩 부르는
+   * 경로에서 그 수는 늘 1이다.
+   */
+  it("**페이지 장수를 제 이름으로 넘긴다**", () => {
+    const 부른자리 = wizard.slice(wizard.indexOf("appendGenerateFields(form,")).slice(0, 700);
+
+    expect(부른자리).toMatch(/pageTotal,/);
+  });
+
+  it("**일괄 생성이 실제 페이지 장수를 넘긴다**", () => {
+    const 일괄 = wizard.slice(wizard.indexOf("generate-sequence:start")).slice(0, 1200);
+
+    // generate(1, …, outputCount, 자리, outputCount) 의 마지막 인자다.
+    expect(일괄).toMatch(/sectionNumber - startSection \+ 1,\s*outputCount\)/);
+  });
+
+  it("**나머지 섹션 생성도 완성 페이지 장수를 넘긴다**", () => {
+    const 나머지 = wizard.slice(wizard.indexOf("generate-rest:start")).slice(0, 1200);
+
+    expect(나머지).toMatch(/index \+ 1,\s*FULL_PAGE_SECTIONS\)/);
   });
 });

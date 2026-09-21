@@ -53,6 +53,13 @@ export type GenerateFieldsInput = {
    * 제가 분석한다.
    */
   analysisFiles?: string[];
+  /**
+   * **페이지가 몇 장짜리인가.** 이 요청이 만드는 장수와 다른 수다.
+   *
+   * 화면은 장마다 따로 부르므로 `count` 는 늘 1이다. 그것으로 프롬프트의
+   * 「N장을 이어 붙였을 때」를 적으면 모든 요청이 「1장」이 된다.
+   */
+  pageTotal?: number;
 };
 
 /** 같은 원본에서 나온 기획인가. 이름과 차례가 모두 같아야 한다. */
@@ -87,6 +94,7 @@ export function appendGenerateFields(form: FormData, input: GenerateFieldsInput)
     form.append("jobIndex", String(input.jobIndex));
     form.append("jobTotal", String(input.jobTotal));
   }
+  if (input.pageTotal && input.pageTotal > 1) form.append("pageTotal", String(input.pageTotal));
   if (input.analysis && fromSameSource(input.uploadFiles, input.analysisFiles)) {
     form.append("analysis", JSON.stringify(input.analysis));
   }

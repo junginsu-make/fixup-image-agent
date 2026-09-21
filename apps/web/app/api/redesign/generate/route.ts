@@ -164,6 +164,12 @@ async function generate(req: Request) {
         쓸 만하지 않으면 제가 분석한다. 여기서는 **모양만** 본다.
       */
       analysis: readReusableAnalysis(form.get("analysis")),
+      /*
+        **페이지가 몇 장짜리인가.** `count` 는 화면이 장마다 따로 부르므로 늘
+        1이다. 그 수를 「N장을 이어 붙였을 때」에 쓰면 모든 요청이 「1장」이
+        된다. 값이 이상하면 안 보낸다 — 코어가 숫자 없이 말한다.
+      */
+      pageTotal: readPageTotal(form.get("pageTotal")),
       useKnowledge: String(form.get("useKnowledge") || "") === "true",
       knowledgeAccessAuthorized: true,
       model: String(form.get("model") || "openai"),
@@ -259,4 +265,19 @@ async function inspectRedesignReferences(
     files.push({ name: entry.name, type: gate.mimeType, buffer });
   }
   return { ok: true, files };
+}
+
+/** 한 페이지의 최대 장수. 섹션 상한과 같다. */
+const MAX_PAGE_SECTIONS = 10;
+
+/**
+ * 화면이 말한 페이지 장수. **값에 쓰이지 않는다** — 프롬프트 문구에만 쓴다.
+ *
+ * 그래도 말이 안 되는 수가 박히면 모델이 없는 장을 가정한다. 범위 밖이면
+ * 안 보낸다.
+ */
+function readPageTotal(raw: FormDataEntryValue | null): number | undefined {
+  const value = Number(String(raw ?? "").trim() || "x");
+  if (!Number.isInteger(value) || value < 1 || value > MAX_PAGE_SECTIONS) return undefined;
+  return value;
 }

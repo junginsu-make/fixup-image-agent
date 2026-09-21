@@ -2,6 +2,7 @@
 // (node:crypto via knowledge-access/generate, @neondatabase via rag) which webpack
 // cannot bundle into this browser module. transcribe-batching.ts is pure/DOM-free.
 import { randomId } from "../../lib/browser-safe";
+import { stripCuts, type CoverageCut } from "./coverage";
 import { planTranscribeBatches, stitchTranscripts, type RedesignStrip } from "@fixup/redesign-core/src/transcribe-batching";
 
 const STRIP_TARGET_WIDTH_MAX = 2048;
@@ -16,10 +17,16 @@ function canvasToJpegBase64(canvas: HTMLCanvasElement): string {
 }
 
 // 소스 영역(<img> 또는 페이지 캔버스)을 목표폭 유지로 세로 스트립들로 자른다.
+/**
+ * 한 영역을 세로 조각으로 자른다.
+ *
+ * **자르려던 수를 돌려준다**(F-7-0). 상한에 닿아 덜 자른 경우를 부르는 쪽이
+ * 알아야, 「몇 조각 중 몇 조각」을 사실대로 말할 수 있다.
+ */
 function sliceRegionToStrips(
   source: CanvasImageSource, srcW: number, srcH: number,
   pageStartRatio: number, pageEndRatio: number, out: RedesignStrip[]
-) {
+): number {
   const width = Math.min(srcW, STRIP_TARGET_WIDTH_MAX); // 다운스케일만, 업스케일 금지
   const scale = width / srcW;
   const scaledH = srcH * scale;
@@ -43,36 +50,87 @@ function sliceRegionToStrips(
       yEndRatio: pageStartRatio + span * ((i + 1) / count),
     });
   }
+  return count;
 }
 
-export async function splitFilesToStrips(files: File[]): Promise<RedesignStrip[]> {
+/**
+ * 원본을 글자 읽기용 조각으로 자른다.
+ *
+ * **자른 것을 함께 돌려준다**(F-7-0). 조각 40장·PDF 20쪽에서 멈추는데,
+ * 전에는 그 사실을 아무 데도 말하지 않았다 — 100쪽짜리를 올린 사람이 앞
+ * 20쪽만 읽은 전사로 만든 페이지를 받으면서 그것을 몰랐다.
+ */
+export async function splitFilesToStrips(
+  files: File[],
+): Promise<{ strips: RedesignStrip[]; cuts: CoverageCut[] }> {
   const out: RedesignStrip[] = [];
+  const cuts: CoverageCut[] = [];
+  let 자르려던조각 = 0;
+  let 통째로건너뛴파일 = 0;
+
   for (const file of files) {
-    if (out.length >= MAX_STRIPS_TOTAL) break;
+    if (out.length >= MAX_STRIPS_TOTAL) {
+      // 조각 상한에 이미 닿았다. 이 파일은 한 조각도 안 읽는다.
+      통째로건너뛴파일 += 1;
+      continue;
+    }
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (isPdf) await splitPdf(file, out);
-    else if (file.type.startsWith("image/")) await splitImage(file, out);
+    if (isPdf) {
+      const pdf = await splitPdf(file, out);
+      자르려던조각 += pdf.wantedStrips;
+      /*
+        **쪽수 상한과 조각 상한은 다른 이유로 끊는다.** 20쪽에서 멈춘 것과
+        40조각에서 멈춘 것을 한 수로 뭉뚱그리면 거짓말이 된다. 실제로 조각이
+        나온 쪽수를 센다.
+      */
+      if (pdf.usedPages < pdf.totalPages) {
+        cuts.push({
+          what: "transcribe-pdf-pages",
+          used: pdf.usedPages,
+          total: pdf.totalPages,
+          label: file.name,
+        });
+      }
+    } else if (file.type.startsWith("image/")) {
+      자르려던조각 += await splitImage(file, out);
+    }
   }
-  return out;
+
+  // 세는 일은 `coverage.ts` 가 한다. 여기서 세면 돌려 볼 수 없다.
+  cuts.push(...stripCuts({ used: out.length, wanted: 자르려던조각, skippedFiles: 통째로건너뛴파일 }));
+
+  return { strips: out, cuts };
 }
 
-async function splitImage(file: File, out: RedesignStrip[]) {
+async function splitImage(file: File, out: RedesignStrip[]): Promise<number> {
   const objectUrl = URL.createObjectURL(file);
   try {
     const img = await loadImage(objectUrl);
-    sliceRegionToStrips(img, img.naturalWidth, img.naturalHeight, 0, 1, out);
+    return sliceRegionToStrips(img, img.naturalWidth, img.naturalHeight, 0, 1, out);
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
 }
 
-async function splitPdf(file: File, out: RedesignStrip[]) {
+/**
+ * PDF 를 조각으로 자른다.
+ *
+ * **세 가지를 돌려준다.** 원래 쪽수, 실제로 조각이 나온 쪽수, 자르려던 조각 수.
+ * 쪽수 상한(20)과 조각 상한(40)은 다른 이유로 끊으므로 따로 세야 한다.
+ */
+async function splitPdf(
+  file: File,
+  out: RedesignStrip[],
+): Promise<{ totalPages: number; usedPages: number; wantedStrips: number }> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"; // 로컬 번들
   // pdfjs 6 부터 문서 자체에는 destroy 가 없다. 정리는 로딩 작업이 맡는다.
   const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer() });
   const pdf = await loadingTask.promise;
-  const pages = Math.min(pdf.numPages, MAX_PDF_PAGES);
+  const totalPages = pdf.numPages;
+  const pages = Math.min(totalPages, MAX_PDF_PAGES);
+  let usedPages = 0;
+  let wantedStrips = 0;
   for (let n = 1; n <= pages && out.length < MAX_STRIPS_TOTAL; n += 1) {
     const page = await pdf.getPage(n);
     // 캔버스 최대 치수(MAX_CANVAS_PX)를 양 축 모두 넘지 않도록 렌더 스케일 자체를 낮춘다.
@@ -87,9 +145,12 @@ async function splitPdf(file: File, out: RedesignStrip[]) {
     if (!ctx) continue;
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
     // 페이지별로만 슬라이스(세로 이어붙이기 금지)
-    sliceRegionToStrips(canvas, canvas.width, canvas.height, (n - 1) / pages, n / pages, out);
+    const before = out.length;
+    wantedStrips += sliceRegionToStrips(canvas, canvas.width, canvas.height, (n - 1) / pages, n / pages, out);
+    if (out.length > before) usedPages += 1;
   }
   await loadingTask.destroy();
+  return { totalPages, usedPages, wantedStrips };
 }
 
 function loadImage(objectUrl: string) {

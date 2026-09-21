@@ -274,3 +274,35 @@ describe("자리를 꾸며 보내면 거절한다", () => {
   });
 });
 
+/**
+ * **페이지 장수를 코어까지 내려보낸다**(F-7-0).
+ *
+ * 화면은 장마다 따로 부르므로 `count` 는 늘 1이다. 그 수로 프롬프트의
+ * 「N장을 이어 붙였을 때」를 적으면 모든 요청이 「1장」이 된다.
+ */
+describe("페이지가 몇 장짜리인지 내려보낸다", () => {
+  const 보낸다 = async (pageTotal?: string) => {
+    const form = new FormData();
+    form.append("files", 원본());
+    form.append("count", "1");
+    if (pageTotal !== undefined) form.append("pageTotal", pageTotal);
+    await generate(new Request("http://local/api/redesign/generate", { method: "POST", body: form }));
+    return (mocks.generate.mock.calls[0]![0] as { pageTotal?: number }).pageTotal;
+  };
+
+  it("**화면이 말한 수를 그대로 넘긴다**", async () => {
+    expect(await 보낸다("8")).toBe(8);
+  });
+
+  it("**안 보내면 안 넘긴다** — 코어가 숫자 없이 말한다", async () => {
+    expect(await 보낸다()).toBeUndefined();
+  });
+
+  it.each([["0"], ["11"], ["-3"], ["2.5"], ["abc"], [""]])(
+    "**말이 안 되는 수(%s)는 안 넘긴다**",
+    async (raw) => {
+      expect(await 보낸다(raw)).toBeUndefined();
+    },
+  );
+});
+

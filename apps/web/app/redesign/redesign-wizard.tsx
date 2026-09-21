@@ -18,10 +18,14 @@ import {
 import {
   type ImageLook,
 } from "@fixup/shared";
-import { splitFilesToStrips, runTranscription } from "./transcribe-client";
+import { runTranscriptStep } from "./transcript-step";
 import { randomId } from "../../lib/browser-safe";
 import { batchSummaryMessage } from "./batch-summary";
 import { appendGenerateFields } from "./generate-form";
+import { coverageNotice } from "./coverage";
+
+/** 「나머지 섹션 생성」이 채우는 완성 페이지의 장수. */
+const FULL_PAGE_SECTIONS = 8;
 import {
   REDESIGN_STEPS,
   commerceTips,
@@ -99,6 +103,7 @@ export function RedesignWizard() {
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState("");
   const [saveWarning, setSaveWarning] = React.useState("");
+  const [coverageWarning, setCoverageWarning] = React.useState(""); // 사연은 `coverage.ts`
   const [rolloutRequest, setRolloutRequest] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const knowledgeInputRef = React.useRef<HTMLInputElement>(null);
@@ -175,11 +180,15 @@ export function RedesignWizard() {
     startSection = 1,
     baseProject?: Project | null,
     displayCount = nextCount,
-    displayIndex = 1
+    displayIndex = 1,
+    /** 페이지가 몇 장짜리인가. 이 요청의 장수와 다르다. 사연은 `generate-form.ts`. */
+    pageTotal = nextCount
   ): Promise<Project | null> {
     const outputCount = typeof nextCount === "number" && Number.isFinite(nextCount) ? nextCount : count;
     const outputRolloutRequest = typeof nextRolloutRequest === "string" ? nextRolloutRequest : "";
 
+    // 지난 번 고지가 지금 자료와 무관하게 남아 있으면 안 된다.
+    setCoverageWarning("");
     if (files.length === 0) {
       setToast("기존 상세페이지 이미지 또는 PDF를 먼저 업로드해주세요.");
       setView("workspace");
@@ -202,7 +211,7 @@ export function RedesignWizard() {
       let completed = 0;
       lastGenerateErrorRef.current = ""; // 지난 번 실패가 이번 요약에 따라붙으면 안 된다.
       for (let sectionNumber = startSection; sectionNumber < startSection + outputCount; sectionNumber += 1) {
-        const nextProject = await generate(1, outputRolloutRequest, sectionNumber, workingProject, outputCount, sectionNumber - startSection + 1);
+        const nextProject = await generate(1, outputRolloutRequest, sectionNumber, workingProject, outputCount, sectionNumber - startSection + 1, outputCount);
         if (!nextProject) break;
         workingProject = nextProject;
         completed += 1;
@@ -256,41 +265,22 @@ export function RedesignWizard() {
 
     try {
       const form = new FormData();
-      const uploadFiles = await normalizeFilesForUpload(files);
+      const normalized = await normalizeFilesForUpload(files);
+      const uploadFiles = normalized.files;
+      const cuts = [...normalized.cuts];
       if (abortController.signal.aborted) throw new DOMException("생성 요청을 취소했습니다.", "AbortError");
 
-      let transcript: string | null = null;
-      const transcriptCacheKey = files.map((f) => `${f.name}:${f.size}`).join(",");
-      if (transcriptCacheRef.current?.key === transcriptCacheKey) {
-        transcript = transcriptCacheRef.current.transcript;
-      } else {
-        /**
-         * **끝까지 간 전사만 캐시에 넣는다.**
-         *
-         * 중단은 예외를 던지지 않고 이미 끝난 배치까지만 이어붙여 정상으로
-         * 돌아온다. 그것을 성공한 것과 같은 열쇠로 넣어 두면, 설정만 바꿔 다시
-         * 만들 때 전사 단계를 건너뛰고 **잘린 텍스트를 영구히 재사용한다** —
-         * 새로고침 전까지 몇 번을 눌러도 같은 결과가 나온다.
-         */
-        let complete = false;
-        try {
-          setToast("원본 상세페이지를 전사하는 중입니다(작은 글씨까지 확인).");
-          const strips = await splitFilesToStrips(files);
-          const r = await runTranscription(strips, {
-            provider: selectedModel,
-            signal: abortController.signal,
-            onProgress: (d, t) => setToast(`전사 진행 ${d}/${t} 배치`),
-          });
-          transcript = r.transcript;
-          complete = r.complete;
-          if (r.failedBatches) setToast(`일부 구간 전사 실패(${r.failedBatches}). 가능한 범위로 진행합니다.`);
-        } catch {
-          transcript = null; // graceful degradation
-        }
-        // 못 다 읽은 것은 남기지 않는다. 다음 번에 처음부터 다시 읽는다.
-        if (complete) transcriptCacheRef.current = { key: transcriptCacheKey, transcript };
-      }
+      const step = await runTranscriptStep({
+        files, provider: selectedModel, signal: abortController.signal,
+        cache: transcriptCacheRef.current,
+        onNotice: setToast,
+        onProgress: (d, t) => setToast(`전사 진행 ${d}/${t} 배치`),
+      });
+      const transcript = step.transcript;
+      cuts.push(...step.cuts);
+      if (step.nextCache) transcriptCacheRef.current = step.nextCache;
 
+      setCoverageWarning(coverageNotice(cuts));
       setToast("원본 분석과 실제 이미지 생성을 시작합니다.");
       const knowledgeText = useSharedKnowledge
         ? knowledgeItems
@@ -304,7 +294,7 @@ export function RedesignWizard() {
         count: outputCount, startSection, rolloutRequest: outputRolloutRequest, transcript,
         characterId, characterAngles,
         // 쪼개 부르는 자리와, 앞 청크가 이미 한 기획(F-7-7).
-        jobIndex: displayIndex, jobTotal: displayCount,
+        jobIndex: displayIndex, jobTotal: displayCount, pageTotal,
         analysis: baseProject?.analysis, analysisFiles: baseProject?.files,
       });
 
@@ -419,7 +409,7 @@ export function RedesignWizard() {
         .map((section) => Number(section.id.replace(/\D/g, "")))
         .filter((sectionNumber) => Number.isFinite(sectionNumber))
     );
-    const missingSections = Array.from({ length: 8 }, (_, index) => index + 1)
+    const missingSections = Array.from({ length: FULL_PAGE_SECTIONS }, (_, index) => index + 1)
       .filter((sectionNumber) => !existingSectionNumbers.has(sectionNumber));
 
     reportClientLog("generate-rest:start", {
@@ -428,14 +418,14 @@ export function RedesignWizard() {
     });
 
     if (missingSections.length === 0) {
-      setToast("이미 8장 상세페이지가 생성되어 있습니다.");
+      setToast(`이미 ${FULL_PAGE_SECTIONS}장 상세페이지가 생성되어 있습니다.`);
       return;
     }
 
     let completed = 0;
     for (const [index, sectionNumber] of missingSections.entries()) {
       setToast(`S${sectionNumber} 섹션을 생성합니다.`);
-      const nextProject = await generate(1, rolloutRequest, sectionNumber, workingProject, missingSections.length, index + 1);
+      const nextProject = await generate(1, rolloutRequest, sectionNumber, workingProject, missingSections.length, index + 1, FULL_PAGE_SECTIONS);
       if (!nextProject) break;
       workingProject = nextProject;
       completed += 1;
@@ -754,7 +744,7 @@ export function RedesignWizard() {
         </div>
       </div>
 
-      {saveWarning ? <div role="alert" className="mb-4 rounded-lg border border-warning/30 p-3 text-sm">{saveWarning}</div> : null}
+      {saveWarning || coverageWarning ? <div role="alert" className="mb-4 rounded-lg border border-warning/30 p-3 text-sm">{[saveWarning, coverageWarning].filter(Boolean).join(" ")}</div> : null}
       {generationSummary ? (
         <div
           className={cn(
@@ -808,7 +798,7 @@ export function RedesignWizard() {
             look={look}
             setLook={setLook}
             files={files}
-            setFiles={setFiles}
+            setFiles={(next) => { setCoverageWarning(""); setFiles(next); }}
             request={request}
             setRequest={setRequest}
             inputRef={inputRef}

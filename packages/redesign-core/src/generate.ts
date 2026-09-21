@@ -201,6 +201,13 @@ export type GenerateSectionsInput = {
    */
   analysis?: unknown;
   /**
+   * **페이지가 몇 장짜리인가.** 이 요청이 만드는 장수(`count`)와 다른 수다.
+   *
+   * 화면이 장마다 따로 부르므로 `count` 는 늘 1이다. 그 수로 「N장을 이어
+   * 붙였을 때」를 적으면 모든 요청이 「1장」이 된다(2026-09-21 리뷰 회귀).
+   */
+  pageTotal?: number;
+  /**
    * 그림을 **실제로 만드는 사람.**
    *
    * 주면 이것을 쓰고, 없으면 지금까지처럼 업체를 직접 부른다.
@@ -430,6 +437,7 @@ export async function generateSections(input: GenerateSectionsInput) {
   const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive, {
     attachmentDirective,
     look: normalizeLook(input.look),
+    pageTotal: Number(input.pageTotal) || undefined,
   });
   const projectTitle = inferProjectTitle(analysis, channel);
 
@@ -902,16 +910,33 @@ export function buildSections(
     attachmentDirective?: string;
     /** 그림의 결. 기본 `auto` 는 아무 말도 보태지 않는다. */
     look?: ImageLook;
+    /**
+     * **페이지가 몇 장짜리인가.** 이 요청이 만드는 장수(`count`)와 다른 수다.
+     *
+     * 리디자인은 **장마다 따로 요청한다** — 화면이 `generate(1, …)` 로 부르므로
+     * `count` 는 언제나 1이다. 그 수로 「N장을 이어 붙였을 때」를 적으면 모든
+     * 요청이 **「1장」**이 되어, 「한 페이지로 이어져야 한다」는 요구가 유료
+     * 이미지마다 무의미해진다(2026-09-21 리뷰에서 회귀로 잡혔다).
+     *
+     * **모르면 숫자를 안 쓴다.** 틀린 수를 대는 것보다 안 대는 쪽이 낫다.
+     */
+    pageTotal?: number;
   }
 ): Section[] {
   // 「추가 요청사항」이 곧 사용자가 직접 친 지시다. 리디자인에는 이미 이 칸이
   // 있으므로 새 입력을 하나 더 만들지 않는다 — 두 칸이 서로 다투게 된다.
   const userInstruction = payload.request.trim();
   const lookDirective = imageLookDirective(options?.look ?? "auto");
+  /*
+    이 요청의 장수가 아니라 **페이지의 장수**다. 한 장씩 부르는 경로에서
+    `count` 는 늘 1이라 그 수를 쓰면 「1장」이 된다.
+  */
+  const pageTotal = Number.isFinite(options?.pageTotal) ? Math.floor(Number(options?.pageTotal)) : count;
+  const pageScopeLabel = pageTotal > 1 ? `${pageTotal}장` : "전체 상세페이지";
 
-  return sectionTemplates(count, startSection).map((template) => {
+  return applyBlueprint(sectionTemplates(count, startSection), analysis, startSection).map((template) => {
     const facts = factsForSections(analysis);
-    const isFactSection = template.id === "S4" || template.id === "S5";
+    const isFactSection = isEvidenceSection(template);
     const factsBlock = isFactSection && facts.length
       ? `\n검증된 원본 사실(정확 표기 유지, 이 안에서만 인증/수치 사용):\n${facts.map((f) => `- ${f}`).join("\n")}\n핵심 인증/수치는 읽기 쉬운 정보 패널로 크게 배치한다(이 섹션에 한해 '작은 글씨 회피' 규칙보다 우선).`
       : "";
@@ -937,13 +962,14 @@ export function buildSections(
       `추가 요청사항: ${payload.request || "전환율 중심으로 리디자인"}`,
       payload.rolloutRequest ? `히어로 1장 검토 후 사용자가 요청한 반영사항: ${payload.rolloutRequest}` : "히어로 검토 후 반영사항: 없음",
       payload.knowledgeText ? `참고 사전 지식: ${payload.knowledgeText.slice(0, 18000)}` : "참고 사전 지식: 없음",
-      `분석 요약: ${JSON.stringify(analysis).slice(0, 2400)}`,
+      // `JSON.stringify(undefined)` 는 `undefined` 라 그대로 자르면 터진다.
+      `분석 요약: ${(JSON.stringify(analysis) ?? "{}").slice(0, 2400)}`,
       // 분석의 design_language 를 따로 뽑아 싣는다. 요약 JSON 안에 묻히면 2400자
       // 자르기에 잘려 나가고, 묻혀 있으면 지시로 읽히지 않는다.
       designLanguageBlock(analysis),
       "브랜드명 금지 규칙: '한이룸', '한이룸의', '한이룸 스킨', 'HANEERUM', 'Haneerum', 'HR'은 서비스명 또는 도구명일 뿐이며 제품 브랜드가 아니다. 이 단어들을 이미지 안의 제품명, 브랜드명, 로고, 라벨, 헤드라인, 후기, FAQ, CTA, 패키지 텍스트로 절대 사용하지 않는다.",
       "브랜드 사용 규칙: 제품 브랜드명과 제품명은 업로드된 원본 상세페이지 또는 제품 패키지에서 확인되는 이름만 사용한다. 원본에서 확인되지 않는 새 브랜드명, 새 제품명, 새 로고를 만들지 않는다.",
-      "전체 연결 규칙: 8장을 이어 붙였을 때 하나의 상세페이지처럼 보여야 한다. 동일한 브랜드 색, 폰트 감각, 제품 사진 톤은 유지하되 각 섹션의 레이아웃은 반드시 다르게 구성한다. 모든 섹션이 큰 상단 헤드라인+중앙 제품컷으로 반복되면 안 된다.",
+      `전체 연결 규칙: ${pageScopeLabel}을 이어 붙였을 때 하나의 상세페이지처럼 보여야 한다. 동일한 브랜드 색, 폰트 감각, 제품 사진 톤은 유지하되 각 섹션의 레이아웃은 반드시 다르게 구성한다. 모든 섹션이 큰 상단 헤드라인+중앙 제품컷으로 반복되면 안 된다.`,
       "섹션별 변화 규칙: 제품 위치, 정보 카드 모양, 아이콘 밀도, 배경 분할, CTA 위치, 타이포 크기 리듬을 섹션마다 다르게 한다. 같은 헤드라인 문구를 반복하지 말고, 섹션 목적에 맞는 새로운 제목을 쓴다.",
       `안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. ${GROUNDING_RULE} 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다.`,
       factsBlock,
@@ -980,6 +1006,126 @@ async function prepareReferenceImages(files: GenerateInputFile[]): Promise<Refer
     }
   }
   return references.slice(0, MAX_REFERENCE_IMAGES);
+}
+
+/**
+ * **자료가 정한 구성을 얹는다**(F-7-0).
+ *
+ * 분석 프롬프트는 `page_blueprint` 를 만들라고 시키는데, 전에는 그것을 **한
+ * 번도 안 읽고** 박아 둔 열 장(S1 히어로 … S10 최종 CTA)을 그대로 썼다.
+ *
+ * 그래서 무엇을 올리든 같은 구성이 나왔다. 후기가 없는 신제품에도 「S7 후기
+ * 카드」가, 비교할 것이 없는 단일 상품에도 「S9 비교/보증」이 만들어진다.
+ * 근거가 없으니 모델은 그 자리를 **지어내거나 비워** 둔다.
+ *
+ * 설계 T-PLAN: 「…원본 부족, **목적에 맞는 구성**, 새 섹션과 신뢰문구 수정」.
+ *
+ * ── 무엇을 안 바꾸나 ────────────────────────────────────────
+ *
+ * **섹션 id 와 레이아웃 지시는 그대로 둔다.**
+ *
+ *   · id 는 화면이 섹션을 잇는 열쇠다(`S3` 처럼). 「나머지 섹션 생성」이 빠진
+ *     번호를 고르므로, 여기가 흔들리면 만든 그림이 엉뚱한 자리에 붙는다
+ *   · 레이아웃 지시는 **장마다 다르게 보이게** 하는 규칙이다. 모델의 청사진은
+ *     「무엇을 말할까」를 적지 「어떻게 배치할까」를 적지 않는다
+ *
+ * 바뀌는 것은 **무엇을 말하는 장인가**뿐이다.
+ *
+ * 모델이 칸 이름을 조금 다르게 줘도 받는다. 엄하게 잡으면 멀쩡한 청사진이
+ * 버려지고 조용히 옛 구성으로 돌아간다.
+ */
+function blueprintEntries(analysis: unknown): Array<Record<string, unknown>> {
+  if (!analysis || typeof analysis !== "object") return [];
+  const raw = (analysis as { page_blueprint?: unknown }).page_blueprint;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}));
+}
+
+/**
+ * **검증된 사실을 어느 장에 붙일까.**
+ *
+ * 전에는 `S4`·`S5` 라는 **자리**였다. 구성이 자료를 따라가게 되면서 그 전제가
+ * 깨졌다 — 청사진이 「시험성적서」를 7번째에 두면 인증·수치가 엉뚱한 장(예:
+ * 사용법)에 실리고 진짜 근거 장에는 안 실린다(2026-09-21 리뷰).
+ *
+ * 청사진을 얹은 장은 **이름과 목적으로** 본다. 안 얹은 장은 전처럼 자리로
+ * 본다 — 박아 둔 구성의 S4·S5 가 곧 근거 장이다.
+ */
+const EVIDENCE_WORDS = /인증|성분|시험|수치|근거|신뢰|검사|함량|스펙|데이터|비교/;
+
+function isEvidenceSection(template: { id: string; name: string; purpose: string; fromBlueprint?: boolean }): boolean {
+  if (!template.fromBlueprint) return template.id === "S4" || template.id === "S5";
+  return EVIDENCE_WORDS.test(`${template.name} ${template.purpose}`);
+}
+
+/** 이름은 한 줄이어야 한다. 프롬프트의 `섹션:` 줄과 화면 제목이 통째로 받는다. */
+const BLUEPRINT_NAME_MAX = 40;
+const BLUEPRINT_TEXT_MAX = 200;
+
+/**
+ * 청사진이 말하는 자리를 찾는다.
+ *
+ * **번호를 쓰되 따르지는 않는다.** 모델이 `S3` 라고 적어 오면 그 칸을 우리 3번
+ * 자리에 얹되, 결과의 번호는 우리 것이다. 전에는 **위치로만** 얹어서, 청사진이
+ * 뒤섞여 오면 「브랜드 스토리」가 히어로 레이아웃(「가장 강한 비주얼」)을 달고
+ * 첫 장이 됐다(2026-09-21 리뷰).
+ *
+ * 번호가 없으면 전처럼 위치로 본다.
+ */
+function blueprintEntryFor(
+  entries: Array<Record<string, unknown>>,
+  sectionNumber: number,
+  fallbackIndex: number,
+): Record<string, unknown> | undefined {
+  const 번호로 = entries.find((entry) => {
+    const id = pickString(entry, ["section_id", "id"]);
+    return /^S\d+$/i.test(id) && Number(id.slice(1)) === sectionNumber;
+  });
+  if (번호로) return 번호로;
+
+  // 어느 칸도 번호를 안 달았을 때만 자리로 본다. 반만 달았으면 그 반은 안 얹는다.
+  const 번호가있나 = entries.some((entry) => /^S\d+$/i.test(pickString(entry, ["section_id", "id"])));
+  return 번호가있나 ? undefined : entries[fallbackIndex];
+}
+
+/**
+ * 이름에 번호를 붙인다.
+ *
+ * **한 페이지 안에서 규격이 같아야 한다.** 청사진이 모자라 뒤쪽이 박아 둔
+ * 이름(`S4 USP 차별점`)을 쓰면, 앞은 맨 이름이고 뒤는 번호가 붙어 섞인다.
+ * 결과 화면이 이름만 찍는데 「나머지 섹션 생성」은 번호로 말하므로, 사용자가
+ * 카드와 번호를 못 잇는 문제도 여기서 닫힌다.
+ */
+function numberedName(id: string, name: string): string {
+  const 잘린것 = name.slice(0, BLUEPRINT_NAME_MAX).trim();
+  // 템플릿 리터럴 안의 \b 는 컴파일 뒤 **백스페이스**가 된다. 낱말 경계는 String.raw 로.
+  return new RegExp(String.raw`^${id}\b`, "i").test(잘린것) ? 잘린것 : `${id} ${잘린것}`;
+}
+
+function applyBlueprint(
+  templates: ReturnType<typeof sectionTemplates>,
+  analysis: unknown,
+  startSection: number,
+): ReturnType<typeof sectionTemplates> {
+  const entries = blueprintEntries(analysis);
+  if (entries.length === 0) return templates;
+
+  return templates.map((template, index) => {
+    const entry = blueprintEntryFor(entries, startSection + index, startSection - 1 + index);
+    const name = entry ? pickString(entry, ["name", "title", "section_name", "label", "heading"]) : "";
+    if (!entry || !name) return template;
+
+    return {
+      ...template,
+      name: numberedName(template.id, name),
+      purpose: (pickString(entry, ["purpose", "goal", "objective", "intent", "summary"]) || template.purpose)
+        .slice(0, BLUEPRINT_TEXT_MAX),
+      source: (pickString(entry, ["source", "evidence", "content", "material", "basis"]) || template.source)
+        .slice(0, BLUEPRINT_TEXT_MAX),
+      /** 이 장이 근거를 말하는 장인가. 검증된 사실 블록이 여기 붙는다. */
+      fromBlueprint: true,
+    };
+  });
 }
 
 function sectionTemplates(count: number, startSection = 1) {

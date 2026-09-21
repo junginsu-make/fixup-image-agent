@@ -6,6 +6,7 @@
  */
 
 import type { SectionResult } from "./redesign-model";
+import { referenceCuts, type CoverageCut } from "./coverage";
 export function downloadDataUrl(url: string, fileName: string) {
   if (!url) return;
   const link = document.createElement("a");
@@ -171,16 +172,52 @@ export async function extractPdfText(file: File) {
   return pages.join("\n");
 }
 
-export async function normalizeFilesForUpload(files: File[]) {
-  const output: File[] = [];
+/** 그림 참조로 실을 수 있는 최대 장수. 코어의 `MAX_REFERENCE_IMAGES` 와 짝이다. */
+const MAX_REFERENCE_FILES = 4;
+
+/**
+ * 올린 자료를 그림 참조로 바꾼다.
+ *
+ * **자른 것을 함께 돌려준다**(F-7-0). 전에는 `slice(0, 4)` 한 줄이 조용히
+ * 버렸다 — 20쪽짜리 PDF 를 올린 사람이 4쪽만 보고 만든 페이지를 받으면서
+ * 그 사실을 어디서도 못 들었다.
+ */
+export async function normalizeFilesForUpload(
+  files: File[],
+): Promise<{ files: File[]; cuts: CoverageCut[] }> {
+  /*
+    **자른 뒤에 센다**(2026-09-21 리뷰).
+
+    상한은 **누적**인데 처음 판은 고지를 **파일마다** 쌓았다. PDF 두 개
+    (20쪽·12쪽)를 올리면 실제로는 첫 PDF 의 4쪽만 쓰는데 「20쪽 중 4쪽,
+    12쪽 중 4쪽」이라고 말했다. 둘째는 한 쪽도 안 썼다. 고지가 목적인 기능이
+    사실이 아닌 문장을 냈다.
+
+    그래서 어느 원본에서 나왔는지를 함께 담아 두고, **자른 뒤 살아남은 것**을
+    원본별로 센다.
+  */
+  const produced: Array<{ file: File; origin: string }> = [];
+  const pdfPages = new Map<string, number>();
+
   for (const file of files) {
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      output.push(...(await renderPdfToImages(file)));
+      const rendered = await renderPdfToImages(file);
+      pdfPages.set(file.name, rendered.totalPages);
+      for (const page of rendered.pages) produced.push({ file: page, origin: file.name });
     } else if (file.type.startsWith("image/")) {
-      output.push(...(await renderImageToReferenceFiles(file)));
+      for (const cropped of await renderImageToReferenceFiles(file)) {
+        produced.push({ file: cropped, origin: file.name });
+      }
     }
   }
-  return output.slice(0, 4);
+
+  const kept = produced.slice(0, MAX_REFERENCE_FILES);
+
+  return {
+    files: kept.map((entry) => entry.file),
+    // 세는 일은 `coverage.ts` 가 한다. 여기서 세면 돌려 볼 수 없다.
+    cuts: referenceCuts({ produced, kept, pdfPages }),
+  };
 }
 
 export async function renderImageToReferenceFiles(file: File) {
@@ -285,12 +322,19 @@ export async function cropImageToPngFile({
   return new File([blob], `${safeName}-reference-${index + 1}.png`, { type: "image/png" });
 }
 
-export async function renderPdfToImages(file: File) {
+/**
+ * PDF 를 그림 참조로 만든다.
+ *
+ * **원래 쪽수를 함께 돌려준다**(F-7-0). 앞 4쪽만 쓰는데, 몇 쪽 중 4쪽인지를
+ * 여기서 말하지 않으면 아무도 모른다.
+ */
+export async function renderPdfToImages(file: File): Promise<{ pages: File[]; totalPages: number }> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
   const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-  const pageCount = Math.min(pdf.numPages, 4);
+  const totalPages = pdf.numPages;
+  const pageCount = Math.min(totalPages, MAX_REFERENCE_FILES);
   const pages: File[] = [];
 
   for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -318,6 +362,6 @@ export async function renderPdfToImages(file: File) {
     pages.push(new File([blob], `${file.name.replace(/\.pdf$/i, "")}-page-${pageNumber}.png`, { type: "image/png" }));
   }
 
-  return pages;
+  return { pages, totalPages };
 }
 
