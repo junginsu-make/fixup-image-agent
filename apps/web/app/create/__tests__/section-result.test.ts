@@ -88,7 +88,12 @@ describe("화면이 지금 배열을 넘긴다", () => {
       String.raw`setSections\(\(current\)[\s\S]{0,900}?generatedImage:[\s\S]{0,400}?\}\)`,
       "g",
     );
-    const 업데이터 = [...editor.matchAll(업데이터패턴)].map((hit) => hit[0]);
+    /*
+      **주석을 걷어내고 본다.** 창(900자)이 주석 길이에 걸리면, 코드는
+      멀쩡한데 시험이 빨개진다. 실제로 그렇게 한 번 깨졌다.
+    */
+    const 코드만 = editor.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const 업데이터 = [...코드만.matchAll(업데이터패턴)].map((hit) => hit[0]);
 
     // 결과를 붙이는 자리가 둘이다 — 단건과 일괄.
     expect(업데이터).toHaveLength(2);

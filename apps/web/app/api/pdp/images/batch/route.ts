@@ -315,7 +315,18 @@ export async function POST(req: Request) {
     { model, billableImages },
   );
 
-  await jobs?.finished({ succeeded, requested: sections.length, settled: Boolean(usage) });
+  /*
+    **정산만 됐다고 원가 기록까지 됐다고 하지 않는다**(설계 §8.4).
+
+    전에는 `settled: Boolean(usage)` 였다. 그런데 `usage` 는 **비용 기록 실패와
+    무관하게** 돌아온다 — 기록 실패는 로그에만 남았다. 그래서 **돈이 새는
+    요청이 「정산 완료」로 닫혀** 아무도 다시 안 봤다.
+  */
+  await jobs?.finished({
+    succeeded,
+    requested: sections.length,
+    settled: Boolean(usage) && usage?.costRecorded !== false,
+  });
 
   return Response.json({
     ok: succeeded > 0,

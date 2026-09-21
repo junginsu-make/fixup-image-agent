@@ -26,6 +26,14 @@ export {
   type ImageProviderInput,
 } from "./pdp.image-provider";
 export { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
+/** 이 그림이 지금 문구로 만든 것인가(N-5, 설계 §4.2). */
+export {
+  IMAGE_STALE_NOTICE,
+  imageStampOf,
+  isImageStale,
+  type ImageStamp,
+} from "./pdp.image-freshness";
+
 /** 그 심사가 지금 구성안을 본 것인가(N-3, 설계 §9.3·§10.1). */
 export {
   REVIEW_STALE_NOTICE,

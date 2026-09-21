@@ -50,7 +50,11 @@ describe("실패도 적는가", () => {
     const api = read("lib/membership/api.ts");
 
     expect(api).not.toContain("if (cost && cost.billableImages > 0) {");
-    expect(api).toMatch(/if \(cost\) \{[\s\S]{0,400}billable_images: cost\.billableImages/);
+    /*
+      창을 넓힌다. 그 사이에 「모르는 것과 0원인 것을 가르는」 주석이
+      들어왔다(N-7). 재는 것은 그대로다 — 비용이 오면 장수를 적는가.
+    */
+    expect(api).toMatch(/if \(cost\) \{[\s\S]{0,1200}billable_images: cost\.billableImages/);
   });
 
   it("기록이 실패하면 조용히 넘어가지 않는다", () => {

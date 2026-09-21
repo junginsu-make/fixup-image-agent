@@ -90,7 +90,7 @@ import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-
 // gpt-image-2 여섯 장이면 서버는 27장을 깎는데 화면은 24장이라고 안내했다.
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
-import { conceptOnlyNotice } from "@fixup/pdp-core";
+import { IMAGE_STALE_NOTICE, conceptOnlyNotice, imageStampOf, isImageStale } from "@fixup/pdp-core";
 import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
 import { alignedWidthFor, canvasFitFor, canvasHeightFor, nextLayerOrigin } from "./layer-coords";
@@ -1543,6 +1543,15 @@ export function PdpEditor({
     물건을 소개하거나 분위기만 먼저 보는 경우다. 막으면 그 사람들이 못 쓴다.
     대신 **실제와 다를 수 있다는 것과, 사진을 올리면 된다는 것**을 말한다.
   */
+  /*
+    **이 그림이 지금 문구로 만든 것인가**(N-5, 설계 §4.2).
+
+    상세페이지는 글자가 이미지 안에 그려진다. 제목을 고쳐도 그림은 옛 글자를
+    들고 있는데 아무 표시가 없었다 — 그대로 내보내면 **고친 글과 다른
+    이미지**가 나간다.
+  */
+  const 그림낡음 = isImageStale(currentSection);
+
   const 개념시안 = conceptOnlyNotice({
     productKind: productKind as never,
     hasProductPhoto: startMode !== "text",
@@ -1649,6 +1658,17 @@ export function PdpEditor({
       setSections((current) =>
         applyToSectionByKey(current, sectionKeysRef.current, sectionKey, {
           generatedImage: toDataUrl(response.mimeType, response.imageBase64),
+          /*
+            **어느 문구로 만든 그림인지 함께 적는다**(N-5, 설계 §4.2).
+
+            글자가 이미지 안에 그려지므로, 제목을 고치면 그림은 옛 글자를
+            들고 있다. 자국이 없으면 화면이 그 사실을 알 길이 없어 **고친
+            글과 다른 이미지가 그대로 나간다.**
+
+            **보낸 섹션으로 찍는다.** 지금 화면의 것으로 찍으면 만드는 사이에
+            문구를 고친 경우 처음부터 맞는 것처럼 보인다.
+          */
+          imageStamp: imageStampOf(section),
           qaWarnings: response.qa?.warnings,
           // 「경고가 없다」와 「검수를 못 돌렸다」는 다르다.
           qaStatus: response.qa?.status,
@@ -1852,19 +1872,31 @@ export function PdpEditor({
          * 옮기면 생성 중에 순서가 바뀌어도 제 섹션을 찾는다.
          */
         const byKey = new Map<string, (typeof response.results)[number]>();
-        chunk.forEach(({ index }, position) => {
+        /*
+          **보낸 섹션도 같은 열쇠로 묶어 둔다**(N-5).
+
+          그림에 어느 문구가 그려졌는지는 **보낸 것**이 안다. 지금 화면의
+          것으로 자국을 찍으면, 만드는 사이에 문구를 고친 경우 처음부터
+          맞는 것처럼 보인다.
+        */
+        const 보낸것 = new Map<string, (typeof chunk)[number]["section"]>();
+        chunk.forEach(({ index, section: 보낸섹션 }, position) => {
           // 지금 배열을 본다. 오래된 것을 쓰면 짝이 어긋난다(A-16).
           const key = sectionKeysRef.current[index];
           const outcome = response.results[position];
           if (key && outcome) byKey.set(key, outcome);
+          if (key) 보낸것.set(key, 보낸섹션);
         });
         setSections((current) =>
           current.map((item, position) => {
-            const outcome = byKey.get(sectionKeysRef.current[position] ?? String(position));
+            const key = sectionKeysRef.current[position] ?? String(position);
+            const outcome = byKey.get(key);
             if (!outcome?.ok) return item;
             return {
               ...item,
               generatedImage: toDataUrl(outcome.mimeType, outcome.imageBase64),
+              // 어느 문구로 만든 그림인지 함께 적는다(N-5). 단건 경로와 같다.
+              imageStamp: imageStampOf(보낸것.get(key) ?? item),
               qaWarnings: outcome.qa?.warnings,
               qaStatus: outcome.qa?.status,
             };
@@ -3169,9 +3201,29 @@ export function PdpEditor({
                 ) : null}
               </div>
 
+              {그림낡음 ? (
+                <p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm">
+                  {IMAGE_STALE_NOTICE}
+                </p>
+              ) : null}
+
               <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
-                <Badge variant={currentSection.generatedImage ? "green" : "outline"}>
-                  {currentSection.generatedImage ? "이미지 준비 완료" : "이미지 생성 필요"}
+                {/*
+                  **고친 글과 다른 이미지를 「준비 완료」라고 하지 않는다**(N-5).
+
+                  글자가 이미지 안에 그려지므로, 제목을 고치면 그림은 옛 글자를
+                  들고 있다. 그대로 내보내면 고친 글과 다른 이미지가 나간다.
+                */}
+                <Badge
+                  variant={
+                    그림낡음 ? "destructive" : currentSection.generatedImage ? "green" : "outline"
+                  }
+                >
+                  {그림낡음
+                    ? "이전 구성의 결과"
+                    : currentSection.generatedImage
+                      ? "이미지 준비 완료"
+                      : "이미지 생성 필요"}
                 </Badge>
                 {currentSection.qaStatus === "unavailable" ? (
                   /*

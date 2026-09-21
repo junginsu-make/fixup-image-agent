@@ -101,6 +101,17 @@ export interface SectionBlueprint {
   style_guide: string;
   reference_usage: string;
   generatedImage?: string;
+  /**
+   * **이 그림을 만들 때의 문구 자국**(N-5, 설계 §4.2).
+   *
+   * 상세페이지는 글자가 이미지 안에 그려진다. 제목을 고쳐도 그림은 옛
+   * 글자를 들고 있는데 **아무 표시가 없었다** — 그대로 내보내면 고친 글과
+   * 다른 이미지가 나간다.
+   *
+   * 지금 문구와 대조해 낡았는지 가린다(`isImageStale`). 옛 초안에는 이 값이
+   * 없고, 없으면 낡았다고 하지 않는다.
+   */
+  imageStamp?: string;
   qaWarnings?: QaDefect[];
   /**
    * 검수가 어떻게 끝났는가.

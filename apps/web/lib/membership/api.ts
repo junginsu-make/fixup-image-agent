@@ -303,14 +303,26 @@ export async function finalizeAiUsage(
    * 실패했는데 정말 0장이면 0을 적는 것이 맞다. 「돈이 안 나갔다」와 「모른다」는
    * 다르고, 지금까지는 둘이 같은 모양이었다.
    */
+  let costRecorded: boolean | undefined;
   if (cost) {
+    /*
+      **모르는 것과 0원인 것을 가른다**(설계 §7.2).
+
+      전에는 `llm_usd: cost.llmUsd ?? 0` 이라 셋이 전부 0 으로 보였다 —
+      정말 0원인 것, 제공자가 사용량을 안 준 것, 기록이 실패한 것.
+
+      모를 때는 **금액 칸을 아예 안 건드린다.** 0 을 적으면 「돈이 안 나갔다」가
+      되고, 그 뒤로는 되돌릴 근거가 없다.
+    */
+    const 금액을안다 = typeof cost.llmUsd === "number" && Number.isFinite(cost.llmUsd);
     const { error: costError } = await admin
       .from("generation_events")
       .update({
         model: cost.model,
         billable_images: cost.billableImages,
         // 그림이 없는 단계(분석·기획)도 여기로 원가가 들어온다.
-        llm_usd: cost.llmUsd ?? 0,
+        ...(금액을안다 ? { llm_usd: cost.llmUsd } : {}),
+        cost_state: 금액을안다 ? "recorded" : "unknown",
       })
       .eq("user_id", reservation.userId)
       .eq("request_id", reservation.requestId);
@@ -323,9 +335,16 @@ export async function finalizeAiUsage(
         billableImages: cost.billableImages,
       });
     }
+    /*
+      **정산만 됐다고 원가 기록까지 됐다고 하지 않는다**(설계 §8.4).
+
+      사용량 확정은 되돌리지 않는다 — 장부가 조금 비는 것보다 회원의 크레딧이
+      예약된 채 묶이는 쪽이 훨씬 나쁘다. 다만 **부르는 쪽이 알 수 있게** 한다.
+    */
+    costRecorded = !costError;
   }
 
-  return usageFromRpc(data[0]);
+  return { ...usageFromRpc(data[0]), ...(costRecorded === undefined ? {} : { costRecorded }) };
 }
 
 /**

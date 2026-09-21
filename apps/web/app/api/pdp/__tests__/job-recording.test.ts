@@ -153,3 +153,52 @@ describe("스위치가 켜졌을 때", () => {
   아무도 안 쓰는 칸을 두면 그 칸만 지키는 시험이 남아, 다음 사람이 「쓰이는
   값」으로 오해한다.
 */
+
+/**
+ * **원가 기록이 실패하면 정산 완료라고 하지 않는다**(N-6, 설계 §8.4).
+ *
+ * 전에는 `settled: Boolean(usage)` 였다. 그런데 `usage` 는 **비용 기록 실패와
+ * 무관하게** 돌아온다 — 기록 실패는 로그에만 남았다. 그래서 **돈이 새는
+ * 요청이 「정산 완료」로 닫혀** 아무도 다시 안 봤다.
+ */
+describe("원가 기록이 실패하면", () => {
+  const 켜고 = async (settleResult: unknown) => {
+    state.settle.mockResolvedValue(settleResult);
+    process.env.PDP_JOBS_ENABLED = "1";
+    try {
+      await batch(request(body()));
+    } finally {
+      delete process.env.PDP_JOBS_ENABLED;
+    }
+    const 마무리 = state.recorder.mock.calls.at(-1)?.[0] as { settled?: boolean } | undefined;
+    return 마무리;
+  };
+
+  it("**정산 완료로 닫지 않는다**", async () => {
+    const 마무리 = await 켜고({ used: 1, quota: 100, costRecorded: false });
+
+    expect(마무리?.settled).toBe(false);
+  });
+
+  it("**잘 적었으면 완료로 닫는다**", async () => {
+    const 마무리 = await 켜고({ used: 1, quota: 100, costRecorded: true });
+
+    expect(마무리?.settled).toBe(true);
+  });
+
+  /**
+   * **비용을 안 넘긴 요청은 적을 것이 없다.** 그때까지 미완으로 보면 재처리
+   * 대상이 쓸데없이 는다.
+   */
+  it("**그 칸이 아예 없으면 완료로 닫는다**", async () => {
+    const 마무리 = await 켜고({ used: 1, quota: 100 });
+
+    expect(마무리?.settled).toBe(true);
+  });
+
+  it("**정산 자체를 못 했으면 완료가 아니다**", async () => {
+    const 마무리 = await 켜고(undefined);
+
+    expect(마무리?.settled).toBe(false);
+  });
+});

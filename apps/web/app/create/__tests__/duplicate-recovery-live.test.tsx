@@ -3,6 +3,7 @@ import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSectionFor } from "../scenario-sections";
+import { imageStampOf } from "@fixup/pdp-core";
 
 /**
  * **같은 요청이 막히면 편집기가 실제로 알리는가**(K-05).
@@ -299,5 +300,102 @@ describe("심사가 없으면 자기 채점표를 정직하게 그린다", () =>
     await 편집으로();
 
     expect(그려진글()).not.toContain("스스로 매긴");
+  });
+});
+
+/**
+ * **고친 글과 다른 이미지를 「준비 완료」라고 하지 않는다**(N-5, 설계 §4.2).
+ *
+ * 상세페이지는 글자가 이미지 안에 그려진다. 제목을 「3일 만에」에서 「7일
+ * 만에」로 고쳐도 **화면의 이미지는 여전히 「3일 만에」**인데 아무 표시가
+ * 없었다. 그대로 내보내면 고친 글과 다른 이미지가 나간다.
+ */
+describe("문구를 고친 뒤의 옛 이미지", () => {
+  const 만든섹션 = { ...섹션, headline: "3일 만에" };
+  const 자국 = imageStampOf(만든섹션 as never);
+
+  const 그림있는결과 = (headline: string) =>
+    ({
+      originalImage: "AAAA",
+      blueprint: {
+        executiveSummary: "요약", scorecard: [], blueprintList: [],
+        sections: [{ ...만든섹션, headline, generatedImage: "data:image/png;base64,AAA", imageStamp: 자국 }],
+      },
+    }) as never;
+
+  const 편집으로 = async () => {
+    const 단추 = renderer.root.findAll((node) => node.type === "button" && 글자(node as never) === "편집");
+    if (단추[0]) await act(async () => { 단추[0]!.props.onClick(); });
+  };
+
+  it("**고친 뒤에는 「이전 구성의 결과」라고 한다**", async () => {
+    await 띄운다({ initialResult: 그림있는결과("7일 만에") });
+    await 편집으로();
+
+    const 글 = 그려진글();
+    expect(글).toContain("이전 구성의 결과");
+    expect(글).not.toContain("이미지 준비 완료");
+  });
+
+  it("**무엇을 해야 하는지 말한다**", async () => {
+    await 띄운다({ initialResult: 그림있는결과("7일 만에") });
+    await 편집으로();
+
+    expect(그려진글()).toContain("다시 만들어야");
+  });
+
+  it("**안 고쳤으면 그대로 준비 완료라고 한다**", async () => {
+    await 띄운다({ initialResult: 그림있는결과("3일 만에") });
+    await 편집으로();
+
+    const 글 = 그려진글();
+    expect(글).toContain("이미지 준비 완료");
+    expect(글).not.toContain("이전 구성의 결과");
+  });
+
+  /**
+   * **옛 초안을 나무라지 않는다.** 이 기능이 생기기 전에 만든 그림에는
+   * 자국이 없다.
+   */
+  it("**자국이 없으면 그대로 보여 준다**", async () => {
+    await 띄운다({
+      initialResult: {
+        originalImage: "AAAA",
+        blueprint: {
+          executiveSummary: "요약", scorecard: [], blueprintList: [],
+          sections: [{ ...섹션, headline: "아무 제목", generatedImage: "data:image/png;base64,AAA" }],
+        },
+      } as never,
+    });
+    await 편집으로();
+
+    expect(그려진글()).toContain("이미지 준비 완료");
+  });
+});
+
+/**
+ * **그림을 넣을 때 자국을 실제로 찍는가**(N-5).
+ *
+ * 안 찍으면 `isImageStale` 이 영영 거짓을 준다 — 판정만 맞고 아무것도 안
+ * 고친 것이 된다.
+ */
+describe("그림을 만들면 그때 문구를 적어 둔다", () => {
+  it("**단건 생성이 자국을 찍는다**", async () => {
+    captured.answer = { ok: true, imageBase64: "RESULT", mimeType: "image/png" };
+    const 바뀐섹션: Array<Record<string, unknown>> = [];
+
+    await 띄운다({ onSectionsChange: (update: unknown) => {
+      const next = typeof update === "function"
+        ? (update as (s: unknown[]) => Array<Record<string, unknown>>)([{ ...섹션, headline: "첫 장" }])
+        : update;
+      바뀐섹션.push(...(next as Array<Record<string, unknown>>));
+    } });
+
+    await act(async () => {
+      renderer.root.findAll((node) => node.type === "button" && 글자(node as never) === "생성")[0]!.props.onClick();
+    });
+    await 가라앉힌다();
+
+    expect(바뀐섹션.some((section) => Boolean(section.imageStamp)), "자국이 안 찍혔다").toBe(true);
   });
 });

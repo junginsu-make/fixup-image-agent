@@ -118,8 +118,18 @@ export function TextModeFlow({
     은유로 채운 페이지를 받았다. 무엇을 파는지와 무엇을 하러 왔는지는 따로
     받는다.
   */
-  const [productKind, setProductKind] = useState<ProductKind>(DEFAULT_PRODUCT_KIND);
-  const [pageGoal, setPageGoal] = useState<PageGoal>(DEFAULT_PAGE_GOAL);
+  /*
+    **초안을 따라다녀야 한다**(N-8, 설계 §6.3·§9.1).
+
+    전에는 `useState(기본값)` 뿐이었다. 바로 아래 줄들은 전부 `initialDraft`
+    를 읽는데 이 둘만 빠져 있었다 — 「실물 / 문의」를 골라 저장한 뒤 다시 열어
+    재기획하면 **「기타 / 판매」로 조용히 바뀌었다.**
+
+    개념 시안 판단(N-2)도 상품 종류를 보므로, 이 값이 사라지면 사진 없이
+    실물을 파는 경고도 함께 사라진다.
+  */
+  const [productKind, setProductKind] = useState<ProductKind>(initialDraft?.productKind ?? DEFAULT_PRODUCT_KIND);
+  const [pageGoal, setPageGoal] = useState<PageGoal>(initialDraft?.pageGoal ?? DEFAULT_PAGE_GOAL);
   const [brief, setBrief] = useState<ProductBrief | null>(initialDraft?.brief ?? null);
   // 이미지 방향을 사용자가 고쳤는지 비교하려면 최초 시나리오를 그대로 들고 있어야 한다.
   const [originalBlueprint, setOriginalBlueprint] = useState<LandingPageBlueprint | null>(initialDraft?.originalBlueprint ?? null);
@@ -146,10 +156,12 @@ export function TextModeFlow({
   useEffect(() => {
     onDraftChange?.({ stage, text, brief, blueprint, originalBlueprint, review, styleReference,
       styleReferenceEnabled, preserveProduct, personSource, characterId, characterAngles, keyVisual,
-      imageModel, copyIntensity, gapPolicy, planningExecutions });
+      imageModel, copyIntensity, gapPolicy, planningExecutions,
+      // 무엇을 파는가·무엇을 하려는가(N-8). 안 담으면 다시 열 때 기본값으로 돌아간다.
+      productKind, pageGoal });
   }, [onDraftChange, stage, text, brief, blueprint, originalBlueprint, review, styleReference,
     styleReferenceEnabled, preserveProduct, personSource, characterId, characterAngles, keyVisual,
-    imageModel, copyIntensity, gapPolicy, planningExecutions]);
+    imageModel, copyIntensity, gapPolicy, planningExecutions, productKind, pageGoal]);
 
   const handlePlan = async () => {
     setIsBusy(true);

@@ -56,6 +56,17 @@ export type UsageSummary = {
   remaining: number;
   periodStart: string;
   periodEnd: string;
+  /**
+   * **원가를 장부에 적었는가**(N-6, 설계 §8.4).
+   *
+   * 「정산만 완료됐다고 원가 기록까지 완료됐다고 하지 않는다」. 전에는 기록
+   * 실패를 로그에만 남기고 사용량 결과를 그대로 돌려줬다 — 부르는 쪽은
+   * 그것으로 「정산 끝」을 판정하므로 **돈이 새는 요청이 닫힌 것으로**
+   * 표시됐다.
+   *
+   * 비용을 안 넘긴 요청에는 이 칸이 없다. 적을 것이 없었다는 뜻이다.
+   */
+  costRecorded?: boolean;
 };
 
 export type MembershipContext = {

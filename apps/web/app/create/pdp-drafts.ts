@@ -18,6 +18,8 @@ import type {
   PdpLlmExecution,
   PersonSource,
   ProductReadingStatus,
+  ProductKind,
+  PageGoal,
 } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
@@ -138,6 +140,20 @@ export interface PdpTextDraftState {
   imageModel: ImageModelId;
   copyIntensity: CopyIntensity;
   gapPolicy: GapPolicy;
+  /**
+   * **무엇을 파는가·무엇을 하려는가**(N-8, 설계 §6.3·§9.1).
+   *
+   * 화면이 `useState(기본값)` 으로만 들고 있어서, 저장했다 다시 열면
+   * **「기타 / 판매」로 조용히 바뀌었다.** 그 상태로 재기획하면 사용자가 고른
+   * 것과 다른 지시가 서버로 간다.
+   *
+   * 개념 시안 판단(N-2)도 상품 종류를 보므로, 이 값이 사라지면 **사진 없이
+   * 실물을 파는 경고도 함께 사라진다.**
+   *
+   * 옛 초안에는 이 칸이 없다. 없으면 코어의 기본값을 쓴다.
+   */
+  productKind?: ProductKind;
+  pageGoal?: PageGoal;
 }
 
 export interface PdpDraftRecord {

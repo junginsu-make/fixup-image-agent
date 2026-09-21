@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deletePdpDraft, getPdpDraft, savePdpDraft, preservePdpDraft, purgeExpiredPdpDrafts, type PdpDraftInput } from "../pdp-drafts";
@@ -104,5 +105,78 @@ describe("T-SAVE: 판독 상태도 왕복에서 살아남는다", () => {
     await savePdpDraft(input);
 
     expect((await getPdpDraft(input.id!))?.result?.productReadingStatus).toBeUndefined();
+  });
+});
+
+/**
+ * **상품 종류와 목적이 초안 복원에서 사라졌다**(N-8, 설계 §6.3·§9.1).
+ *
+ * 설계 §9.1: 「이미지/텍스트는 입력 방식이다. 실물/서비스/디지털/기타와
+ * 판매/문의/홍보 목적은 **별도로 받는다**」.
+ * 설계 §6.3 표: 두 값의 기획 입력 범위가 「전체」다.
+ *
+ * ── 무엇이 문제였나 ────────────────────────────────────────
+ *
+ * `TextModeFlow` 는 두 값을 `useState(기본값)` 으로만 들고 있었다. 바로 옆
+ * 줄들은 전부 `initialDraft?.X` 를 읽는데 이 둘만 빠져 있었다.
+ *
+ * 「실물 / 문의」를 골라 저장한 뒤 그 작업을 다시 열어 재기획하면, 화면
+ * 버튼이 기본값으로 돌아간 채 서버로 간다 — **「기타 / 판매」로 조용히
+ * 바뀐다.** K-08 이 고치려던 바로 그 증상이다.
+ *
+ * 개념 시안 판단(N-2)도 상품 종류를 보므로, 이 값이 사라지면 **사진 없이
+ * 실물을 파는 경고도 함께 사라진다.**
+ */
+describe("상품 종류와 목적이 초안을 따라다닌다", () => {
+  /**
+   * **화면이 그 값을 읽고 쓰는가.**
+   *
+   * 저장소는 `textDraft` 를 통째로 넘기므로 저장 자체는 처음부터 됐다.
+   * 빠진 것은 **화면이 안 읽고 안 쓰는 것**이었다 — 그러니 여기서 재야 한다.
+   */
+  it("**초안에 담는 칸과 화면이 읽는 칸이 같은 이름이다**", () => {
+    const flow = readFileSync(new URL("../TextModeFlow.tsx", import.meta.url), "utf8");
+
+    // 읽기: `initialDraft?.productKind` 가 있어야 다시 열 때 살아난다.
+    expect(flow).toContain("initialDraft?.productKind");
+    expect(flow).toContain("initialDraft?.pageGoal");
+    // 쓰기: 저장 몸통에 실려야 다음에 읽을 것이 있다.
+    const 저장 = flow.slice(flow.indexOf("onDraftChange?.({"), flow.indexOf("}, [onDraftChange"));
+    expect(저장).toContain("productKind");
+    expect(저장).toContain("pageGoal");
+  });
+
+  it("**저장하고 불러오면 그대로다**", async () => {
+    const saved = await savePdpDraft({
+      ...fixture(),
+      textDraft: {
+        stage: "input", text: "나무 도마를 팝니다", brief: null,
+        blueprint: null, originalBlueprint: null,
+        styleReferenceEnabled: true, preserveProduct: true, characterAngles: [],
+        keyVisual: null, imageModel: "nano-banana", copyIntensity: "normal", gapPolicy: "ask",
+        productKind: "physical", pageGoal: "inquiry",
+      } as never,
+    });
+
+    const restored = await getPdpDraft(saved.id);
+
+    expect(restored?.textDraft?.productKind).toBe("physical");
+    expect(restored?.textDraft?.pageGoal).toBe("inquiry");
+  });
+
+  /**
+   * **옛 초안에는 이 칸이 없다.** 없는 것을 기본값으로 채우되, 그 기본값이
+   * 무엇인지는 코어 한 곳에서만 정한다.
+   */
+  it("**옛 초안은 빈 채로 와도 안 터진다**", async () => {
+    const saved = await savePdpDraft({
+      ...fixture(),
+      textDraft: { stage: "input", text: "옛 초안", keyVisual: null } as never,
+    });
+
+    const restored = await getPdpDraft(saved.id);
+
+    expect(restored?.textDraft).toBeTruthy();
+    expect(restored?.textDraft?.productKind).toBeUndefined();
   });
 });
