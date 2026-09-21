@@ -55,12 +55,13 @@ export function EasyMessageRow({
   }
 
   /*
-    **시스템 말도 AI 쪽 말풍선이다.**
+    **AI 쪽 말풍선.** 인사(`system`)와 도우미가 한 답(`assistant`)이 같은
+    모양으로 온다 — 읽는 사람에게는 둘 다 「저쪽이 한 말」이다.
 
     가운데 옅은 글로 두면 「누가 한 말인지 모르는 안내문」이 된다. 인사도
     대화의 한 줄이므로 같은 자리에서 같은 모양으로 온다.
   */
-  if (message.role === "system") {
+  if (message.role === "system" || message.role === "assistant") {
     return (
       <div className="flex items-start gap-2">
         <AssistantMark />
@@ -85,7 +86,7 @@ export function EasyMessageRow({
           className="max-w-[85%] overflow-hidden rounded-2xl rounded-bl-md border border-border transition-opacity hover:opacity-90"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="만든 그림" className="block max-h-[55vh] w-auto" />
+          <img src={imageUrl} alt="만든 이미지" className="block max-h-[55vh] w-auto" />
         </button>
       ) : (
         <div

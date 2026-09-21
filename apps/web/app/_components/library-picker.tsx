@@ -85,6 +85,7 @@ export function LibraryPickerButton({
   sets,
   onPickSet,
   label = "라이브러리에서 불러오기",
+  triggerVariant = "outline",
   fit = "cover",
   title = "라이브러리에서 불러오기",
   description,
@@ -112,6 +113,13 @@ export function LibraryPickerButton({
   /** 라이브러리에서 아주 지운다. 안 넘기면 지우기 버튼이 안 나온다. */
   onDelete?(image: LibraryPickImage): void;
   label?: string;
+  /**
+   * 여는 단추의 색. **기본은 지금까지대로 `outline`** 이라 쓰던 화면은 그대로다.
+   *
+   * Easy 첫 화면만 다르다 — 거기서는 이 단추가 나란한 셋 중 하나이고,
+   * 셋이 똑같이 생기면 무엇이 다음 걸음인지 알 수 없다(2026-09-21 사용자).
+   */
+  triggerVariant?: React.ComponentProps<typeof Button>["variant"];
   /**
    * 격자에 그림을 **채울지 담을지.**
    *
@@ -182,7 +190,7 @@ export function LibraryPickerButton({
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant={triggerVariant} onClick={() => setOpen(true)}>
         <FolderOpen className="size-4" />
         {label}
         <Badge variant="secondary" className="ml-1">{images.length}</Badge>

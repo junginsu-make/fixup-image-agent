@@ -86,7 +86,7 @@ export function EasyResultPanel({
             className="block w-full overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="만든 그림" className="block w-full" />
+            <img src={url} alt="만든 이미지" className="block w-full" />
           </button>
         ) : (
           /*

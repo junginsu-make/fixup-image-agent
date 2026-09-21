@@ -137,3 +137,38 @@ describe("화면과 서버가 같은 기본값을 쓴다", () => {
     expect(generate).toContain("const VARIANTS = 1;");
   });
 });
+
+/**
+ * **값이 나가기 전에 가른다** (2026-09-21 사용자 — 「꼭 이미지만이 아니라
+ * 사용자와 AI 가 대화 할 수 있어야 합니다」).
+ *
+ * 그전에는 친 말이 전부 그림 주문이었다. 「안녕하세요」 한 마디에 그림값이
+ * 나갔다. 가르는 자리가 세 라우트를 부르기 **앞**에 있어야 그 일이 안 난다.
+ */
+describe("말과 주문을 가르는 자리", () => {
+  it("가르는 판단을 라우트 안에 두지 않는다", () => {
+    // 판단은 `app/easy/chat.ts` 가 값으로 잰다. 여기 있으면 못 잰다.
+    expect(generate).toContain('from "../../../easy/chat"');
+    expect(generate).toContain("readEasyDecision");
+  });
+
+  it("프로젝트를 만들기 전에 가른다", () => {
+    const 가르는곳 = generate.indexOf("readEasyDecision");
+    const 만드는곳 = generate.indexOf("await createProject(");
+
+    expect(가르는곳).toBeGreaterThan(0);
+    expect(만드는곳).toBeGreaterThan(0);
+    expect(가르는곳).toBeLessThan(만드는곳);
+  });
+
+  it("말로 답한 턴은 그림을 만들지 않고 끝낸다", () => {
+    const 말갈래 = generate.slice(
+      generate.indexOf('decision.wants === "talk"'),
+      generate.indexOf("await createProject("),
+    );
+
+    expect(말갈래).toContain("talked: true");
+    expect(말갈래).toContain('role: "assistant"');
+    expect(말갈래).toContain("return Response.json");
+  });
+});
