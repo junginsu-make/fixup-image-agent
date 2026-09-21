@@ -126,6 +126,14 @@ export function createLocalJobRepository(root: string): LocalJobRepository {
       return job;
     },
 
+    async findLatestForDocument(userId, documentId, revision): Promise<JobRecord | null> {
+      const 내것 = read().jobs.filter(
+        (job) => job.userId === userId && job.documentId === documentId && job.revision === revision,
+      );
+      // 여러 번 만들었으면 **마지막 것**이 사용자가 기억하는 화면이다.
+      return 내것.length ? 내것.reduce((a, b) => (a.createdAt <= b.createdAt ? b : a)) : null;
+    },
+
     async advance(jobId, userId, event) {
       const data = read();
       const job = data.jobs.find((entry) => entry.id === jobId);

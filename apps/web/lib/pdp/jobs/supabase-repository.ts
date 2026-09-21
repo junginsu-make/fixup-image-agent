@@ -189,6 +189,36 @@ export function createSupabaseJobRepository(admin: SupabaseClient<any>): PdpJobR
       return toRecord(row, await itemsOf(jobId));
     },
 
+    async findLatestForDocument(userId: string, documentId: string, revision: number): Promise<JobRecord | null> {
+      const { data } = await admin
+        .from(JOBS)
+        .select("*")
+        /*
+          **셋 다 있어야 한다**(K-04).
+
+          이 길은 사용자가 **자기 초안 id** 만 들고 들어온다. `user_id` 를
+          빠뜨리면 초안 id 를 아는 것만으로 남의 그림을 되찾는다 — service
+          role 은 RLS 를 지나치므로 코드가 빠뜨리면 막아 주는 것이 없다.
+
+          `revision` 은 오늘 늘 0 이라 실제로 거르는 일을 하지는 않는다. 그래도
+          거는 까닭은, 훗날 개정판을 올리기 시작했을 때 **여기가 빠져 있으면**
+          옛 구성의 그림이 새 구성에 붙기 때문이다. 자세한 사정은
+          `repository.ts` 의 `findLatestForDocument` 머리말에 적었다.
+        */
+        .eq("user_id", userId)
+        .eq("document_id", documentId)
+        .eq("revision", revision)
+        // 여러 번 만들었으면 마지막 것이 사용자가 기억하는 화면이다.
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const row = (data as Row | null) ?? null;
+      // 없으면 섹션 표를 읽으러 가지 않는다. 헛걸음이다.
+      if (!row) return null;
+      return toRecord(row, await itemsOf(row.id));
+    },
+
     async advance(jobId: string, userId: string, event: PdpJobEvent): Promise<JobRecord> {
       const row = await rowOf(jobId, userId);
       if (!row) throw new Error(`작업을 찾지 못했거나 권한이 없습니다: ${jobId}`);

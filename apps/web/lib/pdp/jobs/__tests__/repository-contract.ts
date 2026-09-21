@@ -14,6 +14,7 @@ import { fingerprintOf } from "../claim";
  *   2. 남의 작업은 못 본다
  *   3. 두 워커가 동시에 잡아도 하나만 잡는다
  *   4. 결과는 어떤 실패에도 안 사라진다
+ *   5. 문서로 자기 작업을 찾을 수 있다
  */
 const 요청 = {
   documentId: "doc-1",
@@ -198,6 +199,69 @@ export function describeJobRepositoryContract(
       });
     
   
+    });
+
+    /**
+     * **5. 문서로 자기 작업을 찾을 수 있다**(K-04).
+     *
+     * 탭을 닫았다 돌아온 사용자는 **작업 번호를 모른다.** 번호는 생성 응답에
+     * 실려 오는데, 닫고 나간 경우가 바로 그 응답을 못 받은 경우다. 그런데
+     * 서버는 그동안 그림을 저장소에 올려 두었다.
+     *
+     * 화면이 아는 것은 **자기 초안 id** 뿐이다. 그것으로 찾을 수 없으면
+     * `GET /api/pdp/jobs/:id` 는 아무도 못 부르는 문이고, 사용자는 이미 값을
+     * 치른 그림을 다시 만들어 두 번 낸다.
+     *
+     * 설계 §8.1 이 `pdp_generation_jobs` 에 document/revision 을 둔 까닭이 이것이다.
+     */
+    describe("5. 문서로 자기 작업을 찾는다", () => {
+      it("**초안 id 로 찾는다**", async () => {
+        const id = await 만들고id(만들기());
+
+        const found = await repo.findLatestForDocument("u1", 요청.documentId, 요청.revision);
+
+        expect(found?.id).toBe(id);
+      });
+
+      it("**남의 문서는 못 찾는다** — 초안 id 만 알아서는 안 된다", async () => {
+        await 만들고id(만들기());
+
+        expect(await repo.findLatestForDocument("u2", 요청.documentId, 요청.revision)).toBeNull();
+      });
+
+      it("**다른 개정판은 남남이다** — 구성을 다시 짠 뒤의 옛 그림을 끌어오지 않는다", async () => {
+        await 만들고id(만들기());
+
+        expect(await repo.findLatestForDocument("u1", 요청.documentId, 요청.revision + 1)).toBeNull();
+      });
+
+      it("없으면 `null` 이다", async () => {
+        expect(await repo.findLatestForDocument("u1", "없는문서", 0)).toBeNull();
+      });
+
+      /**
+       * **가장 나중 것을 준다.** 같은 개정판으로 여러 번 만들었으면 마지막
+       * 것이 사용자가 기억하는 화면이다.
+       */
+      it("**여러 번 만들었으면 마지막 것을 준다**", async () => {
+        await 만들고id(만들기("u1", "key-1"));
+        const 나중 = await 만들고id(만들기("u1", "key-2", { sectionIds: ["s3"] }));
+
+        const found = await repo.findLatestForDocument("u1", 요청.documentId, 요청.revision);
+
+        expect(found?.id).toBe(나중);
+      });
+
+      it("**섹션 결과도 함께 온다** — 되찾을 그림이 거기 적혀 있다", async () => {
+        const id = await 만들고id(만들기());
+        await repo.recordItem(id, {
+          sectionId: "s1", attempt: 1, outputPath: "u1/j/s1.png",
+        });
+
+        const found = await repo.findLatestForDocument("u1", 요청.documentId, 요청.revision);
+
+        expect(found?.items.map((item) => item.outputPath)).toContain("u1/j/s1.png");
+      });
     });
   });
 }

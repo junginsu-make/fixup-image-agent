@@ -198,6 +198,14 @@ interface PdpEditorProps {
   imageModel?: ImageModelId;
   desiredTone: string;
   initialDraftState?: PdpEditorDraftState | null;
+  /**
+   * 서버에 남아 있던 그림을 되찾았다는 한마디(K-04).
+   *
+   * **말없이 바꾸면 배신이다.** 없던 그림이 갑자기 들어와 있으면 사용자는
+   * 자기가 만든 것인지 아닌지 가릴 수 없다. 무엇을 되찾을지 고르는 판단은
+   * 부모가 하고(`job-recovery.ts`), 여기서는 그 말을 보여 주기만 한다.
+   */
+  recoveredNotice?: string;
   lastSavedAt?: string | null;
   manualSaveToastToken?: number;
   onOpenSettings?: () => void;
@@ -275,6 +283,7 @@ export function PdpEditor({
   imageModel = DEFAULT_IMAGE_MODEL,
   desiredTone,
   initialDraftState,
+  recoveredNotice,
   lastSavedAt,
   manualSaveToastToken = 0,
   onOpenSettings,
@@ -2557,6 +2566,11 @@ export function PdpEditor({
             <p className="mt-2 text-xs text-muted-foreground">
               성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 차감되며 {generationRun.completed}장이면 {imageCreditUnits(imageModel, generationRun.completed)}장입니다.
             </p>
+          </div>
+        ) : null}
+        {recoveredNotice ? (
+          <div className="rounded-md border border-primary/25 bg-primary-soft px-3.5 py-2.5 text-sm text-foreground">
+            {recoveredNotice}
           </div>
         ) : null}
         {notice ? (

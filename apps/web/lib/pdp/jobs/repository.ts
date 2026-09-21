@@ -79,6 +79,24 @@ export interface PdpJobRepository {
   createOrGet(input: CreateJobInput): Promise<CreateJobResult>;
   /** 소유자만 읽는다. 남이면 `null` — 있는지 없는지도 알려 주지 않는다. */
   get(jobId: string, userId: string): Promise<JobRecord | null>;
+  /**
+   * 한 문서·개정판의 **가장 나중 작업**을 찾는다(K-04).
+   *
+   * 탭을 닫았다 돌아온 사용자는 **작업 번호를 모른다.** 번호는 생성 응답에
+   * 실려 오는데, 닫고 나간 경우가 바로 그 응답을 못 받은 경우다. 그동안
+   * 서버는 그림을 저장소에 올려 두었으므로, 화면이 아는 유일한 것(자기 초안
+   * id)으로 찾아갈 길이 있어야 한다.
+   *
+   * 소유자만 찾는다. 남이면 `null` 이다.
+   *
+   * **개정판이 다르면 남남이다.** 다만 **오늘 옛 구성의 그림을 막는 것은 이
+   * 값이 아니다** — 화면은 늘 0 을 싣는다. 실제로 막는 것은 재기획할 때마다
+   * `stableSections` 가 섹션에 새 UUID 를 붙여, 옛 작업의 것이 「지금 구성안에
+   * 없는 섹션」으로 걸러지는 것이다.
+   *
+   * 훗날 섹션 id 를 안정 키로 바꾸면 **그때 이 값이 실제로 일해야 한다.**
+   */
+  findLatestForDocument(userId: string, documentId: string, revision: number): Promise<JobRecord | null>;
   /** 소유자만 바꾼다. 남이면 던진다. */
   advance(jobId: string, userId: string, event: PdpJobEvent): Promise<JobRecord>;
   /**

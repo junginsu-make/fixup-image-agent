@@ -30,8 +30,9 @@ function 기록하는클라이언트(rows: Record<string, unknown[]> = {}) {
       neq: (column: string, value: unknown) => (call.filters.push(["neq", column, value]), chain),
       not: (column: string, _op: string, value: unknown) => (call.filters.push(["not", column, value]), chain),
       or: (expr: string) => (call.filters.push(["or", expr, null]), chain),
-      order: () => chain,
-      limit: () => chain,
+      // **무엇으로 정렬하는지까지 본다.** 안 재면 정렬을 지워도 통과한다.
+      order: (column: string, options?: unknown) => (call.filters.push(["order", column, options]), chain),
+      limit: (count: number) => (call.filters.push(["limit", String(count), null]), chain),
       select: () => chain,
       maybeSingle: async () => ({ data: (rows[table] ?? [])[0] ?? null, error: null }),
       single: async () => ({ data: (rows[table] ?? [])[0] ?? { id: "job-1" }, error: null }),
@@ -53,6 +54,9 @@ function 기록하는클라이언트(rows: Record<string, unknown[]> = {}) {
 
 const 열 = (call: Call | undefined, kind: string) =>
   (call?.filters ?? []).filter(([op]) => op === kind).map(([, column]) => column);
+
+const 인자 = (call: Call | undefined, kind: string) =>
+  (call?.filters ?? []).find(([op]) => op === kind)?.[2];
 
 describe("남의 작업을 읽지 않는다", () => {
   it("**읽을 때 user_id 로 좁힌다**", async () => {
@@ -135,5 +139,73 @@ describe("같은 결과를 두 줄로 세지 않는다", () => {
     const payload = calls.find((call) => call.op === "upsert")?.payload as Record<string, unknown>;
     expect(payload.output_path).toBe("u1/pdp/d1/s1.png");
     expect(Object.keys(payload)).not.toContain("image_base64");
+  });
+});
+
+/**
+ * **문서로 찾을 때도 남의 것을 읽지 않는다**(K-04).
+ *
+ * 이 길은 사용자가 **자기 초안 id** 만 들고 들어온다. `user_id` 를 빠뜨리면
+ * 초안 id 를 아는 것만으로 남의 그림을 되찾는다 — service role 은 RLS 를
+ * 지나치므로 코드가 빠뜨리면 막아 주는 것이 없다.
+ */
+describe("문서로 찾을 때", () => {
+  it("**user_id·document_id·revision 셋으로 좁힌다**", async () => {
+    const { client, calls } = 기록하는클라이언트();
+
+    await createSupabaseJobRepository(client as never).findLatestForDocument("u1", "doc-1", 3);
+
+    const 찾기 = calls[0];
+    expect(열(찾기, "eq")).toEqual(expect.arrayContaining(["user_id", "document_id", "revision"]));
+  });
+
+  it("**없으면 `null` 이다** — 섹션을 읽으러 가지 않는다", async () => {
+    const { client, calls } = 기록하는클라이언트();
+
+    expect(await createSupabaseJobRepository(client as never).findLatestForDocument("u1", "doc-1", 3)).toBeNull();
+    // 작업이 없는데 섹션 표를 또 읽으면 헛걸음이다.
+    expect(calls).toHaveLength(1);
+  });
+
+  /**
+   * **가장 나중 것을 준다.**
+   *
+   * 같은 개정판으로 여러 번 만들었으면 마지막 것이 사용자가 기억하는 화면이다.
+   * 정렬을 빠뜨리면 DB 가 주는 순서대로 아무거나 온다 — 옛 작업이 올 수 있다.
+   */
+  it("**만든 차례의 역순으로 첫 줄만 읽는다**", async () => {
+    const { client, calls } = 기록하는클라이언트();
+
+    await createSupabaseJobRepository(client as never).findLatestForDocument("u1", "doc-1", 3);
+
+    expect(열(calls[0], "order")).toEqual(["created_at"]);
+    expect(인자(calls[0], "order")).toEqual({ ascending: false });
+    expect(열(calls[0], "limit")).toEqual(["1"]);
+  });
+
+  /**
+   * **섹션 결과도 함께 와야 한다.** 되찾을 그림이 거기 적혀 있다. 작업 줄만
+   * 주면 화면은 「작업은 있는데 그림이 없다」로 읽고 아무것도 못 되찾는다.
+   */
+  it("**찾았으면 그 작업의 섹션을 읽는다**", async () => {
+    const { client, calls } = 기록하는클라이언트({
+      pdp_generation_jobs: [{
+        id: "job-7", user_id: "u1", team_id: null, document_id: "doc-1", revision: 3,
+        operation: "pdp_image", section_ids: ["s1"], reservation_request_id: "res-1",
+        idempotency_key: "k1", fingerprint: "f1",
+        generation: "completed", settlement: "settled", persistence: "stored", submission: "known",
+        lease_until: null, lease_owner: null,
+        created_at: "2026-09-21T00:00:00Z", updated_at: "2026-09-21T00:01:00Z",
+      }],
+      pdp_generation_items: [{ job_id: "job-7", section_id: "s1", attempt: 1, output_path: "u1/j/s1.png" }],
+    });
+
+    const found = await createSupabaseJobRepository(client as never).findLatestForDocument("u1", "doc-1", 3);
+
+    expect(found?.id).toBe("job-7");
+    expect(found?.items.map((item) => item.outputPath)).toEqual(["u1/j/s1.png"]);
+    // 섹션 표를 **그 작업 번호로** 읽는다. 다른 값으로 읽으면 남의 것이 온다.
+    const 섹션읽기 = calls.find((call) => call.table === "pdp_generation_items");
+    expect((섹션읽기?.filters ?? []).some(([op, column, value]) => op === "eq" && column === "job_id" && value === "job-7")).toBe(true);
   });
 });

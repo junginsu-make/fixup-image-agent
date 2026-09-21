@@ -134,7 +134,25 @@ describe("본문이 너무 크면 읽다가 끊는다", () => {
     const { REFERENCE_UPLOAD_BODY_LIMIT } = await import("../limits");
     const 큰것 = Buffer.alloc(REFERENCE_UPLOAD_BODY_LIMIT + 1024, 1);
 
-    const response = await 올린다(큰것);
+    /*
+      **여기서는 본문을 `FormData` 로 만들지 않는다.**
+
+      `readBoundedBody` 는 상한을 넘으면 `reader.cancel()` 로 끊는다 — 제품
+      코드는 맞다. 그런데 `FormData` 로 만든 요청은 undici 가 그 뒤로도
+      조각을 밀어 넣어 닫힌 흐름에 부딪히고, 처리 안 된 거부로 **시험 전체가
+      실패로 끝난다**(3613건이 통과해도 그렇다). 실제 서버에서는 본문이 망
+      흐름이라 이 일이 없다.
+
+      **재는 것은 그대로다.** 라우트는 상한을 넘은 시점에 끊으므로 multipart
+      해석까지 가지 않는다 — 안에 무엇이 담겼는지는 이 시험과 무관하다.
+    */
+    const response = await POST(
+      new Request("http://local/api/reference-images", {
+        method: "POST",
+        headers: { "content-type": "multipart/form-data; boundary=abc" },
+        body: Uint8Array.from(큰것),
+      }),
+    );
 
     expect(response.status).toBe(413);
     expect(mocks.save).not.toHaveBeenCalled();
@@ -155,9 +173,22 @@ describe("본문이 너무 크면 읽다가 끊는다", () => {
 describe("인증이 먼저다", () => {
   it("**인증 실패는 본문을 읽기 전에 돌려보낸다**", async () => {
     mocks.auth.mockResolvedValue({ ok: false, response: new Response(null, { status: 401 }) });
-    const form = new FormData();
-    form.append("file", new File([Uint8Array.from(await png())], "본보기.png", { type: "image/png" }));
-    const request = new Request("http://local/api/reference-images", { method: "POST", body: form });
+    /*
+      **여기서는 본문을 흐름으로 만들지 않는다.**
+
+      이 시험이 재는 것이 「본문을 **안 읽는다**」라서, 끝난 뒤에도 본문이 안
+      읽힌 채 남는다. `FormData` 로 만들면 undici 가 그 뒤로도 조각을 밀어
+      넣다가 닫힌 흐름에 부딪혀 `ERR_INVALID_STATE` 를 던지고, 처리 안 된
+      거부로 **시험 전체가 실패로 끝난다** — 3613건이 통과해도 그렇다.
+
+      무엇이 담겼는지는 이 시험과 무관하다. 문지기가 본문을 **펴 보기 전에**
+      돌려보내는지만 잰다. 실제 업로드 모양은 이 파일의 다른 시험들이 쓴다.
+    */
+    const request = new Request("http://local/api/reference-images", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=abc" },
+      body: "본문은 펴 보지도 않는다",
+    });
 
     const response = await POST(request);
 

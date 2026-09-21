@@ -35,24 +35,17 @@ describe("전략만 고치면 섹션은 안 바뀐다고 말한다", () => {
   });
 });
 
-describe("다시 짜도 이전 구성으로 되돌릴 수 있다", () => {
-  const client = 소스("PdpMakerClient.tsx");
+/*
+  「다시 짜도 이전 구성으로 되돌릴 수 있다」는 여기서 안 잰다.
 
-  it("**재기획 직전 구성을 들고 있는다**", () => {
-    // 설계 §4.2: 「이전 revision을 보존한다」
-    expect(client).toContain("setPreviousPlan(strategyDirective ? result : null)");
-  });
+  전에는 `setPreviousPlan(strategyDirective ? result : null)` 과
+  `setReview(restoring.review)` 를 **소스 문자열로** 쟀다. 그런 시험은 같은
+  일을 하는 다른 모양으로 고치면 빨개지고, 정작 화면에 안 실려도 통과한다 —
+  실제로 이 둘은 구현을 한 덩이로 묶자마자 깨졌고, 동작은 멀쩡했다.
 
-  /*
-    「처음 기획이면 되돌릴 것이 없다」는 여기서 안 잰다 — `toContain("onRestorePreviousPlan={")`
-    는 삼항을 뒤집어도 통과한다. **빨개질 수 없는 시험은 시험이 아니다.**
-    실제 보장은 `replan-live.test.tsx` 가 화면을 띄워 한다.
-  */
-
-  it("되돌리면 심사 결과도 함께 돌아온다", () => {
-    expect(client).toContain("setReview(restoring.review)");
-  });
-});
+  보장은 `replan-live.test.tsx` 가 화면을 띄워 한다 — 구성안·심사·얹은 글자가
+  실제로 돌아오는지, 다시 짠 쪽 것이 안 따라오는지.
+*/
 
 describe("클릭 이벤트가 전략으로 새지 않는다", () => {
   const client = 소스("PdpMakerClient.tsx");

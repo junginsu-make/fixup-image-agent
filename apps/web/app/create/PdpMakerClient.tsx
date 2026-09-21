@@ -38,6 +38,7 @@ import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
@@ -48,6 +49,32 @@ const START_MODES: Array<{ value: CreateMode; label: string; desc: string }> = [
   { value: "image", label: "이미지로 시작", desc: "상품 사진이 있습니다. 사진을 분석해 구성을 잡습니다." },
   { value: "text", label: "텍스트로 시작", desc: "사진이 없습니다. 설명을 적으면 구성과 이미지를 만듭니다." },
 ];
+
+/**
+ * 되돌리기 한 번을 위해 들고 있는 **재기획 직전의 것**.
+ *
+ * **구성안과 얹은 글자를 한 덩이로 둔다**(A-2). 따로 두면 둘의 수명을 사람이
+ * 맞춰야 하고, 한쪽만 버리는 자리가 생기면 되돌리기가 **남의 레이어**를 들고
+ * 온다. 한 칸이면 그 실수가 나올 자리가 없다.
+ */
+/**
+ * 되찾을 때 묻는 개정판.
+ *
+ * **오늘은 0 하나뿐이다.** 생성 요청도 `jobRequestFields(draftId, 0)` 으로
+ * 늘 0 을 싣는다. 두 자리가 갈리면 만든 것을 못 찾으므로 한 곳에 적어 둔다.
+ *
+ * **옛 구성의 그림을 막는 것은 이 값이 아니다.** 재기획하면 `stableSections`
+ * 가 섹션마다 새 UUID 를 붙여, 옛 작업의 것은 「지금 구성안에 없는 섹션」으로
+ * 걸러진다. 훗날 섹션 id 를 안정 키로 바꾸면 **그때 이 값이 실제로 일해야
+ * 한다** — 그때 개정판을 올리는 것을 잊으면 옛 그림이 새 구성에 붙는다.
+ */
+const RECOVERY_REVISION = 0;
+
+type PreviousPlan = {
+  result: GeneratedResult;
+  /** 다시 짜기 직전 편집기 상태. 그때 편집기에 들어간 적이 없으면 없다. */
+  editor: PdpEditorDraftState | null;
+};
 
 export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enabled?: boolean }) {
   const draftRepository = useMemo(() => createDraftRepository(documentV3Enabled), [documentV3Enabled]);
@@ -157,7 +184,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 작업 id 로 대조하지는 않는다 — 저장 안 한 작업이 자동 저장으로 id 를 받는
    * 순간, 같은 작업인데도 단추가 사라진다.
    */
-  const [previousPlan, setPreviousPlan] = useState<GeneratedResult | null>(null);
+  const [previousPlan, setPreviousPlan] = useState<PreviousPlan | null>(null);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [desiredTone, setDesiredTone] = useState("");
   /*
@@ -250,6 +277,15 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       sections: typeof update === "function" ? update(current.blueprint.sections) : update } } : current);
   }, []);
   const [editorSessionKey, setEditorSessionKey] = useState(0);
+  /**
+   * 되찾은 것을 알리는 한마디(K-04).
+   *
+   * **말없이 바꾸면 무엇이 달라졌는지 모른다.** 없던 그림이 갑자기 들어와
+   * 있으면 사용자는 자기가 만든 것인지 아닌지 가릴 수 없다.
+   */
+  const [recoveredNotice, setRecoveredNotice] = useState("");
+  /** 되찾기를 물어본 초안. 안 적어 두면 질의가 끝없이 돈다. */
+  const askedRecoveryRef = useRef<string | null>(null);
   const [undoDraftId, setUndoDraftId] = useState<string | null>(null);
   const [scenarioBusy, setScenarioBusy] = useState(false);
   const scenarioBusyRef = useRef(false);
@@ -499,6 +535,10 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     isApplyingDraftRef.current = true;
     // 다른 작업으로 간다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
     setPreviousPlan(null);
+    // 되찾기도 앞 작업의 것이다. 안 비우면 아무것도 안 되찾은 새 작업에
+    // 「2장을 되찾았습니다」가 그대로 떠 있는다.
+    setRecoveredNotice("");
+    askedRecoveryRef.current = null;
     setAppState("upload");
     setPreparedImage(null);
     setModelImage(null);
@@ -570,6 +610,9 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         isApplyingDraftRef.current = true;
         // 다른 작업을 연다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
         setPreviousPlan(null);
+        // 되찾기 알림도 앞 작업의 것이다.
+        setRecoveredNotice("");
+        askedRecoveryRef.current = null;
         setActiveDraftId(draft.id);
         setDraftCreatedAt(draft.createdAt);
         setLastSavedAt(draft.updatedAt);
@@ -649,6 +692,87 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     autoloadedDraftRef.current = true;
     void handleLoadDraft(draftId);
   }, [searchParams, handleLoadDraft]);
+
+  /**
+   * **돌아오면 만들어 둔 그림을 되찾는다**(K-04, 설계 §8).
+   *
+   * ── 무엇을 고치나 ────────────────────────────────────────
+   *
+   * 그림은 브라우저로만 갔다. 탭을 닫으면 **이미 값을 치른 그림이 사라지고**
+   * 사용자는 다시 눌러 두 번 낸다. 서버는 그동안 그것을 저장소에 올려 두는데
+   * (`lib/pdp/jobs/recorder.ts`), 가지러 가는 화면이 없었다.
+   *
+   * ── 조심하는 것 셋 ───────────────────────────────────────
+   *
+   * **이미 있는 그림을 안 덮는다.** 되찾기가 그 뒤에 한 편집을 지우면 고치려던
+   * 손실을 다른 모양으로 다시 내는 셈이다. 무엇을 고르는지는
+   * `recoverableSections` 가 값으로 정한다.
+   *
+   * **한 번만 묻는다.** 되찾아 넣으면 `result` 가 바뀌어 이 효과가 다시 돈다.
+   * 적어 두지 않으면 **두 번** 나간다(실측). 끝없이 돌지는 않는다 — 두 번째는
+   * 칸이 차 있어 `recoverableSections` 가 빈 목록을 주고 멈춘다. 그래도 값이
+   * 안 나가는 질의를 두 배로 보낼 까닭이 없다.
+   *
+   * **못 찾아도 조용하다.** 스위치가 꺼져 있으면 서버는 늘 404 다. 그때 화면이
+   * 흔들리면 만들기 자체를 못 한다.
+   */
+  useEffect(() => {
+    const sections = result?.blueprint.sections ?? [];
+    if (!shouldAskForRecovery(activeDraftId, sections)) return;
+    if (askedRecoveryRef.current === activeDraftId) return;
+    askedRecoveryRef.current = activeDraftId;
+
+    void (async () => {
+      try {
+        // 개정판은 생성 요청에 싣는 값과 같아야 한다(`jobRequestFields`).
+        const answer = await apiJson<{ ok?: boolean; job?: RecoverableJob }>(
+          `/pdp/jobs?documentId=${encodeURIComponent(String(activeDraftId))}&revision=${RECOVERY_REVISION}`,
+        );
+        if (!answer?.ok || !answer.job) return;
+
+        const 고른것 = recoverableSections(answer.job, sections);
+        if (!고른것.length) return;
+
+        /*
+          **그 자리에서 구워 들인다**(리뷰 HIGH).
+
+          서버가 주는 것은 한 시간짜리 서명 주소다. 그대로 넣으면 자동 저장이
+          그것을 초안에 적고 **한 시간 뒤 깨진 그림으로 열린다** — 그때는 칸이
+          차 있어 되찾을 수도 없다.
+        */
+        const 되찾을것 = await bakeRecoveredImages(고른것, fetch);
+
+        const 주소 = new Map(되찾을것.map((image) => [image.sectionId, image.url]));
+        /*
+          **실제로 넣은 장수를 센다**(리뷰 MEDIUM).
+
+          고른 것은 **물을 때**의 섹션으로 셌는데, 넣기는 **최신** 섹션에
+          대해 한 번 더 거른다. 고른 수로 말하면 한 장도 안 넣고 「1장을
+          되찾았습니다」라고 하는 일이 생긴다.
+        */
+        let 넣은수 = 0;
+        setResult((current) => {
+          if (!current) return current;
+          넣은수 = 0;
+          const sections = current.blueprint.sections.map((section) => {
+            const url = 주소.get(section.section_id);
+            // 그 사이에 그림이 생겼으면 그대로 둔다. 덮으면 편집이 날아간다.
+            if (!url || section.generatedImage) return section;
+            넣은수 += 1;
+            return { ...section, generatedImage: url };
+          });
+          return { ...current, blueprint: { ...current.blueprint, sections } };
+        });
+        if (넣은수 > 0) {
+          setRecoveredNotice(
+            `만들어 두었던 이미지 ${넣은수}장을 되찾았습니다. 다시 만들지 않아도 됩니다.`,
+          );
+        }
+      } catch {
+        // 되찾기는 덤이다. 실패해도 만들기를 막지 않는다.
+      }
+    })();
+  }, [activeDraftId, result]);
 
   /**
    * 저장된 작업을 모두 지운다.
@@ -800,8 +924,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       }
 
       const blueprint = { ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) };
-      // 다시 짠 것이면 직전 구성을 들고 있는다. 처음 기획이면 되돌릴 것이 없다.
-      setPreviousPlan(strategyDirective ? result : null);
+      /*
+        다시 짠 것이면 직전 구성을 들고 있는다. 처음 기획이면 되돌릴 것이 없다.
+
+        **얹은 글자도 한 덩이로 담는다**(A-2). 바로 아래에서 화면의 편집기
+        상태를 비우므로, 여기서 안 들고 있으면 되돌려도 레이어가 안 돌아온다.
+      */
+      setPreviousPlan(strategyDirective && result ? { result, editor: editorDraftState } : null);
       setResult({ ...response.result, blueprint });
       setAnalyzedBlueprint(blueprint);
       // 심사 결과를 시나리오 화면에 넘긴다. 사진 경로에도 심사가 붙었는데
@@ -839,6 +968,15 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     chosenPersonSource?: PersonSource,
   ) => {
     setImageModel(model);
+    /*
+      **앞 작업의 되돌리기를 버린다.**
+
+      이미지 모드로 다시 짠 뒤(되돌리기가 담긴 상태) 업로드로 돌아가 글 모드로
+      갈아타면, `result` 만 새 것으로 바뀌고 되돌리기는 그대로 남았다. 그러면
+      **글로 만든 작업 화면에 「이전 구성으로 되돌리기」가 떠 있고**, 누르면
+      통째로 앞 작업으로 바뀐다.
+    */
+    setPreviousPlan(null);
     setReview(blueprintReview);
     // 붙이면 켜진다 — A-11 의 불변식은 여기도 같다.
     if (chosenStyleReference) attachStyleReference(chosenStyleReference);
@@ -971,17 +1109,22 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
 
                   const restoring = previousPlan;
                   setPreviousPlan(null);
-                  setResult(restoring);
-                  setAnalyzedBlueprint(restoring.blueprint);
-                  setReview(restoring.review);
+                  setResult(restoring.result);
+                  setAnalyzedBlueprint(restoring.result.blueprint);
+                  setReview(restoring.result.review);
                   /*
-                    **편집기를 새로 연다.**
+                    **그때 얹었던 글자를 되살린다**(A-2).
 
-                    되돌리면 섹션 묶음이 통째로 바뀐다. 편집기가 옛 세션을 들고
-                    있으면 레이어가 **남의 섹션에 붙는다** — 이 저장소가 섹션 키
-                    어긋남으로 이미 겪은 일이다. 기획 직후와 같은 처리를 한다.
+                    되살리는 것은 **다시 짜기 직전**, 곧 지금 돌아가는 그
+                    구성의 레이어라 남의 것이 아니다. 넘기는 길에
+                    `editorForSections` 가 섹션 열쇠로 한 번 더 거른다.
+
+                    세션 열쇠 갱신은 **오늘 기준으로 효과가 없다.** 되돌리기는
+                    구성안 화면에만 있고 그때 편집기는 이미 내려가 있어, 다음에
+                    열 때 어차피 새로 마운트된다. 훗날 편집기 위에서 되돌릴 수
+                    있게 되면 그때 필요해지므로 남겨 둔다.
                   */
-                  setEditorDraftState(null);
+                  setEditorDraftState(restoring.editor);
                   setEditorSessionKey((current) => current + 1);
                   setNotice("이전 구성으로 되돌렸습니다. 되돌리기 전 작업은 저장된 작업에 보관했습니다.");
                 }
@@ -1026,6 +1169,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         userInstruction={userInstruction}
         initialDraftState={editorDraftState ? editorForSections(editorDraftState, result.blueprint.sections) : null}
         initialResult={result}
+        recoveredNotice={recoveredNotice}
         lastSavedAt={lastSavedAt}
         manualSaveToastToken={manualSaveToastToken}
         onDraftStateChange={handleEditorDraftStateChange}

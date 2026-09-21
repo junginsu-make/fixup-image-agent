@@ -1,6 +1,6 @@
 import { authenticateApiMember } from "../../../../../lib/membership/api";
-import { createPdpJobRepository, outcomeOf } from "../../../../../lib/pdp/jobs";
-import { signJobArtifacts } from "../../../../../lib/pdp/jobs/artifact-urls";
+import { createPdpJobRepository } from "../../../../../lib/pdp/jobs";
+import { jobNotFound, jobView } from "../view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
  *
  * 남의 것이면 **404** 다. 「권한 없음」으로 답하면 그 id 가 있다는 사실을
  * 알려 주는 셈이 된다.
+ *
+ * **번호를 모르는 사용자**는 옆 문(`GET /api/pdp/jobs?documentId=`)으로
+ * 들어온다. 답의 모양은 `view.ts` 한 곳에서 짓는다.
  */
 export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await authenticateApiMember();
@@ -20,33 +23,7 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
 
   const { id } = await context.params;
   const job = await createPdpJobRepository().get(id, auth.member.userId);
-  if (!job) {
-    return Response.json({ ok: false, code: "NOT_FOUND", message: "작업을 찾지 못했습니다." }, { status: 404 });
-  }
+  if (!job) return jobNotFound();
 
-  // 저장된 것만 주소를 만든다. 못 올린 섹션은 가리킬 자리가 없다.
-  const paths = job.items.map((item) => item.outputPath).filter((path): path is string => Boolean(path));
-  const signed = await signJobArtifacts(paths);
-
-  return Response.json({
-    ok: true,
-    job: {
-      id: job.id,
-      documentId: job.documentId,
-      revision: job.revision,
-      operation: job.operation,
-      /** 사용자에게 보여줄 한마디. 화면이 같은 말을 여러 곳에서 짓지 않게 한다. */
-      outcome: outcomeOf(job.state),
-      state: job.state,
-      items: job.items.map((item) => ({
-        sectionId: item.sectionId,
-        attempt: item.attempt,
-        // 못 올렸으면 `null` 이다. 없는 자리를 가리키지 않는다.
-        url: item.outputPath ? (signed[item.outputPath] ?? null) : null,
-        errorCode: item.errorCode ?? null,
-      })),
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
-    },
-  });
+  return Response.json({ ok: true, job: await jobView(job) });
 }
