@@ -23,6 +23,7 @@ import { randomId } from "../../lib/browser-safe";
 import { batchSummaryMessage } from "./batch-summary";
 import { appendGenerateFields } from "./generate-form";
 import { coverageNotice } from "./coverage";
+import { mergeFailedSections } from "./failed-sections";
 
 /** 「나머지 섹션 생성」이 채우는 완성 페이지의 장수. */
 const FULL_PAGE_SECTIONS = 8;
@@ -325,6 +326,12 @@ export function RedesignWizard() {
       const project: Project = {
         ...data.project,
         title: projectDisplayTitle(data.project),
+        // 어느 장이 왜 빠졌는지(F-7-8). 사연은 `failed-sections.ts`.
+        failedSections: mergeFailedSections(
+          baseProject?.failedSections,
+          data.project?.failedSections,
+          (data.project?.sections ?? []).map((section: { section_id?: string }) => String(section.section_id ?? "")),
+        ),
         sections: data.project.sections.map((section: Record<string, string>) => ({
           id: section.section_id,
           name: section.name,

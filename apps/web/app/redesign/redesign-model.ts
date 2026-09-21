@@ -49,6 +49,8 @@ export type SectionRevision = {
   model?: Model;
 };
 
+import type { FailedSection } from "./failed-sections";
+
 export type Project = {
   id: string;
   title: string;
@@ -61,6 +63,15 @@ export type Project = {
   request: string;
   createdAt: string;
   sections: SectionResult[];
+  /**
+   * **어느 장이 왜 안 만들어졌나**(F-7-8).
+   *
+   * 코어는 이미 이유를 만든다 — 실패한 섹션에는 제공자가 준 말이, 시도조차
+   * 못 한 섹션에는 「앞 섹션이 실패해 시도하지 않았습니다」가 붙는다. 그런데
+   * 화면에 이 칸이 없어서 **한 번도 안 읽혔다.** 사용자는 집계 숫자만 보고
+   * 여덟 장을 통째로 다시 만들었다.
+   */
+  failedSections?: FailedSection[];
   analysis?: unknown;
   savedAt?: string;
 };

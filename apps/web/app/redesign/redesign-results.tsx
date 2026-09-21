@@ -10,6 +10,7 @@
  */
 
 import * as React from "react";
+import { failedSectionLines, type FailedSectionLine } from "./failed-sections";
 import {
   ChevronLeft,
   ChevronRight,
@@ -71,6 +72,8 @@ export function Results({
     return <Card><CardContent>아직 생성된 프로젝트가 없습니다.</CardContent></Card>;
   }
   const showRollout = project.sections.length < 8;
+  // 어느 장이 왜 빠졌는지(F-7-8). 사연은 `failed-sections.ts`.
+  const 빠진장 = failedSectionLines(project.failedSections);
   const title = projectDisplayTitle(project);
   const downloadableSections = project.sections.filter((section) => section.imageUrl);
   const facts = Array.isArray((project?.analysis as any)?.verified_facts)
@@ -115,6 +118,30 @@ export function Results({
         <Button variant="secondary" onClick={() => onToast("히어로 1장 재생성은 다음 단계에서 연결할 예정입니다.")}><RefreshCw className="size-4" />히어로 다시 생성</Button>
         <Button onClick={downloadAllImages} disabled={downloadableSections.length === 0}><Download className="size-4" />전체 다운로드</Button>
       </Topbar>
+
+      {빠진장.length > 0 && (
+        <Card className="mb-4 border-warning/30">
+          <CardHeader>
+            <CardTitle>만들어지지 않은 섹션 {빠진장.length}장</CardTitle>
+            <CardDescription>
+              아래 섹션만 다시 만들면 됩니다. 이미 만든 이미지는 그대로 있고 다시 차감되지 않습니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              {빠진장.map((line: FailedSectionLine) => (
+                <li key={line.label}>
+                  <span className="font-bold">{line.label}</span>{" "}
+                  <Badge variant={line.skipped ? "secondary" : "destructive"}>
+                    {line.skipped ? "시도 안 함" : "실패"}
+                  </Badge>
+                  <p className="mt-0.5 text-muted-foreground">{line.reason}</p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {facts.length > 0 && (
         <Card className="mb-4">
