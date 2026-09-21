@@ -1198,6 +1198,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         characterId={characterId}
         characterAngles={characterAngles}
         startMode={startMode}
+        // 사진 없이 실물을 팔 때를 가린다(N-2). 글 경로에서 사용자가 고른 값이다.
+        productKind={textDraft?.brief?.productKind}
         desiredTone={desiredTone}
         look={look}
         userInstruction={userInstruction}

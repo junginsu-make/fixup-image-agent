@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import React from "react";
 import { create } from "react-test-renderer";
 import { describe, expect, it } from "vitest";
-import { REVIEW_CRITERIA } from "@fixup/pdp-core";
+import { REVIEW_CRITERIA, reviewStampOf } from "@fixup/pdp-core";
 import { ReviewPanel } from "../ReviewPanel";
+import { ScorecardPanel } from "../ScorecardPanel";
 
 /**
  * **모델이 스스로 본 것을 합격이라고 말하고 있었다**(U-16).
@@ -44,8 +45,8 @@ const 걸린것 = {
   })),
 };
 
-const 글 = (review: unknown) =>
-  JSON.stringify(create(<ReviewPanel review={review as never} />).toJSON());
+const 글 = (review: unknown, blueprint?: unknown) =>
+  JSON.stringify(create(<ReviewPanel review={review as never} blueprint={blueprint as never} />).toJSON());
 
 describe("심사 결과를 성과라고 하지 않는다", () => {
   /**
@@ -114,5 +115,148 @@ describe("소개 문서가 성과를 주장하지 않는다", () => {
 
   it("**심사 점수를 판매 효과라고 하지 않는다**", () => {
     expect(readme).toMatch(/판매 효과가 아닙니다/);
+  });
+});
+
+/**
+ * **고친 구성안에 옛 심사의 「통과」를 붙이지 않는다**(N-3, 설계 §9.3).
+ *
+ * 심사 결과는 한 번 받으면 그대로 남았다. 사용자가 섹션을 지우거나 제목을
+ * 고쳐도 **「모두 통과했습니다」가 그대로 붙어 있었다.** 사용자는 고친
+ * 구성안이 검사를 통과한 줄 안다.
+ *
+ * 설계 §9.3: 「변경 후 기존 심사 결과는 **stale 표시**. '이전 구성안 심사
+ * 통과'를 새 구성안에 붙이지 않는다」.
+ */
+describe("지난 구성안의 심사를 통과라고 하지 않는다", () => {
+  const 섹션 = (headline: string) =>
+    ({
+      section_id: "S1", section_name: "히어로", goal: "관심",
+      headline, subheadline: "", bullets: [], trust_or_objection_line: "",
+      CTA: "", prompt_ko: "", prompt_en: "", layout_notes: "",
+    }) as never;
+
+  const 구성안 = (headline: string) =>
+    ({ executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [섹션(headline)] }) as never;
+
+  const 심사받은구성안 = 구성안("오늘 시작하세요");
+  const 자국 = reviewStampOf(심사받은구성안);
+
+  it("**구성안을 고치면 통과라고 안 한다**", () => {
+    const 고친뒤 = 글({ ...모두통과, stamp: 자국 }, 구성안("내일 시작하세요"));
+
+    expect(고친뒤).not.toContain("모두 통과했습니다");
+    expect(고친뒤).toContain("지난 구성안의 심사 결과입니다");
+  });
+
+  /**
+   * **제목만 바꾸는 것으로는 부족하다.** 본문의 「일곱 항목을 별도 심사에서
+   * 확인했습니다」가 남으면 그것이 곧 통과로 읽힌다.
+   */
+  it("**낡으면 확인했다는 말도 안 한다**", () => {
+    const 고친뒤 = 글({ ...모두통과, stamp: 자국 }, 구성안("내일 시작하세요"));
+
+    expect(고친뒤).not.toContain("확인했습니다");
+  });
+
+  it("**무엇을 해야 하는지 말한다** — 통과가 아니라고만 하면 사용자는 멈춘다", () => {
+    const 고친뒤 = 글({ ...모두통과, stamp: 자국 }, 구성안("내일 시작하세요"));
+
+    expect(고친뒤).toContain("아직 검사하지 않았습니다");
+  });
+
+  it("**안 고쳤으면 그대로 통과라고 한다**", () => {
+    const 그대로 = 글({ ...모두통과, stamp: 자국 }, 심사받은구성안);
+
+    expect(그대로).toContain("모두 통과했습니다");
+    expect(그대로).not.toContain("지난 구성안");
+  });
+
+  /**
+   * **옛 초안을 나무라지 않는다.** 자국이 없는 심사는 이 기능이 생기기 전
+   * 것이다. 그것을 전부 「지난 구성안」이라고 하면 사용자는 경고를 무시한다.
+   */
+  it("**자국이 없으면 그대로 보여 준다**", () => {
+    expect(글(모두통과, 구성안("아무 제목"))).toContain("모두 통과했습니다");
+  });
+
+  it("**구성안을 안 넘기면 그대로 보여 준다** — 알 방법이 없다", () => {
+    expect(글({ ...모두통과, stamp: 자국 })).toContain("모두 통과했습니다");
+  });
+
+  it("**걸린 것이 있는 심사도 낡으면 그렇게 말한다**", () => {
+    const 고친뒤 = 글({ ...걸린것, stamp: 자국 }, 구성안("내일 시작하세요"));
+
+    expect(고친뒤).toContain("지난 구성안의 심사 결과입니다");
+  });
+});
+
+/**
+ * **심사가 없을 때 뜨는 자기 채점표**(N-4, 설계 §9.3).
+ *
+ * 설계: 「`scorecard` 의 **작성자 자기평가**를 독립 심사나 판매 효과 점수로
+ * 표시하지 않는다」.
+ *
+ * ── 무엇이 문제였나 ────────────────────────────────────────
+ *
+ * 심사 호출이 실패하면(`runReview` 가 `null` 을 준다) 화면은 `scorecard` 를
+ * 그대로 그린다. 거기에는 **A/B 등급 배지**가 붙는다. 그런데 그것은
+ * 「구성안을 쓴 바로 그 호출이 같은 자리에서 스스로 매긴 점수」다.
+ *
+ * `ReviewPanel` 안에만 있는 「AI 가 스스로 본 결과입니다」 문구는 **이
+ * 갈래에서는 안 뜬다.** 등급만 남는다. 사람이 읽으면 검증된 점수로 읽힌다.
+ */
+describe("자기 채점표를 심사처럼 보이게 하지 않는다", () => {
+  const 채점표 = readFileSync(new URL("../ScorecardPanel.tsx", import.meta.url), "utf8");
+
+  it("**작성자 자기평가라고 말한다**", () => {
+    expect(채점표).toContain("스스로 매긴");
+  });
+
+  it("**심사가 아니라고 말한다** — 등급만 두면 검증으로 읽힌다", () => {
+    expect(채점표).toContain("심사가 아닙니다");
+  });
+
+  it("**판매 효과를 확인하지 않았다고 말한다**", () => {
+    expect(채점표).toContain("판매 효과");
+  });
+
+  /**
+   * **문구를 파일에 적어 두는 것과 화면에 그리는 것은 다르다**(X-07 의 교훈).
+   */
+  it("**실제로 화면에 그린다**", () => {
+    const 글 = JSON.stringify(
+      create(<ScorecardPanel scorecard={[{ category: "대상", score: "A", reason: "좁혔다" }] as never} />).toJSON(),
+    );
+
+    expect(글).toContain("스스로 매긴");
+    expect(글).toContain("대상");
+  });
+
+  /**
+   * **등급에 색을 입히지 않는다.** A 를 초록으로 칠하면 「검사를 통과했다」로
+   * 읽힌다. 스스로 매긴 점수에 그런 무게를 주면 안 된다.
+   */
+  it("**A 등급을 초록으로 칠하지 않는다**", () => {
+    const 칠 = (score: string) =>
+      JSON.stringify(
+        create(<ScorecardPanel scorecard={[{ category: "대상", score, reason: "" }] as never} />).toJSON(),
+      );
+
+    /*
+      **`variant="green"` 을 찾으면 안 잡힌다.** `Badge` 가 그 값을 클래스로
+      바꾼다(`bg-primary-soft text-primary`). 그려진 것을 본다.
+    */
+    expect(칠("A")).not.toContain("bg-primary-soft");
+    // 등급이 달라도 **같은 차림**이어야 한다. 색으로 서열을 매기지 않는다.
+    expect(칠("A").replace(/"A"/g, '"?"')).toBe(칠("C").replace(/"C"/g, '"?"'));
+  });
+
+  it("**채점표가 없으면 아무것도 안 그린다**", () => {
+    expect(create(<ScorecardPanel scorecard={[] as never} />).toJSON()).toBeNull();
+  });
+
+  it("**줄표를 안 쓴다**", () => {
+    expect(채점표.split("SELF_SCORE_NOTE")[1]?.slice(0, 200) ?? "").not.toContain("—");
   });
 });

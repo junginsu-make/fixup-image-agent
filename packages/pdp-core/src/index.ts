@@ -26,6 +26,21 @@ export {
   type ImageProviderInput,
 } from "./pdp.image-provider";
 export { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
+/** 그 심사가 지금 구성안을 본 것인가(N-3, 설계 §9.3·§10.1). */
+export {
+  REVIEW_STALE_NOTICE,
+  isReviewStale,
+  reviewStampOf,
+  type ReviewStamp,
+} from "./pdp.review-freshness";
+
+/** 사진 없이 실물을 팔 때(N-2). 화면이 판단하고 서버가 프롬프트에 싣는다. */
+export {
+  conceptOnlyNotice,
+  conceptOnlyPromptRule,
+  type ConceptOnlyNotice,
+  type ProductEvidenceInput,
+} from "./pdp.concept-only";
 export {
   anchorRoleFor,
   defaultPreserveProduct,

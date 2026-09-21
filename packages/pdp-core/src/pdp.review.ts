@@ -130,6 +130,16 @@ export interface BlueprintReview {
   droppedCount?: number;
   /** 응답이 목록 모양조차 아니었다. */
   malformed?: boolean;
+  /**
+   * **이 심사가 본 구성안의 자국**(N-3, 설계 §9.3).
+   *
+   * 사용자가 섹션을 지우거나 제목을 고쳐도 심사 결과는 그대로 남았다 —
+   * 고친 구성안에 「모두 통과했습니다」가 붙었다. 지금 구성안과 대조해
+   * 낡았는지 가린다(`isReviewStale`).
+   *
+   * 옛 초안에는 이 값이 없다. 없으면 낡았다고 하지 않는다.
+   */
+  stamp?: string;
 }
 
 export interface ReviewSummary {

@@ -456,6 +456,13 @@ export interface ImageGenOptions {
    * 지키기가 풀리지 않는다 — 자리마다 따로 받는 이유다.
    */
   attachmentIntents?: AttachmentIntents;
+  /**
+   * **실제 제품 사진이 없다**(N-2, 설계 §9.1).
+   *
+   * 글로만 실물을 설명한 경우다. 켜지면 상표·로고를 빼고 제품 확대를 피한다 —
+   * 지어낸 물건이 **실제 제품처럼 보이지 않게** 한다.
+   */
+  conceptOnly?: boolean;
 }
 
 /** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */

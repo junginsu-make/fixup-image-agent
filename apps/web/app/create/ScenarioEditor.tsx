@@ -523,7 +523,7 @@ export function ScenarioEditor({
           onSectionsChange={(sections) => onChange({ ...blueprint, sections })}
         />
 
-        {review ? <ReviewPanel review={review} /> : null}
+        {review ? <ReviewPanel review={review} blueprint={blueprint} /> : null}
 
         {brief && brief.assumptions.length > 0 ? (
           <div className="mb-4 rounded-md border border-primary/25 bg-primary-soft/40 p-3.5">

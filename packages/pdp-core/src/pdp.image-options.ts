@@ -48,6 +48,8 @@ export interface PageImageInputs {
    * 선언하면 그 안의 글자가 페이지 전체에 되풀이된다(U-03).
    */
   anchorKind?: AnchorKind;
+  /** 실제 제품 사진이 없다(N-2, 설계 §9.1). 화면이 판단해 보낸다. */
+  conceptOnly?: boolean;
   /**
    * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
    * 안 오면 업로드가 이긴다 — 옛 초안이 조용히 달라지지 않게.
@@ -143,6 +145,7 @@ export function buildSectionImageOptions(
     attachmentIntents: page.attachmentIntents,
     preserveProductImage: page.preserveProduct ?? true,
     anchorKind: page.anchorKind,
+    conceptOnly: page.conceptOnly,
     personSource: page.personSource,
     styleReferenceImages: page.styleReferenceImages?.length ? page.styleReferenceImages : undefined,
   };
@@ -167,6 +170,8 @@ export interface PageImageWire {
    * 선언하면 그 안의 글자가 페이지 전체에 되풀이된다(U-03).
    */
   anchorKind?: AnchorKind;
+  /** 실제 제품 사진이 없다(N-2, 설계 §9.1). 화면이 판단해 보낸다. */
+  conceptOnly?: boolean;
   /**
    * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
    * 안 오면 업로드가 이긴다 — 옛 초안이 조용히 달라지지 않게.

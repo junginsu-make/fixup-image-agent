@@ -6,6 +6,7 @@ import {
   type TextPlanDeps,
 } from "./pdp.text-plan";
 import { REVIEW_CRITERIA } from "./pdp.review";
+import { isReviewStale } from "./pdp.review-freshness";
 
 const brief = {
   offeringName: "저녁 요가 클래스",
@@ -248,5 +249,29 @@ describe("심사자에게 주는 것", () => {
     );
 
     expect(prompts[2]).not.toContain("이 문장은 심사자에게 가면 안 된다");
+  });
+});
+
+/**
+ * **심사가 무엇을 보고 낸 것인지 함께 적는다**(N-3, 설계 §9.3).
+ *
+ * 이 자국이 없으면 사용자가 섹션을 지우거나 제목을 고쳐도 「모두
+ * 통과했습니다」가 그대로 붙는다. 화면이 대조할 것이 없기 때문이다.
+ */
+describe("심사에 자국을 찍는다", () => {
+  it("**심사 결과가 본 구성안의 자국을 들고 온다**", async () => {
+    const { deps } = scriptedDeps([brief, blueprintPayload("처음"), 통과]);
+
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
+
+    expect(result.review?.stamp).toBeTruthy();
+  });
+
+  it("**그 자국이 실제로 심사받은 구성안의 것이다** — 다른 것으로 찍으면 처음부터 낡는다", async () => {
+    const { deps } = scriptedDeps([brief, blueprintPayload("처음"), 통과]);
+
+    const result = await planFromText({ text: "요가 강의", aspectRatio: "9:16" }, undefined, deps);
+
+    expect(isReviewStale(result.review?.stamp, result.blueprint)).toBe(false);
   });
 });

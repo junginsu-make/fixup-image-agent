@@ -78,6 +78,7 @@ import { keepWordsPresentIn } from "./emphasis-words";
 import { COPY_SLOTS, overlayStyleFor, type CopyOverlayType } from "./copy-slots";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import { ReviewPanel } from "./ReviewPanel";
+import { ScorecardPanel } from "./ScorecardPanel";
 import {
   chunkForModel,
   planUploadBatches,
@@ -89,6 +90,7 @@ import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-
 // gpt-image-2 여섯 장이면 서버는 27장을 깎는데 화면은 24장이라고 안내했다.
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
+import { conceptOnlyNotice } from "@fixup/pdp-core";
 import { describeBatchRun } from "./generation-run";
 import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
 import { alignedWidthFor, canvasFitFor, canvasHeightFor, nextLayerOrigin } from "./layer-coords";
@@ -196,6 +198,14 @@ interface PdpEditorProps {
   // 단계 표시줄은 4단계를 모두 그리므로 1·2단계 라벨도 계속 보인다.
   // 텍스트로 시작한 작업에 "이미지 업로드"가 뜨지 않게 시작 방식을 넘겨받는다.
   startMode?: CreateMode;
+  /**
+   * 파는 것이 무엇인가(N-2, 설계 §9.1).
+   *
+   * **사진 없이 실물을 팔 때**를 가리기 위해 필요하다. 글로만 「나무 도마를
+   * 팝니다」라고 적으면 우리는 나무 도마를 **지어내고**, 그 그림에는 실제로
+   * 파는 물건과 다른 결·색·모양이 그려진다.
+   */
+  productKind?: string;
   /** 텍스트 경로에서 고른 이미지 모델. 섹션 생성에 그대로 쓴다. */
   imageModel?: ImageModelId;
   desiredTone: string;
@@ -303,6 +313,7 @@ export function PdpEditor({
   look = "photoreal",
   userInstruction = "",
   startMode = "image",
+  productKind,
   imageModel = DEFAULT_IMAGE_MODEL,
   desiredTone,
   initialDraftState,
@@ -1525,10 +1536,24 @@ export function PdpEditor({
     styleIntent: attachmentIntents?.style,
   });
 
+  /*
+    **사진 없이 실물을 팔고 있다고 말한다**(N-2, 설계 §9.1).
+
+    막지는 않는다. 개념 시안이 필요한 경우가 실제로 있다 — 아직 만들지 않은
+    물건을 소개하거나 분위기만 먼저 보는 경우다. 막으면 그 사람들이 못 쓴다.
+    대신 **실제와 다를 수 있다는 것과, 사진을 올리면 된다는 것**을 말한다.
+  */
+  const 개념시안 = conceptOnlyNotice({
+    productKind: productKind as never,
+    hasProductPhoto: startMode !== "text",
+  });
+
   const pageWire = (): PageImageWire =>
     buildPageWire({
       // 글 경로의 앵커는 우리가 만든 대표 이미지다. 실물 제품이 아니다(U-03).
       anchorKind: startMode === "text" ? "key-visual" : "product-photo",
+      // 사진 없이 실물을 팔 때를 가린다(N-2). 판단은 `page-wire.ts` 가 한다.
+      productKind,
       imageModel,
       outputMode,
       look,
@@ -2597,6 +2622,11 @@ export function PdpEditor({
             </p>
           </div>
         ) : null}
+        {개념시안.conceptOnly ? (
+          <div className="rounded-md border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-sm">
+            {개념시안.message}
+          </div>
+        ) : null}
         {recoveredFailures?.length ? (
           <div className="rounded-md border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-sm">
             <p className="font-bold">만들어지지 않은 섹션 {recoveredFailures.length}장</p>
@@ -2767,33 +2797,10 @@ export function PdpEditor({
               */}
               {review ? (
                 <div className="mt-3">
-                  <ReviewPanel review={review} />
+                  <ReviewPanel review={review} blueprint={initialResult.blueprint} />
                 </div>
               ) : (
-                <div className="mt-3 grid gap-2">
-                  {initialResult.blueprint.scorecard.map((item) => (
-                    <article
-                      key={`${item.category}-${item.score}`}
-                      className="rounded-md bg-background p-2.5 shadow-[var(--shadow-ring)]"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <strong className="text-sm">{item.category}</strong>
-                        <Badge
-                          variant={
-                            item.score.startsWith("A")
-                              ? "green"
-                              : item.score.startsWith("B")
-                                ? "secondary"
-                                : "outline"
-                          }
-                        >
-                          {item.score}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{item.reason}</p>
-                    </article>
-                  ))}
-                </div>
+                <ScorecardPanel scorecard={initialResult.blueprint.scorecard} />
               )}
             </div>
           </details>

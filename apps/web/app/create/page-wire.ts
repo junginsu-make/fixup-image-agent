@@ -1,4 +1,5 @@
 import type { AnchorKind, AttachmentIntents, ImageModelId, PageImageWire, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
+import { conceptOnlyNotice } from "@fixup/pdp-core";
 
 /**
  * 페이지 전체가 공유하는 값을 **한 번만** 짓는다.
@@ -26,6 +27,13 @@ export interface PageWireInputs {
    */
   anchorKind?: AnchorKind;
   /**
+   * 파는 것이 무엇인가. **개념 시안 판단에 쓴다**(N-2, 설계 §9.1).
+   *
+   * 글 경로에서 사용자가 고른다. 사진 경로에는 아직 이 칸이 없다 — 사진이
+   * 곧 실물 증거라 개념 시안일 수 없다.
+   */
+  productKind?: string;
+  /**
    * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
    *
    * 전에는 서버가 말없이 업로드 쪽을 썼다. 사용자는 이미지가 나온 뒤에야
@@ -50,6 +58,23 @@ export function buildPageWire(input: PageWireInputs): PageImageWire {
     userInstruction: input.userInstruction.trim() || undefined,
     preserveProduct: input.preserveProduct,
     anchorKind: input.anchorKind,
+    /*
+      **사진 없이 실물을 팔 때**(N-2, 설계 §9.1).
+
+      글로만 「나무 도마를 팝니다」라고 적으면 우리는 나무 도마를 **지어낸다.**
+      그 그림에는 실제로 파는 물건과 다른 결·색·모양이 그려지고, 사용자는
+      그것을 상세페이지에 올린다.
+
+      **판단은 여기 한 곳에서 한다.** 화면에 두면 한 장 만들 때와 여러 장
+      만들 때가 갈린다 — 이 파일이 존재하는 까닭이 그것이다.
+
+      앵커가 우리가 만든 대표 이미지(`key-visual`)라는 것이 곧 **실제 제품
+      사진이 없다**는 뜻이다.
+    */
+    conceptOnly: conceptOnlyNotice({
+      productKind: input.productKind as never,
+      hasProductPhoto: input.anchorKind !== "key-visual",
+    }).conceptOnly || undefined,
     personSource: input.personSource,
     styleReference: input.styleReference,
     referenceModel: input.referenceModel

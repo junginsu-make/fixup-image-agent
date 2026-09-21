@@ -1,6 +1,8 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, TriangleAlert } from "lucide-react";
+import { REVIEW_STALE_NOTICE, isReviewStale } from "@fixup/pdp-core";
+import type { LandingPageBlueprint } from "@fixup/pdp-core";
 import { REVIEW_CRITERIA, summarizeReview } from "@fixup/pdp-core";
 import type { BlueprintReview, ReviewRating } from "@fixup/pdp-core";
 import { Badge } from "@fixup/ui";
@@ -42,18 +44,34 @@ function criterionLabel(id: string) {
   return REVIEW_CRITERIA.find((criterion) => criterion.id === id)?.label ?? id;
 }
 
-export function ReviewPanel({ review }: { review: BlueprintReview }) {
+export function ReviewPanel({
+  review,
+  blueprint,
+}: {
+  review: BlueprintReview;
+  /**
+   * 지금 구성안(N-3, 설계 §9.3).
+   *
+   * **심사가 본 것과 지금 것이 다른지** 여기서 가린다. 안 넘기면 낡았는지
+   * 알 수 없어 「모두 통과했습니다」가 고친 구성안에 그대로 붙는다.
+   */
+  blueprint?: LandingPageBlueprint | null;
+}) {
   if (review.items.length === 0) return null;
 
   const summary = summarizeReview(review);
   const problems = review.items.filter((item) => item.rating !== "pass");
-  const allPassed = problems.length === 0;
+  const 낡음 = isReviewStale(review.stamp, blueprint);
+  // 낡은 심사는 통과라고 말하지 않는다. 그 통과는 옛 구성안의 것이다.
+  const allPassed = problems.length === 0 && !낡음;
 
   return (
     <div
       className={cn(
         "mb-4 rounded-md border p-3.5",
-        allPassed
+        낡음
+          ? "border-border bg-muted/30"
+          : allPassed
           ? "border-primary/25 bg-primary-soft/40"
           : summary.failed > 0
             ? "border-warning/30 bg-warning/5"
@@ -64,15 +82,23 @@ export function ReviewPanel({ review }: { review: BlueprintReview }) {
         {allPassed ? (
           <CheckCircle2 size={14} className="text-primary" />
         ) : (
-          <AlertTriangle size={14} className="text-warning" />
+          <AlertTriangle size={14} className={낡음 ? "text-muted-foreground" : "text-warning"} />
         )}
         <span className="text-sm font-bold">
-          {allPassed ? "AI 판매 원칙 심사를 모두 통과했습니다" : "AI 판매 원칙 심사에서 걸린 부분입니다"}
+          {낡음
+            ? "지난 구성안의 심사 결과입니다"
+            : allPassed
+              ? "AI 판매 원칙 심사를 모두 통과했습니다"
+              : "AI 판매 원칙 심사에서 걸린 부분입니다"}
         </span>
         <Badge variant="secondary" className="ml-auto">
           통과 {summary.passed} / {review.items.length}
         </Badge>
       </div>
+
+      {낡음 ? (
+        <p className="mb-2.5 text-sm text-muted-foreground">{REVIEW_STALE_NOTICE}</p>
+      ) : null}
 
       {allPassed ? (
         <p className="text-sm text-muted-foreground">

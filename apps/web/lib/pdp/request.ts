@@ -54,6 +54,11 @@ const options = z.object({
   guidePriorityMode: z.enum(["guide-first", "style-first"]).optional(),
   outputMode: z.enum(["editable", "full-image"]).optional(), withModel: z.boolean().optional(),
   peopleMode: z.enum(["auto", "none"]).optional(),
+  /*
+    **실제 제품 사진이 없다**(N-2, 설계 §9.1). 글로만 실물을 설명한 경우다.
+    화면이 판단해 보낸다 — 상품 종류를 아는 쪽이 화면이다.
+  */
+  conceptOnly: z.boolean().optional(),
   emphasisWords: z.array(text).optional(),
 }).passthrough();
 const target = z.discriminatedUnion("slot", [
@@ -73,6 +78,8 @@ const page = z.object({ imageModel: model.optional(), styleReference: image.opti
   preserveProduct: z.boolean().optional(), outputMode: z.enum(["editable", "full-image"]).optional(),
   // 앵커가 실물 사진인가, 우리가 만든 대표 이미지인가(U-03). 안 오면 실물로 본다.
   anchorKind: z.enum(["product-photo", "key-visual"]).optional(),
+  // 실제 제품 사진이 없다(N-2). 화면이 판단해 보낸다.
+  conceptOnly: z.boolean().optional(),
   // 인물 사진과 저장 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04).
   personSource: z.enum(["uploaded", "character"]).optional(),
   look: z.enum(IMAGE_LOOKS).optional(),

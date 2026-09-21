@@ -1,3 +1,4 @@
+import { reviewStampOf } from "./pdp.review-freshness";
 import { Type, purposeOfCall } from "./pdp.llm";
 import { extractJsonCandidate } from "./pdp.response-parse";
 import { isRetriableModelFailure } from "./pdp.retry-policy";
@@ -134,6 +135,13 @@ type InternalImageGenOptions = ImageGenOptions & {
   /** 제품 이미지를 지킬 것인가. 자세한 판단은 pdp.product-anchor 참조. */
   preserveProductImage?: boolean;
   anchorKind?: AnchorKind;
+  /**
+   * **실제 제품 사진이 없다**(N-2, 설계 §9.1).
+   *
+   * 글로만 실물을 설명한 경우다. 화면이 판단해서 보낸다 — 상품 종류를 아는
+   * 쪽이 화면이고, 서버가 다시 추측하면 판단이 두 벌이 된다.
+   */
+  conceptOnly?: boolean;
   personSource?: PersonSource;
   /**
    * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
@@ -429,7 +437,18 @@ ${analyzePrompt}`
             responseSchema: REVIEW_SCHEMA as never,
           },
         });
-        return normalizeReview(JSON.parse(extractResponseText(response)));
+        /*
+          **무엇을 보고 낸 심사인지 함께 적는다**(N-3, 설계 §9.3).
+
+          이 값이 없으면 사용자가 섹션을 지우거나 제목을 고쳐도 「모두
+          통과했습니다」가 그대로 붙는다. 자국을 찍어 두면 화면이 대조해
+          낡았는지 가릴 수 있다.
+
+          **심사에 준 것과 같은 구성안으로 찍는다.** 다른 것으로 찍으면
+          처음부터 낡은 심사가 된다.
+        */
+        const reviewed = normalizeReview(JSON.parse(extractResponseText(response)));
+        return reviewed ? { ...reviewed, stamp: reviewStampOf(candidate) } : reviewed;
       } catch {
         return null;
       }
@@ -835,6 +854,8 @@ ${analyzePrompt}`
         // 첨부됐는데 정작 사람이 안 나올 수 있었다.
         withModel: Boolean(options.withModel && (usesUploadedPerson || usesCharacter)),
         outputMode: options.outputMode ?? "editable",
+        // 실제 제품 사진이 없으면 상표·로고를 빼고 확대를 피한다(N-2).
+        conceptOnly: options.conceptOnly,
         emphasisWords: options.emphasisWords,
         desiredTone: request.desiredTone,
         // 화면에서 고른 인물 조건. 안 넘기면 프롬프트가 늘 「20대 한국 여성」으로

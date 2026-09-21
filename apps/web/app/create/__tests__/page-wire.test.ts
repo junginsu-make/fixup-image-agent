@@ -138,3 +138,43 @@ describe("인물 선택을 실어 보낸다", () => {
     expect(wire).toContain("personSource,");
   });
 });
+
+/**
+ * **사진 없이 실물을 팔 때**(N-2, 설계 §9.1).
+ *
+ * 글로만 「나무 도마를 팝니다」라고 적으면 우리는 나무 도마를 **지어낸다.**
+ * 그 그림에는 실제로 파는 물건과 다른 결·색·모양이 그려지고, 사용자는 그것을
+ * 상세페이지에 올린다.
+ *
+ * 설계 §9.1: 「참고용 외형 없는 실물 입력은 **임의 제품을 실제 제품처럼 생성
+ * 승인하지 않는다**」.
+ */
+describe("개념 시안 판단이 요청에 실린다", () => {
+  it("**실물인데 실제 사진이 없으면 실린다**", () => {
+    const wire = buildPageWire({ ...기본, productKind: "physical", anchorKind: "key-visual" });
+
+    expect(wire.conceptOnly).toBe(true);
+  });
+
+  it("**실제 제품 사진이 있으면 안 실린다**", () => {
+    const wire = buildPageWire({ ...기본, productKind: "physical", anchorKind: "product-photo" });
+
+    expect(wire.conceptOnly).toBeFalsy();
+  });
+
+  /**
+   * **앵커 종류를 안 보내면 실물 사진으로 본다.** 사진 경로의 기본값이고,
+   * 거기서는 업로드한 사진이 곧 실물 증거다.
+   */
+  it("**앵커 종류를 안 보내면 안 실린다**", () => {
+    expect(buildPageWire({ ...기본, productKind: "physical" }).conceptOnly).toBeFalsy();
+  });
+
+  it("**무형 상품이나 안 밝힌 경우에는 안 실린다** — 보여 줄 실물이 없거나 모른다", () => {
+    for (const kind of ["service", "digital", undefined]) {
+      const wire = buildPageWire({ ...기본, productKind: kind as never, anchorKind: "key-visual" });
+
+      expect(wire.conceptOnly, String(kind)).toBeFalsy();
+    }
+  });
+});

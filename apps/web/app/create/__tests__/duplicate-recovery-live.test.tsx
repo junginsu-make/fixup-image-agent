@@ -221,3 +221,83 @@ describe("안 만들어진 장을 화면에 그린다", () => {
     expect(그려진글()).toContain("다시 차감되지 않습니다");
   });
 });
+
+/**
+ * **사진 없이 실물을 팔고 있다고 화면이 말한다**(N-2, 설계 §9.1).
+ *
+ * 판단을 만들어 두고 화면이 안 그리면 아무것도 안 고친 것이다(X-07 의 교훈).
+ */
+describe("사진 없이 실물을 팔 때", () => {
+  it("**실제와 다를 수 있다고 말한다**", async () => {
+    await 띄운다({ startMode: "text", productKind: "physical" });
+
+    const 글 = 그려진글();
+    expect(글).toContain("다를 수 있");
+    expect(글).toContain("사진을 올리면");
+  });
+
+  it("**사진 경로에는 아무 말도 안 한다** — 업로드한 사진이 곧 실물 증거다", async () => {
+    await 띄운다({ startMode: "image", productKind: "physical" });
+
+    expect(그려진글()).not.toContain("다를 수 있");
+  });
+
+  it("**무형 상품에는 아무 말도 안 한다** — 보여 줄 실물이 없다", async () => {
+    await 띄운다({ startMode: "text", productKind: "service" });
+
+    expect(그려진글()).not.toContain("다를 수 있");
+  });
+
+  /**
+   * **모를 때는 경고하지 않는다.** 상품 종류를 안 밝힌 사람에게 「사진이
+   * 없습니다」라고 하면 무형 상품을 파는 사람도 그 말을 듣는다.
+   */
+  it("**상품 종류를 모르면 아무 말도 안 한다**", async () => {
+    await 띄운다({ startMode: "text" });
+
+    expect(그려진글()).not.toContain("다를 수 있");
+  });
+});
+
+/**
+ * **심사가 없을 때 뜨는 자기 채점표**(N-4, 설계 §9.3).
+ *
+ * 심사 호출이 실패하면 화면은 `scorecard` 를 그대로 그린다. 거기 붙은 A/B
+ * 등급은 사람이 읽으면 검증된 점수로 읽힌다 — 그런데 그것은 **구성안을 쓴
+ * 바로 그 호출이 같은 자리에서 스스로 매긴 점수**다.
+ */
+describe("심사가 없으면 자기 채점표를 정직하게 그린다", () => {
+  const 채점표붙은결과 = {
+    originalImage: "AAAA",
+    blueprint: {
+      executiveSummary: "요약",
+      scorecard: [{ category: "대상", score: "A", reason: "좁혔다" }],
+      blueprintList: [],
+      sections: [{ ...섹션, headline: "첫 장" }],
+    },
+  } as never;
+
+  /** 채점표는 편집 화면에 있다. 첫 화면은 갤러리다. */
+  const 편집으로 = async () => {
+    const 단추 = renderer.root.findAll((node) => node.type === "button" && 글자(node as never) === "편집");
+    if (단추[0]) await act(async () => { 단추[0]!.props.onClick(); });
+  };
+
+  it("**스스로 매긴 점수라고 말한다**", async () => {
+    await 띄운다({ initialResult: 채점표붙은결과 });
+    await 편집으로();
+
+    expect(그려진글()).toContain("스스로 매긴");
+  });
+
+  it("**심사가 있으면 채점표를 안 그린다** — 둘을 나란히 두면 구별이 안 된다", async () => {
+    await 띄운다({
+      initialResult: 채점표붙은결과,
+      review: { items: [{ criterion: "audience", rating: "pass", evidence: "", fix: "" }] },
+    });
+
+    await 편집으로();
+
+    expect(그려진글()).not.toContain("스스로 매긴");
+  });
+});

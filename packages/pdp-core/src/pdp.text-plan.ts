@@ -1,3 +1,4 @@
+import { reviewStampOf } from "./pdp.review-freshness";
 import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
 import { PdpServiceError } from "./pdp.service";
@@ -709,13 +710,20 @@ export async function planFromText(
   // 실패하면 심사 없이 진행한다 — 심사를 붙이기 전과 같은 상태가 된다.
   const runReview = async (candidate: LandingPageBlueprint) => {
     try {
-      return normalizeReview(
+      const reviewed = normalizeReview(
         await resolved.generateJson(
           buildReviewPrompt(candidate, SALES_PRINCIPLES),
           REVIEW_SCHEMA,
           REVIEW_TOOL,
         ),
       );
+      /*
+        **무엇을 보고 낸 심사인지 함께 적는다**(N-3, 설계 §9.3).
+
+        사진 경로(`pdp.service.ts`)와 같은 처리다. 한쪽만 찍으면 글로 만든
+        작업에서는 고친 구성안에 「모두 통과했습니다」가 그대로 붙는다.
+      */
+      return reviewed ? { ...reviewed, stamp: reviewStampOf(candidate) } : reviewed;
     } catch {
       return null;
     }

@@ -34,6 +34,17 @@ export interface ImagePromptOptions {
   peopleMode?: PeopleMode;
   desiredTone?: string;
   /**
+   * **실제 제품 사진이 없다**(N-2, 설계 §9.1).
+   *
+   * 글로만 「나무 도마를 팝니다」라고 적으면 우리는 나무 도마를 **지어낸다.**
+   * 그 그림에는 실제로 파는 물건과 다른 결·색·모양이 그려지고, 사용자는
+   * 그것을 상세페이지에 올린다.
+   *
+   * 설계: 「참고용 외형 없는 실물 입력은 **임의 제품을 실제 제품처럼 생성
+   * 승인하지 않는다**」. 켜지면 상표·로고를 빼고 확대를 피한다.
+   */
+  conceptOnly?: boolean;
+  /**
    * 그림의 결. **상세페이지의 기본은 `photoreal`** 이다.
    *
    * 다른 도구는 `auto`(첨부의 결을 따라감)가 기본이지만, 상세페이지는 처음부터
@@ -229,6 +240,19 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
       people: peopleRule(options),
     },
     layout: section.layout_notes || "compose it the way this message deserves",
+    /*
+      **실제 제품 사진이 없을 때**(N-2). 「지어내지 마라」만으로는 모델이
+      그럴듯한 물건을 그리고, 그 그림은 **실제 제품처럼 보인다.**
+    */
+    ...(options.conceptOnly
+      ? {
+          concept_only: {
+            note: "no real product photo exists; this is a concept visual",
+            avoid: ["brand marks", "logos", "product name lettering", "extreme close-ups of the product"],
+            prefer: "usage scene or mood rather than a catalogue shot of the object",
+          },
+        }
+      : {}),
     forbidden: [
       "buttons",
       "arrows",
