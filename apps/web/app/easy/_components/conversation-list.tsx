@@ -35,8 +35,14 @@ export const TOGGLE_EVENT = "easy-conversations-toggle";
 
 export function EasyConversationList({
   conversations,
+  width,
 }: {
   conversations: EasyConversationRecord[];
+  /**
+   * 끌어서 정한 너비. `null` 이면 아직 안 쟀다는 뜻이라 기본 너비로 둔다 —
+   * 서버가 그린 것과 같아야 화면이 한 번 튀지 않는다(`split-handle.tsx`).
+   */
+  width: number | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -98,8 +104,17 @@ export function EasyConversationList({
       ) : null}
 
       <div
+        /*
+          **넓어졌고, 끌 수 있다**(2026-09-21 사용자 — 「채팅목록 사이즈 더
+          넓혀주세요」). 224 에서는 「따뜻한 느낌의 카페 오픈 포스터」 같은
+          제목이 반도 못 가고 잘렸다.
+
+          재기 전 한 프레임은 CSS 가 맡는다 — `w-[18rem]` 이 `LIST_DEFAULT`
+          288px 이다. 두 벌이 되는 값이라 시험이 둘을 묶어 둔다.
+        */
+        style={width === null ? undefined : { width }}
         className={cn(
-          "z-40 flex w-56 shrink-0 flex-col border-r border-border bg-background",
+          "z-40 flex w-[18rem] shrink-0 flex-col border-r border-border bg-background",
           /*
             **좁은 화면에서는 떠 있는 판이다.** 넓은 화면에서는 대시보드의 첫
             칸으로 자리를 차지한다 — 그때는 셸이 이미 화면 높이를 정해 줬으므로
@@ -107,6 +122,8 @@ export function EasyConversationList({
           */
           "fixed inset-y-0 left-0 h-dvh -translate-x-full transition-transform",
           "md:static md:h-auto md:translate-x-0",
+          // 떠 있는 판일 때는 끌어 둔 너비를 안 쓴다. 옆 칸을 밀어낼 일이 없다.
+          "max-md:!w-[18rem]",
           open && "translate-x-0",
         )}
       >

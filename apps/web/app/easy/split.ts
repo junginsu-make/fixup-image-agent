@@ -1,5 +1,7 @@
 /**
- * 대화와 결과 칸 **사이 구분선**의 자리 (2026-09-18 사용자 요청).
+ * 대시보드 안 **구분선 둘**의 자리 (2026-09-18 · 2026-09-21 사용자 요청).
+ *
+ * 칸이 셋이라 구분선이 둘이다 — **대화 목록 | 대화 | 결과**.
  *
  * ── 왜 화면 밖에 있나 ────────────────────────────────────────
  *
@@ -19,8 +21,25 @@
 export const RESULT_MIN = 240;
 export const RESULT_MAX = 720;
 
-/** 대화 쪽에 남겨 둘 최소 너비(px). 입력창과 말풍선이 들어가는 폭이다. */
-export const CHAT_MIN = 360;
+/**
+ * 대화 쪽에 남겨 둘 최소 너비(px).
+ *
+ * **모델 줄이 두 줄로 접히지 않는 너비다.** 360 이었는데, 목록을 288 로 넓히자
+ * (2026-09-21) 대화가 그 바닥까지 눌리면서 입력창 위 모델 줄이 두 줄로 접혔다.
+ * 재 보니 「글 · 모델 이름 · 이미지 · 모델 이름」이 한 줄에 서려면 430 쯤이
+ * 든다 — 이름이 가장 긴 `gpt-image-2.5-sunburst` 까지 쳤다.
+ *
+ * 바닥이 하는 일이 그것이다. **못 쓸 만큼 좁아지는 자리에서 멈추는 것.**
+ */
+export const CHAT_MIN = 440;
+
+/**
+ * 구분선 하나가 먹는 너비(px). `w-2` 와 같다.
+ *
+ * **셈에 넣어야 바닥이 진짜 바닥이 된다.** 안 빼면 선 하나당 8px 씩 대화가
+ * `CHAT_MIN` 아래로 눌린다 — 실제로 352 까지 내려갔다(2026-09-21 실측).
+ */
+export const HANDLE = 8;
 
 /**
  * 처음 너비 — **끌 수 있는 데까지 미리 끌어 둔 값**이다 (2026-09-21 사용자).
@@ -49,7 +68,7 @@ export function clampResultWidth(available: number, wanted: number): number {
    * 그때 결과 칸을 우선하면 입력창이 눌린다. 글을 못 치면 이 모드가 아무것도
    * 못 하는 화면이 된다.
    */
-  const ceiling = Math.min(RESULT_MAX, available - CHAT_MIN);
+  const ceiling = Math.min(RESULT_MAX, available - CHAT_MIN - HANDLE);
 
   // 대화 바닥조차 못 지키는 너비면 결과 칸을 접는다. 화면이 그것을 안 그린다.
   if (ceiling < RESULT_MIN) return 0;
@@ -61,4 +80,51 @@ export function clampResultWidth(available: number, wanted: number): number {
 export function readResultWidth(stored: string | null): number {
   const parsed = Number(stored);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : RESULT_DEFAULT;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   대화 목록 칸 (2026-09-21 사용자 — 「채팅목록 사이즈 더 넓혀주세요.
+   그리고 여기도 마우스로 클릭시 선 이동 될 수 있게 하세요」)
+   ───────────────────────────────────────────────────────────── */
+
+/** 대화 목록의 최소·최대 너비(px). */
+export const LIST_MIN = 200;
+export const LIST_MAX = 420;
+
+/**
+ * 처음 너비. `w-[18rem]` 과 같다 — 고치면 둘이 갈리므로 여기서만 정한다.
+ *
+ * 224 였다. 「따뜻한 느낌의 카페 오픈 포스터」 같은 제목이 반도 못 가고 잘렸다.
+ */
+export const LIST_DEFAULT = 288;
+
+/**
+ * 끌어 놓은 자리를 **쓸 수 있는 목록 너비로** 바꾼다.
+ *
+ * ── 결과 칸과 다른 점 둘 ─────────────────────────────────────
+ *
+ * **접지 않는다.** 결과 칸은 자리가 없으면 0 이 되어 사라지는데, 목록은 대화를
+ * 갈아타는 길이라 사라지면 갈 곳이 없어진다. 좁은 화면에서는 애초에 떠 있는
+ * 판이라 이 셈에 끼지도 않는다.
+ *
+ * **결과 칸 몫을 빼 두지 않는다.** 목록을 끄는 사람은 지금 목록을 넓히려는
+ * 것이다. 줄어들 쪽은 결과 칸이고, 그쪽은 제 셈(`clampResultWidth`)이 다시
+ * 가둔다 — 대화 바닥(`CHAT_MIN`)만 여기서 지킨다.
+ *
+ * @param available 목록·대화·결과가 나눠 가질 전체 너비
+ * @param wanted    끌어서 만들려는 목록 너비
+ */
+export function clampListWidth(available: number, wanted: number): number {
+  const ceiling = Math.min(LIST_MAX, available - CHAT_MIN - HANDLE);
+
+  // 대화 바닥조차 못 지키는 너비면 더 줄일 것이 없다. 최소에서 멈춘다.
+  if (ceiling < LIST_MIN) return LIST_MIN;
+
+  return Math.round(Math.min(ceiling, Math.max(LIST_MIN, wanted)));
+}
+
+/** 저장해 둔 값을 읽을 때 쓴다. 숫자가 아니면 기본으로 떨어진다. */
+export function readListWidth(stored: string | null): number {
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : LIST_DEFAULT;
 }

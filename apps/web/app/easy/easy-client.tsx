@@ -12,7 +12,7 @@ import { easyCost } from "./cost";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
-import { EasySplitHandle, useResultWidth } from "./_components/split-handle";
+import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
 import { openImageViewer } from "../_components/image-viewer";
 
 /**
@@ -78,7 +78,7 @@ export function EasyClient({
    * `split.ts` 가 값으로 한다.
    */
   const split = React.useRef<HTMLDivElement>(null);
-  const { width: resultWidth, apply: setResultWidth } = useResultWidth(split);
+  const { width: resultWidth, apply: setResultWidth } = useSplitWidth(split, "result");
 
   const file = React.useRef<HTMLInputElement>(null);
   const bottom = React.useRef<HTMLDivElement>(null);
@@ -485,6 +485,14 @@ export function EasyClient({
               width={resultWidth}
               onChange={setResultWidth}
               containerRef={split}
+              side="right"
+              label="대화와 결과 칸 너비"
+              /*
+                **결과 칸과 같이 나타나고 같이 사라진다**(2026-09-18 확인).
+                결과 칸은 `lg` 미만에서 `hidden` 인데 구분선이 그대로 남아
+                있었다 — 끌 것이 없는 손잡이가 화면 가운데에 선으로 섰다.
+              */
+              className="hidden lg:block"
             />
           )}
           <EasyResultPanel

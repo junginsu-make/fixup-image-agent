@@ -553,10 +553,11 @@ export function AppShell({
             "min-w-0 lg:col-start-2",
             /*
               **본문이 높이를 나눠 갖는다.** 상단바 줄은 제 키만 쓰고(`shrink-0`),
-              남는 자리를 `main` 이 다 가진다. 좁은 화면에서는 위 상단바(3.5rem)를
-              뺀 만큼이다.
+              남는 자리를 `main` 이 다 가진다. 좁은 화면에서는 위 상단바를 뺀
+              만큼이다 — **`h-14`(3.5rem)에 아래 테두리 1px 을 더한 값이다.**
+              테두리를 빼먹어 900px 폭에서 1px 씩 페이지가 스크롤됐다(2026-09-21 실측).
             */
-            fill && "flex h-[calc(100dvh-3.5rem)] flex-col lg:h-dvh",
+            fill && "flex h-[calc(100dvh-3.5rem-1px)] flex-col lg:h-dvh",
           )}
         >
           {/* 계정 상태와 테마 전환은 화면 오른쪽 위에 둔다. 예전에는 사이드바

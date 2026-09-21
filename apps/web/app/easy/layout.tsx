@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { requireActiveMember } from "../../lib/membership/server";
 import { StudioLayout } from "../_components/studio-layout";
 import { easyStoreForUser } from "../../lib/easy/store";
-import { EasyConversationList } from "./_components/conversation-list";
+import { EasyDashboard } from "./_components/dashboard";
 
 /**
  * Easy 모드도 **다른 도구와 같은 셸 안**에 산다 (2026-09-21 사용자).
@@ -44,12 +44,10 @@ export default async function EasyLayout({ children }: { children: ReactNode }) 
     <StudioLayout fill>
       {/*
         대시보드 안을 셋으로 나눈다 — **대화 목록 · 대화 · 결과**.
-        뒤의 둘은 `children`(`EasyClient`)이 제 안에서 다시 나눈다.
+        나누는 일은 `EasyDashboard` 가 한다. 구분선을 끌 수 있으려면 상태가
+        있어야 하고, 그것은 서버 부품인 여기서 못 든다.
       */}
-      <div className="flex min-h-0 flex-1">
-        <EasyConversationList conversations={conversations} />
-        {children}
-      </div>
+      <EasyDashboard conversations={conversations}>{children}</EasyDashboard>
     </StudioLayout>
   );
 }

@@ -49,14 +49,14 @@ export function EasyResultPanel({
       그래서 `split.ts` 의 규칙을 **클래스로 한 번 더 적는다.**
 
         w-[45rem]                 RESULT_MAX 720px
-        max-w-[calc(100%-360px)]  CHAT_MIN 360px 을 대화 쪽에 남긴다
+        max-w-[calc(100%-448px)]  CHAT_MIN 440 + 구분선 8 을 대화 쪽에 남긴다
 
       `clampResultWidth(available, RESULT_MAX)` 와 같은 값이 나온다. 두 벌이
       되는 값이라 `__tests__/result-panel-width.test.ts` 가 둘을 묶어 둔다.
     */
     <aside
       style={width === null ? undefined : { width }}
-      className="hidden w-[45rem] max-w-[calc(100%-360px)] shrink-0 flex-col lg:flex"
+      className="hidden w-[45rem] max-w-[calc(100%-448px)] shrink-0 flex-col lg:flex"
     >
       <div className="flex shrink-0 items-center justify-between px-4 py-3">
         <span className="text-meta text-subtle-foreground">결과</span>

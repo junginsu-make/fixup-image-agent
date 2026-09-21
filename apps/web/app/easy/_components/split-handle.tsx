@@ -1,11 +1,26 @@
 "use client";
 
 import * as React from "react";
+import { MoveHorizontal } from "lucide-react";
 import { cn } from "@fixup/ui";
-import { CHAT_MIN, RESULT_MIN, clampResultWidth, readResultWidth } from "../split";
+import {
+  CHAT_MIN,
+  LIST_MIN,
+  RESULT_MIN,
+  clampListWidth,
+  clampResultWidth,
+  readListWidth,
+  readResultWidth,
+} from "../split";
 
 /**
- * 대화와 결과 칸 사이의 **끌 수 있는 구분선** (2026-09-18 사용자 요청).
+ * 대시보드 안의 **끌 수 있는 구분선** (2026-09-18 · 2026-09-21 사용자 요청).
+ *
+ * 칸이 셋이라 구분선이 둘이다 — **대화 목록 | 대화 | 결과**. 둘이 하는 일은
+ * 같고 **어느 쪽 끝에서 너비를 재느냐만 다르다.**
+ *
+ *   side="left"   왼쪽 끝에서 포인터까지 = 대화 목록 너비
+ *   side="right"  오른쪽 끝에서 포인터까지 = 결과 칸 너비
  *
  * ── 판단은 여기 없다 ─────────────────────────────────────────
  *
@@ -15,55 +30,86 @@ import { CHAT_MIN, RESULT_MIN, clampResultWidth, readResultWidth } from "../spli
  *
  * 마우스로만 되면 키보드로 쓰는 사람은 칸 너비를 못 바꾼다. 화살표로 한 번에
  * 24px 씩 움직인다 — `separator` 역할에 `aria-valuenow` 를 붙여 낭독기도 지금
- * 너비를 읽는다.
+ * 너비를 읽는다. **미는 방향은 화면과 같다** — 오른쪽 화살표는 선이 오른쪽으로
+ * 간다. 그러면 왼쪽 칸은 넓어지고 오른쪽 칸은 좁아진다.
  *
  * ── 저장은 브라우저에만 ──────────────────────────────────────
  *
  * 이 사람 이 브라우저의 편의일 뿐이다. 서버에 보낼 값이 아니고, 비거나
- * 망가져도 기본값으로 뜬다(`readResultWidth`).
+ * 망가져도 기본값으로 뜬다.
  */
 
-const KEY = "easy-result-width";
 const STEP = 24;
 
-export function useResultWidth(containerRef: React.RefObject<HTMLElement | null>) {
-  const [width, setWidth] = React.useState<number | null>(null);
+/** 구분선 하나가 무엇을 재고 어디에 적어 두는지. */
+const 규칙 = {
+  list: { key: "easy-list-width", read: readListWidth, clamp: clampListWidth, floor: LIST_MIN },
+  result: { key: "easy-result-width", read: readResultWidth, clamp: clampResultWidth, floor: RESULT_MIN },
+} as const;
 
-  /*
-   * **첫 그림은 서버와 같아야 한다.** 저장값을 처음부터 쓰면 서버가 그린 것과
-   * 달라 화면이 한 번 튄다. 떠서 한 번 재고 난 뒤에 붙인다.
-   */
+export type SplitKind = keyof typeof 규칙;
+
+/**
+ * 칸 하나의 너비를 들고 있는다.
+ *
+ * ── 「원한 너비」와 「지금 쓸 수 있는 너비」를 따로 둔다 ──────
+ *
+ * 가둔 값만 들고 있으면 **한쪽으로만 간다.** 목록을 넓혀 결과 칸이 616 에서
+ * 492 로 줄었는데, 목록을 도로 좁혀도 492 에 머물렀다(2026-09-21 실측). 자리가
+ * 다시 생겼는데 안 돌아오면 사용자는 줄어든 까닭도 안 돌아오는 까닭도 모른다.
+ *
+ * 그래서 원한 값(`원한너비`)은 그대로 두고, **화면에 쓸 값은 그때그때 가둔다.**
+ * 끌면 원한 값이 바뀌고, 옆 칸이 움직이면 쓸 값만 바뀐다.
+ *
+ * ── `null` 은 아직 안 쟀다는 뜻 ──────────────────────────────
+ *
+ * 첫 그림은 서버와 같아야 한다(저장값을 처음부터 쓰면 화면이 한 번 튄다).
+ * 붙고 나서 한 번 재고 그때 붙인다.
+ */
+export function useSplitWidth(containerRef: React.RefObject<HTMLElement | null>, kind: SplitKind) {
+  const { key, read, clamp } = 규칙[kind];
+  const [원한너비, set원한너비] = React.useState<number | null>(null);
+  const [나눌자리, set나눌자리] = React.useState<number | null>(null);
+
   React.useEffect(() => {
-    const available = containerRef.current?.clientWidth ?? 0;
     let stored: string | null = null;
     try {
-      stored = window.localStorage.getItem(KEY);
+      stored = window.localStorage.getItem(key);
     } catch {
       // 사생활 보호 창에서는 못 읽는다. 기본값으로 간다.
     }
-    setWidth(clampResultWidth(available, readResultWidth(stored)));
+    set원한너비(read(stored));
+  }, [key, read]);
+
+  /*
+   * **담는 칸 너비를 계속 따라간다.**
+   *
+   * 창 크기만 보면 모자란다 — 구분선이 둘이라 **옆 칸을 끌어도** 이 칸이
+   * 가진 자리가 달라진다. 목록을 넓히면 대화와 결과가 나눠 갖던 너비가
+   * 줄어드는데, 그때 결과 칸이 그대로면 대화가 바닥 아래로 눌린다.
+   */
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const observer = new ResizeObserver(() => set나눌자리(container.clientWidth));
+    observer.observe(container);
+    return () => observer.disconnect();
   }, [containerRef]);
 
-  /** 창 크기가 바뀌면 지금 너비가 안 맞을 수 있다. 다시 가둔다. */
-  React.useEffect(() => {
-    const onResize = () => {
-      const available = containerRef.current?.clientWidth ?? 0;
-      setWidth((current) => (current === null ? null : clampResultWidth(available, current)));
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [containerRef]);
+  const width = 원한너비 === null || 나눌자리 === null ? null : clamp(나눌자리, 원한너비);
 
   const apply = React.useCallback((next: number) => {
     const available = containerRef.current?.clientWidth ?? 0;
-    const settled = clampResultWidth(available, next);
-    setWidth(settled);
+    const settled = clamp(available, next);
+    // **가둔 값을 원한 값으로 적는다.** 끌어서 멈춘 자리가 곧 원한 자리다.
+    set원한너비(settled);
     try {
-      window.localStorage.setItem(KEY, String(settled));
+      window.localStorage.setItem(key, String(settled));
     } catch {
       // 못 써도 이번 화면에서는 그대로 쓴다.
     }
-  }, [containerRef]);
+  }, [containerRef, key, clamp]);
 
   return { width, apply };
 }
@@ -72,10 +118,19 @@ export function EasySplitHandle({
   width,
   onChange,
   containerRef,
+  side,
+  label,
+  className,
 }: {
   width: number;
   onChange: (next: number) => void;
   containerRef: React.RefObject<HTMLElement | null>;
+  /** 어느 끝에서 너비를 재나. 왼쪽 칸을 재면 `"left"`. */
+  side: "left" | "right";
+  /** 낭독기가 읽을 이름. 「무엇과 무엇 사이인가」를 적는다. */
+  label: string;
+  /** 어느 화면 폭부터 보일지. 옆 칸이 사라지면 이 선도 같이 사라져야 한다. */
+  className?: string;
 }) {
   const [dragging, setDragging] = React.useState(false);
 
@@ -92,8 +147,7 @@ export function EasySplitHandle({
     const move = (event: PointerEvent) => {
       const box = containerRef.current?.getBoundingClientRect();
       if (!box) return;
-      // 구분선의 오른쪽이 결과 칸이다. 오른끝에서 포인터까지가 그 너비다.
-      onChange(box.right - event.clientX);
+      onChange(side === "left" ? event.clientX - box.left : box.right - event.clientX);
     };
     const stop = () => setDragging(false);
 
@@ -115,37 +169,38 @@ export function EasySplitHandle({
       document.body.style.userSelect = previous;
       document.body.style.cursor = "";
     };
-  }, [dragging, containerRef, onChange]);
+  }, [dragging, containerRef, onChange, side]);
+
+  /** 선을 그쪽으로 밀면 이 칸은 넓어지나 좁아지나. */
+  const 밀기 = (방향: "left" | "right") => {
+    const 넓어진다 = 방향 === (side === "left" ? "right" : "left");
+    onChange(width + (넓어진다 ? STEP : -STEP));
+  };
+
+  const 최소 = 규칙[side === "left" ? "list" : "result"].floor;
 
   return (
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="대화와 결과 칸 너비"
+      aria-label={label}
       aria-valuenow={width}
-      aria-valuemin={RESULT_MIN}
-      aria-valuemax={Math.max(RESULT_MIN, (containerRef.current?.clientWidth ?? 0) - CHAT_MIN)}
+      aria-valuemin={최소}
+      aria-valuemax={Math.max(최소, (containerRef.current?.clientWidth ?? 0) - CHAT_MIN)}
       tabIndex={0}
       onPointerDown={(event) => {
         event.preventDefault();
         setDragging(true);
       }}
       onKeyDown={(event) => {
-        // 왼쪽 화살표는 결과 칸을 넓힌다 — 구분선이 왼쪽으로 가는 것이다.
-        if (event.key === "ArrowLeft") { event.preventDefault(); onChange(width + STEP); }
-        if (event.key === "ArrowRight") { event.preventDefault(); onChange(width - STEP); }
+        if (event.key === "ArrowLeft") { event.preventDefault(); 밀기("left"); }
+        if (event.key === "ArrowRight") { event.preventDefault(); 밀기("right"); }
       }}
       className={cn(
         // 보이는 선은 1px 이지만 잡는 자리는 넓다. 얇으면 잡기가 어렵다.
         "group relative w-2 shrink-0 cursor-col-resize",
-        /*
-          **결과 칸과 같이 나타나고 같이 사라진다**(2026-09-18 확인).
-
-          결과 칸은 `lg` 미만에서 `hidden` 인데 구분선이 그대로 남아 있었다.
-          끌 것이 없는 손잡이가 화면 가운데에 선으로 서 있었다.
-        */
-        "hidden lg:block",
         "focus-visible:outline-none",
+        className,
       )}
     >
       <span
@@ -156,6 +211,29 @@ export function EasySplitHandle({
           dragging && "bg-primary",
         )}
       />
+
+      {/*
+        **끌 수 있다는 것을 눈으로 알린다**(2026-09-21 사용자 — 「양쪽 다 이동할
+        수 있다는 아이콘을 표시해주세요」).
+
+        전에는 1px 선뿐이라, 커서를 정확히 그 위에 올려 모양이 바뀌는 것을 봐야만
+        끌 수 있다는 걸 알았다. **몰랐으면 없는 기능이다.**
+
+        늘 보이되 옅게 둔다 — 손이 가면 진해진다. 화살표가 양쪽을 가리키는 것이
+        곧 「양쪽 다 간다」는 말이다.
+      */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute left-1/2 top-1/2 grid h-7 w-4 -translate-x-1/2 -translate-y-1/2 place-items-center",
+          "rounded-full border border-border bg-background text-subtle-foreground transition-colors",
+          "group-hover:border-primary group-hover:text-primary",
+          "group-focus-visible:border-primary group-focus-visible:text-primary",
+          dragging && "border-primary text-primary",
+        )}
+      >
+        <MoveHorizontal className="h-3 w-3" />
+      </span>
     </div>
   );
 }
