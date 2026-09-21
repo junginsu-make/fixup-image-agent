@@ -143,3 +143,88 @@ describe("T-COST: 리디자인 모델 선택", () => {
     expect(기록.model).toMatch(/nano-banana/);
   });
 });
+
+/**
+ * **리디자인 라우트 시험 공백을 메운다**(X-04).
+ *
+ * 설계 §14.6: 「redesign route 시험 공백 | **인증·본문·모델·정산·부분 실패
+ * 동작 시험**」. 다섯 축 중 고치는 길의 **인증**과 생성의 **부분 실패**가
+ * 비어 있었다(2026-09-21 조사).
+ */
+describe("고치는 길도 인증이 먼저다", () => {
+  it("**로그인 안 했으면 본문을 안 읽는다**", async () => {
+    mocks.auth.mockResolvedValue({ ok: false, response: new Response(null, { status: 401 }) });
+    const request = new Request("http://local/api/redesign/edit", {
+      method: "POST",
+      body: JSON.stringify({ imageUrl: "data:image/png;base64,AAAA", request: "밝게" }),
+    });
+
+    const response = await edit(request);
+
+    expect(response.status).toBe(401);
+    expect(request.bodyUsed, "본문을 읽었다").toBe(false);
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  it("**로그인 안 했으면 고치지도 않는다**", async () => {
+    mocks.auth.mockResolvedValue({ ok: false, response: new Response(null, { status: 401 }) });
+
+    await edit(
+      new Request("http://local/api/redesign/edit", {
+        method: "POST",
+        body: JSON.stringify({ imageUrl: "data:image/png;base64,AAAA", request: "밝게" }),
+      }),
+    );
+
+    expect(mocks.edit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * **일부만 만들어졌으면 만든 만큼만 받는다.**
+ *
+ * 전량 실패(`sections: []`)는 이미 잰다(`chunked-billing.test.ts`). 그 사이 —
+ * **셋을 시켰는데 둘만 나온 경우**는 아무도 안 봤다. 여기서 값이 틀리면
+ * 사용자는 못 받은 장까지 낸다.
+ */
+describe("부분 성공은 만든 만큼만 받는다", () => {
+  const 여러장 = async (요청장수: number, 만든장수: number) => {
+    mocks.generate.mockResolvedValue({
+      project: { sections: Array.from({ length: 만든장수 }, (_, i) => ({ imageUrl: `img-${i}` })) },
+    });
+    const form = new FormData();
+    form.append("files", 원본());
+    form.append("count", String(요청장수));
+    return generate(new Request("http://local/api/redesign/generate", { method: "POST", body: form }));
+  };
+
+  it("**셋을 시켜 둘이 나오면 둘 값이다**", async () => {
+    const { imageCreditUnits } = await import("../../../../lib/credit-cost");
+
+    await 여러장(3, 2);
+
+    expect(mocks.settle.mock.calls[0]![2]).toBe(imageCreditUnits("gpt-image-2.5-flare", 2));
+  });
+
+  it("**셋을 시켜 둘이 나와도 성공으로 닫는다** — 만든 것이 있다", async () => {
+    await 여러장(3, 2);
+
+    expect(mocks.settle.mock.calls[0]![1]).toBe(true);
+  });
+
+  it("**시킨 것보다 많이 나와도 시킨 만큼만 받는다**", async () => {
+    const { imageCreditUnits } = await import("../../../../lib/credit-cost");
+
+    await 여러장(2, 5);
+
+    expect(mocks.settle.mock.calls[0]![2]).toBe(imageCreditUnits("gpt-image-2.5-flare", 2));
+  });
+
+  it("**한 장도 못 만들면 그 까닭을 장부에 적는다**", async () => {
+    await 여러장(3, 0);
+
+    expect(mocks.settle.mock.calls[0]![1]).toBe(false);
+    expect(mocks.settle.mock.calls[0]![3]).toBe("no_image_generated");
+  });
+});
+

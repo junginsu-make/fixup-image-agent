@@ -29,8 +29,9 @@ const 정산: Array<{ success: boolean; units: number; errorCode?: string; llmUs
 let 정산결과: unknown = {};
 let 예약허용 = true;
 
+let 인증결과: unknown = { ok: true, member: { userId: "u1" } };
 vi.mock("../../../../lib/membership/api", () => ({
-  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
+  authenticateApiMember: async () => 인증결과,
   reserveAiUsage: async (_req: Request, operation: string, units: number) => {
     예약.push({ operation, units });
     return 예약허용
@@ -86,6 +87,7 @@ beforeEach(() => {
   정산결과 = {};
   전사호출 = 0;
   예약허용 = true;
+  인증결과 = { ok: true, member: { userId: "u1" } };
   전사가터진다 = false;
 });
 
@@ -198,6 +200,37 @@ describe("장부가 안 닫혀도 전사를 돌려준다", () => {
     await POST(요청());
 
     expect(정산).toHaveLength(1);
+  });
+});
+
+/**
+ * **인증이 본문보다 먼저다**(X-04).
+ *
+ * 설계 §14.6(F-7-10-b): 「**인증 전** multipart 전체 파싱·크기 제한 없음」.
+ * 같은 원칙이 JSON 본문에도 걸린다 — 로그인도 안 한 요청의 몸을 읽어 메모리에
+ * 쌓을 까닭이 없다.
+ *
+ * 레퍼런스 등록 길은 **인증 → 본문 → 예약** 순이다(`style-references/route.ts`).
+ * 전사만 본문이 먼저였다.
+ */
+describe("인증이 본문보다 먼저다", () => {
+  it("**로그인 안 했으면 본문을 안 읽는다**", async () => {
+    인증결과 = { ok: false, response: Response.json({ error: "로그인이 필요합니다." }, { status: 401 }) };
+    const request = 요청();
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(401);
+    expect(request.bodyUsed, "본문을 읽었다").toBe(false);
+  });
+
+  it("**로그인 안 했으면 예약도 안 한다**", async () => {
+    인증결과 = { ok: false, response: Response.json({ error: "로그인이 필요합니다." }, { status: 401 }) };
+
+    await POST(요청());
+
+    expect(예약).toHaveLength(0);
+    expect(전사호출).toBe(0);
   });
 });
 

@@ -1,6 +1,6 @@
 import { transcribeStrips, humanizeProviderError, RedesignError } from "@fixup/redesign-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
-import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
 import { TRANSCRIBE_JSON_LIMIT, TRANSCRIBE_MAX_MB } from "./limits";
@@ -29,7 +29,19 @@ export async function POST(req: Request) {
 
 async function transcribe(req: Request) {
   /*
-    **문지기를 먼저 지난다**(C-9 와 같은 판단).
+    **인증이 먼저다**(X-04).
+
+    로그인도 안 한 요청의 몸을 읽어 메모리에 쌓을 까닭이 없다. 레퍼런스 등록
+    길이 이미 **인증 → 본문 → 예약** 순이다(`pdp/style-references/route.ts`) —
+    전사만 본문이 먼저였다.
+
+    `reserveAiUsage` 도 안에서 인증하지만 그것은 본문을 읽은 **뒤**다.
+  */
+  const auth = await authenticateApiMember();
+  if (!auth.ok) return auth.response;
+
+  /*
+    **그다음 문지기다**(C-9 와 같은 판단).
 
     깨진 입력·너무 큰 본문은 모델을 부르기 전에 끝난다. 예약을 먼저 하면
     값싼 실패로 시간당 한도를 태울 수 있다.
