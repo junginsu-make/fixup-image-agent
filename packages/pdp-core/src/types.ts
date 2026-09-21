@@ -1,3 +1,5 @@
+import type { PageGoal, ProductKind } from "./pdp.offering";
+export type { PageGoal, ProductKind };
 import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { AnchorKind } from "./pdp.product-anchor";
@@ -475,6 +477,15 @@ export type OfferingKind =
 export interface ProductBrief {
   offeringName: string;
   offeringKind: OfferingKind;
+  /**
+   * **사용자가 고른** 상품 종류. 모델이 글에서 짐작하는 `offeringKind` 와 다르다.
+   *
+   * 입력 방식(사진/글)과 상품 종류는 **다른 축**인데 붙어 있었다(K-08).
+   * 안 고르면 없고, 그때 프롬프트는 어느 쪽으로도 단정하지 않는다.
+   */
+  productKind?: ProductKind;
+  /** 이 페이지로 무엇을 하려는가. 안 고르면 판매다. */
+  pageGoal?: PageGoal;
   oneLiner: string;
   audience: string; // 누구에게
   problem: string; // 어떤 문제를
@@ -490,6 +501,15 @@ export interface ProductBrief {
 
 export interface TextPlanRequest {
   text: string;
+  /**
+   * **사용자가 고른** 상품 종류(K-08).
+   *
+   * 글로 시작한다는 것은 **입력 방식**일 뿐이다. 전에는 그것이 곧 「무형
+   * 상품」으로 읽혀, 사진 없는 실물을 파는 사람이 은유로 채운 페이지를 받았다.
+   */
+  productKind?: ProductKind;
+  /** 이 페이지로 무엇을 하려는가. 안 고르면 판매다. */
+  pageGoal?: PageGoal;
   aspectRatio: AspectRatio;
   desiredTone?: string;
   outputMode?: PdpOutputMode;

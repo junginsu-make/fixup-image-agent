@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
+import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember } from "../membership/api";
@@ -142,6 +142,11 @@ const schemas = {
     look: z.enum(IMAGE_LOOKS).optional(),
   }).passthrough(),
   plan: z.object({ ...common, text: text.trim().min(1), outputMode: z.enum(["editable", "full-image"]).optional(),
+    /*
+      **입력 방식과 상품 종류는 다른 축이다**(K-08). 글로 시작한다는 것이
+      곧 「무형 상품」이 아니다 — 목록은 코어에 한 벌이다.
+    */
+    productKind: z.enum(PRODUCT_KINDS).optional(), pageGoal: z.enum(PAGE_GOALS).optional(),
     copyIntensity: z.enum(["plain", "normal", "strong", "max"]).optional(), gapPolicy: z.enum(["omit", "ask", "sample"]).optional() }).passthrough(),
   keyVisual: z.object({ ...common, imageModel: model.optional(), brief: z.object({ offeringName: text.trim().min(1) }).passthrough(),
     blueprint: z.object({ sections: z.array(section).min(1) }).passthrough() }).passthrough(),

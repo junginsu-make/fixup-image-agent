@@ -34,6 +34,7 @@ import { apiJson, toAnchorImage, toDataUrl } from "./pdp-utils";
 import { replaceBlueprintState } from "./text-plan-state";
 import type { PdpTextDraftState } from "./pdp-drafts";
 import { stableSections } from "./document-state";
+import { DEFAULT_PAGE_GOAL, DEFAULT_PRODUCT_KIND, type PageGoal, type ProductKind } from "@fixup/pdp-core";
 
 /**
  * 텍스트 진입 경로 전체를 담는다.
@@ -110,6 +111,15 @@ export function TextModeFlow({
   }, []);
   const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>(initialDraft?.copyIntensity ?? "normal");
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>(initialDraft?.gapPolicy ?? "ask");
+  /*
+    **글로 시작한다는 것은 입력 방식일 뿐이다**(K-08).
+
+    전에는 그것이 곧 「무형 상품」으로 읽혀, 사진 없는 실물을 파는 사람이
+    은유로 채운 페이지를 받았다. 무엇을 파는지와 무엇을 하러 왔는지는 따로
+    받는다.
+  */
+  const [productKind, setProductKind] = useState<ProductKind>(DEFAULT_PRODUCT_KIND);
+  const [pageGoal, setPageGoal] = useState<PageGoal>(DEFAULT_PAGE_GOAL);
   const [brief, setBrief] = useState<ProductBrief | null>(initialDraft?.brief ?? null);
   // 이미지 방향을 사용자가 고쳤는지 비교하려면 최초 시나리오를 그대로 들고 있어야 한다.
   const [originalBlueprint, setOriginalBlueprint] = useState<LandingPageBlueprint | null>(initialDraft?.originalBlueprint ?? null);
@@ -152,6 +162,8 @@ export function TextModeFlow({
         method: "POST",
         body: JSON.stringify({
           text,
+          productKind,
+          pageGoal,
           aspectRatio,
           outputMode,
           desiredTone: desiredTone.trim() || undefined,
@@ -271,6 +283,10 @@ export function TextModeFlow({
 
       {stage === "input" ? (
         <TextBriefInput
+          productKind={productKind}
+          pageGoal={pageGoal}
+          onProductKindChange={setProductKind}
+          onPageGoalChange={setPageGoal}
           value={text}
           copyIntensity={copyIntensity}
           gapPolicy={gapPolicy}

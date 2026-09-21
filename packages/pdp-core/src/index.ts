@@ -154,6 +154,8 @@ export { recoverLookWithoutReference, type LookRecovery } from "./pdp.look-recov
 export { ANALYSIS_QUOTA_EXEMPT_CODES, consumesAnalysisQuota } from "./pdp.analysis-quota";
 export { RETRIABLE_MODEL_CODES, isRetriableModelFailure } from "./pdp.retry-policy";
 export { IMAGE_TONES, TONE_AUTO_LABEL } from "./pdp.tone";
+export { DEFAULT_PAGE_GOAL, DEFAULT_PRODUCT_KIND, PAGE_GOALS, PRODUCT_KINDS, isTangibleKind, pageGoalRule, productKindLabel, productKindRule } from "./pdp.offering";
+export type { PageGoal, ProductKind } from "./pdp.offering";
 export type { ImageTone } from "./pdp.tone";
 export { extractJsonCandidate } from "./pdp.response-parse";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";

@@ -18,6 +18,8 @@ import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, normalize
 import { resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
 import type { StructureFailure } from "./pdp.evidence";
 import { DEFAULT_IMAGE_MODEL } from "./types";
+import { DEFAULT_PAGE_GOAL, DEFAULT_PRODUCT_KIND, pageGoalRule, productKindLabel, productKindRule } from "./pdp.offering";
+import type { ProductKind } from "./pdp.offering";
 import type {
   AspectRatio,
   CopyEvidence,
@@ -118,9 +120,20 @@ const BRIEF_RULES = `규칙:
 - offeringKind 는 다음 중 하나: ${OFFERING_KINDS.join(", ")}.
 - 모든 문자열은 한국어로 쓴다.`;
 
-export function buildBriefPrompt(text: string) {
-  return `너는 무형 상품(강의·코칭·구독·소프트웨어·커뮤니티)의 판매 기획자다.
-사용자가 규칙 없이 쓴 아래 텍스트에서 판매 브리프를 뽑아낸다.
+/**
+ * **무엇을 파는지 못 박지 않는다**(K-08).
+ *
+ * 전에는 「너는 **무형 상품**(강의·코칭·구독·소프트웨어·커뮤니티)의 판매
+ * 기획자다」로 시작했다. 사진이 없을 뿐인 실물을 글로 설명한 사람도 그 지시를
+ * 받는다 — **입력 방식과 상품 종류를 붙여 둔** 것이 문제였다.
+ */
+export function buildBriefPrompt(text: string, productKind?: ProductKind) {
+  const 종류 = productKind && productKind !== "other"
+    ? `사용자가 밝힌 상품 종류는 **${productKindLabel(productKind)}** 이다.
+`
+    : "";
+  return `너는 상세페이지 판매 기획자다.
+${종류}사용자가 규칙 없이 쓴 아래 텍스트에서 판매 브리프를 뽑아낸다.
 
 ${BRIEF_RULES}
 
@@ -148,9 +161,14 @@ function outputModeRules(outputMode: PdpOutputMode) {
   경로에만 있던 「사람이 안 나오는 페이지면 cast 는 빈 문자열」이 글 경로에는
   없었다. 두 벌로 적으면 한쪽만 고치는 날이 온다.
 */
+/*
+  **상품 종류를 여기 못 박지 않는다**(K-08).
+
+  전에는 첫 줄이 「무형 상품이다. 만질 수 있는 제품 사진을 전제하지 마라」였다.
+  그 한 줄 때문에 실물을 글로 설명한 사람의 페이지에 제품 자리 대신 은유가
+  들어갔다. 이제 `productKindRule` 이 그 자리에 들어간다.
+*/
 const BLUEPRINT_RULES = `규칙:
-- 무형 상품이다. 만질 수 있는 제품 사진을 전제하지 마라.
-  이미지 방향은 사용 장면·결과 장면·감정·은유로 잡는다.
 - 앞 섹션의 감정을 다음 섹션이 이어받아 하나의 흐름을 만든다.
 - **반론 섹션은 반드시 넣는다.** 살까 말까 망설이는 이유(가격, 나한테도 될까, 실패하면,
   효과가 약하지 않을까)를 페이지가 먼저 꺼내 다루는 섹션이다. 좋은 점만 나열하면
@@ -211,6 +229,10 @@ ${DESIGN_SYSTEM_RULES}
 ${sectionCountRules()}
 
 ${SALES_PRINCIPLES}
+
+${productKindRule(brief.productKind ?? DEFAULT_PRODUCT_KIND)}
+
+${pageGoalRule(brief.pageGoal ?? DEFAULT_PAGE_GOAL)}
 
 ${BLUEPRINT_RULES}
 
@@ -643,10 +665,20 @@ export async function planFromText(
   }
 
   const resolved = deps ?? requireDeps(providers);
-  const brief = normalizeBrief(
-    await resolved.generateJson(buildBriefPrompt(sourceText), BRIEF_SCHEMA, BRIEF_TOOL),
-    sourceText,
-  );
+  /*
+    **사용자가 고른 것이 모델의 짐작보다 세다**(K-08).
+
+    `offeringKind` 는 모델이 글에서 읽어 고른다. `productKind` 는 사용자가
+    직접 고른 값이라, 설계도 프롬프트는 이쪽을 본다.
+  */
+  const brief: ProductBrief = {
+    ...normalizeBrief(
+      await resolved.generateJson(buildBriefPrompt(sourceText, input.productKind), BRIEF_SCHEMA, BRIEF_TOOL),
+      sourceText,
+    ),
+    productKind: input.productKind,
+    pageGoal: input.pageGoal,
+  };
 
   if (!brief.offeringName) {
     throw new PdpServiceError(
