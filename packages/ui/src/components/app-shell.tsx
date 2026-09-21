@@ -61,9 +61,11 @@ const navGroups: NavGroup[] = [
         묻히면 뜻이 없다. 나머지 도구는 다섯 단계에 칸이 열한 개인데, 무엇을
         적어야 할지 모르는 사람에게는 그것이 벽이다.
 
-        누르면 **이 셸이 사라진다.** `app/easy` 는 `StudioLayout` 을 안 감싸고
-        제 레이아웃을 쓴다 — 사이드바에 도구가 여섯 개 걸려 있으면 「쉬운
-        모드」가 아니다(2026-09-17 사용자 결정).
+        **이 셸 안에 산다.** 한때는 아니었다 — 「사이드바에 도구가 여섯 개
+        걸려 있으면 「쉬운 모드」가 아니다」라고 보고 `app/easy` 가 제 레이아웃을
+        썼다(2026-09-17). 써 보고 사용자가 뒤집었다: 다른 도구는 사이드바·상단바가
+        고정인데 **Easy 만 화면이 통째로 바뀌어** 어디 와 있는지 알 수 없었다
+        (2026-09-21). 지금은 `fill` 만 켜고 나머지는 다른 도구와 똑같다.
       */
       { href: "/easy", label: "Easy 모드", desc: "말로 만들기", icon: Zap },
       // 「카드 뼈대」는 여기 없다. 카드뉴스를 만드는 두 가지 길 중 하나라
@@ -183,6 +185,17 @@ interface AppShellProps {
    * (`NEXT_PUBLIC_` 을 새로 만들면 스위치가 둘이 된다).
    */
   hasAd?: boolean;
+  /**
+   * **한 화면에 꽉 채운다.** 본문이 제 안에서 스크롤하고 **페이지는 안 늘어난다.**
+   *
+   * 기본은 꺼짐이다. 대부분의 화면은 내용만큼 길어지고 페이지가 스크롤된다 —
+   * 그게 맞다. 켜야 하는 것은 **입력창이 아래에 붙어 있어야 하는 화면**뿐이다
+   * (2026-09-21 사용자 — Easy 모드도 다른 도구처럼 셸 안에 넣어 달라).
+   *
+   * 그런 화면을 셸 밖에 따로 만들면 사이드바와 상단바가 갈린다. 셸이 한 칸을
+   * 더 받는 편이 **두 벌로 사는 것보다 낫다.**
+   */
+  fill?: boolean;
   /**
    * 사이드바에 걸 프로젝트 목록.
    *
@@ -320,6 +333,7 @@ export function AppShell({
   isAdmin = false,
   hasTeam = false,
   hasAd = false,
+  fill = false,
   projects = [],
   currentProjectId = null,
   onSelectProject,
@@ -361,7 +375,12 @@ export function AppShell({
   const allLinks = [...visibleGroups.flatMap((g) => g.items), ...visibleBottomItems];
 
   return (
-    <div className="min-h-screen bg-background">
+    /*
+      `fill` 일 때만 화면 높이에 못 박는다. **넓은 화면에서만이다** — 좁은
+      화면은 위에 상단바가 있고, 거기서까지 높이를 못 박으면 상단바 높이만큼
+      본문이 넘쳐 페이지에 스크롤이 생긴다.
+    */
+    <div className={cn("min-h-screen bg-background", fill && "lg:h-dvh lg:overflow-hidden")}>
       {/* 좁은 화면 전용 상단바. 넓은 화면에서는 사이드바가 그 역할을 한다. */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur lg:hidden">
         <div className="flex h-14 items-center justify-between px-4">
@@ -529,11 +548,21 @@ export function AppShell({
           통째로 빠지는데, 그러면 본문이 자동으로 첫 칸(0px)에 들어가 짜부라진다.
           자리를 지정해 두면 사이드바가 있든 없든 본문은 늘 남는 칸을 쓴다.
         */}
-        <div className="min-w-0 lg:col-start-2">
+        <div
+          className={cn(
+            "min-w-0 lg:col-start-2",
+            /*
+              **본문이 높이를 나눠 갖는다.** 상단바 줄은 제 키만 쓰고(`shrink-0`),
+              남는 자리를 `main` 이 다 가진다. 좁은 화면에서는 위 상단바(3.5rem)를
+              뺀 만큼이다.
+            */
+            fill && "flex h-[calc(100dvh-3.5rem)] flex-col lg:h-dvh",
+          )}
+        >
           {/* 계정 상태와 테마 전환은 화면 오른쪽 위에 둔다. 예전에는 사이드바
               맨 아래에 있어서, 내가 누구로 접속했는지 보려면 눈이 왼쪽 아래로
               내려가야 했다. 좁은 화면은 위 상단바가 같은 것을 이미 보여준다. */}
-          <div className="hidden items-center justify-end gap-2 px-[clamp(16px,2.2vw,52px)] pt-4 lg:flex">
+          <div className="hidden shrink-0 items-center justify-end gap-2 px-[clamp(16px,2.2vw,52px)] pt-4 lg:flex">
             {actions}
             <ThemeToggle />
           </div>
@@ -547,7 +576,7 @@ export function AppShell({
             찾게 하지 않는다.
           */}
           {current ? (
-            <div className="mx-[clamp(16px,2.2vw,52px)] mt-4 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-sm">
+            <div className="mx-[clamp(16px,2.2vw,52px)] mt-4 flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-sm">
               <span className="font-bold text-primary">{current.name}</span>
               <span className="text-subtle-foreground">만 보고 있습니다</span>
               {onSelectProject ? (
@@ -562,8 +591,22 @@ export function AppShell({
             </div>
           ) : null}
 
-          {/* 페이지가 자기 <main> 을 또 열지 않도록 셸이 하나만 제공한다. */}
-          <main className="min-w-0 px-[clamp(16px,2.2vw,52px)] pb-6 pt-4">{children}</main>
+          {/*
+            페이지가 자기 <main> 을 또 열지 않도록 셸이 하나만 제공한다.
+
+            **`fill` 이면 여백을 안 준다.** 꽉 채우는 화면은 제 안에서 칸을
+            나누므로(대화 · 구분선 · 결과) 바깥 여백이 그 계산을 어긋나게 한다.
+          */}
+          <main
+            className={cn(
+              "min-w-0",
+              fill
+                ? "flex min-h-0 flex-1 flex-col"
+                : "px-[clamp(16px,2.2vw,52px)] pb-6 pt-4",
+            )}
+          >
+            {children}
+          </main>
         </div>
       </div>
     </div>

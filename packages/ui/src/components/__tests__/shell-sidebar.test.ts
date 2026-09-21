@@ -173,7 +173,15 @@ describe("화면에 실제로 걸려 있다", () => {
    * 멀어져 본문 내용과 부딪힌다 — 2026-09-14 에 그래서 옮겼다.
    */
   it("본문 윗줄에 단추를 두지 않는다", () => {
-    const row = shell.indexOf('<div className="hidden items-center justify-end');
+    /*
+      **그 줄을 클래스 첫머리로 찾지 않는다.** 처음에는
+      `'<div className="hidden items-center justify-end'` 로 찾았는데,
+      그 줄에 `shrink-0` 하나가 끼어들자(2026-09-21 `fill`) 줄을 **못 찾아서**
+      시험이 깨졌다. 손잡이 자리는 그대로였는데도 그랬다.
+
+      찾는 표시는 그 줄을 그 줄이게 하는 것이어야 한다 — 오른끝 정렬이다.
+    */
+    const row = shell.indexOf("items-center justify-end gap-2");
     expect(row).toBeGreaterThan(0);
     const rowEnd = shell.indexOf("</div>", row);
     expect(shell.slice(row, rowEnd)).not.toContain("toggleSidebar");
