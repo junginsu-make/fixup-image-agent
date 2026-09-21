@@ -385,3 +385,43 @@ describe("설명서와 사이드바가 같은 이름을 쓴다", () => {
     expect(머리말없는것.map((topic) => topic.href)).toEqual(["/guide"]);
   });
 });
+
+/**
+ * **설명서는 로그인 없이도 열린다** (2026-09-21 사용자).
+ *
+ * 이 문서의 일은 이 시스템이 무엇을 하는지 말해 주는 것이다. 그것을 보려고
+ * 로그인부터 하라는 것은 순서가 거꾸로다 — 무엇인지 모르는 채로 가입하라는
+ * 말이 된다.
+ *
+ * 문은 미들웨어가 열고, 화면은 손님에게 다른 것을 두른다. **둘 중 하나만
+ * 있으면 안 된다** — 문만 열면 손님이 사이드바를 보고 열리지 않는 문 여섯 개를
+ * 누르게 되고, 화면만 고치면 애초에 못 들어온다.
+ */
+describe("설명서는 문이 열려 있다", () => {
+  const middleware = readFileSync(join(GUIDE_DIR, "..", "..", "middleware.ts"), "utf8");
+  const layout = readFileSync(join(GUIDE_DIR, "layout.tsx"), "utf8");
+
+  it("미들웨어가 로그인 앞에서 통과시킨다", () => {
+    const 공개목록 = middleware.match(/const PUBLIC_PATHS = \[([\s\S]*?)\];/)?.[1];
+
+    expect(공개목록, "PUBLIC_PATHS 를 못 찾았다").toBeTruthy();
+    expect(주석을뺀다(공개목록!)).toContain('"/guide"');
+  });
+
+  /** 손님에게 도구 사이드바를 두르면 눌러 봐야 전부 로그인으로 돌아온다. */
+  it("손님에게는 셸 대신 공개 머리·꼬리를 두른다", () => {
+    // **여는 자리를 본다.** 닫는 꼬리(`</PublicPage>`)만 남아도 이름은 걸린다.
+    expect(layout).toContain("<PublicPage");
+    // 회원에게는 지금까지대로 셸이다. 하나만 남으면 한쪽이 깨진 것이다.
+    expect(layout).toContain("<StudioLayout>");
+    expect(layout).toContain("isUsableAccount");
+  });
+
+  /** 문지기를 쓰면 손님이 로그인으로 튕긴다. */
+  it("설명서가 회원을 요구하지 않는다", () => {
+    expect(layout).not.toContain("requireActiveMember");
+    for (const file of guideSources()) {
+      expect(file.source, `${file.name} 가 회원을 요구한다`).not.toContain("requireActiveMember");
+    }
+  });
+});
