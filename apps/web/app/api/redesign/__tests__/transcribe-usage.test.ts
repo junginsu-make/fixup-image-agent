@@ -25,6 +25,8 @@ vi.mock("server-only", () => ({}));
 
 const 예약: Array<{ operation: string; units: number }> = [];
 const 정산: Array<{ success: boolean; units: number; errorCode?: string; llmUsd?: number }> = [];
+/** 정산이 무엇을 돌려줄까. 못 닫으면 `undefined` 다(`settleAiUsage` 의 계약). */
+let 정산결과: unknown = {};
 let 예약허용 = true;
 
 vi.mock("../../../../lib/membership/api", () => ({
@@ -43,7 +45,7 @@ vi.mock("../../../../lib/membership/api", () => ({
     cost?: { llmUsd?: number },
   ) => {
     정산.push({ success, units, errorCode, llmUsd: cost?.llmUsd });
-    return {};
+    return 정산결과;
   },
 }));
 
@@ -81,6 +83,7 @@ const 요청 = (body?: unknown) =>
 beforeEach(() => {
   예약.length = 0;
   정산.length = 0;
+  정산결과 = {};
   전사호출 = 0;
   예약허용 = true;
   전사가터진다 = false;
@@ -161,3 +164,40 @@ describe("본문이 너무 크면 문지기에서 끝난다", () => {
     expect(전사호출).toBe(0);
   });
 });
+
+/**
+ * **장부를 못 닫았다고 전사를 버리지 않는다**(X-02).
+ *
+ * 설계 §14.6: 「PDP·리디자인 **모든 유료/계량 라우트 실패 주입**」.
+ *
+ * `settleAiUsage` 가 던지지 않고 `undefined` 를 준다는 성질은
+ * `lib/membership/__tests__/settle-swallows.test.ts` 가 실제로 돌려 잰다.
+ * 여기서는 **이 라우트가 그 성질 위에서 제대로 도는지**를 잰다 — 못 닫았다고
+ * 500 을 주면 사용자는 이미 값을 치른 전사를 잃는다.
+ */
+describe("장부가 안 닫혀도 전사를 돌려준다", () => {
+  it("**정산이 아무것도 못 줘도 200 이다**", async () => {
+    정산결과 = undefined;
+
+    const response = await POST(요청());
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).transcript).toContain("구간 1");
+  });
+
+  it("**사용량 칸만 빈다** — 결과는 그대로다", async () => {
+    정산결과 = undefined;
+
+    const body = await (await POST(요청())).json() as { usage?: unknown; transcript?: string };
+
+    expect(body.usage).toBeUndefined();
+    expect(body.transcript).toBeTruthy();
+  });
+
+  it("**정산을 한 번은 부른다** — 안 부르면 예약이 묶인 채 남는다", async () => {
+    await POST(요청());
+
+    expect(정산).toHaveLength(1);
+  });
+});
+

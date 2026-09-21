@@ -18,6 +18,8 @@ vi.mock("server-only", () => ({}));
 
 const 예약: Array<{ operation: string; units: number }> = [];
 const 정산: Array<{ success: boolean; units: number; errorCode?: string; llmUsd?: number }> = [];
+/** 정산이 무엇을 돌려줄까. 못 닫으면 `undefined` 다(`settleAiUsage` 의 계약). */
+let 정산결과: unknown = {};
 let 예약허용 = true;
 
 vi.mock("../../../../lib/membership/api", () => ({
@@ -36,7 +38,7 @@ vi.mock("../../../../lib/membership/api", () => ({
     cost?: { llmUsd?: number },
   ) => {
     정산.push({ success, units, errorCode, llmUsd: cost?.llmUsd });
-    return {};
+    return 정산결과;
   },
 }));
 
@@ -77,6 +79,7 @@ const 요청 = async (body?: unknown) =>
 beforeEach(() => {
   예약.length = 0;
   정산.length = 0;
+  정산결과 = {};
   모델호출 = 0;
   예약허용 = true;
   모델을부른다 = true;
@@ -230,3 +233,32 @@ describe("올리는 화면이 모두 식별자를 붙인다", () => {
     expect(utils).toContain('headers.set("x-idempotency-key", randomId())');
   });
 });
+
+/**
+ * **장부를 못 닫았다고 레퍼런스를 잃지 않는다**(X-02).
+ *
+ * 설계 §14.6: 「PDP·리디자인 **모든 유료/계량 라우트 실패 주입**」.
+ *
+ * 이 길은 크레딧이 0 이지만 **글 모델 값은 이미 나갔다.** 못 닫았다고 500 을
+ * 주면 사용자는 저장된 레퍼런스를 못 보고 다시 올린다 — 그때 값이 또 나간다.
+ */
+describe("장부가 안 닫혀도 결과를 돌려준다", () => {
+  it("**정산이 아무것도 못 줘도 200 이다**", async () => {
+    정산결과 = undefined;
+
+    const response = await POST(await 요청());
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).id).toBe("new-id");
+  });
+
+  it("**사용량 칸만 빈다**", async () => {
+    정산결과 = undefined;
+
+    const body = await (await POST(await 요청())).json() as { usage?: unknown; ok?: boolean };
+
+    expect(body.usage).toBeUndefined();
+    expect(body.ok).toBe(true);
+  });
+});
+
