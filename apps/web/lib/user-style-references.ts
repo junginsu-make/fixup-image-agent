@@ -76,6 +76,23 @@ function normalizeSource(value: unknown): StyleReferenceSource {
  * 거부했는데, 그러면 화면이 "분석하는 중…"에 갇히고 사용자는 이유를 알 수 없었다.
  * 생성에는 아무 문제가 없는데도 레퍼런스를 쓸 수 없었다.
  */
+/**
+ * 이 사람이 지금 몇 장을 쌓아 두었나.
+ *
+ * **넣기 전에 센다**(C-7). 전에는 아무도 안 봤다. 목록을 읽지 않고 수만
+ * 물으므로 왕복 한 번이고, 올릴 때만 돈다.
+ */
+export async function countUserStyleReferences(userId: string): Promise<number> {
+  const supabase = createSupabaseAdminClient();
+  const { count, error } = await supabase
+    .from("style_references")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function registerUserStyleReference(input: {
   userId: string;
   name: string;

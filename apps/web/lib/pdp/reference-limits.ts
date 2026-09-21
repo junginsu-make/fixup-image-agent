@@ -60,3 +60,27 @@ export const STYLE_REFERENCE_MAX_PIXELS = 40_000_000;
 /** 화면이 쓰는 한 줄. 서버 오류 문구와 같은 수를 쓴다. */
 export const STYLE_REFERENCE_LIMIT_HINT =
   `PNG · JPEG · WebP, ${STYLE_REFERENCE_MAX_MB}MB 이하, ${STYLE_REFERENCE_MAX_PIXELS / 1_000_000}백만 화소 이하`;
+
+/**
+ * **한 사람이 쌓아 둘 수 있는 레퍼런스 수**(C-7 의 「누적 목록」).
+ *
+ * ── 무엇이 문제였나 ────────────────────────────────────────
+ *
+ * 본문 크기·파일 용량·화소·시간당 횟수는 막는데 **쌓이는 총량은 아무도 안
+ * 봤다.** 넣기 전에 기존 행을 세지 않고 표에도 쿼터가 없다. 실질 상한은
+ * 시간당 60회뿐이라 하루면 1,440장, 한 달이면 사실상 무제한이다.
+ *
+ * ── 왜 200 인가 ────────────────────────────────────────────
+ *
+ * **모델이 읽는 것은 최신 40장뿐이다**(`loadUserReferenceCandidates` 의
+ * `limit(MAX_USER_REFERENCES)`). 그보다 많은 것은 고르는 데 **한 번도 쓰이지
+ * 않고** 창고만 먹는다.
+ *
+ * 그렇다고 40 에서 막으면 모아 두고 고르는 쓰임을 끊는다. 목록 한 쪽
+ * (`STYLE_REFERENCE_PAGE_MAX` = 200)을 상한으로 둔다 — 모델이 보는 창의 다섯
+ * 배고, **한 쪽에 다 보이므로 지울 것을 찾기도 쉽다.**
+ *
+ * 값으로 잰다: `apps/web/app/api/pdp/__tests__/style-references-quota.test.ts`
+ * 의 「상한 값의 근거」가 이 두 수와의 관계를 잠근다.
+ */
+export const STYLE_REFERENCE_MAX_PER_USER = 200;

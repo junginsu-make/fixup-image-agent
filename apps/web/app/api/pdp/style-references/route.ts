@@ -2,11 +2,16 @@ import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../.
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
-import { STYLE_REFERENCE_JSON_LIMIT, STYLE_REFERENCE_MAX_MB } from "../../../../lib/pdp/reference-limits";
+import {
+  STYLE_REFERENCE_JSON_LIMIT,
+  STYLE_REFERENCE_MAX_MB,
+  STYLE_REFERENCE_MAX_PER_USER,
+} from "../../../../lib/pdp/reference-limits";
 import {
   deleteUserStyleReference,
   listUserStyleReferences,
   ownerOfStyleReference,
+  countUserStyleReferences,
   registerUserStyleReference,
 } from "../../../../lib/user-style-references";
 
@@ -163,6 +168,30 @@ async function register(req: Request) {
     일이 정상이라, 같은 칸을 쓰면 정리하다가 그날 기획이 막힌다
     (`lib/membership/hourly-limit.ts`).
   */
+  /*
+    **쌓인 총량도 본다**(C-7 의 「누적 목록」).
+
+    본문 크기·화소·시간당 횟수는 막는데 **쌓이는 총량은 아무도 안 봤다.**
+    실질 상한이 시간당 60회뿐이라 한 달이면 사실상 무제한이었다.
+
+    문지기 뒤·예약 앞이다. 여기서 끝나는 것은 글 모델을 부르기 전이라 값싼
+    실패로 한도를 태우지 않는다.
+
+    **못 세면 막지 않는다.** 표가 잠깐 안 읽히는 날 올리기가 통째로 멎으면
+    안 된다. 세는 것은 방어이지 기능이 아니다.
+  */
+  try {
+    const 쌓인것 = await countUserStyleReferences(auth.member.userId);
+    if (쌓인것 >= STYLE_REFERENCE_MAX_PER_USER) {
+      return fail(
+        409,
+        `레퍼런스를 ${STYLE_REFERENCE_MAX_PER_USER}장까지 보관할 수 있습니다. 안 쓰는 것을 지운 뒤 다시 올려 주세요.`,
+      );
+    }
+  } catch {
+    // 못 셌다. 막지 않고 간다.
+  }
+
   const reservation = await reserveAiUsage(req, "reference_analyze", 0);
   if (!reservation.ok) return reservation.response;
 
