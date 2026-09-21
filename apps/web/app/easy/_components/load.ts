@@ -22,17 +22,36 @@ import type { EasyMessage } from "../turn";
 export const EASY_RATIO = "1:1";
 
 /**
- * 그림 모델 목록.
+ * 이미지 모델 목록.
  *
  * **진짜 이름을 낸다**(설계 §5-1). 모델 표의 `label` 은 우리 이름(「표준형」)이라
- * 여기서는 `id` 를 쓴다 — 예외는 이 화면 하나다.
+ * 이름 자리에는 `id` 를 쓴다 — 예외는 이 화면 하나다.
+ *
+ * **글 모델과 같은 모양으로 준다**(2026-09-21 사용자). 이름만 늘어놓으면
+ * `gpt-image-2.5-flare` 와 `nano-banana-pro` 중 무엇을 골라야 할지 알 수 없다.
+ * 우리 이름(「표준형」)을 등급 자리에 두고, 한 줄 설명을 붙인다.
+ *
+ * **옛 모델은 뺀다.** `gpt-image-2` 는 저장된 작업이 그 id 를 들고 있어 표에서
+ * 지울 수 없지만, 새로 고를 까닭이 없다 — 고를 것을 없애는 것이 이 모드의
+ * 뜻이다.
  */
 export function easyImageModels() {
-  return IMAGE_MODELS.map((model) => ({ id: model.id, label: model.id }));
+  return IMAGE_MODELS
+    .filter((model) => !model.legacy)
+    .map((model) => ({
+      id: model.id,
+      label: model.id,
+      // 우리 이름이 곧 등급이다 — 「표준형」·「정밀형 플러스」·「경제형」.
+      tier: model.label,
+      note: model.note ?? "",
+      family: model.family ?? "gpt-image",
+    }));
 }
 
 export function defaultEasyImageModel(): string {
-  return IMAGE_MODELS.find((model) => model.isDefault)?.id ?? IMAGE_MODELS[0]!.id;
+  // 기본이 옛 모델일 수는 없지만, 목록에서 뺀 것을 기본으로 두면 안 된다.
+  const 고를수있는것 = IMAGE_MODELS.filter((model) => !model.legacy);
+  return 고를수있는것.find((model) => model.isDefault)?.id ?? 고를수있는것[0]!.id;
 }
 
 /**

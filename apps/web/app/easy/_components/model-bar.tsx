@@ -31,7 +31,14 @@ import { textModelChoices, type TextModelChoice } from "@fixup/shared";
 
 export interface ImageModelChoice {
   id: string;
+  /** 드롭다운에 보이는 이름. **진짜 이름이다**(설계 §5-1). */
   label: string;
+  /** 우리 이름이 곧 등급이다 — 「표준형」·「경제형」. */
+  tier: string;
+  /** 한 줄 설명. 왜 이것을 고를까. */
+  note: string;
+  /** 어느 계열인가. 화면이 묶어 보일 때 쓴다. */
+  family: "gpt-image" | "nano-banana";
 }
 
 function TextModelMenu({
@@ -122,16 +129,42 @@ function ImageModelMenu({
           <ChevronDown className="h-3 w-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {models.map((model) => (
-          <DropdownMenuItem
-            key={model.id}
-            className="cursor-pointer"
-            onSelect={() => onChange(model.id)}
-          >
-            {model.label}
-          </DropdownMenuItem>
-        ))}
+      {/*
+        **글 모델과 같은 모양으로 낸다**(2026-09-21 사용자).
+
+        이름만 늘어놓으면 `gpt-image-2.5-flare` 와 `nano-banana-pro` 중 무엇을
+        골라야 할지 알 수 없다. 우리 이름(「표준형」)이 등급 자리에 오고, 한 줄
+        설명이 그 아래에 온다.
+
+        **머리말은 id 의 공통 부분이다.** 아래 항목이 `gpt-image-2.5-flare`
+        인데 머리말이 「OpenAI」면 어긋나고, 「GPT Image」는 `model-name.test.ts`
+        가 막는 이름이다 — 이미 적혀 있는 것을 그대로 쓰면 둘 다 안 걸린다.
+      */}
+      <DropdownMenuContent align="start" className="w-72">
+        {models.map((model, at) => {
+          const 계열이바뀌나 = at === 0 || model.family !== models[at - 1]!.family;
+          return (
+            <React.Fragment key={model.id}>
+              {계열이바뀌나 ? (
+                <div className="px-2 pb-1 pt-2 text-meta uppercase tracking-wide text-subtle-foreground">
+                  {model.family}
+                </div>
+              ) : null}
+              <DropdownMenuItem
+                className="grid cursor-pointer gap-0.5 py-2"
+                onSelect={() => onChange(model.id)}
+              >
+                <span className="flex w-full items-center justify-between gap-3">
+                  <span className="font-medium">{model.label}</span>
+                  <span className="shrink-0 text-meta text-subtle-foreground">{model.tier}</span>
+                </span>
+                {model.note ? (
+                  <span className="text-meta text-subtle-foreground">{model.note}</span>
+                ) : null}
+              </DropdownMenuItem>
+            </React.Fragment>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -161,7 +194,7 @@ export function EasyModelBar({
     <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
       <span className="hidden text-meta text-subtle-foreground sm:inline">글</span>
       <TextModelMenu value={textModel} onChange={onTextModel} disabled={disabled} />
-      <span className="ml-2 hidden text-meta text-subtle-foreground sm:inline">그림</span>
+      <span className="ml-2 hidden text-meta text-subtle-foreground sm:inline">이미지</span>
       <ImageModelMenu
         models={imageModels}
         value={imageModel}
