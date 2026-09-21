@@ -81,8 +81,14 @@ vi.mock("../local-store", () => ({ isLocalStoreEnabled: () => false }));
 // 아니다 — 사본이 만들어지고 표에 적히는가만 본다.
 vi.mock("@fixup/pdp-core", () => ({ analyzeStyleImage: async () => "설명" }));
 vi.mock("../pdp/providers", () => ({ createPdpLlmOrNull: () => null }));
+/** 어떤 옵션으로 잘랐는지. 체인의 마지막 고리라 여기서 잰다(X-08). */
+const sliceOptions: Array<Record<string, unknown> | undefined> = [];
+
 vi.mock("../pdp/slice-image", () => ({
-  sliceTallReference: async (input: { imageBase64: string; mimeType: string }) => [input],
+  sliceTallReference: async (
+    input: { imageBase64: string; mimeType: string },
+    options?: Record<string, unknown>,
+  ) => { sliceOptions.push(options); return [input]; },
 }));
 
 const mod = await import("../user-style-references");
@@ -103,7 +109,7 @@ async function photo(): Promise<Buffer> {
 beforeEach(() => {
   uploads.length = 0; removed.length = 0;
   updated = null; listRows = []; signedPaths = [];
-  selectedColumns = ""; deleteRow = null; eqCalls.length = 0;
+  selectedColumns = ""; deleteRow = null; eqCalls.length = 0; sliceOptions.length = 0;
   rangeCall = null; totalCount = 0; selectOptions = undefined; listError = null;
 });
 
@@ -353,5 +359,28 @@ describe("목록을 못 불러왔을 때", () => {
     const page = await mod.listUserStyleReferences("u1");
 
     expect(page.failed).toBe(false);
+  });
+});
+
+/**
+ * **참조 크기 체인의 마지막 고리**(X-08).
+ *
+ * 긴 레퍼런스를 통째로 보내면 모델이 긴 변 기준으로 줄여 **폭 100픽셀짜리
+ * 띠**를 본다 — 글꼴도 배치도 안 보인다. 그래서 기획 요청은 조각내서 보내고,
+ * 짧아도 폭이 크면 줄인다(`shrinkWhole`).
+ *
+ * 그 규칙이 **등록 경로에도** 있어야 한다. 서술을 만드는 것도 같은 그림을 같은
+ * 모델에게 보여 주는 일이기 때문이다. 기획 쪽은 시험이 있었는데
+ * (`pdp-analyze-route.test.ts`), 이쪽은 흉내가 옵션을 통째로 버려서 **아무도
+ * 안 쟀다.**
+ */
+describe("등록할 때도 같은 규칙으로 자른다", () => {
+  it("**짧아도 폭이 크면 줄인다**", async () => {
+    await mod.registerUserStyleReference({
+      userId: "u1", name: "겨울", source: "upload",
+      imageBase64: (await photo()).toString("base64"), mimeType: "image/png",
+    });
+
+    expect(sliceOptions).toEqual([{ shrinkWhole: true }]);
   });
 });
