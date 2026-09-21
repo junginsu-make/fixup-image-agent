@@ -222,3 +222,49 @@ describe("대화 칸의 글 너비", () => {
     expect(코드("../easy-client.tsx")).not.toContain("max-w-2xl");
   });
 });
+
+/**
+ * **왼쪽은 오가는 말, 오른쪽은 만든 것** (2026-09-21 사용자 — 「그냥 오른쪽과
+ * 중복이 되니까… 결과 섹션은 딱 결과물만 모아서 보이는거죠」).
+ *
+ * 오른쪽 칸이 **마지막 한 장**만 걸고 있었다. 그러면 대화에 이미 있는 그림이
+ * 옆에 한 번 더 뜰 뿐이라 자리를 두 배로 쓰고 아무것도 더 알려 주지 않는다.
+ */
+describe("결과 칸", () => {
+  it("한 장이 아니라 이 대화의 결과 전부를 받는다", () => {
+    expect(panel).toContain("images: readonly EasyResult[]");
+    expect(client).toContain("images={results}");
+    // 마지막 한 장만 고르던 자리가 남아 있으면 되돌아간 것이다.
+    expect(코드("../easy-client.tsx")).not.toContain("lastImage");
+  });
+
+  /**
+   * **한 벌로 연다.** 한 장씩 열면 다음 장을 보려고 닫았다 다시 눌러야 한다 —
+   * 사용자가 말한 「슬라이드」가 그것이다. 뷰어는 이미 ‹ › 를 갖고 있다.
+   */
+  it("누르면 한 벌이 열린다", () => {
+    expect(client).toContain("openImageGallery");
+    expect(코드("../easy-client.tsx")).not.toContain("openImageViewer");
+  });
+
+  /**
+   * **머리에 크게 보기·내려받기를 두지 않는다.** 한 장일 때는 「그 한 장」을
+   * 가리켰지만 여러 장이 되면 어느 장인지 말할 수 없다.
+   */
+  it("어느 장인지 못 밝히는 단추를 머리에 두지 않는다", () => {
+    /*
+      **주석을 걷고 머리 줄만 본다.** 「크게 보기 창이 내려받기까지 갖고 있다」는
+      설명이 바로 그 자리에 적혀 있어, 주석째 보면 제 설명에 걸려 넘어진다
+      (2026-09-21).
+    */
+    const 코드만 = 코드("../_components/result-panel.tsx");
+    const 머리 = 코드만.slice(
+      코드만.indexOf("shrink-0 items-center"),
+      코드만.indexOf("overflow-y-auto"),
+    );
+
+    expect(머리.length).toBeGreaterThan(0);
+    expect(머리).not.toContain("크게 보기");
+    expect(머리).not.toContain("내려받기");
+  });
+});

@@ -1,12 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Download, Maximize2 } from "lucide-react";
-import { Button } from "@fixup/ui";
 import { EasyImageWorking } from "./message";
 
 /**
- * 오른쪽 **결과 칸** (2026-09-18 사용자 결정).
+ * 오른쪽 **결과 칸** — 이 대화에서 만든 것만 모은다.
  *
  * ── 어디서 왔나 ──────────────────────────────────────────────
  *
@@ -14,25 +12,44 @@ import { EasyImageWorking } from "./message";
  * Easy 설계(9/17)가 그것을 뺐는데, 뺀 것은 **작업판**이다. 「옆에 칸이 열한 개
  * 있으면 사용자는 결국 그것을 보고, 그러면 쉬워지지 않는다」가 그 까닭이다.
  *
- * **결과 칸은 그 까닭에 안 걸린다.** 고칠 칸이 없고 보여 주기만 한다. 그래서
- * 되살린다.
+ * **결과 칸은 그 까닭에 안 걸린다.** 고칠 칸이 없고 보여 주기만 한다.
  *
- * ── 왜 필요한가 ──────────────────────────────────────────────
+ * ── 한 장에서 전부로 ────────────────────────────────────────
  *
- * 그림이 대화 속에 섞여 있으면 대화가 길어질수록 **위로 사라진다.** 방금 만든
- * 것을 다시 보려면 올려야 하고, 크게 보려면 눌러야 한다.
+ * 되살릴 때는 **마지막 한 장**만 걸었다(2026-09-18). 그러면 대화에 이미 있는 그
+ * 그림이 옆에 한 번 더 뜰 뿐이라 자리를 두 배로 쓰고 아무것도 더 알려 주지
+ * 않는다 — 사용자가 그대로 짚었다(2026-09-21, 「그냥 오른쪽과 중복이 되니까…
+ * 결과 섹션은 딱 결과물만 모아서 보이는거죠」).
  *
- * 여기서는 **마지막 그림이 늘 같은 자리에** 큼직하게 있다.
+ * 이제 칸이 서로 다른 일을 한다.
+ *
+ *   왼쪽   오가는 **말**. 그림은 그 말의 한 줄로 끼어 있다
+ *   오른쪽  만든 **것**. 대화가 길어져도 결과만 훑고, 여러 장을 견준다
+ *
+ * ── 새것이 위다 ─────────────────────────────────────────────
+ *
+ * 대화는 위에서 아래로 쌓이지만 여기는 뒤집는다. 방금 만든 것을 **굴리지 않고**
+ * 보는 것이 이 칸을 되살린 까닭이었다(2026-09-18). 차례는 번호로 말한다.
  */
 
+export interface EasyResult {
+  id: string;
+  url: string;
+}
+
 export function EasyResultPanel({
-  url,
+  images,
   width,
   working,
   onOpen,
 }: {
-  /** 마지막으로 만든 이미지. 아직 없으면 비어 있다. */
-  url?: string;
+  /** 이 대화에서 만든 것 전부. 대화 차례대로 온다. */
+  images: readonly EasyResult[];
+  /**
+   * 끌어서 정한 너비. `null` 이면 아직 안 쟀다는 뜻이라 기본 너비로 둔다 —
+   * 서버가 그린 것과 같아야 화면이 한 번 튀지 않는다(`split-handle.tsx`).
+   */
+  width: number | null;
   /**
    * 지금 이미지를 만드는 중인가.
    *
@@ -42,12 +59,8 @@ export function EasyResultPanel({
    * 보인다.
    */
   working?: boolean;
-  /**
-   * 끌어서 정한 너비. `null` 이면 아직 안 쟀다는 뜻이라 기본 너비로 둔다 —
-   * 서버가 그린 것과 같아야 화면이 한 번 튀지 않는다(`split-handle.tsx`).
-   */
-  width: number | null;
-  onOpen: () => void;
+  /** 몇 번째를 눌렀나. 대화 차례 기준이다 — 화면이 뒤집어 그려도 번호는 안 바뀐다. */
+  onOpen: (at: number) => void;
 }) {
   return (
     /*
@@ -63,46 +76,53 @@ export function EasyResultPanel({
         max-w-[calc(100%-448px)]  CHAT_MIN 440 + 구분선 8 을 대화 쪽에 남긴다
 
       `clampResultWidth(available, RESULT_MAX)` 와 같은 값이 나온다. 두 벌이
-      되는 값이라 `__tests__/result-panel-width.test.ts` 가 둘을 묶어 둔다.
+      되는 값이라 `__tests__/shell-wiring.test.ts` 가 둘을 묶어 둔다.
     */
     <aside
       style={width === null ? undefined : { width }}
       className="hidden w-[45rem] max-w-[calc(100%-448px)] shrink-0 flex-col lg:flex"
     >
-      <div className="flex shrink-0 items-center justify-between px-4 py-3">
+      <div className="flex shrink-0 items-center gap-2 px-4 py-3">
         <span className="text-meta text-subtle-foreground">결과</span>
-        {url ? (
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon" aria-label="크게 보기" onClick={onOpen}>
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-            {/*
-              **내려받기는 링크로 한다.** 자바스크립트로 만들면 파일 이름과
-              확장자를 우리가 지어내야 하고, 브라우저마다 다르게 군다.
-            */}
-            <Button asChild variant="ghost" size="icon" aria-label="내려받기">
-              <a href={url} download target="_blank" rel="noreferrer">
-                <Download className="h-4 w-4" />
-              </a>
-            </Button>
-          </div>
+        {images.length ? (
+          <span className="text-meta tabular-nums text-subtle-foreground">{images.length}</span>
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        {url ? (
-          <button
-            type="button"
-            onClick={onOpen}
-            className="block w-full overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="만든 이미지" className="block w-full" />
-          </button>
-        ) : working ? (
-          // 대화 쪽과 **같은 판**을 쓴다. 두 자리가 다르게 생기면 다른 일로 보인다.
-          <EasyImageWorking className="w-full" />
-        ) : (
+      {/*
+        **크게 보기·내려받기 단추를 머리에 안 둔다.** 한 장일 때는 「그 한 장」을
+        가리켰지만 여러 장이 되면 **어느 장인지 말할 수 없다.** 누를 것은 그림
+        자체이고, 크게 보기 창이 내려받기까지 갖고 있다.
+      */}
+      <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-4 pb-4">
+        {working ? <EasyImageWorking className="w-full" /> : null}
+
+        {images.length ? (
+          // 새것이 위다. 번호는 **만든 차례**라 뒤집어도 1번이 첫 장이다.
+          [...images].reverse().map((image, 뒤에서) => {
+            const at = images.length - 1 - 뒤에서;
+            return (
+              <button
+                key={image.id}
+                type="button"
+                onClick={() => onOpen(at)}
+                className="group relative block w-full overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image.url} alt={`만든 이미지 ${at + 1}`} className="block w-full" />
+                {/*
+                  여러 장이면 몇 번째인지 말한다. 한 장뿐일 때는 셀 것이 없어
+                  번호가 오히려 묻는다 — 「1 은 무엇에 견준 1 인가」.
+                */}
+                {images.length > 1 ? (
+                  <span className="absolute left-2 top-2 rounded-full bg-background/85 px-2 py-0.5 text-meta tabular-nums text-subtle-foreground">
+                    {at + 1}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })
+        ) : working ? null : (
           /*
             **빈 칸에도 말을 적는다.** 아무것도 없으면 고장인 줄 안다.
           */
