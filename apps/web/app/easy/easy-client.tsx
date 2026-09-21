@@ -12,7 +12,9 @@ import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
+import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
+import { EasyAskChoice } from "./_components/ask-choice";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
@@ -82,6 +84,18 @@ export function EasyClient({
   const [textModel, setTextModel] = React.useState(DEFAULT_TEXT_MODEL);
   const [imageModel, setImageModel] = React.useState(defaultImageModel);
   const [urls, setUrls] = React.useState<Record<string, string>>(initialUrls ?? {});
+  /*
+   * **물어본 뒤 답을 기다리는 중인가** (2026-09-21 사용자).
+   *
+   * 서버가 「물어봐야 한다」고 하면 그림을 안 만들고 이 자리에 친 말을 담아
+   * 둔다. 고르고 만들기를 누르면 그 말 그대로 다시 보낸다.
+   *
+   * **화면에만 있고 표에는 안 남는다.** 답 없이 떠나면 아무 일도 안 일어난
+   * 것이 맞다 — 남겨 두면 답 없는 물음만 쌓인다.
+   */
+  const [asking, setAsking] = React.useState<string | null>(null);
+  const [askRatio, setAskRatio] = React.useState("");
+  const [askLook, setAskLook] = React.useState("");
   /*
    * **만든 조건.** 다시 열 때는 서버가 읽어 주고, 지금 만든 것은 만들면서 적는다.
    * 새로고침을 기다렸다 보여 주면 방금 만든 것만 조건이 비어 보인다.
@@ -218,9 +232,12 @@ export function EasyClient({
    * **보내는 중에는 입력창을 잠근다**(설계 §11-②). 엔터가 곧 생성이라 두 번
    * 치면 두 번 값이 나가고 되돌릴 수 없다 — `turn.canSend` 가 그것을 정한다.
    */
-  async function send() {
-    const prompt = draft.trim();
-    if (!prompt || !turn.canSend) return;
+  async function send(
+    /** 물어본 뒤 다시 보낼 때 쓴다. 비우면 입력창의 말을 보낸다. */
+     다시?: { prompt: string; ratio: string; look: string },
+  ) {
+    const prompt = 다시?.prompt ?? draft.trim();
+    if (!prompt || (!다시 && !turn.canSend)) return;
 
     /*
      * **잠그기 전에 id 부터 만든다**(2026-09-21 사용자 보고).
@@ -241,10 +258,22 @@ export function EasyClient({
 
     setSending(true);
     setError(null);
-    setDraft("");
 
-    // 내 말을 먼저 그린다. 답이 말일지 그림일지는 아직 모른다 — 서버가 가른다.
-    setMessages((current) => [...current, { id: `user-${자리}`, role: "user", body: prompt }]);
+    if (다시) {
+      // 물음 줄을 거둔다. 내 말은 이미 그려져 있다.
+      setAsking(null);
+    } else {
+      setDraft("");
+      /*
+        **묻던 것을 거둔다.** 답하지 않고 새 말을 치면 그 물음은 버린 것이다.
+        남겨 두면 지난 말에 딸린 토글이 새 말 밑에 붙어 무엇을 묻는지 흐려진다.
+      */
+      setAsking(null);
+      setAskRatio("");
+      setAskLook("");
+      // 내 말을 먼저 그린다. 답이 말일지 그림일지는 아직 모른다 — 서버가 가른다.
+      setMessages((current) => [...current, { id: `user-${자리}`, role: "user", body: prompt }]);
+    }
 
     try {
       /*
@@ -268,9 +297,20 @@ export function EasyClient({
           textModel,
           imageModel,
           referenceIds: attachments.map((one) => one.id),
+          // 고른 것이 있으면 함께 보낸다. 없으면 서버가 물어볼지 정한다.
+          ...(다시?.ratio ? { ratio: 다시.ratio } : {}),
+          ...(다시?.look ? { look: 다시.look } : {}),
         }),
       });
       const body = await response.json().catch(() => ({}));
+      if (body.ok && body.asked) {
+        /*
+         * **물어만 보고 끝낸다.** 그림을 안 만들었으므로 값도 안 든다.
+         * 친 말을 들고 있다가 고른 뒤 그대로 다시 보낸다.
+         */
+        setAsking(prompt);
+        return;
+      }
       if (body.ok && body.talked) {
         /*
          * **말로 답한 턴.** 그림을 안 만들었으므로 기다릴 것도 없다.
@@ -308,7 +348,12 @@ export function EasyClient({
         */
         setOptions((current) => ({
           ...current,
-          [자리]: { model: imageModel, ratio: ratioId, references: attachments.length },
+          // 서버가 실제로 쓴 값을 그대로 적는다. 여기서 다시 셈하면 갈린다.
+          [자리]: {
+            model: imageModel,
+            ratio: typeof body.ratio === "string" ? body.ratio : ratioId,
+            references: attachments.length,
+          },
         }));
         setMessages((current) => current.map((one) =>
           one.id === 자리 ? { ...one, workId: image.id } : one));
@@ -406,7 +451,27 @@ export function EasyClient({
 
             그림이 이미 자리를 잡았으면 안 낸다. 기다리는 표시가 둘이 된다.
           */}
-          {turn.busy && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
+          {/*
+            **비율·그림체를 한 번 묻는다**(2026-09-21 사용자). 막지 않는다 —
+            「이대로 만들기」가 늘 열려 있고, 누르면 지금까지대로 간다.
+          */}
+          {asking ? (
+            <EasyAskChoice
+              ratio={askRatio}
+              look={askLook}
+              onRatio={setAskRatio}
+              onLook={setAskLook}
+              disabled={turn.busy}
+              onSubmit={() => {
+                const 보낼말 = asking;
+                setAskRatio("");
+                setAskLook("");
+                void send({ prompt: 보낼말, ratio: askRatio, look: askLook });
+              }}
+            />
+          ) : null}
+
+          {turn.busy && !asking && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
 
           {/*
             붙일지 묻는 단추. **첫 화면에서 한 번만**이다 — 되묻지 않는다(§6).
