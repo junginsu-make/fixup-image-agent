@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CHAT_MIN, RESULT_DEFAULT, RESULT_MAX } from "../split";
+import { CHAT_MIN, HANDLE, LIST_DEFAULT, RESULT_DEFAULT, RESULT_MAX } from "../split";
 
 /**
  * Easy 모드는 **다른 도구와 같은 셸 안**에 있다 (2026-09-21 사용자).
@@ -24,6 +24,9 @@ import { CHAT_MIN, RESULT_DEFAULT, RESULT_MAX } from "../split";
 const 화면 = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 const layout = 화면("../layout.tsx");
+const dashboard = 화면("../_components/dashboard.tsx");
+const list = 화면("../_components/conversation-list.tsx");
+const handle = 화면("../_components/split-handle.tsx");
 const panel = 화면("../_components/result-panel.tsx");
 const client = 화면("../easy-client.tsx");
 
@@ -45,7 +48,8 @@ describe("셸 안에 산다", () => {
   });
 
   it("대화 목록을 대시보드 안에 둔다", () => {
-    expect(layout).toContain("EasyConversationList");
+    expect(layout).toContain("EasyDashboard");
+    expect(dashboard).toContain("EasyConversationList");
   });
 
   /**
@@ -55,6 +59,39 @@ describe("셸 안에 산다", () => {
   it("「자세한 모드로」를 따로 그리지 않는다", () => {
     expect(layout).not.toContain("자세한 모드로");
     expect(client).not.toContain("자세한 모드로");
+  });
+});
+
+describe("구분선 둘", () => {
+  /**
+   * 칸이 셋이면 선이 둘이다. 목록 쪽 선이 빠지면 **넓힌 목록을 되돌릴 길이
+   * 없다** — 2026-09-21 에 사용자가 「여기도 선 이동 될 수 있게」라고 한 자리다.
+   */
+  it("목록 쪽과 결과 쪽 양쪽에 있다", () => {
+    expect(dashboard).toContain("side=" + JSON.stringify("left"));
+    expect(client).toContain("side=" + JSON.stringify("right"));
+  });
+
+  /**
+   * **끌 수 있다는 것이 눈에 보여야 한다**(2026-09-21 사용자 — 「양쪽 다 이동할
+   * 수 있다는 아이콘을 표시해주세요」). 1px 선뿐이면 커서를 정확히 그 위에
+   * 올려 보기 전에는 알 수 없고, 모르면 없는 기능이다.
+   */
+  it("양쪽으로 간다는 아이콘을 단다", () => {
+    // **그려야 잡힌다.** 이름만 보면 안 쓰이는 import 하나로도 통과한다.
+    expect(handle).toContain("<MoveHorizontal");
+  });
+});
+
+describe("대화 목록의 처음 너비", () => {
+  /** 「채팅목록 사이즈 더 넓혀주세요」(2026-09-21). 전에는 224 였다. */
+  it("전보다 넓다", () => {
+    expect(LIST_DEFAULT).toBeGreaterThan(224);
+  });
+
+  it("CSS 가 적어 둔 값이 split.ts 와 같다", () => {
+    const rem = Number(/w-\[(\d+(?:\.\d+)?)rem\]/.exec(list)?.[1]);
+    expect(rem * 16).toBe(LIST_DEFAULT);
   });
 });
 
@@ -68,14 +105,14 @@ describe("결과 칸의 처음 너비", () => {
   });
 
   /**
-   * 재기 전 한 프레임을 CSS 가 맡는다. `w-[45rem]` 은 720px, 뺄 값은 `CHAT_MIN`.
-   * 16 은 Tailwind 의 rem 기본값이다.
+   * 재기 전 한 프레임을 CSS 가 맡는다. `w-[45rem]` 은 720px, 뺄 값은 대화
+   * 바닥에 구분선 하나를 더한 것이다. 16 은 Tailwind 의 rem 기본값이다.
    */
   it("CSS 가 적어 둔 값이 split.ts 와 같다", () => {
     const rem = Number(/w-\[(\d+(?:\.\d+)?)rem\]/.exec(panel)?.[1]);
     expect(rem * 16).toBe(RESULT_MAX);
 
     const 남길것 = Number(/max-w-\[calc\(100%-(\d+)px\)\]/.exec(panel)?.[1]);
-    expect(남길것).toBe(CHAT_MIN);
+    expect(남길것).toBe(CHAT_MIN + HANDLE);
   });
 });
