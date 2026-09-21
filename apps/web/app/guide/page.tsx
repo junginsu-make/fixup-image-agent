@@ -1,3 +1,4 @@
+import * as React from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
@@ -18,7 +19,7 @@ export default function GuideHomePage() {
       <GuideHeader
         kicker="처음 오셨다면"
         title="무엇을 만들든, 순서는 하나입니다"
-        lead="이 시스템은 도구 다섯 개를 모아 둔 곳이 아니라 한 바퀴 도는 흐름입니다. 재료를 모아 두면 어느 도구에서든 그것을 불러 쓰고, 만든 결과물이 다시 다음 작업의 재료가 됩니다. 아래 순서만 알면 도구가 달라져도 화면이 낯설지 않습니다."
+        lead="이 시스템은 도구를 모아 둔 곳이 아니라 한 바퀴 도는 흐름입니다. 재료를 모아 두면 어느 도구에서든 그것을 불러 쓰고, 만든 결과물이 다시 다음 작업의 재료가 됩니다. 아래 순서만 알면 도구가 달라져도 화면이 낯설지 않습니다."
       />
 
       <Section
@@ -44,25 +45,37 @@ export default function GuideHomePage() {
         </p>
       </Section>
 
-      <Section title="어떤 도구를 열어야 하나" hint="만들려는 것에서 고르세요.">
+      {/*
+        **왼쪽 사이드바와 같은 차례·같은 이름**(2026-09-21). 메뉴에서 본 이름을
+        설명서에서 못 찾으면, 「어디를 누르는지 말해 주는」 이 문서의 일이 안
+        된다. 갈래 머리말도 사이드바가 내는 그것이다.
+      */}
+      <Section title="어떤 도구를 열어야 하나" hint="사이드바와 같은 차례입니다.">
         <ul className="grid gap-2.5 sm:grid-cols-2">
-          {topics.map((topic) => (
-            <li key={topic.href}>
-              <Link
-                href={topic.href}
-                className="block h-full rounded-xl border bg-card p-4 transition-colors hover:border-primary hover:bg-background"
-              >
-                <strong className="block text-sm font-extrabold">{topic.label}</strong>
-                <span className="mt-1 block text-sm leading-6 text-muted-foreground">{topic.desc}</span>
-              </Link>
-            </li>
+          {topics.map((topic, at) => (
+            <React.Fragment key={topic.href}>
+              {topic.section && topic.section !== topics[at - 1]?.section ? (
+                <li className="sm:col-span-2">
+                  <p className="text-meta font-bold text-foreground">{topic.section}</p>
+                </li>
+              ) : null}
+              <li>
+                <Link
+                  href={topic.href}
+                  className="block h-full rounded-xl border bg-card p-4 transition-colors hover:border-primary hover:bg-background"
+                >
+                  <strong className="block text-sm font-extrabold">{topic.label}</strong>
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">{topic.desc}</span>
+                </Link>
+              </li>
+            </React.Fragment>
           ))}
         </ul>
       </Section>
 
       <Section
         title="도구가 달라도 같은 말"
-        hint="한 번만 익히면 다섯 도구에서 그대로 씁니다."
+        hint="한 번만 익히면 어느 도구에서나 그대로 씁니다."
       >
         <div className="grid gap-4">
           <div>
