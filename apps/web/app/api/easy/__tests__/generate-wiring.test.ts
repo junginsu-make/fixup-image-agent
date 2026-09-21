@@ -117,19 +117,19 @@ describe("화면과 서버가 같은 기본값을 쓴다", () => {
   const load = readFileSync(new URL("../../../easy/_components/load.ts", import.meta.url), "utf8");
 
   /**
-   * **비율이 두 벌이면 값이 갈린다.**
+   * **비율 기본값은 한 벌뿐이다.**
    *
-   * 화면은 `EASY_RATIO` 로 값을 세고(`cost.ts`), 서버는 `RATIO` 로 만든다.
-   * 갈리면 **화면이 말하는 값과 실제로 깎이는 값이 다르다** — 사용자가 보는
-   * 유일한 값 정보가 거짓이 된다.
+   * 화면은 그 값으로 값을 세고(`cost.ts`) 서버는 그 값으로 만든다. 두 벌이면
+   * **화면이 말하는 값과 실제로 깎이는 값이 다르다** — 사용자가 보는 유일한 값
+   * 정보가 거짓이 된다.
+   *
+   * 전에는 두 벌을 두고 이 시험이 **같은지 맞대 봤다.** 2026-09-21 에 비율을
+   * 고를 수 있게 되면서 한 벌(`ask.ts`)로 합쳤다 — 맞대 볼 일이 없는 편이 낫다.
    */
-  it("비율이 같다", () => {
-    const 서버 = generate.match(/const RATIO = "([^"]+)"/)?.[1];
-    const 화면 = load.match(/export const EASY_RATIO = "([^"]+)"/)?.[1];
-
-    expect(서버, "서버의 비율을 못 찾았다").toBeTruthy();
-    expect(화면, "화면의 비율을 못 찾았다").toBeTruthy();
-    expect(화면).toBe(서버);
+  it("비율 기본값을 저마다 적지 않는다", () => {
+    expect(generate).toContain("EASY_DEFAULT_RATIO");
+    expect(generate).not.toMatch(/const RATIO = "/);
+    expect(load).not.toContain("EASY_RATIO =");
   });
 
   /** 한 줄에 한 장이다(설계 §9). 값 셈도 그 수로 한다. */
@@ -192,5 +192,37 @@ describe("대신 부를 때의 요청 식별자", () => {
 
     expect(단계들.length).toBe(3);
     expect(new Set(단계들).size).toBe(3);
+  });
+});
+
+/**
+ * **비율·결을 한 번 물어본다** (2026-09-21 사용자 — 「지금은 무조건 1:1로만
+ * 나옵니다. 비율, 스타일 정보는 물어보고 그에 맞게 제작하게 해주세요」).
+ *
+ * 묻되 막지 않는다. 판단은 `app/easy/ask.ts` 가 값으로 하고, 여기서는 그
+ * 결정을 **값이 나가기 전에** 따르기만 한다.
+ */
+describe("비율·결 묻기", () => {
+  it("판단을 라우트 안에 두지 않는다", () => {
+    expect(generate).toContain('from "../../../easy/ask"');
+    expect(generate).toContain("easyAsk({");
+  });
+
+  /**
+   * **물어만 볼 때는 아무것도 안 남긴다.** 답 없이 떠나면 아무 일도 안
+   * 일어난 것이 맞다 — 남겨 두면 답 없는 물음만 쌓인다.
+   */
+  it("물어볼 때는 대화에 아무것도 안 쌓는다", () => {
+    const 묻는곳 = generate.indexOf("asked: true");
+    const 남기는곳 = generate.indexOf('role: "user"');
+
+    expect(묻는곳).toBeGreaterThan(0);
+    expect(남기는곳).toBeGreaterThan(묻는곳);
+  });
+
+  /** 고른 비율·결이 실제로 만들기에 들어가야 뜻이 있다. */
+  it("고른 값으로 만든다", () => {
+    expect(generate).toContain("ratio: 고르기.ratio");
+    expect(generate).toContain("look: 고르기.look");
   });
 });

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { textModelVendor } from "@fixup/shared";
+import { EASY_LOOKS, EASY_RATIOS } from "../../app/easy/ask";
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
@@ -41,8 +42,20 @@ const EASY_CHAT_SPEC: StructuredSpec = {
        */
       wants: { type: "string", enum: ["image", "talk"] },
       reply: { type: "string" },
+      /*
+       * **말 속에 있을 때만 채운다.** 빈 글이 「없다」는 뜻이다.
+       *
+       * `required` 에 넣는 까닭은 하나다 — 구조화 응답은 안 채운 칸을 그냥
+       * 빼 버려서, 모델이 「없음」을 말할 길이 없으면 아무 값이나 채운다.
+       */
+      ratio: { type: "string", enum: ["", ...EASY_RATIOS.map((one) => one.id)] },
+      /*
+        **`auto` 는 안 준다.** 그것은 「안 골랐다」는 뜻의 기본값이라, 고를 거리로
+        주면 모델이 그것을 골라 놓고 「말했다」가 된다 — 그러면 안 묻는다.
+      */
+      look: { type: "string", enum: ["", ...EASY_LOOKS.filter((one) => one.id !== "auto").map((one) => one.id)] },
     },
-    required: ["wants", "reply"],
+    required: ["wants", "reply", "ratio", "look"],
   },
 };
 

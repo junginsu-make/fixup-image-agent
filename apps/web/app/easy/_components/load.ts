@@ -20,7 +20,6 @@ import type { EasyImageOptions } from "../options";
  * `api/easy/generate` 의 `RATIO` 와 같아야 한다 — 갈리면 화면이 말하는 값과
  * 실제로 깎이는 값이 다르다. 시험이 그 둘을 맞대 본다.
  */
-export const EASY_RATIO = "1:1";
 
 /**
  * 이미지 모델 목록.

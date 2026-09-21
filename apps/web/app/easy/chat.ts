@@ -1,3 +1,4 @@
+import { EASY_LOOKS, EASY_RATIOS } from "./ask";
 import type { EasyMessage } from "./turn";
 
 /**
@@ -33,6 +34,15 @@ export interface EasyDecision {
   wants: "image" | "talk";
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
+  /**
+   * 말 속에 **이미 있던** 비율·결. 없으면 비어 있다.
+   *
+   * **읽어 두면 안 물어도 된다**(2026-09-21). 「세로로 만들어줘」라고 했는데
+   * 비율을 또 물으면 안 들은 것이 된다. 그리고 지금까지는 그렇게 말해도
+   * **무조건 정사각형**이 나왔다 — 읽을 자리가 없었다.
+   */
+  ratio?: string;
+  look?: string;
 }
 
 /** 지난 대화를 몇 줄까지 보여 줄까. */
@@ -99,6 +109,23 @@ export function easyChatPrompt(
     "",
     "`image` 면 `reply` 는 빈 글로 두세요. 이미지가 곧 답입니다.",
     "",
+    "── 말 속에 비율이나 그림체가 있나 ──",
+    "",
+    "**있을 때만 적습니다.** 없으면 그 칸을 비워 두세요. 지어내면 사용자가 말한",
+    "적 없는 모양으로 나오고, 왜 그렇게 나왔는지 알 길이 없습니다.",
+    "",
+    `  ratio  ${EASY_RATIOS.map((one) => `${one.id}(${one.label})`).join(" · ")}`,
+    `  look   ${EASY_LOOKS.map((one) => `${one.id}(${one.label})`).join(" · ")}`,
+    "",
+    "**모양이나 올릴 자리를 직접 말했을 때만** 고릅니다. 「세로로」·「가로로」·",
+    "「인스타 피드에」·「스토리에」·「16:9 로」처럼요. 그림체도 「실사로」·",
+    "「애니풍으로」처럼 **직접 말했을 때만** 고릅니다.",
+    "",
+    "**쓰임을 가리키는 말만으로는 고르지 마세요.** 「포스터」·「배너」·「썸네일」은",
+    "무엇에 쓸지를 말할 뿐 모양을 말한 것이 아닙니다. 그런 말만 있으면 **비웁니다.**",
+    "모양은 사용자에게 따로 물어봅니다. 여기서 앞질러 고르면 **말한 적 없는",
+    "모양**으로 나가고, 사용자는 왜 그렇게 나왔는지 알 길이 없습니다.",
+    "",
     /*
       **화면이 쓰는 말로 답하게 한다.** 위에서 「이미지」라고 불러 줘도 모델은
       제 말투로 「그림」이라고 답했다(2026-09-21 실측). 화면은 「이미지 만들기」·
@@ -130,7 +157,7 @@ export function easyChatPrompt(
  * 씹힌다. 둘 다 사용자가 원인을 알 수 없는 자리다.
  */
 export function readEasyDecision(raw: unknown): EasyDecision {
-  const value = raw as { wants?: unknown; reply?: unknown } | null;
+  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown } | null;
   const wants = value?.wants;
 
   if (wants !== "image" && wants !== "talk") {
@@ -140,5 +167,22 @@ export function readEasyDecision(raw: unknown): EasyDecision {
   return {
     wants,
     reply: typeof value?.reply === "string" ? value.reply.trim() : "",
+    /*
+      **모르는 값은 버린다.** 목록에 없는 비율·결이 오면 그것은 지어낸 것이고,
+      그대로 넘기면 만들기가 거절당한다(`PosterProjectInputSchema`). 비워 두면
+      물어보거나 기본값으로 간다 — 둘 다 사용자가 이해할 수 있는 결과다.
+    */
+    ...(아는비율.has(value?.ratio as string) ? { ratio: value!.ratio as string } : {}),
+    /*
+      **`auto` 는 안 말한 것과 같다.** 「레퍼런스 스타일」이 기본값이라 값이
+      없는 것과 뜻이 겹치는데, 값으로 오면 「말했다」로 읽혀 **묻지 않게 된다**
+      (2026-09-21 실측에서 그랬다).
+    */
+    ...(아는결.has(value?.look as string) && value!.look !== "auto"
+      ? { look: value!.look as string }
+      : {}),
   };
 }
+
+const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));
+const 아는결 = new Set(EASY_LOOKS.map((one) => one.id as string));

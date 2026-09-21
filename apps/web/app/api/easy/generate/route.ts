@@ -4,6 +4,7 @@ import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { stepIdempotencyKey } from "../../../../lib/easy/step-key";
 import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
+import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
@@ -43,8 +44,13 @@ export const dynamic = "force-dynamic";
  * 있게 되고, 그 사이 화면을 떠난 사람은 결과를 잃는다.
  */
 
-/** 기본값 — 고를 것을 없앴으므로 나머지는 여기서 정한다(설계 §9). */
-const RATIO = "1:1";
+/**
+ * 기본값 — 고를 것을 없앴으므로 나머지는 여기서 정한다(설계 §9).
+ *
+ * **비율은 더 이상 여기서 못 박지 않는다**(2026-09-21 사용자 — 「지금은 무조건
+ * 1:1로만 나옵니다」). 말 속에 있으면 그것, 물어서 고르면 그것, 아무것도
+ * 없으면 `ask.ts` 의 기본값이다.
+ */
 const VARIANTS = 1;
 
 function fail(message: string, status = 500) {
@@ -127,14 +133,9 @@ export async function POST(request: Request) {
   const preservedIds: string[] = Array.isArray(input.preservedIds) ? input.preservedIds : [];
   const personIds: string[] = Array.isArray(input.personIds) ? input.personIds : [];
 
+  const 붙인수 = referenceIds.length + preservedIds.length + personIds.length;
+
   try {
-    // 사용자가 친 말을 먼저 남긴다. 아래가 실패해도 대화에는 그 말이 있어야
-    // 무엇을 하려 했는지 알 수 있다.
-    await store.appendMessage({ conversationId, role: "user", body: prompt });
-
-    // 제목이 비어 있으면 이 말로 짓는다. 첫 프롬프트 한 번만이다(설계 §4-1).
-    if (!conversation.title) await store.renameConversation(conversationId, easyTitle(prompt));
-
     /*
      * ⓪ **말인가 주문인가.**
      *
@@ -142,9 +143,9 @@ export async function POST(request: Request) {
      * 그림값이 나간다.
      *
      * **지난 대화를 같이 준다.** 「그거 말고 다른 걸로」 같은 말은 앞을 봐야
-     * 뜻이 선다. 방금 남긴 이 말은 빼고 준다 — 프롬프트가 따로 싣는다.
+     * 뜻이 선다. 이번 말은 아직 안 남겼으므로 그대로 다 준다.
      */
-    const 지난줄 = (await store.listMessages(conversationId)).slice(0, -1);
+    const 지난줄 = await store.listMessages(conversationId);
     const decision = readEasyDecision(
       await createEasyChatProvider(process.env, textModel).decide(
         easyChatPrompt(
@@ -155,10 +156,38 @@ export async function POST(request: Request) {
            * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
            * (2026-09-21 실측).
            */
-          referenceIds.length + preservedIds.length + personIds.length,
+          붙인수,
         ),
       ),
     );
+
+    /*
+     * ⓵ **비율·결을 한 번 물어볼까** (2026-09-21 사용자).
+     *
+     * 묻기로 했으면 **아무것도 안 남기고** 그대로 돌려준다. 그림도 안 만들고
+     * 대화 줄도 안 쌓는다 — 물어만 보고 사용자가 답을 안 하고 떠나면 **아무
+     * 일도 일어나지 않은 것**이 맞다. 남겨 두면 답 없는 물음만 쌓인다.
+     *
+     * 판단은 `ask.ts` 가 값으로 한다. 여기서 하면 못 잰다.
+     */
+    const 고르기 = easyAsk({
+      attachmentCount: 붙인수,
+      chosenRatio: typeof input.ratio === "string" ? input.ratio : undefined,
+      chosenLook: typeof input.look === "string" ? input.look : undefined,
+      saidRatio: decision.ratio,
+      saidLook: decision.look,
+    });
+
+    if (decision.wants === "image" && 고르기.asks) {
+      return Response.json({ ok: true, asked: true, textModel });
+    }
+
+    // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야
+    // 무엇을 하려 했는지 알 수 있다.
+    await store.appendMessage({ conversationId, role: "user", body: prompt });
+
+    // 제목이 비어 있으면 이 말로 짓는다. 첫 프롬프트 한 번만이다(설계 §4-1).
+    if (!conversation.title) await store.renameConversation(conversationId, easyTitle(prompt));
 
     if (decision.wants === "talk") {
       /*
@@ -176,7 +205,9 @@ export async function POST(request: Request) {
     // ① 프로젝트
     const created = await read(await createProject(relay(request, "/api/poster/projects", {
       title: easyTitle(prompt) || "Easy",
-      ratio: RATIO,
+      // 말 속에 있던 것 · 물어서 고른 것 · 기본값 차례다(`ask.ts`).
+      ratio: 고르기.ratio,
+      look: 고르기.look,
       modelId: typeof input.imageModel === "string" ? input.imageModel : undefined,
       variants: VARIANTS,
       instruction: prompt,
@@ -224,6 +255,8 @@ export async function POST(request: Request) {
       projectId,
       submission: submitted.submission,
       textModel,
+      ratio: 고르기.ratio,
+      look: 고르기.look,
       ...(submitted.notice ? { notice: submitted.notice } : {}),
     });
   } catch (error) {
@@ -248,5 +281,10 @@ export async function POST(request: Request) {
 export async function GET() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
-  return Response.json({ ok: true, ratio: RATIO, variants: VARIANTS, textModel: DEFAULT_TEXT_MODEL });
+  return Response.json({
+    ok: true,
+    ratio: EASY_DEFAULT_RATIO,
+    variants: VARIANTS,
+    textModel: DEFAULT_TEXT_MODEL,
+  });
 }

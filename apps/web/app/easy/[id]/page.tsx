@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { EasyClient } from "../easy-client";
-import { EASY_RATIO, defaultEasyImageModel, easyImageModels, loadEasyConversation } from "../_components/load";
+import { defaultEasyImageModel, easyImageModels, loadEasyConversation } from "../_components/load";
+import { EASY_DEFAULT_RATIO } from "../ask";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function EasyConversationPage({
       initialOptions={loaded.options}
       imageModels={easyImageModels()}
       defaultImageModel={defaultEasyImageModel()}
-      ratioId={EASY_RATIO}
+      ratioId={EASY_DEFAULT_RATIO}
     />
   );
 }
