@@ -47,7 +47,19 @@ describe("어디서 그림을 가져오는가", () => {
    * 세 곳만 직접 읽는다.
    */
   it("합쳐 주는 함수 대신 세 곳을 직접 읽는다", () => {
-    expect(client).not.toMatch(/loadLibrary\(\)/);
+    /*
+      **주석은 빼고 본다.** 화면이 그 규칙을 주석으로 적어 두었기 때문이다 —
+      「`loadLibrary()` 를 안 쓴다」는 설명이 그대로 걸린다.
+
+      이 단언은 오랫동안 죽어 있었다. `String.raw` 없이 적은 낱말 경계가
+      리터럴 백스페이스로 박혀서 「백스페이스 문자를 찾아라」가 됐고, 그래서
+      **무엇을 넣어도 통과했다.** 살리자마자 이 주석을 잡았다(C-9 리뷰).
+    */
+    const 코드만 = client
+      .replace(new RegExp(String.raw`\/\*[\s\S]*?\*\/`, "g"), "")
+      .replace(new RegExp(String.raw`^\s*\/\/.*$`, "gm"), "");
+
+    expect(코드만).not.toMatch(new RegExp(String.raw`\bloadLibrary\(\)`));
     for (const url of ['"/api/library"', '"/api/reference-images"', '"/api/poster/projects"']) {
       expect(client, url).toContain(url);
     }

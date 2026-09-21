@@ -1,5 +1,7 @@
 import { RedesignError } from "./errors.js";
 import type { RedesignStrip } from "./transcribe-batching.js";
+import { reportUsage, type UsageReporter } from "./usage.js";
+import { assertNotTruncated } from "./truncation.js";
 
 const OPENAI_ANALYSIS_MODEL = process.env.OPENAI_ANALYSIS_MODEL || "gpt-5.5";
 export const GOOGLE_READING_MODEL = process.env.GOOGLE_READING_MODEL || "gemini-3.1-pro-preview";
@@ -15,6 +17,14 @@ export type TranscribeStripsInput = {
   openaiKey?: string;
   googleKey?: string;
   signal?: AbortSignal;
+  /**
+   * **쓴 토큰을 받아 적을 자리**(F-7-9).
+   *
+   * 전사는 상세페이지를 통째로 잘라 글 모델에 먹인다 — 스트립 마흔 장까지,
+   * 한 배치에 여덟 장이므로 한 번 돌면 호출이 다섯 번까지 간다. 그런데
+   * 2026-09-21 까지 그 돈이 장부에 한 줄도 없었다.
+   */
+  onUsage?: UsageReporter;
 };
 export type TranscribeStripsResult = { transcript: string; lastSectionType?: string };
 
@@ -33,8 +43,8 @@ export async function transcribeStrips(input: TranscribeStripsInput): Promise<Tr
   const prompt = buildTranscribeStripsPrompt(strips, batchIndex, batchCount, input.previousSectionHint);
 
   const raw = provider === "google"
-    ? await callGoogleReading({ apiKey, prompt, strips, signal: input.signal })
-    : await callOpenAiReading({ apiKey, prompt, strips, signal: input.signal });
+    ? await callGoogleReading({ apiKey, prompt, strips, signal: input.signal, onUsage: input.onUsage })
+    : await callOpenAiReading({ apiKey, prompt, strips, signal: input.signal, onUsage: input.onUsage });
   return parseTranscriptPayload(raw);
 }
 
@@ -98,7 +108,7 @@ export function parseTranscriptPayload(raw: string): TranscribeStripsResult {
   return { transcript: transcript.slice(0, MAX_LONG_PAGE_TRANSCRIPT_CHARS), lastSectionType: lastSectionType || undefined };
 }
 
-async function callOpenAiReading({ apiKey, prompt, strips, signal }: { apiKey: string; prompt: string; strips: RedesignStrip[]; signal?: AbortSignal }): Promise<string> {
+async function callOpenAiReading({ apiKey, prompt, strips, signal, onUsage }: { apiKey: string; prompt: string; strips: RedesignStrip[]; signal?: AbortSignal; onUsage?: UsageReporter }): Promise<string> {
   const content: Array<{ type: "input_text"; text: string } | { type: "input_image"; image_url: string }> = [{ type: "input_text", text: prompt }];
   for (const s of strips) content.push({ type: "input_image", image_url: `data:${s.mimeType};base64,${s.base64}` });
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -114,11 +124,21 @@ async function callOpenAiReading({ apiKey, prompt, strips, signal }: { apiKey: s
     }),
   });
   const data = await readJson(response);
+  // **실패해도 적는다.** 모델이 돌다가 끊긴 경우에도 값은 이미 나갔다.
+  reportUsage(onUsage, OPENAI_ANALYSIS_MODEL, data);
   if (!response.ok) throw new RedesignError(data?.error?.message || "OpenAI 전사 요청 실패", 502);
+  /*
+    **끝까지 못 쓴 전사를 온전한 것처럼 쓰지 않는다**(F-7-1).
+
+    잘리면 JSON 이 깨져 화면이 그 배치를 「[구간 전사 실패]」 자리표시로
+    바꾼다 — 그것이 맞다. 여기서 안 보면 **조각난 전사가 온전한 것처럼**
+    기획으로 흘러간다.
+  */
+  assertNotTruncated(data, OPENAI_ANALYSIS_MODEL);
   return data.output_text || (data.output?.flatMap((i: any) => i.content || []).map((c: any) => c.text || "").join("\n") ?? "");
 }
 
-async function callGoogleReading({ apiKey, prompt, strips, signal }: { apiKey: string; prompt: string; strips: RedesignStrip[]; signal?: AbortSignal }): Promise<string> {
+async function callGoogleReading({ apiKey, prompt, strips, signal, onUsage }: { apiKey: string; prompt: string; strips: RedesignStrip[]; signal?: AbortSignal; onUsage?: UsageReporter }): Promise<string> {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
   for (const s of strips) parts.push({ inlineData: { mimeType: s.mimeType, data: s.base64 } });
   parts.push({ text: prompt });
@@ -129,7 +149,9 @@ async function callGoogleReading({ apiKey, prompt, strips, signal }: { apiKey: s
     body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseMimeType: "application/json" } }),
   });
   const data = await readJson(response);
+  reportUsage(onUsage, GOOGLE_READING_MODEL, data);
   if (!response.ok) throw new RedesignError(data?.error?.message || "Google 전사 요청 실패", 502);
+  assertNotTruncated(data, GOOGLE_READING_MODEL);
   return data?.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text || "";
 }
 

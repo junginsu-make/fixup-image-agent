@@ -1,4 +1,5 @@
 import { designerPersona, imageLookDirective, type ImageLook } from "@fixup/shared";
+import { PAGE_CONTEXT_MAX_LENGTH } from "./pdp.input-limits";
 import type {
   PdpGuidePriorityMode,
   PdpImageStyle,
@@ -22,6 +23,8 @@ import type {
 export type PeopleMode = "auto" | "none";
 
 export interface ImagePromptOptions {
+  /** 화면에서 고른 화면비. 프롬프트의 방향이 여기서 나온다. */
+  aspectRatio?: string;
   style: PdpImageStyle;
   withModel: boolean;
   outputMode: PdpOutputMode;
@@ -30,6 +33,17 @@ export interface ImagePromptOptions {
   /** 인물을 아예 배제할지. 기본은 장면이 요구할 때만 넣는 auto. */
   peopleMode?: PeopleMode;
   desiredTone?: string;
+  /**
+   * **실제 제품 사진이 없다**(N-2, 설계 §9.1).
+   *
+   * 글로만 「나무 도마를 팝니다」라고 적으면 우리는 나무 도마를 **지어낸다.**
+   * 그 그림에는 실제로 파는 물건과 다른 결·색·모양이 그려지고, 사용자는
+   * 그것을 상세페이지에 올린다.
+   *
+   * 설계: 「참고용 외형 없는 실물 입력은 **임의 제품을 실제 제품처럼 생성
+   * 승인하지 않는다**」. 켜지면 상표·로고를 빼고 확대를 피한다.
+   */
+  conceptOnly?: boolean;
   /**
    * 그림의 결. **상세페이지의 기본은 `photoreal`** 이다.
    *
@@ -152,17 +166,25 @@ function peopleRule(options: ImagePromptOptions) {
 }
 
 /**
- * 배경 설명의 상한. 「그 밖에」는 자유 서술 칸이라 문단째로 붙여 넣는다.
+ * 배경 설명을 프롬프트에 실을 만큼만.
  *
- * 판매자 브리프가 같은 이유로 칸마다 500자에서 자른다(`normalizeSellerBrief`).
- * 여기만 무제한이면 배경 설명이 그 뒤의 지시들을 밀어낸다.
+ * ── 여기는 마지막 그물이다 ───────────────────────────────────
+ *
+ * 길이는 **경계에서** 막는다 — 화면이 제한을 보여 주고(`InputLengthHint`),
+ * zod 가 같은 상수(`PAGE_CONTEXT_MAX_LENGTH`)로 거른다. 여기까지 온 값은 이미
+ * 통과한 값이라 이 자르기는 **발동하지 않는다.**
+ *
+ * 그래도 남겨 둔다. 코어를 직접 부르는 길이 생기면 배경 설명 하나가 그 뒤의
+ * 지시를 통째로 밀어낼 수 있다.
+ *
+ * **상한을 여기 또 적지 않는다**(U-08). 전에는 `MAX_PAGE_CONTEXT = 500` 을 따로
+ * 들고 있었고, 주석은 「판매자 브리프도 같은 이유로 자른다」고 했는데 그 자르기는
+ * 없앴다 — 주석이 없는 동작을 근거로 들고 있었다.
  */
-const MAX_PAGE_CONTEXT = 500;
-
 function pageContextOf(options: ImagePromptOptions) {
   const trimmed = options.pageContext?.trim() ?? "";
   // 코드 단위로 자르면 500번째가 이모지일 때 서러게이트 쌍이 갈린다.
-  return Array.from(trimmed).slice(0, MAX_PAGE_CONTEXT).join("");
+  return Array.from(trimmed).slice(0, PAGE_CONTEXT_MAX_LENGTH).join("");
 }
 
 export function buildImageSystemPrompt(options: ImagePromptOptions) {
@@ -173,7 +195,9 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     designerPersona(),
     "You are art-directing Korean e-commerce detail page sections.",
     "Read the brief carefully and render exactly what it asks for — nothing more.",
-    `People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as ${whoAppears(options)}.`,
+    options.withModel
+      ? `Required subject: ${whoAppears(options)} must appear. Preserve their identity exactly.`
+      : `People are optional. Only include a person when the scene genuinely calls for one; when one appears they must read as ${whoAppears(options)}.`,
     // 실사는 지금까지 쓰던 문구를 그대로 둔다. 다른 결을 골랐을 때만 공용
     // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
     look === "photoreal"
@@ -190,11 +214,25 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     .join(" ");
 }
 
+/**
+ * 화면비가 방향을 정한다.
+ *
+ * 전에는 `"vertical"` 이 박혀 있었다. 가로(4:3·16:9)를 고르면 **크기는 가로로
+ * 가는데 글은 세로라고 말했다** — 모델이 둘 중 하나를 버린다(2026-09-17 리뷰 U-07).
+ */
+function orientationOf(aspectRatio?: string): "vertical" | "horizontal" | "square" {
+  if (!aspectRatio) return "vertical";
+  const [width, height] = aspectRatio.split(":").map(Number);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || height === 0) return "vertical";
+  if (width === height) return "square";
+  return width > height ? "horizontal" : "vertical";
+}
+
 export function buildImageJson(section: SectionBlueprint, options: ImagePromptOptions) {
   const look = lookOf(options);
   const brief: Record<string, unknown> = {
     task: "korean_ecommerce_detail_page_section",
-    format: { orientation: "vertical", target: "mobile", static_image: true },
+    format: { orientation: orientationOf(options.aspectRatio), target: "mobile", static_image: true },
     scene: {
       subject: section.prompt_en || section.prompt_ko || section.headline,
       setting: STYLE_SETTING[options.style],
@@ -202,6 +240,19 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
       people: peopleRule(options),
     },
     layout: section.layout_notes || "compose it the way this message deserves",
+    /*
+      **실제 제품 사진이 없을 때**(N-2). 「지어내지 마라」만으로는 모델이
+      그럴듯한 물건을 그리고, 그 그림은 **실제 제품처럼 보인다.**
+    */
+    ...(options.conceptOnly
+      ? {
+          concept_only: {
+            note: "no real product photo exists; this is a concept visual",
+            avoid: ["brand marks", "logos", "product name lettering", "extreme close-ups of the product"],
+            prefer: "usage scene or mood rather than a catalogue shot of the object",
+          },
+        }
+      : {}),
     forbidden: [
       "buttons",
       "arrows",

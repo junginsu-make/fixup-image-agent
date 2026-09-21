@@ -116,3 +116,56 @@ describe("나머지 칸도 빠지지 않는다", () => {
     expect(body.gapPolicy).toBe("omit");
   });
 });
+
+/**
+ * **고친 전략은 재기획을 눌렀을 때만 간다**(U-11).
+ *
+ * 전략 칸을 고치는 것은 요약 수정일 뿐이다(설계 §4.2). 그것만으로 구성을 다시
+ * 짜면 사용자가 글자 하나 고칠 때마다 유료 기획 호출이 나간다.
+ */
+describe("전략 재기획", () => {
+  it("**눌렀으면 실어 보낸다**", () => {
+    const 요청 = buildAnalyzeRequest({ ...기본, strategyDirective: "아침 시간을 되찾아 주는 이야기" });
+
+    expect(요청.strategyDirective).toBe("아침 시간을 되찾아 주는 이야기");
+  });
+
+  it("**안 눌렀으면 안 보낸다**", () => {
+    expect(buildAnalyzeRequest(기본).strategyDirective).toBeUndefined();
+  });
+
+  it("공백만 적은 전략은 안 보낸다 — 빈 지시로 값을 쓰지 않는다", () => {
+    expect(buildAnalyzeRequest({ ...기본, strategyDirective: "   " }).strategyDirective).toBeUndefined();
+  });
+});
+
+/**
+ * **구성 요청과 그림체가 기획까지 간다**(U-06).
+ *
+ * 전에는 둘 다 이미지 생성에만 갔다. 사용자가 「섹션을 다섯 개로」를 적어도
+ * 기획은 그 말을 본 적이 없고, 기획은 사진인지 그림인지 모른 채 장면을 썼다.
+ */
+describe("구성·문구 요청과 그림체", () => {
+  it("**적었으면 실어 보낸다**", () => {
+    const 요청 = buildAnalyzeRequest({ ...기본, planInstruction: "섹션을 다섯 개로" });
+
+    expect(요청.planInstruction).toBe("섹션을 다섯 개로");
+  });
+
+  it("**그림체도 실어 보낸다**", () => {
+    expect(buildAnalyzeRequest({ ...기본, look: "illustration" }).look).toBe("illustration");
+  });
+
+  it("안 적었으면 안 보낸다", () => {
+    expect(buildAnalyzeRequest(기본).planInstruction).toBeUndefined();
+  });
+
+  it("공백만 적은 것은 안 보낸다", () => {
+    expect(buildAnalyzeRequest({ ...기본, planInstruction: "   " }).planInstruction).toBeUndefined();
+  });
+
+  it("**장면 지시는 여전히 기획에 안 간다** — 다른 물건이다", () => {
+    // 「배경은 밤」은 그림을 정하지 섹션 구성을 정하지 않는다.
+    expect(Object.keys(buildAnalyzeRequest(기본))).not.toContain("userInstruction");
+  });
+});

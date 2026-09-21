@@ -26,15 +26,38 @@ const route = read("app/api/ad/export/route.ts");
 const client = read("app/ad/ad-export-client.tsx");
 const types = read("lib/membership/types.ts");
 
-/** 이번에 더한 마이그레이션. 파일 이름이 바뀌어도 내용으로 찾는다. */
-const migration = (() => {
-  const dir = path.join(REPO, "supabase", "migrations");
-  for (const name of readdirSync(dir).sort().reverse()) {
-    const body = readFileSync(path.join(dir, name), "utf8");
-    if (body.includes("ad_export")) return body;
-  }
-  return "";
-})();
+/**
+ * 어떤 것을 **마지막으로** 정의한 마이그레이션. 그것이 실제 동작이다.
+ *
+ * 전에는 「`ad_export` 가 적힌 가장 최신 파일」 하나를 골랐다. 그런데 예약
+ * 함수를 다시 정의하는 마이그레이션은 화이트리스트를 그대로 옮겨 적으므로
+ * `ad_export` 가 같이 적힌다 — 2026-09-20 에 분석 한도 정책을 고치면서 그
+ * 파일이 골라졌고, 단가표를 안 건드렸다는 이유로 세 시험이 빨개졌다.
+ *
+ * 지키려는 것은 「한 파일에 다 있다」가 아니라 **「지금 실제로 걸려 있는
+ * 정의들이 서로 안 어긋난다」**이다. 그러니 각각 마지막 것을 찾는다.
+ */
+const migrationsDir = path.join(REPO, "supabase", "migrations");
+const migrationNames = readdirSync(migrationsDir).sort();
+/**
+ * 주석을 걷어내고 본다. 이 저장소의 SQL 은 설명이 길어서, 「무엇을 하려다
+ * 말았다」고 적은 주석의 낱말이 정의로 오인된다.
+ */
+const readMigration = (name: string) =>
+  readFileSync(path.join(migrationsDir, name), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*--.*$/gm, "");
+
+function latestDefining(needle: string): string {
+  const last = migrationNames.filter((name) => readMigration(name).includes(needle)).pop();
+  expect(last, `${needle} 을 정의한 마이그레이션이 없다`).toBeTruthy();
+  return readMigration(last!);
+}
+
+/** 표의 check 제약 / 예약 함수 / 단가표. 셋이 서로 다른 파일일 수 있다. */
+const operationCheck = latestDefining("generation_events_operation_check");
+const reserveFunction = latestDefining("create or replace function public.reserve_generation");
+const priceTable = latestDefining(BACKGROUND_REMOVAL_MODEL);
 
 describe("원가", () => {
   it("배경 제거를 안 하면 0원이다", () => {
@@ -138,15 +161,15 @@ describe("마이그레이션과 코드가 어긋나지 않는다", () => {
    * 좁은 쪽이 실제 한계다.
    */
   it("표의 check 와 예약 함수가 모두 ad_export 를 안다", () => {
-    expect(migration).not.toBe("");
-    const check = migration.indexOf("generation_events_operation_check");
-    const reserve = migration.indexOf("function public.reserve_generation");
+    // 표가 받는 값
+    const check = operationCheck.indexOf("generation_events_operation_check");
     expect(check).toBeGreaterThan(0);
-    expect(reserve).toBeGreaterThan(0);
+    expect(operationCheck.slice(check)).toContain("'ad_export'");
 
-    // check 제약 쪽에 한 번, 예약 함수 쪽에 한 번 — 둘 다 있어야 한다.
-    expect(migration.slice(check, reserve)).toContain("'ad_export'");
-    expect(migration.slice(reserve)).toContain("'ad_export'");
+    // 예약 함수가 통과시키는 값. 다른 파일에서 다시 정의됐을 수 있다.
+    const reserve = reserveFunction.indexOf("create or replace function public.reserve_generation");
+    expect(reserve).toBeGreaterThan(-1);
+    expect(reserveFunction.slice(reserve)).toContain("'ad_export'");
   });
 
   /** 코드가 보내는 값과 DB 가 받는 값이 같아야 한다. */
@@ -160,13 +183,13 @@ describe("마이그레이션과 코드가 어긋나지 않는다", () => {
    * 세 모델에서 이미 났다.
    */
   it("배경 제거 단가가 표에 들어간다", () => {
-    expect(migration).toContain(BACKGROUND_REMOVAL_MODEL);
-    expect(migration).toContain("model_prices");
+    expect(priceTable).toContain(BACKGROUND_REMOVAL_MODEL);
+    expect(priceTable).toContain("model_prices");
   });
 
   /** 코드의 값과 표의 값이 갈리면 장부가 거짓이 된다. */
   it("코드의 단가와 표의 단가가 같다", () => {
-    const found = migration.match(/0\.00300/);
+    const found = priceTable.match(/0\.00300/);
     expect(found).not.toBeNull();
     expect(BACKGROUND_REMOVAL_USD).toBeCloseTo(0.003, 6);
   });

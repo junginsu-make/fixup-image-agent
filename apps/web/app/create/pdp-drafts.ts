@@ -11,7 +11,17 @@ import type {
   ReferenceModelUsage,
   SectionBlueprint,
   AttachmentIntents,
+  ImageModelId,
+  LandingPageBlueprint,
+  ProductBrief,
+  BlueprintReview,
+  PdpLlmExecution,
+  PersonSource,
+  ProductReadingStatus,
+  ProductKind,
+  PageGoal,
 } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 
 import { selectExpiredDraftIds } from "./draft-retention";
@@ -110,6 +120,42 @@ export interface PreparedImageDraft {
   fileName: string;
 }
 
+/** 텍스트 경로의 중간 상태도 초안의 일부다. 컴포넌트 수명과 분리한다. */
+export interface PdpTextDraftState {
+  planningExecutions?: PdpLlmExecution[];
+  stage: "input" | "scenario" | "unverifiedReview" | "keyVisual";
+  text: string;
+  brief: ProductBrief | null;
+  blueprint: LandingPageBlueprint | null;
+  originalBlueprint: LandingPageBlueprint | null;
+  review?: BlueprintReview;
+  styleReference?: StyleReferenceDraft;
+  styleReferenceEnabled: boolean;
+  preserveProduct: boolean;
+  /** 인물 사진과 캐릭터를 둘 다 골랐을 때 누구를 쓸 것인가(U-04). */
+  personSource?: PersonSource;
+  characterId?: string;
+  characterAngles: string[];
+  keyVisual: { base64: string; mimeType: string } | null;
+  imageModel: ImageModelId;
+  copyIntensity: CopyIntensity;
+  gapPolicy: GapPolicy;
+  /**
+   * **무엇을 파는가·무엇을 하려는가**(N-8, 설계 §6.3·§9.1).
+   *
+   * 화면이 `useState(기본값)` 으로만 들고 있어서, 저장했다 다시 열면
+   * **「기타 / 판매」로 조용히 바뀌었다.** 그 상태로 재기획하면 사용자가 고른
+   * 것과 다른 지시가 서버로 간다.
+   *
+   * 개념 시안 판단(N-2)도 상품 종류를 보므로, 이 값이 사라지면 **사진 없이
+   * 실물을 파는 경고도 함께 사라진다.**
+   *
+   * 옛 초안에는 이 칸이 없다. 없으면 코어의 기본값을 쓴다.
+   */
+  productKind?: ProductKind;
+  pageGoal?: PageGoal;
+}
+
 export interface PdpDraftRecord {
   id: string;
   title: string;
@@ -129,6 +175,8 @@ export interface PdpDraftRecord {
   /** 그림의 결과 사용자가 직접 친 지시. 예전 초안에는 없다. */
   look?: ImageLook;
   userInstruction?: string;
+  /** 구성·문구 요청(U-06). 장면 지시와 다른 물건이다. 옛 초안에는 없다. */
+  planInstruction?: string;
   /**
    * 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 예전 초안에는 없다.
    *
@@ -148,6 +196,15 @@ export interface PdpDraftRecord {
   aspectRatio: AspectRatio;
   notice: string;
   editorState: PdpEditorDraftState | null;
+  imageModel?: ImageModelId;
+  characterId?: string;
+  characterAngles?: string[];
+  preserveProduct?: boolean;
+  personSource?: PersonSource;
+  startMode?: "image" | "text";
+  analyzedBlueprint?: LandingPageBlueprint | null;
+  textDraft?: PdpTextDraftState | null;
+  snapshotOf?: string;
 }
 
 export interface PdpDraftSummary {
@@ -241,8 +298,9 @@ export async function getPdpDraft(id: string): Promise<PdpDraftRecord | null> {
 export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord> {
   const now = new Date().toISOString();
   const nextRecord: PdpDraftRecord = {
+    ...input,
     id: input.id ?? randomId(),
-    title: buildDraftTitle(input),
+    title: `${input.snapshotOf ? "[보관] " : ""}${buildDraftTitle(input)}`,
     createdAt: input.createdAt ?? now,
     updatedAt: now,
     appState: input.appState,
@@ -257,6 +315,7 @@ export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord
     desiredTone: input.desiredTone,
     look: input.look,
     userInstruction: input.userInstruction,
+    planInstruction: input.planInstruction,
     aspectRatio: input.aspectRatio,
     notice: input.notice,
     editorState: input.editorState,
@@ -266,6 +325,12 @@ export async function savePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord
 
   await withStore("readwrite", (store) => requestAsPromise(store.put(normalizedRecord)));
   return normalizedRecord;
+}
+
+/** 유료 결과를 바꾸기 전에 다른 ID로 저장한다. 실패하면 호출자가 변경을 중단한다. */
+export function preservePdpDraft(input: PdpDraftInput): Promise<PdpDraftRecord> {
+  return savePdpDraft({ ...input, id: undefined, createdAt: undefined,
+    snapshotOf: input.id ?? "unsaved", notice: "변경 전 보관한 작업입니다. 이 초안을 열면 이전 상태로 돌아갑니다." });
 }
 
 export async function deletePdpDraft(id: string): Promise<void> {
@@ -302,12 +367,13 @@ export async function deleteAllPdpDrafts(): Promise<number> {
  * **실패해도 조용히 넘어간다.** 청소는 곁다리다. 이것 때문에 목록이 안 뜨면
  * 본말이 뒤집힌다.
  */
-export async function purgeExpiredPdpDrafts(now: Date = new Date()): Promise<number> {
+export async function purgeExpiredPdpDrafts(now: Date = new Date(), protectedIds: readonly string[] = []): Promise<number> {
   try {
     const records = await withStore("readonly", (store) =>
       requestAsPromise<PdpDraftRecord[]>(store.getAll()),
     );
-    const expired = selectExpiredDraftIds(records, now);
+    const protectedSet = new Set(protectedIds);
+    const expired = selectExpiredDraftIds(records, now).filter((id) => !protectedSet.has(id));
     if (expired.length === 0) return 0;
 
     await withStore("readwrite", async (store) => {
@@ -373,9 +439,23 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
       ? (record.look as ImageLook)
       : "photoreal",
     userInstruction: record.userInstruction ?? "",
+    planInstruction: record.planInstruction,
     aspectRatio: normalizeAspectRatio(record.aspectRatio),
     notice: record.notice ?? "저장된 작업을 불러왔습니다.",
     editorState: normalizeEditorState(record.editorState, result),
+    attachmentIntents: record.attachmentIntents,
+    styleReference: record.styleReference,
+    styleReferenceEnabled: record.styleReferenceEnabled ?? true,
+    imageModel: IMAGE_MODELS.some((model) => model.id === record.imageModel) ? record.imageModel : DEFAULT_IMAGE_MODEL,
+    characterId: record.characterId,
+    characterAngles: record.characterAngles ?? [],
+    preserveProduct: record.preserveProduct ?? true,
+    // 안 고른 상태(undefined)와 고른 상태를 구분해야 한다. 모르는 값은 버린다.
+    personSource: PERSON_SOURCES.includes(record.personSource as PersonSource) ? record.personSource : undefined,
+    startMode: record.startMode === "text" ? "text" : "image",
+    analyzedBlueprint: record.analyzedBlueprint ?? null,
+    textDraft: record.textDraft ?? null,
+    snapshotOf: record.snapshotOf,
   };
 }
 
@@ -394,6 +474,10 @@ function normalizePreparedImage(image: PreparedImageDraft | null | undefined) {
   };
 }
 
+/** 깨진/옛 레코드가 모르는 값을 물고 오면 화면이 엉뚱한 경고를 띄운다. */
+const READING_STATUSES: ProductReadingStatus[] = ["usable", "thin", "unfounded"];
+const PERSON_SOURCES: PersonSource[] = ["uploaded", "character"];
+
 function normalizeGeneratedResult(
   result: GeneratedResult | null | undefined,
   preparedImage: PreparedImageDraft | null,
@@ -401,8 +485,10 @@ function normalizeGeneratedResult(
 ): GeneratedResult | null {
   if (result?.blueprint?.sections?.length) {
     return {
+      planningExecutions: result.planningExecutions,
       originalImage: result.originalImage || preparedImage?.previewUrl || toDataUrl(preparedImage),
       blueprint: {
+        ...result.blueprint,
         executiveSummary: result.blueprint.executiveSummary ?? "",
         scorecard: Array.isArray(result.blueprint.scorecard) ? result.blueprint.scorecard : [],
         blueprintList: Array.isArray(result.blueprint.blueprintList) ? result.blueprint.blueprintList : [],
@@ -416,6 +502,17 @@ function normalizeGeneratedResult(
        * 이 기능의 목적인데 재적재 한 번에 무너졌다.
        */
       ...(result.review ? { review: result.review } : {}),
+      /**
+       * **판독 상태도 버리지 않는다.** 바로 위와 같은 이유다.
+       *
+       * 초안을 다시 열면 「사진에서 제품을 읽지 못했습니다」가 사라져, 근거 없는
+       * 카피가 확인된 것처럼 보였다. 필드를 하나씩 나열하는 자리는 새 필드가
+       * 생길 때마다 이렇게 샌다.
+       */
+      ...(READING_STATUSES.includes(result.productReadingStatus as ProductReadingStatus)
+        ? { productReadingStatus: result.productReadingStatus }
+        : {}),
+      ...(result.copyGapOutcome ? { copyGapOutcome: result.copyGapOutcome } : {}),
     };
   }
 

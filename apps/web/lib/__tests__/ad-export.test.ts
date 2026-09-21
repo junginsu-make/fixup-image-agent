@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { deflateSync } from "node:zlib";
 import { AD_SPECS, type AdSpec } from "../ad/specs";
 import { planDerivation } from "../ad/derive";
 import { exportForAd } from "../ad/export";
 import { checkAgainstSpec } from "../ad/check";
+import { oversizedPng } from "./fixtures/oversized-png";
 
 /**
  * 마스터에서 광고 규격을 뽑고, 만들어진 바이트를 검사한다.
@@ -20,45 +20,6 @@ async function busy(width: number, height: number): Promise<Buffer> {
   const pixels = Buffer.alloc(width * height * 3);
   for (let i = 0; i < pixels.length; i += 1) pixels[i] = (i * 2654435761) % 256;
   return sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
-}
-
-/**
- * **머리말에만 큰 크기를 적은 PNG.** 알맹이는 없다.
- *
- * `limitInputPixels` 를 실제로 밟으려면 상한을 넘는 입력이 필요한데, 40MP 짜리
- * 그림을 진짜로 만들면 raw 로 120MB 를 쓴다(이 저장소는 39.7MP 에서 RSS 483MB 를
- * 측정한 적이 있다). sharp 는 머리말만 보고 거부하므로 **68바이트면 충분하다.**
- *
- * 소스에 상수가 적혀 있는지 문자열로 대조하는 대신 **동작을 밟는다** — 이
- * 저장소는 문자열 대조 시험이 무력화 변경을 못 잡는 함정에 이미 한 번 빠졌다.
- */
-function oversizedPng(width: number, height: number): Buffer {
-  const table = [...Array(256)].map((_, n) => {
-    let c = n;
-    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    return c >>> 0;
-  });
-  const chunk = (type: string, data: Buffer) => {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(data.length);
-    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-    let crc = 0xffffffff;
-    for (const b of body) crc = table[(crc ^ b) & 0xff]! ^ (crc >>> 8);
-    const tail = Buffer.alloc(4);
-    tail.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
-    return Buffer.concat([len, body, tail]);
-  };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 0;
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(Buffer.alloc(16))),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
 }
 
 /** 압축이 아주 잘 되는 그림. 「작아서 통과」를 확인할 때 쓴다. */

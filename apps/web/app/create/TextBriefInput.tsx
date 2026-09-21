@@ -2,7 +2,8 @@
 
 import { Loader2, Wand2 } from "lucide-react";
 import { Badge, Button, Textarea } from "@fixup/ui";
-import type { CopyIntensity, GapPolicy } from "@fixup/pdp-core";
+import type { CopyIntensity, GapPolicy, PageGoal, ProductKind } from "@fixup/pdp-core";
+import { PAGE_GOALS, PRODUCT_KINDS, productKindLabel } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
 
 /**
@@ -16,10 +17,30 @@ const EXAMPLES = [
   "퇴근 후 집에서 하는 30분 요가 클래스. 직장인 대상이고 장비가 필요 없습니다.",
   "소상공인 대상 세무 상담 구독 서비스. 월 1회 화상 상담과 장부 검토를 제공합니다.",
   "프리랜서 디자이너를 위한 견적서 자동화 앱입니다.",
+  // **실물 본보기.** 셋 다 무형이면 실물을 파는 사람은 이 길이 자기 것이
+  // 아니라고 읽는다(K-08).
+  "직접 만든 천연 비누입니다. 향은 라벤더와 시트러스 두 가지고, 민감성 피부도 쓸 수 있습니다.",
 ];
+
+/**
+ * **무엇을 파는가**(K-08).
+ *
+ * 글로 시작한다는 것은 **입력 방식**일 뿐인데, 전에는 그것이 곧 「무형 상품」
+ * 으로 읽혔다. 사진이 없을 뿐인 실물을 파는 사람도 「만질 수 있는 제품을
+ * 전제하지 마라」는 지시를 받은 기획을 돌려받았다.
+ */
+const PAGE_GOAL_LABEL: Record<PageGoal, string> = {
+  purchase: "판매",
+  inquiry: "문의 받기",
+  promotion: "알리기",
+};
 
 interface TextBriefInputProps {
   value: string;
+  productKind: ProductKind;
+  pageGoal: PageGoal;
+  onProductKindChange: (value: ProductKind) => void;
+  onPageGoalChange: (value: PageGoal) => void;
   copyIntensity: CopyIntensity;
   gapPolicy: GapPolicy;
   isBusy: boolean;
@@ -38,6 +59,10 @@ export function TextBriefInput({
   onChange,
   onCopyIntensityChange,
   onGapPolicyChange,
+  productKind,
+  pageGoal,
+  onProductKindChange,
+  onPageGoalChange,
   onSubmit,
 }: TextBriefInputProps) {
   const canSubmit = value.trim().length > 0 && !isBusy;
@@ -68,6 +93,37 @@ export function TextBriefInput({
       />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {/*
+          **입력 방식과 상품 종류를 가른다**(K-08). 글로 쓴다고 무형이 아니다 —
+          사진이 없을 뿐인 실물이 가장 흔한 경우다.
+        */}
+        <fieldset className="grid gap-1.5">
+          <legend className="text-meta text-subtle-foreground">무엇을 파시나요</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {PRODUCT_KINDS.map((kind) => (
+              <Button key={kind} type="button" size="sm" disabled={isBusy}
+                data-product-kind={kind}
+                variant={productKind === kind ? "default" : "outline"}
+                onClick={() => onProductKindChange(kind)}>{productKindLabel(kind)}</Button>
+            ))}
+          </div>
+          <span className="text-meta text-subtle-foreground">
+            실물이면 제품을 보여 주는 장면으로, 아니면 사용 장면과 결과로 잡습니다.
+          </span>
+        </fieldset>
+
+        <fieldset className="grid gap-1.5">
+          <legend className="text-meta text-subtle-foreground">이 페이지로 하려는 것</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {PAGE_GOALS.map((goal) => (
+              <Button key={goal} type="button" size="sm" disabled={isBusy}
+                data-page-goal={goal}
+                variant={pageGoal === goal ? "default" : "outline"}
+                onClick={() => onPageGoalChange(goal)}>{PAGE_GOAL_LABEL[goal]}</Button>
+            ))}
+          </div>
+        </fieldset>
+
         <fieldset className="grid gap-1.5">
           <legend className="text-meta text-subtle-foreground">표현 강도</legend>
           <div className="flex flex-wrap gap-1.5">

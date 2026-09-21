@@ -1,4 +1,6 @@
-import type { SectionBlueprint } from "@fixup/pdp-core";
+import { applyDesignSystem } from "@fixup/pdp-core";
+import type { DesignSystem, SectionBlueprint } from "@fixup/pdp-core";
+import { randomId } from "../../lib/browser-safe";
 
 /**
  * 사용자가 시나리오에서 새로 추가하는 섹션.
@@ -53,9 +55,23 @@ export function createEmptySection(index: number): SectionBlueprint {
  * 안 쓰인 가장 작은 번호를 고른다 — 지우고 다시 넣었을 때 번호가 끝없이
  * 커지지 않는다.
  */
-export function createSectionFor(sections: readonly SectionBlueprint[]): SectionBlueprint {
-  const taken = new Set(sections.map((section) => section.section_id));
-  let number = 1;
-  while (taken.has(`S${number}`)) number += 1;
-  return createEmptySection(number - 1);
+export function createSectionFor(
+  sections: readonly SectionBlueprint[],
+  /**
+   * 페이지 공용 디자인. 있으면 **이것을 직접 받는다**(U-15).
+   *
+   * 전에는 형제의 `style_guide` 를 통째로 베꼈다. 그 형제를 사용자가 고치거나
+   * 지우면 **계승이 조용히 끊긴다** — 새 섹션만 다른 서체·다른 인물로 만들어지고,
+   * 그 사실은 이미지가 나온 뒤에야 보인다.
+   */
+  designSystem?: DesignSystem,
+): SectionBlueprint {
+  const id = randomId();
+  const section: SectionBlueprint = {
+    ...createEmptySection(sections.length), section_id: id, image_id: `IMG_${id}`,
+    // 공용 디자인이 없는 페이지(옛 초안)는 전처럼 형제에게서 물려받는다.
+    style_guide: sections.find((section) => section.style_guide)?.style_guide ?? "",
+    reference_usage: sections.find((section) => section.reference_usage)?.reference_usage ?? "" };
+
+  return applyDesignSystem(section, designSystem);
 }

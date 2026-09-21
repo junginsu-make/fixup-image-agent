@@ -49,6 +49,12 @@ const OPERATIONS = [
   "sns_image",
   // 광고 규격 내보내기 (2026-09-14). 원가가 0 인 요청도 예약은 거친다.
   "ad_export",
+  // 레퍼런스 서술 (2026-09-20). 크레딧은 0 이고 글 모델 값만 나간다.
+  // 상세페이지 분석과 **시간당 칸이 다르다**(`lib/membership/hourly-limit.ts`).
+  "reference_analyze",
+  // 전사 (2026-09-21). 크레딧은 0 이고 글 모델 값만 나간다. 한 페이지에
+  // 호출이 다섯 번까지 가므로 시간당 칸도 따로 둔다.
+  "redesign_transcribe",
 ];
 
 describe("예약이 받아들이는 작업 종류", () => {

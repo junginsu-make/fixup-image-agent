@@ -68,5 +68,15 @@ export {
 export {
   planTranscribeBatches,
   stitchTranscripts,
+  TRANSCRIBE_MAX_BASE64_CHARS,
   type RedesignStrip
 } from "./transcribe-batching.js";
+export { reportUsage, type LlmUsage, type UsageReporter } from "./usage.js";
+/*
+  프롬프트 조립기. **근거 계약을 실제로 싣는지 밖에서 재려면** 나와 있어야 한다
+  (F-7-1, `apps/web/lib/__tests__/grounding-contract.test.ts`).
+*/
+export { buildAnalyzePrompt, buildSections } from "./generate.js";
+
+/** 안 쓰인 참조를 말한다(N-9, 설계 §1 불변조건 7). */
+export { referenceBudgetNotice, type ReferenceBudgetInput } from "./reference-budget";

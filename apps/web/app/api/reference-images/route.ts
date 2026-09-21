@@ -5,6 +5,9 @@ import { listReferenceImages, localFileUrl, saveReferenceImage } from "../../../
 import { isLocalStoreEnabled } from "../../../lib/local-store";
 import { ReferencePurposeSchema } from "../reference-sets/schema";
 import { teamIdOf } from "../../../lib/teams/store";
+import { BodyLimitError, readBoundedBody } from "../../../lib/pdp/request";
+import { inspectUploadedImage } from "../../../lib/pdp/image-gate";
+import { REFERENCE_UPLOAD_BODY_LIMIT, REFERENCE_UPLOAD_MAX_MB } from "./limits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,24 +54,72 @@ export async function GET() {
   }
 }
 
+/**
+ * **낯선 바이트를 받는 문**(F-7-10-b).
+ *
+ * 전에는 `await request.formData()` 한 줄이었다. 용량 상한도, 그림인지 보는
+ * 눈도 없었다. 인증된 회원이 임의 크기 파일로 서버 메모리를 **두 배로**
+ * 부풀릴 수 있었고(원본 + `Uint8Array` 사본), 16383×16383 단색 PNG 는 수백
+ * KB 로 눌리는데 펼치면 1GB 가 넘는다.
+ *
+ * 상세페이지 레퍼런스 문에는 이미 같은 문지기가 있다. 같은 회사의 같은
+ * 위험인데 이 문만 열려 있었다 — **계약을 함께 쓴다.**
+ *
+ * **되던 것은 안 좁아진다.** 저장 쪽이 이미 PNG·JPG·WEBP 만 받고 화면
+ * `accept` 도 같은 셋이다. 바뀌는 것은 **딱지 대신 바이트를 본다**는 것뿐이다.
+ */
 export async function POST(request: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
+
+  let form: FormData;
   try {
-    const form = await request.formData();
+    // 본문을 상한까지만 읽는다. `formData()` 는 끝까지 읽는다.
+    const bytes = await readBoundedBody(request, REFERENCE_UPLOAD_BODY_LIMIT);
+    form = await new Response(Uint8Array.from(bytes), {
+      headers: { "content-type": request.headers.get("content-type") ?? "" },
+    }).formData();
+  } catch (error) {
+    return Response.json(
+      {
+        ok: false,
+        message: error instanceof BodyLimitError
+          ? `이미지 용량이 너무 큽니다. ${REFERENCE_UPLOAD_MAX_MB}MB 이하로 올려 주세요.`
+          : "요청 형식이 올바르지 않습니다.",
+      },
+      { status: error instanceof BodyLimitError ? 413 : 400 },
+    );
+  }
+
+  try {
     const id = IdSchema.parse(form.get("id"));
     const title = z.string().max(200).parse(form.get("title") ?? "");
     const purpose = ReferencePurposeSchema.parse(form.get("purpose"));
     const file = form.get("file");
     if (!(file instanceof File)) throw new Error("이미지 파일을 골라 주세요.");
 
+    /*
+      **딱지를 믿지 않고 바이트를 본다.** 화면이 준 `type` 은 확장자에서 온
+      값이라, `.png` 라는 이름의 JPEG 이 `image/png` 로 저장돼 브라우저가 못
+      여는 파일이 된다. 그림이 아닌 바이트도 여기서 끝난다.
+    */
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const inspected = await inspectUploadedImage(bytes);
+    if (!inspected.ok) {
+      return Response.json(
+        { ok: false, message: inspected.message },
+        { status: inspected.reason === "too_many_pixels" ? 413 : 400 },
+      );
+    }
+
     const image = await saveReferenceImage({
       userId: auth.member.userId,
       id,
       title,
       purpose,
-      bytes: new Uint8Array(await file.arrayBuffer()),
-      mimeType: file.type,
+      bytes: new Uint8Array(bytes),
+      // 화면이 준 딱지가 아니라 **실제 바이트로 정한 값**이다.
+      mimeType: inspected.mimeType,
     });
 
     // 로컬은 서명 URL 이 없어 자체 경로로 내려 준다. 운영은 목록을 다시

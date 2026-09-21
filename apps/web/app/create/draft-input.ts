@@ -1,4 +1,5 @@
 import type { PdpAppState, PdpDraftRecord, PdpEditorDraftState } from "./pdp-drafts";
+import { editorForSections } from "./editor-state";
 
 /**
  * 화면 상태에서 초안에 담을 몸통을 만든다.
@@ -60,6 +61,6 @@ export function buildDraftInput(state: DraftInputState, hasContent: boolean): Dr
           ? "editor"
           : "upload",
     notice: editorDraftState?.notice ?? notice,
-    editorState: rest.result ? (editorDraftState ?? defaultEditorState()) : null,
+    editorState: rest.result ? editorForSections(editorDraftState ?? defaultEditorState(), rest.result.blueprint.sections) : null,
   };
 }

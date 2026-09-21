@@ -126,12 +126,9 @@ describe("GPT Image 2 페이로드", () => {
     expect(p.image_urls[1]).toBe("data:image/png;base64,BBBB");
   });
 
-  it("참조가 16장을 넘으면 잘라낸다 (문서 상한)", () => {
+  it("참조가 16장을 넘으면 거부한다", () => {
     const many = Array.from({ length: 20 }, () => anchor);
-    const p = buildFalPayload("gpt-image-2", { ...base, references: many }) as FalPayload & {
-      image_urls: string[];
-    };
-    expect(p.image_urls).toHaveLength(16);
+    expect(() => buildFalPayload("gpt-image-2", { ...base, references: many })).toThrow(/참조/);
   });
 
   it("system_prompt 를 지원하지 않으므로 프롬프트에 합친다", () => {
@@ -304,13 +301,12 @@ describe("참조 이미지 장수 상한", () => {
     }
   });
 
-  it("상한을 넘으면 잘라서 보낸다 — nano 계열도", () => {
+  it("모든 모델에서 상한 초과를 조용히 버리지 않는다", () => {
     // 전에는 GPT 만 잘랐고 nano 계열은 받은 만큼 다 보냈다.
     for (const model of IMAGE_MODELS) {
-      const payload = buildFalPayload(model.id, {
+      expect(() => buildFalPayload(model.id, {
         ...base, references: many(model.maxReferenceImages + 5),
-      }) as FalPayload & { image_urls?: string[] };
-      expect(payload.image_urls?.length).toBe(model.maxReferenceImages);
+      })).toThrow(/참조/);
     }
   });
 
@@ -323,10 +319,10 @@ describe("참조 이미지 장수 상한", () => {
     }
   });
 
-  it("앞쪽을 남긴다", () => {
+  it("한도 안에서 순서를 그대로 유지한다", () => {
     // 순서가 곧 우선순위다. 정체성 기준이 앞에 온다.
     const payload = buildFalPayload("nano-banana", {
-      ...base, references: [anchor, ...many(20)],
+      ...base, references: [anchor, ...many(6)],
     }) as FalPayload & { image_urls?: string[] };
     expect(payload.image_urls?.[0]).toContain("image/jpeg");
   });
@@ -370,10 +366,7 @@ describe("특화 모델", () => {
   it("참조 상한이 10장이다", () => {
     // Seedream 은 참조를 10장까지 받는다. nano 계열(14)보다 좁다.
     const many = Array.from({ length: 15 }, (): ReferenceImage => style);
-    const payload = buildFalPayload("seedream-5-pro", { ...base, references: many }) as FalPayload & {
-      image_urls?: string[];
-    };
-    expect(payload.image_urls?.length).toBe(10);
+    expect(() => buildFalPayload("seedream-5-pro", { ...base, references: many })).toThrow(/10장/);
   });
 });
 

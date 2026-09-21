@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SectionBlueprint } from "@fixup/pdp-core";
 
 const membership = vi.hoisted(() => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
+  settleAiUsage: vi.fn(async () => ({})),
   reserveAiUsage: vi.fn(),
   finalizeAiUsage: vi.fn(),
 }));
@@ -140,5 +142,118 @@ describe("이미지 생성 근거 게이트", () => {
     }));
     expect(response.status).toBe(400);
     expect(membership.reserveAiUsage).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * **사용자가 직접 친 금지 주장도 막는다**(N-1, 설계 §9.2).
+ *
+ * 설계: 「`sample`: … **금지된 허위 주장은 확인 버튼만으로 허용하지 않는다**」.
+ *
+ * ── 무엇이 새고 있었나 ─────────────────────────────────────
+ *
+ * 게이트는 `scanBannedClaims(section.prompt_en)` **하나만** 봤다. 그런데
+ * 상세페이지는 출력 모드가 `full-image` 라 **글자가 이미지 안에 그려진다** —
+ * `pdp.image-prompt.ts` 가 제목·부제·불릿·신뢰문구를 프롬프트에 싣는다.
+ *
+ * 그래서 사용자가 제목에 「식약처 인증」을 직접 치면
+ *
+ *   `applyUserEdit` → `kind: "user"` → 코어의 banned 검사는 `sample` 만 본다
+ *   → 서버 게이트는 `prompt_en` 만 본다
+ *   → **그대로 이미지에 그려져 나간다**
+ *
+ * 금지어 갈래가 guarantee·medical·credential 셋이라 전부 법적 위험이다.
+ *
+ * ── 재는 것을 갈라 둔다 ────────────────────────────────────
+ *
+ * 게이트에는 검사가 셋이다(근거 없는 수치 · 미확인 예시 · 금지 주장). 근거를
+ * 안 달면 **앞 둘에 먼저 걸려** 금지 주장 검사가 도는지 알 수 없다. 그래서
+ * 아래는 전부 `kind: "user"` 근거를 달아 **금지 주장만 남긴다** — 사용자가
+ * 직접 써서 확인까지 누른 상태다.
+ */
+describe("금지된 주장은 어느 칸에 있어도 막는다", () => {
+  /**
+   * 그 칸을 사용자가 직접 쓰고 확인까지 누른 상태.
+   *
+   * **같은 칸의 근거가 둘이면 안 된다.** 기본 근거를 남겨 두면 값이 안 맞아
+   * `stale` 이 되고, 그러면 「미확인 예시」 검사에 먼저 걸려 금지 주장 검사가
+   * 도는지 알 수 없다.
+   */
+  const 사용자가친것 = (slot: string, value: string) =>
+    section({
+      [slot]: value,
+      evidence: [
+        ...(slot === "headline" ? [] : [{ target: { slot: "headline" }, value: "오늘 시작하세요", kind: "rhetoric" }]),
+        { target: { slot: "prompt_ko" }, value: "밝은 방", kind: "rhetoric" },
+        { target: { slot }, value, kind: "user" },
+      ],
+    } as never);
+
+  it.each([
+    ["headline", "식약처 인증을 받은 제품입니다"],
+    ["subheadline", "국내 1위 제품입니다"],
+    ["trust_or_objection_line", "특허 등록된 기술입니다"],
+  ])("**%s 에 있어도 막는다** — 이미지에 그려지는 칸이다", (slot, value) => {
+    const 막힘 = rejectIfUnverified([사용자가친것(slot, value)]);
+
+    expect(막힘, `${slot} 이 안 막혔다`).toBeTruthy();
+  });
+
+  it("**불릿에 있어도 막는다**", () => {
+    const 막힘 = rejectIfUnverified([
+      section({
+        bullets: ["평범한 줄", "국내 1위 제품"],
+        evidence: [
+          { target: { slot: "headline" }, value: "오늘 시작하세요", kind: "rhetoric" },
+          { target: { slot: "prompt_ko" }, value: "밝은 방", kind: "rhetoric" },
+          { target: { slot: "bullet", index: 0 }, value: "평범한 줄", kind: "rhetoric" },
+          { target: { slot: "bullet", index: 1 }, value: "국내 1위 제품", kind: "user" },
+        ],
+      } as never),
+    ]);
+
+    expect(막힘).toBeTruthy();
+  });
+
+  /**
+   * **이미지에 안 실리는 칸은 안 막는다.** CTA 는 싣지 않기로 한 결정이 있다
+   * (`pdp.image-prompt.ts`, 2026-07-30). 안 그려지는 글자로 생성을 막으면
+   * 사용자는 왜 막혔는지 알 수 없다.
+   */
+  it("**이미지에 안 실리는 CTA 는 안 막는다**", () => {
+    expect(rejectIfUnverified([사용자가친것("CTA", "국내 1위 제품 보러 가기")])).toBeNull();
+  });
+
+  /**
+   * **무엇을 고쳐야 하는지 말한다.**
+   *
+   * 「사용할 수 없는 주장이 있습니다」만 말하면 사용자는 여덟 칸을 뒤진다.
+   * 사용자가 직접 쓴 문구를 우리가 말없이 지우지 않기로 했으므로
+   * (그것이야말로 배신이다), **어디를 고쳐야 하는지는 반드시 말해야 한다.**
+   */
+  it("**어느 칸의 무슨 말이 걸렸는지 알려 준다**", async () => {
+    const 막힘 = rejectIfUnverified([사용자가친것("headline", "식약처 인증을 받은 제품입니다")]);
+
+    const body = await 막힘!.json();
+    expect(body.message).toContain("제목");
+    expect(body.message).toContain("식약처 인증");
+  });
+
+  it("**섹션 이름도 알려 준다** — 여러 장 중 어느 장인지", async () => {
+    const 막힘 = rejectIfUnverified([사용자가친것("subheadline", "국내 1위 제품입니다")]);
+
+    const body = await 막힘!.json();
+    expect(body.message).toContain("첫 장면");
+  });
+
+  it("**사용자에게 보이는 말에 줄표를 안 쓴다**", async () => {
+    const 막힘 = rejectIfUnverified([사용자가친것("headline", "식약처 인증을 받은 제품입니다")]);
+
+    expect((await 막힘!.json()).message).not.toContain("—");
+  });
+
+  it("**멀쩡한 문구는 그대로 지나간다** — 막는 것이 과하면 못 쓴다", () => {
+    expect(rejectIfUnverified([사용자가친것("headline", "30일 환불 보장")])).toBeNull();
+    expect(rejectIfUnverified([사용자가친것("subheadline", "부담 없이 써 보세요")])).toBeNull();
   });
 });

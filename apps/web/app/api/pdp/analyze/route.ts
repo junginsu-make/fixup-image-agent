@@ -3,16 +3,23 @@ import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fi
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { sliceTallReference } from "../../../../lib/pdp/slice-image";
-import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
-const MAX_ANALYZE_ATTEMPTS = 2;
 
-function isTransientBlueprintFailure(code: unknown, detail?: string) {
-  return String(code) === "INVALID_REQUEST" && /prompt_en|no sections|section/i.test(detail ?? "");
-}
+/*
+  **다시 묻는 일은 코어가 한다**(D-3).
+
+  여기에는 「`INVALID_REQUEST` 이고 detail 에 section 이 있으면 다시 부른다」는
+  고리가 있었다. 그런데 분석 경로는 그 코드를 던지는 자리가 없다 — 섹션이 비면
+  `AI_RESPONSE_INVALID` 다. **한 번도 안 걸렸다.** 있는 줄 알았던 그물이 없었다.
+
+  지금은 `retryOperation` 이 그 코드를 두 번까지 다시 묻는다
+  (`pdp.retry-policy`). 여기에 또 걸면 한 요청에 모델을 여섯 번 부른다.
+*/
 
 export async function POST(req: Request) {
   // 이 요청에서 글 모델에 쓴 돈을 잰다. 안쪽 어디서 부르든 여기로 모인다.
@@ -20,10 +27,12 @@ export async function POST(req: Request) {
 }
 
 async function analyze(req: Request) {
+  const parsed = await readPdpRequest<PdpAnalyzeRequest>(req, "analyze");
+  if (!parsed.ok) return parsed.response;
   const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
   if (!reservation.ok) return reservation.response;
   try {
-    const body = (await req.json()) as PdpAnalyzeRequest;
+    const body = parsed.body;
     const providers = createPdpProviders();
 
     /*
@@ -41,41 +50,47 @@ async function analyze(req: Request) {
         }
       : undefined;
     const request = { ...body, styleReference };
-    let lastEnvelope: ReturnType<typeof toPdpErrorResponse> | null = null;
-    let lastStatus = 500;
-    for (let attempt = 1; attempt <= MAX_ANALYZE_ATTEMPTS; attempt++) {
-      try {
-        // 조각낸 레퍼런스가 실린 `request` 를 보낸다(`body` 가 아니다).
-        const result = await analyzeProduct(request, providers, { skipFirstImage: true });
-        // 장부가 안 닫혀도 결과는 돌려준다. 여기서 던지면 아래 catch 가 성공한
-        // 분석을 「분석 실패」로 바꾸고, 사용자는 다시 눌러 돈을 또 쓴다.
-        /**
-         * **그림이 없는 단계도 돈이 든다.** 크레딧은 0장이지만 글 모델 값은
-         * 나갔다. 그동안 이 값이 장부에 안 실려, 분석만 반복하는 사용이
-         * 원가 집계에서 $0 으로 보였다.
-         */
-        const usage = await settleAiUsage(reservation, true, 0, undefined, {
-          model: "",
-          billableImages: 0,
-          llmUsd: readLlmMeter().usd,
-        });
-        return Response.json({ ok: true, result, usage });
-      } catch (err) {
-        lastEnvelope = toPdpErrorResponse(err);
-        lastStatus = mapPdpErrorCodeToStatus(lastEnvelope.code);
-        if (!(attempt < MAX_ANALYZE_ATTEMPTS && isTransientBlueprintFailure(lastEnvelope.code, lastEnvelope.detail))) break;
-      }
-    }
-    // 실패해도 글 모델 값은 이미 나갔다. 낭비가 안 보이면 줄일 수도 없다.
-    await finalizeAiUsage(reservation, false, 0, String(lastEnvelope?.code || "analyze_failed"), {
+
+    // 조각낸 레퍼런스가 실린 `request` 를 보낸다(`body` 가 아니다).
+    const analyzed = await analyzeProduct(request, providers, { skipFirstImage: true });
+    const result = { ...analyzed, planningExecutions: providers.llm.executions?.filter((entry) => entry.purpose === "planning") };
+    /**
+     * 장부가 안 닫혀도 결과는 돌려준다. 여기서 던지면 아래 catch 가 성공한
+     * 분석을 「분석 실패」로 바꾸고, 사용자는 다시 눌러 돈을 또 쓴다.
+     *
+     * **그것을 지키는 것은 이 자리가 아니라 `settleAiUsage` 다** — 그 함수가
+     * RPC 오류를 삼킨다. `finalizeAiUsage` 로 바꾸는 순간 성공한 분석이
+     * 500 이 된다.
+     *
+     * **그림이 없는 단계도 돈이 든다.** 크레딧은 0장이지만 글 모델 값은
+     * 나갔다. 그동안 이 값이 장부에 안 실려, 분석만 반복하는 사용이 원가
+     * 집계에서 $0 으로 보였다.
+     */
+    const usage = await settleAiUsage(reservation, true, 0, undefined, {
       model: "",
       billableImages: 0,
       llmUsd: readLlmMeter().usd,
     });
-    return Response.json(lastEnvelope, { status: lastStatus });
+    return Response.json({ ok: true, result, usage });
   } catch (err) {
-    await finalizeAiUsage(reservation, false, 0, "invalid_request");
+    /*
+      **무슨 코드로 닫느냐가 한도를 가른다**(C-9).
+
+      여기는 그동안 `"invalid_request"` 한 줄로 닫았다. 그런데 이 자리에 오는
+      것은 요청 모양 문제가 아니다 — 요청 모양은 `readPdpRequest` 가 예약
+      **전에** 되돌려 보낸다. 실제로 오는 것은 키가 없거나(`AI_KEY_MISSING`)
+      레퍼런스를 자르다 터진 경우다.
+
+      SQL 은 이 코드를 보고 분석 한도를 먹일지 정한다(`pdp.analysis-quota`).
+      뭉뚱그려 적으면 공급자 장애가 사용자 한도를 먹는다.
+    */
     const envelope = toPdpErrorResponse(err);
+    // 실패해도 글 모델 값은 이미 나갔다. 낭비가 안 보이면 줄일 수도 없다.
+    await settleAiUsage(reservation, false, 0, String(envelope.code || "analyze_failed"), {
+      model: "",
+      billableImages: 0,
+      llmUsd: readLlmMeter().usd,
+    });
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }
 }

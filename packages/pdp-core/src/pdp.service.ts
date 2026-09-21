@@ -1,9 +1,13 @@
-import { Type } from "./pdp.llm";
+import { reviewStampOf } from "./pdp.review-freshness";
+import { Type, purposeOfCall } from "./pdp.llm";
+import { extractJsonCandidate } from "./pdp.response-parse";
+import { isRetriableModelFailure } from "./pdp.retry-policy";
 import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
   userInstructionHead,
   userInstructionTail,
+  resolveLook,
   type ImageLook,
 } from "@fixup/shared";
 import type {
@@ -24,7 +28,7 @@ import type {
   SectionBlueprint
 } from "./types";
 import { DEFAULT_IMAGE_MODEL } from "./types";
-import { classifyOutcome, qaRetryDirective, runQaGate, type QaOutcome } from "./pdp.qa";
+import { classifyOutcome, qaRetryDirective, qaStatusOf, runQaGate, type QaOutcome, type QaStatus, type QaVerdict } from "./pdp.qa";
 import type { ImageGenerator, PdpProviders } from "./pdp.image-provider";
 import {
   DEFAULT_PDP_LOOK,
@@ -32,7 +36,12 @@ import {
   buildImageSystemPrompt,
   type ImagePromptOptions,
 } from "./pdp.image-prompt";
-import { shouldSendAnchor } from "./pdp.product-anchor";
+import { anchorRoleFor, shouldSendAnchor } from "./pdp.product-anchor";
+import type { AnchorKind } from "./pdp.product-anchor";
+import { resolvePersonSource } from "./pdp.person-source";
+import type { PersonSource } from "./pdp.person-source";
+import { countClearedCopy, normalizeSectionEvidence, resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
+import { photoSourceText, productFactText } from "./pdp.photo-evidence";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { buildSellerBriefPrompt, type SellerBrief } from "./pdp.seller-brief";
 import { intensityRules } from "./pdp.copy-intensity";
@@ -49,9 +58,15 @@ import {
   PRODUCT_GROUNDING_RULES,
   PRODUCT_READING_RULES,
   PRODUCT_READING_SCHEMA,
+  effectiveGapPolicy,
   normalizeProductReading,
+  productReadingStatus,
 } from "./pdp.product-reading";
 import { buildReferenceRoleDirective } from "./pdp.reference-policy";
+import { clampSections, sectionCountRules } from "./pdp.section-plan";
+import { buildStrategyDirective } from "./pdp.replan";
+import { adPolishRule, buildPlanInstructionRules, lookPlanningRule } from "./pdp.plan-instruction";
+import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, designSystemPartOf, normalizeDesignSystem } from "./pdp.design-system";
 
 const DEFAULT_IMAGE_MIME = "image/jpeg";
 
@@ -65,6 +80,13 @@ type GeneratedImagePayload = {
 };
 
 type QaResult = {
+  /**
+   * 검수가 어떻게 끝났는가.
+   *
+   * `passed` 만으로는 **못 돌린 것과 통과한 것을 구별할 수 없다**. 부르는 쪽이
+   * 「검사를 안 했다」를 알아야 사용자에게 그대로 알릴 수 있다(설계 §10.2).
+   */
+  status?: QaStatus;
   passed: boolean;
   blocking: QaDefect[];
   warnings: QaDefect[];
@@ -112,6 +134,15 @@ type InternalImageGenOptions = ImageGenOptions & {
   styleReferenceImages?: Array<{ base64: string; mimeType: string; description?: string }>;
   /** 제품 이미지를 지킬 것인가. 자세한 판단은 pdp.product-anchor 참조. */
   preserveProductImage?: boolean;
+  anchorKind?: AnchorKind;
+  /**
+   * **실제 제품 사진이 없다**(N-2, 설계 §9.1).
+   *
+   * 글로만 실물을 설명한 경우다. 화면이 판단해서 보낸다 — 상품 종류를 아는
+   * 쪽이 화면이고, 서버가 다시 추측하면 판단이 두 벌이 된다.
+   */
+  conceptOnly?: boolean;
+  personSource?: PersonSource;
   /**
    * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
    *
@@ -204,11 +235,19 @@ function legacyContentsClient(llm: PdpLlm): LegacyContentsClient {
               mimeType: part.inlineData!.mimeType,
             })),
           schema: args.config?.responseSchema,
-          maxTokens: args.config?.maxOutputTokens ?? 8192,
+          purpose: purposeOfCall(args.name),
+          // 부르는 쪽이 정했으면 그것을 쓴다. 안 정했으면 제공자가 목적을 보고
+          // 정한다 — 기획은 길게, 검수는 짧게.
+          maxTokens: args.config?.maxOutputTokens,
         });
       },
     },
   };
+}
+
+/** 사진 경로의 어댑터를 시험에서 그대로 재기 위한 출구. 제품 코드는 안 쓴다. */
+export function legacyClientForTest(llm: PdpLlm): LegacyContentsClient {
+  return legacyContentsClient(llm);
 }
 
 export class PdpService {
@@ -259,18 +298,40 @@ export class PdpService {
       request.sellerBrief,
       request.copyIntensity,
       request.gapPolicy,
-      styleReferenceForPlan
-        ? {
-            styleReference: {
-              description: styleReferenceForPlan.description,
-              intent: styleReferenceForPlan.intent,
-              sliceCount: styleReferenceImages.length,
-            },
-          }
-        : undefined,
+      {
+        ...(styleReferenceForPlan
+          ? {
+              styleReference: {
+                description: styleReferenceForPlan.description,
+                intent: styleReferenceForPlan.intent,
+                sliceCount: styleReferenceImages.length,
+              },
+            }
+          : {}),
+        // 구성·문구 요청과 그림체도 기획이 본다(U-06).
+        planInstruction: request.planInstruction,
+        /*
+          **없는 레퍼런스를 따르라고 하지 않는다.**
+
+          `auto` 는 붙인 레퍼런스의 결을 따르는 값이다. 레퍼런스를 뺐는데 값이
+          `auto` 로 남으면, 기획 프롬프트에 그림 한 장 없이 「첨부한 레퍼런스를
+          따르라」가 실린다 — 모델은 없는 것을 상상해 `style_guide` 를 채운다.
+        */
+        look: resolveLook(request.look ?? "photoreal", Boolean(styleReferenceForPlan)),
+      },
     );
 
-    const makeBlueprint = (revisionDirective: string) => retryOperation(async () => {
+    /**
+     * 설계도를 한 벌 받아 온다.
+     *
+     * **코드 재시도를 켜는 유일한 자리다**(D-6). 글 모델은 같은 것을 다시
+     * 물으면 다른 답을 준다.
+     *
+     * `retries` 를 받는 이유는 **재작성이 덤이기 때문**이다. 호출 하나가
+     * 60~110초라, 재시도(3회) × 재작성(2번 호출) = 여섯 번이면 라우트
+     * 상한(300초)을 넘고 그때는 정산이 아예 안 돌아 예약이 묶인 채 남는다.
+     */
+    const makeBlueprint = (revisionDirective: string, retries = 2) => retryOperation(async () => {
       const response = await client.models.generateContent({
         name: "pdp_blueprint",
         contents: [
@@ -301,6 +362,8 @@ ${analyzePrompt}`
             // 제품 사실이 뒤에 쓰는 카피의 조건이 된다 — 호출을 늘리지 않고 순서를 만든다.
             properties: {
               productReading: PRODUCT_READING_SCHEMA,
+              // 섹션보다 앞이다. 먼저 정한 디자인이 뒤에 쓰는 장면의 조건이 된다.
+              designSystem: DESIGN_SYSTEM_SCHEMA,
               executiveSummary: { type: Type.STRING },
               scorecard: {
                 type: Type.ARRAY,
@@ -359,7 +422,7 @@ ${analyzePrompt}`
       });
 
       return parseBlueprintResponse(response);
-    });
+    }, retries, 1500, true);
 
     /**
      * 심사는 품질을 올리려는 장치다. 그것 때문에 생성 자체가 죽으면 손해가 더 크다.
@@ -374,34 +437,120 @@ ${analyzePrompt}`
             responseSchema: REVIEW_SCHEMA as never,
           },
         });
-        return normalizeReview(JSON.parse(extractResponseText(response)));
+        /*
+          **무엇을 보고 낸 심사인지 함께 적는다**(N-3, 설계 §9.3).
+
+          이 값이 없으면 사용자가 섹션을 지우거나 제목을 고쳐도 「모두
+          통과했습니다」가 그대로 붙는다. 자국을 찍어 두면 화면이 대조해
+          낡았는지 가릴 수 있다.
+
+          **심사에 준 것과 같은 구성안으로 찍는다.** 다른 것으로 찍으면
+          처음부터 낡은 심사가 된다.
+        */
+        const reviewed = normalizeReview(JSON.parse(extractResponseText(response)));
+        return reviewed ? { ...reviewed, stamp: reviewStampOf(candidate) } : reviewed;
       } catch {
         return null;
       }
     };
 
-    let blueprint = await makeBlueprint("");
+    /*
+      **고친 전략이 있으면 그것에서 출발한다**(U-11).
+
+      없으면 빈 문자열이라 평소 기획과 한 글자도 다르지 않다.
+    */
+    let blueprint = await makeBlueprint(buildStrategyDirective(request.strategyDirective));
     let review = await runReview(blueprint);
 
     // 사진 경로는 텍스트 경로보다 상한을 좁게 잡는다. 여기는 "사진 한 장 넣고 빨리
     // 받는" 길이라, 품질을 올리자고 대기 시간을 두 배로 만들면 길의 성격이 바뀐다.
     if (review && needsRevision(review)) {
-      const revised = await makeBlueprint(buildRevisionDirective(review));
-      const revisedReview = await runReview(revised);
-      // 고친 것이 더 나쁘면 원래 것을 쓴다. 재작성이 늘 개선은 아니다.
-      if (reviewPenalty(revisedReview) < reviewPenalty(review)) {
-        blueprint = revised;
-        review = revisedReview;
+      /*
+        **고치기가 실패하면 안 고친 것과 같은 상태로 둔다.**
+
+        전에는 여기에 그물이 없었다. 빈 섹션 판정을 파싱 자리로 옮긴 뒤로는
+        재작성이 빈 답을 받으면 던지는데, 그러면 **첫 번째로 이미 받아 둔
+        멀쩡한 설계도까지 같이 죽는다**(리뷰 HIGH-1).
+
+        바로 위 심사(`runReview`)가 같은 상황을 일부러 삼키는 것과 같은 결이다
+        — 「덤 때문에 생성 자체가 죽으면 손해가 더 크다」.
+
+        되묻지도 않는다(`retries = 0`). 덤에 값을 세 배로 쓰지 않는다.
+      */
+      try {
+        const revised = await makeBlueprint(buildRevisionDirective(review), 0);
+        const revisedReview = await runReview(revised);
+        // 고친 것이 더 나쁘면 원래 것을 쓴다. 재작성이 늘 개선은 아니다.
+        if (reviewPenalty(revisedReview) < reviewPenalty(review)) {
+          blueprint = revised;
+          review = revisedReview;
+        }
+      } catch (error) {
+        console.warn("[pdp] 구성안 재작성 실패 — 처음 만든 것을 그대로 씁니다", error);
       }
     }
 
-    const firstSection = blueprint.sections[0];
+    /*
+      **사진 경로도 근거를 검사한다**(K-09).
 
+      전에는 글 경로에서만 돌았다. 사진 경로는 같은 스키마로 `evidence` 를
+      받으면서 아무도 안 봐서, 지어낸 인용·금지된 주장·안 채운 질문이 그대로
+      통과했다. 같은 함수를 쓴다 — 두 벌로 적으면 한쪽만 고치는 날이 온다.
+
+      원문은 **사용자가 직접 적은 것**이다(`photoSourceText`). 사진에서 읽은
+      것은 추정이라 인용의 근거가 될 수 없다(설계 §9.2).
+    */
+    const photoSourceInput = {
+      sellerBrief: request.sellerBrief,
+      additionalInfo: request.additionalInfo,
+    };
+    const photoSource = photoSourceText(photoSourceInput);
+
+    /*
+      **제품을 충분히 읽었는지 본다**(U-13).
+
+      `isProductReadingUsable` 은 만들어만 두고 아무도 부르지 않았다. 사진이
+      흐릿하든 제품이 안 보이든 결과는 똑같이 「완성」으로 나왔다.
+
+      판단은 **그 자리에서 쓰인다** — 근거가 아예 없으면 「예시로 채우기」를
+      내린다. 이름표만 붙이고 아무것도 안 바꾸면 안 부르던 때와 같다.
+    */
+    const readingStatus = productReadingStatus({
+      reading: blueprint.productReading,
+      // **제품을 말하는 칸만 센다.** 「대상: 30대 여성」한 줄로 근거가 생기지
+      // 않는다 — 그 칸은 인용의 원문이지 제품 사실이 아니다.
+      sellerSourceText: productFactText(photoSourceInput),
+    });
+    const requestedGapPolicy = request.gapPolicy ?? "ask";
+    const gapPolicy = effectiveGapPolicy(readingStatus, requestedGapPolicy);
+
+    const beforeGapPolicy = blueprint;
+    const photoEvidenceFailures = verifyEvidenceStructure(blueprint, photoSource);
+    if (photoEvidenceFailures.length > 0) {
+      // 정책을 넘긴다. 글 경로와 같은 처리다 — 예시로 채우기를 고른 사용자에게
+      // 빈 페이지를 주지 않는다.
+      // 섹션만 갈아 끼운다. 구성안 전체를 바꾸면 사진 경로가 함께 들고 있는
+      // 제품 판독(`productReading`)이 떨어져 나간다.
+      blueprint = {
+        ...blueprint,
+        sections: resolveStructureFailures(blueprint, photoEvidenceFailures, gapPolicy).sections,
+      };
+    }
+
+    /*
+      섹션이 비었는지는 **파싱 자리에서** 본다(D-3). 여기서 보면 재시도 바깥이라
+      빈 답이 그대로 끝난다.
+
+      그래도 단정(`!`)은 안 쓴다. 이 사이에 `resolveStructureFailures` 가 끼는데,
+      지금은 `.map` 이라 수를 안 줄이지만 **언젠가 `.filter` 가 되면 단정이
+      조용히 거짓말을 한다.** 여기 닿으면 진짜 버그라는 뜻이므로 그렇게 말한다.
+    */
+    const firstSection = blueprint.sections[0];
     if (!firstSection) {
       throw new PdpServiceError(
         "AI_RESPONSE_INVALID",
         "상세페이지 섹션을 생성하지 못했습니다.",
-        "No sections returned from analyze response."
+        "Sections disappeared between parse and image generation."
       );
     }
 
@@ -445,7 +594,22 @@ ${analyzePrompt}`
       blueprint,
       // 심사 결과를 함께 돌려준다. 화면이 이미 받을 준비가 돼 있는데
       // (ScenarioEditor 의 review) 사진 경로만 늘 비어 있었다.
-      review: review ?? undefined
+      review: review ?? undefined,
+      // 못 읽었으면 화면이 말할 수 있어야 한다. 조용히 넘기면 사용자는 근거
+      // 없는 카피를 확인된 것으로 읽는다.
+      productReadingStatus: readingStatus,
+      /*
+        **정한 것이 아니라 한 것을 적는다.**
+
+        정책을 엄하게 내려도 한 칸도 안 비워질 수 있다 — 모델이 근거 딱지를 안
+        붙인 섹션은 검사가 통째로 건너뛴다. 그때 화면이 「치웠습니다」라고 하면
+        사용자는 위험한 문장이 사라진 줄 알고 그대로 발행한다.
+      */
+      copyGapOutcome: {
+        requested: requestedGapPolicy,
+        applied: gapPolicy,
+        cleared: countClearedCopy(beforeGapPolicy, blueprint)
+      }
     };
   }
 
@@ -462,10 +626,22 @@ ${analyzePrompt}`
       request.options?.referenceModelImageBase64,
       request.options?.referenceModelImageMimeType
     );
-    const referenceModelProfile =
-      normalizedReferenceModel && request.options?.withModel
-        ? await this.extractReferenceModelProfile(client, normalizedReferenceModel)
-        : null;
+    /*
+      **안 쓸 얼굴의 프로필을 뽑지 않는다**(U-04).
+
+      캐릭터를 골랐으면 업로드 사진은 그림에 안 들어간다. 그런데 프로필을 뽑으면
+      LLM 호출 한 번이 그냥 나가고, 그 프로필로 나온 그림을 대조하면 **당연히
+      불일치**라 멀쩡한 그림을 세 번까지 다시 만든다.
+    */
+    const usesUploadedPerson =
+      resolvePersonSource({
+        hasUploadedPerson: Boolean(normalizedReferenceModel && request.options?.withModel),
+        hasCharacter: (request.options?.characterReferences ?? []).length > 0,
+        choice: request.options?.personSource,
+      }) === "uploaded";
+    const referenceModelProfile = usesUploadedPerson && normalizedReferenceModel
+      ? await this.extractReferenceModelProfile(client, normalizedReferenceModel)
+      : null;
 
     const image = await this.generateSectionImageInternal({
       ...request,
@@ -520,10 +696,22 @@ ${analyzePrompt}`
       request.options?.referenceModelImageMimeType
     );
     const options = normalizeImageOptions(request.options);
-    const referenceModelProfile =
-      normalizedReferenceModel && options.withModel
-        ? request.options?.referenceModelProfile ?? (await this.extractReferenceModelProfile(client, normalizedReferenceModel))
-        : null;
+    /*
+      **누구를 쓸지 한 번만 정하고 네 자리가 함께 쓴다**(U-04).
+
+      전에는 참조를 담는 자리만 고쳤다. 프로필 뽑기·재시도 상한·동일 인물 검증은
+      옛 조건을 그대로 써서, 캐릭터를 고르면 **그림은 캐릭터로 그려 놓고 검증은
+      업로드 얼굴과 대조**했다 — 당연히 불일치라 세 장을 태우고 요청이 실패한다.
+    */
+    const usesUploadedPerson =
+      resolvePersonSource({
+        hasUploadedPerson: Boolean(normalizedReferenceModel && options.withModel),
+        hasCharacter: (options.characterReferences ?? []).length > 0,
+        choice: options.personSource,
+      }) === "uploaded";
+    const referenceModelProfile = usesUploadedPerson && normalizedReferenceModel
+      ? request.options?.referenceModelProfile ?? (await this.extractReferenceModelProfile(client, normalizedReferenceModel))
+      : null;
 
     if (!section.prompt_en) {
       throw new PdpServiceError(
@@ -534,7 +722,7 @@ ${analyzePrompt}`
     }
 
     const qaEnabled = options.outputMode === "full-image";
-    const refMaxAttempts = normalizedReferenceModel && options.withModel ? REFERENCE_MODEL_MAX_ATTEMPTS : 1;
+    const refMaxAttempts = usesUploadedPerson ? REFERENCE_MODEL_MAX_ATTEMPTS : 1;
     // qa+ref 동시면 속도 우선(결정 #4)으로 QA_MAX_ATTEMPTS(2)를 상한으로 쓴다.
     const maxAttempts = qaEnabled ? QA_MAX_ATTEMPTS : refMaxAttempts;
     let lastGeneratedImage: GeneratedImagePayload | null = null;
@@ -542,6 +730,8 @@ ${analyzePrompt}`
     // 번 치른다. 오류로 끝난 호출은 이미지가 없으므로 세지 않는다.
     let generatedImages = 0;
     let retryDirective = options.retryDirective;
+    /** 마지막 검수 판정. 「못 돌렸다」와 「결함이 없다」를 가리는 데 쓴다. */
+    let lastQaVerdict: QaVerdict | null = null;
     let lastQaOutcome: QaOutcome = { blocking: [], warnings: [] };
     /**
      * 마지막 시도에서 인물 검증이 통과했나.
@@ -571,12 +761,25 @@ ${analyzePrompt}`
       const styleReferences = options.styleReferenceImages ?? [];
       const styleReference = styleReferences[0];
 
-      // 참조가 둘이면 모델이 절충한다. 제품 보존을 끄면 앵커를 빼서
-      // 레퍼런스의 디자인을 온전히 받는다.
+      /*
+        **제품 사진은 언제나 보낸다**(U-03).
+
+        전에는 제품 보존을 끄면 앵커를 통째로 뺐다. 그러면 모델은 레퍼런스만
+        보고 **제품을 지어낸다** — 화면이 말한 「조금씩 달라질 수 있습니다」가
+        아니라 다른 제품이 나온다.
+
+        참조가 둘이면 모델이 절충하는 것은 여전하다. 그것은 **앵커를 빼서가
+        아니라 지시로** 푼다(`anchorRole`).
+      */
+      const anchorRole = anchorRoleFor({
+        anchorKind: options.anchorKind,
+        hasStyleReference: Boolean(styleReference),
+        preserveProduct: options.preserveProductImage ?? true,
+      });
       if (
         shouldSendAnchor({
+          anchorKind: options.anchorKind,
           hasStyleReference: Boolean(styleReference),
-          preserveProduct: options.preserveProductImage ?? true,
         })
       ) {
         references.push({
@@ -587,10 +790,16 @@ ${analyzePrompt}`
         });
       }
 
-      // 얼굴은 하나만 보낸다. 둘을 넣으면 모델이 절충해 제3의 인물이 나온다.
-      // 업로드한 사진이 캐릭터보다 우선이다 — 사용자가 방금 고른 쪽이다.
-      const usesUploadedPerson = Boolean(normalizedReferenceModel && options.withModel);
+      /*
+        얼굴은 하나만 보낸다. 둘을 넣으면 모델이 절충해 제3의 인물이 나온다.
+
+        **누구를 쓸지는 사용자가 정한다**(U-04). 전에는 업로드가 말없이 이겼다 —
+        「사용자가 방금 고른 쪽」이라 적어 뒀지만, 구성안 화면에서는 캐릭터가 더
+        나중일 수도 있다. 어느 쪽이든 사용자는 **이미지가 나온 뒤에야** 자기
+        선택이 무시된 것을 안다.
+      */
       const characterViews = options.characterReferences ?? [];
+      // 위에서 한 번 정했다. 여기서 또 부르면 두 벌이 되고, 한쪽만 고치는 날이 온다.
       const usesCharacter = !usesUploadedPerson && characterViews.length > 0;
 
       if (usesUploadedPerson && normalizedReferenceModel) {
@@ -635,6 +844,9 @@ ${analyzePrompt}`
       });
 
       const promptOptions: ImagePromptOptions = {
+        // 화면비가 프롬프트의 방향을 정한다. 안 넘기면 가로로 뽑으면서 글로는
+        // 세로라고 말한다(2026-09-17 리뷰 U-07).
+        aspectRatio: request.aspectRatio,
         style: options.style,
         // "이 섹션에 인물컷이 필요하다"는 뜻이다. 사용자가 켰고 **인물 참조가 실제로
         // 붙었을 때만** 참이다. 예전에는 업로드 사진만 셌다 — 그래서 캐릭터를 골라
@@ -642,6 +854,8 @@ ${analyzePrompt}`
         // 첨부됐는데 정작 사람이 안 나올 수 있었다.
         withModel: Boolean(options.withModel && (usesUploadedPerson || usesCharacter)),
         outputMode: options.outputMode ?? "editable",
+        // 실제 제품 사진이 없으면 상표·로고를 빼고 확대를 피한다(N-2).
+        conceptOnly: options.conceptOnly,
         emphasisWords: options.emphasisWords,
         desiredTone: request.desiredTone,
         // 화면에서 고른 인물 조건. 안 넘기면 프롬프트가 늘 「20대 한국 여성」으로
@@ -670,10 +884,12 @@ ${analyzePrompt}`
       // 프롬프트 뒤에 긴 문단을 붙였더니 앞쪽 구도 지시가 밀려 무시됐다 — 긴
       // 프롬프트에서 중간 문장은 힘을 잃는다. 가장 중요한 것은 양끝에 둔다.
       const prompt = [
-        userInstructionHead(options.userInstruction),
+        userInstructionHead(options.userInstruction, { identityFirst: true }),
         buildImageJson(section, promptOptions),
         buildReferenceRoleDirective(references, {
           hasUserInstruction: Boolean(options.userInstruction),
+          // 얼마나 지킬지를 함께 넘긴다. 안 넘기면 토글이 아무것도 안 바꾼다.
+          anchorRole,
         }),
         characterIdentity,
         retryDirective ? `Correction required: ${retryDirective}` : "",
@@ -710,7 +926,7 @@ ${analyzePrompt}`
 
       let refOk = true;
       let refDirective = "";
-      if (normalizedReferenceModel && options.withModel && referenceModelProfile) {
+      if (usesUploadedPerson && normalizedReferenceModel && referenceModelProfile) {
         const validation = await this.validateGeneratedImage(client, {
           generatedImage,
           referenceModelImage: normalizedReferenceModel,
@@ -734,6 +950,7 @@ ${analyzePrompt}`
           qaOk = false;
           qaDirective = qaRetryDirective({ defects: sawBlockingOutcome.blocking });
         } else {
+          lastQaVerdict = verdict;
           lastQaOutcome = classifyOutcome(verdict);
           qaOk = lastQaOutcome.blocking.length === 0;
           if (lastQaOutcome.blocking.length) {
@@ -746,11 +963,30 @@ ${analyzePrompt}`
       }
 
       if (refOk && qaOk) {
+        /*
+          **검수를 못 돌린 것을 「통과」로 적지 않는다**(설계 §10.2).
+
+          `runQaGate` 는 호출·파싱이 실패하면 빈 결함을 돌려준다(fail-open).
+          그 자체는 맞는 선택이다 — 검수가 흔들린다고 이미 값을 치른 그림을
+          버릴 수는 없다. 다만 전에는 그 경우도 `passed: true` 로 나가서,
+          **한 번도 검사 안 한 그림이 통과 도장을 받았다.**
+        */
+        const status = lastQaVerdict ? qaStatusOf(lastQaVerdict, lastQaOutcome) : "unavailable";
         return {
           ...generatedImage,
           generatedImages,
           qa: qaEnabled
-            ? { passed: true, blocking: [], warnings: lastQaOutcome.warnings, attempts: attempt + 1 }
+            ? {
+                /*
+                  경고(minor)는 지금까지대로 통과다 — 사람이 보면 좋지만 다시
+                  만들 일은 아니다. **못 돌린 것만** 통과에서 뺀다.
+                */
+                passed: status !== "unavailable" && status !== "failed",
+                status,
+                blocking: [],
+                warnings: lastQaOutcome.warnings,
+                attempts: attempt + 1,
+              }
             : undefined
         };
       }
@@ -929,6 +1165,17 @@ export function toPdpErrorResponse(error: unknown): {
 
   const detail = stringifyError(error);
   const message = error instanceof Error ? error.message : "상세페이지 마법사 처리 중 오류가 발생했습니다.";
+  /*
+    **상태 코드가 있으면 그것이 답이다.**
+
+    SDK 는 공급자 본문을 그대로 `error.message` 에 싣는다. 그래서 본문에 섞인
+    숫자로 짐작하면 「400 prompt is too long: 214297 tokens」가 사용량 초과로
+    분류됐다 — 분석 한도 면제가 생긴 지금은 그것이 **입력 길이로 만들 수 있는
+    우회로**다(C-9 리뷰).
+  */
+  const status = typeof (error as { status?: unknown })?.status === "number"
+    ? (error as { status: number }).status
+    : undefined;
 
   /*
     운영자가 키를 안 넣은 채 배포한 경우. 라우트가 공급자를 만들다 던진다.
@@ -936,6 +1183,20 @@ export function toPdpErrorResponse(error: unknown): {
     없는지는 접힌 detail 안에만 있었다. 이름으로 가른다(엔진은 웹 쪽 클래스를
     import 하지 않는다).
   */
+  /*
+    모델이 답을 끝까지 못 쓴 경우. 「처리 중 오류」로 떨어지면 운영자도 사용자도
+    무엇을 줄여야 하는지 모른다 — 2026-09-17 텍스트 기획이 그렇게 111초를 쓰고
+    죽었다. 이름으로 가른다(엔진은 웹 쪽 클래스를 import 하지 않는다).
+  */
+  if (error instanceof Error && error.name === "PdpResponseTruncatedError") {
+    return {
+      ok: false as const,
+      code: "AI_RESPONSE_INVALID" as const,
+      message: "AI 가 답을 끝까지 쓰지 못하고 잘렸습니다. 입력을 줄이거나 섹션 수를 줄여 다시 시도해 주세요.",
+      detail
+    };
+  }
+
   if (error instanceof Error && error.name === "PdpProviderConfigurationError") {
     return {
       ok: false as const,
@@ -964,7 +1225,7 @@ export function toPdpErrorResponse(error: unknown): {
     };
   }
 
-  if (isQuotaError(message)) {
+  if (isQuotaError(message, status)) {
     return {
       ok: false as const,
       code: "AI_QUOTA_EXCEEDED" as const,
@@ -973,11 +1234,34 @@ export function toPdpErrorResponse(error: unknown): {
     };
   }
 
+  /*
+    **「모델이 답을 보냈다」가 「공급자가 죽었다」보다 강한 신호다.**
+
+    아래 장애 판정은 본문 글자도 본다. 모델이 쓴 조각이 그 글자에 닿으면
+    과금이 나간 뒤인데도 장애로 분류돼 한도를 면제받는다. 그래서 JSON 오류를
+    먼저 가른다(C-9 리뷰).
+  */
   if (isJsonError(message)) {
     return {
       ok: false as const,
       code: "AI_RESPONSE_INVALID" as const,
       message: "AI 응답을 해석하지 못했습니다. 같은 이미지로 다시 시도해 주세요.",
+      detail
+    };
+  }
+
+  /*
+    공급자가 손도 안 댄 실패. 그동안 전부 「처리 중 오류」로 떨어져서,
+    **분석 한도를 면제할 방법이 없었다**(C-9) — 그 통에는 우리 쪽 버그도 함께
+    담기기 때문이다. 장애만 따로 이름 붙여야 갈라 셀 수 있다.
+
+    사용량 초과(429)보다 **뒤에** 둔다. 429 는 장애가 아니라 우리 몫을 다 쓴 것이다.
+  */
+  if (isProviderUnavailableError(message, status)) {
+    return {
+      ok: false as const,
+      code: "AI_PROVIDER_UNAVAILABLE" as const,
+      message: "AI 공급자가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.",
       detail
     };
   }
@@ -1054,6 +1338,21 @@ export function buildAnalyzePrompt(
       /** 조각으로 나눠 보냈으면 몇 장인지. 모델이 순서를 알아야 이어 읽는다. */
       sliceCount?: number;
     };
+    /**
+     * 사용자가 적은 **구성·문구 요청**(U-06).
+     *
+     * 장면 지시(`userInstruction`)와 다른 물건이다 — 저쪽은 그림을 정하고
+     * 이쪽은 섹션과 카피를 정한다. 전에는 칸이 하나뿐이라 구성 요청을 적어도
+     * **기획이 그 말을 본 적이 없었다.**
+     */
+    planInstruction?: string;
+    /**
+     * 그림체. **기획도 알아야 한다**(설계 §6.3: 「기획과 생성 양쪽 전달」).
+     *
+     * 모르면 사진을 전제로 장면을 써서, 일러스트를 고른 사용자가 그릴 수 없는
+     * 지시를 받는다.
+     */
+    look?: ImageLook;
   },
 ) {
   const referenceModelPrompt = referenceModelProfile
@@ -1112,13 +1411,18 @@ export function buildAnalyzePrompt(
    * 말했다. 이 파일 자신의 규칙대로면 **뒤에 있는 쪽이 이긴다** — 레퍼런스를
    * 보여 준 의미가 조용히 희석된다.
    *
-   * 「디자인 가이드 우선 모드에서만 강하게」도 뺐다. `pdp.image-prompt.ts` 는
-   * `design_system = style_guide` 를 조건 없이 한다. 기획에게 스스로 힘을
-   * 빼라고 말할 이유가 없다.
+   * **같은 함정에 또 걸렸다**(U-15, 2026-09-18). 앞에 `DESIGN_SYSTEM_RULES` 를
+   * 놓아 「서체·색·등장인물은 designSystem 이 정한다」고 해 놓고, 여기가 여전히
+   * 「전체 통일 스타일 … 서체 인상을 적을 것」이라 말했다. 뒤에 있는 이쪽이
+   * 이기므로, 섹션마다 서체를 또 정하고 그 제각각인 글이 공용 서술 **앞에**
+   * 남았다 — 통일하려고 만든 장치가 통일을 못 시켰다.
+   *
+   * 그래서 이 자리는 **그 섹션만의 연출**로 좁힌다. 페이지 정체성(서체·색·인물)은
+   * 앞에서 한 번만 정한다.
    */
   const styleGuideFieldRule = extras?.styleReference
-    ? "- style_guide: 전체 통일 스타일. **위에 첨부된 디자인 레퍼런스를 기준으로** 레이아웃·여백·색 쓰임·서체 인상을 적을 것."
-    : "- style_guide: 전체 통일 스타일. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것.";
+    ? "- style_guide: **이 섹션만의 연출**(세트·조명·구도·질감·여백)을 적을 것. **위에 첨부된 디자인 레퍼런스를 기준으로** 적되, 서체·색·등장인물은 designSystem 이 이미 정했으니 다시 적지 말 것."
+    : "- style_guide: **이 섹션만의 연출**(세트·조명·구도·질감)을 적을 것. 스튜디오는 정제된 세트/조명/질감, 라이프스타일은 현실감 있는 공간/행동, 아웃도어는 위치감/공기감/활동성을 분명히 적을 것. 서체·색·등장인물은 designSystem 이 이미 정했으니 다시 적지 말 것.";
 
   const outputModePrompt =
     outputMode === "full-image"
@@ -1136,7 +1440,7 @@ export function buildAnalyzePrompt(
 - 편집 텍스트가 올라갈 좌/우/하단 여백을 남기고, 인물 얼굴·제품 핵심이 예상 헤드라인 영역과 겹치지 않게 섹션별 구도를 설계할 것.`;
 
   return `
-이 제품 이미지를 분석하여 5~6개의 핵심 섹션으로 구성된 상세페이지 전체 블루프린트를 설계해주세요.
+이 제품 이미지를 분석하여 상세페이지 전체 블루프린트를 설계해주세요.
 
 ${buildSellerBriefPrompt(sellerBrief)}
 
@@ -1148,6 +1452,14 @@ ${PRODUCT_READING_RULES}
 
 ${PRODUCT_GROUNDING_RULES}
 
+${lookPlanningRule(extras?.look)}
+
+${buildPlanInstructionRules(extras?.planInstruction)}
+
+${DESIGN_SYSTEM_RULES}
+
+${sectionCountRules({ hasPlanInstruction: Boolean(extras?.planInstruction?.trim()) })}
+
 ${SALES_PRINCIPLES}
 ${outputModePrompt}
 ${additionalInfo ? `[사용자 추가 정보]: ${additionalInfo}` : ""}
@@ -1156,15 +1468,15 @@ ${referenceModelPrompt}
 ${styleReferencePrompt}
 
 # 섹션 템플릿(필수 필드)
-- section_id: S1~S6
-- section_name: (예: 히어로/체크리스트/베네핏/근거/사용법/후기 등)
+- section_id: S1 부터 차례로
+- section_name: 이 섹션이 하는 일을 가리키는 내부 이름 (예: 히어로/근거/사용법)
 - goal: 이 섹션의 역할(짧은 한 문장)
 - headline: 한국어 1줄(강하게)
 - headline_en: headline의 자연스러운 영어 번역 1줄
 - subheadline: 한국어 1줄(명확하게)
 - subheadline_en: subheadline의 자연스러운 영어 번역 1줄
-- bullets: 한국어 3개(스캔용, 각 1줄)
-- bullets_en: bullets의 자연스러운 영어 번역 3개
+- bullets: 한국어 2~4개(스캔용, 각 1줄). 할 말이 있는 만큼만 — 수를 채우려고 지어내지 말 것
+- bullets_en: bullets와 같은 개수의 자연스러운 영어 번역
 - trust_or_objection_line: 한국어 불안 제거/신뢰 1문장
 - trust_or_objection_line_en: trust_or_objection_line의 자연스러운 영어 번역 1문장
 - CTA: 빈 문자열
@@ -1175,15 +1487,14 @@ ${styleReferencePrompt}
 # 섹션 구성 원칙(강제)
 - 작성 전에 내부적으로 한 줄 판매 스레드를 먼저 고정할 것: 고객이 원하는 결과 → 지금 막는 불편 → 이 제품의 해결 메커니즘 → 구매해야 하는 구체적 이유. 전체 섹션은 이 스레드를 따라 하나의 판매 영화처럼 이어질 것.
 - 각 섹션의 headline/subheadline은 앞 섹션의 감정·판단을 받아 다음 장면으로 넘기고, 같은 문구를 반복하지 말 것.
-- 베네핏은 3개 고정
 - **반론 섹션은 반드시 넣는다.** 살까 말까 망설이는 이유(가격, 나한테도 될까, 실패하면, 효과가 약하지 않을까)를 페이지가 먼저 꺼내 다루는 섹션이다. 좋은 점만 나열하면 읽는 사람은 속으로 반박하며 읽는다.
   강도를 세게 잡을수록 이 섹션을 빼기 쉬운데, 그때 이탈이 가장 크다. 표현을 강하게 하되 **섹션을 줄여서 강해지려 하지 않는다.**
 - 근거 섹션은 반드시 결과→조건→해석 3단으로 작성
-- 리뷰 섹션은 전/후 사진보다 사용감 문장 후기 카드 6~12개 우선
+- 후기를 쓰는 섹션은 **실제 근거가 있을 때만** 넣는다. 판매자가 알려준 후기가 없으면 그 섹션을 만들지 않는다. 개수를 채우려고 사용감 문장을 지어내지 말 것.
 - 사용법/루틴은 선택지를 2~3개로 줄여 선택 피로를 없앨 것
 - CTA 필드는 모든 섹션에서 빈 문자열로 둘 것. 통이미지는 링크를 걸 수 없어 눌리지 않는 그림 버튼이 되고, 텍스트편집 모드에서도 이 값을 쓰지 않는다. 실제 구매 버튼은 쇼핑몰이 붙인다(사용자 결정 2026-07-30).
-- 각 섹션의 이미지는 단순한 제품 누끼나 그래픽이 아닌 소비자의 구매 전환을 유도할 수 있는 고품질 광고 사진 느낌으로 기획할 것
-- 첫 번째 섹션은 구매 전환에 가장 중요하므로 반드시 매력적인 모델이 제품과 함께 연출된 컷으로 프롬프트를 작성할 것
+${adPolishRule(extras?.look)}
+- 첫 번째 섹션은 구매 전환에 가장 중요하다. 이 제품을 가장 잘 보여 주는 장면으로 만들 것 — 사람이 쓰는 모습이 그 장면이면 사람을 넣고, 제품 자체가 주인공이면 제품을 크게 보여줄 것. **모든 상품에 사람이 나와야 하는 것은 아니다.**
 - 각 섹션 이미지는 해당 헤드라인과 서브헤드라인의 메시지를 시각적으로 전달해야 함
 
 # 카피 작성 원칙(강제)
@@ -1196,7 +1507,7 @@ ${styleReferencePrompt}
 - 모든 섹션 CTA와 CTA_en은 빈 문자열로 두고, '구매하기/자세히 보기/지금 확인하기/클릭/버튼/>' 같은 링크·버튼 유도 문구를 visible copy에 쓰지 말 것.
 
 # 섹션별 이미지 생성 프롬프트
-- image_id: IMG_S1~IMG_S6
+- image_id: 섹션 번호에 맞춰 IMG_S1 부터 차례로
 - purpose: 이 이미지가 전달해야 하는 메시지(짧은 한 문장)
 - prompt_ko: 한국어 이미지 생성 프롬프트(1~2문장). 구도, 거리감, 시선 높이, 제품이 프레임에서 차지하는 비중을 함께 명시할 것.
 - prompt_en: 영어 프롬프트(실제 이미지 생성용). Include composition, framing distance, camera angle, product prominence, and the key subject action. Keep it neutral enough that studio/lifestyle/outdoor priority can still be controlled at generation time.
@@ -1461,9 +1772,10 @@ function getModelAgeDescriptor(ageRange?: ImageGenOptions["modelAgeRange"]) {
 }
 
 function parseBlueprintResponse(response: { text?: string }) {
+  let blueprint: LandingPageBlueprint;
   try {
     const parsed = JSON.parse(extractResponseText(response)) as Partial<LandingPageBlueprint>;
-    return sanitizeBlueprint(parsed);
+    blueprint = sanitizeBlueprint(parsed);
   } catch (error) {
     throw new PdpServiceError(
       "AI_RESPONSE_INVALID",
@@ -1471,14 +1783,51 @@ function parseBlueprintResponse(response: { text?: string }) {
       stringifyError(error)
     );
   }
+
+  /*
+    **섹션이 하나도 없으면 여기서 끝낸다**(D-3).
+
+    전에는 이 판정이 **재시도 바깥**에 있었다. 빈 답이 오면 그대로 끝났고,
+    라우트가 다시 부르라고 둔 장치는 코드가 안 맞아 한 번도 안 걸렸다.
+
+    여기로 옮기면 같은 코드(`AI_RESPONSE_INVALID`)로 **다시 묻게 된다** —
+    `retryOperation` 이 이 갈래를 재시도 대상으로 안다(`pdp.retry-policy`).
+  */
+  if (!blueprint.sections.length) {
+    throw new PdpServiceError(
+      "AI_RESPONSE_INVALID",
+      "상세페이지 섹션을 생성하지 못했습니다.",
+      "No sections returned from analyze response."
+    );
+  }
+
+  return blueprint;
 }
 
 function sanitizeBlueprint(input: Partial<LandingPageBlueprint>) {
+  /*
+    **상한은 코드가 지킨다.**
+
+    장수를 프롬프트에서 풀었으니, 막는 것이 문구뿐이면 아무것도 막지 못한다.
+    문구는 부탁이지 강제가 아니다 — 모델이 서른 장을 내놓으면 서른 장이 그대로
+    생성 대기열에 들어가고 한 장마다 값이 나간다.
+  */
+  /*
+    **공용 디자인을 모든 섹션에 싣는다**(U-15).
+
+    전에는 사진 경로에 이 장치가 없었다. 프롬프트가 「전체 통일 스타일」이라고
+    적어 두긴 했지만 여섯 섹션이 각자 자기 문장을 쓰면 통일될 수가 없다.
+    글 경로와 **같은 함수**를 쓴다.
+  */
+  const designSystem = normalizeDesignSystem(input.designSystem);
   const sections = Array.isArray(input.sections)
-    ? input.sections.map((section, index) => normalizeSection(section, index))
+    ? clampSections(input.sections)
+        .map((section, index) => normalizeSection(section, index))
+        .map((section) => applyDesignSystem(section, designSystem))
     : [];
 
   return {
+    designSystem,
     // 여기서 빠뜨리면 읽어낸 제품 사실이 조용히 사라진다. 필드를 하나씩 나열하는
     // 함수는 새 값을 삼킨다 — 이 저장소에서 이미 두 번 겪었다.
     productReading: normalizeProductReading(input.productReading),
@@ -1526,7 +1875,20 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
     negative_prompt: asString(section.negative_prompt),
     style_guide: asString(section.style_guide),
     reference_usage: asString(section.reference_usage),
-    generatedImage: section.generatedImage
+    generatedImage: section.generatedImage,
+    /*
+      **근거를 버리지 않는다.**
+
+      이 함수는 필드를 하나씩 나열하는데 `evidence`·`evidenceVersion` 이 목록에
+      없어, 모델이 근거를 보내도 통째로 사라졌다. 그래서 근거 검사를 붙여도
+      **볼 것이 없었다** — 지어낸 인용이 그대로 나갔다.
+
+      글 경로와 같은 손질 함수를 쓴다(`pdp.evidence`). 두 벌로 적으면 한쪽만
+      고치는 날이 온다.
+    */
+    ...(section.evidenceVersion === 1
+      ? { evidenceVersion: 1 as const, evidence: normalizeSectionEvidence(section.evidence) }
+      : {}),
   };
 }
 
@@ -1614,11 +1976,26 @@ function getBaseSceneDirection(section: SectionBlueprint, mode: PdpGuidePriority
       .join(" ");
   }
 
+  /*
+    **컷 타입이 이겨도 페이지 정체성은 안 바뀐다**(U-15).
+
+    전에는 `style_guide` 를 통째로 버렸다. 그 안에 페이지 공용 디자인(서체·색·
+    등장인물)이 함께 실려 있어서, **한 섹션만 컷 타입 우선으로 두면 그 섹션만
+    다른 서체·다른 사람으로 만들어졌다.** 토글은 섹션마다 따로다.
+
+    컷 타입이 덮어야 하는 것은 그 섹션의 구도·연출이지 페이지 전체의 서체가
+    아니다. 그래서 공용 서술만 남긴다.
+  */
+  const shared = designSystemPartOf(section.style_guide);
+
   return [
     `Communicate this purpose clearly: ${section.purpose}.`,
     "Build a fresh scene from the selected shot type.",
-    "Do not inherit conflicting layout or style-guide assumptions from the section metadata."
-  ].join(" ");
+    "Do not inherit conflicting layout or style-guide assumptions from the section metadata.",
+    shared
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function buildValidationPrompt(profile: ReferenceModelProfile, expectedStyle: NonNullable<ImageGenOptions["style"]>) {
@@ -1742,39 +2119,6 @@ function extractResponseText(response: { text?: string }) {
   return extractedJson ?? normalized;
 }
 
-function extractJsonCandidate(input: string) {
-  if (!input) {
-    return null;
-  }
-
-  const objectStart = input.indexOf("{");
-  const arrayStart = input.indexOf("[");
-  const startIndexCandidates = [objectStart, arrayStart].filter((value) => value >= 0);
-
-  if (!startIndexCandidates.length) {
-    return null;
-  }
-
-  const startIndex = Math.min(...startIndexCandidates);
-
-  for (let endIndex = input.length; endIndex > startIndex; endIndex -= 1) {
-    const candidate = input.slice(startIndex, endIndex).trim();
-
-    if (!candidate) {
-      continue;
-    }
-
-    try {
-      JSON.parse(candidate);
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
 function buildHighResolutionInlinePart(mimeType: string, data: string) {
   return {
     inlineData: {
@@ -1843,22 +2187,54 @@ function extractGeneratedImage(response: {
   return null;
 }
 
-async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay = 1500): Promise<T> {
+/**
+ * 다시 불러 본다.
+ *
+ * **`retriableByCode` 는 부르는 쪽이 켠다.** 기본은 꺼짐이다 — 이 함수는 글
+ * 모델 호출만 감싸지 않는다. **그림 만드는 호출도** 감싸고, 그쪽은 fal 이 200 을
+ * 준 뒤라 **이미 값을 치렀다.** 몸통을 못 읽었다고 다시 그리면 한 장 값이 세 장
+ * 값이 되고, 성공한 장수만 세는 장부에는 0장으로 남는다(리뷰 HIGH-2).
+ *
+ * 「같은 것을 다시 물으면 다른 답이 온다」는 근거는 **글 모델에만** 참이다.
+ */
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  retries = 2,
+  delay = 1500,
+  retriableByCode = false,
+): Promise<T> {
   try {
     return await operation();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // 여기도 본문 숫자로 짐작하지 않는다. 이 자리가 `AI_QUOTA_EXCEEDED` 를
+    // 직접 던지므로, 느슨하면 분석 한도 면제가 그대로 뚫린다(C-9 리뷰).
+    const status = typeof (error as { status?: unknown })?.status === "number"
+      ? (error as { status: number }).status
+      : undefined;
 
-    if (retries > 0 && (isQuotaError(message) || isJsonError(message))) {
+    /*
+      **코드로 정한다**(D-6).
+
+      전에는 `error.message` 에서 「JSON」 같은 엔진 글자를 찾았다. 그런데
+      설계도 파싱은 그 오류를 잡아 **한국어 문장으로 바꿔** 던진다 — 찾는 글자가
+      사라져서 한 번도 안 걸렸다. 다시 물으면 될 일을 한 번에 포기했다.
+
+      글자 대조도 남겨 둔다. `PdpServiceError` 로 감싸이지 않은 채 올라오는
+      자리(공급자 SDK 가 직접 던지는 경우)가 아직 있다.
+    */
+    const retriableCode = retriableByCode && error instanceof PdpServiceError && isRetriableModelFailure(error.code);
+
+    if (retries > 0 && (retriableCode || isQuotaError(message, status) || isJsonError(message))) {
       await wait(delay);
-      return retryOperation(operation, retries - 1, delay * 2);
+      return retryOperation(operation, retries - 1, delay * 2, retriableByCode);
     }
 
     if (error instanceof PdpServiceError) {
       throw error;
     }
 
-    if (isQuotaError(message)) {
+    if (isQuotaError(message, status)) {
       throw new PdpServiceError(
         "AI_QUOTA_EXCEEDED",
         "AI 사용량이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
@@ -1878,9 +2254,23 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 2, delay
   }
 }
 
-function isQuotaError(message: string) {
+/**
+ * 공급자가 **우리 몫이 다 됐다**고 한 경우.
+ *
+ * `"429"` 부분일치를 버렸다. 토큰 수·바이트 수에 그 세 글자가 들어가면
+ * 「400 prompt is too long: 214297 tokens」가 사용량 초과가 됐다. 그동안은 모든
+ * 실패가 분석 한도를 먹어서 무해했지만, 이제 이 코드가 **면제**라 사용자가
+ * 입력 길이로 만들 수 있는 우회로가 된다(C-9 리뷰).
+ */
+function isQuotaError(message: string, status?: number) {
+  // 상태 코드가 있으면 그것이 답이다. 본문 숫자로 짐작하지 않는다.
+  if (typeof status === "number") return status === 429;
   const lowered = message.toLowerCase();
-  return lowered.includes("429") || lowered.includes("quota") || lowered.includes("resource_exhausted");
+  return (
+    new RegExp(String.raw`\b429\b`).test(lowered) ||
+    lowered.includes("quota") ||
+    lowered.includes("resource_exhausted")
+  );
 }
 
 function isInvalidApiKeyError(message: string) {
@@ -1901,6 +2291,33 @@ function isPermissionError(message: string) {
     lowered.includes("forbidden") ||
     lowered.includes("model access") ||
     lowered.includes("not found for api version")
+  );
+}
+
+/**
+ * 공급자에 **닿지 못했거나** 공급자가 **답을 못 준** 경우.
+ *
+ * 모델이 일한 흔적이 없는 실패다. 우리 쪽 버그(`PDP_ANALYZE_FAILED`)와 갈라
+ * 두어야 분석 한도를 면제할 수 있다.
+ */
+function isProviderUnavailableError(message: string, status?: number) {
+  // 4xx 는 장애가 아니라 우리 요청 문제다. 본문 글자로 뒤집지 않는다.
+  if (typeof status === "number" && status < 500) return false;
+  if (status === 502 || status === 503 || status === 504) return true;
+  const lowered = message.toLowerCase();
+  return (
+    lowered.includes("fetch failed") ||
+    lowered.includes("econnrefused") ||
+    lowered.includes("econnreset") ||
+    lowered.includes("etimedout") ||
+    lowered.includes("enotfound") ||
+    lowered.includes("socket hang up") ||
+    lowered.includes("network error") ||
+    lowered.includes("overloaded") ||
+    lowered.includes("service unavailable") ||
+    lowered.includes("bad gateway") ||
+    lowered.includes("gateway timeout") ||
+    new RegExp(String.raw`\b(502|503|504)\b`).test(lowered)
   );
 }
 

@@ -170,7 +170,19 @@ describe("응답 정규화", () => {
     for (const broken of [null, undefined, {}, { items: "배열이 아님" }, []]) {
       const review = normalizeReview(broken);
       expect(review.items).toEqual([]);
-      expect(needsRevision(review)).toBe(false);
+    }
+  });
+
+  it("**망가진 응답을 통과로 넘기지 않는다**", () => {
+    /*
+      전에는 여기서 `needsRevision` 이 거짓이길 기대했다 — 「죽지 않는다」를
+      「통과다」로 적은 셈이다. 빈 심사는 fail 이 하나도 없으니 조용히 통과했고,
+      재작성 루프도 그 결과를 가장 좋은 것으로 채택했다.
+
+      **아무도 안 본 구성안이 이기면 안 된다**(설계 §10.1).
+    */
+    for (const broken of [null, undefined, {}, { items: "배열이 아님" }, []]) {
+      expect(needsRevision(normalizeReview(broken))).toBe(true);
     }
   });
 
@@ -205,10 +217,17 @@ describe("사용자에게 보여줄 요약", () => {
  * fail 하나는 weak 여럿보다 나쁘다 — fail 은 "이대로 만들면 안 된다"는 뜻이다.
  */
 describe("심사 비교", () => {
+  /*
+    **실제 기준 이름을 쓴다.** 전에는 `c0`·`c1` 같은 가짜 이름으로 두 개만
+    만들었는데, 그러면 「일곱 항목이 다 왔는가」를 재는 쪽과 뜻이 갈린다 —
+    안 본 항목이 다섯인데 「전부 통과」로 읽혔다.
+
+    모자란 만큼은 통과로 채워 **비교하려는 것(fail·weak 의 무게)만 남긴다.**
+  */
   const make = (ratings: Array<"pass" | "weak" | "fail">) => ({
-    items: ratings.map((rating, index) => ({
-      criterion: `c${index}`,
-      rating,
+    items: REVIEW_CRITERIA.map((criterion, index) => ({
+      criterion: criterion.id,
+      rating: ratings[index] ?? ("pass" as const),
       evidence: "",
       fix: "",
     })),

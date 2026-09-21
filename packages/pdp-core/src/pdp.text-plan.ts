@@ -1,6 +1,8 @@
+import { reviewStampOf } from "./pdp.review-freshness";
 import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
 import { PdpServiceError } from "./pdp.service";
+import { purposeOfCall } from "./pdp.llm";
 import type { PdpProviders } from "./pdp.image-provider";
 import type { ImageModelId } from "./types";
 import {
@@ -12,9 +14,13 @@ import {
 } from "./pdp.review";
 import { SALES_PRINCIPLES } from "./pdp.sales-principles";
 import { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
+import { clampSections, sectionCountRules } from "./pdp.section-plan";
+import { DESIGN_SYSTEM_RULES, DESIGN_SYSTEM_SCHEMA, applyDesignSystem, normalizeDesignSystem } from "./pdp.design-system";
 import { resolveStructureFailures, verifyEvidenceStructure } from "./pdp.evidence";
 import type { StructureFailure } from "./pdp.evidence";
 import { DEFAULT_IMAGE_MODEL } from "./types";
+import { DEFAULT_PAGE_GOAL, DEFAULT_PRODUCT_KIND, pageGoalRule, productKindLabel, productKindRule } from "./pdp.offering";
+import type { ProductKind } from "./pdp.offering";
 import type {
   AspectRatio,
   CopyEvidence,
@@ -115,9 +121,20 @@ const BRIEF_RULES = `규칙:
 - offeringKind 는 다음 중 하나: ${OFFERING_KINDS.join(", ")}.
 - 모든 문자열은 한국어로 쓴다.`;
 
-export function buildBriefPrompt(text: string) {
-  return `너는 무형 상품(강의·코칭·구독·소프트웨어·커뮤니티)의 판매 기획자다.
-사용자가 규칙 없이 쓴 아래 텍스트에서 판매 브리프를 뽑아낸다.
+/**
+ * **무엇을 파는지 못 박지 않는다**(K-08).
+ *
+ * 전에는 「너는 **무형 상품**(강의·코칭·구독·소프트웨어·커뮤니티)의 판매
+ * 기획자다」로 시작했다. 사진이 없을 뿐인 실물을 글로 설명한 사람도 그 지시를
+ * 받는다 — **입력 방식과 상품 종류를 붙여 둔** 것이 문제였다.
+ */
+export function buildBriefPrompt(text: string, productKind?: ProductKind) {
+  const 종류 = productKind && productKind !== "other"
+    ? `사용자가 밝힌 상품 종류는 **${productKindLabel(productKind)}** 이다.
+`
+    : "";
+  return `너는 상세페이지 판매 기획자다.
+${종류}사용자가 규칙 없이 쓴 아래 텍스트에서 판매 브리프를 뽑아낸다.
 
 ${BRIEF_RULES}
 
@@ -139,17 +156,24 @@ function outputModeRules(outputMode: PdpOutputMode) {
   (사용자 결정 2026-07-30). 실제 구매 버튼은 쇼핑몰이 붙인다.`;
 }
 
+/*
+  **공용 디자인 규칙은 여기 없다.** `DESIGN_SYSTEM_RULES`(pdp.design-system.ts)가
+  프롬프트 앞쪽에 실린다 — 전에는 이 목록 안에 같은 말을 따로 적어, 사진
+  경로에만 있던 「사람이 안 나오는 페이지면 cast 는 빈 문자열」이 글 경로에는
+  없었다. 두 벌로 적으면 한쪽만 고치는 날이 온다.
+*/
+/*
+  **상품 종류를 여기 못 박지 않는다**(K-08).
+
+  전에는 첫 줄이 「무형 상품이다. 만질 수 있는 제품 사진을 전제하지 마라」였다.
+  그 한 줄 때문에 실물을 글로 설명한 사람의 페이지에 제품 자리 대신 은유가
+  들어갔다. 이제 `productKindRule` 이 그 자리에 들어간다.
+*/
 const BLUEPRINT_RULES = `규칙:
-- designSystem 은 페이지 전체가 공유하는 디자인 규칙이다. **한 번만** 정하고 전체 섹션이 공유한다.
-  섹션 이미지는 각각 따로 생성되므로 여기서 정하지 않으면 섹션마다 폰트와 인물이 달라진다.
-  · headlineFont / bodyFont: 한국어 서체 성격을 한국어로 묘사한다(예: "굵은 기하학적 산세리프",
-    "가늘고 단정한 산세리프"). 그림처럼 쓰는 레터링이 아닌 한 페이지 안에서 서체는 바뀌지 않는다.
-  · palette: 배경·본문·강조 3색을 한국어로 적는다.
-  · cast: 페이지에 반복 등장할 인물 한 명을 구체적으로 묘사한다(나이대, 성별, 머리, 옷차림).
-    한국인으로 쓴다. 모든 섹션에 같은 사람이 나온다는 전제로 작성한다.
-- 무형 상품이다. 만질 수 있는 제품 사진을 전제하지 마라.
-  이미지 방향은 사용 장면·결과 장면·감정·은유로 잡는다.
-- 섹션은 4~7개. 앞 섹션의 감정을 다음 섹션이 이어받아 하나의 흐름을 만든다.
+- 앞 섹션의 감정을 다음 섹션이 이어받아 하나의 흐름을 만든다.
+- **반론 섹션은 반드시 넣는다.** 살까 말까 망설이는 이유(가격, 나한테도 될까, 실패하면,
+  효과가 약하지 않을까)를 페이지가 먼저 꺼내 다루는 섹션이다. 좋은 점만 나열하면
+  읽는 사람은 속으로 반박하며 읽는다.
 - section_name 은 내부 역할명이며 한국어로 쓴다("문제 제기", "반론 해소" 처럼).
   화면에 그대로 라벨로 표시되므로 Intro/Solution 같은 영어를 쓰지 마라.
   단, 이 역할명을 headline/subheadline/bullets 안에 그대로 옮겨 쓰지는 마라.
@@ -201,7 +225,15 @@ ${intensityRules(copyIntensity)}
 
 ${gapPolicyRules(gapPolicy)}
 
+${DESIGN_SYSTEM_RULES}
+
+${sectionCountRules()}
+
 ${SALES_PRINCIPLES}
+
+${productKindRule(brief.productKind ?? DEFAULT_PRODUCT_KIND)}
+
+${pageGoalRule(brief.pageGoal ?? DEFAULT_PAGE_GOAL)}
 
 ${BLUEPRINT_RULES}
 
@@ -370,37 +402,6 @@ function normalizeSection(raw: Record<string, unknown>, index: number): SectionB
   };
 }
 
-function normalizeDesignSystem(raw: unknown): DesignSystem | undefined {
-  const input = (raw ?? {}) as Record<string, unknown>;
-  const system: DesignSystem = {
-    headlineFont: asString(input.headlineFont),
-    bodyFont: asString(input.bodyFont),
-    palette: asStringArray(input.palette),
-    cast: asString(input.cast),
-  };
-  const empty =
-    !system.headlineFont && !system.bodyFont && !system.palette.length && !system.cast;
-  return empty ? undefined : system;
-}
-
-/**
- * 공용 디자인 규칙을 모든 섹션이 똑같이 받도록 문장으로 만든다.
- * buildImagePrompt 가 style_guide 를 그대로 프롬프트에 넣으므로(pdp.service.ts:1177)
- * 별도 배관 없이 전 섹션에 같은 지시가 전달된다.
- */
-function describeDesignSystem(system: DesignSystem) {
-  return [
-    "[페이지 공용 디자인 시스템 — 모든 섹션이 동일하게 따른다]",
-    system.headlineFont ? `헤드라인 서체: ${system.headlineFont}` : "",
-    system.bodyFont ? `본문 서체: ${system.bodyFont}` : "",
-    system.palette.length ? `색 팔레트: ${system.palette.join(" / ")}` : "",
-    system.cast ? `반복 등장 인물: ${system.cast} — 모든 섹션에 같은 사람이 나온다` : "",
-    "이 값들은 섹션마다 바뀌면 안 된다.",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
 export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
   const input = (raw ?? {}) as Record<string, unknown>;
   const rawSections = Array.isArray(input.sections) ? input.sections : [];
@@ -414,15 +415,13 @@ export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
   }
 
   const designSystem = normalizeDesignSystem(input.designSystem);
-  const shared = designSystem ? describeDesignSystem(designSystem) : "";
 
-  const sections = rawSections
+  // 상한은 코드가 지킨다. 프롬프트 문구는 부탁이지 강제가 아니다 — 한 장이 곧
+  // 이미지 한 장이고 값이 나간다.
+  const sections = clampSections(rawSections)
     .map((section, index) => normalizeSection((section ?? {}) as Record<string, unknown>, index))
-    .map((section) =>
-      shared
-        ? { ...section, style_guide: [section.style_guide, shared].filter(Boolean).join(" ") }
-        : section,
-    );
+    // 사진 경로와 **같은 함수**를 쓴다. 두 벌로 적으면 한쪽만 고치는 날이 온다.
+    .map((section) => applyDesignSystem(section, designSystem));
   const scorecard = Array.isArray(input.scorecard) ? input.scorecard : [];
   const blueprintList = asStringArray(input.blueprintList);
 
@@ -445,14 +444,11 @@ export function normalizeTextBlueprint(raw: unknown): LandingPageBlueprint {
 
 // ── 이미지 방향 병합 ────────────────────────────────────────────
 
-const ART_DIRECTION_MARKER = "\n\nArt direction override (Korean, follow this): ";
-
 /**
  * 시나리오에서 고친 한국어 이미지 방향을 실제 생성에 쓰이는 prompt_en 에 반영한다.
  *
- * 이미지 생성은 prompt_en 만 본다. 사용자가 한국어 방향을 고쳤는데 무시되면
- * 막다른 길이 되므로, 원본과 달라진 섹션에만 추가 지시를 덧붙인다.
- * 여러 번 고쳐도 지시가 쌓이지 않도록 이전 지시는 잘라내고 다시 붙인다.
+ * 현재 장면이 정본이다. 새 장면과 충돌하는 예전 영문을 덧붙이지 않는다.
+ * 수정하지 않은 장면만 모델이 처음 작성한 영문 표현을 유지한다.
  */
 export function mergeArtDirection(
   original: LandingPageBlueprint,
@@ -468,19 +464,16 @@ export function mergeArtDirection(
 
       // 사용자가 새로 추가한 섹션. 한국어 방향이 유일한 단서다.
       if (!base) {
-        return section.prompt_en.trim()
-          ? section
-          : { ...section, prompt_en: promptKo };
+        return { ...section, prompt_en: promptKo || section.prompt_en };
       }
 
       if (promptKo === base.prompt_ko.trim()) {
         return { ...section, prompt_en: base.prompt_en };
       }
 
-      const basePromptEn = base.prompt_en.split(ART_DIRECTION_MARKER)[0];
       return {
         ...section,
-        prompt_en: promptKo ? `${basePromptEn}${ART_DIRECTION_MARKER}${promptKo}` : basePromptEn,
+        prompt_en: promptKo || base.prompt_en,
       };
     }),
   };
@@ -552,16 +545,6 @@ const SECTION_SCHEMA = {
   },
 };
 
-const DESIGN_SYSTEM_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    headlineFont: { type: Type.STRING },
-    bodyFont: { type: Type.STRING },
-    palette: { type: Type.ARRAY, items: { type: Type.STRING } },
-    cast: { type: Type.STRING },
-  },
-};
-
 const BLUEPRINT_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -617,7 +600,12 @@ export function textPlanDepsFrom(providers: PdpProviders): TextPlanDeps {
 function depsFrom(providers: PdpProviders): TextPlanDeps {
   return {
     async generateJson(prompt, schema, name) {
-      const response = await providers.llm.generate({ name, prompt, schema, maxTokens: 8192 });
+      /*
+        **길이 상한은 제공자가 정한다.** 여기서 8192 를 실으면 모델별 정책을
+        덮는다 — 2026-09-17 실호출에서 기획이 그 8192 에 걸려 잘렸고, 조각난
+        값이 「섹션 0개」로 둔갑했다(`docs/bugs/pdp-validation/w3-live-planning.txt`).
+      */
+      const response = await providers.llm.generate({ name, prompt, schema, purpose: purposeOfCall(name) });
       return parseJsonText(response.text);
     },
 
@@ -678,10 +666,20 @@ export async function planFromText(
   }
 
   const resolved = deps ?? requireDeps(providers);
-  const brief = normalizeBrief(
-    await resolved.generateJson(buildBriefPrompt(sourceText), BRIEF_SCHEMA, BRIEF_TOOL),
-    sourceText,
-  );
+  /*
+    **사용자가 고른 것이 모델의 짐작보다 세다**(K-08).
+
+    `offeringKind` 는 모델이 글에서 읽어 고른다. `productKind` 는 사용자가
+    직접 고른 값이라, 설계도 프롬프트는 이쪽을 본다.
+  */
+  const brief: ProductBrief = {
+    ...normalizeBrief(
+      await resolved.generateJson(buildBriefPrompt(sourceText, input.productKind), BRIEF_SCHEMA, BRIEF_TOOL),
+      sourceText,
+    ),
+    productKind: input.productKind,
+    pageGoal: input.pageGoal,
+  };
 
   if (!brief.offeringName) {
     throw new PdpServiceError(
@@ -712,13 +710,20 @@ export async function planFromText(
   // 실패하면 심사 없이 진행한다 — 심사를 붙이기 전과 같은 상태가 된다.
   const runReview = async (candidate: LandingPageBlueprint) => {
     try {
-      return normalizeReview(
+      const reviewed = normalizeReview(
         await resolved.generateJson(
           buildReviewPrompt(candidate, SALES_PRINCIPLES),
           REVIEW_SCHEMA,
           REVIEW_TOOL,
         ),
       );
+      /*
+        **무엇을 보고 낸 심사인지 함께 적는다**(N-3, 설계 §9.3).
+
+        사진 경로(`pdp.service.ts`)와 같은 처리다. 한쪽만 찍으면 글로 만든
+        작업에서는 고친 구성안에 「모두 통과했습니다」가 그대로 붙는다.
+      */
+      return reviewed ? { ...reviewed, stamp: reviewStampOf(candidate) } : reviewed;
     } catch {
       return null;
     }
@@ -738,7 +743,24 @@ export async function planFromText(
     const revisionDirective = structureFailures.length
       ? buildEvidenceRevisionDirective(structureFailures)
       : buildRevisionDirective(review!);
-    blueprint = await makeBlueprint(revisionDirective);
+
+    /*
+      **다시 만들다 실패해도 앞의 것을 잃지 않는다.**
+
+      재작성은 품질을 올리려는 시도다. 그 시도가 빈 응답을 받아 던지면, 이미
+      만들어 둔 멀쩡한 구성안까지 함께 날아가고 사용자는 몇 분을 기다린 끝에
+      「구성안을 만들지 못했습니다」만 본다. 값도 이미 치렀다.
+
+      심사가 실패해도 진행하는 바로 아래 `runReview` 와 같은 판단이다.
+    */
+    let revised;
+    try {
+      revised = await makeBlueprint(revisionDirective);
+    } catch {
+      break;
+    }
+
+    blueprint = revised;
     structureFailures = verifyEvidenceStructure(blueprint, sourceText);
     review = await runReview(blueprint);
   }

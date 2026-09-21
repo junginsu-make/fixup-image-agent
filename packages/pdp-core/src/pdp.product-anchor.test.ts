@@ -1,23 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { defaultPreserveProduct, shouldSendAnchor } from "./pdp.product-anchor";
+import { defaultPreserveProduct } from "./pdp.product-anchor";
 
-describe("앵커를 보낼지 판단", () => {
-  // 레퍼런스가 없으면 앵커가 유일한 시각 기준이다. 빼면 섹션마다 상품이 달라진다.
-  it("스타일 레퍼런스가 없으면 항상 보낸다", () => {
-    expect(shouldSendAnchor({ hasStyleReference: false, preserveProduct: true })).toBe(true);
-    expect(shouldSendAnchor({ hasStyleReference: false, preserveProduct: false })).toBe(true);
-  });
+/*
+  **앵커를 보낼지**는 이제 `anchorKind` 가 정한다 — 실물 사진은 언제나 보내고,
+  우리가 만든 대표 이미지는 디자인 레퍼런스가 있으면 보내지 않는다(U-03).
 
-  it("레퍼런스가 있고 제품 보존을 켜면 보낸다", () => {
-    expect(shouldSendAnchor({ hasStyleReference: true, preserveProduct: true })).toBe(true);
-  });
-
-  // 참조가 둘이면 모델이 절충한다. 실측에서 배경·글자는 레퍼런스를 따랐는데
-  // 제품 라벨만 앵커 성향으로 남았다. 디자인을 온전히 받으려면 앵커를 뺀다.
-  it("레퍼런스가 있고 제품 보존을 끄면 보내지 않는다", () => {
-    expect(shouldSendAnchor({ hasStyleReference: true, preserveProduct: false })).toBe(false);
-  });
-});
+  그 판단과 「얼마나 지킬 것인가」(`anchorRoleFor`)는
+  `pdp.product-anchor-role.test.ts` 가 잰다. 여기 있던 세 시험은 전부
+  `preserveProduct` 로 갈렸는데, 이제 그 값은 보낼지 말지를 안 정한다.
+*/
 
 describe("제품 보존 기본값", () => {
   // 사진으로 시작하면 실물 상품이 있다. 그 생김새가 매번 달라지면 안 된다.

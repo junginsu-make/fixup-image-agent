@@ -25,10 +25,20 @@ describe("판매자 입력 정리", () => {
     expect(normalizeSellerBrief({ audience: "  30대 직장인  " }).audience).toBe("30대 직장인");
   });
 
-  it("지나치게 길면 자른다", () => {
-    // 한 칸이 프롬프트를 밀어내면 정작 규칙이 묻힌다.
+  /*
+    **이제 여기서 자르지 않는다**(U-08, 2026-09-19).
+
+    「한 칸이 프롬프트를 밀어내면 규칙이 묻힌다」는 걱정은 여전히 참이다. 다만
+    **몰래 자르는 것**이 답이 아니었다 — 사용자는 501번째 글자부터 사라진 문장을
+    알 길이 없고, 페이지에 그 말이 안 나와도 원인을 짐작 못 한다.
+
+    길이는 **경계에서** 막는다. 화면이 제한을 보여 주고(`InputLengthHint`),
+    넘치면 분석을 못 누르며, zod 가 같은 상수로 거른다. 여기까지 온 값은 이미
+    통과한 값이다.
+  */
+  it("**길어도 자르지 않는다** — 무엇을 잃었는지 알 수 없게 만들지 않는다", () => {
     const long = "가".repeat(900);
-    expect(normalizeSellerBrief({ problem: long }).problem).toHaveLength(500);
+    expect(normalizeSellerBrief({ problem: long }).problem).toHaveLength(900);
   });
 
   it("아무것도 안 주면 빈 객체", () => {

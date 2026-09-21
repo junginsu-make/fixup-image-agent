@@ -332,3 +332,118 @@ export function removeTarget(
     }),
   };
 }
+
+/**
+ * 모델이 준 근거 목록을 **믿을 수 있는 모양**으로 손질한다.
+ *
+ * ── 왜 공용인가 ──────────────────────────────────────────────
+ *
+ * 글 경로에는 이 손질이 있었고 **사진 경로에는 없었다.** 사진 경로의
+ * `normalizeSection` 은 필드를 하나씩 나열하는데 `evidence` 와 `evidenceVersion`
+ * 이 그 목록에 없어, 모델이 근거를 보내도 **통째로 버려졌다.**
+ *
+ * 그래서 검사를 붙여도 볼 것이 없었다 — 지어낸 인용이 그대로 나갔다.
+ * 같은 사고가 이 파일 머리말에 이미 적혀 있다(「필드를 하나씩 나열하지 않는다」).
+ */
+
+/**
+ * 근거를 붙일 수 있는 카피 자리.
+ *
+ * `bullet` 은 여기 없다 — 번호가 함께 와야 해서 위에서 따로 가린다.
+ */
+const EVIDENCE_SLOTS = [
+  "headline",
+  "subheadline",
+  "trust_or_objection_line",
+  "CTA",
+  "prompt_ko",
+] as const;
+
+function asPlainText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function normalizeCopyTarget(value: unknown): CopyTarget | null {
+  const target = (value ?? {}) as Record<string, unknown>;
+  const slot = asPlainText(target.slot);
+  if (slot === "bullet") {
+    return Number.isInteger(target.index) && Number(target.index) >= 0
+      ? { slot, index: Number(target.index) }
+      : null;
+  }
+  return EVIDENCE_SLOTS.includes(slot as (typeof EVIDENCE_SLOTS)[number])
+    ? { slot: slot as (typeof EVIDENCE_SLOTS)[number] }
+    : null;
+}
+
+export function normalizeEvidenceEntry(value: unknown): CopyEvidence | null {
+  const input = (value ?? {}) as Record<string, unknown>;
+  const target = normalizeCopyTarget(input.target);
+  if (!target) return null;
+
+  const kind = asPlainText(input.kind);
+  const quote = asPlainText(input.quote);
+  const note = asPlainText(input.note);
+
+  return {
+    target,
+    value: asPlainText(input.value),
+    /*
+      **모르는 종류는 `sample` 로 떨어뜨린다.**
+      `quoted` 로 두면 「원문에 있다」는 주장이 근거 없이 서고, 그 문장이
+      확인 없이 나간다. `sample` 은 사용자 확인을 거친다.
+    */
+    kind: kind === "user" ? "sample" : (["quoted", "rhetoric", "sample", "ask"].includes(kind) ? (kind as CopyEvidence["kind"]) : "sample"),
+    ...(quote ? { quote } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+/** 섹션 하나의 근거 목록. 모양이 틀린 항목은 버린다. */
+export function normalizeSectionEvidence(value: unknown): CopyEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizeEvidenceEntry(entry))
+    .filter((entry): entry is CopyEvidence => entry !== null);
+}
+
+/**
+ * 정책을 적용한 결과 **실제로 몇 칸을 비웠는가.**
+ *
+ * ── 왜 세는가 ────────────────────────────────────────────────
+ *
+ * 「빈칸으로 두었습니다」를 화면에 띄우려면 **정말 비웠는지** 알아야 한다.
+ * 정책을 정하는 것과 그 정책이 무언가를 바꾸는 것은 다른 일이다 —
+ * `verifyEvidenceStructure` 는 `evidenceVersion !== 1` 인 섹션을 통째로
+ * 건너뛴다. 모델이 근거 딱지를 안 붙이면 정책을 아무리 엄하게 정해도 **한 칸도
+ * 안 비워진다.**
+ *
+ * 그때 「치웠습니다」라고 말하면 사용자는 위험한 문장이 사라진 줄 알고 그대로
+ * 발행한다. 원래 문제보다 나쁘다.
+ */
+export function countClearedCopy(
+  before: LandingPageBlueprint,
+  after: LandingPageBlueprint,
+): number {
+  let cleared = 0;
+
+  after.sections.forEach((section, index) => {
+    const original = before.sections[index];
+    // 섹션이 밀렸으면 셀 수 없다. `resolveStructureFailures` 는 1:1 로 돌려주므로
+    // 여기 걸리면 부르는 쪽이 잘못한 것이다. 세지 않는 편이 부풀리는 것보다 낫다.
+    if (!original || original.section_id !== section.section_id) return;
+
+    const 비었나 = (was: string | undefined, now: string | undefined) =>
+      Boolean(was?.trim()) && !now?.trim();
+
+    for (const slot of ["headline", "subheadline", "trust_or_objection_line", "CTA"] as const) {
+      if (비었나(original[slot], section[slot])) cleared += 1;
+    }
+
+    (original.bullets ?? []).forEach((bullet, bulletIndex) => {
+      if (비었나(bullet, section.bullets?.[bulletIndex])) cleared += 1;
+    });
+  });
+
+  return cleared;
+}

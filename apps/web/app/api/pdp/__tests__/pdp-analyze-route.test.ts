@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH } from "@fixup/pdp-core";
 
 /**
  * 기획 요청에 **조각난 레퍼런스가 실려 나가는가.**
@@ -24,6 +25,7 @@ vi.mock("@fixup/pdp-core", async () => {
 });
 
 vi.mock("../../../../lib/membership/api", () => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
   reserveAiUsage: async () => ({ ok: true as const, userId: "u1", requestId: "r1", usage: {} }),
   finalizeAiUsage: async () => ({}),
   // 장부가 안 닫혀도 결과를 돌려주는 쪽(2026-09-09 master). 없으면 성공 경로가
@@ -92,5 +94,75 @@ describe("기획 요청", () => {
 
     expect(analyzed).toHaveLength(1);
     expect(analyzed[0]!.styleReference).toBeUndefined();
+  });
+});
+
+/**
+ * **서버가 정말 막는가**(U-08).
+ *
+ * 상한을 「같은 상수를 쓴다」고 소스 문자열로만 재면, 상한을 스무 배로 늘려도
+ * 시험이 전부 통과한다. 실제로 요청을 보내 본다.
+ */
+describe("입력 길이 상한", () => {
+  const 긴글 = (n: number) => "가".repeat(n);
+  const 기본 = { imageBase64: "PRODUCT", mimeType: "image/png" };
+
+  it("**판매자 칸이 상한을 넘으면 막는다**", async () => {
+    const response = await POST(
+      요청({ ...기본, sellerBrief: { audience: 긴글(SELLER_BRIEF_MAX_LENGTH + 1) } }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(analyzed).toHaveLength(0);
+  });
+
+  it("딱 맞으면 통과한다 — 경계에서 한 글자 차이로 갈린다", async () => {
+    const response = await POST(
+      요청({ ...기본, sellerBrief: { audience: 긴글(SELLER_BRIEF_MAX_LENGTH) } }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(analyzed).toHaveLength(1);
+  });
+
+  it("**배경 칸도 막는다** — 전에는 기획만 무제한이라 이미지에서 400 이 났다", async () => {
+    const response = await POST(요청({ ...기본, additionalInfo: 긴글(PAGE_CONTEXT_MAX_LENGTH + 1) }));
+
+    expect(response.status).toBe(400);
+    expect(analyzed).toHaveLength(0);
+  });
+
+  it("배경 칸도 딱 맞으면 통과한다", async () => {
+    const response = await POST(요청({ ...기본, additionalInfo: 긴글(PAGE_CONTEXT_MAX_LENGTH) }));
+
+    expect(response.status).toBe(200);
+  });
+});
+
+/**
+ * **구성 요청과 그림체가 기획까지 닿는가**(U-06).
+ *
+ * 화면이 보내도 라우트가 안 넘기면 소용없다. `analyzeProduct` 가 받는 값을 본다.
+ */
+describe("구성·문구 요청과 그림체", () => {
+  const 기본 = { imageBase64: "PRODUCT", mimeType: "image/png" };
+
+  it("**구성 요청이 기획에 닿는다**", async () => {
+    await POST(요청({ ...기본, planInstruction: "섹션을 다섯 개로" }));
+
+    expect(analyzed).toHaveLength(1);
+    expect((analyzed[0] as Record<string, unknown>).planInstruction).toBe("섹션을 다섯 개로");
+  });
+
+  it("**그림체가 기획에 닿는다**", async () => {
+    await POST(요청({ ...기본, look: "illustration" }));
+
+    expect((analyzed[0] as Record<string, unknown>).look).toBe("illustration");
+  });
+
+  it("모르는 그림체는 막는다", async () => {
+    const response = await POST(요청({ ...기본, look: "크레용" }));
+
+    expect(response.status).toBe(400);
   });
 });

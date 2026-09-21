@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildDraftInput } from "../draft-input";
 import type { DraftInputState } from "../draft-input";
+import type { PdpEditorDraftState } from "../pdp-drafts";
+import { createEmptySection } from "../scenario-sections";
 
 /**
  * 초안에서 한 칸이 빠지면 조용히 잃는다.
@@ -10,7 +12,10 @@ import type { DraftInputState } from "../draft-input";
  * 잡기 전까지 시험 1,885건이 전부 통과하고 있었다.
  */
 
-const editorState = { notice: "편집기 알림" } as never;
+const sections = [createEmptySection(0)];
+const editorState: PdpEditorDraftState = { notice: "편집기 알림", sections, sectionKeys: ["S1"],
+  currentSectionIndex: 0, sectionOptions: {}, overlaysBySection: {}, defaultCopyLanguage: "ko",
+  workbenchTab: "image", workbenchState: { x: 0, y: 0, width: 200, height: 200, isOpen: true } };
 
 const 상태: DraftInputState = {
   id: "d1",
@@ -19,7 +24,7 @@ const 상태: DraftInputState = {
   preparedImage: { base64: "PRODUCT" } as never,
   modelImage: { base64: "PERSON" } as never,
   modelImageUsage: "hero-only",
-  result: { originalImage: "PRODUCT" } as never,
+  result: { originalImage: "PRODUCT", blueprint: { executiveSummary: "", scorecard: [], blueprintList: [], sections } },
   additionalInfo: "추가 정보",
   sellerBrief: { audience: "30대" } as never,
   copyIntensity: "strong",
@@ -33,7 +38,7 @@ const 상태: DraftInputState = {
   aspectRatio: "9:16",
   notice: "화면 알림",
   editorDraftState: editorState,
-  defaultEditorState: () => ({ notice: "기본값" }) as never,
+  defaultEditorState: () => ({ ...editorState, notice: "기본값" }),
 };
 
 describe("담아야 할 칸이 하나도 안 빠진다", () => {
@@ -141,7 +146,7 @@ describe("편집기 상태", () => {
 
   it("결과가 있는데 상태가 없으면 기본값을 만든다", () => {
     const draft = buildDraftInput({ ...상태, editorDraftState: null }, true)!;
-    expect(draft.editorState).toEqual({ notice: "기본값" });
+    expect(draft.editorState).toEqual({ ...editorState, notice: "기본값" });
   });
 });
 

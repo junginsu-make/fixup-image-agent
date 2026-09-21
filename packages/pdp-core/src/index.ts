@@ -20,13 +20,43 @@ export {
   falImageFrom,
   type PdpProviders,
   maxBatchSizeFor,
+  assertReferenceBudget,
   resolveEndpoint,
   type ImageGenerator,
   type ImageProviderInput,
 } from "./pdp.image-provider";
 export { buildImageJson, buildImageSystemPrompt, type ImagePromptOptions } from "./pdp.image-prompt";
-export { defaultPreserveProduct, shouldSendAnchor } from "./pdp.product-anchor";
-export { Type, type PdpLlm, type PdpLlmImage, type PdpLlmRequest, type PdpLlmResponse } from "./pdp.llm";
+/** 이 그림이 지금 문구로 만든 것인가(N-5, 설계 §4.2). */
+export {
+  IMAGE_STALE_NOTICE,
+  imageStampOf,
+  isImageStale,
+  type ImageStamp,
+} from "./pdp.image-freshness";
+
+/** 그 심사가 지금 구성안을 본 것인가(N-3, 설계 §9.3·§10.1). */
+export {
+  REVIEW_STALE_NOTICE,
+  isReviewStale,
+  reviewStampOf,
+  type ReviewStamp,
+} from "./pdp.review-freshness";
+
+/** 사진 없이 실물을 팔 때(N-2). 화면이 판단하고 서버가 프롬프트에 싣는다. */
+export {
+  conceptOnlyNotice,
+  conceptOnlyPromptRule,
+  type ConceptOnlyNotice,
+  type ProductEvidenceInput,
+} from "./pdp.concept-only";
+export {
+  anchorRoleFor,
+  defaultPreserveProduct,
+  shouldSendAnchor,
+  type AnchorKind,
+  type AnchorRole,
+} from "./pdp.product-anchor";
+export { Type, purposeOfCall, type PdpLlm, type PdpLlmImage, type PdpLlmPurpose, type PdpLlmRequest, type PdpLlmResponse, type PdpLlmExecution } from "./pdp.llm";
 export {
   buildSectionImageOptions,
   pageInputsFromWire,
@@ -37,8 +67,12 @@ export {
 } from "./pdp.image-options";
 export { MAX_UPLOAD_BYTES, base64Bytes, planUploadBatches } from "./pdp.upload-budget";
 export {
+  ANGLE_KEYWORD_RULES,
   CHARACTER_ANGLES,
   CHARACTER_SHEET,
+  DEFAULT_SECTION_ANGLE,
+  explainAngleForSection,
+  type AngleChoice,
   CHARACTER_SHEET_ASPECT,
   angleDirective,
   migrateAngle,
@@ -91,9 +125,12 @@ export {
 export {
   PRODUCT_GROUNDING_RULES,
   PRODUCT_READING_RULES,
+  effectiveGapPolicy,
   isProductReadingUsable,
   normalizeProductReading,
+  productReadingStatus,
   type ProductReading,
+  type ProductReadingStatus,
 } from "./pdp.product-reading";
 export {
   buildSellerBriefPrompt,
@@ -117,6 +154,7 @@ export {
   acknowledgeAll,
   applyUserEdit,
   collectUnverified,
+  countClearedCopy,
   findUncoveredFactTargets,
   resolveStructureFailures,
   removeTarget,
@@ -127,7 +165,46 @@ export {
   type StructureFailureReason,
   type UnverifiedItem,
 } from "./pdp.evidence";
+export {
+  ATTACHMENT_INTENT_MAX_LENGTH, PAGE_CONTEXT_MAX_LENGTH,
+  SELLER_BRIEF_MAX_LENGTH,
+  overLimitFields,
+  type LongInstructionKey,
+  type OverLimitField,
+} from "./pdp.input-limits";
+export { identityConflictOf, type IdentityConflict } from "./pdp.identity-conflict";
+export { recoverLookWithoutReference, type LookRecovery } from "./pdp.look-recovery";
+export { ANALYSIS_QUOTA_EXEMPT_CODES, consumesAnalysisQuota } from "./pdp.analysis-quota";
+export { RETRIABLE_MODEL_CODES, isRetriableModelFailure } from "./pdp.retry-policy";
+export { IMAGE_TONES, TONE_AUTO_LABEL } from "./pdp.tone";
+export { DEFAULT_PAGE_GOAL, DEFAULT_PRODUCT_KIND, PAGE_GOALS, PRODUCT_KINDS, isTangibleKind, pageGoalRule, productKindLabel, productKindRule } from "./pdp.offering";
+export type { PageGoal, ProductKind } from "./pdp.offering";
+export type { ImageTone } from "./pdp.tone";
+export { extractJsonCandidate } from "./pdp.response-parse";
 export { gapPolicyRules, intensityRules } from "./pdp.copy-intensity";
+export {
+  personSourceConflict,
+  resolvePersonSource,
+  type PersonSource,
+} from "./pdp.person-source";
+export { sanitizePromptText } from "./pdp.claim-policy";
+export { MAX_STRATEGY_LENGTH, buildStrategyDirective } from "./pdp.replan";
+export {
+  DESIGN_SYSTEM_MARKER,
+  applyDesignSystem,
+  describeDesignSystem,
+  designSystemPartOf,
+  normalizeDesignSystem,
+  sectionsMissingDesignSystem,
+} from "./pdp.design-system";
+export {
+  MAX_PLANNED_SECTIONS,
+  clampSections,
+  sectionCountRules,
+  sectionPlanGaps,
+  type SectionPlanGap,
+  type SectionPlanGapKind,
+} from "./pdp.section-plan";
 export {
   generateKeyVisual,
   textPlanDepsFrom,
@@ -142,7 +219,23 @@ export {
 } from "./pdp.text-plan";
 export * from "./types";
 
-const controller = new PdpController();
+/**
+ * **부를 때 만든다**(D-4).
+ *
+ * 전에는 여기서 바로 `new PdpController()` 를 했다. 그것은 **이 파일을 불러오는
+ * 순간 실행되는 부작용**이라, 번들러가 「이 배럴에서 상수 하나만 쓴다」는 것을
+ * 알아도 서비스와 **프롬프트 전체를 지우지 못한다.**
+ *
+ * 실측(2026-09-20, `next build`): 브라우저 청크 하나(96KB)에
+ * 「never change the product…」·「USER INSTRUCTION for composition」·
+ * 「Overall tone:」 같은 **서버 프롬프트 문장이 그대로** 들어 있었다. 화면
+ * 컴포넌트 열다섯이 이 배럴을 들이기 때문이다.
+ *
+ * 프롬프트는 우리가 무엇을 어떻게 시키는지가 적힌 글이다. 브라우저로 내려보낼
+ * 이유가 없다.
+ */
+let controllerInstance: PdpController | null = null;
+const controllerOf = () => (controllerInstance ??= new PdpController());
 
 /**
  * Maps a PdpErrorCode to the HTTP status used by the original Next.js
@@ -161,6 +254,9 @@ export function mapPdpErrorCodeToStatus(code?: PdpErrorCode | string): number {
       return 403;
     case "AI_QUOTA_EXCEEDED":
       return 429;
+    // 우리 잘못이 아니라 위쪽이 못 받는 상태다. 503 이어야 재시도가 말이 된다.
+    case "AI_PROVIDER_UNAVAILABLE":
+      return 503;
     case "PDP_IMAGE_QA_REJECTED":
       return 422;
     default:
@@ -209,7 +305,7 @@ export async function analyzeProduct(
   providers?: PdpProviders,
   options?: { skipFirstImage?: boolean }
 ): Promise<PdpAnalyzeSuccessResponse["result"]> {
-  const response = await controller.analyze(input, providers, options);
+  const response = await controllerOf().analyze(input, providers, options);
 
   if (response.ok) {
     return response.result;
@@ -238,7 +334,7 @@ export async function generateSectionImage(
   generatedImages: number;
   qa?: { warnings: QaDefect[] };
 }> {
-  const response = await controller.generateImage(input, providers);
+  const response = await controllerOf().generateImage(input, providers);
 
   if (response.ok) {
     return {

@@ -11,6 +11,7 @@ import {
   type TextPlanDeps,
 } from "./pdp.text-plan";
 import { PdpServiceError } from "./pdp.service";
+import { DESIGN_SYSTEM_RULES } from "./pdp.design-system";
 import { DEFAULT_IMAGE_MODEL } from "./types";
 import type { LandingPageBlueprint, ProductBrief } from "./types";
 
@@ -220,10 +221,11 @@ describe("디자인 시스템 공유", () => {
     expect(blueprint.sections[0].style_guide).toBe("원래 값");
   });
 
-  it("시나리오 프롬프트가 디자인 시스템을 한 번만 정하라고 지시한다", () => {
-    const prompt = buildTextBlueprintPrompt(makeBrief());
-    expect(prompt).toContain("designSystem");
-    expect(prompt).toMatch(/designSystem[\s\S]*한 번만|전체 섹션이 공유/);
+  it("시나리오 프롬프트가 **사진 경로와 같은** 디자인 규칙을 싣는다", () => {
+    // 전에는 이 파일 안에 같은 말을 따로 적었다. 그 바람에 사진 경로에만 있던
+    // 「사람이 안 나오는 페이지면 cast 는 빈 문자열」이 여기엔 없었다.
+    // 규칙 내용 자체는 `pdp.design-system.test.ts` 가 잰다.
+    expect(buildTextBlueprintPrompt(makeBrief())).toContain(DESIGN_SYSTEM_RULES);
   });
 });
 
@@ -239,14 +241,14 @@ describe("이미지 방향 병합", () => {
     expect(merged.sections[0].prompt_en).toBe("living room at dusk");
   });
 
-  it("고쳤으면 원본 prompt_en을 유지한 채 지시를 덧붙인다", () => {
+  it("고쳤으면 이전 장면을 섞지 않고 현재 장면을 쓴다", () => {
     const edited = {
       ...original,
       sections: [{ ...original.sections[0], prompt_ko: "아침 사무실" }],
     };
     const merged = mergeArtDirection(original, edited);
 
-    expect(merged.sections[0].prompt_en).toContain("living room at dusk");
+    expect(merged.sections[0].prompt_en).not.toContain("living room at dusk");
     expect(merged.sections[0].prompt_en).toContain("아침 사무실");
     expect(merged.sections[0].prompt_ko).toBe("아침 사무실");
   });

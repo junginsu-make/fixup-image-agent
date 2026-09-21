@@ -1,11 +1,12 @@
 import {
+  PdpServiceError,
   resolveCharacterAngles,
   generateSectionImage,
-  maxBatchSizeFor,
   toPdpErrorResponse,
   buildSectionImageOptions,
   pageInputsFromWire,
   DEFAULT_IMAGE_MODEL,
+  mapPdpErrorCodeToStatus,
 } from "@fixup/pdp-core";
 import type {
   AspectRatio,
@@ -20,6 +21,9 @@ import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
+import { createJobRecorder } from "../../../../../lib/pdp/jobs/recorder";
+import { fingerprintOf, isPdpJobsEnabled } from "../../../../../lib/pdp/jobs";
+import { readPdpRequest } from "../../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +32,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 type BatchRequest = {
+  /** 어느 작업의 것인가. 없으면 예약 식별자로 대신한다 — 그때는 이 요청 한 건만 묶인다. */
+  documentId?: string;
+  revision?: number;
   originalImageBase64: string;
   sections: SectionBlueprint[];
   /**
@@ -63,21 +70,14 @@ type BatchRequest = {
 };
 
 export async function POST(req: Request) {
-  let body: BatchRequest;
-  try {
-    body = (await req.json()) as BatchRequest;
-  } catch {
-    return Response.json(
-      { ok: false, code: "INVALID_REQUEST", message: "요청을 해석하지 못했습니다." },
-      { status: 400 },
-    );
-  }
+  const parsed = await readPdpRequest<BatchRequest>(req, "batch");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
 
-  // 클라이언트가 이미 나눠 보내지만, 여기서도 자른다. 넘겨받은 장수를 그대로
-  // 믿으면 함수가 300초에 걸려 죽고, 예약한 크레딧이 finalize 되지 못한다.
-  const sections = (body.sections ?? []).slice(0, maxBatchSizeFor(model));
+  // 장수와 형식은 readPdpRequest에서 예약 전에 검사했다. 조용히 자르지 않는다.
+  const sections = body.sections;
   if (sections.length === 0) {
     return Response.json(
       { ok: false, code: "INVALID_REQUEST", message: "생성할 섹션이 없습니다." },
@@ -122,6 +122,44 @@ export async function POST(req: Request) {
   if (!reservation.ok) return reservation.response;
 
   /*
+    **화면 밖에서도 되찾을 수 있게 적어 둔다**(설계 §8).
+
+    지금은 그림이 브라우저로만 간다. 탭을 닫으면 이미 값을 치른 그림이 사라지고
+    사용자는 다시 눌러 두 번 낸다.
+
+    **스위치가 꺼져 있으면 여기부터 아무 일도 없다.** 기록기가 빈 껍데기라
+    호출은 전부 즉시 돌아온다. 켜져 있어도 기록 실패는 밖으로 안 나온다 —
+    기록하려다 그림을 잃으면 고치려던 것과 같은 손실이 된다.
+  */
+  const jobs = isPdpJobsEnabled()
+    ? await createJobRecorder({
+        enabled: true,
+        input: {
+          userId: reservation.userId,
+          teamId: await teamIdOf(reservation.userId),
+          // 화면이 쥔 요청 식별자. 같은 눌림이면 같은 값이다.
+          idempotencyKey: req.headers.get("x-idempotency-key") ?? reservation.requestId,
+          fingerprint: fingerprintOf({
+            documentId: body.documentId ?? reservation.requestId,
+            revision: body.revision ?? 0,
+            operation: "pdp_image",
+            sectionIds: sections.map((section) => section.section_id),
+            imageModel: model,
+            aspectRatio: body.aspectRatio,
+          }),
+          documentId: body.documentId ?? reservation.requestId,
+          revision: body.revision ?? 0,
+          operation: "pdp_image",
+          sectionIds: sections.map((section) => section.section_id),
+          // **예약 식별자는 서버가 정한다.** 클라이언트가 제출하지 않는다.
+          reservationRequestId: reservation.requestId,
+        },
+      }).catch(() => null)
+    : null;
+
+  try {
+
+  /*
    * 섹션마다 **실제로 보낼 각도**를 먼저 정하고, 필요한 그림만 한 번씩 읽는다.
    *
    * 사람이 고른 각도가 있으면 모든 섹션이 그것을 쓴다. 안 고르면 지금까지대로
@@ -142,6 +180,20 @@ export async function POST(req: Request) {
         await loadCharacterView(reservation.userId, body.characterId, angle, teamId),
       );
     }
+
+    /*
+      **못 불러온 캐릭터로 조용히 만들지 않는다**(A-14, 설계 §6.2).
+
+      단건 라우트와 같은 규칙이다. 한쪽만 막으면 다른 쪽으로 샌다 — 여기는
+      **여러 장을 한 번에** 만드는 자리라 조용히 넘어가면 값이 그만큼 나간다.
+    */
+    if ([...characterByAngle.values()].every((view) => !view)) {
+      throw new PdpServiceError(
+        "INVALID_REQUEST",
+        "고른 캐릭터를 불러오지 못했습니다. 캐릭터를 다시 고르거나 빼고 만들어 주세요.",
+        `character ${body.characterId} has no usable view`,
+      );
+    }
   }
 
   // **조립은 한 곳에서만 한다.** 전에는 여기서 손으로 지었고, 그래서 인물 사진을
@@ -158,8 +210,8 @@ export async function POST(req: Request) {
     return views.length ? views : undefined;
   };
 
-  const settled = await Promise.allSettled(
-    sections.map((section, position) => {
+  // 동기 조립을 모두 끝낸 뒤 제출한다. 뒤 섹션 조립 실패로 앞쪽 유료 결과를 잃지 않는다.
+  const requests = sections.map((section, position) => {
       const options = buildSectionImageOptions(page, {
         section,
         index: body.sectionIndexes?.[position] ?? position,
@@ -176,18 +228,16 @@ export async function POST(req: Request) {
         characterReferences: viewsFor(position),
       });
 
-      return generateSectionImage(
-        {
+      return {
           originalImageBase64: body.originalImageBase64,
           section,
           aspectRatio: body.aspectRatio,
           desiredTone: body.desiredTone,
           options,
-        },
-        providers,
-      );
-    }),
-  );
+        };
+    });
+  await jobs?.started();
+  const settled = await Promise.allSettled(requests.map((request) => generateSectionImage(request, providers)));
 
   const results = settled.map((outcome, index) => {
     const section = sections[index];
@@ -212,6 +262,36 @@ export async function POST(req: Request) {
     };
   });
 
+  /*
+    한 장씩 적는다. **안 나온 장도 적는다**(F-7-8).
+
+    전에는 성공한 것만 적었다(`if (!result.ok) continue`). 그래서 되찾을 때
+    서버가 아는 것은 「만들어진 것」뿐이고 **왜 빠졌는지는 아무 데도 안
+    남았다** — 사용자는 집계 숫자만 보고 여덟 장을 통째로 다시 만들고, 그때
+    이미 만든 넉 장 값이 또 나간다.
+
+    설계 §14.6: 「failedSections 미표시 | **영구 상태·섹션별 실패/미시도 이유
+    표시**」. 리디자인 쪽은 이미 닫았고 PDP 만 남아 있었다.
+  */
+  for (const result of results) {
+    if (result.ok) {
+      await jobs?.sectionDone({
+        sectionId: result.sectionId,
+        attempt: 1,
+        imageBase64: result.imageBase64,
+        mimeType: result.mimeType,
+        model,
+      });
+    } else {
+      await jobs?.sectionFailed({
+        sectionId: result.sectionId,
+        attempt: 1,
+        errorCode: result.code,
+        model,
+      });
+    }
+  }
+
   // 실패한 장은 차감하지 않는다. finalizeAiUsage 가 consumedUnits 를 인자로 받아
   // 부분 성공이 그대로 처리된다.
   const succeeded = results.filter((r) => r.ok).length;
@@ -235,12 +315,39 @@ export async function POST(req: Request) {
     { model, billableImages },
   );
 
+  /*
+    **정산만 됐다고 원가 기록까지 됐다고 하지 않는다**(설계 §8.4).
+
+    전에는 `settled: Boolean(usage)` 였다. 그런데 `usage` 는 **비용 기록 실패와
+    무관하게** 돌아온다 — 기록 실패는 로그에만 남았다. 그래서 **돈이 새는
+    요청이 「정산 완료」로 닫혀** 아무도 다시 안 봤다.
+  */
+  await jobs?.finished({
+    succeeded,
+    requested: sections.length,
+    settled: Boolean(usage) && usage?.costRecorded !== false,
+  });
+
   return Response.json({
-    ok: true,
+    ok: succeeded > 0,
+    status: succeeded === sections.length ? "completed" : succeeded > 0 ? "partial" : "failed",
+    /*
+      **더 때려도 같은 답이 온다.** 공급자가 죽은 것에 이름을 붙인 김에 여기도
+      넣는다(C-9) — 전에는 장애가 「처리 중 오류」라 멈출 근거가 없어, 죽은
+      공급자를 섹션 수만큼 계속 때렸다.
+    */
+    stopBatch: results.some((result) => !result.ok &&
+      ["AI_KEY_MISSING", "AI_QUOTA_EXCEEDED", "AI_PROVIDER_UNAVAILABLE"].includes(result.code)),
+    ...(succeeded === 0 ? { message: "모든 섹션 생성에 실패했습니다. 오류를 확인한 뒤 다시 시도해 주세요." } : {}),
     model,
     requested: sections.length,
     succeeded,
     results,
     usage,
   });
+  } catch (error) {
+    const envelope = toPdpErrorResponse(error);
+    await settleAiUsage(reservation, false, 0, envelope.code);
+    return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
+  }
 }

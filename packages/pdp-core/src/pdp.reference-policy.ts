@@ -1,4 +1,5 @@
 import { attachmentPlacementRule, characterAngleDirective, priorityLine } from "@fixup/shared";
+import type { AnchorRole } from "./pdp.product-anchor";
 import type { ReferenceImage } from "./types";
 
 /**
@@ -13,6 +14,18 @@ import type { ReferenceImage } from "./types";
  * | 자리 | `kind` | 어떻게 |
  * |---|---|---|
  * | 제품 | `anchor` | **정체성 유지** — 형태·색·재질·라벨. 각도·구도는 장면이 정한다 |
+ *
+ * `anchor` 는 2026-09-18(U-03)부터 세 갈래다 — `anchorRole` 이 정한다.
+ *
+ * | `anchorRole` | 언제 | 무엇을 지키나 |
+ * |---|---|---|
+ * | `identity`(기본) | 실물 사진 + 보존 켬, 또는 레퍼런스 없음 | 형태·색·재질·라벨 |
+ * | `shape-only` | 실물 사진 + 보존 끔 + 레퍼런스 있음 | 형태·라벨 글자. 색은 레퍼런스 |
+ * | `mood-only` | 글 경로의 **만들어 낸** 대표 이미지 | 결뿐. 그 안의 물건·글자는 안 가져온다 |
+ *
+ * **`shape-only` 는 아직 실측하지 않았다.** 아래 2026-07-30 표는 오히려 반대
+ * 방향을 가리킨다 — 지시문은 정체성을 **못 풀었다**. 그래도 그쪽을 고른 이유는
+ * `pdp.product-anchor.ts` 머리말에 적었다.
  * | 인물·캐릭터 | `person` | **정체성 유지** — 얼굴·체형. 표정·자세는 장면이 정한다 |
  * | 디자인 레퍼런스 | `style` | **모방만** — 레이아웃·분위기·색·서체. 그 안의 물건·사람은 가져오지 않는다 |
  *
@@ -64,6 +77,46 @@ export type ReferenceRole = ReferenceImage["kind"];
 export function isIdentityReference(role: ReferenceRole): boolean {
   return role === "anchor" || role === "person";
 }
+
+/**
+ * **형태만 지키는 제품 규칙**(U-03).
+ *
+ * 디자인 레퍼런스를 온전히 따르기로 한 경우다. 전에는 이때 **제품 사진을 아예
+ * 안 보냈고**, 그래서 모델이 제품을 지어냈다. 이제는 보내되 **무엇을 양보할지**
+ * 를 말한다.
+ *
+ * 양보하는 것: 색·마감·질감. 지키는 것: **형태와 라벨 글자.** 글자가 바뀌면
+ * 그건 다른 제품이고, 없는 브랜드를 지어낸 것이 된다.
+ */
+const ANCHOR_SHAPE_ONLY: string[] = [
+  "This is the product. Keep its form and its text, but let the design reference decide its colours:",
+  "  · silhouette and defining features, real proportions of the object itself " +
+    "(a tall slim bottle must not become short and wide)",
+  "  · every logo, label and package text, spelled exactly as shown",
+  "Its colour palette, finish and material may be restyled to match the design reference. " +
+    "Nothing else about it may change.",
+  "Do NOT copy the reference's camera angle, crop, distance, background or lighting — " +
+    "the scene description decides those. Show this same product in a newly composed image.",
+  "Never substitute a different product, and never invent one. This is the product being sold.",
+];
+
+/**
+ * **만들어 낸 대표 이미지용 규칙**(U-03).
+ *
+ * 글 경로의 앵커는 우리가 만든 그림이다. 거기엔 헤드라인 글자와 임의의 소품이
+ * 박혀 있어서, 「판매 중인 제품, 라벨 글자까지 지켜라」로 선언하면 **그 글자가
+ * 페이지 전체에 되풀이된다.**
+ *
+ * 이 그림이 정하는 것은 **페이지의 결**뿐이다.
+ */
+const ANCHOR_MOOD_ONLY: string[] = [
+  "This is the page's key visual, made for this page. It sets the visual tone only:",
+  "  · colour mood, lighting, texture and overall feeling",
+  "Do NOT treat anything inside it as a real product or a real person. " +
+    "Do not reproduce its text, logos, props or specific objects.",
+  "Do NOT copy its camera angle, crop, distance, background or composition — " +
+    "the scene description decides those.",
+];
 
 const ROLE_RULES: Record<ReferenceRole, string[]> = {
   anchor: [
@@ -131,9 +184,25 @@ const ROLE_LABEL: Record<ReferenceRole, string> = {
  */
 export function buildReferenceRoleDirective(
   references: readonly ReferenceImage[],
-  options?: { hasUserInstruction?: boolean },
+  options?: {
+    hasUserInstruction?: boolean;
+    /**
+     * 제품 참조를 얼마나 지킬 것인가(→ `pdp.product-anchor.ts` 의 `anchorRoleFor`).
+     *
+     * **안 주면 `identity` 다.** 옛 호출자가 조용히 보존을 잃으면 안 된다.
+     */
+    anchorRole?: AnchorRole;
+  },
 ): string {
   if (references.length === 0) return "";
+
+  const rulesFor = (role: ReferenceRole): string[] => {
+    if (role !== "anchor") return ROLE_RULES[role];
+    // 안 주면 `identity` 다. 옛 호출자가 조용히 보존을 잃으면 안 된다.
+    if (options?.anchorRole === "shape-only") return ANCHOR_SHAPE_ONLY;
+    if (options?.anchorRole === "mood-only") return ANCHOR_MOOD_ONLY;
+    return ROLE_RULES.anchor;
+  };
 
   const lines = [
     // 첨부를 대충 훑고 기억으로 그리면 라벨 글자가 뭉개지고 색이 어긋난다.
@@ -167,6 +236,7 @@ export function buildReferenceRoleDirective(
     );
     const intent = reference.intent?.trim();
     if (intent) {
+      if (isIdentityReference(reference.kind)) lines.push(...rulesFor(reference.kind));
       /**
        * **설계 4-1 A안 — 자리별로.**
        *
@@ -182,9 +252,9 @@ export function buildReferenceRoleDirective(
       lines.push(
         // 이름을 붙인다. 우선순위 줄이 「USER INSTRUCTION 이 1등」이라고 말하는데
         // 그 이름의 블록이 없으면, 없는 것을 1등으로 올려 둔 셈이 된다.
-        "USER INSTRUCTION for this image. The user wrote what to do with it. Their words " +
-          "replace the usual rules for this role, so those rules are deliberately omitted. " +
-          "Follow this exactly:",
+        isIdentityReference(reference.kind)
+          ? "USER INSTRUCTION for composition and pose. Keep all identity constraints above; never change the product or character to satisfy this instruction:"
+          : "USER INSTRUCTION for this design reference. Follow the requested design treatment only; do not import its product or people:",
       );
       lines.push(intent);
       /**
@@ -201,7 +271,7 @@ export function buildReferenceRoleDirective(
     } else if (!isSlice || stylePart === 1) {
       // 조각마다 같은 규칙을 되풀이하면 프롬프트가 규칙으로 찬다. 첫 조각에서
       // 한 번만 말하고, 나머지 조각은 번호로만 잇는다.
-      lines.push(...ROLE_RULES[reference.kind]);
+      lines.push(...rulesFor(reference.kind));
       if (isSlice) {
         lines.push(
           `The ${styleCount} DESIGN REFERENCE images are slices of ONE long detail page, ` +
@@ -245,7 +315,7 @@ export function buildReferenceRoleDirective(
   // 지시를 적어 규칙을 뺀 자리는 더 이상 「지킨 대상」이 아니다. 그대로 세면
   // 「deliberately omitted」와 같은 단락에서 「preserved subject」가 부딪힌다.
   const hasIdentity = references.some(
-    (reference) => isIdentityReference(reference.kind) && !reference.intent?.trim(),
+    (reference) => isIdentityReference(reference.kind),
   );
   // 지킨 것이 구석에 작게 들어가면 지킨 보람이 없다. 자리를 정하게 한다.
   lines.push(attachmentPlacementRule(hasIdentity), "");
@@ -261,7 +331,7 @@ export function buildReferenceRoleDirective(
   // 있어도 서열을 밝혀야 한다 — 안 그러면 적은 말이 규칙 아래로 읽힌다.
   const hasSlotIntent = references.some((reference) => Boolean(reference.intent?.trim()));
   if (options?.hasUserInstruction || hasSlotIntent) {
-    const ranking = priorityLine({ hasUserInstruction: true, hasPreserved: hasIdentity });
+    const ranking = priorityLine({ hasUserInstruction: true, hasPreserved: hasIdentity, identityFirst: true });
     if (ranking) lines.push(ranking);
   }
 

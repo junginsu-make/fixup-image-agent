@@ -38,7 +38,9 @@ describe("성공 경로가 그것을 쓰는가", () => {
   });
 
   it("대표 이미지", () => {
-    expect(keyVisual).toContain("await settleAiUsage(reservation, true, 1, undefined, {");
+    // 장수는 더 이상 손으로 적지 않는다(`route-reliability.test.ts` 가 값으로 잰다).
+    // 여기서는 **던지지 않는 갈래**를 쓰는지만 본다.
+    expect(keyVisual).toContain("await settleAiUsage(reservation, true, units, undefined, {");
   });
 
   it("배치 — 여기는 try 밖이라 던지면 전부 잃는다", () => {
