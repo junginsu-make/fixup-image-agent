@@ -54,8 +54,15 @@ function walk(dir: string, out: string[] = []): string[] {
 describe("배포 문서가 코드보다 뒤처지지 않는다", () => {
   it("코드가 읽는 환경변수는 전부 app.env.example 에 있다", () => {
     const documented = new Set(example.match(/^[A-Z][A-Z0-9_]*(?==)/gm) ?? []);
-    /** 별칭도 적힌 것으로 본다 — 주석에 나오면 배포하는 사람이 찾을 수 있다. */
-    const mentioned = (name: string) => documented.has(name) || example.includes(name);
+    /**
+     * 별칭도 적힌 것으로 본다 — 주석에 나오면 배포하는 사람이 찾을 수 있다.
+     *
+     * **단어 경계로 본다.** 부분일치로 두었더니 `KNOWLEDGE_ACCESS_KEY`(단수
+     * 폴백)가 문서의 `KNOWLEDGE_ACCESS_KEYS`(복수)에 먹혀 통과했다 — 배포하는
+     * 사람은 단수 이름이 있는 줄도 몰랐다. 이 검사가 막으려던 바로 그 상황이다.
+     */
+    const mentioned = (name: string) =>
+      documented.has(name) || new RegExp(String.raw`\b${name}\b`).test(example);
 
     const missing = new Set<string>();
     for (const dir of SOURCE_ROOTS) {

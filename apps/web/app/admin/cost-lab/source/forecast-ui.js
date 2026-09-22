@@ -9,6 +9,7 @@
   const put = (obj, path, value) => { const keys=path.split('.'); let target=obj; for(const key of keys.slice(0,-1))target=target[key]; target[keys.at(-1)]=value; };
   let draft = api.createScenario(false), lastRows = [], timer, syncing=false, valid=true;
   let detailsOpen=false,fieldId=0,products={};
+  let launch=api.createLaunchStrategy(),launchOpen=false;
   const presets={light:[40,50],normal:[70,80],full:[100,100]};
   const sizes=[[1024,768],[1024,1024],[1024,1536],[1920,1080],[2560,1440],[3840,2160]];
   const aliases={flare:'gpt-image-2.5-flare',sunburst:'gpt-image-2.5-sunburst',gpt2:'gpt-image-2',pro:'nano-banana-pro',nano2:'nano-banana-2',nano:'nano-banana',seedream:'seedream-5-pro',qwen:'qwen-image-2-pro',ro:'redesign-openai',rg:'redesign-google'};
@@ -131,7 +132,7 @@
     try{
       const scenario=api.validateScenario(draft), rows=api.forecast(scenario);lastRows=rows;valid=true;
       el('fc-error').hidden=true;el('forecast-panel').classList.remove('invalid');
-      const r=rows[scenario.selectedMonth-1];syncPricingCost(r,scenario);const first=rows.flatMap(x=>x.transitions.map(message=>({month:x.index,message})))[0];
+      renderLaunch(scenario);const r=rows[scenario.selectedMonth-1];syncPricingCost(r,scenario);const first=rows.flatMap(x=>x.transitions.map(message=>({month:x.index,message})))[0];
       const blocked=r.serviceability==='quota-exceeded';
       el('fc-origin').textContent=(scenario.example?'예시 조건 · ':'직접 입력 · ')+(r.completeness==='partial'?'아직 입력하지 않은 인프라/사용량이 있습니다. 확인한 비용만 표시합니다.':'입력한 조건으로 계산했습니다. 운영 계정 실시간 연동은 아닙니다.');
       document.querySelectorAll('[data-fc-policy]').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.fcPolicy===scenario.business.policy));b.disabled=scenario.business.basis==='wallet';});
@@ -167,7 +168,28 @@
       document.querySelectorAll('[data-fc-path]').forEach(input=>{if(input!==document.activeElement){const value=get(draft,input.dataset.fcPath);input.value=value??'';}});
     }catch(err){error(err);}
   }
-  function hydrate(){mainInputs();configurations();el('fc-details').open=detailsOpen;render();}
+  function launchField(path,label,{kind='number',max=1e9,min=0,unit=''}={}){
+    const value=get(launch,path),id='launch-'+path.replaceAll('.','-');
+    return `<label class="fc-field" for="${id}"><span>${esc(label)}</span><input id="${id}" type="${kind}" data-launch-path="${path}" data-launch-kind="${kind}" value="${esc(value)}" min="${min}" max="${max}" step="any">${unit?`<small class="muted">${esc(unit)}</small>`:''}</label>`;
+  }
+  function hydrateLaunch(){
+    el('fc-launch-inputs').innerHTML=`<div class="fc-main-inputs">${launchField('targetMarginPct','목표 전체 예산 마진 (%)',{max:95})}<label class="fc-field"><span>수수료 기준</span><select data-launch-path="feeMode" data-launch-kind="text"><option value="assumed-total" ${launch.feeMode==='assumed-total'?'selected':''}>사용자 가정 · 총 15% (조정 가능)</option><option value="official-cash" ${launch.feeMode==='official-cash'?'selected':''}>공식 국내 기본 · 16.5% + 108,900원</option></select></label><label class="fc-field"><span>크레딧 차감 기준</span><select data-launch-path="policy" data-launch-kind="text"><option value="image-v2" ${launch.policy==='image-v2'?'selected':''}>새 정책 · 일반 이미지 1장=1개</option><option value="cost-v1" ${launch.policy==='cost-v1'?'selected':''}>기존 원가 환산</option></select></label></div>
+      <div class="fc-table"><table><thead><tr><th>상품</th><th>판매가</th><th>기본 크레딧</th><th>보너스 %</th><th>예상 구매자</th><th>운영비 적립 개월</th></tr></thead><tbody>${launch.plans.map((p,i)=>`<tr><th>${esc(p.name)}<small style="display:block" class="muted">${p.type==='subscription'?'월 제공 · 이월 없음':'단건 구매 · 이월 / 가격은 비교용'}</small></th><td>${launchField(`plans.${i}.priceKrw`,'판매가 (원)',{min:1,max:1e7})}</td><td>${launchField(`plans.${i}.baseCredits`,'기본 제공량',{min:1,max:1e6})}</td><td>${launchField(`plans.${i}.bonusPct`,'추가 제공률',{max:200})}</td><td>${launchField(`plans.${i}.buyers`,'구매자 수',{max:1e6})}</td><td>${launchField(`plans.${i}.reserveMonths`,'운영비 적립 기간',{min:1,max:36})}</td></tr>`).join('')}</tbody></table></div>
+      <div class="fc-main-inputs">${launchField('feePct','총 수수료율 가정 (%)',{max:50})}${launchField('projectFeeKrw','프로젝트 기본료 가정 (원)')}${launchField('adBudgetKrw','모집 광고·경품 현금 예산 (원)')}${launchField('eventRecipients','추가 무료 체험자 (명)',{unit:'구매자와 중복되는 인원 제외'})}${launchField('eventCredits','체험자 1인당 무료 크레딧',{max:1e6})}</div>
+      <p class="muted">기본안: 베이직 10만원·115개, 프리미엄 20만원·230개. 두 상품의 크레딧당 판매가는 같습니다. 프리미엄 보너스나 제공량을 바꾸어 비교하세요. 구매형의 적립 기간은 실제 유효기간 설정을 바꾸지 않습니다.</p>`;
+    el('fc-launch').open=launchOpen;
+  }
+  function renderLaunch(scenario){
+    try{
+      const result=api.compareLaunchPlans(launch,scenario);el('fc-launch-error').hidden=true;
+      el('fc-launch-results').innerHTML=`<h2>전량 소진하면 30%가 남을까요?</h2><p class="muted">부가세 제외 매출 기준 · 입력한 첫 회원 그룹의 작업 구성 · 기본료는 ${number(result.buyers)}건에 배분 · 채널 공제 ${number(result.effectiveFeePct,1)}%</p><div class="fc-table"><table><thead><tr><th>상품</th><th>총 크레딧 / 생성</th><th>API 비용</th><th>운영비 적립</th><th>모집·기본료 배분</th><th>예산 마진</th><th>목표 ${number(launch.targetMarginPct)}%</th></tr></thead><tbody>${result.results.map(p=>`<tr><th>${esc(p.name)}</th><td>${number(p.issuedCredits)}개 / ${number(p.images)}장</td><td>${money(p.apiKrw)}</td><td>${money(p.infraReserveKrw)}</td><td>${money(p.eventPerSaleKrw)}</td><td>${p.marginPct===null?'미확정':number(p.marginPct,1)+'%'}</td><td>${p.meetsTarget===null?'운영 정보 필요':p.meetsTarget?'가정 내 충족':'미달'}</td></tr>`).join('')}</tbody></table></div>
+      <p>목표 마진을 지키며 API·운영·이벤트에 쓸 수 있는 예산: ${result.results.map(p=>`${esc(p.name)} ${money(p.operatingBudgetKrw)}`).join(' / ')}</p>
+      <p class="muted">무료 이벤트 예상 ${number(result.eventImages)}장 · API ${money(result.eventApiKrw)}. 상단의 현재 회원 조건과 달리 이 표는 상품별 구매자 모두가 보너스까지 소진하는 조건입니다.</p><details><summary>계산 범위·수수료 근거</summary><ul>${result.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul><a href="https://helpcenter.wadiz.io/hc/ko/articles/25375315142169" target="_blank" rel="noopener">와디즈 공식 요금제 안내</a></details>`;
+    }catch(err){el('fc-launch-error').hidden=false;el('fc-launch-error').textContent=err instanceof Error?err.message:String(err);el('fc-launch-results').innerHTML='';}
+  }
+  document.addEventListener('input',e=>{const t=e.target,path=t.dataset.launchPath;if(!path)return;put(launch,path,t.dataset.launchKind==='number'?(t.value===''?NaN:Number(t.value)):t.value);clearTimeout(timer);timer=setTimeout(()=>{try{renderLaunch(api.validateScenario(draft));}catch(err){error(err);}},150);});
+  el('fc-launch').addEventListener('toggle',()=>{launchOpen=el('fc-launch').open;});
+  function hydrate(){mainInputs();configurations();hydrateLaunch();el('fc-details').open=detailsOpen;render();}
   function changed(path){remember(path);if(draft.source!=='current')updateLegacyFrom(path);clearTimeout(timer);timer=setTimeout(render,150);}
   document.addEventListener('input',e=>{
     const t=e.target,path=t.dataset.fcPath;
@@ -211,20 +233,20 @@
   el('fc-selection').addEventListener('change',e=>{draft.aws.selection=e.target.value;changed('aws.selection');render();});
   el('fc-example').onclick=()=>{products={};draft=api.createScenario(true);hydrate();};
   el('fc-empty').onclick=()=>{products={};draft=api.createScenario(false);hydrate();el('fc-details').open=true;};
-  const downloadJson=()=>{const s=api.validateScenario(draft);download('MCS-운영비-설정.json',JSON.stringify(s,null,2),'application/json');};
+  const downloadJson=()=>{const s=api.validateScenario(draft);download('MCS-운영비-설정.json',JSON.stringify({schema:'mcs-forecast-config',version:1,scenario:s,launch:api.validateLaunchStrategy(launch)},null,2),'application/json');};
   el('fc-export').onclick=()=>{try{downloadJson();}catch(err){error(err);}};
   el('fc-import').onclick=()=>el('fc-file').click();
-  el('fc-file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>262144)throw Error('설정 파일은 256KB 이하여야 합니다.');const parsed=JSON.parse(await file.text());if(parsed.schema==='mcs-cost-lab'){restoreSession(parsed);window.hydrate();hydrate();showTab(restoredView);return;}const next=api.validateScenario(parsed);draft=next;hydrate();}catch(err){error(err);}finally{e.target.value='';}};
+  el('fc-file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>262144)throw Error('설정 파일은 256KB 이하여야 합니다.');const parsed=JSON.parse(await file.text());if(parsed.schema==='mcs-cost-lab'){restoreSession(parsed);window.hydrate();hydrate();showTab(restoredView);return;}const wrapped=parsed.schema==='mcs-forecast-config';if(wrapped&&parsed.version!==1)throw Error('지원하지 않는 설정 버전입니다.');const next=api.validateScenario(wrapped?parsed.scenario:parsed);const nextLaunch=wrapped?api.validateLaunchStrategy(parsed.launch):launch;draft=next;launch=nextLaunch;hydrate();}catch(err){error(err);}finally{e.target.value='';}};
   el('fc-upgrade-prices').onclick=()=>{draft.catalog=copy(api.CURRENT_CATALOG);hydrate();};
   window.MCSForecastController={
     read:()=>api.validateScenario(draft),
-    ui:()=>({detailsOpen,products:copy(products)}),
+    ui:()=>({detailsOpen,products:copy(products),launch:api.validateLaunchStrategy(launch),launchOpen}),
     restoreLegacy:view=>{products={};draft=api.createScenario(false);sourceProjection(view==='wallet'?'wallet':'main',true);hydrate();},
-    restore:(raw,ui)=>{const next=api.validateScenario(raw),savedProducts=validateProducts(ui?.products,next);draft=next;products=savedProducts;detailsOpen=Boolean(ui?.detailsOpen);hydrate();},
+    restore:(raw,ui)=>{const next=api.validateScenario(raw),savedProducts=validateProducts(ui?.products,next);const nextLaunch=ui?.launch?api.validateLaunchStrategy(ui.launch):api.createLaunchStrategy();launch=nextLaunch;launchOpen=Boolean(ui?.launchOpen);draft=next;products=savedProducts;detailsOpen=Boolean(ui?.detailsOpen);hydrate();},
     legacyChanged:source=>{if(syncing||draft.source!==source)return;sourceProjection(source,false);clearTimeout(timer);timer=setTimeout(()=>{mainInputs();render();},100);},
     result:()=>copy(lastRows),
   };
-  if(typeof pendingForecast!=='undefined'&&pendingForecast){try{draft=api.validateScenario(pendingForecast);detailsOpen=Boolean(pendingForecastUi?.detailsOpen);products=validateProducts(pendingForecastUi?.products,draft);}catch(err){error(err);}}
+  if(typeof pendingForecast!=='undefined'&&pendingForecast){try{draft=api.validateScenario(pendingForecast);detailsOpen=Boolean(pendingForecastUi?.detailsOpen);products=validateProducts(pendingForecastUi?.products,draft);launch=pendingForecastUi?.launch?api.validateLaunchStrategy(pendingForecastUi.launch):api.createLaunchStrategy();launchOpen=Boolean(pendingForecastUi?.launchOpen);}catch(err){error(err);}}
   else if(typeof hasRestoredSession!=='undefined'&&hasRestoredSession){sourceProjection(currentView==='wallet'?'wallet':'main',true);}
   hydrate();
 })();

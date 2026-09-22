@@ -14,6 +14,10 @@
     <div class="panel fc-three"><div><span>같은 사용량, 무료 혜택이 끝나면</span><strong id="fc-normal"></strong><small>혜택 전 예상 운영비</small></div><div><span>계속 보관하면 예측 마지막 달</span><strong id="fc-stock"></strong><small id="fc-stock-note"></small></div><div><span>언제 비용이 달라질까요?</span><strong id="fc-next"></strong><small id="fc-next-note"></small></div></div>
     <div class="panel"><div class="fc-toolbar"><h2>회원 수만 바꾸어 보면</h2><span class="muted">같은 사용 조건 · 선택 월 기준</span></div><div class="fc-table"><table><thead><tr><th>시작 회원</th><th>생성 이미지</th><th>월 운영비</th><th>월 이익</th><th>추천 서버</th></tr></thead><tbody id="fc-comparison"></tbody></table></div><p class="muted">가입 회원은 동시 접속자 수가 아닙니다. 혼합 그룹은 상세에서 그룹별 인원을 조정하세요.</p></div>
   </div>
+  <details id="fc-launch" class="fc-details"><summary>와디즈 상품 전략 <small>베이직 · 프리미엄 · 구매 크레딧 / 목표 마진 30%</small></summary>
+    <div class="panel"><h2>구독 혜택과 크레딧 판매를 함께 비교합니다</h2><p class="muted">보너스를 포함해 전량 사용할 때를 계산합니다. 구독은 매월 소멸, 구매형은 잔액을 이월하는 판매건별 예산 비교입니다. 실제 상품이나 회원 크레딧을 변경하지 않습니다.</p><div id="fc-launch-inputs"></div></div>
+    <div class="panel"><p id="fc-launch-error" class="fc-error" role="alert" hidden></p><div id="fc-launch-results"></div></div>
+  </details>
   <details id="fc-details" class="fc-details"><summary>세부 조건과 월별 내역 펼치기 <small>회원 구성 · 생성 작업 · 서버·DB · 저장·전송 · 가격</small></summary>
     <div class="fc-config" id="fc-config"></div>
     <div class="panel"><h2>월별 비용과 누적 사용량</h2><div id="fc-chart" class="fc-chart" aria-label="월별 비용, 아래 표에서 상세 확인"></div><div class="fc-table"><table><thead><tr><th>월</th><th>회원 / 활성</th><th>생성 / API 출력</th><th>파일 말 / 평균 GB</th><th>DB GB</th><th>AWS 송신 GB</th><th>요금제</th><th>운영비</th><th>누적 비용</th><th>상태</th></tr></thead><tbody id="fc-table"></tbody></table></div></div>
