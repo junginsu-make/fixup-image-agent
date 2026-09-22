@@ -4,3 +4,5 @@ export { estimateWork, legacyModels } from "./work-profiles";
 export { simulateMember } from "./usage";
 export { forecast } from "./forecast";
 export { recommendCapacity } from "./sizing";
+export { createLaunchStrategy, recommendedLaunchStrategy, validateLaunchStrategy, compareLaunchPlans } from "./launch-strategy";
+export { PLAN_ASSUMPTIONS, PLAN_DEFAULTS, pricePlans, validatePlanInputs } from "./subscription-plans";
