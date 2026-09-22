@@ -41,6 +41,14 @@ describe("판단이 살아 있는 상태에 이어져 있는가", () => {
   });
 
   /**
+   * **붙인 그림 전부를 센다.** `styleCount` 만 넘기면 제품·인물을 지키려고만
+   * 붙인 사람이 「지시도 그림도 없다」로 판정돼 만들기가 막힌다.
+   */
+  it("만들기 버튼이 붙인 그림 전부를 본다", () => {
+    expect(source).toMatch(/canCreatePoster\({[\s\S]*?\breferenceCount,/);
+  });
+
+  /**
    * 화면이 「GPT Image 2 로 만듭니다」라고 말했으면 그 모델을 **보내야** 한다.
    *
    * **두 곳을 각각 짚는다.** `choice.model.id` 는 추정과 본문 양쪽에 나오는데,
@@ -200,6 +208,22 @@ describe("글만으로 만드는 길", () => {
     expect(source).toContain('rerunStartStep(rerunFrom ? rerunStep : null, RERUN_STEPS, "instruction")');
     expect(source, "단계가 없는 주소가 다른 단계로 열리면 안 된다")
       .not.toMatch(/RERUN_STEPS, "(reference|spec)"/);
+  });
+
+  /**
+   * **01 「다음」이 아무것도 안 본다** (2026-09-22 사용자 보고).
+   *
+   * 전에는 제목과 지시가 둘 다 있어야 눌렸다. 그래서 레퍼런스부터 붙이고
+   * 시작하려는 사람은 02 로 넘어가지도 못했다 — 규칙(`canCreatePoster`·
+   * `PosterProjectInputSchema`)을 풀어 놔도 이 한 줄이 살아 있으면 길이 없다.
+   */
+  it("지시 「다음」이 입력을 안 본다", () => {
+    /*
+      같은 `setStep("reference")` 가 이 화면에 둘 있다 — 위쪽 「고치기」와 여기.
+      속성 하나 없는 여는 태그째로 잡아야 `disabled` 가 돌아온 것을 잡는다.
+    */
+    expect(source, "01 을 다시 필수로 만들면 안 된다")
+      .toMatch(/<Button onClick=\{\(\) => setStep\("reference"\)\}>\s*다음/);
   });
 
   /** 첨부는 선택이다. 여기에 장수 조건이 돌아오면 길이 다시 막힌다. */

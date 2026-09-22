@@ -70,7 +70,7 @@ describe("몇 개를 만드는가", () => {
 
 describe("만들기를 누를 수 있는가", () => {
   const ok = {
-    styleCount: 1, instruction: "가을 사진전 포스터", estimateRejected: false,
+    styleCount: 1, referenceCount: 1, instruction: "가을 사진전 포스터", estimateRejected: false,
     overReferenceLimit: false, adMode: false, adReady: false,
   };
 
@@ -88,7 +88,7 @@ describe("만들기를 누를 수 있는가", () => {
    * 막고 있던 것은 이 버튼과 스키마뿐이었다.
    */
   it("그림이 없어도 누를 수 있다", () => {
-    expect(canCreatePoster({ ...ok, styleCount: 0 })).toBe(true);
+    expect(canCreatePoster({ ...ok, styleCount: 0, referenceCount: 0 })).toBe(true);
   });
 
   /**
@@ -100,8 +100,29 @@ describe("만들기를 누를 수 있는가", () => {
     expect(canCreatePoster({ ...ok, styleCount: 1, adMode: true, adReady: true })).toBe(true);
   });
 
-  it("지시가 비어 있으면 못 누른다", () => {
-    expect(canCreatePoster({ ...ok, instruction: "   " })).toBe(false);
+  /**
+   * **그림만으로도 만들 수 있다** (2026-09-22 사용자 보고).
+   *
+   * 글만으로 만드는 길은 2026-09-16 에 열었는데 그 반대는 막혀 있었다. 01 지시를
+   * 비운 채 레퍼런스부터 붙이고 「이 그림들을 어떻게 쓸까요」에 적는 사람이 있다.
+   */
+  it("지시가 비어도 그림이 있으면 누를 수 있다", () => {
+    expect(canCreatePoster({ ...ok, instruction: "   " })).toBe(true);
+  });
+
+  /**
+   * **지키려고 붙인 그림도 근거다.**
+   *
+   * `styleCount` 로 재면 제품·인물을 지키려고만 붙인 사람이 막힌다 — 그 사람도
+   * 화면에는 그림을 붙여 놨다.
+   */
+  it("따라 만들기가 없어도 지킬 그림이 있으면 누를 수 있다", () => {
+    expect(canCreatePoster({ ...ok, instruction: "", styleCount: 0, referenceCount: 1 })).toBe(true);
+  });
+
+  /** 글도 그림도 없으면 무엇을 그릴지 말해 주는 것이 프롬프트에 한 줄도 없다. */
+  it("지시도 그림도 없으면 못 누른다", () => {
+    expect(canCreatePoster({ ...ok, instruction: "   ", styleCount: 0, referenceCount: 0 })).toBe(false);
   });
 
   it("추정이 거절이거나 레퍼런스가 넘치면 못 누른다", () => {

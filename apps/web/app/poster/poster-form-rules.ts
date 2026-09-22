@@ -64,6 +64,13 @@ export function projectCount(adMode: boolean, masterCount: number): number {
  */
 export function canCreatePoster(input: {
   styleCount: number;
+  /**
+   * 붙인 그림 전부의 수 — 따라 만들기 + 지키기.
+   *
+   * `styleCount` 로는 못 잰다. 그것은 「따라 만들기」만 세는데, 제품·인물을
+   * 지키려고 붙인 사람에게도 **그릴 근거는 있다.**
+   */
+  referenceCount: number;
   instruction: string;
   estimateRejected: boolean;
   overReferenceLimit: boolean;
@@ -85,7 +92,17 @@ export function canCreatePoster(input: {
    * 그대로 따라가는데(`effectiveRatio`), 맞출 원본이 없으면 성립하지 않는다.
    */
   if (input.adMode && input.styleCount <= 0) return false;
-  if (input.instruction.trim().length === 0) return false;
+  /*
+   * **그림만으로도 만들 수 있다.** 글과 그림, 둘 중 하나만 있으면 된다.
+   *
+   * 글만으로 만드는 길을 연 뒤에도 그 반대는 막혀 있었다 — 01 지시가 비면
+   * 02 로 넘어가지도 못했다. 레퍼런스를 먼저 붙이고 「이 그림들을 어떻게
+   * 쓸까요」에 적는 것부터 시작하고 싶은 사람이 있다(2026-09-22 사용자 보고).
+   *
+   * **둘 다 비면 막는다.** 그때는 무엇을 그릴지 말해 주는 것이 프롬프트에
+   * 한 줄도 없다 — 기획이 통째로 지어내고, 그 값을 사용자가 낸다.
+   */
+  if (input.instruction.trim().length === 0 && input.referenceCount <= 0) return false;
   if (input.estimateRejected || input.overReferenceLimit) return false;
   return !input.adMode || input.adReady;
 }

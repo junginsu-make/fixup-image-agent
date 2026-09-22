@@ -87,7 +87,14 @@ export function buildPlanPrompt(input: PosterPlanInput): string {
   return [
     "포스터 한 장의 기획 칸을 채웁니다. 자유 문장이 아니라 정해진 칸에 값을 넣습니다.",
     "",
-    `사용자 지시: ${input.instruction}`,
+    /*
+     * **지시는 비어 있을 수 있다**(2026-09-22). 01 을 건너뛰고 그림부터 붙인
+     * 사람이다. 그때 `사용자 지시: ` 만 남기면 빈 칸을 본 기획이 「지시가
+     * 잘렸다」로 읽고 스스로 채운다 — 무엇을 근거로 채워야 하는지 적는다.
+     */
+    input.instruction.trim()
+      ? `사용자 지시: ${input.instruction.trim()}`
+      : "사용자 지시: (적지 않았습니다. 아래 첨부한 그림과 사용자가 적은 말만 근거로 채우고, 근거가 없는 칸은 invented 에 적으세요.)",
     `비율: ${input.ratio}`,
     "",
     "첨부한 그림 (번호는 화면에 보이는 것과 같습니다):",
