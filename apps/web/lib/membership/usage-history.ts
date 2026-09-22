@@ -32,14 +32,17 @@ export interface UsageLine {
   tone: "charged" | "pending" | "free" | "failed" | "legacy";
 }
 
-/** 사이드바에서 쓰는 이름과 맞춘다. 회원이 메뉴에서 본 이름으로 찾는다. */
+/**
+ * 사이드바 이름으로 적는다(이미지 > 쉽게·다양하게, 상세페이지 > 만들기·리디자인).
+ * 「쉽게」와 「다양하게」는 같은 장부 이름(`poster_image`)으로 남아 둘을 가르지 못한다.
+ */
 const TOOL: Record<string, string> = {
-  pdp_analyze: "상세페이지 · 분석",
-  pdp_image: "상세페이지 · 이미지",
+  pdp_analyze: "상세페이지 만들기 · 분석",
+  pdp_image: "상세페이지 만들기",
   redesign_transcribe: "리디자인 · 읽기",
   redesign_generate: "리디자인 · 생성",
   redesign_edit: "리디자인 · 수정",
-  poster_image: "이미지 만들기",
+  poster_image: "이미지 (쉽게·다양하게)",
   sns_image: "카드뉴스",
   ad_export: "광고소재",
   reference_analyze: "참고 이미지 분석",

@@ -110,7 +110,7 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>}
         {/* 옛 기준 계정이어도 기록은 보인다. 그 줄들은 「크레딧 적용 전」으로 따로 묶인다. */}
-        <UsageHistoryCard rows={history} grants={grants} periodStart={usage.periodStart} usedThisMonth={usage.pricingPolicy === "image-v2" ? usage.used : 0} unlimited={usage.unlimited === true} />
+        <UsageHistoryCard rows={history} grants={grants} usedThisMonth={usage.pricingPolicy === "image-v2" ? usage.used : null} unlimited={usage.unlimited === true} />
         </div>
 
         <div className="grid gap-4">

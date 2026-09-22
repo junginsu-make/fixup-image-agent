@@ -16,7 +16,7 @@ const row = (over: Partial<UsageEventRow>): UsageEventRow => ({
 describe("한 줄", () => {
   it("성공은 쓴 크레딧만큼 빠진다", () => {
     const line = describeUsageEvent(row({ consumed_units: 2, requested_units: 2 }));
-    expect(line.tool).toBe("이미지 만들기");
+    expect(line.tool).toBe("이미지 (쉽게·다양하게)");
     expect(line.amount).toBe("-2크레딧");
     expect(line.status).toBe("완료");
     expect(line.charged).toBe(2);
@@ -50,7 +50,7 @@ describe("한 줄", () => {
 
   it("분석처럼 크레딧이 안 드는 일은 무료라고 말한다", () => {
     const line = describeUsageEvent(row({ operation: "pdp_analyze", requested_units: 0, consumed_units: 0 }));
-    expect(line.tool).toBe("상세페이지 · 분석");
+    expect(line.tool).toBe("상세페이지 만들기 · 분석");
     expect(line.amount).toBe("무료");
   });
 

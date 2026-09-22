@@ -83,11 +83,24 @@ describe("사용 기록과 레이아웃", () => {
     expect(page).toContain("readMyGrants(membership.user.id)");
   });
 
-  /** 기록의 합과 잔액 카드의 「이번 달 사용」이 같은 규칙이어야 믿을 수 있다. */
-  it("합계를 잔액과 같은 규칙으로 셈하고 둘을 맞대 보인다", () => {
+  /**
+   * 기록은 최근 것만 싣는다. 실린 줄의 합을 「이번 달」이라고 굵게 보이면 잔액의 값과 다른
+   * 숫자가 선다(독립 리뷰 2026-09-22). 이번 달 사용은 잔액이 센 값 하나만 쓴다.
+   */
+  it("이번 달 사용은 잔액이 센 값을 쓰고, 잘렸으면 그렇게 말한다", () => {
     const card = read("app/settings/usage-history-card.tsx");
-    expect(card).toContain("monthlyCreditTotal(rows, periodStart)");
-    expect(card).toContain("total === usedThisMonth");
+    expect(card).not.toContain("monthlyCreditTotal(");
+    expect(card).toContain("{usedThisMonth.toLocaleString(");
+    expect(card).toContain("최근 ${USAGE_HISTORY_LIMIT}건만 보여 드립니다");
+  });
+
+  it("기록·받은 크레딧을 못 읽어도 화면이 죽지 않고, 없다고 거짓말하지 않는다", () => {
+    const store = read("lib/membership/usage-store.ts");
+    expect(store).not.toContain("throw new Error(`사용 기록을 읽지 못했습니다");
+    expect(store).toContain("Promise<GrantRow[] | null>");
+    const card = read("app/settings/usage-history-card.tsx");
+    expect(card).toContain("사용 기록을 불러오지 못했습니다");
+    expect(card).toContain("받은 크레딧을 불러오지 못했습니다");
   });
 });
 

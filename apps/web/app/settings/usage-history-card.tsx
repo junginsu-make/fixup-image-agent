@@ -1,8 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@fixup/ui";
-import { describeUsageEvent, monthlyCreditTotal, type UsageEventRow } from "../../lib/membership/usage-history";
-import type { GrantRow } from "../../lib/membership/usage-store";
+import { describeUsageEvent, type UsageEventRow } from "../../lib/membership/usage-history";
+import { USAGE_HISTORY_LIMIT, type GrantRow } from "../../lib/membership/usage-store";
 
-const when = (value: string) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+const when = (value: string) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
 const day = (value: string) => new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 const KIND: Record<string, string> = { subscription: "구독", purchase: "구매", bonus: "추가 지급" };
 const TONE: Record<string, string> = {
@@ -16,27 +16,37 @@ const TONE: Record<string, string> = {
 /**
  * 내 크레딧 사용 기록과 받은 크레딧.
  *
- * 합계는 잔액 카드의 「이번 달 사용」과 **같은 규칙**으로 셈한다(`monthlyCreditTotal`).
- * 두 숫자가 다르면 기록을 믿을 수 없다 — 2026-09-22 사용자 요청 「사용기록이 정확해야 합니다」.
+ * **이번 달 합계는 잔액이 센 값을 그대로 쓴다.** 기록은 최근 것만 싣기 때문에, 실린 줄을
+ * 더하면 한 달 치가 안 될 수 있다 — 그 합을 굵게 보이면 위 「이번 달 사용」과 다른 숫자가
+ * 두 개 선다(독립 리뷰 2026-09-22). 사용자 요청 「사용기록이 정확해야 합니다」.
  */
-export function UsageHistoryCard({ rows, grants, periodStart, usedThisMonth, unlimited }: {
-  rows: UsageEventRow[];
-  grants: GrantRow[];
-  periodStart: string;
-  usedThisMonth: number;
+export function UsageHistoryCard({ rows, grants, usedThisMonth, unlimited }: {
+  rows: UsageEventRow[] | null;
+  grants: GrantRow[] | null;
+  /** 잔액이 센 이번 달 사용. 크레딧 계정이 아니면 null. */
+  usedThisMonth: number | null;
   unlimited: boolean;
 }) {
+  if (!rows) {
+    return (
+      <Card>
+        <CardHeader><CardTitle>사용 기록</CardTitle></CardHeader>
+        <CardContent><p role="alert" className="text-base text-muted-foreground">사용 기록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요. 잔액은 위 숫자가 맞습니다.</p></CardContent>
+      </Card>
+    );
+  }
   const current = rows.filter((row) => row.pricing_policy === "image-v2");
   const legacy = rows.filter((row) => row.pricing_policy !== "image-v2");
-  const total = monthlyCreditTotal(rows, periodStart);
+  const cut = rows.length >= USAGE_HISTORY_LIMIT;
 
   return (
     <Card>
       <CardHeader className="space-y-1.5">
         <CardTitle>사용 기록</CardTitle>
         <CardDescription className="text-sm">
-          성공한 이미지만 차감되고, 실패하면 돌려받습니다. 이번 달 합계 <strong className="text-foreground">{total.toLocaleString("ko-KR")}크레딧</strong>
-          {total === usedThisMonth ? " · 위 「이번 달 사용」과 같습니다." : ` · 이번 달 사용 ${usedThisMonth.toLocaleString("ko-KR")}크레딧(최근 기록만 보여서 다를 수 있습니다).`}
+          성공한 이미지만 차감되고, 실패하면 돌려받습니다.
+          {usedThisMonth !== null ? <> 이번 달 사용 <strong className="text-foreground">{usedThisMonth.toLocaleString("ko-KR")}크레딧</strong>.</> : null}
+          {cut ? ` 최근 ${USAGE_HISTORY_LIMIT}건만 보여 드립니다.` : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -50,7 +60,9 @@ export function UsageHistoryCard({ rows, grants, periodStart, usedThisMonth, unl
           </details>
         ) : null}
 
-        {grants.length ? (
+        {grants === null ? (
+          <p className="border-t pt-4 text-sm text-muted-foreground">받은 크레딧을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.</p>
+        ) : grants.length ? (
           <section className="space-y-2 border-t pt-4">
             <h3 className="text-sm font-bold">받은 크레딧</h3>
             <ul className="divide-y rounded-lg border">
