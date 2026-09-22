@@ -28,9 +28,15 @@ import {
  * **앞쪽을 남긴다.** 순서가 곧 우선순위라, 정체성 기준이 앞에 온다.
  */
 function withinLimit(model: ImageModelId, references: ReferenceImage[]) {
+  assertReferenceBudget(model, references.length);
+  return references;
+}
+
+export function assertReferenceBudget(model: ImageModelId, count: number): void {
   const limit = IMAGE_MODELS.find((entry) => entry.id === model)?.maxReferenceImages;
-  // 모르는 모델이면 가장 좁은 상한으로 떨어뜨린다. 크게 잡아 틀리면 요청이 죽는다.
-  return references.slice(0, limit ?? 7);
+  if (count > (limit ?? 7)) {
+    throw new PdpServiceError("INVALID_REQUEST", `참조 이미지가 ${count}장입니다. 이 모델은 ${limit ?? 7}장까지 사용할 수 있습니다. 각도나 참조를 줄이거나 다른 모델을 선택해 주세요.`);
+  }
 }
 
 /**

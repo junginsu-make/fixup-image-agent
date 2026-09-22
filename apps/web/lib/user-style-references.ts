@@ -76,6 +76,23 @@ function normalizeSource(value: unknown): StyleReferenceSource {
  * 거부했는데, 그러면 화면이 "분석하는 중…"에 갇히고 사용자는 이유를 알 수 없었다.
  * 생성에는 아무 문제가 없는데도 레퍼런스를 쓸 수 없었다.
  */
+/**
+ * 이 사람이 지금 몇 장을 쌓아 두었나.
+ *
+ * **넣기 전에 센다**(C-7). 전에는 아무도 안 봤다. 목록을 읽지 않고 수만
+ * 물으므로 왕복 한 번이고, 올릴 때만 돈다.
+ */
+export async function countUserStyleReferences(userId: string): Promise<number> {
+  const supabase = createSupabaseAdminClient();
+  const { count, error } = await supabase
+    .from("style_references")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function registerUserStyleReference(input: {
   userId: string;
   name: string;
@@ -164,19 +181,71 @@ export async function registerUserStyleReference(input: {
   return { ok: true as const, id: row.id as string, description };
 }
 
-export async function listUserStyleReferences(userId: string): Promise<UserStyleReference[]> {
+/**
+ * 한 번에 몇 장까지. 서명 URL 을 그 수만큼 만들어야 하므로 막지 않으면 목록
+ * 한 번이 창고를 때린다. 전에 쓰던 `.limit(200)` 과 같은 수다.
+ */
+export const STYLE_REFERENCE_PAGE_MAX = 200;
+
+export interface StyleReferencePage {
+  references: UserStyleReference[];
+  /** **표에 실제로 있는 수.** 보이는 수와 다를 수 있다. */
+  total: number;
+  /** 다음 쪽이 시작하는 자리. 없으면 `null`. */
+  nextOffset: number | null;
+  /**
+   * 표가 대답을 못 했는가.
+   *
+   * **「못 불러왔다」와 「없다」는 다르다.** 같은 모양으로 두면 화면이
+   * 「0장」이라고 단언하고, 사용자는 레퍼런스가 사라진 줄 안다.
+   */
+  failed: boolean;
+}
+
+/**
+ * 목록을 **쪽으로 나눠** 돌려준다.
+ *
+ * ── 무엇이 문제였나 (C-7) ────────────────────────────────────
+ *
+ * 전에는 `.limit(200)` 하나였고, 라우트는 그 길이를 `total` 이라 불렀다.
+ * 레퍼런스가 240장이면 화면은 **「200장」이라고 말하면서 40장을 안 보여 준다.**
+ * 사용자는 올린 것이 사라진 줄 안다.
+ *
+ * 설계 §12: 「레퍼런스 목록은 pagination 을 제공한다. **200개 이후 보이지 않게
+ * 숨기지 않는다.**」
+ *
+ * 그래서 **가진 수를 사실대로 세고**, 다음 쪽이 어디부터인지 함께 말한다.
+ */
+export async function listUserStyleReferences(
+  userId: string,
+  page: { limit?: number; offset?: number } = {},
+): Promise<StyleReferencePage> {
+  const limit = Math.min(STYLE_REFERENCE_PAGE_MAX, Math.max(1, Math.floor(page.limit ?? STYLE_REFERENCE_PAGE_MAX)));
+  const offset = Math.max(0, Math.floor(page.offset ?? 0));
+  const empty: StyleReferencePage = { references: [], total: 0, nextOffset: null, failed: false };
+
   // 로컬 확인 모드에는 이 표가 없다. 비어 있다고 답한다 — 500 은 거짓말이다.
-  if (isLocalStoreEnabled()) return [];
+  if (isLocalStoreEnabled()) return empty;
   const supabase = createSupabaseAdminClient();
 
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("style_references")
-    .select("id,name,source,description,path,thumb_path,created_at")
+    // **세어 달라고 말해야 센다.** 이 옵션이 없으면 `count` 가 null 이고,
+    // 그러면 「보이는 수」를 「가진 수」라고 다시 말하게 된다.
+    .select("id,name,source,description,path,thumb_path,created_at", { count: "exact" })
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .range(offset, offset + limit - 1);
 
-  if (error || !data?.length) return [];
+  const total = count ?? 0;
+  /*
+    **돌아온 행 수가 아니라 달라고 한 크기로 센다.**
+
+    돌아온 수로 재면 마지막 쪽이 꽉 찼을 때(정확히 limit 개) 「다음이 있다」고
+    말하고, 그 다음 쪽은 비어 있다. 자리 계산은 요청한 크기로 하는 것이 맞다.
+  */
+  const nextOffset = offset + limit < total ? offset + limit : null;
+  if (error || !data?.length) return { ...empty, total: error ? 0 : total, failed: Boolean(error) };
 
   /**
    * **원본과 사본을 둘 다 서명한다.**
@@ -196,15 +265,20 @@ export async function listUserStyleReferences(userId: string): Promise<UserStyle
     if (entry.path && entry.signedUrl) urlByPath.set(entry.path, entry.signedUrl);
   }
 
-  return data.map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    name: row.name as string,
-    source: normalizeSource(row.source),
-    description: row.description as string,
-    createdAt: String(row.created_at),
-    url: urlByPath.get(row.path as string) ?? null,
-    thumbUrl: row.thumb_path ? urlByPath.get(row.thumb_path as string) ?? null : null,
-  }));
+  return {
+    references: data.map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      name: row.name as string,
+      source: normalizeSource(row.source),
+      description: row.description as string,
+      createdAt: String(row.created_at),
+      url: urlByPath.get(row.path as string) ?? null,
+      thumbUrl: row.thumb_path ? urlByPath.get(row.thumb_path as string) ?? null : null,
+    })),
+    total,
+    nextOffset,
+    failed: false,
+  };
 }
 
 /**
@@ -287,6 +361,27 @@ async function loadLibraryReferences(
   return loaded.filter(Boolean) as StyleReferenceMatch[];
 }
 
+/**
+ * 이 행의 주인은 누구인가. 없으면 `null`.
+ *
+ * **삭제가 세 가지를 갈라 답하려면 필요하다**(C-10-c). 남의 것(404)과 이미 지운
+ * 것(멱등 성공)은 사용자 범위로만 찾으면 **둘 다 「없음」으로 같아 보인다.**
+ * 그래서 주인을 한 번 묻는다.
+ *
+ * 이것이 UUID 하나의 존재 여부를 알려 주기는 한다. UUIDv4 는 찍어서 맞힐 수
+ * 없으므로 실질적인 값이 없고, 대신 사용자가 두 번 눌러도 오류를 안 본다.
+ */
+export async function ownerOfStyleReference(id: string): Promise<string | null> {
+  if (isLocalStoreEnabled()) return null;
+  const supabase = createSupabaseAdminClient();
+  const { data } = await supabase
+    .from("style_references")
+    .select("user_id")
+    .eq("id", id)
+    .maybeSingle();
+  return (data?.user_id as string | undefined) ?? null;
+}
+
 export async function deleteUserStyleReference(userId: string, id: string) {
   const supabase = createSupabaseAdminClient();
 
@@ -315,5 +410,11 @@ export async function deleteUserStyleReference(userId: string, id: string) {
     .eq("user_id", userId)
     .eq("id", id);
 
-  return { ok: !error, message: error?.message };
+  /*
+    **지운 것과 없던 것을 갈라 답한다**(C-10-c).
+
+    전에는 둘 다 `ok: true` 였다. 두 번 눌러도 같은 답이라는 점은 맞지만,
+    부르는 쪽이 「정말 있었나」를 알 길이 없었다.
+  */
+  return { ok: !error, deleted: Boolean(row) && !error, message: error?.message };
 }

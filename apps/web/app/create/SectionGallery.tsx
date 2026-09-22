@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import type { GeneratedResult, SectionBlueprint } from "@fixup/pdp-core";
 import { apiJson } from "./pdp-utils";
+import { SectionPreview } from "./SectionPreview";
+import type { CanvasLayer } from "./pdp-drafts";
 // **서버가 차감할 때 쓰는 그 함수다.** 화면이 장수를 따로 세면 안내와 실제가 갈린다.
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { Badge, Button, cn } from "@fixup/ui";
@@ -54,6 +56,14 @@ const SIZE_LABEL: Array<{ value: GalleryCardSize; label: string }> = [
 interface SectionGalleryProps {
   sections: Section[];
   sectionKeys: string[];
+  /**
+   * 섹션마다 얹은 글자·도형.
+   *
+   * **개수만 받으면 그릴 수 없다.** 전에는 `layerCounts` 만 받아 「레이어 3」
+   * 배지로 개수만 알려 줬고, 정작 이어보기는 「최종 모습 그대로」라고 적어 두고
+   * 얹은 글자를 하나도 안 보여 줬다.
+   */
+  overlaysBySection?: Record<string, CanvasLayer[]>;
   /** 지금 고른 그림 모델. 차감 장수를 서버와 같은 식으로 세는 데 쓴다. */
   imageModel: string;
   generatingKeys: string[];
@@ -108,6 +118,7 @@ function SegmentedControl<T extends string>({
 export function SectionGallery({
   sections,
   sectionKeys,
+  overlaysBySection,
   imageModel,
   generatingKeys,
   layerCounts,
@@ -281,15 +292,26 @@ export function SectionGallery({
                   disabled={!section.generatedImage}
                   aria-label={`${getName(section)} 크게 보기`}
                   className={cn(
-                    "relative block aspect-[3/4] w-full overflow-hidden bg-canvas",
-                    section.generatedImage ? "cursor-zoom-in" : "cursor-default"
+                    /*
+                      **그림을 자르지 않는다.** 전에는 `aspect-[3/4]` 칸에
+                      `object-cover` 로 담았는데, 그림은 잘리고 얹은 글자는 안
+                      잘린 좌표로 그려져 **9:16·1:1 작업에서 글자가 딴 자리에
+                      떴다**(3:4 만 우연히 맞았다). 사용자가 그 썸네일을 보고
+                      멀쩡한 배치를 옮기게 된다 — 미리보기가 틀렸는데 원본을 고친다.
+
+                      빈 섹션만 3:4 자리를 잡아 목록이 들쭉날쭉해지지 않게 한다.
+                    */
+                    "relative block w-full overflow-hidden bg-canvas",
+                    section.generatedImage ? "cursor-zoom-in" : "aspect-[3/4] cursor-default"
                   )}
                 >
                   {section.generatedImage ? (
-                    <img
+                    <SectionPreview
                       alt={getName(section)}
                       src={section.generatedImage}
-                      className="h-full w-full object-cover"
+                      layers={overlaysBySection?.[key] ?? []}
+                      className="block w-full"
+                      imageClassName="block w-full"
                     />
                   ) : (
                     <span className="grid h-full place-items-center text-subtle-foreground">
@@ -410,7 +432,13 @@ export function SectionGallery({
                   className="block w-full cursor-zoom-in"
                   aria-label={`${getName(section)} 크게 보기`}
                 >
-                  <img alt={getName(section)} src={section.generatedImage} className="block w-full" />
+                  <SectionPreview
+                    alt={getName(section)}
+                    src={section.generatedImage}
+                    layers={overlaysBySection?.[key] ?? []}
+                    className="block w-full"
+                    imageClassName="block w-full"
+                  />
                 </button>
               ) : (
                 <div
@@ -472,12 +500,17 @@ export function SectionGallery({
               <ChevronLeft size={22} />
             </button>
 
-            {/* 여기는 화면에 맞춘 크기다. 한 번 더 누르면 원본 크기로 본다. */}
+            {/*
+              **`data-zoomable` 을 붙이지 않는다.** 붙이면 전역 뷰어가 이 모달
+              위에 한 겹 더 열리고, 두 keydown 이 함께 돌아 Esc 한 번에 둘 다
+              닫힌다. 화살표를 누르면 뒤에 가려진 이 모달만 조용히 넘어간다.
+              이 화면은 자기 뷰어를 이미 갖고 있다(설계 §11: 「확대보기는 한
+              뷰어만 소유한다」).
+            */}
             <img
               alt={getName(zoomSection)}
               src={zoomSection.generatedImage}
-              data-zoomable
-              className="max-h-full max-w-full cursor-zoom-in rounded-md object-contain shadow-[var(--shadow-elevate)]"
+              className="max-h-full max-w-full rounded-md object-contain shadow-[var(--shadow-elevate)]"
             />
 
             <button

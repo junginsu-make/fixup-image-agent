@@ -15,9 +15,15 @@ import { describe, expect, it } from "vitest";
  * 409 「요청을 처리할 수 없습니다」만 떴다. 셋이 같은지 여기서 지킨다.
  */
 
+/*
+  **호환 래퍼는 건너뛴다.** 202609220002 는 옛 함수를 `_cost_v1` 로 이름만 바꾸고,
+  같은 이름의 얇은 래퍼를 세워 **전환한 계정을 옛 경로로 과금하지 못하게** 막는다.
+  옛 경로의 실제 동작은 그 전 파일에 그대로 있고, 이 검사들이 재려는 것이 그 동작이다.
+*/
+const COMPAT_WRAPPER = /^202609220002_/;
 const migrationsDir = fileURLToPath(new URL("../../../../../supabase/migrations/", import.meta.url));
 // Only ordered migrations are executable history; manual dashboard copies are not.
-const migrationFiles = readdirSync(migrationsDir).filter(name => /^\d{12,14}_.*\.sql$/.test(name)).sort();
+const migrationFiles = readdirSync(migrationsDir).filter(name => /^\d{12,14}_.*\.sql$/.test(name) && !COMPAT_WRAPPER.test(name)).sort();
 
 /** 주석을 걷어낸다. 이 저장소의 SQL 은 설명이 길어 단어가 코드로 오인된다. */
 function code(name: string): string {
@@ -49,6 +55,12 @@ const OPERATIONS = [
   "sns_image",
   // 광고 규격 내보내기 (2026-09-14). 원가가 0 인 요청도 예약은 거친다.
   "ad_export",
+  // 레퍼런스 서술 (2026-09-20). 크레딧은 0 이고 글 모델 값만 나간다.
+  // 상세페이지 분석과 **시간당 칸이 다르다**(`lib/membership/hourly-limit.ts`).
+  "reference_analyze",
+  // 전사 (2026-09-21). 크레딧은 0 이고 글 모델 값만 나간다. 한 페이지에
+  // 호출이 다섯 번까지 가므로 시간당 칸도 따로 둔다.
+  "redesign_transcribe",
 ];
 
 describe("예약이 받아들이는 작업 종류", () => {

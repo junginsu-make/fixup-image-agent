@@ -1,5 +1,5 @@
 /**
- * MCS 교차 타입 (cross-cutting types).
+ * FormWith 교차 타입 (cross-cutting types).
  * 두 도구(pdp / redesign)가 공유하는 프론트엔드 레벨 타입만 둔다.
  * 백엔드 도메인 타입은 각 core 패키지(@fixup/pdp-core, @fixup/redesign-core)에 있다.
  */
@@ -48,3 +48,6 @@ export * from "./image-look";
 export * from "./josa";
 export * from "./llm-price";
 export * from "./text-models";
+
+/** 지어내면 안 되는 것 — 두 도구가 함께 쓰는 한 벌(F-7-1). */
+export { GROUNDING_RULE, NEVER_FABRICATE } from "./grounding.js";

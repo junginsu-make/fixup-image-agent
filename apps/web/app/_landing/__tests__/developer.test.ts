@@ -68,7 +68,7 @@ describe("화면에 실제로 걸려 있다", () => {
     expect(footer).not.toContain("footerRight");
   });
 
-  it("「MCS란」 링크가 빠졌다", () => {
+  it("「FormWith란」 링크가 빠졌다", () => {
     expect(footer).not.toContain("navAbout");
     expect(footer).not.toContain('href="/about"');
   });

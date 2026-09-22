@@ -50,7 +50,12 @@ export function describeCharacterChoice(
   views: PickableView[],
   angleLabel: (angle: string) => string,
 ): string {
-  if (isAutoChoice(picked)) return "각도 자동. 섹션에 맞는 장면을 골라 씁니다";
+  /*
+    **판정처럼 말하지 않는다**(U-05). 자동은 낱말 대조이고, 아무것도 안 걸리면
+    한 각도로 굳는다. 리디자인은 섹션 설명이 없어 **언제나** 그 자리다 —
+    「섹션에 맞는 장면을 골라 씁니다」는 거기서 사실도 아니었다.
+  */
+  if (isAutoChoice(picked)) return "각도 자동. 낱말을 보고 한 장을 고릅니다";
   return chosenViews(picked, views)
     .map((view) => angleLabel(view.angle))
     .join(" · ");

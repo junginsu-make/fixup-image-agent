@@ -17,11 +17,13 @@ import type {
   GapPolicy,
   GeneratedResult,
   ImageModelId,
+  PersonSource,
   KeyVisualResponse,
   LandingPageBlueprint,
   PdpOutputMode,
   ProductBrief,
   TextPlanResponse,
+  PdpLlmExecution,
 } from "@fixup/pdp-core";
 import { KeyVisualGate } from "./KeyVisualGate";
 import { ScenarioEditor } from "./ScenarioEditor";
@@ -30,6 +32,9 @@ import { TextBriefInput } from "./TextBriefInput";
 import { UnverifiedReview } from "./UnverifiedReview";
 import { apiJson, toAnchorImage, toDataUrl } from "./pdp-utils";
 import { replaceBlueprintState } from "./text-plan-state";
+import type { PdpTextDraftState } from "./pdp-drafts";
+import { stableSections } from "./document-state";
+import { DEFAULT_PAGE_GOAL, DEFAULT_PRODUCT_KIND, type PageGoal, type ProductKind } from "@fixup/pdp-core";
 
 /**
  * 텍스트 진입 경로 전체를 담는다.
@@ -42,6 +47,9 @@ import { replaceBlueprintState } from "./text-plan-state";
 export type TextStage = "input" | "scenario" | "unverifiedReview" | "keyVisual";
 
 interface TextModeFlowProps {
+  initialDraft?: PdpTextDraftState | null;
+  onDraftChange?: (draft: PdpTextDraftState) => void;
+  onBeforeReplace?: () => Promise<boolean>;
   /** 첨부 자리별 지시. 글로 시작해도 레퍼런스·캐릭터는 붙일 수 있다. */
   attachmentIntents: AttachmentIntents;
   onIntentChange: (slot: keyof AttachmentIntents, value: string) => void;
@@ -50,6 +58,8 @@ interface TextModeFlowProps {
   desiredTone: string;
   stage: TextStage;
   onStageChange: (stage: TextStage) => void;
+  /** 사진 모드에서 올린 인물 사진의 이름. 있으면 캐릭터와 충돌한다(U-04). */
+  referenceModelName?: string;
   onComplete: (
     result: GeneratedResult,
     imageModel: ImageModelId,
@@ -59,6 +69,13 @@ interface TextModeFlowProps {
     characterId?: string,
     /** 고른 각도. 비어 있으면 자동 — 서버가 섹션에 맞춰 고른다. */
     characterAngles?: string[],
+    /**
+     * 인물 사진과 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+     *
+     * 글 경로에도 이 충돌이 온다 — 사진 모드에서 인물을 올린 뒤 글 모드로
+     * 바꾸면 그 사진이 남는다.
+     */
+    personSource?: PersonSource,
   ) => void;
 }
 
@@ -69,6 +86,9 @@ function errorText(error: unknown) {
 }
 
 export function TextModeFlow({
+  initialDraft,
+  onDraftChange,
+  onBeforeReplace,
   attachmentIntents,
   onIntentChange,
   aspectRatio,
@@ -76,9 +96,10 @@ export function TextModeFlow({
   desiredTone,
   stage,
   onStageChange,
+  referenceModelName,
   onComplete,
 }: TextModeFlowProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialDraft?.text ?? "");
   const [fromLibrary, setFromLibrary] = useState<string | null>(null);
 
   // 라이브러리에서 「상세페이지로」를 눌러 왔으면 글이 이미 들어가 있어야 한다.
@@ -88,37 +109,73 @@ export function TextModeFlow({
     setText(handoff.text);
     setFromLibrary(handoff.title);
   }, []);
-  const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
-  const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
-  const [brief, setBrief] = useState<ProductBrief | null>(null);
+  const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>(initialDraft?.copyIntensity ?? "normal");
+  const [gapPolicy, setGapPolicy] = useState<GapPolicy>(initialDraft?.gapPolicy ?? "ask");
+  /*
+    **글로 시작한다는 것은 입력 방식일 뿐이다**(K-08).
+
+    전에는 그것이 곧 「무형 상품」으로 읽혀, 사진 없는 실물을 파는 사람이
+    은유로 채운 페이지를 받았다. 무엇을 파는지와 무엇을 하러 왔는지는 따로
+    받는다.
+  */
+  /*
+    **초안을 따라다녀야 한다**(N-8, 설계 §6.3·§9.1).
+
+    전에는 `useState(기본값)` 뿐이었다. 바로 아래 줄들은 전부 `initialDraft`
+    를 읽는데 이 둘만 빠져 있었다 — 「실물 / 문의」를 골라 저장한 뒤 다시 열어
+    재기획하면 **「기타 / 판매」로 조용히 바뀌었다.**
+
+    개념 시안 판단(N-2)도 상품 종류를 보므로, 이 값이 사라지면 사진 없이
+    실물을 파는 경고도 함께 사라진다.
+  */
+  const [productKind, setProductKind] = useState<ProductKind>(initialDraft?.productKind ?? DEFAULT_PRODUCT_KIND);
+  const [pageGoal, setPageGoal] = useState<PageGoal>(initialDraft?.pageGoal ?? DEFAULT_PAGE_GOAL);
+  const [brief, setBrief] = useState<ProductBrief | null>(initialDraft?.brief ?? null);
   // 이미지 방향을 사용자가 고쳤는지 비교하려면 최초 시나리오를 그대로 들고 있어야 한다.
-  const [originalBlueprint, setOriginalBlueprint] = useState<LandingPageBlueprint | null>(null);
-  const [blueprint, setBlueprint] = useState<LandingPageBlueprint | null>(null);
+  const [originalBlueprint, setOriginalBlueprint] = useState<LandingPageBlueprint | null>(initialDraft?.originalBlueprint ?? null);
+  const [blueprint, setBlueprint] = useState<LandingPageBlueprint | null>(initialDraft?.blueprint ?? null);
   // 판매 원칙 심사 결과. 두 번 다시 만들고도 남은 지적은 숨기지 않고 화면에 띄운다.
-  const [review, setReview] = useState<BlueprintReview | undefined>(undefined);
+  const [review, setReview] = useState<BlueprintReview | undefined>(initialDraft?.review);
   // 추천된 디자인 레퍼런스와 그것을 쓸지 여부. 반영 강도가 "디자인 전체"라
   // 무엇이 씌워지는지 보여주고 끌 수 있어야 한다.
-  const [styleReference, setStyleReference] = useState<StyleReferenceView | undefined>(undefined);
-  const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(true);
+  const [styleReference, setStyleReference] = useState<StyleReferenceView | undefined>(initialDraft?.styleReference);
+  const [styleReferenceEnabled, setStyleReferenceEnabled] = useState(initialDraft?.styleReferenceEnabled ?? true);
   // 처음 위치는 상품 유형으로 잡는다 — 무형 상품은 지킬 실물이 없다.
   // 추론이 틀릴 수 있으므로 화면에서 바꿀 수 있게 둔다.
-  const [preserveProduct, setPreserveProduct] = useState(true);
-  const [characterId, setCharacterId] = useState<string | undefined>(undefined);
+  const [preserveProduct, setPreserveProduct] = useState(initialDraft?.preserveProduct ?? true);
+  const [personSource, setPersonSource] = useState(initialDraft?.personSource);
+  const [characterId, setCharacterId] = useState<string | undefined>(initialDraft?.characterId);
   // 비어 있으면 자동이다. `create/CharacterPicker.tsx` 머리말 참조.
-  const [characterAngles, setCharacterAngles] = useState<string[]>([]);
-  const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(null);
-  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL);
+  const [characterAngles, setCharacterAngles] = useState<string[]>(initialDraft?.characterAngles ?? []);
+  const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(initialDraft?.keyVisual ?? null);
+  const [imageModel, setImageModel] = useState<ImageModelId>(initialDraft?.imageModel ?? DEFAULT_IMAGE_MODEL);
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [planningExecutions, setPlanningExecutions] = useState<PdpLlmExecution[] | undefined>(initialDraft?.planningExecutions);
+
+  useEffect(() => {
+    onDraftChange?.({ stage, text, brief, blueprint, originalBlueprint, review, styleReference,
+      styleReferenceEnabled, preserveProduct, personSource, characterId, characterAngles, keyVisual,
+      imageModel, copyIntensity, gapPolicy, planningExecutions,
+      // 무엇을 파는가·무엇을 하려는가(N-8). 안 담으면 다시 열 때 기본값으로 돌아간다.
+      productKind, pageGoal });
+  }, [onDraftChange, stage, text, brief, blueprint, originalBlueprint, review, styleReference,
+    styleReferenceEnabled, preserveProduct, personSource, characterId, characterAngles, keyVisual,
+    imageModel, copyIntensity, gapPolicy, planningExecutions, productKind, pageGoal]);
 
   const handlePlan = async () => {
     setIsBusy(true);
     setErrorMessage("");
     try {
+      if ((blueprint || keyVisual) && onBeforeReplace && !(await onBeforeReplace())) {
+        setErrorMessage("이전 작업을 보관하지 못해 다시 기획하기를 중단했습니다."); return;
+      }
       const response = await apiJson<TextPlanResponse>("/pdp/plan-from-text", {
         method: "POST",
         body: JSON.stringify({
           text,
+          productKind,
+          pageGoal,
           aspectRatio,
           outputMode,
           desiredTone: desiredTone.trim() || undefined,
@@ -133,7 +190,8 @@ export function TextModeFlow({
       }
 
       setBrief(response.result.brief);
-      const replacement = replaceBlueprintState(response.result.blueprint);
+      setPlanningExecutions(response.result.planningExecutions);
+      const replacement = replaceBlueprintState({ ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) });
       setOriginalBlueprint(replacement.originalBlueprint);
       setBlueprint(replacement.blueprint);
       setReview(response.result.review);
@@ -159,6 +217,9 @@ export function TextModeFlow({
     setIsBusy(true);
     setErrorMessage("");
     try {
+      if (keyVisual && onBeforeReplace && !(await onBeforeReplace())) {
+        setErrorMessage("이전 대표 이미지를 보관하지 못해 재생성을 중단했습니다."); return;
+      }
       const response = await apiJson<KeyVisualResponse>("/pdp/key-visual", {
         method: "POST",
         body: JSON.stringify({ brief, blueprint: source, aspectRatio, imageModel }),
@@ -205,6 +266,8 @@ export function TextModeFlow({
         {
           originalImage: anchor.base64,
           blueprint: mergeArtDirection(originalBlueprint, blueprint),
+          review,
+          planningExecutions,
         },
         imageModel,
         review,
@@ -212,6 +275,7 @@ export function TextModeFlow({
         preserveProduct,
         characterId,
         characterAngles,
+        personSource,
       );
     } catch (error) {
       setErrorMessage(`대표 이미지를 준비하지 못했습니다. ${errorText(error)}`);
@@ -221,6 +285,7 @@ export function TextModeFlow({
 
   return (
     <div className="grid gap-4">
+      {planningExecutions?.some((entry) => entry.fallbackFrom) ? <p role="status" className="text-sm text-muted-foreground">대체 기획 모델로 구성안을 만들었습니다. 내용을 확인해 주세요.</p> : null}
       {errorMessage ? (
         <div className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
           <AlertCircle size={16} className="mt-0.5 flex-none text-destructive" />
@@ -230,6 +295,10 @@ export function TextModeFlow({
 
       {stage === "input" ? (
         <TextBriefInput
+          productKind={productKind}
+          pageGoal={pageGoal}
+          onProductKindChange={setProductKind}
+          onPageGoalChange={setPageGoal}
           value={text}
           copyIntensity={copyIntensity}
           gapPolicy={gapPolicy}
@@ -252,6 +321,9 @@ export function TextModeFlow({
           styleReferenceEnabled={styleReferenceEnabled}
           onStyleReferenceToggle={setStyleReferenceEnabled}
           preserveProduct={preserveProduct}
+          referenceModelName={referenceModelName}
+          personSource={personSource}
+          onPersonSourceChange={setPersonSource}
           onPreserveProductChange={setPreserveProduct}
           characterId={characterId}
           characterAngles={characterAngles}

@@ -7,13 +7,13 @@ import vm from "node:vm";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dir = path.join(root, "apps/web/app/admin/cost-lab");
 const entry = path.join(root, "apps/web/lib/admin/cost-forecast/browser-entry.ts");
-const result = await build({ entryPoints: [entry], bundle: true, write: false, format: "iife", globalName: "MCSForecast", platform: "browser", target: "es2022", minify: true, legalComments: "none", metafile: true });
+const result = await build({ entryPoints: [entry], bundle: true, write: false, format: "iife", globalName: "FormWithForecast", platform: "browser", target: "es2022", minify: true, legalComments: "none", metafile: true });
 if (Object.keys(result.metafile.inputs).some(p => /server-only|supabase\/admin|server-keys|node:/.test(p))) throw new Error("예측 번들에 서버 의존성이 들어왔습니다.");
 // Zod's generated validation templates contain whitespace-only lines even after minification.
 const engine = result.outputFiles[0].text.replace(/^[\t ]+$/gm, "").replace(/<\/script/gi, "<\\/script");
 const sandbox = { structuredClone, TextEncoder, Date, console };
 vm.createContext(sandbox); vm.runInContext(engine, sandbox);
-const models = sandbox.MCSForecast.legacyModels(sandbox.MCSForecast.CURRENT_CATALOG);
+const models = sandbox.FormWithForecast.legacyModels(sandbox.FormWithForecast.CURRENT_CATALOG);
 const [ui, markup, css] = await Promise.all(["forecast-ui.js", "forecast-panel.html", "forecast.css"].map(async file => (await readFile(path.join(dir, "source", file), "utf8")).replace(/\r\n/g, "\n")));
 const generated = (name, content) => `<!-- ${name}:start -->\n${content}\n<!-- ${name}:end -->`;
 const replaceBlock = (html, name, content) => {
@@ -38,4 +38,4 @@ for (const file of ["index.html", "prepaid.html"]) {
   }
 }
 if (stale) process.exitCode = 1;
-else console.log(`비용 예측 번들 ${result.outputFiles[0].contents.length} bytes · 단가 ${sandbox.MCSForecast.CURRENT_CATALOG.version}`);
+else console.log(`비용 예측 번들 ${result.outputFiles[0].contents.length} bytes · 단가 ${sandbox.FormWithForecast.CURRENT_CATALOG.version}`);

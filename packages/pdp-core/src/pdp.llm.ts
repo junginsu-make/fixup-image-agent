@@ -15,7 +15,32 @@ export interface PdpLlmImage {
   mimeType: string;
 }
 
+/**
+ * 호출 이름 → 무슨 일인가.
+ *
+ * **한 곳에만 둔다.** 전에는 제공자(`apps/web/lib/pdp/providers.ts`)가 이름을
+ * 보고 짐작했다. 짐작하는 쪽과 부르는 쪽이 갈리면, 새 호출을 더한 날 그것이
+ * 조용히 검수 모델로 간다 — 설계 §3 이 「알 수 없는 이름을 우연히 기획으로
+ * 분류하지 않는다」고 못 박은 자리다.
+ */
+const CALL_PURPOSE: Record<string, PdpLlmPurpose> = {
+  pdp_brief: "planning",
+  pdp_blueprint: "planning",
+  pdp_review: "review",
+  pdp_qa: "review",
+  pdp_person_profile: "reference",
+  pdp_person_check: "reference",
+};
+
+export type PdpLlmPurpose = "planning" | "review" | "reference";
+
+/** 이름으로 목적을 정한다. 모르는 이름은 기획으로 올리지 않는다. */
+export function purposeOfCall(name: string): PdpLlmPurpose {
+  return CALL_PURPOSE[name] ?? "review";
+}
+
 export interface PdpLlmRequest {
+  purpose?: PdpLlmPurpose;
   prompt: string;
   /**
    * 받고 싶은 모양. 표준 JSON Schema 다.
@@ -43,10 +68,20 @@ export interface PdpLlmRequest {
  */
 export interface PdpLlmResponse {
   text: string;
+  execution?: PdpLlmExecution;
+}
+
+export interface PdpLlmExecution {
+  purpose: "planning" | "review" | "reference";
+  provider: "anthropic" | "openai";
+  model: string;
+  fallbackFrom?: string;
+  fallbackReason?: string;
 }
 
 export interface PdpLlm {
   generate(request: PdpLlmRequest): Promise<PdpLlmResponse>;
+  executions?: PdpLlmExecution[];
 }
 
 /**

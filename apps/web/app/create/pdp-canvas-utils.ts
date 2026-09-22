@@ -4,14 +4,19 @@
  * PdpEditor.tsx(2,802줄) 안에서 UI 와 뒤엉켜 있던 것을 2026-07-21 UI 개편 때
  * 그대로 옮겼다. 로직은 한 줄도 바꾸지 않았다.
  *
- * ⚠️ buildOverlayShellStyle / buildOverlayBackgroundStyle / buildOverlayTextStyle /
- *    buildShapeLayerStyle 네 개는 화면 표시와 buildExportNode(html2canvas 내보내기)가
- *    함께 쓴다. 보기 좋게 고치면 사용자가 내려받는 결과물이 바뀐다.
+ * ⚠️ buildOverlayShellStyle / buildOverlayBackgroundStyle / buildOverlayTextStyle
+ *    **세 개**는 화면 표시와 buildExportNode(html2canvas 내보내기)가 함께 쓴다.
+ *    보기 좋게 고치면 사용자가 내려받는 결과물이 바뀐다.
+ *
+ *    `buildShapeLayerStyle` 은 **아직 공유가 아니다** — 내보내기가 도형 스타일을
+ *    직접 적는다(X-07 에서 확인). 지금은 두 곳이 같은 값을 내지만 한쪽만 고치면
+ *    조용히 갈린다. 합칠 때 `mapping-and-export-style.test.ts` 를 함께 고친다.
  *    zIndex 계산도 레이어 쌓임 모델이라 장식이 아니다.
  */
 
 import type { CSSProperties } from "react";
 import html2canvas from "html2canvas";
+import { normalizeFontFamily } from "./editor-options";
 import type {
   AspectRatio,
   GeneratedResult,
@@ -78,6 +83,9 @@ export async function buildExportNode(input: { imageSrc: string; width: number; 
   const image = await loadImage(input.imageSrc);
   const width = Math.max(1, Math.round(input.width));
   const height = Math.max(1, Math.round((image.naturalHeight / Math.max(image.naturalWidth, 1)) * width));
+
+  const naturalWidth = image.naturalWidth;
+  const naturalHeight = image.naturalHeight;
 
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -148,7 +156,7 @@ export async function buildExportNode(input: { imageSrc: string; width: number; 
     container.appendChild(layerEl);
   }
 
-  return container;
+  return { node: container, naturalWidth, naturalHeight };
 }
 
 export function applyInlineStyle(target: HTMLElement, style: CSSProperties) {
@@ -162,13 +170,30 @@ export function applyInlineStyle(target: HTMLElement, style: CSSProperties) {
   });
 }
 
+/**
+ * 파일 하나를 내려받게 한다.
+ *
+ * **앵커를 문서에 붙였다가 치운다.** 안 붙이면 일부 브라우저가 클릭을
+ * 무시한다. 이 저장소의 다른 다운로드(`image-viewer.tsx`)도 붙인다 —
+ * 두 곳이 다르면 한쪽만 고쳐지는 날이 온다.
+ *
+ * **주소는 한 박자 뒤에 거둔다.** `0ms` 는 너무 일러서, 큰 ZIP 은 받기가
+ * 시작도 못 하고 주소가 사라질 수 있다. 그렇다고 안 거두면 그 파일이
+ * 메모리에 계속 남는다.
+ */
 export function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
+  link.rel = "noopener";
+  link.style.display = "none";
+
+  document.body.appendChild(link);
   link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  document.body.removeChild(link);
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function sanitizeSectionFileName(value: string) {
@@ -246,6 +271,12 @@ export function normalizeTextOverlay(
     text: translations[language] || translations.ko,
     translations,
     color: overlay.color ?? "#ffffff",
+    /*
+      **없는 글꼴로 저장된 레이어를 되살린다.**
+      목록을 고쳐도 이미 저장된 작업은 계속 깨진 채로 있다 — 고친 보람이 새
+      작업에만 돌아간다. 읽을 때 한 번 고쳐 두면 옛 초안도 제대로 찍힌다.
+    */
+    fontFamily: normalizeFontFamily(overlay.fontFamily),
     backgroundColor: overlay.backgroundColor === "transparent" ? "#102532" : overlay.backgroundColor,
     backgroundEnabled: overlay.backgroundEnabled ?? hasLegacyBackground,
     backgroundOpacity: overlay.backgroundOpacity ?? 0.72,
@@ -683,11 +714,19 @@ export function formatSavedAt(value: string) {
   }).format(date);
 }
 
+/**
+ * 작업대를 레이어 옆에 붙인다.
+ *
+ * **`canvasFit` 을 받는다.** 레이어 좌표는 축소 전 460 좌표계인데 작업대는
+ * 무대의 보이는 좌표계에 놓인다. 배율을 모르면 좁은 화면에서 작업대가 레이어
+ * 에서 한참 떨어진 곳을 가리킨다.
+ */
 export function anchorWorkbenchToOverlay(
   overlay: CanvasLayer,
   canvasEl: HTMLDivElement | null,
   stageEl: HTMLDivElement | null,
-  workbench: FloatingWorkbenchState
+  workbench: FloatingWorkbenchState,
+  canvasFit = 1
 ) {
   const workbenchWidth = workbench.width;
   const workbenchHeight = workbench.height;
@@ -696,17 +735,21 @@ export function anchorWorkbenchToOverlay(
   const stageHeight = stageEl?.clientHeight ?? 720;
   const canvasLeft = canvasEl?.offsetLeft ?? 0;
   const canvasTop = canvasEl?.offsetTop ?? 0;
-  const overlayWidth = toNumericSize(overlay.width, 320);
+  // 보이는 자리로 환산한다. 축소돼 있으면 그만큼 가까워진다.
+  const fit = canvasFit > 0 ? canvasFit : 1;
+  const overlayWidth = toNumericSize(overlay.width, 320) * fit;
+  const overlayX = overlay.x * fit;
+  const overlayY = overlay.y * fit;
 
-  let x = canvasLeft + overlay.x + overlayWidth + gap;
+  let x = canvasLeft + overlayX + overlayWidth + gap;
   if (x + workbenchWidth > stageWidth - 16) {
-    x = canvasLeft + overlay.x - workbenchWidth - gap;
+    x = canvasLeft + overlayX - workbenchWidth - gap;
   }
   if (x < 12) {
-    x = clampValue(canvasLeft + overlay.x + 12, 12, Math.max(12, stageWidth - workbenchWidth - 16));
+    x = clampValue(canvasLeft + overlayX + 12, 12, Math.max(12, stageWidth - workbenchWidth - 16));
   }
 
-  const y = clampValue(canvasTop + overlay.y, 12, Math.max(12, stageHeight - workbenchHeight - 16));
+  const y = clampValue(canvasTop + overlayY, 12, Math.max(12, stageHeight - workbenchHeight - 16));
 
   return {
     x: Math.round(x),

@@ -88,6 +88,10 @@ export function StyleReferenceCard({
         참조가 둘(제품 기준 이미지 + 레퍼런스)이면 모델이 절충한다. 실측에서
         배경·글자는 레퍼런스를 따랐는데 제품 라벨만 원래 색으로 남았다.
         무엇을 지킬지는 자기 상품을 아는 사람이 제일 잘 안다.
+
+        **끄더라도 제품 사진은 간다**(U-03). 전에는 껐을 때 제품 사진을 아예 안
+        보내서 모델이 제품을 지어냈다 — 그러면서 화면은 「조금씩 달라질 수
+        있습니다」라고 말했다. 이제 토글은 **얼마나 지킬지**만 정한다.
       */}
       {enabled ? (
         <label className="mt-2.5 flex cursor-pointer items-start gap-2 rounded-md bg-background/60 p-2.5">
@@ -98,11 +102,11 @@ export function StyleReferenceCard({
             className="mt-0.5"
           />
           <span className="text-sm">
-            <strong>제품 이미지 그대로 지키기</strong>
+            <strong>제품 색·마감까지 그대로 지키기</strong>
             <span className="mt-0.5 block text-xs text-muted-foreground">
               {preserveProduct
-                ? "섹션마다 같은 제품이 나옵니다. 대신 레퍼런스 디자인이 일부만 반영됩니다."
-                : "레퍼런스 디자인을 온전히 따릅니다. 대신 섹션마다 제품 모습이 조금씩 달라질 수 있습니다."}
+                ? "제품의 색과 마감이 사진 그대로 나옵니다. 대신 레퍼런스 디자인이 일부만 반영됩니다."
+                : "레퍼런스 디자인에 맞춰 제품 색·마감이 조정될 수 있습니다. 형태와 라벨 글자는 지킵니다."}
             </span>
           </span>
         </label>

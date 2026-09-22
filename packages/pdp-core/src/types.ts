@@ -1,7 +1,12 @@
+import type { PageGoal, ProductKind } from "./pdp.offering";
+export type { PageGoal, ProductKind };
 import type { ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
-import type { ProductReading } from "./pdp.product-reading";
+import type { AnchorKind } from "./pdp.product-anchor";
+import type { PersonSource } from "./pdp.person-source";
+import type { ProductReading, ProductReadingStatus } from "./pdp.product-reading";
 import type { SellerBrief } from "./pdp.seller-brief";
+import type { PdpLlmExecution } from "./pdp.llm";
 
 /**
  * 캐릭터 그림 한 장. **한 사람의 한 각도**다.
@@ -96,7 +101,25 @@ export interface SectionBlueprint {
   style_guide: string;
   reference_usage: string;
   generatedImage?: string;
-  qaWarnings?: QaDefect[]; // analyze 첫 이미지의 QA 결함(경고로 표기, blueprint는 보존).
+  /**
+   * **이 그림을 만들 때의 문구 자국**(N-5, 설계 §4.2).
+   *
+   * 상세페이지는 글자가 이미지 안에 그려진다. 제목을 고쳐도 그림은 옛
+   * 글자를 들고 있는데 **아무 표시가 없었다** — 그대로 내보내면 고친 글과
+   * 다른 이미지가 나간다.
+   *
+   * 지금 문구와 대조해 낡았는지 가린다(`isImageStale`). 옛 초안에는 이 값이
+   * 없고, 없으면 낡았다고 하지 않는다.
+   */
+  imageStamp?: string;
+  qaWarnings?: QaDefect[];
+  /**
+   * 검수가 어떻게 끝났는가.
+   *
+   * **경고가 없는 것과 검수를 못 돌린 것은 다르다.** 상태를 안 남기면 화면이
+   * 그 둘을 구별할 수 없어, 한 번도 검사 안 한 그림이 「이상 없음」으로 보인다.
+   */
+  qaStatus?: "passed" | "failed" | "review_required" | "unavailable";
   /** 글기반 생성의 근거 스키마. 없으면 이 기능 도입 전 구성안이다. */
   evidenceVersion?: 1;
   evidence?: CopyEvidence[];
@@ -131,9 +154,33 @@ export interface LandingPageBlueprint {
   designSystem?: DesignSystem;
 }
 
+export interface CopyGapOutcome {
+  /** 사용자가 고른 정책. */
+  requested: GapPolicy;
+  /** 실제로 적용한 정책. 근거가 아예 없으면 `sample` 이 `ask` 로 내려간다. */
+  applied: GapPolicy;
+  /** 그 결과 실제로 비운 칸 수. 0 이면 아무것도 안 치웠다는 뜻이다. */
+  cleared: number;
+}
+
 export interface GeneratedResult {
+  planningExecutions?: PdpLlmExecution[];
   originalImage: string;
   blueprint: LandingPageBlueprint;
+  /**
+   * 사진에서 제품을 **충분히 읽었는가**(→ `pdp.product-reading.ts`).
+   *
+   * 사진 경로에만 있다. 글 경로는 사용자가 친 글이 곧 근거라 물을 것이 없다.
+   */
+  productReadingStatus?: ProductReadingStatus;
+  /**
+   * 빈자리 정책을 **실제로 어떻게 적용했는가.**
+   *
+   * 고른 것(`requested`)과 쓴 것(`applied`)이 다를 수 있고, 정책이 엄해도
+   * **한 칸도 안 비워질 수 있다**(모델이 근거 딱지를 안 붙인 섹션은 검사에서
+   * 건너뛴다). 화면이 「치웠습니다」를 말하려면 이 값을 봐야 한다.
+   */
+  copyGapOutcome?: CopyGapOutcome;
   /**
    * 구성안 심사 결과. 선택 필드다 — 심사가 실패하면 없이 진행한다.
    * 저장해 둔 초안에도 없다.
@@ -382,6 +429,8 @@ export interface ImageGenOptions {
    * 스타일 레퍼런스가 없으면 이 값과 무관하게 앵커를 보낸다.
    */
   preserveProductImage?: boolean;
+  anchorKind?: AnchorKind;
+  personSource?: PersonSource;
   /**
    * 이 페이지에 고정할 인물. **한 사람의 여러 각도**다.
    *
@@ -418,6 +467,13 @@ export interface ImageGenOptions {
    * 지키기가 풀리지 않는다 — 자리마다 따로 받는 이유다.
    */
   attachmentIntents?: AttachmentIntents;
+  /**
+   * **실제 제품 사진이 없다**(N-2, 설계 §9.1).
+   *
+   * 글로만 실물을 설명한 경우다. 켜지면 상표·로고를 빼고 제품 확대를 피한다 —
+   * 지어낸 물건이 **실제 제품처럼 보이지 않게** 한다.
+   */
+  conceptOnly?: boolean;
 }
 
 /** 첨부 자리별 지시. `ReferenceImage["kind"]` 와 같은 이름을 쓴다. */
@@ -439,6 +495,15 @@ export type OfferingKind =
 export interface ProductBrief {
   offeringName: string;
   offeringKind: OfferingKind;
+  /**
+   * **사용자가 고른** 상품 종류. 모델이 글에서 짐작하는 `offeringKind` 와 다르다.
+   *
+   * 입력 방식(사진/글)과 상품 종류는 **다른 축**인데 붙어 있었다(K-08).
+   * 안 고르면 없고, 그때 프롬프트는 어느 쪽으로도 단정하지 않는다.
+   */
+  productKind?: ProductKind;
+  /** 이 페이지로 무엇을 하려는가. 안 고르면 판매다. */
+  pageGoal?: PageGoal;
   oneLiner: string;
   audience: string; // 누구에게
   problem: string; // 어떤 문제를
@@ -454,6 +519,15 @@ export interface ProductBrief {
 
 export interface TextPlanRequest {
   text: string;
+  /**
+   * **사용자가 고른** 상품 종류(K-08).
+   *
+   * 글로 시작한다는 것은 **입력 방식**일 뿐이다. 전에는 그것이 곧 「무형
+   * 상품」으로 읽혀, 사진 없는 실물을 파는 사람이 은유로 채운 페이지를 받았다.
+   */
+  productKind?: ProductKind;
+  /** 이 페이지로 무엇을 하려는가. 안 고르면 판매다. */
+  pageGoal?: PageGoal;
   aspectRatio: AspectRatio;
   desiredTone?: string;
   outputMode?: PdpOutputMode;
@@ -462,6 +536,7 @@ export interface TextPlanRequest {
 }
 
 export interface TextPlanResult {
+  planningExecutions?: PdpLlmExecution[];
   brief: ProductBrief;
   blueprint: LandingPageBlueprint;
   /**
@@ -509,6 +584,23 @@ export interface PdpAnalyzeRequest {
    * 사진으로는 대상·불편·차별점을 알 수 없어서 받는다.
    */
   sellerBrief?: SellerBrief;
+  /**
+   * 사용자가 고친 **전체 전략**. 있으면 이 전략에서 출발해 구성을 다시 짠다
+   * (→ `pdp.replan.ts`).
+   *
+   * 전략 칸을 고치는 것과 구성을 다시 짜는 것은 다른 일이다. 전자는 요약 수정일
+   * 뿐이고, 섹션은 사용자가 「이 전략으로 구성 다시 만들기」를 누를 때만 바뀐다.
+   */
+  strategyDirective?: string;
+  /**
+   * 사용자가 적은 **구성·문구 요청**(U-06). 장면 지시와 다른 물건이다.
+   *
+   * 전에는 「추가 지시」 칸이 하나뿐이었고 그 값은 이미지 생성에만 갔다 —
+   * 구성 요청을 적어도 기획이 본 적이 없었다.
+   */
+  planInstruction?: string;
+  /** 그림체. 설계 §6.3 이 「기획과 생성 양쪽 전달」이라 적은 값이다. */
+  look?: ImageLook;
   /** 표현 강도. 텍스트 경로와 같은 손잡이다. */
   copyIntensity?: CopyIntensity;
   /** 근거가 없는 자리를 어떻게 할 것인가. */
@@ -580,7 +672,16 @@ export interface PdpGenerateImageSuccessResponse {
   ok: true;
   imageBase64: string;
   mimeType: string;
-  qa?: { warnings: QaDefect[] };
+  /**
+   * fal 이 **실제로 만든** 장수. 재시도로 버린 것까지 센다.
+   *
+   * **돈이 걸린 값이다.** 라우트가 이것으로 과금한다
+   * (`billableImages: generatedImages`). 그런데 이 칸이 공개 계약에 없어서,
+   * 부르는 쪽은 서비스 안의 **사설 타입**에만 있는 값을 믿고 썼다(D-11-e).
+   * 누가 그 칸을 빼도 타입 검사가 조용했다.
+   */
+  generatedImages: number;
+  qa?: { warnings: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" };
 }
 
 export interface PdpValidateApiKeySuccessResponse {
@@ -594,6 +695,14 @@ export type PdpErrorCode =
   | "AI_KEY_MISSING"
   | "AI_KEY_INVALID"
   | "AI_MODEL_ACCESS_DENIED"
+  /**
+   * 공급자가 손도 안 댄 실패. 연결이 끊겼거나 502·503, 또는 과부하다.
+   *
+   * `PDP_ANALYZE_FAILED` 와 갈라 둔 이유는 **분석 한도** 때문이다. 그 통은 우리
+   * 쪽 버그도 함께 담아서, 통째로 면제하면 모델 값을 다 쓰고 터진 경우까지
+   * 공짜가 된다(`pdp.analysis-quota`).
+   */
+  | "AI_PROVIDER_UNAVAILABLE"
   | "INVALID_IMAGE_PAYLOAD"
   | "INVALID_REQUEST"
   | "AI_QUOTA_EXCEEDED"

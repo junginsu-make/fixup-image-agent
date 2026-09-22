@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2, Package, Palette, Pencil, X } from "lucide-react";
 import { Button } from "@fixup/ui";
 import type { PdpResultImage } from "../../lib/library";
+import { randomId } from "../../lib/browser-safe";
 
 /**
  * 라이브러리 결과물 뷰어 — 저장한 작업의 섹션 이미지를 크게 보고 내려받는다.
@@ -102,9 +103,10 @@ export function ResultViewer({ title, images, onClose, onEdit, accountItemId }: 
     setReferenceNotice("");
     try {
       const base64 = await base64Of(current.image);
+      // 크레딧 장부를 거치는 길이다(C-4-b). 예약이 요청 식별자를 요구한다.
       const response = await fetch("/api/pdp/style-references", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-idempotency-key": randomId() },
         body: JSON.stringify({
           name: `${title} ${index + 1}번째`,
           source: "generated",

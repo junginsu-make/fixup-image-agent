@@ -325,3 +325,44 @@ describe("페이지 배경 설명이 섹션까지 간다", () => {
     expect(buildSectionImageOptions({}, target()).pageContext).toBeUndefined();
   });
 });
+
+/**
+ * **캐릭터를 골랐으면 업로드 사진을 아예 안 넘긴다**(U-04).
+ *
+ * 넘기면 서버가 프로필을 뽑고(LLM 한 번), 캐릭터로 그린 그림을 **업로드 얼굴과
+ * 대조**해 재시도를 부른다. 그 자리 주석이 이미 말한다 — 「이 섹션에 안 쓰는
+ * 사진은 아예 넘기지 않는다」.
+ */
+describe("안 쓰기로 한 인물 사진은 안 넘긴다", () => {
+  const 둘다 = (personSource?: "uploaded" | "character"): PageImageInputs => ({
+    referenceModel: 인물사진,
+    referenceModelUsage: "all-sections",
+    personSource,
+  });
+
+  it("**캐릭터를 골랐으면 사진이 안 실린다**", () => {
+    const options = buildSectionImageOptions(둘다("character"), target({ characterReferences: [캐릭터] }));
+
+    expect(options.referenceModelImageBase64).toBeUndefined();
+    // 캐릭터는 그대로 간다.
+    expect(options.characterReferences).toHaveLength(1);
+    // 사람은 여전히 나온다.
+    expect(options.withModel).toBe(true);
+  });
+
+  it("업로드를 골랐으면 실린다", () => {
+    const options = buildSectionImageOptions(둘다("uploaded"), target({ characterReferences: [캐릭터] }));
+
+    expect(options.referenceModelImageBase64).toBe("PERSON");
+  });
+
+  it("**안 골랐으면 전과 같다** — 옛 초안이 조용히 달라지지 않는다", () => {
+    const options = buildSectionImageOptions(둘다(), target({ characterReferences: [캐릭터] }));
+
+    expect(options.referenceModelImageBase64).toBe("PERSON");
+  });
+
+  it("고른 값이 서버까지 이어진다", () => {
+    expect(buildSectionImageOptions(둘다("character"), target()).personSource).toBe("character");
+  });
+});

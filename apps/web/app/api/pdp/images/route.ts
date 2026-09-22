@@ -5,6 +5,7 @@ import {
   generateSectionImage,
   resolveCharacterAngles,
   type CharacterImageReference,
+  PdpServiceError,
   toPdpErrorResponse,
   mapPdpErrorCodeToStatus,
   buildSectionImageOptions,
@@ -49,31 +50,34 @@ import { loadCharacterView } from "../../../../lib/characters";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { withSlicedStyleReference } from "../../../../lib/pdp/slice-image";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
-import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  let body: PdpImagesRequestBody;
-  try {
-    body = (await req.json()) as PdpImagesRequestBody;
-  } catch {
-    return Response.json(
-      { ok: false, code: "INVALID_REQUEST", message: "요청을 해석하지 못했습니다." },
-      { status: 400 },
-    );
-  }
+  const parsed = await readPdpRequest<PdpImagesRequestBody>(req, "single");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   const gateResponse = rejectIfUnverified(body.section ? [body.section] : []);
   if (gateResponse) return gateResponse;
 
   // 장은 실제 단가에서 뽑는다. 전에는 여기만 무조건 1 이었고 일괄 쪽만 제대로
   // 셌다 — 같은 그림 한 장이 어느 버튼으로 들어왔느냐에 따라 값이 달랐다.
-  const model = body.page?.imageModel ?? body.options?.imageModel ?? DEFAULT_IMAGE_MODEL;
+  /*
+    **모델은 페이지가 정한다.** 전에는 여기만 `options.imageModel` 도 봤는데,
+    조립기(`buildSectionImageOptions`)는 어차피 `page.imageModel` 로 덮어쓴다 —
+    그래서 섹션 옵션에 다른 모델을 실으면 **값은 그 모델로 매기고 그림은 페이지
+    모델로 그렸다.** 배치 라우트는 처음부터 페이지만 봤다(2026-09-17 리뷰 D-9).
+
+    크레딧 견적도 같은 모델을 봐야 한다 — 여기가 갈리면 예약과 그림이 또 어긋난다.
+  */
+  const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1), creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:image"));
   if (!reservation.ok) return reservation.response;
 
@@ -96,6 +100,24 @@ export async function POST(req: Request) {
         const view = await loadCharacterView(reservation.userId, body.characterId, angle, teamId);
         if (view) characterReferences.push(view);
       }
+    }
+
+    /*
+      **못 불러온 캐릭터로 조용히 만들지 않는다**(A-14, 설계 §6.2).
+
+      전에는 한 장도 못 불러오면 `undefined` 를 넘겨 **그 캐릭터 없이** 그림을
+      만들고 값을 받았다. 사용자는 캐릭터를 골라 뒀으니 나올 줄 알고, 나온
+      그림에는 다른 사람이 있다.
+
+      화면도 같은 것을 알린다(`CharacterPicker` 의 「고른 캐릭터를 불러오지
+      못했습니다」). 여기서 막는 것은 그 화면을 못 본 채 들어온 요청이다.
+    */
+    if (body.characterId && characterReferences.length === 0) {
+      throw new PdpServiceError(
+        "INVALID_REQUEST",
+        "고른 캐릭터를 불러오지 못했습니다. 캐릭터를 다시 고르거나 빼고 만들어 주세요.",
+        `character ${body.characterId} has no usable view`,
+      );
     }
 
     // 긴 레퍼런스를 조각으로 나눈다. 일괄 라우트와 같아야 한다 — 한쪽만
@@ -134,7 +156,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
-    await finalizeAiUsage(
+    await settleAiUsage(
       reservation,
       false,
       0,

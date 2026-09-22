@@ -140,28 +140,68 @@ async function readAccountItems(): Promise<LibraryItem[]> {
  * 계정 화면에서만 보였다. 사용자에게는 이것도 "내가 계정에 올려 둔 것"이라
  * 라이브러리에 없으면 어디에 뒀는지 찾지 못한다. 한 장짜리 항목으로 싣는다.
  */
-async function readReferenceItems(): Promise<LibraryItem[]> {
-  try {
-    const response = await fetch("/api/pdp/style-references", { cache: "no-store" });
-    if (!response.ok) return [];
-    const body = (await response.json()) as {
-      ok?: boolean;
-      references?: Array<{ id: string; name: string; createdAt: string; url: string | null }>;
-    };
-    if (!body.ok || !body.references) return [];
+/**
+ * **끝없이 돌지 않는다.** 서버가 다음 자리를 잘못 주는 날에도 화면이 멈추면 안
+ * 된다. 한 쪽이 200장이니 넉넉하다.
+ */
+const REFERENCE_PAGE_LIMIT = 20;
 
-    return body.references.map((reference) => ({
-      id: reference.id,
-      tool: "reference" as const,
-      title: reference.name,
-      thumbnail: reference.url ?? undefined,
-      createdAt: Date.parse(reference.createdAt) || 0,
-      storage: "account" as const,
-      imageCount: 1,
-    }));
-  } catch {
-    return [];
+/** 한 번에 받는 수. 서버 상한과 같다. */
+const REFERENCE_PAGE_SIZE = 200;
+
+async function readReferenceItems(): Promise<LibraryItem[]> {
+  const items: LibraryItem[] = [];
+  let offset: number | null = 0;
+
+  /*
+    **쪽을 끝까지 따라간다**(C-7).
+
+    전에는 한 번만 물었고, 목록 API 가 앞 200장만 주던 시절에는 그 뒤가 **아무
+    표시 없이 없는 것이 됐다.** 사용자에게는 「분명 올렸는데 라이브러리엔 없다」
+    가 된다.
+  */
+  for (let page = 0; page < REFERENCE_PAGE_LIMIT && offset !== null; page++) {
+    try {
+      // 쪽 크기를 **적어 보낸다.** 서버 기본값에 기대면 그 값이 바뀐 날
+      // 왕복 수가 조용히 열 배가 된다.
+      const response = await fetch(
+        `/api/pdp/style-references?limit=${REFERENCE_PAGE_SIZE}&offset=${offset}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) break;
+      const body = (await response.json()) as {
+        ok?: boolean;
+        references?: Array<{ id: string; name: string; createdAt: string; url: string | null }>;
+        nextOffset?: number | null;
+      };
+      if (!body.ok || !body.references?.length) break;
+
+      items.push(...body.references.map((reference) => ({
+        id: reference.id,
+        tool: "reference" as const,
+        title: reference.name,
+        thumbnail: reference.url ?? undefined,
+        createdAt: Date.parse(reference.createdAt) || 0,
+        storage: "account" as const,
+        imageCount: 1,
+      })));
+      // 앞으로만 간다. 서버가 제자리를 주면 여기서 끝낸다.
+      const next = body.nextOffset ?? null;
+      offset = next !== null && next > offset ? next : null;
+    } catch {
+      break;
+    }
   }
+
+  /*
+    **상한에 닿았으면 남긴다.** 조용히 자르는 것이 이 변경이 고치려던 문제와
+    같은 꼴이다. 라이브러리 화면에는 이 사실을 실을 자리가 없어 로그로 남긴다.
+  */
+  if (offset !== null) {
+    console.warn(`[library] 디자인 레퍼런스를 ${items.length}장까지만 불러왔습니다. 전부 보려면 계정 화면을 쓰세요.`);
+  }
+
+  return items;
 }
 
 export async function loadLibrary(): Promise<LibraryItem[]> {

@@ -66,7 +66,7 @@ const PER_IMAGE_ROUTES = [
  * 값을 실행해 보는 쪽은 `scripts/tests/credit-ledger.test.mjs` 가 실제
  * PostgreSQL 에서 맡는다.
  */
-const CONVERTERS = /\b(imageCreditUnits|characterCreditCost|creditUnits|adExportUnits)\s*\(/;
+const CONVERTERS = /\b(imageCreditUnits|characterCreditCost|creditUnits|adExportUnits|chunkCreditUnits)\s*\(/;
 
 /** 주석은 값이 아니다. 지우고 나서 본다. */
 const withoutComments = (text: string) =>
@@ -100,6 +100,20 @@ function argumentsOf(source: string, openIndex: number): string[] {
 }
 
 /**
+ * 이 이름을 만드는 **마지막** 선언이 환산에서 나왔나.
+ *
+ * 첫 선언만 보면, 앞쪽에 같은 이름의 멀쩡한 선언이 있을 때 뒤의 진짜 값이
+ * 그 뒤에 숨는다. 독립 리뷰가 변이로 뚫은 자리다.
+ */
+function declaredFrom(source: string, name: string): boolean {
+  if (!/^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(name)) return false;
+  const assignment = new RegExp(String.raw`\b(?:const|let|var)\s+${name}\s*=([^;]+);`, "gu");
+  let last: RegExpExecArray | null = null;
+  for (let hit = assignment.exec(source); hit; hit = assignment.exec(source)) last = hit;
+  return last ? CONVERTERS.test(withoutComments(last[1]!).trim()) : false;
+}
+
+/**
  * 값이 환산을 거쳤나.
  *
  * 미리 셈해 변수에 담아 두는 자리가 있다(`characters/views` 의 `reserved`).
@@ -110,13 +124,15 @@ function argumentsOf(source: string, openIndex: number): string[] {
 function converted(source: string, value: string): boolean {
   const bare = withoutComments(value).trim();
   if (CONVERTERS.test(bare)) return true;
-  if (!/^[A-Za-z_$][\w$]*$/.test(bare)) return false;
-  // **마지막 선언을 본다.** 첫 선언만 보면, 앞쪽에 같은 이름의 멀쩡한 선언이
-  // 있을 때 뒤의 진짜 값이 그 뒤에 숨는다. 이것도 리뷰가 변이로 뚫었다.
-  const assignment = new RegExp(String.raw`\b(?:const|let|var)\s+${bare}\s*=([^;]+);`, "g");
-  let last: RegExpExecArray | null = null;
-  for (let hit = assignment.exec(source); hit; hit = assignment.exec(source)) last = hit;
-  return last ? CONVERTERS.test(withoutComments(last[1]!).trim()) : false;
+  /*
+    미리 만들어 둔 셈틀을 부르는 자리도 있다 — 리디자인은 묶음 전체의 값을
+    한 번만 올림하려고 `const 청구 = chunkCreditUnits(…)` 를 만들어 두고
+    `청구(n)` 으로 부른다. 그 이름을 따라가서 본다.
+  */
+  const called = /^([^\s(]+)\s*\(/.exec(bare);
+  if (called && declaredFrom(source, called[1]!)) return true;
+  // 미리 셈해 변수에 담아 두는 자리도 있다(`characters/views` 의 `reserved`).
+  return declaredFrom(source, bare);
 }
 
 function settlementCalls(source: string) {

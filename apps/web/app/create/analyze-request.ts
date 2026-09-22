@@ -1,3 +1,4 @@
+import type { ImageLook } from "@fixup/shared";
 import type {
   AspectRatio,
   AttachmentIntents,
@@ -35,6 +36,21 @@ export interface AnalyzeRequestInputs {
   /** 시나리오 화면의 「디자인 레퍼런스 쓰기」 토글. 끄면 기획도 안 본다. */
   styleReferenceEnabled: boolean;
   attachmentIntents: AttachmentIntents;
+  /**
+   * 사용자가 고친 전체 전략. **「이 전략으로 구성 다시 만들기」를 눌렀을 때만**
+   * 온다(U-11).
+   *
+   * 전략 칸을 고치기만 한 것으로는 안 보낸다 — 그건 요약 수정이지 재기획이
+   * 아니다(설계 §4.2).
+   */
+  strategyDirective?: string;
+  /**
+   * 사용자가 적은 **구성·문구 요청**(U-06). 장면 지시와 다른 물건이라 기획이
+   * 본다.
+   */
+  planInstruction?: string;
+  /** 그림체. 설계 §6.3 이 「기획과 생성 양쪽 전달」이라 적은 값이다. */
+  look?: ImageLook;
 }
 
 export function buildAnalyzeRequest(input: AnalyzeRequestInputs): PdpAnalyzeRequest {
@@ -48,6 +64,9 @@ export function buildAnalyzeRequest(input: AnalyzeRequestInputs): PdpAnalyzeRequ
   const usesStyleReference = Boolean(input.styleReferenceEnabled && input.styleReference);
 
   return {
+    strategyDirective: input.strategyDirective?.trim() || undefined,
+    planInstruction: input.planInstruction?.trim() || undefined,
+    look: input.look,
     imageBase64: input.preparedImage.base64,
     mimeType: input.preparedImage.mimeType,
     modelImageBase64: input.modelImage?.base64,

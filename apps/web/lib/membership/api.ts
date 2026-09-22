@@ -1,9 +1,11 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { isPdpJobsEnabled } from "../pdp/jobs/flags";
 import { hasFullScope, viewerFrom } from "../access/core";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
+import { hourlyLimitFor } from "./hourly-limit";
 import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
 import { imageCredits } from "@fixup/shared";
 import { isCreditLedgerEnabled, type CreditReservationPlan } from "./credit-ledger";
@@ -74,10 +76,18 @@ export async function reserveAiUsage(
   }
 
   const admin = createSupabaseAdminClient();
-  const configuredAnalysisLimit = Number(process.env.ANALYZE_HOURLY_LIMIT || 10);
-  const analysisLimit = Number.isFinite(configuredAnalysisLimit)
-    ? Math.min(1000, Math.max(1, Math.floor(configuredAnalysisLimit)))
-    : 10;
+  /*
+    **작업마다 제 한도를 본다**(C-7).
+
+    전에는 `ANALYZE_HOURLY_LIMIT` 하나였다. 레퍼런스 분석이 같은 칸을 쓰면
+    레퍼런스를 정리하다가 그날 상세페이지를 못 만들게 된다 — 한자리에서 스무
+    장을 올리는 일이 정상이기 때문이다. 표는 `hourly-limit.ts` 에 있다.
+
+    **이 한도는 두 정책에 다 간다.** 장부를 켜면 `credit_reserve_dispatch` 가
+    같은 값을 받아 옛 경로로 그대로 넘긴다 — 전환 안 한 회원이 정책 스위치
+    하나로 다른 한도를 받으면 안 된다.
+  */
+  const analysisLimit = hourlyLimitFor(operation);
   const ledger = isCreditLedgerEnabled();
   const { data, error } = await admin.rpc(ledger ? "credit_reserve_dispatch" : "reserve_generation", ledger ? {
     p_user: auth.member.userId, p_request: requestId, p_operation: operation, p_legacy_units: units, p_analysis_limit: analysisLimit,
@@ -113,17 +123,34 @@ export async function reserveAiUsage(
       team_quota_exceeded: "팀의 이번 달 생성 한도를 모두 사용했습니다. 팀장에게 문의해 주세요.",
       concurrent_limit: "이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.",
       analysis_rate_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
-      duplicate_request: "이미 처리된 요청입니다. 새로고침 후 다시 시도해 주세요.",
+      /*
+        **같은 말, 다른 reason**(C-9). 사용자가 할 일은 「잠시 후 다시」로 같다.
+        가른 이유는 운영이다 — 한도(시간당 10)에 걸린 것과 남용 천장(시간당
+        100)에 걸린 것은 할 일이 정반대다. reason 까지 같으면 구분할 길이 없다.
+      */
+      analysis_abuse_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
       credit_account_not_activated: "크레딧 계정 전환이 준비 중입니다. 운영자에게 문의해 주세요.",
       credit_quote_required: "이 생성 경로의 크레딧 설정을 확인해야 합니다.",
       credit_ledger_required: "새 크레딧 처리가 준비 중입니다. 잠시 후 다시 시도해 주세요.",
     };
+    // 전환한 계정에는 「이번 달 한도」라는 말이 없다. 남은 것은 잔액이다.
     if (usage.pricingPolicy === "image-v2") messages.quota_exceeded = `크레딧이 모자랍니다. 사용 가능 ${usage.remaining}크레딧입니다.`;
-    const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit"]
+    /*
+      **중복일 때만 표를 한 번 더 읽는다**(E-6-2-b).
+
+      한 문장으로 뭉뚱그리던 자리다. 무엇이 일어났는지는 그 행의 상태가 안다.
+      다른 거절 사유에는 이 왕복을 걸지 않는다 — 한도에 걸린 것은 표를 안
+      읽어도 할 말이 정해져 있다.
+    */
+    const message =
+      row.reason === "duplicate_request"
+        ? await duplicateRequestMessage(admin, auth.member.userId, requestId, operation)
+        : messages[row.reason] ?? "요청을 처리할 수 없습니다.";
+    const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit", "analysis_abuse_limit"]
       .includes(row.reason) ? 429 : 409;
     return {
       ok: false,
-      response: membershipApiError(status, row.reason, messages[row.reason] ?? "요청을 처리할 수 없습니다.", usage),
+      response: membershipApiError(status, row.reason, message, usage),
     };
   }
   return { ok: true, userId: auth.member.userId, requestId, usage };
@@ -165,6 +192,91 @@ export async function settleAiUsage(
     // 이미 `logUsageFailure` 가 사용자 id 와 요청 id 를 남겼다. 손으로 풀 수 있다.
     return undefined;
   }
+}
+
+/**
+ * **같은 식별자로 다시 왔을 때 무슨 말을 할 것인가**(E-6-2-b).
+ *
+ * ── 무엇이 문제였나 ──────────────────────────────────────────
+ *
+ * 화면은 같은 섹션을 다시 만들 때 **같은 요청 식별자**를 쓴다
+ * (`PdpEditor` 의 `retryRequestKeysRef`). 두 번 과금되지 않게 하려는 장치다.
+ *
+ * 그 식별자로 다시 오면 `reserve_generation` 은 무조건 `duplicate_request` 를
+ * 준다. 앱은 한 문장으로 답했다 — 「이미 처리된 요청입니다. **새로고침 후 다시
+ * 시도해 주세요.**」
+ *
+ * 그 한 문장이 서로 다른 세 상황을 덮고 있었고, **셋 중 무엇도 새로고침으로
+ * 안 풀린다.** 특히 이미 끝난 요청이면 「다시 시도」가 **값을 한 번 더** 내게
+ * 만든다 — 단건 생성은 결과를 되찾는 길이 아예 없다(일괄만 job 을 남기고,
+ * 그 job 도 `PDP_JOBS_ENABLED` 가 꺼져 있다).
+ *
+ * 설계 §14.5(E-6-2-b): 「header 존재 = **결과 복구 아님**」.
+ *
+ * ── 표가 아는 것을 말한다 ────────────────────────────────────
+ *
+ * 마이그레이션은 안 건드린다. `generation_events` 의 그 행을 한 번 더 읽으면
+ * 상태를 알 수 있다.
+ */
+/**
+ * **작업을 적는 갈래**(K-05 리뷰 HIGH).
+ *
+ * `reserveAiUsage` 는 열여섯 곳이 쓰는데 `createJobRecorder` 를 부르는 것은
+ * `api/pdp/images/batch/route.ts` 하나뿐이다. 나머지에 「되찾을 수 있다」고
+ * 말하면 **구성안 분석 중복에도 「만들어 둔 이미지」를 말하게 된다.**
+ *
+ * 단건 `/pdp/images` 도 같은 `pdp_image` 다. 그쪽은 작업을 안 남기지만,
+ * 되찾기는 요청 식별자가 아니라 **문서 번호로** 찾으므로 앞선 묶음이 남긴
+ * 작업을 찾아 빈 섹션을 채울 수 있다.
+ *
+ * 작업을 적는 라우트가 늘면 여기도 함께 는다. 한 곳에 적어 둔다.
+ */
+const KEEPS_JOBS = new Set<GenerationOperation>(["pdp_image"]);
+
+async function duplicateRequestMessage(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  requestId: string,
+  operation: GenerationOperation,
+): Promise<string> {
+  const { data } = await admin
+    .from("generation_events")
+    .select("status")
+    .eq("user_id", userId)
+    .eq("request_id", requestId)
+    .maybeSingle();
+
+  const status = (data as { status?: string } | null)?.status;
+
+  if (status === "reserved") {
+    return "같은 요청이 아직 처리 중입니다. 잠시 기다리면 결과가 나타납니다.";
+  }
+  if (status === "succeeded") {
+    /*
+      **되찾을 수 있게 됐으면 그렇게 말한다**(K-05).
+
+      설계 §14.5(E-6-2-b) 의 처리는 「header 만 아닌 **동일 결과 회수**」다.
+      작업 경로가 켜져 있으면 서버가 그 그림을 들고 있으므로
+      (`GET /api/pdp/jobs?documentId=`) 값을 안 내고 되찾을 수 있다.
+
+      **꺼져 있으면 옛 말이 맞다.** 값은 나갔고 그림도 만들어졌는데 화면에 못
+      왔고, 되찾을 길이 없다 — 여기가 제일 나쁘다.
+    */
+    if (isPdpJobsEnabled() && KEEPS_JOBS.has(operation)) {
+      /*
+        **단정하지 않는다.** 깃발이 켜져 있어도 그 요청의 작업이 실제로
+        있다는 보장은 없다 — 기록기가 조용히 실패했을 수 있고, 저장 안 한
+        초안은 찾을 열쇠조차 없다. 「모르는 것을 안다고 하지 않는다」.
+      */
+      return "이 요청은 이미 끝났습니다. 만들어 둔 이미지가 남아 있으면 화면이 되찾아 옵니다. 잠시 뒤에도 안 보이면 새로 만들어 주세요.";
+    }
+    return "이 요청은 이미 끝났습니다. 결과가 화면에 안 보이면 다시 만들면 되지만, 다시 만들면 값이 한 번 더 나갑니다.";
+  }
+  if (status === "failed") {
+    return "이 요청은 실패로 끝났습니다. 새로 만들어 주세요.";
+  }
+  // 표를 못 읽었다. **모르는 것을 안다고 하지 않는다.**
+  return "같은 요청이 이미 접수돼 있습니다. 잠시 뒤에도 결과가 안 보이면 새로 만들어 주세요.";
 }
 
 export async function finalizeAiUsage(
@@ -212,14 +324,26 @@ export async function finalizeAiUsage(
    * 실패했는데 정말 0장이면 0을 적는 것이 맞다. 「돈이 안 나갔다」와 「모른다」는
    * 다르고, 지금까지는 둘이 같은 모양이었다.
    */
+  let costRecorded: boolean | undefined;
   if (cost) {
+    /*
+      **모르는 것과 0원인 것을 가른다**(설계 §7.2).
+
+      전에는 `llm_usd: cost.llmUsd ?? 0` 이라 셋이 전부 0 으로 보였다 —
+      정말 0원인 것, 제공자가 사용량을 안 준 것, 기록이 실패한 것.
+
+      모를 때는 **금액 칸을 아예 안 건드린다.** 0 을 적으면 「돈이 안 나갔다」가
+      되고, 그 뒤로는 되돌릴 근거가 없다.
+    */
+    const 금액을안다 = typeof cost.llmUsd === "number" && Number.isFinite(cost.llmUsd);
     const { error: costError } = await admin
       .from("generation_events")
       .update({
         model: cost.model,
         billable_images: cost.billableImages,
         // 그림이 없는 단계(분석·기획)도 여기로 원가가 들어온다.
-        llm_usd: cost.llmUsd ?? 0,
+        ...(금액을안다 ? { llm_usd: cost.llmUsd } : {}),
+        cost_state: 금액을안다 ? "recorded" : "unknown",
       })
       .eq("user_id", reservation.userId)
       .eq("request_id", reservation.requestId);
@@ -232,9 +356,23 @@ export async function finalizeAiUsage(
         billableImages: cost.billableImages,
       });
     }
+    /*
+      **정산만 됐다고 원가 기록까지 됐다고 하지 않는다**(설계 §8.4).
+
+      사용량 확정은 되돌리지 않는다 — 장부가 조금 비는 것보다 회원의 크레딧이
+      예약된 채 묶이는 쪽이 훨씬 나쁘다. 다만 **부르는 쪽이 알 수 있게** 한다.
+    */
+    costRecorded = !costError;
   }
 
-  return ledger ? { ...usageFromRow(data.usage ?? {}), settlementPending: data.settled === false } : usageFromRpc(data[0]);
+  /*
+    **원가 기록 여부는 두 정책에 다 실린다.** 정산이 됐다고 원가까지 남았다고
+    말하지 않는 것은(설계 §8.4) 장부를 켜든 안 켜든 같은 약속이다.
+  */
+  const recorded = costRecorded === undefined ? {} : { costRecorded };
+  return ledger
+    ? { ...usageFromRow(data.usage ?? {}), settlementPending: data.settled === false, ...recorded }
+    : { ...usageFromRpc(data[0]), ...recorded };
 }
 
 /**

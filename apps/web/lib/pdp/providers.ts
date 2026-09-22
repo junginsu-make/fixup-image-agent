@@ -1,6 +1,7 @@
 import { recordFrom } from "../llm/meter";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { purposeOfCall } from "@fixup/pdp-core";
 import type { PdpLlm, PdpLlmRequest, PdpProviders } from "@fixup/pdp-core";
 import { createPdpImageGenerator } from "./fal";
 import { unwrapStringified } from "../llm/structured";
@@ -17,8 +18,34 @@ import { unwrapStringified } from "../llm/structured";
  */
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+const DEFAULT_PLANNING_MODEL = "claude-fable-5";
 const DEFAULT_OPENAI_MODEL = "gpt-5.6-sol";
 const DEFAULT_MAX_TOKENS = 8192;
+/**
+ * **기획은 길게 답한다.**
+ *
+ * 구성안 한 벌은 섹션마다 제목·부제·불릿을 한국어와 영어로 두 번 적는다.
+ * 8192 로는 섹션이 여섯이면 끝까지 못 쓴다 — 2026-09-17 실호출 검증에서
+ * 텍스트 기획이 그렇게 잘려 죽었다(`docs/bugs/pdp-validation/w3-live-planning.txt`).
+ *
+ * 검수·참조 분석은 짧게 답하므로 그대로 둔다. 실제 상한은 모델의 종료 사유로
+ * 다시 잰다 — 이 값은 「잘리면 알 수 있게」 한 뒤의 출발점이다.
+ */
+const PLANNING_MAX_TOKENS = 32768;
+
+/**
+ * 모델이 끝까지 못 쓴 답.
+ *
+ * 조각난 도구 인자는 「값이 없는 정상 응답」과 구별되지 않는다. 그대로 흘리면
+ * 「섹션이 0개」 같은 엉뚱한 자리에서 죽고, 원인은 사라진 채 값만 나간다.
+ */
+export class PdpResponseTruncatedError extends Error {
+  readonly code = "AI_RESPONSE_TRUNCATED";
+  constructor(readonly model: string, readonly call: string) {
+    super(`${model} 이(가) ${call} 답을 끝까지 쓰지 못하고 잘렸습니다. 요청을 줄이거나 상한을 올려 주세요.`);
+    this.name = "PdpResponseTruncatedError";
+  }
+}
 
 export class PdpProviderConfigurationError extends Error {
   constructor(readonly missing: string[]) {
@@ -34,6 +61,17 @@ function requireKeys(names: string[], environment: Env) {
   if (missing.length) throw new PdpProviderConfigurationError(missing);
 }
 
+/**
+ * 이 호출에 줄 답의 길이.
+ *
+ * 부르는 쪽이 정했으면 그것을 쓴다. 안 정했으면 **무슨 일을 하는 호출인지**로
+ * 정한다 — 기획은 길고 검수는 짧다.
+ */
+function maxTokensFor(request: PdpLlmRequest): number {
+  if (request.maxTokens) return request.maxTokens;
+  return request.purpose === "planning" ? PLANNING_MAX_TOKENS : DEFAULT_MAX_TOKENS;
+}
+
 /** base64 원문을 `data:` 주소로. OpenAI 는 이 모양으로만 그림을 받는다. */
 function dataUrl(image: { base64: string; mimeType: string }) {
   return `data:${image.mimeType};base64,${image.base64}`;
@@ -46,7 +84,7 @@ async function viaAnthropic(
 ): Promise<unknown> {
   const response = await client.messages.create({
     model,
-    max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_tokens: maxTokensFor(request),
     messages: [
       {
         role: "user",
@@ -77,6 +115,10 @@ async function viaAnthropic(
   });
   recordFrom(model, response);
 
+  // **답이 잘렸으면 여기서 멈춘다.** 아래로 흘리면 조각난 값이 정상 응답으로
+  // 읽히고, 그 다음 검증이 「섹션이 없다」고 말한다 — 원인이 두 겹 뒤로 숨는다.
+  if (response.stop_reason === "max_tokens") throw new PdpResponseTruncatedError(model, request.name);
+
   const call = response.content.find(
     (block): block is Anthropic.ToolUseBlock =>
       block.type === "tool_use" && block.name === request.name,
@@ -92,7 +134,7 @@ async function viaOpenAI(
 ): Promise<unknown> {
   const response = await client.responses.create({
     model,
-    max_output_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_output_tokens: maxTokensFor(request),
     input: [
       { role: "developer", content: "Return only the requested structured result." },
       {
@@ -144,6 +186,8 @@ export function createPdpLlm(environment: Env = process.env): PdpLlm {
     timeout: 120_000,
   });
   const anthropicModel = environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL;
+  const planningModel = environment.PDP_PLANNING_MODEL?.trim() || DEFAULT_PLANNING_MODEL;
+  const executions: NonNullable<PdpLlm["executions"]> = [];
 
   const openaiKey = environment.OPENAI_API_KEY?.trim();
   const openai = openaiKey
@@ -155,13 +199,31 @@ export function createPdpLlm(environment: Env = process.env): PdpLlm {
     DEFAULT_OPENAI_MODEL;
 
   return {
+    executions,
     async generate(request) {
+      // 이름→목적 표는 코어에 한 벌만 둔다. 여기서 다시 짐작하면 새 호출이
+      // 생긴 날 두 곳이 갈린다.
+      const purpose = request.purpose ?? purposeOfCall(request.name);
+      const model = purpose === "planning" ? planningModel : anthropicModel;
       try {
-        return { text: JSON.stringify(await viaAnthropic(anthropic, anthropicModel, request)) };
+        const text = JSON.stringify(await viaAnthropic(anthropic, model, request));
+        const execution = { purpose, provider: "anthropic" as const, model };
+        executions.push(execution);
+        return { text, execution };
       } catch (error) {
+        // 잘림은 제공자 장애가 아니다. 예비로 넘기면 같은 길이를 한 번 더
+        // 치르고 또 잘린다 — 값만 두 배로 쓰고 원인은 그대로다.
+        if (error instanceof PdpResponseTruncatedError) throw error;
+        const status = (error as { status?: number })?.status;
+        // 잘못된 모델/권한/요청 설정을 정상적인 영구 폴백처럼 숨기지 않는다.
+        if (purpose === "planning" && status && [400, 401, 403, 404, 422].includes(status)) throw error;
         if (!openai) throw error;
-        console.warn(`[pdp] Claude 실패, OpenAI 로 넘어갑니다 (${request.name})`, error);
-        return { text: JSON.stringify(await viaOpenAI(openai, openaiModel, request)) };
+        const fallbackReason = status ? `provider_${status}` : "provider_unavailable";
+        console.warn(`[pdp] 대체 기획/검수 모델 사용 (${request.name}, ${fallbackReason})`);
+        const text = JSON.stringify(await viaOpenAI(openai, openaiModel, request));
+        const execution = { purpose, provider: "openai" as const, model: openaiModel, fallbackFrom: model, fallbackReason };
+        executions.push(execution);
+        return { text, execution };
       }
     },
   };

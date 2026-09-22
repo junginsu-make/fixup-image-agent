@@ -10,6 +10,7 @@ import {
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { readPdpRequest } from "../../../../lib/pdp/request";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 
 export const runtime = "nodejs";
@@ -19,12 +20,10 @@ export const maxDuration = 300;
 /**
  * 섹션 이미지들의 색·조명·질감을 묶는 대표 이미지 1장.
  *
- * **섹션 이미지와 같은 셈을 쓴다** — `imageCreditUnits(model, 1)`. 전에는
- * 예약도 확정도 `1` 로 박아 두고 「섹션 이미지와 동일하게 1 크레딧」이라고
- * 적어 두었는데, 정작 섹션 이미지는 모델 단가로 환산한다(`pdp/images`).
- * 그래서 비싼 모델일수록 이 한 장만 덜 깎였다(2026-09-22 발견).
- *
- * 재생성은 새 x-idempotency-key 로 다시 호출하며 그때마다 같은 만큼 든다.
+ * **값은 섹션 이미지와 같은 계산기에서 나온다.** 전에는 모델과 무관하게 1이었다 —
+ * 2026-09-08 에 「장을 실제 단가에 붙인다」로 바뀔 때 이 라우트만 안 따라와서,
+ * 같은 모델로 같은 크기를 만드는데 섹션은 5장이고 대표는 1장이었다.
+ * 재생성은 새 x-idempotency-key 로 다시 호출하며 그때마다 같은 값이 든다.
  *
  * **여기에는 근거 게이트(rejectIfUnverified)를 붙이지 않는다.** 빠뜨린 것이 아니다 —
  * buildKeyVisualPrompt 는 브리프와 style_guide 만 읽고 headline·subheadline·bullets·
@@ -32,8 +31,14 @@ export const maxDuration = 300;
  * 키비주얼 프롬프트가 섹션 카피를 읽기 시작하면 그때는 게이트가 필요하다.
  */
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null) as KeyVisualRequest | null;
-  if (!body) return Response.json({ ok: false, message: "Invalid request" }, { status: 400 });
+  const parsed = await readPdpRequest<KeyVisualRequest>(req, "keyVisual");
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
+  /*
+    **값은 섹션 이미지와 같은 계산기에서 나온다.** 전에는 모델과 무관하게 1이었다 —
+    2026-09-08 에 「장을 실제 단가에 붙인다」로 바뀔 때 이 라우트만 안 따라와서,
+    같은 모델로 같은 크기를 만드는데 섹션은 5장이고 대표는 1장이었다.
+  */
   const model = body.imageModel ?? DEFAULT_IMAGE_MODEL;
   const units = imageCreditUnits(model, 1);
   const reservation = await reserveAiUsage(req, "pdp_image", units, creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:key-visual"));
@@ -52,7 +57,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, imageBase64, mimeType, usage });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
-    await finalizeAiUsage(reservation, false, 0, String(envelope.code || "key_visual_failed"));
+    await settleAiUsage(reservation, false, 0, String(envelope.code || "key_visual_failed"));
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }
 }

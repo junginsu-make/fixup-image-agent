@@ -1,4 +1,5 @@
 import { userInstructionHead, userInstructionTail } from "@fixup/shared";
+import { GROUNDING_RULE } from "@fixup/shared";
 import { RedesignError } from "./errors.js";
 
 /**
@@ -31,6 +32,8 @@ const GOOGLE_NANO_BANANA_2_MODEL = "gemini-3.1-flash-image-preview";
 
 type Provider = "openai" | "google";
 
+import type { RedesignImageGenerator } from "./generate";
+
 export type EditSectionInput = {
   /** "openai" | "google" (anything not "google" becomes "openai") */
   model?: string;
@@ -41,6 +44,14 @@ export type EditSectionInput = {
   project?: { title?: string; channel?: string } & Record<string, unknown>;
   openaiKey?: string;
   googleKey?: string;
+  /**
+   * 그림 통로. **새로 만들 때와 같은 길로 고친다.**
+   *
+   * 없으면 지금까지의 길(OpenAI·Google 직접 호출)로 떨어진다. 그 길은
+   * `quality: "low"` 라 글자가 뭉개지는데 값은 `gpt-image-2.5` `max` 기준으로
+   * 받고 있었다(2026-09-17 리뷰 F-7-5). 키가 있으면 늘 이쪽이 쓰인다.
+   */
+  generateImage?: RedesignImageGenerator;
 };
 
 export async function editSection(input: EditSectionInput) {
@@ -81,21 +92,38 @@ export async function editSection(input: EditSectionInput) {
     `사용자 수정 요청: ${requestText}`,
     "브랜드명 금지 규칙: '한이룸', '한이룸의', '한이룸 스킨', 'HANEERUM', 'Haneerum', 'HR'은 서비스명 또는 도구명일 뿐이며 제품 브랜드가 아니다. 이 단어들을 이미지 안의 제품명, 브랜드명, 로고, 라벨, 헤드라인, 후기, FAQ, CTA, 패키지 텍스트로 절대 사용하지 않는다.",
     "브랜드 사용 규칙: 제품 브랜드명과 제품명은 첨부된 이미지와 프로젝트 원본에서 확인되는 이름만 사용한다. 원본에서 확인되지 않는 새 브랜드명, 새 제품명, 새 로고를 만들지 않는다.",
-    "규칙: 제품명, 패키지, 핵심 수치, 안전한 표현 원칙은 유지한다. 근거 없는 효능/리뷰/인증/수치를 새로 만들지 않는다. 같은 상세페이지 안에서 이어 붙였을 때 반복 레이아웃처럼 보이지 않도록 정보 배치, 카드 구조, 타이포 리듬을 조정한다. 한국어 문구는 크게, 작은 글씨는 줄이고, 한 장에 메시지 하나만 담는다.",
+    `규칙: 제품명, 패키지, 핵심 수치, 안전한 표현 원칙은 유지한다. ${GROUNDING_RULE} 같은 상세페이지 안에서 이어 붙였을 때 반복 레이아웃처럼 보이지 않도록 정보 배치, 카드 구조, 타이포 리듬을 조정한다. 한국어 문구는 크게, 작은 글씨는 줄이고, 한 장에 메시지 하나만 담는다.`,
     userInstructionTail(requestText)
   ]
     .filter(Boolean)
     .join("\n");
 
-  const edited = provider === "google"
-    ? await editWithGoogle({ apiKey, prompt, image })
-    : await editWithOpenAI({ apiKey, prompt, image });
+  const edited = input.generateImage
+    ? await editViaGenerator(input.generateImage, prompt, image)
+    : provider === "google"
+      ? await editWithGoogle({ apiKey, prompt, image })
+      : await editWithOpenAI({ apiKey, prompt, image });
 
   return {
     imageUrl: `data:${edited.mimeType};base64,${edited.buffer.toString("base64")}`,
     mimeType: edited.mimeType,
     prompt
   };
+}
+
+/** 주입받은 통로로 고친다. 크기는 생성 경로와 같은 9:16 상세페이지 규격이다. */
+async function editViaGenerator(
+  generateImage: RedesignImageGenerator,
+  prompt: string,
+  image: { mimeType: string; buffer: Buffer },
+) {
+  return generateImage({
+    prompt,
+    // 고칠 그림 자체가 유일한 참조다. 원본을 안 보내면 「같은 제품을 유지한다」가
+    // 지킬 대상 없이 떠 버린다.
+    references: [{ name: "section.png", mimeType: image.mimeType, buffer: image.buffer }],
+    size: "1152x2048",
+  });
 }
 
 async function editWithOpenAI({

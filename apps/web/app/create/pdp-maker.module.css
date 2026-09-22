@@ -173,9 +173,31 @@
   place-items: center;
 }
 
+/*
+  좁아지면 **겉을 줄인다.** 안쪽 폭은 460 으로 고정이다.
+
+  전에는 캔버스 자체가 `min(100%, 460px)` 로 줄었고, 레이어 좌표가 그 폭 기준
+  절대값이라 **화면 폭마다 좌표의 뜻이 달랐다.** 데스크톱에서 오른쪽에 붙여
+  놓은 글자가 휴대폰에서는 밖으로 나가 잘린 채 구워졌다.
+
+  겉만 줄이면 안쪽 좌표계는 늘 460 이다 — 어느 기기에서 열어도 같은 자리다.
+  실제 축소는 `--canvas-fit` 이 정하고, 화면 폭에 따라 화면 코드가 넣어 준다.
+*/
+.imageCanvasFit {
+  width: min(100%, 460px);
+  /*
+    **격자 칸은 기본적으로 내용보다 작아지지 않는다**(`min-width: auto`).
+    안쪽이 460px 로 고정이라 이 값을 안 풀면 `min(100%, …)` 가 무시되고
+    좁은 화면에서도 460px 그대로 남는다 — 2026-09-17 실제 브라우저로 확인했다.
+  */
+  min-width: 0;
+}
+
 .imageCanvas {
   position: relative;
-  width: min(100%, 460px);
+  width: 460px;
+  transform-origin: top left;
+  transform: scale(var(--canvas-fit, 1));
 }
 
 .sectionImage {

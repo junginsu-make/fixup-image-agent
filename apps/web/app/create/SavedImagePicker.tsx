@@ -140,6 +140,24 @@ export function SavedImagePicker({
           description: "라이브러리 참고 이미지",
         }));
 
+      /*
+        **다 안 보여 주고 있으면 말한다**(C-7).
+
+        레퍼런스 목록은 한 쪽이 200장이다. 그보다 많이 올린 사용자에게 아무 말도
+        안 하면 **올린 것이 사라진 줄 안다.** 고르기 창은 쪽을 넘기지 않으므로
+        (한 장 고르러 온 자리다) 어디서 다 볼 수 있는지 함께 알린다.
+      */
+      const total = Number(refs?.total ?? 0);
+      const shown = (refs?.references ?? []).length;
+      // 라이브러리만 고르는 자리는 레퍼런스를 아래에서 걸러 낸다. 안 보여 줄
+      // 것을 두고 「다 못 보여 준다」고 하면 엉뚱한 말이 된다.
+      const 레퍼런스를보여준다 = origin !== "library";
+      setMessage(
+        레퍼런스를보여준다 && total > shown
+          ? `디자인 레퍼런스 ${total}장 중 최근 ${shown}장입니다. 전부 보려면 계정 화면에서 확인해 주세요.`
+          : "",
+      );
+
       const all = [...fromRefs, ...fromShared, ...fromLibrary];
       setImages(origin ? all.filter((image) => image.origin === origin) : all);
     } catch {

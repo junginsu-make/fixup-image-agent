@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
 // 섹션 여러 장을 한 번에 올린다. 장당 몇 MB라 넉넉히 잡는다.
 export const maxDuration = 300;
 
-// 한 작업에 담을 수 있는 이미지 수. 상세페이지 섹션이 보통 4~7장이다.
+// 한 작업에 담을 수 있는 이미지 수. 상세페이지 섹션 상한은 10장이다
+// (`MAX_PLANNED_SECTIONS`). 이 값은 그보다 넉넉해야 한다.
 const MAX_IMAGES = 20;
 
 /**

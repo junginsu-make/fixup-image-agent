@@ -1,4 +1,4 @@
-// MCS 랜딩페이지 카피 사전 — 디자인 프로토타입에서 그대로 추출
+// FormWith 랜딩페이지 카피 사전 — 디자인 프로토타입에서 그대로 추출
 // 위치: apps/web/app/_landing/landing-content.ts
 //
 // - presets[].src 는 public/landing/ 기준 경로입니다 (next/image 로 그대로 사용 가능)
@@ -27,7 +27,7 @@ export interface Preset {
 }
 
 export const KO = {
-  navAbout: "MCS란", navGallery: "결과물", navTools: "도구", navHow: "작동 원리", navTry: "직접 해보기", navDiff: "차별점",
+  navAbout: "FormWith란", navGallery: "결과물", navTools: "도구", navHow: "작동 원리", navTry: "직접 해보기", navDiff: "차별점",
   langShort: "한", langOther: "영", langSwitchLabel: "English 로 보기",
   ctaShort: "무료 체험 신청",
   navLogin: "로그인", navSignup: "가입 신청", navStudio: "스튜디오 열기", navLogout: "로그아웃", localBadge: "로컬 확인 모드",
@@ -140,7 +140,7 @@ export const KO = {
 export type LandingCopy = typeof KO;
 
 export const EN: LandingCopy = {
-  navAbout: "What is MCS", navGallery: "Output", navTools: "Tools", navHow: "How it works", navTry: "Try it", navDiff: "Difference",
+  navAbout: "What is FormWith", navGallery: "Output", navTools: "Tools", navHow: "How it works", navTry: "Try it", navDiff: "Difference",
   langShort: "EN", langOther: "KO", langSwitchLabel: "한국어로 보기",
   ctaShort: "Request access",
   navLogin: "Sign in", navSignup: "Request access", navStudio: "Open studio", navLogout: "Sign out", localBadge: "Local preview mode",

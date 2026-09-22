@@ -1,4 +1,4 @@
-// MCS 브랜드 소개(`/about`) 카피 사전.
+// FormWith 브랜드 소개(`/about`) 카피 사전.
 //
 // `landing-content.ts` 와 같은 규칙을 따른다 — KO 를 단일 출처로 두고 EN 을
 // 그 타입에 맞춘다. 키가 하나라도 빠지면 타입 검사에서 잡힌다.
@@ -36,9 +36,9 @@ export interface Vow {
 }
 
 export const ABOUT_KO = {
-  metaTitle: "MCS란",
+  metaTitle: "FormWith란",
   metaDescription:
-    "따라 만들 그림 한 장과 한 줄. 손으로 하는 건 거기까지입니다. 구조를 잡고 글자를 정하고 그림을 만들고 검수하고 매체 규격에 맞추는 일은 MCS 가 이어서 합니다.",
+    "따라 만들 그림 한 장과 한 줄. 손으로 하는 건 거기까지입니다. 구조를 잡고 글자를 정하고 그림을 만들고 검수하고 매체 규격에 맞추는 일은 FormWith 가 이어서 합니다.",
 
   kicker: "브랜드 소개",
   h1a: "그림 한 장과 한 줄,",
@@ -117,9 +117,9 @@ export const ABOUT_KO = {
 export type AboutCopy = typeof ABOUT_KO;
 
 export const ABOUT_EN: AboutCopy = {
-  metaTitle: "What is MCS",
+  metaTitle: "What is FormWith",
   metaDescription:
-    "One image to follow and one line. That is where your part ends. MCS takes it from there — structure, copy, image, review, and every channel size.",
+    "One image to follow and one line. That is where your part ends. FormWith takes it from there — structure, copy, image, review, and every channel size.",
 
   kicker: "About",
   h1a: "One image, one line.",

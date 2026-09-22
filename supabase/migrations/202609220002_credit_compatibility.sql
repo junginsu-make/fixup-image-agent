@@ -38,7 +38,7 @@ begin
   perform credit_lock();
   if exists(select 1 from credit_accounts where user_id=p_user) then
     if p_outputs is null then return jsonb_build_object('allowed',false,'reason','credit_quote_required','usage',credit_wallet_state(p_user)); end if;
-    return credit_reserve(p_user,p_request,p_operation,p_outputs,p_resource);
+    return credit_reserve(p_user,p_request,p_operation,p_outputs,p_resource,p_analysis_limit);
   end if;
   select * into v from reserve_generation_cost_v1(p_user,p_request,p_operation,p_legacy_units,p_analysis_limit);
   return jsonb_build_object('allowed',v.allowed,'reason',v.reason,'policy','cost-v1','usage',to_jsonb(v));

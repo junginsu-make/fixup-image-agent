@@ -1,5 +1,5 @@
 /**
- * MCS 마크 — 겹쳐 쌓인 사각형 셋.
+ * FormWith 마크 — 겹쳐 쌓인 사각형 셋.
  *
  * 2026-09-10 에 첫 화면 로고가 바뀌면서 여기도 맞췄다. 원본은
  * `apps/web/public/brand/mcs-mark-{dark,light}-bg.svg` 다.
@@ -26,7 +26,7 @@ export function BrandMark({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       role="img"
-      aria-label="MCS"
+      aria-label="FormWith"
     >
       <rect x="2" y="12" width="18" height="18" rx="3" fill="currentColor" fillOpacity="0.35" />
       <rect x="7" y="7" width="18" height="18" rx="3" fill="currentColor" fillOpacity="0.7" />

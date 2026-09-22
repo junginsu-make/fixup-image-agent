@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { photoGapPolicyRules } from "./pdp.product-reading";
 import { intensityRules } from "./pdp.copy-intensity";
 import { buildAnalyzePrompt } from "./pdp.service";
+import { sectionPlanGaps } from "./pdp.section-plan";
 
 /**
  * 표현 강도와 빈칸 처리는 텍스트 경로에만 있었다. 같은 사람이 같은 제품을 파는데
@@ -90,11 +91,38 @@ describe("반론 섹션은 빠지지 않는다", () => {
     expect(intensityRules("max")).toContain("반론 섹션을 빼지 않는다");
   });
 
-  it("섹션 하한을 5개로 올렸다", () => {
-    // 4개까지 허용하면 반론이 가장 먼저 빠진다.
+  /*
+    **장수 하한으로 지키던 것을 이름으로 지킨다**(U-14, 2026-09-18).
+
+    전에는 「5~6개」로 하한을 올려 반론이 빠지는 것을 막았다. 그런데 장수는
+    **반론이 있는지 확인하지 않는다** — 다섯 장을 만들되 전부 자랑인 페이지도
+    통과한다. 늘어난 것은 길이뿐이었고, 할 말이 적은 제품에는 빈 장을 채우려고
+    지어낸 문장이 들어갔다(설계 §9.1).
+
+    그래서 보호를 두 겹으로 옮겼다.
+    - 프롬프트가 **반론 섹션을 이름으로** 요구한다(바로 위 시험)
+    - `sectionPlanGaps` 가 **결과물에 망설임을 다루는 문장이 있는지** 실제로
+      본다. 없으면 화면이 말한다
+  */
+  it("**장수가 아니라 이름으로 요구한다**", () => {
     const prompt = buildAnalyzePrompt(undefined, undefined, null, "full-image");
-    expect(prompt).toContain("5~6개의 핵심 섹션");
-    expect(prompt).not.toContain("4~6개의 핵심 섹션");
+
+    expect(prompt).toContain("반론 섹션은 반드시 넣는다");
+    // 고정 장수는 더 이상 없다. 있으면 할 말 적은 제품에 빈 장이 붙는다.
+    expect(prompt).not.toContain("5~6개의 핵심 섹션");
+  });
+
+  it("**결과물에 망설임을 다루는 문장이 없으면 잡힌다** — 장수는 그것을 못 본다", () => {
+    const 자랑만 = [
+      { section_id: "S1", trust_or_objection_line: "" },
+      { section_id: "S2", trust_or_objection_line: "" },
+      { section_id: "S3", trust_or_objection_line: "" },
+      { section_id: "S4", trust_or_objection_line: "" },
+      { section_id: "S5", trust_or_objection_line: "" },
+    ] as never[];
+
+    // 다섯 장이지만 반론이 없다. 옛 하한은 이것을 통과시켰다.
+    expect(sectionPlanGaps(자랑만).map((gap) => gap.kind)).toContain("no_reassurance");
   });
 });
 

@@ -26,13 +26,13 @@ export const metadata: Metadata = {
   */
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "MCS",
-    template: "%s — MCS",
+    default: "FormWith",
+    template: "%s — FormWith",
   },
   description: DESCRIPTION,
-  applicationName: "MCS",
+  applicationName: "FormWith",
   manifest: "/site.webmanifest",
-  appleWebApp: { title: "MCS" },
+  appleWebApp: { title: "FormWith" },
 
   /*
     링크를 붙였을 때 뜨는 미리보기.
@@ -52,16 +52,16 @@ export const metadata: Metadata = {
   */
   openGraph: {
     type: "website",
-    siteName: "MCS",
-    title: "MCS — Marketing Content Studio",
+    siteName: "FormWith",
+    title: "FormWith — Marketing Content Studio",
     description: DESCRIPTION,
     url: SITE_URL,
     locale: "ko_KR",
-    images: [{ url: "/og-hero.png", width: 1200, height: 630, alt: "MCS 가 만든 결과물" }],
+    images: [{ url: "/og-hero.png", width: 1200, height: 630, alt: "FormWith 가 만든 결과물" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "MCS — Marketing Content Studio",
+    title: "FormWith — Marketing Content Studio",
     description: DESCRIPTION,
     images: ["/og-hero.png"],
   },

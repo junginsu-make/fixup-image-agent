@@ -609,21 +609,77 @@ export function resolveCharacterAngles(picked: string[], layoutNotes: string): C
   return chosen.length ? chosen : [pickAngleForSection(layoutNotes)];
 }
 
-export function pickAngleForSection(layoutNotes: string): CharacterAngle {
+/**
+ * 자동 각도의 **규칙 표.**
+ *
+ * ── 왜 표로 두나 ─────────────────────────────────────────────
+ *
+ * 이것은 **판단이 아니라 낱말 대조**다. 화면이 「섹션 설명을 읽어 어울리는
+ * 각도를 고릅니다」라고 말했는데, 사용자는 그 말을 「AI 가 봤겠지」로 읽고 왜 이
+ * 각도인지 물을 생각을 못 한다(U-05).
+ *
+ * 규칙이 나쁘다는 말이 아니다 — 잘 돈다. 나쁜 것은 **판단처럼 보이게 말한
+ * 것**이다. 그래서 규칙을 밖으로 내고, 화면이 그대로 보여 줄 수 있게 한다.
+ *
+ * **차례가 곧 우선순위다.** 먼저 걸리는 것이 이긴다.
+ */
+export const ANGLE_KEYWORD_RULES = [
+  {
+    angle: "back" as const,
+    pattern: /뒷모습|뒤돌아|뒤에서|behind|back view|walking away|from behind/,
+    examples: ["뒷모습", "뒤돌아", "back view"],
+  },
+  {
+    angle: "front" as const,
+    pattern: /정면|클로즈업|close-?up|portrait|facing camera|straight-on/,
+    examples: ["정면", "클로즈업", "close-up"],
+  },
+  {
+    // 오른쪽을 보고 선 장면. 왼쪽에 여백이 생겨 글자를 앉히기 좋다.
+    angle: "right_45" as const,
+    pattern: /오른쪽|우측|right side|facing right/,
+    examples: ["오른쪽", "우측", "facing right"],
+  },
+  /*
+    **각도 이름은 여기 안 적는다.** 화면이 `characterAngleLabel` 로 부르는데
+    여기 또 적으면 두 벌이 되고, 실제로 「뒷모습」과 「뒷면」으로 갈렸다.
+  */
+] as const satisfies readonly {
+  angle: CharacterAngle;
+  pattern: RegExp;
+  examples: readonly string[];
+}[];
+
+/** 아무 낱말도 안 걸렸을 때. 두 눈이 보여 얼굴이 남는다. */
+export const DEFAULT_SECTION_ANGLE: CharacterAngle = "left_45";
+
+export interface AngleChoice {
+  angle: CharacterAngle;
+  /** `keyword` 면 낱말이 걸린 것, `default` 면 아무것도 안 걸린 것. */
+  reason: "keyword" | "default";
+  /** 실제로 걸린 낱말. 기본값일 때는 없다. */
+  matched?: string;
+}
+
+/**
+ * 각도를 고르고 **무엇 때문에 골랐는지 함께** 돌려준다.
+ *
+ * 화면이 「이 낱말이 있어 뒤를 골랐습니다」라고 말할 수 있어야, 사용자가 그
+ * 판단을 확인하고 필요하면 직접 고른다.
+ */
+export function explainAngleForSection(layoutNotes: string): AngleChoice {
   const text = layoutNotes.toLowerCase();
 
-  if (/뒷모습|뒤돌아|뒤에서|behind|back view|walking away|from behind/.test(text)) {
-    return "back";
+  for (const rule of ANGLE_KEYWORD_RULES) {
+    const hit = rule.pattern.exec(text);
+    if (hit) return { angle: rule.angle, reason: "keyword", matched: hit[0] };
   }
-  if (/정면|클로즈업|close-?up|portrait|facing camera|straight-on/.test(text)) {
-    return "front";
-  }
-  // 오른쪽을 보고 선 장면. 왼쪽에 여백이 생겨 글자를 앉히기 좋다.
-  if (/오른쪽|우측|right side|facing right/.test(text)) {
-    return "right_45";
-  }
-  // 그 밖의 사용 장면은 좌측 45도가 자연스럽다. 두 눈이 보여 얼굴이 남는다.
-  return "left_45";
+
+  return { angle: DEFAULT_SECTION_ANGLE, reason: "default" };
+}
+
+export function pickAngleForSection(layoutNotes: string): CharacterAngle {
+  return explainAngleForSection(layoutNotes).angle;
 }
 
 /**

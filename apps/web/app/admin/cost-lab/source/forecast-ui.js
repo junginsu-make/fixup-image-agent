@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  const api = window.MCSForecast, el = id => document.getElementById(id);
+  const api = window.FormWithForecast, el = id => document.getElementById(id);
   const copy = x => structuredClone(x);
   const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number = (x, digits=0) => x === null || !Number.isFinite(x) ? '미확인' : new Intl.NumberFormat('ko-KR',{maximumFractionDigits:digits}).format(x);
@@ -34,7 +34,7 @@
   function remember(path) { draft.evidence[path]={kind:'assumed',source:'사용자 직접 입력',checkedAt:new Date().toISOString().slice(0,10)}; }
   function sourceProjection(source, fresh=false) {
     if(source==='current')return;
-    const w=source==='wallet'?window.MCSWallet?.read():null, main=typeof state==='object'?state:null;
+    const w=source==='wallet'?window.FormWithWallet?.read():null, main=typeof state==='object'?state:null;
     const src=w??main;if(!src)return;
     const previous=new Map(draft.profiles.map(p=>[p.id,p]));
     draft.source=source;draft.fx=src.fx;
@@ -85,9 +85,9 @@
     if(draft.source==='main'&&typeof state==='object'){
       const map={'groups.0.members':'customers','groups.0.quota':'credits','groups.0.priceKrw':'price','groups.0.utilPct':'util','groups.0.purchases':'packs','fx':'fx','business.vatPct':'vat','business.paymentPct':'pg','business.manualInfraKrw':'fixed'};
       if(map[path]){state[map[path]]=get(draft,path);if(path==='groups.0.priceKrw'&&state.pricingMode==='auto')state.pricingMode='manual';}
-    }else if(draft.source==='wallet'&&window.MCSWallet){
-      const raw=window.MCSWallet.read(),map={'groups.0.members':'customers','groups.0.quota':'topup','groups.0.priceKrw':'topup','groups.0.utilPct':'util','groups.0.purchases':'frequency','fx':'fx','business.vatPct':'vat','business.paymentPct':'pg','business.manualInfraKrw':'fixed'};
-      if(map[path]){raw[map[path]]=get(draft,path);syncing=true;try{window.MCSWallet.restore(raw);}finally{syncing=false;}if(path==='groups.0.quota')draft.groups[0].priceKrw=draft.groups[0].quota;}
+    }else if(draft.source==='wallet'&&window.FormWithWallet){
+      const raw=window.FormWithWallet.read(),map={'groups.0.members':'customers','groups.0.quota':'topup','groups.0.priceKrw':'topup','groups.0.utilPct':'util','groups.0.purchases':'frequency','fx':'fx','business.vatPct':'vat','business.paymentPct':'pg','business.manualInfraKrw':'fixed'};
+      if(map[path]){raw[map[path]]=get(draft,path);syncing=true;try{window.FormWithWallet.restore(raw);}finally{syncing=false;}if(path==='groups.0.quota')draft.groups[0].priceKrw=draft.groups[0].quota;}
     }
   }
   function mainInputs() {
@@ -125,7 +125,7 @@
     syncing=true;
     try{
       if(scenario.source==='main'&&Math.abs(state.fixed-amount)>1e-6){state.fixed=amount;window.update();const input=document.querySelector('[data-key="fixed"]');if(input)input.value=amount;}
-      if(scenario.source==='wallet'&&window.MCSWallet){const w=window.MCSWallet.read();if(Math.abs(w.fixed-amount)>1e-6){w.fixed=amount;window.MCSWallet.restore(w);}}
+      if(scenario.source==='wallet'&&window.FormWithWallet){const w=window.FormWithWallet.read();if(Math.abs(w.fixed-amount)>1e-6){w.fixed=amount;window.FormWithWallet.restore(w);}}
     }finally{syncing=false;}
   }
   function render(){
@@ -233,12 +233,12 @@
   el('fc-selection').addEventListener('change',e=>{draft.aws.selection=e.target.value;changed('aws.selection');render();});
   el('fc-example').onclick=()=>{products={};draft=api.createScenario(true);hydrate();};
   el('fc-empty').onclick=()=>{products={};draft=api.createScenario(false);hydrate();el('fc-details').open=true;};
-  const downloadJson=()=>{const s=api.validateScenario(draft);download('MCS-운영비-설정.json',JSON.stringify({schema:'mcs-forecast-config',version:1,scenario:s,launch:api.validateLaunchStrategy(launch)},null,2),'application/json');};
+  const downloadJson=()=>{const s=api.validateScenario(draft);download('FormWith-운영비-설정.json',JSON.stringify({schema:'mcs-forecast-config',version:1,scenario:s,launch:api.validateLaunchStrategy(launch)},null,2),'application/json');};
   el('fc-export').onclick=()=>{try{downloadJson();}catch(err){error(err);}};
   el('fc-import').onclick=()=>el('fc-file').click();
   el('fc-file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>262144)throw Error('설정 파일은 256KB 이하여야 합니다.');const parsed=JSON.parse(await file.text());if(parsed.schema==='mcs-cost-lab'){restoreSession(parsed);window.hydrate();hydrate();showTab(restoredView);return;}const wrapped=parsed.schema==='mcs-forecast-config';if(wrapped&&parsed.version!==1)throw Error('지원하지 않는 설정 버전입니다.');const next=api.validateScenario(wrapped?parsed.scenario:parsed);const nextLaunch=wrapped?api.validateLaunchStrategy(parsed.launch):launch;draft=next;launch=nextLaunch;hydrate();}catch(err){error(err);}finally{e.target.value='';}};
   el('fc-upgrade-prices').onclick=()=>{draft.catalog=copy(api.CURRENT_CATALOG);hydrate();};
-  window.MCSForecastController={
+  window.FormWithForecastController={
     read:()=>api.validateScenario(draft),
     ui:()=>({detailsOpen,products:copy(products),launch:api.validateLaunchStrategy(launch),launchOpen}),
     restoreLegacy:view=>{products={};draft=api.createScenario(false);sourceProjection(view==='wallet'?'wallet':'main',true);hydrate();},

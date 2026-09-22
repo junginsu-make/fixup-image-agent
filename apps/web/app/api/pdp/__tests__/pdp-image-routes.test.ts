@@ -32,6 +32,7 @@ vi.mock("@fixup/pdp-core", async () => {
 });
 
 vi.mock("../../../../lib/membership/api", () => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
   reserveAiUsage: async (_req: Request, _op: string, units: number) => {
     reserved.push(units);
     return { ok: true as const, userId: "u1", requestId: "r1", usage: {} };
@@ -428,5 +429,64 @@ describe("고른 각도가 엔진까지 닿는다", () => {
     );
 
     expect(calls[0]!.options.characterReferences).toBeUndefined();
+  });
+});
+
+/**
+ * **못 불러온 캐릭터로 조용히 만들지 않는다**(A-14).
+ *
+ * 전에는 한 장도 못 불러오면 그냥 `undefined` 를 넘겨 **그 캐릭터 없이** 그림을
+ * 만들고 값을 받았다. 사용자는 캐릭터를 골라 뒀으니 나올 줄 알고, 나온 그림에는
+ * 다른 사람이 있다.
+ *
+ * 설계 §6.2: 「참조가 없으면 **알리고 대체 인물을 자동 생성하지 않는다.**」
+ */
+describe("캐릭터를 못 불러오면 막는다", () => {
+  it("**단건: 한 장도 못 불러오면 400**", async () => {
+    charactersByAngle = {};
+
+    const response = await single(
+      post({ originalImageBase64: "AAAA", section: section("S1"), characterId: "c1", page: {} }),
+    );
+
+    expect(response.status).toBe(400);
+    // 그림을 안 만들었으니 값도 안 나간다.
+    expect(calls).toHaveLength(0);
+  });
+
+  it("**일괄: 한 장도 못 불러오면 400**", async () => {
+    charactersByAngle = {};
+
+    const response = await batch(
+      post({
+        originalImageBase64: "AAAA",
+        sections: [section("S1"), section("S2")],
+        characterId: "c1",
+        page: {},
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("**한 장이라도 불러왔으면 만든다** — 각도 하나가 없다고 막으면 안 된다", async () => {
+    charactersByAngle = { left_45: { base64: "CHAR", mimeType: "image/png", identityPrompt: "같은 사람" } };
+
+    const response = await single(
+      post({ originalImageBase64: "AAAA", section: section("S1"), characterId: "c1", page: {} }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("**캐릭터를 안 골랐으면 전과 같다**", async () => {
+    charactersByAngle = {};
+
+    const response = await single(
+      post({ originalImageBase64: "AAAA", section: section("S1"), page: {} }),
+    );
+
+    expect(response.status).toBe(200);
   });
 });

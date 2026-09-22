@@ -3,10 +3,17 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
-import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, ReferenceModelUsage } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL, mergeArtDirection } from "@fixup/pdp-core";
-import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
-import { buildSectionKeys, deleteAllPdpDrafts, deletePdpDraft, getPdpDraft, listPdpDrafts, purgeExpiredPdpDrafts, savePdpDraft } from "./pdp-drafts";
+import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL, MAX_STRATEGY_LENGTH, PAGE_CONTEXT_MAX_LENGTH, recoverLookWithoutReference, SELLER_BRIEF_MAX_LENGTH, mergeArtDirection, overLimitFields } from "@fixup/pdp-core";
+import { InputLengthHint } from "./InputLengthHint";
+import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PreparedImageDraft, PdpTextDraftState } from "./pdp-drafts";
+import { DraftSaveClock, startDraftAutosave, draftChangeValues } from "./draft-save-clock";
+import { createDraftRepository } from "./draft-repository";
+import { stableSections } from "./document-state";
+import { editorForSections } from "./editor-state";
+import { buildSectionKeys, purgeExpiredPdpDrafts } from "./pdp-drafts";
+import { purgeExpiredPdpDocuments } from "./document-store";
+import { draftSaveFailureMessage } from "./draft-save-failure";
 import { DRAFT_RETENTION_NOTICE } from "./draft-retention";
 import type { CopyIntensity, GapPolicy, SellerBrief } from "@fixup/pdp-core";
 import { COPY_INTENSITIES, GAP_POLICIES, GAP_POLICY_LEGEND } from "./copy-controls";
@@ -31,6 +38,9 @@ import { ScenarioEditor } from "./ScenarioEditor";
 import { CharacterPicker } from "./CharacterPicker";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-utils";
+import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
+import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
+import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText } from "../../lib/browser-safe";
 
@@ -41,7 +51,34 @@ const START_MODES: Array<{ value: CreateMode; label: string; desc: string }> = [
   { value: "text", label: "텍스트로 시작", desc: "사진이 없습니다. 설명을 적으면 구성과 이미지를 만듭니다." },
 ];
 
-export function PdpMakerClient() {
+/**
+ * 되돌리기 한 번을 위해 들고 있는 **재기획 직전의 것**.
+ *
+ * **구성안과 얹은 글자를 한 덩이로 둔다**(A-2). 따로 두면 둘의 수명을 사람이
+ * 맞춰야 하고, 한쪽만 버리는 자리가 생기면 되돌리기가 **남의 레이어**를 들고
+ * 온다. 한 칸이면 그 실수가 나올 자리가 없다.
+ */
+/**
+ * 되찾을 때 묻는 개정판.
+ *
+ * **오늘은 0 하나뿐이다.** 생성 요청도 `jobRequestFields(draftId, 0)` 으로
+ * 늘 0 을 싣는다. 두 자리가 갈리면 만든 것을 못 찾으므로 한 곳에 적어 둔다.
+ *
+ * **옛 구성의 그림을 막는 것은 이 값이 아니다.** 재기획하면 `stableSections`
+ * 가 섹션마다 새 UUID 를 붙여, 옛 작업의 것은 「지금 구성안에 없는 섹션」으로
+ * 걸러진다. 훗날 섹션 id 를 안정 키로 바꾸면 **그때 이 값이 실제로 일해야
+ * 한다** — 그때 개정판을 올리는 것을 잊으면 옛 그림이 새 구성에 붙는다.
+ */
+const RECOVERY_REVISION = 0;
+
+type PreviousPlan = {
+  result: GeneratedResult;
+  /** 다시 짜기 직전 편집기 상태. 그때 편집기에 들어간 적이 없으면 없다. */
+  editor: PdpEditorDraftState | null;
+};
+
+export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enabled?: boolean }) {
+  const draftRepository = useMemo(() => createDraftRepository(documentV3Enabled), [documentV3Enabled]);
   const router = useRouter();
   const searchParams = useSearchParams();
   // 라이브러리에서 ?draft=<id> 로 넘어오면 그 작업을 한 번만 자동으로 연다.
@@ -75,6 +112,7 @@ export function PdpMakerClient() {
   }, []);
   // 텍스트 경로의 중간 단계. 초안에 저장하지 않으므로 컴포넌트 상태로만 둔다.
   const [textStage, setTextStage] = useState<TextStage>("input");
+  const [textDraft, setTextDraft] = useState<PdpTextDraftState | null>(null);
   // 텍스트 경로에서 고른 이미지 모델. 편집기의 섹션 생성까지 이어진다.
   const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL);
   // 텍스트 경로의 구성안 심사 결과. 이미지 경로에는 심사가 없어 비어 있다.
@@ -90,10 +128,18 @@ export function PdpMakerClient() {
    * 그때는 따라갈 것이 없는 것과 같으므로 「레퍼런스 스타일」도 못 쓴다.
    */
   const hasStyleReference = Boolean(styleReference) && styleReferenceEnabled;
+
   const [sellerBrief, setSellerBrief] = useState<SellerBrief>({});
   const [copyIntensity, setCopyIntensity] = useState<CopyIntensity>("normal");
   const [gapPolicy, setGapPolicy] = useState<GapPolicy>("ask");
   const [preserveProduct, setPreserveProduct] = useState(true);
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   *
+   * 비어 있으면 서버가 업로드를 쓴다 — 지금까지의 동작이다. 화면은 그 사실을
+   * 보여 주고 바꿀 수 있게 한다.
+   */
+  const [personSource, setPersonSource] = useState<PersonSource | undefined>(undefined);
   const [characterId, setCharacterId] = useState<string | undefined>(undefined);
   /**
    * 이 캐릭터에서 **쓸 각도**. 비어 있으면 자동 — 서버가 섹션에 맞춰 고른다.
@@ -124,6 +170,22 @@ export function PdpMakerClient() {
    * 먹었는지 알 방법이 없었다.
    */
   const [analyzedBlueprint, setAnalyzedBlueprint] = useState<LandingPageBlueprint | null>(null);
+  /**
+   * 재기획 **직전** 구성안. 되돌리기 한 번을 위해 들고 있다(설계 §4.2:
+   * 「이전 revision을 보존한다」).
+   *
+   * 초안에 저장하지 않는다 — 화면을 다시 열면 「방금 다시 짰다」는 맥락이
+   * 사라지고, 그때 되돌리기 단추만 남으면 무엇으로 돌아가는지 알 수 없다.
+   * (새로고침 뒤의 보존은 `preserveBeforeReplacement` 가 판 보관 초안이 맡는다.)
+   *
+   * **작업을 갈아 끼울 때 버린다**(`resetWorkspace`·`handleLoadDraft`). 안
+   * 버리면 A 를 다시 짠 뒤 B 를 열었을 때 A 의 되돌리기 단추가 살아 있고,
+   * 누르면 **B 위에 A 의 유료 이미지가 앉는다.**
+   *
+   * 작업 id 로 대조하지는 않는다 — 저장 안 한 작업이 자동 저장으로 id 를 받는
+   * 순간, 같은 작업인데도 단추가 사라진다.
+   */
+  const [previousPlan, setPreviousPlan] = useState<PreviousPlan | null>(null);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [desiredTone, setDesiredTone] = useState("");
   /*
@@ -134,7 +196,55 @@ export function PdpMakerClient() {
    * 쓰던 사람의 결과물이 조용히 바뀐다.
    */
   const [look, setLook] = useState<ImageLook>("photoreal");
+
+  /**
+   * 레퍼런스가 **없어지면 그림체를 되돌리고 알린다**(A-10).
+   *
+   * `auto` 는 「붙인 레퍼런스의 결을 따른다」는 뜻이라, 따를 그림이 없어지면
+   * 값이 뜻을 잃는다. 화면은 그 단추를 흐리게 만들 뿐이라 사용자는 여전히
+   * `auto` 가 골라진 것을 본다.
+   *
+   * **없어지는 길이 둘이다** — 토글을 끄는 것과 레퍼런스를 빼는 것. 설계도
+   * 「제거/비활성화」라고 둘을 함께 적었다. 처음에는 토글만 막았고, 그래서
+   * 「레퍼런스 빼기」를 누르면 아무 말도 없었다.
+   */
+  const recoverLook = useCallback((hasReference: boolean) => {
+    const recovery = recoverLookWithoutReference(look, hasReference);
+    if (!recovery) return;
+    setLook(recovery.look);
+    // 조용히 바꾸면 고른 것이 혼자 사라진 것처럼 보인다.
+    setNotice(recovery.notice);
+  }, [look]);
+
+  const toggleStyleReference = useCallback((enabled: boolean) => {
+    setStyleReferenceEnabled(enabled);
+    recoverLook(enabled && Boolean(styleReference));
+  }, [recoverLook, styleReference]);
+
+  /** 레퍼런스를 뺀다. **A-10 의 제목이 가리키는 바로 그 길이다.** */
+  const removeStyleReference = useCallback(() => {
+    setStyleReference(undefined);
+    recoverLook(false);
+  }, [recoverLook]);
+
+  /**
+   * 새 레퍼런스는 **켜진 채로 시작한다**(A-11, 설계 §6.3).
+   *
+   * 전에는 값만 갈아 끼웠다. 앞 레퍼런스에서 토글을 꺼 뒀다면 새로 붙인
+   * 레퍼런스도 **꺼진 채로** 들어와, 붙여 놓고 안 쓰이는 일이 생긴다.
+   */
+  const attachStyleReference = useCallback((reference: StyleReferenceView) => {
+    setStyleReference(reference);
+    setStyleReferenceEnabled(true);
+  }, []);
   const [userInstruction, setUserInstruction] = useState("");
+  /**
+   * **구성·문구 요청**(U-06). 장면 지시(`userInstruction`)와 다른 물건이다.
+   *
+   * 옛 초안에는 없다. 그때 적힌 말은 장면 지시로 남는다 — 지금 와서 구성
+   * 요청으로 읽으면 사용자가 적은 적 없는 뜻이 생긴다.
+   */
+  const [planInstruction, setPlanInstruction] = useState("");
   /** 첨부 자리마다 적는 「이 그림을 어떻게 쓸까요」. 적은 자리의 고정 문구만 빠진다. */
   const [attachmentIntents, setAttachmentIntents] = useState<AttachmentIntents>({});
   const setIntent = useCallback(
@@ -159,48 +269,120 @@ export function PdpMakerClient() {
   const [draftCreatedAt, setDraftCreatedAt] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [editorDraftState, setEditorDraftState] = useState<PdpEditorDraftState | null>(null);
+  // 섹션 내용의 정본은 result.blueprint다. 편집기의 결과도 같은 곳으로 합류한다.
+  const handleEditorDraftStateChange = useCallback((state: PdpEditorDraftState) => {
+    setEditorDraftState(state);
+  }, []);
+  const handleSectionsChange = useCallback((update: React.SetStateAction<LandingPageBlueprint["sections"]>) => {
+    setResult((current) => current ? { ...current, blueprint: { ...current.blueprint,
+      sections: typeof update === "function" ? update(current.blueprint.sections) : update } } : current);
+  }, []);
   const [editorSessionKey, setEditorSessionKey] = useState(0);
+  /**
+   * 되찾은 것을 알리는 한마디(K-04).
+   *
+   * **말없이 바꾸면 무엇이 달라졌는지 모른다.** 없던 그림이 갑자기 들어와
+   * 있으면 사용자는 자기가 만든 것인지 아닌지 가릴 수 없다.
+   */
+  const [recoveredNotice, setRecoveredNotice] = useState("");
+  /**
+   * **어느 장이 왜 안 만들어졌나**(F-7-8).
+   *
+   * 서버가 실패한 섹션도 까닭과 함께 적어 둔다(`lib/pdp/jobs/recorder.ts` 의
+   * `sectionFailed`). 전에는 성공한 것만 적어서 **왜 빠졌는지가 아무 데도 안
+   * 남았고**, 사용자는 집계 숫자만 보고 여덟 장을 통째로 다시 만들었다.
+   */
+  const [recoveredFailures, setRecoveredFailures] = useState<RecoveredFailureLine[]>([]);
+  /** 되찾기를 물어본 초안. 안 적어 두면 질의가 두 번 나간다. */
+  const askedRecoveryRef = useRef<string | null>(null);
+  /**
+   * 되찾기를 **다시 물어보게 하는 표**(K-05).
+   *
+   * 평소에는 초안을 열 때 한 번만 묻는다. 그런데 **같은 요청이 중복으로
+   * 막혔을 때**는 다시 물어야 한다 — 그 사이에 작업이 끝나 서버가 그림을
+   * 들게 됐을 수 있고, 그것이 사용자가 지금 못 받고 있는 바로 그 그림이다.
+   */
+  const [recoveryNonce, setRecoveryNonce] = useState(0);
+  const [undoDraftId, setUndoDraftId] = useState<string | null>(null);
+  const [scenarioBusy, setScenarioBusy] = useState(false);
+  const scenarioBusyRef = useRef(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [manualSaveToastToken, setManualSaveToastToken] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
   const isApplyingDraftRef = useRef(false);
   const saveInFlightRef = useRef(false);
+  const saveClockRef = useRef(new DraftSaveClock());
 
   const selectedRatio = useMemo(() => RATIO_OPTIONS.find((option) => option.value === aspectRatio) ?? RATIO_OPTIONS[2], [aspectRatio]);
   const selectedToneLabel = desiredTone || "AI 자동 추천";
   const preparedImageDisplayName = preparedImage ? formatCompactFileName(preparedImage.fileName) : "";
   const modelImageDisplayName = modelImage ? formatCompactFileName(modelImage.fileName) : "";
-  const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId);
-  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage));
+  const hasDraftContent = Boolean(preparedImage || modelImage || result || additionalInfo.trim() || desiredTone.trim() || activeDraftId || textDraft?.text.trim() || styleReference || userInstruction.trim() || planInstruction.trim() || Object.values(sellerBrief).some(Boolean));
+  /**
+   * 넘친 입력 칸. **막기 전에 어느 칸인지 말한다**(U-08).
+   *
+   * 전에는 서버가 「요청이 올바르지 않습니다」 한 줄로 되돌려보냈다 — 어느 칸이
+   * 왜 걸렸는지 알 길이 없었다.
+   */
+  const overLimit = useMemo(
+    /*
+      **이 문이 막는 것은 기획 요청이다.**
+
+      그래서 기획 요청이 **실제로 싣는 칸만** 본다(`buildAnalyzeRequest`).
+      「이미지 연출 요청」(`userInstruction`)은 여기 안 실린다 — 그 칸은
+      `buildPageWire` 를 거쳐 **만들기** 요청에만 간다.
+
+      처음엔 그 칸도 여기서 봤다. 리뷰가 잡았다: **반대쪽 문에 걸려 있었다** —
+      기획을 엉뚱하게 막으면서 정작 그 칸을 싣는 만들기는 안 막았다.
+      만들기 쪽 문지기는 `PdpEditor` 에 따로 있다.
+    */
+    () => overLimitFields(sellerBrief, additionalInfo, SELLER_BRIEF_LABELS, {
+      planInstruction,
+      // 기획은 첨부 지시 중 **디자인 레퍼런스 것만** 싣는다
+      // (`buildAnalyzeRequest` 의 `styleReference.intent`).
+      styleIntent: attachmentIntents.style,
+    }),
+    [sellerBrief, additionalInfo, planInstruction, attachmentIntents.style],
+  );
+  const canAnalyze = Boolean(preparedImage && (!modelImage || modelImageUsage) && overLimit.length === 0);
+  /** 넘친 칸을 사용자 말로. 단추 아래와 오류 문구가 **같은 말**을 쓴다. */
+  const overLimitMessage = overLimit.length
+    ? `${overLimit.map((field) => `${field.label} ${field.length - field.limit}자 초과`).join(", ")}. 줄인 뒤 다시 눌러 주세요.`
+    : "";
 
   const goToSettings = useCallback(() => router.push("/settings"), [router]);
+  const protectedDraftId = activeDraftId ?? searchParams.get("draft");
 
   const refreshDrafts = useCallback(async () => {
     setIsLoadingDrafts(true);
     try {
       // 목록을 읽을 때 만료된 것을 함께 치운다. 따로 도는 청소 작업을 두면
       // 언제 도는지 알 수 없고, 브라우저를 안 열면 영영 안 돈다.
-      await purgeExpiredPdpDrafts();
-      setDrafts(await listPdpDrafts());
+      // v3 이관 전에 원본을 만료 청소하지 않는다. 새 저장소의 보관 정책은 별도 적용한다.
+      /*
+        **저장소를 갈아도 약속은 그대로다**(E-6-3-b).
+
+        전에는 `if (!documentV3Enabled)` 가 붙어 있었다. 새 저장소를 켜는 순간
+        청소가 멈추는데, 화면은 「30일이 지나면 자동으로 삭제됩니다」를 그대로
+        띄운다 — **지키는 코드가 없는 약속**이 된다.
+
+        둘 다 부른다. 새 저장소를 켜도 옛 초안이 남아 있을 수 있고(이관 전에
+        만든 것), 둘 다 그 약속의 대상이다.
+      */
+      const 지킬것 = protectedDraftId ? [protectedDraftId] : [];
+      await purgeExpiredPdpDrafts(new Date(), 지킬것);
+      await purgeExpiredPdpDocuments(new Date(), 지킬것);
+      setDrafts(await draftRepository.list());
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "저장된 작업 목록을 불러오지 못했습니다.");
     } finally {
       setIsLoadingDrafts(false);
     }
-  }, []);
+  }, [draftRepository, documentV3Enabled, protectedDraftId]);
 
   useEffect(() => {
     void refreshDrafts();
   }, [refreshDrafts]);
-
-  useEffect(() => {
-    if (isApplyingDraftRef.current || !hasDraftContent) {
-      return;
-    }
-
-    setIsDirty(true);
-    setSaveState((current) => (current === "saved" ? "idle" : current));
-  }, [additionalInfo, appState, aspectRatio, desiredTone, editorDraftState, hasDraftContent, modelImage, modelImageUsage, preparedImage, result]);
 
   const handlePreparedImage = async (file: File) => {
     try {
@@ -259,9 +441,18 @@ export function PdpMakerClient() {
           desiredTone,
           look,
           userInstruction,
+          planInstruction,
           attachmentIntents,
           styleReference,
           styleReferenceEnabled,
+          imageModel,
+          characterId,
+          characterAngles,
+          preserveProduct,
+          personSource,
+          startMode,
+          analyzedBlueprint,
+          textDraft,
           aspectRatio,
           notice,
           editorDraftState,
@@ -269,8 +460,18 @@ export function PdpMakerClient() {
         },
         hasDraftContent,
       ),
-    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, attachmentIntents, styleReference, styleReferenceEnabled],
+    [activeDraftId, additionalInfo, sellerBrief, copyIntensity, gapPolicy, appState, aspectRatio, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, look, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, userInstruction, planInstruction, attachmentIntents, styleReference, styleReferenceEnabled, imageModel, characterId, characterAngles, preserveProduct, personSource, startMode, analyzedBlueprint, textDraft],
   );
+
+  const draftSnapshot = useMemo(() => buildDraftInput(), [buildDraftInput]);
+  useEffect(() => {
+    if (!draftSnapshot) return;
+    const clock = saveClockRef.current;
+    clock.observe(draftChangeValues({ ...draftSnapshot, editorState: editorDraftState }));
+    if (isApplyingDraftRef.current) clock.acknowledge(clock.revision);
+    setIsDirty(clock.dirty);
+    if (clock.dirty) setSaveState((current) => current === "saved" ? "idle" : current);
+  }, [draftSnapshot, editorDraftState]);
 
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
@@ -280,16 +481,20 @@ export function PdpMakerClient() {
       }
 
       saveInFlightRef.current = true;
+      const savingClock = saveClockRef.current;
+      const savingRevision = savingClock.revision;
       setSaveState("saving");
 
       try {
-        const savedDraft = await savePdpDraft(input);
-        isApplyingDraftRef.current = true;
+        const savedDraft = await draftRepository.save(input);
+        // 저장을 기다리는 동안 다른 작업을 열었으면 그 화면의 ID/dirty를 덮지 않는다.
+        if (saveClockRef.current !== savingClock) return savedDraft;
         setActiveDraftId(savedDraft.id);
         setDraftCreatedAt(savedDraft.createdAt);
         setLastSavedAt(savedDraft.updatedAt);
-        setSaveState("saved");
-        setIsDirty(false);
+        saveClockRef.current.acknowledge(savingRevision);
+        setSaveState(saveClockRef.current.dirty ? "idle" : "saved");
+        setIsDirty(saveClockRef.current.dirty);
         if (mode === "manual") {
           setNotice("현재 작업을 저장했습니다. 시작 화면에서 이어서 작업할 수 있습니다.");
           if (options?.showToast) {
@@ -300,7 +505,8 @@ export function PdpMakerClient() {
         return savedDraft;
       } catch (error) {
         setSaveState("error");
-        setErrorMessage("작업을 저장하지 못했습니다.");
+        // 용량이 찬 것과 그냥 실패한 것은 할 일이 다르다(E-6-3-a).
+        setErrorMessage(draftSaveFailureMessage(error));
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
         return null;
       } finally {
@@ -310,7 +516,7 @@ export function PdpMakerClient() {
         });
       }
     },
-    [buildDraftInput, refreshDrafts]
+    [buildDraftInput, refreshDrafts, draftRepository]
   );
 
   const confirmSaveBeforeLeaving = useCallback(async () => {
@@ -327,13 +533,48 @@ export function PdpMakerClient() {
     return Boolean(savedDraft);
   }, [hasDraftContent, isDirty, persistDraft]);
 
+  const preserveBeforeReplacement = useCallback(async () => {
+    const input = buildDraftInput();
+    if (!input) return true;
+    try {
+      const backup = await draftRepository.preserve(input);
+      setUndoDraftId(backup.id);
+      await refreshDrafts();
+      return true;
+    } catch (error) {
+      setErrorMessage("이전 작업을 보관하지 못해 변경을 중단했습니다.");
+      setErrorDetail(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  }, [buildDraftInput, refreshDrafts, draftRepository]);
+
   const resetWorkspace = useCallback(() => {
     isApplyingDraftRef.current = true;
+    // 다른 작업으로 간다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
+    setPreviousPlan(null);
+    // 되찾기도 앞 작업의 것이다. 안 비우면 아무것도 안 되찾은 새 작업에
+    // 「2장을 되찾았습니다」가 그대로 떠 있는다.
+    setRecoveredNotice("");
+    setRecoveredFailures([]);
+    askedRecoveryRef.current = null;
     setAppState("upload");
     setPreparedImage(null);
     setModelImage(null);
     setModelImageUsage(null);
     setResult(null);
+    setUndoDraftId(null);
+    setAnalyzedBlueprint(null);
+    setTextDraft(null);
+    setTextStage("input");
+    setImageModel(DEFAULT_IMAGE_MODEL);
+    setCharacterId(undefined);
+    setCharacterAngles([]);
+    setPreserveProduct(true);
+    setLook("photoreal");
+    setUserInstruction("");
+    // 새 제품이다. 앞 작업의 구성 요청을 들고 가면 유료 기획 결과가 그 말로 바뀐다.
+    setPlanInstruction("");
+    saveClockRef.current = new DraftSaveClock();
     setAdditionalInfo("");
     setSellerBrief({});
     setCopyIntensity("normal");
@@ -377,7 +618,7 @@ export function PdpMakerClient() {
       setShowErrorDetail(false);
 
       try {
-        const draft = await getPdpDraft(draftId);
+        const draft = await draftRepository.get(draftId);
         if (!draft) {
           setErrorMessage("저장된 작업을 찾지 못했습니다.");
           await refreshDrafts();
@@ -385,13 +626,31 @@ export function PdpMakerClient() {
         }
 
         isApplyingDraftRef.current = true;
+        // 다른 작업을 연다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
+        setPreviousPlan(null);
+        // 되찾기 알림도 앞 작업의 것이다.
+        setRecoveredNotice("");
+        setRecoveredFailures([]);
+        askedRecoveryRef.current = null;
         setActiveDraftId(draft.id);
         setDraftCreatedAt(draft.createdAt);
         setLastSavedAt(draft.updatedAt);
         setPreparedImage(draft.preparedImage);
         setModelImage(draft.modelImage ?? null);
         setModelImageUsage(draft.modelImageUsage ?? null);
-        setResult(draft.result);
+        setResult(draft.result && draft.editorState?.sections.length
+          ? { ...draft.result, blueprint: { ...draft.result.blueprint, sections: draft.editorState.sections } }
+          : draft.result);
+        setImageModel(draft.imageModel ?? DEFAULT_IMAGE_MODEL);
+        setCharacterId(draft.characterId);
+        setCharacterAngles(draft.characterAngles ?? []);
+        setPreserveProduct(draft.preserveProduct ?? true);
+        setPersonSource(draft.personSource);
+        setStartMode(draft.startMode ?? "image");
+        setAnalyzedBlueprint(draft.analyzedBlueprint ?? null);
+        setTextDraft(draft.textDraft ?? null);
+        setTextStage(draft.textDraft?.stage ?? "input");
+        saveClockRef.current = new DraftSaveClock();
         // 심사 결과도 함께 되살린다. 안 넘기면 지적이 있어도 화면이 늘 비어 있다.
         setReview(draft.result?.review);
         setAdditionalInfo(draft.additionalInfo);
@@ -401,11 +660,26 @@ export function PdpMakerClient() {
         setDesiredTone(draft.desiredTone);
         setLook(draft.look ?? "photoreal");
         setUserInstruction(draft.userInstruction ?? "");
+        setPlanInstruction(draft.planInstruction ?? "");
         // 안 되돌리면 앞 작업의 제품 지시가 새 제품에 그대로 붙는다.
         setAttachmentIntents(draft.attachmentIntents ?? {});
         // 그림과 그 그림에 적은 말은 함께 움직여야 짝이 안 어긋난다.
         setStyleReference(draft.styleReference ?? undefined);
         setStyleReferenceEnabled(draft.styleReferenceEnabled ?? true);
+        /*
+          **이미 깨진 초안이 되살아나지 않게 한다**(A-10).
+
+          이 변경 전에 저장된 초안은 「`auto` + 레퍼런스 없음」인 채로 남아
+          있다. 복구 없이 불러오면 A-10 이 고치려던 상태가 그대로 화면에 오른다.
+        */
+        const 복구 = recoverLookWithoutReference(
+          draft.look ?? "photoreal",
+          Boolean(draft.styleReference) && (draft.styleReferenceEnabled ?? true),
+        );
+        if (복구) {
+          setLook(복구.look);
+          setNotice(복구.notice);
+        }
         setAspectRatio(draft.aspectRatio);
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
@@ -424,7 +698,7 @@ export function PdpMakerClient() {
         });
       }
     },
-    [confirmSaveBeforeLeaving, refreshDrafts]
+    [confirmSaveBeforeLeaving, refreshDrafts, draftRepository]
   );
 
   // 라이브러리에서 '이어서 편집'으로 넘어오면 ?draft=<id> 를 읽어 그 작업을 연다.
@@ -437,6 +711,102 @@ export function PdpMakerClient() {
     autoloadedDraftRef.current = true;
     void handleLoadDraft(draftId);
   }, [searchParams, handleLoadDraft]);
+
+  /**
+   * **돌아오면 만들어 둔 그림을 되찾는다**(K-04, 설계 §8).
+   *
+   * ── 무엇을 고치나 ────────────────────────────────────────
+   *
+   * 그림은 브라우저로만 갔다. 탭을 닫으면 **이미 값을 치른 그림이 사라지고**
+   * 사용자는 다시 눌러 두 번 낸다. 서버는 그동안 그것을 저장소에 올려 두는데
+   * (`lib/pdp/jobs/recorder.ts`), 가지러 가는 화면이 없었다.
+   *
+   * ── 조심하는 것 셋 ───────────────────────────────────────
+   *
+   * **이미 있는 그림을 안 덮는다.** 되찾기가 그 뒤에 한 편집을 지우면 고치려던
+   * 손실을 다른 모양으로 다시 내는 셈이다. 무엇을 고르는지는
+   * `recoverableSections` 가 값으로 정한다.
+   *
+   * **한 번만 묻는다.** 되찾아 넣으면 `result` 가 바뀌어 이 효과가 다시 돈다.
+   * 적어 두지 않으면 **두 번** 나간다(실측). 끝없이 돌지는 않는다 — 두 번째는
+   * 칸이 차 있어 `recoverableSections` 가 빈 목록을 주고 멈춘다. 그래도 값이
+   * 안 나가는 질의를 두 배로 보낼 까닭이 없다.
+   *
+   * **못 찾아도 조용하다.** 스위치가 꺼져 있으면 서버는 늘 404 다. 그때 화면이
+   * 흔들리면 만들기 자체를 못 한다.
+   */
+  useEffect(() => {
+    const sections = result?.blueprint.sections ?? [];
+    if (!shouldAskForRecovery(activeDraftId, sections)) return;
+    // 다시 물어보라는 표가 올라오면 그때는 또 묻는다(K-05).
+    const 표 = `${activeDraftId}#${recoveryNonce}`;
+    if (askedRecoveryRef.current === 표) return;
+    askedRecoveryRef.current = 표;
+
+    void (async () => {
+      try {
+        // 개정판은 생성 요청에 싣는 값과 같아야 한다(`jobRequestFields`).
+        const answer = await apiJson<{ ok?: boolean; job?: RecoverableJob }>(
+          `/pdp/jobs?documentId=${encodeURIComponent(String(activeDraftId))}&revision=${RECOVERY_REVISION}`,
+        );
+        if (!answer?.ok || !answer.job) return;
+
+        /*
+          **안 만들어진 장을 먼저 말한다**(F-7-8).
+
+          되찾을 그림이 하나도 없는 경우가 **바로 이 항목이 고치려는 경우**다 —
+          다 실패했으면 사용자는 까닭을 가장 알고 싶다. 아래 조기 반환 뒤에
+          두면 그때 아무 말도 안 하게 된다.
+
+          지금 화면에 그림이 있는 섹션은 그 뒤 다시 만들어 성공한 것이므로
+          `recoveredFailureLines` 가 뺀다 — 안 빼면 **다 만들고도 「실패
+          1장」이 남는다**.
+        */
+        setRecoveredFailures(recoveredFailureLines(answer.job.items, sections));
+
+        const 고른것 = recoverableSections(answer.job, sections);
+        if (!고른것.length) return;
+
+        /*
+          **그 자리에서 구워 들인다**(리뷰 HIGH).
+
+          서버가 주는 것은 한 시간짜리 서명 주소다. 그대로 넣으면 자동 저장이
+          그것을 초안에 적고 **한 시간 뒤 깨진 그림으로 열린다** — 그때는 칸이
+          차 있어 되찾을 수도 없다.
+        */
+        const 되찾을것 = await bakeRecoveredImages(고른것, fetch);
+
+        const 주소 = new Map(되찾을것.map((image) => [image.sectionId, image.url]));
+        /*
+          **실제로 넣은 장수를 센다**(리뷰 MEDIUM).
+
+          고른 것은 **물을 때**의 섹션으로 셌는데, 넣기는 **최신** 섹션에
+          대해 한 번 더 거른다. 고른 수로 말하면 한 장도 안 넣고 「1장을
+          되찾았습니다」라고 하는 일이 생긴다.
+        */
+        let 넣은수 = 0;
+        setResult((current) => {
+          if (!current) return current;
+          넣은수 = 0;
+          const sections = current.blueprint.sections.map((section) => {
+            const url = 주소.get(section.section_id);
+            // 그 사이에 그림이 생겼으면 그대로 둔다. 덮으면 편집이 날아간다.
+            if (!url || section.generatedImage) return section;
+            넣은수 += 1;
+            return { ...section, generatedImage: url };
+          });
+          return { ...current, blueprint: { ...current.blueprint, sections } };
+        });
+        if (넣은수 > 0) {
+          setRecoveredNotice(
+            `만들어 두었던 이미지 ${넣은수}장을 되찾았습니다. 다시 만들지 않아도 됩니다.`,
+          );
+        }
+      } catch {
+        // 되찾기는 덤이다. 실패해도 만들기를 막지 않는다.
+      }
+    })();
+  }, [activeDraftId, result, recoveryNonce]);
 
   /**
    * 저장된 작업을 모두 지운다.
@@ -454,7 +824,7 @@ export function PdpMakerClient() {
     }
 
     try {
-      await deleteAllPdpDrafts();
+      for (const draft of drafts) await draftRepository.remove(draft.id);
       resetWorkspace();
       await refreshDrafts();
       setNotice("저장된 작업을 모두 삭제했습니다.");
@@ -462,7 +832,7 @@ export function PdpMakerClient() {
       setErrorMessage("저장된 작업을 삭제하지 못했습니다.");
       setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     }
-  }, [drafts.length, refreshDrafts, resetWorkspace]);
+  }, [drafts, draftRepository, refreshDrafts, resetWorkspace]);
 
   const handleDeleteDraft = useCallback(
     async (draftId: string) => {
@@ -472,7 +842,7 @@ export function PdpMakerClient() {
       }
 
       try {
-        await deletePdpDraft(draftId);
+        await draftRepository.remove(draftId);
         if (activeDraftId === draftId) {
           resetWorkspace();
         }
@@ -482,7 +852,7 @@ export function PdpMakerClient() {
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       }
     },
-    [activeDraftId, refreshDrafts, resetWorkspace]
+    [activeDraftId, draftRepository, refreshDrafts, resetWorkspace]
   );
 
   useEffect(() => {
@@ -499,23 +869,36 @@ export function PdpMakerClient() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasDraftContent, isDirty]);
 
-  useEffect(() => {
-    if (!hasDraftContent) {
+  const autosaveRef = useRef(() => {});
+  autosaveRef.current = () => {
+    if (hasDraftContent && isDirty && !isApplyingDraftRef.current) void persistDraft("auto");
+  };
+  useEffect(() => startDraftAutosave(() => autosaveRef.current()), []);
+
+  /**
+   * 구성안을 짓는다.
+   *
+   * `strategyDirective` 가 있으면 **고친 전략으로 다시 짜는 것**이다(U-11).
+   * 없으면 처음 기획이다.
+   */
+  const handleAnalyze = async (strategyDirective?: string) => {
+    // 실패하면 여기로 돌려보낸다. 구성 화면에서 눌렀는데 편집기로 가면 안 된다.
+    const enteredFrom = appState;
+    /*
+      **입구가 둘이다**(U-08).
+
+      업로드 화면 단추는 `canAnalyze` 로 막히는데, 구성안 화면의 「이 전략으로
+      구성 다시 만들기」는 그 문지기를 안 지난다. 501자를 담은 옛 초안 —
+      전에는 기획에 상한이 없어 그런 초안이 생길 수 있었다 — 을 열어 거기서
+      누르면 **조용한 400** 이 난다. 없애려던 바로 그 화면이다.
+
+      그래서 함수 머리에서 막는다. 문구도 단추 아래와 **같은 것**을 쓴다.
+    */
+    if (overLimit.length > 0) {
+      setErrorMessage(overLimitMessage);
+      setAppState("upload");
       return;
     }
-
-    const timer = window.setInterval(() => {
-      if (!isDirty) {
-        return;
-      }
-
-      void persistDraft("auto");
-    }, 30000);
-
-    return () => window.clearInterval(timer);
-  }, [hasDraftContent, isDirty, persistDraft]);
-
-  const handleAnalyze = async () => {
     if (!preparedImage) {
       setErrorMessage("먼저 제품 이미지를 업로드해 주세요.");
       return;
@@ -534,6 +917,14 @@ export function PdpMakerClient() {
     setAnalysisStartedAt(Date.now());
 
     try {
+      /*
+        재기획이 기존 유료 이미지와 레이어의 유일한 저장본을 덮어쓰지 않게 한다.
+
+        **왔던 화면으로 돌려보낸다.** 전에는 늘 편집기로 보냈는데, 구성 화면에서
+        누르는 길(전략 재기획)이 생기면서 어긋났다 — 게다가 오류 문구는 업로드
+        화면에서만 그려져 편집기에서는 아무 설명이 없다.
+      */
+      if (result && !(await preserveBeforeReplacement())) { setAppState(enteredFrom); return; }
       setLoadingStep("제품을 분석하고 상세페이지 구조를 설계하는 중입니다.");
 
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
@@ -552,6 +943,9 @@ export function PdpMakerClient() {
             styleReference,
             styleReferenceEnabled,
             attachmentIntents,
+            strategyDirective,
+            planInstruction,
+            look,
           }),
         })
       });
@@ -563,8 +957,16 @@ export function PdpMakerClient() {
         return;
       }
 
-      setResult(response.result);
-      setAnalyzedBlueprint(response.result.blueprint);
+      const blueprint = { ...response.result.blueprint, sections: stableSections(response.result.blueprint.sections) };
+      /*
+        다시 짠 것이면 직전 구성을 들고 있는다. 처음 기획이면 되돌릴 것이 없다.
+
+        **얹은 글자도 한 덩이로 담는다**(A-2). 바로 아래에서 화면의 편집기
+        상태를 비우므로, 여기서 안 들고 있으면 되돌려도 레이어가 안 돌아온다.
+      */
+      setPreviousPlan(strategyDirective && result ? { result, editor: editorDraftState } : null);
+      setResult({ ...response.result, blueprint });
+      setAnalyzedBlueprint(blueprint);
       // 심사 결과를 시나리오 화면에 넘긴다. 사진 경로에도 심사가 붙었는데
       // 받아 두지 않으면 화면은 늘 비어 있다.
       setReview(response.result.review);
@@ -572,7 +974,11 @@ export function PdpMakerClient() {
       setEditorSessionKey((current) => current + 1);
       // 바로 편집기로 보내면 구성안을 볼 기회가 없다. 이미지는 한 장에 돈이 드니
       // 만들기 전에 카피·장면·레퍼런스를 확인할 수 있어야 한다.
-      setNotice("구성안이 나왔습니다. 문구와 장면을 확인하고 필요하면 고쳐 주세요.");
+      setNotice(
+        strategyDirective
+          ? "고친 전략으로 구성을 다시 짰습니다. 이전 구성은 저장된 작업에 보관했습니다."
+          : "구성안이 나왔습니다. 문구와 장면을 확인하고 필요하면 고쳐 주세요.",
+      );
       setAppState("scenario");
     } catch (error) {
       setAppState("upload");
@@ -593,14 +999,29 @@ export function PdpMakerClient() {
     chosenPreserveProduct?: boolean,
     chosenCharacterId?: string,
     chosenCharacterAngles?: string[],
+    chosenPersonSource?: PersonSource,
   ) => {
     setImageModel(model);
+    /*
+      **앞 작업의 되돌리기를 버린다.**
+
+      이미지 모드로 다시 짠 뒤(되돌리기가 담긴 상태) 업로드로 돌아가 글 모드로
+      갈아타면, `result` 만 새 것으로 바뀌고 되돌리기는 그대로 남았다. 그러면
+      **글로 만든 작업 화면에 「이전 구성으로 되돌리기」가 떠 있고**, 누르면
+      통째로 앞 작업으로 바뀐다.
+    */
+    setPreviousPlan(null);
     setReview(blueprintReview);
-    setStyleReference(chosenStyleReference);
+    // 붙이면 켜진다 — A-11 의 불변식은 여기도 같다.
+    if (chosenStyleReference) attachStyleReference(chosenStyleReference);
+    else setStyleReference(undefined);
     setPreserveProduct(chosenPreserveProduct ?? true);
     setCharacterId(chosenCharacterId);
     setCharacterAngles(chosenCharacterAngles ?? []);
+    // 글 경로에서 고른 것도 편집기로 이어진다(U-04).
+    setPersonSource(chosenPersonSource);
     setResult(generated);
+    setAnalyzedBlueprint(generated.blueprint);
     setEditorDraftState(null);
     setEditorSessionKey((current) => current + 1);
     setNotice("시나리오와 대표 이미지를 정했습니다. 이제 섹션별 이미지를 만들어 보세요.");
@@ -624,6 +1045,21 @@ export function PdpMakerClient() {
 
     resetWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleScenarioChange = async (blueprint: LandingPageBlueprint) => {
+    if (!result || scenarioBusyRef.current) return;
+    const before = result;
+    const removedImage = before.blueprint.sections.some((section) => section.generatedImage &&
+      !blueprint.sections.some((next) => next.section_id === section.section_id));
+    if (removedImage) {
+      scenarioBusyRef.current = true; setScenarioBusy(true);
+      try { if (!(await preserveBeforeReplacement())) return; }
+      finally { scenarioBusyRef.current = false; setScenarioBusy(false); }
+    }
+    setResult((current) => current === before ? { ...before, blueprint: mergeArtDirection(
+      analyzedBlueprint ?? { ...blueprint, sections: [] }, blueprint,
+    ) } : current);
   };
 
   /**
@@ -655,37 +1091,84 @@ export function PdpMakerClient() {
         {notice ? (
           <p className="rounded-md bg-primary-soft p-3.5 text-sm text-foreground">{notice}</p>
         ) : null}
+        {result.planningExecutions?.some((entry) => entry.fallbackFrom) ? <p role="status" className="text-sm text-muted-foreground">대체 기획 모델로 작성한 구성안입니다. 내용을 확인해 주세요.</p> : null}
         <ScenarioEditor
           attachmentIntents={attachmentIntents}
           onIntentChange={setIntent}
           blueprint={result.blueprint}
           referenceModelName={modelImage ? modelImageDisplayName : undefined}
+          referenceModelUsage={modelImageUsage}
           onReferenceModelRemove={() => {
             setModelImage(null);
             setModelImageUsage(null);
             setNotice("인물 이미지를 뺐습니다. 이후 생성에는 반영되지 않습니다.");
           }}
           review={review}
+          // 사진에서 제품을 충분히 읽었는가. 못 읽었으면 화면이 말해야 한다(U-13).
+          productReadingStatus={result.productReadingStatus}
+          // **화면 토글값이 아니라 그 실행에 실제로 쓰인 것**을 넘긴다. 사용자는
+          // 결과를 본 뒤에도 정책을 바꿀 수 있어, 지금 값으로는 「무엇을 했는가」를
+          // 되짚을 수 없다.
+          gapOutcome={result.copyGapOutcome}
           styleReference={styleReference}
           styleReferenceEnabled={styleReferenceEnabled}
-          onStyleReferenceToggle={setStyleReferenceEnabled}
-          onStyleReferenceAttached={setStyleReference}
+          onStyleReferenceToggle={toggleStyleReference}
+          onStyleReferenceAttached={attachStyleReference}
           preserveProduct={preserveProduct}
           onPreserveProductChange={setPreserveProduct}
           characterId={characterId}
           characterAngles={characterAngles}
           onCharacterChange={chooseCharacter}
+          personSource={personSource}
+          onPersonSourceChange={setPersonSource}
           outputMode={outputMode}
           imageModel={imageModel}
-          isBusy={false}
-          onChange={(blueprint: LandingPageBlueprint) => setResult({ ...result, blueprint })}
+          isBusy={scenarioBusy}
+          onChange={handleScenarioChange}
           onModelChange={setImageModel}
-          onRegenerate={() => void handleAnalyze()}
+          onRegenerate={() => { setAppState("upload"); if (startMode === "text") setTextStage("input"); }}
+          // 고친 전략으로 **구성만** 다시 짠다. 업로드까지 되돌리지 않는다(U-11).
+          onReplanFromStrategy={(strategy) => void handleAnalyze(strategy)}
+          onRestorePreviousPlan={
+            previousPlan
+              ? async () => {
+                  /*
+                    **되돌리기도 보관을 먼저 지난다.**
+
+                    다시 짠 뒤 이미지를 만들고 돌아와 되돌리면, 그 유료 이미지가
+                    통째로 사라진다. 다른 모든 덮어쓰기 자리는 보관본을 판다 —
+                    여기만 빠져 있었다.
+                  */
+                  if (!(await preserveBeforeReplacement())) return;
+
+                  const restoring = previousPlan;
+                  setPreviousPlan(null);
+                  setResult(restoring.result);
+                  setAnalyzedBlueprint(restoring.result.blueprint);
+                  setReview(restoring.result.review);
+                  /*
+                    **그때 얹었던 글자를 되살린다**(A-2).
+
+                    되살리는 것은 **다시 짜기 직전**, 곧 지금 돌아가는 그
+                    구성의 레이어라 남의 것이 아니다. 넘기는 길에
+                    `editorForSections` 가 섹션 열쇠로 한 번 더 거른다.
+
+                    세션 열쇠 갱신은 **오늘 기준으로 효과가 없다.** 되돌리기는
+                    구성안 화면에만 있고 그때 편집기는 이미 내려가 있어, 다음에
+                    열 때 어차피 새로 마운트된다. 훗날 편집기 위에서 되돌릴 수
+                    있게 되면 그때 필요해지므로 남겨 둔다.
+                  */
+                  setEditorDraftState(restoring.editor);
+                  setEditorSessionKey((current) => current + 1);
+                  setNotice("이전 구성으로 되돌렸습니다. 되돌리기 전 작업은 저장된 작업에 보관했습니다.");
+                }
+              : undefined
+          }
           onConfirm={() => {
             // 고친 한국어 이미지 방향을 실제 생성에 쓰이는 prompt_en 에 실어 보낸다.
-            if (analyzedBlueprint) {
-              setResult({ ...result, blueprint: mergeArtDirection(analyzedBlueprint, result.blueprint) });
-            }
+            setResult({ ...result, blueprint: mergeArtDirection(
+              analyzedBlueprint ?? { ...result.blueprint, sections: [] }, result.blueprint,
+            ) });
             setNotice("섹션별 이미지를 만들어 보세요.");
             setAppState("editor");
           }}
@@ -698,10 +1181,16 @@ export function PdpMakerClient() {
     return (
       <PdpEditor
         key={`${activeDraftId ?? "new"}-${editorSessionKey}`}
+        // 생성 결과를 서버에 적을 때 무엇의 것인지 묶는 값.
+        draftId={activeDraftId}
         aspectRatio={aspectRatio}
         outputMode={outputMode}
         imageModel={imageModel}
         review={review}
+        // 편집기에서 섹션을 더할 때도 같은 디자인을 물려준다(U-15).
+        designSystem={result.blueprint.designSystem}
+        // 둘 다 골랐을 때 누구를 쓸지. 구성안 화면에서 고른 것이 여기로 온다(U-04).
+        personSource={personSource}
         // 시나리오 화면의 '디자인 레퍼런스 쓰기' 토글을 여기서 지켜야 한다.
         // 그냥 styleReference 를 넘기면 껐는데도 반영된다 — 토글이 거짓말이 된다.
         styleReference={styleReferenceEnabled ? styleReference : undefined}
@@ -709,19 +1198,38 @@ export function PdpMakerClient() {
         characterId={characterId}
         characterAngles={characterAngles}
         startMode={startMode}
+        // 사진 없이 실물을 팔 때를 가린다(N-2). 글 경로에서 사용자가 고른 값이다.
+        productKind={textDraft?.brief?.productKind}
         desiredTone={desiredTone}
         look={look}
         userInstruction={userInstruction}
-        initialDraftState={editorDraftState}
+        initialDraftState={editorDraftState ? editorForSections(editorDraftState, result.blueprint.sections) : null}
         initialResult={result}
+        recoveredNotice={recoveredNotice}
+        recoveredFailures={recoveredFailures}
+        /*
+          **같은 요청이 막히면 만들어 둔 것을 되찾으러 간다**(K-05).
+
+          화면은 같은 묶음을 다시 누를 때 같은 요청 식별자를 쓴다 — 두 번
+          과금을 막는 장치다. 그런데 그 식별자로 다시 오면 서버는 중복으로
+          거절하고 끝이라, 사용자는 **이미 값을 치른 그림을 못 받은 채**
+          막혔다. 서버는 그 그림을 들고 있다.
+        */
+        onDuplicateRequest={() => setRecoveryNonce((current) => current + 1)}
         lastSavedAt={lastSavedAt}
         manualSaveToastToken={manualSaveToastToken}
-        onDraftStateChange={setEditorDraftState}
+        onDraftStateChange={handleEditorDraftStateChange}
+        onSectionsChange={handleSectionsChange}
+        onBeforeReplace={preserveBeforeReplacement}
+        onUndo={undoDraftId ? () => void handleLoadDraft(undoDraftId) : undefined}
         onManualSave={() => void persistDraft("manual", { showToast: true })}
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
         pageContext={additionalInfo}
-        onJumpStep={(id) => setAppState(id === "upload" ? "upload" : "scenario")}
+        onJumpStep={(id) => {
+          setAppState(id === "upload" ? "upload" : "scenario");
+          if (id === "upload" && startMode === "text") setTextStage("input");
+        }}
         referenceModelImage={modelImage}
         referenceModelUsage={modelImageUsage}
         attachmentIntents={intentsOrUndefined(
@@ -847,6 +1355,10 @@ export function PdpMakerClient() {
         </section>
       ) : startMode === "text" ? (
         <TextModeFlow
+          key={editorSessionKey}
+          initialDraft={textDraft}
+          onDraftChange={setTextDraft}
+          onBeforeReplace={preserveBeforeReplacement}
           attachmentIntents={attachmentIntents}
           onIntentChange={setIntent}
           aspectRatio={aspectRatio}
@@ -854,6 +1366,11 @@ export function PdpMakerClient() {
           desiredTone={desiredTone}
           stage={textStage}
           onStageChange={setTextStage}
+          /*
+            **글 모드에도 이 충돌이 온다**(U-04). 사진 모드에서 인물을 올린 뒤
+            모드를 바꾸면 그 사진이 남고, 여기서 캐릭터를 고르면 둘이 된다.
+          */
+          referenceModelName={modelImage ? modelImageDisplayName : undefined}
           onComplete={handleTextModeComplete}
         />
       ) : (
@@ -936,6 +1453,10 @@ export function PdpMakerClient() {
                         size="sm"
                         className="flex-1"
                         disabled={isLoadingDraft}
+                        // 어느 작업의 단추인지 남긴다. 화면 시험이 이것으로
+                        // 「다른 작업을 열면 앞 작업의 되돌리기가 사라지는가」를
+                        // 잰다 — 글자로 찾으면 React 트리가 순환이라 못 찾는다.
+                        data-draft-id={draft.id}
                         onClick={() => void handleLoadDraft(draft.id)}
                       >
                         <FolderOpen size={14} className="mr-1.5" />
@@ -1063,6 +1584,8 @@ export function PdpMakerClient() {
                   id="intent-anchor"
                   value={attachmentIntents.anchor ?? ""}
                   onChange={(next) => setIntent("anchor", next)}
+                  // 지켜야 할 것이 있는 자리다. 바꿔 달라는 말은 알려 준다(U-18).
+                  role="anchor"
                   placeholder="예: 뚜껑 색은 그대로 두고 각도만 바꿔 주세요"
                 />
               </div>
@@ -1073,7 +1596,7 @@ export function PdpMakerClient() {
                     <Badge variant="secondary">그대로 지킵니다</Badge>
                     <strong className="mt-1.5 block text-sm">인물 · 캐릭터</strong>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      인물 사진 1장 또는 다각도 캐릭터 중 하나만 씁니다. 둘 다 고르면 사진이 우선합니다.
+                      인물 사진 1장 또는 다각도 캐릭터 중 하나만 씁니다. 둘 다 고르면 다음 화면에서 누구를 쓸지 고를 수 있습니다.
                     </p>
                   </div>
                   {/*
@@ -1134,6 +1657,7 @@ export function PdpMakerClient() {
                       id="intent-person"
                       value={attachmentIntents.person ?? ""}
                       onChange={(next) => setIntent("person", next)}
+                      role="person"
                       placeholder="예: 안경을 꼭 씌워 주세요"
                     />
                   ) : null}
@@ -1160,7 +1684,7 @@ export function PdpMakerClient() {
                       <StyleReferenceCard
                         reference={styleReference}
                         enabled={styleReferenceEnabled}
-                        onToggle={setStyleReferenceEnabled}
+                        onToggle={toggleStyleReference}
                         preserveProduct={preserveProduct}
                         onPreserveProductChange={setPreserveProduct}
                       />
@@ -1168,19 +1692,21 @@ export function PdpMakerClient() {
                         variant="ghost"
                         size="sm"
                         className="justify-self-start text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => setStyleReference(undefined)}
+                        onClick={removeStyleReference}
                       >
                         <Trash2 size={14} className="mr-1.5" />
                         레퍼런스 빼기
                       </Button>
                     </>
                   ) : null}
-                  <StyleReferenceAttach onAttached={setStyleReference} />
+                  <StyleReferenceAttach onAttached={attachStyleReference} />
                   {styleReference ? (
                     <AttachmentIntentField
                       id="intent-style"
                       value={attachmentIntents.style ?? ""}
                       onChange={(next) => setIntent("style", next)}
+                      // 모방만 하는 자리라 지킬 정체성이 없다. 무엇을 바꾸라 해도 충돌이 아니다.
+                      role="style"
                       placeholder="예: 색만 가져오고 배치는 무시해 주세요"
                     />
                   ) : null}
@@ -1405,6 +1931,8 @@ export function PdpMakerClient() {
                           placeholder={field.placeholder}
                           className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
                         />
+                        {/* 제한을 보이게 한다. 몰래 자르거나 말없이 막지 않는다(U-08). */}
+                        <InputLengthHint value={sellerBrief[field.key] ?? ""} limit={SELLER_BRIEF_MAX_LENGTH} />
                       </div>
                     ))}
                   </div>
@@ -1422,6 +1950,7 @@ export function PdpMakerClient() {
                     placeholder="예: 네이버 스마트스토어용, 여름 시즌, 프리미엄 보습 이미지 강조"
                     className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
                   />
+                  <InputLengthHint value={additionalInfo} limit={PAGE_CONTEXT_MAX_LENGTH} />
                 </div>
 
                 {/*
@@ -1476,7 +2005,8 @@ export function PdpMakerClient() {
                   <span className={fieldLabelClass}>원하는 톤</span>
                   <div className="flex flex-wrap gap-1.5">
                     {TONE_OPTIONS.map((tone) => {
-                      const value = tone === "AI 자동 추천" ? "" : tone;
+                      // 상수를 쓴다. 손으로 다시 적으면 오타를 tsc 가 못 잡는다.
+                      const value = tone === TONE_AUTO_LABEL ? "" : tone;
                       const isActive = desiredTone === value;
 
                       return (
@@ -1522,6 +2052,9 @@ export function PdpMakerClient() {
                           key={option}
                           type="button"
                           title={blocked || IMAGE_LOOK_HINT[option]}
+                          // 어느 결의 단추인지 남긴다. 시험이 **눌린 상태**를
+                          // 값으로 재려면 자리를 가리킬 것이 있어야 한다(A-10).
+                          data-look={option}
                           aria-pressed={isActive}
                           disabled={Boolean(blocked)}
                           onClick={() => setLook(option)}
@@ -1548,9 +2081,36 @@ export function PdpMakerClient() {
                   ) : null}
                 </div>
 
+                {/*
+                  **구성 요청과 장면 요청을 가른다**(U-06).
+
+                  전에는 칸이 하나뿐이었고 그 값은 이미지 생성에만 갔다. 예시도
+                  장면 지시라, 「섹션을 다섯 개로」를 적은 사용자는 **아무 일도
+                  안 일어나는 이유를 알 수 없었다.**
+                */}
+                <div>
+                  <label className={fieldLabelClass} htmlFor="planInstruction">
+                    구성·문구 요청 · 선택
+                  </label>
+                  <textarea
+                    id="planInstruction"
+                    rows={2}
+                    value={planInstruction}
+                    onChange={(event) => setPlanInstruction(event.target.value)}
+                    placeholder="예: 섹션을 다섯 개로, 존댓말로 써 주세요"
+                    maxLength={MAX_STRATEGY_LENGTH}
+                    className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
+                  />
+                  {/* 서버가 막는 길이와 같다. 화면이 모르면 설명 없는 400 을 만난다(U-08). */}
+                  <InputLengthHint value={planInstruction} limit={MAX_STRATEGY_LENGTH} />
+                  <span className="mt-1 block text-meta text-subtle-foreground">
+                    섹션 구성과 문구에 반영합니다. 없는 사실을 새로 만들지는 않습니다.
+                  </span>
+                </div>
+
                 <div>
                   <label className={fieldLabelClass} htmlFor="userInstruction">
-                    추가 지시 · 선택
+                    이미지 연출 요청 · 선택
                   </label>
                   <textarea
                     id="userInstruction"
@@ -1558,11 +2118,14 @@ export function PdpMakerClient() {
                     value={userInstruction}
                     onChange={(event) => setUserInstruction(event.target.value)}
                     placeholder="예: 배경은 밤, 창밖에 네온"
+                    maxLength={MAX_STRATEGY_LENGTH}
                     className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-subtle-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--primary-ring)]"
                   />
+                  {/* 서버가 막는 길이와 같다. 화면이 모르면 설명 없는 400 을 만난다(D-8). */}
+                  <InputLengthHint value={userInstruction} limit={MAX_STRATEGY_LENGTH} />
                   {/* 프롬프트 맨 앞과 맨 뒤에 두 번 들어간다. 중간에 두면 힘을 잃는다. */}
                   <span className="mt-1 block text-meta text-subtle-foreground">
-                    여기 적은 말이 다른 모든 지시보다 우선합니다.
+                    그림에만 반영합니다. 여기 적은 말이 다른 모든 연출 지시보다 우선합니다.
                   </span>
                 </div>
 
@@ -1622,10 +2185,28 @@ export function PdpMakerClient() {
             </div>
 
             <div>
-              <Button className="w-full" size="lg" disabled={!canAnalyze} onClick={handleAnalyze}>
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={!canAnalyze}
+                // 왜 못 누르는지 읽어 주게 잇는다. 안 이으면 화면을 못 보는
+                // 사용자에게는 그냥 안 눌리는 단추다.
+                aria-describedby={overLimit.length ? "analyze-blocked" : undefined}
+                // **인자 없이 부른다.** 그냥 넘기면 클릭 이벤트가 전략 지시가 된다.
+                onClick={() => void handleAnalyze()}
+              >
                 <Wand2 size={16} className="mr-1.5" />
                 AI 분석 시작하기
               </Button>
+              {/*
+                **왜 못 누르는지 말한다**(U-08). 막기만 하면 서버가 「요청이
+                올바르지 않습니다」로 되돌려보내던 때와 다를 것이 없다.
+              */}
+              {overLimit.length > 0 ? (
+                <p id="analyze-blocked" role="status" className="mt-2 text-sm text-warning">
+                  {overLimitMessage}
+                </p>
+              ) : null}
               <div className="mt-2 rounded-md bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
                 <strong className="text-foreground">이 단계의 이미지 크레딧: 0장</strong><br />
                 상세 구조만 분석합니다. 분석이 끝난 뒤 필요한 섹션 이미지를 선택해 생성하며, 성공한 이미지마다 1장씩 차감됩니다.
@@ -1683,6 +2264,17 @@ const SELLER_BRIEF_FIELDS: ReadonlyArray<{
     placeholder: "예: 2026 우수제품 선정 / 무료 반품 30일",
   },
 ];
+
+/**
+ * 넘친 칸을 짚을 때 쓸 **화면 이름.** 코어는 짧은 이름을 들고 있는데, 사용자가
+ * 보는 것은 이 질문형 이름이라 그대로 말해야 어느 칸인지 안다(U-08).
+ */
+const SELLER_BRIEF_LABELS: Partial<Record<keyof SellerBrief | "pageContext", string>> = {
+  ...Object.fromEntries(SELLER_BRIEF_FIELDS.map((field) => [field.key, field.label])),
+  // 화면 이름을 함께 넘긴다. 안 넘기면 초과 문구만 코어의 짧은 이름으로 남는다.
+  pageContext: "그 밖에 · 채널과 시즌",
+};
+
 
 const previewCardClass =
   "mt-3 flex flex-wrap gap-3 rounded-md bg-background p-3 shadow-[var(--shadow-ring)]";

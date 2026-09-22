@@ -339,15 +339,18 @@ begin
   return v_result;
 end $$;
 
-create or replace function public.credit_reserve(p_user uuid,p_request uuid,p_operation text,p_outputs integer[],p_resource text)
+create or replace function public.credit_reserve(p_user uuid,p_request uuid,p_operation text,p_outputs integer[],p_resource text,p_analysis_limit integer default 10)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare p profiles%rowtype; g credit_grants%rowtype; v_need integer; v_left integer; v_take integer; v_team uuid; v_cap integer; v_team_used integer; v_state jsonb;
+  v_analysis_limit integer := least(greatest(p_analysis_limit,1),1000); v_recent integer;
+  -- 모델이 일한 흔적이 없는 실패. 202609200002 의 목록과 같아야 한다.
+  v_exempt_codes text[] := array['AI_KEY_MISSING','AI_KEY_INVALID','AI_MODEL_ACCESS_DENIED','AI_QUOTA_EXCEEDED','AI_PROVIDER_UNAVAILABLE','INVALID_IMAGE_PAYLOAD','reservation_expired'];
 begin
   perform credit_lock();
   select * into p from profiles where id=p_user for update;
   if not found or p.status<>'active' or p.email_confirmed_at is null then return jsonb_build_object('allowed',false,'reason','inactive_member'); end if;
   if not exists(select 1 from credit_accounts where user_id=p_user) then return jsonb_build_object('allowed',false,'reason','credit_account_not_activated'); end if;
-  if p_request is null or p_operation not in ('pdp_analyze','pdp_image','redesign_generate','redesign_edit','poster_image','sns_image','ad_export') or p_outputs is null or cardinality(p_outputs)>60 or exists(select 1 from unnest(p_outputs) u where u is null or u not in(1,2)) or length(trim(coalesce(p_resource,'')))=0 then raise exception 'invalid_credit_quote'; end if;
+  if p_request is null or p_operation not in ('pdp_analyze','reference_analyze','redesign_transcribe','pdp_image','redesign_generate','redesign_edit','poster_image','sns_image','ad_export') or p_outputs is null or cardinality(p_outputs)>60 or exists(select 1 from unnest(p_outputs) u where u is null or u not in(1,2)) or length(trim(coalesce(p_resource,'')))=0 then raise exception 'invalid_credit_quote'; end if;
   select coalesce(sum(u),0)::integer into v_need from unnest(p_outputs) u;
   if v_need>max_reserve_units() then return jsonb_build_object('allowed',false,'reason','invalid_request'); end if;
   perform credit_ensure_paid_period(p_user); v_state:=credit_wallet_state(p_user);
@@ -356,7 +359,22 @@ begin
   -- settlement review by design; the block must not, or an abandoned request locks the account
   -- until an administrator notices. Only a live, unreviewed request blocks the next one.
   if v_need>0 and exists(select 1 from generation_events where user_id=p_user and pricing_policy='image-v2' and status='reserved' and requested_units>0 and expires_at>now() and credit_phase is distinct from 'needs_review') then return jsonb_build_object('allowed',false,'reason','concurrent_limit','usage',v_state); end if;
-  if v_need=0 and (select count(*) from generation_events where user_id=p_user and requested_units=0 and created_at>now()-interval '1 hour')>=10 then return jsonb_build_object('allowed',false,'reason','analysis_rate_limit','usage',v_state); end if;
+  /*
+    **시간당 한도는 작업 종류별로 센다.** 한도 값은 앱이 넣어 준다
+    (`lib/membership/hourly-limit.ts`). 옛 경로와 같은 계약이라야 한다 — 정책
+    스위치 하나로 회원이 다른 한도를 받으면 안 된다(202609200002).
+  */
+  if p_operation in ('pdp_analyze','reference_analyze','redesign_transcribe') then
+    -- 값이 나간 시도만 센다. 아직 안 닫힌 행(error_code is null)은 센다.
+    select count(*)::integer into v_recent from generation_events
+      where user_id=p_user and operation=p_operation and created_at>now()-interval '1 hour'
+        and coalesce(error_code,'') <> all (v_exempt_codes);
+    if v_recent>=v_analysis_limit then return jsonb_build_object('allowed',false,'reason','analysis_rate_limit','usage',v_state); end if;
+    -- 남용 천장. 면제받은 실패도 서버를 쓴다. 정상 사용은 여기 닿지 않는다.
+    select count(*)::integer into v_recent from generation_events
+      where user_id=p_user and operation=p_operation and created_at>now()-interval '1 hour';
+    if v_recent>=v_analysis_limit*10 then return jsonb_build_object('allowed',false,'reason','analysis_abuse_limit','usage',v_state); end if;
+  end if;
   if (v_state->>'available')::integer<v_need then return jsonb_build_object('allowed',false,'reason','quota_exceeded','usage',v_state); end if;
   select tm.team_id into v_team from team_members tm where tm.user_id=p_user;
   if v_team is not null then

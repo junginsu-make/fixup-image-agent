@@ -1,8 +1,13 @@
 "use client";
 import { useCreditPolicy, useCreditUnit } from "../_components/credit-policy-provider";
 
-import type { MouseEvent as ReactMouseEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
+import { createSectionFor } from "./scenario-sections";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { previewedLayer, type LayerPreview } from "./layer-preview";
+import { batchRetryKeyId } from "./batch-retry-key";
+import { shouldRecoverAfter } from "./job-recovery";
+import type { RecoveredFailureLine } from "./recovered-failures";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
@@ -31,18 +36,22 @@ import {
   User,
 } from "lucide-react";
 import { Rnd } from "react-rnd";
+import { imageRequestLengthBlock } from "./image-request-length";
 import type {
   AspectRatio,
   BlueprintReview,
+  DesignSystem,
   GeneratedResult,
   ImageGenOptions,
   PdpCopyLanguage,
   PdpGenerateImageResponse,
   PdpOutputMode,
+  PersonSource,
   ReferenceModelUsage,
   QaDefect,
+  SectionBlueprint,
 } from "@fixup/pdp-core";
-import { isBlockingDefect } from "@fixup/pdp-core";
+import { MAX_PLANNED_SECTIONS, isBlockingDefect } from "@fixup/pdp-core";
 import type {
   CanvasLayer,
   FloatingWorkbenchState,
@@ -70,6 +79,7 @@ import { keepWordsPresentIn } from "./emphasis-words";
 import { COPY_SLOTS, overlayStyleFor, type CopyOverlayType } from "./copy-slots";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
 import { ReviewPanel } from "./ReviewPanel";
+import { ScorecardPanel } from "./ScorecardPanel";
 import {
   chunkForModel,
   planUploadBatches,
@@ -81,10 +91,17 @@ import type { AttachmentIntents, ImageModelId, PageImageWire } from "@fixup/pdp-
 // gpt-image-2 여섯 장이면 서버는 27장을 깎는데 화면은 24장이라고 안내했다.
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { buildPageWire } from "./page-wire";
+import { IMAGE_STALE_NOTICE, conceptOnlyNotice, imageStampOf, isImageStale } from "@fixup/pdp-core";
 import { describeBatchRun } from "./generation-run";
+import { blobToBase64, exportFileName, exportScaleFor, mimeTypeOfDataUrl, needsRecomposite } from "./export-fidelity";
+import { alignedWidthFor, canvasFitFor, canvasHeightFor, nextLayerOrigin } from "./layer-coords";
+import { restoreSectionKeys } from "./section-keys-restore";
+import { applyToSectionByKey } from "./section-result";
+import { jobRequestFields } from "./job-recovery";
 import {
   ALIGN_OPTIONS,
   BASIC_SOLID_COLORS,
+  DEFAULT_FONT_FAMILY,
   FONT_OPTIONS,
   FONT_WEIGHT_OPTIONS,
   MODEL_AGE_OPTIONS,
@@ -98,6 +115,7 @@ import {
   anchorWorkbenchToOverlay,
   applyLanguageToTextOverlay,
   buildExportNode,
+  loadImage,
   buildOverlayBackgroundStyle,
   buildOverlayShellStyle,
   buildOverlayTextStyle,
@@ -125,7 +143,6 @@ import {
   normalizeSectionOptions,
   normalizeShapeLayer,
   normalizeTextOverlay,
-  sanitizeSectionFileName,
   sortColorsByContrast,
   toNumericSize,
   uniqueColors,
@@ -139,12 +156,31 @@ import { pdpProcessSource } from "../api/library/work-process";
 
 interface PdpEditorProps {
   initialResult: GeneratedResult;
+  /**
+   * 이 작업의 초안 id. 생성 결과를 서버에 적을 때 **무엇의 것인지** 묶는 값이다.
+   *
+   * 아직 저장 안 한 작업은 `null` 이다 — 그때는 서버가 예약 식별자로 대신하고
+   * 그 요청 한 건만 묶인다(`job-recovery.ts`).
+   */
+  draftId?: string | null;
   /** 텍스트 경로의 구성안 심사 결과. 있으면 자기채점 점수표 대신 이것을 보여준다. */
   review?: BlueprintReview;
+  /**
+   * 페이지 공용 디자인. 여기서 섹션을 더할 때도 **같은 것을 물려준다**(U-15).
+   *
+   * 없으면 새 섹션만 다른 서체·다른 인물로 만들어지고, 그 사실은 이미지가
+   * 나온 뒤에야 보인다.
+   */
+  designSystem?: DesignSystem;
   /** 이 페이지의 디자인 언어를 정하는 참조 이미지. 모든 섹션이 같은 것을 쓴다. */
   styleReference?: { imageBase64: string; mimeType: string; description?: string };
   /** 제품 이미지를 지킬 것인가. 레퍼런스가 있을 때만 의미가 있다. */
   preserveProduct?: boolean;
+  /**
+   * 인물 사진과 저장 캐릭터를 **둘 다 골랐을 때** 누구를 쓸 것인가(U-04).
+   * 구성안 화면에서 사용자가 고른다.
+   */
+  personSource?: PersonSource;
   /** 이 페이지에 고정할 인물. 섹션마다 맞는 각도가 자동으로 들어간다. */
   characterId?: string;
   /**
@@ -163,10 +199,47 @@ interface PdpEditorProps {
   // 단계 표시줄은 4단계를 모두 그리므로 1·2단계 라벨도 계속 보인다.
   // 텍스트로 시작한 작업에 "이미지 업로드"가 뜨지 않게 시작 방식을 넘겨받는다.
   startMode?: CreateMode;
+  /**
+   * 파는 것이 무엇인가(N-2, 설계 §9.1).
+   *
+   * **사진 없이 실물을 팔 때**를 가리기 위해 필요하다. 글로만 「나무 도마를
+   * 팝니다」라고 적으면 우리는 나무 도마를 **지어내고**, 그 그림에는 실제로
+   * 파는 물건과 다른 결·색·모양이 그려진다.
+   */
+  productKind?: string;
   /** 텍스트 경로에서 고른 이미지 모델. 섹션 생성에 그대로 쓴다. */
   imageModel?: ImageModelId;
   desiredTone: string;
   initialDraftState?: PdpEditorDraftState | null;
+  /**
+   * 서버에 남아 있던 그림을 되찾았다는 한마디(K-04).
+   *
+   * **말없이 바꾸면 배신이다.** 없던 그림이 갑자기 들어와 있으면 사용자는
+   * 자기가 만든 것인지 아닌지 가릴 수 없다. 무엇을 되찾을지 고르는 판단은
+   * 부모가 하고(`job-recovery.ts`), 여기서는 그 말을 보여 주기만 한다.
+   */
+  recoveredNotice?: string;
+  /**
+   * 안 만들어진 장과 그 까닭(F-7-8).
+   *
+   * 무엇을 보여 줄지 고르는 판단은 화면 밖에 있다(`recovered-failures.ts`).
+   * 여기서는 받은 줄을 그린다.
+   */
+  recoveredFailures?: RecoveredFailureLine[];
+  /**
+   * 같은 요청이 **중복으로 막혔다**(K-05).
+   *
+   * 그 식별자로 이미 만들어진 것이 서버에 있을 수 있다. 부모가 되찾으러
+   * 간다 — 여기서는 「막혔다」는 사실만 알린다.
+   *
+   * **일괄과 단건이 막히는 사정이 다르다.** 일괄은 같은 묶음을 다시 누를 때
+   * 같은 열쇠가 가서 막힌다. 단건은 응답을 받으면 열쇠를 놓으므로
+   * (`delete retryRequestKeysRef.current[sectionKey]`), **던져서 catch 로
+   * 빠진 뒤 다시 누른 경우**에만 막힌다. 그래도 부를 값어치는 있다 —
+   * 되찾기는 요청 식별자가 아니라 문서 번호로 찾으므로 앞선 묶음이 남긴
+   * 작업을 찾아 빈 섹션을 채울 수 있다.
+   */
+  onDuplicateRequest?: () => void;
   lastSavedAt?: string | null;
   manualSaveToastToken?: number;
   onOpenSettings?: () => void;
@@ -186,6 +259,9 @@ interface PdpEditorProps {
    */
   onJumpStep?: (id: "upload" | "analyze") => void;
   saveState?: "idle" | "saving" | "saved" | "error";
+  onBeforeReplace?: () => Promise<boolean>;
+  onSectionsChange: Dispatch<SetStateAction<SectionBlueprint[]>>;
+  onUndo?: () => void;
 }
 
 /** /api/pdp/images/batch 응답. 실패한 섹션은 ok:false 로 개별 표시된다. */
@@ -195,9 +271,10 @@ type BatchImagesResponse =
       requested: number;
       succeeded: number;
       results: Array<
-        | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[] } }
+        | { sectionId: string; ok: true; imageBase64: string; mimeType: string; qa?: { warnings?: QaDefect[]; status?: "passed" | "failed" | "review_required" | "unavailable" } }
         | { sectionId: string; ok: false; code?: string; message?: string }
       >;
+      stopBatch?: boolean;
       message?: string;
     }
   | { ok: false; code?: string; message?: string; requested?: number; succeeded?: number; results?: never };
@@ -224,9 +301,12 @@ type ImageGenerationOutcome = {
 
 export function PdpEditor({
   initialResult,
+  draftId = null,
   review,
+  designSystem,
   styleReference,
   preserveProduct = true,
+  personSource,
   characterId,
   characterAngles,
   aspectRatio,
@@ -234,9 +314,13 @@ export function PdpEditor({
   look = "photoreal",
   userInstruction = "",
   startMode = "image",
+  productKind,
   imageModel = DEFAULT_IMAGE_MODEL,
   desiredTone,
   initialDraftState,
+  recoveredNotice,
+  recoveredFailures,
+  onDuplicateRequest,
   lastSavedAt,
   manualSaveToastToken = 0,
   onOpenSettings,
@@ -249,16 +333,16 @@ export function PdpEditor({
   pageContext,
   onJumpStep,
   saveState = "idle",
+  onBeforeReplace,
+  onSectionsChange,
+  onUndo,
 }: PdpEditorProps) {
   const creditPolicy = useCreditPolicy();
   // 문장 속 「성공 3장」은 이미지 개수라 그대로다. 바꾸는 것은 차감 금액의 단위뿐이다.
   const 단위 = useCreditUnit();
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
-  const [sections, setSections] = useState(() =>
-    initialDraftState?.sections?.length
-      ? initialDraftState.sections.map((section) => normalizeSectionCopyFields({ ...section }))
-      : initialResult.blueprint.sections.map((section) => normalizeSectionCopyFields({ ...section }))
-  );
+  const sections = initialResult.blueprint.sections;
+  const setSections = onSectionsChange;
   /* 격자에서 여러 장을 동시에 만들 수 있으므로 '생성 중'을 섹션 키 집합으로 둔다. */
   const [generatingKeys, setGeneratingKeys] = useState<string[]>([]);
   const [generationRun, setGenerationRun] = useState<GenerationRun | null>(null);
@@ -272,29 +356,45 @@ export function PdpEditor({
   );
   /* 레이어·설정은 섹션 순서가 아니라 고유 키로 저장한다.
      순서로 저장하면 섹션 순서를 바꿨을 때 다른 섹션의 레이어가 딸려온다. */
-  const [sectionKeys, setSectionKeys] = useState<string[]>(
-    () =>
-      initialDraftState?.sectionKeys?.length === (initialDraftState?.sections?.length ?? -1)
-        ? initialDraftState.sectionKeys
-        : buildSectionKeys(
-            initialDraftState?.sections?.length
-              ? initialDraftState.sections
-              : initialResult.blueprint.sections
-          )
+  const [sectionKeys, setSectionKeys] = useState<string[]>(() =>
+    restoreSectionKeys({
+      draftKeys: initialDraftState?.sectionKeys,
+      draftSections: initialDraftState?.sections,
+      // **지금 그리는 섹션**과 짝이 맞는지 본다. 초안끼리 비교하면 어긋난 채 통과한다.
+      renderedSections: initialResult.blueprint.sections,
+    }),
   );
+  /**
+   * **지금** 키 배열(A-16).
+   *
+   * 비동기 결과를 붙일 때 클로저의 `sectionKeys` 를 쓰면 **생성을 시작할 때의
+   * 배열**이다. 도는 동안 순서가 바뀌면 인덱스와 키의 짝이 달라져 엉뚱한
+   * 섹션에 이미지가 박힌다.
+   *
+   * 지금은 순서 변경·삭제가 잠겨 있어 그 창이 안 열린다. 다만 **잠금이 유일한
+   * 방어**이면 잠금을 안 거는 길이 하나 생길 때 조용히 되살아난다.
+   */
+  const sectionKeysRef = useRef<string[]>(sectionKeys);
+  // 렌더 중에 대입하지 않는다 — 버려지는 렌더에서도 대입된다.
+  useEffect(() => {
+    sectionKeysRef.current = sectionKeys;
+  }, [sectionKeys]);
+
   const [sectionOptions, setSectionOptions] = useState<Record<string, ImageGenOptions>>(
     () =>
       normalizeSectionOptions(
         initialDraftState?.sectionOptions ?? {},
         referenceModelUsage,
         // '첫 섹션'은 순서가 아니라 키로 가린다.
-        (initialDraftState?.sectionKeys?.length === (initialDraftState?.sections?.length ?? -1)
-          ? initialDraftState.sectionKeys
-          : buildSectionKeys(
-              initialDraftState?.sections?.length ? initialDraftState.sections : initialResult.blueprint.sections
-            ))[0]
+        restoreSectionKeys({
+          draftKeys: initialDraftState?.sectionKeys,
+          draftSections: initialDraftState?.sections,
+          renderedSections: initialResult.blueprint.sections,
+        })[0]
       )
   );
+  /** 끄는(크기를 바꾸는) 중인 레이어의 임시 값. 사연은 `layer-preview.ts`. */
+  const [layerPreview, setLayerPreview] = useState<LayerPreview>(null);
   const [overlaysBySection, setOverlaysBySection] = useState<Record<string, CanvasLayer[]>>(
     () => normalizeOverlayRecord(initialDraftState?.overlaysBySection ?? {})
   );
@@ -329,6 +429,17 @@ export function PdpEditor({
   // 라이브러리 저장은 브라우저 초안 저장과 다르다. 계정에 올려 기기를 옮겨도 남는다.
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
+  /*
+    **겉을 줄이는 배율.** 안쪽 캔버스는 늘 460px 이라 레이어 좌표의 뜻이
+    화면 폭과 무관해진다. 좁은 화면에서는 이 값만 작아진다.
+  */
+  const canvasFitRef = useRef<HTMLDivElement | null>(null);
+  const [canvasFit, setCanvasFit] = useState(1);
+  /*
+    줄인 만큼 **자리도 줄여야** 아래에 빈 공간이 생기지 않는다.
+    `transform: scale()` 은 보이는 크기만 줄이고 레이아웃 높이는 그대로다.
+  */
+  const [canvasHeight, setCanvasHeight] = useState<number | null>(null);
   /**
    * 편집 캔버스의 마지막 실제 폭.
    *
@@ -357,7 +468,15 @@ export function PdpEditor({
   const currentLayers = overlaysBySection[currentSectionKey] ?? [];
   const currentTextLayers = currentLayers.filter(isTextLayer);
   const currentShapeLayers = currentLayers.filter(isShapeLayer);
-  const selectedLayer = currentLayers.find((overlay) => overlay.id === selectedOverlayId) ?? null;
+  /*
+    **옆 숫자도 같이 움직여야 한다**(B-12-c 리뷰).
+
+    크기 손잡이를 끄는 동안 캔버스의 글자는 임시 글자 크기로 실시간으로
+    커지는데, 작업대의 「폭」·「크기」 칸은 확정값을 읽어 **손을 뗄 때까지
+    멈춰 있다가 한 번에 튀었다.** 같은 화면에 두 값이 어긋나 보인다.
+  */
+  const committedLayer = currentLayers.find((overlay) => overlay.id === selectedOverlayId) ?? null;
+  const selectedLayer = committedLayer ? previewedLayer(committedLayer, layerPreview) : null;
   const selectedTextLayer = selectedLayer && isTextLayer(selectedLayer) ? selectedLayer : null;
   const selectedShapeLayer = selectedLayer && isShapeLayer(selectedLayer) ? selectedLayer : null;
   const generatedCount = sections.filter((section) => Boolean(section.generatedImage)).length;
@@ -466,6 +585,61 @@ export function PdpEditor({
       : "히어로우 전용 업로드 모델이 적용되어 타깃 페르소나가 비활성화되었습니다."
     : "";
 
+  /*
+    **훅은 early return 앞에 둔다.**
+
+    아래 넷은 원래 이 파일 한참 뒤(캡처 함수들 사이)에 있었다. 그런데 바로
+    밑에 `if (!currentSection) return …` 이 있어서, 섹션이 있다가 없어지는
+    순간 **훅 개수가 달라진다** — React 가 「Rendered more hooks than during
+    the previous render」로 죽는다.
+
+    `next build` 가 이것을 lint 오류(`react-hooks/rules-of-hooks`) 넷으로
+    막고 있었다. 운영 빌드가 통째로 안 됐다.
+
+    쓰는 자리(ref 콜백)는 그대로다. 선언 자리만 위로 옮긴다.
+  */
+  /*
+    **붙는 순간에 관찰을 시작한다.**
+
+    `useEffect` 로 하면 갤러리↔편집을 오갈 때 딸림값이 안 바뀌어 **다시 돌지
+    않는다.** 그때 캔버스는 아직 없었으므로 관찰자가 한 번도 안 붙고, 창을
+    줄여도 배율이 1 그대로다 — 2026-09-17 실제 브라우저로 그렇게 확인했다.
+    ref 콜백은 실제로 붙고 떨어질 때마다 불린다.
+  */
+  const fitObserverRef = useRef<ResizeObserver | null>(null);
+  const attachCanvasFit = useCallback((node: HTMLDivElement | null) => {
+    fitObserverRef.current?.disconnect();
+    fitObserverRef.current = null;
+    canvasFitRef.current = node;
+    if (!node || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasFit(canvasFitFor(entry?.contentRect.width));
+    });
+    observer.observe(node);
+    fitObserverRef.current = observer;
+    setCanvasFit(canvasFitFor(node.clientWidth));
+  }, []);
+
+  /** 안쪽 높이는 그림 비율이 정한다. 줄인 만큼 자리도 줄이려면 이 값이 필요하다. */
+  const heightObserverRef = useRef<ResizeObserver | null>(null);
+  const attachCanvas = useCallback((node: HTMLDivElement | null) => {
+    heightObserverRef.current?.disconnect();
+    heightObserverRef.current = null;
+    imageContainerRef.current = node;
+    if (!node) return;
+    // 안쪽 폭은 늘 460 이다. 내보내기가 이 값을 기준으로 굽는다.
+    if (node.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasHeight(entry?.contentRect.height ?? null);
+    });
+    observer.observe(node);
+    heightObserverRef.current = observer;
+    setCanvasHeight(node.clientHeight || null);
+  }, []);
+
   if (!currentSection) {
     return (
       <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
@@ -527,8 +701,8 @@ export function PdpEditor({
 
   const handleTextAlignChange = (overlay: TextOverlay, nextAlign: OverlayTextAlign) => {
     const currentWidth = toNumericSize(overlay.width, 320);
-    const recommendedWidth = clampValue(Math.round(overlay.fontSize * 10), 220, 520);
-    const nextWidth = Math.max(currentWidth, recommendedWidth);
+    // 캔버스를 벗어나지 않는 만큼만 넓힌다. 전에는 안 봐서 오른쪽이 잘렸다.
+    const nextWidth = alignedWidthFor({ x: overlay.x, width: currentWidth, fontSize: overlay.fontSize });
 
     updateOverlay(overlay.id, {
       textAlign: nextAlign,
@@ -585,7 +759,8 @@ export function PdpEditor({
 
     setWorkbenchState((current) => ({
       ...current,
-      ...anchorWorkbenchToOverlay(selectedLayer, imageContainerRef.current, previewStageRef.current, current),
+      // 축소 배율을 함께 넘긴다. 안 넘기면 좁은 화면에서 엉뚱한 자리에 붙는다.
+      ...anchorWorkbenchToOverlay(selectedLayer, imageContainerRef.current, previewStageRef.current, current, canvasFit),
       isOpen: true,
     }));
   };
@@ -1347,8 +1522,51 @@ export function PdpEditor({
    * 전에는 두 호출이 각자 몸통을 지었고, 그래서 「배치와 같은 값을 보내야 한다」는
    * 주석이 네 군데 붙어 있었다. 주석으로 지키던 것을 여기 한 곳으로 옮겼다.
    */
+  /**
+   * **만들기가 싣는 칸이 넘쳤는가.**
+   *
+   * 「이미지 연출 요청」은 이 화면이 아니라 **기획 화면**에 있는 칸인데,
+   * 요청에 싣는 것은 여기다(`buildPageWire`). 상한이 늦게 붙어서, 그 전에
+   * 저장된 초안이 넘친 값을 담은 채 복원되면 서버가 「요청이 올바르지
+   * 않습니다」 한 줄로 거절한다 — **어느 칸인지도 모르고 이 화면에는 그
+   * 칸을 고칠 입력란도 없다.**
+   *
+   * 그래서 여기서 먼저 막고, **어디서 고치는지**까지 말한다.
+   */
+  const lengthBlockedMessage = imageRequestLengthBlock({
+    userInstruction,
+    anchorIntent: attachmentIntents?.anchor,
+    personIntent: attachmentIntents?.person,
+    styleIntent: attachmentIntents?.style,
+  });
+
+  /*
+    **사진 없이 실물을 팔고 있다고 말한다**(N-2, 설계 §9.1).
+
+    막지는 않는다. 개념 시안이 필요한 경우가 실제로 있다 — 아직 만들지 않은
+    물건을 소개하거나 분위기만 먼저 보는 경우다. 막으면 그 사람들이 못 쓴다.
+    대신 **실제와 다를 수 있다는 것과, 사진을 올리면 된다는 것**을 말한다.
+  */
+  /*
+    **이 그림이 지금 문구로 만든 것인가**(N-5, 설계 §4.2).
+
+    상세페이지는 글자가 이미지 안에 그려진다. 제목을 고쳐도 그림은 옛 글자를
+    들고 있는데 아무 표시가 없었다 — 그대로 내보내면 **고친 글과 다른
+    이미지**가 나간다.
+  */
+  const 그림낡음 = isImageStale(currentSection);
+
+  const 개념시안 = conceptOnlyNotice({
+    productKind: productKind as never,
+    hasProductPhoto: startMode !== "text",
+  });
+
   const pageWire = (): PageImageWire =>
     buildPageWire({
+      // 글 경로의 앵커는 우리가 만든 대표 이미지다. 실물 제품이 아니다(U-03).
+      anchorKind: startMode === "text" ? "key-visual" : "product-photo",
+      // 사진 없이 실물을 팔 때를 가린다(N-2). 판단은 `page-wire.ts` 가 한다.
+      productKind,
       imageModel,
       outputMode,
       look,
@@ -1359,6 +1577,8 @@ export function PdpEditor({
       pageContext,
       referenceModel: referenceModelImage,
       referenceModelUsage,
+      // 둘 다 골랐을 때 누구를 쓸지. 안 넘기면 서버가 말없이 업로드를 쓴다(U-04).
+      personSource,
     });
 
   /**
@@ -1382,6 +1602,11 @@ export function PdpEditor({
       sectionOptions[sectionKey],
       referenceModelUsage === "all-sections" ? true : index === 0
     );
+
+    if (lengthBlockedMessage) {
+      setErrorMessage(lengthBlockedMessage);
+      return { ok: false, stopBatch: true };
+    }
 
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setErrorMessage("");
@@ -1415,6 +1640,8 @@ export function PdpEditor({
       if (!response.ok) {
         setErrorMessage(response.message);
         const responseCode = String(response.code || "");
+        // 같은 요청이 막혔다. 이미 만들어진 것이 서버에 있을 수 있다(K-05).
+        if (shouldRecoverAfter(responseCode)) onDuplicateRequest?.();
         return {
           ok: false,
           stopBatch: [
@@ -1433,11 +1660,23 @@ export function PdpEditor({
       }
 
       setSections((current) =>
-        current.map((item, itemIndex) =>
-          sectionKeys[itemIndex] === sectionKey
-            ? { ...item, generatedImage: toDataUrl(response.mimeType, response.imageBase64), qaWarnings: response.qa?.warnings }
-            : item
-        )
+        applyToSectionByKey(current, sectionKeysRef.current, sectionKey, {
+          generatedImage: toDataUrl(response.mimeType, response.imageBase64),
+          /*
+            **어느 문구로 만든 그림인지 함께 적는다**(N-5, 설계 §4.2).
+
+            글자가 이미지 안에 그려지므로, 제목을 고치면 그림은 옛 글자를
+            들고 있다. 자국이 없으면 화면이 그 사실을 알 길이 없어 **고친
+            글과 다른 이미지가 그대로 나간다.**
+
+            **보낸 섹션으로 찍는다.** 지금 화면의 것으로 찍으면 만드는 사이에
+            문구를 고친 경우 처음부터 맞는 것처럼 보인다.
+          */
+          imageStamp: imageStampOf(section),
+          qaWarnings: response.qa?.warnings,
+          // 「경고가 없다」와 「검수를 못 돌렸다」는 다르다.
+          qaStatus: response.qa?.status,
+        }),
       );
       setNotice(`${getDisplaySectionName(section)} 이미지를 만들었습니다.`);
       return { ok: true };
@@ -1460,6 +1699,13 @@ export function PdpEditor({
     if (!section) return;
 
     generationLockRef.current = true;
+    if (section.generatedImage && onBeforeReplace) {
+      try {
+        if (!(await onBeforeReplace())) { generationLockRef.current = false; setErrorMessage("이전 결과를 보관하지 못했습니다. 다시 시도해 주세요."); return; }
+      } catch {
+        generationLockRef.current = false; setErrorMessage("이전 결과를 보관하지 못했습니다."); return;
+      }
+    }
     const startedAt = Date.now();
     setGenerationRun({
       mode: "single",
@@ -1496,6 +1742,10 @@ export function PdpEditor({
   /** 아직 이미지가 없는 섹션을 한 번에 만든다. */
   const handleGenerateAllMissing = async () => {
     if (generationLockRef.current) return;
+    if (lengthBlockedMessage) {
+      setErrorMessage(lengthBlockedMessage);
+      return;
+    }
     const targets = sections
       .map((section, index) => ({ section, index }))
       .filter(({ section }) => !section.generatedImage);
@@ -1547,10 +1797,25 @@ export function PdpEditor({
 
     try {
       for (const chunk of chunks) {
+        /*
+          **다시 눌러도 같은 열쇠로 간다**(K-05).
+
+          `apiJson` 은 머리글이 없으면 POST 마다 새 열쇠를 만든다. 그래서
+          통신이 끊겨 다시 누르면 **새 예약**이 되어 이미 만든 것을 또 만들고
+          또 받았다. 단건 경로는 섹션마다 열쇠를 붙잡아 두는데 일괄만 빠져
+          있었다.
+        */
+        const chunkKeyId = batchRetryKeyId(chunk.map(({ section }) => section.section_id));
+        const chunkRequestKey = retryRequestKeysRef.current[chunkKeyId] ?? randomId();
+        retryRequestKeysRef.current[chunkKeyId] = chunkRequestKey;
+
         const response = await apiJson<BatchImagesResponse>("/pdp/images/batch", {
           method: "POST",
+          headers: { "x-idempotency-key": chunkRequestKey },
           body: JSON.stringify({
             originalImageBase64: initialResult.originalImage,
+            // 결과를 서버에 적을 때 무엇의 것인지 묶는다. 저장 전이면 안 싣는다.
+            ...jobRequestFields(draftId, 0),
             sections: chunk.map(({ section }) => section),
             // 묶음 안 순서가 아니라 **페이지에서의 자리**를 보낸다. 인물 사진을
             // 「첫 섹션에만」 쓸 때 두 번째 묶음의 첫 장은 히어로가 아니다.
@@ -1593,6 +1858,8 @@ export function PdpEditor({
           // 계속 밀어붙이면 같은 오류만 반복하므로 여기서 멈춘다.
           failed += chunk.length;
           setErrorMessage(response.message ?? "일괄 생성에 실패했습니다.");
+          // 같은 묶음이 막혔다. 이미 만들어진 것이 서버에 있을 수 있다(K-05).
+          if (shouldRecoverAfter(response.code)) onDuplicateRequest?.();
           break;
         }
 
@@ -1609,19 +1876,33 @@ export function PdpEditor({
          * 옮기면 생성 중에 순서가 바뀌어도 제 섹션을 찾는다.
          */
         const byKey = new Map<string, (typeof response.results)[number]>();
-        chunk.forEach(({ index }, position) => {
-          const key = sectionKeys[index];
+        /*
+          **보낸 섹션도 같은 열쇠로 묶어 둔다**(N-5).
+
+          그림에 어느 문구가 그려졌는지는 **보낸 것**이 안다. 지금 화면의
+          것으로 자국을 찍으면, 만드는 사이에 문구를 고친 경우 처음부터
+          맞는 것처럼 보인다.
+        */
+        const 보낸것 = new Map<string, (typeof chunk)[number]["section"]>();
+        chunk.forEach(({ index, section: 보낸섹션 }, position) => {
+          // 지금 배열을 본다. 오래된 것을 쓰면 짝이 어긋난다(A-16).
+          const key = sectionKeysRef.current[index];
           const outcome = response.results[position];
           if (key && outcome) byKey.set(key, outcome);
+          if (key) 보낸것.set(key, 보낸섹션);
         });
         setSections((current) =>
           current.map((item, position) => {
-            const outcome = byKey.get(sectionKeys[position] ?? String(position));
+            const key = sectionKeysRef.current[position] ?? String(position);
+            const outcome = byKey.get(key);
             if (!outcome?.ok) return item;
             return {
               ...item,
               generatedImage: toDataUrl(outcome.mimeType, outcome.imageBase64),
+              // 어느 문구로 만든 그림인지 함께 적는다(N-5). 단건 경로와 같다.
+              imageStamp: imageStampOf(보낸것.get(key) ?? item),
               qaWarnings: outcome.qa?.warnings,
+              qaStatus: outcome.qa?.status,
             };
           }),
         );
@@ -1631,6 +1912,10 @@ export function PdpEditor({
         setGenerationRun(
           describeRun("running", getDisplaySectionName(chunk[chunk.length - 1].section)),
         );
+        if (response.stopBatch) {
+          setErrorMessage("공급자 연결 또는 한도 문제로 남은 묶음을 중단했습니다. 성공한 이미지는 보관했습니다.");
+          break;
+        }
       }
     } catch (error) {
       failed += targets.length - processed;
@@ -1661,6 +1946,7 @@ export function PdpEditor({
    * 키와 섹션의 짝이 어긋나 레이어가 남의 섹션에 붙는다.
    */
   const handleMoveSection = (from: number, to: number) => {
+    if (generationLockRef.current) return;
     if (to < 0 || to >= sections.length || from === to) {
       return;
     }
@@ -1685,12 +1971,17 @@ export function PdpEditor({
   };
 
   /** 섹션을 삭제한다. 그 섹션의 레이어·설정도 함께 지운다(남기면 유령 데이터). */
-  const handleDeleteSection = (index: number) => {
+  const handleDeleteSection = async (index: number) => {
+    if (generationLockRef.current) return;
     if (sections.length <= 1) {
       setErrorMessage("섹션은 최소 한 개는 있어야 합니다.");
       return;
     }
 
+    generationLockRef.current = true;
+    try {
+      if (onBeforeReplace && !(await onBeforeReplace())) { setErrorMessage("이전 섹션을 보관하지 못해 삭제를 중단했습니다."); return; }
+    } finally { generationLockRef.current = false; }
     const key = sectionKeys[index];
     setSections((current) => current.filter((_, i) => i !== index));
     setSectionKeys((current) => current.filter((_, i) => i !== index));
@@ -1704,50 +1995,21 @@ export function PdpEditor({
       delete next[key];
       return next;
     });
-    setCurrentSectionIndex((current) => Math.max(0, Math.min(current, sections.length - 2)));
+    setCurrentSectionIndex((current) => Math.max(0, Math.min(index < current ? current - 1 : current, sections.length - 2)));
     setNotice("섹션을 삭제했습니다.");
   };
 
   /** 빈 섹션을 뒤에 추가한다. 키는 기존과 겹치지 않게 만든다. */
   const handleAddSection = () => {
-    const used = new Set(sectionKeys);
-    let n = sections.length + 1;
-    let key = `S${n}`;
-    while (used.has(key)) {
-      n += 1;
-      key = `S${n}`;
+    if (generationLockRef.current) return;
+    // 서버와 같은 상한을 쓴다(설계 §9.1). 넘겨 만들면 다시 기획할 때 잘린다.
+    if (sections.length >= MAX_PLANNED_SECTIONS) {
+      setNotice(`한 페이지에 ${MAX_PLANNED_SECTIONS}장까지 만들 수 있습니다.`);
+      return;
     }
-
-    setSections((current) => [
-      ...current,
-      // 타입 단언으로 때우지 않고 스키마의 모든 필드를 채운다.
-      // 빠뜨리면 편집기 곳곳에서 undefined 를 만난다.
-      normalizeSectionCopyFields({
-        section_id: key,
-        section_name: `새 섹션 ${current.length + 1}`,
-        goal: "",
-        headline: "",
-        headline_en: "",
-        subheadline: "",
-        subheadline_en: "",
-        bullets: [],
-        bullets_en: [],
-        trust_or_objection_line: "",
-        trust_or_objection_line_en: "",
-        CTA: "",
-        CTA_en: "",
-        layout_notes: "",
-        compliance_notes: "",
-        image_id: key,
-        purpose: "",
-        prompt_ko: "",
-        prompt_en: "",
-        negative_prompt: "",
-        style_guide: "",
-        reference_usage: "",
-      }),
-    ]);
-    setSectionKeys((current) => [...current, key]);
+    const section = createSectionFor(sections, designSystem);
+    setSections((current) => [...current, section]);
+    setSectionKeys((current) => [...current, section.section_id]);
     setNotice("빈 섹션을 추가했습니다. 문구를 넣고 이미지를 만들어 보세요.");
   };
 
@@ -1779,7 +2041,7 @@ export function PdpEditor({
     const estimatedBox = estimateOverlayBox(displayText, {
       fontSize: defaultFontSize,
       fontWeight: defaultFontWeight,
-      fontFamily: "'Pretendard', sans-serif",
+      fontFamily: DEFAULT_FONT_FAMILY,
       lineHeight: 1.2,
       maxWidth: style.maxWidth,
     });
@@ -1790,8 +2052,13 @@ export function PdpEditor({
       text: displayText,
       language: defaultCopyLanguage,
       translations: normalizedTranslations,
-      x: 52,
-      y: 52,
+      // 이미 있는 것과 안 겹치게 비켜 놓는다. 전에는 늘 같은 자리라 포개졌다.
+      // 상자 크기와 캔버스 높이까지 넘긴다. 자리만 보면 오른쪽·아래가 넘친다.
+      ...nextLayerOrigin(currentLayers, { x: 52, y: 52 }, {
+        width: estimatedBox.width,
+        height: estimatedBox.height,
+        canvasHeight: canvasHeightFor(aspectRatio),
+      }),
       width: estimatedBox.width,
       height: estimatedBox.height,
       fontSize: defaultFontSize,
@@ -1800,7 +2067,7 @@ export function PdpEditor({
       backgroundEnabled: false,
       backgroundOpacity: 0.72,
       backgroundRadius: 18,
-      fontFamily: "'Pretendard', sans-serif",
+      fontFamily: DEFAULT_FONT_FAMILY,
       fontWeight: defaultFontWeight,
       textAlign: "left",
       lineHeight: 1.2,
@@ -1832,8 +2099,11 @@ export function PdpEditor({
     const newShape: ShapeLayer = normalizeShapeLayer({
       id: randomId(),
       kind: "shape",
-      x: 64,
-      y: 64,
+      ...nextLayerOrigin(currentLayers, { x: 64, y: 64 }, {
+        width: 260,
+        height: 120,
+        canvasHeight: canvasHeightFor(aspectRatio),
+      }),
       width: 260,
       height: 120,
       fillColor: shapeColorRecommendations[0] ?? colorRecommendations.darkColor,
@@ -1883,12 +2153,21 @@ export function PdpEditor({
     };
   };
 
-  const handleResize = (
+  /** 크기 조절이 실제로 바꾸는 칸들. `Partial<CanvasLayer>` 로 그대로 쓰인다. */
+  type ResizeUpdates = { x?: number; y?: number; width?: number; height?: number; fontSize?: number };
+
+  /**
+   * 이 크기 조절이 만드는 값.
+   *
+   * **계산과 확정을 갈랐다**(B-12-c). 끄는 동안은 이 값을 임시 자리에만 담고,
+   * 놓을 때 한 번 확정한다. 전에는 프레임마다 확정했다.
+   */
+  const resizeUpdates = (
     overlay: CanvasLayer,
     direction: string,
     ref: HTMLElement,
     position: { x: number; y: number }
-  ) => {
+  ): ResizeUpdates => {
     const base = resizeSessionRef.current[overlay.id] ?? {
       width: toNumericSize(overlay.width, 320),
       height: toNumericSize(overlay.height, 92),
@@ -1900,31 +2179,47 @@ export function PdpEditor({
     const isHorizontalOnly = direction === "left" || direction === "right";
     const isVerticalOnly = direction === "top" || direction === "bottom";
 
-    if (isHorizontalOnly) {
-      updateOverlay(overlay.id, { width: nextWidth, x: position.x });
-      return;
-    }
-
-    if (isVerticalOnly) {
-      updateOverlay(overlay.id, { height: nextHeight, y: position.y });
-      return;
-    }
-
+    if (isHorizontalOnly) return { width: nextWidth, x: position.x };
+    if (isVerticalOnly) return { height: nextHeight, y: position.y };
     if (isShapeLayer(overlay)) {
-      updateOverlay(overlay.id, { width: nextWidth, height: nextHeight, x: position.x, y: position.y });
-      return;
+      return { width: nextWidth, height: nextHeight, x: position.x, y: position.y };
     }
 
     const scale = Math.max(nextWidth / Math.max(base.width, 1), nextHeight / Math.max(base.height, 1));
-    const nextFontSize = clampValue(Math.round(base.fontSize * scale), 10, 180);
-
-    updateOverlay(overlay.id, {
+    return {
       width: nextWidth,
       height: nextHeight,
       x: position.x,
       y: position.y,
-      fontSize: nextFontSize,
-    });
+      fontSize: clampValue(Math.round(base.fontSize * scale), 10, 180),
+    };
+  };
+
+  const handleResize = (
+    overlay: CanvasLayer,
+    direction: string,
+    ref: HTMLElement,
+    position: { x: number; y: number }
+  ) => {
+    updateOverlay(overlay.id, resizeUpdates(overlay, direction, ref, position));
+  };
+
+  /** 크기를 바꾸는 중에 보여 줄 값. 확정하지 않는다. */
+  const previewResize = (
+    overlay: CanvasLayer,
+    direction: string,
+    ref: HTMLElement,
+    position: { x: number; y: number }
+  ): LayerPreview => {
+    const updates = resizeUpdates(overlay, direction, ref, position);
+    return {
+      id: overlay.id,
+      x: updates.x ?? toNumericSize(overlay.x, 0),
+      y: updates.y ?? toNumericSize(overlay.y, 0),
+      width: updates.width,
+      height: updates.height,
+      fontSize: updates.fontSize,
+    };
   };
 
   const handleResizeStop = (overlayId: string) => {
@@ -1935,17 +2230,43 @@ export function PdpEditor({
     updateOverlay(overlay.id, { x, y });
   };
 
+  /**
+   * 섹션 한 장을 파일로 굽는다.
+   *
+   * **얹은 것이 없으면 다시 굽지 않는다.** 원본 바이트를 그대로 준다 — 다시
+   * 구우면 JPEG 로 바뀌며 손실이 나는데, 글자도 도형도 없으면 그럴 이유가 없다.
+   *
+   * 얹은 것이 있으면 **원본 해상도로** 합친다. 전에는 캔버스 폭(최대 460px)에
+   * 2를 곱해 구웠다 — 1536px 로 만든 것이 920px 로 나갔다(폭 60%, 넓이 36%).
+   * 레이어 좌표가 캔버스 폭 기준이라, 배율만 원본에 맞추면 배치는 그대로 두고
+   * 해상도만 되찾는다.
+   */
+
   const captureSectionBlob = async (sectionIndex: number) => {
     const section = sections[sectionIndex];
     if (!section?.generatedImage) {
       throw new Error("이미지가 없는 섹션은 다운로드할 수 없습니다.");
     }
 
+    const layers = overlaysBySection[sectionKeys[sectionIndex] ?? String(sectionIndex)] ?? [];
+    const mimeType = mimeTypeOfDataUrl(section.generatedImage);
+
+    if (!needsRecomposite(layers)) {
+      // 원본 그대로. 형식도 바꾸지 않는다.
+      const response = await fetch(section.generatedImage);
+      return { blob: await response.blob(), mimeType, recomposited: false };
+    }
+
     // 붙어 있으면 지금 값을, 아니면 마지막으로 잰 값을 쓴다. 둘 다 없을 때만
     // 기본 폭으로 떨어진다(레이어를 한 번도 안 놓은 작업이라 어긋날 것도 없다).
     const width = imageContainerRef.current?.clientWidth || lastCanvasWidthRef.current || 460;
-    const layers = overlaysBySection[sectionKeys[sectionIndex] ?? String(sectionIndex)] ?? [];
-    const exportNode = await buildExportNode({ imageSrc: section.generatedImage, width, layers });
+    // **한 번만 읽는다.** 전에는 `buildExportNode` 안에서 한 번, 여기서 또 한 번
+    // 같은 4~5MB data URL 을 디코드했다.
+    const { node: exportNode, naturalWidth } = await buildExportNode({
+      imageSrc: section.generatedImage,
+      width,
+      layers,
+    });
 
     document.body.appendChild(exportNode);
 
@@ -1960,7 +2281,7 @@ export function PdpEditor({
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        scale: 2,
+        scale: exportScaleFor({ naturalWidth, canvasWidth: width }),
       });
 
       const blob = await new Promise<Blob | null>((resolve) => {
@@ -1971,7 +2292,7 @@ export function PdpEditor({
         throw new Error("다운로드용 이미지를 만들지 못했습니다.");
       }
 
-      return blob;
+      return { blob, mimeType: "image/jpeg", recomposited: true };
     } finally {
       exportNode.remove();
     }
@@ -1986,8 +2307,13 @@ export function PdpEditor({
       setSelectedOverlayId(null);
       setEditingOverlayId(null);
       setActiveColorPalette(null);
-      const blob = await captureSectionBlob(currentSectionIndex);
-      downloadBlob(blob, `pdp-${sanitizeSectionFileName(currentSection.section_id)}.jpg`);
+      const captured = await captureSectionBlob(currentSectionIndex);
+      // 원본 그대로 줄 때는 원래 형식의 확장자를 쓴다. png 를 .jpg 로 저장하면
+      // 여는 프로그램이 헷갈린다.
+      downloadBlob(
+        captured.blob,
+        exportFileName(currentSection.section_id, captured.mimeType, captured.recomposited),
+      );
       setNotice(`${getDisplaySectionName(currentSection)} 컷을 다운로드했습니다.`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "이미지를 다운로드하지 못했습니다.");
@@ -2011,11 +2337,40 @@ export function PdpEditor({
     setIsSavingToLibrary(true);
     setErrorMessage("");
     try {
-      const images = saved.map((section) => {
-        const [, mimeType = "image/png", base64 = ""] =
-          /^data:([^;]+);base64,(.*)$/.exec(section.generatedImage ?? "") ?? [];
-        return { base64, mimeType };
-      });
+      /*
+        **얹은 글자와 도형을 함께 저장한다.**
+
+        전에는 `generatedImage` 원본만 올렸다. 다운로드·ZIP 은 합쳐서 굽는데
+        라이브러리만 안 합쳐서, 같은 작업인데 **내려받은 것과 저장된 것이
+        달랐다.** 여기는 「완성본 보관」이고 참고용 원본 저장과는 다른 동작이다.
+      */
+      /*
+        **한 장씩 굽는다.** 전에는 `Promise.all` 이라 여덟 장이 동시에
+        html2canvas 를 탔다. 그 라이브러리는 호출마다 문서 전체를 iframe 으로
+        복제하고 1536×2752 짜리 캔버스를 만든다 — 휴대폰에서는 탭이 죽고
+        사용자에게는 「저장이 안 된다」로만 보인다. ZIP 경로는 처음부터 순차였다.
+
+        **한 장이 실패해도 나머지를 살린다.** 동시에 돌릴 때는 하나만 터져도
+        여덟 장 전부가 저장되지 않았다. 못 구운 것은 원본 바이트로 올리고,
+        어느 섹션이 그랬는지 알린다.
+      */
+      const images: Array<{ base64: string; mimeType: string }> = [];
+      const 원본으로 : string[] = [];
+
+      for (const section of saved) {
+        const index = sections.indexOf(section);
+        try {
+          const captured = await captureSectionBlob(index);
+          images.push({ base64: await blobToBase64(captured.blob), mimeType: captured.mimeType });
+        } catch {
+          // 굽기에 실패했다. 얹은 글자는 없지만 그림은 남긴다.
+          const [, mimeType = "image/png", base64 = ""] =
+            /^data:([^;]+);base64,(.*)$/.exec(section.generatedImage ?? "") ?? [];
+          if (!base64) continue;
+          images.push({ base64, mimeType });
+          원본으로.push(getDisplaySectionName(section));
+        }
+      }
 
       // 섹션 이미지 한 장이 4~5MB다. 전부 한 요청에 담으면 서버가 파싱하다
       // 죽을 수 있다(운영 여유 메모리 445MB). 예산에 맞춰 나눠 보낸다.
@@ -2050,7 +2405,10 @@ export function PdpEditor({
       }
 
       if (savedCount) {
-        setNotice(`라이브러리에 ${savedCount}장을 저장했습니다. 다른 기기에서도 보입니다.`);
+        const 덧붙임 = 원본으로.length
+          ? ` (${원본으로.join(", ")}은(는) 얹은 글자 없이 원본으로 저장했습니다)`
+          : "";
+        setNotice(`라이브러리에 ${savedCount}장을 저장했습니다. 다른 기기에서도 보입니다.${덧붙임}`);
       }
       if (failure) setErrorMessage(failure);
     } catch (error) {
@@ -2081,8 +2439,10 @@ export function PdpEditor({
       const zip = new JSZip();
 
       for (const { section, index } of downloadableSections) {
-        const blob = await captureSectionBlob(index);
-        zip.file(`pdp-${String(index + 1).padStart(2, "0")}-${sanitizeSectionFileName(section.section_id)}.jpg`, blob);
+        const captured = await captureSectionBlob(index);
+        const name = exportFileName(section.section_id, captured.mimeType, captured.recomposited);
+        // 순서를 앞에 붙인다. 이어 붙일 때 차례가 섞이면 안 된다.
+        zip.file(`${String(index + 1).padStart(2, "0")}-${name}`, captured.blob);
       }
 
       const archive = await zip.generateAsync({ type: "blob" });
@@ -2182,6 +2542,7 @@ export function PdpEditor({
             설정
           </Button>
         ) : null}
+        {onUndo ? <Button variant="ghost" size="sm" disabled={isGenerating} onClick={onUndo}>변경 전으로 되돌리기</Button> : null}
         {onManualSave ? (
           <Button variant="ghost" size="sm" disabled={saveState === "saving"} onClick={onManualSave}>
             {saveState === "saving" ? (
@@ -2297,6 +2658,35 @@ export function PdpEditor({
             </p>
           </div>
         ) : null}
+        {개념시안.conceptOnly ? (
+          <div className="rounded-md border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-sm">
+            {개념시안.message}
+          </div>
+        ) : null}
+        {recoveredFailures?.length ? (
+          <div className="rounded-md border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-sm">
+            <p className="font-bold">만들어지지 않은 섹션 {recoveredFailures.length}장</p>
+            <p className="mt-0.5 text-muted-foreground">
+              아래 섹션만 다시 만들면 됩니다. 이미 만든 이미지는 그대로 있고 다시 차감되지 않습니다.
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {recoveredFailures.map((line) => (
+                <li key={line.label}>
+                  <span className="font-bold">{line.label}</span>{" "}
+                  <Badge variant={line.retryable ? "secondary" : "destructive"}>
+                    {line.retryable ? "다시 해 보세요" : "조치가 필요합니다"}
+                  </Badge>
+                  <p className="mt-0.5 text-muted-foreground">{line.reason}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {recoveredNotice ? (
+          <div className="rounded-md border border-primary/25 bg-primary-soft px-3.5 py-2.5 text-sm text-foreground">
+            {recoveredNotice}
+          </div>
+        ) : null}
         {notice ? (
           <div className="rounded-md bg-card px-3.5 py-2.5 text-sm text-muted-foreground shadow-[var(--shadow-ring)]">
             {notice}
@@ -2318,6 +2708,8 @@ export function PdpEditor({
             imageModel={imageModel}
             generatingKeys={generatingKeys}
             layerCounts={layerCounts}
+            // 개수만 넘기면 갤러리가 얹은 글자를 못 그린다.
+            overlaysBySection={overlaysBySection}
             onGenerate={(index) => void handleGenerateImage(index)}
             onGenerateAllMissing={() => void handleGenerateAllMissing()}
             onEdit={(index) => {
@@ -2441,33 +2833,10 @@ export function PdpEditor({
               */}
               {review ? (
                 <div className="mt-3">
-                  <ReviewPanel review={review} />
+                  <ReviewPanel review={review} blueprint={initialResult.blueprint} />
                 </div>
               ) : (
-                <div className="mt-3 grid gap-2">
-                  {initialResult.blueprint.scorecard.map((item) => (
-                    <article
-                      key={`${item.category}-${item.score}`}
-                      className="rounded-md bg-background p-2.5 shadow-[var(--shadow-ring)]"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <strong className="text-sm">{item.category}</strong>
-                        <Badge
-                          variant={
-                            item.score.startsWith("A")
-                              ? "green"
-                              : item.score.startsWith("B")
-                                ? "secondary"
-                                : "outline"
-                          }
-                        >
-                          {item.score}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{item.reason}</p>
-                    </article>
-                  ))}
-                </div>
+                <ScorecardPanel scorecard={initialResult.blueprint.scorecard} />
               )}
             </div>
           </details>
@@ -2545,24 +2914,52 @@ export function PdpEditor({
 
               <div className={styles.previewStage} ref={previewStageRef}>
                 {currentSection.generatedImage ? (
+                  /*
+                    **겉은 줄고 안은 고정이다.**
+
+                    안쪽 캔버스는 늘 460px 이고, 좁은 화면에서는 이 겉껍데기가
+                    그만큼 줄인 배율(`--canvas-fit`)을 넣어 준다. 레이어 좌표가
+                    460 기준으로 고정되므로 **어느 기기에서 열어도 같은 자리**다.
+
+                    전에는 캔버스 자체가 줄어 좌표의 뜻이 화면마다 달랐다 —
+                    데스크톱에서 오른쪽에 붙인 글자가 휴대폰에서 잘렸다.
+                  */
+                  <div
+                    className={styles.imageCanvasFit}
+                    ref={attachCanvasFit}
+                    // 줄인 만큼 자리도 줄인다. 안 그러면 아래에 빈 공간이 남는다.
+                    style={canvasHeight ? { height: `${canvasHeight * canvasFit}px` } : undefined}
+                  >
                   <div
                     className={styles.imageCanvas}
-                    ref={(node) => {
-                      imageContainerRef.current = node;
-                      // 붙거나 크기가 바뀔 때 기준 폭을 적어 둔다. 갤러리에서
-                      // 내려받을 때 이 값이 없으면 좌표가 어긋난다.
-                      if (node?.clientWidth) lastCanvasWidthRef.current = node.clientWidth;
-                    }}
+                    ref={attachCanvas}
+                    style={{ "--canvas-fit": canvasFit } as CSSProperties}
                   >
                     <img
                       alt={currentSection.section_name}
                       className={styles.sectionImage}
                       draggable={false}
                       src={currentSection.generatedImage}
+                      /*
+                        **못 읽으면 그렇다고 말한다.** 손상된 초안을 열면 빈
+                        자리 위에 글자만 떠 있었고, 사용자는 무엇이 잘못됐는지
+                        모른 채 이미지가 사라졌다고 본다.
+                      */
+                      onError={() =>
+                        setErrorMessage(
+                          `${getDisplaySectionName(currentSection)} 이미지를 불러오지 못했습니다. 다시 만들어 주세요.`,
+                        )
+                      }
                     />
 
-                    {[...currentShapeLayers, ...currentTextLayers].map((overlay) => (
+                    {[...currentShapeLayers, ...currentTextLayers].map((layer) => {
+                      // 끄는 중이면 임시 자리로 보여 준다. 확정은 놓을 때 한다.
+                      const overlay = previewedLayer(layer, layerPreview);
+                      return (
                       <Rnd
+                        // 겉이 줄어 있으면 마우스 움직임도 그만큼 환산해야
+                        // 잡은 자리와 실제 자리가 어긋나지 않는다.
+                        scale={canvasFit}
                         bounds="parent"
                         className={`${styles.overlayBox} ${isShapeLayer(overlay) ? styles.shapeLayerBox : styles.textLayerBox} ${selectedOverlayId === overlay.id ? styles.overlaySelected : ""}`}
                         enableUserSelectHack={false}
@@ -2589,15 +2986,33 @@ export function PdpEditor({
                           setSelectedOverlayId(overlay.id);
                           setActiveColorPalette(null);
                         }}
-                        onDrag={(_, data) => handleOverlayDrag(overlay, data.x, data.y)}
-                        onDragStop={(_, data) => handleOverlayDrag(overlay, data.x, data.y)}
-                        onResize={(_, direction, ref, __, position) => handleResize(overlay, direction, ref, position)}
+                        /*
+                          **끄는 동안은 임시 자리에만 담는다**(B-12-c).
+
+                          전에는 프레임마다 확정해서, 60fps 드래그가 부모
+                          (`PdpMakerClient`)를 초당 60번 다시 그리고 저장
+                          시계를 61번 움직였다. 놓기 전의 중간 좌표는 저장할
+                          값이 아니다.
+                        */
+                        onDrag={(_, data) => setLayerPreview({ id: layer.id, x: data.x, y: data.y })}
+                        onDragStop={(_, data) => {
+                          // **확정은 언제나 `layer`.** 임시 객체를 넘기면 언젠가
+                          // 임시값을 확정하게 된다.
+                          handleOverlayDrag(layer, data.x, data.y);
+                          // 안 비우면 다음 렌더가 임시 자리를 계속 보여 준다.
+                          setLayerPreview(null);
+                        }}
+                        // 크기 조절도 같은 기계다. 놓을 때 한 번 확정한다.
+                        onResize={(_, direction, ref, __, position) =>
+                          setLayerPreview(previewResize(layer, direction, ref, position))
+                        }
                         onResizeStart={() => {
-                          handleResizeStart(overlay);
+                          handleResizeStart(layer);
                         }}
                         onResizeStop={(_, direction, ref, __, position) => {
-                          handleResize(overlay, direction, ref, position);
-                          handleResizeStop(overlay.id);
+                          handleResize(layer, direction, ref, position);
+                          handleResizeStop(layer.id);
+                          setLayerPreview(null);
                         }}
                         position={{ x: overlay.x, y: overlay.y }}
                         resizeHandleClasses={{
@@ -2661,7 +3076,9 @@ export function PdpEditor({
                           </div>
                         )}
                       </Rnd>
-                    ))}
+                      );
+                    })}
+                  </div>
                   </div>
                 ) : (
                   <div className={styles.placeholderPanel}>
@@ -2788,10 +3205,39 @@ export function PdpEditor({
                 ) : null}
               </div>
 
+              {그림낡음 ? (
+                <p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm">
+                  {IMAGE_STALE_NOTICE}
+                </p>
+              ) : null}
+
               <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
-                <Badge variant={currentSection.generatedImage ? "green" : "outline"}>
-                  {currentSection.generatedImage ? "이미지 준비 완료" : "이미지 생성 필요"}
+                {/*
+                  **고친 글과 다른 이미지를 「준비 완료」라고 하지 않는다**(N-5).
+
+                  글자가 이미지 안에 그려지므로, 제목을 고치면 그림은 옛 글자를
+                  들고 있다. 그대로 내보내면 고친 글과 다른 이미지가 나간다.
+                */}
+                <Badge
+                  variant={
+                    그림낡음 ? "destructive" : currentSection.generatedImage ? "green" : "outline"
+                  }
+                >
+                  {그림낡음
+                    ? "이전 구성의 결과"
+                    : currentSection.generatedImage
+                      ? "이미지 준비 완료"
+                      : "이미지 생성 필요"}
                 </Badge>
+                {currentSection.qaStatus === "unavailable" ? (
+                  /*
+                    **검수를 못 돌린 것을 숨기지 않는다.** 그림은 나왔지만
+                    아무도 안 봤다 — 「이상 없음」과 구별해 알린다(설계 §10.2).
+                  */
+                  <Badge variant="outline" title="검수 호출이 실패해 이미지를 확인하지 못했습니다.">
+                    검수 못 함
+                  </Badge>
+                ) : null}
                 {currentSection.qaWarnings && currentSection.qaWarnings.length > 0 ? (
                   <Badge
                     variant={currentSection.qaWarnings.some(isBlockingDefect) ? "destructive" : "secondary"}

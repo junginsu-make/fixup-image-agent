@@ -20,6 +20,8 @@ RDS, ALB, NAT Gateway, CloudFront는 첫 배포에 넣지 않는다. 실제 EC2�
 - 회원 승인제 유지 여부. 현재 코드는 `pending → admin 승인 → active`로 구현돼 있다.
 - 신규 회원 월 기본 이미지 한도. migration의 현재 시작값은 30장이나 운영 적용 전 확정한다.
 - `ANALYZE_HOURLY_LIMIT`. 현재 시작값은 10회/시간이며 환경변수로 조정할 수 있다.
+- `REFERENCE_ANALYZE_HOURLY_LIMIT`. 레퍼런스를 올릴 때 그림을 읽는 호출의 시간당 한도다. 시작값은 60회/시간. **상세페이지 분석과 칸이 다르다** — 레퍼런스는 한자리에서 여러 장을 올리는 일이 정상이라, 같은 칸을 쓰면 레퍼런스를 정리하다가 그날 상세페이지를 못 만들게 된다.
+- 두 한도 모두 실패를 세는 방식이 2026-09-20 에 바뀌었다. 모델이 일한 흔적이 없는 실패(키 없음·공급자 장애·깨진 그림)는 한도를 소비하지 않는다. 대신 면제 여부와 무관한 남용 천장이 한도의 열 배로 걸린다. 걸린 쪽은 `generation_events` 의 `reason` 으로 구분한다(`analysis_rate_limit` / `analysis_abuse_limit`).
 - AWS 콘솔에서 현재 계정에 표시되는 Free Tier/크레딧 유형과 대상 인스턴스
 
 ## 1. Supabase 전용 프로젝트

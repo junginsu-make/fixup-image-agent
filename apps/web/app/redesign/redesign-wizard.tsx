@@ -18,8 +18,15 @@ import {
 import {
   type ImageLook,
 } from "@fixup/shared";
-import { splitFilesToStrips, runTranscription } from "./transcribe-client";
+import { runTranscriptStep } from "./transcript-step";
 import { randomId } from "../../lib/browser-safe";
+import { batchSummaryMessage } from "./batch-summary";
+import { appendGenerateFields } from "./generate-form";
+import { coverageNotice } from "./coverage";
+import { mergeFailedSections } from "./failed-sections";
+
+/** 「나머지 섹션 생성」이 채우는 완성 페이지의 장수. */
+const FULL_PAGE_SECTIONS = 8;
 import {
   REDESIGN_STEPS,
   commerceTips,
@@ -55,6 +62,7 @@ import {
 import { Dashboard, Workspace } from "./redesign-panels";
 import { GenerationProgressPanel, Results, estimateGenerationSeconds, generationPhase, isAbortError } from "./redesign-results";
 import { requestIdentityOf } from "./redesign-request";
+import { persistRedesignResult } from "./result-persistence";
 import { redesignProcessSource } from "../api/library/work-process";
 
 
@@ -95,11 +103,15 @@ export function RedesignWizard() {
   const [generationSummary, setGenerationSummary] = React.useState<GenerationSummary | null>(null);
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState("");
+  const [saveWarning, setSaveWarning] = React.useState("");
+  const [coverageWarning, setCoverageWarning] = React.useState(""); // 사연은 `coverage.ts`
   const [rolloutRequest, setRolloutRequest] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const knowledgeInputRef = React.useRef<HTMLInputElement>(null);
   const generationAbortRef = React.useRef<AbortController | null>(null);
   const retryRequestKeysRef = React.useRef<Record<string, string>>({});
+  /** 안쪽이 남기고 바깥 요약이 실어 보낸다. 사연은 `batch-summary.ts`. */
+  const lastGenerateErrorRef = React.useRef("");
   const transcriptCacheRef = React.useRef<{ key: string; transcript: string | null } | null>(null);
 
   React.useEffect(() => {
@@ -169,11 +181,15 @@ export function RedesignWizard() {
     startSection = 1,
     baseProject?: Project | null,
     displayCount = nextCount,
-    displayIndex = 1
+    displayIndex = 1,
+    /** 페이지가 몇 장짜리인가. 이 요청의 장수와 다르다. 사연은 `generate-form.ts`. */
+    pageTotal = nextCount
   ): Promise<Project | null> {
     const outputCount = typeof nextCount === "number" && Number.isFinite(nextCount) ? nextCount : count;
     const outputRolloutRequest = typeof nextRolloutRequest === "string" ? nextRolloutRequest : "";
 
+    // 지난 번 고지가 지금 자료와 무관하게 남아 있으면 안 된다.
+    setCoverageWarning("");
     if (files.length === 0) {
       setToast("기존 상세페이지 이미지 또는 PDF를 먼저 업로드해주세요.");
       setView("workspace");
@@ -194,8 +210,9 @@ export function RedesignWizard() {
       });
       let workingProject: Project | null = null;
       let completed = 0;
+      lastGenerateErrorRef.current = ""; // 지난 번 실패가 이번 요약에 따라붙으면 안 된다.
       for (let sectionNumber = startSection; sectionNumber < startSection + outputCount; sectionNumber += 1) {
-        const nextProject = await generate(1, outputRolloutRequest, sectionNumber, workingProject, outputCount, sectionNumber - startSection + 1);
+        const nextProject = await generate(1, outputRolloutRequest, sectionNumber, workingProject, outputCount, sectionNumber - startSection + 1, outputCount);
         if (!nextProject) break;
         workingProject = nextProject;
         completed += 1;
@@ -209,7 +226,7 @@ export function RedesignWizard() {
         skipped: Math.max(0, outputCount - completed - (completed < outputCount ? 1 : 0)),
         finishedAt: Date.now(),
       });
-      setToast(`일괄 생성 결과: 성공 ${completed}장${completed < outputCount ? ` · 확인 필요 1장 · 미시도 ${Math.max(0, outputCount - completed - 1)}장` : ""}. 성공한 이미지만 차감됐습니다.`);
+      setToast(batchSummaryMessage({ requested: outputCount, completed, reason: lastGenerateErrorRef.current }));
       return workingProject;
     }
 
@@ -249,41 +266,22 @@ export function RedesignWizard() {
 
     try {
       const form = new FormData();
-      const uploadFiles = await normalizeFilesForUpload(files);
+      const normalized = await normalizeFilesForUpload(files);
+      const uploadFiles = normalized.files;
+      const cuts = [...normalized.cuts];
       if (abortController.signal.aborted) throw new DOMException("생성 요청을 취소했습니다.", "AbortError");
 
-      let transcript: string | null = null;
-      const transcriptCacheKey = files.map((f) => `${f.name}:${f.size}`).join(",");
-      if (transcriptCacheRef.current?.key === transcriptCacheKey) {
-        transcript = transcriptCacheRef.current.transcript;
-      } else {
-        /**
-         * **끝까지 간 전사만 캐시에 넣는다.**
-         *
-         * 중단은 예외를 던지지 않고 이미 끝난 배치까지만 이어붙여 정상으로
-         * 돌아온다. 그것을 성공한 것과 같은 열쇠로 넣어 두면, 설정만 바꿔 다시
-         * 만들 때 전사 단계를 건너뛰고 **잘린 텍스트를 영구히 재사용한다** —
-         * 새로고침 전까지 몇 번을 눌러도 같은 결과가 나온다.
-         */
-        let complete = false;
-        try {
-          setToast("원본 상세페이지를 전사하는 중입니다(작은 글씨까지 확인).");
-          const strips = await splitFilesToStrips(files);
-          const r = await runTranscription(strips, {
-            provider: selectedModel,
-            signal: abortController.signal,
-            onProgress: (d, t) => setToast(`전사 진행 ${d}/${t} 배치`),
-          });
-          transcript = r.transcript;
-          complete = r.complete;
-          if (r.failedBatches) setToast(`일부 구간 전사 실패(${r.failedBatches}). 가능한 범위로 진행합니다.`);
-        } catch {
-          transcript = null; // graceful degradation
-        }
-        // 못 다 읽은 것은 남기지 않는다. 다음 번에 처음부터 다시 읽는다.
-        if (complete) transcriptCacheRef.current = { key: transcriptCacheKey, transcript };
-      }
+      const step = await runTranscriptStep({
+        files, provider: selectedModel, signal: abortController.signal,
+        cache: transcriptCacheRef.current,
+        onNotice: setToast,
+        onProgress: (d, t) => setToast(`전사 진행 ${d}/${t} 배치`),
+      });
+      const transcript = step.transcript;
+      cuts.push(...step.cuts);
+      if (step.nextCache) transcriptCacheRef.current = step.nextCache;
 
+      setCoverageWarning(coverageNotice(cuts));
       setToast("원본 분석과 실제 이미지 생성을 시작합니다.");
       const knowledgeText = useSharedKnowledge
         ? knowledgeItems
@@ -291,21 +289,15 @@ export function RedesignWizard() {
             .join("\n\n")
             .slice(0, 60000)
         : "";
-      uploadFiles.forEach((file) => form.append("files", file));
-      form.append("knowledgeText", knowledgeText);
-      form.append("useKnowledge", String(useSharedKnowledge));
-      form.append("request", request);
-      form.append("model", selectedModel);
-      form.append("channel", channel);
-      form.append("ratio", ratio);
-      form.append("look", look);
-      form.append("count", String(outputCount));
-      form.append("startSection", String(startSection));
-      form.append("rolloutRequest", outputRolloutRequest);
-      if (transcript) form.append("transcript", transcript);
-      // 각도는 여러 번 넣는다 — 라우트가 `getAll` 로 받는다. 안 넣으면 자동이다.
-      if (characterId) form.append("characterId", characterId);
-      if (characterId) for (const a of characterAngles) form.append("characterAngles", a);
+      appendGenerateFields(form, {
+        uploadFiles, knowledgeText, useKnowledge: useSharedKnowledge, request,
+        model: selectedModel, channel, ratio, look,
+        count: outputCount, startSection, rolloutRequest: outputRolloutRequest, transcript,
+        characterId, characterAngles,
+        // 쪼개 부르는 자리와, 앞 청크가 이미 한 기획(F-7-7).
+        jobIndex: displayIndex, jobTotal: displayCount, pageTotal,
+        analysis: baseProject?.analysis, analysisFiles: baseProject?.files,
+      });
 
       const response = await fetch("/api/redesign/generate", {
         method: "POST",
@@ -334,6 +326,14 @@ export function RedesignWizard() {
       const project: Project = {
         ...data.project,
         title: projectDisplayTitle(data.project),
+        // 어느 장이 왜 빠졌는지(F-7-8). 사연은 `failed-sections.ts`.
+        // 안 쓰인 참조가 있으면 그 사실을 들고 간다(N-9).
+        referenceNotice: data.project?.referenceNotice,
+        failedSections: mergeFailedSections(
+          baseProject?.failedSections,
+          data.project?.failedSections,
+          (data.project?.sections ?? []).map((section: { section_id?: string }) => String(section.section_id ?? "")),
+        ),
         sections: data.project.sections.map((section: Record<string, string>) => ({
           id: section.section_id,
           name: section.name,
@@ -394,8 +394,10 @@ export function RedesignWizard() {
         skipped: 0,
         finishedAt: Date.now(),
       });
+      const 사유 = error instanceof Error ? error.message : "이미지 생성 중 오류가 발생했습니다.";
+      lastGenerateErrorRef.current = isAbortError(error) ? "" : 사유; // 바깥 요약이 덮기 전에 남긴다.
       if (isAbortError(error)) setToast("생성 요청을 취소했습니다. 서버 처리 여부는 사용량에서 확인해 주세요.");
-      else setToast(error instanceof Error ? error.message : "이미지 생성 중 오류가 발생했습니다.");
+      else setToast(사유);
       return null;
     } finally {
       if (generationAbortRef.current === abortController) generationAbortRef.current = null;
@@ -416,7 +418,7 @@ export function RedesignWizard() {
         .map((section) => Number(section.id.replace(/\D/g, "")))
         .filter((sectionNumber) => Number.isFinite(sectionNumber))
     );
-    const missingSections = Array.from({ length: 8 }, (_, index) => index + 1)
+    const missingSections = Array.from({ length: FULL_PAGE_SECTIONS }, (_, index) => index + 1)
       .filter((sectionNumber) => !existingSectionNumbers.has(sectionNumber));
 
     reportClientLog("generate-rest:start", {
@@ -425,14 +427,15 @@ export function RedesignWizard() {
     });
 
     if (missingSections.length === 0) {
-      setToast("이미 8장 상세페이지가 생성되어 있습니다.");
+      setToast(`이미 ${FULL_PAGE_SECTIONS}장 상세페이지가 생성되어 있습니다.`);
       return;
     }
 
     let completed = 0;
+    lastGenerateErrorRef.current = ""; // 지난 번 실패가 이번 요약에 따라붙으면 안 된다.
     for (const [index, sectionNumber] of missingSections.entries()) {
       setToast(`S${sectionNumber} 섹션을 생성합니다.`);
-      const nextProject = await generate(1, rolloutRequest, sectionNumber, workingProject, missingSections.length, index + 1);
+      const nextProject = await generate(1, rolloutRequest, sectionNumber, workingProject, missingSections.length, index + 1, FULL_PAGE_SECTIONS);
       if (!nextProject) break;
       workingProject = nextProject;
       completed += 1;
@@ -446,7 +449,11 @@ export function RedesignWizard() {
       skipped: Math.max(0, missingSections.length - completed - (completed < missingSections.length ? 1 : 0)),
       finishedAt: Date.now(),
     });
-    setToast(`나머지 섹션 결과: 성공 ${completed}장${completed < missingSections.length ? ` · 확인 필요 1장 · 미시도 ${Math.max(0, missingSections.length - completed - 1)}장` : ""}. 성공한 이미지만 차감됐습니다.`);
+    setToast(batchSummaryMessage({
+      requested: missingSections.length,
+      completed,
+      reason: lastGenerateErrorRef.current,
+    }));
   }
 
   function openProject(project: Project) {
@@ -539,23 +546,7 @@ export function RedesignWizard() {
     }
   }
 
-  /**
-   * 결과물을 계정 라이브러리에 올린다.
-   *
-   * 옆의 '작업 저장'은 브라우저 IndexedDB 에 두는 것이라 기기를 옮기면 안 보이고
-   * 브라우저를 지우면 사라진다. 이쪽은 서버의 내 계정에 남는다.
-   *
-   * 자동으로 올리지 않는다 — 실험 삼아 돌린 것까지 쌓이면 목록이 쓰레기로 찬다.
-   */
-  /**
-   * 방금 만든 섹션만 서버 라이브러리에 올린다.
-   *
-   * 전체를 다시 올리지 않는다 — 여덟 섹션이면 같은 그림을 서른여섯 번
-   * 올리게 된다. `sourceId` 가 같으면 서버가 이어 붙인다.
-   *
-   * **조용히 실패한다.** 자동 저장이 사용자의 작업을 막아서는 안 된다.
-   * 못 올렸으면 '라이브러리에 저장' 버튼이 그대로 남아 있다.
-   */
+  // 전체 작업은 브라우저에, 이번 섹션만 라이브러리에 보관한다. 실패 상태는 남긴다.
   async function autoSaveSections(project: Project, sections: SectionResult[]) {
     const images = sections
       .map((section) => /^data:([^;]+);base64,(.*)$/.exec(section.imageUrl || ""))
@@ -565,8 +556,9 @@ export function RedesignWizard() {
 
     if (images.length === 0) return;
 
-    try {
-      await fetch("/api/library", {
+    const stored = await persistRedesignResult(
+      () => saveProjectToDb({ ...project, savedAt: new Date().toISOString() }),
+      () => fetch("/api/library", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -576,9 +568,14 @@ export function RedesignWizard() {
           ...redesignProcessSource(project),
           images,
         }),
-      });
-    } catch {
-      // 삼킨다. 손으로 올릴 길이 남아 있다.
+      }),
+    );
+    if (!stored.librarySaved || !stored.localSaved) {
+      setSaveWarning(stored.localSaved
+        ? "생성 결과는 이 브라우저에 보관했지만 라이브러리 저장에 실패했습니다. ‘라이브러리에 저장’으로 다시 저장해 주세요."
+        : stored.librarySaved
+          ? "이미지는 라이브러리에 저장했지만 브라우저 작업 저장에 실패했습니다. ‘작업 저장’을 다시 시도해 주세요."
+          : "생성 결과를 저장하지 못했습니다. 화면을 닫기 전에 다운로드하거나 다시 저장해 주세요.");
     }
   }
 
@@ -761,6 +758,7 @@ export function RedesignWizard() {
         </div>
       </div>
 
+      {saveWarning || coverageWarning ? <div role="alert" className="mb-4 rounded-lg border border-warning/30 p-3 text-sm">{[saveWarning, coverageWarning].filter(Boolean).join(" ")}</div> : null}
       {generationSummary ? (
         <div
           className={cn(
@@ -814,7 +812,7 @@ export function RedesignWizard() {
             look={look}
             setLook={setLook}
             files={files}
-            setFiles={setFiles}
+            setFiles={(next) => { setCoverageWarning(""); setFiles(next); }}
             request={request}
             setRequest={setRequest}
             inputRef={inputRef}

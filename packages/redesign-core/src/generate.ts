@@ -1,3 +1,4 @@
+import { referenceBudgetNotice } from "./reference-budget";
 import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
@@ -13,6 +14,9 @@ import {
 import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
 import { RedesignError } from "./errors.js";
+import { reportUsage } from "./usage.js";
+import { GROUNDING_RULE } from "@fixup/shared";
+import { assertNotTruncated, TRUNCATED_CODE } from "./truncation.js";
 import { GOOGLE_READING_MODEL } from "./transcribe.js";
 
 /**
@@ -182,6 +186,28 @@ export type GenerateSectionsInput = {
    * 라우트가 정한다.
    */
   onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
+  /**
+   * **이미 한 기획.** 있으면 다시 안 한다(F-7-7).
+   *
+   * 화면의 「나머지 섹션 생성」은 자기 자신을 한 장씩 다시 부른다. 그래서
+   * 여덟 장 채우기는 **분석도 여덟 번** 돌았다 — 글 모델 값이 여덟 배고,
+   * 그만큼 더 기다리고, 무엇보다 **청크마다 다른 계획**이 나왔다.
+   *
+   * 분석 결과는 이미 응답에 실려 돌아간다(`project.analysis`). 그것을 도로
+   * 주면 된다.
+   *
+   * **쓸 만한 것만 믿는다.** 화면이 가진 사본이 낡았거나 비었으면 무시하고
+   * 다시 분석한다 — 그대로 쓰면 F-7-3 이 막은 「빈 분석으로 유료 생성」이
+   * 뒷문으로 되살아난다.
+   */
+  analysis?: unknown;
+  /**
+   * **페이지가 몇 장짜리인가.** 이 요청이 만드는 장수(`count`)와 다른 수다.
+   *
+   * 화면이 장마다 따로 부르므로 `count` 는 늘 1이다. 그 수로 「N장을 이어
+   * 붙였을 때」를 적으면 모든 요청이 「1장」이 된다(2026-09-21 리뷰 회귀).
+   */
+  pageTotal?: number;
   /**
    * 그림을 **실제로 만드는 사람.**
    *
@@ -387,8 +413,11 @@ export async function generateSections(input: GenerateSectionsInput) {
     : "";
   console.info(`[generate] knowledge ready job=${jobId} useKnowledge=${useKnowledge} chars=${retrievedKnowledgeText.length}`);
   const payload = { request: requestText, rolloutRequest, knowledgeText: retrievedKnowledgeText, options: { channel, ratio, count } };
-  console.info(`[generate] analysis start job=${jobId}`);
-  const analysis = await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage });
+  // 이미 한 기획이 있으면 다시 안 한다(F-7-7). 쓸 만한 것만 믿는다.
+  const reusedAnalysis = isUsableAnalysis(input.analysis) ? input.analysis : undefined;
+  console.info(`[generate] analysis start job=${jobId} reused=${Boolean(reusedAnalysis)}`);
+  const analysis = reusedAnalysis
+    ?? await analyzeSource({ provider, apiKey, references, payload, modelInfo, transcript, onUsage: input.onUsage });
   console.info(`[generate] analysis done job=${jobId}`);
   // 분석에는 인물을 넣지 않는다. 분석은 원본 상세페이지를 읽어 제품을 파악하는
   // 일이라, 인물이 섞이면 제품 분석이 오염된다. 생성에만 넣는다.
@@ -409,6 +438,7 @@ export async function generateSections(input: GenerateSectionsInput) {
   const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive, {
     attachmentDirective,
     look: normalizeLook(input.look),
+    pageTotal: Number(input.pageTotal) || undefined,
   });
   const projectTitle = inferProjectTitle(analysis, channel);
 
@@ -485,6 +515,20 @@ export async function generateSections(input: GenerateSectionsInput) {
       analysis,
       sections: generatedSections,
       failedSections,
+      /*
+        **안 쓰인 참조를 말한다**(N-9, 설계 §1 불변조건 7).
+
+        참조를 상한에서 자르는 것 자체는 맞다 — 모델이 받을 수 있는 장수가
+        정해져 있다. 문제는 **안 알리는 것**이었다. 각도를 넷 고르고 원본이
+        세 장이면 각도 하나가 말없이 빠지고, 사용자는 결과가 왜 다른지
+        알 길이 없다.
+      */
+      referenceNotice: referenceBudgetNotice({
+        characterCount: characters.length,
+        attachedCharacterCount,
+        originalCount: references.length,
+        attachedCount: drawReferences.length,
+      }),
       warning: failedSections.length > 0
         ? `${generatedSections.length}장은 생성됐고 ${failedSections.length}장 이후는 실패했습니다. 정밀형 요청 제한이면 잠시 후 섹션별 재생성을 실행하세요.`
         : ""
@@ -548,7 +592,8 @@ export function buildAnalyzePrompt(
   return [
     "너는 전환율 중심 CRO 카피라이터 + 상세페이지 UX 디자이너 + 커머스 리서처다.",
     "업로드된 기존 상세페이지와 전사를 근거로 카테고리, USP, 타겟, 전환 저해 요소, 유지할 장점, 리디자인 전략을 한국어 JSON으로 요약하라.",
-    "근거 없는 수치/효과/리뷰/인증을 만들지 말고, 위험 표현은 안전하게 완화하라.",
+    // 지어내면 안 되는 것의 목록은 두 도구가 한 벌로 쓴다(F-7-1).
+    GROUNDING_RULE,
     `판매 채널: ${payload.options.channel}`,
     `추가 요청사항: ${payload.request || "전환율 중심으로 리디자인"}`,
     payload.rolloutRequest ? `히어로 검토 후 나머지 섹션에 반영할 요청: ${payload.rolloutRequest}` : "히어로 검토 후 요청: 없음",
@@ -565,6 +610,30 @@ export function buildAnalyzePrompt(
     "  · typography: 서체 굵기·자폭·성격, 제목과 본문의 크기 비.",
     "  · layout: 정보를 담는 그릇(표·카드·띠), 여백 리듬, CTA 위치.",
   ].join("\n");
+}
+
+/**
+ * **쓸 만한 분석인가.**
+ *
+ * 기획이 쓰는 칸 중 하나라도 차 있으면 쓸 만하다고 본다. 넷 다 비면 모델이
+ * 아무 말도 안 한 것이고, 그 상태로 그리면 자료를 한 번도 안 읽은 페이지가
+ * 나온다.
+ *
+ * **엄하게 잡지 않는다.** 모델이 칸 이름을 조금 다르게 줘도 사람이 보기에
+ * 쓸 만한 답이면 통과해야 한다 — 여기서 과하게 막으면 멀쩡한 생성이 죽는다.
+ */
+function isUsableAnalysis(analysis: unknown): boolean {
+  if (!analysis || typeof analysis !== "object") return false;
+  const value = analysis as Record<string, unknown>;
+
+  if (value.product_inferred || value.design_language) return true;
+  if (typeof value.strategy === "string" && value.strategy.trim()) return true;
+  if (typeof value.diagnostic_summary === "string" && value.diagnostic_summary.trim()) return true;
+  if (Array.isArray(value.page_blueprint) && value.page_blueprint.length > 0) return true;
+  // 모델이 JSON 이 아닌 글로 답한 경우. 내용이 있으면 프롬프트에 실을 값이 된다.
+  if (typeof value.summary === "string" && value.summary.trim()) return true;
+
+  return false;
 }
 
 async function analyzeSource({
@@ -587,52 +656,94 @@ async function analyzeSource({
   const prompt = buildAnalyzePrompt(payload, modelInfo, transcript);
 
   try {
-    if (provider === "google") {
-      return await analyzeWithGoogle({ apiKey, prompt, references, onUsage });
+    const analysis = provider === "google"
+      ? await analyzeWithGoogle({ apiKey, prompt, references, onUsage })
+      : await analyzeWithOpenAI({ apiKey, prompt, references, onUsage });
+
+    /*
+      **터지는 실패만 실패가 아니다.**
+
+      분석이 비는 길은 둘인데 catch 는 던지는 쪽만 잡는다. 다른 하나는
+      **200 인데 본문이 빈 경우**다 — `parseMaybeJson` 은 절대 안 던지고
+      `{ summary: "" }` 를 정상 반환한다. 그대로 흐르면 프롬프트에
+      `분석 요약: {"summary":""}` 가 박힌 채 장마다 값이 나간다. 설계 §14.5 가
+      쓴 말 그대로의 「**빈 분석**으로 유료 생성」이다.
+
+      지어낼 수 있는 상황이 아니다. 기획 모델은 추론 모델이라 추론 토큰을 다
+      쓰면 200 에 빈 `output_text` 를 주고, Google 쪽은 안전차단이면
+      `candidates` 가 비어 빈 글자로 떨어진다.
+
+      **던져서 아래 catch 로 합류시킨다.** 사용자가 보는 말도, 상태도, 크레딧도
+      터진 실패와 똑같아야 한다.
+    */
+    if (!isUsableAnalysis(analysis)) {
+      throw new Error(`분석 응답이 비었습니다: ${JSON.stringify(analysis).slice(0, 200)}`);
     }
-    return await analyzeWithOpenAI({ apiKey, prompt, references, onUsage });
+    return analysis;
   } catch (error) {
-    return {
-      product_inferred: { category: "업로드 자료 기반 추정", confidence: 0.4 },
-      diagnostic_summary: `AI 분석 호출 실패: ${error instanceof Error ? error.message : "unknown"}`,
-      strategy: "원본 자료의 제품컷/USP/근거를 보존하고, 6~8장 섹션 구조로 전환 설계를 적용합니다.",
-      page_blueprint: [],
-      compliance_notes: "근거 없는 수치, 리뷰, 인증, 효과 표현은 생성하지 않습니다.",
-      verified_facts: []
-    };
-  }
-}
+    /*
+      **여기서 멈춘다**(F-7-3).
 
-/**
- * 업체 응답에서 토큰 수를 꺼낸다.
- *
- * OpenAI 는 `usage.input_tokens`, Google 은 `usageMetadata.promptTokenCount` 다.
- * **못 찾으면 0 이 아니라 아무 말도 하지 않는다** — 0원으로 적히면 「안 썼다」와
- * 「못 쟀다」가 같은 모양이 된다.
- */
-function reportUsage(
-  onUsage: GenerateSectionsInput["onUsage"],
-  model: string,
-  data: unknown,
-): void {
-  if (!onUsage || !data || typeof data !== "object") return;
-  const record = data as Record<string, unknown>;
-  const usage = (record.usage ?? record.usageMetadata) as Record<string, unknown> | undefined;
-  if (!usage || typeof usage !== "object") return;
+      전에는 지어낸 결과를 돌려줬다 — `page_blueprint: []` 에 만들어 낸 제품
+      추정과 일반론 전략이었다. 그 상태로 생성이 그대로 돌고 **장마다 값이
+      나간다.** 사용자는 자기 자료를 한 번도 안 읽은 페이지를 받고 그 값을 낸다.
 
-  const pick = (...names: string[]) => {
-    for (const name of names) {
-      const value = usage[name];
-      if (typeof value === "number" && Number.isFinite(value)) return value;
+      더 나빴던 것은 **아무도 그 사실을 몰랐다**는 점이다. 실패는
+      `diagnostic_summary` 라는 글에만 남는데 그것을 화면에 띄우는 곳이 한
+      군데도 없었다.
+
+      예약은 생성 **앞**에 있다. 여기서 멈추면 크레딧은 0으로 닫히고 사용자는
+      아무것도 잃지 않는다.
+
+      **5xx 로 준다.** 4xx 면 화면이 「입력이 잘못됐다」로 읽어, 멀쩡한 자료를
+      다시 만들려고 애쓰게 된다.
+
+      **「이 요청에는」을 뺄 수 없다.** 일괄 생성은 한 장씩 여러 번 부르므로,
+      다섯째에서 멈췄으면 앞 네 장은 이미 차감됐다. 그냥 「크레딧은 사용되지
+      않았습니다」라고 하면 사용자가 읽는 단위(여덟 장 만들기)에서 거짓이 된다.
+    */
+    const detail = error instanceof Error ? error.message : String(error);
+    const status = typeof (error as { status?: unknown })?.status === "number"
+      ? (error as { status: number }).status
+      : undefined;
+    console.error(`[generate] 분석 실패로 중단 status=${status ?? "none"}`, error);
+
+    /*
+      **고칠 수 있는 실패를 「잠시 후 다시」로 뭉개지 않는다.**
+
+      제공자가 4xx 로 거절한 것은 **다시 시도해도 영원히 안 된다** — 키가
+      틀렸거나, 조직 인증이 안 됐거나, 올린 그림 형식이 안 맞는 경우다.
+      `humanizeProviderError` 가 그 셋에 대해 무엇을 하면 되는지 적어 두었는데,
+      전부 502 로 덮으면 그 안내가 **도달할 수 없는 글**이 된다.
+
+      429(한도)는 뺀다. 그것은 진짜로 잠시 후 다시다.
+    */
+    if (status !== undefined && status >= 400 && status < 500 && status !== 429) {
+      throw new RedesignError(humanizeProviderError(detail), 400);
     }
-    return undefined;
-  };
 
-  const inputTokens = pick("input_tokens", "prompt_tokens", "promptTokenCount");
-  const outputTokens = pick("output_tokens", "completion_tokens", "candidatesTokenCount");
-  if (inputTokens === undefined && outputTokens === undefined) return;
+    /*
+      **잘린 것도 「잠시 후 다시」가 아니다**(F-7-1).
 
-  onUsage({ model, inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 });
+      다시 불러도 같은 길이를 쓴다. 할 일은 원본 장수를 줄이거나 상한을 올리는
+      것이고, 그 말이 이미 오류에 적혀 있다. 일반 문구로 덮으면 사용자가
+      같은 요청을 계속 다시 보낸다.
+    */
+    if ((error as { code?: unknown })?.code === TRUNCATED_CODE) {
+      /*
+        `error.message` 는 **이미 사용자에게 보일 말**이다. 모델 이름과
+        finishReason 은 `error.detail` 에만 있고 위 `console.error` 로만 나간다
+        — 상세페이지가 공급자 문구를 한 겹 번역해 내보내는 것과 같은 계약이다
+        (`pdp.service.ts`).
+      */
+      throw new RedesignError(detail, 422);
+    }
+
+    throw new RedesignError(
+      "업로드한 자료를 분석하지 못했습니다. 잠시 후 다시 시도해 주세요. 이 요청에는 크레딧이 사용되지 않았습니다.",
+      502,
+    );
+  }
 }
 
 async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiKey: string; prompt: string; references: ReferenceImage[]; onUsage?: GenerateSectionsInput["onUsage"] }) {
@@ -650,6 +761,22 @@ async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiK
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
+    /*
+      **출력 상한을 씌우지 않는다**(F-7-1 리뷰, 2026-09-21).
+
+      처음에는 상세페이지의 기획 상한(32,768)을 그대로 가져왔다. 리뷰가 잡았다 —
+      **여기는 원래 상한이 없었으므로 그것을 씌우는 것은 추가가 아니라 축소**다.
+      게다가 Responses 의 `max_output_tokens` 는 보이는 출력 **더하기 추론
+      토큰**이고, 이 모델은 추론 모델이다(추론을 다 쓰면 200 에 빈 `output_text`
+      가 온다는 사실이 이 파일에 이미 적혀 있다).
+
+      상세페이지의 32,768 은 **그쪽 기획 응답 10,463토큰을 재고** 정한 값이다.
+      리디자인 분석은 입력도 출력도 다른 작업이라 그 근거를 빌려 쓸 수 없다.
+
+      **구멍은 상한이 아니라 검사가 막는다.** 잘리면 `assertNotTruncated` 가
+      잡아 값이 나가기 전에 멈춘다. 상한은 장부의 `output_tokens` 분포를 보고
+      값으로 정한 뒤에 넣는다(`usage.ts` 가 그 값을 이미 보내고 있다).
+    */
     body: JSON.stringify({
       model: ANALYSIS_MODEL,
       input: [{ role: "user", content }]
@@ -657,8 +784,14 @@ async function analyzeWithOpenAI({ apiKey, prompt, references, onUsage }: { apiK
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response));
+  // **상태를 싣는다.** 4xx 는 다시 시도해도 안 된다 — 아래 catch 가 갈라 준다.
+  if (!response.ok) {
+    throw Object.assign(new Error(withRequestId(data?.error?.message || "OpenAI 분석 요청 실패", response)), {
+      status: response.status,
+    });
+  }
   reportUsage(onUsage, ANALYSIS_MODEL, data);
+  assertNotTruncated(data, ANALYSIS_MODEL);
   const text = data.output_text || extractOpenAIText(data);
   return parseMaybeJson(text);
 }
@@ -684,8 +817,13 @@ async function analyzeWithGoogle({ apiKey, prompt, references, onUsage }: { apiK
   });
 
   const data = await readJsonResponse(response);
-  if (!response.ok) throw new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response));
+  if (!response.ok) {
+    throw Object.assign(new Error(withRequestId(data?.error?.message || "Google 분석 요청 실패", response)), {
+      status: response.status,
+    });
+  }
   reportUsage(onUsage, GOOGLE_READING_MODEL, data);
+  assertNotTruncated(data, GOOGLE_READING_MODEL);
   const text = data?.candidates?.[0]?.content?.parts?.find((part: { text?: string }) => part.text)?.text || "";
   return parseMaybeJson(text);
 }
@@ -787,16 +925,33 @@ export function buildSections(
     attachmentDirective?: string;
     /** 그림의 결. 기본 `auto` 는 아무 말도 보태지 않는다. */
     look?: ImageLook;
+    /**
+     * **페이지가 몇 장짜리인가.** 이 요청이 만드는 장수(`count`)와 다른 수다.
+     *
+     * 리디자인은 **장마다 따로 요청한다** — 화면이 `generate(1, …)` 로 부르므로
+     * `count` 는 언제나 1이다. 그 수로 「N장을 이어 붙였을 때」를 적으면 모든
+     * 요청이 **「1장」**이 되어, 「한 페이지로 이어져야 한다」는 요구가 유료
+     * 이미지마다 무의미해진다(2026-09-21 리뷰에서 회귀로 잡혔다).
+     *
+     * **모르면 숫자를 안 쓴다.** 틀린 수를 대는 것보다 안 대는 쪽이 낫다.
+     */
+    pageTotal?: number;
   }
 ): Section[] {
   // 「추가 요청사항」이 곧 사용자가 직접 친 지시다. 리디자인에는 이미 이 칸이
   // 있으므로 새 입력을 하나 더 만들지 않는다 — 두 칸이 서로 다투게 된다.
   const userInstruction = payload.request.trim();
   const lookDirective = imageLookDirective(options?.look ?? "auto");
+  /*
+    이 요청의 장수가 아니라 **페이지의 장수**다. 한 장씩 부르는 경로에서
+    `count` 는 늘 1이라 그 수를 쓰면 「1장」이 된다.
+  */
+  const pageTotal = Number.isFinite(options?.pageTotal) ? Math.floor(Number(options?.pageTotal)) : count;
+  const pageScopeLabel = pageTotal > 1 ? `${pageTotal}장` : "전체 상세페이지";
 
-  return sectionTemplates(count, startSection).map((template) => {
+  return applyBlueprint(sectionTemplates(count, startSection), analysis, startSection).map((template) => {
     const facts = factsForSections(analysis);
-    const isFactSection = template.id === "S4" || template.id === "S5";
+    const isFactSection = isEvidenceSection(template);
     const factsBlock = isFactSection && facts.length
       ? `\n검증된 원본 사실(정확 표기 유지, 이 안에서만 인증/수치 사용):\n${facts.map((f) => `- ${f}`).join("\n")}\n핵심 인증/수치는 읽기 쉬운 정보 패널로 크게 배치한다(이 섹션에 한해 '작은 글씨 회피' 규칙보다 우선).`
       : "";
@@ -822,15 +977,16 @@ export function buildSections(
       `추가 요청사항: ${payload.request || "전환율 중심으로 리디자인"}`,
       payload.rolloutRequest ? `히어로 1장 검토 후 사용자가 요청한 반영사항: ${payload.rolloutRequest}` : "히어로 검토 후 반영사항: 없음",
       payload.knowledgeText ? `참고 사전 지식: ${payload.knowledgeText.slice(0, 18000)}` : "참고 사전 지식: 없음",
-      `분석 요약: ${JSON.stringify(analysis).slice(0, 2400)}`,
+      // `JSON.stringify(undefined)` 는 `undefined` 라 그대로 자르면 터진다.
+      `분석 요약: ${(JSON.stringify(analysis) ?? "{}").slice(0, 2400)}`,
       // 분석의 design_language 를 따로 뽑아 싣는다. 요약 JSON 안에 묻히면 2400자
       // 자르기에 잘려 나가고, 묻혀 있으면 지시로 읽히지 않는다.
       designLanguageBlock(analysis),
       "브랜드명 금지 규칙: '한이룸', '한이룸의', '한이룸 스킨', 'HANEERUM', 'Haneerum', 'HR'은 서비스명 또는 도구명일 뿐이며 제품 브랜드가 아니다. 이 단어들을 이미지 안의 제품명, 브랜드명, 로고, 라벨, 헤드라인, 후기, FAQ, CTA, 패키지 텍스트로 절대 사용하지 않는다.",
       "브랜드 사용 규칙: 제품 브랜드명과 제품명은 업로드된 원본 상세페이지 또는 제품 패키지에서 확인되는 이름만 사용한다. 원본에서 확인되지 않는 새 브랜드명, 새 제품명, 새 로고를 만들지 않는다.",
-      "전체 연결 규칙: 8장을 이어 붙였을 때 하나의 상세페이지처럼 보여야 한다. 동일한 브랜드 색, 폰트 감각, 제품 사진 톤은 유지하되 각 섹션의 레이아웃은 반드시 다르게 구성한다. 모든 섹션이 큰 상단 헤드라인+중앙 제품컷으로 반복되면 안 된다.",
+      `전체 연결 규칙: ${pageScopeLabel}을 이어 붙였을 때 하나의 상세페이지처럼 보여야 한다. 동일한 브랜드 색, 폰트 감각, 제품 사진 톤은 유지하되 각 섹션의 레이아웃은 반드시 다르게 구성한다. 모든 섹션이 큰 상단 헤드라인+중앙 제품컷으로 반복되면 안 된다.`,
       "섹션별 변화 규칙: 제품 위치, 정보 카드 모양, 아이콘 밀도, 배경 분할, CTA 위치, 타이포 크기 리듬을 섹션마다 다르게 한다. 같은 헤드라인 문구를 반복하지 말고, 섹션 목적에 맞는 새로운 제목을 쓴다.",
-      "안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. 근거 없는 수치, 리뷰, 인증, 효과를 만들지 않는다. 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다. 규제 리스크가 있으면 안전한 표현으로 완화한다.",
+      `안전 규칙: 원본 제품컷/색감/핵심 정보는 보존한다. ${GROUNDING_RULE} 한 장에 메시지 하나만 담는다. 한국어 문구는 크게, 불릿은 3개 이하로 배치한다. 복잡한 배경과 작은 글씨를 피한다.`,
       factsBlock,
       lookDirective,
       characterDirective ?? "",
@@ -865,6 +1021,126 @@ async function prepareReferenceImages(files: GenerateInputFile[]): Promise<Refer
     }
   }
   return references.slice(0, MAX_REFERENCE_IMAGES);
+}
+
+/**
+ * **자료가 정한 구성을 얹는다**(F-7-0).
+ *
+ * 분석 프롬프트는 `page_blueprint` 를 만들라고 시키는데, 전에는 그것을 **한
+ * 번도 안 읽고** 박아 둔 열 장(S1 히어로 … S10 최종 CTA)을 그대로 썼다.
+ *
+ * 그래서 무엇을 올리든 같은 구성이 나왔다. 후기가 없는 신제품에도 「S7 후기
+ * 카드」가, 비교할 것이 없는 단일 상품에도 「S9 비교/보증」이 만들어진다.
+ * 근거가 없으니 모델은 그 자리를 **지어내거나 비워** 둔다.
+ *
+ * 설계 T-PLAN: 「…원본 부족, **목적에 맞는 구성**, 새 섹션과 신뢰문구 수정」.
+ *
+ * ── 무엇을 안 바꾸나 ────────────────────────────────────────
+ *
+ * **섹션 id 와 레이아웃 지시는 그대로 둔다.**
+ *
+ *   · id 는 화면이 섹션을 잇는 열쇠다(`S3` 처럼). 「나머지 섹션 생성」이 빠진
+ *     번호를 고르므로, 여기가 흔들리면 만든 그림이 엉뚱한 자리에 붙는다
+ *   · 레이아웃 지시는 **장마다 다르게 보이게** 하는 규칙이다. 모델의 청사진은
+ *     「무엇을 말할까」를 적지 「어떻게 배치할까」를 적지 않는다
+ *
+ * 바뀌는 것은 **무엇을 말하는 장인가**뿐이다.
+ *
+ * 모델이 칸 이름을 조금 다르게 줘도 받는다. 엄하게 잡으면 멀쩡한 청사진이
+ * 버려지고 조용히 옛 구성으로 돌아간다.
+ */
+function blueprintEntries(analysis: unknown): Array<Record<string, unknown>> {
+  if (!analysis || typeof analysis !== "object") return [];
+  const raw = (analysis as { page_blueprint?: unknown }).page_blueprint;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}));
+}
+
+/**
+ * **검증된 사실을 어느 장에 붙일까.**
+ *
+ * 전에는 `S4`·`S5` 라는 **자리**였다. 구성이 자료를 따라가게 되면서 그 전제가
+ * 깨졌다 — 청사진이 「시험성적서」를 7번째에 두면 인증·수치가 엉뚱한 장(예:
+ * 사용법)에 실리고 진짜 근거 장에는 안 실린다(2026-09-21 리뷰).
+ *
+ * 청사진을 얹은 장은 **이름과 목적으로** 본다. 안 얹은 장은 전처럼 자리로
+ * 본다 — 박아 둔 구성의 S4·S5 가 곧 근거 장이다.
+ */
+const EVIDENCE_WORDS = /인증|성분|시험|수치|근거|신뢰|검사|함량|스펙|데이터|비교/;
+
+function isEvidenceSection(template: { id: string; name: string; purpose: string; fromBlueprint?: boolean }): boolean {
+  if (!template.fromBlueprint) return template.id === "S4" || template.id === "S5";
+  return EVIDENCE_WORDS.test(`${template.name} ${template.purpose}`);
+}
+
+/** 이름은 한 줄이어야 한다. 프롬프트의 `섹션:` 줄과 화면 제목이 통째로 받는다. */
+const BLUEPRINT_NAME_MAX = 40;
+const BLUEPRINT_TEXT_MAX = 200;
+
+/**
+ * 청사진이 말하는 자리를 찾는다.
+ *
+ * **번호를 쓰되 따르지는 않는다.** 모델이 `S3` 라고 적어 오면 그 칸을 우리 3번
+ * 자리에 얹되, 결과의 번호는 우리 것이다. 전에는 **위치로만** 얹어서, 청사진이
+ * 뒤섞여 오면 「브랜드 스토리」가 히어로 레이아웃(「가장 강한 비주얼」)을 달고
+ * 첫 장이 됐다(2026-09-21 리뷰).
+ *
+ * 번호가 없으면 전처럼 위치로 본다.
+ */
+function blueprintEntryFor(
+  entries: Array<Record<string, unknown>>,
+  sectionNumber: number,
+  fallbackIndex: number,
+): Record<string, unknown> | undefined {
+  const 번호로 = entries.find((entry) => {
+    const id = pickString(entry, ["section_id", "id"]);
+    return /^S\d+$/i.test(id) && Number(id.slice(1)) === sectionNumber;
+  });
+  if (번호로) return 번호로;
+
+  // 어느 칸도 번호를 안 달았을 때만 자리로 본다. 반만 달았으면 그 반은 안 얹는다.
+  const 번호가있나 = entries.some((entry) => /^S\d+$/i.test(pickString(entry, ["section_id", "id"])));
+  return 번호가있나 ? undefined : entries[fallbackIndex];
+}
+
+/**
+ * 이름에 번호를 붙인다.
+ *
+ * **한 페이지 안에서 규격이 같아야 한다.** 청사진이 모자라 뒤쪽이 박아 둔
+ * 이름(`S4 USP 차별점`)을 쓰면, 앞은 맨 이름이고 뒤는 번호가 붙어 섞인다.
+ * 결과 화면이 이름만 찍는데 「나머지 섹션 생성」은 번호로 말하므로, 사용자가
+ * 카드와 번호를 못 잇는 문제도 여기서 닫힌다.
+ */
+function numberedName(id: string, name: string): string {
+  const 잘린것 = name.slice(0, BLUEPRINT_NAME_MAX).trim();
+  // 템플릿 리터럴 안의 \b 는 컴파일 뒤 **백스페이스**가 된다. 낱말 경계는 String.raw 로.
+  return new RegExp(String.raw`^${id}\b`, "i").test(잘린것) ? 잘린것 : `${id} ${잘린것}`;
+}
+
+function applyBlueprint(
+  templates: ReturnType<typeof sectionTemplates>,
+  analysis: unknown,
+  startSection: number,
+): ReturnType<typeof sectionTemplates> {
+  const entries = blueprintEntries(analysis);
+  if (entries.length === 0) return templates;
+
+  return templates.map((template, index) => {
+    const entry = blueprintEntryFor(entries, startSection + index, startSection - 1 + index);
+    const name = entry ? pickString(entry, ["name", "title", "section_name", "label", "heading"]) : "";
+    if (!entry || !name) return template;
+
+    return {
+      ...template,
+      name: numberedName(template.id, name),
+      purpose: (pickString(entry, ["purpose", "goal", "objective", "intent", "summary"]) || template.purpose)
+        .slice(0, BLUEPRINT_TEXT_MAX),
+      source: (pickString(entry, ["source", "evidence", "content", "material", "basis"]) || template.source)
+        .slice(0, BLUEPRINT_TEXT_MAX),
+      /** 이 장이 근거를 말하는 장인가. 검증된 사실 블록이 여기 붙는다. */
+      fromBlueprint: true,
+    };
+  });
 }
 
 function sectionTemplates(count: number, startSection = 1) {
