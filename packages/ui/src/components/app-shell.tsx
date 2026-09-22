@@ -193,10 +193,10 @@ export function navGroupsFor(hasAd: boolean): NavGroup[] {
 
 /** 권한과 소속에 따라 달라지는 메뉴. 보이는 것과 열리는 것은 별개다 — 실제
  *  차단은 각 화면이 서버에서 한다. */
-function bottomItemsFor(isAdmin: boolean, hasTeam: boolean) {
+function bottomItemsFor(isAdmin: boolean, hasTeam: boolean, teamEnabled = true) {
   return [
     ...bottomItems,
-    ...(hasTeam || isAdmin ? [teamItem] : []),
+    ...(teamEnabled && (hasTeam || isAdmin) ? [teamItem] : []),
     ...(isAdmin ? [adminItem] : []),
   ];
 }
@@ -224,6 +224,8 @@ interface AppShellProps {
    * `/team` 은 열린다 — 거기서 「아직 팀에 속해 있지 않습니다」를 본다.
    */
   hasTeam?: boolean;
+  /** 팀 기능이 켜져 있나. 꺼져 있으면 팀이 있는 사람·운영자에게도 팀 메뉴를 안 낸다. */
+  teamEnabled?: boolean;
   /**
    * 광고 규격 내보내기가 켜져 있는지. 메뉴를 낼지만 정한다.
    *
@@ -378,6 +380,7 @@ export function AppShell({
   sidebarFooter,
   isAdmin = false,
   hasTeam = false,
+  teamEnabled = true,
   hasAd = false,
   fill = false,
   projects = [],
@@ -416,7 +419,7 @@ export function AppShell({
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
   const visibleGroups = navGroupsFor(hasAd);
-  const visibleBottomItems = bottomItemsFor(isAdmin, hasTeam);
+  const visibleBottomItems = bottomItemsFor(isAdmin, hasTeam, teamEnabled);
   const current = projects.find((project) => project.id === currentProjectId) ?? null;
   const allLinks = [...visibleGroups.flatMap((g) => g.items), ...visibleBottomItems];
 

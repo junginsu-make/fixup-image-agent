@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { isDisabledRoute } from "../../lib/access/routes";
+import { HOME_AFTER_LOGIN } from "../../lib/routes";
+import { shownFailure } from "../../lib/teams/failure";
 import { Crown, UserMinus, Users } from "lucide-react";
 import { Badge, Button, Card, Input } from "@fixup/ui";
 import { requireActiveMember } from "../../lib/membership/server";
-import { canWriteTeam, summarize } from "../../lib/teams/core";
+import { canWriteTeam, leaveOutcome, summarize } from "../../lib/teams/core";
 import type { TeamWithMembers } from "../../lib/teams/core";
 import {
   countActiveMembers,
@@ -31,6 +35,7 @@ const NOTICES: Record<string, string> = {
   team_created: "팀을 만들었습니다.",
   team_renamed: "팀 이름을 바꿨습니다.",
   team_archived: "팀을 접었습니다. 작업물은 만든 사람의 개인 작업으로 돌아갔습니다.",
+  // 혼자 남은 팀에서 빼면 팀을 접는다(`leaveOutcome`). 결과는 위와 같다.
   assigned: "팀에 넣었습니다. 만들어 둔 작업물도 함께 옮겼습니다.",
   promoted: "팀장으로 세웠습니다.",
   demoted: "팀원으로 내렸습니다.",
@@ -56,9 +61,14 @@ type TabId = (typeof TABS)[number]["id"];
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ notice?: string; tab?: string; team?: string }>;
+  searchParams: Promise<{ notice?: string; tab?: string; team?: string; error?: string }>;
 }) {
-  const { notice, tab, team: teamParam } = await searchParams;
+  /*
+    **꺼 둔 화면이다**(2026-09-22). 사이드바에서 빼는 것만으로는 주소를 치면 열린다.
+    켤 때는 `lib/access/routes.ts` 의 `disabled` 한 줄만 지우면 이 문도 같이 열린다.
+  */
+  if (isDisabledRoute("/team")) redirect(HOME_AFTER_LOGIN);
+  const { notice, tab, team: teamParam, error } = await searchParams;
   const active: TabId = TABS.some((entry) => entry.id === tab) ? (tab as TabId) : "members";
   const member = await requireActiveMember();
   const isAdmin = member.profile.role === "admin";
@@ -132,6 +142,10 @@ export default async function TeamPage({
         ) : null}
       </header>
 
+      {/* 처리하지 못한 일. 액션이 던지지 않고 `?error=` 로 실어 보낸 문구다(`lib/teams/failure.ts`). */}
+      {shownFailure(error) ? (
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{shownFailure(error)}</p>
+      ) : null}
       {notice && NOTICES[notice] ? (
         <p className="rounded-md border border-primary/30 bg-primary-soft px-3 py-2 text-sm">
           {NOTICES[notice]}
@@ -385,11 +399,19 @@ function TeamCard({
                   </form>
                   <form action={removeMemberAction}>
                     <input type="hidden" name="userId" value={row.userId} />
+                    {/*
+                      뺄 수 없는 사람에게 버튼을 누르게 두지 않는다. 판단은 서버와 같은
+                      `leaveOutcome` 이 한다 — 화면에 조건을 또 적으면 둘이 갈린다.
+                    */}
                     <ConfirmSubmitButton
                       variant="ghost"
                       size="sm"
                       className="gap-1.5 text-subtle-foreground"
-                      confirmMessage={`${row.email} 을 「${team.name}」에서 뺍니다. 이 사람의 작업물은 개인 작업으로 돌아가고, 팀원들은 더 이상 볼 수 없습니다. 계속할까요?`}
+                      disabled={leaveOutcome(team.members, row.userId) === "blocked"}
+                      title={leaveOutcome(team.members, row.userId) === "blocked" ? "마지막 팀장은 뺄 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요." : undefined}
+                      confirmMessage={leaveOutcome(team.members, row.userId) === "archive"
+                        ? `「${team.name}」에 ${row.email} 혼자 남아 있어, 빼면 팀을 접습니다. 작업물은 개인 작업으로 돌아갑니다. 계속할까요?`
+                        : `${row.email} 을 「${team.name}」에서 뺍니다. 이 사람의 작업물은 개인 작업으로 돌아가고, 팀원들은 더 이상 볼 수 없습니다. 계속할까요?`}
                       pendingLabel="빼는 중..."
                     >
                       <UserMinus className="h-3.5 w-3.5" />

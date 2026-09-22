@@ -5,6 +5,7 @@ import { CARD_RATIOS, IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import { REVIEW_CRITERIA } from "@fixup/pdp-core";
 import { ATTACHMENT_ROLE_LABEL, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { GUIDE_TOPICS, neighborsOf } from "../_components/topics";
+import { isDisabledRoute } from "../../../lib/access/routes";
 
 /**
  * 설명서가 실제와 어긋나지 않는지 잡는다.
@@ -57,6 +58,8 @@ describe("설명서 목차", () => {
     const hrefs = new Set(GUIDE_TOPICS.map((topic) => topic.href));
     for (const file of guideSources()) {
       const href = file.name === "(home)" ? "/guide" : `/guide/${file.name}`;
+      // 꺼 둔 도구의 설명서는 파일은 남기고 목차에서만 뺀다(2026-09-22 팀). 켜면 돌아온다.
+      if (file.name === "team" && isDisabledRoute("/team")) continue;
       expect(hrefs, `${href} 가 목차에 없다`).toContain(href);
     }
   });
@@ -236,6 +239,7 @@ describe("도구와 설명서가 짝을 이룬다", () => {
       GUIDE_TOPICS.map((topic) => topic.toolHref).filter(Boolean),
     );
     for (const tool of TOOLS_NEEDING_GUIDE) {
+      if (isDisabledRoute(tool)) continue;
       expect(covered, `${tool} 를 설명하는 문서가 없다`).toContain(tool);
     }
   });

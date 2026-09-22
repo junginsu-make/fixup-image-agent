@@ -125,6 +125,21 @@ export function canRemove(members: readonly { userId: string; role: TeamRole }[]
   return canDemote(members, userId);
 }
 
+/**
+ * 팀에서 빼면 무슨 일이 일어나나.
+ *
+ * **혼자인 팀이면 팀을 접는다.** 마지막 팀장은 못 빼므로(`canRemove`) 혼자 남은
+ * 팀은 정리할 길이 없었다 — 2026-09-22 운영에서 팀 화면과 관리자 명단 둘 다 그
+ * 벽에 부딪혀 오류 화면이 떴다. 다른 사람이 남는데 마지막 팀장이면 막는다.
+ */
+export function leaveOutcome(members: readonly { userId: string; role: TeamRole }[], userId: string): "remove" | "archive" | "blocked" {
+  if (!members.some((member) => member.userId === userId)) return "blocked";
+  // 혼자 남은 **팀장**일 때만 접는다. 팀장이 아닌 사람 혼자면 사람만 뺀다 — 팀까지 접으면
+  // 이름·한도·프로젝트가 같이 사라지고, 되살리는 화면이 없다(독립 리뷰 2026-09-22).
+  if (members.length === 1 && members[0]!.role === "leader") return "archive";
+  return canRemove(members, userId) ? "remove" : "blocked";
+}
+
 /* ── 요약 ─────────────────────────────────────────────────────── */
 
 export interface AssignmentSummary {

@@ -4,10 +4,12 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 import { requireAdmin } from "../../lib/membership/server";
 import { isLocalAuthBypass } from "../../lib/dev-auth";
+import { isDisabledRoute } from "../../lib/access/routes";
+import { shownFailure } from "../../lib/teams/failure";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { listTeams, teamsOf } from "../../lib/teams/store";
 import { formatKrw, getCostByMember, getUsdKrw } from "../../lib/cost";
-import { AdminNotice, Metric } from "./admin-shared";
+import { AdminError, AdminNotice, Metric } from "./admin-shared";
 import { MemberTable } from "./member-list/member-table";
 import type { AdminMemberRow, CreditInfo, CreditPlan } from "./member-list/types";
 
@@ -17,7 +19,7 @@ const PAGE_SIZE = 50;
 const SELECT = "h-9 rounded-md border bg-background px-3 text-sm";
 const PROFILE_COLUMNS = "id,email,email_confirmed_at,role,status,monthly_quota,approved_at,created_at";
 
-type Params = { q?: string; status?: string; plan?: string; balance?: string; review?: string; page?: string; notice?: string };
+type Params = { q?: string; status?: string; plan?: string; balance?: string; review?: string; page?: string; notice?: string; error?: string };
 type Profile = AdminMemberRow["profile"];
 type LedgerItem = { id: string; available: number; reserved: number; used: number; unlimited?: boolean; plan_id: string | null; subscription_status: string | null; next_expires: string | null; review_units: number };
 type MemberPage = { profiles: Profile[]; credits: Map<string, CreditInfo>; total: number; plans: CreditPlan[] };
@@ -81,6 +83,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   return (
     <div className="space-y-6">
       {params.notice ? <AdminNotice notice={params.notice} /> : null}
+      {shownFailure(params.error) ? <AdminError message={shownFailure(params.error)!} /> : null}
       {ledgerError ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">크레딧 장부를 읽지 못해 크레딧·플랜 칸을 비워 두었습니다. 승인·정지는 그대로 됩니다. ({ledgerError})</p> : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric icon={<Users />} label="전체 회원" value={totalResult.count ?? 0} />
@@ -92,7 +95,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         <CardHeader><CardTitle>회원 목록</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <Filters params={params} plans={list.plans} ledger={ledger} />
-          <MemberTable rows={rows} plans={list.plans} teams={teams} ledger={ledger} />
+          <MemberTable rows={rows} plans={list.plans} teams={teams} ledger={ledger} teamsEnabled={!isDisabledRoute("/team")} />
           {!rows.length ? <p className="py-10 text-center text-muted-foreground">조건에 맞는 회원이 없습니다.</p> : null}
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>총 {list.total.toLocaleString("ko-KR")}명</span>

@@ -5,7 +5,7 @@ import { requireActiveMember, getUsageSummary } from "../../lib/membership/serve
 import { canAccessPage, viewerFrom } from "../../lib/access/core";
 // 스위치만 읽는다 — `batch` 를 지나면 sharp 를 통째로 끌고 온다.
 import { isAdExportEnabled } from "../../lib/ad/feature";
-import { PAGE_ACCESS } from "../../lib/access/routes";
+import { PAGE_ACCESS, isDisabledRoute } from "../../lib/access/routes";
 import { GuideLink } from "./guide-link";
 import { ReferenceHuntButton } from "./reference-hunt-button";
 import { myMembership } from "../../lib/teams/store";
@@ -50,6 +50,8 @@ export async function StudioLayout({
           profile: membership.profile,
         }), PAGE_ACCESS)}
         hasTeam={Boolean(team)}
+        // 팀 기능을 꺼 두면 팀이 남아 있는 사람에게도 메뉴를 안 낸다(2026-09-22).
+        teamEnabled={!isDisabledRoute("/team")}
         // 꺼져 있으면 메뉴에도 없다. 눌러서 404 를 만나는 메뉴는 안 만든다.
         hasAd={isAdExportEnabled()}
         fill={fill}

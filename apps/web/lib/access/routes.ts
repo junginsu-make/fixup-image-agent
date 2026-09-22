@@ -69,7 +69,12 @@ export const APP_ROUTES: AppRoute[] = [
   // 역할을 안 건다. 「팀장」은 UserRole 이 아니라 팀 안의 자리라
   // 여기서는 적을 수 없다. 화면은 누구나 열되 팀이 없는 사람에게는
   // 「아직 팀이 없습니다」가 뜨고, 꾸미는 것은 서버 액션이 막는다.
-  { path: "/team", label: "팀" },
+  //
+  // 2026-09-22 사용자 판단으로 끈다. 당분간 개인 사용자 위주로 간다.
+  // 입구만 닫는다 — 사이드바·관리자 명단의 팀 칸·설명서의 팀 문서가 이 값을 보고
+  // 숨고, 팀을 바꾸는 서버 액션은 거절한다. 표와 데이터(teams·team_members·
+  // 작업물의 team_id)는 그대로 둔다. 켤 때는 아래 `disabled: true` 한 줄만 지운다.
+  { path: "/team", label: "팀", disabled: true },
   { path: "/settings", label: "계정" },
   { path: "/admin", label: "관리자", requiredRole: "admin" },
 ];
