@@ -366,3 +366,34 @@
     width: 100%;
   }
 }
+
+/* 「여기부터 누르면 된다」고 가리키는 단추.
+
+   2026-09-22 사용자 — 「상세페이지 기획 이후 이미지 생성하는 페이지에서
+   사용자가 거기서 어떻게 해야 할지 모릅니다 (…) 생성 버튼이 조금 더 잘보이게
+   모션이나 애니메이션을 주던가 해야 합니다」.
+
+   테두리에서 번져 나가는 고리다. 단추 자체는 제자리에 있다 — 움직이는 단추는
+   누르려는 순간 빗나가게 만든다.
+
+   위 「손잡이」와 같은 규칙으로 **여섯 번 뛰고 선다.** 멈추지 않는 움직임은
+   계속 신경을 긁는다. 그 사이에 못 봤으면 옆의 안내 글이 대신 말한다. */
+@keyframes fixup-cta-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+
+.fixup-cta-pulse {
+  animation: fixup-cta-pulse 1600ms ease-out 6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fixup-cta-pulse {
+    animation: none;
+  }
+}

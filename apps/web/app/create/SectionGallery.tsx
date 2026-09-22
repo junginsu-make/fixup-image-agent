@@ -9,11 +9,7 @@ import {
   ChevronRight,
   ImageIcon,
   Loader2,
-  Palette,
-  Pencil,
   Plus,
-  RefreshCw,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -141,6 +137,11 @@ export function SectionGallery({
   const generatedCount = sections.filter((section) => section.generatedImage).length;
   const missingCount = sections.length - generatedCount;
   const isBusy = generatingKeys.length > 0;
+  /**
+   * **처음 도착한 사람에게만 안내를 편다.** 한 장이라도 만들었으면 이 화면이
+   * 무엇인지 이미 안다 — 그때도 큰 상자를 띄우면 그냥 방해다.
+   */
+  const startGuide = generatedCount === 0 && missingCount > 0;
 
   const closeZoom = useCallback(() => setZoomIndex(null), []);
   const stepZoom = useCallback(
@@ -250,14 +251,14 @@ export function SectionGallery({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          {missingCount > 0 ? (
+          {/*
+            **아직 한 장도 없으면 여기에 두지 않는다.** 아래 시작 안내가 같은
+            단추를 크게 들고 있다. 둘을 함께 두면 어느 쪽이 맞는지 또 헷갈린다.
+          */}
+          {missingCount > 0 && generatedCount > 0 ? (
             <div className="flex flex-col items-end gap-1">
               <Button variant="outline" size="sm" disabled={isBusy} onClick={onGenerateAllMissing}>
-                {isBusy ? (
-                  <Loader2 size={15} className="mr-1.5 animate-spin" />
-                ) : (
-                  <Sparkles size={15} className="mr-1.5" />
-                )}
+                {isBusy ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : null}
                 남은 {missingCount}장 만들기
               </Button>
               <span className="text-[11px] text-subtle-foreground">전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount, { policy: creditPolicy })}{단위} 차감</span>
@@ -265,10 +266,51 @@ export function SectionGallery({
           ) : null}
           <Button size="sm" disabled={!generatedCount || isBusy} onClick={onGoEdit}>
             편집으로
-            <ChevronRight size={15} className="ml-1" />
           </Button>
         </div>
       </div>
+
+      {/*
+        **여기서 뭘 해야 하는지 말해 준다**(2026-09-22 사용자 신고).
+
+        기획이 끝나면 빈 카드만 깔린 화면으로 넘어온다. 만들기 단추는 빽빽한
+        도구 막대 끝에 작은 테두리 단추 하나였고, 사용자는 「어떻게 해야 할지
+        모르겠다」고 했다.
+
+        **글·크기·움직임 셋 다 준다.** 움직임만 주면 화면을 늦게 본 사람은 못
+        보고, 글만 주면 눈이 먼저 가지 않는다. 움직임은 여섯 번 뛰고 멎는다.
+      */}
+      {startGuide ? (
+        <section
+          aria-labelledby="pdp-start-guide"
+          className="mb-4 grid justify-items-center gap-2 rounded-lg border border-primary/30 bg-primary-soft px-4 py-5 text-center"
+        >
+          <h3 id="pdp-start-guide" className="text-base font-bold">
+            이제 섹션 이미지를 만들 차례입니다
+          </h3>
+          <p className="max-w-lg text-sm text-muted-foreground">
+            {/*
+              **「만드는 동안 기다리세요」를 여기서 말하지 않는다.** 첫 묶음이
+              끝나면 이 상자가 사라지는데, 그때 그 문장도 같이 사라진다.
+              진행 상황은 위의 진행 띠(`aria-live`)가 끝까지 말한다.
+            */}
+            아래 단추를 누르면 섹션 {sections.length}개의 이미지를 한 번에 만듭니다.
+            한 장씩 만들고 싶으면 각 카드의 「생성」을 누르면 됩니다.
+          </p>
+          <Button
+            size="lg"
+            className="mt-1 fixup-cta-pulse"
+            disabled={isBusy}
+            onClick={onGenerateAllMissing}
+          >
+            {isBusy ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}
+            이미지 {missingCount}장 만들기
+          </Button>
+          <span className="text-[11px] text-subtle-foreground">
+            전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount)}장 차감
+          </span>
+        </section>
+      ) : null}
 
       <p className="mb-3 text-xs text-subtle-foreground">
         카드를 누르면 크게 열립니다 · ← → 이동 · Esc 닫기
@@ -382,17 +424,10 @@ export function SectionGallery({
                     disabled={isBusy}
                     onClick={() => onGenerate(index)}
                   >
-                    {busy ? (
-                      <Loader2 size={14} className="mr-1.5 animate-spin" />
-                    ) : section.generatedImage ? (
-                      <RefreshCw size={14} className="mr-1.5" />
-                    ) : (
-                      <Sparkles size={14} className="mr-1.5" />
-                    )}
+                    {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                     {section.generatedImage ? "다시 생성" : "생성"}
                   </Button>
                   <Button size="sm" onClick={() => onEdit(index)} disabled={isBusy || !section.generatedImage}>
-                    <Pencil size={14} className="mr-1.5" />
                     편집
                   </Button>
                 </div>
@@ -537,7 +572,7 @@ export function SectionGallery({
                 onEdit(target);
               }}
             >
-              <Pencil size={14} className="mr-1.5" />이 섹션 편집하기
+              이 섹션 편집하기
             </Button>
             {/*
               마음에 든 결과를 다음 작업의 디자인 레퍼런스로 남긴다.
@@ -549,7 +584,6 @@ export function SectionGallery({
               disabled={savingReference}
               onClick={() => void saveAsReference(zoomSection, zoomIndex ?? 0)}
             >
-              <Palette size={14} className="mr-1.5" />
               {savingReference ? "저장 중…" : "레퍼런스로 저장"}
             </Button>
           </div>

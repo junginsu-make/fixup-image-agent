@@ -109,7 +109,11 @@ describe("일괄 생성이 중복으로 막히면", () => {
   it("**되찾으러 가라고 알린다**", async () => {
     await 띄운다();
 
-    const 만들기 = 단추("남은 1장 만들기");
+    /*
+      **라벨이 바뀌었다.** 아직 한 장도 없는 화면에서는 「남은 N장」이 아니라
+      시작 안내의 「이미지 N장 만들기」다(2026-09-22). 하는 일은 같다.
+    */
+    const 만들기 = 단추("이미지 1장 만들기");
     expect(만들기[0], "일괄 만들기 단추를 못 찾았다").toBeTruthy();
 
     await act(async () => { 만들기[0]!.props.onClick(); });
@@ -130,7 +134,7 @@ describe("일괄 생성이 중복으로 막히면", () => {
     captured.answer = { ok: false, code, message: "막혔다" };
 
     await 띄운다();
-    await act(async () => { 단추("남은 1장 만들기")[0]!.props.onClick(); });
+    await act(async () => { 단추("이미지 1장 만들기")[0]!.props.onClick(); });
     await 가라앉힌다();
 
     expect(captured.asked).toContain("/pdp/images/batch");
@@ -144,7 +148,7 @@ describe("일괄 생성이 중복으로 막히면", () => {
     };
 
     await 띄운다();
-    await act(async () => { 단추("남은 1장 만들기")[0]!.props.onClick(); });
+    await act(async () => { 단추("이미지 1장 만들기")[0]!.props.onClick(); });
     await 가라앉힌다();
 
     expect(captured.calls).toBe(0);
