@@ -10,6 +10,7 @@ import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { listTeams, teamsOf } from "../../lib/teams/store";
 import { formatKrw, getCostByMember, getUsdKrw } from "../../lib/cost";
 import { AdminError, AdminNotice, Metric } from "./admin-shared";
+import { readProfileExtras } from "../../lib/membership/profile-store";
 import { MemberTable } from "./member-list/member-table";
 import type { AdminMemberRow, CreditInfo, CreditPlan } from "./member-list/types";
 
@@ -56,7 +57,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const ids = list.profiles.map((profile) => profile.id);
   const admin = createSupabaseAdminClient();
 
-  const [teamByUser, teams, totalResult, pendingResult, summaryResult, usageResult, usdKrw, costByMember] = await Promise.all([
+  const [teamByUser, teams, totalResult, pendingResult, summaryResult, usageResult, usdKrw, costByMember, extras] = await Promise.all([
     teamsOf(ids),
     listTeams().then((all) => all.map((team) => ({ id: team.id, name: team.name }))),
     admin.from("profiles").select("id", { count: "exact", head: true }),
@@ -65,6 +66,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     ids.length ? admin.rpc("admin_member_usage", { p_user_ids: ids }) : Promise.resolve({ data: [], error: null }),
     getUsdKrw(),
     getCostByMember(ids),
+    readProfileExtras(ids),
   ]);
   const failed = [totalResult.error, pendingResult.error, summaryResult.error, usageResult.error].find(Boolean);
   if (failed) throw failed;
@@ -75,6 +77,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     const cost = costByMember.get(profile.id);
     return {
       profile, team: teamByUser.get(profile.id), monthImages: images.get(profile.id) ?? 0,
+      name: extras.get(profile.id)?.displayName ?? null, referrer: extras.get(profile.id)?.referrer ?? null,
       monthCost: formatKrw(cost?.monthUsd ?? 0, usdKrw), totalCost: formatKrw(cost?.totalUsd ?? 0, usdKrw), totalImages: cost?.images ?? 0,
       credit: list.credits.get(profile.id) ?? null,
     };
@@ -115,7 +118,7 @@ function Filters({ params, plans, ledger }: { params: Params; plans: CreditPlan[
     <form className="grid gap-2 sm:flex sm:flex-wrap">
       <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input name="q" aria-label="이메일 검색" defaultValue={params.q} className="pl-9" placeholder="이메일 검색" />
+        <Input name="q" aria-label="회원 검색" defaultValue={params.q} className="pl-9" placeholder={ledger ? "이메일 · 이름 · 추천인 검색" : "이메일 검색"} />
       </div>
       <select name="status" aria-label="회원 상태" defaultValue={params.status || ""} className={SELECT}>
         <option value="">전체 상태</option>

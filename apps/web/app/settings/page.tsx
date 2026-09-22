@@ -11,8 +11,12 @@ import {
   getUsageSummary,
   requireActiveMember,
 } from "../../lib/membership/server";
+import Link from "next/link";
 import { ClearLegacyKeys } from "./clear-legacy-keys";
-import { StyleReferenceManager } from "./StyleReferenceManager";
+import { ProfileCard } from "./profile-card";
+import { LoginCard } from "./login-card";
+import { readProfileExtras } from "../../lib/membership/profile-store";
+import { isOwnerEmail, resolveOwnerEmail } from "../../lib/membership/owner";
 
 /**
  * 계정 화면.
@@ -24,6 +28,7 @@ import { StyleReferenceManager } from "./StyleReferenceManager";
 export default async function SettingsPage() {
   const membership = await requireActiveMember();
   const usage = await getUsageSummary(membership.user.id);
+  const extras = (await readProfileExtras([membership.user.id])).get(membership.user.id);
   const resetDate = new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
     year: "numeric",
@@ -42,7 +47,7 @@ export default async function SettingsPage() {
         <div>
           <p className="mb-1 text-xs font-bold text-muted-foreground">계정</p>
           <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-normal max-md:text-2xl">
-            계정 및 사용량
+            {extras?.displayName ? `${extras.displayName} 님의 계정` : "계정 및 사용량"}
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             개인 API 키를 넣을 필요가 없습니다. 생성은 운영자 서버 키로
@@ -93,33 +98,20 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>}
 
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle>회원 정보</CardTitle>
-              <CardDescription>
-                이 계정으로 만든 작업만 내 라이브러리에 보입니다.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <p className="break-all font-medium">{membership.profile.email}</p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              회원·승인·사용량과{" "}
-              <strong>
-                라이브러리에 저장한 결과물, 디자인 레퍼런스, 캐릭터
-              </strong>
-              는 서버의 내 계정에 보관되어 다른 기기에서도 보입니다. 작업 중
-              초안은 이 브라우저에만 저장되며, 브라우저 데이터를 지우면
-              사라집니다.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4">
+          <ProfileCard email={membership.profile.email} name={extras?.displayName ?? null} referrer={extras?.referrer ?? null} joinedAt={membership.profile.created_at} />
+          <LoginCard email={membership.profile.email} owner={isOwnerEmail(membership.profile.email, resolveOwnerEmail(process.env.OWNER_EMAIL))} />
+        </div>
       </div>
 
-      <div className="mt-4">
-        <StyleReferenceManager />
-      </div>
+      {/*
+        「내 디자인 레퍼런스」 칸은 뺐다(2026-09-22 사용자 결정). 상세페이지도 자동 추천과
+        「저장한 이미지」 고르기에서 라이브러리의 참고 이미지를 이미 같이 읽는다
+        (`lib/user-style-references.ts` 의 loadLibraryReferences). 올려 둔 것은 그대로 남는다.
+      */}
+      <p className="mt-4 text-sm text-muted-foreground">
+        참고 이미지는 <Link href="/library" className="font-semibold text-primary underline underline-offset-4">라이브러리</Link>에서 올리고 관리합니다. 상세페이지·이미지 만들기·카드뉴스가 모두 거기서 불러옵니다.
+      </p>
     </div>
   );
 }

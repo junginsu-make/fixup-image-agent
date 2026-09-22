@@ -258,7 +258,7 @@ describe("상한을 사용자에게 말한다", () => {
   });
 
   it.each([
-    ["계정 화면", "app/settings/StyleReferenceManager.tsx"],
+    // 계정 화면의 올리기는 2026-09-22 에 뺐다 — 참고 이미지는 라이브러리에서 올린다.
     ["기획 화면", "app/create/StyleReferenceAttach.tsx"],
   ])("**%s 이 그 문구를 건다**", (_label, relative) => {
     const source = readFileSync(new URL(`../../../../${relative}`, import.meta.url), "utf8");

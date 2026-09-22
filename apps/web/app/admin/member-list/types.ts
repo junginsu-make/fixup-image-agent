@@ -4,6 +4,10 @@ import type { MemberProfile } from "../../../lib/membership/types";
 export interface AdminMemberRow {
   profile: Pick<MemberProfile, "id" | "email" | "email_confirmed_at" | "role" | "status" | "approved_at" | "created_at" | "monthly_quota">;
   team?: { teamId: string; teamName: string; role: "leader" | "member" };
+  /** 이름. 202609220005 전 서버·가입 때 안 적은 회원은 null. */
+  name: string | null;
+  /** 추천인 — 회원이 적은 글자 그대로다. 검증하지 않는다. */
+  referrer: string | null;
   /** 이번 달 성공 이미지 수(생성 기록 기준). 크레딧 차감과 다를 수 있다 — 인쇄용은 2크레딧이다. */
   monthImages: number;
   monthCost: string;
