@@ -95,3 +95,30 @@ export function toMessageRecord(row: EasyMessageRow): EasyMessageRecord {
     createdAt: row.created_at,
   };
 }
+
+/**
+ * PostgREST 가 한 번에 주는 줄 수의 윗선. 이보다 많으면 나눠 받는다.
+ *
+ * **Supabase 의 `max_rows`(기본 1000)와 같아야 한다.** 그보다 작게 낮추면 첫 쪽이
+ * 덜 차서 끝으로 읽고, 나머지 쉽게 작업이 조용히 「다양하게」로 들어간다.
+ */
+export const EASY_WORK_PAGE = 1000;
+
+type WorkIdPage = PromiseLike<{ data: { work_id: string | null }[] | null; error: { message: string } | null }>;
+
+/**
+ * 쉽게 대화의 그림 줄이 가리키는 작업 id 를 **전부** 모은다(2026-09-22 라이브러리 필터).
+ *
+ * 한 번에 받으면 1000줄에서 잘린다 — 오래 쓴 회원의 옛 작업이 조용히 「다양하게」로
+ * 넘어간다. 끝날 때까지 나눠 받는다. 회원 권한이면 RLS 가 자기 대화만 준다.
+ */
+export async function collectEasyWorkIds(page: (from: number, to: number) => WorkIdPage): Promise<string[]> {
+  const ids = new Set<string>();
+  for (let from = 0; ; from += EASY_WORK_PAGE) {
+    const { data, error } = await page(from, from + EASY_WORK_PAGE - 1);
+    if (error) throw new Error(`쉽게 작업 목록: ${error.message}`);
+    const rows = data ?? [];
+    for (const row of rows) if (row.work_id) ids.add(row.work_id);
+    if (rows.length < EASY_WORK_PAGE) return [...ids];
+  }
+}

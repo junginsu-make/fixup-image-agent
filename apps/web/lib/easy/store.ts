@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createSupabaseServerClient } from "../supabase/server";
 import { getLocalDatabase, isLocalStoreEnabled } from "../local-store";
 import {
+  collectEasyWorkIds,
   CONVERSATION_COLUMNS,
   MESSAGE_COLUMNS,
   toConversationRecord,
@@ -43,9 +44,15 @@ export interface EasyStore {
     body?: string;
     workId?: string | null;
   }): Promise<EasyMessageRecord>;
+  /**
+   * 내 쉽게 대화가 만든 작업의 id. 라이브러리가 쉽게와 다양하게를 가르는 데 쓴다 —
+   * 둘 다 같은 포스터 작업으로 저장되어 작업만 보고는 못 가른다.
+   */
+  listWorkIds(): Promise<string[]>;
 }
 
 const DEFAULT_LIMIT = 50;
+
 
 /* ── Supabase ─────────────────────────────────────────────── */
 
@@ -154,6 +161,16 @@ function supabaseEasyStore(userId: string): EasyStore {
         .eq("id", input.conversationId)
         .eq("user_id", userId);
       return row;
+    },
+
+    async listWorkIds() {
+      const supabase = await createSupabaseServerClient();
+      return collectEasyWorkIds((from, to) => supabase
+        .from("easy_messages")
+        .select("work_id")
+        .not("work_id", "is", null)
+        .order("id")
+        .range(from, to));
     },
   };
 }
@@ -270,6 +287,17 @@ function localEasyStore(userId: string): EasyStore {
         if (conversation) conversation.updatedAt = record.createdAt;
       });
       return record;
+    },
+
+    async listWorkIds() {
+      return database.read((data) => {
+        const mine = new Set(bucket(data, "easyConversations")
+          .filter((row) => row.userId === userId)
+          .map((row) => row.id));
+        return [...new Set(bucket(data, "easyMessages")
+          .filter((row) => row.workId && mine.has(row.conversationId))
+          .map((row) => row.workId!))];
+      });
     },
   };
 }

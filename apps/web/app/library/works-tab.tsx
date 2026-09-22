@@ -10,9 +10,13 @@ import { isShowcased, type ShowcaseAdminView } from "../api/showcase/core";
 import { coverOf } from "./works-cover";
 import { canOpenSteps } from "./work-steps";
 import {
-  isWorkShowcased, libraryWorks, showcaseKindOf, TOOL_LABEL,
+  isWorkShowcased, libraryCharacterWorks, libraryWorks, showcaseKindOf, TOOL_LABEL,
   type LibraryWork, type WorkTool,
 } from "./library-works";
+import {
+  countByOrigin, filterWorks, originLabel, originOf, workFilters,
+  type WorkFilterId,
+} from "./work-filter";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -90,6 +94,33 @@ interface Work {
   /** 사용자가 정한 값들. 이름과 값 쌍으로 그대로 보여준다. */
   settings: Array<[string, string]>;
   href: string;
+  /** 캐릭터 만들기로 만든 것. 「캐릭터」 거르기에서만 보인다(`work-filter.ts`). */
+  origin?: "character";
+}
+
+/**
+ * 카드와 큰 창에 적는 「무엇으로 만들었나」. **거르기 단추와 같은 말을 쓴다.**
+ *
+ * 쉽게로 만든 작업 목록을 못 읽었으면 쉽게인지 다양하게인지 모른다 — 그때는 틀린
+ * 말 대신 예전 이름(「이미지」)을 적는다.
+ */
+function labelOf(work: Work, easyIds: ReadonlySet<string> | null): string {
+  if (work.origin === "character") return originLabel("character");
+  if (!easyIds && work.tool === "poster") return TOOL_LABEL.poster;
+  return originLabel(originOf(work, easyIds ?? new Set()));
+}
+
+/**
+ * 쉽게로 만든 작업 id. **못 읽으면 `null`** — 빈 목록으로 대신하면 쉽게 작업이
+ * 전부 「다양하게」로 들어간다.
+ */
+async function readEasyWorkIds(): Promise<Set<string> | null> {
+  try {
+    const body = await (await fetch("/api/easy/works", { cache: "no-store" })).json();
+    return body?.ok && Array.isArray(body.workIds) ? new Set(body.workIds as string[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 const STATUS: Record<string, { label: string; tone: "green" | "secondary" | "destructive" }> = {
@@ -199,7 +230,10 @@ async function readLibraryWorks(allMembers: boolean) {
   try {
     const body = await (await fetch("/api/library", { cache: "no-store" })).json();
     if (!body?.ok) return [];
-    return libraryWorks(body.items ?? []).filter((work) => allMembers || work.mine);
+    const items = body.items ?? [];
+    // 캐릭터 결과도 싣는다. 「전체」에서는 거르기가 뺀다(`work-filter.ts`).
+    return [...libraryWorks(items), ...libraryCharacterWorks(items)]
+      .filter((work) => allMembers || work.mine);
   } catch {
     return [];
   }
@@ -267,6 +301,13 @@ export function WorksTab() {
   const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const [featuring, setFeaturing] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState("");
+  /**
+   * 무엇으로 만든 것만 볼까(2026-09-22 사용자 요청 — 쉽게/다양하게/카드뉴스/캐릭터/
+   * 광고소재/상세페이지/리디자인).
+   */
+  const [filter, setFilter] = React.useState<WorkFilterId>("all");
+  /** 쉽게로 만든 작업 id. `null` 이면 못 읽었다 — 쉽게와 다양하게를 못 가른다. */
+  const [easyIds, setEasyIds] = React.useState<Set<string> | null>(null);
   const pending = React.useMemo(
     () => (works ?? []).find((work) => work.id === confirming) ?? null,
     [works, confirming],
@@ -303,7 +344,7 @@ export function WorksTab() {
 
     const meta: Array<[string, string]> = [
       ["만든 때", when(work.createdAt || work.updatedAt)],
-      ["도구", TOOL_LABEL[work.tool]],
+      ["도구", labelOf(work, easyIds)],
       ...(work.intent ? ([["무엇을 만들려던 것인가", work.intent]] as Array<[string, string]>) : []),
       ...work.settings.filter(([, value]) => value),
       ["만든 사람", work.ownerEmail ?? work.userId ?? "확인할 수 없음"],
@@ -318,7 +359,7 @@ export function WorksTab() {
       deleteLabel: "이 작업 지우기",
       // 자기 것, 그리고 관리자. 잘못 올라온 것을 내릴 사람이 아무도 없으면
       // 그대로 남는다. 되돌릴 수 없는 일이라 누른 뒤 한 번 더 묻는다.
-      onDelete: work.mine || isAdmin ? () => setConfirming(work.id) : undefined,
+      onDelete: canDelete(work) ? () => setConfirming(work.id) : undefined,
       // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다.
       action: showcase
         ? {
@@ -388,6 +429,16 @@ export function WorksTab() {
     }
   }
 
+  /**
+   * 지우기 단추를 낼까. 자기 것, 그리고 관리자.
+   *
+   * **캐릭터 결과는 여기서 안 지운다.** 캐릭터 표와 라이브러리 양쪽에 있어, 여기서
+   * 지우면 라이브러리 쪽만 사라지고 캐릭터 탭에는 그대로 남는다. 캐릭터 탭에서 지운다.
+   */
+  function canDelete(work: Work): boolean {
+    return work.origin !== "character" && (work.mine || isAdmin === true);
+  }
+
   async function remove(work: Work) {
     setDeleting(work.id);
     setMessage("");
@@ -452,6 +503,7 @@ export function WorksTab() {
     if (isAdmin === null) return;
     let alive = true;
     setWorks(null);
+    setEasyIds(null);
     void (async () => {
       try {
         // 전체를 볼 때는 관리자 전용 길로 한 번에 읽는다. 회원용 목록은 자기
@@ -464,6 +516,7 @@ export function WorksTab() {
                 readLibraryWorks(true),
               ]);
               if (!body.ok) throw new Error(body.message ?? "작업물을 불러오지 못했습니다.");
+              if (alive && Array.isArray(body.easyWorkIds)) setEasyIds(new Set(body.easyWorkIds as string[]));
               return [
                 ...(body.sns ?? []).map(toSnsWork),
                 ...(body.poster ?? []).map(toPosterWork),
@@ -472,11 +525,13 @@ export function WorksTab() {
             })()
           : await (async () => {
               // 두 도구를 함께 읽어 한 목록으로 만든다. 사용자에게는 "내가 만든 것"이 하나다.
-              const [sns, poster, library] = await Promise.all([
+              const [sns, poster, library, easy] = await Promise.all([
                 fetch("/api/sns/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
                 fetch("/api/poster/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
                 readLibraryWorks(false),
+                readEasyWorkIds(),
               ]);
+              if (alive) setEasyIds(easy);
               return [
                 ...(sns.ok ? (sns.projects ?? []).map(toSnsWork) : []),
                 ...(poster.ok ? (poster.projects ?? []).map(toPosterWork) : []),
@@ -499,6 +554,13 @@ export function WorksTab() {
   if (message) return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{message}</p>;
   if (!works) return <p className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />작업물을 불러오는 중입니다.</p>;
   if (!works.length) return <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">아직 만든 작업물이 없습니다.</p>;
+
+  const filters = workFilters(easyIds !== null);
+  // 못 쓰게 된 단추가 골라져 있으면(쉽게 목록을 다시 못 읽은 경우) 전체로 본다.
+  const chosen = filters.find((entry) => entry.id === filter)?.unavailable ? "all" : filter;
+  const known = easyIds ?? new Set<string>();
+  const counts = countByOrigin(works, known);
+  const visible = filterWorks(works, chosen, known);
 
   return (
     <div className="grid gap-5">
@@ -523,12 +585,58 @@ export function WorksTab() {
       {notice ? (
         <p role="status" className="rounded-md border border-primary/30 bg-primary-soft px-4 py-3 text-sm">{notice}</p>
       ) : null}
+      {/* 무엇으로 만든 것만 볼까. 단추마다 개수를 적어, 눌러 보기 전에 비었는지 안다. */}
+      <div role="group" aria-label="만든 기능으로 거르기" className="flex flex-wrap gap-2">
+        {filters.map((entry) => {
+          const active = chosen === entry.id;
+          return (
+            <Button
+              key={entry.id}
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              aria-pressed={active}
+              aria-disabled={entry.unavailable ? true : undefined}
+              className={cn("rounded-full", entry.unavailable && "opacity-50")}
+              onClick={() => {
+                /*
+                  **못 쓰는 단추도 누르면 까닭을 말한다.** `disabled` 로 막으면 눌러도
+                  아무 반응이 없어 고장으로 읽힌다. 말풍선(`title`)은 안 뜨는 환경이
+                  있다(2026-09-17 「과정 보기」에서 겪었다).
+                */
+                if (entry.unavailable) {
+                  setNotice(entry.unavailable);
+                  return;
+                }
+                // 거르기 까닭만 지운다. 「첫 화면에 걸었습니다」 같은 다른 안내는 남긴다.
+                setNotice((current) => (filters.some((other) => other.unavailable === current) ? "" : current));
+                setFilter(entry.id);
+              }}
+            >
+              {entry.label}
+              {entry.unavailable ? null : <span className="tabular-nums opacity-70">{counts[entry.id]}</span>}
+            </Button>
+          );
+        })}
+      </div>
+
       {featuring ? (
         <p role="status" className="text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />첫 화면에 거는 중입니다. 그림을 한 벌 떠 두느라 몇 초 걸립니다.</p>
       ) : null}
 
+      {visible.length ? null : (
+        <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+          {chosen === "all"
+            ? counts.character
+              // 캐릭터 결과만 있으면 「없다」가 옆 단추의 숫자와 어긋난다.
+              ? "캐릭터 만들기로 만든 것은 「캐릭터」 단추에서 봅니다."
+              : "아직 만든 작업물이 없습니다."
+            : `「${filters.find((entry) => entry.id === chosen)!.label}」로 만든 작업물이 없습니다.`}
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {works.map((work) => (
+        {visible.map((work) => (
           <Card key={`${work.tool}-${work.id}`} className="relative cursor-pointer overflow-hidden" onClick={() => (work.imageCount ? void openWork(work) : router.push(work.href))}>
             {/* 지우기를 카드 모서리에 둔다.
 
@@ -538,7 +646,7 @@ export function WorksTab() {
 
                 모서리에 두는 것은 참고 이미지와 같다. 아래에 줄로 두면 카드가
                 길어지고 다른 단추와 섞여 잘못 누르게 된다. */}
-            {work.mine || isAdmin ? (
+            {canDelete(work) ? (
               <button
                 type="button"
                 aria-label={`${work.title} 지우기`}
@@ -609,7 +717,7 @@ export function WorksTab() {
             <CardContent className="grid gap-2 p-3">
               <p className="truncate text-sm font-bold">{work.title}</p>
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="secondary">{TOOL_LABEL[work.tool]}</Badge>
+                <Badge variant="secondary">{labelOf(work, easyIds)}</Badge>
                 {work.imageCount > 1 ? <Badge variant="secondary">{work.imageCount}장 묶음</Badge> : null}
                 {showcase && isWorkShowcased(showcase, work.tool, work.id)
                   ? <Badge>첫 화면</Badge>
@@ -633,7 +741,7 @@ export function WorksTab() {
             <DialogHeader>
               <DialogTitle>지울까요?</DialogTitle>
               <DialogDescription>
-                「{pending.title}」{TOOL_LABEL[pending.tool]} 작업을 지웁니다.
+                「{pending.title}」{labelOf(pending, easyIds)} 작업을 지웁니다.
                 만들어 둔 그림도 함께 사라지고, 되돌릴 수 없습니다.
                 {!pending.mine ? (
                   <>
