@@ -20,6 +20,7 @@ import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
 import { openImageGallery } from "../_components/image-viewer";
+import { attachmentFromUpload, easyUploadForm } from "./upload";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -162,20 +163,12 @@ export function EasyClient({
   async function upload(files: FileList) {
     setError(null);
     for (const one of Array.from(files)) {
-      const form = new FormData();
       // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`browser-safe.ts`).
-      form.append("id", randomId());
-      form.append("title", one.name);
-      // 역할은 여기서 묻지 않는다. 기획이 판단한다 — 붙인 것을 전부 읽는다.
-      form.append("purpose", "style");
-      form.append("file", one);
+      const form = easyUploadForm(one, randomId());
       try {
         const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json();
         if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");
-        setAttachments((current) => [
-          ...current,
-          { id: body.image.id, url: body.image.url, title: body.image.title ?? one.name },
-        ]);
+        setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
       } catch (cause) {
         setError({
           message: cause instanceof Error ? cause.message : "그림을 올리지 못했습니다.",
