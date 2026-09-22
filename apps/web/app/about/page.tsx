@@ -12,7 +12,7 @@ import "../_landing/hero/hero.css";
 import "./about.css";
 
 /**
- * MCS 란 — 브랜드 소개.
+ * FormWith 란 — 브랜드 소개.
  *
  * **첫 화면과 한 벌로 보여야 한다.** 그래서 새 디자인을 만들지 않고
  * `landing.css` 의 토큰과 클래스를 그대로 쓴다(`.mcs-section` · `.mcs-h2` ·
@@ -33,7 +33,7 @@ export async function generateMetadata({
   return {
     title: a.metaTitle,
     description: a.metaDescription,
-    openGraph: { title: `${a.metaTitle} — MCS`, description: a.metaDescription },
+    openGraph: { title: `${a.metaTitle} — FormWith`, description: a.metaDescription },
   };
 }
 

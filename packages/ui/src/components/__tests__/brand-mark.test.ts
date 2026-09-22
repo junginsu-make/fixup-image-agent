@@ -34,7 +34,7 @@ function rects(svg: string): string[] {
   )].map((found) => [...found.slice(1, 6), found[6] ?? "1"].join(","));
 }
 
-describe("MCS 마크", () => {
+describe("FormWith 마크", () => {
   it("원본 svg 와 모양·짙기가 같다", () => {
     const want = rects(original);
     expect(want.length, "원본에서 사각형을 못 읽었다").toBe(3);

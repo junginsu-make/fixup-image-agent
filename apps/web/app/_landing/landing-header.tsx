@@ -59,13 +59,13 @@ export function LandingHeader({
   return (
     <header className="mcs-header">
       <div className="mcs-shell mcs-header-inner">
-        <Link href="/" className="mcs-brand" aria-label="MCS 홈">
+        <Link href="/" className="mcs-brand" aria-label="FormWith 홈">
           {/*
             로고는 그림이지 글자가 아니다 — `alt` 를 비우고 옆 글자가 이름을
-            말하게 한다. 둘 다 읽으면 스크린리더에서 「MCS MCS」가 된다.
+            말하게 한다. 둘 다 읽으면 스크린리더에서 「FormWith FormWith」가 된다.
           */}
           <Image src="/brand/mcs-mark-dark-bg.svg" alt="" width={28} height={28} priority />
-          <b>MCS</b>
+          <b>FormWith</b>
           <span>Marketing Content Studio</span>
         </Link>
 

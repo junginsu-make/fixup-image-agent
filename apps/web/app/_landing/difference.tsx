@@ -21,7 +21,7 @@ export function Difference({ t }: { t: LandingCopy }) {
                 <th scope="col">{t.diffColA}</th>
                 <th scope="col">{t.diffColB}</th>
                 <th scope="col" className="mcs-col-mcs">
-                  MCS
+                  FormWith
                 </th>
               </tr>
             </thead>
