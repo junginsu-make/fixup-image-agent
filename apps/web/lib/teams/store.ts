@@ -7,6 +7,7 @@ import {
   TEAM_SCOPED_TABLES,
   canDemote,
   canRemove,
+  leaveOutcome,
   normalizeTeamName,
   teamNameError,
   type TeamMemberRow,
@@ -455,19 +456,29 @@ export async function assignMember(
   await stampWorkTeam(userId, teamId, fromTeamId);
 }
 
-/** 팀에서 뺀다. 작업물은 개인 것으로 돌아간다. */
-export async function removeMember(userId: string): Promise<void> {
+/**
+ * 팀에서 뺀다. 작업물은 개인 것으로 돌아간다.
+ *
+ * **혼자인 팀이면 팀을 접는다**(`leaveOutcome`). 전에는 혼자 남은 팀장을 빼려 하면
+ * 막히기만 해서 그 팀을 정리할 길이 없었다(2026-09-22 운영 오류 두 건).
+ */
+export async function removeMember(userId: string): Promise<"removed" | "archived" | "none"> {
   if (noTeamStore()) throw new Error("로컬 확인 모드에는 팀 저장소가 없습니다.");
   const admin = createSupabaseAdminClient();
 
   const { data: current } = await admin
     .from("team_members").select("team_id").eq("user_id", userId).maybeSingle();
-  if (!current) return;
+  if (!current) return "none";
 
   const teamId = (current as { team_id: string }).team_id;
   const members = await membersOf(teamId);
-  if (!canRemove(members, userId)) {
+  const outcome = leaveOutcome(members, userId);
+  if (outcome === "blocked") {
     throw new Error("마지막 팀장은 뺄 수 없습니다. 먼저 다른 팀원을 팀장으로 세워 주세요.");
+  }
+  if (outcome === "archive") {
+    await archiveTeam(teamId);
+    return "archived";
   }
 
   // 작업물을 먼저 푼다. 회원 줄을 먼저 지우면 어느 팀에서 풀어야 할지
@@ -475,6 +486,7 @@ export async function removeMember(userId: string): Promise<void> {
   await clearWorkTeam(userId, teamId);
   const { error } = await admin.from("team_members").delete().eq("user_id", userId);
   if (error) throw new Error(error.message);
+  return "removed";
 }
 
 export async function setMemberRole(userId: string, role: TeamRole): Promise<void> {

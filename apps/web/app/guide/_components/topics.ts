@@ -1,3 +1,5 @@
+import { isDisabledRoute } from "../../../lib/access/routes";
+
 /**
  * 설명서의 목차 — 단일 출처.
  *
@@ -33,7 +35,7 @@ export interface GuideTopic {
   toolLabel?: string;
 }
 
-export const GUIDE_TOPICS: GuideTopic[] = [
+const ALL_TOPICS: GuideTopic[] = [
   {
     href: "/guide",
     label: "처음 오셨다면",
@@ -130,6 +132,12 @@ export const GUIDE_TOPICS: GuideTopic[] = [
     toolLabel: "사용량 보기",
   },
 ];
+
+/**
+ * 꺼 둔 화면의 설명서는 목차에서 뺀다(2026-09-22 팀). 누를 도구가 없는 설명서는
+ * 「어디를 누르는지」를 말할 수 없다. 켜면 등록부(`lib/access/routes.ts`)와 함께 돌아온다.
+ */
+export const GUIDE_TOPICS: GuideTopic[] = ALL_TOPICS.filter((topic) => !topic.toolHref || !isDisabledRoute(topic.toolHref));
 
 /**
  * 메뉴에서 부르는 이름. 「이미지 > 다양하게」 꼴이다.

@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { sendApprovalEmail, sendConfirmationEmail } from "../../lib/email/approval";
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 import { ledgerMissing } from "../../lib/membership/usage-row";
+import { isDisabledRoute } from "../../lib/access/routes";
+import { failureUrl, teamFailure } from "../../lib/teams/failure";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { assignMember, removeMember, setMemberRole } from "../../lib/teams/store";
@@ -284,29 +286,45 @@ export async function resendConfirmation(formData: FormData) {
  * 돌려보내기 때문이다. 명단에서 눌렀는데 팀 화면으로 튕기면 하던 일을 잃는다.
  */
 export async function assignTeamFromAdmin(formData: FormData) {
-  const userId = readUserId(formData);
-  await requireAdminFor(userId);
-  const teamId = String(formData.get("teamId") || "");
+  await adminTeamAttempt(async () => {
+    const userId = readUserId(formData);
+    await requireAdminFor(userId);
+    const teamId = String(formData.get("teamId") || "");
 
-  // 「팀 없음」을 고르면 뺀다. 고르개 하나로 넣고 빼는 것이 둘 다 된다.
-  if (!teamId) {
-    await removeMember(userId);
-    revalidatePath("/admin");
-    redirect("/admin?notice=team_removed");
-  }
+    // 「팀 없음」을 고르면 뺀다. 혼자인 팀이면 팀을 접는다(`leaveOutcome`).
+    if (!teamId) return (await removeMember(userId)) === "archived" ? "/admin?notice=team_archived" : "/admin?notice=team_removed";
 
-  if (!/^[0-9a-f-]{36}$/i.test(teamId)) throw new Error("올바르지 않은 팀 ID입니다.");
-  await assignMember(userId, teamId);
-  revalidatePath("/admin");
-  redirect("/admin?notice=team_assigned");
+    if (!/^[0-9a-f-]{36}$/i.test(teamId)) throw new Error("올바르지 않은 팀 ID입니다.");
+    await assignMember(userId, teamId);
+    return "/admin?notice=team_assigned";
+  });
 }
 
 /** 팀장 · 팀원을 바꾼다. 마지막 팀장은 못 내린다 — `setMemberRole` 이 막는다. */
 export async function setTeamRoleFromAdmin(formData: FormData) {
-  const userId = readUserId(formData);
-  await requireAdminFor(userId);
-  const role = formData.get("role") === "leader" ? "leader" : "member";
-  await setMemberRole(userId, role);
+  await adminTeamAttempt(async () => {
+    const userId = readUserId(formData);
+    await requireAdminFor(userId);
+    const role = formData.get("role") === "leader" ? "leader" : "member";
+    await setMemberRole(userId, role);
+    return `/admin?notice=${role === "leader" ? "team_promoted" : "team_demoted"}`;
+  });
+}
+
+/**
+ * 팀 편성은 던지지 않고 돌려보낸다. 던지면 운영에서는 회원 관리 화면 전체가
+ * 「server-side exception」으로 바뀐다(2026-09-22 Digest 4200012665, 원인은
+ * 「마지막 팀장은 뺄 수 없습니다」). 팀 기능이 꺼져 있으면 아무것도 바꾸지 않는다.
+ */
+async function adminTeamAttempt(work: () => Promise<string>): Promise<never> {
+  let target: string;
+  try {
+    if (isDisabledRoute("/team")) throw new Error("팀 기능은 지금 꺼 두었습니다.");
+    target = await work();
+  } catch (cause) {
+    unstable_rethrow(cause);
+    target = failureUrl("/admin", teamFailure(cause));
+  }
   revalidatePath("/admin");
-  redirect(`/admin?notice=${role === "leader" ? "team_promoted" : "team_demoted"}`);
+  redirect(target);
 }

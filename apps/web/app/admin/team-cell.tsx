@@ -57,7 +57,7 @@ export function TeamCell({
             const next = event.target.value;
             const message = next
               ? `${email} 을 「${teams.find((t) => t.id === next)?.name}」에 넣습니다.\n\n이 회원이 만든 작업물과 참고 이미지도 함께 팀으로 갑니다.`
-              : `${email} 을 팀에서 뺍니다.\n\n작업물과 참고 이미지는 개인 것으로 돌아갑니다.`;
+              : `${email} 을 팀에서 뺍니다.\n\n작업물과 참고 이미지는 개인 것으로 돌아갑니다. 이 사람이 팀에 혼자 남은 팀장이면 팀을 접습니다.`;
             if (window.confirm(message)) form.current?.requestSubmit();
             else event.target.value = team?.teamId ?? "";
           }}

@@ -27,9 +27,15 @@ const SHOWCASE_NOTICE: Record<string, string> = {
 const TEAM_NOTICE: Record<string, string> = {
   team_assigned: "팀에 넣었습니다. 이 회원이 만든 작업물과 참고 이미지도 함께 팀으로 갔습니다.",
   team_removed: "팀에서 뺐습니다. 작업물과 참고 이미지는 개인 것으로 돌아갔습니다.",
+  team_archived: "혼자 남은 팀이라 팀을 접었습니다. 작업물과 참고 이미지는 개인 것으로 돌아갔습니다.",
   team_promoted: "팀장으로 세웠습니다.",
   team_demoted: "팀원으로 내렸습니다.",
 };
+
+/** 처리하지 못한 일. 서버 액션이 던지지 않고 `?error=` 로 실어 보낸 문구다. */
+export function AdminError({ message }: { message: string }) {
+  return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
+}
 
 export function AdminNotice({ notice }: { notice: string }) {
   const failed = notice === "approved_email_failed";

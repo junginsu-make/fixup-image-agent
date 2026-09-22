@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { isDisabledRoute } from "../../../lib/access/routes";
 import { ChoiceTable, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -8,6 +10,8 @@ import { Callouts } from "../_components/mockup";
 export const metadata: Metadata = { title: "팀 · 사용 설명서" };
 
 export default function TeamGuidePage() {
+  // 팀 기능을 꺼 둔 동안(2026-09-22)에는 누를 도구가 없다. 설명서 첫 화면으로 보낸다.
+  if (isDisabledRoute("/team")) redirect("/guide");
   return (
     <>
       <GuideHeader

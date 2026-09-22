@@ -24,7 +24,7 @@ const day = (value: string | null) => (value ? new Date(value).toLocaleDateStrin
  * 회원의 승인과 플랜을 보려면 오가야 했다(2026-09-22 사용자 지적). 이제 한 줄에
  * 승인·크레딧·플랜이 같이 있고, 「플랜·크레딧」을 누르면 그 회원 패널이 열린다.
  */
-export function MemberTable({ rows, plans, teams, ledger }: { rows: AdminMemberRow[]; plans: CreditPlan[]; teams: TeamOption[]; ledger: boolean }) {
+export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }: { rows: AdminMemberRow[]; plans: CreditPlan[]; teams: TeamOption[]; ledger: boolean; teamsEnabled?: boolean }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -55,7 +55,7 @@ export function MemberTable({ rows, plans, teams, ledger }: { rows: AdminMemberR
 
       <div className="grid gap-3 md:hidden">
         {rows.map((row) => (
-          <MobileCard key={row.profile.id} row={row} teams={teams} ledger={ledger} planName={planName}
+          <MobileCard key={row.profile.id} row={row} teams={teamsEnabled ? teams : null} ledger={ledger} planName={planName}
             checked={selected.includes(row.profile.id)} onCheck={(on) => toggle(row.profile.id, on)} onOpen={() => open(row.profile.id)} />
         ))}
       </div>
@@ -70,12 +70,13 @@ export function MemberTable({ rows, plans, teams, ledger }: { rows: AdminMemberR
                     onChange={(event) => setSelected(event.target.checked ? rows.map((row) => row.profile.id) : [])} />
                 </th>
               ) : null}
-              {["회원", "팀", "상태", "크레딧", "플랜", "이번 달", "비용", "관리"].map((label) => <th key={label} className="py-3 pr-3 font-medium">{label}</th>)}
+              {/* 팀 기능을 꺼 두면(2026-09-22) 팀 칸을 뺀다. 고르개로 팀에 넣을 수 있게 두면 꺼 둔 기능이 여기로 새어 나온다. */}
+              {["회원", ...(teamsEnabled ? ["팀"] : []), "상태", "크레딧", "플랜", "이번 달", "비용", "관리"].map((label) => <th key={label} className="py-3 pr-3 font-medium">{label}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <DesktopRow key={row.profile.id} row={row} teams={teams} ledger={ledger} planName={planName}
+              <DesktopRow key={row.profile.id} row={row} teams={teamsEnabled ? teams : null} ledger={ledger} planName={planName}
                 checked={selected.includes(row.profile.id)} onCheck={(on) => toggle(row.profile.id, on)} onOpen={() => open(row.profile.id)} />
             ))}
           </tbody>
@@ -102,7 +103,7 @@ function exportCsv(rows: AdminMemberRow[], planName: (id: string) => string) {
   URL.revokeObjectURL(url);
 }
 
-type RowProps = { row: AdminMemberRow; teams: TeamOption[]; ledger: boolean; planName: (id: string) => string; checked: boolean; onCheck: (on: boolean) => void; onOpen: () => void };
+type RowProps = { row: AdminMemberRow; teams: TeamOption[] | null; ledger: boolean; planName: (id: string) => string; checked: boolean; onCheck: (on: boolean) => void; onOpen: () => void };
 
 function Identity({ row }: { row: AdminMemberRow }) {
   const { profile } = row;
@@ -176,7 +177,7 @@ function DesktopRow({ row, teams, ledger, planName, checked, onCheck, onOpen }: 
     <tr className="border-b align-top">
       {ledger ? <td className="py-4 pr-2"><input type="checkbox" aria-label={`${row.profile.email} 선택`} checked={checked} onChange={(event) => onCheck(event.target.checked)} /></td> : null}
       <td className="py-4 pr-3"><Identity row={row} /></td>
-      <td className="py-4 pr-3"><TeamCell userId={row.profile.id} email={row.profile.email} team={row.team} teams={teams} /></td>
+      {teams ? <td className="py-4 pr-3"><TeamCell userId={row.profile.id} email={row.profile.email} team={row.team} teams={teams} /></td> : null}
       <td className="py-4 pr-3"><StatusBadge profile={row.profile} /></td>
       <td className="py-4 pr-3"><CreditCell row={row} /></td>
       <td className="py-4 pr-3"><PlanCell row={row} planName={planName} /></td>
@@ -210,10 +211,12 @@ function MobileCard({ row, teams, ledger, planName, checked, onCheck, onOpen }: 
             <dd className="mt-1">{value}</dd>
           </div>
         ))}
-        <div className="col-span-2 rounded-lg bg-muted/50 p-3">
-          <dt className="text-xs text-muted-foreground">팀</dt>
-          <dd className="mt-1"><TeamCell userId={row.profile.id} email={row.profile.email} team={row.team} teams={teams} /></dd>
-        </div>
+        {teams ? (
+          <div className="col-span-2 rounded-lg bg-muted/50 p-3">
+            <dt className="text-xs text-muted-foreground">팀</dt>
+            <dd className="mt-1"><TeamCell userId={row.profile.id} email={row.profile.email} team={row.team} teams={teams} /></dd>
+          </div>
+        ) : null}
       </dl>
       <div className="mt-4 border-t pt-4"><Manage row={row} ledger={ledger} onOpen={onOpen} fullWidth /></div>
     </article>

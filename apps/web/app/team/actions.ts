@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { requireActiveMember, requireAdmin } from "../../lib/membership/server";
 import { canAssignMember, canWriteTeam } from "../../lib/teams/core";
 import {
@@ -28,6 +28,8 @@ import { personalQuotaError, teamQuotaError } from "../../lib/teams/credit";
 import { setCurrentProject } from "../../lib/teams/current-project";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
+import { isDisabledRoute } from "../../lib/access/routes";
+import { failureUrl, teamFailure } from "../../lib/teams/failure";
 
 /**
  * 팀 편성 — 누가 무엇을 할 수 있나.
@@ -46,6 +48,36 @@ import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
  * 주소만 알면 밖에서도 부를 수 있다.
  */
 
+/**
+ * 한 번 해 보고, 실패하면 **던지지 않고** 사람 말로 돌려보낸다.
+ *
+ * 서버 액션이 던지면 운영에서는 「server-side exception · Digest …」만 보인다
+ * (2026-09-22 「빼기」가 그랬다). 성공 주소는 `work` 가 돌려준다.
+ *
+ * `redirect()` 는 `try` 밖에서 부른다 — 안에서 부르면 그것이 던지는 신호를 `catch`
+ * 가 잡아 버린다. 문지기(`requireAdmin` 등)가 로그인 화면으로 보내는 신호도 같아서,
+ * 잡으면 `unstable_rethrow` 로 그대로 다시 던진다.
+ */
+async function attempt(back: string, work: () => Promise<string>): Promise<never> {
+  let target: string;
+  try {
+    target = await work();
+  } catch (cause) {
+    unstable_rethrow(cause);
+    target = failureUrl(back, teamFailure(cause));
+  }
+  revalidatePath("/team");
+  redirect(target);
+}
+
+/**
+ * 팀 기능이 꺼져 있으면 아무것도 바꾸지 않는다(2026-09-22 사용자 판단, `lib/access/routes.ts`).
+ * 화면이 닫혀도 폼은 주소만 알면 밖에서 부를 수 있다.
+ */
+function requireTeamOpen() {
+  if (isDisabledRoute("/team")) throw new Error("팀 기능은 지금 꺼 두었습니다.");
+}
+
 function readId(formData: FormData, field: string) {
   const value = String(formData.get(field) || "");
   if (!/^[0-9a-f-]{36}$/i.test(value)) throw new Error("올바르지 않은 ID입니다.");
@@ -59,6 +91,7 @@ function readId(formData: FormData, field: string) {
  * 남의 팀 ID 를 적어 보내는 것으로 아무 팀이나 꾸릴 수 있게 된다.
  */
 async function requireTeamWrite(teamId: string): Promise<{ isAdmin: boolean }> {
+  requireTeamOpen();
   const member = await requireActiveMember();
   const isAdmin = member.profile.role === "admin";
   const mine = isAdmin ? null : await myMembership(member.user.id);
@@ -89,24 +122,30 @@ async function teamOf(userId: string) {
 /* ── 팀 자체 — 운영자만 ────────────────────────────────────────── */
 
 export async function createTeamAction(formData: FormData) {
-  const admin = await requireAdmin();
-  await createTeam(String(formData.get("name") || ""), admin.user.id);
-  revalidatePath("/team");
-  redirect("/team?notice=team_created");
+  await attempt("/team", async () => {
+    requireTeamOpen();
+    const admin = await requireAdmin();
+    await createTeam(String(formData.get("name") || ""), admin.user.id);
+    return "/team?notice=team_created";
+  });
 }
 
 export async function renameTeamAction(formData: FormData) {
-  await requireAdmin();
-  await renameTeam(readId(formData, "teamId"), String(formData.get("name") || ""));
-  revalidatePath("/team");
-  redirect("/team?notice=team_renamed");
+  await attempt("/team", async () => {
+    requireTeamOpen();
+    await requireAdmin();
+    await renameTeam(readId(formData, "teamId"), String(formData.get("name") || ""));
+    return "/team?notice=team_renamed";
+  });
 }
 
 export async function archiveTeamAction(formData: FormData) {
-  await requireAdmin();
-  await archiveTeam(readId(formData, "teamId"));
-  revalidatePath("/team");
-  redirect("/team?notice=team_archived");
+  await attempt("/team", async () => {
+    requireTeamOpen();
+    await requireAdmin();
+    await archiveTeam(readId(formData, "teamId"));
+    return "/team?notice=team_archived";
+  });
 }
 
 /* ── 팀 안 — 운영자와 그 팀의 팀장 ─────────────────────────────── */
@@ -121,6 +160,10 @@ export async function archiveTeamAction(formData: FormData) {
  * 모르는 채로 화면이 성공이라고 말한다.
  */
 export async function assignMemberAction(formData: FormData) {
+  await attempt("/team", () => assignMembers(formData));
+}
+
+async function assignMembers(formData: FormData): Promise<string> {
   const teamId = readId(formData, "teamId");
   const { isAdmin } = await requireTeamWrite(teamId);
 
@@ -157,26 +200,26 @@ export async function assignMemberAction(formData: FormData) {
   for (const userId of userIds) {
     await assignMember(userId, teamId, role);
   }
-
-  revalidatePath("/team");
-  redirect("/team?notice=assigned");
+  return "/team?notice=assigned";
 }
 
 export async function setMemberRoleAction(formData: FormData) {
-  const userId = readId(formData, "userId");
-  await requireTeamWrite(await teamOf(userId));
-  const role = formData.get("role") === "leader" ? "leader" : "member";
-  await setMemberRole(userId, role);
-  revalidatePath("/team");
-  redirect(`/team?notice=${role === "leader" ? "promoted" : "demoted"}`);
+  await attempt("/team", async () => {
+    const userId = readId(formData, "userId");
+    await requireTeamWrite(await teamOf(userId));
+    const role = formData.get("role") === "leader" ? "leader" : "member";
+    await setMemberRole(userId, role);
+    return `/team?notice=${role === "leader" ? "promoted" : "demoted"}`;
+  });
 }
 
 export async function removeMemberAction(formData: FormData) {
-  const userId = readId(formData, "userId");
-  await requireTeamWrite(await teamOf(userId));
-  await removeMember(userId);
-  revalidatePath("/team");
-  redirect("/team?notice=removed");
+  await attempt("/team", async () => {
+    const userId = readId(formData, "userId");
+    await requireTeamWrite(await teamOf(userId));
+    // 혼자인 팀이면 빼는 대신 팀을 접는다(`leaveOutcome`). 무엇을 했는지 그대로 말한다.
+    return (await removeMember(userId)) === "archived" ? "/team?notice=team_archived" : "/team?notice=removed";
+  });
 }
 
 /* ── 프로젝트 — 운영자와 그 팀의 팀장 ──────────────────────────── */
@@ -194,53 +237,58 @@ async function requireProjectWrite(projectId: string): Promise<string> {
 }
 
 export async function createProjectAction(formData: FormData) {
-  const member = await requireActiveMember();
-  const teamId = readId(formData, "teamId");
-  await requireTeamWrite(teamId);
-  await createProject(teamId, String(formData.get("name") || ""), member.user.id);
-  revalidatePath("/team");
-  redirect("/team?tab=projects&notice=project_created");
+  await attempt("/team?tab=projects", async () => {
+    const member = await requireActiveMember();
+    const teamId = readId(formData, "teamId");
+    await requireTeamWrite(teamId);
+    await createProject(teamId, String(formData.get("name") || ""), member.user.id);
+    return "/team?tab=projects&notice=project_created";
+  });
 }
 
 export async function renameProjectAction(formData: FormData) {
-  const projectId = readId(formData, "projectId");
-  await requireProjectWrite(projectId);
-  await renameProject(projectId, String(formData.get("name") || ""));
-  revalidatePath("/team");
-  redirect("/team?tab=projects&notice=project_renamed");
+  await attempt("/team?tab=projects", async () => {
+    const projectId = readId(formData, "projectId");
+    await requireProjectWrite(projectId);
+    await renameProject(projectId, String(formData.get("name") || ""));
+    return "/team?tab=projects&notice=project_renamed";
+  });
 }
 
 export async function archiveProjectAction(formData: FormData) {
-  const projectId = readId(formData, "projectId");
-  await requireProjectWrite(projectId);
-  await archiveProject(projectId);
-  // 접은 것을 고른 채로 두면 모든 화면이 텅 빈다. 「전체」로 되돌린다.
-  await setCurrentProject(null);
-  revalidatePath("/team");
-  redirect("/team?tab=projects&notice=project_archived");
+  await attempt("/team?tab=projects", async () => {
+    const projectId = readId(formData, "projectId");
+    await requireProjectWrite(projectId);
+    await archiveProject(projectId);
+    // 접은 것을 고른 채로 두면 모든 화면이 텅 빈다. 「전체」로 되돌린다.
+    await setCurrentProject(null);
+    return "/team?tab=projects&notice=project_archived";
+  });
 }
 
 export async function moveProjectAction(formData: FormData) {
-  const projectId = readId(formData, "projectId");
-  const teamId = await requireProjectWrite(projectId);
-  await moveProject(teamId, projectId, formData.get("direction") === "up" ? "up" : "down");
-  revalidatePath("/team");
-  redirect("/team?tab=projects");
+  await attempt("/team?tab=projects", async () => {
+    const projectId = readId(formData, "projectId");
+    const teamId = await requireProjectWrite(projectId);
+    await moveProject(teamId, projectId, formData.get("direction") === "up" ? "up" : "down");
+    return "/team?tab=projects";
+  });
 }
 
 /** 작업물 하나를 프로젝트에 넣거나 뺀다. */
 export async function moveWorkAction(formData: FormData) {
-  const teamId = readId(formData, "teamId");
-  await requireTeamWrite(teamId);
+  await attempt("/team?tab=works", async () => {
+    const teamId = readId(formData, "teamId");
+    await requireTeamWrite(teamId);
 
-  const table = String(formData.get("table") || "") as Parameters<typeof moveWorkToProject>[1];
-  const workId = readId(formData, "workId");
-  const raw = String(formData.get("projectId") || "");
-  const projectId = raw ? readId(formData, "projectId") : null;
+    const table = String(formData.get("table") || "") as Parameters<typeof moveWorkToProject>[1];
+    const workId = readId(formData, "workId");
+    const raw = String(formData.get("projectId") || "");
+    const projectId = raw ? readId(formData, "projectId") : null;
 
-  await moveWorkToProject(teamId, table, workId, projectId);
-  revalidatePath("/team");
-  redirect("/team?tab=works&notice=work_moved");
+    await moveWorkToProject(teamId, table, workId, projectId);
+    return "/team?tab=works&notice=work_moved";
+  });
 }
 
 /**
@@ -289,11 +337,15 @@ function readQuota(
  * 지금까지의 동작이라, 값을 정하기 전까지는 아무도 갑자기 막히지 않는다.
  */
 export async function setTeamQuotaAction(formData: FormData) {
-  const teamId = readId(formData, "teamId");
-  await requireTeamWrite(teamId);
-  await setTeamQuota(teamId, readQuota(formData, "quota", teamQuotaError));
-  revalidatePath("/team");
-  redirect(`/team?tab=credit&team=${teamId}&notice=team_quota_set`);
+  // 실패해도 보던 팀으로 돌아간다. 팀이 여럿인 운영자가 어느 팀이었는지 잃지 않게.
+  const seen = String(formData.get("teamId") || "");
+  const back = /^[0-9a-f-]{36}$/i.test(seen) ? `/team?tab=credit&team=${seen}` : "/team?tab=credit";
+  await attempt(back, async () => {
+    const teamId = readId(formData, "teamId");
+    await requireTeamWrite(teamId);
+    await setTeamQuota(teamId, readQuota(formData, "quota", teamQuotaError));
+    return `/team?tab=credit&team=${teamId}&notice=team_quota_set`;
+  });
 }
 
 /**
@@ -303,12 +355,13 @@ export async function setTeamQuotaAction(formData: FormData) {
  * 유일한 길이라, 이게 없으면 팀 한도를 정해도 나눌 방법이 없다.
  */
 export async function setPersonalQuotaAction(formData: FormData) {
-  const userId = readId(formData, "userId");
-  const teamId = await teamOf(userId);
-  await requireTeamWrite(teamId);
-  // 크레딧 장부에서는 개인 상한이 아무것도 안 막는다. 저장되는 척하면 거짓말이다.
-  if (isCreditLedgerEnabled()) throw new Error("개인 상한은 쓰지 않습니다. 크레딧은 관리자가 회원·크레딧 관리에서 지급합니다.");
-  await setPersonalQuota(userId, readQuota(formData, "quota", personalQuotaError));
-  revalidatePath("/team");
-  redirect(`/team?tab=credit&team=${teamId}&notice=personal_quota_set`);
+  await attempt("/team?tab=credit", async () => {
+    const userId = readId(formData, "userId");
+    const teamId = await teamOf(userId);
+    await requireTeamWrite(teamId);
+    // 크레딧 장부에서는 개인 상한이 아무것도 안 막는다. 저장되는 척하면 거짓말이다.
+    if (isCreditLedgerEnabled()) throw new Error("개인 상한은 쓰지 않습니다. 크레딧은 관리자가 회원 관리에서 지급합니다.");
+    await setPersonalQuota(userId, readQuota(formData, "quota", personalQuotaError));
+    return `/team?tab=credit&team=${teamId}&notice=personal_quota_set`;
+  });
 }

@@ -70,9 +70,9 @@ describe("등록부가 실제로 문을 지킨다", () => {
  * 「메뉴에 없는데 주소를 치면 열리는 화면」.
  */
 describe("당분간 꺼 둔 화면", () => {
-  it("수집함과 수집 리스트가 꺼져 있다", () => {
-    // 2026-09-10 운영자 판단. 켤 때는 `routes.ts` 의 `disabled` 두 줄을 지운다.
-    expect([...DISABLED_ROUTES].sort()).toEqual(["/inbox", "/sources"]);
+  it("수집함 · 수집 리스트 · 팀이 꺼져 있다", () => {
+    // 2026-09-10 운영자 판단(수집), 2026-09-22 사용자 판단(팀). 켤 때는 `routes.ts` 의 `disabled` 를 지운다.
+    expect([...DISABLED_ROUTES].sort()).toEqual(["/inbox", "/sources", "/team"]);
   });
 
   it("지우지 않고 꺼 뒀다 — 되돌릴 곳이 남아 있다", () => {
@@ -114,6 +114,14 @@ describe("당분간 꺼 둔 화면", () => {
     // 반복문이 헛돌지 않는지 먼저 본다.
     expect(shell).toContain('href: "/library"');
     for (const route of DISABLED_ROUTES) {
+      /*
+        팀은 메뉴 항목을 지우지 않고 스위치(`teamEnabled`)로 가린다 — 팀이 있는 사람에게만
+        내는 조건이 이미 붙어 있어서, 그 조건에 한 겹을 더했다.
+      */
+      if (route === "/team") {
+        expect(shell).toContain("...(teamEnabled && (hasTeam || isAdmin) ? [teamItem] : [])");
+        continue;
+      }
       expect(shell, `사이드바에 ${route} 가 남아 있다`).not.toContain(`href: "${route}"`);
     }
   });
