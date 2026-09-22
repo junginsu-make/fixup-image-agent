@@ -26,7 +26,7 @@ export function profileInputError(input: { name: string; referrer: string }): st
   const referrer = String(input.referrer ?? "").replace(/\s+/g, " ").trim();
   if (!name) return "이름을 적어 주세요.";
   if ([...name].length > PROFILE_LIMITS.name) return `이름은 ${PROFILE_LIMITS.name}자까지 적을 수 있습니다.`;
-  if ([...referrer].length > PROFILE_LIMITS.referrer) return `추천인은 ${PROFILE_LIMITS.referrer}자까지 적을 수 있습니다.`;
+  if ([...referrer].length > PROFILE_LIMITS.referrer) return `추천코드는 ${PROFILE_LIMITS.referrer}자까지 적을 수 있습니다.`;
   return null;
 }
 

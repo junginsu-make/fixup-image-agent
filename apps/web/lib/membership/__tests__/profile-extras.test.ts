@@ -30,7 +30,7 @@ describe("고칠 때 검사", () => {
   /** 자르지 않고 알려 준다. 고치는 화면에서 조용히 잘리면 저장된 것이 적은 것과 다르다. */
   it("너무 길면 알려 준다", () => {
     expect(profileInputError({ name: "가".repeat(41), referrer: "" })).toBe("이름은 40자까지 적을 수 있습니다.");
-    expect(profileInputError({ name: "김철수", referrer: "나".repeat(101) })).toBe("추천인은 100자까지 적을 수 있습니다.");
+    expect(profileInputError({ name: "김철수", referrer: "나".repeat(101) })).toBe("추천코드는 100자까지 적을 수 있습니다.");
   });
 
   it("추천인은 비워도 된다", () => {

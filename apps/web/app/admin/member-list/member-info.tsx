@@ -40,8 +40,8 @@ function ProfileForm({ row, pending, run }: { row: AdminMemberRow; pending: bool
   return (
     <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); run(() => adminUpdateMemberProfile(row.profile.id, { name, referrer })); }}>
       <Field label="이름"><Input className="w-40" required maxLength={PROFILE_LIMITS.name} value={name} onChange={(event) => setName(event.target.value)} /></Field>
-      <Field label="추천인 (회원이 적은 값)"><Input className="w-56" maxLength={PROFILE_LIMITS.referrer} value={referrer} onChange={(event) => setReferrer(event.target.value)} /></Field>
-      <Button type="submit" size="sm" variant="outline" disabled={pending}>이름·추천인 저장</Button>
+      <Field label="추천코드 (회원이 적은 값)"><Input className="w-56" maxLength={PROFILE_LIMITS.referrer} value={referrer} onChange={(event) => setReferrer(event.target.value)} /></Field>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>이름·추천코드 저장</Button>
     </form>
   );
 }

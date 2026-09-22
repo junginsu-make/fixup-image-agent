@@ -41,6 +41,22 @@ export type TranscriptStepResult = {
   nextCache: TranscriptCache;
   /** 캐시를 그대로 썼는가. 썼으면 모델을 한 번도 안 불렀다. */
   fromCache: boolean;
+  /**
+   * **못 읽은 구간 수**(2026-09-22).
+   *
+   * 전에는 이 사실이 `onNotice` 로 나가 토스트가 됐고, 같은 틱의 다음 토스트가
+   * 덮어 **한 번도 안 보였다.** 값으로 올리고 남길지는 화면이 정한다.
+   */
+  failedBatches: number;
+  /**
+   * **한 자도 못 읽었는가.**
+   *
+   * 일부 실패와 다르다. 통째로 못 읽으면 서버 프롬프트가 「이미지만으로
+   * 추정」으로 바뀌면서 **「전사에 없는 수치를 만들지 마라」는 제동과
+   * `verified_facts` 가 함께 사라진다.** 조용히 넘어가면 사용자는 근거가
+   * 있는 줄 안다.
+   */
+  readFailed: boolean;
 };
 
 /** 같은 자료인지 가르는 열쇠. 이름과 크기가 모두 같아야 한다. */
@@ -51,12 +67,22 @@ export function transcriptCacheKey(files: File[]): string {
 export async function runTranscriptStep(input: TranscriptStepInput): Promise<TranscriptStepResult> {
   const key = transcriptCacheKey(input.files);
   if (input.cache?.key === key) {
-    return { transcript: input.cache.transcript, cuts: [], nextCache: input.cache, fromCache: true };
+    // 지난 번에 **끝까지** 읽은 것만 캐시에 들어간다. 실패가 아니다.
+    return {
+      transcript: input.cache.transcript,
+      cuts: [],
+      nextCache: input.cache,
+      fromCache: true,
+      failedBatches: 0,
+      readFailed: false,
+    };
   }
 
   const cuts: CoverageCut[] = [];
   let transcript: string | null = null;
   let complete = false;
+  let failedBatches = 0;
+  let threw = false;
 
   try {
     input.onNotice?.("원본 상세페이지를 전사하는 중입니다(작은 글씨까지 확인).");
@@ -70,14 +96,31 @@ export async function runTranscriptStep(input: TranscriptStepInput): Promise<Tra
     });
     transcript = result.transcript;
     complete = result.complete;
-    if (result.failedBatches) {
-      input.onNotice?.(`일부 구간 전사 실패(${result.failedBatches}). 가능한 범위로 진행합니다.`);
-    }
+    /*
+      **여기서 문구를 만들지 않는다.** 전에는 `onNotice` 로 흘려보냈는데 그것이
+      토스트라, 바로 다음 토스트가 같은 틱에 덮어 한 번도 안 보였다. 값만
+      올린다.
+    */
+    failedBatches = result.failedBatches ?? 0;
   } catch {
     // 전사는 있으면 좋은 것이다. 못 읽어도 그림 참조만으로 진행한다.
     transcript = null;
+    threw = true;
   }
 
+  /*
+    **글이 한 자도 안 나왔으면 읽은 것이 아니다.** 예외 없이 빈 값이 오는 길이
+    있다 — 그때 성공으로 치면 사용자는 근거가 있는 줄 안다.
+  */
+  const readFailed = threw || !String(transcript ?? "").trim();
+
   // 못 다 읽은 것은 남기지 않는다. 다음 번에 처음부터 다시 읽는다.
-  return { transcript, cuts, nextCache: complete ? { key, transcript } : null, fromCache: false };
+  return {
+    transcript,
+    cuts,
+    nextCache: complete ? { key, transcript } : null,
+    fromCache: false,
+    failedBatches,
+    readFailed,
+  };
 }

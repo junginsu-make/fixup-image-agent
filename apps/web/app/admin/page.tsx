@@ -118,7 +118,7 @@ function Filters({ params, plans, ledger }: { params: Params; plans: CreditPlan[
     <form className="grid gap-2 sm:flex sm:flex-wrap">
       <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input name="q" aria-label="회원 검색" defaultValue={params.q} className="pl-9" placeholder={ledger ? "이메일 · 이름 · 추천인 검색" : "이메일 검색"} />
+        <Input name="q" aria-label="회원 검색" defaultValue={params.q} className="pl-9" placeholder={ledger ? "이메일 · 이름 · 추천코드 검색" : "이메일 검색"} />
       </div>
       <select name="status" aria-label="회원 상태" defaultValue={params.status || ""} className={SELECT}>
         <option value="">전체 상태</option>

@@ -23,6 +23,7 @@ import { randomId } from "../../lib/browser-safe";
 import { batchSummaryMessage } from "./batch-summary";
 import { appendGenerateFields } from "./generate-form";
 import { coverageNotice } from "./coverage";
+import { sourceReadingNotice } from "./source-reading";
 import { mergeFailedSections } from "./failed-sections";
 
 /** 「나머지 섹션 생성」이 채우는 완성 페이지의 장수. */
@@ -60,7 +61,9 @@ import {
   normalizeFilesForUpload,
 } from "./redesign-files";
 import { Dashboard, Workspace } from "./redesign-panels";
-import { GenerationProgressPanel, Results, estimateGenerationSeconds, generationPhase, isAbortError } from "./redesign-results";
+import { GenerationProgressPanel, Results, estimateGenerationSeconds, isAbortError } from "./redesign-results";
+import { type RedesignPhase } from "./generation-progress";
+import { useGenerationProgress } from "./use-generation-progress";
 import { requestIdentityOf } from "./redesign-request";
 import { persistRedesignResult } from "./result-persistence";
 import { redesignProcessSource } from "../api/library/work-process";
@@ -99,7 +102,12 @@ export function RedesignWizard() {
   const [knowledgeOpen, setKnowledgeOpen] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [generationPlan, setGenerationPlan] = React.useState<GenerationPlan | null>(null);
-  const [generationProgress, setGenerationProgress] = React.useState<GenerationProgress | null>(null);
+  /** 지금 **실제로** 지나는 구간. 사연은 `generation-progress.ts`. */
+  const [phase, setPhase] = React.useState<RedesignPhase>("convert");
+  /** 전사에서 끝난 배치와 전체 배치. 아는 구간에서만 찬다. */
+  const [transcribeCount, setTranscribeCount] = React.useState<{ done: number; total: number } | null>(null);
+  /** 원본을 다 못 읽었다는 알림. 사연은 `source-reading.ts`. */
+  const [sourceReadingNotice_, setSourceReadingNotice] = React.useState("");
   const [generationSummary, setGenerationSummary] = React.useState<GenerationSummary | null>(null);
   const [editingSectionId, setEditingSectionId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState("");
@@ -134,32 +142,12 @@ export function RedesignWizard() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  React.useEffect(() => {
-    if (!generating || !generationPlan) {
-      setGenerationProgress(null);
-      return;
-    }
-
-    const totalSeconds = estimateGenerationSeconds(generationPlan.model, generationPlan.count);
-    const update = () => {
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - generationPlan.startedAt) / 1000));
-      const rawPercent = (elapsedSeconds / totalSeconds) * 100;
-      const percent = Math.min(96, Math.max(4, Math.round(rawPercent)));
-      const remainingSeconds = Math.max(5, totalSeconds - elapsedSeconds);
-      const tip = commerceTips[Math.floor(elapsedSeconds / 7) % commerceTips.length];
-      setGenerationProgress({
-        percent,
-        elapsedSeconds,
-        remainingSeconds,
-        phase: generationPhase(percent, elapsedSeconds),
-        tip
-      });
-    };
-
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, [generating, generationPlan]);
+  const generationProgress = useGenerationProgress({
+    generating,
+    plan: generationPlan,
+    phase,
+    transcribeCount,
+  });
 
   const currentProject = activeProject || projects[0];
 
@@ -245,6 +233,9 @@ export function RedesignWizard() {
       startedAt: Date.now()
     });
     setGenerating(true);
+    setPhase("convert");
+    setTranscribeCount(null);
+    setSourceReadingNotice("");
     setToast("원본 자료를 이미지 생성용 PNG로 변환하는 중입니다.");
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
@@ -271,17 +262,23 @@ export function RedesignWizard() {
       const cuts = [...normalized.cuts];
       if (abortController.signal.aborted) throw new DOMException("생성 요청을 취소했습니다.", "AbortError");
 
+      setPhase("transcribe");
       const step = await runTranscriptStep({
         files, provider: selectedModel, signal: abortController.signal,
         cache: transcriptCacheRef.current,
-        onNotice: setToast,
-        onProgress: (d, t) => setToast(`전사 진행 ${d}/${t} 배치`),
+        // 대기 화면이 **실제 배치 수**로 막대를 채운다. 여기만 셀 수 있는 구간이다.
+        onProgress: (d, t) => setTranscribeCount({ done: d, total: t }),
       });
       const transcript = step.transcript;
       cuts.push(...step.cuts);
       if (step.nextCache) transcriptCacheRef.current = step.nextCache;
 
+      // 못 읽은 것은 **남는 자리**에 적는다. 토스트는 덮여 안 보였다.
+      setSourceReadingNotice(sourceReadingNotice(step));
+
       setCoverageWarning(coverageNotice(cuts));
+      setPhase("generate");
+      setTranscribeCount(null);
       setToast("원본 분석과 실제 이미지 생성을 시작합니다.");
       const knowledgeText = useSharedKnowledge
         ? knowledgeItems
@@ -758,7 +755,12 @@ export function RedesignWizard() {
         </div>
       </div>
 
-      {saveWarning || coverageWarning ? <div role="alert" className="mb-4 rounded-lg border border-warning/30 p-3 text-sm">{[saveWarning, coverageWarning].filter(Boolean).join(" ")}</div> : null}
+      {/* 원본을 못 읽은 것도 여기 남는다. 토스트는 덮여 안 보였다. */}
+      {saveWarning || coverageWarning || sourceReadingNotice_ ? (
+        <div role="alert" className="mb-4 rounded-lg border border-warning/30 p-3 text-sm">
+          {[saveWarning, coverageWarning, sourceReadingNotice_].filter(Boolean).join(" ")}
+        </div>
+      ) : null}
       {generationSummary ? (
         <div
           className={cn(
