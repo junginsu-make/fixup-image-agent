@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
-import { sendApprovalEmail, sendConfirmationEmail } from "../../lib/email/approval";
+import { sendApprovalEmail, sendConfirmationEmail, sendPasswordResetEmail } from "../../lib/email/approval";
+import { updateProfileExtras } from "../../lib/membership/profile-store";
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
@@ -17,6 +18,7 @@ import {
   OWNER_PROTECTED_MESSAGE,
   canDeleteAdmin,
   canManageTarget,
+  isOwnerEmail,
   resolveOwnerEmail,
 } from "../../lib/membership/owner";
 
@@ -327,4 +329,101 @@ async function adminTeamAttempt(work: () => Promise<string>): Promise<never> {
   }
   revalidatePath("/admin");
   redirect(target);
+}
+
+/* ── 회원 정보 — 관리자 회원 관리 패널에서 ─────────────────────────── */
+
+/*
+  화면이 결과를 받아 그 자리에서 알려 준다. 그래서 이 셋은 던지지도 돌려보내지도 않고
+  `{ ok, message }` 를 돌려준다. 소유자 보호(`requireAdminFor`)는 다른 회원 액션과 같다.
+*/
+type MemberResult = { ok: boolean; message: string };
+
+async function memberAttempt(userId: string, work: (target: Awaited<ReturnType<typeof requireAdminFor>>) => Promise<MemberResult>): Promise<MemberResult> {
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) return { ok: false, message: "올바르지 않은 회원 ID입니다." };
+    return await work(await requireAdminFor(userId));
+  } catch (cause) {
+    unstable_rethrow(cause);
+    const message = cause instanceof Error ? cause.message : "";
+    if (/[가-힣]/.test(message)) return { ok: false, message };
+    console.error("[admin] 회원 정보 처리 실패", cause);
+    return { ok: false, message: "처리하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+}
+
+/** 메일로 보낼 재설정 주소. `/auth/confirm` 이 token_hash 로 확인하고 `/reset-password` 로 보낸다. */
+function recoveryUrl(siteUrl: string, hashedToken: string): string {
+  const url = new URL("/auth/confirm", siteUrl);
+  url.searchParams.set("token_hash", hashedToken);
+  url.searchParams.set("type", "recovery");
+  url.searchParams.set("next", "/reset-password");
+  return url.toString();
+}
+
+/**
+ * 다른 관리자의 비밀번호는 **소유자만** 바꾼다. 관리자 A 가 관리자 B 의 비밀번호를 정하면
+ * B 로 들어갈 수 있다 — 관리자 지우기가 소유자만인 것과 같은 무게다(독립 리뷰 2026-09-22).
+ */
+function adminPasswordGuard(target: { role: string }, actorEmail: string): string | null {
+  if (target.role !== "admin") return null;
+  return isOwnerEmail(actorEmail, resolveOwnerEmail(process.env.OWNER_EMAIL)) ? null : "다른 관리자의 비밀번호는 소유자만 바꿀 수 있습니다.";
+}
+
+/** 회원 이름·추천인을 관리자가 고친다. */
+export async function adminUpdateMemberProfile(userId: string, input: { name: string; referrer: string }): Promise<MemberResult> {
+  return memberAttempt(userId, async () => {
+    const result = await updateProfileExtras(userId, { name: String(input?.name ?? ""), referrer: String(input?.referrer ?? "") });
+    if (result.ok) revalidatePath("/admin");
+    return result;
+  });
+}
+
+/**
+ * 비밀번호 재설정 메일을 보낸다. **관리자는 새 비밀번호를 모른다** — 회원이 메일의 링크로
+ * 직접 정한다. 기본은 이것이다(2026-09-22 사용자 결정: 메일 + 직접 지정 둘 다).
+ */
+export async function adminSendPasswordReset(userId: string): Promise<MemberResult> {
+  return memberAttempt(userId, async ({ admin, target, current }) => {
+    const blocked = adminPasswordGuard(target, current.profile.email);
+    if (blocked) return { ok: false, message: blocked };
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+    if (!siteUrl) return { ok: false, message: "NEXT_PUBLIC_SITE_URL 이 설정되지 않아 메일을 보낼 수 없습니다." };
+    const { data: link, error } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: target.email,
+      options: { redirectTo: `${siteUrl}/auth/confirm?next=/reset-password` },
+    });
+    /*
+      **action_link 를 그대로 보내지 않는다.** 그 링크는 로그인 토큰을 주소 뒤(#)에 실어 돌려
+      보내는데, `/auth/confirm` 은 서버라 그 부분을 못 읽어 로그인 오류 화면으로 간다(독립 리뷰
+      2026-09-22). 해시 토큰으로 우리 주소를 직접 만든다 — 그 라우트가 verifyOtp 로 재설정
+      세션을 세운 뒤 비밀번호 정하는 화면으로 보낸다.
+    */
+    const hashed = link?.properties?.hashed_token;
+    if (error || !hashed) return { ok: false, message: `재설정 링크를 만들지 못했습니다: ${error?.message ?? "링크 없음"}` };
+    await sendPasswordResetEmail(target.email, recoveryUrl(siteUrl, hashed));
+    return { ok: true, message: `${target.email} 로 비밀번호 재설정 메일을 보냈습니다.` };
+  });
+}
+
+/**
+ * 관리자가 새 비밀번호를 직접 정한다. 메일을 못 받는 회원을 급히 돕는 길이다.
+ *
+ * 관리자가 그 비밀번호를 알게 되므로 회원에게 알려 주고 **로그인 뒤 바꾸라고 안내한다**
+ * (화면 문구). 규칙은 가입·재설정과 같다(8자 이상).
+ */
+export async function adminSetMemberPassword(userId: string, password: string): Promise<MemberResult> {
+  return memberAttempt(userId, async ({ admin, target, current }) => {
+    if (typeof password !== "string" || password.length < 8) return { ok: false, message: "새 비밀번호는 8자 이상이어야 합니다." };
+    if (password.length > 72) return { ok: false, message: "새 비밀번호는 72자까지 정할 수 있습니다." };
+    if (userId === current.user.id) return { ok: false, message: "내 비밀번호는 계정 화면에서 바꿔 주세요." };
+    const blocked = adminPasswordGuard(target, current.profile.email);
+    if (blocked) return { ok: false, message: blocked };
+    const { error } = await admin.auth.admin.updateUserById(userId, { password });
+    if (error) return { ok: false, message: `비밀번호를 바꾸지 못했습니다: ${error.message}` };
+    // 누가 누구의 비밀번호를 정했는지 서버 기록에 남긴다. 비밀번호 자체는 남기지 않는다.
+    console.info("[admin] 비밀번호 직접 지정", { actor: current.user.id, target: userId });
+    return { ok: true, message: `${target.email} 의 비밀번호를 바꿨습니다. 그 회원은 다른 기기에서 다시 로그인해야 할 수 있습니다. 회원에게 알려 주고, 로그인한 뒤 계정 화면에서 바꾸라고 안내하세요.` };
+  });
 }

@@ -202,7 +202,7 @@ describe("올리는 화면이 모두 식별자를 붙인다", () => {
   it.each([
     ["기획 화면의 레퍼런스 붙이기", "app/create/StyleReferenceAttach.tsx"],
     ["라이브러리 뷰어의 저장", "app/library/ResultViewer.tsx"],
-    ["계정 화면의 올리기", "app/settings/StyleReferenceManager.tsx"],
+    // 계정 화면의 올리기는 2026-09-22 에 뺐다 — 참고 이미지는 라이브러리에서 올린다.
   ])("**%s 이 직접 붙인다**", async (_label, relative) => {
     const source = await 화면(relative);
 

@@ -32,7 +32,7 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
   const panel = useRef<HTMLDivElement | null>(null);
   const planName = (id: string) => plans.find((plan) => plan.id === id)?.name ?? id;
   const emailOf = (id: string) => rows.find((row) => row.profile.id === id)?.profile.email ?? id;
-  const focus = rows.find((row) => row.profile.id === focusId && row.credit);
+  const focus = rows.find((row) => row.profile.id === focusId);
   const picked = rows.filter((row) => selected.includes(row.profile.id));
   const toggle = (id: string, on: boolean) => setSelected((list) => (on ? [...list, id] : list.filter((entry) => entry !== id)));
   /*
@@ -89,9 +89,9 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
 /** 이 쪽의 회원을 CSV 로. 엑셀이 수식으로 읽는 첫 글자(= + - @)는 막는다. */
 function exportCsv(rows: AdminMemberRow[], planName: (id: string) => string) {
   const cell = (value: unknown) => `"${String(value ?? "").replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
-  const header = ["이메일", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용", "누적 비용"];
+  const header = ["이름", "이메일", "추천인(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용", "누적 비용"];
   const body = rows.map((row) => [
-    row.profile.email, row.profile.status, row.team?.teamName ?? "",
+    row.name ?? "", row.profile.email, row.referrer ?? "", row.profile.status, row.team?.teamName ?? "",
     row.credit ? (row.credit.unlimited ? "무제한" : row.credit.available) : "", row.credit?.reserved ?? "", row.credit?.reviewUnits ?? "",
     row.credit?.used ?? "", row.monthImages, row.credit?.planId ? planName(row.credit.planId) : "", row.credit?.planStatus ?? "",
     row.monthCost, row.totalCost,
@@ -110,14 +110,18 @@ function Identity({ row }: { row: AdminMemberRow }) {
   return (
     <>
       {/* `<p>` 가 아니라 `<div>` 다. `Badge` 가 `<div>` 라 `<p>` 안에 넣으면 hydration 오류가 난다. */}
+      {/* 사람은 이름으로 찾는다. 이름이 있으면 굵게 앞에, 이메일은 그 아래. */}
       <div className="flex flex-wrap items-center gap-1.5 break-all font-medium">
-        {profile.email}
+        {row.name ? <span className="font-bold">{row.name}</span> : null}
+        <span className={row.name ? "text-muted-foreground" : undefined}>{profile.email}</span>
         {profile.role === "admin" ? <Badge variant="secondary">운영자</Badge> : null}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {profile.email_confirmed_at ? "이메일 인증" : "미인증"} · 가입 {day(profile.created_at)}
         {profile.approved_at ? ` · 승인 ${day(profile.approved_at)}` : ""}
       </p>
+      {/* 회원이 적은 글자 그대로다. 실재하는 회원처럼 읽히지 않게 출처를 밝힌다. */}
+      {row.referrer ? <p className="mt-0.5 text-xs text-muted-foreground">추천인(적은 값): {row.referrer}</p> : null}
     </>
   );
 }
@@ -166,7 +170,8 @@ function CostCell({ row }: { row: AdminMemberRow }) {
 function Manage({ row, ledger, onOpen, fullWidth = false }: { row: AdminMemberRow; ledger: boolean; onOpen: () => void; fullWidth?: boolean }) {
   return (
     <div className="flex flex-wrap items-start gap-1.5">
-      {ledger && row.credit ? <Button size="sm" variant="outline" className={fullWidth ? "w-full" : undefined} onClick={onOpen}>플랜·크레딧</Button> : null}
+      {/* 회원 정보(이름·추천인·비밀번호)와 플랜·크레딧을 한 패널에서 본다. */}
+      <Button size="sm" variant="outline" className={fullWidth ? "w-full" : undefined} onClick={onOpen}>{ledger && row.credit ? "플랜·크레딧·정보" : "회원 정보"}</Button>
       <MemberActions profile={row.profile} fullWidth={fullWidth} />
     </div>
   );

@@ -7,6 +7,7 @@ import type { AdminMemberRow, CreditPlan } from "./types";
 import { PLAN_STATUS_LABEL } from "./types";
 import type { CreditCommandState } from "./use-credit-command";
 import { Field, GrantForm, SELECT, number, text } from "./forms";
+import { MemberInfo } from "./member-info";
 
 type Grant = { id: string; source_key?: string; kind: string; granted_units: number; consumed_units: number; reserved_units: number; expires_at: string; revoked_at: string | null; reason: string };
 type Pending = { request_id: string; operation: string; requested_units: number; credit_phase: string; credit_quote: { outputs: number[] } };
@@ -22,6 +23,8 @@ export function CreditPanel({ row, plans, state, onClose, version }: { row: Admi
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
+    // 크레딧 장부가 없는 회원(로컬 미리보기)은 이력을 안 읽는다.
+    if (!row.credit) return;
     let live = true;
     // 새로 읽는 동안 앞 사람의 이력(회수·정산 폼 포함)을 남겨 두지 않는다.
     setError(""); setHistory(null);
@@ -38,7 +41,17 @@ export function CreditPanel({ row, plans, state, onClose, version }: { row: Admi
         <Button size="sm" variant="outline" onClick={onClose}>닫기</Button>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Summary row={row} plans={plans} />
+        <MemberInfo key={row.profile.id} row={row} />
+        {row.credit ? <CreditSections row={row} plans={plans} state={state} history={history} error={error} /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CreditSections({ row, plans, state, history, error }: { row: AdminMemberRow; plans: CreditPlan[]; state: CreditCommandState; history: History | null; error: string }) {
+  return (
+    <>
+        <Section title="크레딧·플랜"><Summary row={row} plans={plans} /></Section>
         <Section title="플랜"><PlanControls row={row} plans={plans} state={state} /></Section>
         <Section title="결제 확인" hint="그 달 결제를 받았으면 여기서 확인합니다. 확인해야 그 달 구독 크레딧이 지급되고, 월말에 소멸합니다.">
           <PaidForm row={row} plans={plans} state={state} />
@@ -56,8 +69,7 @@ export function CreditPanel({ row, plans, state, onClose, version }: { row: Admi
             <ul className="mt-2 space-y-1">{history.audit.map((event) => <li key={event.id} className="text-xs text-muted-foreground">{day(event.created_at)} · {event.action} · {event.reason}</li>)}</ul>
           </details>
         ) : null}
-      </CardContent>
-    </Card>
+    </>
   );
 }
 

@@ -62,3 +62,24 @@ export async function sendConfirmationEmail(email: string, confirmUrl: string) {
     html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#2b2024"><h2 style="color:#B0446A">이메일 인증을 완료해 주세요</h2><p>아래 버튼을 누르면 인증이 끝납니다. 인증 후 관리자 승인을 거쳐 이용할 수 있습니다.</p><p><a href="${confirmUrl}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#B0446A;color:white;text-decoration:none;font-weight:700">이메일 인증 완료</a></p><p style="font-size:12px;color:#6b6b6b">버튼이 안 눌리면 이 주소를 복사해 주소창에 붙여넣으세요.<br>${confirmUrl}</p></div>`,
   });
 }
+
+/**
+ * 비밀번호 재설정 링크를 **우리 SMTP 로** 보낸다. 관리자가 회원 대신 누른다.
+ *
+ * 인증 메일과 같은 까닭이다 — Supabase 의 재설정 API 는 캡차를 요구하는데 관리자 화면은
+ * 캡차를 띄울 자리가 아니다. 링크는 관리 키로 만든 것을 그대로 받는다.
+ */
+export async function sendPasswordResetEmail(email: string, resetUrl: string) {
+  const parsed = new URL(resetUrl);
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("재설정 링크가 올바르지 않습니다.");
+  }
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await createTransport().sendMail({
+    from,
+    to: email,
+    subject: "[FormWith] 비밀번호를 다시 정해 주세요",
+    text: `아래 주소를 열면 새 비밀번호를 정할 수 있습니다. 요청하지 않았다면 이 메일은 무시하셔도 됩니다.\n\n${resetUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#2b2024"><h2 style="color:#B0446A">비밀번호를 다시 정해 주세요</h2><p>아래 버튼을 누르면 새 비밀번호를 정할 수 있습니다. 요청하지 않았다면 이 메일은 무시하셔도 됩니다.</p><p><a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#B0446A;color:white;text-decoration:none;font-weight:700">새 비밀번호 정하기</a></p><p style="font-size:12px;color:#6b6b6b">버튼이 안 눌리면 이 주소를 복사해 주소창에 붙여넣으세요.<br>${resetUrl}</p></div>`,
+  });
+}

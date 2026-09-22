@@ -17,6 +17,7 @@ import { AuthShell } from "../_components/auth-shell";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import { authAvailability } from "../../lib/supabase/env";
+import { cleanProfileText, PROFILE_LIMITS, profileInputError } from "../../lib/membership/profile-extras";
 
 /**
  * 인증 메일을 못 보낸 것과 입력이 틀린 것은 사용자가 할 일이 다르다.
@@ -32,6 +33,8 @@ function isMailDeliveryFailure(error: { status?: number; code?: string; message:
 }
 
 export default function SignupPage() {
+  const [name, setName] = React.useState("");
+  const [referrer, setReferrer] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
@@ -48,6 +51,8 @@ export default function SignupPage() {
     event.preventDefault();
     setError("");
     if (!auth.ready) return setError(auth.message);
+    const profileProblem = profileInputError({ name, referrer });
+    if (profileProblem) return setError(profileProblem);
     if (password.length < 8) return setError("비밀번호는 8자 이상이어야 합니다.");
     if (password !== confirm) return setError("비밀번호 확인이 일치하지 않습니다.");
     if (captchaRequired && !captchaToken) return setError("보안 확인을 완료해 주세요.");
@@ -60,6 +65,15 @@ export default function SignupPage() {
         options: {
           captchaToken: captchaToken || undefined,
           emailRedirectTo: `${window.location.origin}/auth/confirm?next=/access`,
+          /*
+            이름·추천인은 가입 메타데이터로 보낸다. 가입 트리거(202609220005)가 계정이
+            만들어지는 그 한 번에 profiles 로 옮긴다 — 가입 직후 통신이 끊겨도 안 빠진다.
+            추천인은 검증하지 않는다. 적은 그대로 담는다(2026-09-22 사용자 결정).
+          */
+          data: {
+            display_name: cleanProfileText(name, PROFILE_LIMITS.name),
+            referrer_input: cleanProfileText(referrer, PROFILE_LIMITS.referrer),
+          },
         },
       });
       if (signupError) {
@@ -121,9 +135,14 @@ export default function SignupPage() {
         </div>
       ) : (
         <form className="space-y-4" onSubmit={submit}>
+          <div className="space-y-1.5"><Label htmlFor="name">이름</Label><Input id="name" autoComplete="name" required maxLength={PROFILE_LIMITS.name} value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="email">이메일</Label><Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="password">비밀번호</Label><Input id="password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="confirm">비밀번호 확인</Label><Input id="confirm" type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} /></div>
+          <div className="space-y-1.5">
+            <Label htmlFor="referrer">추천인 <span className="font-normal text-muted-foreground">· 선택</span></Label>
+            <Input id="referrer" maxLength={PROFILE_LIMITS.referrer} placeholder="추천인 이름이나 추천 코드" value={referrer} onChange={(e) => setReferrer(e.target.value)} />
+          </div>
           <Turnstile key={captchaVersion} onToken={setCaptchaToken} />
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={loading || !auth.ready}>{loading ? "가입 처리 중..." : "인증 메일 받기"}</Button>
