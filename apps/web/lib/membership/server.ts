@@ -10,7 +10,7 @@ import { isUsableAccount } from "./usable";
 import { canAccessPage, viewerFrom } from "../access/core";
 import { PAGE_ACCESS } from "../access/routes";
 import { isCreditLedgerEnabled } from "./credit-ledger";
-import { usageFromRow } from "./usage-row";
+import { usageFromRow, ledgerMissing } from "./usage-row";
 
 export const getMembership = cache(async (): Promise<MembershipContext | null> => {
   if (isLocalAuthBypass) return devMembership;
@@ -62,7 +62,7 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   const admin = createSupabaseAdminClient();
   if (isCreditLedgerEnabled()) {
     const { data: wallet, error: walletError } = await admin.rpc("credit_summary", { p_user: userId });
-    if (walletError) throw walletError;
+    if (walletError && !ledgerMissing(walletError)) throw walletError;
     if (wallet) return usageFromRow(wallet);
   }
   const { data, error } = await admin.rpc("member_usage_summary", { p_user_id: userId });

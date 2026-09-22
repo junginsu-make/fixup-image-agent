@@ -58,7 +58,8 @@ function 원가차이(): string {
 
 export default async function CreditsGuidePage() {
   const member = await getMembership();
-  const usage = member ? await getUsageSummary(member.user.id) : null;
+  // 설명서는 사용량을 못 읽었다고 닫힐 만한 화면이 아니다. 허브와 같은 판단이다.
+  const usage = member ? await getUsageSummary(member.user.id).catch(() => null) : null;
   if (usage?.pricingPolicy === "image-v2") return <>
     <GuideHeader kicker="크레딧과 모델" title="이미지 1장 = 1크레딧" lead="일반 이미지와 최종 카드 1장에 1크레딧, 600만 픽셀 이상 인쇄용 결과에는 2크레딧이 듭니다. 기획·분석과 단순 내보내기는 무료입니다." />
     <CreditWallet usage={usage} />

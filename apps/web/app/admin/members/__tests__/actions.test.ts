@@ -36,6 +36,22 @@ describe("관리자 입력에서 실제 SQL까지", () => {
       expect(args.p_actor).toBe(f.actor);
     }
   });
+  /*
+    소유자 보호가 이 화면에도 걸리는지 아무도 안 보고 있었다. 일괄 명령이 늘면서
+    `users` 를 뽑는 줄(`actions.ts` 의 users 추출)이 유일한 관문이 되었는데, 그
+    줄을 건드리면 조용히 뚫린다 — 관리자를 되살리는 길은 화면에 없다.
+  */
+  it("소유자 계정은 다른 관리자가 일괄로도 못 건드린다", async () => {
+    const previous = process.env.OWNER_EMAIL;
+    process.env.OWNER_EMAIL = "owner@example.invalid";
+    f.targetEmail = "owner@example.invalid";
+    try {
+      const result = await changeCredits({ kind:"status", users:[f.user], status:"suspended", reason:"시험", action });
+      expect(result.ok).toBe(false);
+      expect(f.rpc).not.toHaveBeenCalled();
+    } finally { process.env.OWNER_EMAIL = previous; }
+  });
+
   it("인증 실패 시 DB를 호출하지 않는다", async () => {
     f.requireAdmin.mockRejectedValue(new Error("admin required"));
     expect(await changeCredits({ kind:"plan", plan:"test", name:"시험", units:100, amount:10000, active:true })).toMatchObject({ ok:false });

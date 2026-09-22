@@ -52,10 +52,15 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
       if (error || data?.length !== users.length) throw new Error("선택한 회원을 찾지 못했습니다.");
       if (data.some(target => !canManageTarget({ actorEmail: actor.profile.email, targetEmail: target.email, owner: resolveOwnerEmail(process.env.OWNER_EMAIL) }))) throw new Error(OWNER_PROTECTED_MESSAGE);
     }
+    // 결과를 버리지 않는다. 일괄 상태 변경은 조건에 안 맞는 회원을 건너뛰므로,
+    // 「반영했습니다」만 내면 0명이 바뀌어도 성공으로 읽힌다 — 화면은 몇 명이
+    // 바뀌었는지 알려 준다고 적어 두었다.
     const call = async (name: string, args: Record<string, unknown>) => {
-      const { error } = await db.rpc(name, { ...args, p_actor: actor.user.id });
+      const { data, error } = await db.rpc(name, { ...args, p_actor: actor.user.id });
       if (error) throw new Error(error.message);
+      return data;
     };
+    let outcome = "반영했습니다.";
     switch (command.kind) {
       case "grant":
         // One DB transaction: the entire selection succeeds or rolls back together.
@@ -73,10 +78,18 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
       // 고른 사람 전부가 한 트랜잭션이다. 장부가 못 받는 회원이 하나라도 있으면
       // 절반만 새 플랜으로 남지 않고 통째로 되돌아간다.
       case "subscription": await call("credit_admin_subscription_many", { p_users: users, p_plan: command.plan, p_status: command.status, p_started: new Date().toISOString(), p_cancel: command.status === "canceled" ? new Date().toISOString() : null, p_action: command.action }); break;
-      case "status": await call("credit_admin_member_status", { p_users: users, p_status: command.status, p_reason: command.reason, p_action: command.action }); break;
+      case "status": {
+        const moved = await call("credit_admin_member_status", { p_users: users, p_status: command.status, p_reason: command.reason, p_action: command.action });
+        const count = Array.isArray(moved) ? moved.length : 0;
+        const label = command.status === "active" ? "승인" : "정지";
+        outcome = count === users.length
+          ? `${count}명을 ${label}했습니다.`
+          : `${users.length}명 중 ${count}명을 ${label}했습니다. 나머지는 조건에 맞지 않아 건너뛰었습니다.`;
+        break;
+      }
       case "paid": await call("credit_admin_confirm_period", { p_user: command.user, p_period: command.period, p_paid: command.amount, p_units: command.units, p_source: `paid:${command.action}` }); break;
     }
     revalidatePath("/admin/members"); revalidatePath("/settings");
-    return { ok: true, message: "반영했습니다." };
+    return { ok: true, message: outcome };
   } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "처리하지 못했습니다." }; }
 }
