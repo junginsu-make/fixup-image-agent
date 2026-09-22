@@ -1070,7 +1070,16 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    */
   if (appState === "scenario" && result) {
     return (
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:px-6">
+      <div className="grid gap-4">
+        {/*
+          **셸이 주는 여백을 또 주지 않는다**(2026-09-22 사용자 지적).
+
+          전에는 이 칸이 너비와 여백을 스스로 잡았다. 그런데 `AppShell` 이
+          이미 좌우 16~52px 과 위아래 여백을 준다 — 같은 셸 안인데 이 화면만
+          양옆이 좁고 위아래가 벌어졌고, 넓은 화면에서는 다른 도구보다 좁았다.
+
+          카드뉴스·포스터는 바깥 칸에서 아무것도 안 잡는다. 같게 둔다.
+        */}
         {/*
           이 화면에는 막대가 아예 없었다. 앞뒤로 몇 단계가 남았는지 알 수 없고
           되돌아갈 방법도 없었다 — 다른 두 화면에는 있는데 여기만 빠져 있었다.

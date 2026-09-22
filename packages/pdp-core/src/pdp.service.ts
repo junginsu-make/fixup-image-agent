@@ -1,4 +1,5 @@
 import { reviewStampOf } from "./pdp.review-freshness";
+import { carryProductReading } from "./pdp.product-reading";
 import { Type, purposeOfCall } from "./pdp.llm";
 import { extractJsonCandidate } from "./pdp.response-parse";
 import { isRetriableModelFailure } from "./pdp.retry-policy";
@@ -482,7 +483,21 @@ ${analyzePrompt}`
         const revisedReview = await runReview(revised);
         // 고친 것이 더 나쁘면 원래 것을 쓴다. 재작성이 늘 개선은 아니다.
         if (reviewPenalty(revisedReview) < reviewPenalty(review)) {
-          blueprint = revised;
+          /*
+            **사진에서 읽은 것을 잃지 않는다**(2026-09-22 사용자 신고).
+
+            여기서 구성안을 **통째로** 갈아 끼운다. 그런데 사진 경로는 제품
+            판독(`productReading`)을 구성안 안에 들고 다니고, 응답 스키마에
+            `required` 가 없어 모델이 그 칸을 건너뛰어도 정상 응답이다.
+
+            그래서 다시 만든 응답에 판독이 안 실려 오면 **처음에 잘 읽은
+            것까지 사라지고**, 화면에 「사진에서 제품을 충분히 읽지
+            못했습니다」가 떴다.
+
+            아래 근거 구조 실패 처리는 같은 위험을 알고 「섹션만 갈아
+            끼운다」고 적어 두었는데, 이 자리에는 그 보호가 없었다.
+          */
+          blueprint = carryProductReading(revised, blueprint);
           review = revisedReview;
         }
       } catch (error) {

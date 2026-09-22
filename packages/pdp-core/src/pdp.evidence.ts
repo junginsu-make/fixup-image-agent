@@ -269,9 +269,28 @@ export function applyUserEdit(
       if (section.section_id !== sectionId || readCopyTarget(section, target) === undefined) return section;
       const written = writeCopyTarget(section, target, value);
       const remaining = (written.evidence ?? []).filter((entry) => !sameTarget(entry.target, target));
+      /*
+        **고쳤다고 「근거 체계를 갖췄다」고 선언하지 않는다**(2026-09-22).
+
+        전에는 여기서 `evidenceVersion: 1` 을 찍었다. 그런데 그 값은 「이
+        섹션은 근거 체계를 갖췄다」는 뜻이고, 게이트가 그것을 보고 **모든
+        수치 칸에 근거를 요구한다.**
+
+        사진 경로는 근거를 **아예 만들지 않는다** — 분석 응답 스키마에 그
+        칸이 없다. 그래서 그대로 두면 게이트가 지나가는데, 사용자가 **장면
+        지시 한 줄만 고쳐도** 그 순간 1판으로 승격되고 나머지 칸의 수치가
+        전부 「근거 없음」이 되어 **그 섹션은 영구히 400** 이 됐다.
+
+        막히는 문장은 사용자가 쓴 주장이 아니라 **우리 AI 가 사진을 보고 쓴
+        제목**이고, 붙일 근거가 처음부터 없다. 충족이 불가능한 조건이었다.
+
+        **누가 썼는지는 그대로 남긴다.** 고친 칸의 `user` 근거는 값어치가
+        있다 — 금지 주장 검사(N-1)가 그것을 본다.
+      */
       return {
         ...written,
-        evidenceVersion: 1,
+        // 원래 1판이던 섹션만 1판으로 둔다. 없던 것을 새로 붙이지 않는다.
+        ...(section.evidenceVersion === 1 ? { evidenceVersion: 1 as const } : {}),
         evidence: [...remaining, { target, value, kind: "user" }],
       };
     }),

@@ -107,8 +107,54 @@ export const PRODUCT_GROUNDING_RULES = `# 카피는 제품에서 나와야 한�
  */
 export function isProductReadingUsable(reading: ProductReading | undefined): boolean {
   if (!reading) return false;
-  if (reading.category.trim().length < 4) return false;
+  /*
+    **한글은 한 음절이 한 자다**(2026-09-22 사용자 신고).
+
+    전에는 4자 미만을 「못 읽었다」로 봤다. 그런데 한글 제품 종류는 대부분
+    그 선에 걸린다 — 「세럼」·「크림」·「비누」·「가방」은 2자, 「프로틴」·
+    「단백질」·「보충제」는 3자다. 사진에서 본 것을 여섯 개 적어도 **종류
+    이름이 짧다는 이유 하나로** 경고가 떴다.
+
+    영어는 `protein powder` 만 해도 14자라 이 선에 안 걸린다. **한글
+    사용자에게만 빡빡한 기준**이었다.
+
+    **글자 수가 아니라 「적혔는가」를 본다.** 비었거나 한 글자면 종류 이름을
+    못 적은 것이다. 실제로 막아야 하는 것은 그쪽이고, 판독이 얼마나 두꺼운지는
+    아래의 「사진에서 본 것 2개 이상」이 잰다.
+  */
+  if (reading.category.trim().length < 2) return false;
   return reading.visibleFacts.filter((fact) => fact.trim()).length >= 2;
+}
+
+/**
+ * 다시 만든 구성안에 **앞서 읽은 것을 잇는다**(2026-09-22).
+ *
+ * ── 왜 필요한가 ────────────────────────────────────────────
+ *
+ * 사진 경로는 제품 판독을 구성안 **안에** 들고 다닌다. 심사에서 지적이
+ * 나오면 구성안을 한 번 다시 만드는데, 그 응답에 판독이 안 실려 오면
+ * **처음에 잘 읽은 것까지 사라진다.**
+ *
+ * 응답 스키마에 `required` 가 없어 모델이 그 칸을 건너뛰어도 정상 응답이다.
+ * 강제하는 것은 프롬프트 문장뿐이다.
+ *
+ * 같은 위험을 이 파일 바깥의 다른 자리가 이미 알고 있다 — 근거 구조 실패를
+ * 고칠 때 「섹션만 갈아 끼운다. 구성안 전체를 바꾸면 제품 판독이 떨어져
+ * 나간다」고 주석까지 달았다. 재작성 자리에는 그 보호가 없었다.
+ *
+ * ── 무엇을 고르나 ──────────────────────────────────────────
+ *
+ * **두꺼운 쪽을 남긴다.** 새로 읽은 것이 쓸 만하면 그것이 맞다(다시 만들며
+ * 더 정확해졌을 수 있다). 얇아졌거나 아예 없으면 앞의 것을 지킨다.
+ */
+export function carryProductReading<T extends { productReading?: ProductReading }>(
+  next: T,
+  previous: { productReading?: ProductReading } | undefined,
+): T {
+  const 앞의것 = previous?.productReading;
+  if (!앞의것) return next;
+  if (isProductReadingUsable(next.productReading)) return next;
+  return { ...next, productReading: 앞의것 };
 }
 
 /** 저장된 초안이나 구버전 응답에 없을 수 있다. 없으면 빈 값으로 채운다. */
