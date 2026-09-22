@@ -6,6 +6,7 @@ import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { sliceTallReference } from "../../../../lib/pdp/slice-image";
 import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { readPdpRequest } from "../../../../lib/pdp/request";
+import { clearPlanStage, markPlanStage } from "../../../../lib/pdp/plan-progress";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +56,27 @@ async function analyze(req: Request) {
     const request = { ...body, styleReference };
 
     // 조각낸 레퍼런스가 실린 `request` 를 보낸다(`body` 가 아니다).
-    const analyzed = await analyzeProduct(request, providers, { skipFirstImage: true });
+    /*
+      **기획이 어디쯤인지 적어 둔다**(2026-09-22 사용자 요청).
+
+      사진 기획은 4분 가까이 걸린다. 화면은 그동안 한 줄로 버텼고, 사용자는
+      「막연하게 너무 지루하게 기다리기만 한다」고 했다.
+
+      **시간으로 세지 않는다.** 모델이 늦으면 아직 구성안을 짜는 중인데 화면이
+      「검수 중」이라고 말하게 된다. 코어가 실제로 넘어갈 때만 여기에 찍고,
+      화면은 `analyze/progress` 로 물어본다.
+
+      번호는 화면이 만들어 보낸다. 안 보내면 아무 일도 안 한다 — 진행 표시가
+      없을 뿐 기획은 그대로 돈다.
+    */
+    // 코어 요청 모양에는 없는 칸이다. 기획의 입력이 아니라 **진행을 물어볼
+    // 번호**라, 모양은 `isPlanProgressId` 가 가린다.
+    const progressId = String((body as { planProgressId?: unknown }).planProgressId ?? "");
+
+    const analyzed = await analyzeProduct(request, providers, {
+      skipFirstImage: true,
+      onStage: (stage) => markPlanStage(progressId, reservation.userId, stage),
+    });
     const result = { ...analyzed, planningExecutions: providers.llm.executions?.filter((entry) => entry.purpose === "planning") };
     /**
      * 장부가 안 닫혀도 결과는 돌려준다. 여기서 던지면 아래 catch 가 성공한
@@ -74,6 +95,7 @@ async function analyze(req: Request) {
       billableImages: 0,
       llmUsd: readLlmMeter().usd,
     });
+    clearPlanStage(progressId);
     return Response.json({ ok: true, result, usage });
   } catch (err) {
     /*
@@ -87,6 +109,8 @@ async function analyze(req: Request) {
       SQL 은 이 코드를 보고 분석 한도를 먹일지 정한다(`pdp.analysis-quota`).
       뭉뚱그려 적으면 공급자 장애가 사용자 한도를 먹는다.
     */
+    // 실패해도 들고 있을 까닭이 없다. 화면은 응답으로 실패를 안다.
+    clearPlanStage(String((parsed.body as { planProgressId?: unknown }).planProgressId ?? ""));
     const envelope = toPdpErrorResponse(err);
     // 실패해도 글 모델 값은 이미 나갔다. 낭비가 안 보이면 줄일 수도 없다.
     await settleAiUsage(reservation, false, 0, String(envelope.code || "analyze_failed"), {

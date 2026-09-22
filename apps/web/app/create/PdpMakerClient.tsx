@@ -42,7 +42,8 @@ import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type Re
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
-import { copyText } from "../../lib/browser-safe";
+import { copyText, randomId } from "../../lib/browser-safe";
+import { PlanProgress } from "./PlanProgress";
 
 type PreparedImage = PreparedImageDraft;
 
@@ -261,6 +262,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const [errorDetail, setErrorDetail] = useState("");
   const [showErrorDetail, setShowErrorDetail] = useState(false);
   const [loadingStep, setLoadingStep] = useState("제품 이미지를 분석하는 중입니다.");
+  /**
+   * **이 기획을 가리키는 번호**(2026-09-22).
+   *
+   * 요청에 함께 실어 보내면 서버가 단계를 여기에 찍어 두고, 대기 화면이 그
+   * 번호로 물어본다. 한 번 기획에 하나씩 새로 만든다.
+   */
+  const [planProgressId, setPlanProgressId] = useState("");
   const [analysisStartedAt, setAnalysisStartedAt] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<PdpDraftSummary[]>([]);
   const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
@@ -915,6 +923,9 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setShowErrorDetail(false);
     setLoadingStep("회원 권한과 서버 연결 상태를 확인하는 중입니다.");
     setAnalysisStartedAt(Date.now());
+    // 기다림이 시작되는 자리에서 만든다. 요청보다 먼저 있어야 화면이 물어볼 수 있다.
+    const progressId = randomId();
+    setPlanProgressId(progressId);
 
     try {
       /*
@@ -947,6 +958,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
             planInstruction,
             look,
           }),
+          // 기획의 입력이 아니라 **진행을 물어볼 번호**다.
+          planProgressId: progressId,
         })
       });
 
@@ -1351,7 +1364,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           </div>
           <div>
             <h2 className="text-h1">AI가 상세페이지 구조를 만드는 중입니다</h2>
-            <p className="mt-1 text-body text-muted-foreground">{loadingStep}</p>
+            <PlanProgress progressId={planProgressId} fallback={loadingStep} />
             <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs">
               <Badge variant="secondary">분석 단계 · 이미지 크레딧 0장</Badge>
               {analysisStartedAt ? <Badge variant="outline"><ElapsedTime startedAt={analysisStartedAt} /></Badge> : null}

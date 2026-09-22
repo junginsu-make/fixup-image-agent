@@ -1,6 +1,7 @@
 import type { PdpAnalyzeRequest, PdpGenerateImageRequest } from "./types";
 import { PdpService, PdpServiceError, toPdpErrorResponse } from "./pdp.service";
 import type { PdpProviders } from "./pdp.image-provider";
+import type { PdpPlanStage } from "./pdp.plan-stage";
 
 export class PdpController {
   constructor(private readonly pdpService = new PdpService()) {}
@@ -8,7 +9,7 @@ export class PdpController {
   async analyze(
     body: PdpAnalyzeRequest,
     providers?: PdpProviders,
-    options?: { skipFirstImage?: boolean }
+    options?: { skipFirstImage?: boolean; onStage?: (stage: PdpPlanStage) => void }
   ) {
     try {
       const result = await this.pdpService.analyzeProduct(body, providers, options);
