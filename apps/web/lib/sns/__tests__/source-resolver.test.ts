@@ -28,9 +28,21 @@ describe("01 내용 가져오기", () => {
   });
 
   it("웹 주소는 본문을 실제로 가져온다", async () => {
+    // 2026-09-22 부터 스위치로 꺼 두었다(`lib/sns/feature.ts`). 켰을 때의 동작을 잰다.
+    vi.stubEnv("SNS_WEB_SOURCE", "1");
     const result = await resolveSourceText({ kind: "web", url: "https://example.com/a" }, deps());
     expect(result.text).toContain("기사 본문");
     expect(result.text).not.toContain("가져올 주소");
+    vi.unstubAllEnvs();
+  });
+
+  it("웹 주소가 꺼져 있으면 가져오지 않고 까닭을 말한다", async () => {
+    vi.stubEnv("SNS_WEB_SOURCE", "");
+    const fetchWeb = vi.fn();
+    const result = await resolveSourceText({ kind: "web", url: "https://example.com/a" }, deps({ ingestWeb: fetchWeb }));
+    expect(fetchWeb).not.toHaveBeenCalled();
+    expect(result.issues[0]).toContain("웹 주소로 가져오기는 지금 쓰지 않습니다");
+    vi.unstubAllEnvs();
   });
 
   it("질문은 검색해서 근거를 가져온다", async () => {
@@ -63,7 +75,9 @@ describe("01 내용 가져오기", () => {
   });
 
   it("가져온 뒤에는 어디서 왔는지 남긴다", async () => {
+    vi.stubEnv("SNS_WEB_SOURCE", "1");
     const result = await resolveSourceText({ kind: "web", url: "https://example.com/a" }, deps());
+    vi.unstubAllEnvs();
     expect(result.origin).toBe("https://example.com/a");
   });
 });

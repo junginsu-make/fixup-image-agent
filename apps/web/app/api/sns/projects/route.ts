@@ -3,6 +3,7 @@ import { snsProjectServiceForUser } from "../../../../lib/repository-factory";
 import { refreshProjectListAssetUrls } from "../../../../lib/sns/runtime";
 import { ProjectValidationError } from "./project-service";
 import { ProjectInputSchema } from "./schema";
+import { isWebSourceEnabled } from "../../../../lib/sns/feature";
 import { selectedProjectFor } from "../../../../lib/teams/current-project";
 
 export const runtime = "nodejs";
@@ -27,6 +28,10 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const parsed = ProjectInputSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return Response.json({ ok: false, message: "프로젝트 입력을 확인해 주세요.", issues: parsed.error.issues }, { status: 400 });
+  // 화면에서 감춘 것과 안 받는 것은 다르다. 주소만 알면 이 API 를 직접 부를 수 있다.
+  if (parsed.data.source.kind === "web" && !isWebSourceEnabled()) {
+    return Response.json({ ok: false, message: "웹 주소로 가져오기는 지금 쓰지 않습니다. 글의 내용을 직접 붙여 넣어 주세요." }, { status: 400 });
+  }
   try {
     const project = await (await snsProjectServiceForUser(auth.member.userId)).create(auth.member.userId, parsed.data);
     return Response.json({ ok: true, project }, { status: 201 });

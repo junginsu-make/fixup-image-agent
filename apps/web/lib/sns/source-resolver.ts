@@ -1,5 +1,6 @@
 import { failureReason } from "@fixup/shared";
 import type { ProjectSource } from "../../app/api/sns/projects/schema";
+import { isWebSourceEnabled } from "./feature";
 
 /**
  * 01 내용을 **실제로 가져온다.**
@@ -59,6 +60,8 @@ export async function resolveSourceText(
     }
 
     if (source.kind === "web") {
+      // 꺼 둔 동안(2026-09-22)에는 가져오지 않는다. 운영에서 작동하지 않던 길이다(`lib/sns/feature.ts`).
+      if (!isWebSourceEnabled()) return { text: "", issues: ["웹 주소로 가져오기는 지금 쓰지 않습니다. 글의 내용을 직접 붙여 넣어 주세요."] };
       const text = joined(await dependencies.ingestWeb({ id: "sns", url: source.url }));
       return text
         ? { text, origin: source.url, issues: [] }
