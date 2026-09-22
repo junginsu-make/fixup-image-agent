@@ -590,7 +590,7 @@ export function EasyClient({
               }
               disabled={!turn.canSend}
               rows={1}
-              className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+              className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 md:text-base"
             />
             <Button
               size="icon"
