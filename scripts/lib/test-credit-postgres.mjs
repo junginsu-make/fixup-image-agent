@@ -72,10 +72,15 @@ export async function testPostgres() {
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
     `);
     return { sql, close, dir, port,
-      async migrate(extra = []) {
+      /**
+       * `until` 까지만 깐다. 202609220003 은 모든 회원을 새 장부로 옮기므로, 옮기기 전
+       * 세상을 시험하는 파일은 그 앞에서 멈춰야 한다.
+       */
+      async migrate(extra = [], { until } = {}) {
         const folder = path.join(root, 'supabase/migrations');
         const tracked = (await exec('git', ['ls-files', 'supabase/migrations'], { ...options, cwd: root })).stdout.split(/\r?\n/).map(p => path.basename(p));
-        const files = [...new Set([...tracked.filter(n => /^\d{12,14}_.*\.sql$/.test(n)), ...extra])].sort();
+        const files = [...new Set([...tracked.filter(n => /^\d{12,14}_.*\.sql$/.test(n)), ...extra])].sort()
+          .filter(n => !until || n.slice(0, until.length) <= until);
         for (const file of files) {
           try { await sql(await readFile(path.join(folder, file), 'utf8')); }
           catch (e) { throw new Error(`Migration ${file}: ${e.message}`); }

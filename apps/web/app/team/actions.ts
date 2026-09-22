@@ -27,6 +27,7 @@ import {
 import { personalQuotaError, teamQuotaError } from "../../lib/teams/credit";
 import { setCurrentProject } from "../../lib/teams/current-project";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 
 /**
  * 팀 편성 — 누가 무엇을 할 수 있나.
@@ -305,6 +306,8 @@ export async function setPersonalQuotaAction(formData: FormData) {
   const userId = readId(formData, "userId");
   const teamId = await teamOf(userId);
   await requireTeamWrite(teamId);
+  // 크레딧 장부에서는 개인 상한이 아무것도 안 막는다. 저장되는 척하면 거짓말이다.
+  if (isCreditLedgerEnabled()) throw new Error("개인 상한은 쓰지 않습니다. 크레딧은 관리자가 회원·크레딧 관리에서 지급합니다.");
   await setPersonalQuota(userId, readQuota(formData, "quota", personalQuotaError));
   revalidatePath("/team");
   redirect(`/team?tab=credit&team=${teamId}&notice=personal_quota_set`);

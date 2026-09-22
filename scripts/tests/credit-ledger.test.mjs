@@ -12,7 +12,8 @@ let db;
 const json=async q=>JSON.parse(await db.sql(q));
 before(async()=>{
   db=await testPostgres();
-  await db.migrate(['202609220001_credit_ledger_v2.sql','202609220002_credit_compatibility.sql']);
+  // 전 회원을 옮기기(202609220003) 전의 세상 — 계정별 전환을 시험한다.
+  await db.migrate(['202609220001_credit_ledger_v2.sql','202609220002_credit_compatibility.sql'],{until:'202609220002'});
   if (process.env.CREDIT_TEST_MUTATION) {
     const source=readFileSync(new URL('../../supabase/migrations/202609220001_credit_ledger_v2.sql',import.meta.url),'utf8');
     const target=process.env.CREDIT_TEST_MUTATION==='blocking'?'credit_reserve':'credit_finalize';

@@ -41,6 +41,8 @@ export interface MemberUsage {
   usedInTeam: number;
   /** 이 사람의 개인 상한. */
   personalQuota: number;
+  /** 최고 관리자. 크레딧 장부에서만 온다(202609220003). */
+  unlimited?: boolean;
 }
 
 export interface TeamCredit {
@@ -56,6 +58,11 @@ export interface TeamCredit {
    */
   teamUsed: number;
   members: MemberUsage[];
+  /**
+   * 크레딧 장부에서 읽었나. 그때 `personalQuota` 는 상한이 아니라 **잔액+사용**이고
+   * 개인 상한 칸(`profiles.monthly_quota`)은 아무것도 막지 않는다.
+   */
+  ledger?: boolean;
 }
 
 /* ── 한도 ─────────────────────────────────────────────────────── */
@@ -83,7 +90,9 @@ export function personalQuotaError(raw: string): string | null {
  * 사고다** — 지금까지 각자 쓰던 만큼을 그대로 더한 것이 최소한의 출발점이다.
  */
 export function suggestedQuota(members: readonly MemberUsage[]): number {
-  return members.reduce((sum, member) => sum + member.personalQuota, 0);
+  // 무제한 관리자의 「잔액」은 1억이라 더하면 팀 한도 최대값을 넘는 제안이 된다.
+  const sum = members.filter((member) => !member.unlimited).reduce((total, member) => total + member.personalQuota, 0);
+  return Math.min(sum, TEAM_QUOTA_MAX);
 }
 
 /* ── 잔량 ─────────────────────────────────────────────────────── */

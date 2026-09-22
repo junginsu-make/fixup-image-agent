@@ -15,6 +15,7 @@ import { GUIDE_TOPICS } from "./_components/topics";
 */
 import { LANDING_COST_SPREAD } from "../_landing/credit-facts";
 import { getMembership, getUsageSummary } from "../../lib/membership/server";
+import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 
 export const metadata: Metadata = { title: "사용 설명서" };
 
@@ -24,12 +25,12 @@ const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person",
 export default async function GuideHomePage() {
   const topics = GUIDE_TOPICS.filter((topic) => topic.href !== "/guide");
   /*
-    로그인 없이도 열리는 화면이라 회원이 없을 수 있다. 없으면 기존 기준으로
-    말한다 — 그것이 지금 실제로 도는 정책이다.
+    로그인 없이도 열리는 화면이라 회원이 없을 수 있다. 없으면 장부 스위치를
+    본다 — 켜져 있으면 가입하는 사람은 새 장부로 들어간다(202609220003).
   */
   const member = await getMembership();
   const usage = member ? await getUsageSummary(member.user.id).catch(() => null) : null;
-  const perImage = usage?.pricingPolicy === "image-v2";
+  const perImage = usage ? usage.pricingPolicy === "image-v2" : isCreditLedgerEnabled();
 
   return (
     <>
