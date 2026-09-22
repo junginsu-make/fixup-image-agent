@@ -1,3 +1,4 @@
+import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import { generateSections, humanizeProviderError, RedesignError, type GenerateInputFile } from "@fixup/redesign-core";
 import { buildSceneWithCharacterDirective, resolveCharacterAngles } from "@fixup/pdp-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
@@ -47,7 +48,7 @@ async function generate(req: Request) {
     } catch {
       generateImage = undefined;
     }
-    reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(provider, requestedCount));
+    reservation = await reserveAiUsage(req, "redesign_generate", imageCreditUnits(provider, requestedCount), creditImagePlan(requestedCount, { width: 1152, height: 2048 }, "redesign:generate"));
     if (!reservation.ok) return reservation.response;
     const fileEntries = form.getAll("files").filter((f): f is File => f instanceof File);
     const files: GenerateInputFile[] = await Promise.all(fileEntries.map(async (f) => ({ name: f.name, type: f.type, buffer: Buffer.from(await f.arrayBuffer()) })));
@@ -90,6 +91,7 @@ async function generate(req: Request) {
       }
     }
 
+    await markCreditStarted(reservation);
     const result = await generateSections({
       files,
       characters,
@@ -119,7 +121,7 @@ async function generate(req: Request) {
       imageCreditUnits(provider, consumed),
       consumed > 0 ? undefined : "no_image_generated",
       // 글값도 함께 남긴다. 그동안 리디자인의 분석 비용은 장부에 0원이었다.
-      { model: provider, billableImages: consumed, llmUsd: readLlmMeter().usd },
+      { model: provider, billableImages: consumed, deliveredImages: consumed, completionConfirmed: true, llmUsd: readLlmMeter().usd },
     );
     return Response.json({ ...result, usage });
   } catch (err) {

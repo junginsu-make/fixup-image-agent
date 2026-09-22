@@ -87,7 +87,8 @@ describe("폴링 밖에서 끝나도 닫는가", () => {
   it("확정할 때 모델과 장수를 함께 넘긴다", () => {
     expect(stop).toContain("project.modelId");
     expect(status).toContain("project.modelId");
-    expect(settle).toContain("billableImages: made");
+    expect(settle).toContain("deliveredImages: made");
+    expect(settle).toContain("costBaselineCount");
   });
 
   it("도는 중이 아닌 흐름에 열쇠가 남아 있으면 마무리한다", () => {

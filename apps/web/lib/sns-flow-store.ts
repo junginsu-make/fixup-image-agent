@@ -12,6 +12,7 @@ import {
   saveLocalSnsFlow,
 } from "./local-store";
 import { createSupabaseServerClient } from "./supabase/server";
+import { createSupabaseAdminClient } from "./supabase/admin";
 import { snsCardPathsToRemove } from "./sns/thumbnail";
 
 /**
@@ -118,7 +119,7 @@ export async function snsFlowStoreForUser(userId: string): Promise<SnsFlowStore>
        * 팀원의 카드뉴스에서 생성을 돌리면 크레딧이 예약·차감되고 fal 에
        * 실제 요청이 나간 뒤, 결과만 어디에도 안 남았다.
        */
-      const result = await client.from("sns_projects")
+      const result = await createSupabaseAdminClient().from("sns_projects")
         .update({ data, status, updated_at: new Date().toISOString() })
         .eq("id", projectId).eq("user_id", userId)
         .select("id");

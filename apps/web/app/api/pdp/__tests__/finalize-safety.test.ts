@@ -38,7 +38,10 @@ describe("성공 경로가 그것을 쓰는가", () => {
   });
 
   it("대표 이미지", () => {
-    expect(keyVisual).toContain("await settleAiUsage(reservation, true, 1, undefined, {");
+    // 섹션 이미지와 같은 셈을 쓴다. 전에는 `1` 이 박혀 있었는데, 그건 모델
+    // 단가를 무시한 값이라 2026-09-22 에 `imageCreditUnits` 로 바뀌었다.
+    expect(keyVisual).toContain("await settleAiUsage(reservation, true, units, undefined, {");
+    expect(keyVisual).toContain("const units = imageCreditUnits(model, 1);");
   });
 
   it("배치 — 여기는 try 밖이라 던지면 전부 잃는다", () => {

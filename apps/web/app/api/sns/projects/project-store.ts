@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SnsProjectCreateRecord, SnsProjectRecord, SnsProjectRepository } from "./project-service";
 
@@ -66,7 +67,7 @@ export function record(row: ProjectRow): SnsProjectRecord {
 export function createSupabaseSnsProjectRepository(client: SupabaseClient): SnsProjectRepository {
   return {
     async create(row) {
-      const { data, error } = await client.from("sns_projects").insert({
+      const { data, error } = await createSupabaseAdminClient().from("sns_projects").insert({
         user_id: row.userId,
         candidate_id: row.candidateId ?? null,
         title: row.title,

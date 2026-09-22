@@ -1,4 +1,7 @@
 "use client";
+import { imageCredits } from "@fixup/shared";
+import { posterCreditSize } from "../../lib/membership/image-sizes";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import * as React from "react";
 import Link from "next/link";
@@ -69,6 +72,7 @@ const PROMPT_NAIL_EXAMPLES = [
 ].join("\n");
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
+  const creditPolicy = useCreditPolicy();
   const router = useRouter();
   /**
    * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
@@ -250,6 +254,14 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     modelId: choice.model.id, ratioId: submitRatio, variants,
     hasReferences,
   });
+  const imageCreditPreview = (() => {
+    if (creditPolicy !== "image-v2") return null;
+    try {
+      return adMode
+        ? adPlan.masters.reduce((sum, master) => sum + imageCredits(posterCreditSize(choice.model.id, "match-source", master)) * variants, 0)
+        : imageCredits(posterCreditSize(choice.model.id, submitRatio)) * variants;
+    } catch { return null; }
+  })();
 
   // 라이브러리에서 「이미지로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
   React.useEffect(() => {
@@ -825,7 +837,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                   화면이 안 말하면 두 갈래를 견줄 수 없었다(설계 §9).
                 */}
                 <span className="mt-1 block text-meta text-subtle-foreground">
-                  위는 그림 장수입니다. {planCostNote({
+                  {creditPolicy === "image-v2" ? imageCreditPreview === null ? "첨부 이미지 크기 확인 후 차감량이 확정됩니다. " : `완성 시 ${imageCreditPreview}크레딧. ` : "위는 그림 장수입니다. "}{planCostNote({
+                    policy: creditPolicy,
                     // 무엇을 세는지는 `plan-cost` 가 정한다. 여기서 정하면 시험이 못 간다.
                     ...planCostCounts(orderedIds.map((id) => roles[id] ?? "none")),
                     promptMode,

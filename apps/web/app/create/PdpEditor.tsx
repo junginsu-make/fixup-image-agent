@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -249,6 +250,7 @@ export function PdpEditor({
   onJumpStep,
   saveState = "idle",
 }: PdpEditorProps) {
+  const creditPolicy = useCreditPolicy();
   const [currentSectionIndex, setCurrentSectionIndex] = useState(() => initialDraftState?.currentSectionIndex ?? 0);
   const [sections, setSections] = useState(() =>
     initialDraftState?.sections?.length
@@ -1644,7 +1646,7 @@ export function PdpEditor({
         ),
       );
       setNotice(
-        `일괄 생성 결과: 성공 ${completed}장${failed ? ` · 실패 ${failed}장` : ""}. 성공한 ${completed}장에 대해 ${imageCreditUnits(imageModel, completed)}장이 차감됐습니다.`
+        `일괄 생성 결과: 성공 ${completed}장${failed ? ` · 실패 ${failed}장` : ""}. 성공한 ${completed}장에 대해 ${imageCreditUnits(imageModel, completed, { policy: creditPolicy })}장이 차감됐습니다.`
       );
       generationLockRef.current = false;
     }
@@ -2289,7 +2291,7 @@ export function PdpEditor({
               ) : null}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 차감되며 {generationRun.completed}장이면 {imageCreditUnits(imageModel, generationRun.completed)}장입니다.
+              성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 차감되며 {generationRun.completed}장이면 {imageCreditUnits(imageModel, generationRun.completed, { policy: creditPolicy })}장입니다.
             </p>
           </div>
         ) : null}

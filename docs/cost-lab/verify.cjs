@@ -74,7 +74,9 @@ near(retailSns.imageRemainingMoney*5,retailSns.remainingMoney);
 near(allowance(poster,{...base,vat:0,pg:0}).remainingMoney,retail.jobPrice-retail.aiCost);
 ok(allowance(poster,{...base,price:0}).remainingMoney<0,'loss is preserved');
 const auto50=applyAutomaticPrice({...copy(base),target:50});
-near(auto50.price,15968);
+// 단가 동기화: 리디자인 $0.19 → 현재 서비스 $0.165. 옛 가격 상수가 아니라
+// 같은 입력에서 목표 마진을 만족하는 최소 원 단위를 검증한다.
+near(auto50.price,Math.ceil(calculate({...copy(base),target:50}).floor));
 ok(calculate(auto50).margin>=50&&calculate(auto50).margin<50.01,'automatic price meets target with whole won rounding');
 ok(allowance(poster,auto50).jobPrice<retail.jobPrice,'target updates customer price');
 ok(calculate(auto50).profit<r.profit,'target updates monthly profit');
@@ -146,7 +148,7 @@ const roundtrip=normalizeSession(JSON.parse(JSON.stringify(fullSession)));
 near(roundtrip.production.target,30);near(roundtrip.production.jobs.character,3);near(roundtrip.production.regens.character,6);near(roundtrip.wallet.topup,123456);ok(roundtrip.view==='production','active tab restored');
 const compact=compactSession(fullSession);assert.deepEqual(normalizeSession(compact).main,roundtrip.main);checks++;
 near(normalizeSession(compact).production.regens.character,6);ok(JSON.stringify(compact).length<JSON.stringify(roundtrip).length,'compact share preserves settings without repeated row descriptions');
-near(normalizeSession(base).main.price,29000);ok(normalizeSession(base).version===2,'legacy snapshot migration');
+near(normalizeSession(base).main.price,29000);ok(normalizeSession(base).version===3,'legacy snapshot migration');
 assert.deepEqual(normalizeSession(roundtrip),roundtrip);checks++;
 near(calculate(base).overallMargin,calculate(base).profit/calculate(base).net*100);
 ok((html.match(/role="tab" /g)||[]).length===4,'four primary tabs');

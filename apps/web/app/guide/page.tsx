@@ -5,14 +5,31 @@ import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from
 import { Flow, FlowLegend, GuideHeader, Section } from "./_components/flow";
 import { GuideFooter } from "./_components/guide-footer";
 import { GUIDE_TOPICS } from "./_components/topics";
+/*
+  숫자를 손으로 적지 않는다. 여기에는 「4.6배」가 박혀 있었는데 모델이 드나드는
+  사이 실제는 5.4배가 되었고 글만 남았다 — `/guide/credits` 와 공개 홈은
+  2026-09-21 에 고쳤는데 이 허브만 빠졌다(2026-09-22 발견).
+
+  `_landing` 것을 가져다 쓰는 이유는 그 모듈이 이미 이 값을 모델 표에서 셈하고
+  있어서다. 여기서 또 셈하면 같은 숫자를 두 곳에서 관리하게 된다.
+*/
+import { LANDING_COST_SPREAD } from "../_landing/credit-facts";
+import { getMembership, getUsageSummary } from "../../lib/membership/server";
 
 export const metadata: Metadata = { title: "사용 설명서" };
 
 /** 역할 어휘는 shared 에서 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "place_as_is"];
 
-export default function GuideHomePage() {
+export default async function GuideHomePage() {
   const topics = GUIDE_TOPICS.filter((topic) => topic.href !== "/guide");
+  /*
+    로그인 없이도 열리는 화면이라 회원이 없을 수 있다. 없으면 기존 기준으로
+    말한다 — 그것이 지금 실제로 도는 정책이다.
+  */
+  const member = await getMembership();
+  const usage = member ? await getUsageSummary(member.user.id).catch(() => null) : null;
+  const perImage = usage?.pricingPolicy === "image-v2";
 
   return (
     <>
@@ -128,8 +145,18 @@ export default function GuideHomePage() {
             실패한 이미지는 크레딧으로 정산하지 않습니다
           </li>
           <li>
-            · <strong className="text-foreground">모델마다 차감량이 다릅니다.</strong> 원가가 4.6배까지 벌어지기
-            때문입니다. 자세한 것은 <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">크레딧과 모델</Link>에 있습니다
+            {perImage ? (
+              <>
+                · <strong className="text-foreground">이미지 1장이 1크레딧입니다.</strong> 어떤 방식으로 만들어도
+                같습니다. 인쇄용 큰 크기만 2크레딧입니다
+              </>
+            ) : (
+              <>
+                · <strong className="text-foreground">모델마다 차감량이 다릅니다.</strong> 원가가 {LANDING_COST_SPREAD}배까지
+                벌어지기 때문입니다
+              </>
+            )}
+            . 자세한 것은 <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">크레딧과 모델</Link>에 있습니다
           </li>
         </ul>
       </Section>

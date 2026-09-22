@@ -1,3 +1,4 @@
+import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { creditUnits } from "@fixup/shared";
@@ -51,10 +52,11 @@ export async function POST(req: Request) {
     ? imageCreditUnits(parsed.data.modelId, 1)
     // 결이 모델을 정하므로 예약 시점에는 모른다. 비싸게 잡고 아래에서 확정한다.
     : creditUnits(maxImageUnitUsd());
-  const reservation = await reserveAiUsage(req, "pdp_image", reserved);
+  const reservation = await reserveAiUsage(req, "pdp_image", reserved, creditImagePlan(1, { width: 2048, height: 2048 }, "character:view"));
   if (!reservation.ok) return reservation.response;
 
   try {
+    await markCreditStarted(reservation);
     const result = await regenerateAngle({
       userId: auth.member.userId,
       characterId: parsed.data.characterId,
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
       // **실제로 쓴 모델로 확정한다.** 예약은 비싸게 잡아 둔 것이다.
       result.ok ? imageCreditUnits(result.model, 1) : 0,
       result.ok ? undefined : "character_angle_failed",
-      result.ok ? { model: result.model, billableImages: 1 } : undefined,
+      result.ok ? { model: result.model, billableImages: 1, deliveredImages: 1, completionConfirmed: true } : undefined,
     );
 
     return Response.json({ ...result, usage }, { status: result.ok ? 200 : 500 });

@@ -1,3 +1,4 @@
+import { freeCreditPlan } from "../../../../../../lib/membership/credit-ledger";
 import { readLlmMeter, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { mergeGrammar, planPoster, readAttachments } from "@fixup/poster-core";
 import { planReferences, resolveTextModel } from "@fixup/shared";
@@ -122,7 +123,7 @@ async function plan(request: Request, context: Context, 고른글모델?: string
      */
     const visionReads = Object.keys(read.reads).length;
     const units = creditUnits(llmCostUsd({ planCalls: 1, visionReads }));
-    const reserved = await reserveAiUsage(request, "poster_image", units);
+    const reserved = await reserveAiUsage(request, "poster_image", units, freeCreditPlan(`poster:${id}:plan`));
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
@@ -191,7 +192,7 @@ async function plan(request: Request, context: Context, 고른글모델?: string
     const 실제 = 잰값.metered && 잰값.usd > 0 ? 잰값.usd : llmCostUsd({ planCalls: 1, visionReads });
     await finalizeAiUsage(reservation, true, creditUnits(실제), undefined, {
       model: "",
-      billableImages: 0,
+      billableImages: 0, deliveredImages: 0, completionConfirmed: true,
       llmUsd: 실제,
     });
     return Response.json({ ok: true, project: saved, issues: [...read.issues, ...plan.issues] });

@@ -6,9 +6,12 @@
     "dev": "pnpm --filter @fixup/web dev",
     "build": "pnpm --filter @fixup/web build",
     "build:ec2": "node scripts/build-ec2.mjs",
+    "build:cost-forecast": "node scripts/build-cost-forecast.mjs",
+    "check:cost-forecast": "node scripts/build-cost-forecast.mjs --check",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --filter @fixup/web lint",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "test:credit-db": "node --test scripts/tests/credit-ledger.test.mjs"
   },
   "pnpm": {
     "overrides": {

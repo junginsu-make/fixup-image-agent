@@ -1,3 +1,5 @@
+import { getMembership, getUsageSummary } from "../../../lib/membership/server";
+import { CreditWallet } from "../../_components/credit-wallet";
 import type { Metadata } from "next";
 import { IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
 import { creditUnits } from "@fixup/shared";
@@ -54,7 +56,15 @@ function 원가차이(): string {
   return (Math.max(...값) / Math.min(...값)).toFixed(1);
 }
 
-export default function CreditsGuidePage() {
+export default async function CreditsGuidePage() {
+  const member = await getMembership();
+  const usage = member ? await getUsageSummary(member.user.id) : null;
+  if (usage?.pricingPolicy === "image-v2") return <>
+    <GuideHeader kicker="크레딧과 모델" title="이미지 1장 = 1크레딧" lead="일반 이미지와 최종 카드 1장에 1크레딧, 600만 픽셀 이상 인쇄용 결과에는 2크레딧이 듭니다. 기획·분석과 단순 내보내기는 무료입니다." />
+    <CreditWallet usage={usage} />
+    <p className="my-5 text-sm text-muted-foreground">모델별 등급 차감은 없습니다. 다시 만들면 새 결과물로 차감하며 내부 재시도는 추가 차감하지 않습니다. 상세페이지는 각 섹션과 대표 이미지를 각각 셉니다. 카드뉴스는 내부 그림 칸 수에 관계없이 완성 카드 수로 셉니다. 처리 중인 요청의 결과가 불명확하면 확인 후 크레딧을 확정하거나 반환합니다.</p>
+    <GuideFooter href="/guide" />
+  </>;
   return (
     <>
       <GuideHeader

@@ -32,6 +32,12 @@ export type MemberProfile = {
 };
 
 export type UsageSummary = {
+  pricingPolicy?: "cost-v1" | "image-v2";
+  balance?: number;
+  settlementPending?: boolean;
+  subscription?: { units: number; expiresAt: string | null };
+  purchased?: { units: number; expiresAt: string | null };
+  bonus?: { units: number; expiresAt: string | null };
   used: number;
   reserved: number;
   quota: number;

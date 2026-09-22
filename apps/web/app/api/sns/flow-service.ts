@@ -97,6 +97,7 @@ export interface SnsFlowState {
      * 그대로 남아 있어, 합계를 그냥 쓰면 **이미 낸 것을 또 받는다.**
      */
     costBaselineUsd?: number;
+    costBaselineCount?: number;
   };
 }
 

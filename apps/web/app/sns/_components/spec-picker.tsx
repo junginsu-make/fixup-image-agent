@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../../_components/credit-policy-provider";
 
 import {
   CARD_RATIOS,
@@ -30,7 +31,12 @@ export interface SnsSpec {
   userInstruction: string;
 }
 
-export function estimateCostLabel(spec: SnsSpec, attachments: Attachment[]): string {
+export function estimateCostLabel(spec: SnsSpec, attachments: Attachment[], policy: "cost-v1" | "image-v2" = "cost-v1"): string {
+  if (policy === "image-v2") {
+    if (spec.cardCountMode === "fixed") return `완성 카드 ${spec.cardCount}장 · ${spec.cardCount}크레딧`;
+    const range = planSlots({ requested: "auto", placeAsIsCount: attachments.filter(a => a.kind === "place_as_is").length, hasEndingImage: attachments.some(a => a.kind === "ending") }).autoRange!;
+    return `완성 카드 ${range.min}~${range.max}장 · ${range.min}~${range.max}크레딧`;
+  }
   const model = modelById(spec.modelId);
   if (spec.cardCountMode === "fixed") {
     const estimate = estimateCost({
@@ -56,6 +62,7 @@ export function SpecPicker({ spec, onChange, attachments }: {
   onChange(value: SnsSpec): void;
   attachments: Attachment[];
 }) {
+  const creditPolicy = useCreditPolicy();
   /*
    * **켜 보이는 결.**
    *
@@ -147,7 +154,7 @@ export function SpecPicker({ spec, onChange, attachments }: {
           <div className="flex flex-wrap items-center gap-2"><strong>자리 계산</strong>{plan.issues.length ? <Badge variant="secondary">확인 필요</Badge> : <Badge variant="green">배치 가능</Badge>}</div>
           {plan.total === "auto" ? <p className="text-sm">AI 추천 범위 {plan.autoRange!.min}~{plan.autoRange!.max}장 · 원본 {plan.placeAsIs}장 · 표지와 마지막 각 1자리</p> : <p className="text-sm">{plan.total}장 = 표지 1 + 원본 {plan.placeAsIs} + AI 속지 {plan.aiBody} + 마지막 1</p>}
           {plan.issues.map((issue) => <p key={issue} role="alert" className="text-sm text-destructive">{issue}</p>)}
-          <p className="text-sm font-semibold text-primary">{estimateCostLabel(spec, attachments)}</p>
+          <p className="text-sm font-semibold text-primary">{estimateCostLabel(spec, attachments, creditPolicy)}</p>
         </CardContent>
       </Card>
     </div>

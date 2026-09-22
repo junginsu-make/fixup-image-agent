@@ -48,7 +48,7 @@ describe("차감 장수를 서버와 같은 식으로 세는가", () => {
     expect(editor).not.toContain("IMAGE_MODEL_CREDIT_WEIGHT");
     expect(gallery).not.toContain("IMAGE_MODEL_CREDIT_WEIGHT");
     expect(editor).toContain("imageCreditUnits(imageModel,");
-    expect(gallery).toContain("imageCreditUnits(imageModel, missingCount)");
+    expect(gallery).toContain("imageCreditUnits(imageModel, missingCount, { policy: creditPolicy })");
   });
 });
 

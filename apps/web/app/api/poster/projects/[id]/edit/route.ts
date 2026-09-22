@@ -1,3 +1,5 @@
+import { knownPosterCreditSize } from "../../../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted, bindCreditJob } from "../../../../../../lib/membership/credit-ledger";
 import { canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
 import { z } from "zod";
@@ -94,10 +96,11 @@ export async function POST(request: Request, context: Context) {
       // 고친 기준 그림을 늘 레퍼런스로 넣는다 — i2i 단가다.
       hasReferences: true,
     });
-    const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0));
+    const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0), creditImagePlan(1, knownPosterCreditSize(project.modelId, ratioId, job.sourceSize), `poster:${id}`));
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
+    await markCreditStarted(reservation);
     const submission = await submitPoster(job, {
       queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
         // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.
@@ -110,6 +113,7 @@ export async function POST(request: Request, context: Context) {
      * 확정은 `status` 가 결과를 받은 뒤에 한다 — 만들기와 같은 길이다. 화면도
      * 수정 뒤에 같은 `status` 를 물어보므로 거기서 마무리된다.
      */
+    await bindCreditJob(reservation, { key: `poster:${submission.requestRowId}`, resource: `poster:${id}`, providerId: submission.falRequestId, endpoint: submission.endpoint });
     await stores.projects.update(id, {
       data: { ...project.data, reservationId: reserved.requestId },
     });

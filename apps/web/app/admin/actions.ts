@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { sendApprovalEmail, sendConfirmationEmail } from "../../lib/email/approval";
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { assignMember, removeMember, setMemberRole } from "../../lib/teams/store";
@@ -93,6 +94,11 @@ export async function setMemberStatus(formData: FormData) {
 export async function updateQuota(formData: FormData) {
   const userId = readUserId(formData);
   const { admin } = await requireAdminFor(userId);
+  if (isCreditLedgerEnabled()) {
+    const { data: account, error } = await admin.from("credit_accounts").select("user_id").eq("user_id", userId).maybeSingle();
+    if (error) throw error;
+    if (account) throw new Error("전환한 회원의 크레딧은 회원·크레딧 관리에서 지급하거나 회수해 주세요.");
+  }
   const quota = Number(formData.get("quota"));
   if (!Number.isInteger(quota) || quota < 0 || quota > 10000) throw new Error("한도는 0~10000 사이 정수여야 합니다.");
   const { error } = await admin.from("profiles").update({ monthly_quota: quota, updated_at: new Date().toISOString() }).eq("id", userId);

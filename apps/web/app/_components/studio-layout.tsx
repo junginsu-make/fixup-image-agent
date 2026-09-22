@@ -1,3 +1,4 @@
+import { CreditPolicyProvider } from "./credit-policy-provider";
 import type { ReactNode } from "react";
 import { AppShell } from "@fixup/ui";
 import { requireActiveMember, getUsageSummary } from "../../lib/membership/server";
@@ -40,7 +41,7 @@ export async function StudioLayout({
   return (
     // 만드는 중인 것들은 셸 바깥에 둔다. 화면을 옮겨도 이 자리는 다시 만들어지지
     // 않으므로, 다른 화면으로 가도 결과를 계속 받아 올 수 있다.
-    <RunningJobsProvider>
+    <CreditPolicyProvider usage={usage}><RunningJobsProvider>
       <AppShell
         // 메뉴에 관리자를 낼지도 등록부가 정한다. 미들웨어가 문을 여는 기준과
         // 같은 곳에서 나와야, 「메뉴엔 있는데 안 열리는」 일이 안 생긴다.
@@ -77,6 +78,6 @@ export async function StudioLayout({
       >
         {children}
       </AppShell>
-    </RunningJobsProvider>
+    </RunningJobsProvider></CreditPolicyProvider>
   );
 }

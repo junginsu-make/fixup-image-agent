@@ -1,3 +1,4 @@
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
 }
 
 async function analyze(req: Request) {
-  const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
+  const reservation = await reserveAiUsage(req, "pdp_analyze", 0, freeCreditPlan("pdp:analyze"));
   if (!reservation.ok) return reservation.response;
   try {
     const body = (await req.json()) as PdpAnalyzeRequest;

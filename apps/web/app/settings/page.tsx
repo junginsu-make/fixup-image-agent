@@ -1,3 +1,4 @@
+import { CreditWallet } from "../_components/credit-wallet";
 import {
   Badge,
   Card,
@@ -59,7 +60,7 @@ export default async function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)] gap-4 max-xl:grid-cols-1">
-        <Card>
+        {usage.pricingPolicy === "image-v2" ? <CreditWallet usage={usage} /> : <Card>
           <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
             <div className="min-w-0 space-y-1.5">
               <CardTitle>월 이미지 크레딧</CardTitle>
@@ -90,7 +91,7 @@ export default async function SettingsPage() {
               차감됩니다. 생성 화면에 모델별 차감량이 표시됩니다.
             </p>
           </CardContent>
-        </Card>
+        </Card>}
 
         <Card>
           <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">

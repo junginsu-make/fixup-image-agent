@@ -16,6 +16,8 @@ import { describe, expect, it } from "vitest";
  */
 
 const migrationsDir = fileURLToPath(new URL("../../../../../supabase/migrations/", import.meta.url));
+// Only ordered migrations are executable history; manual dashboard copies are not.
+const migrationFiles = readdirSync(migrationsDir).filter(name => /^\d{12,14}_.*\.sql$/.test(name)).sort();
 
 /** 주석을 걷어낸다. 이 저장소의 SQL 은 설명이 길어 단어가 코드로 오인된다. */
 function code(name: string): string {
@@ -32,9 +34,7 @@ function code(name: string): string {
  * **넓힌 것을 못 봤다.** 마지막 것을 찾으면 그런 일이 안 난다.
  */
 function latestDefining(needle: string): string {
-  const files = readdirSync(migrationsDir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
+  const files = migrationFiles;
   const last = files.filter((name) => code(name).includes(needle)).pop();
   expect(last, `${needle} 을 정의한 마이그레이션이 없다`).toBeTruthy();
   return code(last!);
@@ -53,11 +53,16 @@ const OPERATIONS = [
 
 describe("예약이 받아들이는 작업 종류", () => {
   it("예약 함수의 화이트리스트가 모든 종류를 받는다", () => {
-    const sql = latestDefining("function public.reserve_generation");
-    const clause = sql.match(/p_operation not in \(([\s\S]*?)\)/);
-    expect(clause, "화이트리스트를 찾지 못했다").toBeTruthy();
-    for (const operation of OPERATIONS) {
-      expect(clause![1], `${operation} 이 예약 함수에서 빠졌다`).toContain(`'${operation}'`);
+    // The compatibility wrapper delegates to the renamed legacy body. Check both
+    // actual implementations, rather than expecting a whitelist in that wrapper.
+    for (const name of ["reserve_generation", "credit_reserve"]) {
+      const bodies = migrationFiles.flatMap(file => [...code(file).matchAll(new RegExp(`function public\\.${name}\\([\\s\\S]*?\\$\\$;`, "gi"))].map(match => match[0]));
+      const implementation = bodies.filter(body => /p_operation not in\s*\(/.test(body)).at(-1);
+      const clause = implementation?.match(/p_operation not in\s*\(([\s\S]*?)\)/);
+      expect(clause, `${name} 화이트리스트를 찾지 못했다`).toBeTruthy();
+      for (const operation of OPERATIONS) {
+        expect(clause![1], `${operation} 이 ${name} 에서 빠졌다`).toContain(`'${operation}'`);
+      }
     }
   });
 

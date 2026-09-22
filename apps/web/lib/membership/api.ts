@@ -5,6 +5,9 @@ import { hasFullScope, viewerFrom } from "../access/core";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
+import { imageCredits } from "@fixup/shared";
+import { isCreditLedgerEnabled, type CreditReservationPlan } from "./credit-ledger";
+import { usageFromRow } from "./usage-row";
 
 type ApiMember = { userId: string; profile: MemberProfile };
 
@@ -54,6 +57,7 @@ export async function reserveAiUsage(
   request: Request,
   operation: GenerationOperation,
   units: number,
+  creditPlan?: CreditReservationPlan,
 ): Promise<
   | { ok: true; userId: string; requestId: string; usage: UsageSummary }
   | { ok: false; response: Response }
@@ -74,14 +78,18 @@ export async function reserveAiUsage(
   const analysisLimit = Number.isFinite(configuredAnalysisLimit)
     ? Math.min(1000, Math.max(1, Math.floor(configuredAnalysisLimit)))
     : 10;
-  const { data, error } = await admin.rpc("reserve_generation", {
+  const ledger = isCreditLedgerEnabled();
+  const { data, error } = await admin.rpc(ledger ? "credit_reserve_dispatch" : "reserve_generation", ledger ? {
+    p_user: auth.member.userId, p_request: requestId, p_operation: operation, p_legacy_units: units, p_analysis_limit: analysisLimit,
+    p_outputs: creditPlan ? creditPlan.outputs.map(imageCredits) : null, p_resource: creditPlan?.resource ?? new URL(request.url).pathname,
+  } : {
     p_user_id: auth.member.userId,
     p_request_id: requestId,
     p_operation: operation,
     p_units: units,
     p_analysis_limit: analysisLimit,
   });
-  if (error || !data?.[0]) {
+  if (error || !(ledger ? data : data?.[0])) {
     // 2026-09-04 운영에서 이 오류가 났는데 journalctl 에 한 줄도 없어 원인을 못
     // 찾았다. 사용자에게 가는 문장은 하나지만 원인은 둘로 갈린다 — RPC 자체가
     // 실패한 것(rpc_error)과, 호출은 됐는데 행이 안 온 것(empty_result)은
@@ -95,8 +103,8 @@ export async function reserveAiUsage(
     });
     return { ok: false, response: membershipApiError(500, "usage_unavailable", "사용량을 확인하지 못했습니다.") };
   }
-  const row = data[0];
-  const usage = usageFromRpc(row);
+  const row = ledger ? data : data[0];
+  const usage = ledger ? usageFromRow(row.usage ?? {}) : usageFromRpc(row);
   if (!row.allowed) {
     const messages: Record<string, string> = {
       quota_exceeded: "이번 달 이미지 생성 한도를 모두 사용했습니다.",
@@ -106,7 +114,11 @@ export async function reserveAiUsage(
       concurrent_limit: "이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.",
       analysis_rate_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
       duplicate_request: "이미 처리된 요청입니다. 새로고침 후 다시 시도해 주세요.",
+      credit_account_not_activated: "크레딧 계정 전환이 준비 중입니다. 운영자에게 문의해 주세요.",
+      credit_quote_required: "이 생성 경로의 크레딧 설정을 확인해야 합니다.",
+      credit_ledger_required: "새 크레딧 처리가 준비 중입니다. 잠시 후 다시 시도해 주세요.",
     };
+    if (usage.pricingPolicy === "image-v2") messages.quota_exceeded = `크레딧이 모자랍니다. 사용 가능 ${usage.remaining}크레딧입니다.`;
     const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit"]
       .includes(row.reason) ? 429 : 409;
     return {
@@ -145,7 +157,7 @@ export async function settleAiUsage(
   success: boolean,
   consumedUnits: number,
   errorCode?: string,
-  cost?: { model: string; billableImages: number; llmUsd?: number },
+  cost?: { model: string; billableImages: number; llmUsd?: number; deliveredImages?: number; completionConfirmed?: boolean },
 ) {
   try {
     return await finalizeAiUsage(reservation, success, consumedUnits, errorCode, cost);
@@ -160,18 +172,22 @@ export async function finalizeAiUsage(
   success: boolean,
   consumedUnits: number,
   errorCode?: string,
-  cost?: { model: string; billableImages: number; llmUsd?: number },
+  cost?: { model: string; billableImages: number; llmUsd?: number; deliveredImages?: number; completionConfirmed?: boolean },
 ) {
   if (isLocalAuthBypass) return devUsageSummary;
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.rpc("finalize_generation", {
+  const ledger = isCreditLedgerEnabled();
+  const { data, error } = await admin.rpc(ledger ? "credit_finalize_dispatch" : "finalize_generation", ledger ? {
+    p_user: reservation.userId, p_request: reservation.requestId, p_success: success, p_legacy_units: consumedUnits,
+    p_delivered: cost?.deliveredImages ?? (success ? null : 0), p_terminal: cost?.completionConfirmed ?? success, p_error: errorCode ?? null,
+  } : {
     p_user_id: reservation.userId,
     p_request_id: reservation.requestId,
     p_success: success,
     p_consumed_units: consumedUnits,
     p_error_code: errorCode ?? null,
   });
-  if (error || !data?.[0]) {
+  if (error || !(ledger ? data : data?.[0])) {
     // 던지기만 하면 호출한 라우트가 catch 에서 다시 finalize 를 불러 또 던지고,
     // 결국 500 만 남는다 — 어느 회원의 어느 요청이 매달렸는지가 사라진다.
     // 예약된 채 묶인 크레딧을 손으로 풀려면 이 두 값이 있어야 한다.
@@ -218,7 +234,7 @@ export async function finalizeAiUsage(
     }
   }
 
-  return usageFromRpc(data[0]);
+  return ledger ? { ...usageFromRow(data.usage ?? {}), settlementPending: data.settled === false } : usageFromRpc(data[0]);
 }
 
 /**

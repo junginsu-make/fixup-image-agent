@@ -10,6 +10,7 @@
  */
 
 import * as React from "react";
+import { useCreditUnit } from "../_components/credit-policy-provider";
 import {
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,9 @@ export function Results({
   generating: boolean;
   editingSectionId: string | null;
 }) {
+  // 훅은 이른 반환보다 위에 있어야 한다. 아래에 두면 프로젝트가 없는 렌더에서만
+  // 건너뛰어, 렌더마다 훅 차례가 달라진다.
+  const 단위 = useCreditUnit();
   if (!project) {
     return <Card><CardContent>아직 생성된 프로젝트가 없습니다.</CardContent></Card>;
   }
@@ -173,7 +177,7 @@ export function Results({
                 나머지 상세페이지 만들기
               </Button>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">전부 성공 시 최대 {Math.max(0, 8 - project.sections.length)}장 차감.</strong><br />
+                <strong className="text-foreground">전부 성공 시 최대 {Math.max(0, 8 - project.sections.length)}{단위} 차감.</strong><br />
                 이 요청은 S2 이후 섹션 생성 프롬프트에 함께 반영됩니다. 먼저 히어로 1장을 확인한 뒤 확장하며, 성공한 이미지만 차감됩니다.
               </p>
             </CardContent>

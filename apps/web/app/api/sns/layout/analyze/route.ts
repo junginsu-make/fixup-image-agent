@@ -1,3 +1,4 @@
+import { freeCreditPlan } from "../../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { normalizeAnalysis } from "@fixup/layout-core";
 import { creditUnits, withIssueFallback } from "@fixup/shared";
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
    * 잡는 장수는 0 이다 — 얼마가 나갈지는 부르고 나서야 안다. 한도는 확정할
    * 때 실제로 쓴 값으로 깎는다(`pdp_analyze` 와 같은 방식).
    */
-  const reserved = await reserveAiUsage(request, "sns_image", 0);
+  const reserved = await reserveAiUsage(request, "sns_image", 0, freeCreditPlan("sns:layout-analysis"));
   if (!reserved.ok) return reserved.response;
   const reservation = { userId: reserved.userId, requestId: reserved.requestId };
 

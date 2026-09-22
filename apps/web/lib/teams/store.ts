@@ -1,3 +1,4 @@
+import { isCreditLedgerEnabled } from "../membership/credit-ledger";
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
@@ -514,6 +515,12 @@ async function membersOf(teamId: string): Promise<Array<{ userId: string; role: 
 export async function teamCredit(teamId: string): Promise<TeamCredit> {
   if (noTeamStore()) return { quota: 0, teamUsed: 0, members: [] };
   const admin = createSupabaseAdminClient();
+  if (isCreditLedgerEnabled()) {
+    const { data, error } = await admin.rpc("credit_team_state", { p_team: teamId });
+    if (error) throw new Error(error.message);
+    if (data) return data as TeamCredit;
+  }
+
 
   const [{ data: teamRow }, members] = await Promise.all([
     admin.from("teams").select("monthly_quota").eq("id", teamId).maybeSingle(),

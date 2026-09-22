@@ -1,3 +1,5 @@
+import { pdpCreditSize } from "../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import {
   DEFAULT_IMAGE_MODEL,
   generateSectionImage,
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
   // 장은 실제 단가에서 뽑는다. 전에는 여기만 무조건 1 이었고 일괄 쪽만 제대로
   // 셌다 — 같은 그림 한 장이 어느 버튼으로 들어왔느냐에 따라 값이 달랐다.
   const model = body.page?.imageModel ?? body.options?.imageModel ?? DEFAULT_IMAGE_MODEL;
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1), creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:image"));
   if (!reservation.ok) return reservation.response;
 
   try {
@@ -111,6 +113,7 @@ export async function POST(req: Request) {
       },
     );
 
+    await markCreditStarted(reservation);
     const { imageBase64, mimeType, generatedImages, qa } = await generateSectionImage(
       {
         originalImageBase64: body.originalImageBase64,
@@ -126,7 +129,7 @@ export async function POST(req: Request) {
     // 그림을 「생성 실패」로 바꾼다 — 돈은 나갔고 사용자는 결과를 못 본다.
     const usage = await settleAiUsage(reservation, true, imageCreditUnits(model, 1), undefined, {
       model,
-      billableImages: generatedImages,
+      billableImages: generatedImages, deliveredImages: 1, completionConfirmed: true,
     });
     return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
   } catch (err) {

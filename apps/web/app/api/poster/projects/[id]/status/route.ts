@@ -1,3 +1,4 @@
+import { lookupCreditJob, closeCreditPoster } from "../../../../../../lib/membership/credit-ledger";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -127,7 +128,12 @@ export async function POST(request: Request, context: Context) {
   const { id } = await context.params;
   const stores = posterStoresForUser(auth.member.userId);
 
+  let binding: Awaited<ReturnType<typeof lookupCreditJob>> = null;
   try {
+    binding = await lookupCreditJob(auth.member.userId, `poster:${parsed.data.requestRowId}`);
+    if (binding && (binding.resource_key !== `poster:${id}` || binding.provider_request_id !== parsed.data.falRequestId || binding.endpoint !== parsed.data.endpoint)) {
+      return Response.json({ ok: false, message: "생성 요청 정보가 일치하지 않습니다." }, { status: 409 });
+    }
     const fal = createPosterFalClients();
 
     const result = await collectPoster(
@@ -169,10 +175,11 @@ export async function POST(request: Request, context: Context) {
        */
       const savedCount = result.savedCount ?? 0;
       const unitUsd = result.unitCostUsd ?? 0;
-      const reservationId = project?.data.reservationId;
+      const reservationId = binding?.request_id ?? project?.data.reservationId;
+      let settled = !reservationId;
       if (reservationId) {
         try {
-          await finalizeAiUsage(
+          const usage = await finalizeAiUsage(
             { userId: auth.member.userId, requestId: reservationId },
             savedCount > 0,
             creditUnits(unitUsd * savedCount),
@@ -185,16 +192,22 @@ export async function POST(request: Request, context: Context) {
              * 회원 차감(`consumed_units`)과 우리가 낸 돈은 다른 값이라,
              * 차감만 적으면 원가를 영영 알 수 없다.
              */
-            { model: project?.modelId ?? "", billableImages: savedCount },
+            { model: project?.modelId ?? "", billableImages: savedCount, deliveredImages: savedCount, completionConfirmed: true },
           );
+          settled = !usage?.settlementPending;
         } catch {
           // 삼킨다. 사용자가 만든 그림을 못 보는 것이 더 나쁘다.
         }
       }
-      await stores.projects.update(id, {
-        status: "done",
-        ...(project ? { data: { ...project.data, reservationId: undefined } } : {}),
-      });
+      // A late poll of an older job must not clear a newer generation's pointer.
+      if (binding) {
+        await closeCreditPoster(auth.member.userId, id, binding.request_id, "done", settled);
+      } else {
+        await stores.projects.update(id, {
+          status: "done",
+          ...(project && settled ? { data: { ...project.data, reservationId: undefined } } : {}),
+        });
+      }
     }
     return Response.json({
       ok: true,
@@ -227,18 +240,20 @@ export async function POST(request: Request, context: Context) {
     if (verdict.releaseReservation) {
       try {
         const project = await stores.projects.get(id);
-        const reservationId = project?.data.reservationId;
+        const reservationId = binding?.request_id ?? project?.data.reservationId;
         if (reservationId) {
-          await finalizeAiUsage(
+          const usage = await finalizeAiUsage(
             { userId: auth.member.userId, requestId: reservationId },
             false,
             0,
             `poster_${verdict.kind}`,
+            binding ? { model: project?.modelId ?? "", billableImages: 0, deliveredImages: 0, completionConfirmed: true } : undefined,
           );
-          await stores.projects.update(id, {
+          if (binding) await closeCreditPoster(auth.member.userId, id, binding.request_id, "ready", !usage?.settlementPending);
+          else await stores.projects.update(id, {
             // 자리를 돌려준다. 안 그러면 창이 지날 때까지 다시 못 누른다.
             status: "ready",
-            ...(project ? { data: { ...project.data, reservationId: undefined } } : {}),
+            ...(project && !usage?.settlementPending ? { data: { ...project.data, reservationId: undefined } } : {}),
           });
         }
       } catch {

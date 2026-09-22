@@ -80,6 +80,25 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Verify offline cost forecast and calculations
+        run: |
+          pnpm check:cost-forecast
+          pnpm --filter @fixup/web exec vitest run lib/admin/cost-forecast/__tests__ lib/admin/__tests__/cost-lab.test.ts
+          node docs/cost-lab/verify.cjs
+          node docs/cost-lab/verify-wallet.cjs
+          node docs/cost-lab/verify-market.cjs
+
+      - name: Verify credit ledger in an isolated PostgreSQL cluster
+        shell: bash
+        run: |
+          export TEST_PG_BIN="$(pg_config --bindir)"
+          pnpm test:credit-db
+          # 초록이 진짜 초록인지 본다. 장부 함수를 일부러 망가뜨렸을 때 테스트가
+          # 안 깨지면 그 테스트는 아무것도 안 지키고 있는 것이다.
+          node scripts/tests/credit-mutations.mjs
+          pnpm --filter @fixup/shared test
+          pnpm --filter @fixup/web exec vitest run lib/membership lib/sns/__tests__/credit-settlement.test.ts app/api/pdp app/api/characters app/api/poster app/api/sns
+
   # ── 빌드 ─────────────────────────────────────────────────────────
   build:
     runs-on: ubuntu-latest

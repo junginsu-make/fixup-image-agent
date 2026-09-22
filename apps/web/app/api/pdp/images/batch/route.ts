@@ -1,3 +1,5 @@
+import { pdpCreditSize } from "../../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../../../lib/membership/credit-ledger";
 import {
   resolveCharacterAngles,
   generateSectionImage,
@@ -118,7 +120,7 @@ export async function POST(req: Request) {
    */
   const providers = createPdpProviders();
 
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length), creditImagePlan(sections.length, pdpCreditSize(model, body.aspectRatio), "pdp:batch"));
   if (!reservation.ok) return reservation.response;
 
   /*
@@ -158,6 +160,7 @@ export async function POST(req: Request) {
     return views.length ? views : undefined;
   };
 
+  await markCreditStarted(reservation);
   const settled = await Promise.allSettled(
     sections.map((section, position) => {
       const options = buildSectionImageOptions(page, {
@@ -232,7 +235,7 @@ export async function POST(req: Request) {
     succeeded > 0,
     imageCreditUnits(model, succeeded),
     succeeded > 0 ? undefined : "batch_all_failed",
-    { model, billableImages },
+    { model, billableImages, deliveredImages: succeeded, completionConfirmed: true },
   );
 
   return Response.json({

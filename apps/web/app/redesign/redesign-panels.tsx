@@ -10,6 +10,7 @@
  */
 
 import * as React from "react";
+import { useCreditUnit } from "../_components/credit-policy-provider";
 import {
   CircleHelp,
   FileImage,
@@ -206,6 +207,7 @@ export function Workspace(props: {
   generating: boolean;
   onGenerate: () => void;
 }) {
+  const 단위 = useCreditUnit();
   const {
     selectedModel,
     setSelectedModel,
@@ -237,7 +239,7 @@ export function Workspace(props: {
       <Topbar eyebrow="REDESIGN WORKSPACE">
         <div className="flex flex-col items-end gap-1">
           <Button onClick={() => onGenerate()} disabled={generating}>{generating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}리디자인 생성</Button>
-          <span className="text-[11px] text-muted-foreground">전부 성공 시 최대 {count}장 차감</span>
+          <span className="text-[11px] text-muted-foreground">전부 성공 시 최대 {count}{단위} 차감</span>
         </div>
       </Topbar>
 
@@ -425,7 +427,7 @@ export function Workspace(props: {
                 onChange={onCharacterChange}
               />
               <div className="rounded-md bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
-                <strong className="text-foreground">예상 이미지 크레딧: 최대 {count}장</strong><br />
+                <strong className="text-foreground">예상 이미지 크레딧: 최대 {count}{단위}</strong><br />
                 실제로 생성에 성공한 이미지 수만큼만 차감됩니다. 실패한 결과는 차감되지 않습니다.
               </div>
             </CardContent>

@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -120,6 +121,7 @@ export function SectionGallery({
   getName,
   getGoal,
 }: SectionGalleryProps) {
+  const creditPolicy = useCreditPolicy();
   const [viewMode, setViewMode] = useState<GalleryViewMode>("grid");
   const [cardSize, setCardSize] = useState<GalleryCardSize>("medium");
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
@@ -246,7 +248,7 @@ export function SectionGallery({
                 )}
                 남은 {missingCount}장 만들기
               </Button>
-              <span className="text-[11px] text-subtle-foreground">전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount)}장 차감</span>
+              <span className="text-[11px] text-subtle-foreground">전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount, { policy: creditPolicy })}장 차감</span>
             </div>
           ) : null}
           <Button size="sm" disabled={!generatedCount || isBusy} onClick={onGoEdit}>
