@@ -43,7 +43,7 @@ type Step = "content" | "images" | "spec";
 /** 새로 만드는 화면에 있는 단계. 04·05 는 만든 작업 화면에 있다. */
 const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];
 
-export function NewSnsClient() {
+export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}) {
   const creditPolicy = useCreditPolicy();
   const router = useRouter();
   /**
@@ -71,6 +71,8 @@ export function NewSnsClient() {
   const [step, setStep] = React.useState<Step>(() => rerunStartStep<Step>(rerunFrom ? rerunStep : null, RERUN_STEPS, "content"));
   const [title, setTitle] = React.useState("");
   const [source, setSource] = React.useState<SourceDraft>({ kind: "text", text: "" });
+  /** 지난 작업이 웹 주소로 만든 것인데 지금은 꺼져 있다. 그 주소를 알려 준다. */
+  const [droppedWebUrl, setDroppedWebUrl] = React.useState<string | null>(null);
   const [toneNote, setToneNote] = React.useState("");
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
   /**
@@ -163,7 +165,17 @@ export function NewSnsClient() {
       const { seed } = result;
       setTitle(seed.title);
       setToneNote(seed.toneNote);
-      setSource(seed.source);
+      /*
+        웹 주소가 꺼져 있으면 그 갈래가 화면에 없어 01 이 텅 빈다. 빈 글로 두고 무엇이었는지
+        알려 준다 — 사용자가 그 글을 붙여 넣으면 이어서 만들 수 있다.
+      */
+      if (seed.source.kind === "web" && !webSource) {
+        setDroppedWebUrl(seed.source.url);
+        setSource({ kind: "text", text: "" });
+      } else {
+        setDroppedWebUrl(null);
+        setSource(seed.source);
+      }
       setAttachments(seed.attachments);
       setIntents(seed.intents);
       setSpec(seed.spec);
@@ -195,6 +207,16 @@ export function NewSnsClient() {
   }
 
   async function createProject() {
+    /*
+      01 이 비었으면 01 로 돌려보내고 까닭을 말한다. 웹 주소로 만든 작업을 02·03 에서 다시
+      시작하면 내용이 빈 글로 떨어지는데(웹 주소를 꺼 둠), 그대로 보내면 서버가
+      「입력을 확인해 주세요」만 돌려준다(독립 리뷰 2026-09-22). 불러오기 효과 안에서
+      단계를 옮기지 않는 까닭은 `library/__tests__/rerun-wiring.test.ts` 에 있다.
+    */
+    if (!sourceDraftValid(source)) {
+      setStep("content");
+      return setMessage(droppedWebUrl ? "01 내용이 비어 있습니다. 웹 주소 대신 그 글의 내용을 붙여 넣어 주세요." : "01 내용이 비어 있습니다. 카드뉴스로 만들 내용을 채워 주세요.");
+    }
     const issues = [...attachmentIssues, ...slotPlan.issues];
     if (issues.length) return setMessage(issues.join("\n"));
     setSaving(true);
@@ -281,7 +303,7 @@ export function NewSnsClient() {
       <Card>
         <CardHeader>
           <CardTitle>{step === "content" ? "01 내용" : step === "images" ? "02 이미지" : "03 규격"}</CardTitle>
-          <CardDescription>{step === "content" ? "내용을 넣는 네 가지 길 중 하나를 고릅니다." : step === "images" ? "이미지를 고르고 생성 모델이 다룰 방법을 지정합니다." : "해상도 대신 게시 비율과 장수·언어·모델만 고릅니다."}</CardDescription>
+          <CardDescription>{step === "content" ? "내용을 어디서 가져올지 고릅니다." : step === "images" ? "이미지를 고르고 생성 모델이 다룰 방법을 지정합니다." : "해상도 대신 게시 비율과 장수·언어·모델만 고릅니다."}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-8">
           {/*
@@ -298,7 +320,7 @@ export function NewSnsClient() {
               라이브러리의 <strong className="text-foreground">{fromLibrary}</strong> 을(를) 가져왔습니다. 고쳐서 쓰셔도 됩니다.
             </p>
           ) : null}
-          {!seeding && step === "content" ? <SourceInput title={title} onTitleChange={setTitle} source={source} onSourceChange={setSource} toneNote={toneNote} onToneNoteChange={setToneNote} /> : null}
+          {!seeding && step === "content" ? <SourceInput title={title} onTitleChange={setTitle} source={source} onSourceChange={setSource} toneNote={toneNote} onToneNoteChange={setToneNote} webSource={webSource} droppedWebUrl={source.kind === "text" && source.text.trim() ? null : droppedWebUrl} /> : null}
           {!seeding && step === "images" ? <AttachmentPicker attachments={attachments} onChange={setAttachments} modelId={spec.modelId} totalCards={totalCards} intents={intents} onIntentsChange={setIntents} /> : null}
           {!seeding && step === "spec" ? <SpecPicker spec={spec} onChange={setSpec} attachments={attachments} /> : null}
 

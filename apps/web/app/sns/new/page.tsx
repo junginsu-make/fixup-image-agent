@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { StudioLayout } from "../../_components/studio-layout";
 import { NewSnsClient } from "../new-client";
+import { isWebSourceEnabled } from "../../../lib/sns/feature";
 
 export const metadata: Metadata = {
   title: "카드뉴스 만들기",
@@ -8,5 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default function NewSnsPage() {
-  return <StudioLayout><NewSnsClient /></StudioLayout>;
+  // 웹 주소 갈래는 서버의 스위치를 따른다(`lib/sns/feature.ts`). 화면이 스스로 정하지 않는다.
+  return <StudioLayout><NewSnsClient webSource={isWebSourceEnabled()} /></StudioLayout>;
 }
