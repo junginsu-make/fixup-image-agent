@@ -136,7 +136,7 @@ export async function updateModelPrice(formData: FormData) {
   }
   await setModelPrice(model, raw);
   revalidatePath("/admin");
-  redirect("/admin?notice=price_updated");
+  redirect("/admin/system?notice=price_updated");
 }
 
 /**
@@ -151,7 +151,7 @@ export async function updateAiBadge(formData: FormData) {
   if (next !== "on" && next !== "off") throw new Error("올바르지 않은 값입니다.");
   await setAiBadgeEnabled(next === "on");
   revalidatePath("/admin");
-  redirect(`/admin?notice=${next === "on" ? "badge_on" : "badge_off"}`);
+  redirect(`/admin/system?notice=${next === "on" ? "badge_on" : "badge_off"}`);
 }
 
 function readShowcaseId(formData: FormData) {
@@ -171,7 +171,7 @@ export async function updateUsdKrw(formData: FormData) {
   }
   await setUsdKrw(Math.round(raw));
   revalidatePath("/admin");
-  redirect("/admin?notice=rate_updated");
+  redirect("/admin/system?notice=rate_updated");
 }
 
 /**

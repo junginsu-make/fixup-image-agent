@@ -31,10 +31,11 @@ describe("회원 삭제", () => {
 });
 
 describe("장부가 켜지면 옛 한도 칸을 치운다", () => {
-  it("/admin 의 월 한도 폼", () => {
+  /** 2026-09-22 에 회원 관리 탭으로 합치면서 월 한도 칸을 아예 뺐다. 크레딧은 「플랜·크레딧」 패널에서. */
+  it("/admin 에 월 한도 폼이 없다", () => {
     const page = read("app/admin/page.tsx");
-    const form = page.slice(page.indexOf("function QuotaForm"));
-    expect(form.slice(0, 600)).toMatch(/if \(isCreditLedgerEnabled\(\)\)[\s\S]*?href="\/admin\/members"/);
+    expect(page).not.toContain("updateQuota");
+    expect(page).not.toContain("QuotaForm");
   });
 
   it("팀 화면의 개인 상한 폼", () => {

@@ -35,7 +35,8 @@ describe("무제한", () => {
   it.each([
     "app/_components/studio-actions.tsx",
     "app/_components/credit-wallet.tsx",
-    "app/admin/members/members-client.tsx",
+    "app/admin/member-list/member-table.tsx",
+    "app/admin/member-list/credit-panel.tsx",
     "app/team/credit-tab.tsx",
   ])("%s 가 무제한을 안다", (file) => {
     expect(readFileSync(join(web, file), "utf8")).toMatch(/\bunlimited\b|\bcreditBalanceLabel\(/);

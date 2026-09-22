@@ -7,14 +7,16 @@ vi.mock("../../../../lib/membership/credit-ledger", () => ({ isCreditLedgerEnabl
 vi.mock("../../../../lib/membership/server", () => ({ requireAdmin: f.requireAdmin }));
 vi.mock("../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: f.rpc, from: () => ({ select: () => ({ in: async () => ({ data: [{ id: f.user, email: f.targetEmail }] }), eq: () => ({ single: async () => ({ data: { user_id: f.user } }) }) }) }) }) }));
 import { changeCredits, type CreditCommand } from "../actions";
-const sql = readFileSync(new URL("../../../../../../supabase/migrations/202609220001_credit_ledger_v2.sql", import.meta.url), "utf8");
+const sql = ["202609220001_credit_ledger_v2.sql", "202609220004_credit_plan_delete.sql"]
+  .map(name => readFileSync(new URL(`../../../../../../supabase/migrations/${name}`, import.meta.url), "utf8")).join("\n");
 const action = "20000000-0000-4000-8000-000000000001";
 describe("관리자 입력에서 실제 SQL까지", () => {
   beforeEach(() => {
     f.rpc.mockReset(); f.requireAdmin.mockReset();
     f.requireAdmin.mockResolvedValue({ user: { id: f.actor }, profile: { email: "admin@example.invalid" } });
     f.targetEmail = "member@example.invalid";
-    f.rpc.mockResolvedValue({ error: null });
+    // 플랜 삭제는 결과를 읽는다. 다른 명령은 data 를 안 본다.
+    f.rpc.mockResolvedValue({ data: { deleted: true, members: 0 }, error: null });
   });
   it("모든 변경이 실존하는 SQL 인자와 인증된 actor를 사용한다", async () => {
     const commands: CreditCommand[] = [
@@ -26,6 +28,7 @@ describe("관리자 입력에서 실제 SQL까지", () => {
       { kind:"subscription", users:[f.user], plan:"test", status:"active", action },
       { kind:"paid", user:f.user, period:"2026-09-01", units:100, amount:10000, action },
       { kind:"status", users:[f.user], status:"suspended", reason:"이용 약관 위반", action },
+      { kind:"plan_delete", plan:"test" },
     ];
     for (const command of commands) expect(await changeCredits(command)).toMatchObject({ ok:true });
     for (const [name,args] of f.rpc.mock.calls) {
@@ -56,6 +59,14 @@ describe("관리자 입력에서 실제 SQL까지", () => {
     f.requireAdmin.mockRejectedValue(new Error("admin required"));
     expect(await changeCredits({ kind:"plan", plan:"test", name:"시험", units:100, amount:10000, active:true })).toMatchObject({ ok:false });
     expect(f.rpc).not.toHaveBeenCalled();
+  });
+  /** 쓰거나 썼던 회원이 있으면 DB 가 지우지 않고 몇 명인지 돌려준다. 성공으로 읽으면 안 된다. */
+  it("쓰는 회원이 있는 플랜은 삭제 실패와 인원을 알린다", async () => {
+    f.rpc.mockResolvedValue({ data: { deleted: false, members: 3 }, error: null });
+    const result = await changeCredits({ kind:"plan_delete", plan:"basic" });
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("3명");
+    expect(result.message).toContain("판매 중지");
   });
   it("음수 지급은 DB 호출 전에 거절한다", async () => {
     expect(await changeCredits({ kind:"grant", users:[f.user], grantKind:"purchase", units:-1, amount:0, expires:null, reason:"입력 오류", action })).toMatchObject({ ok:false });
