@@ -33,7 +33,7 @@ export function ProfileCard({ email, name, referrer, joinedAt }: { email: string
         </div>
         {!editing ? <Button size="sm" variant="outline" onClick={() => { setEditing(true); setNotice(null); }}>수정</Button> : null}
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+      <CardContent className="space-y-4 text-base">
         {editing ? (
           <form className="grid gap-3" onSubmit={save}>
             <div className="grid gap-1.5"><Label htmlFor="profile-name">이름</Label><Input id="profile-name" required maxLength={PROFILE_LIMITS.name} value={draftName} onChange={(event) => setDraftName(event.target.value)} /></div>
@@ -48,9 +48,9 @@ export function ProfileCard({ email, name, referrer, joinedAt }: { email: string
           </form>
         ) : (
           <dl className="grid gap-3">
-            <div><dt className="text-xs text-muted-foreground">이름</dt><dd className="font-medium">{name ?? <span className="text-muted-foreground">아직 적지 않았습니다</span>}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">이메일</dt><dd className="break-all font-medium">{email}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">추천인</dt><dd className="font-medium">{referrer ?? <span className="text-muted-foreground">없음</span>}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">이름</dt><dd className="text-base font-medium">{name ?? <span className="text-muted-foreground">아직 적지 않았습니다</span>}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">이메일</dt><dd className="break-all text-base font-medium">{email}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">추천인</dt><dd className="text-base font-medium">{referrer ?? <span className="text-muted-foreground">없음</span>}</dd></div>
           </dl>
         )}
         {notice ? <p role="status" className={`text-sm ${notice.ok ? "text-muted-foreground" : "text-destructive"}`}>{notice.text}</p> : null}

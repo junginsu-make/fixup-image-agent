@@ -69,6 +69,41 @@ describe("계정 화면", () => {
   });
 });
 
+describe("사용 기록과 레이아웃", () => {
+  const page = read("app/settings/page.tsx");
+
+  /** 전에는 잔액 카드가 오른쪽 두 카드 높이만큼 빈 채로 늘어났다(2026-09-22 사용자 지적). */
+  it("칸마다 제 높이로 서고, 잔액 아래에 사용 기록이 온다", () => {
+    expect(page).toContain("items-start");
+    expect(page).toContain("<UsageHistoryCard");
+  });
+
+  it("사용 기록은 로그인한 본인 것만 읽는다", () => {
+    expect(page).toContain("readUsageHistory(membership.user.id)");
+    expect(page).toContain("readMyGrants(membership.user.id)");
+  });
+
+  /**
+   * 기록은 최근 것만 싣는다. 실린 줄의 합을 「이번 달」이라고 굵게 보이면 잔액의 값과 다른
+   * 숫자가 선다(독립 리뷰 2026-09-22). 이번 달 사용은 잔액이 센 값 하나만 쓴다.
+   */
+  it("이번 달 사용은 잔액이 센 값을 쓰고, 잘렸으면 그렇게 말한다", () => {
+    const card = read("app/settings/usage-history-card.tsx");
+    expect(card).not.toContain("monthlyCreditTotal(");
+    expect(card).toContain("{usedThisMonth.toLocaleString(");
+    expect(card).toContain("최근 ${USAGE_HISTORY_LIMIT}건만 보여 드립니다");
+  });
+
+  it("기록·받은 크레딧을 못 읽어도 화면이 죽지 않고, 없다고 거짓말하지 않는다", () => {
+    const store = read("lib/membership/usage-store.ts");
+    expect(store).not.toContain("throw new Error(`사용 기록을 읽지 못했습니다");
+    expect(store).toContain("Promise<GrantRow[] | null>");
+    const card = read("app/settings/usage-history-card.tsx");
+    expect(card).toContain("사용 기록을 불러오지 못했습니다");
+    expect(card).toContain("받은 크레딧을 불러오지 못했습니다");
+  });
+});
+
 describe("가입", () => {
   const signup = read("app/signup/page.tsx");
   it("이름은 꼭, 추천인은 골라서 받는다", () => {

@@ -128,7 +128,7 @@ const navGroups: NavGroup[] = [
 // 위아래를 합친 `allLinks` 가 `section` 을 모르는 갈래를 품는다 — CI 의
 // 타입 검사가 그것을 잡았다(2026-09-21).
 const bottomItems: NavLink[] = [
-  { href: "/settings", label: "계정", desc: "사용량·레퍼런스", icon: Settings },
+  { href: "/settings", label: "계정", desc: "크레딧·회원 정보", icon: Settings },
 ];
 
 // 팀은 소속이 있는 사람에게만 낸다. 팀이 하나도 없는 회사에서 모두에게
