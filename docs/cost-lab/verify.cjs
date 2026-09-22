@@ -151,7 +151,7 @@ near(normalizeSession(compact).production.regens.character,6);ok(JSON.stringify(
 near(normalizeSession(base).main.price,29000);ok(normalizeSession(base).version===3,'legacy snapshot migration');
 assert.deepEqual(normalizeSession(roundtrip),roundtrip);checks++;
 near(calculate(base).overallMargin,calculate(base).profit/calculate(base).net*100);
-ok((html.match(/role="tab" /g)||[]).length===4,'four primary tabs');
+ok((html.match(/role="tab" /g)||[]).length===5,'five primary tabs (plans added 2026-09-22)');
 ok(!html.includes('id="chatgpt-plus-quota"'),'duplicate ChatGPT panel removed');
 ok(!html.includes('<h2>기존 자료에서 정리한 부분</h2>'),'revision history removed from product');
 console.log(JSON.stringify({syntax:scripts.map(x=>x[1]),checks,default:{profit:r.profit,margin:r.margin,minimumPackPrice:r.floor,breakEvenCustomers:r.be},customerAllowance:base.rows.map(row=>({name:row.name,...allowance(row,base)})),webmcp:'Requires supported browser context; not verified by this test.'},null,2));

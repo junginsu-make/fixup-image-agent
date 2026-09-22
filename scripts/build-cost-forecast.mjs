@@ -14,7 +14,7 @@ const engine = result.outputFiles[0].text.replace(/^[\t ]+$/gm, "").replace(/<\/
 const sandbox = { structuredClone, TextEncoder, Date, console };
 vm.createContext(sandbox); vm.runInContext(engine, sandbox);
 const models = sandbox.FormWithForecast.legacyModels(sandbox.FormWithForecast.CURRENT_CATALOG);
-const [ui, markup, css] = await Promise.all(["forecast-ui.js", "forecast-panel.html", "forecast.css"].map(async file => (await readFile(path.join(dir, "source", file), "utf8")).replace(/\r\n/g, "\n")));
+const [ui, markup, css, plansUi] = await Promise.all(["forecast-ui.js", "forecast-panel.html", "forecast.css", "plans-ui.js"].map(async file => (await readFile(path.join(dir, "source", file), "utf8")).replace(/\r\n/g, "\n")));
 const generated = (name, content) => `<!-- ${name}:start -->\n${content}\n<!-- ${name}:end -->`;
 const replaceBlock = (html, name, content) => {
   const start = `<!-- ${name}:start -->`, end = `<!-- ${name}:end -->`;
@@ -31,6 +31,9 @@ for (const file of ["index.html", "prepaid.html"]) {
     html = replaceBlock(html, "forecast-ui", `<script id="forecast-ui">\n${ui}\n</script>`);
     html = replaceBlock(html, "forecast-style", `<style id="forecast-style">\n${css}\n</style>`);
     html = replaceBlock(html, "forecast-panel", markup.trim());
+    html = replaceBlock(html, "plans-ui", `<script id="plans-ui">
+${plansUi}
+</script>`);
   }
   if (html !== old) {
     if (process.argv.includes("--check")) { console.error(`재생성 필요: ${path.relative(root, filename)}`); stale = true; }
