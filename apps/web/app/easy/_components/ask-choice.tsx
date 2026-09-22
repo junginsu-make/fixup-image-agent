@@ -41,7 +41,7 @@ export function EasyAskChoice({
 }) {
   return (
     <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5">
-      <p className="text-sm leading-6">
+      <p className="text-base leading-7">
         어떤 모양으로 만들까요? <strong>안 고르셔도 됩니다.</strong> 그때는
         정사각형에, 적어 주신 말에 맞춰 만듭니다.
       </p>

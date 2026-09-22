@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@fixup/ui";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
@@ -105,7 +105,7 @@ export function EasyImageWorking({ className }: {
         className ?? "w-64",
       )}
     >
-      <span className="flex items-center gap-2 text-sm text-foreground">
+      <span className="flex items-center gap-2 text-base text-foreground">
         <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
         이미지를 만들고 있습니다
       </span>
@@ -121,15 +121,26 @@ export function EasyImageWorking({ className }: {
   );
 }
 
-/** AI 쪽 표식. 말풍선 왼쪽에 붙어 누가 한 말인지 알린다. */
+/**
+ * AI 쪽 표식. 말풍선 왼쪽에 붙어 누가 한 말인지 알린다.
+ *
+ * **로봇 캐릭터가 답하는 것처럼**(2026-09-22 사용자 요청). 반짝이 아이콘 대신 캐릭터의
+ * 얼굴과 흔드는 손까지만 둥글게 잘라 쓴다 — 온몸이 다 보일 필요는 없다. 원본은
+ * `frontend/캐릭터/`, 128px webp 로 줄였다(`public/easy/assistant.webp`).
+ *
+ * 장식이다. 낭독기가 말풍선마다 「로봇」을 읽으면 대화가 안 들린다.
+ */
 function AssistantMark() {
   return (
-    <span
+    // eslint-disable-next-line @next/next/no-img-element -- 128px 고정 장식. 최적화 서버를 거칠 까닭이 없다.
+    <img
+      src="/easy/assistant.webp"
+      alt=""
       aria-hidden
-      className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary"
-    >
-      <Sparkles className="size-3.5" />
-    </span>
+      width={36}
+      height={36}
+      className="mt-0.5 size-9 shrink-0 rounded-full border border-border bg-white object-cover"
+    />
   );
 }
 
@@ -146,7 +157,7 @@ export function EasyMessageRow({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary-soft px-4 py-2.5 text-sm leading-6">
+        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary-soft px-4 py-2.5 text-base leading-7">
           {message.body}
         </p>
       </div>
@@ -164,7 +175,7 @@ export function EasyMessageRow({
     return (
       <div className="flex items-start gap-2">
         <AssistantMark />
-        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm leading-6">
+        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-base leading-7">
           {message.body}
         </p>
       </div>

@@ -205,21 +205,17 @@ export function EasySplitHandle({
       )}
     >
       {/*
-        **`border` 색으로는 안 보인다**(2026-09-21 사용자 — 「선을 조금 더 잘
-        보이게 해주세요. 전체적으로 구분선이 매우 잘 안보입니다」).
+        **선은 옅게, 대화와 입력칸 사이 선과 같은 색으로**(2026-09-22 사용자 — 「다시
+        원래대로 선을 흐리게, 채팅 대화내용과 입력하는 곳 구분선과 동일하게」).
 
-        `--border`(#e8e6dc)는 바탕(#f7f6f1)과 거의 같은 값이라, 칸을 **나누는
-        선**으로는 약하다. 그 색은 카드 테두리처럼 **있는 듯 없는 듯해야 하는
-        자리**의 색이다. 여기는 반대다 — 잡아서 끄는 자리라 눈에 걸려야 한다.
-
-        글자색(`--subtle-foreground`)을 옅게 깔아 쓴다. 두 테마 모두에서
-        바탕과 충분히 갈린다.
+        2026-09-21 에 「선이 안 보인다」는 말에 글자색을 옅게 깔아 진하게 했는데, 칸을
+        가르는 선이 눈에 걸리니 화면이 무거워졌다. 끌 수 있다는 것은 가운데 손잡이
+        아이콘이 알린다 — 선까지 진할 까닭은 없다. 손이 가면 여전히 강조색이 된다.
       */}
       <span
         aria-hidden
         className={cn(
-          "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors",
-          "bg-subtle-foreground/45",
+          "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors",
           "group-hover:bg-primary group-focus-visible:bg-primary",
           dragging && "bg-primary",
         )}
