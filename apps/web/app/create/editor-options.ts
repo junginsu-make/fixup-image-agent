@@ -1,4 +1,3 @@
-import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import type { ImageGenOptions } from "@fixup/pdp-core";
 import type { OverlayTextAlign } from "./pdp-drafts";
 
@@ -87,10 +86,11 @@ export const FONT_WEIGHT_OPTIONS = [
   { value: "900", label: "Black" },
 ];
 
-export const ALIGN_OPTIONS: Array<{ value: OverlayTextAlign; label: string; Icon: typeof AlignLeft }> = [
-  { value: "left", label: "왼쪽", Icon: AlignLeft },
-  { value: "center", label: "가운데", Icon: AlignCenter },
-  { value: "right", label: "오른쪽", Icon: AlignRight },
+// 아이콘을 들고 있었다. 글자가 있는 단추 앞에는 아이콘을 안 둔다(2026-09-22).
+export const ALIGN_OPTIONS: Array<{ value: OverlayTextAlign; label: string }> = [
+  { value: "left", label: "왼쪽" },
+  { value: "center", label: "가운데" },
+  { value: "right", label: "오른쪽" },
 ];
 
 export const BASIC_SOLID_COLORS = [

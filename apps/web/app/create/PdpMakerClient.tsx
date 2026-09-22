@@ -42,7 +42,8 @@ import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type Re
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
-import { copyText } from "../../lib/browser-safe";
+import { copyText, randomId } from "../../lib/browser-safe";
+import { PlanProgress } from "./PlanProgress";
 
 type PreparedImage = PreparedImageDraft;
 
@@ -261,6 +262,13 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const [errorDetail, setErrorDetail] = useState("");
   const [showErrorDetail, setShowErrorDetail] = useState(false);
   const [loadingStep, setLoadingStep] = useState("제품 이미지를 분석하는 중입니다.");
+  /**
+   * **이 기획을 가리키는 번호**(2026-09-22).
+   *
+   * 요청에 함께 실어 보내면 서버가 단계를 여기에 찍어 두고, 대기 화면이 그
+   * 번호로 물어본다. 한 번 기획에 하나씩 새로 만든다.
+   */
+  const [planProgressId, setPlanProgressId] = useState("");
   const [analysisStartedAt, setAnalysisStartedAt] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<PdpDraftSummary[]>([]);
   const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
@@ -915,6 +923,9 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setShowErrorDetail(false);
     setLoadingStep("회원 권한과 서버 연결 상태를 확인하는 중입니다.");
     setAnalysisStartedAt(Date.now());
+    // 기다림이 시작되는 자리에서 만든다. 요청보다 먼저 있어야 화면이 물어볼 수 있다.
+    const progressId = randomId();
+    setPlanProgressId(progressId);
 
     try {
       /*
@@ -947,6 +958,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
             planInstruction,
             look,
           }),
+          // 기획의 입력이 아니라 **진행을 물어볼 번호**다.
+          planProgressId: progressId,
         })
       });
 
@@ -1070,7 +1083,16 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    */
   if (appState === "scenario" && result) {
     return (
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:px-6">
+      <div className="grid gap-4">
+        {/*
+          **셸이 주는 여백을 또 주지 않는다**(2026-09-22 사용자 지적).
+
+          전에는 이 칸이 너비와 여백을 스스로 잡았다. 그런데 `AppShell` 이
+          이미 좌우 16~52px 과 위아래 여백을 준다 — 같은 셸 안인데 이 화면만
+          양옆이 좁고 위아래가 벌어졌고, 넓은 화면에서는 다른 도구보다 좁았다.
+
+          카드뉴스·포스터는 바깥 칸에서 아무것도 안 잡는다. 같게 둔다.
+        */}
         {/*
           이 화면에는 막대가 아예 없었다. 앞뒤로 몇 단계가 남았는지 알 수 없고
           되돌아갈 방법도 없었다 — 다른 두 화면에는 있는데 여기만 빠져 있었다.
@@ -1342,7 +1364,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
           </div>
           <div>
             <h2 className="text-h1">AI가 상세페이지 구조를 만드는 중입니다</h2>
-            <p className="mt-1 text-body text-muted-foreground">{loadingStep}</p>
+            <PlanProgress progressId={planProgressId} fallback={loadingStep} />
             <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs">
               <Badge variant="secondary">분석 단계 · 이미지 크레딧 0장</Badge>
               {analysisStartedAt ? <Badge variant="outline"><ElapsedTime startedAt={analysisStartedAt} /></Badge> : null}

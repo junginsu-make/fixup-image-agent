@@ -1,4 +1,6 @@
 import { reviewStampOf } from "./pdp.review-freshness";
+import { carryProductReading } from "./pdp.product-reading";
+import type { PdpPlanStage } from "./pdp.plan-stage";
 import { Type, purposeOfCall } from "./pdp.llm";
 import { extractJsonCandidate } from "./pdp.response-parse";
 import { isRetriableModelFailure } from "./pdp.retry-policy";
@@ -254,13 +256,38 @@ export class PdpService {
   async analyzeProduct(
     request: PdpAnalyzeRequest,
     providers?: PdpProviders,
-    options?: { skipFirstImage?: boolean }
+    options?: {
+      skipFirstImage?: boolean;
+      /**
+       * **지금 어디를 지나는지 알린다**(2026-09-22 사용자 요청).
+       *
+       * 기획은 4분 가까이 걸린다. 그동안 화면이 한 줄로 버티면 사용자는
+       * 멈춘 것인지 도는 것인지 모른다. **넘어갈 때만** 말한다 — 시간으로
+       * 세면 모델이 늦을 때 하지도 않은 일을 알리게 된다.
+       *
+       * 없으면 아무 일도 안 한다. 덤이라 있고 없고로 결과가 안 갈린다.
+       */
+      onStage?: (stage: PdpPlanStage) => void;
+    }
   ) {
+    /*
+      **알리다 터져도 기획은 끝나야 한다.** 심사·재작성에 이미 같은 그물이
+      있다 — 「덤 때문에 생성 자체가 죽으면 손해가 더 크다」. 진행 표시는
+      덤 중의 덤이다.
+    */
+    const 알린다 = (stage: PdpPlanStage) => {
+      try {
+        options?.onStage?.(stage);
+      } catch {
+        // 듣는 쪽 사정이다. 기획을 멈출 까닭이 없다.
+      }
+    };
     const resolved = this.requireProviders(providers);
     const normalizedImage = sanitizeBase64Payload(request.imageBase64);
     const mimeType = normalizeMimeType(request.mimeType);
     const referenceModelImage = normalizeReferenceModelImage(request.modelImageBase64, request.modelImageMimeType);
     const client = this.getClient(resolved.llm);
+    if (referenceModelImage) 알린다("reference");
     const referenceModelProfile =
       referenceModelImage ? await this.extractReferenceModelProfile(client, referenceModelImage) : null;
 
@@ -459,7 +486,9 @@ ${analyzePrompt}`
 
       없으면 빈 문자열이라 평소 기획과 한 글자도 다르지 않다.
     */
+    알린다("blueprint");
     let blueprint = await makeBlueprint(buildStrategyDirective(request.strategyDirective));
+    알린다("review");
     let review = await runReview(blueprint);
 
     // 사진 경로는 텍스트 경로보다 상한을 좁게 잡는다. 여기는 "사진 한 장 넣고 빨리
@@ -478,11 +507,27 @@ ${analyzePrompt}`
         되묻지도 않는다(`retries = 0`). 덤에 값을 세 배로 쓰지 않는다.
       */
       try {
+        알린다("revise");
         const revised = await makeBlueprint(buildRevisionDirective(review), 0);
+        알린다("recheck");
         const revisedReview = await runReview(revised);
         // 고친 것이 더 나쁘면 원래 것을 쓴다. 재작성이 늘 개선은 아니다.
         if (reviewPenalty(revisedReview) < reviewPenalty(review)) {
-          blueprint = revised;
+          /*
+            **사진에서 읽은 것을 잃지 않는다**(2026-09-22 사용자 신고).
+
+            여기서 구성안을 **통째로** 갈아 끼운다. 그런데 사진 경로는 제품
+            판독(`productReading`)을 구성안 안에 들고 다니고, 응답 스키마에
+            `required` 가 없어 모델이 그 칸을 건너뛰어도 정상 응답이다.
+
+            그래서 다시 만든 응답에 판독이 안 실려 오면 **처음에 잘 읽은
+            것까지 사라지고**, 화면에 「사진에서 제품을 충분히 읽지
+            못했습니다」가 떴다.
+
+            아래 근거 구조 실패 처리는 같은 위험을 알고 「섹션만 갈아
+            끼운다」고 적어 두었는데, 이 자리에는 그 보호가 없었다.
+          */
+          blueprint = carryProductReading(revised, blueprint);
           review = revisedReview;
         }
       } catch (error) {
@@ -505,6 +550,8 @@ ${analyzePrompt}`
       additionalInfo: request.additionalInfo,
     };
     const photoSource = photoSourceText(photoSourceInput);
+    // 여기서부터는 모델을 안 부른다. 근거를 맞춰 보고 빈칸을 정리한다.
+    알린다("finish");
 
     /*
       **제품을 충분히 읽었는지 본다**(U-13).

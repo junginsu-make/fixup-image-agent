@@ -132,6 +132,16 @@ export {
   type ProductReading,
   type ProductReadingStatus,
 } from "./pdp.product-reading";
+import type { PdpPlanStage } from "./pdp.plan-stage";
+export {
+  ALWAYS_PASSED,
+  PLAN_STAGES,
+  PLAN_STAGE_LABEL,
+  PLAN_STAGE_STEP,
+  isPlanStage,
+  planStageOrder,
+  type PdpPlanStage,
+} from "./pdp.plan-stage";
 export {
   buildSellerBriefPrompt,
   hasSellerBrief,
@@ -303,7 +313,7 @@ function throwFromErrorResponse(response: {
 export async function analyzeProduct(
   input: PdpAnalyzeRequest,
   providers?: PdpProviders,
-  options?: { skipFirstImage?: boolean }
+  options?: { skipFirstImage?: boolean; onStage?: (stage: PdpPlanStage) => void }
 ): Promise<PdpAnalyzeSuccessResponse["result"]> {
   const response = await controllerOf().analyze(input, providers, options);
 

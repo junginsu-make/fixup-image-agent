@@ -11,23 +11,17 @@ import type { RecoveredFailureLine } from "./recovered-failures";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
   AlertCircle,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Download,
   Globe2,
   Image as ImageIcon,
-  Library,
   Loader2,
   Palette,
   RefreshCw,
-  Save,
   Settings2,
   Sparkles,
   Square,
@@ -1113,7 +1107,7 @@ export function PdpEditor({
             ) : null}
 
             <button className={styles.primaryButtonWide} disabled={isGenerating} onClick={() => void handleGenerateImage()} type="button">
-              {isGeneratingSection ? <Loader2 className={styles.spinIcon} size={16} /> : currentSection.generatedImage ? <RefreshCw size={16} /> : <ImageIcon size={16} />}
+              {isGeneratingSection ? <Loader2 className={styles.spinIcon} size={16} /> : null}
               {currentSection.generatedImage ? "이미지 다시 만들기" : "이미지 생성하기"}
             </button>
 
@@ -1130,7 +1124,6 @@ export function PdpEditor({
           <div className={styles.workbenchSectionStack}>
             <div className={styles.toolbarRow}>
               <button className={styles.inlineDangerButton} onClick={() => deleteOverlay(selectedTextLayer.id)} type="button">
-                <Trash2 size={14} />
                 삭제
               </button>
             </div>
@@ -1329,14 +1322,13 @@ export function PdpEditor({
             <div className={styles.floatingField}>
               <span className={styles.optionMiniLabel}>정렬</span>
               <div className={styles.alignButtonGroup}>
-                {ALIGN_OPTIONS.map(({ value, label, Icon }) => (
+                {ALIGN_OPTIONS.map(({ value, label }) => (
                   <button
                     className={selectedTextLayer.textAlign === value ? styles.alignButtonActive : styles.alignButton}
                     key={value}
                     onClick={() => handleTextAlignChange(selectedTextLayer, value)}
                     type="button"
                   >
-                    <Icon size={15} />
                     {label}
                   </button>
                 ))}
@@ -1348,7 +1340,6 @@ export function PdpEditor({
             <div className={styles.toolbarRow}>
               <p className={styles.floatingHint}>사각형은 이미지 위, 텍스트 아래에 깔리는 독립 배경 오브젝트입니다.</p>
               <button className={styles.inlineDangerButton} onClick={() => deleteOverlay(selectedShapeLayer.id)} type="button">
-                <Trash2 size={14} />
                 삭제
               </button>
             </div>
@@ -1396,7 +1387,6 @@ export function PdpEditor({
               <p>캔버스의 텍스트나 배경 사각형을 클릭하면 이 패널에서 바로 편집할 수 있습니다.</p>
               <div className={styles.inspectorEmptyActions}>
                 <button className={styles.copyUtilityButton} onClick={handleAddShapeLayer} type="button">
-                  <Square size={15} />
                   배경 사각형 추가
                 </button>
               </div>
@@ -1426,7 +1416,6 @@ export function PdpEditor({
             <div className={styles.copySection}>
               <p className={styles.cardLabel}>Layout Object</p>
               <button className={styles.copyUtilityButton} onClick={handleAddShapeLayer} type="button">
-                <Palette size={15} />
                 배경 사각형 추가
               </button>
             </div>
@@ -2510,7 +2499,6 @@ export function PdpEditor({
         onClick={stopShellClick}
       >
         <Button variant="ghost" size="sm" disabled={isGenerating} onClick={onReset}>
-          <ChevronLeft size={16} className="mr-1" />
           설정으로
         </Button>
         <span className="mx-1 h-5 w-px bg-border" />
@@ -2538,18 +2526,13 @@ export function PdpEditor({
         <span className="mx-1 h-5 w-px bg-border" />
         {onOpenSettings ? (
           <Button variant="ghost" size="sm" onClick={onOpenSettings}>
-            <Settings2 size={16} className="mr-1.5" />
             설정
           </Button>
         ) : null}
         {onUndo ? <Button variant="ghost" size="sm" disabled={isGenerating} onClick={onUndo}>변경 전으로 되돌리기</Button> : null}
         {onManualSave ? (
           <Button variant="ghost" size="sm" disabled={saveState === "saving"} onClick={onManualSave}>
-            {saveState === "saving" ? (
-              <Loader2 size={16} className="mr-1.5 animate-spin" />
-            ) : (
-              <Save size={16} className="mr-1.5" />
-            )}
+            {saveState === "saving" ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
             작업 저장하기
           </Button>
         ) : null}
@@ -2560,11 +2543,7 @@ export function PdpEditor({
           onClick={() => void handleSaveToLibrary()}
           title="계정에 올려 다른 기기에서도 볼 수 있게 합니다"
         >
-          {isSavingToLibrary ? (
-            <Loader2 size={16} className="mr-1.5 animate-spin" />
-          ) : (
-            <Library size={16} className="mr-1.5" />
-          )}
+          {isSavingToLibrary ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
           라이브러리에 저장
         </Button>
         {/* 위 버튼은 상세페이지 보관함으로 간다. 이건 참고 이미지로 넣어
@@ -2585,15 +2564,10 @@ export function PdpEditor({
             disabled={!generatedCount || isDownloadingAll}
             onClick={handleDownloadAll}
           >
-            {isDownloadingAll ? (
-              <Loader2 size={16} className="mr-1.5 animate-spin" />
-            ) : (
-              <Download size={16} className="mr-1.5" />
-            )}
+            {isDownloadingAll ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
             전체 ZIP
           </Button>
           <Button size="sm" onClick={handleDownload} disabled={!currentSection.generatedImage}>
-            <Download size={16} className="mr-1.5" />
             현재 섹션 다운로드
           </Button>
         </div>
@@ -2807,7 +2781,6 @@ export function PdpEditor({
 
           <details className="group rounded-lg bg-card p-4 shadow-[var(--shadow-ring)]">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 text-h3">
-              <Sparkles size={16} className="text-primary" />
               AI 분석 요약 보기
             </summary>
             <div className="mt-3">
@@ -2882,9 +2855,9 @@ export function PdpEditor({
 
             <div className="mb-3 flex flex-wrap gap-1.5">
               {[
-                { tab: "image" as const, icon: <Settings2 size={15} />, label: "이미지" },
-                { tab: "layer" as const, icon: <Type size={15} />, label: "텍스트 편집" },
-                { tab: "copy" as const, icon: <Sparkles size={15} />, label: "카피" },
+                { tab: "image" as const, label: "이미지" },
+                { tab: "layer" as const, label: "텍스트 편집" },
+                { tab: "copy" as const, label: "카피" },
               ].map((item) => (
                 <button
                   key={item.tab}
@@ -2893,12 +2866,10 @@ export function PdpEditor({
                   onClick={() => openWorkbench(item.tab)}
                   className={cn(dockButtonClass, workbenchTab === item.tab && workbenchState.isOpen && dockButtonActiveClass)}
                 >
-                  {item.icon}
                   {item.label}
                 </button>
               ))}
               <button type="button" onClick={handleAddShapeLayer} className={dockButtonClass}>
-                <Square size={15} />
                 배경 사각형 추가
               </button>
               <button
@@ -2907,7 +2878,6 @@ export function PdpEditor({
                 onClick={() => openWorkbench("guide")}
                 className={cn(dockButtonClass, workbenchTab === "guide" && workbenchState.isOpen && dockButtonActiveClass)}
               >
-                <Palette size={15} />
                 가이드
               </button>
             </div>
@@ -3146,7 +3116,6 @@ export function PdpEditor({
                             onClick={workbenchTab === "layer" && selectedLayer ? snapWorkbenchToOverlay : snapWorkbenchToEdge}
                             type="button"
                           >
-                            <RefreshCw size={14} />
                             옆으로 붙이기
                           </button>
                           <button
@@ -3170,7 +3139,6 @@ export function PdpEditor({
                           onClick={() => setWorkbenchTab("image")}
                           type="button"
                         >
-                          <Settings2 size={15} />
                           이미지
                         </button>
                         <button
@@ -3178,7 +3146,6 @@ export function PdpEditor({
                           onClick={() => setWorkbenchTab("layer")}
                           type="button"
                         >
-                          <Type size={15} />
                           텍스트 편집
                         </button>
                         <button
@@ -3186,7 +3153,6 @@ export function PdpEditor({
                           onClick={() => setWorkbenchTab("copy")}
                           type="button"
                         >
-                          <Sparkles size={15} />
                           카피
                         </button>
                         <button
@@ -3194,7 +3160,6 @@ export function PdpEditor({
                           onClick={() => setWorkbenchTab("guide")}
                           type="button"
                         >
-                          <Palette size={15} />
                           가이드
                         </button>
                       </div>
