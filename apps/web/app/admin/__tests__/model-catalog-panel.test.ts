@@ -18,13 +18,14 @@ const drawn = panel
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
   .replace(/^\s*\/\/.*$/gm, "");
-const adminPage = readFileSync(new URL("../page.tsx", import.meta.url), "utf8");
+// 2026-09-22 에 시스템 관리 탭(`/admin/system`)으로 옮겼다.
+const adminPage = readFileSync(new URL("../system/page.tsx", import.meta.url), "utf8");
 const adminLayout = readFileSync(new URL("../layout.tsx", import.meta.url), "utf8");
 
 describe("모델 대조표", () => {
   it("관리자 화면에 실제로 걸려 있다", () => {
     expect(adminPage).toContain("<ModelCatalogPanel />");
-    expect(adminPage).toContain('from "./ModelCatalogPanel"');
+    expect(adminPage).toContain('from "../ModelCatalogPanel"');
   });
 
   /** 관리자 폴더의 문지기가 이 표를 덮는다. 없어지면 누구나 본다. */
