@@ -1,3 +1,5 @@
+import { pdpCreditSize } from "../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import {
   DEFAULT_IMAGE_MODEL,
   generateKeyVisual,
@@ -7,7 +9,7 @@ import {
 } from "@fixup/pdp-core";
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
-import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { readPdpRequest } from "../../../../lib/pdp/request";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 
@@ -39,17 +41,18 @@ export async function POST(req: Request) {
   */
   const model = body.imageModel ?? DEFAULT_IMAGE_MODEL;
   const units = imageCreditUnits(model, 1);
-  const reservation = await reserveAiUsage(req, "pdp_image", units);
+  const reservation = await reserveAiUsage(req, "pdp_image", units, creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:key-visual"));
   if (!reservation.ok) return reservation.response;
 
   try {
+    await markCreditStarted(reservation);
     const { imageBase64, mimeType } = await generateKeyVisual(body, textPlanDepsFrom(createPdpProviders()));
     // 섹션 이미지와 똑같이 fal 에서 한 장을 만든다. 모델을 안 남기면 이 한 장은
     // 비용 집계에서 0원으로 사라진다.
     // 장부가 안 닫혀도 그림은 돌려준다. 포스터·카드뉴스와 같은 판단이다.
     const usage = await settleAiUsage(reservation, true, units, undefined, {
       model,
-      billableImages: 1,
+      billableImages: 1, deliveredImages: 1, completionConfirmed: true,
     });
     return Response.json({ ok: true, imageBase64, mimeType, usage });
   } catch (err) {

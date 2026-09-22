@@ -1,3 +1,4 @@
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { analyzeProduct, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { PdpAnalyzeRequest } from "@fixup/pdp-core";
@@ -29,7 +30,9 @@ export async function POST(req: Request) {
 async function analyze(req: Request) {
   const parsed = await readPdpRequest<PdpAnalyzeRequest>(req, "analyze");
   if (!parsed.ok) return parsed.response;
-  const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
+  // 그림이 없으므로 0크레딧이다. 그래도 예약은 거친다 — 정지 계정과 잔액
+  // 부족은 0장짜리 요청도 막아야 한다.
+  const reservation = await reserveAiUsage(req, "pdp_analyze", 0, freeCreditPlan("pdp:analyze"));
   if (!reservation.ok) return reservation.response;
   try {
     const body = parsed.body;

@@ -1,3 +1,5 @@
+import { snsCreditSize } from "../../../../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../../lib/membership/api";
@@ -124,10 +126,11 @@ export async function POST(request: Request, context: Context) {
       });
       // 이 카드의 장면 프롬프트 한 번. 원고 기획은 다시 하지 않는다.
       const llm = llmCostUsd({ planCalls: estimate.generatedCount });
-      const reserved = await reserveAiUsage(request, "sns_image", creditUnits(estimate.usd + llm));
+      const reserved = await reserveAiUsage(request, "sns_image", creditUnits(estimate.usd + llm), creditImagePlan(1, snsCreditSize(project.ratio), `sns:${project.id}`));
       if (!reserved.ok) return reserved.response;
       reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
+      await markCreditStarted(reservation);
       const flow = await startQueuedFlow(project, currentFlow, dependencies, { cardIndexes: [index], note: noteInput.data.note });
       /**
        * **열쇠는 `startQueuedFlow` 뒤에 적는다.**
@@ -142,6 +145,7 @@ export async function POST(request: Request, context: Context) {
           generation: {
             ...flow.generation,
             reservationId: reserved.requestId,
+            costBaselineCount: currentFlow.costs.length,
             costBaselineUsd: currentFlow.costs.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0),
           },
         }

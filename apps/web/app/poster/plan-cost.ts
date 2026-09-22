@@ -15,6 +15,7 @@ import type { PromptMode } from "./prompt-mode";
  */
 
 export interface PlanCostInput {
+  policy?: "cost-v1" | "image-v2";
   /**
    * 기획이 **비전으로 읽는** 첨부 수.
    *
@@ -96,6 +97,7 @@ export function planCostUsd(input: PlanCostInput): number {
  * 합쳐서 올림하면 모자란다.
  */
 export function planCostUnits(input: PlanCostInput): number {
+  if (input.policy === "image-v2") return 0;
   if (input.promptMode === "verbatim") return 0;
 
   const once = llmCostUsd({ planCalls: 1, visionReads: visionReads(input) });
@@ -113,6 +115,7 @@ export function planCostUnits(input: PlanCostInput): number {
  * 무엇과 견주는지가 흐려진다. 달러는 관리자 화면(원가 장부)이 갖는다.
  */
 export function planCostNote(input: PlanCostInput): string {
+  if (input.policy === "image-v2") return "기획·분석은 무료입니다. 최종 이미지에만 크레딧이 듭니다.";
   if (input.promptMode === "verbatim") {
     return "기획을 안 돌려서 기획 몫이 안 듭니다.";
   }

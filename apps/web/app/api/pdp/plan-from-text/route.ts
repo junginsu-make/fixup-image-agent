@@ -1,3 +1,4 @@
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { planFromText, toPdpErrorResponse, mapPdpErrorCodeToStatus } from "@fixup/pdp-core";
 import type { CopyIntensity, GapPolicy, TextPlanRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
@@ -42,7 +43,7 @@ async function plan(req: Request) {
   const parsed = await readPdpRequest<TextPlanRequest>(req, "plan");
   if (!parsed.ok) return parsed.response;
   // 이미지를 만들지 않는 단계라 크레딧은 소모하지 않는다(시간당 횟수 제한만 적용).
-  const reservation = await reserveAiUsage(req, "pdp_analyze", 0);
+  const reservation = await reserveAiUsage(req, "pdp_analyze", 0, freeCreditPlan("pdp:plan"));
   if (!reservation.ok) return reservation.response;
 
   try {

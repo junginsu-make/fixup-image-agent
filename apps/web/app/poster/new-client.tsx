@@ -1,4 +1,7 @@
 "use client";
+import { imageCredits } from "@fixup/shared";
+import { posterCreditSize } from "../../lib/membership/image-sizes";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import * as React from "react";
 import Link from "next/link";
@@ -69,6 +72,7 @@ const PROMPT_NAIL_EXAMPLES = [
 ].join("\n");
 
 export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) {
+  const creditPolicy = useCreditPolicy();
   const router = useRouter();
   /**
    * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
@@ -250,6 +254,14 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
     modelId: choice.model.id, ratioId: submitRatio, variants,
     hasReferences,
   });
+  const imageCreditPreview = (() => {
+    if (creditPolicy !== "image-v2") return null;
+    try {
+      return adMode
+        ? adPlan.masters.reduce((sum, master) => sum + imageCredits(posterCreditSize(choice.model.id, "match-source", master)) * variants, 0)
+        : imageCredits(posterCreditSize(choice.model.id, submitRatio)) * variants;
+    } catch { return null; }
+  })();
 
   // 라이브러리에서 「이미지로」를 눌러 왔으면 지시가 이미 들어가 있어야 한다.
   React.useEffect(() => {
@@ -469,12 +481,22 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
 
   const canSubmit = canCreatePoster({
     styleCount: styleIds.length,
+    // 지키려고 붙인 그림도 근거다. `referenceCount` 가 그 둘을 합친 수다.
+    referenceCount,
     instruction,
     estimateRejected: Boolean(estimate.rejected),
     overReferenceLimit,
     adMode,
     adReady: adPlan.ready,
   });
+
+  /**
+   * 글도 그림도 하나 없는가.
+   *
+   * **회색 버튼만 두면 고장으로 읽힌다.** 01 을 선택으로 푼 뒤로는 아무것도 안
+   * 적고 03 까지 올 수 있게 됐다 — 무엇을 하면 눌리는지 그 자리에서 말한다.
+   */
+  const nothingToDrawOn = instruction.trim().length === 0 && referenceCount === 0;
 
   /*
     **어디로 갈 수 있는지는 `posterRerunJump` 가 정한다.** 값을 못 불러왔으면
@@ -815,7 +837,8 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
                   화면이 안 말하면 두 갈래를 견줄 수 없었다(설계 §9).
                 */}
                 <span className="mt-1 block text-meta text-subtle-foreground">
-                  위는 그림 장수입니다. {planCostNote({
+                  {creditPolicy === "image-v2" ? imageCreditPreview === null ? "첨부 이미지 크기 확인 후 차감량이 확정됩니다. " : `완성 시 ${imageCreditPreview}크레딧. ` : "위는 그림 장수입니다. "}{planCostNote({
+                    policy: creditPolicy,
                     // 무엇을 세는지는 `plan-cost` 가 정한다. 여기서 정하면 시험이 못 간다.
                     ...planCostCounts(orderedIds.map((id) => roles[id] ?? "none")),
                     promptMode,
@@ -825,6 +848,14 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               </p>
             )
             )}
+
+            {/* 둘 다 비면 그릴 근거가 없다. 어느 쪽을 채워도 된다고 말한다. */}
+            {nothingToDrawOn ? (
+              <p className="text-sm text-muted-foreground">
+                01 지시에 한 줄을 적거나, 02 레퍼런스에서 그림을 한 장 붙여 주세요.
+                둘 중 하나만 있으면 만들 수 있습니다.
+              </p>
+            ) : null}
 
             <div className="flex justify-end">
               {/* 마지막 칸이다. 값을 보여 준 자리에서 바로 만든다. */}
@@ -840,11 +871,19 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
         <Card>
           <CardHeader>
             <CardTitle>무엇을 만들까</CardTitle>
-            <CardDescription>한두 줄이면 됩니다. 완성된 프롬프트가 있으면 아래 칸에 그대로 넣으세요.</CardDescription>
+            <CardDescription>
+              한두 줄이면 됩니다. 완성된 프롬프트가 있으면 아래 칸에 그대로 넣으세요.{" "}
+              {/*
+                **안 적고 넘어가도 된다는 것을 여기서 말한다.** 버튼만 풀어 두면
+                비워도 되는 줄 모르고 그대로 멈춰 선다.
+              */}
+              <strong className="text-foreground">비워 두고 넘어가도 됩니다.</strong>{" "}
+              02 레퍼런스에서 그림을 붙이고 거기서 적어도 됩니다.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-title">작업 이름</Label>
+              <Label htmlFor="poster-title">작업 이름 · 선택</Label>
               <Input
                 id="poster-title"
                 value={title}
@@ -853,7 +892,7 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="poster-instruction">무엇을 만들까 · 한두 줄</Label>
+              <Label htmlFor="poster-instruction">무엇을 만들까 · 한두 줄 · 선택</Label>
               <Textarea
                 id="poster-instruction"
                 value={instruction}
@@ -993,11 +1032,16 @@ export function PosterNewClient({ adEnabled = false }: { adEnabled?: boolean }) 
             </div>
 
             <div className="flex justify-end">
-              {/* 제목과 지시가 있어야 다음이 뜻이 있다. 나머지는 다음 칸에서 정한다. */}
-              <Button
-                onClick={() => setStep("reference")}
-                disabled={!title.trim() || !instruction.trim()}
-              >
+              {/*
+                **이 칸을 안 채워도 다음으로 간다.**
+
+                제목도 지시도 필수가 아니다. 레퍼런스부터 붙이고 「이 그림들을
+                어떻게 쓸까요」에 적는 것으로 시작하고 싶은 사람이 있는데, 여기서
+                막히면 그 길이 아예 없었다(2026-09-22 사용자 보고). 제목은 비면
+                「이름 없는 이미지」로 붙고(`projectBody`), 글과 그림이 **둘 다**
+                비었는지는 마지막 「만들기」가 본다(`canCreatePoster`).
+              */}
+              <Button onClick={() => setStep("reference")}>
                 다음
               </Button>
             </div>

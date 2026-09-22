@@ -63,4 +63,10 @@ export const devUsageSummary: UsageSummary = {
   // 전체 타임스탬프를 넣으면 Invalid time value 가 된다.
   periodStart: "2026-07-01",
   periodEnd: "2026-08-01",
+  ...(isLocalAuthBypass && process.env.LOCAL_CREDIT_PREVIEW === "1" ? {
+    pricingPolicy: "image-v2" as const, used: 20, reserved: 5, quota: 125, balance: 105, remaining: 100,
+    subscription: { units: 60, expiresAt: "2026-10-01T00:00:00+09:00" },
+    purchased: { units: 40, expiresAt: "2026-12-22T12:00:00+09:00" },
+    bonus: { units: 0, expiresAt: null }, periodStart: "2026-09-01", periodEnd: "2026-10-01",
+  } : {}),
 };

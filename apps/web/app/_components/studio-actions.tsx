@@ -55,8 +55,8 @@ export function StudioActions({
         <span className="hidden lg:inline">{email}</span>
         <span className="lg:hidden">{emailLocalPart(email)}</span>
       </span>
-      <Badge variant="secondary" title={`${email} · 예약 ${currentUsage.reserved}장`}>
-        {currentUsage.used}/{currentUsage.quota}장
+      <Badge variant="secondary" title={`${email} · 처리 중 ${currentUsage.reserved}${currentUsage.pricingPolicy === "image-v2" ? "크레딧" : "장"}`}>
+        {currentUsage.pricingPolicy === "image-v2" ? `${currentUsage.remaining}크레딧 남음` : `${currentUsage.used}/${currentUsage.quota}장`}
       </Badge>
       {/* '계정'과 '관리자'는 뺐다. 둘 다 사이드바 아래 메뉴와 같은 화면이라
           둘로 보였다. 여기 남는 것은 상태(사용량)와 그때그때 쓰는 동작뿐이다. */}

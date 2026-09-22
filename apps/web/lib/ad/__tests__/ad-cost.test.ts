@@ -38,7 +38,12 @@ const types = read("lib/membership/types.ts");
  * 정의들이 서로 안 어긋난다」**이다. 그러니 각각 마지막 것을 찾는다.
  */
 const migrationsDir = path.join(REPO, "supabase", "migrations");
-const migrationNames = readdirSync(migrationsDir).sort();
+/*
+  **호환 래퍼는 건너뛴다.** 202609220002 는 옛 함수를 `_cost_v1` 로 이름만 바꾸고
+  같은 이름의 얇은 래퍼를 세워 전환한 계정을 옛 경로로 과금하지 못하게 막는다.
+  화이트리스트의 실제 동작은 그 전 파일에 그대로 있다.
+*/
+const migrationNames = readdirSync(migrationsDir).filter((name) => !name.startsWith("202609220002_")).sort();
 /**
  * 주석을 걷어내고 본다. 이 저장소의 SQL 은 설명이 길어서, 「무엇을 하려다
  * 말았다」고 적은 주석의 낱말이 정의로 오인된다.

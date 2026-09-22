@@ -7,6 +7,9 @@ import { createSupabaseServerClient } from "../supabase/server";
 import { devMemberProfile, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import { hourlyLimitFor } from "./hourly-limit";
 import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
+import { imageCredits } from "@fixup/shared";
+import { isCreditLedgerEnabled, type CreditReservationPlan } from "./credit-ledger";
+import { usageFromRow } from "./usage-row";
 
 type ApiMember = { userId: string; profile: MemberProfile };
 
@@ -56,6 +59,7 @@ export async function reserveAiUsage(
   request: Request,
   operation: GenerationOperation,
   units: number,
+  creditPlan?: CreditReservationPlan,
 ): Promise<
   | { ok: true; userId: string; requestId: string; usage: UsageSummary }
   | { ok: false; response: Response }
@@ -78,16 +82,24 @@ export async function reserveAiUsage(
     전에는 `ANALYZE_HOURLY_LIMIT` 하나였다. 레퍼런스 분석이 같은 칸을 쓰면
     레퍼런스를 정리하다가 그날 상세페이지를 못 만들게 된다 — 한자리에서 스무
     장을 올리는 일이 정상이기 때문이다. 표는 `hourly-limit.ts` 에 있다.
+
+    **이 한도는 두 정책에 다 간다.** 장부를 켜면 `credit_reserve_dispatch` 가
+    같은 값을 받아 옛 경로로 그대로 넘긴다 — 전환 안 한 회원이 정책 스위치
+    하나로 다른 한도를 받으면 안 된다.
   */
   const analysisLimit = hourlyLimitFor(operation);
-  const { data, error } = await admin.rpc("reserve_generation", {
+  const ledger = isCreditLedgerEnabled();
+  const { data, error } = await admin.rpc(ledger ? "credit_reserve_dispatch" : "reserve_generation", ledger ? {
+    p_user: auth.member.userId, p_request: requestId, p_operation: operation, p_legacy_units: units, p_analysis_limit: analysisLimit,
+    p_outputs: creditPlan ? creditPlan.outputs.map(imageCredits) : null, p_resource: creditPlan?.resource ?? new URL(request.url).pathname,
+  } : {
     p_user_id: auth.member.userId,
     p_request_id: requestId,
     p_operation: operation,
     p_units: units,
     p_analysis_limit: analysisLimit,
   });
-  if (error || !data?.[0]) {
+  if (error || !(ledger ? data : data?.[0])) {
     // 2026-09-04 운영에서 이 오류가 났는데 journalctl 에 한 줄도 없어 원인을 못
     // 찾았다. 사용자에게 가는 문장은 하나지만 원인은 둘로 갈린다 — RPC 자체가
     // 실패한 것(rpc_error)과, 호출은 됐는데 행이 안 온 것(empty_result)은
@@ -101,8 +113,8 @@ export async function reserveAiUsage(
     });
     return { ok: false, response: membershipApiError(500, "usage_unavailable", "사용량을 확인하지 못했습니다.") };
   }
-  const row = data[0];
-  const usage = usageFromRpc(row);
+  const row = ledger ? data : data[0];
+  const usage = ledger ? usageFromRow(row.usage ?? {}) : usageFromRpc(row);
   if (!row.allowed) {
     const messages: Record<string, string> = {
       quota_exceeded: "이번 달 이미지 생성 한도를 모두 사용했습니다.",
@@ -117,7 +129,12 @@ export async function reserveAiUsage(
         100)에 걸린 것은 할 일이 정반대다. reason 까지 같으면 구분할 길이 없다.
       */
       analysis_abuse_limit: "분석 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+      credit_account_not_activated: "크레딧 계정 전환이 준비 중입니다. 운영자에게 문의해 주세요.",
+      credit_quote_required: "이 생성 경로의 크레딧 설정을 확인해야 합니다.",
+      credit_ledger_required: "새 크레딧 처리가 준비 중입니다. 잠시 후 다시 시도해 주세요.",
     };
+    // 전환한 계정에는 「이번 달 한도」라는 말이 없다. 남은 것은 잔액이다.
+    if (usage.pricingPolicy === "image-v2") messages.quota_exceeded = `크레딧이 모자랍니다. 사용 가능 ${usage.remaining}크레딧입니다.`;
     /*
       **중복일 때만 표를 한 번 더 읽는다**(E-6-2-b).
 
@@ -167,7 +184,7 @@ export async function settleAiUsage(
   success: boolean,
   consumedUnits: number,
   errorCode?: string,
-  cost?: { model: string; billableImages: number; llmUsd?: number },
+  cost?: { model: string; billableImages: number; llmUsd?: number; deliveredImages?: number; completionConfirmed?: boolean },
 ) {
   try {
     return await finalizeAiUsage(reservation, success, consumedUnits, errorCode, cost);
@@ -267,18 +284,22 @@ export async function finalizeAiUsage(
   success: boolean,
   consumedUnits: number,
   errorCode?: string,
-  cost?: { model: string; billableImages: number; llmUsd?: number },
+  cost?: { model: string; billableImages: number; llmUsd?: number; deliveredImages?: number; completionConfirmed?: boolean },
 ) {
   if (isLocalAuthBypass) return devUsageSummary;
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.rpc("finalize_generation", {
+  const ledger = isCreditLedgerEnabled();
+  const { data, error } = await admin.rpc(ledger ? "credit_finalize_dispatch" : "finalize_generation", ledger ? {
+    p_user: reservation.userId, p_request: reservation.requestId, p_success: success, p_legacy_units: consumedUnits,
+    p_delivered: cost?.deliveredImages ?? (success ? null : 0), p_terminal: cost?.completionConfirmed ?? success, p_error: errorCode ?? null,
+  } : {
     p_user_id: reservation.userId,
     p_request_id: reservation.requestId,
     p_success: success,
     p_consumed_units: consumedUnits,
     p_error_code: errorCode ?? null,
   });
-  if (error || !data?.[0]) {
+  if (error || !(ledger ? data : data?.[0])) {
     // 던지기만 하면 호출한 라우트가 catch 에서 다시 finalize 를 불러 또 던지고,
     // 결국 500 만 남는다 — 어느 회원의 어느 요청이 매달렸는지가 사라진다.
     // 예약된 채 묶인 크레딧을 손으로 풀려면 이 두 값이 있어야 한다.
@@ -344,7 +365,14 @@ export async function finalizeAiUsage(
     costRecorded = !costError;
   }
 
-  return { ...usageFromRpc(data[0]), ...(costRecorded === undefined ? {} : { costRecorded }) };
+  /*
+    **원가 기록 여부는 두 정책에 다 실린다.** 정산이 됐다고 원가까지 남았다고
+    말하지 않는 것은(설계 §8.4) 장부를 켜든 안 켜든 같은 약속이다.
+  */
+  const recorded = costRecorded === undefined ? {} : { costRecorded };
+  return ledger
+    ? { ...usageFromRow(data.usage ?? {}), settlementPending: data.settled === false, ...recorded }
+    : { ...usageFromRpc(data[0]), ...recorded };
 }
 
 /**

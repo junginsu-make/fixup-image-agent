@@ -1,3 +1,5 @@
+import { knownPosterCreditSize } from "../../../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted, bindCreditJob } from "../../../../../../lib/membership/credit-ledger";
 import sharp from "sharp";
 import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
@@ -174,7 +176,7 @@ export async function POST(request: Request, context: Context) {
       sourceSize,
     });
     const units = creditUnits(estimate.totalUsd ?? 0);
-    const reserved = await reserveAiUsage(request, "poster_image", units);
+    const reserved = await reserveAiUsage(request, "poster_image", units, creditImagePlan(project.data.variants, knownPosterCreditSize(choice.model.id, project.ratio, sourceSize), `poster:${id}`));
     /**
      * **거절이면 자리부터 돌려준다.**
      *
@@ -189,6 +191,7 @@ export async function POST(request: Request, context: Context) {
     }
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
+    await markCreditStarted(reservation);
     const submission = await submitPoster(
       {
         projectId: id,
@@ -252,6 +255,7 @@ export async function POST(request: Request, context: Context) {
      * 열쇠를 여기서 넘겨줄 길이 이것뿐이다. `data` 는 jsonb 라 칸을 더해도
      * 마이그레이션이 필요 없다.
      */
+    await bindCreditJob(reservation, { key: `poster:${submission.requestRowId}`, resource: `poster:${id}`, providerId: submission.falRequestId, endpoint: submission.endpoint });
     await stores.projects.update(id, {
       data: { ...project.data, reservationId: reserved.requestId },
     });

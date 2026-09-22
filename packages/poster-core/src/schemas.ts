@@ -58,8 +58,18 @@ export const PosterProjectInputSchema = z.object({
   ratio: z.enum(POSTER_RATIO_IDS),
   modelId: z.enum(MODEL_IDS),
   variants: z.number().int().min(MIN_VARIANTS).max(MAX_VARIANTS),
-  /** 사용자가 적는 한 줄. 나머지는 기획이 채운다. */
-  instruction: z.string().trim().min(1),
+  /**
+   * 사용자가 적는 한 줄. 나머지는 기획이 채운다. **없어도 된다.**
+   *
+   * 예전에는 `min(1)` 이었다. 레퍼런스를 선택으로 푼 뒤에도 그 반대는 막혀
+   * 있어서, 그림부터 붙이고 「이 그림들을 어떻게 쓸까요」에 적는 것으로
+   * 시작할 수가 없었다(2026-09-22 사용자 보고).
+   *
+   * **글과 그림이 둘 다 비는 것만 막는다** — 아래 `superRefine` 에서 잰다.
+   * 없으면 빈 줄로 읽는다: 옛 화면이 이 칸을 안 보낼 수도 있고, 「안 적었다」와
+   * 「없다」는 같은 뜻이다.
+   */
+  instruction: z.string().trim().default(""),
   /**
    * 따라 만들 기준. **없어도 된다.**
    *
@@ -154,6 +164,27 @@ export const PosterProjectInputSchema = z.object({
    */
   inventedSlots: z.array(z.string()).default([]),
 }).strict().superRefine((input, ctx) => {
+  /**
+   * **글과 그림이 둘 다 비면 그릴 근거가 없다.**
+   *
+   * 01 지시를 선택으로 풀면서(2026-09-22) `instruction` 의 `min(1)` 을 걷어냈다.
+   * 그 자리를 여기가 받는다 — 둘 중 하나만 있으면 되지만, 하나도 없으면 기획이
+   * 통째로 지어내고 그 값을 사용자가 낸다.
+   *
+   * 화면도 막지만(`canCreatePoster`) 화면을 안 거치는 길이 있다.
+   */
+  if (
+    input.instruction.length === 0
+    && input.referenceIds.length === 0
+    && input.preservedIds.length === 0
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["instruction"],
+      message: "무엇을 만들지 한 줄 적거나, 따라 만들 그림을 한 장 이상 골라 주세요.",
+    });
+  }
+
   /**
    * **광고 규격은 따라 만들 그림이 있어야 한다.**
    *

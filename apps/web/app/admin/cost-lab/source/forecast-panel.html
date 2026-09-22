@@ -1,0 +1,28 @@
+<section id="forecast-panel" aria-label="통합 비용 예측">
+  <div class="fc-heading"><div><h1>몇 장 만들고, 한 달에 얼마가 들까요?</h1><p class="muted">생성량부터 API·서버·DB 비용과 수익까지 한곳에서 확인합니다.</p></div><span class="tag" id="fc-basis">현재 서비스 차감 기준</span></div>
+  <div class="fc-notice" id="fc-origin"></div>
+  <div class="fc-actions" aria-label="차감 정책 비교"><button data-fc-policy="current">기존 · 원가 환산</button><button data-fc-policy="image-v2">새 정책 · 이미지 1장=1크레딧</button><span class="muted">정책만 바꾸어 생성량·비용·이익을 비교합니다. 운영 전환은 별도입니다.</span></div>
+  <div class="fc-actions"><button id="fc-example">예시 조건으로 살펴보기</button><button id="fc-empty">현재 정보 입력</button><button id="fc-import">설정 파일 불러오기</button><button id="fc-export">설정 JSON 내려받기</button><button id="fc-upgrade-prices">최신 단가로 다시 계산</button><input id="fc-file" type="file" accept="application/json,.json" hidden></div>
+  <div class="panel fc-input-panel"><div class="fc-main-inputs" id="fc-main-inputs"></div><div class="fc-presets"><span>얼마나 쓸까요?</span><button data-fc-preset="light">가끔 사용</button><button data-fc-preset="normal">보통 사용</button><button data-fc-preset="full">모두 소진</button><span class="tag" id="fc-custom" hidden>직접 설정</span></div><p class="muted" id="fc-preset-note"></p></div>
+  <p class="fc-error" id="fc-error" role="alert" hidden></p>
+  <div id="fc-output">
+    <div class="fc-toolbar"><h2 id="fc-title"></h2><div class="fc-months" id="fc-months" aria-label="선택 월"></div></div>
+    <p class="muted" id="fc-context"></p>
+    <div class="fc-kpis"><article class="panel"><span>한 사람이 만들 수 있는 양</span><strong id="fc-allowance">—</strong><small id="fc-allowance-note"></small></article><article class="panel"><span>선택 월 전체 생성 예상</span><strong id="fc-images">—</strong><small id="fc-active"></small></article><article class="panel fc-featured"><span id="fc-cost-title">월 예상 운영비</span><strong id="fc-cost">—</strong><small id="fc-cost-note"></small></article><article class="panel"><span>월 예상 이익</span><strong id="fc-profit">—</strong><small id="fc-profit-note"></small></article></div>
+    <div class="fc-cost-strip" id="fc-breakdown"></div>
+    <div class="panel fc-recommendation"><div class="fc-toolbar"><h2>어떤 운영 구성을 검토할까요?</h2><span class="tag" id="fc-confidence"></span></div><div class="fc-three"><div><span>EC2 후보</span><strong id="fc-server"></strong><small id="fc-load"></small></div><div><span>Supabase</span><strong id="fc-db-plan"></strong><small id="fc-db-note"></small></div><div><span>추천 사양 비용 반영</span><label class="field"><select id="fc-selection" aria-label="서버 비용 계산 기준"><option value="manual">현재 입력한 사양</option><option value="recommended">추천 사양 사용</option></select></label><small id="fc-selection-note"></small></div></div></div>
+    <div class="panel fc-three"><div><span>같은 사용량, 무료 혜택이 끝나면</span><strong id="fc-normal"></strong><small>혜택 전 예상 운영비</small></div><div><span>계속 보관하면 예측 마지막 달</span><strong id="fc-stock"></strong><small id="fc-stock-note"></small></div><div><span>언제 비용이 달라질까요?</span><strong id="fc-next"></strong><small id="fc-next-note"></small></div></div>
+    <div class="panel"><div class="fc-toolbar"><h2>회원 수만 바꾸어 보면</h2><span class="muted">같은 사용 조건 · 선택 월 기준</span></div><div class="fc-table"><table><thead><tr><th>시작 회원</th><th>생성 이미지</th><th>월 운영비</th><th>월 이익</th><th>추천 서버</th></tr></thead><tbody id="fc-comparison"></tbody></table></div><p class="muted">가입 회원은 동시 접속자 수가 아닙니다. 혼합 그룹은 상세에서 그룹별 인원을 조정하세요.</p></div>
+  </div>
+  <details id="fc-launch" class="fc-details"><summary>와디즈 상품 전략 <small>베이직 · 프리미엄 · 구매 크레딧 / 목표 마진 30%</small></summary>
+    <div class="panel"><h2>구독 혜택과 크레딧 판매를 함께 비교합니다</h2><p class="muted">보너스를 포함해 전량 사용할 때를 계산합니다. 구독은 매월 소멸, 구매형은 잔액을 이월하는 판매건별 예산 비교입니다. 실제 상품이나 회원 크레딧을 변경하지 않습니다.</p><div id="fc-launch-inputs"></div></div>
+    <div class="panel"><p id="fc-launch-error" class="fc-error" role="alert" hidden></p><div id="fc-launch-results"></div></div>
+  </details>
+  <details id="fc-details" class="fc-details"><summary>세부 조건과 월별 내역 펼치기 <small>회원 구성 · 생성 작업 · 서버·DB · 저장·전송 · 가격</small></summary>
+    <div class="fc-config" id="fc-config"></div>
+    <div class="panel"><h2>월별 비용과 누적 사용량</h2><div id="fc-chart" class="fc-chart" aria-label="월별 비용, 아래 표에서 상세 확인"></div><div class="fc-table"><table><thead><tr><th>월</th><th>회원 / 활성</th><th>생성 / API 출력</th><th>파일 말 / 평균 GB</th><th>DB GB</th><th>AWS 송신 GB</th><th>요금제</th><th>운영비</th><th>누적 비용</th><th>상태</th></tr></thead><tbody id="fc-table"></tbody></table></div></div>
+    <div class="fc-columns"><section class="panel"><h2>선택 월 비용 내역</h2><div id="fc-lines"></div></section><section class="panel"><h2>확인할 조건과 근거</h2><ul id="fc-warnings"></ul><div id="fc-evidence"></div></section></div>
+    <p class="muted">이 화면은 운영 설정을 바꾸지 않는 예측 도구입니다. 보관 기간은 삭제 정책의 가정이며 실제 파일을 지우지 않습니다.</p>
+  </details>
+  <div class="sr-only" id="fc-live" aria-live="polite"></div>
+</section>

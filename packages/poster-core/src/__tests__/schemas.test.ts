@@ -73,6 +73,46 @@ describe("포스터 프로젝트 입력", () => {
   });
 
   /**
+   * **그림만으로도 만들 수 있다** (2026-09-22 사용자 보고).
+   *
+   * 글만으로 만드는 길을 연 뒤에도 그 반대는 `instruction: min(1)` 이 막고
+   * 있었다. 그림부터 붙이고 「이 그림들을 어떻게 쓸까요」에 적는 것으로
+   * 시작하는 사람이 있다 — 화면만 풀면 API 가 400 을 돌려준다.
+   */
+  it("지시가 비어도 그림이 있으면 받는다", () => {
+    expect(PosterProjectInputSchema.safeParse({ ...valid, instruction: "  " }).success).toBe(true);
+  });
+
+  it("지시가 빠져 있어도 받는다 — 빈 줄과 같은 뜻이다", () => {
+    const { instruction: _omitted, ...withoutInstruction } = valid;
+    const parsed = PosterProjectInputSchema.safeParse(withoutInstruction);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.instruction).toBe("");
+  });
+
+  /**
+   * **둘 다 비면 그릴 근거가 없다.** 기획이 열한 칸을 통째로 지어내고 그 값을
+   * 사용자가 낸다. 화면도 막지만(`canCreatePoster`) 화면을 안 거치는 길이 있다.
+   */
+  it("지시도 그림도 없으면 거절한다", () => {
+    expect(PosterProjectInputSchema.safeParse({
+      ...valid, instruction: "  ", referenceIds: [],
+    }).success).toBe(false);
+  });
+
+  /** 지키려고 붙인 그림도 근거다 — 따라 만들 그림이 없어도 통과해야 한다. */
+  it("지킬 그림만 있어도 받는다", () => {
+    expect(PosterProjectInputSchema.safeParse({
+      ...valid,
+      instruction: "",
+      referenceIds: [],
+      preservedIds: ["22222222-2222-4222-8222-222222222222"],
+      attachmentOrder: ["22222222-2222-4222-8222-222222222222"],
+    }).success).toBe(true);
+  });
+
+  /**
    * **광고 모드는 예외다.** 비율을 `match-source` 로 보내 첨부한 그림의 크기를
    * 그대로 따라가는데, 맞출 원본이 없으면 성립하지 않는다. 화면도 막지만
    * (`canCreatePoster`) 화면을 안 거치는 길이 있다.

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, BarChart3, Clock3, ImageIcon, Search, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from "@fixup/ui";
@@ -115,6 +116,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-6">
+      <Link href="/admin/members" className="inline-block rounded-lg border px-4 py-2 text-sm">회원·크레딧 관리 →</Link>
+      {isCreditLedgerEnabled() && <p className="text-sm text-muted-foreground">정책 전환 기간에는 아래 누적 사용량에 구·신 차감 단위가 함께 포함될 수 있습니다. 현재 잔액·만료·지급은 회원·크레딧 관리에서 확인해 주세요.</p>}
       <div>
         <h1 className="text-h1">관리자</h1>
         <p className="mt-1 text-body text-muted-foreground">회원 승인, 상태, 월 한도와 실제 성공 이미지 사용량을 관리합니다.</p>

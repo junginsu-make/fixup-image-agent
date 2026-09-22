@@ -18,6 +18,12 @@ import { ANALYSIS_QUOTA_EXEMPT_CODES, consumesAnalysisQuota } from "@fixup/pdp-c
  * 그래서 **두 벌을 맞대 본다.**
  */
 
+/*
+  **호환 래퍼는 건너뛴다.** 202609220002 는 옛 함수를 `_cost_v1` 로 이름만 바꾸고,
+  같은 이름의 얇은 래퍼를 세워 **전환한 계정을 옛 경로로 과금하지 못하게** 막는다.
+  옛 경로의 실제 동작은 그 전 파일에 그대로 있고, 이 검사들이 재려는 것이 그 동작이다.
+*/
+const COMPAT_WRAPPER = /^202609220002_/;
 const migrationsDir = fileURLToPath(new URL("../../../../../supabase/migrations/", import.meta.url));
 
 /** 주석을 걷어낸다. 이 저장소의 SQL 은 설명이 길어 단어가 코드로 오인된다. */
@@ -35,7 +41,7 @@ function code(name: string): string {
  */
 function latestDefining(needle: string): string {
   const files = readdirSync(migrationsDir)
-    .filter((name) => name.endsWith(".sql"))
+    .filter((name) => name.endsWith(".sql") && !COMPAT_WRAPPER.test(name))
     .sort();
   const last = files.filter((name) => code(name).includes(needle)).pop();
   expect(last, `${needle} 을 정의한 마이그레이션이 없다`).toBeTruthy();

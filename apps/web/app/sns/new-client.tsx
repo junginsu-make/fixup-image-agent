@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -43,6 +44,7 @@ type Step = "content" | "images" | "spec";
 const RERUN_STEPS: readonly Step[] = ["content", "images", "spec"];
 
 export function NewSnsClient() {
+  const creditPolicy = useCreditPolicy();
   const router = useRouter();
   /**
    * 이미 만든 작업의 **지난 단계로 돌아온 것인가.**
@@ -310,7 +312,7 @@ export function NewSnsClient() {
           <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6">
             <div>{step !== "content" ? <Button variant="secondary" onClick={() => setStep(step === "spec" ? "images" : "content")}><ArrowLeft className="size-4" />이전</Button> : null}</div>
             <div className="flex flex-wrap items-center justify-end gap-3">
-              {step === "spec" ? <span className="text-sm font-semibold text-primary">{estimateCostLabel(spec, attachments)}</span> : null}
+              {step === "spec" ? <span className="text-sm font-semibold text-primary">{estimateCostLabel(spec, attachments, creditPolicy)}</span> : null}
               {step === "content" ? <Button onClick={nextFromContent}>이미지 고르기<ArrowRight className="size-4" /></Button> : null}
               {step === "images" ? <Button onClick={nextFromImages}>규격 고르기<ArrowRight className="size-4" /></Button> : null}
               {step === "spec" ? <Button onClick={() => void createProject()} disabled={saving}>{saving ? "저장 중…" : "기획 시작"}</Button> : null}

@@ -35,14 +35,16 @@ export async function POST(_request: Request, context: Context) {
     if (!project) return Response.json({ ok: false, message: "작업을 찾지 못했습니다." }, { status: 404 });
 
     const reservationId = project.data.reservationId;
+    let settled = !reservationId;
     if (reservationId) {
       try {
-        await finalizeAiUsage(
+        const usage = await finalizeAiUsage(
           { userId: auth.member.userId, requestId: reservationId },
           false,
           0,
           "poster_stopped",
         );
+        settled = !usage?.settlementPending;
       } catch {
         // 삼킨다. 예약은 만료로도 풀린다 — 여기서 터지면 멈추지도 못한다.
       }
@@ -51,7 +53,7 @@ export async function POST(_request: Request, context: Context) {
     // 주인만 고칠 수 있다(`projects.update` 가 `user_id` 로 건다).
     const saved = await stores.projects.update(id, {
       status: "ready",
-      data: { ...project.data, reservationId: undefined },
+      data: { ...project.data, reservationId: settled ? undefined : reservationId },
     });
     return Response.json({ ok: true, project: saved });
   } catch (error) {

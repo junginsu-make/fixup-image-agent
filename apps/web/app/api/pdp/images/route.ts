@@ -1,3 +1,5 @@
+import { pdpCreditSize } from "../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import {
   DEFAULT_IMAGE_MODEL,
   generateSectionImage,
@@ -72,9 +74,11 @@ export async function POST(req: Request) {
     조립기(`buildSectionImageOptions`)는 어차피 `page.imageModel` 로 덮어쓴다 —
     그래서 섹션 옵션에 다른 모델을 실으면 **값은 그 모델로 매기고 그림은 페이지
     모델로 그렸다.** 배치 라우트는 처음부터 페이지만 봤다(2026-09-17 리뷰 D-9).
+
+    크레딧 견적도 같은 모델을 봐야 한다 — 여기가 갈리면 예약과 그림이 또 어긋난다.
   */
   const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1), creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:image"));
   if (!reservation.ok) return reservation.response;
 
   try {
@@ -131,6 +135,7 @@ export async function POST(req: Request) {
       },
     );
 
+    await markCreditStarted(reservation);
     const { imageBase64, mimeType, generatedImages, qa } = await generateSectionImage(
       {
         originalImageBase64: body.originalImageBase64,
@@ -146,7 +151,7 @@ export async function POST(req: Request) {
     // 그림을 「생성 실패」로 바꾼다 — 돈은 나갔고 사용자는 결과를 못 본다.
     const usage = await settleAiUsage(reservation, true, imageCreditUnits(model, 1), undefined, {
       model,
-      billableImages: generatedImages,
+      billableImages: generatedImages, deliveredImages: 1, completionConfirmed: true,
     });
     return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
   } catch (err) {

@@ -9,6 +9,8 @@ import type { MemberProfile, MembershipContext, UsageSummary } from "./types";
 import { isUsableAccount } from "./usable";
 import { canAccessPage, viewerFrom } from "../access/core";
 import { PAGE_ACCESS } from "../access/routes";
+import { isCreditLedgerEnabled } from "./credit-ledger";
+import { usageFromRow, ledgerMissing } from "./usage-row";
 
 export const getMembership = cache(async (): Promise<MembershipContext | null> => {
   if (isLocalAuthBypass) return devMembership;
@@ -58,6 +60,11 @@ export async function requireAdmin() {
 export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   if (isLocalAuthBypass) return devUsageSummary;
   const admin = createSupabaseAdminClient();
+  if (isCreditLedgerEnabled()) {
+    const { data: wallet, error: walletError } = await admin.rpc("credit_summary", { p_user: userId });
+    if (walletError && !ledgerMissing(walletError)) throw walletError;
+    if (wallet) return usageFromRow(wallet);
+  }
   const { data, error } = await admin.rpc("member_usage_summary", { p_user_id: userId });
   if (error || !data?.[0]) throw error ?? new Error("회원 사용량을 찾지 못했습니다.");
   const row = data[0];

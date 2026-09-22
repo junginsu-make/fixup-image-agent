@@ -1,3 +1,5 @@
+import { imageCredits } from "@fixup/shared";
+import { posterCreditSize } from "../../lib/membership/image-sizes";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { estimatePosterCost } from "@fixup/poster-core";
 
@@ -25,6 +27,7 @@ import { estimatePosterCost } from "@fixup/poster-core";
  */
 
 export interface EasyCostInput {
+  policy?: "cost-v1" | "image-v2";
   /** 그림 모델 id. */
   modelId: string;
   /** 붙인 그림 수. 기획이 **한 장씩 비전으로** 읽는다(`readAttachments`). */
@@ -47,6 +50,10 @@ export interface EasyCost {
  * 읽는다고 보고 잰다 — 적게 잡으면 사용자가 모르는 사이에 한도가 준다.
  */
 export function easyCost(input: EasyCostInput): EasyCost {
+  if (input.policy === "image-v2") {
+    try { return { units: imageCredits(posterCreditSize(input.modelId, input.ratioId)) }; }
+    catch (error) { return { rejected: error instanceof Error ? error.message : "크기를 확인해 주세요." }; }
+  }
   const attachments = Math.max(0, input.attachmentCount);
 
   const image = estimatePosterCost({

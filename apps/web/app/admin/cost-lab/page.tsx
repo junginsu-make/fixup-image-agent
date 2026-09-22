@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "비용 전략실",
-  description: "판매가·크레딧·마진을 바꿔 보는 시뮬레이션입니다.",
+  description: "생성량·API·서버·DB 비용과 성장에 따른 운영비를 함께 예상합니다.",
 };
 
 /**

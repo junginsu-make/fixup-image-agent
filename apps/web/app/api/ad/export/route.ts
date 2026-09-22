@@ -1,3 +1,4 @@
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { BACKGROUND_REMOVAL_MODEL, adExportUnits } from "../../../../lib/ad/cost";
@@ -148,7 +149,7 @@ export async function POST(request: Request) {
    * 다른 도구와 같은 공식을 쓴다(`@fixup/shared` 의 `creditUnits`).
    */
   const planned = adExportUnits(needsCutout(parsed.data.specIds) ? 1 : 0);
-  const reserved = await reserveAiUsage(request, "ad_export", planned);
+  const reserved = await reserveAiUsage(request, "ad_export", planned, freeCreditPlan("ad:export"));
   if (!reserved.ok) return reserved.response;
 
   /**
@@ -299,7 +300,7 @@ export async function POST(request: Request) {
       made > 0,
       made > 0 ? adExportUnits(cutoutCalls) : 0,
       made > 0 ? undefined : "no_spec_produced",
-      { model: BACKGROUND_REMOVAL_MODEL, billableImages: cutoutCalls, llmUsd: 0 },
+      { model: BACKGROUND_REMOVAL_MODEL, billableImages: cutoutCalls, llmUsd: 0, deliveredImages: 0, completionConfirmed: true },
     );
 
     return Response.json({

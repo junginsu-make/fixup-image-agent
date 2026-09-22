@@ -43,6 +43,7 @@ export * from "./attachment-role";
 export * from "./attachment-order";
 export * from "./attachment-restore";
 export * from "./credit";
+export * from "./credit-policy";
 export * from "./image-look";
 export * from "./josa";
 export * from "./llm-price";

@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -140,6 +141,7 @@ const STEPS: StepDefinition[] = [
 ];
 
 export function CharacterStudio() {
+  const creditPolicy = useCreditPolicy();
   const [step, setStep] = useState<"make" | "result">("make");
 
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -491,7 +493,7 @@ export function CharacterStudio() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">내 캐릭터 {characters.length}</Badge>
-          {creditCost ? <Badge variant="outline">정면 한 장 약 {creditCost}장 차감</Badge> : null}
+          {creditPolicy === "image-v2" ? <Badge variant="outline">새로 만든 이미지 1장당 1크레딧</Badge> : creditCost ? <Badge variant="outline">정면 한 장 약 {creditCost}장 차감</Badge> : null}
         </div>
       </div>
 

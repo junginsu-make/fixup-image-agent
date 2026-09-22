@@ -1,3 +1,4 @@
+import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import { editSection, humanizeEditError, RedesignError, type EditSectionInput } from "@fixup/redesign-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
@@ -32,9 +33,10 @@ export async function POST(req: Request) {
   }
   const billedModel = generateImage ? falModel : provider;
   const units = imageCreditUnits(billedModel, 1);
-  const reservation = await reserveAiUsage(req, "redesign_edit", units);
+  const reservation = await reserveAiUsage(req, "redesign_edit", units, creditImagePlan(1, { width: 1152, height: 2048 }, "redesign:edit"));
   if (!reservation.ok) return reservation.response;
   try {
+    await markCreditStarted(reservation);
     /*
       새로 만들 때와 같은 길(fal)로 고친다. 키가 없을 때만 지금까지의 직접
       호출로 떨어진다 — 그 길 하나 때문에 수정이 통째로 멎으면 안 된다.
@@ -47,7 +49,7 @@ export async function POST(req: Request) {
     });
     const usage = await settleAiUsage(reservation, true, units, undefined, {
       model: billedModel,
-      billableImages: 1,
+      billableImages: 1, deliveredImages: 1, completionConfirmed: true,
     });
     return Response.json({ ...result, usage });
   } catch (err) {

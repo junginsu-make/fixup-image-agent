@@ -1,3 +1,5 @@
+import { pdpCreditSize } from "../../../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../../../lib/membership/credit-ledger";
 import {
   PdpServiceError,
   resolveCharacterAngles,
@@ -118,7 +120,7 @@ export async function POST(req: Request) {
    */
   const providers = createPdpProviders();
 
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length), creditImagePlan(sections.length, pdpCreditSize(model, body.aspectRatio), "pdp:batch"));
   if (!reservation.ok) return reservation.response;
 
   /*
@@ -237,6 +239,9 @@ export async function POST(req: Request) {
         };
     });
   await jobs?.started();
+  // 조립이 다 끝나고 **제공사를 부르기 직전**이 시작 시점이다. 여기보다 앞에
+  // 두면 조립만 하다 죽은 요청까지 「시작됨」으로 남아 정산 확인 대상이 된다.
+  await markCreditStarted(reservation);
   const settled = await Promise.allSettled(requests.map((request) => generateSectionImage(request, providers)));
 
   const results = settled.map((outcome, index) => {
@@ -312,7 +317,7 @@ export async function POST(req: Request) {
     succeeded > 0,
     imageCreditUnits(model, succeeded),
     succeeded > 0 ? undefined : "batch_all_failed",
-    { model, billableImages },
+    { model, billableImages, deliveredImages: succeeded, completionConfirmed: true },
   );
 
   /*

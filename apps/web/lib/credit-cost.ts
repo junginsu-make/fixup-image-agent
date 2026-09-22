@@ -1,3 +1,4 @@
+import { imageCredits, type CreditPolicyId } from "@fixup/shared";
 import { CARD_RATIOS, IMAGE_MODELS, modelById, unitPrice, type ImageMode } from "@fixup/sns-core";
 import { creditUnits } from "@fixup/shared";
 
@@ -81,7 +82,7 @@ const DEFAULT_SIZE = { width: 1024, height: 1024 };
  */
 export function imageUnitUsd(
   modelId: string,
-  options: { size?: { width: number; height: number }; mode?: ImageMode } = {},
+  options: { size?: { width: number; height: number }; mode?: ImageMode; policy?: CreditPolicyId } = {},
 ): number {
   const flat = FLAT_USD[modelId];
   if (flat !== undefined) return flat;
@@ -129,8 +130,9 @@ export function maxImageUnitUsd(): number {
 export function imageCreditUnits(
   modelId: string,
   imageCount: number,
-  options: { size?: { width: number; height: number }; mode?: ImageMode } = {},
+  options: { size?: { width: number; height: number }; mode?: ImageMode; policy?: CreditPolicyId } = {},
 ): number {
   if (imageCount <= 0) return 0;
+  if (options.policy === "image-v2") return imageCredits(options.size ?? { width: 2048, height: 2048 }) * imageCount;
   return creditUnits(imageUnitUsd(modelId, options) * imageCount);
 }

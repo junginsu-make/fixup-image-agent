@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -74,6 +75,7 @@ export function EasyClient({
   defaultImageModel,
   ratioId,
 }: EasyClientProps) {
+  const creditPolicy = useCreditPolicy();
   const router = useRouter();
   const [messages, setMessages] = React.useState<EasyMessage[]>(initialMessages);
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
@@ -147,8 +149,8 @@ export function EasyClient({
   );
 
   const cost = React.useMemo(
-    () => easyCost({ modelId: imageModel, ratioId, attachmentCount: attachments.length }),
-    [imageModel, ratioId, attachments.length],
+    () => easyCost({ policy: creditPolicy, modelId: imageModel, ratioId, attachmentCount: attachments.length }),
+    [creditPolicy, imageModel, ratioId, attachments.length],
   );
 
   // 새 줄이 붙으면 아래로 따라간다. 대화가 위에 멈춰 있으면 답이 온 줄 모른다.
@@ -623,7 +625,7 @@ export function EasyClient({
             */}
             {cost.units !== undefined ? (
               <>
-                이미지를 만들면 <strong>약 {cost.units}장</strong>이 듭니다.{" "}
+                이미지를 만들면 <strong>약 {cost.units}{creditPolicy === "image-v2" ? "크레딧" : "장"}</strong>이 듭니다.{" "}
               </>
             ) : (
               <>{cost.rejected} </>

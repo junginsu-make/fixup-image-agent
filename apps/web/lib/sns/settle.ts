@@ -58,7 +58,7 @@ export async function settleSnsReservation(
   ).length;
 
   try {
-    await finalizeAiUsage(
+    const usage = await finalizeAiUsage(
       { userId, requestId: reservationId },
       made > 0,
       creditUnits(spent + llmCostUsd({ planCalls: 1 + made })),
@@ -70,9 +70,12 @@ export async function settleSnsReservation(
        * 만들었는데 `admin_cost_by_operation` 에는 0장으로 나왔다. 회원 차감과
        * 우리가 낸 돈은 다른 값이라, 차감만 적으면 원가를 영영 알 수 없다.
        */
-      { model: modelId ?? "", billableImages: made },
+      { model: modelId ?? "", billableImages: flow.generation?.costBaselineCount === undefined ? made : flow.costs.slice(flow.generation.costBaselineCount).filter(entry => entry.costUsd !== null).length, deliveredImages: made,
+        completionConfirmed: flow.cards.filter(card => picked.has(card.index)).every(card => card.status === "done" || card.status === "review_required") },
     );
+    if (usage?.settlementPending) return flow;
   } catch {
+    return flow;
     // 삼킨다. 사용자가 만든 카드를 못 보는 것이 더 나쁘다.
   }
 

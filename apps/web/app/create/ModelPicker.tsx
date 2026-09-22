@@ -1,4 +1,5 @@
 "use client";
+import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
@@ -20,6 +21,7 @@ interface ModelPickerProps {
 }
 
 export function ModelPicker({ value, sectionCount, disabled, onChange }: ModelPickerProps) {
+  const creditPolicy = useCreditPolicy();
   return (
     <fieldset className="grid gap-2" disabled={disabled}>
       <legend className="mb-1 text-meta text-subtle-foreground">이미지 생성 모델</legend>
@@ -64,7 +66,7 @@ export function ModelPicker({ value, sectionCount, disabled, onChange }: ModelPi
                 </span>
               ) : null}
               <span className="ml-auto text-xs font-bold text-primary">
-                {model.creditWeight * sectionCount}장 차감
+                {creditPolicy === "image-v2" ? `${sectionCount}크레딧` : `${model.creditWeight * sectionCount}장`} 차감
               </span>
             </span>
             <span className="mt-1 block pl-6 text-sm text-muted-foreground">{model.description}</span>

@@ -1,5 +1,8 @@
+import { pdpCreditSize } from "../../../lib/membership/image-sizes";
+import { creditImagePlan, markCreditStarted } from "../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../lib/membership/api";
+import { imageCreditUnits } from "../../../lib/credit-cost";
 import {
   DEFAULT_CANDIDATES,
   MAX_CANDIDATES,
@@ -151,10 +154,12 @@ export async function POST(req: Request) {
     const reservation = await reserveAiUsage(
       req, "pdp_image",
       characterCreditCost(body.look, modelId, { candidates: body.candidates, extraAngles: 0 }),
+      creditImagePlan(body.candidates ?? DEFAULT_CANDIDATES, pdpCreditSize(modelId, body.aspectRatio), "character:candidates"),
     );
     if (!reservation.ok) return reservation.response;
 
     try {
+      await markCreditStarted(reservation);
       const result = await generateCandidates({
         description: body.description,
         aspectRatio: body.aspectRatio,
@@ -164,13 +169,20 @@ export async function POST(req: Request) {
         reference,
         candidates: body.candidates,
       });
-      // 실패한 장은 차감하지 않는다.
+      /*
+        실패한 장은 차감하지 않는다.
+
+        **장수가 아니라 환산한 값을 넘긴다.** 예약은 `characterCreditCost` 로
+        단가를 거치는데 확정만 장수를 그대로 넘기고 있었다 — 비싼 모델일수록
+        덜 깎였다(2026-09-22 발견). 형제 라우트 `characters/views` 는 처음부터
+        `imageCreditUnits` 로 다시 환산하고 있었다.
+      */
       const usage = await finalizeAiUsage(
         reservation,
         result.candidates.length > 0,
-        result.candidates.length,
+        imageCreditUnits(result.model, result.candidates.length),
         result.candidates.length > 0 ? undefined : "candidates_failed",
-        { model: result.model, billableImages: result.candidates.length },
+        { model: result.model, billableImages: result.candidates.length, deliveredImages: result.candidates.length, completionConfirmed: true },
       );
       return Response.json({
         ok: result.candidates.length > 0,
@@ -199,10 +211,12 @@ export async function POST(req: Request) {
   const reservation = await reserveAiUsage(
     req, "pdp_image",
     characterCreditCost(body.look, modelId, { candidates: 0, extraAngles: extraImages }),
+    creditImagePlan(extraImages, pdpCreditSize(modelId, body.aspectRatio), "character:angles"),
   );
   if (!reservation.ok) return reservation.response;
 
   try {
+    await markCreditStarted(reservation);
     const result = await createCharacter({
       angles: angles as CharacterAngle[],
       sheet: body.sheet,
@@ -219,12 +233,13 @@ export async function POST(req: Request) {
 
     // 정면은 이미 만든 것이라 차감하지 않는다.
     const generated = result.ok ? Math.max(0, result.angleCount - 1) : 0;
+    // 위 후보 생성과 같은 이유로 장수가 아니라 환산한 값을 넘긴다.
     const usage = await finalizeAiUsage(
       reservation,
       result.ok,
-      generated,
+      imageCreditUnits(modelId, generated),
       result.ok ? undefined : "character_create_failed",
-      { model: modelId, billableImages: generated },
+      { model: modelId, billableImages: generated, deliveredImages: generated, completionConfirmed: true },
     );
 
     return Response.json({ ...result, usage }, { status: result.ok ? 200 : 500 });

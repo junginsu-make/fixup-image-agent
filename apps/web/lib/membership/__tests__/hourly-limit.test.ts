@@ -106,7 +106,12 @@ describe("표가 한 벌이다", () => {
   /** 마지막으로 정의한 것이 실제 동작이다. 파일 이름을 박아 두면 넓힌 것을 못 본다. */
   const latestDefining = (needle: string) => {
     const last = readdirSync(migrationsDir)
-      .filter((name) => name.endsWith(".sql"))
+      /*
+        **호환 래퍼는 건너뛴다.** 202609220002 는 옛 함수를 `_cost_v1` 로 이름만
+        바꾸고 같은 이름의 얇은 래퍼를 세워 전환한 계정을 옛 경로로 과금하지
+        못하게 막는다. 시간당 한도의 실제 동작은 그 전 파일에 그대로 있다.
+      */
+      .filter((name) => name.endsWith(".sql") && !name.startsWith("202609220002_"))
       .sort()
       .filter((name) => code(name).includes(needle))
       .pop();
