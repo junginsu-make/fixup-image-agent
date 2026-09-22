@@ -96,7 +96,12 @@ export function toMessageRecord(row: EasyMessageRow): EasyMessageRecord {
   };
 }
 
-/** PostgREST 가 한 번에 주는 줄 수의 윗선. 이보다 많으면 나눠 받는다. */
+/**
+ * PostgREST 가 한 번에 주는 줄 수의 윗선. 이보다 많으면 나눠 받는다.
+ *
+ * **Supabase 의 `max_rows`(기본 1000)와 같아야 한다.** 그보다 작게 낮추면 첫 쪽이
+ * 덜 차서 끝으로 읽고, 나머지 쉽게 작업이 조용히 「다양하게」로 들어간다.
+ */
 export const EASY_WORK_PAGE = 1000;
 
 type WorkIdPage = PromiseLike<{ data: { work_id: string | null }[] | null; error: { message: string } | null }>;

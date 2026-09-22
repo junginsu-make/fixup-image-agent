@@ -608,7 +608,8 @@ export function WorksTab() {
                   setNotice(entry.unavailable);
                   return;
                 }
-                setNotice("");
+                // 거르기 까닭만 지운다. 「첫 화면에 걸었습니다」 같은 다른 안내는 남긴다.
+                setNotice((current) => (filters.some((other) => other.unavailable === current) ? "" : current));
                 setFilter(entry.id);
               }}
             >
@@ -626,7 +627,10 @@ export function WorksTab() {
       {visible.length ? null : (
         <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
           {chosen === "all"
-            ? "아직 만든 작업물이 없습니다."
+            ? counts.character
+              // 캐릭터 결과만 있으면 「없다」가 옆 단추의 숫자와 어긋난다.
+              ? "캐릭터 만들기로 만든 것은 「캐릭터」 단추에서 봅니다."
+              : "아직 만든 작업물이 없습니다."
             : `「${filters.find((entry) => entry.id === chosen)!.label}」로 만든 작업물이 없습니다.`}
         </p>
       )}
