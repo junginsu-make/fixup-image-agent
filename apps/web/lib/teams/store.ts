@@ -518,7 +518,7 @@ export async function teamCredit(teamId: string): Promise<TeamCredit> {
   if (isCreditLedgerEnabled()) {
     const { data, error } = await admin.rpc("credit_team_state", { p_team: teamId });
     if (error) throw new Error(error.message);
-    if (data) return data as TeamCredit;
+    if (data) return { ...(data as TeamCredit), ledger: true };
   }
 
 

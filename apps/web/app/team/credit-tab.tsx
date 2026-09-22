@@ -106,8 +106,12 @@ export function CreditTab({
       <section>
         <h2 className="mb-2 text-sm font-bold">팀원별 사용량</h2>
         <p className="mb-3 text-meta text-subtle-foreground">
-          개인 상한은 <strong>팀 잔량 안에서의 천장</strong>입니다. 팀 잔량이 개인 상한보다 적으면
-          잔량이 먼저 걸립니다.
+          {credit.ledger ? (
+            <>각자의 크레딧이 <strong>팀 잔량 안에서</strong> 쓰입니다. 팀 잔량이 개인 크레딧보다 적으면 잔량이 먼저 걸립니다.</>
+          ) : (
+            <>개인 상한은 <strong>팀 잔량 안에서의 천장</strong>입니다. 팀 잔량이 개인 상한보다 적으면
+            잔량이 먼저 걸립니다.</>
+          )}
         </p>
 
         {credit.members.length === 0 ? (
@@ -131,7 +135,7 @@ export function CreditTab({
                     </span>
                     <span className="block text-meta text-subtle-foreground tabular-nums">
                       이번 달 {row.used.toLocaleString("ko-KR")} 사용 · 실제 천장{" "}
-                      {ceiling.toLocaleString("ko-KR")}
+                      {row.unlimited && credit.quota === 0 ? "무제한" : ceiling.toLocaleString("ko-KR")}
                       {/* 개인 상한을 100 으로 적어 뒀는데 팀 때문에 40 밖에 못
                           쓴다면, 그 사실을 여기서 말해야 한다. 안 말하면
                           「상한이 100 인데 왜 막히지」가 된다. */}
@@ -139,7 +143,7 @@ export function CreditTab({
                     </span>
                   </span>
 
-                  {canWrite ? (
+                  {credit.ledger ? null : canWrite ? (
                     <form action={setPersonalQuotaAction} className="flex items-center gap-2">
                       <input type="hidden" name="userId" value={row.userId} />
                       <Input

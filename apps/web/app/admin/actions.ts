@@ -6,6 +6,7 @@ import { sendApprovalEmail, sendConfirmationEmail } from "../../lib/email/approv
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
+import { ledgerMissing } from "../../lib/membership/usage-row";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
 import { setAiBadgeEnabled } from "../../lib/ai-badge-setting";
 import { assignMember, removeMember, setMemberRole } from "../../lib/teams/store";
@@ -16,6 +17,9 @@ import {
   canManageTarget,
   resolveOwnerEmail,
 } from "../../lib/membership/owner";
+
+/** 돈 기록이 있는 회원. 지우지 않고 정지한다(202609220003). */
+const MONEY_RECORDS_MESSAGE = "크레딧 지급·구독 기록이 있는 회원은 지울 수 없습니다. 대신 정지해 주세요.";
 
 function readUserId(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -208,6 +212,15 @@ export async function deleteMember(formData: FormData) {
   if (typed !== String(profile.email).trim().toLowerCase()) {
     throw new Error("지우려는 회원의 이메일을 그대로 입력해 주세요.");
   }
+
+  /*
+    크레딧 지급·구독 기록이 있으면 DB 가 삭제를 막는다(돈 기록은 회원과 함께 지우지
+    않는다, 202609220003). 막힌 뒤의 「Database error deleting user」는 이유를 안
+    알려 주므로 먼저 묻는다. 함수가 아직 없는 서버(003 전)에서는 막을 기록도 없다.
+  */
+  const { data: kept, error: keptError } = await admin.rpc("credit_member_has_records", { p_user: userId });
+  if (keptError && !ledgerMissing(keptError)) throw new Error(`삭제 가능 여부를 확인하지 못했습니다: ${keptError.message}`);
+  if (kept === true) throw new Error(MONEY_RECORDS_MESSAGE);
 
   // 인증 계정을 지운다. profiles 는 auth.users 를 참조하므로 함께 사라진다.
   const { error } = await admin.auth.admin.deleteUser(userId);

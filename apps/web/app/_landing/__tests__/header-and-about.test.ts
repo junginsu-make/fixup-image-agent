@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ABOUT_EN, ABOUT_KO } from "../about-content";
 import { EN, KO } from "../landing-content";
+import { LANDING_CREDITS } from "../credit-facts";
 
 /**
  * 상단바와 `/about` 이 서로 어긋나지 않는지 본다.
@@ -311,5 +312,21 @@ describe("공개 홈의 크레딧 사실", () => {
 
     expect(한국어, "한국어 콘솔 라벨에 숫자가 없다").toBeTruthy();
     expect(영어).toBe(한국어);
+  });
+
+  /**
+   * **2026-09-22 부터 전 회원이 「이미지 1장 = 1크레딧」이다**(202609220003).
+   * 모델 등급 차감은 없다. 홈이 「모델별 5 / 3 / 1장」이라고 말하면 없는 요금을
+   * 광고하는 셈이다.
+   */
+  it("모델마다 차감이 다르다고 말하지 않는다", () => {
+    expect(new Set(Object.values(LANDING_CREDITS)).size).toBe(1);
+    expect(LANDING_CREDITS.정밀형).toBe(1);
+    expect(코드만).not.toMatch(/LANDING_CREDITS\.[^}]+\}장/);
+    expect(코드만).not.toContain("모델별 ${");
+    expect(코드만).not.toContain("credits follow that cost");
+    expect(코드만).not.toContain("원가 그대로 크레딧");
+    expect(코드만).not.toContain("pass straight through to credits");
+    expect(코드만).not.toContain("Model weights");
   });
 });

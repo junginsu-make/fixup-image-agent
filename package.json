@@ -11,7 +11,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --filter @fixup/web lint",
     "test": "pnpm -r test",
-    "test:credit-db": "node --test scripts/tests/credit-ledger.test.mjs"
+    "test:credit-db": "node --test scripts/tests/credit-ledger.test.mjs scripts/tests/credit-activate.test.mjs"
   },
   "pnpm": {
     "overrides": {

@@ -244,10 +244,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                       />
                     </dd>
                   </div>
-                  <div className="rounded-lg bg-muted/50 p-3">
+                  {!isCreditLedgerEnabled() && <div className="rounded-lg bg-muted/50 p-3">
                     <dt className="text-xs text-muted-foreground">현재 월 한도</dt>
                     <dd className="mt-1 text-lg font-extrabold">{profile.monthly_quota}장</dd>
-                  </div>
+                  </div>}
                   <div className="rounded-lg bg-muted/50 p-3">
                     <dt className="text-xs text-muted-foreground">이번 달 비용</dt>
                     <dd className="mt-1 text-lg font-extrabold">
@@ -263,7 +263,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 </dl>
 
                 <div className="mt-4 border-t pt-4">
-                  <p className="mb-2 text-xs font-bold text-muted-foreground">월 한도 변경</p>
+                  <p className="mb-2 text-xs font-bold text-muted-foreground">{isCreditLedgerEnabled() ? "크레딧" : "월 한도 변경"}</p>
                   <QuotaForm profile={profile} fullWidth />
                 </div>
                 <div className="mt-4 border-t pt-4">
@@ -277,7 +277,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b text-xs text-muted-foreground">
-                <tr><th className="py-3 pr-3">회원</th><th className="py-3 pr-3">팀</th><th className="py-3 pr-3">상태</th><th className="py-3 pr-3">이번 달</th><th className="py-3 pr-3">이번 달 비용</th><th className="py-3 pr-3">누적 비용</th><th className="py-3 pr-3">월 한도</th><th className="py-3">관리</th></tr>
+                <tr><th className="py-3 pr-3">회원</th><th className="py-3 pr-3">팀</th><th className="py-3 pr-3">상태</th><th className="py-3 pr-3">이번 달</th><th className="py-3 pr-3">이번 달 비용</th><th className="py-3 pr-3">누적 비용</th><th className="py-3 pr-3">{isCreditLedgerEnabled() ? "크레딧" : "월 한도"}</th><th className="py-3">관리</th></tr>
               </thead>
               <tbody>
                 {profiles.map((profile) => (
@@ -496,6 +496,11 @@ function Metric({ icon, label, value, suffix = "명" }: { icon: ReactNode; label
 }
 
 function QuotaForm({ profile, fullWidth = false }: { profile: MemberProfile; fullWidth?: boolean }) {
+  // 장부가 켜지면 전 회원이 크레딧 장부에 있다(202609220003). 월 한도는 더 이상
+  // 아무것도 막지 않고, 저장하면 `updateQuota` 가 거절한다. 칸 대신 길을 보여 준다.
+  if (isCreditLedgerEnabled()) {
+    return <Link href="/admin/members" className="text-sm font-semibold text-primary underline underline-offset-4">크레딧 관리</Link>;
+  }
   return (
     <form action={updateQuota} className="flex gap-2">
       <input type="hidden" name="userId" value={profile.id} />

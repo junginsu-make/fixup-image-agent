@@ -1,5 +1,5 @@
 import { IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
-import { creditUnits } from "@fixup/shared";
+import { imageCredits } from "@fixup/shared";
 
 /**
  * 랜딩이 말하는 **크레딧 사실**. 손으로 안 적는다.
@@ -24,19 +24,25 @@ import { creditUnits } from "@fixup/shared";
  *
  * 그래서 「가중치」라는 말 자체를 안 쓴다. 숫자는 쓰는 그 함수로 셈한다 —
  * 모델 표가 바뀌면 홈도 같이 바뀐다.
+ *
+ * ── 2026-09-22 부터는 모델과 관계없이 1장 = 1크레딧 ─────────────
+ *
+ * 전 회원이 새 장부로 옮겨졌다(202609220003). 차감은 원가가 아니라 **결과물
+ * 크기**로만 정해진다(`imageCredits`). 원가 차이(`LANDING_COST_SPREAD`)는 우리가
+ * 떠안는 몫이지 회원에게 넘기는 값이 아니다.
  */
 
 /** 표가 기준으로 삼는 크기. 정사각 1024 는 가장 흔한 한 장이다. */
 const 기준크기 = { width: 1024, height: 1024 };
 
 function 한장당(id: string): number {
-  const model = IMAGE_MODELS.find((entry) => entry.id === id);
-  if (!model) throw new Error(`모델 표에 없습니다: ${id}`);
-  return creditUnits(unitPrice(model, "t2i", 기준크기));
+  // 모델 표에 없는 이름을 홈이 말하지 않게 하는 검사는 그대로 둔다.
+  if (!IMAGE_MODELS.some((entry) => entry.id === id)) throw new Error(`모델 표에 없습니다: ${id}`);
+  return imageCredits(기준크기);
 }
 
 /**
- * 정사각 한 장을 만들 때 깎이는 장수.
+ * 정사각 한 장을 만들 때 깎이는 크레딧.
  *
  * **id 로 집는다.** 「가장 비싼 것」처럼 순위로 집으면 모델이 드나들 때 홈이
  * 말하는 모델과 표의 모델이 조용히 갈린다.

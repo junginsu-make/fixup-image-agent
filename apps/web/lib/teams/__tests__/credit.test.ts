@@ -4,6 +4,7 @@ import {
   effectiveQuotaOf,
   personalQuotaError,
   suggestedQuota,
+  TEAM_QUOTA_MAX,
   teamQuotaError,
   type MemberUsage,
   type TeamCredit,
@@ -69,6 +70,20 @@ describe("제안값", () => {
 
   it("아무도 없으면 0 이다", () => {
     expect(suggestedQuota([])).toBe(0);
+  });
+
+  /**
+   * 크레딧 장부에서 무제한 관리자의 「잔액+사용」은 1억이다(202609220003). 더하면
+   * 팀 한도 최대값을 넘는 값을 제안하고, 그 값은 폼이 거절한다.
+   */
+  it("무제한 관리자는 더하지 않는다", () => {
+    expect(
+      suggestedQuota([member({ personalQuota: 100_000_000, unlimited: true }), member({ userId: "u2", personalQuota: 30 })]),
+    ).toBe(30);
+  });
+
+  it("최대값을 넘는 제안은 하지 않는다", () => {
+    expect(suggestedQuota([member({ personalQuota: 900_000 }), member({ userId: "u2", personalQuota: 900_000 })])).toBe(TEAM_QUOTA_MAX);
   });
 });
 
