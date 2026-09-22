@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Badge, Button } from "@fixup/ui";
 import { TeamCell } from "../team-cell";
 import { BulkBar } from "./bulk-bar";
@@ -29,7 +29,6 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
   const [focusId, setFocusId] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const state = useCreditCommand(() => setVersion((value) => value + 1));
-  const panel = useRef<HTMLDivElement | null>(null);
   const planName = (id: string) => plans.find((plan) => plan.id === id)?.name ?? id;
   const emailOf = (id: string) => rows.find((row) => row.profile.id === id)?.profile.email ?? id;
   const focus = rows.find((row) => row.profile.id === focusId);
@@ -41,22 +40,37 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
   */
   const open = (id: string) => { state.cancel(); setFocusId(id); setVersion((value) => value + 1); };
   const close = () => { state.cancel(); setFocusId(null); };
+  /*
+    **상세는 누른 줄 바로 뒤에서 연다**(2026-09-22 사용자 신고).
+
+    전에는 표 위쪽에 그리고 `scrollIntoView` 로 화면을 끌어올렸다. 스무 번째
+    회원을 누르면 맨 위로 튀고, 닫으면 다시 찾아 내려와야 했다 — 「자꾸
+    포인트가 바뀌니까 헷갈립니다」.
+
+    덮을 열 수는 **머리와 같은 식으로 센다.** 둘이 갈리면 그 줄만 밀려 표가
+    어긋난다.
+  */
+  const columnCount = (ledger ? 1 : 0) + 7 + (teamsEnabled ? 1 : 0);
+
   // 쪽이나 거르기가 바뀌면 고른 것도 버린다. 안 보이는 회원이 선택된 채로 남는다.
   const ids = rows.map((row) => row.profile.id).join(",");
   useEffect(() => { setSelected([]); }, [ids]);
-  useEffect(() => { if (focusId) panel.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [focusId]);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end"><Button size="sm" variant="outline" onClick={() => exportCsv(rows, planName)}>이 쪽 CSV 받기</Button></div>
       {ledger && picked.length ? <BulkBar rows={picked} plans={plans} state={state} onClear={() => setSelected([])} /> : null}
       <ConfirmCard state={state} planName={planName} emailOf={emailOf} />
-      {focus ? <div ref={panel}><CreditPanel key={focus.profile.id} row={focus} plans={plans} state={state} version={version} onClose={close} /></div> : null}
 
       <div className="grid gap-3 md:hidden">
         {rows.map((row) => (
-          <MobileCard key={row.profile.id} row={row} teams={teamsEnabled ? teams : null} ledger={ledger} planName={planName}
-            checked={selected.includes(row.profile.id)} onCheck={(on) => toggle(row.profile.id, on)} onOpen={() => open(row.profile.id)} />
+          <Fragment key={row.profile.id}>
+            <MobileCard row={row} teams={teamsEnabled ? teams : null} ledger={ledger} planName={planName}
+              checked={selected.includes(row.profile.id)} onCheck={(on) => toggle(row.profile.id, on)} onOpen={() => open(row.profile.id)} />
+            {focus?.profile.id === row.profile.id ? (
+              <CreditPanel key={focus.profile.id} row={focus} plans={plans} state={state} version={version} onClose={close} />
+            ) : null}
+          </Fragment>
         ))}
       </div>
 
@@ -76,8 +90,17 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
           </thead>
           <tbody>
             {rows.map((row) => (
-              <DesktopRow key={row.profile.id} row={row} teams={teamsEnabled ? teams : null} ledger={ledger} planName={planName}
-                checked={selected.includes(row.profile.id)} onCheck={(on) => toggle(row.profile.id, on)} onOpen={() => open(row.profile.id)} />
+              <Fragment key={row.profile.id}>
+                <DesktopRow row={row} teams={teamsEnabled ? teams : null} ledger={ledger} planName={planName}
+                  checked={selected.includes(row.profile.id)} onCheck={(on) => toggle(row.profile.id, on)} onOpen={() => open(row.profile.id)} />
+                {focus?.profile.id === row.profile.id ? (
+                  <tr>
+                    <td colSpan={columnCount} className="pb-4">
+                      <CreditPanel key={focus.profile.id} row={focus} plans={plans} state={state} version={version} onClose={close} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </tbody>
         </table>
