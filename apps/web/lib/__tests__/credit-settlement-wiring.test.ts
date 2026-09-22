@@ -50,8 +50,27 @@ const PER_IMAGE_ROUTES = [
   "app/api/pdp/key-visual/route.ts",
 ];
 
-/** 장수를 크레딧으로 바꾸는 함수들. 하나라도 거치면 환산한 것이다. */
+/**
+ * 장수를 크레딧으로 바꾸는 함수들.
+ *
+ * ── 이 검사가 **못 잡는 것** ────────────────────────────────────
+ *
+ * 독립 리뷰가 변이 10건으로 실측했다(2026-09-22). 「환산을 거쳤나」만 재고
+ * **「금액이 맞나」는 못 잰다** — `imageCreditUnits(model, 1)` 처럼 개수만
+ * 틀리거나 `… * 0` 으로 없애면 그대로 통과한다.
+ *
+ * 그걸 잡으려면 값을 실행해 봐야 하는데, 그건 이 검사의 몫이 아니다.
+ * **여기서 막는 것은 「환산을 통째로 잊는 것」 하나다** — 실제로 났던 사고가
+ * 그것이고, 넷 다 그 모양이었다.
+ *
+ * 값을 실행해 보는 쪽은 `scripts/tests/credit-ledger.test.mjs` 가 실제
+ * PostgreSQL 에서 맡는다.
+ */
 const CONVERTERS = /\b(imageCreditUnits|characterCreditCost|creditUnits|adExportUnits)\s*\(/;
+
+/** 주석은 값이 아니다. 지우고 나서 본다. */
+const withoutComments = (text: string) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 /**
  * 여는 괄호부터 짝이 맞는 닫는 괄호까지 잘라 낸다.
@@ -89,11 +108,15 @@ function argumentsOf(source: string, openIndex: number): string[] {
  * 그때는 코드가 너무 멀리 돌아가고 있다는 뜻이다.
  */
 function converted(source: string, value: string): boolean {
-  if (CONVERTERS.test(value)) return true;
-  if (!/^[A-Za-z_$][\w$]*$/.test(value)) return false;
-  const assignment = new RegExp(String.raw`\b(?:const|let|var)\s+${value}\s*=([^;]+);`);
-  const found = assignment.exec(source);
-  return found ? CONVERTERS.test(found[1]!) : false;
+  const bare = withoutComments(value).trim();
+  if (CONVERTERS.test(bare)) return true;
+  if (!/^[A-Za-z_$][\w$]*$/.test(bare)) return false;
+  // **마지막 선언을 본다.** 첫 선언만 보면, 앞쪽에 같은 이름의 멀쩡한 선언이
+  // 있을 때 뒤의 진짜 값이 그 뒤에 숨는다. 이것도 리뷰가 변이로 뚫었다.
+  const assignment = new RegExp(String.raw`\b(?:const|let|var)\s+${bare}\s*=([^;]+);`, "g");
+  let last: RegExpExecArray | null = null;
+  for (let hit = assignment.exec(source); hit; hit = assignment.exec(source)) last = hit;
+  return last ? CONVERTERS.test(withoutComments(last[1]!).trim()) : false;
 }
 
 function settlementCalls(source: string) {
