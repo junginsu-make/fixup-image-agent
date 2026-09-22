@@ -82,17 +82,17 @@ describe("상단바 목록", () => {
     }
   });
 
-  it("MCS 란이 목록에 있다", () => {
+  it("FormWith 란이 목록에 있다", () => {
     expect(navHrefs.map((item) => item.href)).toContain("/about");
-    expect(KO.navAbout).toBe("MCS란");
+    expect(KO.navAbout).toBe("FormWith란");
   });
 
   /**
-   * **「MCS란」은 이제 넓은 화면에서만 닿는다** (운영자 요청 2026-09-14).
+   * **「FormWith란」은 이제 넓은 화면에서만 닿는다** (운영자 요청 2026-09-14).
    *
    * 전에는 푸터에도 한 줄을 두었다. 좁은 화면에서 상단바 목록이 통째로 접히기
    * 때문인데(`.mcs-nav-links` 가 1080px 아래에서 `display: none`), 그 줄이
-   * 휴대폰에서의 유일한 통로였다 — 실제로 390px 에서 「MCS란」이 0개였다.
+   * 휴대폰에서의 유일한 통로였다 — 실제로 390px 에서 「FormWith란」이 0개였다.
    *
    * 운영자가 그 줄을 빼기로 했으므로 **1080px 아래에서는 주소를 직접 치지
    * 않는 한 못 간다.** 시험을 지우지 않고 그 사실을 여기 남긴다 — 지우면
@@ -158,7 +158,7 @@ describe("언어 전환", () => {
   });
 });
 
-describe("MCS 란 화면", () => {
+describe("FormWith 란 화면", () => {
   it("로그인 앞에 열려 있다", () => {
     // 안 열면 첫 화면 메뉴를 누른 사람이 로그인 화면을 만난다.
     const list = middleware.slice(

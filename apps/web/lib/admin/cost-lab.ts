@@ -165,7 +165,7 @@ body { font-family: inherit; background: var(--background); color: var(--foregro
 
   **상표 칸은 이름만 남긴다.** 처음에는 통째로 숨겼는데, 그러면 화면 어디에도
   「비용 전략실」이 없어진다 — 도구의 큰 제목은 「어떤 가격이면 지속 가능할까?」
-  라서 여기가 어디인지 말해 주지 않는다. 사이드바와 겹치는 MCS 네모와 영문
+  라서 여기가 어디인지 말해 주지 않는다. 사이드바와 겹치는 FormWith 네모와 영문
   부제만 빼고, 이름은 버튼 줄 왼쪽의 빈자리에 그대로 둔다.
 */
 header.top .brand .mark, header.top .brand .meta { display: none; }

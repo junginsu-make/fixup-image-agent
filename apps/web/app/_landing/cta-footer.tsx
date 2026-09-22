@@ -7,7 +7,7 @@ export function LandingFooter({ t, locale }: { t: LandingCopy; locale: Locale })
   return (
     <footer className="mcs-footer">
       <div className="mcs-shell mcs-footer-inner">
-        <b>MCS</b>
+        <b>FormWith</b>
         <span>{t.footerNote}</span>
         {/*
           약관과 처리방침은 **늘 닿는 자리**에 있어야 한다(전자상거래법 ·

@@ -9,7 +9,7 @@ const onboardingSteps = ["가입 신청", "이메일 인증", "스튜디오 이�
 
 export function PublicLogo() {
   return (
-    <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="MCS 홈">
+    <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="FormWith 홈">
       {/*
         **색을 여기서 못 박는다.** 마크의 회색 둘은 `currentColor` 라 부모의
         글자색을 물려받는데, 푸터(`PublicFooter`)는 상자에
@@ -18,7 +18,7 @@ export function PublicLogo() {
       */}
       <BrandMark className="h-9 w-9 shrink-0 text-foreground" />
       <span className="flex min-w-0 flex-col gap-1 leading-none">
-        <strong className="truncate text-base font-bold tracking-[-0.02em]">MCS</strong>
+        <strong className="truncate text-base font-bold tracking-[-0.02em]">FormWith</strong>
         <em className="hidden text-[9px] not-italic tracking-[0.2em] text-muted-foreground sm:block">
           MARKETING CONTENT STUDIO
         </em>

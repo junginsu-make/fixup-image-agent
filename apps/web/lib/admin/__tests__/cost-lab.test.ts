@@ -289,6 +289,6 @@ describe("도구 자체", () => {
   });
 
   it("이 시스템의 화면이라고 적혀 있다", () => {
-    expect(html).toContain("<title>MCS 비용 전략실</title>");
+    expect(html).toContain("<title>FormWith 비용 전략실</title>");
   });
 });
