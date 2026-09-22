@@ -69,6 +69,28 @@ describe("계정 화면", () => {
   });
 });
 
+describe("사용 기록과 레이아웃", () => {
+  const page = read("app/settings/page.tsx");
+
+  /** 전에는 잔액 카드가 오른쪽 두 카드 높이만큼 빈 채로 늘어났다(2026-09-22 사용자 지적). */
+  it("칸마다 제 높이로 서고, 잔액 아래에 사용 기록이 온다", () => {
+    expect(page).toContain("items-start");
+    expect(page).toContain("<UsageHistoryCard");
+  });
+
+  it("사용 기록은 로그인한 본인 것만 읽는다", () => {
+    expect(page).toContain("readUsageHistory(membership.user.id)");
+    expect(page).toContain("readMyGrants(membership.user.id)");
+  });
+
+  /** 기록의 합과 잔액 카드의 「이번 달 사용」이 같은 규칙이어야 믿을 수 있다. */
+  it("합계를 잔액과 같은 규칙으로 셈하고 둘을 맞대 보인다", () => {
+    const card = read("app/settings/usage-history-card.tsx");
+    expect(card).toContain("monthlyCreditTotal(rows, periodStart)");
+    expect(card).toContain("total === usedThisMonth");
+  });
+});
+
 describe("가입", () => {
   const signup = read("app/signup/page.tsx");
   it("이름은 꼭, 추천인은 골라서 받는다", () => {

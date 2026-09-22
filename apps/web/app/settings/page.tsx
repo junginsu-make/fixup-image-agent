@@ -16,6 +16,8 @@ import { ClearLegacyKeys } from "./clear-legacy-keys";
 import { ProfileCard } from "./profile-card";
 import { LoginCard } from "./login-card";
 import { readProfileExtras } from "../../lib/membership/profile-store";
+import { readMyGrants, readUsageHistory } from "../../lib/membership/usage-store";
+import { UsageHistoryCard } from "./usage-history-card";
 import { isOwnerEmail, resolveOwnerEmail } from "../../lib/membership/owner";
 
 /**
@@ -28,7 +30,12 @@ import { isOwnerEmail, resolveOwnerEmail } from "../../lib/membership/owner";
 export default async function SettingsPage() {
   const membership = await requireActiveMember();
   const usage = await getUsageSummary(membership.user.id);
-  const extras = (await readProfileExtras([membership.user.id])).get(membership.user.id);
+  const [extrasById, history, grants] = await Promise.all([
+    readProfileExtras([membership.user.id]),
+    readUsageHistory(membership.user.id),
+    readMyGrants(membership.user.id),
+  ]);
+  const extras = extrasById.get(membership.user.id);
   const resetDate = new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
     year: "numeric",
@@ -64,7 +71,12 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)] gap-4 max-xl:grid-cols-1">
+      {/*
+        왼쪽은 잔액과 사용 기록, 오른쪽은 회원·로그인 정보다. 전에는 잔액 카드 하나가 오른쪽
+        두 카드 높이만큼 빈 채로 늘어났다(2026-09-22 사용자 지적). 칸마다 제 높이로 선다.
+      */}
+      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)] items-start gap-4 max-xl:grid-cols-1">
+        <div className="grid gap-4">
         {usage.pricingPolicy === "image-v2" ? <CreditWallet usage={usage} /> : <Card>
           <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
             <div className="min-w-0 space-y-1.5">
@@ -97,6 +109,9 @@ export default async function SettingsPage() {
             </p>
           </CardContent>
         </Card>}
+        {/* 옛 기준 계정이어도 기록은 보인다. 그 줄들은 「크레딧 적용 전」으로 따로 묶인다. */}
+        <UsageHistoryCard rows={history} grants={grants} periodStart={usage.periodStart} usedThisMonth={usage.pricingPolicy === "image-v2" ? usage.used : 0} unlimited={usage.unlimited === true} />
+        </div>
 
         <div className="grid gap-4">
           <ProfileCard email={membership.profile.email} name={extras?.displayName ?? null} referrer={extras?.referrer ?? null} joinedAt={membership.profile.created_at} />
