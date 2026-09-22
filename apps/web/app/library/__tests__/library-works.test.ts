@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  isWorkShowcased, libraryWorks, showcaseKindOf, TOOL_LABEL,
+  isWorkShowcased, libraryCharacterWorks, libraryWorks, showcaseKindOf, TOOL_LABEL,
 } from "../library-works";
 
 /**
@@ -151,5 +151,26 @@ describe("isWorkShowcased", () => {
   it("안 걸린 작업은 아니다", () => {
     expect(isWorkShowcased(걸린것, "create", "item-2")).toBe(false);
     expect(isWorkShowcased([], "create", "item-1")).toBe(false);
+  });
+});
+
+/**
+ * 캐릭터 만들기 결과 — **「캐릭터」 거르기를 골랐을 때만** 실린다(2026-09-22 사용자 요청).
+ * 「전체」에는 여전히 안 싣는다(위 「캐릭터는 싣지 않는다」).
+ */
+describe("libraryCharacterWorks", () => {
+  it("캐릭터 결과만 싣고, 캐릭터라고 표시한다", () => {
+    const works = libraryCharacterWorks([item, { ...item, id: "char-1", sourceType: "character" }]);
+    expect(works.map((work) => work.id)).toEqual(["char-1"]);
+    expect(works[0]!.origin).toBe("character");
+    expect(works[0]!.href).toBe("/library/works/char-1");
+  });
+
+  it("그림이 없는 캐릭터 결과는 싣지 않는다", () => {
+    expect(libraryCharacterWorks([{ ...item, sourceType: "character", imageCount: 0, coverUrl: null, coverThumbUrl: null }])).toEqual([]);
+  });
+
+  it("일반 작업에는 캐릭터 표시가 붙지 않는다", () => {
+    expect(libraryWorks([item])[0]!.origin).toBeUndefined();
   });
 });

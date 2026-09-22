@@ -25,6 +25,7 @@ import type { SnsProjectCreateRecord, SnsProjectRecord } from "../../sns/project
 import { listCharacters } from "../../../../lib/characters";
 import { ownerIdsOf, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
+import { collectEasyWorkIds } from "../../../../lib/easy/store-core";
 
 /**
  * 관리자가 보는 **모든 회원의 작업물** — 저장소를 만지는 쪽.
@@ -126,15 +127,36 @@ async function listAllPosterProjects() {
  * 것이 아니게 된다.
  */
 export async function listAllWorks(viewerId: string) {
-  if (isLocalStoreEnabled()) return { sns: [], poster: [] };
+  if (isLocalStoreEnabled()) return { sns: [], poster: [], easyWorkIds: [] };
 
-  const [sns, poster] = await Promise.all([listAllSnsProjects(), listAllPosterProjects()]);
+  const [sns, poster, easyWorkIds] = await Promise.all([
+    listAllSnsProjects(),
+    listAllPosterProjects(),
+    listAllEasyWorkIds(),
+  ]);
   const emails = await emailsByUserId(ownerIdsOf([...sns, ...poster]));
 
   return {
     sns: withOwner(sns, viewerId, emails),
     poster: withOwner(poster, viewerId, emails),
+    easyWorkIds,
   };
+}
+
+/**
+ * 모든 회원의 쉽게 대화가 만든 작업 id (2026-09-22 라이브러리 필터).
+ *
+ * 라이브러리가 쉽게와 다양하게를 가르는 데 쓴다. **id 만 읽는다** — 대화 내용은
+ * 회원이 친 말이라 관리자 목록에도 싣지 않는다.
+ */
+async function listAllEasyWorkIds(): Promise<string[]> {
+  const admin = createSupabaseAdminClient();
+  return collectEasyWorkIds((from, to) => admin
+    .from("easy_messages")
+    .select("work_id")
+    .not("work_id", "is", null)
+    .order("id")
+    .range(from, to));
 }
 
 /**

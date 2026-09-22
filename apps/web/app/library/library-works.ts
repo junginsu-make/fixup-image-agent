@@ -90,6 +90,8 @@ export interface LibraryWork {
   intent: string;
   settings: Array<[string, string]>;
   href: string;
+  /** 캐릭터 만들기로 만든 것. 도구 칸(`create`)으로는 못 가른다(`work-filter.ts`). */
+  origin?: "character";
 }
 
 export function libraryWorks(items: readonly LibraryListItem[]): LibraryWork[] {
@@ -100,36 +102,57 @@ export function libraryWorks(items: readonly LibraryListItem[]): LibraryWork[] {
       캐릭터 탭과 작업물 탭에 같은 것이 두 번 보인다.
     */
     .filter((item) => item.sourceType !== "character")
-    // 표지도 없고 열 것도 없는 행. 카드만 덩그러니 서면 눌러도 빈 창이 열린다.
-    .filter((item) => item.imageCount > 0 || item.coverUrl || item.coverThumbUrl)
-    .map((item) => ({
-      id: item.id,
-      tool: item.tool,
-      title: item.title,
-      // 계정 보관분은 만들어진 뒤에 올라온 것이라 늘 완료다.
-      status: "done",
-      createdAt: item.createdAt,
-      updatedAt: item.createdAt,
-      ownerEmail: item.ownerEmail,
-      mine: item.mine,
-      cover: coverOf({ url: item.coverUrl, thumbUrl: item.coverThumbUrl }),
-      imageCount: item.imageCount,
-      /*
-        **낱장은 여기서 싣지 않는다.** 한 작업에 스무 장까지 들어가는데 목록에서
-        전부 서명해 실으면 첫 화면이 다시 무거워진다 — 사용자가 「끊긴다」고
-        말한 그 증상이다. 열 때 `/api/library?id=` 로 받는다.
-      */
-      images: [],
-      intent: "",
-      settings: [
-        ...(item.aspectRatio ? ([["비율", item.aspectRatio]] as Array<[string, string]>) : []),
-        ["장수", `${item.imageCount}장`],
-      ],
-      /*
-        **도구 화면으로 보내지 않는다.** 계정 보관분은 브라우저 초안이 아니라
-        이어서 편집할 수 없다(`library/page.tsx`). `/create` 로 보내면 「저장된
-        작업을 찾지 못했습니다」가 뜬다 — 예전에 실제로 그랬다.
-      */
-      href: `/library/works/${item.id}`,
-    }));
+    .filter(hasPicture)
+    .map(toLibraryWork);
+}
+
+/**
+ * 캐릭터 만들기 결과. **「캐릭터」 거르기를 골랐을 때만 보인다**(2026-09-22 사용자 요청).
+ *
+ * 「전체」에는 넣지 않는다 — 위 `libraryWorks` 가 뺀 까닭 그대로, 캐릭터 탭과 두 번
+ * 보인다. 거르기가 그 규칙을 지킨다(`work-filter.ts`).
+ */
+export function libraryCharacterWorks(items: readonly LibraryListItem[]): LibraryWork[] {
+  return items
+    .filter((item) => item.sourceType === "character")
+    .filter(hasPicture)
+    .map((item) => ({ ...toLibraryWork(item), origin: "character" as const }));
+}
+
+// 표지도 없고 열 것도 없는 행. 카드만 덩그러니 서면 눌러도 빈 창이 열린다.
+function hasPicture(item: LibraryListItem): boolean {
+  return item.imageCount > 0 || Boolean(item.coverUrl || item.coverThumbUrl);
+}
+
+function toLibraryWork(item: LibraryListItem): LibraryWork {
+  return {
+    id: item.id,
+    tool: item.tool,
+    title: item.title,
+    // 계정 보관분은 만들어진 뒤에 올라온 것이라 늘 완료다.
+    status: "done",
+    createdAt: item.createdAt,
+    updatedAt: item.createdAt,
+    ownerEmail: item.ownerEmail,
+    mine: item.mine,
+    cover: coverOf({ url: item.coverUrl, thumbUrl: item.coverThumbUrl }),
+    imageCount: item.imageCount,
+    /*
+      **낱장은 여기서 싣지 않는다.** 한 작업에 스무 장까지 들어가는데 목록에서
+      전부 서명해 실으면 첫 화면이 다시 무거워진다 — 사용자가 「끊긴다」고
+      말한 그 증상이다. 열 때 `/api/library?id=` 로 받는다.
+    */
+    images: [],
+    intent: "",
+    settings: [
+      ...(item.aspectRatio ? ([["비율", item.aspectRatio]] as Array<[string, string]>) : []),
+      ["장수", `${item.imageCount}장`],
+    ],
+    /*
+      **도구 화면으로 보내지 않는다.** 계정 보관분은 브라우저 초안이 아니라
+      이어서 편집할 수 없다(`library/page.tsx`). `/create` 로 보내면 「저장된
+      작업을 찾지 못했습니다」가 뜬다 — 예전에 실제로 그랬다.
+    */
+    href: `/library/works/${item.id}`,
+  };
 }
