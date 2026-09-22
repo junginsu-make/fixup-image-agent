@@ -311,7 +311,8 @@ export function SectionResultCard({
                 type="button"
                 className={cn(
                   "h-7 shrink-0 rounded-full border border-border bg-card px-2 text-[11px] font-bold text-muted-foreground",
-                  revisionPosition === revisionIndex && "border-primary bg-primary text-primary"
+                  // 고른 것이 배경과 같은 색이라 안 보였다. 저장소의 짝을 쓴다(2026-09-22).
+                  revisionPosition === revisionIndex && "border-primary bg-primary text-primary-foreground"
                 )}
                 onClick={() => setRevisionIndex(revisionPosition)}
               >
@@ -384,16 +385,10 @@ export function GenerationProgressPanel({
   currentIndex: number;
   onCancel: () => void;
 }) {
-  const isWaiting = progress.percent >= 96;
   const isLongWait = progress.elapsedSeconds >= 120;
   const generationTitle = count > 1
     ? `${count}장 중 ${currentIndex}번째 이미지 생성중입니다.`
     : `${modelLabel} · ${count}장 생성`;
-  const statusLabel = isWaiting
-    ? isLongWait
-      ? "AI가 마무리 작업 중 · 조금 더 걸리고 있어요"
-      : "AI가 마무리 작업 중"
-    : `${progress.percent}%`;
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-card/55 p-4 backdrop-blur-sm">
@@ -404,21 +399,34 @@ export function GenerationProgressPanel({
             <h2 className="mt-1 text-base font-bold">{generationTitle}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{count > 1 ? `${modelLabel} · ` : ""}경과 {formatDuration(progress.elapsedSeconds)}</p>
           </div>
+          {/*
+            **아는 것만 센다**(2026-09-22). 전에는 경과 시간으로 퍼센트를
+            지어내 4~96 사이에 가뒀다. 늦어지면 96% 에 붙어 「예상 5초 남음」을
+            영원히 되풀이했다. 지금은 전사 배치처럼 실제로 셀 수 있는 구간에만
+            숫자가 있다.
+          */}
           <div className="text-right">
-            <strong className={cn("block leading-none", isWaiting ? "text-base" : "text-2xl")}>{statusLabel}</strong>
-            <span className="mt-1 block text-xs text-muted-foreground">
-              {isWaiting ? "AI가 이미지 최적화 작업을 진행중입니다." : `예상 ${formatDuration(progress.remainingSeconds)} 남음`}
-            </span>
+            {progress.kind === "determinate" ? (
+              <strong className="block text-2xl leading-none">{progress.percent}%</strong>
+            ) : null}
+            <span className="mt-1 block text-xs text-muted-foreground">{progress.note}</span>
           </div>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
-            style={{ width: `${progress.percent}%` }}
-          />
-        </div>
+        {progress.kind === "determinate" ? (
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
+              style={{ width: `${progress.percent ?? 0}%` }}
+            />
+          </div>
+        ) : (
+          /* 진척을 모르는 구간이다. 채우는 대신 흐르게 둔다 — 상세페이지와 같은 방식이다. */
+          <div className="relative h-2 overflow-hidden rounded-full bg-muted">
+            <div className="absolute inset-y-0 w-1/3 animate-[pdp-indeterminate_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
+          </div>
+        )}
         <div className="mt-3 grid grid-cols-[160px_minmax(0,1fr)] gap-3 text-sm max-sm:grid-cols-1">
-          <div className="rounded-md bg-primary px-3 py-2 font-bold text-primary">{progress.phase}</div>
+          <div className="rounded-md bg-primary px-3 py-2 font-bold text-primary-foreground">{progress.label}</div>
           <div className="rounded-md border border-border bg-card px-3 py-2 leading-relaxed text-muted-foreground">
             {isLongWait && modelLabel === models.openai.label
               ? "정밀형은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다. 특히 긴 상세페이지 캡처나 참조 이미지가 여러 장이면 응답 시간이 길어질 수 있어요."
@@ -442,14 +450,6 @@ export function estimateGenerationSeconds(model: Model, count: number) {
   const setupSeconds = 24;
   const perImageSeconds = model === "google" ? 78 : 65;
   return setupSeconds + Math.max(1, count) * perImageSeconds;
-}
-
-export function generationPhase(percent: number, elapsedSeconds: number) {
-  if (percent >= 96) return elapsedSeconds >= 120 ? "최종 최적화 중" : "마무리 작업";
-  if (percent < 15) return "원본 변환";
-  if (percent < 32) return "프롬프트 구성";
-  if (percent < 76) return "이미지 API 처리";
-  return "결과 수신 준비";
 }
 
 export function formatDuration(seconds: number) {

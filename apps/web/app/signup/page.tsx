@@ -140,8 +140,8 @@ export default function SignupPage() {
           <div className="space-y-1.5"><Label htmlFor="password">비밀번호</Label><Input id="password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="confirm">비밀번호 확인</Label><Input id="confirm" type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} /></div>
           <div className="space-y-1.5">
-            <Label htmlFor="referrer">추천인 <span className="font-normal text-muted-foreground">· 선택</span></Label>
-            <Input id="referrer" maxLength={PROFILE_LIMITS.referrer} placeholder="추천인 이름이나 추천 코드" value={referrer} onChange={(e) => setReferrer(e.target.value)} />
+            <Label htmlFor="referrer">추천코드 <span className="font-normal text-muted-foreground">· 선택</span></Label>
+            <Input id="referrer" maxLength={PROFILE_LIMITS.referrer} placeholder="받으신 추천코드" value={referrer} onChange={(e) => setReferrer(e.target.value)} />
           </div>
           <Turnstile key={captchaVersion} onToken={setCaptchaToken} />
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}

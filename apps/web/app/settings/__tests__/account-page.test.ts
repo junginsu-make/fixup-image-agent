@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 /**
  * **계정 화면(마이페이지)** — 2026-09-22 사용자 요청.
  *
- * 이름·이메일·비밀번호·추천인을 보고 고친다. 「내 디자인 레퍼런스」는 뺀다(라이브러리가
- * 같은 일을 한다). 관리자 회원 관리에서도 이름·추천인을 보고, 비밀번호를 재설정 메일이나
+ * 이름·이메일·비밀번호·추천코드을 보고 고친다. 「내 디자인 레퍼런스」는 뺀다(라이브러리가
+ * 같은 일을 한다). 관리자 회원 관리에서도 이름·추천코드을 보고, 비밀번호를 재설정 메일이나
  * 직접 지정으로 바꾼다.
  */
 const web = join(__dirname, "..", "..", "..");
@@ -21,7 +21,7 @@ describe("계정 화면", () => {
     expect(page).toContain('href="/library"');
   });
 
-  it("이름·추천인을 보여 주고 고친다", () => {
+  it("이름·추천코드을 보여 주고 고친다", () => {
     expect(page).toContain("<ProfileCard");
     expect(read("app/settings/profile-card.tsx")).toContain("updateMyProfile");
   });
@@ -64,7 +64,7 @@ describe("계정 화면", () => {
   });
 
   /** 모든 화면이 쓰는 회원 조회에 새 칸을 넣으면, 마이그레이션 전 서버에서 전부 죽는다. */
-  it("이름·추천인은 따로 읽는다 — 공용 회원 조회에 안 넣는다", () => {
+  it("이름·추천코드은 따로 읽는다 — 공용 회원 조회에 안 넣는다", () => {
     expect(read("lib/membership/server.ts")).not.toContain("display_name");
   });
 });
@@ -106,7 +106,7 @@ describe("사용 기록과 레이아웃", () => {
 
 describe("가입", () => {
   const signup = read("app/signup/page.tsx");
-  it("이름은 꼭, 추천인은 골라서 받는다", () => {
+  it("이름은 꼭, 추천코드은 골라서 받는다", () => {
     expect(signup).toContain('htmlFor="name"');
     expect(signup).toContain('htmlFor="referrer"');
     expect(signup).toContain("display_name: cleanProfileText(name");
@@ -115,10 +115,10 @@ describe("가입", () => {
 });
 
 describe("관리자 회원 관리", () => {
-  it("한 줄에 이름·추천인이 보인다", () => {
+  it("한 줄에 이름·추천코드이 보인다", () => {
     const table = read("app/admin/member-list/member-table.tsx");
     expect(table).toContain("row.name");
-    expect(table).toContain("추천인(적은 값)");
+    expect(table).toContain("추천코드(적은 값)");
   });
 
   it("비밀번호를 재설정 메일과 직접 지정으로 바꾼다", () => {

@@ -105,11 +105,21 @@ export type GenerationPlan = {
   startedAt: number;
 };
 
+/**
+ * 대기 화면이 말하는 것.
+ *
+ * **퍼센트는 선택이다**(2026-09-22). 전에는 `percent` 가 필수라 모르는 구간
+ * 에서도 값을 지어내야 했다 — 경과 시간으로 채우고 4~96 사이에 가뒀다.
+ * 지금은 아는 구간(전사 배치)에만 있다. 판단은 `generation-progress.ts` 다.
+ */
 export type GenerationProgress = {
-  percent: number;
+  kind: "determinate" | "indeterminate";
+  percent?: number;
+  /** 지금 하는 일. */
+  label: string;
+  /** 시간에 대해 할 수 있는 말. 할 말이 없으면 빈 문자열이다. */
+  note: string;
   elapsedSeconds: number;
-  remainingSeconds: number;
-  phase: string;
   tip: string;
 };
 
