@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * 비용 전략실 문서를 창(`iframe`)에 내준다.
+ * 비용 전략 문서를 창(`iframe`)에 내준다.
  *
  * 주소 모양이 파일 이름 그대로인 이유가 있다 — 도구 안에서 두 문서가
  * **상대 경로로 서로를 건다**(`href="index.html"`). 그래야 그 링크가 그냥
@@ -61,7 +61,7 @@ export async function GET(_request: Request, context: { params: Promise<{ file: 
       빠져 꾸러미에 안 담긴 것. 빈 화면을 주면 도구가 고장 난 줄 알고 계산을
       의심하게 된다.
     */
-    return new Response("비용 전략실 파일을 찾지 못했습니다. 배포 꾸러미를 확인해 주세요.", {
+    return new Response("비용 전략 파일을 찾지 못했습니다. 배포 꾸러미를 확인해 주세요.", {
       status: 500,
       headers: { "content-type": "text/plain; charset=utf-8" },
     });

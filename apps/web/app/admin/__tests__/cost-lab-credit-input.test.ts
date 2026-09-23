@@ -33,12 +33,15 @@ const 코드만 = (body: string) =>
 
 describe("계산은 크레딧을 이미 입력으로 받는다", () => {
   it("**크레딧을 바꾸면 가격이 따라온다**", () => {
-    const [plan] = pricePlans([{ ...PLAN_DEFAULTS[0]!, credits: 100 }]);
+    // 확정값이 바뀌어도 이 규칙은 같다. 그래서 값을 직접 준다.
+    const 기준 = { id: "basic", name: "Basic", targetPct: 53.4, discountPct: 0 };
+    const [작게] = pricePlans([{ ...기준, credits: 75 }]);
+    const [크게] = pricePlans([{ ...기준, credits: 100 }]);
 
-    // 100개 × 450원 원가에 같은 목표 마진(53.4%)을 얹은 값.
-    expect(plan!.credits).toBe(100);
-    expect(plan!.listPrice).toBe(120_000);
-    expect(plan!.unitPrice).toBe(1_200);
+    expect(작게!.listPrice).toBe(90_000);
+    expect(크게!.listPrice).toBe(120_000);
+    // 1개당은 그대로다. 목표 마진을 지키기 때문이다.
+    expect(크게!.unitPrice).toBe(1_200);
   });
 
   /**
@@ -49,8 +52,8 @@ describe("계산은 크레딧을 이미 입력으로 받는다", () => {
     const [작게] = pricePlans([{ ...PLAN_DEFAULTS[0]!, credits: 45 }]);
     const [크게] = pricePlans([{ ...PLAN_DEFAULTS[0]!, credits: 450 }]);
 
-    expect(작게!.usage).toEqual({ pdp: 5, cardnews: 5, images: 45, print: 22 });
-    expect(크게!.usage).toEqual({ pdp: 50, cardnews: 56, images: 450, print: 225 });
+    expect(작게!.usage).toEqual({ pdp: 5, cardnews: 9, images: 45, print: 22 });
+    expect(크게!.usage).toEqual({ pdp: 50, cardnews: 90, images: 450, print: 225 });
   });
 
   it("**크레딧은 정수만 받는다** — 0.5개짜리 크레딧은 없다", () => {
