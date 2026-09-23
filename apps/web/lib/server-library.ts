@@ -3,6 +3,11 @@ import { scopedRead, type ViewScope } from "./teams/scope";
 import { isLocalStoreEnabled } from "./local-store";
 import { encodeForStorage, makeThumbnail, sniffImageMime } from "./image-encoding";
 import { markAsAi } from "./watermark";
+import { appendDecision } from "./library-append";
+import { randomUUID } from "node:crypto";
+
+/** 같은 자리에 다른 요청이 먼저 붙였다. 되돌린 뒤 「어긋남」으로 답하려고 구별한다. */
+class PositionTakenError extends Error {}
 import type { UserRole } from "./membership/types";
 import { hasFullScope, ownerFilter, type ScopeAction } from "./access/core";
 
@@ -16,7 +21,7 @@ import { hasFullScope, ownerFilter, type ScopeAction } from "./access/core";
  * 이미지는 Storage 버킷 'library' 에, 메타데이터만 테이블에 둔다. 섹션 이미지
  * 한 장이 2~5MB라 base64 로 행에 넣으면 목록 조회조차 느려진다.
  *
- * 경로는 `{user_id}/{item_id}/{position}.{ext}` 다. 첫 칸이 소유자라
+ * 경로는 `{user_id}/{item_id}/{position}-{요청표시}.{ext}` 다. 첫 칸이 소유자라
  * Storage 정책이 경로만 보고 판정한다 — 조인하다 실수할 여지를 없앤다.
  *
  * **여기서 읽고 쓰는 것은 전부 admin 클라이언트다.** 그러므로 RLS 는 이 길에
@@ -233,6 +238,15 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
 
   const uploaded: string[] = [];
   let coverThumbPath: string | null = null;
+  /*
+    **요청마다 파일 이름을 다르게 한다**(2차 독립 리뷰 HIGH).
+
+    같은 작업에 두 요청이 겹치면(탭 두 개, 다시 그려진 편집기) 둘 다 같은
+    자리 번호를 쓴다. 이름이 같으면 늦은 쪽이 실패해 되돌릴 때 **먼저 성공한
+    쪽의 파일을 지운다** — 목록은 「저장됨」인데 그림이 없다. 경로는 표
+    (`library_images.path`)에 적혀 읽히므로 이름 규칙에 기대는 곳이 없다.
+  */
+  const batchTag = randomUUID().slice(0, 8);
 
   try {
     const rows = [];
@@ -244,7 +258,7 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
       // 줄여 놓은 것을 다시 부풀린 채로 저장하게 된다.
       const { bytes, mimeType } = await encodeForStorage(marked, image.mimeType);
 
-      const path = `${input.userId}/${item.id}/${position}.${extensionFor(mimeType)}`;
+      const path = `${input.userId}/${item.id}/${position}-${batchTag}.${extensionFor(mimeType)}`;
       const { error } = await supabase.storage
         .from(BUCKET)
         .upload(path, bytes, { contentType: mimeType, upsert: true });
@@ -261,7 +275,7 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
       const thumbnail = candidate && candidate.length < bytes.length ? candidate : null;
       let thumbPath: string | null = null;
       if (thumbnail) {
-        thumbPath = `${input.userId}/${item.id}/${position}.thumb.webp`;
+        thumbPath = `${input.userId}/${item.id}/${position}-${batchTag}.thumb.webp`;
         const { error: thumbError } = await supabase.storage
           .from(BUCKET)
           .upload(thumbPath, thumbnail, { contentType: "image/webp", upsert: true });
@@ -289,13 +303,17 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
     }
 
     const { error: imagesError } = await supabase.from("library_images").insert(rows);
-    if (imagesError) throw new Error(imagesError.message);
+    if (imagesError) {
+      // 같은 자리에 다른 요청이 먼저 붙였다. 내 파일만 되돌리고 「어긋남」으로 답한다.
+      if (imagesError.code === "23505") throw new PositionTakenError();
+      throw new Error(imagesError.message);
+    }
 
     /**
      * 표지는 **첫 장일 때만** 정한다. 이어 붙일 때 덮으면 두 번째 섹션이
      * 표지가 되어, 목록에서 페이지가 중간부터 시작하는 것처럼 보인다.
      */
-    await supabase
+    const { error: countError } = await supabase
       .from("library_items")
       .update(
         appendTo
@@ -307,6 +325,9 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
             },
       )
       .eq("id", item.id);
+    // 그림과 행은 들어갔다. 장수는 이어 붙일 때 행을 직접 세므로(`findLibraryItemBySource`)
+    // 여기서 실패해도 되돌리지 않는다 — 되돌리면 멀쩡히 저장된 것을 잃는다.
+    if (countError) console.error("[library:count]", countError.message);
 
     return { ok: true as const, id: item.id as string, imageCount: rows.length };
   } catch (error) {
@@ -317,10 +338,15 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
      * 섹션들이 그 안에 있다. 이번에 올리던 것만 되돌린다.
      */
     if (!appendTo) await supabase.from("library_items").delete().eq("id", item.id);
-    return {
-      ok: false as const,
-      message: error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.",
-    };
+    if (error instanceof PositionTakenError) {
+      return { ok: false as const, conflict: true, message: "다른 곳에서 먼저 저장했습니다. 다시 눌러 주세요." };
+    }
+    /*
+      **DB·저장소 문구를 화면에 흘리지 않는다.** 제약·표 이름이 그대로 나간다
+      (`route.ts` 와 같은 원칙). 로그에만 남긴다.
+    */
+    console.error("[library:save-item]", error);
+    return { ok: false as const, message: "저장 중 오류가 발생했습니다." };
   }
 }
 
@@ -331,28 +357,89 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
  * 목록에 같은 페이지가 여덟 줄로 흩어진다. 한 줄로 모으려면 「이 장이 어느
  * 작업의 것인가」를 알아야 하는데, 그 열쇠가 `sourceId`(화면의 프로젝트 id)다.
  *
- * **`sourceId` 가 없으면 지금까지처럼 새로 만든다.** 상세페이지는 한 번에
- * 여러 장을 올리므로 이어 붙일 일이 없다.
+ * **`sourceId` 가 없으면 지금까지처럼 새로 만든다.**
+ *
+ * 상세페이지도 이제 쓴다. 한 요청이 10MB 를 넘으면 앞단이 잘라, 여러 장을
+ * 나눠 보내며 한 작업에 모은다(2026-09-23).
  */
-export async function saveOrAppendLibraryItem(input: SaveLibraryItemInput) {
+export async function saveOrAppendLibraryItem(
+  input: SaveLibraryItemInput & {
+    /**
+     * 이 묶음이 **몇 번째 장부터**인가. 주면 서버가 이미 있는 장수와 대조해
+     * 같은 장을 두 번 붙이지 않는다(`appendDecision`). 상세페이지가 준다.
+     * 안 주면 지금까지처럼 뒤에 붙인다 — 리디자인이 그렇게 부른다.
+     */
+    startPosition?: number;
+  },
+) {
   if (!input.sourceId) return saveLibraryItem(input);
 
-  const supabase = createSupabaseAdminClient();
-  const { data: existing } = await supabase
-    .from("library_items")
-    .select("id,image_count")
-    .eq("user_id", input.userId)
-    .eq("tool", input.tool)
-    .eq("source_id", input.sourceId)
-    .maybeSingle();
+  const existing = await findLibraryItemBySource(input.userId, input.tool, input.sourceId);
+  const decision = appendDecision({
+    existingCount: existing ? existing.imageCount : null,
+    startPosition: input.startPosition,
+    count: input.images.length,
+  });
 
-  if (!existing) return saveLibraryItem(input);
-
-  const row = existing as { id: string; image_count: number | null };
+  if (decision.kind === "already") {
+    // 다시 보낸 것이다. 성공으로 답해야 화면이 다음 묶음으로 넘어간다.
+    return { ok: true as const, id: existing?.id ?? "", imageCount: 0, totalCount: decision.imageCount, alreadySaved: true };
+  }
+  if (decision.kind === "conflict") {
+    return {
+      ok: false as const,
+      conflict: true,
+      totalCount: decision.imageCount,
+      message: "라이브러리에 저장된 장수가 달라 이어서 올리지 못했습니다. 다시 눌러 주세요.",
+    };
+  }
+  if (decision.kind === "create" || !existing) return saveLibraryItem(input);
   return saveLibraryItem({
     ...input,
-    appendTo: { itemId: row.id, startPosition: Math.max(0, row.image_count ?? 0) },
+    appendTo: { itemId: existing.id, startPosition: decision.startPosition },
   });
+}
+
+/**
+ * 같은 작업(`sourceId`)이 이미 있으면 그 id 와 장수. **자기 것만** 찾는다.
+ *
+ * 화면이 올리기 전에 「몇 장까지 있나」를 묻는 데도 쓴다 — 다시 연 초안이
+ * 이미 올린 장을 굽고 보내는 수고를 덜어 준다.
+ */
+export async function findLibraryItemBySource(
+  userId: string,
+  tool: SaveLibraryItemInput["tool"],
+  sourceId: string,
+): Promise<{ id: string; imageCount: number } | null> {
+  const supabase = createSupabaseAdminClient();
+  /*
+    **가장 오래된 한 줄을 고른다.** 표에 `(user_id, tool, source_id)` 고유
+    제약이 없어, 첫 저장 둘이 겹치면 줄이 둘 생길 수 있다. 그때 `maybeSingle`
+    은 오류와 빈 값을 주고, 빈 값을 「없음」으로 읽으면 저장할 때마다 줄이 하나씩
+    더 생긴다(2차 독립 리뷰). **오류는 던진다** — 「없음」과 「모름」은 다르다.
+  */
+  const { data, error } = await supabase
+    .from("library_items")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("tool", tool)
+    .eq("source_id", sourceId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const row = (data ?? [])[0] as { id: string } | undefined;
+  if (!row) return null;
+
+  /*
+    **장수는 행을 직접 센다.** `image_count` 갱신이 실패하면 낡은 수가 남고,
+    그 수를 믿고 이어 붙이면 자리가 겹친다.
+  */
+  const { count, error: countError } = await supabase
+    .from("library_images")
+    .select("id", { count: "exact", head: true })
+    .eq("item_id", row.id);
+  if (countError) throw new Error(countError.message);
+  return { id: row.id, imageCount: Math.max(0, count ?? 0) };
 }
 
 /**

@@ -345,20 +345,17 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
       hierarchy: "headline 2.5-3x the subheadline",
       render_exactly: true,
       readability: "must stay readable when scaled down to a 390px phone; no clipped or ellipsised Korean",
-    };
+      /*
+        **신뢰문구(`trust_or_objection_line`)를 그리지 않는다**(2026-09-23 사용자).
 
-    // 신뢰문구는 망설임을 덮는 한 줄이다("민감한 피부도 부담 없이"). 이것 없이 장점만
-    // 나열하면 페이지가 광고로만 읽힌다. 그런데 아예 전달되지 않고 있었다.
-    //
-    // 제목·불릿과 같은 무게로 두면 안 된다. 크게 그리면 셋이 서로 주인 자리를 다투고,
-    // 그러다 제목이 잘린다. 역할과 위치를 함께 지정한다.
-    if (section.trust_or_objection_line) {
-      (brief.typography as Record<string, unknown>).reassurance_line = {
-        text: section.trust_or_objection_line,
-        role: "quietly answers the hesitation a buyer has at this point",
-        treatment: "one small line, below the point cards, subdued colour — never a heading",
-      };
-    }
+        전에는 「카드 아래 작은 한 줄」로 그리게 했다. 그랬더니 완성본 밑에
+        「총 제공 횟수와 섭취량은 별도 상품 정보에서 확인하세요」 같은 설명이
+        박혀 나왔다 — 사용자가 필요 없다고 한 그 줄이다. 섹션 설명
+        (`section.role`·`message`)도 같은 식으로 옮겨 그려질 수 있어 함께 막는다.
+      */
+      no_other_text:
+        "draw only the headline, subheadline and point_cards above — no captions, footnotes, disclaimers or explanatory sentences anywhere else",
+    };
 
     // CTA("지금 확인하기")는 싣지 않는다. 사용자 결정(2026-07-30):
     // 이미지에 그려 넣으면 눌리지 않는 그림 버튼이 되고, 섹션마다 반복되면 페이지가

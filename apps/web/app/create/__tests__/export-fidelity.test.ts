@@ -115,7 +115,7 @@ describe("화면이 실제로 쓰는가", () => {
       .join(String.fromCharCode(10));
 
     expect(저장함수).not.toContain("Promise.all");
-    expect(저장함수).toContain("for (const section of saved)");
+    expect(저장함수).toContain("for (const { section, index } of libraryEntries");
   });
 
   it("**한 장이 실패해도 나머지를 살린다**", () => {

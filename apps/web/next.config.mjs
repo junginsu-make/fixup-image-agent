@@ -58,6 +58,18 @@ const nextConfig = {
   // 수집 어댑터 중 커뮤니티 크롤러가 playwright 를 쓴다. 번들에 넣으려 하면
   // chromium-bidi 를 못 찾아 빌드가 깨진다. 서버에서 그대로 require 하게 둔다.
   serverExternalPackages: ["playwright", "playwright-core"],
+  experimental: {
+    /*
+      **미들웨어가 요청 본문을 10MB 에서 자른다**(기본값). 잘린 JSON 은 못
+      읽어 라우트가 500 을 낸다 — 2026-09-23 라이브러리 저장이 통째로 이렇게
+      실패했다(`Request body exceeded 10MB for /api/library`).
+
+      화면은 이미 7MB 씩 나눠 보낸다(`app/create/library-save.ts`). 이 값은
+      **한 장이 그보다 큰 경우**의 여유다 — 원본 PNG 한 장이 9MB 면 base64 로
+      12MB 가 되고, 그 한 장은 더 나눌 수 없다.
+    */
+    middlewareClientMaxBodySize: "16mb",
+  },
   webpack: (config) => {
     // 이식한 코어가 ESM 관례대로 상대 import에 .js 확장자를 쓴다(소스는 .ts).
     // webpack이 .js 지정자를 .ts로도 해석하도록 매핑한다(typecheck는 bundler 해석으로 이미 통과).

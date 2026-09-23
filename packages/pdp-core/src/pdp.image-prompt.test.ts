@@ -156,17 +156,24 @@ describe("full-image 모드가 카피를 온전히 넘긴다", () => {
     expect(brief.typography.point_cards).toEqual(["첫째", "둘째"]);
   });
 
-  it("신뢰문구를 넘기고, 조용한 한 줄로 다루라고 말한다", () => {
-    const section = makeSection({ trust_or_objection_line: "민감한 피부도 부담 없이 씁니다" });
-    const brief = JSON.parse(buildImageJson(section, opts));
-    expect(brief.typography.reassurance_line.text).toBe("민감한 피부도 부담 없이 씁니다");
-    // 제목·불릿과 같은 무게로 두면 셋이 주인 자리를 다투다 제목이 잘린다.
-    expect(brief.typography.reassurance_line.treatment).toContain("never a heading");
+  /*
+    **이미지 아래 설명 한 줄을 그리지 않는다**(2026-09-23 사용자).
+
+    신뢰문구를 「카드 아래 작은 한 줄」로 그리게 했더니, 완성본 밑에
+    「총 제공 횟수와 섭취량은 별도 상품 정보에서 확인하세요」 같은 안내가
+    박혀 나왔다. 상세페이지 이미지에는 필요 없는 설명이다.
+  */
+  it("신뢰문구를 그림에 싣지 않는다", () => {
+    const section = makeSection({ trust_or_objection_line: "총 제공 횟수는 별도 상품 정보에서 확인하세요" });
+    const raw = buildImageJson(section, opts);
+    expect(raw).not.toContain("총 제공 횟수는 별도 상품 정보에서 확인하세요");
+    expect(JSON.parse(raw).typography.reassurance_line).toBeUndefined();
   });
 
-  it("신뢰문구가 없으면 그 항목을 넣지 않는다", () => {
+  it("제목·부제·포인트 카드 말고는 글자를 그리지 말라고 말한다", () => {
     const brief = JSON.parse(buildImageJson(makeSection(), opts));
-    expect(brief.typography.reassurance_line).toBeUndefined();
+    // 섹션 설명(`section.role`·`message`)이나 규제 메모를 문장으로 옮겨 그리지 않게 한다.
+    expect(brief.typography.no_other_text).toContain("no captions");
   });
 
   it("CTA 는 싣지 않는다", () => {

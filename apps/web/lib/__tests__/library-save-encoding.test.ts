@@ -134,9 +134,9 @@ describe("saveLibraryItem — 저장 형식", () => {
     });
 
     expect(uploads).toHaveLength(2);
-    expect(uploads[0]!.path).toMatch(/\/0\.webp$/);
+    expect(uploads[0]!.path).toMatch(/\/0-[0-9a-f]{8}\.webp$/);
     expect(uploads[0]!.contentType).toBe("image/webp");
-    expect(uploads[1]!.path).toMatch(/\/1\.jpg$/);
+    expect(uploads[1]!.path).toMatch(/\/1-[0-9a-f]{8}\.jpg$/);
     expect(uploads[1]!.contentType).toBe("image/jpeg");
     expect(insertedImageRows[0]!.mime_type).toBe("image/webp");
     expect(insertedImageRows[1]!.mime_type).toBe("image/jpeg");

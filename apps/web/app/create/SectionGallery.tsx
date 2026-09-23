@@ -67,6 +67,13 @@ interface SectionGalleryProps {
   onGenerate: (index: number) => void;
   onGenerateAllMissing: () => void;
   onEdit: (index: number) => void;
+  /**
+   * 이 장만 내려받는다. 얹은 글자까지 구운 완성본은 편집기가 굽는다.
+   *
+   * 전에는 도구 막대의 「현재 섹션 다운로드」뿐이었는데, 갤러리에서는 그것이
+   * 늘 첫 장이었다(2026-09-23 사용자). 확대 창이 자기 장 번호로 부른다.
+   */
+  onDownload: (index: number) => Promise<void> | void;
   onMove: (from: number, to: number) => void;
   onDelete: (index: number) => void;
   onAdd: () => void;
@@ -121,6 +128,7 @@ export function SectionGallery({
   onGenerate,
   onGenerateAllMissing,
   onEdit,
+  onDownload,
   onMove,
   onDelete,
   onAdd,
@@ -182,6 +190,17 @@ export function SectionGallery({
   // 실패해도 조용히 넘기지 않는다 — 저장된 줄 알고 넘어가면 나중에 없어서 당황한다.
   const [savingReference, setSavingReference] = useState(false);
   const [referenceNotice, setReferenceNotice] = useState("");
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadZoomed = async () => {
+    if (zoomIndex === null || downloading) return;
+    setDownloading(true);
+    try {
+      await onDownload(zoomIndex);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const saveAsReference = async (section: SectionBlueprint | null, index: number) => {
     if (!section?.generatedImage || savingReference) return;
@@ -563,6 +582,10 @@ export function SectionGallery({
             className="mx-auto flex w-full max-w-5xl flex-none justify-center gap-2 pt-3"
             onClick={(event) => event.stopPropagation()}
           >
+            <Button size="sm" disabled={downloading} onClick={() => void downloadZoomed()}>
+              {downloading ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : null}
+              이 이미지 다운로드
+            </Button>
             <Button
               variant="outline"
               size="sm"

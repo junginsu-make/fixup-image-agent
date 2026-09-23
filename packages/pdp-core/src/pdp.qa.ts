@@ -93,8 +93,6 @@ export function buildQaPrompt(
     approved.headline ? `headline: ${sanitizeCopy(approved.headline)}` : "",
     approved.subheadline ? `subheadline: ${sanitizeCopy(approved.subheadline)}` : "",
     ...approved.bullets.map((bullet, index) => `bullet[${index}]: ${sanitizeCopy(bullet)}`),
-    // 작게 그리지만 **그리는 글자**다. 빠뜨리면 QA 가 오탐한다.
-    approved.reassurance ? `reassurance: ${sanitizeCopy(approved.reassurance)}` : ""
   ]
     .filter(Boolean)
     .join("\n");

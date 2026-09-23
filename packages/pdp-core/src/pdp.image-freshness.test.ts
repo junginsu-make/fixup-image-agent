@@ -47,12 +47,34 @@ describe("무엇을 고치면 그림이 낡는가", () => {
     expect(isImageStale({ ...만든뒤, headline: "7일 만에" })).toBe(true);
   });
 
-  it("**부제·불릿·신뢰문장을 고쳐도 낡는다** — 전부 그려진다", () => {
+  it("**부제·불릿을 고쳐도 낡는다** — 전부 그려진다", () => {
     const 만든뒤 = 그림있는섹션();
 
     expect(isImageStale({ ...만든뒤, subheadline: "다른 부제" }), "부제").toBe(true);
     expect(isImageStale({ ...만든뒤, bullets: ["둘"] }), "불릿").toBe(true);
-    expect(isImageStale({ ...만든뒤, trust_or_objection_line: "다른 문장" }), "신뢰문장").toBe(true);
+  });
+
+  /*
+    **신뢰문장은 이제 그림에 안 그린다**(2026-09-23 사용자). 그걸 고쳤다고
+    「다시 만들어야 반영된다」고 하면, 그림에 없는 글자 때문에 크레딧을 쓴다
+    (독립 리뷰 MEDIUM).
+  */
+  it("**신뢰문장을 고쳐도 낡지 않는다** — 그림에 없는 글자다", () => {
+    const 만든뒤 = 그림있는섹션();
+
+    expect(isImageStale({ ...만든뒤, trust_or_objection_line: "다른 문장" })).toBe(false);
+  });
+
+  it("**옛 자국(신뢰문장을 담던 때)도 알아본다** — 전에 만든 그림이 한꺼번에 낡음이 되지 않는다", () => {
+    const base = 섹션();
+    const 옛자국 = [
+      base.headline, base.subheadline, (base.bullets ?? []).join(""), base.trust_or_objection_line,
+      base.prompt_en, base.prompt_ko,
+    ].join("");
+    const 옛그림 = { ...base, generatedImage: "data:image/png;base64,AAA", imageStamp: 옛자국 };
+
+    expect(isImageStale(옛그림)).toBe(false);
+    expect(isImageStale({ ...옛그림, headline: "7일 만에" })).toBe(true);
   });
 
   it("**장면 지시를 고치면 낡는다** — 같은 글자라도 다른 그림이다", () => {
