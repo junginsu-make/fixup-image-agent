@@ -3,7 +3,7 @@
 import * as React from "react";
 
 /**
- * 비용 전략실이 열리는 창.
+ * 비용 전략이 열리는 창.
  *
  * **왜 창(iframe)인가.** 도구가 body·button·table 같은 일반 선택자로 CSS 를
  * 건다. 앱 안에 그대로 풀면 사이드바와 다른 화면까지 함께 물든다. 창 안에 두면
@@ -71,7 +71,7 @@ export function CostLabFrame() {
           입력하던 조건이 날아간다. 뜨는 즉시 메시지로 맞춘다.
         */
         src="/admin/cost-lab/doc/index.html"
-        title="비용 전략실"
+        title="비용 전략"
         onLoad={send}
         className="block h-full w-full border-0"
       />

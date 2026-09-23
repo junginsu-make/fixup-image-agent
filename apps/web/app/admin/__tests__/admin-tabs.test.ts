@@ -6,15 +6,15 @@ import { ADMIN_TABS, activeAdminTab } from "../admin-tabs";
 /**
  * **관리자 화면은 탭 셋이다** (2026-09-22 사용자 요청).
  *
- * 전에는 회원 목록(`/admin`)·크레딧 관리(`/admin/members`)·비용 전략실이 따로였고,
+ * 전에는 회원 목록(`/admin`)·크레딧 관리(`/admin/members`)·비용 전략이 따로였고,
  * 나머지 둘은 `/admin` 위쪽 버튼으로 들어갔다. 한 회원을 보려면 두 화면을 오가야 했다.
  */
 const web = join(__dirname, "..", "..", "..");
 const read = (file: string) => readFileSync(join(web, file), "utf8");
 
 describe("탭", () => {
-  it("회원 관리 · 시스템 관리 · 비용 전략실 순서다", () => {
-    expect(ADMIN_TABS.map((tab) => tab.label)).toEqual(["회원 관리", "시스템 관리", "비용 전략실"]);
+  it("회원 관리 · 시스템 관리 · 비용 전략 순서다", () => {
+    expect(ADMIN_TABS.map((tab) => tab.label)).toEqual(["회원 관리", "시스템 관리", "비용 전략"]);
   });
 
   it("주소마다 맞는 탭이 켜진다", () => {
@@ -40,7 +40,7 @@ describe("탭", () => {
 describe("따로 들어가던 문을 없앴다", () => {
   const page = read("app/admin/page.tsx");
 
-  it("회원 관리 탭에 비용 전략실·크레딧 관리 버튼이 없다", () => {
+  it("회원 관리 탭에 비용 전략·크레딧 관리 버튼이 없다", () => {
     expect(page).not.toContain('href="/admin/cost-lab"');
     expect(page).not.toContain('href="/admin/members"');
   });

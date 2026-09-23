@@ -16,7 +16,12 @@ export const PLAN_ASSUMPTIONS = Object.freeze({
   wadizFeePct: 15,
   overheadPct: 10, // 서버·DB·와디즈 기본료·모집 이벤트·고객 응대
   priceStepKrw: 1_000,
-  usage: { pdp: 9, cardnews: 8, print: 2 },
+  /*
+    **카드뉴스는 5장으로 센다**(2026-09-23 사용자). 비용 전략의 작업 표는
+    처음부터 「6카드 중 생성 이미지 5장 가정」이었는데 여기만 8이라, 같은
+    화면에서 두 숫자가 갈려 있었다.
+  */
+  usage: { pdp: 9, cardnews: 5, print: 2 },
 });
 
 const planSchema = z.object({
@@ -27,10 +32,16 @@ const planSchema = z.object({
 }).strict();
 export type PlanInput = z.infer<typeof planSchema>;
 
+/**
+ * **2026-09-23 사용자 확정값.**
+ *
+ * 월 가격 89,000·159,000·299,000원에서 추가 할인을 얹어 실제로 받는 돈이
+ * 62,033·109,074·209,898원이 된다. 1개당 827·727·700원.
+ */
 export const PLAN_DEFAULTS: readonly PlanInput[] = Object.freeze([
-  { id: "basic", name: "Basic", credits: 75, targetPct: 53.4, discountPct: 0 },
-  { id: "premium", name: "Premium", credits: 150, targetPct: 44, discountPct: 0 },
-  { id: "ultra", name: "Ultra", credits: 300, targetPct: 34.7, discountPct: 0 },
+  { id: "basic", name: "Basic", credits: 75, targetPct: 53, discountPct: 30.3 },
+  { id: "premium", name: "Premium", credits: 150, targetPct: 48.5, discountPct: 31.4 },
+  { id: "ultra", name: "Ultra", credits: 300, targetPct: 45.8, discountPct: 29.8 },
 ]);
 
 export function validatePlanInputs(input: unknown): PlanInput[] {
