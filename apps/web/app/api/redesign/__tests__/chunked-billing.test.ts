@@ -76,6 +76,22 @@ beforeEach(() => {
   mocks.generate.mockResolvedValue({ project: { sections: [{ imageUrl: "result" }] } });
 });
 
+/*
+  **크레딧 장부로 옮긴 회원은 「몇 장·어떤 크기」가 있어야 값을 잡는다**
+  (2026-09-23 운영 로그: 「이 생성 경로의 크레딧 설정을 확인해야 합니다」).
+  리디자인은 그것을 안 보내 전환한 회원 전원이 생성에서 거절됐다.
+*/
+describe("크레딧 장부에 몇 장·어떤 크기를 알린다", () => {
+  it("**요청한 장수만큼, 실제로 그리는 크기(1152×2048)로 알린다**", async () => {
+    await 청크(1, 1);
+
+    const plan = mocks.reserve.mock.calls[0]?.[3] as { outputs: unknown[]; resource: string } | undefined;
+    expect(plan, "크레딧 정보를 안 보냈다").toBeDefined();
+    expect(plan!.outputs).toEqual([{ width: 1152, height: 2048 }]);
+    expect(plan!.resource).toBe("redesign:generate");
+  });
+});
+
 describe("쪼개 불러도 한 번에 부른 값과 같다", () => {
   it("**여덟 번 나눠 부른 합이 한 번에 여덟 장 값과 같다**", async () => {
     for (let i = 1; i <= 8; i += 1) await 청크(i, 8);

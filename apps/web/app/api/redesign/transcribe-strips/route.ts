@@ -1,6 +1,7 @@
 import { transcribeStrips, humanizeProviderError, RedesignError } from "@fixup/redesign-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
 import { TRANSCRIBE_JSON_LIMIT, TRANSCRIBE_MAX_MB } from "./limits";
@@ -69,7 +70,9 @@ async function transcribe(req: Request) {
     시간당 열 번짜리 칸의 절반을 먹으면 그날 기획을 못 한다
     (`lib/membership/hourly-limit.ts`).
   */
-  const reservation = await reserveAiUsage(req, "redesign_transcribe", 0);
+  // 넷째 인자가 없으면 크레딧 장부로 옮긴 회원이 무조건 거절된다(2026-09-23 운영).
+  // 그리는 것이 없으니 빈 목록이다.
+  const reservation = await reserveAiUsage(req, "redesign_transcribe", 0, freeCreditPlan("redesign:transcribe"));
   if (!reservation.ok) return reservation.response;
 
   const controller = new AbortController();
