@@ -43,6 +43,14 @@ export async function authenticateApiMember(): Promise<
   if (typed.status === "suspended") {
     return { ok: false, response: membershipApiError(403, "suspended", "이용이 정지된 계정입니다.") };
   }
+  /*
+    **떠난 계정은 못 들어온다**(2026-09-23). 돈 기록이 있어 지우지 못하고
+    닫기만 한 계정이라, 인증 자체는 살아 있다 — 여기서 막지 않으면 탈퇴한
+    사람이 그대로 쓴다.
+  */
+  if (typed.status === "withdrawn") {
+    return { ok: false, response: membershipApiError(403, "withdrawn", "탈퇴한 계정입니다.") };
+  }
   return { ok: true, member: { userId: user.id, profile: typed } };
 }
 

@@ -29,5 +29,6 @@ export function isUsableAccount(
 export function isTerminalWait(
   profile: { status?: MembershipStatus | string | null } | null | undefined,
 ): boolean {
-  return profile?.status === "suspended";
+  // 탈퇴한 계정도 스스로 안 풀린다. 되물으면 화면이 영영 기다린다(2026-09-23).
+  return profile?.status === "suspended" || profile?.status === "withdrawn";
 }
