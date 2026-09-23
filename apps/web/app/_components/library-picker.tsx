@@ -85,6 +85,7 @@ export function LibraryPickerButton({
   sets,
   onPickSet,
   label = "라이브러리에서 불러오기",
+  triggerAriaLabel,
   triggerVariant = "outline",
   fit = "cover",
   title = "라이브러리에서 불러오기",
@@ -113,6 +114,8 @@ export function LibraryPickerButton({
   /** 라이브러리에서 아주 지운다. 안 넘기면 지우기 버튼이 안 나온다. */
   onDelete?(image: LibraryPickImage): void;
   label?: string;
+  /** 글자 없이 아이콘만 낼 때의 이름. 화면 낭독기가 읽는다. */
+  triggerAriaLabel?: string;
   /**
    * 여는 단추의 색. **기본은 지금까지대로 `outline`** 이라 쓰던 화면은 그대로다.
    *
@@ -190,7 +193,7 @@ export function LibraryPickerButton({
 
   return (
     <>
-      <Button type="button" variant={triggerVariant} onClick={() => setOpen(true)}>
+      <Button type="button" variant={triggerVariant} aria-label={triggerAriaLabel} onClick={() => setOpen(true)}>
         <FolderOpen className="size-4" />
         {label}
         <Badge variant="secondary" className="ml-1">{images.length}</Badge>

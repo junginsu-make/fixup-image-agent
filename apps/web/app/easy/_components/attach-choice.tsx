@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@fixup/ui";
-import { LibraryPickerButton } from "../../_components/library-picker";
+import { EasyLibraryPicker, type EasyLibrary } from "./library-attach";
 
 /**
  * 첫 화면의 세 갈래 — **직접 첨부 · 라이브러리에서 · 없이 시작** (설계 §3).
@@ -32,53 +32,20 @@ interface Picked {
   title: string;
 }
 
-/** `/api/poster/references` 가 주는 줄. `ReferenceItem` 과 같은 모양이다. */
-interface ReferenceRow {
-  id: string;
-  title?: string | null;
-  url?: string;
-  thumbUrl?: string | null;
-  mine?: boolean;
-  ownerEmail?: string | null;
-}
-
 export function EasyAttachChoice({
+  library,
   selectedIds,
   onUpload,
   onPick,
   onSkip,
 }: {
+  /** 목록은 화면이 한 번만 읽어 입력창의 폴더 단추와 나눠 쓴다. */
+  library: EasyLibrary;
   selectedIds: string[];
   onUpload: () => void;
   onPick: (picked: Picked[]) => void;
   onSkip: () => void;
 }) {
-  const [rows, setRows] = React.useState<ReferenceRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const body = await (await fetch("/api/poster/references", { cache: "no-store" })).json();
-      // **`references` 다.** `images` 로 읽으면 늘 빈 배열이 온다.
-      setRows(body.ok && Array.isArray(body.references) ? body.references : []);
-    } catch {
-      // 못 불러오면 빈 목록이다. 창이 「고를 그림이 없습니다」를 보여 준다.
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  /*
-   * **화면이 뜰 때 불러온다.**
-   *
-   * 누를 때 부르면 창이 빈 채로 열리고 사용자가 새로고침을 눌러야 한다 —
-   * 이미지 만들기(02)는 화면이 뜰 때 미리 읽어 두므로 창이 곧바로 찬다.
-   * 같은 길로 간다.
-   */
-  React.useEffect(() => { void load(); }, [load]);
-
   return (
     /*
       **무게를 셋으로 가른다**(2026-09-21 사용자 — 「꼭 해야 하는거라면 더 눈에
@@ -103,30 +70,7 @@ export function EasyAttachChoice({
         **고른 것을 곧바로 붙인다.** 이 창은 `onToggle` 로 한 장씩 알려 주므로
         「고르기」와 「닫기」를 따로 기다리지 않는다.
       */}
-      <LibraryPickerButton
-        label="라이브러리에서"
-        triggerVariant="secondary"
-        title="라이브러리에서 고르기"
-        description={`고를 수 있는 이미지 ${rows.length}장 · 눌러서 고릅니다`}
-        loading={loading}
-        images={rows.map((row) => ({
-          id: row.id,
-          title: row.title ?? "",
-          url: row.url ?? null,
-          // 격자는 사본을 쓴다. 안 넘기면 창 하나에 수십 MB 가 오간다.
-          thumbUrl: row.thumbUrl ?? null,
-          // 주인 표시. 떨어뜨리면 남의 그림에도 지우기가 붙는다.
-          mine: row.mine,
-          ownerEmail: row.ownerEmail,
-        }))}
-        selectedIds={selectedIds}
-        onReload={load}
-        onToggle={(image) => {
-          const url = image.url ?? image.thumbUrl;
-          if (!url) return;
-          onPick([{ id: image.id, url, title: image.title ?? "" }]);
-        }}
-      />
+      <EasyLibraryPicker library={library} selectedIds={selectedIds} onPick={onPick} label="라이브러리에서" />
 
       <Button variant="outline" onClick={onSkip}>
         없이 시작
