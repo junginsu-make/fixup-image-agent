@@ -136,13 +136,13 @@ main>.title-row{display:none}#fc-live{position:absolute;width:1px;height:1px;mar
 
 
 
-<section id="plans" role="tabpanel" aria-labelledby="tab-plans" hidden><div class="toolbar"><div><h2>월 구독 플랜 기본값</h2><p class="muted">크레딧은 고정하고, 목표 마진과 추가 할인을 바꾸면 월 가격·1개당 가격·마진이 다시 계산됩니다.</p></div><span class="tag">2026-09-22 확정값에서 시작</span></div>
+<section id="plans" role="tabpanel" aria-labelledby="tab-plans" hidden><div class="toolbar"><div><h2>월 구독 플랜 기본값</h2><p class="muted">크레딧·목표 마진·추가 할인을 바꾸면 월 가격·1개당 가격·마진이 다시 계산됩니다. 크레딧을 바꾸면 아래 「한 달에 만들 수 있는 양」도 함께 바뀝니다.</p></div><span class="tag">2026-09-22 확정값에서 시작</span></div>
 
 <p class="notice neutral">여기서 바꾼 숫자는 이 브라우저에만 저장됩니다. 실제 결제 상품이나 회원에게 지급하는 크레딧은 바꾸지 않습니다.</p>
 
-<div class="panel" style="margin-top:20px"><div class="sectionhead"><h3>상품과 고객 혜택</h3><div class="small-actions"><button id="plans-apply" class="primary">선택한 플랜을 통합 요약·충전형에 적용</button><button id="plans-reset">확정값으로 되돌리기</button></div></div><p id="plans-applied" class="muted" role="status"></p><p id="plans-error" class="notice" role="alert" hidden>목표 마진과 추가 할인은 0~90% 사이로 입력하세요. 고치기 전까지 계산은 이전 값으로 둡니다.</p><div class="table-scroll"><table><thead><tr><th>적용할 플랜</th><th>크레딧</th><th>목표 마진</th><th>추가 할인</th><th>월 가격</th><th>고객 결제액</th><th>1개당</th><th>실제 마진</th><th>크레딧 더 받음</th><th>1개당 할인</th></tr></thead><tbody id="plans-rows"></tbody></table></div><p class="wide-note">월 가격 = 목표 마진이 나오는 가격을 1,000원 단위로 반올림한 값. 고객 결제액 = 월 가격에서 추가 할인을 뺀 금액이며, 1개당 가격과 실제 마진은 고객 결제액으로 계산합니다.</p><p class="wide-note" id="plans-bonus-note"></p></div>
+<div class="panel" style="margin-top:20px"><div class="sectionhead"><h3>상품과 고객 혜택</h3><div class="small-actions"><button id="plans-apply" class="primary">선택한 플랜을 통합 요약·충전형에 적용</button><button id="plans-reset">확정값으로 되돌리기</button></div></div><p id="plans-applied" class="muted" role="status"></p><p id="plans-error" class="notice" role="alert" hidden>크레딧은 1개 이상 정수로, 목표 마진과 추가 할인은 0~90% 사이로 입력하세요. 고치기 전까지 계산은 이전 값으로 둡니다.</p><div class="table-scroll"><table><thead><tr><th>적용할 플랜</th><th>크레딧</th><th>목표 마진</th><th>추가 할인</th><th>월 가격</th><th>고객 결제액</th><th>1개당</th><th>실제 마진</th><th>크레딧 더 받음</th><th>1개당 할인</th></tr></thead><tbody id="plans-rows"></tbody></table></div><p class="wide-note">월 가격 = 목표 마진이 나오는 가격을 1,000원 단위로 반올림한 값. 고객 결제액 = 월 가격에서 추가 할인을 뺀 금액이며, 1개당 가격과 실제 마진은 고객 결제액으로 계산합니다.</p><p class="wide-note" id="plans-bonus-note"></p></div>
 
-<div class="panel" style="margin-top:20px"><h3>한 달에 만들 수 있는 양</h3><div class="table-scroll"><table><thead><tr><th>상품</th><th>상세페이지 (9장)</th><th>카드뉴스 (8장)</th><th>이미지·포스터 (1장)</th><th>인쇄용 큰 크기 (2크레딧)</th></tr></thead><tbody id="plans-usage"></tbody></table></div><p class="wide-note">한 가지만 만들 때의 최대치입니다. 섞어 쓰면 크레딧 합계 안에서 나눠 씁니다. 상세페이지·카드뉴스 장수는 예시이며 섹션 수에 따라 달라집니다. 인쇄용 큰 크기는 약 600만 픽셀 이상입니다.</p></div>
+<div class="panel" style="margin-top:20px"><h3>한 달에 만들 수 있는 양</h3><div class="table-scroll"><table><thead><tr><th>상품</th><th>상세페이지 (9장)</th><th>카드뉴스 (8장)</th><th>이미지·포스터 (1장)</th><th>인쇄용 큰 크기 (2크레딧)</th></tr></thead><tbody id="plans-usage"></tbody></table></div><p class="wide-note">한 가지만 만들 때의 최대치입니다. 위에서 크레딧을 바꾸면 이 표도 함께 바뀝니다. 섞어 쓰면 크레딧 합계 안에서 나눠 씁니다. 상세페이지·카드뉴스 장수는 예시이며 섹션 수에 따라 달라집니다. 인쇄용 큰 크기는 약 600만 픽셀 이상입니다.</p></div>
 
 <div class="panel" style="margin-top:20px"><h3>계산 기준</h3><ul class="muted"><li>가격은 부가세 포함입니다. 결제액의 1/11은 세금이라 먼저 뺍니다.</li><li>이미지 1장 원가는 <strong>450원</strong>으로 잡았습니다. 기본 모델 정사각 1장은 약 290원, 1크레딧 안에서 가장 비싼 경우는 약 345원(환율 1,380원)이고, 실패해 다시 만드는 비용까지 넉넉히 더한 값입니다.</li><li>고객이 크레딧을 <strong>전부 쓴다</strong>고 가정했습니다. 덜 쓰면 더 남습니다.</li><li>「실제 마진」은 와디즈 수수료와 서버·이벤트 예산을 <strong>빼기 전</strong> 값입니다. 통합 요약·충전형은 결제 수수료 등을 따로 빼므로 마진 숫자가 이 표와 다를 수 있습니다.</li></ul></div>
 
@@ -860,7 +860,11 @@ if(document.modelContext?.registerTool){const lifecycle=new AbortController();co
   'use strict';
   /*
     플랜 기본값 탭. 계산은 `lib/admin/cost-forecast/subscription-plans.ts` 가 하고
-    여기서는 그리기와 적용만 한다. 크레딧은 고정, 목표 마진·추가 할인만 바꾼다.
+    여기서는 그리기와 적용만 한다. 크레딧·목표 마진·추가 할인 셋 다 바꾼다.
+
+    **크레딧도 입력칸이다**(2026-09-23 사용자 요청). 계산은 처음부터 크레딧을
+    입력으로 받고 있었고, 막고 있던 것은 화면이었다. 크레딧을 고치면 가격도
+    「한 달에 만들 수 있는 양」도 함께 다시 계산된다.
 
     적용은 단추로만 한다. 숫자를 고칠 때마다 통합 요약에 밀어 넣으면 그쪽에서
     손보던 조건이 매번 초기화된다. 처음 열 때만(공유 링크로 연 게 아니면) 선택한
@@ -887,13 +891,25 @@ if(document.modelContext?.registerTool){const lifecycle=new AbortController();co
   let { plans, selected } = load();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ plans, selected })); } catch { /* 저장 못 해도 화면은 동작 */ } };
 
-  const input = (p, field, label) =>
-    `<span class="inputbox"><input type="number" data-plan="${esc(p.id)}" data-plan-field="${field}" min="0" max="90" step="0.1" value="${p[field]}" aria-label="${esc(p.name)} ${label}"><span>%</span></span>`;
+  /*
+    **규격을 칸마다 다르게 준다.** 전에는 `max="90" step="0.1"` 과 `%` 가 못
+    박혀 있었다. 크레딧에 그대로 쓰면 90개가 상한이 되고 75.5개를 받아 준다.
+  */
+  const FIELDS = {
+    credits: { label: '크레딧', min: 1, max: 100000, step: 1, suffix: '개' },
+    targetPct: { label: '목표 마진', min: 0, max: 90, step: 0.1, suffix: '%' },
+    discountPct: { label: '추가 할인', min: 0, max: 90, step: 0.1, suffix: '%' },
+  };
+
+  const input = (p, field) => {
+    const f = FIELDS[field];
+    return `<span class="inputbox"><input type="number" data-plan="${esc(p.id)}" data-plan-field="${field}" min="${f.min}" max="${f.max}" step="${f.step}" value="${p[field]}" aria-label="${esc(p.name)} ${f.label}"><span>${f.suffix}</span></span>`;
+  };
 
   function build() {
     el('plans-rows').innerHTML = plans.map(p => `<tr>
       <td><label><input type="radio" name="plan-apply" value="${esc(p.id)}" ${p.id === selected ? 'checked' : ''}> <strong>${esc(p.name)}</strong></label></td>
-      <td>${p.credits}개</td><td>${input(p, 'targetPct', '목표 마진')}</td><td>${input(p, 'discountPct', '추가 할인')}</td>
+      <td>${input(p, 'credits')}</td><td>${input(p, 'targetPct')}</td><td>${input(p, 'discountPct')}</td>
       <td id="plan-list-${p.id}"></td><td id="plan-paid-${p.id}"></td><td id="plan-unit-${p.id}"></td>
       <td id="plan-margin-${p.id}"></td><td id="plan-bonus-${p.id}"></td><td id="plan-off-${p.id}"></td></tr>`).join('');
     render();
