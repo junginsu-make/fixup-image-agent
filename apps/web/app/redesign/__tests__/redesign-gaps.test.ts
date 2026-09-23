@@ -71,7 +71,7 @@ describe("라이브러리에 저절로 남는다", () => {
   /** 같은 작업의 섹션이 여덟 줄로 흩어지면 목록이 못 쓰게 된다. */
   it("같은 작업의 섹션은 한 줄로 모인다", () => {
     expect(wizard).toContain("sourceId: project.id");
-    expect(route).toContain("sourceId: body.sourceId");
+    expect(route).toContain("const sourceId = body.sourceId");
     expect(library).toContain("export async function saveOrAppendLibraryItem");
   });
 

@@ -192,7 +192,6 @@ describe("금지된 주장은 어느 칸에 있어도 막는다", () => {
   it.each([
     ["headline", "식약처 인증을 받은 제품입니다"],
     ["subheadline", "국내 1위 제품입니다"],
-    ["trust_or_objection_line", "특허 등록된 기술입니다"],
   ])("**%s 에 있어도 막는다** — 이미지에 그려지는 칸이다", (slot, value) => {
     const 막힘 = rejectIfUnverified([사용자가친것(slot, value)]);
 
@@ -222,6 +221,16 @@ describe("금지된 주장은 어느 칸에 있어도 막는다", () => {
    */
   it("**이미지에 안 실리는 CTA 는 안 막는다**", () => {
     expect(rejectIfUnverified([사용자가친것("CTA", "국내 1위 제품 보러 가기")])).toBeNull();
+  });
+
+  /**
+   * **신뢰 문장도 이제 안 막는다**(2026-09-23 사용자 결정).
+   *
+   * 이미지 밑에 설명 한 줄로 박혀 나와 그리지 않기로 했다. 그림에 없는
+   * 문장 때문에 만들기가 막히면 사용자는 이유를 알 수 없다 — CTA 와 같은 이유다.
+   */
+  it("**이미지에 안 실리는 신뢰 문장은 안 막는다**", () => {
+    expect(rejectIfUnverified([사용자가친것("trust_or_objection_line", "특허 등록된 기술입니다")])).toBeNull();
   });
 
   /**

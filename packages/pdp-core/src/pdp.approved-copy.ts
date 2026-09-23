@@ -7,9 +7,10 @@ import type { PdpOutputMode, SectionBlueprint } from "./types";
  *
  * 생성과 QA 가 각자 다른 목록을 보고 있었다.
  *
- *   신뢰문구 — 그림에는 **그린다**(`pdp.image-prompt.ts` 의 `reassurance_line`).
- *              QA 는 **안 봤다** → 그 한 줄이 「승인 안 된 글자」로 잡혀,
- *              멀쩡한 그림을 다시 만들었다. 값도 두 번 나갔다.
+ *   신뢰문구 — 한때 그림에 그렸는데 QA 는 **안 봤다** → 그 한 줄이 「승인 안 된
+ *              글자」로 잡혀 멀쩡한 그림을 다시 만들었다. 지금은 **양쪽 다 안
+ *              싣는다**(2026-09-23 사용자: 완성본 밑에 설명 한 줄이 박혀 나왔다).
+ *              편집기의 카피 목록에서 글자로 얹을 수는 있다.
  *   CTA      — 그림에는 **안 그린다**(2026-07-30 사용자 결정: 눌리지 않는 그림
  *              버튼이 되고 섹션마다 반복되면 페이지가 버튼 나열이 된다).
  *              QA 는 **승인 원고로 봤다** → 없는 문구를 기준으로 삼았다.
@@ -22,8 +23,6 @@ export interface ApprovedCopy {
   headline?: string;
   subheadline?: string;
   bullets: string[];
-  /** 망설임을 덮는 한 줄. 그림에 작게 그린다. */
-  reassurance?: string;
 }
 
 const 값이있으면 = (value: string | undefined) => {
@@ -47,6 +46,5 @@ export function approvedCopyOf(
     headline: 값이있으면(section.headline),
     subheadline: 값이있으면(section.subheadline),
     bullets: (section.bullets ?? []).map((bullet) => bullet?.trim()).filter((bullet): bullet is string => Boolean(bullet)),
-    reassurance: 값이있으면(section.trust_or_objection_line),
   };
 }

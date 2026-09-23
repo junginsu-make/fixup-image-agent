@@ -18,7 +18,8 @@ import type { SectionBlueprint } from "./types";
  * ── 무엇을 세는가 ──────────────────────────────────────────
  *
  * **그림에 실제로 들어가는 것만** 센다(`pdp.image-prompt.ts` 의 `typography`
- * 와 `scene`). 제목·부제·불릿·신뢰문장·장면 지시다.
+ * 와 `scene`). 제목·부제·불릿·장면 지시다. 신뢰문장은 2026-09-23 부터
+ * 그림에 안 그리므로 안 센다.
  *
  * CTA 는 안 센다 — 이미지에 싣지 않기로 한 결정이 있다(2026-07-30). 근거
  * 딱지나 검수 결과도 안 센다. 그림이 안 바뀌는 것으로 「낡았다」고 하면
@@ -35,6 +36,23 @@ export type ImageStamp = string;
  */
 export function imageStampOf(section: SectionBlueprint | null | undefined): ImageStamp {
   if (!section) return "";
+  // 신뢰문장은 안 센다 — 그림에 안 그린다(2026-09-23, `pdp.image-prompt.ts`).
+  return [
+    section.headline ?? "",
+    section.subheadline ?? "",
+    (section.bullets ?? []).join(""),
+    section.prompt_en ?? "",
+    section.prompt_ko ?? "",
+  ].join("");
+}
+
+/**
+ * 신뢰문장을 그리던 때의 자국. **그때 만든 그림을 알아보는 데만** 쓴다.
+ *
+ * 새 공식만 보면 전에 만든 그림이 한꺼번에 「낡음」이 된다 — 사용자는 표시를
+ * 무시하게 되고, 무시하지 않으면 멀쩡한 그림을 다시 만드느라 크레딧을 쓴다.
+ */
+function legacyImageStampOf(section: SectionBlueprint): ImageStamp {
   return [
     section.headline ?? "",
     section.subheadline ?? "",
@@ -56,7 +74,7 @@ export function imageStampOf(section: SectionBlueprint | null | undefined): Imag
 export function isImageStale(section: SectionBlueprint | null | undefined): boolean {
   if (!section?.generatedImage) return false;
   if (!section.imageStamp) return false;
-  return section.imageStamp !== imageStampOf(section);
+  return section.imageStamp !== imageStampOf(section) && section.imageStamp !== legacyImageStampOf(section);
 }
 
 /** 낡은 그림 옆에 붙일 말. */

@@ -23,6 +23,8 @@ let imageSelectRows: Array<Record<string, unknown>> = [];
 let signedPaths: string[] = [];
 let failThumbnail = false;
 let failImageInsert = false;
+/** 같은 자리에 다른 요청이 먼저 붙였다(고유 제약 위반, 23505). */
+let positionTaken = false;
 let failImageSelect = false;
 /** 삭제가 0줄을 지운 상황. 남의 항목을 지우려 했을 때 운영에서 나는 답이다. */
 let deleteReturnsNoRows = false;
@@ -36,6 +38,12 @@ function builderFor(table: string) {
       if (table === "library_images") imageRows = rows as Array<Record<string, unknown>>;
       if (table === "library_images" && failImageInsert) {
         return { then: (r: (x: unknown) => unknown) => Promise.resolve(r({ error: { message: "표 쓰기 실패" } })) };
+      }
+      if (table === "library_images" && positionTaken) {
+        return { then: (r: (x: unknown) => unknown) => Promise.resolve(r({ error: {
+          code: "23505",
+          message: 'duplicate key value violates unique constraint "library_images_item_id_position_key"',
+        } })) };
       }
       return self;
     },
@@ -127,6 +135,7 @@ beforeEach(() => {
   uploads.length = 0; removed.length = 0;
   imageRows = []; itemUpdates = []; listRows = []; imageSelectRows = []; signedPaths = [];
   failThumbnail = false; failImageInsert = false; failImageSelect = false; failThumbUpload = false;
+  positionTaken = false;
   deleteReturnsNoRows = false;
 });
 
@@ -178,10 +187,49 @@ describe("saveLibraryItem — 작은 사본", () => {
     expect(result.ok).toBe(false);
     // **원본과 사본을 둘 다 확인한다.** 한쪽만 보면 다른 쪽 되돌리기가
     // 통째로 사라져도 시험이 통과한다.
-    expect(removed.flat().sort()).toEqual([
-      "user-1/item-1/0.thumb.webp",
-      "user-1/item-1/0.webp",
-    ]);
+    // 파일 이름에 요청 표시가 붙는다(겹친 요청이 서로의 파일을 지우지 않게).
+    const 지운것 = removed.flat().sort();
+    expect(지운것).toHaveLength(2);
+    expect(지운것[0]).toMatch(/^user-1\/item-1\/0-[0-9a-f]{8}\.thumb\.webp$/);
+    expect(지운것[1]).toMatch(/^user-1\/item-1\/0-[0-9a-f]{8}\.webp$/);
+  });
+
+  /*
+    **겹친 요청이 서로의 파일을 지우지 않는다**(2차 독립 리뷰 HIGH).
+
+    같은 작업에 두 요청이 겹치면 둘 다 같은 자리 번호를 쓴다. 파일 이름이
+    같으면 늦은 쪽이 되돌리며 먼저 성공한 쪽의 파일을 지웠다.
+  */
+  it("**요청마다 파일 이름이 다르다** — 되돌릴 때 남의 파일을 안 지운다", async () => {
+    await save([await photoPng()]);
+    const 처음 = uploads.map((u) => u.path);
+    uploads.length = 0;
+    await save([await photoPng()]);
+    const 다음 = uploads.map((u) => u.path);
+
+    expect(다음.some((path) => 처음.includes(path))).toBe(false);
+  });
+
+  it("**자리가 이미 찼으면 「어긋남」으로 답한다** — 화면이 서버 장수부터 다시 보낸다", async () => {
+    positionTaken = true;
+
+    const result = await save([await photoPng()]);
+
+    expect(result.ok).toBe(false);
+    expect("conflict" in result && result.conflict).toBe(true);
+  });
+
+  it("**DB 문구를 화면에 흘리지 않는다** — 제약 이름이 그대로 나간다", async () => {
+    failImageInsert = true;
+    const 실패 = await save([await photoPng()]);
+    positionTaken = true;
+    failImageInsert = false;
+    const 겹침 = await save([await photoPng()]);
+
+    for (const result of [실패, 겹침]) {
+      expect(result.ok).toBe(false);
+      expect(JSON.stringify(result)).not.toMatch(/표 쓰기 실패|duplicate key|library_images/);
+    }
   });
 
   it("표지는 첫 장의 원본이다", async () => {
@@ -190,7 +238,7 @@ describe("saveLibraryItem — 작은 사본", () => {
     await save([await photoPng(), await photoPng(700, 500)]);
 
     const cover = itemUpdates.find((patch) => "cover_path" in patch);
-    expect(cover!.cover_path).toBe("user-1/item-1/0.webp");
+    expect(cover!.cover_path).toMatch(/^user-1\/item-1\/0-[0-9a-f]{8}\.webp$/);
   });
 
   it("사본만 못 올리면 그 자리를 비워 둔다 — 없는 파일을 가리키면 표지가 아예 안 뜬다", async () => {

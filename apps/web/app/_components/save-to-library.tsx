@@ -29,11 +29,14 @@ export function SaveToLibrary({
  * 화면이 버튼밭이 되므로 결과 액션 줄에 하나만 둔다.
  */
 export function SaveImagesToLibrary({
-  images, className, disabled = false,
+  images, className, disabled = false, buttonVariant = "ghost", buttonClassName,
 }: {
   images: Array<{ fileUrl: string; title: string }>;
   className?: string;
   disabled?: boolean;
+  /** 놓이는 막대에 맞춘다. 상세페이지 도구 막대는 테두리 단추를 쓴다. */
+  buttonVariant?: "ghost" | "outline";
+  buttonClassName?: string;
 }) {
   const [state, setState] = React.useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = React.useState<string | null>(null);
@@ -66,7 +69,13 @@ export function SaveImagesToLibrary({
   const many = images.length > 1;
   return (
     <span className={className}>
-      <Button size="sm" variant="ghost" disabled={disabled || state !== "idle"} onClick={() => void save()}>
+      <Button
+        size="sm"
+        variant={buttonVariant}
+        className={buttonClassName}
+        disabled={disabled || state !== "idle"}
+        onClick={() => void save()}
+      >
         {state === "saving" ? "보관하는 중…"
           : state === "saved" ? "라이브러리에 보관됨"
             : many ? `참고 이미지로 보관 · ${images.length}장` : "참고 이미지로 보관"}

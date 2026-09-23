@@ -268,16 +268,14 @@ function SectionCard({
         />
         <BulletList bullets={section.bullets} onChange={onBulletsChange} />
         {/*
-          **신뢰문구도 그림에 그려진다.** 「허리가 약해도 부담 없이」처럼 망설임을
-          덮는 한 줄이라, 장점만 나열된 페이지를 광고가 아니게 만드는 자리다
-          (`pdp.image-prompt.ts` 의 `reassurance_line`).
-
-          그런데 이 칸이 없어서, 사용자는 자기 페이지에 뭐라고 적힐지 **보지도
-          고치지도 못한 채** 생성 버튼을 눌렀다. 보여 주지 않으면 승인이 아니다.
+          **신뢰문구는 그림에 그리지 않는다**(2026-09-23 사용자: 완성본 밑에 설명
+          한 줄이 박혀 나왔다). 편집 화면의 「카피」 목록에는 나오므로, 원하면
+          글자로 얹을 수 있다(`copy-slots.ts`). 칸에 그렇게 적어 둔다 — 적은 것이
+          그림에 나올 줄 알고 기다리게 두지 않는다.
         */}
         <EditableField
-          label="신뢰·반론 문구"
-          placeholder="구매를 망설이게 하는 점을 덮는 한 줄 (예: 민감한 피부도 부담 없이)"
+          label="신뢰·반론 문구 (이미지에는 넣지 않음)"
+          placeholder="구매를 망설이게 하는 점을 덮는 한 줄. 편집 화면의 카피 목록에서 글자로 얹을 수 있습니다."
           value={section.trust_or_objection_line}
           onChange={(line) => onTargetChange({ slot: "trust_or_objection_line" }, line)}
         />

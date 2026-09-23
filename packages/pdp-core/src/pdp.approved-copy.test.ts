@@ -9,8 +9,8 @@ import type { SectionBlueprint } from "./types";
  *
  * 생성과 QA 가 각자 다른 목록을 보고 있었다.
  *
- *   신뢰문구(`trust_or_objection_line`) — 그림에는 **그린다**. QA 는 **안 본다**
- *     → 그 한 줄이 「승인 안 된 글자」로 잡혀, 멀쩡한 그림을 다시 만든다
+ *   신뢰문구(`trust_or_objection_line`) — 그림에 **안 그린다**(2026-09-23 사용자:
+ *     완성본 밑에 설명 한 줄이 박혀 나왔다). QA 도 **안 본다**
  *   CTA — 그림에는 **안 그린다**(2026-07-30 결정). QA 는 **승인 원고로 본다**
  *     → 없는 문구를 기준으로 삼는다
  *
@@ -39,8 +39,8 @@ describe("승인 원고에 무엇이 들어가나", () => {
     expect(원고.bullets).toEqual(["3단 높이 조절", "통기성 메시"]);
   });
 
-  it("**신뢰문구가 들어간다** — 그림에 그리는 글자다", () => {
-    expect(approvedCopyOf(섹션()).reassurance).toBe("허리가 약해도 부담 없이");
+  it("**신뢰문구는 안 들어간다** — 그림에 안 그리기로 했다(2026-09-23)", () => {
+    expect(JSON.stringify(approvedCopyOf(섹션()))).not.toContain("허리가 약해도 부담 없이");
   });
 
   it("**CTA 는 안 들어간다** — 그림에 안 그리기로 했다(2026-07-30)", () => {
@@ -50,9 +50,8 @@ describe("승인 원고에 무엇이 들어가나", () => {
   });
 
   it("빈 칸은 버린다", () => {
-    const 원고 = approvedCopyOf(섹션({ trust_or_objection_line: "", bullets: ["", "값"] }));
+    const 원고 = approvedCopyOf(섹션({ bullets: ["", "값"] }));
 
-    expect(원고.reassurance).toBeUndefined();
     expect(원고.bullets).toEqual(["값"]);
   });
 
@@ -65,8 +64,8 @@ describe("승인 원고에 무엇이 들어가나", () => {
 });
 
 describe("QA 가 보는 것과 그림에 그리는 것이 같다", () => {
-  it("**신뢰문구가 QA 프롬프트에 있다**", () => {
-    expect(buildQaPrompt(섹션())).toContain("허리가 약해도 부담 없이");
+  it("**신뢰문구는 QA 프롬프트에 없다** — 그리지 않는 글자를 기준으로 삼지 않는다", () => {
+    expect(buildQaPrompt(섹션())).not.toContain("허리가 약해도 부담 없이");
   });
 
   it("**CTA 는 QA 프롬프트에 없다** — 그리지 않는 글자를 기준으로 삼지 않는다", () => {
@@ -78,10 +77,13 @@ describe("QA 가 보는 것과 그림에 그리는 것이 같다", () => {
     const 그림 = buildImageJson(section, { style: "studio", withModel: false, outputMode: "full-image" });
     const qa = buildQaPrompt(section);
 
-    for (const 문구 of ["무릎이 편한 의자", "3단 높이 조절", "허리가 약해도 부담 없이"]) {
+    for (const 문구 of ["무릎이 편한 의자", "3단 높이 조절"]) {
       expect(그림, `그림 프롬프트에 「${문구}」가 없다`).toContain(문구);
       expect(qa, `QA 프롬프트에 「${문구}」가 없다`).toContain(문구);
     }
+    // 안 그리는 글자는 **양쪽 다** 없어야 한다. 한쪽만 있으면 QA 가 오탐한다.
+    expect(그림).not.toContain("허리가 약해도 부담 없이");
+    expect(qa).not.toContain("허리가 약해도 부담 없이");
   });
 
   it("**글자 없는 그림은 QA 도 원고를 안 본다**", () => {

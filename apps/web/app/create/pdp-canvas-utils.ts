@@ -714,85 +714,12 @@ export function formatSavedAt(value: string) {
   }).format(date);
 }
 
-/**
- * 작업대를 레이어 옆에 붙인다.
- *
- * **`canvasFit` 을 받는다.** 레이어 좌표는 축소 전 460 좌표계인데 작업대는
- * 무대의 보이는 좌표계에 놓인다. 배율을 모르면 좁은 화면에서 작업대가 레이어
- * 에서 한참 떨어진 곳을 가리킨다.
- */
-export function anchorWorkbenchToOverlay(
-  overlay: CanvasLayer,
-  canvasEl: HTMLDivElement | null,
-  stageEl: HTMLDivElement | null,
-  workbench: FloatingWorkbenchState,
-  canvasFit = 1
-) {
-  const workbenchWidth = workbench.width;
-  const workbenchHeight = workbench.height;
-  const gap = 18;
-  const stageWidth = stageEl?.clientWidth ?? 1240;
-  const stageHeight = stageEl?.clientHeight ?? 720;
-  const canvasLeft = canvasEl?.offsetLeft ?? 0;
-  const canvasTop = canvasEl?.offsetTop ?? 0;
-  // 보이는 자리로 환산한다. 축소돼 있으면 그만큼 가까워진다.
-  const fit = canvasFit > 0 ? canvasFit : 1;
-  const overlayWidth = toNumericSize(overlay.width, 320) * fit;
-  const overlayX = overlay.x * fit;
-  const overlayY = overlay.y * fit;
-
-  let x = canvasLeft + overlayX + overlayWidth + gap;
-  if (x + workbenchWidth > stageWidth - 16) {
-    x = canvasLeft + overlayX - workbenchWidth - gap;
-  }
-  if (x < 12) {
-    x = clampValue(canvasLeft + overlayX + 12, 12, Math.max(12, stageWidth - workbenchWidth - 16));
-  }
-
-  const y = clampValue(canvasTop + overlayY, 12, Math.max(12, stageHeight - workbenchHeight - 16));
-
-  return {
-    x: Math.round(x),
-    y: Math.round(y),
-  };
-}
-
 export function isTextLayer(layer: CanvasLayer): layer is TextOverlay {
   return layer.kind === "text";
 }
 
 export function isShapeLayer(layer: CanvasLayer): layer is ShapeLayer {
   return layer.kind === "shape";
-}
-
-export function getWorkbenchPosition(stageEl: HTMLDivElement | null) {
-  const width = 332;
-  const height = 500;
-  const stageWidth = stageEl?.clientWidth ?? 1240;
-  const stageHeight = stageEl?.clientHeight ?? 720;
-
-  return {
-    x: Math.max(16, stageWidth - width - 20),
-    y: 20,
-    width,
-    height: Math.min(height, Math.max(420, stageHeight - 40)),
-    isOpen: true,
-  };
-}
-
-export function clampWorkbenchToStage(workbench: FloatingWorkbenchState, stageEl: HTMLDivElement | null) {
-  if (!stageEl) {
-    return workbench;
-  }
-
-  const maxX = Math.max(16, stageEl.clientWidth - workbench.width - 16);
-  const maxY = Math.max(16, stageEl.clientHeight - workbench.height - 16);
-
-  return {
-    ...workbench,
-    x: clampValue(workbench.x, 16, maxX),
-    y: clampValue(workbench.y, 16, maxY),
-  };
 }
 
 /**

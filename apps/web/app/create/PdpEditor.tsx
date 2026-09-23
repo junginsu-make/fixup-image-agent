@@ -11,6 +11,14 @@ import type { RecoveredFailureLine } from "./recovered-failures";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import {
+  libraryVersionKey,
+  libraryWorkId,
+  pendingLibraryUpload,
+  requestBatches,
+  type LibraryUploadProgress,
+} from "./library-save";
+import { stitchLayout } from "./stitch-layout";
+import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
@@ -76,7 +84,6 @@ import { ReviewPanel } from "./ReviewPanel";
 import { ScorecardPanel } from "./ScorecardPanel";
 import {
   chunkForModel,
-  planUploadBatches,
   DEFAULT_IMAGE_MODEL,
   IMAGE_MODELS,
 } from "@fixup/pdp-core";
@@ -106,7 +113,6 @@ import {
 import { ElapsedTime } from "../_components/elapsed-time";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
-  anchorWorkbenchToOverlay,
   applyLanguageToTextOverlay,
   buildExportNode,
   loadImage,
@@ -115,7 +121,6 @@ import {
   buildOverlayTextStyle,
   buildShapeLayerStyle,
   clampValue,
-  clampWorkbenchToStage,
   downloadBlob,
   estimateOverlayBox,
   extractImageColorRecommendations,
@@ -127,7 +132,6 @@ import {
   getModelAgeLabel,
   getModelCountryLabel,
   getModelGenderLabel,
-  getWorkbenchPosition,
   isShapeLayer,
   isTextLayer,
   normalizeCanvasLayer,
@@ -147,6 +151,9 @@ import type {
 } from "./pdp-canvas-utils";
 import { randomId } from "../../lib/browser-safe";
 import { pdpProcessSource } from "../api/library/work-process";
+
+/** 도구 막대 단추. 테두리·바탕·14px 로 막대인 것이 한눈에 보이게 한다. */
+const toolbarButtonClass = "h-9 gap-1.5 bg-background px-3 text-sm font-semibold text-foreground";
 
 interface PdpEditorProps {
   initialResult: GeneratedResult;
@@ -422,6 +429,16 @@ export function PdpEditor({
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   // 라이브러리 저장은 브라우저 초안 저장과 다르다. 계정에 올려 기기를 옮겨도 남는다.
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
+  const [isDownloadingStitched, setIsDownloadingStitched] = useState(false);
+  /*
+    **라이브러리에 어느 판을 어디까지 올렸나.**
+
+    같은 판을 또 올리면 서버가 한 작업 뒤에 같은 장을 또 이어 붙인다.
+    끊긴 판은 이어서 올린다. 화면에 「저장됨」을 보여 주려고 상태로도 둔다.
+  */
+  const [libraryProgress, setLibraryProgress] = useState<LibraryUploadProgress | null>(null);
+  const libraryProgressRef = useRef<LibraryUploadProgress | null>(null);
+  const librarySavingRef = useRef(false);
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
   /*
     **겉을 줄이는 배율.** 안쪽 캔버스는 늘 460px 이라 레이어 좌표의 뜻이
@@ -495,14 +512,6 @@ export function PdpEditor({
       isOpen: true,
     }));
   }, [currentSectionIndex, selectedLayer]);
-
-  useEffect(() => {
-    if (!previewStageRef.current) {
-      return;
-    }
-
-    setWorkbenchState((current) => clampWorkbenchToStage(current, previewStageRef.current));
-  }, [currentSectionIndex, currentSection?.generatedImage]);
 
   useEffect(() => {
     onDraftStateChange?.({
@@ -634,6 +643,50 @@ export function PdpEditor({
     setCanvasHeight(node.clientHeight || null);
   }, []);
 
+  /** 지금 페이지의 판. 그림·순서·얹은 글자 중 하나라도 바뀌면 달라진다. */
+  const libraryEntries = useMemo(
+    () =>
+      sections
+        .map((section, index) => ({ section, index }))
+        .filter(({ section }) => Boolean(section.generatedImage)),
+    [sections],
+  );
+  const libraryVersionSections = useMemo(
+    () =>
+      libraryEntries.map(({ section, index }) => {
+        const key = sectionKeys[index] ?? String(index);
+        return { key, image: section.generatedImage as string, layers: overlaysBySection[key] ?? [] };
+      }),
+    [libraryEntries, overlaysBySection, sectionKeys],
+  );
+  const currentLibraryKey = useMemo(() => libraryVersionKey(libraryVersionSections), [libraryVersionSections]);
+  const librarySaved =
+    libraryEntries.length > 0 &&
+    pendingLibraryUpload(libraryProgress, currentLibraryKey, libraryEntries.length).done;
+
+  /*
+    **생성이 끝나면 라이브러리에 자동으로 올린다.**
+
+    일괄 생성이 끝났을 때, 그리고 아직 한 번도 안 올린 페이지가 한 장씩 만들어져
+    다 채워졌을 때다. 한 장을 다시 만들 때마다 올리면 목록이 같은 페이지로
+    가득 찬다 — 그때는 단추가 「변경분 저장」으로 알려 준다.
+
+    **다 만들어졌을 때만 올린다.** 반쯤 만든 페이지를 올리면 나머지를 채운 뒤
+    또 한 벌이 생긴다.
+  */
+  // 저장 함수는 아래(이른 반환 뒤)에서 짓는다. 훅은 그 앞에 있어야 하므로
+  // 가리키는 자리만 먼저 둔다. 매 렌더 마지막 함수로 바꿔 끼운다.
+  const saveToLibraryRef = useRef<(options?: { auto?: boolean }) => Promise<void>>(async () => {});
+  const autoSavedRunRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (generationRun?.status !== "finished" || !generationRun.completed) return;
+    if (autoSavedRunRef.current === generationRun.startedAt) return;
+    if (!sections.length || sections.some((section) => !section.generatedImage)) return;
+    if (generationRun.mode !== "batch" && libraryProgressRef.current) return;
+    autoSavedRunRef.current = generationRun.startedAt;
+    void saveToLibraryRef.current({ auto: true });
+  }, [generationRun, sections]);
+
   if (!currentSection) {
     return (
       <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
@@ -725,38 +778,10 @@ export function PdpEditor({
     }));
   };
 
+  // 작업대는 이미지 옆 칸에 고정돼 있다. 여는 것만 하면 된다.
   const openWorkbench = (tab: WorkbenchTab) => {
     setWorkbenchTab(tab);
-    setWorkbenchState((current) => {
-      const fallback = getWorkbenchPosition(previewStageRef.current);
-
-      return {
-        ...(current.isOpen ? current : fallback),
-        isOpen: true,
-      };
-    });
-  };
-
-  const snapWorkbenchToEdge = () => {
-    const nextPosition = getWorkbenchPosition(previewStageRef.current);
-    setWorkbenchState((current) => ({
-      ...current,
-      ...nextPosition,
-      isOpen: true,
-    }));
-  };
-
-  const snapWorkbenchToOverlay = () => {
-    if (!selectedLayer) {
-      return;
-    }
-
-    setWorkbenchState((current) => ({
-      ...current,
-      // 축소 배율을 함께 넘긴다. 안 넘기면 좁은 화면에서 엉뚱한 자리에 붙는다.
-      ...anchorWorkbenchToOverlay(selectedLayer, imageContainerRef.current, previewStageRef.current, current, canvasFit),
-      isOpen: true,
-    }));
+    setWorkbenchState((current) => ({ ...current, isOpen: true }));
   };
 
   const renderColorPaletteField = ({
@@ -2287,125 +2312,253 @@ export function PdpEditor({
     }
   };
 
-  const handleDownload = async () => {
-    if (!currentSection.generatedImage) {
+  /**
+   * 만든 섹션을 계정 라이브러리에 **한 작업으로** 올린다.
+   *
+   * **생성이 끝나면 자동으로 부른다**(2026-09-23 사용자: 「생성 완료된 상세페이지
+   * 이미지들은 라이브러리에 자동 저장되어야 합니다」). 단추로도 부를 수 있다 —
+   * 한 장을 다시 만들거나 글자를 얹은 뒤 그 판을 남기고 싶을 때다.
+   *
+   * **한 페이지는 한 작업이다.** 전에는 묶음마다 새 작업이 되어 「(1/3)」처럼
+   * 여러 줄로 흩어졌다. 모든 묶음에 같은 `sourceId` 를 실어 서버가 이어 붙인다.
+   *
+   * 브라우저 초안 저장("작업 저장하기")과는 다른 동작이다. 이쪽은 서버에 남아
+   * 다른 기기에서도 보이고, 브라우저를 지워도 사라지지 않는다.
+   */
+  const handleSaveToLibrary = async ({ auto = false }: { auto?: boolean } = {}) => {
+    if (!libraryEntries.length) {
+      if (!auto) setErrorMessage("라이브러리에 저장할 이미지가 아직 없습니다.");
       return;
     }
+    // 자동 저장과 단추가 겹치면 같은 판이 두 번 올라간다.
+    if (librarySavingRef.current) return;
 
+    const versionKey = currentLibraryKey;
+    const total = libraryEntries.length;
+    const pending = pendingLibraryUpload(libraryProgressRef.current, versionKey, total);
+    /*
+      자동 저장은 이미 올린 판이면 멈춘다. **단추는 늘 서버에 묻는다** — 그사이
+      라이브러리에서 지웠다면 다시 올릴 수 있어야 한다(2차 독립 리뷰).
+    */
+    if (pending.done && auto) return;
+
+    const recordProgress = (sent: number) => {
+      const progress = { key: versionKey, sent };
+      libraryProgressRef.current = progress;
+      setLibraryProgress(progress);
+    };
+
+    librarySavingRef.current = true;
+    setIsSavingToLibrary(true);
+    if (!auto) setErrorMessage("");
+    try {
+      /*
+        **작업 열쇠는 그림으로 짓는다**(`libraryWorkId`). 표의 칸이 uuid 이고,
+        초안 id 는 도중에 생기거나 바뀌어 같은 페이지를 두 작업으로 가른다.
+
+        **먼저 서버에 몇 장까지 있는지 묻는다.** 다시 연 초안은 무엇을 올렸는지
+        모른다 — 묻지 않으면 이미 있는 장을 또 굽고 또 보낸다.
+      */
+      const sourceId = libraryWorkId(libraryVersionSections);
+      const probe = await apiJson<{ ok: boolean; imageCount?: number }>(`/library?sourceId=${sourceId}`);
+      // **서버가 기준이다.** 못 물었으면 이 화면이 기억하는 곳부터 보낸다.
+      let sent = probe.ok ? Math.min(Math.max(0, probe.imageCount ?? 0), total) : pending.from;
+      if (sent >= total) {
+        recordProgress(total);
+        if (!auto) setNotice("이 상세페이지는 이미 라이브러리에 저장되어 있습니다.");
+        return;
+      }
+
+      /*
+        **얹은 글자와 도형을 함께 저장한다.** 다운로드·ZIP 은 합쳐서 굽는데
+        라이브러리만 안 합치면, 같은 작업인데 내려받은 것과 저장된 것이 다르다.
+
+        **한 장씩 굽는다.** html2canvas 는 호출마다 문서 전체를 복제한다 —
+        동시에 여덟 장을 돌리면 휴대폰에서 탭이 죽는다.
+
+        **못 구운 것은 원본 바이트로 올린다.** 원본도 못 읽으면 **거기서 멈춘다**
+        — 건너뛰면 뒤의 장이 한 칸씩 당겨져 섹션 번호와 자리가 어긋난다.
+      */
+      const images: Array<{ base64: string; mimeType: string }> = [];
+      const 원본으로: string[] = [];
+      let 못읽음 = "";
+
+      for (const { section, index } of libraryEntries.slice(sent)) {
+        try {
+          const captured = await captureSectionBlob(index);
+          images.push({ base64: await blobToBase64(captured.blob), mimeType: captured.mimeType });
+        } catch {
+          const [, mimeType = "image/png", base64 = ""] =
+            /^data:([^;]+);base64,(.*)$/.exec(section.generatedImage ?? "") ?? [];
+          if (!base64) {
+            못읽음 = getDisplaySectionName(section);
+            break;
+          }
+          images.push({ base64, mimeType });
+          원본으로.push(getDisplaySectionName(section));
+        }
+      }
+
+      // 앞단이 요청 본문을 10MB 에서 자른다(운영 로그). 그 안에 맞춰 나눠 보낸다.
+      const title = initialResult.blueprint.executiveSummary?.slice(0, 60) || "상세페이지 작업";
+      const startedAt = sent;
+      let failure = "";
+
+      for (const batch of requestBatches(images)) {
+        const response = await apiJson<{
+          ok: boolean;
+          alreadySaved?: boolean;
+          conflict?: boolean;
+          totalCount?: number;
+          message?: string;
+        }>("/library", {
+          method: "POST",
+          // 만든 과정을 함께 보낸다. **무엇을 남길지는 서버가 고른다**
+          // (`api/library/work-process.ts`) — 여기서 골라 보내면 화면마다
+          // 규칙이 갈리고, 언젠가 원본 사진이 섞여 들어간다.
+          body: JSON.stringify({
+            title,
+            tool: "create",
+            sourceId,
+            // 몇 번째 장부터인지 알린다. 서버가 이미 있는 장을 또 붙이지 않는다.
+            startPosition: sent,
+            ...pdpProcessSource(initialResult, aspectRatio),
+            images: batch,
+          }),
+        });
+        if (!response.ok) {
+          // 장수가 어긋났다(다른 탭이 올렸거나 응답을 놓쳤다). 서버의 장수부터 다시 보낸다.
+          if (response.conflict && typeof response.totalCount === "number") {
+            recordProgress(Math.min(response.totalCount, total));
+          }
+          failure = response.message ?? "라이브러리에 저장하지 못했습니다.";
+          break;
+        }
+        sent = Math.min(total, Math.max(sent + batch.length, response.alreadySaved ? response.totalCount ?? 0 : 0));
+        recordProgress(sent);
+      }
+
+      if (!failure && 못읽음) {
+        failure = `${못읽음} 이미지를 읽지 못해 거기서 멈췄습니다. 그 섹션을 다시 만든 뒤 저장해 주세요.`;
+      }
+
+      if (sent > startedAt && !failure) {
+        const 덧붙임 = 원본으로.length
+          ? ` (${원본으로.join(", ")}은(는) 얹은 글자 없이 원본으로 저장했습니다)`
+          : "";
+        const 알림 = `라이브러리에 ${sent}장을 한 작업으로 저장했습니다.${덧붙임}`;
+        // 자동 저장은 방금 뜬 「성공 N장 · 크레딧 차감」 안내를 지우지 않고 덧붙인다.
+        setNotice((previous) => (auto && previous ? `${previous} · ${알림}` : 알림));
+      }
+      if (failure) {
+        setErrorMessage(
+          sent > 0
+            ? `라이브러리에 ${sent}/${total}장까지 저장했습니다. 「라이브러리에 저장」을 다시 누르면 나머지를 이어서 올립니다. (${failure})`
+            : failure,
+        );
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "라이브러리에 저장하지 못했습니다.",
+      );
+    } finally {
+      librarySavingRef.current = false;
+      setIsSavingToLibrary(false);
+    }
+  };
+
+  saveToLibraryRef.current = handleSaveToLibrary;
+
+  /**
+   * 섹션 한 장을 내려받는다. 얹은 글자까지 구운 완성본이다.
+   *
+   * 전에는 「현재 섹션」만 받을 수 있었는데, 갤러리에서는 현재 섹션이 늘 첫
+   * 장이라 **무엇을 눌러도 첫 장이 받아졌다**(2026-09-23 사용자). 이제 확대
+   * 창이 자기 장 번호로 부른다.
+   */
+  const downloadSection = async (index: number) => {
+    const section = sections[index];
+    if (!section?.generatedImage) return;
     try {
       setSelectedOverlayId(null);
       setEditingOverlayId(null);
       setActiveColorPalette(null);
-      const captured = await captureSectionBlob(currentSectionIndex);
-      // 원본 그대로 줄 때는 원래 형식의 확장자를 쓴다. png 를 .jpg 로 저장하면
-      // 여는 프로그램이 헷갈린다.
+      const captured = await captureSectionBlob(index);
       downloadBlob(
         captured.blob,
-        exportFileName(currentSection.section_id, captured.mimeType, captured.recomposited),
+        `${String(index + 1).padStart(2, "0")}-${exportFileName(section.section_id, captured.mimeType, captured.recomposited)}`,
       );
-      setNotice(`${getDisplaySectionName(currentSection)} 컷을 다운로드했습니다.`);
+      setNotice(`${getDisplaySectionName(section)} 이미지를 다운로드했습니다.`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "이미지를 다운로드하지 못했습니다.");
     }
   };
 
   /**
-   * 만든 섹션을 계정 라이브러리에 올린다.
+   * **이어보기를 긴 한 장으로 내려받는다**(2026-09-23 사용자).
    *
-   * 자동으로 올리지 않는다 — 실험 삼아 돌린 것까지 쌓이면 목록이 쓰레기로 찬다.
-   * 브라우저 초안 저장("작업 저장하기")과는 다른 동작이다. 이쪽은 서버에 남아
-   * 다른 기기에서도 보이고, 브라우저를 지워도 사라지지 않는다.
+   * 상세페이지는 결국 위아래로 붙인 긴 한 장으로 쇼핑몰에 올라간다. 얹은
+   * 글자까지 구운 장을 틈 없이 쌓는다. 한 장씩 굽는 것은 ZIP 과 같은 이유다.
    */
-  const handleSaveToLibrary = async () => {
-    const saved = sections.filter((section) => Boolean(section.generatedImage));
-    if (!saved.length) {
-      setErrorMessage("라이브러리에 저장할 이미지가 아직 없습니다.");
+  const handleDownloadStitched = async () => {
+    if (!libraryEntries.length) {
+      setErrorMessage("다운로드할 이미지가 아직 없습니다.");
       return;
     }
-
-    setIsSavingToLibrary(true);
-    setErrorMessage("");
     try {
+      setIsDownloadingStitched(true);
+      setSelectedOverlayId(null);
+      setEditingOverlayId(null);
+      setActiveColorPalette(null);
+
       /*
-        **얹은 글자와 도형을 함께 저장한다.**
-
-        전에는 `generatedImage` 원본만 올렸다. 다운로드·ZIP 은 합쳐서 굽는데
-        라이브러리만 안 합쳐서, 같은 작업인데 **내려받은 것과 저장된 것이
-        달랐다.** 여기는 「완성본 보관」이고 참고용 원본 저장과는 다른 동작이다.
+        **두 번에 나눠 굽는다**(독립 리뷰 MEDIUM). 전에는 모든 장의 비트맵을
+        쥔 채 그려, 8장이면 비트맵만 135MB 에 캔버스가 그만큼 더 들었다 —
+        ZIP·라이브러리 저장을 한 장씩으로 바꾼 이유(휴대폰 탭이 죽음)가 여기서
+        되살아났다. 먼저 크기만 재고 바로 놓은 뒤, 한 장씩 다시 구워 그리고 놓는다.
       */
+      const sizes: Array<{ width: number; height: number }> = [];
+      for (const { index } of libraryEntries) {
+        const bitmap = await createImageBitmap((await captureSectionBlob(index)).blob);
+        sizes.push({ width: bitmap.width, height: bitmap.height });
+        bitmap.close();
+      }
+
+      // 아이폰·아이패드 사파리는 캔버스 넓이 한도가 약 1,670만 픽셀이다.
+      const isAppleMobile = /iP(hone|ad|od)/.test(navigator.userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const layout = stitchLayout(sizes, isAppleMobile ? { maxArea: 16_000_000 } : {});
+      const canvas = document.createElement("canvas");
+      canvas.width = layout.width;
+      canvas.height = layout.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("이어보기 이미지를 만들지 못했습니다.");
+      // 투명한 PNG 가 섞여도 JPEG 에서 검게 나오지 않게 바탕을 깐다.
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, layout.width, layout.height);
+
+      for (const [position, { index }] of libraryEntries.entries()) {
+        const bitmap = await createImageBitmap((await captureSectionBlob(index)).blob);
+        const row = layout.rows[position];
+        context.drawImage(bitmap, 0, row.y, layout.width, row.height);
+        bitmap.close();
+      }
+
       /*
-        **한 장씩 굽는다.** 전에는 `Promise.all` 이라 여덟 장이 동시에
-        html2canvas 를 탔다. 그 라이브러리는 호출마다 문서 전체를 iframe 으로
-        복제하고 1536×2752 짜리 캔버스를 만든다 — 휴대폰에서는 탭이 죽고
-        사용자에게는 「저장이 안 된다」로만 보인다. ZIP 경로는 처음부터 순차였다.
-
-        **한 장이 실패해도 나머지를 살린다.** 동시에 돌릴 때는 하나만 터져도
-        여덟 장 전부가 저장되지 않았다. 못 구운 것은 원본 바이트로 올리고,
-        어느 섹션이 그랬는지 알린다.
+        **JPEG 로 굽는다.** 폭 1536 에 높이가 2만 픽셀을 넘는 사진이라 PNG 면
+        수십 MB 가 되어 쇼핑몰 업로드 한도를 넘는다. 품질은 0.95 로 둔다.
       */
-      const images: Array<{ base64: string; mimeType: string }> = [];
-      const 원본으로 : string[] = [];
-
-      for (const section of saved) {
-        const index = sections.indexOf(section);
-        try {
-          const captured = await captureSectionBlob(index);
-          images.push({ base64: await blobToBase64(captured.blob), mimeType: captured.mimeType });
-        } catch {
-          // 굽기에 실패했다. 얹은 글자는 없지만 그림은 남긴다.
-          const [, mimeType = "image/png", base64 = ""] =
-            /^data:([^;]+);base64,(.*)$/.exec(section.generatedImage ?? "") ?? [];
-          if (!base64) continue;
-          images.push({ base64, mimeType });
-          원본으로.push(getDisplaySectionName(section));
-        }
-      }
-
-      // 섹션 이미지 한 장이 4~5MB다. 전부 한 요청에 담으면 서버가 파싱하다
-      // 죽을 수 있다(운영 여유 메모리 445MB). 예산에 맞춰 나눠 보낸다.
-      const batches = planUploadBatches(images);
-      let savedCount = 0;
-      let failure = "";
-
-      for (const [index, batch] of batches.entries()) {
-        const title =
-          (initialResult.blueprint.executiveSummary?.slice(0, 60) || "상세페이지 작업") +
-          (batches.length > 1 ? ` (${index + 1}/${batches.length})` : "");
-        const response = await apiJson<{ ok: boolean; imageCount?: number; message?: string }>(
-          "/library",
-          {
-            method: "POST",
-            // 만든 과정을 함께 보낸다. **무엇을 남길지는 서버가 고른다**
-            // (`api/library/work-process.ts`) — 여기서 골라 보내면 화면마다
-            // 규칙이 갈리고, 언젠가 원본 사진이 섞여 들어간다.
-            body: JSON.stringify({
-              title,
-              tool: "create",
-              ...pdpProcessSource(initialResult, aspectRatio),
-              images: batch,
-            }),
-          },
-        );
-        if (response.ok) savedCount += response.imageCount ?? batch.length;
-        else {
-          failure = response.message ?? "라이브러리에 저장하지 못했습니다.";
-          break;
-        }
-      }
-
-      if (savedCount) {
-        const 덧붙임 = 원본으로.length
-          ? ` (${원본으로.join(", ")}은(는) 얹은 글자 없이 원본으로 저장했습니다)`
-          : "";
-        setNotice(`라이브러리에 ${savedCount}장을 저장했습니다. 다른 기기에서도 보입니다.${덧붙임}`);
-      }
-      if (failure) setErrorMessage(failure);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.95));
+      // 캔버스를 바로 놓는다. 들고 있으면 그만큼 메모리가 남는다.
+      canvas.width = 0;
+      canvas.height = 0;
+      if (!blob) throw new Error("이어보기 이미지를 만들지 못했습니다. 섹션 수를 줄여 다시 시도해 주세요.");
+      downloadBlob(blob, `pdp-stitched-${new Date().toISOString().slice(0, 10)}.jpg`);
+      setNotice(`${libraryEntries.length}개 섹션을 이어 붙인 한 장을 다운로드했습니다.`);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "라이브러리에 저장하지 못했습니다.",
-      );
+      setErrorMessage(error instanceof Error ? error.message : "이어보기 이미지를 다운로드하지 못했습니다.");
     } finally {
-      setIsSavingToLibrary(false);
+      setIsDownloadingStitched(false);
     }
   };
 
@@ -2494,15 +2647,27 @@ export function PdpEditor({
         />
       </div>
 
+      {/*
+        **도구 막대를 잘 보이게 한다**(2026-09-23 사용자: 「설정으로, 펼치기, 편집
+        등 버튼이 나와 있는 곳이 잘 안 보입니다」).
+
+        전에는 전부 테두리 없는 작은 글자(`ghost`·12px)라 막대인지도 몰랐다.
+        단추마다 테두리·바탕·14px 굵은 글자를 주고, 하는 일끼리 묶었다 —
+        (아이콘은 안 붙인다 — 2026-09-22 사용자 지시, `section-start-guide.test`)
+        왼쪽은 오가기, 가운데는 저장, 오른쪽은 내려받기다.
+      */}
       <div
-        className="mb-4 flex flex-wrap items-center gap-1.5 rounded-lg bg-card p-2 shadow-[var(--shadow-ring)]"
+        className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2.5 shadow-[var(--shadow-ring)]"
         onClick={stopShellClick}
       >
-        <Button variant="ghost" size="sm" disabled={isGenerating} onClick={onReset}>
+        <Button variant="outline" className={toolbarButtonClass} disabled={isGenerating} onClick={onReset}>
           설정으로
         </Button>
-        <span className="mx-1 h-5 w-px bg-border" />
-        <div className="flex gap-0.5 rounded-full bg-background p-0.5 shadow-[var(--shadow-ring)]">
+        <div
+          role="group"
+          aria-label="보기 전환"
+          className="flex gap-1 rounded-lg border border-border bg-background p-1"
+        >
           {([
             { value: "gallery" as const, label: "갤러리" },
             { value: "editor" as const, label: "편집" },
@@ -2513,38 +2678,50 @@ export function PdpEditor({
               aria-pressed={screen === item.value}
               onClick={() => setScreen(item.value)}
               className={cn(
-                "rounded-full px-3 py-1 text-xs font-bold transition-colors",
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-3.5 text-sm font-semibold transition-colors",
                 screen === item.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-foreground hover:bg-muted"
               )}
             >
               {item.label}
             </button>
           ))}
         </div>
-        <span className="mx-1 h-5 w-px bg-border" />
         {onOpenSettings ? (
-          <Button variant="ghost" size="sm" onClick={onOpenSettings}>
+          <Button variant="outline" className={toolbarButtonClass} onClick={onOpenSettings}>
             설정
           </Button>
         ) : null}
-        {onUndo ? <Button variant="ghost" size="sm" disabled={isGenerating} onClick={onUndo}>변경 전으로 되돌리기</Button> : null}
+
+        <span aria-hidden className="mx-1 hidden h-6 w-px bg-border sm:block" />
+
+        {onUndo ? (
+          <Button variant="outline" className={toolbarButtonClass} disabled={isGenerating} onClick={onUndo}>
+            변경 전으로 되돌리기
+          </Button>
+        ) : null}
         {onManualSave ? (
-          <Button variant="ghost" size="sm" disabled={saveState === "saving"} onClick={onManualSave}>
-            {saveState === "saving" ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
+          <Button variant="outline" className={toolbarButtonClass} disabled={saveState === "saving"} onClick={onManualSave}>
+            {saveState === "saving" ? <Loader2 className="animate-spin" /> : null}
             작업 저장하기
           </Button>
         ) : null}
         <Button
-          variant="ghost"
-          size="sm"
+          variant="outline"
+          className={toolbarButtonClass}
           disabled={!generatedCount || isSavingToLibrary}
           onClick={() => void handleSaveToLibrary()}
-          title="계정에 올려 다른 기기에서도 볼 수 있게 합니다"
+          title="계정에 한 작업으로 올려 다른 기기에서도 볼 수 있게 합니다. 생성이 끝나면 자동으로 올라갑니다."
         >
-          {isSavingToLibrary ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
-          라이브러리에 저장
+          {isSavingToLibrary ? <Loader2 className="animate-spin" /> : null}
+          {isSavingToLibrary
+            ? "라이브러리에 저장 중"
+            : librarySaved
+              ? "라이브러리에 저장됨"
+              : libraryProgress
+                ? "바뀐 내용 라이브러리에 저장"
+                : "라이브러리에 저장"}
         </Button>
         {/* 위 버튼은 상세페이지 보관함으로 간다. 이건 참고 이미지로 넣어
             카드뉴스·포스터가 다음 작업의 기준으로 쓸 수 있게 한다. */}
@@ -2556,19 +2733,36 @@ export function PdpEditor({
               title: `상세페이지 ${index + 1}`,
             }))}
           disabled={!generatedCount}
+          buttonVariant="outline"
+          buttonClassName={toolbarButtonClass}
         />
-        <div className="ml-auto flex items-center gap-1.5">
+
+        {/*
+          **내려받기는 두 가지만 둔다**(2026-09-23 사용자).
+
+          「현재 섹션 다운로드」는 갤러리에서 늘 첫 장을 받았다 — 갤러리에는
+          「현재 섹션」이 없는데 첫 장이 그 자리를 차지하고 있었다. 한 장씩은
+          확대 창에서 받는다. 여기에는 전부(ZIP)와 이어 붙인 한 장만 둔다.
+        */}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
-            disabled={!generatedCount || isDownloadingAll}
-            onClick={handleDownloadAll}
+            className={toolbarButtonClass}
+            disabled={!generatedCount || isDownloadingStitched}
+            onClick={() => void handleDownloadStitched()}
+            title="이어보기처럼 위아래로 붙인 긴 한 장(JPG)으로 받습니다"
           >
-            {isDownloadingAll ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
-            전체 ZIP
+            {isDownloadingStitched ? <Loader2 className="animate-spin" /> : null}
+            이어보기 다운로드
           </Button>
-          <Button size="sm" onClick={handleDownload} disabled={!currentSection.generatedImage}>
-            현재 섹션 다운로드
+          <Button
+            className="h-9 gap-1.5 px-4 text-sm font-semibold"
+            disabled={!generatedCount || isDownloadingAll}
+            onClick={() => void handleDownloadAll()}
+            title="섹션마다 한 장씩 ZIP 으로 받습니다"
+          >
+            {isDownloadingAll ? <Loader2 className="animate-spin" /> : null}
+            전체 다운로드
           </Button>
         </div>
       </div>
@@ -2690,6 +2884,7 @@ export function PdpEditor({
               setCurrentSectionIndex(index);
               setScreen("editor");
             }}
+            onDownload={downloadSection}
             onMove={handleMoveSection}
             onDelete={handleDeleteSection}
             onAdd={handleAddSection}
@@ -2707,7 +2902,16 @@ export function PdpEditor({
         </div>
       ) : (
       <div className="grid items-start gap-4 xl:grid-cols-[clamp(240px,18vw,300px)_minmax(0,1fr)]">
-        <aside className="grid gap-3 xl:sticky xl:top-6" onClick={stopShellClick}>
+        {/*
+          **왼쪽 칸이 자기 폭을 넘지 않게 한다**(2026-09-23 사용자: 「겹치고 안 보인다」).
+
+          격자의 칸 크기는 기본으로 **내용 중 가장 긴 줄**이다(`min-width: auto`).
+          섹션 목록의 설명은 한 줄로 자르게(`truncate`) 해 두었지만, 자르기 전의 긴
+          줄이 그 칸을 넓혀서 왼쪽 카드들이 300px 칸을 넘어 350px 폭으로 밀려 나왔다.
+          `sticky` 라 겹칠 때 위에 그려져, 가운데 편집 화면의 제목과 도구 단추를
+          덮었다. 칸마다 `minmax(0, 1fr)` 로 「내용보다 작아져도 된다」를 적는다.
+        */}
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 xl:sticky xl:top-6" onClick={stopShellClick}>
           <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-ring)]">
             <p className="text-meta text-subtle-foreground">현재 섹션</p>
             <h2 className="text-h2">{getDisplaySectionName(currentSection)}</h2>
@@ -2736,7 +2940,7 @@ export function PdpEditor({
 
           <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-ring)]">
             <p className="mb-2 text-meta text-subtle-foreground">섹션 목록</p>
-            <div className="grid gap-1">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
               {sections.map((section, index) => {
                 const isCurrent = index === currentSectionIndex;
 
@@ -2747,7 +2951,7 @@ export function PdpEditor({
                     aria-current={isCurrent ? "true" : undefined}
                     onClick={() => setCurrentSectionIndex(index)}
                     className={cn(
-                      "flex items-start gap-2 rounded-md p-2 text-left transition-colors",
+                      "flex w-full min-w-0 items-start gap-2 rounded-md p-2 text-left transition-colors",
                       isCurrent
                         ? "bg-primary-soft shadow-[0_0_0_1px_var(--primary-ring)]"
                         : "hover:bg-background"
@@ -2882,6 +3086,22 @@ export function PdpEditor({
               </button>
             </div>
 
+              {/*
+                **작업대를 이미지 옆 칸에 고정한다**(2026-09-23 사용자: 「레이아웃이
+                정형화 안 되어 겹치고 안 보인다」).
+
+                전에는 무대 위에 떠 있는 창(`Rnd`)이었다. 처음 자리가 x=756 으로
+                박혀 있어 무대가 그보다 좁으면 **오른쪽 끝이 잘려** 닫기 단추가
+                안 보였고, 넓으면 이미지 위를 덮었다. 끌어서 옮기는 것은 사용자가
+                매번 치워야 한다는 뜻이다. 이제 넓은 화면에서는 오른쪽 칸, 좁은
+                화면에서는 이미지 아래에 놓인다 — 어느 폭에서도 겹치지 않는다.
+              */}
+              <div
+                className={cn(
+                  "grid items-start gap-4",
+                  workbenchState.isOpen && "2xl:grid-cols-[minmax(0,1fr)_clamp(320px,22vw,380px)]",
+                )}
+              >
               <div className={styles.previewStage} ref={previewStageRef}>
                 {currentSection.generatedImage ? (
                   /*
@@ -3060,42 +3280,10 @@ export function PdpEditor({
                   </div>
                 )}
 
+              </div>
+
                 {workbenchState.isOpen ? (
-                  <Rnd
-                    bounds="parent"
-                    className={styles.workbenchShell}
-                    dragHandleClassName={styles.workbenchHandle}
-                    enableResizing={{
-                      top: false,
-                      right: true,
-                      bottom: true,
-                      left: false,
-                      topRight: false,
-                      bottomRight: true,
-                      bottomLeft: false,
-                      topLeft: false,
-                    }}
-                    minHeight={420}
-                    minWidth={320}
-                    onDragStop={(_, data) =>
-                      setWorkbenchState((current) => ({
-                        ...current,
-                        x: data.x,
-                        y: data.y,
-                      }))
-                    }
-                    onResizeStop={(_, __, ref, ___, position) =>
-                      setWorkbenchState((current) => ({
-                        ...current,
-                        x: position.x,
-                        y: position.y,
-                        width: ref.offsetWidth,
-                        height: ref.offsetHeight,
-                      }))
-                    }
-                    position={{ x: workbenchState.x, y: workbenchState.y }}
-                    size={{ width: workbenchState.width, height: workbenchState.height }}
-                  >
+                  <div className={styles.workbenchDock}>
                     <div className={styles.workbenchPanel} onClick={(event: ReactMouseEvent<HTMLDivElement>) => event.stopPropagation()}>
                       <div className={styles.workbenchHandle}>
                         <div className={styles.workbenchHandleCopy}>
@@ -3111,13 +3299,6 @@ export function PdpEditor({
                           </strong>
                         </div>
                         <div className={styles.workbenchHeaderActions}>
-                          <button
-                            className={styles.inlineButton}
-                            onClick={workbenchTab === "layer" && selectedLayer ? snapWorkbenchToOverlay : snapWorkbenchToEdge}
-                            type="button"
-                          >
-                            옆으로 붙이기
-                          </button>
                           <button
                             className={styles.inlineButton}
                             onClick={() =>
@@ -3166,7 +3347,7 @@ export function PdpEditor({
 
                       <div className={styles.workbenchBody}>{renderWorkbenchBody()}</div>
                     </div>
-                  </Rnd>
+                  </div>
                 ) : null}
               </div>
 

@@ -390,9 +390,30 @@
 }
 
 
-.workbenchShell {
-  position: absolute;
-  z-index: 6;
+/*
+  작업대는 이미지 옆(넓은 화면) 또는 아래(좁은 화면) 칸에 고정된다.
+  전에는 무대 위에 떠 있어 무대가 좁으면 잘리고 넓으면 이미지를 덮었다.
+  높이를 화면 안으로 묶고 안쪽(`workbenchBody`)만 스크롤한다.
+*/
+.workbenchDock {
+  min-width: 0;
+  height: min(720px, calc(100vh - 48px));
+}
+
+@media (min-width: 1536px) {
+  .workbenchDock {
+    position: sticky;
+    top: 24px;
+  }
+}
+
+.workbenchDock .workbenchPanel {
+  box-shadow: var(--shadow-ring);
+  backdrop-filter: none;
+}
+
+.workbenchDock .workbenchHandle {
+  cursor: default;
 }
 
 .workbenchPanel {
@@ -1142,10 +1163,5 @@
   .previewStage {
     min-height: 420px;
     padding: 16px;
-  }
-
-  .workbenchShell {
-    width: calc(100% - 24px) !important;
-    left: 12px !important;
   }
 }

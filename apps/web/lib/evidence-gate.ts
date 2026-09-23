@@ -54,7 +54,7 @@ export function rejectIfUnverified(sections: SectionBlueprint[]): Response | nul
  *
  * 전에는 `prompt_en` **하나만** 봤다. 그런데 상세페이지는 출력 모드가
  * `full-image` 라 글자가 이미지 안에 그려진다 — `pdp.image-prompt.ts` 의
- * `typography` 가 제목·부제·불릿·신뢰문구를 프롬프트에 싣는다.
+ * `typography` 가 제목·부제·불릿을 프롬프트에 싣는다.
  *
  * 그래서 사용자가 제목에 「식약처 인증」을 직접 치면 아무 데도 안 걸렸다.
  * 코어의 금지 주장 검사는 **우리가 채운 예시**(`kind: "sample"`)에만 돌고,
@@ -69,6 +69,9 @@ export function rejectIfUnverified(sections: SectionBlueprint[]): Response | nul
  * 2026-07-30 — 눌리지 않는 그림 버튼이 되기 때문). **안 그려지는 글자로
  * 생성을 막으면 사용자는 왜 막혔는지 알 수 없다.**
  *
+ * **신뢰 문장도 안 본다**(2026-09-23 사용자 결정). 이미지 밑에 설명 한 줄로
+ * 박혀 나와 그리지 않기로 했다 — CTA 와 같은 이유로 그 글자로 막지 않는다.
+ *
  * `prompt_ko` 도 안 본다 — 장면 지시이고 `prompt_en` 으로 옮겨져 실린다.
  */
 function bannedInRenderedCopy(section: SectionBlueprint) {
@@ -76,7 +79,6 @@ function bannedInRenderedCopy(section: SectionBlueprint) {
     { label: "장면 지시", text: section.prompt_en },
     { label: "제목", text: section.headline },
     { label: "부제", text: section.subheadline },
-    { label: "신뢰 문장", text: section.trust_or_objection_line },
     ...(section.bullets ?? []).map((text, index) => ({ label: `${index + 1}번째 항목`, text })),
   ];
 

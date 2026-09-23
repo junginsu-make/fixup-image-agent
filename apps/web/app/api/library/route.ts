@@ -1,5 +1,6 @@
 import {
   deleteLibraryItem,
+  findLibraryItemBySource,
   getLibraryItemImages,
   listLibraryItems,
   saveOrAppendLibraryItem,
@@ -15,6 +16,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // 섹션 여러 장을 한 번에 올린다. 장당 몇 MB라 넉넉히 잡는다.
 export const maxDuration = 300;
+
+/** `library_items.source_id` 칸이 uuid 다. 다른 글자는 조회 전에 거른다. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // 한 작업에 담을 수 있는 이미지 수. 상세페이지 섹션 상한은 10장이다
 // (`MAX_PLANNED_SECTIONS`). 이 값은 그보다 넉넉해야 한다.
@@ -51,8 +55,30 @@ export async function GET(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
+  const query = new URL(req.url).searchParams;
+
+  /*
+    **같은 작업이 몇 장까지 올라가 있나**(상세페이지 이어 올리기).
+
+    다시 연 초안은 무엇을 올렸는지 모른다. 먼저 물어 이미 있는 장은 굽지도
+    보내지도 않는다. 자기 것만 본다 — 남의 작업 열쇠로 장수를 떠볼 수 없다.
+  */
+  const sourceId = query.get("sourceId");
+  if (sourceId !== null) {
+    if (!UUID_RE.test(sourceId)) {
+      return Response.json({ ok: false, message: "요청 형식이 올바르지 않습니다." }, { status: 400 });
+    }
+    try {
+      const found = await findLibraryItemBySource(auth.member.userId, "create", sourceId);
+      return Response.json({ ok: true, imageCount: found?.imageCount ?? 0 });
+    } catch (error) {
+      console.error("[library:source]", error);
+      return Response.json({ ok: false, message: "라이브러리를 불러오지 못했습니다." }, { status: 500 });
+    }
+  }
+
   const viewer = await viewerOf(auth.member);
-  const itemId = new URL(req.url).searchParams.get("id");
+  const itemId = query.get("id");
 
   try {
     if (itemId) {
@@ -96,6 +122,11 @@ export async function POST(req: Request) {
        */
       blueprint?: unknown;
       review?: unknown;
+      /**
+       * 이 묶음이 **몇 번째 장부터**인가. 주면 서버가 이미 있는 장과 대조해
+       * 같은 장을 두 번 붙이지 않는다(`lib/library-append.ts`).
+       */
+      startPosition?: number;
       images?: Array<{ base64?: string; mimeType?: string }>;
     };
 
@@ -112,13 +143,23 @@ export async function POST(req: Request) {
     }
 
     const tool = body.tool === "redesign" ? "redesign" : "create";
+    const sourceId = body.sourceId ? String(body.sourceId).slice(0, 120) : undefined;
+    // 칸이 uuid 라, 아니면 표가 형식 오류를 내고 500 이 된다. 먼저 400 으로 답한다.
+    if (sourceId && !UUID_RE.test(sourceId)) {
+      return Response.json({ ok: false, message: "요청 형식이 올바르지 않습니다." }, { status: 400 });
+    }
+    const startPosition =
+      Number.isInteger(body.startPosition) && (body.startPosition as number) >= 0
+        ? (body.startPosition as number)
+        : undefined;
     const result = await saveOrAppendLibraryItem({
       userId: auth.member.userId,
       title: String(body.title || "제목 없는 작업"),
       tool,
       origin: originOf(body.origin, tool),
       aspectRatio: body.aspectRatio,
-      sourceId: body.sourceId ? String(body.sourceId).slice(0, 120) : undefined,
+      sourceId,
+      startPosition,
       process: workProcessOf({
         blueprint: body.blueprint as never,
         review: body.review,
@@ -127,9 +168,9 @@ export async function POST(req: Request) {
       images,
     });
 
-    return result.ok
-      ? Response.json(result)
-      : Response.json(result, { status: 500 });
+    if (result.ok) return Response.json(result);
+    // 장수가 어긋났다. 화면이 `totalCount` 부터 다시 보내면 된다.
+    return Response.json(result, { status: "conflict" in result && result.conflict ? 409 : 500 });
   } catch (error) {
     /*
       **DB 오류 문구를 화면에 흘리지 않는다.** 표 이름·칼럼 이름·제약 이름이
