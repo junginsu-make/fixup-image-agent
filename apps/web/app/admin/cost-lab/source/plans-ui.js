@@ -112,6 +112,47 @@
   el('plans').addEventListener('change', e => {
     if (e.target.name === 'plan-apply') { selected = e.target.value; save(); }
   });
+  /*
+    **저장은 실제 구독 플랜을 바꾼다**(2026-09-23 사용자 요청).
+
+    그동안 이 화면은 브라우저에만 저장됐다. 이제 `subscription_plans` 에
+    들어가고, **회원 관리에서 등급을 줄 때 이 값이 그대로 쓰인다.**
+
+    저장이 성공하면 **같은 값을 다른 탭에도 민다** — 통합 요약·충전형·
+    생산량이 옛 숫자를 들고 있으면, 저장한 사람은 어느 쪽이 맞는지 모른다.
+  */
+  let 저장중 = false;
+  async function saveToServer() {
+    if (저장중) return;
+    저장중 = true;
+    const button = el('plans-save');
+    const 원래글자 = button.textContent;
+    button.disabled = true; button.textContent = '저장하는 중…';
+    el('plans-saved').textContent = '';
+    try {
+      const response = await fetch('/api/admin/cost-plans', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ plans }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.ok) {
+        el('plans-saved').textContent = body.message || '저장하지 못했습니다. 잠시 후 다시 눌러 주세요.';
+        return;
+      }
+      // 저장한 값으로 다른 탭을 맞춘다. 고른 플랜 하나가 아니라 저장한 그대로다.
+      apply(selected, false);
+      const 요약 = api.pricePlans(plans).map(p => `${p.name} ${p.credits}개 ${won(p.paidPrice)}`).join(' · ');
+      el('plans-saved').textContent = `저장했습니다. 회원 관리에서 이 값으로 등급을 줍니다 — ${요약}`;
+      if (typeof toast === 'function') toast('구독 플랜을 저장했습니다.');
+    } catch {
+      el('plans-saved').textContent = '서버와 통신하지 못했습니다. 잠시 후 다시 눌러 주세요.';
+    } finally {
+      저장중 = false;
+      button.disabled = false; button.textContent = 원래글자;
+    }
+  }
+
+  el('plans-save').onclick = () => void saveToServer();
   el('plans-apply').onclick = () => apply(selected, true);
   el('plans-reset').onclick = () => { plans = defaults(); selected = 'basic'; save(); build(); el('plans-error').hidden = true; };
 
