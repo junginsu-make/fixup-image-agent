@@ -65,7 +65,7 @@ describe("포스터 작업 조립", () => {
 
   it("GPT 는 픽셀과 품질을 명시한다 — auto 는 입력 크기를 물려받는다", () => {
     const job = buildPosterJob(base);
-    expect(job.input.image_size).toEqual({ width: 1024, height: 1536 });
+    expect(job.input.image_size).toEqual({ width: 1216, height: 1824 });
     expect(job.input.quality).toBe("high");
   });
 
