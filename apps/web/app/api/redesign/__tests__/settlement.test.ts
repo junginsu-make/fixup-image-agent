@@ -228,3 +228,50 @@ describe("부분 성공은 만든 만큼만 받는다", () => {
   });
 });
 
+
+/**
+ * **「1080×1920」을 고르면 정말 1080×1920 이 나온다**(2026-09-23 사용자 결정).
+ *
+ * 전에는 「9:16」과 같은 1152×2048 이 나왔다. 모델이 크기를 정확히 안 지키므로
+ * 라우트가 다 만든 그림을 맞춘다. 고친 그림도 작업의 크기를 지킨다.
+ */
+describe("정확한 출력 크기", () => {
+  const sharpLib = async () => (await import("sharp")).default;
+  const 그림 = async (width: number, height: number) => {
+    const sharp = await sharpLib();
+    const buffer = await sharp({ create: { width, height, channels: 3, background: "#c96" } }).png().toBuffer();
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  };
+  const 크기 = async (dataUrl: string) => {
+    const sharp = await sharpLib();
+    const meta = await sharp(Buffer.from(dataUrl.split(",")[1]!, "base64")).metadata();
+    return `${meta.width}x${meta.height}`;
+  };
+  const 생성 = async (ratio: string) => {
+    mocks.generate.mockResolvedValue({ project: { sections: [{ imageUrl: await 그림(1152, 2048) }] } });
+    const form = new FormData();
+    form.append("files", 원본());
+    form.append("ratio", ratio);
+    const response = await generate(new Request("http://local/api/redesign/generate", { method: "POST", body: form }));
+    const json = await response.json();
+    if (!json.project) throw new Error(`route said ${response.status}: ${JSON.stringify(json)}`);
+    return json.project.sections[0].imageUrl as string;
+  };
+
+  it("**생성: 1080×1920 을 고르면 1080×1920 이다**", async () => {
+    expect(await 크기(await 생성("1080×1920"))).toBe("1080x1920");
+  });
+
+  it("생성: 9:16 은 모델이 그린 그대로다", async () => {
+    expect(await 크기(await 생성("9:16"))).toBe("1152x2048");
+  });
+
+  it("**수정: 1080×1920 작업의 고친 그림도 1080×1920 이다**", async () => {
+    mocks.edit.mockResolvedValue({ imageUrl: await 그림(1152, 2048) });
+    const response = await edit(new Request("http://local/api/redesign/edit", {
+      method: "POST",
+      body: JSON.stringify({ imageUrl: "data:image/png;base64,AAAA", request: "밝게", project: { ratio: "1080×1920" } }),
+    }));
+    expect(await 크기((await response.json()).imageUrl)).toBe("1080x1920");
+  });
+});

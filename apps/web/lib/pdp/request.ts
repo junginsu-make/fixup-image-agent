@@ -19,6 +19,12 @@ const model = text.refine((value) => IMAGE_MODELS.some((entry) => entry.id === v
   .transform((value) => value as ImageModelId);
 const ratio = z.enum(["1:1", "3:4", "4:3", "9:16", "16:9"]);
 /*
+  **리디자인은 「1080×1920」도 받는다**(2026-09-23). 화면이 이 선택지를 내놓고
+  있었는데 여기서 거절해, 고르면 늘 「요청 형식이 올바르지 않습니다」였다.
+  그 크기로 맞추는 일은 라우트가 한다(`lib/redesign/exact-size.ts`).
+*/
+const redesignRatio = z.enum(["1:1", "3:4", "4:3", "9:16", "16:9", "1080×1920", "1080x1920"]);
+/*
   `.passthrough()` 라 **선언하지 않은 칸은 무검증으로 지나간다.** 그래서 이
   그림에 붙는 말 두 칸을 여기서 못 박는다 — `intent` 는 규칙을 밀어내고,
   `description` 은 프롬프트에 그대로 실린다.
@@ -235,7 +241,7 @@ export async function readRedesignForm(req: Request): Promise<{ ok: true; form: 
       !Number.isInteger(count) || count < 1 || count > 10 || !Number.isInteger(start) || start < 1 ||
       !form.getAll("files").some((file) => file instanceof File && file.size > 0) ||
       (form.has("model") && !["openai", "google"].includes(String(form.get("model")))) ||
-      (form.has("ratio") && !ratio.safeParse(form.get("ratio")).success) ||
+      (form.has("ratio") && !redesignRatio.safeParse(form.get("ratio")).success) ||
       (form.has("look") && !z.enum(IMAGE_LOOKS).safeParse(form.get("look")).success)) {
       return { ok: false, response: invalidPdpRequest() };
     }
