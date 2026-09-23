@@ -10,6 +10,7 @@ import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
 import { createRedesignImageGenerator, pixelSizeOf, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
+import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -198,7 +199,18 @@ async function generate(req: Request) {
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
     });
-    const consumed = Math.min(requestedCount, result.project.sections.length);
+    /*
+      **「1080×1920」을 고르면 정말 그 크기로 준다**(2026-09-23 사용자 결정).
+      모델은 픽셀 크기를 정확히 안 지키므로 다 만든 뒤 맞춘다. 「9:16」은 그대로.
+    */
+    const exact = exactOutputSize(String(form.get("ratio") || ""));
+    // 한 장씩 차례로 맞춘다(서버 메모리). 받은 목록은 고쳐 쓰지 않고 새로 짓는다.
+    const sizedSections = [];
+    for (const section of result.project.sections) {
+      sizedSections.push(exact && section.imageUrl ? { ...section, imageUrl: await fitDataUrlToSize(section.imageUrl, exact) } : section);
+    }
+    const sized = { ...result, project: { ...result.project, sections: sizedSections } };
+    const consumed = Math.min(requestedCount, sized.project.sections.length);
     const usage = await settleAiUsage(
       reservation,
       consumed > 0,
@@ -209,7 +221,7 @@ async function generate(req: Request) {
       // 글값도 함께 남긴다. 그동안 리디자인의 분석 비용은 장부에 0원이었다.
       { model: billedModel, billableImages: consumed, deliveredImages: consumed, completionConfirmed: true, llmUsd: readLlmMeter().usd },
     );
-    return Response.json({ ...result, usage });
+    return Response.json({ ...sized, usage });
   } catch (err) {
     if (reservation?.ok) {
       /*

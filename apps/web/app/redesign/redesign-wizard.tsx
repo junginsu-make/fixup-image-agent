@@ -664,7 +664,7 @@ export function RedesignWizard() {
           imageUrl: requestImageUrl,
           request: trimmedEditRequest,
           section,
-          project: { title: projectDisplayTitle(project), channel: project.channel, request: project.request }
+          project: { title: projectDisplayTitle(project), channel: project.channel, request: project.request, ratio: project.ratio }
         }),
         signal: abortController.signal
       });

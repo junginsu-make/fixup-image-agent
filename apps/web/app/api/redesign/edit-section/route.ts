@@ -5,6 +5,7 @@ import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../l
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { readPdpRequest } from "../../../../lib/pdp/request";
+import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -41,12 +42,15 @@ export async function POST(req: Request) {
       새로 만들 때와 같은 길(fal)로 고친다. 키가 없을 때만 지금까지의 직접
       호출로 떨어진다 — 그 길 하나 때문에 수정이 통째로 멎으면 안 된다.
     */
-    const result = await editSection({
+    const edited = await editSection({
       ...body,
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
       generateImage,
     });
+    // 고친 그림도 작업의 크기를 지킨다. 「1080×1920」 작업이면 그 크기로 맞춘다.
+    const exact = exactOutputSize((body as { project?: { ratio?: string } }).project?.ratio);
+    const result = exact && edited.imageUrl ? { ...edited, imageUrl: await fitDataUrlToSize(edited.imageUrl, exact) } : edited;
     const usage = await settleAiUsage(reservation, true, units, undefined, {
       model: billedModel,
       billableImages: 1, deliveredImages: 1, completionConfirmed: true,
