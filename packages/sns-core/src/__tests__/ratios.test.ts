@@ -119,7 +119,7 @@ describe("포스터 비율을 모델 값으로", () => {
   });
 
   it("포스터 세로 2:3 은 양쪽 다 된다", () => {
-    expect(resolvePosterSize("2:3", gpt).pixel).toEqual({ width: 1024, height: 1536 });
+    expect(resolvePosterSize("2:3", gpt).pixel).toEqual({ width: 1216, height: 1824 });
     expect(resolvePosterSize("2:3", nano).aspectRatio).toBe("2:3");
   });
 

@@ -82,13 +82,31 @@ function ratioShape(list: typeof POSTER_RATIOS) {
 }
 
 describe("격리 자물쇠 — 포스터 비율", () => {
+  /**
+   * **2026-09-23 에 넷을 키웠다** — `4:5`·`1:1`·`9:16`·`2:3`·`3:4` 의 짧은 변을
+   * 1200 이상으로. 이 자물쇠가 잡으라고 만든 「광고 파생의 근거가 무너지는」
+   * 변경이 아니라 **그 반대다.**
+   *
+   * 광고 필수 규격의 짧은 변이 1200 인데 재료가 1088~1152 라, `/ad` 가 정사각
+   * 필수 규격 셋을 **어떤 그림으로도 못 뽑고 있었다**(확대 금지,
+   * `apps/web/lib/ad/export.ts:91`). 광고가 이 값에 기대는 방향은 「목표보다
+   * 작아지면 안 된다」이므로 키우는 것은 근거를 무너뜨리지 않는다. 비율은 한
+   * 자리도 안 틀어졌고 단가·크레딧도 그대로다.
+   *
+   * **`CARD_RATIOS`(아래 자물쇠)는 안 건드렸다.** 두 목록의 같은 id 가 이제
+   * 다른 크기인 것은 의도다 — 카드뉴스는 슬롯 레이아웃과 레터박스 확대 경고가
+   * 크기에 얽혀 있어 판단이 따로 필요하고, 광고 소재의 재료는 이미지 만들기다.
+   *
+   * 설계: `docs/superpowers/specs/2026-09-23-ad-source-size-design.md`
+   * 검증: `apps/web/lib/__tests__/ad-source-coverage.test.ts`
+   */
   it("목록이 그대로다 — 항목이 늘거나 픽셀이 바뀌면 광고 파생의 근거가 무너진다", () => {
     expect(ratioShape(POSTER_RATIOS)).toEqual([
-      { id: "4:5", pixel: { width: 1088, height: 1360 }, enumFallback: null, pixelOnly: false },
-      { id: "1:1", pixel: { width: 1088, height: 1088 }, enumFallback: null, pixelOnly: false },
-      { id: "9:16", pixel: { width: 1152, height: 2048 }, enumFallback: null, pixelOnly: false },
-      { id: "2:3", pixel: { width: 1024, height: 1536 }, enumFallback: null, pixelOnly: false },
-      { id: "3:4", pixel: { width: 1152, height: 1536 }, enumFallback: null, pixelOnly: false },
+      { id: "4:5", pixel: { width: 1216, height: 1520 }, enumFallback: null, pixelOnly: false },
+      { id: "1:1", pixel: { width: 1200, height: 1200 }, enumFallback: null, pixelOnly: false },
+      { id: "9:16", pixel: { width: 1296, height: 2304 }, enumFallback: null, pixelOnly: false },
+      { id: "2:3", pixel: { width: 1216, height: 1824 }, enumFallback: null, pixelOnly: false },
+      { id: "3:4", pixel: { width: 1200, height: 1600 }, enumFallback: null, pixelOnly: false },
       { id: "16:9", pixel: { width: 2048, height: 1152 }, enumFallback: null, pixelOnly: false },
       { id: "a4-draft", pixel: { width: 1088, height: 1536 }, enumFallback: "3:4", pixelOnly: false },
       { id: "a4-print", pixel: { width: 2400, height: 3392 }, enumFallback: null, pixelOnly: true },

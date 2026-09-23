@@ -81,7 +81,7 @@ function croppedTo(master: AdMaster, target: { width: number; height: number }) 
  * 적었는데, 문제가 나는 곳은 `목표 세로 == 마스터 세로` 같은 **측도 0 의 경계**라
  * 무작위로는 거의 안 뽑힌다. 격자로 쓸어야 보인다(8.4만 목표에서 20건).
  */
-function usable(master: AdMaster, spec: AdSpec): boolean {
+export function usable(master: AdMaster, spec: AdSpec): boolean {
   return master.width >= spec.target.width && master.height >= spec.target.height;
 }
 
