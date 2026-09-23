@@ -55,7 +55,13 @@ export function easyTurn(input: EasyTurnInput): EasyTurn {
   const 말을걸었나 = input.messages.some((message) => message.role !== "system");
   const 붙였나 = input.attachments.length > 0;
 
-  const showsAttachChoice = !붙였나 && !말을걸었나 && !input.startedWithout;
+  /*
+    **붙였다고 닫지 않는다** (2026-09-23 사용자).
+
+    전에는 한 장만 붙어도 이 화면이 사라졌다. 그런데 라이브러리로 가는 길이
+    여기뿐이라, 두 장째부터는 고를 수가 없었다. 말을 걸기 전까지는 남겨 둔다.
+  */
+  const showsAttachChoice = !말을걸었나 && !input.startedWithout;
 
   return {
     showsAttachChoice,
@@ -64,7 +70,11 @@ export function easyTurn(input: EasyTurnInput): EasyTurn {
      *
      * 엔터가 곧 생성이다. 실수로 두 번 치면 두 번 값이 나가고 되돌릴 수 없다.
      */
-    canSend: !showsAttachChoice && !input.sending,
+    /*
+      선택 화면이 남아 있어도 **한 장이라도 붙였으면 입력창을 연다.** 예전에는
+      「선택 화면이 없으면 열린다」였는데, 화면을 남기기로 하면서 그 둘을 떼었다.
+    */
+    canSend: (붙였나 || 말을걸었나 || Boolean(input.startedWithout)) && !input.sending,
     busy: input.sending,
   };
 }

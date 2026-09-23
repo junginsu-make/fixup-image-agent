@@ -15,6 +15,7 @@ import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
+import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
 import { EasyAskChoice } from "./_components/ask-choice";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
@@ -81,6 +82,11 @@ export function EasyClient({
   const [messages, setMessages] = React.useState<EasyMessage[]>(initialMessages);
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
   const [startedWithout, setStartedWithout] = React.useState(initialMessages.length > 0);
+  /*
+    라이브러리 목록. **화면이 한 번 읽어 두 곳이 나눠 쓴다** — 시작 화면의
+    「라이브러리에서」와 입력창의 폴더 단추다.
+  */
+  const library = useEasyLibrary();
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<{ message: string; retryable: boolean } | null>(null);
@@ -473,6 +479,7 @@ export function EasyClient({
           */}
           {turn.showsAttachChoice ? (
             <EasyAttachChoice
+              library={library}
               selectedIds={attachments.map((one) => one.id)}
               onUpload={() => file.current?.click()}
               onPick={pickFromLibrary}
@@ -568,6 +575,20 @@ export function EasyClient({
             >
               <ImagePlus className="h-4 w-4" />
             </Button>
+            {/*
+              **라이브러리도 입력창에서 연다** (2026-09-23 사용자).
+
+              전에는 라이브러리로 가는 길이 첫 화면의 단추뿐이었다. 한 장 붙이면
+              그 화면이 사라져서, 두 장째부터는 고를 방법이 없었다.
+            */}
+            <EasyLibraryPicker
+              library={library}
+              selectedIds={attachments.map((one) => one.id)}
+              onPick={pickFromLibrary}
+              label=""
+              triggerVariant="ghost"
+              triggerAriaLabel="라이브러리에서 붙이기"
+            />
             <Textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
