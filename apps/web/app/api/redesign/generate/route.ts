@@ -1,5 +1,5 @@
 import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
-import { generateSections, humanizeProviderError, RedesignError, type GenerateInputFile } from "@fixup/redesign-core";
+import { generateSections, humanizeProviderError, RedesignError, sizeForRatio, type GenerateInputFile } from "@fixup/redesign-core";
 import { buildSceneWithCharacterDirective, resolveCharacterAngles } from "@fixup/pdp-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
@@ -9,7 +9,7 @@ import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
-import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
+import { createRedesignImageGenerator, pixelSizeOf, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -109,7 +109,19 @@ async function generate(req: Request) {
     if (!inspected.ok) return inspected.response;
     const files: GenerateInputFile[] = inspected.files;
 
-    reservation = await reserveAiUsage(req, "redesign_generate", 청구(requestedCount));
+    /*
+      **몇 장·어떤 크기인지 함께 알린다**(2026-09-23 운영 로그).
+
+      크레딧 장부로 옮긴 회원은 이것이 있어야 값을 잡는다. 빠져 있어서 그
+      회원들은 리디자인을 누를 때마다 「이 생성 경로의 크레딧 설정을 확인해야
+      합니다」로 거절됐다. 크기는 코어가 실제로 그리는 크기다(`sizeForRatio`).
+    */
+    const creditPlan = creditImagePlan(
+      requestedCount,
+      pixelSizeOf(sizeForRatio(String(form.get("ratio") || "9:16"))),
+      "redesign:generate",
+    );
+    reservation = await reserveAiUsage(req, "redesign_generate", 청구(requestedCount), creditPlan);
     if (!reservation.ok) return reservation.response;
 
     /*

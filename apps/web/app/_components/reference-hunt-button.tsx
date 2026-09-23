@@ -29,8 +29,14 @@ export function ReferenceHuntButton() {
       "
     >
       <Search className="size-4" aria-hidden />
-      레퍼런스 찾기
-      <ExternalLink className="size-3 opacity-70" aria-hidden />
+      {/*
+        **좁은 화면 상단바에서는 글자를 숨긴다**(2026-09-23 화면 검수). 390px 에서
+        이 단추가 왼쪽 로고를 덮고 로그아웃 단추를 둘째 줄로 밀어냈다. 상단바는
+        lg 미만(1023px 까지)에만 나오므로 그 폭 전체에서 아이콘만 둔다 — 긴 주소의
+        회원도 한 줄에 들어가게. 읽는 이에게는 그대로 「레퍼런스 찾기」로 들린다.
+      */}
+      <span className="max-lg:sr-only">레퍼런스 찾기</span>
+      <ExternalLink className="size-3 opacity-70 max-lg:hidden" aria-hidden />
       <span className="sr-only">(새 탭에서 핀터레스트가 열립니다)</span>
     </a>
   );

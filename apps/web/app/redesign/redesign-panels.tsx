@@ -14,7 +14,6 @@ import * as React from "react";
 import { useCreditUnit } from "../_components/credit-policy-provider";
 import {
   CircleHelp,
-  FileImage,
   FileText,
   Image as ImageIcon,
   Loader2,
@@ -40,6 +39,8 @@ import {
 } from "@fixup/ui";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { SavedImagePicker } from "../create/SavedImagePicker";
+import { mergeAttachedFiles, removeAttachedFile } from "./attached-files";
+import { AttachedFileList } from "./attached-file-list";
 import { CharacterPickerButton, type PickableCharacter } from "../_components/character-picker";
 import {
   chosenViews,
@@ -82,12 +83,12 @@ export function Dashboard({
 
       <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)] gap-4 max-xl:grid-cols-1">
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
             <div>
               <CardTitle>최근 리디자인 프로젝트</CardTitle>
               <CardDescription>업로드한 원본 자료를 기준으로 생성된 작업 목록</CardDescription>
             </div>
-            <Badge variant="green">6~8장 기본</Badge>
+            <Badge variant="green" className="shrink-0 whitespace-nowrap">6~8장 기본</Badge>
           </CardHeader>
           <CardContent className="grid gap-3">
             {projects.length > 0 ? (
@@ -247,12 +248,12 @@ export function Workspace(props: {
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4 max-xl:grid-cols-1">
         <div className="grid gap-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
               <div>
                 <CardTitle>기존 상세페이지 자료 업로드</CardTitle>
                 <CardDescription>이미지 또는 PDF를 첨부하면 원본 정보와 전환 저해 요소를 분석합니다.</CardDescription>
               </div>
-              <Badge variant="green">대용량 가능</Badge>
+              <Badge variant="green" className="shrink-0 whitespace-nowrap">대용량 가능</Badge>
             </CardHeader>
             <CardContent>
               <button
@@ -261,7 +262,8 @@ export function Workspace(props: {
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
-                  setFiles(Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/") || file.type === "application/pdf"));
+                  // **더한다.** 전에는 끌어 놓을 때마다 앞에 올린 것이 사라졌다.
+                  setFiles(mergeAttachedFiles(files, Array.from(event.dataTransfer.files)));
                 }}
               >
                 <span>
@@ -290,7 +292,8 @@ export function Workspace(props: {
                 type="file"
                 accept="image/*,.pdf"
                 onChange={(event) => {
-                  setFiles(Array.from(event.target.files || []));
+                  // **더한다.** 전에는 고를 때마다 앞에 고른 것이 사라졌다(2026-09-23).
+                  setFiles(mergeAttachedFiles(files, Array.from(event.target.files || [])));
                   /**
                    * **고른 뒤에 비운다.**
                    *
@@ -306,19 +309,13 @@ export function Workspace(props: {
                 {/* 라이브러리에 이미 있는 그림을 디스크에서 다시 찾게 하지 않는다. */}
                 <SavedImagePicker
                   label="라이브러리에서 불러오기"
-                  onPick={(file) => setFiles([...files, file])}
+                  onPick={(file) => setFiles(mergeAttachedFiles(files, [file]))}
                 />
               </div>
-              {files.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {files.map((file) => (
-                    <Badge key={file.name} variant="default">
-                      {file.type === "application/pdf" ? <FileText className="mr-1 size-3" /> : <FileImage className="mr-1 size-3" />}
-                      {file.name}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+              <AttachedFileList
+                files={files}
+                onRemove={(key) => setFiles(removeAttachedFile(files, key))}
+              />
               <div className="mt-4">
                 <label className="mb-2 block text-xs font-bold text-muted-foreground">그림체</label>
                 <div className="flex flex-wrap gap-2">
@@ -405,7 +402,11 @@ export function Workspace(props: {
                   onClick={() => setSelectedModel(model)}
                 >
                   <strong className="block text-sm">{models[model].label}</strong>
-                  <code className="mt-1 block break-words text-[11px] text-muted-foreground">{models[model].id}</code>
+                  {/*
+                    내부 모델 이름(`gpt-image-2-…`)을 보여 주지 않는다. 비개발자에게 뜻이
+                    없고, 실제로 그리는 길(fal)과도 이름이 달라 오해만 산다(2026-09-23).
+                  */}
+                  <span className="mt-1 block text-xs text-muted-foreground">{models[model].hint}</span>
                 </button>
               ))}
             </CardContent>

@@ -37,7 +37,11 @@ export function StudioActions({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    /*
+      **좁은 화면에서 두 줄로 꺾이지 않는다**(2026-09-23 화면 검수). 상단바는 높이가
+      56px 로 고정인데 여기가 꺾이면서 로그아웃 단추가 로고 아래로 빠져 겹쳤다.
+    */
+    <div className="flex items-center gap-1.5 max-sm:gap-0.5 lg:flex-wrap">
       {/*
         **지금 어느 계정으로 들어와 있는지 눈에 보여야 한다.**
 
@@ -49,7 +53,9 @@ export function StudioActions({
         전체는 마우스오버와 화면 낭독기에 그대로 남는다.
       */}
       <span
-        className="max-w-[14rem] truncate text-xs font-medium text-subtle-foreground"
+        // 휴대폰 폭에서는 자리가 없다. 주소는 배지의 마우스오버와 낭독기에 남는다.
+        // 좁은 상단바(lg 미만)에서는 폭을 묶는다. 긴 주소가 단추를 밀어내지 않게.
+        className="max-w-[14rem] truncate text-xs font-medium text-subtle-foreground max-lg:max-w-[8rem] max-sm:hidden"
         title={email}
         aria-label={accountAriaLabel(email)}
       >

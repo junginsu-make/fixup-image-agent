@@ -1,4 +1,5 @@
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
@@ -192,7 +193,9 @@ async function register(req: Request) {
     // 못 셌다. 막지 않고 간다.
   }
 
-  const reservation = await reserveAiUsage(req, "reference_analyze", 0);
+  // 넷째 인자가 없으면 크레딧 장부로 옮긴 회원이 무조건 거절된다(2026-09-23 운영).
+  // 그리는 것이 없으니 빈 목록이다.
+  const reservation = await reserveAiUsage(req, "reference_analyze", 0, freeCreditPlan("pdp:style-reference"));
   if (!reservation.ok) return reservation.response;
 
   try {

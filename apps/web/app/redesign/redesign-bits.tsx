@@ -7,9 +7,23 @@
 
 import * as React from "react";
 import { cn } from "@fixup/ui";
-export function Topbar({ eyebrow, title, children }: { eyebrow: string; title?: string; children: React.ReactNode }) {
+export function Topbar({
+  eyebrow,
+  title,
+  stacked = false,
+  children,
+}: {
+  eyebrow: string;
+  title?: string;
+  /**
+   * 제목 아래 줄에 단추를 둔다. 결과 화면은 제목이 길고 단추가 다섯이라, 한 줄에
+   * 넣으면 제목이 두 줄로 꺾이고 단추도 두 줄로 어긋났다(2026-09-23 화면 검수).
+   */
+  stacked?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-4 max-md:flex-col">
+    <div className={cn("mb-5 flex gap-4", stacked ? "flex-col" : "items-start justify-between max-md:flex-col")}>
       <div>
         <p className="mb-1 text-xs font-bold text-muted-foreground">{eyebrow}</p>
         {title ? <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-normal max-md:text-2xl">{title}</h1> : null}

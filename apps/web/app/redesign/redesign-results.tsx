@@ -13,6 +13,7 @@ import * as React from "react";
 import { useCreditUnit } from "../_components/credit-policy-provider";
 import { failedSectionLines, type FailedSectionLine } from "./failed-sections";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -43,7 +44,7 @@ import {
   type Project,
   type SectionResult,
 } from "./redesign-model";
-import { buildImageFileName, downloadDataUrl } from "./redesign-files";
+import { buildImageFileName, downloadDataUrl, sanitizeDownloadName } from "./redesign-files";
 import { ensureSectionRevisions, projectDisplayTitle } from "./redesign-project";
 import { OptionGroup, PlaceholderThumb, Topbar } from "./redesign-bits";
 export function Results({
@@ -72,6 +73,7 @@ export function Results({
   // 훅은 이른 반환보다 위에 있어야 한다. 아래에 두면 프로젝트가 없는 렌더에서만
   // 건너뛰어, 렌더마다 훅 차례가 달라진다.
   const 단위 = useCreditUnit();
+  const [zipping, setZipping] = React.useState(false);
   if (!project) {
     return <Card><CardContent>아직 생성된 프로젝트가 없습니다.</CardContent></Card>;
   }
@@ -84,23 +86,42 @@ export function Results({
     ? ((project!.analysis as any).verified_facts as string[])
     : [];
 
-  function downloadAllImages() {
+  /**
+   * **한 파일(ZIP)로 내려받는다**(2026-09-23 화면 검수).
+   *
+   * 전에는 장마다 0.25초 간격으로 따로 내려받게 했다. 브라우저는 한 페이지가
+   * 잇달아 여러 파일을 내려받으려 하면 막거나 허락을 묻는다 — 그러면 몇 장은
+   * 조용히 안 받아진다. 상세페이지의 「전체 다운로드」와 같은 방식이다.
+   */
+  async function downloadAllImages() {
     if (downloadableSections.length === 0) {
       onToast("다운로드할 이미지가 없습니다.");
       return;
     }
-
-    downloadableSections.forEach((section, index) => {
-      window.setTimeout(() => {
-        downloadDataUrl(section.imageUrl || "", buildImageFileName(title, section, index));
-      }, index * 250);
-    });
-    onToast(`${downloadableSections.length}개 이미지를 다운로드합니다.`);
+    setZipping(true);
+    try {
+      // 누를 때만 불러온다. 화면을 열 때마다 받기엔 크다(약 100KB).
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+      for (const [index, section] of downloadableSections.entries()) {
+        const blob = await (await fetch(section.imageUrl as string)).blob();
+        zip.file(`${String(index + 1).padStart(2, "0")}-${buildImageFileName(title, section, index)}`, blob);
+      }
+      const archive = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(archive);
+      downloadDataUrl(url, `${sanitizeDownloadName(title || "redesign")}-전체.zip`);
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      onToast(`${downloadableSections.length}장을 ZIP 하나로 다운로드했습니다.`);
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "전체 이미지를 내려받지 못했습니다.");
+    } finally {
+      setZipping(false);
+    }
   }
 
   return (
     <section>
-      <Topbar eyebrow="RESULTS" title={title}>
+      <Topbar eyebrow="RESULTS" title={title} stacked>
         <Button variant="secondary" onClick={onSave}><FileText className="size-4" />작업 저장</Button>
         <Button
           variant="secondary"
@@ -112,15 +133,23 @@ export function Results({
         </Button>
         {/* 위 버튼은 리디자인 보관함으로 간다. 이건 참고 이미지로 넣어
             카드뉴스·포스터가 다음 작업의 기준으로 쓸 수 있게 한다. */}
+        {/* 옆 단추들과 같은 모양으로. 테두리 없는 글자만 있어 단추로 안 보였다(2026-09-23). */}
         <SaveImagesToLibrary
           images={downloadableSections.map((section, index) => ({
             fileUrl: section.imageUrl as string,
             title: `리디자인 ${index + 1}`,
           }))}
           disabled={downloadableSections.length === 0}
+          buttonVariant="secondary"
+          buttonClassName="h-9 px-4 text-sm"
         />
-        <Button variant="secondary" onClick={() => onToast("히어로 1장 재생성은 다음 단계에서 연결할 예정입니다.")}><RefreshCw className="size-4" />히어로 다시 생성</Button>
-        <Button onClick={downloadAllImages} disabled={downloadableSections.length === 0}><Download className="size-4" />전체 다운로드</Button>
+        {/*
+          「히어로 다시 생성」 단추는 뺐다. 누르면 「다음 단계에서 연결할 예정」이라는
+          말만 나오는, 아무 일도 안 하는 단추였다(2026-09-23 화면 검수).
+        */}
+        <Button onClick={() => void downloadAllImages()} disabled={downloadableSections.length === 0 || zipping}>
+          {zipping ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}전체 다운로드
+        </Button>
       </Topbar>
 
       {project.referenceNotice ? (
@@ -171,14 +200,19 @@ export function Results({
 
       <div className={cn("grid gap-4", showRollout ? "grid-cols-[minmax(0,1fr)_320px] max-xl:grid-cols-1" : "grid-cols-1")}>
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
             <div>
               <CardTitle>리디자인 결과 {project.sections.length}장</CardTitle>
               <CardDescription>저장하면 대시보드의 최근 프로젝트에서 다시 열 수 있습니다.</CardDescription>
             </div>
-            <Badge variant="green">{models[project.model].label}</Badge>
+            <Badge variant="green" className="shrink-0 whitespace-nowrap">{models[project.model].label}</Badge>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3 max-2xl:grid-cols-2 max-lg:grid-cols-1">
+          {/*
+            **카드 폭을 줄여 한눈에 본다**(2026-09-23 화면 검수). 전에는 1440 화면에서
+            두 줄로 놓여 한 장이 폭 550·높이 980 이었고, 여덟 장이면 페이지가
+            6천 픽셀이 넘었다. 폭 220 부터 채워 넓은 화면에서는 네 장씩 놓인다.
+          */}
+          <CardContent className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
             {project.sections.map((section, index) => (
               <SectionResultCard
                 key={section.id}
@@ -248,7 +282,10 @@ export function SectionResultCard({
   editing: boolean;
   disabled: boolean;
 }) {
+  const 단위 = useCreditUnit();
   const [editRequest, setEditRequest] = React.useState("");
+  // 수정 칸을 펼쳤는가. 카드가 들고 있어야 수정이 끝나거나 실패해도 그대로 남는다.
+  const [editOpen, setEditOpen] = React.useState(false);
   const [editModel, setEditModel] = React.useState<Model>("openai");
   const revisions = React.useMemo(() => ensureSectionRevisions(section), [section]);
   const currentIndex = Math.max(0, revisions.findIndex((revision) => revision.imageUrl === section.imageUrl));
@@ -269,7 +306,7 @@ export function SectionResultCard({
   }
 
   return (
-    <Card className="overflow-hidden shadow-none">
+    <Card className="flex flex-col overflow-hidden shadow-none">
       <div className="relative aspect-[9/16] border-b border-border bg-muted">
         {activeRevision?.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -302,7 +339,8 @@ export function SectionResultCard({
           </>
         ) : null}
       </div>
-      <CardContent className="grid gap-3 p-3">
+      {/* 섹션 이름이 두 줄이어도 단추 줄이 옆 카드와 맞게, 설명이 남는 높이를 가진다. */}
+      <CardContent className="flex flex-1 flex-col gap-3 p-3">
         {revisions.length > 1 ? (
           <div className="flex items-center gap-1.5 overflow-x-auto">
             {revisions.map((revision, revisionPosition) => (
@@ -321,7 +359,7 @@ export function SectionResultCard({
             ))}
           </div>
         ) : null}
-        <div>
+        <div className="flex-1">
           <h3 className="text-sm font-semibold">{section.name}</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{section.purpose}</p>
           <p className="mt-2 text-xs"><strong>원본 참조:</strong> {section.source}</p>
@@ -336,7 +374,22 @@ export function SectionResultCard({
           <Download className="size-4" />
           이미지 다운로드
         </Button>
-        <div className="grid gap-2 rounded-md border border-border bg-muted/40 p-2">
+        {/*
+          **수정 칸은 펼쳐서 쓴다**(2026-09-23 화면 검수). 전에는 카드마다 요청 칸·
+          빠른 요청 다섯·모델 고르기·단추가 늘 펼쳐져, 여덟 장이면 같은 양식이
+          여덟 번 반복됐다. 펼침은 카드가 들고 있다 — `editing` 에 묶으면 수정이
+          끝나는 순간(실패해도) 칸이 접혀 방금 적은 요청이 가려졌다(독립 리뷰).
+        */}
+        <details
+          className="group rounded-md border border-border bg-muted/40"
+          open={editOpen}
+          onToggle={(event) => setEditOpen(event.currentTarget.open)}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 py-2 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+            이 섹션 수정하기
+            <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+        <div className="grid gap-2 border-t border-border p-2">
           <label className="text-xs font-bold text-muted-foreground">섹션 수정 요청</label>
           <Textarea
             value={editRequest}
@@ -365,8 +418,9 @@ export function SectionResultCard({
             {editing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             이 섹션 수정
           </Button>
-          <p className="text-[11px] leading-4 text-muted-foreground">수정 이미지가 성공하면 크레딧 1장이 차감됩니다.</p>
+          <p className="text-xs leading-4 text-muted-foreground">수정 이미지가 성공하면 1{단위} 차감됩니다.</p>
         </div>
+        </details>
       </CardContent>
     </Card>
   );
@@ -385,6 +439,7 @@ export function GenerationProgressPanel({
   currentIndex: number;
   onCancel: () => void;
 }) {
+  const 단위 = useCreditUnit();
   const isLongWait = progress.elapsedSeconds >= 120;
   const generationTitle = count > 1
     ? `${count}장 중 ${currentIndex}번째 이미지 생성중입니다.`
@@ -435,7 +490,7 @@ export function GenerationProgressPanel({
         </div>
         <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground max-sm:flex-col max-sm:items-stretch">
           <span>
-            성공 시 현재 요청에서 최대 {count}장이 차감됩니다. 취소는 화면의 대기만 멈추며, 이미 외부 API에 전달돼 완료된 이미지는 차감될 수 있습니다.
+            성공 시 현재 요청에서 최대 {count}{단위} 차감됩니다. 취소는 화면의 대기만 멈추며, 이미 외부 API에 전달돼 완료된 이미지는 차감될 수 있습니다.
           </span>
           <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
             요청 취소

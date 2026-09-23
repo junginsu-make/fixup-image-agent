@@ -35,7 +35,12 @@ describe("작업을 저장할 때 과정도 함께 보낸다", () => {
     const uploads = source.match(/\n\s+images(,|:)/g) ?? [];
     expect(uploads.length, `${file} 의 저장 자리 수가 변했다 — 가늠자를 고쳐라`).toBe(calls);
 
-    const spreads = source.split(`...${maker}(`).length - 1;
+    /*
+      과정을 짓는 호출 수. 펼쳐 넣든(`...maker(`) 도우미에 넘기든(`process:
+      maker(`, 리디자인의 한 장씩 올리기 — `library-upload.ts`) 저장 자리마다
+      한 번이다. 가져오는 줄(`import { maker }`)에는 괄호가 없어 안 센다.
+    */
+    const spreads = source.split(`${maker}(`).length - 1;
     expect(spreads, `${file} 에서 과정을 안 보내는 저장이 있다`).toBe(calls);
   });
 

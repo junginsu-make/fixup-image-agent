@@ -67,6 +67,7 @@ import { useGenerationProgress } from "./use-generation-progress";
 import { requestIdentityOf } from "./redesign-request";
 import { persistRedesignResult } from "./result-persistence";
 import { redesignProcessSource } from "../api/library/work-process";
+import { uploadRedesignToLibrary } from "./library-upload";
 
 
 
@@ -117,6 +118,8 @@ export function RedesignWizard() {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const knowledgeInputRef = React.useRef<HTMLInputElement>(null);
   const generationAbortRef = React.useRef<AbortController | null>(null);
+  // 라이브러리 저장 중인가. 한 장씩 보내 오래 걸리고, 또 누르면 같은 판이 두 벌 생긴다.
+  const librarySavingRef = React.useRef(false);
   const retryRequestKeysRef = React.useRef<Record<string, string>>({});
   /** 안쪽이 남기고 바깥 요약이 실어 보낸다. 사연은 `batch-summary.ts`. */
   const lastGenerateErrorRef = React.useRef("");
@@ -569,7 +572,7 @@ export function RedesignWizard() {
     );
     if (!stored.librarySaved || !stored.localSaved) {
       setSaveWarning(stored.localSaved
-        ? "생성 결과는 이 브라우저에 보관했지만 라이브러리 저장에 실패했습니다. ‘라이브러리에 저장’으로 다시 저장해 주세요."
+        ? "생성 결과는 이 브라우저에 보관했지만 라이브러리 저장에 실패했습니다. ‘라이브러리에 저장’을 누르면 지금 판이 새 작업으로 한 벌 저장됩니다."
         : stored.librarySaved
           ? "이미지는 라이브러리에 저장했지만 브라우저 작업 저장에 실패했습니다. ‘작업 저장’을 다시 시도해 주세요."
           : "생성 결과를 저장하지 못했습니다. 화면을 닫기 전에 다운로드하거나 다시 저장해 주세요.");
@@ -584,6 +587,11 @@ export function RedesignWizard() {
       return;
     }
 
+    if (librarySavingRef.current) {
+      setToast("라이브러리에 저장하는 중입니다. 끝날 때까지 기다려 주세요.");
+      return;
+    }
+    librarySavingRef.current = true;
     setToast("라이브러리에 저장하는 중…");
     try {
       const images = withImages.map((section) => {
@@ -592,28 +600,19 @@ export function RedesignWizard() {
         return { base64, mimeType };
       });
 
-      const response = await fetch("/api/library", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: projectDisplayTitle(target),
-          tool: "redesign",
-          // 같은 작업의 섹션은 라이브러리에서 한 줄로 모인다. 이 값이 없으면
-          // 섹션마다 새 줄이 되어 같은 페이지가 여덟 줄로 흩어진다.
-          sourceId: target.id,
-          ...redesignProcessSource(target),
-          images,
-        }),
+      // 지금 판을 **새 작업 하나로** 한 장씩 남긴다. 자동 저장한 작업 뒤에 붙이면
+      // 같은 장이 두 벌 되고, 고친 장은 가려낼 수 없다(`library-upload.ts`).
+      const { added, failure } = await uploadRedesignToLibrary({
+        title: projectDisplayTitle(target),
+        sourceId: randomId(),
+        process: redesignProcessSource(target),
+        images,
       });
-      const body = (await response.json()) as { ok?: boolean; imageCount?: number; message?: string };
-
-      setToast(
-        body.ok
-          ? `라이브러리에 ${body.imageCount ?? images.length}장을 저장했습니다. 다른 기기에서도 보입니다.`
-          : body.message ?? "라이브러리에 저장하지 못했습니다.",
-      );
+      setToast(failure || `지금 판 ${added}장을 라이브러리에 새 작업으로 저장했습니다. 다른 기기에서도 보입니다.`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "라이브러리에 저장하지 못했습니다.");
+    } finally {
+      librarySavingRef.current = false;
     }
   }
 
@@ -690,7 +689,7 @@ export function RedesignWizard() {
       outcomeKnown = true;
       delete retryRequestKeysRef.current[requestIdentity];
       setGenerationSummary({ label: "섹션 수정", requested: 1, succeeded: 1, failed: 0, uncertain: 0, skipped: 0, finishedAt: Date.now() });
-      setToast(`${section.name} 수정 완료 · 성공한 이미지 1장만 차감됐습니다. 마음에 들면 작업 저장을 눌러주세요.`);
+      setToast(`${section.name} 수정 완료 · 성공한 이미지만 차감됐습니다. 마음에 들면 작업 저장을 눌러주세요.`);
     } catch (error) {
       reportClientLog("edit-section:error", {
         sectionId,

@@ -35,7 +35,7 @@ export function SaveImagesToLibrary({
   className?: string;
   disabled?: boolean;
   /** 놓이는 막대에 맞춘다. 상세페이지 도구 막대는 테두리 단추를 쓴다. */
-  buttonVariant?: "ghost" | "outline";
+  buttonVariant?: "ghost" | "outline" | "secondary";
   buttonClassName?: string;
 }) {
   const [state, setState] = React.useState<"idle" | "saving" | "saved">("idle");

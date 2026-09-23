@@ -435,9 +435,11 @@ export function AppShell({
         <div className="flex h-14 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2" aria-label="FormWith 홈">
             <BrandMark className="h-6 w-6 flex-none" />
-            <span className="text-sm font-bold tracking-[-0.02em]">FormWith</span>
+            {/* 아주 좁은 폭(휴대폰)에서는 표식만 둔다. 이름까지 두면 오른쪽 단추들이
+                밀려 겹친다(2026-09-23 화면 검수, 390px). 이름은 aria-label 에 있다. */}
+            <span className="text-sm font-bold tracking-[-0.02em] max-[420px]:sr-only">FormWith</span>
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-sm:gap-1">
             {actions}
             <ThemeToggle />
             <DropdownMenu>

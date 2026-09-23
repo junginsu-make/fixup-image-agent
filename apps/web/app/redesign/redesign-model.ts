@@ -154,11 +154,13 @@ export const projectStoreName = "projects";
 export const models = {
   openai: {
     label: "정밀형",
-    id: "gpt-image-2-2026-04-21"
+    id: "gpt-image-2-2026-04-21",
+    hint: "더 정교하게 만듭니다 · 시간이 더 걸립니다"
   },
   google: {
     label: "속도형",
-    id: "gemini-3.1-flash-image-preview"
+    id: "gemini-3.1-flash-image-preview",
+    hint: "더 빠르게 만듭니다"
   }
 };
 
