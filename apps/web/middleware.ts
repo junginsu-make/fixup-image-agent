@@ -6,6 +6,7 @@ import { canAccessPage } from "./lib/access/core";
 import { isUsableAccount } from "./lib/membership/usable";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
+import { SESSION_MAX_MS, SESSION_START_COOKIE, sessionAuthCookieNames, sessionWindow } from "./lib/auth/session-window";
 
 const PUBLIC_PATHS = [
   "/",
@@ -83,6 +84,38 @@ export async function middleware(request: NextRequest) {
   });
 
   const { data: { user } } = await supabase.auth.getUser();
+
+  /*
+    로그인 유지는 **하루**다 (2026-09-23 사용자). 로그인한 시각을 쿠키에 적어
+    두고, 24시간이 지나면 로그인 쿠키를 지워 내보낸다. 시작 시각은 쓰는 동안에도
+    늘리지 않는다 — 늘리면 제한이 사실상 없어진다.
+
+    API 로 먼저 빠지기 전에 본다. 화면만 막고 API 를 열어 두면 반쪽이다.
+  */
+  if (user) {
+    const window = sessionWindow(request.cookies.get(SESSION_START_COOKIE)?.value, new Date());
+    if (window.state === "expired") {
+      const secure = request.nextUrl.protocol === "https:";
+      const expired = pathname.startsWith("/api/")
+        ? NextResponse.json(
+            { ok: false, code: "session_expired", message: "로그인 유지 시간(24시간)이 지났습니다. 다시 로그인해 주세요." },
+            { status: 401 },
+          )
+        : NextResponse.redirect(new URL("/login?expired=1", base));
+      for (const name of sessionAuthCookieNames(request.cookies.getAll().map((cookie) => cookie.name))) {
+        expired.cookies.set(name, "", { path: "/", maxAge: 0, secure, sameSite: "lax" });
+      }
+      return expired;
+    }
+    if (window.state === "start") {
+      // 평문 HTTP 로도 여는 서버라 `secure` 를 항상 붙이면 쿠키가 통째로 버려진다.
+      response.cookies.set(SESSION_START_COOKIE, String(window.startedAt), {
+        path: "/", httpOnly: true, sameSite: "lax", secure: request.nextUrl.protocol === "https:",
+        maxAge: Math.ceil(SESSION_MAX_MS / 1000),
+      });
+    }
+  }
+
   if (pathname.startsWith("/api/")) return response;
 
   /**
@@ -100,7 +133,12 @@ export async function middleware(request: NextRequest) {
    */
   if (isDisabledRoute(pathname)) return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base));
 
-  const isAuthPage = matches(pathname, ["/login", "/signup", "/forgot-password"]);
+  /*
+    **`/login` 은 여기 없다** (2026-09-23 사용자). 이미 로그인한 사람을 홈으로
+    돌려보내면, 다른 계정으로 들어가려는 사람이 입력 창을 아예 못 본다. 화면이
+    「지금 ○○로 로그인되어 있습니다」를 보여 주고 고르게 한다.
+  */
+  const isAuthPage = matches(pathname, ["/signup", "/forgot-password"]);
   if (!user) {
     if (matches(pathname, PUBLIC_PATHS)) return response;
     const loginUrl = new URL("/login", base);
