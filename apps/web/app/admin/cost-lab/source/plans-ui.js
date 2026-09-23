@@ -2,7 +2,11 @@
   'use strict';
   /*
     플랜 기본값 탭. 계산은 `lib/admin/cost-forecast/subscription-plans.ts` 가 하고
-    여기서는 그리기와 적용만 한다. 크레딧은 고정, 목표 마진·추가 할인만 바꾼다.
+    여기서는 그리기와 적용만 한다. 크레딧·목표 마진·추가 할인 셋 다 바꾼다.
+
+    **크레딧도 입력칸이다**(2026-09-23 사용자 요청). 계산은 처음부터 크레딧을
+    입력으로 받고 있었고, 막고 있던 것은 화면이었다. 크레딧을 고치면 가격도
+    「한 달에 만들 수 있는 양」도 함께 다시 계산된다.
 
     적용은 단추로만 한다. 숫자를 고칠 때마다 통합 요약에 밀어 넣으면 그쪽에서
     손보던 조건이 매번 초기화된다. 처음 열 때만(공유 링크로 연 게 아니면) 선택한
@@ -29,13 +33,25 @@
   let { plans, selected } = load();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ plans, selected })); } catch { /* 저장 못 해도 화면은 동작 */ } };
 
-  const input = (p, field, label) =>
-    `<span class="inputbox"><input type="number" data-plan="${esc(p.id)}" data-plan-field="${field}" min="0" max="90" step="0.1" value="${p[field]}" aria-label="${esc(p.name)} ${label}"><span>%</span></span>`;
+  /*
+    **규격을 칸마다 다르게 준다.** 전에는 `max="90" step="0.1"` 과 `%` 가 못
+    박혀 있었다. 크레딧에 그대로 쓰면 90개가 상한이 되고 75.5개를 받아 준다.
+  */
+  const FIELDS = {
+    credits: { label: '크레딧', min: 1, max: 100000, step: 1, suffix: '개' },
+    targetPct: { label: '목표 마진', min: 0, max: 90, step: 0.1, suffix: '%' },
+    discountPct: { label: '추가 할인', min: 0, max: 90, step: 0.1, suffix: '%' },
+  };
+
+  const input = (p, field) => {
+    const f = FIELDS[field];
+    return `<span class="inputbox"><input type="number" data-plan="${esc(p.id)}" data-plan-field="${field}" min="${f.min}" max="${f.max}" step="${f.step}" value="${p[field]}" aria-label="${esc(p.name)} ${f.label}"><span>${f.suffix}</span></span>`;
+  };
 
   function build() {
     el('plans-rows').innerHTML = plans.map(p => `<tr>
       <td><label><input type="radio" name="plan-apply" value="${esc(p.id)}" ${p.id === selected ? 'checked' : ''}> <strong>${esc(p.name)}</strong></label></td>
-      <td>${p.credits}개</td><td>${input(p, 'targetPct', '목표 마진')}</td><td>${input(p, 'discountPct', '추가 할인')}</td>
+      <td>${input(p, 'credits')}</td><td>${input(p, 'targetPct')}</td><td>${input(p, 'discountPct')}</td>
       <td id="plan-list-${p.id}"></td><td id="plan-paid-${p.id}"></td><td id="plan-unit-${p.id}"></td>
       <td id="plan-margin-${p.id}"></td><td id="plan-bonus-${p.id}"></td><td id="plan-off-${p.id}"></td></tr>`).join('');
     render();
