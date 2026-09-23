@@ -1,5 +1,14 @@
 export type UserRole = "member" | "admin";
-export type MembershipStatus = "pending" | "active" | "suspended";
+/**
+ * `withdrawn` 은 **본인이 떠난 것**이다(2026-09-23).
+ *
+ * 정지(`suspended`)와 값을 나눈 까닭: 정지는 **운영자가 막은 것**이라 풀 수
+ * 있지만 탈퇴는 그렇지 않다. 같은 값을 쓰면 관리자 화면에서 구분이 안 되고,
+ * **정지를 푸는 순간 탈퇴한 계정이 되살아난다.**
+ *
+ * 표의 check 제약과 짝이다(`202609230001_member_withdrawal.sql`).
+ */
+export type MembershipStatus = "pending" | "active" | "suspended" | "withdrawn";
 export type GenerationOperation =
   | "pdp_analyze"
   | "pdp_image"
