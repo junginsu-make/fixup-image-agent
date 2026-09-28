@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@fixup/ui";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+import { clearCsChat } from "../../lib/cs/chat-store";
 import { Turnstile } from "../_components/turnstile";
 import { ACCESS_POLL_MS, pollExhaustedNotice, shouldPollAccess } from "./poll";
 
@@ -60,6 +61,8 @@ export function AccessActions({
   const captchaRequired = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
 
   async function signOut() {
+    // **도우미 대화를 지운다.** 남겨 두면 다음 사람이 앞사람의 대화를 본다.
+    clearCsChat();
     await fetch("/auth/signout", { method: "POST" });
     router.replace("/");
     router.refresh();

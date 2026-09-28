@@ -6,6 +6,7 @@ import * as React from "react";
 import { LogOut } from "lucide-react";
 import { Badge, Button } from "@fixup/ui";
 import type { UsageSummary } from "../../lib/membership/types";
+import { clearCsChat } from "../../lib/cs/chat-store";
 import { creditBalanceLabel } from "../../lib/membership/credit-label";
 import { accountAriaLabel, emailLocalPart } from "./account-label";
 
@@ -31,6 +32,8 @@ export function StudioActions({
   }, []);
 
   async function signOut() {
+    // **도우미 대화를 지운다.** 남겨 두면 다음 사람이 앞사람의 대화를 본다.
+    clearCsChat();
     await fetch("/auth/signout", { method: "POST" });
     router.replace("/");
     router.refresh();
