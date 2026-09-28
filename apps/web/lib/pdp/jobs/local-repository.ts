@@ -131,8 +131,16 @@ export function createLocalJobRepository(root: string): LocalJobRepository {
       const 내것 = read().jobs.filter(
         (job) => job.userId === userId && job.documentId === documentId && job.revision === revision,
       );
-      // 작업 전부에서 섹션마다 가장 최근 그림을 모은다(`supabase-repository.ts` 와 같은 규칙).
-      return mergeDocumentJobs(내것);
+      /*
+        작업 전부에서 섹션마다 가장 최근 그림을 모은다(`supabase-repository.ts`
+        와 같은 규칙).
+
+        **최근 것을 먼저 놓아 준다.** 여기 배열은 넣은 차례(오래된 것 먼저)이고,
+        Supabase 는 `created_at desc` 로 읽어 최근 것이 먼저다. 같은 밀리초에
+        만들어진 둘이 있으면 안정 정렬이 들어온 차례를 지켜서, **같은 계약을 두
+        구현이 다르게 답했다**(2026-09-28 CI 가 잡았다). 뒤집어서 맞춘다.
+      */
+      return mergeDocumentJobs([...내것].reverse());
     },
 
     async advance(jobId, userId, event) {
