@@ -6,6 +6,7 @@ import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { describeAccount } from "../../../../lib/cs/account-facts";
 import { readMyFacts } from "../../../../lib/cs/my-account";
 import { appendCsTurns, readCsTurns } from "../../../../lib/cs/session";
+import { formatReply } from "../../../../lib/cs/reply-format";
 import { createCsProvider } from "../../../../lib/cs/provider";
 import { ANSWER_SPEC, DECIDE_SPEC, answerPrompt, decidePrompt } from "../../../../lib/cs/prompt";
 import {
@@ -121,7 +122,12 @@ async function ask(req: Request) {
       답처럼 써 보내고, 화면은 그것을 답으로 그린다.
     */
     const 못했다 = 답?.answered === false || !String(답?.reply ?? "").trim();
-    const reply = 못했다 ? NO_EVIDENCE : String(답.reply).trim();
+    /*
+      **놓기 전에 모양을 다듬는다**(2026-09-28 사용자 신고 「한 줄로만 쭉
+      나옵니다」). 낱말은 그대로 두고 줄만 만진다 — 마크다운 별표를 걷고,
+      한 덩어리로 온 글은 문장마다 끊는다.
+    */
+    const reply = 못했다 ? NO_EVIDENCE : formatReply(String(답.reply));
 
     return 마무리(입력, userId, turns, {
       reply,

@@ -55,6 +55,20 @@ describe("문의 남기기", () => {
     expect(몸통, "근거를 화면이 정하고 있다").not.toContain("sources");
   });
 
+  /**
+   * **줄바꿈을 살린다**(2026-09-28 사용자 신고).
+   *
+   * 「지금 챗에 결과물들이 한 줄로만 쭉 나오고 있습니다.」 글을 그냥 넣으면
+   * HTML 이 `
+` 을 빈칸 하나로 뭉갠다 — **모델이 줄을 나눠 보내도 소용이
+   * 없었다.** 고칠 자리가 둘인데 화면 쪽이 이것이다.
+   */
+  it("답의 줄바꿈이 화면에 남는다", () => {
+    const 말풍선 = panel.slice(panel.indexOf("{turn.text}") - 400, panel.indexOf("{turn.text}"));
+
+    expect(말풍선, "줄바꿈이 빈칸으로 뭉개진다").toContain("whitespace-pre-wrap");
+  });
+
   /** 보낸 결과를 말해 준다. 조용히 끝나면 보냈는지 알 수 없다. */
   it("보낸 결과를 화면에 보여 준다", () => {
     expect(panel).toContain("문의결과");

@@ -41,6 +41,16 @@ function LoginForm() {
   const [signedIn, setSignedIn] = React.useState<{ email: string } | null | undefined>(undefined);
   const [switching, setSwitching] = React.useState(false);
   const expired = params.get("expired") === "1";
+  /*
+    **탈퇴한 사람에게 끝났다고 말해 준다**(2026-09-28).
+
+    탈퇴가 끝나면 `withdraw-card.tsx` 가 `/login?notice=withdrawn` 으로 통째로
+    옮긴다. 그런데 이 화면이 `notice` 를 **읽지 않아서**, 되돌릴 수 없는 일을
+    한 사람이 아무 말도 못 듣고 로그인 칸만 보고 있었다.
+
+    그 자리에서 「되긴 된 건가」를 묻게 된다. 한 줄이라도 말해 준다.
+  */
+  const withdrawn = params.get("notice") === "withdrawn";
 
   React.useEffect(() => {
     if (!auth.ready) return setSignedIn(null);
@@ -114,6 +124,12 @@ function LoginForm() {
         {expired ? (
           <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">
             로그인 유지 시간(24시간)이 지나 로그아웃되었습니다. 다시 로그인해 주세요.
+          </p>
+        ) : null}
+        {withdrawn ? (
+          <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+            탈퇴가 완료되었습니다. 이 계정으로는 로그인할 수 없습니다. 크레딧을 받거나 쓴 기록이 있으면
+            결제·크레딧 기록은 법령에 따라 보관됩니다.
           </p>
         ) : null}
         <div className="space-y-1.5"><Label htmlFor="email">이메일</Label><Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
