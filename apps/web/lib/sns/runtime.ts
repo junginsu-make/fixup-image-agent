@@ -216,10 +216,11 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     if (attachment.assetPath.startsWith(ownFolder)) paths.add(attachment.assetPath);
   });
   project.data.flow?.cards.forEach((card) => {
-    if (card.assetPath) paths.add(card.assetPath);
+    // 카드 경로도 같다 — 「그대로 넣기」 카드는 기획 때 첨부 경로를 그대로 받는다.
+    if (card.assetPath?.startsWith(ownFolder)) paths.add(card.assetPath);
     // **결과판이 이 함수를 지난다.** 여기서 안 모으면 카드 열 장을 원본으로
     // 받는 상태가 그대로다 — 이 변경의 목적이 바로 그것이었다.
-    if (card.thumbPath) paths.add(card.thumbPath);
+    if (card.thumbPath?.startsWith(ownFolder)) paths.add(card.thumbPath);
   });
   // 서명할 것이 없어도 끝까지 간다 — 일찍 돌아가면 남의 폴더 첨부가 옛 주소를 그대로 들고 나간다.
   if (!paths.size && !project.data.attachments.length) return project;
@@ -236,12 +237,30 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
       ...card,
       assetUrl: card.kind === "generated"
         ? card.assetPath ? urls.get(card.assetPath) ?? card.assetUrl : card.assetUrl
-        : card.attachmentId ? attachmentUrl.get(card.attachmentId) ?? card.assetUrl : card.assetUrl,
+        // 첨부 주소가 비면(내 폴더 밖이라 서명 못 함) 내 폴더의 카드 그림으로 보여 준다 —
+        // 관리자 복사본은 카드 그림만 관리자 폴더로 옮겨져 있다(2026-09-28 독립 리뷰).
+        : card.attachmentId
+          ? attachmentUrl.get(card.attachmentId) || (card.assetPath ? urls.get(card.assetPath) : undefined) || card.assetUrl
+          : card.assetUrl,
       ...previewUrlOf(card, (path) => urls.get(path)),
     })),
   } : undefined;
   return { ...project, data: { ...project.data, attachments, flow } };
 }
+
+/**
+ * **쓸 수 없는 첨부가 있나** — 만들기 전에 본다(2026-09-28 독립 리뷰).
+ *
+ * `refreshProjectAssetUrls` 는 작업 주인 폴더 첨부만 서명하고 나머지는 빈 주소로
+ * 둔다(관리자 복사본에 남은 회원 폴더 첨부 등). 그대로 만들면 크레딧을 예약한 뒤
+ * 첨부 올리기에서 영어 원문 오류로 넘어진다. 예약 전에 막고 우리말로 알린다.
+ */
+export function hasUnusableAttachment(project: SnsProjectRecord): boolean {
+  return project.data.attachments.some((attachment) => !attachment.url);
+}
+
+export const UNUSABLE_ATTACHMENT_MESSAGE =
+  "쓸 수 없는 첨부 이미지가 있습니다. 「지난 단계로」에서 첨부를 다시 골라 주세요.";
 
 /**
  * 목록에 나올 작업들의 그림 주소를 한 번에 만든다.

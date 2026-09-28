@@ -126,6 +126,18 @@ describe("SNS 프로젝트 서비스", () => {
       .rejects.toBeInstanceOf(ProjectValidationError);
   });
 
+  it("내 폴더로 시작해도 `..`·역슬래시로 빠져나가는 경로는 막는다", async () => {
+    const repository: SnsProjectRepository = {
+      create: async (row) => ({ id: "p", ...row, createdAt: "", updatedAt: "" }),
+      list: async () => [],
+    };
+    for (const assetPath of ["session-user/../u9/references/x.png", "session-user/references\\..\\x.png"]) {
+      const input = ProjectInputSchema.parse({ ...base, attachments: [{ ...base.attachments[0], assetPath }] });
+      await expect(createProjectService(repository).create("session-user", input))
+        .rejects.toBeInstanceOf(ProjectValidationError);
+    }
+  });
+
   it("인증 사용자와 자리 계획을 저장한다", async () => {
     const rows: unknown[] = [];
     const repository: SnsProjectRepository = {

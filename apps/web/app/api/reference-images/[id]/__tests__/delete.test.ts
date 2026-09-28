@@ -43,6 +43,10 @@ function client(kind: "session" | "admin") {
           return builder;
         },
         maybeSingle: async () => {
+          // Postgres 는 uuid 모양이 아닌 값을 비교하지 못하고 22P02 로 거절한다.
+          if (!/^[0-9a-f-]{36}$/.test(id) && !state.rows.some((entry) => entry.id === id)) {
+            return { data: null, error: { code: "22P02", message: `invalid input syntax for type uuid: "${id}"` } };
+          }
           const row = state.rows.find((entry) => entry.id === id);
           const visible = row && (kind === "admin" || row.user_id === state.sessionUser);
           return { data: visible ? row : null, error: null };
@@ -65,6 +69,10 @@ vi.mock("../../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient:
 
 const { DELETE } = await import("../route");
 
+const MINE = "11111111-1111-4111-8111-111111111111";
+const THEIRS = "22222222-2222-4222-8222-222222222222";
+const NOTHING = "33333333-3333-4333-8333-333333333333";
+
 const 줄 = (id: string, user_id: string): Row => ({
   id, user_id, storage_path: `${user_id}/references/${id}.png`, thumb_path: null,
 });
@@ -81,7 +89,7 @@ const 지운다 = (id: string) =>
 
 beforeEach(() => {
   vi.resetAllMocks();
-  state.rows = [줄("mine", "member-1"), 줄("theirs", "member-9")];
+  state.rows = [줄(MINE, "member-1"), 줄(THEIRS, "member-9")];
   state.deletedBy = [];
   state.removedFiles = [];
 });
@@ -89,31 +97,36 @@ beforeEach(() => {
 describe("참고 이미지 지우기", () => {
   it("올린 사람은 자기 것을 지운다", async () => {
     로그인("member-1", "member");
-    const response = await 지운다("mine");
+    const response = await 지운다(MINE);
     expect(response.status).toBe(200);
-    expect(state.rows.map((row) => row.id)).toEqual(["theirs"]);
-    expect(state.removedFiles).toContain("member-1/references/mine.png");
+    expect(state.rows.map((row) => row.id)).toEqual([THEIRS]);
+    expect(state.removedFiles).toContain(`member-1/references/${MINE}.png`);
   });
 
   it("**관리자는 남이 올린 것도 지운다** — 목록이 「내 것만」이 된 뒤에도", async () => {
     로그인("admin-1", "admin");
-    const response = await 지운다("theirs");
+    const response = await 지운다(THEIRS);
     expect(response.status).toBe(200);
-    expect(state.rows.map((row) => row.id)).toEqual(["mine"]);
+    expect(state.rows.map((row) => row.id)).toEqual([MINE]);
     // 남의 행을 세션으로 지우면 RLS 가 0줄로 막고 성공처럼 답한다.
-    expect(state.deletedBy).toEqual([{ client: "admin", id: "theirs" }]);
+    expect(state.deletedBy).toEqual([{ client: "admin", id: THEIRS }]);
   });
 
   it("회원은 남의 것을 못 지우고, 있다는 사실도 모른다", async () => {
     로그인("member-1", "member");
-    const response = await 지운다("theirs");
+    const response = await 지운다(THEIRS);
     expect(response.status).toBe(404);
-    expect(state.rows.map((row) => row.id)).toEqual(["mine", "theirs"]);
+    expect(state.rows.map((row) => row.id)).toEqual([MINE, THEIRS]);
     expect(state.deletedBy).toEqual([]);
+  });
+
+  it("id 모양이 아니면 DB 에 묻지 않고 없다고 답한다 — 500 이 아니다", async () => {
+    로그인("admin-1", "admin");
+    expect((await 지운다("not-a-uuid")).status).toBe(404);
   });
 
   it("없는 것은 없다고 답한다", async () => {
     로그인("admin-1", "admin");
-    expect((await 지운다("nothing")).status).toBe(404);
+    expect((await 지운다(NOTHING)).status).toBe(404);
   });
 });

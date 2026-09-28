@@ -147,7 +147,9 @@ export function snsSeed(
   */
   const copies = new Map(adopted.map((entry) => [entry.from, entry]));
   const usable = mine
-    ? attachments
+    // 주소를 못 받은 첨부(내 폴더 밖이라 서명이 안 된 것)는 싣지 않는다 — 02 단계에
+    // 빈 칸으로 남고 만들기가 이유 없이 거절된다. 빠진 수로 세어 화면이 알린다.
+    ? attachments.filter((attachment) => Boolean(attachment.url))
     : attachments.flatMap((attachment) => {
         const copy = copies.get(attachment.id);
         return copy

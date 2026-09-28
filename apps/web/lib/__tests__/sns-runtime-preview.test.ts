@@ -211,6 +211,32 @@ describe("refreshProjectAssetUrls — 첨부는 작업 주인 것만 서명한�
     expect(refreshed.data.attachments[0]!.url).toBe("");
   });
 
+  it("카드 경로도 작업 주인 폴더 것만 서명한다", async () => {
+    // 「그대로 넣기」 카드는 기획 때 첨부 경로를 그대로 받는다(`actual-flow.ts`).
+    const refreshed = await refreshProjectAssetUrls({
+      ...project(),
+      data: {
+        source: { kind: "text", text: "본문" }, attachments: [],
+        flow: { stage: "result", cards: [{ index: 1, kind: "generated", assetPath: "u9/sns/p1/1.png" }] },
+      },
+    } as never);
+    expect(refreshed.data.flow!.cards[0]!.assetUrl).not.toBe("signed:u9/sns/p1/1.png");
+  });
+
+  it("**첨부 주소가 비면 내 폴더의 카드 그림으로 보여 준다** — 관리자 복사본", async () => {
+    // 관리자 복사본은 첨부가 원래 회원 폴더에 남고, 카드 그림은 관리자 폴더로
+    // 복사돼 있다. 첨부 주소가 비었다고 카드까지 빈 칸이 되면 안 된다(독립 리뷰).
+    const refreshed = await refreshProjectAssetUrls({
+      ...project(),
+      data: {
+        source: { kind: "text", text: "본문" },
+        attachments: [{ id: "a1", kind: "place_as_is", assetPath: "u9/references/a1.png", url: "old" }],
+        flow: { stage: "result", cards: [{ index: 2, kind: "place_as_is", attachmentId: "a1", assetPath: "u1/sns/p1/2.png" }] },
+      },
+    } as never);
+    expect(refreshed.data.flow!.cards[0]!.assetUrl).toBe("signed:u1/sns/p1/2.png");
+  });
+
   it("**화면이 보낸 주소로 되돌아가지 않는다** — 서버가 그 주소를 받아 온다", async () => {
     // 생성할 때 서버가 이 주소로 그림을 받는다(`uploadReference`). 서명을 못 하면
     // 저장된 값을 그대로 쓰던 자리라, 내부 주소를 넣으면 서버가 그리로 요청했다.

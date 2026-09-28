@@ -53,7 +53,7 @@ grant execute on function public.reference_visible(uuid, uuid) to authenticated;
 --   -- **정확히 두 줄**이어야 한다. 운영은 콘솔에 손으로 붙여 적용해 와서 저장소와
 --   -- 갈린 적이 있다. 옛 「members read all reference images」(using true) 처럼
 --   -- 다른 select 정책이 하나라도 남아 있으면 OR 로 합쳐져 이 파일의 효과가 없다.
---     members manage own reference images   ALL     (auth.uid() = user_id)
+--     members manage own reference images   ALL     (( SELECT auth.uid() AS uid) = user_id)
 --     team reads reference images           SELECT  reference_visible(team_id, user_id)
 --
 -- ── 되돌리기 ──────────────────────────────────────────────────────

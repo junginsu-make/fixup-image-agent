@@ -7,7 +7,7 @@ import { estimateCost } from "../../../../../../sns/cost-estimate";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../../lib/sns-flow-store";
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../../lib/sns-generation-store";
 import { createSnsGenerationProviders, SnsProviderConfigurationError } from "../../../../../../../lib/sns/providers";
-import { createQueuedGenerationDependencies, refreshProjectAssetUrls } from "../../../../../../../lib/sns/runtime";
+import { createQueuedGenerationDependencies, hasUnusableAttachment, refreshProjectAssetUrls, UNUSABLE_ATTACHMENT_MESSAGE } from "../../../../../../../lib/sns/runtime";
 import { hasActiveQueuedGeneration, startQueuedFlow } from "../../../../../../../lib/sns/queued-flow";
 import { CARD_NOTE_MAX } from "../../../../../../sns/[id]/result-rules";
 import { withSnsProjectLock } from "../../../../../../../lib/sns/project-lock";
@@ -93,6 +93,7 @@ export async function POST(request: Request, context: Context) {
       if (hasActiveQueuedGeneration(project.data.flow)) return Response.json({ ok: false, message: "다른 카드가 생성 중입니다." }, { status: 409 });
       const providers = createSnsGenerationProviders();
       project = await refreshProjectAssetUrls(project);
+      if (hasUnusableAttachment(project)) return Response.json({ ok: false, message: UNUSABLE_ATTACHMENT_MESSAGE }, { status: 409 });
       const currentFlow = project.data.flow;
       if (!currentFlow) return Response.json({ ok: false, message: "결과를 찾을 수 없습니다." }, { status: 404 });
       const dependencies = await createQueuedGenerationDependencies({

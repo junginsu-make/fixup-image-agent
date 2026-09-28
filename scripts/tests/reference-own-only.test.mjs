@@ -78,6 +78,11 @@ test('only the two expected policies guard the table — no stray read-all polic
   assert.equal(rows, 'members manage own reference images:ALL,team reads reference images:SELECT');
 });
 
+test("the visibility check runs with the caller's rights (security invoker)", async () => {
+  // 이제 auth.uid() 만 본다. 소유자 권한이 필요 없고, 좁을수록 실수했을 때 새는 것이 적다.
+  assert.equal(await db.sql(`select prosecdef from pg_proc where oid='public.reference_visible(uuid,uuid)'::regprocedure;`), 'f');
+});
+
 test('nobody signed in sees nothing', async () => {
   assert.equal(await db.sql(`begin;
     set local role authenticated;

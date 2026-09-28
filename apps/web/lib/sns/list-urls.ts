@@ -19,12 +19,18 @@ import type { SnsProjectRecord } from "../../app/api/sns/projects/project-servic
 export function collectCardPaths(projects: SnsProjectRecord[]): string[] {
   const paths = new Set<string>();
   for (const project of projects) {
+    /*
+      **작업 주인 폴더 것만 서명한다**(2026-09-28). 「그대로 넣기」 카드는 기획 때
+      첨부 경로를 그대로 받는데, 서명은 서버 권한이라 그 경로가 남의 폴더면 남의
+      파일 주소가 목록으로 나갔다(독립 리뷰). 만든 카드는 늘 주인 폴더라 잃는 것이 없다.
+    */
+    const ownFolder = `${project.userId}/`;
     for (const card of project.data.flow?.cards ?? []) {
-      if (card.assetPath) paths.add(card.assetPath);
+      if (card.assetPath?.startsWith(ownFolder)) paths.add(card.assetPath);
       // **미리보기도 함께 서명한다.** 목록은 미리보기를 걸고, 확대·내려받기·
       // 라이브러리 저장은 원본을 쓴다 — 둘 다 필요하다. 한 번에 모아 서명하므로
       // 왕복은 늘지 않는다.
-      if (card.thumbPath) paths.add(card.thumbPath);
+      if (card.thumbPath?.startsWith(ownFolder)) paths.add(card.thumbPath);
     }
   }
   return [...paths];

@@ -62,7 +62,9 @@ export function createProjectService(repository: SnsProjectRepository) {
         이미지·작업물이 열렸다(독립 리뷰). 저장 경로의 첫 칸이 소유자다
         (`docs/DEPLOY.md`). 누구 것인지는 알려 주지 않는다.
       */
-      if (input.attachments.some((attachment) => !attachment.assetPath.startsWith(`${userId}/`))) {
+      // `..`·역슬래시로 내 폴더에서 빠져나가는 경로도 막는다 — 앞머리만 보면 통과한다.
+      if (input.attachments.some((attachment) => !attachment.assetPath.startsWith(`${userId}/`)
+        || attachment.assetPath.includes("..") || attachment.assetPath.includes("\\"))) {
         issues.push("첨부 이미지를 찾을 수 없습니다. 다시 골라 주세요.");
       }
       const placeAsIsCount = input.attachments.filter((attachment) => attachment.kind === "place_as_is").length;

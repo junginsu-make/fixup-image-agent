@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import {
   findLocalReferenceImage,
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ id: string }> };
 
 /**
- * 참고 이미지를 지운다. **올린 사람만.**
+ * 참고 이미지를 지운다. **올린 사람과 관리자만.**
  *
  * **행을 먼저 지우고 파일을 나중에 지운다.** 파일이 먼저 사라지면 목록에는
  * 남아 있는데 미리보기가 깨진 상태가 된다. 반대 순서면 파일만 남는데,
@@ -37,6 +38,10 @@ export async function DELETE(_request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await context.params;
+    // id 모양이 아니면 DB 에 묻지 않는다 — 묻으면 22P02 로 500 이 난다.
+    if (!z.string().uuid().safeParse(id).success) {
+      return Response.json({ ok: false, message: "참고 이미지를 찾을 수 없습니다." }, { status: 404 });
+    }
 
     if (isLocalStoreEnabled()) {
       const database = getLocalDatabase();
