@@ -24,11 +24,16 @@ describe("작업을 저장할 때 과정도 함께 보낸다", () => {
    * 함께 보내는 것만이 「작업을 저장하는 자리」다.
    */
   const savers = [
-    { file: "app/create/PdpEditor.tsx", maker: "pdpProcessSource", calls: 1 },
+    /*
+      상세페이지는 과정을 **두 군데서** 짓는다 — 화면이 올리는 편집본 저장 하나와,
+      생성 요청에 실어 서버가 라이브러리를 맞출 때 쓰는 것 하나(`librarySyncFields`,
+      2026-09-28). 그림을 올리는 자리는 여전히 하나다.
+    */
+    { file: "app/create/PdpEditor.tsx", maker: "pdpProcessSource", calls: 1, makerCalls: 2 },
     { file: "app/redesign/redesign-wizard.tsx", maker: "redesignProcessSource", calls: 2 },
   ];
 
-  it.each(savers)("$file 의 저장 $calls 군데가 모두 과정을 보낸다", ({ file, maker, calls }) => {
+  it.each(savers)("$file 의 저장 $calls 군데가 모두 과정을 보낸다", ({ file, maker, calls, makerCalls }) => {
     const source = read(file);
 
     // 그림을 올리는 호출 = 본문에 `images` 를 담아 보내는 자리
@@ -41,7 +46,7 @@ describe("작업을 저장할 때 과정도 함께 보낸다", () => {
       한 번이다. 가져오는 줄(`import { maker }`)에는 괄호가 없어 안 센다.
     */
     const spreads = source.split(`${maker}(`).length - 1;
-    expect(spreads, `${file} 에서 과정을 안 보내는 저장이 있다`).toBe(calls);
+    expect(spreads, `${file} 에서 과정을 안 보내는 저장이 있다`).toBe(makerCalls ?? calls);
   });
 
   it("서버가 화면이 보낸 것을 그대로 담지 않는다", () => {

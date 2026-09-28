@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { advanceJob, isTerminal, type PdpJobEvent, type PdpJobState } from "./state";
 import { resolveSubmission } from "./claim";
+import { mergeDocumentJobs } from "./merge-document-jobs";
 import type {
   CreateJobInput,
   CreateJobResult,
@@ -47,6 +48,8 @@ type Row = {
 };
 
 type ItemRow = {
+  /** 여러 작업의 섹션을 한 번에 읽을 때 작업별로 가르는 데 쓴다. */
+  job_id?: string;
   section_id: string;
   attempt: number;
   provider_request_id: string | null;
@@ -59,6 +62,8 @@ type ItemRow = {
 
 const JOBS = "pdp_generation_jobs";
 const ITEMS = "pdp_generation_items";
+/** 섹션 결과를 물을 때 한 번에 싣는 작업 id 수. */
+const ITEM_QUERY_CHUNK = 100;
 
 function toRecord(row: Row, items: ItemRow[]): JobRecord {
   return {
@@ -208,15 +213,34 @@ export function createSupabaseJobRepository(admin: SupabaseClient<any>): PdpJobR
         .eq("user_id", userId)
         .eq("document_id", documentId)
         .eq("revision", revision)
-        // 여러 번 만들었으면 마지막 것이 사용자가 기억하는 화면이다.
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        // 한 장 다시 만들기도 작업을 남긴다. 여러 번 다시 만든 문서도 처음 묶음까지 닿게 넉넉히(2차 리뷰 LOW-5).
+        .limit(300);
 
-      const row = (data as Row | null) ?? null;
+      const rows = (data as Row[] | null) ?? [];
       // 없으면 섹션 표를 읽으러 가지 않는다. 헛걸음이다.
-      if (!row) return null;
-      return toRecord(row, await itemsOf(row.id));
+      if (!rows.length) return null;
+      /*
+        **작업 전부에서 섹션마다 가장 최근 그림을 모은다**(독립 리뷰 HIGH-3). 가장 최근
+        작업 하나만 보면, 한 장 다시 만들기가 앞선 묶음의 섹션을 가려 되찾지 못한다.
+      */
+      /*
+        작업 id 를 **100개씩 나눠** 묻는다(3차 리뷰 MEDIUM) — 수백 개를 한 주소에 실으면
+        주소가 너무 길어 거절될 수 있다. 읽기 실패는 던진다 — 「없음」과 「모름」은 다르다.
+      */
+      const itemRows: ItemRow[] = [];
+      for (let start = 0; start < rows.length; start += ITEM_QUERY_CHUNK) {
+        const ids = rows.slice(start, start + ITEM_QUERY_CHUNK).map((row) => row.id);
+        const { data: chunk, error } = await admin.from(ITEMS).select("*").in("job_id", ids).order("attempt");
+        if (error) throw new Error(error.message);
+        itemRows.push(...((chunk ?? []) as ItemRow[]));
+      }
+      const byJob = new Map<string, ItemRow[]>();
+      for (const item of itemRows) {
+        const jobId = item.job_id ?? "";
+        byJob.set(jobId, [...(byJob.get(jobId) ?? []), item]);
+      }
+      return mergeDocumentJobs(rows.map((row) => toRecord(row, byJob.get(row.id) ?? [])));
     },
 
     async advance(jobId: string, userId: string, event: PdpJobEvent): Promise<JobRecord> {

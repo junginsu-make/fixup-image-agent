@@ -31,6 +31,18 @@ import { hasFullScope, ownerFilter, type ScopeAction } from "./access/core";
  */
 
 const BUCKET = "library";
+/** 파일 이름에 새길 수 있는 표시: 8자리 16진수, 또는 `s<섹션>-a<그림>`(8자리씩). */
+const FILE_TAG_RE = /^(?:[0-9a-f]{8}|s[0-9a-f]{8}-a[0-9a-f]{8})$/;
+
+/**
+ * 파일 이름에 쓸 조각. 섹션·그림 표시(`s…-a…`)에는 **요청마다 무작위 조각을 더 붙인다**
+ * (독립 리뷰 LOW-2) — 같은 그림을 두 요청이 겹쳐 올려도 이름이 달라, 늦게 실패한 쪽이
+ * 되돌리며 먼저 성공한 쪽의 파일을 지우지 않는다.
+ */
+function fileStemTag(fileTag: string | undefined): string {
+  if (!fileTag || !FILE_TAG_RE.test(fileTag)) return randomUUID().slice(0, 8);
+  return fileTag.startsWith("s") ? `${fileTag}-${randomUUID().slice(0, 6)}` : fileTag;
+}
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 /** 목록을 보는 사람. 클라이언트가 보낸 값이 아니라 세션에서 꺼낸 것만 넣는다. */
@@ -126,6 +138,14 @@ export interface SaveLibraryItemInput {
    * 페이지가 여덟 줄로 흩어진다. `saveOrAppendLibraryItem` 이 채워 준다.
    */
   appendTo?: { itemId: string; startPosition: number };
+  /**
+   * 파일 이름에 새길 표시. 안 주면 요청마다 새로 짓는다.
+   *
+   * 서버가 상세페이지를 직접 등록할 때 **어느 섹션의 어느 그림인지**(`s<섹션>-a<그림>`,
+   * 16진수 8자리씩) 새긴다(`pdp/jobs/library-sync.ts`). 다음에 맞춰 볼 때 같은
+   * 섹션의 바뀐 자리만 다시 올린다.
+   */
+  fileTag?: string;
 }
 
 export interface ServerLibraryItem {
@@ -246,7 +266,7 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
     쪽의 파일을 지운다** — 목록은 「저장됨」인데 그림이 없다. 경로는 표
     (`library_images.path`)에 적혀 읽히므로 이름 규칙에 기대는 곳이 없다.
   */
-  const batchTag = randomUUID().slice(0, 8);
+  const batchTag = fileStemTag(input.fileTag);
 
   try {
     const rows = [];
@@ -313,11 +333,23 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
      * 표지는 **첫 장일 때만** 정한다. 이어 붙일 때 덮으면 두 번째 섹션이
      * 표지가 되어, 목록에서 페이지가 중간부터 시작하는 것처럼 보인다.
      */
+    /*
+      이어 붙였으면 **장수는 행을 센다**(4차 리뷰 LOW). 자리 번호로 셈하면, 자리를 옮기다
+      멈춰 멀리 선 줄(100000 번대)이 있을 때 장수가 십만이 된다.
+    */
+    let appendedCount = startPosition + rows.length;
+    if (appendTo) {
+      const { count, error: rowCountError } = await supabase
+        .from("library_images")
+        .select("id", { count: "exact", head: true })
+        .eq("item_id", item.id);
+      if (!rowCountError && typeof count === "number") appendedCount = count;
+    }
     const { error: countError } = await supabase
       .from("library_items")
       .update(
         appendTo
-          ? { image_count: startPosition + rows.length }
+          ? { image_count: appendedCount }
           : {
               cover_path: rows[0]?.path ?? null,
               cover_thumb_path: coverThumbPath,
@@ -347,6 +379,158 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
     */
     console.error("[library:save-item]", error);
     return { ok: false as const, message: "저장 중 오류가 발생했습니다." };
+  }
+}
+
+/**
+ * 작업의 **한 자리를 새 그림으로 바꾼다**(서버가 상세페이지를 맞출 때).
+ *
+ * 섹션 하나를 다시 만들면 라이브러리의 그 자리만 바꾼다 — 나머지를 다시 굽지 않는다.
+ * 새 파일을 먼저 올리고 표를 고친 **뒤에** 옛 파일을 지운다. 순서가 반대면 중간에
+ * 실패했을 때 그 자리가 빈다. 표 고치기가 실패하면 새 파일을 지우고 옛 것을 둔다.
+ *
+ * 자기 작업만 고친다(`user_id` 로 묶는다).
+ */
+export async function replaceLibraryImageAt(input: {
+  userId: string;
+  itemId: string;
+  position: number;
+  origin: LibraryOrigin;
+  fileTag: string;
+  image: LibraryImageInput;
+}): Promise<{ ok: boolean }> {
+  const supabase = createSupabaseAdminClient();
+  const { data: row, error: readError } = await supabase
+    .from("library_images")
+    .select("path,thumb_path")
+    .eq("item_id", input.itemId)
+    .eq("user_id", input.userId)
+    .eq("position", input.position)
+    .maybeSingle();
+  if (readError || !row) return { ok: false };
+  const old = row as { path: string; thumb_path: string | null };
+
+  if (!FILE_TAG_RE.test(input.fileTag)) return { ok: false };
+  const stem = fileStemTag(input.fileTag);
+  const original = Buffer.from(input.image.base64, "base64");
+  const marked = input.origin === "ai" ? await markAsAi(original) : original;
+  const { bytes, mimeType } = await encodeForStorage(marked, input.image.mimeType);
+  const path = `${input.userId}/${input.itemId}/${input.position}-${stem}.${extensionFor(mimeType)}`;
+  const uploaded: string[] = [];
+  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, bytes, { contentType: mimeType, upsert: true });
+  if (uploadError) return { ok: false };
+  uploaded.push(path);
+
+  const candidate = await makeThumbnail(bytes);
+  let thumbPath: string | null = null;
+  if (candidate && candidate.length < bytes.length) {
+    const next = `${input.userId}/${input.itemId}/${input.position}-${stem}.thumb.webp`;
+    const { error } = await supabase.storage.from(BUCKET).upload(next, candidate, { contentType: "image/webp", upsert: true });
+    if (!error) {
+      thumbPath = next;
+      uploaded.push(next);
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("library_images")
+    .update({ path, mime_type: mimeType, thumb_path: thumbPath })
+    .eq("item_id", input.itemId)
+    .eq("user_id", input.userId)
+    .eq("position", input.position);
+  if (updateError) {
+    await supabase.storage.from(BUCKET).remove(uploaded);
+    return { ok: false };
+  }
+  // 표지는 첫 자리다. 첫 자리를 바꿨으면 표지도 따라간다.
+  if (input.position === 0) {
+    const { error: coverError } = await supabase
+      .from("library_items")
+      .update({ cover_path: path, cover_thumb_path: thumbPath })
+      .eq("id", input.itemId)
+      .eq("user_id", input.userId);
+    /*
+      **표지를 못 고쳤으면 옛 파일을 지우지 않는다**(독립 리뷰 MEDIUM-1). 지우면 표지가
+      없는 파일을 가리켜 목록 카드가 깨진다. 옛 파일은 표지로 남는다.
+    */
+    if (coverError) {
+      console.warn("[library:replace] 표지를 못 고쳐 옛 파일을 둡니다", coverError.message);
+      return { ok: true };
+    }
+  }
+  // 새 것이 자리를 잡은 뒤에 옛 파일을 지운다. 같은 이름이면 지우지 않는다(덮어썼다).
+  const stale = [old.path, old.thumb_path].filter((value): value is string => Boolean(value) && !uploaded.includes(value as string));
+  if (stale.length) await supabase.storage.from(BUCKET).remove(stale);
+  return { ok: true };
+}
+
+/** 자리를 옮기는 동안 잠시 쓰는 번호의 바닥. 자리 번호는 겹칠 수 없다(`unique (item_id, position)`). */
+const REORDER_PARKING = 100_000;
+
+/**
+ * 작업의 그림 **자리만 옮긴다**(서버가 상세페이지를 맞출 때, 사용자가 섹션 순서를 바꿨다).
+ *
+ * `order` 는 지금 자리 번호를 새 차례대로 늘어놓은 것이다 — `order[i]` 자리가 `i` 로 간다.
+ * **파일은 건드리지 않는다.** 표의 번호만 바꾼다. 번호가 겹칠 수 없어 먼저 멀리 비켜
+ * 세웠다가 제자리로 온다. 중간에 멈추면 멀리 선 채로 남지만 차례는 그대로라, 다음
+ * 맞추기가 다시 옮긴다. **비켜 세울 번호는 지금 가장 큰 번호 위에서 고른다** — 앞서
+ * 멈춰 남은 줄과 겹치면 매번 같은 곳에서 실패했다(3차 리뷰 LOW). 표지는 새 첫 자리를
+ * 따라간다.
+ *
+ * 자기 작업만 고친다(`user_id` 로 묶는다).
+ */
+export async function reorderLibraryImages(input: {
+  userId: string;
+  itemId: string;
+  order: readonly number[];
+}): Promise<{ ok: boolean }> {
+  if (new Set(input.order).size !== input.order.length) return { ok: false };
+  const supabase = createSupabaseAdminClient();
+  const move = async (from: number, to: number) => {
+    const { error } = await supabase
+      .from("library_images")
+      .update({ position: to })
+      .eq("item_id", input.itemId)
+      .eq("user_id", input.userId)
+      .eq("position", from);
+    if (error) throw new Error(error.message);
+  };
+  try {
+    const { data: top, error: topError } = await supabase
+      .from("library_images")
+      .select("position")
+      .eq("item_id", input.itemId)
+      .eq("user_id", input.userId)
+      .order("position", { ascending: false })
+      .limit(1);
+    if (topError) throw new Error(topError.message);
+    const highest = ((top ?? []) as Array<{ position: number }>)[0]?.position ?? 0;
+    const parking = Math.max(highest, REORDER_PARKING) + 1;
+
+    for (const [index, position] of input.order.entries()) await move(position, parking + index);
+    for (const index of input.order.keys()) await move(parking + index, index);
+
+    const { data: first, error: readError } = await supabase
+      .from("library_images")
+      .select("path,thumb_path")
+      .eq("item_id", input.itemId)
+      .eq("user_id", input.userId)
+      .eq("position", 0)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (first) {
+      const cover = first as { path: string; thumb_path: string | null };
+      const { error: coverError } = await supabase
+        .from("library_items")
+        .update({ cover_path: cover.path, cover_thumb_path: cover.thumb_path })
+        .eq("id", input.itemId)
+        .eq("user_id", input.userId);
+      if (coverError) console.warn("[library:reorder] 표지를 못 고쳤습니다", coverError.message);
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error("[library:reorder]", error);
+    return { ok: false };
   }
 }
 

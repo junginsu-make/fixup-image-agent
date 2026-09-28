@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { advanceJob, initialJobState, isTerminal } from "./state";
 import { leaseExpiredAt, resolveSubmission } from "./claim";
+import { mergeDocumentJobs } from "./merge-document-jobs";
 import type {
   CreateJobInput,
   CreateJobResult,
@@ -130,8 +131,8 @@ export function createLocalJobRepository(root: string): LocalJobRepository {
       const 내것 = read().jobs.filter(
         (job) => job.userId === userId && job.documentId === documentId && job.revision === revision,
       );
-      // 여러 번 만들었으면 **마지막 것**이 사용자가 기억하는 화면이다.
-      return 내것.length ? 내것.reduce((a, b) => (a.createdAt <= b.createdAt ? b : a)) : null;
+      // 작업 전부에서 섹션마다 가장 최근 그림을 모은다(`supabase-repository.ts` 와 같은 규칙).
+      return mergeDocumentJobs(내것);
     },
 
     async advance(jobId, userId, event) {

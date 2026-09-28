@@ -28,6 +28,7 @@ function 기록하는클라이언트(rows: Record<string, unknown[]> = {}) {
     const chain: Record<string, unknown> = {
       eq: (column: string, value: unknown) => (call.filters.push(["eq", column, value]), chain),
       neq: (column: string, value: unknown) => (call.filters.push(["neq", column, value]), chain),
+      in: (column: string, value: unknown) => (call.filters.push(["in", column, value]), chain),
       not: (column: string, _op: string, value: unknown) => (call.filters.push(["not", column, value]), chain),
       or: (expr: string) => (call.filters.push(["or", expr, null]), chain),
       // **무엇으로 정렬하는지까지 본다.** 안 재면 정렬을 지워도 통과한다.
@@ -168,19 +169,30 @@ describe("문서로 찾을 때", () => {
   });
 
   /**
-   * **가장 나중 것을 준다.**
+   * **문서의 작업을 최근 것부터 모두 읽는다**(독립 리뷰 HIGH-3, 2026-09-28).
    *
-   * 같은 개정판으로 여러 번 만들었으면 마지막 것이 사용자가 기억하는 화면이다.
-   * 정렬을 빠뜨리면 DB 가 주는 순서대로 아무거나 온다 — 옛 작업이 올 수 있다.
+   * 전에는 가장 최근 하나만 읽었다. 한 장 다시 만들기가 작업을 남기면서 그 한 장짜리가
+   * 앞선 묶음을 가려 되찾지 못했다. 섹션마다 가장 최근 그림을 모으는 일은
+   * `mergeDocumentJobs` 가 한다(따로 시험).
    */
-  it("**만든 차례의 역순으로 첫 줄만 읽는다**", async () => {
+  it("**만든 차례의 역순으로 여러 줄을 읽는다**", async () => {
     const { client, calls } = 기록하는클라이언트();
 
     await createSupabaseJobRepository(client as never).findLatestForDocument("u1", "doc-1", 3);
 
     expect(열(calls[0], "order")).toEqual(["created_at"]);
     expect(인자(calls[0], "order")).toEqual({ ascending: false });
-    expect(열(calls[0], "limit")).toEqual(["1"]);
+    expect(Number(열(calls[0], "limit")[0])).toBeGreaterThan(1);
+  });
+
+  it("**작업이 많으면 섹션 결과를 100개씩 나눠 묻는다** — 주소가 너무 길어 거절되지 않게(3차 리뷰 MEDIUM)", async () => {
+    const jobs = Array.from({ length: 150 }, (_, index) => ({ id: `job-${index}`, section_ids: [], created_at: "2026-09-21T00:00:00Z" }));
+    const { client, calls } = 기록하는클라이언트({ pdp_generation_jobs: jobs, pdp_generation_items: [] });
+
+    await createSupabaseJobRepository(client as never).findLatestForDocument("u1", "doc-1", 0);
+
+    const itemCalls = calls.filter((call) => call.table === "pdp_generation_items");
+    expect(itemCalls.map((call) => (call.filters.find(([op]) => op === "in")?.[2] as string[]).length)).toEqual([100, 50]);
   });
 
   /**
@@ -204,8 +216,9 @@ describe("문서로 찾을 때", () => {
 
     expect(found?.id).toBe("job-7");
     expect(found?.items.map((item) => item.outputPath)).toEqual(["u1/j/s1.png"]);
-    // 섹션 표를 **그 작업 번호로** 읽는다. 다른 값으로 읽으면 남의 것이 온다.
+    // 섹션 표를 **찾은 작업 번호들로만** 읽는다. 다른 값으로 읽으면 남의 것이 온다.
     const 섹션읽기 = calls.find((call) => call.table === "pdp_generation_items");
-    expect((섹션읽기?.filters ?? []).some(([op, column, value]) => op === "eq" && column === "job_id" && value === "job-7")).toBe(true);
+    expect((섹션읽기?.filters ?? []).some(([op, column, value]) =>
+      op === "in" && column === "job_id" && JSON.stringify(value) === JSON.stringify(["job-7"]))).toBe(true);
   });
 });

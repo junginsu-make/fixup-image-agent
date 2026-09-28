@@ -25,6 +25,8 @@ import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
 import { createJobRecorder } from "../../../../../lib/pdp/jobs/recorder";
 import { fingerprintOf, isPdpJobsEnabled } from "../../../../../lib/pdp/jobs";
+import { syncDocumentLibraryLater } from "../../../../../lib/pdp/jobs/library-sync";
+import { librarySyncFromBody } from "../../../../../lib/pdp/jobs/library-sync-request";
 import { readPdpRequest } from "../../../../../lib/pdp/request";
 
 export const runtime = "nodejs";
@@ -332,6 +334,21 @@ export async function POST(req: Request) {
     requested: sections.length,
     settled: Boolean(usage) && usage?.costRecorded !== false,
   });
+
+  /*
+    **라이브러리는 서버가 맞춘다**(2026-09-28 사용자 결정). 전에는 브라우저가
+    등록해, 만든 직후 창을 닫으면 그림은 서버에 있는데 라이브러리엔 없었다.
+    **기다리지 않는다** — 응답은 바로 나가고, 등록 실패는 로그로만 남는다.
+    결과가 저장소에 적힌 요청(`jobs.jobId`)만 맞춘다.
+  */
+  const librarySync = jobs?.jobId && succeeded > 0 ? librarySyncFromBody(reservation.userId, body as Record<string, unknown>) : null;
+  if (librarySync) {
+    // 방금 만든 그림을 그대로 넣는다 — 화면이 받는 바이트와 같다(지문이 맞는다).
+    const images = results.flatMap((result) =>
+      result.ok ? [{ sectionId: result.sectionId, image: { base64: result.imageBase64, mimeType: result.mimeType } }] : [],
+    );
+    void syncDocumentLibraryLater({ ...librarySync, images });
+  }
 
   return Response.json({
     ok: succeeded > 0,
