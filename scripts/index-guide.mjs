@@ -21,7 +21,7 @@
  * 돌린다** — 배포 전에 돌리면 옛 화면을 긁는다.
  */
 
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { build } from "esbuild";
 import vm from "node:vm";
@@ -125,7 +125,18 @@ async function main() {
     return;
   }
 
-  const { indexKnowledgeDocument, isRagConfigured } = await import("@fixup/redesign-core");
+  /*
+    **가리키는 이름이 아니라 길로 부른다.** 이 파일은 저장소 뿌리에 있고
+    뿌리의 `node_modules` 에는 `@fixup/*` 가 링크되지 않는다(작업 패키지들이
+    쓰는 쪽에만 링크된다). 이름으로 부르면 `ERR_MODULE_NOT_FOUND` 다.
+
+    그리고 그쪽 입구는 **TypeScript** 라(`main: src/index.ts`) 맨 `node` 로는
+    못 읽는다. 그래서 `tsx` 로 돈다(`pnpm index:guide`).
+  */
+  const { indexKnowledgeDocument, isRagConfigured } = await import(
+    // 윈도에서는 절대경로를 그대로 주면 `c:` 를 스킴으로 읽는다. URL 로 준다.
+    pathToFileURL(path.join(root, "packages/redesign-core/src/index.ts")).href
+  );
   if (!isRagConfigured()) {
     console.error("DATABASE_URL 과 OPENAI_API_KEY 가 있어야 합니다.");
     process.exit(1);

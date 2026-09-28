@@ -7,7 +7,7 @@
     "build": "pnpm --filter @fixup/web build",
     "build:ec2": "node scripts/build-ec2.mjs",
     "build:cost-forecast": "node scripts/build-cost-forecast.mjs",
-    "index:guide": "node scripts/index-guide.mjs",
+    "index:guide": "tsx scripts/index-guide.mjs",
     "check:cost-forecast": "node scripts/build-cost-forecast.mjs --check",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --filter @fixup/web lint",
