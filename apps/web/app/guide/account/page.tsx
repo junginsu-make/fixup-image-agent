@@ -92,6 +92,11 @@ export default function AccountGuidePage() {
       </Section>
 
       <Section title="플랜과 크레딧은 어떻게 받나" hint="지금은 운영자가 넣어 드립니다.">
+        <p className="text-sm leading-7 text-muted-foreground">
+          <strong className="text-foreground">가입하면 크레딧은 0 으로 시작합니다.</strong> 가입 혜택으로 주는
+          크레딧은 없습니다. 만들어 보시려면 먼저 플랜이나 크레딧을 받아야 합니다.
+        </p>
+
         <Callouts
           items={[
             {
@@ -105,11 +110,20 @@ export default function AccountGuidePage() {
               ),
             },
             {
-              title: "넣어 드리면 바로 쓸 수 있습니다",
+              title: "플랜과 크레딧은 따로입니다",
               body: (
                 <>
-                  플랜이 들어오면 그 달 몫의 크레딧이 함께 들어옵니다. 새로 로그인할 필요 없이 화면을 다시 열면
-                  남은 크레딧이 바뀐 것을 볼 수 있습니다.
+                  플랜을 넣는 것과 그 달 크레딧을 넣는 것이 <strong className="text-foreground">따로</strong>
+                  움직입니다. 플랜만 붙어 있고 크레딧이 0 이면 아직 그 달 몫이 안 들어온 것입니다. 문의해
+                  주시면 넣어 드립니다.
+                </>
+              ),
+            },
+            {
+              title: "들어오면 바로 쓸 수 있습니다",
+              body: (
+                <>
+                  다시 로그인할 필요 없이 화면을 새로 열면 남은 크레딧이 바뀐 것을 볼 수 있습니다.
                 </>
               ),
             },
@@ -119,8 +133,8 @@ export default function AccountGuidePage() {
         <Flow
           nodes={[
             { label: "문의", sub: "필요한 플랜을 알려 주세요", human: true },
-            { label: "운영자 확인", sub: "플랜을 넣습니다" },
-            { label: "크레딧 들어옴", sub: "그 달 몫" },
+            { label: "플랜 부여", sub: "운영자가 넣습니다" },
+            { label: "그 달 확인", sub: "크레딧은 여기서 들어옵니다" },
             { label: "만들기", sub: "바로 쓸 수 있습니다" },
           ]}
         />
@@ -179,8 +193,8 @@ export default function AccountGuidePage() {
               body: (
                 <>
                   크레딧을 받거나 쓴 기록이 있으면 <strong className="text-foreground">결제·크레딧 기록은 법령에 따라
-                  보관됩니다.</strong> 그 경우 계정은 지워지는 대신 닫힙니다. 기록이 전혀 없으면 계정이 통째로
-                  지워집니다. 어느 쪽이었는지는 끝난 뒤 화면이 알려 줍니다.
+                  보관됩니다.</strong> 그 경우 계정은 지워지는 대신 닫힙니다. 한 번이라도 만들어 본 계정은 대개
+                  이쪽입니다. 가입만 하고 아무것도 안 만든 계정은 통째로 지워집니다.
                 </>
               ),
             },
