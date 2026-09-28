@@ -113,10 +113,31 @@ describe("이메일", () => {
  * 검토가 따로 필요하다 — 이름을 바꿨다고 검토가 끝난 것이 아니다.
  */
 describe("약관·개인정보처리방침", () => {
-  const 문서 = readFileSync(join(WEB, "app/_landing/legal/documents.ts"), "utf8");
+  /*
+    **글자 탈출을 풀고 본다**(2026-09-28).
+
+    이 검사에 구멍이 있었다. 법률 문서의 본문은 **한 줄짜리 문자열**이고 줄바꿈이
+    `\n` 이라는 **두 글자**로 들어 있다. 그래서 문단 첫머리의 옛 이름은 바로 앞에
+    `n` 이 붙어 있는 꼴이 되고, `\b` 는 낱말 경계를 못 찾는다.
+
+        "…입니다.\n\nMCS는 AI를"   →  옛 이름 앞 글자가 `n` 이라 경계가 없다
+
+    그 바람에 **게시된 약관이 옛 이름을 세 곳 쓰고 있는데도 초록이었다.**
+    탈출 문자를 먼저 풀고 본다.
+  */
+  const 문서 = readFileSync(join(WEB, "app/_landing/legal/documents.ts"), "utf8")
+    .replace(/\\[nrt]/g, " ");
 
   it("**옛 이름이 안 남았다**", () => {
     expect(문서).not.toMatch(/\bMCS\b/);
+  });
+
+  /** 구멍이 있던 그 꼴을 그대로 재 둔다. 검사가 되돌아가면 붉어진다. */
+  it("**문단 첫머리의 옛 이름도 잡는다**", () => {
+    const 한줄짜리본문 = String.raw`body: "앞 문장입니다.\n\nMCS는 서비스입니다.",`;
+
+    expect(한줄짜리본문, "탈출을 안 풀면 이 꼴을 놓친다").not.toMatch(/\bMCS\b/);
+    expect(한줄짜리본문.replace(/\\[nrt]/g, " ")).toMatch(/\bMCS\b/);
   });
 
   it("**새 이름이 쓰인다**", () => {
