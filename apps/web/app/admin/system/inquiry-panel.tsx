@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import { INQUIRY_STATUS_LABEL, type InquiryRow } from "../../../lib/cs/inquiry-store";
+import { CS_EMAIL } from "../../../lib/cs/contact";
 import { setInquiryStatus } from "./inquiry-actions";
 
 /**
@@ -49,7 +50,7 @@ export function InquiryPanel({ rows }: { rows: InquiryRow[] }) {
       <CardContent className="grid gap-3">
         <p className="text-xs text-muted-foreground">
           도우미가 답하지 못한 물음이 여기로 옵니다. 답은 메일로 보내 주세요.
-          받는 곳은 <code>CS_INQUIRY_EMAIL</code> 이고, 안 적으면 ai.dev@fixupworld.com 입니다.
+          받는 곳은 <code>CS_INQUIRY_EMAIL</code> 이고, 안 적으면 {CS_EMAIL} 입니다.
         </p>
 
         {rows.length === 0 ? (

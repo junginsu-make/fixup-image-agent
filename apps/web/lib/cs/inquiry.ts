@@ -2,6 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import { createSupabaseAdminClient } from "../supabase/admin";
 import type { CsTurn } from "./session";
+import { CS_EMAIL } from "./contact";
 
 /**
  * **문의를 남긴다**(2026-09-23 사용자 결정, 설계 §10).
@@ -23,8 +24,13 @@ import type { CsTurn } from "./session";
  * 못 보냈으면 `mailed_at` 이 빈 채로 남고 관리자 화면이 그것을 보여 준다.
  */
 
-/** 받는 곳. 바뀔 때 배포가 필요하면 안 되므로 환경변수로 둔다. */
-const 기본받는곳 = "ai.dev@fixupworld.com";
+/*
+  **받는 곳은 `contact.ts` 가 정한다.** 화면에 보여 주는 주소와 메일이 가는
+  주소가 갈라지면, 사용자는 화면에 적힌 곳으로 보내고 담당자는 다른 곳을
+  본다. 문의가 조용히 사라지는 가장 나쁜 모양이다.
+
+  환경변수로 덮을 수 있는 것은 그대로 둔다 — 급할 때 배포 없이 돌리기 위함이다.
+*/
 
 export interface InquiryInput {
   userId: string;
@@ -116,7 +122,7 @@ async function 메일보낸다(input: InquiryInput, id: string): Promise<boolean
     });
     await transport.sendMail({
       from: process.env.SMTP_FROM || user,
-      to: process.env.CS_INQUIRY_EMAIL?.trim() || 기본받는곳,
+      to: process.env.CS_INQUIRY_EMAIL?.trim() || CS_EMAIL,
       // 답장하면 그 사람에게 바로 간다.
       replyTo: input.email,
       subject: `[FormWith] 문의 · ${input.email}`,

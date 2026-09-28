@@ -90,6 +90,7 @@ vi.mock("nodemailer", () => ({
 }));
 
 const { POST } = await import("../inquiry/route");
+const { CS_EMAIL } = await import("../../../../lib/cs/contact");
 const { resetCsSessionsForTest, appendCsTurns } = await import("../../../../lib/cs/session");
 
 const 남긴다 = (body: unknown) =>
@@ -382,10 +383,17 @@ describe("조임", () => {
 });
 
 describe("메일", () => {
-  it("**기본 받는 곳은 담당자 주소다**", async () => {
+  /**
+   * **화면에 보여 주는 주소로 간다**(2026-09-28).
+   *
+   * 주소를 여기 글자로 박아 두면, 정본(`lib/cs/contact.ts`)을 고쳤을 때
+   * 시험만 붉어진다. 재야 하는 것은 「그 주소인가」가 아니라 **「보여 주는
+   * 곳과 가는 곳이 같은가」**다.
+   */
+  it("**기본 받는 곳은 화면에 적힌 그 주소다**", async () => {
     await 남긴다({ question: "결제가 안 돼요" });
 
-    expect(보낸메일[0]?.to).toBe("ai.dev@fixupworld.com");
+    expect(보낸메일[0]?.to, "보여 주는 주소와 가는 주소가 다르다").toBe(CS_EMAIL);
   });
 
   it("**환경변수로 받는 곳을 바꿀 수 있다**", async () => {

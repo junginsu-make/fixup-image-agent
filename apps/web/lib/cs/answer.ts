@@ -1,5 +1,6 @@
 import type { RetrievedKnowledge } from "@fixup/redesign-core";
 import { keepKnownTopics, type AccountTopic } from "./topics";
+import { CS_CONTACT_LINE } from "./contact";
 
 /**
  * **답을 쓰기 전과 쓴 뒤의 판단.**
@@ -106,17 +107,30 @@ export function evidenceBlock(chunks: readonly RetrievedKnowledge[]): string {
     .join("\n\n");
 }
 
-/** 근거가 없을 때 하는 말. 이 문장이 봇의 정직함이다. */
+/**
+ * 근거가 없을 때 하는 말. **이 문장이 봇의 정직함이다.**
+ *
+ * 2026-09-28 사용자 지시로 **메일 주소까지 적는다** — 「AI 가 답변을 못하는
+ * 것들은 메일로 문의하라고 정확히 안내해줘야 합니다」. 못 답하고 끝내면
+ * 사용자는 갈 곳을 모른 채 창을 닫는다.
+ */
 export const NO_EVIDENCE =
-  "이건 제가 확실히 알지 못합니다. 설명서에서 근거를 찾지 못했어요. 아래 「문의 남기기」로 보내 주시면 담당자가 확인하고 답해 드립니다.";
+  `이건 제가 확실히 알지 못합니다. 설명서에서 근거를 찾지 못했어요.
+${CS_CONTACT_LINE}`;
 
-/** 로그인하지 않은 사람에게. */
+/**
+ * 로그인하지 않은 사람에게.
+ *
+ * **여기에는 문의 안내를 안 붙인다.** 할 일이 문의가 아니라 로그인이다.
+ * 갈 곳을 둘로 주면 엉뚱한 쪽으로 간다.
+ */
 export const NEEDS_LOGIN =
   "크레딧·플랜처럼 계정에 대한 것은 로그인하셔야 알려 드릴 수 있습니다.";
 
 /** 사람에게 넘길 때. */
 export const HANDOFF =
-  "이건 담당자가 직접 봐야 할 것 같습니다. 아래 「문의 남기기」로 보내 주시면 확인하고 답해 드립니다.";
+  `이건 담당자가 직접 봐야 할 것 같습니다.
+${CS_CONTACT_LINE}`;
 
 /**
  * **답에 근거를 붙일 수 있는가.**

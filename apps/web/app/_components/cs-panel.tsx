@@ -7,6 +7,7 @@ import {
 } from "@fixup/ui";
 import { billableFetch } from "../../lib/billable-fetch";
 import { randomId } from "../../lib/browser-safe";
+import { CS_EMAIL } from "../../lib/cs/contact";
 
 /**
  * **무엇이든 물어보세요** — 사이드바 바닥의 도우미(2026-09-23 사용자 요청).
@@ -267,8 +268,13 @@ export function CsPanel() {
               />
               <Button type="submit" disabled={pending || !draft.trim()}>보내기</Button>
             </form>
+            {/*
+              **갈 곳을 늘 적어 둔다**(2026-09-28 사용자 지시). 못 답한
+              그 순간에만 알려 주면, 답은 받았는데 부족했던 사람은 갈 곳을
+              모른다.
+            */}
             <p className="mt-2 text-[11px] text-subtle-foreground">
-              대화는 한 시간 동안만 남고 그 뒤에는 사라집니다.
+              대화는 한 시간 동안만 남고 그 뒤에는 사라집니다. 문의는 {CS_EMAIL} 로도 받습니다.
             </p>
           </SidePanelFooter>
         </SidePanelContent>
