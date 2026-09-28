@@ -12,6 +12,28 @@ import type { JobRecord } from "../repository";
 const job = (id: string, createdAt: string, items: JobRecord["items"], sectionIds = items.map((item) => item.sectionId)) =>
   ({ id, createdAt, updatedAt: createdAt, items, sectionIds, userId: "u", teamId: null, documentId: "d", revision: 0, operation: "pdp_image", reservationRequestId: id } as unknown as JobRecord);
 
+/**
+ * **같은 밀리초에 만들어진 둘**(2026-09-28 CI 가 잡았다).
+ *
+ * `createdAt` 은 밀리초까지라 빠른 기계에서는 두 작업이 같은 시각을 갖는다.
+ * 그때 `sort` 는 안정 정렬이라 **들어온 차례를 그대로 둔다** — 그래서 넘겨주는
+ * 쪽이 최근 것을 먼저 놓아 줘야 한다.
+ *
+ * 계약 시험은 이것을 **시계 운으로만** 잡는다. 여기서 못 박는다.
+ */
+describe("같은 시각에 만들어진 작업", () => {
+  it("**넘겨준 차례의 앞엣것을 최근으로 본다**", () => {
+    const 같은시각 = "2026-09-28T01:00:00.000Z";
+    const merged = mergeDocumentJobs([
+      job("나중에-만든-것", 같은시각, [{ sectionId: "s1", attempt: 1, outputPath: "새것" }]),
+      job("먼저-만든-것", 같은시각, [{ sectionId: "s1", attempt: 1, outputPath: "옛것" }]),
+    ]);
+
+    expect(merged?.id, "같은 시각이면 앞엣것이 최근이다").toBe("나중에-만든-것");
+    expect(merged?.items[0]?.outputPath).toBe("새것");
+  });
+});
+
 describe("문서 작업 합치기", () => {
   it("**한 장짜리 최근 작업이 앞선 묶음을 가리지 않는다**", () => {
     const merged = mergeDocumentJobs([
