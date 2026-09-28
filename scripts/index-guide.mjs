@@ -44,6 +44,13 @@ const 맛보기 = process.argv.includes("--dry");
  * **목차(`topics.ts`)를 그대로 따르지 않는다.** 그쪽은 화면에서 꺼진 항목을
  * 빼는데(`isDisabledRoute`), 지식은 꺼진 기능도 알고 있어야 한다 — 「팀
  * 기능이 왜 안 보이나요」에 답하려면 그 글이 있어야 한다.
+ *
+ * **그래서 목록이 둘이 되고, 둘은 어긋난다.** 2026-09-28 에 실제로 어긋났다 —
+ * 설명서 둘을 새로 써서 배포했는데 이 목록에 안 넣어서 **봇은 그 글을 못
+ * 봤다.** 화면에는 있고 봇만 모르는 상태라 알아채기도 어렵다.
+ *
+ * 시험이 본다(`apps/web/app/guide/__tests__/index-coverage.test.ts`) —
+ * `app/guide` 아래 쪽이 여기 다 있는지.
  */
 const 쪽들 = [
   { href: "/guide", label: "처음 오셨다면" },
@@ -57,6 +64,8 @@ const 쪽들 = [
   { href: "/guide/library", label: "라이브러리" },
   { href: "/guide/credits", label: "크레딧과 모델" },
   { href: "/guide/team", label: "팀" },
+  { href: "/guide/account", label: "계정과 플랜" },
+  { href: "/guide/trouble", label: "막혔을 때" },
 ];
 
 /** 글 다듬기는 앱과 같은 함수를 쓴다. 두 벌로 적으면 한쪽만 고치는 날이 온다. */
