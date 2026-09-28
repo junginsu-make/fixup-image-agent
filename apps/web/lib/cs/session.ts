@@ -35,6 +35,14 @@ const 대화최대 = 500;
 export interface CsTurn {
   role: "user" | "bot";
   text: string;
+  /**
+   * 그 답의 근거. **도우미 말에만 있다.**
+   *
+   * 여기 두는 까닭은 하나다 — 문의를 남길 때 **화면이 보낸 근거를 믿지 않기
+   * 위해서다.** 화면이 보내게 하면 아무 주소나 「봇이 찾은 근거」로 넣을 수
+   * 있고, 그 주소는 관리자 화면에서 눌리는 링크가 된다.
+   */
+  sources?: Array<{ name: string; href: string }>;
 }
 
 interface 기록 {

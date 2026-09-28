@@ -255,6 +255,26 @@ describe("대화", () => {
     expect(turns[0]?.text).toBe("크레딧이 뭔가요?");
   });
 
+  /**
+   * **근거를 말과 함께 남긴다.** 문의를 남길 때 화면이 보낸 근거를 믿지
+   * 않으려면 서버가 들고 있어야 한다(`app/api/cs/inquiry/route.ts`).
+   */
+  it("**도우미 말에 근거가 함께 남는다**", async () => {
+    await 묻는다({ question: "크레딧이 뭔가요?", sessionId: "chat-0001" });
+
+    const 도우미말 = readCsTurns("chat-0001", "me-1").find((t) => t.role === "bot");
+    expect(도우미말?.sources, "근거가 안 남아 문의에 실을 것이 없다")
+      .toEqual([{ name: "이용 안내 · 크레딧과 모델", href: "/guide/credits" }]);
+  });
+
+  it("**못 찾았으면 빈 것으로 남는다** — 그것이 지식 구멍의 표시다", async () => {
+    조각들 = [];
+
+    await 묻는다({ question: "환불 규정이 어떻게 되나요?", sessionId: "chat-0001" });
+
+    expect(readCsTurns("chat-0001", "me-1").find((t) => t.role === "bot")?.sources).toEqual([]);
+  });
+
   it("**남은 대화를 남이 못 본다**", async () => {
     await 묻는다({ question: "크레딧", sessionId: "chat-0001" });
 

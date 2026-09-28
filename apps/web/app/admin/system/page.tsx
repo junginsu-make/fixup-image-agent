@@ -11,6 +11,8 @@ import { CostPanel } from "../CostPanel";
 import { ModelCatalogPanel } from "../ModelCatalogPanel";
 import { ShowcasePanel } from "../showcase-panel";
 import { PlanSettings } from "./plan-settings";
+import { InquiryPanel } from "./inquiry-panel";
+import { listInquiries } from "../../../lib/cs/inquiry-store";
 import type { CreditPlan } from "../member-list/types";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +41,17 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
   if (failed) throw failed;
   /* 못 읽어도 던지지 않는다. 이 표는 나중에 붙어서, 마이그레이션 전 서버에는 없다. */
   const showcase = await listShowcaseForAdmin().catch(() => null);
+  /* 문의함도 같다. `listInquiries` 가 못 읽으면 빈 목록을 준다. */
+  const inquiries = await listInquiries();
 
   return (
     <div className="space-y-6">
       {notice ? <AdminNotice notice={notice} /> : null}
+      {/*
+        **문의함을 맨 위에 둔다.** 답을 기다리는 사람이 있는 화면이다. 비용
+        표나 모델 단가보다 급하다.
+      */}
+      <InquiryPanel rows={inquiries} />
       <PlanSettings plans={(planResult.data ?? []) as CreditPlan[]} enabled={ledger} />
       <CostPanel summary={costSummary} usdKrw={usdKrw} byOperation={costByOperation} byModel={costByModel} daily={costDaily} prices={modelPrices} />
       {/* 값이 왜 그런지 바로 위 표에서 궁금해진다. 그 답을 옆에 둔다. */}

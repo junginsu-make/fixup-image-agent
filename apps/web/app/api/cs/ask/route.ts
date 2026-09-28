@@ -148,7 +148,11 @@ async function 마무리(
   void turns;
   appendCsTurns(입력.sessionId, userId, [
     { role: "user", text: 입력.question },
-    { role: "bot", text: 결과.reply },
+    /*
+      **근거를 말과 함께 남긴다.** 문의를 남길 때 화면이 보낸 근거를 믿지
+      않으려면 서버가 들고 있어야 한다(`app/api/cs/inquiry/route.ts`).
+    */
+    { role: "bot", text: 결과.reply, sources: 결과.sources },
   ]);
   await 닫는다(true);
   return Response.json({ ok: true, ...결과 }, { headers: { "Cache-Control": "no-store" } });

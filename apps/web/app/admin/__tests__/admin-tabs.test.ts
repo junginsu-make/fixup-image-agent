@@ -26,14 +26,50 @@ describe("탭", () => {
     expect(activeAdminTab("/admin/systematic")).toBe("/admin");
   });
 
+  /*
+    **리터럴이 아니라 뜻을 잰다.** 전에는 `<AdminTabs />` 를 그대로 찾았는데,
+    2026-09-28 안 본 문의 수를 넘기게 되면서(설계 §10.3) 이 시험이 걸렸다.
+    지키려던 것은 「모든 관리자 화면 위에 탭이 붙는다」이지 인자가 없다는
+    것이 아니었다.
+  */
   it("모든 관리자 화면 위에 탭이 붙는다", () => {
-    expect(read("app/admin/layout.tsx")).toContain("<AdminTabs />");
+    expect(read("app/admin/layout.tsx")).toContain("<AdminTabs");
   });
 
   it("탭마다 화면이 있다", () => {
     for (const tab of ADMIN_TABS) {
       expect(() => read(`app${tab.href}/page.tsx`), tab.href).not.toThrow();
     }
+  });
+});
+
+/**
+ * **안 본 문의 수를 탭에 적는다**(설계 §10.3).
+ *
+ * 문의함은 시스템 관리 안쪽에 있어서 **들어가 보지 않으면 모른다.** 답을
+ * 기다리는 사람이 있는데 아무도 안 보는 것이 가장 나쁘다.
+ */
+describe("안 본 문의 수", () => {
+  const tabs = read("app/admin/admin-tabs.tsx");
+  const layout = read("app/admin/layout.tsx");
+
+  it("셸이 수를 세어 탭에 넘긴다", () => {
+    expect(layout).toContain("countNewInquiries");
+    expect(layout).toContain("newInquiries={newInquiries}");
+  });
+
+  it("시스템 관리 탭에만 붙는다", () => {
+    expect(tabs).toContain('tab.href === "/admin/system" && newInquiries > 0');
+  });
+
+  /** 0 을 적어 두면 눈이 익어서 1 도 안 보인다. */
+  it("0 이면 아무것도 안 그린다", () => {
+    expect(tabs).toContain("newInquiries > 0");
+  });
+
+  /** 눈으로만 알리면 화면을 못 보는 사람은 모른다. */
+  it("읽어 주는 말이 붙는다", () => {
+    expect(tabs).toMatch(/aria-label=\{`안 본 문의 \$\{newInquiries\}건`\}/);
   });
 });
 
@@ -53,7 +89,7 @@ describe("따로 들어가던 문을 없앴다", () => {
 
   it("시스템 설정은 시스템 관리 탭에 있고 회원 탭에는 없다", () => {
     const system = read("app/admin/system/page.tsx");
-    for (const panel of ["<CostPanel", "<ModelCatalogPanel", "<AiBadgePanel", "<ShowcasePanel", "<PlanSettings"]) {
+    for (const panel of ["<CostPanel", "<ModelCatalogPanel", "<AiBadgePanel", "<ShowcasePanel", "<PlanSettings", "<InquiryPanel"]) {
       expect(system, panel).toContain(panel);
       expect(page, panel).not.toContain(panel);
     }

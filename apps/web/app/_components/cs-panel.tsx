@@ -61,6 +61,9 @@ export function CsPanel() {
   const sessionId = React.useRef<string>("");
   if (!sessionId.current) sessionId.current = `chat-${randomId().replace(/-/g, "").slice(0, 24)}`;
 
+  const [문의중, set문의중] = React.useState(false);
+  const [문의결과, set문의결과] = React.useState("");
+
   const 바닥 = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     if (open) 바닥.current?.scrollIntoView({ block: "end" });
@@ -105,6 +108,44 @@ export function CsPanel() {
     } finally {
       setPending(false);
     }
+  };
+
+  /**
+   * **담당자에게 넘긴다**(설계 §10).
+   *
+   * 보내는 것은 **물음과 대화 번호뿐이다.** 대화도 근거도 서버가 들고 있는
+   * 것을 쓴다 — 통째로 보내면 아무 글이나 「내 대화」로 넣을 수 있고, 근거는
+   * 그 주소가 관리자 화면에서 눌리는 링크가 된다.
+   */
+  const 문의한다 = async (question: string) => {
+    if (문의중) return;
+    set문의중(true);
+    set문의결과("");
+    try {
+      const response = await fetch("/api/cs/inquiry", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question,
+          sessionId: sessionId.current,
+          page: window.location.pathname,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { ok?: boolean; mailed?: boolean; message?: string };
+      set문의결과(body.ok
+        ? body.message ?? "문의를 남겼습니다."
+        : body.message ?? "문의를 남기지 못했습니다. 잠시 후 다시 눌러 주세요.");
+    } catch {
+      set문의결과("서버와 통신하지 못했습니다. 잠시 후 다시 눌러 주세요.");
+    } finally {
+      set문의중(false);
+    }
+  };
+
+  /** 이 답 바로 앞의 사용자 물음. 문의에 함께 싣는다. */
+  const 앞의물음 = (index: number) => {
+    for (let i = index - 1; i >= 0; i -= 1) if (turns[i]!.role === "user") return turns[i]!.text;
+    return "";
   };
 
   return (
@@ -179,13 +220,19 @@ export function CsPanel() {
                   </div>
                 ) : null}
                 {turn.handoff ? (
-                  <a href="/settings" className="text-xs font-bold text-primary underline underline-offset-4">
-                    문의 남기기
-                  </a>
+                  <button
+                    type="button"
+                    disabled={문의중}
+                    onClick={() => void 문의한다(앞의물음(index))}
+                    className="justify-self-start text-xs font-bold text-primary underline underline-offset-4 disabled:opacity-50"
+                  >
+                    {문의중 ? "보내는 중…" : "문의 남기기"}
+                  </button>
                 ) : null}
               </div>
             ))}
 
+            {문의결과 ? <p role="status" className="text-sm text-primary">{문의결과}</p> : null}
             {pending ? <p className="text-sm text-muted-foreground">답을 찾는 중입니다…</p> : null}
             {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
             <div ref={바닥} />
