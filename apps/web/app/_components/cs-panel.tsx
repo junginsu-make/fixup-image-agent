@@ -204,9 +204,15 @@ export function CsPanel() {
 
             {turns.map((turn, index) => (
               <div key={index} className={cn("grid gap-1", turn.role === "user" && "justify-items-end")}>
+                {/*
+                  **줄바꿈을 살린다**(2026-09-28 사용자 신고 「한 줄로만 쭉
+                  나옵니다」). 글을 그냥 넣으면 HTML 이 `
+` 을 빈칸 하나로
+                  뭉갠다 — 모델이 줄을 나눠 보내도 소용이 없었다.
+                */}
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed",
+                    "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed",
                     turn.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted",
                   )}
                 >
