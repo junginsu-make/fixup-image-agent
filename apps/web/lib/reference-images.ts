@@ -120,8 +120,8 @@ export function localFileUrl(id: string): string {
 /**
  * 창고에 있는 그림.
  *
- * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 팀이 안 붙은 것은
- * 누구나, 팀에 묶인 것은 그 팀만, 운영자는 전부다.
+ * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 회원은 내 것만,
+ * 운영자는 전부다(2026-09-28 사용자 결정 — 그전에는 공용 창고였다).
  *
  * 서버 권한으로 읽으므로 **RLS 가 여기를 안 막는다.** 이 필터가 유일한
  * 문지기다 — 서명 URL 도 admin 클라이언트가 발급해 Storage 정책의
@@ -207,10 +207,11 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   /**
    * **내 그림을 먼저, 그리고 절대 안 밀리게.**
    *
-   * 공용이 되면서 400장 상한을 전 회원이 나눠 쓰게 됐다. 한 번에 다 읽으면
-   * 남이 최근에 많이 올린 날 **내 오래된 그림이 목록에서 사라진다**
+   * 운영자는 전 회원 것을 보므로 400장 상한을 전 회원이 나눠 쓴다. 한 번에 다
+   * 읽으면 남이 최근에 많이 올린 날 **내 오래된 그림이 목록에서 사라진다**
    * (2026-09-17 독립 리뷰). 그래서 두 번 읽는다 — 내 것 400, 나머지 400.
-   * 둘 다 색인을 타는 가벼운 질의다.
+   * 둘 다 색인을 타는 가벼운 질의다. 회원은 두 질의 모두 내 것만 돌려받는다
+   * (`readReferences` 가 좁힌다).
    *
    * 차례도 이 순서다. 고르는 창은 내 그림부터 보게 된다(사용자 결정).
    */
@@ -270,21 +271,13 @@ async function readReferences(
 ): Promise<ReferenceImageView[]> {
   const visibility = referenceVisibility({
     userId: viewer.userId,
-    teamId: viewer.teamId ?? null,
     isAdmin: canSeeOwnerEmails(viewer),
   });
 
   const supabase = createSupabaseAdminClient();
   const scoped = (narrow: ReferenceNarrow) => {
     const query = narrow(referenceQuery(supabase));
-    if (visibility.kind === "team") {
-      return query.or(
-        `team_id.is.null,team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`,
-      );
-    }
-    if (visibility.kind === "loose") {
-      return query.or(`team_id.is.null,user_id.eq.${visibility.userId}`);
-    }
+    if (visibility.kind === "own") return query.eq("user_id", visibility.userId);
     return query;
   };
 

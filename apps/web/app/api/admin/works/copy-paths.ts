@@ -300,7 +300,7 @@ export function ownerCouldSeeReference(
   row: { userId: string; teamId: string | null },
 ): boolean {
   return canSeeReference(
-    referenceVisibility({ userId: owner.userId, teamId: owner.teamId, isAdmin: false }),
+    referenceVisibility({ userId: owner.userId, isAdmin: false }),
     row,
   );
 }
