@@ -19,10 +19,26 @@ const banner = readFileSync(new URL("../../poster/_components/working-banner.tsx
 const sns = readFileSync(new URL("../../sns/[id]/project-client.tsx", import.meta.url), "utf8");
 
 describe("만드는 중 표시", () => {
-  it("사이드바에는 칸이 없다", () => {
-    expect(shell).not.toContain("sidebarFooter");
+  /**
+   * **없앤 것은 「진행 중」 표시이지 칸 자체가 아니다.**
+   *
+   * 처음에는 `sidebarFooter` 가 있는지만 봤다. 그런데 2026-09-23 에 CS 도우미
+   * 단추를 그 자리에 달면서 이 검사가 빨개졌다 — 도우미는 진행 표시가 아닌데
+   * 막혔다.
+   *
+   * 규칙의 뜻은 **같은 말이 두 군데에 뜨지 않는 것**이다. 그래서 재는 것을
+   * 좁힌다 — 칸이 있느냐가 아니라 **거기서 만드는 중을 보여 주느냐**다.
+   */
+  it("사이드바가 「만드는 중」을 보여 주지 않는다", () => {
     expect(shell).not.toContain("RunningJobsPanel");
     expect(jobs, "칸을 되살리면 두 군데에 다시 보인다").not.toContain("export function RunningJobsPanel");
+  });
+
+  it("사이드바 바닥에 진행·중지 문구가 없다", () => {
+    const 바닥 = /sidebarFooter=\{([\s\S]{0,200})\}/.exec(shell)?.[1] ?? "";
+    for (const 말 of ["만드는 중", "진행", "중지"]) {
+      expect(바닥, `사이드바 바닥에 「${말}」이 있다`).not.toContain(말);
+    }
   });
 
   it("셸은 그대로 결과를 받아 온다 — 없애면 화면을 옮길 때 결과를 놓친다", () => {

@@ -26,7 +26,15 @@ export function activeAdminTab(pathname: string): string {
   return hit[0]?.href ?? "/admin";
 }
 
-export function AdminTabs() {
+/**
+ * **안 본 문의 수를 탭에 적는다**(설계 §10.3 「안 본 문의 수를 탭에 표시한다」).
+ *
+ * 문의함은 「시스템 관리」 안쪽에 있어서 **들어가 보지 않으면 모른다.** 답을
+ * 기다리는 사람이 있는데 아무도 안 본다는 것이 가장 나쁘다.
+ *
+ * `0` 이면 아무것도 안 그린다. 0 을 적어 두면 눈이 익어서 1 도 안 보인다.
+ */
+export function AdminTabs({ newInquiries = 0 }: { newInquiries?: number }) {
   const active = activeAdminTab(usePathname() ?? "/admin");
   return (
     <nav className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground" aria-label="관리자 화면 탭">
@@ -42,6 +50,14 @@ export function AdminTabs() {
             }`}
           >
             {tab.label}
+            {tab.href === "/admin/system" && newInquiries > 0 ? (
+              <span
+                aria-label={`안 본 문의 ${newInquiries}건`}
+                className="ml-1.5 rounded-full bg-destructive px-1.5 text-[11px] font-bold leading-4 text-destructive-foreground"
+              >
+                {newInquiries}
+              </span>
+            ) : null}
           </Link>
         );
       })}

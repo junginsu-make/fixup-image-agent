@@ -14,6 +14,7 @@ import { currentProjectId } from "../../lib/teams/current-project";
 import { selectProjectAction } from "../team/actions";
 import { RunningJobsProvider } from "./running-jobs";
 import { StudioActions } from "./studio-actions";
+import { CsPanel } from "./cs-panel";
 
 export async function StudioLayout({
   children,
@@ -61,6 +62,12 @@ export async function StudioLayout({
           workCount: project.workCount,
         }))}
         currentProjectId={currentProject}
+        /*
+          **도우미는 셸이 들고 있는다**(2026-09-23). 화면을 옮겨도 다시
+          만들어지지 않으므로 대화가 안 끊긴다 — `sidebarFooter` 주석이
+          적어 둔 그 까닭이다.
+        */
+        sidebarFooter={<CsPanel />}
         onSelectProject={selectProjectAction}
         /*
           **사이드바에는 「진행 중」을 안 둔다**(2026-09-17 사용자 결정). 뒤에

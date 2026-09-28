@@ -49,6 +49,17 @@ export const HOURLY_LIMITS = {
    * 칸의 절반을 먹으면 그날 기획을 못 한다.
    */
   redesign_transcribe: { env: "TRANSCRIBE_HOURLY_LIMIT", fallback: 60 },
+  /**
+   * CS 도우미 물음.
+   *
+   * **값싸고 자주 온다.** 설명서 조각 서너 개와 답 한 단락이면 한 번에 약
+   * 5원이다. 기획(시간당 열 번)과 같은 칸을 쓰면 몇 번 물어보고 나면 그날
+   * 상세페이지를 못 만든다 — 그래서 칸을 나눈다.
+   *
+   * 60 은 **1분에 한 번**이다. 사람이 대화하는 속도로는 넉넉하고, 자동으로
+   * 두드리는 것은 걸린다.
+   */
+  cs_ask: { env: "CS_ASK_HOURLY_LIMIT", fallback: 60 },
 } as const satisfies Partial<Record<GenerationOperation, { env: string; fallback: number }>>;
 
 type LimitedOperation = keyof typeof HOURLY_LIMITS;

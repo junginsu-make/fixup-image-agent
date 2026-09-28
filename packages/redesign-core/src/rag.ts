@@ -11,10 +11,14 @@ const EMBEDDING_DIMENSIONS = 1536;
  * `redesign` 은 기존 상세페이지를 전사한 텍스트, `sales` 는 판매 원칙이다.
  * 성격이 전혀 달라서 한 통에서 검색하면 판매 원칙을 찾을 때 남의 페이지
  * 문구가 딸려 나온다.
+ *
+ * **`guide` 는 사용 설명서다**(2026-09-23, CS 응답 AI). 같은 까닭으로 제 통을
+ * 쓴다 — 「크레딧이 뭔가요」에 남의 상세페이지 전사가 근거로 딸려 나오면 안
+ * 된다.
  */
-export type KnowledgeKind = "sales" | "redesign";
+export type KnowledgeKind = "sales" | "redesign" | "guide";
 
-const KNOWLEDGE_KINDS: KnowledgeKind[] = ["sales", "redesign"];
+const KNOWLEDGE_KINDS: KnowledgeKind[] = ["sales", "redesign", "guide"];
 
 /**
  * 유사도 하한 기본값.

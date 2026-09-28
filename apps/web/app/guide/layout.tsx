@@ -41,7 +41,13 @@ export default async function Layout({ children }: { children: ReactNode }) {
   const 본문 = (
     <div className="grid gap-6 lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-10">
       <GuideNav />
-      <div className="grid min-w-0 gap-8 pb-4">{children}</div>
+      {/*
+        **표식을 단다**(2026-09-23, CS 응답 AI). 설명서를 봇의 지식으로 넣을
+        때 **그려진 글**을 긁는다 — 소스에는 숫자가 없고 함수로 셈하기
+        때문이다(`guide/credits/page.tsx` 주석). 그때 사이드바·꼬리말이 섞이지
+        않게 본문만 가리킨다.
+      */}
+      <div data-guide-body className="grid min-w-0 gap-8 pb-4">{children}</div>
     </div>
   );
 

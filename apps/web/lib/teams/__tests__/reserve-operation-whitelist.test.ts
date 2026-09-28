@@ -47,6 +47,7 @@ function latestDefining(needle: string): string {
 }
 
 const OPERATIONS = [
+  "cs_ask",
   "pdp_analyze",
   "pdp_image",
   "redesign_generate",
