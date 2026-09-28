@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseLegal } from "../render";
 import { LEGAL_DOCS, PRIVACY_DOC, TERMS_DOC } from "../documents";
+import { BUSINESS } from "../business-info";
 
 /**
  * 법률 문서는 **원문 그대로** 걸려야 한다.
@@ -32,9 +33,19 @@ describe("문서 자체", () => {
  * 이 넷은 채워져 있어야 한다.
  */
 describe("채워야 하는 칸", () => {
-  it("두 문서 모두 사업자명과 시행일이 들어 있다", () => {
+  /**
+   * **등록된 상호를 쓴다**(2026-09-28).
+   *
+   * 전에는 `fixup` 이 들어 있는지만 봤다. 그런데 법률 문서가 밝혀야 하는 것은
+   * **사업자등록증의 상호**이고(전자상거래법 제10조), 그것은 「주식회사
+   * 픽스업」이다. `fixup` 은 제품·저장소에서 쓰는 이름이지 등록된 상호가 아니다.
+   *
+   * 푸터의 사업자 정보와 **같은 값**을 쓰는지 본다. 두 곳이 갈라지면 어느
+   * 쪽이 진짜인지 다투게 된다.
+   */
+  it("두 문서 모두 등록된 상호와 시행일이 들어 있다", () => {
     for (const doc of LEGAL_DOCS) {
-      expect(doc.body).toContain("fixup");
+      expect(doc.body, "푸터와 다른 상호를 쓰고 있다").toContain(BUSINESS.companyName);
       expect(doc.body).toContain("2026년 9월 10일");
     }
   });

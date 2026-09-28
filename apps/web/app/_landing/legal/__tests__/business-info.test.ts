@@ -37,13 +37,42 @@ describe("사업자 정보", () => {
     expect(BUSINESS.contact).toMatch(/^0\d{1,2}-\d{3,4}-\d{4}$/);
   });
 
-  it("통신판매업 칸은 없는 번호를 지어내지 않는다", () => {
-    // 신고번호를 받으면 「제 0000-경기김포-0000 호」 형태로 바뀐다.
-    const value = BUSINESS.mailOrderNumber;
-    expect(value.length).toBeGreaterThan(0);
-    if (value !== "신고 준비중") {
-      expect(value).toMatch(/제\s?\d{4}-.+-\d+\s?호/);
-    }
+  /**
+   * **번호를 받았다**(2026-09-28).
+   *
+   * 그 전에는 「신고 준비중」이었다 — 없는 번호를 지어내지 않으려고 그 말을
+   * 그대로 뒀다. 이제 실제 번호가 있으므로 그 꼴인지만 본다.
+   */
+  it("통신판매업 신고번호가 실제 번호 꼴이다", () => {
+    expect(BUSINESS.mailOrderNumber).toMatch(/제\s?\d{4}-.+-\d+\s?호/);
+  });
+
+  /**
+   * **통신판매업 신고번호를 받았다**(2026-09-28).
+   *
+   * 오래 「신고 준비중」이었다. 공정거래위원회 조회의 값을 그대로 옮겼다.
+   * 자리표시나 빈 글자가 화면에 나가면 표시한 것으로 치지 않는다.
+   */
+  it("신고번호가 실제 번호 꼴이다", () => {
+    expect(BUSINESS.mailOrderNumber).toMatch(/^제\s\d{4}-.+-\d+\s호$/);
+  });
+
+  /**
+   * **푸터와 약관이 같은 값을 말해야 한다**(2026-09-28).
+   *
+   * 상호·전화번호가 두 곳에 적혀 있다. 갈라지면 **어느 쪽이 진짜인지
+   * 다투게 된다** — 전자상거래법이 요구하는 것은 하나의 정확한 표시다.
+   */
+  it("약관·처리방침이 푸터와 같은 상호·전화번호를 쓴다", () => {
+    const 문서 = read("app/_landing/legal/documents.ts");
+
+    expect(문서, "푸터와 다른 상호를 쓰고 있다").toContain(BUSINESS.companyName);
+    expect(문서, "푸터와 다른 전화번호를 쓰고 있다").toContain(BUSINESS.contact);
+  });
+
+  /** 자리표시가 남은 채로 게시되면 고지를 안 한 것이다. */
+  it("전화번호 자리표시가 남아 있지 않다", () => {
+    expect(read("app/_landing/legal/documents.ts")).not.toContain("[전화번호]");
   });
 
   it("법이 요구하는 여섯 항목을 모두 건다", () => {
