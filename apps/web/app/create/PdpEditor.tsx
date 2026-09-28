@@ -74,6 +74,7 @@ const dockButtonClass =
 const dockButtonActiveClass =
   "bg-primary text-primary-foreground shadow-none hover:bg-primary";
 import { apiJson, toDataUrl } from "./pdp-utils";
+import { confirmServerLibrary, nextLibraryStep, pageImageHashes, type ServerLibraryOutcome } from "./library-server-sync";
 import { buildSectionKeys } from "./pdp-drafts";
 import { SectionGallery } from "./SectionGallery";
 import { EmphasisWordPicker } from "./EmphasisWordPicker";
@@ -676,16 +677,27 @@ export function PdpEditor({
   */
   // 저장 함수는 아래(이른 반환 뒤)에서 짓는다. 훅은 그 앞에 있어야 하므로
   // 가리키는 자리만 먼저 둔다. 매 렌더 마지막 함수로 바꿔 끼운다.
-  const saveToLibraryRef = useRef<(options?: { auto?: boolean }) => Promise<void>>(async () => {});
+  const saveToLibraryRef = useRef<(options?: { auto?: boolean; singleRun?: boolean }) => Promise<void>>(async () => {});
+  const libraryRerunRef = useRef<{ auto: boolean; singleRun: boolean } | null>(null);
   const autoSavedRunRef = useRef<number | null>(null);
   useEffect(() => {
+    /*
+      문서가 있으면 저장 함수가 **서버에 확인**한다(`handleSaveToLibrary`) — 서버가
+      모자란 섹션만 한 장씩 받아 같은 작업에 붙인다(리뷰 HIGH-2, 2차 HIGH-A).
+    */
     if (generationRun?.status !== "finished" || !generationRun.completed) return;
     if (autoSavedRunRef.current === generationRun.startedAt) return;
     if (!sections.length || sections.some((section) => !section.generatedImage)) return;
-    if (generationRun.mode !== "batch" && libraryProgressRef.current) return;
+    // 한 장 다시 만들기: 문서가 없으면 이미 올린 판 뒤에 또 올리지 않는다. 문서가 있으면
+    // 서버가 그 자리를 바꿔 두었는지 확인만 한다.
+    if (!draftId && generationRun.mode !== "batch" && libraryProgressRef.current) return;
     autoSavedRunRef.current = generationRun.startedAt;
-    void saveToLibraryRef.current({ auto: true });
-  }, [generationRun, sections]);
+    void saveToLibraryRef.current({ auto: true, singleRun: generationRun.mode !== "batch" });
+  }, [draftId, generationRun, sections]);
+  // 생성 요청마다 **지금** 차례를 싣는다. 일괄 생성 도중 순서를 바꿔도 뒤 묶음이 옛 차례를
+  // 보내지 않게(리뷰 MEDIUM-4).
+  const librarySectionsRef = useRef(sections);
+  librarySectionsRef.current = sections;
 
   if (!currentSection) {
     return (
@@ -1602,6 +1614,18 @@ export function PdpEditor({
    * 생성이 도는 동안 사용자가 순서를 바꿀 수 있어, 인덱스로 되돌리면
    * 엉뚱한 섹션에 이미지가 박힌다.
    */
+  /*
+    **라이브러리는 서버가 맞춘다**(2026-09-28 사용자 결정). 생성 요청마다 어느 문서의
+    것인지와 **지금 페이지의 섹션 차례**·이름·과정을 함께 보낸다 — 서버가 순서를
+    바꾸거나 지운 섹션까지 따라가게(`lib/pdp/jobs/library-sync.ts`).
+  */
+  const librarySyncFields = () => ({
+    ...jobRequestFields(draftId, 0),
+    pageSectionIds: librarySectionsRef.current.map((section) => section.section_id),
+    libraryTitle: initialResult.blueprint.executiveSummary?.slice(0, 60) || "상세페이지 작업",
+    libraryProcess: pdpProcessSource(initialResult, aspectRatio),
+  });
+
   const generateSectionImage = async (index: number): Promise<ImageGenerationOutcome> => {
     const section = sections[index];
     const sectionKey = sectionKeys[index];
@@ -1633,6 +1657,8 @@ export function PdpEditor({
         headers: { "x-idempotency-key": requestKey },
         body: JSON.stringify({
           originalImageBase64: initialResult.originalImage,
+          // 서버가 이 한 장도 남기고 라이브러리를 맞춘다(`librarySyncFields`).
+          ...librarySyncFields(),
           section,
           aspectRatio,
           desiredTone: desiredTone || undefined,
@@ -1829,7 +1855,7 @@ export function PdpEditor({
           body: JSON.stringify({
             originalImageBase64: initialResult.originalImage,
             // 결과를 서버에 적을 때 무엇의 것인지 묶는다. 저장 전이면 안 싣는다.
-            ...jobRequestFields(draftId, 0),
+            ...librarySyncFields(),
             sections: chunk.map(({ section }) => section),
             // 묶음 안 순서가 아니라 **페이지에서의 자리**를 보낸다. 인물 사진을
             // 「첫 섹션에만」 쓸 때 두 번째 묶음의 첫 장은 히어로가 아니다.
@@ -2325,13 +2351,90 @@ export function PdpEditor({
    * 브라우저 초안 저장("작업 저장하기")과는 다른 동작이다. 이쪽은 서버에 남아
    * 다른 기기에서도 보이고, 브라우저를 지워도 사라지지 않는다.
    */
-  const handleSaveToLibrary = async ({ auto = false }: { auto?: boolean } = {}) => {
+  /*
+    **저장 중에 온 자동 저장은 버리지 않고 끝난 뒤 다시 돈다**(4차 리뷰 MEDIUM). 전에는
+    한 장을 다시 만들어도 앞선 저장이 돌고 있으면 그냥 돌아가, 그 판은 아무도 안 올렸다.
+    단추 누르기는 다시 돌리지 않는다 — 사용자가 결과를 보고 다시 누른다.
+  */
+  const deferIfLibraryBusy = (auto: boolean, singleRun: boolean) => {
+    if (!librarySavingRef.current) return false;
+    if (auto) libraryRerunRef.current = { auto: true, singleRun };
+    return true;
+  };
+  const releaseLibrarySave = () => {
+    librarySavingRef.current = false;
+    setIsSavingToLibrary(false);
+    const rerun = libraryRerunRef.current;
+    if (!rerun) return;
+    libraryRerunRef.current = null;
+    // 다음 틀에서 **가장 새 저장 함수**로 돈다 — 그사이 바뀐 페이지를 본다.
+    setTimeout(() => void saveToLibraryRef.current(rerun), 0);
+  };
+
+  const handleSaveToLibrary = async ({ auto = false, singleRun = false }: { auto?: boolean; singleRun?: boolean } = {}) => {
     if (!libraryEntries.length) {
       if (!auto) setErrorMessage("라이브러리에 저장할 이미지가 아직 없습니다.");
       return;
     }
+    /*
+      **문서가 있으면 서버가 라이브러리 작업 하나에 맞춘다**(2026-09-28 사용자 결정).
+      화면은 서버에 확인만 하고, 서버가 모르는 섹션(예전 결과 등)의 원본만 **한 장씩**
+      보낸다 — 서버가 같은 작업에 붙인다(`confirmServerLibrary`). 화면이 페이지를 따로
+      올리는 것은 서버가 맞출 수 없는 환경일 때뿐이다. 전에는 서버가 모자라면 화면이
+      새 작업을 올려, 한 장을 다시 만들 때마다 같은 페이지가 한 벌씩 늘었다(2차 리뷰 HIGH-A).
+
+      글자·도형을 얹은 편집본은 서버가 모른다. 단추로 누르면 그 판을 따로 남긴다.
+    */
+    const hasEdits = libraryVersionSections.some((section) => section.layers.length > 0);
+    if (draftId && (auto || !hasEdits)) {
+      if (deferIfLibraryBusy(auto, singleRun)) return;
+      librarySavingRef.current = true;
+      setIsSavingToLibrary(true);
+      let outcome: ServerLibraryOutcome = "error";
+      try {
+        /*
+          **요청마다 지금 화면에서 다시 짓는다**(4차 리뷰 MEDIUM). 확인이 여러 장을 보내는
+          동안 사용자가 한 장을 다시 만들 수 있다 — 처음 찍어 둔 지문·그림을 계속 쓰면
+          서버가 넣은 새 그림을 옛 그림으로 되돌렸다. 차례·지문·보낼 그림은 같은 순간의 것이다.
+        */
+        outcome = await confirmServerLibrary({
+          request: async (supplied) => {
+            const pageSectionHashes = await pageImageHashes(librarySectionsRef.current.map((section) => section.generatedImage));
+            return apiJson("/pdp/library-sync", {
+              method: "POST",
+              body: JSON.stringify({ ...librarySyncFields(), pageSectionHashes, ...(supplied ? { supplied } : {}) }),
+            });
+          },
+          sectionIds: libraryEntries.map(({ section }) => section.section_id),
+          imageOf: (sectionId) => {
+            const section = librarySectionsRef.current.find((entry) => entry.section_id === sectionId);
+            const [, mimeType = "", base64 = ""] = /^data:([^;]+);base64,(.*)$/.exec(section?.generatedImage ?? "") ?? [];
+            return base64 ? { base64, mimeType } : null;
+          },
+        });
+      } catch {
+        outcome = "error";
+      } finally {
+        releaseLibrarySave();
+      }
+      const step = nextLibraryStep(outcome, { auto, singleRun, hasProgress: Boolean(libraryProgressRef.current) });
+      if (step === "done") {
+        const progress = { key: currentLibraryKey, sent: libraryEntries.length };
+        libraryProgressRef.current = progress;
+        setLibraryProgress(progress);
+        if (!auto) setNotice("이 상세페이지는 라이브러리에 저장되어 있습니다. 글자나 도형을 얹으면 그 편집본을 따로 남길 수 있습니다.");
+        return;
+      }
+      if (step === "retry") {
+        // 짐작으로 올리지 않는다 — 올리면 같은 페이지가 두 벌 된다(2차 리뷰 MEDIUM-2).
+        setErrorMessage("라이브러리 저장을 확인하지 못했습니다. 잠시 뒤 「라이브러리에 저장」을 다시 눌러 주세요.");
+        return;
+      }
+      // 서버가 맞출 수 없는 환경이다. 한 장 다시 만들기로 이미 올린 판 뒤에는 또 올리지 않는다.
+      if (step === "skip") return;
+    }
     // 자동 저장과 단추가 겹치면 같은 판이 두 번 올라간다.
-    if (librarySavingRef.current) return;
+    if (deferIfLibraryBusy(auto, singleRun)) return;
 
     const versionKey = currentLibraryKey;
     const total = libraryEntries.length;
@@ -2462,8 +2565,7 @@ export function PdpEditor({
         error instanceof Error ? error.message : "라이브러리에 저장하지 못했습니다.",
       );
     } finally {
-      librarySavingRef.current = false;
-      setIsSavingToLibrary(false);
+      releaseLibrarySave();
     }
   };
 

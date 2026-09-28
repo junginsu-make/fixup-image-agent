@@ -62,7 +62,7 @@ describe("3 — 라이브러리에 한 작업으로, 자동으로", () => {
   it("**생성이 끝나면 자동으로 부른다**", () => {
     const 효과 = 구간(editor, "const autoSavedRunRef", "if (!currentSection) {");
     expect(효과).toContain('generationRun?.status !== "finished"');
-    expect(효과).toContain("saveToLibraryRef.current({ auto: true })");
+    expect(효과).toContain("saveToLibraryRef.current({ auto: true,");
     // 다 만들어졌을 때만. 반쪽을 올리면 나머지를 채운 뒤 또 한 벌이 생긴다.
     expect(효과).toContain("sections.some((section) => !section.generatedImage)");
   });

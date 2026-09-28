@@ -54,6 +54,10 @@ import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readPdpRequest } from "../../../../lib/pdp/request";
+import { createJobRecorder, type JobRecorder } from "../../../../lib/pdp/jobs/recorder";
+import { fingerprintOf, isPdpJobsEnabled } from "../../../../lib/pdp/jobs";
+import { syncDocumentLibraryLater } from "../../../../lib/pdp/jobs/library-sync";
+import { librarySyncFromBody } from "../../../../lib/pdp/jobs/library-sync-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +84,11 @@ export async function POST(req: Request) {
   const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
   const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1), creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:image"));
   if (!reservation.ok) return reservation.response;
+
+  // 실패했을 때도 기록을 닫으려고 밖에 둔다(독립 리뷰 HIGH-3) — 안 닫으면 결과 없는 작업이
+  // 「가장 최근」 자리를 차지한 채 남는다.
+  let jobs: JobRecorder | null = null;
+  const sectionId = String(body.section?.section_id ?? "");
 
   try {
     /*
@@ -135,6 +144,40 @@ export async function POST(req: Request) {
       },
     );
 
+    /*
+      **다시 만든 한 장도 서버에 남긴다**(2026-09-28). 전에는 일괄만 적었다 —
+      그래서 섹션 하나를 다시 만들면 서버는 몰랐고, 라이브러리도 옛 그림을 들고
+      있었다. 문서를 알 때만 적는다(모르면 묶을 열쇠가 없다). 적다 실패해도
+      그림은 나간다(`createJobRecorder` 규칙).
+    */
+    const librarySync = isPdpJobsEnabled() ? librarySyncFromBody(reservation.userId, body as unknown as Record<string, unknown>) : null;
+    // 기록에 붙일 팀. 못 읽어도 생성은 막지 않는다 — 곁다리 조회다(리뷰 MEDIUM-2).
+    const jobTeamId = librarySync && sectionId ? await teamIdOf(reservation.userId).catch(() => null) : null;
+    jobs = librarySync && sectionId
+      ? await createJobRecorder({
+          enabled: true,
+          input: {
+            userId: reservation.userId,
+            teamId: jobTeamId,
+            idempotencyKey: req.headers.get("x-idempotency-key") ?? reservation.requestId,
+            fingerprint: fingerprintOf({
+              documentId: librarySync.documentId,
+              revision: 0,
+              operation: "pdp_image",
+              sectionIds: [sectionId],
+              imageModel: model,
+              aspectRatio: body.aspectRatio,
+            }),
+            documentId: librarySync.documentId,
+            revision: 0,
+            operation: "pdp_image",
+            sectionIds: [sectionId],
+            reservationRequestId: reservation.requestId,
+          },
+        }).catch(() => null)
+      : null;
+
+    await jobs?.started();
     await markCreditStarted(reservation);
     const { imageBase64, mimeType, generatedImages, qa } = await generateSectionImage(
       {
@@ -153,9 +196,18 @@ export async function POST(req: Request) {
       model,
       billableImages: generatedImages, deliveredImages: 1, completionConfirmed: true,
     });
+    await jobs?.sectionDone({ sectionId, attempt: 1, imageBase64, mimeType, model });
+    await jobs?.finished({ succeeded: 1, requested: 1, settled: Boolean(usage) && usage?.costRecorded !== false });
+    // 라이브러리는 서버가 맞춘다. 기다리지 않는다(일괄 라우트와 같다).
+    // 방금 만든 그림을 그대로 넣는다 — 화면이 받는 바이트와 같다(지문이 맞는다).
+    if (librarySync && jobs?.jobId && sectionId) {
+      void syncDocumentLibraryLater({ ...librarySync, images: [{ sectionId, image: { base64: imageBase64, mimeType } }] });
+    }
     return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
+    await jobs?.sectionFailed({ sectionId, attempt: 1, errorCode: String(envelope.code || "image_failed") });
+    await jobs?.finished({ succeeded: 0, requested: 1, settled: true });
     await settleAiUsage(
       reservation,
       false,

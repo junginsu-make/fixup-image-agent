@@ -883,6 +883,23 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   };
   useEffect(() => startDraftAutosave(() => autosaveRef.current()), []);
 
+  /*
+    **편집 화면에 들어서자마자 초안 번호를 받는다**(2026-09-28).
+
+    서버가 상세페이지를 라이브러리에 맞추려면 생성 요청에 문서 번호가 있어야 한다.
+    번호는 30초 자동 저장 때에야 생겨서, 기획이 끝나자마자 「만들기」를 누르면 번호
+    없이 나갔다. 게다가 번호가 생기는 순간 편집기가 다시 그려진다(`key`) — 생성
+    도중이면 곤란하다. 그래서 **들어서는 즉시** 한 번 저장해, 다시 그려지는 일이 누르기
+    전에 끝나게 한다. 저장이 실패하면 화면이 대신 라이브러리에 올린다(자동 저장).
+  */
+  // 기획(결과)마다 한 번. 같은 세션에서 새 작업을 시작하면 그 기획으로 또 한 번.
+  const earlySavedForRef = useRef<unknown>(null);
+  useEffect(() => {
+    if (appState !== "editor" || !result || activeDraftId || earlySavedForRef.current === result) return;
+    earlySavedForRef.current = result;
+    void persistDraft("auto");
+  }, [activeDraftId, appState, persistDraft, result]);
+
   /**
    * 구성안을 짓는다.
    *
