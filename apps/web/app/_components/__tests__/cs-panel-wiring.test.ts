@@ -63,7 +63,19 @@ describe("문의 남기기", () => {
 
   /** 두 번 눌러 두 줄이 남지 않게 막는다. */
   it("보내는 동안 다시 못 누른다", () => {
-    expect(panel).toContain("disabled={문의중}");
-    expect(panel).toMatch(/if \(문의중\) return;/);
+    expect(panel).toMatch(/disabled=\{문의중 \|\| 보낸것\.has\(index\)\}/);
+    expect(panel).toMatch(/if \(문의중 \|\| 보낸것\.has\(index\)\) return;/);
+  });
+
+  /**
+   * **보낸 뒤에도 단추가 되살아났다**(2026-09-28 독립 검토). 서버가 같은
+   * 물음을 한 번만 받으므로 줄이 늘지는 않지만, 눌릴 수 있는 단추를 두면
+   * 보냈는지 모른다는 뜻이다.
+   */
+  it("보낸 답의 단추는 굳는다", () => {
+    expect(panel).toContain("보낸것");
+    expect(panel).toContain("문의를 남겼습니다");
+    // 받았을 때만 굳힌다. 못 받았으면 다시 누를 수 있어야 한다.
+    expect(panel).toMatch(/if \(body\.ok\) set보낸것/);
   });
 });

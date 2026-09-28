@@ -63,6 +63,13 @@ export function CsPanel() {
 
   const [문의중, set문의중] = React.useState(false);
   const [문의결과, set문의결과] = React.useState("");
+  /**
+   * 이미 보낸 답. **보낸 뒤 단추가 되살아나면 또 누른다.**
+   *
+   * 서버가 같은 물음을 한 번만 받으므로 줄이 늘지는 않지만, 눌릴 수 있는
+   * 단추를 두면 보냈는지 모른다는 뜻이다.
+   */
+  const [보낸것, set보낸것] = React.useState<ReadonlySet<number>>(new Set());
 
   const 바닥 = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
@@ -117,8 +124,8 @@ export function CsPanel() {
    * 것을 쓴다 — 통째로 보내면 아무 글이나 「내 대화」로 넣을 수 있고, 근거는
    * 그 주소가 관리자 화면에서 눌리는 링크가 된다.
    */
-  const 문의한다 = async (question: string) => {
-    if (문의중) return;
+  const 문의한다 = async (index: number, question: string) => {
+    if (문의중 || 보낸것.has(index)) return;
     set문의중(true);
     set문의결과("");
     try {
@@ -135,6 +142,8 @@ export function CsPanel() {
       set문의결과(body.ok
         ? body.message ?? "문의를 남겼습니다."
         : body.message ?? "문의를 남기지 못했습니다. 잠시 후 다시 눌러 주세요.");
+      // 받았으면 그 단추를 굳힌다. 못 받았으면 다시 누를 수 있어야 한다.
+      if (body.ok) set보낸것((before) => new Set(before).add(index));
     } catch {
       set문의결과("서버와 통신하지 못했습니다. 잠시 후 다시 눌러 주세요.");
     } finally {
@@ -222,11 +231,11 @@ export function CsPanel() {
                 {turn.handoff ? (
                   <button
                     type="button"
-                    disabled={문의중}
-                    onClick={() => void 문의한다(앞의물음(index))}
-                    className="justify-self-start text-xs font-bold text-primary underline underline-offset-4 disabled:opacity-50"
+                    disabled={문의중 || 보낸것.has(index)}
+                    onClick={() => void 문의한다(index, 앞의물음(index))}
+                    className="justify-self-start text-xs font-bold text-primary underline underline-offset-4 disabled:no-underline disabled:opacity-60"
                   >
-                    {문의중 ? "보내는 중…" : "문의 남기기"}
+                    {보낸것.has(index) ? "문의를 남겼습니다" : 문의중 ? "보내는 중…" : "문의 남기기"}
                   </button>
                 ) : null}
               </div>

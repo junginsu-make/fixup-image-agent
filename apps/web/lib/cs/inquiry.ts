@@ -207,7 +207,16 @@ export async function saveInquiry(input: InquiryInput): Promise<InquiryResult> {
   const id = String(data.id);
   const mailed = await 메일보낸다(input, id);
   if (mailed) {
-    await db.from("cs_inquiries").update({ mailed_at: new Date().toISOString() }).eq("id", id);
+    /*
+      **이 실패를 조용히 넘기면 거짓이 남는다.** 갱신이 안 되면 `mailed_at` 이
+      빈 채 남고, 관리자 화면은 「메일 못 보냄」을 붙인다 — 담당자는 이미 받은
+      메일을 못 받은 것으로 읽는다. 응답의 `mailed` 와도 어긋난다.
+    */
+    const { error: 갱신오류 } = await db
+      .from("cs_inquiries")
+      .update({ mailed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (갱신오류) console.warn("[cs] 메일 보낸 때를 못 적었습니다", id, 갱신오류.message);
   }
 
   /*

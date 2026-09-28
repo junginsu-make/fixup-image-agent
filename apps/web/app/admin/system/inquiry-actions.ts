@@ -28,8 +28,18 @@ export async function setInquiryStatus(formData: FormData) {
   if (!isInquiryStatus(status)) throw new Error("올바르지 않은 상태입니다.");
 
   const db = createSupabaseAdminClient();
-  const { error } = await db.from("cs_inquiries").update({ status }).eq("id", id);
+  /*
+    **바뀐 줄을 돌려받는다.** `update(...).eq(...)` 는 맞는 줄이 **0개여도**
+    `error` 가 `null` 이다 — 지워진 문의에 대고 눌러도 아무 말 없이 화면만 다시
+    그려지고, 관리자는 바뀐 줄 안다.
+  */
+  const { data, error } = await db
+    .from("cs_inquiries")
+    .update({ status })
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(`상태를 바꾸지 못했습니다: ${error.message}`);
+  if (!data || data.length === 0) throw new Error("없는 문의입니다. 이미 지워졌을 수 있습니다.");
 
   revalidatePath("/admin/system");
 }

@@ -63,11 +63,14 @@ vi.mock("../../../../lib/supabase/admin", () => ({
       update: (patch: Record<string, unknown>) => {
         한일.push("update");
         찍은것.push(patch);
-        return { eq: async () => ({ error: null }) };
+        return { eq: async () => (갱신된다 ? { error: null } : { error: { message: "못 적었다" } }) };
       },
     }),
   }),
 }));
+
+/** `mailed_at` 갱신이 되나. 안 되면 조용히 넘기지 말아야 한다. */
+let 갱신된다 = true;
 
 /** 메일이 나가나. */
 let 메일된다 = true;
@@ -99,7 +102,7 @@ beforeEach(() => {
   resetCsSessionsForTest();
   한일.length = 0; 찍은것.length = 0; 보낸메일.length = 0;
   넣은줄 = null;
-  로그인했다 = true; 표가된다 = true; 메일된다 = true;
+  로그인했다 = true; 표가된다 = true; 메일된다 = true; 갱신된다 = true;
   최근것 = [];
   delete process.env.CS_INQUIRY_HOURLY_LIMIT;
   process.env.SMTP_HOST = "smtp.example.com";
@@ -170,6 +173,29 @@ describe("순서", () => {
 
     expect(찍은것.length).toBe(1);
     expect(찍은것[0]).toHaveProperty("mailed_at");
+  });
+
+  /**
+   * **이 실패를 조용히 넘기면 거짓이 남는다**(2026-09-28 독립 검토).
+   * `mailed_at` 이 빈 채 남으면 관리자 화면이 「메일 못 보냄」을 붙이고,
+   * 담당자는 이미 받은 메일을 못 받은 것으로 읽는다.
+   */
+  it("**보낸 때를 못 적으면 적어 둔다**", async () => {
+    갱신된다 = false;
+    const 적힌것: unknown[] = [];
+    const 원래 = console.warn;
+    console.warn = (...args: unknown[]) => { 적힌것.push(args); };
+
+    try {
+      const body = await 본문(await 남긴다({ question: "결제가 안 돼요" }));
+      // 문의는 이미 접수됐다. 메일도 실제로 갔다. 응답은 그대로 둔다.
+      expect(body.ok).toBe(true);
+      expect(body.mailed).toBe(true);
+    } finally {
+      console.warn = 원래;
+    }
+
+    expect(적힌것.length, "조용히 넘어갔다").toBe(1);
   });
 
   it("**표가 안 되면 메일도 안 보낸다** — 번호 없는 문의는 쫓을 수 없다", async () => {

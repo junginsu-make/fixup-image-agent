@@ -27,15 +27,21 @@ vi.mock("../../../lib/membership/server", () => ({
 
 const 바꾼것: Array<{ patch: Record<string, unknown>; id: string }> = [];
 let 표가된다 = true;
+/** 바뀐 줄 수. **0 이면 없는 문의다** — 그때도 `error` 는 `null` 이다. */
+let 바뀐줄 = 1;
 
 vi.mock("../../../lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: () => ({
       update: (patch: Record<string, unknown>) => ({
-        eq: async (_column: string, id: string) => {
-          바꾼것.push({ patch, id });
-          return 표가된다 ? { error: null } : { error: { message: "없는 문의" } };
-        },
+        eq: (_column: string, id: string) => ({
+          select: async () => {
+            바꾼것.push({ patch, id });
+            return 표가된다
+              ? { data: Array.from({ length: 바뀐줄 }, () => ({ id })), error: null }
+              : { data: null, error: { message: "표가 죽었다" } };
+          },
+        }),
       }),
     }),
   }),
@@ -56,6 +62,7 @@ beforeEach(() => {
   바꾼것.length = 0;
   관리자다 = true;
   표가된다 = true;
+  바뀐줄 = 1;
 });
 
 describe("상태 바꾸기", () => {
@@ -93,5 +100,16 @@ describe("상태 바꾸기", () => {
     표가된다 = false;
 
     await expect(부른다(좋은번호, "done")).rejects.toThrow("바꾸지 못했습니다");
+  });
+
+  /**
+   * **0줄이 맞아도 `error` 는 `null` 이다**(2026-09-28 독립 검토). 지워진
+   * 문의에 대고 눌러도 아무 말 없이 화면만 다시 그려지면 관리자는 바뀐 줄
+   * 안다.
+   */
+  it("**없는 문의면 알린다**", async () => {
+    바뀐줄 = 0;
+
+    await expect(부른다(좋은번호, "done")).rejects.toThrow("없는 문의");
   });
 });
