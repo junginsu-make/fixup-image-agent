@@ -23,13 +23,17 @@
 -- 고치고 지우는 정책(「members manage own reference images」)과 세트 항목 정책은
 -- 안 건드린다. 둘 다 이미 올린 사람·세트 주인만이다.
 --
+-- `security invoker` 로 바꾼다. 전에는 회원에게 막힌 `team_members` 를 읽느라
+-- 소유자 권한이 필요했다. 이제 `auth.uid()` 만 보므로 묻는 사람 권한으로 돌면 된다 —
+-- 권한이 좁을수록 실수했을 때 새는 것이 적다.
+--
 -- 여러 번 돌려도 같다.
 
 create or replace function public.reference_visible(row_team_id uuid, row_user_id uuid)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   -- 팀 칸은 받기만 하고 쓰지 않는다. 정책이 두 인자로 부른다.
@@ -43,6 +47,14 @@ grant execute on function public.reference_visible(uuid, uuid) to authenticated;
 --
 --   select pg_get_functiondef('public.reference_visible(uuid,uuid)'::regprocedure);
 --   -- 본문이 `row_user_id = (select auth.uid())` 한 줄이어야 한다.
+--
+--   select policyname, cmd, qual from pg_policies
+--    where schemaname = 'public' and tablename = 'reference_images' order by policyname;
+--   -- **정확히 두 줄**이어야 한다. 운영은 콘솔에 손으로 붙여 적용해 와서 저장소와
+--   -- 갈린 적이 있다. 옛 「members read all reference images」(using true) 처럼
+--   -- 다른 select 정책이 하나라도 남아 있으면 OR 로 합쳐져 이 파일의 효과가 없다.
+--     members manage own reference images   ALL     (auth.uid() = user_id)
+--     team reads reference images           SELECT  reference_visible(team_id, user_id)
 --
 -- ── 되돌리기 ──────────────────────────────────────────────────────
 --

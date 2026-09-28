@@ -204,17 +204,31 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     return { ...project, data: { ...project.data, attachments, flow } };
   }
   const paths = new Set<string>();
-  project.data.attachments.forEach((attachment) => paths.add(attachment.assetPath));
+  /*
+    **첨부는 작업 주인 폴더 것만 서명한다**(2026-09-28). 첨부 경로는 화면이 보낸
+    값이라, 서버 권한으로 그대로 서명하면 경로만 알면 남의 파일이 열렸다. 만들 때도
+    막지만(`project-service.ts`), 그 전에 저장된 작업이 있어도 여기서 새지 않는다.
+    서명을 못 한 첨부는 빈 주소가 된다 — 화면이 보낸 옛 주소로 되돌아가면 생성할 때
+    서버가 그 주소로 그림을 받으러 간다(`uploadReference`).
+  */
+  const ownFolder = `${project.userId}/`;
+  project.data.attachments.forEach((attachment) => {
+    if (attachment.assetPath.startsWith(ownFolder)) paths.add(attachment.assetPath);
+  });
   project.data.flow?.cards.forEach((card) => {
     if (card.assetPath) paths.add(card.assetPath);
     // **결과판이 이 함수를 지난다.** 여기서 안 모으면 카드 열 장을 원본으로
     // 받는 상태가 그대로다 — 이 변경의 목적이 바로 그것이었다.
     if (card.thumbPath) paths.add(card.thumbPath);
   });
-  if (!paths.size) return project;
+  // 서명할 것이 없어도 끝까지 간다 — 일찍 돌아가면 남의 폴더 첨부가 옛 주소를 그대로 들고 나간다.
+  if (!paths.size && !project.data.attachments.length) return project;
   // 경로는 RLS 를 지나 읽어 온 작업 행에서 꺼낸 것이다.
-  const urls = await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS);
-  const attachments = project.data.attachments.map((attachment) => ({ ...attachment, url: urls.get(attachment.assetPath) ?? attachment.url }));
+  const urls = paths.size ? await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS) : new Map<string, string>();
+  const attachments = project.data.attachments.map((attachment) => ({
+    ...attachment,
+    url: attachment.assetPath.startsWith(ownFolder) ? urls.get(attachment.assetPath) ?? "" : "",
+  }));
   const attachmentUrl = new Map(attachments.map((attachment) => [attachment.id, attachment.url]));
   const flow = project.data.flow ? {
     ...project.data.flow,

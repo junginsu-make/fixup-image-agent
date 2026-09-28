@@ -9,7 +9,7 @@ const base = {
   toneNote: "친구에게 말하듯",
   attachments: [{
     id: "reference-1", kind: "style_reference" as const, role: "cover" as const,
-    assetPath: "user/references/reference-1.jpg", url: "/api/reference-images/reference-1/file",
+    assetPath: "session-user/references/reference-1.jpg", url: "/api/reference-images/reference-1/file",
   }],
   ratio: "4:5" as const,
   cardCountMode: "auto" as const,
@@ -81,7 +81,7 @@ describe("SNS 프로젝트 서비스", () => {
       cardCount: 4,
       attachments: [
         ...Array.from({ length: 6 }, (_unused, index) => ({
-          id: `original-${index}`, kind: "place_as_is", assetPath: `p${index}`, url: `u${index}`,
+          id: `original-${index}`, kind: "place_as_is", assetPath: `session-user/references/p${index}.png`, url: `u${index}`,
         })),
         base.attachments[0],
       ],
@@ -89,6 +89,41 @@ describe("SNS 프로젝트 서비스", () => {
 
     await expect(createProjectService(repository).create("session-user", input))
       .rejects.toThrow("원본 그대로 쓸 장은 6장이지만 속지 자리는 2자리뿐입니다");
+  });
+
+  it("**남의 폴더 첨부는 받지 않는다** — 경로를 적어 넣어 남의 파일을 여는 길 (2026-09-28)", async () => {
+    // 첨부 경로는 화면이 보낸 값이다. 저장해 두면 열 때마다 서버 권한으로 서명되어
+    // 남의 참고 이미지·작업물이 열렸다(2026-09-28 독립 리뷰). 파일 첫 칸이
+    // 소유자다(`docs/DEPLOY.md`).
+    let created = false;
+    const repository: SnsProjectRepository = {
+      create: async (row) => {
+        created = true;
+        return { id: "project-1", ...row, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z" };
+      },
+      list: async () => [],
+    };
+    const input = ProjectInputSchema.parse({
+      ...base,
+      attachments: [{ ...base.attachments[0], assetPath: "someone-else/references/reference-1.jpg" }],
+    });
+
+    await expect(createProjectService(repository).create("session-user", input))
+      .rejects.toBeInstanceOf(ProjectValidationError);
+    expect(created).toBe(false);
+  });
+
+  it("「session-user」로 시작하는 다른 사람 폴더도 막는다 — 앞머리만 같으면 안 된다", async () => {
+    const repository: SnsProjectRepository = {
+      create: async (row) => ({ id: "p", ...row, createdAt: "", updatedAt: "" }),
+      list: async () => [],
+    };
+    const input = ProjectInputSchema.parse({
+      ...base,
+      attachments: [{ ...base.attachments[0], assetPath: "session-user-2/references/reference-1.jpg" }],
+    });
+    await expect(createProjectService(repository).create("session-user", input))
+      .rejects.toBeInstanceOf(ProjectValidationError);
   });
 
   it("인증 사용자와 자리 계획을 저장한다", async () => {

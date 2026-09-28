@@ -56,6 +56,15 @@ export function createProjectService(repository: SnsProjectRepository) {
       const model = modelById(input.modelId);
       const totalCards = input.cardCountMode === "fixed" ? input.cardCount! : MAX_CARDS;
       const issues = validateAttachments(input.attachments, model.maxReferenceImages, totalCards);
+      /*
+        **첨부는 내 폴더 것만 받는다**(2026-09-28). 경로는 화면이 보낸 값이고,
+        저장해 두면 열 때마다 서버 권한으로 서명된다 — 경로만 알면 남의 참고
+        이미지·작업물이 열렸다(독립 리뷰). 저장 경로의 첫 칸이 소유자다
+        (`docs/DEPLOY.md`). 누구 것인지는 알려 주지 않는다.
+      */
+      if (input.attachments.some((attachment) => !attachment.assetPath.startsWith(`${userId}/`))) {
+        issues.push("첨부 이미지를 찾을 수 없습니다. 다시 골라 주세요.");
+      }
       const placeAsIsCount = input.attachments.filter((attachment) => attachment.kind === "place_as_is").length;
       const hasEndingImage = input.attachments.some((attachment) => attachment.kind === "ending");
       const slotPlan = planSlots({

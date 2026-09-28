@@ -70,6 +70,14 @@ test('my own image stays visible even with a team stamped on it', async () => {
   }
 });
 
+test('only the two expected policies guard the table — no stray read-all policy', async () => {
+  // 정책은 OR 로 합쳐진다. `using (true)` 같은 select 정책이 하나라도 다시 생기면
+  // 판정 함수를 아무리 좁혀도 전원이 본다.
+  const rows = await db.sql(`select string_agg(policyname || ':' || cmd, ',' order by policyname)
+    from pg_policies where schemaname='public' and tablename='reference_images';`);
+  assert.equal(rows, 'members manage own reference images:ALL,team reads reference images:SELECT');
+});
+
 test('nobody signed in sees nothing', async () => {
   assert.equal(await db.sql(`begin;
     set local role authenticated;

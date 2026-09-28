@@ -55,7 +55,8 @@ vi.mock("../supabase/admin", () => ({
         // 없기 때문이다 — Storage 정책이 경로 첫 칸을 소유자로 본다.
         createSignedUrl: async () => ({ data: { signedUrl: "signed" }, error: null }),
         createSignedUrls: async (paths: string[]) => ({
-          data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+          // 이름에 `missing` 이 들어간 파일은 저장소에 없다 — 서명이 안 나온다.
+          data: paths.filter((path) => !path.includes("missing")).map((path) => ({ path, signedUrl: `signed:${path}` })),
           error: null,
         }),
       }),
@@ -188,6 +189,36 @@ function projectWithCards(cards: Array<Record<string, unknown>>) {
     data: { source: { kind: "text", text: "본문" }, attachments: [], flow: { stage: "result", cards } },
   } as never;
 }
+
+describe("refreshProjectAssetUrls — 첨부는 작업 주인 것만 서명한다 (2026-09-28)", () => {
+  const withAttachment = (assetPath: string, url: string) => ({
+    ...project(),
+    data: {
+      source: { kind: "text", text: "본문" },
+      attachments: [{ id: "a1", kind: "style_reference", role: "cover", assetPath, url }],
+    },
+  }) as never;
+
+  it("내 폴더의 첨부는 새로 서명한다", async () => {
+    const refreshed = await refreshProjectAssetUrls(withAttachment("u1/references/a1.png", "old"));
+    expect(refreshed.data.attachments[0]!.url).toBe("signed:u1/references/a1.png");
+  });
+
+  it("**남의 폴더 경로는 서명하지 않는다** — 경로를 적어 넣어 남의 파일을 여는 길", async () => {
+    // 첨부 경로는 화면이 보낸 값이다. 서버 권한으로 서명하면 경로만 알면 남의
+    // 참고 이미지·작업물이 열린다(2026-09-28 독립 리뷰).
+    const refreshed = await refreshProjectAssetUrls(withAttachment("u9/references/x.png", "old"));
+    expect(refreshed.data.attachments[0]!.url).toBe("");
+  });
+
+  it("**화면이 보낸 주소로 되돌아가지 않는다** — 서버가 그 주소를 받아 온다", async () => {
+    // 생성할 때 서버가 이 주소로 그림을 받는다(`uploadReference`). 서명을 못 하면
+    // 저장된 값을 그대로 쓰던 자리라, 내부 주소를 넣으면 서버가 그리로 요청했다.
+    // 내 폴더인데 파일이 없어 서명이 안 나오는 경우다.
+    const refreshed = await refreshProjectAssetUrls(withAttachment("u1/references/missing.png", "http://169.254.169.254/"));
+    expect(refreshed.data.attachments[0]!.url).not.toContain("169.254");
+  });
+});
 
 describe("refreshProjectAssetUrls — 결과판도 미리보기를 받는다", () => {
   it("만든 카드에 미리보기 주소를 붙인다", async () => {

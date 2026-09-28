@@ -14,8 +14,8 @@ import { ThumbImage } from "../_components/thumb-image";
 /**
  * 화면이 보는 참고 이미지 한 장.
  *
- * `mine` 과 `ownerEmail` 은 서버가 정해서 보낸다. 참고 이미지는 회원 공용
- * 창고라 남이 올린 것도 목록에 나오는데, 지우기는 올린 사람만 한다 —
+ * `mine` 과 `ownerEmail` 은 서버가 정해서 보낸다. 참고 이미지는 올린 사람만
+ * 본다(2026-09-28). 남의 것이 목록에 나오는 것은 관리자뿐이고, 회원은 서로 못 지운다 —
  * 남이 쓰던 본보기를 지우면 그 사람의 작업이 조용히 깨진다.
  */
 type ReferenceImageView = ReferenceImageRow & {
@@ -120,7 +120,7 @@ export function ReferencesTab() {
 
   /** 창고에서 아주 지운다. 세 도구 어디서도 안 보이게 된다. */
   async function removeImage(image: ReferenceImageView) {
-    // 남의 것을 지울 때는 누구 것인지 밝히고 묻는다. 공용 창고라 목록에서는
+    // 남의 것을 지울 때는 누구 것인지 밝히고 묻는다. 관리자 목록에서는
     // 내 것과 남의 것이 나란히 있어, 밝히지 않으면 잘못 짚기 쉽다.
     const whose = image.mine === false
       ? `
@@ -230,7 +230,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
               {uploading ? "올리는 중…" : "참고 이미지 올리기"}
             </Button>
-            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 참고 이미지는 회원 공용이라 다른 회원이 올린 것도 함께 보이고, 지우기는 올린 사람만 합니다.</span>
+            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 올린 참고 이미지는 나만 봅니다. 다른 회원에게는 보이지 않습니다.</span>
           </div>
 
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">참고 이미지를 불러오는 중입니다.</p> : visibleImages.length === 0 ? (
@@ -245,7 +245,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
                       **남이 올린 것에는 안 보인다 — 관리자만 빼고.** 회원이
                       눌렀을 때는 서버가 막아 「지우지 못했습니다」만 떴다. 못 할
                       일은 단추부터 없는 편이 낫다. 관리자는 할 수 있으므로 둔다 —
-                      공용 창고에 잘못 올라온 것을 내릴 사람이 없으면 그대로
+                      잘못 올라온 것을 내릴 사람이 없으면 그대로
                       남는다. */}
                   {image.mine === false && !isAdmin ? null : (
                     <button

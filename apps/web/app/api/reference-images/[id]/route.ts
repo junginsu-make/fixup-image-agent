@@ -23,10 +23,14 @@ type Context = { params: Promise<{ id: string }> };
  * 남아 있는데 미리보기가 깨진 상태가 된다. 반대 순서면 파일만 남는데,
  * 그건 눈에 안 띄고 용량만 차지할 뿐이다.
  *
- * 목록이 회원 공용이 되면서 **소유자 확인을 코드에서 직접 한다.** 전에는
- * 남의 행이 애초에 안 보여 못 지웠다. 지금은 보이고, RLS 는 delete 를
- * 막되 "0 줄 지웠다"를 오류가 아닌 성공으로 돌려준다 — 그대로 두면 지운 줄
- * 알았는데 그대로인 상태가 된다.
+ * **행은 서버 권한으로 찾고, 누가 지우나는 코드가 정한다.** 2026-09-28 부터
+ * 참고 이미지는 올린 사람만 보인다(202609280004). 세션으로 찾으면 관리자에게도
+ * 남의 행이 안 보여, 잘못 올라온 것을 치울 수 없게 된다(2026-09-28 독립 리뷰).
+ * 못 지우는 사람에게는 **없는 것처럼** 404 로 답한다 — 남의 것이 있는지조차
+ * 알려 주지 않는다.
+ *
+ * RLS 는 delete 를 막되 "0 줄 지웠다"를 오류가 아닌 성공으로 돌려준다 — 그래서
+ * 남의 것은 아래에서 관리자 권한으로 지운다.
  */
 export async function DELETE(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
@@ -55,21 +59,17 @@ export async function DELETE(_request: Request, context: Context) {
     // 세트 항목은 FK cascade 가 지운다. RLS 는 마지막 방어선으로 남겨 두고,
     // 사용자에게 무슨 일이 일어났는지는 여기서 분명히 답한다.
     const supabase = await createSupabaseServerClient();
-    const found = await supabase
+    const found = await createSupabaseAdminClient()
       .from("reference_images")
       .select("user_id,storage_path,thumb_path")
       .eq("id", id)
       .maybeSingle();
     if (found.error) throw new Error(found.error.message);
-    if (!found.data) return Response.json({ ok: false, message: "참고 이미지를 찾을 수 없습니다." }, { status: 404 });
-    if (!canModifyReferenceImage(
+    if (!found.data || !canModifyReferenceImage(
       { userId: auth.member.userId, role: auth.member.profile.role },
       found.data.user_id as string,
     )) {
-      return Response.json(
-        { ok: false, message: "다른 회원이 올린 참고 이미지는 지울 수 없습니다." },
-        { status: 403 },
-      );
+      return Response.json({ ok: false, message: "참고 이미지를 찾을 수 없습니다." }, { status: 404 });
     }
 
     // 남의 것을 지우는 것은 **관리자 권한으로** 해야 한다. 세션 클라이언트로
