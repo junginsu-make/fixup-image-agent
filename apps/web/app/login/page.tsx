@@ -8,6 +8,7 @@ import { Button, Input, Label } from "@fixup/ui";
 import { AuthShell } from "../_components/auth-shell";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+import { clearCsChat } from "../../lib/cs/chat-store";
 import { authAvailability } from "../../lib/supabase/env";
 import { safeNext } from "../../lib/routes";
 
@@ -65,6 +66,8 @@ function LoginForm() {
   async function signOut() {
     setSwitching(true);
     try {
+      // **도우미 대화를 지운다.** 계정을 바꾸면 앞 계정의 대화가 남으면 안 된다.
+      clearCsChat();
       await createSupabaseBrowserClient().auth.signOut();
       setSignedIn(null);
       router.refresh();

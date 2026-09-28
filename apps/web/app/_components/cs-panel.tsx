@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import {
-  Button, Input, SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
-  SidePanelFooter, SidePanelHeader, SidePanelTitle, cn,
+  Button, SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
+  SidePanelFooter, SidePanelHeader, SidePanelTitle, Textarea, cn,
 } from "@fixup/ui";
 import { billableFetch } from "../../lib/billable-fetch";
 import { randomId } from "../../lib/browser-safe";
 import { CS_EMAIL } from "../../lib/cs/contact";
+import { readCsChat, writeCsChat } from "../../lib/cs/chat-store";
 
 /**
  * **무엇이든 물어보세요** — 사이드바 바닥의 도우미(2026-09-23 사용자 요청).
@@ -56,11 +57,52 @@ export function CsPanel() {
   const [error, setError] = React.useState("");
 
   /*
-    **한 대화의 번호.** 서버가 이것으로 한 시간 동안 대화를 들고 있다
+    **한 대화의 번호.** 서버가 이것으로 대화를 들고 있다
     (`lib/cs/session.ts`). 계정과 무관한 값이라 여기서 만들어도 된다.
   */
   const sessionId = React.useRef<string>("");
   if (!sessionId.current) sessionId.current = `chat-${randomId().replace(/-/g, "").slice(0, 24)}`;
+
+  /**
+   * **화면을 옮겨도 대화가 남는다**(2026-09-28 사용자 요청).
+   *
+   * ── 왜 필요한가 ──────────────────────────────────────────
+   *
+   * 셸의 주석은 「화면을 옮겨도 다시 만들어지지 않는다」고 적고 있지만 **그것은
+   * 한 layout 안에서만 참이다.** 이 저장소는 `/library`·`/create`·`/easy` 가
+   * 각자 제 layout 에서 셸을 두르므로, 도구를 옮기면 이 컴포넌트가 통째로 새로
+   * 만들어지고 대화가 사라졌다. 번호까지 새로 생겨 **서버가 들고 있는 것도 못
+   * 찾았다.**
+   *
+   * 꺼내는 일은 **붙은 뒤에** 한다. 서버에서 그린 첫 화면과 브라우저의 첫
+   * 화면이 달라지면 React 가 어긋난 것을 알린다.
+   */
+  React.useEffect(() => {
+    const 남은것 = readCsChat();
+    if (!남은것) return;
+    sessionId.current = 남은것.sessionId;
+    setTurns(남은것.turns);
+  }, []);
+
+  /** 말이 오갈 때마다 적어 둔다. 시계는 여기서 다시 선다. */
+  React.useEffect(() => {
+    if (turns.length === 0) return;
+    writeCsChat({ sessionId: sessionId.current, turns });
+  }, [turns]);
+
+  /**
+   * 입력칸이 내용만큼 자란다.
+   *
+   * **높이를 먼저 0 으로 되돌린다.** 안 그러면 지운 뒤에도 줄어들지 않는다 —
+   * `scrollHeight` 가 지금 높이보다 작아질 수 없기 때문이다.
+   */
+  const 입력칸 = React.useRef<HTMLTextAreaElement | null>(null);
+  React.useEffect(() => {
+    const 칸 = 입력칸.current;
+    if (!칸) return;
+    칸.style.height = "0px";
+    칸.style.height = `${칸.scrollHeight}px`;
+  }, [draft, open]);
 
   const [문의중, set문의중] = React.useState(false);
   const [문의결과, set문의결과] = React.useState("");
@@ -259,12 +301,34 @@ export function CsPanel() {
               className="flex gap-2"
               onSubmit={(event) => { event.preventDefault(); void 보낸다(draft); }}
             >
-              <Input
+              {/*
+                **길게 쓰면 줄이 늘어난다**(2026-09-28 사용자 요청).
+
+                전에는 한 줄짜리 칸이라 길게 쓰면 **앞이 밀려 나가 안 보였다.**
+                자기가 무엇을 썼는지 모르는 채로 보내게 된다.
+
+                한 줄로 시작해 내용만큼 자라고, 넉 줄쯤에서 멈춰 스크롤로
+                넘긴다 — 더 늘리면 대화가 화면 밖으로 밀린다.
+              */}
+              <Textarea
+                ref={입력칸}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  /*
+                    **Enter 로 보내고 Shift+Enter 로 줄을 바꾼다.** 채팅에서
+                    익은 규칙이다. 한글을 조합하는 중에는 보내지 않는다 —
+                    글자를 고르는 Enter 까지 먹으면 말이 잘린다.
+                  */
+                  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+                  event.preventDefault();
+                  void 보낸다(draft);
+                }}
                 placeholder="궁금한 것을 적어 주세요"
                 aria-label="물어볼 내용"
                 disabled={pending}
+                rows={1}
+                className="max-h-[7.5rem] min-h-0 resize-none overflow-y-auto py-2 leading-6"
               />
               <Button type="submit" disabled={pending || !draft.trim()}>보내기</Button>
             </form>

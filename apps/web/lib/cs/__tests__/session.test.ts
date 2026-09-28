@@ -8,7 +8,7 @@ import {
 } from "../session";
 
 /**
- * **대화는 한 시간만 산다**(2026-09-23 사용자 결정).
+ * **대화는 하루 산다**(2026-09-23 사용자 결정, 2026-09-28 에 한 시간에서 늘림).
  *
  * > 창을 닫고 1시간까지만 유지하고 지나면 다 리셋 시키세요.
  *
@@ -120,41 +120,54 @@ describe("주인", () => {
 });
 
 /**
- * **한 시간.** 사용자가 정한 값이다.
+ * **하루.** 2026-09-28 사용자가 한 시간에서 늘렸다.
+ *
+ * 화면 쪽과 같은 수여야 한다(`lib/cs/chat-store.ts`). 서버가 먼저 잊으면
+ * 화면에는 대화가 보이는데 도우미는 앞의 말을 모른 채 답한다.
  */
-describe("한 시간 뒤 사라진다", () => {
-  it("**59분은 이어진다**", () => {
+describe("하루 뒤 사라진다", () => {
+  it("**23시간은 이어진다**", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-23T00:00:00Z"));
     appendCsTurns("chat-0001", "me", [{ role: "user", text: "내 말" }]);
 
-    vi.setSystemTime(new Date("2026-09-23T00:59:00Z"));
+    vi.setSystemTime(new Date("2026-09-23T23:00:00Z"));
     expect(readCsTurns("chat-0001", "me")).toHaveLength(1);
   });
 
-  it("**61분은 빈 창이다**", () => {
+  /** 한 시간이던 때 사라지던 자리. 이제는 남아야 한다. */
+  it("**61분에는 안 사라진다**", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-23T00:00:00Z"));
     appendCsTurns("chat-0001", "me", [{ role: "user", text: "내 말" }]);
 
     vi.setSystemTime(new Date("2026-09-23T01:01:00Z"));
+    expect(readCsTurns("chat-0001", "me"), "아직 하루가 안 지났는데 버렸다").toHaveLength(1);
+  });
+
+  it("**25시간은 빈 창이다**", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-23T00:00:00Z"));
+    appendCsTurns("chat-0001", "me", [{ role: "user", text: "내 말" }]);
+
+    vi.setSystemTime(new Date("2026-09-24T01:00:00Z"));
     expect(readCsTurns("chat-0001", "me")).toEqual([]);
   });
 
   /**
-   * **시계는 말할 때마다 다시 선다.** 한 시간은 「마지막으로 말한 뒤 한
-   * 시간」이다 — 대화하는 중에 끊기면 안 된다.
+   * **시계는 말할 때마다 다시 선다.** 하루는 「마지막으로 말한 뒤 하루」다 —
+   * 대화하는 중에 끊기면 안 된다.
    */
   it("**말하면 시계가 다시 선다**", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-23T00:00:00Z"));
     appendCsTurns("chat-0001", "me", [{ role: "user", text: "첫 말" }]);
 
-    vi.setSystemTime(new Date("2026-09-23T00:50:00Z"));
+    vi.setSystemTime(new Date("2026-09-23T20:00:00Z"));
     appendCsTurns("chat-0001", "me", [{ role: "user", text: "둘째 말" }]);
 
-    // 첫 말로부터 70분, 둘째 말로부터 20분.
-    vi.setSystemTime(new Date("2026-09-23T01:10:00Z"));
+    // 첫 말로부터 28시간, 둘째 말로부터 8시간.
+    vi.setSystemTime(new Date("2026-09-24T04:00:00Z"));
     expect(readCsTurns("chat-0001", "me"), "대화하는 중에 끊겼다").toHaveLength(2);
   });
 
