@@ -114,15 +114,63 @@ describe("회원 화면에 모델 이름이 없다", () => {
   const 문자열들 = (source: string): string[] =>
     (주석을_뺀다(source).match(/"[^"\n]*"|'[^'\n]*'|`[^`]*`/g) ?? []).map((조각) => 조각.slice(1, -1));
 
+  /**
+   * **법이 공개하라는 문서는 뺀다**(2026-09-28).
+   *
+   * 개인정보 보호법은 위탁받은 자와 국외로 이전받는 자를 **이름으로** 공개하게
+   * 한다(제26조·제28조의8). 처리방침에 「[AI 처리업체]」라고 적어 두는 것은
+   * 공개를 안 한 것이다.
+   *
+   * 이 검사가 지키려는 것은 **어느 모델을 어디에 쓰는지**이지 업체 이름 자체가
+   * 아니다. 처리방침은 「문서 분석·텍스트 생성」이라고만 적어 그 결론을 넘기지
+   * 않는다.
+   *
+   * **예외는 이 파일 하나뿐이다.** 모델 이름은 여기서도 못 쓰며, 그것은 아래
+   * 「id 가 글에 섞이지 않는다」가 따로 잡는다.
+   */
+  // 저장된 경로는 `/` 로 적혀 있다. `join` 은 윈도에서 `\` 를 써서 안 맞는다.
+  const 법이_이름을_요구하는_문서 = "legal/documents.ts";
+  const 업체이름 = new Set(["Anthropic", "OpenAI Image"]);
+
   for (const 이름 of 새면_안_되는_이름) {
     it(`「${이름}」이 없다`, () => {
       const 걸린곳 = 화면들
+        .filter((file) => !(업체이름.has(이름) && file.path.endsWith(법이_이름을_요구하는_문서)))
         .filter((file) => 문자열들(file.source).some((글) => 글.includes(이름)))
         .map((file) => file.path);
 
       expect(걸린곳, `회원 화면에 「${이름}」이 남아 있다`).toEqual([]);
     });
   }
+
+  /**
+   * **예외가 그 문서에만, 그 이름에만 걸리는지.** 예외를 넓히면 이 검사가
+   * 통째로 무의미해진다.
+   */
+  it("법률 문서 예외는 업체 이름 둘에만 걸린다", () => {
+    expect([...업체이름].every((이름) => 새면_안_되는_이름.includes(이름))).toBe(true);
+    expect(업체이름.size).toBeLessThanOrEqual(2);
+    // 모델 이름은 법률 문서에서도 못 쓴다.
+    for (const 모델 of ["GPT Image", "Nano Banana", "Gemini", "Midjourney"]) {
+      expect(업체이름.has(모델), `${모델} 은 예외가 아니다`).toBe(false);
+    }
+  });
+
+  /**
+   * **예외가 그 한 파일에만 걸리는지 직접 잰다**(2026-09-28 변이 시험이 잡았다).
+   *
+   * 앞의 검사들은 「지금 다른 화면에 그 이름이 없어서」 통과한다. 예외를 모든
+   * 화면으로 넓혀도 오늘은 티가 안 나고, **다음에 누가 화면에 적는 날** 비로소
+   * 샌다. 그때는 늦다.
+   */
+  it("법률 문서가 아닌 화면은 예외를 못 받는다", () => {
+    const 예외를받나 = (path: string) => path.endsWith(법이_이름을_요구하는_문서);
+
+    expect(예외를받나("app/_landing/legal/documents.ts"), "그 문서가 예외를 못 받는다").toBe(true);
+    for (const 남 of ["app/settings/page.tsx", "app/guide/account/page.tsx", "lib/email/approval.ts"]) {
+      expect(예외를받나(남), `${남} 이 예외를 받고 있다`).toBe(false);
+    }
+  });
 
   /**
    * id 는 서버에 보낼 값이라 코드에 남는다. 다만 **글에 섞이면** 그대로
