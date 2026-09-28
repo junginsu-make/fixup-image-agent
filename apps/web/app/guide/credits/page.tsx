@@ -8,6 +8,7 @@ import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_component
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockChoices, MockField, MockNote } from "../_components/mockup";
+import { LedgerCreditsGuide } from "./ledger";
 
 export const metadata: Metadata = { title: "크레딧과 모델 · 사용 설명서" };
 
@@ -63,12 +64,15 @@ export default async function CreditsGuidePage() {
   const usage = member ? await getUsageSummary(member.user.id).catch(() => null) : null;
   // 방문자는 장부 스위치를 본다. 켜져 있으면 가입하는 사람은 새 장부로 들어간다(202609220003).
   const perImage = usage ? usage.pricingPolicy === "image-v2" : isCreditLedgerEnabled();
-  if (perImage) return <>
-    <GuideHeader kicker="크레딧과 모델" title="이미지 1장 = 1크레딧" lead="일반 이미지와 최종 카드 1장에 1크레딧, 600만 픽셀 이상 인쇄용 결과에는 2크레딧이 듭니다. 기획·분석과 단순 내보내기는 무료입니다." />
-    {usage && <CreditWallet usage={usage} />}
-    <p className="my-5 text-sm text-muted-foreground">모델별 등급 차감은 없습니다. 다시 만들면 새 결과물로 차감하며 내부 재시도는 추가 차감하지 않습니다. 상세페이지는 각 섹션과 대표 이미지를 각각 셉니다. 카드뉴스는 내부 그림 칸 수에 관계없이 완성 카드 수로 셉니다. 처리 중인 요청의 결과가 불명확하면 확인 후 크레딧을 확정하거나 반환합니다.</p>
-    <GuideFooter href="/guide" />
-  </>;
+  /*
+    **장부 쪽도 제대로 쓴다**(2026-09-28, 설계 §9 2단계).
+
+    여기가 네 줄뿐이었다. 그려진 글이 305자로 열한 쪽 중 유일하게 얇아서,
+    도우미가 「크레딧은 어떻게 차감되나요?」에 이 쪽을 못 집었다 — 찾을 글이
+    없었기 때문이다. 크레딧은 가장 많이 묻는 것이고 틀리면 돈 문제가 된다.
+  */
+  // 잔액 상자는 **회원일 때만** 그린다. 방문자에게는 잔액이 없다.
+  if (perImage) return <LedgerCreditsGuide wallet={usage && <CreditWallet usage={usage} />} />;
   return (
     <>
       <GuideHeader
