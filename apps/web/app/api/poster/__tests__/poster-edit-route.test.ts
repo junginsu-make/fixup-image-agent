@@ -310,8 +310,16 @@ describe("고치기는 처음 만들기와 같은 모델·크기로 값을 낸�
     const response = await call({ instruction: "배경을 밤으로 바꿔 주세요" });
     expect(response.status).toBe(200);
     expect(submitted[0]!.modelId).toBe(choice.model.id);
-    const built = (builders[0] as (job: unknown) => { rejected?: string })(submitted[0]);
+    const built = (builders[0] as (job: unknown) => { rejected?: string; estimate: { totalUsd?: number } })(submitted[0]);
     expect(built.rejected).toBeUndefined();
+    /*
+     * **예약도 바뀐 모델로 잡는다.** 견적만 옛 모델로 두면 그 조합은 거절돼 0장을
+     * 예약하고, 확정은 예약한 장수를 못 넘어 고치기가 공짜가 된다(2026-09-29 리뷰).
+     * 실제 요청이 적는 단가와 예약을 직접 묶는다.
+     */
+    const { creditUnits } = await import("@fixup/shared");
+    expect(reserved[0]).toBeGreaterThan(0);
+    expect(reserved[0]).toBe(creditUnits(built.estimate.totalUsd ?? 0));
   });
 
   it("원본 비율 작업은 부모 그림의 실제 크기로 예약한다", async () => {

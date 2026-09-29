@@ -118,7 +118,12 @@ export async function POST(request: Request, context: Context) {
      * **처음 만들기와 같은 모델을 쓴다.** 처음 만들기는 고른 모델이 그 비율을 못
      * 만들면 만들 수 있는 모델로 바꾸고(`generate/route.ts`), 바꾼 것을 작업에
      * 적지 않는다. 작업의 모델을 그대로 쓰면 그런 작업은 고치기가 「만들 수
-     * 없는 조합」으로 거절됐다(2026-09-29 리뷰). 같은 규칙이면 같은 모델이 나온다.
+     * 없는 조합」으로 거절됐다(2026-09-29 리뷰).
+     *
+     * 같은 규칙이라 **모델 목록 차례가 그때와 같으면** 부모 그림과 같은 모델이
+     * 나온다. 목록 맨 앞이 바뀐 뒤(09-10 무렵 gpt-image-2 → flare)의 옛 작업은
+     * 다른 모델로 고친다 — 전에는 아예 거절됐다. 정확히 하려면 부모 요청 줄의
+     * `model_id` 를 읽어야 하는데 그 읽기 길이 아직 없다.
      */
     const modelId = chooseModelForRatio(ratioId, project.modelId, IMAGE_MODELS).model.id;
     const job = planEditJob({
