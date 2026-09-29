@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import type { AdSpec } from "./specs";
+import { AI_METADATA } from "../ai-metadata-values";
 
 /**
  * 내보내기 직전에 **만들어진 바이트 자체**를 검사한다.
@@ -86,9 +87,19 @@ export async function checkAgainstSpec(bytes: Buffer, spec: AdSpec): Promise<Spe
       );
     }
 
-    // 200KB 예산에서 ICC·EXIF 는 사치다. 목록 썸네일(`grid-thumbnail.ts`)은
-    // 정반대로 `keepMetadata()` 를 쓰는데, 거기는 색이 틀어지면 안 되기 때문이다.
-    if (meta.icc || meta.exif) failures.push("메타데이터가 남아 있습니다 (ICC 또는 EXIF)");
+    /*
+      200KB 예산에서 ICC·남의 EXIF 는 사치다. 목록 썸네일(`grid-thumbnail.ts`)은
+      정반대로 `keepMetadata()` 를 쓰는데, 거기는 색이 틀어지면 안 되기 때문이다.
+
+      **AI 생성 표시는 예외다.** 인공지능기본법 제31조가 요구하는 표시라 사치가
+      아니라 의무다(`lib/ai-metadata.ts`). 660바이트로 200KB 예산의 0.3% 다.
+
+      이 예외가 없으면 **배지를 켠 광고 내보내기가 전부 규격 실패로 떨어진다**
+      — 표시를 넣기 시작한 날 실제로 그렇게 됐다(2026-09-29 독립 검토가 찾았다).
+    */
+    const 우리표시 = meta.exif?.toString("latin1").includes(AI_METADATA.software) ?? false;
+    const 남의메타 = Boolean(meta.icc) || (Boolean(meta.exif) && !우리표시);
+    if (남의메타) failures.push("메타데이터가 남아 있습니다 (ICC 또는 EXIF)");
   } catch (error) {
     // `export.ts` 와 같은 규칙 — 고칠 수 있는 것만 문장을 주고 내부 문구는 감춘다.
     console.error("[ad-check] 읽기 실패", { specId: spec.id, error });

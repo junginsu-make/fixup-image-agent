@@ -4,7 +4,7 @@ import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../.
 import { BACKGROUND_REMOVAL_MODEL, adExportUnits } from "../../../../lib/ad/cost";
 import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
-import { markAsAi } from "../../../../lib/watermark";
+import { finishForAd } from "../../../../lib/ad/finish";
 import { getLibraryImageFile } from "../../../../lib/server-library";
 import { getReferenceImageFile } from "../../../../lib/reference-images";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
@@ -210,8 +210,18 @@ export async function POST(request: Request) {
      *
      * **켤지는 여기서 한 번만 정한다.** `markAsAi` 가 호출마다 설정을 조회하므로,
      * 조건 없이 넘기면 꺼져 있어도 규격 수만큼 조회가 돈다.
+     *
+     * **끈 경우에도 `finish` 를 넘긴다**(2026-09-29). 예전에는 껐으면 아예 안
+     * 넘겼는데, 그러면 광고 소재가 **표시 하나 없이 ZIP 으로 나간다** — 사용자가
+     * 그것을 네이버·카카오에 올리므로 인공지능기본법 제31조가 요구하는 「파일
+     * 자체의 표시」가 없는 상태다. 배지를 끄는 것은 보이는 표기를 끄는 결정이지
+     * 표시를 안 하겠다는 결정이 아니다.
+     *
+     * 껐으면 배지 없이 파일 안 표시만 찍는다. 설정을 여기서 이미 읽었으므로
+     * 규격마다 다시 조회하지도 않는다 — 위 최적화의 뜻을 그대로 지킨다.
      */
     const badge = await isAiBadgeEnabled();
+    const finish = finishForAd(badge);
 
     /**
      * **배경 제거를 자리 밖에서 먼저 한다** (설계 §9.2).
@@ -260,7 +270,7 @@ export async function POST(request: Request) {
     const results = await withRenderSlot(
       auth.member.userId,
       () => exportBatch(file.bytes, parsed.data.specIds, {
-        ...(badge ? { finish: markAsAi } : {}),
+        finish,
         /**
          * **이미 지워 둔 것을 준다.** 자리 안에서는 조립·인코딩만 한다.
          * 실패했으면 그 사유를 그대로 던져 그 규격만 실패로 남긴다.

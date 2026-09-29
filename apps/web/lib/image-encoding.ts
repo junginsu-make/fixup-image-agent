@@ -87,7 +87,7 @@ const CHUNK_CRC_BYTES = 4;
  * 찾지 않는 것은, 그림 데이터 안에 우연히 같은 네 글자가 들어 있으면 멀쩡한
  * 그림을 못 줄이기 때문이다.
  */
-function isAnimatedPng(bytes: Buffer): boolean {
+export function isAnimatedPng(bytes: Buffer): boolean {
   let at = PNG_HEADER_BYTES;
   while (at + CHUNK_HEADER_BYTES <= bytes.length) {
     const length = bytes.readUInt32BE(at);

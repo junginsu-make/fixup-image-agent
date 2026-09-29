@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { MAX_INPUT_PIXELS, encodeForStorage, makeThumbnail, sniffImageMime, toPng } from "../image-encoding";
+import { APNG } from "./fixtures/apng";
+import { ANIMATED_GIF } from "./fixtures/animated";
 
 /**
  * 저장 직전 인코딩.
@@ -45,27 +47,9 @@ function withAlpha(alphaAt: (x: number, width: number) => number, width = 64, he
   return sharp(pixels, { raw: { width, height, channels: 4 } });
 }
 
-/**
- * 진짜 APNG(ffmpeg 로 만든 5프레임).
- *
- * **이게 가장 위험한 입력이다.** 첫 여덟 바이트가 규격상 표준 PNG 와 같아
- * 시그니처로 못 가르고, libvips 8.18.3 은 APNG 를 읽지 못해 `pages` 를
- * `undefined` 로 준다 — 즉 프레임 수로도 못 가른다. 게다가 한 장으로 줄어든
- * 결과는 원본보다 작아서 크기 가드마저 통과한다. 세 방어가 전부 통과시킨다.
- */
-const APNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAABAAAAAQBPJcTWAAAACGFjVEwAAAADAAAAAM7tusAAAAAaZmNUTAAAAAAAAAAQAAAAEAAAAAAAAAAAAAEABQAAaBqIGAAAAItJREFUeJzlktENAjEMQ5+lDnKb0FHKJr1NOgpscpsYNUWCwgESH/zgjzZOk9hSIwKOU76LgzznEzMsawRxj5hr8dwgj5odWPFg3xoU5D2kPvPR0kekkHrlZUckfaPwfw0GjnJhO1BN68kMRQRpLGdWKH09TtB+YKn/ccONBVbP21pQYYOKa7eUIV8AeOE0NVoMKPwAAAAaZmNUTAAAAAEAAAAQAAAAAwAAAAAAAAAMAAEABQAAYdb9jgAAADZmZEFUAAAAAnicY/xvzMCQAEJreRgWMDBsYRCG8s/qgPgLGIK/gPg+DG9BHIYFLAwkApI1AABTkws18ozPFgAAABpmY1RMAAAAAwAAABAAAAADAAAAAAAAAAwAAQAFAACMQC5nAAAANmZkQVQAAAAEeJxj/J/GwJDAcMuSYQEDCD1ncAPxf0VC+GrHGRJAfAZJhl0gPttyFgYSAckaAN1ZDA/NuPUvAAAAAElFTkSuQmCC", "base64");
+// APNG 표본은 `ai-metadata.test.ts` 도 쓴다. 두 벌로 두면 한쪽만 고쳐진다.
 
-/**
- * 2프레임 애니메이션 GIF. 손으로 짠 85바이트짜리다.
- *
- * 파일에서 읽지 않고 여기 둔 것은, 이 픽스처가 **막으려는 사고 그 자체**라
- * 어딘가에서 조용히 사라지면 안 되기 때문이다. sharp 로는 애니메이션 GIF 를
- * 만들 수 없어 바이트를 직접 적었다.
- */
-const ANIMATED_GIF = Buffer.from(
-  "R0lGODlhAQABAIAAAAAAAP///yH/C05FVFNDQVBFMi4wAwEAAAAh+QQAZAAAACwAAAAAAQABAAACAkQBACH5BABkAAAALAAAAAABAAEAAAICTAEAOw==",
-  "base64",
-);
+// 애니메이션 GIF 표본도 `ai-metadata.test.ts` 와 함께 쓴다.
 
 /**
  * 픽셀이 같은가. **알파를 떼지 않는다** — 투명도까지 봐야 무손실이다.

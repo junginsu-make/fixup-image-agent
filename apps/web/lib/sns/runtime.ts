@@ -87,7 +87,9 @@ async function uploadResult(
   userId: string, projectId: string, cardIndex: number, bytes: Buffer, contentType: string,
 ): Promise<{ assetPath: string; thumbPath: string | null }> {
   if (isLocalStoreEnabled()) {
-    const png = await sharp(bytes).png().toBuffer();
+    // `keepMetadata()` 가 없으면 AI 생성 표시가 여기서 지워진다. 로컬 저장으로
+    // 확인할 때만 표시가 없어 보여서, 기능이 멀쩡한데도 고장으로 읽힌다.
+    const png = await sharp(bytes).keepMetadata().png().toBuffer();
     const assetPath = await writeLocalSnsResultFile(localStoreRoot(), userId, projectId, cardIndex, png);
     const preview = await makeSnsPreview(png);
     if (!preview) return { assetPath, thumbPath: null };
