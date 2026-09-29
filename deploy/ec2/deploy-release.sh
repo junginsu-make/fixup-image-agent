@@ -57,6 +57,9 @@ for build_dir in "${release_root}/apps/web"/.next*; do
   install -d -o fixup-agent -g fixup-agent -m 0750 "${build_dir}/cache/images"
 done
 
+# 정적 파일 사본(Caddy 가 직접 내준다). 실패하면 current 를 옮기기 전에 멈춘다.
+bash "$(dirname "$0")/sync-static.sh" "${release_root}" "${release_id}"
+
 ln -sfnT "${release_root}" "${current_link}"
 systemctl restart fixup-image-agent.service
 
@@ -73,6 +76,7 @@ if [[ ${healthy} != true ]]; then
   echo "Liveness check failed. Rolling back." >&2
   if [[ -n ${previous_release} && -d ${previous_release} ]]; then
     ln -sfnT "${previous_release}" "${current_link}"
+    bash "$(dirname "$0")/sync-static.sh" "${previous_release}" "$(basename "${previous_release}")" || true
     systemctl restart fixup-image-agent.service
   else
     systemctl stop fixup-image-agent.service
@@ -84,6 +88,7 @@ if ! curl --fail --silent --show-error http://127.0.0.1:3000/api/health/ready >/
   echo "Readiness check failed. Rolling back." >&2
   if [[ -n ${previous_release} && -d ${previous_release} ]]; then
     ln -sfnT "${previous_release}" "${current_link}"
+    bash "$(dirname "$0")/sync-static.sh" "${previous_release}" "$(basename "${previous_release}")" || true
     systemctl restart fixup-image-agent.service
   else
     systemctl stop fixup-image-agent.service

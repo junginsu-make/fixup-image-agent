@@ -56,7 +56,7 @@ function remaining(): string[] {
 }
 
 function prune(keep: number): string {
-  return execFileSync("bash", [SCRIPT, String(keep), root], { encoding: "utf8" });
+  return execFileSync("bash", [SCRIPT, String(keep), root, join(root, "static")], { encoding: "utf8" });
 }
 
 beforeEach(() => {
@@ -126,5 +126,15 @@ onLinuxLike("prune-releases.sh", () => {
     expect(output).toContain("r5");
     expect(output).toContain("r6");
     expect(output).not.toContain("r0");
+  });
+
+  it("지운 릴리스의 정적 사본도 지우고, current 가 가리키는 사본은 남긴다", () => {
+    for (const [id, age] of [["r1", 30], ["r2", 20], ["r3", 10]] as const) {
+      makeRelease(id, age);
+      mkdirSync(join(root, "static", id, "_next", "static"), { recursive: true });
+    }
+    symlinkSync(join(root, "static", "r1"), join(root, "static", "current"));
+    prune(1);
+    expect(readdirSync(join(root, "static")).sort()).toEqual(["current", "r1", "r3"]);
   });
 });

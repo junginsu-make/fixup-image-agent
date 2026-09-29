@@ -60,6 +60,7 @@ install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixu
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
 install -d -o caddy -g caddy -m 0750 /var/log/caddy
+install -d -o root -g caddy -m 0750 /var/www/fixup-image-agent /var/www/fixup-image-agent/static
 sed "s|{{SITE}}|${site_address}|g" "${script_dir}/Caddyfile.template" > /etc/caddy/sites/fixup-image-agent.caddy
 caddy fmt --overwrite /etc/caddy/sites/fixup-image-agent.caddy
 

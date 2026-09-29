@@ -21,6 +21,7 @@ set -euo pipefail
 
 keep=${1:-5}
 app_root=${2:-/opt/fixup-image-agent}
+static_root=${3:-/var/www/fixup-image-agent/static}
 
 # 0 을 받으면 전부 지운다는 뜻이 된다. 그런 뜻으로 부를 일이 없다.
 if [[ ! ${keep} =~ ^[0-9]+$ ]] || (( keep < 1 )); then
@@ -74,5 +75,19 @@ for dir in "${removed[@]}"; do
   echo "릴리스를 지웁니다: ${dir}"
   rm -rf -- "${dir}"
 done
+
+# 지운 릴리스의 정적 사본도 지운다. current 가 가리키는 것은 남긴다.
+#
+# 심볼릭 링크로 이어져 있으면 이름이 같아도 다른 경로로 보일 수 있어, 양쪽을
+# 실제 경로로 풀어(`readlink -f`) 비교한다 — 그래야 static_root 안의 링크가
+# 지금 쓰는 사본을 다른 것으로 잘못 보이게 하지 않는다.
+if [[ -d ${static_root} ]]; then
+  static_current=$(readlink -f "${static_root}/current" 2>/dev/null || true)
+  for dir in "${removed[@]}"; do
+    target=${static_root}/$(basename "${dir}")
+    target_real=$(readlink -f "${target}" 2>/dev/null || true)
+    [[ -d ${target} && ${target_real} != "${static_current}" ]] && rm -rf -- "${target}"
+  done
+fi
 
 echo "릴리스 정리 완료: ${#removed[@]} 개를 지우고 $(( ${#ordered[@]} - ${#removed[@]} )) 개를 남겼습니다."
