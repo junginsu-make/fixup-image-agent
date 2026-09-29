@@ -203,7 +203,7 @@ function bottomItemsFor(isAdmin: boolean, hasTeam: boolean, teamEnabled = true) 
 
 interface AppShellProps {
   children: React.ReactNode;
-  /** 상단바 우측에 주입할 앱 전용 액션(예: 이용 안내 버튼). */
+  /** 상단바 우측에 주입할 앱 전용 액션(예: 레퍼런스 찾기 버튼). */
   actions?: React.ReactNode;
   /**
    * 사이드바 맨 아래, 계정 메뉴 위에 놓을 것(예: 만드는 중 목록).
