@@ -50,24 +50,27 @@ export function canJumpTo(
    * 보여 주는 것과, 아직 없는 화면으로 보내는 것은 다른 문제다.
    */
   allowed?: (id: string) => boolean,
+  allowCurrentJump = false,
 ): boolean {
-  if (stepState(steps, current, id) === "active") return false;
+  if (stepState(steps, current, id) === "active" && !allowCurrentJump) return false;
   return allowed ? allowed(id) : true;
 }
 
-export function StepBar({ steps, current, onJump, allowJump }: {
+export function StepBar({ steps, current, onJump, allowJump, allowCurrentJump = false }: {
   steps: StepDefinition[];
   current: string;
   /** 없으면 어느 단계도 누를 수 없다. 보여 주기만 할 때 쓴다. */
   onJump?: (id: string) => void;
   /** 아직 갈 수 없는 단계를 화면이 가려낸다. 없으면 다 갈 수 있다. */
   allowJump?: (id: string) => boolean;
+  /** 현재 단계가 접힌 패널이면 같은 단계를 눌러 다시 열 수 있다. */
+  allowCurrentJump?: boolean;
 }) {
   return (
     <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2 rounded-lg bg-card p-2.5 shadow-[var(--shadow-ring)]">
       {steps.map((step, index) => {
         const state = stepState(steps, current, step.id);
-        const jumpable = Boolean(onJump) && canJumpTo(steps, current, step.id, allowJump);
+        const jumpable = Boolean(onJump) && canJumpTo(steps, current, step.id, allowJump, allowCurrentJump);
         return (
           <li key={step.id} className="flex items-center gap-1.5">
             <button

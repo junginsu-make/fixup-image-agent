@@ -17,7 +17,7 @@ import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { jobId } from "../../../lib/running-jobs";
-import { currentPosterStep, posterSteps, reachableBeforeCreate } from "../steps";
+import { currentPosterStep, posterSteps } from "../steps";
 import { modelDisplayName } from "../../../lib/model-name";
 import { billableFetch } from "../../../lib/billable-fetch";
 import {
@@ -569,6 +569,8 @@ export function PosterClient(
   const planned = React.useRef(false);
   React.useEffect(() => {
     if (planned.current) return;
+    // 완료된 작업을 다시 열 때는 옛 슬롯이 비어 있어도 초안을 새로 만들지 않는다.
+    if (images.length) return;
     /*
      * **쓴 그대로 보낼 작업은 기획을 안 부른다.**
      *
@@ -794,6 +796,7 @@ export function PosterClient(
   const current = currentPosterStep({
     hasImages: list.length > 0,
     promptMode: project.data.promptMode,
+    planOpen,
   });
 
   return (
@@ -822,12 +825,11 @@ export function PosterClient(
         steps={단계}
         current={current}
         /*
-          **못 가는 곳은 눌리지 않게 한다.** 04·05 는 이 화면 안이라 오갈 데가
-          없는데, `onJump` 안에서 조용히 돌아서면 단추는 활성으로 보이고
-          hover 까지 먹는다 — 눌러도 아무 일이 없어 고장으로 읽힌다
-          (2026-09-16 독립 리뷰). 새로 만드는 화면도 같은 값을 쓴다.
+          04 는 「기획 확인」 단추와 같이 **도는 중에는 잠근다.** 열어 두면 생성이
+          끝나도 새 결과가 패널에 가려진다(2026-09-29 독립 리뷰).
         */
-        allowJump={reachableBeforeCreate}
+        allowJump={(id) => (id !== "plan" || !busy) && (id !== "result" || list.length > 0)}
+        allowCurrentJump={current === "plan" && !planOpen}
         onJump={(id) => {
           /*
             앞 세 단계는 새로 만드는 화면에 있다. **이 작업의 값을 들고** 간다.
@@ -841,7 +843,9 @@ export function PosterClient(
             작업**이 생기고 원래 작업은 안 바뀐다 — 그래서 읽기 전용과
             어긋나지 않는다.
           */
-          if (id === "plan" || id === "result") return;
+          // 저장된 슬롯과 결과는 그대로 두고, 04의 패널만 열고 닫는다.
+          if (id === "plan") return setPlanOpen(true);
+          if (id === "result") return setPlanOpen(false);
           // **누른 단계도 함께 싣는다.** 안 실으면 03 을 눌러도 01 이 열린다
           // (2026-09-17 사용자 보고).
           router.push(rerunHref("/poster/new", project.id, id));
@@ -1026,6 +1030,7 @@ export function PosterClient(
             </details>
           </SidePanelBody>
           <SidePanelFooter className="flex flex-wrap justify-end gap-2">
+            {list.length > 0 ? <Button variant="outline" onClick={() => setPlanOpen(false)}>결과로 돌아가기</Button> : null}
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
               {busy?.kind === "plan" ? <><Loader2 className="mr-1.5 size-4 animate-spin" />기획하는 중…</> : "초안 다시 채우기"}
             </Button>

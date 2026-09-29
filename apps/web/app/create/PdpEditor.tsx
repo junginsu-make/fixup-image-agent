@@ -260,6 +260,10 @@ interface PdpEditorProps {
    * 전에는 편집기 막대에 이동이 아예 없어서, 눌러도 아무 일이 안 일어났다.
    */
   onJumpStep?: (id: "upload" | "analyze") => void;
+  /** 처음 열 화면. 앞 단계에서 04 를 눌러 왔으면 편집 화면이다(`editorScreenFor`). */
+  initialScreen?: "gallery" | "editor";
+  /** 화면이 바뀔 때마다 부모에 알린다. 다시 그려져도 그 화면으로 연다. */
+  onScreenChange?: (screen: "gallery" | "editor") => void;
   saveState?: "idle" | "saving" | "saved" | "error";
   onBeforeReplace?: () => Promise<boolean>;
   onSectionsChange: Dispatch<SetStateAction<SectionBlueprint[]>>;
@@ -334,6 +338,8 @@ export function PdpEditor({
   attachmentIntents,
   pageContext,
   onJumpStep,
+  initialScreen = "gallery",
+  onScreenChange,
   saveState = "idle",
   onBeforeReplace,
   onSectionsChange,
@@ -425,7 +431,10 @@ export function PdpEditor({
   );
   /* 갤러리(전체 검토) ↔ 편집(한 장 다듬기). 기본은 갤러리 —
      분석 직후에는 전체 흐름부터 보는 게 순서다. */
-  const [screen, setScreen] = useState<"gallery" | "editor">("gallery");
+  const [screen, setScreen] = useState<"gallery" | "editor">(initialScreen);
+  useEffect(() => {
+    onScreenChange?.(screen);
+  }, [screen, onScreenChange]);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   // 라이브러리 저장은 브라우저 초안 저장과 다르다. 계정에 올려 기기를 옮겨도 남는다.

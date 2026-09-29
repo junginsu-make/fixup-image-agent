@@ -46,4 +46,9 @@ describe("이동 가능 여부", () => {
   it("현재 단계는 화면이 허락해도 여전히 못 누른다", () => {
     expect(canJumpTo(steps, "b", "b", () => true)).toBe(false);
   });
+
+  it("접힌 패널을 다시 여는 화면만 현재 단계 클릭을 허용한다", () => {
+    expect(canJumpTo(steps, "b", "b", undefined, true)).toBe(true);
+    expect(canJumpTo(steps, "b", "b", () => false, true)).toBe(false);
+  });
 });

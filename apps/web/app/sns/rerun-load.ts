@@ -84,7 +84,7 @@ export function snsRerunJump(
   if (BEFORE_CREATE.has(id)) return { kind: "step", id };
   if (!context.rerunFrom || !context.seeded) return null;
   if (id === "copy" || id === "result") {
-    return { kind: "go", href: `/sns/${encodeURIComponent(context.rerunFrom)}` };
+    return { kind: "go", href: `/sns/${encodeURIComponent(context.rerunFrom)}?view=${id}` };
   }
   return null;
 }

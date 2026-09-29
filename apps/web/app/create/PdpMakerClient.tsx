@@ -28,7 +28,7 @@ import {
 } from "@fixup/shared";
 import { PdpEditor } from "./PdpEditor";
 import { CREATE_STEPS, type CreateMode } from "./create-steps";
-import { canReachStep } from "./step-jump";
+import { canReachStep, editorScreenFor } from "./step-jump";
 import { peekHandoff, takeHandoff } from "../../lib/handoff";
 import { TextModeFlow, type TextStage } from "./TextModeFlow";
 import { SavedImagePicker } from "./SavedImagePicker";
@@ -85,6 +85,14 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   // 라이브러리에서 ?draft=<id> 로 넘어오면 그 작업을 한 번만 자동으로 연다.
   const autoloadedDraftRef = useRef(false);
   const [appState, setAppState] = useState<PdpAppState>("upload");
+  /**
+   * 편집기가 **지금 보이는 화면**(갤러리 03 · 편집 04).
+   *
+   * 부모가 든다. 새 작업은 편집기에 들어서자마자 저장되고 그때 key 가 바뀌어
+   * 편집기가 다시 그려진다 — 편집기만 들고 있으면 04 로 들어온 사람이 03 에
+   * 떨어진다(2026-09-29 독립 리뷰). 막대는 누른 단계로, 다른 길은 갤러리로 연다.
+   */
+  const [editorScreen, setEditorScreen] = useState<"gallery" | "editor">("gallery");
   // 시작 방식. 기본은 기존 이미지 흐름이라 이 화면을 쓰던 사람에게 달라지는 게 없다.
   const [startMode, setStartMode] = useState<CreateMode>("image");
 
@@ -692,6 +700,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         setNotice(draft.notice);
         setEditorDraftState(draft.editorState);
         // 저장해 둔 단계로 돌아간다. 시나리오에서 저장했으면 시나리오다.
+        setEditorScreen("gallery");
         setAppState(draft.result ? draft.appState : "upload");
         setSaveState("saved");
         setIsDirty(false);
@@ -1055,6 +1064,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setEditorDraftState(null);
     setEditorSessionKey((current) => current + 1);
     setNotice("시나리오와 대표 이미지를 정했습니다. 이제 섹션별 이미지를 만들어 보세요.");
+    setEditorScreen("gallery");
     setAppState("editor");
   };
 
@@ -1124,6 +1134,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
               if (startMode === "text") setTextStage("input");
               return;
             }
+            setEditorScreen(editorScreenFor(id));
             setAppState("editor");
           }}
         />
@@ -1209,6 +1220,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
               analyzedBlueprint ?? { ...result.blueprint, sections: [] }, result.blueprint,
             ) });
             setNotice("섹션별 이미지를 만들어 보세요.");
+            setEditorScreen("gallery");
             setAppState("editor");
           }}
         />
@@ -1265,6 +1277,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
         pageContext={additionalInfo}
+        initialScreen={editorScreen}
+        onScreenChange={setEditorScreen}
         onJumpStep={(id) => {
           setAppState(id === "upload" ? "upload" : "scenario");
           if (id === "upload" && startMode === "text") setTextStage("input");
@@ -1332,6 +1346,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
               return;
             }
             // 구성안이 있으면 그 뒤 단계로도 돌아갈 수 있다. 없으면 allowJump 가 막는다.
+            setEditorScreen(editorScreenFor(id));
             setAppState(id === "analyze" ? "scenario" : "editor");
           }}
         />
