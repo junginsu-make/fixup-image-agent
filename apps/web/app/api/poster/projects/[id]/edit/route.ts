@@ -5,6 +5,7 @@ import { editSourceSize } from "./edit-source-size";
 import { editAttachmentInputs } from "./edit-attachments";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
+import { chooseModelForRatio, IMAGE_MODELS } from "@fixup/sns-core";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
@@ -113,12 +114,19 @@ export async function POST(request: Request, context: Context) {
 
     // 화면이 수정하면서 비율을 바꿀 수 있으므로 **정해진 뒤의** 값을 본다.
     const ratioId = parsed.data.ratioId ?? project.ratio;
+    /*
+     * **처음 만들기와 같은 모델을 쓴다.** 처음 만들기는 고른 모델이 그 비율을 못
+     * 만들면 만들 수 있는 모델로 바꾸고(`generate/route.ts`), 바꾼 것을 작업에
+     * 적지 않는다. 작업의 모델을 그대로 쓰면 그런 작업은 고치기가 「만들 수
+     * 없는 조합」으로 거절됐다(2026-09-29 리뷰). 같은 규칙이면 같은 모델이 나온다.
+     */
+    const modelId = chooseModelForRatio(ratioId, project.modelId, IMAGE_MODELS).model.id;
     const job = planEditJob({
       projectId: id,
       parentImageId: parent.id,
       parentUrl,
       instruction: parsed.data.instruction,
-      modelId: project.modelId,
+      modelId,
       ratioId,
       // `match-source` 작업은 크기를 안 넘기면 거절된다(설계 §10 3-b).
       sourceSize: editSourceSize(ratioId, project.data.adMaster, parent),
@@ -140,13 +148,16 @@ export async function POST(request: Request, context: Context) {
      * 수정은 언제나 한 장이다(설계 §「세 장을 또 받지 않는다」).
      */
     const estimate = estimatePosterCost({
-      modelId: project.modelId,
+      modelId,
       ratioId,
       variants: 1,
       // 고친 기준 그림을 늘 레퍼런스로 넣는다 — i2i 단가다.
       hasReferences: true,
+      // 실제 요청과 같은 크기로 값을 낸다. 안 넘기면 원본 비율 작업이 자리표시
+      // 픽셀로 계산돼, 예약한 장수가 실제 값보다 적었다(9장 → 5장, 2026-09-29).
+      sourceSize: job.sourceSize,
     });
-    const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0), creditImagePlan(1, knownPosterCreditSize(project.modelId, ratioId, job.sourceSize), `poster:${id}`));
+    const reserved = await reserveAiUsage(request, "poster_image", creditUnits(estimate.totalUsd ?? 0), creditImagePlan(1, knownPosterCreditSize(modelId, ratioId, job.sourceSize), `poster:${id}`));
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 

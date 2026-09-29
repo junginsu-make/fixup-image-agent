@@ -17,6 +17,7 @@ let project: { id: string; ratio: string; modelId: string; data: Record<string, 
 let parent: { id: string; assetPath: string; selected: boolean; width: number | null; height: number | null };
 type SubmittedJob = {
   ratioId: string;
+  modelId?: string;
   sourceSize?: { width: number; height: number };
   attachments?: Array<{ url: string; role: string }>;
   personUrls?: string[];
@@ -281,5 +282,49 @@ describe("고치기는 고치기 조립으로 나간다", () => {
     await call({ instruction: "배경을 밤으로 바꿔 주세요" });
     expect(submitted[0]!.invented).toEqual(["headline"]);
     expect(submitted[0]!.referenceHasText).toBe(true);
+  });
+});
+
+/**
+ * **고치기도 처음 만들기와 같은 모델·같은 크기로 값을 낸다**(2026-09-29 리뷰).
+ *
+ * ① 처음 만들기는 고른 모델이 그 비율을 못 만들면 만들 수 있는 모델로 바꾼다
+ *    (`chooseModelForRatio`). 바꾼 것을 작업에 적지는 않는다. 고치기는 작업의
+ *    모델을 그대로 써서, 그런 작업은 고치기가 「만들 수 없는 조합」으로 거절됐다.
+ * ② 원본 비율(`match-source`) 작업의 예약 견적에 크기를 안 넘겨 자리표시 픽셀로
+ *    값을 냈다. 처음 만들기는 넘긴다 — 예약한 장수와 실제 값이 갈린다.
+ */
+describe("고치기는 처음 만들기와 같은 모델·크기로 값을 낸다", () => {
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    project.data = { ...project.data, slots: EMPTY_SLOTS };
+  });
+
+  it("고른 모델이 그 비율을 못 만들면 처음 만들기처럼 만들 수 있는 모델로 고친다", async () => {
+    const { chooseModelForRatio, IMAGE_MODELS } = await import("@fixup/sns-core");
+    project = { ...project, ratio: "a4-print", modelId: "nano-banana-pro" };
+    const choice = chooseModelForRatio("a4-print", "nano-banana-pro", IMAGE_MODELS);
+    // 전제: 이 조합은 정말 바뀐다. 안 바뀌면 이 시험은 아무것도 안 잰다.
+    expect(choice.switched).toBe(true);
+
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(response.status).toBe(200);
+    expect(submitted[0]!.modelId).toBe(choice.model.id);
+    const built = (builders[0] as (job: unknown) => { rejected?: string })(submitted[0]);
+    expect(built.rejected).toBeUndefined();
+  });
+
+  it("원본 비율 작업은 부모 그림의 실제 크기로 예약한다", async () => {
+    const { estimatePosterCost } = await import("@fixup/poster-core");
+    const { creditUnits } = await import("@fixup/shared");
+    const at = (sourceSize?: { width: number; height: number }) => creditUnits(estimatePosterCost({
+      modelId: "gpt-image-2", ratioId: "match-source", variants: 1, hasReferences: true, sourceSize,
+    }).totalUsd ?? 0);
+    parent = { ...parent, width: 3000, height: 3000 };
+    // 전제: 실제 크기와 자리표시 크기의 값이 다르다. 같으면 이 시험은 헛돈다.
+    expect(at({ width: 3000, height: 3000 })).not.toBe(at());
+
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(reserved[0]).toBe(at({ width: 3000, height: 3000 }));
   });
 });
