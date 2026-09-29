@@ -251,8 +251,9 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 `install-host.sh` 가 깐다. 바꿀 때는 이 순서로 한다. 먼저 시험 서버에서 같은 순서로 해 본다.
 
 1. ops 꾸러미를 풀어 둔다(매 배포 4번과 같다)
-2. 지금 것을 남긴다
-   `sudo cp -a /etc/caddy/sites /root/caddy-sites.bak && sudo cp /etc/systemd/system/fixup-image-agent.service /root/unit.bak`
+2. 지금 것을 남긴다. **두 번째부터 돌릴 때는 먼저 옛 백업을 지운다** —
+   `cp -a`는 대상 폴더가 이미 있으면 그 **안에** 중첩해서 복사한다(`caddy-sites.bak/sites/…`).
+   `sudo rm -rf /root/caddy-sites.bak && sudo cp -a /etc/caddy/sites /root/caddy-sites.bak && sudo cp /etc/systemd/system/fixup-image-agent.service /root/unit.bak`
 
    **처음 한 번만(도메인을 손으로 연결한 서버)**: `sudo mv /etc/caddy/sites/formwith.caddy /root/formwith.caddy.manual`
    — 손으로 만든 도메인 사이트 파일을 치운다. 이제 `install-host.sh` 가 도메인 사이트와
@@ -261,12 +262,25 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
    (도메인이 없는 서버는 `install-host.sh http://<IP>` 한 인자만 준다). 같은 사이트 주소가
    다른 `*.caddy` 파일에 이미 있으면 스크립트가 **아무것도 바꾸지 않고** 멈추고 알려 준다.
    Caddy 검사(`caddy validate`)도 통과해야 넘어간다 — 실패하면 스크립트가 스스로 옛 설정으로
-   되돌린다
-4. `app.env` 에 새 값이 있으면 넣는다(`NODE_OPTIONS`, `ALERT_EMAIL`)
+   되돌린다.
+
+   **이 단계가 0 이 아닌 코드로 끝나면 4·5단계로 가지 말고 바로 아래 「되돌리기」를 한다.**
+   `install-host.sh` 는 자기가 방금 쓴 사이트 파일만 되돌린다 — 「처음 한 번만」에서 손으로
+   옮긴 `formwith.caddy`(→ `formwith.caddy.manual`)까지는 되돌려 주지 않는다. 그 상태로 두면
+   도메인 사이트가 아예 없는 채로 남을 수 있으니, 실패했으면 디렉터리 전체를 되돌리기 절차로
+   복원한다
+4. `app.env` 에 새 값이 있으면 넣는다(`NODE_OPTIONS`, `ALERT_EMAIL`). **`NODE_OPTIONS=--max-old-space-size=1536`
+   은 서버를 `t3.medium`으로 바꾼 뒤에만 넣는다** — `t3.micro`(911MB)에서는 힙 상한이 실제
+   램보다 커서 뜻이 없다
 5. `sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload caddy`
 6. 확인: `systemctl is-active fixup-image-agent caddy fixup-image-agent-monitor.timer`,
    `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`,
-   정적 파일이 Caddy 로 나가는지 `curl -sI http://127.0.0.1/_next/static/<아무 조각> | grep -i cache-control`,
+   정적 파일이 Caddy 로 나가는지 확인(먼저 실제 조각 이름을 하나 찾는다:
+   `sudo ls /var/www/fixup-image-agent/static/current/_next/static/chunks | head -1`).
+   `http://127.0.0.1/…` 는 Host 가 `127.0.0.1` 이라 어느 사이트 블록과도 안 맞으니 쓰지 않는다 —
+   도메인이면 `curl -sI https://formwith.fix-up.kr/_next/static/chunks/<조각> | grep -i cache-control`,
+   IP 뿐이면 `curl -sI -H "Host: <IP>" http://127.0.0.1/_next/static/chunks/<조각> | grep -i cache-control`
+   (또는 `http://<IP>/…` 로 직접),
    `curl -sI https://formwith.fix-up.kr/ | head -1`(200 이어야 한다),
    `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" http://54.180.68.212/`(308 →
    `https://formwith.fix-up.kr/` 이어야 한다)
@@ -293,17 +307,22 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
    크레딧이 떨어질 때 느려진다
 5. 위 「서버 설정 바꾸기」 절차로 메모리 상한을 넣는다
 
-### 배포 전에 진행 중인 생성 수를 본다
+### 배포 전에 최근 생성 요청을 본다
 
 배포는 재시작이다. 끊기면 결과를 잃는 생성(상세페이지·리디자인·캐릭터의 동기 경로)이 도는 중이면
-기다렸다 한다. Caddy 기록은 사이트마다 파일이 나뉘므로(`*.access.log`) 전부 보고, 「최근 5분」은
-줄 수가 아니라 기록 시각(JSON 기록의 `ts`, 초 단위 실수)으로 거른다:
+기다렸다 한다. **Caddy 는 요청이 끝날 때 기록을 남긴다** — 그래서 아래 숫자는 "지금 도는 중인
+개수"가 아니라 **「최근 5분 안에 끝난 생성 요청 수」**다. 지금 진행 중인 것은 이 숫자와 별개로,
+숫자가 0 이어도 잠깐 기다렸다 다시 보는 식으로 가늠한다(끝나야 기록되므로).
+
+Caddy 기록은 사이트마다 파일이 나뉘므로(`*.access.log`) 전부 보고, 「최근 5분」은 줄 수가 아니라
+기록 시각(JSON 기록의 `ts`, 초 단위 실수)으로 거른다. 셀 때는 **`"method":"POST"` 인 줄만** 센다 —
+안 그러면 캐릭터 목록을 그냥 불러보는 `GET /api/characters` 같은 것도 생성으로 잘못 잡힌다:
 
 ```bash
-sudo sh -c 'tail -q -n 5000 /var/log/caddy/*.access.log' | awk -v t=$(( $(date +%s) - 300 )) 'match($0, /"ts":[0-9.]+/) { if (substr($0, RSTART+5, RLENGTH-5)+0 >= t) print }' | grep -cE '"/api/(pdp/(images|key-visual)|redesign/(generate|edit-section)|characters)'
+sudo sh -c 'tail -q -n 5000 /var/log/caddy/*.access.log' | awk -v t=$(( $(date +%s) - 300 )) 'match($0, /"ts":[0-9.]+/) { if (substr($0, RSTART+5, RLENGTH-5)+0 >= t) print }' | grep -F '"method":"POST"' | grep -cE '"/api/(pdp/(images|key-visual)|redesign/(generate|edit-section)|characters)'
 ```
 
-최근 5분 안에 0 이면 배포한다.
+최근 5분 안에 끝난 생성 요청이 0 이면 배포한다.
 
 ## 되돌리기
 
