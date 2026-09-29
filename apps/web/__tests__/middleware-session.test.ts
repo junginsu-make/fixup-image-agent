@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SESSION_START_COOKIE } from "../lib/auth/session-window";
+import { SESSION_START_COOKIE, sessionStartValue } from "../lib/auth/session-window";
 
 /**
  * 로그인 유지 24시간과 「이미 로그인되어 있습니다」 (2026-09-23 사용자).
@@ -10,13 +10,26 @@ import { SESSION_START_COOKIE } from "../lib/auth/session-window";
  * (로그인 화면이 조용히 홈으로 돌려보냄) 배선까지 잡아야 한다.
  */
 let currentUser: { id: string } | null = { id: "user-1" };
+/** 이번 로그인의 세션 번호. 로그인할 때마다 Supabase 가 새로 준다. */
+let currentSessionId: string | null = "session-1";
 let profile: { role: string; status: string; email_confirmed_at: string | null } = {
   role: "member", status: "active", email_confirmed_at: "2026-09-01T00:00:00Z",
 };
 
+/** 로그인 토큰 모양만 흉내 낸다 — 가운데 조각에 session_id 가 든다. */
+const 토큰 = (sid: string | null) =>
+  sid ? ["h", Buffer.from(JSON.stringify({ sub: "user-1", session_id: sid })).toString("base64url"), "s"].join(".") : undefined;
+
+/** 미들웨어가 서버 쪽 로그인을 끊은 기록. */
+const 끊은것: Array<{ scope?: string }> = [];
+
 vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({
-    auth: { getUser: async () => ({ data: { user: currentUser } }) },
+    auth: {
+      getUser: async () => ({ data: { user: currentUser } }),
+      getSession: async () => ({ data: { session: currentUser ? { access_token: 토큰(currentSessionId) } : null } }),
+      signOut: async (options?: { scope?: string }) => { 끊은것.push(options ?? {}); return { error: null }; },
+    },
     from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: profile }) }) }) }),
   }),
 }));
@@ -38,29 +51,37 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "publishable-key");
   currentUser = { id: "user-1" };
+  currentSessionId = "session-1";
+  끊은것.length = 0;
   profile = { role: "member", status: "active", email_confirmed_at: "2026-09-01T00:00:00Z" };
 });
 
+/** 이번 로그인(session-1)에 묶인 시작 시각. */
+const 시작 = (전: number, 세션 = "session-1") => sessionStartValue(Date.now() - 전, 세션);
+
 describe("로그인 유지 24시간", () => {
-  it("처음 들어오면 로그인 시각을 쿠키에 적는다", async () => {
+  it("처음 들어오면 로그인 시각을 이번 로그인에 묶어 적는다", async () => {
     const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token" }));
     const started = response.cookies.get(SESSION_START_COOKIE);
     expect(started).toBeDefined();
-    expect(Number(started!.value)).toBeGreaterThan(Date.now() - 5_000);
+    const [시각, 세션] = started!.value.split(".");
+    expect(Number(시각)).toBeGreaterThan(Date.now() - 5_000);
+    expect(세션).toBe("session-1");
     expect(started!.httpOnly).toBe(true);
     expect(response.status).toBe(200);
   });
 
   it("24시간 안에는 시작 시각을 늘리지 않는다", async () => {
-    const 어제 = String(Date.now() - 20 * 60 * 60 * 1000);
-    const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 어제 }));
+    const response = await middleware(요청("/create", {
+      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(20 * 60 * 60 * 1000),
+    }));
     expect(response.cookies.get(SESSION_START_COOKIE)).toBeUndefined();
     expect(response.status).toBe(200);
   });
 
   it("24시간이 지나면 로그인 쿠키를 지우고 로그인 화면으로 보낸다", async () => {
     const response = await middleware(요청("/create", {
-      [AUTH_COOKIE]: "token", [`${AUTH_COOKIE}.0`]: "조각", [SESSION_START_COOKIE]: String(Date.now() - 하루 - 1000),
+      [AUTH_COOKIE]: "token", [`${AUTH_COOKIE}.0`]: "조각", [SESSION_START_COOKIE]: 시작(하루 + 1000),
     }));
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toContain("/login?expired=1");
@@ -69,12 +90,124 @@ describe("로그인 유지 24시간", () => {
     }
   });
 
+  /**
+   * **서버 쪽 로그인도 끊는다**(2026-09-29 독립 리뷰).
+   *
+   * 쿠키만 지우면 만료 전에 복사해 둔 토큰이 24시간 뒤에도 계속 쓰인다. 이
+   * 기기의 로그인만 끊는다(`scope: "local"`) — 다른 기기는 제 24시간을 따로 잰다.
+   */
+  it("24시간이 지나면 이 기기의 서버 쪽 로그인도 끊는다", async () => {
+    await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(하루 + 1000) }));
+
+    expect(끊은것).toEqual([{ scope: "local" }]);
+  });
+
+  it("24시간 안이면 끊지 않는다", async () => {
+    await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(20 * 60 * 60 * 1000) }));
+
+    expect(끊은것).toEqual([]);
+  });
+
+  /**
+   * **공개 화면은 그 자리에서 손님으로 연다**(2026-09-29 독립 리뷰).
+   *
+   * 만료가 실제로 걸리면서, 시간이 지난 사람이 첫 화면·설명서를 열어도 로그인
+   * 화면으로 끌려갔다. 특히 메일 인증 링크(`/auth/confirm?token_hash=…`)는 그
+   * 값을 잃어 인증이 안 됐다. 로그인 쿠키를 지운 채 **같은 주소로** 다시 보낸다.
+   */
+  it.each([
+    ["/guide/account", ""],
+    ["/auth/confirm", "?token_hash=abc&type=email&next=/access"],
+  ])("공개 화면 %s 는 로그인을 지우고 같은 주소로 다시 연다", async (path, query) => {
+    const response = await middleware(요청(`${path}${query}`, {
+      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(하루 + 1000),
+    }));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(`http://54.180.68.212${path}${query}`);
+    expect(response.cookies.get(AUTH_COOKIE)?.maxAge).toBe(0);
+    expect(response.cookies.get(SESSION_START_COOKIE)?.maxAge, "시작 시각을 안 지우면 되돌아와 또 만료된다").toBe(0);
+  });
+
+  /** 로그인 화면은 그대로 「시간이 지났다」는 안내와 함께 연다. */
+  it("로그인 화면은 만료 안내와 함께 연다", async () => {
+    const response = await middleware(요청("/login", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(하루 + 1000) }));
+
+    expect(response.headers.get("location")).toContain("/login?expired=1");
+  });
+
   it("API 도 함께 막는다 — 화면만 막으면 반쪽이다", async () => {
     const response = await middleware(요청("/api/library", {
-      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: String(Date.now() - 하루 - 1000),
+      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(하루 + 1000),
     }));
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ ok: false, code: "session_expired" });
+  });
+
+  /**
+   * **브라우저가 24시간 뒤에도 시작 시각을 들고 와야 만료를 잰다**(2026-09-29).
+   *
+   * 위 두 시험은 24시간 지난 시작 시각을 **손으로 넣어서** 통과했다. 그런데
+   * 진짜 브라우저는 그 쿠키를 **수명(maxAge)이 다하면 버린다.** 수명이 정확히
+   * 24시간이었으므로, 끊어야 할 그 순간에 쿠키가 먼저 사라졌다. 다음 요청은
+   * 「처음 들어옴」으로 읽혀 새 24시간이 시작됐고, 로그인은 로그인 쿠키
+   * (`@supabase/ssr` 기본 400일)만큼 이어졌다 — 제한이 없었던 셈이다.
+   *
+   * 그래서 시작 시각 쿠키는 **로그인 쿠키만큼 오래 산다.** 만료는 쿠키 수명이
+   * 아니라 적힌 시각으로 잰다.
+   */
+  it("시작 시각 쿠키는 로그인 쿠키만큼(400일) 산다", async () => {
+    const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token" }));
+    const maxAge = response.cookies.get(SESSION_START_COOKIE)!.maxAge!;
+
+    expect(maxAge, "24시간이면 끊어야 할 순간에 쿠키가 먼저 사라진다").toBeGreaterThanOrEqual(400 * 24 * 60 * 60);
+  });
+
+  it("실제 브라우저처럼 — 24시간 1초 뒤 다음 요청에서 로그인 화면으로 보낸다", async () => {
+    // 1) 처음 들어온다. 서버가 시작 시각 쿠키를 준다.
+    const 처음 = await middleware(요청("/create", { [AUTH_COOKIE]: "token" }));
+    const 받은쿠키 = 처음.cookies.get(SESSION_START_COOKIE)!;
+
+    // 2) 24시간 1초가 지났다. 브라우저는 수명이 남은 쿠키만 보낸다.
+    //    같은 로그인이므로 세션 번호는 그대로다 — 시각만 그만큼 앞으로 당겨 흉내 낸다.
+    const 지난초 = 하루 / 1000 + 1;
+    const 아직있나 = 받은쿠키.maxAge! > 지난초;
+    const 보낼쿠키: Record<string, string> = { [AUTH_COOKIE]: "token" };
+    const [받은시각, 받은세션] = 받은쿠키.value.split(".");
+    if (아직있나) 보낼쿠키[SESSION_START_COOKIE] = sessionStartValue(Number(받은시각) - 지난초 * 1000, 받은세션!);
+
+    const 다음 = await middleware(요청("/create", 보낼쿠키));
+
+    expect(아직있나, "브라우저가 시작 시각을 먼저 버렸다 — 만료를 잴 수 없다").toBe(true);
+    expect(다음.status).toBe(307);
+    expect(다음.headers.get("location")).toContain("/login?expired=1");
+  });
+
+  /**
+   * **로그아웃하고 며칠 뒤 다시 로그인해도 바로 튕기지 않는다**(2026-09-29).
+   *
+   * 시작 시각 쿠키가 오래 살게 되면서 로그아웃 뒤에도 남는다. 그 옛 시각으로
+   * 재면, 다시 로그인하자마자 「24시간 지남」으로 내보낸다. 로그인하면 세션
+   * 번호가 바뀌므로 **다른 로그인의 시각은 새로 센다.**
+   */
+  it("로그아웃 뒤 며칠 지나 다시 로그인하면 새 24시간이 시작된다", async () => {
+    currentSessionId = "session-2";
+    const response = await middleware(요청("/create", {
+      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(3 * 하루, "session-1"),
+    }));
+
+    expect(response.status, "다시 로그인했는데 바로 내보냈다").toBe(200);
+    expect(response.cookies.get(SESSION_START_COOKIE)!.value).toMatch(/^\d+\.session-2$/);
+  });
+
+  /** 같은 브라우저에서 계정을 바꿔 들어온 사람은 앞사람의 시각을 물려받지 않는다. */
+  it("계정을 바꿔 들어오면 앞사람의 시각을 물려받지 않는다", async () => {
+    currentSessionId = "other-user-session";
+    const response = await middleware(요청("/create", {
+      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(23 * 60 * 60 * 1000, "session-1"),
+    }));
+
+    expect(response.cookies.get(SESSION_START_COOKIE)!.value).toMatch(/^\d+\.other-user-session$/);
   });
 
   it("로그인하지 않은 사람에게는 시작 시각을 적지 않는다", async () => {

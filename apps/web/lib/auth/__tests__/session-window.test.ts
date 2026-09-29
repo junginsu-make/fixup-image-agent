@@ -3,6 +3,8 @@ import {
   SESSION_MAX_MS,
   SESSION_START_COOKIE,
   sessionAuthCookieNames,
+  sessionIdFromAccessToken,
+  sessionStartValue,
   sessionWindow,
 } from "../session-window";
 
@@ -46,6 +48,62 @@ describe("로그인 유지 시간", () => {
     expect(sessionWindow(String(지금.getTime() + 60_000), 지금)).toEqual({ state: "start", startedAt: 지금.getTime() });
   });
 
+});
+
+/**
+ * **시작 시각은 그 로그인(세션)에 묶인다**(2026-09-29).
+ *
+ * 시작 시각 쿠키가 24시간이 아니라 로그인 쿠키만큼 살게 되면서, 로그아웃해도
+ * 그 쿠키가 남는다. 묶지 않으면 **며칠 뒤 다시 로그인하자마자 「24시간 지남」
+ * 으로 튕기고**, 계정을 바꿔 들어온 사람이 앞사람의 시각을 물려받는다.
+ *
+ * 로그인할 때마다 Supabase 가 새 `session_id` 를 준다(토큰 안에 반드시 있다).
+ * 쿠키에 그 번호를 함께 적고, 번호가 다르면 새로 센다.
+ */
+describe("시작 시각은 그 로그인에 묶인다", () => {
+  const 묶은값 = (시간: number, 세션: string) => sessionStartValue(지금.getTime() - 시간 * 60 * 60 * 1000, 세션);
+
+  it("시각과 세션 번호를 함께 적는다", () => {
+    expect(sessionStartValue(123, "s-1")).toBe("123.s-1");
+  });
+
+  it("같은 로그인이면 24시간 뒤 내보낸다", () => {
+    expect(sessionWindow(묶은값(24.1, "s-1"), 지금, "s-1")).toEqual({ state: "expired" });
+    expect(sessionWindow(묶은값(23.9, "s-1"), 지금, "s-1")).toEqual({ state: "valid" });
+  });
+
+  it("다른 로그인의 시각이면 새로 센다 — 다시 로그인했거나 계정을 바꿨다", () => {
+    expect(sessionWindow(묶은값(72, "s-old"), 지금, "s-new")).toEqual({ state: "start", startedAt: 지금.getTime() });
+  });
+
+  /** 배포 전에 받은 쿠키(시각만)는 세션을 알면 새로 묶는다. 한 번 새 24시간이 된다. */
+  it("옛 모양(시각만)은 새로 묶는다", () => {
+    expect(sessionWindow(시각(30), 지금, "s-1").state).toBe("start");
+  });
+
+  /** 세션 번호를 못 읽으면 옛 방식대로 시각만 본다 — 못 읽는다고 계속 열어 두지 않는다. */
+  it("세션 번호를 모르면 시각만으로 잰다", () => {
+    expect(sessionWindow(묶은값(24.1, "s-1"), 지금, null)).toEqual({ state: "expired" });
+    expect(sessionWindow(시각(24.1), 지금, null)).toEqual({ state: "expired" });
+  });
+});
+
+describe("토큰에서 세션 번호 읽기", () => {
+  const 토큰 = (payload: object) =>
+    ["header", Buffer.from(JSON.stringify(payload)).toString("base64url"), "signature"].join(".");
+
+  it("로그인 토큰에서 session_id 를 읽는다", () => {
+    expect(sessionIdFromAccessToken(토큰({ sub: "u1", session_id: "8f0c-abc" }))).toBe("8f0c-abc");
+  });
+
+  it("없거나 깨졌으면 null", () => {
+    for (const 값 of [undefined, null, "", "a.b", "a.!!!.c", 토큰({ sub: "u1" }), 토큰({ session_id: "" })]) {
+      expect(sessionIdFromAccessToken(값 as never)).toBeNull();
+    }
+  });
+});
+
+describe("지울 쿠키", () => {
   it("내보낼 때 지울 쿠키를 고른다 — Supabase 로그인 쿠키와 우리 시작 시각", () => {
     const names = sessionAuthCookieNames([
       "sb-bbuweuvylystagohqlhf-auth-token",

@@ -190,7 +190,7 @@ export default function ImageGuidePage() {
                   「무엇을 만들까」에 그대로 넣으세요. 화면이 알아보고 <strong className="text-foreground">「그대로
                   생성」</strong>과 「AI가 다듬어서 생성」 중에 고르라고 묻습니다. 「그대로 생성」은 쓴 글을 고치지 않고
                   그대로 보내며, <strong className="text-foreground">04 기획 확인을 건너뜁니다</strong>. AI가 칸을
-                  채우지 않아 고칠 것이 없습니다. 만들 때는 「기획 확인」을 열어 바로 「N장 만들기」를 누르세요.
+                  채우지 않아 고칠 것이 없습니다. 결과 화면 위 안내 줄의 「N장 만들기」를 누르면 바로 만듭니다.
                 </>
               ),
             },

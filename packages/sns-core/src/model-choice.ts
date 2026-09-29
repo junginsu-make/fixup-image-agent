@@ -143,6 +143,16 @@ function canMake(model: ImageModel, ratioId: string): boolean {
   return Boolean(model.supportedRatios?.includes(ratio.enumFallback ?? ratio.id));
 }
 
+/**
+ * 안내 문장에 쓸 비율 이름. **내부 id 가 아니라 비율 버튼에 적힌 이름**이다 —
+ * 「a4-print」는 회원이 본 적 없는 말이다(2026-09-29). 괄호 속 설명(약 290dpi)은
+ * 빼야 조사가 맞게 붙는다.
+ */
+function ratioName(ratioId: string): string {
+  const label = POSTER_RATIOS.find((entry) => entry.id === ratioId)?.label ?? ratioId;
+  return label.replace(/\s*\([^)]*\)\s*$/, "");
+}
+
 export function chooseModelForRatio(
   ratioId: string,
   preferredId: string,
@@ -153,16 +163,16 @@ export function chooseModelForRatio(
 
   if (canMake(preferred, ratioId)) return { model: preferred, switched: false };
 
+  const what = ratioName(ratioId);
   const able = models.find((model) => canMake(model, ratioId));
   if (!able) {
     return {
       model: preferred,
       switched: false,
-      reason: `${withJosa(ratioId, "을를")} 만들 수 있는 방식이 없습니다.`,
+      reason: `${withJosa(what, "을를")} 만들 수 있는 방식이 없습니다.`,
     };
   }
 
-  const what = ratioId === MATCH_SOURCE ? "첨부한 그림과 같은 비율" : ratioId;
   return {
     model: able,
     switched: true,

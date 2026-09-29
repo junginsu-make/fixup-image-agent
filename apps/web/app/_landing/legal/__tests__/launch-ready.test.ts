@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { LEGAL_DOCS, PRIVACY_DOC, TERMS_DOC } from "../documents";
 import { CS_EMAIL } from "../../../../lib/cs/contact";
 import { CHAT_TTL_MS } from "../../../../lib/cs/chat-store";
-import { SESSION_MAX_MS, SESSION_START_COOKIE } from "../../../../lib/auth/session-window";
+import {
+  SESSION_MAX_MS,
+  SESSION_START_COOKIE,
+  SESSION_START_COOKIE_MAX_AGE_S,
+  sessionStartValue,
+} from "../../../../lib/auth/session-window";
 
 /**
  * **게시해도 되는 상태인가**(2026-09-29).
@@ -157,18 +162,28 @@ describe("보관 기간을 코드·설정에서 읽는다", () => {
 
 describe("지키지 못하는 약속을 적지 않는다", () => {
   /**
-   * **24시간 뒤 다시 로그인하게 하는 장치가 지금은 돌지 않는다**(2026-09-29 확인).
+   * **24시간 뒤 다시 로그인 — 이제 코드가 지킨다**(2026-09-29 고침).
    *
-   * 시작 시각 쿠키(`fx_session_started`)의 수명이 정확히 24시간이라, 끊어야
-   * 할 그 순간 브라우저가 쿠키를 먼저 지운다. 다음 요청은 「시작」으로 읽혀
-   * 새 24시간이 시작된다. 로그인 쿠키(`sb-…`)는 최대 400일 남는다.
+   * 전에는 시작 시각 쿠키의 수명이 정확히 24시간이라 끊어야 할 순간에 먼저
+   * 사라져, 장치가 한 번도 걸리지 않았다. 그래서 처리방침에서 그 약속을 뺐었다.
+   * 쿠키를 로그인 쿠키만큼 살게 하고 그 로그인에 묶어 고쳤다
+   * (`__tests__/middleware-session.test.ts` 가 실제 브라우저처럼 잰다).
    *
-   * 그래서 처리방침은 그 약속을 하지 않는다. 장치를 고치면 이 시험을 바꾸고
-   * 처리방침에 다시 적는다.
+   * 약속을 다시 적되, **그 약속을 지키는 조건**(쿠키가 24시간보다 오래 산다)을
+   * 여기서 함께 본다. 누가 수명을 24시간으로 되돌리면 이 시험이 붉어진다.
    */
-  it("24시간 강제 재로그인을 약속하지 않는다", () => {
-    expect(방침).not.toContain("24시간이 지나면 다시 로그인");
-    expect(방침).toContain("로그아웃할 때까지(브라우저에 최대 400일)");
+  it("24시간 뒤 다시 로그인하게 한다고 적고, 코드가 그렇게 한다", () => {
+    expect(SESSION_START_COOKIE_MAX_AGE_S, "쿠키가 24시간보다 오래 살아야 만료를 잰다").toBeGreaterThan(
+      SESSION_MAX_MS / 1000,
+    );
+    expect(방침).toContain("로그인 후 24시간이 지나면 다시 로그인하도록 합니다");
+    expect(방침).toContain("로그아웃하거나 로그인 후 24시간이 지나면 삭제");
+  });
+
+  /** 시작 시각 쿠키에는 그 로그인의 번호도 들어간다(`sessionStartValue`). 적힌 것을 다 밝힌다. */
+  it("시작 시각 쿠키에 무엇이 들어가는지 다 적는다", () => {
+    expect(sessionStartValue(1, "s")).toContain("s");
+    expect(방침).toContain("로그인 시각과 로그인 식별값 기록");
   });
 
   /** 비밀번호 해시는 회사 Supabase 프로젝트의 `auth.users` 에 있다. 「회사 DB 에 없다」는 거짓이다. */

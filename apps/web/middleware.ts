@@ -6,7 +6,14 @@ import { canAccessPage } from "./lib/access/core";
 import { isUsableAccount } from "./lib/membership/usable";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
-import { SESSION_MAX_MS, SESSION_START_COOKIE, sessionAuthCookieNames, sessionWindow } from "./lib/auth/session-window";
+import {
+  SESSION_START_COOKIE,
+  SESSION_START_COOKIE_MAX_AGE_S,
+  sessionAuthCookieNames,
+  sessionIdFromAccessToken,
+  sessionStartValue,
+  sessionWindow,
+} from "./lib/auth/session-window";
 
 const PUBLIC_PATHS = [
   "/",
@@ -93,15 +100,39 @@ export async function middleware(request: NextRequest) {
     API 로 먼저 빠지기 전에 본다. 화면만 막고 API 를 열어 두면 반쪽이다.
   */
   if (user) {
-    const window = sessionWindow(request.cookies.get(SESSION_START_COOKIE)?.value, new Date());
+    // 이번 로그인의 번호. 시작 시각을 이 로그인에 묶어 잰다 — 까닭은 `sessionStartValue`.
+    const { data: { session } } = await supabase.auth.getSession();
+    const sessionId = sessionIdFromAccessToken(session?.access_token);
+    const window = sessionWindow(request.cookies.get(SESSION_START_COOKIE)?.value, new Date(), sessionId);
     if (window.state === "expired") {
+      /*
+        **서버 쪽 로그인도 끊는다**(2026-09-29 독립 리뷰). 쿠키만 지우면 만료 전에
+        복사해 둔 토큰이 계속 쓰인다. 이 기기의 로그인만 끊는다 — 다른 기기는 제
+        24시간을 따로 잰다. 끊기에 실패해도 아래에서 쿠키는 지운다.
+      */
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // 쿠키를 지우는 것으로 이 브라우저는 내보낸다.
+      }
+
       const secure = request.nextUrl.protocol === "https:";
+      /*
+        **공개 화면은 같은 주소로 다시 연다**(2026-09-29 독립 리뷰). 로그인 쿠키를
+        지운 채 보내면 다음 요청은 손님이라 그 화면이 그대로 열린다. 메일 인증
+        링크(`/auth/confirm?token_hash=…`)도 값을 잃지 않는다. 로그인 화면만은
+        「시간이 지났다」는 안내를 달아 연다.
+
+        되돌아와도 다시 만료되지 않는다 — 시작 시각 쿠키를 함께 지우므로 다음
+        요청은 「새로 시작」이다.
+      */
+      const stayHere = matches(pathname, PUBLIC_PATHS) && pathname !== "/login";
       const expired = pathname.startsWith("/api/")
         ? NextResponse.json(
             { ok: false, code: "session_expired", message: "로그인 유지 시간(24시간)이 지났습니다. 다시 로그인해 주세요." },
             { status: 401 },
           )
-        : NextResponse.redirect(new URL("/login?expired=1", base));
+        : NextResponse.redirect(new URL(stayHere ? `${pathname}${request.nextUrl.search}` : "/login?expired=1", base));
       for (const name of sessionAuthCookieNames(request.cookies.getAll().map((cookie) => cookie.name))) {
         expired.cookies.set(name, "", { path: "/", maxAge: 0, secure, sameSite: "lax" });
       }
@@ -109,9 +140,10 @@ export async function middleware(request: NextRequest) {
     }
     if (window.state === "start") {
       // 평문 HTTP 로도 여는 서버라 `secure` 를 항상 붙이면 쿠키가 통째로 버려진다.
-      response.cookies.set(SESSION_START_COOKIE, String(window.startedAt), {
+      response.cookies.set(SESSION_START_COOKIE, sessionStartValue(window.startedAt, sessionId), {
         path: "/", httpOnly: true, sameSite: "lax", secure: request.nextUrl.protocol === "https:",
-        maxAge: Math.ceil(SESSION_MAX_MS / 1000),
+        // 24시간이 아니라 로그인 쿠키만큼 산다 — 까닭은 `SESSION_START_COOKIE_MAX_AGE_S`.
+        maxAge: SESSION_START_COOKIE_MAX_AGE_S,
       });
     }
   }
