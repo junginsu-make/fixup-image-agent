@@ -198,39 +198,48 @@ describe("관리자는 지우기도 전체", () => {
   });
 });
 
-describe("참고 이미지는 회원 공용", () => {
+describe("참고 이미지는 회원마다 따로 (2026-09-28 사용자 결정)", () => {
   /**
-   * **두 번 읽는다 — 내 것 먼저, 그다음 공용**(2026-09-17 사용자 결정).
+   * 전에는 공용 창고였다(2026-09-04). 유료로 공개하면 모르는 고객끼리 같은
+   * 창고를 쓰게 되어 「내 것만」으로 좁혔다.
    *
-   * 공용이 되면서 400장 상한을 전 회원이 나눠 쓰게 됐다. 한 번에 다 읽으면
-   * 남이 많이 올린 날 내 오래된 그림이 목록에서 사라진다. 그래서 내 것을
-   * 따로 한 번 더 읽어 앞자리에 둔다.
+   * **두 번 읽기는 그대로다 — 내 것 먼저, 그다음 나머지**(2026-09-17). 운영자는
+   * 전 회원 것을 보므로 400장 상한에서 내 오래된 그림이 밀리면 안 된다. 회원은
+   * 두 질의 모두 내 것만 돌려받는다.
    */
-  it("한 질의는 내 것만, 다른 질의는 소유자 조건 없이 읽는다", async () => {
+  it("**소유자 조건은 두 질의 모두에 붙는다** — 코드의 이중 확인에만 기대지 않는다", async () => {
+    // 조건이 빠져도 뒤의 `canSeeReference` 가 걸러 누수는 없다. 그래서 지워도
+    // 초록이던 적이 있다(2026-09-17 독립 리뷰). 400장 상한에 걸리기 전에 거르려면
+    // 질의가 먼저 좁혀야 한다.
     tableRows.reference_images = [];
     await listReferenceImages(MEMBER);
     const owner = recorded.filter(
       (entry) => entry.table === "reference_images" && entry.column === "user_id",
     );
-    // 내 것 질의 하나에만 붙는다. 둘 다 붙으면 공용 그림이 안 보인다.
-    expect(owner.map((entry) => entry.value)).toEqual(["member-1"]);
+    // 내 것 질의는 원래 조건이 있고, 나머지 질의에도 조건이 붙어야 한다 — 그래서
+    // 둘 이상이고 모두 내 id 다. 좁히는 줄이 빠지면 하나만 남는다.
+    expect(owner.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(owner.map((entry) => entry.value))).toEqual(new Set(["member-1"]));
   });
 
-  it("**두 질의 모두에 팀 조건이 붙는다** — 한쪽만 걸면 400장 자리를 남의 팀이 차지한다", async () => {
+  it("팀이 있어도 팀 조건으로 넓히지 않는다", async () => {
+    // 팀 기능을 안 쓴다. 표에 남은 소속이 공유를 되살리면 안 된다.
     tableRows.reference_images = [];
     await listReferenceImages({ ...MEMBER, teamId: "team-1" });
-    // 뒤의 `canSeeReference` 가 걸러 누수는 없지만, 상한 앞에서 못 걸러
-    // 「내 옛 그림이 사라진다」가 그대로 돌아온다(2026-09-17 독립 리뷰).
-    const ors = recorded.filter(
-      (entry) => entry.table === "reference_images" && entry.column === "or",
+    expect(teamConditionOn("reference_images")).toBeUndefined();
+    const owner = recorded.filter(
+      (entry) => entry.table === "reference_images" && entry.column === "user_id",
     );
-    expect(ors.length).toBe(2);
+    // 내 것 질의는 원래 조건이 있고, 나머지 질의에도 조건이 붙어야 한다 — 그래서
+    // 둘 이상이고 모두 내 id 다. 좁히는 줄이 빠지면 하나만 남는다.
+    expect(owner.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(owner.map((entry) => entry.value))).toEqual(new Set(["member-1"]));
   });
 
-  it("내 그림이 앞자리를 갖는다 — 상한에 걸려도 안 밀린다", async () => {
+  it("운영자 목록에서 내 그림이 앞자리를 갖는다 — 상한에 걸려도 안 밀린다", async () => {
     tableRows.reference_images = [
-      { id: "mine", user_id: "member-1", team_id: null,
-        storage_path: "member-1/references/mine.png",
+      { id: "mine", user_id: "admin-1", team_id: null,
+        storage_path: "admin-1/references/mine.png",
         title: "내 것", purpose: "both", width: null, height: null,
         created_at: "2026-09-01T00:00:00.000Z" },
       { id: "theirs", user_id: "member-9", team_id: null,
@@ -239,23 +248,12 @@ describe("참고 이미지는 회원 공용", () => {
         created_at: "2026-09-02T00:00:00.000Z" },
     ];
 
-    const images = await listReferenceImages(MEMBER);
+    const images = await listReferenceImages(ADMIN);
     // 같은 줄이 두 질의에 다 나와도 한 번만 남는다.
     expect(images.map((image) => image.id)).toEqual(["mine", "theirs"]);
   });
 
-  it("**팀 조건은 질의에 붙는다** — 코드의 이중 확인에만 기대지 않는다", async () => {
-    // 조건이 빠져도 뒤의 `canSeeReference` 가 걸러 누수는 없다. 그래서 지워도
-    // 1,631개가 초록이었다(2026-09-17 독립 리뷰). 하지만 400장 상한에 걸리기
-    // 전에 거르려면 질의가 먼저 좁혀야 한다.
-    tableRows.reference_images = [];
-    await listReferenceImages({ ...MEMBER, teamId: "team-1" });
-    expect(teamConditionOn("reference_images")).toBe(
-      "team_id.is.null,team_id.eq.team-1,user_id.eq.member-1",
-    );
-  });
-
-  it("팀이 안 붙은 남의 것도 보이되 내 것이 아니라고 표시한다", async () => {
+  it("팀이 안 붙은 남의 것도 안 보인다 — 전에는 공용 창고였다", async () => {
     tableRows.reference_images = [
       {
         id: "r1", user_id: "member-9", team_id: null,
@@ -265,11 +263,7 @@ describe("참고 이미지는 회원 공용", () => {
       },
     ];
 
-    const [image] = await listReferenceImages(MEMBER);
-    expect(image.mine).toBe(false);
-    expect(image.signedUrl).toBe("signed:member-9/references/r1.png");
-    // 회원에게는 올린 사람의 이메일을 주지 않는다.
-    expect(image.ownerEmail).toBeNull();
+    expect(await listReferenceImages(MEMBER)).toEqual([]);
   });
 
   it("남의 팀에 묶인 것은 안 보인다", async () => {
@@ -295,8 +289,7 @@ describe("참고 이미지는 회원 공용", () => {
   });
 
   it("관리자는 남이 올린 것도 지운다", () => {
-    // 공용 창고라 잘못 올라온 것이 모두에게 보인다. 내릴 사람이 없으면
-    // 그대로 남는다.
+    // 관리자는 전부 본다. 잘못 올라온 것을 내릴 사람이 없으면 그대로 남는다.
     expect(canModifyReferenceImage(ADMIN, "member-9")).toBe(true);
     expect(canModifyReferenceImage(ADMIN, "admin-1")).toBe(true);
   });
@@ -376,11 +369,17 @@ describe("고른 참고 이미지 낱개", () => {
     created_at: "2026-09-01T00:00:00.000Z",
   });
 
-  it("팀이 안 붙은 남의 것도 읽는다 — 목록에서 보였으면 쓸 수 있어야 한다", async () => {
+  it("팀이 안 붙은 남의 것도 id 를 알아도 안 읽힌다 — 목록과 같은 규칙", async () => {
+    // 목록에서 안 보이는 것을 id 로 붙일 수 있으면 남의 사진이 내 작업에 들어간다.
     tableRows.reference_images = [줄("r1", "member-9", null)];
+    expect(await referenceImagesByIds(MEMBER, ["r1"])).toEqual([]);
+  });
+
+  it("내 것은 id 로 읽는다", async () => {
+    tableRows.reference_images = [줄("r1", "member-1", null)];
     const [image] = await referenceImagesByIds(MEMBER, ["r1"]);
     expect(image?.id).toBe("r1");
-    expect(image?.mine).toBe(false);
+    expect(image?.mine).toBe(true);
     // **id 로 걸러 읽는다.** 빠지면 보이는 행을 전부 읽고 전부 서명한다.
     expect(recorded.find((entry) => entry.column === "in:id")?.value).toEqual(["r1"]);
   });

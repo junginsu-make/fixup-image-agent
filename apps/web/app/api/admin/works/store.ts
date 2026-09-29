@@ -699,6 +699,10 @@ async function fileExists(
  * 팀 X 면 팀 X(원래 보던 사람 + 주인인 관리자). 넣은 **다음에** 고친다 — 팀 도장
  * 트리거가 null 을 「안 정함」으로 읽어 관리자 팀을 찍기 때문이다.
  *
+ * **2026-09-28 부터 이 표도 「주인만」이다**(202609280004 — 팀 칸이 보는 범위를
+ * 넓히지 않는다). 위의 공개 위험은 그 규칙에서는 생기지 않는다. 팀을 물려받는
+ * 동작은 팀 기능을 다시 켤 때를 위해 그대로 둔다.
+ *
  * **「원본과 같은 범위」는 복사·재사용 시점에만 맞는다.** 그 뒤 원본 주인이 팀을
  * 옮기거나 팀이 지워져도(FK `on delete set null`) 복사본은 따라가지 않는다 — 복사본은
  * 팀 이동에서 빠지기 때문이다(`lib/teams/store.ts` 의 `moveFollowingWork`). 새 노출은
@@ -772,12 +776,15 @@ export async function copyReferencesToSelf(
     thumb_path: string | null; title: string | null; purpose: string;
     width: number | null; height: number | null;
   }>) {
-    if (!ownerCouldSeeReference(workOwner, { userId: row.user_id, teamId: row.team_id })) continue;
-
+    // 이미 관리자 것이면 그대로 준다. 관리자 손을 거쳐 새어 나갈 남의 그림이
+    // 아니다 — 2026-09-28 「내 것만」 뒤로는 주인이 관리자 그림을 못 보므로, 이
+    // 판단이 아래 검사보다 앞서야 공용 시절 작업을 다시 만들 때 안 빠진다.
     if (row.user_id === ownerUserId) {
       results.push({ from: row.id, id: row.id, storagePath: row.storage_path });
       continue;
     }
+
+    if (!ownerCouldSeeReference(workOwner, { userId: row.user_id, teamId: row.team_id })) continue;
 
     const newId = adoptedReferenceId(row.id, ownerUserId);
     const target = copiedReferencePath(row.storage_path, ownerUserId, newId);

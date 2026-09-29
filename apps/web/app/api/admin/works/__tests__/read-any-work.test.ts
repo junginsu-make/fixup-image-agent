@@ -144,6 +144,9 @@ describe("readAnyWork", () => {
 describe("readAnyWork — 카드뉴스 그림", () => {
   it("카드 원본과 사본을 함께 서명해 주소를 채운다", async () => {
     snsRow = snsProjectRow();
+    // 카드 파일 경로의 첫 칸은 작업 주인이다. 목록은 주인 폴더 것만 서명한다
+    // (2026-09-28, `collectCardPaths`).
+    snsRow.user_id = "회원A";
     (snsRow.data as Record<string, unknown>).flow = {
       stage: "result",
       cards: [{

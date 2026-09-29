@@ -405,12 +405,12 @@ describe("ownerCouldSeeReference", () => {
     expect(ownerCouldSeeReference(주인, { userId: "주인", teamId: "팀Y" })).toBe(true);
   });
 
-  it("주인 팀 것은 된다", () => {
-    expect(ownerCouldSeeReference(주인, { userId: "팀원", teamId: "팀X" })).toBe(true);
+  it("주인 팀원 것도 안 된다 — 팀 기능을 안 쓴다(2026-09-28)", () => {
+    expect(ownerCouldSeeReference(주인, { userId: "팀원", teamId: "팀X" })).toBe(false);
   });
 
-  it("공용(팀 없음)은 된다", () => {
-    expect(ownerCouldSeeReference(주인, { userId: "아무개", teamId: null })).toBe(true);
+  it("팀 없는 남의 것도 안 된다 — 전에는 공용 창고였다", () => {
+    expect(ownerCouldSeeReference(주인, { userId: "아무개", teamId: null })).toBe(false);
   });
 
   it("**남의 팀 것은 안 된다**", () => {

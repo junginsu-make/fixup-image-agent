@@ -285,10 +285,11 @@ describe("무엇을 복사하나", () => {
     expect(rows.size).toBe(1);
   });
 
-  it("주인 팀원의 그림은 옮긴다", async () => {
+  it("주인 팀원의 그림도 안 옮긴다 — 주인이 못 보던 것이다(2026-09-28)", async () => {
     넣기(원본("팀원것", { user_id: "팀원", team_id: "팀X" }));
 
-    expect(await copyReferencesToSelf(["팀원것"], 관리자, 주인, 관리자팀)).toHaveLength(1);
+    expect(await copyReferencesToSelf(["팀원것"], 관리자, 주인, 관리자팀)).toEqual([]);
+    expect(rows.size).toBe(1);
   });
 
   it("이미 관리자 것이면 복사하지 않고 그대로 준다", async () => {

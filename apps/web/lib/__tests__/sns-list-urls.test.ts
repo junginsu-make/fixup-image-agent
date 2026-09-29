@@ -3,6 +3,7 @@ import { collectCardPaths, withCardUrls } from "../sns/list-urls";
 
 const project = (id: string, cards: Array<{ index: number; assetPath?: string; thumbPath?: string }>) => ({
   id,
+  userId: "u",
   data: {
     attachments: [],
     flow: {
@@ -36,6 +37,19 @@ describe("목록에 필요한 그림 경로 모으기", () => {
 
   it("아직 그림이 없는 카드는 건너뛴다", () => {
     expect(collectCardPaths([project("a", [{ index: 1 }])] as never)).toEqual([]);
+  });
+
+  it("**작업 주인 폴더 밖의 경로는 서명하지 않는다** (2026-09-28)", () => {
+    // 「그대로 넣기」 카드는 기획 때 첨부 경로를 그대로 받는다. 그 경로가 남의
+    // 폴더면 목록이 서버 권한으로 남의 파일에 서명해 내보냈다(독립 리뷰).
+    const paths = collectCardPaths([
+      project("a", [
+        { index: 1, assetPath: "u/sns/a/1.png", thumbPath: "u/sns/a/1.thumb.webp" },
+        { index: 2, assetPath: "someone/references/x.png", thumbPath: "someone/references/x.thumb.webp" },
+        { index: 3, assetPath: "u-2/sns/a/3.png" },
+      ]),
+    ] as never);
+    expect(paths).toEqual(["u/sns/a/1.png", "u/sns/a/1.thumb.webp"]);
   });
 });
 

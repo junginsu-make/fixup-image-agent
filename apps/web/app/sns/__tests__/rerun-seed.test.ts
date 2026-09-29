@@ -57,6 +57,21 @@ describe("snsSeed — 내 작업", () => {
     expect(seed.attachments[0]).toMatchObject({ id: "a1", role: "cover" });
     expect(seed.droppedAttachments).toBe(0);
   });
+
+  it("**주소를 못 받은 첨부는 빼고 센다** — 내 폴더 밖이라 서명이 안 된 것 (2026-09-28)", () => {
+    // 관리자 복사본은 첨부가 원래 회원 폴더에 남는다. 그 첨부는 주소가 비어 와서,
+    // 그대로 실으면 02 단계에 빈 칸이 생기고 만들기가 이유 없이 거절된다(독립 리뷰).
+    const withBlank = {
+      ...project,
+      data: {
+        ...project.data,
+        attachments: [project.data.attachments[0]!, { ...project.data.attachments[1]!, url: "" }],
+      },
+    };
+    const seed = snsSeed(withBlank, true);
+    expect(seed.attachments.map((attachment) => attachment.id)).toEqual(["a1"]);
+    expect(seed.droppedAttachments).toBe(1);
+  });
 });
 
 describe("snsSeed — 남의 작업", () => {

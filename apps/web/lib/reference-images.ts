@@ -20,7 +20,7 @@ import type { ReferencePurpose } from "../app/api/reference-sets/schema";
 import type { UserRole } from "./membership/types";
 
 /**
- * 참고 이미지 — 라이브러리의 공용 창고.
+ * 참고 이미지 — 라이브러리의 본보기 창고.
  *
  * 여기 들어온 그림은 카드뉴스·포스터·상세페이지가 전부 쓴다. 그래서 서버에서
  * 넣고 읽는 길이 하나여야 한다.
@@ -29,12 +29,12 @@ import type { UserRole } from "./membership/types";
  * 길이 둘이면 화면마다 한쪽만 붙게 되고, 실제로 상세페이지의 선택창은
  * 운영에서 참고 이미지를 못 봤다. 두 모드를 여기서 한 번에 가른다.
  *
- * **회원 공용이다.** 여기 들어온 그림은 "따라 그릴 본보기"라, 한 사람이 올린
- * 것을 다른 사람이 못 쓰면 같은 그림을 사람 수만큼 다시 올려야 한다. 작업물과
- * 다른 점이 이것이다 — 작업물은 각자의 결과라 남에게 보이면 안 된다.
+ * **올린 사람만 본다**(2026-09-28 사용자 결정). 2026-09-04 부터 회원 공용이었다 —
+ * 내부 몇 사람이 쓸 때는 같은 본보기를 사람 수만큼 다시 올리지 않게 하는 편이
+ * 나았다. 유료로 공개하면 모르는 고객끼리 같은 창고를 쓰게 되어 좁혔다. 운영자는
+ * 전부 본다. 규칙은 `lib/teams/reference-scope.ts` 한 곳이다.
  *
- * **읽기만 공용이다.** 고치고 지우는 것은 올린 사람만 한다. 남이 올린 본보기가
- * 사라지면 그것을 쓰던 다른 사람의 작업이 조용히 깨진다.
+ * 고치고 지우는 것은 올린 사람과 관리자만 한다.
  */
 
 const BUCKET = "library";
@@ -72,11 +72,11 @@ export interface ReferenceViewer {
  * 회원끼리는 서로 못 지운다. 남이 올린 본보기를 지우면 그것을 쓰던 사람의
  * 세트와 작업이 조용히 깨지는데, 지운 쪽은 그 사실을 알 길이 없다.
  *
- * 관리자는 예외로 둔다. 참고 이미지는 회원 공용 창고라 잘못 올라온 것이
- * 모두에게 보인다 — 내릴 수 있는 사람이 아무도 없으면 그대로 남는다.
+ * 관리자는 예외로 둔다. 관리자는 전부 보므로, 잘못 올라온 것을 내릴 수 있는
+ * 사람이 아무도 없으면 그대로 남는다.
  *
- * 목록 읽기가 모두에게 열리면서 이 판정이 **꼭 필요해졌다.** 전에는 남의
- * 행이 애초에 보이지 않아 못 지웠지만, 이제는 보인다.
+ * 지우기 라우트는 행을 서버 권한으로 찾으므로 이 판정이 **유일한 문지기**다
+ * (`app/api/reference-images/[id]/route.ts`).
  */
 export function canModifyReferenceImage(
   viewer: { userId: string; role: UserRole },
@@ -120,22 +120,22 @@ export function localFileUrl(id: string): string {
 /**
  * 창고에 있는 그림.
  *
- * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 팀이 안 붙은 것은
- * 누구나, 팀에 묶인 것은 그 팀만, 운영자는 전부다.
+ * **누가 보나는 `referenceVisibility()` 하나가 정한다.** 회원은 내 것만,
+ * 운영자는 전부다(2026-09-28 사용자 결정 — 그전에는 공용 창고였다).
  *
  * 서버 권한으로 읽으므로 **RLS 가 여기를 안 막는다.** 이 필터가 유일한
  * 문지기다 — 서명 URL 도 admin 클라이언트가 발급해 Storage 정책의
  * `{user_id}/...` 규칙에 안 걸린다.
  *
- * 400장 상한은 그대로 둔다. 공용이 되면서 한 사람이 보던 수보다 훨씬 빨리
- * 찰 것이므로, 넘치면 최신 것부터 잘린다. 검색이나 쪽 나누기는 화면 쪽에서
+ * 400장 상한은 그대로 둔다. 운영자 목록은 전 회원 것이라 빨리 찰 수 있으므로,
+ * 넘치면 최신 것부터 잘린다. 검색이나 쪽 나누기는 화면 쪽에서
  * 필요해질 때 붙인다.
  */
 /**
  * 참고 이미지 한 장의 바이트 — **올린 사람만.**
  *
- * 목록(`listReferenceImages`)과 범위가 **일부러 다르다.** 목록은 공용 창고라
- * 팀이 안 붙은 것을 누구나 보고, 운영자는 전부 본다. 그런데 **가공해서
+ * 목록(`listReferenceImages`)과 범위가 **일부러 다르다.** 목록은 운영자에게
+ * 전부를 보여 준다. 그런데 **가공해서
  * 내려받는 것은 다른 일이다** — ZIP 은 서비스 밖으로 나가고 그 안에는 누구
  * 것인지 안 적힌다. 저장소가 이미 같은 판단을 해 뒀다
  * (`lib/access/core.ts:66` 「내보내기는 전체가 열린 사람도 자기 것만이다」).
@@ -207,10 +207,11 @@ export async function listReferenceImages(viewer: ReferenceViewer): Promise<Refe
   /**
    * **내 그림을 먼저, 그리고 절대 안 밀리게.**
    *
-   * 공용이 되면서 400장 상한을 전 회원이 나눠 쓰게 됐다. 한 번에 다 읽으면
-   * 남이 최근에 많이 올린 날 **내 오래된 그림이 목록에서 사라진다**
+   * 운영자는 전 회원 것을 보므로 400장 상한을 전 회원이 나눠 쓴다. 한 번에 다
+   * 읽으면 남이 최근에 많이 올린 날 **내 오래된 그림이 목록에서 사라진다**
    * (2026-09-17 독립 리뷰). 그래서 두 번 읽는다 — 내 것 400, 나머지 400.
-   * 둘 다 색인을 타는 가벼운 질의다.
+   * 둘 다 색인을 타는 가벼운 질의다. 회원은 두 질의 모두 내 것만 돌려받는다
+   * (`readReferences` 가 좁힌다).
    *
    * 차례도 이 순서다. 고르는 창은 내 그림부터 보게 된다(사용자 결정).
    */
@@ -262,7 +263,7 @@ type ReferenceNarrow = (
  * 목록과 낱개가 **같은 규칙**을 타는 한 곳. 갈리면 한쪽이 조용히 넓어진다.
  *
  * 질의를 여럿 받는다. 앞에서 온 줄이 앞자리를 갖고 같은 줄은 한 번만 남는다 —
- * 「내 것 먼저, 그다음 공용」을 그렇게 만든다.
+ * 「내 것 먼저, 그다음 나머지」를 그렇게 만든다.
  */
 async function readReferences(
   viewer: ReferenceViewer,
@@ -270,21 +271,13 @@ async function readReferences(
 ): Promise<ReferenceImageView[]> {
   const visibility = referenceVisibility({
     userId: viewer.userId,
-    teamId: viewer.teamId ?? null,
     isAdmin: canSeeOwnerEmails(viewer),
   });
 
   const supabase = createSupabaseAdminClient();
   const scoped = (narrow: ReferenceNarrow) => {
     const query = narrow(referenceQuery(supabase));
-    if (visibility.kind === "team") {
-      return query.or(
-        `team_id.is.null,team_id.eq.${visibility.teamId},user_id.eq.${visibility.userId}`,
-      );
-    }
-    if (visibility.kind === "loose") {
-      return query.or(`team_id.is.null,user_id.eq.${visibility.userId}`);
-    }
+    if (visibility.kind === "own") return query.eq("user_id", visibility.userId);
     return query;
   };
 
@@ -417,7 +410,7 @@ export async function saveReferenceImage(input: {
         /**
          * 목록에 걸 사본.
          *
-         * 창고는 **공용**이라 한 화면에 400장까지 뜬다. 라이브러리에서 가장
+         * 운영자에게는 한 화면에 400장까지 뜬다. 라이브러리에서 가장
          * 무거운 화면이다.
          *
          * **원본은 그대로 둔다.** 이 그림은 화면에만 뜨는 것이 아니라 fal 에
