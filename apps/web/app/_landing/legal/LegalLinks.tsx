@@ -75,6 +75,8 @@ export function LegalLinks() {
         <div
           className="mcs-legal-backdrop"
           role="presentation"
+          // 모달의 기본 스크롤은 유지하고, 배경 페이지의 전역 휠 보정에는 전달하지 않는다.
+          onWheel={(event) => event.stopPropagation()}
           onClick={(event) => {
             // 바깥을 눌러도 닫힌다. 안쪽 글을 끌어 고르는 것과는 구분한다.
             if (event.target === event.currentTarget) close();
