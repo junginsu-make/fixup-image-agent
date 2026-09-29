@@ -264,32 +264,49 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
    Caddy 검사(`caddy validate`)도 통과해야 넘어간다 — 실패하면 스크립트가 스스로 옛 설정으로
    되돌린다.
 
-   **이 단계가 0 이 아닌 코드로 끝나면 4·5단계로 가지 말고 바로 아래 「되돌리기」를 한다.**
+   **이 단계가 0 이 아닌 코드로 끝나면 먼저 메시지를 본다.** 「…처음 한 번 절차를 보세요」
+   (다른 파일에 같은 사이트 주소가 이미 있음) 또는 「잘못된 주소」(주소 모양이 틀림)면
+   **아직 아무것도 안 바뀐 것이다** — 이 두 검사는 useradd·install 등 시스템을 건드리기
+   전에 먼저 돈다. 되돌리지 말고 원인을 고쳐 3단계를 다시 돌린다.
+   그 밖의 실패(예: Caddy 설정 검사 실패)는 4·5단계로 가지 말고 바로 아래 「되돌리기」를 한다.
    `install-host.sh` 는 자기가 방금 쓴 사이트 파일만 되돌린다 — 「처음 한 번만」에서 손으로
    옮긴 `formwith.caddy`(→ `formwith.caddy.manual`)까지는 되돌려 주지 않는다. 그 상태로 두면
    도메인 사이트가 아예 없는 채로 남을 수 있으니, 실패했으면 디렉터리 전체를 되돌리기 절차로
    복원한다
-4. `app.env` 에 새 값이 있으면 넣는다(`NODE_OPTIONS`, `ALERT_EMAIL`). **`NODE_OPTIONS=--max-old-space-size=1536`
-   은 서버를 `t3.medium`으로 바꾼 뒤에만 넣는다** — `t3.micro`(911MB)에서는 힙 상한이 실제
-   램보다 커서 뜻이 없다
-5. `sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload caddy`
+4. `app.env` 에 새 값이 있으면 넣는다(`ALERT_EMAIL` 등). **`NODE_OPTIONS` 은 운영 app.env 에
+   이미 줄이 있다 — 새 줄을 넣지 말고 그 줄의 숫자를 `1536`으로 바꾼다(`t3.medium`으로 바꾼
+   뒤에만)** — `t3.micro`(911MB)에서는 힙 상한이 실제 램보다 커서 뜻이 없다. 적용 확인:
+   `sudo tr '\0' '\n' < /proc/$(systemctl show -p MainPID --value fixup-image-agent)/environ | grep NODE_OPTIONS`
+5. `sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload-or-restart caddy`
 6. 확인: `systemctl is-active fixup-image-agent caddy fixup-image-agent-monitor.timer`,
    `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`,
-   정적 파일이 Caddy 로 나가는지 확인(먼저 실제 조각 이름을 하나 찾는다:
-   `sudo ls /var/www/fixup-image-agent/static/current/_next/static/chunks | head -1`).
+   정적 파일이 Caddy 로 나가는지 확인. **정적 사본은 새 릴리스를 한 번 배포한 뒤에 생긴다 —
+   아직 없으면(이번처럼 설정 변경을 새 릴리스 배포보다 먼저 한 경우) 이 확인은 다음 배포
+   뒤에 한다.** 먼저 실제 조각 파일 이름을 하나 찾는다(디렉터리가 섞여 나오지 않도록 파일만
+   고른다): `sudo find /var/www/fixup-image-agent/static/current/_next/static/chunks -maxdepth 1 -type f -name '*.js' | head -1`.
    `http://127.0.0.1/…` 는 Host 가 `127.0.0.1` 이라 어느 사이트 블록과도 안 맞으니 쓰지 않는다 —
    도메인이면 `curl -sI https://formwith.fix-up.kr/_next/static/chunks/<조각> | grep -i cache-control`,
    IP 뿐이면 `curl -sI -H "Host: <IP>" http://127.0.0.1/_next/static/chunks/<조각> | grep -i cache-control`
    (또는 `http://<IP>/…` 로 직접),
    `curl -sI https://formwith.fix-up.kr/ | head -1`(200 이어야 한다),
    `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" http://54.180.68.212/`(308 →
-   `https://formwith.fix-up.kr/` 이어야 한다)
+   `https://formwith.fix-up.kr/` 이어야 한다).
+
+   감시 메일이 실제로 가는지도 시험해 본다: `ALERT_EMAIL` 을 app.env 에 넣은 뒤
+   `sudo env MONITOR_STATE_DIR=/tmp/mon-test MONITOR_HEALTH_URL=http://127.0.0.1:9/ bash /usr/local/lib/fixup-image-agent/monitor.sh`
+   를 두 번 돌린다(준비 상태 확인이 두 번 연속 실패해야 메일을 보낸다) — 받은편지함에
+   `[FormWith 서버] down` 메일이 와야 한다. 끝나면 `sudo rm -rf /tmp/mon-test` 로 시험 상태를
+   지운다. 메일이 안 오면 `sudo journalctl -t …` 를 뒤지기 전에, 방금 돌린 명령 자체의 출력에
+   찍힌 「감시 메일을 보내지 못했습니다」줄부터 본다 — 손으로 돌리면 그 자리에서 실패 이유를
+   알려 준다.
 
 접근 기록 파일 이름이 바뀐다: 손으로 만들어 두었던 동안은 `/var/log/caddy/formwith.access.log`
 였고, `install-host.sh` 가 도메인 사이트를 깐 뒤로는 그 기록도 `/var/log/caddy/fixup-image-agent.access.log`
 에 쌓인다.
 
-**되돌리기**: `sudo rm -rf /etc/caddy/sites && sudo cp -a /root/caddy-sites.bak /etc/caddy/sites && sudo cp /root/unit.bak /etc/systemd/system/fixup-image-agent.service && sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload caddy`
+**되돌리기**: `sudo test -d /root/caddy-sites.bak && sudo rm -rf /etc/caddy/sites && sudo cp -a /root/caddy-sites.bak /etc/caddy/sites && sudo cp /root/unit.bak /etc/systemd/system/fixup-image-agent.service && sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload-or-restart caddy`
+(맨 앞의 `test -d`는 안전장치다 — 백업이 없으면 `&&` 사슬이 그 자리에서 멈춰 아무것도 안
+지운다.)
 
 ### 서버 크기 바꾸기 (AWS 콘솔, 약 5분 정지)
 
@@ -304,7 +321,9 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 3. **인스턴스 상태 → 시작**. 탄력적 IP 는 **0단계를 확인했을 때만** 그대로 붙어 있다(주소
    안 바뀜)
 4. **작업 → 인스턴스 설정 → 크레딧 사양 변경**에서 `unlimited` 인지 본다. `standard` 면 CPU
-   크레딧이 떨어질 때 느려진다
+   크레딧이 떨어질 때 느려진다. `unlimited` 는 오래 바쁘면 CPU 크레딧 추가 요금이 붙을 수
+   있다(`t3.medium` 기준 크레딧을 다 쓴 뒤 시간당 소액). `standard` 는 요금 대신 느려지는
+   쪽이다
 5. 위 「서버 설정 바꾸기」 절차로 메모리 상한을 넣는다
 
 ### 배포 전에 최근 생성 요청을 본다
@@ -319,8 +338,11 @@ Caddy 기록은 사이트마다 파일이 나뉘므로(`*.access.log`) 전부 �
 안 그러면 캐릭터 목록을 그냥 불러보는 `GET /api/characters` 같은 것도 생성으로 잘못 잡힌다:
 
 ```bash
-sudo sh -c 'tail -q -n 5000 /var/log/caddy/*.access.log' | awk -v t=$(( $(date +%s) - 300 )) 'match($0, /"ts":[0-9.]+/) { if (substr($0, RSTART+5, RLENGTH-5)+0 >= t) print }' | grep -F '"method":"POST"' | grep -cE '"/api/(pdp/(images|key-visual)|redesign/(generate|edit-section)|characters)'
+sudo sh -c 'cat /var/log/caddy/*.access.log' | awk -v t=$(( $(date +%s) - 300 )) 'match($0, /"ts":[0-9.]+/) { if (substr($0, RSTART+5, RLENGTH-5)+0 >= t) print }' | grep -F '"method":"POST"' | grep -cE '"/api/(pdp/(images|key-visual)|redesign/(generate|edit-section)|characters)'
 ```
+
+`tail -n 5000` 이 아니라 파일 전체(`cat`)를 본다 — 기록은 10MiB 에서 잘려 가벼우니 전체를
+읽어도 무겁지 않은데, 5000줄은 100명 부하에서 1분치뿐이라 「최근 5분」을 거르기에 모자란다.
 
 최근 5분 안에 끝난 생성 요청이 0 이면 배포한다.
 
