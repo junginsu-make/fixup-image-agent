@@ -323,3 +323,16 @@ describe("고친 결과의 이름과 내려받기", () => {
     expect(source).not.toContain("/images/${image.variantIndex}/file");
   });
 });
+
+/**
+ * **고치기는 고칠 그림을 직접 말한다**(2026-09-29 점검).
+ *
+ * 「이 장만 고치기」는 고르기를 먼저 보내고 입력칸을 연다. 서버가 그때 「골라져
+ * 있는」 그림을 고치면, 고르기가 실패하거나 늦을 때 다른 변형이 고쳐진다.
+ * 서버 쪽은 `poster-edit-route.test.ts` 가 값으로 잰다.
+ */
+describe("고치기가 고칠 그림을 싣는다", () => {
+  it("고치기 요청 본문에 열려 있는 그림의 id 를 싣는다", () => {
+    expect(source).toContain("JSON.stringify({ instruction, ...(editing ? { imageId: editing } : {}) })");
+  });
+});

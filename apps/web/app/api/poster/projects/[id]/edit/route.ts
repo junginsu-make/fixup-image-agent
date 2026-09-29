@@ -1,6 +1,6 @@
 import { knownPosterCreditSize } from "../../../../../../lib/membership/image-sizes";
 import { creditImagePlan, markCreditStarted, bindCreditJob } from "../../../../../../lib/membership/credit-ledger";
-import { buildPosterEditJob, canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
+import { buildPosterEditJob, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
 import { editAttachmentInputs } from "./edit-attachments";
 import { z } from "zod";
@@ -24,6 +24,13 @@ const EditSchema = z.object({
   instruction: z.string().trim().min(1, "무엇을 고칠지 적어 주세요."),
   /** 다른 비율로 다시 만들 때만 준다. */
   ratioId: z.string().optional(),
+  /**
+   * **고칠 그림.** 화면이 직접 말한다. 안 보내는 옛 화면은 골라 둔 그림을 고친다.
+   *
+   * 전에는 서버가 그때 「골라져 있는」 그림을 고쳤다. 화면의 고르기가 실패하거나
+   * 늦게 닿으면 **다른 변형이 고쳐졌다**(2026-09-29 점검).
+   */
+  imageId: z.string().trim().min(1).max(64).optional(),
 }).strict();
 
 /**
@@ -50,14 +57,24 @@ export async function POST(request: Request, context: Context) {
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
 
-    const images = await stores.images.byProject(id);
-    if (!canEdit(images)) {
-      return Response.json(
-        { ok: false, message: "먼저 고칠 변형 하나를 고르세요." },
-        { status: 400 },
-      );
+    /*
+     * 이름표는 필요 없다 — 요청 장부를 안 읽는다.
+     *
+     * **본인 그림만.** 작업·그림 읽기는 팀이면 팀원 것까지 열려 있는데 작업 저장은
+     * 본인 것만 된다. 팀원 작업을 고치면 fal 에 돈을 낸 **뒤에** 저장에서 막혔다.
+     * 여기서 본인 것만 보면 돈이 나가기 전에 「고칠 그림을 찾을 수 없다」로 멈춘다.
+     */
+    const images = await stores.images.byProject(id, { lineage: false, ownOnly: true });
+    const wanted = parsed.data.imageId;
+    // 이 작업의 그림 안에서만 찾는다 — 남의 그림 id 가 와도 여기서 끝난다.
+    const parent = wanted
+      ? images.find((image) => image.id === wanted)
+      : images.find((image) => image.selected);
+    if (!parent) {
+      return wanted
+        ? Response.json({ ok: false, message: "고칠 그림을 찾을 수 없습니다." }, { status: 404 })
+        : Response.json({ ok: false, message: "먼저 고칠 변형 하나를 고르세요." }, { status: 400 });
     }
-    const parent = images.find((image) => image.selected)!;
 
     /**
      * 고친 기준이 될 그림을 **fal 에 올려서** 넘긴다.
@@ -115,17 +132,17 @@ export async function POST(request: Request, context: Context) {
     // 화면이 수정하면서 비율을 바꿀 수 있으므로 **정해진 뒤의** 값을 본다.
     const ratioId = parsed.data.ratioId ?? project.ratio;
     /*
-     * **처음 만들기와 같은 모델을 쓴다.** 처음 만들기는 고른 모델이 그 비율을 못
-     * 만들면 만들 수 있는 모델로 바꾸고(`generate/route.ts`), 바꾼 것을 작업에
-     * 적지 않는다. 작업의 모델을 그대로 쓰면 그런 작업은 고치기가 「만들 수
-     * 없는 조합」으로 거절됐다(2026-09-29 리뷰).
+     * **부모 그림을 만든 모델로 고친다.** 그 모델은 부모 요청 줄에 적혀 있다
+     * (`requests.modelOf`). 처음 만들기는 고른 모델이 그 비율을 못 만들면 바꾸고
+     * 바꾼 것을 작업에 적지 않아서, 작업의 모델을 쓰면 「만들 수 없는 조합」으로
+     * 거절되거나 모델 목록 차례가 바뀐 뒤(09-10 무렵)의 옛 작업은 부모와 다른
+     * 모델로 고쳐졌다(2026-09-29 리뷰·점검).
      *
-     * 같은 규칙이라 **모델 목록 차례가 그때와 같으면** 부모 그림과 같은 모델이
-     * 나온다. 목록 맨 앞이 바뀐 뒤(09-10 무렵 gpt-image-2 → flare)의 옛 작업은
-     * 다른 모델로 고친다 — 전에는 아예 거절됐다. 정확히 하려면 부모 요청 줄의
-     * `model_id` 를 읽어야 하는데 그 읽기 길이 아직 없다.
+     * 그 모델이 이 비율을 못 만들면(비율을 바꿔 고칠 때) 처음 만들기와 같은 규칙
+     * (`chooseModelForRatio`)으로 바꾼다. 부모 모델을 모르면(옛 기록) 작업의 모델이다.
      */
-    const modelId = chooseModelForRatio(ratioId, project.modelId, IMAGE_MODELS).model.id;
+    const parentModelId = await stores.requests.modelOf(parent.generationRequestId).catch(() => null);
+    const modelId = chooseModelForRatio(ratioId, parentModelId ?? project.modelId, IMAGE_MODELS).model.id;
     const job = planEditJob({
       projectId: id,
       parentImageId: parent.id,

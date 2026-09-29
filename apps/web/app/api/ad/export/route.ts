@@ -86,7 +86,12 @@ async function posterImageFile(
   key: string,
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   // 이름표는 필요 없다 — 요청 장부를 안 읽는다.
-  const images = await posterStoresForUser(userId).images.byProject(projectId, { lineage: false });
+  /*
+   * **본인 그림만.** `posterStoresForUser` 는 세션 사용자로 읽지만 그림 읽기는 팀이면
+   * 팀원 것까지 열려 있다(RLS). 팀 입구는 2026-09-22 에 닫혔어도 그 규칙은 살아
+   * 있어서 주인 조건을 따로 건다(2026-09-29 점검).
+   */
+  const images = await posterStoresForUser(userId).images.byProject(projectId, { lineage: false, ownOnly: true });
   /*
    * **파일 길과 같은 규칙으로 고른다**(`findPosterImage`). 전에는 여기서 「번호가
    * 같은 첫 줄」을, 미리보기(파일 길)는 「번호가 같은 가장 최근 줄」을 골라 둘이

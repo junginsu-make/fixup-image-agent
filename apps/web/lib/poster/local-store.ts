@@ -147,6 +147,12 @@ export function createLocalPosterRequestStore(
         return typeof value === "number" && Number.isFinite(value) ? value : null;
       });
     },
+    async modelOf(id) {
+      return database.read((data) => {
+        const row = bucket(data, "posterRequests").find((entry) => entry.id === id && entry.userId === userId);
+        return row?.modelId?.trim() ? row.modelId : null;
+      });
+    },
   };
 }
 

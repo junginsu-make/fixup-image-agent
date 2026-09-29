@@ -17,11 +17,13 @@ let editsResult: Result;
 const notCalls: unknown[][] = [];
 /** 어느 표를 물었나. */
 const tables: string[] = [];
+/** `eq` 조건. */
+const eqCalls: unknown[][] = [];
 
 function query(result: () => Result) {
   const chain = {
     select: () => chain,
-    eq: () => chain,
+    eq: (...args: unknown[]) => { eqCalls.push(args); return chain; },
     order: () => chain,
     not: (...args: unknown[]) => { notCalls.push(args); return chain; },
     then: (resolve: (value: Result) => unknown) => resolve(result()),
@@ -53,6 +55,7 @@ const imageRow = (id: string, requestId: string, variantIndex: number, createdAt
 beforeEach(() => {
   notCalls.length = 0;
   tables.length = 0;
+  eqCalls.length = 0;
   // DB 가 변형 번호로만 줄 세운 그대로 — 고친 결과(e1)가 「변형 1」 옆에 낀다.
   imagesResult = {
     data: [
@@ -97,6 +100,21 @@ describe("운영 결과 목록", () => {
     expect(tables).toEqual(["poster_images"]);
     // 차례는 그대로 만든 차례다.
     expect(list.map((image) => image.id)).toEqual(["v1", "v2", "v3", "e1"]);
+  });
+
+  /*
+   * **본인 것만.** 그림은 부모(작업)를 통해 보이고 팀이면 팀원 것도 보인다(RLS).
+   * 내보내기·고치기처럼 밖으로 나가거나 돈이 드는 길은 본인 것만 봐야 한다
+   * (2026-09-29 점검 — 팀 입구는 닫혔지만 팀 읽기 규칙은 살아 있다).
+   */
+  it("본인 것만 달라고 하면 주인 조건을 건다", async () => {
+    await createSupabasePosterImageStore("u1").byProject("p1", { lineage: false, ownOnly: true });
+    expect(eqCalls).toContainEqual(["user_id", "u1"]);
+  });
+
+  it("안 달라고 하면 지금처럼 주인 조건 없이 읽는다 — 결과 화면은 팀원 것도 본다", async () => {
+    await createSupabasePosterImageStore("u1").byProject("p1");
+    expect(eqCalls).not.toContainEqual(["user_id", "u1"]);
   });
 
   it("그림 목록 자체를 못 읽으면 지금처럼 알린다", async () => {

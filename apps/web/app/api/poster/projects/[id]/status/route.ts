@@ -117,6 +117,28 @@ async function saveResult(
  * **상태 조회는 새 작업을 만들지 않는다.** 과금이 아니므로 화면이 주기적으로
  * 불러도 된다. 탭을 닫아도 request_id 가 장부에 남아 다시 열면 이어진다.
  */
+/**
+ * 원가 장부에 적을 모델 — **이 요청이 실제로 쓴 모델**이다.
+ *
+ * 관리자 원가 화면은 `generation_events.model` 로 단가표를 찾아 값을 매긴다
+ * (`202609100004_llm_cost.sql`). 작업의 모델을 적으면, 처음 만들기가 비율 때문에
+ * 모델을 바꾼 요청이나 부모 그림의 모델로 고친 요청이 **다른 모델의 단가**로
+ * 잡혔다(2026-09-29 사용자 요청). 요청 줄을 못 읽으면(옛 기록·조회 실패) 지금까지
+ * 처럼 작업의 모델로 떨어진다. 회원이 깎이는 장수와는 무관하다.
+ */
+async function modelUsedFor(
+  requests: { modelOf(id: string): Promise<string | null> },
+  requestRowId: string,
+  projectModelId: string | undefined,
+): Promise<string> {
+  try {
+    return (await requests.modelOf(requestRowId)) ?? projectModelId ?? "";
+  } catch {
+    // 이름표 하나 때문에 확정을 막지 않는다 — 결과는 이미 받았다.
+    return projectModelId ?? "";
+  }
+}
+
 export async function POST(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
@@ -166,6 +188,7 @@ export async function POST(request: Request, context: Context) {
      */
     if (result.done) {
       const project = await stores.projects.get(id);
+      const usedModel = await modelUsedFor(stores.requests, parsed.data.requestRowId, project?.modelId);
       /**
        * **이번 회차만 센다.**
        *
@@ -192,7 +215,7 @@ export async function POST(request: Request, context: Context) {
              * 회원 차감(`consumed_units`)과 우리가 낸 돈은 다른 값이라,
              * 차감만 적으면 원가를 영영 알 수 없다.
              */
-            { model: project?.modelId ?? "", billableImages: savedCount, deliveredImages: savedCount, completionConfirmed: true },
+            { model: usedModel, billableImages: savedCount, deliveredImages: savedCount, completionConfirmed: true },
           );
           settled = !usage?.settlementPending;
         } catch {
@@ -247,7 +270,10 @@ export async function POST(request: Request, context: Context) {
             false,
             0,
             `poster_${verdict.kind}`,
-            binding ? { model: project?.modelId ?? "", billableImages: 0, deliveredImages: 0, completionConfirmed: true } : undefined,
+            binding ? {
+              model: await modelUsedFor(stores.requests, parsed.data.requestRowId, project?.modelId),
+              billableImages: 0, deliveredImages: 0, completionConfirmed: true,
+            } : undefined,
           );
           if (binding) await closeCreditPoster(auth.member.userId, id, binding.request_id, "ready", !usage?.settlementPending);
           else await stores.projects.update(id, {

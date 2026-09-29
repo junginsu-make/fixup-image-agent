@@ -736,7 +736,12 @@ export function PosterClient(
     try {
       // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/edit`, {
-        body: JSON.stringify({ instruction }),
+        /*
+          **고칠 그림을 직접 말한다.** 안 보내면 서버가 그때 「골라져 있는」 그림을
+          고친다 — 위 단추의 고르기가 실패하거나 늦으면 다른 변형이 고쳐졌다
+          (2026-09-29 점검).
+        */
+        body: JSON.stringify({ instruction, ...(editing ? { imageId: editing } : {}) }),
       })).json();
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
       setBusy({ kind: "generate", label: "고치는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
