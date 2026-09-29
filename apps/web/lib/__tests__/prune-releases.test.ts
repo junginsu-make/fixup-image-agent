@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, readdirSync, symlinkSync, writeFileSync, utimesSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, readdirSync, symlinkSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -136,5 +136,23 @@ onLinuxLike("prune-releases.sh", () => {
     symlinkSync(join(root, "static", "r1"), join(root, "static", "current"));
     prune(1);
     expect(readdirSync(join(root, "static")).sort()).toEqual(["current", "r1", "r3"]);
+  });
+
+  it("static_root 자체가 심볼릭 링크라도 current 가 가리키는 실제 사본은 남긴다 — 문자열만 비교하면 못 잡는다", () => {
+    // static_root(`static`)가 그 자체로 다른 곳(`static-real`)을 가리키는
+    // 심볼릭 링크인 상황을 흉내낸다. `${static_root}/r1`(미해석) 과
+    // `readlink -f "${static_root}/current"`(해석됨)는 같은 파일이라도 문자열이
+    // 다르다 — 양쪽 다 실제 경로로 풀어야 지금 쓰는 사본을 안 지운다.
+    for (const [id, age] of [["r1", 30], ["r2", 20], ["r3", 10]] as const) {
+      makeRelease(id, age);
+    }
+    mkdirSync(join(root, "static-real", "r1", "_next", "static"), { recursive: true });
+    mkdirSync(join(root, "static-real", "r2", "_next", "static"), { recursive: true });
+    symlinkSync(join(root, "static-real"), join(root, "static"));
+    symlinkSync(join(root, "static-real", "r1"), join(root, "static-real", "current"));
+
+    prune(1);
+
+    expect(existsSync(join(root, "static-real", "r1"))).toBe(true);
   });
 });

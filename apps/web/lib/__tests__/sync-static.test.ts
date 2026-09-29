@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -51,9 +51,45 @@ onLinuxLike("sync-static.sh", () => {
     sync(release("r1"), "r1");
     sync(release("old", false), "old");
     expect(readlinkSync(join(root, "static", "current"))).toBe(join(root, "static", "r1"));
+    expect(existsSync(join(root, "static", "old"))).toBe(false);
   });
 
-  it("릴리스 id 에 경로 문자가 있으면 거절한다", () => {
-    expect(() => sync(release("r1"), "../x")).toThrow();
+  it("릴리스 id 에 경로 문자가 있거나 점으로 시작하면 종료 코드 2 로 이유를 남기고 거절한다", () => {
+    for (const badId of ["../x", ".x"]) {
+      let error: unknown;
+      try {
+        sync(release("r1"), badId);
+      } catch (caught) {
+        error = caught;
+      }
+      const execError = error as { status?: number | null; stderr?: string };
+      expect(execError.status).toBe(2);
+      expect(execError.stderr).toContain("잘못된 릴리스 id");
+    }
+  });
+
+  it("사본의 폴더는 0750, 파일은 0640 권한이다 — Caddy 는 일반 계정이라 더 넓으면 안 된다", () => {
+    sync(release("r1"), "r1");
+    const dirMode = (statSync(join(root, "static", "r1", "_next", "static")).mode & 0o777).toString(8);
+    const fileMode = (statSync(join(root, "static", "r1", "_next", "static", "chunks", "a.js")).mode & 0o777).toString(8);
+    expect(dirMode).toBe("750");
+    expect(fileMode).toBe("640");
+  });
+
+  it("같은 id 로 두 번 동기화해도 성공하고 current 가 그대로다 — 서비스 중인 사본을 다시 쓰지 않는다", () => {
+    const dir = release("r1");
+    sync(dir, "r1");
+    expect(() => sync(dir, "r1")).not.toThrow();
+    expect(readlinkSync(join(root, "static", "current"))).toBe(join(root, "static", "r1"));
+    expect(readFileSync(join(root, "static", "r1", "_next", "static", "chunks", "a.js"), "utf8")).toBe("// r1\n");
+  });
+
+  it("전에 죽은 채 남은 .tmp 가 있어도 새로 시작해 정상 처리한다 — 서비스 중인 사본 위에 덮어쓰지 않는다", () => {
+    mkdirSync(join(root, "static", ".r1.tmp", "stale"), { recursive: true });
+    writeFileSync(join(root, "static", ".r1.tmp", "stale", "junk.txt"), "leftover");
+    sync(release("r1"), "r1");
+    expect(readFileSync(join(root, "static", "r1", "_next", "static", "chunks", "a.js"), "utf8")).toBe("// r1\n");
+    expect(existsSync(join(root, "static", ".r1.tmp"))).toBe(false);
+    expect(readlinkSync(join(root, "static", "current"))).toBe(join(root, "static", "r1"));
   });
 });

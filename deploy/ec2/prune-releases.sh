@@ -12,7 +12,7 @@
 # 둔 서버에서 배포하면 `current` 가 목록 아래쪽에 있다. 그걸 지우면 돌고 있는
 # 서비스가 제 파일을 잃는다.
 #
-#   sudo bash deploy/ec2/prune-releases.sh [남길개수] [app_root]
+#   sudo bash deploy/ec2/prune-releases.sh [남길개수] [app_root] [static_root]
 #
 # 기본값은 5 개, /opt/fixup-image-agent 다. 되돌리기(`rollback-release.sh`)가
 # 갈 수 있는 범위가 남긴 개수로 줄어든다 — 개수를 줄일 때는 그걸 감수하는지
@@ -86,7 +86,9 @@ if [[ -d ${static_root} ]]; then
   for dir in "${removed[@]}"; do
     target=${static_root}/$(basename "${dir}")
     target_real=$(readlink -f "${target}" 2>/dev/null || true)
-    [[ -d ${target} && ${target_real} != "${static_current}" ]] && rm -rf -- "${target}"
+    if [[ -d ${target} && ${target_real} != "${static_current}" ]]; then
+      rm -rf -- "${target}"
+    fi
   done
 fi
 
