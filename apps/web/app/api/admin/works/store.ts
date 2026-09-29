@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
@@ -20,7 +21,7 @@ import {
   type PosterImageRow,
   type PosterProjectRow,
 } from "../../../../lib/poster/supabase-store-core";
-import type { PosterProjectRecord } from "@fixup/poster-core";
+import { orderPosterImages, type PosterProjectRecord } from "@fixup/poster-core";
 import type { SnsProjectCreateRecord, SnsProjectRecord } from "../../sns/projects/project-service";
 import { listCharacters } from "../../../../lib/characters";
 import { ownerIdsOf, withOwner } from "./core";
@@ -340,11 +341,17 @@ export async function readAnyWorkImages(
     )),
   );
 
-  return rows.map((row) => ({
+  /*
+    **만든 차례로 준다.** 이 목록은 결과 화면에 그대로 들어가 다시 만든 회차에
+    「1회차·2회차」 이름이 붙는다. 번호로만 줄 세우면 같은 번호끼리의 차례를 DB 가
+    보장하지 않아 둘째 회차가 1회차가 될 수 있었다(2026-09-29 리뷰). 회원 길
+    (`byProject`)과 같은 규칙이다.
+  */
+  return orderPosterImages(rows.map((row) => ({
     ...toImageRecord(row),
     url: byPath.get(row.asset_path) ?? null,
     thumbUrl: row.thumb_path ? byPath.get(row.thumb_path) ?? null : null,
-  }));
+  })));
 }
 
 /**
@@ -1016,12 +1023,18 @@ export async function copyWorkToSelf(
     .order("created_at", { ascending: true })
     .order("variant_index", { ascending: true });
   const imageRows = (images ?? []) as Parameters<typeof posterCopyPlan>[0];
-  // 원본 회차의 고친 이력(지시·부모 그림). 복사본에서도 「고친 결과」로 불리게 옮긴다.
-  const { data: sourceRequests } = await admin.from("poster_generation_requests")
-    .select("id,parent_image_id,edit_instruction,mode")
+  // 원본 회차의 고친 이력(지시·부모 그림)과 그 회차의 모델·비율. 복사본에서도
+  // 「고친 결과」로 불리게 옮긴다. 이 작업 것만 읽는다.
+  const { data: sourceRequests, error: sourceRequestError } = await admin.from("poster_generation_requests")
+    .select("id,parent_image_id,edit_instruction,mode,model_id,ratio_id,size")
     .eq("project_id", id);
+  // 못 읽어도 복사는 한다 — 고친 이력은 이름표일 뿐이다. 조용히 넘기지는 않는다.
+  if (sourceRequestError) {
+    console.error(`[admin] 원본 작업의 요청 장부를 읽지 못해 고친 이력 없이 복사합니다(${id}): ${sourceRequestError.message}`);
+  }
   const sourceRequestRows = (sourceRequests ?? []) as Array<{
     id: string; parent_image_id: string | null; edit_instruction: string | null; mode: string | null;
+    model_id: string | null; ratio_id: string | null; size: Record<string, unknown> | null;
   }>;
 
   /*
@@ -1037,30 +1050,35 @@ export async function copyWorkToSelf(
     **비용은 0 이다.** 복사는 AI 를 안 부른다 — 0 이 아닌 값을 적으면 장부가
     쓰지 않은 돈을 세게 된다.
   */
-  const requestIdFor: Record<string, string> = {};
-  for (const round of posterCopyRounds(imageRows)) {
-    const source = sourceRequestRows.find((row) => row.id === round.sourceRequestId);
-    const { data: request, error: requestError } = await admin
-      .from("poster_generation_requests")
-      .insert({
+  /*
+    **id 를 미리 정해 한 문장으로 넣는다** — 회차 중 하나에서 실패해 요청 줄 일부만
+    남는 일이 없다(2026-09-29 리뷰).
+  */
+  const rounds = posterCopyRounds(imageRows);
+  const requestIdFor: Record<string, string> = Object.fromEntries(
+    rounds.map((round) => [round.sourceRequestId, randomUUID()]),
+  );
+  if (rounds.length) {
+    const { error: requestError } = await admin.from("poster_generation_requests").insert(rounds.map((round) => {
+      const source = sourceRequestRows.find((row) => row.id === round.sourceRequestId);
+      return {
+        id: requestIdFor[round.sourceRequestId],
         user_id: ownerUserId,
         project_id: created.id,
-        model_id: from.modelId,
-        ratio_id: from.ratio,
+        // 고치기는 비율·모델을 바꿀 수 있다 — 작업 값이 아니라 그 회차 값을 옮긴다.
+        model_id: source?.model_id ?? from.modelId,
+        ratio_id: source?.ratio_id ?? from.ratio,
         mode: source?.mode === "i2i" ? "i2i" : "t2i",
-        size: {},
+        size: source?.size ?? {},
         requested_images: Math.min(Math.max(round.count, 1), 3),
         returned_images: round.count,
         unit_cost_usd: 0,
         cost_usd: 0,
         // 부모 그림은 복사된 그림의 id 를 안 뒤에 단다(아래).
         edit_instruction: source?.edit_instruction ?? null,
-      })
-      .select("id").single();
-    if (requestError || !request) {
-      throw new Error(requestError?.message ?? "복사하지 못했습니다.");
-    }
-    requestIdFor[round.sourceRequestId] = request.id as string;
+      };
+    }));
+    if (requestError) throw new Error(requestError.message);
   }
 
   /*
@@ -1073,11 +1091,11 @@ export async function copyWorkToSelf(
       .update({ status: from.status }).eq("id", created.id);
   }
 
-  const plan = posterCopyPlan(imageRows, ownerUserId, created.id as string, requestIdFor);
+  const plan = posterCopyPlan(imageRows, ownerUserId, created.id as string, requestIdFor, Date.now());
   await moveAssets(admin, plan.moves);
   if (plan.rows.length) {
     const { data: insertedRows, error } = await admin.from("poster_images")
-      .insert(plan.rows).select("id,asset_path");
+      .insert(plan.rows).select("id,generation_request_id,variant_index");
     if (error) throw new Error(error.message);
     /*
       **고친 이력을 잇는다.** 실패해도 복사는 끝난 것이다 — 그림은 다 들어갔고
@@ -1087,7 +1105,7 @@ export async function copyWorkToSelf(
       sourceRequests: sourceRequestRows,
       requestIdFor,
       sources: plan.sources,
-      inserted: (insertedRows ?? []) as Array<{ id: string; asset_path: string }>,
+      inserted: (insertedRows ?? []) as Array<{ id: string; generation_request_id: string; variant_index: number }>,
     });
     for (const update of updates) {
       const { error: parentError } = await admin.from("poster_generation_requests")

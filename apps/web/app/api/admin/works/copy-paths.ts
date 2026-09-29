@@ -146,22 +146,28 @@ export function posterCopyRounds(
  * 규약을 벗어난 경로의 행은 **아예 싣지 않는다.** 그림 없는 변형 행을 남기면
  * 목록에 빈 칸이 생긴다.
  *
- * `sources` 는 새 행과 같은 차례로 원본 그림 id 와 옮긴 경로를 든다 — 넣은 뒤
- * 받은 새 id 와 짝지어 고친 이력을 잇는다(`posterCopyParentUpdates`).
+ * `sources` 는 새 행과 같은 차례로 원본 그림 id 와 (새 요청, 번호)를 든다 — 넣은
+ * 뒤 받은 새 id 와 짝지어 고친 이력을 잇는다(`posterCopyParentUpdates`).
+ *
+ * **만든 시각은 복사한 때(`copiedAtMs`)이고, 회차마다 1ms 씩 벌린다.** 한 번에 넣으면
+ * 시각이 전부 같아져 목록이 변형 번호로만 줄 서고, 회차가 뒤섞여 「고친 결과」가
+ * 부모보다 앞에 섰다(2026-09-29 리뷰). 벌려 두면 원본과 같은 차례로 선다.
  */
 export function posterCopyPlan(
   rows: PosterImageRow[],
   newOwnerId: string,
   newProjectId: string,
   requestIdFor: Readonly<Record<string, string>>,
+  copiedAtMs: number,
 ): {
   rows: Array<Record<string, unknown>>;
   moves: AssetMove[];
-  sources: Array<{ sourceImageId: string | null; assetPath: string }>;
+  sources: Array<{ sourceImageId: string | null; requestId: string; variantIndex: number }>;
 } {
   const moves: AssetMove[] = [];
   const next: Array<Record<string, unknown>> = [];
-  const sources: Array<{ sourceImageId: string | null; assetPath: string }> = [];
+  const sources: Array<{ sourceImageId: string | null; requestId: string; variantIndex: number }> = [];
+  const roundOf = new Map(posterCopyRounds(rows).map((round, index) => [round.sourceRequestId, index]));
 
   for (const row of rows) {
     const requestId = requestIdFor[row.generation_request_id];
@@ -185,8 +191,9 @@ export function posterCopyPlan(
       review: row.review ?? null,
       asset_path: asset,
       thumb_path: thumb,
+      created_at: new Date(copiedAtMs + (roundOf.get(row.generation_request_id) ?? 0)).toISOString(),
     });
-    sources.push({ sourceImageId: row.id ?? null, assetPath: asset });
+    sources.push({ sourceImageId: row.id ?? null, requestId, variantIndex: row.variant_index });
   }
 
   return { rows: next, moves, sources };
@@ -197,20 +204,23 @@ export function posterCopyPlan(
  *
  * 원본 요청의 `parent_image_id` 는 원본 그림을 가리킨다. 복사본에서 그대로 두면
  * 남의 그림을 가리키고, 비우면 「변형 3에서 고침」이 사라진다. 복사된 그림의 id 는
- * 넣은 뒤에야 알아서, 옮긴 경로(`sources` ↔ `inserted`)로 짝을 찾는다.
+ * 넣은 뒤에야 알아서 **(요청, 번호)** 로 짝을 찾는다 — DB 가 유일함을 보장하는
+ * 열쇠다. 경로로 찾으면 09-09 전 작업(고친 결과가 원본 파일을 덮어써 두 줄의
+ * 경로가 같다)에서 고친 결과가 자기 자신을 부모로 가리켰다(2026-09-29 리뷰).
  *
  * 부모가 복사되지 않았으면(지워졌거나 경로 규약을 벗어나 빠짐) 잇지 않는다.
  */
 export function posterCopyParentUpdates(input: {
   sourceRequests: ReadonlyArray<{ id: string; parent_image_id: string | null }>;
   requestIdFor: Readonly<Record<string, string>>;
-  sources: ReadonlyArray<{ sourceImageId: string | null; assetPath: string }>;
-  inserted: ReadonlyArray<{ id: string; asset_path: string }>;
+  sources: ReadonlyArray<{ sourceImageId: string | null; requestId: string; variantIndex: number }>;
+  inserted: ReadonlyArray<{ id: string; generation_request_id: string; variant_index: number }>;
 }): Array<{ requestId: string; parentImageId: string }> {
-  const newIdByPath = new Map(input.inserted.map((row) => [row.asset_path, row.id]));
+  const key = (requestId: string, variantIndex: number) => `${requestId}:${variantIndex}`;
+  const newIdByKey = new Map(input.inserted.map((row) => [key(row.generation_request_id, row.variant_index), row.id]));
   const newIdBySource = new Map(input.sources
     .filter((source) => source.sourceImageId)
-    .map((source) => [source.sourceImageId!, newIdByPath.get(source.assetPath)]));
+    .map((source) => [source.sourceImageId!, newIdByKey.get(key(source.requestId, source.variantIndex))]));
   return input.sourceRequests.flatMap((request) => {
     const requestId = input.requestIdFor[request.id];
     const parentImageId = request.parent_image_id ? newIdBySource.get(request.parent_image_id) : undefined;

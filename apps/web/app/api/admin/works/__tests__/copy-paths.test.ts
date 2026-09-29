@@ -60,6 +60,7 @@ describe("copiedAssetPath", () => {
 });
 
 import { posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan } from "../copy-paths";
+import { orderPosterImages } from "@fixup/poster-core";
 
 /**
  * **무엇을 어디로 옮기고, 표에는 무엇을 적을까.**
@@ -136,9 +137,10 @@ describe("posterCopyPlan", () => {
       asset_path: "회원A/poster/작업1/1.png", thumb_path: null },
   ];
   const 한회차 = { 요청1: "새요청" };
+  const 복사시각 = Date.parse("2026-09-29T10:00:00.000Z");
 
   it("원본과 사본을 모두 옮길 목록에 넣는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차, 복사시각);
 
     expect(plan.moves.map((move) => move.to)).toEqual([
       "관리자B/poster/작업2/0.png",
@@ -148,7 +150,7 @@ describe("posterCopyPlan", () => {
   });
 
   it("새 행은 소유자와 작업이 복사한 사람 것이다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차, 복사시각);
 
     expect(plan.rows[0]).toMatchObject({
       user_id: "관리자B",
@@ -159,11 +161,31 @@ describe("posterCopyPlan", () => {
     });
   });
 
-  it("id 와 만든 시각은 새로 받는다 — 옮겨 적지 않는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
+  it("id 는 새로 받고, 만든 시각은 복사한 때다 — 원본을 옮겨 적지 않는다", () => {
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차, 복사시각);
 
     expect(plan.rows[0]).not.toHaveProperty("id");
-    expect(plan.rows[0]).not.toHaveProperty("created_at");
+    expect(plan.rows[0]!.created_at).toBe("2026-09-29T10:00:00.000Z");
+  });
+
+  /*
+   * **복사본도 회차 차례를 지킨다**(2026-09-29 리뷰).
+   *
+   * 모든 줄을 한 번에 넣으면 만든 시각이 전부 같아져, 목록이 변형 번호로만 줄 서
+   * 회차가 뒤섞이고 「고친 결과」가 부모보다 앞에 섰다. 회차마다 1ms 씩 벌린다.
+   */
+  it("회차마다 만든 시각을 벌려 원본과 같은 차례로 선다", () => {
+    const 여러회차 = [
+      { id: "a0", generation_request_id: "요청1", variant_index: 0, asset_path: "회원A/poster/작업1/요청1/0.png" },
+      { id: "a1", generation_request_id: "요청1", variant_index: 1, asset_path: "회원A/poster/작업1/요청1/1.png" },
+      { id: "e0", generation_request_id: "요청2", variant_index: 0, asset_path: "회원A/poster/작업1/요청2/0.png" },
+      { id: "b0", generation_request_id: "요청3", variant_index: 0, asset_path: "회원A/poster/작업1/요청3/0.png" },
+    ];
+    const plan = posterCopyPlan(여러회차, "관리자B", "작업2", { 요청1: "n1", 요청2: "n2", 요청3: "n3" }, 복사시각);
+    const 줄 = plan.rows.map((row, index) => ({
+      key: 여러회차[index]!.id, createdAt: row.created_at as string, variantIndex: row.variant_index as number,
+    }));
+    expect(orderPosterImages(줄).map((row) => row.key)).toEqual(["a0", "a1", "e0", "b0"]);
   });
 
   it("생성 요청은 **새로 만든 것**을 가리킨다 — 남의 장부 줄이 아니다", () => {
@@ -176,7 +198,7 @@ describe("posterCopyPlan", () => {
       원칙은 그대로 두되(남의 줄을 안 가리킨다) 값은 채운다. 복사한 사람
       소유의 **비용 0** 짜리 요청 행을 만들어 그것을 가리킨다.
     */
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차, 복사시각);
 
     expect(plan.rows[0]!.generation_request_id).toBe("새요청");
     expect(plan.rows[0]!.generation_request_id).not.toBe("요청1");
@@ -186,7 +208,7 @@ describe("posterCopyPlan", () => {
     // 그림 없는 변형 행을 남기면 목록에 빈 칸이 생긴다.
     const plan = posterCopyPlan(
       [{ id: "x", generation_request_id: "요청1", variant_index: 0, asset_path: "이상한경로.png", thumb_path: null }],
-      "관리자B", "작업2", 한회차,
+      "관리자B", "작업2", 한회차, 복사시각,
     );
 
     expect(plan.moves).toEqual([]);
@@ -206,7 +228,7 @@ describe("posterCopyPlan", () => {
       ...rows,
       { id: "고친그림", generation_request_id: "요청2", variant_index: 0, asset_path: "회원A/poster/작업1/요청2/0.png", thumb_path: null },
     ];
-    const plan = posterCopyPlan(두회차, "관리자B", "작업2", { 요청1: "새요청1", 요청2: "새요청2" });
+    const plan = posterCopyPlan(두회차, "관리자B", "작업2", { 요청1: "새요청1", 요청2: "새요청2" }, 복사시각);
 
     const pairs = plan.rows.map((row) => `${row.generation_request_id}:${row.variant_index}`);
     expect(new Set(pairs).size).toBe(pairs.length);
@@ -214,7 +236,7 @@ describe("posterCopyPlan", () => {
   });
 
   it("새 요청을 못 받은 회차의 행은 싣지 않는다 — 남의 줄을 가리키지 않는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", {});
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", {}, 복사시각);
     expect(plan.rows).toEqual([]);
     expect(plan.moves).toEqual([]);
   });
@@ -235,16 +257,20 @@ describe("posterCopyRounds", () => {
 /*
  * **고친 이력을 복사본에서도 잇는다.** 요청 줄의 `parent_image_id` 는 원본 그림을
  * 가리킨다 — 복사본에서는 **복사된 그 그림**을 가리켜야 「변형 3에서 고침」이 된다.
- * 복사된 그림의 id 는 넣은 뒤에야 알므로, 옮긴 경로로 짝을 찾는다.
+ * 복사된 그림의 id 는 넣은 뒤에야 알므로 짝을 찾는다.
+ *
+ * **짝은 경로가 아니라 (요청, 번호)로 찾는다**(2026-09-29 리뷰). 09-09 전에는 고치기
+ * 결과가 원본 변형 1 의 파일을 덮어써 두 줄의 경로가 같았다 — 경로로 찾으면 고친
+ * 결과가 **자기 자신**을 부모로 가리켰다. (요청, 번호)는 DB 가 유일함을 보장한다.
  */
 describe("posterCopyParentUpdates", () => {
   const sources = [
-    { sourceImageId: "원본변형3", assetPath: "관리자B/poster/작업2/요청1/2.png" },
-    { sourceImageId: "원본고친것", assetPath: "관리자B/poster/작업2/요청2/0.png" },
+    { sourceImageId: "원본변형3", requestId: "새요청1", variantIndex: 2 },
+    { sourceImageId: "원본고친것", requestId: "새요청2", variantIndex: 0 },
   ];
   const inserted = [
-    { id: "새변형3", asset_path: "관리자B/poster/작업2/요청1/2.png" },
-    { id: "새고친것", asset_path: "관리자B/poster/작업2/요청2/0.png" },
+    { id: "새변형3", generation_request_id: "새요청1", variant_index: 2 },
+    { id: "새고친것", generation_request_id: "새요청2", variant_index: 0 },
   ];
 
   it("고치기 요청의 부모를 복사된 그림으로 바꿔 단다", () => {
@@ -266,6 +292,25 @@ describe("posterCopyParentUpdates", () => {
       sources,
       inserted,
     })).toEqual([]);
+  });
+
+  it("옛 작업처럼 원본과 고친 결과의 파일 경로가 같아도 자기 자신을 부모로 달지 않는다", () => {
+    const 옛작업 = [
+      { id: "원본0", generation_request_id: "요청1", variant_index: 0, asset_path: "회원A/poster/작업1/0.png" },
+      { id: "고친것", generation_request_id: "요청2", variant_index: 0, asset_path: "회원A/poster/작업1/0.png" },
+    ];
+    const requestIdFor = { 요청1: "새요청1", 요청2: "새요청2" };
+    const plan = posterCopyPlan(옛작업, "관리자B", "작업2", requestIdFor, 0);
+    const updates = posterCopyParentUpdates({
+      sourceRequests: [{ id: "요청2", parent_image_id: "원본0" }],
+      requestIdFor,
+      sources: plan.sources,
+      inserted: [
+        { id: "새원본0", generation_request_id: "새요청1", variant_index: 0 },
+        { id: "새고친것", generation_request_id: "새요청2", variant_index: 0 },
+      ],
+    });
+    expect(updates).toEqual([{ requestId: "새요청2", parentImageId: "새원본0" }]);
   });
 });
 

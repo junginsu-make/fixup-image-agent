@@ -261,7 +261,8 @@ export function AdExportClient() {
       /**
        * **첫 장을 고른 상태로 시작한다.**
        *
-       * `position` 은 이제 배열 번호가 아니라 **서버 번호**다. `0` 으로 두면
+       * `position` 은 배열 번호가 아니다 — 라이브러리는 **서버 번호**, 포스터는 목록
+       * 안 순번이고 서버에는 `imageId` 를 보낸다(`posterImagePicks`). `0` 으로 두면
        * 목록에 0번이 없을 때(라이브러리에서 첫 그림의 서명이 실패하면 그렇다)
        * **아무것도 선택돼 보이지 않고**, 그 상태로 뽑으면 사용자가 본 적 없는
        * 0번을 보내 「찾을 수 없습니다」가 온다 — 썸네일은 멀쩡히 보이는데.
@@ -670,7 +671,9 @@ export function AdExportClient() {
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             type="button"
-            disabled={!item || !picked.length || busy || noImages}
+            // 그림 목록을 불러오는 중(`images === null`)에도 끈다. 그때 누르면 고른
+            // 그림 없이 `position: 0` 만 나간다 — 포스터는 그 값을 서버가 못 읽는다.
+            disabled={!item || !picked.length || busy || noImages || images === null}
             onClick={() => void run()}
           >
             {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}

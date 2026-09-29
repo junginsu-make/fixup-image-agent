@@ -28,6 +28,8 @@ const insertsBy: Record<string, unknown[]> = {};
 const updatesBy: Record<string, Array<Record<string, unknown>>> = {};
 /** 원본 작업의 요청 장부 줄. */
 let requestRows: Array<Record<string, unknown>> = [];
+/** 표별 `eq` 조건. 어느 줄을 고치고 어느 범위를 읽는지 본다. */
+const eqBy: Record<string, Array<[string, unknown]>> = {};
 
 function builderFor(table: string) {
   lastTable = table;
@@ -35,7 +37,7 @@ function builderFor(table: string) {
   let pendingInsert: Array<Record<string, unknown>> | null = null;
   const self: Record<string, unknown> = {
     select: () => self,
-    eq: () => self,
+    eq: (column: string, value: unknown) => { (eqBy[table] ??= []).push([column, value]); return self; },
     order: () => self,
     insert: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
       inserted = row;
@@ -160,6 +162,7 @@ beforeEach(() => {
   for (const key of Object.keys(insertedBy)) delete insertedBy[key];
   for (const key of Object.keys(insertsBy)) delete insertsBy[key];
   for (const key of Object.keys(updatesBy)) delete updatesBy[key];
+  for (const key of Object.keys(eqBy)) delete eqBy[key];
 });
 
 describe("copyWorkToSelf — 카드뉴스", () => {
@@ -249,14 +252,15 @@ describe("copyWorkToSelf — 포스터", () => {
 
     await copyWorkToSelf("poster", "원본", "관리자B");
 
-    const request = insertedBy.poster_generation_requests as Record<string, unknown>;
+    const [request] = insertedBy.poster_generation_requests as Array<Record<string, unknown>>;
     const rows = insertedBy.poster_images as Array<Record<string, unknown>>;
 
     expect(request).toBeTruthy();
-    expect(request.user_id).toBe("관리자B");
-    expect(request.cost_usd).toBe(0);
+    expect(request!.user_id).toBe("관리자B");
+    expect(request!.cost_usd).toBe(0);
     // 남의 줄이 아니라 방금 만든 줄을 가리킨다.
-    expect(rows[0]!.generation_request_id).toBe("새요청-1");
+    expect(rows[0]!.generation_request_id).toBe(request!.id);
+    expect(rows[0]!.generation_request_id).not.toBe("원본요청1");
   });
 
   /*
@@ -283,12 +287,15 @@ describe("copyWorkToSelf — 포스터", () => {
 
     await copyWorkToSelf("poster", "원본", "관리자B");
 
-    const requests = insertsBy.poster_generation_requests as Array<Record<string, unknown>>;
+    // **한 문장으로 넣는다** — 중간에 실패해 요청 줄 일부만 남는 일이 없다.
+    expect(insertsBy.poster_generation_requests).toHaveLength(1);
+    const requests = insertedBy.poster_generation_requests as Array<Record<string, unknown>>;
     expect(requests).toHaveLength(2);
     // 비용은 여전히 0 이다 — 복사는 AI 를 안 부른다.
     expect(requests.every((request) => request.cost_usd === 0 && request.user_id === "관리자B")).toBe(true);
     const rows = insertedBy.poster_images as Array<Record<string, unknown>>;
-    expect(rows.map((row) => row.generation_request_id)).toEqual(["새요청-1", "새요청-2"]);
+    expect(rows.map((row) => row.generation_request_id)).toEqual([requests[0]!.id, requests[1]!.id]);
+    expect(requests[0]!.id).not.toBe(requests[1]!.id);
   });
 
   it("고친 이력을 복사본에서도 잇는다 — 지시와 복사된 부모 그림", async () => {
@@ -302,15 +309,24 @@ describe("copyWorkToSelf — 포스터", () => {
       },
     ];
     requestRows = [
-      { id: "원본요청1", parent_image_id: null, edit_instruction: null, mode: "t2i" },
-      { id: "원본요청2", parent_image_id: "원본그림0", edit_instruction: "배경을 밤으로", mode: "i2i" },
+      { id: "원본요청1", parent_image_id: null, edit_instruction: null, mode: "t2i", model_id: "m1", ratio_id: "2:3", size: {} },
+      {
+        id: "원본요청2", parent_image_id: "원본그림0", edit_instruction: "배경을 밤으로", mode: "i2i",
+        // 고치기는 비율·모델을 바꿀 수 있다 — 작업 값이 아니라 그 회차 값을 옮긴다.
+        model_id: "m2", ratio_id: "9:16", size: { width: 1080, height: 1920 },
+      },
     ];
 
     await copyWorkToSelf("poster", "원본", "관리자B");
 
-    const requests = insertsBy.poster_generation_requests as Array<Record<string, unknown>>;
+    expect((insertedBy.poster_generation_requests as Array<Record<string, unknown>>)[1])
+      .toMatchObject({ model_id: "m2", ratio_id: "9:16", size: { width: 1080, height: 1920 } });
+    const requests = insertedBy.poster_generation_requests as Array<Record<string, unknown>>;
     expect(requests[1]).toMatchObject({ edit_instruction: "배경을 밤으로", mode: "i2i" });
-    // 복사된 첫 그림(새그림-0)이 원본그림0 의 복사본이다.
-    expect(updatesBy.poster_generation_requests).toContainEqual({ parent_image_id: "새그림-0" });
+    // 복사된 첫 그림(새그림-0)이 원본그림0 의 복사본이다 — 그것을 **고치기 요청 줄에** 단다.
+    expect(updatesBy.poster_generation_requests).toEqual([{ parent_image_id: "새그림-0" }]);
+    expect(eqBy.poster_generation_requests).toContainEqual(["id", requests[1]!.id]);
+    // 원본 요청은 **이 작업 것만** 읽는다.
+    expect(eqBy.poster_generation_requests).toContainEqual(["project_id", "원본"]);
   });
 });

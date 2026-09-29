@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
 import { isCharacterReferenceTitle } from "../../lib/character-library";
-import { posterImageLabels, type PosterImageEdit } from "@fixup/poster-core";
+import { orderPosterImages, posterImageLabels, type PosterImageEdit } from "@fixup/poster-core";
 
 /**
  * 광고 규격 화면의 순수한 규칙들.
@@ -195,7 +195,7 @@ export interface AdPosterWork {
   title: string;
   status: string;
   /** 그림 id 로 주소를 건다 — 번호로 걸면 「그 번호 중 가장 최근 것」이 뜬다. */
-  images?: Array<{ id: string; variantIndex: number }>;
+  images?: Array<{ id: string; variantIndex: number; createdAt?: string }>;
 }
 
 /**
@@ -272,7 +272,10 @@ export function adSourceItems(input: {
     .filter((project) => (project.images?.length ?? 0) > 0)
     .map((project) => {
       // 첫 변형의 사본을 쓴다. 원본은 2MB 를 넘어 목록에 깔 수 없다.
-      const first = project.images?.[0];
+      // **먼저 만든 것부터 본다.** 목록 응답은 번호로만 줄 서 있어 다시 만든 회차가
+      // 여럿이면 어느 변형 1 이 앞일지 정해져 있지 않다(2026-09-29 리뷰).
+      const first = orderPosterImages((project.images ?? [])
+        .map((image) => ({ ...image, createdAt: image.createdAt ?? "" })))[0];
       const file = first
         ? `/api/poster/projects/${project.id}/images/${first.id}/file`
         : null;
@@ -411,7 +414,9 @@ export function posterImagePicks(
  * 광고 화면을 열 때 고를 그림 — 주소가 가리킨 것.
  *
  * 결과 화면은 이제 그림 id(`image`)를 싣는다. 옛 주소는 번호(`position`)를 싣는다 —
- * 그때는 지금까지처럼 번호로 본다. 못 찾으면 없음을 준다(`startingPosition` 이
+ * 그 값을 **목록 안 순번**으로 읽는다. 한 번만 만든 작업은 순번과 변형 번호가 같아
+ * 지금과 같고, 다시 만든 회차가 있는 작업만 옛 주소가 다른 칸을 고를 수 있다
+ * (배포 직후 열려 있던 탭뿐이다). 못 찾으면 없음을 준다(`startingPosition` 이
  * 첫 장으로 떨어뜨린다).
  */
 export function preferredPosition(

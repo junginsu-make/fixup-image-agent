@@ -35,7 +35,9 @@ const scopes: string[] = [];
 /** 무엇이 먼저 일어났는가. cutout 이 slot 보다 앞이어야 한다. */
 const order: string[] = [];
 let cutoutThrows: Error | null = null;
-let posterImages: Array<{ variantIndex: number; assetPath: string }> = [
+/** 포스터 그림 파일을 어느 경로에서 읽었나. 어느 그림이 ZIP 에 담기는지가 여기서 갈린다. */
+const posterReads: string[] = [];
+let posterImages: Array<{ variantIndex: number; assetPath: string; id?: string; createdAt?: string }> = [
   { variantIndex: 0, assetPath: "u1/poster/p1/0.png" },
 ];
 
@@ -137,7 +139,10 @@ vi.mock("../../../../lib/poster/stores", () => ({
 }));
 
 vi.mock("../../../../lib/poster/asset-bytes", () => ({
-  posterImageBytes: async () => ({ bytes: Buffer.from("poster"), contentType: "image/png" }),
+  posterImageBytes: async (assetPath: string) => {
+    posterReads.push(assetPath);
+    return { bytes: Buffer.from("poster"), contentType: "image/png" };
+  },
 }));
 
 vi.mock("../../../../lib/server-library", () => ({
@@ -205,6 +210,7 @@ beforeEach(() => {
   order.length = 0;
   cutoutThrows = null;
   posterImages = [{ variantIndex: 0, assetPath: "u1/poster/p1/0.png" }];
+  posterReads.length = 0;
   reserveCalls.length = 0;
   settleCalls.length = 0;
   reserveOk = true;
@@ -377,6 +383,38 @@ describe("포스터 작업에서 뽑는다", () => {
 
   it("없는 변형 번호면 404 다", async () => {
     expect((await call({ ...posterCall, position: 7 })).status).toBe(404);
+  });
+
+  /*
+   * **고른 그림이 그대로 ZIP 에 담긴다**(2026-09-29).
+   *
+   * 「이 장만 고치기」 결과는 번호가 늘 0 이라 원본 변형 1 과 번호가 같다. 전에는
+   * 번호로 「첫 줄」을 골라, 미리보기(가장 최근 = 고친 그림)와 다른 원본이 담겼다.
+   * 화면은 이제 그림 id 를 보내고, 서버는 그것으로 고른다.
+   */
+  describe("번호가 겹친 그림", () => {
+    beforeEach(() => {
+      posterImages = [
+        { id: "원본", createdAt: "2026-09-29T08:00:00+00:00", variantIndex: 0, assetPath: "u1/poster/p1/req-1/0.png" },
+        { id: "고친것", createdAt: "2026-09-29T08:05:00+00:00", variantIndex: 0, assetPath: "u1/poster/p1/req-2/0.png" },
+      ];
+    });
+
+    it("그림 id 를 보내면 그 그림을 읽는다 — 원본도, 고친 것도", async () => {
+      expect((await call({ ...posterCall, imageId: "원본" })).status).toBe(200);
+      expect((await call({ ...posterCall, imageId: "고친것" })).status).toBe(200);
+      expect(posterReads).toEqual(["u1/poster/p1/req-1/0.png", "u1/poster/p1/req-2/0.png"]);
+    });
+
+    it("옛 화면이 번호만 보내면 그 번호 중 가장 최근 것 — 옛 미리보기가 보여 주던 그림이다", async () => {
+      await call(posterCall);
+      expect(posterReads).toEqual(["u1/poster/p1/req-2/0.png"]);
+    });
+
+    it("이 작업에 없는 그림 id 는 번호로 대신 찾지 않고 404 다", async () => {
+      expect((await call({ ...posterCall, imageId: "남의작업그림" })).status).toBe(404);
+      expect(posterReads).toEqual([]);
+    });
   });
 
   /** 안 보내면 지금까지처럼 라이브러리를 읽는다 — 2단계 사용자가 안 깨진다. */
