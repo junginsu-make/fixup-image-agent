@@ -51,7 +51,12 @@ describe("문의처가 한 곳이다", () => {
    * 문서에 적힌 주소가 **도우미가 보여 주고 메일이 가는 주소**와 같은지 본다.
    */
   it.each(문서들)("%s 에 적힌 메일 주소가 모두 문의 창구 주소다", (_제목, doc) => {
-    const 주소들 = doc.body.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) ?? [];
+    // 국외 이전 표의 「연락처」 칸은 **업체의** 개인정보 문의처다(법이 요구한다). 회사 문의처가 아니므로 뺀다.
+    const 국외표시작 = doc.body.indexOf("| 이전받는 자 |");
+    const 국외표끝 = doc.body.indexOf("이전 시기와 방법", 국외표시작);
+    const 회사글 =
+      국외표시작 < 0 ? doc.body : doc.body.slice(0, 국외표시작) + doc.body.slice(국외표끝);
+    const 주소들 = 회사글.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) ?? [];
 
     expect(주소들.length, "연락할 곳이 하나도 안 적혀 있다").toBeGreaterThan(0);
     expect([...new Set(주소들)]).toEqual([CS_EMAIL]);
@@ -98,7 +103,22 @@ describe("국외 이전 표", () => {
    * Region」). **그 이사가 끝나기 전까지 이 표기는 실제와 다르다.**
    */
   it("Supabase 의 저장 지역을 서울로 적는다", () => {
-    expect(방침).toContain("| Supabase | 대한민국(서울)");
+    const 줄 = 방침.split("\n").find((line) => line.startsWith("| Supabase(") && line.includes("@")) ?? "";
+
+    expect(줄, "국외 이전 표에서 Supabase 줄을 못 찾았다").not.toBe("");
+    expect(줄).toContain("| 대한민국(서울) |");
+  });
+
+  /**
+   * **AWS 는 국내 법인이 서울에서 처리한다**(2026-09-29 확인). 한국 청구 주소의
+   * 계정은 2020-12-01 부터 AWS Korea LLC 와 계약한다(AWS Contracting Party).
+   * 서버(EC2)도, 인증메일(SES, `email-smtp.ap-northeast-2`)도 서울이다.
+   */
+  it("AWS 를 국내 법인과 서울로 적는다", () => {
+    const 줄 = 방침.split("\n").find((line) => line.startsWith("| Amazon Web Services(") && line.includes("@")) ?? "";
+
+    expect(줄).toContain("Amazon Web Services Korea LLC");
+    expect(줄).toContain("| 대한민국(서울) |");
   });
 });
 
