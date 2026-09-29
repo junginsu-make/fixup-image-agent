@@ -67,7 +67,12 @@ host_pattern=$(printf '%s' "${host}" | sed 's/\./\\./g')
 for other in /etc/caddy/sites/*.caddy; do
   [[ -e ${other} ]] || continue
   [[ ${other} == "${site_file}" ]] && continue
-  if grep -Eq "^${site_pattern}[[:space:]]*\{" "${other}" || grep -Eq "^https?://${host_pattern}" "${other}"; then
+  # 세 번째 조건(2026-09-29 최종 고침, N6): site_address 를 `https://도메인`
+  # 으로 줬는데 다른 파일에 스킴 없는 맨 도메인 블록(`도메인 {`)이 이미 있는
+  # 경우도 같은 주소로 본다 — 앞의 두 조건은 스킴이 서로 다르면 못 잡는다.
+  if grep -Eq "^${site_pattern}[[:space:]]*\{" "${other}" \
+      || grep -Eq "^https?://${host_pattern}" "${other}" \
+      || { [[ ${site_address} == https://* ]] && grep -Eq "^${host_pattern}[[:space:]]*\{" "${other}"; }; then
     echo "${other} 에 이미 ${site_address} 로 시작하는 사이트 블록이 있습니다. docs/DEPLOY.md 「서버 설정 바꾸기」의 처음 한 번 절차를 보세요." >&2
     exit 1
   fi
@@ -95,11 +100,25 @@ if ! id fixup-agent >/dev/null 2>&1; then
   useradd --system --home-dir /opt/fixup-image-agent --shell /usr/sbin/nologin fixup-agent
 fi
 
+# 잠긴(masked) 워커는 유닛 파일도 enable 도 건드리지 않는다.
+#
+# 수집을 안 쓰기로 하고 일부러 잠근 서버(운영은 2026-09-10 부터 masked)가
+# 있다. 여기서 유닛 파일을 실제 파일로 덮거나 enable 하면, 다음
+# deploy-release.sh 가 워커를 띄워 수집이 다시 돈다(외부 과금 가능, 메모리
+# 상한 없는 프로세스 추가). 판정 방식은 deploy-release.sh 가 이미 쓰는 것과
+# 맞춘다(`is-enabled` 는 잠겼으면 masked, 없으면 not-found 를 찍는다).
+worker_state="$(systemctl is-enabled fixup-image-agent-worker.service 2>/dev/null || true)"
+if [[ ${worker_state} == masked* ]]; then
+  echo "워커가 잠겨 있어 그대로 둡니다."
+fi
+
 install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent
 install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent/releases
 install -d -o root -g fixup-agent -m 0750 /etc/fixup-image-agent
 install -m 0644 "${script_dir}/fixup-image-agent.service" /etc/systemd/system/fixup-image-agent.service
-install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+if [[ ${worker_state} != masked* ]]; then
+  install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+fi
 install -d -o root -g root -m 0755 /usr/local/lib/fixup-image-agent
 install -o root -g root -m 0755 "${script_dir}/monitor.sh" /usr/local/lib/fixup-image-agent/monitor.sh
 install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-monitor.service" /etc/systemd/system/
@@ -135,7 +154,9 @@ fi
 
 systemctl daemon-reload
 systemctl enable fixup-image-agent.service
-systemctl enable fixup-image-agent-worker.service
+if [[ ${worker_state} != masked* ]]; then
+  systemctl enable fixup-image-agent-worker.service
+fi
 systemctl enable --now fixup-image-agent-monitor.timer
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
