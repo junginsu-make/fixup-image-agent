@@ -21,9 +21,29 @@ const shim = (name: string, body: string) => {
   writeFileSync(path, `#!/usr/bin/env bash\n${body}\n`);
   chmodSync(path, 0o755);
 };
-const world = (o: { healthy: boolean; restarts: number; memory: number; high: string; oom?: string; mailFails?: boolean }) => {
+const world = (o: {
+  healthy: boolean;
+  restarts: number;
+  memory: number;
+  high: string;
+  oom?: string;
+  mailFails?: boolean;
+  caddyActive?: boolean;
+}) => {
+  const caddyActive = o.caddyActive ?? true;
   shim("curl", `for a in "$@"; do case "$a" in *health*) ${o.healthy ? "exit 0" : "exit 7"};; smtp*) ${o.mailFails ? "exit 67" : "exit 0"};; esac; done; exit 0`);
-  shim("systemctl", `case "$*" in *NRestarts*) echo ${o.restarts};; *MemoryCurrent*) echo ${o.memory};; *MemoryHigh*) echo ${o.high};; esac`);
+  shim(
+    "systemctl",
+    [
+      `case "$*" in`,
+      `  *is-active*caddy*) ${caddyActive ? "exit 0" : "exit 3"};;`,
+      `  *NRestarts*) echo ${o.restarts};;`,
+      `  *MemoryCurrent*) echo ${o.memory};;`,
+      `  *MemoryHigh*) echo ${o.high};;`,
+      `  *ControlGroup*) echo "";;`,
+      `esac`,
+    ].join("\n"),
+  );
   shim("journalctl", `echo "${o.oom ?? ""}"`);
 };
 const run = (extra: Record<string, string> = {}) =>
@@ -81,9 +101,73 @@ maybeDescribe("monitor.sh", () => {
     expect(run()).toContain("MAIL [restart]");
   });
 
-  it("메모리가 MemoryHigh 의 90% 를 넘으면 알린다", () => {
-    world({ healthy: true, restarts: 0, memory: 2_900_000_000, high: "3145728000" });
-    expect(run()).toContain("MAIL [memory]");
+  // 컨트롤러 재정(브리프 §3, I2): "MemoryCurrent 가 MemoryHigh 의 90% 를 넘으면
+  // 알린다"는 페이지 캐시가 섞여 정상 부하에서도 헛경보를 냈다(상세 10명
+  // 2646MiB > MemoryHigh 2800M 의 90%인 2520MiB). 대신 cgroup memory.events 의
+  // high/max/oom_kill 카운터가 지난 차례보다 늘었을 때만 알린다. 이 시험군은
+  // 원래 있던 "90% 시험"을 대체한다.
+  describe("메모리 — memory.events 카운터가 늘 때만 알린다(I2, 컨트롤러 재정)", () => {
+    const eventsFile = () => join(dir, "memory.events");
+    const writeEvents = (high: number, max = 0, oomKill = 0) =>
+      writeFileSync(eventsFile(), `low 0\nhigh ${high}\nmax ${max}\noom_kill ${oomKill}\n`);
+
+    it("첫 실행은 기준값만 저장하고 알리지 않는다", () => {
+      world({ healthy: true, restarts: 0, memory: 1, high: "infinity" });
+      writeEvents(3);
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).not.toContain("MAIL");
+    });
+
+    it("high 카운터가 늘면 알린다", () => {
+      world({ healthy: true, restarts: 0, memory: 1, high: "infinity" });
+      writeEvents(0);
+      run({ MONITOR_MEMORY_EVENTS: eventsFile() });
+      writeEvents(3);
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).toContain("MAIL [memory]");
+    });
+
+    it("그대로면(늘지 않으면) 알리지 않는다", () => {
+      world({ healthy: true, restarts: 0, memory: 1, high: "infinity" });
+      writeEvents(3);
+      run({ MONITOR_MEMORY_EVENTS: eventsFile() });
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).not.toContain("MAIL");
+    });
+
+    it("파일이 없으면 예외 없이 끝나고 알리지 않는다", () => {
+      world({ healthy: true, restarts: 0, memory: 1, high: "infinity" });
+      const missing = join(dir, "no-such-events-file");
+      expect(() => run({ MONITOR_MEMORY_EVENTS: missing })).not.toThrow();
+      expect(run({ MONITOR_MEMORY_EVENTS: missing })).not.toContain("MAIL");
+    });
+
+    it("형식이 이상하면(숫자 아님) 예외 없이 끝나고 알리지 않는다", () => {
+      world({ healthy: true, restarts: 0, memory: 1, high: "infinity" });
+      writeFileSync(eventsFile(), "이건 memory.events 형식이 아니다\n");
+      expect(() => run({ MONITOR_MEMORY_EVENTS: eventsFile() })).not.toThrow();
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).not.toContain("MAIL");
+    });
+  });
+
+  // 브리프 §4: Caddy(리버스 프록시)가 죽으면 앱이 살아 있어도 아무도 못
+  // 들어온다 — 앱 헬스체크만으로는 못 잡는다.
+  it("Caddy 가 active 가 아니면 알린다", () => {
+    world({ healthy: true, restarts: 0, memory: 1, high: "infinity", caddyActive: false });
+    expect(run()).toContain("MAIL [caddy]");
+  });
+
+  // 브리프 §5(M1): state() 의 숫자 판별을 `^(0|[1-9][0-9]*)$` 로 좁혀, 선행
+  // 0(`08`)이 산술 컨텍스트(`$(( ))`)에서 8진수로 오해되어 "value too great
+  // for base" 로 죽는 것을 막는다. corrupt 값과 같은 취급(기본값 0)이어야 한다.
+  it("down.count 상태 파일이 08(선행 0)이어도 예외 없이 끝나고, 기본값 0 취급으로 두 번째에 알린다", () => {
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(join(stateDir, "down.count"), "08");
+    world({ healthy: false, restarts: 0, memory: 1, high: "infinity" });
+    let firstOutput = "";
+    expect(() => {
+      firstOutput = run();
+    }).not.toThrow();
+    expect(firstOutput).not.toContain("MAIL"); // 08 → 0 취급, 1번째는 count=1(<2)
+    expect(run()).toContain("MAIL [down]"); // 2번째는 count=2(>=2)
   });
 
   it("커널이 프로세스를 죽였으면 알린다", () => {
@@ -202,5 +286,45 @@ maybeDescribe("monitor.sh", () => {
     expect(body).toContain("Content-Type: text/plain; charset=UTF-8");
     expect(body).toContain("Content-Transfer-Encoding: 8bit");
     expect(body).toMatch(/^Date: /m);
+  });
+
+  // 브리프 §2(I3): app.env 값이 따옴표로 감싸져 있어도(systemd EnvironmentFile
+  // 규칙과 같다) 제대로 읽고, 표시 이름에 한글이 있으면 RFC 2047 로 감싸며,
+  // curl 명령줄 인자 어디에도 SMTP 비밀번호가 나타나지 않는다(표준입력으로
+  // 넘긴다).
+  it("따옴표로 감싼 app.env 를 읽고, RFC 2047 From 과 비밀번호 없는 인자를 만든다", () => {
+    writeFileSync(
+      join(dir, "app.env"),
+      [
+        'ALERT_EMAIL="ops@example.invalid"',
+        'SMTP_HOST="smtp.example.invalid"',
+        'SMTP_PORT="465"',
+        'SMTP_SECURE="true"',
+        'SMTP_USER="u"',
+        'SMTP_PASS="hunter2-secret"',
+        'SMTP_FROM="AI 상세페이지 스튜디오 <noreply@example.invalid>"',
+        "",
+      ].join("\n"),
+    );
+    const { argsFile, bodyFile } = captureMail();
+    const args = readMailArgs(argsFile);
+    expect(args).toMatch(/smtps:\/\/smtp\.example\.invalid:465/);
+    expect(args).toContain("--mail-from");
+    expect(args).toContain("noreply@example.invalid");
+    expect(args).toContain("--mail-rcpt");
+    expect(args).toContain("ops@example.invalid");
+    expect(args).not.toContain("hunter2-secret");
+    const body = readFileSync(bodyFile, "utf8");
+    expect(body).toMatch(/^From: =\?UTF-8\?B\?/m);
+  });
+
+  it("SMTP_PORT 이 비어 있으면 465 를 기본값으로 쓴다", () => {
+    writeFileSync(
+      join(dir, "app.env"),
+      "ALERT_EMAIL=ops@example.invalid\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=\nSMTP_SECURE=true\nSMTP_USER=u\nSMTP_PASS=p\nSMTP_FROM=FormWith <noreply@example.invalid>\n",
+    );
+    const { argsFile } = captureMail();
+    const args = readMailArgs(argsFile);
+    expect(args).toMatch(/:465(\r?\n|$)/m);
   });
 });
