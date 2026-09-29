@@ -107,6 +107,23 @@ maybeDescribe("monitor.sh", () => {
     expect(run()).not.toContain("MAIL");
   });
 
+  // 리뷰 결정(수정 1차) 2: 상태 파일이 깨져 있어도(숫자가 아님) set -u 산술에서
+  // "unbound variable" 로 죽지 않는다 — state() 가 숫자 기본값이면 스스로 거른다.
+  // 가드 기본값 0 기준: corrupt 는 0 취급 → 1번째 호출에서 count=1(<2, 메일 없음),
+  // 2번째 호출에서 count=2(>=2, MAIL [down]).
+  it("down.count 상태 파일이 깨져 있어도 예외 없이 끝나고, 기본값 0 취급으로 두 번째에 알린다", () => {
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(join(stateDir, "down.count"), "corrupt");
+    world({ healthy: false, restarts: 0, memory: 1, high: "infinity" });
+    let firstOutput = "";
+    expect(() => {
+      firstOutput = run();
+    }).not.toThrow();
+    expect(firstOutput).not.toContain("MAIL"); // corrupt → 0 취급, 1번째는 count=1(<2)
+    expect(run()).toContain("MAIL [down]"); // 2번째는 count=2(>=2)
+  });
+
   // ── 통제관 결정 1·2: 실제 SMTP 발송(MONITOR_DRY_RUN=0)에서 앱과 같은 해석,
   // RFC 2047 제목 인코딩을 고정한다. curl 가짜는 smtp*:// 호출의 인자 전체를
   // 파일로 남기고, --upload-file 로 넘긴 본문 파일도 복사해 둔다.
@@ -143,30 +160,42 @@ maybeDescribe("monitor.sh", () => {
 
   it("SMTP_PORT=465 이고 SMTP_SECURE 가 없으면 smtps:// 를 쓴다", () => {
     writeFileSync(join(dir, "app.env"), "ALERT_EMAIL=ops@example.invalid\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=465\nSMTP_USER=u\nSMTP_PASS=p\nSMTP_FROM=FormWith <noreply@example.invalid>\n");
-    const { argsFile } = captureMail({});
+    const { argsFile } = captureMail();
     const args = readMailArgs(argsFile);
     expect(args).toMatch(/smtps:\/\/smtp\.example\.invalid:465/);
   });
 
   it("SMTP_PORT=587 이고 SMTP_SECURE=false 면 smtp:// 와 --ssl-reqd 를 쓴다", () => {
     writeFileSync(join(dir, "app.env"), "ALERT_EMAIL=ops@example.invalid\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=587\nSMTP_SECURE=false\nSMTP_USER=u\nSMTP_PASS=p\nSMTP_FROM=FormWith <noreply@example.invalid>\n");
-    const { argsFile } = captureMail({});
+    const { argsFile } = captureMail();
     const args = readMailArgs(argsFile);
     expect(args).toMatch(/smtp:\/\/smtp\.example\.invalid:587/);
     expect(args).not.toMatch(/smtps:\/\//);
     expect(args).toContain("--ssl-reqd");
   });
 
+  // 리뷰 결정(수정 1차) 3: 위 두 시험(465+SECURE 없음, 587+SECURE=false)은 브리프
+  // 원안(`SECURE=="false"` 아니면 smtps)으로 되돌려도 우연히 통과한다 — 둘을
+  // 가르는 조합은 "포트가 465 가 아니고 SECURE 도 안 적힌" 경우뿐이다. 원안이면
+  // smtps(기본값), 결정 1(통제관 규칙)이면 smtp 다.
+  it("SMTP_PORT=587 이고 SMTP_SECURE 가 아예 없으면 smtp:// 를 쓴다 — 원안과 갈리는 경우", () => {
+    writeFileSync(join(dir, "app.env"), "ALERT_EMAIL=ops@example.invalid\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=587\nSMTP_USER=u\nSMTP_PASS=p\nSMTP_FROM=FormWith <noreply@example.invalid>\n");
+    const { argsFile } = captureMail();
+    const args = readMailArgs(argsFile);
+    expect(args).toMatch(/smtp:\/\/smtp\.example\.invalid:587/);
+    expect(args).not.toMatch(/smtps:\/\//);
+  });
+
   it("SMTP_FROM 이 비어 있으면 --mail-from 에 SMTP_USER 를 쓴다", () => {
     writeFileSync(join(dir, "app.env"), "ALERT_EMAIL=ops@example.invalid\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=465\nSMTP_SECURE=true\nSMTP_USER=fallback@example.invalid\nSMTP_PASS=p\nSMTP_FROM=\n");
-    const { argsFile } = captureMail({});
+    const { argsFile } = captureMail();
     const args = readMailArgs(argsFile);
     expect(args).toContain("--mail-from");
     expect(args).toContain("fallback@example.invalid");
   });
 
   it("보낸 편지에 RFC 2047 제목과 MIME 머리글이 있다", () => {
-    const { bodyFile } = captureMail({});
+    const { bodyFile } = captureMail();
     const body = readFileSync(bodyFile, "utf8");
     expect(body).toContain("Subject: =?UTF-8?B?");
     expect(body).toContain("MIME-Version: 1.0");

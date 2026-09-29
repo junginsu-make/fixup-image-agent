@@ -20,7 +20,22 @@ now=$(date +%s)
 mkdir -p "${state_dir}"
 
 read_env() { grep -E "^$1=" "${app_env}" 2>/dev/null | tail -1 | cut -d= -f2-; }
-state() { cat "${state_dir}/$1" 2>/dev/null || echo "${2:-0}"; }
+# 기본값이 숫자면 스스로 거른다 — 저장된 값이 깨져 있으면(디스크 꽉 참·중간에
+# 끊긴 쓰기 등) 기본값으로 대신한다. 안 그러면 이 값을 그대로 산술에 넣는
+# 호출부(sent.<key>, down.count, oom.since 등)가 `set -u` 아래서 "unbound
+# variable" 로 죽는다 — 감시 스크립트가 감시 자신 때문에 멎으면 안 된다.
+state() {
+  local raw default
+  default=${2:-0}
+  raw=$(cat "${state_dir}/$1" 2>/dev/null)
+  if [[ -z ${raw} ]]; then
+    echo "${default}"
+  elif [[ ${default} =~ ^[0-9]+$ && ! ${raw} =~ ^[0-9]+$ ]]; then
+    echo "${default}"
+  else
+    echo "${raw}"
+  fi
+}
 save() { printf '%s' "$2" > "${state_dir}/$1"; }
 
 alert_to=$(read_env ALERT_EMAIL)
