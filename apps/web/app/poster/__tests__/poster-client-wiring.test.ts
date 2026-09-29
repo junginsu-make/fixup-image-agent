@@ -62,8 +62,13 @@ describe("기획은 옆에서 나오고 결과가 페이지를 갖는다", () =>
     expect(source).toContain("if (openedOnce.current) return;");
   });
 
+  /**
+   * 안내 줄은 `plan-bar.tsx` 로 떼어 냈다(2026-09-29). 「기획 확인」 단추가 그
+   * 부품 안에서 `onOpenPlan` 을 부르는지는 `plan-bar.test.tsx` 가 그려서 잰다.
+   * 여기서는 결과 화면이 그 자리에 패널 여는 일을 넘기는지 본다.
+   */
   it("언제든 다시 열 수 있다", () => {
-    expect(source).toMatch(/onClick=\{\(\) => setPlanOpen\(true\)\}/);
+    expect(source).toMatch(/onOpenPlan=\{\(\) => setPlanOpen\(true\)\}/);
   });
 
   it("만들기를 누르면 패널이 닫힌다 — 결과 자리를 가리면 안 된다", () => {

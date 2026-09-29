@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { sessionAuthCookieNames } from "../../lib/auth/session-window";
 import { requireActiveMember } from "../../lib/membership/server";
+import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { updateProfileExtras } from "../../lib/membership/profile-store";
 import { withdrawAccount } from "../../lib/membership/withdraw-account";
 import { confirmsWithdrawal } from "../../lib/membership/withdrawal";
@@ -39,6 +42,33 @@ export async function withdrawMyAccount(input: { confirmEmail: string }): Promis
   }
 
   const result = await withdrawAccount(member.user.id, member.profile.email);
-  if (result.ok) revalidatePath("/settings");
+  if (result.ok) {
+    revalidatePath("/settings");
+    await endThisBrowserSession();
+  }
   return { ok: result.ok, message: result.message };
+}
+
+/**
+ * **탈퇴가 끝나면 이 브라우저의 로그인도 끝낸다**(2026-09-29).
+ *
+ * 전에는 계정만 처리하고 로그인 쿠키를 두었다. 기록이 있어 「닫힌」 계정은
+ * 인증 계정이 남으므로, 로그인 화면이 「이미 로그인되어 있습니다」를 띄웠다.
+ *
+ * 두 겹으로 끝낸다 — 서버 쪽 로그인을 끊고(다른 기기의 갱신 토큰까지),
+ * **이 브라우저의 로그인 쿠키를 직접 지운다.** 서버 쪽 요청이 실패해도 쿠키는
+ * 지운다. 계정은 이미 처리됐으므로 여기서의 실패를 탈퇴 실패라 하지 않는다.
+ */
+async function endThisBrowserSession() {
+  try {
+    const supabase = await createSupabaseServerClient();
+    await supabase.auth.signOut();
+  } catch {
+    // 아래에서 쿠키를 지운다. 탈퇴 결과는 바꾸지 않는다.
+  }
+
+  const store = await cookies();
+  for (const name of sessionAuthCookieNames(store.getAll().map((cookie) => cookie.name))) {
+    store.delete(name);
+  }
 }

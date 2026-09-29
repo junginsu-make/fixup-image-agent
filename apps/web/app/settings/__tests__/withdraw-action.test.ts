@@ -29,11 +29,42 @@ vi.mock("../../../lib/membership/server", () => ({
 
 vi.mock("../../../lib/membership/profile-store", () => ({ updateProfileExtras: vi.fn() }));
 
+let 탈퇴결과: { ok: boolean; message: string; path?: "delete" | "close" } = {
+  ok: true, message: "탈퇴가 완료되었습니다.", path: "delete",
+};
+
 vi.mock("../../../lib/membership/withdraw-account", () => ({
   withdrawAccount: async (userId: string, email: string) => {
     불린것.push({ userId, email });
-    return { ok: true, message: "탈퇴가 완료되었습니다.", path: "delete" as const };
+    return 탈퇴결과;
   },
+}));
+
+/** 이 브라우저의 로그인 흔적. 탈퇴가 끝나면 지워져야 한다. */
+const 브라우저 = {
+  쿠키: [] as string[],
+  지운것: [] as string[],
+  로그아웃: 0,
+  로그아웃실패: false,
+};
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    getAll: () => 브라우저.쿠키.map((name) => ({ name, value: "x" })),
+    delete: (name: string) => { 브라우저.지운것.push(name); },
+  }),
+}));
+
+vi.mock("../../../lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({
+    auth: {
+      signOut: async () => {
+        브라우저.로그아웃 += 1;
+        if (브라우저.로그아웃실패) throw new Error("network");
+        return { error: null };
+      },
+    },
+  }),
 }));
 
 const { withdrawMyAccount } = await import("../actions");
@@ -41,6 +72,11 @@ const { withdrawMyAccount } = await import("../actions");
 beforeEach(() => {
   불린것.length = 0;
   로그인한사람 = { id: "u1", email: "me@example.com" };
+  탈퇴결과 = { ok: true, message: "탈퇴가 완료되었습니다.", path: "delete" };
+  브라우저.쿠키 = ["sb-abc-auth-token", "sb-abc-auth-token.0", "fx_session_started", "mcs_project"];
+  브라우저.지운것 = [];
+  브라우저.로그아웃 = 0;
+  브라우저.로그아웃실패 = false;
 });
 
 describe("확인 글자", () => {
@@ -88,5 +124,62 @@ describe("누구 것을 지우나", () => {
     await withdrawMyAccount({ confirmEmail: "me@example.com", userId: "someone-else" } as never);
 
     expect(불린것[0]!.userId, "요청에 실린 ID 를 따라갔다").toBe("u1");
+  });
+});
+
+/**
+ * **탈퇴하면 이 브라우저의 로그인도 끝난다**(2026-09-29).
+ *
+ * 전에는 계정만 처리하고 로그인 쿠키를 그대로 두었다. 기록이 있어 「닫힌」
+ * 계정은 인증 계정이 남으므로, 로그인 화면이 「이미 로그인되어 있습니다」를
+ * 띄웠다 — 탈퇴했는데 로그인된 채로 보였다(설명서 대조에서 발견).
+ */
+describe("탈퇴 뒤 로그인", () => {
+  it.each([["지운 계정", "delete"], ["닫은 계정", "close"]] as const)(
+    "**%s — 로그아웃하고 로그인 쿠키를 지운다**",
+    async (_이름, path) => {
+      탈퇴결과 = { ok: true, message: "탈퇴가 완료되었습니다.", path };
+      const result = await withdrawMyAccount({ confirmEmail: "me@example.com" });
+
+      expect(result.ok).toBe(true);
+      expect(브라우저.로그아웃, "서버 쪽 로그인을 끝내지 않았다").toBe(1);
+      expect(브라우저.지운것.sort()).toEqual(["fx_session_started", "sb-abc-auth-token", "sb-abc-auth-token.0"]);
+    },
+  );
+
+  /** 로그인과 상관없는 쿠키(마지막 프로젝트)는 건드리지 않는다. */
+  it("로그인과 상관없는 쿠키는 남긴다", async () => {
+    await withdrawMyAccount({ confirmEmail: "me@example.com" });
+
+    expect(브라우저.지운것).not.toContain("mcs_project");
+  });
+
+  /**
+   * **로그아웃 요청이 실패해도 쿠키는 지운다.** 계정은 이미 처리됐다 — 그걸
+   * 실패라 하면 회원은 다시 누르고, 두 번째는 「계정이 없습니다」를 본다.
+   */
+  it("로그아웃 요청이 실패해도 쿠키는 지우고 탈퇴는 성공이다", async () => {
+    브라우저.로그아웃실패 = true;
+    const result = await withdrawMyAccount({ confirmEmail: "me@example.com" });
+
+    expect(result.ok).toBe(true);
+    expect(브라우저.지운것).toContain("sb-abc-auth-token");
+  });
+
+  it("확인 글자가 틀리면 로그인을 건드리지 않는다", async () => {
+    await withdrawMyAccount({ confirmEmail: "other@example.com" });
+
+    expect(브라우저.로그아웃).toBe(0);
+    expect(브라우저.지운것).toEqual([]);
+  });
+
+  /** 탈퇴가 안 됐는데 내보내면, 회원은 된 줄 안다. */
+  it("탈퇴가 실패하면 로그인을 건드리지 않는다", async () => {
+    탈퇴결과 = { ok: false, message: "지금 만들고 있는 작업이 있습니다." };
+    const result = await withdrawMyAccount({ confirmEmail: "me@example.com" });
+
+    expect(result.ok).toBe(false);
+    expect(브라우저.로그아웃).toBe(0);
+    expect(브라우저.지운것).toEqual([]);
   });
 });

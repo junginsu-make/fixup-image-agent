@@ -27,6 +27,7 @@ import { WorkingBanner } from "../_components/working-banner";
 import { rerunHref } from "../../_components/rerun-step";
 import { PlanWriting } from "../_components/plan-writing";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
+import { PlanBar } from "./plan-bar";
 
 interface PosterImage {
   id: string;
@@ -879,14 +880,14 @@ export function PosterClient(
         넓어야 한다. 기획은 만들기 전에 한 번 훑는 자리이므로 옆에서 나온다
         (2026-09-08 사용자 결정).
       */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3">
-        <p className="text-sm text-muted-foreground">
-          {images.length ? "기획을 고치고 다시 만들 수 있습니다." : "기획을 확인한 뒤 만듭니다."}
-        </p>
-        <Button variant="secondary" size="sm" onClick={() => setPlanOpen(true)} disabled={Boolean(busy)}>
-          기획 확인
-        </Button>
-      </div>
+      <PlanBar
+        verbatim={project.data.promptMode === "verbatim"}
+        hasImages={images.length > 0}
+        variants={project.data.variants}
+        busyKind={busy?.kind ?? null}
+        onOpenPlan={() => setPlanOpen(true)}
+        onGenerate={() => void generate()}
+      />
 
       <SidePanel open={planOpen} onOpenChange={setPlanOpen}>
         <SidePanelContent>

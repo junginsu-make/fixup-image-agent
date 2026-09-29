@@ -91,6 +91,29 @@ describe("비율이 모델보다 우선한다", () => {
     expect(choice.reason).toBeTruthy();
   });
 
+  /**
+   * **안내에 내부 이름을 쓰지 않는다**(2026-09-29 설명서 대조에서 발견).
+   *
+   * 「경제형은 a4-print를 만들 수 없어…」처럼 비율의 **내부 id** 가 화면에
+   * 그대로 나갔다. 회원은 「a4-print」라는 말을 본 적이 없다 — 비율 버튼에는
+   * 「A4 인쇄용」이라고 적혀 있다. 괄호 속 설명(약 290dpi)은 조사를 틀리게
+   * 붙이므로 뺀다.
+   */
+  it("안내에 비율의 화면 이름을 쓴다", () => {
+    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+
+    expect(choice.reason).not.toContain("a4-print");
+    expect(choice.reason).toContain("A4 인쇄용을");
+  });
+
+  it("못 만드는 비율을 알릴 때도 화면 이름을 쓴다", () => {
+    const 아무도못함 = IMAGE_MODELS.map((model) => ({ ...model, pixelSizeLimits: undefined }));
+    const choice = chooseModelForRatio("a4-print", "nano-banana", 아무도못함);
+
+    expect(choice.reason).not.toContain("a4-print");
+    expect(choice.reason).toContain("A4 인쇄용");
+  });
+
   it("모르는 모델을 주면 기본 모델로 본다", () => {
     const choice = chooseModelForRatio("1:1", "없는-모델", IMAGE_MODELS);
     // 「기본이 무엇인가」는 목록이 정한다. 여기서 다시 적으면 두 곳이 갈린다.

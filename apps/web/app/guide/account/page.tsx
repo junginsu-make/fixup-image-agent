@@ -140,7 +140,8 @@ export default function AccountGuidePage() {
         />
 
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">로그인은 로그아웃할 때까지 유지됩니다.</strong> 공용 컴퓨터에서는 꼭
+          <strong className="text-foreground">로그인은 24시간 동안 유지되고, 그 뒤에는 다시 로그인해야 합니다.</strong>{" "}
+          쓰는 중에도 로그인한 때부터 24시간이 지나면 로그인 화면으로 옮겨집니다. 공용 컴퓨터에서는 그 전에 꼭
           화면 맨 위 줄의 로그아웃 단추를 눌러 주세요. 비밀번호를 바꾸면 다른 기기에서는 다시 로그인해야 할 수
           있습니다.
         </p>
@@ -366,22 +367,19 @@ export default function AccountGuidePage() {
             2. 확인을 위해 <strong className="text-foreground">내 이메일을 그대로 입력</strong>합니다
           </li>
           <li>
-            3. <strong className="text-foreground">「탈퇴하기」</strong>를 누르면 그 자리에서 처리되고 로그인
-            화면으로 옮겨집니다
+            3. <strong className="text-foreground">「탈퇴하기」</strong>를 누르면 그 자리에서 처리되고, 로그아웃된
+            뒤 로그인 화면으로 옮겨집니다
           </li>
         </ol>
 
         {/*
-          **탈퇴는 로그아웃까지 하지 않는다**(2026-09-29 확인). `withdraw-card.tsx` 는
-          `/login?notice=withdrawn` 으로 옮기기만 한다. 계정을 닫은 경우 브라우저의
-          로그인이 남아서, 로그인 화면이 「이미 로그인되어 있습니다」를 먼저 보여 줄 수
-          있다(`app/login/page.tsx`). 그때 할 일을 적는다.
+          **탈퇴하면 로그아웃까지 한다**(2026-09-29 고침). 전에는 로그인이 남아 로그인
+          화면이 「이미 로그인되어 있습니다」를 먼저 보였다 — `app/settings/actions.ts`
+          의 `endThisBrowserSession` 이 이제 쿠키를 지운다.
         */}
         <p className="text-sm leading-7 text-muted-foreground">
           로그인 화면에 <strong className="text-foreground">「탈퇴가 완료되었습니다. 이 계정으로는 로그인할 수
-          없습니다.」</strong>가 보이면 끝난 것입니다. 로그인 화면이 「이미 로그인되어 있습니다」로 보이면{" "}
-          <strong className="text-foreground">「다른 계정으로 로그인하기」</strong>를 눌러 주세요. 그 브라우저의
-          로그인이 끝나고 탈퇴 완료 안내가 보입니다.
+          없습니다.」</strong>가 보이면 끝난 것입니다.
         </p>
 
         <Callouts
@@ -427,11 +425,6 @@ export default function AccountGuidePage() {
               "탈퇴가 완료되었습니다",
               "로그인 화면에 나옵니다. 탈퇴가 끝났습니다",
               "이 계정으로는 로그인할 수 없습니다. 기록이 있던 계정은 결제·크레딧 기록이 법령에 따라 보관됩니다",
-            ],
-            [
-              "이미 로그인되어 있습니다",
-              "이 브라우저에 로그인이 남아 있습니다",
-              "「다른 계정으로 로그인하기」를 눌러 주세요",
             ],
           ]}
         />
