@@ -66,6 +66,12 @@ export interface SnsFlowCost {
   unitCostUsd?: number;
   falRequestId?: string;
   generationRequestId?: string;
+  /**
+   * 이 장을 **실제로 만든 모델**. 칸 배치형은 칸 비율 때문에 작업의 모델과 다를 수
+   * 있다(`planSlotImage`). 원가 장부가 이것으로 모델을 적는다(`settle.ts`).
+   * 옛 기록에는 없다 — 없으면 작업의 모델로 센다.
+   */
+  modelId?: string;
 }
 
 export interface SnsFlowState {

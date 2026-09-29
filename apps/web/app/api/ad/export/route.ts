@@ -86,7 +86,12 @@ async function posterImageFile(
   key: string,
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   // 이름표는 필요 없다 — 요청 장부를 안 읽는다.
-  const images = await posterStoresForUser(userId).images.byProject(projectId, { lineage: false });
+  /*
+   * **본인 그림만.** `posterStoresForUser` 는 세션 사용자로 읽지만 그림 읽기는 팀이면
+   * 팀원 것까지 열려 있다(RLS). 팀 입구는 2026-09-22 에 닫혔어도 그 규칙은 살아
+   * 있어서 주인 조건을 따로 건다(2026-09-29 점검).
+   */
+  const images = await posterStoresForUser(userId).images.byProject(projectId, { lineage: false, ownOnly: true });
   /*
    * **파일 길과 같은 규칙으로 고른다**(`findPosterImage`). 전에는 여기서 「번호가
    * 같은 첫 줄」을, 미리보기(파일 길)는 「번호가 같은 가장 최근 줄」을 골라 둘이
@@ -196,7 +201,17 @@ export async function POST(request: Request) {
         // 역할을 지어내 넘기는 관례는 위 시험이 막으려던 바로 그것이다.
         "export",
       );
-    if (!file) return new Response("찾을 수 없습니다.", { status: 404 });
+    if (!file) {
+      /*
+        **잡아 둔 예약을 바로 푼다.** 예약을 먼저 잡고 그림을 찾으므로, 여기서 그냥
+        돌아가면 10분 동안 그 사람 한도가 묶였다(2026-09-29 리뷰). 푸는 일이
+        실패해도 404 는 준다 — 예약은 만료되면 어차피 풀린다.
+      */
+      await settleAiUsage(reserved, false, 0, "ad_export_not_found", {
+        model: BACKGROUND_REMOVAL_MODEL, billableImages: 0, llmUsd: 0,
+      }).catch(() => undefined);
+      return new Response("찾을 수 없습니다.", { status: 404 });
+    }
 
     /**
      * **동시 실행을 막는다.**

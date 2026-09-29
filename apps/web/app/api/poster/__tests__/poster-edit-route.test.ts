@@ -14,10 +14,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 let project: { id: string; ratio: string; modelId: string; data: Record<string, unknown> };
-let parent: { id: string; assetPath: string; selected: boolean; width: number | null; height: number | null };
+let parent: {
+  id: string; assetPath: string; selected: boolean; width: number | null; height: number | null;
+  generationRequestId?: string;
+};
+/** 같은 작업의 다른 그림들. 고칠 그림을 id 로 고르는지 볼 때 쓴다. */
+let otherImages: Array<typeof parent> = [];
+/** 부모 그림을 만든 요청 줄의 실제 모델. */
+let parentRequestModel: string | null = null;
+/** 고칠 그림으로 어느 파일을 올렸나. */
+const parentReads: string[] = [];
+/** `byProject` 에 넘어온 선택. */
+const imageListOptions: unknown[] = [];
 type SubmittedJob = {
   ratioId: string;
   modelId?: string;
+  parentImageId?: string;
   sourceSize?: { width: number; height: number };
   attachments?: Array<{ url: string; role: string }>;
   personUrls?: string[];
@@ -61,8 +73,14 @@ vi.mock("../../../../lib/poster/stores", () => ({
         return project;
       },
     },
-    images: { byProject: async () => [parent] },
-    requests: {},
+    images: {
+      byProject: async (_projectId: string, options?: unknown) => {
+        imageListOptions.push(options);
+        return [parent, ...otherImages];
+      },
+    },
+    // **어느 줄을 묻는지 가린다** — 부모 그림의 요청 줄(`req-parent`)만 답한다.
+    requests: { modelOf: async (id: string) => (id === "req-parent" ? parentRequestModel : null) },
   }),
 }));
 
@@ -76,7 +94,10 @@ vi.mock("../../../../lib/poster/providers", () => ({
 }));
 
 vi.mock("../../../../lib/poster/asset-bytes", () => ({
-  posterImageBytes: async () => ({ bytes: Buffer.from("x"), contentType: "image/png" }),
+  posterImageBytes: async (assetPath: string) => {
+    parentReads.push(assetPath);
+    return { bytes: Buffer.from("x"), contentType: "image/png" };
+  },
   referenceBytes: async (storagePath: string) => {
     if (missingPaths.includes(storagePath)) throw new Error("Object not found");
     return { bytes: Buffer.from("r"), contentType: "image/png" };
@@ -116,6 +137,10 @@ beforeEach(() => {
     data: { slots: { action: "" } },
   };
   parent = { id: "i1", assetPath: "u1/poster/p1/0.png", selected: true, width: 1200, height: 628 };
+  otherImages = [];
+  parentRequestModel = null;
+  parentReads.length = 0;
+  imageListOptions.length = 0;
   submitted.length = 0;
   builders.length = 0;
   libraryReferences = [];
@@ -334,5 +359,112 @@ describe("고치기는 처음 만들기와 같은 모델·크기로 값을 낸�
 
     await call({ instruction: "배경을 밤으로 바꿔 주세요" });
     expect(reserved[0]).toBe(at({ width: 3000, height: 3000 }));
+  });
+});
+
+/**
+ * **고칠 그림은 화면이 직접 말한다**(2026-09-29 점검).
+ *
+ * 전에는 화면이 「고르기」를 먼저 보내고, 서버는 그때 「골라져 있는」 그림을 고쳤다.
+ * 고르기가 실패하거나(오류가 떠도 입력칸은 열려 있다) 늦게 닿으면 **다른 변형이
+ * 고쳐졌다** — 사용자는 변형 3을 고쳤다고 알고, 고친 결과는 변형 1에서 나온다.
+ */
+describe("고칠 그림을 id 로 받는다", () => {
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    project = { ...project, ratio: "2:3", data: { ...project.data, slots: EMPTY_SLOTS } };
+    otherImages = [{ id: "i3", assetPath: "u1/poster/p1/req-1/2.png", selected: false, width: 1024, height: 1536 }];
+  });
+
+  it("고칠 그림 id 를 보내면 그 그림을 고친다 — 서버에 다른 그림이 골라져 있어도", async () => {
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요", imageId: "i3" });
+    expect(response.status).toBe(200);
+    expect(parentReads).toEqual(["u1/poster/p1/req-1/2.png"]);
+    expect(submitted[0]!.parentImageId).toBe("i3");
+  });
+
+  it("이 작업에 없는 그림 id 면 404 — 예약도 안 한다", async () => {
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요", imageId: "남의그림" });
+    expect(response.status).toBe(404);
+    expect(reserved).toEqual([]);
+    expect(submitted).toEqual([]);
+  });
+
+  it("id 를 안 보내는 옛 화면은 지금처럼 골라 둔 그림을 고친다", async () => {
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(submitted[0]!.parentImageId).toBe("i1");
+  });
+});
+
+/**
+ * **부모 그림을 만든 모델로 고친다**(2026-09-29 점검).
+ *
+ * 모델 목록 차례가 바뀐 뒤(09-10 무렵)에는 `chooseModelForRatio(작업의 모델)` 이
+ * 부모 그림과 다른 모델을 고를 수 있었다. 부모 그림의 요청 줄에 실제 모델이 있다.
+ */
+describe("부모 그림의 모델로 고친다", () => {
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    project = { ...project, ratio: "2:3", modelId: "gpt-image-2.5-flare", data: { ...project.data, slots: EMPTY_SLOTS } };
+    parent = { ...parent, generationRequestId: "req-parent" };
+  });
+
+  it("부모 그림을 만든 모델이 그 비율을 만들 수 있으면 그 모델이다", async () => {
+    parentRequestModel = "gpt-image-2";
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(submitted[0]!.modelId).toBe("gpt-image-2");
+  });
+
+  it("부모 모델을 모르면(옛 기록) 작업의 모델로 — 지금까지와 같다", async () => {
+    parentRequestModel = null;
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(submitted[0]!.modelId).toBe("gpt-image-2.5-flare");
+  });
+});
+
+/**
+ * **남의 작업은 못 고친다 — 팀원 것도.** 작업·그림 읽기는 팀이면 팀원 것까지
+ * 보이는데(RLS), 작업 저장은 본인 것만 된다. 그래서 팀원의 작업을 고치면 fal 에
+ * 돈을 낸 **뒤에** 저장에서 막혔다. 그림을 본인 것만 읽으면 돈이 나가기 전에 멈춘다
+ * (2026-09-29 점검 — 운영에는 혼자인 팀 하나뿐이라 실제로 일어나지는 않았다).
+ */
+describe("본인 작업만 고친다", () => {
+  it("그림 목록을 본인 것만 달라고 한다", async () => {
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(imageListOptions).toContainEqual(expect.objectContaining({ ownOnly: true }));
+  });
+});
+
+describe("부모 모델이 그 비율을 못 만들면", () => {
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    parent = { ...parent, generationRequestId: "req-parent" };
+    // 비율을 바꿔 고친다 — 부모를 만든 경제형은 인쇄용 A4 를 못 만든다.
+    project = { ...project, modelId: "nano-banana", data: { ...project.data, slots: EMPTY_SLOTS } };
+  });
+
+  it("처음 만들기 규칙으로 만들 수 있는 모델로 바꾸고, 예약도 그 모델로 잡는다", async () => {
+    const { chooseModelForRatio, IMAGE_MODELS } = await import("@fixup/sns-core");
+    const { creditUnits } = await import("@fixup/shared");
+    parentRequestModel = "nano-banana";
+    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+    // 전제: 정말 바뀌는 조합이다.
+    expect(choice.switched).toBe(true);
+
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요", ratioId: "a4-print" });
+    expect(response.status).toBe(200);
+    expect(submitted[0]!.modelId).toBe(choice.model.id);
+    const built = (builders[0] as (job: unknown) => { estimate: { totalUsd?: number } })(submitted[0]);
+    expect(reserved[0]).toBe(creditUnits(built.estimate.totalUsd ?? 0));
+  });
+});
+
+describe("옛 화면이 고칠 그림 없이 보내면", () => {
+  it("골라 둔 그림도 없으면 400 — 무엇을 하라고 말한다", async () => {
+    parent = { ...parent, selected: false };
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toBe("먼저 고칠 변형 하나를 고르세요.");
+    expect(reserved).toEqual([]);
   });
 });

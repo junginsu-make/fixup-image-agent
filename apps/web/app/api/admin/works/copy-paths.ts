@@ -200,6 +200,26 @@ export function posterCopyPlan(
 }
 
 /**
+ * **옮기지 못한 그림은 줄도 안 적는다**(2026-09-29 점검).
+ *
+ * 라이브러리·참고 이미지 복사는 이미 그렇게 한다(`moveAssets` 가 실제로 옮긴 목록을
+ * 준다). 포스터 복사만 그 결과를 버려, 원본을 못 읽은 장이 복사본에 깨진 그림으로
+ * 섰다. 사본(썸네일)만 실패한 장은 살리고 사본 자리를 비운다 — 화면이 원본으로
+ * 떨어진다. `sources` 는 줄과 같은 차례로 함께 거른다.
+ */
+export function keepMovedPosterRows<
+  P extends { rows: Array<Record<string, unknown>>; sources: unknown[] },
+>(plan: P, moved: ReadonlySet<string>): Pick<P, "rows" | "sources"> {
+  const keep = plan.rows.map((row) => moved.has(row.asset_path as string));
+  return {
+    rows: plan.rows
+      .filter((_row, index) => keep[index])
+      .map((row) => (row.thumb_path && !moved.has(row.thumb_path as string) ? { ...row, thumb_path: null } : row)),
+    sources: plan.sources.filter((_source, index) => keep[index]) as P["sources"],
+  };
+}
+
+/**
  * 복사본의 고치기 요청에 **복사된 부모 그림**을 단다.
  *
  * 원본 요청의 `parent_image_id` 는 원본 그림을 가리킨다. 복사본에서 그대로 두면

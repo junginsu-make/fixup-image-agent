@@ -24,7 +24,12 @@ export async function POST(_request: Request, context: Context) {
     const project = await stores.projects.get(id);
     if (!project) return Response.json({ ok: false, message: "포스터 작업을 찾을 수 없습니다." }, { status: 404 });
 
-    const images = await stores.images.byProject(id);
+    /*
+     * **본인 그림만.** 검수는 fal 에 올리고 검수 모델을 부르는, 돈이 드는 길이다.
+     * 그림 읽기는 팀이면 팀원 것까지 열려 있고 결과 저장은 본인 것만 돼서, 팀원의
+     * 작업을 검수하면 모델 값을 낸 뒤에야 막혔다(2026-09-29 리뷰). 이름표도 필요 없다.
+     */
+    const images = await stores.images.byProject(id, { lineage: false, ownOnly: true });
     const target = images.find(shouldReviewPoster);
     if (!target) {
       return Response.json(

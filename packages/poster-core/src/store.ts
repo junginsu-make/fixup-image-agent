@@ -193,6 +193,14 @@ export interface PosterRequestStore {
    * 제출 시점에 서버가 계산해 이 행에 적어 두므로, 여기서 다시 읽는다.
    */
   unitCost(id: string): Promise<number | null>;
+  /**
+   * 제출할 때 **실제로 쓴 모델**. 모르면 `null`.
+   *
+   * 작업의 모델(`project.modelId`)과 다를 수 있다 — 처음 만들기는 고른 모델이 그
+   * 비율을 못 만들면 바꾸고(`chooseModelForRatio`), 바꾼 것을 작업에 적지 않는다.
+   * 원가 장부와 고치기가 이 값을 본다(2026-09-29).
+   */
+  modelOf(id: string): Promise<string | null>;
 }
 
 export interface PosterImageStore {
@@ -202,8 +210,12 @@ export interface PosterImageStore {
    *
    * 이력은 요청 장부를 한 번 더 읽는다. 파일 한 장을 주는 길처럼 이름표가 필요 없고
    * 자주 불리는 곳은 `{ lineage: false }` 로 끈다 — 썸네일마다 질의가 는다.
+   *
+   * `{ ownOnly: true }` 면 **본인 그림만** 준다. 그림 읽기는 팀이면 팀원 것까지 열려
+   * 있다(RLS `team reads poster images`). 내보내기·고치기처럼 밖으로 나가거나 돈이
+   * 드는 길은 이것을 켠다(2026-09-29 점검).
    */
-  byProject(projectId: string, options?: { lineage?: boolean }): Promise<PosterImageRecord[]>;
+  byProject(projectId: string, options?: { lineage?: boolean; ownOnly?: boolean }): Promise<PosterImageRecord[]>;
   /**
    * 목록 화면이 대표 그림을 세울 때 쓴다.
    *

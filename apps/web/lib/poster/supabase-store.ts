@@ -148,6 +148,17 @@ export function createSupabasePosterRequestStore(userId: string): PosterRequestS
       const value = (data as { unit_cost_usd: number | null } | null)?.unit_cost_usd;
       return typeof value === "number" && Number.isFinite(value) ? value : null;
     },
+    async modelOf(id) {
+      // `unitCost` 와 같은 길 — 자기 요청 줄만 읽는다.
+      const { data, error } = await createSupabaseAdminClient()
+        .from("poster_generation_requests")
+        .select("model_id")
+        .eq("id", id).eq("user_id", userId)
+        .maybeSingle();
+      if (error) return null;
+      const value = (data as { model_id: string | null } | null)?.model_id;
+      return typeof value === "string" && value.trim() ? value : null;
+    },
   };
 }
 
@@ -166,9 +177,11 @@ export function createSupabasePosterImageStore(userId: string): PosterImageStore
     async byProject(projectId, options) {
       const client = await createSupabaseServerClient();
       const wantsLineage = options?.lineage !== false;
+      const imageQuery = client.from("poster_images")
+        .select(IMAGE_COLUMNS).eq("project_id", projectId);
       const [images, edits] = await Promise.all([
-        client.from("poster_images")
-          .select(IMAGE_COLUMNS).eq("project_id", projectId)
+        // 본인 것만 달라면 주인 조건을 건다 — 팀 읽기 규칙이 살아 있다.
+        (options?.ownOnly ? imageQuery.eq("user_id", userId) : imageQuery)
           .order("variant_index", { ascending: true }),
         wantsLineage
           ? client.from("poster_generation_requests")
