@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ ${EUID} -ne 0 ]]; then
-  echo "Run as root: sudo bash deploy/ec2/install-host.sh <도메인 또는 IP>" >&2
+  echo "Run as root: sudo bash deploy/ec2/install-host.sh <도메인 또는 http://IP> [redirect_from]" >&2
   exit 1
 fi
 
@@ -15,20 +15,20 @@ if [[ -e /etc/systemd/system/detail-page-studio.service || -d /opt/detail-page-s
   exit 1
 fi
 
-# 도메인 또는 IP 를 받는다.
+# 사이트 주소와(있으면) 리다이렉트를 보낼 주소를 받는다.
 #
 # 도메인이면 Caddy 가 인증서를 받아 HTTPS 로 연다. IP 면 받을 수 없다 —
-# 공개 인증 기관은 IP 에 인증서를 내주지 않는다. 그때는 평문 HTTP 로 연다.
-# 그러라고 `http://` 를 붙여 준다. 안 붙이면 Caddy 가 인증서를 받으려다
-# 실패하고 사이트가 아예 안 뜬다.
-site=${1:-}
-if [[ ${site} =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$ ]]; then
-  site_address=${site}
-elif [[ ${site} =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
-  site_address="http://${site}"
-  echo "IP 로 엽니다: ${site_address} — 인증서 없이 평문 HTTP 입니다." >&2
-else
-  echo "도메인(studio.example.com) 또는 IP(54.180.68.212) 가 필요합니다." >&2
+# 공개 인증 기관은 IP 에 인증서를 내주지 않는다. 그때는 평문 HTTP 로 열도록
+# **호출하는 쪽에서** `http://` 를 붙여 준다. 안 붙이면 Caddy 가 인증서를
+# 받으려다 실패하고 사이트가 아예 안 뜬다.
+#
+# redirect_from 은(주면) 그 주소에서 site_address 의 HTTPS 로 308 리다이렉트
+# 하는 블록을 더한다 — 운영 IP 를 운영 도메인으로 넘길 때 쓴다. 주소 모양
+# 검사는 render-caddy-site.sh 가 한다.
+site_address=${1:-}
+redirect_from=${2:-}
+if [[ -z ${site_address} ]]; then
+  echo "사용법: sudo bash deploy/ec2/install-host.sh <도메인 또는 http://IP> [redirect_from]" >&2
   exit 1
 fi
 
@@ -65,15 +65,59 @@ install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixu
 install -d -o root -g root -m 0755 /etc/caddy/sites
 install -d -o caddy -g caddy -m 0750 /var/log/caddy
 install -d -o root -g caddy -m 0750 /var/www/fixup-image-agent /var/www/fixup-image-agent/static
-sed "s|{{SITE}}|${site_address}|g" "${script_dir}/Caddyfile.template" > /etc/caddy/sites/fixup-image-agent.caddy
-caddy fmt --overwrite /etc/caddy/sites/fixup-image-agent.caddy
+
+site_file=/etc/caddy/sites/fixup-image-agent.caddy
+site_backup=/etc/caddy/sites/fixup-image-agent.caddy.bak
+
+# 이 주소로 시작하는 사이트 블록이 다른 *.caddy 파일에 이미 있으면 멈춘다
+# (예: 운영에서 도메인을 손으로 연결하며 만든 formwith.caddy). 모르고
+# 덮어쓰면 두 파일에 같은 주소가 생겨 `caddy validate` 가 실패하거나, 먼저
+# 있던 사이트(IP→도메인 리다이렉트 같은)를 지우고 나서야 실패해 깨진 채로
+# 남는다.
+host=${site_address#http://}
+host=${host#https://}
+site_pattern=$(printf '%s' "${site_address}" | sed 's/\./\\./g')
+host_pattern=$(printf '%s' "${host}" | sed 's/\./\\./g')
+
+for other in /etc/caddy/sites/*.caddy; do
+  [[ -e ${other} ]] || continue
+  [[ ${other} == "${site_file}" ]] && continue
+  if grep -Eq "^${site_pattern}[[:space:]]*\{" "${other}" || grep -Eq "^https?://${host_pattern}" "${other}"; then
+    echo "${other} 에 이미 ${site_address} 로 시작하는 사이트 블록이 있습니다. docs/DEPLOY.md 「서버 설정 바꾸기」의 처음 한 번 절차를 보세요." >&2
+    exit 1
+  fi
+done
+
+new_site=$(mktemp /tmp/fixup-image-agent-caddy-site.XXXXXX)
+trap 'rm -f "${new_site}"' EXIT
+"${script_dir}/render-caddy-site.sh" "${site_address}" "${redirect_from}" > "${new_site}"
+
+had_site_file=0
+[[ -e ${site_file} ]] && had_site_file=1
+[[ ${had_site_file} -eq 1 ]] && cp "${site_file}" "${site_backup}"
+
+cp "${new_site}" "${site_file}"
+caddy fmt --overwrite "${site_file}"
 
 touch /etc/caddy/Caddyfile
 if ! grep -Fqx 'import /etc/caddy/sites/*.caddy' /etc/caddy/Caddyfile; then
   printf '\nimport /etc/caddy/sites/*.caddy\n' >> /etc/caddy/Caddyfile
 fi
 caddy fmt --overwrite /etc/caddy/Caddyfile
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+# 검사를 root 로 돌리면 접근 기록 파일을 root 소유로 만들어, 정작 Caddy 가
+# 못 열고 뜨지 않는다(2026-09-28 시험 서버에서 겪음). Caddy 가 도는 계정으로
+# 검사한다. 실패하면 방금 바꾼 사이트 파일을 되돌린다 — 깨진 설정을 디스크에
+# 남기지 않는다.
+if ! runuser -u caddy -- caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
+  if [[ ${had_site_file} -eq 1 ]]; then
+    cp "${site_backup}" "${site_file}"
+  else
+    rm -f "${site_file}"
+  fi
+  echo "Caddy 설정 검사에 실패해 옛 설정으로 되돌렸습니다: ${site_file}" >&2
+  exit 1
+fi
 
 systemctl daemon-reload
 systemctl enable fixup-image-agent.service
