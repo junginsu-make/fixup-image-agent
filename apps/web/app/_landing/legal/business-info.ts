@@ -1,4 +1,5 @@
 import type { Locale } from "../landing-content";
+import { CS_EMAIL } from "../../../lib/cs/contact";
 
 /**
  * 푸터에 고정으로 거는 사업자 정보.
@@ -34,6 +35,11 @@ export const BUSINESS = {
    * 걸어 두면 표시한 것으로 치지 않는다.
    */
   contact: "02-1666-8467",
+  /**
+   * 전자우편주소(2026-09-29). 전자상거래법 제10조가 전화번호와 함께 요구한다.
+   * 문의 창구와 **같은 값**을 쓴다 — 갈라지면 한쪽은 아무도 안 본다.
+   */
+  email: CS_EMAIL,
 } as const;
 
 export type BusinessField = keyof typeof BUSINESS;
@@ -46,6 +52,7 @@ export const BUSINESS_ORDER = [
   "mailOrderNumber",
   "address",
   "contact",
+  "email",
 ] as const satisfies readonly BusinessField[];
 
 const LABELS: Record<Locale, Record<BusinessField, string>> = {
@@ -56,6 +63,7 @@ const LABELS: Record<Locale, Record<BusinessField, string>> = {
     mailOrderNumber: "통신판매업 신고번호",
     address: "주소",
     contact: "연락처",
+    email: "이메일",
   },
   en: {
     companyName: "Company",
@@ -64,6 +72,7 @@ const LABELS: Record<Locale, Record<BusinessField, string>> = {
     mailOrderNumber: "Mail-order registration",
     address: "Address",
     contact: "Contact",
+    email: "Email",
   },
 };
 

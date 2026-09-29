@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseLegal } from "../render";
 import { LEGAL_DOCS, PRIVACY_DOC, TERMS_DOC } from "../documents";
 import { BUSINESS } from "../business-info";
+import { CS_EMAIL } from "../../../../lib/cs/contact";
 
 /**
  * 법률 문서는 **원문 그대로** 걸려야 한다.
@@ -50,9 +51,10 @@ describe("채워야 하는 칸", () => {
     }
   });
 
+  /** 문의 창구 주소를 쓴다(2026-09-29 통일). 문서마다 주소가 다르면 한쪽은 아무도 안 본다. */
   it("두 문서 모두 연락처 이메일이 들어 있다", () => {
     for (const doc of LEGAL_DOCS) {
-      expect(doc.body).toContain("9843ohs@gmail.com");
+      expect(doc.body).toContain(CS_EMAIL);
     }
   });
 

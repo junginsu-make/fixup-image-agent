@@ -19,6 +19,7 @@ import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import { authAvailability } from "../../lib/supabase/env";
 import { cleanProfileText, PROFILE_LIMITS, profileInputError } from "../../lib/membership/profile-extras";
 import { signupResult, type SignupResult } from "../../lib/auth/signup-result";
+import { signupConsentError, signupConsentMetadata } from "../../lib/membership/signup-consent";
 
 export default function SignupPage() {
   const [name, setName] = React.useState("");
@@ -26,6 +27,8 @@ export default function SignupPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
+  const [ageConfirmed, setAgeConfirmed] = React.useState(false);
+  const [termsAgreed, setTermsAgreed] = React.useState(false);
   const [captchaToken, setCaptchaToken] = React.useState("");
   const auth = authAvailability();
   const [result, setResult] = React.useState<SignupResult | null>(null);
@@ -45,6 +48,8 @@ export default function SignupPage() {
     if (profileProblem) return setError(profileProblem);
     if (password.length < 8) return setError("비밀번호는 8자 이상이어야 합니다.");
     if (password !== confirm) return setError("비밀번호 확인이 일치하지 않습니다.");
+    const consentProblem = signupConsentError({ ageConfirmed, termsAgreed });
+    if (consentProblem) return setError(consentProblem);
     if (captchaRequired && !captchaToken) return setError("보안 확인을 완료해 주세요.");
     setLoading(true);
     try {
@@ -63,6 +68,8 @@ export default function SignupPage() {
           data: {
             display_name: cleanProfileText(name, PROFILE_LIMITS.name),
             referrer_input: cleanProfileText(referrer, PROFILE_LIMITS.referrer),
+            // 어느 판의 약관에 동의했는지. 동의 시각은 서버의 가입 시각이다.
+            ...signupConsentMetadata(),
           },
         },
       });
@@ -152,6 +159,29 @@ export default function SignupPage() {
             <Label htmlFor="referrer">추천코드 <span className="font-normal text-muted-foreground">· 선택</span></Label>
             <Input id="referrer" maxLength={PROFILE_LIMITS.referrer} placeholder="받으신 추천코드" value={referrer} onChange={(e) => setReferrer(e.target.value)} />
           </div>
+          {/*
+            약관·처리방침은 **새 탭**으로 연다. 같은 탭이면 적던 이름·비밀번호가
+            사라진다. 첫 화면의 #terms·#privacy 주소가 그 문서를 바로 연다.
+            개인정보는 동의 칸이 아니라 안내다 — 까닭은 lib/membership/signup-consent.ts.
+          */}
+          <fieldset className="space-y-2 rounded-md border border-border p-3 text-sm">
+            <legend className="sr-only">가입 동의</legend>
+            <label className="flex items-start gap-2 leading-6">
+              <input type="checkbox" className="mt-1 h-4 w-4 flex-none accent-[var(--primary)]" checked={ageConfirmed} onChange={(e) => setAgeConfirmed(e.target.checked)} />
+              <span><span className="font-bold text-primary">필수</span> 만 14세 이상입니다.</span>
+            </label>
+            <label className="flex items-start gap-2 leading-6">
+              <input type="checkbox" className="mt-1 h-4 w-4 flex-none accent-[var(--primary)]" checked={termsAgreed} onChange={(e) => setTermsAgreed(e.target.checked)} />
+              <span>
+                <span className="font-bold text-primary">필수</span>{" "}
+                <a href="/#terms" target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-2">이용약관<span className="sr-only"> (새 탭에서 열림)</span></a>에 동의합니다.
+              </span>
+            </label>
+            <p className="pl-6 text-xs leading-5 text-muted-foreground">
+              가입 정보는{" "}
+              <a href="/#privacy" target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-2">개인정보 처리방침<span className="sr-only"> (새 탭에서 열림)</span></a>에 따라 처리됩니다.
+            </p>
+          </fieldset>
           <Turnstile key={captchaVersion} onToken={setCaptchaToken} />
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={loading || !auth.ready}>{loading ? "가입 처리 중..." : "인증 메일 받기"}</Button>

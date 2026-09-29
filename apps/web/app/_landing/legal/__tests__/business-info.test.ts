@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { BUSINESS, BUSINESS_ORDER, businessLines } from "../business-info";
+import { CS_EMAIL } from "../../../../lib/cs/contact";
 
 /**
  * 푸터의 사업자 정보가 **증명서와 어긋나지 않는지** 본다.
@@ -75,7 +76,11 @@ describe("사업자 정보", () => {
     expect(read("app/_landing/legal/documents.ts")).not.toContain("[전화번호]");
   });
 
-  it("법이 요구하는 여섯 항목을 모두 건다", () => {
+  /**
+   * **전자우편주소가 빠져 있었다**(2026-09-29). 전자상거래법 제10조는 전화번호와
+   * 함께 전자우편주소도 표시하라고 한다. 문의 창구와 같은 주소를 쓴다.
+   */
+  it("법이 요구하는 일곱 항목을 모두 건다", () => {
     expect([...BUSINESS_ORDER]).toEqual([
       "companyName",
       "ceo",
@@ -83,7 +88,12 @@ describe("사업자 정보", () => {
       "mailOrderNumber",
       "address",
       "contact",
+      "email",
     ]);
+  });
+
+  it("푸터의 전자우편주소가 문의 창구 주소와 같다", () => {
+    expect(BUSINESS.email).toBe(CS_EMAIL);
   });
 });
 
