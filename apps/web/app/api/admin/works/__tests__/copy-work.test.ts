@@ -22,9 +22,17 @@ let lastTable = "";
 let updatedRows = 0;
 /** 표별 마지막 insert. 복사가 여러 표를 건드리므로 하나로는 못 본다. */
 const insertedBy: Record<string, unknown> = {};
+/** 표별 **모든** insert — 포스터는 회차마다 요청을 만든다. */
+const insertsBy: Record<string, unknown[]> = {};
+/** 표별 모든 update. */
+const updatesBy: Record<string, Array<Record<string, unknown>>> = {};
+/** 원본 작업의 요청 장부 줄. */
+let requestRows: Array<Record<string, unknown>> = [];
 
 function builderFor(table: string) {
   lastTable = table;
+  /** 이 질의가 넣은 줄. 실제 DB 처럼 `insert(...).select()` 는 **넣은 줄**을 돌려준다. */
+  let pendingInsert: Array<Record<string, unknown>> | null = null;
   const self: Record<string, unknown> = {
     select: () => self,
     eq: () => self,
@@ -32,9 +40,15 @@ function builderFor(table: string) {
     insert: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
       inserted = row;
       insertedBy[table] = row;
+      (insertsBy[table] ??= []).push(row);
+      pendingInsert = Array.isArray(row) ? row : [row];
       return self;
     },
-    update: (row: Record<string, unknown>) => { updated = row; updatedRows = 1; return self; },
+    update: (row: Record<string, unknown>) => {
+      updated = row; updatedRows = 1;
+      (updatesBy[table] ??= []).push(row);
+      return self;
+    },
     maybeSingle: async () => ({ data: sourceRow, error: null }),
     /*
       만든 행을 돌려준다 — 저장소가 그것을 `record()` 로 바꿔 쓰므로 칸이
@@ -42,7 +56,12 @@ function builderFor(table: string) {
       **방금 넣은 줄**을 돌려준다.
     */
     single: async () => ({
-      data: { ...(inserted as Record<string, unknown> ?? {}), id: "새작업" },
+      data: {
+        ...(inserted as Record<string, unknown> ?? {}),
+        // 요청 줄은 회차마다 따로 만든다 — 실제 DB 처럼 줄마다 다른 id 를 준다.
+        id: table === "poster_generation_requests"
+          ? `새요청-${insertsBy[table]?.length ?? 0}` : "새작업",
+      },
       error: null,
     }),
     /*
@@ -59,8 +78,11 @@ function builderFor(table: string) {
           사라졌다. 실제 DB 는 표마다 따로 답한다.
         */
         data: table === "poster_images"
-          ? imageRows
-          : updatedRows ? [{ id: "새작업" }] : [],
+          // 넣은 줄이면 새 id 를 붙여 돌려준다. 아니면 원본 조회다.
+          ? (pendingInsert ? pendingInsert.map((row, index) => ({ ...row, id: `새그림-${index}` })) : imageRows)
+          : table === "poster_generation_requests"
+            ? requestRows
+            : updatedRows ? [{ id: "새작업" }] : [],
         error: null,
       })),
   };
@@ -124,6 +146,7 @@ function posterSource(): Record<string, unknown> {
 
 function posterImageRow(): Record<string, unknown> {
   return {
+    id: "원본그림0", generation_request_id: "원본요청1",
     variant_index: 0, selected: true, width: 1024, height: 1536, review: null,
     asset_path: "회원A/poster/원본/0.png",
     thumb_path: "회원A/poster/원본/0.thumb.webp",
@@ -133,7 +156,10 @@ function posterImageRow(): Record<string, unknown> {
 beforeEach(() => {
   uploads.length = 0; downloads.length = 0;
   inserted = null; updated = null; sourceRow = null; imageRows = []; lastTable = ""; updatedRows = 0;
+  requestRows = [];
   for (const key of Object.keys(insertedBy)) delete insertedBy[key];
+  for (const key of Object.keys(insertsBy)) delete insertsBy[key];
+  for (const key of Object.keys(updatesBy)) delete updatesBy[key];
 });
 
 describe("copyWorkToSelf — 카드뉴스", () => {
@@ -230,6 +256,61 @@ describe("copyWorkToSelf — 포스터", () => {
     expect(request.user_id).toBe("관리자B");
     expect(request.cost_usd).toBe(0);
     // 남의 줄이 아니라 방금 만든 줄을 가리킨다.
-    expect(rows[0]!.generation_request_id).toBe("새작업");
+    expect(rows[0]!.generation_request_id).toBe("새요청-1");
+  });
+
+  /*
+   * **고치기·다시 만들기가 있던 작업도 복사된다**(2026-09-29 리뷰).
+   *
+   * 전에는 모든 줄을 새 요청 하나에 원래 번호 그대로 붙여, 번호 0 이 둘이 되며
+   * `unique (generation_request_id, variant_index)` 에 걸렸다 — 작업·요청·파일은
+   * 이미 만든 뒤라 빈 복사본이 남았다.
+   */
+  it("회차마다 요청을 따로 만든다 — 같은 번호가 한 요청에 겹치지 않는다", async () => {
+    sourceRow = posterSource();
+    imageRows = [
+      posterImageRow(),
+      {
+        id: "원본고친것", generation_request_id: "원본요청2", variant_index: 0, selected: false,
+        width: 1024, height: 1536, review: null,
+        asset_path: "회원A/poster/원본/원본요청2/0.png", thumb_path: null,
+      },
+    ];
+    requestRows = [
+      { id: "원본요청1", parent_image_id: null, edit_instruction: null, mode: "t2i" },
+      { id: "원본요청2", parent_image_id: "원본그림0", edit_instruction: "배경을 밤으로", mode: "i2i" },
+    ];
+
+    await copyWorkToSelf("poster", "원본", "관리자B");
+
+    const requests = insertsBy.poster_generation_requests as Array<Record<string, unknown>>;
+    expect(requests).toHaveLength(2);
+    // 비용은 여전히 0 이다 — 복사는 AI 를 안 부른다.
+    expect(requests.every((request) => request.cost_usd === 0 && request.user_id === "관리자B")).toBe(true);
+    const rows = insertedBy.poster_images as Array<Record<string, unknown>>;
+    expect(rows.map((row) => row.generation_request_id)).toEqual(["새요청-1", "새요청-2"]);
+  });
+
+  it("고친 이력을 복사본에서도 잇는다 — 지시와 복사된 부모 그림", async () => {
+    sourceRow = posterSource();
+    imageRows = [
+      posterImageRow(),
+      {
+        id: "원본고친것", generation_request_id: "원본요청2", variant_index: 0, selected: false,
+        width: 1024, height: 1536, review: null,
+        asset_path: "회원A/poster/원본/원본요청2/0.png", thumb_path: null,
+      },
+    ];
+    requestRows = [
+      { id: "원본요청1", parent_image_id: null, edit_instruction: null, mode: "t2i" },
+      { id: "원본요청2", parent_image_id: "원본그림0", edit_instruction: "배경을 밤으로", mode: "i2i" },
+    ];
+
+    await copyWorkToSelf("poster", "원본", "관리자B");
+
+    const requests = insertsBy.poster_generation_requests as Array<Record<string, unknown>>;
+    expect(requests[1]).toMatchObject({ edit_instruction: "배경을 밤으로", mode: "i2i" });
+    // 복사된 첫 그림(새그림-0)이 원본그림0 의 복사본이다.
+    expect(updatesBy.poster_generation_requests).toContainEqual({ parent_image_id: "새그림-0" });
   });
 });

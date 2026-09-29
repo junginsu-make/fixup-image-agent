@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
   adoptedReferenceId, copiedCharacterAssetPath, copiedLibraryAssetPath, copiedReferencePath,
   copiedReferenceTitle, ownerCouldSeeReference,
-  posterCopyPlan, snsCopyPlan, type AssetMove,
+  posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan, type AssetMove,
 } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import {
@@ -1010,34 +1010,57 @@ export async function copyWorkToSelf(
   await keepCopyPrivate(admin, "poster_projects", created.id as string);
 
   const { data: images } = await admin.from("poster_images")
-    .select("variant_index,selected,width,height,review,asset_path,thumb_path")
+    .select("id,generation_request_id,variant_index,selected,width,height,review,asset_path,thumb_path")
+    .eq("project_id", id)
+    // 회차를 만든 차례로 세려고 시각 순으로 받는다.
+    .order("created_at", { ascending: true })
+    .order("variant_index", { ascending: true });
+  const imageRows = (images ?? []) as Parameters<typeof posterCopyPlan>[0];
+  // 원본 회차의 고친 이력(지시·부모 그림). 복사본에서도 「고친 결과」로 불리게 옮긴다.
+  const { data: sourceRequests } = await admin.from("poster_generation_requests")
+    .select("id,parent_image_id,edit_instruction,mode")
     .eq("project_id", id);
+  const sourceRequestRows = (sourceRequests ?? []) as Array<{
+    id: string; parent_image_id: string | null; edit_instruction: string | null; mode: string | null;
+  }>;
 
   /*
     **변형 행은 생성 요청을 가리켜야 한다** — 그 칸이 `not null` 이다
     (`202608310004_poster.sql:47`). 남의 장부 줄을 가리킬 수는 없으므로
-    복사한 사람 소유로 하나 만든다.
+    복사한 사람 소유로 만든다.
+
+    **원본 회차마다 하나씩 만든다.** 전에는 하나에 모든 줄을 몰아 붙였다 —
+    「이 장만 고치기」나 다시 만들기가 한 번이라도 있으면 번호 0 이 둘이 되어
+    `unique (generation_request_id, variant_index)` 에 걸렸고, 작업·요청·파일은
+    이미 만든 뒤라 빈 복사본이 남았다(2026-09-29 리뷰).
 
     **비용은 0 이다.** 복사는 AI 를 안 부른다 — 0 이 아닌 값을 적으면 장부가
     쓰지 않은 돈을 세게 된다.
   */
-  const { data: request, error: requestError } = await admin
-    .from("poster_generation_requests")
-    .insert({
-      user_id: ownerUserId,
-      project_id: created.id,
-      model_id: from.modelId,
-      ratio_id: from.ratio,
-      mode: "t2i",
-      size: {},
-      requested_images: Math.min(Math.max((images ?? []).length, 1), 3),
-      returned_images: (images ?? []).length,
-      unit_cost_usd: 0,
-      cost_usd: 0,
-    })
-    .select("id").single();
-  if (requestError || !request) {
-    throw new Error(requestError?.message ?? "복사하지 못했습니다.");
+  const requestIdFor: Record<string, string> = {};
+  for (const round of posterCopyRounds(imageRows)) {
+    const source = sourceRequestRows.find((row) => row.id === round.sourceRequestId);
+    const { data: request, error: requestError } = await admin
+      .from("poster_generation_requests")
+      .insert({
+        user_id: ownerUserId,
+        project_id: created.id,
+        model_id: from.modelId,
+        ratio_id: from.ratio,
+        mode: source?.mode === "i2i" ? "i2i" : "t2i",
+        size: {},
+        requested_images: Math.min(Math.max(round.count, 1), 3),
+        returned_images: round.count,
+        unit_cost_usd: 0,
+        cost_usd: 0,
+        // 부모 그림은 복사된 그림의 id 를 안 뒤에 단다(아래).
+        edit_instruction: source?.edit_instruction ?? null,
+      })
+      .select("id").single();
+    if (requestError || !request) {
+      throw new Error(requestError?.message ?? "복사하지 못했습니다.");
+    }
+    requestIdFor[round.sourceRequestId] = request.id as string;
   }
 
   /*
@@ -1050,13 +1073,29 @@ export async function copyWorkToSelf(
       .update({ status: from.status }).eq("id", created.id);
   }
 
-  const plan = posterCopyPlan(
-    (images ?? []) as Array<{ variant_index: number; asset_path: string; thumb_path: string | null }>,
-    ownerUserId, created.id as string, request.id as string);
+  const plan = posterCopyPlan(imageRows, ownerUserId, created.id as string, requestIdFor);
   await moveAssets(admin, plan.moves);
   if (plan.rows.length) {
-    const { error } = await admin.from("poster_images").insert(plan.rows);
+    const { data: insertedRows, error } = await admin.from("poster_images")
+      .insert(plan.rows).select("id,asset_path");
     if (error) throw new Error(error.message);
+    /*
+      **고친 이력을 잇는다.** 실패해도 복사는 끝난 것이다 — 그림은 다 들어갔고
+      이름표에 「변형 3에서 고침」만 빠진다. 던지면 다 된 복사를 실패로 알린다.
+    */
+    const updates = posterCopyParentUpdates({
+      sourceRequests: sourceRequestRows,
+      requestIdFor,
+      sources: plan.sources,
+      inserted: (insertedRows ?? []) as Array<{ id: string; asset_path: string }>,
+    });
+    for (const update of updates) {
+      const { error: parentError } = await admin.from("poster_generation_requests")
+        .update({ parent_image_id: update.parentImageId }).eq("id", update.requestId);
+      if (parentError) {
+        console.error(`[admin] 복사본의 고친 이력을 잇지 못했습니다(${update.requestId}): ${parentError.message}`);
+      }
+    }
   }
   return { id: created.id as string };
 }

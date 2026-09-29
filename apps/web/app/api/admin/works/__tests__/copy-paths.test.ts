@@ -59,7 +59,7 @@ describe("copiedAssetPath", () => {
   });
 });
 
-import { posterCopyPlan, snsCopyPlan } from "../copy-paths";
+import { posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan } from "../copy-paths";
 
 /**
  * **무엇을 어디로 옮기고, 표에는 무엇을 적을까.**
@@ -130,14 +130,15 @@ describe("snsCopyPlan", () => {
 
 describe("posterCopyPlan", () => {
   const rows = [
-    { variant_index: 0, selected: true, width: 1024, height: 1024, review: null,
+    { id: "원본그림0", generation_request_id: "요청1", variant_index: 0, selected: true, width: 1024, height: 1024, review: null,
       asset_path: "회원A/poster/작업1/0.png", thumb_path: "회원A/poster/작업1/0.thumb.webp" },
-    { variant_index: 1, selected: false, width: 1024, height: 1024, review: null,
+    { id: "원본그림1", generation_request_id: "요청1", variant_index: 1, selected: false, width: 1024, height: 1024, review: null,
       asset_path: "회원A/poster/작업1/1.png", thumb_path: null },
   ];
+  const 한회차 = { 요청1: "새요청" };
 
   it("원본과 사본을 모두 옮길 목록에 넣는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
 
     expect(plan.moves.map((move) => move.to)).toEqual([
       "관리자B/poster/작업2/0.png",
@@ -147,7 +148,7 @@ describe("posterCopyPlan", () => {
   });
 
   it("새 행은 소유자와 작업이 복사한 사람 것이다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
 
     expect(plan.rows[0]).toMatchObject({
       user_id: "관리자B",
@@ -159,7 +160,7 @@ describe("posterCopyPlan", () => {
   });
 
   it("id 와 만든 시각은 새로 받는다 — 옮겨 적지 않는다", () => {
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
 
     expect(plan.rows[0]).not.toHaveProperty("id");
     expect(plan.rows[0]).not.toHaveProperty("created_at");
@@ -173,20 +174,98 @@ describe("posterCopyPlan", () => {
       실패한다 — 그리고 그때는 행과 파일이 이미 올라간 뒤다.
 
       원칙은 그대로 두되(남의 줄을 안 가리킨다) 값은 채운다. 복사한 사람
-      소유의 **비용 0** 짜리 요청 행을 하나 만들어 그것을 가리킨다.
+      소유의 **비용 0** 짜리 요청 행을 만들어 그것을 가리킨다.
     */
-    const plan = posterCopyPlan(rows, "관리자B", "작업2", "새요청");
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", 한회차);
 
     expect(plan.rows[0]!.generation_request_id).toBe("새요청");
-    expect(plan.rows[0]!.generation_request_id).not.toBe("회원A-요청");
+    expect(plan.rows[0]!.generation_request_id).not.toBe("요청1");
   });
 
   it("규약을 벗어난 경로의 행은 싣지 않는다", () => {
     // 그림 없는 변형 행을 남기면 목록에 빈 칸이 생긴다.
-    const plan = posterCopyPlan([{ variant_index: 0, asset_path: "이상한경로.png", thumb_path: null }], "관리자B", "작업2", "새요청");
+    const plan = posterCopyPlan(
+      [{ id: "x", generation_request_id: "요청1", variant_index: 0, asset_path: "이상한경로.png", thumb_path: null }],
+      "관리자B", "작업2", 한회차,
+    );
 
     expect(plan.moves).toEqual([]);
     expect(plan.rows).toEqual([]);
+  });
+
+  /*
+   * **회차가 둘 이상이면 요청도 회차마다 따로다**(2026-09-29 리뷰).
+   *
+   * 전에는 모든 행을 새 요청 **하나**에 원래 번호 그대로 붙였다. 「이 장만 고치기」나
+   * 다시 만들기가 한 번이라도 있으면 번호 0 이 둘이 되어
+   * `unique (generation_request_id, variant_index)` 에 걸렸다 — 복사본 작업·요청·
+   * 파일은 이미 만들어진 뒤라 **빈 복사본**이 남았다.
+   */
+  it("회차마다 새 요청을 가리킨다 — 같은 번호가 한 요청에 둘이 되지 않는다", () => {
+    const 두회차 = [
+      ...rows,
+      { id: "고친그림", generation_request_id: "요청2", variant_index: 0, asset_path: "회원A/poster/작업1/요청2/0.png", thumb_path: null },
+    ];
+    const plan = posterCopyPlan(두회차, "관리자B", "작업2", { 요청1: "새요청1", 요청2: "새요청2" });
+
+    const pairs = plan.rows.map((row) => `${row.generation_request_id}:${row.variant_index}`);
+    expect(new Set(pairs).size).toBe(pairs.length);
+    expect(plan.rows.map((row) => row.generation_request_id)).toEqual(["새요청1", "새요청1", "새요청2"]);
+  });
+
+  it("새 요청을 못 받은 회차의 행은 싣지 않는다 — 남의 줄을 가리키지 않는다", () => {
+    const plan = posterCopyPlan(rows, "관리자B", "작업2", {});
+    expect(plan.rows).toEqual([]);
+    expect(plan.moves).toEqual([]);
+  });
+});
+
+describe("posterCopyRounds", () => {
+  it("원본의 회차를 처음 나온 차례로 세고, 회차마다 그림 수를 센다", () => {
+    expect(posterCopyRounds([
+      { generation_request_id: "요청1" }, { generation_request_id: "요청1" },
+      { generation_request_id: "요청2" }, { generation_request_id: "요청1" },
+    ])).toEqual([
+      { sourceRequestId: "요청1", count: 3 },
+      { sourceRequestId: "요청2", count: 1 },
+    ]);
+  });
+});
+
+/*
+ * **고친 이력을 복사본에서도 잇는다.** 요청 줄의 `parent_image_id` 는 원본 그림을
+ * 가리킨다 — 복사본에서는 **복사된 그 그림**을 가리켜야 「변형 3에서 고침」이 된다.
+ * 복사된 그림의 id 는 넣은 뒤에야 알므로, 옮긴 경로로 짝을 찾는다.
+ */
+describe("posterCopyParentUpdates", () => {
+  const sources = [
+    { sourceImageId: "원본변형3", assetPath: "관리자B/poster/작업2/요청1/2.png" },
+    { sourceImageId: "원본고친것", assetPath: "관리자B/poster/작업2/요청2/0.png" },
+  ];
+  const inserted = [
+    { id: "새변형3", asset_path: "관리자B/poster/작업2/요청1/2.png" },
+    { id: "새고친것", asset_path: "관리자B/poster/작업2/요청2/0.png" },
+  ];
+
+  it("고치기 요청의 부모를 복사된 그림으로 바꿔 단다", () => {
+    expect(posterCopyParentUpdates({
+      sourceRequests: [
+        { id: "요청1", parent_image_id: null },
+        { id: "요청2", parent_image_id: "원본변형3" },
+      ],
+      requestIdFor: { 요청1: "새요청1", 요청2: "새요청2" },
+      sources,
+      inserted,
+    })).toEqual([{ requestId: "새요청2", parentImageId: "새변형3" }]);
+  });
+
+  it("부모가 복사되지 않았으면(지워졌거나 경로가 이상해 빠짐) 잇지 않는다", () => {
+    expect(posterCopyParentUpdates({
+      sourceRequests: [{ id: "요청2", parent_image_id: "사라진그림" }],
+      requestIdFor: { 요청2: "새요청2" },
+      sources,
+      inserted,
+    })).toEqual([]);
   });
 });
 
