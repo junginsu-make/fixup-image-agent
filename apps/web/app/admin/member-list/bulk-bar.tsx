@@ -43,7 +43,7 @@ function PlanForm({ users, plans, state }: { users: string[]; plans: CreditPlan[
   return (
     <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => {
       event.preventDefault();
-      state.submit({ kind: "subscription", users, plan: text(new FormData(event.currentTarget), "plan"), status: "active", action: crypto.randomUUID() });
+      state.submit({ kind: "subscription", users, plan: text(new FormData(event.currentTarget), "plan"), status: "active" });
     }}>
       <Field label="플랜">
         <select className={SELECT} name="plan" required>
@@ -66,7 +66,7 @@ function CancelForm({ rows, state }: { rows: AdminMemberRow[]; state: CreditComm
   if (plans.length > 1) return <p className="text-sm text-muted-foreground">플랜이 서로 다른 회원이 섞여 있습니다. 같은 플랜끼리 해지하세요.</p>;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button size="sm" variant="destructive" disabled={state.pending} onClick={() => state.submit({ kind: "subscription", users: rows.map((row) => row.profile.id), plan: plans[0]!, status: "canceled", action: crypto.randomUUID() })}>
+      <Button size="sm" variant="destructive" disabled={state.pending} onClick={() => state.submit({ kind: "subscription", users: rows.map((row) => row.profile.id), plan: plans[0]!, status: "canceled" })}>
         해지 내용 확인
       </Button>
       <p className="text-xs text-muted-foreground">해지하면 새 결제 확인을 할 수 없습니다. 이미 지급된 크레딧과, 미리 결제 확인해 둔 달의 크레딧은 그대로 지급·사용됩니다.</p>
@@ -79,7 +79,7 @@ function StatusForm({ users, state }: { users: string[]; state: CreditCommandSta
     <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => {
       event.preventDefault();
       const f = new FormData(event.currentTarget);
-      state.submit({ kind: "status", users, status: text(f, "status") as "active" | "suspended", reason: text(f, "reason"), action: crypto.randomUUID() });
+      state.submit({ kind: "status", users, status: text(f, "status") as "active" | "suspended", reason: text(f, "reason") });
     }}>
       <Field label="바꿀 상태">
         <select className={SELECT} name="status"><option value="active">승인</option><option value="suspended">정지</option></select>
