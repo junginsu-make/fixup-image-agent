@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CARD_RATIOS, IMAGE_MODELS, MAX_CARDS } from "@fixup/sns-core";
-import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
+import {
+  ATTACHMENT_ROLE_HINT,
+  ATTACHMENT_ROLE_LABEL,
+  IMAGE_LOOK_HINT,
+  IMAGE_LOOK_LABEL,
+  IMAGE_LOOKS,
+  withJosa,
+  type AttachmentRole,
+} from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -23,11 +31,30 @@ const RATIO_ITEMS = CARD_RATIOS.map((ratio) => ({ title: ratio.id, hint: ratio.l
 const MODEL_NAMES = IMAGE_MODELS.map((model) => model.label).join(" · ");
 
 /** 역할 어휘도 코드가 단일 출처다. 여기 베껴 적으면 어휘가 바뀔 때 안내만 낡는다. */
-const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "place_as_is"];
+const ROLES: AttachmentRole[] = [
+  "style", "preserve_product", "preserve_person", "preserve_person_restyled", "place_as_is",
+];
 const ROLE_ITEMS = ROLES.map((role) => ({
   title: ATTACHMENT_ROLE_LABEL[role],
   hint: ATTACHMENT_ROLE_HINT[role],
 }));
+
+/** 그림체 목록. 화면(03 규격)이 쓰는 그 이름이다. */
+const LOOK_ITEMS = IMAGE_LOOKS.map((look) => ({ title: IMAGE_LOOK_LABEL[look] }));
+
+/**
+ * 모델마다 받는 첨부 장수. 손으로 적었다가 새 모델(정밀형 플러스)이 빠진 채
+ * 낡았다(2026-09-29). 같은 장수끼리 묶어 「… 16장, … 14장」으로 낸다.
+ */
+const REFERENCE_LIMITS = [...new Set(IMAGE_MODELS.map((model) => model.maxReferenceImages))]
+  .sort((a, b) => b - a)
+  .map((max) => {
+    const names = IMAGE_MODELS.filter((model) => model.maxReferenceImages === max)
+      .map((model) => model.label)
+      .join(" · ");
+    return `${withJosa(names, "은는")} ${max}장`;
+  })
+  .join(", ");
 
 export default function CardNewsGuidePage() {
   return (
@@ -132,9 +159,9 @@ export default function CardNewsGuidePage() {
             head={["칸", "무엇이 들어가나", "누가 채우나"]}
             rows={[
               ["배경", "카드 전체를 덮는 바탕색", "고른 색 그대로"],
-              ["그림", "사진이나 일러스트", "AI 또는 라이브러리에서 고른 것"],
-              ["로고", "브랜드 마크", "참고 이미지에서 고른 것. 한 픽셀도 안 바뀝니다"],
-              ["글", "제목 · 본문", "원고가 그대로 들어갑니다"],
+              ["그림", "사진이나 일러스트", "AI 가 그립니다. 칸마다 무엇을 그릴지 적을 수 있습니다"],
+              ["로고", "브랜드 마크", "라이브러리에서 고른 것. AI 를 거치지 않고 그대로 놓습니다"],
+              ["글", "원고의 제목 · 본문 · 강조 문구 · 각주, 또는 고정 문구", "원고가 그대로 들어갑니다"],
             ]}
           />
           <p className="text-sm leading-6 text-muted-foreground">
@@ -148,15 +175,15 @@ export default function CardNewsGuidePage() {
             items={[
               {
                 title: "칸을 끌어서 옮기고 크기를 바꿉니다",
-                body: "가운데 캔버스에서 직접 합니다. 칸을 고르면 오른쪽에 그 칸의 설정이 나옵니다.",
+                body: "왼쪽 캔버스에서 직접 합니다. 칸을 고르면 오른쪽에 그 칸의 설정이 나옵니다.",
               },
               {
                 title: "겹치는 순서는 목록에서 바꿉니다",
                 body: "배경이 맨 아래, 글이 맨 위인 것이 보통입니다. 목록에서 끌어 올리고 내립니다.",
               },
               {
-                title: "표지 · 속지 · 끝장을 따로 짭니다",
-                body: "세 자리의 틀이 다릅니다. 표지는 제목이 크고, 속지는 본문이 길고, 끝장은 마무리 문구가 들어갑니다.",
+                title: "표지 · 속지 · 엔딩을 따로 짭니다",
+                body: "세 자리의 틀이 다릅니다. 표지는 제목이 크고, 속지는 본문이 길고, 엔딩은 마무리 문구가 들어갑니다.",
               },
               {
                 title: "미리보기로 원고를 넣어 봅니다",
@@ -180,17 +207,21 @@ export default function CardNewsGuidePage() {
         </Section>
       </Details>
 
-      <Section title="전체 흐름" hint="다섯 단계입니다. 03까지는 되돌아가 고칠 수 있습니다.">
+      <Section title="전체 흐름" hint="다섯 단계입니다. 「기획 시작」을 누르기 전까지는 01~03 을 오가며 고칩니다.">
         <Flow
           nodes={[
             { label: "01 내용", sub: "쓰거나 가져오기" },
             { label: "02 이미지", sub: "종류 · 역할 · 자리" },
-            { label: "03 규격", sub: "비율 · 장수 · 모델" },
+            { label: "03 규격", sub: "비율 · 장수 · 모델 · 그림체" },
             { label: "04 원고 확인", sub: "여기서 고칩니다", human: true },
             { label: "05 결과", sub: "검수까지" },
           ]}
         />
         <FlowLegend />
+        <p className="text-sm leading-6 text-muted-foreground">
+          <strong className="text-foreground">기획을 시작한 뒤에 01~03 을 누르면 새 작업이 됩니다.</strong> 그 작업의
+          값을 들고 가서 고쳐 만들 수 있고, 원래 작업은 그대로 남습니다.
+        </p>
       </Section>
 
       <Section title="무엇이 다른가" hint="일반 AI 이미지 도구와 비교해서.">
@@ -219,7 +250,7 @@ export default function CardNewsGuidePage() {
         <Mock title="카드뉴스 만들기 · 01 내용">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={0} />
           <MockField label="프로젝트 제목" placeholder="예: AI 자동화, 한 업무부터 시작하기" marker={1} />
-          <MockTabs items={["직접 쓰기", "유튜브 주소", "웹 주소", "질문해서 찾기"]} active={0} marker={2} />
+          <MockTabs items={["직접 쓰기", "유튜브 주소", "질문해서 찾기"]} active={0} marker={2} />
           <MockField label="카드뉴스로 만들 내용" placeholder="글이나 메모를 그대로 붙여 넣으세요." rows={4} />
           <MockField
             label="말투나 분위기 · 선택"
@@ -242,19 +273,16 @@ export default function CardNewsGuidePage() {
               ),
             },
             {
-              title: "내용을 넣는 네 가지 길",
+              title: "내용을 넣는 세 가지 길",
               body: (
                 <ul className="grid gap-1.5">
                   <li>
-                    <strong className="text-foreground">직접 쓰기</strong>. 이미 쓴 글이나 메모를 붙여 넣습니다
+                    <strong className="text-foreground">직접 쓰기</strong>. 이미 쓴 글이나 메모를 붙여 넣습니다.
+                    기사·블로그 글로 만들고 싶으면 본문을 복사해 여기에 붙여 넣으세요
                   </li>
                   <li>
                     <strong className="text-foreground">유튜브 주소</strong>. 영상의 자막을 가져와 내용으로 씁니다.
-                    자막이 없는 영상은 가져올 것이 없습니다
-                  </li>
-                  <li>
-                    <strong className="text-foreground">웹 주소</strong>. 공개된 기사·블로그의 본문을 추출합니다.
-                    로그인이 필요한 페이지는 열지 못합니다
+                    자막이 없으면 영상 속 말소리를 받아 적어 씁니다
                   </li>
                   <li>
                     <strong className="text-foreground">질문해서 찾기</strong>. 재료가 아예 없을 때 씁니다. 궁금한 것을
@@ -278,23 +306,24 @@ export default function CardNewsGuidePage() {
 
       <Details
         title="02 이미지 · 화면 읽기"
-        hint="그림을 첨부하고, 그 그림을 어떻게 쓸지 정합니다. 이 단계를 건너뛰어도 만들어집니다."
+        hint="그림을 첨부하고, 그 그림을 어떻게 쓸지 정합니다. 「따라 만들기」로 둔 그림이 한 장 이상 있어야 다음으로 넘어갑니다."
       >
         <Mock title="카드뉴스 만들기 · 02 이미지">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={1} />
           <MockChoices
-            label="이 그림을 어떻게 쓸까요"
+            label="이 그림의 역할"
             marker={1}
             columns={2}
             active={0}
             items={ROLE_ITEMS}
           />
           <MockChoices
-            label="어느 자리에 넣을까요"
+            label="카드 자리"
             marker={2}
             columns={3}
             active={1}
-            items={[{ title: "표지" }, { title: "속지" }, { title: "마지막 장" }]}
+            items={[{ title: "표지" }, { title: "속지" }, { title: "엔딩" }]}
+            note="「따라 만들기」로 둔 그림에만 나옵니다."
           />
           <MockNote marker={3}>
             모델마다 첨부할 수 있는 장수가 다릅니다. 넘으면 다음으로 넘어가기 전에 알려 줍니다.
@@ -310,11 +339,13 @@ export default function CardNewsGuidePage() {
                 <>
                   같은 사진이라도 역할이 다르면 결과가 완전히 달라집니다. 제품 사진을 「따라 만들기」로 두면 그
                   <strong className="text-foreground"> 분위기만</strong> 가져와 다른 제품이 나옵니다. 실제 그 제품을
-                  보여줘야 한다면 「제품 그대로 지키기」로 두세요. 네 가지 역할은{" "}
+                  보여줘야 한다면 「제품 그대로 지키기」로 두세요. 다섯 가지 역할은{" "}
                   <Link href="/guide" className="font-bold text-primary underline underline-offset-4">
                     처음 오셨다면
                   </Link>
-                  에 자세히 있습니다.
+                  에 자세히 있습니다.{" "}
+                  <strong className="text-foreground">「따라 만들기」로 둔 그림이 한 장은 있어야 합니다.</strong> 그
+                  그림을 기준으로 만들기 때문입니다.
                 </>
               ),
             },
@@ -323,8 +354,11 @@ export default function CardNewsGuidePage() {
               body: (
                 <>
                   카드뉴스는 <strong className="text-foreground">표지 1장 + 속지 여러 장 + 마지막 1장</strong> 구조입니다.
-                  표지와 마지막은 각각 한 자리뿐입니다. 속지는 여러 장을 넣을 수 있고, 넣은 만큼 AI가 만드는 속지가
-                  줄어듭니다.
+                  「카드 자리」(표지 · 속지 · 엔딩)는 <strong className="text-foreground">「따라 만들기」로 둔 그림에만</strong>{" "}
+                  나옵니다. 그 그림을 어느 장의 본보기로 삼을지 정하는 칸이고, 표지와 엔딩은 각각 한 장씩만 둘 수
+                  있습니다. 「원본 그대로 넣기」로 둔 그림은 속지 한 장을 그대로 차지합니다. 이렇게 넣은 만큼만 AI가
+                  만드는 속지가 줄어듭니다. 역할 목록 맨 끝의 「마지막 장」을 고르면 그 그림을 마지막 장에 그대로
+                  넣습니다.
                 </>
               ),
             },
@@ -332,8 +366,8 @@ export default function CardNewsGuidePage() {
               title: "첨부 장수 제한",
               body: (
                 <>
-                  방식마다 다릅니다. 정밀형·표준형은 16장, 속도형과 속도형 라이트는 14장, 경제형은 7장까지
-                  받습니다. 다음 단계로 넘어갈 때 확인하므로 미리 세지 않아도 됩니다.
+                  방식마다 다릅니다. {REFERENCE_LIMITS}까지 받습니다. 다음 단계로 넘어갈 때 확인하므로 미리 세지
+                  않아도 됩니다.
                 </>
               ),
             },
@@ -358,8 +392,10 @@ export default function CardNewsGuidePage() {
             columns={2}
             items={[{ title: "한국어", hint: "English · 日本語 · 中文" }, { title: "표준형 · 기본", hint: MODEL_NAMES }]}
           />
-          <MockNote marker={4}>
-            6장 = 표지 1 + 원본 1 + AI 속지 3 + 마지막 1 · 예상 비용 $0.24
+          <MockChoices label="그림체" marker={4} columns={3} active={0} items={LOOK_ITEMS} />
+          <MockField label="추가 지시 · 선택" placeholder="예: 배경은 밤, 창밖에 네온" />
+          <MockNote marker={5}>
+            6장 = 표지 1 + 원본 1 + AI 속지 3 + 마지막 1 · 완성 카드 6장 · 6크레딧
           </MockNote>
           <MockButtons items={[{ label: "이전", variant: "quiet" }, { label: "기획 시작" }]} />
         </Mock>
@@ -389,7 +425,8 @@ export default function CardNewsGuidePage() {
               title: "언어와 이미지 모델",
               body: (
                 <>
-                  언어는 카드에 그려질 글자의 언어입니다. 모델은 글자 정확도와 비용의 저울질입니다. 자세한 것은{" "}
+                  언어는 카드에 그려질 글자의 언어입니다. 모델마다 글자 정확도와 빠르기가 다릅니다. 카드뉴스의
+                  크레딧은 모델과 상관없이 완성 카드 장수로 셉니다. 자세한 것은{" "}
                   <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
                     크레딧과 모델
                   </Link>
@@ -398,12 +435,23 @@ export default function CardNewsGuidePage() {
               ),
             },
             {
-              title: "자리 계산과 예상 비용",
+              title: "그림체와 추가 지시 · 선택",
+              body: (
+                <>
+                  그림체의 기본은 <strong className="text-foreground">{IMAGE_LOOK_LABEL.auto}</strong>입니다.{" "}
+                  {IMAGE_LOOK_HINT.auto}. 다른 그림체를 고르면 그쪽으로 그립니다. 추가 지시는 비워도 됩니다. 적으면
+                  그 말이 다른 모든 지시보다 우선합니다.
+                </>
+              ),
+            },
+            {
+              title: "자리 계산과 예상 크레딧",
               body: (
                 <>
                   고른 장수가 실제로 어떻게 나뉘는지 그 자리에서 계산해 보여 줍니다. 배치가 불가능하면
-                  <strong className="text-foreground"> 「확인 필요」</strong>가 뜨고 이유를 알려 줍니다. 예상 비용은 실제
-                  결제액이 아니라 이 작업에 드는 원가 추정입니다.
+                  <strong className="text-foreground"> 「확인 필요」</strong>가 뜨고 이유를 알려 줍니다. 예상은
+                  「완성 카드 6장 · 6크레딧」처럼 <strong className="text-foreground">크레딧</strong>으로 나옵니다.
+                  완성 카드 한 장에 1크레딧입니다. 장수를 AI 추천으로 두면 나올 수 있는 범위로 보여 줍니다.
                 </>
               ),
             },
@@ -411,19 +459,19 @@ export default function CardNewsGuidePage() {
         />
       </Details>
 
-      <Details title="04 원고 확인 · 가장 중요한 화면" hint="여기서 고친 글자가 그대로 그림에 들어갑니다.">
+      <Details title="04 원고 확인 · 가장 중요한 화면" hint="여기서 고치고 저장한 글자가 그대로 그림에 들어갑니다.">
         <p className="text-sm leading-7 text-muted-foreground">
-          기획이 끝나면 장마다 들어갈 글이 표로 나옵니다. <strong className="text-foreground">이 단계까지는 이미지
-          크레딧이 한 장도 차감되지 않았습니다.</strong> 고칠 것이 있으면 지금 고치세요. 그림이 나온 뒤에 글자를 고치는
-          것은 처음부터 다시 만드는 일입니다.
+          기획이 끝나면 카드마다 제목 · 본문 · 강조 문구 · 각주 칸이 나옵니다.{" "}
+          <strong className="text-foreground">이 단계까지는 이미지 크레딧이 한 장도 차감되지 않았습니다.</strong> 고칠
+          것이 있으면 지금 고치세요. 그림이 나온 뒤에 글자를 고치는 것은 처음부터 다시 만드는 일입니다.
         </p>
         <Mock title="카드뉴스 만들기 · 04 원고 확인">
           <MockSteps steps={["01 내용", "02 이미지", "03 규격", "04 원고 확인", "05 결과"]} current={3} />
-          <MockField label="1장 · 표지 · 헤드라인" value="보증금 지키는 첫걸음" marker={1} />
-          <MockField label="1장 · 표지 · 본문" value="안전한 월세 계약 체크리스트" />
-          <MockField label="2장 · 속지 · 헤드라인" value="계약 전 확인" />
-          <MockNote marker={2}>여기서 확정한 글자만 그림에 들어갑니다.</MockNote>
-          <MockButtons items={[{ label: "이미지 만들기" }]} />
+          <MockField label="01 카드 · 제목" value="보증금 지키는 첫걸음" marker={1} />
+          <MockField label="01 카드 · 본문" value="안전한 월세 계약 체크리스트" />
+          <MockField label="01 카드 · 강조 문구" value="계약 전 꼭 보기" />
+          <MockButtons marker={2} items={[{ label: "이 카드 원고 저장", variant: "quiet" }]} />
+          <MockButtons marker={3} items={[{ label: "이 원고로 그림 만들기" }]} />
         </Mock>
         <Callouts
           items={[
@@ -432,7 +480,11 @@ export default function CardNewsGuidePage() {
               body: "AI가 쓴 초안입니다. 어색한 표현, 틀린 사실, 너무 긴 문장을 그 자리에서 고치세요. 짧을수록 이미지 안에서 잘 읽힙니다.",
             },
             {
-              title: "「이미지 만들기」를 누르는 순간부터 차감됩니다",
+              title: "카드마다 「이 카드 원고 저장」을 누르세요",
+              body: "저장한 글자만 그림에 들어갑니다. 고치고 저장하지 않은 글은 그림에 들어가지 않습니다.",
+            },
+            {
+              title: "「이 원고로 그림 만들기」를 누르는 순간부터 차감됩니다",
               body: "이 버튼 앞이 무료 구간의 끝입니다. 원고가 마음에 들 때 누르세요.",
             },
           ]}
@@ -457,8 +509,8 @@ export default function CardNewsGuidePage() {
         <Pitfalls
           items={[
             {
-              q: "유튜브 주소를 넣었는데 내용이 비어 있습니다",
-              a: "자막이 없는 영상입니다. 자막을 가져와 내용으로 쓰기 때문에, 자막이 없으면 가져올 것이 없습니다. 「직접 쓰기」로 요지를 적어 주세요.",
+              q: "유튜브 영상의 내용을 가져오지 못했다고 나옵니다",
+              a: "자막을 먼저 읽고, 자막이 없으면 영상 속 말소리를 받아 적습니다. 그래도 가져오지 못하는 영상이 있습니다. 그럴 때는 「직접 쓰기」로 요지를 적어 주세요.",
             },
             {
               q: "「배치 가능」이 아니라 「확인 필요」가 뜹니다",
