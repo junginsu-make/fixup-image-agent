@@ -156,9 +156,9 @@ export default function TroubleGuidePage() {
 
       <Section title="올린 파일이 거절될 때" hint="상한은 도구마다 다릅니다.">
         <p className="text-sm leading-7 text-muted-foreground">
-          올릴 때 <strong className="text-foreground">「이미지 용량이 너무 큽니다」</strong>가 뜨면 같은 자리에 몇
-          MB 이하로 올리라는 상한이 함께 적혀 있습니다. 사진이 너무 크면 긴 변을 2000픽셀 정도로 줄여 올리면 대체로
-          통과합니다. 광고 규격으로 내보낼 때 뜨는{" "}
+          올릴 때 <strong className="text-foreground">「이미지 용량이 너무 큽니다」</strong>가 뜨면 대개 같은 자리에
+          몇 MB 이하로 올리라는 상한이 함께 적혀 있습니다. 상한이 적혀 있지 않으면 사진의 긴 변을 2000픽셀 정도로
+          줄여 올려 보세요. 대체로 통과합니다. 광고 규격으로 내보낼 때 뜨는{" "}
           <strong className="text-foreground">「용량이 넘칩니다」</strong>는 포털이 정한 규격의 상한을 넘었다는
           뜻입니다.
         </p>

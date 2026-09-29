@@ -75,7 +75,7 @@ export default function AccountGuidePage() {
           },
           {
             title: "해지와 환불은 메일로 받습니다",
-            body: `스스로 해지하는 버튼은 아직 없습니다. ${CS_EMAIL} 로 신청해 주세요.`,
+            body: `스스로 해지하는 버튼은 아직 없습니다. ${CS_EMAIL}으로 신청해 주세요.`,
           },
         ]}
         when={[
@@ -253,7 +253,7 @@ export default function AccountGuidePage() {
       <Section title="구독을 해지하려면" hint="메일로 받습니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           <strong className="text-foreground">스스로 해지하는 버튼은 아직 없습니다.</strong> 해지하고 싶으시면{" "}
-          {CS_EMAIL} 로 메일을 보내 주세요. 플랜을 올리거나 내리는 것도 같습니다.
+          {CS_EMAIL}으로 메일을 보내 주세요. 플랜을 올리거나 내리는 것도 같습니다.
         </p>
 
         <Callouts
@@ -308,7 +308,7 @@ export default function AccountGuidePage() {
         />
 
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">구매한 크레딧은 구매일부터 3개월까지</strong> 쓰실 수 있습니다. 그
+          <strong className="text-foreground">구매한 크레딧은 계정에 들어온 날부터 3개월까지</strong> 쓰실 수 있습니다. 그
           안에 남은 것은 환불을 요청하실 수 있고, 남은 양을 계산해 원화로 환산해 드립니다.
         </p>
 
@@ -350,7 +350,7 @@ export default function AccountGuidePage() {
               body: (
                 <>
                   쓰지 않은 구매 크레딧과, 그 달에 한 번도 쓰지 않은 구독은 환불받으실 수 있습니다. 탈퇴하면 남은
-                  크레딧도 사라지므로 <strong className="text-foreground">탈퇴 전에 {CS_EMAIL} 로 먼저 신청</strong>
+                  크레딧도 사라지므로 <strong className="text-foreground">탈퇴 전에 {CS_EMAIL}으로 먼저 신청</strong>
                   하시길 권합니다.
                 </>
               ),
@@ -459,15 +459,15 @@ export default function AccountGuidePage() {
             },
             {
               q: "구독을 해지하고 싶은데 버튼이 없습니다",
-              a: `스스로 해지하는 버튼은 아직 없습니다. ${CS_EMAIL} 로 메일을 보내 주시면 처리해 드리고, 이미 결제한 기간까지는 그대로 쓰실 수 있습니다.`,
+              a: `스스로 해지하는 버튼은 아직 없습니다. ${CS_EMAIL}으로 메일을 보내 주시면 처리해 드리고, 이미 결제한 기간까지는 그대로 쓰실 수 있습니다.`,
             },
             {
               q: "구독을 환불받고 싶습니다",
-              a: `달마다 따로 봅니다. 그 달 구독 크레딧을 한 번이라도 쓰셨으면 그 달 구독료는 환불되지 않습니다. 그 달에 한 번도 안 쓰셨다면 그 달 구독료를 환불받으실 수 있으니 ${CS_EMAIL} 로 신청해 주세요.`,
+              a: `달마다 따로 봅니다. 그 달 구독 크레딧을 한 번이라도 쓰셨으면 그 달 구독료는 환불되지 않습니다. 그 달에 한 번도 안 쓰셨다면 그 달 구독료를 환불받으실 수 있으니 ${CS_EMAIL}으로 신청해 주세요.`,
             },
             {
               q: "크레딧을 사 뒀는데 다 못 썼습니다",
-              a: "구매한 크레딧은 구매일부터 3개월까지 쓰실 수 있고, 남은 것은 그 안에 환불을 요청하실 수 있습니다. 남은 양을 원화로 환산해 드립니다.",
+              a: "구매한 크레딧은 계정에 들어온 날부터 3개월까지 쓰실 수 있고, 남은 것은 그 안에 환불을 요청하실 수 있습니다. 남은 양을 원화로 환산해 드립니다.",
             },
             {
               q: "탈퇴가 안 됩니다",

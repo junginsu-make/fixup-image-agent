@@ -168,7 +168,7 @@ export default function ImageGuidePage() {
                 <>
                   <strong className="text-foreground">따라 만들 그림은 없어도 됩니다.</strong> 무엇을 만들지 한 줄만
                   쓰면 그 글만 보고 그립니다. 그림을 붙이면 그 그림체를 따라가고, 안 붙이면 다음 화면에서 고른
-                  그림체({withJosa(LOOK_NAMES, "으로로")}) 그립니다. 반대로 이 칸을 비우고 02에서 그림만 붙여도
+                  그림체({LOOK_NAMES})로 그립니다. 반대로 이 칸을 비우고 02에서 그림만 붙여도
                   됩니다. 둘 중 하나만 있으면 만들 수 있습니다.
                 </>
               ),
