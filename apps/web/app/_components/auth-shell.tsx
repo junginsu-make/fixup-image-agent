@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@fixup/ui";
 import { OnboardingSteps, PublicHeader } from "./public-shell";
 
@@ -38,9 +37,6 @@ export function AuthShell({
             </CardHeader>
             <CardContent>{children}</CardContent>
           </Card>
-          <div className="text-center text-xs text-muted-foreground">
-            <Link href="/demo" className="underline underline-offset-4">회원가입 전 결과물 보기</Link>
-          </div>
         </div>
       </main>
     </div>
