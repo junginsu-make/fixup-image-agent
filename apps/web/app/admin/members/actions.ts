@@ -46,6 +46,7 @@ const DB_REASON: Record<string, string> = {
   invalid_credit_grant: "지급 내용이 올바르지 않습니다. 크레딧과 금액, 사유를 확인하세요.",
   invalid_credit_expiry: "만료일이 오늘보다 뒤여야 합니다.",
   invalid_paid_period: "결제 확인 내용이 올바르지 않습니다. 달과 크레딧, 금액을 확인하세요.",
+  subscription_periods_user_id_period_key: "이 회원의 해당 월 결제는 이미 확인됐습니다. 지급 이력을 확인해 주세요.",
   credit_reason_required: "사유를 적어 주세요.",
   credit_grant_not_found: "그 지급 기록을 찾지 못했습니다. 새로고침 후 다시 확인하세요.",
   cannot_suspend_self: "지금 쓰는 관리자 계정은 정지할 수 없습니다.",
@@ -92,6 +93,7 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
       case "grant":
         // One DB transaction: the entire selection succeeds or rolls back together.
         await call("credit_admin_grant_many", { p_users: users, p_kind: command.grantKind, p_units: command.units, p_paid_krw: command.amount, p_expires: command.expires, p_source: `admin:${command.action}`, p_reason: command.reason });
+        outcome = `${users.length}명에게 ${users.length > 1 ? "각각 " : ""}${command.units.toLocaleString("ko-KR")}크레딧을 지급했습니다.`;
         break;
       case "activate":
         await call("credit_admin_activate", { p_users: users, p_ratio: command.ratio, p_reason: command.reason, p_action: command.action, p_reviewed_legacy: command.reviewed }); break;
@@ -110,7 +112,10 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
       }
       // 고른 사람 전부가 한 트랜잭션이다. 장부가 못 받는 회원이 하나라도 있으면
       // 절반만 새 플랜으로 남지 않고 통째로 되돌아간다.
-      case "subscription": await call("credit_admin_subscription_many", { p_users: users, p_plan: command.plan, p_status: command.status, p_started: new Date().toISOString(), p_cancel: command.status === "canceled" ? new Date().toISOString() : null, p_action: command.action }); break;
+      case "subscription":
+        await call("credit_admin_subscription_many", { p_users: users, p_plan: command.plan, p_status: command.status, p_started: new Date().toISOString(), p_cancel: command.status === "canceled" ? new Date().toISOString() : null, p_action: command.action });
+        outcome = command.status === "active" ? "구독 플랜을 배정했습니다. 해당 월의 결제를 확인하면 월 구독 크레딧이 지급됩니다." : command.status === "canceled" ? "구독 플랜을 해지했습니다." : "구독 플랜을 중단했습니다.";
+        break;
       case "status": {
         const moved = await call("credit_admin_member_status", { p_users: users, p_status: command.status, p_reason: command.reason, p_action: command.action });
         const count = Array.isArray(moved) ? moved.length : 0;
@@ -120,7 +125,10 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
           : `${users.length}명 중 ${count}명을 ${label}했습니다. 나머지는 조건에 맞지 않아 건너뛰었습니다.`;
         break;
       }
-      case "paid": await call("credit_admin_confirm_period", { p_user: command.user, p_period: command.period, p_paid: command.amount, p_units: command.units, p_source: `paid:${command.action}` }); break;
+      case "paid":
+        await call("credit_admin_confirm_period", { p_user: command.user, p_period: command.period, p_paid: command.amount, p_units: command.units, p_source: `paid:${command.action}` });
+        outcome = `${command.period.slice(0, 7)} 결제 확인을 반영했습니다. 구독 기간에 ${command.units.toLocaleString("ko-KR")}크레딧을 사용할 수 있습니다.`;
+        break;
     }
     revalidatePath("/admin"); revalidatePath("/admin/system"); revalidatePath("/settings");
     return { ok: true, message: outcome };

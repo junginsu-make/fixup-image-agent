@@ -38,8 +38,8 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
     **다른 회원을 열면 반영 대기 중이던 명령을 버린다.** 안 버리면 B 의 패널을 보면서
     A 에게 보낼 명령을 반영하게 된다(독립 리뷰 2026-09-22).
   */
-  const open = (id: string) => { state.cancel(); setFocusId(id); setVersion((value) => value + 1); };
-  const close = () => { state.cancel(); setFocusId(null); };
+  const open = (id: string) => { state.cancel(); if (state.pending) return; setFocusId(id); setVersion((value) => value + 1); };
+  const close = () => { state.cancel(); if (state.pending) return; setFocusId(null); };
   /*
     **상세는 누른 줄 바로 뒤에서 연다**(2026-09-22 사용자 신고).
 

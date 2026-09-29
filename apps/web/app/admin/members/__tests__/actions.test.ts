@@ -72,4 +72,16 @@ describe("관리자 입력에서 실제 SQL까지", () => {
     expect(await changeCredits({ kind:"grant", users:[f.user], grantKind:"purchase", units:-1, amount:0, expires:null, reason:"입력 오류", action })).toMatchObject({ ok:false });
     expect(f.rpc).not.toHaveBeenCalled();
   });
+  it("플랜 배정과 실제 지급의 성공 안내를 구분한다", async () => {
+    const assigned = await changeCredits({ kind:"subscription", users:[f.user], plan:"basic", status:"active", action });
+    expect(assigned.message).toContain("결제");
+    const granted = await changeCredits({ kind:"grant", users:[f.user], grantKind:"purchase", units:100, amount:0, expires:null, reason:"관리자 지급", action });
+    expect(granted.message).toContain("100크레딧을 지급했습니다");
+  });
+  it("같은 월 결제를 다시 확인하면 기존 지급 이력을 안내한다", async () => {
+    f.rpc.mockResolvedValue({ data: null, error: { message: 'duplicate key value violates unique constraint "subscription_periods_user_id_period_key"' } });
+    const result = await changeCredits({ kind:"paid", user:f.user, period:"2026-09-01", units:75, amount:90000, action });
+    expect(result).toMatchObject({ ok:false });
+    expect(result.message).toContain("이미 확인");
+  });
 });

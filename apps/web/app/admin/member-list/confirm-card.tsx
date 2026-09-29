@@ -42,6 +42,8 @@ export function ConfirmCard({ state, planName, emailOf = (id) => id }: { state: 
           <CardContent className="space-y-3 pt-6">
             <p className="text-sm font-bold">반영할 내용을 확인하세요</p>
             <p className="text-sm">{describeCommand(review, planName, emailOf)}</p>
+            {review.kind === "grant" ? <p className="text-xs text-muted-foreground">{review.grantKind === "purchase" ? "구매 크레딧 · 지급일부터 3개월 유효" : `추가 지급 · 만료 ${review.expires ? new Date(review.expires).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "미지정"}`}</p> : null}
+            {review.kind === "subscription" && review.status === "active" ? <p className="text-sm text-muted-foreground">이 단계에서는 플랜만 배정합니다. 월 구독 크레딧은 해당 회원의 결제 확인 단계에서 지급합니다.</p> : null}
             {"reason" in review ? <p className="text-xs text-muted-foreground">사유: {review.reason}</p> : null}
             <div className="flex gap-2">
               <Button size="sm" disabled={pending} onClick={() => execute(review)}>{pending ? "반영 중..." : "확인한 내용 반영"}</Button>
@@ -51,7 +53,7 @@ export function ConfirmCard({ state, planName, emailOf = (id) => id }: { state: 
         </Card>
       ) : null}
       {notice ? (
-        <div role="status" className={`rounded-md border px-4 py-3 text-sm ${notice.ok ? "border-primary/30 bg-primary-soft" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
+        <div role={notice.ok ? "status" : "alert"} className={`rounded-md border px-4 py-3 text-sm ${notice.ok ? "border-primary/30 bg-primary-soft" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
           {notice.text}
           {retry ? <Button size="sm" variant="outline" className="ml-3" disabled={pending} onClick={() => execute(retry)}>같은 요청으로 재시도</Button> : null}
         </div>
