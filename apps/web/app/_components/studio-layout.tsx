@@ -6,7 +6,6 @@ import { canAccessPage, viewerFrom } from "../../lib/access/core";
 // 스위치만 읽는다 — `batch` 를 지나면 sharp 를 통째로 끌고 온다.
 import { isAdExportEnabled } from "../../lib/ad/feature";
 import { PAGE_ACCESS, isDisabledRoute } from "../../lib/access/routes";
-import { GuideLink } from "./guide-link";
 import { ReferenceHuntButton } from "./reference-hunt-button";
 import { myMembership } from "../../lib/teams/store";
 import { listProjectsWithCounts } from "../../lib/teams/project-store";
@@ -81,7 +80,7 @@ export async function StudioLayout({
           <StudioActions email={membership.profile.email} usage={usage}>
             {/* 앱 밖으로 나가는 문. 홈·랜딩에는 이 셸이 안 붙으므로 거기엔 안 나온다. */}
             <ReferenceHuntButton />
-            <GuideLink />
+            {/* 「이용 안내」는 뺐다 — 사이드바의 「사용 설명서」와 같은 곳이었다(2026-09-29 사용자). */}
           </StudioActions>
         }
       >
