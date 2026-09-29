@@ -1,0 +1,18 @@
+# Task 9 브리프 Step 2 — 정적 파일·재시작 틈 (측정 모양, IP http://172.31.13.128)
+
+```
+chunk_path=/_next/static/chunks/webpack-b1cfe1824b330584.js
+HTTP/1.1 200 OK
+Cache-Control: public, max-age=31536000, immutable
+
+(fixup-image-agent 서비스 정지)
+node 멈춤 중 정적=200                     ← Caddy 가 Node 없이도 직접 내줌(진짜 증거)
+없는 조각=502                              ← Node 가 멈춰 있어 20초 대기 뒤 502(문서가 적은
+                                              두 가지 정상 결과 중 하나)
+재시작 틈 첫 화면=200 5.586996s            ← 3초 뒤 서비스 기동 시작, lb_try_duration 20s 안에
+                                              응답, 3~10초 창 안에 듦
+
+(재시작 뒤 확인)
+systemctl is-active fixup-image-agent caddy → active active
+root=200
+```

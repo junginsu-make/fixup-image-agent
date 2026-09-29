@@ -1,0 +1,71 @@
+# Task 9 Step 1 — B 빌드 · A 배포 증거
+
+## 번들 경로 (push 대신, addendum §1)
+
+- git bundle: 952fb7e..docs/capacity-100-design (28 commits), B 의 ~/app 은 952fb7e 에서 시작(clean)
+- B: `git fetch -q /tmp/capacity.bundle docs/capacity-100-design:capacity-s1 && git checkout -q capacity-s1`
+  → `git log --oneline -1` = `b2ce3b2 fix(deploy): 반영 절차 문서의 사각지대를 채운다` (이 워크트리 HEAD 와 일치)
+
+## B 빌드 (bash /tmp/build-b.sh)
+
+```
+... pnpm build:ec2 ...
+added 39 packages in 3s
+Worker bundled: worker/worker.mjs (+ jsdom, @mozilla/readability)
+libvips reachable from the binding: sharp-libvips-linux-x64/lib/libvips-cpp.so.8.18.6
+EC2 runtime prepared: /home/ubuntu/app/dist/ec2
+Entry point: apps/web/server.js
++ test -f dist/ec2/apps/web/server.js
++ tar -czf /home/ubuntu/app-test.tar.gz -C dist/ec2 .
++ ls -la /home/ubuntu/app-test.tar.gz
+-rw-rw-r-- 1 ubuntu ubuntu 64396939 Sep 29 08:45 /home/ubuntu/app-test.tar.gz
++ echo BUILD_DONE
+BUILD_DONE
+EXIT=0
+```
+
+## B → A 로 옮기기 (사설 IP, addendum §1)
+
+```
+scp -i ~/.ssh/loadtest.pem ~/app-test.tar.gz ubuntu@172.31.13.128:/tmp/   → 성공
+scp -i ~/.ssh/loadtest.pem -r ~/app/deploy/ec2 ubuntu@172.31.13.128:/tmp/ec2-new  → 성공
+```
+
+A 도착 확인:
+```
+-rw-rw-r-- 1 ubuntu ubuntu 64396939 Sep 29 08:46 /tmp/app-test.tar.gz
+/tmp/ec2-new/ 에 install-host.sh 등 13개 파일 (모두 -rw-rw-r--, 실행비트 없음 —
+CI 꾸러미의 core.filemode=false 상황을 그대로 재현. install-host.sh 는 모두
+`bash /tmp/ec2-new/install-host.sh` 로 불러 문제 없었음)
+```
+
+## 배포 전 A 상태(참고)
+
+- 기존 릴리스: `/opt/fixup-image-agent/releases/20260928T073346Z-loadtest` (current) — Task 8 산출물, 정적 파일 동기화 이전 릴리스라 `/var/www/fixup-image-agent/static/`가 비어 있었음(정상, 아래에서 새 릴리스로 채워짐)
+- app.env: `NODE_OPTIONS=--max-old-space-size=1536` 이미 있음, `ALERT_EMAIL` 없음(빈칸, 요구사항대로)
+- `tc qdisc show dev ens5` → `netem ... delay 200ms` 유지 확인
+
+## deploy-release.sh 실행 (브리프 Step 1 신규 릴리스)
+
+```
+RID=20260929T085432Z-s1
+정적 파일: /var/www/fixup-image-agent/static/20260929T085432Z-s1
+curl: (7) Failed to connect to 127.0.0.1 port 3000 after 0 ms: Couldn't connect to server   ← 재시작 중 1회, DEPLOY.md 가 "정상"이라 적은 그대로
+Release active: /opt/fixup-image-agent/releases/20260929T085432Z-s1
+Previous release retained: /opt/fixup-image-agent/releases/20260928T073346Z-loadtest
+지울 릴리스가 없습니다 (전체 3 개, 남길 5 개).
+EXIT=0
+```
+
+## 배포 뒤 확인
+
+```
+health=200
+ready=200
+root=200 (http://172.31.13.128/)
+static copy dir: /var/www/fixup-image-agent/static/20260929T085432Z-s1 (+ current 심볼릭 링크)
+chunk=/var/www/fixup-image-agent/static/current/_next/static/chunks/4764-681ddcb9185695cc.js
+sudo -u caddy cat "$chunk" | head -c 50 → "use strict";(self.webpackChunk_N_E=self.webpackCh   (caddy 계정이 읽을 수 있음 확인)
+current release: /opt/fixup-image-agent/releases/20260929T085432Z-s1
+systemctl is-active fixup-image-agent fixup-image-agent-worker caddy → active active active
+```
