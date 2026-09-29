@@ -2,6 +2,7 @@ import {
   buildPosterJob,
   posterImageRows,
   type PosterImageStore,
+  type PosterJob,
   type PosterJobInput,
   type PosterRequestStore,
 } from "@fixup/poster-core";
@@ -68,11 +69,18 @@ export class PosterChargedError extends Error {
   }
 }
 
-export async function submitPoster(
-  job: PosterJobInput & { parentImageId?: string; editInstruction?: string },
+export async function submitPoster<J extends PosterJobInput & { parentImageId?: string; editInstruction?: string }>(
+  job: J,
   dependencies: PosterFlowDependencies,
+  /**
+   * 요청 조립. **안 넘기면 처음 만들기 그대로다.**
+   *
+   * 「이 장만 고치기」만 자기 조립(`buildPosterEditJob`)을 넘긴다. 장부에 적고
+   * 돈 나간 뒤를 다루는 아래 순서는 둘이 같아야 하므로 이 함수를 같이 쓴다.
+   */
+  build: (job: J) => PosterJob = buildPosterJob,
 ): Promise<PosterSubmission> {
-  const built = buildPosterJob(job);
+  const built = build(job);
   if (built.rejected) throw new Error(built.rejected);
 
   const { requestId } = await dependencies.queue.submitJob(built.endpoint, built.input);

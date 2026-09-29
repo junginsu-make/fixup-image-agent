@@ -12,6 +12,8 @@ vi.mock("server-only", () => ({}));
 
 let member = { userId: "u1", role: "member" as "member" | "admin" };
 let byProject: Array<Record<string, unknown>> = [];
+/** `byProject` 에 넘어온 선택. 파일 한 장 줄 때 장부까지 읽으면 썸네일마다 질의가 는다. */
+const byProjectOptions: unknown[] = [];
 let adminRow: Record<string, unknown> | null = null;
 const reads: string[] = [];
 let missingPaths: string[] = [];
@@ -24,7 +26,11 @@ vi.mock("../../../../lib/membership/api", () => ({
 }));
 
 vi.mock("../../../../lib/poster/stores", () => ({
-  posterStoresForUser: () => ({ images: { byProject: async () => byProject } }),
+  posterStoresForUser: () => ({
+    images: {
+      byProject: async (_projectId: string, options?: unknown) => { byProjectOptions.push(options); return byProject; },
+    },
+  }),
 }));
 
 vi.mock("../../../../lib/local-store", () => ({
@@ -69,6 +75,7 @@ beforeEach(() => {
   reads.length = 0;
   missingPaths = [];
   adminRow = null;
+  byProjectOptions.length = 0;
   byProject = [
     { id: "img-0", createdAt: "2026-01-01", variantIndex: 0, assetPath: "u1/poster/p1/0.png", thumbPath: "u1/poster/p1/0.thumb.webp" },
     { id: "img-1", createdAt: "2026-01-01", variantIndex: 1, assetPath: "u1/poster/p1/1.png", thumbPath: "u1/poster/p1/1.thumb.webp" },
@@ -76,6 +83,16 @@ beforeEach(() => {
 });
 
 describe("GET 포스터 결과 파일", () => {
+  /*
+   * 목록 화면은 그림마다 이 길을 한 번씩 부른다(썸네일). 고친 이력은 목록 이름표에만
+   * 쓰이므로 여기서 읽으면 그림 수만큼 장부 질의가 는다(2026-09-29 리뷰).
+   */
+  it("파일 한 장을 줄 때는 고친 이력을 읽지 않는다", async () => {
+    await call("https://x/f?size=thumb", "img-1");
+
+    expect(byProjectOptions).toEqual([{ lineage: false }]);
+  });
+
   it("청한 변형만 준다 — 번호를 무시하면 남의 변형이 열린다", async () => {
     await call("https://x/f", "1");
 

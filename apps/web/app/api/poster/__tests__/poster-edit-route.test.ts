@@ -15,7 +15,22 @@ vi.mock("server-only", () => ({}));
 
 let project: { id: string; ratio: string; modelId: string; data: Record<string, unknown> };
 let parent: { id: string; assetPath: string; selected: boolean; width: number | null; height: number | null };
-const submitted: Array<{ ratioId: string; sourceSize?: { width: number; height: number } }> = [];
+type SubmittedJob = {
+  ratioId: string;
+  sourceSize?: { width: number; height: number };
+  attachments?: Array<{ url: string; role: string }>;
+  personUrls?: string[];
+  invented?: string[];
+  referenceHasText?: boolean;
+};
+const submitted: SubmittedJob[] = [];
+/** `submitPoster` 에 넘어온 조립 함수. **안 넘기면 처음 만들기 조립을 탄다.** */
+const builders: unknown[] = [];
+/** 지킬 대상으로 읽어 올 라이브러리 그림. */
+let libraryReferences: Array<{ id: string; storagePath: string }> = [];
+let uploadCount = 0;
+/** 저장소에서 파일이 사라진 라이브러리 그림의 경로. */
+let missingPaths: string[] = [];
 /** 예약이 잡은 장수와 확정한 장수. **돈이 오가는 길이라 둘 다 본다.** */
 const reserved: number[] = [];
 const finalized: Array<{ success: boolean; units: number; error?: string }> = [];
@@ -53,22 +68,35 @@ vi.mock("../../../../lib/poster/stores", () => ({
 vi.mock("../../../../lib/poster/providers", () => ({
   createPosterFalClients: () => ({
     queue: {},
-    uploader: { uploadReference: async () => "https://fal/parent.png" },
+    // 첫 업로드는 언제나 고칠 그림이다. 그 뒤가 지킬 대상이다.
+    uploader: { uploadReference: async () => (uploadCount++ === 0 ? "https://fal/parent.png" : `https://fal/ref-${uploadCount - 1}.png`) },
   }),
   PosterProviderConfigurationError: class extends Error {},
 }));
 
 vi.mock("../../../../lib/poster/asset-bytes", () => ({
   posterImageBytes: async () => ({ bytes: Buffer.from("x"), contentType: "image/png" }),
+  referenceBytes: async (storagePath: string) => {
+    if (missingPaths.includes(storagePath)) throw new Error("Object not found");
+    return { bytes: Buffer.from("r"), contentType: "image/png" };
+  },
 }));
+
+vi.mock("../../../../lib/poster/references", () => ({
+  posterReferencesByIds: async (_viewer: unknown, ids: string[]) =>
+    libraryReferences.filter((reference) => ids.includes(reference.id)),
+}));
+
+vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 
 vi.mock("../../../../lib/poster/flow", () => ({
   PosterChargedError: class extends Error {
     constructor(readonly falRequestId: string) { super("제출은 됐는데 장부에 적지 못했습니다."); }
   },
-  submitPoster: async (job: { ratioId: string; sourceSize?: { width: number; height: number } }) => {
+  submitPoster: async (job: SubmittedJob, _dependencies: unknown, build?: unknown) => {
     if (submitThrows) throw submitThrows;
     submitted.push(job);
+    builders.push(build);
     return { requestRowId: "r", falRequestId: "f", endpoint: "e", estimatedUsd: 1 };
   },
 }));
@@ -88,6 +116,10 @@ beforeEach(() => {
   };
   parent = { id: "i1", assetPath: "u1/poster/p1/0.png", selected: true, width: 1200, height: 628 };
   submitted.length = 0;
+  builders.length = 0;
+  libraryReferences = [];
+  uploadCount = 0;
+  missingPaths = [];
   reserved.length = 0;
   finalized.length = 0;
   updates.length = 0;
@@ -164,5 +196,90 @@ describe("수정이 장부에 남는가", () => {
     submitThrows = new Error("fal 이 죽었다");
     await call({ instruction: "글자를 키워 주세요" });
     expect(finalized).toContainEqual({ success: false, units: 0, error: "poster_edit_failed" });
+  });
+});
+
+/**
+ * **고치기는 자기 조립을 탄다.**
+ *
+ * 2026-09-29 사용자 보고 — 고칠 때 적은 말이 안 먹혔다. 라우트가 처음 만들기
+ * 조립을 그대로 타서, 지시가 장면 칸 한 줄에 묻히고 고칠 그림이 「느낌만 따라 할
+ * 참고」로 붙었다. 조립 규칙은 `edit-prompt.test.ts` 가 재고, 여기서는 **라우트가
+ * 그 조립을 실제로 넘기는지**를 잰다 — 넘기는 한 줄을 지우면 규칙 시험은 전부
+ * 초록인 채로 사용자에게는 옛 동작이 간다.
+ */
+describe("고치기는 고치기 조립으로 나간다", () => {
+  // 실제 작업은 슬롯 칸이 다 있다(스키마 기본값). 위쪽 묶음의 `{ action: "" }` 는
+  // 조립을 안 돌리는 시험이라 괜찮았다 — 여기서는 조립을 실제로 돌린다.
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    project.data = { ...project.data, slots: EMPTY_SLOTS };
+  });
+
+  it("넘긴 조립을 돌리면 사용자 지시가 맨 앞에 서고 고칠 그림이 Image 1 이다", async () => {
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    const build = builders[0];
+    expect(typeof build, "조립을 안 넘겼다 — 처음 만들기 조립을 탄다").toBe("function");
+    const built = (build as (job: unknown) => { prompt: string; input: Record<string, unknown> })(submitted[0]);
+    expect(built.prompt.startsWith("USER INSTRUCTION (highest priority — follow exactly):\n배경을 밤으로 바꿔 주세요")).toBe(true);
+    expect(built.prompt).toContain("Image 1 is the IMAGE TO EDIT");
+    expect(built.input.image_urls).toEqual(["https://fal/parent.png"]);
+  });
+
+  it("원래 작업의 지킬 대상을 다시 올려 붙인다 — 따라 만들 그림은 빼고", async () => {
+    project.data = {
+      ...project.data,
+      referenceIds: ["style-1"],
+      preservedIds: ["person-1"],
+      personIds: ["person-1"],
+      attachmentOrder: ["style-1", "person-1"],
+    };
+    libraryReferences = [
+      { id: "style-1", storagePath: "u1/ref/style.png" },
+      { id: "person-1", storagePath: "u1/ref/person.png" },
+    ];
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(submitted[0]!.attachments).toEqual([{ url: "https://fal/ref-1.png", role: "preserve_person" }]);
+    expect(submitted[0]!.personUrls).toEqual(["https://fal/ref-1.png"]);
+    const built = (builders[0] as (job: unknown) => { prompt: string; input: Record<string, unknown> })(submitted[0]);
+    expect(built.input.image_urls).toEqual(["https://fal/parent.png", "https://fal/ref-1.png"]);
+    expect(built.prompt).toContain("Image 2 is the original photo of a person");
+  });
+
+  /*
+   * 원본 사진은 보조다. 라이브러리 행은 있는데 저장소 파일이 사라졌다고 고치기
+   * 전체가 실패하면, 전에는 되던 고치기가 안 된다(2026-09-29 리뷰).
+   */
+  it("원본 사진 한 장을 못 읽어도 고치기는 간다 — 그 장만 뺀다", async () => {
+    project.data = {
+      ...project.data,
+      preservedIds: ["gone", "person-1"],
+      personIds: ["person-1"],
+      attachmentOrder: ["gone", "person-1"],
+    };
+    libraryReferences = [
+      { id: "gone", storagePath: "u1/ref/gone.png" },
+      { id: "person-1", storagePath: "u1/ref/person.png" },
+    ];
+    missingPaths = ["u1/ref/gone.png"];
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    // 조용히 빼지 않는다 — 한 줄은 남긴다.
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+    expect(response.status).toBe(200);
+    expect(submitted[0]!.attachments).toEqual([{ url: "https://fal/ref-1.png", role: "preserve_person" }]);
+  });
+
+  it("지킬 것이 없는 작업은 고칠 그림 하나만 올린다", async () => {
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(uploadCount).toBe(1);
+  });
+
+  it("글자를 넣을지 정한 값을 그대로 넘긴다 — 처음 만들 때와 같은 판단을 하려고", async () => {
+    project.data = { ...project.data, inventedSlots: ["headline"], referenceHasText: true };
+    await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(submitted[0]!.invented).toEqual(["headline"]);
+    expect(submitted[0]!.referenceHasText).toBe(true);
   });
 });

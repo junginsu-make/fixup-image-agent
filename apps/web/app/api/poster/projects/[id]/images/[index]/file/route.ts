@@ -108,7 +108,8 @@ export async function GET(request: Request, context: Context) {
       isLocalStoreEnabled(),
     )
       ? await adminAssetPath(id, index)
-      : pickImage(await posterStoresForUser(auth.member.userId).images.byProject(id), index);
+      // 이름표(고친 이력)는 목록 화면의 것이다. 썸네일마다 장부를 읽지 않는다.
+      : pickImage(await posterStoresForUser(auth.member.userId).images.byProject(id, { lineage: false }), index);
     if (!found) return new Response("찾을 수 없습니다.", { status: 404 });
 
     /**

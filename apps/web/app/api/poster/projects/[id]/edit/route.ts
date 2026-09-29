@@ -1,14 +1,18 @@
 import { knownPosterCreditSize } from "../../../../../../lib/membership/image-sizes";
 import { creditImagePlan, markCreditStarted, bindCreditJob } from "../../../../../../lib/membership/credit-ledger";
-import { canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
+import { buildPosterEditJob, canEdit, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
+import { editAttachmentInputs } from "./edit-attachments";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
-import { posterImageBytes } from "../../../../../../lib/poster/asset-bytes";
+import { posterImageBytes, referenceBytes } from "../../../../../../lib/poster/asset-bytes";
+import { posterReferencesByIds } from "../../../../../../lib/poster/references";
+import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
+import { teamIdOf } from "../../../../../../lib/teams/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +70,47 @@ export async function POST(request: Request, context: Context) {
     const fal = createPosterFalClients();
     const parentUrl = await fal.uploader.uploadReference(bytes, contentType);
 
+    /**
+     * **원래 작업의 지킬 대상(제품·인물 원본 사진)도 다시 올린다.**
+     *
+     * 고칠 그림 속 제품·인물은 이미 한 번 그려진 것이라, 그것만 보고 고치면 고칠
+     * 때마다 조금씩 달라진다. 따라 만들 그림은 안 올린다 — 그 결은 고칠 그림에
+     * 이미 있고, 붙이면 「느낌만 따라 하라」가 다시 따라온다(`edit-job.ts`).
+     *
+     * 읽는 규칙은 만들기와 같다(2026-09-17 라이브러리 규칙 통일). 지킬 것이 없는
+     * 작업은 팀 조회부터 건너뛴다.
+     */
+    const preservedIds = project.data.preservedIds ?? [];
+    const preserved = preservedIds.length
+      ? await posterReferencesByIds({
+        userId: auth.member.userId,
+        role: auth.member.profile.role,
+        teamId: await teamIdOf(auth.member.userId),
+      }, preservedIds)
+      : [];
+    const preservedUrlById = await uploadUniqueReferences(
+      preserved,
+      (reference) => reference.id,
+      async (reference) => {
+        /*
+         * **한 장을 못 올려도 고치기는 간다.** 원본 사진은 알아보게 돕는 보조고
+         * 대상은 고칠 그림에 이미 있다. 라이브러리 행은 있는데 파일이 사라진 경우
+         * 여기서 던지면, 사진 없이도 되던 고치기가 통째로 막힌다(2026-09-29 리뷰).
+         * 빈 주소는 `editAttachmentInputs` 가 거른다.
+         */
+        try {
+          const file = await referenceBytes(reference.storagePath);
+          return await fal.uploader.uploadReference(file.bytes, file.contentType);
+        } catch (error) {
+          console.error(
+            `[poster] 고치기: 원본 사진을 못 올려 빼고 갑니다(${reference.id}): `
+            + `${error instanceof Error ? error.message : error}`,
+          );
+          return "";
+        }
+      },
+    );
+
     // 화면이 수정하면서 비율을 바꿀 수 있으므로 **정해진 뒤의** 값을 본다.
     const ratioId = parsed.data.ratioId ?? project.ratio;
     const job = planEditJob({
@@ -78,6 +123,11 @@ export async function POST(request: Request, context: Context) {
       // `match-source` 작업은 크기를 안 넘기면 거절된다(설계 §10 3-b).
       sourceSize: editSourceSize(ratioId, project.data.adMaster, parent),
       slots: project.data.slots,
+      ...editAttachmentInputs(project.data, preserved, preservedUrlById),
+      // 글자를 넣을지는 처음 만들 때와 같은 판단을 한다. 안 넘기면 처음에 글자
+      // 없이 만든 그림을 고칠 때 AI 가 지어낸 헤드라인이 새로 박힌다.
+      invented: project.data.inventedSlots,
+      referenceHasText: project.data.referenceHasText,
     });
 
     /**
@@ -105,7 +155,10 @@ export async function POST(request: Request, context: Context) {
       queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
         // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.
         saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); },
-    });
+    },
+    // **고치기 조립을 넘긴다.** 안 넘기면 처음 만들기 조립을 타서 지시가 묻히고
+    // 고칠 그림이 「느낌만 따라 할 참고」가 된다(2026-09-29 사용자 보고).
+    buildPosterEditJob);
 
     /**
      * **예약 열쇠를 작업에 적어 둔다.**
