@@ -79,7 +79,8 @@ vi.mock("../../../../lib/poster/stores", () => ({
         return [parent, ...otherImages];
       },
     },
-    requests: { modelOf: async () => parentRequestModel },
+    // **어느 줄을 묻는지 가린다** — 부모 그림의 요청 줄(`req-parent`)만 답한다.
+    requests: { modelOf: async (id: string) => (id === "req-parent" ? parentRequestModel : null) },
   }),
 }));
 
@@ -431,5 +432,39 @@ describe("본인 작업만 고친다", () => {
   it("그림 목록을 본인 것만 달라고 한다", async () => {
     await call({ instruction: "배경을 밤으로 바꿔 주세요" });
     expect(imageListOptions).toContainEqual(expect.objectContaining({ ownOnly: true }));
+  });
+});
+
+describe("부모 모델이 그 비율을 못 만들면", () => {
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    parent = { ...parent, generationRequestId: "req-parent" };
+    // 비율을 바꿔 고친다 — 부모를 만든 경제형은 인쇄용 A4 를 못 만든다.
+    project = { ...project, modelId: "nano-banana", data: { ...project.data, slots: EMPTY_SLOTS } };
+  });
+
+  it("처음 만들기 규칙으로 만들 수 있는 모델로 바꾸고, 예약도 그 모델로 잡는다", async () => {
+    const { chooseModelForRatio, IMAGE_MODELS } = await import("@fixup/sns-core");
+    const { creditUnits } = await import("@fixup/shared");
+    parentRequestModel = "nano-banana";
+    const choice = chooseModelForRatio("a4-print", "nano-banana", IMAGE_MODELS);
+    // 전제: 정말 바뀌는 조합이다.
+    expect(choice.switched).toBe(true);
+
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요", ratioId: "a4-print" });
+    expect(response.status).toBe(200);
+    expect(submitted[0]!.modelId).toBe(choice.model.id);
+    const built = (builders[0] as (job: unknown) => { estimate: { totalUsd?: number } })(submitted[0]);
+    expect(reserved[0]).toBe(creditUnits(built.estimate.totalUsd ?? 0));
+  });
+});
+
+describe("옛 화면이 고칠 그림 없이 보내면", () => {
+  it("골라 둔 그림도 없으면 400 — 무엇을 하라고 말한다", async () => {
+    parent = { ...parent, selected: false };
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toBe("먼저 고칠 변형 하나를 고르세요.");
+    expect(reserved).toEqual([]);
   });
 });

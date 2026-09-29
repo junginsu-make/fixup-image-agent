@@ -19,6 +19,8 @@ vi.mock("server-only", () => ({}));
 const costs: Array<{ model: string } | undefined> = [];
 let project: { id: string; modelId: string; data: Record<string, unknown> } | undefined;
 let requestModel: string | null = null;
+/** 조회가 실패하는 경우. */
+let modelLookupFails = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -36,7 +38,12 @@ vi.mock("../../../../lib/poster/stores", () => ({
     requests: {
       unitCost: async () => 0.1,
       complete: async () => {},
-      modelOf: async () => requestModel,
+      // **어느 줄을 묻는지 가린다.** 인자를 무시하면 엉뚱한 줄(작업 id 등)을 읽어도
+      // 통과한다 — 운영에서는 그때 null 이 와 조용히 작업의 모델로 돌아간다(2026-09-29 리뷰).
+      modelOf: async (id: string) => {
+        if (modelLookupFails) throw new Error("DB unavailable");
+        return id === "r1" ? requestModel : null;
+      },
     },
     images: { byProject: async () => [], add: async () => [] },
   }),
@@ -70,6 +77,7 @@ const call = () =>
 beforeEach(() => {
   costs.length = 0;
   requestModel = null;
+  modelLookupFails = false;
   project = { id: "p1", modelId: "nano-banana-pro", data: { reservationId: "res-1" } };
 });
 
@@ -85,6 +93,15 @@ describe("원가 장부에 적는 모델", () => {
   it("요청 줄에 모델이 없는 옛 기록이면 작업의 모델로 떨어진다 — 지금까지와 같다", async () => {
     requestModel = null;
     await call();
+    expect(costs[0]?.model).toBe("nano-banana-pro");
+  });
+});
+
+describe("모델 조회가 실패해도", () => {
+  it("확정은 한다 — 작업의 모델로 적고 결과를 돌려준다", async () => {
+    modelLookupFails = true;
+    const response = await call();
+    expect(response.status).toBe(200);
     expect(costs[0]?.model).toBe("nano-banana-pro");
   });
 });

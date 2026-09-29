@@ -398,6 +398,18 @@ describe("포스터 작업에서 뽑는다", () => {
     expect((await call(posterCall)).status).toBe(404);
   });
 
+  /*
+   * **못 찾으면 잡아 둔 예약을 바로 푼다**(2026-09-29 리뷰). 예약을 먼저 잡고
+   * 그림을 찾는데, 404 는 예약을 안 풀고 돌아가 10분 동안 그 사람 한도가 묶였다.
+   * 이제 본인 그림만 보므로 팀원 작업을 고르면 이 길을 탄다.
+   */
+  it("그림을 못 찾으면 예약을 바로 풀고 404 다", async () => {
+    posterImages = [];
+    expect((await call(posterCall)).status).toBe(404);
+    expect(settleCalls).toHaveLength(1);
+    expect(settleCalls[0]).toMatchObject({ success: false, units: 0 });
+  });
+
   it("없는 변형 번호면 404 다", async () => {
     expect((await call({ ...posterCall, position: 7 })).status).toBe(404);
   });

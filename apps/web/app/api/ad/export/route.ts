@@ -201,7 +201,17 @@ export async function POST(request: Request) {
         // 역할을 지어내 넘기는 관례는 위 시험이 막으려던 바로 그것이다.
         "export",
       );
-    if (!file) return new Response("찾을 수 없습니다.", { status: 404 });
+    if (!file) {
+      /*
+        **잡아 둔 예약을 바로 푼다.** 예약을 먼저 잡고 그림을 찾으므로, 여기서 그냥
+        돌아가면 10분 동안 그 사람 한도가 묶였다(2026-09-29 리뷰). 푸는 일이
+        실패해도 404 는 준다 — 예약은 만료되면 어차피 풀린다.
+      */
+      await settleAiUsage(reserved, false, 0, "ad_export_not_found", {
+        model: BACKGROUND_REMOVAL_MODEL, billableImages: 0, llmUsd: 0,
+      }).catch(() => undefined);
+      return new Response("찾을 수 없습니다.", { status: 404 });
+    }
 
     /**
      * **동시 실행을 막는다.**
