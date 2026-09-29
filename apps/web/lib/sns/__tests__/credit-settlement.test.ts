@@ -29,3 +29,40 @@ describe("완성 카드와 내부 API 호출을 따로 정산", () => {
     expect((await settleSnsReservation("user", flow())).generation?.reservationId).toBe("request");
   });
 });
+
+/*
+ * **장부에는 이번 회차에 실제로 쓴 모델을 적는다**(2026-09-29 사용자 요청).
+ *
+ * 관리자 원가 화면은 장부의 모델 × 모델별 단가로 원가를 낸다. 칸 배치형은 칸 비율
+ * 때문에 모델이 바뀔 수 있는데 작업의 모델을 적어, 다른 모델의 단가로 잡혔다.
+ * 한 회차에 모델이 섞이면 **가장 많이 쓴 모델**을 적는다 — 장부 한 줄에 모델이
+ * 하나라 정확히 나눌 수는 없다. 옛 기록(모델 없음)은 작업의 모델로 센다.
+ */
+describe("원가 장부의 모델", () => {
+  beforeEach(() => { finalize.mockReset(); finalize.mockResolvedValue({ settlementPending: false }); });
+  const withModels = (models: Array<string | undefined>): SnsFlowState => ({
+    ...flow(),
+    costs: [{ cardIndex: 0, costUsd: .15, modelId: "옛회차모델" }, ...models.map((modelId) => ({ cardIndex: 0, costUsd: .15, ...(modelId ? { modelId } : {}) }))],
+  });
+
+  it("이번 회차에 실제로 쓴 모델을 적는다 — 작업의 모델이 아니다", async () => {
+    await settleSnsReservation("user", withModels(["gpt-image-2.5-flare", "gpt-image-2.5-flare", "gpt-image-2.5-flare"]), "nano-banana");
+    expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "gpt-image-2.5-flare" });
+  });
+
+  it("섞였으면 가장 많이 쓴 모델이다 — 옛 기록은 작업의 모델로 센다", async () => {
+    await settleSnsReservation("user", withModels(["gpt-image-2.5-flare", undefined, undefined]), "nano-banana");
+    expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "nano-banana" });
+  });
+
+  it("앞 회차 기록은 안 센다", async () => {
+    // 기준선(1) 앞의 「옛회차모델」은 이번 회차가 아니다.
+    await settleSnsReservation("user", withModels(["gpt-image-2.5-flare"]), "nano-banana");
+    expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "gpt-image-2.5-flare" });
+  });
+
+  it("모델 기록이 하나도 없으면 작업의 모델 — 지금까지와 같다", async () => {
+    await settleSnsReservation("user", withModels([undefined, undefined]), "nano-banana");
+    expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "nano-banana" });
+  });
+});

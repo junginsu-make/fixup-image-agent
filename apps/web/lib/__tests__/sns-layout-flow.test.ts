@@ -227,6 +227,44 @@ describe("레이아웃이 붙은 카드", () => {
     expect(started.cards[0]!.promptWarnings!.join(" ")).toContain("맞는 크기가 없어");
   });
 
+  /*
+   * **바꾼 모델을 기록한다**(2026-09-29 사용자 요청 — 관리자 원가 화면 맞추기).
+   *
+   * 원가 화면은 장부의 모델 이름으로 단가를 찾는다. 칸 비율 때문에 모델을 바꿔
+   * 놓고 요청·비용 기록에는 작업의 모델(`nano-banana`)을 적어, 다른 모델의 단가로
+   * 원가가 잡혔다. 그림을 만드는 방식은 그대로다 — 적는 이름만 바뀐다.
+   */
+  it("칸 때문에 모델을 바꿨으면 요청·비용 기록에 바꾼 모델을 적는다", async () => {
+    const record = recorder();
+    const deps = dependencies(record);
+    const requestModels: string[] = [];
+    const started = await startQueuedFlow(
+      project(),
+      flow({ templateId: "t", slots: WIDE_IMAGE }),
+      {
+        ...deps,
+        requestStore: {
+          ...deps.requestStore,
+          createSubmitted: async (row: { modelId: string }) => {
+            requestModels.push(row.modelId);
+            return { id: "ledger-wide" };
+          },
+        },
+      },
+      { now: "2026-09-01T00:00:00.000Z" },
+    );
+
+    expect(requestModels).toHaveLength(1);
+    expect(requestModels[0]).toMatch(/^gpt-image-2/);
+    expect(started.costs.at(-1)!.modelId).toBe(requestModels[0]);
+  });
+
+  it("안 바꿨으면 작업의 모델을 적는다 — 지금까지와 같다", async () => {
+    const record = recorder();
+    const started = await startQueuedFlow(project(), flow(), dependencies(record), { now: "2026-09-01T00:00:00.000Z" });
+    expect(started.costs.at(-1)!.modelId).toBe("nano-banana");
+  });
+
   it("그림 칸이 없는 뼈대는 fal 을 부르지 않고 바로 합성한다", async () => {
     const record = recorder();
     const started = await startQueuedFlow(

@@ -20,6 +20,33 @@ import type { SnsFlowState } from "../../app/api/sns/flow-service";
  * 열쇠가 없으면 아무것도 안 하고 받은 흐름을 그대로 돌려준다 — 부르는 쪽이
  * 조건을 또 쓰지 않아도 되게 한다.
  */
+/**
+ * 원가 장부에 적을 모델 — **이번 회차에 실제로 쓴 모델**(2026-09-29 사용자 요청).
+ *
+ * 관리자 원가 화면은 장부의 모델 × 모델별 단가로 원가를 낸다. 칸 배치형은 칸 비율
+ * 때문에 모델이 바뀔 수 있는데 작업의 모델을 적어, 다른 모델의 단가로 잡혔다.
+ *
+ * 장부 한 줄에 모델은 하나라, 섞였으면 **가장 많이 쓴 모델**을 적는다(동점이면 작업의
+ * 모델, 아니면 먼저 나온 것). 모델 기록이 없는 장(옛 기록)은 작업의 모델로 센다.
+ * 이번 회차는 기준선(`costBaselineCount`) 뒤의, 값이 나온 장이다 — 청구 장수와 같다.
+ */
+function billedModel(flow: SnsFlowState, projectModelId: string | undefined): string | undefined {
+  const billed = flow.costs
+    .slice(flow.generation?.costBaselineCount ?? 0)
+    .filter((entry) => entry.costUsd !== null);
+  const counts = new Map<string, number>();
+  for (const entry of billed) {
+    const model = entry.modelId ?? projectModelId;
+    if (model) counts.set(model, (counts.get(model) ?? 0) + 1);
+  }
+  let best = projectModelId;
+  let bestCount = projectModelId ? counts.get(projectModelId) ?? 0 : 0;
+  for (const [model, count] of counts) {
+    if (count > bestCount) { best = model; bestCount = count; }
+  }
+  return best;
+}
+
 export async function settleSnsReservation(
   userId: string,
   flow: SnsFlowState,
@@ -70,7 +97,7 @@ export async function settleSnsReservation(
        * 만들었는데 `admin_cost_by_operation` 에는 0장으로 나왔다. 회원 차감과
        * 우리가 낸 돈은 다른 값이라, 차감만 적으면 원가를 영영 알 수 없다.
        */
-      { model: modelId ?? "", billableImages: flow.generation?.costBaselineCount === undefined ? made : flow.costs.slice(flow.generation.costBaselineCount).filter(entry => entry.costUsd !== null).length, deliveredImages: made,
+      { model: billedModel(flow, modelId) ?? "", billableImages: flow.generation?.costBaselineCount === undefined ? made : flow.costs.slice(flow.generation.costBaselineCount).filter(entry => entry.costUsd !== null).length, deliveredImages: made,
         completionConfirmed: flow.cards.filter(card => picked.has(card.index)).every(card => card.status === "done" || card.status === "review_required") },
     );
     if (usage?.settlementPending) return flow;

@@ -198,7 +198,9 @@ async function submitNext(
   const request = await dependencies.requestStore.createSubmitted({
     projectId: project.id,
     cardIndex: card.index,
-    modelId: project.modelId,
+    // **실제로 쓴 모델.** 칸 비율 때문에 바꿨으면 바꾼 모델이다 — 작업의 모델을 적으면
+    // 관리자 원가 화면이 다른 모델의 단가로 셌다(2026-09-29). 만드는 방식은 그대로다.
+    modelId: model.id,
     mode,
     size: resolved,
     requestedImages: 1,
@@ -223,6 +225,7 @@ async function submitNext(
     cardIndex: card.index,
     costUsd: null,
     unitCostUsd,
+    modelId: model.id,
     falRequestId: submitted.requestId,
     generationRequestId: request.id,
   });
