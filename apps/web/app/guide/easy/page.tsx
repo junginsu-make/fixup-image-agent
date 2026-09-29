@@ -21,6 +21,10 @@ export const metadata: Metadata = { title: "쉽게 · 사용 설명서" };
  *   · 「각 모델의 값이 함께 나옵니다」 → 값 표시는 뺐다(사용자 요청)
  *   · 「보내면 바로 값이 듭니다」 → 말로 묻는 턴은 값이 안 든다
  *   · 「무조건 1:1」 → 비율·그림체를 한 번 묻는다
+ *
+ * 2026-09-29 에 한 번 더 맞췄다 — 입력창 위에서 모델을 고를 수 있고
+ * (`model-bar.tsx`), 모양은 주문마다 묻고, 이미지를 붙이면 안 묻고 1:1 로
+ * 간다(`ask.ts`).
  */
 export default function EasyGuidePage() {
   return (
@@ -28,7 +32,7 @@ export default function EasyGuidePage() {
       <GuideHeader
         kicker="이미지 · 쉽게"
         title="말로 만듭니다"
-        lead="무엇을 만들지 한 줄 적으면 이미지가 나옵니다. 궁금한 것은 그냥 물어보셔도 됩니다. 비율·모델·장수를 고르지 않고, AI 가 채운 칸을 검토하지도 않습니다. 처음 오셨다면 여기서 시작하세요."
+        lead="무엇을 만들지 한 줄 적으면 이미지가 나옵니다. 궁금한 것은 그냥 물어보셔도 됩니다. 장수를 고르지 않고, AI 가 채운 칸을 검토하지도 않습니다. 모델은 입력창 위에서 바꿀 수 있지만 그대로 둬도 됩니다. 처음 오셨다면 여기서 시작하세요."
       />
 
       <Summary
@@ -39,11 +43,11 @@ export default function EasyGuidePage() {
             body: "「뭘 적어야 잘 나와?」처럼 물으면 답만 합니다. 이때는 값이 들지 않습니다. 「○○ 만들어줘」처럼 주문하면 그때 만듭니다.",
           },
           {
-            title: "고를 것이 하나입니다",
-            body: "무엇을 만들지 한 줄. 모양을 안 고르면 정사각형 한 장으로 가고, 그 밖은 AI 가 정합니다.",
+            title: "적을 것은 한 줄입니다",
+            body: "무엇을 만들지 한 줄. 모양을 안 고르면 정사각형 한 장으로 가고, 그 밖은 AI 가 정합니다. 장수는 고르지 않습니다. 모델은 입력창 위에서 바꿀 수 있지만 기본값 그대로 둬도 됩니다.",
           },
           {
-            title: "모양은 한 번만 묻습니다",
+            title: "모양은 주문마다 한 번 묻습니다",
             body: "붙인 이미지 없이 주문하면 비율과 그림체를 한 번 묻습니다. 안 고르고 넘어가도 됩니다. 말 속에 이미 있으면 묻지 않습니다.",
           },
           {
@@ -54,7 +58,7 @@ export default function EasyGuidePage() {
         when={[
           "무엇을 적어야 할지 모르겠을 때",
           "빠르게 한 장만 뽑아 보고 싶을 때",
-          "이미지 만들기의 다섯 단계가 부담스러울 때",
+          "「다양하게」의 다섯 단계가 부담스러울 때",
         ]}
       />
 
@@ -129,7 +133,7 @@ export default function EasyGuidePage() {
               <tr className="border-b border-border/60">
                 <td className="py-2 pr-4">고르는 칸</td>
                 <td className="py-2 pr-4">비율 · 모델 · 장수 · 그림체</td>
-                <td className="py-2">비율 · 그림체 (한 번 묻고 넘어갈 수 있음)</td>
+                <td className="py-2">비율 · 그림체 (주문마다 묻고 넘어갈 수 있음) · 모델 (기본값 그대로 둬도 됨)</td>
               </tr>
               <tr className="border-b border-border/60">
                 <td className="py-2 pr-4">한 번에</td>
@@ -138,7 +142,7 @@ export default function EasyGuidePage() {
               </tr>
               <tr className="border-b border-border/60">
                 <td className="py-2 pr-4">기획 확인</td>
-                <td className="py-2 pr-4">04 에서 열한 칸</td>
+                <td className="py-2 pr-4">04 에서 칸 열 개</td>
                 <td className="py-2">없음</td>
               </tr>
               <tr>
@@ -150,7 +154,7 @@ export default function EasyGuidePage() {
           </table>
         </div>
         <p>
-          <strong>둘은 갈래입니다.</strong> 세밀하게 만들 것은 이미지 만들기로 가세요.
+          <strong>둘은 갈래입니다.</strong> 세밀하게 만들 것은 「이미지 &gt; 다양하게」로 가세요.
           왼쪽 사이드바가 그대로 있으니 거기서 바로 옮겨 갑니다.
         </p>
       </Section>
@@ -166,8 +170,9 @@ export default function EasyGuidePage() {
           붙이면 그 배치와 연출을 따라갑니다.
         </p>
         <p>
-          붙인 것이 있으면 <strong>모양을 묻지 않습니다.</strong> 그 결을 따라가는 것이
-          기본이기 때문입니다.
+          붙인 것이 있으면 <strong>모양을 묻지 않습니다.</strong> 그림체는 붙인 이미지를
+          따라갑니다. 비율은 말 속에 적지 않았으면 <strong>정사각형(1:1)</strong>으로
+          만듭니다. 다른 비율이 필요하면 「세로로」·「인스타 피드에 올릴」처럼 함께 적어 주세요.
         </p>
       </Section>
 
@@ -175,6 +180,7 @@ export default function EasyGuidePage() {
         <p>
           대화 속 이미지는 작게 들어갑니다. 대화가 길어져도 오간 말이 안 밀리게 하기
           위해서입니다. <strong>큰 그림과 만든 조건은 오른쪽 결과 칸</strong>에 있습니다.
+          결과 칸은 넓은 화면에서만 보입니다. 화면이 좁으면 대화 속 이미지를 눌러 크게 보세요.
         </p>
         <p>
           결과마다 밑에 <strong>어떤 모델로 어떤 비율에서 만들었는지</strong>가 작게

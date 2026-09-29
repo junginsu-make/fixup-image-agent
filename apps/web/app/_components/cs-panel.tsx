@@ -338,7 +338,7 @@ export function CsPanel() {
               모른다.
             */}
             <p className="mt-2 text-[11px] text-subtle-foreground">
-              대화는 24시간 동안만 남고 그 뒤에는 사라집니다. 문의는 {CS_EMAIL} 로도 받습니다.
+              대화는 24시간 동안만 남고 그 뒤에는 사라집니다. 문의는 {CS_EMAIL}으로도 받습니다.
             </p>
           </SidePanelFooter>
         </SidePanelContent>

@@ -4,6 +4,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockField, MockNote } from "../_components/mockup";
 import { CS_INQUIRY_HINT } from "../_components/contact";
+import { CS_EMAIL } from "../../../lib/cs/contact";
 
 /**
  * **계정 · 플랜 · 탈퇴**(2026-09-28, 설계 §9 2단계 「결제 · 환불 · 구독 해지」와
@@ -24,15 +25,29 @@ import { CS_INQUIRY_HINT } from "../_components/contact";
  *
  * 이 저장소에는 **결제 연동이 없다.** 토스·아임포트·Stripe 같은 것을 찾아봤고
  * 하나도 없다(2026-09-28 확인). 플랜과 크레딧은 운영자가 직접 넣는다
- * (`credit_admin_subscription_many` · `credit_admin_grant_many`).
+ * (`credit_admin_subscription_many` · `credit_admin_grant_many`). 그 달 구독
+ * 크레딧은 운영자가 **그 달 결제를 확인해야** 들어온다(`credit_admin_confirm_period`)
+ * — 달이 바뀐다고 저절로 들어오지 않는다.
  *
  * 그러면 「결제 방법」을 쓸 수 없다. **없는 것을 있는 것처럼 쓰면 그게 가장
  * 나쁘다** — 사용자가 없는 화면을 찾아다닌다. 그래서 있는 그대로 쓴다.
  *
- * **환불 기준도 여기 안 적는다.** 코드에 없고 약관도 초안이다(설계 §14).
- * 기준을 지어내면 그것이 공개된 약속이 된다. 문의로 안내한다고만 적는다.
+ * **환불 기준은 약관 제7조를 옮긴다**(2026-09-29). 처음에는 코드에도 없고
+ * 약관도 초안이라 적지 않았다. 지금은 사용자가 정한 기준이 약관에 실렸다.
+ * 설명서가 약관과 다른 말을 하면 분쟁 때 약관이 이긴다 — 새 기준을 지어내지
+ * 않고 약관의 말(달마다 · 추가 지급은 환불 없음 · 메일로 신청)을 따른다.
+ * 어긋나면 `app/_landing/legal/__tests__/policy-agreement.test.ts` 가 잡는다.
  */
 export const metadata: Metadata = { title: "계정과 플랜 · 사용 설명서" };
+
+/**
+ * 계정 화면의 사용 기록이 싣는 줄 수.
+ *
+ * 정본은 `lib/membership/usage-store.ts` 의 `USAGE_HISTORY_LIMIT` 다. 그 파일은
+ * `server-only` 와 관리 키 클라이언트를 끌고 와서 설명서가 import 하지 않는다.
+ * **그 값을 바꾸면 여기도 함께 바꾼다.**
+ */
+const 보이는기록수 = 40;
 
 export default function AccountGuidePage() {
   return (
@@ -52,43 +67,83 @@ export default function AccountGuidePage() {
           },
           {
             title: "쓴 내역이 한 줄씩 남습니다",
-            body: "무엇에 몇 크레딧이 나갔는지, 실패한 것은 차감됐는지 모두 볼 수 있습니다.",
+            body: `무엇에 몇 크레딧이 나갔는지, 실패한 것은 차감됐는지 최근 ${보이는기록수}건까지 볼 수 있습니다.`,
           },
           {
             title: "탈퇴는 계정 화면 맨 아래에 있습니다",
             body: "되돌릴 수 없습니다. 확인을 위해 이메일을 그대로 입력해야 합니다.",
           },
           {
-            title: "해지와 환불은 문의로 받습니다",
-            body: "스스로 해지하는 버튼은 아직 없습니다.",
+            title: "해지와 환불은 메일로 받습니다",
+            body: `스스로 해지하는 버튼은 아직 없습니다. ${CS_EMAIL}으로 신청해 주세요.`,
           },
         ]}
         when={[
-          "이름이나 추천코드를 고치고 싶을 때",
+          "가입할 때 무엇을 적고 체크하는지 알고 싶을 때",
+          "이름·추천코드·비밀번호를 고치고 싶을 때",
           "이번 달에 얼마나 썼는지 보고 싶을 때",
           "플랜을 바꾸거나 해지하고 싶을 때",
           "더 이상 쓰지 않아 계정을 닫고 싶을 때",
         ]}
       />
 
+      {/*
+        **가입 화면의 동의 칸**(2026-09-29). 체크 칸은 둘뿐이고 둘 다 필수다
+        (`lib/membership/signup-consent.ts`). 개인정보 처리방침은 동의 칸이 아니라
+        링크로 안내한다(`app/signup/page.tsx`). 칸 이름과 뜨는 말은 화면 그대로 적는다.
+      */}
+      <Section title="가입할 때" hint="회원가입 화면에서 적는 것과 체크하는 것입니다.">
+        <ChoiceTable
+          head={["칸", "꼭 해야 하나", "알아 둘 것"]}
+          rows={[
+            ["이름 · 이메일", "필수", "이메일은 로그인에 쓰고, 인증 메일도 이 주소로 갑니다"],
+            ["비밀번호", "필수", "8자 이상입니다. 확인 칸에 한 번 더 적습니다"],
+            ["추천코드", "선택", "받은 코드가 있을 때만 적습니다. 나중에 계정 화면에서 고칠 수 있습니다"],
+            ["만 14세 이상입니다", "필수 체크", "체크하지 않으면 「만 14세 이상인지 확인해 주세요.」가 뜨고 가입되지 않습니다"],
+            ["이용약관에 동의합니다", "필수 체크", "체크하지 않으면 「이용약관에 동의해 주세요.」가 뜨고 가입되지 않습니다"],
+          ]}
+        />
+        <p className="text-sm leading-7 text-muted-foreground">
+          「이용약관」은 체크 칸 안의 링크를, 「개인정보 처리방침」은 체크 칸 아래의 링크를 누르면 새 탭에서 읽을
+          수 있습니다. 개인정보 처리방침은 체크하는 칸 없이 안내만 합니다. 다 적고{" "}
+          <strong className="text-foreground">「인증 메일 받기」</strong>를 누르면 적은 이메일로 인증 메일이 갑니다.
+          메일 속 「이메일 인증 완료」를 누르면 가입이 끝납니다.
+        </p>
+      </Section>
+
       <Section title="계정 화면에 무엇이 있나" hint="왼쪽 사이드바 아래 「계정」입니다.">
-        <Mock title="계정">
+        <Mock title="계정 · 회원 정보">
           <MockField label="이름" value="홍길동" />
-          <MockField label="추천코드" value="가입할 때 적은 코드" />
-          <MockNote>남은 크레딧과 이번 달 사용량이 위쪽에 함께 보입니다.</MockNote>
-          <MockButtons items={[{ label: "비밀번호 바꾸기", variant: "quiet" }, { label: "저장" }]} />
+          <MockField label="추천코드 · 선택" value="가입할 때 적은 코드" />
+          <MockNote>「수정」을 누르면 고칠 수 있습니다. 내 크레딧과 사용 기록도 같은 화면에 함께 보입니다.</MockNote>
+          <MockButtons items={[{ label: "저장" }, { label: "취소", variant: "quiet" }]} />
+        </Mock>
+
+        <Mock title="계정 · 로그인 정보">
+          <MockField label="현재 비밀번호" placeholder="지금 쓰는 비밀번호" />
+          <MockField label="새 비밀번호" placeholder="8자 이상" />
+          <MockField label="새 비밀번호 확인" placeholder="한 번 더" />
+          <MockButtons items={[{ label: "비밀번호 바꾸기" }]} />
         </Mock>
 
         <ChoiceTable
           head={["칸", "무엇을 하나", "바로 반영되나"]}
           rows={[
-            ["이름 · 추천코드", "적어 두면 관리자 화면에서도 같이 보입니다", "저장하면 바로"],
-            ["비밀번호", "메일로 받은 링크에서 새로 정합니다", "메일을 받은 뒤"],
-            ["남은 크레딧", "이번 달에 더 만들 수 있는 양입니다", "만들 때마다 바로"],
-            ["사용 기록", "무엇에 몇 크레딧이 나갔는지 한 줄씩", "만들 때마다 바로"],
+            ["이름 · 추천코드", "「회원 정보」의 「수정」을 눌러 고칩니다. 적어 두면 관리자 화면에서도 같이 보입니다", "저장하면 바로"],
+            ["비밀번호", "「로그인 정보」에서 현재 비밀번호와 새 비밀번호(8자 이상)를 적습니다", "「비밀번호 바꾸기」를 누르면 바로"],
+            ["이메일", "「로그인 정보」에서 새 이메일과 현재 비밀번호를 적으면 확인 메일이 갑니다", "메일의 링크를 누른 뒤"],
+            ["내 크레딧", "지금 쓸 수 있는 크레딧 합계입니다. 구독 · 구매 · 추가 지급으로 나눠 보이고, 칸마다 가장 가까운 만료일이 적힙니다", "만들 때마다 바로"],
+            ["사용 기록", `무엇에 몇 크레딧이 나갔는지 한 줄씩 적힙니다. 최근 ${보이는기록수}건까지 보입니다`, "만들 때마다 바로"],
+            ["받은 크레딧", "사용 기록 아래에 있습니다. 언제 무엇을 받았고, 얼마 남았고, 언제까지 쓸 수 있는지 적힙니다", "들어오면 바로"],
             ["회원 탈퇴", "계정을 닫습니다. 맨 아래에 따로 있습니다", "누른 즉시"],
           ]}
         />
+
+        <p className="text-sm leading-7 text-muted-foreground">
+          <strong className="text-foreground">로그인은 로그아웃할 때까지 유지됩니다.</strong> 공용 컴퓨터에서는 꼭
+          화면 맨 위 줄의 로그아웃 단추를 눌러 주세요. 비밀번호를 바꾸면 다른 기기에서는 다시 로그인해야 할 수
+          있습니다.
+        </p>
       </Section>
 
       {/*
@@ -118,8 +173,19 @@ export default function AccountGuidePage() {
 
       <Section title="플랜과 크레딧은 어떻게 받나" hint="지금은 운영자가 넣어 드립니다.">
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">가입하면 크레딧은 0 으로 시작합니다.</strong> 가입 혜택으로 주는
-          크레딧은 없습니다. 만들어 보시려면 먼저 플랜이나 크레딧을 받아야 합니다.
+          <strong className="text-foreground">가입하면 크레딧은 0 으로 시작합니다.</strong> 가입과 함께 저절로
+          들어오는 크레딧은 없습니다. 만들어 보시려면 먼저 플랜이나 크레딧을 받아야 합니다.
+        </p>
+
+        {/*
+          **체험 크레딧은 「추가 지급」으로 들어간다**(약관 제2·6·7조의 「무료 크레딧」,
+          화면 이름은 「추가 지급」). 얼마를 줄지는 운영 계획이지 코드가 아니므로
+          양은 적지 않는다.
+        */}
+        <p className="text-sm leading-7 text-muted-foreground">
+          운영자가 체험용 크레딧을 <strong className="text-foreground">「추가 지급」</strong>으로 넣어 드릴 수
+          있습니다. 추가 지급 크레딧은 넣을 때 정한 날까지 쓸 수 있고, 그 날짜는 계정 화면에 보입니다. 무료로
+          드리는 것이라 환불되지 않습니다.
         </p>
 
         <Callouts
@@ -139,8 +205,9 @@ export default function AccountGuidePage() {
               body: (
                 <>
                   플랜을 넣는 것과 그 달 크레딧을 넣는 것이 <strong className="text-foreground">따로</strong>
-                  움직입니다. 플랜만 붙어 있고 크레딧이 0 이면 아직 그 달 몫이 안 들어온 것입니다. 문의해
-                  주시면 넣어 드립니다.
+                  움직입니다. 그 달 구독 크레딧은 운영자가 그 달 결제를 확인하면 들어옵니다. 구독을 신청했는데
+                  계정 화면의 「구독」 칸이 0 이고 「받은 크레딧」에 이번 달 구독 줄이 없으면, 아직 그 달 결제
+                  확인 전입니다. 문의해 주세요.
                 </>
               ),
             },
@@ -159,7 +226,7 @@ export default function AccountGuidePage() {
           nodes={[
             { label: "문의", sub: "필요한 플랜을 알려 주세요", human: true },
             { label: "플랜 부여", sub: "운영자가 넣습니다" },
-            { label: "그 달 확인", sub: "크레딧은 여기서 들어옵니다" },
+            { label: "그 달 결제 확인", sub: "크레딧은 여기서 들어옵니다" },
             { label: "만들기", sub: "바로 쓸 수 있습니다" },
           ]}
         />
@@ -178,11 +245,15 @@ export default function AccountGuidePage() {
 
         받은 기준을 **그대로** 적는다. 다듬어서 뜻이 달라지면 그것이 공개된
         약속이 되고, 나중에 다투게 된다.
+
+        **2026-09-29 약관 제7조에 맞췄다.** 구독 환불은 **달마다** 따로 본다 —
+        그 달 구독 크레딧을 한 번도 안 썼으면 그 달 구독료를 돌려준다. 추가 지급
+        (약관의 「무료 크레딧」)은 환불하지 않는다. 신청은 메일로 받는다.
       */}
-      <Section title="구독을 해지하려면" hint="문의로 받습니다.">
+      <Section title="구독을 해지하려면" hint="메일로 받습니다.">
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">스스로 해지하는 버튼은 아직 없습니다.</strong> 해지하고 싶으시면
-          문의해 주세요. 플랜을 올리거나 내리는 것도 같습니다.
+          <strong className="text-foreground">스스로 해지하는 버튼은 아직 없습니다.</strong> 해지하고 싶으시면{" "}
+          {CS_EMAIL}으로 메일을 보내 주세요. 플랜을 올리거나 내리는 것도 같습니다.
         </p>
 
         <Callouts
@@ -201,7 +272,7 @@ export default function AccountGuidePage() {
               body: (
                 <>
                   그 달 몫은 <strong className="text-foreground">그 달에만</strong> 쓸 수 있습니다. 달이 바뀌면
-                  새 몫이 들어오고 지난 몫은 사라집니다.
+                  지난 달 몫은 사라집니다. 새 달 몫은 운영자가 그 달 결제를 확인하면 들어옵니다.
                 </>
               ),
             },
@@ -209,41 +280,83 @@ export default function AccountGuidePage() {
         />
       </Section>
 
-      <Section title="환불 기준" hint="구독과 크레딧 구매가 다릅니다.">
+      <Section title="환불 기준" hint="구독 · 구매 · 추가 지급이 다릅니다. 구독은 달마다 따로 봅니다.">
         <ChoiceTable
-          head={["무엇을", "환불되나", "어떻게 계산하나"]}
+          head={["무엇을", "환불되나", "어떻게"]}
           rows={[
             [
-              "월 구독 · 한 번도 안 썼으면",
-              "환불됩니다",
-              "문의해 주시면 안내해 드립니다",
+              "월 구독 · 그 달 구독 크레딧을 한 번도 안 썼으면",
+              "그 달 구독료를 환불합니다",
+              "달마다 따로 봅니다. 메일로 신청해 주세요",
             ],
             [
-              "월 구독 · 크레딧을 한 번이라도 썼으면",
-              "환불되지 않습니다",
-              "새로 구독한 뒤 만들기를 실행해 크레딧이 소모된 경우입니다",
+              "월 구독 · 그 달 구독 크레딧을 한 번이라도 썼으면",
+              "그 달 구독료는 환불되지 않습니다",
+              "그 달 몫만 해당합니다. 해지하면 다음 달부터는 결제되지 않습니다",
             ],
             [
               "구매한 크레딧 · 남은 것",
               "환불됩니다",
-              "남은 크레딧을 원화로 환산해 돌려드립니다",
+              "그 구매에 실제로 결제한 금액에서 남은 크레딧의 비율만큼 원화로 환산해 돌려드립니다",
+            ],
+            [
+              "추가 지급 크레딧",
+              "환불되지 않습니다",
+              "무료로 드린 것이라 환불 대상이 아닙니다",
             ],
           ]}
         />
 
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">구매한 크레딧은 3개월까지</strong> 쓰실 수 있습니다. 그 안에 남은
-          것은 환불을 요청하실 수 있고, 남은 양을 계산해 원화로 환산해 드립니다.
+          <strong className="text-foreground">구매한 크레딧은 계정에 들어온 날부터 3개월까지</strong> 쓰실 수 있습니다. 그
+          안에 남은 것은 환불을 요청하실 수 있고, 남은 양을 계산해 원화로 환산해 드립니다.
+        </p>
+
+        <p className="text-sm leading-7 text-muted-foreground">
+          <strong className="text-foreground">환불과 해지 신청은 메일로 받습니다:</strong> {CS_EMAIL}. 가입한
+          이메일과 원하시는 내용을 적어 보내 주세요.
         </p>
 
         <p className="text-sm leading-6 text-subtle-foreground">{CS_INQUIRY_HINT}</p>
       </Section>
 
       <Section title="회원 탈퇴" hint="계정 화면 맨 아래, 테두리가 다른 카드입니다.">
+        {/*
+          카드의 안내 문장은 `app/settings/withdraw-notice.ts` 가 정본이다(약관 제11조 —
+          잔여 크레딧 · 환불 방법 · 삭제와 내려받기). 목업은 남은 크레딧이 없을 때의 말이다.
+        */}
         <Mock title="계정 · 회원 탈퇴">
-          <MockNote>탈퇴하면 로그인할 수 없게 되고 만든 작업물과 라이브러리가 모두 사라집니다. 되돌릴 수 없습니다.</MockNote>
+          <MockNote>
+            탈퇴하면 로그인할 수 없게 되고 만든 작업물과 라이브러리가 모두 사라집니다. 되돌릴 수 없습니다. 필요한
+            작업물은 탈퇴하기 전에 라이브러리에서 내려받아 주세요. 결제·크레딧 기록은 법령에 따라 보관됩니다.
+          </MockNote>
           <MockButtons items={[{ label: "탈퇴 절차 시작", variant: "quiet" }]} />
         </Mock>
+
+        <Callouts
+          items={[
+            {
+              title: "탈퇴하기 전에 내려받아 두세요",
+              body: (
+                <>
+                  탈퇴하면 라이브러리의 작업물도 함께 지워집니다.{" "}
+                  <strong className="text-foreground">필요한 작업물은 탈퇴하기 전에 라이브러리에서 내려받아</strong>{" "}
+                  주세요.
+                </>
+              ),
+            },
+            {
+              title: "환불받을 것이 있으면 먼저 신청하세요",
+              body: (
+                <>
+                  쓰지 않은 구매 크레딧과, 그 달에 한 번도 쓰지 않은 구독은 환불받으실 수 있습니다. 탈퇴하면 남은
+                  크레딧도 사라지므로 <strong className="text-foreground">탈퇴 전에 {CS_EMAIL}으로 먼저 신청</strong>
+                  하시길 권합니다.
+                </>
+              ),
+            },
+          ]}
+        />
 
         <ol className="grid gap-2 text-sm leading-7 text-muted-foreground">
           <li>
@@ -253,9 +366,23 @@ export default function AccountGuidePage() {
             2. 확인을 위해 <strong className="text-foreground">내 이메일을 그대로 입력</strong>합니다
           </li>
           <li>
-            3. <strong className="text-foreground">「탈퇴하기」</strong>를 누르면 그 자리에서 처리되고 로그아웃됩니다
+            3. <strong className="text-foreground">「탈퇴하기」</strong>를 누르면 그 자리에서 처리되고 로그인
+            화면으로 옮겨집니다
           </li>
         </ol>
+
+        {/*
+          **탈퇴는 로그아웃까지 하지 않는다**(2026-09-29 확인). `withdraw-card.tsx` 는
+          `/login?notice=withdrawn` 으로 옮기기만 한다. 계정을 닫은 경우 브라우저의
+          로그인이 남아서, 로그인 화면이 「이미 로그인되어 있습니다」를 먼저 보여 줄 수
+          있다(`app/login/page.tsx`). 그때 할 일을 적는다.
+        */}
+        <p className="text-sm leading-7 text-muted-foreground">
+          로그인 화면에 <strong className="text-foreground">「탈퇴가 완료되었습니다. 이 계정으로는 로그인할 수
+          없습니다.」</strong>가 보이면 끝난 것입니다. 로그인 화면이 「이미 로그인되어 있습니다」로 보이면{" "}
+          <strong className="text-foreground">「다른 계정으로 로그인하기」</strong>를 눌러 주세요. 그 브라우저의
+          로그인이 끝나고 탈퇴 완료 안내가 보입니다.
+        </p>
 
         <Callouts
           items={[
@@ -274,8 +401,9 @@ export default function AccountGuidePage() {
               body: (
                 <>
                   크레딧을 받거나 쓴 기록이 있으면 <strong className="text-foreground">결제·크레딧 기록은 법령에 따라
-                  보관됩니다.</strong> 그 경우 계정은 지워지는 대신 닫힙니다. 한 번이라도 만들어 본 계정은 대개
-                  이쪽입니다. 가입만 하고 아무것도 안 만든 계정은 통째로 지워집니다.
+                  보관됩니다.</strong> 그 경우 계정은 지워지는 대신 닫힙니다. 크레딧을 한 번이라도 받았다면 쓰지
+                  않았어도 이쪽입니다. <strong className="text-foreground">크레딧을 한 번도 받은 적이 없고 구독
+                  플랜도 붙은 적이 없는 계정만</strong> 통째로 지워지며, 그 이메일로 새로 가입할 수 있습니다.
                 </>
               ),
             },
@@ -288,17 +416,22 @@ export default function AccountGuidePage() {
             [
               "지금 만들고 있는 작업이 있습니다",
               "크레딧이 잡혀 있습니다",
-              "만들기가 끝난 뒤에 다시 시도해 주세요",
+              "만들기가 끝난 뒤에 다시 시도해 주세요. 사용 기록에 「확인 대기」가 있으면 문의해 주세요",
             ],
             [
-              "계정이 모두 삭제되었습니다",
-              "기록이 없어 통째로 지웠습니다",
-              "같은 이메일로 새로 가입할 수 있습니다",
+              "확인을 위해 계정 이메일을 그대로 입력해 주세요",
+              "입력한 글자가 계정 이메일과 다릅니다",
+              "탈퇴 카드에 적힌 이메일을 그대로 입력해 주세요",
             ],
             [
-              "기록은 법령에 따라 보관됩니다",
-              "돈 기록이 있어 계정을 닫았습니다",
-              "다시 쓰시려면 문의해 주세요",
+              "탈퇴가 완료되었습니다",
+              "로그인 화면에 나옵니다. 탈퇴가 끝났습니다",
+              "이 계정으로는 로그인할 수 없습니다. 기록이 있던 계정은 결제·크레딧 기록이 법령에 따라 보관됩니다",
+            ],
+            [
+              "이미 로그인되어 있습니다",
+              "이 브라우저에 로그인이 남아 있습니다",
+              "「다른 계정으로 로그인하기」를 눌러 주세요",
             ],
           ]}
         />
@@ -326,19 +459,19 @@ export default function AccountGuidePage() {
             },
             {
               q: "구독을 해지하고 싶은데 버튼이 없습니다",
-              a: "스스로 해지하는 버튼은 아직 없습니다. 문의해 주시면 처리해 드리고, 이미 결제한 기간까지는 그대로 쓰실 수 있습니다.",
+              a: `스스로 해지하는 버튼은 아직 없습니다. ${CS_EMAIL}으로 메일을 보내 주시면 처리해 드리고, 이미 결제한 기간까지는 그대로 쓰실 수 있습니다.`,
             },
             {
               q: "구독을 환불받고 싶습니다",
-              a: "크레딧을 한 번이라도 쓰셨으면 환불되지 않습니다. 한 번도 안 쓰셨다면 문의해 주세요.",
+              a: `달마다 따로 봅니다. 그 달 구독 크레딧을 한 번이라도 쓰셨으면 그 달 구독료는 환불되지 않습니다. 그 달에 한 번도 안 쓰셨다면 그 달 구독료를 환불받으실 수 있으니 ${CS_EMAIL}으로 신청해 주세요.`,
             },
             {
               q: "크레딧을 사 뒀는데 다 못 썼습니다",
-              a: "구매한 크레딧은 3개월까지 쓰실 수 있고, 남은 것은 환불을 요청하실 수 있습니다. 남은 양을 원화로 환산해 드립니다.",
+              a: "구매한 크레딧은 계정에 들어온 날부터 3개월까지 쓰실 수 있고, 남은 것은 그 안에 환불을 요청하실 수 있습니다. 남은 양을 원화로 환산해 드립니다.",
             },
             {
               q: "탈퇴가 안 됩니다",
-              a: "만들고 있는 작업이 있으면 막힙니다. 끝난 뒤에 다시 시도해 주세요. 확인 칸에 이메일을 정확히 입력했는지도 확인해 주세요.",
+              a: "만들고 있는 작업이 있으면 막힙니다. 끝난 뒤에 다시 시도해 주세요. 사용 기록에 「확인 대기」가 있으면 운영자가 확인할 때까지 크레딧이 잡혀 있어 탈퇴가 막힙니다. 이때는 문의해 주세요. 확인 칸에 이메일을 정확히 입력했는지도 확인해 주세요.",
             },
             {
               q: "탈퇴했는데 기록이 남았다고 나옵니다",

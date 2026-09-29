@@ -1,39 +1,45 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IMAGE_CREDIT_POLICY } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
-import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
+import { Callouts, Mock, MockButtons, MockChoices, MockField, MockSteps } from "../_components/mockup";
+import { MAX_REFERENCE_IMAGES, REDESIGN_STEPS, models } from "../../redesign/redesign-model";
 
 export const metadata: Metadata = { title: "상세페이지 리디자인 · 사용 설명서" };
 
+/** 화면의 세 화면 이름 그대로. */
+const 화면 = REDESIGN_STEPS.map((step) => step.label);
+
 export default function RedesignGuidePage() {
+  const 보통 = IMAGE_CREDIT_POLICY.normalUnits;
+
   return (
     <>
       <GuideHeader
         kicker="상세페이지 리디자인"
         title="이미 있는 페이지를 뜯어보고 다시 설계"
-        lead="지금 쓰고 있는 상세페이지가 있는데 전환이 안 나올 때 씁니다. 이미지나 PDF를 올리면 거기 적힌 글자를 전부 옮겨 적고, 성분·인증·시험 수치 같은 사실만 골라낸 다음, 그것을 근거로 순서를 다시 짭니다."
+        lead="지금 쓰고 있는 상세페이지가 있는데 전환이 안 나올 때 씁니다. 이미지나 PDF를 올리면 거기 적힌 글자를 전부 옮겨 적고, 성분·인증·시험 수치 같은 사실을 골라낸 다음, 그것을 근거로 구성을 다시 짜서 섹션 이미지로 만듭니다."
       />
 
       <Summary
-        what="이미 있는 상세페이지를 뜯어보고 무엇이 문제인지 짚은 뒤 다시 설계합니다."
+        what="이미 있는 상세페이지를 뜯어보고 구성을 다시 짜서 새 섹션 이미지로 만듭니다."
         points={[
           {
-            title: "먼저 진단합니다",
-            body: "지금 페이지의 어디가 약한지 항목별로 짚습니다. 그냥 새로 그리는 것과 다릅니다.",
+            title: "한 번 누르면 이어서 진행됩니다",
+            body: "「리디자인 생성」을 누르면 글자 옮겨 적기, 원본 분석, 이미지 만들기가 이어서 진행됩니다. 중간에 멈춰 확인하는 화면은 없습니다. 기본은 히어로 1장까지이고, 나머지는 첫 장을 본 뒤 「나머지 상세페이지 만들기」를 눌러 만듭니다.",
           },
           {
-            title: "고칠 곳을 보여 줍니다",
-            body: "무엇을 왜 바꾸는지 먼저 말합니다. 결과만 받으면 왜 나아졌는지 알 수 없습니다.",
+            title: "무엇을 참조했는지 적어 둡니다",
+            body: "결과 카드마다 그 섹션의 목적과 원본의 어느 부분을 참조했는지 보여 줍니다.",
           },
           {
             title: "기존 자산을 씁니다",
             body: "쓸 만한 사진과 문구는 그대로 가져갑니다. 통째로 버리지 않습니다.",
           },
           {
-            title: "진단은 무료입니다",
-            body: "뜯어보고 계획을 세우는 데는 크레딧이 들지 않습니다.",
+            title: "나온 장만 차감합니다",
+            body: `글자를 옮겨 적고 분석하는 데는 따로 들지 않지만, 그 단계만 따로 돌릴 수는 없습니다. 이미지가 한 장 나올 때마다 ${보통}크레딧이 듭니다.`,
           },
         ]}
         when={[
@@ -55,7 +61,7 @@ export default function RedesignGuidePage() {
             <strong className="block text-sm font-extrabold text-primary">리디자인</strong>
             <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
               <strong className="text-foreground">이미 만든 페이지</strong>에서 출발합니다. 거기 쌓인 정보를 잃지 않고
-              순서만 다시 짭니다.
+              구성을 다시 짭니다.
             </p>
           </div>
         </div>
@@ -66,14 +72,14 @@ export default function RedesignGuidePage() {
         </p>
       </Section>
 
-      <Section title="전체 흐름" hint="세 화면을 오갑니다.">
+      <Section title="전체 흐름" hint="「리디자인 생성」 한 번이면 이미지까지 이어집니다. 사람이 보는 것은 결과가 나온 뒤입니다.">
         <Flow
           nodes={[
             { label: "올리기", sub: "이미지 · PDF" },
             { label: "전사", sub: "글자를 옮겨 적기" },
-            { label: "사실 추출", sub: "성분 · 인증 · 수치" },
-            { label: "재설계", sub: "확인하고 고칩니다", human: true },
-            { label: "섹션 생성", sub: "결과 확인" },
+            { label: "분석 · 생성", sub: "사실 · 구성 · 이미지" },
+            { label: "히어로 확인", sub: "첫 장부터 봅니다", human: true },
+            { label: "나머지 · 수정", sub: "8장까지 · 한 장씩", human: true },
           ]}
         />
         <FlowLegend />
@@ -89,78 +95,104 @@ export default function RedesignGuidePage() {
             },
             {
               common: "보기 좋게 다듬는다",
-              ours: "전환을 기준으로 순서를 다시 짭니다",
-              why: "섹션이 각각 괜찮아도 나열이면 팔리지 않습니다. 문제 → 전환 → 근거 → 반론 → 행동 순서로 다시 배치합니다.",
+              ours: "올린 자료를 분석해 구성을 다시 짭니다",
+              why: "섹션이 각각 괜찮아도 나열이면 팔리지 않습니다. AI가 원본을 분석해 섹션마다 무엇을 말할지 정하고, 인증·수치 같은 근거는 근거를 말하는 섹션에 싣습니다.",
             },
             {
               common: "고친 뒤에는 원본을 잃는다",
               ours: "원본에서 뽑은 사실이 그대로 남습니다",
-              why: "전사와 사실 추출 결과를 화면에서 볼 수 있습니다. 새 구성이 원본의 어떤 사실에 근거하는지 짚을 수 있습니다.",
+              why: "결과 화면의 「원문 근거」에 원본에서 뽑은 사실이 글로 남고, 섹션 카드마다 원본의 어느 부분을 참조했는지 적혀 있습니다.",
             },
           ]}
         />
       </Section>
 
       <Details title="화면 읽기">
-        <Mock title="리디자인 · 올리기">
-          <MockSteps steps={["대시보드", "리디자인 작업", "결과 확인"]} current={1} />
+        <Mock title={`리디자인 · ${화면[1]}`}>
+          <MockSteps steps={화면} current={1} />
           <MockChoices
-            label="기존 페이지 올리기"
+            label="기존 상세페이지 자료 업로드"
             marker={1}
-            columns={3}
+            columns={2}
             active={0}
-            items={[{ title: "이미지", hint: "긴 세로 이미지" }, { title: "PDF" }, { title: "라이브러리에서" }]}
+            items={[
+              { title: "이미지 또는 PDF", hint: `앞 ${MAX_REFERENCE_IMAGES}장까지 그림 생성에 반영` },
+              { title: "라이브러리에서 불러오기" },
+            ]}
           />
-          <MockField label="상품 이름" placeholder="예: 수분 앰플 30ml" />
-          <MockNote marker={2}>올린 페이지에서 글자를 전부 옮겨 적습니다. 잠시 걸립니다.</MockNote>
-          <MockButtons items={[{ label: "전사 시작" }]} />
+          <MockField
+            label="추가 요청사항"
+            placeholder="예: 배경은 밤, 창밖에 네온"
+            note="여기 적은 말이 다른 모든 지시보다 우선합니다."
+          />
+          <MockChoices
+            label="이미지 생성 모델"
+            columns={2}
+            active={0}
+            items={[
+              { title: models.openai.label, hint: models.openai.hint },
+              { title: models.google.label, hint: models.google.hint },
+            ]}
+          />
+          <MockChoices
+            label="결과 장수"
+            marker={2}
+            columns={2}
+            active={0}
+            items={[{ title: "히어로 1장" }, { title: "기본 6~8장" }]}
+          />
+          <MockButtons items={[{ label: "리디자인 생성" }]} marker={3} />
         </Mock>
 
-        <Mock title="리디자인 · 사실 확인">
-          <MockField label="확인된 성분" value="히알루론산 2% · 나이아신아마이드 2%" marker={3} />
-          <MockField label="인증 · 시험" value="인증 제2024-…호 · 임상 수분 68%↑" />
-          <MockField label="새 구성안 · 3번째 섹션" value="문제 공감 · 겨울철 당김" marker={4} />
-          <MockButtons items={[{ label: "섹션 만들기" }]} />
+        <Mock title={`리디자인 · ${화면[2]}`}>
+          <MockSteps steps={화면} current={2} />
+          <MockField
+            label="원문 근거(전사에서 추출한 정확 사실)"
+            value="히알루론산 2% · 인증 제2024-…호 · 임상 수분 68%↑"
+            marker={4}
+          />
+          <MockField label="이 섹션 수정하기" placeholder="예: 이 섹션은 헤드라인을 줄이고, …" marker={5} />
+          <MockButtons items={[{ label: "나머지 상세페이지 만들기" }]} marker={6} />
         </Mock>
 
         <Callouts
           items={[
             {
               title: "이미지 또는 PDF로 올립니다",
-              body: "쇼핑몰에서 내려받은 긴 세로 이미지를 그대로 올리면 됩니다. 여러 장으로 나뉘어 있으면 여러 장 올려도 됩니다.",
+              body: `쇼핑몰에서 내려받은 긴 세로 이미지를 그대로 올리면 됩니다. 여러 장으로 나뉘어 있으면 여러 장 올려도 됩니다. 다만 그림을 만들 때 참고하는 것은 앞 ${MAX_REFERENCE_IMAGES}장까지라, 가장 중요한 장을 앞에 두세요.`,
             },
             {
-              title: "전사 · 글자를 옮겨 적는 단계",
+              title: "결과 장수 · 히어로 1장부터",
+              body: "기본은 「히어로 1장」입니다. 첫 장을 먼저 보고 나머지를 만드는 순서라, 방향이 틀렸을 때 크레딧을 덜 씁니다. 처음부터 「기본 6~8장」을 골라도 됩니다.",
+            },
+            {
+              title: "리디자인 생성 · 끝까지 한 번에",
               body: (
                 <>
-                  이미지 안의 글자를 텍스트로 꺼냅니다.{" "}
-                  <strong className="text-foreground">이 단계는 이미지 크레딧을 쓰지 않습니다.</strong> 시간이 조금
-                  걸리지만 여기가 정확해야 뒤가 정확합니다.
+                  누르면 전사, 원본 분석, 이미지 만들기가 이어서 진행됩니다.{" "}
+                  <strong className="text-foreground">진행 중에는 창을 닫거나 다른 화면으로 옮기지 마세요.</strong>{" "}
+                  전사가 이 브라우저에서 돌아서, 창을 닫으면 멈춥니다.
                 </>
               ),
             },
             {
-              title: "사실 추출 · 틀리면 안 되는 것들",
+              title: "원문 근거 · 읽고 복사만 합니다",
               body: (
                 <>
-                  성분, 함량, 인증 번호, 시험 수치를 따로 모읍니다.{" "}
-                  <strong className="text-foreground">여기 있는 값은 눈으로 한 번 확인하세요.</strong> 전사에서 숫자가
-                  잘못 읽힌 채로 넘어가면 새 페이지에도 그대로 들어갑니다.
+                  원본에서 뽑은 성분·함량·인증 번호·시험 수치가 결과 화면에 글로 남습니다. 여기서 고칠 수는 없고 「사실
+                  목록 복사」로 가져갈 수만 있습니다.{" "}
+                  <strong className="text-foreground">이미지 속 글자는 틀릴 수 있습니다.</strong> 숫자와 인증 번호는 이
+                  목록을 기준으로 맞춰 보세요.
                 </>
               ),
             },
             {
-              title: "새 구성안 · 순서가 바뀝니다",
-              body: (
-                <>
-                  원본의 섹션 순서를 그대로 두지 않습니다. 전환을 기준으로 다시 배치합니다. 원하지 않는 순서면 여기서
-                  고치세요. 판단 기준은{" "}
-                  <Link href="/guide/detail-page" className="font-bold text-primary underline underline-offset-4">
-                    상세페이지 만들기
-                  </Link>
-                  의 심사 항목과 같습니다.
-                </>
-              ),
+              title: "이 섹션 수정하기 · 한 장씩 다시",
+              body: `섹션 카드마다 있습니다. 고칠 점을 적고 「이 섹션 수정」을 누르면 그 장만 다시 만듭니다. 한 번에 ${보통}크레딧이 듭니다.`,
+            },
+            {
+              title: "나머지 상세페이지 만들기 · 8장까지",
+              body: "히어로를 보고 「히어로 검토 후 요청」 칸에 나머지에 반영할 방향을 적은 뒤 누릅니다. 빠진 섹션을 채워 8장까지 만듭니다.",
             },
           ]}
         />
@@ -173,7 +205,8 @@ export default function RedesignGuidePage() {
             ["기존 페이지가 있다", "리디자인", "쌓인 사실을 잃지 않습니다"],
             ["상품만 있고 페이지는 없다", "상세페이지 만들기", "사진에서 출발합니다"],
             ["성분·인증이 중요한 상품", "리디자인", "사실 추출이 이런 값을 따로 지킵니다"],
-            ["디자인만 바꾸고 싶다", "리디자인 후 편집", "구성은 두고 섹션 이미지만 다시 만들 수 있습니다"],
+            ["방향부터 확인하고 싶다", "히어로 1장", "첫 장을 보고 나머지에 반영할 방향을 적습니다"],
+            ["몇 장만 마음에 안 든다", "이 섹션 수정하기", "나머지는 두고 그 장만 다시 만듭니다"],
           ]}
         />
       </Section>
@@ -183,15 +216,15 @@ export default function RedesignGuidePage() {
           items={[
             {
               q: "전사된 글자가 군데군데 틀립니다",
-              a: "원본 이미지의 글자가 작거나 배경과 대비가 낮으면 그렇습니다. 사실 확인 화면에서 직접 고치세요. 특히 숫자와 인증 번호는 꼭 확인하시기 바랍니다.",
+              a: "원본 이미지의 글자가 작거나 배경과 대비가 낮으면 그렇습니다. 결과 화면의 「원문 근거」와 이미지 속 숫자·인증 번호를 꼭 맞춰 보시고, 틀린 장은 「이 섹션 수정하기」에 바른 값을 적어 다시 만드세요.",
             },
             {
               q: "전사가 오래 걸립니다",
-              a: "페이지가 길수록 오래 걸립니다. 다른 화면으로 옮겨도 계속 진행됩니다. 돌아오면 그 자리에 결과가 있습니다.",
+              a: "페이지가 길수록 오래 걸립니다. 진행 중에는 창을 닫지 마세요. 끝나면 결과가 대시보드의 「최근 리디자인 프로젝트」와 라이브러리에 저장됩니다. 대시보드 목록은 이 브라우저에 남는 것이라 다른 기기에서는 라이브러리에서 찾으세요.",
             },
             {
               q: "새 구성이 원본과 너무 다릅니다",
-              a: "전환 기준으로 순서를 다시 짜기 때문입니다. 원본 순서를 지켜야 한다면 구성안 화면에서 섹션을 옮기거나 지우세요.",
+              a: "AI가 원본을 분석해 구성을 다시 짜기 때문입니다. 원본 순서를 지키고 싶다면 만들기 전에 「추가 요청사항」에 그렇게 적어 주세요. 여기 적은 말이 다른 모든 지시보다 우선합니다.",
             },
           ]}
         />

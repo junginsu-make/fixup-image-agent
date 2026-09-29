@@ -194,18 +194,27 @@ export function LedgerCreditsGuide({ wallet }: { wallet?: React.ReactNode }) {
         />
       </Section>
 
+      {/*
+        **기간은 장부 함수가 정한다**(`202609220001_credit_ledger_v2.sql` 의
+        `credit_admin_grant`) — 구독은 그 달 말일, 구매는 3개월, 추가 지급은 운영자가
+        넣을 때 정한 날. 약관 제6조가 같은 말을 한다. 그 달 구독 몫은 운영자가 그 달
+        결제를 확인해야 들어온다(`credit_admin_confirm_period`). 달이 바뀐다고 저절로
+        들어오지 않는다.
+      */}
       <Section title="언제까지 쓸 수 있나" hint="받은 방식에 따라 다릅니다.">
         <ChoiceTable
-          head={["이렇게 받은 크레딧", "쓸 수 있는 기간", "이월"]}
+          head={["이렇게 받은 크레딧", "쓸 수 있는 기간", "알아 둘 것"]}
           rows={[
-            ["월 구독", "그 달 말일까지", "다음 달로 넘어가지 않습니다"],
-            ["따로 지급받은 것", "지급일부터 3개월", "기간 안에는 남습니다"],
+            ["월 구독", "지급된 달의 말일까지", "다음 달로 넘어가지 않습니다"],
+            ["구매", "계정에 들어온 날부터 3개월", "기간 안에는 남습니다"],
+            ["추가 지급", "운영자가 지급할 때 정한 날까지", "날짜는 계정 화면에 보입니다"],
           ]}
         />
         <p className="text-sm leading-6 text-muted-foreground">
-          <strong className="text-foreground">구독 크레딧은 이월되지 않습니다.</strong> 달이 바뀌면 그 달 몫이 새로
-          들어오고 지난 달 몫은 사라집니다. 여러 종류가 섞여 있으면{" "}
-          <strong className="text-foreground">먼저 사라질 것부터</strong> 씁니다.
+          <strong className="text-foreground">구독 크레딧은 이월되지 않습니다.</strong> 달이 바뀌면 지난 달 몫은
+          사라집니다. 새 달 몫은 운영자가 그 달 결제를 확인하면 들어옵니다. 여러 종류가 섞여 있으면{" "}
+          <strong className="text-foreground">먼저 사라질 것부터</strong> 씁니다. 종류별로 남은 양과 가장 가까운
+          만료일은 계정 화면의 「내 크레딧」에 보입니다.
         </p>
       </Section>
 
@@ -245,7 +254,7 @@ export function LedgerCreditsGuide({ wallet }: { wallet?: React.ReactNode }) {
           items={[
             {
               q: "크레딧이 부족하다고 나옵니다",
-              a: "남은 양보다 만들려는 장 수가 많을 때 나옵니다. 장 수를 줄여 나눠 만들거나, 달이 바뀌기를 기다리거나, 운영자에게 문의해 주세요.",
+              a: "남은 양보다 만들려는 장 수가 많을 때 나옵니다. 장 수를 줄여 나눠 만들거나 운영자에게 문의해 주세요. 달이 바뀌어도 새 달 구독 몫은 그 달 결제가 확인된 뒤에 들어옵니다.",
             },
             {
               q: "실패했는데 잔액이 줄어 보입니다",
@@ -257,7 +266,7 @@ export function LedgerCreditsGuide({ wallet }: { wallet?: React.ReactNode }) {
             },
             {
               q: "이번 달에 안 쓴 크레딧이 사라졌습니다",
-              a: "구독 크레딧은 이월되지 않습니다. 달이 바뀌면 그 달 몫으로 새로 들어옵니다.",
+              a: "구독 크레딧은 이월되지 않습니다. 달이 바뀌면 지난 달 몫은 사라집니다. 새 달 몫은 운영자가 그 달 결제를 확인하면 들어옵니다.",
             },
           ]}
         />

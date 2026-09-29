@@ -4,7 +4,7 @@ import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
-import { IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, looksWithoutReference } from "@fixup/shared";
+import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, withJosa } from "@fixup/shared";
 
 export const metadata: Metadata = { title: "캐릭터 만들기 · 사용 설명서" };
 
@@ -24,13 +24,19 @@ const KINDS = [
  * 화면에서 그것을 찾다가 못 찾는다(2026-09-16 리뷰. 같은 일이 이미지 설명서에서
  * 한 번 있었다).
  *
- * 화면(`app/characters/CharacterStudio.tsx`)도 `looksWithoutReference()` 를
- * 쓴다. 캐릭터는 따라 만들 그림 없이도 만들 수 있어 「레퍼런스 스타일」이 빠진다.
+ * 화면(`app/characters/CharacterStudio.tsx`)은 `IMAGE_LOOKS` 다섯을 다 보인다
+ * (2026-09-17 부터). 「레퍼런스 스타일」도 목록에 있고, 참고할 그림을 붙여야
+ * 눌린다. 전에는 여기서 그것을 뺐는데 화면이 바뀐 뒤 설명서만 넷으로 남았다.
  */
-const TONES = looksWithoutReference().map((look) => ({
+const TONES = IMAGE_LOOKS.map((look) => ({
   title: IMAGE_LOOK_LABEL[look],
   hint: IMAGE_LOOK_HINT[look],
 }));
+
+/** 「레퍼런스 스타일」 — 그림체 칸과 참고 그림의 역할 칸에 같은 이름으로 나오는 한 스위치다. */
+const REFERENCE_STYLE = IMAGE_LOOK_LABEL.auto;
+/** 받침에 따라 은/는이 갈린다. 화면도 같은 도구를 쓴다. */
+const REFERENCE_STYLE_은는 = `「${REFERENCE_STYLE}」${withJosa(REFERENCE_STYLE, "은는").slice(-1)}`;
 
 const ANGLES = ["정면", "왼쪽 45°", "오른쪽 45°", "왼쪽", "오른쪽", "뒷면"];
 
@@ -100,7 +106,8 @@ export default function CharacterGuidePage() {
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
           둘을 조합합니다. <strong className="text-foreground">「애니풍 강아지」</strong>는 종류 = 동물, 그림체 = 애니메이션입니다.
-          제품 소품을 여러 장면에 똑같이 넣고 싶다면 종류 = 사물로 만들어 두면 됩니다.
+          제품 소품을 여러 장면에 똑같이 넣고 싶다면 종류 = 사물로 만들어 두면 됩니다.{" "}
+          {REFERENCE_STYLE_은는} 참고할 그림을 붙여야 고를 수 있습니다.
         </p>
       </Section>
 
@@ -140,27 +147,34 @@ export default function CharacterGuidePage() {
       </Section>
 
       <Details title="화면 읽기">
-        <Mock title="캐릭터 만들기 · 무엇을 만들지">
+        <Mock title="캐릭터 만들기 · 만들기">
           <MockSteps steps={["만들기", "결과"]} current={0} />
           <MockChoices label="종류" marker={1} items={KINDS} active={0} />
-          <MockChoices label="그림체" marker={2} items={TONES} active={0} />
+          <MockChoices
+            label="그림체"
+            marker={2}
+            columns={3}
+            items={TONES}
+            active={IMAGE_LOOKS.indexOf("photoreal")}
+            note={`${REFERENCE_STYLE_은는} 참고할 그림을 붙여야 고를 수 있습니다. 안 붙였으면 흐리게 보입니다.`}
+          />
           <MockField
-            label="어떤 대상인가"
+            label="무엇을 만들까요"
             marker={3}
             rows={2}
             value="30대 초반 여성, 단발, 베이지 니트, 부드러운 인상"
           />
           <MockChoices
-            label="참고 그림 붙이기 · 선택"
+            label="참고할 그림 · 선택 → 이 그림의 역할"
             marker={4}
             columns={2}
             items={[
               { title: "이 캐릭터 뽑아내기", hint: "그림 속 그 대상을 살립니다 · 기본값" },
-              { title: "결만 따라 만들기", hint: "화풍·색·질감만 가져옵니다" },
+              { title: REFERENCE_STYLE, hint: "화풍·색·질감만 가져오고 대상은 새로 만듭니다" },
             ]}
           />
-          <MockNote>정면을 몇 장 만들지도 여기서 고릅니다. 기본은 한 장입니다.</MockNote>
-          <MockButtons items={[{ label: "정면 1장 만들기" }]} />
+          <MockNote>정면은 언제나 한 장입니다. 마음에 안 들면 「다시 뽑기」로 바꿉니다.</MockNote>
+          <MockButtons items={[{ label: "정면 만들기" }]} />
         </Mock>
 
         <Callouts
@@ -174,19 +188,22 @@ export default function CharacterGuidePage() {
               body: "그림체마다 기본 모델이 달라집니다. 고른 그림체가 캐릭터의 모든 각도에 그대로 갑니다.",
             },
             {
-              title: "어떤 대상인가 · 구체적일수록 좋습니다",
+              title: "무엇을 만들까요 · 구체적일수록 좋습니다",
               body: (
                 <>
-                  나이·차림새·인상까지 적으세요. 여기가 두루뭉술하면 후보가 다 비슷비슷하게 나옵니다.{" "}
+                  나이·차림새·인상까지 적으세요. 여기가 두루뭉술하면 정면이 흐릿한 인상으로 나옵니다.{" "}
                   <strong className="text-foreground">이 설명은 저장돼서 나중에 각도를 더 만들 때도 쓰입니다.</strong>
                 </>
               ),
             },
             {
-              title: "참고 그림 · 두 가지 역할",
+              title: "참고할 그림 · 두 가지 역할",
               body: (
                 <>
-                  <strong className="text-foreground">결만 따라 만들기</strong>는 화풍만 가져오고 대상은 새로 만듭니다.{" "}
+                  <strong className="text-foreground">{REFERENCE_STYLE}</strong>
+                  {withJosa(REFERENCE_STYLE, "은는").slice(-1)} 화풍만 가져오고 대상은 새로 만듭니다. 그림체 칸의
+                  「{REFERENCE_STYLE}」{withJosa(REFERENCE_STYLE, "과와").slice(-1)} 같은 스위치라 하나를 고르면 다른 쪽도
+                  따라 바뀝니다.{" "}
                   <strong className="text-foreground">이 캐릭터 뽑아내기</strong>는 그림 속 그 캐릭터를 그대로 살려
                   각도를 만듭니다. 이미 있는 마스코트를 여러 각도로 만들고 싶을 때는 뒤쪽입니다.
                 </>
@@ -196,7 +213,7 @@ export default function CharacterGuidePage() {
         />
       </Details>
 
-      <Details title="각도 여섯 면" hint="정면을 고른 뒤 나머지를 만듭니다.">
+      <Details title="각도 여섯 면" hint="정면이 나온 뒤 나머지를 만듭니다.">
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {ANGLES.map((angle, index) => (
             <div
@@ -245,7 +262,7 @@ export default function CharacterGuidePage() {
             ["상세페이지에 모델이 여러 번 나온다", `사람 · ${IMAGE_LOOK_LABEL.photoreal}`, "섹션이 바뀌어도 같은 사람이 유지됩니다"],
             ["브랜드 마스코트가 있다", "이 캐릭터 뽑아내기", "기존 그림의 캐릭터를 그대로 살립니다"],
             ["제품 소품을 여러 장면에 넣는다", "사물", "같은 물건이 각 장면에 나옵니다"],
-            ["화풍만 참고하고 싶다", "결만 따라 만들기", "그림은 새로 만들되 결을 맞춥니다"],
+            ["화풍만 참고하고 싶다", `참고할 그림 + ${REFERENCE_STYLE}`, "그림은 새로 만들되 결을 맞춥니다"],
             ["한 장만 필요하다", "이미지 만들기 도구", "재사용할 게 아니면 굳이 고정할 필요가 없습니다"],
           ]}
         />
@@ -255,19 +272,19 @@ export default function CharacterGuidePage() {
         <Pitfalls
           items={[
             {
-              q: "후보가 다 비슷하게 나옵니다",
-              a: "「어떤 대상인가」가 두루뭉술해서 그렇습니다. 나이·머리 모양·옷·인상까지 적어 보세요. 참고 그림을 붙이면 더 좁혀집니다.",
+              q: "정면이 생각과 다르게 나옵니다",
+              a: "「무엇을 만들까요」가 두루뭉술해서 그렇습니다. 나이·머리 모양·옷·인상까지 적어 보세요. 참고할 그림을 붙이면 더 좁혀집니다. 같은 설정으로 한 장 더 보려면 「다시 뽑기」를 누르세요. 앞의 정면은 새것으로 바뀝니다.",
             },
             {
               q: "각도를 만들었는데 다른 사람 같습니다",
-              a: "정면 후보가 특징이 약하면 각도를 만들 때 흔들립니다. 특징이 뚜렷한 후보를 정면으로 고르세요. 그래도 어긋나면 그 각도만 다시 만들 수 있습니다.",
+              a: "정면의 특징이 약하면 각도를 만들 때 흔들립니다. 각도를 만들기 전에 특징이 뚜렷한 정면이 나올 때까지 「다시 뽑기」를 하세요. 이미 만든 각도는 다시 만들 수 없습니다. 「내 캐릭터」에서는 빠진 장면만 더 만들 수 있으니, 어긋났으면 정면부터 새로 만드세요.",
             },
             {
               q: "만든 캐릭터를 어디서 쓰나요",
               a: (
                 <>
-                  상세페이지 만들기의 「등장인물」, 카드뉴스와 이미지 만들기의 「인물 그대로 지키기」에서 불러 씁니다.
-                  저장된 캐릭터는{" "}
+                  상세페이지 만들기에서는 「인물 · 캐릭터」 칸의 「캐릭터 고르기」로, 카드뉴스와 이미지 만들기에서는 그림을
+                  붙이는 자리의 「캐릭터 불러오기」로 불러 씁니다. 저장된 캐릭터는{" "}
                   <Link href="/guide/library" className="font-bold text-primary underline underline-offset-4">
                     라이브러리
                   </Link>

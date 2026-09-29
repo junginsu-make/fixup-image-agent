@@ -24,15 +24,15 @@ export default function AdGuidePage() {
         points={[
           {
             title: "새로 그리지 않습니다",
-            body: "라이브러리·이미지 만들기·참고 이미지에 있는 것에서 뽑습니다. 그래서 대부분 크레딧이 들지 않습니다.",
+            body: "라이브러리·이미지 만들기·참고 이미지에 있는 것에서 뽑습니다. 그래서 크레딧이 들지 않습니다. 투명 배너도 마찬가지입니다.",
           },
           {
             title: "늘리지 않습니다",
             body: "원본보다 크게 만들어야 하는 규격은 아예 못 뽑는다고 알립니다. 늘리면 흐려져 광고 심사에서 반려됩니다.",
           },
           {
-            title: "가장 덜 버리는 쪽으로 자릅니다",
-            body: "규격마다 비율이 가장 가까운 기준 크기를 골라 잘라냅니다. 많이 잘리면 화면이 미리 경고합니다.",
+            title: "비율이 다르면 가운데를 자릅니다",
+            body: "규격 비율에 맞춰 그림 가운데를 잘라냅니다. 결과에서 주인공이 남았는지 꼭 보세요.",
           },
           {
             title: "나온 파일을 다시 검사합니다",
@@ -52,8 +52,9 @@ export default function AdGuidePage() {
           rows={portals}
         />
         <p className="text-sm leading-6 text-muted-foreground">
-          <strong className="text-foreground">「필수」는 그것이 없으면 등록 자체가 안 되는 규격입니다.</strong> 처음
-          화면을 열면 필수만 켜져 있습니다. 성과가 떨어지는 것과 등록이 안 되는 것은 다릅니다.
+          <strong className="text-foreground">「필수」는 그것이 없으면 등록 자체가 안 되는 규격입니다.</strong> 처음에는
+          아무 포털도 골라져 있지 않습니다. 포털을 고르면 그 포털의 필수 규격이 함께 켜집니다. 성과가 떨어지는 것과
+          등록이 안 되는 것은 다릅니다.
         </p>
       </Section>
 
@@ -68,10 +69,10 @@ export default function AdGuidePage() {
         <FlowLegend />
       </Section>
 
-      <Details title="01 그림 고르기 · 화면 읽기" hint="세 곳에서 가져올 수 있습니다.">
+      <Details title="01 그림 고르기 · 화면 읽기" hint="「라이브러리에서 고르기」를 누르면 만든 그림과 올린 참고 이미지가 한 창에 뜹니다.">
         <Mock title="광고 규격으로 내보내기 · 01 그림 고르기">
           <MockSteps steps={["01 그림 고르기", "02 어디에 올릴까요", "03 확인하고 내려받기"]} current={0} />
-          <MockButtons items={[{ label: "라이브러리" }, { label: "이미지 만들기" }, { label: "참고 이미지" }]} />
+          <MockButtons items={[{ label: "라이브러리에서 고르기" }]} />
         </Mock>
         <Callouts
           items={[
@@ -132,22 +133,15 @@ export default function AdGuidePage() {
           비율 제한이 상관없어집니다.
         </p>
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">이 둘을 고를 때만 크레딧이 듭니다.</strong> 배경을 지우는 데 외부 모델을
-          한 번 부르기 때문입니다. 한 번에 1장이고, 여러 개를 골라도 같은 물체를 나눠 쓰므로 한 번만 부릅니다.
+          <strong className="text-foreground">투명 배너도 크레딧이 들지 않습니다.</strong> 배경을 지우는 일을 한 번 더
+          하지만 새로 그리는 것은 아닙니다. 둘 다 골라도 떼어낸 물체 하나를 나눠 씁니다.
         </p>
       </Details>
 
-      <Section title="크레딧" hint="새로 그리지 않으므로 대부분 들지 않습니다.">
-        <ChoiceTable
-          head={["고른 규격", "실제 원가", "차감"]}
-          rows={[
-            ["자르기 · 줄이기만", "우리 서버의 계산뿐", "0장"],
-            ["투명 배너를 포함하면", "배경 제거 한 번", "1장"],
-          ]}
-        />
+      <Section title="크레딧" hint="들지 않습니다.">
         <p className="text-sm leading-6 text-muted-foreground">
-          <strong className="text-foreground">0장이어도 한도는 검사합니다.</strong> 이번 달 한도를 다 쓴 계정은 0장짜리
-          요청도 막힙니다. 자세한 것은{" "}
+          <strong className="text-foreground">이 화면은 새 그림을 그리지 않으므로 크레딧이 들지 않습니다.</strong>{" "}
+          이미 만든 그림을 자르고 줄이기만 합니다. 투명 배너를 골라도 같습니다. 크레딧이 드는 자리는{" "}
           <Link href="/guide/credits" className="font-bold text-primary underline underline-offset-4">
             크레딧과 모델
           </Link>
@@ -160,7 +154,7 @@ export default function AdGuidePage() {
           items={[
             {
               q: "고른 규격이 회색이고 안 켜집니다",
-              a: "고른 그림이 그 규격보다 작습니다. 늘리면 흐려져 광고 심사에서 반려되기 때문에 일부러 막습니다. 더 큰 그림을 고르세요.",
+              a: "이 화면에서 만들지 않는 규격입니다. 브랜드 로고처럼 직접 올려야 하는 것이 그렇고, 줄 옆에 이유가 적혀 있습니다. 고른 그림과는 상관없습니다. 그림이 작아서 못 뽑는 규격은 켜지기는 하고, 뽑은 뒤 03에서 「만들지 않았습니다」와 이유가 나옵니다. 그때는 더 큰 그림을 고르세요.",
             },
             {
               q: "브랜드 로고 규격이 안 만들어집니다",
@@ -178,7 +172,7 @@ export default function AdGuidePage() {
         />
       </Section>
 
-      <GuideFooter href="/guide/ad" toolHref="/ad" toolLabel="광고 규격으로 내보내기 열기" />
+      <GuideFooter href="/guide/ad" toolHref="/ad" toolLabel="「광고소재」 열기" />
     </>
   );
 }

@@ -35,6 +35,21 @@ function 코드에있다(문장: string): boolean {
   return api.includes(문장);
 }
 
+/** `duplicateRequestMessage` 의 몸통. 중복 문장은 여기서만 나온다. */
+const 중복함수 = (() => {
+  const 시작 = api.indexOf("async function duplicateRequestMessage(");
+  if (시작 < 0) return "";
+  // 함수가 끝나는 줄(맨 앞의 `}`). 줄바꿈이 \r\n 이어도 찾는다.
+  const 끝 = api.slice(시작).search(/\r?\n\}\r?\n/);
+  return 끝 < 0 ? "" : api.slice(시작, 시작 + 끝);
+})();
+
+/** 문서의 「같은 요청을 다시 눌렀을 때」 칸. 다음 칸 앞까지다. */
+const 중복칸 = (() => {
+  const 시작 = 문서.indexOf("같은 요청을 다시 눌렀을 때");
+  return 시작 < 0 ? "" : 문서.slice(시작, 문서.indexOf("<Section", 시작));
+})();
+
 describe("막혔을 때 문서", () => {
   /**
    * **거절 문장을 그대로 적는다.**
@@ -50,6 +65,12 @@ describe("막혔을 때 문서", () => {
     "이미 생성 중인 요청이 있습니다",
     "분석 요청이 너무 많습니다",
     "크레딧 계정 전환이 준비 중입니다",
+    /*
+      표에 없는 까닭으로 거절될 때 나오는 말이다(`messages[row.reason] ?? …`).
+      전에는 아래 중복 문장으로 묶어 두었는데 틀렸다 — 중복일 때는 이 말이
+      안 나온다(2026-09-29).
+    */
+    "요청을 처리할 수 없습니다",
   ];
 
   it.each(실린문장)("「%s」가 코드에도 있고 문서에도 있다", (문장) => {
@@ -60,17 +81,26 @@ describe("막혔을 때 문서", () => {
   /**
    * **같은 요청을 다시 보냈을 때의 말들.** 이 넷은 표가 아니라
    * `duplicateRequestMessage` 가 행 상태를 읽어 고른다(`api.ts`).
+   * 마지막 것은 행 상태를 못 읽었을 때다.
    */
   const 중복문장 = [
     "같은 요청이 아직 처리 중입니다",
     "이 요청은 이미 끝났습니다",
     "이 요청은 실패로 끝났습니다",
-    "요청을 처리할 수 없습니다",
+    "같은 요청이 이미 접수돼 있습니다",
   ];
 
-  it.each(중복문장)("「%s」가 코드에도 있고 문서에도 있다", (문장) => {
-    expect(코드에있다(문장), "이 문장이 api.ts 에 없다").toBe(true);
-    expect(문서.includes(문장), "문서에 이 문장이 없다").toBe(true);
+  it.each(중복문장)("「%s」가 중복일 때 나오고 문서의 중복 칸에 있다", (문장) => {
+    expect(중복함수, "duplicateRequestMessage 를 못 찾았다").not.toBe("");
+    expect(중복함수.includes(문장), "이 문장이 duplicateRequestMessage 에 없다").toBe(true);
+    expect(중복칸.includes(문장), "문서의 「같은 요청을 다시 눌렀을 때」 칸에 이 문장이 없다").toBe(true);
+  });
+
+  /** 중복이 아닌 거절 문장을 중복 칸에 두면 사용자가 까닭을 잘못 읽는다. */
+  it("중복 칸에 다른 거절 문장을 두지 않는다", () => {
+    expect(중복함수).not.toContain("요청을 처리할 수 없습니다");
+    expect(중복칸, "문서의 중복 칸을 못 찾았다").not.toBe("");
+    expect(중복칸).not.toContain("요청을 처리할 수 없습니다");
   });
 
   /** 로그인·계정 상태 때문에 막히는 말들. `membershipApiError` 가 내는 것이다. */

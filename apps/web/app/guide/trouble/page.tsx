@@ -6,6 +6,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts } from "../_components/mockup";
 import { CS_INQUIRY_HINT } from "../_components/contact";
+import { hourlyLimitFor } from "../../../lib/membership/hourly-limit";
 
 /**
  * **막혔을 때**(2026-09-28, 설계 §9 2단계 「오류 대응」).
@@ -30,6 +31,8 @@ export const metadata: Metadata = { title: "막혔을 때 · 사용 설명서" }
 
 export default function TroubleGuidePage() {
   const 보통 = IMAGE_CREDIT_POLICY.normalUnits;
+  /** 서버가 막을 때 쓰는 그 함수로 센다. 손으로 적으면 한도를 바꿀 때 문서만 남는다. */
+  const 기획한도 = hourlyLimitFor("pdp_analyze");
 
   return (
     <>
@@ -47,8 +50,8 @@ export default function TroubleGuidePage() {
             body: "잔액이 줄어 보이는 것은 잡아 둔 것입니다. 정산이 끝나면 돌아옵니다.",
           },
           {
-            title: "「잠시 후 다시」는 정말 잠시입니다",
-            body: "시간당으로 세는 제한이라 한 시간 안에 풀립니다.",
+            title: "「잠시 후 다시」는 한 시간 안에 풀립니다",
+            body: "시간당으로 세는 제한입니다. 가장 먼저 보낸 요청이 한 시간을 넘기면 한 번씩 풀립니다.",
           },
           {
             title: "한 번에 하나씩 만듭니다",
@@ -56,7 +59,7 @@ export default function TroubleGuidePage() {
           },
           {
             title: "모르겠으면 물어보세요",
-            body: "화면 왼쪽 아래 도우미가 답하고, 못 답하면 담당자에게 넘겨 줍니다.",
+            body: "「무엇이든 물어보세요」 도우미가 답합니다. 못 답하면 「문의 남기기」를 눌러 담당자에게 넘깁니다. 대화는 24시간 동안만 남습니다.",
           },
         ]}
         when={[
@@ -92,13 +95,18 @@ export default function TroubleGuidePage() {
             ],
             [
               "분석 요청이 너무 많습니다",
-              "시간당 제한에 걸렸습니다. 분석은 무료지만 횟수 제한이 있습니다",
-              "잠시 후 다시 시도해 주세요. 한 시간 안에 풀립니다",
+              `시간당 제한에 걸렸습니다. 분석은 무료지만 횟수 제한이 있습니다. 상세페이지 기획은 시간당 ${기획한도}번이고, 다시 기획하기도 한 번으로 셉니다`,
+              "가장 먼저 보낸 요청이 한 시간을 넘기면 한 번씩 풀립니다",
             ],
             [
               "크레딧 계정 전환이 준비 중입니다",
               "계정이 아직 크레딧 장부로 옮겨지지 않았습니다",
               "운영자에게 문의해 주세요. 직접 풀 수 없습니다",
+            ],
+            [
+              "요청을 처리할 수 없습니다",
+              "위에 없는 까닭으로 거절됐습니다",
+              "잠시 후 다시 해 보시고, 계속되면 문의해 주세요",
             ],
           ]}
         />
@@ -148,13 +156,15 @@ export default function TroubleGuidePage() {
 
       <Section title="올린 파일이 거절될 때" hint="상한은 도구마다 다릅니다.">
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">「용량이 넘칩니다」</strong>가 뜨면 그 자리에 적힌 상한을 함께 보여
-          줍니다. 광고 규격처럼 포털이 정한 상한이 있는 자리는 그 규격의 상한을 따릅니다. 사진이 너무 크면 긴 변을
-          2000픽셀 정도로 줄여 올리면 대체로 통과합니다.
+          올릴 때 <strong className="text-foreground">「이미지 용량이 너무 큽니다」</strong>가 뜨면 대개 같은 자리에
+          몇 MB 이하로 올리라는 상한이 함께 적혀 있습니다. 상한이 적혀 있지 않으면 사진의 긴 변을 2000픽셀 정도로
+          줄여 올려 보세요. 대체로 통과합니다. 광고 규격으로 내보낼 때 뜨는{" "}
+          <strong className="text-foreground">「용량이 넘칩니다」</strong>는 포털이 정한 규격의 상한을 넘었다는
+          뜻입니다.
         </p>
         <p className="text-sm leading-7 text-muted-foreground">
-          <strong className="text-foreground">그림 파일이 아니면 받지 않습니다.</strong> 문서 파일이나 압축 파일은
-          올릴 수 없습니다. 리디자인은 페이지 그림을, 캐릭터는 인물이나 사물 사진을 받습니다.
+          <strong className="text-foreground">리디자인은 이미지와 PDF를, 나머지 도구는 이미지만 받습니다.</strong>{" "}
+          압축 파일은 올릴 수 없습니다. 캐릭터는 인물이나 사물 사진을 받습니다.
         </p>
       </Section>
 
@@ -181,9 +191,9 @@ export default function TroubleGuidePage() {
               "새로 만들어 주세요",
             ],
             [
-              "요청을 처리할 수 없습니다",
-              "계정 상태나 요청 모양 때문에 막혔습니다",
-              "잠시 후 다시 해 보시고, 계속되면 문의해 주세요",
+              "같은 요청이 이미 접수돼 있습니다",
+              "앞의 요청이 어떤 상태인지 확인하지 못했습니다",
+              "잠시 뒤에도 결과가 안 보이면 새로 만들어 주세요",
             ],
           ]}
         />
@@ -205,15 +215,19 @@ export default function TroubleGuidePage() {
         <p className="text-sm leading-7 text-muted-foreground">
           사진을 읽고 구성안을 짜는 일에는 크레딧이 들지 않지만,{" "}
           <strong className="text-foreground">글 모델을 부르는 값은 듭니다.</strong> 크레딧으로 세지 않는 대신 시간당
-          횟수로 막습니다. 정상적으로 쓰면 닿지 않는 수준이고, 자동으로 두드리는 것만 걸립니다.
+          횟수로 막습니다. 상세페이지 기획은 시간당 {기획한도}번까지이고, 구성안을 다시 기획하는 것도 한 번으로
+          셉니다. 가장 먼저 보낸 요청이 한 시간을 넘기면 그만큼 한 번씩 풀립니다.
         </p>
       </Details>
 
       <Section title="그래도 모르겠으면">
         <p className="text-sm leading-7 text-muted-foreground">{CS_INQUIRY_HINT}</p>
         <p className="text-sm leading-6 text-muted-foreground">
-          문의할 때 <strong className="text-foreground">화면에 뜬 말을 그대로</strong> 적어 주시면 훨씬 빨리
-          확인됩니다. 그때까지의 대화도 함께 전달되므로 다시 설명하지 않아도 됩니다.
+          도우미는 스스로 담당자를 부르지 않습니다.{" "}
+          <strong className="text-foreground">「문의 남기기」를 눌러야 담당자에게 넘어갑니다.</strong> 문의할 때{" "}
+          <strong className="text-foreground">화면에 뜬 말을 그대로</strong> 적어 주시면 훨씬 빨리 확인됩니다. 그때까지의
+          대화도 함께 전달되므로 다시 설명하지 않아도 됩니다. 대화는 24시간 동안만 남고, 브라우저를 닫거나 로그아웃하면
+          지워집니다.
         </p>
       </Section>
 
@@ -222,7 +236,7 @@ export default function TroubleGuidePage() {
           items={[
             {
               q: "잠시 후 다시 하라는데 얼마나 기다려야 하나요",
-              a: "시간당으로 세므로 한 시간 안에 풀립니다. 대개는 몇 분이면 됩니다.",
+              a: `시간당으로 셉니다. 가장 먼저 보낸 요청이 한 시간을 넘기면 한 번씩 풀리므로, 길어도 한 시간입니다. 상세페이지 기획은 시간당 ${기획한도}번까지입니다.`,
             },
             {
               q: "크레딧이 있는데 모자란다고 나옵니다",

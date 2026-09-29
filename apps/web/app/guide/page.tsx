@@ -20,7 +20,7 @@ import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 export const metadata: Metadata = { title: "사용 설명서" };
 
 /** 역할 어휘는 shared 에서 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
-const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "place_as_is"];
+const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "preserve_person_restyled", "place_as_is"];
 
 export default async function GuideHomePage() {
   const topics = GUIDE_TOPICS.filter((topic) => topic.href !== "/guide");
@@ -97,11 +97,12 @@ export default async function GuideHomePage() {
       >
         <div className="grid gap-4">
           <div>
-            <h3 className="text-sm font-extrabold">참고 이미지의 역할 네 가지</h3>
+            <h3 className="text-sm font-extrabold">참고 이미지의 역할 다섯 가지</h3>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               그림을 첨부할 때는 <strong className="text-foreground">그 그림을 어떻게 쓸지</strong>도 함께 고릅니다. 같은
-              사진이라도 역할이 다르면 결과가 완전히 달라집니다. 이 네 가지는 카드뉴스·이미지 만들기·상세페이지가
-              똑같이 씁니다.
+              사진이라도 역할이 다르면 결과가 완전히 달라집니다. 카드뉴스는 다섯 가지를 모두, 이미지 만들기는
+              「원본 그대로 넣기」를 뺀 네 가지를 고릅니다. 상세페이지는 역할을 고르지 않고 「제품 사진」 「인물 ·
+              캐릭터」 「디자인 레퍼런스」 칸에 나눠 올립니다.
             </p>
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {ROLES.map((role) => (
@@ -118,7 +119,7 @@ export default async function GuideHomePage() {
           <div className="rounded-xl border-l-2 border-l-primary bg-muted/30 px-4 py-3">
             <strong className="block text-sm">「원본 그대로 넣기」만 AI를 거치지 않습니다</strong>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              나머지 셋은 그림을 새로 만듭니다. 로고나 인증 마크처럼 <strong className="text-foreground">한 픽셀도
+              나머지 넷은 그림을 새로 만듭니다. 로고나 인증 마크처럼 <strong className="text-foreground">한 픽셀도
               변하면 안 되는 것</strong>은 「원본 그대로 넣기」로 두세요. AI에게 맡기면 비슷하지만 다른 것이 나옵니다.
             </p>
           </div>

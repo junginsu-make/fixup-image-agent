@@ -19,7 +19,7 @@ export default function LibraryGuidePage() {
       <GuideHeader
         kicker="라이브러리"
         title="재료를 모아 두고 어느 도구에서든 불러 쓰기"
-        lead="로그인하면 처음 열리는 화면이 라이브러리입니다. 만들기 도구부터 열지 않는 이유가 있습니다. 무엇을 가지고 있는지 모르는 채로 시작하면 매번 재료를 새로 찾게 되기 때문입니다. 여기 쌓인 것은 어느 도구에서나 불러 쓸 수 있습니다."
+        lead="라이브러리는 사이드바 「보관 › 라이브러리」에서 엽니다. 만들기 전에 무엇을 가지고 있는지 먼저 보면 재료를 매번 새로 찾지 않아도 됩니다. 여기 올려 둔 참고 이미지와 캐릭터는 여러 도구에서 불러 쓸 수 있습니다."
       />
 
       <Summary
@@ -30,12 +30,12 @@ export default function LibraryGuidePage() {
             body: "만든 작업물, 등록한 캐릭터, 올려 둔 참고 이미지입니다.",
           },
           {
-            title: "한 바퀴가 닫힙니다",
-            body: "만든 결과물이 다시 다음 작업의 재료가 됩니다. 밖으로 내보냈다 다시 올리지 않습니다.",
+            title: "결과물을 다시 재료로 쓸 수 있습니다",
+            body: "카드뉴스·상세페이지·리디자인 결과 화면에서 「참고 이미지로 보관」을 누르면 다음 작업에서 불러 씁니다.",
           },
           {
-            title: "어느 도구에서든 불러 씁니다",
-            body: "카드뉴스·이미지 만들기·상세페이지·광고 규격이 같은 창고를 봅니다.",
+            title: "올린 참고 이미지는 나만 봅니다",
+            body: "다른 회원에게는 보이지 않습니다.",
           },
           {
             title: "묶음 세트로 관리합니다",
@@ -44,24 +44,27 @@ export default function LibraryGuidePage() {
         ]}
         when={[
           "만들기 전에 재료를 모아 둘 때",
-          "예전에 만든 것을 다시 꺼내 쓸 때",
-          "팀원과 참고 이미지를 나눠 쓸 때",
+          "예전에 만든 것을 다시 꺼내 보거나 내려받을 때",
+          "참고 이미지를 붙인 채로 도구를 바로 열고 싶을 때",
         ]}
       />
 
-      <Section title="한 바퀴가 닫힙니다" hint="만든 것이 다시 재료가 되는 자리입니다.">
+      <Section title="만든 것을 다시 재료로" hint="결과 화면에서 한 번 눌러 두면 됩니다.">
         <Flow
           nodes={[
             { label: "라이브러리", sub: "한자리에 모임" },
             { label: "만들기", sub: "불러 씁니다" },
-            { label: "작업물", sub: "다시 라이브러리로" },
+            { label: "결과 화면", sub: "「참고 이미지로 보관」" },
           ]}
-          loopBack="작업물이 다음 작업의 레퍼런스가 됩니다"
+          loopBack="보관한 결과물이 다음 작업의 레퍼런스가 됩니다"
         />
         <p className="text-sm leading-7 text-muted-foreground">
-          참고 이미지는 <strong className="text-foreground">사용자가 올린 것</strong>, 작업물은{" "}
-          <strong className="text-foreground">시스템이 만든 것</strong>입니다. 둘이 같은 라이브러리에서 같은 자격으로
-          쓰입니다. 지난주에 만든 카드뉴스를 이번 포스터의 레퍼런스로 삼을 수 있습니다.
+          참고 이미지는 <strong className="text-foreground">직접 올린 것</strong>, 작업물은{" "}
+          <strong className="text-foreground">이 서비스가 만든 것</strong>입니다. 만들기 도구에서 그림을 불러올 때는
+          참고 이미지 · 묶음 세트 · 캐릭터가 나옵니다. 작업물을 레퍼런스로 쓰려면 카드뉴스 · 상세페이지 · 리디자인 결과
+          화면에서 <strong className="text-foreground">「참고 이미지로 보관」</strong>을 눌러 두세요. 이미지 만들기
+          결과는 작업물에만 쌓이므로, 레퍼런스로 쓰려면 내려받아 참고 이미지로 올려 주세요. 광고소재 결과는
+          라이브러리에 저장되지 않으니 만들 때 내려받은 파일로 보관해 주세요.
         </p>
       </Section>
 
@@ -76,7 +79,7 @@ export default function LibraryGuidePage() {
               { title: "상세 · 수분 앰플", hint: "8월 30일" },
             ]}
           />
-          <MockButtons items={[{ label: "카드뉴스로 보내기", variant: "quiet" }, { label: "레퍼런스로 쓰기" }]} />
+          <MockButtons items={[{ label: "과정 보기", variant: "quiet" }, { label: "내려받기" }]} />
         </Mock>
 
         <Callouts
@@ -86,11 +89,13 @@ export default function LibraryGuidePage() {
               body: (
                 <ul className="grid gap-1.5">
                   <li>
-                    <strong className="text-foreground">작업물</strong>. 이 시스템이 만든 결과물. 도구별로 쌓입니다
+                    <strong className="text-foreground">작업물</strong>. 이 서비스가 만든 결과물. 도구별로 쌓이고, 누르면
+                    크게 보며 내려받거나 지울 수 있습니다
                   </li>
                   <li>
                     <strong className="text-foreground">참고 이미지</strong>. 직접 올린 그림. 「낱장」과 「묶음 세트」로
-                    나뉩니다
+                    나뉩니다. 낱장 카드의 「카드뉴스로 · 이미지로 · 상세페이지로」를 누르면 그 그림이 붙은 채로 도구가
+                    열립니다
                   </li>
                   <li>
                     <strong className="text-foreground">캐릭터</strong>. 캐릭터 만들기로 각도를 고정해 둔 인물·동물·사물
@@ -115,8 +120,8 @@ export default function LibraryGuidePage() {
           items={[
             {
               common: "결과물을 내려받으면 끝",
-              ours: "만든 것이 라이브러리로 돌아옵니다",
-              why: "작업물이 다음 작업의 레퍼런스가 됩니다. 폴더에서 파일을 찾아 다시 올리는 일이 없습니다.",
+              ours: "만든 것이 라이브러리에 쌓입니다",
+              why: "카드뉴스 · 상세페이지 · 리디자인 결과는 「참고 이미지로 보관」 한 번으로 다음 작업의 레퍼런스가 됩니다. 폴더에서 파일을 찾아 다시 올리지 않아도 됩니다.",
             },
           ]}
         />
@@ -125,7 +130,8 @@ export default function LibraryGuidePage() {
       <Details title="파일은 어디에 저장되나" hint="자주 받는 질문입니다.">
         <p className="text-sm leading-7 text-muted-foreground">
           모든 파일은 <strong className="text-foreground">소유자별 비공개 저장소</strong>에 들어갑니다. 짧은 수명의
-          서명된 주소로만 열리고, 저장 경로의 첫 칸이 소유자라서 다른 회원의 것은 열리지 않습니다. 회원이 AI 키를
+          서명된 주소로만 열리고, 저장 경로의 첫 칸이 소유자라서 다른 회원의 것은 열리지 않습니다. 올린 참고 이미지도
+          나만 봅니다. 다만 회원의 허락을 받아 첫 화면 작품 소개에 올린 결과물은 누구나 볼 수 있습니다. 회원이 AI 키를
           브라우저에 입력하는 일도 없습니다. 생성은 운영자 서버 키로 돕니다.
         </p>
       </Details>
@@ -135,7 +141,8 @@ export default function LibraryGuidePage() {
           head={["이런 상황이면", "이렇게", "왜"]}
           rows={[
             ["같은 틀로 여러 편을 만든다", "묶음 세트로 저장", "그림과 자리가 함께 들어옵니다"],
-            ["지난 결과물을 다시 쓰고 싶다", "작업물 탭 → 레퍼런스로", "내려받아 다시 올릴 필요가 없습니다"],
+            ["지난 결과물을 다시 쓰고 싶다", "결과 화면에서 「참고 이미지로 보관」", "내려받아 다시 올릴 필요가 없습니다 (카드뉴스 · 상세페이지 · 리디자인)"],
+            ["올려 둔 그림으로 바로 만들고 싶다", "참고 이미지 카드의 「카드뉴스로 · 이미지로 · 상세페이지로」", "그 그림이 붙은 채로 도구가 열립니다"],
           ]}
         />
       </Section>

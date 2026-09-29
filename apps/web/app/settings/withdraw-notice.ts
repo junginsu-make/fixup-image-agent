@@ -15,7 +15,7 @@ import { CS_EMAIL } from "../../lib/cs/contact";
 export function withdrawNotice({ availableCredits, unit }: { availableCredits: number; unit: string }): string {
   const credits =
     availableCredits > 0
-      ? ` 남은 크레딧 ${availableCredits}${unit}도 함께 사라집니다. 쓰지 않은 구매 크레딧과 이번 달에 한 번도 쓰지 않은 구독은 환불받으실 수 있으니, 탈퇴 전에 ${CS_EMAIL} 로 먼저 신청하시길 권합니다.`
+      ? ` 남은 크레딧 ${availableCredits}${unit}도 함께 사라집니다. 쓰지 않은 구매 크레딧과 이번 달에 한 번도 쓰지 않은 구독은 환불받으실 수 있으니, 탈퇴 전에 ${CS_EMAIL}으로 먼저 신청하시길 권합니다.`
       : "";
 
   return (
