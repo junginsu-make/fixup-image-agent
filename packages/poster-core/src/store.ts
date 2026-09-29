@@ -1,4 +1,5 @@
 import type { ImageLook } from "@fixup/shared";
+import type { PosterImageEdit } from "./image-lineage";
 import type { PosterSlots, PosterStatus, PromptMode } from "./schemas";
 
 /**
@@ -140,6 +141,13 @@ export interface PosterImageRecord {
   url?: string;
   /** 목록에 거는 사본의 주소. 사본이 없으면 라우트가 원본으로 떨어뜨린다. */
   thumbUrl?: string;
+  /**
+   * 「이 장만 고치기」로 나온 그림이면 무엇을 무슨 말로 고쳤는지.
+   *
+   * `byProject` 만 채운다(요청 장부에서 읽는다). 못 읽으면 비어 있고, 그때 화면은
+   * 지금처럼 「변형 N」으로 부른다.
+   */
+  edit?: PosterImageEdit | null;
 }
 
 export interface PosterProjectStore {
@@ -188,7 +196,14 @@ export interface PosterRequestStore {
 }
 
 export interface PosterImageStore {
-  byProject(projectId: string): Promise<PosterImageRecord[]>;
+  /**
+   * 결과 화면의 목록. **만든 차례**로 주고, 고친 결과에는 이력(`edit`)을 붙인다
+   * (`image-lineage.ts`). 변형 번호로만 줄 세우면 고친 결과가 「변형 1」 옆에 낀다.
+   *
+   * 이력은 요청 장부를 한 번 더 읽는다. 파일 한 장을 주는 길처럼 이름표가 필요 없고
+   * 자주 불리는 곳은 `{ lineage: false }` 로 끈다 — 썸네일마다 질의가 는다.
+   */
+  byProject(projectId: string, options?: { lineage?: boolean }): Promise<PosterImageRecord[]>;
   /**
    * 목록 화면이 대표 그림을 세울 때 쓴다.
    *

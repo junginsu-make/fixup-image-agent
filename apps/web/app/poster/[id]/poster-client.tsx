@@ -12,7 +12,9 @@ import {
   SidePanel, SidePanelBody, SidePanelContent, SidePanelDescription,
   SidePanelFooter, SidePanelHeader, SidePanelTitle,
 } from "@fixup/ui";
-import { previewPosterPrompt, type PosterSlots } from "@fixup/poster-core";
+import {
+  posterImageLabels, previewPosterPrompt, type PosterImageEdit, type PosterSlots,
+} from "@fixup/poster-core";
 import { restoreAttachments, type ImageLook } from "@fixup/shared";
 import { downloadImage } from "../../_components/image-viewer";
 import { useRunningJobs } from "../../_components/running-jobs";
@@ -37,6 +39,8 @@ interface PosterImage {
   /** 목록에 거는 사본. 확대·내려받기는 원본을 쓴다. */
   thumbUrl?: string;
   review?: { decision: string; summary: string; issues: string[] } | null;
+  /** 「이 장만 고치기」로 나온 것이면 무엇을 무슨 말로 고쳤는지. 서버가 붙인다. */
+  edit?: PosterImageEdit | null;
 }
 
 interface PosterProject {
@@ -446,9 +450,14 @@ export function PosterClient(
     );
   }
 
-  function downloadVariant(image: PosterImage) {
-    const src = `/api/poster/projects/${project.id}/images/${image.variantIndex}/file`;
-    void downloadImage({ src, name: `${project.title} 변형 ${image.variantIndex + 1}.png` });
+  /**
+   * **그림 id 로 받는다.** 변형 번호로 받으면 파일 길이 「그 번호 중 가장 최근 것」을
+   * 준다 — 고치기 결과도 번호가 0 이라, 고친 뒤 원래 「변형 1」을 내려받으면 고친
+   * 그림이 받아졌다(2026-09-29).
+   */
+  function downloadVariant(image: PosterImage, title: string) {
+    const src = `/api/poster/projects/${project.id}/images/${image.id}/file`;
+    void downloadImage({ src, name: `${project.title} ${title}.png` });
   }
   const { jobs, start, finish, stop } = useRunningJobs();
 
@@ -798,6 +807,8 @@ export function PosterClient(
     promptMode: project.data.promptMode,
     planOpen,
   });
+  // 고친 결과를 「변형 1」이라 부르지 않는다 — 무엇을 무슨 말로 고쳤는지 함께 적는다.
+  const labels = posterImageLabels(list);
 
   return (
     <div className="grid gap-6">
@@ -1110,7 +1121,7 @@ export function PosterClient(
                         // 목록은 사본을 쓴다. 확대는 `data-viewer-src`, 내려받기는
                         // 아래 `downloadVariant` 가 원본 주소를 쓰므로 품질이 깎이지 않는다.
                         src={image.thumbUrl ?? image.url}
-                        alt={`${project.title} · 변형 ${image.variantIndex + 1}`}
+                        alt={`${project.title} · ${labels[image.id]!.title}`}
                         data-zoomable
                         data-viewer-src={image.url}
                         data-viewer-meta={viewerMeta}
@@ -1124,15 +1135,24 @@ export function PosterClient(
                   </button>
                   <figcaption className="grid gap-2 text-xs">
                     <span className={cn("font-bold", image.selected && "text-primary")}>
-                      변형 {image.variantIndex + 1}{image.selected ? " · 선택됨" : ""}
+                      {labels[image.id]!.title}{image.selected ? " · 선택됨" : ""}
                     </span>
+                    {labels[image.id]!.detail ? (
+                      // 지시가 길면 카드가 그만큼 늘어난다. 두 줄로 줄이고 전체는 올려 보면 보인다.
+                      <span
+                        className="line-clamp-2 break-words text-muted-foreground"
+                        title={labels[image.id]!.detail ?? undefined}
+                      >
+                        {labels[image.id]!.detail}
+                      </span>
+                    ) : null}
                     {/* 만든 것은 이미 작업물로 저장돼 있다. 여기서 따로 보관할
                         일이 없다. 대신 이 한 장만 고치는 길을 둔다. */}
                     <div className="flex flex-wrap gap-1.5">
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => void downloadVariant(image)}
+                        onClick={() => void downloadVariant(image, labels[image.id]!.title)}
                       >
                         <Download />내려받기
                       </Button>

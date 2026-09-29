@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import type {
-  PosterGenerationRequestRecord,
-  PosterImageRecord,
-  PosterImageStore,
-  PosterProjectRecord,
-  PosterProjectStore,
-  PosterReferenceRecord,
-  PosterRequestStore,
+import {
+  orderPosterImages,
+  withEditLineage,
+  type PosterGenerationRequestRecord,
+  type PosterImageRecord,
+  type PosterImageStore,
+  type PosterProjectRecord,
+  type PosterProjectStore,
+  type PosterReferenceRecord,
+  type PosterRequestStore,
 } from "@fixup/poster-core";
 import { getLocalDatabase, type LocalDatabase } from "../local-store";
 import { posterImageUrl, posterThumbUrl } from "./supabase-store-core";
@@ -153,11 +155,16 @@ export function createLocalPosterImageStore(
   userId: string,
 ): PosterImageStore {
   return {
-    async byProject(projectId) {
-      return database.read((data) => bucket(data, "posterImages")
-        .filter((row) => row.userId === userId && row.projectId === projectId)
-        .map((row) => withUrls(strip(row)))
-        .sort((a, b) => a.variantIndex - b.variantIndex));
+    async byProject(projectId, options) {
+      return database.read((data) => {
+        const ordered = orderPosterImages(bucket(data, "posterImages")
+          .filter((row) => row.userId === userId && row.projectId === projectId)
+          .map((row) => withUrls(strip(row))));
+        if (options?.lineage === false) return ordered;
+        // 운영의 RLS 처럼 자기 장부만 읽는다.
+        return withEditLineage(ordered, bucket(data, "posterRequests")
+          .filter((request) => request.userId === userId && request.projectId === projectId));
+      });
     },
     async byProjects(projectIds) {
       if (!projectIds.length) return [];

@@ -296,3 +296,30 @@ describe("글자와 피사체의 관계", () => {
     expect(source).not.toContain("typeInteraction: current.typeInteraction");
   });
 });
+
+/**
+ * **고친 결과를 「변형 1」로 부르지 않고, 내려받기도 그 그림을 준다.**
+ *
+ * 2026-09-29 — 변형 3을 고친 결과가 「변형 1」로 붙었고(고치기는 번호가 늘 0),
+ * 고친 뒤 원래 「변형 1」을 내려받으면 고친 그림이 받아졌다. 파일 길이 번호로
+ * 받으면 「그 번호 중 가장 최근 것」을 주기 때문이다.
+ *
+ * 이름 규칙은 `image-lineage.test.ts` 가 재고, 여기서는 화면이 그것을 쓰는지 본다.
+ * 렌더할 수 없어 소스를 본다(맨 위 머리말).
+ */
+describe("고친 결과의 이름과 내려받기", () => {
+  it("목록 이름을 공용 이름표에서 가져온다 — 변형 번호로 직접 짓지 않는다", () => {
+    expect(source).toContain("posterImageLabels(list)");
+    expect(source).not.toMatch(/변형 \{image\.variantIndex \+ 1\}/);
+    expect(source).not.toMatch(/변형 \$\{image\.variantIndex \+ 1\}/);
+  });
+
+  it("무엇을 무슨 말로 고쳤는지 보여 준다", () => {
+    expect(source).toMatch(/labels\[image\.id\]!\.detail/);
+  });
+
+  it("내려받기는 그림 id 로 받는다 — 번호로 받으면 고친 그림이 대신 온다", () => {
+    expect(source).toContain("/images/${image.id}/file");
+    expect(source).not.toContain("/images/${image.variantIndex}/file");
+  });
+});

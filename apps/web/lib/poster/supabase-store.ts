@@ -1,9 +1,11 @@
 import "server-only";
 
-import type {
-  PosterImageStore,
-  PosterProjectStore,
-  PosterRequestStore,
+import {
+  orderPosterImages,
+  withEditLineage,
+  type PosterImageStore,
+  type PosterProjectStore,
+  type PosterRequestStore,
 } from "@fixup/poster-core";
 import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
@@ -161,12 +163,36 @@ export function createSupabasePosterImageStore(userId: string): PosterImageStore
      * 그래서 `user_id` 조건을 뗀다. 남겨 두면 팀원의 작업은 열리는데 그 안에
      * 그림만 안 보이는 상태가 된다.
      */
-    async byProject(projectId) {
+    async byProject(projectId, options) {
       const client = await createSupabaseServerClient();
-      const { data, error } = await client.from("poster_images")
-        .select(IMAGE_COLUMNS).eq("project_id", projectId)
-        .order("variant_index", { ascending: true });
-      return checked((data ?? []) as PosterImageRow[], error, "포스터 이미지 목록").map(toImageRecord);
+      const wantsLineage = options?.lineage !== false;
+      const [images, edits] = await Promise.all([
+        client.from("poster_images")
+          .select(IMAGE_COLUMNS).eq("project_id", projectId)
+          .order("variant_index", { ascending: true }),
+        wantsLineage
+          ? client.from("poster_generation_requests")
+            .select("id,parent_image_id,edit_instruction").eq("project_id", projectId)
+            .not("edit_instruction", "is", null)
+          : null,
+      ]);
+      const records = checked((images.data ?? []) as PosterImageRow[], images.error, "포스터 이미지 목록")
+        .map(toImageRecord);
+      if (!edits) return orderPosterImages(records);
+      /*
+       * **이력을 못 읽어도 목록은 준다.** 이력은 이름표일 뿐이고, 없으면 지금처럼
+       * 「변형 N」으로 부른다. 여기서 던지면 그림이 통째로 안 보인다.
+       *
+       * 장부는 자기 것만 읽힌다(RLS `members read own poster requests`). 팀원의
+       * 작업을 보면 비어서 온다 — 오류가 아니다.
+       */
+      if (edits.error) console.error(`[poster] 고친 이력을 읽지 못했습니다: ${edits.error.message}`);
+      const rows = (edits.error ? [] : edits.data ?? []) as Array<{
+        id: string; parent_image_id: string | null; edit_instruction: string | null;
+      }>;
+      return withEditLineage(orderPosterImages(records), rows.map((row) => ({
+        id: row.id, parentImageId: row.parent_image_id, editInstruction: row.edit_instruction,
+      })));
     },
     async byProjects(projectIds) {
       if (!projectIds.length) return [];
