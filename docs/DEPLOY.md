@@ -265,9 +265,11 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
    되돌린다.
 
    **이 단계가 0 이 아닌 코드로 끝나면 먼저 메시지를 본다.** 「…처음 한 번 절차를 보세요」
-   (다른 파일에 같은 사이트 주소가 이미 있음) 또는 「잘못된 주소」(주소 모양이 틀림)면
-   **아직 아무것도 안 바뀐 것이다** — 이 두 검사는 useradd·install 등 시스템을 건드리기
-   전에 먼저 돈다. 되돌리지 말고 원인을 고쳐 3단계를 다시 돌린다.
+   (다른 파일에 같은 사이트 주소가 이미 있음), 「잘못된 주소」(주소 모양이 틀림), 또는
+   「잘못된 조합: site_address 가 HTTPS 가 아니면(http://…) redirect_from 을 쓸 수
+   없습니다」(IP 주소에 리다이렉트를 같이 줌)면 **아직 아무것도 안 바뀐 것이다** — 이
+   검사들은 useradd·install 등 시스템을 건드리기 전에 먼저 돈다. 되돌리지 말고 원인을
+   고쳐 3단계를 다시 돌린다.
    그 밖의 실패(예: Caddy 설정 검사 실패)는 4·5단계로 가지 말고 바로 아래 「되돌리기」를 한다.
    `install-host.sh` 는 자기가 방금 쓴 사이트 파일만 되돌린다 — 「처음 한 번만」에서 손으로
    옮긴 `formwith.caddy`(→ `formwith.caddy.manual`)까지는 되돌려 주지 않는다. 그 상태로 두면
@@ -275,15 +277,21 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
    복원한다
 4. `app.env` 에 새 값이 있으면 넣는다(`ALERT_EMAIL` 등). **`NODE_OPTIONS` 은 운영 app.env 에
    이미 줄이 있다 — 새 줄을 넣지 말고 그 줄의 숫자를 `1536`으로 바꾼다(`t3.medium`으로 바꾼
-   뒤에만)** — `t3.micro`(911MB)에서는 힙 상한이 실제 램보다 커서 뜻이 없다. 적용 확인:
-   `sudo tr '\0' '\n' < /proc/$(systemctl show -p MainPID --value fixup-image-agent)/environ | grep NODE_OPTIONS`
+   뒤에만)** — `t3.micro`(911MB)에서는 힙 상한이 실제 램보다 커서 뜻이 없다. (적용 확인은
+   재시작 뒤라야 뜻이 있으므로 6단계에서 한다.)
 5. `sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload-or-restart caddy`
 6. 확인: `systemctl is-active fixup-image-agent caddy fixup-image-agent-monitor.timer`,
+   `NODE_OPTIONS` 이 실제로 적용됐는지(재시작 전엔 옛 프로세스라 옛 값만 보인다):
+   `sudo cat /proc/$(systemctl show -p MainPID --value fixup-image-agent)/environ | tr '\0' '\n' | grep NODE_OPTIONS`
+   (`sudo tr … < /proc/…/environ` 처럼 리다이렉트로 열면 그 파일을 여는 건 sudo 가 아니라
+   호출한 셸이라 `environ` 이 0400·`User=fixup-agent` 라서 늘 Permission denied 다 —
+   `sudo cat` 으로 읽어서 파이프로 넘긴다),
    `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`,
    정적 파일이 Caddy 로 나가는지 확인. **정적 사본은 새 릴리스를 한 번 배포한 뒤에 생긴다 —
    아직 없으면(이번처럼 설정 변경을 새 릴리스 배포보다 먼저 한 경우) 이 확인은 다음 배포
    뒤에 한다.** 먼저 실제 조각 파일 이름을 하나 찾는다(디렉터리가 섞여 나오지 않도록 파일만
-   고른다): `sudo find /var/www/fixup-image-agent/static/current/_next/static/chunks -maxdepth 1 -type f -name '*.js' | head -1`.
+   고르고, 전체 경로가 아니라 파일 이름만 찍는다):
+   `sudo find /var/www/fixup-image-agent/static/current/_next/static/chunks -maxdepth 1 -type f -name '*.js' -printf '%f\n' | head -1`.
    `http://127.0.0.1/…` 는 Host 가 `127.0.0.1` 이라 어느 사이트 블록과도 안 맞으니 쓰지 않는다 —
    도메인이면 `curl -sI https://formwith.fix-up.kr/_next/static/chunks/<조각> | grep -i cache-control`,
    IP 뿐이면 `curl -sI -H "Host: <IP>" http://127.0.0.1/_next/static/chunks/<조각> | grep -i cache-control`

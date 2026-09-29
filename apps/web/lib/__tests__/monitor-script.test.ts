@@ -122,7 +122,23 @@ maybeDescribe("monitor.sh", () => {
       writeEvents(0);
       run({ MONITOR_MEMORY_EVENTS: eventsFile() });
       writeEvents(3);
-      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).toContain("MAIL [memory]");
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).toContain("MAIL [memory-high]");
+    });
+
+    // 재리뷰(2026-09-29): 세 카운터가 같은 쉬는 시간 키 "memory" 를 같이 쓰면,
+    // high 알림이 그 키의 쉬는 시간(1시간)을 시작시켜 같은 시간 안에 훨씬 급한
+    // oom_kill 이 늘어도 send() 의 쿨다운에 걸려 버려진다. 카운터별로
+    // memory-high/memory-max/memory-oom_kill 로 나눠 서로 겹치지 않아야 한다.
+    it("high 알림 뒤 같은 쉬는 시간 안에 oom_kill 이 늘면 그것도 따로 알린다", () => {
+      world({ healthy: true, restarts: 0, memory: 1, high: "infinity" });
+      writeEvents(0, 0, 0);
+      run({ MONITOR_MEMORY_EVENTS: eventsFile() }); // 기준값 저장
+      writeEvents(3, 0, 0);
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).toContain("MAIL [memory-high]");
+      // high 의 쉬는 시간이 막 시작된 같은 차례 안에서, oom_kill 이 늘면 —
+      // 키가 나뉘어 있으므로 이것도 알려야 한다(옛 코드는 공용 키 때문에 버렸다).
+      writeEvents(3, 0, 1);
+      expect(run({ MONITOR_MEMORY_EVENTS: eventsFile() })).toContain("MAIL [memory-oom_kill]");
     });
 
     it("그대로면(늘지 않으면) 알리지 않는다", () => {

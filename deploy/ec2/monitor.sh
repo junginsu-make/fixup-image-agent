@@ -215,7 +215,11 @@ if [[ -n ${memory_events} ]]; then
     [[ ${value} =~ ^[0-9]+$ ]] || continue
     previous=$(state "memevents.${counter}" "${value}")
     if [[ ${previous} =~ ^[0-9]+$ ]] && (( value > previous )); then
-      send memory "메모리 사건 ${counter} 이 늘었습니다(${previous} → ${value}). 현재 ${current_mb}MB / 상한 ${high_mb}MB."
+      # 쉬는 시간 키를 카운터별로 나눈다(memory-high/memory-max/memory-oom_kill).
+      # 세 카운터가 같은 "memory" 키를 썼다면 high 알림이 쉬는 시간을 시작시켜,
+      # 같은 한 시간 안에 훨씬 급한 oom_kill 이 늘어도 send() 의 쿨다운에 걸려
+      # 버려진다.
+      send "memory-${counter}" "메모리 사건 ${counter} 이 늘었습니다(${previous} → ${value}). 현재 ${current_mb}MB / 상한 ${high_mb}MB."
     fi
     save "memevents.${counter}" "${value}"
   done
