@@ -47,6 +47,50 @@ fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+site_file=/etc/caddy/sites/fixup-image-agent.caddy
+site_backup=/etc/caddy/sites/fixup-image-agent.caddy.bak
+
+# 이 주소로 시작하는 사이트 블록이 다른 *.caddy 파일에 이미 있으면 멈춘다
+# (예: 운영에서 도메인을 손으로 연결하며 만든 formwith.caddy). 모르고
+# 덮어쓰면 두 파일에 같은 주소가 생겨 `caddy validate` 가 실패하거나, 먼저
+# 있던 사이트(IP→도메인 리다이렉트 같은)를 지우고 나서야 실패해 깨진 채로
+# 남는다.
+#
+# **이 검사와 주소 검사(render-caddy-site.sh)는 useradd/install 등 시스템에
+# 무엇이든 건드리기 전에 돈다** — 그래야 "아무것도 안 바꾸고 종료" 가 참이
+# 된다(2026-09-29 독립 리뷰).
+host=${site_address#http://}
+host=${host#https://}
+site_pattern=$(printf '%s' "${site_address}" | sed 's/\./\\./g')
+host_pattern=$(printf '%s' "${host}" | sed 's/\./\\./g')
+
+for other in /etc/caddy/sites/*.caddy; do
+  [[ -e ${other} ]] || continue
+  [[ ${other} == "${site_file}" ]] && continue
+  if grep -Eq "^${site_pattern}[[:space:]]*\{" "${other}" || grep -Eq "^https?://${host_pattern}" "${other}"; then
+    echo "${other} 에 이미 ${site_address} 로 시작하는 사이트 블록이 있습니다. docs/DEPLOY.md 「서버 설정 바꾸기」의 처음 한 번 절차를 보세요." >&2
+    exit 1
+  fi
+done
+
+# 사이트 파일 내용을 임시 파일에 먼저 만든다. site_address/redirect_from 이
+# 잘못됐으면(render-caddy-site.sh 가 종료 2) 여기서 멈추고 시스템은 아직 안
+# 건드린 채로 끝난다. 형제 스크립트라 `bash` 로 불러야 한다 — CI 가 만드는
+# 꾸러미(tar)는 실행 권한을 안 지키므로(저장소가 core.filemode=false),
+# 직접 실행하면 "Permission denied" 로 멈춘다(2026-09-29 독립 리뷰).
+new_site=$(mktemp /tmp/fixup-image-agent-caddy-site.XXXXXX)
+trap 'rm -f "${new_site}"' EXIT
+bash "${script_dir}/render-caddy-site.sh" "${site_address}" "${redirect_from}" > "${new_site}"
+caddy fmt --overwrite "${new_site}"
+
+# Caddyfile 의 import 줄도 실제 사이트 파일을 쓰기 전에 갖춰 둔다 — 이 단계가
+# (드물게) 실패해도 아직 사이트 파일은 안 바뀐 상태로 끝나게 한다.
+touch /etc/caddy/Caddyfile
+if ! grep -Fqx 'import /etc/caddy/sites/*.caddy' /etc/caddy/Caddyfile; then
+  printf '\nimport /etc/caddy/sites/*.caddy\n' >> /etc/caddy/Caddyfile
+fi
+caddy fmt --overwrite /etc/caddy/Caddyfile
+
 if ! id fixup-agent >/dev/null 2>&1; then
   useradd --system --home-dir /opt/fixup-image-agent --shell /usr/sbin/nologin fixup-agent
 fi
@@ -66,44 +110,14 @@ install -d -o root -g root -m 0755 /etc/caddy/sites
 install -d -o caddy -g caddy -m 0750 /var/log/caddy
 install -d -o root -g caddy -m 0750 /var/www/fixup-image-agent /var/www/fixup-image-agent/static
 
-site_file=/etc/caddy/sites/fixup-image-agent.caddy
-site_backup=/etc/caddy/sites/fixup-image-agent.caddy.bak
-
-# 이 주소로 시작하는 사이트 블록이 다른 *.caddy 파일에 이미 있으면 멈춘다
-# (예: 운영에서 도메인을 손으로 연결하며 만든 formwith.caddy). 모르고
-# 덮어쓰면 두 파일에 같은 주소가 생겨 `caddy validate` 가 실패하거나, 먼저
-# 있던 사이트(IP→도메인 리다이렉트 같은)를 지우고 나서야 실패해 깨진 채로
-# 남는다.
-host=${site_address#http://}
-host=${host#https://}
-site_pattern=$(printf '%s' "${site_address}" | sed 's/\./\\./g')
-host_pattern=$(printf '%s' "${host}" | sed 's/\./\\./g')
-
-for other in /etc/caddy/sites/*.caddy; do
-  [[ -e ${other} ]] || continue
-  [[ ${other} == "${site_file}" ]] && continue
-  if grep -Eq "^${site_pattern}[[:space:]]*\{" "${other}" || grep -Eq "^https?://${host_pattern}" "${other}"; then
-    echo "${other} 에 이미 ${site_address} 로 시작하는 사이트 블록이 있습니다. docs/DEPLOY.md 「서버 설정 바꾸기」의 처음 한 번 절차를 보세요." >&2
-    exit 1
-  fi
-done
-
-new_site=$(mktemp /tmp/fixup-image-agent-caddy-site.XXXXXX)
-trap 'rm -f "${new_site}"' EXIT
-"${script_dir}/render-caddy-site.sh" "${site_address}" "${redirect_from}" > "${new_site}"
-
 had_site_file=0
 [[ -e ${site_file} ]] && had_site_file=1
 [[ ${had_site_file} -eq 1 ]] && cp "${site_file}" "${site_backup}"
 
-cp "${new_site}" "${site_file}"
-caddy fmt --overwrite "${site_file}"
-
-touch /etc/caddy/Caddyfile
-if ! grep -Fqx 'import /etc/caddy/sites/*.caddy' /etc/caddy/Caddyfile; then
-  printf '\nimport /etc/caddy/sites/*.caddy\n' >> /etc/caddy/Caddyfile
-fi
-caddy fmt --overwrite /etc/caddy/Caddyfile
+# mktemp 는 0600(root 전용)으로 만든다. 그냥 cp 하면 그 권한을 그대로 물려받아
+# caddy 계정이 못 읽는 파일이 되어 검사가 늘 실패한다(2026-09-29 독립 리뷰,
+# 새 서버에서 재현). 명시적으로 0644 root:root 로 쓴다.
+install -m 0644 -o root -g root "${new_site}" "${site_file}"
 
 # 검사를 root 로 돌리면 접근 기록 파일을 root 소유로 만들어, 정작 Caddy 가
 # 못 열고 뜨지 않는다(2026-09-28 시험 서버에서 겪음). Caddy 가 도는 계정으로

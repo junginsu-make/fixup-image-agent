@@ -50,7 +50,10 @@ fi
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ -n ${redirect_from} ]]; then
-  printf '%s {\n\tredir https://%s{uri} 308\n}\n\n' "${redirect_from}" "${site_address}"
+  # site_address 를 이미 `https://` 를 붙여 줬어도(예: https://formwith.fix-up.kr)
+  # 리다이렉트 대상은 한 번만 붙는다 — 안 그러면 `redir https://https://…` 가 된다.
+  redirect_target=${site_address#https://}
+  printf '%s {\n\tredir https://%s{uri} 308\n}\n\n' "${redirect_from}" "${redirect_target}"
 fi
 
 sed "s|{{SITE}}|${site_address}|g" "${script_dir}/Caddyfile.template"

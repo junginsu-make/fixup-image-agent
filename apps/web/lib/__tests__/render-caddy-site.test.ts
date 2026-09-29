@@ -47,6 +47,22 @@ describe("render-caddy-site.sh", () => {
     expect(redirectIndex).toBeGreaterThanOrEqual(0);
     expect(siteIndex).toBeGreaterThan(redirectIndex);
     expect(out).toContain("redir https://formwith.fix-up.kr{uri} 308");
+    expect(out).not.toContain("{{SITE}}");
+  });
+
+  it("site_address 에 이미 https:// 를 붙여도 리다이렉트 대상은 한 번만 붙는다", () => {
+    // 고쳤던 버그: site_address 가 `https://formwith.fix-up.kr` 이면
+    // `redir https://https://formwith.fix-up.kr{uri} 308` 처럼 스킴이 겹쳤었다.
+    const out = render(["https://formwith.fix-up.kr", "http://54.180.68.212"]);
+
+    expect(out).toContain("redir https://formwith.fix-up.kr{uri} 308");
+    expect(out).not.toContain("https://https://");
+    expect(out).not.toContain("{{SITE}}");
+  });
+
+  it("redirect_from 이 잘못된 모양이면(설정 파일에 끼어드는 문자) 종료 코드 2", () => {
+    // redirect_from 검사가 지워지면 이 시험이 실패해 바로 드러난다.
+    expect(renderExitCode(["formwith.fix-up.kr", "http://x {"])).toBe(2);
   });
 
   it("IP 만(http:// 를 붙여서) 주면 그대로 치환한다 — 시험 서버 A 모양", () => {
