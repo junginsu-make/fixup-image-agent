@@ -68,6 +68,15 @@ describe("saved poster plan navigation", () => {
     expect(f.fetch).not.toHaveBeenCalled();
   });
 
+  it("locks 04 while a generation is running, like the plan button", () => {
+    f.fetch.mockReturnValue(new Promise(() => {}));
+    act(() => { view = create(<PosterClient project={project} images={images} />); });
+    act(() => button("04 기획 확인").props.onClick());
+    act(() => button("1장 만들기").props.onClick());
+    expect(current()).toContain("05 결과");
+    expect(button("04 기획 확인").props.disabled).toBe(true);
+  });
+
   it("keeps verbatim projects free of a planning step", () => {
     act(() => { view = create(<PosterClient project={{ ...project, data: { ...project.data, promptMode: "verbatim" } }} images={images} />); });
     expect(button("04 기획 확인")).toBeUndefined();

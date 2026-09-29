@@ -53,6 +53,23 @@ describe("saved card news navigation", () => {
     expect(f.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("does not count attached original cards as a result before any generation", async () => {
+    const attachedOnly = { ...project.data.flow, stage: "copy", cards: [{ ...project.data.flow.cards[0], kind: "place_as_is", status: "pending" }] };
+    f.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ project: { ...project, data: { flow: attachedOnly } } }) });
+    f.params = new URLSearchParams("view=result");
+    await open();
+    expect(current()).toContain("04 원고 확인");
+    expect(button("05 결과").props.disabled).toBe(true);
+  });
+
+  it("keeps the result reachable after the copy is edited following a generation", async () => {
+    const edited = { ...project.data.flow, stage: "copy", generation: { selectedCardIndexes: [0], falReferenceUrls: {}, startedAt: "2026-09-29T00:00:00.000Z" }, cards: [{ ...project.data.flow.cards[0], kind: "place_as_is" }] };
+    f.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ project: { ...project, data: { flow: edited } } }) });
+    await open();
+    expect(current()).toContain("04 원고 확인");
+    expect(button("05 결과").props.disabled).toBe(false);
+  });
+
   it("can show preserved images even when the saved stage is copy", async () => {
     f.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ project: { ...project, data: { flow: { ...project.data.flow, stage: "copy" } } } }) });
     f.params = new URLSearchParams("view=result");

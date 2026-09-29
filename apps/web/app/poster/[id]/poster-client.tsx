@@ -824,7 +824,11 @@ export function PosterClient(
       <StepBar
         steps={단계}
         current={current}
-        allowJump={(id) => id !== "result" || list.length > 0}
+        /*
+          04 는 「기획 확인」 단추와 같이 **도는 중에는 잠근다.** 열어 두면 생성이
+          끝나도 새 결과가 패널에 가려진다(2026-09-29 독립 리뷰).
+        */
+        allowJump={(id) => (id !== "plan" || !busy) && (id !== "result" || list.length > 0)}
         allowCurrentJump={current === "plan" && !planOpen}
         onJump={(id) => {
           /*

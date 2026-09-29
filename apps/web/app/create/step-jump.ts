@@ -25,3 +25,14 @@ export function canReachStep(id: string, progress: CreateProgress): boolean {
   if (id === "upload") return true;
   return progress.hasResult;
 }
+
+/**
+ * 편집기를 **어느 화면으로 여는가.**
+ *
+ * 01·02 에서 「04 편집 · 내보내기」를 눌러도 편집기는 늘 갤러리(03)로 열렸다 —
+ * 누른 단계가 아니라 그 앞에 내려앉았다(2026-09-29 독립 리뷰). 편집기는 열릴
+ * 때만 이 값을 읽는다.
+ */
+export function editorScreenFor(id: string): "gallery" | "editor" {
+  return id === "edit" ? "editor" : "gallery";
+}
