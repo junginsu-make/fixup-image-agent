@@ -56,6 +56,10 @@ install -d -o root -g fixup-agent -m 0750 /opt/fixup-image-agent/releases
 install -d -o root -g fixup-agent -m 0750 /etc/fixup-image-agent
 install -m 0644 "${script_dir}/fixup-image-agent.service" /etc/systemd/system/fixup-image-agent.service
 install -m 0644 "${script_dir}/fixup-image-agent-worker.service" /etc/systemd/system/fixup-image-agent-worker.service
+install -d -o root -g root -m 0755 /usr/local/lib/fixup-image-agent
+install -o root -g root -m 0755 "${script_dir}/monitor.sh" /usr/local/lib/fixup-image-agent/monitor.sh
+install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-monitor.service" /etc/systemd/system/
+install -o root -g root -m 0644 "${script_dir}/fixup-image-agent-monitor.timer" /etc/systemd/system/
 install -m 0640 -o root -g fixup-agent "${script_dir}/app.env.example" /etc/fixup-image-agent/app.env.example
 
 install -d -o root -g root -m 0755 /etc/caddy/sites
@@ -74,6 +78,7 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 systemctl daemon-reload
 systemctl enable fixup-image-agent.service
 systemctl enable fixup-image-agent-worker.service
+systemctl enable --now fixup-image-agent-monitor.timer
 systemctl reload caddy.service 2>/dev/null || systemctl restart caddy.service
 
 echo "Host files installed for ${site_address}."
