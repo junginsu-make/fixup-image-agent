@@ -1,0 +1,38 @@
+# Task 9 브리프 Step 3 — 감시 확인 (fixup-image-agent-monitor.timer, 1분 간격)
+
+```
+$ sudo systemctl stop fixup-image-agent
+Tue Sep 29 08:56:35 UTC 2026
+(130초 대기)
+
+journalctl -u fixup-image-agent-monitor --since "3 min ago":
+Sep 29 08:56:01 ... Starting fixup-image-agent-monitor.service ...
+Sep 29 08:56:02 ... Deactivated successfully.
+Sep 29 08:56:02 ... Finished fixup-image-agent-monitor.service ...
+Sep 29 08:57:09 ... Starting fixup-image-agent-monitor.service ...
+Sep 29 08:57:09 ... Deactivated successfully.
+Sep 29 08:57:09 ... Finished fixup-image-agent-monitor.service ...
+Sep 29 08:58:19 ... Starting fixup-image-agent-monitor.service ...
+Sep 29 08:58:19 ... Deactivated successfully.
+Sep 29 08:58:19 ... Finished fixup-image-agent-monitor.service ...
+
+상태 폴더 /var/lib/fixup-image-agent-monitor/: down.alerted down.count oom.since restarts
+down.count = 2
+down.alerted = 1     (ALERT_EMAIL 빈칸이라 메일은 안 갔다 — monitor.sh 의 send() 는 alert_to
+                       가 비면 조용히 return, 그와 별개로 down.alerted 는 그대로 1로 저장됨)
+
+$ sudo systemctl start fixup-image-agent
+```
+
+## 회복(recovered) 처리 확인
+
+서비스를 다시 올리고 이후(배포·측정 과정에서 여러 차례 재시작/헬스체크가 더 있었다) 다음
+타이머 실행에서 준비 상태가 다시 성공하며 감시 스크립트가 `down.alerted` 를 0 으로 되돌렸다.
+
+```
+sudo cat /var/lib/fixup-image-agent-monitor/down.alerted → 0
+sudo cat /var/lib/fixup-image-agent-monitor/down.count   → 0
+systemctl is-active fixup-image-agent caddy fixup-image-agent-monitor.timer → active active active
+```
+`ALERT_EMAIL` 이 비어 있어 "recovered" 발송 로그 자체는 남지 않는다(설계대로 — send() 가
+alert_to 없으면 아무 것도 하지 않고 조용히 반환). 상태 파일의 0 복귀가 실제 증거다.

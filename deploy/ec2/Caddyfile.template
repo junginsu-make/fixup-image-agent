@@ -8,9 +8,28 @@
 		X-Frame-Options "SAMEORIGIN"
 	}
 
-	# 정적 파일과 API를 나누지 않는다. 전체 도메인을 단일 Next.js upstream으로
-	# 보내 경로별 프록시가 정적 자산을 가리는 사고를 방지한다.
-	reverse_proxy 127.0.0.1:3000
+	# 정적 파일은 사본이 있을 때만 Caddy 가 직접 내준다(sync-static.sh). 없으면
+	# (배포 중·옛 릴리스) 아래 Node 로 넘어간다 — 화면이 깨지지 않는다.
+	# Node 한 코어가 로그인 전 화면에서 막히던 부담을 던다(2026-09-28 측정).
+	@static {
+		path /_next/static/*
+		file {
+			root /var/www/fixup-image-agent/static/current
+		}
+	}
+	handle @static {
+		root * /var/www/fixup-image-agent/static/current
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# 나머지는 Node. 재시작하는 몇 초 동안 502 대신 20초까지 기다린다.
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			lb_try_duration 20s
+			lb_try_interval 250ms
+		}
+	}
 
 	log {
 		output file /var/log/caddy/fixup-image-agent.access.log {

@@ -1,0 +1,7 @@
+[Unit]
+Description=Fixup Image Agent monitor (health, restarts, memory, OOM → mail)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /usr/local/lib/fixup-image-agent/monitor.sh
+StateDirectory=fixup-image-agent-monitor

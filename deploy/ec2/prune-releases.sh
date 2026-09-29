@@ -12,7 +12,7 @@
 # 둔 서버에서 배포하면 `current` 가 목록 아래쪽에 있다. 그걸 지우면 돌고 있는
 # 서비스가 제 파일을 잃는다.
 #
-#   sudo bash deploy/ec2/prune-releases.sh [남길개수] [app_root]
+#   sudo bash deploy/ec2/prune-releases.sh [남길개수] [app_root] [static_root]
 #
 # 기본값은 5 개, /opt/fixup-image-agent 다. 되돌리기(`rollback-release.sh`)가
 # 갈 수 있는 범위가 남긴 개수로 줄어든다 — 개수를 줄일 때는 그걸 감수하는지
@@ -21,6 +21,7 @@ set -euo pipefail
 
 keep=${1:-5}
 app_root=${2:-/opt/fixup-image-agent}
+static_root=${3:-/var/www/fixup-image-agent/static}
 
 # 0 을 받으면 전부 지운다는 뜻이 된다. 그런 뜻으로 부를 일이 없다.
 if [[ ! ${keep} =~ ^[0-9]+$ ]] || (( keep < 1 )); then
@@ -74,5 +75,21 @@ for dir in "${removed[@]}"; do
   echo "릴리스를 지웁니다: ${dir}"
   rm -rf -- "${dir}"
 done
+
+# 지운 릴리스의 정적 사본도 지운다. current 가 가리키는 것은 남긴다.
+#
+# 심볼릭 링크로 이어져 있으면 이름이 같아도 다른 경로로 보일 수 있어, 양쪽을
+# 실제 경로로 풀어(`readlink -f`) 비교한다 — 그래야 static_root 안의 링크가
+# 지금 쓰는 사본을 다른 것으로 잘못 보이게 하지 않는다.
+if [[ -d ${static_root} ]]; then
+  static_current=$(readlink -f "${static_root}/current" 2>/dev/null || true)
+  for dir in "${removed[@]}"; do
+    target=${static_root}/$(basename "${dir}")
+    target_real=$(readlink -f "${target}" 2>/dev/null || true)
+    if [[ -d ${target} && ${target_real} != "${static_current}" ]]; then
+      rm -rf -- "${target}"
+    fi
+  done
+fi
 
 echo "릴리스 정리 완료: ${#removed[@]} 개를 지우고 $(( ${#ordered[@]} - ${#removed[@]} )) 개를 남겼습니다."

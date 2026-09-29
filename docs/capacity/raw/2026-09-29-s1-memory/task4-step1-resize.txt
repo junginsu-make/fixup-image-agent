@@ -1,0 +1,20 @@
+# A_ID=i-08160b9511532a62e
+# 변경 전: t3.micro, 3.36.73.188 (running)
+# stop -> modify-instance-attribute --instance-type t3.medium -> start
+# describe-instances 결과 (InstanceType, PublicIpAddress):
+t3.medium	43.202.63.50
+
+# 서비스 복구 확인 (A, 43.202.63.50)
+systemctl is-active fixup-image-agent caddy:
+active
+active
+curl 127.0.0.1/ http_code:
+200
+free -m (t3.medium 4GiB 확인):
+               total        used        free      shared  buff/cache   available
+Mem:            3832         565        3115           2         386        3266
+Swap:           2047           0        2047
+
+# B의 DB 컨테이너 제한 유지 확인 (A 재부팅 영향 없음)
+docker inspect supabase_db_sb --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}':
+1000000000 1073741824

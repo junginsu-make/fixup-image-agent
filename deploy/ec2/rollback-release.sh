@@ -24,6 +24,11 @@ if [[ -L ${current_link} ]]; then
   previous_release=$(readlink -f "${current_link}")
 fi
 
+# 되돌리는 릴리스의 정적 사본을 current 로(없으면 만든다). 옛 꾸러미면 Caddy 가 Node 로 넘긴다.
+# 정적 사본 실패로 되돌리기 전체가 막히면 안 된다 — 사본에 없는 조각은 Caddy 가 Node 로 넘긴다.
+bash "$(dirname "$0")/sync-static.sh" "${release_root}" "${release_id}" \
+  || echo "경고: 정적 사본을 옮기지 못했습니다 — 사본에 없는 조각은 Caddy 가 Node 로 넘깁니다" >&2
+
 ln -sfnT "${release_root}" /opt/fixup-image-agent/current
 systemctl restart fixup-image-agent.service
 
@@ -41,6 +46,7 @@ if [[ ${healthy} != true ]] \
   echo "Rollback target did not become ready. Restoring the previous release." >&2
   if [[ -n ${previous_release} && -d ${previous_release} ]]; then
     ln -sfnT "${previous_release}" "${current_link}"
+    bash "$(dirname "$0")/sync-static.sh" "${previous_release}" "$(basename "${previous_release}")" || true
     systemctl restart fixup-image-agent.service
   else
     systemctl stop fixup-image-agent.service

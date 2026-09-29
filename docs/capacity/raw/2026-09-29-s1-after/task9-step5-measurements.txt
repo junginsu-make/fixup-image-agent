@@ -1,0 +1,51 @@
+# Task 9 — S1 뒤 재측정 (컨트롤러 재정 2026-09-29: 범위 축소)
+
+컨트롤러 지시로 축소된 범위:
+- 로그인 후 화면 25·50·100: **건너뜀** (S1 은 DB 호출 수를 안 바꾼다 — S2 뒤에 잰다)
+- 로그인 전 130·160명: **건너뜀** (200명 3분 한 번만)
+- 순서: 로그인 전 200 → 상세 6 → 8 → 10(추가) → 섞임 50+3
+
+측정 도구: B 의 `~/tools/k6/{browse.js,generate-pdp.js,setup-users.mjs}`,
+`/tmp/{run-fixed.sh,public-fixed.js}`, A 의 `/tmp/mon.sh`. 매 구간 시작 전
+`fixup-image-agent` 재시작(모니터 CSV 기준선 초기화) — S0 와 같은 방식.
+동시에 두 종류를 겹쳐 돌리지 않음(섞임 구간만 예외 — 그 자체가 목적).
+
+```
+== 로그인 전 화면 200명 (3분)
+  처리 8198 건 | 초당 45.2 | 보통 4296 ms | 느린쪽 5382 ms | 실패 0 %
+  최저여유 1849 MB | 최대서비스메모리 1354 MB | 최대스왑 0 MB | 평균CPU 72 % | 재시작 0 회
+
+== 상세페이지 동시 6 명
+  pdp_batch                                        17    72590    78277    78637    78728     0.0
+  pdp_sections_ok=102  pdp_sections_failed=0
+  최저여유 907 MB | 최대서비스메모리 2307 MB | 최대스왑 0 MB | 평균CPU 53 % | 재시작 0 회
+
+== 상세페이지 동시 8 명
+  pdp_batch                                        18    73131    79907    81839    82321     0.0
+  pdp_sections_ok=108  pdp_sections_failed=0
+  최저여유 801 MB | 최대서비스메모리 2360 MB | 최대스왑 0 MB | 평균CPU 55 % | 재시작 0 회
+
+== 상세페이지 동시 10 명 (컨트롤러 추가 — 예전 한계로 지목된 수)
+  pdp_batch                                        20    76357    90229    95034    96235     0.0
+  pdp_sections_ok=120  pdp_sections_failed=0
+  최저여유 593 MB | 최대서비스메모리 2646 MB | 최대스왑 0 MB | 평균CPU 50 % | 재시작 0 회
+
+== 섞인 상황: 로그인 50명 화면 + 상세페이지 3명
+  api_library                                     166     8782    12232    12817    12914     0.0
+  page_library                                     83     8432    11089    12632    12746     0.0
+  page_sns                                         72     8642    10585    12417    12869     0.0
+  pdp_batch                                         6    86289    90636    91285    91447     0.0
+  pdp_sections_ok=36  pdp_sections_failed=0
+  최저여유 1724 MB | 최대서비스메모리 1495 MB | 최대스왑 0 MB | 평균CPU 44 % | 재시작 0 회
+```
+(pdp_batch 열 순서: 건수, p50, p95, p99, max(ms), 실패율. `pdp_sections_ok/failed` 는
+route.ts/library-sync-request.ts 가 생성 뒤 라이브러리에 실제로 넣었는지의 카운터다 —
+"라이브러리 누락" 수치는 이 `pdp_sections_failed` 다.)
+
+## 참고 — 측정 도구의 기존 결함(이번에 발견, S0 때부터 있었을 것, 수정하지 않음)
+
+`public-fixed.js`(로그인 전 200명에 쓰임)의 정적 자산 프리페치 부분에서 k6/html 라이브러리
+API 불일치로 매 반복마다 `TypeError: Object has no member 'attr'` 오류가 난다(체크 자체는
+100% 성공 — 페이지 본문 3개(`/`, `/signup`, `/login`) 요청은 정상, 그 안의 `_next/static`
+프리페치만 실패). S0 baseline 측정도 같은 스크립트를 썼으므로 비교는 동일 조건이다. 스크립트
+자체는 이번 작업 범위(DEPLOY.md 리허설)가 아니라 고치지 않았다.

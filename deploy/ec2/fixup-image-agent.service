@@ -23,6 +23,11 @@ ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
+# 메모리 상한(2026-09-29 t3.medium 측정, docs/capacity/2026-09-29-baseline.md).
+# 힙 상한(app.env 의 NODE_OPTIONS)보다 크고 램보다 작아야 한다 — 힙 밖(sharp·버퍼)도 여기서 묶인다.
+# MemoryHigh 를 넘으면 느려지고, MemoryMax 를 넘으면 이 서비스만 죽고 5초 뒤 다시 뜬다(서버 전체는 산다).
+MemoryHigh=2800M
+MemoryMax=3200M
 KillSignal=SIGTERM
 NoNewPrivileges=true
 PrivateTmp=true

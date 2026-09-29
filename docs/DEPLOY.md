@@ -245,6 +245,115 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 | dev 서버가 뜬 워크트리에서 빌드 | `.next` 를 공유해 사용자 서버가 500 이 된다 |
 | 아티팩트 업로드 실패를 배포 실패로 읽기 | 릴리스가 본 배송지다. `verify`·`build` 가 success 면 꾸러미는 나왔다 |
 
+## 서버 설정 바꾸기 (배포 흐름 밖)
+
+`deploy-release.sh` 는 앱만 바꾼다. **유닛·Caddy·감시 타이머는 안 바꾼다** — 이것들은
+`install-host.sh` 가 깐다. 바꿀 때는 이 순서로 한다. 먼저 시험 서버에서 같은 순서로 해 본다.
+
+1. ops 꾸러미를 풀어 둔다(매 배포 4번과 같다)
+2. 지금 것을 남긴다. **두 번째부터 돌릴 때는 먼저 옛 백업을 지운다** —
+   `cp -a`는 대상 폴더가 이미 있으면 그 **안에** 중첩해서 복사한다(`caddy-sites.bak/sites/…`).
+   `sudo rm -rf /root/caddy-sites.bak && sudo cp -a /etc/caddy/sites /root/caddy-sites.bak && sudo cp /etc/systemd/system/fixup-image-agent.service /root/unit.bak`
+
+   **처음 한 번만(도메인을 손으로 연결한 서버)**: `sudo mv /etc/caddy/sites/formwith.caddy /root/formwith.caddy.manual`
+   — 손으로 만든 도메인 사이트 파일을 치운다. 이제 `install-host.sh` 가 도메인 사이트와
+   IP→도메인 넘기기를 한 파일로 깐다. 두 번째부터는 이 단계가 필요 없다
+3. `sudo bash /tmp/ops-<sha8>/deploy/ec2/install-host.sh formwith.fix-up.kr http://54.180.68.212`
+   (도메인이 없는 서버는 `install-host.sh http://<IP>` 한 인자만 준다). 같은 사이트 주소가
+   다른 `*.caddy` 파일에 이미 있으면 스크립트가 **아무것도 바꾸지 않고** 멈추고 알려 준다.
+   Caddy 검사(`caddy validate`)도 통과해야 넘어간다 — 실패하면 스크립트가 스스로 옛 설정으로
+   되돌린다.
+
+   **이 단계가 0 이 아닌 코드로 끝나면 먼저 메시지를 본다.** 「…처음 한 번 절차를 보세요」
+   (다른 파일에 같은 사이트 주소가 이미 있음), 「잘못된 주소」(주소 모양이 틀림), 또는
+   「잘못된 조합: site_address 가 HTTPS 가 아니면(http://…) redirect_from 을 쓸 수
+   없습니다」(IP 주소에 리다이렉트를 같이 줌)면 **아직 아무것도 안 바뀐 것이다** — 이
+   검사들은 useradd·install 등 시스템을 건드리기 전에 먼저 돈다. 되돌리지 말고 원인을
+   고쳐 3단계를 다시 돌린다.
+   그 밖의 실패(예: Caddy 설정 검사 실패)는 4·5단계로 가지 말고 바로 아래 「되돌리기」를 한다.
+   `install-host.sh` 는 자기가 방금 쓴 사이트 파일만 되돌린다 — 「처음 한 번만」에서 손으로
+   옮긴 `formwith.caddy`(→ `formwith.caddy.manual`)까지는 되돌려 주지 않는다. 그 상태로 두면
+   도메인 사이트가 아예 없는 채로 남을 수 있으니, 실패했으면 디렉터리 전체를 되돌리기 절차로
+   복원한다
+4. `app.env` 에 새 값이 있으면 넣는다(`ALERT_EMAIL` 등). **`NODE_OPTIONS` 은 운영 app.env 에
+   이미 줄이 있다 — 새 줄을 넣지 말고 그 줄의 숫자를 `1536`으로 바꾼다(`t3.medium`으로 바꾼
+   뒤에만)** — `t3.micro`(911MB)에서는 힙 상한이 실제 램보다 커서 뜻이 없다. (적용 확인은
+   재시작 뒤라야 뜻이 있으므로 6단계에서 한다.)
+5. `sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload-or-restart caddy`
+6. 확인: `systemctl is-active fixup-image-agent caddy fixup-image-agent-monitor.timer`,
+   `NODE_OPTIONS` 이 실제로 적용됐는지(재시작 전엔 옛 프로세스라 옛 값만 보인다):
+   `sudo cat /proc/$(systemctl show -p MainPID --value fixup-image-agent)/environ | tr '\0' '\n' | grep NODE_OPTIONS`
+   (`sudo tr … < /proc/…/environ` 처럼 리다이렉트로 열면 그 파일을 여는 건 sudo 가 아니라
+   호출한 셸이라 `environ` 이 0400·`User=fixup-agent` 라서 늘 Permission denied 다 —
+   `sudo cat` 으로 읽어서 파이프로 넘긴다),
+   `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`,
+   정적 파일이 Caddy 로 나가는지 확인. **정적 사본은 새 릴리스를 한 번 배포한 뒤에 생긴다 —
+   아직 없으면(이번처럼 설정 변경을 새 릴리스 배포보다 먼저 한 경우) 이 확인은 다음 배포
+   뒤에 한다.** 먼저 실제 조각 파일 이름을 하나 찾는다(디렉터리가 섞여 나오지 않도록 파일만
+   고르고, 전체 경로가 아니라 파일 이름만 찍는다):
+   `sudo find /var/www/fixup-image-agent/static/current/_next/static/chunks -maxdepth 1 -type f -name '*.js' -printf '%f\n' | head -1`.
+   `http://127.0.0.1/…` 는 Host 가 `127.0.0.1` 이라 어느 사이트 블록과도 안 맞으니 쓰지 않는다 —
+   도메인이면 `curl -sI https://formwith.fix-up.kr/_next/static/chunks/<조각> | grep -i cache-control`,
+   IP 뿐이면 `curl -sI -H "Host: <IP>" http://127.0.0.1/_next/static/chunks/<조각> | grep -i cache-control`
+   (또는 `http://<IP>/…` 로 직접),
+   `curl -sI https://formwith.fix-up.kr/ | head -1`(200 이어야 한다),
+   `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" http://54.180.68.212/`(308 →
+   `https://formwith.fix-up.kr/` 이어야 한다).
+
+   감시 메일이 실제로 가는지도 시험해 본다: `ALERT_EMAIL` 을 app.env 에 넣은 뒤
+   `sudo env MONITOR_STATE_DIR=/tmp/mon-test MONITOR_HEALTH_URL=http://127.0.0.1:9/ bash /usr/local/lib/fixup-image-agent/monitor.sh`
+   를 두 번 돌린다(준비 상태 확인이 두 번 연속 실패해야 메일을 보낸다) — 받은편지함에
+   `[FormWith 서버] down` 메일이 와야 한다. 끝나면 `sudo rm -rf /tmp/mon-test` 로 시험 상태를
+   지운다. 메일이 안 오면 `sudo journalctl -t …` 를 뒤지기 전에, 방금 돌린 명령 자체의 출력에
+   찍힌 「감시 메일을 보내지 못했습니다」줄부터 본다 — 손으로 돌리면 그 자리에서 실패 이유를
+   알려 준다.
+
+접근 기록 파일 이름이 바뀐다: 손으로 만들어 두었던 동안은 `/var/log/caddy/formwith.access.log`
+였고, `install-host.sh` 가 도메인 사이트를 깐 뒤로는 그 기록도 `/var/log/caddy/fixup-image-agent.access.log`
+에 쌓인다.
+
+**되돌리기**: `sudo test -d /root/caddy-sites.bak && sudo rm -rf /etc/caddy/sites && sudo cp -a /root/caddy-sites.bak /etc/caddy/sites && sudo cp /root/unit.bak /etc/systemd/system/fixup-image-agent.service && sudo systemctl daemon-reload && sudo systemctl restart fixup-image-agent && sudo systemctl reload-or-restart caddy`
+(맨 앞의 `test -d`는 안전장치다 — 백업이 없으면 `&&` 사슬이 그 자리에서 멈춰 아무것도 안
+지운다.)
+
+### 서버 크기 바꾸기 (AWS 콘솔, 약 5분 정지)
+
+운영 서버는 **운영 AWS 계정**에 있다. 콘솔 EC2 → 인스턴스 선택 →
+
+0. **탄력적 IP** 목록에 `54.180.68.212` 가 있고 운영 인스턴스에 연결돼 있는지 본다.
+   **없으면 아래를 진행하지 않는다** — 중지·시작하면 공인 IP 가 바뀌어 도메인(A 레코드 →
+   `54.180.68.212`)이 끊긴다. 먼저 탄력적 IP 를 할당·연결하고 도메인 A 레코드를 그 주소로
+   바꾼 뒤 진행한다(이때 위 「서버 설정 바꾸기」 3단계의 두 번째 인자도 새 주소로 바꾼다)
+1. **인스턴스 상태 → 중지**, 「중지됨」이 될 때까지 기다린다
+2. **작업 → 인스턴스 설정 → 인스턴스 유형 변경** → `t3.medium` → 적용
+3. **인스턴스 상태 → 시작**. 탄력적 IP 는 **0단계를 확인했을 때만** 그대로 붙어 있다(주소
+   안 바뀜)
+4. **작업 → 인스턴스 설정 → 크레딧 사양 변경**에서 `unlimited` 인지 본다. `standard` 면 CPU
+   크레딧이 떨어질 때 느려진다. `unlimited` 는 오래 바쁘면 CPU 크레딧 추가 요금이 붙을 수
+   있다(`t3.medium` 기준 크레딧을 다 쓴 뒤 시간당 소액). `standard` 는 요금 대신 느려지는
+   쪽이다
+5. 위 「서버 설정 바꾸기」 절차로 메모리 상한을 넣는다
+
+### 배포 전에 최근 생성 요청을 본다
+
+배포는 재시작이다. 끊기면 결과를 잃는 생성(상세페이지·리디자인·캐릭터의 동기 경로)이 도는 중이면
+기다렸다 한다. **Caddy 는 요청이 끝날 때 기록을 남긴다** — 그래서 아래 숫자는 "지금 도는 중인
+개수"가 아니라 **「최근 5분 안에 끝난 생성 요청 수」**다. 지금 진행 중인 것은 이 숫자와 별개로,
+숫자가 0 이어도 잠깐 기다렸다 다시 보는 식으로 가늠한다(끝나야 기록되므로).
+
+Caddy 기록은 사이트마다 파일이 나뉘므로(`*.access.log`) 전부 보고, 「최근 5분」은 줄 수가 아니라
+기록 시각(JSON 기록의 `ts`, 초 단위 실수)으로 거른다. 셀 때는 **`"method":"POST"` 인 줄만** 센다 —
+안 그러면 캐릭터 목록을 그냥 불러보는 `GET /api/characters` 같은 것도 생성으로 잘못 잡힌다:
+
+```bash
+sudo sh -c 'cat /var/log/caddy/*.access.log' | awk -v t=$(( $(date +%s) - 300 )) 'match($0, /"ts":[0-9.]+/) { if (substr($0, RSTART+5, RLENGTH-5)+0 >= t) print }' | grep -F '"method":"POST"' | grep -cE '"/api/(pdp/(images|key-visual)|redesign/(generate|edit-section)|characters)'
+```
+
+`tail -n 5000` 이 아니라 파일 전체(`cat`)를 본다 — 기록은 10MiB 에서 잘려 가벼우니 전체를
+읽어도 무겁지 않은데, 5000줄은 100명 부하에서 1분치뿐이라 「최근 5분」을 거르기에 모자란다.
+
+최근 5분 안에 끝난 생성 요청이 0 이면 배포한다.
+
 ## 되돌리기
 
 ```bash
