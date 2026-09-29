@@ -16,7 +16,8 @@ import { billableHeaders } from "../../../lib/billable-fetch";
 import { jobId } from "../../../lib/running-jobs";
 import { useRunningJobs } from "../../_components/running-jobs";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { canViewSnsResult, restoredSnsView } from "../saved-view";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -66,6 +67,7 @@ async function projectRequest(
 }
 
 export function SnsProjectClient({ projectId }: { projectId: string }) {
+  const requestedView = useSearchParams().get("view");
   const [project, setProject] = React.useState<SnsProjectRecord>();
   const [view, setView] = React.useState<"copy" | "result">("copy");
   const [busy, setBusy] = React.useState<"loading" | "planning" | "generating" | undefined>("loading");
@@ -137,12 +139,15 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }, [projectId, request]);
 
   React.useEffect(() => {
+    let live = true;
     projectRequest(`/api/sns/projects/${projectId}/plan`)
       .then((loaded) => {
+        if (!live) return;
         setProject(loaded);
-        if (loaded.data.flow) setView(loaded.data.flow.stage);
+        setView(restoredSnsView(loaded.data.flow, requestedView));
       })
       .catch(async (error) => {
+        if (!live) return;
         /*
           **404 면 남의 작업일 수 있다.** 회원용 경로는 RLS 를 타서 내 것과
           같은 팀 것만 준다. 관리자에게는 별도 통로가 있으므로 한 번 더 묻는다.
@@ -151,17 +156,19 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         if (error instanceof ProjectRequestError && error.status === 404) {
           const response = await fetch(`/api/admin/works/sns/${projectId}`, { cache: "no-store" });
           const body = await response.json().catch(() => null) as { ok?: boolean; work?: SnsProjectRecord } | null;
+          if (!live) return;
           if (body?.ok && body.work) {
             setReadOnly(true);
             setProject(body.work);
-            if (body.work.data.flow) setView(body.work.data.flow.stage);
+            setView(restoredSnsView(body.work.data.flow, requestedView));
             return;
           }
         }
         setMessage(error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.");
       })
-      .finally(() => setBusy(undefined));
-  }, [projectId]);
+      .finally(() => { if (live) setBusy(undefined); });
+    return () => { live = false; };
+  }, [projectId, requestedView]);
 
   const generationActive = hasActiveQueuedGeneration(project?.data.flow);
 
@@ -454,17 +461,10 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       <StepBar
         steps={STEPS}
         current={view}
-        /*
-          **못 가는 곳은 눌리지 않게 한다.** `onJump` 안에서 조용히 돌아서면
-          단추는 활성으로 보이고 hover 까지 먹는데 눌러도 아무 일이 없다 —
-          원고를 다 고친 사람이 「05 결과」를 누르고 고장으로 읽는다
-          (2026-09-16 독립 리뷰). 전에는 `onJump` 자체가 없어서 다섯 단추가
-          전부 비활성이었다. 이미지 쪽도 `allowJump` 로 막는다.
-        */
-        allowJump={(id) => id !== "result" || view === "result"}
+        allowJump={(id) => id !== "result" || canViewSnsResult(flow)}
         onJump={(id) => {
-          if (id === "copy") return view === "result" ? setView("copy") : undefined;
-          if (id === "result") return undefined;
+          if (id === "copy") return setView("copy");
+          if (id === "result") { if (canViewSnsResult(flow)) setView("result"); return; }
           // **누른 단계도 함께 싣는다.** 안 실으면 03 을 눌러도 01 이 열린다
           // (2026-09-17 사용자 보고).
           router.push(rerunHref("/sns/new", projectId, id));

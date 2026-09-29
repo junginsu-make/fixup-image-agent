@@ -123,8 +123,8 @@ describe("snsRerunJump", () => {
   });
 
   it("돌아온 길이면 04·05 는 원래 작업으로 간다", () => {
-    expect(snsRerunJump("copy", { rerunFrom: "w1", seeded: true })).toEqual({ kind: "go", href: "/sns/w1" });
-    expect(snsRerunJump("result", { rerunFrom: "w1", seeded: true })).toEqual({ kind: "go", href: "/sns/w1" });
+    expect(snsRerunJump("copy", { rerunFrom: "w1", seeded: true })).toEqual({ kind: "go", href: "/sns/w1?view=copy" });
+    expect(snsRerunJump("result", { rerunFrom: "w1", seeded: true })).toEqual({ kind: "go", href: "/sns/w1?view=result" });
   });
 
   it("새로 만드는 중이거나 값을 못 불러왔으면 04·05 를 안 연다", () => {

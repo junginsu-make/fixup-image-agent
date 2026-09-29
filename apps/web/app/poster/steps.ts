@@ -68,7 +68,11 @@ export function posterSteps(promptMode?: PromptMode): StepDefinition[] {
 export function currentPosterStep(input: {
   hasImages: boolean;
   promptMode?: PromptMode;
+  planOpen?: boolean;
 }): string {
+  if (input.promptMode === "verbatim") return "result";
+  // 기획은 사이드 패널이다. 결과가 있어도 패널을 열면 현재 단계는 04다.
+  if (input.planOpen) return "plan";
   if (input.hasImages) return "result";
-  return input.promptMode === "verbatim" ? "result" : "plan";
+  return "plan";
 }
