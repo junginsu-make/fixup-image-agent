@@ -82,6 +82,26 @@ describe("어느 그림을 뽑는가", () => {
     expect(client, "배열 번호로 되돌아가면 안 된다").not.toContain("setPosition(index)");
   });
 
+  /*
+   * **포스터는 그림 id 를 함께 보낸다**(2026-09-29). 번호만 보내면 서버가 겹친
+   * 번호 중 하나를 골라, 미리보기와 다른 그림이 ZIP 에 담겼다.
+   */
+  it("고른 그림의 id 를 함께 보낸다", () => {
+    expect(client).toMatch(/imageId: images\?\.find\(\(image\) => image\.position === position\)\?\.imageId \?\? undefined/);
+  });
+
+  /*
+   * 서버도 그 id 로 고른다 — 파일 길과 **같은 규칙**(`findPosterImage`)으로.
+   * 규칙 자체는 `image-lineage.test.ts` 가 값으로 잰다. 여기서는 라우트가 그것을
+   * 부르는지, 옛 「번호가 같은 첫 줄」로 돌아가지 않았는지 본다.
+   */
+  it("서버는 그림 id 로, 파일 길과 같은 규칙으로 고른다", () => {
+    const exportRoute = readFileSync(new URL("../../api/ad/export/route.ts", import.meta.url), "utf8");
+    expect(exportRoute).toContain("parsed.data.imageId ?? String(parsed.data.position)");
+    expect(exportRoute).toContain("findPosterImage(images, key)");
+    expect(exportRoute).not.toContain("image.variantIndex === position");
+  });
+
   it("두 목록 다 순수 규칙이 번호를 정한다", () => {
     expect(client).toContain("posterImagePicks(projectId,");
     expect(client).toContain("libraryImagePicks(");
@@ -114,7 +134,7 @@ describe("고른 그림이 없는 상태로 두지 않는다", () => {
     // 판단이 `startingPosition` 으로 옮겨 갔다(주소로 들어온 변형을 먼저 본다).
     // 되돌아가는 자리는 그대로 「첫 장의 서버 번호」이고, 그 규칙은
     // `export-rules.test.ts` 의 「어느 변형을 고를까」가 값으로 잠근다.
-    expect(client).toContain("setPosition(startingPosition(loaded, preferred))");
+    expect(client).toContain("setPosition(startingPosition(loaded, preferredPosition(loaded, preferred)))");
   });
 
   /**
@@ -241,7 +261,7 @@ describe("결과 화면이 광고로 보낸다", () => {
   );
 
   it("변형마다 주소를 만든다", () => {
-    expect(detail).toContain("adExportHref(project.id, image.variantIndex)");
+    expect(detail).toContain("adExportHref(project.id, image.id)");
   });
 
   /** 꺼져 있는데 버튼이 보이면 눌러서 404 를 만난다. */
@@ -306,7 +326,7 @@ describe("`/ad` 가 포털부터 묻는다", () => {
 
   /** 주소로 들어온 그림은 `chooseItem` 을 거쳐야 그림 목록이 뜬다. */
   it("주소로 들어온 그림을 목록까지 불러 고른다", () => {
-    expect(client).toContain("void chooseItem(wanted, positionFromQuery(query.get(\"position\")))");
+    expect(client).toMatch(/void chooseItem\(wanted, \{\s*image: query\.get\("image"\),\s*position: positionFromQuery\(query\.get\("position"\)\),?\s*\}\)/);
   });
 });
 

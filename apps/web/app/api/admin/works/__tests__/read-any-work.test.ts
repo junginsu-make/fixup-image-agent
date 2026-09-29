@@ -19,6 +19,8 @@ let posterRow: Record<string, unknown> | null = null;
 const queried: string[] = [];
 let signedPaths: string[] = [];
 let characterRows: Array<Record<string, unknown>> = [];
+/** 포스터 그림 줄 여럿. 비어 있으면 지금까지처럼 `posterRow` 하나를 준다. */
+let posterImageRows: Array<Record<string, unknown>> | null = null;
 
 function builderFor(table: string) {
   queried.push(table);
@@ -34,7 +36,9 @@ function builderFor(table: string) {
     maybeSingle: async () => ({ data: row, error: null }),
     then: (resolve: (x: unknown) => unknown) =>
       Promise.resolve(resolve({
-        data: table === "characters" ? characterRows : row ? [row] : [],
+        data: table === "characters" ? characterRows
+          : table === "poster_images" && posterImageRows ? posterImageRows
+          : row ? [row] : [],
         error: null,
       })),
   };
@@ -60,7 +64,7 @@ vi.mock("../../../../../lib/supabase/admin", () => ({
 
 vi.mock("../../../../../lib/local-store", () => ({ isLocalStoreEnabled: () => false }));
 
-const { readAnyWork, readAnyCharacter } = await import("../store");
+const { readAnyWork, readAnyCharacter, readAnyWorkImages } = await import("../store");
 
 /** 표에 실제로 있는 칸 이름 그대로. 화면이 쓰는 이름과 다르다. */
 function snsProjectRow(): Record<string, unknown> {
@@ -77,7 +81,10 @@ function snsProjectRow(): Record<string, unknown> {
   };
 }
 
-beforeEach(() => { snsRow = null; posterRow = null; queried.length = 0; signedPaths = []; characterRows = []; });
+beforeEach(() => {
+  snsRow = null; posterRow = null; queried.length = 0; signedPaths = []; characterRows = [];
+  posterImageRows = null;
+});
 
 describe("readAnyWork", () => {
   it("카드뉴스 한 건을 소유자와 무관하게 읽는다", async () => {
@@ -198,5 +205,33 @@ describe("readAnyCharacter", () => {
   it("없으면 null 이다 — 던지지 않는다", async () => {
     characterRows = [];
     expect(await readAnyCharacter("없는-id")).toBeNull();
+  });
+});
+
+/*
+ * **관리자 읽기 전용 화면도 만든 차례로 받는다**(2026-09-29 리뷰).
+ *
+ * 이 목록은 결과 화면(`PosterClient`)에 그대로 들어가고, 거기서 다시 만든 회차를
+ * 「1회차·2회차」로 이름 붙인다. 번호(`variant_index`)로만 줄 세우면 같은 번호끼리의
+ * 차례를 DB 가 보장하지 않아 **두 번째로 만든 것이 1회차**가 될 수 있었다.
+ */
+describe("readAnyWorkImages — 차례", () => {
+  it("만든 차례로 준다 — 번호가 같아도 먼저 만든 것이 먼저다", async () => {
+    const row = (id: string, request: string, variantIndex: number, createdAt: string) => ({
+      id, user_id: "남의-id", project_id: "p1", generation_request_id: request, variant_index: variantIndex,
+      selected: false, asset_path: `남의-id/poster/p1/${request}/${variantIndex}.png`, thumb_path: null,
+      width: 1024, height: 1536, review: null, created_at: createdAt,
+    });
+    // DB 가 번호로만 줄 세워 준 그대로 — 둘째 회차가 앞에 섞여 온다.
+    posterImageRows = [
+      row("둘째-0", "req-2", 0, "2026-09-29T09:00:00+00:00"),
+      row("첫째-0", "req-1", 0, "2026-09-29T08:00:00+00:00"),
+      row("첫째-1", "req-1", 1, "2026-09-29T08:00:00+00:00"),
+      row("둘째-1", "req-2", 1, "2026-09-29T09:00:00+00:00"),
+    ];
+
+    const images = await readAnyWorkImages("p1");
+
+    expect(images.map((image) => image.id)).toEqual(["첫째-0", "첫째-1", "둘째-0", "둘째-1"]);
   });
 });

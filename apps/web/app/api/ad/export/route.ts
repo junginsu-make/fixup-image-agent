@@ -8,6 +8,7 @@ import { finishForAd } from "../../../../lib/ad/finish";
 import { getLibraryImageFile } from "../../../../lib/server-library";
 import { getReferenceImageFile } from "../../../../lib/reference-images";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
+import { findPosterImage } from "@fixup/poster-core";
 import { posterImageBytes } from "../../../../lib/poster/asset-bytes";
 import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../../lib/ad/batch";
 import { needsCutout } from "../../../../lib/ad/master-plan";
@@ -49,6 +50,13 @@ const RequestSchema = z.object({
   itemId: z.string().trim().min(1).max(64),
   // 한 작업의 그림 수에는 상한이 있다(`api/library/route.ts`).
   position: z.number().int().min(0).max(1_000),
+  /**
+   * 포스터 그림의 id. **있으면 번호보다 먼저 본다.**
+   *
+   * 포스터 변형 번호는 회차마다 0 부터라 겹친다 — 번호로 고르면 미리보기와 다른
+   * 그림이 ZIP 에 담겼다(2026-09-29). 옛 화면은 안 보내고, 그때는 번호로 본다.
+   */
+  imageId: z.string().trim().min(1).max(64).optional(),
   // 규격 id 는 `naver-smartchannel` 이 가장 길다(19자).
   specIds: z.array(z.string().trim().min(1).max(64)).min(1).max(MAX_SPECS_PER_REQUEST),
   /**
@@ -74,10 +82,17 @@ const RequestSchema = z.object({
 async function posterImageFile(
   userId: string,
   projectId: string,
-  position: number,
+  /** 그림 id, 또는 옛 화면이 보낸 변형 번호. */
+  key: string,
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
-  const images = await posterStoresForUser(userId).images.byProject(projectId);
-  const found = images.find((image) => image.variantIndex === position);
+  // 이름표는 필요 없다 — 요청 장부를 안 읽는다.
+  const images = await posterStoresForUser(userId).images.byProject(projectId, { lineage: false });
+  /*
+   * **파일 길과 같은 규칙으로 고른다**(`findPosterImage`). 전에는 여기서 「번호가
+   * 같은 첫 줄」을, 미리보기(파일 길)는 「번호가 같은 가장 최근 줄」을 골라 둘이
+   * 다른 그림이었다. 옛 화면이 번호만 보내도 이제 미리보기에 뜬 그 그림이 나간다.
+   */
+  const found = findPosterImage(images, key);
   if (!found) return null;
   const { bytes, contentType } = await posterImageBytes(found.assetPath);
   return { bytes, mimeType: contentType };
@@ -168,7 +183,9 @@ export async function POST(request: Request) {
       언젠가 「운영자는 예외」가 끼어들지 않는다.
     */
     const file = parsed.data.source === "poster"
-      ? await posterImageFile(auth.member.userId, parsed.data.itemId, parsed.data.position)
+      ? await posterImageFile(
+        auth.member.userId, parsed.data.itemId, parsed.data.imageId ?? String(parsed.data.position),
+      )
       : parsed.data.source === "reference"
         ? await getReferenceImageFile(auth.member.userId, parsed.data.itemId)
         : await getLibraryImageFile(

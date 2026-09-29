@@ -8,7 +8,7 @@ import {
   failureMessage, previewWidth, safeAreaOverlayStyle, safeAreaPercent, specRows, zipEntryName,
   PREVIEW_MAX_WIDTH, PORTAL_LABEL, SHRINK_WARNING, adSourceItems, bytesFromDataUrl, previewBackdrop,
   cropNotice, libraryImagePicks, missingRequiredCount, posterImagePicks, actionNotices,
-  rowsForPortals, selectionForPortals, keepPickedInPortals, itemFromQuery, positionFromQuery, startingPosition, togglePortal, AD_PORTALS,
+  rowsForPortals, selectionForPortals, keepPickedInPortals, itemFromQuery, positionFromQuery, preferredPosition, startingPosition, togglePortal, AD_PORTALS,
 } from "../export-rules";
 
 const rows = specRows(planDerivation);
@@ -274,7 +274,7 @@ describe("고를 수 있는 것을 고르는 규칙", () => {
     { id: "R5", title: "내 캐릭터 스케치", mine: true, thumbUrl: "r5" },
   ];
   const posters = [
-    { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ variantIndex: 0 }] },
+    { id: "P1", title: "광고 (2048×1072)", status: "done", images: [{ id: "img-0", variantIndex: 0 }] },
     { id: "P2", title: "만드는 중", status: "generating", images: [] },
     { id: "P3", title: "결과 없음", status: "done", images: [] },
   ];
@@ -552,22 +552,38 @@ describe("어느 그림을 뽑는가", () => {
    * 3-0 에서 같은 사실(번호가 겹친다)을 **저장 경로 충돌**로만 봤고 화면 쪽은
    * 못 봤다. 같은 사실의 다른 얼굴이다.
    */
-  it("포스터 그림은 변형 번호를 그대로 보낸다", () => {
-    const picks = posterImagePicks("p1", [{ variantIndex: 0 }, { variantIndex: 3 }]);
-    expect(picks.map((pick) => pick.position)).toEqual([0, 3]);
-  });
+  const 그림 = (id: string, variantIndex: number, generationRequestId = "req-1", edit: { parentImageId: string | null; instruction: string } | null = null) =>
+    ({ id, variantIndex, generationRequestId, edit });
 
-  /** 겹친 번호는 하나로 접는다 — 안 접으면 같은 그림이 두 번 뜨고 React key 도 겹친다. */
-  it("겹친 변형 번호를 접는다", () => {
+  /*
+   * **겹친 번호를 접지 않는다 — 그림마다 따로 고른다**(2026-09-29).
+   *
+   * 전에는 「같은 번호면 같은 파일」이라 보고 접었다. 저장 경로에 회차가 들어간
+   * 뒤로(`posterAssetPath`) 그 전제는 깨졌다 — 고친 결과(번호 0)가 변형 1 과
+   * 한 칸으로 접혀 고를 수 없었고, 미리보기는 고친 그림·ZIP 은 원본이었다.
+   */
+  it("번호가 겹쳐도 그림마다 한 칸이다 — 고친 결과도 고를 수 있다", () => {
     const picks = posterImagePicks("p1", [
-      { variantIndex: 0 }, { variantIndex: 0 }, { variantIndex: 1 },
+      그림("v1", 0), 그림("v2", 1), 그림("e1", 0, "req-2", { parentImageId: "v2", instruction: "밤으로" }),
     ]);
-    expect(picks.map((pick) => pick.position)).toEqual([0, 1]);
+    expect(picks.map((pick) => pick.imageId)).toEqual(["v1", "v2", "e1"]);
   });
 
-  it("주소가 변형 번호를 가리킨다 — 배열 번호가 아니다", () => {
-    const picks = posterImagePicks("p1", [{ variantIndex: 5 }]);
-    expect(picks[0]!.image).toBe("/api/poster/projects/p1/images/5/file");
+  it("화면 안에서 고르는 번호는 겹치지 않는다", () => {
+    const picks = posterImagePicks("p1", [그림("v1", 0), 그림("e1", 0, "req-2")]);
+    expect(new Set(picks.map((pick) => pick.position)).size).toBe(2);
+  });
+
+  it("주소는 그림 id 로 건다 — 번호로 걸면 「그 번호 중 최근 것」이 뜬다", () => {
+    const [pick] = posterImagePicks("p1", [그림("img-5", 5)]);
+    expect(pick!.image).toBe("/api/poster/projects/p1/images/img-5/file");
+  });
+
+  it("이름은 결과 화면과 같다", () => {
+    const picks = posterImagePicks("p1", [
+      그림("v1", 0), 그림("v2", 1), 그림("e1", 0, "req-2", { parentImageId: "v2", instruction: "밤으로" }),
+    ]);
+    expect(picks.map((pick) => pick.sectionName)).toEqual(["변형 1", "변형 2", "고친 결과 1"]);
   });
 
   it("그림이 없으면 빈 목록이다", () => {
@@ -617,9 +633,9 @@ describe("작업을 썸네일로 고른다", () => {
     const items = adSourceItems({
       works: [],
       references: [],
-      posters: [{ id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] }],
+      posters: [{ id: "P1", title: "광고", status: "done", images: [{ id: "img-2", variantIndex: 2 }] }],
     });
-    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/2/file?size=thumb");
+    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/img-2/file?size=thumb");
   });
 
   /** 목록 카드는 작은 사본을 먼저 쓴다. 원본은 2MB 를 넘어 격자에 못 깐다. */
@@ -987,6 +1003,35 @@ describe("주소로 들어온 그림을 고른다", () => {
   });
 });
 
+/**
+ * **결과 화면은 그림 id 를 싣는다**(2026-09-29).
+ *
+ * 전에는 변형 번호(`position`)를 실었다. 고친 결과는 번호가 늘 0 이라 「고친 결과 1」
+ * 밑의 단추를 눌러도 변형 1 이 골라졌다. 옛 주소(번호)도 계속 받는다.
+ */
+describe("주소가 가리킨 그림", () => {
+  const picks = posterImagePicks("p1", [
+    { id: "v1", variantIndex: 0, generationRequestId: "req-1" },
+    { id: "v2", variantIndex: 1, generationRequestId: "req-1" },
+    { id: "e1", variantIndex: 0, generationRequestId: "req-2" },
+  ]);
+
+  it("그림 id 가 있으면 그 그림을 고른다 — 번호가 겹쳐도", () => {
+    expect(preferredPosition(picks, { image: "e1", position: null })).toBe(2);
+    expect(preferredPosition(picks, { image: "v1", position: null })).toBe(0);
+  });
+
+  it("id 가 없으면 옛 주소의 번호를 쓴다", () => {
+    expect(preferredPosition(picks, { image: null, position: 1 })).toBe(1);
+  });
+
+  it("모르는 id 는 번호로, 번호도 없으면 없음", () => {
+    expect(preferredPosition(picks, { image: "nope", position: 1 })).toBe(1);
+    expect(preferredPosition(picks, { image: "nope", position: null })).toBeNull();
+    expect(preferredPosition(picks, null)).toBeNull();
+  });
+});
+
 describe("주소로 들어온 변형 번호", () => {
   it("숫자면 그대로 쓴다", () => {
     expect(positionFromQuery("2")).toBe(2);
@@ -1105,11 +1150,11 @@ describe("사본과 원본을 따로 싣는다", () => {
     const items = adSourceItems({
       works: [],
       references: [],
-      posters: [{ id: "P1", title: "광고", status: "done", images: [{ variantIndex: 2 }] }],
+      posters: [{ id: "P1", title: "광고", status: "done", images: [{ id: "img-2", variantIndex: 2 }] }],
     });
-    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/2/file?size=thumb");
+    expect(items[0]!.thumbnail).toBe("/api/poster/projects/P1/images/img-2/file?size=thumb");
     // `?size=thumb` 이 없으면 원본이다(파일 라우트 주석).
-    expect(items[0]!.original).toBe("/api/poster/projects/P1/images/2/file");
+    expect(items[0]!.original).toBe("/api/poster/projects/P1/images/img-2/file");
   });
 
   it("작업물은 표지 원본을 원본 칸에 싣는다", () => {
@@ -1156,9 +1201,9 @@ describe("사본과 원본을 따로 싣는다", () => {
 
 describe("미리보기 줄도 확대는 원본으로 연다", () => {
   it("포스터 변형은 원본을 걸고 원본으로 확대한다", () => {
-    const [pick] = posterImagePicks("P1", [{ variantIndex: 0 }]);
-    expect(pick!.image).toBe("/api/poster/projects/P1/images/0/file");
-    expect(pick!.original).toBe("/api/poster/projects/P1/images/0/file");
+    const [pick] = posterImagePicks("P1", [{ id: "img-0", variantIndex: 0, generationRequestId: "req-1" }]);
+    expect(pick!.image).toBe("/api/poster/projects/P1/images/img-0/file");
+    expect(pick!.original).toBe("/api/poster/projects/P1/images/img-0/file");
   });
 
   it("작업물 낱장은 받은 주소를 원본으로도 쓴다", () => {

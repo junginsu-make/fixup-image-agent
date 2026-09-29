@@ -21,7 +21,7 @@ import { PosterClient } from "../[id]/poster-client";
 
 let view: ReactTestRenderer;
 const project = { id: "saved", title: "저장된 이미지", status: "done", ratio: "square", modelId: "gpt-image-2", data: { instruction: "저장된 지시", variants: 1, promptMode: "assisted" as const, slots: { ...EMPTY_SLOTS, headline: "보존할 기획 문구" } } };
-const images = [{ id: "saved-image", variantIndex: 0, selected: true, url: "/saved-result.png" }];
+const images = [{ id: "saved-image", variantIndex: 0, generationRequestId: "req-1", selected: true, url: "/saved-result.png" }];
 const label = (node: unknown): string => typeof node === "string" ? node : node && typeof node === "object" && "children" in node ? (node.children as unknown[]).map(label).join("") : "";
 const button = (text: string) => view.root.findAllByType("button").find(node => label(node).includes(text))!;
 const current = () => label(view.root.findAllByType("button").find(node => node.props["aria-current"] === "step"));

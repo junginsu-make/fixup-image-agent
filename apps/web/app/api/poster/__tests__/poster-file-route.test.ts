@@ -164,6 +164,22 @@ describe("GET 포스터 결과 파일", () => {
     expect(reads).toEqual(["u1/poster/p1/req-1/0.png"]);
   });
 
+  /*
+   * Postgres 는 시각의 끝자리 0 을 떼고 준다 — 초에서 딱 떨어지면 소수점이 없다.
+   * 글자(`localeCompare`)로 견주면 `…01+00:00` 이 `…01.5+00:00` 보다 뒤로 가서
+   * **먼저 만든 장**을 줬다(2026-09-29 리뷰). 시각으로 견준다.
+   */
+  it("옛 번호 주소의 「가장 나중」은 시각으로 가린다 — 소수점 자리 수가 달라도", async () => {
+    byProject = [
+      { id: "old", createdAt: "2026-09-29T08:00:01+00:00", variantIndex: 0, assetPath: "u1/poster/p1/req-1/0.png", thumbPath: null },
+      { id: "new", createdAt: "2026-09-29T08:00:01.5+00:00", variantIndex: 0, assetPath: "u1/poster/p1/req-2/0.png", thumbPath: null },
+    ];
+
+    await call("https://x/f", "0");
+
+    expect(reads).toEqual(["u1/poster/p1/req-2/0.png"]);
+  });
+
   it("옛 번호 주소는 가장 나중 장으로 떨어진다 — 화면이 비는 것보다 낫다", async () => {
     byProject = [
       { id: "old", createdAt: "2026-01-01", variantIndex: 0, assetPath: "u1/poster/p1/req-1/0.png", thumbPath: null },

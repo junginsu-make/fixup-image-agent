@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { AD_SPECS, type AdSpec } from "../../lib/ad/specs";
 import { isCharacterReferenceTitle } from "../../lib/character-library";
+import { orderPosterImages, posterImageLabels, type PosterImageEdit } from "@fixup/poster-core";
 
 /**
  * 광고 규격 화면의 순수한 규칙들.
@@ -193,7 +194,8 @@ export interface AdPosterWork {
   id: string;
   title: string;
   status: string;
-  images?: Array<{ variantIndex: number }>;
+  /** 그림 id 로 주소를 건다 — 번호로 걸면 「그 번호 중 가장 최근 것」이 뜬다. */
+  images?: Array<{ id: string; variantIndex: number; createdAt?: string }>;
 }
 
 /**
@@ -270,9 +272,12 @@ export function adSourceItems(input: {
     .filter((project) => (project.images?.length ?? 0) > 0)
     .map((project) => {
       // 첫 변형의 사본을 쓴다. 원본은 2MB 를 넘어 목록에 깔 수 없다.
-      const first = project.images?.[0];
+      // **먼저 만든 것부터 본다.** 목록 응답은 번호로만 줄 서 있어 다시 만든 회차가
+      // 여럿이면 어느 변형 1 이 앞일지 정해져 있지 않다(2026-09-29 리뷰).
+      const first = orderPosterImages((project.images ?? [])
+        .map((image) => ({ ...image, createdAt: image.createdAt ?? "" })))[0];
       const file = first
-        ? `/api/poster/projects/${project.id}/images/${first.variantIndex}/file`
+        ? `/api/poster/projects/${project.id}/images/${first.id}/file`
         : null;
       return {
         id: project.id,
@@ -358,44 +363,69 @@ export interface AdImagePick {
    */
   original: string;
   sectionName: string;
-  /** 서버에 보낼 값. **배열 번호가 아니다.** */
+  /**
+   * 화면이 고른 것을 기억하는 번호. 라이브러리는 서버 번호 그대로고, 포스터는
+   * **목록 안 순번**이다 — 포스터의 서버 쪽 열쇠는 아래 `imageId` 다.
+   */
   position: number;
+  /**
+   * 포스터 그림의 id. **서버에는 이것으로 어느 그림인지 말한다.** 라이브러리·
+   * 참고 이미지는 `null` 이다(그쪽은 `position` 이 서버 번호다).
+   *
+   * 선택형(`?`)이 아니라 필수 `null` 이다 — 그림 한 장을 만드는 곳이 셋이라,
+   * 하나가 빠뜨리면 컴파일이 막게 한다.
+   */
+  imageId: string | null;
 }
 
 /**
- * 포스터 작업의 그림들.
+ * 포스터 작업의 그림들 — **그림마다 한 칸, 그림 id 로.**
  *
- * **겹친 변형 번호는 하나로 접는다.** 안 접으면 같은 그림이 두 번 뜨고 React
- * key 도 겹친다.
+ * 전에는 겹친 변형 번호를 하나로 접었다. 「같은 번호면 같은 파일」이라는 전제
+ * 였는데, 저장 경로에 회차가 들어간 뒤로(`posterAssetPath`) 그 전제는 깨졌다.
+ * 그래서 「이 장만 고치기」 결과(번호가 늘 0)가 변형 1 과 한 칸으로 접혀 고를 수
+ * 없었고, 미리보기(번호 → 가장 최근 = 고친 그림)와 ZIP(번호 → 목록 첫 것 =
+ * 원본)이 다른 그림이었다(2026-09-29).
  *
- * **접어도 잃는 그림이 없다.** `assetPath` 가 `(userId, projectId, variantIndex)`
- * 의 순수 함수이고(`supabase-store-core.ts` 의 `posterAssetPath`) 그것을 쓰는
- * 곳이 저장 한 군데뿐이라, **같은 번호의 행은 반드시 같은 파일을 가리킨다** —
- * 겹친 행은 이미 서로의 파일을 덮어쓴 뒤다(설계 §10 3-0).
- *
- * **그 불변식이 여기를 떠받친다.** `byProject` 의 동점 정렬은 보장되지 않아
- * 미리보기와 내보내기가 서로 다른 **행**을 집을 수 있는데, 같은 파일을
- * 가리키므로 결과가 같다. `assetPath` 규칙을 바꾸면 여기가 먼저 깨진다.
+ * 이름은 결과 화면과 같은 규칙(`posterImageLabels`)을 쓴다. 차례는 받은 그대로다 —
+ * 목록 응답이 이미 만든 차례다(`byProject`).
  */
 export function posterImagePicks(
   projectId: string,
-  images: Array<{ variantIndex: number }>,
+  images: ReadonlyArray<{
+    id: string; variantIndex: number; generationRequestId: string; edit?: PosterImageEdit | null;
+  }>,
 ): AdImagePick[] {
-  const seen = new Set<number>();
-  const picks: AdImagePick[] = [];
-  for (const image of images) {
-    if (seen.has(image.variantIndex)) continue;
-    seen.add(image.variantIndex);
-    const file = `/api/poster/projects/${projectId}/images/${image.variantIndex}/file`;
-    picks.push({
+  const labels = posterImageLabels(images);
+  return images.map((image, index) => {
+    const file = `/api/poster/projects/${projectId}/images/${image.id}/file`;
+    return {
       // 포스터 변형은 전부터 원본을 걸었다. 확대도 같은 것을 연다.
       image: file,
       original: file,
-      sectionName: `변형 ${image.variantIndex + 1}`,
-      position: image.variantIndex,
-    });
-  }
-  return picks;
+      sectionName: labels[image.id]!.title,
+      position: index,
+      imageId: image.id,
+    };
+  });
+}
+
+/**
+ * 광고 화면을 열 때 고를 그림 — 주소가 가리킨 것.
+ *
+ * 결과 화면은 이제 그림 id(`image`)를 싣는다. 옛 주소는 번호(`position`)를 싣는다 —
+ * 그 값을 **목록 안 순번**으로 읽는다. 한 번만 만든 작업은 순번과 변형 번호가 같아
+ * 지금과 같고, 다시 만든 회차가 있는 작업만 옛 주소가 다른 칸을 고를 수 있다
+ * (배포 직후 열려 있던 탭뿐이다). 못 찾으면 없음을 준다(`startingPosition` 이
+ * 첫 장으로 떨어뜨린다).
+ */
+export function preferredPosition(
+  picks: ReadonlyArray<Pick<AdImagePick, "position" | "imageId">>,
+  wanted: { image: string | null; position: number | null } | null,
+): number | null {
+  if (!wanted) return null;
+  const byImage = wanted.image ? picks.find((pick) => pick.imageId === wanted.image) : undefined;
+  return byImage ? byImage.position : wanted.position;
 }
 
 /**
@@ -413,6 +443,7 @@ export function libraryImagePicks(
     original: image.image,
     sectionName: image.sectionName,
     position: image.position ?? index,
+    imageId: null,
   }));
 }
 

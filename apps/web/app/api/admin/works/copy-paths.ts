@@ -98,6 +98,10 @@ export function snsCopyPlan(
 
 /** 포스터 변형 한 줄이 들고 있는 것 중 복사에 쓰는 칸. */
 type PosterImageRow = {
+  /** 원본 그림 id. 고친 이력(`parent_image_id`)을 복사본에서 이을 때 쓴다. */
+  id?: string;
+  /** 원본 회차. 복사본도 회차마다 요청을 따로 둔다(`posterCopyRounds`). */
+  generation_request_id: string;
   variant_index: number;
   selected?: boolean;
   width?: number | null;
@@ -106,6 +110,24 @@ type PosterImageRow = {
   asset_path: string;
   thumb_path?: string | null;
 };
+
+/**
+ * 원본의 회차 — 처음 나온 차례로, 회차마다 그림 수.
+ *
+ * **복사본도 회차마다 요청을 하나씩 만든다.** 번호(`variant_index`)는 회차마다
+ * 0 부터라, 한 요청에 몰아 붙이면 `unique (generation_request_id, variant_index)`
+ * 에 걸린다 — 「이 장만 고치기」나 다시 만들기가 한 번이라도 있으면 그랬다
+ * (2026-09-29 리뷰).
+ */
+export function posterCopyRounds(
+  rows: ReadonlyArray<Pick<PosterImageRow, "generation_request_id">>,
+): Array<{ sourceRequestId: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(row.generation_request_id, (counts.get(row.generation_request_id) ?? 0) + 1);
+  }
+  return [...counts].map(([sourceRequestId, count]) => ({ sourceRequestId, count }));
+}
 
 /**
  * 포스터 복사 계획.
@@ -117,21 +139,39 @@ type PosterImageRow = {
  * 되는데, 그 칸은 `not null` 이다(`202608310004_poster.sql:47`). 처음엔 통째로
  * 뺐다가 insert 가 23502 로 **무조건** 실패하는 것을 리뷰에서 잡았다 — 그리고
  * 그때는 행과 파일이 이미 올라간 뒤였다. 원칙은 지키고 값은 채운다: 복사한
- * 사람 소유의 **비용 0** 짜리 요청 행을 하나 만들어 그것을 가리킨다.
+ * 사람 소유의 **비용 0** 짜리 요청 행을 **원본 회차마다** 만들어 그것을 가리킨다
+ * (`requestIdFor`: 원본 요청 id → 새 요청 id). 새 요청을 못 받은 회차의 행은
+ * 싣지 않는다 — 남의 줄을 가리키게 둘 수 없다.
  *
  * 규약을 벗어난 경로의 행은 **아예 싣지 않는다.** 그림 없는 변형 행을 남기면
  * 목록에 빈 칸이 생긴다.
+ *
+ * `sources` 는 새 행과 같은 차례로 원본 그림 id 와 (새 요청, 번호)를 든다 — 넣은
+ * 뒤 받은 새 id 와 짝지어 고친 이력을 잇는다(`posterCopyParentUpdates`).
+ *
+ * **만든 시각은 복사한 때(`copiedAtMs`)이고, 회차마다 1ms 씩 벌린다.** 한 번에 넣으면
+ * 시각이 전부 같아져 목록이 변형 번호로만 줄 서고, 회차가 뒤섞여 「고친 결과」가
+ * 부모보다 앞에 섰다(2026-09-29 리뷰). 벌려 두면 원본과 같은 차례로 선다.
  */
 export function posterCopyPlan(
   rows: PosterImageRow[],
   newOwnerId: string,
   newProjectId: string,
-  newRequestId: string,
-): { rows: Array<Record<string, unknown>>; moves: AssetMove[] } {
+  requestIdFor: Readonly<Record<string, string>>,
+  copiedAtMs: number,
+): {
+  rows: Array<Record<string, unknown>>;
+  moves: AssetMove[];
+  sources: Array<{ sourceImageId: string | null; requestId: string; variantIndex: number }>;
+} {
   const moves: AssetMove[] = [];
   const next: Array<Record<string, unknown>> = [];
+  const sources: Array<{ sourceImageId: string | null; requestId: string; variantIndex: number }> = [];
+  const roundOf = new Map(posterCopyRounds(rows).map((round, index) => [round.sourceRequestId, index]));
 
   for (const row of rows) {
+    const requestId = requestIdFor[row.generation_request_id];
+    if (!requestId) continue;
     const asset = copiedAssetPath(row.asset_path, newOwnerId, newProjectId);
     if (!asset) continue;
     const thumb = row.thumb_path
@@ -143,7 +183,7 @@ export function posterCopyPlan(
     next.push({
       user_id: newOwnerId,
       project_id: newProjectId,
-      generation_request_id: newRequestId,
+      generation_request_id: requestId,
       variant_index: row.variant_index,
       selected: row.selected ?? false,
       width: row.width ?? null,
@@ -151,10 +191,41 @@ export function posterCopyPlan(
       review: row.review ?? null,
       asset_path: asset,
       thumb_path: thumb,
+      created_at: new Date(copiedAtMs + (roundOf.get(row.generation_request_id) ?? 0)).toISOString(),
     });
+    sources.push({ sourceImageId: row.id ?? null, requestId, variantIndex: row.variant_index });
   }
 
-  return { rows: next, moves };
+  return { rows: next, moves, sources };
+}
+
+/**
+ * 복사본의 고치기 요청에 **복사된 부모 그림**을 단다.
+ *
+ * 원본 요청의 `parent_image_id` 는 원본 그림을 가리킨다. 복사본에서 그대로 두면
+ * 남의 그림을 가리키고, 비우면 「변형 3에서 고침」이 사라진다. 복사된 그림의 id 는
+ * 넣은 뒤에야 알아서 **(요청, 번호)** 로 짝을 찾는다 — DB 가 유일함을 보장하는
+ * 열쇠다. 경로로 찾으면 09-09 전 작업(고친 결과가 원본 파일을 덮어써 두 줄의
+ * 경로가 같다)에서 고친 결과가 자기 자신을 부모로 가리켰다(2026-09-29 리뷰).
+ *
+ * 부모가 복사되지 않았으면(지워졌거나 경로 규약을 벗어나 빠짐) 잇지 않는다.
+ */
+export function posterCopyParentUpdates(input: {
+  sourceRequests: ReadonlyArray<{ id: string; parent_image_id: string | null }>;
+  requestIdFor: Readonly<Record<string, string>>;
+  sources: ReadonlyArray<{ sourceImageId: string | null; requestId: string; variantIndex: number }>;
+  inserted: ReadonlyArray<{ id: string; generation_request_id: string; variant_index: number }>;
+}): Array<{ requestId: string; parentImageId: string }> {
+  const key = (requestId: string, variantIndex: number) => `${requestId}:${variantIndex}`;
+  const newIdByKey = new Map(input.inserted.map((row) => [key(row.generation_request_id, row.variant_index), row.id]));
+  const newIdBySource = new Map(input.sources
+    .filter((source) => source.sourceImageId)
+    .map((source) => [source.sourceImageId!, newIdByKey.get(key(source.requestId, source.variantIndex))]));
+  return input.sourceRequests.flatMap((request) => {
+    const requestId = input.requestIdFor[request.id];
+    const parentImageId = request.parent_image_id ? newIdBySource.get(request.parent_image_id) : undefined;
+    return requestId && parentImageId ? [{ requestId, parentImageId }] : [];
+  });
 }
 
 /**

@@ -73,17 +73,32 @@ export interface PosterImageLabel {
  * 목록에 붙일 이름. **받은 차례대로** 고친 결과에 번호를 매긴다.
  *
  * 처음 만든 것은 지금처럼 「변형 N」이다. 이력이 없으면(팀원이 보는 작업은 요청
- * 장부를 못 읽는다) 고친 결과도 지금처럼 「변형 N」으로 떨어진다 — 나빠지지 않는다.
+ * 장부를 못 읽는다) 고친 결과를 고친 것으로 알 수 없어 **한 회차로 센다** —
+ * 「2회차 변형 1」로 불린다. 같은 그림을 주인은 「고친 결과 1」로 보지만, 이름이
+ * 겹치지는 않는다.
  *
  * 「을/를」은 숫자 읽기에 따라 갈려서 「에서」를 쓴다.
+ *
+ * **다시 만들기를 두 번 이상 했으면 회차를 붙인다**(「2회차 변형 1」). `variantIndex`
+ * 는 회차마다 0 부터 세서, 안 붙이면 「변형 1」이 둘이 되고 「변형 1에서 고침」이
+ * 어느 것인지 모른다(2026-09-29 리뷰). 한 번만 만든 작업은 지금 이름 그대로다.
+ * 회차는 **요청 id** 로 가른다 — `generationRequestId` 를 필수로 받아 부르는 쪽이
+ * 빠뜨리면 컴파일이 막는다.
  */
 export function posterImageLabels(
-  images: ReadonlyArray<{ id: string; variantIndex: number; edit?: PosterImageEdit | null }>,
+  images: ReadonlyArray<{
+    id: string; variantIndex: number; generationRequestId: string; edit?: PosterImageEdit | null;
+  }>,
 ): Record<string, PosterImageLabel> {
+  // 받은 차례대로 회차 번호를 매긴다. 고치기는 회차가 아니다.
+  const rounds = [...new Set(images.filter((image) => !image.edit).map((image) => image.generationRequestId))];
+  const roundPrefix = (requestId: string) => (rounds.length > 1 ? `${rounds.indexOf(requestId) + 1}회차 ` : "");
   let edited = 0;
   const titles: Record<string, string> = {};
   for (const image of images) {
-    titles[image.id] = image.edit ? `고친 결과 ${++edited}` : `변형 ${image.variantIndex + 1}`;
+    titles[image.id] = image.edit
+      ? `고친 결과 ${++edited}`
+      : `${roundPrefix(image.generationRequestId)}변형 ${image.variantIndex + 1}`;
   }
   return Object.fromEntries(images.map((image): [string, PosterImageLabel] => {
     if (!image.edit) return [image.id, { title: titles[image.id]!, detail: null }];
@@ -94,4 +109,27 @@ export function posterImageLabels(
       detail: parent ? `${parent}에서 고침 · ${quoted}` : quoted,
     }];
   }));
+}
+
+/**
+ * 그림 한 장을 찾는다 — **그림 id 가 먼저다.**
+ *
+ * 옛 주소·옛 화면은 변형 번호를 보낸다. 번호는 회차마다 0 부터라 겹치므로 그때는
+ * **그 번호 중 가장 최근 것**을 준다 — 화면이 비는 것보다 낫고, 옛 미리보기가
+ * 보여 주던 것과 같다.
+ *
+ * 파일 길(`images/[index]/file`)과 광고 내보내기가 **이 함수 하나**를 쓴다. 전에는
+ * 둘이 따로 골랐다 — 파일 길은 「가장 최근」, 광고는 「목록 첫 것」이라 광고
+ * 미리보기는 고친 그림, ZIP 은 원본이었다(2026-09-29). 시각은 글자가 아니라
+ * 시각으로 견준다(`orderPosterImages`).
+ */
+export function findPosterImage<T extends { id: string; variantIndex: number; createdAt: string }>(
+  images: readonly T[],
+  key: string,
+): T | null {
+  const byId = images.find((image) => image.id === key);
+  if (byId) return byId;
+  if (!/^\d+$/.test(key)) return null;
+  const sameNumber = images.filter((image) => image.variantIndex === Number(key));
+  return orderPosterImages(sameNumber).at(-1) ?? null;
 }

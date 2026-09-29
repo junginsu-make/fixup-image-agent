@@ -34,6 +34,8 @@ import { PlanBar } from "./plan-bar";
 interface PosterImage {
   id: string;
   variantIndex: number;
+  /** 어느 회차에서 나왔나. 다시 만들기를 두 번 이상 했으면 이름에 회차가 붙는다. */
+  generationRequestId: string;
   selected: boolean;
   url?: string;
   /** 목록에 거는 사본. 확대·내려받기는 원본을 쓴다. */
@@ -1174,7 +1176,7 @@ export function PosterClient(
                       */}
                       {adEnabled && (
                         <Button size="sm" variant="outline" asChild>
-                          <Link href={adExportHref(project.id, image.variantIndex)}>
+                          <Link href={adExportHref(project.id, image.id)}>
                             <Megaphone />광고 소재로 뽑기
                           </Link>
                         </Button>

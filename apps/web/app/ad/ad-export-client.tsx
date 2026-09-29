@@ -19,7 +19,7 @@ import {
   AD_PORTALS, PORTAL_LABEL, PREVIEW_MAX_WIDTH, SHRINK_WARNING, SOURCE_LABEL, actionNotices, adSourceItems, pickerKey,
   type AdAccountWork, type AdPosterWork, type AdReferenceImage,
   bytesFromDataUrl, downloadable, excludedCount, failureMessage, isActualSize, itemFromQuery,
-  positionFromQuery, rowsForPortals, startingPosition, togglePortal,
+  positionFromQuery, preferredPosition, rowsForPortals, startingPosition, togglePortal,
   missingRequiredCount, previewBackdrop, previewWidth,
   cropNotice, libraryImagePicks, posterImagePicks, safeAreaOverlayStyle, specRows,
   zipEntryName,
@@ -58,7 +58,7 @@ type ResultEntry = Omit<AdBatchEntry, "bytes"> & { dataUrl?: string };
 async function posterItemImages(projectId: string): Promise<AdImagePick[]> {
   const body = await (await fetch(`/api/poster/projects/${projectId}`, { cache: "no-store" })).json();
   if (!body?.ok) return [];
-  return posterImagePicks(projectId, (body.images ?? []) as Array<{ variantIndex: number }>);
+  return posterImagePicks(projectId, (body.images ?? []) as Parameters<typeof posterImagePicks>[1]);
 }
 
 const ROWS = specRows(planDerivation);
@@ -215,12 +215,19 @@ export function AdExportClient() {
       });
       // **`chooseItem` 을 거친다.** `setItem` 만 하면 그림 목록을 안 불러와
       // 「고를 변형이 없는」 화면이 된다.
-      if (wanted) void chooseItem(wanted, positionFromQuery(query.get("position")));
+      // 결과 화면은 그림 id(`image`)를 싣는다. 옛 주소는 번호(`position`)다.
+      if (wanted) void chooseItem(wanted, {
+        image: query.get("image"),
+        position: positionFromQuery(query.get("position")),
+      });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSources]);
 
-  async function chooseItem(next: AdSourceItem, preferred: number | null = null) {
+  async function chooseItem(
+    next: AdSourceItem,
+    preferred: { image: string | null; position: number | null } | null = null,
+  ) {
     const mine = (token.current += 1);
     setItem(next);
     setImages(null);
@@ -243,6 +250,7 @@ export function AdExportClient() {
               original: (next.original ?? next.thumbnail) as string,
               sectionName: next.title,
               position: 0,
+              imageId: null,
             }]
             : [])
           : libraryImagePicks((await getAccountItemImages(
@@ -253,13 +261,14 @@ export function AdExportClient() {
       /**
        * **첫 장을 고른 상태로 시작한다.**
        *
-       * `position` 은 이제 배열 번호가 아니라 **서버 번호**다. `0` 으로 두면
+       * `position` 은 배열 번호가 아니다 — 라이브러리는 **서버 번호**, 포스터는 목록
+       * 안 순번이고 서버에는 `imageId` 를 보낸다(`posterImagePicks`). `0` 으로 두면
        * 목록에 0번이 없을 때(라이브러리에서 첫 그림의 서명이 실패하면 그렇다)
        * **아무것도 선택돼 보이지 않고**, 그 상태로 뽑으면 사용자가 본 적 없는
        * 0번을 보내 「찾을 수 없습니다」가 온다 — 썸네일은 멀쩡히 보이는데.
        */
       // 주소가 가리킨 변형이 실재하면 그것으로 시작한다(설계 §1 ②).
-      setPosition(startingPosition(loaded, preferred));
+      setPosition(startingPosition(loaded, preferredPosition(loaded, preferred)));
       /*
         **고르면 다음 단계로 넘긴다.** 한 단계씩 보이는 화면에서는 고른 뒤에도
         같은 자리에 머물면 「골랐는데 아무 일도 안 일어난다」가 된다. 되돌아가
@@ -299,7 +308,18 @@ export function AdExportClient() {
            */
           "x-idempotency-key": randomId(),
         },
-        body: JSON.stringify({ itemId: item.id, position, specIds: picked, source: item.source }),
+        /*
+          **포스터는 그림 id 를 함께 보낸다.** 포스터의 `position` 은 화면 안 순번이라
+          서버가 못 읽는다. 번호로만 보내면 겹친 번호 중 하나가 골라져 미리보기와
+          다른 그림이 ZIP 에 담겼다(2026-09-29). 라이브러리는 `null` 이라 안 실린다.
+        */
+        body: JSON.stringify({
+          itemId: item.id,
+          position,
+          imageId: images?.find((image) => image.position === position)?.imageId ?? undefined,
+          specIds: picked,
+          source: item.source,
+        }),
       });
       const body = await response.json().catch(() => null);
       if (mine !== token.current) return;
@@ -651,7 +671,9 @@ export function AdExportClient() {
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             type="button"
-            disabled={!item || !picked.length || busy || noImages}
+            // 그림 목록을 불러오는 중(`images === null`)에도 끈다. 그때 누르면 고른
+            // 그림 없이 `position: 0` 만 나간다 — 포스터는 그 값을 서버가 못 읽는다.
+            disabled={!item || !picked.length || busy || noImages || images === null}
             onClick={() => void run()}
           >
             {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}

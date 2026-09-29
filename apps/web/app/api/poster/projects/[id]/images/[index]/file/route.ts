@@ -6,6 +6,7 @@ import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../../../lib
 import { posterStoresForUser } from "../../../../../../../../lib/poster/stores";
 import { createSupabaseAdminClient } from "../../../../../../../../lib/supabase/admin";
 import { usesAdminLookup } from "./admin-lookup";
+import { findPosterImage } from "@fixup/poster-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,18 +65,12 @@ function isNumericKey(key: string): boolean {
  *
  * 옛 주소는 변형 번호였고 회차가 둘 이상이면 같은 값이 여럿이다. 그때는
  * 가장 나중에 만들어진 것을 준다 — 화면이 비는 것보다 낫다.
+ *
+ * 규칙은 `findPosterImage` 하나다. 광고 내보내기도 같은 것을 쓴다 — 둘이 따로
+ * 고르다 미리보기와 ZIP 이 다른 그림이 됐다(2026-09-29). 전에 여기서 시각을
+ * `localeCompare` 로 견줘 소수점 자리 수가 다르면 먼저 만든 장을 줬다.
  */
-function pickImage<T extends { id: string; variantIndex: number; createdAt: string }>(
-  images: T[],
-  key: string,
-): T | null {
-  const byId = images.find((image) => image.id === key);
-  if (byId) return byId;
-  if (!isNumericKey(key)) return null;
-  return images
-    .filter((image) => image.variantIndex === Number(key))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
-}
+const pickImage = findPosterImage;
 
 /**
  * 결과 이미지를 돌려준다.

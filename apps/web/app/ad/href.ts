@@ -9,12 +9,16 @@
  * 별도 파일로 뺀 이유가 바로 그것이었다(`ad-spec-picker.tsx` 머리말).
  *
  * `feature.ts` 가 스위치 하나 때문에 잎 모듈이 된 것과 같은 판단이다.
+ *
+ * **그림 id 를 싣는다**(2026-09-29). 전에는 변형 번호(`position`)를 실었는데,
+ * 번호는 회차마다 0 부터라 「고친 결과 1」 밑의 단추가 변형 1 을 골랐다. 광고
+ * 화면은 옛 주소의 `position` 도 계속 받는다(`preferredPosition`).
  */
-export function adExportHref(projectId: string, position: number): string {
+export function adExportHref(projectId: string, imageId: string): string {
   const query = new URLSearchParams({
     source: "poster",
     id: projectId,
-    position: String(position),
+    image: imageId,
   });
   return `/ad?${query.toString()}`;
 }

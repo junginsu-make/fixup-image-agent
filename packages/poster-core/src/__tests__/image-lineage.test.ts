@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderPosterImages, posterImageLabels, withEditLineage } from "../image-lineage";
+import { findPosterImage, orderPosterImages, posterImageLabels, withEditLineage } from "../image-lineage";
 
 /**
  * 「이 장만 고치기」 결과가 **목록 어디에, 무슨 이름으로** 뜨나.
@@ -117,5 +117,80 @@ describe("목록에 붙는 이름", () => {
 
   it("이력을 못 읽으면(팀원이 보는 작업) 지금처럼 「변형 N」으로 떨어진다", () => {
     expect(posterImageLabels([변형("e1", 0, 고친뒤, "req-2")]).e1).toEqual({ title: "변형 1", detail: null });
+  });
+});
+
+/**
+ * **다시 만들기를 하면 「변형 1」이 둘이 된다**(2026-09-29 리뷰).
+ *
+ * `variantIndex` 는 회차마다 0 부터 센다. 한 번만 만든 작업은 지금처럼 「변형 N」,
+ * 두 번 이상 만든 작업만 회차를 붙인다 — 「변형 1에서 고침」이 어느 것인지도 갈린다.
+ */
+describe("다시 만들기 회차", () => {
+  const 두회차 = withEditLineage(
+    orderPosterImages([
+      변형("a1", 0), 변형("a2", 1),
+      변형("b1", 0, 고친뒤, "req-2"), 변형("b2", 1, 고친뒤, "req-2"),
+      변형("e1", 0, 두번고친뒤, "req-3"),
+    ]),
+    [{ id: "req-3", parentImageId: "b1", editInstruction: "글자를 키워 주세요" }],
+  );
+  const labels = posterImageLabels(두회차);
+
+  it("두 번 이상 만들었으면 회차를 붙여 가른다", () => {
+    expect(labels.a1!.title).toBe("1회차 변형 1");
+    expect(labels.b1!.title).toBe("2회차 변형 1");
+    expect(labels.b2!.title).toBe("2회차 변형 2");
+  });
+
+  it("고친 결과는 어느 회차의 변형을 고쳤는지 가리킨다", () => {
+    expect(labels.e1).toEqual({ title: "고친 결과 1", detail: "2회차 변형 1에서 고침 · 「글자를 키워 주세요」" });
+  });
+
+  it("고치기는 회차로 세지 않는다 — 한 번 만들고 고치기만 했으면 지금처럼 「변형 N」", () => {
+    const 한회차 = withEditLineage(
+      [변형("v1", 0), 변형("e1", 0, 고친뒤, "req-2")],
+      [{ id: "req-2", parentImageId: "v1", editInstruction: "밤으로" }],
+    );
+    expect(posterImageLabels(한회차).v1!.title).toBe("변형 1");
+  });
+
+  it("이력을 못 읽는 팀원 화면에서도 같은 이름이 둘로 겹치지 않는다", () => {
+    const 이력없음 = [변형("v1", 0), 변형("e1", 0, 고친뒤, "req-2")];
+    const titles = Object.values(posterImageLabels(이력없음)).map((label) => label.title);
+    expect(new Set(titles).size).toBe(2);
+  });
+});
+
+/**
+ * **그림 한 장을 찾는 규칙은 하나다.**
+ *
+ * 파일 길은 번호를 받으면 「그 번호 중 가장 최근 것」을, 광고 내보내기는 「그 번호 중
+ * 목록 첫 것」을 줬다. 그래서 광고 미리보기는 고친 그림, ZIP 은 원본이었다
+ * (2026-09-29). 이제 둘 다 이 함수를 쓰고, 화면은 그림 id 를 보낸다.
+ */
+describe("그림 한 장 찾기", () => {
+  const 목록 = [
+    변형("v1", 0, "2026-09-29T08:00:01+00:00"),
+    변형("v2", 1, "2026-09-29T08:00:01+00:00"),
+    변형("e1", 0, "2026-09-29T08:00:01.5+00:00", "req-2"),
+  ];
+
+  it("id 가 오면 그 그림이다", () => {
+    expect(findPosterImage(목록, "v1")?.id).toBe("v1");
+    expect(findPosterImage(목록, "e1")?.id).toBe("e1");
+  });
+
+  it("옛 주소의 번호는 그 번호 중 가장 최근 것이다 — 시각으로 견준다", () => {
+    // `localeCompare` 로 견주면 소수점 없는 시각이 뒤로 가 v1 이 나왔다.
+    expect(findPosterImage(목록, "0")?.id).toBe("e1");
+    expect(findPosterImage(목록, "1")?.id).toBe("v2");
+  });
+
+  it("없는 id·번호·이상한 값은 없다고 한다", () => {
+    expect(findPosterImage(목록, "nope")).toBeNull();
+    expect(findPosterImage(목록, "7")).toBeNull();
+    expect(findPosterImage(목록, "-1")).toBeNull();
+    expect(findPosterImage(목록, "")).toBeNull();
   });
 });
