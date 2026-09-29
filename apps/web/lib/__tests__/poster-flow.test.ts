@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { EMPTY_SLOTS } from "@fixup/poster-core";
+import { buildPosterEditJob, buildPosterJob, EMPTY_SLOTS, planEditJob } from "@fixup/poster-core";
 import { collectPoster, PosterChargedError, submitPoster } from "../poster/flow";
 
 const job = {
@@ -239,5 +239,37 @@ describe("돈이 나간 뒤에 실패하면", () => {
       queue: { submitJob: vi.fn(async () => { throw new Error("fal 이 거절했습니다."); }) },
     });
     await expect(submitPoster(job, dependencies)).rejects.not.toBeInstanceOf(PosterChargedError);
+  });
+});
+
+/**
+ * **조립만 갈아 끼운다 — 장부 순서는 같다.**
+ *
+ * 「이 장만 고치기」는 자기 조립(`buildPosterEditJob`)을 넘긴다(2026-09-29). 처음
+ * 만들기는 아무것도 안 넘기고, 그때는 **지금까지와 한 글자도 다르지 않게** 나가야
+ * 한다 — 처음 만들기는 잘 돌고 있었다.
+ */
+describe("요청 조립을 넘길 수 있다", () => {
+  it("안 넘기면 처음 만들기 조립 그대로 나간다", async () => {
+    const { dependencies } = deps();
+    await submitPoster(job, dependencies);
+    const [, input] = (dependencies as never as { queue: { submitJob: { mock: { calls: unknown[][] } } } })
+      .queue.submitJob.mock.calls[0] as [string, { prompt: string }];
+    expect(input.prompt).toBe(buildPosterJob(job).prompt);
+  });
+
+  it("고치기 조립을 넘기면 그것으로 나가고, 장부에는 무엇을 고쳤는지 남는다", async () => {
+    const { dependencies, created } = deps();
+    const editJob = planEditJob({
+      projectId: "p1", parentImageId: "img-3", parentUrl: "https://fal.media/parent.png",
+      instruction: "배경을 밤으로 바꿔 주세요", modelId: "gpt-image-2", ratioId: "2:3",
+      slots: { ...EMPTY_SLOTS, headline: "가을" },
+    });
+    await submitPoster(editJob, dependencies, buildPosterEditJob);
+    const [, input] = (dependencies as never as { queue: { submitJob: { mock: { calls: unknown[][] } } } })
+      .queue.submitJob.mock.calls[0] as [string, { prompt: string; image_urls: string[] }];
+    expect(input.prompt.startsWith("USER INSTRUCTION (highest priority — follow exactly):\n배경을 밤으로 바꿔 주세요")).toBe(true);
+    expect(input.image_urls).toEqual(["https://fal.media/parent.png"]);
+    expect(created[0]).toMatchObject({ parentImageId: "img-3", editInstruction: "배경을 밤으로 바꿔 주세요" });
   });
 });

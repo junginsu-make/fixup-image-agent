@@ -1,3 +1,4 @@
+import type { OrderedAttachment } from "@fixup/shared";
 import type { PosterJobInput } from "./generate";
 import type { PosterSlots } from "./schemas";
 
@@ -60,11 +61,26 @@ export interface EditJobInput {
    */
   sourceSize?: { width: number; height: number };
   slots: PosterSlots;
+  /*
+   * 아래는 **원래 작업이 정한 것** — 그림만 봐서는 못 지키는 것들이다.
+   * 옛 호출에는 없다. 없으면 지킬 대상 없이, 글자는 칸이 찼는지로만 가른다.
+   */
+  /** 원래 작업의 첨부(화면 차례). 지킬 대상만 다시 붙는다(`edit-job.ts`). */
+  attachments?: OrderedAttachment[];
+  /** 차례가 없는 옛 작업용 — `buildPosterJob` 과 같은 뜻이다. */
+  preservedUrls?: string[];
+  personUrls?: string[];
+  restyledUrls?: string[];
+  /** 기획이 지어낸 글자 칸. 처음 만들 때와 같은 글자 판단을 하려고 넘긴다. */
+  invented?: string[];
+  referenceHasText?: boolean;
 }
 
 export interface PosterEditJob extends PosterJobInput {
   parentImageId: string;
   editInstruction: string;
+  /** 고칠 그림을 fal 에 올린 주소. 프롬프트의 `Image 1` 이다. */
+  editSourceUrl: string;
 }
 
 export function planEditJob(input: EditJobInput): PosterEditJob {
@@ -75,17 +91,31 @@ export function planEditJob(input: EditJobInput): PosterEditJob {
     projectId: input.projectId,
     parentImageId: input.parentImageId,
     editInstruction: instruction,
+    editSourceUrl: input.parentUrl,
     modelId: input.modelId,
     ratioId: input.ratioId,
     ...(input.sourceSize ? { sourceSize: input.sourceSize } : {}),
     // 수정은 한 장만 만든다. 세 장을 또 받으면 고르는 일이 반복된다.
     variants: 1,
-    slots: {
-      ...input.slots,
-      // 사용자가 적은 수정 지시를 장면 설명 뒤에 붙인다.
-      action: [input.slots.action, instruction].filter((part) => part.trim()).join(". "),
-    },
+    /*
+     * **지시를 장면 칸에 끼워 넣지 않는다.** 전에는 `action` 끝에 붙였고, 그
+     * 자리에서 지시가 묻혀 안 먹혔다(2026-09-29 사용자 보고). 지시는
+     * `editInstruction` 으로 가고 프롬프트 양끝에 선다(`edit-prompt.ts`).
+     */
+    slots: input.slots,
+    /*
+     * **안전망.** 조립은 `buildPosterEditJob` 이 하고 이 값을 쓰지 않는다. 누가
+     * 조립을 안 넘기고 `submitPoster(planEditJob(…))` 로 부르면 처음 만들기 조립을
+     * 타는데, 그때도 지시가 양끝에는 서게 한다(2026-09-29 독립 리뷰).
+     */
+    userInstruction: instruction,
+    // 고칠 그림은 언제나 붙는다. 조립은 `buildPosterEditJob` 이 한다.
     referenceUrls: [input.parentUrl],
-    preservedUrls: [],
+    attachments: input.attachments ?? [],
+    preservedUrls: input.preservedUrls ?? [],
+    personUrls: input.personUrls ?? [],
+    restyledUrls: input.restyledUrls ?? [],
+    invented: input.invented,
+    referenceHasText: input.referenceHasText,
   };
 }

@@ -18,8 +18,9 @@ import { createSupabaseAdminClient } from "../supabase/admin";
  * ── 이 함수는 **아무것도 안 막는다** ──────────────────────────────
  *
  * 경로만 받아 서버 권한으로 내려받는다. **누가 그 경로를 볼 수 있는지는 여기서
- * 안 본다.** 지금은 부르는 자리가 둘뿐이고(`generate/route.ts`) 둘 다
- * `posterReferencesByIds` 가 걸러 준 행의 경로만 넘긴다 — 그래서 안 샌다.
+ * 안 본다.** 지금은 부르는 자리가 만들기(`generate/route.ts`, 둘)와 고치기
+ * (`edit/route.ts`, 하나)뿐이고 모두 `posterReferencesByIds` 가 걸러 준 행의
+ * 경로만 넘긴다 — 그래서 안 샌다.
  *
  * **여기에 사용자 입력이 닿는 길이 생기면 그날 바로 샌다**(2026-09-17 독립
  * 리뷰). 새 호출부를 만들 때는 경로를 어디서 얻었는지부터 보라.
