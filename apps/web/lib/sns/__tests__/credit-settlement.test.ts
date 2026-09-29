@@ -61,6 +61,24 @@ describe("원가 장부의 모델", () => {
     expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "gpt-image-2.5-flare" });
   });
 
+  it("동점이면 작업의 모델이다", async () => {
+    await settleSnsReservation("user", withModels(["gpt-image-2.5-flare", undefined]), "nano-banana");
+    expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "nano-banana" });
+  });
+
+  it("아직 값이 안 나온 장(중지 등)의 모델은 세지 않는다 — 청구 장수와 같은 장만 센다", async () => {
+    const stopped: SnsFlowState = {
+      ...withModels(["gpt-image-2.5-flare"]),
+    };
+    stopped.costs = [
+      ...stopped.costs,
+      { cardIndex: 0, costUsd: null, modelId: "gpt-image-2.5-sunburst" },
+      { cardIndex: 0, costUsd: null, modelId: "gpt-image-2.5-sunburst" },
+    ];
+    await settleSnsReservation("user", stopped, "nano-banana");
+    expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "gpt-image-2.5-flare", billableImages: 1 });
+  });
+
   it("모델 기록이 하나도 없으면 작업의 모델 — 지금까지와 같다", async () => {
     await settleSnsReservation("user", withModels([undefined, undefined]), "nano-banana");
     expect(finalize.mock.calls[0]![4]).toMatchObject({ model: "nano-banana" });
