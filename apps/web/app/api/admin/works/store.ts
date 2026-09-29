@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import {
   adoptedReferenceId, copiedCharacterAssetPath, copiedLibraryAssetPath, copiedReferencePath,
   copiedReferenceTitle, ownerCouldSeeReference,
-  posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan, type AssetMove,
+  keepMovedPosterRows, posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan, type AssetMove,
 } from "./copy-paths";
 import { isLocalStoreEnabled } from "../../../../lib/local-store";
 import {
@@ -1092,10 +1092,11 @@ export async function copyWorkToSelf(
   }
 
   const plan = posterCopyPlan(imageRows, ownerUserId, created.id as string, requestIdFor, Date.now());
-  await moveAssets(admin, plan.moves);
-  if (plan.rows.length) {
+  // 옮기지 못한 그림은 줄을 안 적는다 — 깨진 그림으로 서지 않게(2026-09-29 점검).
+  const kept = keepMovedPosterRows(plan, await moveAssets(admin, plan.moves));
+  if (kept.rows.length) {
     const { data: insertedRows, error } = await admin.from("poster_images")
-      .insert(plan.rows).select("id,generation_request_id,variant_index");
+      .insert(kept.rows).select("id,generation_request_id,variant_index");
     if (error) throw new Error(error.message);
     /*
       **고친 이력을 잇는다.** 실패해도 복사는 끝난 것이다 — 그림은 다 들어갔고
@@ -1104,7 +1105,7 @@ export async function copyWorkToSelf(
     const updates = posterCopyParentUpdates({
       sourceRequests: sourceRequestRows,
       requestIdFor,
-      sources: plan.sources,
+      sources: kept.sources,
       inserted: (insertedRows ?? []) as Array<{ id: string; generation_request_id: string; variant_index: number }>,
     });
     for (const update of updates) {

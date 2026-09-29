@@ -59,7 +59,7 @@ describe("copiedAssetPath", () => {
   });
 });
 
-import { posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan } from "../copy-paths";
+import { keepMovedPosterRows, posterCopyParentUpdates, posterCopyPlan, posterCopyRounds, snsCopyPlan } from "../copy-paths";
 import { orderPosterImages } from "@fixup/poster-core";
 
 /**
@@ -544,5 +544,37 @@ describe("ownerCouldSeeReference", () => {
   it("팀이 없는 주인은 남의 팀 것을 못 본다", () => {
     expect(ownerCouldSeeReference({ userId: "주인", teamId: null }, { userId: "남", teamId: "팀Y" }))
       .toBe(false);
+  });
+});
+
+/*
+ * **옮기지 못한 그림은 줄도 안 적는다**(2026-09-29 점검).
+ *
+ * 라이브러리·참고 이미지 복사는 이미 그렇게 한다. 포스터 복사만 옮기기 결과를
+ * 버리고 줄을 다 적어서, 원본을 못 읽은 장이 복사본에 **깨진 그림**으로 섰다.
+ * 사본(썸네일)만 실패한 장은 살리고 사본 자리를 비운다 — 화면이 원본으로 떨어진다.
+ */
+describe("keepMovedPosterRows", () => {
+  const plan = posterCopyPlan([
+    { id: "a", generation_request_id: "요청1", variant_index: 0,
+      asset_path: "회원A/poster/작업1/0.png", thumb_path: "회원A/poster/작업1/0.thumb.webp" },
+    { id: "b", generation_request_id: "요청1", variant_index: 1,
+      asset_path: "회원A/poster/작업1/1.png", thumb_path: "회원A/poster/작업1/1.thumb.webp" },
+  ], "관리자B", "작업2", { 요청1: "새요청" }, 0);
+
+  it("원본을 못 옮긴 장은 줄과 짝을 함께 뺀다", () => {
+    const kept = keepMovedPosterRows(plan, new Set([
+      "관리자B/poster/작업2/0.png", "관리자B/poster/작업2/0.thumb.webp",
+    ]));
+    expect(kept.rows.map((row) => row.asset_path)).toEqual(["관리자B/poster/작업2/0.png"]);
+    expect(kept.sources.map((source) => source.sourceImageId)).toEqual(["a"]);
+  });
+
+  it("사본만 못 옮긴 장은 살리고 사본 자리를 비운다", () => {
+    const kept = keepMovedPosterRows(plan, new Set([
+      "관리자B/poster/작업2/0.png", "관리자B/poster/작업2/1.png", "관리자B/poster/작업2/1.thumb.webp",
+    ]));
+    expect(kept.rows.map((row) => row.thumb_path)).toEqual([null, "관리자B/poster/작업2/1.thumb.webp"]);
+    expect(kept.sources).toHaveLength(2);
   });
 });

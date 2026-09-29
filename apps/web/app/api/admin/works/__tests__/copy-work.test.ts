@@ -15,6 +15,8 @@ vi.mock("server-only", () => ({}));
 const uploads: string[] = [];
 const downloads: string[] = [];
 let inserted: Record<string, unknown> | Array<Record<string, unknown>> | null = null;
+/** 원본을 못 읽는 경로. 저장소에서 파일이 사라진 경우다. */
+let missingDownloads: string[] = [];
 let updated: Record<string, unknown> | null = null;
 let sourceRow: Record<string, unknown> | null = null;
 let imageRows: Array<Record<string, unknown>> = [];
@@ -98,6 +100,7 @@ vi.mock("../../../../../lib/supabase/admin", () => ({
       from: () => ({
         download: async (path: string) => {
           downloads.push(path);
+          if (missingDownloads.includes(path)) return { data: null, error: { message: "Object not found" } };
           return { data: { arrayBuffer: async () => new ArrayBuffer(8) }, error: null };
         },
         upload: async (path: string) => { uploads.push(path); return { error: null }; },
@@ -159,6 +162,7 @@ beforeEach(() => {
   uploads.length = 0; downloads.length = 0;
   inserted = null; updated = null; sourceRow = null; imageRows = []; lastTable = ""; updatedRows = 0;
   requestRows = [];
+  missingDownloads = [];
   for (const key of Object.keys(insertedBy)) delete insertedBy[key];
   for (const key of Object.keys(insertsBy)) delete insertsBy[key];
   for (const key of Object.keys(updatesBy)) delete updatesBy[key];
@@ -236,14 +240,42 @@ describe("copyWorkToSelf — 포스터", () => {
     });
   });
 
-  it("생성 요청 행을 **복사한 사람 것으로 비용 0** 으로 만든다", () => {
+  it("생성 요청 행을 **복사한 사람 것으로 비용 0** 으로 만든다", async () => {
     /*
       `poster_images.generation_request_id` 는 not null 이라 채워야 하는데,
-      남의 장부 줄을 가리키면 안 된다. 그래서 하나 새로 만든다 — **비용은
+      남의 장부 줄을 가리키면 안 된다. 그래서 새로 만든다 — **비용은
       0 이다.** 복사는 AI 를 안 부르므로 돈이 안 나간다. 0 이 아닌 값을
       적으면 장부가 쓰지 않은 돈을 세게 된다.
+
+      (전에는 이 시험이 `expect(true)` 하나뿐이라 아무것도 안 쟀다 — 2026-09-29 리뷰.)
     */
-    expect(true).toBe(true);
+    sourceRow = posterSource();
+    imageRows = [posterImageRow()];
+
+    await copyWorkToSelf("poster", "원본", "관리자B");
+
+    const [request] = insertedBy.poster_generation_requests as Array<Record<string, unknown>>;
+    expect(request).toMatchObject({ user_id: "관리자B", cost_usd: 0, unit_cost_usd: 0 });
+  });
+
+  it("원본을 못 읽은 그림은 줄을 적지 않는다 — 깨진 그림으로 서지 않게", async () => {
+    sourceRow = posterSource();
+    imageRows = [
+      posterImageRow(),
+      {
+        id: "원본그림1", generation_request_id: "원본요청1", variant_index: 1, selected: false,
+        width: 1024, height: 1536, review: null,
+        asset_path: "회원A/poster/원본/1.png", thumb_path: null,
+      },
+    ];
+    missingDownloads = ["회원A/poster/원본/1.png"];
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await copyWorkToSelf("poster", "원본", "관리자B");
+
+    errors.mockRestore();
+    const rows = insertedBy.poster_images as Array<Record<string, unknown>>;
+    expect(rows.map((row) => row.asset_path)).toEqual(["관리자B/poster/새작업/0.png"]);
   });
 
   it("변형 행이 새로 만든 요청을 가리킨다", async () => {
