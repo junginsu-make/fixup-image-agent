@@ -40,6 +40,12 @@ const 흔적 = {
     때문이다(2026-09-28). 무엇을 쓰는지 세는 목록이 곧 이 시험의 눈이다.
   */
   Cloudflare: [/challenges\.cloudflare\.com/, /TURNSTILE/],
+  /*
+    **이것도 빠져 있었다**(2026-09-29). 상세페이지 리디자인의 「속도형」이
+    이미지와 문구를 Google(Gemini) 로 **직접** 보낸다. fal 을 거쳐 가는 것과
+    달리 회사가 직접 맡기는 것이라 표에 따로 있어야 한다.
+  */
+  Google: [/generativelanguage\.googleapis\.com/],
 } as const;
 
 function 훑는다(dir: string, out: string[] = []): string[] {

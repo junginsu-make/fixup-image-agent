@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@fixup/ui";
+import { useCreditUnit } from "../_components/credit-policy-provider";
 import { withdrawMyAccount } from "./actions";
+import { withdrawNotice } from "./withdraw-notice";
 
 /**
  * **회원 탈퇴**(2026-09-23 사용자 요청).
@@ -29,6 +31,7 @@ export function WithdrawCard({ email, availableCredits }: { email: string; avail
   const [typed, setTyped] = React.useState("");
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState("");
+  const unit = useCreditUnit();
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -51,12 +54,7 @@ export function WithdrawCard({ email, availableCredits }: { email: string; avail
     <Card className="border-destructive/30">
       <CardHeader>
         <CardTitle className="text-destructive">회원 탈퇴</CardTitle>
-        <CardDescription>
-          탈퇴하면 로그인할 수 없게 되고 만든 작업물과 라이브러리가 모두 사라집니다.
-          되돌릴 수 없습니다.
-          {availableCredits > 0 ? ` 남은 크레딧 ${availableCredits}장도 함께 사라집니다.` : ""}
-          {" "}결제·크레딧 기록은 법령에 따라 보관됩니다.
-        </CardDescription>
+        <CardDescription>{withdrawNotice({ availableCredits, unit })}</CardDescription>
       </CardHeader>
       <CardContent>
         {open ? (

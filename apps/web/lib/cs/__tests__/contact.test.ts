@@ -28,6 +28,17 @@ describe("주소", () => {
     expect(CS_EMAIL).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
   });
 
+  /**
+   * **회사 도메인 주소다**(2026-09-29 사용자 확인).
+   *
+   * 전에는 `ai.dev@gmail.com` 이었는데, 회사가 쓰는 주소는
+   * `ai.dev@fixupworld.com` 이었다. 한 글자만 달라도 고객 문의와 개인정보가
+   * 남의 메일함으로 간다. 약관·처리방침·푸터도 이 값을 쓴다.
+   */
+  it("회사가 확인한 주소다", () => {
+    expect(CS_EMAIL).toBe("ai.dev@fixupworld.com");
+  });
+
   it("안내 문장에 그 주소가 들어 있다", () => {
     expect(CS_CONTACT_LINE).toContain(CS_EMAIL);
   });
@@ -91,6 +102,13 @@ describe("한 곳에서만 정한다", () => {
 
     for (const file of [...훑는다(join(web, "app")), ...훑는다(join(web, "lib"))]) {
       if (file.endsWith(join("lib", "cs", "contact.ts"))) continue;
+      /*
+        **법률 문서는 뺀다**(2026-09-29). 게시한 원문이라 주소를 글자 그대로
+        적어야 한다. 대신 그 주소가 이 정본과 같은지는
+        `app/_landing/legal/__tests__/launch-ready.test.ts` 가 따로 본다 —
+        정본을 바꾸면 거기가 붉어져서, 약관을 함께 고치게 된다.
+      */
+      if (file.endsWith(join("legal", "documents.ts"))) continue;
       const 글 = readFileSync(file, "utf8")
         // 주석은 뺀다. 지난 결정을 인용하는 것은 정당하다.
         .replace(/\/\*[\s\S]*?\*\//g, "")
