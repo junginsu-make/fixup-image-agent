@@ -31,10 +31,11 @@ import type { EasyMessage } from "./turn";
 /** 모델이 돌려주는 것. */
 export interface EasyDecision {
   /**
-   * `image` 면 그림을 만들고, `talk` 면 `reply` 를 대화에 적는다.
-   * `detail_page` 면 만들지 않고 안내 한 줄로 끝낸다(설계 §2-7).
+   * `image` 면 한 장, `cardnews` 면 카드뉴스 원고, `either` 면 둘 중 무엇인지 묻고,
+   * `revise` 면 이 대화의 마지막 원고를 말대로 다시 쓴다(2단계 설계 §4 · §7).
+   * `talk` 면 `reply` 를 적고, `detail_page` 면 안내 한 줄로 끝낸다.
    */
-  wants: "image" | "talk" | "detail_page";
+  wants: "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page";
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -79,6 +80,8 @@ export function easyChatPrompt(
    * 붙인 것이 있으면 그 사실을 적어 준다. 그러면 가리키는 말이 뜻을 갖는다.
    */
   attachmentCount = 0,
+  /** 이 대화에 카드뉴스 원고가 있나. 있을 때만 「고치기」 갈래를 알려 준다(2단계 §7). */
+  hasDraft = false,
 ): string {
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
@@ -98,7 +101,19 @@ export function easyChatPrompt(
     "",
     "사용자의 **마지막 말**이 무엇인지 가르세요.",
     "",
-    "  image  지금 **이미지를 만들어 달라는 것**입니다.",
+    "  image     지금 이미지 **한 장**을 만들어 달라는 것입니다. 포스터 · 배너 · 썸네일 ·",
+    "            그림 · 사진 · 로고 · 프로필처럼 원래 한 장인 것이거나, 「한 장」 · 「하나」를",
+    "            말했을 때입니다. 「카드뉴스 표지 한 장만」도 image 입니다.",
+    "  cardnews  **카드뉴스**(여러 장으로 된 카드 · 슬라이드 · 캐러셀)를 만들어 달라는 것입니다.",
+    "  either    만들어 달라는 것은 분명한데 **한 장인지 여러 장인지 알 수 없습니다.**",
+    "            「신메뉴 홍보물 만들어줘」 · 「이걸로 만들어줘」 · 「인스타에 올릴 거 만들어줘」.",
+    "            짐작하지 말고 either 로 두세요. 사용자에게 물어봅니다.",
+    ...(hasDraft
+      ? [
+        "  revise    이 대화에서 **방금 쓴 카드뉴스 원고를 고쳐 달라는 것**입니다. 「더 짧게」 ·",
+        "            「20대 말투로」 · 「존댓말로」. 새 주제를 말하면 revise 가 아니라 cardnews 입니다.",
+      ]
+      : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
     "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
@@ -113,7 +128,7 @@ export function easyChatPrompt(
     "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
     "**무엇을 적으면 되는지 예를 들어** 주세요.",
     "",
-    "`image` 면 `reply` 는 빈 글로 두세요. 이미지가 곧 답입니다.",
+    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
     "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
     "",
     "── 말 속에 비율이나 그림체가 있나 ──",
@@ -163,13 +178,15 @@ export function easyChatPrompt(
  * 인사 한 마디에 값이 나가고, 「모르겠으면 말」로 떨어뜨리면 주문이 조용히
  * 씹힌다. 둘 다 사용자가 원인을 알 수 없는 자리다.
  */
-export function readEasyDecision(raw: unknown): EasyDecision {
+export function readEasyDecision(raw: unknown, options: { canRevise?: boolean } = {}): EasyDecision {
   const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown } | null;
-  const wants = value?.wants;
+  const said = value?.wants;
 
-  if (wants !== "image" && wants !== "talk" && wants !== "detail_page") {
-    throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(wants)}`);
+  if (typeof said !== "string" || !아는갈래.has(said)) {
+    throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(said)}`);
   }
+  // 고칠 원고가 없는데 고치라고 하면 말로 답한다. 만들 것이 없다.
+  const wants = (said === "revise" && !options.canRevise ? "talk" : said) as EasyDecision["wants"];
 
   return {
     wants,
@@ -191,5 +208,6 @@ export function readEasyDecision(raw: unknown): EasyDecision {
   };
 }
 
+const 아는갈래 = new Set(["image", "cardnews", "either", "revise", "talk", "detail_page"]);
 const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));
 const 아는결 = new Set(EASY_LOOKS.map((one) => one.id as string));

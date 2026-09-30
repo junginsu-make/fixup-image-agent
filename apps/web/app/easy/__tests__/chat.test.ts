@@ -131,3 +131,27 @@ describe("상세페이지를 가른다 (설계 §2-7)", () => {
     expect(prompt).toContain("상세페이지 문구 좀 봐줘");
   });
 });
+
+describe("카드뉴스 갈래 (2단계 설계 §4)", () => {
+  it("cardnews 와 either 를 읽는다", () => {
+    expect(readEasyDecision({ wants: "cardnews", reply: "", ratio: "", look: "" }).wants).toBe("cardnews");
+    expect(readEasyDecision({ wants: "either", reply: "", ratio: "", look: "" }).wants).toBe("either");
+  });
+
+  it("원고가 있을 때만 revise 를 받는다", () => {
+    expect(readEasyDecision({ wants: "revise", reply: "", ratio: "", look: "" }, { canRevise: true }).wants).toBe("revise");
+    expect(readEasyDecision({ wants: "revise", reply: "", ratio: "", look: "" }).wants).toBe("talk");
+  });
+
+  it("한 장인지 여러 장인지 모르면 짐작하지 말라고 알린다", () => {
+    const prompt = easyChatPrompt([], "신메뉴 홍보물 만들어줘");
+    expect(prompt).toContain("either");
+    expect(prompt).toContain("신메뉴 홍보물");
+    expect(prompt).toContain("cardnews");
+  });
+
+  it("원고가 있는 대화에서만 revise 를 알려 준다", () => {
+    expect(easyChatPrompt([], "더 짧게", 0, true)).toContain("revise");
+    expect(easyChatPrompt([], "더 짧게")).not.toContain("revise");
+  });
+});
