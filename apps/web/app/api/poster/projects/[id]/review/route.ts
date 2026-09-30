@@ -1,5 +1,7 @@
 import { reviewPoster, shouldReviewPoster } from "@fixup/poster-core";
-import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../../../lib/membership/credit-ledger";
+import { llmSettleCost, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, createPosterReviewProviders, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { posterImageBytes } from "../../../../../../lib/poster/asset-bytes";
@@ -14,10 +16,20 @@ type Context = { params: Promise<{ id: string }> };
  *
  * 세 장을 다 검수하면 두 장 값은 버리는 셈이다. 자동으로 다시 만들지 않는다 —
  * 반려해도 이미지는 남고 사람이 누를 때까지 기다린다.
+ *
+ * **예약을 먼저 거친다**(설계 2026-09-30 §3.1). `poster_image` + `poster:{id}:review`,
+ * 0 크레딧이다. 크레딧이 없거나 운영자가 멈췄으면 fal 에 올리기 전에 막힌다.
  */
-export async function POST(_request: Request, context: Context) {
+export async function POST(request: Request, context: Context) {
+  // 검수 모델에 쓴 돈을 잰다. 정산에 싣는다.
+  return withLlmMeter(() => review(request, context));
+}
+
+async function review(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
+  /** `catch` 에서도 닫아야 하므로 밖에 둔다. */
+  let reservation: { userId: string; requestId: string } | null = null;
   try {
     const { id } = await context.params;
     const stores = posterStoresForUser(auth.member.userId);
@@ -38,6 +50,10 @@ export async function POST(_request: Request, context: Context) {
       );
     }
 
+    const reserved = await reserveAiUsage(request, "poster_image", 0, freeCreditPlan(`poster:${id}:review`));
+    if (!reserved.ok) return reserved.response;
+    reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
     const { bytes, contentType } = await posterImageBytes(target.assetPath);
     const reviewImageUrl = await createPosterFalClients().uploader.uploadReference(bytes, contentType);
 
@@ -54,14 +70,18 @@ export async function POST(_request: Request, context: Context) {
     );
 
     await stores.images.saveReview(target.id, result.review ?? { decision: "fail", summary: "검수하지 못했습니다.", issues: result.issues });
+    const refreshed = await stores.images.byProject(id);
+    await settleAiUsage(reservation, true, 0, undefined, llmSettleCost());
     return Response.json({
       ok: true,
       status: result.status,
       review: result.review,
       issues: result.issues,
-      images: await stores.images.byProject(id),
+      images: refreshed,
     });
   } catch (error) {
+    // 실패해도 닫는다. 안 닫으면 예약이 만료까지 남는다.
+    if (reservation) await settleAiUsage(reservation, false, 0, "poster_review_failed", llmSettleCost());
     if (error instanceof PosterProviderConfigurationError) {
       return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
     }

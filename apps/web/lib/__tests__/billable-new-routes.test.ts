@@ -30,3 +30,11 @@ describe("카드뉴스", () => {
     );
   });
 });
+
+describe("포스터", () => {
+  const poster = read("../../app/poster/[id]/poster-client.tsx");
+
+  it("검수 요청이 식별자 길목(`billableRequest`)을 지난다", () => {
+    expect(poster).toMatch(/billableRequest\(`\/api\/poster\/projects\/\$\{project\.id\}\/review`\)/);
+  });
+});
