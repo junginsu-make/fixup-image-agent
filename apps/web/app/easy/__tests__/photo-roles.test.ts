@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AttachmentRead } from "@fixup/poster-core";
-import { describePhoto, easyRolePrompt, readRoleJudgment } from "../photo-roles";
+import {
+  canPickPerson, describePhoto, easyRolePrompt, mergeRoles, photoAskReason,
+  readChosenRoles, readRoleJudgment, type RoleJudgment,
+} from "../photo-roles";
 
 /**
  * **붙인 사진을 어떻게 쓸지**(설계 §2-3 ⓑ2 · §2-4).
@@ -137,5 +140,100 @@ describe("판단 응답 읽기", () => {
       photos: [{ role: "unclear", said: false }, { role: "unclear", said: false }],
       conflicting: false,
     });
+  });
+});
+
+const 판단 = (...roles: Array<[string, boolean]>): RoleJudgment => ({
+  photos: roles.map(([role, said]) => ({ role: role as never, said })),
+  conflicting: false,
+});
+
+describe("고른 값 읽기 — 서버가 다시 확인한다 (설계 §2-5)", () => {
+  const ids = ["a", "b"];
+
+  it("붙인 사진의 네 역할만 받는다", () => {
+    expect(readChosenRoles([{ id: "a", role: "preserve_product" }, { id: "b", role: "style" }], ids))
+      .toEqual({ a: "preserve_product", b: "style" });
+  });
+
+  it("목록 밖의 id 는 버린다 — 남의 사진 id 를 넣어도 안 먹힌다", () => {
+    expect(readChosenRoles([{ id: "남의것", role: "preserve_product" }], ids)).toEqual({});
+  });
+
+  it("모르는 역할은 버린다", () => {
+    expect(readChosenRoles([{ id: "a", role: "place_as_is" }, { id: "b", role: "unclear" }], ids)).toEqual({});
+  });
+
+  it("같은 id 가 두 번 오면 둘 다 버린다", () => {
+    expect(readChosenRoles([{ id: "a", role: "style" }, { id: "a", role: "preserve_product" }], ids)).toEqual({});
+  });
+
+  it("목록이 아니면 아무것도 안 고른 것이다", () => {
+    expect(readChosenRoles("a:style", ids)).toEqual({});
+  });
+});
+
+describe("합치기 — 고른 것 > 말 > 판단 > 모름 (설계 §2-4)", () => {
+  it("고른 것이 판단을 이긴다", () => {
+    expect(mergeRoles({ ids: ["a"], chosen: { a: "style" }, judged: 판단(["preserve_product", true]) }))
+      .toEqual([{ id: "a", role: "style" }]);
+  });
+
+  it("안 고른 사진은 판단대로 간다", () => {
+    expect(mergeRoles({ ids: ["a", "b"], chosen: { a: "style" }, judged: 판단(["unclear", false], ["preserve_product", true]) }))
+      .toEqual([{ id: "a", role: "style" }, { id: "b", role: "preserve_product" }]);
+  });
+
+  it("판단도 없으면 unclear 다", () => {
+    expect(mergeRoles({ ids: ["a"], chosen: {}, judged: { photos: [], conflicting: false } }))
+      .toEqual([{ id: "a", role: "unclear" }]);
+  });
+
+  it("붙인 순서를 지킨다", () => {
+    expect(mergeRoles({ ids: ["b", "a"], chosen: {}, judged: 판단(["style", false], ["style", false]) }).map((row) => row.id))
+      .toEqual(["b", "a"]);
+  });
+});
+
+describe("물을까 (설계 §2-5)", () => {
+  it("모르는 사진이 있으면 묻는다", () => {
+    expect(photoAskReason([{ id: "a", role: "unclear" }, { id: "b", role: "style" }])).toBe("unclear");
+  });
+
+  it("인물 역할인 사진이 둘이면 묻는다", () => {
+    expect(photoAskReason([{ id: "a", role: "preserve_person" }, { id: "b", role: "preserve_person" }])).toBe("people");
+  });
+
+  it("그림체만 바꾸는 인물도 인물로 센다", () => {
+    expect(photoAskReason([{ id: "a", role: "preserve_person_restyled" }, { id: "b", role: "preserve_person" }])).toBe("people");
+  });
+
+  /** 장 단위로 센다 — 단체 사진 한 장은 1이다(설계 §2-5). */
+  it("단체 사진 한 장은 묻지 않는다", () => {
+    expect(photoAskReason([{ id: "단체", role: "preserve_person_restyled" }, { id: "b", role: "style" }])).toBeNull();
+  });
+
+  it("제품은 여럿이어도 된다", () => {
+    expect(photoAskReason([{ id: "a", role: "preserve_product" }, { id: "b", role: "preserve_product" }])).toBeNull();
+  });
+
+  it("모름이 먼저다 — 둘 다면 unclear 로 묻는다", () => {
+    expect(photoAskReason([
+      { id: "a", role: "unclear" }, { id: "b", role: "preserve_person" }, { id: "c", role: "preserve_person" },
+    ])).toBe("unclear");
+  });
+});
+
+describe("인물은 한 줄에만 (설계 §2-5)", () => {
+  it("다른 줄이 인물이면 못 고른다", () => {
+    expect(canPickPerson({ a: "preserve_person", b: undefined }, "b")).toBe(false);
+  });
+
+  it("자기 줄이 인물이면 그대로 고를 수 있다", () => {
+    expect(canPickPerson({ a: "preserve_person" }, "a")).toBe(true);
+  });
+
+  it("다른 줄이 제품이면 고를 수 있다", () => {
+    expect(canPickPerson({ a: "preserve_product" }, "b")).toBe(true);
   });
 });

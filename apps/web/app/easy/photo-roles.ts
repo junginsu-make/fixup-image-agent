@@ -1,3 +1,4 @@
+import { countPreservedPeople } from "@fixup/shared";
 import type { AttachmentRead } from "@fixup/poster-core";
 
 /**
@@ -168,4 +169,71 @@ export function readRoleJudgment(raw: unknown, count: number): RoleJudgment {
   });
 
   return { photos, conflicting: value?.conflicting === true };
+}
+
+/** 물음 화면의 한 줄이자 합친 결과. */
+export interface PhotoRow {
+  id: string;
+  role: JudgedPhotoRole;
+}
+
+/**
+ * 화면이 보낸 **고른 역할**을 읽는다(설계 §2-5).
+ *
+ * 서버에는 「이번에 붙인 사진」의 기록이 따로 없다. 그래서 ⓪에서 확인한 목록
+ * (`ids`)과만 견준다 — 그 밖의 id, 모르는 역할, 두 번 온 id 는 버린다.
+ * 버린 사진은 판단대로 가고, 판단도 없으면 묻는다.
+ */
+export function readChosenRoles(raw: unknown, ids: readonly string[]): Record<string, EasyPhotoRole> {
+  if (!Array.isArray(raw)) return {};
+  const allowed = new Set(ids);
+  const known = new Set<string>(EASY_PHOTO_ROLES);
+  const entries = raw.map((entry) => entry as { id?: unknown; role?: unknown } | null);
+  const 몇번 = (id: string) => entries.filter((one) => one?.id === id).length;
+
+  return Object.fromEntries(
+    entries
+      .filter((one): one is { id: string; role: string } =>
+        one !== null && typeof one.id === "string" && typeof one.role === "string"
+        && allowed.has(one.id) && known.has(one.role) && 몇번(one.id) === 1)
+      .map((one) => [one.id, one.role as EasyPhotoRole]),
+  );
+}
+
+/** 고른 것 > 말·판단(ⓑ2) > 모름. 붙인 순서를 지킨다. */
+export function mergeRoles(input: {
+  ids: readonly string[];
+  chosen: Readonly<Record<string, EasyPhotoRole>>;
+  judged: RoleJudgment;
+}): PhotoRow[] {
+  return input.ids.map((id, index) => ({
+    id,
+    role: input.chosen[id] ?? input.judged.photos[index]?.role ?? "unclear",
+  }));
+}
+
+export function isPersonRole(role: JudgedPhotoRole): boolean {
+  return role === "preserve_person" || role === "preserve_person_restyled";
+}
+
+/**
+ * 물어야 하나, 무엇을.
+ *
+ * - 모르는 사진이 있으면 `unclear`
+ * - 인물 역할인 **장**이 둘 이상이면 `people` — 얼굴이 섞인다. 단체 사진 한 장은
+ *   1이다(설계 §2-5). 셈은 이미지 만들기와 같은 `countPreservedPeople` 에 캐릭터
+ *   표시 없이 넘긴다
+ */
+export function photoAskReason(rows: readonly PhotoRow[]): "unclear" | "people" | null {
+  if (rows.some((row) => row.role === "unclear")) return "unclear";
+  const people = countPreservedPeople(rows.map((row) => ({ role: row.role as EasyPhotoRole })));
+  return people > 1 ? "people" : null;
+}
+
+/** 인물 역할은 한 줄에서만 고를 수 있다. 다른 줄이 이미 인물이면 못 고른다. */
+export function canPickPerson(
+  picked: Readonly<Record<string, JudgedPhotoRole | undefined>>,
+  id: string,
+): boolean {
+  return !Object.entries(picked).some(([other, role]) => other !== id && role !== undefined && isPersonRole(role));
 }
