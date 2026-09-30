@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
-import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
+import { HOME_AFTER_LOGIN, publicOrigin, signupRequiredPath } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
 import { isUsableAccount } from "./lib/membership/usable";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
@@ -173,9 +173,16 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = matches(pathname, ["/signup", "/forgot-password"]);
   if (!user) {
     if (matches(pathname, PUBLIC_PATHS)) return response;
-    const loginUrl = new URL("/login", base);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    /*
+      **비회원은 로그인 화면이 아니라 첫 화면으로 보낸다**(2026-09-30 사용자, 설계 §3.5).
+      첫 화면이 「회원가입이 필요합니다」 모달을 연다. 로그인 칸부터 내밀면 아직
+      가입하지 않은 사람은 갈 곳을 모른다.
+
+      가려던 곳은 지금까지처럼 `next` 에 **경로만** 싣는다. 모달의 [로그인] 이
+      그대로 넘기고, 로그인 화면이 `safeNext` 로 걸러 돌려보낸다. 로그인 유지
+      시간이 지난 경우는 위에서 이미 `/login?expired=1` 로 갔다.
+    */
+    return NextResponse.redirect(new URL(signupRequiredPath(pathname), base));
   }
 
   const { data: profile } = await supabase

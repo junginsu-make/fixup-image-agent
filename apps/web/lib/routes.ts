@@ -28,6 +28,20 @@ export function safeNext(next: string | null | undefined): string {
 }
 
 /**
+ * 비회원이 회원 화면을 열었을 때 보내는 곳 (2026-09-30 사용자, 설계 §3.5).
+ *
+ * 첫 화면이 `signup=required` 를 보고 「회원가입이 필요합니다」 모달을 연다
+ * (`app/_landing/signup-required-modal.tsx`). `next` 는 모달의 [로그인] 이
+ * 로그인 화면에 넘긴다 — 밖으로 나가는 주소를 걸러 내는 것은 로그인 화면의
+ * `safeNext` 다.
+ */
+export const SIGNUP_REQUIRED = "required";
+
+export function signupRequiredPath(next: string): string {
+  return `/?${new URLSearchParams({ signup: SIGNUP_REQUIRED, next }).toString()}`;
+}
+
+/**
  * 밖에서 보이는 주소.
  *
  * standalone 으로 띄우면 미들웨어의 `request.url` 출처가 **공개 주소가 아니라

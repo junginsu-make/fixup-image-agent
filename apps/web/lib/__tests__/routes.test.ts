@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOME_AFTER_LOGIN, publicOrigin, safeNext } from "../routes";
+import { HOME_AFTER_LOGIN, publicOrigin, safeNext, signupRequiredPath } from "../routes";
 
 const headers = (values: Record<string, string>) => ({
   get: (name: string) => values[name.toLowerCase()] ?? null,
@@ -70,5 +70,15 @@ describe("가려던 곳으로 돌려보내기", () => {
     expect(safeNext("//evil.example.com")).toBe(HOME_AFTER_LOGIN);
     expect(safeNext("https://evil.example.com")).toBe(HOME_AFTER_LOGIN);
     expect(safeNext("evil.example.com")).toBe(HOME_AFTER_LOGIN);
+  });
+});
+
+describe("비회원 안내 주소 (설계 §3.5)", () => {
+  it("첫 화면에 안내 표시와 가려던 곳을 싣는다", () => {
+    expect(signupRequiredPath("/create")).toBe("/?signup=required&next=%2Fcreate");
+  });
+
+  it("하위 경로도 그대로 싣는다", () => {
+    expect(signupRequiredPath("/sns/abc123")).toBe("/?signup=required&next=%2Fsns%2Fabc123");
   });
 });
