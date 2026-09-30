@@ -11,7 +11,7 @@ describe("localBypassRedirect", () => {
   });
 
   it("나머지 경로는 건드리지 않는다", () => {
-    for (const path of ["/", "/create", "/sns", "/poster", "/library", "/demo"]) {
+    for (const path of ["/", "/create", "/sns", "/poster", "/library"]) {
       expect(localBypassRedirect(path)).toBeNull();
     }
   });

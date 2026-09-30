@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOME_AFTER_LOGIN, publicOrigin, safeNext } from "../routes";
+import { HOME_AFTER_LOGIN, publicOrigin, safeNext, signupRequiredPath } from "../routes";
 
 const headers = (values: Record<string, string>) => ({
   get: (name: string) => values[name.toLowerCase()] ?? null,
@@ -70,5 +70,28 @@ describe("가려던 곳으로 돌려보내기", () => {
     expect(safeNext("//evil.example.com")).toBe(HOME_AFTER_LOGIN);
     expect(safeNext("https://evil.example.com")).toBe(HOME_AFTER_LOGIN);
     expect(safeNext("evil.example.com")).toBe(HOME_AFTER_LOGIN);
+  });
+
+  it("역슬래시로 시작하는 것도 바깥 주소다 (2026-09-30 독립 리뷰)", () => {
+    // 브라우저는 경로의 역슬래시를 슬래시로 바꿔 읽는다 — `/\evil.example.com` 은
+    // `//evil.example.com` 이 되어 로그인 뒤 router.replace 가 다른 사이트로 보냈다.
+    expect(safeNext("/\\evil.example.com")).toBe(HOME_AFTER_LOGIN);
+    expect(safeNext("/\\\\evil.example.com")).toBe(HOME_AFTER_LOGIN);
+  });
+
+  it("퍼센트 인코딩된 역슬래시는 그대로 둔다 — 풀어보지 않으니 안전하다", () => {
+    // `%5C` 는 글자 그대로 남는다. 이 함수가 디코딩해서 판정하지 않는 한
+    // 브라우저는 이것을 같은 자리의 경로로 읽는다(다른 사이트로 가지 않는다).
+    expect(safeNext("/%5Cevil.example.com")).toBe("/%5Cevil.example.com");
+  });
+});
+
+describe("비회원 안내 주소 (설계 §3.5)", () => {
+  it("첫 화면에 안내 표시와 가려던 곳을 싣는다", () => {
+    expect(signupRequiredPath("/create")).toBe("/?signup=required&next=%2Fcreate");
+  });
+
+  it("하위 경로도 그대로 싣는다", () => {
+    expect(signupRequiredPath("/sns/abc123")).toBe("/?signup=required&next=%2Fsns%2Fabc123");
   });
 });

@@ -22,7 +22,7 @@ import { GuideNav } from "./_components/guide-nav";
  *   손님      공개 머리·꼬리. 로그인·가입 길이 거기 있다
  *
  * **셸을 손님에게 두르지 않는다.** 사이드바는 도구 목록인데, 눌러 봐야 전부
- * 로그인으로 돌아온다 — 열리지 않는 문을 여섯 개 보여 주는 셈이다.
+ * 첫 화면 회원가입 안내로 간다 — 열리지 않는 문을 여섯 개 보여 주는 셈이다.
  */
 export default async function Layout({ children }: { children: ReactNode }) {
   /*
