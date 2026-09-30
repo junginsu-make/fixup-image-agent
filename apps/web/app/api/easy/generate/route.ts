@@ -6,6 +6,7 @@ import { stepIdempotencyKey } from "../../../../lib/easy/step-key";
 import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
+import { DETAIL_PAGE_GUIDE } from "../../../easy/detail-page";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -199,6 +200,17 @@ export async function POST(request: Request) {
         role: "assistant",
         body: decision.reply || "무엇을 만들어 드릴까요?",
       });
+      return Response.json({ ok: true, talked: true, message: saved, textModel });
+    }
+
+    if (decision.wants === "detail_page") {
+      /*
+       * **상세페이지는 여기서 안 만든다**(설계 §2-7, 2026-09-30 사용자 결정).
+       *
+       * 안내 한 줄을 남기고 끝낸다. 사진을 읽지도 값이 나가지도 않는다.
+       * 화면은 이 문장이 달린 줄에 「상세페이지 만들기 열기」를 단다.
+       */
+      const saved = await store.appendMessage({ conversationId, role: "assistant", body: DETAIL_PAGE_GUIDE });
       return Response.json({ ok: true, talked: true, message: saved, textModel });
     }
 

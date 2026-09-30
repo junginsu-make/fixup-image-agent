@@ -40,7 +40,7 @@ const EASY_CHAT_SPEC: StructuredSpec = {
        * 버린다 — 2026-09-17 에 `invented` 로 한 번, `hasText` 로 또 한 번
        * 당했다. 둘 다 프롬프트에만 적혀 있었다.
        */
-      wants: { type: "string", enum: ["image", "talk"] },
+      wants: { type: "string", enum: ["image", "talk", "detail_page"] },
       reply: { type: "string" },
       /*
        * **말 속에 있을 때만 채운다.** 빈 글이 「없다」는 뜻이다.

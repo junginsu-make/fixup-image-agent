@@ -116,3 +116,18 @@ describe("돌아온 답 읽기", () => {
     expect(readEasyDecision({ wants: "talk" })).toEqual({ wants: "talk", reply: "" });
   });
 });
+
+describe("상세페이지를 가른다 (설계 §2-7)", () => {
+  it("detail_page 를 읽는다", () => {
+    expect(readEasyDecision({ wants: "detail_page", reply: "", ratio: "", look: "" }).wants)
+      .toBe("detail_page");
+  });
+
+  /** 상세페이지에 대해 **묻는 말**까지 안내로 끝내면 대화가 안 된다. */
+  it("만들어 달라는 것과 묻는 말을 가르라고 알린다", () => {
+    const prompt = easyChatPrompt([], "상세페이지 만들어줘");
+
+    expect(prompt).toContain("detail_page");
+    expect(prompt).toContain("상세페이지 문구 좀 봐줘");
+  });
+});

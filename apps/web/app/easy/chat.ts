@@ -30,8 +30,11 @@ import type { EasyMessage } from "./turn";
 
 /** 모델이 돌려주는 것. */
 export interface EasyDecision {
-  /** `image` 면 그림을 만들고, `talk` 면 `reply` 를 대화에 적는다. */
-  wants: "image" | "talk";
+  /**
+   * `image` 면 그림을 만들고, `talk` 면 `reply` 를 대화에 적는다.
+   * `detail_page` 면 만들지 않고 안내 한 줄로 끝낸다(설계 §2-7).
+   */
+  wants: "image" | "talk" | "detail_page";
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -98,6 +101,9 @@ export function easyChatPrompt(
     "  image  지금 **이미지를 만들어 달라는 것**입니다.",
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
+    "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
+    "               만들어 달라는 것입니다. 사진을 붙였어도 같습니다.",
+    "               상세페이지에 대해 **묻는 말**(「상세페이지 문구 좀 봐줘」)은 talk 입니다.",
     "",
     "**낱말로 가르지 마세요.** 「방금 그린 거 왜 그렇게 나왔어?」에는 「그린」이",
     "있지만 묻는 말입니다. 「포스터 만들 때 뭘 적어야 해?」도 묻는 말입니다.",
@@ -108,6 +114,7 @@ export function easyChatPrompt(
     "**무엇을 적으면 되는지 예를 들어** 주세요.",
     "",
     "`image` 면 `reply` 는 빈 글로 두세요. 이미지가 곧 답입니다.",
+    "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
     "",
     "── 말 속에 비율이나 그림체가 있나 ──",
     "",
@@ -160,7 +167,7 @@ export function readEasyDecision(raw: unknown): EasyDecision {
   const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown } | null;
   const wants = value?.wants;
 
-  if (wants !== "image" && wants !== "talk") {
+  if (wants !== "image" && wants !== "talk" && wants !== "detail_page") {
     throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(wants)}`);
   }
 

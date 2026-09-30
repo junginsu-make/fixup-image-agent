@@ -226,3 +226,14 @@ describe("비율·결 묻기", () => {
     expect(generate).toContain("look: 고르기.look");
   });
 });
+
+describe("상세페이지 안내 (설계 §2-7)", () => {
+  it("프로젝트를 만들기 전에 안내만 남기고 끝낸다", () => {
+    const 시작 = generate.indexOf('decision.wants === "detail_page"');
+    const 갈래 = generate.slice(시작, generate.indexOf("await createProject("));
+
+    expect(시작).toBeGreaterThan(0);
+    expect(갈래).toContain("DETAIL_PAGE_GUIDE");
+    expect(갈래).toContain("return Response.json");
+  });
+});
