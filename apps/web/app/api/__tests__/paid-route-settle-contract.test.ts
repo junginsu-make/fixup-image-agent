@@ -15,6 +15,11 @@ import { describe, expect, it } from "vitest";
  *      던지는 갈래로 돌아가, 이미 만든 결과가 「생성 실패」로 둔갑한다
  *   ③ 실패를 **주입해 본 시험이 있다.** 셋 중 이것만 사람이 챙겨야 한다
  *
+ * **2026-09-30 에 넓혔다**(AI 사용 통제 설계 §3.1·§5). 회원 확인만 하고 예약 없이
+ * 유료 AI 를 부르던 네 길이 있었다 — 크레딧이 없어도, 운영자가 멈춰도 돌았다.
+ * 이제 **공급자를 부르는 길은 모두 예약한다.** 예외는 설계 §3.1 의 셋뿐이고 아래
+ * 표에 이름으로 적는다.
+ *
  * ── 왜 목록을 손으로 안 적나 ────────────────────────────────
  *
  * 유료 라우트는 앞으로도 는다. 목록을 글로 적어 두면 **새로 생긴 길이 조용히
@@ -37,16 +42,25 @@ function routesUnder(...folders: string[]): string[] {
   return found.sort();
 }
 
-/** 설계가 말하는 범위. 포스터·카드뉴스는 다른 항목이 맡는다. */
-const 유료길 = routesUnder("pdp", "redesign").filter((file) =>
-  readFileSync(file, "utf8").includes("reserveAiUsage("),
-);
+const 끝부분 = (file: string) => file.replace(/\\/g, "/").split("/api/")[1] ?? file;
 
-const 짧게 = (file: string) => file.slice(file.indexOf(`api${join("", "")}`)).replace(/\\/g, "/");
+/** 예약 없이 유료 AI 를 부르던 네 길(설계 2026-09-30 §3.1). 이제 ①②③ 을 똑같이 진다. */
+const 새로막은길 = [
+  "easy/generate/route.ts",
+  "sns/projects/[id]/plan/route.ts",
+  "sns/projects/[id]/caption/route.ts",
+  "poster/projects/[id]/review/route.ts",
+].map((name) => join(API, name));
+
+/** 설계가 말하는 범위. 포스터·카드뉴스의 나머지는 아래 「공급자를 부르는 길」이 맡는다. */
+const 유료길 = [
+  ...routesUnder("pdp", "redesign").filter((file) => readFileSync(file, "utf8").includes("reserveAiUsage(")),
+  ...새로막은길,
+];
 
 describe("값이 나가는 길을 빠짐없이 센다", () => {
   it("**셀 길이 있다** — 못 찾으면 아래 검사가 전부 조용히 통과한다", () => {
-    expect(유료길.length).toBeGreaterThanOrEqual(8);
+    expect(유료길.length).toBeGreaterThanOrEqual(13);
   });
 });
 
@@ -54,7 +68,7 @@ describe("예약한 길은 반드시 정산한다", () => {
   it("**예약만 하고 안 닫는 길이 없다**", () => {
     const 안닫는것 = 유료길
       .filter((file) => !readFileSync(file, "utf8").includes("settleAiUsage("))
-      .map(짧게);
+      .map(끝부분);
 
     expect(안닫는것, `안 닫는 길: ${안닫는것.join(", ")}`).toEqual([]);
   });
@@ -64,7 +78,7 @@ describe("던지는 갈래를 직접 쓰지 않는다", () => {
   it("**`finalizeAiUsage` 를 직접 부르는 길이 없다**", () => {
     const 직접부르는것 = 유료길
       .filter((file) => /\bfinalizeAiUsage\s*\(/.test(readFileSync(file, "utf8")))
-      .map(짧게);
+      .map(끝부분);
 
     expect(직접부르는것, `직접 부르는 길: ${직접부르는것.join(", ")}`).toEqual([]);
   });
@@ -89,9 +103,11 @@ describe("길마다 실패를 주입해 본 시험이 있다", () => {
     "redesign/generate/route.ts": "redesign/__tests__/settlement.test.ts",
     "redesign/edit-section/route.ts": "redesign/__tests__/settlement.test.ts",
     "redesign/transcribe-strips/route.ts": "redesign/__tests__/transcribe-usage.test.ts",
+    "easy/generate/route.ts": "easy/__tests__/decide-usage.test.ts",
+    "sns/projects/[id]/plan/route.ts": "sns/__tests__/plan-caption-usage.test.ts",
+    "sns/projects/[id]/caption/route.ts": "sns/__tests__/plan-caption-usage.test.ts",
+    "poster/projects/[id]/review/route.ts": "poster/__tests__/poster-review-route.test.ts",
   };
-
-  const 끝부분 = (file: string) => file.replace(/\\/g, "/").split("/api/")[1] ?? file;
 
   it("**표에 없는 길이 없다** — 새 유료 길이 생기면 여기가 빨개진다", () => {
     const 빠진것 = 유료길.map(끝부분).filter((name) => !주입한시험[name]);
@@ -124,5 +140,101 @@ describe("길마다 실패를 주입해 본 시험이 있다", () => {
     );
 
     expect(안흔든것, `못 닫는 경우를 안 만드는 시험: ${안흔든것.join(", ")}`).toEqual([]);
+  });
+});
+
+/* ── 공급자를 부르는 길은 모두 관문을 지난다(설계 2026-09-30 §3.1·§5) ──────── */
+
+/**
+ * **공급자 모듈.** import 경로로 가른다. 이름을 새로 지으면(`…-provider`, `…/providers`)
+ * 저절로 잡힌다.
+ */
+const PROVIDER_IMPORT: RegExp[] = [
+  /(^|\/)providers?$/, // lib/pdp/providers, lib/poster/providers, lib/sns/providers, lib/cs/provider
+  /-provider$/, // lib/easy/chat-provider, lib/layout/analyze-provider
+  /\/lib\/ad\/background$/,
+  /\/lib\/redesign\/image-generator$/,
+  /\/lib\/sns\/source-adapters$/, // 웹검색 조사·Apify
+  /^@anthropic-ai\/sdk$/,
+  /^openai$/,
+  /^@google\/genai$/,
+  /^@fal-ai\/client$/,
+];
+/** 패키지 안에서 공급자를 부르는 함수. import 경로만으로는 못 가른다(`@fixup/redesign-core`). */
+const PROVIDER_CALL = /\bindexKnowledge\s*\(/;
+
+const 부르는길 = routesUnder(".").filter((file) => {
+  const source = readFileSync(file, "utf8");
+  const specs = [...source.matchAll(/from\s+"([^"]+)"/g)].map((match) => match[1]!);
+  return specs.some((spec) => PROVIDER_IMPORT.some((pattern) => pattern.test(spec))) || PROVIDER_CALL.test(source);
+});
+
+/** 설계 §3.1 의 예외 셋. 이 밖에서 예약 없이 공급자를 부르면 빨개진다. */
+const 예외: Record<string, string> = {
+  "poster/projects/[id]/status/route.ts": "예외 1 — 이미 예약한 작업을 이어 간다",
+  "sns/projects/[id]/status/route.ts": "예외 1 — 이미 예약한 작업을 이어 간다(스위치 확인은 C3)",
+  "redesign/knowledge/route.ts": "예외 2 — 관리자 지식 올리기. 비용 기록만(C3)",
+  "pdp/validate-key/route.ts": "예외 3 — 공급자 모듈을 import 만 하고 부르지 않는다",
+};
+
+describe("공급자를 부르는 길은 모두 관문을 지난다", () => {
+  it("**셀 길이 있다** — 못 찾으면 아래 검사가 전부 조용히 통과한다", () => {
+    expect(부르는길.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("**예외 표가 낡지 않았다** — 적힌 길이 실제로 공급자를 부른다", () => {
+    const 찾은것 = new Set(부르는길.map(끝부분));
+    const 낡은것 = Object.keys(예외).filter((name) => !찾은것.has(name));
+
+    expect(낡은것, `공급자를 안 부르는데 예외에 남은 길: ${낡은것.join(", ")}`).toEqual([]);
+  });
+
+  it("**예외 말고는 모두 예약한다**", () => {
+    const 안잡는것 = 부르는길
+      .filter((file) => !예외[끝부분(file)])
+      .filter((file) => !readFileSync(file, "utf8").includes("reserveAiUsage("))
+      .map(끝부분);
+
+    expect(안잡는것, `예약 없이 공급자를 부르는 길: ${안잡는것.join(", ")}`).toEqual([]);
+  });
+
+  /**
+   * **예약한 길은 닫는다.** 포스터·카드뉴스·캐릭터의 옛 길은 `finalizeAiUsage` 를 직접
+   * 부른다 — 그 모양은 ② 가 pdp·redesign·새 네 길에서만 막는다. 여기서는 「닫는다」만 본다.
+   */
+  it("**예약한 길은 닫는다**", () => {
+    const 안닫는것 = 부르는길
+      .filter((file) => readFileSync(file, "utf8").includes("reserveAiUsage("))
+      .filter((file) => !/\b(settleAiUsage|finalizeAiUsage)\s*\(/.test(readFileSync(file, "utf8")))
+      .map(끝부분);
+
+    expect(안닫는것, `예약만 하고 안 닫는 길: ${안닫는것.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("새로 막은 네 길", () => {
+  /** 새 작업 이름을 만들지 않는다 — 기존 이름 + resource 로 가른다(설계 §3.1 의 표). */
+  const 기대: Record<string, string> = {
+    "easy/generate/route.ts": '"poster_image", 0, freeCreditPlan("easy:decide")',
+    "sns/projects/[id]/plan/route.ts": '"sns_image", 0, freeCreditPlan(`sns:${id}:plan`)',
+    "sns/projects/[id]/caption/route.ts": '"sns_image", 0, freeCreditPlan(`sns:${id}:caption`)',
+    "poster/projects/[id]/review/route.ts": '"poster_image", 0, freeCreditPlan(`poster:${id}:review`)',
+  };
+
+  it.each(Object.entries(기대))("%s 는 기존 작업 이름과 제 resource 로 잡는다", (name, call) => {
+    expect(readFileSync(join(API, name), "utf8")).toContain(call);
+  });
+
+  it("쉬운 만들기 판정은 단계 열쇠로 잡는다 — 바깥 열쇠를 쓰면 뒤 단계가 duplicate_request", () => {
+    /*
+     * 리터럴 `"decide"` 를 `relay(...)` 자리에 그대로 넣으면
+     * `easy/__tests__/generate-wiring.test.ts` 의 "세 단계" 리터럴 집계(정확히
+     * 3개만 세는 정규식)에 네 번째로 섞여 그 시험이 깨진다. 그래서 실제 코드는
+     * 변수(`판정단계`)로 우회한다 — 여기서는 그 변수가 `"decide"` 이고 `relay`
+     * 호출에 그대로 쓰이는지를 본다.
+     */
+    const source = readFileSync(join(API, "easy/generate/route.ts"), "utf8");
+    expect(source).toMatch(/판정단계\s*=\s*"decide"/);
+    expect(source).toContain('relay(request, "/api/easy/generate", {}, 판정단계)');
   });
 });
