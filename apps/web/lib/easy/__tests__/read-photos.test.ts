@@ -47,6 +47,32 @@ describe("사진 읽기", () => {
     expect(Object.keys(설명)).toEqual(["b"]);
   });
 
+  /**
+   * **한 장씩 부르되 동시에 부른다**(2026-09-30 실측 — 한 장 15초, 세 장 36초).
+   * 한 부름에 여러 장을 주면 사람과 연출이 섞이므로 부름은 한 장씩이다.
+   */
+  it("사진마다 따로, 동시에 읽는다", async () => {
+    let 지금 = 0;
+    let 가장많이 = 0;
+    const 부름: string[][] = [];
+    const 눈 = {
+      read: async (input: { prompt: string; imageUrls: string[] }) => {
+        부름.push(input.imageUrls);
+        지금 += 1;
+        가장많이 = Math.max(가장많이, 지금);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        지금 -= 1;
+        return 읽은것;
+      },
+    };
+    const 설명 = await readEasyPhotos(
+      [{ id: "a", url: "https://x.test/a.png" }, { id: "b", url: "https://x.test/b.png" }], 눈);
+
+    expect(부름.every((urls) => urls.length === 1)).toBe(true);
+    expect(가장많이).toBe(2);
+    expect(Object.keys(설명).sort()).toEqual(["a", "b"]);
+  });
+
   /** 읽을 것이 없으면 눈을 만들지도 않는다 — 열쇠가 없는 곳에서도 안 터진다. */
   it("읽을 것이 없으면 아무것도 안 부른다", async () => {
     expect(await readEasyPhotos([])).toEqual({});

@@ -13,6 +13,10 @@ import { describePhoto, type EasyPhoto } from "../../app/easy/photo-roles";
  *
  * 주소 서명이 비어 읽을 수 없는 사진은 설명 없이 ⓑ2 로 간다 — 말이 쓰임을
  * 안 말했으면 묻는다(설계 §2-3).
+ *
+ * **한 장씩 부르되 동시에 부른다**(2026-09-30 실측 — 한 장 15초, 세 장 36초).
+ * `readAttachments` 는 받은 것을 차례로 읽는다. 사진마다 따로 넘기면 부름은
+ * 여전히 한 장씩이라 사람과 연출이 섞이지 않고, 기다림은 가장 느린 한 장이 된다.
  */
 export async function readEasyPhotos(
   photos: readonly EasyPhoto[],
@@ -21,9 +25,9 @@ export async function readEasyPhotos(
   const readable = photos.filter((photo) => Boolean(photo.url));
   if (!readable.length) return {};
 
-  const { reads } = await readAttachments(
-    readable.map((photo) => ({ id: photo.id, title: photo.title ?? "사진", url: photo.url! })),
-    reader ?? createPosterAttachmentReader(),
-  );
-  return Object.fromEntries(Object.entries(reads).map(([id, read]) => [id, describePhoto(read)]));
+  const eye = reader ?? createPosterAttachmentReader();
+  const results = await Promise.all(readable.map((photo) =>
+    readAttachments([{ id: photo.id, title: photo.title ?? "사진", url: photo.url! }], eye)));
+  return Object.fromEntries(results.flatMap(({ reads }) =>
+    Object.entries(reads).map(([id, read]) => [id, describePhoto(read)])));
 }
