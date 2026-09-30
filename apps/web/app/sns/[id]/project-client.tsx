@@ -284,7 +284,8 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   async function plan() {
     beginWork("planning");
     try {
-      const saved = await request(`/api/sns/projects/${projectId}/plan`, { method: "POST" });
+      // 기획도 값이 나간다 — 열쇠 없이 보내면 서버가 예약을 거절한다.
+      const saved = await request(`/api/sns/projects/${projectId}/plan`, { method: "POST", headers: billableHeaders() });
       // 중지를 눌렀으면 도착한 기획을 안 쓴다 — 멈춘 화면이 혼자 넘어가면 안 된다.
       if (stopped.current) return;
       setProject(saved);
@@ -347,7 +348,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
     setWritingCaption(true);
     setMessage("");
     try {
-      setProject(await request(`/api/sns/projects/${projectId}/caption`, { method: "POST" }));
+      setProject(await request(`/api/sns/projects/${projectId}/caption`, { method: "POST", headers: billableHeaders() }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "게시글 문구를 만들지 못했습니다.");
     } finally {

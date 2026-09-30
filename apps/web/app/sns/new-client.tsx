@@ -15,6 +15,7 @@ import { takeHandoff } from "../../lib/handoff";
 import { loadSnsRerun, snsRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { rerunStartStep } from "../_components/rerun-step";
+import { billableFetch } from "../../lib/billable-fetch";
 
 /**
  * **손으로 박지 않는다.**
@@ -243,7 +244,8 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
       });
       const payload = await response.json() as { ok?: boolean; project?: { id: string }; message?: string };
       if (!response.ok || !payload.project) throw new Error(payload.message ?? "프로젝트를 만들지 못했습니다.");
-      const planned = await fetch(`/api/sns/projects/${payload.project.id}/plan`, { method: "POST" });
+      // 기획은 값이 나가는 요청이다 — 식별자가 없으면 서버가 예약을 400 으로 거절한다.
+      const planned = await billableFetch(`/api/sns/projects/${payload.project.id}/plan`);
       await planned.json();
       router.push(`/sns/${payload.project.id}`);
     } catch (error) {

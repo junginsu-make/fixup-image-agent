@@ -1,4 +1,6 @@
-import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../../../lib/membership/credit-ledger";
+import { llmSettleCost, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { createActualPlanningFlow } from "../../../../../../lib/sns/actual-flow";
 import { createSourceAdapters } from "../../../../../../lib/sns/source-adapters";
@@ -28,19 +30,41 @@ export async function GET(_request: Request, context: Context) {
   }
 }
 
-export async function POST(_request: Request, context: Context) {
+/**
+ * 기획·원고를 만든다. **웹검색 조사·Apify·글 모델을 부르는, 값이 나가는 길이다.**
+ *
+ * 설계 2026-09-30 §3.1: 회원이 부르는 유료 AI 는 예약을 먼저 거친다. 새 작업
+ * 이름을 만들지 않고 카드뉴스 칸(`sns_image`)에 `sns:{id}:plan` 으로 넣는다 —
+ * 크레딧은 0 장이다(D1). 크레딧이 없거나 운영자가 멈췄으면 예약에서 막힌다.
+ */
+export async function POST(request: Request, context: Context) {
+  // 이 요청에서 글 모델에 쓴 돈을 잰다. 정산에 싣는다.
+  return withLlmMeter(() => plan(request, context));
+}
+
+async function plan(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
+  /** `catch` 에서도 닫아야 하므로 밖에 둔다. 안 닫으면 예약이 만료까지 남는다. */
+  let reservation: { userId: string; requestId: string } | null = null;
   try {
     const { id } = await context.params;
     const store = await snsFlowStoreForUser(auth.member.userId);
     const project = await store.get(id);
     if (!project) return Response.json({ ok: false, message: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
+
+    const reserved = await reserveAiUsage(request, "sns_image", 0, freeCreditPlan(`sns:${id}:plan`));
+    if (!reserved.ok) return reserved.response;
+    reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
     const flow = await createActualPlanningFlow(project, createSnsPlanningProviders(), createSourceAdapters());
     await replaceSnsCardRows(auth.member.userId, id, flow);
     const saved = await store.save(id, flow, "copy_ready");
+    await settleAiUsage(reservation, true, 0, undefined, llmSettleCost());
     return Response.json({ ok: true, project: saved });
   } catch (error) {
+    // 실패해도 닫는다. 이미 부른 값은 원가로 남긴다.
+    if (reservation) await settleAiUsage(reservation, false, 0, "sns_plan_failed", llmSettleCost());
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;

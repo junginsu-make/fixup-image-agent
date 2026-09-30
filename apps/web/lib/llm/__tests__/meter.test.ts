@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { llmCostUsd, priceOf } from "@fixup/shared";
-import { readLlmMeter, recordFrom, recordLlmUsage, tokensFrom, withLlmMeter } from "../meter";
+import { llmSettleCost, readLlmMeter, recordFrom, recordLlmUsage, tokensFrom, withLlmMeter } from "../meter";
 
 /**
  * 계량기가 조용히 0을 세는 것이 가장 나쁘다. 화면은 멀쩡하고 장부만 틀린다.
@@ -100,5 +100,30 @@ describe("계량기 밖", () => {
     const 읽은값 = readLlmMeter();
     expect(읽은값.metered).toBe(false);
     expect(읽은값.usd).toBe(0);
+  });
+});
+
+/**
+ * **정산에 실을 원가**(설계 2026-09-30 §3.1). 0 을 적으면 「돈이 안 나갔다」가 되고
+ * 되돌릴 근거가 없다(`finalizeAiUsage` 의 `cost_state`). 못 쟀으면 금액을 비운다.
+ */
+describe("정산에 실을 원가", () => {
+  it("부른 것이 있으면 잰 금액을 싣는다", async () => {
+    const cost = await withLlmMeter(async () => {
+      recordLlmUsage("claude-sonnet-5", 1000, 100);
+      return llmSettleCost();
+    });
+    expect(cost.model).toBe("");
+    expect(cost.billableImages).toBe(0);
+    expect(cost.llmUsd).toBeGreaterThan(0);
+  });
+
+  it("계량기 안이지만 부른 것이 없으면 금액을 비운다 — 0 과 모름을 가른다", async () => {
+    const cost = await withLlmMeter(async () => llmSettleCost());
+    expect(cost).not.toHaveProperty("llmUsd");
+  });
+
+  it("계량기 밖이면 금액을 비운다", () => {
+    expect(llmSettleCost()).not.toHaveProperty("llmUsd");
   });
 });
