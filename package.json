@@ -12,12 +12,13 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --filter @fixup/web lint",
     "test": "pnpm -r test",
-    "test:credit-db": "node --test scripts/tests/credit-ledger.test.mjs scripts/tests/credit-activate.test.mjs scripts/tests/credit-plan-delete.test.mjs scripts/tests/member-profile.test.mjs scripts/tests/reference-own-only.test.mjs"
+    "test:credit-db": "node --test scripts/tests/credit-ledger.test.mjs scripts/tests/credit-activate.test.mjs scripts/tests/credit-plan-delete.test.mjs scripts/tests/member-profile.test.mjs scripts/tests/reference-own-only.test.mjs scripts/tests/restart-orphans.test.mjs"
   },
   "pnpm": {
     "overrides": {
       "nanoid": ">=3.3.18",
       "postcss": ">=8.5.23",
+      "undici": ">=8.10.2 <9",
       "protobufjs": "7.6.5",
       "sharp": "0.35.4"
     }
