@@ -18,6 +18,12 @@ import { B1_CASES, B2_CASES, type B2Case } from "./cases.mts";
 const RUNS = Number(process.env.RUNS ?? "3");
 const 모델 = process.env.TEXT_MODEL ?? DEFAULT_TEXT_MODEL;
 const 지킬것 = new Set(["preserve_product", "preserve_person", "preserve_person_restyled"]);
+const 카드만 = new Set(["place_as_is", "ending"]);
+/** 원고가 있는 대화 — 실제로 화면이 판단에 넘기는 모양 그대로(카드뉴스 원고 줄은 image 줄이다). */
+const 원고있는대화 = [
+  { id: "u1", role: "user" as const, body: "건강기능식품 고르는 법 카드뉴스 만들어줘" },
+  { id: "i1", role: "image" as const, body: "" },
+];
 
 async function 잰다<T>(call: () => Promise<T>) {
   return withLlmMeter(async () => {
@@ -39,6 +45,7 @@ function b2문제(one: B2Case, got: RoleJudgment): string[] {
       if (최종 !== want) 문제.push(`${i + 1}번 최종 ${최종} ≠ ${want}`);
       return;
     }
+    if (!카드만.has(want) && 카드만.has(have.role)) 문제.push(`치명: ${i + 1}번 말하지 않은 원본 넣기`);
     if ((지킬것.has(want) || want === "unclear") && have.role === "style") {
       문제.push(`치명: ${i + 1}번을 분위기로 보냄`);
     }
@@ -69,12 +76,15 @@ async function main() {
   줄.push("## ⓑ1 말인가 주문인가", "", "| 문장 | 사진 | 기대 | 결과 | ms | $ |", "|---|---|---|---|---|---|");
   for (const one of B1_CASES) {
     for (let run = 0; run < RUNS; run += 1) {
-      const r = await 잰다(() => provider.decide(easyChatPrompt([], one.prompt, one.attachments)));
+      const r = await 잰다(() => provider.decide(easyChatPrompt(one.hasDraft ? 원고있는대화 : [], one.prompt, one.attachments, Boolean(one.hasDraft))));
       let got: string;
-      try { got = readEasyDecision(r.value).wants; } catch { got = "오류"; }
+      try { got = readEasyDecision(r.value, { canRevise: Boolean(one.hasDraft) }).wants; } catch { got = "오류"; }
+      const 기대 = [one.expect].flat() as string[];
+      // 한 장 ↔ 여러 장이 뒤바뀌면 치명이다(2단계 §12) — 틀리면 값이 나가거나 엉뚱한 것이 나온다.
+      if ((got === "image" || got === "cardnews") && !기대.includes(got) && (기대.includes("image") || 기대.includes("cardnews") || 기대.includes("either"))) 치명 += 1;
       합계 += r.usd;
-      if (got !== one.expect) 어긋남 += 1;
-      줄.push(`| ${one.prompt} | ${one.attachments} | ${one.expect} | ${got === one.expect ? got : `**${got}**`} | ${r.ms} | ${r.usd.toFixed(4)} |`);
+      if (!기대.includes(got)) 어긋남 += 1;
+      줄.push(`| ${one.prompt}${one.hasDraft ? " (원고 있음)" : ""} | ${one.attachments} | ${기대.join("/")} | ${기대.includes(got) ? got : `**${got}**`} | ${r.ms} | ${r.usd.toFixed(4)} |`);
     }
   }
 
@@ -85,9 +95,10 @@ async function main() {
         words: one.words,
         photos: one.photos.map((description) => ({ description })),
         followUp: Boolean(one.previous),
+        cardnews: one.cardnews,
       });
       const r = await 잰다(() => provider.decideRoles(prompt));
-      const got = readRoleJudgment(r.value, one.photos.length);
+      const got = readRoleJudgment(r.value, one.photos.length, { cardnews: one.cardnews });
       const 문제 = b2문제(one, got);
       합계 += r.usd;
       걸린시간.push(r.ms);
@@ -111,7 +122,7 @@ async function main() {
 
   const 폴더 = new URL("../../../../docs/easy-measure/", import.meta.url);
   mkdirSync(폴더, { recursive: true });
-  writeFileSync(new URL("2026-09-30-roles.md", 폴더), `${줄.join("\n")}\n`);
+  writeFileSync(new URL(process.env.OUT ?? "2026-09-30-roles.md", 폴더), `${줄.join("\n")}\n`);
   console.log(줄.slice(-6).join("\n"));
   process.exitCode = 치명 || 어긋남 ? 1 : 0;
 }
