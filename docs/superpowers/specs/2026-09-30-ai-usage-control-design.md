@@ -1,7 +1,7 @@
 # AI 사용 통제와 비용 측정 — 설계
 
 - 날짜: 2026-09-30
-- 상태: 초안 개정 1(독립 리뷰 반영)
+- 상태: 승인됨(2026-09-30 13:40, 개정 1)
 - 가지: `feat/ai-usage-control` (`.worktrees/ai-control`)
 
 ## 1. 목적과 사용자 결정
@@ -171,7 +171,7 @@
 
 - 공개 화면: `/`(첫 화면), `/about`, `/guide/**`, `/login`, `/signup`, `/forgot-password`, `/reset-password`,
   `/auth/confirm`, `/auth/signout`
-  - **사용자 확인 필요: 비회원에게 `/`·`/about` 도 열어 둔다.** D3 는 「사용설명서 말고는」이지만, 모달이 뜰 자리(첫 화면)와 소개 화면은 연다
+  - **사용자 확인 완료(2026-09-30 13:40): 비회원에게 `/`·`/about` 도 열어 둔다.** D3 는 「사용설명서 말고는」이지만, 모달이 뜰 자리(첫 화면)와 소개 화면은 연다
 - **`/demo` 삭제**: `app/demo/page.tsx`, 공개 목록(`middleware.ts:37`), 머리·꼬리 링크(`app/_components/public-shell.tsx:72, :86`),
   관련 시험(`lib/__tests__/dev-auth.test.ts:14`). **이미지는 지우지 않는다** — `public/demo-sections/**`·`public/samples/**` 는
   첫 화면 슬라이드(`app/_landing/hero/slides.ts:23-33`)와 `app/api/sns/local-fake-flow.ts:124` 가 쓴다
