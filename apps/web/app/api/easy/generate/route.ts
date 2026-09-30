@@ -159,13 +159,10 @@ async function converse(request: Request) {
      * 바깥 열쇠를 그대로 쓰면 뒤의 기획·생성 예약이 `duplicate_request` 로 막힌다.
      *
      * **`relay` 를 그대로 빌린다** — 다른 라우트를 부르는 것은 아니지만, 헤더의
-     * 요청 식별자를 단계별로 가르는 일은 똑같다. 단계 이름을 변수로 넘겨
-     * `generate-wiring.test.ts` 의 "세 단계" 집계(문자열 리터럴만 센다)에
-     * 안 섞이게 한다 — 그 시험은 대신 부르는 세 라우트만 센다.
+     * 요청 식별자를 단계별로 가르는 일은 똑같다. 이것이 네 번째 단계(`decide`)다.
      */
-    const 판정단계 = "decide";
     const 판정예약 = await reserveAiUsage(
-      relay(request, "/api/easy/generate", {}, 판정단계), "poster_image", 0, freeCreditPlan("easy:decide"),
+      relay(request, "/api/easy/generate", {}, "decide"), "poster_image", 0, freeCreditPlan("easy:decide"),
     );
     if (!판정예약.ok) return 판정예약.response;
 

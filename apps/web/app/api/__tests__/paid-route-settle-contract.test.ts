@@ -227,14 +227,10 @@ describe("새로 막은 네 길", () => {
 
   it("쉬운 만들기 판정은 단계 열쇠로 잡는다 — 바깥 열쇠를 쓰면 뒤 단계가 duplicate_request", () => {
     /*
-     * 리터럴 `"decide"` 를 `relay(...)` 자리에 그대로 넣으면
-     * `easy/__tests__/generate-wiring.test.ts` 의 "세 단계" 리터럴 집계(정확히
-     * 3개만 세는 정규식)에 네 번째로 섞여 그 시험이 깨진다. 그래서 실제 코드는
-     * 변수(`판정단계`)로 우회한다 — 여기서는 그 변수가 `"decide"` 이고 `relay`
-     * 호출에 그대로 쓰이는지를 본다.
+     * `decide` 는 `relay(...)` 가 요청 식별자를 가르는 네 번째 단계다
+     * (`easy/__tests__/generate-wiring.test.ts` 의 "네 단계" 리터럴 집계가 이를 함께 센다).
      */
     const source = readFileSync(join(API, "easy/generate/route.ts"), "utf8");
-    expect(source).toMatch(/판정단계\s*=\s*"decide"/);
-    expect(source).toContain('relay(request, "/api/easy/generate", {}, 판정단계)');
+    expect(source).toContain('relay(request, "/api/easy/generate", {}, "decide")');
   });
 });
