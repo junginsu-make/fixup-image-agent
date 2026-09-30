@@ -175,7 +175,7 @@ export function EasyClient({
    * 대화 차례대로 담는다. 화면이 새것을 위에 둘지는 그쪽이 정한다.
    */
   const results = React.useMemo(
-    () => shown.flatMap((message): Array<{ id: string; url: string; options?: EasyImageOptions }> =>
+    () => shown.flatMap((message): Array<{ id: string; url: string; options?: EasyImageOptions; group?: string }> =>
       message.role === "image" && urls[message.id]
         ? [{ id: message.id, url: urls[message.id]!, options: options[message.id] }]
         // 카드뉴스 줄은 다 만든 카드를 한 장씩 건다(2단계 §8).

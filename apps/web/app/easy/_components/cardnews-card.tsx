@@ -16,13 +16,15 @@ const 자리이름: Record<string, string> = { cover: "표지", body: "속지", 
  * 원고를 새로 쓴다(앞 작업은 지우지 않는다, 2026-09-30 사용자 결정).
  */
 export function EasyCardnewsCard({
-  view, latest, busy, redrafting, onGenerate, onRedraft,
+  view, latest, busy, redrafting, starting, onGenerate, onRedraft,
 }: {
   view: EasyCardnewsView;
   latest: boolean;
   busy?: boolean;
   /** 조건을 바꿔 이 원고를 다시 쓰는 중(1~2분). */
   redrafting?: boolean;
+  /** 「이대로 만들기」를 보냈고 첫 장을 준비하는 중(몇 분 걸린다, 2026-09-30 실제 생성). */
+  starting?: boolean;
   onGenerate: () => void;
   onRedraft: (options: Partial<CardOptions>) => void;
 }) {
@@ -44,6 +46,9 @@ export function EasyCardnewsCard({
           <li key={card.index} className="grid gap-0.5">
             <span><strong>{card.index} {자리이름[card.role] ?? card.role}</strong> {card.headline}</span>
             {card.body ? <span className="text-subtle-foreground">{card.body}</span> : null}
+            {/* 강조 문구 · 각주도 그림에 찍힌다. 만들기 전에 확인할 수 있게 적는다. */}
+            {card.accent ? <span className="text-primary">강조: {card.accent}</span> : null}
+            {card.footnote ? <span className="text-subtle-foreground">작은 글씨: {card.footnote}</span> : null}
           </li>
         ))}
       </ol>
@@ -63,6 +68,9 @@ export function EasyCardnewsCard({
             <Choice label="그림체" value={view.options.look} items={IMAGE_LOOKS.map((id) => [id, IMAGE_LOOK_LABEL[id]])}
               onPick={(v) => 조건("look", v as CardOptions["look"])} disabled={busy} />
           </div>
+          {starting ? (
+            <p role="status" className="text-meta text-primary">카드 만들기를 준비하고 있습니다. 첫 장이 나오기까지 몇 분 걸릴 수 있습니다.</p>
+          ) : null}
           {redrafting ? (
             <p role="status" className="text-meta text-primary">바꾼 조건으로 원고를 새로 쓰고 있습니다. 1~2분 걸립니다.</p>
           ) : null}
@@ -80,6 +88,12 @@ export function EasyCardnewsCard({
       {view.status !== "copy_ready" && view.failed.length ? (
         <p className="text-meta text-destructive">
           {view.failed.join(", ")}번 장은 만들지 못했습니다. 만든 장만큼만 값이 듭니다. 카드뉴스 화면에서 다시 만들 수 있습니다.
+        </p>
+      ) : null}
+
+      {view.status !== "copy_ready" && view.review.length ? (
+        <p className="text-meta text-subtle-foreground">
+          {view.review.join(", ")}번 장은 자동 검수가 글자를 한 번 확인해 보라고 했습니다. 틀린 곳이 있으면 카드뉴스 화면에서 그 장만 다시 만들 수 있습니다.
         </p>
       ) : null}
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cardResults, cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, referenceAnswer,
+  cardResults, cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, newestFirst, referenceAnswer,
   setItemsToAttach,
 } from "../cardnews-state";
 
@@ -24,7 +24,7 @@ describe("카드뉴스 화면 상태", () => {
 
   it("다 만든 카드를 결과 칸에", () => {
     expect(cardResults([{ id: "r1", role: "image" }] as never, { r1: 보기("ready", [{ index: 1, url: "a" }, { index: 2 }]) }))
-      .toEqual([{ id: "r1:1", url: "a" }]);
+      .toEqual([{ id: "r1:1", url: "a", group: "r1" }]);
   });
 
   it("만드는 중인 작업", () => {
@@ -103,5 +103,17 @@ describe("셸 등록 (2단계 §8, 독립 리뷰 3)", () => {
   /** 카드뉴스 화면에 들렀다 오면 주소가 `/sns/p` 로 바뀌어 있다. 그대로 두면 셸과 이 화면이 같이 부른다. */
   it("같은 작업이 다른 주소로 있으면 이 대화 주소로 다시 건다", () => {
     expect(jobsToRegister(["p"], [{ id: "sns:p", href: "/sns/p" }], "c1")).toEqual(["p"]);
+  });
+});
+
+describe("결과 칸 차례 (2026-09-30 실제 생성)", () => {
+  /** 새것이 위(1단계 사용자 결정)는 지키고, 카드뉴스 한 벌 안은 1번부터 읽힌다. 전에는 8번이 맨 위였다. */
+  it("묶음은 새것이 위, 묶음 안은 앞 장부터", () => {
+    const items = [
+      { id: "poster" }, { id: "r1:1", group: "r1" }, { id: "r1:2", group: "r1" }, { id: "last" },
+    ];
+    expect(newestFirst(items).map(({ item, at }) => [item.id, at])).toEqual([
+      ["last", 3], ["r1:1", 1], ["r1:2", 2], ["poster", 0],
+    ]);
   });
 });

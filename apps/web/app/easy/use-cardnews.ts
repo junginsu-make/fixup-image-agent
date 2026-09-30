@@ -49,6 +49,8 @@ export function useEasyCardnews(input: {
   const [acting, setActing] = React.useState(false);
   // 조건을 바꿔 원고를 다시 쓰는 줄. 1~2분 걸려 그동안 그 원고에 표시한다.
   const [redrafting, setRedrafting] = React.useState<string | null>(null);
+  // 「이대로 만들기」를 보낸 줄. 응답까지 몇 분 걸려 그동안 그 원고에 표시한다.
+  const [starting, setStarting] = React.useState<string | null>(null);
   const { jobs, start, finish } = useRunningJobs();
   /*
    * **한 장인가 여러 장인가를 묻는 중**(설계 §4) · **레퍼런스를 요청하는 중**(§5-3).
@@ -81,6 +83,7 @@ export function useEasyCardnews(input: {
     const project = projects[rowId];
     if (!project || acting || generating.length) return;
     setActing(true);
+    setStarting(rowId);
     try {
       await 보낸다({ conversationId, projectId: project.id, action: "generate" });
       start(cardnewsJob(project.id, conversationId, project.title ?? ""));
@@ -89,6 +92,7 @@ export function useEasyCardnews(input: {
       handlers.onError({ message: (cause as Error).message, retryable: (cause as { retryable?: boolean }).retryable !== false });
     } finally {
       setActing(false);
+      setStarting(null);
     }
   }
 
@@ -151,6 +155,7 @@ export function useEasyCardnews(input: {
       latest: latestCardnewsRow(messages, views) === rowId,
       busy: locked || acting || generating.length > 0,
       redrafting: redrafting === rowId,
+      starting: starting === rowId,
       onGenerate: () => void generate(rowId),
       onRedraft: (options: Partial<CardOptions>) => void redraft(rowId, options),
     } : undefined),

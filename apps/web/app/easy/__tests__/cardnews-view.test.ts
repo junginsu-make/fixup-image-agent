@@ -50,4 +50,39 @@ describe("원고 보기", () => {
     expect(cardnewsView(실패, "image-v2").failed).toEqual([2, 3]);
     expect(cardnewsView(작업(), "image-v2").failed).toEqual([]);
   });
+
+  /**
+   * 그림에는 강조 문구 · 각주도 찍힌다(2026-09-30 실제 생성). 원고에서 안 보이면 사용자가
+   * 확인하지 못한 글이 그림에 나간다.
+   */
+  it("강조 문구 · 각주도 원고에 보인다", () => {
+    const 칸 = 작업({
+      data: {
+        source: { kind: "question", question: "q" }, attachments: [],
+        flow: { planningIssues: [], copyIssues: [], cards: [
+          { index: 1, role: "cover", copy: { headline: "h", accent: "강조", footnote: "각주" }, status: "pending" },
+          { index: 2, role: "body", copy: { headline: "h2", accent: "", footnote: "" }, status: "pending" },
+        ] },
+      },
+    });
+    const view = cardnewsView(칸, "image-v2");
+    expect(view.cards[0]).toMatchObject({ accent: "강조", footnote: "각주" });
+    expect(view.cards[1]).not.toHaveProperty("accent");
+    expect(view.cards[1]).not.toHaveProperty("footnote");
+  });
+
+  /** 자동 검수가 확인을 권한 장(2026-09-30 실제 생성에서 8장 중 3장). */
+  it("검수가 확인을 권한 장 번호를 모은다", () => {
+    const 검수 = 작업({
+      status: "ready",
+      data: {
+        source: { kind: "question", question: "q" }, attachments: [],
+        flow: { planningIssues: [], copyIssues: [], cards: [
+          { index: 1, role: "cover", copy: { headline: "a" }, status: "done" },
+          { index: 3, role: "body", copy: { headline: "c" }, status: "review_required" },
+        ] },
+      },
+    });
+    expect(cardnewsView(검수, "image-v2").review).toEqual([3]);
+  });
 });

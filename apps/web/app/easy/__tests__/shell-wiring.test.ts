@@ -393,6 +393,15 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
     expect(훅).toContain("setRedrafting(rowId)");
     expect(코드("../_components/cardnews-card.tsx")).toMatch(/redrafting \? \(/);
   });
+  /** 2026-09-30 실제 생성에서 찾은 것들. */
+  it("원고 카드에 강조 문구 · 각주 · 검수 권한 장 · 시작 안내가 보인다", () => {
+    const 카드 = 코드("../_components/cardnews-card.tsx");
+    expect(카드).toContain("card.accent");
+    expect(카드).toContain("card.footnote");
+    expect(카드).toContain("view.review.length");
+    expect(카드).toMatch(/starting \? \(/);
+    expect(훅).toContain("setStarting(rowId)");
+  });
   it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
     expect(화면쪽).toContain("!cardnews.views[one.id]");
   });

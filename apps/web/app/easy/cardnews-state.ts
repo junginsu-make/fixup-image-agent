@@ -30,14 +30,28 @@ export function latestCardnewsRow(
   return [...messages].reverse().find((message) => message.role === "image" && views[message.id])?.id;
 }
 
-/** 결과 칸에 걸 카드. 그림이 온 것만. */
+/** 결과 칸에 걸 카드. 그림이 온 것만. 한 벌은 같은 묶음(`group`)이다. */
 export function cardResults(
   messages: readonly EasyMessage[],
   views: Readonly<Record<string, EasyCardnewsView>>,
-): Array<{ id: string; url: string }> {
+): Array<{ id: string; url: string; group: string }> {
   return messages.flatMap((message) => (views[message.id]?.cards ?? [])
     .filter((card) => card.url)
-    .map((card) => ({ id: `${message.id}:${card.index}`, url: card.url! })));
+    .map((card) => ({ id: `${message.id}:${card.index}`, url: card.url!, group: message.id })));
+}
+
+/**
+ * **결과 칸 차례.** 새것이 위(1단계 사용자 결정)는 지키되, 카드뉴스 한 벌은 묶음째
+ * 옮겨 안에서는 1번 장부터 읽히게 한다. `at` 은 만든 차례(크게 보기 번호)다.
+ */
+export function newestFirst<T extends { group?: string }>(items: readonly T[]): Array<{ item: T; at: number }> {
+  const 묶음: Array<Array<{ item: T; at: number }>> = [];
+  items.forEach((item, at) => {
+    const last = 묶음[묶음.length - 1];
+    if (item.group && last?.[0]?.item.group === item.group) last.push({ item, at });
+    else 묶음.push([{ item, at }]);
+  });
+  return 묶음.reverse().flat();
 }
 
 export function generatingProjects(views: Readonly<Record<string, EasyCardnewsView>>): string[] {

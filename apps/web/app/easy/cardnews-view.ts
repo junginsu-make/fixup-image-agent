@@ -24,7 +24,7 @@ export interface CardnewsProjectLike {
       copyIssues?: string[];
       cards: Array<{
         index: number; role: string; kind?: string; layout?: unknown;
-        copy: { headline: string; body?: string };
+        copy: { headline: string; body?: string; accent?: string; footnote?: string };
         status: string; assetUrl?: string; thumbUrl?: string;
       }>;
     };
@@ -36,6 +36,9 @@ export interface EasyCardView {
   role: string;
   headline: string;
   body?: string;
+  /** 강조 문구 · 각주. 그림에 찍히므로 원고에서도 보인다(2026-09-30 실제 생성). */
+  accent?: string;
+  footnote?: string;
   status: string;
   url?: string;
 }
@@ -53,6 +56,8 @@ export interface EasyCardnewsView {
   total: number;
   /** 만드는 도중 실패한 장 번호(설계 §9 「실패한 장을 적는다」). */
   failed: number[];
+  /** 자동 검수가 사람 확인을 권한 장 번호. */
+  review: number[];
 }
 
 export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "image-v2"): EasyCardnewsView {
@@ -66,6 +71,8 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
       role: card.role,
       headline: card.copy.headline,
       ...(card.copy.body ? { body: card.copy.body } : {}),
+      ...(card.copy.accent ? { accent: card.copy.accent } : {}),
+      ...(card.copy.footnote ? { footnote: card.copy.footnote } : {}),
       status: card.status,
       ...(card.assetUrl ? { url: card.assetUrl } : {}),
     })),
@@ -79,5 +86,6 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
     done: cards.filter((card) => card.status === "done" || card.status === "review_required").length,
     total: cards.length,
     failed: cards.filter((card) => card.status === "failed").map((card) => card.index),
+    review: cards.filter((card) => card.status === "review_required").map((card) => card.index),
   };
 }
