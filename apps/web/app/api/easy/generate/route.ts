@@ -7,6 +7,13 @@ import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
 import { DETAIL_PAGE_GUIDE } from "../../../easy/detail-page";
+import { readEasyPhotos } from "../../../../lib/easy/read-photos";
+import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { posterReferencesByIds } from "../../../../lib/poster/references";
+import { teamIdOf } from "../../../../lib/teams/store";
+import { UNUSABLE_PHOTO, isPhotoId, missingIds, uniqueIds } from "../../../easy/photo-check";
+import { readChosenRoles } from "../../../easy/photo-roles";
+import { runPhotoTurn } from "../../../easy/photo-turn";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -56,6 +63,28 @@ const VARIANTS = 1;
 
 function fail(message: string, status = 500) {
   return Response.json({ ok: false, message }, { status });
+}
+
+/**
+ * **값이 나가기 전에 멈춘다**(설계 §2-3 ⓪ · §2-6 ⓒ).
+ *
+ * 다시 눌러도 같은 곳에서 막히므로 `retryable: false` 다 — 화면이 「다시 보내면
+ * 값이 또 듭니다」를 띄우지 않는다. 실제로 아무 값도 안 나갔다.
+ */
+function 멈춘다(message: string) {
+  return Response.json({ ok: false, message, retryable: false }, { status: 400 });
+}
+
+/**
+ * 판단 · 읽기에 실제로 쓴 값을 서버 기록에 한 줄 남긴다(설계 §2-9 B).
+ *
+ * 장부에 싣는 것은 새 작업 종류(마이그레이션)가 필요해 후속으로 미뤘다. 그때까지
+ * 운영자가 journalctl 에서 볼 수 있게 한다. 이메일은 남기지 않는다.
+ */
+function 값을적는다(userId: string) {
+  const 잰값 = readLlmMeter();
+  if (!잰값.metered || 잰값.calls === 0) return;
+  console.info(`[easy] 판단·읽기 user=${userId} calls=${잰값.calls} usd=${잰값.usd.toFixed(4)}`);
 }
 
 /**
@@ -109,7 +138,16 @@ class EasyStepError extends Error {
   }
 }
 
+/**
+ * **계량기 안에서 돈다**(설계 §2-9 B). 판단 · 읽기의 토큰은 공용 어댑터가 이미
+ * 적는데(`lib/llm/structured.ts`), 계량기 밖에서 부르면 그 값이 버려진다.
+ * 안에서 부르는 기획 라우트는 제 계량기를 따로 연다 — 두 번 세지 않는다.
+ */
 export async function POST(request: Request) {
+  return withLlmMeter(() => turn(request));
+}
+
+async function turn(request: Request): Promise<Response> {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
@@ -130,15 +168,34 @@ export async function POST(request: Request) {
   const textModel = resolveTextModel(
     typeof input.textModel === "string" ? input.textModel : undefined,
   );
-  const referenceIds: string[] = Array.isArray(input.referenceIds) ? input.referenceIds : [];
-  const preservedIds: string[] = Array.isArray(input.preservedIds) ? input.preservedIds : [];
-  const personIds: string[] = Array.isArray(input.personIds) ? input.personIds : [];
-
-  const 붙인수 = referenceIds.length + preservedIds.length + personIds.length;
+  /*
+   * **붙인 사진 전부, 붙인 순서.** 이름은 `referenceIds` 지만 뜻은 「따라 만들기」가
+   * 아니다 — 옛 화면이 그 이름으로 보내므로 이름만 그대로 둔다. 역할은 아래에서
+   * 정한다(설계 §2-3). 같은 id 는 한 번만 센다(§2-1 — 두 번 세던 것).
+   */
+  const 붙인것 = uniqueIds(input.referenceIds);
+  const 붙인수 = 붙인것.length;
+  if (붙인것.some((id) => !isPhotoId(id))) return 멈춘다(UNUSABLE_PHOTO);
 
   try {
     /*
-     * ⓪ **말인가 주문인가.**
+     * ⓪ **사진 확인**(설계 §2-3). 이미지 만들기와 같은 함수 · 같은 회원 기준으로
+     * 읽고, **요청한 사진이 전부 나왔는지** 센다. 조회는 볼 수 없는 id 를 오류
+     * 없이 빼므로, 세지 않으면 사진이 빠지거나 번호가 당겨진다.
+     */
+    const 사진들 = 붙인수
+      ? await posterReferencesByIds({
+        userId: auth.member.userId,
+        role: auth.member.profile.role,
+        teamId: await teamIdOf(auth.member.userId),
+      }, 붙인것)
+      : [];
+    if (missingIds(붙인것, 사진들).length) return 멈춘다(UNUSABLE_PHOTO);
+    const 고른역할 = readChosenRoles(input.photoRoles, 붙인것);
+    const provider = createEasyChatProvider(process.env, textModel);
+
+    /*
+     * ⓑ1 **말인가 주문인가.**
      *
      * 값이 나가기 전에 가른다. 여기서 안 가르면 「안녕하세요」 한 마디에
      * 그림값이 나간다.
@@ -148,7 +205,7 @@ export async function POST(request: Request) {
      */
     const 지난줄 = await store.listMessages(conversationId);
     const decision = readEasyDecision(
-      await createEasyChatProvider(process.env, textModel).decide(
+      await provider.decide(
         easyChatPrompt(
           지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
           prompt,
@@ -182,6 +239,30 @@ export async function POST(request: Request) {
     if (decision.wants === "image" && 고르기.asks) {
       return Response.json({ ok: true, asked: true, textModel });
     }
+
+    /*
+     * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
+     *
+     * 말을 남기기 **전에** 한다. 묻거나 멈추면 아무것도 안 남긴다 — 비율 물음과
+     * 같다. 말 턴 · 상세페이지 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
+     */
+    const 사진판단 = decision.wants === "image" && 붙인수
+      ? await runPhotoTurn(
+        {
+          photos: 사진들,
+          words: prompt,
+          chosen: 고른역할,
+          ratio: 고르기.ratio,
+          imageModel: typeof input.imageModel === "string" ? input.imageModel : undefined,
+        },
+        { read: (photos) => readEasyPhotos(photos), judge: (text) => provider.decideRoles(text) },
+      )
+      : undefined;
+    if (사진판단?.kind === "stop") return 멈춘다(사진판단.message);
+    if (사진판단?.kind === "ask") {
+      return Response.json({ ok: true, photoAsk: { reason: 사진판단.reason, rows: 사진판단.rows }, textModel });
+    }
+    const 칸 = 사진판단?.fields;
 
     // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야
     // 무엇을 하려 했는지 알 수 있다.
@@ -223,12 +304,16 @@ export async function POST(request: Request) {
       modelId: typeof input.imageModel === "string" ? input.imageModel : undefined,
       variants: VARIANTS,
       instruction: prompt,
-      referenceIds,
-      preservedIds,
-      personIds,
+      referenceIds: 칸?.referenceIds ?? [],
+      preservedIds: 칸?.preservedIds ?? [],
+      personIds: 칸?.personIds ?? [],
+      restyledIds: 칸?.restyledIds ?? [],
       // AI 가 다듬는다. 그것이 이 모드의 값어치다(설계 §9).
       promptMode: "assisted",
-      attachmentOrder: [...referenceIds, ...preservedIds],
+      // **붙인 순서 그대로**(설계 §2-6). 전에는 따라 만들기를 앞으로 당겼다.
+      attachmentOrder: 칸?.attachmentOrder ?? [],
+      // 말과 최종 역할이 맞을 때만 말 전체, 아니면 빈 글(설계 §2-6).
+      attachmentIntent: 사진판단?.attachmentIntent ?? "",
     }, "project")), "기획 준비");
 
     const projectId = created.project?.id as string | undefined;
@@ -286,6 +371,8 @@ export async function POST(request: Request) {
       }, { status: error.status });
     }
     return fail(error instanceof Error ? error.message : "만들지 못했습니다.");
+  } finally {
+    값을적는다(auth.member.userId);
   }
 }
 

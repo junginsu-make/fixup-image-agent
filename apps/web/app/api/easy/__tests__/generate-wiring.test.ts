@@ -237,3 +237,28 @@ describe("상세페이지 안내 (설계 §2-7)", () => {
     expect(갈래).toContain("return Response.json");
   });
 });
+
+describe("사진 역할 (설계 §2-3)", () => {
+  const readPhotos = readFileSync(new URL("../../../../lib/easy/read-photos.ts", import.meta.url), "utf8");
+
+  /**
+   * 위 「기획을 직접 돌리지 않는다」는 그대로 산다 — 라우트는 기획을 안 돌린다.
+   * 역할을 정하려고 사진을 읽는 것은 `lib/easy/read-photos.ts` 가 하고,
+   * **기획과 같은 기계**를 부른다. 사본을 만들지 않는다.
+   */
+  it("사진은 기획과 같은 기계로 읽는다", () => {
+    expect(readPhotos).toContain("readAttachments");
+    expect(readPhotos).toContain("createPosterAttachmentReader");
+    expect(readPhotos).not.toContain("planPoster");
+  });
+
+  it("판단 · 읽기를 계량기 안에서 부른다 (설계 §2-9 B)", () => {
+    expect(generate).toContain("withLlmMeter(");
+  });
+
+  it("사진을 물을 때도 대화에 아무것도 안 쌓는다", () => {
+    const 묻는곳 = generate.indexOf("photoAsk:");
+    expect(묻는곳).toBeGreaterThan(0);
+    expect(generate.indexOf('role: "user"')).toBeGreaterThan(묻는곳);
+  });
+});
