@@ -52,7 +52,7 @@ after(async () => { await db?.close(); });
 
 test('closes only the previous process\'s allow-listed reservations', async () => {
   const result = await json(`select credit_close_restart_orphans('${NOW}');`);
-  assert.deepEqual(result, { released: 1, needs_review: 1 });
+  assert.deepEqual(result, { released: 1, needs_review: 1, failed: 0 });
 });
 
 test('a reservation that never reached the provider is released without charge', async () => {
@@ -80,13 +80,75 @@ test('card news, posters, dispatcher jobs, this process, unmarked and bound rows
 });
 
 test('calling again closes nothing (idempotent)', async () => {
-  assert.deepEqual(await json(`select credit_close_restart_orphans('${NOW}');`), { released: 0, needs_review: 0 });
+  assert.deepEqual(await json(`select credit_close_restart_orphans('${NOW}');`), { released: 0, needs_review: 0, failed: 0 });
 });
 
 test('a member session cannot run it', async () => {
-  await assert.rejects(db.sql(`begin; set local role authenticated; select credit_close_restart_orphans('${NOW}'); commit;`));
+  await assert.rejects(
+    db.sql(`begin; set local role authenticated; select credit_close_restart_orphans('${NOW}'); commit;`),
+    /permission denied for function credit_close_restart_orphans/,
+  );
 });
 
 test('a null boot id is refused', async () => {
   await assert.rejects(db.sql(`select credit_close_restart_orphans(null);`));
+});
+
+/*
+  독립 리뷰(opus) fix round 1 — Important 1.
+
+  경쟁: 다른 트랜잭션(관리자 정산 등)이 우리가 고른 행을 우리가 손대기 전에 먼저
+  닫으면, 상태 가드 없이 `where id=e.id` 만으로 덮어써 이미 닫힌 행이 다시
+  `needs_review` 로 바뀌는 사고가 날 수 있다. `credit_lock()` 을 맨 먼저 잡아
+  다른 돈 함수와 같은 순서로 직렬화하면, 세션 2 는 세션 1 이 커밋할 때까지
+  기다렸다가 이미 정산된 최종 상태만 보게 된다.
+
+  하네스는 `db.sql` 호출마다 새 세션(psql 프로세스)을 띄우므로, 두 문자열을
+  `Promise.all` 로 동시에 보내면 실제로 두 트랜잭션이 겹친다.
+*/
+test('a concurrent settlement mid-scan is not overwritten', async () => {
+  const target = await reservation({ resource: 'pdp:image', operation: 'pdp_image', boot: OLD, started: true });
+  await Promise.all([
+    db.sql(`begin; select credit_finalize('${target.user}','${target.request}',array[]::integer[],true,'admin_x'); select pg_sleep(1); commit;`),
+    db.sql(`select pg_sleep(0.3); select credit_close_restart_orphans('${NOW}');`),
+  ]);
+  const r = await row(target);
+  assert.equal(r.status, 'failed');
+  assert.equal(r.credit_phase, 'settled');
+  assert.equal(r.error_code, 'admin_x');
+});
+
+/*
+  독립 리뷰(opus) fix round 1 — Important 2.
+
+  한 건이 정산 중 예외를 내도(불변식 위반 등) 나머지 건은 계속 닫혀야 하고,
+  실패한 건은 그대로 `reserved` 로 남아 다음 기동 때 다시 시도된다. 반환값의
+  `failed` 로 몇 건이 걸렸는지도 보인다.
+*/
+test('one broken reservation does not block the rest, and is counted as failed', async () => {
+  const broken = await reservation({ resource: 'pdp:key-visual', operation: 'pdp_image', boot: OLD });
+  const normal = await reservation({ resource: 'pdp:image', operation: 'pdp_image', boot: OLD });
+  // credit_finalize 의 실제 홀드(2)와 어긋나게 만들어 정산 중 check 제약(reserved_units >= 0)을 깨뜨린다.
+  await db.sql(`update credit_grants set reserved_units = 0 where user_id = '${broken.user}';`);
+
+  const result = await json(`select credit_close_restart_orphans('${NOW}');`);
+  assert.deepEqual(result, { released: 1, needs_review: 0, failed: 1 });
+
+  const brokenRow = await row(broken);
+  assert.equal(brokenRow.status, 'reserved');
+  assert.notEqual(brokenRow.error_code, 'process_restart');
+
+  const normalRow = await row(normal);
+  assert.equal(normalRow.status, 'failed');
+  assert.equal(normalRow.error_code, 'process_restart');
+});
+
+/*
+  독립 리뷰(opus) fix round 1 — Minor 2. service_role 은 하네스가 만든다
+  (`CREATE ROLE service_role NOLOGIN BYPASSRLS`) — 실행 권한을 실제로 받았는지 확인.
+*/
+test('service_role can run it', async () => {
+  await assert.doesNotReject(
+    db.sql(`begin; set local role service_role; select credit_close_restart_orphans('${NOW}'); commit;`),
+  );
 });
