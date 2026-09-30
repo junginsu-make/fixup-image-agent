@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type * as RedesignCore from "@fixup/redesign-core";
+import type * as IngestCore from "@fixup/ingest-core";
 
 /**
  * **꾸러미의 비용 콜백은 필수 인자다**(설계 2026-09-30 §3.4·§5 「패키지 콜백이 필수 인자다(타입)」).
@@ -14,6 +15,7 @@ import type * as RedesignCore from "@fixup/redesign-core";
  */
 
 declare const redesign: typeof RedesignCore;
+declare const ingest: typeof IngestCore;
 
 const 빠뜨린호출들 = () => [
   // @ts-expect-error onUsage·onImageUsage 가 없다
@@ -28,6 +30,10 @@ const 빠뜨린호출들 = () => [
   redesign.indexKnowledgeDocument({ name: "n", text: "t" }),
   // @ts-expect-error onUsage 가 없다
   redesign.indexKnowledge({ name: "n", text: "t" }),
+  // @ts-expect-error recordUsage 가 없다
+  ingest.createOpenAITopicResearcher({ OPENAI_API_KEY: "k" }),
+  // @ts-expect-error onRun 이 없다
+  ingest.fetchApifyTranscript("https://youtu.be/x", {}),
 ];
 
 describe("꾸러미 비용 콜백", () => {

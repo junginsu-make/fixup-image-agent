@@ -44,6 +44,7 @@ describe("apify 자막 받기", () => {
 
   it("자막 줄과 메타데이터로 바꾼다", async () => {
     const result = await fetchApifyTranscript(URL, {
+      onRun: () => undefined,
       fetchImpl: fakeFetch(ACTOR_RESPONSE) as unknown as typeof fetch,
       environment: { APIFY_TOKEN: "k" },
     });
@@ -59,6 +60,7 @@ describe("apify 자막 받기", () => {
     // 주소에 실으면 프록시 로그·오류 추적·브라우저 기록에 토큰이 그대로 남는다.
     const spy = vi.fn(async () => new Response(JSON.stringify(ACTOR_RESPONSE), { status: 200 }));
     await fetchApifyTranscript(URL, {
+      onRun: () => undefined,
       fetchImpl: spy as unknown as typeof fetch,
       environment: { APIFY_TOKEN: "secret-token-value" },
     });
@@ -70,10 +72,12 @@ describe("apify 자막 받기", () => {
   it("토큰을 오류 메시지에 싣지 않는다", async () => {
     const failing = vi.fn(async () => new Response("자세한 내용에 토큰이 섞일 수 있음", { status: 401 }));
     await expect(fetchApifyTranscript(URL, {
+      onRun: () => undefined,
       fetchImpl: failing as unknown as typeof fetch,
       environment: { APIFY_TOKEN: "secret-token-value" },
     })).rejects.toThrow(/401/);
     await expect(fetchApifyTranscript(URL, {
+      onRun: () => undefined,
       fetchImpl: failing as unknown as typeof fetch,
       environment: { APIFY_TOKEN: "secret-token-value" },
     })).rejects.not.toThrow(/secret-token-value/);
@@ -81,9 +85,38 @@ describe("apify 자막 받기", () => {
 
   it("자막이 없으면 실패로 알린다", async () => {
     await expect(fetchApifyTranscript(URL, {
+      onRun: () => undefined,
       fetchImpl: fakeFetch([{ videoId: "x", segments: [] }]) as unknown as typeof fetch,
       environment: { APIFY_TOKEN: "k" },
     })).rejects.toThrow(/자막을 찾지 못했습니다/);
+  });
+});
+
+describe("apify 비용 알림(설계 2026-09-30 §3.4)", () => {
+  it("액터를 돌리면 알린다 — 동기 실행은 금액을 안 주므로 실행 사실만", async () => {
+    const 받은것: unknown[] = [];
+    await fetchApifyTranscript(URL, {
+      onRun: (run) => 받은것.push(run),
+      fetchImpl: fakeFetch(ACTOR_RESPONSE) as unknown as typeof fetch,
+      environment: { APIFY_TOKEN: "k" },
+    });
+    expect(받은것).toEqual([{ actor: "automation-lab~youtube-transcript", failed: false }]);
+  });
+
+  it("액터가 실패해도 알린다 — 돌았으면 값이 나갔을 수 있다", async () => {
+    const 받은것: unknown[] = [];
+    await expect(fetchApifyTranscript(URL, {
+      onRun: (run) => 받은것.push(run),
+      fetchImpl: vi.fn(async () => new Response("x", { status: 500 })) as unknown as typeof fetch,
+      environment: { APIFY_TOKEN: "k" },
+    })).rejects.toThrow(/500/);
+    expect(받은것).toEqual([{ actor: "automation-lab~youtube-transcript", failed: true }]);
+  });
+
+  it("토큰이 없으면 부르지도 알리지도 않는다", async () => {
+    const 받은것: unknown[] = [];
+    await expect(fetchApifyTranscript(URL, { onRun: (run) => 받은것.push(run), environment: {} })).rejects.toThrow();
+    expect(받은것).toEqual([]);
   });
 });
 

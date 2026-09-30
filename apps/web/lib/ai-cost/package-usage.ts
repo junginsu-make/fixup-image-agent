@@ -1,5 +1,7 @@
 import type { ImageUsage, LlmUsage } from "@fixup/redesign-core";
-import { recordAiCost, recordLlmUsage } from "../llm/meter";
+import type { ApifyRunRecorder, TopicUsageRecorder } from "@fixup/ingest-core";
+import { APIFY_YOUTUBE_RUN_ESTIMATE_USD, WEB_SEARCH_CALL_USD, llmUsdFromTokens } from "@fixup/shared";
+import { recordAiCost, recordLlmUsage, tokensFrom } from "../llm/meter";
 
 /**
  * 꾸러미가 알린 값을 **앱의 한 줄**로 옮긴다(설계 2026-09-30 §3.4 「패키지는 콜백으로」).
@@ -25,3 +27,33 @@ export function recordRedesignDirectImage(usage: ImageUsage): void {
     basis: "image_unit",
   });
 }
+
+/**
+ * 카드뉴스 주제 조사 한 번 — 토큰 값 + 웹검색 횟수 × 호출 단가.
+ *
+ * 계량기 합산(`readLlmMeter`)에는 안 넣는다. 지금까지 기획 정산의 `llm_usd` 에 안 들어가던
+ * 값이라, 넣으면 옛 장부의 숫자가 이번 변경으로 바뀐다. 이 값은 새 표에만 적힌다.
+ */
+export const recordTopicResearch: TopicUsageRecorder = (research) => {
+  const tokens = tokensFrom({ usage: research.usage }) ?? { input: 0, output: 0 };
+  const usd = llmUsdFromTokens(research.model, tokens.input, tokens.output) + research.toolCalls * WEB_SEARCH_CALL_USD;
+  recordAiCost({
+    provider: "openai",
+    model: research.model,
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+    usd,
+    basis: "tokens",
+  });
+};
+
+/** Apify 액터 한 번 — 동기 실행은 금액을 안 주므로 실행 1회 추정(`estimate`). */
+export const recordApifyRun: ApifyRunRecorder = (run) => {
+  recordAiCost({
+    provider: "apify",
+    model: run.actor,
+    usd: APIFY_YOUTUBE_RUN_ESTIMATE_USD,
+    basis: "estimate",
+    failed: run.failed,
+  });
+};

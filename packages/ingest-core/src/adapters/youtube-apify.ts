@@ -34,6 +34,14 @@ const ItemSchema = z.object({
   language: z.string().optional(),
 });
 
+/**
+ * 액터를 한 번 돌렸다는 알림(설계 2026-09-30 §3.4).
+ *
+ * 동기 실행(`run-sync-get-dataset-items`)은 자막 줄만 돌려주고 **사용 금액을 안 준다.** 그래서
+ * 금액은 부르는 쪽이 「실행 1회 추정」으로 매긴다. 실패해도 액터는 돌았으므로 알린다.
+ */
+export type ApifyRunRecorder = (run: { actor: string; failed: boolean }) => void;
+
 export interface ApifyTranscriptResult {
   lines: TranscriptLine[];
   metadata: YoutubeMetadata;
@@ -52,7 +60,8 @@ export function apifyActorId(environment: Record<string, string | undefined> = p
  */
 export async function fetchApifyTranscript(
   url: string,
-  deps: { fetchImpl?: typeof fetch; environment?: Record<string, string | undefined> } = {},
+  /** `onRun` 은 필수다 — 기본값을 두면 안 넘긴 자리가 조용히 0원이 된다(설계 §3.4). */
+  deps: { onRun: ApifyRunRecorder; fetchImpl?: typeof fetch; environment?: Record<string, string | undefined> },
 ): Promise<ApifyTranscriptResult> {
   const environment = deps.environment ?? process.env;
   const token = environment.APIFY_TOKEN?.trim();
@@ -66,6 +75,8 @@ export async function fetchApifyTranscript(
     body: JSON.stringify({ urls: [url] }),
     signal: AbortSignal.timeout((TIMEOUT_SECONDS + 30) * 1000),
   });
+
+  deps.onRun({ actor: apifyActorId(environment), failed: !response.ok });
 
   // 응답 본문에 계정 정보가 섞일 수 있어 상태 코드만 알린다.
   if (!response.ok) throw new Error(`apify 자막 요청이 실패했습니다 (${response.status}).`);
