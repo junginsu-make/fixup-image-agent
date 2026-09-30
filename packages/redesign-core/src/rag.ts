@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import OpenAI from "openai";
 import { createHash } from "node:crypto";
+import { reportUsage, type UsageReporter } from "./usage.js";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
@@ -133,10 +134,13 @@ export async function indexKnowledgeDocument({
   name,
   text,
   kind,
+  onUsage,
 }: {
   name: string;
   text: string;
   kind?: KnowledgeKind;
+  /** 임베딩 토큰을 알린다. 필수다(설계 2026-09-30 §3.4) — 조각마다 한 번 부른다. */
+  onUsage: UsageReporter;
 }) {
   const sql = getSql();
   const openai = getOpenAI();
@@ -161,7 +165,7 @@ export async function indexKnowledgeDocument({
   await sql`DELETE FROM knowledge_chunks WHERE document_id = ${documentId}`;
 
   for (const chunk of chunks) {
-    const embedding = await embedText(openai, chunk.content);
+    const embedding = await embedText(openai, chunk.content, onUsage);
     await sql`
       INSERT INTO knowledge_chunks (document_id, source_name, chunk_index, content, embedding)
       VALUES (${documentId}, ${chunk.sourceName}, ${chunk.chunkIndex}, ${chunk.content}, ${toVector(embedding)}::vector)
@@ -176,19 +180,21 @@ export interface RetrieveKnowledgeOptions {
   kind?: KnowledgeKind;
   /** 이 값 미만의 조각은 버린다. */
   minSimilarity?: number;
+  /** 질문을 임베딩한 토큰을 알린다. 필수다(설계 2026-09-30 §3.4). */
+  onUsage: UsageReporter;
 }
 
 export async function retrieveKnowledge(
   query: string,
-  limit = 8,
-  options: RetrieveKnowledgeOptions = {},
+  limit: number,
+  options: RetrieveKnowledgeOptions,
 ): Promise<RetrievedKnowledge[]> {
   const sql = getSql();
   const openai = getOpenAI();
   if (!sql || !openai || !query.trim()) return [];
 
   await ensureRagSchema();
-  const embedding = await embedText(openai, query.slice(0, 8000));
+  const embedding = await embedText(openai, query.slice(0, 8000), options.onUsage);
   const vector = toVector(embedding);
 
   // kind 가 없으면 전체에서 찾는다. 기존 리디자인 호출부가 그대로 돌아야 한다.
@@ -328,12 +334,14 @@ function splitBySize(section: string): string[] {
   return pieces;
 }
 
-async function embedText(openai: OpenAI, input: string) {
+async function embedText(openai: OpenAI, input: string, onUsage: UsageReporter) {
   const response = await openai.embeddings.create({
     model: EMBEDDING_MODEL,
     input,
     dimensions: EMBEDDING_DIMENSIONS
   });
+  // 임베딩 응답은 `usage.prompt_tokens` 만 준다. 출력 토큰은 0 이다.
+  reportUsage(onUsage, EMBEDDING_MODEL, response);
   return response.data[0].embedding;
 }
 

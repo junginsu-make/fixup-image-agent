@@ -14,7 +14,7 @@ import {
 import { canUseCommonKnowledge } from "./knowledge-access.js";
 import { isRagConfigured, retrieveKnowledge } from "./rag.js";
 import { RedesignError } from "./errors.js";
-import { reportUsage } from "./usage.js";
+import { reportImageUsage, reportUsage, type ImageUsageReporter } from "./usage.js";
 import { GROUNDING_RULE } from "@fixup/shared";
 import { assertNotTruncated, TRUNCATED_CODE } from "./truncation.js";
 import { GOOGLE_READING_MODEL } from "./transcribe.js";
@@ -185,7 +185,13 @@ export type GenerateSectionsInput = {
    * 꾸러미가 앱을 거꾸로 참조하면 둘이 엉킨다. 대신 값을 넘기고, 어디에 적을지는
    * 라우트가 정한다.
    */
-  onUsage?: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
+  onUsage: (usage: { model: string; inputTokens: number; outputTokens: number }) => void;
+  /**
+   * **옛 길(업체 직접 호출)로 그린 그림을 알린다.** `generateImage` 를 넘기면 안 불린다 —
+   * 그 통로는 앱이 제 자리에서 적는다. 필수다: 선택이면 안 넘긴 자리가 조용히 0원이 된다
+   * (설계 2026-09-30 §3.4).
+   */
+  onImageUsage: ImageUsageReporter;
   /**
    * **이미 한 기획.** 있으면 다시 안 한다(F-7-7).
    *
@@ -408,7 +414,8 @@ export async function generateSections(input: GenerateSectionsInput) {
         requestText,
         rolloutRequest,
         channel,
-        fallbackText: knowledgeText
+        fallbackText: knowledgeText,
+        onUsage: input.onUsage
       })
     : "";
   console.info(`[generate] knowledge ready job=${jobId} useKnowledge=${useKnowledge} chars=${retrievedKnowledgeText.length}`);
@@ -456,6 +463,7 @@ export async function generateSections(input: GenerateSectionsInput) {
         : provider === "google"
           ? await generateGoogleImage({ apiKey, prompt: section.promptText, references: drawReferences })
           : await generateOpenAIImage({ apiKey, prompt: section.promptText, references: drawReferences, size: sizeForRatio(ratio) });
+      if (!input.generateImage) reportImageUsage(input.onImageUsage, provider);
 
       generatedSections.push({
         ...section,
@@ -540,12 +548,14 @@ async function buildKnowledgeContext({
   requestText,
   rolloutRequest,
   channel,
-  fallbackText
+  fallbackText,
+  onUsage
 }: {
   requestText: string;
   rolloutRequest: string;
   channel: string;
   fallbackText: string;
+  onUsage: GenerateSectionsInput["onUsage"];
 }) {
   const fallback = fallbackText.slice(0, 60000);
   if (!isRagConfigured()) return fallback;
@@ -557,7 +567,7 @@ async function buildKnowledgeContext({
       `추가 요청사항: ${requestText || "전환율 중심 리디자인"}`,
       rolloutRequest ? `히어로 검토 후 요청: ${rolloutRequest}` : ""
     ].filter(Boolean).join("\n");
-    const chunks = await retrieveKnowledge(query, 8);
+    const chunks = await retrieveKnowledge(query, 8, { onUsage });
     if (chunks.length === 0) return fallback;
 
     return chunks

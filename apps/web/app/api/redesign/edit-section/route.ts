@@ -5,6 +5,7 @@ import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../l
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { withLlmMeter } from "../../../../lib/llm/meter";
+import { recordRedesignDirectImage } from "../../../../lib/ai-cost/package-usage";
 import { readPdpRequest } from "../../../../lib/pdp/request";
 import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
 
@@ -52,6 +53,7 @@ async function handlePost(req: Request) {
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
       generateImage,
+      onImageUsage: recordRedesignDirectImage,
     });
     // 고친 그림도 작업의 크기를 지킨다. 「1080×1920」 작업이면 그 크기로 맞춘다.
     const exact = exactOutputSize((body as { project?: { ratio?: string } }).project?.ratio);
