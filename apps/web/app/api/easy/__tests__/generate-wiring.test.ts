@@ -183,8 +183,10 @@ describe("말과 주문을 가르는 자리", () => {
  */
 describe("대신 부를 때의 요청 식별자", () => {
   it("헤더를 통째로 넘기지 않는다", () => {
+    const relayFile = readFileSync(new URL("../../../../lib/easy/relay.ts", import.meta.url), "utf8");
     expect(generate).not.toContain("headers: request.headers");
-    expect(generate).toContain("stepIdempotencyKey");
+    expect(relayFile).not.toContain("headers: request.headers");
+    expect(relayFile).toContain("stepIdempotencyKey");
   });
 
   it("세 단계에 서로 다른 이름을 준다", () => {

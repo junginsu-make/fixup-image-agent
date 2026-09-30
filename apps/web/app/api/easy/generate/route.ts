@@ -2,7 +2,7 @@ import { DEFAULT_TEXT_MODEL, resolveTextModel } from "@fixup/shared";
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
-import { stepIdempotencyKey } from "../../../../lib/easy/step-key";
+import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
 import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
@@ -88,56 +88,6 @@ function 값을적는다(userId: string) {
   console.info(`[easy] 판단·읽기 user=${userId} calls=${잰값.calls} usd=${잰값.usd.toFixed(4)}`);
 }
 
-/**
- * 라우트 하나를 부른다.
- *
- * **쿠키를 물려준다.** 세 라우트가 각자 `authenticateApiMember` 로 회원을
- * 확인하고 저장소도 회원 권한으로 연다. 원래 요청의 헤더를 그대로 넘겨야 그
- * 확인이 같은 사람으로 통과한다.
- *
- * **요청 식별자만 갈아 끼운다**(2026-09-21 운영 409).
- *
- * 세 라우트 중 **둘이 각자 예약한다** — 기획과 생성이다. 예약은 같은 식별자를
- * 두 번 받으면 `duplicate_request` 로 거절하므로, 그대로 물려주면 **두 번째
- * 단계가 반드시 막힌다.**
- *
- * 포스터 화면은 이 함정에 안 빠진다. 기획과 생성이 사용자의 서로 다른 누름이고
- * 누를 때마다 새 열쇠가 나가기 때문이다. Easy 는 한 번 누르면 셋이 이어 도는
- * 구조라 **우리가 갈라 줘야 한다.**
- */
-function relay(request: Request, url: string, body: unknown, step: string): Request {
-  const headers = new Headers(request.headers);
-  const 바깥열쇠 = headers.get("x-idempotency-key");
-  // 바깥 열쇠가 없으면 갈라 줄 것도 없다. 안쪽이 400 으로 막고 그것이 맞다.
-  if (바깥열쇠) headers.set("x-idempotency-key", stepIdempotencyKey(바깥열쇠, step));
-
-  return new Request(new URL(url, request.url), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
-}
-
-/** 라우트의 답을 읽는다. 실패하면 그 라우트가 준 말을 그대로 올린다. */
-async function read(response: Response, step: string) {
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.ok) {
-    /*
-     * **오류를 뭉개지 않는다**(설계 §5-3). 「문제가 생겼습니다」로 덮으면
-     * 사용자는 무엇을 고쳐야 할지 모르고, 같은 것을 또 눌러 값만 나간다.
-     * 어디서 실패했는지와 그 라우트가 준 말을 함께 올린다.
-     */
-    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status);
-  }
-  return body;
-}
-
-class EasyStepError extends Error {
-  constructor(readonly step: string, message: string, readonly status: number) {
-    super(message);
-    this.name = "EasyStepError";
-  }
-}
 
 /**
  * **계량기 안에서 돈다**(설계 §2-9 B). 판단 · 읽기의 토큰은 공용 어댑터가 이미
