@@ -10,6 +10,7 @@ import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
 import { imageCredits } from "@fixup/shared";
 import { isCreditLedgerEnabled, type CreditReservationPlan } from "./credit-ledger";
 import { usageFromRow } from "./usage-row";
+import { BOOT_ID } from "../runtime/boot-id";
 
 type ApiMember = { userId: string; profile: MemberProfile };
 
@@ -160,6 +161,18 @@ export async function reserveAiUsage(
       ok: false,
       response: membershipApiError(status, row.reason, message, usage),
     };
+  }
+  /*
+    **이 예약을 잡은 프로세스를 적는다**(설계 §3.5). 재시작 뒤 새 프로세스가 끊긴 동기 생성
+    예약을 가려 정리한다. 함수 인자를 바꾸지 않으려고 따로 한 줄 적는다(42725 사고). 못 적어도
+    생성은 막지 않는다 — 그 예약은 정리 대상에서 빠질 뿐이다.
+  */
+  if (ledger) {
+    const { error: tagError } = await admin.from("generation_events")
+      .update({ boot_id: BOOT_ID })
+      .eq("user_id", auth.member.userId)
+      .eq("request_id", requestId);
+    if (tagError) console.warn("[usage] 프로세스 표식을 못 남겼습니다", { requestId, message: tagError.message });
   }
   return { ok: true, userId: auth.member.userId, requestId, usage };
 }
