@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { textModelVendor } from "@fixup/shared";
 import { EASY_LOOKS, EASY_RATIOS } from "../../app/easy/ask";
+import { EASY_PHOTO_ROLES } from "../../app/easy/photo-roles";
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
@@ -59,6 +60,36 @@ const EASY_CHAT_SPEC: StructuredSpec = {
   },
 };
 
+/**
+ * **사진마다 쓰임을 정하는 틀**(설계 §2-3 ⓑ2).
+ *
+ * 번호만 받는다 — id 는 모델에게 주지 않는다. 틀에 없는 칸은 구조화 응답이
+ * 버리므로 `said`·`conflicting` 도 반드시 여기 있어야 한다.
+ */
+const EASY_ROLE_SPEC: StructuredSpec = {
+  name: "easy_photo_roles",
+  description: "붙인 사진마다 쓰임(역할)을 정하고, 말이 그 쓰임을 말했는지 적는다.",
+  schema: {
+    type: "object",
+    properties: {
+      photos: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            number: { type: "integer" },
+            role: { type: "string", enum: [...EASY_PHOTO_ROLES, "unclear"] },
+            said: { type: "boolean" },
+          },
+          required: ["number", "role", "said"],
+        },
+      },
+      conflicting: { type: "boolean" },
+    },
+    required: ["photos", "conflicting"],
+  },
+};
+
 export class EasyChatConfigurationError extends Error {
   constructor(readonly missing: string) {
     super(`${missing} 가 없어 대화를 할 수 없습니다.`);
@@ -84,21 +115,16 @@ export function createEasyChatProvider(
     const key = environment.OPENAI_API_KEY?.trim();
     if (!key) throw new EasyChatConfigurationError("OPENAI_API_KEY");
     const openai = new OpenAI({ apiKey: key, maxRetries: 2, timeout: 60_000 });
-    return {
-      decide: (prompt: string) =>
-        new OpenAIStructuredProvider(openai, textModel!, EASY_CHAT_SPEC).generate(prompt),
-    };
+    const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
+      new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt);
+    return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC) };
   }
 
   const key = environment.ANTHROPIC_API_KEY?.trim();
   if (!key) throw new EasyChatConfigurationError("ANTHROPIC_API_KEY");
   const anthropic = new Anthropic({ apiKey: key, maxRetries: 2, timeout: 60_000 });
-  return {
-    decide: (prompt: string) =>
-      new AnthropicStructuredProvider(
-        anthropic,
-        textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5",
-        EASY_CHAT_SPEC,
-      ).generate(prompt),
-  };
+  const model = textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5";
+  const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
+    new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt);
+  return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC) };
 }
