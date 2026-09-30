@@ -14,6 +14,8 @@ import { PlanSettings } from "./plan-settings";
 import { InquiryPanel } from "./inquiry-panel";
 import { listInquiries } from "../../../lib/cs/inquiry-store";
 import type { CreditPlan } from "../member-list/types";
+import { AiUsagePanel } from "./ai-usage-panel";
+import { getAiCostReport, readAiPausedForAdmin } from "../../../lib/ai-control/report";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,11 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
   ]);
   const failed = [dailyResult.error, topResult.error, planResult.error].find(Boolean);
   if (failed) throw failed;
+  /*
+    **AI 사용 비용과 멈춤 스위치**(설계 2026-09-30 §3.3·§3.4). 보고는 못 읽어도 화면을 연다(null) —
+    스위치 상태는 못 읽으면 던진다: 모르는 채 「켜짐」이라고 보이면 누른 단추가 반대로 동작한다.
+  */
+  const [aiReport, aiPaused] = await Promise.all([getAiCostReport(30), readAiPausedForAdmin()]);
   /* 못 읽어도 던지지 않는다. 이 표는 나중에 붙어서, 마이그레이션 전 서버에는 없다. */
   const showcase = await listShowcaseForAdmin().catch(() => null);
   /* 문의함도 같다. `listInquiries` 가 못 읽으면 빈 목록을 준다. */
@@ -52,6 +59,7 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
         표나 모델 단가보다 급하다.
       */}
       <InquiryPanel rows={inquiries} />
+      <AiUsagePanel report={aiReport} paused={aiPaused} usdKrw={usdKrw} />
       <PlanSettings plans={(planResult.data ?? []) as CreditPlan[]} enabled={ledger} />
       <CostPanel summary={costSummary} usdKrw={usdKrw} byOperation={costByOperation} byModel={costByModel} daily={costDaily} prices={modelPrices} />
       {/* 값이 왜 그런지 바로 위 표에서 궁금해진다. 그 답을 옆에 둔다. */}
