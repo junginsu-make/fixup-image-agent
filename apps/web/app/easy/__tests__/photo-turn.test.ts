@@ -56,6 +56,31 @@ describe("그림 턴 (설계 §2-3)", () => {
     expect(결과).toEqual({ kind: "ask", reason: "unclear", rows: [{ id: "p1", role: "unclear" }, { id: "p2", role: "unclear" }] });
   });
 
+  /**
+   * **설명 없는 사진이 분위기로 떨어지는 것을 코드가 막는다**(설계 §2-3, 독립 리뷰).
+   * 프롬프트 한 문장에만 기대면 모델이 `style` 을 줄 때 제품이 다시 그려진다.
+   */
+  it("설명 없는 사진에 판단이 말 없이 style 을 줘도 묻는다", async () => {
+    const { deps } = 가짜({ photos: [{ number: 1, role: "style", said: false }], conflicting: false });
+    const 결과 = await runPhotoTurn({ ...기본, photos: 사진들(1) }, deps);
+
+    expect(결과).toEqual({ kind: "ask", reason: "unclear", rows: [{ id: "p1", role: "unclear" }] });
+  });
+
+  it("설명이 없어도 말이 쓰임을 말했으면 그대로 간다", async () => {
+    const { deps } = 가짜({ photos: [{ number: 1, role: "style", said: true }], conflicting: false });
+    const 결과 = await runPhotoTurn({ ...기본, words: "이 느낌으로", photos: 사진들(1) }, deps);
+
+    expect(결과.kind).toBe("go");
+  });
+
+  it("설명이 있는 사진의 판단은 건드리지 않는다", async () => {
+    const { deps } = 가짜({ photos: [{ number: 1, role: "style", said: false }], conflicting: false }, { p1: "포스터" });
+    const 결과 = await runPhotoTurn({ ...기본, photos: 사진들(1) }, deps);
+
+    expect(결과.kind).toBe("go");
+  });
+
   it("인물 역할이 둘이면 한 장만 되도록 묻는다", async () => {
     const { deps } = 가짜({
       photos: [{ number: 1, role: "preserve_person", said: true }, { number: 2, role: "preserve_person", said: true }],
@@ -70,7 +95,7 @@ describe("그림 턴 (설계 §2-3)", () => {
     const { deps } = 가짜({
       photos: [{ number: 1, role: "preserve_product", said: true }, { number: 2, role: "style", said: false }],
       conflicting: false,
-    });
+    }, { p1: "원두 봉투", p2: "카페 포스터" });
     const 결과 = await runPhotoTurn({ ...기본, words: "1번 제품 그대로", photos: 사진들(2) }, deps);
 
     expect(결과).toEqual({

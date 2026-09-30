@@ -50,13 +50,29 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
   const descriptions = toRead.length ? await deps.read(toRead) : {};
 
   // ⓑ2 다 골랐어도 돈다 — 말과 고른 것이 부딪히는지 알아야 한다(설계 §2-5).
-  const judged = readRoleJudgment(
+  const read = readRoleJudgment(
     await deps.judge(easyRolePrompt({
       words: input.words,
       photos: input.photos.map((photo) => ({ description: descriptions[photo.id] })),
     })),
     input.photos.length,
   );
+
+  /*
+   * **설명 없는 사진은 말이 쓰임을 말했을 때만 역할을 갖는다**(설계 §2-3).
+   *
+   * 프롬프트도 그렇게 시키지만 그 한 문장에만 기대지 않는다(2026-09-30 독립
+   * 리뷰). 모델이 여기에 `style` 을 주면 지켜야 할 제품이 다시 그려진다 —
+   * 가장 비싼 실수다. 단추로 고른 사진은 판단을 안 쓰므로 건드리지 않는다.
+   */
+  const judged = {
+    ...read,
+    photos: read.photos.map((judgment, index) => {
+      const photo = input.photos[index]!;
+      const 설명없음 = !input.chosen[photo.id] && !descriptions[photo.id];
+      return 설명없음 && !judgment.said ? { role: "unclear" as const, said: false } : judgment;
+    }),
+  };
 
   // ⓓ 고른 것 > 말·판단 > 모름.
   const rows = mergeRoles({ ids: input.photos.map((photo) => photo.id), chosen: input.chosen, judged });
