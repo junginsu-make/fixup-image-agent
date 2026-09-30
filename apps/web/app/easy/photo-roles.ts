@@ -63,7 +63,7 @@ const 아는판단 = new Set<string>([...EASY_PHOTO_ROLES, "unclear"]);
  */
 export function describePhoto(read: AttachmentRead): string {
   return [
-    read.people.length ? `사람 ${read.people.length}명 — ${read.people.join(" / ")}` : "사람 없음",
+    read.people.length ? `사람 ${read.people.length}명: ${read.people.join(" / ")}` : "사람 없음",
     read.staging.trim() ? `무엇이 있나: ${read.staging.trim()}` : "",
     read.hasText ? "글자 있음(제목·타이포그래피 등)" : "글자 없음",
     read.note.trim() ? `디자인: ${read.note.trim()}` : "",
@@ -81,7 +81,7 @@ export function easyRolePrompt(input: {
   photos: ReadonlyArray<{ description?: string }>;
 }): string {
   const 사진줄 = input.photos.map((photo, index) =>
-    `${index + 1}번: ${photo.description?.trim() || "(설명 없음 — 말로만 정하세요)"}`);
+    `${index + 1}번: ${photo.description?.trim() || "(설명 없음, 말로만 정하세요)"}`);
 
   return [
     "당신은 사용자가 붙인 사진을 **어떻게 쓸지** 정하는 도우미입니다.",
@@ -89,27 +89,27 @@ export function easyRolePrompt(input: {
     "",
     "사진마다 역할 하나를 고르세요.",
     "",
-    "  style                     분위기만 참고 — 레이아웃·색·글씨 느낌만 가져오고 내용은 새로 만든다",
-    "  preserve_product          제품 그대로 — 제품·로고·물건의 생김새를 그대로 지킨다",
-    "  preserve_person           인물 그대로 — 사람의 얼굴·체형·옷차림을 그대로 지킨다",
-    "  preserve_person_restyled  인물 그대로 · 그림체만 — 사람은 그대로 두고 그림 느낌만 다른 사진을 따라간다",
-    "  unclear                   모르겠다 — 사용자에게 물어본다",
+    "  style                     분위기만 참고: 레이아웃·색·글씨 느낌만 가져오고 내용은 새로 만든다",
+    "  preserve_product          제품 그대로: 제품·로고·물건의 생김새를 그대로 지킨다",
+    "  preserve_person           인물 그대로: 사람의 얼굴·체형·옷차림을 그대로 지킨다",
+    "  preserve_person_restyled  인물 그대로 · 그림체만: 사람은 그대로 두고 그림 느낌만 다른 사진을 따라간다",
+    "  unclear                   모르겠다: 사용자에게 물어본다",
     "",
     "── 정하는 차례 ──",
     "",
     "1. **사용자 말이 먼저입니다.** 말이 그 사진을 가리키고 쓰임을 말했으면 그대로",
     "   따르고 said 를 true 로 둡니다. 「1번 제품은 그대로」·「이 느낌으로」·",
     "   「1번 사람들을 2번 그림체로」·「제품은 살리고」·「이 사람으로」처럼요.",
-    "   「바꿔 그리지 마」처럼 **하지 말라는 말도** 쓰임입니다 — 지키라는 뜻입니다.",
-    "   「이 느낌으로」·「이 분위기로」·「이 색감으로」는 **느낌만 가져오라는 쓰임**입니다 —",
+    "   「바꿔 그리지 마」처럼 **하지 말라는 말도** 쓰임입니다. 지키라는 뜻입니다.",
+    "   「이 느낌으로」·「이 분위기로」·「이 색감으로」는 **느낌만 가져오라는 쓰임**입니다.",
     "   사람이 찍힌 사진이어도 style, said true 입니다. 되묻지 마세요.",
     "2. 말이 사진을 가리키지만 쓰임이 모호하면(「이걸로」·「이거 참고해서」) 사진을",
     "   봅니다. **이런 말은 쓰임을 말한 것이 아니므로 said 는 false 입니다.**",
-    "   한 갈래로만 읽히면 그 갈래입니다 — 제품만 찍힌 사진은 preserve_product,",
+    "   한 갈래로만 읽히면 그 갈래입니다. 제품만 찍힌 사진은 preserve_product,",
     "   글자와 디자인이 있는 포스터·광고·카드뉴스는 style. 사람이 있는 사진은 두",
     "   갈래로 읽히므로(사람을 살릴지 느낌만 볼지) unclear.",
     "3. 말에 사진 이야기가 **전혀 없으면**(「카페 포스터 만들어줘」): 디자인 참고물",
-    "   (포스터·광고·카드뉴스)은 style, 제품 사진과 인물 사진은 **unclear** 입니다 —",
+    "   (포스터·광고·카드뉴스)은 style, 제품 사진과 인물 사진은 **unclear** 입니다.",
     "   그 제품을 그대로 넣을지 느낌만 볼지 말하지 않았기 때문입니다. 2번과 다릅니다.",
     "   said 는 false 입니다.",
     "",
@@ -119,7 +119,7 @@ export function easyRolePrompt(input: {
     "4. 설명이 없는 사진은 말로만 정합니다. 말이 쓰임을 말하지 않았으면 unclear 입니다.",
     "",
     "**모르면 style 로 두지 마세요.** 지켜야 할 제품이 다시 그려집니다. 애매하면",
-    "unclear 로 두세요 — 묻는 것은 값이 들지 않습니다. 대신 **말에 이미 있는 것은",
+    "unclear 로 두세요. 묻는 것은 값이 들지 않습니다. 대신 **말에 이미 있는 것은",
     "unclear 로 두지 마세요.** 안 들은 것이 됩니다.",
     "",
     "── 말 안에서 엇갈리나 ──",

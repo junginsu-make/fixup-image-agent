@@ -48,6 +48,6 @@ export function photoLimit(input: { ratio: string; imageModel?: string; count: n
   return {
     ok: false,
     message: `「${model.label}」 모델은 사진을 ${model.maxReferenceImages}장까지 받습니다. `
-      + `지금 ${input.count}장입니다 — 몇 장을 빼거나 다른 이미지 모델을 골라 주세요.`,
+      + `지금 ${input.count}장입니다. 몇 장을 빼거나 다른 이미지 모델을 골라 주세요.`,
   };
 }

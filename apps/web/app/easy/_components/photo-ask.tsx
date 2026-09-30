@@ -94,7 +94,7 @@ export function EasyPhotoAsk({
         );
       })}
 
-      <p className="text-meta text-subtle-foreground">말로 답하셔도 됩니다 — 「1번은 우리 원두 봉투야」</p>
+      <p className="text-meta text-subtle-foreground">말로 답하셔도 됩니다. 예: 「1번은 우리 원두 봉투야」</p>
       <div className="flex justify-end">
         <Button size="sm" disabled={disabled || !ready} onClick={onSubmit}>이걸로 만들기</Button>
       </div>
