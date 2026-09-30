@@ -106,3 +106,21 @@ describe("지난 역할", () => {
     expect(previousRolesFor({ a: "style" }, ["a"], [{ id: "a", role: "preserve_product" }])).toEqual([]);
   });
 });
+
+describe("카드뉴스 사진 물음 (2단계 §5-1)", () => {
+  const 줄 = [{ id: "a", role: "unclear" as const }];
+
+  it("어느 갈래의 물음인지 들고 있다, 따로 안 주면 이미지", () => {
+    expect(startPhotoAsk("x", "unclear", 줄).mode).toBe("image");
+    expect(startPhotoAsk("x", "unclear", 줄, "cardnews").mode).toBe("cardnews");
+  });
+
+  it("원본 그대로 · 마지막 장을 고를 수 있다", () => {
+    const state = pickPhoto(startPhotoAsk("x", "unclear", 줄, "cardnews"), "a", "place_as_is");
+    expect(photoAnswer(state).photoRoles).toEqual([{ id: "a", role: "place_as_is" }]);
+  });
+
+  it("카드뉴스에서 정해진 역할도 기억한다", () => {
+    expect(rememberRoles({}, [{ id: "a", role: "ending" }, { id: "b", role: "top" }])).toEqual({ a: "ending" });
+  });
+});

@@ -1,4 +1,4 @@
-import { EASY_PHOTO_ROLES, photoAskReason, type EasyPhotoRole, type PhotoRow } from "./photo-roles";
+import { CARD_ONLY_ROLES, EASY_PHOTO_ROLES, photoAskReason, type CardPhotoRole, type PhotoRow } from "./photo-roles";
 
 /**
  * **사진을 어떻게 쓸지 묻는 동안의 상태**(설계 §2-5).
@@ -10,10 +10,12 @@ export interface PhotoAskState {
   /** 물음을 부른 말. 말로 답하면 그 앞에 붙인다. */
   words: string;
   reason: "unclear" | "people";
+  /** 카드뉴스 물음이면 원본 그대로 · 마지막 장도 고른다(2단계 §5-1). */
+  mode: "image" | "cardnews";
   /** 서버가 준 줄. `role` 은 판단이 정한 것 — 「그림체만」 표시를 이것으로 가른다. */
   rows: PhotoRow[];
   /** 지금 골라져 있는 것. 판단이 정한 줄은 처음부터 골라져 있다. */
-  picked: Record<string, EasyPhotoRole>;
+  picked: Record<string, CardPhotoRole>;
   /** 사용자가 직접 누른 줄. 말로 답할 때는 이것만 보낸다. */
   touched: string[];
 }
@@ -22,20 +24,23 @@ export function startPhotoAsk(
   words: string,
   reason: PhotoAskState["reason"],
   rows: readonly PhotoRow[],
+  /** 서버가 준 값. 모르는 값이면 이미지다. */
+  mode: unknown = "image",
 ): PhotoAskState {
   return {
     words,
     reason,
+    mode: mode === "cardnews" ? "cardnews" : "image",
     rows: [...rows],
     picked: Object.fromEntries(
-      rows.filter((row) => row.role !== "unclear").map((row) => [row.id, row.role as EasyPhotoRole]),
+      rows.filter((row) => row.role !== "unclear").map((row) => [row.id, row.role as CardPhotoRole]),
     ),
     touched: [],
   };
 }
 
 /** 한 줄을 고른다. 다른 줄은 건드리지 않는다. */
-export function pickPhoto(state: PhotoAskState, id: string, role: EasyPhotoRole): PhotoAskState {
+export function pickPhoto(state: PhotoAskState, id: string, role: CardPhotoRole): PhotoAskState {
   return {
     ...state,
     picked: { ...state.picked, [id]: role },
@@ -60,7 +65,7 @@ export function photoAskReady(state: PhotoAskState): boolean {
 export function photoAnswer(
   state: PhotoAskState,
   answer?: string,
-): { prompt: string; photoRoles: Array<{ id: string; role: EasyPhotoRole }> } {
+): { prompt: string; photoRoles: Array<{ id: string; role: CardPhotoRole }> } {
   const 말 = answer?.trim();
   const ids = 말 ? state.touched : state.rows.map((row) => row.id);
   return {
@@ -77,24 +82,25 @@ export function photoAnswer(
  * 않게 한다. 화면에만 있다. 서버가 다시 검사하므로 여기서는 모양만 거른다.
  */
 export function rememberRoles(
-  last: Readonly<Record<string, EasyPhotoRole>>,
+  last: Readonly<Record<string, CardPhotoRole>>,
   roles: unknown,
-): Record<string, EasyPhotoRole> {
+): Record<string, CardPhotoRole> {
   if (!Array.isArray(roles)) return { ...last };
-  const known = new Set<string>(EASY_PHOTO_ROLES);
+  // 카드뉴스에서 정해진 역할도 받는다. 이미지 턴에서는 서버가 두 역할을 버린다.
+  const known = new Set<string>([...EASY_PHOTO_ROLES, ...CARD_ONLY_ROLES]);
   const fresh = roles
     .map((entry) => entry as { id?: unknown; role?: unknown } | null)
-    .filter((one): one is { id: string; role: EasyPhotoRole } =>
+    .filter((one): one is { id: string; role: CardPhotoRole } =>
       one !== null && typeof one.id === "string" && typeof one.role === "string" && known.has(one.role));
   return { ...last, ...Object.fromEntries(fresh.map((one) => [one.id, one.role])) };
 }
 
 /** 지금 붙은 사진 중 기억한 것. 이번에 단추로 고른 사진은 뺀다 — 고른 것이 이긴다. */
 export function previousRolesFor(
-  last: Readonly<Record<string, EasyPhotoRole>>,
+  last: Readonly<Record<string, CardPhotoRole>>,
   attachmentIds: readonly string[],
-  chosen: ReadonlyArray<{ id: string; role: EasyPhotoRole }> = [],
-): Array<{ id: string; role: EasyPhotoRole }> {
+  chosen: ReadonlyArray<{ id: string; role: CardPhotoRole }> = [],
+): Array<{ id: string; role: CardPhotoRole }> {
   const 고른것 = new Set(chosen.map((one) => one.id));
   return attachmentIds.flatMap((id) => (last[id] && !고른것.has(id) ? [{ id, role: last[id]! }] : []));
 }

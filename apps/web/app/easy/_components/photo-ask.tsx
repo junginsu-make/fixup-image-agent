@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button, cn } from "@fixup/ui";
-import { canPickPerson, isPersonRole, type EasyPhotoRole, type JudgedPhotoRole } from "../photo-roles";
+import { canPickPerson, isPersonRole, type CardPhotoRole, type EasyPhotoRole, type JudgedPhotoRole } from "../photo-roles";
 
 /** 물음의 한 줄. 주소는 화면이 붙인 사진에서 채운다. */
 export interface PhotoAskRow {
@@ -26,6 +26,12 @@ const 단추: ReadonlyArray<{ role: EasyPhotoRole; label: string }> = [
  */
 const 그림체만 = { role: "preserve_person_restyled" as const, label: "인물 그대로 · 그림체만" };
 
+/** 카드뉴스 물음에만 낸다(2단계 §5-1). 이미지 한 장에는 이 두 쓰임이 없다. */
+const 카드단추: ReadonlyArray<{ role: CardPhotoRole; label: string }> = [
+  { role: "place_as_is", label: "원본 그대로 한 장" },
+  { role: "ending", label: "마지막 장" },
+];
+
 /**
  * **사진을 어떻게 쓸지 묻는 줄**(설계 §2-5).
  *
@@ -34,6 +40,7 @@ const 그림체만 = { role: "preserve_person_restyled" as const, label: "인물
  */
 export function EasyPhotoAsk({
   reason,
+  mode = "image",
   rows,
   picked,
   ready,
@@ -42,11 +49,12 @@ export function EasyPhotoAsk({
   disabled,
 }: {
   reason: "unclear" | "people";
+  mode?: "image" | "cardnews";
   rows: readonly PhotoAskRow[];
-  picked: Readonly<Record<string, EasyPhotoRole | undefined>>;
+  picked: Readonly<Record<string, CardPhotoRole | undefined>>;
   /** 모두 골랐고 인물이 한 줄 이하인가(`photoAskReady`). */
   ready: boolean;
-  onPick: (id: string, role: EasyPhotoRole) => void;
+  onPick: (id: string, role: CardPhotoRole) => void;
   onSubmit: () => void;
   disabled?: boolean;
 }) {
@@ -59,7 +67,11 @@ export function EasyPhotoAsk({
       </p>
 
       {rows.map((row, index) => {
-        const 고를것 = row.role === "preserve_person_restyled" ? [...단추, 그림체만] : 단추;
+        const 고를것: ReadonlyArray<{ role: CardPhotoRole; label: string }> = [
+          ...단추,
+          ...(mode === "cardnews" ? 카드단추 : []),
+          ...(row.role === "preserve_person_restyled" ? [그림체만] : []),
+        ];
         return (
           <div key={row.id} className="flex flex-wrap items-center gap-1.5">
             <span className="mr-1 flex w-16 shrink-0 items-center gap-1.5 text-meta text-subtle-foreground">

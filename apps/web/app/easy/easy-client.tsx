@@ -21,7 +21,11 @@ import { EasyPhotoAsk } from "./_components/photo-ask";
 import {
   photoAnswer, photoAskReady, pickPhoto, previousRolesFor, rememberRoles, startPhotoAsk, type PhotoAskState,
 } from "./photo-ask-state";
-import type { EasyPhotoRole } from "./photo-roles";
+import type { CardPhotoRole } from "./photo-roles";
+import { EasyCardnewsAsks } from "./_components/cardnews-asks";
+import { cardResults, type EasyResend } from "./cardnews-state";
+import type { CardnewsProjectLike } from "./cardnews-view";
+import { useEasyCardnews } from "./use-cardnews";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
@@ -58,6 +62,8 @@ interface EasyClientProps {
   defaultImageModel: string;
   /** 값 셈에 쓴다. 화면이 바꿀 수 없다(설계 §9). */
   ratioId: string;
+  /** 줄 id → 카드뉴스 작업(2단계 §8). 다시 열 때 `load.ts` 가 찾아 준다. */
+  initialCardnews?: Record<string, CardnewsProjectLike & { title?: string }>;
 }
 
 /** 첨부 한 장. 올린 뒤의 모습이다. */
@@ -81,6 +87,7 @@ export function EasyClient({
   imageModels,
   defaultImageModel,
   ratioId,
+  initialCardnews,
 }: EasyClientProps) {
   const creditPolicy = useCreditPolicy();
   const router = useRouter();
@@ -118,7 +125,7 @@ export function EasyClient({
    * **지난 역할**(설계 §2-4 차례 3). 이 사진으로 만들 때 정해진 역할을 사진 id 별로
    * 들고 있다가 다음 그림 턴에 보낸다. 안 그러면 「좀 더 밝게」에도 같은 물음이 뜬다.
    */
-  const [lastRoles, setLastRoles] = React.useState<Record<string, EasyPhotoRole>>({});
+  const [lastRoles, setLastRoles] = React.useState<Record<string, CardPhotoRole>>({});
   /*
    * **만든 조건.** 다시 열 때는 서버가 읽어 주고, 지금 만든 것은 만들면서 적는다.
    * 새로고침을 기다렸다 보여 주면 방금 만든 것만 조건이 비어 보인다.
@@ -139,6 +146,12 @@ export function EasyClient({
 
   const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
   const shown = messages.length ? messages : [인사];
+  const cardHandlers = React.useMemo(() => ({
+    onMessage: (message: EasyMessage) => setMessages((current) => [...current, message]),
+    onError: (next: { message: string; retryable: boolean }) => setError(next),
+    onDrafted: (photoRoles: unknown) => { setLastRoles((current) => rememberRoles(current, photoRoles)); router.refresh(); },
+  }), [router]);
+  const cardnews = useEasyCardnews({ conversationId, messages: shown, initial: initialCardnews, policy: creditPolicy, handlers: cardHandlers });
 
   /*
    * **이번 한 장에 얼마 드나**(설계 §5-2).
@@ -162,11 +175,12 @@ export function EasyClient({
    * 대화 차례대로 담는다. 화면이 새것을 위에 둘지는 그쪽이 정한다.
    */
   const results = React.useMemo(
-    () => shown.flatMap((message) =>
+    () => shown.flatMap((message): Array<{ id: string; url: string; options?: EasyImageOptions }> =>
       message.role === "image" && urls[message.id]
         ? [{ id: message.id, url: urls[message.id]!, options: options[message.id] }]
-        : []),
-    [shown, urls, options],
+        // 카드뉴스 줄은 다 만든 카드를 한 장씩 건다(2단계 §8).
+        : cardResults([message], cardnews.views)),
+    [shown, urls, options, cardnews.views],
   );
 
   const cost = React.useMemo(
@@ -191,6 +205,7 @@ export function EasyClient({
         setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
         // 사진이 바뀌면 묻던 것은 뜻을 잃는다(Review Focus 1).
         setPhotoAsking(null);
+        cardnews.dropKindAsk();
       } catch (cause) {
         setError({
           message: cause instanceof Error ? cause.message : "그림을 올리지 못했습니다.",
@@ -212,6 +227,7 @@ export function EasyClient({
       return [...current, ...picked.filter((one) => !있는것.has(one.id))];
     });
     setPhotoAsking(null);
+    cardnews.dropKindAsk();
   }
 
   /**
@@ -252,7 +268,7 @@ export function EasyClient({
    */
   async function send(
     /** 물어본 뒤 다시 보낼 때 쓴다. 비우면 입력창의 말을 보낸다. */
-     다시?: { prompt: string; ratio?: string; look?: string; photoRoles?: Array<{ id: string; role: EasyPhotoRole }> },
+     다시?: EasyResend,
   ) {
     /*
      * **사진을 물은 뒤 말로 답하면** 처음 말과 답을 잇는다(설계 §2-5).
@@ -261,6 +277,8 @@ export function EasyClient({
     const prompt = 다시?.prompt ?? 말답?.prompt ?? draft.trim();
     const photoRoles = 다시?.photoRoles ?? 말답?.photoRoles;
     if (!prompt || (!다시 && !turn.canSend)) return;
+    // 고른 갈래는 이어지는 답에만 싣는다. 새로 친 말은 서버가 다시 가른다(2단계 §4).
+    const kind = cardnews.beginTurn({ explicit: 다시?.kind, continuing: Boolean(다시 || 말답), photoMode: photoAsking?.mode });
 
     /*
      * **잠그기 전에 id 부터 만든다**(2026-09-21 사용자 보고).
@@ -328,6 +346,8 @@ export function EasyClient({
           // 고른 것이 있으면 함께 보낸다. 없으면 서버가 물어볼지 정한다.
           ...(다시?.ratio ? { ratio: 다시.ratio } : {}),
           ...(다시?.look ? { look: 다시.look } : {}),
+          // 카드뉴스(2단계): 고른 갈래 · 세트에서 온 자리. 있을 때만 싣는다.
+          ...(kind ? { kind } : {}), ...(다시?.photoSlots?.length ? { photoSlots: 다시.photoSlots } : {}),
         }),
       });
       const body = await response.json().catch(() => ({}));
@@ -337,6 +357,7 @@ export function EasyClient({
          * 친 말을 들고 있다가 고른 뒤 그대로 다시 보낸다.
          */
         setAsking(prompt);
+        cardnews.rememberKind(kind);
         return;
       }
       if (body.ok && body.photoAsk) {
@@ -344,9 +365,12 @@ export function EasyClient({
          * **사진을 어떻게 쓸지 묻고 끝낸다**(설계 §2-5). 값은 안 들었다.
          * 고르거나 말로 답하면 이 말과 함께 다시 보낸다.
          */
-        setPhotoAsking(startPhotoAsk(prompt, body.photoAsk.reason, body.photoAsk.rows));
+        setPhotoAsking(startPhotoAsk(prompt, body.photoAsk.reason, body.photoAsk.rows, body.photoAsk.mode));
+        cardnews.rememberKind(kind);
         return;
       }
+      // 카드뉴스 갈래(2단계): 갈래 물음 · 레퍼런스 요청 · 원고. 값은 안 들었다.
+      if (body.ok && cardnews.take(body, prompt)) return;
       if (body.ok && body.talked) {
         /*
          * **말로 답한 턴.** 그림을 안 만들었으므로 기다릴 것도 없다.
@@ -479,6 +503,7 @@ export function EasyClient({
               imageUrl={urls[message.id]}
               /* 대화에서 눌러도 같은 벌이 열린다. 그 자리에서 시작할 뿐이다. */
               onOpenImage={() => openViewer(results.findIndex((one) => one.id === message.id))}
+              cardnews={cardnews.rowProps(message.id, turn.busy)}
             />
           ))}
 
@@ -518,6 +543,7 @@ export function EasyClient({
                 const 붙인것 = attachments.find((one) => one.id === row.id);
                 return { ...row, url: 붙인것?.url, title: 붙인것?.title };
               })}
+              mode={photoAsking.mode}
               picked={photoAsking.picked}
               ready={photoAskReady(photoAsking)}
               disabled={turn.busy}
@@ -529,6 +555,15 @@ export function EasyClient({
             />
           ) : null}
 
+          <EasyCardnewsAsks
+            kindAsking={cardnews.kindAsking}
+            referenceAsking={cardnews.referenceAsking}
+            library={library}
+            attachedIds={attachments.map((one) => one.id)}
+            disabled={turn.busy}
+            onAttach={pickFromLibrary}
+            onSend={(again) => void send(again)}
+          />
           {turn.busy && !asking && !photoAsking && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
 
           {/*
@@ -742,7 +777,7 @@ export function EasyClient({
             images={results}
             width={resultWidth}
             /* 자리는 잡혔는데 주소가 아직 없으면 만드는 중이다. */
-            working={shown.some((one) => one.role === "image" && !urls[one.id])}
+            working={cardnews.working || shown.some((one) => one.role === "image" && !urls[one.id] && !cardnews.views[one.id])}
             onOpen={openViewer}
           />
         </>

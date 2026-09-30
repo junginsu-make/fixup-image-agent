@@ -7,6 +7,7 @@ import { Button, cn } from "@fixup/ui";
 import { DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
+import { EasyCardnewsCard } from "./cardnews-card";
 
 /**
  * 대화 한 줄 (설계 §4).
@@ -150,11 +151,14 @@ export function EasyMessageRow({
   message,
   imageUrl,
   onOpenImage,
+  cardnews,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
   imageUrl?: string;
   onOpenImage?: () => void;
+  /** 카드뉴스 원고 줄이면 그 작업(2단계 §7). 그림 한 장 대신 원고 카드를 그린다. */
+  cardnews?: React.ComponentProps<typeof EasyCardnewsCard>;
 }) {
   if (message.role === "user") {
     return (
@@ -192,6 +196,15 @@ export function EasyMessageRow({
         ) : (
           <p className={cn("max-w-[85%]", 말풍선)}>{message.body}</p>
         )}
+      </div>
+    );
+  }
+
+  if (cardnews) {
+    return (
+      <div className="flex items-start gap-2">
+        <AssistantMark />
+        <EasyCardnewsCard {...cardnews} />
       </div>
     );
   }

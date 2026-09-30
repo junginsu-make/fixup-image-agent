@@ -365,3 +365,24 @@ describe("카드뉴스 다시 열기 (2단계 §8)", () => {
     expect(load).toMatch(/return \{[^}]*cardnews/);
   });
 });
+
+describe("카드뉴스 화면 잇기 (2단계)", () => {
+  const 화면쪽 = 코드("../easy-client.tsx");
+  const 물음 = 코드("../_components/cardnews-asks.tsx");
+  const 훅 = 코드("../use-cardnews.ts");
+  it("한 장 · 카드뉴스를 묻는 줄과 레퍼런스를 요청하는 줄을 그린다", () => {
+    expect(화면쪽).toContain("<EasyCardnewsAsks");
+    expect(물음).toContain("<EasyKindAsk");
+    expect(물음).toContain("<EasyReferenceAsk");
+  });
+  it("원고 카드를 그린다", () => { expect(코드("../_components/message.tsx")).toContain("<EasyCardnewsCard"); });
+  it("「이대로 만들기」 · 조건 바꾸기를 새 라우트로 보낸다", () => {
+    expect(화면쪽).toContain("useEasyCardnews(");
+    expect(훅).toContain("/api/easy/cardnews");
+  });
+  it("만드는 동안 셸에 그 대화 주소로 등록한다", () => { expect(훅).toMatch(/start\(cardnewsJob\(/); });
+  it("다시 연 대화에 카드뉴스를 넘긴다", () => { expect(코드("../[id]/page.tsx")).toContain("initialCardnews={loaded.cardnews}"); });
+  it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
+    expect(화면쪽).toContain("!cardnews.views[one.id]");
+  });
+});
