@@ -49,7 +49,7 @@ vi.mock("../../../../lib/easy/chat-provider", () => ({
 vi.mock("../../../../lib/easy/read-photos", () => ({
   readEasyPhotos: async (photos: Array<{ id: string }>) => {
     읽은사진.push(photos.map((photo) => photo.id));
-    return Object.fromEntries(photos.map((photo) => [photo.id, "설명"]));
+    return Object.fromEntries(photos.map((photo) => [photo.id, { description: "설명", hasPeople: false, hasText: true }]));
   },
 }));
 vi.mock("../../../../lib/poster/references", () => ({

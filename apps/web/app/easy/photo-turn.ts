@@ -1,7 +1,7 @@
 import { photoLimit } from "./photo-check";
 import {
   easyRolePrompt, mergeRoles, photoAskReason, readRoleJudgment,
-  type EasyPhoto, type EasyPhotoRole, type PhotoRow,
+  type EasyPhoto, type EasyPhotoRead, type EasyPhotoRole, type PhotoRow,
 } from "./photo-roles";
 import { easyAttachmentIntent, posterFieldsFrom, type EasyPosterFields } from "./photo-fields";
 
@@ -24,8 +24,8 @@ export interface PhotoTurnInput {
 }
 
 export interface PhotoTurnDeps {
-  /** id → 설명. 못 읽은 사진은 없다. */
-  read(photos: readonly EasyPhoto[]): Promise<Record<string, string>>;
+  /** id → 읽은 것. 못 읽은 사진은 없다. */
+  read(photos: readonly EasyPhoto[]): Promise<Record<string, EasyPhotoRead>>;
   /** ⓑ2 를 부른다. */
   judge(prompt: string): Promise<unknown>;
 }
@@ -47,30 +47,39 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
 
   // ⓐ 단추로 고른 사진은 읽지 않는다. 역할을 정할 일이 없는데 읽으면 값과 기다림만 는다.
   const toRead = input.photos.filter((photo) => !input.chosen[photo.id]);
-  const descriptions = toRead.length ? await deps.read(toRead) : {};
+  const reads: Record<string, EasyPhotoRead> = toRead.length ? await deps.read(toRead) : {};
 
   // ⓑ2 다 골랐어도 돈다 — 말과 고른 것이 부딪히는지 알아야 한다(설계 §2-5).
   const read = readRoleJudgment(
     await deps.judge(easyRolePrompt({
       words: input.words,
-      photos: input.photos.map((photo) => ({ description: descriptions[photo.id] })),
+      photos: input.photos.map((photo) => ({ description: reads[photo.id]?.description })),
     })),
     input.photos.length,
   );
 
   /*
-   * **설명 없는 사진은 말이 쓰임을 말했을 때만 역할을 갖는다**(설계 §2-3).
+   * **말이 쓰임을 말하지 않았으면 코드가 묻게 하는 두 경우**(설계 §2-3 · §2-4 표).
    *
-   * 프롬프트도 그렇게 시키지만 그 한 문장에만 기대지 않는다(2026-09-30 독립
-   * 리뷰). 모델이 여기에 `style` 을 주면 지켜야 할 제품이 다시 그려진다 —
-   * 가장 비싼 실수다. 단추로 고른 사진은 판단을 안 쓰므로 건드리지 않는다.
+   * - 설명이 없는 사진 — 무엇인지 모르고 골랐다(2026-09-30 독립 리뷰)
+   * - 사람이 있고 글자 디자인이 없는 사진 · 그림 — 사람을 살릴지 느낌만 볼지 두
+   *   갈래다. 사용자 사진으로 재 보니 가족 일러스트가 세 번 중 두 번 분위기로
+   *   갔다(읽기 설명이 매번 달라 모델이 흔들린다). 글자가 있는 포스터는 디자인
+   *   참고물이라 여기 안 걸린다
+   *
+   * 프롬프트도 그렇게 시키지만 그 문장에만 기대지 않는다. 모델이 여기에 `style` 을
+   * 주면 지켜야 할 것이 다시 그려진다 — 가장 비싼 실수다. 단추로 고른 사진은
+   * 판단을 안 쓰므로 건드리지 않는다.
    */
   const judged = {
     ...read,
     photos: read.photos.map((judgment, index) => {
       const photo = input.photos[index]!;
-      const 설명없음 = !input.chosen[photo.id] && !descriptions[photo.id];
-      return 설명없음 && !judgment.said ? { role: "unclear" as const, said: false } : judgment;
+      const one = reads[photo.id];
+      const 모호함 = !one || (one.hasPeople && !one.hasText);
+      return !input.chosen[photo.id] && 모호함 && !judgment.said
+        ? { role: "unclear" as const, said: false }
+        : judgment;
     }),
   };
 

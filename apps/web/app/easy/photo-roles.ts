@@ -71,6 +71,22 @@ export function describePhoto(read: AttachmentRead): string {
 }
 
 /**
+ * 한 장을 읽은 것 — ⓑ2 에 줄 설명과, 코드가 직접 가를 때 쓰는 두 값.
+ *
+ * 설명 글만 두면 「사람이 있나 · 글자 디자인이 있나」를 코드가 알 수 없다.
+ * 읽기는 두 값을 따로 주므로 그대로 들고 다닌다(`photo-turn.ts` 가 쓴다).
+ */
+export interface EasyPhotoRead {
+  description: string;
+  hasPeople: boolean;
+  hasText: boolean;
+}
+
+export function readOfPhoto(read: AttachmentRead): EasyPhotoRead {
+  return { description: describePhoto(read), hasPeople: read.people.length > 0, hasText: read.hasText };
+}
+
+/**
  * ⓑ2 에 보낼 글.
  *
  * **id 를 주지 않는다.** 번호만 준다 — 번호를 id 로 바꾸는 것은 코드가 한다.
@@ -109,13 +125,18 @@ export function easyRolePrompt(input: {
     "   글자와 디자인이 있는 포스터·광고·카드뉴스는 style. 사람이 있는 사진은 두",
     "   갈래로 읽히므로(사람을 살릴지 느낌만 볼지) unclear.",
     "3. 말에 사진 이야기가 **전혀 없으면**(「카페 포스터 만들어줘」): 디자인 참고물",
-    "   (포스터·광고·카드뉴스)은 style, 제품 사진과 인물 사진은 **unclear** 입니다.",
+    "   (포스터·광고·카드뉴스)은 style, 제품 사진·인물 사진·**로고**·**사람이나 캐릭터가",
+    "   주인공인 그림**은 **unclear** 입니다. 만들 것과 관계없어 보여도 그렇습니다.",
     "   그 제품을 그대로 넣을지 느낌만 볼지 말하지 않았기 때문입니다. 2번과 다릅니다.",
     "   said 는 false 입니다.",
     "",
     "**디자인 참고물은 사람이 나와도 디자인 참고물입니다.** 큰 제목·타이포그래피·배치된",
     "문구가 있는 포스터·광고·화보는 모델이 찍혀 있어도 style 입니다(2·3번 모두).",
-    "인물 사진은 **글자 디자인 없이 사람을 찍은 사진**을 말합니다.",
+    "인물 사진은 **글자 디자인 없이 사람을 찍은 사진**을 말합니다. 사진이 아니라",
+    "그림(일러스트·캐릭터)이어도 사람이나 캐릭터가 주인공이고 글자 디자인이 없으면",
+    "인물 사진과 같습니다(말이 없으면 unclear).",
+    "**로고·브랜드 마크만 있는 그림은 제품과 같습니다.** 글자로 되어 있어도 생김새를",
+    "지킬 대상이지 디자인 참고물이 아닙니다(말이 없으면 unclear, 「이걸로」면 preserve_product).",
     "4. 설명이 없는 사진은 말로만 정합니다. 말이 쓰임을 말하지 않았으면 unclear 입니다.",
     "",
     "**모르면 style 로 두지 마세요.** 지켜야 할 제품이 다시 그려집니다. 애매하면",

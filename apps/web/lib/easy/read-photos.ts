@@ -1,6 +1,6 @@
 import { readAttachments, type GrammarReader } from "@fixup/poster-core";
 import { createPosterAttachmentReader } from "../poster/providers";
-import { describePhoto, type EasyPhoto } from "../../app/easy/photo-roles";
+import { readOfPhoto, type EasyPhoto, type EasyPhotoRead } from "../../app/easy/photo-roles";
 
 /**
  * 붙인 사진을 **이미지 만들기 기획이 쓰는 그 기계로** 읽는다(설계 §2-3 ⓐ).
@@ -21,7 +21,7 @@ import { describePhoto, type EasyPhoto } from "../../app/easy/photo-roles";
 export async function readEasyPhotos(
   photos: readonly EasyPhoto[],
   reader?: GrammarReader,
-): Promise<Record<string, string>> {
+): Promise<Record<string, EasyPhotoRead>> {
   const readable = photos.filter((photo) => Boolean(photo.url));
   if (!readable.length) return {};
 
@@ -29,5 +29,5 @@ export async function readEasyPhotos(
   const results = await Promise.all(readable.map((photo) =>
     readAttachments([{ id: photo.id, title: photo.title ?? "사진", url: photo.url! }], eye)));
   return Object.fromEntries(results.flatMap(({ reads }) =>
-    Object.entries(reads).map(([id, read]) => [id, describePhoto(read)])));
+    Object.entries(reads).map(([id, read]) => [id, readOfPhoto(read)])));
 }

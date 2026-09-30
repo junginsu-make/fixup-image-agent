@@ -28,7 +28,9 @@ describe("사진 읽기", () => {
     const 눈 = 가짜눈();
     const 설명 = await readEasyPhotos([{ id: "a", url: "https://x.test/a.png" }], 눈);
 
-    expect(설명.a).toContain("사람 1명");
+    expect(설명.a!.description).toContain("사람 1명");
+    expect(설명.a!.hasPeople).toBe(true);
+    expect(설명.a!.hasText).toBe(false);
     expect(눈.본주소).toEqual(["https://x.test/a.png"]);
   });
 

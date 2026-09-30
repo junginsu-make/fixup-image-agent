@@ -3,11 +3,16 @@ import { runPhotoTurn, type PhotoTurnDeps } from "../photo-turn";
 
 const 사진들 = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, url: `https://x.test/${i + 1}.png` }));
 
-function 가짜(판단: unknown, 설명: Record<string, string> = {}) {
+/** 읽은 것. 글로만 주면 사람도 글자도 없는 사진으로 친다. */
+type 읽음 = string | { description: string; hasPeople: boolean; hasText: boolean };
+
+function 가짜(판단: unknown, 설명: Record<string, 읽음> = {}) {
+  const 읽은것들 = Object.fromEntries(Object.entries(설명).map(([id, one]) =>
+    [id, typeof one === "string" ? { description: one, hasPeople: false, hasText: false } : one]));
   const 읽은것: string[][] = [];
   const 받은글: string[] = [];
   const deps: PhotoTurnDeps = {
-    read: async (photos) => { 읽은것.push(photos.map((photo) => photo.id)); return 설명; },
+    read: async (photos) => { 읽은것.push(photos.map((photo) => photo.id)); return 읽은것들; },
     judge: async (prompt) => { 받은글.push(prompt); return 판단; },
   };
   return { deps, 읽은것, 받은글 };
@@ -79,6 +84,37 @@ describe("그림 턴 (설계 §2-3)", () => {
     const 결과 = await runPhotoTurn({ ...기본, photos: 사진들(1) }, deps);
 
     expect(결과.kind).toBe("go");
+  });
+
+  /**
+   * **사람이 주인공이고 글자 디자인이 없는 그림은 말이 없으면 묻는다**(설계 §2-4 표).
+   * 2026-09-30 사용자 사진으로 잰 가족 일러스트가 세 번 중 두 번 분위기로 갔다 —
+   * 읽기 설명이 매번 달라 모델이 흔들린다. 읽기가 따로 주는 두 값으로 못 박는다.
+   */
+  it("사람이 있고 글자 디자인이 없으면 말 없이 style 을 줘도 묻는다", async () => {
+    const { deps } = 가짜(
+      { photos: [{ number: 1, role: "style", said: false }], conflicting: false },
+      { p1: { description: "사람 2명: 웃는 두 사람의 만화풍 그림", hasPeople: true, hasText: false } },
+    );
+    const 결과 = await runPhotoTurn({ ...기본, photos: 사진들(1) }, deps);
+
+    expect(결과).toEqual({ kind: "ask", reason: "unclear", rows: [{ id: "p1", role: "unclear" }] });
+  });
+
+  it("사람이 나와도 글자 디자인이 있는 포스터는 판단대로 간다", async () => {
+    const { deps } = 가짜(
+      { photos: [{ number: 1, role: "style", said: false }], conflicting: false },
+      { p1: { description: "사람 1명: 모델 · 큰 제목 VOLUME", hasPeople: true, hasText: true } },
+    );
+    expect((await runPhotoTurn({ ...기본, photos: 사진들(1) }, deps)).kind).toBe("go");
+  });
+
+  it("사람 사진이어도 말이 쓰임을 말했으면 그대로 간다", async () => {
+    const { deps } = 가짜(
+      { photos: [{ number: 1, role: "style", said: true }], conflicting: false },
+      { p1: { description: "사람 1명: 얼굴", hasPeople: true, hasText: false } },
+    );
+    expect((await runPhotoTurn({ ...기본, words: "이 느낌으로", photos: 사진들(1) }, deps)).kind).toBe("go");
   });
 
   it("인물 역할이 둘이면 한 장만 되도록 묻는다", async () => {

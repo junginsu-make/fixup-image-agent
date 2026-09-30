@@ -40,11 +40,11 @@ async function main() {
 
   const 설명 = await readEasyPhotos(photos);
   줄.push("", "## 읽은 설명", "");
-  photos.forEach((photo, i) => 줄.push(`${i + 1}. \`${photo.id}\` — ${설명[photo.id] ?? "(못 읽음)"}`));
+  photos.forEach((photo, i) => 줄.push(`${i + 1}. \`${photo.id}\` — ${설명[photo.id]?.description ?? "(못 읽음)"}`));
 
   const provider = createEasyChatProvider(process.env, DEFAULT_TEXT_MODEL);
   for (const words of ["카페 포스터 만들어줘", "이걸로 만들어줘"]) {
-    const raw = await provider.decideRoles(easyRolePrompt({ words, photos: photos.map((p) => ({ description: 설명[p.id] })) }));
+    const raw = await provider.decideRoles(easyRolePrompt({ words, photos: photos.map((p) => ({ description: 설명[p.id]?.description })) }));
     const got = readRoleJudgment(raw, photos.length);
     줄.push("", `## 「${words}」`, "", ...got.photos.map((p, i) => `- ${i + 1}. \`${photos[i]!.id}\` → ${p.role}${p.said ? " (말)" : ""}`));
   }
