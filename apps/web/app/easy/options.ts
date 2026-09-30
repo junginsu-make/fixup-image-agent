@@ -1,3 +1,5 @@
+import { roleOf, type AttachmentRole, type StoredAttachmentData } from "@fixup/shared";
+
 /**
  * **이 이미지가 어떤 조건으로 만들어졌나** (2026-09-21 사용자 — 「결과물 밑에
  * 바로 보이게해서 해당 이미지가 어떤 조건으로 만들어졌는지 쉽게 알게」).
@@ -27,6 +29,8 @@ export interface EasyImageOptions {
   height?: number | null;
   /** 붙였던 참고 이미지 장수. */
   references?: number;
+  /** 붙인 사진마다 어떻게 썼나 — `①제품 유지 · ②분위기 참고`(설계 §2-8). */
+  roles?: string;
 }
 
 /**
@@ -48,6 +52,7 @@ export function easyOptionLines(options: EasyImageOptions | undefined): string[]
   if (options.width && options.height) lines.push(`${options.width} × ${options.height}`);
   // 0장은 「안 붙이고 만들었다」는 뜻이라 적을 값어치가 있다. 모르면 안 적는다.
   if (typeof options.references === "number") lines.push(`참고 ${options.references}장`);
+  if (options.roles) lines.push(options.roles);
 
   return lines;
 }
@@ -69,6 +74,33 @@ export function easyOptionMeta(options: EasyImageOptions | undefined): Array<[st
   if (options.ratio) rows.push(["비율", options.ratio]);
   if (options.width && options.height) rows.push(["크기", `${options.width} × ${options.height}`]);
   if (typeof options.references === "number") rows.push(["참고 이미지", `${options.references}장`]);
+  if (options.roles) rows.push(["사진 역할", options.roles]);
 
   return rows;
+}
+
+const 역할이름: Record<AttachmentRole, string> = {
+  style: "분위기 참고",
+  preserve_product: "제품 유지",
+  preserve_person: "인물 유지",
+  preserve_person_restyled: "인물 유지·그림체 바꾸기",
+  place_as_is: "원본 그대로",
+};
+
+/** ①~⑳, 그 뒤는 숫자. */
+function 번호(index: number): string {
+  return index < 20 ? String.fromCodePoint(0x2460 + index) : `${index + 1}.`;
+}
+
+/**
+ * **이 이미지를 만들 때 사진을 어떻게 썼나**(설계 §2-8).
+ *
+ * 만든 작업에 이미 저장된 칸(차례 · 세 목록)에서 읽는다 — 대화 표에 베끼면
+ * 어긋난다. 역할을 가르는 규칙은 이미지 만들기의 `roleOf` 를 그대로 쓴다.
+ * 차례가 없는 옛 작업은 빈 글이다.
+ */
+export function easyRoleSummary(data: StoredAttachmentData): string {
+  return (data.attachmentOrder ?? [])
+    .map((id, index) => `${번호(index)}${역할이름[roleOf(data, id)]}`)
+    .join(" · ");
 }

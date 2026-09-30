@@ -223,6 +223,8 @@ describe("역할대로 칸을 채운다 (설계 §2-6)", () => {
       attachmentOrder: [사진(1), 사진(2), 사진(3)],
       attachmentIntent: 말,
     });
+    expect((await 보낸다({ prompt: 말, referenceIds: [사진(1), 사진(2), 사진(3)] })).json.roles)
+      .toBe("①분위기 참고 · ②제품 유지 · ③인물 유지·그림체 바꾸기");
   });
 
   it("모두 단추로 골랐으면 사진을 안 읽는다", async () => {

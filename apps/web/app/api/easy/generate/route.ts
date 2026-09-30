@@ -14,6 +14,7 @@ import { teamIdOf } from "../../../../lib/teams/store";
 import { UNUSABLE_PHOTO, isPhotoId, missingIds, uniqueIds } from "../../../easy/photo-check";
 import { readChosenRoles } from "../../../easy/photo-roles";
 import { runPhotoTurn } from "../../../easy/photo-turn";
+import { easyRoleSummary } from "../../../easy/options";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -354,6 +355,8 @@ async function turn(request: Request): Promise<Response> {
       textModel,
       ratio: 고르기.ratio,
       look: 고르기.look,
+      // 만든 조건에 곧바로 적는다. 다시 열 때는 `load.ts` 가 같은 함수로 읽는다.
+      roles: 칸 ? easyRoleSummary(칸) : "",
       ...(submitted.notice ? { notice: submitted.notice } : {}),
     });
   } catch (error) {

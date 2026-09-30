@@ -5,7 +5,7 @@ import { requireActiveMember } from "../../../lib/membership/server";
 import { easyStoreForUser } from "../../../lib/easy/store";
 import { posterStoresForUser } from "../../../lib/poster/stores";
 import type { EasyMessage } from "../turn";
-import type { EasyImageOptions } from "../options";
+import { easyRoleSummary, type EasyImageOptions } from "../options";
 
 /**
  * 화면 둘이 함께 쓰는 **읽기**.
@@ -107,6 +107,7 @@ export async function loadEasyConversation(id: string) {
         height: pick?.height ?? null,
         references:
           (project.data.referenceIds?.length ?? 0) + (project.data.preservedIds?.length ?? 0),
+        roles: easyRoleSummary(project.data) || undefined,
       };
     }
   }
