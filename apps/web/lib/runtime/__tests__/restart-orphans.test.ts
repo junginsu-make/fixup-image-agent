@@ -26,17 +26,26 @@ describe("closeRestartOrphans", () => {
     expect(JSON.stringify(logs)).toContain("\"released\":2");
   });
 
-  it("RPC 오류를 삼킨다 — 기동을 막지 않는다", async () => {
+  it("RPC 오류를 삼킨다 — 기동을 막지 않되, 오류 레벨 로거로 남긴다(최종 리뷰 반영)", async () => {
     const logs: unknown[] = [];
+    const errors: unknown[] = [];
     await expect(closeRestartOrphans({
       rpc: async () => ({ data: null, error: { message: "down" } }),
       log: (message, detail) => logs.push([message, detail]),
+      error: (message, detail) => errors.push([message, detail]),
     })).resolves.toBeUndefined();
-    expect(JSON.stringify(logs)).toContain("down");
+    expect(JSON.stringify(errors)).toContain("down");
+    expect(logs).toEqual([]);
   });
 
-  it("던져도 삼킨다", async () => {
-    await expect(closeRestartOrphans({ rpc: async () => { throw new Error("net"); }, log: () => undefined })).resolves.toBeUndefined();
+  it("던져도 삼킨다 — 오류 레벨 로거로 남긴다(최종 리뷰 반영)", async () => {
+    const errors: unknown[] = [];
+    await expect(closeRestartOrphans({
+      rpc: async () => { throw new Error("net"); },
+      log: () => undefined,
+      error: (message, detail) => errors.push([message, detail]),
+    })).resolves.toBeUndefined();
+    expect(JSON.stringify(errors)).toContain("net");
   });
 
   it("장부가 꺼져 있거나 로컬 저장소면 부르지 않는다", async () => {

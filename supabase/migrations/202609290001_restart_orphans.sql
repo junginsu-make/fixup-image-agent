@@ -28,6 +28,10 @@
 -- 주의: 아래 인덱스는 공유 표 `generation_events` 에 만든다. 만드는 동안 그 표에
 -- 대한 쓰기가 잠깐 막히니 한산한 시간에 적용한다.
 
+-- 그 표 잠금을 오래 기다리지 않는다 — 시간 초과면 한산할 때 다시 돌린다(모든 문장이
+-- if not exists/or replace라 다시 돌려도 안전하다).
+set lock_timeout = '5s';
+
 alter table public.generation_events add column if not exists boot_id uuid;
 create index if not exists generation_events_restart_orphans_idx
   on public.generation_events (created_at)

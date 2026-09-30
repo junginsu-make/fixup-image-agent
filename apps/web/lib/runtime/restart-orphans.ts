@@ -30,6 +30,8 @@ type RestartCleanupResult = { released?: number; needs_review?: number; failed?:
  * 결과에는 이 프로세스의 표식(`BOOT_ID`)을 같이 남긴다 — 여러 기동의 로그가 섞여도 어느
  * 프로세스가 무엇을 정리했는지 가릴 수 있게(R3). `failed` 가 하나라도 있으면 기동은
  * 막지 않되 오류 레벨 로거를 따로 불러 손으로 봐야 할 것이 있다는 신호를 남긴다(R7).
+ * RPC 자체가 오류를 돌려줬거나 던졌을 때도 같은 오류 레벨 로거로 남긴다(최종 리뷰
+ * 반영) — 정상 로그(`log`)에 섞이면 알림 규칙에서 놓치기 쉽다.
  */
 export async function closeRestartOrphans(options: {
   rpc?: Rpc;
@@ -46,7 +48,7 @@ export async function closeRestartOrphans(options: {
   try {
     const { data, error } = await rpc("credit_close_restart_orphans", { p_boot: BOOT_ID });
     if (error) {
-      log("[restart] 묶인 예약 정리 실패", { boot: BOOT_ID, message: error.message });
+      logError("[restart] 묶인 예약 정리 실패", { boot: BOOT_ID, message: error.message });
       return;
     }
     const result = (data ?? {}) as RestartCleanupResult;
@@ -55,6 +57,6 @@ export async function closeRestartOrphans(options: {
       logError("[restart] 묶인 예약 일부를 정리하지 못했습니다. 손으로 확인해야 합니다", { boot: BOOT_ID, ...result });
     }
   } catch (error) {
-    log("[restart] 묶인 예약 정리 실패", { boot: BOOT_ID, message: error instanceof Error ? error.message : String(error) });
+    logError("[restart] 묶인 예약 정리 실패", { boot: BOOT_ID, message: error instanceof Error ? error.message : String(error) });
   }
 }
