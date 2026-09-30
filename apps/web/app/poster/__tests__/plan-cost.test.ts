@@ -185,7 +185,7 @@ describe("라우트가 실제로 읽는 것", () => {
 
   /** 달러가 아니라 장으로 예약한다. */
   it("장으로 바꿔 예약한다", () => {
-    expect(라우트).toContain("creditUnits(llmCostUsd({ planCalls: 1, visionReads }))");
+    expect(라우트).toContain("creditUnits(llmCostUsd({ planCalls: 1, visionReads: 읽을것.length }))");
   });
 });
 

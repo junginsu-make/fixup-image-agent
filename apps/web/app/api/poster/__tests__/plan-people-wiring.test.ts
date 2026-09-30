@@ -31,7 +31,8 @@ describe("사람 읽기가 기획에 이어져 있는가", () => {
    * 레퍼런스에 있는 사람도, 그 사람들이 무엇을 하고 있는지도 안 읽혔다.
    */
   it("붙인 것을 역할로 안 가른다", () => {
-    expect(source).toMatch(/readAttachments\([\s\S]{0,120}\[\.\.\.references, \.\.\.preserved\]/);
+    expect(source).toMatch(/uniqueById\(\s*\[\.\.\.references, \.\.\.preserved\]/);
+    expect(source).toMatch(/readAttachments\(\s*읽을것/);
   });
 
   it("거르던 말이 남아 있지 않다", () => {

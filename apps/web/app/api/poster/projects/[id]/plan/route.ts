@@ -7,6 +7,7 @@ import { posterReferencesByIds } from "../../../../../../lib/poster/references";
 import { teamIdOf } from "../../../../../../lib/teams/store";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
+import { uniqueById } from "../../../../../../lib/poster/unique-by-id";
 import {
   createPosterAttachmentReader,
   createPosterPlanningProviders,
@@ -100,32 +101,33 @@ async function plan(request: Request, context: Context, 고른글모델?: string
      * 2026-09-17 실측에서 드러났다 — 손 여섯이 핸드폰으로 인물을 둘러싸 찍는
      * 표지를 붙였는데 기획이 그 연출을 볼 방법이 없어 「배경은 거의 무지에
      * 가깝게」라고 쓰고 「다른 인물 추가」를 금지했다.
+     *
+     * **같은 그림은 한 번만**(설계 2026-09-30 §3.1). 두 목록에 다 있으면 두 번 읽고
+     * 값도 두 번 나갔다. 개수 상한은 두지 않는다 — 중복만 거른다.
      */
-    const read = await readAttachments(
-      [...references, ...preserved]
-        .filter((reference) => Boolean(reference.url))
-        .map((reference) => ({ id: reference.id, title: reference.title ?? "첨부", url: reference.url! })),
-      createPosterAttachmentReader(),
-    );
+    const 읽을것 = uniqueById([...references, ...preserved].filter((reference) => Boolean(reference.url)));
 
     /**
-     * **여기서 쓴 글 모델 값을 장부에 적는다**(2026-09-08 사용자 결정).
+     * **읽기 전에 자리를 잡는다**(설계 2026-09-30 §3.1, D5).
      *
-     * 기획은 그림보다 싸지만 공짜가 아니다 — 기획 한 번에 첨부를 넉 장 읽으면
-     * nano-banana 그림 한 장보다 비싸다. 지금까지는 이 화면이 장부에 한 줄도
-     * 안 남겼다.
+     * 전에는 다 읽은 뒤에 예약했다 — 실제로 몇 장을 읽었는지 알고 세려고. 그러면
+     * 크레딧이 없는 회원이 거절되기 **전에** 비전 값이 나간다. 이제 「읽을 그림
+     * 수」로 먼저 센다. 확정은 아래에서 실측으로 한다.
      *
-     * **읽기가 끝난 뒤에 센다.** 실제로 몇 장을 읽었는지는 그때 알 수 있고,
-     * 실패한 읽기는 세지 않는다(`read.issues` 로 빠진다).
-     *
-     * 저절로 도는 것이 걱정되지 않는다 — 자동 기획은 **칸이 전부 빈 첫 회에만**
-     * 돈다. 다시 채우려면 사람이 눌러야 한다.
+     * 기획은 그림보다 싸지만 공짜가 아니다(2026-09-08 사용자 결정) — 기획 한 번에
+     * 첨부를 넉 장 읽으면 nano-banana 그림 한 장보다 비싸다.
      */
-    const visionReads = Object.keys(read.reads).length;
-    const units = creditUnits(llmCostUsd({ planCalls: 1, visionReads }));
+    const units = creditUnits(llmCostUsd({ planCalls: 1, visionReads: 읽을것.length }));
     const reserved = await reserveAiUsage(request, "poster_image", units, freeCreditPlan(`poster:${id}:plan`));
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
+
+    const read = await readAttachments(
+      읽을것.map((reference) => ({ id: reference.id, title: reference.title ?? "첨부", url: reference.url! })),
+      createPosterAttachmentReader(),
+    );
+    /** 실제로 읽힌 장 수. 확정의 어림값에 쓴다 — 실패한 읽기는 `read.issues` 로 빠진다. */
+    const visionReads = Object.keys(read.reads).length;
 
     /*
      * **고른 글 모델로 기획한다**(Easy 모드의 드롭다운, 설계 §5-4).
