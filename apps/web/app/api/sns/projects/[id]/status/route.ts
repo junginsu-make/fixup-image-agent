@@ -5,8 +5,9 @@ import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-f
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../lib/sns-generation-store";
 import { createSnsGenerationProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
 import { createQueuedGenerationDependencies, refreshProjectAssetUrls } from "../../../../../../lib/sns/runtime";
-import { hasActiveQueuedGeneration, pollQueuedFlow } from "../../../../../../lib/sns/queued-flow";
+import { hasActiveQueuedGeneration, pollQueuedFlow, stopQueuedGeneration, STOPPED_BY_AI_PAUSE } from "../../../../../../lib/sns/queued-flow";
 import { withSnsProjectLock } from "../../../../../../lib/sns/project-lock";
+import { isAiPaused } from "../../../../../../lib/ai-control/pause";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -43,6 +44,17 @@ async function handlePost(_request: Request, context: Context) {
         const settled = await settleSnsReservation(auth.member.userId, project.data.flow, project.modelId);
         if (settled === project.data.flow) return Response.json({ ok: true, project, active: false });
         return Response.json({ ok: true, project: await store.save(id, settled, "ready"), active: false });
+      }
+      /*
+        **운영자가 멈췄으면 다음 장을 보내지 않는다**(설계 2026-09-30 §3.3). 사이드바 「중지」와
+        **같은 길**을 탄다 — 받아 둔 카드는 남고, 받은 만큼만 정산한다. 제출 자리에서 던지면 흐름이
+        active 로 남아 폴링이 계속 실패하고 예약이 만료되므로 그렇게 하지 않는다.
+        이미 fal 에 보낸 한 장은 값이 나갔지만 결과를 받지 않는다 — 중지와 같다.
+      */
+      if (await isAiPaused()) {
+        const stopped = stopQueuedGeneration(project.data.flow, new Date().toISOString(), STOPPED_BY_AI_PAUSE);
+        const settled = await settleSnsReservation(auth.member.userId, stopped, project.modelId);
+        return Response.json({ ok: true, project: await store.save(id, settled, "ready"), active: false, paused: true });
       }
       const providers = createSnsGenerationProviders();
       project = await refreshProjectAssetUrls(project);
