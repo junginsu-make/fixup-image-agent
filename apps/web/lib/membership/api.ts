@@ -12,6 +12,8 @@ import { isCreditLedgerEnabled, type CreditReservationPlan } from "./credit-ledg
 import { usageFromRow } from "./usage-row";
 import { BOOT_ID } from "../runtime/boot-id";
 import { CS_EMAIL } from "../cs/contact";
+import { bindAiCaller } from "../llm/meter";
+import { costOperationKey } from "../ai-cost/keys";
 
 type ApiMember = { userId: string; profile: MemberProfile };
 
@@ -93,6 +95,7 @@ export async function reserveAiUsage(
   if (!auth.ok) return auth;
   // 우회 계정은 profiles 행이 없어 사용량 RPC가 실패한다. 로컬에서는 집계를 건너뛴다.
   if (isLocalAuthBypass) {
+    bindAiCaller({ userId: devMemberProfile.id, requestId: null, operation: costOperationKey(operation, creditPlan?.resource) });
     return { ok: true, userId: devMemberProfile.id, requestId: "local-dev", usage: devUsageSummary };
   }
   const requestId = request.headers.get("x-idempotency-key");
@@ -198,6 +201,12 @@ export async function reserveAiUsage(
       .eq("request_id", requestId);
     if (tagError) console.warn("[usage] 프로세스 표식을 못 남겼습니다", { requestId, message: tagError.message });
   }
+  /*
+    **이 요청이 누구의 무슨 작업인가**(설계 2026-09-30 §3.4). 라우트 입구의 `withLlmMeter` 가
+    연 저장소에 싣는다. 뒤에서 공급자를 부를 때마다 `ai_cost_events` 에 한 줄씩 적힌다.
+    작업 칸은 resource 에서 id 를 뺀 것 — C2 가 기능을 resource 로 갈랐다(§3.1).
+  */
+  bindAiCaller({ userId: auth.member.userId, requestId, operation: costOperationKey(operation, creditPlan?.resource) });
   return { ok: true, userId: auth.member.userId, requestId, usage };
 }
 

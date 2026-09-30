@@ -2,6 +2,7 @@ import { pdpCreditSize } from "../../../lib/membership/image-sizes";
 import { creditImagePlan, markCreditStarted } from "../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../lib/membership/api";
+import { withLlmMeter } from "../../../lib/llm/meter";
 import { imageCreditUnits } from "../../../lib/credit-cost";
 import {
   DEFAULT_CANDIDATES,
@@ -132,6 +133,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 

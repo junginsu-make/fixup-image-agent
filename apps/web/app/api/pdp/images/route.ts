@@ -51,6 +51,7 @@ import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { withSlicedStyleReference } from "../../../../lib/pdp/slice-image";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../lib/llm/meter";
 import { rejectIfUnverified } from "../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { readPdpRequest } from "../../../../lib/pdp/request";
@@ -64,6 +65,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   const parsed = await readPdpRequest<PdpImagesRequestBody>(req, "single");
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;

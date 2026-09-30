@@ -1,4 +1,5 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { bindAiCaller, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { settleSnsReservation } from "../../../../../../lib/sns/settle";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../lib/sns-generation-store";
@@ -14,6 +15,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(_request: Request, context: Context) {
+  return withLlmMeter(() => handlePost(_request, context));
+}
+
+async function handlePost(_request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   const { id } = await context.params;
@@ -22,6 +27,11 @@ export async function POST(_request: Request, context: Context) {
       const store = await snsFlowStoreForUser(auth.member.userId);
       let project = await store.get(id);
       if (!project?.data.flow) return Response.json({ ok: false, message: "생성 흐름을 찾을 수 없습니다." }, { status: 404 });
+      /*
+        **예약 없이 이어 가는 길이다**(설계 §3.1 예외 1). 다음 장 제출·검수의 비용이 이 작업의
+        몫으로 적히게, 만들기 요청이 잡아 둔 예약 열쇠와 같은 작업 키(`sns`)로 문맥을 채운다.
+      */
+      bindAiCaller({ userId: auth.member.userId, requestId: project.data.flow.generation?.reservationId ?? null, operation: "sns" });
       /**
        * **도는 중이 아니어도 열쇠가 남아 있으면 마무리한다.**
        *
