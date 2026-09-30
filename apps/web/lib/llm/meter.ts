@@ -62,6 +62,22 @@ export function readLlmMeter(): LlmMeterReading {
 }
 
 /**
+ * **정산에 실을 글 모델 원가**(설계 2026-09-30 §3.1).
+ *
+ * 못 쟀으면 금액을 비운다. 0 을 적으면 `finalizeAiUsage` 가 「정말 0원」으로
+ * 남기고(`cost_state='recorded'`), 되돌릴 근거가 없다. 계량기 밖이거나 부른
+ * 것이 없으면 `llmUsd` 를 빼서 「모름」으로 남긴다.
+ */
+export function llmSettleCost(): { model: string; billableImages: number; llmUsd?: number } {
+  const meter = readLlmMeter();
+  return {
+    model: "",
+    billableImages: 0,
+    ...(meter.metered && meter.calls > 0 ? { llmUsd: meter.usd } : {}),
+  };
+}
+
+/**
  * SDK 응답에서 토큰 수를 꺼낸다.
  *
  * 업체마다 이름이 다르다 — Anthropic 은 `usage.input_tokens`, OpenAI 는

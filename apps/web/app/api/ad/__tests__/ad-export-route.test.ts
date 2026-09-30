@@ -98,7 +98,7 @@ vi.mock("../../../../lib/poster/providers", () => ({
  * 2026-09-14 에 이 도구를 사용량 장부에 들였다. 장부를 여는 자리가 빠지면
  * 크레딧이 안 깎이는데, 화면에서는 아무 표가 안 난다 — 시험이 봐야 한다.
  */
-const reserveCalls: Array<{ operation: string; units: number }> = [];
+const reserveCalls: Array<{ operation: string; units: number; resource?: string }> = [];
 const settleCalls: Array<{ success: boolean; units: number; cost?: unknown }> = [];
 let reserveOk = true;
 
@@ -109,8 +109,8 @@ vi.mock("../../../../lib/membership/api", () => ({
       ? { ok: true as const, member: { userId: member.userId, profile: { role: member.role } } }
       : { ok: false as const, response: new Response("로그인이 필요합니다.", { status: 401 }) };
   },
-  reserveAiUsage: async (_request: Request, operation: string, units: number) => {
-    reserveCalls.push({ operation, units });
+  reserveAiUsage: async (_request: Request, operation: string, units: number, plan?: { resource: string }) => {
+    reserveCalls.push({ operation, units, resource: plan?.resource });
     return reserveOk
       ? { ok: true as const, userId: member.userId, requestId: "test-request", usage: undefined }
       : {
@@ -658,6 +658,21 @@ describe("쓸 때마다 장부를 연다", () => {
     globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
     await call(assembling);
     expect(reserveCalls[0]!.units).toBe(1);
+  });
+
+  /**
+   * **AI 를 부르는지 resource 로 알린다**(설계 2026-09-30 §3.1). SQL 은 `ad:export` 만
+   * 「AI 멈춤」·「크레딧 없음」에서 뺀다 — 자르기·줄이기는 돈이 안 든다.
+   */
+  it("자르기·줄이기만이면 ad:export 로 잡는다", async () => {
+    await call(good);
+    expect(reserveCalls[0]!.resource).toBe("ad:export");
+  });
+
+  it("배경 제거가 섞이면 ad:export:cutout 으로 잡는다 — 돈이 나가므로 다른 AI 와 똑같이 막힌다", async () => {
+    globalThis.fetch = (async () => new Response(Buffer.from("cut"))) as never;
+    await call(assembling);
+    expect(reserveCalls[0]!.resource).toBe("ad:export:cutout");
   });
 
   /**

@@ -1,9 +1,11 @@
 import { DEFAULT_TEXT_MODEL, resolveTextModel } from "@fixup/shared";
-import { authenticateApiMember } from "../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
+import { llmSettleCost, withLlmMeter } from "../../../../lib/llm/meter";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { stepIdempotencyKey } from "../../../../lib/easy/step-key";
-import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
+import { easyChatPrompt, readEasyDecision, type EasyDecision } from "../../../easy/chat";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
 import { POST as createProject } from "../../poster/projects/route";
@@ -95,20 +97,31 @@ async function read(response: Response, step: string) {
      * **오류를 뭉개지 않는다**(설계 §5-3). 「문제가 생겼습니다」로 덮으면
      * 사용자는 무엇을 고쳐야 할지 모르고, 같은 것을 또 눌러 값만 나간다.
      * 어디서 실패했는지와 그 라우트가 준 말을 함께 올린다.
+     *
+     * **다시 눌러도 안 풀린다고 안쪽이 말했으면 그대로 옮긴다**(설계 2026-09-30 §3.2).
+     * 멈춤(503)은 상태 코드만으로는 「잠시 뒤 다시」와 가를 수 없다.
      */
-    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status);
+    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status, body.retryable !== false);
   }
   return body;
 }
 
 class EasyStepError extends Error {
-  constructor(readonly step: string, message: string, readonly status: number) {
+  constructor(readonly step: string, message: string, readonly status: number, readonly retryable = true) {
     super(message);
     this.name = "EasyStepError";
   }
 }
 
 export async function POST(request: Request) {
+  /*
+   * **판정에 쓴 글 모델 값을 잰다.** 안쪽 기획 라우트는 제 계량기를 따로 연다 —
+   * 계량기가 겹치면 안쪽이 제 것을 쓰므로 여기 모이는 것은 판정뿐이다.
+   */
+  return withLlmMeter(() => converse(request));
+}
+
+async function converse(request: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
@@ -136,30 +149,56 @@ export async function POST(request: Request) {
   const 붙인수 = referenceIds.length + preservedIds.length + personIds.length;
 
   try {
+    const 지난줄 = await store.listMessages(conversationId);
+
     /*
-     * ⓪ **말인가 주문인가.**
+     * ⓪-1 **판정도 값이 나간다 — 예약부터**(설계 2026-09-30 §3.1).
+     *
+     * 기존 작업 이름(`poster_image`) + `easy:decide`, 0 크레딧(D1). 크레딧이 없거나
+     * 운영자가 멈췄으면 여기서 막혀 글 모델을 안 부른다. 열쇠는 단계마다 가른다 —
+     * 바깥 열쇠를 그대로 쓰면 뒤의 기획·생성 예약이 `duplicate_request` 로 막힌다.
+     *
+     * **`relay` 를 그대로 빌린다** — 다른 라우트를 부르는 것은 아니지만, 헤더의
+     * 요청 식별자를 단계별로 가르는 일은 똑같다. 이것이 네 번째 단계(`decide`)다.
+     */
+    const 판정예약 = await reserveAiUsage(
+      relay(request, "/api/easy/generate", {}, "decide"), "poster_image", 0, freeCreditPlan("easy:decide"),
+    );
+    if (!판정예약.ok) return 판정예약.response;
+
+    /*
+     * ⓪-2 **말인가 주문인가.**
      *
      * 값이 나가기 전에 가른다. 여기서 안 가르면 「안녕하세요」 한 마디에
      * 그림값이 나간다.
      *
      * **지난 대화를 같이 준다.** 「그거 말고 다른 걸로」 같은 말은 앞을 봐야
      * 뜻이 선다. 이번 말은 아직 안 남겼으므로 그대로 다 준다.
+     *
+     * **판정이 끝나면 바로 닫는다.** 되묻기·대화·주문 — 어느 끝으로 가든 판정
+     * 예약은 여기서 끝난다. 주문이면 기획·생성이 각자 따로 예약한다.
      */
-    const 지난줄 = await store.listMessages(conversationId);
-    const decision = readEasyDecision(
-      await createEasyChatProvider(process.env, textModel).decide(
-        easyChatPrompt(
-          지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
-          prompt,
-          /*
-           * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
-           * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
-           * (2026-09-21 실측).
-           */
-          붙인수,
+    let decision: EasyDecision;
+    try {
+      decision = readEasyDecision(
+        await createEasyChatProvider(process.env, textModel).decide(
+          easyChatPrompt(
+            지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
+            prompt,
+            /*
+             * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
+             * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
+             * (2026-09-21 실측).
+             */
+            붙인수,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      await settleAiUsage(판정예약, false, 0, "easy_decide_failed", llmSettleCost());
+      throw error;
+    }
+    await settleAiUsage(판정예약, true, 0, undefined, llmSettleCost());
 
     /*
      * ⓵ **비율·결을 한 번 물어볼까** (2026-09-21 사용자).
@@ -269,8 +308,8 @@ export async function POST(request: Request) {
         ok: false,
         step: error.step,
         message: error.message,
-        // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 화면이 단추를 안 낸다.
-        retryable: error.status !== 402 && error.status !== 403,
+        // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 안쪽이 「안 풀린다」고 한 것(멈춤 503)도 같다.
+        retryable: error.retryable && error.status !== 402 && error.status !== 403,
       }, { status: error.status });
     }
     return fail(error instanceof Error ? error.message : "만들지 못했습니다.");
