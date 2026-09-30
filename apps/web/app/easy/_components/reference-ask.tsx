@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Button } from "@fixup/ui";
 import { NO_REFERENCE } from "../cardnews-attachments";
-import { setItemsToAttach } from "../cardnews-state";
+import { referenceAnswer, setItemsToAttach, type EasyResend } from "../cardnews-state";
 import { EasyLibraryPicker, type EasyLibrary } from "./library-attach";
 
 interface ReferenceSet {
@@ -25,12 +25,19 @@ export function EasyReferenceAsk({
   library: EasyLibrary;
   attachedIds: string[];
   onAttach: (picked: Array<{ id: string; url: string; title: string }>) => void;
-  onSubmit: (slots: Array<{ id: string; role: string }>) => void;
+  /** 이 요청에 답해 붙인 그림은 분위기 참고로 확정해 보낸다(`referenceAnswer`). */
+  onSubmit: (answer: Pick<EasyResend, "photoRoles" | "photoSlots">) => void;
   disabled?: boolean;
 }) {
   const [sets, setSets] = React.useState<ReferenceSet[] | null>(null);
   const [slots, setSlots] = React.useState<Array<{ id: string; role: string }>>([]);
   const [note, setNote] = React.useState("");
+  const [added, setAdded] = React.useState<string[]>([]);
+
+  function attach(picked: Array<{ id: string; url: string; title: string }>) {
+    setAdded((current) => [...current, ...picked.map((one) => one.id)]);
+    onAttach(picked);
+  }
 
   async function openSets() {
     try {
@@ -44,7 +51,7 @@ export function EasyReferenceAsk({
 
   function pickSet(set: ReferenceSet) {
     const picked = setItemsToAttach(set, library.rows);
-    onAttach(picked.attach);
+    attach(picked.attach);
     setSlots(picked.slots);
     setNote(picked.missing ? `세트 그림 ${picked.missing}장은 라이브러리에 없어 뺐습니다.` : "");
   }
@@ -53,7 +60,7 @@ export function EasyReferenceAsk({
     <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5">
       <p className="text-base leading-7">{NO_REFERENCE}</p>
       <div className="flex flex-wrap gap-2">
-        <EasyLibraryPicker library={library} selectedIds={attachedIds} onPick={onAttach} label="라이브러리에서 고르기" />
+        <EasyLibraryPicker library={library} selectedIds={attachedIds} onPick={attach} label="라이브러리에서 고르기" />
         <Button size="sm" variant="secondary" disabled={disabled} onClick={() => void openSets()}>저장한 레퍼런스 세트</Button>
       </div>
       {sets ? (
@@ -67,7 +74,9 @@ export function EasyReferenceAsk({
       ) : null}
       {note ? <p className="text-meta text-subtle-foreground">{note}</p> : null}
       <div className="flex justify-end">
-        <Button size="sm" disabled={disabled || !attachedIds.length} onClick={() => onSubmit(slots)}>이걸로 만들기</Button>
+        <Button size="sm" disabled={disabled || !attachedIds.length} onClick={() => onSubmit(referenceAnswer({ added, attachedIds, slots }))}>
+          이걸로 만들기
+        </Button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import type { EasyKind } from "../cardnews-state";
+import type { EasyKind, EasyResend } from "../cardnews-state";
 import { EasyKindAsk } from "./kind-ask";
 import { EasyReferenceAsk } from "./reference-ask";
 import type { EasyLibrary } from "./library-attach";
@@ -18,7 +18,7 @@ export function EasyCardnewsAsks({
   attachedIds: string[];
   disabled?: boolean;
   onAttach: (picked: Array<{ id: string; url: string; title: string }>) => void;
-  onSend: (again: { prompt: string; kind: EasyKind; photoSlots?: Array<{ id: string; role: string }> }) => void;
+  onSend: (again: EasyResend & { kind: EasyKind }) => void;
 }) {
   return (
     <>
@@ -31,7 +31,7 @@ export function EasyCardnewsAsks({
           attachedIds={attachedIds}
           onAttach={onAttach}
           disabled={disabled}
-          onSubmit={(photoSlots) => onSend({ prompt: referenceAsking, kind: "cardnews", photoSlots })}
+          onSubmit={(answer) => onSend({ prompt: referenceAsking, kind: "cardnews", ...answer })}
         />
       ) : null}
     </>

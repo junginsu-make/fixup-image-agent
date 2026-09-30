@@ -154,4 +154,12 @@ describe("카드뉴스 갈래 (2단계 설계 §4)", () => {
     expect(easyChatPrompt([], "더 짧게", 0, true)).toContain("revise");
     expect(easyChatPrompt([], "더 짧게")).not.toContain("revise");
   });
+
+  /** 설계 §7 「만든 뒤에 고치기」의 예가 「더 밝게」다. 글만이 아니라 카드의 모습도 고친다. */
+  it("원고가 있으면 카드 모습을 고치는 말도 revise 라고 알려 준다", () => {
+    const prompt = easyChatPrompt([], "더 밝게", 0, true);
+    expect(prompt).toContain("「더 밝게」");
+    expect(prompt).toContain("모습");
+    expect(easyChatPrompt([], "더 밝게")).not.toContain("「더 밝게」");
+  });
 });

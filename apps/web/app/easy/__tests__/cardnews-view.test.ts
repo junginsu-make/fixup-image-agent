@@ -33,4 +33,21 @@ describe("원고 보기", () => {
     expect(view.cards).toEqual([]);
     expect(view.issues).toEqual(["자막이 없습니다"]);
   });
+
+  /** 설계 §9: 만드는 도중 실패하면 실패한 장을 적는다(독립 리뷰). */
+  it("실패한 장 번호를 모은다", () => {
+    const 실패 = 작업({
+      status: "ready",
+      data: {
+        source: { kind: "question", question: "q" }, attachments: [],
+        flow: { planningIssues: [], copyIssues: [], cards: [
+          { index: 1, role: "cover", copy: { headline: "a" }, status: "done" },
+          { index: 2, role: "body", copy: { headline: "b" }, status: "failed" },
+          { index: 3, role: "ending", copy: { headline: "c" }, status: "failed" },
+        ] },
+      },
+    });
+    expect(cardnewsView(실패, "image-v2").failed).toEqual([2, 3]);
+    expect(cardnewsView(작업(), "image-v2").failed).toEqual([]);
+  });
 });

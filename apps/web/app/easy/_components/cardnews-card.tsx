@@ -16,11 +16,13 @@ const 자리이름: Record<string, string> = { cover: "표지", body: "속지", 
  * 원고를 새로 쓴다(앞 작업은 지우지 않는다, 2026-09-30 사용자 결정).
  */
 export function EasyCardnewsCard({
-  view, latest, busy, onGenerate, onRedraft,
+  view, latest, busy, redrafting, onGenerate, onRedraft,
 }: {
   view: EasyCardnewsView;
   latest: boolean;
   busy?: boolean;
+  /** 조건을 바꿔 이 원고를 다시 쓰는 중(1~2분). */
+  redrafting?: boolean;
   onGenerate: () => void;
   onRedraft: (options: Partial<CardOptions>) => void;
 }) {
@@ -61,6 +63,9 @@ export function EasyCardnewsCard({
             <Choice label="그림체" value={view.options.look} items={IMAGE_LOOKS.map((id) => [id, IMAGE_LOOK_LABEL[id]])}
               onPick={(v) => 조건("look", v as CardOptions["look"])} disabled={busy} />
           </div>
+          {redrafting ? (
+            <p role="status" className="text-meta text-primary">바꾼 조건으로 원고를 새로 쓰고 있습니다. 1~2분 걸립니다.</p>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-meta text-subtle-foreground">고치고 싶으면 말로 해 주세요. 예: 더 짧게, 20대 말투로</span>
             <Button size="sm" disabled={busy} onClick={onGenerate}>이대로 만들기 · {view.cost.label}</Button>
@@ -70,6 +75,12 @@ export function EasyCardnewsCard({
 
       {view.issues.length && view.status === "copy_ready" ? (
         <p className="text-meta text-subtle-foreground">{view.issues.join(" ")}</p>
+      ) : null}
+
+      {view.status !== "copy_ready" && view.failed.length ? (
+        <p className="text-meta text-destructive">
+          {view.failed.join(", ")}번 장은 만들지 못했습니다. 만든 장만큼만 값이 듭니다. 카드뉴스 화면에서 다시 만들 수 있습니다.
+        </p>
       ) : null}
 
       {view.status !== "copy_ready" ? (

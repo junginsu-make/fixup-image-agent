@@ -382,6 +382,17 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
   });
   it("만드는 동안 셸에 그 대화 주소로 등록한다", () => { expect(훅).toMatch(/start\(cardnewsJob\(/); });
   it("다시 연 대화에 카드뉴스를 넘긴다", () => { expect(코드("../[id]/page.tsx")).toContain("initialCardnews={loaded.cardnews}"); });
+  it("레퍼런스 요청에 답해 붙인 그림은 분위기 참고로 확정해 보낸다(독립 리뷰 2)", () => {
+    expect(코드("../_components/reference-ask.tsx")).toContain("referenceAnswer(");
+  });
+  it("셸 등록은 주소까지 맞는지 보고, 셸 목록이 바뀌면 다시 본다(독립 리뷰 3)", () => {
+    expect(훅).toContain("jobsToRegister(");
+    expect(훅).toMatch(/\}, \[key, jobs\]\);/);
+  });
+  it("조건을 바꿔 원고를 다시 쓰는 동안 그 원고에 표시한다(독립 리뷰)", () => {
+    expect(훅).toContain("setRedrafting(rowId)");
+    expect(코드("../_components/cardnews-card.tsx")).toMatch(/redrafting \? \(/);
+  });
   it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
     expect(화면쪽).toContain("!cardnews.views[one.id]");
   });

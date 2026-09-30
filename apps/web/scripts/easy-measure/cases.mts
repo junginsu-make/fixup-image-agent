@@ -48,6 +48,10 @@ export const B1_CASES: B1Case[] = [
   { prompt: "더 짧게 써줘", attachments: 0, hasDraft: true, expect: "revise" },
   { prompt: "20대 말투로 바꿔줘", attachments: 0, hasDraft: true, expect: "revise" },
   { prompt: "이번엔 강아지 산책 카드뉴스 만들어줘", attachments: 0, hasDraft: true, expect: "cardnews" },
+  // 만든 뒤 카드 모습을 고치는 말(설계 §7 「더 밝게」, 2단계 독립 리뷰 1).
+  { prompt: "좀 더 밝게 해줘", attachments: 0, hasDraft: true, expect: "revise" },
+  { prompt: "배경을 파란색으로 바꿔줘", attachments: 0, hasDraft: true, expect: "revise" },
+  { prompt: "표지가 왜 이렇게 어두워?", attachments: 0, hasDraft: true, expect: "talk" },
 ];
 
 export interface B2Case {

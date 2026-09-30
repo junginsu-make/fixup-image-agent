@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  cardResults, cardnewsJob, continuingKind, generatingProjects, latestCardnewsRow, setItemsToAttach,
+  cardResults, cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, referenceAnswer,
+  setItemsToAttach,
 } from "../cardnews-state";
 
 const 보기 = (status: string, cards: Array<{ index: number; url?: string; status?: string }>) => ({
@@ -68,5 +69,39 @@ describe("고른 갈래가 이어진다 (2단계 §4)", () => {
 
   it("새로 친 말에는 앞서 고른 갈래를 안 붙인다", () => {
     expect(continuingKind({ pending: "cardnews", continuing: false, photoMode: "cardnews" })).toBeUndefined();
+  });
+});
+
+describe("레퍼런스 요청의 답 (2단계 §5-3, 독립 리뷰 2)", () => {
+  it("요청에 답해 붙인 그림은 분위기 참고로 확정하고, 세트의 자리를 함께 보낸다", () => {
+    expect(referenceAnswer({
+      added: ["a", "b", "a"], attachedIds: ["p", "a", "b"],
+      slots: [{ id: "a", role: "cover" }, { id: "b", role: "ending" }],
+    })).toEqual({
+      photoRoles: [{ id: "a", role: "style" }, { id: "b", role: "style" }],
+      photoSlots: [{ id: "a", role: "cover" }, { id: "b", role: "ending" }],
+    });
+  });
+
+  it("요청 전부터 붙어 있던 그림은 판단에 맡긴다, 뺀 그림은 안 보낸다", () => {
+    expect(referenceAnswer({ added: ["a", "gone"], attachedIds: ["p", "a"], slots: [{ id: "gone", role: "cover" }] }))
+      .toEqual({ photoRoles: [{ id: "a", role: "style" }], photoSlots: [] });
+  });
+});
+
+describe("셸 등록 (2단계 §8, 독립 리뷰 3)", () => {
+  const 우리것 = { id: "sns:p", href: "/easy/c1" };
+
+  it("셸에 없으면 등록한다", () => {
+    expect(jobsToRegister(["p"], [], "c1")).toEqual(["p"]);
+  });
+
+  it("같은 작업이 이 대화 주소로 있으면 다시 안 한다", () => {
+    expect(jobsToRegister(["p"], [우리것], "c1")).toEqual([]);
+  });
+
+  /** 카드뉴스 화면에 들렀다 오면 주소가 `/sns/p` 로 바뀌어 있다. 그대로 두면 셸과 이 화면이 같이 부른다. */
+  it("같은 작업이 다른 주소로 있으면 이 대화 주소로 다시 건다", () => {
+    expect(jobsToRegister(["p"], [{ id: "sns:p", href: "/sns/p" }], "c1")).toEqual(["p"]);
   });
 });

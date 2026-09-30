@@ -51,6 +51,8 @@ export interface EasyCardnewsView {
   /** 다 만든 장(검토가 필요한 장 포함, 카드뉴스 정산과 같은 셈). */
   done: number;
   total: number;
+  /** 만드는 도중 실패한 장 번호(설계 §9 「실패한 장을 적는다」). */
+  failed: number[];
 }
 
 export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "image-v2"): EasyCardnewsView {
@@ -76,5 +78,6 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
     }),
     done: cards.filter((card) => card.status === "done" || card.status === "review_required").length,
     total: cards.length,
+    failed: cards.filter((card) => card.status === "failed").map((card) => card.index),
   };
 }

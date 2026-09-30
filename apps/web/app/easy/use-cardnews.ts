@@ -5,7 +5,9 @@ import { useRunningJobs } from "../_components/running-jobs";
 import { billableFetch } from "../../lib/billable-fetch";
 import { JOB_POLL_INTERVAL_MS, jobId } from "../../lib/running-jobs";
 import type { CardOptions } from "./cardnews-options";
-import { cardnewsJob, continuingKind, generatingProjects, latestCardnewsRow, type EasyKind } from "./cardnews-state";
+import {
+  cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, type EasyKind,
+} from "./cardnews-state";
 import { cardnewsView, type CardnewsProjectLike, type EasyCardnewsView } from "./cardnews-view";
 import type { EasyMessage } from "./turn";
 
@@ -45,6 +47,8 @@ export function useEasyCardnews(input: {
   const { conversationId, messages, policy, handlers } = input;
   const [projects, setProjects] = React.useState<Record<string, Project>>(input.initial ?? {});
   const [acting, setActing] = React.useState(false);
+  // 조건을 바꿔 원고를 다시 쓰는 줄. 1~2분 걸려 그동안 그 원고에 표시한다.
+  const [redrafting, setRedrafting] = React.useState<string | null>(null);
   const { jobs, start, finish } = useRunningJobs();
   /*
    * **한 장인가 여러 장인가를 묻는 중**(설계 §4) · **레퍼런스를 요청하는 중**(§5-3).
@@ -93,6 +97,7 @@ export function useEasyCardnews(input: {
     const project = projects[rowId];
     if (!project || acting) return;
     setActing(true);
+    setRedrafting(rowId);
     try {
       const body = await 보낸다({ conversationId, projectId: project.id, action: "redraft", options });
       if (body.cardnews) add(body.cardnews.rowId, body.cardnews.project);
@@ -103,6 +108,7 @@ export function useEasyCardnews(input: {
       handlers.onError({ message: (cause as Error).message, retryable: (cause as { retryable?: boolean }).retryable !== false });
     } finally {
       setActing(false);
+      setRedrafting(null);
     }
   }
 
@@ -144,6 +150,7 @@ export function useEasyCardnews(input: {
       view: views[rowId]!,
       latest: latestCardnewsRow(messages, views) === rowId,
       busy: locked || acting || generating.length > 0,
+      redrafting: redrafting === rowId,
       onGenerate: () => void generate(rowId),
       onRedraft: (options: Partial<CardOptions>) => void redraft(rowId, options),
     } : undefined),
@@ -167,7 +174,7 @@ function useCardnewsProgress(input: {
   generating: string[];
   conversationId: string;
   projects: Record<string, Project>;
-  jobs: ReadonlyArray<{ id: string }>;
+  jobs: ReadonlyArray<{ id: string; href: string }>;
   start: ReturnType<typeof useRunningJobs>["start"];
   finish: ReturnType<typeof useRunningJobs>["finish"];
   replace: (project: Project) => void;
@@ -175,15 +182,19 @@ function useCardnewsProgress(input: {
   const { generating, conversationId, projects, jobs, start, finish, replace } = input;
   const key = generating.join(",");
 
-  // 다시 열었는데 만드는 중이면 셸에도 걸어 둔다. 떠나도 결과를 받게.
+  /*
+   * 만드는 중이면 셸에도 **이 대화 주소로** 걸어 둔다. 떠나도 결과를 받게.
+   *
+   * 셸 목록이 바뀔 때마다 다시 본다. 새로 고치면 셸이 저장해 둔 목록을 이 화면보다
+   * 늦게 불러와 방금 건 것을 덮고, 카드뉴스 화면에 들르면 주소가 바뀐다(독립 리뷰 3).
+   */
   React.useEffect(() => {
-    for (const id of generating) {
-      if (jobs.some((job) => job.id === jobId("sns", id))) continue;
+    for (const id of jobsToRegister(generating, jobs, conversationId)) {
       const title = Object.values(projects).find((one) => one.id === id)?.title ?? "";
       start(cardnewsJob(id, conversationId, title));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, jobs]);
 
   React.useEffect(() => {
     if (!key) return;

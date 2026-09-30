@@ -92,3 +92,36 @@ export function continuingKind(input: {
   if (!input.continuing) return undefined;
   return input.pending ?? (input.photoMode === "cardnews" ? "cardnews" : undefined);
 }
+
+/**
+ * **레퍼런스 요청의 답**(설계 §5-3). 「따라 만들 카드뉴스를 붙여 주세요」에 답해 붙인
+ * 그림은 분위기 참고로 **확정**해 보낸다. 판단에 맡기면 제품 사진으로 읽혀 자리가
+ * 버려지고, 분위기 참고가 없다며 같은 요청이 다시 뜬다(2단계 독립 리뷰 2). 요청 전부터
+ * 붙어 있던 그림은 지금처럼 판단에 맡긴다. 그 사이 뺀 그림은 안 보낸다.
+ */
+export function referenceAnswer(input: {
+  added: readonly string[];
+  attachedIds: readonly string[];
+  slots: ReadonlyArray<{ id: string; role: string }>;
+}): { photoRoles: Array<{ id: string; role: "style" }>; photoSlots: Array<{ id: string; role: string }> } {
+  const 붙은것 = new Set(input.attachedIds);
+  const ids = [...new Set(input.added)].filter((id) => 붙은것.has(id));
+  return {
+    photoRoles: ids.map((id) => ({ id, role: "style" as const })),
+    photoSlots: input.slots.filter((slot) => 붙은것.has(slot.id)),
+  };
+}
+
+/**
+ * **셸에 새로 걸 작업**(설계 §8). 같은 작업이 **이 대화 주소로** 걸려 있을 때만
+ * 건너뛴다. 카드뉴스 화면에 들렀다 오면 주소가 `/sns/…` 로 바뀌어 있어, 그대로 두면
+ * 셸(`href !== pathname`)과 이 화면이 같은 작업을 같이 부른다(2단계 독립 리뷰 3).
+ */
+export function jobsToRegister(
+  generating: readonly string[],
+  jobs: ReadonlyArray<{ id: string; href: string }>,
+  conversationId: string,
+): string[] {
+  const href = `/easy/${conversationId}`;
+  return generating.filter((id) => !jobs.some((job) => job.id === jobId("sns", id) && job.href === href));
+}
