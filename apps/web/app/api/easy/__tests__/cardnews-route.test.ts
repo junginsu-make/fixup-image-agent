@@ -12,7 +12,7 @@ vi.mock("server-only", () => ({}));
 const 사진 = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const 기본원고 = () => ({
-  id: "c1", status: "copy_ready", ratio: "4:5", language: "ko", modelId: "gpt-image-2.5-flare",
+  id: "c1", userId: "me-1", status: "copy_ready", ratio: "4:5", language: "ko", modelId: "gpt-image-2.5-flare",
   cardCountMode: "auto", toneNote: "", title: "t",
   data: {
     source: { kind: "question" as const, question: "q" }, attachments: [] as unknown[], look: "auto",

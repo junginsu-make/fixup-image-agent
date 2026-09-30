@@ -4,6 +4,7 @@ import { IMAGE_MODELS } from "@fixup/sns-core";
 import { requireActiveMember } from "../../../lib/membership/server";
 import { easyStoreForUser } from "../../../lib/easy/store";
 import { posterStoresForUser } from "../../../lib/poster/stores";
+import { cardnewsProject, type EasyCardnewsProject } from "../../../lib/easy/cardnews-steps";
 import type { EasyMessage } from "../turn";
 import { easyRoleSummary, type EasyImageOptions } from "../options";
 
@@ -79,6 +80,8 @@ export async function loadEasyConversation(id: string) {
    */
   const urls: Record<string, string> = {};
   const options: Record<string, EasyImageOptions> = {};
+  // 카드뉴스 원고 줄(2단계 §8). 줄 id → 그 작업. 원고 · 진행 · 결과를 여기서 그린다.
+  const cardnews: Record<string, EasyCardnewsProject> = {};
   if (projectIds.length) {
     const stores = posterStoresForUser(membership.user.id);
     const images = await stores.images.byProjects(projectIds);
@@ -91,12 +94,28 @@ export async function loadEasyConversation(id: string) {
         .filter(Boolean)
         .map((project) => [project!.id, project!]),
     );
+    /*
+     * **포스터에서 못 찾은 작업만 카드뉴스에서 찾는다**(2단계 §8). 그림 줄은
+     * 둘 중 하나를 가리킨다. 포스터가 먼저라 1단계 대화는 지금과 같게 열린다.
+     */
+    const 카드작업 = new Map(
+      (await Promise.all(
+        projectIds
+          .filter((workId) => !projects.has(workId))
+          .map((workId) => cardnewsProject(membership.user.id, workId)),
+      ))
+        .filter(Boolean)
+        .map((project) => [project!.id, project!]),
+    );
 
     for (const row of rows) {
       if (!row.workId) continue;
       const mine = images.filter((image) => image.projectId === row.workId);
       const pick = mine.find((image) => image.selected) ?? mine[0];
       if (pick?.url) urls[row.id] = pick.url;
+
+      const 카드 = 카드작업.get(row.workId);
+      if (카드) cardnews[row.id] = 카드;
 
       const project = projects.get(row.workId);
       if (!project) continue;
@@ -119,5 +138,5 @@ export async function loadEasyConversation(id: string) {
     ...(row.workId ? { workId: row.workId } : {}),
   }));
 
-  return { conversation, messages, urls, options };
+  return { conversation, messages, urls, options, cardnews };
 }

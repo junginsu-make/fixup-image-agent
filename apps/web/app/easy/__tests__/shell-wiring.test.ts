@@ -354,3 +354,14 @@ describe("지난 역할 잇기", () => {
     expect(client).toMatch(/previousRoles[\s\S]{0,80}previousRolesFor\(/);
   });
 });
+
+describe("카드뉴스 다시 열기 (2단계 §8)", () => {
+  const load = 코드("../_components/load.ts");
+  it("포스터에서 못 찾은 작업을 카드뉴스에서 찾는다", () => {
+    expect(load).toContain("cardnewsProject(");
+    expect(load.indexOf("projects.get(")).toBeLessThan(load.indexOf("cardnewsProject("));
+  });
+  it("찾은 카드뉴스 작업을 화면에 넘긴다", () => {
+    expect(load).toMatch(/return \{[^}]*cardnews/);
+  });
+});

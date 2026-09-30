@@ -45,7 +45,8 @@ export async function startCardnews(request: Request, projectId: string): Promis
 /** 이 회원의 카드뉴스 작업 하나. 없으면 `null`: 포스터 작업이거나 남의 것이다. */
 export async function cardnewsProject(userId: string, projectId: string): Promise<EasyCardnewsProject | null> {
   const project = await (await snsFlowStoreForUser(userId)).get(projectId);
-  if (!project) return null;
+  // 저장소는 팀 읽기 규칙으로 팀원 것도 준다. 잠든 팀 기능 때문에 남의 것이 끼지 않게 막는다.
+  if (!project || project.userId !== userId) return null;
   return (await refreshProjectAssetUrls(project)) as unknown as EasyCardnewsProject;
 }
 
