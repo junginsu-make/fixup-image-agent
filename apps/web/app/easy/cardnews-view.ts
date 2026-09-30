@@ -60,6 +60,18 @@ export interface EasyCardnewsView {
   review: number[];
 }
 
+/**
+ * **원고를 못 썼을 때 대화에 남길 말**(설계 §9). 기획의 장수 계산 실패는 개발자 말
+ * (「AI가 고른 8장과 실제 자리 합계 9장이 다릅니다」)이라 쉬운 말로 바꾼다. 자막 없음 같은
+ * 다른 까닭은 그대로 전한다.
+ */
+export function draftFailureMessage(issues: readonly string[]): string {
+  if (issues.some((issue) => issue.includes("자리 합계") || issue.includes("허용 범위"))) {
+    return "원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.";
+  }
+  return `원고를 쓰지 못했습니다. ${issues.join(" ") || "내용을 가져오지 못했습니다."}`;
+}
+
 export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "image-v2"): EasyCardnewsView {
   const flow = project.data.flow;
   const cards = flow?.cards ?? [];

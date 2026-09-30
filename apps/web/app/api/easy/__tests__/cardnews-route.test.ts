@@ -197,7 +197,7 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
 
     expect(부른라우트.map((c) => c.step)).toEqual(["cardnews-project", "cardnews-plan"]);
     expect(부른라우트[0]!.body).toMatchObject({
-      source: { kind: "question" }, ratio: "4:5", cardCountMode: "auto", language: "ko",
+      source: { kind: "question" }, ratio: "4:5", cardCountMode: "fixed", cardCount: 6, language: "ko",
       attachments: [
         { id: 사진(1), kind: "style_reference", role: "cover" },
         { id: 사진(1), kind: "style_reference", role: "body" },
@@ -235,6 +235,15 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     expect(json.talked).toBe(true);
     expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant"]);
     expect(남긴줄[1]!.body).toContain("자막이 없습니다");
+  });
+
+  it("장수 계산이 어긋난 실패는 개발자 말 대신 쉬운 말로 알린다", async () => {
+    역할판단 = 역할(["style", false]);
+    원고작업 = { ...원고작업, data: { ...원고작업.data, flow: {
+      planningIssues: ["주 모델 기획 실패: AI가 고른 8장과 실제 자리 합계 9장이 다릅니다."], copyIssues: [], cards: [],
+    } } };
+    await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] });
+    expect(남긴줄[1]!.body).toBe("원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.");
   });
 });
 

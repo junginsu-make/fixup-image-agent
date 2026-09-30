@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardnewsView } from "../cardnews-view";
+import { cardnewsView, draftFailureMessage } from "../cardnews-view";
 
 const 작업 = (over: Record<string, unknown> = {}) => ({
   id: "p1", status: "copy_ready", ratio: "4:5", language: "ko", modelId: "gpt-image-2.5-flare",
@@ -84,5 +84,17 @@ describe("원고 보기", () => {
       },
     });
     expect(cardnewsView(검수, "image-v2").review).toEqual([3]);
+  });
+});
+
+describe("원고를 못 썼을 때의 말", () => {
+  it("장수 계산 실패는 쉬운 말로", () => {
+    expect(draftFailureMessage(["주 모델 기획 실패: AI가 고른 8장과 실제 자리 합계 9장이 다릅니다.", "OpenAI 예비 기획도 실패했습니다: …"]))
+      .toBe("원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.");
+  });
+
+  it("다른 까닭은 그대로 전한다, 까닭이 없으면 내용을 못 가져왔다고", () => {
+    expect(draftFailureMessage(["자막이 없습니다"])).toBe("원고를 쓰지 못했습니다. 자막이 없습니다");
+    expect(draftFailureMessage([])).toBe("원고를 쓰지 못했습니다. 내용을 가져오지 못했습니다.");
   });
 });

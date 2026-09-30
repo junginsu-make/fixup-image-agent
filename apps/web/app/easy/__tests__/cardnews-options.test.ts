@@ -1,15 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { estimateCost } from "../../sns/cost-estimate";
-import { cardCost, cardOptionsFrom, projectSpecFrom, readCardOptions } from "../cardnews-options";
+import { cardCost, cardOptionsFrom, optionsOfProject, projectSpecFrom, readCardOptions } from "../cardnews-options";
 
 describe("카드뉴스 조건 (2단계 설계 §7)", () => {
   it("말 · 고른 것 · 기본값 차례", () => {
     expect(cardOptionsFrom({ said: {}, chosen: {} })).toEqual({
-      ratio: "4:5", count: "auto", language: "ko", modelId: "gpt-image-2.5-flare", look: "auto",
+      ratio: "4:5", count: 6, language: "ko", modelId: "gpt-image-2.5-flare", look: "auto",
     });
     expect(cardOptionsFrom({ said: { ratio: "1:1", look: "anime" }, chosen: { ratio: "9:16" }, imageModel: "nano-banana-2" }))
       .toMatchObject({ ratio: "9:16", look: "anime", modelId: "nano-banana-2" });
+  });
+
+  /**
+   * **기본 장수는 6장**(2026-09-30 사용자 결정 A). 「자동」이면 기존 기획이 AI 가 고른 전체
+   * 장수와 카드 수를 맞대 보고 1장만 어긋나도 원고를 버린다(`sns-core/planning.ts:78-85`).
+   * 실제로 두 번 중 두 번 주 모델이 거기서 실패했다. 「자동」은 고르면 쓸 수 있다.
+   */
+  it("기본 장수는 6장, 「자동」은 골랐을 때만, 전에 자동으로 만든 원고는 자동 그대로", () => {
+    expect(cardOptionsFrom({ said: {}, chosen: {} }).count).toBe(6);
+    expect(cardOptionsFrom({ said: {}, chosen: { count: "auto" } }).count).toBe("auto");
+    expect(optionsOfProject({ ratio: "4:5", language: "ko", modelId: "gpt-image-2.5-flare", cardCountMode: "auto", data: {} }).count)
+      .toBe("auto");
   });
 
   it("카드뉴스가 못 만드는 비율 · 모르는 모델은 기본으로", () => {

@@ -7,6 +7,7 @@ import { resolveTextModel } from "@fixup/shared";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
+import { draftFailureMessage } from "../../../easy/cardnews-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,11 +62,11 @@ async function act(request: Request): Promise<Response> {
     const flow = 새작업.data.flow;
     if (!flow?.cards.length) {
       // 원고 0장은 조용히 끝내지 않는다(설계 §9). 채팅 턴과 같은 말이다.
-      const 까닭 = [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])].join(" ");
+      const 까닭 = [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])];
       const saved = await store.appendMessage({
         conversationId,
         role: "assistant",
-        body: `원고를 쓰지 못했습니다. ${까닭 || "내용을 가져오지 못했습니다."}`,
+        body: draftFailureMessage(까닭),
       });
       return Response.json({ ok: true, talked: true, message: saved });
     }

@@ -16,6 +16,12 @@ export const CARD_LANGUAGE_LABEL: Record<(typeof CARD_LANGUAGES)[number], string
   ko: "한국어", en: "영어", ja: "일본어", zh: "중국어",
 };
 export const DEFAULT_CARD_MODEL = "gpt-image-2.5-flare";
+/**
+ * **기본 장수**(2026-09-30 사용자 결정 A). 「자동」이면 기존 기획이 AI 가 고른 전체 장수와
+ * 카드 수를 맞대 보고 1장만 어긋나도 원고를 버린다(`sns-core/planning.ts:78-85`). 실제로
+ * 두 번 중 두 번 주 모델이 거기서 실패했다. 장수를 정해 보내면 그 검사를 안 거친다.
+ */
+export const DEFAULT_CARD_COUNT = 6;
 
 export interface CardOptions {
   ratio: (typeof CARD_RATIOS)[number];
@@ -50,7 +56,7 @@ export function cardOptionsFrom(input: {
 }): CardOptions {
   return {
     ratio: input.chosen.ratio ?? (비율(input.said.ratio) ? input.said.ratio as CardOptions["ratio"] : "4:5"),
-    count: input.chosen.count ?? "auto",
+    count: input.chosen.count ?? DEFAULT_CARD_COUNT,
     language: input.chosen.language ?? "ko",
     modelId: input.chosen.modelId
       ?? (input.imageModel && 모델들.has(input.imageModel) ? input.imageModel : DEFAULT_CARD_MODEL),

@@ -21,6 +21,7 @@ import { NOT_MINE, cardAttachmentsFrom, readChosenSlots, slotsFromWords } from "
 import { pickCardSource } from "../../../easy/cardnews-source";
 import { cardOptionsFrom, projectSpecFrom, readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
+import { draftFailureMessage } from "../../../easy/cardnews-view";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -454,11 +455,11 @@ async function cardnewsTurn(ctx: {
      * **원고 0장은 조용히 끝내지 않는다**(설계 §9). 카드뉴스 원고 라우트는 이때도
      * `ok` 다. 까닭을 말하고, 작업은 지우지 않는다(2026-09-30 사용자 결정).
      */
-    const 까닭 = [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])].join(" ");
+    const 까닭 = [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])];
     const saved = await ctx.store.appendMessage({
       conversationId: ctx.conversationId,
       role: "assistant",
-      body: `원고를 쓰지 못했습니다. ${까닭 || "내용을 가져오지 못했습니다."}`,
+      body: draftFailureMessage(까닭),
     });
     return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
   }
