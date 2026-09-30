@@ -101,9 +101,14 @@
 1. `credit_lock()` · 회원 상태(`inactive_member`) · 장부 계정(`credit_account_not_activated`) · 입력 검사(`:252-258`)
 2. ★ **AI 멈춤**: `app_settings.ai_paused='1'` 이면 사유 `ai_paused`. 단 `ad_export` 이면서 `p_resource='ad:export'`(AI 없음)는 통과
 3. 중복 요청(`duplicate_request`, `:260`)
-4. ★ **크레딧 없음**: `credit_wallet_state` 의 **`balance`(available+reserved)가 0 이하**이면 사유 `credits_required`.
-   `available` 로 보지 않는다 — 이미지 작업이 크레딧을 전부 잡고 있는 동안 CS·문구가 막히면 안 된다.
-   `v_need>0` 인 작업도 같은 사유로 막는다(잔액 0 에서 「크레딧이 모자랍니다」와 문구가 갈리지 않게).
+4. ★ **크레딧 없음**: **살아 있는 덩어리(회수 안 됨·만료 전)에 쓸 수 있거나 잡힌 크레딧이 있는지**를 본다 —
+   하나도 없으면 사유 `credits_required`. `credit_wallet_state` 의 `balance`(available+reserved)는 쓰지
+   않는다 — 그 합은 만료·회수된 덩어리의 `reserved_units` 도 그대로 더해서, 덩어리가 만료된 뒤
+   `needs_review` 등으로 못 푼 잡힌 크레딧만 남아도 0크레딧 회원을 통과시킨다(최종 리뷰 반영, §8).
+   대신 `credit_grants` 에서 `revoked_at is null and expires_at>now() and granted_units>consumed_units`
+   인 덩어리가 하나라도 있는지로 본다 — `available` 로 보지 않는 이유는 그대로다: 이미지 작업이 크레딧을
+   전부 잡고 있는 동안 CS·문구가 막히면 안 된다. `v_need>0` 인 작업도 같은 사유로 막는다(잔액 0 에서
+   「크레딧이 모자랍니다」와 문구가 갈리지 않게).
    예외 둘:
    - `ad_export` 이면서 `p_resource='ad:export'`(AI 없음)
    - `cs_ask` 이면서 그 회원의 셀 행이 **10건 미만**. 셀 행 = `operation='cs_ask' and coalesce(error_code,'') <> all(v_exempt_codes || 'invalid_request')`
@@ -266,3 +271,4 @@
 | I-11 SQL 검증 방법 | 정적 시험 + 운영 `begin … rollback` + 적용 전 4가지 확인(§5·§6) |
 | Minor | UTC 줄 번호, 공개 경로 정확히, `/demo` 비회원 기대값, 만료 경로 유지, `/`·`/about` 사용자 확인 표시, 기획 중복 제거는 두 목록 합쳐서, 앱 먼저 배포·상태 코드·`retryable`, 판정 키·모든 끝 정산, 기존 정산 계약 시험 확장, 감사 기록은 `credit_admin_events`, STT 는 설정돼 있을 때만 |
 | 범위 밖 6가지 | 입력 길이 상한·새 시간당 한도(CS 고침만 남김)·참고 이미지 상한(중복 제거만)·이미지 삭제·두 번째 겹·회원별 나눔/추정 비율/STT 설정 삭제(§4) |
+| 최종 전체 리뷰 잔액 기준(구현 뒤) | `credit_wallet_state` 의 `balance`(만료·회수된 덩어리의 잡힌 크레딧도 더함) 대신, 살아 있는 덩어리(회수 안 됨·만료 전)에 쓸 수 있거나 잡힌 크레딧이 있는지로(§3.2). `credit_reserve`·정적 시험·PG 시험 모두 갱신 |

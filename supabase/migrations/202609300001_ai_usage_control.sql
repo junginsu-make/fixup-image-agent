@@ -20,7 +20,9 @@
 --  본문은 202609280001 판을 그대로 옮기고 ★ 자리만 더했다.
 --
 --    ★ AI 멈춤      app_settings.ai_paused='1' 이면 'ai_paused'. 관리자도 멈춘다
---    ★ 크레딧 없음  잔액(available+reserved)이 0 이하면 'credits_required'
+--    ★ 크레딧 없음  살아 있는 덩어리(회수 안 됨·만료 전)에 쓸 수 있거나 잡힌
+--                   크레딧이 없으면 'credits_required'. 만료된 덩어리에 남은
+--                   reserved_units(예: needs_review 로 못 푼 것)는 세지 않는다
 --                   예외 — AI 없는 광고 내보내기(ad_export + 'ad:export')
 --                        — CS 도우미(cs_ask)는 가입 후 통틀어 10건까지
 --    ★ 시간당 한도 목록에 cs_ask (앱은 이미 CS_ASK_HOURLY_LIMIT 을 넘긴다)
@@ -60,8 +62,13 @@ begin
   /*
     ★ **크레딧이 없으면 AI 를 못 쓴다**(설계 §3.2 의 4번, D5·D6).
 
-    `available` 이 아니라 `balance`(available+reserved)로 본다. 이미지 작업이
-    크레딧을 전부 잡고 있는 동안 CS·게시글 문구가 막히면 안 된다.
+    `v_state->>'balance'`(available+reserved)는 안 쓴다 — `credit_wallet_state`
+    의 `reserved` 합은 만료·회수된 덩어리의 `reserved_units` 도 그대로 더하므로,
+    덩어리가 만료된 뒤 needs_review 등으로 안 풀린 잡힌 크레딧만 남아도 잔액이
+    0 보다 커 보여 0크레딧 회원이 통과해 버린다. 대신 **살아 있는 덩어리**(회수
+    안 됨 · 만료 전) 중 아직 다 쓰지 않은 것이 하나라도 있는지 직접 본다 —
+    `granted_units>consumed_units` 는 그 덩어리에 남은 `available`·`reserved_units`
+    를 합쳐 본 것과 같다(칸 불변식 `consumed_units+reserved_units<=granted_units`).
     `v_need>0` 인 작업도 같은 사유다 — 잔액 0 에서 「크레딧이 모자랍니다」와
     문구가 갈리지 않게.
 
@@ -70,7 +77,7 @@ begin
     `cs_failed` 는 센다 — CS 라우트는 모든 예외를 이것으로 닫아 제공사 오류를
     가를 수 없고, 모델 값이 이미 나갔을 수 있다.
   */
-  if not v_no_ai and (v_state->>'balance')::integer<=0 then
+  if not v_no_ai and not exists(select 1 from credit_grants where user_id=p_user and revoked_at is null and expires_at>now() and granted_units>consumed_units) then
     if p_operation='cs_ask' and v_need=0 then
       select count(*)::integer into v_cs_used from generation_events
         where user_id=p_user and operation='cs_ask'

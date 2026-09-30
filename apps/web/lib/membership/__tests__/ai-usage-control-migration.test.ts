@@ -73,14 +73,16 @@ describe("credit_reserve 마지막 판", () => {
     expect(body).toContain("exists(select 1 from app_settings where key='ai_paused' and value='1')");
   });
 
-  it("크레딧 없음은 balance 로 본다 — available 로 보면 이미지가 잡은 동안 CS 가 막힌다", () => {
-    expect(body).toContain("(v_state->>'balance')::integer<=0");
+  it("크레딧 없음은 살아 있는 덩어리로 본다 — 만료된 덩어리에 남은 잡힌 크레딧은 세지 않는다", () => {
+    expect(body).toContain(
+      "not exists(select 1 from credit_grants where user_id=p_user and revoked_at is null and expires_at>now() and granted_units>consumed_units)",
+    );
   });
 
   it("AI 없는 광고 내보내기는 멈춤·크레딧 없음 두 검사에서 모두 빠진다", () => {
     expect(body).toContain("v_no_ai boolean := p_operation='ad_export' and p_resource='ad:export';");
     expect(body).toMatch(/if not v_no_ai and exists\(select 1 from app_settings/);
-    expect(body).toMatch(/if not v_no_ai and \(v_state->>'balance'\)/);
+    expect(body).toMatch(/if not v_no_ai and not exists\(select 1 from credit_grants/);
   });
 
   it("CS 셀 행은 시간당 면제 목록 + invalid_request 를 빼고, 기간 없이 센다", () => {

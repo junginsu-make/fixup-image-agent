@@ -158,6 +158,19 @@ test('expired credits are no balance', async () => {
   assert.equal((await reserve(lapsed)).reason, 'credits_required');
 });
 
+/*
+  최종 리뷰 반영(중요 지적 1) — `credit_wallet_state` 의 `balance`(available+reserved)는
+  만료·회수된 덩어리의 `reserved_units` 도 그대로 더한다. 덩어리가 만료된 뒤
+  `needs_review` 등으로 못 푼 잡힌 크레딧만 남아도 예전 조건(`balance<=0`)은
+  통과시켰다. 살아 있는 덩어리 기준으로 고친 뒤에는 이 경우도 막혀야 한다.
+*/
+test('credits held on an expired grant are not balance', async () => {
+  const one = await member(1);
+  assert.equal((await reserve(one, { operation: 'poster_image', outputs: [1], resource: 'poster:p1' })).allowed, true);
+  await db.sql(`update credit_grants set granted_at=now()-interval '2 days',expires_at=now()-interval '1 day' where user_id='${one}';`);
+  assert.equal((await reserve(one)).reason, 'credits_required');
+});
+
 test('without credits the assistant answers ten times in a lifetime, not per hour', async () => {
   const empty = await member(0);
   await askTimes(empty, 10);
@@ -181,6 +194,18 @@ test('a failed answer counts; a malformed question and exempt provider failures 
   await close(empty, asked[2], 'AI_KEY_MISSING');
   assert.equal((await next()).allowed, true, '시간당 면제 목록의 실패도 안 센다');
   assert.equal((await next()).reason, 'credits_required');
+});
+
+/*
+  최종 리뷰 반영(가벼운 지적 a) — CS 10회를 세는 문장은 `operation='cs_ask'` 로
+  거르므로, 그 사이에 다른 작업(광고 내보내기)이 섞여도 그 작업은 세지 않아야 한다.
+*/
+test('the ten-question count only counts assistant rows', async () => {
+  const empty = await member(0);
+  await askTimes(empty, 9);
+  assert.equal((await reserve(empty, { operation: 'ad_export', resource: 'ad:export' })).allowed, true);
+  assert.equal((await reserve(empty, { operation: 'cs_ask', resource: 'cs:ask' })).allowed, true, '10번째 물음');
+  assert.equal((await reserve(empty, { operation: 'cs_ask', resource: 'cs:ask' })).reason, 'credits_required', '11번째 물음');
 });
 
 test('with at least one credit the ten-question rule does not apply', async () => {
