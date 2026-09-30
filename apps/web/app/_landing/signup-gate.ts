@@ -23,8 +23,12 @@ const first = (value: QueryValue) => (Array.isArray(value) ? value[0] : value);
 export function readSignupGate(query: { signup?: QueryValue; next?: QueryValue }): SignupGate {
   if (first(query.signup) !== SIGNUP_REQUIRED) return { open: false, next: null };
   const next = first(query.next);
-  // 로그인 화면의 `safeNext` 가 그대로 돌려주는 값만 싣는다 — 밖으로 나가는 주소는 여기서부터 버린다.
-  return { open: true, next: next && safeNext(next) === next ? next : null };
+  /*
+    로그인 화면의 `safeNext` 가 그대로 돌려주는 값만 싣는다 — 밖으로 나가는 주소는
+    여기서부터 버린다. 역슬래시는 따로도 거른다(2026-09-30 독립 리뷰) — 브라우저가
+    `/\evil.example.com` 을 `//evil.example.com` 으로 읽어 다른 사이트로 보낸다.
+  */
+  return { open: true, next: next && !next.includes("\\") && safeNext(next) === next ? next : null };
 }
 
 /** 모달의 [로그인] 이 갈 곳. 로그인 화면이 `next` 를 읽어 돌려보낸다(`app/login/page.tsx`). */

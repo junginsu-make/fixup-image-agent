@@ -27,7 +27,7 @@ describe("readSignupGate", () => {
   });
 
   /** 로그인 화면이 다시 거르지만, 우리 화면이 그런 주소를 만들어 내보내지 않는다. */
-  it.each(["//evil.example.com", "https://evil.example.com", "evil.example.com"])(
+  it.each(["//evil.example.com", "https://evil.example.com", "evil.example.com", "/\\evil.example.com"])(
     "밖으로 나가는 next(%s) 는 버린다",
     (next) => {
       expect(readSignupGate({ signup: "required", next })).toEqual({ open: true, next: null });

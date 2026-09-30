@@ -21,10 +21,17 @@ export const HOME_AFTER_LOGIN = "/guide";
  *
  * `//evil.example.com` 같은 것을 그대로 쓰면 브라우저가 **다른 사이트**로
  * 읽는다. 우리 안의 경로만 허용한다.
+ *
+ * **역슬래시도 같은 구멍이다**(2026-09-30 독립 리뷰). 브라우저는 경로의
+ * 역슬래시를 슬래시로 바꿔 읽어서 `/\evil.example.com` 이 `//evil.example.com`
+ * 이 된다 — 실제로 로그인 뒤 `router.replace` 가 다른 사이트로 보냈다(열린
+ * 리다이렉트). 퍼센트 인코딩된 역슬래시(`%5C`)는 이 함수가 디코딩하지 않으므로
+ * 글자 그대로 남아 위험하지 않다.
  */
 export function safeNext(next: string | null | undefined): string {
   if (!next) return HOME_AFTER_LOGIN;
-  return next.startsWith("/") && !next.startsWith("//") ? next : HOME_AFTER_LOGIN;
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return HOME_AFTER_LOGIN;
+  return next;
 }
 
 /**
