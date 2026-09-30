@@ -1,4 +1,4 @@
-import { isPersonRole, type EasyPhotoRole, type RoleJudgment } from "./photo-roles";
+import { isPersonRole, type CardPhotoRole, type EasyPhotoRole, type RoleJudgment } from "./photo-roles";
 
 /**
  * 정해진 역할을 **이미지 만들기가 이미 받는 칸**으로 옮긴다(설계 §2-6).
@@ -54,7 +54,7 @@ export function posterFieldsFrom(rows: ReadonlyArray<{ id: string; role: EasyPho
 export function easyAttachmentIntent(input: {
   words: string;
   judged: RoleJudgment;
-  final: readonly EasyPhotoRole[];
+  final: readonly CardPhotoRole[];
 }): string {
   if (input.judged.conflicting) return "";
   const 말한것 = input.judged.photos

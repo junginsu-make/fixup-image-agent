@@ -253,3 +253,25 @@ describe("인물은 한 줄에만 (설계 §2-5)", () => {
     expect(canPickPerson({ a: "preserve_product" }, "b")).toBe(true);
   });
 });
+
+describe("카드뉴스 역할 (2단계 설계 §5-1)", () => {
+  it("카드뉴스일 때만 원본 그대로 · 마지막 장을 알려 준다", () => {
+    const 카드 = easyRolePrompt({ words: "이 표는 그대로", photos: [{ description: "표" }], cardnews: true });
+    const 한장 = easyRolePrompt({ words: "이 표는 그대로", photos: [{ description: "표" }] });
+    expect(카드).toContain("place_as_is");
+    expect(카드).toContain("ending");
+    expect(한장).not.toContain("place_as_is");
+  });
+
+  it("카드뉴스가 아니면 두 역할을 unclear 로 읽는다", () => {
+    const raw = { photos: [{ number: 1, role: "place_as_is", said: true }], conflicting: false };
+    expect(readRoleJudgment(raw, 1).photos[0]!.role).toBe("unclear");
+    expect(readRoleJudgment(raw, 1, { cardnews: true }).photos[0]).toEqual({ role: "place_as_is", said: true });
+  });
+
+  it("고른 값도 카드뉴스일 때만 두 역할을 받는다", () => {
+    const raw = [{ id: "a", role: "ending" }];
+    expect(readChosenRoles(raw, ["a"])).toEqual({});
+    expect(readChosenRoles(raw, ["a"], { cardnews: true })).toEqual({ a: "ending" });
+  });
+});

@@ -1,7 +1,7 @@
 import { photoLimit } from "./photo-check";
 import {
   easyRolePrompt, mergeRoles, photoAskReason, readRoleJudgment,
-  type EasyPhoto, type EasyPhotoRead, type EasyPhotoRole, type PhotoRow,
+  type CardPhotoRole, type EasyPhoto, type EasyPhotoRead, type EasyPhotoRole, type PhotoRow,
 } from "./photo-roles";
 import { easyAttachmentIntent, posterFieldsFrom, type EasyPosterFields } from "./photo-fields";
 
@@ -18,9 +18,11 @@ export interface PhotoTurnInput {
   /** 이번 요청의 말 전체(처음 말 + 말로 한 답). */
   words: string;
   /** 서버가 다시 확인한 고른 역할. */
-  chosen: Readonly<Record<string, EasyPhotoRole>>;
+  chosen: Readonly<Record<string, CardPhotoRole>>;
   /** 서버가 다시 확인한 지난 역할(설계 §2-4 차례 3). 없으면 빈 것으로 본다. */
-  previous?: Readonly<Record<string, EasyPhotoRole>>;
+  previous?: Readonly<Record<string, CardPhotoRole>>;
+  /** 카드뉴스 턴이면 두 역할(원본 그대로 · 마지막 장)을 더 안다(2단계 §5-1). */
+  mode?: "image" | "cardnews";
   ratio: string;
   imageModel?: string;
 }
@@ -37,8 +39,9 @@ export type PhotoTurn =
   | { kind: "ask"; reason: "unclear" | "people"; rows: PhotoRow[] }
   | {
     kind: "go";
-    rows: Array<{ id: string; role: EasyPhotoRole }>;
-    fields: EasyPosterFields;
+    rows: Array<{ id: string; role: CardPhotoRole }>;
+    /** 이미지 한 장일 때만. 카드뉴스는 `cardnews-attachments.ts` 가 옮긴다. */
+    fields?: EasyPosterFields;
     attachmentIntent: string;
   };
 
@@ -61,8 +64,10 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
       // 이어 만드는 턴인지만 알린다. 지난 역할 자체는 안 준다 — 주면 말이 무엇을
       // 말했는지(`said`)를 그것과 떼어 알 수 없다(설계 §2-4).
       followUp: Object.keys(input.previous ?? {}).length > 0,
+      cardnews: input.mode === "cardnews",
     })),
     input.photos.length,
+    { cardnews: input.mode === "cardnews" },
   );
 
   /*
@@ -100,11 +105,13 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
   const reason = photoAskReason(rows);
   if (reason) return { kind: "ask", reason, rows };
 
-  const decided = rows.map((row) => ({ id: row.id, role: row.role as EasyPhotoRole }));
+  const decided = rows.map((row) => ({ id: row.id, role: row.role as CardPhotoRole }));
   return {
     kind: "go",
     rows: decided,
-    fields: posterFieldsFrom(decided),
+    fields: input.mode === "cardnews"
+      ? undefined
+      : posterFieldsFrom(decided as Array<{ id: string; role: EasyPhotoRole }>),
     attachmentIntent: easyAttachmentIntent({ words: input.words, judged, final: decided.map((row) => row.role) }),
   };
 }

@@ -30,7 +30,12 @@ export const EASY_PHOTO_ROLES = [
 export type EasyPhotoRole = (typeof EASY_PHOTO_ROLES)[number];
 
 /** 판단이 돌려줄 수 있는 것 — 역할 넷에 「모름」. */
-export type JudgedPhotoRole = EasyPhotoRole | "unclear";
+/** 카드뉴스에만 있는 역할 둘(2단계 설계 §5-1). 이미지 한 장에는 자리가 없다. */
+export const CARD_ONLY_ROLES = ["place_as_is", "ending"] as const;
+export type CardPhotoRole = EasyPhotoRole | (typeof CARD_ONLY_ROLES)[number];
+
+/** 판단이 돌려줄 수 있는 것 — 역할에 「모름」. 카드뉴스 둘은 카드뉴스 턴에서만 온다. */
+export type JudgedPhotoRole = CardPhotoRole | "unclear";
 
 /** 붙인 사진 한 장. ⓪에서 확인을 마친 것이다. */
 export interface EasyPhoto {
@@ -53,7 +58,9 @@ export interface RoleJudgment {
 }
 
 const 모름: PhotoJudgment = { role: "unclear", said: false };
-const 아는판단 = new Set<string>([...EASY_PHOTO_ROLES, "unclear"]);
+function 아는판단(cardnews: boolean): Set<string> {
+  return new Set<string>([...EASY_PHOTO_ROLES, "unclear", ...(cardnews ? CARD_ONLY_ROLES : [])]);
+}
 
 /**
  * 한 장을 읽은 것을 ⓑ2 에 줄 한 줄로 만든다.
@@ -97,6 +104,8 @@ export function easyRolePrompt(input: {
   photos: ReadonlyArray<{ description?: string }>;
   /** 이 사진들로 이미 만든 적이 있는 이어 만들기 턴인가(설계 §2-4 지난 역할). */
   followUp?: boolean;
+  /** 카드뉴스 턴이면 역할 둘을 더 알려 준다(2단계 설계 §5-1). */
+  cardnews?: boolean;
 }): string {
   const 사진줄 = input.photos.map((photo, index) =>
     `${index + 1}번: ${photo.description?.trim() || "(설명 없음, 말로만 정하세요)"}`);
@@ -112,6 +121,16 @@ export function easyRolePrompt(input: {
     "  preserve_person           인물 그대로: 사람의 얼굴·체형·옷차림을 그대로 지킨다",
     "  preserve_person_restyled  인물 그대로 · 그림체만: 사람은 그대로 두고 그림 느낌만 다른 사진을 따라간다",
     "  unclear                   모르겠다: 사용자에게 물어본다",
+    ...(input.cardnews
+      ? [
+        "  place_as_is               원본 그대로 한 장: 그 그림을 다시 그리지 않고 카드 한 장으로 그대로 넣는다",
+        "  ending                    마지막 장: 그 그림을 카드뉴스의 마지막 장으로 그대로 쓴다",
+        "",
+        "지금 만드는 것은 **카드뉴스**입니다. 따라 만들 카드뉴스 · 포스터는 style 입니다.",
+        "「이 표는 그대로 넣어줘」처럼 원본을 그대로 넣으라는 말이 있으면 place_as_is,",
+        "「이걸 마지막 장으로」면 ending 입니다. **그런 말이 없으면 둘 다 쓰지 마세요.**",
+      ]
+      : []),
     "",
     "── 정하는 차례 ──",
     "",
@@ -181,7 +200,7 @@ export function easyRolePrompt(input: {
  * - 모르는 역할은 unclear
  * - said 는 역할이 있을 때만, 그리고 참일 때만 참
  */
-export function readRoleJudgment(raw: unknown, count: number): RoleJudgment {
+export function readRoleJudgment(raw: unknown, count: number, options: { cardnews?: boolean } = {}): RoleJudgment {
   const value = raw as { photos?: unknown; conflicting?: unknown } | null;
   const list = value?.photos;
   const entries: unknown[] = Array.isArray(list) ? list : [];
@@ -198,7 +217,7 @@ export function readRoleJudgment(raw: unknown, count: number): RoleJudgment {
     const found = 번호별.get(index + 1);
     if (!found || found.length !== 1) return { ...모름 };
     const { role, said } = found[0]!;
-    if (typeof role !== "string" || !아는판단.has(role)) return { ...모름 };
+    if (typeof role !== "string" || !아는판단(Boolean(options.cardnews)).has(role)) return { ...모름 };
     const judged = role as JudgedPhotoRole;
     return { role: judged, said: judged !== "unclear" && said === true };
   });
@@ -219,10 +238,14 @@ export interface PhotoRow {
  * (`ids`)과만 견준다 — 그 밖의 id, 모르는 역할, 두 번 온 id 는 버린다.
  * 버린 사진은 판단대로 가고, 판단도 없으면 묻는다.
  */
-export function readChosenRoles(raw: unknown, ids: readonly string[]): Record<string, EasyPhotoRole> {
+export function readChosenRoles(
+  raw: unknown,
+  ids: readonly string[],
+  options: { cardnews?: boolean } = {},
+): Record<string, CardPhotoRole> {
   if (!Array.isArray(raw)) return {};
   const allowed = new Set(ids);
-  const known = new Set<string>(EASY_PHOTO_ROLES);
+  const known = new Set<string>([...EASY_PHOTO_ROLES, ...(options.cardnews ? CARD_ONLY_ROLES : [])]);
   const entries = raw.map((entry) => entry as { id?: unknown; role?: unknown } | null);
   const 몇번 = (id: string) => entries.filter((one) => one?.id === id).length;
 
@@ -231,7 +254,7 @@ export function readChosenRoles(raw: unknown, ids: readonly string[]): Record<st
       .filter((one): one is { id: string; role: string } =>
         one !== null && typeof one.id === "string" && typeof one.role === "string"
         && allowed.has(one.id) && known.has(one.role) && 몇번(one.id) === 1)
-      .map((one) => [one.id, one.role as EasyPhotoRole]),
+      .map((one) => [one.id, one.role as CardPhotoRole]),
   );
 }
 
@@ -244,8 +267,8 @@ export function readChosenRoles(raw: unknown, ids: readonly string[]): Record<st
  */
 export function mergeRoles(input: {
   ids: readonly string[];
-  chosen: Readonly<Record<string, EasyPhotoRole>>;
-  previous?: Readonly<Record<string, EasyPhotoRole>>;
+  chosen: Readonly<Record<string, CardPhotoRole>>;
+  previous?: Readonly<Record<string, CardPhotoRole>>;
   judged: RoleJudgment;
 }): PhotoRow[] {
   return input.ids.map((id, index) => {
@@ -272,7 +295,9 @@ export function isPersonRole(role: JudgedPhotoRole): boolean {
  */
 export function photoAskReason(rows: readonly PhotoRow[]): "unclear" | "people" | null {
   if (rows.some((row) => row.role === "unclear")) return "unclear";
-  const people = countPreservedPeople(rows.map((row) => ({ role: row.role as EasyPhotoRole })));
+  const people = countPreservedPeople(
+    rows.filter((row) => isPersonRole(row.role)).map((row) => ({ role: row.role as EasyPhotoRole })),
+  );
   return people > 1 ? "people" : null;
 }
 

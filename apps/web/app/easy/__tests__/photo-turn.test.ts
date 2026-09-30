@@ -179,6 +179,18 @@ describe("그림 턴 (설계 §2-3)", () => {
     });
   });
 
+  it("카드뉴스 턴은 두 역할을 판단에 알리고, 이미지 칸은 안 만든다", async () => {
+    const { deps, 받은글 } = 가짜(
+      { photos: [{ number: 1, role: "place_as_is", said: true }], conflicting: false },
+      { p1: "표 캡처" },
+    );
+    const 결과 = await runPhotoTurn({ ...기본, words: "이 표는 그대로", photos: 사진들(1), mode: "cardnews" }, deps);
+
+    expect(받은글[0]).toContain("place_as_is");
+    expect(결과).toMatchObject({ kind: "go", rows: [{ id: "p1", role: "place_as_is" }] });
+    expect(결과.kind === "go" && 결과.fields).toBeUndefined();
+  });
+
   it("판단이 실패하면 그대로 던진다 — 라우트가 받는다", async () => {
     const deps: PhotoTurnDeps = { read: async () => ({}), judge: async () => { throw new Error("판단 실패"); } };
     await expect(runPhotoTurn({ ...기본, photos: 사진들(1) }, deps)).rejects.toThrow("판단 실패");
