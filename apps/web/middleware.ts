@@ -34,7 +34,6 @@ const PUBLIC_PATHS = [
     사이드바를 보여 주면 눌러 봐야 전부 로그인으로 돌아온다.
   */
   "/guide",
-  "/demo",
   "/login",
   "/signup",
   "/forgot-password",

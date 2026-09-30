@@ -126,3 +126,21 @@ describe("API 와 만료는 그대로", () => {
     expect(response.headers.get("location")).not.toContain("signup=required");
   });
 });
+
+describe("/demo 를 지운 뒤 (D8)", () => {
+  it("비회원은 첫 화면 + 회원가입 안내 — 404 가 아니다", async () => {
+    const response = await middleware(요청("/demo"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(안내로("/demo"));
+  });
+
+  /** 미들웨어는 지나가고, 페이지가 없으니 Next 가 404 를 낸다(배포 뒤 브라우저로 확인 — Task 5). */
+  it("회원은 미들웨어를 그대로 지난다", async () => {
+    currentUser = { id: "user-1" };
+    const response = await middleware(요청("/demo", { [AUTH_COOKIE]: "token" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+});
