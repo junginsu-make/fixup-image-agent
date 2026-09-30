@@ -144,7 +144,7 @@ Caddy가 80/443을 받아 자동 TLS를 처리한다. 애플리케이션 3000번
 
 ## 8. 출시 전 E2E
 
-1. 비회원 `/`, `/demo`, `/login`, `/signup` 접근
+1. 비회원 `/`, `/about`, `/guide`, `/login`, `/signup` 접근 · 그 밖 화면(`/create`, 지운 `/demo` 포함)은 첫 화면 + 「회원가입이 필요합니다」
 2. 예전 `/landing.html` → `/` redirect
 3. liveness 200, readiness 200
 4. 비회원 AI API 직접 호출 → 401
