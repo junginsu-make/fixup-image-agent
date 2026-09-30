@@ -24,6 +24,24 @@ export async function POST(request: Request) {
   return withLlmMeter(() => act(request));
 }
 
+/**
+ * **서버 쪽 고장은 원문 대신 쉬운 말로**(2026-09-30 실제 생성). 그림 서비스 잔액이 떨어지자
+ * 「Forbidden」이 그대로 떴다. 원문은 운영자가 볼 서버 기록에 남긴다. 크레딧 부족(402) ·
+ * 권한(403) · 이미 만드는 중(409) 같은 안내는 뜻이 있어 그대로 전한다.
+ *
+ * 「값은 나가지 않았습니다」가 맞는 까닭: 카드뉴스 만들기는 제출이 실패하면 잡아 둔 장을
+ * 돌려주고 답한다(`api/sns/projects/[id]/generate/route.ts` 의 `catch`).
+ */
+function 고장났다(action: "generate" | "redraft", projectId: string, error: unknown) {
+  console.error(`[easy] 카드뉴스 ${action} 실패 project=${projectId}`, error);
+  return Response.json({
+    ok: false,
+    message: action === "generate"
+      ? "카드를 만들기 시작하지 못했습니다. 값은 나가지 않았습니다. 잠시 뒤 다시 눌러 주세요."
+      : "원고를 다시 쓰지 못했습니다. 잠시 뒤 다시 해 주세요.",
+  }, { status: 500 });
+}
+
 function fail(message: string, status: number) {
   return Response.json({ ok: false, message, retryable: false }, { status });
 }
@@ -73,13 +91,13 @@ async function act(request: Request): Promise<Response> {
     const row = await store.appendMessage({ conversationId, role: "image", workId: 새것 });
     return Response.json({ ok: true, cardnews: { rowId: row.id, project: 새작업 }, message: row });
   } catch (error) {
-    if (error instanceof EasyStepError) {
+    if (error instanceof EasyStepError && error.status < 500) {
       return Response.json({
         ok: false, step: error.step, message: error.message,
         // 402·403 은 다시 눌러도 같은 곳에서 막힌다.
         retryable: error.status !== 402 && error.status !== 403,
       }, { status: error.status });
     }
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "하지 못했습니다." }, { status: 500 });
+    return 고장났다(action, projectId, error);
   }
 }

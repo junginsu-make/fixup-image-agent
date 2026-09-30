@@ -402,6 +402,9 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
     expect(카드).toMatch(/starting \? \(/);
     expect(훅).toContain("setStarting(rowId)");
   });
+  it("원고 본문의 줄바꿈을 살린다(마지막 장 정리 줄)", () => {
+    expect(코드("../_components/cardnews-card.tsx")).toMatch(/whitespace-pre-line[^"]*">\{card\.body\}/);
+  });
   it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
     expect(화면쪽).toContain("!cardnews.views[one.id]");
   });

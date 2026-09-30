@@ -45,7 +45,7 @@ export function EasyCardnewsCard({
         {view.cards.map((card) => (
           <li key={card.index} className="grid gap-0.5">
             <span><strong>{card.index} {자리이름[card.role] ?? card.role}</strong> {card.headline}</span>
-            {card.body ? <span className="text-subtle-foreground">{card.body}</span> : null}
+            {card.body ? <span className="whitespace-pre-line text-subtle-foreground">{card.body}</span> : null}
             {/* 강조 문구 · 각주도 그림에 찍힌다. 만들기 전에 확인할 수 있게 적는다. */}
             {card.accent ? <span className="text-primary">강조: {card.accent}</span> : null}
             {card.footnote ? <span className="text-subtle-foreground">작은 글씨: {card.footnote}</span> : null}

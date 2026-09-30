@@ -30,6 +30,7 @@ const 시작한것: string[] = [];
 const 만든입력: unknown[] = [];
 const 지운것: string[] = [];
 const 받은쓰기: string[] = [];
+let 시작실패: Error | null = null;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -51,7 +52,10 @@ vi.mock("../../../../lib/easy/chat-provider", () => ({
 }));
 vi.mock("../../../../lib/easy/cardnews-steps", () => ({
   cardnewsProject: async (_userId: string, id: string) => 카드작업들[id] ?? null,
-  startCardnews: async (_request: Request, id: string) => { 시작한것.push(id); },
+  startCardnews: async (_request: Request, id: string) => {
+    if (시작실패) throw 시작실패;
+    시작한것.push(id);
+  },
   draftCardnews: async (_request: Request, input: unknown, writeEnding?: unknown) => {
     만든입력.push(input);
     받은쓰기.push(typeof writeEnding);
@@ -60,6 +64,7 @@ vi.mock("../../../../lib/easy/cardnews-steps", () => ({
 }));
 
 const { POST } = await import("../cardnews/route");
+const { EasyStepError } = await import("../../../../lib/easy/relay");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/cardnews", {
@@ -75,6 +80,7 @@ beforeEach(() => {
   카드작업들 = {};
   새원고 = 원고(2);
   남긴줄.length = 0; 시작한것.length = 0; 만든입력.length = 0; 지운것.length = 0; 받은쓰기.length = 0;
+  시작실패 = null;
 });
 
 describe("「이대로 만들기」 (2단계 §8)", () => {
@@ -108,6 +114,30 @@ describe("「이대로 만들기」 (2단계 §8)", () => {
     카드작업들 = { c1: 원고(0) };
     expect((await 보낸다({ action: "generate", projectId: "c1" })).status).toBe(400);
     expect(시작한것).toEqual([]);
+  });
+
+  /** 2026-09-30 실제로 누르니 그림 서비스 잔액이 떨어져 「Forbidden」 원문이 화면에 떴다. */
+  it("바깥 서비스 오류는 원문 대신 쉬운 말로 알린다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    // 카드뉴스 라우트가 fal 의 원문을 담아 500 으로 답하면 「쉽게」는 단계 오류로 받는다.
+    시작실패 = new EasyStepError("카드 만들기", "Forbidden", 500);
+    const { status, json } = await 보낸다({ action: "generate", projectId: "c1" });
+    expect(status).toBe(500);
+    expect(json.message).toBe("카드를 만들기 시작하지 못했습니다. 값은 나가지 않았습니다. 잠시 뒤 다시 눌러 주세요.");
+
+    시작실패 = new Error("Forbidden");
+    expect((await 보낸다({ action: "generate", projectId: "c1" })).json.message)
+      .toBe("카드를 만들기 시작하지 못했습니다. 값은 나가지 않았습니다. 잠시 뒤 다시 눌러 주세요.");
+  });
+
+  it("크레딧 부족처럼 뜻이 있는 안내는 그대로 전한다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    시작실패 = new EasyStepError("카드 만들기", "크레딧이 부족합니다.", 402);
+    const { status, json } = await 보낸다({ action: "generate", projectId: "c1" });
+    expect(status).toBe(402);
+    expect(json).toMatchObject({ message: "크레딧이 부족합니다.", retryable: false });
   });
 
   it("모르는 할 일이면 아무것도 안 한다", async () => {
