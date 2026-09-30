@@ -97,7 +97,7 @@ export function cardCost(input: {
   ratio: string;
   modelId: string;
   attachments: Attachment[];
-  cards: ReadonlyArray<{ index: number; layout?: unknown }>;
+  cards: ReadonlyArray<{ index: number; kind?: string; layout?: unknown }>;
 }): { units: number; label: string } {
   if (input.policy === "image-v2") return { units: input.cards.length, label: `약 ${input.cards.length}크레딧` };
   const estimate = estimateCost({

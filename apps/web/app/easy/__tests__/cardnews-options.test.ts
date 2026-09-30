@@ -35,6 +35,12 @@ describe("카드뉴스 조건 (2단계 설계 §7)", () => {
       .toEqual({ units: 2, label: "약 2크레딧" });
   });
 
+  /** 설계 §11: 새 방식은 원본 그대로 · 마지막 장도 한 장씩 센다(`creditImagePlan(cards.length)`). */
+  it("새 방식은 원본 그대로 장도 센다", () => {
+    const cards = [{ index: 1 }, { index: 2, kind: "place_as_is" }, { index: 3, kind: "ending_image" }];
+    expect(cardCost({ policy: "image-v2", ratio: "4:5", modelId: "gpt-image-2.5-flare", attachments: [], cards }).units).toBe(3);
+  });
+
   it("옛 방식은 카드뉴스 예약과 같은 셈", () => {
     const cards = [{ index: 1 }, { index: 2 }, { index: 3 }];
     const est = estimateCost({ ratio: "4:5", modelId: "gpt-image-2.5-flare", totalCards: 3, attachments: [], cards });
