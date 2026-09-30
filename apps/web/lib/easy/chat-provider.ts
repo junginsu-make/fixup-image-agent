@@ -90,6 +90,23 @@ const EASY_ROLE_SPEC: StructuredSpec = {
   },
 };
 
+/**
+ * **카드뉴스 마지막 장 정리 문장**(2026-09-30 사용자 결정 B). 기존 흐름은 마지막 장에
+ * 한 줄만 넣어, 「쉽게」가 원고를 쓴 직후 채운다(`app/easy/cardnews-ending.ts`).
+ */
+const EASY_ENDING_SPEC: StructuredSpec = {
+  name: "easy_cardnews_ending",
+  description: "카드뉴스 마지막 장의 정리 제목과 핵심 줄을 쓴다.",
+  schema: {
+    type: "object",
+    properties: {
+      headline: { type: "string" },
+      body: { type: "string" },
+    },
+    required: ["headline", "body"],
+  },
+};
+
 export class EasyChatConfigurationError extends Error {
   constructor(readonly missing: string) {
     super(`${missing} 가 없어 대화를 할 수 없습니다.`);
@@ -117,7 +134,7 @@ export function createEasyChatProvider(
     const openai = new OpenAI({ apiKey: key, maxRetries: 2, timeout: 60_000 });
     const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
       new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt);
-    return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC) };
+    return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC) };
   }
 
   const key = environment.ANTHROPIC_API_KEY?.trim();
@@ -126,5 +143,5 @@ export function createEasyChatProvider(
   const model = textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5";
   const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
     new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt);
-  return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC) };
+  return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC) };
 }

@@ -29,6 +29,7 @@ const 남긴줄: Array<{ role: string; body?: string; workId?: string }> = [];
 const 시작한것: string[] = [];
 const 만든입력: unknown[] = [];
 const 지운것: string[] = [];
+const 받은쓰기: string[] = [];
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -45,11 +46,15 @@ vi.mock("../../../../lib/easy/store", () => ({
     deleteConversation: async (id: string) => { 지운것.push(id); },
   }),
 }));
+vi.mock("../../../../lib/easy/chat-provider", () => ({
+  createEasyChatProvider: () => ({ writeEnding: async () => ({ headline: "h", body: "b" }) }),
+}));
 vi.mock("../../../../lib/easy/cardnews-steps", () => ({
   cardnewsProject: async (_userId: string, id: string) => 카드작업들[id] ?? null,
   startCardnews: async (_request: Request, id: string) => { 시작한것.push(id); },
-  draftCardnews: async (_request: Request, input: unknown) => {
+  draftCardnews: async (_request: Request, input: unknown, writeEnding?: unknown) => {
     만든입력.push(input);
+    받은쓰기.push(typeof writeEnding);
     return { projectId: "c2", project: { ...새원고, id: "c2" } };
   },
 }));
@@ -69,7 +74,7 @@ beforeEach(() => {
   지난줄들 = [];
   카드작업들 = {};
   새원고 = 원고(2);
-  남긴줄.length = 0; 시작한것.length = 0; 만든입력.length = 0; 지운것.length = 0;
+  남긴줄.length = 0; 시작한것.length = 0; 만든입력.length = 0; 지운것.length = 0; 받은쓰기.length = 0;
 });
 
 describe("「이대로 만들기」 (2단계 §8)", () => {
@@ -124,6 +129,8 @@ describe("조건 바꾸기 (2단계 §7)", () => {
     expect(남긴줄).toEqual([{ conversationId: "conv", role: "image", workId: "c2" }]);
     expect(지운것).toEqual([]);
     expect(시작한것).toEqual([]);
+    // 다시 쓴 원고도 마지막 장을 채운다(2026-09-30 사용자 결정 B).
+    expect(받은쓰기).toEqual(["function"]);
   });
 
   /** 설계 §9: 원고 0장은 조용히 끝내지 않는다. */

@@ -3,6 +3,8 @@ import { easyStoreForUser } from "../../../../lib/easy/store";
 import { cardnewsProject, draftCardnews, startCardnews } from "../../../../lib/easy/cardnews-steps";
 import { EasyStepError } from "../../../../lib/easy/relay";
 import { withLlmMeter } from "../../../../lib/llm/meter";
+import { resolveTextModel } from "@fixup/shared";
+import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
 
@@ -49,8 +51,12 @@ async function act(request: Request): Promise<Response> {
       return Response.json({ ok: true, started: true });
     }
 
+    // 다시 쓴 원고도 빈 마지막 장을 채운다(2026-09-30 사용자 결정 B).
+    const provider = createEasyChatProvider(
+      process.env, resolveTextModel(typeof input.textModel === "string" ? input.textModel : undefined),
+    );
     const { projectId: 새것, project: 새작업 } = await draftCardnews(
-      request, redraftInput(project, { options: readCardOptions(input.options) }),
+      request, redraftInput(project, { options: readCardOptions(input.options) }), (text) => provider.writeEnding(text),
     );
     const flow = 새작업.data.flow;
     if (!flow?.cards.length) {

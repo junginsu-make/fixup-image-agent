@@ -54,6 +54,7 @@ vi.mock("../../../../lib/easy/chat-provider", () => ({
   createEasyChatProvider: () => ({
     decide: async () => 판단,
     decideRoles: async () => 역할판단,
+    writeEnding: async () => ({ headline: "핵심만 다시", body: "· 목표부터" }),
   }),
 }));
 vi.mock("../../../../lib/easy/read-photos", () => ({
@@ -104,6 +105,13 @@ vi.mock("../../sns/projects/[id]/generate/route", () => ({
   POST: async () => {
     부른라우트.push({ step: "cardnews-generate", body: {} });
     return Response.json({ ok: true });
+  },
+}));
+vi.mock("../../sns/projects/[id]/cards/[index]/route", () => ({
+  PATCH: async (req: Request) => {
+    const body = await req.json();
+    부른라우트.push({ step: "cardnews-ending", body });
+    return Response.json({ ok: true, project: 원고작업 });
   },
 }));
 vi.mock("../../../../lib/sns/feature", () => ({ isWebSourceEnabled: () => false }));
@@ -227,6 +235,19 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     expect(json.talked).toBe(true);
     expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant"]);
     expect(남긴줄[1]!.body).toContain("자막이 없습니다");
+  });
+});
+
+describe("마지막 장 (2026-09-30 사용자 결정 B)", () => {
+  it("빈 마지막 장이 있으면 고른 글 모델이 쓴 정리 문장으로 채운다", async () => {
+    역할판단 = 역할(["style", false]);
+    원고작업 = { ...원고작업, data: { ...원고작업.data, flow: { ...원고작업.data.flow, cards: [
+      ...원고작업.data.flow.cards,
+      { index: 3, role: "ending", kind: "generated", copy: { headline: "핵심 내용을 기억해 주세요" }, status: "pending" },
+    ] } } };
+    await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] });
+    expect(부른라우트.map((c) => c.step)).toEqual(["cardnews-project", "cardnews-plan", "cardnews-ending"]);
+    expect(부른라우트[2]!.body).toEqual({ headline: "핵심만 다시", body: "· 목표부터" });
   });
 });
 

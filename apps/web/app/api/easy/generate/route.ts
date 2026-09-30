@@ -446,7 +446,8 @@ async function cardnewsTurn(ctx: {
   await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.prompt });
   if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
 
-  const { projectId, project } = await draftCardnews(ctx.request, 입력);
+  // 빈 마지막 장은 고른 글 모델이 정리 문장으로 채운다(2026-09-30 사용자 결정 B).
+  const { projectId, project } = await draftCardnews(ctx.request, 입력, (text) => ctx.provider.writeEnding(text));
   const flow = project.data.flow;
   if (!flow?.cards.length) {
     /*

@@ -1,6 +1,8 @@
 import { POST as createCardnews } from "../../app/api/sns/projects/route";
 import { POST as planCardnews } from "../../app/api/sns/projects/[id]/plan/route";
 import { POST as generateCardnews } from "../../app/api/sns/projects/[id]/generate/route";
+import { PATCH as patchCardCopy } from "../../app/api/sns/projects/[id]/cards/[index]/route";
+import { endingPrompt, endingToFill, fallbackEnding, readEnding } from "../../app/easy/cardnews-ending";
 import { snsFlowStoreForUser } from "../sns-flow-store";
 import { refreshProjectAssetUrls } from "../sns/runtime";
 import { EasyStepError, read, relay } from "./relay";
@@ -13,10 +15,18 @@ import type { CardnewsProjectLike } from "../../app/easy/cardnews-view";
 
 export type EasyCardnewsProject = CardnewsProjectLike & { title: string };
 
-/** 만들기 → 원고. 원고는 공짜다(크레딧은 `generate` 가 잡는다). */
+/** 마지막 장 정리 문장을 쓰는 함수. 구조화 응답 `{ headline, body }` 를 돌려준다. */
+export type WriteEnding = (prompt: string) => Promise<unknown>;
+
+/**
+ * 만들기 → 원고 → **마지막 장 채우기**. 원고는 공짜다(크레딧은 `generate` 가 잡는다).
+ *
+ * 마지막 장은 기존 흐름이 한 줄만 넣으므로 「쉽게」가 채운다(`app/easy/cardnews-ending.ts`).
+ */
 export async function draftCardnews(
   request: Request,
   input: unknown,
+  writeEnding?: WriteEnding,
 ): Promise<{ projectId: string; project: CardnewsProjectLike }> {
   const created = await read(await createCardnews(relay(request, "/api/sns/projects", input, "cardnews-project")), "원고 준비");
   const projectId = created.project?.id as string | undefined;
@@ -28,7 +38,36 @@ export async function draftCardnews(
     ),
     "원고 쓰기",
   );
-  return { projectId, project: planned.project as CardnewsProjectLike };
+  const project = planned.project as CardnewsProjectLike;
+  return { projectId, project: await fillEnding(request, projectId, project, writeEnding) };
+}
+
+/**
+ * 빈 마지막 장을 정리 문장으로 채운다. AI 가 못 쓰면 앞 장 제목 목록으로 채운다.
+ * **저장이 실패해도 원고는 돌려준다.** 마지막 장 하나 때문에 쓴 원고를 잃지 않는다.
+ */
+async function fillEnding(
+  request: Request,
+  projectId: string,
+  project: CardnewsProjectLike,
+  writeEnding?: WriteEnding,
+): Promise<CardnewsProjectLike> {
+  const index = endingToFill(project);
+  if (index === undefined) return project;
+  const written = writeEnding ? readEnding(await writeEnding(endingPrompt(project)).catch(() => undefined)) : undefined;
+  try {
+    const saved = await read(
+      await patchCardCopy(
+        relay(request, `/api/sns/projects/${projectId}/cards/${index}`, written ?? fallbackEnding(project), "cardnews-ending"),
+        { params: Promise.resolve({ id: projectId, index: String(index) }) },
+      ),
+      "마지막 장",
+    );
+    return saved.project as CardnewsProjectLike;
+  } catch (error) {
+    console.warn(`[easy] 마지막 장을 채우지 못했습니다 project=${projectId}`, error instanceof Error ? error.message : error);
+    return project;
+  }
 }
 
 /** 「이대로 만들기」. 크레딧은 카드뉴스 `generate` 가 잡는다. */
