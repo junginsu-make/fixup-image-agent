@@ -246,7 +246,9 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
       if (!response.ok || !payload.project) throw new Error(payload.message ?? "프로젝트를 만들지 못했습니다.");
       // 기획은 값이 나가는 요청이다 — 식별자가 없으면 서버가 예약을 400 으로 거절한다.
       const planned = await billableFetch(`/api/sns/projects/${payload.project.id}/plan`);
-      await planned.json();
+      const plannedBody = await planned.json() as { ok?: boolean; message?: string };
+      // 크레딧 0 회원이 이제 이 길로 온다(설계 §3.2) — 예약 거절 문구를 버리지 않고 보인다.
+      if (!planned.ok || !plannedBody.ok) throw new Error(plannedBody.message ?? "기획을 시작하지 못했습니다.");
       router.push(`/sns/${payload.project.id}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "프로젝트를 만들지 못했습니다.");

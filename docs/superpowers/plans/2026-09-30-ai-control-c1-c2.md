@@ -2655,7 +2655,11 @@ systemctl is-active fixup-image-agent                                   # active
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/         # 200
 sudo readlink -f /opt/fixup-image-agent/current                         # 새 릴리스 id
 sudo grep -rq "무료 질문 10회를 모두 썼습니다" /opt/fixup-image-agent/current/apps/web/.next && echo 반영됨
+sudo grep -rq "ad:export:cutout" /opt/fixup-image-agent/current/apps/web/.next && echo 반영됨
 ```
+
+**둘 다 「반영됨」이 나와야 한다. 하나라도 안 나오면 SQL 단계(Step 4 이후)로 가지 않는다** — 빌드 안에 이번
+변경 문구가 없다는 뜻이라, 코드보다 SQL 이 먼저 나간 것과 같은 위험(옛 코드가 새 사유·구분을 모른다)이 있다.
 
 이 시점의 동작: 새 문구는 아직 쓰이지 않는다(SQL 전). 네 길은 기존 작업 이름이라 지금 SQL 로 그대로 돈다(크레딧 0 회원도 아직 통과).
 
@@ -2746,6 +2750,8 @@ select p.oid::regprocedure, md5(regexp_replace(prosrc, E'\r', '', 'g'))
  where n.nspname='public' and p.proname='credit_reserve';
 ```
 Expected: 한 줄, 지문이 저장소 새 판과 같다(Step 2 의 로컬 명령에서 `until: '202609300001'` 로 잰 값).
+**「새 판」은 최종 리뷰로 살아 있는 덩어리 기준으로 고친 뒤의 `202609300001_ai_usage_control.sql` 이다** —
+`balance` 기준의 옛 초안으로 잰 지문과는 다르니, 반드시 지금 저장소 파일로 다시 재 보고 비교한다.
 관리자 계정으로 화면 왼쪽 아래 도우미에게 한 번 묻는다 → 답이 온다(관리자가 막히지 않았다).
 
 - [ ] **Step 7: 되돌리기(문제가 생겼을 때만)**
