@@ -17,6 +17,9 @@ import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
 import { EasyAskChoice } from "./_components/ask-choice";
+import { EasyPhotoAsk } from "./_components/photo-ask";
+import { photoAnswer, photoAskReady, pickPhoto, startPhotoAsk, type PhotoAskState } from "./photo-ask-state";
+import type { EasyPhotoRole } from "./photo-roles";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
@@ -106,6 +109,10 @@ export function EasyClient({
   const [askRatio, setAskRatio] = React.useState("");
   const [askLook, setAskLook] = React.useState("");
   /*
+   * **사진을 어떻게 쓸지 묻는 중**(설계 §2-5). 비율 물음처럼 화면에만 있다.
+   */
+  const [photoAsking, setPhotoAsking] = React.useState<PhotoAskState | null>(null);
+  /*
    * **만든 조건.** 다시 열 때는 서버가 읽어 주고, 지금 만든 것은 만들면서 적는다.
    * 새로고침을 기다렸다 보여 주면 방금 만든 것만 조건이 비어 보인다.
    */
@@ -175,6 +182,8 @@ export function EasyClient({
         const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json();
         if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");
         setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
+        // 사진이 바뀌면 묻던 것은 뜻을 잃는다(Review Focus 1).
+        setPhotoAsking(null);
       } catch (cause) {
         setError({
           message: cause instanceof Error ? cause.message : "그림을 올리지 못했습니다.",
@@ -195,6 +204,7 @@ export function EasyClient({
       const 있는것 = new Set(current.map((one) => one.id));
       return [...current, ...picked.filter((one) => !있는것.has(one.id))];
     });
+    setPhotoAsking(null);
   }
 
   /**
@@ -235,9 +245,14 @@ export function EasyClient({
    */
   async function send(
     /** 물어본 뒤 다시 보낼 때 쓴다. 비우면 입력창의 말을 보낸다. */
-     다시?: { prompt: string; ratio: string; look: string },
+     다시?: { prompt: string; ratio?: string; look?: string; photoRoles?: Array<{ id: string; role: EasyPhotoRole }> },
   ) {
-    const prompt = 다시?.prompt ?? draft.trim();
+    /*
+     * **사진을 물은 뒤 말로 답하면** 처음 말과 답을 잇는다(설계 §2-5).
+     */
+    const 말답 = !다시 && photoAsking && draft.trim() ? photoAnswer(photoAsking, draft) : undefined;
+    const prompt = 다시?.prompt ?? 말답?.prompt ?? draft.trim();
+    const photoRoles = 다시?.photoRoles ?? 말답?.photoRoles;
     if (!prompt || (!다시 && !turn.canSend)) return;
 
     /*
@@ -259,6 +274,7 @@ export function EasyClient({
 
     setSending(true);
     setError(null);
+    setPhotoAsking(null);
 
     if (다시) {
       // 물음 줄을 거둔다. 내 말은 이미 그려져 있다.
@@ -273,7 +289,7 @@ export function EasyClient({
       setAskRatio("");
       setAskLook("");
       // 내 말을 먼저 그린다. 답이 말일지 그림일지는 아직 모른다 — 서버가 가른다.
-      setMessages((current) => [...current, { id: `user-${자리}`, role: "user", body: prompt }]);
+      setMessages((current) => [...current, { id: `user-${자리}`, role: "user", body: 말답 ? draft.trim() : prompt }]);
     }
 
     try {
@@ -298,6 +314,8 @@ export function EasyClient({
           textModel,
           imageModel,
           referenceIds: attachments.map((one) => one.id),
+          // 물음에 답한 것. 서버가 다시 확인한다(설계 §2-5).
+          ...(photoRoles?.length ? { photoRoles } : {}),
           // 고른 것이 있으면 함께 보낸다. 없으면 서버가 물어볼지 정한다.
           ...(다시?.ratio ? { ratio: 다시.ratio } : {}),
           ...(다시?.look ? { look: 다시.look } : {}),
@@ -310,6 +328,14 @@ export function EasyClient({
          * 친 말을 들고 있다가 고른 뒤 그대로 다시 보낸다.
          */
         setAsking(prompt);
+        return;
+      }
+      if (body.ok && body.photoAsk) {
+        /*
+         * **사진을 어떻게 쓸지 묻고 끝낸다**(설계 §2-5). 값은 안 들었다.
+         * 고르거나 말로 답하면 이 말과 함께 다시 보낸다.
+         */
+        setPhotoAsking(startPhotoAsk(prompt, body.photoAsk.reason, body.photoAsk.rows));
         return;
       }
       if (body.ok && body.talked) {
@@ -354,6 +380,7 @@ export function EasyClient({
             model: imageModel,
             ratio: typeof body.ratio === "string" ? body.ratio : ratioId,
             references: attachments.length,
+            ...(typeof body.roles === "string" && body.roles ? { roles: body.roles } : {}),
           },
         }));
         setMessages((current) => current.map((one) =>
@@ -472,7 +499,25 @@ export function EasyClient({
             />
           ) : null}
 
-          {turn.busy && !asking && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
+          {photoAsking ? (
+            <EasyPhotoAsk
+              reason={photoAsking.reason}
+              rows={photoAsking.rows.map((row) => {
+                const 붙인것 = attachments.find((one) => one.id === row.id);
+                return { ...row, url: 붙인것?.url, title: 붙인것?.title };
+              })}
+              picked={photoAsking.picked}
+              ready={photoAskReady(photoAsking)}
+              disabled={turn.busy}
+              onPick={(id, role) => setPhotoAsking((current) => (current ? pickPhoto(current, id, role) : current))}
+              onSubmit={() => {
+                const 답 = photoAnswer(photoAsking);
+                void send({ prompt: 답.prompt, photoRoles: 답.photoRoles });
+              }}
+            />
+          ) : null}
+
+          {turn.busy && !asking && !photoAsking && shown[shown.length - 1]?.role === "user" ? <EasyThinkingRow /> : null}
 
           {/*
             붙일지 묻는 단추. **첫 화면에서 한 번만**이다 — 되묻지 않는다(§6).
@@ -520,7 +565,7 @@ export function EasyClient({
               <button
                 type="button"
                 aria-label="빼기"
-                onClick={() => setAttachments((c) => c.filter((x) => x.id !== one.id))}
+                onClick={() => { setAttachments((c) => c.filter((x) => x.id !== one.id)); setPhotoAsking(null); }}
                 className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background px-1.5 text-meta"
               >
                 ×

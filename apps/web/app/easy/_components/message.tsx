@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { Loader2 } from "lucide-react";
-import { cn } from "@fixup/ui";
+import Link from "next/link";
+import { Button, cn } from "@fixup/ui";
+import { DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
 
@@ -172,12 +174,24 @@ export function EasyMessageRow({
     대화의 한 줄이므로 같은 자리에서 같은 모양으로 온다.
   */
   if (message.role === "system" || message.role === "assistant") {
+    const 말풍선 = "whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-base leading-7";
     return (
       <div className="flex items-start gap-2">
         <AssistantMark />
-        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-base leading-7">
-          {message.body}
-        </p>
+        {isDetailPageGuide(message) ? (
+          /*
+            **상세페이지 안내 줄에만 단추를 단다**(설계 §2-7). 대화 표에 갈래를
+            더하지 않고 문장으로 가른다 — 다시 열어도 그대로 보인다.
+          */
+          <div className="grid max-w-[85%] gap-2">
+            <p className={말풍선}>{message.body}</p>
+            <Button asChild size="sm" variant="secondary" className="w-fit">
+              <Link href={DETAIL_PAGE_HREF}>상세페이지 만들기 열기</Link>
+            </Button>
+          </div>
+        ) : (
+          <p className={cn("max-w-[85%]", 말풍선)}>{message.body}</p>
+        )}
       </div>
     );
   }
