@@ -59,3 +59,42 @@ describe("비용 표", () => {
     expect(sql).toMatch(/grant\s+execute\s+on\s+function\s+public\.ai_cost_record\([^)]*\)\s+to\s+service_role/i);
   });
 });
+
+/* ── C4(202609300003) ─────────────────────────────────────── */
+
+const C4 = "202609300003_ai_cost_admin.sql";
+
+describe("C4 도 새것만 더한다", () => {
+  it("보고와 스위치 둘만 정의한다", () => {
+    expect(existsSync(path.join(migrationsDir, C4))).toBe(true);
+    expect(정의한함수(code(C4)).sort()).toEqual(["admin_ai_cost_report", "admin_set_ai_paused"]);
+  });
+
+  it("기존 표를 바꾸지 않는다(alter·drop 없음)", () => {
+    const sql = code(C4);
+    expect(sql).not.toMatch(/\balter\s+table\b/i);
+    expect(sql).not.toMatch(/\bdrop\s+(table|function|index)\b/i);
+  });
+});
+
+describe("보고와 스위치", () => {
+  const sql = existsSync(path.join(migrationsDir, C4)) ? code(C4) : "";
+
+  it("오늘·이번 달은 한국 시각으로 자른다", () => {
+    expect(sql).toMatch(/date_trunc\('day',\s*p_now\s+at\s+time\s+zone\s+'Asia\/Seoul'\)/i);
+    expect(sql).toMatch(/date_trunc\('month',\s*p_now\s+at\s+time\s+zone\s+'Asia\/Seoul'\)/i);
+  });
+
+  it("스위치는 정확히 '1'/'0' 을 쓰고, 감사 한 줄의 action 은 ai_pause/ai_resume, 대상은 빈 배열", () => {
+    expect(sql).toMatch(/case\s+when\s+p_paused\s+then\s+'1'\s+else\s+'0'\s+end/i);
+    expect(sql).toMatch(/case\s+when\s+p_paused\s+then\s+'ai_pause'\s+else\s+'ai_resume'\s+end/i);
+    expect(sql).toMatch(/'\{\}'::uuid\[\]/);
+  });
+
+  it("두 함수 모두 서비스 권한만 부른다", () => {
+    for (const signature of ["admin_ai_cost_report\\(integer,\\s*timestamptz\\)", "admin_set_ai_paused\\(uuid,\\s*boolean,\\s*text\\)"]) {
+      expect(sql).toMatch(new RegExp(`revoke\\s+all\\s+on\\s+function\\s+public\\.${signature}\\s+from\\s+public,\\s*anon,\\s*authenticated`, "i"));
+      expect(sql).toMatch(new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${signature}\\s+to\\s+service_role`, "i"));
+    }
+  });
+});
