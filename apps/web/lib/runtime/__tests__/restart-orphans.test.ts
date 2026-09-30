@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-const local = vi.hoisted(() => ({ on: false }));
-vi.mock("../../local-store", () => ({ isLocalStoreEnabled: () => local.on }));
 vi.mock("../../supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: async () => ({ data: null, error: null }) }) }));
 
-const { closeRestartOrphans } = await import("../restart-orphans");
+const { closeRestartOrphans, isLocalStoreEnabled: isLocalStoreEnabledInline } = await import("../restart-orphans");
 const { BOOT_ID } = await import("../boot-id");
+// 원본은 여기서만 부른다 — edge 번들에는 이 시험 파일이 안 들어간다.
+const { isLocalStoreEnabled: isLocalStoreEnabledOriginal } = await import("../../local-store");
 
-beforeEach(() => { process.env.CREDIT_LEDGER = "1"; local.on = false; });
+// `isLocalStoreEnabled` 는 이제 이 파일이 직접 갖는다(build fix — ../../local-store 를
+// 불러오면 edge 번들에서 node:fs 해석이 죽는다). 그래서 모듈을 모킹하는 대신 그 함수가
+// 실제로 읽는 환경변수(`restart-orphans.ts` 의 조건과 동일: NODE_ENV !== "production" &&
+// LOCAL_STORE === "1")를 직접 조작한다. vitest 는 NODE_ENV 를 "test" 로 두므로 그대로면 꺼진 것.
+beforeEach(() => { process.env.CREDIT_LEDGER = "1"; delete process.env.LOCAL_STORE; });
 
 describe("closeRestartOrphans", () => {
   it("이 프로세스의 표식으로 DB 정리 함수를 한 번 부르고 결과를 남긴다", async () => {
@@ -40,7 +44,7 @@ describe("closeRestartOrphans", () => {
     const rpc = async (name: string) => { calls.push(name); return { data: null, error: null }; };
     process.env.CREDIT_LEDGER = "";
     await closeRestartOrphans({ rpc, log: () => undefined });
-    process.env.CREDIT_LEDGER = "1"; local.on = true;
+    process.env.CREDIT_LEDGER = "1"; process.env.LOCAL_STORE = "1";
     await closeRestartOrphans({ rpc, log: () => undefined });
     expect(calls).toEqual([]);
   });
@@ -72,5 +76,30 @@ describe("closeRestartOrphans", () => {
       error: (message, detail) => errors.push([message, detail]),
     });
     expect(errors).toEqual([]);
+  });
+});
+
+/**
+ * **build fix 동등성 시험**: `restart-orphans.ts` 가 `../../local-store` 대신
+ * 직접 갖는 `isLocalStoreEnabled` 조건이 원본(`local-store/index.ts:129-131`)과
+ * 갈라지면 안 된다 — 갈리면 기동 정리가 로컬 저장소에서 잘못 돌거나, 반대로
+ * 운영에서 조용히 안 돌 수 있다. 두 함수 다 시그니처가 같다(선택 인자 하나,
+ * 기본값 `process.env`) — `NODE_ENV` 는 vitest 프로세스에서 읽기 전용이라 실제
+ * `process.env` 를 바꿔 끼울 수 없으므로, 둘 다 같은 가짜 environment 객체를
+ * 넣어 비교한다(`lib/__tests__/local-store.test.ts` 와 같은 방식).
+ */
+describe("isLocalStoreEnabled 동등성 — 복제한 조건이 원본과 갈리지 않는지", () => {
+  const combos: Array<[nodeEnv: string | undefined, localStore: string | undefined]> = [
+    ["test", "1"],
+    ["test", "0"],
+    ["test", undefined],
+    ["production", "1"],
+    ["production", undefined],
+    ["development", "1"],
+  ];
+
+  it.each(combos)("NODE_ENV=%s LOCAL_STORE=%s 에서 원본과 같은 값", (nodeEnv, localStore) => {
+    const environment = { NODE_ENV: nodeEnv, LOCAL_STORE: localStore } as NodeJS.ProcessEnv;
+    expect(isLocalStoreEnabledInline(environment)).toBe(isLocalStoreEnabledOriginal(environment));
   });
 });

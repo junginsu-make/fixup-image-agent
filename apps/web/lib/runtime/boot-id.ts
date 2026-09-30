@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 
 /**
  * **이 프로세스의 표식.** 뜰 때 한 번 만든다(설계 §3.5).
@@ -12,6 +11,11 @@ import { randomUUID } from "node:crypto";
  * 와 라우트 핸들러처럼 서로 다른 번들 레이어에서 따로 인스턴스화할 수 있는데, 그러면 기동
  * 정리가 부르는 값과 예약이 적는 값이 갈려, 방금 뜬 이 프로세스의 새 예약을 「내 것이
  * 아니다」로 착각해 닫아버릴 수 있다.
+ *
+ * **`node:crypto` 대신 전역 Web Crypto 를 쓴다**(build fix, 시험 서버 실측). `instrumentation.ts`
+ * 가 미들웨어 때문에 edge 번들로도 한 번 더 컴파일되는데, `node:` 접두 모듈은 그 번들에서
+ * 해석 자체가 안 돼 빌드가 죽는다(`UnhandledSchemeError`, `apps/web/lib/browser-safe.ts` 와
+ * 같은 전역 사용). `globalThis.crypto.randomUUID` 는 두 번들 모두, Node 20+ 에서도 그대로 있다.
  */
 const holder = globalThis as typeof globalThis & { __fixupBootId?: string };
-export const BOOT_ID: string = (holder.__fixupBootId ??= randomUUID());
+export const BOOT_ID: string = (holder.__fixupBootId ??= globalThis.crypto.randomUUID());

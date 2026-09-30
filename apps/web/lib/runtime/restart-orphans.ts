@@ -1,8 +1,20 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/admin";
-import { isLocalStoreEnabled } from "../local-store";
 import { isCreditLedgerEnabled } from "../membership/credit-ledger";
 import { BOOT_ID } from "./boot-id";
+
+/**
+ * `../local-store` 의 것과 같은 조건(그 파일 :129-131) 을 여기 따로 둔다. 그 모듈은
+ * `node:fs`·`node:fs/promises`·`node:path` 를 최상단에서 불러오는데, 이 파일은
+ * `instrumentation.ts` 에서 불리고 그 파일은 미들웨어 때문에 edge 번들로도 컴파일된다
+ * (build fix, 시험 서버 실측 — `UnhandledSchemeError: node:path`). edge 번들은 그 스킴을
+ * 아예 못 읽어 **어느 쪽도 안 부르는 조건문 뒤라도** 빌드가 죽는다. 값이 갈리면 안 되니
+ * 바꿀 때 두 자리를 같이 바꾼다 — 원본과 시그니처(선택 인자 하나, 기본값 `process.env`)도
+ * 그대로 맞춰 뒀다. 동등성은 `__tests__/restart-orphans.test.ts` 가 원본과 나란히 부르며 잰다.
+ */
+export function isLocalStoreEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
+  return environment.NODE_ENV !== "production" && environment.LOCAL_STORE === "1";
+}
 
 type Rpc = (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 
