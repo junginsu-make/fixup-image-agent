@@ -72,6 +72,18 @@ describe("스위치", () => {
   it("이미 도는 그림은 끝까지 돌 수 있다고 적는다(설계 §3.3)", () => {
     expect(글({ report: 보고, paused: false, usdKrw: 1000 })).toContain("이미 제출돼 도는 그림은 끝까지 돌 수 있습니다");
   });
+
+  /**
+   * `readAiPausedForAdmin` 이 던지면(설계 2026-09-30 §3.3) 페이지가 `null` 로 받는다.
+   * **틀린 「켜짐/멈춤」을 절대 보이지 않는다** — 모른다고 말하고 단추를 숨긴다.
+   */
+  it("상태를 못 읽으면(paused=null) 모른다고 말하고 단추를 숨긴다", () => {
+    const 보인것 = 글({ report: 보고, paused: null, usdKrw: 1000 });
+    expect(보인것).toContain("상태를 읽지 못했습니다");
+    expect(보인것).not.toContain("AI 전체 멈춤");
+    expect(보인것).not.toContain("AI 다시 켜기");
+    expect(보낼값({ report: 보고, paused: null, usdKrw: 1000 })).toBeUndefined();
+  });
 });
 
 describe("숫자", () => {
@@ -109,5 +121,20 @@ describe("옛 장부는 「옛 기준」으로 보인다(설계 §3.4)", () => {
   it("옛 비용 패널과 회원 목록의 비용 칸에 「옛 기준」을 적는다", () => {
     expect(읽는다("CostPanel.tsx")).toContain("옛 기준");
     expect(읽는다("member-list/member-table.tsx")).toContain("비용(옛 기준)");
+  });
+});
+
+/**
+ * **스위치 상태를 못 읽어도 시스템 탭 전체가 죽지 않는다**(설계 §3.3).
+ *
+ * `readAiPausedForAdmin` 은 여전히 던진다(§3.3 — 모르는 채 「켜짐」으로 보이면 안 된다는 계약은
+ * 그대로다). 그 대신 **이 파일에서 잡아** `null` 로 넘긴다 — 문의함·플랜까지 함께 죽이지 않는다.
+ */
+describe("페이지가 스위치 읽기 실패를 가둔다", () => {
+  const 읽는다 = (name: string) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
+
+  it("readAiPausedForAdmin() 을 .catch( 로 감싼다", () => {
+    const page = 읽는다("system/page.tsx");
+    expect(page).toMatch(/readAiPausedForAdmin\(\)\s*\.catch\(/);
   });
 });

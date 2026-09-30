@@ -6,6 +6,16 @@
 --
 -- 「오늘」「이번 달」은 **한국 시각**이다. 기존 `admin_cost_*` 는 DB 시각(UTC)으로 잘라
 -- 한국 0시~9시 호출이 「어제」로 잡힌다(202609100004).
+--
+-- ── 처음 한 줄을 미리 심는다 ────────────────────────────────────────
+--
+-- 행이 아예 없으면 `admin_set_ai_paused` 의 `select ... for update` 가 잠글 대상이 없어
+-- **아무것도 잠그지 않는다.** 배포 뒤 첫 스위치를 두 번 거의 동시에 누르면(관리자 둘, 또는
+-- 화면을 두 번 클릭) 두 트랜잭션이 서로 안 걸리고 둘 다 `v_old is null → '0'` 을 보고 둘 다
+-- 「바뀌었다」로 여겨 감사 줄이 두 개 남는다. 행을 미리 심어 두면 그 행 자체가 잠기는
+-- 대상이 되어 두 번째 호출이 첫 번째가 끝날 때까지 기다린다.
+insert into public.app_settings(key, value) values ('ai_paused', '0')
+on conflict (key) do nothing;
 
 create or replace function public.admin_ai_cost_report(
   p_days integer default 30,

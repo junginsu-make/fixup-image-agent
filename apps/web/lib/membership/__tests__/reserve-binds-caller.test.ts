@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * **예약이 성공하면 그 요청의 비용 문맥을 채운다**(설계 2026-09-30 §3.4).
@@ -42,7 +42,13 @@ const PROJECT = "44444444-4444-4444-8444-444444444444";
 const req = () => new Request("http://local/api/x", { headers: { "x-idempotency-key": REQUEST } });
 const usage = { pricing_policy: "image-v2", balance: 5, available: 5, reserved: 0, used: 0 };
 
-beforeEach(() => { process.env.CREDIT_LEDGER = "1"; });
+/*
+  `process.env.CREDIT_LEDGER` 를 직접 쓰면 이 파일이 끝나도 값이 남는다 — 같은 워커가 다음
+  시험 파일을 이어 돌리면 CREDIT_LEDGER 가 뜻하지 않게 켜진 채로 시작한다. `vi.stubEnv` 는
+  vitest 가 값을 기억해 뒀다가 `unstubAllEnvs` 로 정확히 되돌린다.
+*/
+beforeEach(() => { vi.stubEnv("CREDIT_LEDGER", "1"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("예약이 성공하면", () => {
   it("회원·요청·작업 키를 문맥에 싣는다 — 작업 키는 resource 에서 id 를 뺀 것", async () => {

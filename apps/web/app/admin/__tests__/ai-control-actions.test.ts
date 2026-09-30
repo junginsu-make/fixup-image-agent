@@ -69,9 +69,13 @@ describe("스위치 바꾸기", () => {
     expect(calls).toEqual([]);
   });
 
-  it("DB 가 거절하면 알린다 — 바뀐 줄 알고 넘어가지 않게", async () => {
+  it("DB 가 거절하면 던지지 않고 ?error= 로 돌려보낸다 — 바뀐 줄 알고 넘어가지 않게", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
     rpcError = { message: "admin_required" };
-    await expect(누른다("1")).rejects.toThrow("AI 멈춤 스위치를 바꾸지 못했습니다");
-    expect(redirected).toEqual([]);
+    await 누른다("1");
+    expect(redirected).toHaveLength(1);
+    expect(redirected[0]).toMatch(/^\/admin\/system\?error=/);
+    expect(decodeURIComponent(redirected[0]!.split("error=")[1]!)).toBe("AI 멈춤 스위치를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    errorLog.mockRestore();
   });
 });

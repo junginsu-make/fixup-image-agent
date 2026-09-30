@@ -98,14 +98,19 @@ export function replaceAiCostWriterForTest(next: AiCostWriter | null): void {
 }
 
 export async function writeAiCostRow(caller: AiCaller | undefined, entry: AiCostEntry): Promise<void> {
-  const row = toAiCostRow(caller, entry);
+  /*
+    `toAiCostRow` 도 try 안에서 부른다 — 밖에서 부르면 그 호출이 던질 때(예: 잘못된 타입의
+    `entry.usd`) 처리 안 된 거부(unhandled rejection)가 되어 요청과 무관하게 프로세스를
+    흔든다. 이 함수의 계약은 "절대 던지지 않는다"(§3.4)인데 모양을 만드는 자리가 빠져 있었다.
+  */
   try {
+    const row = toAiCostRow(caller, entry);
     await writer(row);
   } catch (error) {
     console.warn("[ai-cost] 비용 한 줄을 적지 못했습니다", {
-      operation: row.p_operation,
-      provider: row.p_provider,
-      model: row.p_model,
+      operation: caller?.operation ?? UNBOUND_OPERATION,
+      provider: entry.provider,
+      model: entry.model,
       message: error instanceof Error ? error.message : String(error),
     });
   }

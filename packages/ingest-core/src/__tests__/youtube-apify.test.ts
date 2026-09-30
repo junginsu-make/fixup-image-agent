@@ -113,6 +113,17 @@ describe("apify 비용 알림(설계 2026-09-30 §3.4)", () => {
     expect(받은것).toEqual([{ actor: "automation-lab~youtube-transcript", failed: true }]);
   });
 
+  it("시간 초과·네트워크 오류로 fetch 자체가 끊겨도 실패를 한 번 알리고 다시 던진다", async () => {
+    // response 를 못 받으면(끊김) 원래 실행 사실이 통째로 사라진다 — 액터는 이미 돌았을 수 있다.
+    const 받은것: unknown[] = [];
+    await expect(fetchApifyTranscript(URL, {
+      onRun: (run) => 받은것.push(run),
+      fetchImpl: (async () => { throw new Error("fetch failed"); }) as unknown as typeof fetch,
+      environment: { APIFY_TOKEN: "k" },
+    })).rejects.toThrow(/fetch failed/);
+    expect(받은것).toEqual([{ actor: "automation-lab~youtube-transcript", failed: true }]);
+  });
+
   it("토큰이 없으면 부르지도 알리지도 않는다", async () => {
     const 받은것: unknown[] = [];
     await expect(fetchApifyTranscript(URL, { onRun: (run) => 받은것.push(run), environment: {} })).rejects.toThrow();

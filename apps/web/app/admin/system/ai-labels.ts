@@ -15,6 +15,14 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 /** 작업 키 = 예약 resource 에서 id 를 뺀 것(`lib/ai-cost/keys.ts`). */
 const OPERATION_LABEL: Record<string, string> = {
+  /*
+    **크기를 몰라 resource 가 없을 때**(주소만 있거나 아예 없는 예약, `costOperationKey` 가
+    작업 이름을 그대로 돌려준다 — 최종 전체 리뷰, 2026-09-30). 그림을 만든 작업이라는 사실은
+    같으므로 각자의 「그림」 칸과 같은 이름표를 단다 — 새 칸으로 나뉘면 합계에서 조용히 빠진다.
+  */
+  "poster_image": "포스터 · 그림",
+  "sns_image": "카드뉴스 · 그림",
+  "pdp_image": "상세페이지 · 그림",
   "sns": "카드뉴스 · 그림",
   "sns:plan": "카드뉴스 · 기획·원고",
   "sns:caption": "카드뉴스 · 게시글 문구",

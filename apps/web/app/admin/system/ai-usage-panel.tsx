@@ -11,7 +11,7 @@ import { setAiPausedAction } from "./ai-control-actions";
  * 보고 바로 결정하도록 숫자와 스위치를 한 카드에 둔다. 숫자는 `ai_cost_events`(호출마다 한 줄)를
  * **한국 시각**으로 모은 것이다. 자동으로 멈추는 것은 없다(D2) — 사람만 누른다.
  */
-export function AiUsagePanel({ report, paused, usdKrw }: { report: AiCostReport | null; paused: boolean; usdKrw: number }) {
+export function AiUsagePanel({ report, paused, usdKrw }: { report: AiCostReport | null; paused: boolean | null; usdKrw: number }) {
   return (
     <Card>
       <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
@@ -33,7 +33,22 @@ export function AiUsagePanel({ report, paused, usdKrw }: { report: AiCostReport 
   );
 }
 
-function PauseSwitch({ paused }: { paused: boolean }) {
+function PauseSwitch({ paused }: { paused: boolean | null }) {
+  if (paused === null) {
+    /*
+      **상태를 못 읽으면 단추를 숨긴다**(설계 2026-09-30 §3.3). 「켜짐」이라고 잘못 보이면
+      관리자가 실제로는 멈춰 있는 걸 모르고 지나치고, 「멈춤」이라고 잘못 보이면 멀쩡히
+      도는 서비스를 급하게 건드리게 된다 — 틀린 상태를 보이느니 모른다고 말하는 쪽이 낫다.
+    */
+    return (
+      <div className="flex flex-col items-end gap-2">
+        <Badge variant="outline">상태 확인 필요</Badge>
+        <p className="max-w-xs text-right text-xs text-destructive">
+          멈춤 스위치 상태를 읽지 못했습니다. 새로고침해서 다시 확인해 주세요.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-end gap-2">
       <Badge variant={paused ? "destructive" : "secondary"}>{paused ? "AI 멈춤" : "AI 켜짐"}</Badge>

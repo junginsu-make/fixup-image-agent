@@ -3717,6 +3717,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | 웹검색 도구 1회 `WEB_SEARCH_CALL_USD` | `packages/shared/src/provider-price.ts` | $0.01 | OpenAI 가격표(웹검색 도구, 조사 모델 `gpt-5.6-sol` 기준) |
 | Apify 자막 1회 `APIFY_YOUTUBE_RUN_ESTIMATE_USD` | 같은 파일 | $0.01 | Apify 콘솔의 `automation-lab~youtube-transcript` 실행 비용 |
 
+**이 대조는 배포 전 관문이다 — 셋 다 대조를 마치기 전에는 Step 7(앱 배포)로 넘어가지 않는다.** 틀린 단가는 그대로 화면(「AI 사용 비용」)과 감사 기록에 실려, 나중에 고쳐도 이미 적힌 옛 줄의 금액은 그대로 남는다(과거 값을 다시 계산하지 않는다).
+
 - [ ] **Step 2: 다른 터미널·운영 환경 확인(읽기만)**
 
 ```bash
@@ -3826,6 +3828,14 @@ Expected: 마이그레이션의 NOTICE 둘과 마지막 NOTICE 한 줄. 예외�
 
 `C3-1-비용표-마이그레이션.sql` → NOTICE `ai_cost_events 표와 ai_cost_record 함수 하나를 만들었습니다.` 확인 → `C4-1-보고스위치-마이그레이션.sql` → NOTICE `AI 비용 보고·멈춤 스위치 함수를 하나씩 만들었습니다.` 확인 → `C3C4-2-적용후확인.sql` 의 주석대로인지 본다.
 
+마이그레이션 둘을 적용한 **바로 뒤**, 같은 SQL 편집기에서 한 줄을 더 돌린다:
+
+```sql
+notify pgrst, 'reload schema';
+```
+
+PostgREST(Supabase 가 `rpc()` 호출을 받는 층)는 스키마를 자동으로도 다시 읽지만 그 주기를 기다리면 앱이 배포된 뒤 한동안 새 함수 둘을 「없음」(PGRST202)으로 볼 수 있다. 이 한 줄로 곧바로 다시 읽게 한다 — 실패해도 위험하지 않다(읽기 신호일 뿐 스키마를 바꾸지 않는다).
+
 이 시점의 동작: 지금 도는 앱은 새 표를 모른다 — 아무것도 바뀌지 않는다(새 것만 더했다).
 
 - [ ] **Step 7: 앱을 배포한다**
@@ -3853,6 +3863,8 @@ select created_at at time zone 'Asia/Seoul' as 한국시각, operation, provider
 ```
 
 Expected: `cs:ask` 줄이 둘 이상(판정 한 번 + 답 한 번, 임베딩 한 번), `provider` 는 `anthropic`·`openai`, `회원있음` 이 true. `/admin/system` 을 열면 맨 위(문의함 아래)에 「AI 사용 비용」 카드와 「AI 켜짐」 배지가 보인다. **`operation='unbound'` 줄이 보이면** 문맥 없이 부른 길이 있다는 뜻이다 — 그 줄의 `model` 로 어느 길인지 찾아 에이전트에게 알린다.
+
+**「AI 사용 비용」은 이 앱(fixup-image-agent)만의 합계다.** 같은 Supabase 를 보는 상세페이지 제품(detail-page-studio)의 호출은 이 표에 적히지 않고(그쪽은 `ai_cost_record` 를 부르지 않는다), `scripts/index-guide.mjs`(설명서 임베딩)도 운영 앱 밖에서 돌아 빠진다 — 그 스크립트는 토큰 수를 화면에만 찍고 `ai_cost_events` 에는 쓰지 않는다. 두 회사·경로의 실제 청구서는 이 화면 밖에서 따로 확인해야 한다.
 
 스위치를 실제로 한 번 눌러 볼지는 **사용자가 정한다**(누르는 동안 모든 회원의 AI 가 멈춘다). 누른다면 한산한 시간에 「AI 전체 멈춤」 → 확인 → 곧바로 「AI 다시 켜기」, 그리고:
 

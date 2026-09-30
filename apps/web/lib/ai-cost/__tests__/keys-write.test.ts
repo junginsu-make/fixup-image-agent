@@ -67,6 +67,15 @@ describe("쓰기가 실패하면", () => {
     warn.mockRestore();
   });
 
+  it("줄 모양을 만드는 자리(toAiCostRow)가 던져도 처리 안 된 거부 없이 경고만 남긴다", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    // falRequestId 가 문자열이 아니면 `.trim()` 이 던진다 — toAiCostRow 도 try 안에 있어야 한다.
+    const badEntry = { provider: "fal", model: "m", usd: 1, basis: "tokens", falRequestId: 123 } as unknown as Parameters<typeof writeAiCostRow>[1];
+    await expect(writeAiCostRow({ userId: null, requestId: null, operation: "poster" }, badEntry)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith("[ai-cost] 비용 한 줄을 적지 못했습니다", expect.objectContaining({ operation: "poster", provider: "fal" }));
+    warn.mockRestore();
+  });
+
   it("Supabase 가 비어 있으면(로컬·시험) 아무것도 안 하고 경고도 안 한다", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const saved = process.env.SUPABASE_SECRET_KEY;
