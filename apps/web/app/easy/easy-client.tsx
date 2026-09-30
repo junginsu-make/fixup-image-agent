@@ -18,7 +18,9 @@ import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
 import { EasyAskChoice } from "./_components/ask-choice";
 import { EasyPhotoAsk } from "./_components/photo-ask";
-import { photoAnswer, photoAskReady, pickPhoto, startPhotoAsk, type PhotoAskState } from "./photo-ask-state";
+import {
+  photoAnswer, photoAskReady, pickPhoto, previousRolesFor, rememberRoles, startPhotoAsk, type PhotoAskState,
+} from "./photo-ask-state";
 import type { EasyPhotoRole } from "./photo-roles";
 import { TOGGLE_EVENT } from "./_components/conversation-list";
 import { EasyResultPanel } from "./_components/result-panel";
@@ -112,6 +114,11 @@ export function EasyClient({
    * **사진을 어떻게 쓸지 묻는 중**(설계 §2-5). 비율 물음처럼 화면에만 있다.
    */
   const [photoAsking, setPhotoAsking] = React.useState<PhotoAskState | null>(null);
+  /*
+   * **지난 역할**(설계 §2-4 차례 3). 이 사진으로 만들 때 정해진 역할을 사진 id 별로
+   * 들고 있다가 다음 그림 턴에 보낸다. 안 그러면 「좀 더 밝게」에도 같은 물음이 뜬다.
+   */
+  const [lastRoles, setLastRoles] = React.useState<Record<string, EasyPhotoRole>>({});
   /*
    * **만든 조건.** 다시 열 때는 서버가 읽어 주고, 지금 만든 것은 만들면서 적는다.
    * 새로고침을 기다렸다 보여 주면 방금 만든 것만 조건이 비어 보인다.
@@ -316,6 +323,8 @@ export function EasyClient({
           referenceIds: attachments.map((one) => one.id),
           // 물음에 답한 것. 서버가 다시 확인한다(설계 §2-5).
           ...(photoRoles?.length ? { photoRoles } : {}),
+          // 지난 역할. 이번에 고른 사진은 빼고 보낸다 — 서버도 다시 확인한다.
+          previousRoles: previousRolesFor(lastRoles, attachments.map((one) => one.id), photoRoles),
           // 고른 것이 있으면 함께 보낸다. 없으면 서버가 물어볼지 정한다.
           ...(다시?.ratio ? { ratio: 다시.ratio } : {}),
           ...(다시?.look ? { look: 다시.look } : {}),
@@ -359,6 +368,9 @@ export function EasyClient({
           retryable: body.retryable !== false,
         });
       }
+
+      // 이번에 정해진 역할을 기억한다. 다음에 이어 만들 때 다시 묻지 않는다.
+      setLastRoles((current) => rememberRoles(current, body.photoRoles));
 
       // 그림 자리를 잡아 둔다. 자리가 없으면 도착하는 순간 대화가 아래로 튄다.
       setMessages((current) => [...current, { id: 자리, role: "image", body: "" }]);

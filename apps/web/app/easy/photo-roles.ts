@@ -221,16 +221,27 @@ export function readChosenRoles(raw: unknown, ids: readonly string[]): Record<st
   );
 }
 
-/** 고른 것 > 말·판단(ⓑ2) > 모름. 붙인 순서를 지킨다. */
+/**
+ * 고른 것 > 말 > 지난 역할 > 판단 > 모름(설계 §2-4). 붙인 순서를 지킨다.
+ *
+ * **지난 역할**은 이 대화에서 같은 사진으로 이미지를 만들 때 정해진 역할이다.
+ * 「좀 더 밝게」처럼 사진 이야기 없이 이어 말할 때 같은 물음이 또 뜨지 않게 한다.
+ * 말이 그 사진의 쓰임을 말하면(`said`) 말이 이긴다.
+ */
 export function mergeRoles(input: {
   ids: readonly string[];
   chosen: Readonly<Record<string, EasyPhotoRole>>;
+  previous?: Readonly<Record<string, EasyPhotoRole>>;
   judged: RoleJudgment;
 }): PhotoRow[] {
-  return input.ids.map((id, index) => ({
-    id,
-    role: input.chosen[id] ?? input.judged.photos[index]?.role ?? "unclear",
-  }));
+  return input.ids.map((id, index) => {
+    const judgment = input.judged.photos[index];
+    const 말한역할 = judgment?.said ? judgment.role : undefined;
+    return {
+      id,
+      role: input.chosen[id] ?? 말한역할 ?? input.previous?.[id] ?? judgment?.role ?? "unclear",
+    };
+  });
 }
 
 export function isPersonRole(role: JudgedPhotoRole): boolean {

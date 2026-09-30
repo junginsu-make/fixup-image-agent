@@ -1,4 +1,4 @@
-import { photoAskReason, type EasyPhotoRole, type PhotoRow } from "./photo-roles";
+import { EASY_PHOTO_ROLES, photoAskReason, type EasyPhotoRole, type PhotoRow } from "./photo-roles";
 
 /**
  * **사진을 어떻게 쓸지 묻는 동안의 상태**(설계 §2-5).
@@ -67,4 +67,34 @@ export function photoAnswer(
     prompt: 말 ? `${state.words}\n${말}` : state.words,
     photoRoles: ids.flatMap((id) => (state.picked[id] ? [{ id, role: state.picked[id]! }] : [])),
   };
+}
+
+/**
+ * **지난 역할을 기억한다**(설계 §2-4 차례 3).
+ *
+ * 그림 턴이 끝나면 서버가 사진마다 최종 역할을 돌려준다. 사진 id 별로 들고 있다가
+ * 다음 그림 턴에 보낸다 — 「좀 더 밝게」처럼 이어 말할 때 같은 물음이 또 뜨지
+ * 않게 한다. 화면에만 있다. 서버가 다시 검사하므로 여기서는 모양만 거른다.
+ */
+export function rememberRoles(
+  last: Readonly<Record<string, EasyPhotoRole>>,
+  roles: unknown,
+): Record<string, EasyPhotoRole> {
+  if (!Array.isArray(roles)) return { ...last };
+  const known = new Set<string>(EASY_PHOTO_ROLES);
+  const fresh = roles
+    .map((entry) => entry as { id?: unknown; role?: unknown } | null)
+    .filter((one): one is { id: string; role: EasyPhotoRole } =>
+      one !== null && typeof one.id === "string" && typeof one.role === "string" && known.has(one.role));
+  return { ...last, ...Object.fromEntries(fresh.map((one) => [one.id, one.role])) };
+}
+
+/** 지금 붙은 사진 중 기억한 것. 이번에 단추로 고른 사진은 뺀다 — 고른 것이 이긴다. */
+export function previousRolesFor(
+  last: Readonly<Record<string, EasyPhotoRole>>,
+  attachmentIds: readonly string[],
+  chosen: ReadonlyArray<{ id: string; role: EasyPhotoRole }> = [],
+): Array<{ id: string; role: EasyPhotoRole }> {
+  const 고른것 = new Set(chosen.map((one) => one.id));
+  return attachmentIds.flatMap((id) => (last[id] && !고른것.has(id) ? [{ id, role: last[id]! }] : []));
 }

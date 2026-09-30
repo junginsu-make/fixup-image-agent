@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { photoAnswer, photoAskReady, pickPhoto, startPhotoAsk } from "../photo-ask-state";
+import { photoAnswer, photoAskReady, pickPhoto, previousRolesFor, rememberRoles, startPhotoAsk } from "../photo-ask-state";
 
 /**
  * **물음 화면의 상태**(설계 §2-5). 화면 안에 두면 값으로 못 잰다.
@@ -72,5 +72,37 @@ describe("답하기", () => {
       prompt: "카페 포스터\n2번은 우리 원두 봉투야",
       photoRoles: [{ id: "b", role: "preserve_product" }],
     });
+  });
+});
+
+/**
+ * **지난 역할을 들고 있다가 보낸다**(설계 §2-4 차례 3). 이어 만들 때 같은
+ * 물음이 또 뜨지 않게 한다. 대화 표에는 안 남는다.
+ */
+describe("지난 역할", () => {
+  it("만든 뒤 받은 역할을 사진 id 별로 기억한다 — 원래 것을 바꾸지 않는다", () => {
+    const before = { a: "style" as const };
+    const after = rememberRoles(before, [{ id: "b", role: "preserve_product" }]);
+
+    expect(after).toEqual({ a: "style", b: "preserve_product" });
+    expect(before).toEqual({ a: "style" });
+  });
+
+  it("같은 사진은 새 역할로 바뀐다", () => {
+    expect(rememberRoles({ a: "style" }, [{ id: "a", role: "preserve_person" }])).toEqual({ a: "preserve_person" });
+  });
+
+  it("모르는 역할이나 모양이 틀린 것은 기억하지 않는다", () => {
+    expect(rememberRoles({}, [{ id: "a", role: "unclear" }, { id: 3, role: "style" }, "엉망"])).toEqual({});
+    expect(rememberRoles({ a: "style" }, undefined)).toEqual({ a: "style" });
+  });
+
+  it("지금 붙은 사진 중 기억한 것만 보낸다", () => {
+    expect(previousRolesFor({ a: "style", z: "preserve_product" }, ["a", "b"]))
+      .toEqual([{ id: "a", role: "style" }]);
+  });
+
+  it("이번에 단추로 고른 사진은 지난 역할로 보내지 않는다", () => {
+    expect(previousRolesFor({ a: "style" }, ["a"], [{ id: "a", role: "preserve_product" }])).toEqual([]);
   });
 });

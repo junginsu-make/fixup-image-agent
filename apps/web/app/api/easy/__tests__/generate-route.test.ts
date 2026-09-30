@@ -243,6 +243,29 @@ describe("역할대로 칸을 채운다 (설계 §2-6)", () => {
     expect(부른라우트[0]!.body).toMatchObject({ referenceIds: [사진(1)], preservedIds: [], attachmentIntent: "" });
   });
 
+  /** 지난 역할(설계 §2-4 차례 3) — 다음 그림 턴에 화면이 돌려보낼 것을 준다. */
+  it("만든 뒤 사진마다 최종 역할을 돌려준다", async () => {
+    역할판단 = 역할(["preserve_product", true]);
+    const { json } = await 보낸다({ prompt: "1번 제품 그대로", referenceIds: [사진(1)] });
+
+    expect(json.photoRoles).toEqual([{ id: 사진(1), role: "preserve_product" }]);
+  });
+
+  it("지난 역할을 받아 다시 묻지 않고, 그 사진은 읽지 않는다", async () => {
+    역할판단 = 역할(["unclear", false]);
+    await 보낸다({ prompt: "좀 더 밝게", referenceIds: [사진(1)], previousRoles: [{ id: 사진(1), role: "preserve_product" }] });
+
+    expect(읽은사진).toEqual([]);
+    expect(부른라우트[0]!.body).toMatchObject({ preservedIds: [사진(1)] });
+  });
+
+  it("남의 사진 id 로 온 지난 역할은 버린다", async () => {
+    역할판단 = 역할(["unclear", false]);
+    const { json } = await 보낸다({ referenceIds: [사진(1)], previousRoles: [{ id: 사진(9), role: "preserve_product" }] });
+
+    expect(json.photoAsk.reason).toBe("unclear");
+  });
+
   /** §2-1 — 붙인 수에 personIds 를 한 번 더 더하던 것. 이제 서로 다른 사진 수다. */
   it("같은 사진을 두 번 붙여도 한 장이다", async () => {
     역할판단 = 역할(["style", false]);

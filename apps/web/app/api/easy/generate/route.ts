@@ -193,6 +193,8 @@ async function turn(request: Request): Promise<Response> {
       : [];
     if (missingIds(붙인것, 사진들).length) return 멈춘다(UNUSABLE_PHOTO);
     const 고른역할 = readChosenRoles(input.photoRoles, 붙인것);
+    // 지난 역할도 고른 값과 같은 검사를 한다 — ⓪ 목록 밖 · 모르는 역할 · 겹친 id 는 버린다.
+    const 지난역할 = readChosenRoles(input.previousRoles, 붙인것);
     const provider = createEasyChatProvider(process.env, textModel);
 
     /*
@@ -253,6 +255,7 @@ async function turn(request: Request): Promise<Response> {
           photos: 사진들,
           words: prompt,
           chosen: 고른역할,
+          previous: 지난역할,
           ratio: 고르기.ratio,
           imageModel: typeof input.imageModel === "string" ? input.imageModel : undefined,
         },
@@ -357,6 +360,8 @@ async function turn(request: Request): Promise<Response> {
       look: 고르기.look,
       // 만든 조건에 곧바로 적는다. 다시 열 때는 `load.ts` 가 같은 함수로 읽는다.
       roles: 칸 ? easyRoleSummary(칸) : "",
+      // 화면이 들고 있다가 다음 그림 턴에 지난 역할로 보낸다(설계 §2-4 차례 3).
+      photoRoles: 사진판단?.rows ?? [],
       ...(submitted.notice ? { notice: submitted.notice } : {}),
     });
   } catch (error) {

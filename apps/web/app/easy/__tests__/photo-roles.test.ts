@@ -189,6 +189,22 @@ describe("합치기 — 고른 것 > 말 > 판단 > 모름 (설계 §2-4)", () =
       .toEqual([{ id: "a", role: "unclear" }]);
   });
 
+  /** 지난 역할(설계 §2-4 차례 3) — 이어 만들 때 같은 물음을 또 하지 않는다. */
+  it("말이 없으면 지난 역할이 판단을 이긴다", () => {
+    expect(mergeRoles({ ids: ["a"], chosen: {}, previous: { a: "preserve_product" }, judged: 판단(["unclear", false]) }))
+      .toEqual([{ id: "a", role: "preserve_product" }]);
+  });
+
+  it("말이 쓰임을 말하면 지난 역할을 덮는다", () => {
+    expect(mergeRoles({ ids: ["a"], chosen: {}, previous: { a: "preserve_product" }, judged: 판단(["style", true]) }))
+      .toEqual([{ id: "a", role: "style" }]);
+  });
+
+  it("고른 것은 지난 역할도 이긴다", () => {
+    expect(mergeRoles({ ids: ["a"], chosen: { a: "style" }, previous: { a: "preserve_product" }, judged: 판단(["unclear", false]) }))
+      .toEqual([{ id: "a", role: "style" }]);
+  });
+
   it("붙인 순서를 지킨다", () => {
     expect(mergeRoles({ ids: ["b", "a"], chosen: {}, judged: 판단(["style", false], ["style", false]) }).map((row) => row.id))
       .toEqual(["b", "a"]);

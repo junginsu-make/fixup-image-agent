@@ -343,3 +343,14 @@ describe("사진 물음이 떠 있을 때의 입력창", () => {
     expect(client).toMatch(/placeholder=\{[\s\S]{0,400}photoAsking[\s\S]{0,160}사진 물음에 대한 답/);
   });
 });
+
+/** **지난 역할을 기억해 보낸다**(설계 §2-4 차례 3). 안 이으면 이어 만들 때마다 같은 물음이 뜬다. */
+describe("지난 역할 잇기", () => {
+  it("만든 뒤 받은 역할을 기억한다", () => {
+    expect(client).toMatch(/rememberRoles\([\s\S]{0,60}body\.photoRoles/);
+  });
+
+  it("다음 그림 턴에 지난 역할로 보낸다", () => {
+    expect(client).toMatch(/previousRoles[\s\S]{0,80}previousRolesFor\(/);
+  });
+});

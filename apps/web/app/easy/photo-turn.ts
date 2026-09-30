@@ -19,6 +19,8 @@ export interface PhotoTurnInput {
   words: string;
   /** 서버가 다시 확인한 고른 역할. */
   chosen: Readonly<Record<string, EasyPhotoRole>>;
+  /** 서버가 다시 확인한 지난 역할(설계 §2-4 차례 3). 없으면 빈 것으로 본다. */
+  previous?: Readonly<Record<string, EasyPhotoRole>>;
   ratio: string;
   imageModel?: string;
 }
@@ -45,8 +47,9 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
   const limit = photoLimit({ ratio: input.ratio, imageModel: input.imageModel, count: input.photos.length });
   if (!limit.ok) return { kind: "stop", message: limit.message };
 
-  // ⓐ 단추로 고른 사진은 읽지 않는다. 역할을 정할 일이 없는데 읽으면 값과 기다림만 는다.
-  const toRead = input.photos.filter((photo) => !input.chosen[photo.id]);
+  // ⓐ 단추로 고른 사진과 지난 역할이 있는 사진은 읽지 않는다. 역할을 정할 일이
+  //   없는데 읽으면 값과 기다림만 는다. 말이 그 사진을 가리키면 말로 정한다.
+  const toRead = input.photos.filter((photo) => !input.chosen[photo.id] && !input.previous?.[photo.id]);
   const reads: Record<string, EasyPhotoRead> = toRead.length ? await deps.read(toRead) : {};
 
   // ⓑ2 다 골랐어도 돈다 — 말과 고른 것이 부딪히는지 알아야 한다(설계 §2-5).
@@ -83,8 +86,13 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
     }),
   };
 
-  // ⓓ 고른 것 > 말·판단 > 모름.
-  const rows = mergeRoles({ ids: input.photos.map((photo) => photo.id), chosen: input.chosen, judged });
+  // ⓓ 고른 것 > 말 > 지난 역할 > 판단 > 모름.
+  const rows = mergeRoles({
+    ids: input.photos.map((photo) => photo.id),
+    chosen: input.chosen,
+    previous: input.previous,
+    judged,
+  });
   const reason = photoAskReason(rows);
   if (reason) return { kind: "ask", reason, rows };
 

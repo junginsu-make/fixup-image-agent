@@ -117,6 +117,23 @@ describe("그림 턴 (설계 §2-3)", () => {
     expect((await runPhotoTurn({ ...기본, words: "이 느낌으로", photos: 사진들(1) }, deps)).kind).toBe("go");
   });
 
+  describe("지난 역할 (설계 §2-4 차례 3)", () => {
+    it("지난 역할이 있는 사진은 읽지 않고, 말이 없으면 그 역할로 간다", async () => {
+      const { deps, 읽은것 } = 가짜({ photos: [{ number: 1, role: "unclear", said: false }], conflicting: false });
+      const 결과 = await runPhotoTurn({ ...기본, words: "좀 더 밝게", photos: 사진들(1), previous: { p1: "preserve_product" } }, deps);
+
+      expect(읽은것).toEqual([]);
+      expect(결과.kind === "go" && 결과.rows).toEqual([{ id: "p1", role: "preserve_product" }]);
+    });
+
+    it("말이 쓰임을 말하면 지난 역할을 덮는다", async () => {
+      const { deps } = 가짜({ photos: [{ number: 1, role: "style", said: true }], conflicting: false });
+      const 결과 = await runPhotoTurn({ ...기본, words: "이번엔 느낌만", photos: 사진들(1), previous: { p1: "preserve_product" } }, deps);
+
+      expect(결과.kind === "go" && 결과.rows).toEqual([{ id: "p1", role: "style" }]);
+    });
+  });
+
   it("인물 역할이 둘이면 한 장만 되도록 묻는다", async () => {
     const { deps } = 가짜({
       photos: [{ number: 1, role: "preserve_person", said: true }, { number: 2, role: "preserve_person", said: true }],
