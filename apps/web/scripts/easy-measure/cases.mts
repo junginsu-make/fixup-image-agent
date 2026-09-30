@@ -1,4 +1,4 @@
-import type { JudgedPhotoRole } from "../../app/easy/photo-roles";
+import type { EasyPhotoRole, JudgedPhotoRole } from "../../app/easy/photo-roles";
 
 /**
  * §2-11 의 문장표. **설명은 읽기가 돌려줄 모양 그대로** 손으로 쓴다
@@ -40,6 +40,11 @@ export interface B2Case {
   expect: JudgedPhotoRole[];
   said: boolean[];
   conflicting?: boolean;
+  /**
+   * 이 사진들로 이미 만든 뒤 이어 말하는 턴의 **지난 역할**(설계 §2-4 차례 3).
+   * 있으면 `expect` 는 **최종 역할**이다 — said 면 판단한 역할, 아니면 지난 역할.
+   */
+  previous?: EasyPhotoRole[];
 }
 
 export const B2_CASES: B2Case[] = [
@@ -61,5 +66,10 @@ export const B2_CASES: B2Case[] = [
   { name: "로고 이걸로", words: "이걸로 만들어줘", photos: [설명.로고], expect: ["preserve_product"], said: [false] },
   { name: "가족 그림 이야기 없음", words: "카페 포스터 만들어줘", photos: [설명.가족그림], expect: ["unclear"], said: [false] },
   { name: "가족 그림 느낌", words: "이 느낌으로 만들어줘", photos: [설명.가족그림], expect: ["style"], said: [true] },
+  // 이어 만들기(2026-09-30 두 번째 독립 리뷰). said 가 거짓이면 지난 역할이 그대로 간다.
+  { name: "이어서 이 느낌", words: "이 느낌으로 더 화사하게", photos: [설명.제품, 설명.포스터], previous: ["preserve_product", "style"], expect: ["preserve_product", "style"], said: [false, false] },
+  { name: "이어서 밝게", words: "좀 더 밝게", photos: [설명.제품, 설명.인물], previous: ["preserve_product", "preserve_person"], expect: ["preserve_product", "preserve_person"], said: [false, false] },
+  { name: "이어서 제품 바로잡기", words: "제품은 그대로 두고 더 크게 넣어줘", photos: [설명.제품, 설명.포스터], previous: ["style", "style"], expect: ["preserve_product", "style"], said: [true, false] },
+  { name: "이어서 1번 바꾸기", words: "1번은 이제 느낌만 참고해줘", photos: [설명.제품, 설명.포스터], previous: ["preserve_product", "style"], expect: ["style", "style"], said: [true, false] },
   { name: "읽기 없음", words: "카페 포스터 만들어줘", photos: [undefined], expect: ["unclear"], said: [false] },
 ];

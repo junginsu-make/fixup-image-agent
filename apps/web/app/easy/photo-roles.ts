@@ -95,6 +95,8 @@ export function readOfPhoto(read: AttachmentRead): EasyPhotoRead {
 export function easyRolePrompt(input: {
   words: string;
   photos: ReadonlyArray<{ description?: string }>;
+  /** 이 사진들로 이미 만든 적이 있는 이어 만들기 턴인가(설계 §2-4 지난 역할). */
+  followUp?: boolean;
 }): string {
   const 사진줄 = input.photos.map((photo, index) =>
     `${index + 1}번: ${photo.description?.trim() || "(설명 없음, 말로만 정하세요)"}`);
@@ -149,6 +151,18 @@ export function easyRolePrompt(input: {
     "아니다, 1번은 느낌만」) conflicting 을 true 로 두고, 역할은 **나중에 한 말**을",
     "따릅니다. 아니면 false 입니다.",
     "",
+    ...(input.followUp
+      ? [
+        "── 이어 만드는 중 ──",
+        "",
+        "이 사진들로 **이미 이미지를 만든 적이 있습니다.** 사용자는 방금 만든 결과를 보고",
+        "이어 말하고 있습니다. 「이 느낌으로 더 밝게」·「이거 좀 더 크게」의 「이 느낌」·",
+        "「이거」는 **방금 만든 결과**를 가리킬 수 있습니다. 번호나 생김새(「제품」·「사람」·",
+        "「포스터」)로 어느 사진인지 **분명히 가리킬 때만** 그 사진의 said 를 true 로",
+        "두세요. 아니면 said 는 false 입니다.",
+        "",
+      ]
+      : []),
     "── 사진 (붙인 순서) ──",
     ...사진줄,
     "",

@@ -118,12 +118,32 @@ describe("그림 턴 (설계 §2-3)", () => {
   });
 
   describe("지난 역할 (설계 §2-4 차례 3)", () => {
-    it("지난 역할이 있는 사진은 읽지 않고, 말이 없으면 그 역할로 간다", async () => {
+    /**
+     * **지난 역할이 있어도 읽는다**(2026-09-30 두 번째 독립 리뷰). 안 읽으면 사진이
+     * 둘 이상일 때 「제품 그대로 크게」가 어느 사진인지 판단이 못 가려, 바로잡으려는
+     * 말이 무시되거나 엉뚱한 사진이 뒤집힌다.
+     */
+    it("지난 역할이 있는 사진도 읽고, 말이 없으면 그 역할로 간다", async () => {
       const { deps, 읽은것 } = 가짜({ photos: [{ number: 1, role: "unclear", said: false }], conflicting: false });
       const 결과 = await runPhotoTurn({ ...기본, words: "좀 더 밝게", photos: 사진들(1), previous: { p1: "preserve_product" } }, deps);
 
-      expect(읽은것).toEqual([]);
+      expect(읽은것).toEqual([["p1"]]);
       expect(결과.kind === "go" && 결과.rows).toEqual([{ id: "p1", role: "preserve_product" }]);
+    });
+
+    it("이어 만드는 턴이면 판단에게 그 사실을 알린다 — 지난 역할 자체는 안 준다", async () => {
+      const { deps, 받은글 } = 가짜({ photos: [], conflicting: false });
+      await runPhotoTurn({ ...기본, words: "좀 더 밝게", photos: 사진들(1), previous: { p1: "preserve_product" } }, deps);
+
+      expect(받은글[0]).toContain("이미 이미지를 만든 적이 있습니다");
+      expect(받은글[0]).not.toContain("preserve_product 로 정해");
+    });
+
+    it("처음 만드는 턴에는 그 말을 안 붙인다", async () => {
+      const { deps, 받은글 } = 가짜({ photos: [], conflicting: false });
+      await runPhotoTurn({ ...기본, photos: 사진들(1) }, deps);
+
+      expect(받은글[0]).not.toContain("이미 이미지를 만든 적이 있습니다");
     });
 
     it("말이 쓰임을 말하면 지난 역할을 덮는다", async () => {

@@ -251,12 +251,30 @@ describe("역할대로 칸을 채운다 (설계 §2-6)", () => {
     expect(json.photoRoles).toEqual([{ id: 사진(1), role: "preserve_product" }]);
   });
 
-  it("지난 역할을 받아 다시 묻지 않고, 그 사진은 읽지 않는다", async () => {
+  it("지난 역할을 받아 다시 묻지 않는다", async () => {
     역할판단 = 역할(["unclear", false]);
-    await 보낸다({ prompt: "좀 더 밝게", referenceIds: [사진(1)], previousRoles: [{ id: 사진(1), role: "preserve_product" }] });
+    const { json } = await 보낸다({ prompt: "좀 더 밝게", referenceIds: [사진(1)], previousRoles: [{ id: 사진(1), role: "preserve_product" }] });
 
-    expect(읽은사진).toEqual([]);
+    expect(json.photoAsk).toBeUndefined();
     expect(부른라우트[0]!.body).toMatchObject({ preservedIds: [사진(1)] });
+  });
+
+  it("같은 사진이 고른 값과 지난 역할에 다 오면 고른 값이 이긴다", async () => {
+    역할판단 = 역할(["unclear", false]);
+    await 보낸다({
+      referenceIds: [사진(1)],
+      photoRoles: [{ id: 사진(1), role: "style" }],
+      previousRoles: [{ id: 사진(1), role: "preserve_product" }],
+    });
+
+    expect(부른라우트[0]!.body).toMatchObject({ referenceIds: [사진(1)], preservedIds: [] });
+  });
+
+  it("묻거나 말로 답한 턴은 지난 역할로 기억할 것을 안 준다", async () => {
+    역할판단 = 역할(["unclear", false]);
+    expect((await 보낸다({ referenceIds: [사진(1)] })).json.photoRoles).toBeUndefined();
+    판단 = { wants: "talk", reply: "네", ratio: "", look: "" };
+    expect((await 보낸다({ prompt: "안녕", referenceIds: [사진(1)] })).json.photoRoles).toBeUndefined();
   });
 
   it("남의 사진 id 로 온 지난 역할은 버린다", async () => {

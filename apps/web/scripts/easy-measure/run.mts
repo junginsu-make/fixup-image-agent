@@ -32,6 +32,13 @@ function b2문제(one: B2Case, got: RoleJudgment): string[] {
   const 문제: string[] = [];
   one.expect.forEach((want, i) => {
     const have = got.photos[i]!;
+    if (one.previous) {
+      // 이어 만들기는 **최종 역할**로 잰다 — said 면 판단한 역할, 아니면 지난 역할(mergeRoles 와 같은 차례).
+      const 최종 = have.said && have.role !== "unclear" ? have.role : one.previous[i]!;
+      if (지킬것.has(want) && 최종 === "style") 문제.push(`치명: ${i + 1}번 지킬 것이 분위기로 감`);
+      if (최종 !== want) 문제.push(`${i + 1}번 최종 ${최종} ≠ ${want}`);
+      return;
+    }
     if ((지킬것.has(want) || want === "unclear") && have.role === "style") {
       문제.push(`치명: ${i + 1}번을 분위기로 보냄`);
     }
@@ -74,7 +81,11 @@ async function main() {
   줄.push("", "## ⓑ2 사진 역할", "", "| 이름 | 말 | 결과(역할/said) | 엇갈림 | 문제 | ms | $ |", "|---|---|---|---|---|---|---|");
   for (const one of B2_CASES) {
     for (let run = 0; run < RUNS; run += 1) {
-      const prompt = easyRolePrompt({ words: one.words, photos: one.photos.map((description) => ({ description })) });
+      const prompt = easyRolePrompt({
+        words: one.words,
+        photos: one.photos.map((description) => ({ description })),
+        followUp: Boolean(one.previous),
+      });
       const r = await 잰다(() => provider.decideRoles(prompt));
       const got = readRoleJudgment(r.value, one.photos.length);
       const 문제 = b2문제(one, got);

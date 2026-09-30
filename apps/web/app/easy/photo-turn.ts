@@ -47,9 +47,10 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
   const limit = photoLimit({ ratio: input.ratio, imageModel: input.imageModel, count: input.photos.length });
   if (!limit.ok) return { kind: "stop", message: limit.message };
 
-  // ⓐ 단추로 고른 사진과 지난 역할이 있는 사진은 읽지 않는다. 역할을 정할 일이
-  //   없는데 읽으면 값과 기다림만 는다. 말이 그 사진을 가리키면 말로 정한다.
-  const toRead = input.photos.filter((photo) => !input.chosen[photo.id] && !input.previous?.[photo.id]);
+  // ⓐ 단추로 고른 사진은 읽지 않는다. 역할을 정할 일이 없는데 읽으면 값과 기다림만 는다.
+  //   **지난 역할이 있는 사진은 읽는다**(2026-09-30 두 번째 독립 리뷰). 안 읽으면
+  //   사진이 둘 이상일 때 「제품 그대로 크게」가 어느 사진인지 판단이 못 가린다.
+  const toRead = input.photos.filter((photo) => !input.chosen[photo.id]);
   const reads: Record<string, EasyPhotoRead> = toRead.length ? await deps.read(toRead) : {};
 
   // ⓑ2 다 골랐어도 돈다 — 말과 고른 것이 부딪히는지 알아야 한다(설계 §2-5).
@@ -57,6 +58,9 @@ export async function runPhotoTurn(input: PhotoTurnInput, deps: PhotoTurnDeps): 
     await deps.judge(easyRolePrompt({
       words: input.words,
       photos: input.photos.map((photo) => ({ description: reads[photo.id]?.description })),
+      // 이어 만드는 턴인지만 알린다. 지난 역할 자체는 안 준다 — 주면 말이 무엇을
+      // 말했는지(`said`)를 그것과 떼어 알 수 없다(설계 §2-4).
+      followUp: Object.keys(input.previous ?? {}).length > 0,
     })),
     input.photos.length,
   );
