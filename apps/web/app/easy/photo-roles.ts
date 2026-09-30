@@ -42,6 +42,8 @@ export interface EasyPhoto {
   id: string;
   title?: string | null;
   url?: string | null;
+  /** 저장 경로. 카드뉴스 첨부가 쓴다(2단계 §5). */
+  storagePath?: string;
 }
 
 export interface PhotoJudgment {

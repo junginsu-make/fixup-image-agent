@@ -15,12 +15,20 @@ import { UNUSABLE_PHOTO, isPhotoId, missingIds, uniqueIds } from "../../../easy/
 import { readChosenRoles } from "../../../easy/photo-roles";
 import { runPhotoTurn } from "../../../easy/photo-turn";
 import { easyRoleSummary } from "../../../easy/options";
+import { isWebSourceEnabled } from "../../../../lib/sns/feature";
+import { draftCardnews, lastCardnewsProject } from "../../../../lib/easy/cardnews-steps";
+import { NOT_MINE, cardAttachmentsFrom, readChosenSlots, slotsFromWords } from "../../../easy/cardnews-attachments";
+import { pickCardSource } from "../../../easy/cardnews-source";
+import { cardOptionsFrom, projectSpecFrom, readCardOptions } from "../../../easy/cardnews-options";
+import { redraftInput } from "../../../easy/cardnews-redraft";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** 카드뉴스 원고는 1~2분 걸린다. 카드뉴스 원고 라우트와 같은 값이다(2단계 §3). */
+export const maxDuration = 300;
 
 /**
  * Easy 모드: 한 줄 → **말 또는 그림** (설계 §8).
@@ -157,6 +165,8 @@ async function turn(request: Request): Promise<Response> {
      * 뜻이 선다. 이번 말은 아직 안 남겼으므로 그대로 다 준다.
      */
     const 지난줄 = await store.listMessages(conversationId);
+    // 고칠 원고가 있을 때만 「고치기」를 안다(2단계 §7). 없으면 고치기는 말로 읽는다.
+    const 고칠원고 = await lastCardnewsProject(auth.member.userId, 지난줄);
     const decision = readEasyDecision(
       await provider.decide(
         easyChatPrompt(
@@ -168,9 +178,20 @@ async function turn(request: Request): Promise<Response> {
            * (2026-09-21 실측).
            */
           붙인수,
+          Boolean(고칠원고),
         ),
       ),
+      { canRevise: Boolean(고칠원고) },
     );
+
+    /*
+     * **고른 갈래가 판단을 이긴다**(2단계 설계 §4). 「이미지 한 장 · 카드뉴스」 단추로
+     * 답하고 다시 보낸 것이다. 말 · 상세페이지 · 고치기에는 안 끼어든다.
+     */
+    const 고른갈래 = input.kind === "image" || input.kind === "cardnews" ? input.kind as "image" | "cardnews" : undefined;
+    const wants = 고른갈래 && ["image", "cardnews", "either"].includes(decision.wants) ? 고른갈래 : decision.wants;
+    // 한 장인지 여러 장인지 모르면 묻고 아무것도 안 남긴다(2단계 §4).
+    if (wants === "either") return Response.json({ ok: true, kindAsk: true, textModel });
 
     /*
      * ⓵ **비율·결을 한 번 물어볼까** (2026-09-21 사용자).
@@ -189,8 +210,15 @@ async function turn(request: Request): Promise<Response> {
       saidLook: decision.look,
     });
 
-    if (decision.wants === "image" && 고르기.asks) {
+    if (wants === "image" && 고르기.asks) {
       return Response.json({ ok: true, asked: true, textModel });
+    }
+
+    if (wants === "cardnews" || wants === "revise") {
+      return await cardnewsTurn({
+        request, userId: auth.member.userId, store, conversation, conversationId, prompt, textModel,
+        wants, 사진들, 붙인것, input, decision, provider, 고칠원고,
+      });
     }
 
     /*
@@ -199,7 +227,7 @@ async function turn(request: Request): Promise<Response> {
      * 말을 남기기 **전에** 한다. 묻거나 멈추면 아무것도 안 남긴다 — 비율 물음과
      * 같다. 말 턴 · 상세페이지 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
      */
-    const 사진판단 = decision.wants === "image" && 붙인수
+    const 사진판단 = wants === "image" && 붙인수
       ? await runPhotoTurn(
         {
           photos: 사진들,
@@ -225,7 +253,7 @@ async function turn(request: Request): Promise<Response> {
     // 제목이 비어 있으면 이 말로 짓는다. 첫 프롬프트 한 번만이다(설계 §4-1).
     if (!conversation.title) await store.renameConversation(conversationId, easyTitle(prompt));
 
-    if (decision.wants === "talk") {
+    if (wants === "talk") {
       /*
        * **답만 적고 끝낸다.** 그림을 안 만들었으므로 값도 거의 안 든다 —
        * 화면이 「약 N장」을 적던 자리도 그래서 「그림을 만들면」으로 바뀌었다.
@@ -238,7 +266,7 @@ async function turn(request: Request): Promise<Response> {
       return Response.json({ ok: true, talked: true, message: saved, textModel });
     }
 
-    if (decision.wants === "detail_page") {
+    if (wants === "detail_page") {
       /*
        * **상세페이지는 여기서 안 만든다**(설계 §2-7, 2026-09-30 사용자 결정).
        *
@@ -332,6 +360,109 @@ async function turn(request: Request): Promise<Response> {
   } finally {
     값을적는다(auth.member.userId);
   }
+}
+
+/**
+ * **카드뉴스 원고 턴**(2단계 설계 §3 · §5 · §7 · §9).
+ *
+ * 원고까지만 쓴다. 원고는 공짜고, 크레딧은 화면의 「이대로 만들기」가 따로 부르는
+ * 카드뉴스 `generate` 가 잡는다. 묻거나 멈추면 아무것도 안 남긴다(1단계와 같다).
+ */
+async function cardnewsTurn(ctx: {
+  request: Request;
+  userId: string;
+  store: ReturnType<typeof easyStoreForUser>;
+  conversation: { title?: string | null };
+  conversationId: string;
+  prompt: string;
+  textModel: string;
+  wants: "cardnews" | "revise";
+  사진들: Array<{ id: string; title?: string | null; url?: string | null; storagePath: string }>;
+  붙인것: string[];
+  input: Record<string, unknown>;
+  decision: { ratio?: string; look?: string };
+  provider: ReturnType<typeof createEasyChatProvider>;
+  고칠원고: Awaited<ReturnType<typeof lastCardnewsProject>>;
+}): Promise<Response> {
+  const 레퍼런스요청 = () => Response.json({ ok: true, needReference: true, textModel: ctx.textModel });
+  let 입력: unknown;
+  let photoRoles: Array<{ id: string; role: string }> = [];
+
+  if (ctx.wants === "revise" && ctx.고칠원고) {
+    // 고치기: 앞 원고의 조건 · 첨부 그대로, 말만 더한다(설계 §7). 앞 작업은 그대로 둔다.
+    입력 = redraftInput(ctx.고칠원고, { words: ctx.prompt });
+  } else {
+    if (!ctx.붙인것.length) return 레퍼런스요청();
+
+    /*
+     * **무엇으로 쓸지를 사진보다 먼저 본다.** 기사 주소처럼 못 쓰는 것이면 여기서
+     * 멈춘다. 사진을 먼저 읽으면 어차피 멈출 턴에 읽기값이 나간다.
+     */
+    const 내용 = pickCardSource(ctx.prompt, { webEnabled: isWebSourceEnabled() });
+    if (!내용.ok) return 멈춘다(내용.message);
+
+    const options = cardOptionsFrom({
+      said: { ratio: ctx.decision.ratio, look: ctx.decision.look },
+      chosen: readCardOptions(ctx.input.cardOptions),
+      imageModel: typeof ctx.input.imageModel === "string" ? ctx.input.imageModel : undefined,
+    });
+    const 판단 = await runPhotoTurn(
+      {
+        photos: ctx.사진들,
+        words: ctx.prompt,
+        mode: "cardnews",
+        chosen: readChosenRoles(ctx.input.photoRoles, ctx.붙인것, { cardnews: true }),
+        previous: readChosenRoles(ctx.input.previousRoles, ctx.붙인것, { cardnews: true }),
+        ratio: options.ratio,
+        imageModel: options.modelId,
+      },
+      { read: (photos) => readEasyPhotos(photos), judge: (text) => ctx.provider.decideRoles(text) },
+    );
+    if (판단.kind === "stop") return 멈춘다(판단.message);
+    if (판단.kind === "ask") {
+      return Response.json({
+        ok: true, photoAsk: { reason: 판단.reason, rows: 판단.rows, mode: "cardnews" }, textModel: ctx.textModel,
+      });
+    }
+    const 첨부 = cardAttachmentsFrom({
+      userId: ctx.userId,
+      photos: ctx.사진들,
+      rows: 판단.rows,
+      slots: { ...slotsFromWords(ctx.prompt, ctx.붙인것), ...readChosenSlots(ctx.input.photoSlots, ctx.붙인것) },
+    });
+    if (!첨부.ok && 첨부.reason === "no_reference") return 레퍼런스요청();
+    if (!첨부.ok) return 멈춘다(첨부.reason === "not_mine" ? NOT_MINE : UNUSABLE_PHOTO);
+
+    photoRoles = 판단.rows;
+    입력 = {
+      title: easyTitle(ctx.prompt) || "카드뉴스",
+      source: 내용.source,
+      attachments: 첨부.attachments,
+      ...projectSpecFrom(options),
+      ...(판단.attachmentIntent ? { userInstruction: 판단.attachmentIntent.slice(0, 2000) } : {}),
+    };
+  }
+
+  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.prompt });
+  if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
+
+  const { projectId, project } = await draftCardnews(ctx.request, 입력);
+  const flow = project.data.flow;
+  if (!flow?.cards.length) {
+    /*
+     * **원고 0장은 조용히 끝내지 않는다**(설계 §9). 카드뉴스 원고 라우트는 이때도
+     * `ok` 다. 까닭을 말하고, 작업은 지우지 않는다(2026-09-30 사용자 결정).
+     */
+    const 까닭 = [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])].join(" ");
+    const saved = await ctx.store.appendMessage({
+      conversationId: ctx.conversationId,
+      role: "assistant",
+      body: `원고를 쓰지 못했습니다. ${까닭 || "내용을 가져오지 못했습니다."}`,
+    });
+    return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
+  }
+  const row = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "image", workId: projectId });
+  return Response.json({ ok: true, cardnews: { rowId: row.id, project }, message: row, photoRoles, textModel: ctx.textModel });
 }
 
 /** 화면이 기본값을 물어볼 자리. 두 벌로 적지 않게 여기서 준다. */
