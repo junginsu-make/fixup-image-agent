@@ -1,7 +1,7 @@
 import { recordAiCost } from "../llm/meter";
 import { defaultFalRouter } from "../fal/pool/default";
 import type { FalRouter } from "../fal/route";
-import { runFalQueued } from "../fal/run";
+import { runFalQueued, type RunFalDeps } from "../fal/run";
 
 /**
  * 배경을 지워 오브젝트만 남긴다.
@@ -78,7 +78,10 @@ export interface FalSubscriber {
  * 계정 풀을 거치는 배경 제거(S3b). 제출·상태·결과가 모두 **같은 계정의 키**로 간다.
  * 비용 한 줄은 지금처럼 `onEnqueue` 에서 적는다 — 그래서 여기서는 `cost` 를 넘기지 않는다.
  */
-export function createBackgroundRemover(router: FalRouter = defaultFalRouter()): FalSubscriber {
+export function createBackgroundRemover(
+  router: FalRouter = defaultFalRouter(),
+  deps: Partial<RunFalDeps> = {},
+): FalSubscriber {
   return {
     async subscribe(endpoint, options) {
       const { data } = await runFalQueued(router, {
@@ -89,7 +92,7 @@ export function createBackgroundRemover(router: FalRouter = defaultFalRouter()):
         startTimeoutS: 60,
         deadlineMs: BACKGROUND_TIMEOUT_MS,
         pollMs: 500,
-      });
+      }, deps);
       return { data };
     },
   };
