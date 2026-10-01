@@ -99,11 +99,12 @@ async function act(request: Request): Promise<Response> {
       ? await 글값을잡고(request, "edit", () => edit(ctx, index))
       : await edit(ctx, index);
   } catch (error) {
-    if (error instanceof EasyStepError && error.status < 500) {
+    // 안쪽이 「다시 눌러도 안 풀린다」고 한 것(운영자 멈춤 503)도 그대로 전한다(독립 리뷰 2026-10-01).
+    if (error instanceof EasyStepError && (error.status < 500 || !error.retryable)) {
       return Response.json({
         ok: false, step: error.step, message: error.message,
         // 402·403 은 다시 눌러도 같은 곳에서 막힌다.
-        retryable: error.status !== 402 && error.status !== 403,
+        retryable: error.retryable && error.status !== 402 && error.status !== 403,
       }, { status: error.status });
     }
     return 고장났다(action, projectId, error);
