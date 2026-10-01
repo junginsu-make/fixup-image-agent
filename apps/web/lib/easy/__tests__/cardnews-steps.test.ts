@@ -14,10 +14,20 @@ let 원고: Record<string, unknown>;
 let 고치기실패: boolean;
 const 고친것: Array<{ id: string; index: string; body: Record<string, unknown> }> = [];
 
+const 찾은것: string[] = [];
+const 서명한것: string[] = [];
 vi.mock("../../sns-flow-store", () => ({
-  snsFlowStoreForUser: async () => ({ get: async (id: string) => 작업들[id] }),
+  snsFlowStoreForUser: async () => ({
+    get: async (id: string) => {
+      찾은것.push(id);
+      if (id === "boom") throw new Error("저장소 오류");
+      return 작업들[id];
+    },
+  }),
 }));
-vi.mock("../../sns/runtime", () => ({ refreshProjectAssetUrls: async (p: unknown) => p }));
+vi.mock("../../sns/runtime", () => ({
+  refreshProjectAssetUrls: async (p: { id: string }) => { 서명한것.push(p.id); return p; },
+}));
 vi.mock("../../../app/api/sns/projects/route", () => ({ POST: async () => Response.json({ ok: true, project: { id: "c1" } }) }));
 vi.mock("../../../app/api/sns/projects/[id]/plan/route", () => ({ POST: async () => Response.json({ ok: true, project: 원고 }) }));
 vi.mock("../../../app/api/sns/projects/[id]/cards/[index]/route", () => ({
@@ -48,6 +58,8 @@ beforeEach(() => {
   원고 = 기본원고();
   고치기실패 = false;
   고친것.length = 0;
+  찾은것.length = 0;
+  서명한것.length = 0;
 });
 
 describe("마지막 장 채우기 (2026-09-30 사용자 결정 B)", () => {
@@ -104,5 +116,26 @@ describe("카드뉴스 작업 찾기", () => {
       { role: "user", workId: null },
     ];
     expect((await lastCardnewsProject("me", rows))?.id).toBe("mine");
+  });
+
+  /** 미뤄 둔 것 1 — 채팅마다 그림 줄을 하나씩 차례로 찾고 서명했다. */
+  it("그림 주소는 찾은 한 개만 서명한다", async () => {
+    작업들 = { ...작업들, older: { id: "older", userId: "me" } };
+    const rows = [{ role: "image", workId: "older" }, { role: "image", workId: "mine" }, { role: "image", workId: "poster-1" }];
+    expect((await lastCardnewsProject("me", rows))?.id).toBe("mine");
+    expect(서명한것).toEqual(["mine"]);
+  });
+
+  it("최근 그림 줄 20개만 본다", async () => {
+    const rows = [
+      { role: "image", workId: "mine" },
+      ...Array.from({ length: 25 }, (_, i) => ({ role: "image", workId: `poster-${i}` })),
+    ];
+    expect(await lastCardnewsProject("me", rows)).toBeNull();
+    expect(찾은것).toHaveLength(20);
+  });
+
+  it("저장소 오류가 나도 실패하지 않고 원고 없음으로 본다(평범한 이미지 주문이 안 깨진다)", async () => {
+    expect(await lastCardnewsProject("me", [{ role: "image", workId: "mine" }, { role: "image", workId: "boom" }])).toBeNull();
   });
 });

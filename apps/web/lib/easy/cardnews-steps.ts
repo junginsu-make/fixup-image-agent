@@ -89,15 +89,31 @@ export async function cardnewsProject(userId: string, projectId: string): Promis
   return (await refreshProjectAssetUrls(project)) as unknown as EasyCardnewsProject;
 }
 
-/** 대화의 마지막 카드뉴스 작업(다시 쓰기 대상). 줄을 뒤에서부터 본다. */
+/** 다시 쓰기 대상을 찾을 최근 그림 줄 수. 그보다 앞의 원고를 고치려면 새로 부탁한다. */
+const 찾을줄수 = 20;
+
+/**
+ * 대화의 마지막 카드뉴스 작업(다시 쓰기 대상). 이 대화의 **모든 턴**이 부른다.
+ *
+ * - 최근 그림 줄만 **한꺼번에** 찾고, 그림 주소 서명은 고른 한 개에만 한다. 전에는 줄마다
+ *   차례로 찾고 서명해, 포스터가 많은 대화에서 턴마다 늦어졌다
+ * - **찾다 실패해도 턴을 깨지 않는다.** 원고가 없는 것으로 보고 이미지 주문은 그대로 간다
+ */
 export async function lastCardnewsProject(
   userId: string,
   rows: ReadonlyArray<{ role: string; workId?: string | null }>,
 ): Promise<EasyCardnewsProject | null> {
-  for (const row of [...rows].reverse()) {
-    if (row.role !== "image" || !row.workId) continue;
-    const project = await cardnewsProject(userId, row.workId);
-    if (project) return project;
+  const ids = [...rows].reverse()
+    .flatMap((row) => (row.role === "image" && row.workId ? [row.workId] : []))
+    .slice(0, 찾을줄수);
+  if (!ids.length) return null;
+  try {
+    const store = await snsFlowStoreForUser(userId);
+    const found = await Promise.all(ids.map((id) => store.get(id)));
+    const project = found.find((one) => one && one.userId === userId);
+    return project ? (await refreshProjectAssetUrls(project)) as unknown as EasyCardnewsProject : null;
+  } catch (error) {
+    console.warn("[easy] 고칠 카드뉴스 원고를 찾지 못했습니다", error instanceof Error ? error.message : error);
+    return null;
   }
-  return null;
 }
