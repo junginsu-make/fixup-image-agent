@@ -342,6 +342,49 @@ describe("고침 4차 — 계정 목록을 못 읽어도 생성은 계속된다"
     expect(liveCalls).toBe(2);
     expect(out.route).toEqual({ accountId: A, key: "key-a" });
   });
+
+  it("한 번 성공한 지 30초가 지나 끊기면 — 그 창에선 한 번만 다시 읽고 한 줄만 적는다, 다음 30초 창에서 한 번 더", async () => {
+    const g = 가게([계정(A, "key-a")]);
+    let clock = 0;
+    let fail = false;
+    let liveCalls = 0;
+    const original = g.store.liveAccounts.bind(g.store);
+    g.store.liveAccounts = async () => {
+      liveCalls += 1;
+      if (fail) throw new Error("db down");
+      return original();
+    };
+    const logs: unknown[] = [];
+    const router = createPoolRouter({
+      store: g.store,
+      masterKey: 열쇠,
+      environment: { FAL_KEY: "env-key" },
+      alert: (e) => { alerts.push(e); },
+      submit: fal({ "key-a": () => "req-1" }).submit,
+      now: () => clock,
+      log: (message) => { logs.push(message); },
+    });
+
+    await router.submit("fal-ai/x", {}); // 성공 — snapshot.at = 0
+    expect(liveCalls).toBe(1);
+
+    fail = true;
+    clock = 30_001; // 캐시가 막 낡은 시점부터
+
+    for (let i = 0; i < 10; i += 1) {
+      clock += 5; // 몇 ms 간격으로 10번 더 요청
+      await router.submit("fal-ai/x", {}).catch(() => undefined);
+    }
+
+    expect(liveCalls).toBe(2); // 이 창에서는 딱 한 번만 다시 읽었다 — 매 요청마다가 아니다
+    expect(logs).toHaveLength(1); // 로그도 한 줄만
+
+    clock += 30_001; // 다음 30초 창
+    await router.submit("fal-ai/x", {}).catch(() => undefined);
+
+    expect(liveCalls).toBe(3);
+    expect(logs).toHaveLength(2);
+  });
 });
 
 describe("accountFailureOf", () => {

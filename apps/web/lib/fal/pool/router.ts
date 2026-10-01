@@ -145,7 +145,9 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
       })
       .catch((error: unknown) => {
         log("[fal-pool] 계정 목록을 읽지 못했습니다", { message: error instanceof Error ? error.message : String(error) });
-        const fallback = lastGood ?? emptySnapshot();
+        // 시각은 지금으로 새로 찍는다(불변 — lastGood 자체는 안 바꾼다) — 안 그러면 마지막 성공
+        // 시각이 30초를 넘기는 순간부터 요청마다 매번 다시 읽고 또 실패하고 또 적는다.
+        const fallback = lastGood ? { ...lastGood, at: now() } : emptySnapshot();
         if (gen === generation) snapshot = fallback;
         return fallback;
       })
