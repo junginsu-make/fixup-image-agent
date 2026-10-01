@@ -19,6 +19,8 @@ const updates: Array<Record<string, unknown>> = [];
 let project: { id: string; modelId: string; data: Record<string, unknown> } | undefined;
 /** `jobResult` 가 던질 것. 시험마다 바꾼다. */
 let resultThrows: unknown = null;
+/** fal 을 물었는가(엔드포인트 검사가 그 앞에서 막는지 본다). */
+let falAsked = 0;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -45,8 +47,9 @@ vi.mock("../../../../lib/poster/stores", () => ({
 vi.mock("../../../../lib/poster/providers", () => ({
   createPosterFalClients: () => ({
     queue: {
-      jobStatus: async () => "completed",
+      jobStatus: async () => { falAsked += 1; return "completed"; },
       jobResult: async () => {
+        falAsked += 1;
         if (resultThrows) throw resultThrows;
         return { images: [] };
       },
@@ -59,12 +62,12 @@ vi.mock("../../../../lib/poster/providers", () => ({
 
 const { POST } = await import("../projects/[id]/status/route");
 
-const call = () =>
+const call = (endpoint = "openai/gpt-image-2.5/sunburst/edit") =>
   POST(
     new Request("http://localhost/api/poster/projects/p1/status", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ requestRowId: "r1", falRequestId: "f1", endpoint: "openai/x" }),
+      body: JSON.stringify({ requestRowId: "r1", falRequestId: "f1", endpoint }),
     }),
     { params: Promise.resolve({ id: "p1" }) },
   );
@@ -77,6 +80,7 @@ beforeEach(() => {
   finalized.length = 0;
   updates.length = 0;
   resultThrows = null;
+  falAsked = 0;
   project = { id: "p1", modelId: "gpt-image-2.5-sunburst", data: { reservationId: "res-1" } };
 });
 
@@ -178,6 +182,30 @@ describe("우리 쪽에서 터지면", () => {
     await call();
 
     expect(finalized).toHaveLength(0);
+  });
+});
+
+/**
+ * **모르는 엔드포인트는 받지 않는다**(최종 보안 리뷰 M1). 이 값은 브라우저가 준다 — 포스터가 쓰는 모델
+ * 엔드포인트(`@fixup/sns-core` 의 `IMAGE_MODELS`)만 받아, 키가 실린 조회가 남의 주소로 가지 않게 한다.
+ */
+describe("엔드포인트", () => {
+  it("포스터 모델의 엔드포인트가 아니면 400 — fal 을 묻지 않는다", async () => {
+    for (const endpoint of ["https://xxxfal.run/fal-ai/nano-banana", "openai/x", "fal-ai/../evil"]) {
+      const response = await call(endpoint);
+      expect(response.status, endpoint).toBe(400);
+    }
+    expect(falAsked).toBe(0);
+    expect(finalized).toHaveLength(0);
+  });
+
+  it("포스터 모델의 엔드포인트는 모두 받는다", async () => {
+    const { IMAGE_MODELS } = await import("@fixup/sns-core");
+    for (const model of IMAGE_MODELS) {
+      for (const endpoint of [model.t2i.endpoint, model.i2i.endpoint]) {
+        expect((await call(endpoint)).status, endpoint).toBe(200);
+      }
+    }
   });
 });
 

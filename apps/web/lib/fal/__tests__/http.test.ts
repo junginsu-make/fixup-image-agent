@@ -90,7 +90,79 @@ describe("falQueueOps", () => {
   it("상태 셋을 우리 말로 바꾼다", async () => {
     const answers = ["IN_QUEUE", "IN_PROGRESS", "COMPLETED"];
     const ops = falQueueOps("k", () => ({ queue: { status: async () => ({ status: answers.shift() }) } }) as never);
-    expect([await ops.status("e", "r"), await ops.status("e", "r"), await ops.status("e", "r")]).toEqual(["queued", "in_progress", "completed"]);
+    const e = "fal-ai/nano-banana";
+    expect([await ops.status(e, "r"), await ops.status(e, "r"), await ops.status(e, "r")]).toEqual(["queued", "in_progress", "completed"]);
+  });
+});
+
+/**
+ * **엔드포인트 모양 검사**(최종 보안 리뷰 M1). 포스터 상태 조회는 브라우저가 준 `endpoint` 를 받는다.
+ * `@fal-ai/client` 는 `https://` 로 시작하고 호스트가 `fal.run` 으로 끝나는 값을 **그대로 주소로** 쓴다 —
+ * `https://xxxfal.run/...` 이면 `Authorization: Key <키>` 가 남의 호스트로 간다. 키를 쓰는 마지막 자리에서 막는다.
+ */
+describe("엔드포인트 모양 검사 — 키를 쓰는 마지막 자리", () => {
+  const 나쁜 = [
+    "https://xxxfal.run/fal-ai/nano-banana",
+    "https:/xxxfal.run/x",
+    "xxxfal.run",
+    "//xxxfal.run/x",
+    "/fal-ai/nano-banana",
+    "fal-ai/../../evil",
+    "fal-ai//x",
+    "fal-ai/x:8080",
+    "fal-ai",
+    "",
+    "fal-ai/x?y=1",
+    "fal-ai/x#y",
+    "fal-ai/ x",
+    "fal.ai/x",
+  ];
+
+  it("나쁜 모양은 제출 전에 400 으로 막는다 — 네트워크로 나가지 않는다", async () => {
+    for (const endpoint of 나쁜) {
+      const { seen, fetchImpl } = 받은(new Response(JSON.stringify({ request_id: "r" })));
+      const error = await submitFalQueue("k", endpoint, {}, {}, fetchImpl).catch((e: unknown) => e);
+      expect(error, endpoint).toBeInstanceOf(FalHttpError);
+      expect(error, endpoint).toMatchObject({ status: 400, body: "", message: "올바르지 않은 생성 요청입니다." });
+      expect(seen, endpoint).toEqual([]);
+    }
+  });
+
+  it("상태·결과·취소도 같은 모양 검사 — 클라이언트를 부르지 않는다", async () => {
+    const called: string[] = [];
+    const queue = {
+      status: async () => { called.push("status"); return { status: "COMPLETED" }; },
+      result: async () => { called.push("result"); return { data: {} }; },
+      cancel: async () => { called.push("cancel"); },
+    };
+    const ops = falQueueOps("k", () => ({ queue }) as never);
+    for (const endpoint of 나쁜) {
+      for (const run of [() => ops.status(endpoint, "r"), () => ops.result(endpoint, "r"), () => ops.cancel(endpoint, "r")]) {
+        const error = await run().catch((e: unknown) => e);
+        expect(error, endpoint).toMatchObject({ status: 400, message: "올바르지 않은 생성 요청입니다." });
+      }
+    }
+    expect(called).toEqual([]);
+  });
+
+  it("저장소가 실제로 쓰는 엔드포인트는 모두 통과한다", async () => {
+    const { IMAGE_MODELS } = await import("@fixup/sns-core");
+    const { resolveEndpoint } = await import("@fixup/pdp-core");
+    const { BACKGROUND_REMOVAL_ENDPOINT } = await import("../../ad/background");
+    const pdpIds = ["gpt-image-2.5-flare", "gpt-image-2", "nano-banana-pro", "nano-banana-2", "nano-banana", "seedream-5-pro", "qwen-image-2-pro"] as const;
+    const real = new Set<string>([
+      ...IMAGE_MODELS.flatMap((model) => [model.t2i.endpoint, model.i2i.endpoint]),
+      ...pdpIds.flatMap((id) => [resolveEndpoint(id, []), resolveEndpoint(id, [{ kind: "product", url: "https://x" } as never])]),
+      BACKGROUND_REMOVAL_ENDPOINT,
+    ]);
+    expect(real.size).toBeGreaterThan(12);
+    for (const endpoint of real) {
+      const { seen, fetchImpl } = 받은(new Response(JSON.stringify({ request_id: "r" })));
+      await submitFalQueue("k", endpoint, {}, {}, fetchImpl);
+      expect(seen[0]!.url).toBe(`https://queue.fal.run/${endpoint}`);
+      const ops = falQueueOps("k", () => ({ queue: { status: async () => ({ status: "IN_QUEUE" }) } }) as never);
+      expect(await ops.status(endpoint, "r")).toBe("queued");
+    }
   });
 });
 

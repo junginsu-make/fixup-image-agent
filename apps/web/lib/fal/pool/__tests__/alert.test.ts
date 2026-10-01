@@ -23,6 +23,12 @@ describe("falPoolAlertMail", () => {
     expect(mail.text).toContain("fal 응답: User is locked");
   });
 
+  it("키를 풀지 못하면 먼저 「다시 확인」을, 열쇠가 정말 바뀌었으면 「키 바꾸기」를 말한다", () => {
+    const mail = falPoolAlertMail({ kind: "decrypt_failed", accountName: "a", detail: "x" });
+    expect(mail.text).toContain("「다시 확인」");
+    expect(mail.text).toContain("「키 바꾸기」");
+  });
+
   it("**키 원문은 어디에도 없다** — 이름·원문 응답만 받는다", () => {
     const mail = falPoolAlertMail({ kind: "invalid", accountName: "a", detail: "invalid key credentials" });
     expect(Object.keys(mail)).toEqual(["subject", "text"]);

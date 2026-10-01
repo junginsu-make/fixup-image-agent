@@ -231,6 +231,35 @@ describe("다시 확인", () => {
   });
 });
 
+/**
+ * **대문자 id 는 소문자로**(최종 보안 리뷰 L3). DB 는 uuid 를 소문자로 돌려주고, 라우터는 그 소문자 id 를
+ * 추가 인증 데이터로 써서 키를 푼다. 대문자로 잠그면 저장은 되는데 생성 때 풀리지 않는다.
+ */
+describe("대문자 id", () => {
+  const 대문자 = ID.toUpperCase();
+
+  it("키 바꾸기는 소문자 id 로 잠그고 보낸다 — 라우터가 DB 의 소문자 id 로 풀 수 있다", async () => {
+    await actions.replaceFalKeyAction(폼({ id: 대문자, key: 키 }));
+    const { args } = calls[0]!;
+    expect(args.p_id).toBe(ID);
+    expect(openFalKey(열쇠, ID, { ciphertext: String(args.p_ciphertext), iv: String(args.p_iv), tag: String(args.p_tag) })).toBe(키);
+  });
+
+  it("다시 확인은 소문자 id 로 잠긴 키를 푼다", async () => {
+    const sealed = sealFalKey(열쇠, ID, 키);
+    stored = { key_ciphertext: sealed.ciphertext, key_iv: sealed.iv, key_tag: sealed.tag };
+    await actions.recheckFalAccountAction(폼({ id: 대문자 }));
+    expect(확인한키).toEqual([키]);
+    expect(calls).toEqual([{ fn: "fal_account_recheck", args: { p_actor: "admin-1", p_id: ID, p_ok: true, p_detail: null } }]);
+  });
+
+  it("설정·지우기도 소문자 id 로 보낸다", async () => {
+    await actions.updateFalAccountAction(폼({ id: 대문자, name: "a", limit: "20", enabled: "1" }));
+    await actions.deleteFalAccountAction(폼({ id: 대문자 }));
+    expect(calls.map((c) => c.args.p_id)).toEqual([ID, ID]);
+  });
+});
+
 describe("DB 함수와 이름이 맞는다", () => {
   const migration = readFileSync(join(__dirname, "..", "..", "..", "..", "..", "supabase", "migrations", "202610010001_fal_account_pool.sql"), "utf8");
   const paramsOf = (fn: string) => {

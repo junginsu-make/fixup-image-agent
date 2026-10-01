@@ -41,6 +41,26 @@ export interface FalSubmitOptions {
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** `<업체>/<모델>[/<칸>...]`. 첫 칸에 점이 없으니 호스트처럼 읽힐 수 없다. */
+const ENDPOINT_SHAPE = /^[a-z0-9-]+\/[a-z0-9][a-z0-9._/-]*$/i;
+
+/**
+ * **키를 싣기 전에 엔드포인트 모양을 본다**(최종 보안 리뷰 M1).
+ *
+ * 포스터 상태 조회는 브라우저가 준 `endpoint` 를 받는다. `@fal-ai/client` 는 호스트가 `fal.run` 으로 끝나는
+ * 주소(`https://xxxfal.run/...`)를 **그대로** 쓰므로, 검사가 없으면 `Authorization: Key <키>` 가 남의 호스트로
+ * 간다. 키를 쓰는 마지막 자리(제출·상태·결과·취소)에서 막는다 — 앞단 검사에만 기대지 않는다.
+ */
+function assertFalEndpoint(endpoint: string): void {
+  const ok = typeof endpoint === "string"
+    && ENDPOINT_SHAPE.test(endpoint)
+    && !endpoint.includes("..")
+    && !endpoint.includes("//")
+    && !endpoint.includes(":")
+    && !endpoint.startsWith("/");
+  if (!ok) throw new FalHttpError(400, "", "올바르지 않은 생성 요청입니다.");
+}
+
 /** 제출하고 fal 요청 번호를 돌려준다. 실패면 `FalHttpError`(상태 코드 그대로). */
 export async function submitFalQueue(
   key: string,
@@ -49,6 +69,7 @@ export async function submitFalQueue(
   options: FalSubmitOptions = {},
   fetchImpl: FetchLike = fetch,
 ): Promise<string> {
+  assertFalEndpoint(endpoint);
   const headers: Record<string, string> = { Authorization: `Key ${key}`, "Content-Type": "application/json" };
   if (options.startTimeoutS !== undefined) headers["x-fal-request-timeout"] = String(options.startTimeoutS);
 
@@ -142,16 +163,19 @@ export function falQueueOps(key: string, factory: ClientFactory = createFalClien
   const client = factory({ credentials: key, retry: { maxRetries: 0 } });
   return {
     async status(endpoint, requestId) {
+      assertFalEndpoint(endpoint);
       const status = await client.queue.status(endpoint, { requestId, logs: false });
       if (status.status === "IN_QUEUE") return "queued";
       if (status.status === "IN_PROGRESS") return "in_progress";
       return "completed";
     },
     async result(endpoint, requestId) {
+      assertFalEndpoint(endpoint);
       const result = await client.queue.result(endpoint as never, { requestId });
       return result.data as unknown;
     },
     async cancel(endpoint, requestId) {
+      assertFalEndpoint(endpoint);
       await client.queue.cancel(endpoint, { requestId });
     },
   };

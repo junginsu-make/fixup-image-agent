@@ -26,7 +26,8 @@ const BACK = "/admin/system";
 
 const NameSchema = z.string().trim().min(1).max(80);
 const LimitSchema = z.coerce.number().int().min(1).max(200);
-const IdSchema = z.string().uuid();
+/** DB 는 uuid 를 소문자로 돌려주고 라우터는 그 id 로 키를 푼다 — 대문자로 잠그면 생성 때 풀리지 않는다. */
+const IdSchema = z.string().uuid().transform((value) => value.toLowerCase());
 
 function failed(message: string): void {
   revalidatePath(BACK);

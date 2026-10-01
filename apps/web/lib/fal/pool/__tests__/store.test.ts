@@ -71,9 +71,9 @@ describe("supabaseFalPoolStore", () => {
     expect(await store.mark("a", "invalid", "")).toBe(false);
   });
 
-  it("목록은 지우지 않은 계정만, 암호문 칸까지 읽는다(서버 안에서만 푼다)", async () => {
+  it("목록은 지우지 않은 계정만, 쉬는 시각·암호문 칸까지 읽는다(서버 안에서만 푼다)", async () => {
     await store.liveAccounts();
-    expect(queries).toEqual(["from fal_accounts", "select id,name,enabled,state,key_ciphertext,key_iv,key_tag", "is deleted_at null"]);
+    expect(queries).toEqual(["from fal_accounts", "select id,name,enabled,state,cooldown_until,key_ciphertext,key_iv,key_tag", "is deleted_at null"]);
   });
 
   it("요청 번호로 계정을 찾는다", async () => {

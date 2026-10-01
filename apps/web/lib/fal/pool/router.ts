@@ -1,4 +1,4 @@
-import { FalHttpError, submitFalQueue } from "../http";
+import { FalHttpError, checkFalKey, submitFalQueue, type FalKeyCheck } from "../http";
 import { envFalRouter, type FalRoute, type FalRouter } from "../route";
 import type { FalPoolAlert } from "./alert";
 import { openFalKey } from "./key-crypto";
@@ -17,10 +17,18 @@ import type { FalAccountFailure, FalAccountState, FalPoolStore } from "./store";
  * - 칸 잡기는 DB 가 한다(`fal_account_claim`) — 웹 프로세스가 여럿이거나 배치기(S4)가 붙어도 같은 수를 센다
  * - 계정 목록(복호한 키)은 30초 보관한다. 관리자 화면이 바꾸면 `refresh()` 로 바로 비운다
  * - 키는 이 프로세스 메모리에만 있다. 브라우저·기록·오류 문구로 나가지 않는다
+ * - **429 인데 옮길 계정이 없으면 쉬게 하지 않는다**(최종 리뷰 I1). 계정 하나일 때 한 번의 429 로 60초 동안
+ *   모든 생성이 멈추던 것을, 이번 제출만 「잠시 뒤 다시」로 끝낸다
+ * - **401/403 은 무료 확인을 한 번 한다**(최종 보안 리뷰 L2). 키가 멀쩡하면 요청 탓이다 — 계정을 끄지 않는다
+ * - DB 가 터진 원문(표·제약 이름)은 기록에만, 화면에는 고정 문구만(최종 보안 리뷰 L4)
  */
 
 export const FAL_POOL_REFRESH_MS = 30_000;
 const REMEMBERED_LIMIT = 5_000;
+/** DB `fal_account_mark` 의 한도 걸림 쉬는 시간과 같다. 이 프로세스 캐시에만 쓴다. */
+const RATE_LIMIT_COOLDOWN_MS = 60_000;
+/** 칸을 줄 수 없는 상태. DB `fal_account_claim` 의 거르기와 같다. */
+const BLOCKED_STATES: readonly FalAccountState[] = ["locked", "invalid", "decrypt_failed"];
 
 /** 켜진 계정이 모두 찼다(또는 모두 막혔다). 429 를 실어 화면이 「잠시 뒤 다시」로 말하게 한다. */
 export class FalPoolBusyError extends Error {
@@ -29,6 +37,20 @@ export class FalPoolBusyError extends Error {
   constructor() {
     super("지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.");
     this.name = "FalPoolBusyError";
+  }
+}
+
+/**
+ * 계정 풀 DB 를 쓰지 못했다. 원문은 기록에만 남기고 화면에는 이 문구만 간다.
+ *
+ * `status` 는 **제출 전**(칸 잡기)에만 싣는다(503) — 아직 아무것도 보내지 않았으니 묶은 장을 풀어도 된다.
+ * 보낸 요청의 계정 찾기에서 터지면 싣지 않는다 — fal 이 이미 그렸을 수 있어 장을 풀면 안 된다
+ * (`classifyFalFailure`: 상태 코드가 없으면 「우리 쪽 고장」으로 보고 풀지 않는다).
+ */
+export class FalPoolUnavailableError extends Error {
+  constructor(readonly status?: number) {
+    super("이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.");
+    this.name = "FalPoolUnavailableError";
   }
 }
 
@@ -53,6 +75,8 @@ interface PoolAccount {
   key: string;
   enabled: boolean;
   state: FalAccountState;
+  /** 한도 걸림 뒤 쉬는 끝(ms). 없으면 null. */
+  cooldownUntil: number | null;
 }
 
 interface Snapshot {
@@ -70,6 +94,8 @@ export interface PoolRouterDeps {
   environment: Env;
   alert: (event: FalPoolAlert) => unknown;
   submit?: typeof submitFalQueue;
+  /** 401/403 뒤 키가 살아 있는지 무료로 한 번 묻는다. 기본은 `checkFalKey`(10초 제한). */
+  checkKey?: (key: string) => Promise<FalKeyCheck>;
   now?: () => number;
   log?: (message: string, detail?: unknown) => void;
 }
@@ -81,6 +107,7 @@ export interface PoolRouter extends FalRouter {
 
 export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
   const submit = deps.submit ?? submitFalQueue;
+  const checkKey = deps.checkKey ?? checkFalKey;
   const env = envFalRouter(deps.environment, submit);
   const now = deps.now ?? Date.now;
   const log = deps.log ?? ((message: string, detail?: unknown) => console.error(message, detail));
@@ -111,11 +138,15 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
     for (const row of rows) {
       try {
         const key = openFalKey(deps.masterKey, row.id, { ciphertext: row.key_ciphertext, iv: row.key_iv, tag: row.key_tag });
-        accounts.set(row.id, { id: row.id, name: row.name, key, enabled: row.enabled, state: row.state });
+        const cooldownUntil = row.cooldown_until ? Date.parse(row.cooldown_until) : NaN;
+        accounts.set(row.id, {
+          id: row.id, name: row.name, key, enabled: row.enabled, state: row.state,
+          cooldownUntil: Number.isFinite(cooldownUntil) ? cooldownUntil : null,
+        });
       } catch {
         // 이미 알려진 상태면 또 표시·메일 보내지 않는다 — 풀릴 때까지 30초마다 다시 적재될 때마다 반복될 뻔했다.
         if (row.state === "decrypt_failed") continue;
-        const detail = "키를 풀지 못했습니다(서버 열쇠가 바뀌었거나 값이 손상됨).";
+        const detail = "키를 풀지 못했습니다(서버 열쇠가 바뀌었거나 값이 손상됨). 열쇠를 되돌렸다면 「다시 확인」을 눌러 주세요.";
         const changed = await deps.store.mark(row.id, "decrypt_failed", detail).catch(() => false);
         if (changed) alert({ kind: "decrypt_failed", accountName: row.name, detail });
       }
@@ -164,21 +195,73 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
     return startLoad();
   }
 
-  const poolOn = (s: Snapshot) => [...s.accounts.values()].some((account) => account.enabled);
+  /**
+   * 켜진 계정이 있는가. **DB 에 `decrypt_failed` 로 적힌 계정은 세지 않는다**(최종 리뷰 I2) — 열쇠를 되돌려
+   * 지금은 풀려도 DB 칸 잡기는 그 계정을 빼므로, 세면 칸을 하나도 못 받아 모든 생성이 「몰려 있습니다」가
+   * 된다. 관리자가 「다시 확인」을 누를 때까지는 서버 `FAL_KEY` 로 보낸다(보충 §3 「모두 키를 풀 수 없음」).
+   */
+  const poolOn = (s: Snapshot) => [...s.accounts.values()].some((account) => account.enabled && account.state !== "decrypt_failed");
+
+  /** 지금 칸을 받을 수 있는 계정인가(DB 칸 잡기의 거르기와 같다, 남은 칸 수는 빼고). */
+  const usable = (account: PoolAccount) =>
+    account.enabled && !BLOCKED_STATES.includes(account.state) && !(account.cooldownUntil !== null && account.cooldownUntil > now());
 
   /**
-   * 계정 상태를 바꾼 결과를 **새 스냅샷**으로 돌려준다(불변). 지금 캐시가 이 스냅샷이면 바로 덮어써,
+   * 계정 하나를 바꾼 결과를 **새 스냅샷**으로 돌려준다(불변). 지금 캐시가 이 스냅샷이면 바로 덮어써,
    * 막 막힌 계정을 `uploadRoute` 가 최대 30초 동안 더 돌려주는 일이 없게 한다.
    */
-  function withAccountState(snap: Snapshot, accountId: string, state: FalAccountState): Snapshot {
+  function withAccount(snap: Snapshot, accountId: string, patch: Partial<Pick<PoolAccount, "state" | "cooldownUntil">>): Snapshot {
     const account = snap.accounts.get(accountId);
     if (!account) return snap;
     const accounts = new Map(snap.accounts);
-    accounts.set(accountId, { ...account, state });
+    accounts.set(accountId, { ...account, ...patch });
     const updated: Snapshot = { ...snap, accounts };
     if (snapshot === snap) snapshot = updated;
     if (lastGood === snap) lastGood = updated;
     return updated;
+  }
+
+  /** DB 를 부르다 터지면 원문은 기록에 한 번, 밖으로는 고정 문구만. */
+  async function guarded<T>(what: string, run: () => Promise<T>, status?: number): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      log(`[fal-pool] ${what}`, { message: error instanceof Error ? error.message : String(error) });
+      throw new FalPoolUnavailableError(status);
+    }
+  }
+
+  /** 무료 확인이 「키가 멀쩡하다」고 하면 참. 확인할 수 없으면(시간 초과·fal 장애) 거짓 — 오늘처럼 다룬다. */
+  async function keyStillWorks(key: string): Promise<boolean> {
+    const check = await checkKey(key).catch(() => null);
+    return check?.ok === true;
+  }
+
+  /**
+   * fal 이 이 계정의 제출을 거절했다. 다음 계정으로 옮길 거면 (바뀐) 스냅샷을 돌려주고, 아니면 던진다.
+   *
+   * - 계정 탓이 아니면(422·5xx·네트워크) 그대로 던진다 — 두 번 과금될 수 있다
+   * - 429 인데 **옮길 다른 계정이 없으면** 쉬게 하지 않고 이번 제출만 「몰려 있습니다」. 쉬게 하면 계정 하나일 때
+   *   60초 동안 모든 생성이 멈춘다
+   * - 401/403(키 오류로 읽힌 것)은 무료 확인 한 번. 키가 멀쩡하면 요청 탓이니 끄지도 옮기지도 않는다
+   */
+  async function onRefused(snap: Snapshot, account: PoolAccount, error: unknown, tried: readonly string[]): Promise<Snapshot> {
+    const failure = accountFailureOf(error);
+    if (!failure) throw error;
+    if (failure === "rate_limited") {
+      const others = [...snap.accounts.values()].some((other) => other.id !== account.id && !tried.includes(other.id) && usable(other));
+      if (!others) throw new FalPoolBusyError();
+    }
+    if (failure === "invalid" && (await keyStillWorks(account.key))) throw error;
+
+    const detail = (error as FalHttpError).body.slice(0, 300);
+    const changed = await deps.store.mark(account.id, failure, detail).catch(() => false);
+    // 이 프로세스 캐시에도 쉬는 중으로 — 다음 제출이 「옮길 곳이 있다」고 잘못 셈하지 않게.
+    if (failure === "rate_limited") return withAccount(snap, account.id, { cooldownUntil: now() + RATE_LIMIT_COOLDOWN_MS });
+    if (!changed) return snap;
+    alert({ kind: failure, accountName: account.name, detail });
+    // 캐시에도 바로 반영 — 안 그러면 uploadRoute 가 최대 30초 동안 막힌 계정을 더 돌려준다.
+    return withAccount(snap, account.id, { state: failure });
   }
 
   /** 받은 번호를 DB 에 붙인다. 세 번 해도 안 되면 기록만 — 같은 프로세스는 메모리로 찾는다. */
@@ -206,7 +289,7 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
 
       const tried: string[] = [];
       for (let attempt = 0; attempt <= snap.accounts.size; attempt += 1) {
-        const slot = await deps.store.claim(endpoint, tried);
+        const slot = await guarded("칸을 잡지 못했습니다", () => deps.store.claim(endpoint, tried), 503);
         if (!slot) throw new FalPoolBusyError();
 
         let account = snap.accounts.get(slot.accountId);
@@ -225,16 +308,8 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
           requestId = await submit(account.key, endpoint, input, options);
         } catch (error) {
           await deps.store.release(slot.slotId).catch((cause: unknown) => log("[fal-pool] 칸을 돌려주지 못했습니다", cause));
-          const failure = accountFailureOf(error);
-          if (!failure) throw error;
+          snap = await onRefused(snap, account, error, tried);
           tried.push(account.id);
-          const detail = (error as FalHttpError).body.slice(0, 300);
-          const changed = await deps.store.mark(account.id, failure, detail).catch(() => false);
-          if (changed && failure !== "rate_limited") {
-            // 캐시에도 바로 반영 — 안 그러면 uploadRoute 가 최대 30초 동안 막힌 계정을 더 돌려준다.
-            snap = withAccountState(snap, account.id, failure);
-            alert({ kind: failure, accountName: account.name, detail });
-          }
           continue;
         }
 
@@ -251,7 +326,8 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
       if (known) return known;
       let snap = await current();
       if (!snap.anyRow) return env.routeOf(requestId);
-      const accountId = await deps.store.accountOf(requestId);
+      // 상태 코드는 싣지 않는다 — 이미 보낸 요청이라 화면이 묶은 장을 풀면 안 된다.
+      const accountId = await guarded("보낸 계정을 찾지 못했습니다", () => deps.store.accountOf(requestId));
       // 계정 기록이 없으면 서버 키로 보낸 요청이다(풀을 켜기 전·켜진 계정이 없던 때).
       if (!accountId) return env.routeOf(requestId);
       let account = snap.accounts.get(accountId);

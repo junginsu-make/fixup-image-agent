@@ -11,6 +11,8 @@ export interface FalAccountRow {
   name: string;
   enabled: boolean;
   state: FalAccountState;
+  /** 한도 걸림(429) 뒤 쉬는 끝 시각(ISO). 지나면 다시 칸을 받는다. */
+  cooldown_until?: string | null;
   key_ciphertext: string;
   key_iv: string;
   key_tag: string;
@@ -49,7 +51,7 @@ export function supabaseFalPoolStore(): FalPoolStore {
     async liveAccounts() {
       const { data, error } = await (await db())
         .from("fal_accounts")
-        .select("id,name,enabled,state,key_ciphertext,key_iv,key_tag")
+        .select("id,name,enabled,state,cooldown_until,key_ciphertext,key_iv,key_tag")
         .is("deleted_at", null);
       if (error) fail("liveAccounts", error);
       return (data ?? []) as FalAccountRow[];

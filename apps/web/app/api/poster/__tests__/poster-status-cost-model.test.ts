@@ -69,7 +69,7 @@ const call = () =>
     new Request("http://localhost/api/poster/projects/p1/status", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ requestRowId: "r1", falRequestId: "f1", endpoint: "openai/x" }),
+      body: JSON.stringify({ requestRowId: "r1", falRequestId: "f1", endpoint: "openai/gpt-image-2.5/sunburst/edit" }),
     }),
     { params: Promise.resolve({ id: "p1" }) },
   );

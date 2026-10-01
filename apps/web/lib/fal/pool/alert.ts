@@ -31,7 +31,7 @@ const TITLE: Record<FalPoolAlertKind, string> = {
 const NEXT_STEP: Record<FalPoolAlertKind, string> = {
   locked: "fal 대시보드에서 잔액을 충전한 뒤 관리자 화면 「fal 계정」에서 「다시 확인」을 눌러 주세요. 그동안 새 생성은 다른 계정으로 갑니다.",
   invalid: "fal 에서 새 키를 만들어 관리자 화면 「fal 계정」에서 키를 바꿔 주세요. 그동안 새 생성은 다른 계정으로 갑니다.",
-  decrypt_failed: "서버의 FAL_KEY_ENCRYPTION_SECRET 이 바뀌었을 수 있습니다. 관리자 화면 「fal 계정」에서 키를 다시 넣어 주세요.",
+  decrypt_failed: "서버의 FAL_KEY_ENCRYPTION_SECRET 이 바뀌었을 수 있습니다. 열쇠를 원래 값으로 되돌렸다면 관리자 화면 「fal 계정」에서 「다시 확인」을 눌러 주세요. 열쇠가 정말 바뀌었다면 「키 바꾸기」로 키를 다시 넣어 주세요. 그동안 새 생성은 다른 계정이나 서버 FAL_KEY 로 갑니다.",
   master_key_missing: "/etc/fixup-image-agent/app.env 에 FAL_KEY_ENCRYPTION_SECRET 을 넣고 서비스를 다시 시작해 주세요. 그동안은 FAL_KEY 하나로 만듭니다.",
 };
 
