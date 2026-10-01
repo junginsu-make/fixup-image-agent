@@ -70,12 +70,13 @@ test('my own image stays visible even with a team stamped on it', async () => {
   }
 });
 
-test('only the two expected policies guard the table — no stray read-all policy', async () => {
+test('only the two expected permissive policies grant access — onboarding adds only a restrictive gate', async () => {
   // 정책은 OR 로 합쳐진다. `using (true)` 같은 select 정책이 하나라도 다시 생기면
   // 판정 함수를 아무리 좁혀도 전원이 본다.
   const rows = await db.sql(`select string_agg(policyname || ':' || cmd, ',' order by policyname)
-    from pg_policies where schemaname='public' and tablename='reference_images';`);
+    from pg_policies where schemaname='public' and tablename='reference_images' and permissive='PERMISSIVE';`);
   assert.equal(rows, 'members manage own reference images:ALL,team reads reference images:SELECT');
+  assert.equal(await db.sql(`select permissive from pg_policies where schemaname='public' and tablename='reference_images' and policyname='social_signup_complete';`), 'RESTRICTIVE');
 });
 
 test("the visibility check runs with the caller's rights (security invoker)", async () => {

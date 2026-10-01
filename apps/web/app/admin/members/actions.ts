@@ -7,6 +7,7 @@ import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { canManageTarget, resolveOwnerEmail, OWNER_PROTECTED_MESSAGE } from "../../../lib/membership/owner";
 import { isCreditLedgerEnabled } from "../../../lib/membership/credit-ledger";
 import { isLocalAuthBypass } from "../../../lib/dev-auth";
+import { needsOnboarding, ONBOARDING_COLUMNS } from "../../../lib/membership/onboarding";
 
 const id = z.string().uuid();
 const units = z.number().int().min(1).max(1_000_000);
@@ -76,8 +77,9 @@ export async function changeCredits(input: CreditCommand): Promise<{ ok: boolean
     const { actor, db } = await context();
     const users = "users" in command ? [...new Set(command.users)] : "user" in command ? [command.user] : [];
     if (users.length) {
-      const { data, error } = await db.from("profiles").select("id,email").in("id", users);
+      const { data, error } = await db.from("profiles").select(`id,email,${ONBOARDING_COLUMNS}`).in("id", users);
       if (error || data?.length !== users.length) throw new Error("선택한 회원을 찾지 못했습니다.");
+      if (["grant", "paid", "subscription"].includes(command.kind) && data.some(needsOnboarding)) throw new Error("가입 정보를 아직 확인하지 않은 회원이 있습니다. 가입 완료 후 지급해 주세요.");
       if (data.some(target => !canManageTarget({ actorEmail: actor.profile.email, targetEmail: target.email, owner: resolveOwnerEmail(process.env.OWNER_EMAIL) }))) throw new Error(OWNER_PROTECTED_MESSAGE);
     }
     // 결과를 버리지 않는다. 일괄 상태 변경은 조건에 안 맞는 회원을 건너뛰므로,

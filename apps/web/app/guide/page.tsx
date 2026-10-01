@@ -16,13 +16,16 @@ import { GUIDE_TOPICS } from "./_components/topics";
 import { LANDING_COST_SPREAD } from "../_landing/credit-facts";
 import { getMembership, getUsageSummary } from "../../lib/membership/server";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
+import { CreditRefresh } from "../_components/credit-refresh";
+import { needsOnboarding, ONBOARDING_PATH } from "../../lib/membership/onboarding";
 
 export const metadata: Metadata = { title: "사용 설명서" };
 
 /** 역할 어휘는 shared 에서 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "preserve_person_restyled", "place_as_is"];
 
-export default async function GuideHomePage() {
+export default async function GuideHomePage({ searchParams }: { searchParams?: Promise<{ signup?: string }> }) {
+  const signupComplete = (await searchParams)?.signup === "complete";
   const topics = GUIDE_TOPICS.filter((topic) => topic.href !== "/guide");
   /*
     로그인 없이도 열리는 화면이라 회원이 없을 수 있다. 없으면 장부 스위치를
@@ -34,6 +37,12 @@ export default async function GuideHomePage() {
 
   return (
     <>
+      {member && needsOnboarding(member.profile) && <div className="mb-5 rounded-xl border p-5"><Link href={ONBOARDING_PATH} className="font-semibold underline">가입 정보를 확인하고 가입을 완료해 주세요.</Link></div>}
+      {signupComplete && member && !needsOnboarding(member.profile) && <div role="status" className="mb-5 space-y-3 rounded-xl border bg-card p-5">
+        <p className="font-semibold">가입이 완료되었습니다.</p>
+        <p className="text-sm">{usage ? `현재 사용 가능한 크레딧은 ${usage.remaining.toLocaleString()}입니다. AI 기능은 관리자가 크레딧을 지급한 뒤 이용할 수 있습니다.` : "크레딧을 확인하지 못했습니다. 잠시 후 다시 조회해 주세요."}</p>
+        <div className="flex items-center gap-4"><CreditRefresh /><Link href="/settings" className="text-sm underline">내 계정과 크레딧 보기</Link></div>
+      </div>}
       <GuideHeader
         kicker="처음 오셨다면"
         title="무엇을 만들든, 순서는 하나입니다"

@@ -15,6 +15,7 @@ import { CS_EMAIL } from "../cs/contact";
 import { bindAiCaller } from "../llm/meter";
 import { costOperationKey } from "../ai-cost/keys";
 import { verifiedLogin } from "../auth/verified-login";
+import { needsOnboarding, ONBOARDING_COLUMNS } from "./onboarding";
 
 export type ApiMember = { userId: string; profile: MemberProfile };
 
@@ -37,7 +38,7 @@ export async function authenticateApiMember(): Promise<
   }
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at")
+    .select(`id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at,${ONBOARDING_COLUMNS}`)
     .eq("id", login.userId)
     .single();
   if (!profile) {
@@ -60,6 +61,9 @@ export async function authenticateApiMember(): Promise<
   */
   if (typed.status === "withdrawn") {
     return { ok: false, response: membershipApiError(403, "withdrawn", "탈퇴한 계정입니다.") };
+  }
+  if (needsOnboarding(typed)) {
+    return { ok: false, response: membershipApiError(403, "onboarding_required", "가입 정보를 확인하고 가입을 완료해 주세요.") };
   }
   return { ok: true, member: { userId: login.userId, profile: typed } };
 }

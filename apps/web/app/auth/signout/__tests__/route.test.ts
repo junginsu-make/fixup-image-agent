@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 다시 로그인하자마자 한 번 튕길 수 있다. 로그아웃은 둘 다 지운다.
  */
 
-const 흔적 = { 지운것: [] as string[], 로그아웃: 0 };
+const 흔적 = { 지운것: [] as string[], 로그아웃: 0, 오류: false };
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ delete: (name: string) => { 흔적.지운것.push(name); } }),
@@ -16,7 +16,7 @@ vi.mock("next/headers", () => ({
 
 vi.mock("../../../../lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({
-    auth: { signOut: async () => { 흔적.로그아웃 += 1; return { error: null }; } },
+    auth: { signOut: async () => { 흔적.로그아웃 += 1; return { error: 흔적.오류 ? { message: "private provider error" } : null }; } },
   }),
 }));
 
@@ -25,9 +25,17 @@ const { POST } = await import("../route");
 beforeEach(() => {
   흔적.지운것 = [];
   흔적.로그아웃 = 0;
+  흔적.오류 = false;
 });
 
 describe("로그아웃", () => {
+  it("로그아웃 실패를 성공으로 알리지 않는다", async () => {
+    흔적.오류 = true;
+    const response = await POST();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ ok: false });
+    expect(흔적.지운것).toEqual([]);
+  });
   it("로그인을 끝내고 로그인 시각 쿠키도 지운다", async () => {
     const response = await POST();
 

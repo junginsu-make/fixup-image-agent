@@ -4,7 +4,8 @@ import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
 export async function POST() {
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) return Response.json({ ok: false }, { status: 503 });
   // 로그인 시각 쿠키도 지운다 — 까닭은 `__tests__/route.test.ts` 머리에 있다.
   (await cookies()).delete(SESSION_START_COOKIE);
   return Response.json({ ok: true });

@@ -116,7 +116,7 @@ export default async function SettingsPage() {
 
         <div className="grid gap-4">
           <ProfileCard email={membership.profile.email} name={extras?.displayName ?? null} referrer={extras?.referrer ?? null} joinedAt={membership.profile.created_at} />
-          <LoginCard email={membership.profile.email} owner={isOwnerEmail(membership.profile.email, resolveOwnerEmail(process.env.OWNER_EMAIL))} />
+          <LoginCard email={membership.profile.email} socialProvider={membership.profile.signup_provider} owner={isOwnerEmail(membership.profile.email, resolveOwnerEmail(process.env.OWNER_EMAIL))} />
           {/*
             **맨 밑에 따로 둔다**(2026-09-23). 되돌릴 수 없는 일은 우연히 닿는
             자리에 두지 않는다.

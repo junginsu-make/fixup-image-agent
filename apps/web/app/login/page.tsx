@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Input, Label } from "@fixup/ui";
 import { AuthShell } from "../_components/auth-shell";
+import { SocialAuthButtons } from "../_components/social-auth-buttons";
+import { socialAuthError } from "../../lib/auth/social-auth";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import { clearCsChat } from "../../lib/cs/chat-store";
@@ -24,7 +26,7 @@ function LoginForm() {
   const [captchaToken, setCaptchaToken] = React.useState("");
   const auth = authAvailability();
   const [error, setError] = React.useState(
-    !auth.ready || params.get("error") === "service_not_configured" ? auth.message : "",
+    !auth.ready || params.get("error") === "service_not_configured" ? auth.message : socialAuthError(params.get("error")),
   );
   const [loading, setLoading] = React.useState(false);
   const [captchaVersion, setCaptchaVersion] = React.useState(0);
@@ -68,9 +70,12 @@ function LoginForm() {
     try {
       // **도우미 대화를 지운다.** 계정을 바꾸면 앞 계정의 대화가 남으면 안 된다.
       clearCsChat();
-      await createSupabaseBrowserClient().auth.signOut();
+      const response = await fetch("/auth/signout", { method: "POST" });
+      if (!response.ok) throw new Error("로그아웃하지 못했습니다. 다시 시도해 주세요.");
       setSignedIn(null);
       router.refresh();
+    } catch {
+      setError("로그아웃하지 못했습니다. 다시 시도해 주세요.");
     } finally {
       setSwitching(false);
     }
@@ -107,6 +112,7 @@ function LoginForm() {
     return (
       <AuthShell title="이미 로그인되어 있습니다" description="다른 계정으로 들어가려면 먼저 로그아웃해야 합니다." step={3}>
         <div className="space-y-4">
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <p className="rounded-md border border-border bg-muted/40 p-3 text-sm">
             지금 <strong className="break-all">{signedIn.email}</strong> 계정으로 로그인되어 있습니다.
           </p>
@@ -122,7 +128,8 @@ function LoginForm() {
   }
 
   return (
-    <AuthShell title="로그인" description="이메일 인증을 마친 회원이면 바로 이용할 수 있습니다." step={3}>
+    <AuthShell title="로그인" description="가입한 계정으로 계속하세요. AI 기능에는 사용 가능한 크레딧이 필요합니다." step={3}>
+      <SocialAuthButtons next={params.get("next")} disabled={loading || !auth.ready || signedIn === undefined} />
       <form className="space-y-4" onSubmit={submit}>
         {expired ? (
           <p role="status" className="rounded-md border border-border bg-muted/40 p-3 text-sm">

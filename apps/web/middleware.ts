@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
 import { HOME_AFTER_LOGIN, publicOrigin, signupRequiredPath } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
-import { isUsableAccount } from "./lib/membership/usable";
+import { canEnterOnboarding, isUsableAccount } from "./lib/membership/usable";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
 import type { UserRole } from "./lib/membership/types";
 import {
@@ -15,6 +15,7 @@ import {
 } from "./lib/auth/session-window";
 import { verifiedLogin } from "./lib/auth/verified-login";
 import { authRoundTrips } from "./lib/auth/auth-round-trips";
+import { ONBOARDING_COLUMNS, ONBOARDING_PATH } from "./lib/membership/onboarding";
 
 const PUBLIC_PATHS = [
   "/",
@@ -41,10 +42,11 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/auth/confirm",
   "/auth/signout",
+  "/auth/callback",
 ];
 
 function matches(pathname: string, roots: string[]) {
-  return roots.some((root) => pathname === root || pathname.startsWith(`${root}/`));
+  return roots.some((root) => pathname === root || (root !== "/auth/callback" && pathname.startsWith(`${root}/`)));
 }
 
 export async function middleware(request: NextRequest) {
@@ -76,6 +78,10 @@ export async function middleware(request: NextRequest) {
     if (matches(pathname, PUBLIC_PATHS)) return response;
     return NextResponse.redirect(new URL("/login?error=service_not_configured", base));
   }
+
+  // The callback exchanges a fresh login. Expiring an old session here would
+  // delete its PKCE verifier before the exchange; the handler validates the new session.
+  if (pathname === "/auth/callback") return response;
 
   const supabase = createServerClient(url, publishableKey, {
     // getClaims 가 조용히 getUser 왕복으로 돌아가면 센다(설계 2026-09-29 §3.2).
@@ -200,11 +206,25 @@ export async function middleware(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,status,email_confirmed_at")
+    .select(`role,status,email_confirmed_at,${ONBOARDING_COLUMNS}`)
     .eq("id", user.userId)
     .single();
 
   const active = isUsableAccount(profile);
+  const onboarding = canEnterOnboarding(profile);
+  const onboardingRedirect = (path: string) => {
+    const target = NextResponse.redirect(new URL(path, base));
+    // getClaims may have refreshed the session before deciding this destination.
+    for (const cookie of response.cookies.getAll()) target.cookies.set(cookie);
+    return target;
+  };
+  if (pathname === ONBOARDING_PATH) {
+    if (!profile) return onboardingRedirect("/login?error=profile_unavailable");
+    return onboarding ? response : onboardingRedirect(active ? HOME_AFTER_LOGIN : "/access");
+  }
+  if (onboarding && (isAuthPage || pathname === "/access" || !matches(pathname, PUBLIC_PATHS))) {
+    return onboardingRedirect(ONBOARDING_PATH);
+  }
   if (isAuthPage) {
     return NextResponse.redirect(new URL(active ? HOME_AFTER_LOGIN : "/access", base));
   }

@@ -28,6 +28,10 @@ beforeEach(() => {
 });
 
 describe("GET /api/session", () => {
+  it("가입 미완료 소셜 회원은 로그인됨·아직 못 씀", async () => {
+    state.profile = { status: "active", email_confirmed_at: "2026-10-01", onboarding_required: true, onboarding_completed_at: null };
+    await expect((await GET()).json()).resolves.toEqual({ authenticated: true, active: false });
+  });
   it("활성 회원은 로그인됨·쓸 수 있음", async () => {
     await expect((await GET()).json()).resolves.toEqual({ authenticated: true, active: true });
   });
