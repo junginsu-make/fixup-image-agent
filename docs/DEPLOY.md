@@ -316,6 +316,47 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 (맨 앞의 `test -d`는 안전장치다 — 백업이 없으면 `&&` 사슬이 그 자리에서 멈춰 아무것도 안
 지운다.)
 
+### fal 계정 풀 열쇠 (처음 한 번, 2026-10 S3b)
+
+관리자 화면 「fal 계정」은 붙여 넣은 fal 키를 **서버 열쇠**(`FAL_KEY_ENCRYPTION_SECRET`)로 잠가 DB 에 둔다.
+열쇠는 DB 에 없고 `/etc/fixup-image-agent/app.env` 에만 있다 — DB 를 상세페이지 제품과 함께 쓰므로 DB 만
+열려서는 키가 새지 않게 하려는 것이다.
+
+- **열쇠가 없거나 틀리면** 계정 풀이 꺼지고 지금처럼 `FAL_KEY` 하나로 만든다. 서비스는 죽지 않는다.
+  등록된 계정이 있는데 열쇠가 없으면 서버 기록에 `[fal-pool]` 줄을 남기고 `ALERT_EMAIL` 로 한 번 알린다
+- **열쇠를 잃으면** 등록한 키를 관리자 화면에서 모두 다시 넣어야 한다(각 계정 「키 바꾸기」). fal 대시보드에서
+  새 키를 만들면 되므로 돈은 들지 않는다. 그래서 사본 보관은 선택이다 — 보관한다면 비밀번호 관리자에만 둔다
+  (이 저장소·채팅·메일에 적지 않는다)
+
+넣기(값이 화면·기록에 찍히지 않게 **서버에서 만든다**):
+
+```bash
+ssh -i <운영 키> ubuntu@54.180.68.212 'sudo grep -c "^FAL_KEY_ENCRYPTION_SECRET=" /etc/fixup-image-agent/app.env || true'
+```
+`0` 이면 넣는다(1 이면 이미 있다 — 덮어쓰지 않는다. 바꾸면 등록한 키를 모두 다시 넣어야 한다):
+```bash
+ssh -i <운영 키> ubuntu@54.180.68.212 'set -e; F=/etc/fixup-image-agent/app.env; sudo cp -a $F /root/app.env.bak-$(date +%Y%m%d%H%M); S=$(openssl rand -base64 32); printf "\n# fal 계정 풀 열쇠(docs/DEPLOY.md 「fal 계정 풀 열쇠」)\nFAL_KEY_ENCRYPTION_SECRET=\"%s\"\n" "$S" | sudo tee -a $F >/dev/null; unset S; sudo stat -c "%a %U:%G" $F; sudo grep -c "^FAL_KEY_ENCRYPTION_SECRET=" $F'
+```
+Expected: `640 root:fixup-agent`, `1`. 그다음 재시작(배포와 같다 — 위 「배포 전에 최근 생성 요청을 본다」를 먼저):
+```bash
+ssh -i <운영 키> ubuntu@54.180.68.212 'sudo systemctl restart fixup-image-agent; sleep 8; systemctl is-active fixup-image-agent; curl -s -o /dev/null -w "local=%{http_code}\n" http://127.0.0.1:3000/'
+```
+확인: 관리자 화면 → 시스템 → 「fal 계정」 카드에 빨간 「서버 열쇠가 없어」 경고가 **없어야** 한다.
+
+사본을 남기려면(선택, 사용자가 직접): 사용자 터미널에서
+`ssh -i <운영 키> ubuntu@54.180.68.212 'sudo grep "^FAL_KEY_ENCRYPTION_SECRET=" /etc/fixup-image-agent/app.env'`
+를 돌려 나온 값을 비밀번호 관리자에 「FormWith 운영 FAL_KEY_ENCRYPTION_SECRET」으로 넣는다.
+
+**되돌리기**: 그 두 줄을 지우고(`sudo -e /etc/fixup-image-agent/app.env`) 재시작 → 풀이 꺼지고 `FAL_KEY` 로 만든다.
+등록한 계정·기록은 DB 에 그대로 남는다.
+
+**열쇠 바꾸기(회전)**: ① 관리자 화면에서 모든 계정 「사용 끄기」 → ② 모든 계정의 「진행 중」이 0 이 될 때까지
+기다린다(진행 중 요청은 옛 열쇠로 푼 키로 묻는다) → ③ `app.env` 의 값을 새 값으로 바꾸고 재시작 → ④ 각 계정
+「키 바꾸기」로 키를 다시 넣고 「사용 켜기」. ①~④ 동안은 `FAL_KEY` 로 만든다. 순서를 건너뛰고 ③부터 하면 진행 중
+요청의 결과를 받지 못한다.
+③ 재시작 뒤에는 옛 열쇠로 잠긴 계정마다 「키를 풀지 못했습니다」 알림 메일이 **계정 수만큼 한 통씩** 온다 —
+회전 중이라면 정상이다(④에서 키를 다시 넣으면 풀린다).
+
 ### 서버 크기 바꾸기 (AWS 콘솔, 약 5분 정지)
 
 운영 서버는 **운영 AWS 계정**에 있다. 콘솔 EC2 → 인스턴스 선택 →
@@ -353,6 +394,10 @@ sudo sh -c 'cat /var/log/caddy/*.access.log' | awk -v t=$(( $(date +%s) - 300 ))
 읽어도 무겁지 않은데, 5000줄은 100명 부하에서 1분치뿐이라 「최근 5분」을 거르기에 모자란다.
 
 최근 5분 안에 끝난 생성 요청이 0 이면 배포한다.
+
+재시작으로 끊긴 생성 요청(상세페이지·리디자인·배경 제거처럼 서버가 끝까지 기다리는 것, 그리고 화면을 닫아
+아무도 다시 묻지 않는 카드뉴스·포스터)은 fal 계정의 「진행 중」 칸을 **최대 30분** 더 쥔다(30분 뒤 저절로
+빠진다). 그동안은 관리자 화면 「fal 계정」의 진행 중 수가 실제보다 크고, 동시 한도를 그만큼 덜 쓴다.
 
 ## 되돌리기
 

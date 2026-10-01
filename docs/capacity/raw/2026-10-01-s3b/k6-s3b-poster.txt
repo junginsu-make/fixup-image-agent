@@ -1,0 +1,541 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: generate-poster.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 5 max VUs, 21m45s max duration (incl. graceful stop):
+              * poster: Up to 5 looping VUs for 1m45s over 2 stages (gracefulRampDown: 20m0s, gracefulStop: 20m0s)
+
+
+running (00m01.0s), 0/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   1% ] 0/5 VUs  0m01.0s/1m45.0s
+
+running (00m02.0s), 0/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   2% ] 0/5 VUs  0m02.0s/1m45.0s
+
+running (00m03.0s), 0/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   3% ] 0/5 VUs  0m03.0s/1m45.0s
+
+running (00m04.0s), 1/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   4% ] 1/5 VUs  0m04.0s/1m45.0s
+
+running (00m05.0s), 1/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   5% ] 1/5 VUs  0m05.0s/1m45.0s
+
+running (00m06.0s), 1/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   6% ] 1/5 VUs  0m06.0s/1m45.0s
+
+running (00m07.0s), 2/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   7% ] 2/5 VUs  0m07.0s/1m45.0s
+
+running (00m08.0s), 2/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   8% ] 2/5 VUs  0m08.0s/1m45.0s
+
+running (00m09.0s), 2/5 VUs, 0 complete and 0 interrupted iterations
+poster   [   9% ] 2/5 VUs  0m09.0s/1m45.0s
+
+running (00m10.0s), 3/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  10% ] 3/5 VUs  0m10.0s/1m45.0s
+
+running (00m11.0s), 3/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  10% ] 3/5 VUs  0m11.0s/1m45.0s
+
+running (00m12.0s), 3/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  11% ] 3/5 VUs  0m12.0s/1m45.0s
+
+running (00m13.0s), 4/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  12% ] 4/5 VUs  0m13.0s/1m45.0s
+
+running (00m14.0s), 4/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  13% ] 4/5 VUs  0m14.0s/1m45.0s
+
+running (00m15.0s), 4/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  14% ] 4/5 VUs  0m15.0s/1m45.0s
+
+running (00m16.0s), 5/5 VUs, 0 complete and 0 interrupted iterations
+poster   [  15% ] 5/5 VUs  0m16.0s/1m45.0s
+time="2026-10-01T09:26:13Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (00m17.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  16% ] 5/5 VUs  0m17.0s/1m45.0s
+
+running (00m18.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  17% ] 5/5 VUs  0m18.0s/1m45.0s
+
+running (00m19.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  18% ] 5/5 VUs  0m19.0s/1m45.0s
+
+running (00m20.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  19% ] 5/5 VUs  0m20.0s/1m45.0s
+
+running (00m21.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  20% ] 5/5 VUs  0m21.0s/1m45.0s
+
+running (00m22.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  21% ] 5/5 VUs  0m22.0s/1m45.0s
+
+running (00m23.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  22% ] 5/5 VUs  0m23.0s/1m45.0s
+
+running (00m24.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  23% ] 5/5 VUs  0m24.0s/1m45.0s
+
+running (00m25.0s), 5/5 VUs, 1 complete and 0 interrupted iterations
+poster   [  24% ] 5/5 VUs  0m25.0s/1m45.0s
+time="2026-10-01T09:26:22Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (00m26.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  25% ] 5/5 VUs  0m26.0s/1m45.0s
+
+running (00m27.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  26% ] 5/5 VUs  0m27.0s/1m45.0s
+
+running (00m28.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  27% ] 5/5 VUs  0m28.0s/1m45.0s
+
+running (00m29.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  28% ] 5/5 VUs  0m29.0s/1m45.0s
+
+running (00m30.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  29% ] 5/5 VUs  0m30.0s/1m45.0s
+
+running (00m31.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  30% ] 5/5 VUs  0m31.0s/1m45.0s
+
+running (00m32.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  30% ] 5/5 VUs  0m32.0s/1m45.0s
+
+running (00m33.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  31% ] 5/5 VUs  0m33.0s/1m45.0s
+
+running (00m34.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  32% ] 5/5 VUs  0m34.0s/1m45.0s
+
+running (00m35.0s), 5/5 VUs, 2 complete and 0 interrupted iterations
+poster   [  33% ] 5/5 VUs  0m35.0s/1m45.0s
+time="2026-10-01T09:26:32Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (00m36.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  34% ] 5/5 VUs  0m36.0s/1m45.0s
+
+running (00m37.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  35% ] 5/5 VUs  0m37.0s/1m45.0s
+
+running (00m38.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  36% ] 5/5 VUs  0m38.0s/1m45.0s
+
+running (00m39.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  37% ] 5/5 VUs  0m39.0s/1m45.0s
+
+running (00m40.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  38% ] 5/5 VUs  0m40.0s/1m45.0s
+
+running (00m41.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  39% ] 5/5 VUs  0m41.0s/1m45.0s
+
+running (00m42.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  40% ] 5/5 VUs  0m42.0s/1m45.0s
+
+running (00m43.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  41% ] 5/5 VUs  0m43.0s/1m45.0s
+
+running (00m44.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  42% ] 5/5 VUs  0m44.0s/1m45.0s
+
+running (00m45.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  43% ] 5/5 VUs  0m45.0s/1m45.0s
+
+running (00m46.0s), 5/5 VUs, 3 complete and 0 interrupted iterations
+poster   [  44% ] 5/5 VUs  0m46.0s/1m45.0s
+time="2026-10-01T09:26:43Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (00m47.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  45% ] 5/5 VUs  0m47.0s/1m45.0s
+
+running (00m48.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  46% ] 5/5 VUs  0m48.0s/1m45.0s
+
+running (00m49.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  47% ] 5/5 VUs  0m49.0s/1m45.0s
+
+running (00m50.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  48% ] 5/5 VUs  0m50.0s/1m45.0s
+
+running (00m51.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  49% ] 5/5 VUs  0m51.0s/1m45.0s
+
+running (00m52.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  50% ] 5/5 VUs  0m52.0s/1m45.0s
+
+running (00m53.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  50% ] 5/5 VUs  0m53.0s/1m45.0s
+
+running (00m54.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  51% ] 5/5 VUs  0m54.0s/1m45.0s
+
+running (00m55.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  52% ] 5/5 VUs  0m55.0s/1m45.0s
+
+running (00m56.0s), 5/5 VUs, 4 complete and 0 interrupted iterations
+poster   [  53% ] 5/5 VUs  0m56.0s/1m45.0s
+time="2026-10-01T09:26:53Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (00m57.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  54% ] 5/5 VUs  0m57.0s/1m45.0s
+
+running (00m58.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  55% ] 5/5 VUs  0m58.0s/1m45.0s
+
+running (00m59.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  56% ] 5/5 VUs  0m59.0s/1m45.0s
+
+running (01m00.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  57% ] 5/5 VUs  1m00.0s/1m45.0s
+
+running (01m01.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  58% ] 5/5 VUs  1m01.0s/1m45.0s
+
+running (01m02.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  59% ] 5/5 VUs  1m02.0s/1m45.0s
+
+running (01m03.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  60% ] 5/5 VUs  1m03.0s/1m45.0s
+
+running (01m04.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  61% ] 5/5 VUs  1m04.0s/1m45.0s
+
+running (01m05.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  62% ] 5/5 VUs  1m05.0s/1m45.0s
+
+running (01m06.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  63% ] 5/5 VUs  1m06.0s/1m45.0s
+
+running (01m07.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+poster   [  64% ] 5/5 VUs  1m07.0s/1m45.0s
+time="2026-10-01T09:27:03Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (01m08.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  65% ] 5/5 VUs  1m08.0s/1m45.0s
+
+running (01m09.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  66% ] 5/5 VUs  1m09.0s/1m45.0s
+
+running (01m10.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  67% ] 5/5 VUs  1m10.0s/1m45.0s
+
+running (01m11.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  68% ] 5/5 VUs  1m11.0s/1m45.0s
+
+running (01m12.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  69% ] 5/5 VUs  1m12.0s/1m45.0s
+
+running (01m13.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  70% ] 5/5 VUs  1m13.0s/1m45.0s
+
+running (01m14.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  70% ] 5/5 VUs  1m14.0s/1m45.0s
+
+running (01m15.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  71% ] 5/5 VUs  1m15.0s/1m45.0s
+
+running (01m16.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  72% ] 5/5 VUs  1m16.0s/1m45.0s
+
+running (01m17.0s), 5/5 VUs, 6 complete and 0 interrupted iterations
+poster   [  73% ] 5/5 VUs  1m17.0s/1m45.0s
+time="2026-10-01T09:27:13Z" level=warning msg="[poster] VU1 generate 실패 status=429 {\"ok\":false,\"code\":\"concurrent_limit\",\"message\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"error\":\"이미 생성 중인 요청이 있습니다. 완료 후 다시 시도해 주세요.\",\"usage\":{\"used\":48,\"reserved\":6,\"quota\":1000000,\"remaining\":999946,\"periodStart\":\"2026-10-01\",\"periodEnd\":\"2026-11-01\",\"pricingPolicy\":\"image-v2\",\"balance\":999952,\"unli" source=console
+
+running (01m18.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  74% ] 5/5 VUs  1m18.0s/1m45.0s
+
+running (01m19.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  75% ] 5/5 VUs  1m19.0s/1m45.0s
+
+running (01m20.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  76% ] 5/5 VUs  1m20.0s/1m45.0s
+
+running (01m21.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  77% ] 5/5 VUs  1m21.0s/1m45.0s
+
+running (01m22.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  78% ] 5/5 VUs  1m22.0s/1m45.0s
+
+running (01m23.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  79% ] 5/5 VUs  1m23.0s/1m45.0s
+
+running (01m24.0s), 5/5 VUs, 7 complete and 0 interrupted iterations
+poster   [  80% ] 5/5 VUs  1m24.0s/1m45.0s
+
+running (01m25.0s), 5/5 VUs, 8 complete and 0 interrupted iterations
+poster   [  81% ] 5/5 VUs  1m25.0s/1m45.0s
+
+running (01m26.0s), 5/5 VUs, 9 complete and 0 interrupted iterations
+poster   [  82% ] 5/5 VUs  1m26.0s/1m45.0s
+
+running (01m27.0s), 5/5 VUs, 9 complete and 0 interrupted iterations
+poster   [  83% ] 5/5 VUs  1m27.0s/1m45.0s
+
+running (01m28.0s), 5/5 VUs, 9 complete and 0 interrupted iterations
+poster   [  84% ] 5/5 VUs  1m28.0s/1m45.0s
+
+running (01m29.0s), 5/5 VUs, 9 complete and 0 interrupted iterations
+poster   [  85% ] 5/5 VUs  1m29.0s/1m45.0s
+
+running (01m30.0s), 5/5 VUs, 9 complete and 0 interrupted iterations
+poster   [  86% ] 5/5 VUs  1m30.0s/1m45.0s
+
+running (01m31.0s), 5/5 VUs, 10 complete and 0 interrupted iterations
+poster   [  87% ] 5/5 VUs  1m31.0s/1m45.0s
+
+running (01m32.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  88% ] 5/5 VUs  1m32.0s/1m45.0s
+
+running (01m33.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  89% ] 5/5 VUs  1m33.0s/1m45.0s
+
+running (01m34.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  90% ] 5/5 VUs  1m34.0s/1m45.0s
+
+running (01m35.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  90% ] 5/5 VUs  1m35.0s/1m45.0s
+
+running (01m36.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  91% ] 5/5 VUs  1m36.0s/1m45.0s
+
+running (01m37.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  92% ] 5/5 VUs  1m37.0s/1m45.0s
+
+running (01m38.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  93% ] 5/5 VUs  1m38.0s/1m45.0s
+
+running (01m39.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  94% ] 5/5 VUs  1m39.0s/1m45.0s
+
+running (01m40.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  95% ] 5/5 VUs  1m40.0s/1m45.0s
+
+running (01m41.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  96% ] 5/5 VUs  1m41.0s/1m45.0s
+
+running (01m42.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  97% ] 5/5 VUs  1m42.0s/1m45.0s
+
+running (01m43.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  98% ] 5/5 VUs  1m43.0s/1m45.0s
+
+running (01m44.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [  99% ] 5/5 VUs  1m44.0s/1m45.0s
+
+running (01m45.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster   [ 100% ] 5/5 VUs  1m45.0s/1m45.0s
+
+running (01m46.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m47.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m48.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m49.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m50.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m51.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m52.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m53.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m54.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m55.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m56.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m57.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m58.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (01m59.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m00.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m01.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m02.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m03.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m04.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m05.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m06.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m07.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m08.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m09.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m10.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m11.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m12.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m13.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m14.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m15.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m16.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m17.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m18.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m19.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m20.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m21.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m22.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m23.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m24.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m25.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m26.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m27.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m28.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m29.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m30.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m31.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m32.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m33.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m34.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m35.0s), 5/5 VUs, 11 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m36.0s), 4/5 VUs, 12 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m37.0s), 4/5 VUs, 12 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m38.0s), 4/5 VUs, 12 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m39.0s), 4/5 VUs, 12 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m40.0s), 4/5 VUs, 12 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m41.0s), 4/5 VUs, 12 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m42.0s), 3/5 VUs, 13 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m43.0s), 3/5 VUs, 13 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m44.0s), 2/5 VUs, 14 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m45.0s), 2/5 VUs, 14 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m46.0s), 2/5 VUs, 14 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+running (02m47.0s), 1/5 VUs, 15 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 5/5 VUs  1m45s
+
+== poster (gpt-image-2.5-flare, 2:3, variants 1, levels 5) ==
+name                                          count    p50ms    p95ms    p99ms    maxms    err%
+poster_create                                    16      430     1122     1649     1781     0.0
+poster_end_to_end                                 9    69931    72633    73159    73291    43.8
+poster_generate                                  16     3119     4069     4320     4382    43.8
+poster_get                                       16      845     1123     1249     1281     0.0
+poster_image                                      9     2498     2975     3108     3141     0.0
+poster_page                                      16      875     1095     1106     1108     0.0
+poster_patch                                     16      842      864      866      867     0.0
+poster_plan                                      16     5105     5316     5326     5328     0.0
+poster_status                                    45      648     5803     6474     6680     0.0
+
+http_reqs=150  http_req_failed=4.67%  auth_failures=0
+
+running (02m47.1s), 0/5 VUs, 16 complete and 0 interrupted iterations
+poster ✓ [ 100% ] 0/5 VUs  1m45s
+time="2026-10-01T09:28:44Z" level=error msg="thresholds on metrics 'e_poster_end_to_end, t_poster_status' have been crossed"

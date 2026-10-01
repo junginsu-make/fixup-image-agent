@@ -119,7 +119,7 @@ async function cutoutForAd(master: Buffer, mimeType: string): Promise<Buffer> {
   // **형식을 지어내지 않는다.** 여기서 `"image/png"` 를 박으면 저장 형식이
   // 바뀌는 날 fal 에 거짓 형식을 알린다 — 그 작업은 이미 계획에 있다.
   const url = await uploader.uploadReference(master, mimeType);
-  const cutUrl = await removeBackground(url, createBackgroundRemover(process.env.FAL_KEY!));
+  const cutUrl = await removeBackground(url, createBackgroundRemover());
   const response = await fetch(cutUrl);
   if (!response.ok) throw new Error("배경을 지운 그림을 내려받지 못했습니다.");
 

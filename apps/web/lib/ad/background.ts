@@ -1,5 +1,7 @@
-import { createFalClient } from "@fal-ai/client";
 import { recordAiCost } from "../llm/meter";
+import { defaultFalRouter } from "../fal/pool/default";
+import type { FalRouter } from "../fal/route";
+import { runFalQueued, type RunFalDeps } from "../fal/run";
 
 /**
  * 배경을 지워 오브젝트만 남긴다.
@@ -72,8 +74,28 @@ export interface FalSubscriber {
   ): Promise<unknown>;
 }
 
-export function createBackgroundRemover(apiKey: string): FalSubscriber {
-  return createFalClient({ credentials: apiKey, retry: { maxRetries: 0 } }) as FalSubscriber;
+/**
+ * 계정 풀을 거치는 배경 제거(S3b). 제출·상태·결과가 모두 **같은 계정의 키**로 간다.
+ * 비용 한 줄은 지금처럼 `onEnqueue` 에서 적는다 — 그래서 여기서는 `cost` 를 넘기지 않는다.
+ */
+export function createBackgroundRemover(
+  router: FalRouter = defaultFalRouter(),
+  deps: Partial<RunFalDeps> = {},
+): FalSubscriber {
+  return {
+    async subscribe(endpoint, options) {
+      const { data } = await runFalQueued(router, {
+        endpoint,
+        input: options.input,
+        signal: options.abortSignal,
+        onSubmitted: options.onEnqueue,
+        startTimeoutS: 60,
+        deadlineMs: BACKGROUND_TIMEOUT_MS,
+        pollMs: 500,
+      }, deps);
+      return { data };
+    },
+  };
 }
 
 /**
@@ -84,8 +106,8 @@ export function createBackgroundRemover(apiKey: string): FalSubscriber {
  * 픽셀·형식·용량 검사를 전부 통과한다(설계 §6.2).
  *
  * **시한을 넘기면 폴링도 끊는다.** `Promise.race` 는 기다리기를 그만둘 뿐이라,
- * 그것만으로는 우리가 손을 뗀 뒤에도 fal 클라이언트가 상태를 계속 묻는다.
- * `@fal-ai/client` 의 `RunOptions` 에 `abortSignal` 이 있으므로 실제로 끊는다.
+ * 그것만으로는 우리가 손을 뗀 뒤에도 상태를 계속 묻는다. `runFalQueued` 가
+ * 신호(`abortSignal`)를 보고 묻기를 멈추고 fal 에 취소를 한 번 보낸다.
  */
 export async function removeBackground(
   imageUrl: string,

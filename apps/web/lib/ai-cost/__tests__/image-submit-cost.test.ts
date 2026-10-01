@@ -13,6 +13,8 @@ vi.mock("../../fal/upload", () => ({ createFalUploader: () => ({ uploadReference
 const { replaceAiCostWriterForTest } = await import("../write");
 const { bindAiCaller, withLlmMeter } = await import("../../llm/meter");
 const { createFalQueueClient, falModelIdFor } = await import("../../fal/queue");
+const { envFalRouter } = await import("../../fal/route");
+const { submitFalQueue } = await import("../../fal/http");
 const { createPdpImageGenerator } = await import("../../pdp/fal");
 const { removeBackground } = await import("../../ad/background");
 const { createRedesignImageGenerator } = await import("../../redesign/image-generator");
@@ -31,11 +33,13 @@ afterEach(() => {
 });
 
 describe("fal 큐(포스터·카드뉴스)", () => {
-  const queueWith = (submit: () => Promise<unknown>) =>
-    createFalQueueClient("key", () => ({ queue: { submit, status: vi.fn(), result: vi.fn() } } as never));
+  /** 서버 키 하나로 보내는 길에 가짜 fetch 를 끼운다 — 제출 자리(`lib/fal/http.ts`)가 적는지 본다. */
+  const queueWith = (response: () => Response) =>
+    createFalQueueClient(envFalRouter({ FAL_KEY: "key" }, (key, endpoint, input, options) =>
+      submitFalQueue(key, endpoint, input, options, async () => response())));
 
   it("제출에 한 줄 — 모델 id·요청 장수·fal 요청 id·작업 문맥을 싣는다", async () => {
-    const queue = queueWith(async () => ({ request_id: "fal-9" }));
+    const queue = queueWith(() => new Response(JSON.stringify({ request_id: "fal-9" })));
     await withLlmMeter(async () => {
       bindAiCaller({ userId: USER, requestId: null, operation: "poster" });
       await queue.submitJob("fal-ai/nano-banana-pro/edit", { prompt: "x", num_images: 3 });
@@ -47,7 +51,7 @@ describe("fal 큐(포스터·카드뉴스)", () => {
   });
 
   it("제출이 실패하면 적지 않는다 — 과금되지 않았다", async () => {
-    const queue = queueWith(async () => { throw new Error("429"); });
+    const queue = queueWith(() => new Response("busy", { status: 429 }));
     await withLlmMeter(async () => {
       await expect(queue.submitJob("fal-ai/nano-banana-pro", { prompt: "x" })).rejects.toThrow();
     });
@@ -55,9 +59,8 @@ describe("fal 큐(포스터·카드뉴스)", () => {
   });
 
   it("상태·결과 조회는 적지 않는다", async () => {
-    const status = vi.fn(async () => ({ status: "COMPLETED" }));
-    const result = vi.fn(async () => ({ data: { images: [] } }));
-    const queue = createFalQueueClient("key", () => ({ queue: { submit: vi.fn(), status, result } } as never));
+    const ops = { status: vi.fn(async () => "completed" as const), result: vi.fn(async () => ({ images: [] })), cancel: vi.fn() };
+    const queue = createFalQueueClient(envFalRouter({ FAL_KEY: "key" }), () => ops);
     await withLlmMeter(async () => {
       await queue.jobStatus("fal-ai/nano-banana-pro", "fal-1");
       await queue.jobResult("fal-ai/nano-banana-pro", "fal-1");
