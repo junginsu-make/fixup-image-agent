@@ -361,6 +361,10 @@ describe("카드뉴스 다시 열기 (2단계 §8)", () => {
     expect(load).toContain("cardnewsProject(");
     expect(load.indexOf("projects.get(")).toBeLessThan(load.indexOf("cardnewsProject("));
   });
+  it("포스터에도 카드뉴스에도 없는 작업의 줄은 지운 작업 안내로 바꾼다(미뤄 둔 것 2)", () => {
+    expect(load).toContain("markDeletedWork(");
+    expect(load).toContain("new Set([...projects.keys(), ...카드작업.keys()])");
+  });
   it("찾은 카드뉴스 작업을 화면에 넘긴다", () => {
     expect(load).toMatch(/return \{[^}]*cardnews/);
   });
