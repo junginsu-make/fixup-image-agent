@@ -406,6 +406,10 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
     expect(카드).toMatch(/starting \? \(/);
     expect(훅).toContain("setStarting(rowId)");
   });
+  it("「이대로 만들기」 답을 못 받으면 작업을 다시 읽어 이어 간다(미뤄 둔 것 3)", () => {
+    expect(훅).toContain("startedDespiteError(");
+    expect(훅).toContain("/plan`");
+  });
   it("원고 본문의 줄바꿈을 살린다(마지막 장 정리 줄)", () => {
     expect(코드("../_components/cardnews-card.tsx")).toMatch(/whitespace-pre-line[^"]*">\{card\.body\}/);
   });

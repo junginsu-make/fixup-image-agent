@@ -6,7 +6,7 @@ import { billableFetch } from "../../lib/billable-fetch";
 import { JOB_POLL_INTERVAL_MS, jobId } from "../../lib/running-jobs";
 import type { CardOptions } from "./cardnews-options";
 import {
-  cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, type EasyKind,
+  cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, startedDespiteError, type EasyKind,
 } from "./cardnews-state";
 import { cardnewsView, type CardnewsProjectLike, type EasyCardnewsView } from "./cardnews-view";
 import type { EasyMessage } from "./turn";
@@ -35,6 +35,16 @@ async function 보낸다(body: Record<string, unknown>) {
     throw Object.assign(new Error(json.message ?? "하지 못했습니다."), { retryable: json.retryable !== false });
   }
   return json;
+}
+
+/** 작업을 다시 읽는다(카드뉴스 화면과 같은 읽기 주소). 못 읽으면 `undefined`. */
+async function 다시읽는다(projectId: string): Promise<Project | undefined> {
+  try {
+    const body = await (await fetch(`/api/sns/projects/${projectId}/plan`, { cache: "no-store" })).json();
+    return body.ok ? body.project as Project : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function useEasyCardnews(input: {
@@ -89,7 +99,14 @@ export function useEasyCardnews(input: {
       start(cardnewsJob(project.id, conversationId, project.title ?? ""));
       replace({ ...project, status: "generating" });
     } catch (cause) {
-      handlers.onError({ message: (cause as Error).message, retryable: (cause as { retryable?: boolean }).retryable !== false });
+      // 답을 못 받았어도 서버가 이미 시작했을 수 있다. 다시 읽어 보고 이어 간다(미뤄 둔 것 3).
+      const 지금 = await 다시읽는다(project.id);
+      if (지금 && startedDespiteError(지금.status)) {
+        start(cardnewsJob(project.id, conversationId, project.title ?? ""));
+        replace(지금);
+      } else {
+        handlers.onError({ message: (cause as Error).message, retryable: (cause as { retryable?: boolean }).retryable !== false });
+      }
     } finally {
       setActing(false);
       setStarting(null);

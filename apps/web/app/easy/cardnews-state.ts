@@ -139,3 +139,11 @@ export function jobsToRegister(
   const href = `/easy/${conversationId}`;
   return generating.filter((id) => !jobs.some((job) => job.id === jobId("sns", id) && job.href === href));
 }
+
+/**
+ * **「이대로 만들기」 답을 못 받았을 때**(미뤄 둔 것 3). 서버는 시작했는데 답이 화면에 안
+ * 닿으면 원고 그대로 멈춰 있었다. 다시 읽은 작업이 원고 단계를 지났으면 시작한 것이다.
+ */
+export function startedDespiteError(status: string | undefined): boolean {
+  return status !== undefined && status !== "copy_ready";
+}

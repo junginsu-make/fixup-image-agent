@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cardResults, cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, newestFirst, referenceAnswer,
+  startedDespiteError,
   setItemsToAttach,
 } from "../cardnews-state";
 
@@ -115,5 +116,18 @@ describe("결과 칸 차례 (2026-09-30 실제 생성)", () => {
     expect(newestFirst(items).map(({ item, at }) => [item.id, at])).toEqual([
       ["last", 3], ["r1:1", 1], ["r1:2", 2], ["poster", 0],
     ]);
+  });
+});
+
+describe("「이대로 만들기」 답을 못 받았을 때 (미뤄 둔 것 3)", () => {
+  /** 서버는 시작했는데 답이 화면에 안 닿으면 원고 그대로 멈춰 있었다. */
+  it("다시 읽은 작업이 원고 단계를 지났으면 시작한 것으로 본다", () => {
+    expect(startedDespiteError("generating")).toBe(true);
+    expect(startedDespiteError("ready")).toBe(true);
+  });
+
+  it("아직 원고 단계거나 읽지 못했으면 실패로 본다", () => {
+    expect(startedDespiteError("copy_ready")).toBe(false);
+    expect(startedDespiteError(undefined)).toBe(false);
   });
 });
