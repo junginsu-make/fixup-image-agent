@@ -33,7 +33,7 @@ import {
 import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
 import type { FalQueueClient } from "../fal/queue";
-import { uploadUniqueReferences } from "../fal/upload";
+import { uploadUniqueReferences } from "../fal/unique-upload";
 
 export const QUEUE_POLL_INTERVAL_MS = 10_000;
 

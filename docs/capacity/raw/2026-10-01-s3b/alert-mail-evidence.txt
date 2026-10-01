@@ -1,0 +1,27 @@
+A(43.202.63.50)의 journalctl -u fixup-image-agent 에서 뽑은 fal 계정 풀 알림 관련 줄
+(시크릿 없음 — 메시지 본문과 오류 사유만).
+
+## Step 7 (fal-b 잠김, fal-c 추가)
+Oct 01 09:35:36 ip-172-31-13-128 node[177659]: [fal-pool] [FormWith] fal 계정 잔액이 바닥나 잠겼습니다 (fal-b) {
+  detail: '{"detail":"User is locked. Reason: Exhausted balance. Top up your balance at fal.ai/dashboard/billing."}'
+Oct 01 09:35:36 ip-172-31-13-128 node[177659]: [fal-pool] 알림 메일을 보내지 못했습니다 { message: 'connect ECONNREFUSED 172.31.26.41:54325' }
+
+## Step 8 (열쇠 없음)
+Oct 01 09:41:31 ip-172-31-13-128 node[178428]: [fal-pool] [FormWith] fal 계정 풀이 꺼져 있습니다(서버 열쇠 없음) { detail: '등록된 계정 3개' }
+Oct 01 09:41:31 ip-172-31-13-128 node[178428]: [fal-pool] 알림 메일을 보내지 못했습니다 { message: 'connect ECONNREFUSED 172.31.26.41:54325' }
+
+## Step 9 서버 부분 (열쇠 회전 — 세 계정 모두 decrypt_failed)
+Oct 01 09:44:52 ip-172-31-13-128 node[178901]: [fal-pool] [FormWith] fal 계정 키를 풀지 못했습니다 (fal-429) {
+Oct 01 09:44:52 ip-172-31-13-128 node[178901]: [fal-pool] 알림 메일을 보내지 못했습니다 { message: 'connect ECONNREFUSED 172.31.26.41:54325' }
+Oct 01 09:44:52 ip-172-31-13-128 node[178901]: [fal-pool] [FormWith] fal 계정 키를 풀지 못했습니다 (fal-b) {
+Oct 01 09:44:52 ip-172-31-13-128 node[178901]: [fal-pool] 알림 메일을 보내지 못했습니다 { message: 'connect ECONNREFUSED 172.31.26.41:54325' }
+Oct 01 09:44:52 ip-172-31-13-128 node[178901]: [fal-pool] [FormWith] fal 계정 키를 풀지 못했습니다 (fal-c) {
+Oct 01 09:44:52 ip-172-31-13-128 node[178901]: [fal-pool] 알림 메일을 보내지 못했습니다 { message: 'connect ECONNREFUSED 172.31.26.41:54325' }
+
+## 원인
+B(43.200.70.164)의 supabase_inbucket_sb 컨테이너는 웹/API 포트(컨테이너 8025 → 호스트
+54324)만 게시돼 있고, SMTP 포트(컨테이너 1025)는 호스트에 게시돼 있지 않다
+(`docker ps` 포트 목록에 1025 매핑 없음, `ss -tlnp` 에도 54325 리슨 없음). A 의
+app.env 는 SMTP_PORT=54325 로 그 쪽으로 보내려 해서 매번 ECONNREFUSED 가 난다 — 앱의
+로직(언제·어떤 제목으로 보낼지, 계정마다 한 통)은 매번 정확했고, 전송 계층만 이
+시험 서버 인프라 설정 때문에 막혔다.

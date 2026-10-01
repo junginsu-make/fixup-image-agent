@@ -41,6 +41,26 @@ export interface FalSubmitOptions {
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** `<업체>/<모델>[/<칸>...]`. 첫 칸에 점이 없으니 호스트처럼 읽힐 수 없다. */
+const ENDPOINT_SHAPE = /^[a-z0-9-]+\/[a-z0-9][a-z0-9._/-]*$/i;
+
+/**
+ * **키를 싣기 전에 엔드포인트 모양을 본다**(최종 보안 리뷰 M1).
+ *
+ * 포스터 상태 조회는 브라우저가 준 `endpoint` 를 받는다. `@fal-ai/client` 는 호스트가 `fal.run` 으로 끝나는
+ * 주소(`https://xxxfal.run/...`)를 **그대로** 쓰므로, 검사가 없으면 `Authorization: Key <키>` 가 남의 호스트로
+ * 간다. 키를 쓰는 마지막 자리(제출·상태·결과·취소)에서 막는다 — 앞단 검사에만 기대지 않는다.
+ */
+function assertFalEndpoint(endpoint: string): void {
+  const ok = typeof endpoint === "string"
+    && ENDPOINT_SHAPE.test(endpoint)
+    && !endpoint.includes("..")
+    && !endpoint.includes("//")
+    && !endpoint.includes(":")
+    && !endpoint.startsWith("/");
+  if (!ok) throw new FalHttpError(400, "", "올바르지 않은 생성 요청입니다.");
+}
+
 /** 제출하고 fal 요청 번호를 돌려준다. 실패면 `FalHttpError`(상태 코드 그대로). */
 export async function submitFalQueue(
   key: string,
@@ -49,6 +69,7 @@ export async function submitFalQueue(
   options: FalSubmitOptions = {},
   fetchImpl: FetchLike = fetch,
 ): Promise<string> {
+  assertFalEndpoint(endpoint);
   const headers: Record<string, string> = { Authorization: `Key ${key}`, "Content-Type": "application/json" };
   if (options.startTimeoutS !== undefined) headers["x-fal-request-timeout"] = String(options.startTimeoutS);
 
@@ -99,20 +120,62 @@ export interface FalQueueOps {
 
 type ClientFactory = (config: { credentials: string; retry: { maxRetries: number } }) => Pick<FalClient, "queue">;
 
+/**
+ * **이미지를 만들지 않고** 키가 살아 있는지 본다(관리자 화면의 등록·「다시 확인」).
+ *
+ * 없는 요청 번호의 상태를 묻는다. 2026-10-01 실측: 엉터리 키는 `401 {"detail":"invalid key credentials"}`,
+ * 모양이 틀린 키·빈 키도 401 이다. 맞는 키는 「그런 요청 없음」(404)을 받는다. 값이 들지 않는다.
+ *
+ * **한계**: 잔액 소진 잠김은 여기서 안 드러날 수 있다 — 실제 생성에서만 드러난다(설계 §3.3). 화면에 적는다.
+ */
+export const FAL_KEY_PROBE_URL = `${FAL_QUEUE_BASE}/fal-ai/nano-banana-pro/requests/00000000-0000-4000-8000-000000000000/status`;
+
+export type FalKeyCheck =
+  | { ok: true }
+  | { ok: false; reason: "invalid" | "unavailable"; status?: number; detail: string };
+
+/** 이 안에 응답이 없으면 포기한다 — 없으면 undici 기본값(약 300초)까지 관리자 화면이 멈춘다. */
+const KEY_CHECK_TIMEOUT_MS = 10_000;
+
+export async function checkFalKey(key: string, fetchImpl: FetchLike = fetch): Promise<FalKeyCheck> {
+  let response: Response;
+  try {
+    response = await fetchImpl(FAL_KEY_PROBE_URL, {
+      method: "GET",
+      headers: { Authorization: `Key ${key}` },
+      signal: AbortSignal.timeout(KEY_CHECK_TIMEOUT_MS),
+    });
+  } catch {
+    /*
+      오류 메시지를 그대로 쓰지 않는다. 제어 문자가 섞인 키는 `fetch`가
+      `Headers.append: "Key <키>" is an invalid header value` 처럼 키를 메시지에 그대로 담아
+      던질 수 있다 — 고정 문구만 돌려준다(화면·기록으로 키가 새지 않게).
+    */
+    return { ok: false, reason: "unavailable", detail: "network" };
+  }
+  const detail = (await response.text().catch(() => "")).slice(0, 300);
+  if (response.ok || response.status === 404) return { ok: true };
+  if (response.status === 401 || response.status === 403) return { ok: false, reason: "invalid", status: response.status, detail };
+  return { ok: false, reason: "unavailable", status: response.status, detail };
+}
+
 export function falQueueOps(key: string, factory: ClientFactory = createFalClient): FalQueueOps {
   const client = factory({ credentials: key, retry: { maxRetries: 0 } });
   return {
     async status(endpoint, requestId) {
+      assertFalEndpoint(endpoint);
       const status = await client.queue.status(endpoint, { requestId, logs: false });
       if (status.status === "IN_QUEUE") return "queued";
       if (status.status === "IN_PROGRESS") return "in_progress";
       return "completed";
     },
     async result(endpoint, requestId) {
+      assertFalEndpoint(endpoint);
       const result = await client.queue.result(endpoint as never, { requestId });
       return result.data as unknown;
     },
     async cancel(endpoint, requestId) {
+      assertFalEndpoint(endpoint);
       await client.queue.cancel(endpoint, { requestId });
     },
   };

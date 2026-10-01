@@ -3,6 +3,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
+import { IMAGE_MODELS } from "@fixup/sns-core";
 import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
 import { bindAiCaller, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { classifyFalFailure } from "../../../../../../lib/fal/failure";
@@ -23,10 +24,16 @@ export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
+/**
+ * 포스터가 제출하는 엔드포인트(`buildPosterJob` 의 `pickEndpoint`)만 받는다. 이 값은 브라우저가 주고,
+ * 그대로 fal 조회 주소가 된다 — 모르는 값이면 키가 실린 조회가 엉뚱한 곳으로 간다(최종 보안 리뷰 M1).
+ */
+const POSTER_ENDPOINTS = new Set(IMAGE_MODELS.flatMap((model) => [model.t2i.endpoint, model.i2i.endpoint]));
+
 const StatusSchema = z.object({
   requestRowId: z.string(),
   falRequestId: z.string(),
-  endpoint: z.string(),
+  endpoint: z.string().refine((value) => POSTER_ENDPOINTS.has(value)),
   /**
    * **더 이상 쓰지 않는다.** 받기만 하고 버린다.
    *

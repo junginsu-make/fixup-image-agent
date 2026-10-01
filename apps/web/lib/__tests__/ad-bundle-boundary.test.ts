@@ -61,7 +61,9 @@ describe("순수 층은 무거운 것을 안 들인다", () => {
    * 방향을 거꾸로 보고 있지 않은지 여기서 확인한다.
    */
   it("서버 층은 실제로 무거운 것을 들인다 — 이 시험이 거꾸로가 아니다", () => {
-    expect(importsOf("../ad/background.ts")).toMatch(HEAVY);
+    // 배경 제거는 S3b 부터 fal 클라이언트를 직접 들이지 않고 공용 대기열 길(`lib/fal/run.ts` → `http.ts`)로 간다.
+    expect(importsOf("../ad/background.ts")).toMatch(/from\s+["']\.\.\/fal\/run["']/);
+    expect(importsOf("../fal/http.ts")).toMatch(HEAVY);
     expect(importsOf("../ad/check.ts")).toMatch(HEAVY);
   });
 

@@ -38,6 +38,15 @@ const AI_CONTROL_NOTICE: Record<string, string> = {
   ai_resumed: "AI 사용을 다시 켰습니다.",
 };
 
+/** fal 계정 알림(보충 2026-10-01). */
+const FAL_ACCOUNT_NOTICE: Record<string, string> = {
+  fal_account_added: "fal 계정을 확인하고 등록했습니다. 키는 잠가 두었고 화면에는 끝 4자리만 보입니다.",
+  fal_account_saved: "fal 계정 설정을 저장했습니다.",
+  fal_account_key: "fal 계정 키를 바꿨습니다.",
+  fal_account_checked: "fal 이 키를 받아 주었습니다. 다시 이 계정으로 보냅니다.",
+  fal_account_deleted: "fal 계정을 지웠습니다. 저장된 키도 함께 지웠습니다.",
+};
+
 /** 처리하지 못한 일. 서버 액션이 던지지 않고 `?error=` 로 실어 보낸 문구다. */
 export function AdminError({ message }: { message: string }) {
   return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
@@ -45,7 +54,7 @@ export function AdminError({ message }: { message: string }) {
 
 export function AdminNotice({ notice }: { notice: string }) {
   const failed = notice === "approved_email_failed";
-  const message = TEAM_NOTICE[notice] ?? SHOWCASE_NOTICE[notice] ?? AI_CONTROL_NOTICE[notice] ?? (notice === "approved"
+  const message = TEAM_NOTICE[notice] ?? SHOWCASE_NOTICE[notice] ?? AI_CONTROL_NOTICE[notice] ?? FAL_ACCOUNT_NOTICE[notice] ?? (notice === "approved"
     ? "회원 승인과 이메일 발송을 완료했습니다."
     : notice === "email_sent"
       ? "승인 이메일을 다시 보냈습니다."
