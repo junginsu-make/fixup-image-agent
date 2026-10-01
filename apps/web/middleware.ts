@@ -10,10 +10,11 @@ import {
   SESSION_START_COOKIE,
   SESSION_START_COOKIE_MAX_AGE_S,
   sessionAuthCookieNames,
-  sessionIdFromAccessToken,
   sessionStartValue,
   sessionWindow,
 } from "./lib/auth/session-window";
+import { verifiedLogin } from "./lib/auth/verified-login";
+import { authRoundTrips } from "./lib/auth/auth-round-trips";
 
 const PUBLIC_PATHS = [
   "/",
@@ -77,6 +78,8 @@ export async function middleware(request: NextRequest) {
   }
 
   const supabase = createServerClient(url, publishableKey, {
+    // getClaims 가 조용히 getUser 왕복으로 돌아가면 센다(설계 2026-09-29 §3.2).
+    global: { fetch: authRoundTrips.fetch },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll(cookiesToSet) {
@@ -89,7 +92,15 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const { data: { user } } = await supabase.auth.getUser();
+  /*
+    **토큰 서명을 이 서버가 확인한다**(설계 2026-09-29 §3.2). 전에는 `getUser()` 로
+    요청마다 Supabase 까지 0.2초를 왕복했다. 정지·탈퇴·관리자 판정은 아래에서
+    지금처럼 `profiles` 를 읽는다 — 토큰은 「누구인가」만 말한다.
+
+    만료가 가까우면 `getClaims` 가 먼저 갱신하고 `setAll` 로 쿠키를 다시 쓴다.
+    그래서 이 줄과 클라이언트 만들기 사이에 다른 일을 끼우지 않는다.
+  */
+  const user = await verifiedLogin(supabase.auth);
 
   /*
     로그인 유지는 **하루**다 (2026-09-23 사용자). 로그인한 시각을 쿠키에 적어
@@ -100,8 +111,8 @@ export async function middleware(request: NextRequest) {
   */
   if (user) {
     // 이번 로그인의 번호. 시작 시각을 이 로그인에 묶어 잰다 — 까닭은 `sessionStartValue`.
-    const { data: { session } } = await supabase.auth.getSession();
-    const sessionId = sessionIdFromAccessToken(session?.access_token);
+    // 서명을 확인한 토큰에서 읽는다.
+    const sessionId = user.sessionId;
     const window = sessionWindow(request.cookies.get(SESSION_START_COOKIE)?.value, new Date(), sessionId);
     if (window.state === "expired") {
       /*
@@ -187,7 +198,7 @@ export async function middleware(request: NextRequest) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("role,status,email_confirmed_at")
-    .eq("id", user.id)
+    .eq("id", user.userId)
     .single();
 
   const active = isUsableAccount(profile);
@@ -209,7 +220,7 @@ export async function middleware(request: NextRequest) {
   // 어느 화면을 누가 여는지는 등록부(`lib/access/routes.ts`)가 정한다.
   // 여기서 경로를 직접 적으면 사이드바·페이지 문지기와 어긋난다 — 그러면
   // 메뉴에는 없는데 주소를 치면 열리는 화면이 생긴다.
-  const viewer = { userId: user.id, role: (profile?.role ?? "member") as UserRole };
+  const viewer = { userId: user.userId, role: (profile?.role ?? "member") as UserRole };
   if (!canAccessPage(pathname, viewer, PAGE_ACCESS)) {
     return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base));
   }

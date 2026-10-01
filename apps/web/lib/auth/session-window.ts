@@ -41,28 +41,11 @@ export type SessionWindow =
  * **시작 시각을 그 로그인에 묶는다.** 쿠키가 로그인 쿠키만큼 살게 되면서
  * 로그아웃 뒤에도 남는다. 묶지 않으면 며칠 뒤 다시 로그인하자마자 옛 시각으로
  * 「24시간 지남」이 되고, 계정을 바꿔 들어온 사람이 앞사람의 시각을 물려받는다.
- * Supabase 는 로그인할 때마다 새 `session_id` 를 준다.
+ * Supabase 는 로그인할 때마다 새 `session_id` 를 준다. 미들웨어는 그 값을
+ * **서명을 확인한 토큰**에서 읽는다(`lib/auth/verified-login.ts`, 설계 2026-09-29 §3.2).
  */
 export function sessionStartValue(startedAt: number, sessionId: string | null): string {
   return sessionId ? `${startedAt}.${sessionId}` : String(startedAt);
-}
-
-/**
- * 로그인 토큰(JWT)의 가운데 조각에서 `session_id` 를 읽는다.
- *
- * 서명은 여기서 보지 않는다 — 이 값은 **어느 로그인의 시각인지 가르는 데만**
- * 쓴다. 로그인이 진짜인지는 미들웨어가 먼저 `getUser()` 로 확인했다.
- */
-export function sessionIdFromAccessToken(token: string | null | undefined): string | null {
-  const payload = token?.split(".")[1];
-  if (!payload) return null;
-  try {
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="))) as { session_id?: unknown };
-    return typeof claims.session_id === "string" && claims.session_id ? claims.session_id : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
