@@ -6,6 +6,7 @@ import type { StyleReferenceView } from "./StyleReferenceCard";
 import { SavedImagePicker, type SavedImageSource } from "./SavedImagePicker";
 import { STYLE_REFERENCE_LIMIT_HINT } from "../../lib/pdp/reference-limits";
 import { randomId } from "../../lib/browser-safe";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 
 /**
  * 시나리오 화면에서 레퍼런스를 바로 첨부한다.
@@ -131,6 +132,8 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
         {/* "분석하는 중"이라고 쓰면 안 된다 — 분석은 곁다리고, 붙이는 일 자체가 아니다. */}
         <span className="min-w-0 truncate">{busy ? "붙이는 중…" : "사진 올리기"}</span>
       </button>
+      {/* 인물 칸·제품 칸과 같은 자리 — 올리는 단추 바로 아래. */}
+      <p className="text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
 
       {/* 계정에 이미 있는 이미지를 파일로 다시 올리게 하지 않는다. */}
       <SavedImagePicker

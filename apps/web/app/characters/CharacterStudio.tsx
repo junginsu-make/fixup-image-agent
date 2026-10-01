@@ -18,6 +18,7 @@ import { LibraryPickerButton } from "../_components/library-picker";
 import { modelDisplayName } from "../../lib/model-name";
 import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { lookAfterRole, roleAfterLook } from "./look-role";
 
 /**
@@ -783,6 +784,7 @@ export function CharacterStudio() {
                 title="참고할 그림 고르기"
                 description="한 장만 씁니다. 다시 누르면 뺍니다"
               />
+              <span className="text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</span>
             </div>
           </Card>
 
