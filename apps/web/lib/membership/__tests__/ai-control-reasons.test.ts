@@ -13,7 +13,7 @@ const state = vi.hoisted(() => ({ reply: {} as Record<string, unknown> }));
 
 vi.mock("../../supabase/server", () => ({
   createSupabaseServerClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "u1" } }, error: null }) },
+    auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } }, error: null }) },
     from: () => {
       const self: Record<string, unknown> = {
         select: () => self, eq: () => self,
