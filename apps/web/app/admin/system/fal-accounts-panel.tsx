@@ -35,7 +35,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 const when = (iso: string) =>
-  new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
 
 export function FalAccountsPanel({ view }: { view: FalPoolAdminView | null }) {
   return (

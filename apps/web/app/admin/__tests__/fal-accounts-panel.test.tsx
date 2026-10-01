@@ -40,7 +40,9 @@ describe("fal 계정 패널", () => {
   it("마지막 오류의 종류와 시각(한국 시각)을 보인다", () => {
     const text = 글({ masterKey: "ok", events: [], accounts: [계정({ state: "locked", lastErrorKind: "locked", lastErrorAt: "2026-10-01T00:30:00Z", lastErrorDetail: "User is locked" })] });
     expect(text).toContain("잔액 소진");
-    expect(text).toContain("오전 09:30");
+    // 24시간 표기 — 「오전/AM」은 실행 환경의 ICU 에 따라 달라 CI 에서 「AM」으로 나왔다
+    expect(text).toContain("09:30");
+    expect(text).not.toMatch(/AM|PM|오전|오후/);
   });
 
   it("계정이 없으면 서버 FAL_KEY 로 만든다고 말한다", () => {
