@@ -25,7 +25,7 @@ describe("원고 보기", () => {
       cost: { units: 2, label: "약 2크레딧" }, done: 1, total: 2,
       options: { ratio: "4:5", count: "auto", language: "ko", look: "auto" },
     });
-    expect(view.cards[1]).toEqual({ index: 2, role: "body", headline: "속지", body: "본문", status: "done", url: "https://x.test/2.png" });
+    expect(view.cards[1]).toEqual({ index: 2, role: "body", headline: "속지", body: "본문", status: "done", url: "https://x.test/2.png", hasImage: true });
   });
 
   it("원고가 없으면 까닭을 모은다", () => {
@@ -96,5 +96,39 @@ describe("원고를 못 썼을 때의 말", () => {
   it("다른 까닭은 그대로 전한다, 까닭이 없으면 내용을 못 가져왔다고", () => {
     expect(draftFailureMessage(["자막이 없습니다"])).toBe("원고를 쓰지 못했습니다. 자막이 없습니다");
     expect(draftFailureMessage([])).toBe("원고를 쓰지 못했습니다. 내용을 가져오지 못했습니다.");
+  });
+});
+
+describe("만든 작업 보기 (3단계)", () => {
+  it("만든 작업 · 장마다 그림 유무 · 게시글", () => {
+    const 만든 = 작업({
+      status: "copy_ready",
+      data: {
+        source: { kind: "question", question: "q" }, attachments: [],
+        flow: {
+          planningIssues: [], copyIssues: [],
+          caption: { hook: "h", body: "b", hashtags: [], firstComment: "" },
+          cards: [
+            { index: 1, role: "cover", copy: { headline: "a" }, status: "done", assetUrl: "u1" },
+            { index: 2, role: "body", copy: { headline: "b" }, status: "pending" },
+          ],
+        },
+      },
+    });
+    const view = cardnewsView(만든, "image-v2");
+    expect(view.made).toBe(true);
+    expect(view.cards.map((card) => card.hasImage)).toEqual([true, false]);
+    expect(view.caption?.hook).toBe("h");
+    expect(cardnewsView(작업(), "image-v2").made).toBe(true);
+  });
+
+  it("그림이 하나도 없는 원고는 만든 작업이 아니다", () => {
+    const 원고 = 작업({
+      data: {
+        source: { kind: "question", question: "q" }, attachments: [],
+        flow: { planningIssues: [], copyIssues: [], cards: [{ index: 1, role: "cover", copy: { headline: "a" }, status: "pending" }] },
+      },
+    });
+    expect(cardnewsView(원고, "image-v2").made).toBe(false);
   });
 });

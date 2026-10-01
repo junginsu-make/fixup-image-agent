@@ -1,6 +1,7 @@
 import type { Attachment } from "@fixup/sns-core";
 import { cardCost, optionsOfProject, type CardOptions } from "./cardnews-options";
 import { cardSourceLabel, type CardSource } from "./cardnews-source";
+import { isMade, type Caption } from "./cardnews-after";
 
 /**
  * **카드뉴스 작업을 「쉽게」가 그릴 것으로**(2단계 설계 §7 · §8). 서버 모듈을
@@ -22,10 +23,11 @@ export interface CardnewsProjectLike {
     flow?: {
       planningIssues?: string[];
       copyIssues?: string[];
+      caption?: Caption;
       cards: Array<{
         index: number; role: string; kind?: string; layout?: unknown;
         copy: { headline: string; body?: string; accent?: string; footnote?: string };
-        status: string; assetUrl?: string; thumbUrl?: string;
+        status: string; assetUrl?: string; assetPath?: string; thumbUrl?: string;
       }>;
     };
   };
@@ -41,6 +43,8 @@ export interface EasyCardView {
   footnote?: string;
   status: string;
   url?: string;
+  /** 그림이 있는 장(3단계 — 다시 만들기 전 앞 그림 보관 · 「그림에도 반영할까요?」). */
+  hasImage: boolean;
 }
 
 export interface EasyCardnewsView {
@@ -58,6 +62,10 @@ export interface EasyCardnewsView {
   failed: number[];
   /** 자동 검수가 사람 확인을 권한 장 번호. */
   review: number[];
+  /** 만든 작업(3단계 §3). 「이대로 만들기」는 만든 작업에 안 낸다. */
+  made: boolean;
+  /** 쓴 게시글(3단계 §6-4). */
+  caption?: Caption;
 }
 
 /**
@@ -87,6 +95,7 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
       ...(card.copy.footnote ? { footnote: card.copy.footnote } : {}),
       status: card.status,
       ...(card.assetUrl ? { url: card.assetUrl } : {}),
+      hasImage: Boolean(card.assetUrl || card.assetPath),
     })),
     issues: [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])],
     options: optionsOfProject(project),
@@ -99,5 +108,7 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
     total: cards.length,
     failed: cards.filter((card) => card.status === "failed").map((card) => card.index),
     review: cards.filter((card) => card.status === "review_required").map((card) => card.index),
+    made: isMade(project),
+    ...(flow?.caption ? { caption: flow.caption } : {}),
   };
 }
