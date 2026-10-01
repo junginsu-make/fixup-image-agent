@@ -71,4 +71,10 @@ describe("붙여 넣은 키 다듬기", () => {
     expect(normalizeFalKey("short")).toBeNull();
     expect(normalizeFalKey("abcd efgh ijkl mnop qrst")).toBeNull();
   });
+
+  it("제어 문자가 섞이면 받지 않는다 — 헤더에 실으면 오류 메시지에 키가 그대로 샐 수 있다", () => {
+    expect(normalizeFalKey(`${원문.slice(0, -1)}\u0000`)).toBeNull();
+    expect(normalizeFalKey(`${원문.slice(0, -1)}\u001f`)).toBeNull();
+    expect(normalizeFalKey(`${원문.slice(0, -1)}\u007f`)).toBeNull();
+  });
 });

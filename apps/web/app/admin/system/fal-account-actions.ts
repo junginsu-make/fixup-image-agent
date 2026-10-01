@@ -51,11 +51,19 @@ function dbFailure(error: { message: string; code?: string }): string {
   return "처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-/** 서버 열쇠. 없으면 등록·키 바꾸기를 하지 않는다(잠글 수 없다). */
-function masterKeyOrFail(): Buffer | null {
+/**
+ * 서버 열쇠. 없거나 값이 틀리면 등록·키 바꾸기·다시 확인을 하지 않는다(잠그거나 풀 수 없다).
+ *
+ * `purpose`로 문구를 가른다 — 다시 확인은 아무것도 저장하지 않으니 「저장할 수 없다」라고 하면
+ * 틀린 말이 된다.
+ */
+function masterKeyOrFail(purpose: "저장" | "다시 확인"): Buffer | null {
   const master = readMasterKey(process.env.FAL_KEY_ENCRYPTION_SECRET);
   if (master.ok) return master.key;
-  failed("서버 열쇠(FAL_KEY_ENCRYPTION_SECRET)가 없어 키를 저장할 수 없습니다. 운영 설정을 먼저 해 주세요.");
+  const cause = master.reason === "missing"
+    ? "서버 열쇠(FAL_KEY_ENCRYPTION_SECRET)가 없습니다."
+    : "서버 열쇠(FAL_KEY_ENCRYPTION_SECRET) 값이 올바르지 않습니다.";
+  failed(`${cause} ${purpose}할 수 없으니 운영 설정을 확인해 주세요.`);
   return null;
 }
 
@@ -80,7 +88,7 @@ export async function addFalAccountAction(formData: FormData) {
   const limit = LimitSchema.safeParse(formData.get("limit") || 20);
   if (!name.success) return failed("이름을 1~80자로 넣어 주세요.");
   if (!limit.success) return failed("동시 한도는 1~200 사이로 넣어 주세요.");
-  const master = masterKeyOrFail();
+  const master = masterKeyOrFail("저장");
   if (!master) return;
   const key = await verifiedKeyOrFail(formData.get("key"));
   if (!key) return;
@@ -126,7 +134,7 @@ export async function replaceFalKeyAction(formData: FormData) {
   const membership = await requireAdmin();
   const id = IdSchema.safeParse(formData.get("id"));
   if (!id.success) return failed("올바르지 않은 값입니다.");
-  const master = masterKeyOrFail();
+  const master = masterKeyOrFail("저장");
   if (!master) return;
   const key = await verifiedKeyOrFail(formData.get("key"));
   if (!key) return;
@@ -149,7 +157,7 @@ export async function recheckFalAccountAction(formData: FormData) {
   const membership = await requireAdmin();
   const id = IdSchema.safeParse(formData.get("id"));
   if (!id.success) return failed("올바르지 않은 값입니다.");
-  const master = masterKeyOrFail();
+  const master = masterKeyOrFail("다시 확인");
   if (!master) return;
 
   const admin = createSupabaseAdminClient();
@@ -178,7 +186,14 @@ export async function recheckFalAccountAction(formData: FormData) {
     p_detail: check.ok ? null : check.detail,
   });
   if (error) return failed(dbFailure(error));
-  if (!check.ok) return failed(`fal 이 이 키를 거절했습니다(${check.status ?? "?"}). 「키 바꾸기」로 새 키를 넣어 주세요.`);
+  if (!check.ok) {
+    /*
+      DB 는 이미 이 계정을 `invalid` 로 적었다 — 라우터가 최대 30초 뒤에나 그 상태를 다시 읽기 전에
+      곧바로 이 계정을 그만 쓰게 한다(같은 프로세스).
+    */
+    refreshFalPool();
+    return failed(`fal 이 이 키를 거절했습니다(${check.status ?? "?"}). 「키 바꾸기」로 새 키를 넣어 주세요.`);
+  }
   done("fal_account_checked");
 }
 

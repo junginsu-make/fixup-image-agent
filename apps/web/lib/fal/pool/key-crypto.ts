@@ -55,12 +55,16 @@ export function openFalKey(master: Buffer, accountId: string, sealed: SealedFalK
 }
 
 /**
- * 붙여 넣은 키를 다듬는다. 앞뒤 공백·따옴표는 벗기고, 안에 공백이 있거나 길이가 이상하면 null.
+ * 붙여 넣은 키를 다듬는다. 앞뒤 공백·따옴표는 벗기고, 안에 공백·제어 문자가 있거나 길이가 이상하면 null.
  * (fal 키는 `아이디:비밀` 모양이지만 모양을 단정하지 않는다 — 확인은 fal 에 한 번 물어서 한다.)
+ *
+ * **제어 문자를 막는 까닭**: 이런 키를 그대로 `Authorization` 헤더에 실으면 `fetch`가
+ * `Headers.append: "Key <키>" is an invalid header value` 처럼 키를 그대로 담은 오류를 던진다 —
+ * 등록·다시 확인 단계에서 애초에 걸러 그 오류 자체가 나지 않게 한다.
  */
 export function normalizeFalKey(raw: string): string | null {
   const value = raw.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
-  if (value.length < 16 || value.length > 300 || /\s/.test(value)) return null;
+  if (value.length < 16 || value.length > 300 || /[\s\x00-\x1f\x7f]/.test(value)) return null;
   return value;
 }
 

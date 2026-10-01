@@ -102,7 +102,8 @@ describe("checkFalKey", () => {
     await checkFalKey("k-1", async (url, init) => { seen.push({ url, init }); return new Response("", { status: 404 }); });
     expect(seen[0]!.url).toBe(FAL_KEY_PROBE_URL);
     expect(seen[0]!.url).toMatch(/\/requests\/[0-9a-f-]+\/status$/);
-    expect(seen[0]!.init).toEqual({ method: "GET", headers: { Authorization: "Key k-1" } });
+    expect(seen[0]!.init).toMatchObject({ method: "GET", headers: { Authorization: "Key k-1" } });
+    expect(seen[0]!.init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("404(그런 요청 없음)·200 이면 키가 살아 있다", async () => {
@@ -119,5 +120,17 @@ describe("checkFalKey", () => {
     expect(await checkFalKey("k", 답(503))).toMatchObject({ ok: false, reason: "unavailable", status: 503 });
     expect(await checkFalKey("k", 답(429))).toMatchObject({ ok: false, reason: "unavailable" });
     expect(await checkFalKey("k", async () => { throw new Error("fetch failed"); })).toMatchObject({ ok: false, reason: "unavailable" });
+  });
+
+  it("fal 이 멈춰도(시간 제한에 걸려 끊겨도) 「지금 확인할 수 없음」", async () => {
+    const result = await checkFalKey("k", async () => { throw new DOMException("The operation was aborted.", "TimeoutError"); });
+    expect(result).toMatchObject({ ok: false, reason: "unavailable" });
+  });
+
+  it("네트워크 오류 메시지에 키가 섞여 있어도 detail 은 고정 문구다 — 키를 화면·기록에 내보내지 않는다", async () => {
+    const result = await checkFalKey("se\u0000cret-key", async () => {
+      throw new Error('Headers.append: "Key se\u0000cret-key" is an invalid header value.');
+    });
+    expect(result).toEqual({ ok: false, reason: "unavailable", detail: "network" });
   });
 });

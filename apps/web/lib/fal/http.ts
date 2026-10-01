@@ -113,12 +113,24 @@ export type FalKeyCheck =
   | { ok: true }
   | { ok: false; reason: "invalid" | "unavailable"; status?: number; detail: string };
 
+/** 이 안에 응답이 없으면 포기한다 — 없으면 undici 기본값(약 300초)까지 관리자 화면이 멈춘다. */
+const KEY_CHECK_TIMEOUT_MS = 10_000;
+
 export async function checkFalKey(key: string, fetchImpl: FetchLike = fetch): Promise<FalKeyCheck> {
   let response: Response;
   try {
-    response = await fetchImpl(FAL_KEY_PROBE_URL, { method: "GET", headers: { Authorization: `Key ${key}` } });
-  } catch (error) {
-    return { ok: false, reason: "unavailable", detail: error instanceof Error ? error.message : String(error) };
+    response = await fetchImpl(FAL_KEY_PROBE_URL, {
+      method: "GET",
+      headers: { Authorization: `Key ${key}` },
+      signal: AbortSignal.timeout(KEY_CHECK_TIMEOUT_MS),
+    });
+  } catch {
+    /*
+      오류 메시지를 그대로 쓰지 않는다. 제어 문자가 섞인 키는 `fetch`가
+      `Headers.append: "Key <키>" is an invalid header value` 처럼 키를 메시지에 그대로 담아
+      던질 수 있다 — 고정 문구만 돌려준다(화면·기록으로 키가 새지 않게).
+    */
+    return { ok: false, reason: "unavailable", detail: "network" };
   }
   const detail = (await response.text().catch(() => "")).slice(0, 300);
   if (response.ok || response.status === 404) return { ok: true };
