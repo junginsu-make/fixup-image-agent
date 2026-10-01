@@ -30,7 +30,7 @@ describe("월 경계와 데이터 보관", () => {
     expect(rows[11]!.images).toBe(0);
   });
   it("할당 디스크와 데이터 크기를 구분한다", () => {
-    const s = createScenario(true); s.supabase.plan = "pro"; s.database.diskGB = 20;
+    const s = createScenario(true); s.startMonth = "2026-10"; s.supabase.plan = "pro"; s.database.diskGB = 20; // 744시간(31일) — 시작 달을 못 박지 않으면 오늘 날짜에 따라 달라진다
     const r = forecast(s)[0]!;
     expect(r.dbUsedGB).toBeLessThan(.1);
     expect(r.costLines.find(l => l.id === "supabase-disk")!.payableUsd).toBeCloseTo(12 * 744 * s.catalog.supabase.diskGBHour);
@@ -77,7 +77,8 @@ describe("사용량과 비용의 독립된 경계", () => {
     expect(forecast(s)[0]!.recommendation.status).toBe("assumption-based");
   });
   it("추천 사양 선택은 실제 월별 비용에 들어간다", () => {
-    const s = createScenario(true), manual = forecast(s)[0]!;
+    const s = createScenario(true); s.startMonth = "2026-10"; // 744시간(31일)으로 못 박는다
+    const manual = forecast(s)[0]!;
     s.aws.selection = "recommended";
     const recommended = forecast(s)[0]!;
     expect(recommended.awsType).toBe("t3.medium");
