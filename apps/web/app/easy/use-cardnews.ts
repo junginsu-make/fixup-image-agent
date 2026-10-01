@@ -7,8 +7,10 @@ import { JOB_POLL_INTERVAL_MS, jobId } from "../../lib/running-jobs";
 import type { CardOptions } from "./cardnews-options";
 import { cardnewsRequest } from "./cardnews-request";
 import { useCardnewsAfter } from "./use-cardnews-after";
+import type { CopyPatch } from "./cardnews-after";
 import {
-  cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, startedDespiteError, type EasyKind,
+  cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, redoCostLabel, startedDespiteError,
+  type EasyKind,
 } from "./cardnews-state";
 import { cardnewsView, type CardnewsProjectLike, type EasyCardnewsView } from "./cardnews-view";
 import type { EasyMessage } from "./turn";
@@ -171,7 +173,19 @@ export function useEasyCardnews(input: {
     rowProps: (rowId: string, locked: boolean) => (views[rowId] ? {
       view: views[rowId]!,
       latest: latestCardnewsRow(messages, views) === rowId,
-      busy: locked || acting || generating.length > 0,
+      busy: locked || acting || generating.length > 0 || Boolean(after.working),
+      // 손보기 도구(3단계 §4). 카드가 마지막 원고 줄에만 단다.
+      tools: {
+        tool: after.tool?.rowId === rowId ? after.tool : null,
+        busy: locked || acting || generating.length > 0 || Boolean(after.working),
+        redoCost: (index: number) => redoCostLabel(views[rowId]!, index, policy),
+        onToggle: (index: number, mode: "edit" | "redo") => after.toggleTool({ rowId, index, mode }),
+        onClose: after.closeTool,
+        onEdit: (index: number, copy: CopyPatch) => void after.editCard(rowId, index, { copy }),
+        onRedo: (index: number, note: string) => void after.redoCard(rowId, index, note),
+        onCaption: () => void after.writeCaption(rowId),
+        onDownload: () => void after.downloadAll(rowId),
+      },
       redrafting: redrafting === rowId,
       starting: starting === rowId,
       onGenerate: () => void generate(rowId),

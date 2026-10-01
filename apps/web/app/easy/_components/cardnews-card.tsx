@@ -6,17 +6,21 @@ import { IMAGE_LOOKS, IMAGE_LOOK_LABEL } from "@fixup/shared";
 import { IMAGE_MODELS } from "@fixup/sns-core";
 import { CARD_COUNTS, CARD_LANGUAGES, CARD_LANGUAGE_LABEL, CARD_RATIOS, type CardOptions } from "../cardnews-options";
 import type { EasyCardnewsView } from "../cardnews-view";
-
-const 자리이름: Record<string, string> = { cover: "표지", body: "속지", ending: "끝" };
+import { EasyCardnewsCaption } from "./cardnews-caption";
+import { EasyCardnewsRow, type EasyCardTools } from "./cardnews-card-row";
 
 /**
  * **카드뉴스 원고 · 진행 · 결과**(2단계 설계 §7 · §8).
  *
  * 마지막 원고에만 조건 줄과 「이대로 만들기」가 있다. 앞 원고는 접는다. 조건을 바꾸면
  * 원고를 새로 쓴다(앞 작업은 지우지 않는다, 2026-09-30 사용자 결정).
+ *
+ * **만든 작업**(그림이 한 장이라도 있다)에는 「이대로 만들기」 · 조건 줄을 안 내고, 장마다
+ * 손보기 단추와 게시글 · 전부 받기를 단다(3단계 §4). 원고 단계를 상태로만 가르면 안 된다 —
+ * 한 장 글을 저장하면 상태가 원고로 돌아와, 누르면 전 장 값이 나간다(3단계 설계 §2 위험).
  */
 export function EasyCardnewsCard({
-  view, latest, busy, redrafting, starting, onGenerate, onRedraft,
+  view, latest, busy, redrafting, starting, onGenerate, onRedraft, tools,
 }: {
   view: EasyCardnewsView;
   latest: boolean;
@@ -27,8 +31,11 @@ export function EasyCardnewsCard({
   starting?: boolean;
   onGenerate: () => void;
   onRedraft: (options: Partial<CardOptions>) => void;
+  /** 손보기 도구(3단계). 마지막 원고 줄에만 온다. */
+  tools?: EasyCardTools;
 }) {
-  if (view.status === "copy_ready" && !latest) {
+  const 원고단계 = view.status === "copy_ready" && !view.made;
+  if (원고단계 && !latest) {
     return <p className="text-meta text-subtle-foreground">원고를 다시 썼습니다.</p>;
   }
   const 조건 = <K extends keyof CardOptions>(key: K, value: CardOptions[K]) =>
@@ -37,23 +44,17 @@ export function EasyCardnewsCard({
   return (
     <div className="grid max-w-[85%] gap-3 rounded-2xl rounded-bl-md bg-muted px-4 py-3">
       <p className="text-base leading-7">
-        {view.status === "copy_ready" ? `원고를 썼습니다 (${view.total}장) · ${view.sourceLabel}`
+        {원고단계 ? `원고를 썼습니다 (${view.total}장) · ${view.sourceLabel}`
           : view.status === "generating" ? `카드를 만드는 중입니다 (${view.done}/${view.total}장)`
             : `카드뉴스 ${view.done}장을 만들었습니다`}
       </p>
       <ol className="grid gap-1.5 text-meta">
         {view.cards.map((card) => (
-          <li key={card.index} className="grid gap-0.5">
-            <span><strong>{card.index} {자리이름[card.role] ?? card.role}</strong> {card.headline}</span>
-            {card.body ? <span className="whitespace-pre-line text-subtle-foreground">{card.body}</span> : null}
-            {/* 강조 문구 · 각주도 그림에 찍힌다. 만들기 전에 확인할 수 있게 적는다. */}
-            {card.accent ? <span className="text-primary">강조: {card.accent}</span> : null}
-            {card.footnote ? <span className="text-subtle-foreground">작은 글씨: {card.footnote}</span> : null}
-          </li>
+          <EasyCardnewsRow key={card.index} card={card} made={view.made} tools={latest ? tools : undefined} />
         ))}
       </ol>
 
-      {view.status === "copy_ready" ? (
+      {원고단계 ? (
         <>
           <div className="flex flex-wrap gap-1.5 text-meta">
             <Choice label="비율" value={view.options.ratio} items={CARD_RATIOS.map((id) => [id, id])}
@@ -81,26 +82,38 @@ export function EasyCardnewsCard({
         </>
       ) : null}
 
-      {view.issues.length && view.status === "copy_ready" ? (
+      {view.issues.length && 원고단계 ? (
         <p className="text-meta text-subtle-foreground">{view.issues.join(" ")}</p>
       ) : null}
 
-      {view.status !== "copy_ready" && view.failed.length ? (
+      {view.made && view.failed.length ? (
         <p className="text-meta text-destructive">
-          {view.failed.join(", ")}번 장은 만들지 못했습니다. 만든 장만큼만 값이 듭니다. 카드뉴스 화면에서 다시 만들 수 있습니다.
+          {view.failed.join(", ")}번 장은 만들지 못했습니다. 만든 장만큼만 값이 듭니다. 그 장의 「다시 만들기」로 다시 만들 수 있습니다.
         </p>
       ) : null}
 
-      {view.status !== "copy_ready" && view.review.length ? (
+      {view.made && view.review.length ? (
         <p className="text-meta text-subtle-foreground">
-          {view.review.join(", ")}번 장은 자동 검수가 글자를 한 번 확인해 보라고 했습니다. 틀린 곳이 있으면 카드뉴스 화면에서 그 장만 다시 만들 수 있습니다.
+          {view.review.join(", ")}번 장은 자동 검수가 글자를 한 번 확인해 보라고 했습니다. 틀린 곳이 있으면 그 장의 「다시 만들기」로 다시 만들 수 있습니다.
         </p>
       ) : null}
 
-      {view.status !== "copy_ready" ? (
-        <Button asChild size="sm" variant="secondary" className="w-fit">
-          <Link href={`/sns/${view.projectId}`}>카드뉴스 화면에서 이어서 작업</Link>
-        </Button>
+      {view.made && latest && view.caption ? <EasyCardnewsCaption caption={view.caption} /> : null}
+
+      {view.made ? (
+        <div className="flex flex-wrap gap-1.5">
+          {latest && tools ? (
+            <>
+              <Button size="sm" variant="secondary" disabled={tools.busy} onClick={tools.onCaption}>
+                {view.caption ? "게시글 다시 쓰기" : "게시글 쓰기"}
+              </Button>
+              <Button size="sm" variant="secondary" disabled={tools.busy} onClick={tools.onDownload}>전부 받기</Button>
+            </>
+          ) : null}
+          <Button asChild size="sm" variant="ghost" className="w-fit">
+            <Link href={`/sns/${view.projectId}`}>카드뉴스 화면에서 이어서 작업</Link>
+          </Button>
+        </div>
       ) : null}
     </div>
   );

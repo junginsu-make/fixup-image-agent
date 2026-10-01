@@ -402,8 +402,11 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
   /** 2026-09-30 실제 생성에서 찾은 것들. */
   it("원고 카드에 강조 문구 · 각주 · 검수 권한 장 · 시작 안내가 보인다", () => {
     const 카드 = 코드("../_components/cardnews-card.tsx");
-    expect(카드).toContain("card.accent");
-    expect(카드).toContain("card.footnote");
+    // 장 한 줄은 3단계에서 `cardnews-card-row.tsx` 로 옮겼다.
+    const 줄 = 코드("../_components/cardnews-card-row.tsx");
+    expect(카드).toContain("<EasyCardnewsRow");
+    expect(줄).toContain("card.accent");
+    expect(줄).toContain("card.footnote");
     expect(카드).toContain("view.review.length");
     expect(카드).toMatch(/starting \? \(/);
     expect(훅).toContain("setStarting(rowId)");
@@ -413,7 +416,7 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
     expect(훅).toContain("/plan`");
   });
   it("원고 본문의 줄바꿈을 살린다(마지막 장 정리 줄)", () => {
-    expect(코드("../_components/cardnews-card.tsx")).toMatch(/whitespace-pre-line[^"]*">\{card\.body\}/);
+    expect(코드("../_components/cardnews-card-row.tsx")).toMatch(/whitespace-pre-line[^"]*">\{card\.body\}/);
   });
   it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
     expect(화면쪽).toContain("!cardnews.views[one.id]");
@@ -436,5 +439,30 @@ describe("만든 카드뉴스 손보기 잇기 (3단계)", () => {
   it("말 「3번 다시」는 확인 줄을 연다, 다시 만들기 뒤에는 진행을 셸에 건다", () => {
     expect(손보기).toMatch(/cardAsk[\s\S]{0,300}mode: "redo"/);
     expect(손보기).toContain("start(cardnewsJob(");
+  });
+});
+
+describe("만든 카드뉴스 손보기 부품 (3단계 §4)", () => {
+  const 카드 = 코드("../_components/cardnews-card.tsx");
+  const 줄 = 코드("../_components/cardnews-card-row.tsx");
+  /** Review Focus 1 */
+  it("원고 단계는 상태가 아니라 만든 작업인지로 가른다, 「이대로 만들기」 · 조건 줄은 원고 단계에만", () => {
+    expect(카드).toContain('const 원고단계 = view.status === "copy_ready" && !view.made;');
+    expect(카드).not.toMatch(/view\.status === "copy_ready" \?/);
+    expect(카드).not.toMatch(/view\.status !== "copy_ready"/);
+  });
+  it("장마다 글 고치기 · 다시 만들기, 다시 만들기는 보관 · 값 안내와 확인 단추", () => {
+    expect(줄).toContain("글 고치기");
+    expect(줄).toContain("다시 만들기");
+    expect(줄).toContain("앞 그림은 라이브러리에 보관합니다");
+    expect(줄).toMatch(/made \?/);
+  });
+  it("게시글 쓰기 · 전부 받기, 게시글은 복사할 수 있다", () => {
+    expect(카드).toContain("게시글 쓰기");
+    expect(카드).toContain("전부 받기");
+    expect(코드("../_components/cardnews-caption.tsx")).toContain("captionText(");
+  });
+  it("원고 줄에 손보기 도구를 넘긴다", () => {
+    expect(코드("../use-cardnews.ts")).toMatch(/tools: \{/);
   });
 });
