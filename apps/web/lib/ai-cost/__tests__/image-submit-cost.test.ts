@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * **그림은 제출하는 자리에서 한 줄**(설계 2026-09-30 §3.4·§5).
  *
  * fal 큐는 제출하면 과금이 끝난다. 상태 조회는 여러 번 오거나 아예 안 올 수 있어
- * 거기서 적으면 두 번 적히거나 빠진다. 동기 호출(상세페이지·리디자인)은 받은 자리에서,
+ * 거기서 적으면 두 번 적히거나 빠진다. 상세페이지·리디자인도 S3a 부터 대기열 제출 자리에서,
  * 배경 제거는 fal 이 요청을 받은 순간(`onEnqueue`)에 적는다.
  */
 vi.mock("server-only", () => ({}));
@@ -72,19 +72,31 @@ describe("fal 큐(포스터·카드뉴스)", () => {
   });
 });
 
-describe("상세페이지·캐릭터(동기 fal)", () => {
-  it("받은 자리에서 한 줄 — 응답 헤더의 요청 id 를 싣는다", async () => {
-    vi.stubGlobal("fetch", async (url: string) => String(url).startsWith("https://fal.run")
-      ? new Response(JSON.stringify({ images: [{ url: "https://cdn/x.png", content_type: "image/png" }] }), { headers: { "x-fal-request-id": "sync-1" } })
-      : new Response(new Uint8Array([1, 2, 3])));
+/**
+ * 상세페이지·캐릭터·리디자인은 S3a 부터 **대기열**이다(설계 2026-09-29 §3.3). 제출 자리(`lib/fal/http.ts`)
+ * 에서 한 줄 — 상태·결과 조회와 그림 내려받기는 적지 않는다.
+ */
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+const 대기열 = (submit: () => Response, result: unknown) => async (url: string) => {
+  const target = String(url);
+  if (!target.startsWith("https://queue.fal.run/")) return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } });
+  if (target.includes("/status")) return json({ status: "COMPLETED" });
+  if (target.includes("/requests/")) return json(result);
+  return submit();
+};
+
+describe("상세페이지·캐릭터(대기열 fal)", () => {
+  it("제출 자리에서 한 줄 — fal 이 준 요청 번호를 싣는다", async () => {
+    vi.stubGlobal("fetch", 대기열(() => json({ request_id: "q-1" }), { images: [{ url: "https://cdn/x.png", content_type: "image/png" }] }));
     await withLlmMeter(async () => {
       await createPdpImageGenerator({ FAL_KEY: "k" })("nano-banana", { prompt: "p", systemPrompt: "s", aspectRatio: "3:4", references: [] });
     });
-    expect(rows).toEqual([expect.objectContaining({ p_provider: "fal", p_model: "nano-banana", p_images: 1, p_fal_request_id: "sync-1" })]);
+    expect(rows).toEqual([expect.objectContaining({ p_provider: "fal", p_model: "nano-banana", p_images: 1, p_fal_request_id: "q-1" })]);
   });
 
-  it("fal 이 거절하면 적지 않는다", async () => {
-    vi.stubGlobal("fetch", async () => new Response("busy", { status: 429 }));
+  it("fal 이 제출을 거절하면 적지 않는다", async () => {
+    vi.stubGlobal("fetch", 대기열(() => new Response("busy", { status: 429 }), {}));
     await withLlmMeter(async () => {
       await expect(createPdpImageGenerator({ FAL_KEY: "k" })("nano-banana", { prompt: "p", systemPrompt: "s", aspectRatio: "3:4", references: [] })).rejects.toThrow();
     });
@@ -92,11 +104,9 @@ describe("상세페이지·캐릭터(동기 fal)", () => {
   });
 });
 
-describe("리디자인(동기 fal)", () => {
-  it("받은 자리에서 한 줄 — 실제로 그린 모델 id 로", async () => {
-    vi.stubGlobal("fetch", async (url: string) => String(url).startsWith("https://fal.run")
-      ? new Response(JSON.stringify({ images: [{ url: "https://cdn/r.png" }] }), { headers: { "x-fal-request-id": "rd-1" } })
-      : new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } }));
+describe("리디자인(대기열 fal)", () => {
+  it("제출 자리에서 한 줄 — 실제로 그린 모델 id 로", async () => {
+    vi.stubGlobal("fetch", 대기열(() => json({ request_id: "rd-1" }), { images: [{ url: "https://cdn/r.png" }] }));
     await withLlmMeter(async () => {
       await createRedesignImageGenerator({ FAL_KEY: "k" })({ prompt: "p", references: [], size: "1152x2048" });
     });

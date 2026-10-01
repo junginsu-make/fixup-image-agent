@@ -33,8 +33,8 @@ const 기록하는파일: Record<string, RegExp> = {
   "apps/web/lib/pdp/providers.ts": /recordFrom\(/,
   "apps/web/lib/layout/analyze-provider.ts": /recordFrom\(/,
   "apps/web/lib/fal/queue.ts": /recordAiCost\(/,
-  "apps/web/lib/pdp/fal.ts": /recordAiCost\(/,
-  "apps/web/lib/redesign/image-generator.ts": /recordAiCost\(/,
+  // 상세페이지·캐릭터·리디자인의 대기열 제출(S3a). 값을 받으면 제출 자리에서 적는다.
+  "apps/web/lib/fal/http.ts": /recordAiCost\(/,
   "apps/web/lib/ad/background.ts": /recordAiCost\(/,
   "packages/redesign-core/src/generate.ts": /reportUsage\([\s\S]*reportImageUsage\(|reportImageUsage\([\s\S]*reportUsage\(/,
   "packages/redesign-core/src/edit-section.ts": /reportImageUsage\(/,
