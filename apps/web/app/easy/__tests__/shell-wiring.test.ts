@@ -330,3 +330,164 @@ describe("대화 속 이미지 크기", () => {
     expect(message).toContain("w-64");
   });
 });
+
+/**
+ * **사진 물음이 떠 있을 때 친 말은 답으로 처음 말에 이어진다**(설계 §2-5).
+ *
+ * 비율 물음은 새 말을 치면 버려지는데 사진 물음은 답으로 이어진다. 입력창이
+ * 그 사실을 말하지 않으면, 새 주문을 친 사람의 두 말이 한 주문으로 섞여
+ * 값이 나간다(2026-09-30 독립 리뷰).
+ */
+describe("사진 물음이 떠 있을 때의 입력창", () => {
+  it("친 말이 물음에 대한 답으로 간다고 알린다", () => {
+    expect(client).toMatch(/placeholder=\{[\s\S]{0,400}photoAsking[\s\S]{0,160}사진 물음에 대한 답/);
+  });
+});
+
+/** **지난 역할을 기억해 보낸다**(설계 §2-4 차례 3). 안 이으면 이어 만들 때마다 같은 물음이 뜬다. */
+describe("지난 역할 잇기", () => {
+  it("만든 뒤 받은 역할을 기억한다", () => {
+    expect(client).toMatch(/rememberRoles\([\s\S]{0,60}body\.photoRoles/);
+  });
+
+  it("다음 그림 턴에 지난 역할로 보낸다", () => {
+    expect(client).toMatch(/previousRoles[\s\S]{0,80}previousRolesFor\(/);
+  });
+});
+
+describe("카드뉴스 다시 열기 (2단계 §8)", () => {
+  const load = 코드("../_components/load.ts");
+  it("포스터에서 못 찾은 작업을 카드뉴스에서 찾는다", () => {
+    expect(load).toContain("cardnewsProject(");
+    expect(load.indexOf("projects.get(")).toBeLessThan(load.indexOf("cardnewsProject("));
+  });
+  it("포스터에도 카드뉴스에도 없는 작업의 줄은 지운 작업 안내로 바꾼다(미뤄 둔 것 2)", () => {
+    expect(load).toContain("markDeletedWork(");
+    expect(load).toContain("new Set([...projects.keys(), ...카드작업.keys()])");
+  });
+  it("찾은 카드뉴스 작업을 화면에 넘긴다", () => {
+    expect(load).toMatch(/return \{[^}]*cardnews/);
+  });
+});
+
+describe("카드뉴스 화면 잇기 (2단계)", () => {
+  const 화면쪽 = 코드("../easy-client.tsx");
+  const 물음 = 코드("../_components/cardnews-asks.tsx");
+  const 훅 = 코드("../use-cardnews.ts");
+  it("한 장 · 카드뉴스를 묻는 줄과 레퍼런스를 요청하는 줄을 그린다", () => {
+    expect(화면쪽).toContain("<EasyCardnewsAsks");
+    expect(물음).toContain("<EasyKindAsk");
+    expect(물음).toContain("<EasyReferenceAsk");
+  });
+  it("원고 카드를 그린다", () => { expect(코드("../_components/message.tsx")).toContain("<EasyCardnewsCard"); });
+  it("「이대로 만들기」 · 조건 바꾸기를 새 라우트로 보낸다", () => {
+    expect(화면쪽).toContain("useEasyCardnews(");
+    // 보내는 함수는 3단계 손보기와 같이 쓰려고 `cardnews-request.ts` 로 옮겼다.
+    expect(코드("../cardnews-request.ts")).toContain('billableFetch("/api/easy/cardnews"');
+    expect(훅).toContain("cardnewsRequest");
+  });
+  it("만드는 동안 셸에 그 대화 주소로 등록한다", () => { expect(훅).toMatch(/start\(cardnewsJob\(/); });
+  it("다시 연 대화에 카드뉴스를 넘긴다", () => { expect(코드("../[id]/page.tsx")).toContain("initialCardnews={loaded.cardnews}"); });
+  it("레퍼런스 요청에 답해 붙인 그림은 분위기 참고로 확정해 보낸다(독립 리뷰 2)", () => {
+    expect(코드("../_components/reference-ask.tsx")).toContain("referenceAnswer(");
+  });
+  it("셸 등록은 주소까지 맞는지 보고, 셸 목록이 바뀌면 다시 본다(독립 리뷰 3)", () => {
+    expect(훅).toContain("jobsToRegister(");
+    expect(훅).toMatch(/\}, \[key, jobs\]\);/);
+  });
+  it("조건을 바꿔 원고를 다시 쓰는 동안 그 원고에 표시한다(독립 리뷰)", () => {
+    expect(훅).toContain("setRedrafting(rowId)");
+    expect(코드("../_components/cardnews-card.tsx")).toMatch(/redrafting \? \(/);
+  });
+  /** 2026-09-30 실제 생성에서 찾은 것들. */
+  it("원고 카드에 강조 문구 · 각주 · 검수 권한 장 · 시작 안내가 보인다", () => {
+    const 카드 = 코드("../_components/cardnews-card.tsx");
+    // 장 한 줄은 3단계에서 `cardnews-card-row.tsx` 로 옮겼다.
+    const 줄 = 코드("../_components/cardnews-card-row.tsx");
+    expect(카드).toContain("<EasyCardnewsRow");
+    expect(줄).toContain("card.accent");
+    expect(줄).toContain("card.footnote");
+    expect(카드).toContain("view.review.length");
+    expect(카드).toMatch(/starting \? \(/);
+    expect(훅).toContain("setStarting(rowId)");
+  });
+  it("「이대로 만들기」 답을 못 받으면 작업을 다시 읽어 이어 간다(미뤄 둔 것 3)", () => {
+    expect(훅).toContain("startedDespiteError(");
+    // 다시 읽기는 손보기와 같이 쓰려고 `cardnews-request.ts` 로 옮겼다.
+    expect(훅).toContain("readCardnewsProject");
+    expect(코드("../cardnews-request.ts")).toContain("/plan`");
+  });
+  it("원고 본문의 줄바꿈을 살린다(마지막 장 정리 줄)", () => {
+    expect(코드("../_components/cardnews-card-row.tsx")).toMatch(/whitespace-pre-line[^"]*">\{card\.body\}/);
+  });
+  it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
+    expect(화면쪽).toContain("!cardnews.views[one.id]");
+  });
+});
+
+describe("만든 카드뉴스 손보기 잇기 (3단계)", () => {
+  const 손보기 = 코드("../use-cardnews-after.ts");
+  const 훅 = 코드("../use-cardnews.ts");
+  it("손보기는 「쉽게」 카드뉴스 라우트로, 식별자를 붙여 보낸다", () => {
+    expect(손보기).toMatch(/action: "redo"/);
+    expect(손보기).toMatch(/action: "edit"/);
+    expect(손보기).toMatch(/action: "caption"/);
+    expect(훅).toContain("useCardnewsAfter(");
+  });
+  it("받기는 jszip 과 카드뉴스 파일 이름 규칙을 쓴다", () => {
+    expect(손보기).toContain("snsCardFilename(");
+    expect(손보기).toContain("jszip");
+  });
+  /** 독립 리뷰 Important 4: 같은 틈에 두 번 누르면 상태가 늦어 두 번 보내고 두 번 보관했다. */
+  it("손보기 요청은 곧바로 잠기는 표시로 겹쳐 보내지 않는다", () => {
+    expect(손보기).toMatch(/보내는중\.current\) return;[\s\S]{0,80}보내는중\.current = true;/);
+  });
+  it("말 「3번 다시」는 확인 줄을 연다, 다시 만들기 뒤에는 진행을 셸에 건다", () => {
+    expect(손보기).toMatch(/cardAsk[\s\S]{0,300}mode: "redo"/);
+    expect(손보기).toContain("start(cardnewsJob(");
+  });
+});
+
+describe("만든 카드뉴스 손보기 부품 (3단계 §4)", () => {
+  const 카드 = 코드("../_components/cardnews-card.tsx");
+  const 줄 = 코드("../_components/cardnews-card-row.tsx");
+  /** Review Focus 1 */
+  it("원고 단계는 상태가 아니라 만든 작업인지로 가른다, 「이대로 만들기」 · 조건 줄은 원고 단계에만", () => {
+    expect(카드).toContain('const 원고단계 = view.status === "copy_ready" && !view.made;');
+    expect(카드).not.toMatch(/view\.status === "copy_ready" \?/);
+    expect(카드).not.toMatch(/view\.status !== "copy_ready"/);
+  });
+  it("장마다 글 고치기 · 다시 만들기, 다시 만들기는 보관 · 값 안내와 확인 단추", () => {
+    expect(줄).toContain("글 고치기");
+    expect(줄).toContain("다시 만들기");
+    expect(줄).toContain("앞 그림은 라이브러리에 보관합니다");
+    expect(줄).toMatch(/made \?/);
+  });
+  it("게시글 쓰기 · 전부 받기, 게시글은 복사할 수 있다", () => {
+    expect(카드).toContain("게시글 쓰기");
+    expect(카드).toContain("전부 받기");
+    expect(코드("../_components/cardnews-caption.tsx")).toContain("captionText(");
+  });
+  it("원고 줄에 손보기 도구를 넘긴다", () => {
+    expect(코드("../use-cardnews.ts")).toMatch(/tools: \{/);
+  });
+});
+
+describe("미뤄 둔 작은 것 잇기 (2026-10-01)", () => {
+  const 손보기 = 코드("../use-cardnews-after.ts");
+  it("다시 만들기 답을 못 받으면 작업을 다시 읽어 시작됐으면 이어 간다(미뤄 둔 것 2)", () => {
+    expect(손보기).toContain("readCardnewsProject(");
+    // 이미 만든 작업이라 「원고 단계를 지났나」(startedDespiteError)로는 못 가른다. 만드는 중일 때만.
+    expect(손보기).toMatch(/지금\?\.status !== "generating"\) throw cause;/);
+  });
+  it("받기는 저장 경로로 이름을 짓고, 링크를 문서에 붙였다 뗀다(미뤄 둔 것 3)", () => {
+    expect(손보기).toMatch(/snsCardFilename\([^)]*card\.path/);
+    expect(손보기).toContain("document.body.appendChild(link)");
+    expect(손보기).toContain("link.remove()");
+  });
+  it("글 칸은 바뀐 칸만 보낸다, 카드 글이 바뀌면 칸을 새로 채운다(미뤄 둔 것 4)", () => {
+    const 줄 = 코드("../_components/cardnews-card-row.tsx");
+    expect(줄).toContain("changedCopy(");
+    expect(줄).toMatch(/<CardEditForm key=/);
+  });
+});

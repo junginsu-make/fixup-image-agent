@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -70,10 +70,26 @@ const reservingPaths = files
  * 요구가 된다. 안쪽 주소는 칸(`[id]`)이 들어 원문으로 못 짝짓는데, **밖에서
  * 부르는 주소는 짝지을 수 있다.**
  */
+/**
+ * 라우트가 **직접 들여오는 도우미 파일**(라우트 파일은 뺀다).
+ *
+ * 2026-09-30 「쉽게」가 대신 부르기를 `lib/easy/relay.ts` 로 옮기고 카드뉴스
+ * 라우트도 같은 것을 쓰게 되자, 라우트 한 파일에는 두 뜻이 다 안 남았다. 그래서
+ * 이 검사가 `/api/easy/generate` 를 놓쳤다. 라우트와 그 도우미를 한 덩이로 본다.
+ */
+function withHelpers(path: string): string {
+  const source = readFileSync(path, "utf8");
+  const helpers = [...source.matchAll(/from "(\.{1,2}\/[^"]+)"/g)]
+    .map(([, spec]) => join(dirname(path), spec!))
+    .flatMap((base) => [`${base}.ts`, `${base}.tsx`].filter((one) => existsSync(one)))
+    .filter((one) => !isRoute(one));
+  return [source, ...helpers.map((one) => readFileSync(one, "utf8"))].join("\n");
+}
+
 const relayingPaths = files
   .filter(isRoute)
   .filter((path) => {
-    const source = readFileSync(path, "utf8");
+    const source = withHelpers(path);
     /*
       **모양이 아니라 뜻으로 찾는다.** 처음에는 `headers: request.headers` 라는
       글자를 찾았는데, 열쇠를 갈아 끼우려고 `new Headers(request.headers)` 로
@@ -151,6 +167,8 @@ describe("크레딧이 깎이는 주소를 부르는 자리", () => {
   /** 못 찾으면 대신 부르는 자리가 통째로 검사 밖에 남는다. */
   it("대신 부르는 주소도 찾았다", () => {
     expect(relayingPaths).toContain("/api/easy/generate");
+    // 「쉽게」의 카드뉴스 「이대로 만들기」(2단계). 안에서 카드뉴스 생성 라우트를 부른다.
+    expect(relayingPaths).toContain("/api/easy/cardnews");
   });
 
   it.each([...new Set([...reservingPaths, ...relayingPaths])])("%s 를 쓰는 부름은 식별자를 붙인다", (url) => {

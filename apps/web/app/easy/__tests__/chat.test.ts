@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NOT_MADE_YET } from "../cardnews-after";
 import { easyChatPrompt, readEasyDecision } from "../chat";
 import type { EasyMessage } from "../turn";
 
@@ -114,5 +115,88 @@ describe("돌아온 답 읽기", () => {
 
   it("답이 없어도 갈래는 산다", () => {
     expect(readEasyDecision({ wants: "talk" })).toEqual({ wants: "talk", reply: "" });
+  });
+});
+
+describe("상세페이지를 가른다 (설계 §2-7)", () => {
+  it("detail_page 를 읽는다", () => {
+    expect(readEasyDecision({ wants: "detail_page", reply: "", ratio: "", look: "" }).wants)
+      .toBe("detail_page");
+  });
+
+  /** 상세페이지에 대해 **묻는 말**까지 안내로 끝내면 대화가 안 된다. */
+  it("만들어 달라는 것과 묻는 말을 가르라고 알린다", () => {
+    const prompt = easyChatPrompt([], "상세페이지 만들어줘");
+
+    expect(prompt).toContain("detail_page");
+    expect(prompt).toContain("상세페이지 문구 좀 봐줘");
+  });
+});
+
+describe("카드뉴스 갈래 (2단계 설계 §4)", () => {
+  it("cardnews 와 either 를 읽는다", () => {
+    expect(readEasyDecision({ wants: "cardnews", reply: "", ratio: "", look: "" }).wants).toBe("cardnews");
+    expect(readEasyDecision({ wants: "either", reply: "", ratio: "", look: "" }).wants).toBe("either");
+  });
+
+  it("원고가 있을 때만 revise 를 받는다", () => {
+    expect(readEasyDecision({ wants: "revise", reply: "", ratio: "", look: "" }, { canRevise: true }).wants).toBe("revise");
+    expect(readEasyDecision({ wants: "revise", reply: "", ratio: "", look: "" }).wants).toBe("talk");
+  });
+
+  it("한 장인지 여러 장인지 모르면 짐작하지 말라고 알린다", () => {
+    const prompt = easyChatPrompt([], "신메뉴 홍보물 만들어줘");
+    expect(prompt).toContain("either");
+    expect(prompt).toContain("신메뉴 홍보물");
+    expect(prompt).toContain("cardnews");
+  });
+
+  it("원고가 있는 대화에서만 revise 를 알려 준다", () => {
+    expect(easyChatPrompt([], "더 짧게", 0, true)).toContain("revise");
+    expect(easyChatPrompt([], "더 짧게")).not.toContain("revise");
+  });
+
+  /** 설계 §7 「만든 뒤에 고치기」의 예가 「더 밝게」다. 글만이 아니라 카드의 모습도 고친다. */
+  it("원고가 있으면 카드 모습을 고치는 말도 revise 라고 알려 준다", () => {
+    const prompt = easyChatPrompt([], "더 밝게", 0, true);
+    expect(prompt).toContain("「더 밝게」");
+    expect(prompt).toContain("모습");
+    expect(easyChatPrompt([], "더 밝게")).not.toContain("「더 밝게」");
+  });
+});
+
+describe("만든 카드뉴스 손보기 (3단계 §5)", () => {
+  const 결정 = (over: Record<string, unknown>) => ({ wants: "talk", reply: "", ratio: "", look: "", card: 0, note: "", ...over });
+
+  it("장 번호와 말을 읽는다, 번호가 없으면 비운다", () => {
+    expect(readEasyDecision(결정({ wants: "card_redo", card: 3, note: " 글자 크게 " }), { canRevise: true, made: true }))
+      .toMatchObject({ wants: "card_redo", card: 3, note: "글자 크게" });
+    expect(readEasyDecision(결정({ wants: "card_text", card: 0, note: "" }), { canRevise: true })).not.toHaveProperty("card");
+    expect(readEasyDecision(결정({ wants: "card_text", card: 2.5 }), { canRevise: true })).not.toHaveProperty("card");
+  });
+
+  it("원고가 없으면 장 고치기를 말로 받는다", () => {
+    expect(readEasyDecision(결정({ wants: "card_text", card: 2 })).wants).toBe("talk");
+  });
+
+  /** Review Focus 4 */
+  it("만든 카드가 없으면 다시 그리기 · 게시글 · 받기는 먼저 만들라고 답한다", () => {
+    for (const wants of ["card_redo", "caption", "download"]) {
+      expect(readEasyDecision(결정({ wants, card: 1 }), { canRevise: true, made: false }))
+        .toMatchObject({ wants: "talk", reply: NOT_MADE_YET });
+    }
+  });
+
+  it("카드뉴스가 아예 없으면 그 갈래들은 모델의 답 그대로 말로 받는다", () => {
+    expect(readEasyDecision(결정({ wants: "download", reply: "무엇을 받으실까요?" })))
+      .toMatchObject({ wants: "talk", reply: "무엇을 받으실까요?" });
+  });
+
+  it("원고가 있을 때만 장 고치기를, 만든 뒤에만 다시 그리기 · 게시글 · 받기를 알려 준다", () => {
+    expect(easyChatPrompt([], "3번 더 짧게", 0, true)).toContain("card_text");
+    expect(easyChatPrompt([], "3번 더 짧게", 0, true)).not.toContain("card_redo");
+    expect(easyChatPrompt([], "3번 다시", 0, true, true)).toContain("card_redo");
+    expect(easyChatPrompt([], "3번 다시", 0, true, true)).toContain("download");
+    expect(easyChatPrompt([], "안녕")).not.toContain("card_text");
   });
 });

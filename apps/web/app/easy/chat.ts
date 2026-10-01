@@ -1,4 +1,5 @@
 import { EASY_LOOKS, EASY_RATIOS } from "./ask";
+import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
 
 /**
@@ -30,8 +31,18 @@ import type { EasyMessage } from "./turn";
 
 /** 모델이 돌려주는 것. */
 export interface EasyDecision {
-  /** `image` 면 그림을 만들고, `talk` 면 `reply` 를 대화에 적는다. */
-  wants: "image" | "talk";
+  /**
+   * `image` 면 한 장, `cardnews` 면 카드뉴스 원고, `either` 면 둘 중 무엇인지 묻고,
+   * `revise` 면 이 대화의 마지막 원고를 말대로 다시 쓴다(2단계 설계 §4 · §7).
+   * `talk` 면 `reply` 를 적고, `detail_page` 면 안내 한 줄로 끝낸다.
+   */
+  wants: "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page"
+    // 3단계: 만든 카드뉴스 손보기(한 장 다시 그리기 · 한 장 글 고치기 · 게시글 · 받기).
+    | "card_redo" | "card_text" | "caption" | "download";
+  /** 3단계: 말한 장 번호. 없으면 비어 있다. */
+  card?: number;
+  /** 3단계: 그 장에 바라는 점 · 고칠 내용. */
+  note?: string;
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -76,6 +87,10 @@ export function easyChatPrompt(
    * 붙인 것이 있으면 그 사실을 적어 준다. 그러면 가리키는 말이 뜻을 갖는다.
    */
   attachmentCount = 0,
+  /** 이 대화에 카드뉴스 원고가 있나. 있을 때만 「고치기」 갈래를 알려 준다(2단계 §7). */
+  hasDraft = false,
+  /** 그 카드뉴스를 만들었나(그림이 있다). 있을 때만 다시 그리기 · 게시글 · 받기를 알려 준다(3단계 §5). */
+  made = false,
 ): string {
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
@@ -95,10 +110,44 @@ export function easyChatPrompt(
     "",
     "사용자의 **마지막 말**이 무엇인지 가르세요.",
     "",
-    "  image  지금 **이미지를 만들어 달라는 것**입니다.",
+    "  image     지금 이미지 **한 장**을 만들어 달라는 것입니다. 포스터 · 배너 · 썸네일 ·",
+    "            그림 · 사진 · 로고 · 프로필처럼 원래 한 장인 것이거나, 「한 장」 · 「하나」를",
+    "            말했을 때입니다. 「카드뉴스 표지 한 장만」도 image 입니다.",
+    "  cardnews  **카드뉴스**(여러 장으로 된 카드 · 슬라이드 · 캐러셀)를 만들어 달라는 것입니다.",
+    "  either    만들어 달라는 것은 분명한데 **한 장인지 여러 장인지 알 수 없습니다.**",
+    "            「신메뉴 홍보물 만들어줘」 · 「이걸로 만들어줘」 · 「인스타에 올릴 거 만들어줘」.",
+    "            짐작하지 말고 either 로 두세요. 사용자에게 물어봅니다.",
+    "            단, 「포스터」 · 「배너」 · 「썸네일」처럼 **원래 한 장인 것**을 말했으면 묻지 말고 image 입니다.",
+    ...(hasDraft
+      ? [
+        "  revise    이 대화의 **카드뉴스 원고나 만든 카드를 고쳐 달라는 것**입니다. 「더 짧게」 ·",
+        "            「20대 말투로」 · 「더 밝게」 · 「배경 파랗게」. 새 주제를 말하면 cardnews 입니다.",
+        "  card_text  이 대화 카드뉴스의 **한 장 글**을 고쳐 달라는 것입니다. 「3번 제목을 ○○로」 · 「2번 더 짧게」.",
+        "             장 번호를 card 에, 고칠 내용을 note 에 적습니다. **번호 없이** 전체를 고치면 revise 입니다.",
+      ]
+      : []),
+    ...(hasDraft && made
+      ? [
+        "  card_redo  만든 카드 중 **한 장을 다시 그려** 달라는 것입니다. 「3번 다시 그려줘」 · 「5번 글자 크게 다시」.",
+        "             장 번호를 card 에, 바라는 점을 note 에 적습니다.",
+        "  caption    인스타에 올릴 **게시글**을 써 달라는 것입니다. 「올릴 글 써줘」 · 「해시태그 붙여줘」.",
+        "  download   만든 카드를 **내려받겠다**는 것입니다. 「다 받을게」 · 「저장할래」.",
+      ]
+      : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
+    "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
+    "               만들어 달라는 것입니다. 사진을 붙였어도 같습니다.",
+    "               상세페이지에 대해 **묻는 말**(「상세페이지 문구 좀 봐줘」)은 talk 입니다.",
     "",
+    ...(hasDraft
+      ? [
+        "**이 대화에는 카드뉴스 원고가 있습니다.** 「더 짧게」 · 「20대 말투로」 · 「더 밝게」처럼",
+        "그 원고의 말투 · 길이 · 내용이나 카드의 모습을 바꿔 달라는 말은 talk 도 image 도 아니라 **revise** 입니다.",
+        "원고에 대해 **묻기만** 하는 말(「원고 몇 장이야?」)은 talk 입니다.",
+        "",
+      ]
+      : []),
     "**낱말로 가르지 마세요.** 「방금 그린 거 왜 그렇게 나왔어?」에는 「그린」이",
     "있지만 묻는 말입니다. 「포스터 만들 때 뭘 적어야 해?」도 묻는 말입니다.",
     "**지금 한 장 만들어 내놓기를 바라는지**만 보세요.",
@@ -107,7 +156,9 @@ export function easyChatPrompt(
     "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
     "**무엇을 적으면 되는지 예를 들어** 주세요.",
     "",
-    "`image` 면 `reply` 는 빈 글로 두세요. 이미지가 곧 답입니다.",
+    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise` · `card_text`" : ""}${hasDraft && made ? " · `card_redo` · `caption` · `download`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
+    ...(hasDraft ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
+    "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
     "",
     "── 말 속에 비율이나 그림체가 있나 ──",
     "",
@@ -156,17 +207,31 @@ export function easyChatPrompt(
  * 인사 한 마디에 값이 나가고, 「모르겠으면 말」로 떨어뜨리면 주문이 조용히
  * 씹힌다. 둘 다 사용자가 원인을 알 수 없는 자리다.
  */
-export function readEasyDecision(raw: unknown): EasyDecision {
-  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown } | null;
-  const wants = value?.wants;
+export function readEasyDecision(raw: unknown, options: { canRevise?: boolean; made?: boolean } = {}): EasyDecision {
+  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown } | null;
+  const said = value?.wants;
 
-  if (wants !== "image" && wants !== "talk") {
-    throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(wants)}`);
+  if (typeof said !== "string" || !아는갈래.has(said)) {
+    throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(said)}`);
   }
+  let wants = said as EasyDecision["wants"];
+  let reply = typeof value?.reply === "string" ? value.reply.trim() : "";
+  // 고칠 원고가 없는데 고치라고 하면 말로 답한다. 만들 것이 없다.
+  if ((said === "revise" || said === "card_text") && !options.canRevise) wants = "talk";
+  // 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다.
+  else if (만든뒤갈래.has(said) && !options.canRevise) wants = "talk";
+  else if (만든뒤갈래.has(said) && !options.made) {
+    wants = "talk";
+    reply = NOT_MADE_YET;
+  }
+  const card = typeof value?.card === "number" && Number.isInteger(value.card) && value.card > 0 ? value.card : undefined;
+  const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim().slice(0, 500) : undefined;
 
   return {
     wants,
-    reply: typeof value?.reply === "string" ? value.reply.trim() : "",
+    reply,
+    ...(card ? { card } : {}),
+    ...(note ? { note } : {}),
     /*
       **모르는 값은 버린다.** 목록에 없는 비율·결이 오면 그것은 지어낸 것이고,
       그대로 넘기면 만들기가 거절당한다(`PosterProjectInputSchema`). 비워 두면
@@ -184,5 +249,9 @@ export function readEasyDecision(raw: unknown): EasyDecision {
   };
 }
 
+const 아는갈래 = new Set([
+  "image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download",
+]);
+const 만든뒤갈래 = new Set(["card_redo", "caption", "download"]);
 const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));
 const 아는결 = new Set(EASY_LOOKS.map((one) => one.id as string));
