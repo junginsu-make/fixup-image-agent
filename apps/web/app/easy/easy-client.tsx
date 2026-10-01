@@ -31,6 +31,7 @@ import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
 import { openImageGallery } from "../_components/image-viewer";
 import { attachmentFromUpload, easyUploadForm } from "./upload";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -739,7 +740,7 @@ export function EasyClient({
               <>{cost.rejected} </>
             )}
             만든 이미지는 라이브러리에 저장됩니다. 세밀하게 만들려면 왼쪽
-            「이미지 만들기」를 누르세요.
+            「이미지 만들기」를 누르세요. {UPLOAD_RIGHTS_NOTE}
           </p>
         </div>
       </div>
@@ -794,7 +795,6 @@ export function EasyClient({
           event.target.value = "";
         }}
       />
-
     </div>
   );
 }
