@@ -76,20 +76,31 @@ async function main() {
   줄.push("## ⓑ1 말인가 주문인가", "", "| 문장 | 사진 | 기대 | 결과 | ms | $ |", "|---|---|---|---|---|---|");
   for (const one of B1_CASES) {
     for (let run = 0; run < RUNS; run += 1) {
-      const r = await 잰다(() => provider.decide(easyChatPrompt(one.hasDraft ? 원고있는대화 : [], one.prompt, one.attachments, Boolean(one.hasDraft))));
+      const r = await 잰다(() => provider.decide(easyChatPrompt(
+        one.hasDraft ? 원고있는대화 : [], one.prompt, one.attachments, Boolean(one.hasDraft), Boolean(one.made),
+      )));
       let got: string;
-      try { got = readEasyDecision(r.value, { canRevise: Boolean(one.hasDraft) }).wants; } catch { got = "오류"; }
+      let 장: number | undefined;
+      try {
+        const 판단 = readEasyDecision(r.value, { canRevise: Boolean(one.hasDraft), made: Boolean(one.made) });
+        got = 판단.wants;
+        장 = 판단.card;
+      } catch { got = "오류"; }
       const 기대 = [one.expect].flat() as string[];
+      // 3단계: 다시 그리기가 아닌데 다시 그리기 · 말한 장과 다른 장을 고치면 치명이다(값 · 엉뚱한 장).
+      if (got === "card_redo" && !기대.includes("card_redo")) 치명 += 1;
+      if (one.card && 기대.includes(got) && 장 !== one.card) 치명 += 1;
       // 한 장 ↔ 여러 장이 뒤바뀌면 치명이다(2단계 §12) — 틀리면 값이 나가거나 엉뚱한 것이 나온다.
       if ((got === "image" || got === "cardnews") && !기대.includes(got) && (기대.includes("image") || 기대.includes("cardnews") || 기대.includes("either"))) 치명 += 1;
       합계 += r.usd;
       if (!기대.includes(got)) 어긋남 += 1;
-      줄.push(`| ${one.prompt}${one.hasDraft ? " (원고 있음)" : ""} | ${one.attachments} | ${기대.join("/")} | ${기대.includes(got) ? got : `**${got}**`} | ${r.ms} | ${r.usd.toFixed(4)} |`);
+      줄.push(`| ${one.prompt}${one.hasDraft ? " (원고 있음)" : ""}${one.made ? " (만든 뒤)" : ""} | ${one.attachments} | ${기대.join("/")}${one.card ? ` ${one.card}번` : ""} | ${기대.includes(got) ? got : `**${got}**`}${장 ? ` ${장}번` : ""} | ${r.ms} | ${r.usd.toFixed(4)} |`);
     }
   }
 
   줄.push("", "## ⓑ2 사진 역할", "", "| 이름 | 말 | 결과(역할/said) | 엇갈림 | 문제 | ms | $ |", "|---|---|---|---|---|---|---|");
-  for (const one of B2_CASES) {
+  // B1_ONLY 면 사진 역할은 건너뛴다(3단계는 말 판단만 바꿨다).
+  for (const one of process.env.B1_ONLY ? [] : B2_CASES) {
     for (let run = 0; run < RUNS; run += 1) {
       const prompt = easyRolePrompt({
         words: one.words,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NOT_MADE_YET } from "../cardnews-after";
 import { easyChatPrompt, readEasyDecision } from "../chat";
 import type { EasyMessage } from "../turn";
 
@@ -161,5 +162,41 @@ describe("카드뉴스 갈래 (2단계 설계 §4)", () => {
     expect(prompt).toContain("「더 밝게」");
     expect(prompt).toContain("모습");
     expect(easyChatPrompt([], "더 밝게")).not.toContain("「더 밝게」");
+  });
+});
+
+describe("만든 카드뉴스 손보기 (3단계 §5)", () => {
+  const 결정 = (over: Record<string, unknown>) => ({ wants: "talk", reply: "", ratio: "", look: "", card: 0, note: "", ...over });
+
+  it("장 번호와 말을 읽는다, 번호가 없으면 비운다", () => {
+    expect(readEasyDecision(결정({ wants: "card_redo", card: 3, note: " 글자 크게 " }), { canRevise: true, made: true }))
+      .toMatchObject({ wants: "card_redo", card: 3, note: "글자 크게" });
+    expect(readEasyDecision(결정({ wants: "card_text", card: 0, note: "" }), { canRevise: true })).not.toHaveProperty("card");
+    expect(readEasyDecision(결정({ wants: "card_text", card: 2.5 }), { canRevise: true })).not.toHaveProperty("card");
+  });
+
+  it("원고가 없으면 장 고치기를 말로 받는다", () => {
+    expect(readEasyDecision(결정({ wants: "card_text", card: 2 })).wants).toBe("talk");
+  });
+
+  /** Review Focus 4 */
+  it("만든 카드가 없으면 다시 그리기 · 게시글 · 받기는 먼저 만들라고 답한다", () => {
+    for (const wants of ["card_redo", "caption", "download"]) {
+      expect(readEasyDecision(결정({ wants, card: 1 }), { canRevise: true, made: false }))
+        .toMatchObject({ wants: "talk", reply: NOT_MADE_YET });
+    }
+  });
+
+  it("카드뉴스가 아예 없으면 그 갈래들은 모델의 답 그대로 말로 받는다", () => {
+    expect(readEasyDecision(결정({ wants: "download", reply: "무엇을 받으실까요?" })))
+      .toMatchObject({ wants: "talk", reply: "무엇을 받으실까요?" });
+  });
+
+  it("원고가 있을 때만 장 고치기를, 만든 뒤에만 다시 그리기 · 게시글 · 받기를 알려 준다", () => {
+    expect(easyChatPrompt([], "3번 더 짧게", 0, true)).toContain("card_text");
+    expect(easyChatPrompt([], "3번 더 짧게", 0, true)).not.toContain("card_redo");
+    expect(easyChatPrompt([], "3번 다시", 0, true, true)).toContain("card_redo");
+    expect(easyChatPrompt([], "3번 다시", 0, true, true)).toContain("download");
+    expect(easyChatPrompt([], "안녕")).not.toContain("card_text");
   });
 });

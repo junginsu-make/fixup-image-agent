@@ -1,4 +1,5 @@
 import { EASY_LOOKS, EASY_RATIOS } from "./ask";
+import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
 
 /**
@@ -35,7 +36,13 @@ export interface EasyDecision {
    * `revise` 면 이 대화의 마지막 원고를 말대로 다시 쓴다(2단계 설계 §4 · §7).
    * `talk` 면 `reply` 를 적고, `detail_page` 면 안내 한 줄로 끝낸다.
    */
-  wants: "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page";
+  wants: "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page"
+    // 3단계: 만든 카드뉴스 손보기(한 장 다시 그리기 · 한 장 글 고치기 · 게시글 · 받기).
+    | "card_redo" | "card_text" | "caption" | "download";
+  /** 3단계: 말한 장 번호. 없으면 비어 있다. */
+  card?: number;
+  /** 3단계: 그 장에 바라는 점 · 고칠 내용. */
+  note?: string;
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -82,6 +89,8 @@ export function easyChatPrompt(
   attachmentCount = 0,
   /** 이 대화에 카드뉴스 원고가 있나. 있을 때만 「고치기」 갈래를 알려 준다(2단계 §7). */
   hasDraft = false,
+  /** 그 카드뉴스를 만들었나(그림이 있다). 있을 때만 다시 그리기 · 게시글 · 받기를 알려 준다(3단계 §5). */
+  made = false,
 ): string {
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
@@ -108,10 +117,21 @@ export function easyChatPrompt(
     "  either    만들어 달라는 것은 분명한데 **한 장인지 여러 장인지 알 수 없습니다.**",
     "            「신메뉴 홍보물 만들어줘」 · 「이걸로 만들어줘」 · 「인스타에 올릴 거 만들어줘」.",
     "            짐작하지 말고 either 로 두세요. 사용자에게 물어봅니다.",
+    "            단, 「포스터」 · 「배너」 · 「썸네일」처럼 **원래 한 장인 것**을 말했으면 묻지 말고 image 입니다.",
     ...(hasDraft
       ? [
         "  revise    이 대화의 **카드뉴스 원고나 만든 카드를 고쳐 달라는 것**입니다. 「더 짧게」 ·",
         "            「20대 말투로」 · 「더 밝게」 · 「배경 파랗게」. 새 주제를 말하면 cardnews 입니다.",
+        "  card_text  이 대화 카드뉴스의 **한 장 글**을 고쳐 달라는 것입니다. 「3번 제목을 ○○로」 · 「2번 더 짧게」.",
+        "             장 번호를 card 에, 고칠 내용을 note 에 적습니다. **번호 없이** 전체를 고치면 revise 입니다.",
+      ]
+      : []),
+    ...(hasDraft && made
+      ? [
+        "  card_redo  만든 카드 중 **한 장을 다시 그려** 달라는 것입니다. 「3번 다시 그려줘」 · 「5번 글자 크게 다시」.",
+        "             장 번호를 card 에, 바라는 점을 note 에 적습니다.",
+        "  caption    인스타에 올릴 **게시글**을 써 달라는 것입니다. 「올릴 글 써줘」 · 「해시태그 붙여줘」.",
+        "  download   만든 카드를 **내려받겠다**는 것입니다. 「다 받을게」 · 「저장할래」.",
       ]
       : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
@@ -136,7 +156,8 @@ export function easyChatPrompt(
     "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
     "**무엇을 적으면 되는지 예를 들어** 주세요.",
     "",
-    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
+    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise` · `card_text`" : ""}${hasDraft && made ? " · `card_redo` · `caption` · `download`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
+    ...(hasDraft ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
     "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
     "",
     "── 말 속에 비율이나 그림체가 있나 ──",
@@ -186,19 +207,31 @@ export function easyChatPrompt(
  * 인사 한 마디에 값이 나가고, 「모르겠으면 말」로 떨어뜨리면 주문이 조용히
  * 씹힌다. 둘 다 사용자가 원인을 알 수 없는 자리다.
  */
-export function readEasyDecision(raw: unknown, options: { canRevise?: boolean } = {}): EasyDecision {
-  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown } | null;
+export function readEasyDecision(raw: unknown, options: { canRevise?: boolean; made?: boolean } = {}): EasyDecision {
+  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown } | null;
   const said = value?.wants;
 
   if (typeof said !== "string" || !아는갈래.has(said)) {
     throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(said)}`);
   }
+  let wants = said as EasyDecision["wants"];
+  let reply = typeof value?.reply === "string" ? value.reply.trim() : "";
   // 고칠 원고가 없는데 고치라고 하면 말로 답한다. 만들 것이 없다.
-  const wants = (said === "revise" && !options.canRevise ? "talk" : said) as EasyDecision["wants"];
+  if ((said === "revise" || said === "card_text") && !options.canRevise) wants = "talk";
+  // 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다.
+  else if (만든뒤갈래.has(said) && !options.canRevise) wants = "talk";
+  else if (만든뒤갈래.has(said) && !options.made) {
+    wants = "talk";
+    reply = NOT_MADE_YET;
+  }
+  const card = typeof value?.card === "number" && Number.isInteger(value.card) && value.card > 0 ? value.card : undefined;
+  const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim().slice(0, 500) : undefined;
 
   return {
     wants,
-    reply: typeof value?.reply === "string" ? value.reply.trim() : "",
+    reply,
+    ...(card ? { card } : {}),
+    ...(note ? { note } : {}),
     /*
       **모르는 값은 버린다.** 목록에 없는 비율·결이 오면 그것은 지어낸 것이고,
       그대로 넘기면 만들기가 거절당한다(`PosterProjectInputSchema`). 비워 두면
@@ -216,6 +249,9 @@ export function readEasyDecision(raw: unknown, options: { canRevise?: boolean } 
   };
 }
 
-const 아는갈래 = new Set(["image", "cardnews", "either", "revise", "talk", "detail_page"]);
+const 아는갈래 = new Set([
+  "image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download",
+]);
+const 만든뒤갈래 = new Set(["card_redo", "caption", "download"]);
 const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));
 const 아는결 = new Set(EASY_LOOKS.map((one) => one.id as string));

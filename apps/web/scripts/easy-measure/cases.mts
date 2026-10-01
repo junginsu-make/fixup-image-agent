@@ -21,10 +21,15 @@ export const 설명 = {
   일러스트: "사람 1명: 가운데 — 큰 눈의 애니메이션풍 소녀, 분홍 단발 · 무엇이 있나: 셀 셰이딩으로 그린 애니메이션 일러스트, 배경은 파스텔 하늘 · 글자 없음 · 디자인: 굵은 외곽선과 평면 채색",
 } as const;
 
-export type B1Want = "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page";
+export type B1Want = "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page"
+  | "card_redo" | "card_text" | "caption" | "download";
 
 /** `expect` 가 여럿이면 그중 하나면 맞다. `hasDraft` 는 원고가 있는 대화(2단계 §7). */
-export interface B1Case { prompt: string; attachments: number; expect: B1Want | B1Want[]; hasDraft?: boolean }
+export interface B1Case {
+  prompt: string; attachments: number; expect: B1Want | B1Want[]; hasDraft?: boolean;
+  /** 그 카드뉴스를 만들었다(3단계). `card` 는 말한 장 번호로 읽혀야 할 값. */
+  made?: boolean; card?: number;
+}
 
 export const B1_CASES: B1Case[] = [
   { prompt: "상세페이지 만들어줘", attachments: 0, expect: "detail_page" },
@@ -52,6 +57,16 @@ export const B1_CASES: B1Case[] = [
   { prompt: "좀 더 밝게 해줘", attachments: 0, hasDraft: true, expect: "revise" },
   { prompt: "배경을 파란색으로 바꿔줘", attachments: 0, hasDraft: true, expect: "revise" },
   { prompt: "표지가 왜 이렇게 어두워?", attachments: 0, hasDraft: true, expect: "talk" },
+  // 3단계: 만든 카드뉴스 손보기(설계 §5).
+  { prompt: "3번 다시 그려줘, 글자 크게", attachments: 0, hasDraft: true, made: true, expect: "card_redo", card: 3 },
+  { prompt: "5번 장 다시 만들어줘", attachments: 0, hasDraft: true, made: true, expect: "card_redo", card: 5 },
+  { prompt: "3번 제목을 '뒷면을 보세요'로 바꿔줘", attachments: 0, hasDraft: true, made: true, expect: "card_text", card: 3 },
+  { prompt: "2번 더 짧게", attachments: 0, hasDraft: true, expect: "card_text", card: 2 },
+  { prompt: "더 짧게 써줘", attachments: 0, hasDraft: true, made: true, expect: "revise" },
+  { prompt: "인스타에 올릴 글 써줘", attachments: 0, hasDraft: true, made: true, expect: "caption" },
+  { prompt: "다 받을게", attachments: 0, hasDraft: true, made: true, expect: "download" },
+  { prompt: "3번 장은 왜 이렇게 나왔어?", attachments: 0, hasDraft: true, made: true, expect: "talk" },
+  { prompt: "강아지 포스터 한 장 만들어줘", attachments: 0, hasDraft: true, made: true, expect: "image" },
 ];
 
 export interface B2Case {
