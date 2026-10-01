@@ -2,9 +2,12 @@
 
 import * as React from "react";
 import { Loader2 } from "lucide-react";
-import { cn } from "@fixup/ui";
+import Link from "next/link";
+import { Button, cn } from "@fixup/ui";
+import { DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
+import { EasyCardnewsCard } from "./cardnews-card";
 
 /**
  * 대화 한 줄 (설계 §4).
@@ -148,11 +151,14 @@ export function EasyMessageRow({
   message,
   imageUrl,
   onOpenImage,
+  cardnews,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
   imageUrl?: string;
   onOpenImage?: () => void;
+  /** 카드뉴스 원고 줄이면 그 작업(2단계 §7). 그림 한 장 대신 원고 카드를 그린다. */
+  cardnews?: React.ComponentProps<typeof EasyCardnewsCard>;
 }) {
   if (message.role === "user") {
     return (
@@ -172,12 +178,33 @@ export function EasyMessageRow({
     대화의 한 줄이므로 같은 자리에서 같은 모양으로 온다.
   */
   if (message.role === "system" || message.role === "assistant") {
+    const 말풍선 = "whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-base leading-7";
     return (
       <div className="flex items-start gap-2">
         <AssistantMark />
-        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-base leading-7">
-          {message.body}
-        </p>
+        {isDetailPageGuide(message) ? (
+          /*
+            **상세페이지 안내 줄에만 단추를 단다**(설계 §2-7). 대화 표에 갈래를
+            더하지 않고 문장으로 가른다 — 다시 열어도 그대로 보인다.
+          */
+          <div className="grid max-w-[85%] gap-2">
+            <p className={말풍선}>{message.body}</p>
+            <Button asChild size="sm" variant="secondary" className="w-fit">
+              <Link href={DETAIL_PAGE_HREF}>상세페이지 만들기 열기</Link>
+            </Button>
+          </div>
+        ) : (
+          <p className={cn("max-w-[85%]", 말풍선)}>{message.body}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (cardnews) {
+    return (
+      <div className="flex items-start gap-2">
+        <AssistantMark />
+        <EasyCardnewsCard {...cardnews} />
       </div>
     );
   }

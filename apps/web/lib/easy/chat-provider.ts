@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { textModelVendor } from "@fixup/shared";
 import { EASY_LOOKS, EASY_RATIOS } from "../../app/easy/ask";
+import { EASY_PHOTO_ROLES } from "../../app/easy/photo-roles";
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
@@ -40,7 +41,10 @@ const EASY_CHAT_SPEC: StructuredSpec = {
        * 버린다 — 2026-09-17 에 `invented` 로 한 번, `hasText` 로 또 한 번
        * 당했다. 둘 다 프롬프트에만 적혀 있었다.
        */
-      wants: { type: "string", enum: ["image", "talk"] },
+      wants: {
+        type: "string",
+        enum: ["image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download"],
+      },
       reply: { type: "string" },
       /*
        * **말 속에 있을 때만 채운다.** 빈 글이 「없다」는 뜻이다.
@@ -54,8 +58,77 @@ const EASY_CHAT_SPEC: StructuredSpec = {
         주면 모델이 그것을 골라 놓고 「말했다」가 된다 — 그러면 안 묻는다.
       */
       look: { type: "string", enum: ["", ...EASY_LOOKS.filter((one) => one.id !== "auto").map((one) => one.id)] },
+      // 3단계: 말한 장 번호(없으면 0)와 그 장에 바라는 점 · 고칠 내용(없으면 빈 글).
+      card: { type: "integer" },
+      note: { type: "string" },
     },
-    required: ["wants", "reply", "ratio", "look"],
+    required: ["wants", "reply", "ratio", "look", "card", "note"],
+  },
+};
+
+/**
+ * **사진마다 쓰임을 정하는 틀**(설계 §2-3 ⓑ2).
+ *
+ * 번호만 받는다 — id 는 모델에게 주지 않는다. 틀에 없는 칸은 구조화 응답이
+ * 버리므로 `said`·`conflicting` 도 반드시 여기 있어야 한다.
+ */
+const EASY_ROLE_SPEC: StructuredSpec = {
+  name: "easy_photo_roles",
+  description: "붙인 사진마다 쓰임(역할)을 정하고, 말이 그 쓰임을 말했는지 적는다.",
+  schema: {
+    type: "object",
+    properties: {
+      photos: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            number: { type: "integer" },
+            role: { type: "string", enum: [...EASY_PHOTO_ROLES, "unclear"] },
+            said: { type: "boolean" },
+          },
+          required: ["number", "role", "said"],
+        },
+      },
+      conflicting: { type: "boolean" },
+    },
+    required: ["photos", "conflicting"],
+  },
+};
+
+/**
+ * **카드뉴스 마지막 장 정리 문장**(2026-09-30 사용자 결정 B). 기존 흐름은 마지막 장에
+ * 한 줄만 넣어, 「쉽게」가 원고를 쓴 직후 채운다(`app/easy/cardnews-ending.ts`).
+ */
+const EASY_ENDING_SPEC: StructuredSpec = {
+  name: "easy_cardnews_ending",
+  description: "카드뉴스 마지막 장의 정리 제목과 핵심 줄을 쓴다.",
+  schema: {
+    type: "object",
+    properties: {
+      headline: { type: "string" },
+      body: { type: "string" },
+    },
+    required: ["headline", "body"],
+  },
+};
+
+/**
+ * **카드뉴스 한 장 글 고치기**(3단계 §6-2). 말이 가리키는 칸만 채우고 나머지는 빈 글.
+ * 네 칸 모두 `required` 다 — 안 채운 칸을 빼 버리면 「안 고친다」를 말할 길이 없다.
+ */
+const EASY_CARD_EDIT_SPEC: StructuredSpec = {
+  name: "easy_card_edit",
+  description: "카드뉴스 한 장의 글을 사용자의 말대로 고친다. 안 고칠 칸은 빈 글.",
+  schema: {
+    type: "object",
+    properties: {
+      headline: { type: "string" },
+      body: { type: "string" },
+      accent: { type: "string" },
+      footnote: { type: "string" },
+    },
+    required: ["headline", "body", "accent", "footnote"],
   },
 };
 
@@ -84,21 +157,16 @@ export function createEasyChatProvider(
     const key = environment.OPENAI_API_KEY?.trim();
     if (!key) throw new EasyChatConfigurationError("OPENAI_API_KEY");
     const openai = new OpenAI({ apiKey: key, maxRetries: 2, timeout: 60_000 });
-    return {
-      decide: (prompt: string) =>
-        new OpenAIStructuredProvider(openai, textModel!, EASY_CHAT_SPEC).generate(prompt),
-    };
+    const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
+      new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt);
+    return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
   }
 
   const key = environment.ANTHROPIC_API_KEY?.trim();
   if (!key) throw new EasyChatConfigurationError("ANTHROPIC_API_KEY");
   const anthropic = new Anthropic({ apiKey: key, maxRetries: 2, timeout: 60_000 });
-  return {
-    decide: (prompt: string) =>
-      new AnthropicStructuredProvider(
-        anthropic,
-        textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5",
-        EASY_CHAT_SPEC,
-      ).generate(prompt),
-  };
+  const model = textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5";
+  const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
+    new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt);
+  return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
 }

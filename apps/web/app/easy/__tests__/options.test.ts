@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { easyOptionLines, easyOptionMeta } from "../options";
+import { easyOptionLines, easyOptionMeta, easyRoleSummary } from "../options";
 
 /**
  * **이 이미지가 어떤 조건으로 만들어졌나** (2026-09-21 사용자 — 「결과물 밑에
@@ -76,5 +76,32 @@ describe("크게 보기 창에 걸 이름표", () => {
     expect(easyOptionMeta(조건).length).toBe(easyOptionLines(조건).length);
     expect(easyOptionMeta({}).length).toBe(easyOptionLines({}).length);
     expect(easyOptionMeta(undefined)).toEqual([]);
+  });
+});
+
+describe("사진 역할 (설계 §2-8)", () => {
+  it("붙인 순서대로 번호와 역할을 적는다", () => {
+    expect(easyRoleSummary({
+      attachmentOrder: ["a", "b", "c", "d"],
+      preservedIds: ["b", "c", "d"],
+      personIds: ["c", "d"],
+      restyledIds: ["d"],
+    })).toBe("①분위기 참고 · ②제품 유지 · ③인물 유지 · ④인물 유지·그림체 바꾸기");
+  });
+
+  /** 옛 작업에는 차례가 없다. 지어내지 않는다. */
+  it("차례가 없으면 빈 글이다", () => {
+    expect(easyRoleSummary({ preservedIds: ["a"] })).toBe("");
+  });
+
+  it("스무 장을 넘으면 숫자로 적는다", () => {
+    const order = Array.from({ length: 21 }, (_, i) => `p${i}`);
+    expect(easyRoleSummary({ attachmentOrder: order }).endsWith("21.분위기 참고")).toBe(true);
+  });
+
+  it("결과 밑과 크게 보기 창에 같은 값을 낸다", () => {
+    const options = { model: "m", roles: "①제품 유지" };
+    expect(easyOptionLines(options)).toContain("①제품 유지");
+    expect(easyOptionMeta(options)).toContainEqual(["사진 역할", "①제품 유지"]);
   });
 });

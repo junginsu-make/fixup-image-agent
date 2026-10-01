@@ -3,6 +3,7 @@
 import * as React from "react";
 import { EasyImageWorking } from "./message";
 import { easyOptionLines, type EasyImageOptions } from "../options";
+import { newestFirst } from "../cardnews-state";
 
 /**
  * 오른쪽 **결과 칸** — 이 대화에서 만든 것만 모은다.
@@ -38,6 +39,8 @@ export interface EasyResult {
   url: string;
   /** 이 장을 만든 조건. 모르면 비어 있다 — 지어내지 않는다. */
   options?: EasyImageOptions;
+  /** 카드뉴스 한 벌. 같은 묶음은 결과 칸에서 앞 장부터 읽힌다(`newestFirst`). */
+  group?: string;
 }
 
 export function EasyResultPanel({
@@ -101,9 +104,8 @@ export function EasyResultPanel({
         {working ? <EasyImageWorking className="w-full" /> : null}
 
         {images.length ? (
-          // 새것이 위다. 번호는 **만든 차례**라 뒤집어도 1번이 첫 장이다.
-          [...images].reverse().map((image, 뒤에서) => {
-            const at = images.length - 1 - 뒤에서;
+          // 새것이 위다. 번호는 **만든 차례**라 뒤집어도 1번이 첫 장이다. 카드뉴스 한 벌은 앞 장부터.
+          newestFirst(images).map(({ item: image, at }) => {
             return (
               <div key={image.id} className="grid gap-1.5">
                 <button

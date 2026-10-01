@@ -27,6 +27,7 @@ export default async function EasyConversationPage({
       initialMessages={loaded.messages}
       initialUrls={loaded.urls}
       initialOptions={loaded.options}
+      initialCardnews={loaded.cardnews}
       imageModels={easyImageModels()}
       defaultImageModel={defaultEasyImageModel()}
       ratioId={EASY_DEFAULT_RATIO}

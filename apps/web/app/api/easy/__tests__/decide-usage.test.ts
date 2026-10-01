@@ -84,6 +84,10 @@ vi.mock("../../poster/projects/[id]/generate/route", () => ({
 
 const { POST } = await import("../generate/route");
 
+/*
+ * 되묻지 않게 하려고 비율을 고른 것으로 보낸다. 처음에는 사진(`referenceIds`)을 붙여
+ * 막았는데, 「쉽게」는 사진 id 형식과 볼 수 있는지를 먼저 확인한다(1단계 §2-3).
+ */
 const call = (body: Record<string, unknown> = {}) =>
   POST(new Request("http://x/api/easy/generate", {
     method: "POST",
@@ -137,7 +141,7 @@ describe("판정 예약은 모든 끝에서 닫는다", () => {
 
   it("그림 주문이면 판정을 닫고 나서 기획·생성으로 간다", async () => {
     decideRaw = { wants: "image" };
-    const body = await (await call({ referenceIds: ["r1"] })).json();
+    const body = await (await call({ ratio: "1:1" })).json();
     expect(body.ok).toBe(true);
     expect(order).toEqual(["reserve", "decide", "settle", "project", "plan", "generate"]);
     expect(settleCalls).toHaveLength(1);
@@ -166,7 +170,7 @@ describe("다시 눌러도 안 풀리는 실패", () => {
       { ok: false, code: "ai_paused", message: "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", retryable: false },
       { status: 503 },
     );
-    const response = await call({ referenceIds: ["r1"] });
+    const response = await call({ ratio: "1:1" });
     expect(response.status).toBe(503);
     const body = await response.json();
     expect(body.retryable).toBe(false);
@@ -176,7 +180,7 @@ describe("다시 눌러도 안 풀리는 실패", () => {
   it("그냥 서버 오류(500)면 다시 시도를 낸다 — 예전 그대로", async () => {
     decideRaw = { wants: "image" };
     planReply = () => Response.json({ ok: false, message: "잠깐 실패" }, { status: 500 });
-    const body = await (await call({ referenceIds: ["r1"] })).json();
+    const body = await (await call({ ratio: "1:1" })).json();
     expect(body.retryable).toBe(true);
   });
 });

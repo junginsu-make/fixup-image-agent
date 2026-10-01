@@ -166,7 +166,7 @@ describe("말과 주문을 가르는 자리", () => {
 
   it("말로 답한 턴은 그림을 만들지 않고 끝낸다", () => {
     const 말갈래 = generate.slice(
-      generate.indexOf('decision.wants === "talk"'),
+      generate.indexOf('(wants === "talk")'),
       generate.indexOf("await createProject("),
     );
 
@@ -186,8 +186,10 @@ describe("말과 주문을 가르는 자리", () => {
  */
 describe("대신 부를 때의 요청 식별자", () => {
   it("헤더를 통째로 넘기지 않는다", () => {
+    const relayFile = readFileSync(new URL("../../../../lib/easy/relay.ts", import.meta.url), "utf8");
     expect(generate).not.toContain("headers: request.headers");
-    expect(generate).toContain("stepIdempotencyKey");
+    expect(relayFile).not.toContain("headers: request.headers");
+    expect(relayFile).toContain("stepIdempotencyKey");
   });
 
   it("네 단계에 서로 다른 이름을 준다", () => {
@@ -227,5 +229,41 @@ describe("비율·결 묻기", () => {
   it("고른 값으로 만든다", () => {
     expect(generate).toContain("ratio: 고르기.ratio");
     expect(generate).toContain("look: 고르기.look");
+  });
+});
+
+describe("상세페이지 안내 (설계 §2-7)", () => {
+  it("프로젝트를 만들기 전에 안내만 남기고 끝낸다", () => {
+    const 시작 = generate.indexOf('(wants === "detail_page")');
+    const 갈래 = generate.slice(시작, generate.indexOf("await createProject("));
+
+    expect(시작).toBeGreaterThan(0);
+    expect(갈래).toContain("DETAIL_PAGE_GUIDE");
+    expect(갈래).toContain("return Response.json");
+  });
+});
+
+describe("사진 역할 (설계 §2-3)", () => {
+  const readPhotos = readFileSync(new URL("../../../../lib/easy/read-photos.ts", import.meta.url), "utf8");
+
+  /**
+   * 위 「기획을 직접 돌리지 않는다」는 그대로 산다 — 라우트는 기획을 안 돌린다.
+   * 역할을 정하려고 사진을 읽는 것은 `lib/easy/read-photos.ts` 가 하고,
+   * **기획과 같은 기계**를 부른다. 사본을 만들지 않는다.
+   */
+  it("사진은 기획과 같은 기계로 읽는다", () => {
+    expect(readPhotos).toContain("readAttachments");
+    expect(readPhotos).toContain("createPosterAttachmentReader");
+    expect(readPhotos).not.toContain("planPoster");
+  });
+
+  it("판단 · 읽기를 계량기 안에서 부른다 (설계 §2-9 B)", () => {
+    expect(generate).toContain("withLlmMeter(");
+  });
+
+  it("사진을 물을 때도 대화에 아무것도 안 쌓는다", () => {
+    const 묻는곳 = generate.indexOf("photoAsk:");
+    expect(묻는곳).toBeGreaterThan(0);
+    expect(generate.indexOf('role: "user"')).toBeGreaterThan(묻는곳);
   });
 });
