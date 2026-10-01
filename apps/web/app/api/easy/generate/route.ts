@@ -22,6 +22,8 @@ import { pickCardSource } from "../../../easy/cardnews-source";
 import { cardOptionsFrom, projectSpecFrom, readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
 import { draftFailureMessage } from "../../../easy/cardnews-view";
+import { isMade } from "../../../easy/cardnews-after";
+import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -168,6 +170,8 @@ async function turn(request: Request): Promise<Response> {
     const 지난줄 = await store.listMessages(conversationId);
     // 고칠 원고가 있을 때만 「고치기」를 안다(2단계 §7). 없으면 고치기는 말로 읽는다.
     const 고칠원고 = await lastCardnewsProject(auth.member.userId, 지난줄);
+    // 그 원고로 카드를 만들었나. 만들었을 때만 다시 그리기 · 게시글 · 받기를 안다(3단계 §5).
+    const 만들었나 = Boolean(고칠원고 && isMade(고칠원고));
     const decision = readEasyDecision(
       await provider.decide(
         easyChatPrompt(
@@ -180,9 +184,10 @@ async function turn(request: Request): Promise<Response> {
            */
           붙인수,
           Boolean(고칠원고),
+          만들었나,
         ),
       ),
-      { canRevise: Boolean(고칠원고) },
+      { canRevise: Boolean(고칠원고), made: 만들었나 },
     );
 
     /*
@@ -193,6 +198,12 @@ async function turn(request: Request): Promise<Response> {
     const wants = 고른갈래 && ["image", "cardnews", "either"].includes(decision.wants) ? 고른갈래 : decision.wants;
     // 한 장인지 여러 장인지 모르면 묻고 아무것도 안 남긴다(2단계 §4).
     if (wants === "either") return Response.json({ ok: true, kindAsk: true, textModel });
+    // 만든 카드뉴스 손보기(3단계). 판단 읽기가 원고 · 만든 카드가 있을 때만 이 갈래를 준다.
+    if ((wants === "card_redo" || wants === "card_text" || wants === "caption" || wants === "download") && 고칠원고) {
+      return await cardAfterTurn({
+        request, store, conversationId, prompt, textModel, wants, decision, provider, project: 고칠원고, rows: 지난줄,
+      });
+    }
 
     /*
      * ⓵ **비율·결을 한 번 물어볼까** (2026-09-21 사용자).

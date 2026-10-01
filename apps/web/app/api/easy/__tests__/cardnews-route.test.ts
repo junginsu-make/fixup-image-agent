@@ -34,6 +34,7 @@ let 지난줄들: Array<Record<string, unknown>>;
 const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
 const 부른라우트: Array<{ step: string; body: Record<string, unknown> }> = [];
+const 손본것: Array<Record<string, unknown>> = [];
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -114,6 +115,14 @@ vi.mock("../../sns/projects/[id]/cards/[index]/route", () => ({
     return Response.json({ ok: true, project: 원고작업 });
   },
 }));
+vi.mock("../../../../lib/easy/cardnews-after-steps", () => ({
+  editCard: async (_r: Request, project: { id: string }, index: number, change: unknown) => {
+    손본것.push({ what: "edit", index, change });
+    return { project: { ...project, edited: true }, needsRedraw: true };
+  },
+  redoCard: async () => { 손본것.push({ what: "redo" }); return { project: {}, archived: null }; },
+  captionCard: async (_r: Request, id: string) => { 손본것.push({ what: "caption", id }); return { id, captioned: true }; },
+}));
 vi.mock("../../../../lib/sns/feature", () => ({ isWebSourceEnabled: () => false }));
 vi.mock("../../../../lib/sns-flow-store", () => ({
   snsFlowStoreForUser: async () => ({ get: async (id: string) => 카드작업들[id] ?? null }),
@@ -121,6 +130,7 @@ vi.mock("../../../../lib/sns-flow-store", () => ({
 vi.mock("../../../../lib/sns/runtime", () => ({ refreshProjectAssetUrls: async (p: unknown) => p }));
 
 const { POST } = await import("../generate/route");
+const { ASK_CARD_NUMBER, NOT_MADE_YET } = await import("../../../easy/cardnews-after");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -142,7 +152,7 @@ beforeEach(() => {
   원고작업 = 기본원고();
   카드작업들 = {};
   지난줄들 = [];
-  남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0;
+  남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0; 손본것.length = 0;
 });
 
 describe("갈래 (2단계 §4)", () => {
@@ -278,5 +288,63 @@ describe("다시 쓰기 (2단계 §7)", () => {
 
     expect(json.talked).toBe(true);
     expect(부른라우트).toEqual([]);
+  });
+});
+
+describe("만든 카드뉴스 손보기 말 (3단계 §5 · §6-5)", () => {
+  const 만든원고 = () => ({ ...원고작업, id: "old", status: "ready", data: { ...원고작업.data, flow: { ...원고작업.data.flow, cards: [
+    { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "done", assetPath: "me-1/sns/old/1.png" },
+    { index: 2, role: "body", kind: "generated", copy: { headline: "b" }, status: "done", assetPath: "me-1/sns/old/2.png" },
+  ] } } });
+  const 판단하면 = (over: Record<string, unknown>) => { 판단 = { wants: "talk", reply: "", ratio: "", look: "", card: 0, note: "", ...over }; };
+  beforeEach(() => {
+    지난줄들 = [{ id: "r1", role: "image", body: "", workId: "old" }];
+    카드작업들 = { old: 만든원고() };
+  });
+
+  /** Review Focus 3 */
+  it("「2번 다시」는 확인 줄만 돌려주고 아무것도 안 부르고 안 남긴다", async () => {
+    판단하면({ wants: "card_redo", card: 2, note: "글자 크게" });
+    const { json } = await 보낸다({ prompt: "2번 다시 그려줘, 글자 크게" });
+    expect(json.cardAsk).toEqual({ rowId: "r1", index: 2, note: "글자 크게" });
+    expect(부른라우트).toEqual([]);
+    expect(손본것).toEqual([]);
+    expect(남긴줄).toEqual([]);
+  });
+
+  /** Review Focus 4 */
+  it("없는 번호 · 번호 없음은 몇 번인지 되묻고 아무것도 안 남긴다", async () => {
+    판단하면({ wants: "card_text", card: 9, note: "짧게" });
+    expect((await 보낸다({ prompt: "9번 더 짧게" })).json.message.body).toBe(ASK_CARD_NUMBER);
+    판단하면({ wants: "card_redo", card: 0, note: "" });
+    expect((await 보낸다({ prompt: "다시 그려줘" })).json.message.body).toBe(ASK_CARD_NUMBER);
+    expect(남긴줄).toEqual([]);
+    expect(손본것).toEqual([]);
+  });
+
+  /** Review Focus 4 */
+  it("만들기 전 원고에 「다시 그려줘」는 먼저 만들라고 답한다", async () => {
+    카드작업들 = { old: { ...원고작업, id: "old" } };
+    판단하면({ wants: "card_redo", card: 1 });
+    const { json } = await 보낸다({ prompt: "1번 다시 그려줘" });
+    expect(json.message.body).toBe(NOT_MADE_YET);
+    expect(손본것).toEqual([]);
+  });
+
+  it("「2번 더 짧게」는 그 장만 고치고 말과 결과를 남긴다", async () => {
+    판단하면({ wants: "card_text", card: 2, note: "더 짧게" });
+    const { json } = await 보낸다({ prompt: "2번 더 짧게" });
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "더 짧게" } }]);
+    expect(남긴줄.map((row) => [row.role, row.body])).toEqual([["user", "2번 더 짧게"], ["assistant", "2번 장 글을 고쳤습니다."]]);
+    expect(json.cardEdited).toMatchObject({ rowId: "r1", index: 2, needsRedraw: true });
+  });
+
+  it("게시글 · 받기", async () => {
+    판단하면({ wants: "caption" });
+    const 게시글 = (await 보낸다({ prompt: "올릴 글 써줘" })).json;
+    expect(게시글.caption).toMatchObject({ rowId: "r1", project: { captioned: true } });
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    판단하면({ wants: "download" });
+    expect((await 보낸다({ prompt: "다 받을게" })).json.download).toEqual({ rowId: "r1" });
   });
 });
