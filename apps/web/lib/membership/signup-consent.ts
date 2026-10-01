@@ -12,7 +12,7 @@
  * 약관을 새 판으로 바꾸면 이 값도 바꾼다. 안 바꾸면 시험이 붉어진다 — 새
  * 약관에 동의한 사람이 옛 판에 동의한 것으로 기록되기 때문이다.
  */
-export const SIGNUP_TERMS_VERSION = "2026-09-14";
+export const SIGNUP_TERMS_VERSION = "2026-10-01";
 
 export interface SignupConsent {
   ageConfirmed: boolean;

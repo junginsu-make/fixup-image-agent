@@ -43,6 +43,7 @@ import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-fa
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
 import { copyText, randomId } from "../../lib/browser-safe";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { PlanProgress } from "./PlanProgress";
 
 type PreparedImage = PreparedImageDraft;
@@ -2473,6 +2474,8 @@ function UploadDropzone({
         </span>
       </button>
       )}
+      {/* 두 모양 모두 버튼 **밖에** 둔다. 안에 두면 버튼 이름으로 읽힌다. */}
+      <p className="mt-1.5 text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
     </>
   );
 }

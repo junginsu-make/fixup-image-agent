@@ -44,10 +44,15 @@ describe("채워야 하는 칸", () => {
    * 푸터의 사업자 정보와 **같은 값**을 쓰는지 본다. 두 곳이 갈라지면 어느
    * 쪽이 진짜인지 다투게 된다.
    */
+  /**
+   * 시행일은 **날짜가 채워져 있는지**만 본다. 특정 날짜를 박아 두었더니 문서를
+   * 고쳐 판이 바뀔 때마다 이 시험이 틀렸다(2026-10-01). 판과 동의 기록이 같은지는
+   * `lib/membership/__tests__/signup-consent.test.ts` 가 본다.
+   */
   it("두 문서 모두 등록된 상호와 시행일이 들어 있다", () => {
     for (const doc of LEGAL_DOCS) {
       expect(doc.body, "푸터와 다른 상호를 쓰고 있다").toContain(BUSINESS.companyName);
-      expect(doc.body).toContain("2026년 9월 10일");
+      expect(doc.body).toMatch(/시행일: 20\d{2}년 \d{1,2}월 \d{1,2}일/);
     }
   });
 

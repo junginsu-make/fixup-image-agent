@@ -16,6 +16,7 @@ import {
 import { SlotCanvas } from "./slot-canvas";
 import { canvasSize } from "./fit-screen";
 import { billableFetch } from "../../../lib/billable-fetch";
+import { UPLOAD_RIGHTS_NOTE } from "../../../lib/rights/upload-notice";
 import { useFitScreen } from "./use-fit-screen";
 import { SlotInspector } from "./slot-inspector";
 import { LibraryPicker, LibraryUploadButton, useLibraryImages } from "./library-picker";
@@ -500,6 +501,8 @@ export function LayoutStudio() {
               {busy === "analyze" ? "읽는 중…" : "칸 읽어내기"}
             </Button>
           </div>
+          {/* 올리는 버튼(`LibraryUploadButton`)은 좁아 그 안에 두면 세 줄로 접힌다. */}
+          <p className="shrink-0 text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
         </section>
       </div>
 

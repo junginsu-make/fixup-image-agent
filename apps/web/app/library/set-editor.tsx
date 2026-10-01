@@ -5,6 +5,7 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogH
 import type { ReferencePurpose, ReferenceRole, ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { randomId } from "../../lib/browser-safe";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { gridSrc } from "../_components/grid-src";
 import { ThumbImage } from "../_components/thumb-image";
 
@@ -138,7 +139,7 @@ export function SetEditor({
             <Button type="button" variant="secondary" disabled={uploading} onClick={() => fileInput.current?.click()}>
               {uploading ? "올리는 중…" : "이미지 올리기"}
             </Button>
-            <span className="text-xs text-muted-foreground">여기서 올린 그림도 라이브러리 낱장에 들어갑니다.</span>
+            <span className="text-xs text-muted-foreground">여기서 올린 그림도 라이브러리 낱장에 들어갑니다. {UPLOAD_RIGHTS_NOTE}</span>
           </div>
 
           {compatibleImages.length === 0 ? (
