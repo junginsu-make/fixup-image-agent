@@ -1,0 +1,21 @@
+
+== browse (levels 50 VU, hold 60s) ==
+name                                          count    p50ms    p95ms    p99ms    maxms    err%
+api_characters                                   39     7451     9614    10541    10580     0.0
+api_easy_works                                   39     7533    10416    10610    10635     0.0
+api_library                                      78     7565    10733    10917    11026     0.0
+api_poster_projects                              66     7721    10680    10857    10864     0.0
+api_showcase_manage                              39     6907     8408     8775     8897     0.0
+api_sns_projects                                 79     7454    10462    10713    10872     0.0
+api_style_references                             39     7243     9584     9978    10215     0.0
+page_create                                      39     7685    10226    10402    10493     0.0
+page_guide                                       23     7505    10480    10785    10850     0.0
+page_home                                        14     7782    10151    10417    10483     0.0
+page_library                                     39     7616     9255    10417    10463     0.0
+page_poster                                      27     7470     9526    10267    10496     0.0
+page_settings                                    19     7882     9781    10484    10660     0.0
+page_sns                                         40     7740    10867    10986    11055     0.0
+static                                         1495        1        6       32       61     0.0
+
+http_reqs=2075  http_req_failed=0.00%  auth_failures=0
+time="2026-10-01T03:18:43Z" level=error msg="thresholds on metrics 'http_req_duration{kind:api}, http_req_duration{kind:page}' have been crossed"

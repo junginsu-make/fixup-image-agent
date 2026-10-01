@@ -14,15 +14,13 @@ let profile: { role: string; status: string; email_confirmed_at: string | null }
   role: "member", status: "active", email_confirmed_at: "2026-09-01T00:00:00Z",
 };
 
-/** 로그인 토큰 모양만 흉내 낸다 — 가운데 조각에 session_id 가 든다. */
-const 토큰 = () =>
-  ["h", Buffer.from(JSON.stringify({ sub: "user-1", session_id: "session-1" })).toString("base64url"), "s"].join(".");
-
 vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({
     auth: {
-      getUser: async () => ({ data: { user: currentUser } }),
-      getSession: async () => ({ data: { session: currentUser ? { access_token: 토큰() } : null } }),
+      getClaims: async () => ({
+        data: currentUser ? { claims: { sub: currentUser.id, session_id: "session-1" } } : null,
+        error: null,
+      }),
       signOut: async () => ({ error: null }),
     },
     from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: profile }) }) }) }),

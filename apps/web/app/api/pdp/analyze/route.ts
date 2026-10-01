@@ -33,7 +33,7 @@ async function analyze(req: Request) {
   if (!parsed.ok) return parsed.response;
   // 그림이 없으므로 0크레딧이다. 그래도 예약은 거친다 — 정지 계정과 잔액
   // 부족은 0장짜리 요청도 막아야 한다.
-  const reservation = await reserveAiUsage(req, "pdp_analyze", 0, freeCreditPlan("pdp:analyze"));
+  const reservation = await reserveAiUsage(req, "pdp_analyze", 0, freeCreditPlan("pdp:analyze"), parsed.member);
   if (!reservation.ok) return reservation.response;
   try {
     const body = parsed.body;

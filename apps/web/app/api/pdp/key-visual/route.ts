@@ -46,7 +46,7 @@ async function handlePost(req: Request) {
   */
   const model = body.imageModel ?? DEFAULT_IMAGE_MODEL;
   const units = imageCreditUnits(model, 1);
-  const reservation = await reserveAiUsage(req, "pdp_image", units, creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:key-visual"));
+  const reservation = await reserveAiUsage(req, "pdp_image", units, creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:key-visual"), parsed.member);
   if (!reservation.ok) return reservation.response;
 
   try {

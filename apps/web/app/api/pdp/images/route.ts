@@ -87,7 +87,7 @@ async function handlePost(req: Request) {
     크레딧 견적도 같은 모델을 봐야 한다 — 여기가 갈리면 예약과 그림이 또 어긋난다.
   */
   const model = body.page?.imageModel ?? DEFAULT_IMAGE_MODEL;
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1), creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:image"));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, 1), creditImagePlan(1, pdpCreditSize(model, body.aspectRatio), "pdp:image"), parsed.member);
   if (!reservation.ok) return reservation.response;
 
   // 실패했을 때도 기록을 닫으려고 밖에 둔다(독립 리뷰 HIGH-3) — 안 닫으면 결과 없는 작업이

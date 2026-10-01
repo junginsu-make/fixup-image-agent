@@ -11,22 +11,25 @@ import { canAccessPage, viewerFrom } from "../access/core";
 import { PAGE_ACCESS } from "../access/routes";
 import { isCreditLedgerEnabled } from "./credit-ledger";
 import { usageFromRow, ledgerMissing } from "./usage-row";
+import { verifiedLogin } from "../auth/verified-login";
 
 export const getMembership = cache(async (): Promise<MembershipContext | null> => {
   if (isLocalAuthBypass) return devMembership;
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return null;
+  // 토큰 서명으로 확인한다 — `getUser()` 왕복 없음(설계 2026-09-29 §3.2). 정지·탈퇴는
+  // 아래 profiles 를 받아 `requireActiveMember` 가 막는다.
+  const login = await verifiedLogin(supabase.auth);
+  if (!login) return null;
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at")
-    .eq("id", user.id)
+    .eq("id", login.userId)
     .single();
 
   if (profileError || !profile) return null;
   return {
-    user: { id: user.id, email: user.email },
+    user: { id: login.userId, email: login.email ?? undefined },
     profile: profile as MemberProfile,
   };
 });

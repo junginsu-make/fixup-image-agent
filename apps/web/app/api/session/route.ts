@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { verifiedLogin } from "../../../lib/auth/verified-login";
 
 // 정적 랜딩(public/landing.html)이 헤더 표시를 정하려고 호출한다.
 // 세션은 요청마다 다르므로 캐시하지 않는다.
@@ -10,9 +11,8 @@ const noStore = { "Cache-Control": "no-store" };
 export async function GET() {
   try {
     const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // 토큰 서명으로 확인한다 — `getUser()` 왕복 없음(설계 2026-09-29 §3.2).
+    const user = await verifiedLogin(supabase.auth);
 
     if (!user) {
       return NextResponse.json({ authenticated: false, active: false }, { headers: noStore });
@@ -22,7 +22,7 @@ export async function GET() {
     const { data: profile } = await supabase
       .from("profiles")
       .select("status,email_confirmed_at")
-      .eq("id", user.id)
+      .eq("id", user.userId)
       .single();
 
     const active = Boolean(profile?.email_confirmed_at && profile?.status === "active");

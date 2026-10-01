@@ -14,8 +14,9 @@ import { BOOT_ID } from "../runtime/boot-id";
 import { CS_EMAIL } from "../cs/contact";
 import { bindAiCaller } from "../llm/meter";
 import { costOperationKey } from "../ai-cost/keys";
+import { verifiedLogin } from "../auth/verified-login";
 
-type ApiMember = { userId: string; profile: MemberProfile };
+export type ApiMember = { userId: string; profile: MemberProfile };
 
 export async function authenticateApiMember(): Promise<
   | { ok: true; member: ApiMember }
@@ -25,14 +26,19 @@ export async function authenticateApiMember(): Promise<
     return { ok: true, member: { userId: devMemberProfile.id, profile: devMemberProfile } };
   }
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
+  /*
+    **누구인지는 토큰 서명으로, 들여보낼지는 profiles 로**(설계 2026-09-29 §3.2).
+    `getUser()` 왕복(0.2초)을 없앴다. 정지·탈퇴·승인 대기·지운 계정은 아래
+    profiles 읽기가 지금처럼 막는다 — 이 읽기는 줄이지 않는다.
+  */
+  const login = await verifiedLogin(supabase.auth);
+  if (!login) {
     return { ok: false, response: membershipApiError(401, "unauthenticated", "로그인이 필요합니다.") };
   }
   const { data: profile } = await supabase
     .from("profiles")
     .select("id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at")
-    .eq("id", user.id)
+    .eq("id", login.userId)
     .single();
   if (!profile) {
     return { ok: false, response: membershipApiError(403, "profile_not_found", "회원 정보를 찾지 못했습니다.") };
@@ -55,7 +61,7 @@ export async function authenticateApiMember(): Promise<
   if (typed.status === "withdrawn") {
     return { ok: false, response: membershipApiError(403, "withdrawn", "탈퇴한 계정입니다.") };
   }
-  return { ok: true, member: { userId: user.id, profile: typed } };
+  return { ok: true, member: { userId: login.userId, profile: typed } };
 }
 
 export async function authenticateApiAdmin() {
@@ -87,11 +93,17 @@ export async function reserveAiUsage(
   operation: GenerationOperation,
   units: number,
   creditPlan?: CreditReservationPlan,
+  /**
+   * 이 요청에서 **이미 인증한 회원**(설계 2026-09-29 §3.2). 주면 다시 인증하지
+   * 않는다 — profiles 0.2초 왕복 한 번이 빠진다. 같은 요청의 `authenticateApiMember`
+   * 결과만 넘긴다(다른 요청·다른 사람의 것을 넘기지 않는다).
+   */
+  authenticated?: ApiMember,
 ): Promise<
   | { ok: true; userId: string; requestId: string; usage: UsageSummary }
   | { ok: false; response: Response }
 > {
-  const auth = await authenticateApiMember();
+  const auth = authenticated ? { ok: true as const, member: authenticated } : await authenticateApiMember();
   if (!auth.ok) return auth;
   // 우회 계정은 profiles 행이 없어 사용량 RPC가 실패한다. 로컬에서는 집계를 건너뛴다.
   if (isLocalAuthBypass) {

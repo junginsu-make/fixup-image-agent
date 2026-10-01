@@ -1,0 +1,19 @@
+/library {"app":50,"supabase":0}
+/sns {"app":41,"supabase":0}
+/poster {"app":41,"supabase":0}
+/create {"app":56,"supabase":0}
+/guide {"app":54,"supabase":0}
+     75 "GET /rest/v1/profiles
+     16 "GET /rest/v1/team_members
+      6 "POST /rest/v1/rpc/credit_summary
+      2 "GET /rest/v1/sns_projects
+      2 "GET /rest/v1/poster_projects
+      2 "GET /rest/v1/library_items
+      1 "GET /rest/v1/style_references
+      1 "GET /rest/v1/easy_messages
+      1 "GET /rest/v1/characters
+
+(GET /auth/v1/user 은 상위 15 줄에 없었다 — 같은 창을 다시 재서 따로 확인)
+---jwks(별도 재측정, 같은 브라우저 한 번 열기 범위)---
+jwks.json count = 0
+GET /auth/v1/user count = 0

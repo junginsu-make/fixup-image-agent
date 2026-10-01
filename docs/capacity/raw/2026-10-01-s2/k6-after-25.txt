@@ -1,0 +1,20 @@
+
+== browse (levels 25 VU, hold 60s) ==
+name                                          count    p50ms    p95ms    p99ms    maxms    err%
+api_characters                                   63      638      675      754      867     0.0
+api_easy_works                                   68      472      677      700      720     0.0
+api_library                                     136      872     1076     1142     1152     0.0
+api_poster_projects                             113      876     1087     1135     1279     0.0
+api_showcase_manage                              68      220      274      287      292     0.0
+api_sns_projects                                 99      671      857      897      928     0.0
+api_style_references                             68      431      477      636      638     0.0
+page_create                                      63      880     1075     1456     1650     0.0
+page_guide                                       41      878     1028     1101     1123     0.0
+page_home                                         7      445      563      593      601     0.0
+page_library                                     68      862     1066     1106     1117     0.0
+page_poster                                      45      873     1100     1218     1263     0.0
+page_settings                                    26      909     1254     2018     2261     0.0
+page_sns                                         31      867      947      998     1016     0.0
+static                                          939        1        4        7        8     0.0
+
+http_reqs=1835  http_req_failed=0.00%  auth_failures=0

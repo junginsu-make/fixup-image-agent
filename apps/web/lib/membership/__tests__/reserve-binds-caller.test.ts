@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({ reply: {} as Record<string, unknown> }));
 
 vi.mock("../../supabase/server", () => ({
   createSupabaseServerClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "0f8fad5b-d9cb-469f-a165-70867728950e" } }, error: null }) },
+    auth: { getClaims: async () => ({ data: { claims: { sub: "0f8fad5b-d9cb-469f-a165-70867728950e" } }, error: null }) },
     from: () => {
       const profile = { id: "0f8fad5b-d9cb-469f-a165-70867728950e", email_confirmed_at: "2026-01-01", status: "active", role: "member" };
       const self: Record<string, unknown> = {

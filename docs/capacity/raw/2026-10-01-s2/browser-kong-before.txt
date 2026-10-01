@@ -1,0 +1,15 @@
+/library {"app":50,"supabase":0}
+/sns {"app":41,"supabase":0}
+/poster {"app":41,"supabase":0}
+/create {"app":56,"supabase":0}
+/guide {"app":54,"supabase":0}
+     85 "GET /auth/v1/user
+     75 "GET /rest/v1/profiles
+     16 "GET /rest/v1/team_members
+      6 "POST /rest/v1/rpc/credit_summary
+      2 "GET /rest/v1/sns_projects
+      2 "GET /rest/v1/poster_projects
+      2 "GET /rest/v1/library_items
+      1 "GET /rest/v1/style_references
+      1 "GET /rest/v1/easy_messages
+      1 "GET /rest/v1/characters

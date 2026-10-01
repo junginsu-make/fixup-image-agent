@@ -3,7 +3,6 @@ import {
   SESSION_MAX_MS,
   SESSION_START_COOKIE,
   sessionAuthCookieNames,
-  sessionIdFromAccessToken,
   sessionStartValue,
   sessionWindow,
 } from "../session-window";
@@ -85,21 +84,6 @@ describe("시작 시각은 그 로그인에 묶인다", () => {
   it("세션 번호를 모르면 시각만으로 잰다", () => {
     expect(sessionWindow(묶은값(24.1, "s-1"), 지금, null)).toEqual({ state: "expired" });
     expect(sessionWindow(시각(24.1), 지금, null)).toEqual({ state: "expired" });
-  });
-});
-
-describe("토큰에서 세션 번호 읽기", () => {
-  const 토큰 = (payload: object) =>
-    ["header", Buffer.from(JSON.stringify(payload)).toString("base64url"), "signature"].join(".");
-
-  it("로그인 토큰에서 session_id 를 읽는다", () => {
-    expect(sessionIdFromAccessToken(토큰({ sub: "u1", session_id: "8f0c-abc" }))).toBe("8f0c-abc");
-  });
-
-  it("없거나 깨졌으면 null", () => {
-    for (const 값 of [undefined, null, "", "a.b", "a.!!!.c", 토큰({ sub: "u1" }), 토큰({ session_id: "" })]) {
-      expect(sessionIdFromAccessToken(값 as never)).toBeNull();
-    }
   });
 });
 

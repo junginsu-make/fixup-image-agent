@@ -1,0 +1,5 @@
+$ sudo journalctl -u fixup-image-agent --since "30 min ago" --no-pager | grep -c "auth-claims"
+0
+
+$ sudo journalctl -u fixup-image-agent --since "30 min ago" --no-pager | grep -iE "warn|error" | grep -v "ExperimentalWarning\|trace-warnings"
+(출력 없음 — 경고/오류 줄 없음)
