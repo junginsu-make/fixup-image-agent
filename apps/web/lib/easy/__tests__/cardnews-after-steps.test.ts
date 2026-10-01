@@ -31,7 +31,12 @@ vi.mock("../../../app/api/sns/projects/[id]/caption/route", () => ({
   },
 }));
 
-const { captionCard, editCard } = await import("../cardnews-after-steps");
+// 기본 보관 길(운영 저장소 · 로컬 파일 · 참고 이미지 저장)은 시험에서 안 쓴다. 들여오기만 막는다.
+vi.mock("../../reference-images", () => ({ saveReferenceImage: async () => ({}) }));
+vi.mock("../../supabase/admin", () => ({ createSupabaseAdminClient: () => ({}) }));
+vi.mock("../../local-store", () => ({ isLocalStoreEnabled: () => true, localStoreRoot: () => "", readLocalSnsResultFile: async () => Buffer.from([]) }));
+
+const { captionCard, editCard, redoCard } = await import("../cardnews-after-steps");
 
 const 요청 = () => new Request("http://localhost/api/easy/cardnews", {
   method: "POST", headers: { "x-idempotency-key": "11111111-1111-4111-8111-111111111111" },
@@ -90,5 +95,67 @@ describe("게시글 (3단계 §6-4)", () => {
   it("카드뉴스 게시글 라우트를 부르고 작업을 돌려준다", async () => {
     expect((await captionCard(요청(), "c1")).id).toBe("c1");
     expect(부른게시글).toEqual(["c1"]);
+  });
+});
+
+describe("한 장 다시 만들기 (3단계 §6-3)", () => {
+  const 보관 = () => {
+    const 넣은것: Array<Record<string, unknown>> = [];
+    const 읽은것: string[] = [];
+    return {
+      넣은것,
+      읽은것,
+      deps: {
+        readFile: async (path: string) => {
+          읽은것.push(path);
+          return { bytes: new Uint8Array([1, 2]), mimeType: path.endsWith(".png") ? "image/png" : "image/jpeg" };
+        },
+        save: async (input: Record<string, unknown>) => { 넣은것.push(input); return {}; },
+        newId: () => "00000000-0000-4000-8000-000000000099",
+      },
+    };
+  };
+
+  it("앞 그림을 참고 이미지로 보관한 뒤 그 장만 다시 만든다", async () => {
+    const { 넣은것, 읽은것, deps } = 보관();
+    const got = await redoCard(요청(), "me", 만든작업(), 2, "글자 크게", deps);
+    expect(읽은것).toEqual(["me/sns/c1/2.png"]);
+    expect(넣은것).toEqual([{
+      userId: "me", id: "00000000-0000-4000-8000-000000000099", title: "거북목 · 2번 장 이전 그림",
+      purpose: "cardnews", bytes: new Uint8Array([1, 2]), mimeType: "image/png",
+    }]);
+    expect(다시만든것).toEqual([{ index: "2", body: { note: "글자 크게" } }]);
+    expect(got.archived).toEqual({ id: "00000000-0000-4000-8000-000000000099", title: "거북목 · 2번 장 이전 그림" });
+    expect(got.project.status).toBe("generating");
+  });
+
+  /** Review Focus 2 */
+  it("보관이 실패하면 다시 만들지 않는다(앞 그림을 잃지 않고 값도 안 나간다)", async () => {
+    const { deps } = 보관();
+    await expect(redoCard(요청(), "me", 만든작업(), 2, undefined, { ...deps, save: async () => { throw new Error("디스크"); } }))
+      .rejects.toThrow("보관하지 못해");
+    await expect(redoCard(요청(), "me", 만든작업(), 2, undefined, { ...deps, readFile: async () => { throw new Error("읽기"); } }))
+      .rejects.toThrow("보관하지 못해");
+    expect(다시만든것).toEqual([]);
+  });
+
+  it("그림이 없던 장(실패한 장)은 보관 없이 다시 만든다", async () => {
+    const { 넣은것, deps } = 보관();
+    const got = await redoCard(요청(), "me", 만든작업(), 3, undefined, deps);
+    expect(넣은것).toEqual([]);
+    expect(got.archived).toBeNull();
+    expect(다시만든것).toEqual([{ index: "3", body: {} }]);
+  });
+
+  it("없는 번호는 보관도 다시 만들기도 안 한다", async () => {
+    const { 넣은것, deps } = 보관();
+    await expect(redoCard(요청(), "me", 만든작업(), 9, undefined, deps)).rejects.toThrow("없습니다");
+    expect(넣은것).toEqual([]);
+    expect(다시만든것).toEqual([]);
+  });
+
+  it("바라는 점은 500자까지만 보낸다", async () => {
+    await redoCard(요청(), "me", 만든작업(), 3, "가".repeat(600), 보관().deps);
+    expect((다시만든것[0]!.body as { note: string }).note).toHaveLength(500);
   });
 });
