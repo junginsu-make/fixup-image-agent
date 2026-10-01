@@ -4,6 +4,16 @@
 
 설계·검증 기록: [소셜가입과 관리자 수동 지급](superpowers/specs/2026-10-01-social-signup-manual-credits-design.md).
 
+**1차 공개는 Google만 진행한다(2026-10-01 사용자 지시).** Kakao 플래그는 `0`으로 유지한다. 공개 API로 확인한 현재 Supabase 상태는 Google/Kakao 모두 비활성이다. Google 자격증명은 사용자가 로컬 `docs/google cloud/`에 제공했으며 Git 로컬 제외 규칙으로 보호했다. 비밀값은 문서·커밋에 넣지 않는다.
+
+| 등록할 곳 | 이번 서비스에 사용할 주소 |
+|---|---|
+| Google Cloud: 승인된 JavaScript 원본 | `https://formwith.fix-up.kr` |
+| Google Cloud: 승인된 리디렉션 URI | `https://bbuweuvylystagohqlhf.supabase.co/auth/v1/callback` |
+| Supabase: 서비스 복귀 주소 | `https://formwith.fix-up.kr/auth/callback` |
+
+제공된 JSON에는 `/api/auth/callback/google`이 기록되어 있으므로, Google Cloud 콘솔의 실제 설정에 Supabase 콜백을 추가했는지 확인해야 한다. 로컬 JSON을 수정하는 것만으로 Google Cloud 설정이 바뀌지는 않는다. Google Client ID·Secret은 Supabase Google 공급자에 입력하되, 아래 DB·앱 준비를 끝낸 후 공급자와 버튼을 활성화한다. 현재 로컬 환경파일의 Supabase 관리 접속 값은 비어 있으므로 원격 설정 변경·DB 적용은 아직 실행하지 않았다.
+
 1. 운영 앱의 `CREDIT_LEDGER=1`, 기존 `credit_enroll_new_profile` 트리거, 신규 0잔액 장부, 현재 AI 통제 SQL을 먼저 확인한다. `scripts/social-signup-preflight.mjs`는 보호된 환경파일을 받아 공급자 활성화와 표/RPC 존재를 읽기 전용으로 확인한다. 트리거 본문·RLS와 배포 앱 설정은 별도 확인이 필요하다.
 2. 공급자 공개 전 `202610010001_social_signup.sql`을 적용하고 이 버전의 앱을 함께 배포한다. 이전 전체 회원 전환 SQL을 다시 실행하지 않는다. 같은 Supabase를 쓰는 다른 서비스가 있으므로 기존 회원·권한과 새 OAuth 계정의 가입 완료 경로를 함께 확인한다.
 3. Google/Kakao 콘솔에는 Supabase의 `/auth/v1/callback` 주소를 등록하고, Supabase Redirect URLs에는 실제 서비스의 `/auth/callback` 주소를 등록한다. 운영 `NEXT_PUBLIC_SITE_URL`과 Supabase Site URL을 실제 서비스 주소에 맞추고, `next` 쿼리를 포함한 복귀도 실제로 확인한다. [Supabase Redirect URLs 안내](https://supabase.com/docs/guides/auth/redirect-urls)
