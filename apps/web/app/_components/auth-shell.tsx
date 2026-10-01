@@ -21,7 +21,7 @@ export function AuthShell({
         <section className="hidden lg:block">
           <p className="text-sm font-extrabold text-primary">AI 콘텐츠 스튜디오</p>
           <h1 className="mt-3 text-3xl font-black tracking-tight">가입부터 첫 생성까지<br />현재 단계를 확인하세요</h1>
-          <p className="mt-4 max-w-md leading-7 text-muted-foreground">이메일 인증만 마치면 바로 이용할 수 있습니다. 운영자 AI 키로 생성하는 서비스라 월 이미지 크레딧이 정해져 있습니다.</p>
+          <p className="mt-4 max-w-md leading-7 text-muted-foreground">계정 인증과 가입 정보 확인을 마치면 로그인할 수 있습니다. AI 기능은 관리자가 크레딧을 지급한 뒤 이용할 수 있습니다.</p>
           <div className="mt-9 rounded-2xl border bg-background p-6">
             <OnboardingSteps current={step} />
           </div>

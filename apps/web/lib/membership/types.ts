@@ -55,6 +55,9 @@ export type GenerationOperation =
   | "ad_export";
 
 export type MemberProfile = {
+  signup_provider?: string | null;
+  onboarding_required?: boolean;
+  onboarding_completed_at?: string | null;
   id: string;
   email: string;
   email_confirmed_at: string | null;

@@ -16,7 +16,11 @@ import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
  * **이 시스템에만 적용한다**(2026-09-22 사용자 결정). 다른 기기의 로그인은 끊지 않는다.
  * 확인은 로그인과 같은 길(`signInWithPassword`)이라 보안 확인(캡차)도 같이 받는다.
  */
-export function LoginCard({ email, owner = false }: { email: string; owner?: boolean }) {
+export function LoginCard({ email, owner = false, socialProvider }: { email: string; owner?: boolean; socialProvider?: string | null }) {
+  if (socialProvider === "google" || socialProvider === "kakao") return <Card>
+    <CardHeader><CardTitle>로그인 정보</CardTitle><CardDescription>{socialProvider === "google" ? "Google" : "카카오"} 계정으로 가입했습니다.</CardDescription></CardHeader>
+    <CardContent className="space-y-2 text-sm"><p className="break-all">{email}</p><p className="text-muted-foreground">가입 시 이 서비스의 별도 비밀번호는 만들지 않았습니다. 연결한 계정의 로그인 정보는 해당 서비스에서 관리해 주세요.</p></CardContent>
+  </Card>;
   return (
     <Card>
       <CardHeader className="space-y-1.5">

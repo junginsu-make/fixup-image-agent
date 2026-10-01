@@ -42,6 +42,15 @@ beforeEach(() => {
 });
 
 describe("authenticateApiMember", () => {
+  it("소셜 인증을 마쳐도 가입 정보 확인 전이면 API에서 막는다", async () => {
+    state.profile = { ...활성, onboarding_required: true, onboarding_completed_at: null };
+    const { authenticateApiMember } = await import("../api");
+    const result = await authenticateApiMember();
+    expect(result.ok).toBe(false);
+    expect(!result.ok && await result.response.json()).toMatchObject({ code: "onboarding_required" });
+    state.profile.onboarding_completed_at = "2026-10-01";
+    expect((await authenticateApiMember()).ok).toBe(true);
+  });
   it("서명이 맞고 활성 회원이면 들여보낸다 — profiles 는 한 번 읽는다", async () => {
     const { authenticateApiMember } = await import("../api");
     const result = await authenticateApiMember();

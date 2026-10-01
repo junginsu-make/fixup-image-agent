@@ -1,4 +1,13 @@
 import type { MembershipStatus } from "./types";
+import { needsOnboarding, type OnboardingState } from "./onboarding";
+
+type AccountState = { email_confirmed_at?: string | null; status?: MembershipStatus | string | null } & OnboardingState;
+export function isVerifiedActiveAccount(profile: AccountState | null | undefined): boolean {
+  return Boolean(profile?.email_confirmed_at) && profile?.status === "active";
+}
+export function canEnterOnboarding(profile: AccountState | null | undefined): boolean {
+  return isVerifiedActiveAccount(profile) && needsOnboarding(profile);
+}
 
 /**
  * 지금 스튜디오를 쓸 수 있는 계정인가.
@@ -8,16 +17,16 @@ import type { MembershipStatus } from "./types";
  * 「들어가라」, 다른 쪽은 「기다려라」가 되어 두 화면이 서로를 밀어낸다.
  * 사용자에게는 화면이 깜빡이며 멈추지 않는 것으로 보인다.
  *
- * 판단은 둘뿐이다. 이메일 인증을 마쳤고, 정지되지 않았다.
+ * 인증과 상태, 최초 소셜 가입 정보 확인을 함께 판단한다.
  */
 export function isUsableAccount(
   profile:
-    | { email_confirmed_at?: string | null; status?: MembershipStatus | string | null }
+    | ({ email_confirmed_at?: string | null; status?: MembershipStatus | string | null } & OnboardingState)
     | null
     | undefined,
 ): boolean {
   if (!profile) return false;
-  return Boolean(profile.email_confirmed_at) && profile.status === "active";
+  return isVerifiedActiveAccount(profile) && !needsOnboarding(profile);
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   Label,
 } from "@fixup/ui";
 import { AuthShell } from "../_components/auth-shell";
+import { SocialAuthButtons } from "../_components/social-auth-buttons";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import { authAvailability } from "../../lib/supabase/env";
@@ -111,7 +112,7 @@ export default function SignupPage() {
 
     <AuthShell
       title={result?.kind === "existing" ? "기존 계정 안내" : "회원가입"}
-      description={result?.kind === "existing" ? "로그인하거나 비밀번호를 재설정해 주세요." : "이메일 인증만 마치면 바로 이미지 생성 도구를 이용할 수 있습니다."}
+      description={result?.kind === "existing" ? "로그인하거나 비밀번호를 재설정해 주세요." : "계정을 인증하고 가입 정보를 확인해 주세요. AI 기능은 관리자가 크레딧을 지급한 뒤 이용할 수 있습니다."}
       step={!result ? 1 : result.kind === "confirmation" ? 2 : 3}
     >
       {result?.kind === "existing" ? (
@@ -150,6 +151,8 @@ export default function SignupPage() {
           <Button type="button" variant="ghost" className="w-full" onClick={() => setResult(null)}>이메일 확인 · 다시 시도</Button>
         </div>
       ) : (
+        <>
+        <SocialAuthButtons disabled={loading || !auth.ready} />
         <form className="space-y-4" onSubmit={submit}>
           <div className="space-y-1.5"><Label htmlFor="name">이름</Label><Input id="name" autoComplete="name" required maxLength={PROFILE_LIMITS.name} value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="email">이메일</Label><Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
@@ -187,6 +190,7 @@ export default function SignupPage() {
           <Button type="submit" className="w-full" disabled={loading || !auth.ready}>{loading ? "가입 처리 중..." : "인증 메일 받기"}</Button>
           <p className="text-center text-sm text-muted-foreground">이미 계정이 있나요? <Link href="/login" className="font-bold text-primary">로그인</Link></p>
         </form>
+        </>
       )}
     </AuthShell>
     </>

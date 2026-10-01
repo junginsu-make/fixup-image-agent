@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const f = vi.hoisted(() => ({ rpc: vi.fn(), requireAdmin: vi.fn(), actor: "10000000-0000-4000-8000-000000000001", user: "10000000-0000-4000-8000-000000000002", targetEmail: "member@example.invalid" }));
+const f = vi.hoisted(() => ({ rpc: vi.fn(), requireAdmin: vi.fn(), actor: "10000000-0000-4000-8000-000000000001", user: "10000000-0000-4000-8000-000000000002", targetEmail: "member@example.invalid", onboardingRequired: false }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("../../../../lib/dev-auth", () => ({ isLocalAuthBypass: false }));
 vi.mock("../../../../lib/membership/credit-ledger", () => ({ isCreditLedgerEnabled: () => true }));
 vi.mock("../../../../lib/membership/server", () => ({ requireAdmin: f.requireAdmin }));
-vi.mock("../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: f.rpc, from: () => ({ select: () => ({ in: async () => ({ data: [{ id: f.user, email: f.targetEmail }] }), eq: () => ({ single: async () => ({ data: { user_id: f.user } }) }) }) }) }) }));
+vi.mock("../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient: () => ({ rpc: f.rpc, from: () => ({ select: () => ({ in: async () => ({ data: [{ id: f.user, email: f.targetEmail, onboarding_required: f.onboardingRequired }] }), eq: () => ({ single: async () => ({ data: { user_id: f.user } }) }) }) }) }) }));
 import { changeCredits, type CreditCommand } from "../actions";
 const sql = ["202609220001_credit_ledger_v2.sql", "202609220004_credit_plan_delete.sql"]
   .map(name => readFileSync(new URL(`../../../../../../supabase/migrations/${name}`, import.meta.url), "utf8")).join("\n");
@@ -15,8 +15,14 @@ describe("관리자 입력에서 실제 SQL까지", () => {
     f.rpc.mockReset(); f.requireAdmin.mockReset();
     f.requireAdmin.mockResolvedValue({ user: { id: f.actor }, profile: { email: "admin@example.invalid" } });
     f.targetEmail = "member@example.invalid";
+    f.onboardingRequired = false;
     // 플랜 삭제는 결과를 읽는다. 다른 명령은 data 를 안 본다.
     f.rpc.mockResolvedValue({ data: { deleted: true, members: 0 }, error: null });
+  });
+  it("가입 미완료 회원에게는 수동 지급하지 않는다", async () => {
+    f.onboardingRequired = true;
+    const result = await changeCredits({ kind: "grant", users: [f.user], grantKind: "bonus", units: 10, amount: 0, expires: "2099-01-01T00:00:00Z", reason: "가입 지원", action });
+    expect(result.ok).toBe(false); expect(result.message).toContain("가입"); expect(f.rpc).not.toHaveBeenCalled();
   });
   it("모든 변경이 실존하는 SQL 인자와 인증된 actor를 사용한다", async () => {
     const commands: CreditCommand[] = [

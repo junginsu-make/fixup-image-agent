@@ -1,5 +1,20 @@
 # 배포
 
+## 구글·카카오 가입 활성화 (2026-10-01)
+
+설계·검증 기록: [소셜가입과 관리자 수동 지급](superpowers/specs/2026-10-01-social-signup-manual-credits-design.md).
+
+1. 운영 앱의 `CREDIT_LEDGER=1`, 기존 `credit_enroll_new_profile` 트리거, 신규 0잔액 장부, 현재 AI 통제 SQL을 먼저 확인한다. `scripts/social-signup-preflight.mjs`는 보호된 환경파일을 받아 공급자 활성화와 표/RPC 존재를 읽기 전용으로 확인한다. 트리거 본문·RLS와 배포 앱 설정은 별도 확인이 필요하다.
+2. 공급자 공개 전 `202610010001_social_signup.sql`을 적용하고 이 버전의 앱을 함께 배포한다. 이전 전체 회원 전환 SQL을 다시 실행하지 않는다. 같은 Supabase를 쓰는 다른 서비스가 있으므로 기존 회원·권한과 새 OAuth 계정의 가입 완료 경로를 함께 확인한다.
+3. Google/Kakao 콘솔에는 Supabase의 `/auth/v1/callback` 주소를 등록하고, Supabase Redirect URLs에는 실제 서비스의 `/auth/callback` 주소를 등록한다. 운영 `NEXT_PUBLIC_SITE_URL`과 Supabase Site URL을 실제 서비스 주소에 맞추고, `next` 쿼리를 포함한 복귀도 실제로 확인한다. [Supabase Redirect URLs 안내](https://supabase.com/docs/guides/auth/redirect-urls)
+4. Kakao는 이메일 제공 권한과 동의 설정을 갖추고 `Allow users without an email`을 끈다. provider secret은 Supabase 설정에만 저장한다. SMTP·CAPTCHA 등 다른 Auth 설정을 전체 덮어쓰기하지 않는다.
+5. 실제 신규 가입 → 이름·필수 동의 → 0크레딧 → `/admin` 수동 지급 → 재로그인 없이 잔액 확인 → 생성·정산을 공급자별로 검증한다. 기존 계정의 자동 연결, 취소·정지·탈퇴, 모바일 복귀도 확인한다.
+6. 확인한 공급자에 대해 GitHub Actions Variables의 `NEXT_PUBLIC_AUTH_GOOGLE_ENABLED` 또는 `NEXT_PUBLIC_AUTH_KAKAO_ENABLED`를 `1`로 설정해 **새 릴리스를 빌드**한다. 런타임 환경파일만 바꾸면 브라우저 버튼은 바뀌지 않는다. 기본값은 `0`이다.
+
+새 소셜 회원에게는 자동 크레딧을 주지 않는다. 관리자가 `/admin`의 `플랜·크레딧`에서 수량·만료일·사유를 정해 지급한다. 신규 미완료 계정에는 지급할 수 없다.
+
+장애 시 해당 공급자의 진입을 중단하고 회원·동의·지급 기록을 보존한다. 미완료 소셜 계정이 생긴 뒤에는 이 제한을 모르는 옛 앱으로 단순 되돌리지 않는다. DB와 외부 공급자 설정·실계정 검증을 마치기 전에는 공개 완료로 기록하지 않는다.
+
 운영은 **Supabase(데이터) + EC2(앱)** 다. Vercel 을 쓰지 않는 이유는 하나다 —
 이미지 여러 장을 한 요청에서 만드는 데 5~9분이 걸려 서버리스 실행 상한에
 걸리고, 앱이 결과를 디스크에 쓴다. 디스크 있는 서버면 지금 코드가 그대로 돈다.

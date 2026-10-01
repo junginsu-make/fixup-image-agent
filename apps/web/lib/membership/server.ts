@@ -6,12 +6,13 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 import { createSupabaseServerClient } from "../supabase/server";
 import { devMembership, devUsageSummary, isLocalAuthBypass } from "../dev-auth";
 import type { MemberProfile, MembershipContext, UsageSummary } from "./types";
-import { isUsableAccount } from "./usable";
+import { canEnterOnboarding, isUsableAccount } from "./usable";
 import { canAccessPage, viewerFrom } from "../access/core";
 import { PAGE_ACCESS } from "../access/routes";
 import { isCreditLedgerEnabled } from "./credit-ledger";
 import { usageFromRow, ledgerMissing } from "./usage-row";
 import { verifiedLogin } from "../auth/verified-login";
+import { ONBOARDING_COLUMNS, ONBOARDING_PATH } from "./onboarding";
 
 export const getMembership = cache(async (): Promise<MembershipContext | null> => {
   if (isLocalAuthBypass) return devMembership;
@@ -23,7 +24,7 @@ export const getMembership = cache(async (): Promise<MembershipContext | null> =
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at")
+    .select(`id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at,${ONBOARDING_COLUMNS}`)
     .eq("id", login.userId)
     .single();
 
@@ -42,6 +43,7 @@ export async function requireSignedIn() {
 
 export async function requireActiveMember() {
   const membership = await requireSignedIn();
+  if (canEnterOnboarding(membership.profile)) redirect(ONBOARDING_PATH);
   if (!isUsableAccount(membership.profile)) redirect("/access");
   return membership;
 }
@@ -68,6 +70,10 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
     if (walletError && !ledgerMissing(walletError)) throw walletError;
     if (wallet) return usageFromRow(wallet);
   }
+  // A social account must never display the legacy monthly default as a balance.
+  const { data: profile, error: profileError } = await admin.from("profiles")
+    .select("onboarding_required").eq("id", userId).single();
+  if (profileError || profile?.onboarding_required) throw new Error("크레딧을 확인하지 못했습니다. 잠시 후 다시 조회해 주세요.");
   const { data, error } = await admin.rpc("member_usage_summary", { p_user_id: userId });
   if (error || !data?.[0]) throw error ?? new Error("회원 사용량을 찾지 못했습니다.");
   const row = data[0];

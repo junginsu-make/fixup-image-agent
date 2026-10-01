@@ -11,6 +11,7 @@ import { listTeams, teamsOf } from "../../lib/teams/store";
 import { formatKrw, getCostByMember, getUsdKrw } from "../../lib/cost";
 import { AdminError, AdminNotice, Metric } from "./admin-shared";
 import { readProfileExtras } from "../../lib/membership/profile-store";
+import { ONBOARDING_COLUMNS } from "../../lib/membership/onboarding";
 import { MemberTable } from "./member-list/member-table";
 import type { AdminMemberRow, CreditInfo, CreditPlan } from "./member-list/types";
 
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 50;
 const SELECT = "h-9 rounded-md border bg-background px-3 text-sm";
-const PROFILE_COLUMNS = "id,email,email_confirmed_at,role,status,monthly_quota,approved_at,created_at";
+const PROFILE_COLUMNS = `id,email,email_confirmed_at,role,status,monthly_quota,approved_at,created_at,${ONBOARDING_COLUMNS}`;
 
 type Params = { q?: string; status?: string; plan?: string; balance?: string; review?: string; page?: string; notice?: string; error?: string };
 type Profile = AdminMemberRow["profile"];

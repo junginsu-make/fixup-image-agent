@@ -3,9 +3,9 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import { BrandMark, Button } from "@fixup/ui";
 
-// 이메일 인증을 마치면 바로 쓸 수 있다(202607290001 마이그레이션).
+// 이메일 또는 소셜 계정 인증 → 가입 정보 확인. AI 이용에는 별도 크레딧이 필요하다.
 // 관리자 승인 단계를 남겨 두면 다 끝난 사람이 더 기다려야 하는 줄 안다.
-const onboardingSteps = ["가입 신청", "이메일 인증", "스튜디오 이용"] as const;
+const onboardingSteps = ["계정 인증", "가입 정보 확인", "스튜디오 이용"] as const;
 
 export function PublicLogo() {
   return (

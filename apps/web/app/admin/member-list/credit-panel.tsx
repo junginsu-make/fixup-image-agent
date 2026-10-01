@@ -8,6 +8,7 @@ import { PLAN_STATUS_LABEL } from "./types";
 import type { CreditCommandState } from "./use-credit-command";
 import { Field, GrantForm, SELECT, number, text } from "./forms";
 import { MemberInfo } from "./member-info";
+import { needsOnboarding } from "../../../lib/membership/onboarding";
 
 type Grant = { id: string; source_key?: string; kind: string; granted_units: number; consumed_units: number; reserved_units: number; expires_at: string; revoked_at: string | null; reason: string };
 type Pending = { request_id: string; operation: string; requested_units: number; credit_phase: string; credit_quote: { outputs: number[] } };
@@ -52,6 +53,7 @@ export function CreditPanel({ row, plans, state, onClose, version }: { row: Admi
 }
 
 function CreditSections({ row, plans, state, history, error }: { row: AdminMemberRow; plans: CreditPlan[]; state: CreditCommandState; history: History | null; error: string }) {
+  if (needsOnboarding(row.profile)) return <p className="text-sm text-muted-foreground">가입 정보를 아직 확인하지 않은 회원입니다. 회원이 가입을 완료한 뒤 크레딧을 지급할 수 있습니다.</p>;
   return (
     <>
         <Section title="크레딧·플랜"><Summary row={row} plans={plans} /></Section>

@@ -2,13 +2,15 @@ import { redirect } from "next/navigation";
 import { Clock3, MailCheck, ShieldAlert } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import { requireSignedIn } from "../../lib/membership/server";
-import { isTerminalWait, isUsableAccount } from "../../lib/membership/usable";
+import { canEnterOnboarding, isTerminalWait, isUsableAccount } from "../../lib/membership/usable";
 import { HOME_AFTER_LOGIN } from "../../lib/routes";
 import { OnboardingSteps, PublicFooter, PublicHeader } from "../_components/public-shell";
 import { AccessActions } from "./access-actions";
+import { ONBOARDING_PATH } from "../../lib/membership/onboarding";
 
 export default async function AccessPage() {
   const { profile } = await requireSignedIn();
+  if (canEnterOnboarding(profile)) redirect(ONBOARDING_PATH);
 
   /*
     **쓸 수 있으면 세워 두지 않는다.**

@@ -2,7 +2,7 @@ import type { MemberProfile } from "../../../lib/membership/types";
 
 /** 회원 관리 탭의 한 줄. 서버가 만들어 클라이언트 표로 넘긴다. */
 export interface AdminMemberRow {
-  profile: Pick<MemberProfile, "id" | "email" | "email_confirmed_at" | "role" | "status" | "approved_at" | "created_at" | "monthly_quota">;
+  profile: Pick<MemberProfile, "id" | "email" | "email_confirmed_at" | "role" | "status" | "approved_at" | "created_at" | "monthly_quota" | "signup_provider" | "onboarding_required" | "onboarding_completed_at">;
   team?: { teamId: string; teamName: string; role: "leader" | "member" };
   /** 이름. 202609220005 전 서버·가입 때 안 적은 회원은 null. */
   name: string | null;

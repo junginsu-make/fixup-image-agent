@@ -1,10 +1,12 @@
 import { workCreditExamples } from "@fixup/shared";
 import type { UsageSummary } from "../../lib/membership/types";
+import { CreditRefresh } from "./credit-refresh";
 
 const date = (value: string | null | undefined) => value ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "없음";
 export function CreditWallet({ usage }: { usage: UsageSummary }) {
   return <section className="space-y-4 rounded-xl border bg-card p-5" aria-label="크레딧 잔액">
-    <h2 className="text-xl font-bold">내 크레딧</h2>
+    <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold">내 크레딧</h2><CreditRefresh /></div>
+    {!usage.unlimited && usage.remaining === 0 && <p className="text-sm text-muted-foreground">사용 가능한 크레딧이 없습니다. 관리자가 지급한 뒤 새로고침하면 확인할 수 있습니다.</p>}
     {usage.unlimited ? <p className="text-base"><strong className="text-4xl">무제한</strong> 최고 관리자 계정입니다</p> : <p className="text-base"><strong className="text-4xl tabular-nums">{usage.remaining.toLocaleString()}</strong> 크레딧 사용 가능</p>}
     <p className="text-base text-muted-foreground">일반 이미지·카드 1장 = 1크레딧 · 인쇄용 600만 픽셀 이상 = 2크레딧. 기획·분석은 무료입니다.</p>
     {!usage.unlimited && <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">

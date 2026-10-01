@@ -5,6 +5,7 @@ import { approveMember, deleteMember, resendApproval, resendConfirmation, setMem
 import { ConfirmSubmitButton } from "../confirm-submit-button";
 import { MoreActions } from "../member-actions";
 import type { AdminMemberRow } from "./types";
+import { needsOnboarding, type OnboardingState } from "../../../lib/membership/onboarding";
 
 type RowProfile = AdminMemberRow["profile"];
 
@@ -150,6 +151,7 @@ export function MemberActions({ profile, fullWidth = false }: { profile: RowProf
   );
 }
 
-export function StatusBadge({ profile }: { profile: Pick<RowProfile, "status"> }) {
+export function StatusBadge({ profile }: { profile: Pick<RowProfile, "status"> & OnboardingState }) {
+  if (profile.status === "active" && needsOnboarding(profile)) return <Badge variant="secondary">가입 정보 확인 전</Badge>;
   return profile.status === "active" ? <Badge variant="green">활성</Badge> : profile.status === "suspended" ? <Badge variant="destructive">정지</Badge> : <Badge variant="secondary">승인 대기</Badge>;
 }
