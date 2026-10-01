@@ -33,6 +33,7 @@ const GOOGLE_NANO_BANANA_2_MODEL = "gemini-3.1-flash-image-preview";
 type Provider = "openai" | "google";
 
 import type { RedesignImageGenerator } from "./generate";
+import { reportImageUsage, type ImageUsageReporter } from "./usage.js";
 
 export type EditSectionInput = {
   /** "openai" | "google" (anything not "google" becomes "openai") */
@@ -52,6 +53,8 @@ export type EditSectionInput = {
    * 받고 있었다(2026-09-17 리뷰 F-7-5). 키가 있으면 늘 이쪽이 쓰인다.
    */
   generateImage?: RedesignImageGenerator;
+  /** 옛 길(업체 직접 호출)로 고친 그림을 알린다. 필수다(설계 2026-09-30 §3.4). */
+  onImageUsage: ImageUsageReporter;
 };
 
 export async function editSection(input: EditSectionInput) {
@@ -103,6 +106,7 @@ export async function editSection(input: EditSectionInput) {
     : provider === "google"
       ? await editWithGoogle({ apiKey, prompt, image })
       : await editWithOpenAI({ apiKey, prompt, image });
+  if (!input.generateImage) reportImageUsage(input.onImageUsage, provider);
 
   return {
     imageUrl: `data:${edited.mimeType};base64,${edited.buffer.toString("base64")}`,

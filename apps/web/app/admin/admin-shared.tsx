@@ -32,6 +32,12 @@ const TEAM_NOTICE: Record<string, string> = {
   team_demoted: "팀원으로 내렸습니다.",
 };
 
+/** AI 전체 멈춤 스위치 알림(설계 2026-09-30 §3.3). */
+const AI_CONTROL_NOTICE: Record<string, string> = {
+  ai_paused: "AI 사용을 멈췄습니다. 새 요청은 모두 거절되고, 카드뉴스는 다음 장을 보내지 않습니다. 이미 제출돼 도는 그림은 끝까지 돌 수 있습니다.",
+  ai_resumed: "AI 사용을 다시 켰습니다.",
+};
+
 /** 처리하지 못한 일. 서버 액션이 던지지 않고 `?error=` 로 실어 보낸 문구다. */
 export function AdminError({ message }: { message: string }) {
   return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
@@ -39,7 +45,7 @@ export function AdminError({ message }: { message: string }) {
 
 export function AdminNotice({ notice }: { notice: string }) {
   const failed = notice === "approved_email_failed";
-  const message = TEAM_NOTICE[notice] ?? SHOWCASE_NOTICE[notice] ?? (notice === "approved"
+  const message = TEAM_NOTICE[notice] ?? SHOWCASE_NOTICE[notice] ?? AI_CONTROL_NOTICE[notice] ?? (notice === "approved"
     ? "회원 승인과 이메일 발송을 완료했습니다."
     : notice === "email_sent"
       ? "승인 이메일을 다시 보냈습니다."

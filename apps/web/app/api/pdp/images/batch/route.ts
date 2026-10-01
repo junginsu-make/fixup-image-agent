@@ -20,6 +20,7 @@ import { createPdpProviders } from "../../../../../lib/pdp/providers";
 import { withSlicedStyleReference } from "../../../../../lib/pdp/slice-image";
 import { loadCharacterView } from "../../../../../lib/characters";
 import { reserveAiUsage, settleAiUsage } from "../../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../../lib/llm/meter";
 import { imageCreditUnits } from "../../../../../lib/credit-cost";
 import { rejectIfUnverified } from "../../../../../lib/evidence-gate";
 import { teamIdOf } from "../../../../../lib/teams/store";
@@ -74,6 +75,10 @@ type BatchRequest = {
 };
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   const parsed = await readPdpRequest<BatchRequest>(req, "batch");
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
@@ -122,7 +127,7 @@ export async function POST(req: Request) {
    */
   const providers = createPdpProviders();
 
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length), creditImagePlan(sections.length, pdpCreditSize(model, body.aspectRatio), "pdp:batch"));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length), creditImagePlan(sections.length, pdpCreditSize(model, body.aspectRatio), "pdp:batch"), parsed.member);
   if (!reservation.ok) return reservation.response;
 
   /*

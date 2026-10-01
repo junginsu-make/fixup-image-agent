@@ -11,6 +11,8 @@ import { slidesFromShowcase } from "./_landing/hero/slides";
 import { CONTENT, type Locale } from "./_landing/landing-content";
 import { LandingHeader } from "./_landing/landing-header";
 import { TrySection } from "./_landing/try-section";
+import { readSignupGate } from "./_landing/signup-gate";
+import { SignupRequiredModal } from "./_landing/signup-required-modal";
 import "./_landing/landing.css";
 import "./_landing/hero/hero.css";
 
@@ -29,11 +31,17 @@ import "./_landing/hero/hero.css";
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; signup?: string | string[]; next?: string | string[] }>;
 }) {
-  const { lang } = await searchParams;
+  const { lang, signup, next } = await searchParams;
   const locale: Locale = lang === "en" ? "en" : "ko";
   const t = CONTENT[locale];
+  /*
+    **비회원이 회원 화면을 열면 여기로 온다**(`middleware.ts`, 설계 §3.5) —
+    `/?signup=required&next=/create`. 로그인한 사람에게는 띄우지 않는다(아래
+    `!signedIn`): 뒤로 가기·즐겨찾기로 이 주소를 다시 열 수 있다.
+  */
+  const gate = readSignupGate({ signup, next });
 
   // 첫 화면이 로그인 상태를 알아야 한다. 모르면 로그인한 사람에게도
   // 「로그인」만 보이고, 눌러도 세션이 있어 스튜디오로 튕겨 들어간다.
@@ -62,6 +70,10 @@ export default async function HomePage({
 
       {/* 바닥에 닿았을 때만 나온다. 첫 화면까지 올라갈 길을 남긴다. */}
       <BackToTop />
+
+      {gate.open && !signedIn ? (
+        <SignupRequiredModal next={gate.next} closeHref={locale === "en" ? "/?lang=en" : "/"} />
+      ) : null}
     </div>
   );
 }

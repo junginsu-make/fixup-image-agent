@@ -1698,6 +1698,9 @@ export function PdpEditor({
             // 팀 한도도 더 만들어 봐야 계속 막힌다. 남은 섹션을 줄줄이
             // 실패시키면 같은 알림만 열 번 뜬다.
             "team_quota_exceeded",
+            // 크레딧이 없거나 운영자가 멈췄다. 남은 섹션도 똑같이 막힌다(설계 2026-09-30 §3.2).
+            "credits_required",
+            "ai_paused",
             "concurrent_limit",
             "pending",
             "suspended",

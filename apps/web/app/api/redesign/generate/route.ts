@@ -2,13 +2,14 @@ import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/c
 import { generateSections, humanizeProviderError, RedesignError, sizeForRatio, type GenerateInputFile } from "@fixup/redesign-core";
 import { buildSceneWithCharacterDirective, resolveCharacterAngles } from "@fixup/pdp-core";
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
-import { authenticateApiMember, settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
 import { readRedesignForm } from "../../../../lib/pdp/request";
 import { chunkCreditUnits } from "../../../../lib/redesign/chunk-billing";
 import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
-import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
+import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { recordPackageLlmUsage, recordRedesignDirectImage } from "../../../../lib/ai-cost/package-usage";
 import { createRedesignImageGenerator, pixelSizeOf, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
 
@@ -122,7 +123,7 @@ async function generate(req: Request) {
       pixelSizeOf(sizeForRatio(String(form.get("ratio") || "9:16"))),
       "redesign:generate",
     );
-    reservation = await reserveAiUsage(req, "redesign_generate", 청구(requestedCount), creditPlan);
+    reservation = await reserveAiUsage(req, "redesign_generate", 청구(requestedCount), creditPlan, parsed.member);
     if (!reservation.ok) return reservation.response;
 
     /*
@@ -142,13 +143,13 @@ async function generate(req: Request) {
     const characterId = String(form.get("characterId") || "");
     const characters: NonNullable<Parameters<typeof generateSections>[0]["characters"]> = [];
     if (characterId) {
-      const auth = await authenticateApiMember();
-      if (!auth.ok) return auth.response;
-      const teamId = await teamIdOf(auth.member.userId);
+      // 몸통을 읽을 때 인증한 회원이다 — 다시 인증하지 않는다(설계 2026-09-29 §3.2).
+      const userId = parsed.member.userId;
+      const teamId = await teamIdOf(userId);
       const picked = form.getAll("characterAngles").map((value) => String(value));
 
       for (const angle of resolveCharacterAngles(picked, "")) {
-        const view = await loadCharacterView(auth.member.userId, characterId, angle, teamId);
+        const view = await loadCharacterView(userId, characterId, angle, teamId);
         if (!view) continue;
         characters.push({
           name: `character-${angle}.png`,
@@ -195,7 +196,8 @@ async function generate(req: Request) {
       count: requestedCount,
       startSection: Number(form.get("startSection") || 1),
       generateImage,
-      onUsage: (usage) => recordLlmUsage(usage.model, usage.inputTokens, usage.outputTokens),
+      onUsage: recordPackageLlmUsage,
+      onImageUsage: recordRedesignDirectImage,
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
     });

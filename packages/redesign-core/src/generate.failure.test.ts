@@ -42,6 +42,8 @@ function 입력(count: number) {
     model: "openai",
     openaiKey: "시험용-키",
     count,
+    onUsage: () => undefined,
+    onImageUsage: () => undefined,
   };
 }
 

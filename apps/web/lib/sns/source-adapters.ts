@@ -1,4 +1,5 @@
 import type { SourceResolverDependencies } from "./source-resolver";
+import { recordApifyRun, recordTopicResearch } from "../ai-cost/package-usage";
 
 /**
  * 실제 어댑터를 붙인다.
@@ -16,7 +17,8 @@ export function createSourceAdapters(
   return {
     async ingestYoutube(input) {
       const { ingestYoutube } = await import("@fixup/ingest-core/src/adapters/youtube");
-      return ingestYoutube(input);
+      // Apify 로 넘어가면 값이 나간다. 그 한 줄을 적는다(설계 2026-09-30 §3.4).
+      return ingestYoutube({ ...input, onApifyRun: recordApifyRun });
     },
     async ingestWeb(input) {
       const { ingestWeb } = await import("@fixup/ingest-core/src/adapters/web");
@@ -31,7 +33,7 @@ export function createSourceAdapters(
         OPENAI_API_KEY: key,
         OPENAI_DRAFT_MODEL: environment.OPENAI_DRAFT_MODEL,
         OPENAI_RESEARCH_MODEL: environment.OPENAI_RESEARCH_MODEL,
-      });
+      }, recordTopicResearch);
       return researcher(question);
     },
   };

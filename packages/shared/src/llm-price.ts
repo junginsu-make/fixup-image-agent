@@ -54,6 +54,10 @@ export const LLM_PRICES: Record<string, TokenPrice> = {
   "gpt-5.6-sol": { inputPerMillion: 4, outputPerMillion: 20 },
   "gpt-5.6-terra": { inputPerMillion: 2, outputPerMillion: 12 },
   "gpt-5.6-luna": { inputPerMillion: 0.2, outputPerMillion: 1.2 },
+
+  // 임베딩(지식 찾기·올리기, `redesign-core/rag.ts`). 출력 토큰이 없다(설계 2026-09-30 §3.4).
+  // 표에 없으면 「아는 것 중 가장 비싼 값」($10/100만)으로 잡혀 500배 비싸게 보인다.
+  "text-embedding-3-small": { inputPerMillion: 0.02, outputPerMillion: 0 },
 };
 
 /**

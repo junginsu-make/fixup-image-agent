@@ -49,6 +49,7 @@ import {
   pickedFrom,
 } from "../_components/character-choice";
 import { characterAngleLabel } from "../../lib/character-library";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { MAX_REFERENCE_IMAGES, models, type Model, type Project, type ServerConfig } from "./redesign-model";
 import { buildImageFileName, downloadDataUrl, imageExtension } from "./redesign-files";
 import { ensureSectionRevisions, projectDisplayTitle, sectionSortNumber } from "./redesign-project";
@@ -285,6 +286,7 @@ export function Workspace(props: {
                   <span className="mt-1 block text-xs text-muted-foreground">원본 제품컷, 수치, 리뷰, 인증, 오퍼 문구를 최대한 보존합니다.</span>
                 </span>
               </button>
+              <p className="mt-2 text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
               <input
                 ref={inputRef}
                 hidden

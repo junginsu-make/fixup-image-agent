@@ -21,10 +21,31 @@ export const HOME_AFTER_LOGIN = "/guide";
  *
  * `//evil.example.com` 같은 것을 그대로 쓰면 브라우저가 **다른 사이트**로
  * 읽는다. 우리 안의 경로만 허용한다.
+ *
+ * **역슬래시도 같은 구멍이다**(2026-09-30 독립 리뷰). 브라우저는 경로의
+ * 역슬래시를 슬래시로 바꿔 읽어서 `/\evil.example.com` 이 `//evil.example.com`
+ * 이 된다 — 실제로 로그인 뒤 `router.replace` 가 다른 사이트로 보냈다(열린
+ * 리다이렉트). 퍼센트 인코딩된 역슬래시(`%5C`)는 이 함수가 디코딩하지 않으므로
+ * 글자 그대로 남아 위험하지 않다.
  */
 export function safeNext(next: string | null | undefined): string {
   if (!next) return HOME_AFTER_LOGIN;
-  return next.startsWith("/") && !next.startsWith("//") ? next : HOME_AFTER_LOGIN;
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return HOME_AFTER_LOGIN;
+  return next;
+}
+
+/**
+ * 비회원이 회원 화면을 열었을 때 보내는 곳 (2026-09-30 사용자, 설계 §3.5).
+ *
+ * 첫 화면이 `signup=required` 를 보고 「회원가입이 필요합니다」 모달을 연다
+ * (`app/_landing/signup-required-modal.tsx`). `next` 는 모달의 [로그인] 이
+ * 로그인 화면에 넘긴다 — 밖으로 나가는 주소를 걸러 내는 것은 로그인 화면의
+ * `safeNext` 다.
+ */
+export const SIGNUP_REQUIRED = "required";
+
+export function signupRequiredPath(next: string): string {
+  return `/?${new URLSearchParams({ signup: SIGNUP_REQUIRED, next }).toString()}`;
 }
 
 /**

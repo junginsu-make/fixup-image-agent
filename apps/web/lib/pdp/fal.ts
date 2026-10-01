@@ -5,6 +5,7 @@ import {
   resolveEndpoint,
   type ImageGenerator,
 } from "@fixup/pdp-core";
+import { recordAiCost } from "../llm/meter";
 
 /**
  * 상세페이지·캐릭터가 fal 로 그림을 만드는 **유일한 자리**.
@@ -45,6 +46,19 @@ export function createPdpImageGenerator(environment: Env = process.env): ImageGe
     });
 
     const text = await response.text();
+    if (response.ok) {
+      /*
+        **받은 그 자리에서 적는다**(설계 §3.4). 아래에서 응답을 못 읽어도 값은 이미 나갔다.
+        동기 호출이라 한 요청에 한 번뿐이다 — fal 요청 id 는 헤더에 있으면 싣는다.
+      */
+      recordAiCost({
+        provider: "fal",
+        model,
+        images: 1,
+        basis: "image_unit",
+        falRequestId: response.headers.get("x-fal-request-id"),
+      });
+    }
     if (!response.ok) {
       throw new PdpServiceError(
         response.status === 429 ? "AI_QUOTA_EXCEEDED" : "PDP_IMAGE_GENERATION_FAILED",

@@ -38,6 +38,13 @@ export function CostPanel({
 
   return (
     <div className="space-y-4">
+      {/*
+        **옛 기준**(설계 2026-09-30 §3.4). 이 숫자는 요청 끝에 모아 적는 그림 장부라 예약 없는 호출과
+        글 AI 일부가 빠진다. 총 비용은 위 「AI 사용 비용」이 기준이다. 단가·환율 고치는 칸은 여기 그대로다.
+      */}
+      <p className="text-sm text-muted-foreground">
+        아래 숫자는 <strong>옛 기준</strong>(그림 장부)입니다. 전체 AI 비용은 위 「AI 사용 비용」을 보세요.
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <CostMetric label="오늘 비용" usd={summary.todayUsd} usdKrw={usdKrw} sub={`${summary.todayImages}장`} />
         <CostMetric label="이번 달 비용" usd={summary.monthUsd} usdKrw={usdKrw} sub={`${summary.monthImages}장`} />

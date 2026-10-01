@@ -9,6 +9,7 @@ import type { ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 import { randomId } from "../../lib/browser-safe";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { ThumbImage } from "../_components/thumb-image";
 
 /**
@@ -230,7 +231,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
               {uploading ? "올리는 중…" : "참고 이미지 올리기"}
             </Button>
-            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 올린 참고 이미지는 나만 봅니다. 다른 회원에게는 보이지 않습니다.</span>
+            <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 올린 참고 이미지는 나만 봅니다. 다른 회원에게는 보이지 않습니다. {UPLOAD_RIGHTS_NOTE}</span>
           </div>
 
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">참고 이미지를 불러오는 중입니다.</p> : visibleImages.length === 0 ? (

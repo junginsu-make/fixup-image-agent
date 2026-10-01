@@ -1,6 +1,7 @@
 import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../lib/llm/meter";
 import { BACKGROUND_REMOVAL_MODEL, adExportUnits } from "../../../../lib/ad/cost";
 import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
@@ -131,6 +132,10 @@ async function cutoutForAd(master: Buffer, mimeType: string): Promise<Buffer> {
 }
 
 export async function POST(request: Request) {
+  return withLlmMeter(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   /**
    * **꺼져 있으면 없는 길이다** (계약 5).
    *
@@ -168,8 +173,14 @@ export async function POST(request: Request) {
    *
    * 다른 도구와 같은 공식을 쓴다(`@fixup/shared` 의 `creditUnits`).
    */
-  const planned = adExportUnits(needsCutout(parsed.data.specIds) ? 1 : 0);
-  const reserved = await reserveAiUsage(request, "ad_export", planned, freeCreditPlan("ad:export"));
+  const cutout = needsCutout(parsed.data.specIds);
+  const planned = adExportUnits(cutout ? 1 : 0);
+  /*
+   * **AI 를 부르는지 resource 로 알린다**(설계 2026-09-30 §3.1). 자르기·줄이기만이면
+   * `ad:export` — SQL 이 이것만 「AI 멈춤」·「크레딧 없음」에서 뺀다. 배경 제거가
+   * 섞이면 `ad:export:cutout` — 돈이 나가므로 다른 AI 와 똑같이 막힌다.
+   */
+  const reserved = await reserveAiUsage(request, "ad_export", planned, freeCreditPlan(cutout ? "ad:export:cutout" : "ad:export"));
   if (!reserved.ok) return reserved.response;
 
   /**

@@ -2,7 +2,8 @@ import { transcribeStrips, humanizeProviderError, RedesignError } from "@fixup/r
 import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys";
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
-import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
+import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { recordPackageLlmUsage } from "../../../../lib/ai-cost/package-usage";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
 import { TRANSCRIBE_JSON_LIMIT, TRANSCRIBE_MAX_MB } from "./limits";
 
@@ -88,7 +89,7 @@ async function transcribe(req: Request) {
       googleKey: resolveGoogleKey(),
       signal: controller.signal,
       // 제공자가 적어 준 토큰이 여기로 온다. 계량기가 감싸고 있어야 갈 곳이 있다.
-      onUsage: (usage) => recordLlmUsage(usage.model, usage.inputTokens, usage.outputTokens),
+      onUsage: recordPackageLlmUsage,
     });
     const usage = await settleAiUsage(reservation, true, 0, undefined, {
       model: "",

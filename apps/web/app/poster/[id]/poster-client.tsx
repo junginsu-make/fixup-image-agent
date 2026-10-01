@@ -714,7 +714,8 @@ export function PosterClient(
   async function review() {
     beginWork({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     try {
-      const body = await (await request(`/api/poster/projects/${project.id}/review`, { method: "POST" })).json();
+      // 검수도 값이 나간다 — 식별자 길목을 지나야 서버가 예약을 받는다.
+      const body = await (await billableRequest(`/api/poster/projects/${project.id}/review`)).json();
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
       setList(body.images);
       if (body.issues?.length) setNotes(body.issues);

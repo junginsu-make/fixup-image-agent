@@ -67,11 +67,7 @@ export function PublicHeader({
               <Link href="/signup">가입 신청</Link>
             </Button>
           </div>
-        ) : (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/demo">데모 보기</Link>
-          </Button>
-        )}
+        ) : null}
       </div>
     </header>
   );
@@ -83,7 +79,6 @@ export function PublicFooter() {
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <PublicLogo />
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <Link href="/demo" className="hover:text-foreground">결과물 데모</Link>
           <Link href="/login" className="hover:text-foreground">로그인</Link>
           <Link href="/signup" className="hover:text-foreground">가입 신청</Link>
         </div>

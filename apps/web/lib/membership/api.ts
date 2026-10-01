@@ -10,8 +10,13 @@ import type { GenerationOperation, MemberProfile, UsageSummary } from "./types";
 import { imageCredits } from "@fixup/shared";
 import { isCreditLedgerEnabled, type CreditReservationPlan } from "./credit-ledger";
 import { usageFromRow } from "./usage-row";
+import { BOOT_ID } from "../runtime/boot-id";
+import { CS_EMAIL } from "../cs/contact";
+import { bindAiCaller } from "../llm/meter";
+import { costOperationKey } from "../ai-cost/keys";
+import { verifiedLogin } from "../auth/verified-login";
 
-type ApiMember = { userId: string; profile: MemberProfile };
+export type ApiMember = { userId: string; profile: MemberProfile };
 
 export async function authenticateApiMember(): Promise<
   | { ok: true; member: ApiMember }
@@ -21,14 +26,19 @@ export async function authenticateApiMember(): Promise<
     return { ok: true, member: { userId: devMemberProfile.id, profile: devMemberProfile } };
   }
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
+  /*
+    **누구인지는 토큰 서명으로, 들여보낼지는 profiles 로**(설계 2026-09-29 §3.2).
+    `getUser()` 왕복(0.2초)을 없앴다. 정지·탈퇴·승인 대기·지운 계정은 아래
+    profiles 읽기가 지금처럼 막는다 — 이 읽기는 줄이지 않는다.
+  */
+  const login = await verifiedLogin(supabase.auth);
+  if (!login) {
     return { ok: false, response: membershipApiError(401, "unauthenticated", "로그인이 필요합니다.") };
   }
   const { data: profile } = await supabase
     .from("profiles")
     .select("id,email,email_confirmed_at,role,status,monthly_quota,approved_at,approval_notified_at,created_at")
-    .eq("id", user.id)
+    .eq("id", login.userId)
     .single();
   if (!profile) {
     return { ok: false, response: membershipApiError(403, "profile_not_found", "회원 정보를 찾지 못했습니다.") };
@@ -51,7 +61,7 @@ export async function authenticateApiMember(): Promise<
   if (typed.status === "withdrawn") {
     return { ok: false, response: membershipApiError(403, "withdrawn", "탈퇴한 계정입니다.") };
   }
-  return { ok: true, member: { userId: user.id, profile: typed } };
+  return { ok: true, member: { userId: login.userId, profile: typed } };
 }
 
 export async function authenticateApiAdmin() {
@@ -63,19 +73,41 @@ export async function authenticateApiAdmin() {
   return auth;
 }
 
+/**
+ * **크레딧이 없거나 운영자가 멈췄다**(설계 2026-09-30 §3.2). 문구는 설계 그대로다.
+ * 크레딧은 당분간 관리자가 손으로 준다(D4) — 그래서 연락처를 싣는다.
+ */
+const CREDITS_REQUIRED_MESSAGE = `크레딧이 없어 이 기능을 쓸 수 없습니다. 운영자에게 문의해 주세요(${CS_EMAIL}).`;
+const CS_FREE_USED_MESSAGE = "무료 질문 10회를 모두 썼습니다. 크레딧을 받은 뒤 다시 이용해 주세요.";
+const AI_PAUSED_MESSAGE = "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.";
+
+/**
+ * **다시 눌러도 안 풀리는 거절.** 화면이 「다시 시도」를 안 내도록 본문에 적는다
+ * (쉬운 만들기의 `retryable`, `app/easy/easy-client.tsx:324-333`). 멈춤(503)은 상태
+ * 코드만으로는 「잠시 뒤 다시」와 가를 수 없어 코드가 아니라 본문으로 알린다.
+ */
+const NOT_RETRYABLE_REASONS = new Set(["credits_required", "ai_paused"]);
+
 export async function reserveAiUsage(
   request: Request,
   operation: GenerationOperation,
   units: number,
   creditPlan?: CreditReservationPlan,
+  /**
+   * 이 요청에서 **이미 인증한 회원**(설계 2026-09-29 §3.2). 주면 다시 인증하지
+   * 않는다 — profiles 0.2초 왕복 한 번이 빠진다. 같은 요청의 `authenticateApiMember`
+   * 결과만 넘긴다(다른 요청·다른 사람의 것을 넘기지 않는다).
+   */
+  authenticated?: ApiMember,
 ): Promise<
   | { ok: true; userId: string; requestId: string; usage: UsageSummary }
   | { ok: false; response: Response }
 > {
-  const auth = await authenticateApiMember();
+  const auth = authenticated ? { ok: true as const, member: authenticated } : await authenticateApiMember();
   if (!auth.ok) return auth;
   // 우회 계정은 profiles 행이 없어 사용량 RPC가 실패한다. 로컬에서는 집계를 건너뛴다.
   if (isLocalAuthBypass) {
+    bindAiCaller({ userId: devMemberProfile.id, requestId: null, operation: costOperationKey(operation, creditPlan?.resource) });
     return { ok: true, userId: devMemberProfile.id, requestId: "local-dev", usage: devUsageSummary };
   }
   const requestId = request.headers.get("x-idempotency-key");
@@ -140,6 +172,9 @@ export async function reserveAiUsage(
       credit_account_not_activated: "크레딧 계정 전환이 준비 중입니다. 운영자에게 문의해 주세요.",
       credit_quote_required: "이 생성 경로의 크레딧 설정을 확인해야 합니다.",
       credit_ledger_required: "새 크레딧 처리가 준비 중입니다. 잠시 후 다시 시도해 주세요.",
+      // CS 도우미는 크레딧이 없어도 가입 후 10번까지 묻는다 — 그 10번을 다 쓴 것이다.
+      credits_required: operation === "cs_ask" ? CS_FREE_USED_MESSAGE : CREDITS_REQUIRED_MESSAGE,
+      ai_paused: AI_PAUSED_MESSAGE,
     };
     // 전환한 계정에는 「이번 달 한도」라는 말이 없다. 남은 것은 잔액이다.
     if (usage.pricingPolicy === "image-v2") messages.quota_exceeded = `크레딧이 모자랍니다. 사용 가능 ${usage.remaining}크레딧입니다.`;
@@ -156,11 +191,34 @@ export async function reserveAiUsage(
         : messages[row.reason] ?? "요청을 처리할 수 없습니다.";
     const status = ["quota_exceeded", "team_quota_exceeded", "concurrent_limit", "analysis_rate_limit", "analysis_abuse_limit"]
       .includes(row.reason) ? 429 : 409;
+    // ★ 새 거절 사유는 위 목록과 다른 상태를 쓴다(설계 §3.2·§3.3).
+    const finalStatus = row.reason === "ai_paused" ? 503 : row.reason === "credits_required" ? 403 : status;
     return {
       ok: false,
-      response: membershipApiError(status, row.reason, message, usage),
+      response: membershipApiError(
+        finalStatus, row.reason, message, usage,
+        NOT_RETRYABLE_REASONS.has(row.reason) ? false : undefined,
+      ),
     };
   }
+  /*
+    **이 예약을 잡은 프로세스를 적는다**(설계 §3.5). 재시작 뒤 새 프로세스가 끊긴 동기 생성
+    예약을 가려 정리한다. 함수 인자를 바꾸지 않으려고 따로 한 줄 적는다(42725 사고). 못 적어도
+    생성은 막지 않는다 — 그 예약은 정리 대상에서 빠질 뿐이다.
+  */
+  if (ledger) {
+    const { error: tagError } = await admin.from("generation_events")
+      .update({ boot_id: BOOT_ID })
+      .eq("user_id", auth.member.userId)
+      .eq("request_id", requestId);
+    if (tagError) console.warn("[usage] 프로세스 표식을 못 남겼습니다", { requestId, message: tagError.message });
+  }
+  /*
+    **이 요청이 누구의 무슨 작업인가**(설계 2026-09-30 §3.4). 라우트 입구의 `withLlmMeter` 가
+    연 저장소에 싣는다. 뒤에서 공급자를 부를 때마다 `ai_cost_events` 에 한 줄씩 적힌다.
+    작업 칸은 resource 에서 id 를 뺀 것 — C2 가 기능을 resource 로 갈랐다(§3.1).
+  */
+  bindAiCaller({ userId: auth.member.userId, requestId, operation: costOperationKey(operation, creditPlan?.resource) });
   return { ok: true, userId: auth.member.userId, requestId, usage };
 }
 
@@ -428,6 +486,11 @@ export function membershipApiError(
   code: string,
   message: string,
   usage?: UsageSummary,
+  retryable?: boolean,
 ) {
-  return Response.json({ ok: false, code, message, error: message, usage }, { status });
+  // `retryable` 은 줄 때만 싣는다. 옛 응답 모양은 그대로 둔다.
+  return Response.json(
+    { ok: false, code, message, error: message, usage, ...(retryable === undefined ? {} : { retryable }) },
+    { status },
+  );
 }

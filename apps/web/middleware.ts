@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { localBypassRedirect } from "./lib/dev-auth";
-import { HOME_AFTER_LOGIN, publicOrigin } from "./lib/routes";
+import { HOME_AFTER_LOGIN, publicOrigin, signupRequiredPath } from "./lib/routes";
 import { canAccessPage } from "./lib/access/core";
 import { isUsableAccount } from "./lib/membership/usable";
 import { PAGE_ACCESS, isDisabledRoute } from "./lib/access/routes";
@@ -10,10 +10,11 @@ import {
   SESSION_START_COOKIE,
   SESSION_START_COOKIE_MAX_AGE_S,
   sessionAuthCookieNames,
-  sessionIdFromAccessToken,
   sessionStartValue,
   sessionWindow,
 } from "./lib/auth/session-window";
+import { verifiedLogin } from "./lib/auth/verified-login";
+import { authRoundTrips } from "./lib/auth/auth-round-trips";
 
 const PUBLIC_PATHS = [
   "/",
@@ -31,10 +32,9 @@ const PUBLIC_PATHS = [
     함께 열어 준다.
 
     화면은 손님에게 셸 대신 공개 머리·꼬리를 두른다(`app/guide/layout.tsx`) —
-    사이드바를 보여 주면 눌러 봐야 전부 로그인으로 돌아온다.
+    사이드바를 보여 주면 눌러 봐야 전부 첫 화면 회원가입 안내로 간다.
   */
   "/guide",
-  "/demo",
   "/login",
   "/signup",
   "/forgot-password",
@@ -78,6 +78,8 @@ export async function middleware(request: NextRequest) {
   }
 
   const supabase = createServerClient(url, publishableKey, {
+    // getClaims 가 조용히 getUser 왕복으로 돌아가면 센다(설계 2026-09-29 §3.2).
+    global: { fetch: authRoundTrips.fetch },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll(cookiesToSet) {
@@ -90,7 +92,15 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const { data: { user } } = await supabase.auth.getUser();
+  /*
+    **토큰 서명을 이 서버가 확인한다**(설계 2026-09-29 §3.2). 전에는 `getUser()` 로
+    요청마다 Supabase 까지 0.2초를 왕복했다. 정지·탈퇴·관리자 판정은 아래에서
+    지금처럼 `profiles` 를 읽는다 — 토큰은 「누구인가」만 말한다.
+
+    만료가 가까우면 `getClaims` 가 먼저 갱신하고 `setAll` 로 쿠키를 다시 쓴다.
+    그래서 이 줄과 클라이언트 만들기 사이에 다른 일을 끼우지 않는다.
+  */
+  const user = await verifiedLogin(supabase.auth);
 
   /*
     로그인 유지는 **하루**다 (2026-09-23 사용자). 로그인한 시각을 쿠키에 적어
@@ -101,13 +111,16 @@ export async function middleware(request: NextRequest) {
   */
   if (user) {
     // 이번 로그인의 번호. 시작 시각을 이 로그인에 묶어 잰다 — 까닭은 `sessionStartValue`.
-    const { data: { session } } = await supabase.auth.getSession();
-    const sessionId = sessionIdFromAccessToken(session?.access_token);
+    // 서명을 확인한 토큰에서 읽는다.
+    const sessionId = user.sessionId;
     const window = sessionWindow(request.cookies.get(SESSION_START_COOKIE)?.value, new Date(), sessionId);
     if (window.state === "expired") {
       /*
-        **서버 쪽 로그인도 끊는다**(2026-09-29 독립 리뷰). 쿠키만 지우면 만료 전에
-        복사해 둔 토큰이 계속 쓰인다. 이 기기의 로그인만 끊는다 — 다른 기기는 제
+        **서버 쪽 로그인도 끊는다**(2026-09-29 독립 리뷰, 2026-10-01 주석 정정).
+        `signOut({ scope: "local" })` 은 이 기기의 **갱신**만 막는다. 만료 전에
+        이미 복사해 둔 access token 은 그 자체 만료 시각(exp, 최대 1시간)까지는
+        여전히 통과한다 — getClaims 가 서버 왕복 없이 서명만 보기 때문이다
+        (설계 §3.2 의 맞바꿈). 이 기기의 로그인만 끊는다. 다른 기기는 제
         24시간을 따로 잰다. 끊기에 실패해도 아래에서 쿠키는 지운다.
       */
       try {
@@ -173,15 +186,22 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = matches(pathname, ["/signup", "/forgot-password"]);
   if (!user) {
     if (matches(pathname, PUBLIC_PATHS)) return response;
-    const loginUrl = new URL("/login", base);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    /*
+      **비회원은 로그인 화면이 아니라 첫 화면으로 보낸다**(2026-09-30 사용자, 설계 §3.5).
+      첫 화면이 「회원가입이 필요합니다」 모달을 연다. 로그인 칸부터 내밀면 아직
+      가입하지 않은 사람은 갈 곳을 모른다.
+
+      가려던 곳은 지금까지처럼 `next` 에 **경로만** 싣는다. 모달의 [로그인] 이
+      그대로 넘기고, 로그인 화면이 `safeNext` 로 걸러 돌려보낸다. 로그인 유지
+      시간이 지난 경우는 위에서 이미 `/login?expired=1` 로 갔다.
+    */
+    return NextResponse.redirect(new URL(signupRequiredPath(pathname), base));
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("role,status,email_confirmed_at")
-    .eq("id", user.id)
+    .eq("id", user.userId)
     .single();
 
   const active = isUsableAccount(profile);
@@ -203,7 +223,7 @@ export async function middleware(request: NextRequest) {
   // 어느 화면을 누가 여는지는 등록부(`lib/access/routes.ts`)가 정한다.
   // 여기서 경로를 직접 적으면 사이드바·페이지 문지기와 어긋난다 — 그러면
   // 메뉴에는 없는데 주소를 치면 열리는 화면이 생긴다.
-  const viewer = { userId: user.id, role: (profile?.role ?? "member") as UserRole };
+  const viewer = { userId: user.userId, role: (profile?.role ?? "member") as UserRole };
   if (!canAccessPage(pathname, viewer, PAGE_ACCESS)) {
     return NextResponse.redirect(new URL(HOME_AFTER_LOGIN, base));
   }

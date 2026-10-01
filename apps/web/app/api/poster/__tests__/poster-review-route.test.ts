@@ -7,18 +7,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 팀원 것까지 열려 있는데(RLS), 결과 저장(`saveReview`)은 본인 것만 된다. 그래서
  * 팀원의 작업을 검수하면 **모델 값을 낸 뒤에야** 저장에서 막혔다. 그림을 본인 것만
  * 읽으면 돈이 나가기 전에 「먼저 변형 하나를 고르세요」로 멈춘다.
+ *
+ * **예약도 거친다**(설계 2026-09-30 §3.1). `poster_image` + `poster:{id}:review`,
+ * 0 크레딧. 크레딧이 없거나 운영자가 멈췄으면 올리기 전에 막힌다.
  */
 
 vi.mock("server-only", () => ({}));
 
 const listOptions: unknown[] = [];
 const uploads: string[] = [];
+const order: string[] = [];
+const reserveCalls: Array<{ operation: string; units: number; resource?: string }> = [];
+const settleCalls: Array<{ success: boolean; code?: string }> = [];
+let reserveOk = true;
+let providerMissing = false;
+let 정산결과: unknown = { remaining: 0 };
 let ownImages: Array<{ id: string; selected: boolean; assetPath: string }> = [];
 /** 팀 읽기 규칙으로 보이는 남의 그림 — 주인 조건을 안 걸면 이것이 나온다. */
 const teammateImage = { id: "남의그림", selected: true, assetPath: "u2/poster/p1/req/0.png" };
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
+  reserveAiUsage: async (_request: Request, operation: string, units: number, plan?: { resource: string }) => {
+    order.push("reserve");
+    reserveCalls.push({ operation, units, resource: plan?.resource });
+    return reserveOk
+      ? { ok: true as const, userId: "u1", requestId: "review-request", usage: undefined }
+      : {
+          ok: false as const,
+          response: Response.json({ ok: false, code: "credits_required", message: "크레딧이 없어 이 기능을 쓸 수 없습니다." }, { status: 403 }),
+        };
+  },
+  settleAiUsage: async (_reservation: unknown, success: boolean, _units: number, code?: string) => {
+    settleCalls.push({ success, code });
+    return 정산결과;
+  },
 }));
 
 vi.mock("../../../../lib/poster/stores", () => ({
@@ -38,13 +61,25 @@ vi.mock("../../../../lib/poster/asset-bytes", () => ({
   posterImageBytes: async (assetPath: string) => ({ bytes: Buffer.from(assetPath), contentType: "image/png" }),
 }));
 
-vi.mock("../../../../lib/poster/providers", () => ({
-  createPosterFalClients: () => ({
-    uploader: { uploadReference: async (bytes: Buffer) => { uploads.push(bytes.toString()); return "https://fal/x.png"; } },
-  }),
-  createPosterReviewProviders: () => ({ primary: {} }),
-  PosterProviderConfigurationError: class extends Error { missing: string[] = []; },
-}));
+vi.mock("../../../../lib/poster/providers", () => {
+  class PosterProviderConfigurationError extends Error { missing: string[] = ["FAL_KEY"]; }
+  return {
+    createPosterFalClients: () => {
+      if (providerMissing) throw new PosterProviderConfigurationError("검수 설정이 없습니다.");
+      return {
+        uploader: {
+          uploadReference: async (bytes: Buffer) => {
+            order.push("upload");
+            uploads.push(bytes.toString());
+            return "https://fal/x.png";
+          },
+        },
+      };
+    },
+    createPosterReviewProviders: () => ({ primary: {} }),
+    PosterProviderConfigurationError,
+  };
+});
 
 vi.mock("@fixup/poster-core", async () => {
   const real = await vi.importActual<typeof import("@fixup/poster-core")>("@fixup/poster-core");
@@ -57,24 +92,71 @@ vi.mock("@fixup/poster-core", async () => {
 const { POST } = await import("../projects/[id]/review/route");
 
 const call = () => POST(new Request("http://x", { method: "POST" }), { params: Promise.resolve({ id: "p1" }) });
+const 내그림 = { id: "내그림", selected: true, assetPath: "u1/poster/p1/req/0.png" };
 
 beforeEach(() => {
   listOptions.length = 0;
   uploads.length = 0;
+  order.length = 0;
+  reserveCalls.length = 0;
+  settleCalls.length = 0;
+  reserveOk = true;
+  providerMissing = false;
+  정산결과 = { remaining: 0 };
   ownImages = [];
 });
 
 describe("검수는 본인 그림만", () => {
   it("그림 목록을 본인 것만 달라고 한다", async () => {
-    ownImages = [{ id: "내그림", selected: true, assetPath: "u1/poster/p1/req/0.png" }];
+    ownImages = [내그림];
     await call();
     expect(listOptions[0]).toMatchObject({ ownOnly: true });
     expect(uploads).toEqual(["u1/poster/p1/req/0.png"]);
   });
 
-  it("본인이 고른 그림이 없으면 올리기·검수 전에 멈춘다 — 팀원 그림이 골라져 있어도", async () => {
+  it("본인이 고른 그림이 없으면 예약·올리기·검수 전에 멈춘다 — 팀원 그림이 골라져 있어도", async () => {
     const response = await call();
     expect(response.status).toBe(400);
     expect(uploads).toEqual([]);
+    expect(reserveCalls).toEqual([]);
+  });
+});
+
+describe("검수도 예약을 거친다", () => {
+  it("올리기 전에 기존 작업 이름과 제 resource 로 자리를 잡는다", async () => {
+    ownImages = [내그림];
+    await call();
+    expect(order.slice(0, 2)).toEqual(["reserve", "upload"]);
+    expect(reserveCalls).toEqual([{ operation: "poster_image", units: 0, resource: "poster:p1:review" }]);
+  });
+
+  it("자리를 못 잡으면 올리지도 검수하지도 않는다", async () => {
+    ownImages = [내그림];
+    reserveOk = false;
+    const response = await call();
+    expect(response.status).toBe(403);
+    expect(uploads).toEqual([]);
+  });
+
+  it("끝나면 성공으로 닫는다", async () => {
+    ownImages = [내그림];
+    await call();
+    expect(settleCalls).toEqual([{ success: true, code: undefined }]);
+  });
+
+  it("설정이 없어 못 부르면 실패로 닫는다", async () => {
+    ownImages = [내그림];
+    providerMissing = true;
+    const response = await call();
+    expect(response.status).toBe(503);
+    expect(settleCalls).toEqual([{ success: false, code: "poster_review_failed" }]);
+  });
+
+  it("정산이 못 닫혀도 검수 결과는 돌려준다", async () => {
+    ownImages = [내그림];
+    정산결과 = undefined;
+    const response = await call();
+    expect(response.status).toBe(200);
+    expect((await response.json()).ok).toBe(true);
   });
 });

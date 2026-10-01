@@ -18,6 +18,7 @@ import { characterAngleLabel } from "../../../lib/character-library";
 import { attachmentNumber } from "@fixup/shared";
 import { openImageViewer } from "../../_components/image-viewer";
 import { randomId } from "../../../lib/browser-safe";
+import { UPLOAD_RIGHTS_NOTE } from "../../../lib/rights/upload-notice";
 
 /**
  * 포스터 레퍼런스 고르기.
@@ -292,7 +293,7 @@ export function ReferencePicker({
           onReload={onUploaded}
         />
         <span className="text-sm text-muted-foreground">
-          여기서 올린 그림도 라이브러리에 들어갑니다.
+          여기서 올린 그림도 라이브러리에 들어갑니다. {UPLOAD_RIGHTS_NOTE}
         </span>
       </div>
 

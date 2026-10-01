@@ -1,7 +1,7 @@
 import { YoutubeTranscript } from "youtube-transcript";
 import { type SourceDocument, SourceInsufficientContentError } from "../types";
 import { fetchYoutubeMetadata, transcribeYoutubeAudio, type YoutubeMetadata } from "./youtube-worker";
-import { fetchApifyTranscript, isApifyConfigured, type ApifyTranscriptResult } from "./youtube-apify";
+import { fetchApifyTranscript, isApifyConfigured, type ApifyRunRecorder, type ApifyTranscriptResult } from "./youtube-apify";
 
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -61,13 +61,22 @@ async function fetchTranscript(videoId: string, language: "ko" | "en"): Promise<
   return YoutubeTranscript.fetchTranscript(videoId, { lang: language });
 }
 
-export async function ingestYoutube(input: { id: string; url: string; fetchTranscript?: TranscriptFetcher; fetchMetadata?: YoutubeMetadataFetcher; transcribeAudio?: YoutubeAudioTranscriber; fetchApify?: ApifyTranscriptFetcher }): Promise<SourceDocument> {
+/**
+ * 비용 기록 없이 Apify 를 불렀다. **조용히 넘기지 않는다** — 앱은 `onApifyRun` 을 넘긴다
+ * (`apps/web/lib/sns/source-adapters.ts`). 넘기지 않는 것은 운영에서 멈춰 둔 수집 워커뿐이다.
+ */
+const warnUnrecordedApifyRun: ApifyRunRecorder = (run) => {
+  console.warn("[ingest] Apify 를 비용 기록 없이 불렀습니다", run);
+};
+
+export async function ingestYoutube(input: { id: string; url: string; fetchTranscript?: TranscriptFetcher; fetchMetadata?: YoutubeMetadataFetcher; transcribeAudio?: YoutubeAudioTranscriber; fetchApify?: ApifyTranscriptFetcher; onApifyRun?: ApifyRunRecorder }): Promise<SourceDocument> {
   const videoId = parseYoutubeVideoId(input.url);
   const transcriptFetcher = input.fetchTranscript ?? fetchTranscript;
   const metadataFetcher = input.fetchMetadata ?? (input.fetchTranscript ? async () => ({}) : fetchYoutubeMetadata);
   const audioTranscriber = input.transcribeAudio ?? (input.fetchTranscript ? undefined : transcribeYoutubeAudio);
   // 키가 없으면 아예 건너뛴다. 로컬 개발은 직접 자막만으로 지금까지처럼 돌아간다.
-  const apifyFetcher = input.fetchApify ?? (isApifyConfigured() ? fetchApifyTranscript : undefined);
+  const onRun = input.onApifyRun ?? warnUnrecordedApifyRun;
+  const apifyFetcher = input.fetchApify ?? (isApifyConfigured() ? (url: string) => fetchApifyTranscript(url, { onRun }) : undefined);
   let metadata: YoutubeMetadata = {};
   try { metadata = await metadataFetcher(input.url); } catch { /* 자막이나 음성만으로 계속 진행합니다. */ }
   let lines: TranscriptLine[] | undefined;

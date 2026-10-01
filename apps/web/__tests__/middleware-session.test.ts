@@ -12,26 +12,55 @@ import { SESSION_START_COOKIE, sessionStartValue } from "../lib/auth/session-win
 let currentUser: { id: string } | null = { id: "user-1" };
 /** 이번 로그인의 세션 번호. 로그인할 때마다 Supabase 가 새로 준다. */
 let currentSessionId: string | null = "session-1";
-let profile: { role: string; status: string; email_confirmed_at: string | null } = {
+let profile: { role: string; status: string; email_confirmed_at: string | null } | null = {
   role: "member", status: "active", email_confirmed_at: "2026-09-01T00:00:00Z",
 };
 
-/** 로그인 토큰 모양만 흉내 낸다 — 가운데 조각에 session_id 가 든다. */
-const 토큰 = (sid: string | null) =>
-  sid ? ["h", Buffer.from(JSON.stringify({ sub: "user-1", session_id: sid })).toString("base64url"), "s"].join(".") : undefined;
-
 /** 미들웨어가 서버 쪽 로그인을 끊은 기록. */
 const 끊은것: Array<{ scope?: string }> = [];
+/** 미들웨어가 Supabase 클라이언트를 만들 때 넘긴 설정. */
+const 받은설정: Array<{ global?: { fetch?: unknown } }> = [];
+/** profiles 를 어느 회원 번호로 읽었나. */
+const 읽은번호: unknown[] = [];
+/** 이번 요청에서 getClaims 가 토큰을 갱신하나 — 만료가 가까우면 Supabase 가 그렇게 한다. */
+let 갱신한다 = false;
+
+/**
+ * **로그인 확인은 `getClaims` 다**(설계 2026-09-29 §3.2). `getUser`·`getSession` 을
+ * 부르면 시험이 터진다 — 앞의 것은 Supabase 왕복이고, 뒤의 것은 서명을 안 본 값이다.
+ */
+const 금지 = (name: string) => async () => {
+  throw new Error(`${name} 를 불렀다 — 미들웨어의 로그인 확인은 getClaims 여야 한다(설계 §3.2)`);
+};
 
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({
-    auth: {
-      getUser: async () => ({ data: { user: currentUser } }),
-      getSession: async () => ({ data: { session: currentUser ? { access_token: 토큰(currentSessionId) } : null } }),
-      signOut: async (options?: { scope?: string }) => { 끊은것.push(options ?? {}); return { error: null }; },
-    },
-    from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: profile }) }) }) }),
-  }),
+  createServerClient: (_url: string, _key: string, options: {
+    global?: { fetch?: unknown };
+    cookies: { setAll: (cookies: Array<{ name: string; value: string; options: object }>) => void };
+  }) => {
+    받은설정.push(options);
+    return {
+      auth: {
+        getClaims: async () => {
+          // 진짜 getClaims 는 만료가 가까우면 getSession 안에서 갱신하고 setAll 로 쿠키를 다시 쓴다.
+          if (갱신한다) options.cookies.setAll([{ name: AUTH_COOKIE, value: "새토큰", options: { path: "/" } }]);
+          return {
+            data: currentUser
+              ? { claims: { sub: currentUser.id, session_id: currentSessionId ?? undefined, role: "service_role" } }
+              : null,
+            error: null,
+          };
+        },
+        getUser: 금지("getUser"),
+        getSession: 금지("getSession"),
+        signOut: async (options?: { scope?: string }) => { 끊은것.push(options ?? {}); return { error: null }; },
+      },
+      from: () => ({ select: () => ({ eq: (_column: string, id: unknown) => {
+        읽은번호.push(id);
+        return { single: async () => ({ data: profile }) };
+      } }) }),
+    };
+  },
 }));
 
 const { middleware } = await import("../middleware");
@@ -53,6 +82,9 @@ beforeEach(() => {
   currentUser = { id: "user-1" };
   currentSessionId = "session-1";
   끊은것.length = 0;
+  받은설정.length = 0;
+  읽은번호.length = 0;
+  갱신한다 = false;
   profile = { role: "member", status: "active", email_confirmed_at: "2026-09-01T00:00:00Z" };
 });
 
@@ -230,5 +262,59 @@ describe("이미 로그인된 사람의 로그인 화면", () => {
       expect(response.status).toBe(307);
       expect(response.headers.get("location")).not.toContain(path);
     }
+  });
+});
+
+/**
+ * **로그인 확인을 바꿔도 문은 그대로다**(설계 2026-09-29 §3.2).
+ *
+ * 토큰 서명은 「누구인가」만 말한다. 정지·탈퇴·지워진 회원은 토큰이 멀쩡해도
+ * 못 들어와야 한다 — 그 판정은 지금처럼 요청마다 `profiles` 에서 읽는다.
+ */
+describe("getClaims 로 바꾼 뒤", () => {
+  it("auth 서버 왕복 없이 들여보낸다 — getUser 를 부르면 이 시험이 터진다", async () => {
+    const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(1000) }));
+    expect(response.status).toBe(200);
+  });
+
+  it("만료가 가까워 getClaims 가 토큰을 갱신하면 새 로그인 쿠키를 응답에 싣는다", async () => {
+    갱신한다 = true;
+    const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(1000) }));
+
+    expect(response.status).toBe(200);
+    expect(response.cookies.get(AUTH_COOKIE)?.value, "갱신한 토큰을 브라우저에 안 주면 다음 요청이 또 갱신하다 끊긴다").toBe("새토큰");
+  });
+
+  it("Supabase 클라이언트에 auth 왕복을 세는 fetch 를 단다", async () => {
+    const { authRoundTrips } = await import("../lib/auth/auth-round-trips");
+    await middleware(요청("/create", { [AUTH_COOKIE]: "token" }));
+    expect(받은설정[0]?.global?.fetch).toBe(authRoundTrips.fetch);
+  });
+
+  it("profiles 는 서명을 확인한 토큰의 회원 번호(sub)로 읽는다", async () => {
+    currentUser = { id: "user-9" };
+    await middleware(요청("/create", { [AUTH_COOKIE]: "token" }));
+    expect(읽은번호).toEqual(["user-9"]);
+  });
+
+  it.each(["suspended", "withdrawn", "pending"])("profiles 가 %s 이면 /access 로 보낸다", async (status) => {
+    profile = { role: "member", status, email_confirmed_at: "2026-09-01T00:00:00Z" };
+    const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(1000) }));
+    expect(response.headers.get("location")).toBe("http://54.180.68.212/access");
+  });
+
+  it("profiles 행이 없으면(지운 계정) /access 로 보낸다 — 토큰만 남은 사람", async () => {
+    profile = null;
+    const response = await middleware(요청("/create", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(1000) }));
+    expect(response.headers.get("location")).toBe("http://54.180.68.212/access");
+  });
+
+  it("관리자 화면은 profiles.role 로 연다 — 토큰의 role 이 아니다", async () => {
+    const 회원 = await middleware(요청("/admin", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(1000) }));
+    expect(회원.status, "일반 회원이 관리자 화면에 들어갔다").toBe(307);
+
+    profile = { role: "admin", status: "active", email_confirmed_at: "2026-09-01T00:00:00Z" };
+    const 관리자 = await middleware(요청("/admin", { [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: 시작(1000) }));
+    expect(관리자.status).toBe(200);
   });
 });

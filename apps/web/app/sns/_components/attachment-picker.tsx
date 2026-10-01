@@ -15,6 +15,7 @@ import { attachMessage, matchAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 import { randomId } from "../../../lib/browser-safe";
+import { UPLOAD_RIGHTS_NOTE } from "../../../lib/rights/upload-notice";
 import { attachmentsForUploaded } from "./uploaded-attachments";
 import { SlotIntents, type SlotIntents as SlotIntentsValue } from "./slot-intents";
 
@@ -276,7 +277,7 @@ export function AttachmentPicker({
           onPick={pickCharacter}
           onReload={() => void load()}
         />
-        <span className="text-sm text-muted-foreground">여기서 올린 그림도 라이브러리에 들어갑니다.</span>
+        <span className="text-sm text-muted-foreground">여기서 올린 그림도 라이브러리에 들어갑니다. {UPLOAD_RIGHTS_NOTE}</span>
       </div>
       {message ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{message}</p> : null}
       {attachments.length === 0 ? (

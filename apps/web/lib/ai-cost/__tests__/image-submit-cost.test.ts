@@ -1,0 +1,118 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * **그림은 제출하는 자리에서 한 줄**(설계 2026-09-30 §3.4·§5).
+ *
+ * fal 큐는 제출하면 과금이 끝난다. 상태 조회는 여러 번 오거나 아예 안 올 수 있어
+ * 거기서 적으면 두 번 적히거나 빠진다. 동기 호출(상세페이지·리디자인)은 받은 자리에서,
+ * 배경 제거는 fal 이 요청을 받은 순간(`onEnqueue`)에 적는다.
+ */
+vi.mock("server-only", () => ({}));
+vi.mock("../../fal/upload", () => ({ createFalUploader: () => ({ uploadReference: async () => "https://fal/ref.png" }) }));
+
+const { replaceAiCostWriterForTest } = await import("../write");
+const { bindAiCaller, withLlmMeter } = await import("../../llm/meter");
+const { createFalQueueClient, falModelIdFor } = await import("../../fal/queue");
+const { createPdpImageGenerator } = await import("../../pdp/fal");
+const { removeBackground } = await import("../../ad/background");
+const { createRedesignImageGenerator } = await import("../../redesign/image-generator");
+
+type Row = Record<string, unknown>;
+let rows: Row[] = [];
+const USER = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+beforeEach(() => {
+  rows = [];
+  replaceAiCostWriterForTest(async (row) => { rows.push(row as unknown as Row); });
+});
+afterEach(() => {
+  replaceAiCostWriterForTest(null);
+  vi.unstubAllGlobals();
+});
+
+describe("fal 큐(포스터·카드뉴스)", () => {
+  const queueWith = (submit: () => Promise<unknown>) =>
+    createFalQueueClient("key", () => ({ queue: { submit, status: vi.fn(), result: vi.fn() } } as never));
+
+  it("제출에 한 줄 — 모델 id·요청 장수·fal 요청 id·작업 문맥을 싣는다", async () => {
+    const queue = queueWith(async () => ({ request_id: "fal-9" }));
+    await withLlmMeter(async () => {
+      bindAiCaller({ userId: USER, requestId: null, operation: "poster" });
+      await queue.submitJob("fal-ai/nano-banana-pro/edit", { prompt: "x", num_images: 3 });
+    });
+    expect(rows).toEqual([expect.objectContaining({
+      p_user: USER, p_operation: "poster", p_provider: "fal", p_model: "nano-banana-pro",
+      p_images: 3, p_usd: null, p_basis: "image_unit", p_fal_request_id: "fal-9",
+    })]);
+  });
+
+  it("제출이 실패하면 적지 않는다 — 과금되지 않았다", async () => {
+    const queue = queueWith(async () => { throw new Error("429"); });
+    await withLlmMeter(async () => {
+      await expect(queue.submitJob("fal-ai/nano-banana-pro", { prompt: "x" })).rejects.toThrow();
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it("상태·결과 조회는 적지 않는다", async () => {
+    const status = vi.fn(async () => ({ status: "COMPLETED" }));
+    const result = vi.fn(async () => ({ data: { images: [] } }));
+    const queue = createFalQueueClient("key", () => ({ queue: { submit: vi.fn(), status, result } } as never));
+    await withLlmMeter(async () => {
+      await queue.jobStatus("fal-ai/nano-banana-pro", "fal-1");
+      await queue.jobResult("fal-ai/nano-banana-pro", "fal-1");
+    });
+    expect(rows).toEqual([]);
+  });
+
+  it("엔드포인트로 단가표의 모델 id 를 찾는다. 모르면 그대로 둔다", () => {
+    expect(falModelIdFor("openai/gpt-image-2.5/flare/edit")).toBe("gpt-image-2.5-flare");
+    expect(falModelIdFor("fal-ai/nano-banana-2")).toBe("nano-banana-2");
+    expect(falModelIdFor("someone/new-model")).toBe("someone/new-model");
+  });
+});
+
+describe("상세페이지·캐릭터(동기 fal)", () => {
+  it("받은 자리에서 한 줄 — 응답 헤더의 요청 id 를 싣는다", async () => {
+    vi.stubGlobal("fetch", async (url: string) => String(url).startsWith("https://fal.run")
+      ? new Response(JSON.stringify({ images: [{ url: "https://cdn/x.png", content_type: "image/png" }] }), { headers: { "x-fal-request-id": "sync-1" } })
+      : new Response(new Uint8Array([1, 2, 3])));
+    await withLlmMeter(async () => {
+      await createPdpImageGenerator({ FAL_KEY: "k" })("nano-banana", { prompt: "p", systemPrompt: "s", aspectRatio: "3:4", references: [] });
+    });
+    expect(rows).toEqual([expect.objectContaining({ p_provider: "fal", p_model: "nano-banana", p_images: 1, p_fal_request_id: "sync-1" })]);
+  });
+
+  it("fal 이 거절하면 적지 않는다", async () => {
+    vi.stubGlobal("fetch", async () => new Response("busy", { status: 429 }));
+    await withLlmMeter(async () => {
+      await expect(createPdpImageGenerator({ FAL_KEY: "k" })("nano-banana", { prompt: "p", systemPrompt: "s", aspectRatio: "3:4", references: [] })).rejects.toThrow();
+    });
+    expect(rows).toEqual([]);
+  });
+});
+
+describe("리디자인(동기 fal)", () => {
+  it("받은 자리에서 한 줄 — 실제로 그린 모델 id 로", async () => {
+    vi.stubGlobal("fetch", async (url: string) => String(url).startsWith("https://fal.run")
+      ? new Response(JSON.stringify({ images: [{ url: "https://cdn/r.png" }] }), { headers: { "x-fal-request-id": "rd-1" } })
+      : new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } }));
+    await withLlmMeter(async () => {
+      await createRedesignImageGenerator({ FAL_KEY: "k" })({ prompt: "p", references: [], size: "1152x2048" });
+    });
+    expect(rows).toEqual([expect.objectContaining({ p_model: "gpt-image-2.5-flare", p_images: 1, p_fal_request_id: "rd-1" })]);
+  });
+});
+
+describe("광고 배경 제거", () => {
+  it("fal 이 요청을 받은 순간 한 줄 — 결과를 기다리다 시간이 넘어도 이미 적혀 있다", async () => {
+    const fal = {
+      subscribe: async (_endpoint: string, options: { onEnqueue?: (id: string) => void }) => {
+        options.onEnqueue?.("bg-1");
+        return { data: { image: { url: "https://fal/cut.png" } } };
+      },
+    };
+    await withLlmMeter(async () => { await removeBackground("https://fal/m.png", fal as never); });
+    expect(rows).toEqual([expect.objectContaining({ p_model: "fal-ai/birefnet/v2", p_images: 1, p_fal_request_id: "bg-1" })]);
+  });
+});

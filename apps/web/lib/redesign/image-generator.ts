@@ -1,6 +1,7 @@
 import { buildModelInput, modelById, resolveSize, type ImageModel } from "@fixup/sns-core";
 import type { RedesignImageGenerator } from "@fixup/redesign-core";
 import { createFalUploader } from "../fal/upload";
+import { recordAiCost } from "../llm/meter";
 
 /**
  * 리디자인이 **다른 도구와 같은 길로** 그림을 만든다.
@@ -129,6 +130,16 @@ export function createRedesignImageGenerator(
     });
 
     const text = await response.text();
+    if (response.ok) {
+      // 받은 그 자리에서 적는다(설계 §3.4). 아래에서 내려받기가 실패해도 값은 이미 나갔다.
+      recordAiCost({
+        provider: "fal",
+        model: model.id,
+        images: 1,
+        basis: "image_unit",
+        falRequestId: response.headers.get("x-fal-request-id"),
+      });
+    }
     if (!response.ok) {
       throw new RedesignFalError(
         response.status === 429

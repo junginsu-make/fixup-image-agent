@@ -13,6 +13,9 @@ import { describe, expect, it } from "vitest";
  *
  * **글로 지킬 수 없다.** 다음 사람이 「여기서 fal 을 한 번만 부르면 빠른데」로
  * 시작하는 것을 막는 것은 이 시험이다.
+ *
+ * **`decide` 는 네 번째 단계다**(설계 2026-09-30 §3.1) — 판정 예약도 `relay()` 로
+ * 요청 식별자를 가른다. 대신 부르는 세 라우트(project/plan/generate)와 같은 규칙.
  */
 
 const generate = readFileSync(new URL("../generate/route.ts", import.meta.url), "utf8");
@@ -189,11 +192,11 @@ describe("대신 부를 때의 요청 식별자", () => {
     expect(relayFile).toContain("stepIdempotencyKey");
   });
 
-  it("세 단계에 서로 다른 이름을 준다", () => {
+  it("네 단계에 서로 다른 이름을 준다", () => {
     const 단계들 = [...generate.matchAll(/relay\([\s\S]*?\}?,\s*"([a-z]+)"\)/g)].map((found) => found[1]);
 
-    expect(단계들.length).toBe(3);
-    expect(new Set(단계들).size).toBe(3);
+    expect(단계들.length).toBe(4);
+    expect(new Set(단계들).size).toBe(4);
   });
 });
 

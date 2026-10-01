@@ -58,7 +58,7 @@ describe("API 문", () => {
     vi.doMock("server-only", () => ({}));
     vi.doMock("../../supabase/server", () => ({
       createSupabaseServerClient: async () => ({
-        auth: { getUser: async () => ({ data: { user: { id: "u1" } }, error: null }) },
+        auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } }, error: null }) },
         from: () => ({
           select: () => ({ eq: () => ({ single: async () => ({ data: { ...profile, status } }) }) }),
         }),

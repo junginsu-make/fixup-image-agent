@@ -45,14 +45,17 @@ export async function read(response: Response, step: string) {
      * **오류를 뭉개지 않는다**(설계 §5-3). 「문제가 생겼습니다」로 덮으면
      * 사용자는 무엇을 고쳐야 할지 모르고, 같은 것을 또 눌러 값만 나간다.
      * 어디서 실패했는지와 그 라우트가 준 말을 함께 올린다.
+     *
+     * **다시 눌러도 안 풀린다고 안쪽이 말했으면 그대로 옮긴다**(설계 2026-09-30 §3.2).
+     * 멈춤(503)은 상태 코드만으로는 「잠시 뒤 다시」와 가를 수 없다.
      */
-    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status);
+    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status, body.retryable !== false);
   }
   return body;
 }
 
 export class EasyStepError extends Error {
-  constructor(readonly step: string, message: string, readonly status: number) {
+  constructor(readonly step: string, message: string, readonly status: number, readonly retryable = true) {
     super(message);
     this.name = "EasyStepError";
   }

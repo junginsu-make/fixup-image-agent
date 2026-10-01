@@ -1,5 +1,7 @@
 import { knowledgeStats, indexKnowledge, deleteKnowledge, RedesignError } from "@fixup/redesign-core";
 import { authenticateApiAdmin, authenticateApiMember } from "../../../../lib/membership/api";
+import { bindAiCaller, withLlmMeter } from "../../../../lib/llm/meter";
+import { recordPackageLlmUsage } from "../../../../lib/ai-cost/package-usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,11 +14,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   const auth = await authenticateApiAdmin();
   if (!auth.ok) return auth.response;
+  // 관리자 전용이라 예약하지 않는다(설계 §3.1 예외 2). 비용 기록만 한다.
+  bindAiCaller({ userId: auth.member.userId, requestId: null, operation: "admin:knowledge" });
   try {
     const body = await req.json();
-    return Response.json(await indexKnowledge({ name: String(body.name || "knowledge-file"), text: String(body.text || ""), kind: body.kind ? String(body.kind) : undefined, adminKey: process.env.KNOWLEDGE_ADMIN_KEY || "" }));
+    return Response.json(await indexKnowledge({ name: String(body.name || "knowledge-file"), text: String(body.text || ""), kind: body.kind ? String(body.kind) : undefined, adminKey: process.env.KNOWLEDGE_ADMIN_KEY || "", onUsage: recordPackageLlmUsage }));
   } catch (err) {
     if (err instanceof RedesignError) return Response.json({ error: err.message }, { status: err.status });
     return Response.json({ error: err instanceof Error ? err.message : "지식파일 인덱싱 중 오류가 발생했습니다." }, { status: 500 });

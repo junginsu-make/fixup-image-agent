@@ -1,6 +1,7 @@
 import { creditImagePlan, markCreditStarted } from "../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../lib/llm/meter";
 import { creditUnits } from "@fixup/shared";
 import { imageCreditUnits, maxImageUnitUsd } from "../../../../lib/credit-cost";
 import { regenerateAngle } from "../../../../lib/characters";
@@ -31,6 +32,10 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 

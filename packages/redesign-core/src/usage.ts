@@ -38,3 +38,16 @@ export function reportUsage(onUsage: UsageReporter | undefined, model: string, d
 
   onUsage({ model, inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 });
 }
+
+/**
+ * **그림을 직접 만든 것을 알린다**(설계 2026-09-30 §3.4).
+ *
+ * 주된 길은 앱이 넘긴 `generateImage`(fal)라 앱이 제 자리에서 적는다. 이 꾸러미가 업체를
+ * 직접 부르는 것은 그 통로가 없을 때(fal 키 없음)의 옛 길뿐이다 — 그 길도 값이 나간다.
+ */
+export type ImageUsage = { provider: "openai" | "google"; images: number };
+export type ImageUsageReporter = (usage: ImageUsage) => void;
+
+export function reportImageUsage(onImageUsage: ImageUsageReporter | undefined, provider: ImageUsage["provider"]): void {
+  if (typeof onImageUsage === "function") onImageUsage({ provider, images: 1 });
+}

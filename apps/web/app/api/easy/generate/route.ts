@@ -1,14 +1,15 @@
 import { DEFAULT_TEXT_MODEL, resolveTextModel } from "@fixup/shared";
-import { authenticateApiMember } from "../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
-import { easyChatPrompt, readEasyDecision } from "../../../easy/chat";
+import { easyChatPrompt, readEasyDecision, type EasyDecision } from "../../../easy/chat";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
 import { DETAIL_PAGE_GUIDE } from "../../../easy/detail-page";
 import { readEasyPhotos } from "../../../../lib/easy/read-photos";
-import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { llmSettleCost, readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { posterReferencesByIds } from "../../../../lib/poster/references";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { UNUSABLE_PHOTO, isPhotoId, missingIds, uniqueIds } from "../../../easy/photo-check";
@@ -166,29 +167,55 @@ async function turn(request: Request): Promise<Response> {
      *
      * **지난 대화를 같이 준다.** 「그거 말고 다른 걸로」 같은 말은 앞을 봐야
      * 뜻이 선다. 이번 말은 아직 안 남겼으므로 그대로 다 준다.
+     *
+     * **판정이 끝나면 바로 닫는다.** 되묻기·대화·주문 — 어느 끝으로 가든 판정
+     * 예약은 여기서 끝난다. 주문이면 기획·생성이 각자 따로 예약한다.
      */
     const 지난줄 = await store.listMessages(conversationId);
     // 고칠 원고가 있을 때만 「고치기」를 안다(2단계 §7). 없으면 고치기는 말로 읽는다.
     const 고칠원고 = await lastCardnewsProject(auth.member.userId, 지난줄);
     // 그 원고로 카드를 만들었나. 만들었을 때만 다시 그리기 · 게시글 · 받기를 안다(3단계 §5).
     const 만들었나 = Boolean(고칠원고 && isMade(고칠원고));
-    const decision = readEasyDecision(
-      await provider.decide(
-        easyChatPrompt(
-          지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
-          prompt,
-          /*
-           * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
-           * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
-           * (2026-09-21 실측).
-           */
-          붙인수,
-          Boolean(고칠원고),
-          만들었나,
-        ),
-      ),
-      { canRevise: Boolean(고칠원고), made: 만들었나 },
+
+    /*
+     * **판정도 값이 나간다 — 예약부터**(설계 2026-09-30 §3.1).
+     *
+     * 기존 작업 이름(`poster_image`) + `easy:decide`, 0 크레딧(D1). 크레딧이 없거나
+     * 운영자가 멈췄으면 여기서 막혀 글 모델을 안 부른다. 열쇠는 단계마다 가른다 —
+     * 바깥 열쇠를 그대로 쓰면 뒤의 기획·생성 예약이 `duplicate_request` 로 막힌다.
+     *
+     * **`relay` 를 그대로 빌린다** — 다른 라우트를 부르는 것은 아니지만, 헤더의
+     * 요청 식별자를 단계별로 가르는 일은 똑같다. 이것이 네 번째 단계(`decide`)다.
+     */
+    const 판정예약 = await reserveAiUsage(
+      relay(request, "/api/easy/generate", {}, "decide"), "poster_image", 0, freeCreditPlan("easy:decide"),
     );
+    if (!판정예약.ok) return 판정예약.response;
+
+    let decision: EasyDecision;
+    try {
+      decision = readEasyDecision(
+        await provider.decide(
+          easyChatPrompt(
+            지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
+            prompt,
+            /*
+             * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
+             * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
+             * (2026-09-21 실측).
+             */
+            붙인수,
+            Boolean(고칠원고),
+            만들었나,
+          ),
+        ),
+        { canRevise: Boolean(고칠원고), made: 만들었나 },
+      );
+    } catch (error) {
+      await settleAiUsage(판정예약, false, 0, "easy_decide_failed", llmSettleCost());
+      throw error;
+    }
+    await settleAiUsage(판정예약, true, 0, undefined, llmSettleCost());
 
     /*
      * **고른 갈래가 판단을 이긴다**(2단계 설계 §4). 「이미지 한 장 · 카드뉴스」 단추로
@@ -365,8 +392,8 @@ async function turn(request: Request): Promise<Response> {
         ok: false,
         step: error.step,
         message: error.message,
-        // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 화면이 단추를 안 낸다.
-        retryable: error.status !== 402 && error.status !== 403,
+        // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 안쪽이 「안 풀린다」고 한 것(멈춤 503)도 같다.
+        retryable: error.retryable && error.status !== 402 && error.status !== 403,
       }, { status: error.status });
     }
     return fail(error instanceof Error ? error.message : "만들지 못했습니다.");

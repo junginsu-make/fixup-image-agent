@@ -1,4 +1,5 @@
 import { createFalClient } from "@fal-ai/client";
+import { recordAiCost } from "../llm/meter";
 
 /**
  * 배경을 지워 오브젝트만 남긴다.
@@ -62,7 +63,12 @@ export function assertCutoutSize(byteLength: number, limit = MAX_CUTOUT_BYTES): 
 export interface FalSubscriber {
   subscribe(
     endpoint: string,
-    options: { input: Record<string, unknown>; abortSignal?: AbortSignal },
+    options: {
+      input: Record<string, unknown>;
+      abortSignal?: AbortSignal;
+      /** fal 이 요청을 받은 순간. **여기서 비용을 적는다** — 제출하면 과금이 끝난다(설계 §3.4). */
+      onEnqueue?: (requestId: string) => void;
+    },
   ): Promise<unknown>;
 }
 
@@ -107,6 +113,13 @@ export async function removeBackground(
       fal.subscribe(BACKGROUND_REMOVAL_ENDPOINT, {
         input: { image_url: imageUrl },
         abortSignal: controller.signal,
+        onEnqueue: (requestId) => recordAiCost({
+          provider: "fal",
+          model: BACKGROUND_REMOVAL_ENDPOINT,
+          images: 1,
+          basis: "image_unit",
+          falRequestId: requestId,
+        }),
       }),
       expiry,
     ]);
