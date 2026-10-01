@@ -5,7 +5,8 @@ import {
   resolveEndpoint,
   type ImageGenerator,
 } from "@fixup/pdp-core";
-import { recordAiCost } from "../llm/meter";
+import { envFalRouter, type FalRouter } from "../fal/route";
+import { FalRunTimeoutError, runFalQueued, type RunFalDeps } from "../fal/run";
 
 /**
  * 상세페이지·캐릭터가 fal 로 그림을 만드는 **유일한 자리**.
@@ -16,9 +17,11 @@ import { recordAiCost } from "../llm/meter";
  *
  * 무엇을 보낼지(엔드포인트·페이로드)는 여전히 코어가 정한다. 그건 도메인
  * 지식이라 옮기면 두 곳으로 갈린다.
+ *
+ * **대기열로 보낸다**(설계 2026-09-29 §3.3, S3a). 동기 `fal.run` 은 fal 계정의 동시 한도를 넘으면
+ * 곧바로 429 였다. 대기열은 fal 쪽에서 기다린다. 이 함수의 모양(한 장 → base64)과 비용 한 줄
+ * (제출 자리, `lib/fal/http.ts`)은 그대로다.
  */
-
-const FAL_BASE_URL = "https://fal.run";
 
 type Env = Record<string, string | undefined>;
 
@@ -34,54 +37,52 @@ function requireKey(environment: Env) {
   return apiKey;
 }
 
-export function createPdpImageGenerator(environment: Env = process.env): ImageGenerator {
-  const apiKey = requireKey(environment);
+function statusOf(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+/** fal 이 시작조차 못 했다(대기 상한). 몰린 것이라 429 와 같은 말을 한다. */
+function isStartTimeout(error: unknown): boolean {
+  return statusOf(error) === 504 && (error as { timeoutType?: unknown }).timeoutType === "user";
+}
+
+/** fal 쪽 실패를 상세페이지의 말로. 429 를 다른 실패와 섞으면 사용자에게 엉뚱한 안내가 간다. */
+function pdpFailure(error: unknown, endpoint: string): PdpServiceError {
+  if (error instanceof PdpServiceError) return error;
+  const status = statusOf(error);
+  const detail = `fal ${endpoint} ${status ?? "error"}: ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}`;
+  if (status === 429 || isStartTimeout(error)) {
+    return new PdpServiceError("AI_QUOTA_EXCEEDED", "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요.", detail);
+  }
+  if (error instanceof FalRunTimeoutError) {
+    return new PdpServiceError("PDP_IMAGE_GENERATION_FAILED", "이미지 생성이 너무 오래 걸렸습니다. 다시 시도해 주세요.", detail);
+  }
+  return new PdpServiceError("PDP_IMAGE_GENERATION_FAILED", "이미지를 생성하지 못했습니다.", detail);
+}
+
+export function createPdpImageGenerator(
+  environment: Env = process.env,
+  router: FalRouter = envFalRouter(environment),
+  deps: Partial<RunFalDeps> = {},
+): ImageGenerator {
+  requireKey(environment);
 
   return async (model, input) => {
     const endpoint = resolveEndpoint(model, input.references);
-    const response = await fetch(`${FAL_BASE_URL}/${endpoint}`, {
-      method: "POST",
-      headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildFalPayload(model, input)),
-    });
-
-    const text = await response.text();
-    if (response.ok) {
-      /*
-        **받은 그 자리에서 적는다**(설계 §3.4). 아래에서 응답을 못 읽어도 값은 이미 나갔다.
-        동기 호출이라 한 요청에 한 번뿐이다 — fal 요청 id 는 헤더에 있으면 싣는다.
-      */
-      recordAiCost({
-        provider: "fal",
-        model,
-        images: 1,
-        basis: "image_unit",
-        falRequestId: response.headers.get("x-fal-request-id"),
-      });
-    }
-    if (!response.ok) {
-      throw new PdpServiceError(
-        response.status === 429 ? "AI_QUOTA_EXCEEDED" : "PDP_IMAGE_GENERATION_FAILED",
-        response.status === 429
-          ? "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요."
-          : "이미지를 생성하지 못했습니다.",
-        `fal ${endpoint} responded ${response.status}: ${text.slice(0, 300)}`,
-      );
-    }
-
-    let parsed: unknown;
+    let data: unknown;
     try {
-      parsed = JSON.parse(text) as unknown;
-    } catch {
-      throw new PdpServiceError(
-        "AI_RESPONSE_INVALID",
-        "이미지 생성 응답을 해석하지 못했습니다.",
-        "fal response was not valid JSON.",
-      );
+      ({ data } = await runFalQueued(
+        router,
+        { endpoint, input: buildFalPayload(model, input), cost: { model, images: 1 } },
+        deps,
+      ));
+    } catch (error) {
+      throw pdpFailure(error, endpoint);
     }
 
     // fal 은 호스팅 URL 로 돌려준다. 이 파이프라인은 base64 를 쓰므로 받아 바꾼다.
-    const image = falImageFrom(parsed);
+    const image = falImageFrom(data);
     const downloaded = await fetch(image.url);
     if (!downloaded.ok) {
       throw new PdpServiceError(
