@@ -1,7 +1,8 @@
 import { buildModelInput, modelById, resolveSize, type ImageModel } from "@fixup/sns-core";
 import type { RedesignImageGenerator } from "@fixup/redesign-core";
 import { createFalUploader } from "../fal/upload";
-import { recordAiCost } from "../llm/meter";
+import { envFalRouter, type FalRouter } from "../fal/route";
+import { FalRunTimeoutError, runFalQueued, type RunFalDeps } from "../fal/run";
 
 /**
  * 리디자인이 **다른 도구와 같은 길로** 그림을 만든다.
@@ -44,8 +45,6 @@ export const REDESIGN_FAL_MODEL = "gpt-image-2.5-flare";
 export function redesignFalModelFor(choice: string | undefined): string {
   return String(choice) === "google" ? "nano-banana-pro" : REDESIGN_FAL_MODEL;
 }
-
-const FAL_BASE_URL = "https://fal.run";
 
 export class RedesignFalError extends Error {}
 
@@ -100,9 +99,32 @@ export function imageUrlFrom(result: unknown): string {
   return image.url;
 }
 
+function statusOf(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+/**
+ * fal 쪽 실패를 리디자인의 말로. 문구는 동기 호출 때와 같다 — 429(와 fal 이 대기 상한 안에 시작을
+ * 못 한 504 user)는 「몰렸다」, 상태 코드가 있으면 그 번호, 없으면(네트워크 등) 원래 예외 그대로.
+ */
+function redesignFailure(error: unknown): unknown {
+  const status = statusOf(error);
+  if (status === 429 || (status === 504 && (error as { timeoutType?: unknown }).timeoutType === "user")) {
+    return new RedesignFalError("이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  if (error instanceof FalRunTimeoutError) {
+    return new RedesignFalError("이미지 생성이 너무 오래 걸렸습니다. 다시 시도해 주세요.");
+  }
+  if (status !== undefined) return new RedesignFalError(`이미지를 생성하지 못했습니다 (${status}).`);
+  return error;
+}
+
 export function createRedesignImageGenerator(
   environment: Record<string, string | undefined> = process.env,
   modelId: string = REDESIGN_FAL_MODEL,
+  router: FalRouter = envFalRouter(environment),
+  deps: Partial<RunFalDeps> = {},
 ): RedesignImageGenerator {
   const apiKey = requireKey(environment);
   const uploader = createFalUploader(apiKey);
@@ -123,32 +145,15 @@ export function createRedesignImageGenerator(
 
     const { endpoint, body } = buildRedesignFalRequest({ model, prompt, imageUrls, size });
 
-    const response = await fetch(`${FAL_BASE_URL}/${endpoint}`, {
-      method: "POST",
-      headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    const text = await response.text();
-    if (response.ok) {
-      // 받은 그 자리에서 적는다(설계 §3.4). 아래에서 내려받기가 실패해도 값은 이미 나갔다.
-      recordAiCost({
-        provider: "fal",
-        model: model.id,
-        images: 1,
-        basis: "image_unit",
-        falRequestId: response.headers.get("x-fal-request-id"),
-      });
-    }
-    if (!response.ok) {
-      throw new RedesignFalError(
-        response.status === 429
-          ? "이미지 생성 요청이 몰렸습니다. 잠시 후 다시 시도해 주세요."
-          : `이미지를 생성하지 못했습니다 (${response.status}).`,
-      );
+    // 대기열로 보낸다(설계 2026-09-29 §3.3, S3a). 비용 한 줄은 제출 자리(`lib/fal/http.ts`)에서.
+    let data: unknown;
+    try {
+      ({ data } = await runFalQueued(router, { endpoint, input: body, cost: { model: model.id, images: 1 } }, deps));
+    } catch (error) {
+      throw redesignFailure(error);
     }
 
-    const url = imageUrlFrom(JSON.parse(text) as unknown);
+    const url = imageUrlFrom(data);
     const downloaded = await fetch(url);
     if (!downloaded.ok) throw new RedesignFalError("만든 이미지를 내려받지 못했습니다.");
 

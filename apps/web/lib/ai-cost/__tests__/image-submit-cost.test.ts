@@ -104,11 +104,9 @@ describe("상세페이지·캐릭터(대기열 fal)", () => {
   });
 });
 
-describe("리디자인(동기 fal)", () => {
-  it("받은 자리에서 한 줄 — 실제로 그린 모델 id 로", async () => {
-    vi.stubGlobal("fetch", async (url: string) => String(url).startsWith("https://fal.run")
-      ? new Response(JSON.stringify({ images: [{ url: "https://cdn/r.png" }] }), { headers: { "x-fal-request-id": "rd-1" } })
-      : new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } }));
+describe("리디자인(대기열 fal)", () => {
+  it("제출 자리에서 한 줄 — 실제로 그린 모델 id 로", async () => {
+    vi.stubGlobal("fetch", 대기열(() => json({ request_id: "rd-1" }), { images: [{ url: "https://cdn/r.png" }] }));
     await withLlmMeter(async () => {
       await createRedesignImageGenerator({ FAL_KEY: "k" })({ prompt: "p", references: [], size: "1152x2048" });
     });
