@@ -31,6 +31,8 @@ const 만든입력: unknown[] = [];
 const 지운것: string[] = [];
 const 받은쓰기: string[] = [];
 let 시작실패: Error | null = null;
+const 손본것: Array<Record<string, unknown>> = [];
+let 보관한것: { id: string; title: string } | null = { id: "a1", title: "t · 1번 장 이전 그림" };
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -48,7 +50,24 @@ vi.mock("../../../../lib/easy/store", () => ({
   }),
 }));
 vi.mock("../../../../lib/easy/chat-provider", () => ({
-  createEasyChatProvider: () => ({ writeEnding: async () => ({ headline: "h", body: "b" }) }),
+  createEasyChatProvider: () => ({
+    writeEnding: async () => ({ headline: "h", body: "b" }),
+    editCard: async () => ({ headline: "말로 고친 제목", body: "", accent: "", footnote: "" }),
+  }),
+}));
+vi.mock("../../../../lib/easy/cardnews-after-steps", () => ({
+  editCard: async (_r: Request, project: { id: string }, index: number, change: unknown, writeEdit?: unknown) => {
+    손본것.push({ what: "edit", index, change, writer: typeof writeEdit });
+    return { project: { ...project, edited: true }, needsRedraw: true };
+  },
+  redoCard: async (_r: Request, userId: string, project: { id: string }, index: number, note?: string) => {
+    손본것.push({ what: "redo", userId, index, note });
+    return { project: { ...project, status: "generating" }, archived: 보관한것 };
+  },
+  captionCard: async (_r: Request, id: string) => {
+    손본것.push({ what: "caption", id });
+    return { id, captioned: true };
+  },
 }));
 vi.mock("../../../../lib/easy/cardnews-steps", () => ({
   cardnewsProject: async (_userId: string, id: string) => 카드작업들[id] ?? null,
@@ -81,6 +100,8 @@ beforeEach(() => {
   새원고 = 원고(2);
   남긴줄.length = 0; 시작한것.length = 0; 만든입력.length = 0; 지운것.length = 0; 받은쓰기.length = 0;
   시작실패 = null;
+  손본것.length = 0;
+  보관한것 = { id: "a1", title: "t · 1번 장 이전 그림" };
 });
 
 describe("「이대로 만들기」 (2단계 §8)", () => {
@@ -172,5 +193,85 @@ describe("조건 바꾸기 (2단계 §7)", () => {
     expect(json.talked).toBe(true);
     expect(남긴줄.map((row) => row.role)).toEqual(["assistant"]);
     expect(남긴줄[0]!.body).toContain("내용이 짧습니다");
+  });
+});
+
+describe("만든 카드뉴스 손보기 (3단계 §6)", () => {
+  const 만든 = () => ({ ...원고(2), status: "copy_ready", data: { ...원고(2).data, flow: { ...원고(2).data.flow, cards: [
+    { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "done", assetPath: "me-1/sns/c1/1.png" },
+    { index: 2, role: "body", kind: "generated", copy: { headline: "b" }, status: "done", assetPath: "me-1/sns/c1/2.png" },
+  ] } } });
+  const 이대화 = () => { 지난줄들 = [{ id: "r1", role: "image", workId: "c1" }]; };
+
+  /** Review Focus 1 */
+  it("만든 작업은 전체 만들기를 거절한다(글을 고쳐 상태가 원고로 돌아와도)", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    const { status, json } = await 보낸다({ action: "generate", projectId: "c1" });
+    expect(status).toBe(409);
+    expect(json.message).toContain("이미 만든 카드뉴스");
+    expect(시작한것).toEqual([]);
+  });
+
+  it("칸으로 온 글 고치기는 그 장을 고치고 대화에 남긴다", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    const { json } = await 보낸다({ action: "edit", projectId: "c1", index: 2, copy: { headline: "새" } });
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { copy: { headline: "새" } }, writer: "undefined" }]);
+    expect(남긴줄.map((row) => row.body)).toEqual(["2번 장 글을 고쳤습니다."]);
+    expect(json).toMatchObject({ ok: true, needsRedraw: true, project: { edited: true } });
+  });
+
+  it("말로 온 글 고치기도 받는다", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    await 보낸다({ action: "edit", projectId: "c1", index: 1, words: "더 짧게" });
+    expect(손본것[0]).toMatchObject({ index: 1, change: { words: "더 짧게" }, writer: "function" });
+  });
+
+  it("다시 만들기는 보관한 이름을 대화에 남긴다", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    const { json } = await 보낸다({ action: "redo", projectId: "c1", index: 1, note: "글자 크게" });
+    expect(손본것).toEqual([{ what: "redo", userId: "me-1", index: 1, note: "글자 크게" }]);
+    expect(남긴줄[0]!.body).toBe("1번 장을 다시 만들고 있습니다. 앞 그림은 라이브러리에 「t · 1번 장 이전 그림」으로 보관했습니다.");
+    expect(json.project.status).toBe("generating");
+  });
+
+  it("그림이 없던 장은 보관 문장 없이 남긴다", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    보관한것 = null;
+    await 보낸다({ action: "redo", projectId: "c1", index: 1 });
+    expect(남긴줄[0]!.body).toBe("1번 장을 다시 만들고 있습니다.");
+  });
+
+  it("번호가 이상하면 아무것도 안 하고 400", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    expect((await 보낸다({ action: "redo", projectId: "c1", index: "x" })).status).toBe(400);
+    expect((await 보낸다({ action: "edit", projectId: "c1", index: 0, copy: { body: "x" } })).status).toBe(400);
+    expect(손본것).toEqual([]);
+  });
+
+  /** Review Focus 5 */
+  it("만드는 중에 또 다시 만들기를 하면 카드뉴스 라우트의 안내를 그대로 전한다", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    const steps = await import("../../../../lib/easy/cardnews-after-steps");
+    const spy = vi.spyOn(steps, "redoCard").mockRejectedValueOnce(new EasyStepError("다시 만들기", "다른 카드가 생성 중입니다.", 409));
+    const { status, json } = await 보낸다({ action: "redo", projectId: "c1", index: 1 });
+    expect(status).toBe(409);
+    expect(json.message).toBe("다른 카드가 생성 중입니다.");
+    expect(남긴줄).toEqual([]);
+    spy.mockRestore();
+  });
+
+  it("게시글을 쓴다", async () => {
+    이대화();
+    카드작업들 = { c1: 만든() };
+    const { json } = await 보낸다({ action: "caption", projectId: "c1" });
+    expect(손본것).toEqual([{ what: "caption", id: "c1" }]);
+    expect(json.project).toMatchObject({ captioned: true });
   });
 });
