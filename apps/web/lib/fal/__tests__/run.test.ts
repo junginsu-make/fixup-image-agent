@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FalRunTimeoutError, runFalQueued } from "../run";
+import { FAL_RUN_QUEUED_POLL_MS, FalRunTimeoutError, runFalQueued } from "../run";
 import type { FalQueueOps, FalQueuePhase } from "../http";
 import type { FalRouter } from "../route";
 
@@ -45,7 +45,9 @@ describe("runFalQueued", () => {
     });
     expect(out).toEqual({ requestId: "r-1", data: { images: [{ url: "u" }] } });
     expect(fake.keys).toEqual(["key-2"]);
-    expect(sleeps).toEqual([1000, 1000]);
+    // 줄 서 있는 동안은 3초, 만드는 중이면 1초 — 100명이 몰려 대부분 줄에 있을 때 서버가 내는 상태 확인을 줄인다
+    expect(sleeps).toEqual([FAL_RUN_QUEUED_POLL_MS, 1000]);
+    expect(FAL_RUN_QUEUED_POLL_MS).toBe(3000);
     expect(router.submitted).toEqual([{ endpoint: "fal-ai/x", input: { a: 1 }, options: { startTimeoutS: 120, cost: { model: "m", images: 1 } } }]);
     expect(router.done).toEqual(["r-1"]);
   });
@@ -95,5 +97,16 @@ describe("runFalQueued", () => {
     const seen: string[] = [];
     await runFalQueued(길(), { endpoint: "e", input: {}, onSubmitted: (id) => seen.push(id) }, { opsFor: 묻기(["completed"]).opsFor });
     expect(seen).toEqual(["r-1"]);
+  });
+
+  it("onSubmitted 가 던져도 finished — 계정 칸이 묶이지 않는다", async () => {
+    const router = 길();
+    const boom = () => { throw new Error("hook"); };
+    await expect(runFalQueued(router, { endpoint: "e", input: {}, onSubmitted: boom }, { opsFor: 묻기(["completed"]).opsFor })).rejects.toThrow("hook");
+    expect(router.done).toEqual(["r-1"]);
+  });
+
+  it("상한 초과 문구는 상세페이지·리디자인과 같다", () => {
+    expect(new FalRunTimeoutError("r").message).toBe("이미지 생성이 너무 오래 걸렸습니다. 다시 시도해 주세요.");
   });
 });
