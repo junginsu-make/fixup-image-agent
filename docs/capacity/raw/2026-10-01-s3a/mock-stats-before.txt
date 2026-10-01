@@ -1,0 +1,2 @@
+# 가짜 AI /__stats 중 fal/queue 관련 경로만 (Step 4, "전" 배포 직후, k6 LEVELS=1,3 HOLD=150s 실행 후)
+fal.run POST fal-ai/nano-banana-pro/edit 66 {'200': 66}
