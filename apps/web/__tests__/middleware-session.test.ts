@@ -45,7 +45,9 @@ vi.mock("@supabase/ssr", () => ({
           // 진짜 getClaims 는 만료가 가까우면 getSession 안에서 갱신하고 setAll 로 쿠키를 다시 쓴다.
           if (갱신한다) options.cookies.setAll([{ name: AUTH_COOKIE, value: "새토큰", options: { path: "/" } }]);
           return {
-            data: currentUser ? { claims: { sub: currentUser.id, session_id: currentSessionId ?? undefined } } : null,
+            data: currentUser
+              ? { claims: { sub: currentUser.id, session_id: currentSessionId ?? undefined, role: "service_role" } }
+              : null,
             error: null,
           };
         },

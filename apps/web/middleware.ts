@@ -116,8 +116,11 @@ export async function middleware(request: NextRequest) {
     const window = sessionWindow(request.cookies.get(SESSION_START_COOKIE)?.value, new Date(), sessionId);
     if (window.state === "expired") {
       /*
-        **서버 쪽 로그인도 끊는다**(2026-09-29 독립 리뷰). 쿠키만 지우면 만료 전에
-        복사해 둔 토큰이 계속 쓰인다. 이 기기의 로그인만 끊는다 — 다른 기기는 제
+        **서버 쪽 로그인도 끊는다**(2026-09-29 독립 리뷰, 2026-10-01 주석 정정).
+        `signOut({ scope: "local" })` 은 이 기기의 **갱신**만 막는다. 만료 전에
+        이미 복사해 둔 access token 은 그 자체 만료 시각(exp, 최대 1시간)까지는
+        여전히 통과한다 — getClaims 가 서버 왕복 없이 서명만 보기 때문이다
+        (설계 §3.2 의 맞바꿈). 이 기기의 로그인만 끊는다. 다른 기기는 제
         24시간을 따로 잰다. 끊기에 실패해도 아래에서 쿠키는 지운다.
       */
       try {

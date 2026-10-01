@@ -18,6 +18,22 @@ type ClaimsAuth = Pick<SupabaseClient["auth"], "getClaims">;
 
 const text = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
 
+/** 예외 한 줄을 1분에 한 번만 남긴다 — 100명이 몰려도 로그가 안 넘친다. */
+const WARN_WINDOW_MS = 60_000;
+let lastWarnAt = 0;
+
+/**
+ * **이름만 남긴다.** 메시지 본문엔 토큰 조각이 섞일 수 있다(auth-js 는 디코드
+ * 실패를 메시지에 그대로 담는다) — 로그에 남기지 않는다.
+ */
+function 예외를적는다(exception: unknown) {
+  const now = Date.now();
+  if (now - lastWarnAt < WARN_WINDOW_MS) return;
+  lastWarnAt = now;
+  const name = exception instanceof Error ? exception.name : "Unknown";
+  console.warn(`[auth-claims] getClaims 예외: ${name}`);
+}
+
 /**
  * `getUser()` 대신 `getClaims()` 로 로그인을 확인한다.
  *
@@ -38,7 +54,8 @@ export async function verifiedLogin(auth: ClaimsAuth): Promise<VerifiedLogin | n
   let error: unknown;
   try {
     ({ data, error } = await auth.getClaims());
-  } catch {
+  } catch (exception) {
+    예외를적는다(exception);
     return null;
   }
   if (error || !data) return null;

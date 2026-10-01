@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { verifiedLogin } from "../verified-login";
 
 /**
@@ -36,6 +36,29 @@ describe("verifiedLogin", () => {
   it("변조된 토큰으로 getClaims 가 예외를 던지면 손님이다 — 터지지 않는다", async () => {
     const auth = { getClaims: async () => { throw new Error("Invalid alg claim"); } } as never;
     await expect(verifiedLogin(auth)).resolves.toBeNull();
+  });
+
+  /**
+   * **이름만, 1분에 한 줄**(2026-10-01 최종 리뷰).
+   *
+   * 토큰 조각이 메시지 본문에 섞일 수 있어 이름만 남긴다. 100명이 몰려 같은
+   * 순간 다 터져도 로그 한 줄이다 — 두 번 던져도 1분 안엔 늘지 않는다.
+   *
+   * 같은 모듈의 횟수 상태가 다른 시험(「변조된 토큰…」)과 섞이지 않도록
+   * `resetModules` 로 이 시험만의 새 모듈을 쓴다.
+   */
+  it("예외는 1분에 한 줄만 남긴다 — 이름만, 메시지 본문은 없다", async () => {
+    vi.resetModules();
+    const { verifiedLogin: 새로고친verifiedLogin } = await import("../verified-login");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const auth = { getClaims: async () => { throw new Error("토큰 조각이 든 메시지"); } } as never;
+
+    await 새로고친verifiedLogin(auth);
+    await 새로고친verifiedLogin(auth);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toBe("[auth-claims] getClaims 예외: Error");
+    warn.mockRestore();
   });
 
   it.each([undefined, "", 42])("sub 가 %s 이면 손님이다 — 누구인지 모르는 로그인은 없다", async (sub) => {
