@@ -8,7 +8,7 @@ vi.mock("server-only", () => ({}));
 
 const { replaceAiCostWriterForTest } = await import("../../ai-cost/write");
 const { withLlmMeter } = await import("../../llm/meter");
-const { FalHttpError, falQueueOps, submitFalQueue } = await import("../http");
+const { FAL_KEY_PROBE_URL, FalHttpError, checkFalKey, falQueueOps, submitFalQueue } = await import("../http");
 
 type Row = Record<string, unknown>;
 let rows: Row[] = [];
@@ -91,5 +91,33 @@ describe("falQueueOps", () => {
     const answers = ["IN_QUEUE", "IN_PROGRESS", "COMPLETED"];
     const ops = falQueueOps("k", () => ({ queue: { status: async () => ({ status: answers.shift() }) } }) as never);
     expect([await ops.status("e", "r"), await ops.status("e", "r"), await ops.status("e", "r")]).toEqual(["queued", "in_progress", "completed"]);
+  });
+});
+
+describe("checkFalKey", () => {
+  const 답 = (status: number, body = "") => async () => new Response(body, { status });
+
+  it("없는 요청의 상태를 Key 인증으로 묻는다 — 그림을 만들지 않는다", async () => {
+    const seen: Array<{ url: string; init?: RequestInit }> = [];
+    await checkFalKey("k-1", async (url, init) => { seen.push({ url, init }); return new Response("", { status: 404 }); });
+    expect(seen[0]!.url).toBe(FAL_KEY_PROBE_URL);
+    expect(seen[0]!.url).toMatch(/\/requests\/[0-9a-f-]+\/status$/);
+    expect(seen[0]!.init).toEqual({ method: "GET", headers: { Authorization: "Key k-1" } });
+  });
+
+  it("404(그런 요청 없음)·200 이면 키가 살아 있다", async () => {
+    expect(await checkFalKey("k", 답(404, '{"status":"NOT_FOUND"}'))).toEqual({ ok: true });
+    expect(await checkFalKey("k", 답(200))).toEqual({ ok: true });
+  });
+
+  it("401·403 이면 키가 틀렸다", async () => {
+    expect(await checkFalKey("k", 답(401, '{"detail":"invalid key credentials"}'))).toEqual({ ok: false, reason: "invalid", status: 401, detail: '{"detail":"invalid key credentials"}' });
+    expect(await checkFalKey("k", 답(403))).toMatchObject({ ok: false, reason: "invalid" });
+  });
+
+  it("그 밖(5xx·429·네트워크)은 「지금 확인할 수 없음」— 틀렸다고 말하지 않는다", async () => {
+    expect(await checkFalKey("k", 답(503))).toMatchObject({ ok: false, reason: "unavailable", status: 503 });
+    expect(await checkFalKey("k", 답(429))).toMatchObject({ ok: false, reason: "unavailable" });
+    expect(await checkFalKey("k", async () => { throw new Error("fetch failed"); })).toMatchObject({ ok: false, reason: "unavailable" });
   });
 });

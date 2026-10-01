@@ -99,6 +99,33 @@ export interface FalQueueOps {
 
 type ClientFactory = (config: { credentials: string; retry: { maxRetries: number } }) => Pick<FalClient, "queue">;
 
+/**
+ * **이미지를 만들지 않고** 키가 살아 있는지 본다(관리자 화면의 등록·「다시 확인」).
+ *
+ * 없는 요청 번호의 상태를 묻는다. 2026-10-01 실측: 엉터리 키는 `401 {"detail":"invalid key credentials"}`,
+ * 모양이 틀린 키·빈 키도 401 이다. 맞는 키는 「그런 요청 없음」(404)을 받는다. 값이 들지 않는다.
+ *
+ * **한계**: 잔액 소진 잠김은 여기서 안 드러날 수 있다 — 실제 생성에서만 드러난다(설계 §3.3). 화면에 적는다.
+ */
+export const FAL_KEY_PROBE_URL = `${FAL_QUEUE_BASE}/fal-ai/nano-banana-pro/requests/00000000-0000-4000-8000-000000000000/status`;
+
+export type FalKeyCheck =
+  | { ok: true }
+  | { ok: false; reason: "invalid" | "unavailable"; status?: number; detail: string };
+
+export async function checkFalKey(key: string, fetchImpl: FetchLike = fetch): Promise<FalKeyCheck> {
+  let response: Response;
+  try {
+    response = await fetchImpl(FAL_KEY_PROBE_URL, { method: "GET", headers: { Authorization: `Key ${key}` } });
+  } catch (error) {
+    return { ok: false, reason: "unavailable", detail: error instanceof Error ? error.message : String(error) };
+  }
+  const detail = (await response.text().catch(() => "")).slice(0, 300);
+  if (response.ok || response.status === 404) return { ok: true };
+  if (response.status === 401 || response.status === 403) return { ok: false, reason: "invalid", status: response.status, detail };
+  return { ok: false, reason: "unavailable", status: response.status, detail };
+}
+
 export function falQueueOps(key: string, factory: ClientFactory = createFalClient): FalQueueOps {
   const client = factory({ credentials: key, retry: { maxRetries: 0 } });
   return {
