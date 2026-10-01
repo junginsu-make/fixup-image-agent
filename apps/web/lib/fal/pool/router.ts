@@ -86,7 +86,11 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
   const log = deps.log ?? ((message: string, detail?: unknown) => console.error(message, detail));
   const remembered = new Map<string, FalRoute>();
   let snapshot: Snapshot | null = null;
+  /** 마지막으로 **성공한** 적재 — `refresh()` 로도 비우지 않는다. DB 가 끊기면 이것으로 버틴다. */
+  let lastGood: Snapshot | null = null;
   let loading: Promise<Snapshot> | null = null;
+  /** `refresh()` 때마다 하나 올린다. 전에 떠 있던 적재가 뒤늦게 끝나도 이 수가 바뀌어 있으면 캐시에 쓰지 않는다. */
+  let generation = 0;
 
   const remember = (requestId: string, route: FalRoute) => {
     remembered.set(requestId, route);
@@ -109,6 +113,8 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
         const key = openFalKey(deps.masterKey, row.id, { ciphertext: row.key_ciphertext, iv: row.key_iv, tag: row.key_tag });
         accounts.set(row.id, { id: row.id, name: row.name, key, enabled: row.enabled, state: row.state });
       } catch {
+        // 이미 알려진 상태면 또 표시·메일 보내지 않는다 — 풀릴 때까지 30초마다 다시 적재될 때마다 반복될 뻔했다.
+        if (row.state === "decrypt_failed") continue;
         const detail = "키를 풀지 못했습니다(서버 열쇠가 바뀌었거나 값이 손상됨).";
         const changed = await deps.store.mark(row.id, "decrypt_failed", detail).catch(() => false);
         if (changed) alert({ kind: "decrypt_failed", accountName: row.name, detail });
@@ -117,20 +123,61 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
     return { at: now(), accounts, anyRow: rows.length > 0 };
   }
 
-  function current(force = false): Promise<Snapshot> {
-    if (!force && snapshot && now() - snapshot.at < FAL_POOL_REFRESH_MS) return Promise.resolve(snapshot);
-    loading ??= load()
+  /** 계정이 하나도 없는 것처럼 — 풀이 꺼졌을 때(오늘)와 읽기 자체가 실패했을 때(새 장애) 같은 모양으로 쓴다. */
+  function emptySnapshot(): Snapshot {
+    return { at: now(), accounts: new Map(), anyRow: false };
+  }
+
+  /**
+   * 목록을 하나 적재한다. `refresh()` 가 그 사이 불렸으면(세대 번호가 바뀌면) 늦게 끝난 결과를 캐시에
+   * 쓰지 않는다. **읽기 자체가 실패하면**(DB 장애) 새 하드 의존을 만들지 않는다 — 전에 성공한 목록이
+   * 있으면 그걸 그대로 쓰고, 한 번도 없었으면 풀이 비었을 때와 같은 모양으로 서버 `FAL_KEY` 로 넘긴다.
+   */
+  function startLoad(): Promise<Snapshot> {
+    const gen = generation;
+    const promise = load()
       .then((loaded) => {
-        snapshot = loaded;
+        if (gen === generation) {
+          snapshot = loaded;
+          lastGood = loaded;
+        }
         return loaded;
       })
+      .catch((error: unknown) => {
+        log("[fal-pool] 계정 목록을 읽지 못했습니다", { message: error instanceof Error ? error.message : String(error) });
+        const fallback = lastGood ?? emptySnapshot();
+        if (gen === generation) snapshot = fallback;
+        return fallback;
+      })
       .finally(() => {
-        loading = null;
+        if (loading === promise) loading = null;
       });
-    return loading;
+    loading = promise;
+    return promise;
+  }
+
+  function current(force = false): Promise<Snapshot> {
+    if (!force && snapshot && now() - snapshot.at < FAL_POOL_REFRESH_MS) return Promise.resolve(snapshot);
+    if (!force && loading) return loading;
+    return startLoad();
   }
 
   const poolOn = (s: Snapshot) => [...s.accounts.values()].some((account) => account.enabled);
+
+  /**
+   * 계정 상태를 바꾼 결과를 **새 스냅샷**으로 돌려준다(불변). 지금 캐시가 이 스냅샷이면 바로 덮어써,
+   * 막 막힌 계정을 `uploadRoute` 가 최대 30초 동안 더 돌려주는 일이 없게 한다.
+   */
+  function withAccountState(snap: Snapshot, accountId: string, state: FalAccountState): Snapshot {
+    const account = snap.accounts.get(accountId);
+    if (!account) return snap;
+    const accounts = new Map(snap.accounts);
+    accounts.set(accountId, { ...account, state });
+    const updated: Snapshot = { ...snap, accounts };
+    if (snapshot === snap) snapshot = updated;
+    if (lastGood === snap) lastGood = updated;
+    return updated;
+  }
 
   /** 받은 번호를 DB 에 붙인다. 세 번 해도 안 되면 기록만 — 같은 프로세스는 메모리로 찾는다. */
   async function bind(slotId: number, requestId: string) {
@@ -146,7 +193,9 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
 
   return {
     refresh() {
+      generation += 1;
       snapshot = null;
+      loading = null;
     },
 
     async submit(endpoint, input, options) {
@@ -179,7 +228,11 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
           tried.push(account.id);
           const detail = (error as FalHttpError).body.slice(0, 300);
           const changed = await deps.store.mark(account.id, failure, detail).catch(() => false);
-          if (changed && failure !== "rate_limited") alert({ kind: failure, accountName: account.name, detail });
+          if (changed && failure !== "rate_limited") {
+            // 캐시에도 바로 반영 — 안 그러면 uploadRoute 가 최대 30초 동안 막힌 계정을 더 돌려준다.
+            snap = withAccountState(snap, account.id, failure);
+            alert({ kind: failure, accountName: account.name, detail });
+          }
           continue;
         }
 

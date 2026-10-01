@@ -241,6 +241,109 @@ describe("보낸 요청은 보낸 계정으로 묻는다", () => {
   });
 });
 
+describe("고침 1차 — 막힌 계정은 캐시에도 바로 반영한다", () => {
+  it("401 뒤에는 그 계정을 캐시에서도 막아 uploadRoute 가 다른 계정을 쓴다", async () => {
+    const g = 가게([계정(A, "key-a", { limit: 30 }), 계정(B, "key-b")]);
+    const router = 만들기(g.store, fal({ "key-a": () => new FalHttpError(401, "invalid key credentials") }).submit);
+    await router.submit("fal-ai/x", {});
+    const route = await router.uploadRoute();
+    expect(route.accountId).toBe(B);
+  });
+
+  it("남은 계정이 없으면 uploadRoute 도 서버 FAL_KEY 로 — 방금 막힌 계정을 또 주지 않는다", async () => {
+    const g = 가게([계정(A, "key-a")]);
+    const router = 만들기(g.store, fal({ "key-a": () => new FalHttpError(401, "invalid key credentials") }).submit);
+    await router.submit("fal-ai/x", {}).catch(() => undefined);
+    expect(await router.uploadRoute()).toEqual({ accountId: null, key: "env-key" });
+  });
+});
+
+describe("고침 2차 — refresh() 와 겹친 낡은 적재는 캐시에 남지 않는다", () => {
+  it("refresh() 뒤에 늦게 끝난 적재는 버리고, 다음 제출은 새로 읽는다", async () => {
+    let release: (rows: FalAccountRow[]) => void = () => {};
+    let calls = 0;
+    const rowOf = (key: string): FalAccountRow => {
+      const sealed = sealFalKey(열쇠, A, key);
+      return { id: A, name: "fal-a", enabled: true, state: "ok", key_ciphertext: sealed.ciphertext, key_iv: sealed.iv, key_tag: sealed.tag };
+    };
+    const store: FalPoolStore = {
+      liveAccounts: () => {
+        calls += 1;
+        if (calls === 1) return new Promise((resolve) => { release = resolve; });
+        return Promise.resolve([rowOf("key-new")]);
+      },
+      claim: async () => ({ slotId: 1, accountId: A }),
+      bind: async () => {},
+      release: async () => {},
+      finish: async () => {},
+      accountOf: async () => null,
+      mark: async () => false,
+    };
+    const f = fal({ "key-old": () => "req-old", "key-new": () => "req-new" });
+    const router = 만들기(store, f.submit);
+
+    const first = router.submit("fal-ai/x", {});
+    router.refresh();
+    release([rowOf("key-old")]);
+    await first;
+
+    const second = await router.submit("fal-ai/x", {});
+    expect(calls).toBe(2);
+    expect(second.route.key).toBe("key-new");
+  });
+});
+
+describe("고침 3차 — 이미 decrypt_failed 인 계정은 다시 표시하지 않는다", () => {
+  it("매번 적재할 때마다 표시·메일을 또 보내지 않는다", async () => {
+    const g = 가게([계정(A, "key-a", { sealedFor: B, state: "decrypt_failed" })]);
+    const f = fal({});
+    await 만들기(g.store, f.submit).submit("fal-ai/x", {});
+    expect(g.marks).toEqual([]);
+    expect(alerts).toEqual([]);
+    expect(f.seen).toEqual(["env-key"]);
+  });
+});
+
+describe("고침 4차 — 계정 목록을 못 읽어도 생성은 계속된다", () => {
+  it("한 번도 읽은 적이 없는데 DB 가 죽으면 서버 FAL_KEY 로 — 새 하드 의존을 만들지 않는다", async () => {
+    const store: FalPoolStore = {
+      liveAccounts: async () => { throw new Error("db unreachable"); },
+      claim: async () => null,
+      bind: async () => {},
+      release: async () => {},
+      finish: async () => {},
+      accountOf: async () => null,
+      mark: async () => false,
+    };
+    const f = fal({});
+    const out = await 만들기(store, f.submit).submit("fal-ai/x", {});
+    expect(f.seen).toEqual(["env-key"]);
+    expect(out.route).toEqual({ accountId: null, key: "env-key" });
+  });
+
+  it("한 번 읽은 뒤 DB 가 끊겨도 이전에 읽은 목록을 그대로 쓴다", async () => {
+    const g = 가게([계정(A, "key-a")]);
+    let fail = false;
+    let liveCalls = 0;
+    const original = g.store.liveAccounts.bind(g.store);
+    g.store.liveAccounts = async () => {
+      liveCalls += 1;
+      if (fail) throw new Error("db down");
+      return original();
+    };
+    const f = fal({ "key-a": () => "req-1" });
+    const router = 만들기(g.store, f.submit);
+    await router.submit("fal-ai/x", {});
+
+    fail = true;
+    router.refresh();
+    const out = await router.submit("fal-ai/x", {});
+
+    expect(liveCalls).toBe(2);
+    expect(out.route).toEqual({ accountId: A, key: "key-a" });
+  });
+});
+
 describe("accountFailureOf", () => {
   it("429·401·403 만 계정 탓이다", () => {
     expect(accountFailureOf(new FalHttpError(429, ""))).toBe("rate_limited");
