@@ -12,7 +12,9 @@ import { describe, expect, it } from "vitest";
  * 번들을 만들지 않으니 통과했다.
  *
  * 그래서 `"use client"` 파일마다 상대 경로 import 를 끝까지 따라가, 그 안에 서버 전용 표시가 없는지 본다.
- * `import type` 은 지워지므로 따라가지 않는다. 패키지(`@…`, 이름) import 는 이 저장소 밖이라 보지 않는다.
+ * `import type` 은 지워지므로 따라가지 않는다. **잡지 못하는 것:** 패키지 import(`@fixup/*` 워크스페이스
+ * 패키지 포함)는 따라가지 않는다 — 지금 그 패키지들은 `@fixup/shared`·`zod` 만 들이지만, 서버 전용 의존성을
+ * 더하면 이 시험은 못 잡는다. 또 `import { type X }` 처럼 키워드 없이 타입만 가져와도 따라간다(거짓 실패 쪽).
  */
 const WEB_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SERVER_ONLY = /^\s*import\s+["']server-only["']/m;
