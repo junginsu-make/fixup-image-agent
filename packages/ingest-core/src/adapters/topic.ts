@@ -57,7 +57,11 @@ function outputCitations(response: unknown): TopicCitation[] {
 
 export function createOpenAITopicResearcher(
   environment: { OPENAI_API_KEY?: string; OPENAI_RESEARCH_MODEL?: string; OPENAI_DRAFT_MODEL?: string } = process.env as Record<string, string | undefined>,
-  recordUsage: TopicUsageRecorder = () => undefined,
+  /**
+   * 조사 한 번의 토큰·웹검색 횟수를 알린다. **필수다**(설계 2026-09-30 §3.4) — 기본값을 두면
+   * 안 넘긴 자리가 조용히 0원이 된다.
+   */
+  recordUsage: TopicUsageRecorder,
 ): TopicResearcher {
   if (!environment.OPENAI_API_KEY) throw new TopicResearchNotConfiguredError();
   const client = new OpenAI({ apiKey: environment.OPENAI_API_KEY });
@@ -216,10 +220,10 @@ function takeMarks(chunk: string): { text: string; citationIndexes: number[] } {
   return { text, citationIndexes };
 }
 
-export async function ingestTopic(input: { id: string; topic: string; researcher?: TopicResearcher }): Promise<SourceDocument> {
+export async function ingestTopic(input: { id: string; topic: string; researcher: TopicResearcher }): Promise<SourceDocument> {
   const topic = input.topic.trim();
   if (topic.length < 2 || topic.length > 180) throw new Error("조사할 주제는 2~180자로 적어 주세요.");
-  const result = await (input.researcher ?? createOpenAITopicResearcher())(topic);
+  const result = await input.researcher(topic);
   if (!hasNonCitationContent(result.text) || result.citations.length === 0) throw new SourceInsufficientContentError();
 
   const marked = markCitationPositions(result.text, result.citations);

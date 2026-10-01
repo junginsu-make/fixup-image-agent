@@ -8,7 +8,8 @@ import { chunkCreditUnits } from "../../../../lib/redesign/chunk-billing";
 import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { loadCharacterView } from "../../../../lib/characters";
 import { teamIdOf } from "../../../../lib/teams/store";
-import { readLlmMeter, recordLlmUsage, withLlmMeter } from "../../../../lib/llm/meter";
+import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { recordPackageLlmUsage, recordRedesignDirectImage } from "../../../../lib/ai-cost/package-usage";
 import { createRedesignImageGenerator, pixelSizeOf, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
 
@@ -195,7 +196,8 @@ async function generate(req: Request) {
       count: requestedCount,
       startSection: Number(form.get("startSection") || 1),
       generateImage,
-      onUsage: (usage) => recordLlmUsage(usage.model, usage.inputTokens, usage.outputTokens),
+      onUsage: recordPackageLlmUsage,
+      onImageUsage: recordRedesignDirectImage,
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
     });

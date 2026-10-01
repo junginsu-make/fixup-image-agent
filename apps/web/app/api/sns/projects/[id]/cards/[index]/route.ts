@@ -3,6 +3,7 @@ import { creditImagePlan, markCreditStarted } from "../../../../../../../lib/mem
 import { z } from "zod";
 import { creditUnits, llmCostUsd } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../../../../lib/llm/meter";
 import { estimateCost } from "../../../../../../sns/cost-estimate";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../../lib/sns-flow-store";
 import { snsSubmittedGenerationRequestStoreForUser } from "../../../../../../../lib/sns-generation-store";
@@ -66,6 +67,10 @@ export async function PATCH(request: Request, context: Context) {
 }
 
 export async function POST(request: Request, context: Context) {
+  return withLlmMeter(() => handlePost(request, context));
+}
+
+async function handlePost(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   /** `catch` 에서도 봐야 한다 — 제출이 실패하면 묶인 장을 돌려줘야 한다. */

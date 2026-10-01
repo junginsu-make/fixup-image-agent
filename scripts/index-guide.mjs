@@ -152,14 +152,17 @@ async function main() {
   }
 
   let 조각 = 0;
+  // 운영 앱 밖에서 돌므로 ai_cost_events 에는 안 적힌다(설계 2026-09-30 §3.4). 대신 여기서 센다.
+  let 임베딩토큰 = 0;
+  const onUsage = (usage) => { 임베딩토큰 += usage.inputTokens; };
   for (const 문서 of 문서들) {
-    const result = await indexKnowledgeDocument({ name: 문서.name, text: 문서.text, kind: "guide" });
+    const result = await indexKnowledgeDocument({ name: 문서.name, text: 문서.text, kind: "guide", onUsage });
     if (!result.indexed) { console.error(`  못 넣음 ${문서.name} — ${result.reason}`); continue; }
     조각 += result.chunks;
     console.log(`  넣음 ${문서.name} — 조각 ${result.chunks}개`);
   }
 
-  console.log(`\n설명서 ${문서들.length}쪽 · 조각 ${조각}개를 넣었습니다.`);
+  console.log(`\n설명서 ${문서들.length}쪽 · 조각 ${조각}개를 넣었습니다. 임베딩 토큰 ${임베딩토큰}개.`);
 }
 
 await main();

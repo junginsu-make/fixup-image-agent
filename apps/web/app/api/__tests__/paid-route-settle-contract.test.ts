@@ -237,3 +237,62 @@ describe("새로 막은 네 길", () => {
     expect(source).toContain('relay(request, "/api/easy/generate", {}, "decide")');
   });
 });
+
+/* ── 공급자를 부르는 길은 비용 문맥을 연다(설계 2026-09-30 §3.4·§5) ──────── */
+
+/**
+ * **호출마다 한 줄**은 라우트 입구가 계량기 저장소를 열어야 「누구의 무슨 작업」이 붙는다.
+ * 안 열면 그 길의 비용은 `unbound`(문맥 없음)로 적힌다 — 돈은 잡히지만 누구 것인지 모른다.
+ *
+ * 예약하는 길은 `reserveAiUsage` 가 문맥을 채운다. 예약하지 않는 예외 길(설계 §3.1)은
+ * 라우트가 `bindAiCaller` 를 직접 부른다. `pdp/validate-key` 는 공급자를 부르지 않는다.
+ */
+describe("공급자를 부르는 길은 비용 문맥을 연다", () => {
+  const 문맥예외 = new Set(["pdp/validate-key/route.ts"]);
+
+  it("**입구에서 계량기를 연다**", () => {
+    const 안여는것 = 부르는길
+      .filter((file) => !문맥예외.has(끝부분(file)))
+      // 안쪽에서만 여는 것(칸 읽기의 옛 모양)은 모자란다 — 예약이 그보다 먼저 와서 문맥을 못 싣는다.
+      .filter((file) => !/return\s+withLlmMeter\(/.test(readFileSync(file, "utf8")))
+      .map(끝부분);
+
+    expect(안여는것, `계량기 없이 공급자를 부르는 길: ${안여는것.join(", ")}`).toEqual([]);
+  });
+
+  it("**예약하지 않는 길은 문맥을 직접 채운다**", () => {
+    const 안채우는것 = 부르는길
+      .filter((file) => !문맥예외.has(끝부분(file)))
+      .filter((file) => !readFileSync(file, "utf8").includes("reserveAiUsage("))
+      .filter((file) => !readFileSync(file, "utf8").includes("bindAiCaller("))
+      .map(끝부분);
+
+    expect(안채우는것, `문맥 없이 공급자를 부르는 길: ${안채우는것.join(", ")}`).toEqual([]);
+  });
+});
+
+/**
+ * **`reserveAiUsage(` 가 있는 모든 route.ts 는 `return withLlmMeter(` 도 있다(파일 기준, 최종 전체 리뷰).**
+ *
+ * 위 「입구에서 계량기를 연다」는 `부르는길`(import 경로로 짐작한 공급자 호출) 안에서만 본다 —
+ * 이 파일 맨 위 주석이 스스로 적은 한계다: 「`lib` 를 한 겹 거쳐 공급자를 부르는 새 라우트는
+ * 이 시험이 놓칠 수 있다.」 예약(`reserveAiUsage`)은 언제나 라우트 파일에 직접 적히므로, import
+ * 짐작을 거치지 않고 **`reserveAiUsage(` 문자열이 있는 모든 route.ts** 를 곧바로 센다. 예약만
+ * 하고 계량기를 안 열면 그 요청의 비용은 `unbound`(문맥 없음)로 적혀 누구 것인지 모른 채
+ * 남는다(설계 §3.4·§5).
+ */
+describe("reserveAiUsage 가 있는 길은 모두 withLlmMeter 도 연다(파일 기준)", () => {
+  const 예약하는모든길 = routesUnder(".").filter((file) => readFileSync(file, "utf8").includes("reserveAiUsage("));
+
+  it("**셀 길이 있다** — 못 찾으면 아래 검사가 조용히 통과한다", () => {
+    expect(예약하는모든길.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("**reserveAiUsage 가 있으면 return withLlmMeter( 도 있다**", () => {
+    const 안여는것 = 예약하는모든길
+      .filter((file) => !/return\s+withLlmMeter\(/.test(readFileSync(file, "utf8")))
+      .map(끝부분);
+
+    expect(안여는것, `reserveAiUsage 는 있는데 withLlmMeter 를 안 여는 길: ${안여는것.join(", ")}`).toEqual([]);
+  });
+});

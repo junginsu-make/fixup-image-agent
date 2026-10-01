@@ -24,7 +24,7 @@ export type TranscribeStripsInput = {
    * 한 배치에 여덟 장이므로 한 번 돌면 호출이 다섯 번까지 간다. 그런데
    * 2026-09-21 까지 그 돈이 장부에 한 줄도 없었다.
    */
-  onUsage?: UsageReporter;
+  onUsage: UsageReporter;
 };
 export type TranscribeStripsResult = { transcript: string; lastSectionType?: string };
 

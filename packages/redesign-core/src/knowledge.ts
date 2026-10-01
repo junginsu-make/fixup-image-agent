@@ -1,6 +1,7 @@
 import { canManageCommonKnowledge } from "./knowledge-access.js";
 import { deleteKnowledgeDocument, getKnowledgeStats, indexKnowledgeDocument, isRagConfigured, normalizeKnowledgeKind } from "./rag.js";
 import { RedesignError } from "./errors.js";
+import type { UsageReporter } from "./usage.js";
 
 /**
  * Ported from `.refs/redesign-maker-10/src/app/api/knowledge/route.ts`
@@ -54,6 +55,8 @@ export type IndexKnowledgeInput = {
   adminKey?: string;
   /** 비우면 redesign 으로 들어간다. 판매 원칙을 넣을 때만 "sales" 를 준다. */
   kind?: string;
+  /** 임베딩 토큰을 알린다. 필수다(설계 2026-09-30 §3.4) — 관리자 지식 올리기도 값이 나간다. */
+  onUsage: UsageReporter;
 };
 
 export async function indexKnowledge(input: IndexKnowledgeInput) {
@@ -82,6 +85,7 @@ export async function indexKnowledge(input: IndexKnowledgeInput) {
     name,
     text,
     kind: normalizeKnowledgeKind(input.kind),
+    onUsage: input.onUsage,
   });
   return { configured: true, ...result };
 }

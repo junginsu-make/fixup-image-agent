@@ -1,6 +1,7 @@
 import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../lib/llm/meter";
 import { BACKGROUND_REMOVAL_MODEL, adExportUnits } from "../../../../lib/ad/cost";
 import { RenderBusyError, withRenderSlot } from "../../../../lib/layout/render-gate";
 import { isAiBadgeEnabled } from "../../../../lib/ai-badge-setting";
@@ -131,6 +132,10 @@ async function cutoutForAd(master: Buffer, mimeType: string): Promise<Buffer> {
 }
 
 export async function POST(request: Request) {
+  return withLlmMeter(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   /**
    * **꺼져 있으면 없는 길이다** (계약 5).
    *

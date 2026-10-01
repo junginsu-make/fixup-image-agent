@@ -34,6 +34,14 @@ const ItemSchema = z.object({
   language: z.string().optional(),
 });
 
+/**
+ * 액터를 한 번 돌렸다는 알림(설계 2026-09-30 §3.4).
+ *
+ * 동기 실행(`run-sync-get-dataset-items`)은 자막 줄만 돌려주고 **사용 금액을 안 준다.** 그래서
+ * 금액은 부르는 쪽이 「실행 1회 추정」으로 매긴다. 실패해도 액터는 돌았으므로 알린다.
+ */
+export type ApifyRunRecorder = (run: { actor: string; failed: boolean }) => void;
+
 export interface ApifyTranscriptResult {
   lines: TranscriptLine[];
   metadata: YoutubeMetadata;
@@ -52,7 +60,8 @@ export function apifyActorId(environment: Record<string, string | undefined> = p
  */
 export async function fetchApifyTranscript(
   url: string,
-  deps: { fetchImpl?: typeof fetch; environment?: Record<string, string | undefined> } = {},
+  /** `onRun` 은 필수다 — 기본값을 두면 안 넘긴 자리가 조용히 0원이 된다(설계 §3.4). */
+  deps: { onRun: ApifyRunRecorder; fetchImpl?: typeof fetch; environment?: Record<string, string | undefined> },
 ): Promise<ApifyTranscriptResult> {
   const environment = deps.environment ?? process.env;
   const token = environment.APIFY_TOKEN?.trim();
@@ -60,12 +69,25 @@ export async function fetchApifyTranscript(
 
   // 토큰은 헤더로 보낸다. 주소에 실으면 프록시 로그·오류 추적·브라우저 기록에 그대로 남는다.
   const endpoint = `https://api.apify.com/v2/acts/${apifyActorId(environment)}/run-sync-get-dataset-items?timeout=${TIMEOUT_SECONDS}`;
-  const response = await (deps.fetchImpl ?? fetch)(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ urls: [url] }),
-    signal: AbortSignal.timeout((TIMEOUT_SECONDS + 30) * 1000),
-  });
+  let response: Response;
+  try {
+    response = await (deps.fetchImpl ?? fetch)(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ urls: [url] }),
+      signal: AbortSignal.timeout((TIMEOUT_SECONDS + 30) * 1000),
+    });
+  } catch (error) {
+    /*
+      시간 초과·네트워크 끊김이면 `response` 자체가 없어 아래 `onRun` 이 안 불린다. 액터는
+      이미 시작해 요금이 나갔을 수 있는데(§3.4) 알림이 통째로 사라지면 그 금액이 장부에서
+      빠진다. 실패를 한 번 알리고 그대로 다시 던진다 — 자막을 못 받은 건 여전히 실패다.
+    */
+    deps.onRun({ actor: apifyActorId(environment), failed: true });
+    throw error;
+  }
+
+  deps.onRun({ actor: apifyActorId(environment), failed: !response.ok });
 
   // 응답 본문에 계정 정보가 섞일 수 있어 상태 코드만 알린다.
   if (!response.ok) throw new Error(`apify 자막 요청이 실패했습니다 (${response.status}).`);

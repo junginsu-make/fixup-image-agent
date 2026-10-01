@@ -4,6 +4,8 @@ import { resolveOpenaiKey, resolveGoogleKey } from "../../../../lib/server-keys"
 import { createRedesignImageGenerator, redesignFalModelFor } from "../../../../lib/redesign/image-generator";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 import { settleAiUsage, reserveAiUsage } from "../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../lib/llm/meter";
+import { recordRedesignDirectImage } from "../../../../lib/ai-cost/package-usage";
 import { readPdpRequest } from "../../../../lib/pdp/request";
 import { exactOutputSize, fitDataUrlToSize } from "../../../../lib/redesign/exact-size";
 
@@ -11,6 +13,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   /**
    * **몸을 먼저 읽는다.** 어느 제공자로 고칠지에 따라 값이 다르다
    * ($0.19 vs $0.13). 전에는 무엇이든 1장이었다.
@@ -47,6 +53,7 @@ export async function POST(req: Request) {
       openaiKey: resolveOpenaiKey(),
       googleKey: resolveGoogleKey(),
       generateImage,
+      onImageUsage: recordRedesignDirectImage,
     });
     // 고친 그림도 작업의 크기를 지킨다. 「1080×1920」 작업이면 그 크기로 맞춘다.
     const exact = exactOutputSize((body as { project?: { ratio?: string } }).project?.ratio);

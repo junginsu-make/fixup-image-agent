@@ -6,7 +6,8 @@ import { isLocalAuthBypass } from "../../../lib/dev-auth";
 import { getCostByModel, getCostByOperation, getCostDaily, getCostSummary, getModelPrices, getUsdKrw } from "../../../lib/cost";
 import { listShowcaseForAdmin } from "../../api/showcase/store";
 import { updateAiBadge } from "../actions";
-import { AdminNotice } from "../admin-shared";
+import { AdminError, AdminNotice } from "../admin-shared";
+import { shownFailure } from "../../../lib/teams/failure";
 import { CostPanel } from "../CostPanel";
 import { ModelCatalogPanel } from "../ModelCatalogPanel";
 import { ShowcasePanel } from "../showcase-panel";
@@ -14,6 +15,8 @@ import { PlanSettings } from "./plan-settings";
 import { InquiryPanel } from "./inquiry-panel";
 import { listInquiries } from "../../../lib/cs/inquiry-store";
 import type { CreditPlan } from "../member-list/types";
+import { AiUsagePanel } from "./ai-usage-panel";
+import { getAiCostReport, readAiPausedForAdmin } from "../../../lib/ai-control/report";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +30,8 @@ type TopUsage = { user_id: string; email: string; consumed_units: number | strin
  * 전에는 `/admin` 한 장에서 회원 목록 위에 쌓여 있었다. 회원을 찾으려면 이것들을
  * 다 지나 내려가야 했다.
  */
-export default async function AdminSystemPage({ searchParams }: { searchParams: Promise<{ notice?: string }> }) {
-  const { notice } = await searchParams;
+export default async function AdminSystemPage({ searchParams }: { searchParams: Promise<{ notice?: string; error?: string }> }) {
+  const { notice, error } = await searchParams;
   const admin = createSupabaseAdminClient();
   const ledger = isCreditLedgerEnabled() && !isLocalAuthBypass;
   const [usdKrw, costSummary, costByOperation, costByModel, costDaily, modelPrices, aiBadgeOn, dailyResult, topResult, planResult] = await Promise.all([
@@ -39,6 +42,19 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
   ]);
   const failed = [dailyResult.error, topResult.error, planResult.error].find(Boolean);
   if (failed) throw failed;
+  /*
+    **AI 사용 비용과 멈춤 스위치**(설계 2026-09-30 §3.3·§3.4). 보고는 못 읽어도 화면을 연다(null).
+    스위치 상태도 이제 이 탭 전체를 던져서 죽이지 않는다 — 문의함·플랜까지 500 이 되면 안 된다.
+    대신 못 읽으면 `null` 로 넘기고, 패널이 「상태를 읽지 못했습니다」를 보이며 단추를 숨긴다
+    (틀린 「켜짐/멈춤」을 화면에 내느니 모른다고 말하는 쪽이 안전하다).
+  */
+  const [aiReport, aiPaused] = await Promise.all([
+    getAiCostReport(30),
+    readAiPausedForAdmin().catch((cause) => {
+      console.error("[ai-control] 멈춤 스위치 상태를 읽지 못했습니다", { message: cause instanceof Error ? cause.message : String(cause) });
+      return null;
+    }),
+  ]);
   /* 못 읽어도 던지지 않는다. 이 표는 나중에 붙어서, 마이그레이션 전 서버에는 없다. */
   const showcase = await listShowcaseForAdmin().catch(() => null);
   /* 문의함도 같다. `listInquiries` 가 못 읽으면 빈 목록을 준다. */
@@ -47,11 +63,13 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
   return (
     <div className="space-y-6">
       {notice ? <AdminNotice notice={notice} /> : null}
+      {shownFailure(error) ? <AdminError message={shownFailure(error)!} /> : null}
       {/*
         **문의함을 맨 위에 둔다.** 답을 기다리는 사람이 있는 화면이다. 비용
         표나 모델 단가보다 급하다.
       */}
       <InquiryPanel rows={inquiries} />
+      <AiUsagePanel report={aiReport} paused={aiPaused} usdKrw={usdKrw} />
       <PlanSettings plans={(planResult.data ?? []) as CreditPlan[]} enabled={ledger} />
       <CostPanel summary={costSummary} usdKrw={usdKrw} byOperation={costByOperation} byModel={costByModel} daily={costDaily} prices={modelPrices} />
       {/* 값이 왜 그런지 바로 위 표에서 궁금해진다. 그 답을 옆에 둔다. */}

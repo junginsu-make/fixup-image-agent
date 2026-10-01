@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { IMAGE_MODELS, MATCH_SOURCE, chooseModelForRatio } from "@fixup/sns-core";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../../../lib/llm/meter";
 import { posterReferencesByIds } from "../../../../../../lib/poster/references";
 import { teamIdOf } from "../../../../../../lib/teams/store";
 import { creditUnits } from "@fixup/shared";
@@ -54,6 +55,10 @@ function justSubmitted(updatedAt: string): boolean {
 }
 
 export async function POST(request: Request, context: Context) {
+  return withLlmMeter(() => handlePost(request, context));
+}
+
+async function handlePost(request: Request, context: Context) {
   /** `catch` 에서도 봐야 한다 — 실패하면 묶인 장을 돌려줘야 한다. */
   let reservation: { userId: string; requestId: string } | null = null;
   const auth = await authenticateApiMember();

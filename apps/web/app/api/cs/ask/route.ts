@@ -3,6 +3,7 @@ import { retrieveKnowledge } from "@fixup/redesign-core";
 import { reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { recordPackageLlmUsage } from "../../../../lib/ai-cost/package-usage";
 import { describeAccount } from "../../../../lib/cs/account-facts";
 import { readMyFacts } from "../../../../lib/cs/my-account";
 import { appendCsTurns, readCsTurns } from "../../../../lib/cs/session";
@@ -97,7 +98,7 @@ async function ask(req: Request) {
 
     // ② 무엇을 근거로 답하나.
     const chunks = plan.act === "search"
-      ? await retrieveKnowledge(plan.query, 조각수, { kind: "guide" })
+      ? await retrieveKnowledge(plan.query, 조각수, { kind: "guide", onUsage: recordPackageLlmUsage })
       : [];
 
     /*

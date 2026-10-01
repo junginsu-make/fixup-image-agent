@@ -7,6 +7,7 @@ import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
 import { chooseModelForRatio, IMAGE_MODELS } from "@fixup/sns-core";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../../../lib/llm/meter";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
@@ -40,6 +41,10 @@ const EditSchema = z.object({
  * 것이 유지된다. 수정은 한 장만 만든다 — 세 장을 또 받으면 고르는 일이 반복된다.
  */
 export async function POST(request: Request, context: Context) {
+  return withLlmMeter(() => handlePost(request, context));
+}
+
+async function handlePost(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   /** `catch` 에서도 봐야 한다 — 제출이 실패하면 묶인 장을 돌려줘야 한다. */

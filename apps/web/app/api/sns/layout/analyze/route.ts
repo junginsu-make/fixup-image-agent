@@ -23,6 +23,10 @@ const InputSchema = z.object({ referenceImageId: z.string().trim().min(1).max(20
  * 아니라 「직접 만드세요」라는 안내로 끝난다.
  */
 export async function POST(request: Request) {
+  return withLlmMeter(() => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   /**
    * **부르기 전에 자리를 잡는다.**
    *

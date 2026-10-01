@@ -4,6 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
 import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
+import { bindAiCaller, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { classifyFalFailure } from "../../../../../../lib/fal/failure";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../lib/local-store";
 import { makePosterThumbnail } from "../../../../../../lib/poster/thumbnail";
@@ -140,8 +141,14 @@ async function modelUsedFor(
 }
 
 export async function POST(request: Request, context: Context) {
+  return withLlmMeter(() => handlePost(request, context));
+}
+
+async function handlePost(request: Request, context: Context) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
+  // 결과를 받아 오기만 한다 — 값은 제출 때 이미 적혔다(설계 §3.4). 그래도 문맥은 채워 둔다.
+  bindAiCaller({ userId: auth.member.userId, requestId: null, operation: "poster" });
   const parsed = StatusSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return Response.json({ ok: false, message: "조회할 요청을 알려 주세요." }, { status: 400 });

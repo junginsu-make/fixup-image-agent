@@ -10,6 +10,7 @@ import {
 import type { KeyVisualRequest } from "@fixup/pdp-core";
 import { createPdpProviders } from "../../../../lib/pdp/providers";
 import { finalizeAiUsage, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { withLlmMeter } from "../../../../lib/llm/meter";
 import { readPdpRequest } from "../../../../lib/pdp/request";
 import { imageCreditUnits } from "../../../../lib/credit-cost";
 
@@ -31,6 +32,10 @@ export const maxDuration = 300;
  * 키비주얼 프롬프트가 섹션 카피를 읽기 시작하면 그때는 게이트가 필요하다.
  */
 export async function POST(req: Request) {
+  return withLlmMeter(() => handlePost(req));
+}
+
+async function handlePost(req: Request) {
   const parsed = await readPdpRequest<KeyVisualRequest>(req, "keyVisual");
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;

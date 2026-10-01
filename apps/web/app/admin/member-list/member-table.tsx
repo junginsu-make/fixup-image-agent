@@ -85,7 +85,7 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
                 </th>
               ) : null}
               {/* 팀 기능을 꺼 두면(2026-09-22) 팀 칸을 뺀다. 고르개로 팀에 넣을 수 있게 두면 꺼 둔 기능이 여기로 새어 나온다. */}
-              {["회원", ...(teamsEnabled ? ["팀"] : []), "상태", "크레딧", "플랜", "이번 달", "비용", "관리"].map((label) => <th key={label} className="py-3 pr-3 font-medium">{label}</th>)}
+              {["회원", ...(teamsEnabled ? ["팀"] : []), "상태", "크레딧", "플랜", "이번 달", "비용(옛 기준)", "관리"].map((label) => <th key={label} className="py-3 pr-3 font-medium">{label}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -112,7 +112,7 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
 /** 이 쪽의 회원을 CSV 로. 엑셀이 수식으로 읽는 첫 글자(= + - @)는 막는다. */
 function exportCsv(rows: AdminMemberRow[], planName: (id: string) => string) {
   const cell = (value: unknown) => `"${String(value ?? "").replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
-  const header = ["이름", "이메일", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용", "누적 비용"];
+  const header = ["이름", "이메일", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용(옛 기준)", "누적 비용(옛 기준)"];
   const body = rows.map((row) => [
     row.name ?? "", row.profile.email, row.referrer ?? "", row.profile.status, row.team?.teamName ?? "",
     row.credit ? (row.credit.unlimited ? "무제한" : row.credit.available) : "", row.credit?.reserved ?? "", row.credit?.reviewUnits ?? "",
@@ -221,7 +221,7 @@ function MobileCard({ row, teams, ledger, planName, checked, onCheck, onOpen }: 
     ["크레딧", <CreditCell key="c" row={row} />],
     ["플랜", <PlanCell key="p" row={row} planName={planName} />],
     ["이번 달", <MonthCell key="m" row={row} />],
-    ["비용", <CostCell key="k" row={row} />],
+    ["비용(옛 기준)", <CostCell key="k" row={row} />],
   ];
   return (
     <article className="rounded-xl border bg-background p-4 shadow-sm">
