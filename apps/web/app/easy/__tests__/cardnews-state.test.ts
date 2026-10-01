@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cardResults, cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, newestFirst, referenceAnswer,
-  startedDespiteError,
+  openTool, redoCostLabel, startedDespiteError,
   setItemsToAttach,
 } from "../cardnews-state";
 
@@ -129,5 +129,26 @@ describe("「이대로 만들기」 답을 못 받았을 때 (미뤄 둔 것 3)"
   it("아직 원고 단계거나 읽지 못했으면 실패로 본다", () => {
     expect(startedDespiteError("copy_ready")).toBe(false);
     expect(startedDespiteError(undefined)).toBe(false);
+  });
+});
+
+describe("장 도구 (3단계 §4)", () => {
+  it("같은 장 같은 도구를 다시 누르면 닫고, 다른 것을 누르면 바꾼다", () => {
+    const 고치기 = { rowId: "r", index: 2, mode: "edit" as const };
+    expect(openTool(null, 고치기)).toEqual(고치기);
+    expect(openTool(고치기, 고치기)).toBeNull();
+    expect(openTool(고치기, { ...고치기, mode: "redo" })).toEqual({ ...고치기, mode: "redo" });
+    expect(openTool(고치기, { ...고치기, index: 3 })).toEqual({ ...고치기, index: 3 });
+  });
+
+  it("말로 연 확인 줄은 같은 장이어도 닫지 않고 바라는 점을 바꾼다", () => {
+    const 확인 = { rowId: "r", index: 2, mode: "redo" as const, note: "글자 크게" };
+    expect(openTool(확인, { ...확인, note: "더 밝게" }, { keep: true })).toEqual({ ...확인, note: "더 밝게" });
+  });
+
+  it("다시 만들기 값은 그 장 하나로 센다", () => {
+    const 보기 = { options: { ratio: "4:5", modelId: "gpt-image-2.5-flare" }, cards: [{ index: 1 }, { index: 2 }] } as never;
+    expect(redoCostLabel(보기, 2, "image-v2")).toBe("약 1크레딧");
+    expect(redoCostLabel(보기, 2, "cost-v1")).toMatch(/^약 \d+장$/);
   });
 });

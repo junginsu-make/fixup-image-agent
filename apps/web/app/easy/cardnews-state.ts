@@ -1,4 +1,5 @@
 import { jobId, type RunningJob } from "../../lib/running-jobs";
+import { cardCost } from "./cardnews-options";
 import type { EasyCardnewsView } from "./cardnews-view";
 import type { CardPhotoRole } from "./photo-roles";
 import type { EasyMessage } from "./turn";
@@ -146,4 +147,31 @@ export function jobsToRegister(
  */
 export function startedDespiteError(status: string | undefined): boolean {
   return status !== undefined && status !== "copy_ready";
+}
+
+/**
+ * **장 도구**(3단계 §4) — 한 장의 글 칸 또는 다시 만들기 확인 줄. 한 번에 하나만 열린다.
+ */
+export type CardTool = { rowId: string; index: number; mode: "edit" | "redo"; note?: string } | null;
+
+/**
+ * 도구를 연다. 같은 장 같은 도구를 다시 누르면 닫는다. 말 「3번 다시」로 열 때는(`keep`)
+ * 이미 열려 있어도 닫지 않고 바라는 점만 바꾼다.
+ */
+export function openTool(current: CardTool, next: CardTool, options: { keep?: boolean } = {}): CardTool {
+  if (!next) return null;
+  const 같은것 = current && current.rowId === next.rowId && current.index === next.index && current.mode === next.mode;
+  return 같은것 && !options.keep ? null : next;
+}
+
+/**
+ * **다시 만들기 값**(설계 §4). 그 장 하나로 센다 — 카드뉴스 한 장 다시 만들기 라우트가
+ * `onlyCardIndexes: [index]` · `creditImagePlan(1, …)` 로 잡는 것과 같은 단위다.
+ */
+export function redoCostLabel(
+  view: Pick<EasyCardnewsView, "options" | "cards">,
+  index: number,
+  policy: "cost-v1" | "image-v2",
+): string {
+  return cardCost({ policy, ratio: view.options.ratio, modelId: view.options.modelId, attachments: [], cards: [{ index }] }).label;
 }

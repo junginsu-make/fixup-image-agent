@@ -382,7 +382,9 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
   it("원고 카드를 그린다", () => { expect(코드("../_components/message.tsx")).toContain("<EasyCardnewsCard"); });
   it("「이대로 만들기」 · 조건 바꾸기를 새 라우트로 보낸다", () => {
     expect(화면쪽).toContain("useEasyCardnews(");
-    expect(훅).toContain("/api/easy/cardnews");
+    // 보내는 함수는 3단계 손보기와 같이 쓰려고 `cardnews-request.ts` 로 옮겼다.
+    expect(코드("../cardnews-request.ts")).toContain('billableFetch("/api/easy/cardnews"');
+    expect(훅).toContain("cardnewsRequest");
   });
   it("만드는 동안 셸에 그 대화 주소로 등록한다", () => { expect(훅).toMatch(/start\(cardnewsJob\(/); });
   it("다시 연 대화에 카드뉴스를 넘긴다", () => { expect(코드("../[id]/page.tsx")).toContain("initialCardnews={loaded.cardnews}"); });
@@ -415,5 +417,24 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
   });
   it("카드뉴스 줄은 그림 한 장처럼 「만드는 중」으로 세지 않는다", () => {
     expect(화면쪽).toContain("!cardnews.views[one.id]");
+  });
+});
+
+describe("만든 카드뉴스 손보기 잇기 (3단계)", () => {
+  const 손보기 = 코드("../use-cardnews-after.ts");
+  const 훅 = 코드("../use-cardnews.ts");
+  it("손보기는 「쉽게」 카드뉴스 라우트로, 식별자를 붙여 보낸다", () => {
+    expect(손보기).toMatch(/action: "redo"/);
+    expect(손보기).toMatch(/action: "edit"/);
+    expect(손보기).toMatch(/action: "caption"/);
+    expect(훅).toContain("useCardnewsAfter(");
+  });
+  it("받기는 jszip 과 카드뉴스 파일 이름 규칙을 쓴다", () => {
+    expect(손보기).toContain("snsCardFilename(");
+    expect(손보기).toContain("jszip");
+  });
+  it("말 「3번 다시」는 확인 줄을 연다, 다시 만들기 뒤에는 진행을 셸에 건다", () => {
+    expect(손보기).toMatch(/cardAsk[\s\S]{0,300}mode: "redo"/);
+    expect(손보기).toContain("start(cardnewsJob(");
   });
 });

@@ -5,6 +5,8 @@ import { useRunningJobs } from "../_components/running-jobs";
 import { billableFetch } from "../../lib/billable-fetch";
 import { JOB_POLL_INTERVAL_MS, jobId } from "../../lib/running-jobs";
 import type { CardOptions } from "./cardnews-options";
+import { cardnewsRequest } from "./cardnews-request";
+import { useCardnewsAfter } from "./use-cardnews-after";
 import {
   cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, startedDespiteError, type EasyKind,
 } from "./cardnews-state";
@@ -28,14 +30,7 @@ export interface EasyCardnewsHandlers {
   onDrafted(photoRoles: unknown): void;
 }
 
-async function 보낸다(body: Record<string, unknown>) {
-  const response = await billableFetch("/api/easy/cardnews", { body: JSON.stringify(body) });
-  const json = await response.json().catch(() => ({}));
-  if (!json.ok) {
-    throw Object.assign(new Error(json.message ?? "하지 못했습니다."), { retryable: json.retryable !== false });
-  }
-  return json;
-}
+const 보낸다 = cardnewsRequest;
 
 /** 작업을 다시 읽는다(카드뉴스 화면과 같은 읽기 주소). 못 읽으면 `undefined`. */
 async function 다시읽는다(projectId: string): Promise<Project | undefined> {
@@ -147,7 +142,13 @@ export function useEasyCardnews(input: {
   }
 
   /** 카드뉴스 갈래의 답이면 받아 그리고 `true`. 값은 원고까지 안 든다. */
+  // 만든 카드뉴스 손보기(3단계). 채팅 턴의 답도 `take` 가 먼저 그쪽에 건넨다.
+  const after = useCardnewsAfter({
+    conversationId, projects, views, replace, start, onMessage: handlers.onMessage, onError: handlers.onError,
+  });
+
   function take(body: { kindAsk?: boolean; needReference?: boolean; cardnews?: { rowId: string; project: Project }; photoRoles?: unknown }, prompt: string) {
+    if (after.take(body as Parameters<typeof after.take>[0])) return true;
     if (body.kindAsk) setKindAsking(prompt);
     else if (body.needReference) setReferenceAsking(prompt);
     else if (body.cardnews) {
@@ -176,6 +177,7 @@ export function useEasyCardnews(input: {
       onGenerate: () => void generate(rowId),
       onRedraft: (options: Partial<CardOptions>) => void redraft(rowId, options),
     } : undefined),
+    after,
     kindAsking,
     referenceAsking,
     /** 사진이 바뀌면 갈래 물음은 뜻을 잃는다. 레퍼런스 요청은 붙이는 것이 답이라 둔다. */
