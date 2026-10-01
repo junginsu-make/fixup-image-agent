@@ -27,9 +27,20 @@ const text = (value: unknown): string | null => (typeof value === "string" && va
  * `auth-round-trips.ts` 가 센다.
  *
  * 토큰이 곧 만료되면 `getClaims` 가 먼저 갱신한다(`getUser` 와 같다).
+ *
+ * 변조된 토큰은 `error` 가 아니라 **예외**로 온다(auth-js 2.110.8
+ * `GoTrueClient.getClaims`, `Invalid alg claim`·`crypto.subtle` 의
+ * DOMException 등은 `isAuthError` 가 아니라 그대로 던진다). 여기서 잡아
+ * 손님으로 돌린다 — 로그인 확인 한 번이 요청 전체를 터뜨리면 안 된다.
  */
 export async function verifiedLogin(auth: ClaimsAuth): Promise<VerifiedLogin | null> {
-  const { data, error } = await auth.getClaims();
+  let data: { claims: Record<string, unknown> } | null;
+  let error: unknown;
+  try {
+    ({ data, error } = await auth.getClaims());
+  } catch {
+    return null;
+  }
   if (error || !data) return null;
   const userId = text(data.claims.sub);
   if (!userId) return null;

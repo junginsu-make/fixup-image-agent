@@ -33,6 +33,11 @@ describe("verifiedLogin", () => {
     await expect(verifiedLogin(auth({ data: { claims: 정상 }, error: new Error("Invalid JWT signature") }))).resolves.toBeNull();
   });
 
+  it("변조된 토큰으로 getClaims 가 예외를 던지면 손님이다 — 터지지 않는다", async () => {
+    const auth = { getClaims: async () => { throw new Error("Invalid alg claim"); } } as never;
+    await expect(verifiedLogin(auth)).resolves.toBeNull();
+  });
+
   it.each([undefined, "", 42])("sub 가 %s 이면 손님이다 — 누구인지 모르는 로그인은 없다", async (sub) => {
     await expect(verifiedLogin(auth({ data: { claims: { ...정상, sub } }, error: null }))).resolves.toBeNull();
   });
