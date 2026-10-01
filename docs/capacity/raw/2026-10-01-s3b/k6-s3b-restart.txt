@@ -1,0 +1,294 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: generate-poster.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 1 max VUs, 21m15s max duration (incl. graceful stop):
+              * poster: Up to 1 looping VUs for 1m15s over 2 stages (gracefulRampDown: 20m0s, gracefulStop: 20m0s)
+
+
+running (00m01.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   1% ] 0/1 VUs  0m01.0s/1m15.0s
+
+running (00m02.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   3% ] 0/1 VUs  0m02.0s/1m15.0s
+
+running (00m03.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   4% ] 0/1 VUs  0m03.0s/1m15.0s
+
+running (00m04.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   5% ] 0/1 VUs  0m04.0s/1m15.0s
+
+running (00m05.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   7% ] 0/1 VUs  0m05.0s/1m15.0s
+
+running (00m06.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   8% ] 0/1 VUs  0m06.0s/1m15.0s
+
+running (00m07.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [   9% ] 0/1 VUs  0m07.0s/1m15.0s
+
+running (00m08.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  11% ] 0/1 VUs  0m08.0s/1m15.0s
+
+running (00m09.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  12% ] 0/1 VUs  0m09.0s/1m15.0s
+
+running (00m10.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  13% ] 0/1 VUs  0m10.0s/1m15.0s
+
+running (00m11.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  15% ] 0/1 VUs  0m11.0s/1m15.0s
+
+running (00m12.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  16% ] 0/1 VUs  0m12.0s/1m15.0s
+
+running (00m13.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  17% ] 0/1 VUs  0m13.0s/1m15.0s
+
+running (00m14.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  19% ] 0/1 VUs  0m14.0s/1m15.0s
+
+running (00m15.0s), 0/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  20% ] 0/1 VUs  0m15.0s/1m15.0s
+
+running (00m16.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  21% ] 1/1 VUs  0m16.0s/1m15.0s
+
+running (00m17.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  23% ] 1/1 VUs  0m17.0s/1m15.0s
+
+running (00m18.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  24% ] 1/1 VUs  0m18.0s/1m15.0s
+
+running (00m19.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  25% ] 1/1 VUs  0m19.0s/1m15.0s
+
+running (00m20.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  27% ] 1/1 VUs  0m20.0s/1m15.0s
+
+running (00m21.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  28% ] 1/1 VUs  0m21.0s/1m15.0s
+
+running (00m22.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  29% ] 1/1 VUs  0m22.0s/1m15.0s
+
+running (00m23.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  31% ] 1/1 VUs  0m23.0s/1m15.0s
+
+running (00m24.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  32% ] 1/1 VUs  0m24.0s/1m15.0s
+
+running (00m25.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  33% ] 1/1 VUs  0m25.0s/1m15.0s
+
+running (00m26.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  35% ] 1/1 VUs  0m26.0s/1m15.0s
+
+running (00m27.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  36% ] 1/1 VUs  0m27.0s/1m15.0s
+
+running (00m28.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  37% ] 1/1 VUs  0m28.0s/1m15.0s
+
+running (00m29.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  39% ] 1/1 VUs  0m29.0s/1m15.0s
+
+running (00m30.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  40% ] 1/1 VUs  0m30.0s/1m15.0s
+
+running (00m31.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  41% ] 1/1 VUs  0m31.0s/1m15.0s
+
+running (00m32.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  43% ] 1/1 VUs  0m32.0s/1m15.0s
+
+running (00m33.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  44% ] 1/1 VUs  0m33.0s/1m15.0s
+
+running (00m34.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  45% ] 1/1 VUs  0m34.0s/1m15.0s
+
+running (00m35.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  47% ] 1/1 VUs  0m35.0s/1m15.0s
+
+running (00m36.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  48% ] 1/1 VUs  0m36.0s/1m15.0s
+
+running (00m37.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  49% ] 1/1 VUs  0m37.0s/1m15.0s
+
+running (00m38.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  51% ] 1/1 VUs  0m38.0s/1m15.0s
+
+running (00m39.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  52% ] 1/1 VUs  0m39.0s/1m15.0s
+
+running (00m40.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  53% ] 1/1 VUs  0m40.0s/1m15.0s
+
+running (00m41.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  55% ] 1/1 VUs  0m41.0s/1m15.0s
+
+running (00m42.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  56% ] 1/1 VUs  0m42.0s/1m15.0s
+
+running (00m43.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  57% ] 1/1 VUs  0m43.0s/1m15.0s
+
+running (00m44.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  59% ] 1/1 VUs  0m44.0s/1m15.0s
+
+running (00m45.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  60% ] 1/1 VUs  0m45.0s/1m15.0s
+
+running (00m46.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  61% ] 1/1 VUs  0m46.0s/1m15.0s
+
+running (00m47.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  63% ] 1/1 VUs  0m47.0s/1m15.0s
+
+running (00m48.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  64% ] 1/1 VUs  0m48.0s/1m15.0s
+
+running (00m49.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  65% ] 1/1 VUs  0m49.0s/1m15.0s
+
+running (00m50.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  67% ] 1/1 VUs  0m50.0s/1m15.0s
+
+running (00m51.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  68% ] 1/1 VUs  0m51.0s/1m15.0s
+
+running (00m52.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  69% ] 1/1 VUs  0m52.0s/1m15.0s
+
+running (00m53.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  71% ] 1/1 VUs  0m53.0s/1m15.0s
+
+running (00m54.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  72% ] 1/1 VUs  0m54.0s/1m15.0s
+
+running (00m55.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  73% ] 1/1 VUs  0m55.0s/1m15.0s
+
+running (00m56.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  75% ] 1/1 VUs  0m56.0s/1m15.0s
+
+running (00m57.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  76% ] 1/1 VUs  0m57.0s/1m15.0s
+
+running (00m58.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  77% ] 1/1 VUs  0m58.0s/1m15.0s
+
+running (00m59.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  79% ] 1/1 VUs  0m59.0s/1m15.0s
+
+running (01m00.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  80% ] 1/1 VUs  1m00.0s/1m15.0s
+
+running (01m01.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  81% ] 1/1 VUs  1m01.0s/1m15.0s
+
+running (01m02.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  83% ] 1/1 VUs  1m02.0s/1m15.0s
+
+running (01m03.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  84% ] 1/1 VUs  1m03.0s/1m15.0s
+
+running (01m04.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  85% ] 1/1 VUs  1m04.0s/1m15.0s
+
+running (01m05.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  87% ] 1/1 VUs  1m05.0s/1m15.0s
+
+running (01m06.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  88% ] 1/1 VUs  1m06.0s/1m15.0s
+
+running (01m07.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  89% ] 1/1 VUs  1m07.0s/1m15.0s
+
+running (01m08.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  91% ] 1/1 VUs  1m08.0s/1m15.0s
+
+running (01m09.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  92% ] 1/1 VUs  1m09.0s/1m15.0s
+
+running (01m10.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  93% ] 1/1 VUs  1m10.0s/1m15.0s
+
+running (01m11.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  95% ] 1/1 VUs  1m11.0s/1m15.0s
+
+running (01m12.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  96% ] 1/1 VUs  1m12.0s/1m15.0s
+
+running (01m13.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  97% ] 1/1 VUs  1m13.0s/1m15.0s
+
+running (01m14.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [  99% ] 1/1 VUs  1m14.0s/1m15.0s
+
+running (01m15.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster   [ 100% ] 1/1 VUs  1m15.0s/1m15.0s
+
+running (01m16.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m17.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m18.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m19.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m20.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m21.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m22.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m23.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m24.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m25.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m26.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+running (01m27.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+poster ↓ [ 100% ] 1/1 VUs  1m15s
+
+== poster (gpt-image-2.5-flare, 2:3, variants 1, levels 1) ==
+name                                          count    p50ms    p95ms    p99ms    maxms    err%
+poster_create                                     1     1266     1266     1266     1266     0.0
+poster_end_to_end                                 1    64493    64493    64493    64493     0.0
+poster_generate                                   1     4191     4191     4191     4191     0.0
+poster_get                                        1     1064     1064     1064     1064     0.0
+poster_image                                      1     2579     2579     2579     2579     0.0
+poster_page                                       1      909      909      909      909     0.0
+poster_patch                                      1      856      856      856      856     0.0
+poster_plan                                       1     5323     5323     5323     5323     0.0
+poster_status                                     4     1487     6097     6689     6837     0.0
+
+http_reqs=11  http_req_failed=0.00%  auth_failures=0
+
+running (01m27.1s), 0/1 VUs, 1 complete and 0 interrupted iterations
+poster ✓ [ 100% ] 0/1 VUs  1m15s
+time="2026-10-01T09:33:05Z" level=error msg="thresholds on metrics 't_poster_status' have been crossed"
