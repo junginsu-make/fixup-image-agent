@@ -90,6 +90,7 @@ export function cardEditPrompt(project: AfterProject, index: number, words: stri
     "",
     "규칙:",
     "- 말이 가리키는 칸만 고칩니다. 안 고칠 칸은 빈 글로 둡니다.",
+    "- 칸을 **지우라는** 말이면 그 칸에 「-」 한 글자만 적습니다. headline 은 지울 수 없습니다.",
     "- 지금 글에 없는 사실 · 숫자 · 기관 이름을 새로 넣지 않습니다.",
     `- ${언어}로 씁니다.`,
   ].join("\n");
@@ -97,21 +98,44 @@ export function cardEditPrompt(project: AfterProject, index: number, words: stri
 
 const 칸상한 = { headline: 80, body: 400, accent: 120, footnote: 160 } as const;
 
-/** 고친 글을 다듬는다. 빈 칸은 안 바꾼 것으로 본다. 바꿀 것이 없으면 `undefined`. */
-export function readCardEdit(raw: unknown): CopyPatch | undefined {
+/**
+ * 고친 글을 다듬는다. 바꿀 것이 없으면 `undefined`.
+ *
+ * - 말로 고친 글(글 모델): 빈 칸은 안 바꾼 것, 「-」 는 그 칸을 지운다는 뜻
+ * - 칸으로 고친 글(`explicit`): 온 칸만 바꾸고, 비운 칸은 지운다
+ * - 제목은 어느 쪽이든 지울 수 없다(미뤄 둔 것 4 — 전에는 칸을 비워도 안 지워졌다)
+ */
+export function readCardEdit(raw: unknown, options: { explicit?: boolean } = {}): CopyPatch | undefined {
   const value = (raw ?? {}) as Record<string, unknown>;
   const patch = Object.fromEntries(
     (Object.keys(칸상한) as Array<keyof typeof 칸상한>).flatMap((key) => {
-      const text = typeof value[key] === "string" ? (value[key] as string).trim() : "";
+      if (typeof value[key] !== "string") return [];
+      const text = (value[key] as string).trim();
+      const 지운다 = options.explicit ? text === "" : text === "-";
+      if (지운다) return key === "headline" ? [] : [[key, ""]];
       return text ? [[key, text.slice(0, 칸상한[key])]] : [];
     }),
   ) as CopyPatch;
   return Object.keys(patch).length ? patch : undefined;
 }
 
-/** 전부 받기: 그림이 있는 장만. */
-export function downloadList(view: { cards: ReadonlyArray<{ index: number; url?: string }> }): Array<{ index: number; url: string }> {
-  return view.cards.flatMap((card) => (card.url ? [{ index: card.index, url: card.url }] : []));
+/** 글 칸에서 **바뀐 칸만** 뽑는다. 비운 칸은 지우기(빈 글), 제목을 비우면 안 바꾼다. */
+export function changedCopy(before: CopyPatch, after: CopyPatch): CopyPatch {
+  return Object.fromEntries(
+    (Object.keys(칸상한) as Array<keyof typeof 칸상한>).flatMap((key) => {
+      const 새것 = (after[key] ?? "").trim();
+      if (새것 === (before[key] ?? "").trim()) return [];
+      if (key === "headline" && !새것) return [];
+      return [[key, 새것]];
+    }),
+  ) as CopyPatch;
+}
+
+/** 전부 받기: 그림이 있는 장만. 파일 이름은 저장 경로의 확장자를 쓴다(미뤄 둔 것 3). */
+export function downloadList(
+  view: { cards: ReadonlyArray<{ index: number; url?: string; path?: string }> },
+): Array<{ index: number; url: string; path?: string }> {
+  return view.cards.flatMap((card) => (card.url ? [{ index: card.index, url: card.url, ...(card.path ? { path: card.path } : {}) }] : []));
 }
 
 /** 게시글을 복사할 한 덩이로. */

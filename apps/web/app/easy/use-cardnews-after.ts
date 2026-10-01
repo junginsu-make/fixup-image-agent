@@ -4,7 +4,7 @@ import * as React from "react";
 import type { RunningJob } from "../../lib/running-jobs";
 import { snsCardFilename } from "../sns/download-filename";
 import { downloadList, type CopyPatch } from "./cardnews-after";
-import { cardnewsRequest } from "./cardnews-request";
+import { cardnewsRequest, readCardnewsProject } from "./cardnews-request";
 import { cardnewsJob, openTool, type CardTool } from "./cardnews-state";
 import type { CardnewsProjectLike, EasyCardnewsView } from "./cardnews-view";
 import type { EasyMessage } from "./turn";
@@ -68,7 +68,19 @@ export function useCardnewsAfter(input: {
   /** 한 장 다시 만들기 — 확인 줄의 단추를 눌렀을 때만 온다. 값은 그 장만큼. */
   const redoCard = (rowId: string, index: number, note?: string) =>
     한다(rowId, async (project) => {
-      const body = await cardnewsRequest({ conversationId, projectId: project.id, action: "redo", index, ...(note?.trim() ? { note } : {}) });
+      let body: { project: Project; message?: 서버줄 };
+      try {
+        body = await cardnewsRequest({ conversationId, projectId: project.id, action: "redo", index, ...(note?.trim() ? { note } : {}) });
+      } catch (cause) {
+        /*
+         * **답을 못 받아도 서버가 이미 시작했을 수 있다**(미뤄 둔 것 2). 다시 읽어 만드는 중이면
+         * 그대로 이어 간다. 아니면 원래 오류를 보인다.
+         */
+        // 이미 만든 작업이라 「원고 단계를 지났나」로는 못 가른다. 만드는 중일 때만 시작된 것이다.
+        const 지금 = await readCardnewsProject(project.id);
+        if (지금?.status !== "generating") throw cause;
+        body = { project: 지금 };
+      }
       replace(body.project);
       // 진행은 2단계 진행 표시가 이어 받는다. 떠나도 셸이 받게 이 대화 주소로 건다.
       start(cardnewsJob(project.id, conversationId, project.title ?? ""));
@@ -94,11 +106,15 @@ export function useCardnewsAfter(input: {
       for (const card of list) {
         const response = await fetch(card.url);
         if (!response.ok) throw new Error(`${card.index}번 그림을 받지 못했습니다.`);
-        zip.file(snsCardFilename(project.title ?? "", card.index, new URL(card.url, window.location.href).pathname), await response.blob());
+        // 확장자는 저장 경로에서 읽는다. 로컬 주소에는 확장자가 없어 PNG 가 .jpg 로 붙었다(미뤄 둔 것 3).
+        zip.file(snsCardFilename(project.title ?? "", card.index, card.path ?? new URL(card.url, window.location.href).pathname), await response.blob());
       }
       const url = URL.createObjectURL(await zip.generateAsync({ type: "blob" }));
       const link = Object.assign(document.createElement("a"), { href: url, download: `${project.title || "card-news"}.zip` });
+      // 문서에 붙였다 뗀다. 안 붙이면 일부 브라우저가 내려받지 않는다(카드뉴스 화면과 같다).
+      document.body.appendChild(link);
       link.click();
+      link.remove();
       URL.revokeObjectURL(url);
     });
 

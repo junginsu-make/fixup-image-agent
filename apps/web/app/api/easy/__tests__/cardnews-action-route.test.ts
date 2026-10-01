@@ -31,6 +31,7 @@ const 만든입력: unknown[] = [];
 const 지운것: string[] = [];
 const 받은쓰기: string[] = [];
 let 시작실패: Error | null = null;
+let 남기기실패 = false;
 const 손본것: Array<Record<string, unknown>> = [];
 let 보관한것: { id: string; title: string } | null = { id: "a1", title: "t · 1번 장 이전 그림" };
 
@@ -43,6 +44,7 @@ vi.mock("../../../../lib/easy/store", () => ({
     getConversation: async (id: string) => (id === "conv" ? { id, title: "있음" } : null),
     listMessages: async () => 지난줄들,
     appendMessage: async (row: { role: string; body?: string; workId?: string }) => {
+      if (남기기실패) throw new Error("대화 저장 실패");
       남긴줄.push(row);
       return { id: `m${남긴줄.length}`, ...row };
     },
@@ -100,6 +102,7 @@ beforeEach(() => {
   새원고 = 원고(2);
   남긴줄.length = 0; 시작한것.length = 0; 만든입력.length = 0; 지운것.length = 0; 받은쓰기.length = 0;
   시작실패 = null;
+  남기기실패 = false;
   손본것.length = 0;
   보관한것 = { id: "a1", title: "t · 1번 장 이전 그림" };
 });
@@ -289,5 +292,20 @@ describe("아직 만들지 않은 원고 (독립 리뷰 Critical)", () => {
       expect(json.message).toContain("이대로 만들기");
     }
     expect(손본것).toEqual([]);
+  });
+});
+
+describe("다시 만들기는 시작됐는데 대화 저장만 실패하면 (미뤄 둔 것 2)", () => {
+  it("값이 나가지 않았다고 잘못 알리지 않고 시작된 작업을 준다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: { ...원고(2), data: { ...원고(2).data, flow: { ...원고(2).data.flow, cards: [
+      { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "done", assetPath: "me-1/sns/c1/1.png" },
+    ] } } } };
+    남기기실패 = true;
+    const { status, json } = await 보낸다({ action: "redo", projectId: "c1", index: 1 });
+    expect(status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.project).toBeDefined();
+    expect(손본것.map((one) => one.what)).toEqual(["redo"]);
   });
 });

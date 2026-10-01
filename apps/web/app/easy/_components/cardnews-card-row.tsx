@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button, Textarea, cn } from "@fixup/ui";
-import type { CopyPatch } from "../cardnews-after";
+import { changedCopy, type CopyPatch } from "../cardnews-after";
 import type { CardTool } from "../cardnews-state";
 import type { EasyCardView } from "../cardnews-view";
 
@@ -45,7 +45,10 @@ export function EasyCardnewsRow({ card, made, tools }: { card: EasyCardView; mad
       {/* 강조 문구 · 각주도 그림에 찍힌다. 만들기 전에 확인할 수 있게 적는다. */}
       {card.accent ? <span className="text-primary">강조: {card.accent}</span> : null}
       {card.footnote ? <span className="text-subtle-foreground">작은 글씨: {card.footnote}</span> : null}
-      {tools && 열림?.mode === "edit" ? <CardEditForm card={card} tools={tools} /> : null}
+      {tools && 열림?.mode === "edit" ? (
+        // 카드 글이 바뀌면(말로 고침 등) 칸을 새로 채운다.
+        <CardEditForm key={[card.headline, card.body, card.accent, card.footnote].join("|")} card={card} tools={tools} />
+      ) : null}
       {tools && 열림?.mode === "redo" ? <RedoConfirm card={card} note={열림.note ?? ""} tools={tools} /> : null}
     </li>
   );
@@ -75,11 +78,15 @@ const 칸들: Array<{ key: keyof CopyPatch; label: string; rows: number }> = [
   { key: "footnote", label: "작은 글씨", rows: 1 },
 ];
 
-/** **글 칸**(설계 §4). 무료. 비운 칸은 그대로 둔다(서버 `readCardEdit`). */
+/** **글 칸**(설계 §4). 무료. 바뀐 칸만 보내고, 비운 칸은 지운다(제목은 못 지운다). */
 function CardEditForm({ card, tools }: { card: EasyCardView; tools: EasyCardTools }) {
-  const [글, set글] = React.useState<CopyPatch>({
-    headline: card.headline, body: card.body ?? "", accent: card.accent ?? "", footnote: card.footnote ?? "",
-  });
+  const 처음: CopyPatch = { headline: card.headline, body: card.body ?? "", accent: card.accent ?? "", footnote: card.footnote ?? "" };
+  const [글, set글] = React.useState<CopyPatch>(처음);
+  const 저장 = () => {
+    const 바뀐것 = changedCopy(처음, 글);
+    if (Object.keys(바뀐것).length) tools.onEdit(card.index, 바뀐것);
+    else tools.onClose();
+  };
   return (
     <div className="mt-1 grid gap-1.5 rounded-lg border border-border bg-background p-2">
       {칸들.map((칸) => (
@@ -93,10 +100,10 @@ function CardEditForm({ card, tools }: { card: EasyCardView; tools: EasyCardTool
           />
         </label>
       ))}
-      <span className="text-subtle-foreground">비운 칸은 바꾸지 않습니다. 그림이 있는 장은 저장 뒤 다시 만들어야 그림에 반영됩니다.</span>
+      <span className="text-subtle-foreground">비운 칸은 지웁니다(제목은 지울 수 없습니다). 그림이 있는 장은 저장 뒤 다시 만들어야 그림에 반영됩니다.</span>
       <div className="flex justify-end gap-1.5">
         <Button size="sm" variant="ghost" onClick={tools.onClose}>그만두기</Button>
-        <Button size="sm" disabled={tools.busy} onClick={() => tools.onEdit(card.index, 글)}>저장</Button>
+        <Button size="sm" disabled={tools.busy} onClick={저장}>저장</Button>
       </div>
     </div>
   );

@@ -126,6 +126,19 @@ async function 다시읽는다(userId: string, fallback: EasyCardnewsProject | C
   return (await cardnewsProject(userId, id)) ?? fallback;
 }
 
+/**
+ * **일은 끝났고 대화 기록만 실패하면 일을 실패로 알리지 않는다**(미뤄 둔 것 2). 다시 만들기가
+ * 시작됐는데 「값은 나가지 않았습니다」로 뜨면 사용자가 또 누른다. 기록은 서버 로그에 남긴다.
+ */
+async function 남긴다(store: 맥락["store"], conversationId: string, body: string) {
+  try {
+    return await store.appendMessage({ conversationId, role: "assistant", body });
+  } catch (error) {
+    console.error(`[easy] 대화에 남기지 못했습니다 conversation=${conversationId}`, error);
+    return { role: "assistant" as const, body };
+  }
+}
+
 function 글모델(input: Record<string, unknown>) {
   return createEasyChatProvider(process.env, resolveTextModel(typeof input.textModel === "string" ? input.textModel : undefined));
 }
@@ -154,7 +167,7 @@ async function edit({ request, input, userId, conversationId, project, store }: 
   // 글 모델은 말로 고칠 때만 만든다. 칸으로 고치는 것은 글 모델 없이도 되어야 한다.
   const got = await editCard(request, project, index, { ...(copy ? { copy } : {}), ...(words ? { words } : {}) },
     words ? (text) => 글모델(input).editCard(text) : undefined);
-  const message = await store.appendMessage({ conversationId, role: "assistant", body: `${index}번 장 글을 고쳤습니다.` });
+  const message = await 남긴다(store, conversationId, `${index}번 장 글을 고쳤습니다.`);
   return Response.json({ ok: true, project: await 다시읽는다(userId, got.project, project.id), needsRedraw: got.needsRedraw, message });
 }
 
@@ -163,8 +176,6 @@ async function redo({ request, input, userId, conversationId, project, store }: 
   const note = typeof input.note === "string" ? input.note : undefined;
   const got = await redoCard(request, userId, project, index, note);
   const 보관 = got.archived ? ` 앞 그림은 라이브러리에 「${got.archived.title}」으로 보관했습니다.` : "";
-  const message = await store.appendMessage({
-    conversationId, role: "assistant", body: `${index}번 장을 다시 만들고 있습니다.${보관}`,
-  });
+  const message = await 남긴다(store, conversationId, `${index}번 장을 다시 만들고 있습니다.${보관}`);
   return Response.json({ ok: true, project: await 다시읽는다(userId, got.project, project.id), message });
 }

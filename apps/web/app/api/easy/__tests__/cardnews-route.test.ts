@@ -35,6 +35,7 @@ const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
 const 부른라우트: Array<{ step: string; body: Record<string, unknown> }> = [];
 const 손본것: Array<Record<string, unknown>> = [];
+let 손보기실패 = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -117,11 +118,16 @@ vi.mock("../../sns/projects/[id]/cards/[index]/route", () => ({
 }));
 vi.mock("../../../../lib/easy/cardnews-after-steps", () => ({
   editCard: async (_r: Request, project: { id: string }, index: number, change: unknown) => {
+    if (손보기실패) throw new Error("글 모델 실패");
     손본것.push({ what: "edit", index, change });
     return { project: { ...project, edited: true }, needsRedraw: true };
   },
   redoCard: async () => { 손본것.push({ what: "redo" }); return { project: {}, archived: null }; },
-  captionCard: async (_r: Request, id: string) => { 손본것.push({ what: "caption", id }); return { id, captioned: true }; },
+  captionCard: async (_r: Request, id: string) => {
+    if (손보기실패) throw new Error("게시글 실패");
+    손본것.push({ what: "caption", id });
+    return { id, captioned: true };
+  },
 }));
 vi.mock("../../../../lib/sns/feature", () => ({ isWebSourceEnabled: () => false }));
 vi.mock("../../../../lib/sns-flow-store", () => ({
@@ -153,6 +159,7 @@ beforeEach(() => {
   카드작업들 = {};
   지난줄들 = [];
   남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0; 손본것.length = 0;
+  손보기실패 = false;
 });
 
 describe("갈래 (2단계 §4)", () => {
@@ -359,5 +366,33 @@ describe("만든 카드뉴스 손보기 말 (3단계 §5 · §6-5)", () => {
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
     판단하면({ wants: "download" });
     expect((await 보낸다({ prompt: "다 받을게" })).json.download).toEqual({ rowId: "r1" });
+  });
+});
+
+describe("미뤄 둔 작은 것 (2026-10-01)", () => {
+  const 만든원고 = () => ({ ...원고작업, id: "old", status: "ready", data: { ...원고작업.data, flow: { ...원고작업.data.flow, cards: [
+    { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "done", assetPath: "me-1/sns/old/1.png" },
+    { index: 2, role: "body", kind: "generated", copy: { headline: "b" }, status: "done", assetPath: "me-1/sns/old/2.png" },
+  ] } } });
+  beforeEach(() => {
+    지난줄들 = [{ id: "r1", role: "image", body: "", workId: "old" }];
+    카드작업들 = { old: 만든원고() };
+  });
+
+  /** 1: 남기지 않은 답에 빈 id 를 주면 화면이 두 답을 같은 줄로 본다. */
+  it("남기지 않은 답에는 id 를 안 준다(화면이 저마다 짓는다)", async () => {
+    판단 = { wants: "card_text", reply: "", ratio: "", look: "", card: 9, note: "" };
+    const { json } = await 보낸다({ prompt: "9번 짧게" });
+    expect(json.message).not.toHaveProperty("id");
+  });
+
+  /** 5: 고치기 · 게시글이 실패하면 답 없는 말만 남았다. */
+  it("글 고치기 · 게시글이 실패하면 사용자 말도 남기지 않는다", async () => {
+    손보기실패 = true;
+    판단 = { wants: "card_text", reply: "", ratio: "", look: "", card: 2, note: "짧게" };
+    await 보낸다({ prompt: "2번 짧게" });
+    판단 = { wants: "caption", reply: "", ratio: "", look: "", card: 0, note: "" };
+    await 보낸다({ prompt: "올릴 글 써줘" });
+    expect(남긴줄).toEqual([]);
   });
 });

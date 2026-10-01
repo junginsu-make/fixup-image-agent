@@ -5,7 +5,7 @@ import { useRunningJobs } from "../_components/running-jobs";
 import { billableFetch } from "../../lib/billable-fetch";
 import { JOB_POLL_INTERVAL_MS, jobId } from "../../lib/running-jobs";
 import type { CardOptions } from "./cardnews-options";
-import { cardnewsRequest } from "./cardnews-request";
+import { cardnewsRequest, readCardnewsProject } from "./cardnews-request";
 import { useCardnewsAfter } from "./use-cardnews-after";
 import type { CopyPatch } from "./cardnews-after";
 import {
@@ -34,15 +34,8 @@ export interface EasyCardnewsHandlers {
 
 const 보낸다 = cardnewsRequest;
 
-/** 작업을 다시 읽는다(카드뉴스 화면과 같은 읽기 주소). 못 읽으면 `undefined`. */
-async function 다시읽는다(projectId: string): Promise<Project | undefined> {
-  try {
-    const body = await (await fetch(`/api/sns/projects/${projectId}/plan`, { cache: "no-store" })).json();
-    return body.ok ? body.project as Project : undefined;
-  } catch {
-    return undefined;
-  }
-}
+/** 작업을 다시 읽는다. 못 읽으면 `undefined`(`cardnews-request.ts`). */
+const 다시읽는다 = readCardnewsProject;
 
 export function useEasyCardnews(input: {
   conversationId: string;

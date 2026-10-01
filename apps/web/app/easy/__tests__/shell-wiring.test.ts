@@ -413,7 +413,9 @@ describe("카드뉴스 화면 잇기 (2단계)", () => {
   });
   it("「이대로 만들기」 답을 못 받으면 작업을 다시 읽어 이어 간다(미뤄 둔 것 3)", () => {
     expect(훅).toContain("startedDespiteError(");
-    expect(훅).toContain("/plan`");
+    // 다시 읽기는 손보기와 같이 쓰려고 `cardnews-request.ts` 로 옮겼다.
+    expect(훅).toContain("readCardnewsProject");
+    expect(코드("../cardnews-request.ts")).toContain("/plan`");
   });
   it("원고 본문의 줄바꿈을 살린다(마지막 장 정리 줄)", () => {
     expect(코드("../_components/cardnews-card-row.tsx")).toMatch(/whitespace-pre-line[^"]*">\{card\.body\}/);
@@ -468,5 +470,24 @@ describe("만든 카드뉴스 손보기 부품 (3단계 §4)", () => {
   });
   it("원고 줄에 손보기 도구를 넘긴다", () => {
     expect(코드("../use-cardnews.ts")).toMatch(/tools: \{/);
+  });
+});
+
+describe("미뤄 둔 작은 것 잇기 (2026-10-01)", () => {
+  const 손보기 = 코드("../use-cardnews-after.ts");
+  it("다시 만들기 답을 못 받으면 작업을 다시 읽어 시작됐으면 이어 간다(미뤄 둔 것 2)", () => {
+    expect(손보기).toContain("readCardnewsProject(");
+    // 이미 만든 작업이라 「원고 단계를 지났나」(startedDespiteError)로는 못 가른다. 만드는 중일 때만.
+    expect(손보기).toMatch(/지금\?\.status !== "generating"\) throw cause;/);
+  });
+  it("받기는 저장 경로로 이름을 짓고, 링크를 문서에 붙였다 뗀다(미뤄 둔 것 3)", () => {
+    expect(손보기).toMatch(/snsCardFilename\([^)]*card\.path/);
+    expect(손보기).toContain("document.body.appendChild(link)");
+    expect(손보기).toContain("link.remove()");
+  });
+  it("글 칸은 바뀐 칸만 보낸다, 카드 글이 바뀌면 칸을 새로 채운다(미뤄 둔 것 4)", () => {
+    const 줄 = 코드("../_components/cardnews-card-row.tsx");
+    expect(줄).toContain("changedCopy(");
+    expect(줄).toMatch(/<CardEditForm key=/);
   });
 });

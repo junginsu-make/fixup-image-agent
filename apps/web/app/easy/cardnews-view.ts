@@ -45,6 +45,8 @@ export interface EasyCardView {
   url?: string;
   /** 그림이 있는 장(3단계 — 다시 만들기 전 앞 그림 보관 · 「그림에도 반영할까요?」). */
   hasImage: boolean;
+  /** 저장 경로. 받은 파일 이름의 확장자를 여기서 읽는다. */
+  path?: string;
 }
 
 export interface EasyCardnewsView {
@@ -96,6 +98,7 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
       status: card.status,
       ...(card.assetUrl ? { url: card.assetUrl } : {}),
       hasImage: hasOwnImage(card),
+      ...(card.assetPath ? { path: card.assetPath } : {}),
     })),
     issues: [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])],
     options: optionsOfProject(project),

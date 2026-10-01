@@ -149,3 +149,13 @@ describe("붙인 사진 칸 보기 (독립 리뷰 Critical)", () => {
     expect(view.cards[1]!.hasImage).toBe(false);
   });
 });
+
+describe("받기 경로 (미뤄 둔 것 3)", () => {
+  it("장마다 저장 경로를 싣는다", () => {
+    expect(cardnewsView(작업({
+      data: { source: { kind: "question", question: "q" }, attachments: [], flow: { planningIssues: [], copyIssues: [], cards: [
+        { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "done", assetUrl: "u", assetPath: "me/sns/p/1.png" },
+      ] } },
+    }), "image-v2").cards[0]!.path).toBe("me/sns/p/1.png");
+  });
+});

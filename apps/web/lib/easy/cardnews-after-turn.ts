@@ -35,30 +35,33 @@ export async function cardAfterTurn(ctx: {
 
   if (ctx.wants === "download") return Response.json({ ok: true, download: { rowId }, textModel });
 
-  const 말을남긴다 = () => store.appendMessage({ conversationId, role: "user", body: ctx.prompt });
+  /*
+   * **일이 끝난 뒤에 남긴다**(미뤄 둔 것 5). 먼저 남기면 게시글 · 글 고치기가 실패했을 때
+   * 답 없는 말만 대화에 남았다.
+   */
+  const 주고받기를남긴다 = async (answer: string) => {
+    await store.appendMessage({ conversationId, role: "user", body: ctx.prompt });
+    return store.appendMessage({ conversationId, role: "assistant", body: answer });
+  };
+  // 남기지 않는 답에는 id 를 안 준다. 빈 id 는 화면이 두 답을 같은 줄로 본다(미뤄 둔 것 1).
+  const 말로만 = (body: string) => Response.json({ ok: true, talked: true, message: { role: "assistant", body }, textModel });
   if (ctx.wants === "caption") {
-    await 말을남긴다();
     const 고친작업 = await captionCard(ctx.request, project.id);
-    const message = await store.appendMessage({ conversationId, role: "assistant", body: "게시글을 썼습니다. 카드뉴스 밑에서 복사할 수 있습니다." });
+    const message = await 주고받기를남긴다("게시글을 썼습니다. 카드뉴스 밑에서 복사할 수 있습니다.");
     return Response.json({ ok: true, caption: { rowId, project: await 다시읽는다(고친작업) }, message, textModel });
   }
 
   const index = ctx.decision.card;
-  if (!index || !cardAt(project, index)) {
-    return Response.json({ ok: true, talked: true, message: { id: "", role: "assistant", body: ASK_CARD_NUMBER }, textModel });
-  }
+  if (!index || !cardAt(project, index)) return 말로만(ASK_CARD_NUMBER);
   if (ctx.wants === "card_redo") {
     return Response.json({ ok: true, cardAsk: { rowId, index, ...(ctx.decision.note ? { note: ctx.decision.note } : {}) }, textModel });
   }
 
-  if (isGenerating(project)) {
-    // 남기기 전에 본다. 만드는 중에 고치면 진행이 끊기고, 실패하면 답 없는 말만 남는다(독립 리뷰).
-    return Response.json({ ok: true, talked: true, message: { id: "", role: "assistant", body: STILL_GENERATING }, textModel });
-  }
-  await 말을남긴다();
+  // 만드는 중에 고치면 진행이 끊긴다(독립 리뷰). 아무것도 남기지 않고 답만 한다.
+  if (isGenerating(project)) return 말로만(STILL_GENERATING);
   const got = await editCard(ctx.request, project, index, { words: ctx.decision.note || ctx.prompt },
     (text) => ctx.provider.editCard(text));
-  const message = await store.appendMessage({ conversationId, role: "assistant", body: `${index}번 장 글을 고쳤습니다.` });
+  const message = await 주고받기를남긴다(`${index}번 장 글을 고쳤습니다.`);
   return Response.json({
     ok: true, cardEdited: { rowId, project: await 다시읽는다(got.project), index, needsRedraw: got.needsRedraw }, message, textModel,
   });

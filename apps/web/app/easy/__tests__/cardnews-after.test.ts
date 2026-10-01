@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING, archiveTitle, captionText, cardAt, cardEditPrompt, downloadList, hasOwnImage,
-  isGenerating, isMade, readCardEdit,
+  changedCopy, isGenerating, isMade, readCardEdit,
 } from "../cardnews-after";
 
 /**
@@ -94,4 +94,30 @@ describe("만드는 중 (독립 리뷰 Important 3 · 4)", () => {
   });
 
   it("안내 말", () => { expect(STILL_GENERATING).toContain("만드는 중"); });
+});
+
+describe("미뤄 둔 작은 것 (2026-10-01)", () => {
+  /** 3: 받은 파일 이름은 저장 경로의 확장자를 쓴다. 로컬 주소에는 확장자가 없어 PNG 가 .jpg 로 붙었다. */
+  it("받기 목록에 저장 경로를 싣는다", () => {
+    const view = { cards: [{ index: 1, url: "/api/x/1/file", path: "u/sns/p/1.png" }] } as never;
+    expect(downloadList(view)).toEqual([{ index: 1, url: "/api/x/1/file", path: "u/sns/p/1.png" }]);
+  });
+
+  /** 4: 칸으로 고칠 때 비운 칸은 지운다. 제목은 비울 수 없다. */
+  it("칸으로 고친 글은 바뀐 칸만, 비운 칸은 지운다", () => {
+    const 앞 = { headline: "제목", body: "본문", accent: "강조", footnote: "" };
+    expect(changedCopy(앞, { ...앞, accent: "" })).toEqual({ accent: "" });
+    expect(changedCopy(앞, { ...앞, headline: " 새 제목 " })).toEqual({ headline: "새 제목" });
+    expect(changedCopy(앞, { ...앞, headline: "" })).toEqual({});
+    expect(changedCopy(앞, 앞)).toEqual({});
+  });
+
+  it("칸 글을 그대로 받을 때는 비운 칸도 지우기로 받는다(제목 빼고)", () => {
+    expect(readCardEdit({ accent: "", headline: "" }, { explicit: true })).toEqual({ accent: "" });
+  });
+
+  it("말로 고칠 때 「-」 는 그 칸을 지운다는 뜻이다(제목 빼고)", () => {
+    expect(readCardEdit({ headline: "-", body: "", accent: "-", footnote: "" })).toEqual({ accent: "" });
+    expect(cardEditPrompt(작업([장(1)]), 1, "강조 빼줘")).toContain("「-」");
+  });
 });

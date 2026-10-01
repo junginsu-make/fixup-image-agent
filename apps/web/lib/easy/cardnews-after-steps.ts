@@ -39,7 +39,7 @@ export async function editCard(
   if (!card) throw new EasyStepError("글 고치기", "그 번호의 장이 없습니다.", 400);
   if (isGenerating(project)) throw new EasyStepError("글 고치기", STILL_GENERATING, 409);
   const patch = change.copy
-    ? readCardEdit(change.copy)
+    ? readCardEdit(change.copy, { explicit: true })
     : change.words?.trim() && writeEdit
       ? readCardEdit(await writeEdit(cardEditPrompt(project, index, change.words.trim())))
       : undefined;

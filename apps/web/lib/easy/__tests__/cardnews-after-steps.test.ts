@@ -207,3 +207,10 @@ describe("만드는 중에는 (독립 리뷰 Important 3 · 4)", () => {
     expect(고친것).toEqual([]);
   });
 });
+
+describe("칸으로 지우기 (미뤄 둔 것 4)", () => {
+  it("칸으로 비운 칸은 빈 글로 저장해 지운다", async () => {
+    await editCard(요청(), 만든작업(), 2, { copy: { accent: "" } });
+    expect(고친것).toEqual([{ index: "2", body: { accent: "" } }]);
+  });
+});
