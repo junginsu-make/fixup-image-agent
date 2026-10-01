@@ -26,6 +26,8 @@ export function socialNext(value: string | null | undefined): string {
     if (url.origin !== "https://auth.invalid" || /^\/(?:auth|login|signup|access|forgot-password|reset-password)(?:\/|$)/.test(url.pathname)) return HOME_AFTER_LOGIN;
     // Validate the decoded path, but keep the original query encoding intact.
     const original = new URL(safeNext(value), "https://auth.invalid");
+    // Dot segments can collapse into "//host"; check the value actually returned.
+    if (original.origin !== "https://auth.invalid" || original.pathname.startsWith("//")) return HOME_AFTER_LOGIN;
     return `${original.pathname}${original.search}${original.hash}`;
   } catch { return HOME_AFTER_LOGIN; }
 }

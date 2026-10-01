@@ -15,7 +15,7 @@ describe("social OAuth redirect contract", () => {
     expect(() => authOrigin("http://evil.example.com", "development")).toThrow();
   });
   it("never permits external destinations or auth loops after normalizing the URL", () => {
-    for (const next of ["//evil.example.com", "/\\evil.example.com", "/\tevil.example.com", "https://evil.example.com", "/auth/onboarding", "/login", "/x/../auth/callback", "/%61uth/callback", "/%2f%2fevil.example.com"]) {
+    for (const next of ["//evil.example.com", "/\\evil.example.com", "/\tevil.example.com", "https://evil.example.com", "/auth/onboarding", "/login", "/x/../auth/callback", "/%61uth/callback", "/%2f%2fevil.example.com", "/.//evil.example.com", "/x/..//evil.example.com", "/%2E//evil.example.com"]) {
       expect(socialNext(next)).toBe("/guide");
     }
     expect(socialNext("/library?kind=poster")).toBe("/library?kind=poster");
