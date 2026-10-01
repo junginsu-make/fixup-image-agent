@@ -1,0 +1,51 @@
+time="2026-10-01T03:19:54Z" level=warning msg="[browse] VU27 /create → 307 /login" source=console
+time="2026-10-01T03:19:54Z" level=warning msg="[browse] VU3 /sns → 307 http://172.31.13.128/?signup=required&next=%2Fsns" source=console
+time="2026-10-01T03:19:55Z" level=warning msg="[browse] VU4 /library → 307 http://172.31.13.128/?signup=required&next=%2Flibrary" source=console
+time="2026-10-01T03:19:55Z" level=warning msg="[browse] VU12 /poster → 307 http://172.31.13.128/?signup=required&next=%2Fposter" source=console
+time="2026-10-01T03:19:55Z" level=warning msg="[browse] VU11 /poster → 307 http://172.31.13.128/?signup=required&next=%2Fposter" source=console
+time="2026-10-01T03:19:57Z" level=warning msg="[browse] VU22 /library → 307 /login" source=console
+time="2026-10-01T03:19:57Z" level=warning msg="[browse] VU26 /poster → 307 /login" source=console
+time="2026-10-01T03:19:58Z" level=warning msg="[browse] VU65 /create → 307 http://172.31.13.128/?signup=required&next=%2Fcreate" source=console
+time="2026-10-01T03:19:58Z" level=warning msg="[browse] VU77 /library → 307 http://172.31.13.128/?signup=required&next=%2Flibrary" source=console
+time="2026-10-01T03:19:58Z" level=warning msg="[browse] VU66 /sns → 307 http://172.31.13.128/?signup=required&next=%2Fsns" source=console
+time="2026-10-01T03:19:58Z" level=warning msg="[browse] VU76 /poster → 307 http://172.31.13.128/?signup=required&next=%2Fposter" source=console
+time="2026-10-01T03:19:59Z" level=warning msg="[browse] VU57 /create → 307 http://172.31.13.128/?signup=required&next=%2Fcreate" source=console
+time="2026-10-01T03:20:00Z" level=warning msg="[browse] VU56 /create → 307 http://172.31.13.128/?signup=required&next=%2Fcreate" source=console
+time="2026-10-01T03:20:01Z" level=warning msg="[browse] VU92 /library → 307 http://172.31.13.128/?signup=required&next=%2Flibrary" source=console
+time="2026-10-01T03:20:01Z" level=warning msg="[browse] VU40 /sns → 307 /login" source=console
+time="2026-10-01T03:20:02Z" level=warning msg="[browse] VU46 /sns → 307 /login" source=console
+time="2026-10-01T03:20:02Z" level=warning msg="[browse] VU2 /sns → 307 http://172.31.13.128/?signup=required&next=%2Fsns" source=console
+time="2026-10-01T03:20:02Z" level=warning msg="[browse] VU59 /create → 307 /login" source=console
+time="2026-10-01T03:20:02Z" level=warning msg="[browse] VU64 /poster → 307 http://172.31.13.128/?signup=required&next=%2Fposter" source=console
+time="2026-10-01T03:20:03Z" level=warning msg="[browse] VU79 /library → 307 http://172.31.13.128/?signup=required&next=%2Flibrary" source=console
+time="2026-10-01T03:20:03Z" level=warning msg="[browse] VU72 /settings → 307 http://172.31.13.128/?signup=required&next=%2Fsettings" source=console
+time="2026-10-01T03:20:04Z" level=warning msg="[browse] VU51 /create → 307 /login" source=console
+time="2026-10-01T03:20:04Z" level=warning msg="[browse] VU88 /sns → 307 http://172.31.13.128/?signup=required&next=%2Fsns" source=console
+time="2026-10-01T03:20:05Z" level=warning msg="[browse] VU8 /poster → 307 http://172.31.13.128/?signup=required&next=%2Fposter" source=console
+time="2026-10-01T03:20:07Z" level=warning msg="[browse] VU19 /sns → 307 http://172.31.13.128/?signup=required&next=%2Fsns" source=console
+time="2026-10-01T03:20:08Z" level=warning msg="[browse] VU13 /create → 307 http://172.31.13.128/?signup=required&next=%2Fcreate" source=console
+time="2026-10-01T03:20:09Z" level=warning msg="[browse] VU24 /create → 307 http://172.31.13.128/?signup=required&next=%2Fcreate" source=console
+time="2026-10-01T03:20:09Z" level=warning msg="[browse] VU15 /sns → 307 http://172.31.13.128/?signup=required&next=%2Fsns" source=console
+time="2026-10-01T03:20:09Z" level=warning msg="[browse] VU45 /poster → 307 http://172.31.13.128/?signup=required&next=%2Fposter" source=console
+time="2026-10-01T03:20:11Z" level=warning msg="[browse] VU53 /library → 307 http://172.31.13.128/?signup=required&next=%2Flibrary" source=console
+
+== browse (levels 100 VU, hold 60s) ==
+name                                          count    p50ms    p95ms    p99ms    maxms    err%
+api_characters                                   44    15535    20429    20583    20693    20.5
+api_easy_works                                   44    17761    20626    20795    20900    29.5
+api_library                                      95    15687    20467    20633    20660    21.1
+api_poster_projects                              85    15719    20524    20872    21352    21.2
+api_showcase_manage                              48    16035    19824    20210    20420    20.8
+api_sns_projects                                 74    16452    20450    20525    20653    28.4
+api_style_references                             51    14621    20418    20424    20429     9.8
+page_create                                      52    15376    19551    20472    20834    15.4
+page_guide                                       26    15800    20431    20721    20817     0.0
+page_home                                        16    15545    19964    20344    20439     0.0
+page_library                                     57    14400    18243    19368    19811    10.5
+page_poster                                      49    15473    19155    19718    19741    16.3
+page_settings                                    19    14623    17648    18219    18362    10.5
+page_sns                                         39    15322    19961    20322    20465    23.1
+static                                         2508        1        6       12       60     0.0
+
+http_reqs=3210  http_req_failed=2.99%  auth_failures=103
+time="2026-10-01T03:20:49Z" level=error msg="thresholds on metrics 'auth_failures, http_req_duration{kind:api}, http_req_duration{kind:page}, http_req_failed' have been crossed"
