@@ -17,6 +17,8 @@ import { listInquiries } from "../../../lib/cs/inquiry-store";
 import type { CreditPlan } from "../member-list/types";
 import { AiUsagePanel } from "./ai-usage-panel";
 import { getAiCostReport, readAiPausedForAdmin } from "../../../lib/ai-control/report";
+import { readFalPoolForAdmin } from "../../../lib/fal/pool/admin";
+import { FalAccountsPanel } from "./fal-accounts-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,14 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
       return null;
     }),
   ]);
+  /*
+    **fal 계정**(보충 2026-10-01). 못 읽어도 탭을 죽이지 않는다 — 마이그레이션 전 서버에는 함수가 없다.
+    패널이 「읽지 못했습니다」를 보이고 단추를 숨긴다.
+  */
+  const falPool = await readFalPoolForAdmin().catch((cause) => {
+    console.error("[fal-pool] 관리자 목록을 읽지 못했습니다", { message: cause instanceof Error ? cause.message : String(cause) });
+    return null;
+  });
   /* 못 읽어도 던지지 않는다. 이 표는 나중에 붙어서, 마이그레이션 전 서버에는 없다. */
   const showcase = await listShowcaseForAdmin().catch(() => null);
   /* 문의함도 같다. `listInquiries` 가 못 읽으면 빈 목록을 준다. */
@@ -70,6 +80,7 @@ export default async function AdminSystemPage({ searchParams }: { searchParams: 
       */}
       <InquiryPanel rows={inquiries} />
       <AiUsagePanel report={aiReport} paused={aiPaused} usdKrw={usdKrw} />
+      <FalAccountsPanel view={falPool} />
       <PlanSettings plans={(planResult.data ?? []) as CreditPlan[]} enabled={ledger} />
       <CostPanel summary={costSummary} usdKrw={usdKrw} byOperation={costByOperation} byModel={costByModel} daily={costDaily} prices={modelPrices} />
       {/* 값이 왜 그런지 바로 위 표에서 궁금해진다. 그 답을 옆에 둔다. */}
