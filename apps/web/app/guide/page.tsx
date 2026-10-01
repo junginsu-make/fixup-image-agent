@@ -126,11 +126,12 @@ export default async function GuideHomePage() {
 
           {/* 상단에 늘 떠 있는데 설명이 없었다. 눌러 보기 전에는 무엇인지 모른다. */}
           <div>
-            <h3 className="text-sm font-extrabold">참고할 그림이 없을 때 · 「레퍼런스 찾기」</h3>
+            <h3 className="text-sm font-extrabold">참고할 그림이 없을 때 · 「아이디어 발굴」</h3>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              화면 <strong className="text-foreground">오른쪽 위 청록색 버튼</strong>입니다. 어느 도구에서든 보입니다.
-              누르면 새 탭에서 핀터레스트가 열립니다. 만들기 전에 결을 잡을 그림을 찾는 자리입니다.
-              마음에 드는 그림을 내려받아 라이브러리에 올려 두면 어느 도구에서든 불러 씁니다.
+              화면 <strong className="text-foreground">오른쪽 위 노란색 버튼</strong>입니다. 어느 도구에서든 보입니다.
+              누르면 핀터레스트·픽사베이·망고보드·미리캔버스 같은 디자인 사이트 목록이 뜨고, 고른 사이트가 새 탭에서
+              열립니다. 만들기 전에 결을 잡는 자리입니다. 분위기와 구성만 참고하고, 그림을 그대로 쓰려면 그 사이트의
+              이용 조건(라이선스)을 먼저 확인하세요.
             </p>
           </div>
         </div>
