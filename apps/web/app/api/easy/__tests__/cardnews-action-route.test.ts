@@ -35,10 +35,35 @@ let 남기기실패 = false;
 const 손본것: Array<Record<string, unknown>> = [];
 let 보관한것: { id: string; title: string } | null = { id: "a1", title: "t · 1번 장 이전 그림" };
 
+const 예약한것: Array<{ key: string | null; operation: string; units: number; resource?: string }> = [];
+const 정산한것: Array<{ success: boolean; units: number; code?: string }> = [];
+let 예약됨 = true;
+let 정산결과: unknown = { remaining: 0 };
+let 원고실패: Error | null = null;
+
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
+  reserveAiUsage: async (request: Request, operation: string, units: number, plan?: { resource: string }) => {
+    예약한것.push({ key: request.headers.get("x-idempotency-key"), operation, units, resource: plan?.resource });
+    return 예약됨
+      ? { ok: true as const, userId: "me-1", requestId: "text-request", usage: undefined }
+      : {
+          ok: false as const,
+          response: Response.json(
+            { ok: false, code: "ai_paused", message: "운영자가 AI 사용을 잠시 멈췄습니다.", retryable: false },
+            { status: 503 },
+          ),
+        };
+  },
+  settleAiUsage: async (_reservation: unknown, success: boolean, units: number, code?: string) => {
+    정산한것.push({ success, units, code });
+    return 정산결과;
+  },
 }));
-vi.mock("../../../../lib/llm/meter", () => ({ withLlmMeter: (fn: () => unknown) => fn() }));
+vi.mock("../../../../lib/llm/meter", () => ({
+  withLlmMeter: (fn: () => unknown) => fn(),
+  llmSettleCost: () => ({ model: "", billableImages: 0 }),
+}));
 vi.mock("../../../../lib/easy/store", () => ({
   easyStoreForUser: () => ({
     getConversation: async (id: string) => (id === "conv" ? { id, title: "있음" } : null),
@@ -78,6 +103,7 @@ vi.mock("../../../../lib/easy/cardnews-steps", () => ({
     시작한것.push(id);
   },
   draftCardnews: async (_request: Request, input: unknown, writeEnding?: unknown) => {
+    if (원고실패) throw 원고실패;
     만든입력.push(input);
     받은쓰기.push(typeof writeEnding);
     return { projectId: "c2", project: { ...새원고, id: "c2" } };
@@ -86,6 +112,7 @@ vi.mock("../../../../lib/easy/cardnews-steps", () => ({
 
 const { POST } = await import("../cardnews/route");
 const { EasyStepError } = await import("../../../../lib/easy/relay");
+const { stepIdempotencyKey } = await import("../../../../lib/easy/step-key");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/cardnews", {
@@ -105,6 +132,10 @@ beforeEach(() => {
   남기기실패 = false;
   손본것.length = 0;
   보관한것 = { id: "a1", title: "t · 1번 장 이전 그림" };
+  예약한것.length = 0; 정산한것.length = 0;
+  예약됨 = true;
+  정산결과 = { remaining: 0 };
+  원고실패 = null;
 });
 
 describe("「이대로 만들기」 (2단계 §8)", () => {
@@ -307,5 +338,74 @@ describe("다시 만들기는 시작됐는데 대화 저장만 실패하면 (미
     expect(json.ok).toBe(true);
     expect(json.project).toBeDefined();
     expect(손본것.map((one) => one.what)).toEqual(["redo"]);
+  });
+});
+
+/**
+ * **글 모델을 부르는 두 길은 먼저 예약한다**(master 2026-09-30 AI 사용 통제 §3.1).
+ *
+ * 말로 한 장 고치기와 조건 바꾸기(마지막 장 채우기)는 글 모델을 부른다. 예약 없이 돌면
+ * 크레딧이 없어도, 운영자가 AI 를 멈춰도 돌았다. 판정과 같이 0 크레딧으로 잡고 닫는다.
+ */
+describe("글 모델 길의 예약 (master §3.1)", () => {
+  const 만든것 = () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: { ...원고(2), status: "ready", data: { ...원고(2).data, flow: { ...원고(2).data.flow, cards: [
+      { index: 1, role: "body", kind: "generated", copy: { headline: "1" }, status: "done", assetPath: "me-1/sns/c1/1.png" },
+    ] } } } };
+  };
+
+  it("말로 고치기는 단계 열쇠로 0 크레딧 예약을 잡고 닫는다", async () => {
+    만든것();
+    const { json } = await 보낸다({ action: "edit", projectId: "c1", index: 1, words: "더 짧게" });
+    expect(json.ok).toBe(true);
+    expect(예약한것).toEqual([{
+      key: stepIdempotencyKey("11111111-1111-4111-8111-111111111111", "text"),
+      operation: "sns_image", units: 0, resource: "easy:cardnews-edit",
+    }]);
+    expect(정산한것).toEqual([{ success: true, units: 0, code: undefined }]);
+  });
+
+  it("예약이 막히면 글을 안 고치고, 다시 눌러도 안 풀린다고 알린다", async () => {
+    만든것();
+    예약됨 = false;
+    const { status, json } = await 보낸다({ action: "edit", projectId: "c1", index: 1, words: "더 짧게" });
+    expect(status).toBe(503);
+    expect(json.retryable).toBe(false);
+    expect(손본것).toEqual([]);
+    expect(남긴줄).toEqual([]);
+  });
+
+  it("칸으로 고치기는 글 모델을 안 불러 예약도 안 한다", async () => {
+    만든것();
+    await 보낸다({ action: "edit", projectId: "c1", index: 1, copy: { headline: "새 제목" } });
+    expect(손본것).toHaveLength(1);
+    expect(예약한것).toEqual([]);
+  });
+
+  it("조건 바꾸기도 예약하고 닫는다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    const { json } = await 보낸다({ action: "redraft", projectId: "c1", options: { count: 6 } });
+    expect(json.ok).toBe(true);
+    expect(예약한것.map((one) => one.resource)).toEqual(["easy:cardnews-redraft"]);
+    expect(정산한것).toEqual([{ success: true, units: 0, code: undefined }]);
+  });
+
+  it("실패하면 실패로 닫는다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    원고실패 = new Error("모델이 죽었다");
+    const { status } = await 보낸다({ action: "redraft", projectId: "c1", options: { count: 6 } });
+    expect(status).toBe(500);
+    expect(정산한것).toEqual([{ success: false, units: 0, code: "easy_cardnews_failed" }]);
+  });
+
+  it("정산이 못 닫혀도 답은 돌려준다", async () => {
+    만든것();
+    정산결과 = undefined;
+    const { status, json } = await 보낸다({ action: "edit", projectId: "c1", index: 1, words: "더 짧게" });
+    expect(status).toBe(200);
+    expect(json.ok).toBe(true);
   });
 });

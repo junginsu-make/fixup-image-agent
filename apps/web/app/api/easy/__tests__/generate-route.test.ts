@@ -23,6 +23,9 @@ const 부른횟수 = { decide: 0, roles: 0 };
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
+  // 판정 예약(master 2026-09-30 §3.1). 여기서 재는 것이 아니라 지나가게만 한다.
+  reserveAiUsage: async () => ({ ok: true as const, userId: "me-1", requestId: "decide", usage: undefined }),
+  settleAiUsage: async () => ({ remaining: 0 }),
 }));
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 vi.mock("../../../../lib/easy/store", () => ({
@@ -59,6 +62,7 @@ vi.mock("../../../../lib/poster/references", () => ({
 vi.mock("../../../../lib/llm/meter", () => ({
   withLlmMeter: (fn: () => unknown) => fn(),
   readLlmMeter: () => ({ metered: true, usd: 0, calls: 0, inputTokens: 0, outputTokens: 0 }),
+  llmSettleCost: () => ({ model: "", billableImages: 0 }),
 }));
 vi.mock("../../poster/projects/route", () => ({
   POST: async (req: Request) => {

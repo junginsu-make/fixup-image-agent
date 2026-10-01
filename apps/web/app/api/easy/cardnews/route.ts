@@ -1,9 +1,10 @@
-import { authenticateApiMember } from "../../../../lib/membership/api";
+import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
+import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { cardnewsProject, draftCardnews, startCardnews, type EasyCardnewsProject } from "../../../../lib/easy/cardnews-steps";
 import { captionCard, editCard, redoCard } from "../../../../lib/easy/cardnews-after-steps";
-import { EasyStepError } from "../../../../lib/easy/relay";
-import { withLlmMeter } from "../../../../lib/llm/meter";
+import { EasyStepError, relay } from "../../../../lib/easy/relay";
+import { llmSettleCost, withLlmMeter } from "../../../../lib/llm/meter";
 import { resolveTextModel } from "@fixup/shared";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { NOT_MADE_YET, isMade, type CopyPatch } from "../../../easy/cardnews-after";
@@ -83,7 +84,7 @@ async function act(request: Request): Promise<Response> {
   const ctx: 맥락 = { request, input, userId: auth.member.userId, conversationId, project, store };
   try {
     if (action === "generate") return await generate(ctx);
-    if (action === "redraft") return await redraft(ctx);
+    if (action === "redraft") return await 글값을잡고(request, "redraft", () => redraft(ctx));
     // 다시 만들기 · 게시글은 만든 카드뉴스에만. 원고에 한 장씩 값이 나가는 길을 막는다(독립 리뷰).
     if ((action === "redo" || action === "caption") && !isMade(project)) return fail(NOT_MADE_YET, 409);
     if (action === "caption") {
@@ -92,7 +93,11 @@ async function act(request: Request): Promise<Response> {
     }
     const index = typeof input.index === "number" && Number.isInteger(input.index) && input.index > 0 ? input.index : 0;
     if (!index) return fail("몇 번 장인지 알려 주세요.", 400);
-    return action === "edit" ? await edit(ctx, index) : await redo(ctx, index);
+    if (action === "redo") return await redo(ctx, index);
+    // 말로 고칠 때만 글 모델을 부른다. 칸으로 고치는 것은 예약할 것이 없다.
+    return typeof input.words === "string" && input.words
+      ? await 글값을잡고(request, "edit", () => edit(ctx, index))
+      : await edit(ctx, index);
   } catch (error) {
     if (error instanceof EasyStepError && error.status < 500) {
       return Response.json({
@@ -137,6 +142,30 @@ async function 남긴다(store: 맥락["store"], conversationId: string, body: s
     console.error(`[easy] 대화에 남기지 못했습니다 conversation=${conversationId}`, error);
     return { role: "assistant" as const, body };
   }
+}
+
+/**
+ * **글 모델을 부르기 전에 0 크레딧으로 예약하고, 끝나면 닫는다**(master 2026-09-30 AI 사용 통제 §3.1).
+ *
+ * 예약이 없으면 크레딧이 없어도, 운영자가 AI 를 멈춰도 돌았다. 판정(`easy:decide`)과 같은 모양이다.
+ * 열쇠는 단계(`text`)로 가른다 — 바깥 열쇠를 쓰면 안쪽 카드뉴스 라우트의 예약이 `duplicate_request` 로 막힌다.
+ */
+async function 글값을잡고(
+  request: Request, what: "edit" | "redraft", run: () => Promise<Response>,
+): Promise<Response> {
+  const 예약 = await reserveAiUsage(
+    relay(request, "/api/easy/cardnews", {}, "text"), "sns_image", 0, freeCreditPlan(`easy:cardnews-${what}`),
+  );
+  if (!예약.ok) return 예약.response;
+  let answer: Response;
+  try {
+    answer = await run();
+  } catch (error) {
+    await settleAiUsage(예약, false, 0, "easy_cardnews_failed", llmSettleCost());
+    throw error;
+  }
+  await settleAiUsage(예약, answer.ok, 0, answer.ok ? undefined : "easy_cardnews_failed", llmSettleCost());
+  return answer;
 }
 
 function 글모델(input: Record<string, unknown>) {
