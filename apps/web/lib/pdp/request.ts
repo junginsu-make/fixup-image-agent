@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_TONES, MAX_STRATEGY_LENGTH, PAGE_GOALS, PRODUCT_KINDS, PAGE_CONTEXT_MAX_LENGTH, SELLER_BRIEF_MAX_LENGTH, maxBatchSizeFor } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
-import { authenticateApiMember } from "../membership/api";
+import { authenticateApiMember, type ApiMember } from "../membership/api";
 
 // 기존 decoded 업로드 예산 20MiB + base64 팽창 + JSON 메타데이터 여유.
 export const PDP_JSON_LIMIT = Math.ceil(20 * 1024 * 1024 * 4 / 3) + 1024 * 1024;
@@ -229,7 +229,13 @@ function validJobPosition(form: FormData): boolean {
     && total <= MAX_JOB_CHUNKS && index <= total;
 }
 
-export async function readRedesignForm(req: Request): Promise<{ ok: true; form: FormData } | { ok: false; response: Response }> {
+/*
+  **인증 결과를 함께 돌려준다**(설계 2026-09-29 §3.2). 라우트가 `reserveAiUsage` 에
+  그대로 넘겨, 한 요청 안에서 profiles 를 두 번 읽지 않는다.
+*/
+export async function readRedesignForm(req: Request): Promise<
+  { ok: true; form: FormData; member: ApiMember } | { ok: false; response: Response }
+> {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
   try {
@@ -245,12 +251,12 @@ export async function readRedesignForm(req: Request): Promise<{ ok: true; form: 
       (form.has("look") && !z.enum(IMAGE_LOOKS).safeParse(form.get("look")).success)) {
       return { ok: false, response: invalidPdpRequest() };
     }
-    return { ok: true, form };
+    return { ok: true, form, member: auth.member };
   } catch (error) { return { ok: false, response: bodyError(error) }; }
 }
 
 export async function readPdpRequest<T>(req: Request, kind: keyof typeof schemas): Promise<
-  { ok: true; body: T } | { ok: false; response: Response }
+  { ok: true; body: T; member: ApiMember } | { ok: false; response: Response }
 > {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth;
@@ -258,7 +264,7 @@ export async function readPdpRequest<T>(req: Request, kind: keyof typeof schemas
     const bytes = await readBoundedBody(req);
     const parsed = schemas[kind].safeParse(JSON.parse(bytes.toString("utf8")));
     if (!parsed.success) return { ok: false, response: invalidPdpRequest() };
-    return { ok: true, body: parsed.data as T };
+    return { ok: true, body: parsed.data as T, member: auth.member };
   } catch (error) {
     return { ok: false, response: bodyError(error) };
   }

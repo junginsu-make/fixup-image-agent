@@ -93,11 +93,17 @@ export async function reserveAiUsage(
   operation: GenerationOperation,
   units: number,
   creditPlan?: CreditReservationPlan,
+  /**
+   * 이 요청에서 **이미 인증한 회원**(설계 2026-09-29 §3.2). 주면 다시 인증하지
+   * 않는다 — profiles 0.2초 왕복 한 번이 빠진다. 같은 요청의 `authenticateApiMember`
+   * 결과만 넘긴다(다른 요청·다른 사람의 것을 넘기지 않는다).
+   */
+  authenticated?: ApiMember,
 ): Promise<
   | { ok: true; userId: string; requestId: string; usage: UsageSummary }
   | { ok: false; response: Response }
 > {
-  const auth = await authenticateApiMember();
+  const auth = authenticated ? { ok: true as const, member: authenticated } : await authenticateApiMember();
   if (!auth.ok) return auth;
   // 우회 계정은 profiles 행이 없어 사용량 RPC가 실패한다. 로컬에서는 집계를 건너뛴다.
   if (isLocalAuthBypass) {

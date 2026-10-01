@@ -40,7 +40,7 @@ async function handlePost(req: Request) {
   }
   const billedModel = generateImage ? falModel : provider;
   const units = imageCreditUnits(billedModel, 1);
-  const reservation = await reserveAiUsage(req, "redesign_edit", units, creditImagePlan(1, { width: 1152, height: 2048 }, "redesign:edit"));
+  const reservation = await reserveAiUsage(req, "redesign_edit", units, creditImagePlan(1, { width: 1152, height: 2048 }, "redesign:edit"), parsed.member);
   if (!reservation.ok) return reservation.response;
   try {
     await markCreditStarted(reservation);

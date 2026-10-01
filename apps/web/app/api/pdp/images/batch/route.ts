@@ -127,7 +127,7 @@ async function handlePost(req: Request) {
    */
   const providers = createPdpProviders();
 
-  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length), creditImagePlan(sections.length, pdpCreditSize(model, body.aspectRatio), "pdp:batch"));
+  const reservation = await reserveAiUsage(req, "pdp_image", imageCreditUnits(model, sections.length), creditImagePlan(sections.length, pdpCreditSize(model, body.aspectRatio), "pdp:batch"), parsed.member);
   if (!reservation.ok) return reservation.response;
 
   /*
