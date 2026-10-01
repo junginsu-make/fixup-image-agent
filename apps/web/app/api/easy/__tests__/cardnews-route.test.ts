@@ -130,7 +130,7 @@ vi.mock("../../../../lib/sns-flow-store", () => ({
 vi.mock("../../../../lib/sns/runtime", () => ({ refreshProjectAssetUrls: async (p: unknown) => p }));
 
 const { POST } = await import("../generate/route");
-const { ASK_CARD_NUMBER, NOT_MADE_YET } = await import("../../../easy/cardnews-after");
+const { ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING } = await import("../../../easy/cardnews-after");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -336,13 +336,26 @@ describe("만든 카드뉴스 손보기 말 (3단계 §5 · §6-5)", () => {
     const { json } = await 보낸다({ prompt: "2번 더 짧게" });
     expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "더 짧게" } }]);
     expect(남긴줄.map((row) => [row.role, row.body])).toEqual([["user", "2번 더 짧게"], ["assistant", "2번 장 글을 고쳤습니다."]]);
-    expect(json.cardEdited).toMatchObject({ rowId: "r1", index: 2, needsRedraw: true });
+    expect(json.cardEdited).toMatchObject({ rowId: "r1", index: 2, needsRedraw: true, project: { id: "old" } });
+    expect(json.cardEdited.project.edited).toBeUndefined();
+  });
+
+  /** 독립 리뷰 Important 3 */
+  it("만드는 중에 「2번 더 짧게」는 다 만든 뒤 하라고 답하고 아무것도 안 남긴다", async () => {
+    카드작업들 = { old: { ...만든원고(), status: "generating" } };
+    판단하면({ wants: "card_text", card: 2, note: "더 짧게" });
+    const { json } = await 보낸다({ prompt: "2번 더 짧게" });
+    expect(json.message.body).toBe(STILL_GENERATING);
+    expect(손본것).toEqual([]);
+    expect(남긴줄).toEqual([]);
   });
 
   it("게시글 · 받기", async () => {
     판단하면({ wants: "caption" });
     const 게시글 = (await 보낸다({ prompt: "올릴 글 써줘" })).json;
-    expect(게시글.caption).toMatchObject({ rowId: "r1", project: { captioned: true } });
+    // 다시 읽어 새로 서명한 작업을 준다(독립 리뷰).
+    expect(게시글.caption).toMatchObject({ rowId: "r1", project: { id: "old" } });
+    expect(게시글.caption.project.captioned).toBeUndefined();
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
     판단하면({ wants: "download" });
     expect((await 보낸다({ prompt: "다 받을게" })).json.download).toEqual({ rowId: "r1" });

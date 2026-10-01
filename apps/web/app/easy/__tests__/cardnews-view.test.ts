@@ -132,3 +132,20 @@ describe("만든 작업 보기 (3단계)", () => {
     expect(cardnewsView(원고, "image-v2").made).toBe(false);
   });
 });
+
+describe("붙인 사진 칸 보기 (독립 리뷰 Critical)", () => {
+  it("원본 그대로 사진 칸은 그림이 있다고 보지 않고, 만든 작업도 아니다", () => {
+    const 원고 = 작업({
+      data: {
+        source: { kind: "question", question: "q" }, attachments: [],
+        flow: { planningIssues: [], copyIssues: [], cards: [
+          { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "pending" },
+          { index: 2, role: "body", kind: "place_as_is", copy: { headline: "사용자 원본" }, status: "pending", assetUrl: "u", assetPath: "u/references/a.png" },
+        ] },
+      },
+    });
+    const view = cardnewsView(원고, "image-v2");
+    expect(view.made).toBe(false);
+    expect(view.cards[1]!.hasImage).toBe(false);
+  });
+});

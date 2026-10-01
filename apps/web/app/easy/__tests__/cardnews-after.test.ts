@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  ASK_CARD_NUMBER, NOT_MADE_YET, archiveTitle, captionText, cardAt, cardEditPrompt, downloadList, isMade, readCardEdit,
+  ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING, archiveTitle, captionText, cardAt, cardEditPrompt, downloadList, hasOwnImage,
+  isGenerating, isMade, readCardEdit,
 } from "../cardnews-after";
 
 /**
@@ -65,4 +66,32 @@ describe("받기 · 게시글", () => {
     expect(NOT_MADE_YET).toContain("이대로 만들기");
     expect(ASK_CARD_NUMBER).toContain("몇 번");
   });
+});
+
+describe("붙인 사진 칸은 만든 그림이 아니다 (독립 리뷰 Critical)", () => {
+  /** 기획이 원본 그대로 · 마지막 장 사진 칸에 원고 단계부터 사진 경로를 넣는다(`lib/sns/actual-flow.ts:101-105`). */
+  it("원본 그대로 · 마지막 장 사진이 있는 원고는 만든 작업이 아니다", () => {
+    const 원고 = 작업([
+      장(1, { role: "cover" }),
+      장(2, { kind: "place_as_is", assetPath: "u/references/a.png" }),
+      장(3, { role: "ending", kind: "ending_image", assetPath: "u/references/b.png" }),
+    ], "copy_ready");
+    expect(isMade(원고)).toBe(false);
+  });
+
+  it("AI 가 그린 장의 그림만 제 그림이다", () => {
+    expect(hasOwnImage(장(1, { status: "done", assetPath: "u/sns/p/1.png" }))).toBe(true);
+    expect(hasOwnImage(장(2, { kind: "place_as_is", assetPath: "u/references/a.png" }))).toBe(false);
+    expect(hasOwnImage(장(3))).toBe(false);
+  });
+});
+
+describe("만드는 중 (독립 리뷰 Important 3 · 4)", () => {
+  it("작업이나 어느 장이 만드는 중이면 만드는 중", () => {
+    expect(isGenerating(작업([장(1, { status: "done" })], "generating"))).toBe(true);
+    expect(isGenerating(작업([장(1, { status: "done" }), 장(2, { status: "generating" })], "ready"))).toBe(true);
+    expect(isGenerating(작업([장(1, { status: "done" })], "ready"))).toBe(false);
+  });
+
+  it("안내 말", () => { expect(STILL_GENERATING).toContain("만드는 중"); });
 });

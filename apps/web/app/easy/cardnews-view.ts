@@ -1,7 +1,7 @@
 import type { Attachment } from "@fixup/sns-core";
 import { cardCost, optionsOfProject, type CardOptions } from "./cardnews-options";
 import { cardSourceLabel, type CardSource } from "./cardnews-source";
-import { isMade, type Caption } from "./cardnews-after";
+import { hasOwnImage, isMade, type Caption } from "./cardnews-after";
 
 /**
  * **카드뉴스 작업을 「쉽게」가 그릴 것으로**(2단계 설계 §7 · §8). 서버 모듈을
@@ -95,7 +95,7 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
       ...(card.copy.footnote ? { footnote: card.copy.footnote } : {}),
       status: card.status,
       ...(card.assetUrl ? { url: card.assetUrl } : {}),
-      hasImage: Boolean(card.assetUrl || card.assetPath),
+      hasImage: hasOwnImage(card),
     })),
     issues: [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])],
     options: optionsOfProject(project),

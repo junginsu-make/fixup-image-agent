@@ -219,7 +219,9 @@ describe("만든 카드뉴스 손보기 (3단계 §6)", () => {
     const { json } = await 보낸다({ action: "edit", projectId: "c1", index: 2, copy: { headline: "새" } });
     expect(손본것).toEqual([{ what: "edit", index: 2, change: { copy: { headline: "새" } }, writer: "undefined" }]);
     expect(남긴줄.map((row) => row.body)).toEqual(["2번 장 글을 고쳤습니다."]);
-    expect(json).toMatchObject({ ok: true, needsRedraw: true, project: { edited: true } });
+    // 카드뉴스 라우트가 준 작업(옛 그림 주소)이 아니라 다시 읽어 새로 서명한 작업을 준다(독립 리뷰).
+    expect(json).toMatchObject({ ok: true, needsRedraw: true, project: { id: "c1", status: "copy_ready" } });
+    expect(json.project.edited).toBeUndefined();
   });
 
   it("말로 온 글 고치기도 받는다", async () => {
@@ -235,7 +237,7 @@ describe("만든 카드뉴스 손보기 (3단계 §6)", () => {
     const { json } = await 보낸다({ action: "redo", projectId: "c1", index: 1, note: "글자 크게" });
     expect(손본것).toEqual([{ what: "redo", userId: "me-1", index: 1, note: "글자 크게" }]);
     expect(남긴줄[0]!.body).toBe("1번 장을 다시 만들고 있습니다. 앞 그림은 라이브러리에 「t · 1번 장 이전 그림」으로 보관했습니다.");
-    expect(json.project.status).toBe("generating");
+    expect(json.project.status).toBe("copy_ready"); // 다시 읽은 작업
   });
 
   it("그림이 없던 장은 보관 문장 없이 남긴다", async () => {
@@ -272,6 +274,20 @@ describe("만든 카드뉴스 손보기 (3단계 §6)", () => {
     카드작업들 = { c1: 만든() };
     const { json } = await 보낸다({ action: "caption", projectId: "c1" });
     expect(손본것).toEqual([{ what: "caption", id: "c1" }]);
-    expect(json.project).toMatchObject({ captioned: true });
+    expect(json.project).toMatchObject({ id: "c1" });
+    expect(json.project.captioned).toBeUndefined();
+  });
+});
+
+describe("아직 만들지 않은 원고 (독립 리뷰 Critical)", () => {
+  it("다시 만들기 · 게시글은 거절한다(한 장씩 값이 나가는 길을 막는다)", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    for (const body of [{ action: "redo", index: 1 }, { action: "caption" }]) {
+      const { status, json } = await 보낸다({ projectId: "c1", ...body });
+      expect(status).toBe(409);
+      expect(json.message).toContain("이대로 만들기");
+    }
+    expect(손본것).toEqual([]);
   });
 });

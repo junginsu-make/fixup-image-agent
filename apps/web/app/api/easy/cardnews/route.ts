@@ -6,10 +6,10 @@ import { EasyStepError } from "../../../../lib/easy/relay";
 import { withLlmMeter } from "../../../../lib/llm/meter";
 import { resolveTextModel } from "@fixup/shared";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
-import { isMade, type CopyPatch } from "../../../easy/cardnews-after";
+import { NOT_MADE_YET, isMade, type CopyPatch } from "../../../easy/cardnews-after";
 import { readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
-import { draftFailureMessage } from "../../../easy/cardnews-view";
+import { draftFailureMessage, type CardnewsProjectLike } from "../../../easy/cardnews-view";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +84,12 @@ async function act(request: Request): Promise<Response> {
   try {
     if (action === "generate") return await generate(ctx);
     if (action === "redraft") return await redraft(ctx);
-    if (action === "caption") return Response.json({ ok: true, project: await captionCard(request, projectId) });
+    // 다시 만들기 · 게시글은 만든 카드뉴스에만. 원고에 한 장씩 값이 나가는 길을 막는다(독립 리뷰).
+    if ((action === "redo" || action === "caption") && !isMade(project)) return fail(NOT_MADE_YET, 409);
+    if (action === "caption") {
+      const 쓴것 = await captionCard(request, projectId);
+      return Response.json({ ok: true, project: await 다시읽는다(ctx.userId, 쓴것, projectId) });
+    }
     const index = typeof input.index === "number" && Number.isInteger(input.index) && input.index > 0 ? input.index : 0;
     if (!index) return fail("몇 번 장인지 알려 주세요.", 400);
     return action === "edit" ? await edit(ctx, index) : await redo(ctx, index);
@@ -113,6 +118,14 @@ async function generate({ request, project }: 맥락): Promise<Response> {
   return Response.json({ ok: true, started: true });
 }
 
+/**
+ * **다시 읽어 새로 서명한 작업**(독립 리뷰). 카드뉴스 라우트가 돌려주는 작업에는 저장해 둔
+ * 그림 주소(1시간짜리 서명)가 들어 있어, 그대로 화면을 덮으면 어제 연 대화의 그림이 깨진다.
+ */
+async function 다시읽는다(userId: string, fallback: EasyCardnewsProject | CardnewsProjectLike, id: string) {
+  return (await cardnewsProject(userId, id)) ?? fallback;
+}
+
 function 글모델(input: Record<string, unknown>) {
   return createEasyChatProvider(process.env, resolveTextModel(typeof input.textModel === "string" ? input.textModel : undefined));
 }
@@ -135,14 +148,14 @@ async function redraft({ request, input, conversationId, project, store }: 맥�
 }
 
 /** **한 장 글 고치기**(3단계 §6-2). 칸으로 온 글이나 말. 무료다. */
-async function edit({ request, input, conversationId, project, store }: 맥락, index: number): Promise<Response> {
+async function edit({ request, input, userId, conversationId, project, store }: 맥락, index: number): Promise<Response> {
   const copy = input.copy && typeof input.copy === "object" ? input.copy as CopyPatch : undefined;
   const words = typeof input.words === "string" ? input.words : undefined;
   // 글 모델은 말로 고칠 때만 만든다. 칸으로 고치는 것은 글 모델 없이도 되어야 한다.
   const got = await editCard(request, project, index, { ...(copy ? { copy } : {}), ...(words ? { words } : {}) },
     words ? (text) => 글모델(input).editCard(text) : undefined);
   const message = await store.appendMessage({ conversationId, role: "assistant", body: `${index}번 장 글을 고쳤습니다.` });
-  return Response.json({ ok: true, project: got.project, needsRedraw: got.needsRedraw, message });
+  return Response.json({ ok: true, project: await 다시읽는다(userId, got.project, project.id), needsRedraw: got.needsRedraw, message });
 }
 
 /** **한 장 다시 만들기**(3단계 §6-3). 앞 그림을 보관한 뒤. 그 장만큼 크레딧. */
@@ -153,5 +166,5 @@ async function redo({ request, input, userId, conversationId, project, store }: 
   const message = await store.appendMessage({
     conversationId, role: "assistant", body: `${index}번 장을 다시 만들고 있습니다.${보관}`,
   });
-  return Response.json({ ok: true, project: got.project, message });
+  return Response.json({ ok: true, project: await 다시읽는다(userId, got.project, project.id), message });
 }

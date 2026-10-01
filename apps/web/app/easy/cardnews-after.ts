@@ -29,18 +29,39 @@ export interface Caption { hook: string; body: string; hashtags: string[]; first
 
 export const NOT_MADE_YET = "아직 만든 카드가 없습니다. 원고 밑 「이대로 만들기」를 먼저 눌러 주세요.";
 export const ASK_CARD_NUMBER = "몇 번 장인가요? 예: 「3번 다시 그려줘」";
+export const STILL_GENERATING = "카드를 만드는 중입니다. 다 만든 뒤 다시 말씀해 주세요.";
+
+/**
+ * **만드는 중**(독립 리뷰). 작업이나 어느 장이 만드는 중이면 글 고치기 · 다시 만들기를 받지 않는다.
+ * 카드뉴스의 글 저장은 만드는 중에도 상태를 원고로 되돌려 진행이 끊기고, 다시 만들기는
+ * 어차피 거절되는데 앞 그림만 또 보관된다.
+ */
+export function isGenerating(project: { status: string; data: { flow?: { cards: ReadonlyArray<{ status: string }> } } }): boolean {
+  return project.status === "generating" || (project.data.flow?.cards ?? []).some((card) => card.status === "generating");
+}
 
 const 그림있는상태 = new Set(["done", "review_required", "failed"]);
 
 /**
- * **만든 작업**(설계 §3). 그림이 한 장이라도 있으면(실패한 장 포함) 만든 작업이다.
+ * **AI 가 그린 장의 제 그림**. 원본 그대로 · 마지막 장 사진 칸은 기획이 원고 단계부터 사진
+ * 경로를 넣어 둔다(`lib/sns/actual-flow.ts:101-105`) — 그것은 만든 그림이 아니다(독립 리뷰).
+ */
+export function hasOwnImage(card: { kind?: string; assetPath?: string; assetUrl?: string }): boolean {
+  return (card.kind ?? "generated") === "generated" && Boolean(card.assetPath || card.assetUrl);
+}
+
+/**
+ * **만든 작업**(설계 §3). 만든 뒤 상태(완료 · 확인 필요 · 실패)인 장이 있거나, AI 가 그린
+ * 장에 그림이 있으면 만든 작업이다. 붙인 사진 칸은 세지 않는다(`hasOwnImage`).
  *
  * 상태(`status`)로 가르지 않는다. 한 장 글을 저장하면 카드뉴스 라우트가 상태를
  * `copy_ready` 로 되돌려(`cards/[index]/route.ts:58`), 상태로 가르면 「이대로 만들기」가
  * 다시 나오고 누르면 전 장 값이 나간다(설계 §2 위험).
  */
-export function isMade(project: { data: { flow?: { cards: ReadonlyArray<{ status: string; assetPath?: string }> } } }): boolean {
-  return (project.data.flow?.cards ?? []).some((card) => 그림있는상태.has(card.status) || Boolean(card.assetPath));
+export function isMade(project: {
+  data: { flow?: { cards: ReadonlyArray<{ status: string; kind?: string; assetPath?: string; assetUrl?: string }> } };
+}): boolean {
+  return (project.data.flow?.cards ?? []).some((card) => 그림있는상태.has(card.status) || hasOwnImage(card));
 }
 
 export function cardAt(project: AfterProject, index: number): AfterCard | undefined {

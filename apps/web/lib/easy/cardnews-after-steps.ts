@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { PATCH as patchCardCopy, POST as redoCardRoute } from "../../app/api/sns/projects/[id]/cards/[index]/route";
 import { POST as writeCaptionRoute } from "../../app/api/sns/projects/[id]/caption/route";
-import { archiveTitle, cardAt, cardEditPrompt, readCardEdit, type AfterProject, type CopyPatch } from "../../app/easy/cardnews-after";
+import {
+  STILL_GENERATING, archiveTitle, cardAt, cardEditPrompt, hasOwnImage, isGenerating, readCardEdit, type AfterProject,
+  type CopyPatch,
+} from "../../app/easy/cardnews-after";
 import type { CardnewsProjectLike } from "../../app/easy/cardnews-view";
 import { isLocalStoreEnabled, localStoreRoot, readLocalSnsResultFile } from "../local-store";
 import { saveReferenceImage } from "../reference-images";
@@ -34,6 +37,7 @@ export async function editCard(
 ): Promise<{ project: CardnewsProjectLike; needsRedraw: boolean }> {
   const card = cardAt(project, index);
   if (!card) throw new EasyStepError("글 고치기", "그 번호의 장이 없습니다.", 400);
+  if (isGenerating(project)) throw new EasyStepError("글 고치기", STILL_GENERATING, 409);
   const patch = change.copy
     ? readCardEdit(change.copy)
     : change.words?.trim() && writeEdit
@@ -47,7 +51,8 @@ export async function editCard(
     ),
     "글 고치기",
   );
-  return { project: saved.project as CardnewsProjectLike, needsRedraw: Boolean(card.assetPath || card.assetUrl) };
+  // 붙인 사진 칸은 다시 만들어도 그 사진이 그대로 들어간다. 다시 그릴 것은 AI 가 그린 장뿐이다.
+  return { project: saved.project as CardnewsProjectLike, needsRedraw: hasOwnImage(card) };
 }
 
 /** **게시글**(설계 §6-4). 카드뉴스 게시글 라우트가 쓰고 작업에 저장한다. 크레딧 없음. */
@@ -102,7 +107,11 @@ export async function archiveCard(
   deps: ArchiveDeps = 기본보관,
 ): Promise<{ id: string; title: string } | null> {
   const card = cardAt(project, index);
-  if (!card?.assetPath) return null;
+  /*
+   * AI 가 그린 장의 **내 폴더 그림만** 보관한다. 붙인 사진 칸은 다시 만들어도 덮어쓰지 않고
+   * (그 사진을 다시 넣는다), 내 폴더 밖 경로는 서버 권한으로 읽지 않는다(`runtime.ts` 서명과 같은 원칙).
+   */
+  if (!card?.assetPath || !hasOwnImage(card) || !card.assetPath.startsWith(`${userId}/`)) return null;
   const file = await deps.readFile(card.assetPath);
   const title = archiveTitle(project.title ?? "", index);
   const id = deps.newId();
@@ -125,6 +134,8 @@ export async function redoCard(
   deps: ArchiveDeps = 기본보관,
 ): Promise<{ project: CardnewsProjectLike; archived: { id: string; title: string } | null }> {
   if (!cardAt(project, index)) throw new EasyStepError("다시 만들기", "그 번호의 장이 없습니다.", 400);
+  // 만드는 중이면 카드뉴스 라우트가 어차피 거절한다. 보관부터 하면 같은 그림이 쌓인다(독립 리뷰).
+  if (isGenerating(project)) throw new EasyStepError("다시 만들기", STILL_GENERATING, 409);
   let archived: { id: string; title: string } | null;
   try {
     archived = await archiveCard(userId, project, index, deps);

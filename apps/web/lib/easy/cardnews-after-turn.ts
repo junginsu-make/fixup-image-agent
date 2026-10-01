@@ -1,7 +1,7 @@
-import { ASK_CARD_NUMBER, cardAt } from "../../app/easy/cardnews-after";
+import { ASK_CARD_NUMBER, STILL_GENERATING, cardAt, isGenerating } from "../../app/easy/cardnews-after";
 import type { EasyDecision } from "../../app/easy/chat";
 import { captionCard, editCard } from "./cardnews-after-steps";
-import type { EasyCardnewsProject } from "./cardnews-steps";
+import { cardnewsProject, type EasyCardnewsProject } from "./cardnews-steps";
 import type { createEasyChatProvider } from "./chat-provider";
 import type { easyStoreForUser } from "./store";
 
@@ -16,6 +16,7 @@ import type { easyStoreForUser } from "./store";
  */
 export async function cardAfterTurn(ctx: {
   request: Request;
+  userId: string;
   store: ReturnType<typeof easyStoreForUser>;
   conversationId: string;
   prompt: string;
@@ -27,6 +28,8 @@ export async function cardAfterTurn(ctx: {
   rows: ReadonlyArray<{ id: string; role: string; workId?: string | null }>;
 }): Promise<Response> {
   const { conversationId, project, store, textModel } = ctx;
+  // 카드뉴스 라우트가 준 작업은 옛 그림 주소를 품는다. 다시 읽어 새로 서명한 것을 준다(독립 리뷰).
+  const 다시읽는다 = async (fallback: unknown) => (await cardnewsProject(ctx.userId, project.id)) ?? fallback;
   // 화면이 단추를 달 줄. 같은 작업을 가리키는 마지막 줄이다.
   const rowId = [...ctx.rows].reverse().find((row) => row.role === "image" && row.workId === project.id)?.id ?? "";
 
@@ -37,7 +40,7 @@ export async function cardAfterTurn(ctx: {
     await 말을남긴다();
     const 고친작업 = await captionCard(ctx.request, project.id);
     const message = await store.appendMessage({ conversationId, role: "assistant", body: "게시글을 썼습니다. 카드뉴스 밑에서 복사할 수 있습니다." });
-    return Response.json({ ok: true, caption: { rowId, project: 고친작업 }, message, textModel });
+    return Response.json({ ok: true, caption: { rowId, project: await 다시읽는다(고친작업) }, message, textModel });
   }
 
   const index = ctx.decision.card;
@@ -48,11 +51,15 @@ export async function cardAfterTurn(ctx: {
     return Response.json({ ok: true, cardAsk: { rowId, index, ...(ctx.decision.note ? { note: ctx.decision.note } : {}) }, textModel });
   }
 
+  if (isGenerating(project)) {
+    // 남기기 전에 본다. 만드는 중에 고치면 진행이 끊기고, 실패하면 답 없는 말만 남는다(독립 리뷰).
+    return Response.json({ ok: true, talked: true, message: { id: "", role: "assistant", body: STILL_GENERATING }, textModel });
+  }
   await 말을남긴다();
   const got = await editCard(ctx.request, project, index, { words: ctx.decision.note || ctx.prompt },
     (text) => ctx.provider.editCard(text));
   const message = await store.appendMessage({ conversationId, role: "assistant", body: `${index}번 장 글을 고쳤습니다.` });
   return Response.json({
-    ok: true, cardEdited: { rowId, project: got.project, index, needsRedraw: got.needsRedraw }, message, textModel,
+    ok: true, cardEdited: { rowId, project: await 다시읽는다(got.project), index, needsRedraw: got.needsRedraw }, message, textModel,
   });
 }

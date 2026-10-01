@@ -34,6 +34,8 @@ export function useCardnewsAfter(input: {
   const [tool, setTool] = React.useState<CardTool>(null);
   // 지금 보내는 일(줄 id). 그동안 단추를 잠근다.
   const [working, setWorking] = React.useState<string | null>(null);
+  // 같은 틈의 두 번째 누름을 곧바로 막는다. 상태(`working`)는 다음 그리기에야 보여 두 번 보냈다(독립 리뷰).
+  const 보내는중 = React.useRef(false);
 
   const 말을붙인다 = (message: 서버줄 | undefined) => {
     if (message?.body) onMessage({ id: message.id || `after-${Date.now()}`, role: "assistant", body: message.body });
@@ -41,13 +43,15 @@ export function useCardnewsAfter(input: {
 
   async function 한다(rowId: string, work: (project: Project) => Promise<void>) {
     const project = projects[rowId];
-    if (!project || working) return;
+    if (!project || 보내는중.current) return;
+    보내는중.current = true;
     setWorking(rowId);
     try {
       await work(project);
     } catch (cause) {
       onError({ message: (cause as Error).message, retryable: (cause as { retryable?: boolean }).retryable !== false });
     } finally {
+      보내는중.current = false;
       setWorking(null);
     }
   }

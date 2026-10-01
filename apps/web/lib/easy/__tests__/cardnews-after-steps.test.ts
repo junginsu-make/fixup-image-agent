@@ -159,3 +159,51 @@ describe("한 장 다시 만들기 (3단계 §6-3)", () => {
     expect((다시만든것[0]!.body as { note: string }).note).toHaveLength(500);
   });
 });
+
+describe("붙인 사진 칸 (독립 리뷰 Critical)", () => {
+  const 사진칸 = () => ({
+    id: "c1", title: "거북목", status: "ready", language: "ko",
+    data: { flow: { cards: [
+      장(1, { status: "done", assetPath: "me/sns/c1/1.png" }),
+      장(2, { kind: "place_as_is", status: "done", assetPath: "me/references/a.png" }),
+      장(3, { status: "done", assetPath: "other/sns/c1/3.png" }),
+    ] } },
+  });
+
+  it("붙인 사진 칸의 글을 고쳐도 다시 그릴 필요가 없다", async () => {
+    expect((await editCard(요청(), 사진칸(), 2, { copy: { headline: "x" } })).needsRedraw).toBe(false);
+  });
+
+  it("붙인 사진 칸 · 내 폴더 밖 그림은 보관하지 않는다(덮어쓰지 않거나 남의 것)", async () => {
+    const 넣은것: unknown[] = [];
+    const deps = {
+      readFile: async () => ({ bytes: new Uint8Array([1]), mimeType: "image/png" }),
+      save: async (input: unknown) => { 넣은것.push(input); return {}; },
+      newId: () => "00000000-0000-4000-8000-000000000098",
+    };
+    expect((await redoCard(요청(), "me", 사진칸(), 2, undefined, deps)).archived).toBeNull();
+    expect((await redoCard(요청(), "me", 사진칸(), 3, undefined, deps)).archived).toBeNull();
+    expect(넣은것).toEqual([]);
+  });
+});
+
+describe("만드는 중에는 (독립 리뷰 Important 3 · 4)", () => {
+  const 만드는중 = () => ({ ...만든작업(), status: "generating" });
+
+  it("다시 만들기는 앞 그림을 보관하기 전에 멈춘다(라이브러리에 같은 그림이 쌓이지 않는다)", async () => {
+    const 넣은것: unknown[] = [];
+    const deps = {
+      readFile: async () => ({ bytes: new Uint8Array([1]), mimeType: "image/png" }),
+      save: async (input: unknown) => { 넣은것.push(input); return {}; },
+      newId: () => "00000000-0000-4000-8000-000000000097",
+    };
+    await expect(redoCard(요청(), "me", 만드는중(), 2, undefined, deps)).rejects.toThrow("만드는 중");
+    expect(넣은것).toEqual([]);
+    expect(다시만든것).toEqual([]);
+  });
+
+  it("글 고치기도 멈춘다(만드는 중에 저장하면 상태가 원고로 돌아가 진행이 끊긴다)", async () => {
+    await expect(editCard(요청(), 만드는중(), 2, { copy: { headline: "x" } })).rejects.toThrow("만드는 중");
+    expect(고친것).toEqual([]);
+  });
+});

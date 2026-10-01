@@ -436,6 +436,10 @@ describe("만든 카드뉴스 손보기 잇기 (3단계)", () => {
     expect(손보기).toContain("snsCardFilename(");
     expect(손보기).toContain("jszip");
   });
+  /** 독립 리뷰 Important 4: 같은 틈에 두 번 누르면 상태가 늦어 두 번 보내고 두 번 보관했다. */
+  it("손보기 요청은 곧바로 잠기는 표시로 겹쳐 보내지 않는다", () => {
+    expect(손보기).toMatch(/보내는중\.current\) return;[\s\S]{0,80}보내는중\.current = true;/);
+  });
   it("말 「3번 다시」는 확인 줄을 연다, 다시 만들기 뒤에는 진행을 셸에 건다", () => {
     expect(손보기).toMatch(/cardAsk[\s\S]{0,300}mode: "redo"/);
     expect(손보기).toContain("start(cardnewsJob(");

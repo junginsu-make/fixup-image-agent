@@ -201,7 +201,8 @@ async function turn(request: Request): Promise<Response> {
     // 만든 카드뉴스 손보기(3단계). 판단 읽기가 원고 · 만든 카드가 있을 때만 이 갈래를 준다.
     if ((wants === "card_redo" || wants === "card_text" || wants === "caption" || wants === "download") && 고칠원고) {
       return await cardAfterTurn({
-        request, store, conversationId, prompt, textModel, wants, decision, provider, project: 고칠원고, rows: 지난줄,
+        request, userId: auth.member.userId, store, conversationId, prompt, textModel, wants, decision, provider,
+        project: 고칠원고, rows: 지난줄,
       });
     }
 
