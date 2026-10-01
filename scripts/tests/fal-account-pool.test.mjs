@@ -78,6 +78,22 @@ test('claim returns nothing when every account is full', async () => {
   assert.equal(await claim(), null);
 });
 
+/*
+  독립 리뷰(opus) fix round 1 — Important 2.
+
+  `fal_account_claim` 의 짧은 잠금(advisory lock)을 지우면, 여러 요청이 동시에 「남은 칸」을 같은 값으로
+  읽고 전부 통과해 한도를 넘어 배정한다(리뷰어 확인: 잠금 없이 한도 3 짜리 계정 둘에 24개를 동시에 보내면
+  17/7 로 벌어졌다). 하네스는 `db.sql` 호출마다 새 psql 프로세스(새 세션)를 띄우므로, `claim()` 을
+  `Promise.all` 로 묶으면 실제로 여러 트랜잭션이 동시에 들어온다.
+*/
+test('claim serializes concurrent racers so a limit of 3 never over-allocates', async () => {
+  await add(A, 'solo', 3);
+  const attempts = await Promise.all(Array.from({ length: 20 }, () => claim()));
+  const granted = attempts.filter(Boolean);
+  assert.equal(granted.length, 3);
+  assert.equal(await open(A), 3);
+});
+
 test('claim skips excluded, disabled, cooling, locked, invalid and undecryptable accounts', async () => {
   await add(A, 'a'); await add(B, 'b'); await add(C, 'c');
   assert.notEqual((await claim([A, B])).account_id, A);
@@ -129,6 +145,21 @@ test('mark is true only on the first change; rate_limited cools for 60 seconds a
   const slot = await claim();
   await db.sql(`select fal_request_bind(${slot.slot_id}, 'req-3');`);
   assert.equal(await db.sql(`select state || ':' || coalesce(cooldown_until::text,'none') from fal_accounts where id='${A}';`), 'ok:none');
+});
+
+/*
+  독립 리뷰(opus) fix round 1 — Important 1.
+
+  막혀서(locked/invalid/decrypt_failed) 뺀 계정에 그 뒤 하나의 429 만 와도 `rate_limited` 로 덮어써지면,
+  60초 뒤 다시 배정되고(여전히 잠겨 있을 계정인데) 다음 403 에서 메일이 또 나간다. 관리자가 고치거나
+  「다시 확인」할 때까지는 상태를 지켜야 한다.
+*/
+test('a locked account is not downgraded to rate_limited by a later 429', async () => {
+  await add(A, 'a');
+  assert.equal(await db.sql(`select fal_account_mark('${A}','locked','User is locked');`), 't');
+  assert.equal(await db.sql(`select fal_account_mark('${A}','rate_limited','429');`), 'f');
+  assert.equal(await db.sql(`select state from fal_accounts where id='${A}';`), 'locked');
+  assert.equal(await claim(), null);
 });
 
 test('an unknown failure kind is refused', async () => {

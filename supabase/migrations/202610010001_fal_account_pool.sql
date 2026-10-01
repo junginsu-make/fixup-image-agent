@@ -13,6 +13,9 @@
 -- 포기하는 시간(`lib/sns/queued-flow.ts` `QUEUE_GIVE_UP_MS`)과 같다 — 화면을 닫아 아무도 다시 묻지 않는 요청이
 -- 계정 칸을 영원히 쥐지 않게 한다.
 
+-- `fal_accounts` 가 공유 표 `profiles` 를 FK 로 참조하므로, 생성 중 그 표에 짧은 잠금을 건다 — 오래 기다리지 않는다.
+set lock_timeout = '5s';
+
 create table if not exists public.fal_accounts (
   id                 uuid primary key,
   name               text not null check (char_length(btrim(name)) between 1 and 80),
@@ -166,6 +169,11 @@ begin
   end if;
   select state into v_prev from fal_accounts where id = p_account and deleted_at is null for update;
   if not found then
+    return false;
+  end if;
+  -- locked/invalid/decrypt_failed 은 관리자가 고칠 때까지 유지한다. 그 뒤에 온 한도 걸림(429) 한 번으로
+  -- 60초만 쉬었다가 다시 배정되거나, 다음 403 에서 메일이 또 나가면 안 된다.
+  if v_prev in ('locked', 'invalid', 'decrypt_failed') and p_kind = 'rate_limited' then
     return false;
   end if;
   update fal_accounts set
