@@ -195,6 +195,20 @@ describe("「이대로 만들기」 (2단계 §8)", () => {
     expect(json).toMatchObject({ message: "크레딧이 부족합니다.", retryable: false });
   });
 
+  /**
+   * **운영자가 AI 를 멈췄으면 그 안내를 그대로 전한다**(독립 리뷰 2026-10-01). 안쪽 라우트는 503 ·
+   * `retryable: false` 로 답하는데, 500 대 쉬운 말로 덮으면 「잠시 뒤 다시 눌러 주세요」와 다시 시도
+   * 단추가 떠 사용자가 계속 누른다.
+   */
+  it("다시 눌러도 안 풀리는 멈춤(503)은 쉬운 말로 덮지 않고 그대로 전한다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    시작실패 = new EasyStepError("카드 만들기", "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", 503, false);
+    const { status, json } = await 보낸다({ action: "generate", projectId: "c1" });
+    expect(status).toBe(503);
+    expect(json).toMatchObject({ message: "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", retryable: false });
+  });
+
   it("모르는 할 일이면 아무것도 안 한다", async () => {
     지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
     카드작업들 = { c1: 원고(2) };
