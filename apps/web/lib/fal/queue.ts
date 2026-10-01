@@ -1,6 +1,7 @@
-import { createFalClient, type FalClient } from "@fal-ai/client";
 import { IMAGE_MODELS } from "@fixup/sns-core";
-import { recordAiCost } from "../llm/meter";
+import { falQueueOps, type FalQueueOps } from "./http";
+import { defaultFalRouter } from "./pool/default";
+import type { FalRouter } from "./route";
 
 export type FalJobStatus = "queued" | "in_progress" | "completed";
 
@@ -9,8 +10,6 @@ export interface FalQueueClient {
   jobStatus(endpoint: string, requestId: string): Promise<FalJobStatus>;
   jobResult(endpoint: string, requestId: string): Promise<{ images: Array<{ url: string }> }>;
 }
-
-type FalClientFactory = (config: { credentials: string; retry: { maxRetries: number } }) => Pick<FalClient, "queue">;
 
 /**
  * 엔드포인트 → 단가표(`model_prices`)의 모델 id. 모르는 엔드포인트면 그대로 넘긴다 —
@@ -26,40 +25,36 @@ function requestedImages(input: Record<string, unknown>): number {
   return Number.isInteger(count) && count > 0 ? Math.min(count, 100) : 1;
 }
 
-/** 모델 도메인과 무관한 fal queue 제출·조회 계약. */
+/**
+ * 모델 도메인과 무관한 fal queue 제출·조회 계약(포스터·카드뉴스).
+ *
+ * **어느 계정으로 보낼지·물을지는 `router` 가 정한다**(S3b). 제출은 켜진 계정 중 여유가 가장 큰 곳으로,
+ * 상태·결과는 그 요청을 보낸 계정의 키로 묻는다. 카드뉴스·포스터 기록에는 계정 칸이 없어도 된다 —
+ * fal 요청 번호로 찾는다(`fal_requests`). 비용 한 줄은 제출 자리(`lib/fal/http.ts`)에서 쓴다.
+ */
 export function createFalQueueClient(
-  apiKey: string,
-  factory: FalClientFactory = createFalClient,
+  router: FalRouter = defaultFalRouter(),
+  opsFor: (key: string) => FalQueueOps = falQueueOps,
 ): FalQueueClient {
-  const client = factory({ credentials: apiKey, retry: { maxRetries: 0 } });
   return {
     async submitJob(endpoint, input) {
-      const submitted = await client.queue.submit(endpoint as never, { input } as never);
-      /*
-        **제출하는 자리에서 적는다**(설계 §3.4). fal 큐는 제출하면 과금이 끝난다
-        (`lib/poster/flow.ts` 「이 줄부터는 돈이 이미 나갔다」). 상태 조회는 여러 번 오거나
-        아예 안 올 수 있어 거기서 적지 않는다. 요청 id 가 표에서 unique 라 두 번 안 적힌다.
-      */
-      recordAiCost({
-        provider: "fal",
-        model: falModelIdFor(endpoint),
-        images: requestedImages(input),
-        basis: "image_unit",
-        falRequestId: submitted.request_id,
+      const { requestId } = await router.submit(endpoint, input, {
+        cost: { model: falModelIdFor(endpoint), images: requestedImages(input) },
       });
-      return { requestId: submitted.request_id };
+      return { requestId };
     },
     async jobStatus(endpoint, requestId) {
-      const status = await client.queue.status(endpoint, { requestId, logs: true });
-      if (status.status === "IN_QUEUE") return "queued";
-      if (status.status === "IN_PROGRESS") return "in_progress";
-      return "completed";
+      const route = await router.routeOf(requestId);
+      const status = await opsFor(route.key).status(endpoint, requestId);
+      // 끝났으면 계정의 진행 중 수에서 뺀다. 결과 받기는 그 뒤에 와도 같은 키를 쓴다.
+      if (status === "completed") router.finished(requestId);
+      return status;
     },
     async jobResult(endpoint, requestId) {
-      const result = await client.queue.result(endpoint as never, { requestId });
-      const data = result.data as { images?: Array<{ url?: string }> };
+      const route = await router.routeOf(requestId);
+      const data = (await opsFor(route.key).result(endpoint, requestId)) as { images?: Array<{ url?: string }> } | null;
       return {
-        images: (data.images ?? []).flatMap((image) => image.url ? [{ url: image.url }] : []),
+        images: (data?.images ?? []).flatMap((image) => image.url ? [{ url: image.url }] : []),
       };
     },
   };

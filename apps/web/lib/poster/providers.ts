@@ -10,6 +10,7 @@ import {
 } from "../llm/structured";
 import { createFalQueueClient } from "../fal/queue";
 import { createFalUploader } from "../fal/upload";
+import { defaultFalRouter } from "../fal/pool/default";
 
 /**
  * 포스터 제공자.
@@ -302,8 +303,10 @@ export function createPosterReviewProviders(environment: Record<string, string |
 
 export function createPosterFalClients(environment: Record<string, string | undefined> = process.env) {
   requireKeys(["FAL_KEY"], environment);
+  // 계정은 풀이 고른다(S3b). 열쇠가 없거나 계정이 없으면 FAL_KEY 로 — 오늘과 같다.
+  const router = defaultFalRouter(environment);
   return {
-    queue: createFalQueueClient(environment.FAL_KEY!),
-    uploader: createFalUploader(environment.FAL_KEY!),
+    queue: createFalQueueClient(router),
+    uploader: createFalUploader(router),
   };
 }

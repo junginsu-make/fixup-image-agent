@@ -1,7 +1,8 @@
 import { buildModelInput, modelById, resolveSize, type ImageModel } from "@fixup/sns-core";
 import type { RedesignImageGenerator } from "@fixup/redesign-core";
 import { createFalUploader } from "../fal/upload";
-import { envFalRouter, type FalRouter } from "../fal/route";
+import { defaultFalRouter } from "../fal/pool/default";
+import type { FalRouter } from "../fal/route";
 import { FalRunTimeoutError, runFalQueued, type RunFalDeps } from "../fal/run";
 
 /**
@@ -123,11 +124,11 @@ function redesignFailure(error: unknown): unknown {
 export function createRedesignImageGenerator(
   environment: Record<string, string | undefined> = process.env,
   modelId: string = REDESIGN_FAL_MODEL,
-  router: FalRouter = envFalRouter(environment),
+  router: FalRouter = defaultFalRouter(environment),
   deps: Partial<RunFalDeps> = {},
 ): RedesignImageGenerator {
-  const apiKey = requireKey(environment);
-  const uploader = createFalUploader(apiKey);
+  requireKey(environment);
+  const uploader = createFalUploader(router);
   const model = modelById(modelId);
 
   return async ({ prompt, references, size }) => {

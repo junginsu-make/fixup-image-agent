@@ -17,6 +17,7 @@ import {
 } from "../llm/structured";
 import { createFalQueueClient, type FalQueueClient } from "../fal/queue";
 import { createFalUploader, type FalUploader } from "../fal/upload";
+import { defaultFalRouter } from "../fal/pool/default";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const DEFAULT_OPENAI_TEXT_MODEL = "gpt-5.6-sol";
@@ -284,8 +285,10 @@ export function createSnsPlanningProviders(environment: Record<string, string | 
 export function createSnsGenerationProviders(environment: Record<string, string | undefined> = process.env) {
   requireSnsProviderKeys("generation", environment);
   const { anthropic, openai, anthropicModel, openaiVisionModel } = clients(environment);
-  const falQueue = createFalQueueClient(environment.FAL_KEY!);
-  const falUploader = createFalUploader(environment.FAL_KEY!);
+  // 계정은 풀이 고른다(S3b). 열쇠가 없거나 계정이 없으면 FAL_KEY 로 — 오늘과 같다.
+  const router = defaultFalRouter(environment);
+  const falQueue = createFalQueueClient(router);
+  const falUploader = createFalUploader(router);
   return {
     sceneProvider: new FallbackSceneProvider(
       new AnthropicSceneProvider(anthropic, anthropicModel),

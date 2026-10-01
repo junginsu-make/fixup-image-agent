@@ -52,6 +52,16 @@ describe("runFalQueued", () => {
     expect(router.done).toEqual(["r-1"]);
   });
 
+  it("pollMs 를 주면 줄에서도 그 간격 — 배경 제거처럼 짧은 시한을 쓸 때 3초를 강제하지 않는다", async () => {
+    const router = 길();
+    const fake = 묻기(["queued", "in_progress", "completed"], { images: [{ url: "u" }] });
+    const sleeps: number[] = [];
+    await runFalQueued(router, { endpoint: "fal-ai/x", input: {}, pollMs: 500 }, {
+      opsFor: fake.opsFor, sleep: async (ms) => { sleeps.push(ms); }, now: () => 0,
+    });
+    expect(sleeps).toEqual([500, 500]);
+  });
+
   it("상한을 넘기면 취소를 한 번 보내고 FalRunTimeoutError — 그래도 finished", async () => {
     const router = 길();
     const fake = 묻기(Array(20).fill("in_progress"));

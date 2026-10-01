@@ -12,9 +12,11 @@ import type { FalRouter } from "./route";
  * - 우리 쪽 상한(`deadlineMs`): 지나면 취소를 한 번 보내고 `FalRunTimeoutError`. 동기 호출 때도 Node `fetch`
  *   의 머리 대기 상한(undici `headersTimeout` 300초)이 사실상 같은 끝이었다
  * - 끝나면(성공·실패·포기 모두) `router.finished` — 계정 풀의 동시 수 세기에서 뺀다
- * - 줄 서 있는 동안(`queued`)은 3초, 만드는 중이면 1초 간격으로 묻는다. 100명이 몰리면 대부분이 fal 줄에
- *   서 있는데, 그 사이 1초마다 물으면 서버가 내는 상태 확인이 진행 중인 장수만큼 초당 쌓인다(최종 리뷰).
- *   줄에서 나온 뒤에도 그림을 만드는 시간이 있어, 늦게 알아채는 몫은 대개 그 안에 묻힌다
+ * - `pollMs` 를 안 주면 줄 서 있는 동안(`queued`)은 3초, 만드는 중이면 1초 간격으로 묻는다. 100명이
+ *   몰리면 대부분이 fal 줄에 서 있는데, 그 사이 1초마다 물으면 서버가 내는 상태 확인이 진행 중인
+ *   장수만큼 초당 쌓인다(최종 리뷰). 줄에서 나온 뒤에도 그림을 만드는 시간이 있어, 늦게 알아채는
+ *   몫은 대개 그 안에 묻힌다. **`pollMs` 를 직접 주면 그 값이 모든 단계에 그대로 간다**(보충
+ *   2026-10-01) — 배경 제거처럼 60초 시한에 3초 간격을 강제하면 너무 성기다
  */
 
 export const FAL_RUN_POLL_MS = 1_000;
@@ -67,7 +69,7 @@ export async function runFalQueued(
   const opsFor = deps.opsFor ?? falQueueOps;
   const sleep = deps.sleep ?? realSleep;
   const now = deps.now ?? Date.now;
-  const pollMs = options.pollMs ?? FAL_RUN_POLL_MS;
+  const explicitPollMs = options.pollMs;
   const deadline = now() + (options.deadlineMs ?? FAL_RUN_DEADLINE_MS);
 
   if (options.signal?.aborted) throw abortError();
@@ -93,7 +95,7 @@ export async function runFalQueued(
         await cancel();
         throw new FalRunTimeoutError(requestId);
       }
-      const wait = phase === "queued" ? Math.max(pollMs, FAL_RUN_QUEUED_POLL_MS) : pollMs;
+      const wait = explicitPollMs ?? (phase === "queued" ? FAL_RUN_QUEUED_POLL_MS : FAL_RUN_POLL_MS);
       await sleep(Math.max(0, Math.min(wait, deadline - now())));
     }
   } finally {

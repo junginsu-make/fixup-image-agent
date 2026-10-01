@@ -5,7 +5,8 @@ import {
   resolveEndpoint,
   type ImageGenerator,
 } from "@fixup/pdp-core";
-import { envFalRouter, type FalRouter } from "../fal/route";
+import { defaultFalRouter } from "../fal/pool/default";
+import type { FalRouter } from "../fal/route";
 import { FalRunTimeoutError, runFalQueued, type RunFalDeps } from "../fal/run";
 
 /**
@@ -63,7 +64,7 @@ function pdpFailure(error: unknown, endpoint: string): PdpServiceError {
 
 export function createPdpImageGenerator(
   environment: Env = process.env,
-  router: FalRouter = envFalRouter(environment),
+  router: FalRouter = defaultFalRouter(environment),
   deps: Partial<RunFalDeps> = {},
 ): ImageGenerator {
   requireKey(environment);
