@@ -1,0 +1,61 @@
++ cd /home/ubuntu/app
++ export NEXT_PUBLIC_SITE_URL=http://172.31.13.128
++ NEXT_PUBLIC_SITE_URL=http://172.31.13.128
++ export NEXT_PUBLIC_SUPABASE_URL=http://172.31.26.41:54321
++ NEXT_PUBLIC_SUPABASE_URL=http://172.31.26.41:54321
++ export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=(redacted — 시험 서버 B 의 publishable 키)
++ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=(redacted — 시험 서버 B 의 publishable 키)
++ export NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
++ NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
++ pnpm install --frozen-lockfile
+Scope: all 11 workspace projects
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+Done in 2.4s using pnpm v9.15.9
++ pnpm build:ec2
+
+> fixup-image-agent@ build:ec2 /home/ubuntu/app
+> node scripts/build-ec2.mjs
+
+
+> fixup-image-agent@ build /home/ubuntu/app
+> pnpm --filter @fixup/web build
+
+
+> @fixup/web@0.0.0 build /home/ubuntu/app/apps/web
+> next build
+
+   Next.js 15.5.24
+   - Experiments (use with caution):
+     . middlewareClientMaxBodySize: "16mb"
+
+   Creating an optimized production build ...
+Failed to compile.
+
+./lib/supabase/secret-env.ts
+Error:   x You're importing a component that needs "server-only". That only works in a Server Component which is not supported in the pages/ directory. Read more: https://nextjs.org/docs/app/building-your-application/rendering/server-components
+  |
+
+ ,-[/home/ubuntu/app/apps/web/lib/supabase/secret-env.ts:1:1]
+1 | import "server-only";
+  : ^^^^^^^^^^^^^^^^^^^^^
+2 |
+3 | import { getSupabasePublicEnv } from "./env";
+  `----
+
+Import trace for requested module:
+./lib/supabase/secret-env.ts
+./lib/supabase/admin.ts
+./lib/fal/pool/store.ts
+./lib/fal/pool/default.ts
+./lib/fal/upload.ts
+./lib/sns/queued-flow.ts
+./app/sns/[id]/project-client.tsx
+
+> Build failed because of webpack errors
+/home/ubuntu/app/apps/web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @fixup/web@0.0.0 build: `next build`
+Exit status 1
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.
