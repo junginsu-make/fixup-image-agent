@@ -132,6 +132,8 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
         {/* "분석하는 중"이라고 쓰면 안 된다 — 분석은 곁다리고, 붙이는 일 자체가 아니다. */}
         <span className="min-w-0 truncate">{busy ? "붙이는 중…" : "사진 올리기"}</span>
       </button>
+      {/* 인물 칸·제품 칸과 같은 자리 — 올리는 단추 바로 아래. */}
+      <p className="text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
 
       {/* 계정에 이미 있는 이미지를 파일로 다시 올리게 하지 않는다. */}
       <SavedImagePicker
@@ -145,7 +147,6 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
         서버와 같은 상수를 읽는다(설계 §12 「정책 상수와 UI 에서 일치」).
       */}
       <p className="text-xs text-muted-foreground">{STYLE_REFERENCE_LIMIT_HINT}</p>
-      <p className="text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
 
       {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
     </div>

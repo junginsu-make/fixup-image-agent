@@ -27,11 +27,37 @@ function tsx파일들(dir: string): string[] {
 
 const 경로 = (path: string) => relative(app, path).split(sep).join("/");
 
-/** 그림을 받는 파일 입력이 있는 파일. 지식 파일(PDF·TXT)만 받는 관리자 업로드는 빠진다. */
-const 업로드파일들 = tsx파일들(app).filter((path) => {
-  const 내용 = readFileSync(path, "utf8");
-  return /type="file"/.test(내용) && /accept="[^"]*image/.test(내용);
-});
+/**
+ * 파일을 고르는 입력이 있는 파일 **전부**. `accept` 는 보지 않는다 — `accept={상수}`
+ * 로 쓰면 그림인지 글자로 알 수 없어, 그물에서 조용히 빠진다(2026-10-01 독립 리뷰).
+ * 그림이 아닌 자리는 아래 `그림아님` 에 이유와 함께 적는다.
+ */
+const 업로드파일들 = tsx파일들(app).filter((path) =>
+  /type=(?:"file"|\{\s*["']file["']\s*\})/.test(readFileSync(path, "utf8")),
+);
+
+/**
+ * **지금 아는 파일 입력 자리 전부**(2026-10-01). 늘거나 줄면 이 목록부터 고친다 —
+ * 새 자리에 안내를 붙였는지, 빠진 자리가 정말 없어졌는지 그때 사람이 본다.
+ */
+const 알려진자리 = [
+  "characters/CharacterStudio.tsx",
+  "create/PdpMakerClient.tsx",
+  "create/StyleReferenceAttach.tsx",
+  "easy/easy-client.tsx",
+  "library/references-tab.tsx",
+  "library/set-editor.tsx",
+  "poster/_components/reference-picker.tsx",
+  "redesign/redesign-panels.tsx",
+  "redesign/redesign-wizard.tsx",
+  "sns/_components/attachment-picker.tsx",
+  "sns/layout/library-picker.tsx",
+];
+
+/** 그림을 받지 않는 파일 입력. 안내가 필요 없다. */
+const 그림아님: Record<string, string> = {
+  "redesign/redesign-wizard.tsx": "관리자가 지식 파일(PDF·TXT·MD)을 올리는 자리. 그림을 받지 않는다",
+};
 
 /**
  * 입력은 그 파일에 있지만 **안내는 부르는 쪽 화면이 보여 주는** 자리.
@@ -57,13 +83,21 @@ describe("업로드 자리의 권리 안내", () => {
     expect(UPLOAD_RIGHTS_NOTE).toBe("사용 권한이 있는 이미지만 올려 주세요.");
   });
 
-  /** 찾는 그물이 비어 있으면 아래 검사가 모두 그냥 통과한다. */
-  it("그림 업로드 자리를 실제로 찾는다", () => {
-    expect(업로드파일들.length).toBeGreaterThanOrEqual(10);
+  /**
+   * 그물이 비거나 한 자리가 빠지고 다른 자리가 들어와도 개수만 보면 모른다.
+   * 목록을 통째로 맞춘다.
+   */
+  it("찾은 파일 입력 자리가 알려진 목록과 같다", () => {
+    expect(업로드파일들.map(경로).sort()).toEqual([...알려진자리].sort());
+  });
+
+  /** 예외가 거짓이 되지 않게 한다 — 그림을 받기 시작하면 안내를 붙여야 한다. */
+  it.each(Object.keys(그림아님).map((파일) => [파일]))("그림아님으로 둔 %s 는 정말 그림을 받지 않는다", (파일) => {
+    expect(readFileSync(join(app, 파일), "utf8")).not.toMatch(/accept=[^>]*image/);
   });
 
   it.each(업로드파일들.map((path) => [경로(path)]))("%s 에서 안내 한 줄이 보인다", (파일) => {
-    if (보류[파일]) return;
+    if (보류[파일] || 그림아님[파일]) return;
     const 보여주는곳 = 안내를보여주는곳[파일] ?? 파일;
     const 내용 = readFileSync(join(app, 보여주는곳), "utf8");
     expect(내용, `${보여주는곳} 가 {UPLOAD_RIGHTS_NOTE} 를 화면에 그리지 않는다`).toMatch(/\{UPLOAD_RIGHTS_NOTE\}/);
