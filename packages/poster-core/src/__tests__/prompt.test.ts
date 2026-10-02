@@ -689,125 +689,77 @@ describe("첨부가 없는데 auto 가 들어오면", () => {
 });
 
 /**
- * **글자 칸이 전부 「AI 가 골라 채운 것」이면 사용자는 글자를 안 시킨 것이다.**
+ * **기획이 채운 글자도 싣는다** (2026-10-02 사용자 결정).
  *
- * 전에는 「빈 칸이면 글자를 안 시킨 것」으로 읽었다. 기획이 근거 없는 칸을 비워
- * 뒀기 때문이다. 그런데 기획을 「다 채우게」 바꾸면서 그 신호가 사라졌다 —
- * headline 이 늘 차서 **「글자를 넣지 말라」에 도달할 길이 없어졌다**
- * (2026-09-17 리뷰).
+ * 2026-09-17 부터는 글자 칸이 전부 「AI 가 골라 채움」이면 그 글자를 버리고
+ * 「글자를 넣지 말라」를 보냈다. 그런데 04 는 그 글자를 보여 주며 「마음에 안
+ * 들면 지우거나 고치세요」라고 말한다 — 그대로 두면 들어간다고 읽힌다.
  *
- * 그 자리를 `invented` 가 대신한다. 실측으로 갈리는 것을 확인했다(각 4·3회):
+ * 첨부 없이 글로만 만들면 붙인 그림의 글자(`referenceHasText`)도 없어서,
+ * 사람이 문구를 글자 그대로 적지 않는 한 **글자가 영영 안 나왔다**
+ * (2026-10-02 사용자 보고 — 기획에 있던 글자가 결과에 없었다).
  *
- *   「…헤드라인은 「가을, 셔터를 누르다」」 → headline 은 그대로 옮겨 적고
- *                                        invented 에 **안** 넣는다
- *   「벚꽃 아래에서 손을 흔드는 학생」      → 글자 칸 **셋 다** invented
- *
- * **하나라도 사람 것이면 금지하지 않는다.** 나머지는 기획의 제안이고, 04 에
- * 표가 붙어 있어 사람이 지울 수 있다.
+ * 이제 칸에 있으면 싣고, 사람이 비웠으면 안 싣는다. 출처는 안 따진다.
  */
-describe("글자가 전부 AI 가 고른 것일 때", () => {
-  const 글자칸 = ["headline", "subline", "sideTexts"];
-
-  it("셋 다 AI 것이면 글자를 넣지 말라고 한다", () => {
-    const prompt = buildPosterPrompt({ slots, images, size, invented: 글자칸 });
-
-    expect(prompt).toContain("Render it with NO text");
-  });
-
-  /** 금지하면서 그 글자를 같이 실으면 앞뒤가 안 맞는다. */
-  it("그때 그 글자를 싣지 않는다", () => {
-    const prompt = buildPosterPrompt({ slots, images, size, invented: 글자칸 });
-
-    expect(prompt).not.toContain("가을, 셔터를 누르다");
-  });
-
-  it("헤드라인이 사람 것이면 금지하지 않는다", () => {
-    const prompt = buildPosterPrompt({
-      slots, images, size, invented: ["subline", "sideTexts"],
-    });
-
-    expect(prompt).not.toContain("Render it with NO text");
-    expect(prompt).toContain("가을, 셔터를 누르다");
-  });
-
-  /**
-   * **헤드라인 하나로만 재면 안 된다.**
-   *
-   * 여섯 시험이 전부 헤드라인으로 갈려서, 「곁텍스트를 아예 안 센다」거나
-   * 「headline 만 본다」는 변이가 다 통과했다(2026-09-17 리뷰). 셋을 각각
-   * 사람 것으로 두고 재야 그 판단이 재어진다.
+describe("기획이 채운 글자", () => {
+  /*
+   * 옛 작업에는 저장된 표(`inventedSlots`)·`referenceHasText` 가 남아 있다.
+   * 그 값이 섞여 들어와도 판단이 흔들리면 안 된다.
    */
-  it("받침 문구만 사람 것이어도 금지하지 않는다", () => {
-    const prompt = buildPosterPrompt({
-      slots, images, size, invented: ["headline", "sideTexts"],
-    });
+  const 표붙은입력 = {
+    slots, images, size,
+    invented: ["headline", "subline", "sideTexts"],
+    referenceHasText: false,
+  };
 
+  it("표가 붙은 글자도 그대로 싣는다", () => {
+    const prompt = buildPosterPrompt(표붙은입력);
+
+    expect(prompt).toContain("Render this text exactly as written");
+    expect(prompt).toContain("가을, 셔터를 누르다");
     expect(prompt).not.toContain("Render it with NO text");
-    expect(prompt).toContain("필름으로 담은 도시의 온도");
   });
 
-  it("곁텍스트만 사람 것이어도 금지하지 않는다", () => {
-    const prompt = buildPosterPrompt({
-      slots, images, size, invented: ["headline", "subline"],
-    });
+  /** 헤드라인 하나로만 재면 「headline 만 본다」는 변이가 통과한다. */
+  it("받침 문구와 곁텍스트도 싣는다", () => {
+    const prompt = buildPosterPrompt(표붙은입력);
 
-    expect(prompt).not.toContain("Render it with NO text");
+    expect(prompt).toContain("필름으로 담은 도시의 온도");
     expect(prompt).toContain("28MM F2.0");
   });
 
-  /**
-   * **붙인 그림에 글자가 있으면 넣는다.**
-   *
-   * 2026-09-17 사용자 판단 — 글자를 넣을지는 규칙이 아니라 붙인 그림과 사용자가
-   * 적은 말이 정한다. VOGUE 표지를 붙였는데 결과에 글자가 하나도 없었다.
-   * 거대한 타이포그래피가 그 포스터의 핵심인데도 그랬다.
-   *
-   * 금지문은 2026-09-08 「BEST DAY EVER!」 사고의 대응이고, **그때는 첨부
-   * 어디에도 글자가 없었다.** 두 경우가 다른데 같은 규칙을 받고 있었다.
-   */
-  it("붙인 그림에 글자가 있으면 금지하지 않는다", () => {
-    const prompt = buildPosterPrompt({
-      slots, images, size, invented: 글자칸, referenceHasText: true,
-    });
+  /** 첨부 없이 글로만 만들 때가 이번에 막혀 있던 길이다. */
+  it("첨부가 없어도 싣는다", () => {
+    const prompt = buildPosterPrompt({ ...표붙은입력, images: [] });
 
-    expect(prompt).not.toContain("Render it with NO text");
     expect(prompt).toContain("가을, 셔터를 누르다");
+    expect(prompt).not.toContain("Render it with NO text");
   });
 
-  /** 글자가 없는 그림이면 지금까지대로 막는다. 그것이 2026-09-08 의 경우다. */
-  it("붙인 그림에 글자가 없으면 지금까지대로 막는다", () => {
+  /** 사람이 04 에서 세 칸을 다 비우면 글자 없이 그림만 — 2026-09-08 의 대응은 남는다. */
+  it("세 칸이 다 비었으면 글자를 넣지 말라고 한다", () => {
     const prompt = buildPosterPrompt({
-      slots, images, size, invented: 글자칸, referenceHasText: false,
+      ...표붙은입력,
+      slots: { ...slots, headline: "", subline: "", sideTexts: [] },
     });
 
     expect(prompt).toContain("Render it with NO text");
+    expect(prompt).not.toContain("Render this text exactly as written");
   });
 
-  /** 옛 작업에는 이 값이 없다. 없으면 지금까지대로다. */
-  it("안 넘기면 지금까지대로다", () => {
-    expect(buildPosterPrompt({ slots, images, size, invented: 글자칸 }))
-      .toContain("Render it with NO text");
-  });
-
-  /** 글자 아닌 칸이 AI 것인 건 상관없다. 그림 이야기다. */
-  it("글자 아닌 칸만 AI 것이면 금지하지 않는다", () => {
+  /** 공백만 남은 칸은 빈 칸이다. 지우다 만 칸이 글자로 실리면 안 된다. */
+  it("공백만 남은 칸은 빈 칸으로 본다", () => {
     const prompt = buildPosterPrompt({
-      slots, images, size, invented: ["scene", "dominantColor"],
+      ...표붙은입력,
+      slots: { ...slots, headline: "  ", subline: "\n", sideTexts: [] },
     });
 
-    expect(prompt).not.toContain("Render it with NO text");
-  });
-
-  /** 옛 작업에는 이 값이 없다. 지금까지대로 칸이 비었는지로만 본다. */
-  it("안 넘기면 지금까지대로다", () => {
-    expect(buildPosterPrompt({ slots, images, size })).toContain("가을, 셔터를 누르다");
-    expect(buildPosterPrompt({ slots: EMPTY_SLOTS, images, size }))
-      .toContain("Render it with NO text");
+    expect(prompt).toContain("Render it with NO text");
   });
 
   /**
    * **쓴 그대로는 여전히 아무 말도 안 한다.** 글자를 넣을지는 사용자 프롬프트가
-   * 정한다. 그 갈래는 기획을 안 돌리므로 `invented` 도 비어 있다.
+   * 정한다. 그 갈래는 기획을 안 돌린다.
    */
   it("쓴 그대로면 금지하지 않는다", () => {
     const prompt = buildPosterPrompt({

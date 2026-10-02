@@ -84,26 +84,23 @@ describe("미리보기", () => {
 });
 
 /**
- * **미리보기가 「글자를 넣지 말라」를 함께 보여야 한다.**
+ * **미리보기도 기획이 채운 글자를 보여 준다** (2026-10-02 사용자 결정).
  *
  * 04 의 「모델에 보낼 프롬프트 보기」는 **실제로 갈 것**을 보여 주겠다는 약속이다.
- * 이 값을 안 넘기면 실제 프롬프트에는 금지문이 붙는데 미리보기에는 안 붙어,
- * 그 약속이 깨진다.
- *
- * 배선 하나를 지워도 시험이 다 초록이었다(2026-09-17 리뷰). 소스 문자열이
- * 아니라 **값으로** 잰다.
+ * 소스 문자열이 아니라 **값으로** 잰다.
  */
-describe("지어낸 칸이 미리보기에도 닿는다", () => {
-  it("글자가 전부 AI 것이면 금지문을 보여 준다", () => {
-    const prompt = previewPosterPrompt({
-      ...기본,
-      invented: ["headline", "subline", "sideTexts"],
-    });
+describe("기획이 채운 글자가 미리보기에 보인다", () => {
+  it("표가 붙은 글자도 보인다", () => {
+    const 옛작업 = { ...기본, invented: ["headline", "subline", "sideTexts"] };
+    const prompt = previewPosterPrompt(옛작업);
 
-    expect(prompt).toContain("Render it with NO text");
+    expect(prompt).toContain("가을 사진전");
+    expect(prompt).not.toContain("Render it with NO text");
   });
 
-  it("안 넘기면 지금까지대로다", () => {
-    expect(previewPosterPrompt(기본)).not.toContain("Render it with NO text");
+  it("글자 칸이 다 비었으면 금지문을 보여 준다", () => {
+    const prompt = previewPosterPrompt({ ...기본, slots: { ...기본.slots, headline: "" } });
+
+    expect(prompt).toContain("Render it with NO text");
   });
 });
