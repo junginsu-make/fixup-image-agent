@@ -5,20 +5,32 @@ import { cookies } from "next/headers";
 import { sessionAuthCookieNames } from "../../lib/auth/session-window";
 import { requireActiveMember } from "../../lib/membership/server";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
-import { updateProfileExtras } from "../../lib/membership/profile-store";
+import { updateProfileExtras, updateProfilePhone } from "../../lib/membership/profile-store";
+import { normalizePhone, phoneInputError } from "../../lib/membership/phone";
 import { withdrawAccount } from "../../lib/membership/withdraw-account";
 import { confirmsWithdrawal } from "../../lib/membership/withdrawal";
 
 /**
- * 내 이름·추천인 고치기.
+ * 내 이름·추천인·전화번호(선택) 고치기.
  *
  * **대상은 로그인한 본인뿐이다.** 폼에서 회원 ID 를 받지 않는다 — 받으면 남의 ID 를
  * 적어 보내는 것으로 남의 이름을 바꿀 수 있다.
  */
-export async function updateMyProfile(input: { name: string; referrer: string }): Promise<{ ok: boolean; message: string }> {
+export async function updateMyProfile(input: { name: string; referrer: string; phone?: string; phoneConsent?: boolean }): Promise<{ ok: boolean; message: string }> {
   const member = await requireActiveMember();
+  const phone = input?.phone === undefined ? undefined : String(input.phone);
+  // 번호 형식부터 본다 — 이름만 저장되고 번호가 거절되는 일을 줄인다. 동의는 번호가 바뀔 때 저장소가 묻는다.
+  if (phone?.trim() && !normalizePhone(phone)) return { ok: false, message: phoneInputError(phone, true) ?? "전화번호를 확인해 주세요." };
   const result = await updateProfileExtras(member.user.id, { name: String(input?.name ?? ""), referrer: String(input?.referrer ?? "") });
-  if (result.ok) revalidatePath("/settings");
+  if (!result.ok) return result;
+  if (phone !== undefined) {
+    const saved = await updateProfilePhone(member.user.id, { phone, consent: input?.phoneConsent === true }, "member");
+    if (!saved.ok) {
+      revalidatePath("/settings");
+      return { ok: false, message: `이름·추천코드는 저장했습니다. ${saved.message}` };
+    }
+  }
+  revalidatePath("/settings");
   return result;
 }
 

@@ -4,21 +4,24 @@ import * as React from "react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@fixup/ui";
 import { PROFILE_LIMITS } from "../../lib/membership/profile-extras";
 import { updateMyProfile } from "./actions";
+import { PhoneField } from "../_components/phone-field";
 
 const day = (value: string) => new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
-/** 회원 정보 — 이름·이메일·추천코드·가입일. 이름과 추천코드는 여기서 바로 고친다. */
-export function ProfileCard({ email, name, referrer, joinedAt }: { email: string; name: string | null; referrer: string | null; joinedAt: string }) {
+/** 회원 정보 — 이름·이메일·추천코드·전화번호(선택)·가입일. 이름·추천코드·전화번호는 여기서 바로 고친다. */
+export function ProfileCard({ email, name, referrer, phone = null, joinedAt }: { email: string; name: string | null; referrer: string | null; phone?: string | null; joinedAt: string }) {
   const [editing, setEditing] = React.useState(false);
   const [draftName, setDraftName] = React.useState(name ?? "");
   const [draftReferrer, setDraftReferrer] = React.useState(referrer ?? "");
+  const [draftPhone, setDraftPhone] = React.useState(phone ?? "");
+  const [phoneConsent, setPhoneConsent] = React.useState(false);
   const [notice, setNotice] = React.useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = React.useTransition();
 
   function save(event: React.FormEvent) {
     event.preventDefault();
     start(async () => {
-      const result = await updateMyProfile({ name: draftName, referrer: draftReferrer });
+      const result = await updateMyProfile({ name: draftName, referrer: draftReferrer, phone: draftPhone, phoneConsent });
       setNotice({ ok: result.ok, text: result.message });
       if (result.ok) setEditing(false);
     });
@@ -41,9 +44,10 @@ export function ProfileCard({ email, name, referrer, joinedAt }: { email: string
               <Label htmlFor="profile-referrer">추천코드 <span className="font-normal text-muted-foreground">· 선택</span></Label>
               <Input id="profile-referrer" maxLength={PROFILE_LIMITS.referrer} placeholder="받으신 추천코드" value={draftReferrer} onChange={(event) => setDraftReferrer(event.target.value)} />
             </div>
+            <PhoneField id="profile-phone" phone={draftPhone} onPhone={setDraftPhone} consent={phoneConsent} onConsent={setPhoneConsent} savedPhone={phone} disabled={pending} />
             <div className="flex gap-2">
               <Button type="submit" size="sm" disabled={pending}>{pending ? "저장 중..." : "저장"}</Button>
-              <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => { setEditing(false); setDraftName(name ?? ""); setDraftReferrer(referrer ?? ""); }}>취소</Button>
+              <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => { setEditing(false); setDraftName(name ?? ""); setDraftReferrer(referrer ?? ""); setDraftPhone(phone ?? ""); setPhoneConsent(false); }}>취소</Button>
             </div>
           </form>
         ) : (
@@ -51,6 +55,7 @@ export function ProfileCard({ email, name, referrer, joinedAt }: { email: string
             <div><dt className="text-xs text-muted-foreground">이름</dt><dd className="text-base font-medium">{name ?? <span className="text-muted-foreground">아직 적지 않았습니다</span>}</dd></div>
             <div><dt className="text-xs text-muted-foreground">이메일</dt><dd className="break-all text-base font-medium">{email}</dd></div>
             <div><dt className="text-xs text-muted-foreground">추천코드</dt><dd className="text-base font-medium">{referrer ?? <span className="text-muted-foreground">없음</span>}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">휴대폰 또는 전화번호 · 선택</dt><dd className="text-base font-medium">{phone ?? <span className="text-muted-foreground">없음</span>}</dd></div>
           </dl>
         )}
         {notice ? <p role="status" className={`text-sm ${notice.ok ? "text-muted-foreground" : "text-destructive"}`}>{notice.text}</p> : null}

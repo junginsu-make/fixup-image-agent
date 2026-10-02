@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { sendApprovalEmail, sendConfirmationEmail, sendPasswordResetEmail } from "../../lib/email/approval";
-import { updateProfileExtras } from "../../lib/membership/profile-store";
+import { updateProfileExtras, updateProfilePhone } from "../../lib/membership/profile-store";
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
@@ -371,10 +371,21 @@ function adminPasswordGuard(target: { role: string }, actorEmail: string): strin
 }
 
 /** 회원 이름·추천인을 관리자가 고친다. */
-export async function adminUpdateMemberProfile(userId: string, input: { name: string; referrer: string }): Promise<MemberResult> {
+export async function adminUpdateMemberProfile(userId: string, input: { name: string; referrer: string; phone?: string; phoneBefore?: string | null }): Promise<MemberResult> {
   return memberAttempt(userId, async () => {
     const result = await updateProfileExtras(userId, { name: String(input?.name ?? ""), referrer: String(input?.referrer ?? "") });
-    if (result.ok) revalidatePath("/admin");
+    if (!result.ok) return result;
+    revalidatePath("/admin");
+    /*
+      전화번호(선택)는 **회원이 동의한 번호만** 관리자가 고치거나 지운다. 동의를 대신
+      하지 않는다 — 저장소가 동의 기록을 보고 판단한다(consent 는 늘 false 로 넘긴다).
+      관리자가 보던 번호(phoneBefore)를 함께 넘겨, 그 사이 회원이 바꾼 번호를 덮지 않는다.
+    */
+    if (input?.phone !== undefined) {
+      const expected = input.phoneBefore ? String(input.phoneBefore) : null;
+      const saved = await updateProfilePhone(userId, { phone: String(input.phone), consent: false, expected }, "admin");
+      if (!saved.ok) return { ok: false, message: `이름·추천코드는 저장했습니다. ${saved.message}` };
+    }
     return result;
   });
 }
