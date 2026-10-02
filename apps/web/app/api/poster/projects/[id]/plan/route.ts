@@ -144,9 +144,6 @@ async function plan(request: Request, context: Context, 고른글모델?: string
           project.data, [...references, ...preserved], read.summaries, read.people,
         ),
         attachmentIntent: project.data.attachmentIntent,
-        // 붙인 그림에 글자가 있으면 지어난 글자도 안 지워진다.
-        // 그때는 「장면에서 글자 얘기를 하지 말라」고 시키면 안 된다.
-        referenceHasText: Object.values(read.reads).some((one) => one.hasText),
       },
       providers.primary,
       providers.backup,
@@ -177,12 +174,6 @@ async function plan(request: Request, context: Context, 고른글모델?: string
          * `invented` 에 안 적으므로 저절로 빠진다.
          */
         inventedSlots: plan.invented,
-        /*
-         * **붙인 그림에 글자가 있나.** 글자를 넣을지는 규칙이 아니라 이 값이
-         * 정한다(2026-09-17 사용자 판단). 한 장이라도 글자가 있으면 넣는다 —
-         * 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수 있다.
-         */
-        referenceHasText: Object.values(read.reads).some((one) => one.hasText),
         grammarIssues: [...read.issues, ...plan.issues],
       },
     });

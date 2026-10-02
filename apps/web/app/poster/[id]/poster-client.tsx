@@ -74,8 +74,6 @@ interface PosterProject {
     promptMode?: "verbatim" | "assisted";
     /** 기획이 근거 없이 채웠다고 밝힌 칸들. 옛 작업에는 없다. */
     inventedSlots?: string[];
-    /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. */
-    referenceHasText?: boolean;
   };
 }
 
@@ -276,16 +274,7 @@ export function PosterClient(
     look: project.data.look,
     userInstruction: project.data.userInstruction,
     attachmentIntent: project.data.attachmentIntent,
-    /*
-     * **미리보기도 같은 값을 봐야 한다.** 안 넘기면 실제로 갈 프롬프트에는
-     * 「글자를 넣지 말라」가 붙는데 미리보기에는 안 붙는다 — 「모델에 보낼
-     * 프롬프트 보기」가 거짓말을 한다.
-     *
-     * 화면 state 를 쓴다. 사람이 방금 고친 칸이 곧바로 반영돼야 한다.
-     */
-    invented,
-    referenceHasText: project.data.referenceHasText,
-  }), [slots, project, invented]);
+  }), [slots, project]);
 
   /**
    * 사용자가 직접 친 말 — 있는 것만.

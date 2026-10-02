@@ -48,8 +48,6 @@ export function buildPosterEditJob(job: PosterEditJob): PosterJob {
     size: base.size.width && base.size.height
       ? { width: base.size.width, height: base.size.height }
       : undefined,
-    invented: job.invented,
-    referenceHasText: job.referenceHasText,
   });
   return { ...base, prompt, input: { ...base.input, prompt } };
 }

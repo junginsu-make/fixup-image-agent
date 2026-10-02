@@ -302,11 +302,15 @@ describe("고치기는 고치기 조립으로 나간다", () => {
     expect(uploadCount).toBe(1);
   });
 
-  it("글자를 넣을지 정한 값을 그대로 넘긴다 — 처음 만들 때와 같은 판단을 하려고", async () => {
+  /*
+   * **표는 화면에만 붙는다** (2026-10-02 사용자 결정). 기획이 채운 글자도 처음
+   * 만들 때 실리므로, 고치기도 표를 보고 글자를 빼면 안 된다.
+   */
+  it("「AI 가 골라 채움」 표를 고치기에 넘기지 않는다", async () => {
     project.data = { ...project.data, inventedSlots: ["headline"], referenceHasText: true };
     await call({ instruction: "배경을 밤으로 바꿔 주세요" });
-    expect(submitted[0]!.invented).toEqual(["headline"]);
-    expect(submitted[0]!.referenceHasText).toBe(true);
+    expect(submitted[0]!.invented).toBeUndefined();
+    expect(submitted[0]!.referenceHasText).toBeUndefined();
   });
 });
 

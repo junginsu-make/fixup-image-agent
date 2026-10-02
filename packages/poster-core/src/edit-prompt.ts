@@ -48,8 +48,6 @@ export interface PosterEditPromptInput {
   images: PosterPromptImage[];
   slots: PosterSlots;
   size?: { width: number; height: number };
-  invented?: string[];
-  referenceHasText?: boolean;
 }
 
 /** 고칠 그림의 번호. 프롬프트와 `image_urls` 가 이 약속을 같이 지킨다. */
@@ -130,24 +128,14 @@ function editPriorityLine(hasIdentityReferences: boolean): string {
 /**
  * 그림에 넣기로 한 글자 칸 — 처음 만들 때(`prompt.ts` 의 `copyLines`)와 **같은 판단**.
  *
- * 글자 칸이 전부 AI 가 지어낸 것이고 붙인 그림에도 글자가 없으면, 처음 만들 때
- * 「글자를 넣지 말라」가 갔다. 고치기가 이 판단을 안 거쳐서 그런 그림을 고치면
- * 지어낸 헤드라인이 새로 박혔다(2026-09-29 재현).
+ * 칸에 있으면 싣는다. 기획이 채운 글자도 처음 만들 때 실리므로(2026-10-02 사용자
+ * 결정) 고치기도 같은 글자를 철자 그대로 지킨다.
  *
- * **`copyLines` 를 고쳐서 나눠 쓰지 않고 여기 따로 둔다.** 처음 만들기는 잘 돌고
- * 있고, 고치기 때문에 그 코드를 건드리지 않는다(2026-09-29 사용자 지시). 두 판단이
- * 갈리지 않는 것은 `edit-prompt.test.ts` 가 처음 만들기 프롬프트와 나란히 놓고 잰다.
+ * **`copyLines` 를 고쳐서 나눠 쓰지 않고 여기 따로 둔다.** 고치기 때문에 처음
+ * 만들기 코드를 건드리지 않는다(2026-09-29 사용자 지시). 두 판단이 갈리지 않는
+ * 것은 `edit-prompt.test.ts` 가 처음 만들기 프롬프트와 나란히 놓고 잰다.
  */
-function authoredCopyEntries(
-  slots: PosterSlots,
-  invented: string[] = [],
-  referenceHasText = false,
-): Array<[string, string]> {
-  const 사람이적은칸 = (["headline", "subline"] as const)
-    .filter((field) => slots[field].trim().length > 0 && !invented.includes(field));
-  const 곁텍스트도적었나 = slots.sideTexts.length > 0 && !invented.includes("sideTexts");
-  const 글자를원한다 = 사람이적은칸.length > 0 || 곁텍스트도적었나 || referenceHasText;
-  if (!글자를원한다) return [];
+function authoredCopyEntries(slots: PosterSlots): Array<[string, string]> {
   const all: Array<[string, string]> = [
     ["HEADLINE", slots.headline],
     ["SUBLINE", slots.subline],
@@ -165,10 +153,10 @@ function authoredCopyEntries(
  *
  * 적어 둔 글자는 **철자 그대로** 한 번 더 적는다. 고치기도 그림 전체를 다시
  * 그리므로 한글이 뭉개질 수 있다. 무엇을 넣을지는 처음 만들 때와 같은 판단을
- * 쓴다(`authoredCopyEntries`) — 그래야 AI 가 지어낸 헤드라인이 새로 안 박힌다.
+ * 쓴다(`authoredCopyEntries`) — 그래야 처음 만들 때 실은 글자를 그대로 지킨다.
  */
-function editCopyLines(slots: PosterSlots, invented: string[] = [], referenceHasText = false): string[] {
-  const entries = authoredCopyEntries(slots, invented, referenceHasText);
+function editCopyLines(slots: PosterSlots): string[] {
+  const entries = authoredCopyEntries(slots);
   return [
     `Keep every piece of text in Image ${EDIT_SOURCE_NUMBER} exactly as it is — same wording, spelling,`
     + " spacing and placement — unless the USER INSTRUCTION changes it.",
@@ -200,7 +188,7 @@ export function buildPosterEditPrompt(input: PosterEditPromptInput): string {
     ...identity,
     editPriorityLine(identity.length > 0),
     "",
-    ...editCopyLines(input.slots, input.invented, input.referenceHasText),
+    ...editCopyLines(input.slots),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
     // 맨 뒤에서 한 번 더 못 박는다.
