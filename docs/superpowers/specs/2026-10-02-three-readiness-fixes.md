@@ -1,6 +1,6 @@
 # 배포 전 발견한 세 결함 개선
 
-대상: `d4c6555e`에서 분리한 `fix/three-readiness` / `.worktrees/fix-three-readiness`.
+대상: `d4c6555e`에서 분리한 `fix/three-readiness` / `.worktrees/fix-three-readiness`. 구현 후 `23b04cf8`에 재배치했으며, 통합된 전화번호 작업과 기존 검사 목록을 보존했다.
 범위는 사용자 승인한 세 건이다. 회원가입·전화번호·관리자 회원 화면은 변경하지 않는다.
 
 ## 1. fal 요청 복구와 처리 자리 정리
@@ -40,4 +40,12 @@
 
 위 두 스크립트는 `pnpm test:readiness-fixes`로 실행하며 PR 검사와 릴리스 생성 전 검사에 연결한다. 타입 검사·웹 회귀·Linux 빌드를 확인하고, 운영에서는 새 ops 꾸러미의 `release-recovery.sh`를 함께 사용한다. 앱만 바꾸고 옛 배포 스크립트를 계속 쓰면 롤백 수정은 적용되지 않는다.
 
-현재는 로컬 구현·검증 단계다. 운영 서버·실제 제공자·운영 크레딧을 변경하지 않는다. 최종 실행 결과는 작업 완료 시 갱신한다.
+## 검증 기록
+
+- 수정 전: fal 장애 재현 4개, 롤백 관련 검사, 키 누락·초기화 검사 18개가 실패하는 것을 확인했다.
+- 로컬 전체 웹: 6,458개 통과 / 기존 38개 건너뜀. 타입 검사·lint·production build 통과(기존 lint 경고는 남음).
+- 새 회귀 스크립트: 배포 복구 5개, 임시 PostgreSQL에서 요청 복구·1회 정산·지연 bind 경합 4개 통과.
+- 최종 라우터 보완 후 관련 검사 51개 통과. 실제 Supabase SDK의 abortSignal 연결은 타입 검사와 어댑터 시험으로 확인했다.
+- PR [#245](https://github.com/junginsu-make/fixup-image-agent/pull/245)의 코드 커밋 `a65b10a4`는 [Linux CI](https://github.com/junginsu-make/fixup-image-agent/actions/runs/36969619185) 통과. 릴리스 빌드 기록은 같은 PR과 연결된 workflow에서 확인한다.
+
+운영 서버·실제 제공자·운영 크레딧은 이번 작업에서 변경하거나 호출하지 않았다. 운영 적용은 별도이며, SQL 추가 적용은 필요하지 않다. 전체 DB가 계속 응답하지 않거나 공급자 접수 직후 다른 작업 기록까지 전부 저장하지 못하는 상황을 무손실로 보장하는 작업은 아니다. 복구 영수증을 저장한 작업은 계정 정보가 없어 기본 키로 잘못 조회되는 일을 막는다.
