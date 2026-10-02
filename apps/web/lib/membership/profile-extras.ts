@@ -38,4 +38,6 @@ export function missingProfileColumns(error: { code?: string } | null): boolean 
 export interface ProfileExtras {
   displayName: string | null;
   referrer: string | null;
+  /** 회원이 동의하고 적은 전화번호(선택, 202610020001). 칸이 없는 서버에서는 null. */
+  phone: string | null;
 }

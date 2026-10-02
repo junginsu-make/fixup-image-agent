@@ -8,6 +8,8 @@ export interface AdminMemberRow {
   name: string | null;
   /** 추천인 — 회원이 적은 글자 그대로다. 검증하지 않는다. */
   referrer: string | null;
+  /** 전화번호(선택, 202610020001) — 회원이 동의하고 적은 번호. 없으면 null. */
+  phone: string | null;
   /** 이번 달 성공 이미지 수(생성 기록 기준). 크레딧 차감과 다를 수 있다 — 인쇄용은 2크레딧이다. */
   monthImages: number;
   monthCost: string;

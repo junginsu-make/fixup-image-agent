@@ -38,4 +38,15 @@ describe("first social signup form", () => {
     await act(async () => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
     expect(state.replace).toHaveBeenCalledWith("/guide?signup=complete"); expect(state.refresh).toHaveBeenCalled();
   });
+  it("offers an optional phone field and sends it with its consent", async () => {
+    state.complete.mockResolvedValue({ ok: true });
+    act(() => { tree = create(<OnboardingForm email="member@example.invalid" name="홍길동" referrer="" />); });
+    expect(JSON.stringify(tree.toJSON())).toContain("선택");
+    const phone = tree.root.findAllByType("input").find(x => x.props.id === "social-phone")!;
+    expect(phone.props.required).toBeFalsy();
+    act(() => { phone.props.onChange({ target: { value: "010-1234-5678" } }); });
+    act(() => { for (const check of tree.root.findAllByType("input").filter(x => x.props.type === "checkbox")) check.props.onChange({ target: { checked: true } }); });
+    await act(async () => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+    expect(state.complete).toHaveBeenCalledWith(expect.objectContaining({ phone: "010-1234-5678", phoneConsent: true }));
+  });
 });

@@ -1,3 +1,4 @@
+import { phoneInputError } from "./phone";
 import { profileInputError } from "./profile-extras";
 import { SIGNUP_TERMS_VERSION, signupConsentError } from "./signup-consent";
 
@@ -17,9 +18,13 @@ export type OnboardingInput = {
   ageConfirmed: boolean;
   termsAgreed: boolean;
   termsVersion: string;
+  /** 휴대폰 또는 전화번호(선택). 적으면 phoneConsent 가 있어야 저장한다. */
+  phone?: string;
+  phoneConsent?: boolean;
 };
 export function onboardingInputError(input: OnboardingInput): string | null {
-  const error = profileInputError(input) ?? signupConsentError({ ageConfirmed: input.ageConfirmed === true, termsAgreed: input.termsAgreed === true });
+  const error = profileInputError(input) ?? phoneInputError(input.phone ?? "", input.phoneConsent === true)
+    ?? signupConsentError({ ageConfirmed: input.ageConfirmed === true, termsAgreed: input.termsAgreed === true });
   if (error) return error;
   return input.termsVersion === SIGNUP_TERMS_VERSION ? null : "이용약관이 변경되었습니다. 새로고침 후 내용을 확인해 주세요.";
 }

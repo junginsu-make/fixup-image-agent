@@ -70,6 +70,7 @@ const 회원 = (provider: string | null) => ({
   team: undefined,
   name: "김회원",
   referrer: null,
+  phone: provider === "google" ? "010-1234-5678" : null,
   monthImages: 0,
   monthCost: "0원",
   totalCost: "0원",
@@ -121,5 +122,18 @@ describe("가입 방식", () => {
     const 글 = 그려진글();
     expect(글, "Google 회원 표시가 없다").toContain("Google 가입");
     expect(글, "이메일 회원 표시가 없다").toContain("이메일 가입");
+  });
+  /** 전화번호(선택, 2026-10-02): 관리자가 회원마다 본다. 적지 않은 회원에게는 빈 줄을 안 만든다. */
+  it("**회원 줄과 내려받는 표에 전화번호를 적는다**", async () => {
+    // 회원 한 사람이 PC 표와 휴대폰 카드에 한 번씩, 두 번 그려진다.
+    await 띄운다([회원(null)]);
+    expect(그려진글(), "번호 없는 회원에게도 줄을 만들었다").not.toContain("전화 ");
+    act(() => renderer.unmount());
+    await 띄운다([회원("google")]);
+    expect(그려진글()).toContain('"전화 ","010-1234-5678"');
+    const [머리, 소셜, 이메일] = memberCsv([회원("google"), 회원(null)] as never, (id) => id).replace(/^﻿/, "").split(/\r\n/);
+    expect(머리).toContain('"전화번호"');
+    expect(소셜).toContain('"010-1234-5678"');
+    expect(이메일).toContain('""');
   });
 });

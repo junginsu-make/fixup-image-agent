@@ -78,7 +78,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     const cost = costByMember.get(profile.id);
     return {
       profile, team: teamByUser.get(profile.id), monthImages: images.get(profile.id) ?? 0,
-      name: extras.get(profile.id)?.displayName ?? null, referrer: extras.get(profile.id)?.referrer ?? null,
+      name: extras.get(profile.id)?.displayName ?? null, referrer: extras.get(profile.id)?.referrer ?? null, phone: extras.get(profile.id)?.phone ?? null,
       monthCost: formatKrw(cost?.monthUsd ?? 0, usdKrw), totalCost: formatKrw(cost?.totalUsd ?? 0, usdKrw), totalImages: cost?.images ?? 0,
       credit: list.credits.get(profile.id) ?? null,
     };

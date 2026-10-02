@@ -115,9 +115,9 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
 /** 이 쪽의 회원을 CSV 글로. 엑셀이 수식으로 읽는 첫 글자(= + - @)는 막는다. 상태는 화면 뱃지와 같은 말이다. */
 export function memberCsv(rows: AdminMemberRow[], planName: (id: string) => string): string {
   const cell = (value: unknown) => `"${String(value ?? "").replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
-  const header = ["이름", "이메일", "가입 방식", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용(옛 기준)", "누적 비용(옛 기준)"];
+  const header = ["이름", "이메일", "전화번호", "가입 방식", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용(옛 기준)", "누적 비용(옛 기준)"];
   const body = rows.map((row) => [
-    row.name ?? "", row.profile.email, signupMethodLabel(row.profile.signup_provider), row.referrer ?? "", memberStatusLabel(row.profile), row.team?.teamName ?? "",
+    row.name ?? "", row.profile.email, row.phone ?? "", signupMethodLabel(row.profile.signup_provider), row.referrer ?? "", memberStatusLabel(row.profile), row.team?.teamName ?? "",
     row.credit ? (row.credit.unlimited ? "무제한" : row.credit.available) : "", row.credit?.reserved ?? "", row.credit?.reviewUnits ?? "",
     row.credit?.used ?? "", row.monthImages, row.credit?.planId ? planName(row.credit.planId) : "", row.credit?.planStatus ?? "",
     row.monthCost, row.totalCost,
@@ -152,6 +152,7 @@ function Identity({ row }: { row: AdminMemberRow }) {
       </p>
       {/* 회원이 적은 글자 그대로다. 실재하는 회원처럼 읽히지 않게 출처를 밝힌다. */}
       {row.referrer ? <p className="mt-0.5 text-xs text-muted-foreground">추천코드(적은 값): {row.referrer}</p> : null}
+      {row.phone ? <p className="mt-0.5 text-xs text-muted-foreground">전화 {row.phone}</p> : null}
     </>
   );
 }

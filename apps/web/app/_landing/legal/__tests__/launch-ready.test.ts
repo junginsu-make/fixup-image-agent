@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LEGAL_DOCS, PRIVACY_DOC, TERMS_DOC } from "../documents";
 import { CS_EMAIL } from "../../../../lib/cs/contact";
+import { PHONE_CONSENT } from "../../../../lib/membership/phone";
 import { CHAT_TTL_MS } from "../../../../lib/cs/chat-store";
 import {
   SESSION_MAX_MS,
@@ -81,6 +82,7 @@ describe("가입 화면이 받는 것을 처리방침이 적는다", () => {
   it.each([
     ["이름", 'htmlFor="name"'],
     ["추천코드", 'htmlFor="referrer"'],
+    ["전화번호", '<PhoneField id="phone"'],
   ])("%s 를 받고, 그것을 적는다", (항목, 화면표시) => {
     expect(가입화면, "화면이 더는 이것을 받지 않는다 — 처리방침도 고친다").toContain(화면표시);
     expect(가입줄, `가입 화면이 ${항목} 을 받는데 처리방침에 없다`).toContain(항목);
@@ -120,6 +122,10 @@ describe("간편가입이 받는 것을 처리방침이 적는다", () => {
     expect(가입줄).toContain(항목);
   });
 
+  it("간편가입 확인 화면도 전화번호(선택)를 받는다", () => {
+    expect(확인화면).toContain("<PhoneField");
+  });
+
   it("간편가입은 비밀번호를 받지 않는다고 적는다", () => {
     expect(가입줄).toContain("비밀번호는 받지 않습니다");
   });
@@ -127,6 +133,23 @@ describe("간편가입이 받는 것을 처리방침이 적는다", () => {
   it("간편가입의 만 14세 확인 자리를 적는다", () => {
     expect(확인화면, "확인 화면이 더는 만 14세를 묻지 않는다 — 처리방침도 고친다").toContain("만 14세 이상입니다");
     expect(방침).toContain("가입 정보 확인 화면에서 만 14세 이상인지 확인");
+  });
+});
+
+/**
+ * **전화번호는 선택 동의로 받는다**(2026-10-02 사용자 결정). 처리방침은 화면의 동의
+ * 문구와 같은 목적·항목·보유기간을 적는다 — 다르면 동의받은 것과 공개한 것이 갈린다.
+ */
+describe("전화번호(선택)를 처리방침이 적는다", () => {
+  const 연락처줄 = 방침.split("\n").find((line) => line.startsWith("| 연락처(선택)")) ?? "";
+  it("처리방침에 연락처(선택) 줄이 있다", () => {
+    expect(연락처줄.length).toBeGreaterThan(20);
+  });
+  it.each(["purpose", "items", "retention"] as const)("동의 문구의 %s 와 같은 말을 쓴다", (key) => {
+    expect(연락처줄).toContain(PHONE_CONSENT[key]);
+  });
+  it("동의를 받아 처리한다고 적는다", () => {
+    expect(연락처줄).toContain("동의");
   });
 });
 

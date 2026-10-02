@@ -7,11 +7,13 @@ import { SIGNUP_TERMS_VERSION } from "../../../lib/membership/signup-consent";
 import { PROFILE_LIMITS } from "../../../lib/membership/profile-extras";
 import { HOME_AFTER_LOGIN } from "../../../lib/routes";
 import { completeSocialOnboarding } from "./actions";
+import { PhoneField } from "../../_components/phone-field";
 import { clearCsChat } from "../../../lib/cs/chat-store";
 
 export function OnboardingForm({ email, name: initialName, referrer: initialReferrer }: { email: string; name: string; referrer: string }) {
   const router = useRouter();
   const [name, setName] = useState(initialName), [referrer, setReferrer] = useState(initialReferrer);
+  const [phone, setPhone] = useState(""), [phoneConsent, setPhoneConsent] = useState(false);
   const [ageConfirmed, setAge] = useState(false), [termsAgreed, setTerms] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
@@ -22,7 +24,7 @@ export function OnboardingForm({ email, name: initialName, referrer: initialRefe
   return <form className="space-y-4" onSubmit={async event => {
     event.preventDefault(); if (!begin()) return;
     try {
-      const result = await completeSocialOnboarding({ name, referrer, ageConfirmed, termsAgreed, termsVersion: SIGNUP_TERMS_VERSION });
+      const result = await completeSocialOnboarding({ name, referrer, phone, phoneConsent, ageConfirmed, termsAgreed, termsVersion: SIGNUP_TERMS_VERSION });
       if (!result.ok) return setMessage(result.message);
       router.replace(`${HOME_AFTER_LOGIN}?signup=complete`); router.refresh();
     } catch { setMessage("가입 결과를 확인하지 못했습니다. 다시 시도해 주세요."); }
@@ -31,6 +33,7 @@ export function OnboardingForm({ email, name: initialName, referrer: initialRefe
     <p className="break-all rounded-md bg-muted p-3 text-sm">인증한 이메일: <strong>{email}</strong></p>
     <div className="space-y-1.5"><Label htmlFor="social-name">이름</Label><Input id="social-name" autoComplete="name" maxLength={PROFILE_LIMITS.name} required value={name} onChange={e => setName(e.target.value)} /></div>
     <div className="space-y-1.5"><Label htmlFor="social-referrer">추천코드 · 선택</Label><Input id="social-referrer" maxLength={PROFILE_LIMITS.referrer} value={referrer} onChange={e => setReferrer(e.target.value)} /></div>
+    <PhoneField id="social-phone" phone={phone} onPhone={setPhone} consent={phoneConsent} onConsent={setPhoneConsent} disabled={pending} />
     <fieldset className="space-y-3 rounded-lg border p-4 text-sm">
       <legend className="sr-only">가입 필수 확인</legend>
       <label className="flex items-start gap-2"><input type="checkbox" required className="mt-1" checked={ageConfirmed} onChange={e => setAge(e.target.checked)} /><span>만 14세 이상입니다. (필수)</span></label>

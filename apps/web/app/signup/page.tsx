@@ -14,6 +14,7 @@ import {
   Label,
 } from "@fixup/ui";
 import { AuthShell } from "../_components/auth-shell";
+import { PhoneField } from "../_components/phone-field";
 import { SocialAuthButtons } from "../_components/social-auth-buttons";
 import { Turnstile } from "../_components/turnstile";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
@@ -21,10 +22,13 @@ import { authAvailability } from "../../lib/supabase/env";
 import { cleanProfileText, PROFILE_LIMITS, profileInputError } from "../../lib/membership/profile-extras";
 import { signupResult, type SignupResult } from "../../lib/auth/signup-result";
 import { signupConsentError, signupConsentMetadata } from "../../lib/membership/signup-consent";
+import { phoneInputError, signupPhoneMetadata } from "../../lib/membership/phone";
 
 export default function SignupPage() {
   const [name, setName] = React.useState("");
   const [referrer, setReferrer] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [phoneConsent, setPhoneConsent] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
@@ -47,6 +51,8 @@ export default function SignupPage() {
     if (!auth.ready) return setError(auth.message);
     const profileProblem = profileInputError({ name, referrer });
     if (profileProblem) return setError(profileProblem);
+    const phoneProblem = phoneInputError(phone, phoneConsent);
+    if (phoneProblem) return setError(phoneProblem);
     if (password.length < 8) return setError("비밀번호는 8자 이상이어야 합니다.");
     if (password !== confirm) return setError("비밀번호 확인이 일치하지 않습니다.");
     const consentProblem = signupConsentError({ ageConfirmed, termsAgreed });
@@ -69,6 +75,8 @@ export default function SignupPage() {
           data: {
             display_name: cleanProfileText(name, PROFILE_LIMITS.name),
             referrer_input: cleanProfileText(referrer, PROFILE_LIMITS.referrer),
+            // 전화번호(선택)는 동의했을 때만 싣는다. 가입 트리거(202610020001)가 그때만 옮긴다.
+            ...signupPhoneMetadata(phone, phoneConsent),
             // 어느 판의 약관에 동의했는지. 동의 시각은 서버의 가입 시각이다.
             ...signupConsentMetadata(),
           },
@@ -162,6 +170,7 @@ export default function SignupPage() {
             <Label htmlFor="referrer">추천코드 <span className="font-normal text-muted-foreground">· 선택</span></Label>
             <Input id="referrer" maxLength={PROFILE_LIMITS.referrer} placeholder="받으신 추천코드" value={referrer} onChange={(e) => setReferrer(e.target.value)} />
           </div>
+          <PhoneField id="phone" phone={phone} onPhone={setPhone} consent={phoneConsent} onConsent={setPhoneConsent} disabled={loading} />
           {/*
             약관·처리방침은 **새 탭**으로 연다. 같은 탭이면 적던 이름·비밀번호가
             사라진다. 첫 화면의 #terms·#privacy 주소가 그 문서를 바로 연다.

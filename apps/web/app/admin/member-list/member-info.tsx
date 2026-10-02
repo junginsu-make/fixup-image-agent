@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button, Input } from "@fixup/ui";
 import { PROFILE_LIMITS } from "../../../lib/membership/profile-extras";
+import { PHONE_MAX_INPUT } from "../../../lib/membership/phone";
 import { adminSendPasswordReset, adminSetMemberPassword, adminUpdateMemberProfile } from "../actions";
 import { Field } from "./forms";
 import type { AdminMemberRow } from "./types";
@@ -37,11 +38,18 @@ type Run = (work: () => Promise<{ ok: boolean; message: string }>) => void;
 function ProfileForm({ row, pending, run }: { row: AdminMemberRow; pending: boolean; run: Run }) {
   const [name, setName] = React.useState(row.name ?? "");
   const [referrer, setReferrer] = React.useState(row.referrer ?? "");
+  // 전화번호(선택)는 회원이 동의하고 적은 번호만 고치거나 지운다. 없으면 관리자가 넣지 않는다.
+  const [phone, setPhone] = React.useState(row.phone ?? "");
   return (
-    <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); run(() => adminUpdateMemberProfile(row.profile.id, { name, referrer })); }}>
+    <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); run(() => adminUpdateMemberProfile(row.profile.id, phone === (row.phone ?? "") ? { name, referrer } : { name, referrer, phone, phoneBefore: row.phone })); }}>
       <Field label="이름"><Input className="w-40" required maxLength={PROFILE_LIMITS.name} value={name} onChange={(event) => setName(event.target.value)} /></Field>
       <Field label="추천코드 (회원이 적은 값)"><Input className="w-56" maxLength={PROFILE_LIMITS.referrer} value={referrer} onChange={(event) => setReferrer(event.target.value)} /></Field>
-      <Button type="submit" size="sm" variant="outline" disabled={pending}>이름·추천코드 저장</Button>
+      <Field label="전화번호 (선택 · 회원 동의)">
+        <Input id={`admin-phone-${row.profile.id}`} className="w-44" type="tel" maxLength={PHONE_MAX_INPUT} disabled={!row.phone}
+          placeholder={row.phone ? "" : "회원이 직접 입력"} value={phone} onChange={(event) => setPhone(event.target.value)} />
+      </Field>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>회원 정보 저장</Button>
+      {!row.phone ? <p className="w-full text-xs text-muted-foreground">전화번호는 회원이 가입하거나 계정 화면에서 동의하고 적어야 생깁니다. 관리자는 이미 있는 번호만 고치거나 지울 수 있습니다.</p> : null}
     </form>
   );
 }
