@@ -24,9 +24,10 @@ describe("회원 삭제", () => {
     expect(body).toContain("MONEY_RECORDS_MESSAGE");
   });
 
-  /** 003 을 안 돌린 서버에는 그 함수가 없다. 그렇다고 삭제가 막히면 안 된다. */
-  it("함수가 없는 서버에서는 그냥 지운다", () => {
-    expect(body).toContain("ledgerMissing(keptError)");
+  /** 운영의 부분 적용 상태에서도 삭제 가능 여부를 추측하지 않는다. */
+  it("함수가 없는 서버에서는 기록을 확인할 때까지 지우지 않는다", () => {
+    expect(body).not.toContain("ledgerMissing(keptError)");
+    expect(body).toContain('keptError || typeof kept !== "boolean"');
   });
 });
 

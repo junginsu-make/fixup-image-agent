@@ -7,7 +7,6 @@ import { updateProfileExtras, updateProfilePhone } from "../../lib/membership/pr
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
-import { ledgerMissing } from "../../lib/membership/usage-row";
 import { isDisabledRoute } from "../../lib/access/routes";
 import { failureUrl, teamFailure } from "../../lib/teams/failure";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
@@ -220,10 +219,10 @@ export async function deleteMember(formData: FormData) {
   /*
     크레딧 지급·구독 기록이 있으면 DB 가 삭제를 막는다(돈 기록은 회원과 함께 지우지
     않는다, 202609220003). 막힌 뒤의 「Database error deleting user」는 이유를 안
-    알려 주므로 먼저 묻는다. 함수가 아직 없는 서버(003 전)에서는 막을 기록도 없다.
+    알려 주므로 먼저 묻는다. 함수가 없거나 조회가 실패하면 삭제 가능 여부를 알 수 없다.
   */
   const { data: kept, error: keptError } = await admin.rpc("credit_member_has_records", { p_user: userId });
-  if (keptError && !ledgerMissing(keptError)) throw new Error(`삭제 가능 여부를 확인하지 못했습니다: ${keptError.message}`);
+  if (keptError || typeof kept !== "boolean") throw new Error("삭제 가능 여부를 확인하지 못했습니다. 회원 삭제 설정을 확인한 뒤 다시 시도해 주세요.");
   if (kept === true) throw new Error(MONEY_RECORDS_MESSAGE);
 
   // 인증 계정을 지운다. profiles 는 auth.users 를 참조하므로 함께 사라진다.
