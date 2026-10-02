@@ -9,10 +9,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
 let rpcData: unknown = null;
 const queries: string[] = [];
+let boundId: string | null = "req-1";
+const response = (data: unknown) => {
+  const promise = Promise.resolve({ data, error: null });
+  return Object.assign(promise, { abortSignal: (signal: AbortSignal) => { expect(signal).toBeInstanceOf(AbortSignal); return promise; } });
+};
 const fake = {
-  rpc: async (fn: string, args: Record<string, unknown>) => {
+  rpc: (fn: string, args: Record<string, unknown>) => {
     calls.push({ fn, args });
-    return { data: rpcData, error: null };
+    return response(rpcData);
   },
   from: (table: string) => {
     queries.push(`from ${table}`);
@@ -20,7 +25,8 @@ const fake = {
       select: (columns: string) => { queries.push(`select ${columns}`); return chain; },
       is: (column: string, value: unknown) => { queries.push(`is ${column} ${String(value)}`); return Promise.resolve({ data: [], error: null }); },
       eq: (column: string, value: unknown) => { queries.push(`eq ${column} ${String(value)}`); return chain; },
-      maybeSingle: async () => ({ data: { account_id: "acct-1" }, error: null }),
+      abortSignal: (signal: AbortSignal) => { expect(signal).toBeInstanceOf(AbortSignal); return chain; },
+      maybeSingle: () => response({ account_id: "acct-1", fal_request_id: boundId }),
     };
     return chain;
   },
@@ -40,10 +46,15 @@ beforeEach(() => {
   calls.length = 0;
   queries.length = 0;
   rpcData = null;
+  boundId = "req-1";
 });
 
 describe("supabaseFalPoolStore", () => {
   const store = supabaseFalPoolStore();
+  it("void RPC 응답만으로 저장 성공을 가정하지 않는다", async () => {
+    boundId = null;
+    await expect(store.bind(7, "req-1")).rejects.toThrow("binding was not confirmed");
+  });
 
   it.each([
     ["claim", () => store.claim("fal-ai/x", ["a"]), "fal_account_claim"],

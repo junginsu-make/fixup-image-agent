@@ -23,36 +23,24 @@ previous_release=""
 if [[ -L ${current_link} ]]; then
   previous_release=$(readlink -f "${current_link}")
 fi
+static_link=/var/www/fixup-image-agent/static/current
+previous_static=""
+if [[ -L ${static_link} ]]; then previous_static=$(readlink -f "${static_link}"); fi
+ops_dir=$(dirname "$0")
+source "${ops_dir}/release-recovery.sh"
 
-# 되돌리는 릴리스의 정적 사본을 current 로(없으면 만든다). 옛 꾸러미면 Caddy 가 Node 로 넘긴다.
-# 정적 사본 실패로 되돌리기 전체가 막히면 안 된다 — 사본에 없는 조각은 Caddy 가 Node 로 넘긴다.
-bash "$(dirname "$0")/sync-static.sh" "${release_root}" "${release_id}" \
-  || echo "경고: 정적 사본을 옮기지 못했습니다 — 사본에 없는 조각은 Caddy 가 Node 로 넘깁니다" >&2
+# BEGIN RELEASE SWITCH
+restart_attempted=false
+trap 'release_failed $?' ERR
+bash "$(dirname "$0")/sync-static.sh" "${release_root}" "${release_id}"
 
-ln -sfnT "${release_root}" /opt/fixup-image-agent/current
+ln -sfnT "${release_root}" "${current_link}"
+restart_attempted=true
 systemctl restart fixup-image-agent.service
 
-healthy=false
-for _ in $(seq 1 20); do
-  if curl --fail --silent --show-error http://127.0.0.1:3000/api/health >/dev/null; then
-    healthy=true
-    break
-  fi
-  sleep 2
-done
-
-if [[ ${healthy} != true ]] \
-  || ! curl --fail --silent --show-error http://127.0.0.1:3000/api/health/ready >/dev/null; then
-  echo "Rollback target did not become ready. Restoring the previous release." >&2
-  if [[ -n ${previous_release} && -d ${previous_release} ]]; then
-    ln -sfnT "${previous_release}" "${current_link}"
-    bash "$(dirname "$0")/sync-static.sh" "${previous_release}" "$(basename "${previous_release}")" || true
-    systemctl restart fixup-image-agent.service
-  else
-    systemctl stop fixup-image-agent.service
-  fi
-  exit 1
-fi
+if ! release_health; then release_failed 1; fi
+trap - ERR
+# END RELEASE SWITCH
 
 # 웹이 옛 릴리스로 건강하게 돌아온 뒤에 워커도 같은 릴리스로 넘긴다.
 # 다시 시작하지 않으면 웹만 되돌아가고 수집은 되돌린 코드로 계속 돈다.

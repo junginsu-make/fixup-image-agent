@@ -37,6 +37,11 @@ previous_release=""
 if [[ -L ${current_link} ]]; then
   previous_release=$(readlink -f "${current_link}")
 fi
+static_link=/var/www/fixup-image-agent/static/current
+previous_static=""
+if [[ -L ${static_link} ]]; then previous_static=$(readlink -f "${static_link}"); fi
+ops_dir=$(dirname "$0")
+source "${ops_dir}/release-recovery.sh"
 
 install -d -o root -g fixup-agent -m 0750 "${release_root}"
 tar -xzf "${archive}" -C "${release_root}"
@@ -57,44 +62,19 @@ for build_dir in "${release_root}/apps/web"/.next*; do
   install -d -o fixup-agent -g fixup-agent -m 0750 "${build_dir}/cache/images"
 done
 
-# 정적 파일 사본(Caddy 가 직접 내준다). 실패하면 current 를 옮기기 전에 멈춘다.
+# BEGIN RELEASE SWITCH
+# Every failure after activation begins restores both captured pointers.
+restart_attempted=false
+trap 'release_failed $?' ERR
 bash "$(dirname "$0")/sync-static.sh" "${release_root}" "${release_id}"
 
 ln -sfnT "${release_root}" "${current_link}"
+restart_attempted=true
 systemctl restart fixup-image-agent.service
 
-healthy=false
-for _ in $(seq 1 20); do
-  if curl --fail --silent --show-error http://127.0.0.1:3000/api/health >/dev/null; then
-    healthy=true
-    break
-  fi
-  sleep 2
-done
-
-if [[ ${healthy} != true ]]; then
-  echo "Liveness check failed. Rolling back." >&2
-  if [[ -n ${previous_release} && -d ${previous_release} ]]; then
-    ln -sfnT "${previous_release}" "${current_link}"
-    bash "$(dirname "$0")/sync-static.sh" "${previous_release}" "$(basename "${previous_release}")" || true
-    systemctl restart fixup-image-agent.service
-  else
-    systemctl stop fixup-image-agent.service
-  fi
-  exit 1
-fi
-
-if ! curl --fail --silent --show-error http://127.0.0.1:3000/api/health/ready >/dev/null; then
-  echo "Readiness check failed. Rolling back." >&2
-  if [[ -n ${previous_release} && -d ${previous_release} ]]; then
-    ln -sfnT "${previous_release}" "${current_link}"
-    bash "$(dirname "$0")/sync-static.sh" "${previous_release}" "$(basename "${previous_release}")" || true
-    systemctl restart fixup-image-agent.service
-  else
-    systemctl stop fixup-image-agent.service
-  fi
-  exit 1
-fi
+if ! release_health; then release_failed 1; fi
+trap - ERR
+# END RELEASE SWITCH
 
 # 워커는 웹이 건강한 것을 본 뒤에 넘긴다.
 #

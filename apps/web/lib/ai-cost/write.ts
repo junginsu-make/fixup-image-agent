@@ -1,4 +1,5 @@
 import { isUuid, type AiCostProvider } from "./keys";
+import { falProviderRequestId } from "../fal/request-id";
 
 /**
  * **공급자를 한 번 부를 때마다 한 줄**을 적는다(설계 2026-09-30 §3.4).
@@ -76,7 +77,7 @@ export function toAiCostRow(caller: AiCaller | undefined, entry: AiCostEntry): A
     p_usd: entry.basis === "image_unit" ? null : Math.max(0, Number((entry.usd ?? 0).toFixed(6))),
     p_basis: entry.basis,
     p_failed: entry.failed === true,
-    p_fal_request_id: entry.falRequestId?.trim() || null,
+    p_fal_request_id: entry.falRequestId?.trim() ? falProviderRequestId(entry.falRequestId.trim()) : null,
   };
 }
 

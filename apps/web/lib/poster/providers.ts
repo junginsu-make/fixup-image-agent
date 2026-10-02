@@ -185,9 +185,17 @@ const REVIEW_SPEC: StructuredSpec = {
 };
 
 function clients(environment: Record<string, string | undefined>) {
+  let anthropic: Anthropic | undefined;
+  let openai: OpenAI | undefined;
   return {
-    anthropic: new Anthropic({ apiKey: environment.ANTHROPIC_API_KEY!, maxRetries: 2, timeout: 120_000 }),
-    openai: new OpenAI({ apiKey: environment.OPENAI_API_KEY!, maxRetries: 2, timeout: 120_000 }),
+    get anthropic() {
+      requireKeys(["ANTHROPIC_API_KEY"], environment);
+      return anthropic ??= new Anthropic({ apiKey: environment.ANTHROPIC_API_KEY!.trim(), maxRetries: 2, timeout: 120_000 });
+    },
+    get openai() {
+      requireKeys(["OPENAI_API_KEY"], environment);
+      return openai ??= new OpenAI({ apiKey: environment.OPENAI_API_KEY!.trim(), maxRetries: 2, timeout: 120_000 });
+    },
     anthropicModel: environment.ANTHROPIC_MODEL?.trim() || DEFAULT_ANTHROPIC_MODEL,
     openaiModel: environment.OPENAI_VISION_MODEL?.trim()
       || environment.OPENAI_DRAFT_MODEL?.trim()
@@ -227,16 +235,17 @@ export function createPosterPlanningProviders(
   // 고른 것이 OpenAI 면 그 열쇠가 있어야 한다. 없으면 무엇이 없는지 알린다.
   requireKeys(vendor === "openai" ? ["OPENAI_API_KEY"] : ["ANTHROPIC_API_KEY"], environment);
 
-  const { anthropic, openai, anthropicModel, openaiModel } = clients(environment);
+  const sdk = clients(environment);
+  const { anthropicModel, openaiModel } = sdk;
   const backup = environment.OPENAI_API_KEY?.trim()
-    ? { plan: (prompt: string) => new OpenAIStructuredProvider(openai, openaiModel, PLAN_SPEC).generate(prompt) }
+    ? { plan: (prompt: string) => new OpenAIStructuredProvider(sdk.openai, openaiModel, PLAN_SPEC).generate(prompt) }
     : undefined;
 
   const primary = vendor === "openai"
-    ? { plan: (prompt: string) => new OpenAIStructuredProvider(openai, textModel!, PLAN_SPEC).generate(prompt) }
+    ? { plan: (prompt: string) => new OpenAIStructuredProvider(sdk.openai, textModel!, PLAN_SPEC).generate(prompt) }
     : {
       plan: (prompt: string) => new AnthropicStructuredProvider(
-        anthropic,
+        sdk.anthropic,
         // 고른 것이 있으면 그것으로. 없으면 지금까지대로.
         textModel ?? anthropicModel,
         PLAN_SPEC,

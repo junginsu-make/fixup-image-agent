@@ -23,3 +23,9 @@ jobs:
       - run: pnpm test
 
       - run: pnpm -r typecheck
+
+      - name: Verify release recovery and fal route durability
+        shell: bash
+        run: |
+          export TEST_PG_BIN="$(pg_config --bindir)"
+          pnpm test:readiness-fixes

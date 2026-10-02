@@ -89,6 +89,7 @@ jobs:
         run: |
           export TEST_PG_BIN="$(pg_config --bindir)"
           pnpm test:credit-db
+          pnpm test:readiness-fixes
           # 초록이 진짜 초록인지 본다. 장부 함수를 일부러 망가뜨렸을 때 테스트가
           # 안 깨지면 그 테스트는 아무것도 안 지키고 있는 것이다.
           node scripts/tests/credit-mutations.mjs

@@ -3,6 +3,7 @@ import { IMAGE_MODELS } from "@fixup/sns-core";
 import { FalHttpError, falQueueOps, type FalQueueOps } from "./http";
 import { defaultFalRouter } from "./pool/default";
 import type { FalRouter } from "./route";
+import { falProviderRequestId } from "./request-id";
 
 export type FalJobStatus = "queued" | "in_progress" | "completed";
 
@@ -84,19 +85,19 @@ export function createFalQueueClient(
       const route = await router.routeOf(requestId);
       let status: FalJobStatus;
       try {
-        status = await opsFor(route.key).status(endpoint, requestId);
+        status = await opsFor(route.key).status(endpoint, falProviderRequestId(requestId));
       } catch (error) {
         throw asSdkShapedFailure(error);
       }
       // 끝났으면 계정의 진행 중 수에서 뺀다. 결과 받기는 그 뒤에 와도 같은 키를 쓴다.
-      if (status === "completed") router.finished(requestId);
+      if (status === "completed") await router.finished(requestId);
       return status;
     },
     async jobResult(endpoint, requestId) {
       const route = await router.routeOf(requestId);
       let data: { images?: Array<{ url?: string }> } | null;
       try {
-        data = (await opsFor(route.key).result(endpoint, requestId)) as { images?: Array<{ url?: string }> } | null;
+        data = (await opsFor(route.key).result(endpoint, falProviderRequestId(requestId))) as { images?: Array<{ url?: string }> } | null;
       } catch (error) {
         throw asSdkShapedFailure(error);
       }

@@ -240,10 +240,10 @@ describe("보낸 요청은 보낸 계정으로 묻는다", () => {
     expect(await 만들기(g.store, fal({}).submit).routeOf("old-req")).toEqual({ accountId: null, key: "env-key" });
   });
 
-  it("계정 행이 아예 없으면 DB 를 보지 않는다", async () => {
+  it("현재 계정 목록이 비어도 과거 요청의 계정 기록은 확인한다", async () => {
     const g = 가게([]);
     await 만들기(g.store, fal({}).submit).routeOf("old-req");
-    expect(g.calls).toEqual(["liveAccounts"]);
+    expect(g.calls).toEqual(["liveAccounts", "accountOf:old-req"]);
   });
 
   it("끝나면 진행 중에서 뺀다 — 서버 키 요청은 DB 를 부르지 않는다", async () => {

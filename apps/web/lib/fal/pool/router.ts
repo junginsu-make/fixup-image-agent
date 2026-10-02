@@ -3,6 +3,8 @@ import { envFalRouter, type FalRoute, type FalRouter } from "../route";
 import type { FalPoolAlert } from "./alert";
 import { openFalKey } from "./key-crypto";
 import type { FalAccountFailure, FalAccountState, FalPoolStore } from "./store";
+import { isFalReceipt, type FalReceipt } from "../request-id";
+import { openFalReceipt, sealFalReceipt } from "./receipt";
 
 /**
  * **fal 계정 풀**(설계 2026-09-29 §3.3 · 보충 2026-10-01).
@@ -80,10 +82,9 @@ interface PoolAccount {
 }
 
 interface Snapshot {
+  loaded: boolean;
   at: number;
   accounts: Map<string, PoolAccount>;
-  /** 지우지 않은 계정 행이 하나라도 있는가(꺼졌거나 풀 수 없어도). 없으면 DB 를 보지 않는다. */
-  anyRow: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -111,7 +112,9 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
   const env = envFalRouter(deps.environment, submit);
   const now = deps.now ?? Date.now;
   const log = deps.log ?? ((message: string, detail?: unknown) => console.error(message, detail));
-  const remembered = new Map<string, FalRoute>();
+  type Remembered = { route: FalRoute; slotId?: number; providerId: string };
+  const remembered = new Map<string, Remembered>();
+  const pendingFinishes = new Map<string, Remembered>();
   let snapshot: Snapshot | null = null;
   /** 마지막으로 **성공한** 적재 — `refresh()` 로도 비우지 않는다. DB 가 끊기면 이것으로 버틴다. */
   let lastGood: Snapshot | null = null;
@@ -119,8 +122,8 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
   /** `refresh()` 때마다 하나 올린다. 전에 떠 있던 적재가 뒤늦게 끝나도 이 수가 바뀌어 있으면 캐시에 쓰지 않는다. */
   let generation = 0;
 
-  const remember = (requestId: string, route: FalRoute) => {
-    remembered.set(requestId, route);
+  const remember = (requestId: string, route: FalRoute, slotId?: number, providerId = requestId) => {
+    remembered.set(requestId, { route, slotId, providerId });
     if (remembered.size > REMEMBERED_LIMIT) remembered.delete(remembered.keys().next().value as string);
   };
 
@@ -151,12 +154,12 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
         if (changed) alert({ kind: "decrypt_failed", accountName: row.name, detail });
       }
     }
-    return { at: now(), accounts, anyRow: rows.length > 0 };
+    return { at: now(), accounts, loaded: true };
   }
 
-  /** 계정이 하나도 없는 것처럼 — 풀이 꺼졌을 때(오늘)와 읽기 자체가 실패했을 때(새 장애) 같은 모양으로 쓴다. */
+  /** 읽기 실패를 빈 목록과 구분한다. 이 상태로 기존 요청의 계정을 추측하지 않는다. */
   function emptySnapshot(): Snapshot {
-    return { at: now(), accounts: new Map(), anyRow: false };
+    return { at: now(), accounts: new Map(), loaded: false };
   }
 
   /**
@@ -264,14 +267,30 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
     return withAccount(snap, account.id, { state: failure });
   }
 
-  /** 받은 번호를 DB 에 붙인다. 세 번 해도 안 되면 기록만 — 같은 프로세스는 메모리로 찾는다. */
+  /** 저장을 확인하지 못하면 호출자에게 서명된 복구 영수증을 반환한다. 재제출하지 않는다. */
   async function bind(slotId: number, requestId: string) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         await deps.store.bind(slotId, requestId);
-        return;
+        return true;
       } catch (error) {
         if (attempt === 3) log("[fal-pool] 요청 번호를 계정에 묶지 못했습니다", { requestId, message: (error as Error).message });
+      }
+    }
+    return false;
+  }
+
+  async function finishKnown(id: string, entry: Remembered): Promise<void> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        // Release deletes ONLY an unbound slot. If bind won the race, finish below
+        // closes its bound row. This order also works when bind stays unavailable.
+        if (entry.slotId !== undefined) await deps.store.release(entry.slotId);
+        await deps.store.finish(entry.providerId);
+        pendingFinishes.delete(id);
+        return;
+      } catch (error) {
+        if (attempt === 3) log("[fal-pool] 완료한 요청의 칸 정리를 다시 시도해야 합니다", { requestId: entry.providerId, message: error instanceof Error ? error.message : String(error) });
       }
     }
   }
@@ -284,8 +303,14 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
     },
 
     async submit(endpoint, input, options) {
+      const pending = pendingFinishes.entries().next().value;
+      if (pending) await finishKnown(pending[0], pending[1]);
       let snap = await current();
-      if (!poolOn(snap)) return env.submit(endpoint, input, options);
+      if (!poolOn(snap)) {
+        const accepted = await env.submit(endpoint, input, options);
+        remember(accepted.requestId, accepted.route);
+        return accepted;
+      }
 
       const tried: string[] = [];
       for (let attempt = 0; attempt <= snap.accounts.size; attempt += 1) {
@@ -314,37 +339,54 @@ export function createPoolRouter(deps: PoolRouterDeps): PoolRouter {
         }
 
         const route: FalRoute = { accountId: account.id, key: account.key };
-        remember(requestId, route);
-        await bind(slot.slotId, requestId);
-        return { requestId, route };
+        remember(requestId, route, slot.slotId);
+        if (await bind(slot.slotId, requestId)) return { requestId, route };
+        // The caller already persists this opaque ID in its server-owned job record.
+        // Preserve account/slot identity there if the dedicated binding RPC failed.
+        // Never throw an ordinary submission error after the provider accepted it.
+        const receipt = sealFalReceipt(deps.masterKey, { accountId: account.id, slotId: slot.slotId, requestId });
+        remember(receipt, route, slot.slotId, requestId);
+        return { requestId: receipt, route };
       }
       throw new FalPoolBusyError();
     },
 
     async routeOf(requestId) {
+      const receipt = isFalReceipt(requestId) ? openFalReceipt(deps.masterKey, requestId) : null;
       const known = remembered.get(requestId);
-      if (known) return known;
+      if (known) return known.route;
       let snap = await current();
-      if (!snap.anyRow) return env.routeOf(requestId);
+      if (!snap.loaded) throw new FalPoolUnavailableError();
       // 상태 코드는 싣지 않는다 — 이미 보낸 요청이라 화면이 묶은 장을 풀면 안 된다.
-      const accountId = await guarded("보낸 계정을 찾지 못했습니다", () => deps.store.accountOf(requestId));
+      const accountId = receipt?.accountId ?? await guarded("보낸 계정을 찾지 못했습니다", () => deps.store.accountOf(requestId));
       // 계정 기록이 없으면 서버 키로 보낸 요청이다(풀을 켜기 전·켜진 계정이 없던 때).
-      if (!accountId) return env.routeOf(requestId);
+      if (!accountId) {
+        const route = await env.routeOf(requestId);
+        remember(requestId, route);
+        return route;
+      }
       let account = snap.accounts.get(accountId);
       if (!account) {
         snap = await current(true);
         account = snap.accounts.get(accountId);
       }
-      if (!account) throw new FalHttpError(410, "", "이 요청을 보낸 fal 계정을 더는 쓸 수 없습니다.");
+      if (!account) throw new FalPoolUnavailableError();
       const route: FalRoute = { accountId, key: account.key };
-      remember(requestId, route);
+      remember(requestId, route, receipt?.slotId, receipt?.requestId ?? requestId);
       return route;
     },
 
-    finished(requestId) {
-      const route = remembered.get(requestId);
-      if (route ? route.accountId === null : !snapshot?.anyRow) return;
-      deps.store.finish(requestId).catch((cause: unknown) => log("[fal-pool] 끝난 요청을 적지 못했습니다", cause));
+    async finished(requestId) {
+      const receipt: FalReceipt | null = isFalReceipt(requestId) ? openFalReceipt(deps.masterKey, requestId) : null;
+      const known = remembered.get(requestId);
+      if (known?.route.accountId === null) return;
+      const entry = known ?? { route: { accountId: receipt?.accountId ?? null, key: "" }, slotId: receipt?.slotId, providerId: receipt?.requestId ?? requestId };
+      pendingFinishes.set(requestId, entry);
+      if (pendingFinishes.size > REMEMBERED_LIMIT) {
+        pendingFinishes.delete(pendingFinishes.keys().next().value as string);
+        log("[fal-pool] 완료 정리 대기 한도를 넘었습니다. 오래된 칸은 DB lease 만료로 해제됩니다.");
+      }
+      await finishKnown(requestId, entry);
     },
 
     async uploadRoute() {
