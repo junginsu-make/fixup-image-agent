@@ -146,30 +146,31 @@ describe("③ 고칠 그림은 참고용이 아니라 고칠 대상이다", () =
 
 describe("원래 작업의 글자 결정을 그대로 따른다", () => {
   /*
-   * 처음 만들 때 글자 칸이 전부 AI 가 지어낸 것이면 「글자를 넣지 말라」가
-   * 붙었다. 고치기는 `invented` 를 안 넘겨서 **없던 헤드라인이 고친 그림에
-   * 생겼다**(2026-09-29 재현).
+   * **기획이 채운 글자도 처음 만들 때 실렸다** (2026-10-02 사용자 결정). 고치기도
+   * 같은 글자를 철자 그대로 지킨다 — 처음 만들 때 실은 글자를 고치기가 모르면
+   * 뭉개진 한글을 바로잡을 근거가 없다.
+   *
+   * 옛 작업에는 저장된 표(`inventedSlots`)가 남아 있다. 그 값이 섞여 들어와도
+   * 글자가 빠지면 안 된다.
    */
-  it("글자 칸이 전부 AI 것이면 그 글자를 새로 넣으라고 하지 않는다", () => {
-    const { prompt } = built({ invented: ["headline", "subline", "sideTexts"] });
-    expect(prompt).not.toContain("가을, 한 잔");
-    expect(prompt).not.toContain("시나몬 라떼 출시");
+  it("표가 붙은 글자도 철자 그대로 지키라고 한다", () => {
+    const 옛작업: Partial<EditJobInput> & { invented?: string[] } = {
+      invented: ["headline", "subline", "sideTexts"],
+    };
+    const { prompt } = built(옛작업);
+    expect(prompt).toContain("HEADLINE: 가을, 한 잔");
+    expect(prompt).toContain("SUBLINE: 시나몬 라떼 출시");
   });
 
-  it("사람이 적은 글자는 철자 그대로 지키라고 하되, 지시가 바꾸면 따른다", () => {
-    const { prompt } = built({ invented: [] });
+  it("적어 둔 글자는 철자 그대로 지키라고 하되, 지시가 바꾸면 따른다", () => {
+    const { prompt } = built();
     expect(prompt).toContain("HEADLINE: 가을, 한 잔");
     expect(prompt).toMatch(/unless the USER INSTRUCTION changes it/);
   });
 
   it("고칠 그림의 글자가 뭉개져 있으면 적어 둔 철자가 이긴다", () => {
-    expect(built({ invented: [] }).prompt)
+    expect(built().prompt)
       .toContain("If Image 1 shows this copy with different spelling, use the spelling above.");
-  });
-
-  it("붙인 그림에 글자가 있던 작업이면 AI 가 채운 글자도 지킨다 — 처음 만들 때와 같다", () => {
-    const { prompt } = built({ invented: ["headline", "subline", "sideTexts"], referenceHasText: true });
-    expect(prompt).toContain("HEADLINE: 가을, 한 잔");
   });
 
   /*
@@ -341,16 +342,12 @@ describe("원래 작업의 원본 사진은 알아보게만 한다", () => {
  * 만든 그림을 고칠 때 글자가 생기거나, 그 반대가 된다 — 여기서 나란히 놓고 잰다.
  */
 describe("글자를 넣을지는 처음 만들 때와 같은 판단이다", () => {
-  const 경우들: Array<{ 이름: string; slots: typeof 원래슬롯; invented?: string[]; referenceHasText?: boolean }> = [
-    { 이름: "사람이 적은 헤드라인", slots: 원래슬롯, invented: [] },
-    { 이름: "전부 AI 가 지어냄", slots: 원래슬롯, invented: ["headline", "subline", "sideTexts"] },
-    { 이름: "헤드라인만 AI", slots: 원래슬롯, invented: ["headline"] },
-    { 이름: "전부 AI + 붙인 그림에 글자", slots: 원래슬롯, invented: ["headline", "subline", "sideTexts"], referenceHasText: true },
-    { 이름: "곁텍스트만 사람", slots: { ...원래슬롯, headline: "", subline: "", sideTexts: ["매일 7시"] }, invented: [] },
-    { 이름: "곁텍스트도 AI", slots: { ...원래슬롯, sideTexts: ["매일 7시"] }, invented: ["headline", "subline", "sideTexts"] },
-    { 이름: "옛 작업(invented 없음)", slots: 원래슬롯 },
+  const 경우들: Array<{ 이름: string; slots: typeof 원래슬롯 }> = [
+    { 이름: "헤드라인·받침 문구", slots: 원래슬롯 },
+    { 이름: "곁텍스트만", slots: { ...원래슬롯, headline: "", subline: "", sideTexts: ["매일 7시"] } },
+    { 이름: "셋 다", slots: { ...원래슬롯, sideTexts: ["매일 7시"] } },
     { 이름: "빈 슬롯", slots: EMPTY_SLOTS },
-    { 이름: "공백뿐인 헤드라인", slots: { ...원래슬롯, headline: "   ", subline: "" }, invented: [] },
+    { 이름: "공백뿐인 헤드라인", slots: { ...원래슬롯, headline: "   ", subline: "" } },
   ];
 
   for (const 경우 of 경우들) {
@@ -358,9 +355,8 @@ describe("글자를 넣을지는 처음 만들 때와 같은 판단이다", () =
       const 처음 = buildPosterJob({
         projectId: "p1", modelId: "gpt-image-2", ratioId: "2:3", variants: 3,
         slots: 경우.slots, referenceUrls: [], preservedUrls: [],
-        invented: 경우.invented, referenceHasText: 경우.referenceHasText,
       }).prompt;
-      const 고치기 = built({ slots: 경우.slots, invented: 경우.invented, referenceHasText: 경우.referenceHasText }).prompt;
+      const 고치기 = built({ slots: 경우.slots }).prompt;
       const 글자칸 = (prompt: string) => prompt.split("\n").filter((line) => /^\s+(HEADLINE|SUBLINE|SIDE \d+):/.test(line));
       expect(글자칸(고치기)).toEqual(글자칸(처음));
     });

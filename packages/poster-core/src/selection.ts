@@ -63,7 +63,7 @@ export interface EditJobInput {
   slots: PosterSlots;
   /*
    * 아래는 **원래 작업이 정한 것** — 그림만 봐서는 못 지키는 것들이다.
-   * 옛 호출에는 없다. 없으면 지킬 대상 없이, 글자는 칸이 찼는지로만 가른다.
+   * 옛 호출에는 없다. 없으면 지킬 대상 없이 고친다.
    */
   /** 원래 작업의 첨부(화면 차례). 지킬 대상만 다시 붙는다(`edit-job.ts`). */
   attachments?: OrderedAttachment[];
@@ -71,9 +71,6 @@ export interface EditJobInput {
   preservedUrls?: string[];
   personUrls?: string[];
   restyledUrls?: string[];
-  /** 기획이 지어낸 글자 칸. 처음 만들 때와 같은 글자 판단을 하려고 넘긴다. */
-  invented?: string[];
-  referenceHasText?: boolean;
 }
 
 export interface PosterEditJob extends PosterJobInput {
@@ -115,7 +112,5 @@ export function planEditJob(input: EditJobInput): PosterEditJob {
     preservedUrls: input.preservedUrls ?? [],
     personUrls: input.personUrls ?? [],
     restyledUrls: input.restyledUrls ?? [],
-    invented: input.invented,
-    referenceHasText: input.referenceHasText,
   };
 }

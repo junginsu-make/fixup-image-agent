@@ -159,10 +159,6 @@ async function handlePost(request: Request, context: Context) {
       sourceSize: editSourceSize(ratioId, project.data.adMaster, parent),
       slots: project.data.slots,
       ...editAttachmentInputs(project.data, preserved, preservedUrlById),
-      // 글자를 넣을지는 처음 만들 때와 같은 판단을 한다. 안 넘기면 처음에 글자
-      // 없이 만든 그림을 고칠 때 AI 가 지어낸 헤드라인이 새로 박힌다.
-      invented: project.data.inventedSlots,
-      referenceHasText: project.data.referenceHasText,
     });
 
     /**

@@ -69,21 +69,6 @@ export interface PosterPromptInput {
    */
   verbatimScene?: string;
   /**
-   * 기획이 **근거 없이 채웠다고 밝힌** 칸 이름들.
-   *
-   * 글자 칸이 전부 여기 들어 있으면 사용자가 글자를 안 시킨 것이라, 아래에서
-   * 「글자를 넣지 말라」를 붙인다. 옛 작업에는 없다 — 없으면 지금까지대로
-   * 칸이 비었는지로만 본다.
-   */
-  invented?: string[];
-  /**
-   * 붙인 그림에 **글자가 있나**(`grammar.ts` 의 `hasText`).
-   *
-   * 있으면 글자를 넣는다 — 사용자가 따라 만들라고 한 그림의 핵심이 글자일 수
-   * 있다. 없으면 지금까지대로 막는다. 옛 작업에는 이 값이 없다.
-   */
-  referenceHasText?: boolean;
-  /**
    * 첨부한 그림들을 어떻게 쓸지 사용자가 01에서 적은 말.
    *
    * 03의 `userInstruction` 과 **뜻이 다르다** — 이쪽은 그림 얘기, 저쪽은
@@ -254,49 +239,25 @@ function sceneLines(slots: PosterSlots): string[] {
  * 「글자를 안 원한다」가 아니라 「우리가 안 물어봤다」는 뜻이다. 그때 금지하면
  * 사용자 프롬프트가 글자를 요구해도 우리가 막는다(2026-09-16 실물 확인).
  */
-function copyLines(
-  slots: PosterSlots,
-  verbatim = false,
-  invented: string[] = [],
-  referenceHasText = false,
-): string[] {
+function copyLines(slots: PosterSlots, verbatim = false): string[] {
   /*
-   * **글자 칸이 전부 「AI 가 골라 채운 것」이면 사용자는 글자를 안 시킨 것이다.**
+   * **칸에 있으면 싣는다. 누가 채웠는지는 안 따진다** (2026-10-02 사용자 결정).
    *
-   * 전에는 「빈 칸이면 안 시킨 것」으로 읽었다 — 기획이 근거 없는 칸을 비웠기
-   * 때문이다. 기획을 「다 채우게」 바꾸면서 그 신호가 사라졌다(2026-09-17).
-   * headline 이 늘 차서 아래 금지문에 **도달할 길이 없어졌다.**
+   * 2026-09-17 부터 10-02 까지는 글자 칸이 전부 「AI 가 골라 채움」이면 그
+   * 글자를 버리고 아래 금지문을 보냈다. 그런데 04 는 그 글자를 보여 주며
+   * 「마음에 안 들면 지우거나 고치세요」라고 말한다 — 그대로 두면 들어간다고
+   * 읽힌다. 첨부 없이 글로만 만들면 붙인 그림의 글자도 없어서, 사람이 문구를
+   * 글자 그대로 적지 않는 한 **글자가 영영 안 나왔다.**
    *
-   * 그 자리를 `invented` 가 대신한다. 실측으로 갈리는 것을 확인했다(각 4·3회) —
-   * 「헤드라인은 「가을, 셔터를 누르다」」라고 적으면 그대로 옮겨 적고 `invented`
-   * 에 안 넣는다. 글자 얘기가 없으면 셋 다 넣는다.
-   *
-   * **하나라도 사람 것이면 금지하지 않는다.** 나머지는 기획의 제안이고 04 에
-   * 표가 붙어 있어 사람이 지울 수 있다.
+   * 이제 기획이 채운 것은 **처음 방향**으로 싣고, 사람이 04 에서 고치거나
+   * 지운다. 글자 없는 그림을 원하면 세 칸을 비운다 — 그러면 아래 금지문이 간다.
+   * 「글자 없이」라고 적은 사람은 기획이 칸을 비워 둔다(`planning.ts`).
    */
-  const 사람이적은칸 = (["headline", "subline"] as const)
-    .filter((field) => slots[field].trim().length > 0 && !invented.includes(field));
-  const 곁텍스트도적었나 = slots.sideTexts.length > 0 && !invented.includes("sideTexts");
-  const 사람이시킨글자 = 사람이적은칸.length > 0 || 곁텍스트도적었나;
-
-  /*
-   * **붙인 그림에 글자가 있으면 그것도 「시킨 것」이다.**
-   *
-   * 글자를 넣을지는 규칙이 아니라 **붙인 그림과 사용자가 적은 말**이 정한다
-   * (2026-09-17 사용자 판단). VOGUE 표지를 붙였는데 결과에 글자가 하나도
-   * 없었다 — 거대한 타이포그래피가 그 포스터의 핵심인데도 그랬다.
-   *
-   * 아래 금지문은 2026-09-08 「BEST DAY EVER!」 사고의 대응이고, **그때는
-   * 첨부 어디에도 글자가 없었다.** 두 경우가 다른데 같은 규칙을 받고 있었다.
-   * 이제는 읽어서 가른다(`grammar.ts` 의 `hasText`) — 우리가 정하지 않는다.
-   */
-  const 글자를원한다 = 사람이시킨글자 || referenceHasText;
-
-  const all: Array<[string, string]> = 글자를원한다 ? [
+  const all: Array<[string, string]> = [
     ["HEADLINE", slots.headline],
     ["SUBLINE", slots.subline],
     ...slots.sideTexts.map((value, index): [string, string] => [`SIDE ${index + 1}`, value]),
-  ] : [];
+  ];
   const entries = all.filter(([, value]) => value.trim().length > 0);
 
   /**
@@ -402,12 +363,7 @@ export function buildPosterPrompt(input: PosterPromptInput): string {
       : sceneLines(input.slots)),
     ...(look ? [look] : []),
     "",
-    ...copyLines(
-      input.slots,
-      Boolean(input.verbatimScene?.trim()),
-      input.invented,
-      input.referenceHasText,
-    ),
+    ...copyLines(input.slots, Boolean(input.verbatimScene?.trim())),
     "",
     ...(forbidden ? [`Do not include: ${forbidden}.`] : []),
     // 맨 뒤에서 한 번 더 못 박는다. 긴 프롬프트에서 중간은 힘을 잃는다.

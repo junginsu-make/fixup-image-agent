@@ -64,15 +64,6 @@ export interface PosterJobInput {
   verbatimScene?: string;
   /** 첨부한 그림들을 어떻게 쓸지. 01에서 적는다. */
   attachmentIntent?: string;
-  /**
-   * 기획이 근거 없이 채웠다고 밝힌 칸들.
-   *
-   * 글자 칸이 전부 여기 있으면 사용자가 글자를 안 시킨 것이라 「글자를 넣지
-   * 말라」가 붙는다(`prompt.ts` 의 `copyLines`). 옛 작업에는 없다.
-   */
-  invented?: string[];
-  /** 붙인 그림에 글자가 있나. 글자를 넣을지를 이 값이 정한다. */
-  referenceHasText?: boolean;
   /** 그림의 결. 없으면 auto — 첨부한 그림의 결을 따라간다. */
   look?: ImageLook;
 }
@@ -167,9 +158,6 @@ export function buildPosterJob(job: PosterJobInput): PosterJob {
     verbatimScene: job.verbatimScene,
     attachmentIntent: job.attachmentIntent,
     look: job.look,
-    // 글자 칸이 전부 AI 것이면 「글자를 넣지 말라」가 붙는다(`copyLines`).
-    invented: job.invented,
-    referenceHasText: job.referenceHasText,
   });
 
   const input: Record<string, unknown> = { prompt, num_images: job.variants };
