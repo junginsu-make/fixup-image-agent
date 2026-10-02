@@ -51,7 +51,7 @@ vi.mock("../actions", () => ({
 }));
 vi.mock("../members/actions", () => ({ creditMemberHistory: vi.fn(), changeCredits: vi.fn() }));
 
-const { MemberTable, signupMethodLabel } = await import("../member-list/member-table");
+const { MemberTable, memberCsv, signupMethodLabel } = await import("../member-list/member-table");
 
 const 회원 = (provider: string | null) => ({
   profile: {
@@ -95,6 +95,25 @@ describe("가입 방식", () => {
     expect(signupMethodLabel("email")).toBe("이메일 가입");
     expect(signupMethodLabel(null)).toBe("이메일 가입");
     expect(signupMethodLabel(undefined)).toBe("이메일 가입");
+  });
+
+  /**
+   * **내려받는 표도 화면과 같은 상태를 쓴다**(2026-10-02). 전에는 `status` 를
+   * 그대로 적어 가입 확인을 안 마친 소셜 회원이 `active` 로 나갔다.
+   */
+  it("**내려받는 표에 가입 방식과 화면과 같은 상태를 적는다**", () => {
+    const 미완료 = 회원("google");
+    const csv = memberCsv([
+      { ...미완료, profile: { ...미완료.profile, onboarding_completed_at: null } },
+      회원(null),
+    ] as never, (id) => id);
+    const [머리, 소셜, 이메일] = csv.replace("﻿", "").split("\r\n");
+    expect(머리).toContain('"가입 방식"');
+    expect(소셜).toContain('"Google 가입"');
+    expect(소셜).toContain('"가입 정보 확인 전"');
+    expect(소셜, "상태 영어 값이 그대로 나갔다").not.toContain('"active"');
+    expect(이메일).toContain('"이메일 가입"');
+    expect(이메일).toContain('"활성"');
   });
 
   it("**회원 줄마다 가입 방식을 그린다**", async () => {

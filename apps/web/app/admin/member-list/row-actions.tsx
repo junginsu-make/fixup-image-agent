@@ -151,7 +151,13 @@ export function MemberActions({ profile, fullWidth = false }: { profile: RowProf
   );
 }
 
+/** 화면 뱃지와 내려받는 표가 같은 말을 쓴다. */
+export function memberStatusLabel(profile: Pick<RowProfile, "status"> & OnboardingState): string {
+  if (profile.status === "active" && needsOnboarding(profile)) return "가입 정보 확인 전";
+  return profile.status === "active" ? "활성" : profile.status === "suspended" ? "정지" : "승인 대기";
+}
+
 export function StatusBadge({ profile }: { profile: Pick<RowProfile, "status"> & OnboardingState }) {
-  if (profile.status === "active" && needsOnboarding(profile)) return <Badge variant="secondary">가입 정보 확인 전</Badge>;
-  return profile.status === "active" ? <Badge variant="green">활성</Badge> : profile.status === "suspended" ? <Badge variant="destructive">정지</Badge> : <Badge variant="secondary">승인 대기</Badge>;
+  const label = memberStatusLabel(profile);
+  return <Badge variant={label === "활성" ? "green" : label === "정지" ? "destructive" : "secondary"}>{label}</Badge>;
 }
