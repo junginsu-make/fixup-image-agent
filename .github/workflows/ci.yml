@@ -29,3 +29,4 @@ jobs:
         run: |
           export TEST_PG_BIN="$(pg_config --bindir)"
           pnpm test:readiness-fixes
+          node --test scripts/tests/member-delete-repair.test.mjs

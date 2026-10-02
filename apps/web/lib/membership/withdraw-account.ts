@@ -1,6 +1,5 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/admin";
-import { ledgerMissing } from "./usage-row";
 import { checkWithdrawal, withdrawalDone, type WithdrawalPath } from "./withdrawal";
 
 /**
@@ -69,19 +68,22 @@ export async function withdrawAccount(userId: string, email: string): Promise<Wi
 
   /*
     **돈 기록이 있는지 묻는다.** 없으면 지울 수 있고 있으면 닫는다.
-    장부가 아직 없는 서버(202609220003 전)에서는 막을 기록도 없다.
+    확인 함수가 없거나 조회가 실패하면 기록이 없는 것으로 간주하지 않는다.
   */
   const { data: kept, error: keptError } = await db.rpc("credit_member_has_records", { p_user: userId });
-  if (keptError && !ledgerMissing(keptError)) {
-    return { ok: false, message: `탈퇴 가능 여부를 확인하지 못했습니다: ${keptError.message}` };
+  if (keptError || typeof kept !== "boolean") {
+    return { ok: false, message: "탈퇴 가능 여부를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
   }
 
   /*
     **처리 중인 작업이 있는지 묻는다.** 「처리 중」은 `credit_grants` 의
     `reserved_units` 가 든다 — 화면이 보여 주는 그 값이다.
   */
-  const { data: holds } = await db
+  const { data: holds, error: holdsError } = await db
     .from("credit_grants").select("reserved_units").eq("user_id", userId).gt("reserved_units", 0).limit(1);
+  if (holdsError || !Array.isArray(holds)) {
+    return { ok: false, message: "처리 중인 크레딧을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
 
   const 판단 = checkWithdrawal({
     hasMoneyRecords: kept === true,

@@ -12,7 +12,9 @@ vi.mock("server-only", () => ({}));
 /** 데이터베이스에 실제로 보낸 것. */
 const 한일: string[] = [];
 
-let 돈기록 = false;
+let 돈기록: boolean | null = false;
+let 확인오류: { code: string; message: string } | null = null;
+let 보류조회오류 = false;
 let 잡힌크레딧 = 0;
 let 상태 = "active";
 let rpc오류: string | null = null;
@@ -25,13 +27,13 @@ vi.mock("../../supabase/admin", () => ({
       select: (_cols: string) => ({
         eq: () => ({
           single: async () => ({ data: table === "profiles" ? { status: 상태 } : null, error: null }),
-          gt: () => ({ limit: async () => ({ data: 잡힌크레딧 > 0 ? [{ reserved_units: 잡힌크레딧 }] : [] }) }),
+          gt: () => ({ limit: async () => ({ data: 잡힌크레딧 > 0 ? [{ reserved_units: 잡힌크레딧 }] : [], error: 보류조회오류 ? { message: "offline" } : null }) }),
         }),
       }),
     }),
     rpc: async (fn: string, args: Record<string, unknown>) => {
       한일.push(`rpc:${fn}`);
-      if (fn === "credit_member_has_records") return { data: 돈기록, error: null };
+      if (fn === "credit_member_has_records") return { data: 돈기록, error: 확인오류 };
       void args;
       return rpc오류 ? { error: { message: rpc오류 } } : { error: null };
     },
@@ -65,6 +67,8 @@ const 탈퇴 = () => withdrawAccount("u1", "me@example.com");
 beforeEach(() => {
   한일.length = 0;
   돈기록 = false;
+  확인오류 = null;
+  보류조회오류 = false;
   잡힌크레딧 = 0;
   상태 = "active";
   rpc오류 = null;
@@ -188,6 +192,21 @@ describe("이미 떠난 계정", () => {
 });
 
 describe("실패하면", () => {
+  it.each(["PGRST202", "42883"])("확인 함수가 없으면 파일과 회원을 지우지 않는다 (%s)", async code => {
+    확인오류 = { code, message: "function missing" };
+    expect((await 탈퇴()).ok).toBe(false);
+    expect(한일.some(x => x.startsWith("deleteUser") || x.startsWith("remove") || x.startsWith("list"))).toBe(false);
+  });
+  it("빈 확인 응답을 돈 기록 없음으로 해석하지 않는다", async () => {
+    돈기록 = null;
+    expect((await 탈퇴()).ok).toBe(false);
+    expect(한일.some(x => x.startsWith("deleteUser") || x.startsWith("remove") || x.startsWith("list"))).toBe(false);
+  });
+  it("처리 중인 크레딧 조회 실패도 파일 삭제 전에 멈춘다", async () => {
+    보류조회오류 = true;
+    expect((await 탈퇴()).ok).toBe(false);
+    expect(한일.some(x => x.startsWith("deleteUser") || x.startsWith("remove") || x.startsWith("list"))).toBe(false);
+  });
   it("**닫기가 실패하면 그렇다고 말한다** — 마이그레이션 전이면 함수가 없다", async () => {
     돈기록 = true;
     rpc오류 = "function member_withdraw does not exist";
