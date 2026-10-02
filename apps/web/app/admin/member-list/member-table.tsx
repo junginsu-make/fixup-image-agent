@@ -6,7 +6,7 @@ import { TeamCell } from "../team-cell";
 import { BulkBar } from "./bulk-bar";
 import { ConfirmCard } from "./confirm-card";
 import { CreditPanel } from "./credit-panel";
-import { MemberActions, StatusBadge } from "./row-actions";
+import { MemberActions, memberStatusLabel, StatusBadge } from "./row-actions";
 import type { AdminMemberRow, CreditPlan } from "./types";
 import { PLAN_STATUS_LABEL } from "./types";
 import { useCreditCommand } from "./use-credit-command";
@@ -112,17 +112,21 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
   );
 }
 
-/** 이 쪽의 회원을 CSV 로. 엑셀이 수식으로 읽는 첫 글자(= + - @)는 막는다. */
-function exportCsv(rows: AdminMemberRow[], planName: (id: string) => string) {
+/** 이 쪽의 회원을 CSV 글로. 엑셀이 수식으로 읽는 첫 글자(= + - @)는 막는다. 상태는 화면 뱃지와 같은 말이다. */
+export function memberCsv(rows: AdminMemberRow[], planName: (id: string) => string): string {
   const cell = (value: unknown) => `"${String(value ?? "").replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
   const header = ["이름", "이메일", "가입 방식", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용(옛 기준)", "누적 비용(옛 기준)"];
   const body = rows.map((row) => [
-    row.name ?? "", row.profile.email, signupMethodLabel(row.profile.signup_provider), row.referrer ?? "", row.profile.status, row.team?.teamName ?? "",
+    row.name ?? "", row.profile.email, signupMethodLabel(row.profile.signup_provider), row.referrer ?? "", memberStatusLabel(row.profile), row.team?.teamName ?? "",
     row.credit ? (row.credit.unlimited ? "무제한" : row.credit.available) : "", row.credit?.reserved ?? "", row.credit?.reviewUnits ?? "",
     row.credit?.used ?? "", row.monthImages, row.credit?.planId ? planName(row.credit.planId) : "", row.credit?.planStatus ?? "",
     row.monthCost, row.totalCost,
   ]);
-  const csv = "\uFEFF" + [header, ...body].map((line) => line.map(cell).join(",")).join("\r\n");
+  return "\uFEFF" + [header, ...body].map((line) => line.map(cell).join(",")).join("\r\n");
+}
+
+function exportCsv(rows: AdminMemberRow[], planName: (id: string) => string) {
+  const csv = memberCsv(rows, planName);
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url; link.download = "members.csv"; link.click();
