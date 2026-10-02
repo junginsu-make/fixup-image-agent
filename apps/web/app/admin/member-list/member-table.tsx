@@ -16,6 +16,9 @@ const count = (value: number) => value.toLocaleString("ko-KR");
 // 서버와 브라우저가 같은 날짜를 그려야 한다. 시간대를 안 박으면 새벽에 가입한 회원의
 // 날짜가 둘 사이에서 달라져 화면 전체가 다시 그려진다.
 const day = (value: string | null) => (value ? new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "");
+// 소셜 가입 도입(2026-10-01) 전 회원은 공급자가 비어 있다 — 그때는 이메일 가입뿐이었다.
+const SIGNUP_METHOD: Record<string, string> = { google: "Google 가입", kakao: "카카오 가입" };
+export const signupMethodLabel = (provider: string | null | undefined) => (provider && SIGNUP_METHOD[provider]) || "이메일 가입";
 
 /**
  * 회원 관리 탭의 표.
@@ -112,9 +115,9 @@ export function MemberTable({ rows, plans, teams, ledger, teamsEnabled = true }:
 /** 이 쪽의 회원을 CSV 로. 엑셀이 수식으로 읽는 첫 글자(= + - @)는 막는다. */
 function exportCsv(rows: AdminMemberRow[], planName: (id: string) => string) {
   const cell = (value: unknown) => `"${String(value ?? "").replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
-  const header = ["이름", "이메일", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용(옛 기준)", "누적 비용(옛 기준)"];
+  const header = ["이름", "이메일", "가입 방식", "추천코드(적은 값)", "상태", "팀", "사용 가능 크레딧", "처리 중", "확인 대기", "이번 달 사용 크레딧", "이번 달 이미지", "플랜", "플랜 상태", "이번 달 비용(옛 기준)", "누적 비용(옛 기준)"];
   const body = rows.map((row) => [
-    row.name ?? "", row.profile.email, row.referrer ?? "", row.profile.status, row.team?.teamName ?? "",
+    row.name ?? "", row.profile.email, signupMethodLabel(row.profile.signup_provider), row.referrer ?? "", row.profile.status, row.team?.teamName ?? "",
     row.credit ? (row.credit.unlimited ? "무제한" : row.credit.available) : "", row.credit?.reserved ?? "", row.credit?.reviewUnits ?? "",
     row.credit?.used ?? "", row.monthImages, row.credit?.planId ? planName(row.credit.planId) : "", row.credit?.planStatus ?? "",
     row.monthCost, row.totalCost,
@@ -140,7 +143,7 @@ function Identity({ row }: { row: AdminMemberRow }) {
         {profile.role === "admin" ? <Badge variant="secondary">운영자</Badge> : null}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        {profile.email_confirmed_at ? "이메일 인증" : "미인증"} · 가입 {day(profile.created_at)}
+        {signupMethodLabel(profile.signup_provider)} · {profile.email_confirmed_at ? "이메일 인증" : "미인증"} · 가입 {day(profile.created_at)}
         {profile.approved_at ? ` · 승인 ${day(profile.approved_at)}` : ""}
       </p>
       {/* 회원이 적은 글자 그대로다. 실재하는 회원처럼 읽히지 않게 출처를 밝힌다. */}
