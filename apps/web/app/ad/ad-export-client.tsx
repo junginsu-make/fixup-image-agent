@@ -1,4 +1,5 @@
 "use client";
+import { observeAccountResponse } from "../../lib/membership/account-events";
 
 import * as React from "react";
 import Link from "next/link";
@@ -160,6 +161,7 @@ export function AdExportClient() {
     const readJson = async (url: string) => {
       const response = await fetch(url, { cache: "no-store" });
       const body = await response.json();
+      observeAccountResponse(body);
       if (!response.ok || !body?.ok) throw new Error(url);
       return body as Record<string, unknown>;
     };
@@ -331,9 +333,7 @@ export function AdExportClient() {
        * 바뀐다. 한도에 가까운 사람은 그 사이에 남은 장수를 잘못 보고 판단한다.
        * 거절된 응답에도 사용량이 실려 온다 — 한도 초과가 그렇다.
        */
-      if (body?.usage) {
-        window.dispatchEvent(new CustomEvent("studio-usage-updated", { detail: body.usage }));
-      }
+      observeAccountResponse(body);
 
       if (!response.ok || !body?.ok) {
         // 본문 없는 404 도 온다(기능이 꺼짐·그림 없음). 상태로 갈라 말한다.

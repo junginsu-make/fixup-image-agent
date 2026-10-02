@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import * as React from "react";
+import { useAccountSummary } from "./credit-policy-provider";
 import { LogOut } from "lucide-react";
 import { Badge, Button } from "@fixup/ui";
 import type { UsageSummary } from "../../lib/membership/types";
@@ -17,19 +17,11 @@ export function StudioActions({
 }: {
   children?: ReactNode;
   email: string;
-  usage: UsageSummary;
+  usage: UsageSummary | null;
 }) {
   const router = useRouter();
-  const [currentUsage, setCurrentUsage] = React.useState(usage);
-
-  React.useEffect(() => {
-    const update = (event: Event) => {
-      const detail = (event as CustomEvent<UsageSummary>).detail;
-      if (detail && typeof detail.used === "number") setCurrentUsage(detail);
-    };
-    window.addEventListener("studio-usage-updated", update);
-    return () => window.removeEventListener("studio-usage-updated", update);
-  }, []);
+  const account = useAccountSummary();
+  const currentUsage = account ? account.usage : usage;
 
   async function signOut() {
     // **도우미 대화를 지운다.** 남겨 두면 다음 사람이 앞사람의 대화를 본다.
@@ -65,9 +57,10 @@ export function StudioActions({
         <span className="hidden lg:inline">{email}</span>
         <span className="lg:hidden">{emailLocalPart(email)}</span>
       </span>
-      <Badge variant="secondary" title={`${email} · 처리 중 ${currentUsage.reserved}${currentUsage.pricingPolicy === "image-v2" ? "크레딧" : "장"}`}>
-        {currentUsage.pricingPolicy === "image-v2" ? creditBalanceLabel(currentUsage) : `${currentUsage.used}/${currentUsage.quota}장`}
+      <Badge variant="secondary" title={currentUsage ? `${email} · 처리 중 ${currentUsage.reserved}${currentUsage.pricingPolicy === "image-v2" ? "크레딧" : "장"}` : "잔액 확인 필요"}>
+        {!currentUsage ? "잔액 확인 필요" : currentUsage.pricingPolicy === "image-v2" ? creditBalanceLabel(currentUsage) : `${currentUsage.used}/${currentUsage.quota}장`}
       </Badge>
+      {account?.error ? <span role="status" className="text-xs text-destructive">잔액 확인 지연</span> : null}
       {/* '계정'과 '관리자'는 뺐다. 둘 다 사이드바 아래 메뉴와 같은 화면이라
           둘로 보였다. 여기 남는 것은 상태(사용량)와 그때그때 쓰는 동작뿐이다. */}
       {children}

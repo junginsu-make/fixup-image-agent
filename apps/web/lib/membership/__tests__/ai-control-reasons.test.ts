@@ -73,11 +73,11 @@ describe("운영자가 멈췄으면", () => {
   });
 });
 
-describe("옛 사유는 그대로다", () => {
-  it("크레딧 모자람은 429 이고 retryable 칸을 싣지 않는다", async () => {
+describe("개인 잔액 부족은 자동 재시도하지 않는다", () => {
+  it("크레딧 모자람은 기존 429 를 유지하고 retryable=false를 싣는다", async () => {
     const { status, body } = await refused("poster_image", "quota_exceeded");
     expect(status).toBe(429);
-    expect(body).not.toHaveProperty("retryable");
+    expect(body.retryable).toBe(false);
   });
 });
 

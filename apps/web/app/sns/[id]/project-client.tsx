@@ -1,4 +1,5 @@
 "use client";
+import { observeAccountResponse } from "../../../lib/membership/account-events";
 
 import * as React from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
@@ -60,6 +61,7 @@ async function projectRequest(
   }
   const response = await fetch(url, init);
   const payload = await response.json() as Payload;
+  observeAccountResponse(payload, (init?.method ?? "GET") !== "GET" && !url.endsWith("/status"));
   if (!response.ok || !payload.project) {
     throw new ProjectRequestError(payload.message ?? "프로젝트를 처리하지 못했습니다.", response.status);
   }

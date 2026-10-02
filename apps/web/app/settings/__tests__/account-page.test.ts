@@ -90,7 +90,8 @@ describe("사용 기록과 레이아웃", () => {
   it("이번 달 사용은 잔액이 센 값을 쓰고, 잘렸으면 그렇게 말한다", () => {
     const card = read("app/settings/usage-history-card.tsx");
     expect(card).not.toContain("monthlyCreditTotal(");
-    expect(card).toContain("{usedThisMonth.toLocaleString(");
+    expect(card).toContain("<CreditUsed initial={usedThisMonth}");
+    expect(read("app/_components/credit-used.tsx")).toContain("account.usage.used");
     expect(card).toContain("최근 ${USAGE_HISTORY_LIMIT}건만 보여 드립니다");
   });
 

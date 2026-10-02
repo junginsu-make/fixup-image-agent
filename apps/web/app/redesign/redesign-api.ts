@@ -1,3 +1,4 @@
+import { observeAccountResponse } from "../../lib/membership/account-events";
 /**
  * 서버와 주고받는 자잘한 것들 — 설정 읽기, 응답 풀기, 기록 남기기.
  *
@@ -28,7 +29,7 @@ export async function readApiResponse(response: Response): Promise<any> {
 
   try {
     const data = JSON.parse(text);
-    if (data?.usage) window.dispatchEvent(new CustomEvent("studio-usage-updated", { detail: data.usage }));
+    observeAccountResponse(data);
     return data;
   } catch {
     return {
@@ -55,4 +56,3 @@ export function reportClientLog(event: string, payload: Record<string, unknown> 
     // Logging must never interrupt generation.
   });
 }
-

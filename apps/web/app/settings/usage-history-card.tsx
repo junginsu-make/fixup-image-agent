@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@fixup/ui";
+import { CreditUsed } from "../_components/credit-used";
 import { describeUsageEvent, type UsageEventRow } from "../../lib/membership/usage-history";
 import { USAGE_HISTORY_LIMIT, type GrantRow } from "../../lib/membership/usage-store";
 
@@ -45,8 +46,9 @@ export function UsageHistoryCard({ rows, grants, usedThisMonth, unlimited }: {
         <CardTitle>사용 기록</CardTitle>
         <CardDescription className="text-sm">
           성공한 이미지만 차감되고, 실패하면 돌려받습니다.
-          {usedThisMonth !== null ? <> 이번 달 사용 <strong className="text-foreground">{usedThisMonth.toLocaleString("ko-KR")}크레딧</strong>.</> : null}
+          <CreditUsed initial={usedThisMonth} />
           {cut ? ` 최근 ${USAGE_HISTORY_LIMIT}건만 보여 드립니다.` : ""}
+          <span className="block">아래 이력은 마지막 화면 조회 기준입니다. 최신 내역은 크레딧 새로고침으로 확인해 주세요.</span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

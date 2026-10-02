@@ -152,8 +152,8 @@ describe("장부에 실제로 걸려 있다", () => {
     expect(client).toContain("randomId()");
   });
 
-  it("화면이 사용량 칸을 바로 고친다", () => {
-    expect(client).toContain("studio-usage-updated");
+  it("화면이 서버 잔액 재조회를 공통 처리기에 알린다", () => {
+    expect(client).toContain("observeAccountResponse(body)");
   });
 });
 

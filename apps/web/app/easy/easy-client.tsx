@@ -1,4 +1,5 @@
 "use client";
+import { observeAccountResponse } from "../../lib/membership/account-events";
 import { useCreditPolicy } from "../_components/credit-policy-provider";
 
 import * as React from "react";
@@ -202,6 +203,7 @@ export function EasyClient({
       const form = easyUploadForm(one, randomId());
       try {
         const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json();
+        observeAccountResponse(body, true);
         if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");
         setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
         // 사진이 바뀌면 묻던 것은 뜻을 잃는다(Review Focus 1).
@@ -352,6 +354,7 @@ export function EasyClient({
         }),
       });
       const body = await response.json().catch(() => ({}));
+      observeAccountResponse(body, true);
       if (body.ok && body.asked) {
         /*
          * **물어만 보고 끝낸다.** 그림을 안 만들었으므로 값도 안 든다.
@@ -463,6 +466,7 @@ export function EasyClient({
       const poll = await (await billableFetch(`/api/poster/projects/${projectId}/status`, {
         body: JSON.stringify(body),
       })).json();
+      observeAccountResponse(poll, false);
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
       if (poll.done) {
         const first = poll.images?.[0];

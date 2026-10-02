@@ -1,4 +1,5 @@
 import { stepIdempotencyKey } from "./step-key";
+import type { UsageSummary } from "../membership/types";
 
 /**
  * 「쉽게」가 다른 라우트를 **함수로** 부를 때 쓰는 셋(1단계 라우트에서 옮겼다).
@@ -49,13 +50,16 @@ export async function read(response: Response, step: string) {
      * **다시 눌러도 안 풀린다고 안쪽이 말했으면 그대로 옮긴다**(설계 2026-09-30 §3.2).
      * 멈춤(503)은 상태 코드만으로는 「잠시 뒤 다시」와 가를 수 없다.
      */
-    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status, body.retryable !== false);
+    const shortage = body.code === "credits_required" || body.code === "quota_exceeded";
+    const usage = shortage && body.usage && [body.usage.remaining, body.usage.used, body.usage.reserved].every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) ? body.usage as UsageSummary : undefined;
+    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status, !shortage && body.retryable !== false, shortage ? body.code : undefined, usage);
   }
   return body;
 }
 
 export class EasyStepError extends Error {
-  constructor(readonly step: string, message: string, readonly status: number, readonly retryable = true) {
+  constructor(readonly step: string, message: string, readonly status: number, readonly retryable = true,
+    readonly code?: "credits_required" | "quota_exceeded", readonly usage?: UsageSummary) {
     super(message);
     this.name = "EasyStepError";
   }

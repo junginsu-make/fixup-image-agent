@@ -103,6 +103,7 @@ async function act(request: Request): Promise<Response> {
     if (error instanceof EasyStepError && (error.status < 500 || !error.retryable)) {
       return Response.json({
         ok: false, step: error.step, message: error.message,
+        ...(error.code ? { code: error.code, usage: error.usage } : {}),
         // 402·403 은 다시 눌러도 같은 곳에서 막힌다.
         retryable: error.retryable && error.status !== 402 && error.status !== 403,
       }, { status: error.status });

@@ -1,4 +1,5 @@
 "use client";
+import { invalidateAccount, readAccountResponse } from "../../lib/membership/account-events";
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
@@ -62,7 +63,7 @@ async function tellServerToStop(job: RunningJob): Promise<void> {
     ? `/api/sns/projects/${projectId}/stop`
     : `/api/poster/projects/${projectId}/stop`;
   try {
-    await fetch(url, { method: "POST" });
+    await readAccountResponse(await fetch(url, { method: "POST" }), true);
   } catch {
     // 못 알려도 목록에서는 뺀다. 화면이 멈춘 것이 사용자가 원한 결과다.
   }
@@ -84,6 +85,7 @@ export function RunningJobsProvider({ children }: { children: React.ReactNode })
 
   const finish = React.useCallback((id: string) => {
     setJobs((current) => removeJob(current, id));
+    invalidateAccount();
   }, []);
 
   const stop = React.useCallback(async (job: RunningJob) => {
@@ -123,7 +125,7 @@ export function RunningJobsProvider({ children }: { children: React.ReactNode })
           });
           // 프로젝트가 사라졌으면 유령이 남는다. 그때는 지운다.
           if (response.status === 404) { finish(job.id); continue; }
-          if (jobDone(await response.json())) finish(job.id);
+          if (jobDone(await readAccountResponse(response))) finish(job.id);
         } catch {
           // 한 번 못 물어봤다고 지우지 않는다. 다음 차례에 다시 물어본다.
         }
