@@ -155,6 +155,10 @@ Supabase 값은 상세페이지와 **같은 것**을 넣는다. 같은 DB 를 �
 `master` 에 push 하면 GitHub Actions(`Build EC2 release`)가 검사·빌드를 하고
 꾸러미 둘을 **릴리스 자산**으로 올린다. 태그는 `release-<sha12>` 다.
 
+> **2026-10-02 부터:** 빌드는 검사(`verify`)가 통과한 뒤에만 돈다 — 검사가 실패하면 릴리스가
+> 아예 나오지 않는다(약 4분). 그리고 `master` 는 보호돼 있다 — **PR 로만** 들어가고, PR 검사
+> `test` 가 통과해야 머지된다(관리자도 같다). 강제 덮어쓰기·삭제는 막혀 있다.
+
 ```
 fixup-image-agent-<sha12>.tar.gz        앱 (약 56MB)
 fixup-image-agent-ops-<sha12>.tar.gz    deploy/ec2 (스크립트·유닛 파일)
