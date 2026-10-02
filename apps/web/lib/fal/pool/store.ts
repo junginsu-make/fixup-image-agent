@@ -32,6 +32,10 @@ export interface FalPoolStore {
   mark(accountId: string, kind: FalAccountFailure, detail: string): Promise<boolean>;
 }
 
+// These calls happen after an external job may already have been accepted or
+// completed. Bound the wait so DB recovery cannot indefinitely hide its result.
+const POST_SUBMIT_DB_TIMEOUT_MS = 5_000;
+
 function fail(what: string, error: { message: string }): never {
   throw new Error(`[fal-pool] ${what}: ${error.message}`);
 }
@@ -63,15 +67,24 @@ export function supabaseFalPoolStore(): FalPoolStore {
       return row ? { slotId: Number(row.slot_id), accountId: row.account_id } : null;
     },
     async bind(slotId, requestId) {
-      const { error } = await (await db()).rpc("fal_request_bind", { p_slot: slotId, p_request: requestId });
+      const { error } = await (await db()).rpc("fal_request_bind", { p_slot: slotId, p_request: requestId })
+        .abortSignal(AbortSignal.timeout(POST_SUBMIT_DB_TIMEOUT_MS));
       if (error) fail("bind", error);
+      // The old RPC returns void even if no row matched. Confirm acceptance before
+      // allowing the application to rely on a plain provider ID across restarts.
+      const { data: bound, error: readError } = await (await db()).from("fal_requests")
+        .select("fal_request_id").eq("id", slotId).abortSignal(AbortSignal.timeout(POST_SUBMIT_DB_TIMEOUT_MS)).maybeSingle();
+      if (readError) fail("bind verification", readError);
+      if (bound?.fal_request_id !== requestId) fail("bind verification", { message: "request binding was not confirmed" });
     },
     async release(slotId) {
-      const { error } = await (await db()).rpc("fal_request_release", { p_slot: slotId });
+      const { error } = await (await db()).rpc("fal_request_release", { p_slot: slotId })
+        .abortSignal(AbortSignal.timeout(POST_SUBMIT_DB_TIMEOUT_MS));
       if (error) fail("release", error);
     },
     async finish(requestId) {
-      const { error } = await (await db()).rpc("fal_request_finish", { p_request: requestId });
+      const { error } = await (await db()).rpc("fal_request_finish", { p_request: requestId })
+        .abortSignal(AbortSignal.timeout(POST_SUBMIT_DB_TIMEOUT_MS));
       if (error) fail("finish", error);
     },
     async accountOf(requestId) {

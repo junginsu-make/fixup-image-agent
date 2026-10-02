@@ -1,5 +1,6 @@
 import { falQueueOps, type FalQueueOps, type FalSubmitCost } from "./http";
 import type { FalRouter } from "./route";
+import { falProviderRequestId } from "./request-id";
 
 /**
  * **대기열에 맡기고, 끝날 때까지 이 요청 안에서 묻는다**(설계 2026-09-29 §3.3).
@@ -78,7 +79,8 @@ export async function runFalQueued(
     cost: options.cost,
   });
   const ops = opsFor(route.key);
-  const cancel = () => ops.cancel(options.endpoint, requestId).catch(() => undefined);
+  const providerId = falProviderRequestId(requestId);
+  const cancel = () => ops.cancel(options.endpoint, providerId).catch(() => undefined);
 
   try {
     options.onSubmitted?.(requestId);
@@ -87,9 +89,9 @@ export async function runFalQueued(
         await cancel();
         throw abortError();
       }
-      const phase = await ops.status(options.endpoint, requestId);
+      const phase = await ops.status(options.endpoint, providerId);
       if (phase === "completed") {
-        return { requestId, data: await ops.result(options.endpoint, requestId) };
+        return { requestId, data: await ops.result(options.endpoint, providerId) };
       }
       if (now() >= deadline) {
         await cancel();
@@ -99,6 +101,6 @@ export async function runFalQueued(
       await sleep(Math.max(0, Math.min(wait, deadline - now())));
     }
   } finally {
-    router.finished(requestId);
+    await router.finished(requestId);
   }
 }

@@ -1,4 +1,5 @@
 import { submitFalQueue, type FalSubmitOptions } from "./http";
+import { isFalReceipt, FalRecoveryRequiredError } from "./request-id";
 
 /**
  * **어느 fal 키로 보내고, 보낸 요청을 어느 키로 다시 묻는가.**
@@ -22,8 +23,8 @@ export interface FalRouter {
   ): Promise<{ requestId: string; route: FalRoute }>;
   /** 이미 보낸 요청을 물을 키. */
   routeOf(requestId: string): Promise<FalRoute>;
-  /** 이 요청이 끝났다(성공·실패·포기). 동시 수 세기에서 뺀다. 기다리지 않는다. */
-  finished(requestId: string): void;
+  /** 완료한 처리 자리를 정리한다. DB 일시 실패로 이미 만든 결과를 버리지 않는다. */
+  finished(requestId: string): void | Promise<void>;
   /** 참고 그림을 fal 저장소에 올릴 키. */
   uploadRoute(): Promise<FalRoute>;
 }
@@ -51,7 +52,8 @@ export function envFalRouter(environment: Env = process.env, submit = submitFalQ
       const requestId = await submit(chosen.key, endpoint, input, options);
       return { requestId, route: chosen };
     },
-    async routeOf() {
+    async routeOf(requestId) {
+      if (isFalReceipt(requestId)) throw new FalRecoveryRequiredError();
       return route();
     },
     finished() {},
