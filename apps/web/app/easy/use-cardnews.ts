@@ -1,4 +1,5 @@
 "use client";
+import { observeAccountResponse } from "../../lib/membership/account-events";
 
 import * as React from "react";
 import { useRunningJobs } from "../_components/running-jobs";
@@ -237,6 +238,7 @@ function useCardnewsProgress(input: {
           if (stopped) return;
           try {
             const body = await (await billableFetch(`/api/sns/projects/${id}/status`, {})).json();
+            observeAccountResponse(body, false);
             if (stopped) return;
             if (body.ok && body.project) replace(body.project);
             if (body.ok && body.active === false) finish(jobId("sns", id));

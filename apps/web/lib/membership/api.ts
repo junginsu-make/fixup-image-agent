@@ -90,7 +90,7 @@ const AI_PAUSED_MESSAGE = "운영자가 AI 사용을 잠시 멈췄습니다. 잠
  * (쉬운 만들기의 `retryable`, `app/easy/easy-client.tsx:324-333`). 멈춤(503)은 상태
  * 코드만으로는 「잠시 뒤 다시」와 가를 수 없어 코드가 아니라 본문으로 알린다.
  */
-const NOT_RETRYABLE_REASONS = new Set(["credits_required", "ai_paused"]);
+const NOT_RETRYABLE_REASONS = new Set(["credits_required", "quota_exceeded", "ai_paused"]);
 
 export async function reserveAiUsage(
   request: Request,

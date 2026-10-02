@@ -1,3 +1,4 @@
+import { observeAccountResponse } from "../../lib/membership/account-events";
 import { billableFetch } from "../../lib/billable-fetch";
 import type { CardnewsProjectLike } from "./cardnews-view";
 
@@ -9,6 +10,7 @@ import type { CardnewsProjectLike } from "./cardnews-view";
 export async function cardnewsRequest(body: Record<string, unknown>) {
   const response = await billableFetch("/api/easy/cardnews", { body: JSON.stringify(body) });
   const json = await response.json().catch(() => ({}));
+  observeAccountResponse(json, true);
   if (!json.ok) {
     throw Object.assign(new Error(json.message ?? "하지 못했습니다."), { retryable: json.retryable !== false });
   }
@@ -23,6 +25,7 @@ export async function cardnewsRequest(body: Record<string, unknown>) {
 export async function readCardnewsProject(projectId: string): Promise<(CardnewsProjectLike & { title?: string }) | undefined> {
   try {
     const body = await (await fetch(`/api/sns/projects/${projectId}/plan`, { cache: "no-store" })).json();
+    observeAccountResponse(body);
     return body.ok ? body.project : undefined;
   } catch {
     return undefined;

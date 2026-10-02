@@ -392,6 +392,7 @@ async function turn(request: Request): Promise<Response> {
         ok: false,
         step: error.step,
         message: error.message,
+        ...(error.code ? { code: error.code, usage: error.usage } : {}),
         // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 안쪽이 「안 풀린다」고 한 것(멈춤 503)도 같다.
         retryable: error.retryable && error.status !== 402 && error.status !== 403,
       }, { status: error.status });

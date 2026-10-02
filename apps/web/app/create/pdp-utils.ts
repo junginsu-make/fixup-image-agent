@@ -1,3 +1,4 @@
+import { observeAccountResponse } from "../../lib/membership/account-events";
 import type { AspectRatio } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
 import { IMAGE_TONES, TONE_AUTO_LABEL } from "@fixup/pdp-core";
@@ -43,9 +44,7 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const data = await response.json() as T & { usage?: unknown };
-  if (data && typeof data === "object" && data.usage) {
-    window.dispatchEvent(new CustomEvent("studio-usage-updated", { detail: data.usage }));
-  }
+  observeAccountResponse(data);
   return data;
 }
 

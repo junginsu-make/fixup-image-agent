@@ -1,4 +1,5 @@
 "use client";
+import { invalidateAccount } from "../../../lib/membership/account-events";
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -52,7 +53,7 @@ export function useCreditCommand(onDone?: () => void) {
       setNotice({ ok: result.ok, text: result.message });
       setReview(null);
       setRetry(result.ok ? null : command);
-      if (result.ok) { router.refresh(); onDone?.(); }
+      if (result.ok) { invalidateAccount(); router.refresh(); onDone?.(); }
     } finally {
       inFlight.current = false; setPending(false);
     }

@@ -1,3 +1,4 @@
+import { initialAccountSummary } from "../../lib/membership/account-summary";
 import { CreditWallet } from "../_components/credit-wallet";
 import {
   Badge,
@@ -8,7 +9,6 @@ import {
   CardTitle,
 } from "@fixup/ui";
 import {
-  getUsageSummary,
   requireActiveMember,
 } from "../../lib/membership/server";
 import Link from "next/link";
@@ -30,7 +30,7 @@ import { isOwnerEmail, resolveOwnerEmail } from "../../lib/membership/owner";
  */
 export default async function SettingsPage() {
   const membership = await requireActiveMember();
-  const usage = await getUsageSummary(membership.user.id);
+  const usage = (await initialAccountSummary(membership.user.id))?.usage ?? null;
   const [extrasById, history, grants] = await Promise.all([
     readProfileExtras([membership.user.id]),
     readUsageHistory(membership.user.id),
@@ -42,8 +42,8 @@ export default async function SettingsPage() {
     year: "numeric",
     month: "long",
     day: "numeric",
-  }).format(new Date(`${usage.periodEnd}T00:00:00+09:00`));
-  const percent = usage.quota
+  }).format(new Date(`${usage?.periodEnd ?? "1970-01-01"}T00:00:00+09:00`));
+  const percent = usage?.quota
     ? Math.min(100, Math.round((usage.used / usage.quota) * 100))
     : 100;
 
@@ -78,7 +78,7 @@ export default async function SettingsPage() {
       */}
       <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)] items-start gap-4 max-xl:grid-cols-1">
         <div className="grid gap-4">
-        {usage.pricingPolicy === "image-v2" ? <CreditWallet usage={usage} /> : <Card>
+        {!usage || usage.pricingPolicy === "image-v2" ? <CreditWallet usage={usage} /> : <Card>
           <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
             <div className="min-w-0 space-y-1.5">
               <CardTitle>월 이미지 크레딧</CardTitle>
@@ -111,7 +111,7 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>}
         {/* 옛 기준 계정이어도 기록은 보인다. 그 줄들은 「크레딧 적용 전」으로 따로 묶인다. */}
-        <UsageHistoryCard rows={history} grants={grants} usedThisMonth={usage.pricingPolicy === "image-v2" ? usage.used : null} unlimited={usage.unlimited === true} />
+        <UsageHistoryCard rows={history} grants={grants} usedThisMonth={usage?.pricingPolicy === "image-v2" ? usage.used : null} unlimited={usage?.unlimited === true} />
         </div>
 
         <div className="grid gap-4">
@@ -121,7 +121,7 @@ export default async function SettingsPage() {
             **맨 밑에 따로 둔다**(2026-09-23). 되돌릴 수 없는 일은 우연히 닿는
             자리에 두지 않는다.
           */}
-          <WithdrawCard email={membership.profile.email} availableCredits={usage.remaining} />
+          {usage ? <WithdrawCard email={membership.profile.email} availableCredits={usage.remaining} /> : <p className="text-sm text-muted-foreground">탈퇴 전에 크레딧 잔액을 다시 확인해 주세요.</p>}
         </div>
       </div>
 

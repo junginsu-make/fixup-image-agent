@@ -1,4 +1,5 @@
 "use client";
+import { invalidateAccount, observeAccountResponse } from "../../../lib/membership/account-events";
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -503,6 +504,7 @@ export function PosterClient(
       }
     } finally {
       setStopping(false);
+      invalidateAccount();
       setBusy(null);
       /*
         **덧붙인다. 덮어쓰지 않는다.** 여기에는 기획이 남긴 경고가 들어 있는데,
@@ -617,6 +619,7 @@ export function PosterClient(
       });
       // 무엇을 표에서 뺄지는 서버가 정한다. 화면 state 와 어긋나지 않게 받는다.
       const body = await response.json();
+      observeAccountResponse(body, true);
       if (!body.ok) throw new Error(body.message ?? "슬롯을 저장하지 못했습니다.");
       setInvented(body.project?.data?.inventedSlots ?? []);
       return true;
@@ -635,6 +638,7 @@ export function PosterClient(
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
       // 중지를 눌렀으면 도착한 초안을 안 쓴다 — 멈춘 뒤에 칸이 채워지면 안 된다.
       if (stopped.current) return;
+      observeAccountResponse(body, true);
       if (!body.ok) throw new Error(body.message ?? "기획하지 못했습니다.");
       setSlots(body.project.data.slots);
       // **새 목록도 받는다.** 안 받으면 방금 채운 칸에 표가 하나도 안 붙는다 —
@@ -671,6 +675,7 @@ export function PosterClient(
        */
       if (!await saveSlots()) return;
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/generate`)).json();
+      observeAccountResponse(start, true);
       if (stopped.current) return;
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
@@ -692,6 +697,7 @@ export function PosterClient(
         body: JSON.stringify({ imageId }),
       });
       const body = await response.json();
+      observeAccountResponse(body, true);
       if (!body.ok) throw new Error(body.message ?? "변형을 고르지 못했습니다.");
       setList(body.images);
     } catch (cause) {
@@ -705,6 +711,7 @@ export function PosterClient(
     try {
       // 검수도 값이 나간다 — 식별자 길목을 지나야 서버가 예약을 받는다.
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/review`)).json();
+      observeAccountResponse(body, true);
       if (!body.ok) throw new Error(body.message ?? "검수하지 못했습니다.");
       setList(body.images);
       if (body.issues?.length) setNotes(body.issues);
@@ -733,6 +740,7 @@ export function PosterClient(
         */
         body: JSON.stringify({ instruction, ...(editing ? { imageId: editing } : {}) }),
       })).json();
+      observeAccountResponse(start, true);
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
       setBusy({ kind: "generate", label: "고치는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
       await pollUntilDone(start.submission, 1);
@@ -783,6 +791,7 @@ export function PosterClient(
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       })).json();
+      observeAccountResponse(poll, false);
       // 물어보는 사이에 눌렀을 수도 있다. 도착한 답을 화면에 쓰기 전에 본다.
       if (stopped.current) return false;
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
