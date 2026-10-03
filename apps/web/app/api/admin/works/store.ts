@@ -367,7 +367,7 @@ export async function readAnyCharacter(
   id: string,
 ): Promise<Record<string, unknown> | null> {
   // 범위가 「전체」라 `userId`·`teamId` 는 쓰이지 않는다. 빈 값을 넘긴다.
-  const characters = await listCharacters("", null, { allMembers: true });
+  const characters = await listCharacters("", null, { allMembers: true, ids: [id] });
   return (characters.find((character) => character.id === id) ?? null) as
     unknown as Record<string, unknown> | null;
 }
