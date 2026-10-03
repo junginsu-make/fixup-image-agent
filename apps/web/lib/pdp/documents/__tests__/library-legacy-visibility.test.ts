@@ -201,6 +201,18 @@ describe("W9 지키는 것", () => {
     expect(await openedPositions()).toEqual([1, 3, 4]);
   });
 
+  it("보안(2026-10-03): 줄인 표지의 위치가 그 줄 주인의 폴더 밖이면 서명하지 않는다", async () => {
+    const OTHER = "77777777-7777-4777-8777-777777777777";
+    givenItem();
+    await libraryWrite(0, S1, A1); await libraryWrite(1, S2, A2); await libraryWrite(2, S3, A3);
+    await openDocument();
+    await saveDocument([A1, A3]);
+    st.rows = st.rows.map((row) => (row.position === 1 ? { ...row, path: `${OTHER}/${ITEM}/1-s${S2}-a${A2}-abc123.webp` } : row));
+    const [card] = await legacyCards();
+    expect(card).toMatchObject({ id: ITEM, imageCount: 1, coverUrl: null });
+    expect(st.signCalls.flat().some((path) => path.startsWith(OTHER))).toBe(false);
+  });
+
   it("F11: 문서 저장 전에 창을 닫음 — 저장 뒤에 바뀐 자리와 새 섹션은 보인다", async () => {
     await openDocument(); givenItem();
     await libraryWrite(0, S1, A1); await libraryWrite(1, S2, A2);

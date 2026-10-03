@@ -9,6 +9,7 @@ import type { CardnewsProjectLike } from "../../app/easy/cardnews-view";
 import { isLocalStoreEnabled, localStoreRoot, readLocalSnsResultFile } from "../local-store";
 import { saveReferenceImage } from "../reference-images";
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { inOwnerFolder } from "../storage/owner-folder";
 import { EasyStepError, read, relay } from "./relay";
 
 /**
@@ -111,7 +112,8 @@ export async function archiveCard(
    * AI 가 그린 장의 **내 폴더 그림만** 보관한다. 붙인 사진 칸은 다시 만들어도 덮어쓰지 않고
    * (그 사진을 다시 넣는다), 내 폴더 밖 경로는 서버 권한으로 읽지 않는다(`runtime.ts` 서명과 같은 원칙).
    */
-  if (!card?.assetPath || !hasOwnImage(card) || !card.assetPath.startsWith(`${userId}/`)) return null;
+  // 앞머리만 보면 `%2e%2e`·탭으로 빠져나간다 — 주인 폴더 검사로 본다(2026-10-03).
+  if (!card?.assetPath || !hasOwnImage(card) || !inOwnerFolder(card.assetPath, userId)) return null;
   const file = await deps.readFile(card.assetPath);
   const title = archiveTitle(project.title ?? "", index);
   const id = deps.newId();

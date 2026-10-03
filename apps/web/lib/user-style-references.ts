@@ -1,5 +1,6 @@
 import { analyzeStyleImage, type StyleReferenceMatch } from "@fixup/pdp-core";
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { inOwnerFolder, onlyInOwnerFolder } from "./storage/owner-folder";
 import { createPdpLlmOrNull } from "./pdp/providers";
 import { sliceTallReference } from "./pdp/slice-image";
 import { isLocalStoreEnabled } from "./local-store";
@@ -253,9 +254,9 @@ export async function listUserStyleReferences(
    * 격자는 사본을, 고르기와 생성 입력은 원본을 쓴다 — `lib/reference-images.ts`
    * 와 같은 규약이다. 한 번에 모아 보내므로 왕복은 늘지 않는다.
    */
+  // 내 폴더 안의 위치만 서명한다 — 밖이면 남의 그림이 열린다(2026-10-03).
   const paths = data
-    .flatMap((row: { path: string; thumb_path?: string | null }) => [row.path, row.thumb_path])
-    .filter(Boolean) as string[];
+    .flatMap((row: { path: string; thumb_path?: string | null }) => onlyInOwnerFolder([row.path, row.thumb_path], userId));
   const signed = paths.length
     ? await supabase.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
@@ -300,7 +301,9 @@ export async function loadUserReferenceCandidates(userId: string): Promise<Style
 
   const loaded = await Promise.all(
     data.map(async (row: Record<string, unknown>) => {
-      const { data: file } = await supabase.storage.from(BUCKET).download(row.path as string);
+      // 내 폴더 밖이면 남의 그림이 생성 재료로 들어온다(2026-10-03).
+      if (!inOwnerFolder(row.path, userId)) return null;
+      const { data: file } = await supabase.storage.from(BUCKET).download(row.path);
       if (!file) return null;
       const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
       return {
@@ -398,10 +401,11 @@ export async function deleteUserStyleReference(userId: string, id: string) {
     **사본도 같이 지운다.** 행이 사라지면 사본의 자리를 아는 근거가 없어진다 —
     앞선 작업에서 네 번 반복해 잡힌 실수라 `gridPathsToRemove` 로 모은다.
   */
-  const toRemove = gridPathsToRemove([{
+  // 내 폴더 밖의 위치는 지우지 않는다 — 남의 그림이 지워진다(2026-10-03).
+  const toRemove = onlyInOwnerFolder(gridPathsToRemove([{
     path: (row?.path as string | null) ?? null,
     thumbPath: (row?.thumb_path as string | null) ?? null,
-  }]);
+  }]), userId);
   if (toRemove.length) await supabase.storage.from(BUCKET).remove(toRemove);
 
   const { error } = await supabase

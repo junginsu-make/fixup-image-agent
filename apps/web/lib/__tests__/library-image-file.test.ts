@@ -66,7 +66,7 @@ beforeEach(async () => {
   parentVisible = true;
   stored = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#2277cc" } })
     .webp({ lossless: true }).toBuffer();
-  rows = [{ path: "owner-9/item-1/0.webp", mime_type: "image/webp" }];
+  rows = [{ path: "owner-9/item-1/0.webp", mime_type: "image/webp", user_id: "owner-9" }];
 });
 
 describe("getLibraryImageFile", () => {
@@ -117,7 +117,7 @@ describe("getLibraryImageFile", () => {
   it("mime 은 실제 바이트로 정한다 — 표의 값을 믿지 않는다", async () => {
     // 표의 mime_type 은 화면이 보낸 문자열이 그대로 들어올 수 있는 칸이다.
     // 그 값을 헤더로 흘리면 같은 출처에서 임의 문서가 열린다.
-    rows = [{ path: "owner-9/item-1/0.webp", mime_type: "text/html" }];
+    rows = [{ path: "owner-9/item-1/0.webp", mime_type: "text/html", user_id: "owner-9" }];
 
     const file = await getLibraryImageFile(MEMBER, "item-1", 0);
 

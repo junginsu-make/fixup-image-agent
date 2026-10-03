@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
+import { inOwnerFolder, onlyInOwnerFolder } from "../../../../lib/storage/owner-folder";
 import {
   adoptedReferenceId, copiedCharacterAssetPath, copiedLibraryAssetPath, copiedReferencePath,
   copiedReferenceTitle, ownerCouldSeeReference,
@@ -266,9 +267,18 @@ async function moveAssets(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   moves: AssetMove[],
   bucket: string = BUCKET,
+  /**
+   * 원본 주인. 주면 그 주인의 폴더 밖 위치는 가져오지 않는다(2026-10-03 보안 리뷰) — 회원이 위치를
+   * 고쳐 쓸 수 있던 표(라이브러리·캐릭터 각도·카드뉴스 작업 데이터)에서 온 위치에 준다.
+   */
+  sourceOwnerId?: string,
 ): Promise<Set<string>> {
   const moved = new Set<string>();
   for (const move of moves) {
+    if (sourceOwnerId !== undefined && !inOwnerFolder(move.from, sourceOwnerId)) {
+      console.error("[admin-copy] 원본 주인의 폴더 밖 위치라 가져오지 않습니다.");
+      continue;
+    }
     const file = await admin.storage.from(bucket).download(move.from);
     if (file.error || !file.data) {
       // 한 줄 남긴다. 조용히 걸러지면 그림이 왜 비었는지 알 길이 없다.
@@ -501,7 +511,7 @@ export async function copyLibraryWorkToSelf(
 
   const { data: source, error: readError } = await admin
     .from("library_items")
-    .select("title,tool,aspect_ratio,data")
+    .select("title,tool,aspect_ratio,data,user_id")
     .eq("id", id)
     .maybeSingle();
   if (readError) throw new Error(readError.message);
@@ -577,7 +587,7 @@ export async function copyLibraryWorkToSelf(
       });
     }
 
-    const moved = await moveAssets(admin, moves, BUCKET);
+    const moved = await moveAssets(admin, moves, BUCKET, String(from.user_id ?? ""));
     uploaded.push(...moved);
 
     /*
@@ -941,7 +951,7 @@ export async function copyCharacterToSelf(
       angle: view.angle, path, thumb_path: thumb,
     });
   }
-  await moveAssets(admin, moves, CHARACTER_BUCKET);
+  await moveAssets(admin, moves, CHARACTER_BUCKET, String(source.user_id ?? ""));
 
   // 3) 옮긴 자리를 적는다.
   if (rows.length) {
@@ -988,7 +998,7 @@ export async function copyWorkToSelf(
     // 2) 그림을 옮기고 3) 바뀐 경로를 적는다.
     const plan = snsCopyPlan(
       from.data as unknown as Record<string, unknown>, ownerUserId, created.id);
-    await moveAssets(admin, plan.moves);
+    await moveAssets(admin, plan.moves, BUCKET, from.userId);
     /*
       **갱신 행 수를 센다.** `update` 는 한 줄도 안 맞아도 오류가 아니다 —
       `sns-flow-store.ts` 가 같은 함정으로 사고를 겪고 `select("id")` 로 세고
@@ -1123,12 +1133,14 @@ export async function deleteAnyWork(kind: "sns" | "poster", id: string): Promise
   const admin = createSupabaseAdminClient();
 
   if (kind === "sns") {
-    const { data } = await admin.from("sns_projects").select("data").eq("id", id).maybeSingle();
+    const { data } = await admin.from("sns_projects").select("data,user_id").eq("id", id).maybeSingle();
     if (!data) return false;
     // 회원 삭제와 **같은 규칙**을 쓴다. 두 길이 갈라지면 한쪽만 미리보기를 남긴다.
-    const paths = snsCardPathsToRemove(
+    // 작업 데이터는 회원이 고칠 수 있다 — 주인 폴더 밖은 지우지 않는다(2026-10-03 보안 리뷰).
+    // 회원 삭제는 회원 토큰으로 지워 저장소 규칙이 같은 일을 한다. 여기는 서버 권한이라 직접 거른다.
+    const paths = onlyInOwnerFolder(snsCardPathsToRemove(
       ((data.data as { flow?: { cards?: Array<{ assetPath?: string; thumbPath?: string | null }> } })?.flow?.cards) ?? [],
-    );
+    ), String(data.user_id ?? ""));
 
     // 카드 행은 FK cascade 가 지운다.
     const { error } = await admin.from("sns_projects").delete().eq("id", id);

@@ -2,7 +2,7 @@ import {expect,it,vi} from "vitest";
 vi.mock("server-only",()=>({}));
 const state=vi.hoisted(()=>({fail:false}));
 const source="33333333-3333-4333-8333-333333333333";
-const rows=Array.from({length:5},(_,i)=>({item_id:"old",position:i,path:"u/old/"+i+"-s12345678-a"+String(i).repeat(8)+".webp",mime_type:"image/webp"}));
+const rows=Array.from({length:5},(_,i)=>({item_id:"old",position:i,path:"u/old/"+i+"-s12345678-a"+String(i).repeat(8)+".webp",mime_type:"image/webp",user_id:"u"}));
 vi.mock("../flags",()=>({serverDocumentsEnabled:()=>true}));
 vi.mock("../library-adapter",()=>({documentLibraryAdapter:()=>({
   list:async()=>{if(state.fail)throw Error("문서 서명 실패");return [{id:source,sourceId:source,documentId:source,tool:"create",imageCount:2,imageTags:["00000000","11111111"]}];},

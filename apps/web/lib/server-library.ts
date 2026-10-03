@@ -2,6 +2,7 @@ import {serverDocumentsEnabled} from "./pdp/documents/flags";
 import {parseLibraryFileKey} from "./pdp/jobs/library-sync-plan";
 import {legacyRowHidden} from "../app/library/document-works";
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { inOwnerFolder, onlyInOwnerFolder } from "./storage/owner-folder";
 import { scopedRead, type ViewScope } from "./teams/scope";
 import { isLocalStoreEnabled } from "./local-store";
 import { encodeForStorage, makeThumbnail, sniffImageMime } from "./image-encoding";
@@ -467,7 +468,8 @@ export async function replaceLibraryImageAt(input: {
     }
   }
   // 새 것이 자리를 잡은 뒤에 옛 파일을 지운다. 같은 이름이면 지우지 않는다(덮어썼다).
-  const stale = [old.path, old.thumb_path].filter((value): value is string => Boolean(value) && !uploaded.includes(value as string));
+  // 내 폴더 밖의 위치는 지우지 않는다 — 남의 그림이 지워진다(2026-10-03).
+  const stale = onlyInOwnerFolder([old.path, old.thumb_path], input.userId).filter((value) => !uploaded.includes(value));
   if (stale.length) await supabase.storage.from(BUCKET).remove(stale);
   return { ok: true };
 }
@@ -684,10 +686,10 @@ async function listLegacyLibraryItems(viewer: LibraryViewer): Promise<ServerLibr
    * 그래서 목록 카드가 쓸 `coverThumbUrl` 을 따로 낸다. 두 경로를 한 번의
    * `createSignedUrls` 에 함께 넣으므로 왕복은 늘지 않는다.
    */
+  // 그 작업 주인의 폴더 안일 때만 서명한다 — 밖이면 남의 그림이 열린다(2026-10-03).
   const covers = data
-    .flatMap((row: { cover_path: string | null; cover_thumb_path: string | null }) =>
-      [row.cover_path, row.cover_thumb_path])
-    .filter(Boolean) as string[];
+    .flatMap((row: { user_id: string; cover_path: string | null; cover_thumb_path: string | null }) =>
+      onlyInOwnerFolder([row.cover_path, row.cover_thumb_path], String(row.user_id)));
   const signed = covers.length
     ? await supabase.storage.from(BUCKET).createSignedUrls(covers, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
@@ -825,16 +827,18 @@ export async function getLibraryItemImages(viewer: LibraryViewer, itemId: string
 
   let { data, error } = await supabase
     .from("library_images")
-    .select("position,path,mime_type")
+    .select("position,path,mime_type,user_id")
     .eq("item_id", itemId)
     .order("position", { ascending: true });
   if (error || !data?.length) return [];
   // 목록과 같은 규칙으로 뺀다 — 카드의 장수와 열었을 때의 장수가 같아야 한다(W9).
   if(adapter)data=await withoutDocumentRows(adapter,itemId,data);
 
-  const signed = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrls(data.map((row: { path: string }) => row.path as string), SIGNED_URL_TTL_SECONDS);
+  // 그 줄 주인의 폴더 안일 때만 서명한다 — 밖이면 남의 그림이 열린다(2026-10-03).
+  const signable = data.flatMap((row: { path: string; user_id: string }) => onlyInOwnerFolder([row.path], String(row.user_id)));
+  const signed = signable.length
+    ? await supabase.storage.from(BUCKET).createSignedUrls(signable, SIGNED_URL_TTL_SECONDS)
+    : { data: [] };
 
   const urlByPath = toUrlMap(signed.data);
 
@@ -892,11 +896,14 @@ export async function getLibraryImageFile(
 
   const { data, error } = await supabase
     .from("library_images")
-    .select("path")
+    .select("path,user_id")
     .eq("item_id", itemId)
     .eq("position", position);
-  const path = (data as Array<{ path?: string }> | null)?.[0]?.path;
+  const row = (data as Array<{ path?: string; user_id?: string }> | null)?.[0];
+  const path = row?.path;
   if (error || !path) return null;
+  // 주인 폴더 밖이면 남의 그림을 내려 준다(광고 규격 생성 재료로도) — 2026-10-03.
+  if (!inOwnerFolder(path, String(row?.user_id ?? ""))) return null;
 
   const file = await supabase.storage.from(BUCKET).download(path);
   if (file.error || !file.data) return null;
@@ -926,7 +933,7 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
    * 된다. 한 줄도 안 지우면서 오류도 안 나므로, 화면에는 「지웠다」가 뜨고
    * 실제로는 그대로 남는다. 관리자에게 조건이 사라진 지금 이 함정이 열렸다.
    */
-  const imageQuery = supabase.from("library_images").select("path,thumb_path").eq("item_id", itemId);
+  const imageQuery = supabase.from("library_images").select("path,thumb_path,user_id").eq("item_id", itemId);
   const { data: images, error: imagesError } = await (owner ? imageQuery.eq("user_id", owner) : imageQuery);
 
   /**
@@ -942,9 +949,10 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
 
   // **작은 사본도 함께 지운다.** 표를 지우면 사본의 자리를 아는 곳이 사라지므로,
   // 여기서 빠뜨리면 아무도 못 찾는 파일이 용량만 차지한 채 영영 남는다.
+  // 그 줄 주인의 폴더 밖은 지우지 않는다(관리자가 지울 때도) — 남의 그림이 지워진다(2026-10-03).
   const paths = (images ?? [])
-    .flatMap((row: { path: string; thumb_path: string | null }) => [row.path, row.thumb_path])
-    .filter(Boolean) as string[];
+    .flatMap((row: { path: string; thumb_path: string | null; user_id: string }) =>
+      onlyInOwnerFolder([row.path, row.thumb_path], String(row.user_id)));
 
   /**
    * **행을 먼저 지우고, 지운 줄을 세어 본다.**
@@ -1017,7 +1025,7 @@ async function withoutDocumentRows<T extends RowFacts>(adapter: DocumentAdapter,
   return linked ? rows.filter((row) => !legacyRowHidden(artifactOf(row), linked)) : rows;
 }
 
-type LinkedRow = RowFacts & { item_id: string; position: number; thumb_path: string | null };
+type LinkedRow = RowFacts & { item_id: string; position: number; thumb_path: string | null; user_id: string };
 /** 한 번에 읽는 줄 수(프로젝트 최대 행 수 기본 1000)와 `in` 한 번에 넣는 작업 수(uuid 하나가 주소에서 약 39바이트). */
 const LINKED_ROW_PAGE = 1000;
 const LINKED_ITEM_CHUNK = 100;
@@ -1028,7 +1036,7 @@ async function readLinkedRows(supabase: AdminClient, itemIds: string[]): Promise
   for (let start = 0; start < itemIds.length; start += LINKED_ITEM_CHUNK) {
     const ids = itemIds.slice(start, start + LINKED_ITEM_CHUNK);
     for (let offset = 0; ; offset += LINKED_ROW_PAGE) {
-      const { data, error } = await supabase.from("library_images").select("item_id,position,path,thumb_path")
+      const { data, error } = await supabase.from("library_images").select("item_id,position,path,thumb_path,user_id")
         .in("item_id", ids).order("item_id").order("position").range(offset, offset + LINKED_ROW_PAGE - 1);
       if (error || !data) return null;
       rows = [...rows, ...(data as LinkedRow[])];
@@ -1057,7 +1065,8 @@ async function trimLinkedLegacy(items: ServerLibraryItem[], documents: ServerLib
     return [item.id, { own, visible: own.filter((row) => !legacyRowHidden(artifactOf(row), doc)) }] as const;
   }));
   const changed = [...split.values()].filter(({ own, visible }) => visible.length && visible.length < own.length);
-  const covers = changed.flatMap(({ visible: [cover] }) => [cover!.path, ...(cover!.thumb_path ? [cover!.thumb_path] : [])]);
+  // 그 줄 주인의 폴더 안일 때만 서명한다 — 밖이면 남의 그림이 열린다(2026-10-03).
+  const covers = changed.flatMap(({ visible: [cover] }) => onlyInOwnerFolder([cover!.path, cover!.thumb_path], String(cover!.user_id)));
   const signed = covers.length ? await supabase.storage.from(BUCKET).createSignedUrls(covers, SIGNED_URL_TTL_SECONDS) : { data: [] };
   const urls = toUrlMap(signed.data);
   return items.flatMap((item) => {
