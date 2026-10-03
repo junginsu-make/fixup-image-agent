@@ -1,6 +1,7 @@
 import "server-only";
 import { signPath, signPaths } from "../storage/signing";
 import { inOwnerFolder } from "../storage/owner-folder";
+import { STYLE_REFERENCE_MAX_PIXELS } from "../pdp/reference-limits";
 
 import sharp from "sharp";
 import {
@@ -40,12 +41,59 @@ function extensionFor(contentType: string): string {
   return "png";
 }
 
+/**
+ * 받아 오는 그림 한 장의 상한. 참고 이미지 올리기 상한(20MB, `STYLE_REFERENCE_MAX_MB`) 위에 여유를 둔다.
+ * 상한 없이 끝까지 받으면 거대한 응답 하나로 서버 메모리가 바닥난다(2026-10-03 SSRF 리뷰 — 시험에서
+ * 실제로 「Array buffer allocation failed」로 작업자가 죽었다).
+ */
+const MAX_FETCHED_IMAGE_BYTES = 32 * 1024 * 1024;
+
+async function cappedBytes(response: Response): Promise<Buffer> {
+  const tooLarge = () => new Error("받아 온 이미지가 너무 큽니다.");
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_FETCHED_IMAGE_BYTES) {
+    // 받지 않을 본문은 닫는다 — 안 닫으면 시간 제한(30초)까지 연결이 남는다.
+    await response.body?.cancel();
+    throw tooLarge();
+  }
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_FETCHED_IMAGE_BYTES) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function fetchedImage(url: string): Promise<{ bytes: Buffer; contentType: string }> {
   const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`이미지를 내려받지 못했습니다: HTTP ${response.status}`);
   const contentType = response.headers.get("content-type")?.split(";")[0] ?? "image/png";
   if (!contentType.startsWith("image/")) throw new Error(`이미지 응답이 아닙니다: ${contentType}`);
-  return { bytes: Buffer.from(await response.arrayBuffer()), contentType };
+  return { bytes: await cappedBytes(response), contentType };
+}
+
+/**
+ * 저장소에 있는 원본 한 장 — **웹 주소가 아니라 저장소 위치로** 읽는다(2026-10-03 SSRF 리뷰).
+ * 부르는 쪽이 위치가 그 회원 폴더 안인지 먼저 본다. 운영은 그 위치를 서버가 서명한 주소로 받는다 —
+ * 전에도 같은 주소를 받았으므로 결과물은 같다.
+ */
+async function storedOriginal(path: string): Promise<{ bytes: Buffer; contentType: string }> {
+  if (!isLocalStoreEnabled()) return fetchedImage(await signedUrl(path));
+  const bytes = path.split("/")[1] === "sns"
+    ? await readLocalSnsResultFile(localStoreRoot(), path)
+    : await readLocalReferenceFile(localStoreRoot(), path);
+  const extension = path.slice(path.lastIndexOf(".")).toLowerCase();
+  const contentType = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg" : extension === ".webp" ? "image/webp" : "image/png";
+  return { bytes, contentType };
 }
 
 async function signedUrl(path: string): Promise<string> {
@@ -150,7 +198,8 @@ function edgeSamples(data: Buffer, width: number, height: number, channels: numb
 }
 
 async function letterbox(bytes: Buffer, target: { width: number; height: number }) {
-  const normalized = await sharp(bytes).rotate().toBuffer();
+  // 화소 상한은 참고 이미지 올리기 상한과 같다 — 올린 그림은 다 통과하고, 작은 파일에 큰 화소를 숨긴 그림은 펼치지 않는다.
+  const normalized = await sharp(bytes, { limitInputPixels: STYLE_REFERENCE_MAX_PIXELS }).rotate().toBuffer();
   const metadata = await sharp(normalized).metadata();
   if (!metadata.width || !metadata.height) throw new Error("원본 이미지 크기를 읽지 못했습니다.");
   const plan = letterboxPlan({ width: metadata.width, height: metadata.height }, target);
@@ -227,7 +276,9 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     if (ownFolder(card.thumbPath)) paths.add(card.thumbPath);
   });
   // 서명할 것이 없어도 끝까지 간다 — 일찍 돌아가면 남의 폴더 첨부가 옛 주소를 그대로 들고 나간다.
-  if (!paths.size && !project.data.attachments.length) return project;
+  // 「그대로 넣기」 카드의 저장된 주소도 같다 — 비우려면 끝까지 가야 한다(2026-10-03).
+  const hasStoredOriginalUrl = project.data.flow?.cards.some((card) => card.kind !== "generated" && card.assetUrl);
+  if (!paths.size && !project.data.attachments.length && !hasStoredOriginalUrl) return project;
   // 경로는 RLS 를 지나 읽어 온 작업 행에서 꺼낸 것이다.
   const urls = paths.size ? await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS) : new Map<string, string>();
   const attachments = project.data.attachments.map((attachment) => ({
@@ -243,9 +294,11 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
         ? card.assetPath ? urls.get(card.assetPath) ?? card.assetUrl : card.assetUrl
         // 첨부 주소가 비면(내 폴더 밖이라 서명 못 함) 내 폴더의 카드 그림으로 보여 준다 —
         // 관리자 복사본은 카드 그림만 관리자 폴더로 옮겨져 있다(2026-09-28 독립 리뷰).
-        : card.attachmentId
-          ? attachmentUrl.get(card.attachmentId) || (card.assetPath ? urls.get(card.assetPath) : undefined) || card.assetUrl
-          : card.assetUrl,
+        // **저장된 주소로는 되돌아가지 않는다**(2026-10-03 SSRF 리뷰) — 그 칸은 회원이 고칠 수 있다.
+        // 첨부 → 내 폴더 위치 순으로 서명한 주소만 쓰고, 둘 다 없으면 비운다.
+        : (card.attachmentId ? attachmentUrl.get(card.attachmentId) : undefined)
+          || (card.assetPath ? urls.get(card.assetPath) : undefined)
+          || undefined,
       ...previewUrlOf(card, (path) => urls.get(path)),
     })),
   } : undefined;
@@ -403,8 +456,18 @@ export async function createQueuedGenerationDependencies(input: {
       await updateCard(cardIndex, { status, review: { result: review, issues }, error: null });
     },
     async saveOriginal(card) {
-      if (!card.assetUrl) throw new Error(`${card.index}번 사용자 원본 URL이 없습니다.`);
-      const image = await fetchedImage(card.assetUrl);
+      /*
+        **카드에 적힌 웹 주소(`assetUrl`)로 받으러 가지 않는다**(2026-10-03 SSRF 리뷰). 그 칸은 작업 데이터에
+        있어 회원이 고칠 수 있다 — 적힌 주소로 우리 서버가 내부망이든 거대한 파일이든 받으러 갔다.
+        원본은 저장소 위치로 읽는다: 첨부 원본 → 카드에 적힌 위치(관리자 복사본·다시 만들기), 내 폴더 것만.
+        열 때 서명하던 차례(`refreshProjectAssetUrls`)와 같다.
+      */
+      const attachment = card.attachmentId
+        ? input.project.data.attachments.find((entry) => entry.id === card.attachmentId)
+        : undefined;
+      const source = [attachment?.assetPath, card.assetPath].find((path) => inOwnerFolder(path, input.userId));
+      if (!source) throw new Error(`${card.index}번 사용자 원본을 찾지 못했습니다.`);
+      const image = await storedOriginal(source);
       const rendered = await letterbox(image.bytes, ratio);
       const saved = await uploadResult(input.userId, input.project.id, card.index, rendered, "image/png");
       await updateCard(card.index, {
