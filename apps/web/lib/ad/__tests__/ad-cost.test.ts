@@ -42,8 +42,9 @@ const migrationsDir = path.join(REPO, "supabase", "migrations");
   **호환 래퍼는 건너뛴다.** 202609220002 는 옛 함수를 `_cost_v1` 로 이름만 바꾸고
   같은 이름의 얇은 래퍼를 세워 전환한 계정을 옛 경로로 과금하지 못하게 막는다.
   화이트리스트의 실제 동작은 그 전 파일에 그대로 있다.
+  202610030003 은 같은 이름의 함수를 「언제나 거절」로 닫는 껍데기다 — 옛 경로의 규칙은 그 앞 마지막 정의에 남는다(2026-10-03).
 */
-const migrationNames = readdirSync(migrationsDir).filter((name) => !name.startsWith("202609220002_")).sort();
+const migrationNames = readdirSync(migrationsDir).filter((name) => !/^(202609220002|202610030003)_/.test(name)).sort();
 /**
  * 주석을 걷어내고 본다. 이 저장소의 SQL 은 설명이 길어서, 「무엇을 하려다
  * 말았다」고 적은 주석의 낱말이 정의로 오인된다.
