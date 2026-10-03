@@ -211,6 +211,11 @@ describe("refreshProjectAssetUrls — 첨부는 작업 주인 것만 서명한�
     expect(refreshed.data.attachments[0]!.url).toBe("");
   });
 
+  it("보안(2026-10-03): 내 폴더로 시작해도 빠져나가는 첨부 위치는 서명하지 않는다", async () => {
+    const refreshed = await refreshProjectAssetUrls(withAttachment("u1/references/%2e%2e/%2e%2e/u9/references/x.png", "old"));
+    expect(refreshed.data.attachments[0]!.url).toBe("");
+  });
+
   it("카드 경로도 작업 주인 폴더 것만 서명한다", async () => {
     // 「그대로 넣기」 카드는 기획 때 첨부 경로를 그대로 받는다(`actual-flow.ts`).
     const refreshed = await refreshProjectAssetUrls({

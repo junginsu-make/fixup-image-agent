@@ -93,7 +93,7 @@ vi.mock("../../../../../lib/supabase/admin", () => ({
 const { copyLibraryWorkToSelf } = await import("../store");
 
 function source(): Record<string, unknown> {
-  return { title: "흑초 상세페이지", tool: "create", aspect_ratio: "4:5", data: { summary: "요약" } };
+  return { title: "흑초 상세페이지", tool: "create", aspect_ratio: "4:5", data: { summary: "요약" }, user_id: "회원A" };
 }
 
 function image(position: number): Record<string, unknown> {
@@ -133,6 +133,15 @@ describe("잘 될 때", () => {
       cover_path: "관리자B/새작업/0.png",
       cover_thumb_path: "관리자B/새작업/0.thumb.webp",
     });
+  });
+});
+
+describe("보안(2026-10-03) — 원본 주인의 폴더 밖 위치는 가져오지 않는다", () => {
+  it("남의 그림 위치가 적힌 장은 내려받지도 올리지도 않는다", async () => {
+    imageRows = [image(0), { ...image(1), path: "회원C/원본/1.png", thumb_path: "회원A/원본/%2e%2e/%2e%2e/회원C/원본/1.thumb.webp" }];
+    await copyLibraryWorkToSelf("원본", "관리자B");
+    expect(uploaded).toEqual(["관리자B/새작업/0.png", "관리자B/새작업/0.thumb.webp"]);
+    expect(insertedImages).toHaveLength(1);
   });
 });
 

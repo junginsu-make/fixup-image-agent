@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { MAX_INPUT_PIXELS } from "../../../lib/image-encoding";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
+import { inOwnerFolder } from "../../../lib/storage/owner-folder";
 import { isLocalStoreEnabled } from "../../../lib/local-store";
 import {
   mimeForStoragePath,
@@ -252,6 +253,8 @@ export async function addShowcaseItem(
 
   const source = await findSourceImage(input.sourceKind, input.sourceId, input.imageIndex);
   if (!source) return { ok: false, message: "걸 그림을 찾지 못했습니다." };
+  // 그 줄 주인의 폴더 밖이면 남의 그림이 첫 화면으로 공개 복사된다(2026-10-03 보안 리뷰).
+  if (!inOwnerFolder(source.storagePath, source.ownerId ?? "")) return { ok: false, message: "걸 그림을 찾지 못했습니다." };
 
   const original = await supabase.storage.from(source.bucket??BUCKET).download(source.storagePath);
   if (original.error || !original.data) {

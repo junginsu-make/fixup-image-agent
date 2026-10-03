@@ -192,6 +192,18 @@ describe("copyWorkToSelf — 카드뉴스", () => {
     expect(uploads.every((path) => path.startsWith("관리자B/"))).toBe(true);
   });
 
+  it("보안(2026-10-03): 원본 주인의 폴더 밖 위치는 내려받지 않는다", async () => {
+    const row = snsSource();
+    const data = row.data as { flow: { cards: Array<Record<string, unknown>> } };
+    data.flow.cards = [
+      { assetPath: "회원A/sns/원본/0.png", thumbPath: "회원A/sns/원본/%2e%2e/%2e%2e/회원C/sns/x/0.thumb.webp" },
+      { assetPath: "회원C/sns/x/1.png" },
+    ];
+    sourceRow = row;
+    await copyWorkToSelf("sns", "원본", "관리자B");
+    expect(downloads).toEqual(["회원A/sns/원본/0.png"]);
+  });
+
   it("작은 사본도 함께 옮긴다", async () => {
     // 빠뜨리면 복사본이 격자에서 원본을 받아, 2026-09-15 에 고친 것이 그
     // 작업에서만 되살아난다.

@@ -115,6 +115,18 @@ describe("addShowcaseItem — 표시용 사본", () => {
     await addShowcaseItem({sourceKind:"library",sourceId:"33333333-3333-4333-8333-333333333333",imageIndex:0},"admin-1");
     expect(downloadedPath).toBe("user-1/item/0.png");expect(uploads).toHaveLength(2);
   });
+  it("보안(2026-10-03): 원본 위치가 그 줄 주인의 폴더 밖이면 내려받지도 걸지도 않는다", async () => {
+    // 공개 갤러리로 복사되므로 남의 그림이 첫 화면에 나간다.
+    for (const path of ["user-9/item/0.png", "user-1/item/%2e%2e/%2e%2e/user-9/item/0.png"]) {
+      downloadedPath = null; uploads.length = 0;
+      sourceRow = { path, user_id: "user-1", position: 0 };
+      const result = await addShowcaseItem({ sourceKind: "library", sourceId: "src-1", imageIndex: 0 }, "admin-1");
+      expect(result.ok).toBe(false);
+      expect(downloadedPath).toBeNull();
+      expect(uploads).toHaveLength(0);
+    }
+  });
+
   it("원본과 함께 표시용 사본을 만들어 둔다", async () => {
     await addShowcaseItem({ sourceKind: "library", sourceId: "src-1", imageIndex: 0 }, "admin-1");
 

@@ -271,8 +271,8 @@ describe("listLibraryItems — 목록은 작은 사본을 쓴다", () => {
 describe("deleteLibraryItem — 작은 사본도 함께 지운다", () => {
   it("원본과 사본을 한 번에 지운다 — 사본만 남으면 아무도 못 찾는다", async () => {
     imageSelectRows = [
-      { path: "user-1/a/0.webp", thumb_path: "user-1/a/0.thumb.webp" },
-      { path: "user-1/a/1.webp", thumb_path: null },
+      { path: "user-1/a/0.webp", thumb_path: "user-1/a/0.thumb.webp", user_id: "user-1" },
+      { path: "user-1/a/1.webp", thumb_path: null, user_id: "user-1" },
     ];
 
     await deleteLibraryItem({ userId: "user-1", role: "member" }, "a");

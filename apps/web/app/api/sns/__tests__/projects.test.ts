@@ -131,7 +131,13 @@ describe("SNS 프로젝트 서비스", () => {
       create: async (row) => ({ id: "p", ...row, createdAt: "", updatedAt: "" }),
       list: async () => [],
     };
-    for (const assetPath of ["session-user/../u9/references/x.png", "session-user/references\\..\\x.png"]) {
+    for (const assetPath of [
+      "session-user/../u9/references/x.png",
+      "session-user/references\\..\\x.png",
+      // 보안(2026-10-03): 서명 주소는 `%2e%2e` 를 `..` 로 풀고 탭을 지운다.
+      "session-user/references/%2e%2e/%2e%2e/u9/references/x.png",
+      "session-user/references/.\t./.\t./u9/references/x.png",
+    ]) {
       const input = ProjectInputSchema.parse({ ...base, attachments: [{ ...base.attachments[0], assetPath }] });
       await expect(createProjectService(repository).create("session-user", input))
         .rejects.toBeInstanceOf(ProjectValidationError);

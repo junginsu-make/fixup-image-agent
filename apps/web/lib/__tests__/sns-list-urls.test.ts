@@ -51,6 +51,17 @@ describe("목록에 필요한 그림 경로 모으기", () => {
     ] as never);
     expect(paths).toEqual(["u/sns/a/1.png", "u/sns/a/1.thumb.webp"]);
   });
+
+  it("보안(2026-10-03): 내 폴더로 시작해도 빠져나가는 위치는 서명하지 않는다", () => {
+    // 서명 주소는 `%2e%2e` 를 `..` 로 풀고 탭을 지운다 — 앞머리만 보면 남의 파일이 서명된다.
+    const paths = collectCardPaths([
+      project("a", [
+        { index: 1, assetPath: "u/sns/a/%2e%2e/%2e%2e/%2e%2e/someone/sns/x/1.png", thumbPath: "u/sns/a/.\t./.\t./someone/x.thumb.webp" },
+        { index: 2, assetPath: "u/sns/a/2.png" },
+      ]),
+    ] as never);
+    expect(paths).toEqual(["u/sns/a/2.png"]);
+  });
 });
 
 describe("모은 주소를 작업에 다시 붙이기", () => {

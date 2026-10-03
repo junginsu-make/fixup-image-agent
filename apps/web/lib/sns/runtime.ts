@@ -1,5 +1,6 @@
 import "server-only";
 import { signPath, signPaths } from "../storage/signing";
+import { inOwnerFolder } from "../storage/owner-folder";
 
 import sharp from "sharp";
 import {
@@ -213,16 +214,17 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
     서명을 못 한 첨부는 빈 주소가 된다 — 화면이 보낸 옛 주소로 되돌아가면 생성할 때
     서버가 그 주소로 그림을 받으러 간다(`uploadReference`).
   */
-  const ownFolder = `${project.userId}/`;
+  // 앞머리만 보면 `%2e%2e`·탭으로 빠져나간다 — 주인 폴더 검사로 본다(2026-10-03).
+  const ownFolder = (path: string | null | undefined): path is string => inOwnerFolder(path, project.userId);
   project.data.attachments.forEach((attachment) => {
-    if (attachment.assetPath.startsWith(ownFolder)) paths.add(attachment.assetPath);
+    if (ownFolder(attachment.assetPath)) paths.add(attachment.assetPath);
   });
   project.data.flow?.cards.forEach((card) => {
     // 카드 경로도 같다 — 「그대로 넣기」 카드는 기획 때 첨부 경로를 그대로 받는다.
-    if (card.assetPath?.startsWith(ownFolder)) paths.add(card.assetPath);
+    if (ownFolder(card.assetPath)) paths.add(card.assetPath);
     // **결과판이 이 함수를 지난다.** 여기서 안 모으면 카드 열 장을 원본으로
     // 받는 상태가 그대로다 — 이 변경의 목적이 바로 그것이었다.
-    if (card.thumbPath?.startsWith(ownFolder)) paths.add(card.thumbPath);
+    if (ownFolder(card.thumbPath)) paths.add(card.thumbPath);
   });
   // 서명할 것이 없어도 끝까지 간다 — 일찍 돌아가면 남의 폴더 첨부가 옛 주소를 그대로 들고 나간다.
   if (!paths.size && !project.data.attachments.length) return project;
@@ -230,7 +232,7 @@ export async function refreshProjectAssetUrls(project: SnsProjectRecord): Promis
   const urls = paths.size ? await signPaths(BUCKET, [...paths], SIGNED_URL_TTL_SECONDS) : new Map<string, string>();
   const attachments = project.data.attachments.map((attachment) => ({
     ...attachment,
-    url: attachment.assetPath.startsWith(ownFolder) ? urls.get(attachment.assetPath) ?? "" : "",
+    url: ownFolder(attachment.assetPath) ? urls.get(attachment.assetPath) ?? "" : "",
   }));
   const attachmentUrl = new Map(attachments.map((attachment) => [attachment.id, attachment.url]));
   const flow = project.data.flow ? {

@@ -31,6 +31,7 @@ import { createPdpImageGenerator } from "./pdp/fal";
 const falImage: ReturnType<typeof createPdpImageGenerator> = (model, input) =>
   createPdpImageGenerator()(model, input);
 import { createSupabaseAdminClient } from "./supabase/admin";
+import { inOwnerFolder, onlyInOwnerFolder } from "./storage/owner-folder";
 import { scopedRead } from "./teams/scope";
 import { characterReferenceEntries, characterReferenceTitle } from "./character-library";
 import { saveReferenceImage, removeReferenceImagesByTitle } from "./reference-images";
@@ -747,9 +748,10 @@ export async function listCharacters(
 
   // **원본과 사본을 둘 다 서명한다.** 격자는 사본을, 확대와 생성 입력은
   // 원본을 쓴다. 한 번에 모아 보내므로 왕복은 늘지 않는다.
-  const paths = (viewRows ?? [])
-    .flatMap((row: { path: string; thumb_path?: string | null }) => [row.path, row.thumb_path])
-    .filter(Boolean) as string[];
+  // 위치는 그 캐릭터 주인의 폴더 안일 때만 서명한다 — 밖이면 남의 그림이 열린다(2026-10-03).
+  const ownerOf = new Map(data.map((row: { id: string; user_id: string }) => [String(row.id), String(row.user_id)]));
+  const paths = (viewRows ?? []).flatMap((row: { character_id: string; path: string; thumb_path?: string | null }) =>
+    onlyInOwnerFolder([row.path, row.thumb_path], ownerOf.get(String(row.character_id)) ?? ""));
   const signed = paths.length
     ? await supabase.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
@@ -793,11 +795,13 @@ async function loadViewBytes(
   const supabase = createSupabaseAdminClient();
   const { data: view } = await supabase
     .from("character_views")
-    .select("path,mime_type")
+    .select("path,mime_type,user_id")
     .eq("character_id", characterId)
     .eq("angle", angle)
     .maybeSingle();
   if (!view) return null;
+  // 주인 폴더 밖이면 남의 그림이 생성 재료로 들어온다(2026-10-03).
+  if (!inOwnerFolder(view.path, String(view.user_id))) return null;
 
   const { data: file } = await supabase.storage.from(BUCKET).download(view.path as string);
   if (!file) return null;
@@ -853,11 +857,12 @@ export async function deleteCharacter(userId: string, characterId: string) {
       .eq("character_id", characterId);
 
     // 사본도 함께 지운다. 행이 사라지면 그 자리를 아는 곳이 없어진다.
-    const paths = gridPathsToRemove(
+    // 내 폴더 밖의 위치는 지우지 않는다 — 남의 그림이 지워진다(2026-10-03).
+    const paths = onlyInOwnerFolder(gridPathsToRemove(
       (views ?? []).map((row: { path: string; thumb_path?: string | null }) => ({
         path: row.path, thumbPath: row.thumb_path ?? null,
       })),
-    );
+    ), userId);
     if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
 
     const { error } = await supabase

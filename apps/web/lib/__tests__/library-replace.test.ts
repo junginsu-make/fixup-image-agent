@@ -71,6 +71,15 @@ beforeEach(() => {
 const TAG = "s1a2b3c4d-a5e6f7a8b";
 const image = { base64: Buffer.from("IMG").toString("base64"), mimeType: "image/png" };
 
+describe("한 자리 바꾸기 — 옛 위치가 내 폴더 밖이면(2026-10-03 보안 리뷰)", () => {
+  it("남의 그림 위치는 지우지 않는다", async () => {
+    existing = { path: "someone/item/1-oldoldol.webp", thumb_path: "u/item/%2e%2e/%2e%2e/someone/item/1.thumb.webp" };
+    const result = await replaceLibraryImageAt({ userId: "u", itemId: "item", position: 1, origin: "ai", fileTag: TAG, image });
+    expect(result.ok).toBe(true);
+    expect(log.some((line) => line.startsWith("remove"))).toBe(false);
+  });
+});
+
 describe("한 자리 바꾸기", () => {
   it("**새 파일 → 표 고침 → 옛 파일 지움** 차례다 — 중간에 멈춰도 자리가 비지 않는다", async () => {
     const result = await replaceLibraryImageAt({ userId: "u", itemId: "item", position: 1, origin: "ai", fileTag: TAG, image });

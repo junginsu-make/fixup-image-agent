@@ -1,5 +1,6 @@
 import { MAX_CARDS, modelById, planSlots, validateAttachments, type Attachment, type ImageLook, type SlotPlan } from "@fixup/sns-core";
 import type { ProjectInput, ProjectSource } from "./schema";
+import { inOwnerFolder } from "../../../../lib/storage/owner-folder";
 import type { SnsFlowState } from "../flow-service";
 
 export interface SnsProjectCreateRecord {
@@ -63,8 +64,8 @@ export function createProjectService(repository: SnsProjectRepository) {
         (`docs/DEPLOY.md`). 누구 것인지는 알려 주지 않는다.
       */
       // `..`·역슬래시로 내 폴더에서 빠져나가는 경로도 막는다 — 앞머리만 보면 통과한다.
-      if (input.attachments.some((attachment) => !attachment.assetPath.startsWith(`${userId}/`)
-        || attachment.assetPath.includes("..") || attachment.assetPath.includes("\\"))) {
+      // 서명 주소는 `%2e%2e` 를 `..` 로 풀고 탭을 지운다 — 주인 폴더 검사로 본다(2026-10-03).
+      if (input.attachments.some((attachment) => !inOwnerFolder(attachment.assetPath, userId))) {
         issues.push("첨부 이미지를 찾을 수 없습니다. 다시 골라 주세요.");
       }
       const placeAsIsCount = input.attachments.filter((attachment) => attachment.kind === "place_as_is").length;

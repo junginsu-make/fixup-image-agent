@@ -116,6 +116,15 @@ describe("한 장 다시 만들기 (3단계 §6-3)", () => {
     };
   };
 
+  it("보안(2026-10-03): 내 폴더로 시작해도 빠져나가는 위치(%2e%2e·탭)는 서버 권한으로 읽지 않는다", async () => {
+    const { 읽은것, deps } = 보관();
+    const 작업 = 만든작업();
+    작업.data.flow.cards[1] = 장(2, { status: "done", assetPath: "me/sns/c1/%2e%2e/%2e%2e/%2e%2e/someone/sns/x/2.png" });
+    const got = await redoCard(요청(), "me", 작업, 2, "", deps);
+    expect(읽은것).toEqual([]);
+    expect(got.archived).toBeNull();
+  });
+
   it("앞 그림을 참고 이미지로 보관한 뒤 그 장만 다시 만든다", async () => {
     const { 넣은것, 읽은것, deps } = 보관();
     const got = await redoCard(요청(), "me", 만든작업(), 2, "글자 크게", deps);
