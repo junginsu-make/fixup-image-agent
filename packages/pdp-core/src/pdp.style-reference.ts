@@ -1,4 +1,5 @@
 import { Type } from "./pdp.llm";
+import { MAX_STRATEGY_LENGTH } from "./pdp.replan";
 import type { PdpLlm } from "./pdp.llm";
 import type { ProductBrief } from "./types";
 
@@ -123,7 +124,7 @@ export function normalizeStyleAnalysis(raw: unknown): string {
     }
   }
 
-  return lines.join("\n");
+  return lines.join("\n").slice(0, MAX_STRATEGY_LENGTH);
 }
 
 

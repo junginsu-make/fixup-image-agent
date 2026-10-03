@@ -137,8 +137,8 @@ describe("화면 배선", () => {
     const 저장 = editor.slice(editor.indexOf("const deferIfLibraryBusy"), editor.indexOf("saveToLibraryRef.current = handleSaveToLibrary"));
     expect(저장).toContain("if (auto) libraryRerunRef.current = { auto: true, singleRun };");
     expect(저장).toContain("setTimeout(() => void saveToLibraryRef.current(rerun), 0);");
-    // 저장이 끝나는 두 곳 모두 풀어 준다.
-    expect(저장.match(/releaseLibrarySave\(\);/g)).toHaveLength(2);
+    // 문서 저장과 기존 두 저장 경로 모두 끝날 때 잠금을 푼다.
+    expect(저장.match(/releaseLibrarySave\(\);/g)).toHaveLength(3);
     expect(저장.match(/if \(deferIfLibraryBusy\(auto, singleRun\)\) return;/g)).toHaveLength(2);
     expect(저장).not.toContain("librarySavingRef.current) return;");
   });

@@ -45,6 +45,10 @@ export function WorkDetailClient({ workId }: { workId: string }) {
         const body = await response.json().catch(() => null);
         if (!alive) return;
         if (body?.ok && body.work) {
+          if(body.work.documentId){
+            router.replace(body.work.mine?`/create?doc=${body.work.documentId}`:`/library/pdp/${body.work.documentId}?owner=${encodeURIComponent(body.work.documentOwner)}`);
+            return;
+          }
           /*
             **주인이 아니면 읽기 전용이다.** 「회원용 길이 성공했나」로 가르면
             안 된다 — 같은 팀 사람의 작업은 회원용 길이 **성공한다**
@@ -76,7 +80,7 @@ export function WorkDetailClient({ workId }: { workId: string }) {
       }
     })();
     return () => { alive = false; };
-  }, [workId]);
+  }, [workId, router]);
 
   /** 남의 작업을 **내 것으로 복사한다.** 고치는 대신 복사한다. */
   const copyToSelf = React.useCallback(async () => {

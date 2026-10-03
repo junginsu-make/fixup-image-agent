@@ -1,3 +1,4 @@
+import { sectionScenePrompt } from "./pdp.scene-prompt";
 import { designerPersona, imageLookDirective, type ImageLook } from "@fixup/shared";
 import { PAGE_CONTEXT_MAX_LENGTH } from "./pdp.input-limits";
 import type {
@@ -234,7 +235,7 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
     task: "korean_ecommerce_detail_page_section",
     format: { orientation: orientationOf(options.aspectRatio), target: "mobile", static_image: true },
     scene: {
-      subject: section.prompt_en || section.prompt_ko || section.headline,
+      subject: sectionScenePrompt(section),
       setting: STYLE_SETTING[options.style],
       location: countryOf(options).place,
       people: peopleRule(options),

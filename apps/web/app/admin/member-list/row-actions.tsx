@@ -126,8 +126,8 @@ export function MemberActions({ profile, fullWidth = false }: { profile: RowProf
           <form action={deleteMember} className="grid gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-2">
             <input type="hidden" name="userId" value={profile.id} />
             <p className="text-[11px] leading-snug text-destructive">
-              되돌릴 수 없습니다. 이 회원이 만든 작업물·참고 이미지·캐릭터가 함께 사라집니다.
-              다시 못 들어오게만 하려면 「이용 정지」를 쓰세요.
+              되돌릴 수 없습니다. 이 회원이 만든 작업물·참고 이미지·캐릭터와 상세페이지 작업 원본, 이 회원
+              작업으로 만든 관리자 사본이 함께 사라집니다. 다시 못 들어오게만 하려면 「이용 정지」를 쓰세요.
             </p>
             <input
               name="confirmEmail"
@@ -139,7 +139,7 @@ export function MemberActions({ profile, fullWidth = false }: { profile: RowProf
             />
             <ConfirmSubmitButton
               variant="destructive"
-              confirmMessage={`${profile.email} 회원을 아주 지웁니다. 되돌릴 수 없습니다. 계속할까요?`}
+              confirmMessage={`${profile.email} 회원을 아주 지웁니다. 이 회원의 상세페이지 작업 원본과 이 회원 작업으로 만든 관리자 사본도 함께 지워집니다. 되돌릴 수 없습니다. 계속할까요?`}
               pendingLabel="지우는 중..."
             >
               아주 지우기

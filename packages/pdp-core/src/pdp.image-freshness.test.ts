@@ -25,6 +25,11 @@ const 그림있는섹션 = (patch: Record<string, unknown> = {}) => {
 };
 
 describe("그림을 만들 때의 문구를 적어 둔다", () => {
+  it("F13: 빈 영어 장면을 한국어로 채워도 실제 장면이 같으면 낡음이 아니다",()=>{
+    const before=그림있는섹션({prompt_en:"",prompt_ko:"밝은 방"});
+    expect(isImageStale({...before,prompt_en:"밝은 방"})).toBe(false);
+    expect(imageStampOf(섹션())).toBe(["3일 만에","부제","하나","a bright room","밝은 방"].join("\u0002"));
+  });
   it("**같은 문구면 같은 자국이다**", () => {
     expect(imageStampOf(섹션())).toBe(imageStampOf(섹션()));
   });

@@ -34,7 +34,7 @@ const image = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   intent: intent.optional(),
   // 우리가 만든 서술이 되돌아오는 칸이다. 넉넉히 두되 무한정은 아니다.
-  description: text.max(MAX_STRATEGY_LENGTH).optional(),
+  description: text.transform((value) => value.slice(0, MAX_STRATEGY_LENGTH)).optional(),
 }).passthrough();
 /*
   **깨진 그림은 예약 전에 되돌려 보낸다**(C-9 리뷰).
@@ -72,7 +72,7 @@ const target = z.discriminatedUnion("slot", [
   z.object({ slot: z.literal("bullet"), index: z.number().int().nonnegative() }),
 ]);
 const section = z.object({
-  section_id: text.trim().min(1), prompt_en: text.trim().min(1),
+  section_id: text.trim().min(1), prompt_en: text.trim().default(""),
   headline: text.optional(), subheadline: text.optional(), bullets: z.array(text).default([]),
   prompt_ko: text.optional(), layout_notes: text.optional(),
   evidenceVersion: z.literal(1).optional(),

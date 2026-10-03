@@ -24,8 +24,9 @@ import { overLimitFields, type LongInstructionKey } from "@fixup/pdp-core";
  */
 export function imageRequestLengthBlock(
   fields: Partial<Record<LongInstructionKey, string | undefined>>,
+  pageContext?: string,
 ): string {
-  const over = overLimitFields({} as never, undefined, undefined, fields);
+  const over = overLimitFields({} as never, pageContext, undefined, fields);
   if (!over.length) return "";
 
   const 목록 = over.map((field) => `${field.label} ${field.length - field.limit}자 초과`).join(", ");

@@ -19,6 +19,11 @@ import { imageRequestLengthBlock } from "../image-request-length";
  */
 
 describe("넘치지 않으면 막지 않는다", () => {
+  it("그 밖에 배경 설명은 500자까지, 초과하면 생성 전에 안내한다", () => {
+    expect(imageRequestLengthBlock({}, "가".repeat(500))).toBe("");
+    expect(imageRequestLengthBlock({}, "가".repeat(501))).toContain("1자 초과");
+    expect(imageRequestLengthBlock({}, "가".repeat(501))).toContain("기획 화면");
+  });
   it("빈 값은 막지 않는다", () => {
     expect(imageRequestLengthBlock({})).toBe("");
   });

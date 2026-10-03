@@ -1,3 +1,6 @@
+import {serverDocumentsEnabled} from "./pdp/documents/flags";
+import {parseLibraryFileKey} from "./pdp/jobs/library-sync-plan";
+import {legacyRowHidden} from "../app/library/document-works";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { scopedRead, type ViewScope } from "./teams/scope";
 import { isLocalStoreEnabled } from "./local-store";
@@ -165,6 +168,11 @@ export interface ServerLibraryItem {
   mine: boolean;
   /** 누가 만들었는가. **관리자에게만** 채운다 — 회원끼리 이메일이 보이면 안 된다. */
   ownerEmail: string | null;
+  documentId?:string;
+  documentOwner?:string;
+  imageTags?:string[];
+  /** 문서 카드만, 서버 안에서만: 문서가 가졌던 그림 지문. 연결된 옛 그림을 보일지 정한다(`legacyRowHidden`). 응답에는 싣지 않는다. */
+  heldImageTags?:string[];
 }
 
 /** createSignedUrls 는 항목마다 실패할 수 있다. 실패한 것은 버린다. */
@@ -644,7 +652,7 @@ async function emailsByUserId(userIds: string[]): Promise<Map<string, string>> {
   );
 }
 
-export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLibraryItem[]> {
+async function listLegacyLibraryItems(viewer: LibraryViewer): Promise<ServerLibraryItem[]> {
   // 로컬 확인 모드에는 이 보관함이 없다. 500 을 내면 서버가 고장난 것처럼
   // 보이지만 사실은 안 쓰는 저장소다. 비어 있다고 답하는 것이 정직하다.
   if (isLocalStoreEnabled()) return [];
@@ -732,19 +740,27 @@ export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLib
  * 던지면 500 이 된다.
  */
 export async function getLibraryItem(viewer: LibraryViewer, itemId: string) {
+  const adapter=await documentAdapterFor(viewer);
+  const document=adapter?await documentSide("작업",()=>adapter.work(itemId)):null;
+  if(document)return document;
   if (isLocalStoreEnabled()) return null;
   if (!(await canSeeItem(viewer, itemId))) return null;
 
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("library_items")
-    .select("id,user_id,title,tool,aspect_ratio,image_count,created_at,data")
+    .select("id,user_id,title,tool,aspect_ratio,image_count,created_at,data,source_id")
     .eq("id", itemId)
     .maybeSingle();
   if (error || !data) return null;
 
   const row = data as Record<string, unknown>;
   const ownerId = row.user_id as string;
+  const sourceId=row.source_id;
+  if(adapter && row.tool==="create" && typeof sourceId==="string"){
+    const linked=await documentSide("연결 작업",()=>adapter.work(sourceId));
+    if(linked)return linked;
+  }
   // 만든 사람은 **남의 것일 때만** 붙인다. 자기 것이면 붙일 이유가 없고,
   // 붙이면 회원끼리 이메일이 보이는 길이 하나 생긴다.
   const mine = ownerId === viewer.userId;
@@ -800,16 +816,21 @@ async function canSeeItem(viewer: LibraryViewer, itemId: string): Promise<boolea
 
 /** 한 건의 이미지 전체. 서명 URL 이라 수명이 있다. */
 export async function getLibraryItemImages(viewer: LibraryViewer, itemId: string) {
+  const adapter=await documentAdapterFor(viewer);
+  const documentImages=adapter?await documentSide("그림",()=>adapter.images(itemId)):null;
+  if(documentImages)return documentImages;
   const supabase = createSupabaseAdminClient();
 
   if (!(await canSeeItem(viewer, itemId))) return [];
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("library_images")
     .select("position,path,mime_type")
     .eq("item_id", itemId)
     .order("position", { ascending: true });
   if (error || !data?.length) return [];
+  // 목록과 같은 규칙으로 뺀다 — 카드의 장수와 열었을 때의 장수가 같아야 한다(W9).
+  if(adapter)data=await withoutDocumentRows(adapter,itemId,data);
 
   const signed = await supabase.storage
     .from(BUCKET)
@@ -853,6 +874,9 @@ export async function getLibraryImageFile(
    */
   action: "read" | "export" = "read",
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
+  const adapter=await documentAdapterFor(viewer);
+  const documentFile=adapter?await documentSide("파일",()=>adapter.file(itemId,position,action)):null;
+  if(documentFile)return documentFile;
   const supabase = createSupabaseAdminClient();
 
   /**
@@ -891,6 +915,7 @@ export async function getLibraryImageFile(
  * 그대로 남는다 — 2026-09-04 운영자 판단.
  */
 export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
+  // 문서 전체 삭제는 확인을 받는 전용 문서 API에서만 처리한다.
   const supabase = createSupabaseAdminClient();
   const owner = libraryScope(viewer, "delete");
 
@@ -941,4 +966,106 @@ export async function deleteLibraryItem(viewer: LibraryViewer, itemId: string) {
 
   if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
   return { ok: true as const };
+}
+
+export async function listLibraryItems(viewer: LibraryViewer): Promise<ServerLibraryItem[]> {
+  const adapter = await documentAdapterFor(viewer);
+  const [legacyResult, documentResult] = await Promise.allSettled([listLegacyLibraryItems(viewer), adapter ? adapter.list() : null]);
+  const legacy = legacyResult.status === "fulfilled" ? legacyResult.value : [];
+  const documents = documentResult.status === "fulfilled" ? documentResult.value : null;
+  if (documentResult.status === "rejected") console.warn("[library] 상세페이지 목록을 불러오지 못했습니다.");
+  if (!adapter || !documents) return legacy;
+  // 지운 문서 목록만 못 읽어도 목록은 연다 — 정리를 기다리는 옛 작업이 잠시 보일 뿐이다(3차 리뷰 W20).
+  const excluded = new Set((await documentSide("삭제 목록", () => adapter.excluded())) ?? []);
+  const kept = legacy.filter((item) => !(item.tool === "create" && excluded.has(item.sourceId ?? "")));
+  const trimmed = await trimLinkedLegacy(kept, documents);
+  // 가졌던 지문은 옛 그림을 가르는 데만 쓴다 — 화면에 보낼 까닭이 없고 문서마다 수백 개일 수 있다.
+  return [...documents.map(({ heldImageTags: _held, ...document }) => document), ...trimmed];
+}
+
+type DocumentAdapter = ReturnType<typeof import("./pdp/documents/library-adapter")["documentLibraryAdapter"]>;
+type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
+
+/** 서버 문서 기능이 켜져 있을 때만 문서 쪽 길을 연다. 꺼져 있으면 문서 표를 건드리지 않는다. */
+async function documentAdapterFor(viewer: LibraryViewer): Promise<DocumentAdapter | null> {
+  if (!serverDocumentsEnabled()) return null;
+  return (await import("./pdp/documents/library-adapter")).documentLibraryAdapter(viewer);
+}
+
+/**
+ * **문서 쪽 조회가 실패해도 옛 라이브러리 길은 연다**(3차 리뷰 W20). 문서 없이 계속하고 로그만
+ * 남긴다 — 문서 표 하나가 앓는다고 옛 작업 열기·그림·파일 받기까지 500 이 되면 안 된다.
+ */
+async function documentSide<T>(what: string, run: () => Promise<T>): Promise<T | null> {
+  try {
+    return await run();
+  } catch (error) {
+    console.warn(`[library] 상세페이지 ${what} 조회 실패. 문서 없이 옛 경로로 계속합니다`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+type RowFacts = { path: string };
+const artifactOf = (row: RowFacts) => parseLibraryFileKey(row.path)?.artifact ?? null;
+
+/** 한 작업을 열 때: 연결된 문서가 보여 주거나 일부러 뺀 그림을 뺀다(W9). 문서를 못 읽으면 그대로 둔다. */
+async function withoutDocumentRows<T extends RowFacts>(adapter: DocumentAdapter, itemId: string, rows: T[]): Promise<T[]> {
+  const parent = await createSupabaseAdminClient().from("library_items").select("source_id,tool").eq("id", itemId).maybeSingle();
+  const sourceId = parent.data?.tool === "create" ? (parent.data.source_id as string | null) : null;
+  if (!sourceId) return rows;
+  const linked = await documentSide("연결 문서", () => adapter.linkedDocument(sourceId));
+  return linked ? rows.filter((row) => !legacyRowHidden(artifactOf(row), linked)) : rows;
+}
+
+type LinkedRow = RowFacts & { item_id: string; position: number; thumb_path: string | null };
+/** 한 번에 읽는 줄 수(프로젝트 최대 행 수 기본 1000)와 `in` 한 번에 넣는 작업 수(uuid 하나가 주소에서 약 39바이트). */
+const LINKED_ROW_PAGE = 1000;
+const LINKED_ITEM_CHUNK = 100;
+
+/** 연결된 옛 작업들의 그림 줄을 **한 번에** 읽는다(W11). 못 읽으면 `null` — 부르는 쪽이 줄이지 않는다. */
+async function readLinkedRows(supabase: AdminClient, itemIds: string[]): Promise<LinkedRow[] | null> {
+  let rows: LinkedRow[] = [];
+  for (let start = 0; start < itemIds.length; start += LINKED_ITEM_CHUNK) {
+    const ids = itemIds.slice(start, start + LINKED_ITEM_CHUNK);
+    for (let offset = 0; ; offset += LINKED_ROW_PAGE) {
+      const { data, error } = await supabase.from("library_images").select("item_id,position,path,thumb_path")
+        .in("item_id", ids).order("item_id").order("position").range(offset, offset + LINKED_ROW_PAGE - 1);
+      if (error || !data) return null;
+      rows = [...rows, ...(data as LinkedRow[])];
+      if (data.length < LINKED_ROW_PAGE) break;
+    }
+  }
+  return rows;
+}
+
+/**
+ * 문서와 연결된 옛 작업에서 **문서가 보여 주거나 일부러 뺀 그림**을 뺀다(W9, 규칙은 `legacyRowHidden`).
+ * 그림 줄은 한 번에 읽고, 표지가 바뀐 작업만 한 번에 서명한다(W11). 줄을 못 읽으면 그대로 보인다
+ * — 사라지는 그림이 없어야 한다(F10).
+ */
+async function trimLinkedLegacy(items: ServerLibraryItem[], documents: ServerLibraryItem[]): Promise<ServerLibraryItem[]> {
+  const linkedOf = (item: ServerLibraryItem) => (item.tool === "create"
+    ? documents.find((doc) => doc.id === item.sourceId || doc.sourceId === item.sourceId) : undefined);
+  const linked = items.filter((item) => linkedOf(item));
+  if (!linked.length || isLocalStoreEnabled()) return items;
+  const supabase = createSupabaseAdminClient();
+  const rows = await readLinkedRows(supabase, linked.map((item) => item.id));
+  if (!rows) return items;
+  const split = new Map(linked.map((item) => {
+    const doc = linkedOf(item)!;
+    const own = rows.filter((row) => row.item_id === item.id);
+    return [item.id, { own, visible: own.filter((row) => !legacyRowHidden(artifactOf(row), doc)) }] as const;
+  }));
+  const changed = [...split.values()].filter(({ own, visible }) => visible.length && visible.length < own.length);
+  const covers = changed.flatMap(({ visible: [cover] }) => [cover!.path, ...(cover!.thumb_path ? [cover!.thumb_path] : [])]);
+  const signed = covers.length ? await supabase.storage.from(BUCKET).createSignedUrls(covers, SIGNED_URL_TTL_SECONDS) : { data: [] };
+  const urls = toUrlMap(signed.data);
+  return items.flatMap((item) => {
+    const entry = split.get(item.id);
+    if (!entry || entry.visible.length === entry.own.length) return [item];
+    const cover = entry.visible[0];
+    if (!cover) return [];
+    return [{ ...item, imageCount: entry.visible.length, coverUrl: urls.get(cover.path) ?? null,
+      coverThumbUrl: cover.thumb_path ? urls.get(cover.thumb_path) ?? null : null }];
+  });
 }

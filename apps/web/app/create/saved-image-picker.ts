@@ -1,4 +1,5 @@
 export interface SavedLibraryItem {
+  documentId?: string;
   id: string;
   title: string;
   coverUrl: string | null;
@@ -8,6 +9,7 @@ export interface SavedLibraryItem {
 }
 
 export interface SavedLibraryImage {
+  documentId?: string;
   id: string;
   name: string;
   /**
@@ -36,5 +38,6 @@ export function toSavedLibraryImages(
       url: item.coverUrl as string,
       thumbUrl: item.coverThumbUrl ?? null,
       origin: "library",
+      ...(item.documentId ? {documentId:item.documentId} : {}),
     }));
 }

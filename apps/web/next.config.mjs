@@ -68,7 +68,9 @@ const nextConfig = {
       **한 장이 그보다 큰 경우**의 여유다 — 원본 PNG 한 장이 9MB 면 base64 로
       12MB 가 되고, 그 한 장은 더 나눌 수 없다.
     */
-    middlewareClientMaxBodySize: "16mb",
+    // 로컬 문서 저장은 Storage 대신 이 서버에 원본(최대 20MiB)을 보낸다.
+    // 운영은 브라우저→Storage 직행이므로 기존 상한을 유지한다.
+    middlewareClientMaxBodySize: process.env.NODE_ENV !== "production" && process.env.LOCAL_STORE === "1" && process.env.PDP_SERVER_DOCUMENTS === "1" ? "24mb" : "16mb",
   },
   webpack: (config) => {
     // 이식한 코어가 ESM 관례대로 상대 import에 .js 확장자를 쓴다(소스는 .ts).

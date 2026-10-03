@@ -248,6 +248,7 @@ interface PdpEditorProps {
   onReset: () => void;
   onDraftStateChange?: (draftState: PdpEditorDraftState) => void;
   onManualSave?: () => void;
+  onSaveServerDocument?: () => Promise<boolean>;
   referenceModelImage?: PreparedImageDraft | null;
   referenceModelUsage?: ReferenceModelUsage | null;
   /** 첨부 자리마다 적은 「이 그림을 어떻게 쓸까요」. 안 붙은 자리는 걸러서 온다. */
@@ -333,6 +334,7 @@ export function PdpEditor({
   onReset,
   onDraftStateChange,
   onManualSave,
+  onSaveServerDocument,
   referenceModelImage = null,
   referenceModelUsage = null,
   attachmentIntents,
@@ -1573,7 +1575,7 @@ export function PdpEditor({
     anchorIntent: attachmentIntents?.anchor,
     personIntent: attachmentIntents?.person,
     styleIntent: attachmentIntents?.style,
-  });
+  }, pageContext);
 
   /*
     **사진 없이 실물을 팔고 있다고 말한다**(N-2, 설계 §9.1).
@@ -2384,6 +2386,19 @@ export function PdpEditor({
   };
 
   const handleSaveToLibrary = async ({ auto = false, singleRun = false }: { auto?: boolean; singleRun?: boolean } = {}) => {
+    const hasEdits = libraryVersionSections.some((section) => section.layers.length > 0);
+    if(onSaveServerDocument && (auto || !hasEdits)){
+      if(deferIfLibraryBusy(auto,singleRun))return;
+      librarySavingRef.current=true;setIsSavingToLibrary(true);
+      try{
+        if(!await onSaveServerDocument())throw new Error("작업 저장을 마치지 못했습니다. 다시 저장해 주세요.");
+        const progress={key:currentLibraryKey,sent:libraryEntries.length};
+        libraryProgressRef.current=progress;setLibraryProgress(progress);
+        if(!auto)setNotice("현재 작업과 그림을 라이브러리에 저장했습니다.");
+      }catch(e){setErrorMessage(e instanceof Error?e.message:"작업을 저장하지 못했습니다.");}
+      finally{releaseLibrarySave();}
+      return;
+    }
     if (!libraryEntries.length) {
       if (!auto) setErrorMessage("라이브러리에 저장할 이미지가 아직 없습니다.");
       return;
@@ -2397,7 +2412,6 @@ export function PdpEditor({
 
       글자·도형을 얹은 편집본은 서버가 모른다. 단추로 누르면 그 판을 따로 남긴다.
     */
-    const hasEdits = libraryVersionSections.some((section) => section.layers.length > 0);
     if (draftId && (auto || !hasEdits)) {
       if (deferIfLibraryBusy(auto, singleRun)) return;
       librarySavingRef.current = true;

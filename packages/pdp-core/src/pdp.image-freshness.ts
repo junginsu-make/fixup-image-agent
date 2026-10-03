@@ -1,4 +1,5 @@
 import type { SectionBlueprint } from "./types";
+import { sectionScenePrompt } from "./pdp.scene-prompt";
 
 /**
  * **이 그림이 지금 문구로 만든 것인가**(N-5, 설계 §4.2).
@@ -41,7 +42,7 @@ export function imageStampOf(section: SectionBlueprint | null | undefined): Imag
     section.headline ?? "",
     section.subheadline ?? "",
     (section.bullets ?? []).join(""),
-    section.prompt_en ?? "",
+    sectionScenePrompt(section),
     section.prompt_ko ?? "",
   ].join("");
 }

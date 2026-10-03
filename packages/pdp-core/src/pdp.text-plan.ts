@@ -1,3 +1,4 @@
+import { sectionScenePrompt } from "./pdp.scene-prompt";
 import { reviewStampOf } from "./pdp.review-freshness";
 import { Type } from "./pdp.llm";
 import type { PdpLlm } from "./pdp.llm";
@@ -391,9 +392,8 @@ function normalizeSection(raw: Record<string, unknown>, index: number): SectionB
     image_id: asString(raw.image_id) || `IMG_S${index + 1}`,
     purpose: asString(raw.purpose),
     prompt_ko: promptKo,
-    // 비면 generateSectionImage 가 INVALID_REQUEST 로 거부한다(pdp.service.ts:340).
-    // 시나리오 단계에서 막다른 길을 만들지 않도록 반드시 채운다.
-    prompt_en: asString(raw.prompt_en) || promptKo || headline,
+    // 사진 기획·옛 초안 생성과 같은 규칙으로 빈 장면을 복구한다.
+    prompt_en: sectionScenePrompt(raw),
     negative_prompt: asString(raw.negative_prompt),
     style_guide: asString(raw.style_guide),
     reference_usage: asString(raw.reference_usage),
@@ -464,16 +464,16 @@ export function mergeArtDirection(
 
       // 사용자가 새로 추가한 섹션. 한국어 방향이 유일한 단서다.
       if (!base) {
-        return { ...section, prompt_en: promptKo || section.prompt_en };
+        return { ...section, prompt_en: promptKo || sectionScenePrompt(section) };
       }
 
       if (promptKo === base.prompt_ko.trim()) {
-        return { ...section, prompt_en: base.prompt_en };
+        return { ...section, prompt_en: sectionScenePrompt({ ...section, prompt_en: base.prompt_en }) };
       }
 
       return {
         ...section,
-        prompt_en: promptKo || base.prompt_en,
+        prompt_en: promptKo || sectionScenePrompt({ ...section, prompt_en: base.prompt_en }),
       };
     }),
   };

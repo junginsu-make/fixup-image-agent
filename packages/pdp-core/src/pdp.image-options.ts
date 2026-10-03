@@ -201,6 +201,7 @@ export function pageInputsFromWire(wire?: PageImageWire): PageImageInputs {
     userInstruction: wire.userInstruction,
     preserveProduct: wire.preserveProduct,
     anchorKind: wire.anchorKind,
+    conceptOnly: wire.conceptOnly,
     personSource: wire.personSource,
     pageContext: wire.pageContext,
     attachmentIntents: wire.attachmentIntents,

@@ -28,14 +28,14 @@ describe("형식 거절 기록", () => {
 
     const result = await readPdpRequest(post({
       originalImageBase64: "AAAA",
-      section: { section_id: "S1", prompt_en: "", headline: "비밀 문구 123" },
+      section: { section_id: "", prompt_en: "", headline: "비밀 문구 123" },
     }), "single");
 
     expect(result.ok).toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
     const line = warn.mock.calls[0]!.map(String).join(" ");
     expect(line).toContain("single");
-    expect(line).toContain("section.prompt_en");
+    expect(line).toContain("section.section_id");
   });
 
   it("값은 남기지 않는다", async () => {

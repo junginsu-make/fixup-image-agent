@@ -1,0 +1,728 @@
+{
+  "generatedAt": "2026-10-03T03:48:15+09:00",
+  "branch": "feat/pdp-server-documents",
+  "baseHead": "a8aae23f097cd916ee97cfde9d5e8db6e9cc4329",
+  "note": "F1-F21 review fixes. Code and tests only; documentation excluded; all changes remain uncommitted. | 2026-10-03 Claude 3차 리뷰·수정 뒤 다시 생성(작업 트리 전체 변경 코드 파일)",
+  "files": [
+    {
+      "path": "apps/web/app/admin/__tests__/member-delete-confirm.test.tsx",
+      "state": "untracked",
+      "bytes": 2268,
+      "sha256": "9e4920ed584b4f75f9ecc2bb6b6969e0deb42026c8010feda65ed7834c8e2371"
+    },
+    {
+      "path": "apps/web/app/admin/__tests__/member-delete-pdp.test.ts",
+      "state": "untracked",
+      "bytes": 4763,
+      "sha256": "36a92ab21a4dbd841654d4960972805740740898df2f8ae7a567a7bf194e5a64"
+    },
+    {
+      "path": "apps/web/app/admin/__tests__/member-delete.test.ts",
+      "state": "modified",
+      "bytes": 2803,
+      "sha256": "9700e1fe6fb0600e291a6e75871608568b00a379e546ed44edb44669b9ca8668"
+    },
+    {
+      "path": "apps/web/app/admin/actions.ts",
+      "state": "modified",
+      "bytes": 23431,
+      "sha256": "f369327e58b225e98b74a471fdeebdda7501c295539f1dfbbe2fc632ff37c797"
+    },
+    {
+      "path": "apps/web/app/admin/member-list/row-actions.tsx",
+      "state": "modified",
+      "bytes": 7466,
+      "sha256": "603d3948eb082c84194af697363c80006f8507246d413504efae9763f7d839bc"
+    },
+    {
+      "path": "apps/web/app/api/admin/pdp-documents/[id]/copy/route.ts",
+      "state": "untracked",
+      "bytes": 285,
+      "sha256": "76a87f607b8c9bb2096cfe684a1e055c2d93c7717912bd48fed6e2cb4ff3aaa8"
+    },
+    {
+      "path": "apps/web/app/api/admin/pdp-documents/[id]/route.ts",
+      "state": "untracked",
+      "bytes": 280,
+      "sha256": "4fe24875d6eb7a6785f47edfc434460d9019fa135750369ee64bf1a69a0c42bf"
+    },
+    {
+      "path": "apps/web/app/api/admin/pdp-documents/route.ts",
+      "state": "untracked",
+      "bytes": 203,
+      "sha256": "81df3cb3f475a8e907e0c7611000f3a77684b98a68761c6b90320fa0c994ad89"
+    },
+    {
+      "path": "apps/web/app/api/pdp/__tests__/library-sync-wiring.test.ts",
+      "state": "modified",
+      "bytes": 9526,
+      "sha256": "c626de6b844f0da300e6b0e7e735ce711e591df276c6429ba65812005604d622"
+    },
+    {
+      "path": "apps/web/app/api/pdp/__tests__/route-reliability.test.ts",
+      "state": "modified",
+      "bytes": 10057,
+      "sha256": "bb7ea31c2263af83b45378846229314dd0edc218bfade309c3179e32a348da42"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/[id]/assets/file/route.ts",
+      "state": "untracked",
+      "bytes": 2192,
+      "sha256": "aca2fea0ce7f7904e977d813ee2192e7e81f81d27f6bb6eeda36abb2b00bc0e8"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/[id]/assets/route.ts",
+      "state": "untracked",
+      "bytes": 301,
+      "sha256": "5fca3424f322415464dbbdb74c3503b6d6480d1fbaa0e7039fe43e39e7708959"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/[id]/pin/route.ts",
+      "state": "untracked",
+      "bytes": 298,
+      "sha256": "c97b5db5969ddacb3e76ffecd2470e3bdd2e794b61644576c596e9f55eac1293"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/[id]/restore/route.ts",
+      "state": "untracked",
+      "bytes": 302,
+      "sha256": "3de1af5d551a8a5578cbc7caec0b950b0986844bbb18d2610cc53452a726c8c4"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/[id]/revisions/route.ts",
+      "state": "untracked",
+      "bytes": 303,
+      "sha256": "e37ae7550d2e22bec29e464127f177025ad8ea7ab8417b09498f9808bf359aa2"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/[id]/route.ts",
+      "state": "untracked",
+      "bytes": 512,
+      "sha256": "0e008b46e6de8ec0f18554a956d223127a1f524f39685a8a78e598c3c180c39e"
+    },
+    {
+      "path": "apps/web/app/api/pdp/documents/route.ts",
+      "state": "untracked",
+      "bytes": 266,
+      "sha256": "380383743dac08165222bf99b7b30ddce789934419cb86c21a7745c218b86ad7"
+    },
+    {
+      "path": "apps/web/app/api/showcase/__tests__/showcase-thumbnails.test.ts",
+      "state": "modified",
+      "bytes": 13112,
+      "sha256": "77bc5dac0613fcfd17d59a7657c36d5ee906bed87581b9afbe67f5be68bf0e68"
+    },
+    {
+      "path": "apps/web/app/api/showcase/store.ts",
+      "state": "modified",
+      "bytes": 15937,
+      "sha256": "8ca1fd0654c2424f7824ce5cf065bcd5f5542516dfae1768f399c8bcf37f1a0e"
+    },
+    {
+      "path": "apps/web/app/create/PdpEditor.tsx",
+      "state": "modified",
+      "bytes": 163046,
+      "sha256": "49957c11aa6fe919fd4ae6533d1263023f7a94a1979e4caa17f6f78b9d16d4a8"
+    },
+    {
+      "path": "apps/web/app/create/PdpMakerClient.tsx",
+      "state": "modified",
+      "bytes": 135708,
+      "sha256": "bd22da5bcfeb2281283bf962fa1e778c97d6e837cdf050bfd918b32dfc11f4ac"
+    },
+    {
+      "path": "apps/web/app/create/SavedImagePicker.tsx",
+      "state": "modified",
+      "bytes": 14811,
+      "sha256": "1311d9eee64b56aec2e23a05618210beb3effa6091c0cb953bb3df166b4b22e2"
+    },
+    {
+      "path": "apps/web/app/create/ServerDocumentHistory.tsx",
+      "state": "untracked",
+      "bytes": 1817,
+      "sha256": "5214d462acd14fb65583c5a7486ac9e01e7560c325ca428451394a775276b594"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/draft-ui.test.tsx",
+      "state": "modified",
+      "bytes": 16267,
+      "sha256": "76086b626924c8dfdfc6c8f9fe695a5aedbb8448e2af603054f96de054062cbf"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/duplicate-recovery-live.test.tsx",
+      "state": "modified",
+      "bytes": 18331,
+      "sha256": "a4f698495f20b8a37745a2e06c22520bea4325d936f550c99cf8e212a33c1c19"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/image-request-length.test.ts",
+      "state": "modified",
+      "bytes": 5201,
+      "sha256": "5000cf21e93c76df5cd4a4f2965fa362a304ab0b81a4c858e6eac18281691320"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/latest-browser-draft.test.ts",
+      "state": "untracked",
+      "bytes": 1503,
+      "sha256": "ea61f17e28d8105a4c11c53df75f0fedb64b6b5b1f64f399f3bff69db06866b2"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/retention-and-quota.test.ts",
+      "state": "modified",
+      "bytes": 7131,
+      "sha256": "34a74075e1f2839ef2ed12e71b5699de35a5e359b3ada09d7866adb426b4f73d"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/saved-image-picker.test.ts",
+      "state": "modified",
+      "bytes": 2125,
+      "sha256": "830d814c8c2968f9452f6c15a83778c69e222cd2f217c4bb030919c133370479"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/server-document-codec.test.ts",
+      "state": "untracked",
+      "bytes": 6385,
+      "sha256": "6916c94770030a3eb27547f9421ca6bede768adea59479ccf39b247996c64d45"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/server-document-ui.test.tsx",
+      "state": "untracked",
+      "bytes": 19246,
+      "sha256": "9f1bb0d332f68c92b450d8707f6c1a52cbb7624aa2eadb0720a326cfb87f3b27"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/server-draft-encode-failure.test.ts",
+      "state": "untracked",
+      "bytes": 6396,
+      "sha256": "28b4e4bc8015895071ff5c9f1e2162144ac3bd3389a3b86c3a57df7eeae2fca9"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/server-draft-repository.test.ts",
+      "state": "untracked",
+      "bytes": 14742,
+      "sha256": "49a68c922aa6ccd07713c19134bf2677a04b76cd77d68e05feecbfa4fb1f9dc5"
+    },
+    {
+      "path": "apps/web/app/create/__tests__/server-draft-temporary.test.ts",
+      "state": "untracked",
+      "bytes": 18285,
+      "sha256": "3fbba5a2c092d3b957af2a987cd8acf67d017c53ea8cc45e24f702845427f1c1"
+    },
+    {
+      "path": "apps/web/app/create/draft-repository.ts",
+      "state": "modified",
+      "bytes": 4254,
+      "sha256": "bcc62c97744479f676a034df89a75452900001ed95e5dad528a62d07c0625de8"
+    },
+    {
+      "path": "apps/web/app/create/image-request-length.ts",
+      "state": "modified",
+      "bytes": 1862,
+      "sha256": "7cbe276179c4bd7d9c2c5faf1f3eda67fa34ff4949b5a144ca5a0707a3f6d9b5"
+    },
+    {
+      "path": "apps/web/app/create/page.tsx",
+      "state": "modified",
+      "bytes": 871,
+      "sha256": "09608833be6e2b6ab6dbc39992c3bce8d73ce0885fa9cec4f74b83c53d0bdf87"
+    },
+    {
+      "path": "apps/web/app/create/pdp-drafts.ts",
+      "state": "modified",
+      "bytes": 26497,
+      "sha256": "3fe925180977a3c4a0cd995fddf25617c6fa89b37c3d929192070951ab9adaa7"
+    },
+    {
+      "path": "apps/web/app/create/saved-image-picker.ts",
+      "state": "modified",
+      "bytes": 1481,
+      "sha256": "ff73ccf82ec489dad8a8ac92d00921d398b015ec4ce36b2ca57422a39fb557d1"
+    },
+    {
+      "path": "apps/web/app/create/scenario-sections.ts",
+      "state": "modified",
+      "bytes": 3401,
+      "sha256": "f85f4364c02115a5d5041a45f38ee7b1f4899521af7122fdbec0ed913906abac"
+    },
+    {
+      "path": "apps/web/app/create/server-document-codec.ts",
+      "state": "untracked",
+      "bytes": 8317,
+      "sha256": "c5375df9593dfc8d3832fca09bf4a757bbd066129dab0389d5e282d069ea503d"
+    },
+    {
+      "path": "apps/web/app/create/server-draft-repository.ts",
+      "state": "untracked",
+      "bytes": 18507,
+      "sha256": "f08010924d7184e66aaabdab890823fdf20f0df51cb2d98c6423609b416c301d"
+    },
+    {
+      "path": "apps/web/app/library/__tests__/document-works.test.ts",
+      "state": "untracked",
+      "bytes": 1607,
+      "sha256": "42e4f03a462d3831bf2f681bebd1c9c66ed88516979b505ed35949ab67727ca0"
+    },
+    {
+      "path": "apps/web/app/library/__tests__/works-tab-document-delete.test.tsx",
+      "state": "untracked",
+      "bytes": 5568,
+      "sha256": "ac6ea5c995ae2d5a4e88388d6411743ef64b57ead9ddbe1621ff74aba81eaeb3"
+    },
+    {
+      "path": "apps/web/app/library/document-works.ts",
+      "state": "untracked",
+      "bytes": 3081,
+      "sha256": "17089a3e42012767ea2072aabab888f02517349fa4ed039f77e3387bc68a263f"
+    },
+    {
+      "path": "apps/web/app/library/library-works.ts",
+      "state": "modified",
+      "bytes": 7008,
+      "sha256": "170b564acc3656cc229a68543f365ad0d87ab573f8b2b110d79d28c8bc3fa5af"
+    },
+    {
+      "path": "apps/web/app/library/page.tsx",
+      "state": "modified",
+      "bytes": 9442,
+      "sha256": "b895f7becf6b5fd61e7bc0422e5d2a719510b5994ac429caccbf0aea52f7b327"
+    },
+    {
+      "path": "apps/web/app/library/pdp/[id]/inspector.tsx",
+      "state": "untracked",
+      "bytes": 3293,
+      "sha256": "5212daceefc20a8a66ecb7de76edf2564bc837bb85cca0d2c4b3c9804ce65ec3"
+    },
+    {
+      "path": "apps/web/app/library/pdp/[id]/page.tsx",
+      "state": "untracked",
+      "bytes": 392,
+      "sha256": "327da6dd45e2bcd5b7f61aa5a096323535549d99859fc39df1ea1df90cc0caac"
+    },
+    {
+      "path": "apps/web/app/library/works-tab.tsx",
+      "state": "modified",
+      "bytes": 38016,
+      "sha256": "5409e38907f9c17b3e1e395ae6e3ab5f6e0ca4cfbd4255a62b166b0b51eb5a2a"
+    },
+    {
+      "path": "apps/web/app/library/works/[id]/detail-client.tsx",
+      "state": "modified",
+      "bytes": 9786,
+      "sha256": "8ed63aa87f4941e2e772db9a6763a66837d2dad7084d6b5599a6869c10f5c40b"
+    },
+    {
+      "path": "apps/web/lib/evidence-gate.ts",
+      "state": "modified",
+      "bytes": 7352,
+      "sha256": "f308d7f4b5d5aca4c66e4348ee70b78bced23ac183ecbdc1d6fca33d510c87b8"
+    },
+    {
+      "path": "apps/web/lib/library.ts",
+      "state": "modified",
+      "bytes": 12920,
+      "sha256": "1402ba790457f391ff9f849143a86c30f02190fe2abc0657755a91588c6dc10a"
+    },
+    {
+      "path": "apps/web/lib/membership/__tests__/withdraw-account.test.ts",
+      "state": "modified",
+      "bytes": 8108,
+      "sha256": "240c8dfd8c6d25e457ab0f43ee2400be0389353934bf39827a968ebfe4a2b2c6"
+    },
+    {
+      "path": "apps/web/lib/membership/__tests__/withdraw-pdp-copies.test.ts",
+      "state": "untracked",
+      "bytes": 6352,
+      "sha256": "c728038a673c8cd4df76a40d7d40353c24fb1f1bf6aa478149f9b1edac6014e9"
+    },
+    {
+      "path": "apps/web/lib/membership/__tests__/withdraw-pdp.test.ts",
+      "state": "untracked",
+      "bytes": 2976,
+      "sha256": "26121d435fd6726b5dc1ce6afb34e7b0def2445f9cf550558c7247a21c30ee83"
+    },
+    {
+      "path": "apps/web/lib/membership/withdraw-account.ts",
+      "state": "modified",
+      "bytes": 5781,
+      "sha256": "24749b7c4f51cd5c7e062b3539ba1013a71f2b7d677708e03f5ca4b78c25d909"
+    },
+    {
+      "path": "apps/web/lib/membership/withdraw-pdp.ts",
+      "state": "untracked",
+      "bytes": 3265,
+      "sha256": "df2b6896896d555be7a7d238735bd644151c1660ec4586c8f062703e4b7a29f5"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/legacy-scene-request.test.ts",
+      "state": "untracked",
+      "bytes": 2650,
+      "sha256": "952db0f3587cb19966504a618a9ed2cf522d705e6d316f0f6df5262744339004"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/photo-path-analyze.test.ts",
+      "state": "untracked",
+      "bytes": 6780,
+      "sha256": "e38dfdfe7c303d8cd98f89313e96d5fb88e7add7e4f28fc36bcb13cad93e5c37"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/photo-path-matrix.test.ts",
+      "state": "untracked",
+      "bytes": 14099,
+      "sha256": "3ef057e476f9670519e68ecf52933c288a15b960d92e22ac9cfa214b21a05fac"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/request-bounds.test.ts",
+      "state": "modified",
+      "bytes": 7266,
+      "sha256": "13b8ee7d9559b4736488d4478d8e3394a5549fb290e1eba656168ff10e78fe23"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/request-reject-log.test.ts",
+      "state": "modified",
+      "bytes": 3129,
+      "sha256": "3197d050fec3cc59173e58c9d0a3c26e7fbba940de18bf9396ecdfc2387ab55c"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/style-description-limit.test.ts",
+      "state": "untracked",
+      "bytes": 1548,
+      "sha256": "a3a5255b84870cc0a54ee29ec57cfde6e4441ae39ff8e66d92b5572740416776"
+    },
+    {
+      "path": "apps/web/lib/pdp/__tests__/text-path-matrix.test.ts",
+      "state": "untracked",
+      "bytes": 23172,
+      "sha256": "cd245bf3350b73564299a38ae91a96be3bdcb92a677caf14f417ac4787354902"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/admin-copy-owner.test.ts",
+      "state": "untracked",
+      "bytes": 5061,
+      "sha256": "c4c990ec2d6cfa2894eeab19fe1b830fa74f55b833080602177fe21fe6115b56"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/admin.test.ts",
+      "state": "untracked",
+      "bytes": 3488,
+      "sha256": "ab1d40d3444ea67c5cdd0bd943ef19e592a5ff9b1b9037c3e1482ad0366ccdbc"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/api.test.ts",
+      "state": "untracked",
+      "bytes": 8565,
+      "sha256": "21ed97b86bac3c43fd46015b967c27de8d8d821b702bb6a7c008398528f56d5b"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/cleanup-fairness.test.ts",
+      "state": "untracked",
+      "bytes": 3137,
+      "sha256": "e837d230659a9fcbcf259a76223a8264b9e2f609f7d3f4bddf74acae50a604ac"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/delete-legacy.test.ts",
+      "state": "untracked",
+      "bytes": 1842,
+      "sha256": "d80496a81a6afa95d94aad795ed783b558514ce77a01264e61ad79031e90e150"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/deleted-lookup.test.ts",
+      "state": "untracked",
+      "bytes": 3774,
+      "sha256": "c4fc87434ab6b51b4695b90dc9b0da67472fbcdbbb10b1d7ed78ee74d666e28f"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/document-size.test.ts",
+      "state": "untracked",
+      "bytes": 1510,
+      "sha256": "28c8f274bf1783f6932c206822be22f311e0ee20ffde2ada8f255dd380033e23"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/fake-supabase.ts",
+      "state": "untracked",
+      "bytes": 7156,
+      "sha256": "817f8ab3a7cb9d9bcbc70572bb30e5f236773e5d20f2cceb7c84ac484e859b41"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/fallback-scene-gate.test.ts",
+      "state": "untracked",
+      "bytes": 7553,
+      "sha256": "0dae6df56dddff26b24cde370da90f632350639516ab3d5eb44a2b6f0dc290e1"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/held-image-tags.test.ts",
+      "state": "untracked",
+      "bytes": 10222,
+      "sha256": "9cc079ba509d80566814e5d49a535ba6a381e643af975b498c5c32c3e775f8b0"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/inline-image-guard.test.ts",
+      "state": "untracked",
+      "bytes": 7500,
+      "sha256": "f154937fc1ac4a7cd631afcdc5ecc915bb639ec8adb158a9bdd0744e2ce669da"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/library-adapter.test.ts",
+      "state": "untracked",
+      "bytes": 2998,
+      "sha256": "970eab1f8c2f2d7d8784e34a18bd978fd916bec864cac6af967ba55f5f27acb0"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/library-authority.test.ts",
+      "state": "untracked",
+      "bytes": 956,
+      "sha256": "2f8c906f17a08da6f2ff43149ef88f68b75fae66edf7301bfbf60f4e5830e9a3"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/library-delete-boundary.test.ts",
+      "state": "untracked",
+      "bytes": 1420,
+      "sha256": "b564a3973556ee098629cf06b87602b23fe6c0d6b639abe69f5b20e78cdcde72"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/library-image-dedup.test.ts",
+      "state": "untracked",
+      "bytes": 2170,
+      "sha256": "0809f786772351780f2ee0ef5a6bd4c35e49eab227da9123486b4fa6c15854ca"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/library-legacy-visibility.test.ts",
+      "state": "untracked",
+      "bytes": 15627,
+      "sha256": "36c9d094b572b482a50826488a8c9a9af76c0370e2a6fb202983857312869160"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/local-file-route.test.ts",
+      "state": "untracked",
+      "bytes": 1263,
+      "sha256": "578ef3c4510dc2ed30ce8358b683cc75af93df90d51e5974fcbc394c91b81db1"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/pin-limit.test.ts",
+      "state": "untracked",
+      "bytes": 3617,
+      "sha256": "00aa42b47960bb489ece821cae3ed5f411e6d10b9e5f94db794b06e88ccff97f"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/repository.test.ts",
+      "state": "untracked",
+      "bytes": 4225,
+      "sha256": "58795972bbc137dec0453bd34f85bb0d8bcc67087045d700e2cf0b6b7829d03a"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/storage.test.ts",
+      "state": "untracked",
+      "bytes": 4055,
+      "sha256": "f7e598a433a73dd97a37d95f03c420203df16c7c823d176387ad10a7ab0ef577"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/supabase-repository.test.ts",
+      "state": "untracked",
+      "bytes": 3233,
+      "sha256": "7569fad2819602485083b837cad270402aa58088b8bdfed861a9577bfbde0533"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/__tests__/unsafe-characters.test.ts",
+      "state": "untracked",
+      "bytes": 4064,
+      "sha256": "ab393beb635717137e2feda8552fd3e21c1ff2ce93964cdd647aea95f153e9ce"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/admin.ts",
+      "state": "untracked",
+      "bytes": 3945,
+      "sha256": "46e94eff2cd051670827fc010d4fa91889d6d79235d3c486ba96248b6ee4b92e"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/delete-legacy.ts",
+      "state": "untracked",
+      "bytes": 1842,
+      "sha256": "c5e997f4540b96766a3e6736cdd75a43d609477c7115ca51299a1d5709f316a8"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/flags.ts",
+      "state": "untracked",
+      "bytes": 80,
+      "sha256": "d85fd96cfcf2d527fccabadef558580e73ff55d2103e13c4a8aad887c73cd65e"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/http.ts",
+      "state": "untracked",
+      "bytes": 7622,
+      "sha256": "26ca59927bbefdb6683ffa0dc24d0135068c09095023570a8fa451d8283a3702"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/index.ts",
+      "state": "untracked",
+      "bytes": 2245,
+      "sha256": "f2aee2072685e9a083f004d6ce730ed65a1ca8bef1bb7fefe8ddf9d7bbe8e709"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/library-adapter.ts",
+      "state": "untracked",
+      "bytes": 4000,
+      "sha256": "12c5583adf9c1f5053a566e498600b1fc1307eebd1dabbf4fdf28b3293fc372c"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/local-repository.ts",
+      "state": "untracked",
+      "bytes": 7866,
+      "sha256": "03614f8b86c9dbb82b0a3a5f5dde7a3332c52201a9776ebedcdb2fa5eaa20922"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/model.ts",
+      "state": "untracked",
+      "bytes": 14896,
+      "sha256": "fdb03a104091dc731483015927761d8ac87788453279fc9ac7fadd4d37ac9e30"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/publication.ts",
+      "state": "untracked",
+      "bytes": 1448,
+      "sha256": "77b3615b54790ec13987e955db3395697a8af441158329e2bb35bf3de47a87f5"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/repository.ts",
+      "state": "untracked",
+      "bytes": 1533,
+      "sha256": "07f70ddd007ce06871636dd65ae82676b65bac650f841d183467c0cc0326c53a"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/storage.ts",
+      "state": "untracked",
+      "bytes": 7014,
+      "sha256": "91216b2ff8a6a88c135acfdcf877267b53fbf199ae2b981b17c685e5ee986e0f"
+    },
+    {
+      "path": "apps/web/lib/pdp/documents/supabase-repository.ts",
+      "state": "untracked",
+      "bytes": 8521,
+      "sha256": "034d37978ca3be39b1ffec98ae04d2f4e26b418e2851a1cbd47699d134710948"
+    },
+    {
+      "path": "apps/web/lib/pdp/jobs/__tests__/library-sync-deleted.test.ts",
+      "state": "untracked",
+      "bytes": 4291,
+      "sha256": "5fc1b2d85176c45dfb9d7bd6d9bedf1665df28207b0f3d78737ac0956d1602d5"
+    },
+    {
+      "path": "apps/web/lib/pdp/jobs/library-sync.ts",
+      "state": "modified",
+      "bytes": 18873,
+      "sha256": "4071d12ee799697c8f7c6b8bcb0b78c915a46f71e4b01dd2cce813f3bb6c1219"
+    },
+    {
+      "path": "apps/web/lib/pdp/request.ts",
+      "state": "modified",
+      "bytes": 16644,
+      "sha256": "992e821a50b1684672e15003c2eb8c062b5c8150e3953fd623d22440c01f7212"
+    },
+    {
+      "path": "apps/web/lib/server-library.ts",
+      "state": "modified",
+      "bytes": 51425,
+      "sha256": "c9b45cf895be5d75b6686443b81ab94d604ee208ad76373215bd34f876e34f02"
+    },
+    {
+      "path": "apps/web/next.config.mjs",
+      "state": "modified",
+      "bytes": 4570,
+      "sha256": "39c648b1972a5d5f9603e796de1cd019d174338154f8d1eec6f96f825e7947db"
+    },
+    {
+      "path": "deploy/ec2/app.env.example",
+      "state": "modified",
+      "bytes": 7596,
+      "sha256": "c9f87a49268cb4f209a7e45f20eb6713b2f532472ecabdd6a066594f71e063ab"
+    },
+    {
+      "path": "packages/pdp-core/src/index.ts",
+      "state": "modified",
+      "bytes": 11137,
+      "sha256": "9004671bf87fbd0a798e79a716491075c89cca24a9e6125c2a22ff2e212a251a"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.concept-only.test.ts",
+      "state": "modified",
+      "bytes": 6957,
+      "sha256": "4c140cc9dc22f3c9cffd154a8f12a22962703adc9489cf2b74a2b421ccefbadc"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.image-freshness.test.ts",
+      "state": "modified",
+      "bytes": 6074,
+      "sha256": "e56e760aeb8fa3fff05ae61512a666b887b3584c059c4167cb915319d7a7ad4d"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.image-freshness.ts",
+      "state": "modified",
+      "bytes": 3806,
+      "sha256": "eb14fd40a6725f3cae8faede4055a062bfbb880672a1a508d03a64b450cfa754"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.image-options.ts",
+      "state": "modified",
+      "bytes": 10509,
+      "sha256": "1402b975f8321c93b18d3edc1813eb736a0a6202dc3a5b3a87d343be11f0d627"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.image-prompt.ts",
+      "state": "modified",
+      "bytes": 17864,
+      "sha256": "2b9df2499523629824e86dbbd871c5819479d0e24070d0746e65bd446ae2e1f5"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.scene-prompt.test.ts",
+      "state": "untracked",
+      "bytes": 2219,
+      "sha256": "405d9bb117b24229549b60edc7256141e07b1e90ac7f10d0ceb31c0fee4e4d3a"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.scene-prompt.ts",
+      "state": "untracked",
+      "bytes": 574,
+      "sha256": "bb97f8f647c786888b65a3bfef68aa88637e4931c111fec36bb26ed755043433"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.service.ts",
+      "state": "modified",
+      "bytes": 113117,
+      "sha256": "dea8cdbde784c7842c817d0b4ec39c0b5fdc7737a79a14f2c0765aaf39252015"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.style-reference.ts",
+      "state": "modified",
+      "bytes": 8561,
+      "sha256": "4d97a2e1b62338a4b59bb88a1fd5a71ac09124916e7d55bbbb87a8e707ec48a7"
+    },
+    {
+      "path": "packages/pdp-core/src/pdp.text-plan.ts",
+      "state": "modified",
+      "bytes": 33418,
+      "sha256": "e5f06fac13182b5f1e284c0d30ae4a25401559454f0b88ed1528d67f4539c8ff"
+    },
+    {
+      "path": "scripts/tests/pdp-documents-browser.mjs",
+      "state": "untracked",
+      "bytes": 12980,
+      "sha256": "fb767afeb0bd9d2a6cbcd086bfceaaf8847356ced414167af7c9443eb628fb90"
+    },
+    {
+      "path": "scripts/tests/pdp-documents-sql.test.mjs",
+      "state": "untracked",
+      "bytes": 16319,
+      "sha256": "0c575f095846819fa1eb13dc51da98bf56d55c0ce9de3bfe5f50e6b30e8fbc4e"
+    },
+    {
+      "path": "scripts/tests/pdp-server-boundary.mjs",
+      "state": "untracked",
+      "bytes": 2237,
+      "sha256": "899417a681c15a6fae5d659a3d9de6f4a597cc240565375727f2a1ee55afddb0"
+    },
+    {
+      "path": "supabase/migrations/202610030001_pdp_documents.sql",
+      "state": "untracked",
+      "bytes": 12138,
+      "sha256": "550eac1522f1a055e44c30b417d6b9e5a5427b81fbc9c97f92bb4975c9099232"
+    }
+  ]
+}

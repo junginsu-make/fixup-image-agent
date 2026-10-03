@@ -1,4 +1,8 @@
 "use client";
+import { createServerDraftRepository } from "./server-draft-repository";
+import { createServerBrowserDrafts } from "./draft-repository";
+import { ServerDocumentHistory } from "./ServerDocumentHistory";
+import { uuid as serverDocumentId } from "../../lib/pdp/documents/model";
 
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -73,14 +77,20 @@ const START_MODES: Array<{ value: CreateMode; label: string; desc: string }> = [
  */
 const RECOVERY_REVISION = 0;
 
+/** 서버 저장이 다른 창의 저장과 겹쳐 사본으로 갈라졌을 때. 다른 작업을 열면 아래 말로 바꿔 남긴다. */
+const FORKED_SAVE_MESSAGE = "다른 창에서 먼저 저장했습니다. 현재 수정은 별도 사본으로 저장했으며, 이 사본에서 계속 작업합니다.";
+const FORKED_BEFORE_LEAVING_MESSAGE = "앞 작업은 다른 창에서 먼저 저장해, 이 화면의 수정을 별도 사본으로 저장했습니다. 저장된 작업 목록에서 그 사본을 열 수 있습니다.";
+
 type PreviousPlan = {
   result: GeneratedResult;
   /** 다시 짜기 직전 편집기 상태. 그때 편집기에 들어간 적이 없으면 없다. */
   editor: PdpEditorDraftState | null;
 };
 
-export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enabled?: boolean }) {
-  const draftRepository = useMemo(() => createDraftRepository(documentV3Enabled), [documentV3Enabled]);
+export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabled = false }: { documentV3Enabled?: boolean; serverDocumentsEnabled?: boolean }) {
+  const draftRepository = useMemo(() => serverDocumentsEnabled
+    ? createServerDraftRepository(createServerBrowserDrafts(documentV3Enabled))
+    : createDraftRepository(documentV3Enabled), [documentV3Enabled, serverDocumentsEnabled]);
   const router = useRouter();
   const searchParams = useSearchParams();
   // 라이브러리에서 ?draft=<id> 로 넘어오면 그 작업을 한 번만 자동으로 연다.
@@ -281,8 +291,12 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const [analysisStartedAt, setAnalysisStartedAt] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<PdpDraftSummary[]>([]);
   const [isLoadingDrafts, setIsLoadingDrafts] = useState(true);
+  const [draftListNotice, setDraftListNotice] = useState("");
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const serverRevisionRef = useRef<number | undefined>(undefined);
+  const loadingDraftRef = useRef(false);
+  const restoringDraftRef = useRef(false);
   const [draftCreatedAt, setDraftCreatedAt] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [editorDraftState, setEditorDraftState] = useState<PdpEditorDraftState | null>(null);
@@ -302,6 +316,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 있으면 사용자는 자기가 만든 것인지 아닌지 가릴 수 없다.
    */
   const [recoveredNotice, setRecoveredNotice] = useState("");
+  const [recoveredCopyId,setRecoveredCopyId]=useState<string|null>(null);
   /**
    * **어느 장이 왜 안 만들어졌나**(F-7-8).
    *
@@ -368,7 +383,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     : "";
 
   const goToSettings = useCallback(() => router.push("/settings"), [router]);
-  const protectedDraftId = activeDraftId ?? searchParams.get("draft");
+  const protectedDraftId = activeDraftId ?? searchParams.get("doc") ?? searchParams.get("draft");
 
   const refreshDrafts = useCallback(async () => {
     setIsLoadingDrafts(true);
@@ -389,13 +404,17 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       const 지킬것 = protectedDraftId ? [protectedDraftId] : [];
       await purgeExpiredPdpDrafts(new Date(), 지킬것);
       await purgeExpiredPdpDocuments(new Date(), 지킬것);
-      setDrafts(await draftRepository.list());
+      const list = await draftRepository.list();
+      setDrafts(list);
+      setDraftListNotice("serverUnavailable" in list && list.serverUnavailable ? "서버에 연결하지 못해 이 브라우저의 작업만 보입니다." : "");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "저장된 작업 목록을 불러오지 못했습니다.");
+      // 서버 모드는 목록 실패가 저장·임시 보관 안내를 덮지 않게 목록 자리에만 알린다.
+      if (serverDocumentsEnabled) setDraftListNotice("저장된 작업 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.");
+      else setErrorMessage(error instanceof Error ? error.message : "저장된 작업 목록을 불러오지 못했습니다.");
     } finally {
       setIsLoadingDrafts(false);
     }
-  }, [draftRepository, documentV3Enabled, protectedDraftId]);
+  }, [draftRepository, documentV3Enabled, protectedDraftId, serverDocumentsEnabled]);
 
   useEffect(() => {
     void refreshDrafts();
@@ -493,9 +512,14 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
       const input = buildDraftInput();
-      if (!input || saveInFlightRef.current) {
+      if (!input || saveInFlightRef.current || loadingDraftRef.current) {
+        // 누른 저장을 말없이 버리지 않는다. 자동 저장은 다음 차례에 다시 돈다.
+        if (serverDocumentsEnabled && mode === "manual" && loadingDraftRef.current) {
+          setErrorMessage(restoringDraftRef.current ? "복원 중입니다. 끝나면 다시 저장해 주세요." : "작업을 불러오는 중입니다. 끝나면 다시 저장해 주세요.");
+        }
         return null;
       }
+      if (serverDocumentsEnabled) input.serverRevision = serverRevisionRef.current;
 
       saveInFlightRef.current = true;
       const savingClock = saveClockRef.current;
@@ -507,8 +531,23 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         // 저장을 기다리는 동안 다른 작업을 열었으면 그 화면의 ID/dirty를 덮지 않는다.
         if (saveClockRef.current !== savingClock) return savedDraft;
         setActiveDraftId(savedDraft.id);
+        serverRevisionRef.current = savedDraft.serverRevision;
+        if (serverDocumentsEnabled) {
+          autoloadedDraftRef.current = true;
+          router.replace(`/create?${savedDraft.temporary?"draft":"doc"}=${savedDraft.id}`, { scroll: false });
+          // 사본으로 갈라지면 원래 작업의 보관 지점으로 가는 되돌리기는 이 사본의 것이 아니다.
+          if ("conflictOf" in savedDraft) { setUndoDraftId(null); setErrorMessage(FORKED_SAVE_MESSAGE); }
+        }
         setDraftCreatedAt(savedDraft.createdAt);
         setLastSavedAt(savedDraft.updatedAt);
+        if(savedDraft.temporary){
+          setSaveState("error");
+          const reason = "temporaryReason" in savedDraft ? savedDraft.temporaryReason : undefined;
+          setErrorMessage(reason === "login" ? "로그인이 만료되어 이 브라우저에 임시 보관했습니다. 다시 로그인한 뒤 저장해 주세요."
+            : reason === "busy" ? "요청이 많아 잠시 뒤 다시 저장해 주세요. 이 브라우저에 임시 보관했습니다."
+            : "서버에 저장하지 못해 이 브라우저에 임시 보관했습니다. 편집을 계속할 수 있습니다. 다시 저장해 주세요.");
+          await refreshDrafts();return savedDraft;
+        }
         saveClockRef.current.acknowledge(savingRevision);
         setSaveState(saveClockRef.current.dirty ? "idle" : "saved");
         setIsDirty(saveClockRef.current.dirty);
@@ -522,8 +561,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         return savedDraft;
       } catch (error) {
         setSaveState("error");
-        // 용량이 찬 것과 그냥 실패한 것은 할 일이 다르다(E-6-3-a).
-        setErrorMessage(draftSaveFailureMessage(error));
+        // 용량이 찬 것과 그냥 실패한 것은 할 일이 다르다(E-6-3-a). 서버가 거절한 까닭은 그대로 보인다.
+        setErrorMessage(error instanceof Error && error.name === "DocumentSaveRejectedError" ? error.message : draftSaveFailureMessage(error));
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
         return null;
       } finally {
@@ -533,10 +572,19 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         });
       }
     },
-    [buildDraftInput, refreshDrafts, draftRepository]
+    [buildDraftInput, refreshDrafts, draftRepository, serverDocumentsEnabled, router]
   );
 
+  const persistLatestRef = useRef(persistDraft);
+  persistLatestRef.current = persistDraft;
+  const waitForServerSave=useCallback(async()=>{
+    for(let i=0;saveInFlightRef.current && i<480;i++)await new Promise(resolve=>setTimeout(resolve,250));
+    if(saveInFlightRef.current){setErrorMessage("저장이 아직 진행 중입니다. 끝난 뒤 다시 눌러 주세요.");return false;}
+    return true;
+  },[]);
+
   const confirmSaveBeforeLeaving = useCallback(async () => {
+    if(serverDocumentsEnabled && !await waitForServerSave())return false;
     if (!isDirty || !hasDraftContent) {
       return true;
     }
@@ -546,15 +594,24 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       return true;
     }
 
-    const savedDraft = await persistDraft("manual");
+    const savedDraft = await (serverDocumentsEnabled?persistLatestRef.current:persistDraft)("manual");
     return Boolean(savedDraft);
-  }, [hasDraftContent, isDirty, persistDraft]);
+  }, [hasDraftContent, isDirty, persistDraft, serverDocumentsEnabled, waitForServerSave]);
 
   const preserveBeforeReplacement = useCallback(async () => {
     const input = buildDraftInput();
     if (!input) return true;
+    if (serverDocumentsEnabled) input.serverRevision = serverRevisionRef.current;
     try {
       const backup = await draftRepository.preserve(input);
+      serverRevisionRef.current = backup.serverRevision;
+      if (serverDocumentsEnabled && "conflictOf" in backup) {
+        const copyId = backup.id.split("@")[0];
+        setActiveDraftId(copyId); setUndoDraftId(null); autoloadedDraftRef.current = true;
+        router.replace(`/create?doc=${copyId}`, { scroll: false });
+        setErrorMessage("다른 창의 수정과 겹쳐 사본을 만들었습니다. 사본에서 변경을 다시 눌러 주세요.");
+        return false;
+      }
       setUndoDraftId(backup.id);
       await refreshDrafts();
       return true;
@@ -563,7 +620,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       setErrorDetail(error instanceof Error ? error.message : String(error));
       return false;
     }
-  }, [buildDraftInput, refreshDrafts, draftRepository]);
+  }, [buildDraftInput, refreshDrafts, draftRepository, serverDocumentsEnabled, router]);
 
   const resetWorkspace = useCallback(() => {
     isApplyingDraftRef.current = true;
@@ -571,7 +628,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setPreviousPlan(null);
     // 되찾기도 앞 작업의 것이다. 안 비우면 아무것도 안 되찾은 새 작업에
     // 「2장을 되찾았습니다」가 그대로 떠 있는다.
-    setRecoveredNotice("");
+    setRecoveredNotice(""); setRecoveredCopyId(null);
     setRecoveredFailures([]);
     askedRecoveryRef.current = null;
     setAppState("upload");
@@ -612,6 +669,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
     setAnalysisStartedAt(null);
     setEditorDraftState(null);
     setActiveDraftId(null);
+    serverRevisionRef.current = undefined;
     setDraftCreatedAt(null);
     setLastSavedAt(null);
     setSaveState("idle");
@@ -629,8 +687,11 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         return;
       }
 
+      loadingDraftRef.current = true;
+      restoringDraftRef.current = draftId.includes("@");
       setIsLoadingDraft(true);
-      setErrorMessage("");
+      // 떠나기 직전 저장이 사본으로 갈라졌으면 그 사실은 남긴다. 지우면 수정이 어디 갔는지 모른다.
+      setErrorMessage((current) => current === FORKED_SAVE_MESSAGE ? FORKED_BEFORE_LEAVING_MESSAGE : "");
       setErrorDetail("");
       setShowErrorDetail(false);
 
@@ -644,12 +705,18 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
 
         isApplyingDraftRef.current = true;
         // 다른 작업을 연다. 앞 작업의 되돌리기를 들고 가면 남의 구성에 덮인다.
+        setUndoDraftId(null);
         setPreviousPlan(null);
         // 되찾기 알림도 앞 작업의 것이다.
-        setRecoveredNotice("");
+        setRecoveredNotice(""); setRecoveredCopyId(null);
         setRecoveredFailures([]);
         askedRecoveryRef.current = null;
         setActiveDraftId(draft.id);
+        serverRevisionRef.current = draft.serverRevision;
+        if (serverDocumentsEnabled) {
+          autoloadedDraftRef.current = true;
+          router.replace(`/create?${draft.temporary?"draft":"doc"}=${draft.id}`, { scroll: false });
+        }
         setDraftCreatedAt(draft.createdAt);
         setLastSavedAt(draft.updatedAt);
         setPreparedImage(draft.preparedImage);
@@ -704,29 +771,45 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         setEditorScreen("gallery");
         setAppState(draft.result ? draft.appState : "upload");
         setSaveState("saved");
+        if(draft.temporary){
+          setSaveState("error");
+          setErrorMessage(draft.unsavedOf
+            ? "다른 곳에서 저장한 최신 작업과 겹쳐 따로 둔 변경입니다. 저장하면 원래 작업은 그대로 두고 별도 사본으로 저장합니다."
+            : "이 브라우저에 임시 보관한 작업입니다. 편집을 계속하고 서버에 다시 저장해 주세요.");
+        }
+        if ("unsavedCopyId" in draft && draft.unsavedCopyId) {
+          setErrorMessage("이 브라우저에 서버에 저장되지 않은 변경이 남아 있었는데, 그사이 다른 곳에서 이 작업을 저장했습니다. 서버의 최신 작업을 열었고, 남은 변경은 저장된 작업 목록에 「저장 안 된 변경」으로 따로 두었습니다.");
+          void refreshDrafts();
+        }
         setIsDirty(false);
         setEditorSessionKey((current) => current + 1);
       } catch (error) {
-        setErrorMessage("저장된 작업을 불러오지 못했습니다.");
+        setErrorMessage(error instanceof Error && error.name==="RestoreConflictError"?error.message:"저장된 작업을 불러오지 못했습니다.");
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       } finally {
         requestAnimationFrame(() => {
           isApplyingDraftRef.current = false;
           setIsLoadingDraft(false);
+          loadingDraftRef.current = false;
         });
       }
     },
-    [confirmSaveBeforeLeaving, refreshDrafts, draftRepository]
+    [confirmSaveBeforeLeaving, refreshDrafts, draftRepository, serverDocumentsEnabled, router]
   );
 
   // 라이브러리에서 '이어서 편집'으로 넘어오면 ?draft=<id> 를 읽어 그 작업을 연다.
   // ref 로 한 번만 실행한다. 안 그러면 로드 중 상태 변경이 재실행을 부를 수 있다.
   useEffect(() => {
-    const draftId = searchParams.get("draft");
+    const docId=searchParams.get("doc");
+    const draftId = docId ?? searchParams.get("draft");
     if (!draftId || autoloadedDraftRef.current) {
       return;
     }
     autoloadedDraftRef.current = true;
+    // @revision은 화면의 확인된 복원 동작에서만 쓴다. 외부 열기 링크는 복원 명령이 아니다.
+    if(draftId.includes("@") || draftId.length>120 || (docId!==null && !serverDocumentId.safeParse(docId).success)){
+      setErrorMessage("작업 주소가 올바르지 않습니다.");return;
+    }
     void handleLoadDraft(draftId);
   }, [searchParams, handleLoadDraft]);
 
@@ -795,6 +878,20 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         const 되찾을것 = await bakeRecoveredImages(고른것, fetch);
 
         const 주소 = new Map(되찾을것.map((image) => [image.sectionId, image.url]));
+        if(!주소.size)return;
+        if(serverDocumentsEnabled){
+          const snapshot=buildDraftInput();
+          if(!snapshot?.result)return;
+          const sections=snapshot.result.blueprint.sections.map(section=>
+            !section.generatedImage && 주소.has(section.section_id)?{...section,generatedImage:주소.get(section.section_id)}:section);
+          const restored={...snapshot.result,blueprint:{...snapshot.result.blueprint,sections}};
+          if(!("recover" in draftRepository) || typeof draftRepository.recover!=="function" || !activeDraftId)return;
+          const copy=await draftRepository.recover({...snapshot,
+            result:restored,editorState:snapshot.editorState?{...snapshot.editorState,sections}:null},activeDraftId,answer.job.id);
+          setRecoveredCopyId(copy.id);
+          setRecoveredNotice("저장 전에 생성한 그림을 별도 복구 사본에 보관했습니다. 원래 작업은 그대로입니다. 사본에서 그림과 기획을 확인해 주세요.");
+          return;
+        }
         /*
           **실제로 넣은 장수를 센다**(리뷰 MEDIUM).
 
@@ -824,7 +921,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         // 되찾기는 덤이다. 실패해도 만들기를 막지 않는다.
       }
     })();
-  }, [activeDraftId, result, recoveryNonce]);
+  }, [activeDraftId, result, recoveryNonce, serverDocumentsEnabled, buildDraftInput, draftRepository]);
 
   /**
    * 저장된 작업을 모두 지운다.
@@ -833,8 +930,10 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 사라지는지 모른 채 누르게 된다. 지금 열어 둔 작업도 함께 지워지므로 화면을 비운다.
    */
   const handleDeleteAllDrafts = useCallback(async () => {
-    const shouldDelete = window.confirm(
-      `저장된 작업 ${drafts.length}개를 모두 삭제할까요?
+    // 서버 모드는 한 건 삭제처럼 라이브러리의 그림까지 지운다. 그 사실을 같은 말로 알린다.
+    const shouldDelete = window.confirm(serverDocumentsEnabled
+      ? `저장된 작업 ${drafts.length}개를 모두 삭제할까요?\n라이브러리의 이 작업 그림도 함께 지워집니다. 되돌릴 수 없습니다.`
+      : `저장된 작업 ${drafts.length}개를 모두 삭제할까요?
 되돌릴 수 없습니다.`,
     );
     if (!shouldDelete) {
@@ -850,11 +949,11 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
       setErrorMessage("저장된 작업을 삭제하지 못했습니다.");
       setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     }
-  }, [drafts, draftRepository, refreshDrafts, resetWorkspace]);
+  }, [drafts, draftRepository, refreshDrafts, resetWorkspace, serverDocumentsEnabled]);
 
   const handleDeleteDraft = useCallback(
     async (draftId: string) => {
-      const shouldDelete = window.confirm("이 저장된 작업을 삭제할까요?");
+      const shouldDelete = window.confirm(serverDocumentsEnabled?"이 저장된 작업을 삭제할까요? 라이브러리의 이 작업 그림도 함께 지워집니다.":"이 저장된 작업을 삭제할까요?");
       if (!shouldDelete) {
         return;
       }
@@ -870,7 +969,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       }
     },
-    [activeDraftId, draftRepository, refreshDrafts, resetWorkspace]
+    [activeDraftId, draftRepository, refreshDrafts, resetWorkspace, serverDocumentsEnabled]
   );
 
   useEffect(() => {
@@ -889,7 +988,7 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
 
   const autosaveRef = useRef(() => {});
   autosaveRef.current = () => {
-    if (hasDraftContent && isDirty && !isApplyingDraftRef.current) void persistDraft("auto");
+    if (hasDraftContent && isDirty && !isApplyingDraftRef.current && !loadingDraftRef.current) void persistDraft("auto");
   };
   useEffect(() => startDraftAutosave(() => autosaveRef.current()), []);
 
@@ -1109,9 +1208,12 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
    * 글기반 경로가 쓰는 ScenarioEditor 를 그대로 쓴다. 여기서 카피·장면을 고치고,
    * 디자인 레퍼런스를 붙이고, 올린 인물 이미지를 뺄 수 있다 — 앞 화면은 이미 지났다.
    */
+  const historyControls = serverDocumentsEnabled && activeDraftId ? <ServerDocumentHistory key={activeDraftId} id={activeDraftId} onRestore={revision => handleLoadDraft(`${activeDraftId}@${revision}`)} /> : null;
+
   if (appState === "scenario" && result) {
     return (
       <div className="grid gap-4">
+        {historyControls}
         {/*
           **셸이 주는 여백을 또 주지 않는다**(2026-09-22 사용자 지적).
 
@@ -1230,7 +1332,17 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
   }
 
   if (appState === "editor" && result) {
+    if (serverDocumentsEnabled && !activeDraftId) return (
+      <div role="status" className="rounded border p-6">
+        <p>{saveState === "error" ? "작업 저장을 마치지 못했습니다. 입력과 그림은 현재 화면에 남아 있습니다." : "작업을 저장하고 있습니다."}</p>
+        {saveState === "error" ? <button type="button" onClick={() => void persistDraft("manual")}>다시 저장</button> : null}
+        <button type="button" disabled className="ml-4">임시 보관 후 설정으로 돌아갈 수 있습니다</button>
+      </div>
+    );
     return (
+      <div>
+      {historyControls}
+      {serverDocumentsEnabled && recoveredCopyId ? <button type="button" className="mb-3 rounded border p-2" onClick={()=>void handleLoadDraft(recoveredCopyId)}>복구 사본 열기</button> : null}
       <PdpEditor
         key={`${activeDraftId ?? "new"}-${editorSessionKey}`}
         // 생성 결과를 서버에 적을 때 무엇의 것인지 묶는 값.
@@ -1275,6 +1387,10 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         onBeforeReplace={preserveBeforeReplacement}
         onUndo={undoDraftId ? () => void handleLoadDraft(undoDraftId) : undefined}
         onManualSave={() => void persistDraft("manual", { showToast: true })}
+        onSaveServerDocument={serverDocumentsEnabled ? async () => {
+          if(!await waitForServerSave())return false;
+          const saved=await persistLatestRef.current("auto");return Boolean(saved && !saved.temporary);
+        } : undefined}
         onOpenSettings={goToSettings}
         onReset={() => void handleReset()}
         pageContext={additionalInfo}
@@ -1298,11 +1414,14 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
         )}
         saveState={saveState}
       />
+      {serverDocumentsEnabled && errorMessage ? <p role="alert">{errorMessage}</p> : null}
+      </div>
     );
   }
 
   return (
     <div className="min-w-0">
+      {historyControls}
       {/* 자체 헤더 제거(2026-07-21) — 셸이 좌측 내비와 <main> 을 제공한다.
           이전에는 셸의 <main> 안에 또 <main> 이 있었고 설정 링크가 중복이었다. */}
       <div className="mb-5 flex flex-wrap items-end gap-4">
@@ -1443,7 +1562,8 @@ export function PdpMakerClient({ documentV3Enabled = false }: { documentV3Enable
                   왜 목록이 계속 늘어나는지, 언제 줄어드는지 여기서 알린다.
                   안내 없이 지우면 "내 작업이 사라졌다"가 된다.
                 */}
-                <p className="mt-1 text-meta text-subtle-foreground">{DRAFT_RETENTION_NOTICE}</p>
+                <p className="mt-1 text-meta text-subtle-foreground">{serverDocumentsEnabled ? "서버에 저장한 작업은 직접 지울 때까지 보관합니다. 이 브라우저에만 있는 초안은 30일 동안 보관합니다." : DRAFT_RETENTION_NOTICE}</p>
+                {draftListNotice ? <p role="status" className="mt-1 text-sm text-destructive">{draftListNotice}</p> : null}
               </div>
               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary">자동 저장 30초</Badge>

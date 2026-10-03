@@ -7,6 +7,7 @@ import { updateProfileExtras, updateProfilePhone } from "../../lib/membership/pr
 import { requireAdmin } from "../../lib/membership/server";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
+import { withdrawPdpDocuments } from "../../lib/membership/withdraw-pdp";
 import { isDisabledRoute } from "../../lib/access/routes";
 import { failureUrl, teamFailure } from "../../lib/teams/failure";
 import { setModelPrice, setUsdKrw } from "../../lib/cost";
@@ -224,6 +225,13 @@ export async function deleteMember(formData: FormData) {
   const { data: kept, error: keptError } = await admin.rpc("credit_member_has_records", { p_user: userId });
   if (keptError || typeof kept !== "boolean") throw new Error("삭제 가능 여부를 확인하지 못했습니다. 회원 삭제 설정을 확인한 뒤 다시 시도해 주세요.");
   if (kept === true) throw new Error(MONEY_RECORDS_MESSAGE);
+
+  /*
+    **상세페이지 작업을 먼저 지운다**(탈퇴와 같은 정리). 계정을 지우면 문서 행은 함께 사라지지만
+    저장소의 원본 파일과 관리자 사본은 남는다. 실패하면 계정을 지우지 않는다 — 다시 누르면 이어서 지운다.
+  */
+  try { await withdrawPdpDocuments(admin, userId); }
+  catch { throw new Error("상세페이지 작업을 정리하지 못했습니다. 잠시 후 다시 시도해 주세요."); }
 
   // 인증 계정을 지운다. profiles 는 auth.users 를 참조하므로 함께 사라진다.
   const { error } = await admin.auth.admin.deleteUser(userId);

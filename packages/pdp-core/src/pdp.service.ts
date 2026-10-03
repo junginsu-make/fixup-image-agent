@@ -1,3 +1,4 @@
+import { sectionScenePrompt } from "./pdp.scene-prompt";
 import { reviewStampOf } from "./pdp.review-freshness";
 import { carryProductReading } from "./pdp.product-reading";
 import type { PdpPlanStage } from "./pdp.plan-stage";
@@ -759,14 +760,6 @@ ${analyzePrompt}`
     const referenceModelProfile = usesUploadedPerson && normalizedReferenceModel
       ? request.options?.referenceModelProfile ?? (await this.extractReferenceModelProfile(client, normalizedReferenceModel))
       : null;
-
-    if (!section.prompt_en) {
-      throw new PdpServiceError(
-        "INVALID_REQUEST",
-        "이미지 프롬프트가 없는 섹션입니다.",
-        "Section prompt_en is missing."
-      );
-    }
 
     const qaEnabled = options.outputMode === "full-image";
     const refMaxAttempts = usesUploadedPerson ? REFERENCE_MODEL_MAX_ATTEMPTS : 1;
@@ -1918,7 +1911,7 @@ function normalizeSection(section: Partial<SectionBlueprint>, index: number): Se
     image_id: asString(section.image_id) || `IMG_S${index + 1}`,
     purpose: asString(section.purpose),
     prompt_ko: asString(section.prompt_ko),
-    prompt_en: asString(section.prompt_en),
+    prompt_en: sectionScenePrompt(section),
     negative_prompt: asString(section.negative_prompt),
     style_guide: asString(section.style_guide),
     reference_usage: asString(section.reference_usage),

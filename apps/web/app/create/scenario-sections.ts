@@ -1,4 +1,4 @@
-import { applyDesignSystem } from "@fixup/pdp-core";
+import { applyDesignSystem, DEFAULT_SECTION_SCENE } from "@fixup/pdp-core";
 import type { DesignSystem, SectionBlueprint } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
 
@@ -33,7 +33,7 @@ export function createEmptySection(index: number): SectionBlueprint {
     image_id: `IMG_S${number}`,
     purpose: "",
     prompt_ko: "제품을 중심에 둔 밝은 스튜디오 장면",
-    prompt_en: "product centered on a bright clean studio background, soft even lighting",
+    prompt_en: DEFAULT_SECTION_SCENE,
     negative_prompt: "",
     style_guide: "",
     reference_usage: "",

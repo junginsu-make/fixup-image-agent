@@ -30,6 +30,7 @@ import { gridSrc } from "../_components/grid-src";
  */
 
 interface SavedImage {
+  documentId?: string;
   id: string;
   name: string;
   /** **원본이다.** 고르면 이 주소를 받아 생성 입력으로 넘긴다. */
@@ -178,6 +179,7 @@ export function SavedImagePicker({
    * 한 번 묻는다 — 이미지 만들기(`reference-picker.tsx`)와 같은 방식이다.
    */
   const handleDelete = async (image: SavedImage) => {
+    if (image.documentId) return;
     if (!window.confirm(`'${image.name}' 를 아주 지울까요? 되돌릴 수 없습니다.`)) return;
     setDeletingId(image.id);
     setMessage("");
@@ -278,7 +280,7 @@ export function SavedImagePicker({
                 <Maximize2 className="h-3 w-3" />
               </button>
               {/* 되돌릴 수 없는 일이라 눈에 덜 띄게 두고, 누르면 한 번 묻는다. */}
-              <button
+              {!image.documentId && <button
                 type="button"
                 disabled={Boolean(deletingId)}
                 aria-label={`${image.name} 지우기`}
@@ -290,7 +292,7 @@ export function SavedImagePicker({
                 ) : (
                   <Trash2 className="h-3 w-3" />
                 )}
-              </button>
+              </button>}
             </div>
             <button
               type="button"

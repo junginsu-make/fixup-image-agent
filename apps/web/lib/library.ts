@@ -5,7 +5,7 @@
  * 데이터 병합/이동은 하지 않는다(각 도구의 독립 저장소 유지). 조회만 통합한다.
  */
 import type { LibraryItem } from "@fixup/shared";
-import { listPdpDrafts, deletePdpDraft, getPdpDraft } from "../app/create/pdp-drafts";
+import { createDraftRepository, readLatestBrowserDraft } from "../app/create/draft-repository";
 
 const REDESIGN_DB = "hanirum-redesign-projects";
 const REDESIGN_STORE = "projects";
@@ -26,7 +26,7 @@ function parseTime(value?: string): number {
 /** 'new'(새로 만들기) 도구의 IndexedDB 초안을 LibraryItem으로 변환 */
 async function readPdpDrafts(): Promise<LibraryItem[]> {
   try {
-    const drafts = await listPdpDrafts();
+    const drafts = await createDraftRepository(false).list();
     return drafts.map((d) => ({
       id: d.id,
       tool: "pdp" as const,
@@ -111,7 +111,7 @@ async function readAccountItems(): Promise<LibraryItem[]> {
       ok?: boolean;
       items?: Array<{
         id: string; title: string; tool: string; imageCount: number;
-        createdAt: string; coverUrl: string | null; coverThumbUrl?: string | null;
+        createdAt: string; coverUrl: string | null; coverThumbUrl?: string | null; documentId?:string;
       }>;
     };
     if (!body.ok || !body.items) return [];
@@ -128,6 +128,7 @@ async function readAccountItems(): Promise<LibraryItem[]> {
       createdAt: Date.parse(item.createdAt) || 0,
       storage: "account" as const,
       imageCount: item.imageCount,
+      ...(item.documentId?{documentId:item.documentId}:{}),
     }));
   } catch {
     return [];
@@ -286,7 +287,7 @@ export async function deleteLibraryItem(item: LibraryItem): Promise<void> {
   }
 
   if (item.tool === "pdp") {
-    await deletePdpDraft(item.id);
+    await createDraftRepository(false).remove(item.id);
   } else {
     await deleteRedesignProject(item.id);
   }
@@ -353,7 +354,7 @@ export async function getAccountItemImages(
 export async function getPdpResultImages(
   id: string
 ): Promise<{ title: string; images: PdpResultImage[] } | null> {
-  const draft = await getPdpDraft(id);
+  const draft = await readLatestBrowserDraft(id);
   if (!draft) {
     return null;
   }
