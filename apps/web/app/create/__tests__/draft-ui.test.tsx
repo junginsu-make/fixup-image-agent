@@ -19,7 +19,7 @@ vi.mock("../ScenarioEditor", () => ({ ScenarioEditor: (props: Record<string, unk
 import { PdpMakerClient } from "../PdpMakerClient";
 
 let renderer: ReactTestRenderer;
-const flush = async () => { for (let i = 0; i < 8; i++) await act(async () => { await new Promise<void>((resolve) => setImmediate(resolve)); }); };
+const flush = async () => { for (let i = 0; i < 24; i++) await act(async () => { await new Promise<void>((resolve) => setImmediate(resolve)); }); };
 beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn(), confirm: () => true, scrollTo: vi.fn() });

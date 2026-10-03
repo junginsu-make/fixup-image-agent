@@ -205,6 +205,16 @@ export interface PdpDraftRecord {
   analyzedBlueprint?: LandingPageBlueprint | null;
   textDraft?: PdpTextDraftState | null;
   snapshotOf?: string;
+  /** 이 화면이 읽은 서버 버전. 저장 대기 중 다시 읽은 버전으로 바꾸지 않는다. */
+  serverRevision?: number;
+  /** 서버 저장을 재시도해야 하는 이 브라우저의 임시 보관본. */
+  temporary?: boolean;
+  /** 임시 보관본의 내용을 실어 보낸 저장 요청 번호. 다시 열 때 서버에 이미 반영됐는지 가린다. */
+  serverRequestId?: string;
+  /** 이 브라우저가 `serverRevision` 위에 보낸 저장 요청 번호들. 서버 최신이 내 저장인지 가린다. */
+  serverSentRequestIds?: string[];
+  /** 서버 최신본과 갈라져 따로 둔 「저장 안 된 변경」이면 원래 작업 id. 저장하면 사본이 된다. */
+  unsavedOf?: string;
 }
 
 export interface PdpDraftSummary {
@@ -277,7 +287,7 @@ export async function listPdpDrafts(): Promise<PdpDraftSummary[]> {
       createdAt: record.createdAt,
       aspectRatio: record.aspectRatio,
       sectionCount: record.editorState?.sections.length ?? record.result?.blueprint.sections.length ?? 0,
-      stageLabel: record.result ? "편집 중" : "설정 초안",
+      stageLabel: record.unsavedOf ? "저장 안 된 변경" : record.result ? "편집 중" : "설정 초안",
       thumbnailUrl:
         record.editorState?.sections[0]?.generatedImage ??
         record.result?.blueprint.sections[0]?.generatedImage ??
@@ -456,6 +466,11 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     analyzedBlueprint: record.analyzedBlueprint ?? null,
     textDraft: record.textDraft ?? null,
     snapshotOf: record.snapshotOf,
+    serverRevision: record.serverRevision,
+    temporary: record.temporary,
+    serverRequestId: record.serverRequestId,
+    serverSentRequestIds: record.serverSentRequestIds,
+    unsavedOf: record.unsavedOf,
   };
 }
 

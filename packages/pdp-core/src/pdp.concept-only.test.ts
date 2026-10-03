@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { conceptOnlyNotice, conceptOnlyPromptRule } from "./pdp.concept-only";
 import { buildImageJson } from "./pdp.image-prompt";
-import { buildSectionImageOptions } from "./pdp.image-options";
+import { buildSectionImageOptions, pageInputsFromWire } from "./pdp.image-options";
 
 /**
  * **사진 없이 실물을 팔 때**(N-2, 설계 §9.1).
@@ -15,6 +15,15 @@ import { buildSectionImageOptions } from "./pdp.image-options";
  */
 
 describe("개념 시안으로 다루어야 하는 때", () => {
+  it("화면의 사진 없음 표시가 서버 조립기를 지나 최종 그림 지시까지 간다", () => {
+    const page = pageInputsFromWire({ conceptOnly: true });
+    expect(page.conceptOnly).toBe(true);
+    const options = buildSectionImageOptions(page, { section: { section_id: "S1" } as never, index: 0 });
+    expect(options.conceptOnly).toBe(true);
+    const prompt = JSON.parse(buildImageJson({ section_id: "S1", prompt_en: "product", bullets: [] } as never, options as never));
+    expect(prompt.concept_only.avoid).toContain("logos");
+    expect(pageInputsFromWire({ conceptOnly: false }).conceptOnly).toBe(false);
+  });
   it("**실물인데 사진이 없으면 알린다**", () => {
     const 알림 = conceptOnlyNotice({ productKind: "physical", hasProductPhoto: false });
 

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { toSavedLibraryImages } from "../saved-image-picker";
 
 describe("toSavedLibraryImages", () => {
+  it("F1: 문서 표지는 삭제 금지 표식을 고르기 창까지 전달한다", () => {
+    const [image]=toSavedLibraryImages([{id:"doc",documentId:"doc",title:"문서",coverUrl:"signed:original"}]);
+    expect(image).toMatchObject({documentId:"doc"});
+  });
   const items = [
     {
       id: "generated",

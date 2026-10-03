@@ -66,6 +66,9 @@ export interface LibraryListItem {
   coverThumbUrl: string | null;
   mine: boolean;
   ownerEmail: string | null;
+  sourceId?:string|null;
+  /** 서버 문서 카드면 그 문서 id(`/api/library` 가 문서도 싣는다). */
+  documentId?:string;
 }
 
 /** 작업물 탭의 카드 한 장. `works-tab.tsx` 의 `Work` 와 같은 모양이다. */
@@ -92,6 +95,14 @@ export interface LibraryWork {
   href: string;
   /** 캐릭터 만들기로 만든 것. 도구 칸(`create`)으로는 못 가른다(`work-filter.ts`). */
   origin?: "character";
+  sourceId?:string|null;
+  documentId?:string;
+  documentOwner?:string;
+  /**
+   * 서버가 문서라고 알린 카드인데 문서 목록을 아직 못 읽었다. 문서 목록을 읽으면 이 카드는 문서
+   * 카드로 바뀐다(`mergeDocumentWorks`). 못 읽은 채로 지우면 일반 삭제로 가 엉뚱한 안내가 뜬다(W24).
+   */
+  documentUnconfirmed?:boolean;
 }
 
 export function libraryWorks(items: readonly LibraryListItem[]): LibraryWork[] {
@@ -127,6 +138,8 @@ function hasPicture(item: LibraryListItem): boolean {
 function toLibraryWork(item: LibraryListItem): LibraryWork {
   return {
     id: item.id,
+    sourceId:item.sourceId,
+    ...(item.documentId?{documentUnconfirmed:true}:{}),
     tool: item.tool,
     title: item.title,
     // 계정 보관분은 만들어진 뒤에 올라온 것이라 늘 완료다.

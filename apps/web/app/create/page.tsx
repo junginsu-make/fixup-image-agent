@@ -15,7 +15,7 @@ export default function CreatePage() {
     <div className="create-root">
       {/* useSearchParams(?draft=) 는 Suspense 경계를 요구한다(Next 14). */}
       <Suspense>
-        <PdpMakerClient documentV3Enabled={process.env.PDP_DOCUMENT_V3 === "1"} />
+        <PdpMakerClient documentV3Enabled={process.env.PDP_DOCUMENT_V3 === "1"} serverDocumentsEnabled={process.env.PDP_SERVER_DOCUMENTS === "1"} />
       </Suspense>
     </div>
   );

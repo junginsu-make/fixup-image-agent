@@ -7,15 +7,40 @@ function record(doc: PdpDocumentV3): PdpDraftRecord {
     createdAt: doc.createdAt, updatedAt: doc.updatedAt };
 }
 
+/** 서버 이관 전에 두 브라우저 저장소의 실제 저장 시각을 비교한다. 원본은 지우지 않는다. */
+export async function readLatestBrowserDraft(id:string):Promise<PdpDraftRecord|null>{
+  const [legacy,document]=await Promise.all([getPdpDraft(id),readPdpDocument(id)]);
+  if(!document)return legacy;
+  if(legacy && legacy.updatedAt>document.updatedAt)return legacy;
+  const current=record(document);
+  if(legacy && legacy.updatedAt===document.updatedAt){
+    current.notice="두 브라우저 사본의 저장 시각이 같습니다. 새 저장 방식의 사본을 열었습니다. 다른 사본도 이 브라우저에 남아 있습니다.";
+  }
+  return current;
+}
+
+/**
+ * 서버 저장 모드가 쓰는 이 브라우저의 보관함. 화면과 시험이 같은 조합을 쓴다.
+ *
+ * `discard` 는 임시 보관본(옛 초안 칸)만 지운다. 이관 원본인 새 저장 방식 사본은 남긴다.
+ */
+export function createServerBrowserDrafts(enableV3: boolean) {
+  return { ...createDraftRepository(enableV3), get: readLatestBrowserDraft, save: savePdpDraft, discard: deletePdpDraft };
+}
+
 /** 한 화면이 마지막으로 읽은 revision을 유지한다. 저장 직전 최신본을 읽어 충돌을 숨기지 않는다. */
 export function createDraftRepository(enableV3: boolean) {
   const opened = new Map<string, PdpDocumentV3>();
   const conflictCopies = new Map<string, string>();
   return {
     async get(id: string): Promise<PdpDraftRecord | null> {
-      const doc = await readPdpDocument(id) ?? (enableV3 ? await migratePdpDraft(id) : null);
+      const [stored,legacy] = await Promise.all([readPdpDocument(id),getPdpDraft(id)]);
+      const doc = stored ?? (enableV3 && legacy ? await migratePdpDraft(id) : null);
+      if(doc && legacy && legacy.updatedAt>doc.updatedAt){
+        opened.set(id,doc);
+        return { ...record(createPdpDocument(legacy)), title:legacy.title, updatedAt:legacy.updatedAt };
+      }
       if (!doc) {
-        const legacy = await getPdpDraft(id);
         if (!legacy) return null;
         return { ...record(createPdpDocument(legacy)), title: legacy.title, updatedAt: legacy.updatedAt };
       }
@@ -48,7 +73,7 @@ export function createDraftRepository(enableV3: boolean) {
     async list() {
       const [legacy, documents] = await Promise.all([listPdpDrafts(), listPdpDocuments()]);
       const list = new Map(legacy.map((entry) => [entry.id, entry]));
-      for (const entry of documents) list.set(entry.id, entry);
+      for (const entry of documents) if(!list.has(entry.id) || entry.updatedAt>=list.get(entry.id)!.updatedAt) list.set(entry.id, entry);
       return [...list.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
   };

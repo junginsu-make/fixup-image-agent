@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -58,6 +58,74 @@ describe("도구 화면들이 같은 셸을 쓴다", () => {
     });
 
     expect(셸밖.map((entry) => entry.이름), "셸 밖에 있는 화면").toEqual([]);
+  });
+});
+
+/**
+ * **셸을 두 번 씌우지 않는다.**
+ *
+ * ── 무엇이 어긋났었나 ──────────────────────────────────────
+ *
+ * `/library/works/[id]`(상세페이지 과정 보기)와 `/characters/[id]`(캐릭터
+ * 과정 보기)는 페이지가 `<StudioLayout>` 으로 감쌌다. 카드뉴스·포스터
+ * 페이지를 본뜬 것인데, 그쪽은 폴더에 레이아웃이 없어 페이지가 감싸야 한다.
+ * **이 둘은 폴더의 `layout.tsx` 가 이미 감싸고 있었다.** 그래서 사이드바와
+ * 상단바가 한 벌 더 안쪽에 그려져, 대시보드 안에 대시보드가 보였다
+ * (2026-10-02 사용자 지적).
+ *
+ * ── 왜 폴더를 다 훑나 ─────────────────────────────────────
+ *
+ * 위 검사처럼 이름을 적어 두면 **새 페이지는 못 잡는다.** 이번 것도 옆
+ * 파일을 베끼며 생겼다. 페이지마다 위쪽 레이아웃을 따라 올라가 본다.
+ */
+describe("셸을 두 번 씌우지 않는다", () => {
+  const 코드만 = (body: string) =>
+    body
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+
+  const 셸을씌운다 = (rel: string) => /<StudioLayout[\s>]/.test(코드만(읽기(rel)));
+
+  const 페이지들 = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      if (entry.isDirectory()) return entry.name === "__tests__" ? [] : 페이지들(join(dir, entry.name));
+      return entry.name === "page.tsx" ? [relative(WEB, join(dir, entry.name))] : [];
+    });
+
+  /** `app/a/b/page.tsx` → `app/a/b`, `app/a`, `app` — 레이아웃이 감쌀 수 있는 폴더. */
+  const 위폴더들 = (rel: string): string[] => {
+    const dir = dirname(rel);
+    return dir === "." ? [] : [dir, ...위폴더들(dir)];
+  };
+
+  const 셸을씌운레이아웃이있다 = (page: string) =>
+    위폴더들(page).some((dir) => {
+      const layout = join(dir, "layout.tsx");
+      return existsSync(join(WEB, layout)) && 셸을씌운다(layout);
+    });
+
+  const 슬래시로 = (rel: string) => rel.replace(/\\/g, "/");
+
+  /**
+   * **아래 검사가 빈 배열로만 통과하지 않게 한다.** 경로 셈이 어긋나 레이아웃을
+   * 못 찾으면 두 겹 목록은 늘 비고, 검사는 아무것도 못 잡은 채 초록이 된다.
+   */
+  it("훑는 목록에 과정 보기 두 페이지가 들어 있고, 위에 셸 레이아웃을 찾는다", () => {
+    const 목록 = 페이지들(join(WEB, "app")).map(슬래시로);
+    expect(목록).toContain("app/library/works/[id]/page.tsx");
+    expect(목록).toContain("app/characters/[id]/page.tsx");
+    expect(셸을씌운레이아웃이있다(join("app", "library", "works", "[id]", "page.tsx"))).toBe(true);
+    expect(셸을씌운레이아웃이있다(join("app", "characters", "[id]", "page.tsx"))).toBe(true);
+  });
+
+  it("**레이아웃이 이미 씌운 셸을 페이지가 또 씌우지 않는다**", () => {
+    const 두겹 = 페이지들(join(WEB, "app"))
+      .filter(셸을씌운다)
+      .filter(셸을씌운레이아웃이있다)
+      .map(슬래시로);
+
+    expect(두겹, "셸을 두 번 씌운 페이지").toEqual([]);
   });
 });
 

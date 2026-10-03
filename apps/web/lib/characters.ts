@@ -694,14 +694,24 @@ async function findCharacter(
 export async function listCharacters(
   userId: string,
   teamId: string | null = null,
-  options: { allMembers?: boolean } = {},
+  options: { allMembers?: boolean; ids?: string[] } = {},
 ): Promise<CharacterSummary[]> {
+  /*
+   * **id 를 주면 그것만, 개수 제한 없이 찾는다.**
+   *
+   * 목록은 최근 100개로 자른다. 하나를 열 때 그 안에서 찾으면 오래된 캐릭터는
+   * 「찾을 수 없습니다」가 된다(2026-10-02). 각도 짝짓기와 서명은 여전히 이
+   * 함수 한 곳에만 둔다 — 단건용을 따로 만들지 않는 이유는 위와 같다.
+   */
+  const ids = options.ids;
+  if (ids && !ids.length) return [];
+
   if (isLocalStoreEnabled()) {
     const [rows, views] = await Promise.all([
       listLocalCharacters(userId),
       listLocalCharacterViews(userId),
     ]);
-    return rows.map((row) => {
+    return rows.filter((row) => !ids || ids.includes(row.id)).map((row) => {
       const record = normalizeRecord(row as unknown as Record<string, unknown>);
       return {
         ...record,
@@ -719,8 +729,9 @@ export async function listCharacters(
   }
 
   const supabase = createSupabaseAdminClient();
+  const ordered = supabase.from("characters").select("*").order("created_at", { ascending: false });
   const { data, error } = await scopedRead(
-    supabase.from("characters").select("*").order("created_at", { ascending: false }).limit(100),
+    ids ? ordered.in("id", ids) : ordered.limit(100),
     { userId, teamId, isAdmin: options.allMembers === true },
   );
 

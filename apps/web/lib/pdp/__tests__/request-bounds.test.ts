@@ -148,7 +148,7 @@ describe("첨부 지시도 상한이 있다", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("**레퍼런스 서술도 무한정은 아니다**", async () => {
+  it("**레퍼런스 서술은 길어도 거절하지 않고 받는다** (자르기는 style-description-limit.test.ts)", async () => {
     const result = await 보낸다({
       ...기본,
       styleReference: {
@@ -158,7 +158,7 @@ describe("첨부 지시도 상한이 있다", () => {
       },
     });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 
   it("우리가 만든 서술 길이는 그대로 통과한다", async () => {

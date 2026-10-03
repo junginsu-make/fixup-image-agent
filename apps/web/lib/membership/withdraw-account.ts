@@ -1,5 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { withdrawPdpDocuments } from "./withdraw-pdp";
 import { checkWithdrawal, withdrawalDone, type WithdrawalPath } from "./withdrawal";
 
 /**
@@ -94,6 +95,8 @@ export async function withdrawAccount(userId: string, email: string): Promise<Wi
   if (!판단.ok) return { ok: false, message: 판단.reason };
 
   // 내 것이다. 어느 길로 가든 지운다.
+  try { await withdrawPdpDocuments(db,userId); }
+  catch { return {ok:false,message:"상세페이지 작업을 정리하지 못했습니다. 잠시 후 탈퇴를 다시 시도해 주세요."}; }
   await 파일을지운다(db, userId);
 
   if (판단.path === "close") {

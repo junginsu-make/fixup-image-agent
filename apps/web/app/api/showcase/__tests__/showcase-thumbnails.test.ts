@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+vi.mock("../../../../lib/pdp/documents/flags",()=>({serverDocumentsEnabled:()=>true}));
 
 /**
  * 첫 화면 갤러리의 표시용 사본.
@@ -46,7 +47,9 @@ function builderFor(table: string) {
     eq: (column: string, value: unknown) => { conditions.push([column, value]); return self; },
     order: () => self,
     limit: () => self,
-    maybeSingle: async () => ({ data: table === "showcase_items" ? itemRow : sourceRow, error: null }),
+    is: () => self,
+    maybeSingle: async () => table==="pdp_documents"?{data:null,error:{message:"document service unavailable"}}:
+      ({ data: table === "showcase_items" ? itemRow : sourceRow, error: null }),
     // findSourceImage 는 maybeSingle 이 아니라 await query 로 받는다.
     then: (r: (x: unknown) => unknown) =>
       Promise.resolve(r({ data: table === "library_images" && sourceRow ? [sourceRow] : [], error: null })),
@@ -108,6 +111,10 @@ beforeEach(async () => {
 });
 
 describe("addShowcaseItem — 표시용 사본", () => {
+  it("F14: 문서 조회만 실패해도 옛 라이브러리 그림은 게시할 수 있다",async()=>{
+    await addShowcaseItem({sourceKind:"library",sourceId:"33333333-3333-4333-8333-333333333333",imageIndex:0},"admin-1");
+    expect(downloadedPath).toBe("user-1/item/0.png");expect(uploads).toHaveLength(2);
+  });
   it("원본과 함께 표시용 사본을 만들어 둔다", async () => {
     await addShowcaseItem({ sourceKind: "library", sourceId: "src-1", imageIndex: 0 }, "admin-1");
 

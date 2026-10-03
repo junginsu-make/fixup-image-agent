@@ -44,7 +44,7 @@ describe("T-INPUT: 예약 전 검증", () => {
     ["숫자 참조", { ...body(), page: { styleReference: { imageBase64: 123, mimeType: "image/png" } } }],
     ["null 본문", null],
     ["잘못된 국가", { ...body(), optionsBySection: { s1: { modelCountry: "mars" } } }],
-    ["빈 장면", { ...body(), sections: [{ ...section, prompt_en: "" }] }],
+    ["빈 섹션 번호", { ...body(), sections: [{ ...section, section_id: "" }] }],
     ["배치 상한 초과", { ...body(), sections: Array.from({ length: 100 }, () => section) }],
   ])("%s는 예약 없이 400", async (_label, data) => {
     const response = await batch(request(data));
@@ -53,6 +53,12 @@ describe("T-INPUT: 예약 전 검증", () => {
   it("단건 섹션 누락도 예약 없이 400", async () => {
     const response = await single(request({ originalImageBase64: "AAAA", aspectRatio: "3:4" }));
     expect(response.status).toBe(400); expect(state.reserve).not.toHaveBeenCalled();
+  });
+  it("옛 초안의 빈 장면은 생성 코어에서 복구하도록 전달한다", async () => {
+    const response = await batch(request({ ...body(), sections: [{ ...section, prompt_en: "" }] }));
+    expect(response.status).toBe(200);
+    expect(state.reserve).toHaveBeenCalledTimes(1);
+    expect(state.generate).toHaveBeenCalledTimes(1);
   });
   it("비인증 요청은 본문을 읽지 않는다", async () => {
     state.auth.mockResolvedValue({ ok: false, response: Response.json({ code: "unauthenticated" }, { status: 401 }) });

@@ -164,6 +164,7 @@ interface SourceImage {
   storagePath: string;
   ownerId: string | null;
   index: number;
+  bucket?:string;
 }
 
 /**
@@ -181,6 +182,9 @@ async function findSourceImage(
   const supabase = createSupabaseAdminClient();
 
   if (kind === "library") {
+    const {findDocumentPublicationSource}=await import("../../../lib/pdp/documents/publication");
+    const documentSource=await findDocumentPublicationSource(sourceId,imageIndex);
+    if(documentSource)return documentSource;
     let query = supabase
       .from("library_images")
       .select("user_id,position,path")
@@ -249,7 +253,7 @@ export async function addShowcaseItem(
   const source = await findSourceImage(input.sourceKind, input.sourceId, input.imageIndex);
   if (!source) return { ok: false, message: "걸 그림을 찾지 못했습니다." };
 
-  const original = await supabase.storage.from(BUCKET).download(source.storagePath);
+  const original = await supabase.storage.from(source.bucket??BUCKET).download(source.storagePath);
   if (original.error || !original.data) {
     return { ok: false, message: "원본 그림을 읽지 못했습니다." };
   }

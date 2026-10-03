@@ -143,6 +143,9 @@ export default function LibraryPage() {
     // 브라우저 저장분과 달리 IndexedDB 에는 없어서, 예전처럼 조회하면 0장이 나와
     // 편집기로 튕겼다.
     if (item.storage === "account") {
+      if("documentId" in item && typeof item.documentId==="string"){
+        setOpeningId(null);router.push("/create?doc="+item.documentId);return;
+      }
       try {
         const result = await getAccountItemImages(item);
         if (result?.images.length) {

@@ -34,7 +34,7 @@ const image = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   intent: intent.optional(),
   // 우리가 만든 서술이 되돌아오는 칸이다. 넉넉히 두되 무한정은 아니다.
-  description: text.max(MAX_STRATEGY_LENGTH).optional(),
+  description: text.transform((value) => value.slice(0, MAX_STRATEGY_LENGTH)).optional(),
 }).passthrough();
 /*
   **깨진 그림은 예약 전에 되돌려 보낸다**(C-9 리뷰).
@@ -72,7 +72,7 @@ const target = z.discriminatedUnion("slot", [
   z.object({ slot: z.literal("bullet"), index: z.number().int().nonnegative() }),
 ]);
 const section = z.object({
-  section_id: text.trim().min(1), prompt_en: text.trim().min(1),
+  section_id: text.trim().min(1), prompt_en: text.trim().default(""),
   headline: text.optional(), subheadline: text.optional(), bullets: z.array(text).default([]),
   prompt_ko: text.optional(), layout_notes: text.optional(),
   evidenceVersion: z.literal(1).optional(),
@@ -263,9 +263,20 @@ export async function readPdpRequest<T>(req: Request, kind: keyof typeof schemas
   try {
     const bytes = await readBoundedBody(req);
     const parsed = schemas[kind].safeParse(JSON.parse(bytes.toString("utf8")));
-    if (!parsed.success) return { ok: false, response: invalidPdpRequest() };
+    if (!parsed.success) {
+      /*
+        **어느 칸인지 남긴다**(2026-10-02). 상세페이지 이미지가 이 자리에서 네 번
+        거절됐는데 기록이 없어 원인을 못 짚었다. 칸 이름과 규칙 종류만 —
+        값은 사용자가 쓴 글이라 남기지 않는다(zod 의 message 에도 받은 값이 섞인다).
+      */
+      console.warn(`[pdp] 요청 형식 거절 (${kind})`,
+        parsed.error.issues.slice(0, 10).map((issue) => `${issue.path.join(".") || "(몸통)"}:${issue.code}`).join(", "));
+      return { ok: false, response: invalidPdpRequest() };
+    }
     return { ok: true, body: parsed.data as T, member: auth.member };
   } catch (error) {
+    // 깨진 JSON 도 같은 답이 나간다. 이름만 — JSON.parse 의 문장에는 몸통 조각이 섞인다.
+    console.warn(`[pdp] 요청 본문 읽기 실패 (${kind})`, error instanceof Error ? error.name : typeof error);
     return { ok: false, response: bodyError(error) };
   }
 }

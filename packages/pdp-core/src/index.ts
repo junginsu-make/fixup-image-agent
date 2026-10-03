@@ -1,3 +1,4 @@
+export { sectionScenePrompt, DEFAULT_SECTION_SCENE } from "./pdp.scene-prompt";
 import { PdpController } from "./pdp.controller";
 import { PdpService, PdpServiceError, toPdpErrorResponse } from "./pdp.service";
 import type {

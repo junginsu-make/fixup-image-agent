@@ -1,6 +1,7 @@
 import { isLocalStoreEnabled } from "../../local-store";
 import { createSupabaseAdminClient } from "../../supabase/admin";
 import { reorderLibraryImages, replaceLibraryImageAt, saveLibraryItem } from "../../server-library";
+import { serverDocumentsEnabled } from "../documents/flags";
 import {
   artifactTag,
   libraryFileKey,
@@ -82,6 +83,8 @@ type Candidate = { itemId: string; rows: LibraryRow[] };
 /** 저장소를 만지는 일. 시험이 갈아 끼운다. */
 export interface LibrarySyncDeps {
   localOnly: () => boolean;
+  /** 이 문서가 지워졌거나 지우는 중인가. 그러면 라이브러리에 아무것도 쓰지 않는다(3차 리뷰 W12). 없으면 묻지 않는다. */
+  documentDeleted?: (userId: string, documentId: string) => Promise<boolean>;
   /** 이 문서의 라이브러리 작업들(자기 것, 가장 최근 것부터). */
   findItems: (userId: string, documentId: string) => Promise<Candidate[]>;
   create: (input: LibrarySyncInput & { fileKey: string; image: Image }) => Promise<string | null>;
@@ -93,8 +96,23 @@ export interface LibrarySyncDeps {
 
 const MAX_CANDIDATES = 10;
 
+/**
+ * 서버 문서가 지워졌거나 지우는 중인가(`deleted_at` 이 찍히는 순간부터). 문서 기능이 꺼져 있으면
+ * 문서 표를 건드리지 않는다 — 표가 없는 운영에서도 동기화는 지금처럼 돈다.
+ * 이 문서 한 건만 묻는다(최종 리뷰 L4) — 회원의 지운 문서 목록 전체를 생성마다 읽지 않는다.
+ *
+ * 남는 틈(알고 둔 것): 이 확인과 라이브러리 쓰기 사이(워터마크·업로드, 수 초)에 문서가 지워지고 그
+ * 삭제의 옛 작업 정리가 먼저 끝나면, 이번에 새로 연 작업 한 건은 숨은 채 남을 수 있다.
+ */
+export async function serverDocumentDeleted(userId: string, documentId: string): Promise<boolean> {
+  if (!serverDocumentsEnabled()) return false;
+  const { documentServices } = await import("../documents/index");
+  return documentServices().repo.isDeleted(userId, documentId);
+}
+
 const defaultDeps: LibrarySyncDeps = {
   localOnly: () => isLocalStoreEnabled(),
+  documentDeleted: serverDocumentDeleted,
   async findItems(userId, documentId) {
     const admin = createSupabaseAdminClient();
     const { data: items, error } = await admin
@@ -183,6 +201,7 @@ export async function syncPdpDocumentToLibrary(
 
   const page = buildPage(input);
   const known = page.filter((entry) => entry.artifact !== null);
+  // 화면이 닫혀 문서 자동저장이 끊겨도 생성 결과는 서버 라이브러리에 남긴다.
   const summarize = (inItem: Map<string, string>): LibrarySyncSummary => {
     const same = known.filter((entry) => inItem.get(entry.section) === entry.artifact);
     return {
@@ -192,6 +211,8 @@ export async function syncPdpDocumentToLibrary(
     };
   };
   if (known.length === 0) return summarize(new Map());
+  // 지운 문서의 늦은 결과로 새 작업을 열면 목록이 숨긴 채 줄과 파일만 남는다(W12).
+  if (await documentGone(input, deps)) return { desired: 0, covered: 0, missing: [] };
 
   // 이 문서의 작업 중 **지금 페이지와 맞는** 가장 최근 것. 맞지 않는 작업은 그대로 둔다.
   const candidates = await deps.findItems(input.userId, input.documentId);
@@ -206,6 +227,16 @@ export async function syncPdpDocumentToLibrary(
   if (!itemId) return summarize(new Map());
   const rows = keyed([{ position: 0, path: `${input.userId}/${itemId}/0-${fileKey}.webp` }]);
   return fillItem({ input, deps, page, itemId, rows, summarize });
+}
+
+/** 지웠는지 묻는다. 확인을 못 하면 맞춘다 — 창을 닫아도 결과를 남기는 것(F11)이 먼저다. */
+async function documentGone(input: LibrarySyncInput, deps: LibrarySyncDeps): Promise<boolean> {
+  try {
+    return (await deps.documentDeleted?.(input.userId, input.documentId)) ?? false;
+  } catch (error) {
+    console.warn(`[pdp-library-sync] ${input.documentId} 문서가 지워졌는지 확인하지 못해 그대로 맞춥니다`, error);
+    return false;
+  }
 }
 
 async function fillItem(context: {

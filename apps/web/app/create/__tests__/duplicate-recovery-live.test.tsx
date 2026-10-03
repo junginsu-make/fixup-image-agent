@@ -105,6 +105,52 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("긴 배경 설명을 실제 생성 단추에서 막는다", () => {
+  it.each(["image", "text"])("%s 모드의 단건·일괄은 501자면 요청 전에 안내한다", async (startMode) => {
+    await 띄운다({ startMode, pageContext: "가".repeat(501) });
+    await act(async () => { 단추("이미지 1장 만들기")[0]!.props.onClick(); });
+    await 가라앉힌다();
+    expect(captured.asked).toEqual([]);
+    expect(그려진글()).toContain("1자 초과");
+    await act(async () => {
+      renderer.root.findAll((node) => node.type === "button" && 글자(node as never) === "생성")[0]!.props.onClick();
+    });
+    await 가라앉힌다();
+    expect(captured.asked).toEqual([]);
+    expect(그려진글()).toContain("기획 화면");
+  });
+  it("500자는 실제 생성 요청을 보낸다", async () => {
+    await 띄운다({ pageContext: "가".repeat(500) });
+    await act(async () => { 단추("이미지 1장 만들기")[0]!.props.onClick(); });
+    await 가라앉힌다();
+    expect(captured.asked).toContain("/pdp/images/batch");
+  });
+});
+
+describe("서버 문서의 라이브러리 저장",()=>{
+  it("F18: 서버 모드에서도 얹은 글자가 있으면 편집본 저장 경로를 실행한다",async()=>{
+    captured.answer={ok:true,imageCount:0};
+    const section={...섹션,generatedImage:"data:image/png;base64,AAAA"};
+    await 띄운다({onSaveServerDocument:async()=>true,
+      initialResult:{originalImage:"AAAA",blueprint:{executiveSummary:"",scorecard:[],blueprintList:[],sections:[section]}},
+      initialDraftState:{sections:[section],sectionKeys:["S1"],overlaysBySection:{S1:[{id:"text",type:"text",text:"추가 문구",x:0,y:0,width:100,height:100}]}}});
+    await act(async()=>{단추("라이브러리에 저장")[0].props.onClick();});await 가라앉힌다();
+    expect(captured.asked).toContain("/library");
+    // 이 시험 환경에는 캔버스가 없어 원본으로 남긴다. 합성 성공으로 알리지 않는다.
+    expect(그려진글()).toContain("얹은 글자 없이 원본으로 저장");
+  });
+  it.each([true,false])("문서 저장 성공=%s에 맞춰 안내하고 기존 업로드는 호출하지 않는다",async(success)=>{
+    const save=vi.fn(async()=>success);
+    await 띄운다({onSaveServerDocument:save,initialResult:{originalImage:"AAAA",blueprint:{
+      executiveSummary:"",scorecard:[],blueprintList:[],sections:[{...섹션,generatedImage:"data:image/png;base64,AAAA"}]}}});
+    const button=단추("라이브러리에 저장")[0];expect(button).toBeTruthy();
+    await act(async()=>{button.props.onClick();});await 가라앉힌다();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(captured.asked).toEqual([]);
+    expect(그려진글()).toContain(success?"현재 작업과 그림을 라이브러리에 저장했습니다":"작업 저장을 마치지 못했습니다");
+  });
+});
+
 describe("일괄 생성이 중복으로 막히면", () => {
   it("**되찾으러 가라고 알린다**", async () => {
     await 띄운다();

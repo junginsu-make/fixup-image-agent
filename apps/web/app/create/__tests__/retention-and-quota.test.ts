@@ -160,7 +160,8 @@ describe("저장이 실패했을 때", () => {
 describe("화면이 그 문구를 실제로 쓴다", () => {
   it("**저장 실패 자리가 코어 판정을 부른다** — 화면이 따로 적으면 말이 갈린다", () => {
     const client = readFileSync(new URL("../PdpMakerClient.tsx", import.meta.url), "utf8");
-    const 실패자리 = client.slice(client.indexOf('setSaveState("error")'));
+    const 저장자리 = client.slice(client.indexOf("const persistDraft ="));
+    const 실패자리 = 저장자리.slice(저장자리.indexOf("} catch (error) {"));
 
     expect(실패자리.slice(0, 300)).toContain("draftSaveFailureMessage(error)");
   });

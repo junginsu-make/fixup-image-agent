@@ -24,10 +24,14 @@ let 저장소파일: Array<{ name: string; id: string | null }> = [];
 vi.mock("../../supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: (table: string) => ({
+      update: () => ({eq:async()=>({error:null})}),
+      delete: () => ({eq:async()=>({error:null})}),
       select: (_cols: string) => ({
         eq: () => ({
           single: async () => ({ data: table === "profiles" ? { status: 상태 } : null, error: null }),
           gt: () => ({ limit: async () => ({ data: 잡힌크레딧 > 0 ? [{ reserved_units: 잡힌크레딧 }] : [], error: 보류조회오류 ? { message: "offline" } : null }) }),
+          // 관리자 사본 찾기(W8). 이 시험의 회원에게는 사본이 없다.
+          limit: async () => ({ data: [], error: null }),
         }),
       }),
     }),

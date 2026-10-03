@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { mergeDocumentWorks, documentImages, UNCONFIRMED_DOCUMENT_NOTICE } from "./document-works";
 import { useRouter } from "next/navigation";
 import { modelDisplayName } from "../../lib/model-name";
 import { ListOrdered, Loader2, Trash2 } from "lucide-react";
@@ -96,6 +97,11 @@ interface Work {
   href: string;
   /** 캐릭터 만들기로 만든 것. 「캐릭터」 거르기에서만 보인다(`work-filter.ts`). */
   origin?: "character";
+  sourceId?: string | null;
+  documentId?: string;
+  documentOwner?: string;
+  /** 문서 목록을 못 읽어 문서인지만 아는 카드. 지우지 않는다(`library-works.ts`). */
+  documentUnconfirmed?: boolean;
 }
 
 /**
@@ -226,16 +232,23 @@ function toPosterWork(project: Record<string, any>): Work {
  * **못 읽어도 목록을 비우지 않는다.** 카드뉴스·포스터가 이미 와 있는데 이것
  * 하나 때문에 화면이 통째로 비면, 사용자는 작업이 사라진 줄 안다.
  */
-async function readLibraryWorks(allMembers: boolean) {
+async function readLibraryWorks(allMembers: boolean, onError?: (message:string)=>void) {
+  let legacy: LibraryWork[] = [];
   try {
     const body = await (await fetch("/api/library", { cache: "no-store" })).json();
-    if (!body?.ok) return [];
+    if (!body?.ok) throw new Error("작업물 일부를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.");
     const items = body.items ?? [];
-    // 캐릭터 결과도 싣는다. 「전체」에서는 거르기가 뺀다(`work-filter.ts`).
-    return [...libraryWorks(items), ...libraryCharacterWorks(items)]
-      .filter((work) => allMembers || work.mine);
-  } catch {
-    return [];
+    legacy = [...libraryWorks(items), ...libraryCharacterWorks(items)].filter(work => allMembers || work.mine);
+  } catch (error) { onError?.(error instanceof Error ? error.message : "작업물을 불러오지 못했습니다."); }
+  try {
+    const response = await fetch(allMembers ? "/api/admin/pdp-documents" : "/api/pdp/documents", { cache: "no-store" });
+    if (response.status === 404) return legacy;
+    const body = await response.json();
+    if (!response.ok || !body.ok) throw new Error("서버에 저장한 상세페이지 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.");
+    return mergeDocumentWorks(legacy, body.documents ?? []);
+  } catch (error) {
+    onError?.(error instanceof Error ? error.message : "서버 작업을 불러오지 못했습니다.");
+    return legacy;
   }
 }
 
@@ -245,8 +258,14 @@ async function readLibraryWorks(allMembers: boolean) {
  * 카드뉴스·포스터는 목록이 낱장까지 싣고 오지만, 이쪽은 표지만 온다
  * (`library-works.ts` 에 이유를 적었다).
  */
-async function readWorkImages(work: LibraryWork | { id: string; title: string }) {
+async function readWorkImages(work: Work) {
   try {
+    if (work.documentId) {
+      const endpoint = work.mine ? `/api/pdp/documents/${work.documentId}` : `/api/admin/pdp-documents/${work.documentId}?owner=${encodeURIComponent(work.documentOwner ?? "")}`;
+      const response = await fetch(endpoint, { cache: "no-store" });
+      const payload = await response.json();
+      return response.ok && payload.ok ? documentImages(payload.record, payload.urls) : [];
+    }
     const body = await (await fetch(`/api/library?id=${encodeURIComponent(work.id)}`, { cache: "no-store" })).json();
     if (!body?.ok) return [];
     const rows = (body.images ?? []) as Array<{ url?: string | null; position: number }>;
@@ -338,6 +357,7 @@ export function WorksTab() {
       }
     }
     if (!images.length) {
+      if(work.documentId){router.push(work.href);return;}
       setNotice("이 작업에는 볼 수 있는 그림이 없습니다.");
       return;
     }
@@ -359,7 +379,7 @@ export function WorksTab() {
       deleteLabel: "이 작업 지우기",
       // 자기 것, 그리고 관리자. 잘못 올라온 것을 내릴 사람이 아무도 없으면
       // 그대로 남는다. 되돌릴 수 없는 일이라 누른 뒤 한 번 더 묻는다.
-      onDelete: canDelete(work) ? () => setConfirming(work.id) : undefined,
+      onDelete: canDelete(work) ? () => askDelete(work) : undefined,
       // 관리자에게만 보인다. 넘겨보다 마음에 드는 장에서 바로 건다.
       action: showcase
         ? {
@@ -436,7 +456,16 @@ export function WorksTab() {
    * 지우면 라이브러리 쪽만 사라지고 캐릭터 탭에는 그대로 남는다. 캐릭터 탭에서 지운다.
    */
   function canDelete(work: Work): boolean {
-    return work.origin !== "character" && (work.mine || isAdmin === true);
+    return work.origin !== "character" && (work.documentId ? work.mine : (work.mine || isAdmin === true));
+  }
+
+  /** 지우기 확인을 연다. 문서인지 확인하지 못한 카드는 열지 않고 까닭을 말한다(3차 리뷰 W24). */
+  function askDelete(work: Work) {
+    if (work.documentUnconfirmed) {
+      setNotice(UNCONFIRMED_DOCUMENT_NOTICE);
+      return;
+    }
+    setConfirming(work.id);
   }
 
   async function remove(work: Work) {
@@ -449,7 +478,7 @@ export function WorksTab() {
         실수를 겪고 남긴 주석이다.
       */
       const account = work.tool === "create" || work.tool === "redesign";
-      const endpoint = account
+      const endpoint = work.documentId ? `/api/pdp/documents/${work.documentId}` : account
         ? "/api/library"
         : work.tool === "sns"
           ? `/api/sns/projects/${work.id}`
@@ -513,7 +542,7 @@ export function WorksTab() {
           ? await (async () => {
               const [body, library] = await Promise.all([
                 (await fetch("/api/admin/works", { cache: "no-store" })).json(),
-                readLibraryWorks(true),
+                readLibraryWorks(true, text => { if (alive) setNotice(text); }),
               ]);
               if (!body.ok) throw new Error(body.message ?? "작업물을 불러오지 못했습니다.");
               if (alive && Array.isArray(body.easyWorkIds)) setEasyIds(new Set(body.easyWorkIds as string[]));
@@ -528,7 +557,7 @@ export function WorksTab() {
               const [sns, poster, library, easy] = await Promise.all([
                 fetch("/api/sns/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
                 fetch("/api/poster/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
-                readLibraryWorks(false),
+                readLibraryWorks(false, text => { if (alive) setNotice(text); }),
                 readEasyWorkIds(),
               ]);
               if (alive) setEasyIds(easy);
@@ -553,7 +582,7 @@ export function WorksTab() {
 
   if (message) return <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{message}</p>;
   if (!works) return <p className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />작업물을 불러오는 중입니다.</p>;
-  if (!works.length) return <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">아직 만든 작업물이 없습니다.</p>;
+  if (!works.length) return <p role={notice ? "alert" : undefined} className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">{notice || "아직 만든 작업물이 없습니다."}</p>;
 
   const filters = workFilters(easyIds !== null);
   // 못 쓰게 된 단추가 골라져 있으면(쉽게 목록을 다시 못 읽은 경우) 전체로 본다.
@@ -654,7 +683,7 @@ export function WorksTab() {
                 onClick={(event) => {
                   // 카드를 누른 것으로도 읽히면 지우기 확인과 큰 창이 함께 뜬다.
                   event.stopPropagation();
-                  setConfirming(work.id);
+                  askDelete(work);
                 }}
                 className={cn(DELETE_CORNER_BUTTON, "disabled:opacity-50")}
               ><Trash2 className="size-3.5" /></button>
@@ -743,6 +772,7 @@ export function WorksTab() {
               <DialogDescription>
                 「{pending.title}」{labelOf(pending, easyIds)} 작업을 지웁니다.
                 만들어 둔 그림도 함께 사라지고, 되돌릴 수 없습니다.
+                {pending.documentId ? " 라이브러리의 이 작업 그림도 함께 지워집니다." : null}
                 {!pending.mine ? (
                   <>
                     <br />
