@@ -22,8 +22,10 @@ import { ANALYSIS_QUOTA_EXEMPT_CODES, consumesAnalysisQuota } from "@fixup/pdp-c
   **호환 래퍼는 건너뛴다.** 202609220002 는 옛 함수를 `_cost_v1` 로 이름만 바꾸고,
   같은 이름의 얇은 래퍼를 세워 **전환한 계정을 옛 경로로 과금하지 못하게** 막는다.
   옛 경로의 실제 동작은 그 전 파일에 그대로 있고, 이 검사들이 재려는 것이 그 동작이다.
+  202610030003 은 같은 이름의 함수를 「언제나 거절」로 닫는 껍데기다 — 옛 경로의 규칙은 그 앞 마지막 정의에 남는다
+  (2026-10-03, 크레딧 우회 막기 — 동작은 scripts/tests/reserve-generation-ledger-only.test.mjs 가 실제 DB 로 본다).
 */
-const COMPAT_WRAPPER = /^202609220002_/;
+const COMPAT_WRAPPER = /^(202609220002|202610030003)_/;
 const migrationsDir = fileURLToPath(new URL("../../../../../supabase/migrations/", import.meta.url));
 
 /** 주석을 걷어낸다. 이 저장소의 SQL 은 설명이 길어 단어가 코드로 오인된다. */
