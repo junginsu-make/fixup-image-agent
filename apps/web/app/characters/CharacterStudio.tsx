@@ -20,6 +20,9 @@ import { randomId } from "../../lib/browser-safe";
 import { billableFetch } from "../../lib/billable-fetch";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { lookAfterRole, roleAfterLook } from "./look-role";
+import { useOpenedCharacter } from "./use-opened-character";
+import { OpenedNotice } from "./opened-notice";
+import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
  * 캐릭터 만들기.
@@ -141,7 +144,7 @@ const STEPS: StepDefinition[] = [
   { id: "result", label: "결과", desc: "만들어진 것을 봅니다" },
 ];
 
-export function CharacterStudio() {
+export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   const creditPolicy = useCreditPolicy();
   const [step, setStep] = useState<"make" | "result">("make");
 
@@ -255,6 +258,38 @@ export function CharacterStudio() {
   }, []);
 
   useEffect(() => { void load(); void loadLibrary(); }, [load, loadLibrary]);
+
+  /*
+   * 라이브러리 「과정 보기」로 열었으면 그 캐릭터로 칸과 고른 정면을 채운다.
+   * 저장은 아래 `handleCreate` 그대로다 — 언제나 **새 캐릭터**가 된다.
+   * 그림체 칸은 첨부가 비었을 때의 규칙(`lookAfterRole`)으로 맞추고, 고른 정면에는
+   * 저장된 그림체를 그대로 얼린다 — 처음 만들 때와 같은 값으로 각도를 그린다.
+   */
+  const prefillOpened = useCallback((values: OpenedValues, front: OpenedFront | null) => {
+    setName(values.name);
+    setDescription(values.description);
+    setKind(values.kind as Kind);
+    setLook(lookAfterRole("extract", values.look as Look));
+    if (!front) return;
+    setChosen({
+      ...front, description: values.description, name: values.name,
+      kind: values.kind as Kind, look: values.look as Look, modelId: "",
+    });
+  }, []);
+  const showCarried = useCallback(async (createdId: string) => {
+    const refreshed = await load();
+    setCreated(refreshed.find((entry) => entry.id === createdId) ?? null);
+  }, [load]);
+  const appendMessage = useCallback((text: string) => {
+    setMessage((current) => [current, text].filter(Boolean).join(" "));
+  }, []);
+  const opening = useOpenedCharacter({
+    opened, kinds: KINDS, looks: LOOKS, prefill: prefillOpened,
+    takenNames: loading ? null : characters.map((entry) => entry.name),
+    chosenBase64: chosen?.base64 ?? null, createdId: created?.id ?? null,
+    currentName: name, createdName: created?.name ?? null, rename: setName,
+    onCarried: showCarried, announce: appendMessage,
+  });
 
   /** 그림 한 장을 base64 로 읽는다. 서버는 본문을 그대로 fal 에 넘긴다. */
   async function readAsAttached(
@@ -498,6 +533,7 @@ export function CharacterStudio() {
         </div>
       </div>
 
+      {opened && step === "make" ? <OpenedNotice name={opened.name} front={opening.front} /> : null}
       {/* 다른 도구와 같은 막대다. 만드는 중에는 못 옮긴다 — 몇 십 초를 기다린
           결과가 어디로 갔는지 모르게 된다. */}
       <div className="mb-4">

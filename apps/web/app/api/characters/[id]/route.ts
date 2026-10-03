@@ -15,8 +15,8 @@ export const dynamic = "force-dynamic";
  * 주소까지 이미 다 해 준다. 단건용 질의를 따로 만들면 그 규칙이 두 군데로
  * 갈리고 언젠가 한쪽만 고쳐진다 — 이 저장소가 반복해서 당한 방식이다.
  *
- * 캐릭터는 한 사람당 많아야 수십 개라 목록을 받아 거르는 값이 싸다. 수백
- * 개가 되면 그때 단건 질의를 만든다.
+ * **id 를 넘겨 그것만 찾는다.** 목록은 최근 100개로 잘려, 그 안에서 찾으면
+ * 오래된 캐릭터가 404 가 됐다(2026-10-02).
  *
  * 남의 것이면 목록에 없으므로 **404** 가 된다. 관리자는 별도 통로로 읽는다
  * (`api/admin/works` 와 같은 갈래).
@@ -28,7 +28,7 @@ export async function GET(_request: Request, context: Context) {
   try {
     const { id } = await context.params;
     const characters = await listCharacters(
-      auth.member.userId, await teamIdOf(auth.member.userId));
+      auth.member.userId, await teamIdOf(auth.member.userId), { ids: [id] });
     const character = pickCharacter(characters, id);
     if (!character) {
       return Response.json({ ok: false, message: "캐릭터를 찾을 수 없습니다." }, { status: 404 });
