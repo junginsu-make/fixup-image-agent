@@ -20,7 +20,7 @@ describe("개념 시안으로 다루어야 하는 때", () => {
     expect(page.conceptOnly).toBe(true);
     const options = buildSectionImageOptions(page, { section: { section_id: "S1" } as never, index: 0 });
     expect(options.conceptOnly).toBe(true);
-    const prompt = JSON.parse(buildImageJson({ section_id: "S1", prompt_en: "product", bullets: [] } as never, options));
+    const prompt = JSON.parse(buildImageJson({ section_id: "S1", prompt_en: "product", bullets: [] } as never, options as never));
     expect(prompt.concept_only.avoid).toContain("logos");
     expect(pageInputsFromWire({ conceptOnly: false }).conceptOnly).toBe(false);
   });

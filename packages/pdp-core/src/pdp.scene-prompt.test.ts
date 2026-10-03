@@ -15,7 +15,7 @@ describe("사진과 글 기획의 장면 지시", () => {
   ])("두 기획 경로가 같은 대체값을 쓴다: %j", async (raw, expected) => {
     const text = normalizeTextBlueprint({ sections: [raw] });
     const photo = await new PdpService().analyzeProduct(
-      { imageBase64: "iVBORw0KGgo=", mimeType: "image/png" },
+      { imageBase64: "iVBORw0KGgo=", mimeType: "image/png" } as never,
       { llm: { generate: async () => ({ text: JSON.stringify({ sections: [raw] }) }) } } as never,
       { skipFirstImage: true },
     );
