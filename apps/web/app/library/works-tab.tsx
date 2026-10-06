@@ -18,6 +18,7 @@ import {
   countByOrigin, filterWorks, originLabel, originOf, workFilters,
   type WorkFilterId,
 } from "./work-filter";
+import { readEasyWorks, stepsHref, type EasyWorks } from "./easy-href";
 import {
   Badge, Button, Card, CardContent,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -120,10 +121,9 @@ function labelOf(work: Work, easyIds: ReadonlySet<string> | null): string {
  * 쉽게로 만든 작업 id. **못 읽으면 `null`** — 빈 목록으로 대신하면 쉽게 작업이
  * 전부 「다양하게」로 들어간다.
  */
-async function readEasyWorkIds(): Promise<Set<string> | null> {
+async function fetchEasyWorks(): Promise<EasyWorks | null> {
   try {
-    const body = await (await fetch("/api/easy/works", { cache: "no-store" })).json();
-    return body?.ok && Array.isArray(body.workIds) ? new Set(body.workIds as string[]) : null;
+    return readEasyWorks(await (await fetch("/api/easy/works", { cache: "no-store" })).json());
   } catch {
     return null;
   }
@@ -327,6 +327,7 @@ export function WorksTab() {
   const [filter, setFilter] = React.useState<WorkFilterId>("all");
   /** 쉽게로 만든 작업 id. `null` 이면 못 읽었다 — 쉽게와 다양하게를 못 가른다. */
   const [easyIds, setEasyIds] = React.useState<Set<string> | null>(null);
+  const [easyConversations, setEasyConversations] = React.useState<Map<string, string> | null>(null); // 쉽게 작업 → 대화(설계 C)
   const pending = React.useMemo(
     () => (works ?? []).find((work) => work.id === confirming) ?? null,
     [works, confirming],
@@ -533,6 +534,7 @@ export function WorksTab() {
     let alive = true;
     setWorks(null);
     setEasyIds(null);
+    setEasyConversations(null);
     void (async () => {
       try {
         // 전체를 볼 때는 관리자 전용 길로 한 번에 읽는다. 회원용 목록은 자기
@@ -558,9 +560,9 @@ export function WorksTab() {
                 fetch("/api/sns/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
                 fetch("/api/poster/projects", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
                 readLibraryWorks(false, text => { if (alive) setNotice(text); }),
-                readEasyWorkIds(),
+                fetchEasyWorks(),
               ]);
-              if (alive) setEasyIds(easy);
+              if (alive) { setEasyIds(easy?.ids ?? null); setEasyConversations(easy?.conversations ?? null); }
               return [
                 ...(sns.ok ? (sns.projects ?? []).map(toSnsWork) : []),
                 ...(poster.ok ? (poster.projects ?? []).map(toPosterWork) : []),
@@ -666,7 +668,7 @@ export function WorksTab() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {visible.map((work) => (
-          <Card key={`${work.tool}-${work.id}`} className="relative cursor-pointer overflow-hidden" onClick={() => (work.imageCount ? void openWork(work) : router.push(work.href))}>
+          <Card key={`${work.tool}-${work.id}`} className="relative cursor-pointer overflow-hidden" onClick={() => (work.imageCount ? void openWork(work) : router.push(stepsHref(work, easyConversations)))}>
             {/* 지우기를 카드 모서리에 둔다.
 
                 전에는 큰 창을 열어야만 지울 수 있었다. 그런데 **그림이 없는
@@ -703,7 +705,7 @@ export function WorksTab() {
                 onClick={(event) => {
                   // 카드를 누른 것으로도 읽히면 뷰어와 이동이 함께 일어난다.
                   event.stopPropagation();
-                  router.push(work.href);
+                  router.push(stepsHref(work, easyConversations));
                 }}
                 className={cn(CORNER_BUTTON, "group left-1.5 hover:text-foreground")}
               >
