@@ -93,6 +93,16 @@ export {
   type CharacterReferenceRole,
 } from "./pdp.character";
 export {
+  BRIEF_EXTRAS_MAX,
+  BRIEF_IDENTITY_MAX,
+  CHARACTER_BRIEF_SPEC,
+  buildCharacterBriefRequest,
+  composeBriefDescription,
+  parseCharacterBrief,
+  type CharacterBrief,
+  type CharacterBriefInput,
+} from "./pdp.character-brief";
+export {
   MIN_STYLE_SIMILARITY,
   analyzeStyleImage,
   buildStyleAnalysisPrompt,
