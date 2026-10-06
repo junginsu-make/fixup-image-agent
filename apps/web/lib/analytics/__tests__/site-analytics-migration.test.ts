@@ -68,3 +68,28 @@ describe("표·함수 파일", () => {
     expect(table).not.toMatch(/\b(ip|user_agent|ua|cookie|fx_vid)\b\s+text/i);
   });
 });
+
+describe("보고 함수 파일", () => {
+  const report = code("202610060002_site_analytics_report.sql");
+
+  it("admin_site_traffic·admin_site_people 둘만 정의하고 표를 바꾸지 않는다", () => {
+    expect(defined(report)).toEqual(["admin_site_people", "admin_site_traffic"]);
+    expect(report).not.toMatch(/\b(alter|drop)\s+table\b/i);
+  });
+
+  it("서비스 권한만 부른다", () => {
+    for (const fn of ["admin_site_traffic", "admin_site_people"]) {
+      expect(revoked(report, fn), fn).toBe(true);
+      expect(granted(report, fn), fn).toBe(true);
+    }
+  });
+
+  it("security definer 함수는 모두 search_path 를 public, pg_temp 로 못 박는다", () => {
+    const bodies = report.split(/create\s+or\s+replace\s+function/i).slice(1);
+    const definers = bodies.filter((body) => /security\s+definer/i.test(body));
+    expect(definers.length).toBe(2);
+    for (const body of definers) {
+      expect(body).toMatch(/set\s+search_path\s*=\s*public,\s*pg_temp/i);
+    }
+  });
+});
