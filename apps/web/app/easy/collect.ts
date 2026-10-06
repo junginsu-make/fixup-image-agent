@@ -17,6 +17,11 @@ export interface EasySubmission {
 
 /** 끝났는데 이번 요청의 그림이 없을 때(설계 B5). 전에는 「만들고 있습니다」가 영원히 돌았다. */
 export const NO_IMAGE_MADE = "이미지가 나오지 않았습니다. 같은 말을 다시 보내 주세요.";
+/**
+ * 15분을 넘겨 그만 물을 때. 그 요청은 아직 끝날 수 있고, 다시 열면 이어 받는다(B3).
+ * 「다시 보내 주세요」는 값이 또 드는 재전송을 부르므로 쓰지 않는다. 화면에서만 알린다.
+ */
+export const STILL_MAKING = "아직 이미지를 만들고 있을 수 있습니다. 잠시 뒤 이 대화를 다시 열면 이어서 받아 옵니다.";
 
 const 묻는간격 = 10_000;
 /** 이만큼 기다려도 안 끝나면 그만둔다(보안 리뷰 L1). 멈춘 요청을 끝없이 묻지 않는다. */
@@ -24,8 +29,8 @@ const 최대기다림 = 15 * 60_000;
 const 기다린다 = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * 받으면 그 그림, 화면을 떠났으면 `undefined`. 0장이거나 시작한 지 15분이 지나도 안
- * 끝나면 `NO_IMAGE_MADE` 로 던진다.
+ * 받으면 그 그림, 화면을 떠났으면 `undefined`. 0장이면 `NO_IMAGE_MADE`, 시작한 지
+ * 15분이 지나도 안 끝나면 `STILL_MAKING` 으로 던진다.
  */
 export async function collectEasyImage(
   projectId: string,
@@ -60,6 +65,7 @@ export async function collectEasyImage(
       if (!first) throw new Error(NO_IMAGE_MADE);
       return { id: first.id, url: first.url };
     }
-    if (now() - 시작 >= 최대기다림) throw new Error(NO_IMAGE_MADE);
+    // 다시 보낼 실패가 아니다(`retryable: false`) — 화면이 「값이 또 듭니다」 재전송 안내를 안 붙인다.
+    if (now() - 시작 >= 최대기다림) throw Object.assign(new Error(STILL_MAKING), { retryable: false });
   }
 }

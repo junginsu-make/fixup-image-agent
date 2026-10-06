@@ -4,7 +4,7 @@ const f = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("../../../lib/billable-fetch", () => ({ billableFetch: f.fetch }));
 vi.mock("../../../lib/membership/account-events", () => ({ observeAccountResponse: () => {} }));
 
-import { NO_IMAGE_MADE, collectEasyImage } from "../collect";
+import { NO_IMAGE_MADE, STILL_MAKING, collectEasyImage } from "../collect";
 
 /**
  * **결과 받기**(화면에서 옮김, 2026-10-06 설계 B3 · B5). 만든 직후와 다시 열 때가 같은
@@ -52,12 +52,22 @@ describe("결과 받기", () => {
     };
     const 끝난답 = 답({ ok: true, done: true, images: [{ id: "i1", url: "u", generationRequestId: "r1" }] });
 
-    it("15분이 지나도 안 끝나면 NO_IMAGE_MADE 로 알린다", async () => {
+    /**
+     * 그 요청은 아직 끝날 수 있다(다시 열면 이어 받는다). 「다시 보내 주세요」(NO_IMAGE_MADE)는
+     * 값이 또 드는 재전송을 부른다 — 15분 넘김은 따로 알리고, 재전송 안내도 안 붙인다.
+     */
+    it("15분이 지나도 안 끝나면 STILL_MAKING 으로 알린다 — 다시 보내라 하지 않는다", async () => {
       // 고치기 전에는 끝없이 묻는다 — 테스트가 멈추지 않게 200번째에 끝난 답을 준다.
       f.fetch.mockImplementation(async () => (f.fetch.mock.calls.length >= 200 ? 끝난답 : 답({ ok: true, done: false })));
       const { now, wait } = 시계();
-      await expect(collectEasyImage("p1", 일감, () => true, wait, now)).rejects.toThrow(NO_IMAGE_MADE);
+      const 실패 = await collectEasyImage("p1", 일감, () => true, wait, now).then(() => undefined, (cause: unknown) => cause);
+      expect(실패).toBeInstanceOf(Error);
+      expect((실패 as Error).message).toBe(STILL_MAKING);
+      expect((실패 as Error).message).not.toBe(NO_IMAGE_MADE);
+      expect((실패 as { retryable?: boolean }).retryable).toBe(false);
       expect(f.fetch).toHaveBeenCalledTimes(90);
+      // 화면에서만 알린다. 상태를 묻는 것 말고는 서버에 아무것도 안 보낸다(실패 줄로 안 남는다).
+      expect(f.fetch.mock.calls.every(([url]) => url === "/api/poster/projects/p1/status")).toBe(true);
     });
 
     it("15분 안에 끝나면 받는다", async () => {
