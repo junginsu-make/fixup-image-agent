@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { CARD_RATIOS, IMAGE_MODELS, MAX_CARDS } from "@fixup/sns-core";
 import {
@@ -24,7 +24,7 @@ import {
   MockTabs,
 } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "카드뉴스 만들기 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/cardnews");
 
 /** 화면에 뜨는 목록을 그대로 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const RATIO_ITEMS = CARD_RATIOS.map((ratio) => ({ title: ratio.id, hint: ratio.label }));

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { IMAGE_CREDIT_POLICY } from "@fixup/shared";
 import { ChoiceTable, GuideHeader, Pitfalls, Section } from "../_components/flow";
@@ -27,7 +27,7 @@ import { hourlyLimitFor } from "../../../lib/membership/hourly-limit";
  * (`server-only` 를 끌고 온다) 화면에 주려면 문서가 서버 컴포넌트여야 한다.
  * **시험으로 잇는 것이 더 단순하다.**
  */
-export const metadata: Metadata = { title: "막혔을 때 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/trouble");
 
 export default function TroubleGuidePage() {
   const 보통 = IMAGE_CREDIT_POLICY.normalUnits;

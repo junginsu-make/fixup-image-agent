@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { IMAGE_MODELS, REVIEW_CRITERIA } from "@fixup/pdp-core";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
@@ -9,7 +9,7 @@ import { COPY_SLOTS } from "../../create/copy-slots";
 import { CREATE_STEPS } from "../../create/create-steps";
 import { DRAFT_RETENTION_DAYS } from "../../create/draft-retention";
 
-export const metadata: Metadata = { title: "상세페이지 만들기 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/detail-page");
 
 /** 화면의 단계 이름 그대로. 손으로 적으면 이름이 바뀔 때 설명서만 남는다. */
 const 단계 = CREATE_STEPS.image.map((step) => step.label);

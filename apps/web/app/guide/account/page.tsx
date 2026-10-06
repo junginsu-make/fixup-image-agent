@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -38,7 +38,7 @@ import { CS_EMAIL } from "../../../lib/cs/contact";
  * 않고 약관의 말(달마다 · 추가 지급은 환불 없음 · 메일로 신청)을 따른다.
  * 어긋나면 `app/_landing/legal/__tests__/policy-agreement.test.ts` 가 잡는다.
  */
-export const metadata: Metadata = { title: "계정과 플랜 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/account");
 
 /**
  * 계정 화면의 사용 기록이 싣는 줄 수.

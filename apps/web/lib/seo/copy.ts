@@ -48,7 +48,7 @@ export const GUIDE_COPY: Readonly<Record<string, PageCopy>> = {
   "/guide/image": {
     title: "이미지 만들기 · 사용 설명서",
     description:
-      "광고 소재, 포스터, 일반 이미지 한 장을 AI로 만드는 방법. 레퍼런스를 넣어 같은 분위기의 이미지를 얻는 순서를 안내합니다.",
+      "AI 이미지 만들기 사용법. 광고 소재, 포스터, 일반 이미지 한 장을 레퍼런스와 같은 분위기로 만드는 순서를 안내합니다.",
   },
   "/guide/cardnews": {
     title: "카드뉴스 만들기 · 사용 설명서",

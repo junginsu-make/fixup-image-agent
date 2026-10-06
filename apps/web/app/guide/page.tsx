@@ -1,6 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
-import type { Metadata } from "next";
+import { guideMetadata } from "../../lib/seo/metadata";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "@fixup/shared";
 import { Flow, FlowLegend, GuideHeader, Section } from "./_components/flow";
 import { GuideFooter } from "./_components/guide-footer";
@@ -19,7 +19,7 @@ import { isCreditLedgerEnabled } from "../../lib/membership/credit-ledger";
 import { CreditRefresh } from "../_components/credit-refresh";
 import { needsOnboarding, ONBOARDING_PATH } from "../../lib/membership/onboarding";
 
-export const metadata: Metadata = { title: "사용 설명서" };
+export const metadata = guideMetadata("/guide");
 
 /** 역할 어휘는 shared 에서 가져온다. 여기 적으면 코드가 바뀔 때 안내만 낡는다. */
 const ROLES: AttachmentRole[] = ["style", "preserve_product", "preserve_person", "preserve_person_restyled", "place_as_is"];
