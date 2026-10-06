@@ -234,7 +234,7 @@ async function handlePost(req: Request) {
         message: result.candidates.length ? undefined : "후보를 만들지 못했습니다.",
       });
     } catch (error) {
-      await finalizeAiUsage(reservation, false, 0, "candidates_failed");
+      await finalizeAiUsage(reservation, false, 0, "candidates_failed", { model: "", billableImages: 0, llmUsd: llmSettleCost().llmUsd });
       return Response.json(
         { ok: false, message: error instanceof Error ? error.message : "후보를 만들지 못했습니다." },
         { status: 500 },
@@ -295,7 +295,7 @@ async function handlePost(req: Request) {
 
     return Response.json({ ...result, usage }, { status: result.ok ? 200 : 500 });
   } catch (error) {
-    await finalizeAiUsage(reservation, false, 0, "character_create_failed");
+    await finalizeAiUsage(reservation, false, 0, "character_create_failed", { model: "", billableImages: 0, llmUsd: llmSettleCost().llmUsd });
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "캐릭터를 만들지 못했습니다." },
       { status: 500 },
