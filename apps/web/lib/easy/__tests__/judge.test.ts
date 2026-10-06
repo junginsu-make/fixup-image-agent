@@ -77,3 +77,18 @@ describe("빈 답이면 한 번 더 묻는다 (A3)", () => {
     expect(decide).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("코드가 정한 광고 갈래 (A5)", () => {
+  it("단추로 고른 광고 이미지 · 규격 안내는 글 모델에 안 묻는다", async () => {
+    const decide = 판단기();
+    expect((await 묻는다(decide, { adStep: "image" })).wants).toBe("image");
+    expect((await 묻는다(decide, { adStep: "specs" })).wants).toBe("ad_specs");
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  it("「광고 소재 말고」면 규격 안내를 선택지에서 뺀다", async () => {
+    const decide = 판단기(결정({ wants: "image" }));
+    await 묻는다(decide, { prompt: "광고 소재 말고 그냥 이미지 만들어줘" });
+    expect(decide.mock.calls[0]![1]).not.toContain("ad_specs");
+  });
+});

@@ -13,13 +13,18 @@ vi.mock("server-only", () => ({}));
 type Image = { id: string; generationRequestId: string; selected: boolean };
 let project: { id: string; ratio: string; data: Record<string, unknown> } | undefined;
 let images: Image[];
+let 다른작업 = new Set<string>();
 const imageOptions: unknown[] = [];
 const edits: Array<{ url: string; body: Record<string, unknown>; step: string | null }> = [];
 let editResponse: Response;
 
 vi.mock("../../poster/stores", () => ({
   posterStoresForUser: () => ({
-    projects: { get: async (id: string) => (project && project.id === id ? project : undefined) },
+    projects: {
+      get: async (id: string) => (project && project.id === id
+        ? project
+        : 다른작업.has(id) ? { id, ratio: "1:1", data: {} } : undefined),
+    },
     images: {
       byProject: async (_id: string, options?: unknown) => { imageOptions.push(options); return images; },
     },
@@ -32,7 +37,7 @@ vi.mock("../../../app/api/poster/projects/[id]/edit/route", () => ({
   },
 }));
 
-const { imageEditTurn, lastEasyImage } = await import("../image-edit-turn");
+const { countEasyImages, imageEditTurn, lastEasyImage } = await import("../image-edit-turn");
 const { editRowBody } = await import("../../../app/easy/row-image");
 
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
@@ -59,6 +64,7 @@ beforeEach(() => {
   imageOptions.length = 0;
   edits.length = 0;
   남긴줄.length = 0;
+  다른작업 = new Set();
   editResponse = Response.json({ ok: true, submission: { requestRowId: "r2", falRequestId: "f2", endpoint: "e" } });
 });
 
@@ -194,5 +200,29 @@ describe("기다리라는 안내", () => {
     const { IMAGE_NOT_READY } = await import("../image-edit-turn");
     expect(IMAGE_NOT_READY).toContain("10분");
     expect(IMAGE_NOT_READY).toContain("새로 만들어");
+  });
+});
+
+describe("이 대화에서 만든 이미지 수 (규격 안내, 최종 리뷰 2026-10-06)", () => {
+  /**
+   * 그림 줄을 그대로 세면 고친 줄 · 카드뉴스 줄 · 지운 작업까지 센다 — 「만든 이미지가 5장
+   * 있습니다」라고 안내하고 「광고소재」에서는 2장만 보인다.
+   */
+  it("서로 다른 포스터 작업만 센다 — 고친 줄 · 카드뉴스 · 지운 작업은 안 센다", async () => {
+    다른작업 = new Set(["p2"]);
+    const rows = [
+      줄.user("카페 포스터 만들어줘"),
+      줄.image("p1"),
+      줄.image("p1", editRowBody("r2")), // 같은 작업을 고친 줄
+      줄.image("p2"),
+      줄.image("card-9"), // 카드뉴스 작업 — 포스터 저장소에 없다
+      줄.image("gone"), // 지운 작업
+      줄.user("규격별로"),
+    ];
+    expect(await countEasyImages("me", rows)).toBe(2);
+  });
+
+  it("그림 줄이 없으면 0", async () => {
+    expect(await countEasyImages("me", [줄.user("안녕")])).toBe(0);
   });
 });

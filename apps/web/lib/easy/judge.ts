@@ -3,6 +3,7 @@ import {
   type EasyChoices, type EasyDecision, type EasyWant,
 } from "../../app/easy/chat";
 import type { EasyMessage } from "../../app/easy/turn";
+import { hasAdNegation, type EasyAdStep } from "../../app/easy/ad-ask";
 
 /**
  * **「쉽게」 한 턴의 판단**(2026-10-06 설계 A1 · A3).
@@ -26,14 +27,20 @@ export interface EasyJudgeInput {
    * 비율 · 그림체를 말에서 읽으려고 판단은 한 번 한다.
    */
   kindPicked?: boolean;
+  /** 코드가 낱말로 정한 광고 갈래(설계 A5). `image` · `specs` 면 글 모델에 묻지 않는다. */
+  adStep?: EasyAdStep;
 }
 
 export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision> {
-  const { hasDraft, made, madeImage } = input.choices;
-  const wants = easyAvailableWants(input.choices);
+  if (input.adStep === "image") return { wants: "image", reply: "" };
+  if (input.adStep === "specs") return { wants: "ad_specs", reply: "" };
+  // 「광고 소재 말고 ○○」면 규격 안내를 선택지에서 뺀다 — 부정은 그 뒤 요청을 따른다(A5).
+  const choices = { ...input.choices, adNegated: hasAdNegation(input.prompt) };
+  const { hasDraft, made, madeImage, adNegated } = choices;
+  const wants = easyAvailableWants(choices);
   const ask = async (retry: boolean) => readEasyDecision(
     await input.decide(
-      easyChatPrompt(input.history, input.prompt, input.attachmentCount, hasDraft, made, madeImage, { retry }),
+      easyChatPrompt(input.history, input.prompt, input.attachmentCount, hasDraft, made, madeImage, { retry, adNegated }),
       wants,
     ),
     { canRevise: hasDraft, made, editableImage: madeImage },

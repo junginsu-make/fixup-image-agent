@@ -57,6 +57,23 @@ export async function lastEasyImage(userId: string, rows: readonly Row[]): Promi
   };
 }
 
+/**
+ * 이 대화에서 만든 **이미지 수**(규격 안내용, 최종 리뷰 2026-10-06).
+ *
+ * 그림 줄을 그대로 세면 고친 줄(같은 작업) · 카드뉴스 줄 · 지운 작업까지 센다 — 안내가
+ * 「만든 이미지가 5장」이라 하고 「광고소재」에서는 2장만 보인다. 그림 줄이 가리키는 **서로
+ * 다른 작업** 가운데 **포스터 작업**만 센다. 카드뉴스 작업 · 지운 작업은 포스터 저장소에 없다.
+ *
+ * 작업마다 한 번씩 읽으므로 **규격 안내 턴에서만** 부른다.
+ */
+export async function countEasyImages(userId: string, rows: readonly Row[]): Promise<number> {
+  const ids = [...new Set(rows.flatMap((one) => (one.role === "image" && one.workId ? [one.workId] : [])))];
+  if (!ids.length) return 0;
+  const projects = posterStoresForUser(userId).projects;
+  const found = await Promise.all(ids.map((id) => projects.get(id).catch(() => undefined)));
+  return found.filter(Boolean).length;
+}
+
 /** 고칠 그림이 아직 없을 때. 만드는 중이거나 만들지 못한 그림이다. */
 export const IMAGE_NOT_READY =
   "고칠 이미지가 아직 준비되지 않았습니다. 만들기가 끝난 뒤 다시 말씀해 주세요. "

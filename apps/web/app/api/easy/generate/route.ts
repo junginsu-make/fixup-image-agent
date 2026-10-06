@@ -26,7 +26,9 @@ import { redraftInput } from "../../../easy/cardnews-redraft";
 import { draftFailureMessage } from "../../../easy/cardnews-view";
 import { isMade } from "../../../easy/cardnews-after";
 import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
-import { imageEditTurn, lastEasyImage } from "../../../../lib/easy/image-edit-turn";
+import { countEasyImages, imageEditTurn, lastEasyImage } from "../../../../lib/easy/image-edit-turn";
+import { AD_ANSWER_NOTE, adImageInstruction, easyAdStep } from "../../../easy/ad-ask";
+import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -182,6 +184,14 @@ async function turn(request: Request): Promise<Response> {
     const 고칠그림 = await lastEasyImage(auth.member.userId, 지난줄);
 
     /*
+     * **「광고 소재」는 코드가 먼저 본다**(2026-10-06 설계 A5). 물을 때는 글 모델을 안
+     * 부르고 물음 줄만 남긴다 — 값도 예약도 없다. 단추 글 · 규격 낱말이면 아래 판단이
+     * 글 모델 없이 갈래를 정한다.
+     */
+    const 광고 = easyAdStep(prompt, 지난줄);
+    if (광고 === "ask") return await adQuestionTurn({ store, conversation, conversationId, prompt, textModel });
+
+    /*
      * **판정도 값이 나간다 — 예약부터**(설계 2026-09-30 §3.1).
      *
      * 기존 작업 이름(`poster_image`) + `easy:decide`, 0 크레딧(D1). 크레딧이 없거나
@@ -206,6 +216,7 @@ async function turn(request: Request): Promise<Response> {
     const 골랐나 = Boolean(고른갈래) && input.kindPicked === true;
 
     let decision: EasyDecision;
+    let 광고안내 = "";
     try {
       // 한 턴의 판단 — 선택지(A1) · 빈 답 재질문(A3)은 `lib/easy/judge.ts` 가 한다.
       decision = await judgeEasyTurn({
@@ -221,7 +232,23 @@ async function turn(request: Request): Promise<Response> {
         choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) },
         // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
         kindPicked: 골랐나,
+        adStep: 광고,
       });
+      /*
+       * **규격 안내는 글 모델이 우리 기능의 사실로 쓴다**(A5). 판정과 같은 예약 안에서
+       * 부른다 — 크레딧이 없거나 운영자가 멈췄으면 여기도 막힌다.
+       *
+       * **갈래를 단추로 골랐으면 쓰지 않는다**(최종 리뷰) — 아래에서 고른 갈래가 이겨 이 글은
+       * 버려진다. 이미지 수는 서로 다른 포스터 작업만 센다(`countEasyImages` — 고친 줄 ·
+       * 카드뉴스 · 지운 작업을 세면 「광고소재」에서 고를 수 있는 수와 어긋난다). 글 모델이
+       * 실패해도 `writeAdGuide` 가 코드가 쓴 안내로 대신한다 — 대화가 멈추지 않는다.
+       */
+      if (decision.wants === "ad_specs" && !골랐나) {
+        광고안내 = await writeAdGuide((text) => provider.writeAdGuide(text), {
+          prompt,
+          imageCount: await countEasyImages(auth.member.userId, 지난줄),
+        });
+      }
     } catch (error) {
       await settleAiUsage(판정예약, false, 0, "easy_decide_failed", llmSettleCost());
       throw error;
@@ -239,6 +266,10 @@ async function turn(request: Request): Promise<Response> {
       : decision.wants;
     // 한 장인지 여러 장인지 모르면 묻고 아무것도 안 남긴다(2단계 §4).
     if (wants === "either") return Response.json({ ok: true, kindAsk: true, textModel });
+    // 규격별 이미지는 여기서 안 만든다. 「광고소재」 안내를 남기고 끝낸다(A5).
+    if (wants === "ad_specs") {
+      return await adGuideTurn({ store, conversation, conversationId, prompt, textModel, guide: 광고안내 });
+    }
     // 만든 카드뉴스 손보기(3단계). 판단 읽기가 원고 · 만든 카드가 있을 때만 이 갈래를 준다.
     if ((wants === "card_redo" || wants === "card_text" || wants === "caption" || wants === "download") && 고칠원고) {
       return await cardAfterTurn({
@@ -288,11 +319,22 @@ async function turn(request: Request): Promise<Response> {
      * 말을 남기기 **전에** 한다. 묻거나 멈추면 아무것도 안 남긴다 — 비율 물음과
      * 같다. 말 턴 · 상세페이지 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
      */
+    /*
+     * **광고 물음에 답해 만드는 이미지는 물음 앞의 말로 그린다**(A5). 단추만 눌렀으면 그
+     * 말 그대로, 말로 답했으면 그 말 + 답. 물음 뒤가 아니면 이번 말 그대로다.
+     *
+     * **답일 때만 잇는다**(최종 리뷰 2026-10-06) — 「광고 이미지 만들기」 단추를 눌렀거나,
+     * 판단 모델이 이 말을 물음의 답이라고 `note` 에 표시했을 때. 물음 뒤에 「그건 됐고 고양이
+     * 포스터 만들어줘」라고 했는데 처음 말을 붙이면 엉뚱한 것을 그린다.
+     */
+    const 답했나 = 광고 === "image" || decision.note === AD_ANSWER_NOTE;
+    const 지시 = adImageInstruction(지난줄, prompt, 답했나) ?? prompt;
+
     const 사진판단 = wants === "image" && 붙인수
       ? await runPhotoTurn(
         {
           photos: 사진들,
-          words: prompt,
+          words: 지시,
           chosen: 고른역할,
           previous: 지난역할,
           ratio: 고르기.ratio,
@@ -340,13 +382,13 @@ async function turn(request: Request): Promise<Response> {
 
     // ① 프로젝트
     const created = await read(await createProject(relay(request, "/api/poster/projects", {
-      title: easyTitle(prompt) || "Easy",
+      title: easyTitle(지시) || "Easy",
       // 말 속에 있던 것 · 물어서 고른 것 · 기본값 차례다(`ask.ts`).
       ratio: 고르기.ratio,
       look: 고르기.look,
       modelId: typeof input.imageModel === "string" ? input.imageModel : undefined,
       variants: VARIANTS,
-      instruction: prompt,
+      instruction: 지시,
       referenceIds: 칸?.referenceIds ?? [],
       preservedIds: 칸?.preservedIds ?? [],
       personIds: 칸?.personIds ?? [],
