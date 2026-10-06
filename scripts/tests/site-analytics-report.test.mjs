@@ -26,7 +26,7 @@ before(async () => {
       ('${ADMIN}','a@example.invalid',now()),('${KIM}','kim@example.invalid',now()),
       ('${LEE}','lee@example.invalid',now()),('${PARK}','park@example.invalid',now());
     update profiles set status='active', role='admin', created_at='2026-01-01' where id='${ADMIN}';
-    update profiles set status='active', created_at='2026-10-06 00:30:00+09', signup_provider='kakao', referrer_input='카페' where id='${KIM}';
+    update profiles set status='active', created_at='2026-10-06 10:05:00+09', signup_provider='kakao', referrer_input='카페' where id='${KIM}';
     update profiles set status='active', created_at='2026-08-01', signup_provider=null where id='${LEE}';
     update profiles set status='active', created_at='2026-10-04 15:00:00+09' where id='${PARK}';
     insert into analytics_page_views(created_at, visitor, cookie_key, user_id, path, referrer_host, utm_source, utm_campaign, device, browser, entry) values
@@ -118,6 +118,18 @@ test('an empty window still gives a full calendar and zeros', async () => {
   assert.equal(r.avg_session_seconds, 0);
   assert.equal(Number(r.consent_rate), 0);
   assert.deepEqual(r.sources, []);
+});
+
+test('visits after signup never count as the first touch', async () => {
+  // 박은 10/4 에 가입했고 방문 기록이 없다. 가입 뒤(10/5)의 첫 화면 줄 하나가 생겨도 '(unknown)' 이어야 한다.
+  await db.sql(`insert into analytics_page_views(created_at, visitor, cookie_key, user_id, path, utm_source, device, browser, entry)
+    values ('2026-10-05 12:00:00+09', '${V('7')}', null, '${PARK}', '/', 'naver', 'desktop', 'chrome', true);`);
+  try {
+    const r = await people();
+    assert.deepEqual(r.signup_sources.map((s) => [s.key, s.members]).sort(), [['(unknown)', 1], ['youtube', 1]]);
+  } finally {
+    await db.sql(`delete from analytics_page_views where visitor = '${V('7')}';`);
+  }
 });
 
 test('members and visitors cannot call the reports', async () => {

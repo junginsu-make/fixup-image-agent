@@ -177,16 +177,29 @@ as $$
     where s.user_id is not null or t.user_id is not null
   ),
   joined as (
-    select m.id from members m cross join win w
+    select m.id, m.created_at from members m cross join win w
     where m.created_at >= w.window_start and m.created_at <= p_now
   ),
-  -- 가입자의 첫 유입: 그 회원이 로그인한 채 남긴 visitor(같은 날) 또는 cookie_key(여러 날)와 같은 첫 화면 줄 중 가장 이른 것.
-  touches as (
-    select j.id, e.created_at, coalesce(e.utm_source, e.referrer_host, '(direct)') as source
+  -- 회원이 로그인한 채 남긴 (visitor, cookie_key) 쌍 — 회원마다 한 번만 모은다.
+  member_keys as (
+    select distinct j.id, j.created_at as joined_at, x.visitor, x.cookie_key
     from joined j
-    join analytics_page_views e on e.entry and e.created_at <= p_now and (
-         e.visitor in (select x.visitor from analytics_page_views x where x.user_id = j.id)
-      or e.cookie_key in (select x.cookie_key from analytics_page_views x where x.user_id = j.id and x.cookie_key is not null))
+    join analytics_page_views x on x.user_id = j.id
+  ),
+  -- 가입자의 첫 유입: 위 visitor(같은 날) 또는 cookie_key(여러 날)와 같은 첫 화면 줄 중 가장 이른 것.
+  -- **가입 시각 이전 줄만** 본다 — 가입 뒤의 방문은 유입이 아니다. 앞선 줄이 없으면 '(unknown)'.
+  -- 회원별로 or 를 겹쳐 비교하지 않고 두 갈래(visitor 로, cookie_key 로)를 따로 이어 합친다.
+  touches as (
+    select k.id, e.created_at, coalesce(e.utm_source, e.referrer_host, '(direct)') as source
+    from member_keys k
+    join analytics_page_views e on e.visitor = k.visitor
+    where e.entry and e.created_at <= k.joined_at and e.created_at <= p_now
+    union all
+    select k.id, e.created_at, coalesce(e.utm_source, e.referrer_host, '(direct)') as source
+    from member_keys k
+    join analytics_page_views e on e.cookie_key = k.cookie_key
+    where k.cookie_key is not null
+      and e.entry and e.created_at <= k.joined_at and e.created_at <= p_now
   ),
   first_touch as (
     select distinct on (j.id) j.id, coalesce(t.source, '(unknown)') as source
