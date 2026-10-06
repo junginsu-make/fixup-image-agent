@@ -127,6 +127,13 @@ describe("거절", () => {
     expect(res.status).toBe(415);
     expect(이은것).toEqual([]);
   });
+  it("남의 사이트가 같은 IP 로 열두 번 눌러도 그 IP 의 진짜 요청은 막히지 않는다", async () => {
+    for (let i = 0; i < 12; i += 1) {
+      const res = await 누르기({ consent: false }, { "sec-fetch-site": "cross-site", "x-forwarded-for": "192.0.2.55" });
+      expect(res.status).toBe(403);
+    }
+    expect((await 누르기({ consent: true }, { "x-forwarded-for": "192.0.2.55" })).status).toBe(204);
+  });
   it("한 IP 가 1분에 10번을 넘으면 429, 쿠키는 안 심는다", async () => {
     const statuses: number[] = [];
     let last: Response | null = null;

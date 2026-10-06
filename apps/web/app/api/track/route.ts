@@ -22,9 +22,12 @@ export const dynamic = "force-dynamic";
  */
 const NO_CONTENT = () => new Response(null, { status: 204 });
 const MAX_BODY = 4_096;
-// 한 IP 는 1분에 60줄, 서버 전체는 1분에 300줄. 열린 자리라 IP 를 바꿔 가며 몰아치는 것까지 막는다.
+// 한 IP 는 1분에 60줄, 서버 전체는 1분에 300줄·하루에 2만 줄. 열린 자리라 IP 를 바꿔 가며 몰아치는 것까지 막는다.
 const allowIp = createLimiter({ limit: 60, windowMs: 60_000, maxKeys: 5_000 });
 const allowAll = createLimiter({ limit: 300, windowMs: 60_000, maxKeys: 1 });
+// 하루 전체 2만 줄. 1분 상한만으로는 IP 몇 개가 하루 종일(43만 줄) 채워 공용 DB 디스크를 부풀릴 수 있다.
+// 앞 둘을 통과한 요청만 센다(막힌 요청이 하루 몫을 먹지 않게 && 순서를 지킨다).
+const allowDay = createLimiter({ limit: 20_000, windowMs: 86_400_000, maxKeys: 1 });
 
 const 방문 = z.object({
   path: z.string().min(1).max(2_000),
@@ -52,7 +55,7 @@ function acceptable(req: Request, userAgent: string, ip: string | null): boolean
   if (isBot(userAgent)) return false;
   const site = req.headers.get("sec-fetch-site");
   if (site && site !== "same-origin") return false;
-  return allowIp(ip ?? "unknown") && allowAll("all");
+  return allowIp(ip ?? "unknown") && allowAll("all") && allowDay("all");
 }
 
 /** 동의한 브라우저의 번호표. 동의했는데 번호가 없거나 모양이 틀리면 새로 만든다 — 그때만 issue. */

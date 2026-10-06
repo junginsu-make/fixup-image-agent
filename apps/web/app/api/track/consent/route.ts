@@ -59,11 +59,12 @@ function sameSite(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
-  if (!allow(clientIp(req.headers) ?? "unknown")) return new Response(null, { status: 429 });
   if (!sameSite(req)) return new Response(null, { status: 403 });
   if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
     return new Response(null, { status: 415 });
   }
+  // 횟수는 같은 사이트의 요청만 센다 — 남의 사이트가 피해자 IP 의 몫을 태워 거부를 막지 못하게.
+  if (!allow(clientIp(req.headers) ?? "unknown")) return new Response(null, { status: 429 });
   const consent = await readChoice(req);
   if (consent === null) return new Response(null, { status: 400 });
 
