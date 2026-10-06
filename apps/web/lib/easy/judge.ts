@@ -51,7 +51,13 @@ export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision
   /*
    * **다시 물은 답은 talk 이고 글이 있을 때만 쓴다.** 다른 갈래로 바뀌면 사용자가 말한
    * 적 없는 만들기로 값이 나갈 수 있다 — 그때는 처음 답(빈 talk)을 그대로 둔다.
+   * 다시 묻다가 실패해도 처음 답을 쓴다 — 대화가 멈추지 않는다(최종 리뷰).
    */
-  const again = await ask(true);
+  let again: EasyDecision;
+  try {
+    again = await ask(true);
+  } catch {
+    return first;
+  }
   return again.wants === "talk" && again.reply ? again : first;
 }

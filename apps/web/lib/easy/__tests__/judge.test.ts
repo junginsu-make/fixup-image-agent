@@ -52,6 +52,16 @@ describe("빈 답이면 한 번 더 묻는다 (A3)", () => {
     expect(await 묻는다(decide)).toMatchObject({ wants: "talk", reply: "" });
   });
 
+  /** 최종 리뷰: 다시 묻다가 실패하면 턴 전체가 오류로 멈췄다. 대화는 멈추지 않는다. */
+  it("다시 묻다가 실패하면 처음 답(빈 talk)을 돌려준다 — 라우트가 기본 문장을 쓴다", async () => {
+    const decide = vi.fn(async () => {
+      if (decide.mock.calls.length > 1) throw new Error("글 모델이 응답하지 않습니다");
+      return 결정();
+    });
+    expect(await 묻는다(decide as unknown as ReturnType<typeof 판단기>)).toMatchObject({ wants: "talk", reply: "" });
+    expect(decide).toHaveBeenCalledTimes(2);
+  });
+
   it("답이 있으면 한 번만 묻는다", async () => {
     const decide = 판단기(결정({ reply: "안녕하세요!" }));
     await 묻는다(decide);
