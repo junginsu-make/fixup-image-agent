@@ -19,15 +19,22 @@ export interface EasySubmission {
 export const NO_IMAGE_MADE = "이미지가 나오지 않았습니다. 같은 말을 다시 보내 주세요.";
 
 const 묻는간격 = 10_000;
+/** 이만큼 기다려도 안 끝나면 그만둔다(보안 리뷰 L1). 멈춘 요청을 끝없이 묻지 않는다. */
+const 최대기다림 = 15 * 60_000;
 const 기다린다 = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** 받으면 그 그림, 화면을 떠났으면 `undefined`. 0장이면 `NO_IMAGE_MADE` 로 던진다. */
+/**
+ * 받으면 그 그림, 화면을 떠났으면 `undefined`. 0장이거나 시작한 지 15분이 지나도 안
+ * 끝나면 `NO_IMAGE_MADE` 로 던진다.
+ */
 export async function collectEasyImage(
   projectId: string,
   submission: EasySubmission,
   isAlive: () => boolean,
   wait: (ms: number) => Promise<void> = 기다린다,
+  now: () => number = Date.now,
 ): Promise<{ id: string; url: string } | undefined> {
+  const 시작 = now();
   const body = {
     requestRowId: submission.requestRowId,
     falRequestId: submission.falRequestId,
@@ -53,5 +60,6 @@ export async function collectEasyImage(
       if (!first) throw new Error(NO_IMAGE_MADE);
       return { id: first.id, url: first.url };
     }
+    if (now() - 시작 >= 최대기다림) throw new Error(NO_IMAGE_MADE);
   }
 }

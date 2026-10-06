@@ -41,6 +41,32 @@ describe("결과 받기", () => {
     await expect(collectEasyImage("p1", 일감, () => true, 안기다림)).rejects.toThrow("내용 검사에 걸렸습니다.");
   });
 
+  /**
+   * 보안 리뷰 L1: 멈춘 요청이면 끝없이 물었다. 시작한 지 15분이 지나도 안 끝나면 실패로
+   * 알린다. 만든 직후와 다시 열 때가 같은 함수라 둘 다 멈춘다.
+   */
+  describe("오래 걸리면 그만둔다 (L1)", () => {
+    const 시계 = () => {
+      let 지금 = 0;
+      return { now: () => 지금, wait: async (ms: number) => { 지금 += ms; } };
+    };
+    const 끝난답 = 답({ ok: true, done: true, images: [{ id: "i1", url: "u", generationRequestId: "r1" }] });
+
+    it("15분이 지나도 안 끝나면 NO_IMAGE_MADE 로 알린다", async () => {
+      // 고치기 전에는 끝없이 묻는다 — 테스트가 멈추지 않게 200번째에 끝난 답을 준다.
+      f.fetch.mockImplementation(async () => (f.fetch.mock.calls.length >= 200 ? 끝난답 : 답({ ok: true, done: false })));
+      const { now, wait } = 시계();
+      await expect(collectEasyImage("p1", 일감, () => true, wait, now)).rejects.toThrow(NO_IMAGE_MADE);
+      expect(f.fetch).toHaveBeenCalledTimes(90);
+    });
+
+    it("15분 안에 끝나면 받는다", async () => {
+      f.fetch.mockImplementation(async () => (f.fetch.mock.calls.length >= 89 ? 끝난답 : 답({ ok: true, done: false })));
+      const { now, wait } = 시계();
+      expect(await collectEasyImage("p1", 일감, () => true, wait, now)).toEqual({ id: "i1", url: "u" });
+    });
+  });
+
   it("화면을 떠났으면 묻지 않고 그만둔다", async () => {
     expect(await collectEasyImage("p1", 일감, () => false, 안기다림)).toBeUndefined();
     expect(f.fetch).not.toHaveBeenCalled();
