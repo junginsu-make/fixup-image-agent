@@ -2,7 +2,8 @@ import { pdpCreditSize } from "../../../lib/membership/image-sizes";
 import { creditImagePlan, markCreditStarted } from "../../../lib/membership/credit-ledger";
 import { z } from "zod";
 import { authenticateApiMember, finalizeAiUsage, reserveAiUsage } from "../../../lib/membership/api";
-import { withLlmMeter } from "../../../lib/llm/meter";
+import { llmSettleCost, withLlmMeter } from "../../../lib/llm/meter";
+import { prepareCharacterBrief } from "../../../lib/character-brief";
 import { imageCreditUnits } from "../../../lib/credit-cost";
 import {
   DEFAULT_CANDIDATES,
@@ -65,6 +66,11 @@ const BodySchema = z.object({
   }).optional(),
   chosenBase64: z.string().optional(),
   chosenMimeType: z.string().optional(),
+  /**
+   * 정면을 만들 때 LLM 이 정리한 정체성. 화면이 받아 두었다가 저장 때 돌려준다.
+   * 없으면(옛 화면·「과정 보기」로 연 캐릭터) 저장 단계가 직접 정리한다.
+   */
+  identityPrompt: z.string().trim().max(2000).optional(),
   candidates: z.number().int().min(MIN_CANDIDATES).max(MAX_CANDIDATES).optional(),
   /** 정면 말고 더 만들 각도. 빈 배열이면 정면 한 장짜리가 된다. */
   angles: z.array(z.enum(CHARACTER_ANGLES.map((angle) => angle.id) as [string, ...string[]])).optional(),
@@ -165,8 +171,16 @@ async function handlePost(req: Request) {
 
     try {
       await markCreditStarted(reservation);
-      const result = await generateCandidates({
+      // 사용자가 친 말을 이미지 모델이 오해하지 않게 정리한다. 실패하면 원문이다.
+      const brief = await prepareCharacterBrief({
         description: body.description,
+        kind: body.kind,
+        look: body.look,
+        referenceRole: reference?.role,
+        hasOwnCharacter: false,
+      });
+      const result = await generateCandidates({
+        description: brief.prompt,
         aspectRatio: body.aspectRatio,
         kind: body.kind,
         look: body.look,
@@ -187,13 +201,14 @@ async function handlePost(req: Request) {
         result.candidates.length > 0,
         imageCreditUnits(result.model, result.candidates.length),
         result.candidates.length > 0 ? undefined : "candidates_failed",
-        { model: result.model, billableImages: result.candidates.length, deliveredImages: result.candidates.length, completionConfirmed: true },
+        { model: result.model, billableImages: result.candidates.length, deliveredImages: result.candidates.length, completionConfirmed: true, llmUsd: llmSettleCost().llmUsd },
       );
       return Response.json({
         ok: result.candidates.length > 0,
         candidates: result.candidates,
         requested: result.requested,
         usage,
+        brief: { identity: brief.identity, refined: brief.refined },
         message: result.candidates.length ? undefined : "후보를 만들지 못했습니다.",
       });
     } catch (error) {
@@ -222,12 +237,21 @@ async function handlePost(req: Request) {
 
   try {
     await markCreditStarted(reservation);
+    // 정면 때 정리한 정체성을 받는다. 없으면 여기서 정리한다 — 각도가 원문으로 그려지면
+    // 정면과 다른 해석이 된다.
+    const identityPrompt = body.identityPrompt || (await prepareCharacterBrief({
+      description: body.description,
+      kind: body.kind,
+      look: body.look,
+      hasOwnCharacter: false,
+    })).identity;
     const result = await createCharacter({
       angles: angles as CharacterAngle[],
       sheet: body.sheet,
       userId: auth.member.userId,
       name: (body.name || body.description).slice(0, 80),
       description: body.description,
+      identityPrompt,
       aspectRatio: body.aspectRatio,
       kind: body.kind,
       look: body.look,
@@ -244,7 +268,7 @@ async function handlePost(req: Request) {
       result.ok,
       imageCreditUnits(modelId, generated),
       result.ok ? undefined : "character_create_failed",
-      { model: modelId, billableImages: generated, deliveredImages: generated, completionConfirmed: true },
+      { model: modelId, billableImages: generated, deliveredImages: generated, completionConfirmed: true, llmUsd: llmSettleCost().llmUsd },
     );
 
     return Response.json({ ...result, usage }, { status: result.ok ? 200 : 500 });

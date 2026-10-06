@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * 라우트가 **정리한 말로 그리고, 정리한 정체성을 저장하는가.**
+ * 그림·DB·LLM 은 전부 가짜다. 라우트의 연결만 본다.
+ */
+
+vi.mock("server-only", () => ({}));
+
+const calls = {
+  brief: [] as unknown[],
+  candidates: [] as Array<Record<string, unknown>>,
+  create: [] as Array<Record<string, unknown>>,
+  reserve: 0,
+};
+
+vi.mock("../../../../lib/membership/api", () => ({
+  authenticateApiMember: async () => ({ ok: true, member: { userId: "u1" } }),
+  reserveAiUsage: async () => { calls.reserve += 1; return { ok: true, userId: "u1", requestId: "r1" }; },
+  finalizeAiUsage: async () => undefined,
+}));
+vi.mock("../../../../lib/membership/credit-ledger", () => ({
+  creditImagePlan: () => ({}),
+  markCreditStarted: async () => undefined,
+}));
+vi.mock("../../../../lib/membership/image-sizes", () => ({ pdpCreditSize: () => "standard" }));
+vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
+vi.mock("../../../../lib/llm/meter", () => ({
+  withLlmMeter: (run: () => unknown) => run(),
+  llmSettleCost: () => ({ model: "", billableImages: 0, llmUsd: 0.002 }),
+}));
+vi.mock("../../../../lib/character-brief", () => ({
+  prepareCharacterBrief: async (input: unknown) => {
+    calls.brief.push(input);
+    return { prompt: "A cat with one head. Smiling.", identity: "A cat with one head.", refined: true };
+  },
+}));
+vi.mock("../../../../lib/characters", () => ({
+  DEFAULT_CANDIDATES: 1,
+  MIN_CANDIDATES: 1,
+  MAX_CANDIDATES: 3,
+  characterCreditCost: () => 1,
+  listCharacters: async () => [],
+  deleteCharacter: async () => ({ ok: true }),
+  generateCandidates: async (input: Record<string, unknown>) => {
+    calls.candidates.push(input);
+    return { model: "nano-banana-pro", candidates: [{ base64: "AAAA", mimeType: "image/png" }], requested: 1 };
+  },
+  createCharacter: async (input: Record<string, unknown>) => {
+    calls.create.push(input);
+    return { ok: true, id: "c1", angleCount: 1 };
+  },
+}));
+
+const { POST } = await import("../route");
+
+function post(body: Record<string, unknown>) {
+  return POST(new Request("http://local/api/characters", { method: "POST", body: JSON.stringify(body) }));
+}
+
+const 기본 = { description: "고양이인데 3등신", kind: "character", look: "3d" };
+
+beforeEach(() => {
+  calls.brief.length = 0;
+  calls.candidates.length = 0;
+  calls.create.length = 0;
+  calls.reserve = 0;
+});
+
+describe("정면 만들기", () => {
+  it("정리한 말로 그리고, 정리한 정체성을 돌려준다", async () => {
+    const response = await post({ ...기본, step: "candidates" });
+    const body = await response.json();
+
+    expect(calls.brief[0]).toEqual({
+      description: 기본.description, kind: "character", look: "3d",
+      referenceRole: undefined, hasOwnCharacter: false,
+    });
+    expect(calls.candidates[0]!.description).toBe("A cat with one head. Smiling.");
+    expect(body.brief).toEqual({ identity: "A cat with one head.", refined: true });
+  });
+});
+
+describe("저장", () => {
+  const 저장 = { ...기본, step: "create", chosenBase64: "AAAA", chosenMimeType: "image/png", angles: [] };
+
+  it("화면이 보낸 정체성을 그대로 저장한다 — 다시 정리하지 않는다", async () => {
+    await post({ ...저장, identityPrompt: "A cat with one head." });
+    expect(calls.brief).toHaveLength(0);
+    expect(calls.create[0]!.identityPrompt).toBe("A cat with one head.");
+    expect(calls.create[0]!.description).toBe(기본.description);
+  });
+
+  /** Review Focus 3 — 옛 화면·「과정 보기」로 연 캐릭터는 정체성을 안 보낸다. */
+  it("정체성이 없으면 저장 단계가 직접 정리한다", async () => {
+    await post(저장);
+    expect(calls.brief).toHaveLength(1);
+    expect(calls.create[0]!.identityPrompt).toBe("A cat with one head.");
+  });
+});

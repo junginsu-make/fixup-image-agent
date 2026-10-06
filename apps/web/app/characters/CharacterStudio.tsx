@@ -198,7 +198,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 그림과 어긋나지 않아야 한다.
    */
   const [chosen, setChosen] = useState<
-    (Candidate & { description: string; name: string; kind: Kind; look: Look; modelId: string }) | null
+    (Candidate & { description: string; identity: string; name: string; kind: Kind; look: Look; modelId: string }) | null
   >(null);
   const [busy, setBusy] = useState<"" | "candidates" | "create">("");
   /** 각도를 만드는 동안 자리를 잡아 둘 칸. 비면 만드는 중이 아니다. */
@@ -272,7 +272,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setLook(lookAfterRole("extract", values.look as Look));
     if (!front) return;
     setChosen({
-      ...front, description: values.description, name: values.name,
+      ...front, description: values.description, identity: "", name: values.name,
       kind: values.kind as Kind, look: values.look as Look, modelId: "",
     });
   }, []);
@@ -363,14 +363,16 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
             ? { role: attached.role, base64: attached.base64, mimeType: attached.mimeType }
             : undefined,
         }),
-      })).json() as { ok?: boolean; candidates?: Candidate[]; message?: string };
+      })).json() as {
+        ok?: boolean; candidates?: Candidate[]; message?: string; brief?: { identity?: string };
+      };
 
       const made = body.candidates?.[0];
       if (!body.ok || !made) return setMessage(body.message ?? "정면을 만들지 못했습니다.");
 
       // 만들 때 쓸 값을 함께 얼려 둔다 — 뒤에 왼쪽 칸을 건드려도 이미 나온
       // 그림과 어긋나지 않아야 한다.
-      setChosen({ ...made, description, name, kind, look, modelId });
+      setChosen({ ...made, description, identity: body.brief?.identity || description, name, kind, look, modelId });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "정면을 만들지 못했습니다.");
     } finally {
@@ -421,6 +423,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
           name: (chosen.name.trim() || chosen.description).slice(0, 40),
           chosenBase64: chosen.base64,
           chosenMimeType: chosen.mimeType,
+          identityPrompt: chosen.identity || undefined,
         }),
       })).json() as {
         ok?: boolean; id?: string; message?: string; missingAngles?: number; referenceIssue?: string;
@@ -698,10 +701,10 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   }
                   onChange={(event) => setDescription(event.target.value)}
                 />
-                {/* 장식이 아니다. 적은 말이 그대로 모델로 간다는 것과 종류가 묘사를
+                {/* 장식이 아니다. 적은 말이 정리되어 간다는 것과 종류가 묘사를
                     이기지 않는다는 것을 모르면, 엉뚱한 결과를 보고도 원인을 찾을 수 없다. */}
                 <p className="flex-none text-[11px] leading-snug text-subtle-foreground">
-                  적은 말이 <strong>그대로</strong> 모델로 갑니다. 한국어 그대로 보내고,
+                  적은 말을 AI 가 <strong>정리해서</strong> 모델에 보냅니다. 「3등신」 같은 말도 풀어서 전합니다.
                   <strong> 종류는 묘사에 맞춰</strong> 고르세요.
                 </p>
               </label>
