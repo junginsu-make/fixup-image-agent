@@ -27,10 +27,23 @@ export const HOME_AFTER_LOGIN = "/guide";
  * 이 된다 — 실제로 로그인 뒤 `router.replace` 가 다른 사이트로 보냈다(열린
  * 리다이렉트). 퍼센트 인코딩된 역슬래시(`%5C`)는 이 함수가 디코딩하지 않으므로
  * 글자 그대로 남아 위험하지 않다.
+ *
+ * **탭·줄바꿈 같은 제어문자도 같은 구멍이다**(2026-10-06 조사). 브라우저와
+ * `new URL` 이 주소를 읽을 때 그것들을 지워서 `/<탭>/evil.example.com` 이
+ * `//evil.example.com` 이 된다 — 메일 인증 링크에서 실제로 다른 사이트로 보냈다.
+ *
+ * **글자만 보지 않고 풀어 본 결과도 본다.** `/.//evil.example.com` 은 글자로는
+ * 멀쩡한데 점 경로가 풀리면 `//evil.example.com` 이 된다(2026-10-06 보안 리뷰).
+ * `socialNext`(`lib/auth/social-auth.ts`)가 이미 같은 확인을 한다.
  */
+const UNSAFE_IN_NEXT = /[\u0000-\u001f\u007f\\]/;
+const PROBE_ORIGIN = "https://next.invalid";
+
 export function safeNext(next: string | null | undefined): string {
   if (!next) return HOME_AFTER_LOGIN;
-  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return HOME_AFTER_LOGIN;
+  if (!next.startsWith("/") || next.startsWith("//") || UNSAFE_IN_NEXT.test(next)) return HOME_AFTER_LOGIN;
+  const resolved = new URL(next, PROBE_ORIGIN);
+  if (resolved.origin !== PROBE_ORIGIN || resolved.pathname.startsWith("//")) return HOME_AFTER_LOGIN;
   return next;
 }
 

@@ -79,6 +79,38 @@ describe("가려던 곳으로 돌려보내기", () => {
     expect(safeNext("/\\\\evil.example.com")).toBe(HOME_AFTER_LOGIN);
   });
 
+  /**
+   * **탭·줄바꿈도 바깥 주소다** (2026-10-06 조사).
+   *
+   * 주소를 읽을 때 브라우저와 `new URL` 은 탭·줄바꿈을 지운다 — `/<탭>/evil` 은
+   * `//evil` 이 되어 다른 사이트로 간다. 메일 인증 링크(`auth/confirm`)에서
+   * 실제로 `https://evil.example.com/` 으로 보내는 것을 재현했다.
+   */
+  it.each([
+    ["탭", "/\t/evil.example.com"],
+    ["줄바꿈", "/\n/evil.example.com"],
+    ["캐리지 리턴", "/\r/evil.example.com"],
+    ["널", "/\u0000/evil.example.com"],
+    ["DEL", "/\u007f/evil.example.com"],
+  ])("%s 이 섞여도 바깥으로 보내지 않는다", (_label, next) => {
+    expect(safeNext(next)).toBe(HOME_AFTER_LOGIN);
+  });
+
+  it("돌려준 값을 우리 주소에 붙이면 언제나 우리 사이트다", () => {
+    const base = "https://formwith.example";
+    const tricky = [
+      "/\t/evil.example.com", "/\n\n/evil.example.com", "/\\evil.example.com", "//evil.example.com",
+      "/./\t/evil.example.com", "/%09/evil.example.com", "/ /evil.example.com", "/sns/abc?x=1#y",
+      // 점 경로는 풀면 `//evil` 이 된다 — 출처는 같아도 경로가 바깥 주소 모양이다(보안 리뷰).
+      "/.//evil.example.com", "/..//evil.example.com", "/a/..//evil.example.com", "/%2e%2e//evil.example.com",
+    ];
+    for (const next of tricky) {
+      const resolved = new URL(safeNext(next), base);
+      expect(resolved.origin, JSON.stringify(next)).toBe(base);
+      expect(resolved.pathname.startsWith("//"), JSON.stringify(next)).toBe(false);
+    }
+  });
+
   it("퍼센트 인코딩된 역슬래시는 그대로 둔다 — 풀어보지 않으니 안전하다", () => {
     // `%5C` 는 글자 그대로 남는다. 이 함수가 디코딩해서 판정하지 않는 한
     // 브라우저는 이것을 같은 자리의 경로로 읽는다(다른 사이트로 가지 않는다).
