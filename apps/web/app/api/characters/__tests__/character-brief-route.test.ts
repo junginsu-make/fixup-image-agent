@@ -91,6 +91,14 @@ describe("저장", () => {
     expect(calls.create[0]!.description).toBe(기본.description);
   });
 
+  /** 정면은 이미 돈을 냈다 — 정체성이 길다고 저장을 거절하면 안 된다. */
+  it("2000자를 넘는 정체성은 거절하지 않고 자른다", async () => {
+    const response = await post({ ...저장, identityPrompt: "a".repeat(2500) });
+    expect(response.status).toBe(200);
+    expect(calls.brief).toHaveLength(0);
+    expect((calls.create[0]!.identityPrompt as string).length).toBe(2000);
+  });
+
   /** Review Focus 3 — 옛 화면·「과정 보기」로 연 캐릭터는 정체성을 안 보낸다. */
   it("정체성이 없으면 저장 단계가 직접 정리한다", async () => {
     await post(저장);

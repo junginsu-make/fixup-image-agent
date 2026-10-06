@@ -69,8 +69,9 @@ const BodySchema = z.object({
   /**
    * 정면을 만들 때 LLM 이 정리한 정체성. 화면이 받아 두었다가 저장 때 돌려준다.
    * 없으면(옛 화면·「과정 보기」로 연 캐릭터) 저장 단계가 직접 정리한다.
+   * 길면 거절하지 않고 자른다 — 정면은 이미 돈을 냈으니 저장이 막히면 안 된다.
    */
-  identityPrompt: z.string().trim().max(2000).optional(),
+  identityPrompt: z.string().trim().transform((value) => value.slice(0, 2000)).optional(),
   candidates: z.number().int().min(MIN_CANDIDATES).max(MAX_CANDIDATES).optional(),
   /** 정면 말고 더 만들 각도. 빈 배열이면 정면 한 장짜리가 된다. */
   angles: z.array(z.enum(CHARACTER_ANGLES.map((angle) => angle.id) as [string, ...string[]])).optional(),
