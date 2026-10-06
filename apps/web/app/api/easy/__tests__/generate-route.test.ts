@@ -15,6 +15,8 @@ const 사진 = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, 
 let 판단: unknown;
 let 역할판단: unknown;
 let 역할판단실패: Error | null;
+let 기획실패 = false;
+let 기획던짐 = false;
 let 볼수있는사진: string[];
 const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
@@ -73,7 +75,11 @@ vi.mock("../../poster/projects/route", () => ({
 vi.mock("../../poster/projects/[id]/plan/route", () => ({
   POST: async (req: Request) => {
     부른라우트.push({ step: "plan", body: await req.json() });
-    return Response.json({ ok: true });
+    // 우리가 알고 낸 실패가 아닌 것 — 저장소 · DB 오류가 그대로 올라온 경우(최종 리뷰).
+    if (기획던짐) throw new Error('relation "poster_projects" does not exist');
+    return 기획실패
+      ? Response.json({ ok: false, message: "기획이 막혔습니다." }, { status: 502 })
+      : Response.json({ ok: true });
   },
 }));
 vi.mock("../../poster/projects/[id]/generate/route", () => ({
@@ -85,6 +91,8 @@ vi.mock("../../poster/projects/[id]/generate/route", () => ({
 
 const { POST } = await import("../generate/route");
 const { DETAIL_PAGE_GUIDE } = await import("../../../easy/detail-page");
+const { FAILED_TURN_GENERIC, failureRowBody } = await import("../../../../lib/easy/failure-row");
+const { withRowJob } = await import("../../../easy/row-image");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -104,6 +112,7 @@ beforeEach(() => {
   판단 = { wants: "image", reply: "", ratio: "", look: "" };
   역할판단 = { photos: [], conflicting: false };
   역할판단실패 = null;
+  기획실패 = false; 기획던짐 = false;
   볼수있는사진 = [사진(1), 사진(2), 사진(3)];
   남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0;
   부른횟수.decide = 0; 부른횟수.roles = 0;
@@ -334,5 +343,37 @@ describe("한 턴의 판단 (2026-10-06 A2 · A3)", () => {
     판단 = { wants: "talk", reply: "", ratio: "", look: "" };
     await 보낸다({ kind: "image", kindPicked: true, ratio: "1:1" });
     expect(부른횟수.decide).toBe(1);
+  });
+});
+
+describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
+  it("말을 남긴 뒤 기획이 실패하면 실패 안내를 도우미 줄로 남긴다", async () => {
+    기획실패 = true;
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status } = await 보낸다({});
+    expect(status).toBe(502);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(남긴줄[1]!.body).toBe(failureRowBody("기획이 막혔습니다."));
+  });
+
+  /**
+   * 최종 리뷰(2026-10-06): 우리가 알고 낸 실패(`EasyStepError`)가 아니면 오류 글에 표 이름 ·
+   * 칼럼 이름이 섞여 온다. 대화는 남고 다시 열면 보이므로 그 글을 남기지 않는다.
+   */
+  it("알고 낸 실패가 아니면 내부 글 대신 일반 문장을 남긴다", async () => {
+    기획던짐 = true;
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    await 보낸다({});
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(남긴줄[1]!.body).toBe(failureRowBody(FAILED_TURN_GENERIC));
+    expect(남긴줄[1]!.body).not.toContain("poster_projects");
+  });
+
+  it("그림 줄에 결과를 받을 정보를 남긴다 — 다시 열면 이어 받는다", async () => {
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    await 보낸다({});
+    expect(남긴줄.at(-1)).toMatchObject({
+      role: "image", body: withRowJob("", { requestRowId: "r", falRequestId: "f", endpoint: "e" }),
+    });
   });
 });

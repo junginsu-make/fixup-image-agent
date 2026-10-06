@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, pickCollectedImage, pickRowImage,
+  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, pickCollectedImage, pickRowImage, rowJobOf,
+  withRowJob,
 } from "../row-image";
 
 /**
@@ -136,5 +137,48 @@ describe("화면이 결과를 받을 때", () => {
     const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
     expect(화면).toMatch(/pickCollectedImage(<[^>]*>)?\(poll\.images, submission\.requestRowId\)/);
     expect(화면).not.toContain("poll.images?.[0]");
+  });
+});
+
+describe("받을 정보 (B3)", () => {
+  const 일감 = { requestRowId: "r1", falRequestId: "f-1", endpoint: "fal-ai/gpt-image-2/edit" };
+
+  it("처음 만든 줄 · 고친 줄 모두 끝에 붙이고 다시 읽는다", () => {
+    expect(rowJobOf(withRowJob("", 일감))).toEqual(일감);
+    expect(rowJobOf(withRowJob(editRowBody("r2", ["logo"]), 일감))).toEqual(일감);
+  });
+
+  it("붙여도 고친 줄 표시는 그대로 읽힌다", () => {
+    const body = withRowJob(editRowBody("r2", ["logo-1", "logo-2"]), 일감);
+    expect(editRequestOf(body)).toBe("r2");
+    expect(editAddedOf(body)).toEqual(["logo-1", "logo-2"]);
+    expect(editRequestOf(withRowJob(editRowBody("r3"), 일감))).toBe("r3");
+  });
+
+  it("처음 만든 줄에 붙여도 고친 줄로 안 읽힌다 — 예전 고르기 규칙 그대로", () => {
+    expect(editRequestOf(withRowJob("", 일감))).toBeUndefined();
+    const images = [그림("a", "r1"), 그림("b", "r1", true)];
+    expect(pickRowImage({ body: withRowJob("", 일감) }, images, new Set())?.id).toBe("b");
+  });
+
+  /** Review Focus 3 */
+  it("주소에 쉼표 · 쌍반점 · 표시 글자가 있어도 서로 안 섞인다", () => {
+    const 이상한 = { ...일감, endpoint: "fal-ai/x,y;added=z;job=w" };
+    const body = withRowJob(editRowBody("r2"), 이상한);
+    expect(rowJobOf(body)).toEqual(이상한);
+    expect(editAddedOf(body)).toEqual([]);
+    expect(editRequestOf(body)).toBe("r2");
+  });
+
+  it("셋 중 하나라도 없으면 붙이지 않는다 — 옛 응답", () => {
+    expect(withRowJob("", { requestRowId: "r1" })).toBe("");
+    expect(withRowJob("", undefined)).toBe("");
+  });
+
+  it("표시가 없거나 깨졌으면 없다", () => {
+    expect(rowJobOf("")).toBeUndefined();
+    expect(rowJobOf(editRowBody("r2"))).toBeUndefined();
+    expect(rowJobOf(";job=a,b")).toBeUndefined();
+    expect(rowJobOf(";job=%E0%A4%A,b,c")).toBeUndefined();
   });
 });

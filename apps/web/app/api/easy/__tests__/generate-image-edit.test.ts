@@ -17,6 +17,7 @@ let 지난줄: Array<{ id: string; role: string; body: string; workId: string | 
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
 const 부른라우트: Array<{ step: string; url: string; body: Record<string, unknown> }> = [];
 let 받은갈래: string[] = [];
+let 고치기실패 = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -67,6 +68,7 @@ vi.mock("../../../../lib/poster/stores", () => ({
 const 라우트 = (step: string) => ({
   POST: async (req: Request) => {
     부른라우트.push({ step, url: req.url, body: await req.json() });
+    if (step === "edit" && 고치기실패) return Response.json({ ok: false, message: "고치기가 막혔습니다." }, { status: 502 });
     return step === "project"
       ? Response.json({ ok: true, project: { id: "new" } })
       : Response.json({ ok: true, submission: { requestRowId: `${step}-row`, falRequestId: "f", endpoint: "e" } });
@@ -79,6 +81,7 @@ vi.mock("../../poster/projects/[id]/edit/route", () => 라우트("edit"));
 
 const { POST } = await import("../generate/route");
 const { NOTHING_TO_EDIT } = await import("../../../easy/chat");
+const { failureRowBody } = await import("../../../../lib/easy/failure-row");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -98,6 +101,7 @@ beforeEach(() => {
     { id: "i1", role: "image", body: "", workId: "p1" },
   ];
   남긴줄.length = 0; 부른라우트.length = 0;
+  고치기실패 = false;
 });
 
 describe("이미지를 만든 대화에서 고쳐 달라고 하면", () => {
@@ -158,5 +162,15 @@ describe("선택지와 고른 갈래 (2026-10-06 A1 · A2)", () => {
     판단 = { ...(판단 as object), wants: "image_edit" };
     await 보낸다({ prompt: "배경만 파랗게", kind: "image" });
     expect(부른라우트.map((call) => call.step)).toEqual(["edit"]);
+  });
+});
+
+describe("고치기가 실패하면 (2026-10-06 B4)", () => {
+  it("말 뒤에 실패 안내를 남긴다", async () => {
+    고치기실패 = true;
+    판단 = { ...(판단 as object), wants: "image_edit" };
+    await 보낸다({ prompt: "배경만 파랗게" });
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(남긴줄[1]!.body).toBe(failureRowBody("고치기가 막혔습니다."));
   });
 });

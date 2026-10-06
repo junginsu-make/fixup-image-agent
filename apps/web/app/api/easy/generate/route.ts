@@ -4,6 +4,8 @@ import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
+import { FAILED_TURN_GENERIC, trackUserTurn } from "../../../../lib/easy/failure-row";
+import { withRowJob } from "../../../easy/row-image";
 import type { EasyDecision } from "../../../easy/chat";
 import { judgeEasyTurn } from "../../../../lib/easy/judge";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
@@ -124,7 +126,9 @@ async function turn(request: Request): Promise<Response> {
   if (!conversationId) return fail("어느 대화인지 알려 주세요.", 400);
   if (!prompt) return fail("무엇을 만들지 적어 주세요.", 400);
 
-  const store = easyStoreForUser(auth.member.userId);
+  // 사용자 말 뒤에 답 없이 실패하면 실패 안내를 남길 수 있게 지켜본다(2026-10-06 설계 B4).
+  const 지킴 = trackUserTurn(easyStoreForUser(auth.member.userId));
+  const store = 지킴.store;
   const conversation = await store.getConversation(conversationId);
   if (!conversation) return fail("대화를 찾을 수 없습니다.", 404);
 
@@ -430,7 +434,8 @@ async function turn(request: Request): Promise<Response> {
      * **제출한 직후에 남긴다.** 결과를 기다려 남기면, 화면을 떠난 사람의 대화에
      * 그 그림이 안 들어간다.
      */
-    await store.appendMessage({ conversationId, role: "image", workId: projectId });
+    // 받을 정보를 함께 적는다 — 화면을 떠났다 다시 열어도 이어 받는다(2026-10-06 설계 B3).
+    await store.appendMessage({ conversationId, role: "image", workId: projectId, body: withRowJob("", submitted.submission) });
 
     return Response.json({
       ok: true,
@@ -446,6 +451,12 @@ async function turn(request: Request): Promise<Response> {
       ...(submitted.notice ? { notice: submitted.notice } : {}),
     });
   } catch (error) {
+    /*
+     * 사용자 말을 남긴 뒤 실패했으면 그 안내도 대화에 남긴다(B4). 우리가 알고 낸 실패면
+     * 화면이 보이는 말 그대로, 아니면 일반 문장 — 내부 오류 글(표 이름 등)은 대화에 남기지
+     * 않는다(최종 리뷰 2026-10-06).
+     */
+    await 지킴.leaveFailure(conversationId, error instanceof EasyStepError ? error.message : FAILED_TURN_GENERIC);
     if (error instanceof EasyStepError) {
       /*
        * **세 갈래를 가려 말한다**(설계 §5-3). 어느 쪽이냐에 따라 할 일이

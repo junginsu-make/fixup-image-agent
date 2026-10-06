@@ -25,6 +25,47 @@ const 고친줄머리 = "edit-request:";
 const 넣은사진머리 = ";added=";
 
 /**
+ * **받을 정보**(2026-10-06 설계 B3). 그림 줄 글 **끝**에 붙인다 — 고친 줄 표시 뒤다.
+ * 다시 열 때 그림이 아직 없으면 이것으로 `status` 에 물어 이어 받는다. 칸마다
+ * `encodeURIComponent` 로 감싸 쉼표 · 쌍반점이 섞이지 않는다.
+ */
+const 일감머리 = ";job=";
+
+/** `status` 라우트가 그대로 받는 셋. */
+export interface EasyRowJob {
+  requestRowId: string;
+  falRequestId: string;
+  endpoint: string;
+}
+
+/** 받을 정보 앞부분(고친 줄 표시 · 빈 글). */
+function 앞부분(body: string): string {
+  const at = body.indexOf(일감머리);
+  return at < 0 ? body : body.slice(0, at);
+}
+
+/** 줄 글 끝에 받을 정보를 붙인다. 셋 중 하나라도 없으면 붙이지 않는다(옛 응답). */
+export function withRowJob(body: string, job: Partial<EasyRowJob> | undefined): string {
+  const parts = [job?.requestRowId, job?.falRequestId, job?.endpoint];
+  if (!parts.every((part): part is string => typeof part === "string" && part.length > 0)) return body;
+  return `${body}${일감머리}${parts.map(encodeURIComponent).join(",")}`;
+}
+
+/** 줄 글의 받을 정보. 없거나 깨졌으면 비어 있다. */
+export function rowJobOf(body: string | null | undefined): EasyRowJob | undefined {
+  const at = body?.indexOf(일감머리) ?? -1;
+  if (at < 0) return undefined;
+  try {
+    const parts = body!.slice(at + 일감머리.length).split(",").map((part) => decodeURIComponent(part));
+    if (parts.length !== 3 || parts.some((part) => !part)) return undefined;
+    const [requestRowId, falRequestId, endpoint] = parts as [string, string, string];
+    return { requestRowId, falRequestId, endpoint };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * 고친 줄에 남길 글.
  *
  * **그때 넣은 사진도 적는다**(2026-10-06 독립 리뷰). 화면의 첨부는 보낸 뒤에도
@@ -38,15 +79,16 @@ export function editRowBody(requestRowId: string, addedIds: readonly string[] = 
 
 /** 고친 줄이면 그 요청 번호. 처음 만든 줄이면 비어 있다. */
 export function editRequestOf(body: string | null | undefined): string | undefined {
-  if (!body?.startsWith(고친줄머리)) return undefined;
-  const id = body.slice(고친줄머리.length).split(넣은사진머리)[0]!.trim();
+  const core = 앞부분(body ?? "");
+  if (!core.startsWith(고친줄머리)) return undefined;
+  const id = core.slice(고친줄머리.length).split(넣은사진머리)[0]!.trim();
   return id || undefined;
 }
 
 /** 고친 줄이 넣은 사진. */
 export function editAddedOf(body: string | null | undefined): string[] {
   if (!editRequestOf(body)) return [];
-  const [, added = ""] = body!.split(넣은사진머리);
+  const [, added = ""] = 앞부분(body!).split(넣은사진머리);
   return added.split(",").map((id) => id.trim()).filter(Boolean);
 }
 

@@ -3,6 +3,7 @@ import {
   AD_ANSWER_NOTE, AD_CHOICE_IMAGE, AD_CHOICE_SPECS, AD_QUESTION, adGuideBody, adImageInstruction, adQuestionOrigin,
   easyAdStep, hasAdNegation, isAdGuide, isAdQuestion, visibleBody,
 } from "../ad-ask";
+import { FAILED_TURN_GENERIC, failureRowBody } from "../../../lib/easy/failure-row";
 
 /**
  * **「광고 소재」라는 말이 나오면 먼저 묻는다**(2026-10-06 설계 A5, 사용자 결정 두 번).
@@ -123,5 +124,31 @@ describe("물음 줄 · 안내 줄 알아보기", () => {
 
   it("묻는 글은 사용자가 정한 그대로다", () => {
     expect(AD_QUESTION).toBe("광고 이미지를 만들고 싶으세요, 아니면 네이버·구글·카카오 규격별로 이미지를 베리에이션하고 싶으세요?");
+  });
+});
+
+/**
+ * **단추로 답했다가 실패한 뒤**(최종 리뷰 2026-10-06). 실패도 대화에 남으므로(B4) 물음 뒤에
+ * 「단추 글 줄 + 실패 안내 줄」이 붙는다. 그대로면 물음이 마지막 줄이 아니라서, 다시 답해도
+ * 앞 물음의 답으로 안 읽히고 처음 말도 사라진다.
+ */
+describe("단추로 답했다가 실패한 뒤", () => {
+  const 실패뒤 = [...물은뒤, 줄("user", AD_CHOICE_IMAGE), 줄("assistant", failureRowBody(FAILED_TURN_GENERIC))];
+
+  it("그 둘을 건너뛰고 물음을 부른 말을 찾는다", () => {
+    expect(adQuestionOrigin(실패뒤)).toBe("겨울 화장품 광고 소재 만들어줘");
+  });
+
+  it("다시 답해도 앞 물음의 답으로 읽는다", () => {
+    expect(easyAdStep(AD_CHOICE_IMAGE, 실패뒤)).toBe("image");
+    expect(adImageInstruction(실패뒤, "광고 이미지로요", true)).toBe("겨울 화장품 광고 소재 만들어줘\n광고 이미지로요");
+  });
+
+  it("말로 한 답이 실패했으면 건너뛰지 않는다 — 단추 답만 그렇다", () => {
+    expect(adQuestionOrigin([...물은뒤, 줄("user", "광고 이미지로요"), 줄("assistant", failureRowBody("x"))])).toBeUndefined();
+  });
+
+  it("실패 줄이 아닌 답 뒤면 건너뛰지 않는다", () => {
+    expect(adQuestionOrigin([...물은뒤, 줄("user", AD_CHOICE_SPECS), 줄("assistant", adGuideBody("안내"))])).toBeUndefined();
   });
 });

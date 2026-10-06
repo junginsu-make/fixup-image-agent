@@ -1,5 +1,5 @@
 import { POST as submitEdit } from "../../app/api/poster/projects/[id]/edit/route";
-import { editAddedOf, editRowBody, editTargetImage } from "../../app/easy/row-image";
+import { editAddedOf, editRowBody, editTargetImage, withRowJob } from "../../app/easy/row-image";
 import { posterStoresForUser } from "../poster/stores";
 import { read, relay } from "./relay";
 import type { easyStoreForUser } from "./store";
@@ -136,7 +136,7 @@ export async function imageEditTurn(ctx: {
     conversationId: ctx.conversationId,
     role: "image",
     workId: projectId,
-    body: editRowBody(submitted.submission.requestRowId, added),
+    body: withRowJob(editRowBody(submitted.submission.requestRowId, added), submitted.submission),
   });
 
   return Response.json({

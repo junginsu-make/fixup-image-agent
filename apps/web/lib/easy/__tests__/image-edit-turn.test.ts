@@ -38,7 +38,7 @@ vi.mock("../../../app/api/poster/projects/[id]/edit/route", () => ({
 }));
 
 const { countEasyImages, imageEditTurn, lastEasyImage } = await import("../image-edit-turn");
-const { editRowBody } = await import("../../../app/easy/row-image");
+const { editRowBody, withRowJob } = await import("../../../app/easy/row-image");
 
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
 const store = {
@@ -121,7 +121,7 @@ describe("고치기", () => {
     await 고친다([줄.image("p1")]);
     expect(남긴줄).toEqual([
       { conversationId: "c1", role: "user", body: "로고를 이걸로 바꿔줘" },
-      { conversationId: "c1", role: "image", workId: "p1", body: editRowBody("r2") },
+      { conversationId: "c1", role: "image", workId: "p1", body: withRowJob(editRowBody("r2"), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) },
     ]);
   });
 
@@ -171,7 +171,7 @@ describe("이어서 고칠 때", () => {
 
   it("넣은 사진을 고친 줄에 적어 둔다", async () => {
     await 고친다(대화({ id: "i1", role: "image", body: "", workId: "p1" }), ["logo-1"]);
-    expect(남긴줄.at(-1)).toMatchObject({ role: "image", body: editRowBody("r2", ["logo-1"]) });
+    expect(남긴줄.at(-1)).toMatchObject({ role: "image", body: withRowJob(editRowBody("r2", ["logo-1"]), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) });
   });
 
   it("앞의 고치기가 실패했으면(오래 지나도 그림 없음) 그 앞의 그림을 고친다 — 막히지 않는다", async () => {

@@ -1,4 +1,5 @@
 import type { EasyMessage } from "./turn";
+import { isFailureRowBody } from "../../lib/easy/failure-row";
 
 /**
  * **「광고 소재」라는 말이 나오면 먼저 묻는다**(2026-10-06 설계 A5, 사용자 결정 두 번).
@@ -49,13 +50,30 @@ export function hasAdNegation(prompt: string): boolean {
 }
 
 /**
- * 마지막 줄이 광고 물음이면 **그 물음을 부른 사용자 말**. 물음 앞에 사용자 말이 없으면
+ * 광고 물음이 있어야 할 자리. 보통은 마지막 줄이다.
+ *
+ * **단추로 답했다가 실패한 턴**(사용자 단추 글 줄 + 실패 안내 줄, 설계 B4)이 뒤에 붙었으면 그
+ * 둘을 건너뛴다 — 다시 답해도 앞 물음의 답으로 읽고 처음 말도 잇는다. 말로 한 답이 실패한
+ * 것은 건너뛰지 않는다(그 말이 답이었는지 코드는 모른다).
+ */
+function 물음자리(rows: readonly Row[]): number {
+  const n = rows.length;
+  const 답 = rows[n - 2];
+  const 실패 = rows[n - 1];
+  const 단추답실패 = n >= 3 && 실패?.role === "assistant" && isFailureRowBody(실패.body)
+    && 답?.role === "user" && (답.body === AD_CHOICE_IMAGE || 답.body === AD_CHOICE_SPECS);
+  return 단추답실패 ? n - 3 : n - 1;
+}
+
+/**
+ * 광고 물음 바로 뒤면 **그 물음을 부른 사용자 말**. 물음 앞에 사용자 말이 없으면
  * 빈 글, 물음 뒤가 아니면 `undefined`.
  */
 export function adQuestionOrigin(rows: readonly Row[]): string | undefined {
-  const last = rows[rows.length - 1];
-  if (!last || !isAdQuestion(last)) return undefined;
-  const before = rows[rows.length - 2];
+  const at = 물음자리(rows);
+  const question = rows[at];
+  if (!question || !isAdQuestion(question)) return undefined;
+  const before = rows[at - 1];
   return before?.role === "user" ? before.body : "";
 }
 
