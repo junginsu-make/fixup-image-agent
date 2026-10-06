@@ -102,6 +102,7 @@ export {
   type CharacterBrief,
   type CharacterBriefInput,
 } from "./pdp.character-brief";
+export { OWN_WITH_EXTRACT_MESSAGE, ownCharacterWithStyleDirective } from "./pdp.character-own";
 export {
   MIN_STYLE_SIMILARITY,
   analyzeStyleImage,

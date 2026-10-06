@@ -13,6 +13,7 @@ import {
   resolveCharacterAngles,
   selectCharacterModel,
 } from "./pdp.character";
+import { OWN_WITH_EXTRACT_MESSAGE } from "./pdp.character-own";
 import { IMAGE_LOOKS, imageLookDirective } from "@fixup/shared";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -349,6 +350,56 @@ describe("첨부한 그림의 역할", () => {
 
   it("역할이 없으면 첨부 이야기를 하지 않는다", () => {
     expect(buildCandidatePrompt(base)).not.toMatch(/supplied reference/i);
+  });
+
+  /** 2026-10-06 사용자 결정 — 레퍼런스는 화풍과 **몸 비율**을 함께 준다. */
+  it("레퍼런스 스타일은 몸 비율도 따르라고 한다", () => {
+    const prompt = buildCandidatePrompt({ ...base, referenceRole: "style" });
+    expect(prompt).toMatch(/head-to-body ratio/i);
+    expect(prompt).toMatch(/Do not copy the character in it/i);
+  });
+
+  it("레퍼런스가 비율을 정하면 사람 비율을 강요하지 않는다", () => {
+    const prompt = buildCandidatePrompt({ ...base, kind: "person", referenceRole: "style" });
+    expect(prompt).not.toMatch(/anatomically correct/i);
+    expect(prompt).toMatch(/proportions from the style reference/i);
+  });
+
+  it("레퍼런스가 없으면 사람 비율 지시는 그대로다", () => {
+    expect(buildCandidatePrompt({ ...base, kind: "person" })).toMatch(/anatomically correct/i);
+  });
+
+  describe("내 캐릭터", () => {
+    it("내 캐릭터만 있으면 뽑아내기와 같은 지시다", () => {
+      const own = buildCandidatePrompt({ ...base, ownCharacter: true });
+      expect(own).toBe(buildCandidatePrompt({ ...base, referenceRole: "extract" }));
+    });
+
+    it("둘 다 있으면 Image 1 은 지키고 Image 2 는 화풍·비율을 준다", () => {
+      const prompt = buildCandidatePrompt({ ...base, look: "auto", ownCharacter: true, referenceRole: "style" });
+      expect(prompt).toMatch(/Image 1 is the user's OWN character/);
+      expect(prompt).toMatch(/Image 2 is a STYLE reference/);
+      expect(prompt).toMatch(/head-to-body ratio/);
+      // 비율만은 Image 2 가 이긴다 — 안 박으면 「지켜라」와 부딪힌다.
+      expect(prompt).toMatch(/Body proportions are the one exception/);
+      expect(prompt).toMatch(/Do not copy the character in Image 2/);
+    });
+
+    it("둘 다 있을 때는 한 장짜리 문구가 섞이지 않는다", () => {
+      const prompt = buildCandidatePrompt({ ...base, look: "auto", ownCharacter: true, referenceRole: "style" });
+      expect(prompt).not.toMatch(/The supplied reference image is a STYLE reference/);
+      expect(prompt).not.toMatch(/Reproduce the same character/);
+    });
+
+    it("둘 다 있으면 지킬 대상이 레퍼런스보다 앞선다", () => {
+      const prompt = buildCandidatePrompt({ ...base, look: "auto", ownCharacter: true, referenceRole: "style" });
+      expect(prompt).toMatch(/PRESERVED SUBJECT > the REFERENCE image/);
+    });
+
+    it("내 캐릭터와 뽑아내기는 함께 못 쓴다", () => {
+      expect(() => buildCandidatePrompt({ ...base, ownCharacter: true, referenceRole: "extract" }))
+        .toThrow(OWN_WITH_EXTRACT_MESSAGE);
+    });
   });
 });
 
