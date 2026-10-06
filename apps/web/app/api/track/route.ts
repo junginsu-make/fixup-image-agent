@@ -31,6 +31,9 @@ const 방문 = z.object({
 }).strict();
 
 async function readVisit(req: Request) {
+  // 선언된 크기가 크면 읽기 전에 버린다(읽은 뒤 길이 검사는 그대로 둔다 — 선언은 거짓일 수 있다).
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY) return null;
   const raw = await req.text();
   if (raw.length > MAX_BODY) return null;
   try {
@@ -57,7 +60,7 @@ function visitorCookie(req: Request): { cookieId: string | null; issue: boolean 
   return known ? { cookieId: known, issue: false } : { cookieId: crypto.randomUUID(), issue: true };
 }
 
-export async function POST(req: Request) {
+async function handle(req: Request): Promise<Response> {
   const userAgent = (req.headers.get("user-agent") ?? "").slice(0, 512);
   const ip = clientIp(req.headers);
   if (!acceptable(req, userAgent, ip)) return NO_CONTENT();
@@ -68,22 +71,18 @@ export async function POST(req: Request) {
 
   const origin = new URL(publicOrigin(req.headers, new URL(req.url).origin));
   const { cookieId, issue } = visitorCookie(req);
-  try {
-    await recordPageView({
-      ip,
-      userAgent,
-      userId: await currentUserId(),
-      cookieId,
-      path,
-      referrerHost: visit.entry ? referrerHost(visit.referrer, origin.host) : null,
-      utm: utmFrom(visit.entry ? visit.search ?? "" : ""),
-      device: deviceFrom(userAgent),
-      browser: browserFrom(userAgent),
-      entry: visit.entry,
-    });
-  } catch {
-    // 통계 때문에 응답이 깨지면 안 된다 — 기록 쪽이 이미 경고를 남긴다.
-  }
+  await recordPageView({
+    ip,
+    userAgent,
+    userId: await currentUserId(),
+    cookieId,
+    path,
+    referrerHost: visit.entry ? referrerHost(visit.referrer, origin.host) : null,
+    utm: utmFrom(visit.entry ? visit.search ?? "" : ""),
+    device: deviceFrom(userAgent),
+    browser: browserFrom(userAgent),
+    entry: visit.entry,
+  });
   pruneSoon();
 
   const response = NO_CONTENT();
@@ -93,4 +92,13 @@ export async function POST(req: Request) {
     }));
   }
   return response;
+}
+
+/** 어떤 경우에도 204 — 주소 해석·본문 읽기·기록 어디서 던져도 화면은 모른다. */
+export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch {
+    return NO_CONTENT();
+  }
 }

@@ -129,6 +129,19 @@ describe("안 적는다 — 그래도 204", () => {
   });
 });
 
+describe("어떤 경우에도 204", () => {
+  it("x-forwarded-proto 가 망가져 있어도 204 (주소 해석이 던져도)", async () => {
+    const res = await 보내기({ path: "/", entry: true }, { "x-forwarded-proto": "ht tp", "x-forwarded-host": "formwith.fix-up.kr" });
+    expect(res.status).toBe(204);
+  });
+
+  it("content-length 가 4KB 를 넘으면 본문을 읽지 않고 버린다", async () => {
+    const res = await 보내기({ path: "/", entry: true }, { "content-length": "999999" });
+    expect(res.status).toBe(204);
+    expect(적은것).toEqual([]);
+  });
+});
+
 describe("몰아치기", () => {
   it("한 IP 가 1분에 120번을 넘으면 그 뒤는 안 적는다", async () => {
     for (let i = 0; i < 125; i += 1) {
