@@ -63,6 +63,24 @@ describe("판단 읽기", () => {
       expect(읽은것.reply).toBe(NOTHING_TO_EDIT);
     }
   });
+
+  /**
+   * 2차 최종 리뷰 b — 2차부터는 모든 갈래에서 reply 를 쓴다. 바꿔 읽은 일에 처음 갈래로 쓴 글
+   * (「원고를 고치겠습니다」)이 머리말로 나가면 안 된다. 다른 일하는 갈래로 바꿔 읽으면 reply 를 비운다.
+   */
+  it("다른 일하는 갈래로 바꿔 읽으면 처음 갈래로 쓴 reply 를 버린다", () => {
+    const 원고고치기 = { ...결정("revise"), reply: "카드뉴스 원고를 고치겠습니다." };
+    expect(readEasyDecision(원고고치기, { editableImage: true })).toMatchObject({ wants: "image_edit", reply: "" });
+    const 이미지고치기 = { ...결정("image_edit"), reply: "배경을 바꾸겠습니다." };
+    expect(readEasyDecision(이미지고치기, { canRevise: true })).toMatchObject({ wants: "revise", reply: "" });
+    expect(readEasyDecision({ ...결정("image"), reply: "만들겠습니다." })).toMatchObject({ wants: "image", reply: "만들겠습니다." });
+  });
+
+  /** 2차 최종 리뷰 c — AI 가 표시 머리로 시작하는 글을 쓰면 그 말 줄이 머리말 · 물음으로 읽힌다. */
+  it("AI 가 쓴 reply 의 표시 머리를 푼다", () => {
+    expect(readEasyDecision({ ...결정("talk"), reply: "say:안녕하세요" }).reply).toBe("say：안녕하세요");
+    expect(readEasyDecision({ ...결정("talk"), reply: "ask:ratio:\n어떤 모양?" }).reply).toBe("ask：ratio:\n어떤 모양?");
+  });
 });
 
 describe("판단 틀", () => {

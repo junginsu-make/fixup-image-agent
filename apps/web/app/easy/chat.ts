@@ -2,7 +2,7 @@ import { EASY_LOOKS, EASY_RATIOS } from "./ask";
 import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
 import { adQuestionOrigin } from "./ad-ask";
-import { visibleBody } from "./row-marks";
+import { plainAiText, visibleBody } from "./row-marks";
 import { easyAdAnswerLines, easyAdWantLines, easyCapabilityLines, easyFirstPhotoLines } from "./chat-facts";
 
 /**
@@ -50,6 +50,8 @@ export interface EasyDecision {
   card?: number;
   /** 3단계: 그 장에 바라는 점 · 고칠 내용. */
   note?: string;
+  /** 2차 D2: 고칠 결과물 번호(이 대화의 「이미지 N」). 없으면 마지막 이미지다. */
+  target?: number;
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -293,6 +295,55 @@ export function easyChatPrompt(
   ].join("\n");
 }
 
+/** 「지금 쓸 수 있는 것」 사실. 판단 읽기와 단추 답(`fitButtonDecision`)이 같은 것을 본다. */
+export interface EasyAvailability {
+  canRevise?: boolean;
+  made?: boolean;
+  /** 고칠 수 있는 이미지가 이 대화에 있나(2차: 지운 것만 빼고 — 만드는 중 · 못 만든 것도 넣는다). */
+  editableImage?: boolean;
+}
+
+/**
+ * **쓸 수 없는 갈래를 바꿔 읽는다**(2026-10-06, 2차 최종 리뷰 1 · b).
+ *
+ * - 이미지 고치기는 고칠 이미지가 있어야 한다. 없으면 원고 고치기로, 원고도 없으면 고칠 것이 없다고 답한다
+ * - 고칠 원고가 없는데 고치라고 하면 만든 이미지를 고친다 — 모델은 이미지를 고쳐 달라는 말에도 `revise` 를
+ *   골랐다(2026-10-06 실측 6/6). 둘 다 없으면 빈 답이 아니라 안내 — 빈 답은 같은 말을 되풀이했다
+ * - 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다
+ *
+ * **다른 일하는 갈래로 바꿔 읽으면 `reply` 를 비운다**(2차 최종 리뷰 b). 2차부터는 모든 갈래에서 reply 를
+ * 쓰는데, 그 글은 모델이 처음 고른 일로 쓴 말이라(「원고를 고치겠습니다」) 바뀐 일의 머리말로 나가면 틀린다.
+ * 비우면 코드 문장이 나간다.
+ */
+export function availableWant(said: EasyWant, reply: string, options: EasyAvailability): { wants: EasyWant; reply: string } {
+  if (said === "image_edit" && !options.editableImage) {
+    return options.canRevise ? { wants: "revise", reply: "" } : { wants: "talk", reply: NOTHING_TO_EDIT };
+  }
+  if ((said === "revise" || said === "card_text") && !options.canRevise) {
+    return options.editableImage ? { wants: "image_edit", reply: "" } : { wants: "talk", reply: NOTHING_TO_EDIT };
+  }
+  if (만든뒤갈래.has(said) && !options.canRevise) return { wants: "talk", reply };
+  if (만든뒤갈래.has(said) && !options.made) return { wants: "talk", reply: NOT_MADE_YET };
+  return { wants: said, reply };
+}
+
+/** 단추 답이 다른 일로 바뀌어 읽힐 자리일 때의 답(2차 최종 리뷰 1). 프로젝트 만들기 앞의 막이도 쓴다. */
+export const CANNOT_DO_NOW =
+  "고칠 이미지나 카드뉴스가 그 사이 바뀌어 말씀대로 할 수 없습니다. 무엇을 할지 다시 알려 주세요.";
+
+/**
+ * **단추 답의 갈래도 지금 사실로 다시 본다**(2차 최종 리뷰 1 · Review Focus 7). 단추 답은 판단 모델을 안
+ * 부르고 물음 줄에 적어 둔 판단으로 간다 — 물은 뒤에 이미지를 지웠거나 원고가 사라졌으면 그 판단은 낡았다.
+ * 판단 읽기와 같은 `availableWant` 를 지나고, **바뀌면 다른 일로 새지 않는다**: 판단 읽기라면 바꿔 읽을
+ * 다른 일하는 갈래(원고 고치기 ↔ 이미지 고치기)여도 그 일을 안 하고 사실 문장으로 끝낸다. 누른 단추와 다른
+ * 일에 값이 나가면 안 된다.
+ */
+export function fitButtonDecision(decision: EasyDecision, options: EasyAvailability): EasyDecision {
+  const fitted = availableWant(decision.wants, decision.reply, options);
+  if (fitted.wants === decision.wants) return decision;
+  return { wants: "talk", reply: fitted.wants === "talk" && fitted.reply ? fitted.reply : CANNOT_DO_NOW };
+}
+
 /**
  * 돌아온 것을 읽는다.
  *
@@ -303,7 +354,7 @@ export function easyChatPrompt(
 export function readEasyDecision(
   raw: unknown,
   /** `editableImage`: 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가(2026-10-06). */
-  options: { canRevise?: boolean; made?: boolean; editableImage?: boolean } = {},
+  options: EasyAvailability = {},
 ): EasyDecision {
   const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown } | null;
   const said = value?.wants;
@@ -311,31 +362,10 @@ export function readEasyDecision(
   if (typeof said !== "string" || !아는갈래.has(said)) {
     throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(said)}`);
   }
-  let wants = said as EasyDecision["wants"];
-  let reply = typeof value?.reply === "string" ? value.reply.trim() : "";
-  /*
-    **이미지 고치기는 고칠 이미지가 있어야 한다.** 없으면 원고 고치기로, 원고도
-    없으면 고칠 것이 없다고 답한다.
-  */
-  if (said === "image_edit" && !options.editableImage) {
-    if (options.canRevise) wants = "revise";
-    else { wants = "talk"; reply = NOTHING_TO_EDIT; }
-  }
-  /*
-    고칠 원고가 없는데 고치라고 하면 — **만든 이미지가 있으면 그것을 고친다.**
-    모델은 이미지를 고쳐 달라는 말에도 `revise` 를 골랐다(2026-10-06 실측 6/6).
-    둘 다 없으면 빈 답이 아니라 안내를 한다 — 빈 답은 같은 말을 되풀이했다.
-  */
-  else if ((said === "revise" || said === "card_text") && !options.canRevise) {
-    if (options.editableImage) wants = "image_edit";
-    else { wants = "talk"; reply = NOTHING_TO_EDIT; }
-  }
-  // 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다.
-  else if (만든뒤갈래.has(said) && !options.canRevise) wants = "talk";
-  else if (만든뒤갈래.has(said) && !options.made) {
-    wants = "talk";
-    reply = NOT_MADE_YET;
-  }
+  // AI 가 쓴 글이 표시 머리로 시작하면 풀어 둔다 — 저장한 말 줄이 물음 · 머리말로 읽히지 않게(2차 최종 리뷰 c).
+  const { wants, reply } = availableWant(
+    said as EasyWant, plainAiText(typeof value?.reply === "string" ? value.reply.trim() : ""), options,
+  );
   const card = typeof value?.card === "number" && Number.isInteger(value.card) && value.card > 0 ? value.card : undefined;
   const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim().slice(0, 500) : undefined;
 
