@@ -30,9 +30,9 @@ export const AD_HREF = "/ad";
  */
 export const AD_ANSWER_NOTE = "answer";
 
-const 광고낱말 = /광고\s?소재/;
+const 광고낱말 = /광고\s*소재/;
 const 규격낱말 = ["규격별", "사이즈별", "리사이징", "리사이즈", "베리에이션", "네이버", "구글", "카카오"];
-const 부정 = /광고\s?소재\s*(?:은|는|이|가|을|를|도)?\s*(?:말고|빼고|없이|아니)/;
+const 부정 = /광고\s*소재\s*(?:은|는|이|가|을|를|도)?\s*(?:말고|빼고|없이|아니)/;
 const 안내머리 = "ad-guide:";
 
 type Row = Pick<EasyMessage, "role" | "body">;

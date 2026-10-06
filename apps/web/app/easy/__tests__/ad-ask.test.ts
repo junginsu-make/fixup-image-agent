@@ -35,6 +35,20 @@ describe("「광고 소재」 낱말", () => {
       expect(easyAdStep(prompt, [])).toBeUndefined();
     },
   );
+
+  /** 최종 리뷰: 빈칸을 한 칸만 받아 「광고  소재」(두 칸 · 탭 · 줄바꿈 없는 빈칸)를 놓쳤다. */
+  it.each(["광고  소재 만들어줘", "광고\t소재 만들어줘", "광고 소재 만들어줘"])(
+    "빈칸이 여러 칸이어도(%j) 낱말로 읽는다",
+    (prompt) => { expect(easyAdStep(prompt, [])).toBe("ask"); },
+  );
+
+  it.each(["광고  소재 말고 그냥 이미지", "광고\t소재는 빼고 포스터로", "광고  소재 아니고 카드뉴스"])(
+    "빈칸이 여러 칸이어도(%j) 부정을 읽는다",
+    (prompt) => {
+      expect(hasAdNegation(prompt)).toBe(true);
+      expect(easyAdStep(prompt, [])).toBeUndefined();
+    },
+  );
 });
 
 describe("물음 뒤의 답", () => {
