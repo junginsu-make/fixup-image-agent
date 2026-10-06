@@ -156,4 +156,15 @@ describe("검색 로봇 파일은 회원 확인 없이 통과한다(계획 2026-
     expect(response.headers.get("location")).toBeNull();
     expect(response.status).toBe(200);
   });
+
+  it.each(["/robots.txt", "/sitemap.xml"])("24시간이 지난 회원이 %s 를 열어도 로그인 화면으로 안 보내고 쿠키도 안 건드린다", async (path) => {
+    currentUser = { id: "member-1" };
+    const response = await middleware(요청(path, {
+      [AUTH_COOKIE]: "token", [SESSION_START_COOKIE]: sessionStartValue(Date.now() - 하루 - 1000, "session-1"),
+    }));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.status).toBe(200);
+    expect(response.cookies.get(AUTH_COOKIE)).toBeUndefined();
+    expect(response.cookies.get(SESSION_START_COOKIE)).toBeUndefined();
+  });
 });

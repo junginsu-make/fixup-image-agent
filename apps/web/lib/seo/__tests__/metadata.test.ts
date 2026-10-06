@@ -31,6 +31,18 @@ describe("pageMetadata", () => {
   });
 });
 
+describe("pageMetadata selfLinks: false", () => {
+  const meta = pageMetadata({ path: "/", title: "t", description: "d", selfLinks: false });
+  it("대표 주소·언어 연결·og:url 을 메타데이터에서 뺀다(화면이 직접 낸다)", () => {
+    expect(meta.alternates).toBeUndefined();
+    expect(meta.openGraph).not.toHaveProperty("url");
+  });
+  it("그래도 공유 그림·제목은 그대로", () => {
+    expect((meta.openGraph as { images: unknown[] }).images).toEqual([OG_IMAGE]);
+    expect(meta.openGraph?.title).toBe("t | FormWith");
+  });
+});
+
 describe("문구", () => {
   const all = [HOME_COPY.ko, HOME_COPY.en, ...Object.values(GUIDE_COPY)];
 

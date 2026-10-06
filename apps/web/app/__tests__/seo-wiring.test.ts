@@ -18,7 +18,7 @@ const GUIDE_PAGES: Array<[file: string, href: string]> = [
   ),
 ];
 
-describe("설명서 14쪽", () => {
+describe("설명서 13쪽(목차 첫 쪽 포함)", () => {
   it.each(GUIDE_PAGES)("%s 는 guideMetadata(\"%s\")", (file, href) => {
     const source = read(file);
     expect(source).toContain(`export const metadata = guideMetadata("${href}");`);
@@ -49,8 +49,13 @@ describe("공통 틀·첫 화면·소개", () => {
   it("첫 화면은 언어별 generateMetadata 와 구조화 데이터를 낸다", () => {
     const page = read("page.tsx");
     expect(page).toContain("export async function generateMetadata");
-    expect(page).toContain('languageAlternates("/", "/?lang=en")');
     expect(page).toContain("<StructuredData />");
+  });
+  it("첫 화면은 대표 주소·언어 연결·og:url 을 직접 낸다(Next 가 / 의 조회 값을 버리므로)", () => {
+    const page = read("page.tsx");
+    expect(page).toContain("<HomeLinks locale={locale} />");
+    expect(page).toContain("selfLinks: false");
+    expect(page).not.toContain("languageAlternates(");
   });
   it("소개는 pageMetadata 로 대표 주소와 영어 판을 잇는다", () => {
     const about = read("about", "page.tsx");

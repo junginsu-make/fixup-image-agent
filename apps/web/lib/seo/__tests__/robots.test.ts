@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { APP_ROUTES } from "../../access/routes";
-import { PRIVATE_PREFIXES, robotsTxt } from "../robots";
+import { PRIVATE_PREFIXES, PUBLIC_API_PREFIXES, robotsTxt } from "../robots";
 
 /** 검색 로봇 안내(계획 2026-10-06 seo-search-registration). */
 const disallowed = (text: string) => text.split("\n").filter((l) => l.startsWith("Disallow: ")).map((l) => l.slice(10));
@@ -22,6 +22,13 @@ describe("robotsTxt", () => {
     for (const path of ["/api/track", "/auth/callback", "/easy", "/ad", "/onboarding", "/access"]) {
       expect(blocks(list, path), path).toBe(true);
     }
+  });
+  it("작품 그림 길은 /api/ 막기보다 앞서 열어 둔다(첫 화면 그림을 로봇이 읽게)", () => {
+    expect(PUBLIC_API_PREFIXES).toEqual(["/api/showcase/"]);
+    const lines = text.split("\n");
+    expect(lines).toContain("Allow: /api/showcase/");
+    expect(lines.indexOf("Allow: /api/showcase/")).toBeGreaterThan(lines.indexOf("Allow: /"));
+    expect(lines.indexOf("Allow: /api/showcase/")).toBeLessThan(lines.indexOf("Disallow: /api/"));
   });
   it("공개 화면은 하나도 막지 않는다", () => {
     const list = disallowed(text);

@@ -100,7 +100,9 @@ https://formwith.fix-up.kr/?utm_source=…&utm_medium=…&utm_campaign=…
 
 ### 새 화면을 만들 때
 
-- 공개 화면: `lib/seo/copy.ts` 에 문구를 추가한다
+- 공개 화면: `lib/seo/copy.ts` 에 문구를 추가하고, 화면 파일에 `pageMetadata(...)`(설명서 쪽은 `guideMetadata`)를 단다.
+  사이트 지도에는 `lib/seo/sitemap.ts` 의 `publicPages()` 에 한 줄 넣는다(설명서 목차 쪽이면 아래 줄대로 저절로 들어간다).
+  손님이 열어야 하는 화면이면 `middleware.ts` 의 `PUBLIC_PATHS` 에도 주소를 넣는다
 - 사용 설명서 화면: 목차 `apps/web/app/guide/_components/topics.ts` 에 넣으면 사이트 지도에 저절로 들어간다
 - 회원 전용 화면: `lib/seo/robots.ts` 의 `PRIVATE_PREFIXES` 에 주소 앞부분을 추가해 검색에서 뺀다
 

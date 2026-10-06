@@ -27,6 +27,9 @@ export const PRIVATE_PREFIXES = [
   "/team",
 ] as const;
 
+/** `/api/` 막기 안에서도 열어 둘 길 — 첫 화면 캐러셀 그림(로그인 없이 읽는다, `api/showcase/[id]/file`). */
+export const PUBLIC_API_PREFIXES = ["/api/showcase/"] as const;
+
 const DAUM_PIN = /^#DaumWebMasterTool:[^\s]+$/;
 
 export function robotsTxt({
@@ -44,6 +47,7 @@ export function robotsTxt({
     ...(pin ? [pin] : []),
     "User-agent: *",
     "Allow: /",
+    ...PUBLIC_API_PREFIXES.map((prefix) => `Allow: ${prefix}`),
     ...disallow.map((prefix) => `Disallow: ${prefix}`),
     "",
     `Sitemap: ${siteUrl}/sitemap.xml`,

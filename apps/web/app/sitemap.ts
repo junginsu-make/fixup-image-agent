@@ -5,5 +5,5 @@ import { GUIDE_TOPICS } from "./guide/_components/topics";
 
 /** sitemap.xml — 공개 화면만(계획 2026-10-06 seo-search-registration). */
 export default function sitemap(): MetadataRoute.Sitemap {
-  return sitemapEntries(SITE_URL, publicPages(GUIDE_TOPICS.map((topic) => topic.href)), new Date());
+  return sitemapEntries(SITE_URL, publicPages(GUIDE_TOPICS.map((topic) => topic.href)));
 }

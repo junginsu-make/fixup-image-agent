@@ -16,19 +16,24 @@ export interface PageMetaInput {
   absoluteTitle?: boolean;
   locale?: "ko" | "en";
   languages?: Record<string, string>;
+  /** false 면 대표 주소·언어 연결·og:url 을 메타데이터에서 뺀다. 첫 화면이 직접 낸다(`_landing/home-links.tsx`). */
+  selfLinks?: boolean;
 }
 
 export function pageMetadata(input: PageMetaInput): Metadata {
   const shareTitle = input.absoluteTitle ? input.title : `${input.title} | ${SITE_NAME}`;
+  const selfLinks = input.selfLinks !== false;
   return {
     title: input.absoluteTitle ? { absolute: input.title } : input.title,
     description: input.description,
-    alternates: { canonical: input.path, ...(input.languages ? { languages: input.languages } : {}) },
+    ...(selfLinks
+      ? { alternates: { canonical: input.path, ...(input.languages ? { languages: input.languages } : {}) } }
+      : {}),
     openGraph: {
       type: "website",
       siteName: SITE_NAME,
       locale: input.locale === "en" ? "en_US" : "ko_KR",
-      url: input.path,
+      ...(selfLinks ? { url: input.path } : {}),
       title: shareTitle,
       description: input.description,
       images: [OG_IMAGE],
