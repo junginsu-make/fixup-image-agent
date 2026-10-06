@@ -1,7 +1,7 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
-import { publicOrigin } from "../../../lib/routes";
+import { publicOrigin, safeNext } from "../../../lib/routes";
 
 /**
  * 메일의 인증 링크가 도착하는 자리.
@@ -16,8 +16,10 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type") as EmailOtpType | null;
-  const requestedNext = url.searchParams.get("next") || "/access";
-  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/access";
+  // 판정은 로그인 화면과 같은 `safeNext` 하나로 한다. 여기만 따로 적어 두었다가
+  // 탭·역슬래시 구멍이 이 자리에만 남았다(2026-10-06).
+  const requestedNext = url.searchParams.get("next");
+  const next = requestedNext && safeNext(requestedNext) === requestedNext ? requestedNext : "/access";
   const supabase = await createSupabaseServerClient();
   let error: unknown;
   if (code) ({ error } = await supabase.auth.exchangeCodeForSession(code));
