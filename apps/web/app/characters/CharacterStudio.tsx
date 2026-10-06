@@ -395,7 +395,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
           candidates: 1,
           modelId: modelId || undefined,
           reference: attached
-            ? { role: attached.role, base64: attached.base64, mimeType: attached.mimeType }
+            ? { role: roleWithOwn(attached.role, Boolean(own)), base64: attached.base64, mimeType: attached.mimeType }
             : undefined,
           ownCharacter: own ? { base64: own.base64, mimeType: own.mimeType } : undefined,
         }),
@@ -426,7 +426,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setDescription("");
     setName("");
     setAttached(null);
-    setOwn(null);
+    // 날것으로 비운다 — setOwn 은 낡은 attached 로 그림체를 다시 레퍼런스 스타일로 돌린다.
+    setOwnRaw(null);
     setMessage("");
   };
 
