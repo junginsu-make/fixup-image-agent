@@ -9,6 +9,7 @@ vi.mock("../../_components/elapsed-time", () => ({ ElapsedTime: () => null }));
 
 import { EasyMessageRow } from "../_components/message";
 import { AD_CHOICE_IMAGE, AD_CHOICE_SPECS, AD_QUESTION, adGuideBody } from "../ad-ask";
+import { askBody, sayBody, withPick } from "../row-marks";
 
 const 글자 = (node: unknown): string => typeof node === "string"
   ? node
@@ -75,5 +76,22 @@ describe("화면이 마지막 물음에만 단추를 단다 (Review Focus 1)", (
   it("단추로 보낸 턴이 실패해도 단추 글을 입력창에 넣지 않는다", () => {
     expect(화면).toContain("if (!친말 && (cause as Error)?.message !== STILL_MAKING) setDraft(prompt);");
     expect(화면).not.toMatch(/\n\s*setDraft\(prompt\);/);
+  });
+});
+
+describe("표시를 뗀 글 (2차 §3-0)", () => {
+  it("단추 답 줄은 고른 값 표시 없이 보인다", () => {
+    act(() => { view = create(<EasyMessageRow message={{ id: "u", role: "user", body: withPick("이미지 한 장", { kind: "image" }) }} />); });
+    expect(글()).toContain("이미지 한 장");
+    expect(글()).not.toContain(";pick=");
+  });
+
+  it("머리말 줄 · 물음 줄은 표시 없이 보인다", () => {
+    act(() => { view = create(<EasyMessageRow message={{ id: "s", role: "assistant", body: sayBody("만들겠습니다.") }} />); });
+    expect(글()).toContain("만들겠습니다.");
+    expect(글()).not.toContain("say:");
+    act(() => { view.update(<EasyMessageRow message={{ id: "q", role: "assistant", body: askBody("ratio", "어떤 모양으로 만들까요?") }} />); });
+    expect(글()).toContain("어떤 모양으로 만들까요?");
+    expect(글()).not.toContain("ask:");
   });
 });

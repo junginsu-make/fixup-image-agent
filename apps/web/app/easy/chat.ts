@@ -1,7 +1,8 @@
 import { EASY_LOOKS, EASY_RATIOS } from "./ask";
 import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
-import { adQuestionOrigin, visibleBody } from "./ad-ask";
+import { adQuestionOrigin } from "./ad-ask";
+import { visibleBody } from "./row-marks";
 import { easyAdAnswerLines, easyAdWantLines, easyCapabilityLines, easyFirstPhotoLines } from "./chat-facts";
 
 /**

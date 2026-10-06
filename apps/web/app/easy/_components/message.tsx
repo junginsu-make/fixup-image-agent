@@ -5,7 +5,8 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button, cn } from "@fixup/ui";
 import { DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
-import { isAdGuide, isAdQuestion, visibleBody } from "../ad-ask";
+import { isAdGuide, isAdQuestion } from "../ad-ask";
+import { visibleBody } from "../row-marks";
 import { EasyAdGuide, EasyAdQuestion } from "./ad-rows";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
@@ -172,7 +173,7 @@ export function EasyMessageRow({
     return (
       <div className="flex justify-end">
         <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary-soft px-4 py-2.5 text-base leading-7">
-          {message.body}
+          {visibleBody(message)}
         </p>
       </div>
     );
@@ -206,7 +207,7 @@ export function EasyMessageRow({
         ) : isAdGuide(message) ? (
           <EasyAdGuide body={visibleBody(message)} bubble={말풍선} />
         ) : (
-          <p className={cn("max-w-[85%]", 말풍선)}>{message.body}</p>
+          <p className={cn("max-w-[85%]", 말풍선)}>{visibleBody(message)}</p>
         )}
       </div>
     );

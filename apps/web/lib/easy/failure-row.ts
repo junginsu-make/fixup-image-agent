@@ -1,4 +1,5 @@
 import type { EasyStore } from "./store";
+import { isSayBody } from "../../app/easy/row-marks";
 
 /**
  * **실패도 대화에 남긴다**(2026-10-06 설계 B4).
@@ -49,7 +50,11 @@ export function trackUserTurn<S extends { appendMessage: Append }>(store: S): {
   let 답없는말 = false;
   const appendMessage: Append = async (input) => {
     const row = await store.appendMessage(input);
-    답없는말 = input.role === "user";
+    /*
+     * **머리말 줄은 답이 아니다**(2026-10-07 2차 D4 · §3-4). 일하는 턴은 사용자 줄 -> 머리말 줄 ->
+     * 그림 줄 차례다. 머리말 뒤에 기획 · 생성이 실패해도 실패 줄이 남아야 한다.
+     */
+    답없는말 = input.role === "user" || (답없는말 && input.role === "assistant" && isSayBody(input.body ?? ""));
     return row;
   };
   return {

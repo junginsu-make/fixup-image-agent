@@ -4,6 +4,7 @@ import {
   easyAdStep, hasAdNegation, isAdGuide, isAdQuestion, visibleBody,
 } from "../ad-ask";
 import { FAILED_TURN_GENERIC, failureRowBody } from "../../../lib/easy/failure-row";
+import { sayBody } from "../row-marks";
 
 /**
  * **「광고 소재」라는 말이 나오면 먼저 묻는다**(2026-10-06 설계 A5, 사용자 결정 두 번).
@@ -164,5 +165,22 @@ describe("단추로 답했다가 실패한 뒤", () => {
 
   it("실패 줄이 아닌 답 뒤면 건너뛰지 않는다", () => {
     expect(adQuestionOrigin([...물은뒤, 줄("user", AD_CHOICE_SPECS), 줄("assistant", adGuideBody("안내"))])).toBeUndefined();
+  });
+
+  /**
+   * 2차 최종 리뷰 2 — 2차부터 일하는 턴은 사용자 줄 → 머리말 줄(`say:`) → 그림 줄이다. 단추로 답한 턴이
+   * 머리말 뒤에 실패하면 [물음, 단추 글, 머리말, 실패] 가 된다. 머리말은 답이 아니므로 건너뛴다.
+   */
+  it("단추 답 실패 짝 사이에 머리말 줄이 끼어도 건너뛴다", () => {
+    const 머리말뒤실패 = [
+      ...물은뒤, 줄("user", AD_CHOICE_IMAGE), 줄("assistant", sayBody("광고 이미지를 만들겠습니다.")),
+      줄("assistant", failureRowBody(FAILED_TURN_GENERIC)),
+    ];
+    expect(adQuestionOrigin(머리말뒤실패)).toBe("겨울 화장품 광고 소재 만들어줘");
+    expect(easyAdStep(AD_CHOICE_IMAGE, 머리말뒤실패)).toBe("image");
+  });
+
+  it("머리말 줄만 있고 실패 줄이 없으면(만들기가 이어진 턴) 건너뛰지 않는다", () => {
+    expect(adQuestionOrigin([...물은뒤, 줄("user", AD_CHOICE_IMAGE), 줄("assistant", sayBody("만들겠습니다."))])).toBeUndefined();
   });
 });

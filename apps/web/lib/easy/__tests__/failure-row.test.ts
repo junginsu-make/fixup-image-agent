@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EasyStore } from "../store";
 import { FAILED_TURN_GENERIC, failureRowBody, failureRowMessage, isFailureRowBody, trackUserTurn } from "../failure-row";
 import { EasyStepError } from "../relay";
+import { sayBody } from "../../../app/easy/row-marks";
 
 /**
  * **실패도 대화에 남긴다**(2026-10-06 설계 B4). 실패한 턴은 새로고침하면 내 말만 남고
@@ -50,6 +51,26 @@ describe("실패 안내 줄 (B4)", () => {
     await 지킴.store.appendMessage({ conversationId: "c1", role: "image", workId: "p1" });
     await 지킴.leaveFailure("c1", "x");
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "image"]);
+  });
+
+  /** 2차 D4 · Review Focus 2 — 일하는 턴은 사용자 줄 → 머리말 줄 → 그림 줄. 머리말 뒤 실패도 남긴다. */
+  it("머리말 줄은 답으로 치지 않는다 — 그 뒤 실패해도 실패 안내를 남긴다", async () => {
+    const { 남긴줄, store } = 저장소();
+    const 지킴 = trackUserTurn(store);
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "user", body: "포스터" });
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "assistant", body: sayBody("포스터를 만들겠습니다.") });
+    await 지킴.leaveFailure("c1", "x");
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(남긴줄[2]!.body).toBe(failureRowBody("x"));
+  });
+
+  it("머리말이 아닌 도우미 줄은 답이다 - 예전 그대로 실패 안내를 안 남긴다", async () => {
+    const { 남긴줄, store } = 저장소();
+    const 지킴 = trackUserTurn(store);
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "user", body: "안녕" });
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "assistant", body: "안녕하세요" });
+    await 지킴.leaveFailure("c1", "x");
+    expect(남긴줄).toHaveLength(2);
   });
 
   it("두 번 불러도 한 번만 남긴다", async () => {

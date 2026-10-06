@@ -1,5 +1,6 @@
 import type { EasyMessage } from "./turn";
 import { isFailureRowBody } from "../../lib/easy/failure-row";
+import { guideBody, isSayBody, readGuide } from "./row-marks";
 
 /**
  * **「광고 소재」라는 말이 나오면 먼저 묻는다**(2026-10-06 설계 A5, 사용자 결정 두 번).
@@ -12,7 +13,7 @@ import { isFailureRowBody } from "../../lib/easy/failure-row";
  * 안 물어도 됩니다」). 「광고 소재 말고 ○○」처럼 부정하면 코드는 끼어들지 않는다.
  *
  * **물음 줄 · 안내 줄은 대화에 남는다.** 물음 줄은 글이 `AD_QUESTION` 과 똑같은 도우미 줄,
- * 안내 줄은 글이 `ad-guide:` 로 시작하는 도우미 줄이다. 표에 칸을 더하지 않는다 —
+ * 안내 줄은 글이 `guide:ad:`(옛 줄은 `ad-guide:`)로 시작하는 도우미 줄이다(`row-marks.ts`). 표에 칸을 더하지 않는다 —
  * `row-image.ts` 의 `edit-request:` 와 같은 방식이다.
  */
 
@@ -33,7 +34,6 @@ export const AD_ANSWER_NOTE = "answer";
 const 광고낱말 = /광고\s*소재/;
 const 규격낱말 = ["규격별", "사이즈별", "리사이징", "리사이즈", "베리에이션", "네이버", "구글", "카카오"];
 const 부정 = /광고\s*소재\s*(?:은|는|이|가|을|를|도)?\s*(?:말고|빼고|없이|아니)/;
-const 안내머리 = "ad-guide:";
 
 type Row = Pick<EasyMessage, "role" | "body">;
 
@@ -52,17 +52,20 @@ export function hasAdNegation(prompt: string): boolean {
 /**
  * 광고 물음이 있어야 할 자리. 보통은 마지막 줄이다.
  *
- * **단추로 답했다가 실패한 턴**(사용자 단추 글 줄 + 실패 안내 줄, 설계 B4)이 뒤에 붙었으면 그
- * 둘을 건너뛴다 — 다시 답해도 앞 물음의 답으로 읽고 처음 말도 잇는다. 말로 한 답이 실패한
+ * **단추로 답했다가 실패한 턴**(사용자 단추 글 줄 + (2차의 머리말 줄) + 실패 안내 줄, 설계 B4)이 뒤에 붙었으면 그
+ * 줄들을 건너뛴다 — 다시 답해도 앞 물음의 답으로 읽고 처음 말도 잇는다. 말로 한 답이 실패한
  * 것은 건너뛰지 않는다(그 말이 답이었는지 코드는 모른다).
  */
 function 물음자리(rows: readonly Row[]): number {
   const n = rows.length;
-  const 답 = rows[n - 2];
   const 실패 = rows[n - 1];
-  const 단추답실패 = n >= 3 && 실패?.role === "assistant" && isFailureRowBody(실패.body)
-    && 답?.role === "user" && (답.body === AD_CHOICE_IMAGE || 답.body === AD_CHOICE_SPECS);
-  return 단추답실패 ? n - 3 : n - 1;
+  if (!(실패?.role === "assistant" && isFailureRowBody(실패.body))) return n - 1;
+  // 단추 답 -> (머리말) -> 실패. 머리말 줄은 일하는 턴의 AI 말이다. 답이 아니다(2차 D4).
+  const 머리말 = rows[n - 2]?.role === "assistant" && isSayBody(rows[n - 2]!.body);
+  const 답자리 = 머리말 ? n - 3 : n - 2;
+  const 답 = rows[답자리];
+  const 단추답실패 = 답자리 >= 1 && 답?.role === "user" && (답.body === AD_CHOICE_IMAGE || 답.body === AD_CHOICE_SPECS);
+  return 단추답실패 ? 답자리 - 1 : n - 1;
 }
 
 /**
@@ -116,16 +119,15 @@ export function adImageInstruction(rows: readonly Row[], prompt: string, answere
   return prompt === AD_CHOICE_IMAGE ? origin : `${origin}\n${prompt}`;
 }
 
-/** 안내 줄에 남길 글. 화면이 이 표시를 보고 「광고소재 열기」를 단다. */
+/** 안내 줄에 남길 글. 화면이 이 표시를 보고 「광고소재 열기」를 단다(2차 §3-0, `guide:ad:`). */
 export function adGuideBody(text: string): string {
-  return `${안내머리}${text}`;
+  return guideBody("ad", text);
 }
 
+/** 광고 안내 줄인가. 옛 `ad-guide:` 줄도 맞다. */
 export function isAdGuide(message: Row): boolean {
-  return message.role === "assistant" && message.body.startsWith(안내머리);
+  return readGuide(message)?.kind === "ad";
 }
 
-/** 보일 글(화면 · 모델 모두). 안내 줄이면 표시를 뗀다. */
-export function visibleBody(message: Row): string {
-  return isAdGuide(message) ? message.body.slice(안내머리.length) : message.body;
-}
+// 보일 글은 표시 한 벌이 뗀다(2차 §3-0). 옛 import 가 그대로 돌게 여기서도 내보낸다.
+export { visibleBody } from "./row-marks";
