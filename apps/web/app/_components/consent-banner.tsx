@@ -47,11 +47,12 @@ export function ConsentBanner() {
   }
 
   if (!open) return null;
+  // 층은 70 — 첫 화면의 「맨 위로」(60)·머리(50)보다 위, 처리방침 창(100)보다 아래(시험이 본다).
   return (
     <div
       role="dialog"
       aria-label="방문 통계 쿠키"
-      className="fixed inset-x-0 bottom-0 z-50 border-t bg-background p-4 shadow-lg sm:inset-x-auto sm:bottom-4 sm:right-4 sm:max-w-sm sm:rounded-lg sm:border"
+      className="fixed inset-x-0 bottom-0 z-[70] border-t bg-background p-4 shadow-lg sm:inset-x-auto sm:bottom-4 sm:right-4 sm:max-w-sm sm:rounded-lg sm:border"
     >
       <p className="text-sm font-medium">방문 통계 쿠키</p>
       <p className="mt-1 text-sm text-muted-foreground">
