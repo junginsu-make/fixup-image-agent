@@ -49,6 +49,40 @@ describe("물음에 답할 때 앞서 고른 것을 함께 (B2)", () => {
   });
 });
 
+/**
+ * **단추로 고른 갈래는 이어 답할 때도 고른 것이다**(설계 A2, 최종 리뷰 I1). 「이미지 한 장」
+ * 단추 뒤 비율 · 사진 물음에 단추로 답해 다시 보내면 그 말에는 갈래가 없다. 「골랐다」를
+ * 안 이으면 서버가 또 판단해 다른 길로 샜다.
+ */
+describe("단추로 고른 갈래를 잇는다 (A2)", () => {
+  const 갈래단추 = () => carryChoices({ continuing: true, carry: {}, picked: { kind: "image" } });
+
+  it("갈래 단추로 보낸 턴은 고른 것이다", () => {
+    expect(갈래단추().kindPicked).toBe(true);
+  });
+
+  it("그 뒤 비율 물음에 「이대로 만들기」로 답하면 「골랐다」를 싣는다", () => {
+    const 답 = askSubmission("고양이 그려줘", { ratio: "", look: "" });
+    expect(carryChoices({ continuing: true, carry: 갈래단추(), picked: 답 })).toEqual({ ratio: EASY_DEFAULT_RATIO, kindPicked: true });
+  });
+
+  it("사진 물음에 단추로 답해도 싣는다", () => {
+    expect(carryChoices({ continuing: true, carry: 갈래단추(), picked: {} }).kindPicked).toBe(true);
+  });
+
+  it("말로 친 답은 고른 것이 아니다", () => {
+    expect(carryChoices({ continuing: true, carry: 갈래단추() }).kindPicked).toBeUndefined();
+  });
+
+  it("새로 친 말이면 버린다", () => {
+    expect(carryChoices({ continuing: false, carry: 갈래단추(), picked: { kind: "image" } })).toEqual({});
+  });
+
+  it("갈래를 안 고른 채 이어 답하면 싣지 않는다", () => {
+    expect(carryChoices({ continuing: true, carry: { ratio: "4:5" }, picked: {} }).kindPicked).toBeUndefined();
+  });
+});
+
 describe("화면이 묶음을 쓴다", () => {
   const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
 

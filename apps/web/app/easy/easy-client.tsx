@@ -375,8 +375,8 @@ export function EasyClient({
           ...(고른값.look ? { look: 고른값.look } : {}),
           // 카드뉴스(2단계): 고른 갈래 · 세트에서 온 자리. 있을 때만 싣는다.
           ...(kind ? { kind } : {}), ...(다시?.photoSlots?.length ? { photoSlots: 다시.photoSlots } : {}),
-          // 갈래 단추로 고른 턴만(설계 A2). 말로 답한 턴에 이어 온 갈래(`continuingKind`)는 고른 것이 아니다.
-          ...(다시?.kind ? { kindPicked: true } : {}),
+          // 갈래 단추로 고른 턴과 그 뒤 단추로 이어 답한 턴만(설계 A2). 말로 친 답은 고른 것이 아니다(`carryChoices`).
+          ...(고른값.kindPicked ? { kindPicked: true } : {}),
         }),
       });
       const body = await response.json().catch(() => ({}));

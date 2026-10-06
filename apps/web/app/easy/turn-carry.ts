@@ -4,11 +4,12 @@ import type { EasyResend } from "./cardnews-state";
 /**
  * **같은 말에 이어 답할 때 싣는 것**(2026-10-06 설계 B1 · B2). 화면 안에 두면 값으로 못
  * 잰다. 갈래(kind)는 `cardnews-state.ts` 의 `continuingKind` 가 이미 잇는다 — 여기는
- * 비율 · 그림체다.
+ * 비율 · 그림체, 그리고 그 갈래를 단추로 골랐는지(`kindPicked`, 설계 A2)다.
  */
 export interface EasyCarry {
   ratio?: string;
   look?: string;
+  kindPicked?: boolean;
 }
 
 /**
@@ -23,10 +24,19 @@ export function askSubmission(prompt: string, picked: { ratio: string; look: str
  * 이번에 실을 비율 · 그림체(B2). 같은 말에 이어 답하면(`continuing`) 앞서 고른 것에 이번에
  * 고른 것을 덮어 싣는다. **새로 친 말이면 비운다** — 다른 주문에 옛 값이 몰래 붙지 않게.
  * 돌려준 값이 곧 다음 묶음이다.
+ *
+ * `kindPicked`(설계 A2, 최종 리뷰 I1): 갈래 단추로 보낸 턴, 그리고 그 뒤 **단추로**
+ * 이어 답한 턴(`picked` 가 있다 — 「이대로 만들기」 · 사진 물음 단추)만 고른 것이다.
+ * 말로 친 답(`picked` 없음)은 고른 것이 아니라 버린다.
  */
-export function carryChoices(input: { continuing: boolean; carry: EasyCarry; picked?: EasyCarry }): EasyCarry {
+export function carryChoices(input: {
+  continuing: boolean;
+  carry: EasyCarry;
+  picked?: Pick<EasyResend, "ratio" | "look" | "kind">;
+}): EasyCarry {
   if (!input.continuing) return {};
   const ratio = input.picked?.ratio || input.carry.ratio;
   const look = input.picked?.look || input.carry.look;
-  return { ...(ratio ? { ratio } : {}), ...(look ? { look } : {}) };
+  const kindPicked = Boolean(input.picked?.kind) || (Boolean(input.picked) && input.carry.kindPicked === true);
+  return { ...(ratio ? { ratio } : {}), ...(look ? { look } : {}), ...(kindPicked ? { kindPicked } : {}) };
 }

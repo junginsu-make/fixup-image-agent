@@ -8,8 +8,9 @@ import { describe, expect, it } from "vitest";
 const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
 
 describe("kindPicked", () => {
-  it("다시 보낸 말에 고른 갈래가 있을 때만 싣는다", () => {
-    expect(화면).toContain("...(다시?.kind ? { kindPicked: true } : {}),");
+  it("고른 값 묶음(carryChoices)이 정한 대로 싣는다 — 단추로 이어 답한 턴도 (최종 리뷰 I1)", () => {
+    expect(화면).toContain("...(고른값.kindPicked ? { kindPicked: true } : {}),");
+    expect(화면).not.toContain("...(다시?.kind ? { kindPicked: true } : {}),");
   });
 
   it("이어 온 갈래(kind)로는 싣지 않는다 — 말로 한 답은 고른 것이 아니다", () => {
