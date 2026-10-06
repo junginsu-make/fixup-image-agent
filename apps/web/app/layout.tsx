@@ -4,6 +4,7 @@ import { ThemeProvider, Toaster } from "@fixup/ui";
 import { ImageViewerHost } from "./_components/image-viewer";
 import { PageViewTracker } from "./_components/page-view-tracker";
 import { ConsentBanner } from "./_components/consent-banner";
+import { SITE_URL, verificationMetadata } from "../lib/seo/site";
 /*
   글꼴을 여기서 부른다.
 
@@ -18,7 +19,6 @@ import { ConsentBanner } from "./_components/consent-banner";
 import "./pretendard.css";
 import "./globals.css";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://54.180.68.212";
 const DESCRIPTION = "레퍼런스 한 장이면 같은 결의 이미지가 나옵니다. 카드뉴스·광고 소재·포스터·상세페이지·캐릭터를 한 곳에서.";
 
 export const metadata: Metadata = {
@@ -34,6 +34,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   applicationName: "FormWith",
   manifest: "/site.webmanifest",
+  verification: verificationMetadata(),
   appleWebApp: { title: "FormWith" },
 
   /*
@@ -52,12 +53,12 @@ export const metadata: Metadata = {
     바꿨는데 카카오톡에는 끝까지 첫 번째 것이 떴다. 주소가 달라지면 캐시가
     없으니 새로 받아 간다.
   */
+  // og:url 은 화면마다 단다(lib/seo/metadata). 여기 두면 모든 화면이 첫 화면 주소를 공유 주소로 낸다.
   openGraph: {
     type: "website",
     siteName: "FormWith",
     title: "FormWith — Marketing Content Studio",
     description: DESCRIPTION,
-    url: SITE_URL,
     locale: "ko_KR",
     images: [{ url: "/og-hero.png", width: 1200, height: 630, alt: "FormWith 가 만든 결과물" }],
   },

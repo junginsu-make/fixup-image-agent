@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { AD_SPECS, adPortalSummary } from "./data";
 import { ChoiceTable, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
@@ -6,7 +6,7 @@ import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockSteps } from "../_components/mockup";
 
-export const metadata: Metadata = { title: "광고 규격으로 내보내기 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/ad");
 
 export default function AdGuidePage() {
   const portals = adPortalSummary();

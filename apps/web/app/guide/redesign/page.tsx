@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import { IMAGE_CREDIT_POLICY } from "@fixup/shared";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
@@ -6,7 +6,7 @@ import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockSteps } from "../_components/mockup";
 import { MAX_REFERENCE_IMAGES, REDESIGN_STEPS, models } from "../../redesign/redesign-model";
 
-export const metadata: Metadata = { title: "상세페이지 리디자인 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/redesign");
 
 /** 화면의 세 화면 이름 그대로. */
 const 화면 = REDESIGN_STEPS.map((step) => step.label);

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import { ChoiceTable, DiffList, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Details, Summary } from "../_components/summary";
@@ -11,7 +11,7 @@ import { Callouts, Mock, MockButtons, MockChoices, MockTabs } from "../_componen
  * 설명서에 남겨 두면 **설명서에는 있는데 눌러도 없는 화면**이 된다.
  * 되살릴 때는 이 파일의 git 이력에서 그 절을 그대로 되가져오면 된다.
  */
-export const metadata: Metadata = { title: "라이브러리 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/library");
 
 export default function LibraryGuidePage() {
   return (

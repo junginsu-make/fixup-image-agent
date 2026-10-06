@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { IMAGE_MODELS, POSTER_RATIOS } from "@fixup/sns-core";
 import {
@@ -30,7 +30,7 @@ import { POSTER_STEPS } from "../../poster/steps";
  */
 const LOOK_NAMES = looksWithoutReference().map((look) => IMAGE_LOOK_LABEL[look]).join("·");
 
-export const metadata: Metadata = { title: "이미지 만들기 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/image");
 
 /**
  * **화면이 쓰는 목록을 그대로 쓴다.**

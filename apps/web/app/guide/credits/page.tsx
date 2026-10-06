@@ -1,7 +1,7 @@
 import { getMembership, getUsageSummary } from "../../../lib/membership/server";
 import { CreditWallet } from "../../_components/credit-wallet";
 import { isCreditLedgerEnabled } from "../../../lib/membership/credit-ledger";
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import { IMAGE_MODELS, unitPrice } from "@fixup/sns-core";
 import { creditUnits } from "@fixup/shared";
 import { ChoiceTable, Flow, GuideHeader, Pitfalls, Section } from "../_components/flow";
@@ -10,7 +10,7 @@ import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockChoices, MockField, MockNote } from "../_components/mockup";
 import { LedgerCreditsGuide } from "./ledger";
 
-export const metadata: Metadata = { title: "크레딧과 모델 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/credits");
 
 /**
  * 모델마다 한 줄 설명. **차감량은 여기 안 적는다.**
