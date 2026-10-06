@@ -152,7 +152,15 @@ async function handlePost(req: Request) {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
-  const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
+  // 읽지 못하면 `{}` 로 검증하지 않는다 — 그림이 너무 커 본문이 잘린 경우에 엉뚱한 안내가 떴다.
+  const raw: unknown = await req.json().catch(() => undefined);
+  if (raw === undefined) {
+    return Response.json(
+      { ok: false, message: "요청을 읽지 못했습니다. 붙인 그림이 너무 크면 줄여서 다시 올려 주세요." },
+      { status: 400 },
+    );
+  }
+  const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) {
     return Response.json(
       { ok: false, message: parsed.error.issues[0]?.message ?? "요청을 해석하지 못했습니다." },

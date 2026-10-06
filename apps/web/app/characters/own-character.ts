@@ -21,3 +21,17 @@ export function roleWithOwn(role: CharacterReferenceRole, hasOwn: boolean): Char
 export function lookLockedByPair(hasOwn: boolean, hasReference: boolean): string {
   return hasOwn && hasReference ? OWN_LOOK_LOCKED : "";
 }
+
+/**
+ * 붙인 그림 둘의 base64 글자 수 합 한도. base64 는 1.33배로 부풀고 앱의 요청 상한은 16MB 다.
+ * 15_000_000 글자 ≈ 그림 11MB. 그림을 줄이지 않고 올리기 전에 막는다.
+ */
+export const IMAGES_BASE64_MAX = 15_000_000;
+export const IMAGES_TOO_LARGE_MESSAGE = "붙인 그림이 너무 큽니다. 두 그림을 합쳐 약 11MB 이하로 올려 주세요.";
+
+export function imagesTooLarge(
+  attached: { base64: string } | null | undefined,
+  own: { base64: string } | null | undefined,
+): boolean {
+  return (attached?.base64.length ?? 0) + (own?.base64.length ?? 0) > IMAGES_BASE64_MAX;
+}

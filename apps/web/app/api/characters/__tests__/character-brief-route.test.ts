@@ -130,3 +130,13 @@ describe("내 캐릭터", () => {
     expect(calls.brief[0]).toMatchObject({ hasOwnCharacter: true, referenceRole: "style" });
   });
 });
+
+describe("읽을 수 없는 요청", () => {
+  /** 두 그림이 너무 커 본문이 잘리면 `{}` 로 검증해 「무엇을 만들지 적어 주세요」가 떴다. */
+  it("JSON 이 아니면 400 으로 거절하고 돈을 잡지 않는다", async () => {
+    const response = await POST(new Request("http://local/api/characters", { method: "POST", body: "{\"description\":\"고양이\",\"ownChar" }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toBe("요청을 읽지 못했습니다. 붙인 그림이 너무 크면 줄여서 다시 올려 주세요.");
+    expect(calls.reserve).toBe(0);
+  });
+});

@@ -23,7 +23,9 @@ import { lookAfterRole, roleAfterLook } from "./look-role";
 import { useOpenedCharacter } from "./use-opened-character";
 import { OpenedNotice } from "./opened-notice";
 import { OwnCharacterField } from "./OwnCharacterField";
-import { OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, lookLockedByPair, roleWithOwn } from "./own-character";
+import {
+  IMAGES_TOO_LARGE_MESSAGE, OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, imagesTooLarge, lookLockedByPair, roleWithOwn,
+} from "./own-character";
 import { readImageBlob, type ReadImage } from "./read-image";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
@@ -384,6 +386,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    */
   const handleCandidates = async () => {
     if (!description.trim()) return setMessage("무엇을 만들지 적어 주세요.");
+    // 요청 상한(16MB)을 넘으면 서버가 본문을 잘라 엉뚱한 오류가 난다. 그림은 줄이지 않고 막는다.
+    if (imagesTooLarge(attached, own)) return setMessage(IMAGES_TOO_LARGE_MESSAGE);
     setBusy("candidates");
     setMessage("");
     setChosen(null);

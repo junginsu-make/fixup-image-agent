@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lookAfterRole } from "../look-role";
-import { lookLockedByPair, roleWithOwn } from "../own-character";
+import { IMAGES_BASE64_MAX, imagesTooLarge, lookLockedByPair, roleWithOwn } from "../own-character";
 
 /**
  * 「내 캐릭터」가 있으면 참고할 그림은 레퍼런스 스타일뿐이다.
@@ -63,5 +63,24 @@ describe("넣고 빼는 순서", () => {
     let s: State = { own: false, role: "extract", look: "anime" };
     s = putOwn(s, true);
     expect(s).toEqual({ own: true, role: "style", look: "auto" });
+  });
+});
+
+/** 두 그림이 base64 로 부풀어 16MB 요청 상한을 넘으면 서버가 본문을 잘라 엉뚱한 오류가 난다. */
+describe("붙인 그림 합계 한도", () => {
+  const image = (length: number) => ({ base64: "a".repeat(length) });
+
+  it("한도 이하면 보낸다", () => {
+    expect(imagesTooLarge(image(IMAGES_BASE64_MAX / 2), image(IMAGES_BASE64_MAX / 2))).toBe(false);
+  });
+
+  it("합이 한도를 넘으면 막는다", () => {
+    expect(imagesTooLarge(image(IMAGES_BASE64_MAX), image(1))).toBe(true);
+  });
+
+  it("그림이 없거나 하나뿐이어도 셈한다", () => {
+    expect(imagesTooLarge(null, null)).toBe(false);
+    expect(imagesTooLarge(image(IMAGES_BASE64_MAX + 1), null)).toBe(true);
+    expect(imagesTooLarge(null, image(10))).toBe(false);
   });
 });
