@@ -88,10 +88,16 @@ describe("증감 배지", () => {
     const html = renderToStaticMarkup(<TrafficPanel report={oneDay} previous={null} />);
     expect(html).not.toMatch(/▲|▼|새로 생김|변화 없음|대비/);
   });
-  it("오늘 방문자는 어제와 견준다", () => {
+  it("오늘 방문자는 배지 없이 어제 하루 숫자만 곁들인다", () => {
     const html = renderToStaticMarkup(<TrafficPanel report={traffic} previous={null} />);
-    expect(html).toContain("어제 하루 전체 대비");
-    expect(html).toContain("▲ 100%");
+    expect(html).toContain("어제 하루 1명");
+    expect(html).not.toMatch(/▲|▼|새로 생김|변화 없음/);
+  });
+  it("오늘 방문자는 지난 기간이 있어도 배지가 없다", () => {
+    const html = renderToStaticMarkup(<TrafficPanel report={traffic} previous={traffic} />);
+    const today = html.slice(html.indexOf("오늘 방문자"), html.indexOf("하루 단위 합"));
+    expect(today).toContain("어제 하루 1명");
+    expect(today).not.toMatch(/▲|▼|새로 생김|변화 없음/);
   });
   it("활동 회원도 증감을 보인다", () => {
     const html = renderToStaticMarkup(<PeoplePanel report={people} previous={{ ...people, activeMembers: 1 }} />);
@@ -136,6 +142,26 @@ describe("비율 막대 목록", () => {
   });
   it("기능은 쓴 회원·실패를 작은 글씨로", () => {
     expect(renderToStaticMarkup(<PeoplePanel report={people} />)).toContain("쓴 회원 1명 · 실패 1번");
+  });
+});
+
+describe("읽기 좋게", () => {
+  it("한글 라벨은 낱말 가운데서 안 끊고, 이메일은 아무 데서나 끊는다", () => {
+    const tiles = renderToStaticMarkup(<TrafficPanel report={traffic} />);
+    const label = tiles.slice(0, tiles.indexOf("최근 7일 들어온 회원"));
+    expect(label.slice(label.lastIndexOf("<dt"))).toContain("break-keep");
+    const list = renderToStaticMarkup(<SourcesPanel report={traffic} />);
+    expect(list).toMatch(/class="[^"]*break-keep[^"]*\[overflow-wrap:anywhere\][^"]*">크롬|class="[^"]*break-keep[^"]*\[overflow-wrap:anywhere\][^"]*">카카오톡 앱 안/);
+    expect(renderToStaticMarkup(<PeoplePanel report={people} />)).toMatch(/class="[^"]*break-all[^"]*">kim@example.invalid/);
+  });
+  it("증감 배지는 어두운 화면용 색이 따로 있다", () => {
+    const up = renderToStaticMarkup(<TrafficPanel report={traffic} previous={{ ...traffic, visitorDays: 2, members: 4 }} />);
+    expect(up).toMatch(/dark:bg-emerald-[^"]*">▲/);
+    expect(up).toMatch(/dark:text-red-[^"]*">▼|dark:bg-red-[^"]*">▼/);
+  });
+  it("상위 20개만 받는 목록에는 비율 범위를 적는다", () => {
+    const html = renderToStaticMarkup(<SourcesPanel report={traffic} />);
+    expect(html.match(/상위 20개 안에서의 비율/g)).toHaveLength(3);
   });
 });
 

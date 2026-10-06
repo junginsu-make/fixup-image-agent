@@ -20,6 +20,8 @@ interface RankListProps<T extends { key: string }> {
   unit: string;
   /** 비율의 분모. 안 주면 보이는 줄의 합. */
   total?: number;
+  /** 제목 아래 작은 회색 안내(예: 비율이 무엇 안에서의 몫인지). */
+  note?: string;
 }
 
 /**
@@ -27,13 +29,14 @@ interface RankListProps<T extends { key: string }> {
  * 상위 8개만 펼쳐 두고 나머지는 「더 보기」에 접는다. 표가 아니라 줄 목록이라 휴대폰에서도 넘치지 않는다.
  */
 export function RankList<T extends { key: string }>(props: RankListProps<T>) {
-  const { title, rows } = props;
+  const { title, rows, note } = props;
   const total = props.total ?? rows.reduce((sum, row) => sum + props.value(row), 0);
   const head = rows.slice(0, SHOWN);
   const rest = rows.slice(SHOWN);
   return (
     <section className="min-w-0">
-      <h3 className="mb-2 text-sm font-medium">{title}</h3>
+      <h3 className={cn("text-sm font-medium", note ? "mb-0.5" : "mb-2")}>{title}</h3>
+      {note ? <p className="mb-2 break-keep text-xs text-muted-foreground">{note}</p> : null}
       {rows.length ? (
         <>
           <RankRows {...props} rows={head} total={total} />
@@ -60,12 +63,12 @@ function RankRows<T extends { key: string }>({ rows, value, label, sublabel, uni
         return (
           <li key={row.key} className="min-w-0">
             <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="min-w-0 break-words font-medium">{label(row.key)}</span>
+              <span className="min-w-0 break-keep font-medium [overflow-wrap:anywhere]">{label(row.key)}</span>
               <span className="shrink-0 tabular-nums">
                 {count(amount)}{unit} <span className="text-muted-foreground">{shareText(ratio)}</span>
               </span>
             </div>
-            {sub ? <p className="mt-0.5 break-all text-xs text-muted-foreground">{sub}</p> : null}
+            {sub ? <p className="mt-0.5 break-keep text-xs text-muted-foreground [overflow-wrap:anywhere]">{sub}</p> : null}
             <div className="mt-1 h-1.5 w-full rounded-full bg-muted" aria-hidden>
               <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(2, ratio * 100))}%` }} />
             </div>

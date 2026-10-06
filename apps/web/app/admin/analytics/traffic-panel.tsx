@@ -48,7 +48,10 @@ function TrafficNumbers({ report, previous }: { report: SiteTraffic; previous: S
   );
 }
 
-/** 숫자 칸 여덟. 기간 숫자 셋은 지난 기간과, 오늘 방문자는 어제 하루와 견준다(못 읽었으면 배지 없음). */
+/**
+ * 숫자 칸 여덟. 기간 숫자 셋은 지난 기간과 견준다(못 읽었으면 배지 없음).
+ * 오늘 방문자는 배지 없이 어제 하루 숫자만 곁들인다. 진행 중인 오늘을 어제 하루 전체와 견주면 아침마다 ▼ 로 보인다.
+ */
 function TrafficTiles({ report, previous }: { report: SiteTraffic; previous: SiteTraffic | null }) {
   const versus = (current: number, before: number | undefined) => change(current, before ?? null);
   const hint = previous ? `지난 ${report.days}일 같은 시각까지 대비` : undefined;
@@ -56,7 +59,7 @@ function TrafficTiles({ report, previous }: { report: SiteTraffic; previous: Sit
   return (
     <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <StatTile icon={Users} label="오늘 방문자" value={count(report.todayVisitors)}
-        change={versus(report.todayVisitors, yesterday)} hint={yesterday === undefined ? undefined : "어제 하루 전체 대비"} />
+        hint={yesterday === undefined ? undefined : `어제 하루 ${count(yesterday)}명`} />
       <StatTile icon={CalendarDays} label={`최근 ${report.days}일 방문(하루 단위 합)`} value={count(report.visitorDays)}
         change={versus(report.visitorDays, previous?.visitorDays)} hint={hint} />
       <StatTile icon={UserCheck} label={`최근 ${report.days}일 들어온 회원`} value={count(report.members)}

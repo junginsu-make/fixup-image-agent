@@ -59,10 +59,10 @@ function TopMembers({ rows }: { rows: MemberUse[] }) {
           {rows.map((member) => (
             <li key={member.id || member.email} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2 text-sm">
               <div className="min-w-0">
-                {member.name ? <p className="break-words font-medium">{member.name}</p> : null}
+                {member.name ? <p className="break-keep font-medium [overflow-wrap:anywhere]">{member.name}</p> : null}
                 <p className="break-all text-xs text-muted-foreground">{member.email}</p>
               </div>
-              <p className="text-xs tabular-nums text-muted-foreground">
+              <p className="break-keep text-xs tabular-nums text-muted-foreground">
                 화면 {count(member.views)}번 · AI {count(member.calls)}번 · 마지막 방문 {seen(member.lastSeen)}
               </p>
             </li>
