@@ -55,10 +55,40 @@ describe("규격대로 뽑는다", () => {
     ["둘 다 모자람", 400, 210],
     ["세로만 모자람", 1600, 300],
     ["가로만 모자람", 900, 1200],
-  ])("작은 그림을 받으면 실패로 알린다 (%s) — 조용히 늘리지 않는다", async (_label, w, h) => {
+  ])("작은 그림을 받으면 실패로 알린다 (%s) — 1.2배 넘게 늘리지 않는다", async (_label, w, h) => {
     const spec = specById("naver-gfa-banner");
     const result = await exportForAd(await flat(w, h), spec, planDerivation(spec));
     expect("failed" in result).toBe(true);
+  });
+
+  /**
+   * **조금 모자란 것은 1.2배까지 늘려 뽑는다** (사용자 결정 2026-10-06).
+   *
+   * 2026-09-23 이전 그림은 정사각이 1088×1088 이라 1200 규격에 112픽셀이
+   * 모자랐고, 그 그림으로는 정사각·가로 필수 규격이 하나도 안 나왔다. 실제
+   * 그림을 1.1배 늘려 비교했더니 글자가 눈으로 갈리지 않았다.
+   */
+  it.each([
+    ["google-rda-square", 1200, 1200],
+    ["google-rda-landscape", 1200, 628],
+  ])("1088 정사각 그림에서 %s 를 늘려 뽑는다", async (specId, w, h) => {
+    const { bytes } = await derive(specId, await flat(1088, 1088));
+    const meta = await sharp(bytes).metadata();
+    expect([meta.width, meta.height]).toEqual([w, h]);
+  });
+
+  // 두 변을 따로, 경계 양쪽을 다 본다. 1.2 정확히는 통과, 그 위는 거부.
+  it.each([
+    ["가로가 정확히 1.2배", "google-rda-square", 1000, 1000, true],
+    ["가로가 1.2배를 넘음", "google-rda-square", 999, 1000, false],
+    ["세로가 1.2배를 넘음", "google-rda-square", 1000, 999, false],
+    ["세로만 1.2배 안쪽", "google-rda-landscape", 2000, 524, true],
+    ["세로만 1.2배를 넘음", "google-rda-landscape", 2000, 523, false],
+  ])("늘리는 상한은 1.2배다 (%s)", async (_label, specId, w, h, ok) => {
+    const spec = specById(specId);
+    const result = await exportForAd(await flat(w, h), spec, planDerivation(spec));
+    expect("failed" in result, JSON.stringify(result).slice(0, 200)).toBe(!ok);
+    if (!ok) expect((result as { failed: string }).failed).toMatch(/1\.2배/);
   });
 
   it("만들 수 없는 규격은 뽑지 않는다", async () => {

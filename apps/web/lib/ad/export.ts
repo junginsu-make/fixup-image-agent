@@ -35,6 +35,10 @@ const MAX_INPUT_PIXELS = 40_000_000;
 const QUALITY_MAX = 92;
 const QUALITY_MIN = 40;
 
+/** 원본을 늘려도 되는 상한 1.2배를 분수(6/5)로 둔다. */
+const UPSCALE_NUM = 6;
+const UPSCALE_DEN = 5;
+
 export interface AdExport {
   bytes: Buffer;
   /** 실제로 쓴 품질. 상한이 빡빡할수록 낮아진다. */
@@ -87,11 +91,23 @@ export async function exportForAd(
      * `가로 ≥ 목표` 와 `세로 ≥ 목표` 가 서로 동치가 되어, 한쪽 조건이 도달
      * 불가능한 죽은 가지가 된다. 원본 크기끼리는 둘이 독립이다 — 1600×300 은
      * 1200×628 에 대해 가로만 충분하다.
+     *
+     * **1.2배까지는 늘린다** (사용자 결정 2026-10-06). 2026-09-23 이전 그림은
+     * 정사각이 1088 이라 1200 규격을 못 뽑았는데, 실제 그림을 1.1배 늘려 보니
+     * 글자가 눈으로 갈리지 않았다. 그 위는 지금처럼 막는다.
+     *
+     * **이 여유는 여기에만 둔다.** `derive.ts` 의 `usable` 은 새로 만들 마스터를
+     * 고르는 식이라, 거기에 여유를 주면 새 그림까지 늘려 쓰게 된다.
+     *
+     * 나눗셈 없이 정수로 비교한다(`목표 ≤ 원본 × 1.2` ⇔ `목표 × 5 ≤ 원본 × 6`) —
+     * 경계에서 부동소수점이 판정을 뒤집지 않게.
      */
-    if (size.width < spec.target.width || size.height < spec.target.height) {
+    const fits = (target: number, source: number) =>
+      target * UPSCALE_DEN <= source * UPSCALE_NUM;
+    if (!fits(spec.target.width, size.width) || !fits(spec.target.height, size.height)) {
       return {
-        failed: `원본이 작아 ${spec.target.width}×${spec.target.height} 를 만들려면 늘려야 합니다.`
-          + " 늘리면 흐려져 광고 심사에서 반려됩니다.",
+        failed: `원본이 작아 ${spec.target.width}×${spec.target.height} 를 만들려면 1.2배 넘게 늘려야 합니다.`
+          + " 그만큼 늘리면 흐려져 광고로 쓰기 어렵습니다.",
       };
     }
 
