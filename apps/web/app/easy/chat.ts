@@ -38,7 +38,9 @@ export interface EasyDecision {
    */
   wants: "image" | "cardnews" | "either" | "revise" | "talk" | "detail_page"
     // 3단계: 만든 카드뉴스 손보기(한 장 다시 그리기 · 한 장 글 고치기 · 게시글 · 받기).
-    | "card_redo" | "card_text" | "caption" | "download";
+    | "card_redo" | "card_text" | "caption" | "download"
+    // 이 대화에서 마지막으로 만든 이미지 한 장을 고친다(2026-10-06).
+    | "image_edit";
   /** 3단계: 말한 장 번호. 없으면 비어 있다. */
   card?: number;
   /** 3단계: 그 장에 바라는 점 · 고칠 내용. */
@@ -55,6 +57,15 @@ export interface EasyDecision {
   ratio?: string;
   look?: string;
 }
+
+/**
+ * 고쳐 달라는데 고칠 것이 없을 때의 답.
+ *
+ * **빈 답으로 두지 않는다**(2026-10-06). 빈 답은 「무엇을 만들어 드릴까요?」로
+ * 떨어지고, 사용자가 같은 말을 다시 보내도 같은 답만 되풀이됐다.
+ */
+export const NOTHING_TO_EDIT =
+  "이 대화에는 아직 고칠 이미지나 카드뉴스가 없습니다. 먼저 무엇을 만들지 알려 주세요. 예: 「카페 신메뉴 포스터 만들어줘」";
 
 /** 지난 대화를 몇 줄까지 보여 줄까. */
 const 되돌아볼줄 = 12;
@@ -91,6 +102,8 @@ export function easyChatPrompt(
   hasDraft = false,
   /** 그 카드뉴스를 만들었나(그림이 있다). 있을 때만 다시 그리기 · 게시글 · 받기를 알려 준다(3단계 §5). */
   made = false,
+  /** 이 대화의 마지막 결과가 이미지 한 장인가. 그때만 「이미지 고치기」를 알려 준다(2026-10-06). */
+  madeImage = false,
 ): string {
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
@@ -134,6 +147,24 @@ export function easyChatPrompt(
         "  download   만든 카드를 **내려받겠다**는 것입니다. 「다 받을게」 · 「저장할래」.",
       ]
       : []),
+    ...(madeImage
+      ? [
+        "  image_edit  이 대화에서 **마지막으로 만든 이미지를 고쳐** 달라는 것입니다. 「로고를 이걸로 바꿔줘」 ·",
+        "              「글자를 크게」 · 「배경만 파랗게」 · 「방금 거에서 ○○만 바꿔줘」. 붙인 이미지가 있으면 그것을",
+        "              넣어 고쳐 달라는 뜻입니다. 전혀 다른 새 이미지를 말하면 image 입니다.",
+      ]
+      : []),
+    /*
+      **원고와 이미지가 함께 있으면 마지막 것을 알려 준다**(2026-10-06 독립 리뷰).
+      안 알려 주면 모델은 고쳐 달라는 말에 `revise` 를 골라 앞의 카드뉴스 원고를
+      고친다 — 사용자는 방금 만든 이미지를 보고 말한 것이다.
+    */
+    ...(hasDraft && madeImage
+      ? [
+        "  **이 대화에서 마지막으로 만든 것은 이미지 한 장입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
+        "  image_edit 입니다. 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
+      ]
+      : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
     "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
@@ -156,7 +187,7 @@ export function easyChatPrompt(
     "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
     "**무엇을 적으면 되는지 예를 들어** 주세요.",
     "",
-    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise` · `card_text`" : ""}${hasDraft && made ? " · `card_redo` · `caption` · `download`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
+    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise` · `card_text`" : ""}${hasDraft && made ? " · `card_redo` · `caption` · `download`" : ""}${madeImage ? " · `image_edit`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
     ...(hasDraft ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
     "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
     "",
@@ -207,7 +238,11 @@ export function easyChatPrompt(
  * 인사 한 마디에 값이 나가고, 「모르겠으면 말」로 떨어뜨리면 주문이 조용히
  * 씹힌다. 둘 다 사용자가 원인을 알 수 없는 자리다.
  */
-export function readEasyDecision(raw: unknown, options: { canRevise?: boolean; made?: boolean } = {}): EasyDecision {
+export function readEasyDecision(
+  raw: unknown,
+  /** `editableImage`: 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가(2026-10-06). */
+  options: { canRevise?: boolean; made?: boolean; editableImage?: boolean } = {},
+): EasyDecision {
   const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown } | null;
   const said = value?.wants;
 
@@ -216,8 +251,23 @@ export function readEasyDecision(raw: unknown, options: { canRevise?: boolean; m
   }
   let wants = said as EasyDecision["wants"];
   let reply = typeof value?.reply === "string" ? value.reply.trim() : "";
-  // 고칠 원고가 없는데 고치라고 하면 말로 답한다. 만들 것이 없다.
-  if ((said === "revise" || said === "card_text") && !options.canRevise) wants = "talk";
+  /*
+    **이미지 고치기는 고칠 이미지가 있어야 한다.** 없으면 원고 고치기로, 원고도
+    없으면 고칠 것이 없다고 답한다.
+  */
+  if (said === "image_edit" && !options.editableImage) {
+    if (options.canRevise) wants = "revise";
+    else { wants = "talk"; reply = NOTHING_TO_EDIT; }
+  }
+  /*
+    고칠 원고가 없는데 고치라고 하면 — **만든 이미지가 있으면 그것을 고친다.**
+    모델은 이미지를 고쳐 달라는 말에도 `revise` 를 골랐다(2026-10-06 실측 6/6).
+    둘 다 없으면 빈 답이 아니라 안내를 한다 — 빈 답은 같은 말을 되풀이했다.
+  */
+  else if ((said === "revise" || said === "card_text") && !options.canRevise) {
+    if (options.editableImage) wants = "image_edit";
+    else { wants = "talk"; reply = NOTHING_TO_EDIT; }
+  }
   // 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다.
   else if (만든뒤갈래.has(said) && !options.canRevise) wants = "talk";
   else if (만든뒤갈래.has(said) && !options.made) {
@@ -251,6 +301,7 @@ export function readEasyDecision(raw: unknown, options: { canRevise?: boolean; m
 
 const 아는갈래 = new Set([
   "image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download",
+  "image_edit",
 ]);
 const 만든뒤갈래 = new Set(["card_redo", "caption", "download"]);
 const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));

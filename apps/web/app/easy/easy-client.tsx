@@ -14,6 +14,7 @@ import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
+import { pickCollectedImage } from "./row-image";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -469,7 +470,8 @@ export function EasyClient({
       observeAccountResponse(poll, false);
       if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
       if (poll.done) {
-        const first = poll.images?.[0];
+        // 이번 요청의 그림 — 고치기는 같은 작업에 그림을 더해 첫 장이 원본이다(`row-image.ts`).
+        const first = pickCollectedImage<{ id: string; url: string; generationRequestId?: string }>(poll.images, submission.requestRowId);
         return first ? { id: first.id, url: first.url } : undefined;
       }
     }
