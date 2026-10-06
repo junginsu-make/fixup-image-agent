@@ -45,6 +45,7 @@ vi.mock("../../../../lib/easy/chat-provider", () => ({
 vi.mock("../../../../lib/easy/cardnews-steps", async (original) => ({
   ...(await original<object>()),
   lastCardnewsProject: async () => null,
+  cardnewsProjectIds: async () => new Set<string>(),
 }));
 vi.mock("../../../../lib/easy/read-photos", () => ({ readEasyPhotos: async () => ({}) }));
 vi.mock("../../../../lib/poster/references", () => ({

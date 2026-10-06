@@ -57,6 +57,7 @@ vi.mock("../../../../lib/easy/chat-provider", () => ({
 vi.mock("../../../../lib/easy/cardnews-steps", async (original) => ({
   ...(await original<object>()),
   lastCardnewsProject: async () => null,
+  cardnewsProjectIds: async () => new Set<string>(),
 }));
 vi.mock("../../../../lib/easy/read-photos", () => ({ readEasyPhotos: async () => ({}) }));
 vi.mock("../../../../lib/poster/references", () => ({ posterReferencesByIds: async () => [] }));
@@ -68,7 +69,7 @@ vi.mock("../../../../lib/llm/meter", () => ({
 vi.mock("../../../../lib/poster/stores", () => ({
   posterStoresForUser: () => ({
     projects: { get: async (id: string) => (포스터작업.has(id) ? { id, ratio: "1:1", data: {} } : undefined) },
-    images: { byProject: async () => [] },
+    images: { byProject: async () => [], byProjects: async () => [] },
   }),
 }));
 const 라우트 = (step: string) => ({

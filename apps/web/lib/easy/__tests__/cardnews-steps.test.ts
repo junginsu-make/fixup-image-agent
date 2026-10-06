@@ -41,7 +41,7 @@ vi.mock("../../../app/api/sns/projects/[id]/cards/[index]/route", () => ({
 }));
 vi.mock("../../../app/api/sns/projects/[id]/generate/route", () => ({ POST: async () => Response.json({}) }));
 
-const { cardnewsProject, draftCardnews, lastCardnewsProject } = await import("../cardnews-steps");
+const { cardnewsProject, cardnewsProjectIds, draftCardnews, lastCardnewsProject } = await import("../cardnews-steps");
 
 const 카드 = (index: number, role: string, headline: string, extra: Record<string, unknown> = {}) =>
   ({ index, role, kind: "generated", copy: { headline }, status: "pending", ...extra });
@@ -137,5 +137,16 @@ describe("카드뉴스 작업 찾기", () => {
 
   it("저장소 오류가 나도 실패하지 않고 원고 없음으로 본다(평범한 이미지 주문이 안 깨진다)", async () => {
     expect(await lastCardnewsProject("me", [{ role: "image", workId: "mine" }, { role: "image", workId: "boom" }])).toBeNull();
+  });
+
+  /** 2차 D2 — 결과물 번호의 갈래(카드뉴스인가)만 본다. 턴마다 부르므로 서명하지 않는다. */
+  it("카드뉴스 작업인 id 만 고른다 — 남의 것 · 포스터는 빼고, 서명하지 않는다", async () => {
+    expect(await cardnewsProjectIds("me", ["mine", "theirs", "poster-1"])).toEqual(new Set(["mine"]));
+    expect(서명한것).toEqual([]);
+    expect(await cardnewsProjectIds("me", [])).toEqual(new Set());
+  });
+
+  it("저장소 오류가 나도 실패하지 않고 빈 모음이다", async () => {
+    expect(await cardnewsProjectIds("me", ["mine", "boom"])).toEqual(new Set());
   });
 });

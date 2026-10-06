@@ -4,6 +4,7 @@ import {
 } from "../../app/easy/chat";
 import type { EasyMessage } from "../../app/easy/turn";
 import { hasAdNegation, type EasyAdStep } from "../../app/easy/ad-ask";
+import type { EasyResultEntry } from "../../app/easy/image-numbers";
 
 /**
  * **「쉽게」 한 턴의 판단**(2026-10-06 설계 A1 · A3).
@@ -29,6 +30,8 @@ export interface EasyJudgeInput {
   kindPicked?: boolean;
   /** 코드가 낱말로 정한 광고 갈래(설계 A5). `image` · `specs` 면 글 모델에 묻지 않는다. */
   adStep?: EasyAdStep;
+  /** 2차 D2: 이 대화의 결과물(번호 · 갈래 · 상태). 판단 모델이 고칠 번호를 고른다. */
+  images?: readonly EasyResultEntry[];
 }
 
 export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision> {
@@ -40,7 +43,9 @@ export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision
   const wants = easyAvailableWants(choices);
   const ask = async (retry: boolean) => readEasyDecision(
     await input.decide(
-      easyChatPrompt(input.history, input.prompt, input.attachmentCount, hasDraft, made, madeImage, { retry, adNegated }),
+      easyChatPrompt(input.history, input.prompt, input.attachmentCount, hasDraft, made, madeImage, {
+        retry, adNegated, images: input.images,
+      }),
       wants,
     ),
     { canRevise: hasDraft, made, editableImage: madeImage },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, jobRowStates, pickCollectedImage, pickRowImage,
-  rowJobOf, rowJobRequestIds, withRowJob,
+  rowFromOf, rowJobOf, rowJobRequestIds, withRowFrom, withRowJob,
 } from "../row-image";
 
 /**
@@ -212,5 +212,24 @@ describe("아직 안 받은 줄 (B3, 최종 리뷰 2026-10-06)", () => {
 
   it("못 읽은 요청(모름)은 이어 받지도 실패로도 보이지 않는다", () => {
     expect(jobRowStates(rows, {}, new Map())).toEqual({ pending: [], failed: [] });
+  });
+});
+
+/** 2차 D2 · Review Focus 3 — 고친 대상 줄 표시가 다른 표시와 섞이지 않는다. */
+describe("고친 대상 줄 (;from=)", () => {
+  const 일감 = { requestRowId: "r2", falRequestId: "f;a,b", endpoint: "fal-ai/x;from=y" };
+
+  it("고친 줄 표시 · 넣은 사진 · 고친 대상 · 받을 정보가 안 섞인다", () => {
+    const body = withRowJob(withRowFrom(editRowBody("r2", ["logo-1", "logo-2"]), "row;1,2"), 일감);
+    expect(editRequestOf(body)).toBe("r2");
+    expect(editAddedOf(body)).toEqual(["logo-1", "logo-2"]);
+    expect(rowFromOf(body)).toBe("row;1,2");
+    expect(rowJobOf(body)).toEqual(일감);
+  });
+
+  it("고친 대상이 없으면 붙이지 않고, 옛 줄은 비어 있다", () => {
+    expect(withRowFrom(editRowBody("r2"), undefined)).toBe("edit-request:r2");
+    expect(rowFromOf(withRowJob(editRowBody("r2"), 일감))).toBeUndefined();
+    expect(rowFromOf("")).toBeUndefined();
   });
 });

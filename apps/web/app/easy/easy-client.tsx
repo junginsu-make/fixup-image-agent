@@ -74,6 +74,8 @@ interface EasyClientProps {
   initialPending?: string[];
   /** 끝났는데 그림이 없는 그림 줄 id(설계 B5). 다시 열면 「만들고 있습니다」 대신 실패로 보인다. */
   initialFailed?: string[];
+  /** 줄 id → 「이미지 N」 · 「카드뉴스 N」(2차 D2). 다시 열 때 `load.ts` 가 서버와 같은 함수로 센다. */
+  initialResultLabels?: Record<string, string>;
 }
 
 /** 첨부 한 장. 올린 뒤의 모습이다. */
@@ -100,6 +102,7 @@ export function EasyClient({
   initialCardnews,
   initialPending,
   initialFailed,
+  initialResultLabels,
 }: EasyClientProps) {
   const creditPolicy = useCreditPolicy();
   const router = useRouter();
@@ -117,6 +120,7 @@ export function EasyClient({
   const [textModel, setTextModel] = React.useState(DEFAULT_TEXT_MODEL);
   const [imageModel, setImageModel] = React.useState(defaultImageModel);
   const [urls, setUrls] = React.useState<Record<string, string>>(initialUrls ?? {});
+  const [labels, setLabels] = React.useState<Record<string, string>>(initialResultLabels ?? {});
   /*
    * **물음 줄에서 고르는 중인 것**(2026-10-07 2차 D1). 물음은 이제 대화 줄로 남는다 — 화면은 비율
    * 토글 · 사진 고르기 · 레퍼런스 고르기처럼 그 자리에서 고르는 것만 든다(`use-easy-asks.ts`).
@@ -368,6 +372,10 @@ export function EasyClient({
         router.refresh();
         return;
       }
+      // 화면의 「카드뉴스 N」(2차 D2). 서버가 같은 함수로 센 결과물 번호다.
+      if (body.ok && body.cardnews?.rowId && typeof body.resultLabel === "string") {
+        setLabels((current) => ({ ...current, [body.cardnews.rowId]: body.resultLabel }));
+      }
       // 카드뉴스 원고 · 손보기(2단계 · 3단계). 값은 원고까지 안 든다.
       if (body.ok && cardnews.take(body)) return;
       if (body.ok && body.talked) {
@@ -397,6 +405,8 @@ export function EasyClient({
 
       // 그림 자리를 잡아 둔다. 자리가 없으면 도착하는 순간 대화가 아래로 튄다.
       setMessages((current) => [...current, { id: 자리, role: "image", body: "" }]);
+      // 화면의 「이미지 N」(2차 D2). 서버가 같은 함수로 센 결과물 번호다.
+      if (typeof body.resultLabel === "string") setLabels((current) => ({ ...current, [자리]: body.resultLabel }));
       받음 = true;
 
       // 결과는 기존 status 라우트에 물어 받는다. 포스터 화면과 같은 길이다.
@@ -476,6 +486,7 @@ export function EasyClient({
               onOpenImage={() => openViewer(results.findIndex((one) => one.id === message.id))}
               cardnews={cardnews.rowProps(message.id, turn.busy)}
               failed={failed[message.id]}
+              resultLabel={labels[message.id]}
               onAdChoice={message.id === 답할물음 && !turn.busy ? (answer) => void send({ text: answer }) : undefined}
               // 물음 줄 밑의 단추 · 고르기. 지금 답할 수 있는 물음 줄이고 보내는 중이 아닐 때만(Review Focus 1, 2차 D1).
               askControls={message.id === 답할물음 && !turn.busy ? (

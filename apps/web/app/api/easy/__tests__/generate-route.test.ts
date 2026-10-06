@@ -410,4 +410,9 @@ describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
       role: "image", body: withRowJob("", { requestRowId: "r", falRequestId: "f", endpoint: "e" }),
     });
   });
+
+  it("만든 이미지의 이름표를 응답에 싣는다 — 화면의 「이미지 N」 (2차 D2)", async () => {
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    expect((await 보낸다({})).json.resultLabel).toBe("이미지 1");
+  });
 });

@@ -160,3 +160,19 @@ describe("표시를 뗀 글 (2차 §3-0)", () => {
     expect(글()).not.toContain("ask:");
   });
 });
+
+describe("결과물 이름표 (2차 D2)", () => {
+  it("그림 밑에 「이미지 N」을 보인다 — 만드는 중에도", () => {
+    act(() => { view = create(<EasyMessageRow message={{ id: "i1", role: "image", body: "", workId: "p1" }} imageUrl="/a.png" resultLabel="이미지 2" />); });
+    expect(글()).toContain("이미지 2");
+    act(() => { view.update(<EasyMessageRow message={{ id: "i1", role: "image", body: "", workId: "p1" }} resultLabel="이미지 3" />); });
+    expect(글()).toContain("이미지 3");
+    expect(글()).toContain("이미지를 만들고 있습니다");
+  });
+
+  it("지운 결과 줄에도 이름표가 남는다", () => {
+    act(() => { view = create(<EasyMessageRow message={{ id: "i1", role: "assistant", body: "이 작업은 지워졌습니다." }} resultLabel="결과물 1" />); });
+    expect(글()).toContain("이 작업은 지워졌습니다.");
+    expect(글()).toContain("결과물 1");
+  });
+});

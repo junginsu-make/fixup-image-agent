@@ -89,6 +89,22 @@ export async function cardnewsProject(userId: string, projectId: string): Promis
   return (await refreshProjectAssetUrls(project)) as unknown as EasyCardnewsProject;
 }
 
+/**
+ * 이 회원의 카드뉴스 작업인 id(2026-10-07 2차 D2 — 결과물 번호의 갈래). 턴마다 부르므로 **있는지만** 보고
+ * 그림 주소는 서명하지 않는다. 못 읽어도 턴을 깨지 않는다 — 빈 모음(그 번호는 「지운 결과」로 보인다).
+ */
+export async function cardnewsProjectIds(userId: string, ids: readonly string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  try {
+    const store = await snsFlowStoreForUser(userId);
+    const found = await Promise.all(ids.map((id) => store.get(id)));
+    return new Set(found.flatMap((one) => (one && one.userId === userId ? [one.id] : [])));
+  } catch (error) {
+    console.warn("[easy] 카드뉴스 작업을 읽지 못했습니다", error instanceof Error ? error.message : error);
+    return new Set();
+  }
+}
+
 /** 다시 쓰기 대상을 찾을 최근 그림 줄 수. 그보다 앞의 원고를 고치려면 새로 부탁한다. */
 const 찾을줄수 = 20;
 

@@ -368,6 +368,10 @@ describe("카드뉴스 다시 열기 (2단계 §8)", () => {
   it("찾은 카드뉴스 작업을 화면에 넘긴다", () => {
     expect(load).toMatch(/return \{[^}]*cardnews/);
   });
+  it("다시 열 때 결과물 이름표를 같은 함수로 세어 넘긴다 (2차 D2)", () => {
+    expect(load).toContain("numberEasyResults(rows)");
+    expect(코드("../[id]/page.tsx")).toContain("initialResultLabels={loaded.labels}");
+  });
 });
 
 describe("카드뉴스 화면 잇기 (2단계)", () => {

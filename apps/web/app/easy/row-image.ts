@@ -31,6 +31,13 @@ const 넣은사진머리 = ";added=";
  */
 const 일감머리 = ";job=";
 
+/**
+ * **고친 대상 줄**(2026-10-07 2차 D2). 고친 줄 글에 「어느 줄의 그림을 고쳤나」를 적는다 — 판단
+ * 모델에 주는 목록의 「#3 이미지 · #1 을 고친 것」이 이것으로 나온다. 고친 줄 표시 **뒤**,
+ * 받을 정보 **앞**에 붙인다. 앞부분만 읽는 `editRequestOf` · `editAddedOf` 와 안 섞인다.
+ */
+const 고친곳머리 = ";from=";
+
 /** `status` 라우트가 그대로 받는 셋. */
 export interface EasyRowJob {
   requestRowId: string;
@@ -38,10 +45,10 @@ export interface EasyRowJob {
   endpoint: string;
 }
 
-/** 받을 정보 앞부분(고친 줄 표시 · 빈 글). */
+/** 고친 대상 · 받을 정보 앞부분(고친 줄 표시 · 빈 글). */
 function 앞부분(body: string): string {
-  const at = body.indexOf(일감머리);
-  return at < 0 ? body : body.slice(0, at);
+  const 자리들 = [body.indexOf(고친곳머리), body.indexOf(일감머리)].filter((at) => at >= 0);
+  return 자리들.length ? body.slice(0, Math.min(...자리들)) : body;
 }
 
 /** 줄 글 끝에 받을 정보를 붙인다. 셋 중 하나라도 없으면 붙이지 않는다(옛 응답). */
@@ -60,6 +67,23 @@ export function rowJobOf(body: string | null | undefined): EasyRowJob | undefine
     if (parts.length !== 3 || parts.some((part) => !part)) return undefined;
     const [requestRowId, falRequestId, endpoint] = parts as [string, string, string];
     return { requestRowId, falRequestId, endpoint };
+  } catch {
+    return undefined;
+  }
+}
+
+/** 고친 줄에 고친 대상 줄을 붙인다. `withRowJob` 보다 먼저 부른다(받을 정보가 끝에 온다). */
+export function withRowFrom(body: string, rowId: string | undefined): string {
+  return rowId ? `${body}${고친곳머리}${encodeURIComponent(rowId)}` : body;
+}
+
+/** 고친 대상 줄 id. 없거나 깨졌으면 비어 있다. */
+export function rowFromOf(body: string | null | undefined): string | undefined {
+  const at = body?.indexOf(고친곳머리) ?? -1;
+  if (at < 0) return undefined;
+  const end = body!.indexOf(일감머리, at);
+  try {
+    return decodeURIComponent(body!.slice(at + 고친곳머리.length, end < 0 ? undefined : end)) || undefined;
   } catch {
     return undefined;
   }

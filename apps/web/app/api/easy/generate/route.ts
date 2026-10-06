@@ -37,6 +37,8 @@ import { countEasyImages, imageEditTurn, lastEasyImage } from "../../../../lib/e
 import { easyAdStep } from "../../../easy/ad-ask";
 import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
 import { askTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
+import { loadEasyImages } from "../../../../lib/easy/image-list";
+import { nextResultNumber, resultLabel } from "../../../easy/image-numbers";
 import { KIND_QUESTION, RATIO_QUESTION, aiText, askText, photoQuestion } from "../../../easy/turn-words";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
@@ -209,6 +211,8 @@ async function turn(request: Request): Promise<Response> {
     const 만들었나 = Boolean(고칠원고 && isMade(고칠원고));
     // 이 대화의 마지막 결과가 이미지 한 장이면 그것을 이어서 고친다(2026-10-06).
     const 고칠그림 = await lastEasyImage(auth.member.userId, 지난줄);
+    // 이 대화의 결과물(번호 · 갈래 · 상태 · 그림, 2차 D2). 판단 모델에 목록으로 준다. 못 읽어도 턴은 간다.
+    const 이미지들 = await loadEasyImages(auth.member.userId, 지난줄);
 
     /*
      * **「광고 소재」는 코드가 먼저 본다**(2026-10-06 설계 A5). 물을 때는 글 모델을 안
@@ -264,6 +268,7 @@ async function turn(request: Request): Promise<Response> {
           // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
           kindPicked: 옛골랐나,
           adStep: 광고,
+          images: 이미지들.entries,
         });
         /*
          * **규격 안내는 글 모델이 우리 기능의 사실로 쓴다**(A5). 판정과 같은 예약 안에서 부른다.
@@ -393,6 +398,7 @@ async function turn(request: Request): Promise<Response> {
       return await cardnewsTurn({
         request, userId: auth.member.userId, store, conversation, conversationId, prompt, textModel,
         wants, 사진들, 붙인것, input, decision, provider, 고칠원고, 물음: 물음맥락, 말한것, 고른, 지시, userBody: 사용자글,
+        결과번호: nextResultNumber(지난줄),
       });
     }
 
@@ -532,6 +538,8 @@ async function turn(request: Request): Promise<Response> {
       roles: 칸 ? easyRoleSummary(칸) : "",
       // 화면이 들고 있다가 다음 그림 턴에 지난 역할로 보낸다(설계 §2-4 차례 3).
       photoRoles: 사진판단?.rows ?? [],
+      // 화면의 「이미지 N」(2차 D2). 화면과 같은 함수로 센 결과물 번호다.
+      resultLabel: resultLabel("image", nextResultNumber(지난줄)),
       ...(submitted.notice ? { notice: submitted.notice } : {}),
     });
   } catch (error) {
@@ -592,6 +600,8 @@ async function cardnewsTurn(ctx: {
   지시: string;
   /** 사용자 줄에 남길 글. */
   userBody: string;
+  /** 남길 원고 줄의 결과물 번호(2차 D2 — 화면의 「카드뉴스 N」). */
+  결과번호: number;
 }): Promise<Response> {
   // 따라 만들 카드뉴스를 요청한다. 요청도 대화에 남는다(2차 D1). 문장은 고정이다.
   const 레퍼런스요청 = () => askTurn(ctx.물음, {
@@ -677,7 +687,11 @@ async function cardnewsTurn(ctx: {
     return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
   }
   const row = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "image", workId: projectId });
-  return Response.json({ ok: true, cardnews: { rowId: row.id, project }, message: row, photoRoles, textModel: ctx.textModel });
+  return Response.json({
+    ok: true, cardnews: { rowId: row.id, project }, message: row, photoRoles, textModel: ctx.textModel,
+    // 화면의 「카드뉴스 N」(2차 D2). 이미지와 같은 결과물 번호다.
+    resultLabel: resultLabel("cardnews", ctx.결과번호),
+  });
 }
 
 /** 화면이 기본값을 물어볼 자리. 두 벌로 적지 않게 여기서 준다. */

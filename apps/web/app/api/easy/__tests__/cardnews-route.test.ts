@@ -271,6 +271,14 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] });
     expect(남긴줄[1]!.body).toBe("원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.");
   });
+
+  /** 2차 D2 · 최종 리뷰 5 — 카드뉴스 줄도 결과물 번호를 받는다. 앞의 이미지 줄과 함께 센다. */
+  it("원고 응답에 「카드뉴스 N」 이름표를 싣는다 — 번호는 앞의 결과물 줄과 함께 센다", async () => {
+    역할판단 = 역할(["style", false]);
+    expect((await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] })).json.resultLabel).toBe("카드뉴스 1");
+    지난줄들 = [{ id: "r0", role: "image", body: "", workId: "p-old" }];
+    expect((await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] })).json.resultLabel).toBe("카드뉴스 2");
+  });
 });
 
 describe("마지막 장 (2026-09-30 사용자 결정 B)", () => {

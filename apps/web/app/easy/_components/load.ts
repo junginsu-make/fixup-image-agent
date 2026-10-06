@@ -8,6 +8,7 @@ import { cardnewsProject, type EasyCardnewsProject } from "../../../lib/easy/car
 import { posterRequestsFinished } from "../../../lib/easy/pending-requests";
 import { markDeletedWork } from "../deleted-work";
 import { editedRequestIds, jobRowStates, pickRowImage, rowJobRequestIds } from "../row-image";
+import { numberEasyResults, resultKindOf, resultLabel } from "../image-numbers";
 import type { EasyMessage } from "../turn";
 import { easyRoleSummary, type EasyImageOptions } from "../options";
 
@@ -87,6 +88,8 @@ export async function loadEasyConversation(id: string) {
   const cardnews: Record<string, EasyCardnewsProject> = {};
   // 찾은 작업. 포스터에도 카드뉴스에도 없는 줄은 지운 작업이다(`deleted-work.ts`).
   let 아는작업 = new Set<string>();
+  // 포스터 작업(결과물 이름표의 「이미지」, 2차 D2). 아는 작업 가운데 포스터가 아닌 것이 카드뉴스다.
+  let 포스터작업 = new Set<string>();
   if (projectIds.length) {
     const stores = posterStoresForUser(membership.user.id);
     const images = await stores.images.byProjects(projectIds);
@@ -113,6 +116,7 @@ export async function loadEasyConversation(id: string) {
         .map((project) => [project!.id, project!]),
     );
     아는작업 = new Set([...projects.keys(), ...카드작업.keys()]);
+    포스터작업 = new Set(projects.keys());
 
     for (const row of rows) {
       if (!row.workId) continue;
@@ -154,5 +158,12 @@ export async function loadEasyConversation(id: string) {
     ...(row.workId ? { workId: row.workId } : {}),
   })), 아는작업);
 
-  return { conversation, messages, urls, options, cardnews, pending: 받기.pending, failed: 받기.failed };
+  /*
+   * 결과물 이름표(2차 D2) — 이미지 · 카드뉴스 · 지운 것 모두 대화 차례대로 센다. 서버 판단과 같은 함수다.
+   * `resultKindOf` 는 포스터를 먼저 보므로 「아는 작업」을 카드뉴스 자리에 넘겨도 된다.
+   */
+  const labels = Object.fromEntries(numberEasyResults(rows).map((one) => [
+    one.rowId, resultLabel(resultKindOf(one.workId, 포스터작업, 아는작업), one.n),
+  ]));
+  return { conversation, messages, urls, options, cardnews, pending: 받기.pending, failed: 받기.failed, labels };
 }

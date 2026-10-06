@@ -5,7 +5,9 @@ import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
 import {
   easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyPhotoGoneLines,
+  easyResultListLines, easyResultRowText,
 } from "./chat-facts";
+import type { EasyResultEntry } from "./image-numbers";
 import { askChain } from "./ask-chain";
 
 /**
@@ -74,6 +76,8 @@ export interface EasyPromptOptions {
   retry?: boolean;
   /** A5: 「광고 소재 말고 ○○」라고 했다. 규격 안내를 선택지에서 뺀다. */
   adNegated?: boolean;
+  /** 2차 D2: 이 대화의 결과물(번호 · 갈래 · 상태). 목록으로 싣고, 지난 대화의 결과물 줄에도 번호를 적는다. */
+  images?: readonly EasyResultEntry[];
 }
 
 /** 판단 모델이 고를 수 있는 갈래 하나. */
@@ -160,13 +164,15 @@ export function easyChatPrompt(
 ): string {
   // 프롬프트의 갈래 안내와 판단 틀의 선택지가 **같은 함수**에서 나온다(2026-10-06 설계 A1).
   const 갈래 = easyAvailableWants({ hasDraft, made, madeImage, adNegated: options.adNegated });
+  // 2차 D2: 결과물 줄에도 화면의 「이미지 N」 · 「카드뉴스 N」 번호를 적는다.
+  const 결과물 = new Map((options.images ?? []).map((one) => [one.rowId, one]));
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
     .filter((message) => message.id !== "greeting")
     .slice(-되돌아볼줄)
     .map((message) => {
       const body = message.role === "image"
-        ? "(이미지 한 장을 만들어 보여 줬습니다)"
+        ? easyResultRowText(결과물.get(message.id))
         : visibleBody(message).slice(0, 한줄최대);
       return `${말한이(message.role)}: ${body}`;
     });
@@ -294,6 +300,8 @@ export function easyChatPrompt(
     ...(갈래.includes("ad_specs") && adQuestionOrigin(history) !== undefined ? easyAdAnswerLines() : []),
     // 2차 D1: 광고 물음이 아닌 물음 뒤면 그 답일 수 있다고 알린다. 광고 물음은 바로 위 1차 안내가 맡는다.
     ...물음뒤줄(history, 갈래),
+    // 2차 D2: 지난 대화 창 밖의 결과물도 고를 수 있게 목록을 따로 싣는다.
+    ...easyResultListLines(options.images ?? []),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
     ...지난말,
     "",

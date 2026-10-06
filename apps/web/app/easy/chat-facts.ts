@@ -10,6 +10,7 @@
 import type { EasyWant } from "./chat";
 import { AD_ANSWER_NOTE, AD_QUESTION } from "./ad-ask";
 import type { EasyAskKind } from "./row-marks";
+import type { EasyImageState, EasyResultEntry } from "./image-numbers";
 
 /**
  * 「쉽게」가 하는 일 · 안 하는 일(A4). 안 되는 것을 물으면 모델이 사실을 몰라 엉뚱하게
@@ -120,4 +121,35 @@ export function easyPhotoGoneLines(): string[] {
     "reply 에 「그 사진을 다시 붙여 주세요. 라이브러리에 있습니다.」라고 알려 주세요.",
     "",
   ];
+}
+
+const 상태말: Record<EasyImageState, string> = { done: "완료", making: "만드는 중", failed: "만들지 못함", deleted: "지움" };
+
+function 결과물줄(one: EasyResultEntry): string {
+  const 말 = one.words ? `「${one.words}」` : "";
+  if (one.kind === "deleted") return [`#${one.n} (지운 결과)`, 말].filter(Boolean).join(" · ");
+  if (one.kind === "cardnews") return [`#${one.n} 카드뉴스`, 말].filter(Boolean).join(" · ");
+  return [`#${one.n} 이미지`, 말, 상태말[one.state], one.fromN ? `#${one.fromN} 을 고친 것` : ""].filter(Boolean).join(" · ");
+}
+
+/**
+ * **이 대화의 결과물 목록**(2026-10-07 2차 D2, 최종 리뷰 5). 지난 대화 창 밖의 결과물도 번호로 고를 수 있게
+ * 따로 싣는다. 번호는 화면의 「이미지 N」 · 「카드뉴스 N」과 같고, 이미지 · 카드뉴스 · 지운 것을 함께 센다.
+ */
+export function easyResultListLines(entries: readonly EasyResultEntry[]): string[] {
+  if (!entries.length) return [];
+  return [
+    "── 이 대화의 결과물 (번호는 화면의 「이미지 N」 · 「카드뉴스 N」과 같습니다) ──",
+    ...entries.map(결과물줄),
+    "번호는 이미지 · 카드뉴스 · 지운 결과를 함께 셉니다. 이미지로 고칠 수 있는 것은 「이미지」라고 적힌 번호뿐입니다.",
+    "",
+  ];
+}
+
+/** 지난 대화의 결과물 줄을 판단 모델에 보일 글(2차 D2). 번호를 모르면 예전 글 그대로다. */
+export function easyResultRowText(entry: EasyResultEntry | undefined): string {
+  if (!entry) return "(이미지 한 장을 만들어 보여 줬습니다)";
+  if (entry.kind === "cardnews") return `(#${entry.n} 카드뉴스를 만들어 보여 줬습니다)`;
+  if (entry.kind === "deleted") return `(#${entry.n} 결과물을 만들어 보여 줬습니다. 지금은 지웠습니다)`;
+  return `(#${entry.n} 이미지를 만들어 보여 줬습니다)`;
 }

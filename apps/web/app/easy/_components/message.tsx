@@ -150,6 +150,11 @@ function AssistantMark() {
   );
 }
 
+/** 「이미지 N」 · 「카드뉴스 N」(2차 D2). 사용자가 번호로 말할 수 있게 결과물 밑에 작게 적는다. */
+function ResultLabel({ label }: { label?: string }) {
+  return label ? <span className="text-meta text-subtle-foreground">{label}</span> : null;
+}
+
 export function EasyMessageRow({
   message,
   imageUrl,
@@ -158,6 +163,7 @@ export function EasyMessageRow({
   failed,
   onAdChoice,
   askControls,
+  resultLabel,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
@@ -171,6 +177,8 @@ export function EasyMessageRow({
   onAdChoice?: (answer: string) => void;
   /** 물음 줄 밑의 단추 · 고르기(2차 D1). 화면이 마지막 물음 줄에만 넘긴다. */
   askControls?: React.ReactNode;
+  /** 이 대화의 결과물 이름표(2차 D2). 지운 결과의 줄에도 자리를 지킨 이름표가 온다. */
+  resultLabel?: string;
 }) {
   if (message.role === "user") {
     return (
@@ -209,6 +217,11 @@ export function EasyMessageRow({
           <EasyAdQuestion body={message.body} bubble={말풍선} onChoose={onAdChoice} />
         ) : isAdGuide(message) ? (
           <EasyAdGuide body={visibleBody(message)} bubble={말풍선} />
+        ) : resultLabel ? (
+          <div className="grid max-w-[85%] gap-1">
+            <p className={말풍선}>{visibleBody(message)}</p>
+            <ResultLabel label={resultLabel} />
+          </div>
         ) : askControls ? (
           <div className="grid max-w-[85%] gap-2">
             <p className={말풍선}>{visibleBody(message)}</p>
@@ -225,7 +238,10 @@ export function EasyMessageRow({
     return (
       <div className="flex items-start gap-2">
         <AssistantMark />
-        <EasyCardnewsCard {...cardnews} />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <EasyCardnewsCard {...cardnews} />
+          <ResultLabel label={resultLabel} />
+        </div>
       </div>
     );
   }
@@ -237,6 +253,7 @@ export function EasyMessageRow({
   return (
     <div className="flex items-start gap-2">
       <AssistantMark />
+      <div className="grid gap-1">
       {imageUrl ? (
         /*
           **대화 속 이미지는 작다**(2026-09-21 사용자 — 「채팅 기록이 오히려
@@ -264,6 +281,8 @@ export function EasyMessageRow({
       ) : (
         <EasyImageWorking />
       )}
+      <ResultLabel label={resultLabel} />
+      </div>
     </div>
   );
 }
