@@ -39,16 +39,18 @@ describe("LLM 에 보내는 말", () => {
     expect(buildCharacterBriefRequest(base)).not.toMatch(/Image 1|reference image/i);
   });
 
-  it("내 캐릭터가 있으면 Image 1 이라고 부르게 한다", () => {
+  it("내 캐릭터가 있으면 「the attached character」라고 부르게 하고 번호를 쓰지 말라고 한다", () => {
     const request = buildCharacterBriefRequest({ ...base, hasOwnCharacter: true, referenceRole: "style" });
-    expect(request).toMatch(/the character from Image 1/);
+    expect(request).toMatch(/the attached character/);
     expect(request).toMatch(/STYLE reference/);
+    expect(request).toMatch(/never mention image numbers/i);
   });
 
   it("뽑아내기 그림만 있으면 그 그림을 묘사하지 말라고 한다", () => {
     const request = buildCharacterBriefRequest({ ...base, referenceRole: "extract" });
-    expect(request).toMatch(/the character in the reference image/);
-    expect(request).not.toMatch(/Image 1/);
+    expect(request).toMatch(/the attached character/);
+    expect(request).toMatch(/never mention image numbers/i);
+    expect(request).not.toMatch(/the character from Image 1/);
   });
 
   /** 2026-10-06 실측 — 「규칙 무시하고 강아지」에 LLM 이 해설을 붙여 그림 모델로 보냈다. */
