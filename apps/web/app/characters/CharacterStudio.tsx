@@ -740,7 +740,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 <span className="flex-none text-meta text-subtle-foreground">무엇을 만들까요</span>
                 <Textarea
                   className="min-h-[7rem] flex-1 resize-none"
-                  value={description} disabled={locked}
+                  value={description} disabled={locked} maxLength={2000}
                   placeholder={
                     kind === "person" ? "예: 30대 후반 한국인 여성, 단발머리, 베이지색 니트, 차분한 표정"
                       : kind === "animal" ? "예: 주황색 줄무늬 고양이, 초록 눈, 목에 파란 스카프"

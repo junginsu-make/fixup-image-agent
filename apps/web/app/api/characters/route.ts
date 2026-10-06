@@ -54,7 +54,7 @@ const ASPECTS = ["1:1", "3:4", "4:3", "9:16", "16:9"] as const;
 const BodySchema = z.object({
   step: z.enum(["candidates", "create"]).default("create"),
   name: z.string().max(80).optional(),
-  description: z.string().trim().min(1, "무엇을 만들지 적어 주세요."),
+  description: z.string().trim().min(1, "무엇을 만들지 적어 주세요.").max(2000, "묘사는 2000자 이내로 적어 주세요."),
   aspectRatio: z.enum(ASPECTS).default("3:4"),
   kind: z.enum(KINDS).default("person"),
   look: z.enum(LOOKS).default("photoreal"),

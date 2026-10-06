@@ -140,3 +140,17 @@ describe("읽을 수 없는 요청", () => {
     expect(calls.reserve).toBe(0);
   });
 });
+
+describe("묘사 길이", () => {
+  it("2001자 묘사는 400 으로 거절하고 돈을 잡지 않는다", async () => {
+    const response = await post({ ...기본, step: "candidates", description: "가".repeat(2001) });
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toBe("묘사는 2000자 이내로 적어 주세요.");
+    expect(calls.reserve).toBe(0);
+  });
+
+  it("2000자 묘사는 받는다", async () => {
+    const response = await post({ ...기본, step: "candidates", description: "가".repeat(2000) });
+    expect(response.status).toBe(200);
+  });
+});
