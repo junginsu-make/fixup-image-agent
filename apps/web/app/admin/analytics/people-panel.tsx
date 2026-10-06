@@ -3,9 +3,9 @@ import { Ticket, UserPlus, Users } from "lucide-react";
 import { change } from "../../../lib/analytics/compare";
 import type { FeatureUse, MemberUse, SitePeople } from "../../../lib/analytics/report";
 import { aiOperationLabel } from "../system/ai-labels";
-import { providerLabel, sourceLabel } from "./labels";
+import { mergeByLabel, providerLabel, sourceLabel } from "./labels";
 import { RankList } from "./rank-list";
-import { StatTile } from "./stat-tile";
+import { previousHint, StatTile } from "./stat-tile";
 
 const count = (value: number) => value.toLocaleString("ko-KR");
 const seen = (iso: string | null) =>
@@ -35,13 +35,13 @@ function PeopleBody({ report, previous }: { report: SitePeople; previous: SitePe
       <dl className="grid gap-3 sm:grid-cols-3">
         <StatTile icon={Users} label={`최근 ${report.days}일 활동 회원`} value={count(report.activeMembers)}
           change={change(report.activeMembers, previous?.activeMembers ?? null)}
-          hint={previous ? `지난 ${report.days}일 같은 시각까지 대비` : undefined} />
+          hint={previousHint(report.days, previous?.activeMembers, "명")} />
         <StatTile icon={UserPlus} label="그중 새로 가입" value={count(report.newMembers)} />
         <StatTile icon={Ticket} label="그중 추천코드 입력" value={count(report.withReferral)} />
       </dl>
       <div className="grid gap-8 lg:grid-cols-2">
         <RankList title="가입 방법" rows={report.byProvider} value={members} label={providerLabel} unit="명" />
-        <RankList title="가입자가 처음 들어온 경로" rows={report.signupSources} value={members} label={sourceLabel} unit="명" />
+        <RankList title="가입자가 처음 들어온 경로" rows={mergeByLabel(report.signupSources, sourceLabel, members)} value={members} label={sourceLabel} unit="명" />
       </div>
       <RankList title="많이 쓴 기능(AI 호출 기준)" rows={report.features} value={calls} label={aiOperationLabel} sublabel={featureNote} unit="번" />
       <TopMembers rows={report.topMembers} />

@@ -3,15 +3,28 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 let rpcResult: { data: unknown; error: { message: string } | null } = { data: null, error: null };
 const rpcCalls: Array<{ fn: string; args: unknown }> = [];
+let firstRow: { data: unknown; error: { message: string } | null } = { data: [], error: null };
+const queries: string[] = [];
 vi.mock("../../supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     rpc: async (fn: string, args: unknown) => {
       rpcCalls.push({ fn, args });
       return rpcResult;
     },
+    from: (table: string) => ({
+      select: (columns: string) => ({
+        order: (column: string, options: { ascending: boolean }) => ({
+          limit: async (count: number) => {
+            queries.push(`${table}|${columns}|${column}|${options.ascending}|${count}`);
+            return firstRow;
+          },
+        }),
+      }),
+    }),
   }),
 }));
-const { getSitePeopleBefore, getSiteTraffic, getSiteTrafficBefore, parseSitePeople, parseSiteTraffic } = await import("../report");
+const { getSitePeople, getSitePeopleBefore, getSiteTraffic, getSiteTrafficBefore, getTrackingStart, parseSitePeople, parseSiteTraffic } =
+  await import("../report");
 
 describe("parseSiteTraffic", () => {
   it("DB 이름(snake_case)을 화면 이름으로, 숫자 문자열을 숫자로", () => {
@@ -76,5 +89,54 @@ describe("지난 기간 읽기", () => {
   it("못 읽으면 null", async () => {
     rpcResult = { data: null, error: { message: "boom" } };
     expect(await getSiteTrafficBefore(7, new Date())).toBeNull();
+  });
+});
+
+describe("한 시계로 읽기", () => {
+  it("이번 기간도 now 를 주면 같은 p_now 로 넘긴다", async () => {
+    rpcCalls.length = 0;
+    rpcResult = { data: {}, error: null };
+    const now = new Date("2026-10-06T03:00:00Z");
+    await getSiteTraffic(7, now);
+    await getSitePeople(7, now);
+    expect(rpcCalls).toEqual([
+      { fn: "admin_site_traffic", args: { p_days: 7, p_now: "2026-10-06T03:00:00.000Z" } },
+      { fn: "admin_site_people", args: { p_days: 7, p_now: "2026-10-06T03:00:00.000Z" } },
+    ]);
+  });
+  it("앞선 기간 실패는 경고 글로 구분된다", async () => {
+    rpcResult = { data: null, error: { message: "boom" } };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await getSiteTraffic(7);
+    await getSiteTrafficBefore(7, new Date());
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain("앞선 기간");
+    expect(String(warn.mock.calls[1]?.[0])).toContain("앞선 기간");
+    warn.mockRestore();
+  });
+});
+
+describe("getTrackingStart", () => {
+  it("가장 이른 방문 줄의 시각", async () => {
+    queries.length = 0;
+    firstRow = { data: [{ created_at: "2026-10-06T01:23:45+00:00" }], error: null };
+    expect((await getTrackingStart())?.toISOString()).toBe("2026-10-06T01:23:45.000Z");
+    expect(queries).toEqual(["analytics_page_views|created_at|created_at|true|1"]);
+  });
+  it("기록이 없으면 null", async () => {
+    firstRow = { data: [], error: null };
+    expect(await getTrackingStart()).toBeNull();
+  });
+  it("못 읽으면 경고 한 번, null", async () => {
+    firstRow = { data: null, error: { message: "boom" } };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await getTrackingStart()).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+  it("이상한 시각이면 null", async () => {
+    firstRow = { data: [{ created_at: "not a date" }], error: null };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await getTrackingStart()).toBeNull();
+    warn.mockRestore();
   });
 });

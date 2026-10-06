@@ -80,22 +80,46 @@ export function parseSitePeople(raw: unknown): SitePeople {
 }
 
 /** 못 읽으면 null — 탭은 「준비 전」으로 열린다. 던지면 관리자 화면 전체가 500 이 된다. */
-async function readReport<T>(fn: string, days: number, parse: (raw: unknown) => T, now?: Date): Promise<T | null> {
+async function readReport<T>(fn: string, days: number, parse: (raw: unknown) => T, now?: Date, which = ""): Promise<T | null> {
   try {
     const { data, error } = await createSupabaseAdminClient().rpc(fn, now ? { p_days: days, p_now: now.toISOString() } : { p_days: days });
     if (error) throw new Error(error.message);
     return parse(data);
   } catch (error) {
-    console.warn(`[analytics] ${fn} 를 읽지 못했습니다`, { message: error instanceof Error ? error.message : String(error) });
+    console.warn(`[analytics] ${which}${fn} 를 읽지 못했습니다`, { message: error instanceof Error ? error.message : String(error) });
     return null;
   }
 }
 
-export const getSiteTraffic = (days: number) => readReport("admin_site_traffic", days, parseSiteTraffic);
-export const getSitePeople = (days: number) => readReport("admin_site_people", days, parseSitePeople);
+/** 이번 기간. `now` 를 주면 그 시각을 끝으로 센다(앞선 기간과 한 시계로 읽으려고). */
+export const getSiteTraffic = (days: number, now?: Date) => readReport("admin_site_traffic", days, parseSiteTraffic, now);
+export const getSitePeople = (days: number, now?: Date) => readReport("admin_site_people", days, parseSitePeople, now);
 
-/** 지난 기간(이번 창 바로 앞, 같은 길이). 못 읽으면 null — 이번 기간 화면은 그대로 열리고 증감만 빠진다. */
+/**
+ * 앞선 기간(길이·모양이 같고 `days` 일 앞, 마지막 날은 같은 시각까지. `compare.ts` 참고).
+ * 못 읽으면 null — 이번 기간 화면은 그대로 열리고 증감만 빠진다.
+ */
 export const getSiteTrafficBefore = (days: number, now: Date) =>
-  readReport("admin_site_traffic", days, parseSiteTraffic, previousWindowEnd(days, now));
+  readReport("admin_site_traffic", days, parseSiteTraffic, previousWindowEnd(days, now), "앞선 기간 ");
 export const getSitePeopleBefore = (days: number, now: Date) =>
-  readReport("admin_site_people", days, parseSitePeople, previousWindowEnd(days, now));
+  readReport("admin_site_people", days, parseSitePeople, previousWindowEnd(days, now), "앞선 기간 ");
+
+/**
+ * 방문 기록이 시작된 시각(가장 이른 `analytics_page_views` 줄). 비었거나 못 읽으면 null — 던지지 않는다.
+ * 앞선 기간이 기록 시작 전에 걸치면 견주지 않으려고 쓴다.
+ */
+export async function getTrackingStart(): Promise<Date | null> {
+  try {
+    const { data, error } = await createSupabaseAdminClient()
+      .from("analytics_page_views").select("created_at").order("created_at", { ascending: true }).limit(1);
+    if (error) throw new Error(error.message);
+    const first = rows(data)[0];
+    if (!first) return null;
+    const start = new Date(String(first.created_at ?? ""));
+    if (Number.isNaN(start.getTime())) throw new Error("기록 시작 시각을 읽을 수 없습니다");
+    return start;
+  } catch (error) {
+    console.warn("[analytics] 방문 기록 시작 시각을 읽지 못했습니다", { message: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}

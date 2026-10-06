@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserLabel, deviceLabel, pageLabel, providerLabel, sourceLabel } from "../analytics/labels";
+import { browserLabel, deviceLabel, mergeByLabel, pageLabel, providerLabel, sourceLabel } from "../analytics/labels";
 
 describe("pageLabel", () => {
   it("정확히 같은 주소", () => {
@@ -54,5 +54,35 @@ describe("물려받은 이름은 이름표가 아니다", () => {
     expect(pageLabel(key)).toBe(key);
     expect(pageLabel(`/${key}`)).toBe(`/${key}`);
     expect(pageLabel(`/${key}/x`)).toBe(`/${key}/x`);
+  });
+});
+
+describe("mergeByLabel", () => {
+  it("같은 한글 이름의 줄을 합치고 순서를 다시 세운다", () => {
+    const rows = [
+      { key: "(direct)", views: 5, visitors: 4 },
+      { key: "instagram", views: 3, visitors: 3 },
+      { key: "naver.com", views: 2, visitors: 2 },
+      { key: "l.instagram.com", views: 4, visitors: 2 },
+      { key: "m.naver.com", views: 1, visitors: 1 },
+      { key: "example.org", views: 3, visitors: 1 },
+    ];
+    expect(mergeByLabel(rows, sourceLabel, (row) => row.views)).toEqual([
+      { key: "instagram", views: 7, visitors: 5 },
+      { key: "(direct)", views: 5, visitors: 4 },
+      { key: "naver.com", views: 3, visitors: 3 },
+      { key: "example.org", views: 3, visitors: 1 },
+    ]);
+  });
+  it("회원 수 목록도 합친다", () => {
+    const rows = [{ key: "kakao", members: 1 }, { key: "youtube", members: 2 }, { key: "kakaotalk", members: 2 }];
+    expect(mergeByLabel(rows, sourceLabel, (row) => row.members)).toEqual([
+      { key: "kakao", members: 3 }, { key: "youtube", members: 2 },
+    ]);
+  });
+  it("원래 배열을 바꾸지 않는다", () => {
+    const rows = [{ key: "kakao", members: 1 }, { key: "kakaotalk", members: 2 }];
+    mergeByLabel(rows, sourceLabel, (row) => row.members);
+    expect(rows).toEqual([{ key: "kakao", members: 1 }, { key: "kakaotalk", members: 2 }]);
   });
 });

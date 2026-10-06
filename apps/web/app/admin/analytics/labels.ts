@@ -54,3 +54,23 @@ export function pageLabel(path: string): string {
   }
   return path;
 }
+
+/** 두 줄의 숫자 칸을 더한 새 줄. 키(첫 줄의 원래 값)는 그대로 둔다. */
+function addCounts<T extends { key: string }>(base: T, extra: T): T {
+  const summed = Object.entries(base).map(([field, value]) =>
+    [field, typeof value === "number" ? value + Number((extra as Record<string, unknown>)[field] ?? 0) : value]);
+  return Object.fromEntries(summed) as T;
+}
+
+/**
+ * **같은 한글 이름의 줄을 합친다**(instagram·l.instagram.com, kakao·kakaotalk 처럼). 숫자 칸은 더하고 키는 처음 본 줄의 것.
+ * 먼저 본 순서를 지킨 채 `rank` 큰 순으로 다시 세운다(같으면 먼저 본 줄이 앞). 방문자처럼 겹칠 수 있는 숫자도 그냥 더한다.
+ */
+export function mergeByLabel<T extends { key: string }>(rows: T[], label: (key: string) => string, rank: (row: T) => number): T[] {
+  const merged = rows.reduce((groups, row) => {
+    const name = label(row.key);
+    const seen = groups.get(name);
+    return new Map(groups).set(name, seen ? addCounts(seen, row) : row);
+  }, new Map<string, T>());
+  return [...merged.values()].sort((a, b) => rank(b) - rank(a));
+}

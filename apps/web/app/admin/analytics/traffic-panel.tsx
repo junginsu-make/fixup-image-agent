@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import { CalendarDays, Clock, Cookie, Eye, Layers, Repeat, UserCheck, Users } from "lucide-react";
 import { change } from "../../../lib/analytics/compare";
 import type { DailyVisit, SiteTraffic } from "../../../lib/analytics/report";
-import { StatTile } from "./stat-tile";
+import { previousHint, StatTile } from "./stat-tile";
 import { TrendChart } from "./trend-chart";
 
 const count = (value: number) => value.toLocaleString("ko-KR");
@@ -49,22 +49,22 @@ function TrafficNumbers({ report, previous }: { report: SiteTraffic; previous: S
 }
 
 /**
- * 숫자 칸 여덟. 기간 숫자 셋은 지난 기간과 견준다(못 읽었으면 배지 없음).
+ * 숫자 칸 여덟. 기간 숫자 셋은 앞선 기간과 견주고 그 값을 안내로 보인다(못 읽었거나 견주지 않으면 둘 다 없음).
  * 오늘 방문자는 배지 없이 어제 하루 숫자만 곁들인다. 진행 중인 오늘을 어제 하루 전체와 견주면 아침마다 ▼ 로 보인다.
  */
 function TrafficTiles({ report, previous }: { report: SiteTraffic; previous: SiteTraffic | null }) {
   const versus = (current: number, before: number | undefined) => change(current, before ?? null);
-  const hint = previous ? `지난 ${report.days}일 같은 시각까지 대비` : undefined;
   const yesterday = report.daily.length >= 2 ? report.daily[report.daily.length - 2]!.visitors : undefined;
   return (
     <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <StatTile icon={Users} label="오늘 방문자" value={count(report.todayVisitors)}
         hint={yesterday === undefined ? undefined : `어제 하루 ${count(yesterday)}명`} />
       <StatTile icon={CalendarDays} label={`최근 ${report.days}일 방문(하루 단위 합)`} value={count(report.visitorDays)}
-        change={versus(report.visitorDays, previous?.visitorDays)} hint={hint} />
+        change={versus(report.visitorDays, previous?.visitorDays)} hint={previousHint(report.days, previous?.visitorDays, "명")} />
       <StatTile icon={UserCheck} label={`최근 ${report.days}일 들어온 회원`} value={count(report.members)}
-        change={versus(report.members, previous?.members)} hint={hint} />
-      <StatTile icon={Eye} label="화면 본 횟수" value={count(report.views)} change={versus(report.views, previous?.views)} hint={hint} />
+        change={versus(report.members, previous?.members)} hint={previousHint(report.days, previous?.members, "명")} />
+      <StatTile icon={Eye} label="화면 본 횟수" value={count(report.views)}
+        change={versus(report.views, previous?.views)} hint={previousHint(report.days, previous?.views, "번")} />
       <StatTile icon={Clock} label="한 번 올 때 머문 시간(평균)" value={duration(report.avgSessionSeconds)} />
       <StatTile icon={Layers} label="한 번 올 때 본 화면(평균)" value={String(report.avgViewsPerSession)} />
       <StatTile icon={Cookie} label="방문 통계 쿠키 동의율" value={percent(report.consentRate)} />
