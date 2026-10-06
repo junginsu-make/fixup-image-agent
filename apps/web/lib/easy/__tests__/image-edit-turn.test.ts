@@ -125,9 +125,13 @@ describe("고치기", () => {
     ]);
   });
 
-  it("새로 붙인 사진만 넣는다 — 그 작업에 이미 쓴 사진은 다시 안 넣는다", async () => {
+  /**
+   * 2차 D3: 첨부는 만들기 · 고치기에 쓴 뒤 입력창에서 내려간다. 붙어 있다면 이번에 일부러 붙인 것이다.
+   * 원래 작업의 **지킬 사진**(제품 · 인물 그대로)만 뺀다 — 고치기 라우트가 알아서 다시 붙인다.
+   */
+  it("지킬 사진만 빼고 붙인 사진을 넣는다 — 따라 만들 사진도 다시 붙였으면 넣는다 (2차 D3)", async () => {
     await 고친다([줄.image("p1")], ["src-1", "keep-1", "logo-1"]);
-    expect(edits[0]!.body.addedReferenceIds).toEqual(["logo-1"]);
+    expect(edits[0]!.body.addedReferenceIds).toEqual(["src-1", "logo-1"]);
   });
 
   it("고칠 그림이 아직 없으면(만드는 중) 값 없이 안내만 한다", async () => {
@@ -156,7 +160,8 @@ describe("이어서 고칠 때", () => {
     });
   };
 
-  it("앞서 고칠 때 넣은 사진은 다시 넣지 않는다 — 입력창에 남아 있어도", async () => {
+  /** 2차 D3: 예전에는 남아 있던 첨부를 걸렀다. 이제 첨부가 내려가므로 다시 붙인 로고는 일부러 붙인 것이다. */
+  it("앞서 고칠 때 넣은 로고를 다시 붙이면 다시 넣는다 (2차 D3)", async () => {
     images = [
       { id: "img-1", generationRequestId: "r1", selected: false },
       { id: "img-2", generationRequestId: "r2", selected: false },
@@ -165,7 +170,7 @@ describe("이어서 고칠 때", () => {
       { id: "i1", role: "image", body: "", workId: "p1" },
       { id: "i2", role: "image", body: editRowBody("r2", ["logo-1"]), workId: "p1" },
     ), ["src-1", "logo-1"]);
-    expect(edits[0]!.body).not.toHaveProperty("addedReferenceIds");
+    expect(edits[0]!.body.addedReferenceIds).toEqual(["src-1", "logo-1"]);
     expect(edits[0]!.body.imageId).toBe("img-2");
   });
 

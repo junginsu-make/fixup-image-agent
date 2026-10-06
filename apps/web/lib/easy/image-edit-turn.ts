@@ -1,5 +1,5 @@
 import { POST as submitEdit } from "../../app/api/poster/projects/[id]/edit/route";
-import { editAddedOf, editRowBody, editTargetImage, withRowJob } from "../../app/easy/row-image";
+import { editRowBody, editTargetImage, withRowJob } from "../../app/easy/row-image";
 import { posterStoresForUser } from "../poster/stores";
 import { read, relay } from "./relay";
 import type { easyStoreForUser } from "./store";
@@ -28,10 +28,11 @@ export interface EasyImageTarget {
   projectId: string;
   ratio: string;
   /**
-   * 그 작업에 이미 쓴 사진 — 처음 만들 때 쓴 것과 앞서 고칠 때 넣은 것. 다시 붙어
-   * 와도 새것으로 안 넣는다(화면의 첨부는 보낸 뒤에도 남는다, 2026-10-06 리뷰).
+   * 그 작업의 **지킬 사진**(제품 · 인물 그대로). 고치기 라우트가 알아서 다시 붙이므로 새로 안 넣는다.
+   * 그 밖에 붙어 있는 사진은 이번에 일부러 붙인 새 재료다 첨부는 쓴 뒤 입력창에서 내려가므로
+   * (2026-10-07 2차 D3) 예전 고치기에 넣은 로고 · 따라 만들 사진도 다시 붙였으면 넣는다.
    */
-  usedIds: ReadonlySet<string>;
+  keptIds: ReadonlySet<string>;
 }
 
 /**
@@ -49,11 +50,7 @@ export async function lastEasyImage(userId: string, rows: readonly Row[]): Promi
   return {
     projectId: project.id,
     ratio: project.ratio,
-    usedIds: new Set([
-      ...(data.referenceIds ?? []), ...(data.preservedIds ?? []),
-      ...(data.personIds ?? []), ...(data.restyledIds ?? []),
-      ...rows.filter((one) => one.role === "image" && one.workId === project.id).flatMap((one) => editAddedOf(one.body)),
-    ]),
+    keptIds: new Set([...(data.preservedIds ?? []), ...(data.personIds ?? [])]),
   };
 }
 
@@ -113,11 +110,11 @@ export async function imageEditTurn(ctx: {
   }
 
   /*
-   * **새로 붙인 사진만** 넣는다. 처음에 쓴 원본 사진은 입력창에 그대로 붙어 있기
-   * 쉬운데, 그것을 다시 넣으면 고친 그림에 원본의 모습이 되살아난다. 원래 작업의
-   * 지킬 대상은 고치기 라우트가 알아서 다시 붙인다.
+   * **이번에 붙인 사진은 넣는다**(2026-10-07 2차 D3). 첨부는 만들기 · 고치기에 쓴 뒤 입력창에서
+   * 내려가므로, 붙어 있다면 사용자가 이번에 일부러 붙인 것이다. 원래 작업의 지킬 사진만 뺀다
+   * 고치기 라우트가 알아서 다시 붙인다.
    */
-  const added = ctx.attachments.filter((id) => !ctx.target.usedIds.has(id));
+  const added = ctx.attachments.filter((id) => !ctx.target.keptIds.has(id));
   const submitted = await read(
     await submitEdit(
       relay(ctx.request, `/api/poster/projects/${projectId}/edit`, {

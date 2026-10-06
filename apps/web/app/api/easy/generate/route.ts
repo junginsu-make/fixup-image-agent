@@ -254,8 +254,12 @@ async function turn(request: Request): Promise<Response> {
           decide: (text, wants) => provider.decide(text, wants),
           history: 지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
           prompt,
-          // 붙인 것이 있는지 알려 준다. 안 알려 주면 「이걸로 하나 그려줘」를 되묻는다(2026-09-21 실측).
-          attachmentCount: 처음사진.ids.length,
+          /*
+           * 붙인 것이 있는지 알려 준다. 안 알려 주면 「이걸로 하나 그려줘」를 되묻는다(2026-09-21 실측).
+           * 새로고침 뒤 물음에 말로 답하면 화면에 첨부가 없다 물음 줄에 적어 둔 사진을 센다. 안 세면
+           * 「그 사진을 다시 붙여 주세요」(D3 줄)가 나가는데, 그 사진은 답으로 읽히면 아래에서 그대로 쓴다.
+           */
+          attachmentCount: 처음사진.ids.length || 이을사진.length,
           choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) },
           // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
           kindPicked: 옛골랐나,

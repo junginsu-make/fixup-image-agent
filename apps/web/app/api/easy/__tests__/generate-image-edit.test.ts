@@ -110,8 +110,8 @@ describe("이미지를 만든 대화에서 고쳐 달라고 하면", () => {
     expect(status).toBe(200);
     expect(부른라우트.map((call) => call.step)).toEqual(["edit"]);
     expect(부른라우트[0]!.url).toContain("/api/poster/projects/p1/edit");
-    // 처음에 쓴 원본(사진 1)은 빼고 새로 붙인 로고(사진 2)만 넣는다.
-    expect(부른라우트[0]!.body).toEqual({ instruction: 로고바꿔줘, imageId: "img-1", addedReferenceIds: [사진(2)] });
+    // 2차 D3: 첨부는 쓴 뒤 내려간다 — 붙어 있으면 일부러 붙인 것이라 다 넣는다(지킬 사진만 뺀다. 이 작업엔 없다).
+    expect(부른라우트[0]!.body).toEqual({ instruction: 로고바꿔줘, imageId: "img-1", addedReferenceIds: [사진(1), 사진(2)] });
     expect(json).toMatchObject({ ok: true, projectId: "p1", submission: { requestRowId: "edit-row" } });
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "image"]);
   });

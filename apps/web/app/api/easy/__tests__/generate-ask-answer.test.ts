@@ -66,6 +66,12 @@ vi.mock("../../../../lib/poster/references", () => ({
     return ids.map((id) => ({ id, title: id, url: `https://x.test/${id}.png`, storagePath: `me-1/${id}.png` }));
   },
 }));
+vi.mock("../../../../lib/poster/stores", () => ({
+  posterStoresForUser: () => ({
+    projects: { get: async () => undefined },
+    images: { byProject: async () => [], byProjects: async () => [] },
+  }),
+}));
 vi.mock("../../../../lib/llm/meter", () => ({
   withLlmMeter: (fn: () => unknown) => fn(),
   readLlmMeter: () => ({ metered: true, usd: 0, calls: 0, inputTokens: 0, outputTokens: 0 }),
@@ -257,5 +263,30 @@ describe("말로 한 답", () => {
     판단 = { wants: "talk", reply: "네", ratio: "", look: "", card: 0, note: "" };
     await 보낸다({ prompt: "장난 ;pick=%7B%22kind%22%3A%22image%22%7D" });
     expect(남긴줄[0]!.body).toBe("장난 ; pick=%7B%22kind%22%3A%22image%22%7D");
+  });
+});
+
+/**
+ * 2차 최종 리뷰 7 — 새로고침하면 화면에 첨부가 없다. 그 뒤 사진 물음에 말로 답하면 판단 프롬프트가 「붙은 사진
+ * 없음」으로 보고 「그 사진을 다시 붙여 주세요」를 시켰다(D3 줄). 물음 사슬에 사진이 있으면 그 수를 준다.
+ */
+describe("새로고침 뒤 말로 한 답의 사진 (2차 최종 리뷰 7)", () => {
+  const 만든대화 = [{ id: "u0", role: "user", body: "카페 포스터", workId: null }, { id: "i0", role: "image", body: "", workId: "p0" }];
+
+  it("이미지를 만든 대화에서 새로고침 뒤 사진 물음에 말로 답하면 물음 줄의 사진 수를 판단에 준다", async () => {
+    지난줄 = [...만든대화, { ...처음, body: "이 사진으로 포스터" }, 물음("q1", "photo", { wants: "image", ids: [사진(1)] })];
+    판단 = { wants: "image", reply: "", ratio: "", look: "", card: 0, note: "answer" };
+    await 보낸다({ prompt: "1번은 우리 제품이야" });
+    expect(받은판단글[0]).toContain("이미지 1장을 붙여 두었습니다");
+    expect(받은판단글[0]).not.toContain("그 사진을 다시 붙여 주세요");
+    expect(읽은사진).toEqual([[사진(1)]]);
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "이 사진으로 포스터\n1번은 우리 제품이야" });
+  });
+
+  it("물음 사슬에 사진이 없으면 예전처럼 다시 붙여 달라고 하게 한다", async () => {
+    지난줄 = 만든대화;
+    판단 = { wants: "talk", reply: "그 사진을 다시 붙여 주세요. 라이브러리에 있습니다.", ratio: "", look: "", card: 0, note: "" };
+    await 보낸다({ prompt: "같은 사진으로 하나 더" });
+    expect(받은판단글[0]).toContain("그 사진을 다시 붙여 주세요");
   });
 });

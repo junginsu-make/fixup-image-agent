@@ -17,6 +17,7 @@ import { easyOptionMeta, type EasyImageOptions } from "./options";
 import { STILL_MAKING, collectEasyImage } from "./collect";
 import { useEasyResume } from "./use-resume-images";
 import { useEasyAsks } from "./use-easy-asks";
+import { usedAttachments } from "./attachments-after";
 import { photoTypedReply, type EasyButtonReply } from "./ask-answers";
 import { answerableAskId } from "./ask-chain";
 import { withPick } from "./row-marks";
@@ -355,6 +356,8 @@ export function EasyClient({
       });
       const body = await response.json().catch(() => ({}));
       observeAccountResponse(body, true);
+      // 만들기에 쓴 턴이면 붙인 사진을 내린다(2차 D3). 물음 · 대화 · 실패에는 그대로 둔다.
+      if (usedAttachments(body)) setAttachments([]);
       if (body.ok && body.ask && body.message) {
         /*
          * **물음도 대화의 한 줄이다**(2차 D1). 물음 줄을 붙이고, 사진 · 레퍼런스처럼 그 자리에서

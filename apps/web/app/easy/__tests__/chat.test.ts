@@ -231,3 +231,15 @@ describe("물음 뒤의 말 (2차 D1)", () => {
     expect(easyChatPrompt(번호물음, "1번", 0, false, false, true)).toContain("image_edit 로 고르고 target 에 그 번호");
   });
 });
+
+describe("쓴 사진은 내려간다 (2차 D3)", () => {
+  it("만든 것이 있고 붙은 사진이 없으면, 앞의 사진을 다시 쓰자는 말에 다시 붙여 달라고 하게 한다", () => {
+    const prompt = easyChatPrompt([말("user", "카페 포스터"), 말("image", "")], "같은 사진으로 하나 더");
+    expect(prompt).toContain("그 사진을 다시 붙여 주세요");
+  });
+
+  it("사진이 붙어 있거나 아직 만든 것이 없으면 안 적는다", () => {
+    expect(easyChatPrompt([말("user", "카페 포스터"), 말("image", "")], "하나 더", 1)).not.toContain("다시 붙여 주세요");
+    expect(easyChatPrompt([], "하나 더")).not.toContain("다시 붙여 주세요");
+  });
+});

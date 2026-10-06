@@ -4,7 +4,7 @@ import type { EasyMessage } from "./turn";
 import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
 import {
-  easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines,
+  easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyPhotoGoneLines,
 } from "./chat-facts";
 import { askChain } from "./ask-chain";
 
@@ -286,6 +286,8 @@ export function easyChatPrompt(
         ...(갈래.includes("image_edit") || 갈래.includes("revise") ? [] : easyFirstPhotoLines()),
       ]
       : []),
+    // 2차 D3: 쓴 사진은 내려간다. 만든 것이 있는데 붙은 사진이 없으면 다시 붙여 달라고 하게 한다.
+    ...(attachmentCount === 0 && history.some((message) => message.role === "image") ? easyPhotoGoneLines() : []),
     ...(options.retry
       ? ["**앞서 talk 를 고르고 reply 를 비웠습니다.** talk 이면 이번에는 reply 에 꼭 답을 쓰세요.", ""]
       : []),
