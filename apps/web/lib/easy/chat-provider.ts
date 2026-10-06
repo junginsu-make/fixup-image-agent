@@ -124,6 +124,20 @@ const EASY_ENDING_SPEC: StructuredSpec = {
  * **카드뉴스 한 장 글 고치기**(3단계 §6-2). 말이 가리키는 칸만 채우고 나머지는 빈 글.
  * 네 칸 모두 `required` 다 — 안 채운 칸을 빼 버리면 「안 고친다」를 말할 길이 없다.
  */
+/**
+ * **규격별 이미지 안내 글**(2026-10-06 설계 A5). 사실은 `app/easy/ad-guide.ts` 가 프롬프트에
+ * 넣고, 모델은 그것으로 글만 쓴다. `text` 하나다.
+ */
+const EASY_AD_GUIDE_SPEC: StructuredSpec = {
+  name: "easy_ad_guide",
+  description: "규격별 광고 이미지를 「광고소재」에서 만드는 법을 주어진 사실만으로 안내한다.",
+  schema: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+};
+
 const EASY_CARD_EDIT_SPEC: StructuredSpec = {
   name: "easy_card_edit",
   description: "카드뉴스 한 장의 글을 사용자의 말대로 고친다. 안 고칠 칸은 빈 글.",
@@ -166,7 +180,7 @@ export function createEasyChatProvider(
     const openai = new OpenAI({ apiKey: key, maxRetries: 2, timeout: 60_000 });
     const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
       new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt);
-    return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
+    return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC), writeAdGuide: 부른다(EASY_AD_GUIDE_SPEC) };
   }
 
   const key = environment.ANTHROPIC_API_KEY?.trim();
@@ -175,5 +189,5 @@ export function createEasyChatProvider(
   const model = textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5";
   const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
     new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt);
-  return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
+  return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC), writeAdGuide: 부른다(EASY_AD_GUIDE_SPEC) };
 }

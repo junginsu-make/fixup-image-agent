@@ -1,7 +1,8 @@
 import { EASY_LOOKS, EASY_RATIOS } from "./ask";
 import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
-import { easyCapabilityLines, easyFirstPhotoLines } from "./chat-facts";
+import { adQuestionOrigin, visibleBody } from "./ad-ask";
+import { easyAdAnswerLines, easyAdWantLines, easyCapabilityLines, easyFirstPhotoLines } from "./chat-facts";
 
 /**
  * **말인가, 만들어 달라는 것인가.**
@@ -41,7 +42,9 @@ export interface EasyDecision {
     // 3단계: 만든 카드뉴스 손보기(한 장 다시 그리기 · 한 장 글 고치기 · 게시글 · 받기).
     | "card_redo" | "card_text" | "caption" | "download"
     // 이 대화에서 마지막으로 만든 이미지 한 장을 고친다(2026-10-06).
-    | "image_edit";
+    | "image_edit"
+    // 포털 광고 규격별로 여러 장 — 여기서 안 만들고 「광고소재」로 안내한다(2026-10-06 설계 A5).
+    | "ad_specs";
   /** 3단계: 말한 장 번호. 없으면 비어 있다. */
   card?: number;
   /** 3단계: 그 장에 바라는 점 · 고칠 내용. */
@@ -63,6 +66,8 @@ export interface EasyDecision {
 export interface EasyPromptOptions {
   /** A3: 앞서 talk 인데 reply 가 비었다. 이번에는 꼭 쓰라고 한다. */
   retry?: boolean;
+  /** A5: 「광고 소재 말고 ○○」라고 했다. 규격 안내를 선택지에서 뺀다. */
+  adNegated?: boolean;
 }
 
 /** 판단 모델이 고를 수 있는 갈래 하나. */
@@ -76,6 +81,8 @@ export interface EasyChoices {
   made: boolean;
   /** 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가. */
   madeImage: boolean;
+  /** A5: 「광고 소재 말고 ○○」라고 했나. 그러면 규격 안내를 고를 수 없다. */
+  adNegated?: boolean;
 }
 
 /**
@@ -92,6 +99,7 @@ export function easyAvailableWants(choices: EasyChoices): EasyWant[] {
     ...(choices.hasDraft && choices.made ? (["card_redo", "caption", "download"] as const) : []),
     ...(choices.madeImage ? (["image_edit"] as const) : []),
     "talk", "detail_page",
+    ...(choices.adNegated ? [] : (["ad_specs"] as const)),
   ];
 }
 
@@ -145,7 +153,7 @@ export function easyChatPrompt(
   options: EasyPromptOptions = {},
 ): string {
   // 프롬프트의 갈래 안내와 판단 틀의 선택지가 **같은 함수**에서 나온다(2026-10-06 설계 A1).
-  const 갈래 = easyAvailableWants({ hasDraft, made, madeImage });
+  const 갈래 = easyAvailableWants({ hasDraft, made, madeImage, adNegated: options.adNegated });
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
     .filter((message) => message.id !== "greeting")
@@ -153,7 +161,7 @@ export function easyChatPrompt(
     .map((message) => {
       const body = message.role === "image"
         ? "(이미지 한 장을 만들어 보여 줬습니다)"
-        : message.body.slice(0, 한줄최대);
+        : visibleBody(message).slice(0, 한줄최대);
       return `${말한이(message.role)}: ${body}`;
     });
 
@@ -211,6 +219,7 @@ export function easyChatPrompt(
     "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
     "               만들어 달라는 것입니다. 사진을 붙였어도 같습니다.",
     "               상세페이지에 대해 **묻는 말**(「상세페이지 문구 좀 봐줘」)은 talk 입니다.",
+    ...(갈래.includes("ad_specs") ? easyAdWantLines() : []),
     "",
     ...(갈래.includes("revise")
       ? [
@@ -231,6 +240,7 @@ export function easyChatPrompt(
     `${빈답갈래(갈래)} 면 \`reply\` 는 빈 글로 두세요.`,
     ...(갈래.includes("card_text") ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
     "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
+    ...(갈래.includes("ad_specs") ? ["`ad_specs` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다."] : []),
     "",
     // 갈래 이름은 쓸 수 있는 것만 적는다(A1) — 같은 목록을 넘긴다.
     ...easyCapabilityLines(갈래),
@@ -271,6 +281,7 @@ export function easyChatPrompt(
     ...(options.retry
       ? ["**앞서 talk 를 고르고 reply 를 비웠습니다.** talk 이면 이번에는 reply 에 꼭 답을 쓰세요.", ""]
       : []),
+    ...(갈래.includes("ad_specs") && adQuestionOrigin(history) !== undefined ? easyAdAnswerLines() : []),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
     ...지난말,
     "",
@@ -357,7 +368,7 @@ function 빈답갈래(갈래: readonly EasyWant[]): string {
 
 const 아는갈래 = new Set([
   "image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download",
-  "image_edit",
+  "image_edit", "ad_specs",
 ]);
 const 만든뒤갈래 = new Set(["card_redo", "caption", "download"]);
 const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));

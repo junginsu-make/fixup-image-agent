@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { easyAvailableWants, easyChatPrompt } from "../chat";
+import { easyAvailableWants, easyChatPrompt, readEasyDecision } from "../chat";
+import { AD_QUESTION, adGuideBody } from "../ad-ask";
 import { easyCapabilityLines } from "../chat-facts";
 import { easyChatSpec } from "../../../lib/easy/chat-provider";
 
@@ -11,7 +12,7 @@ import { easyChatSpec } from "../../../lib/easy/chat-provider";
  * 같은 말이 6/6 새 이미지였다. 프롬프트와 틀이 **같은 함수**에서 나와야 다시 안 갈린다.
  */
 const 모든갈래 = [
-  "image", "cardnews", "either", "revise", "card_text", "card_redo", "caption", "download", "image_edit", "talk", "detail_page",
+  "image", "cardnews", "either", "revise", "card_text", "card_redo", "caption", "download", "image_edit", "talk", "detail_page", "ad_specs",
 ];
 const 경우들 = [false, true].flatMap((hasDraft) => [false, true].flatMap((made) =>
   [false, true].map((madeImage) => ({ hasDraft, made, madeImage }))));
@@ -22,14 +23,14 @@ const 선택지 = (wants: readonly string[]) =>
 describe("지금 쓸 수 있는 갈래 (A1)", () => {
   it("만든 것이 없으면 고치기 갈래가 아예 없다", () => {
     expect(easyAvailableWants({ hasDraft: false, made: false, madeImage: false }))
-      .toEqual(["image", "cardnews", "either", "talk", "detail_page"]);
+      .toEqual(["image", "cardnews", "either", "talk", "detail_page", "ad_specs"]);
   });
 
   it("원고가 있으면 원고 고치기, 만들었으면 손보기, 이미지가 있으면 이미지 고치기가 열린다", () => {
     expect(easyAvailableWants({ hasDraft: true, made: false, madeImage: false }))
-      .toEqual(["image", "cardnews", "either", "revise", "card_text", "talk", "detail_page"]);
+      .toEqual(["image", "cardnews", "either", "revise", "card_text", "talk", "detail_page", "ad_specs"]);
     expect(easyAvailableWants({ hasDraft: true, made: true, madeImage: true })).toEqual([
-      "image", "cardnews", "either", "revise", "card_text", "card_redo", "caption", "download", "image_edit", "talk", "detail_page",
+      "image", "cardnews", "either", "revise", "card_text", "card_redo", "caption", "download", "image_edit", "talk", "detail_page", "ad_specs",
     ]);
     // 원고 없이 「만들었다」만 오는 일은 없지만, 와도 손보기는 열지 않는다.
     expect(easyAvailableWants({ hasDraft: false, made: true, madeImage: false })).not.toContain("card_redo");
@@ -81,5 +82,54 @@ describe("만든 것이 없는 대화의 사진 (A1-2)", () => {
   it("이미지나 원고가 있으면 그 말을 안 적는다 — 그때는 고치기가 맞다", () => {
     expect(easyChatPrompt([], "바꿔줘", 2, false, false, true)).not.toContain("새 이미지를 만들라는 것");
     expect(easyChatPrompt([], "바꿔줘", 2, true)).not.toContain("새 이미지를 만들라는 것");
+  });
+});
+
+describe("광고 규격 갈래 (A5)", () => {
+  const 없음 = { hasDraft: false, made: false, madeImage: false };
+
+  it("늘 열려 있다 — 「광고 소재」 낱말이 없어도 여러 규격을 말하면 고를 수 있다", () => {
+    expect(easyAvailableWants(없음)).toContain("ad_specs");
+    expect(갈래줄이있나(easyChatPrompt([], "구글 배너 사이즈별로 다"), "ad_specs")).toBe(true);
+  });
+
+  it("「광고 소재 말고」면 선택지와 안내에서 뺀다", () => {
+    expect(easyAvailableWants({ ...없음, adNegated: true })).not.toContain("ad_specs");
+    const prompt = easyChatPrompt([], "광고 소재 말고 그냥 이미지", 0, false, false, false, { adNegated: true });
+    expect(prompt).not.toContain("ad_specs");
+  });
+
+  it("바로 앞이 광고 물음이면 그 답으로 읽으라고 알린다", () => {
+    const 물은뒤 = [
+      { id: "u", role: "user" as const, body: "광고 소재 만들어줘" },
+      { id: "q", role: "assistant" as const, body: AD_QUESTION },
+    ];
+    expect(easyChatPrompt(물은뒤, "사이즈별로요")).toContain("바로 앞에서");
+    expect(easyChatPrompt([], "사이즈별로요")).not.toContain("바로 앞에서");
+  });
+
+  /** 최종 리뷰(2026-10-06): 답일 때만 처음 말을 잇는다. 답인지는 모델이 이미 있는 `note` 칸에 적는다. */
+  it("물음의 답이면 note 에 answer 를 적으라고 알린다", () => {
+    const 물은뒤 = [
+      { id: "u", role: "user" as const, body: "광고 소재 만들어줘" },
+      { id: "q", role: "assistant" as const, body: AD_QUESTION },
+    ];
+    expect(easyChatPrompt(물은뒤, "광고 이미지로요")).toContain("`note` 에 `answer`");
+    expect(easyChatPrompt([], "광고 이미지로요")).not.toContain("`note` 에 `answer`");
+  });
+
+  it("만들어 달라는 말은 ad_specs 라고 하는 일 줄에도 적고, 「광고 소재 말고」면 뺀다 (A4)", () => {
+    expect(easyCapabilityLines(easyAvailableWants(없음)).join("\n")).toContain("**만들어 달라는** 말은 ad_specs 입니다.");
+    expect(easyCapabilityLines(easyAvailableWants({ ...없음, adNegated: true })).join("\n")).not.toContain("ad_specs");
+  });
+
+  it("안내 줄의 표시는 모델에게 안 보낸다", () => {
+    const prompt = easyChatPrompt([{ id: "g", role: "assistant", body: adGuideBody("광고소재에서 합니다") }], "고마워");
+    expect(prompt).toContain("도우미: 광고소재에서 합니다");
+    expect(prompt).not.toContain("ad-guide:");
+  });
+
+  it("판단 결과로 ad_specs 를 받는다", () => {
+    expect(readEasyDecision({ wants: "ad_specs", reply: "" }).wants).toBe("ad_specs");
   });
 });
