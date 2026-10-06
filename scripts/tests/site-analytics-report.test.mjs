@@ -21,6 +21,8 @@ const people = (days = 7) => json(`select admin_site_people(${days}, '${NOW}'::t
 
 before(async () => {
   db = await testPostgres();
+  // 기계 시간대와 상관없이 세션을 UTC 로 고정한다(한국 날짜 자르기가 빠지면 이 시험이 잡도록).
+  await db.sql("alter database postgres set timezone to 'UTC';");
   await db.migrate(MIGRATIONS);
   await db.sql(`insert into auth.users(id,email,email_confirmed_at) values
       ('${ADMIN}','a@example.invalid',now()),('${KIM}','kim@example.invalid',now()),
@@ -31,8 +33,8 @@ before(async () => {
     update profiles set status='active', created_at='2026-10-04 15:00:00+09' where id='${PARK}';
     insert into analytics_page_views(created_at, visitor, cookie_key, user_id, path, referrer_host, utm_source, utm_campaign, device, browser, entry) values
       -- 관리자: 로그인 전 + 로그인 뒤(같은 visitor), 그리고 다른 날 같은 쿠키 번호 — 셋 다 빠져야 한다
-      ('2026-10-06 09:00:00+09', '${V('a')}', '${V('9')}', null,      '/',        null, null, null, 'desktop','chrome', true),
-      ('2026-10-06 09:01:00+09', '${V('a')}', '${V('9')}', '${ADMIN}', '/create',  null, null, null, 'desktop','chrome', false),
+      ('2026-10-06 09:00:00+09', '${V('a')}', null,        null,      '/',        null, null, null, 'desktop','chrome', true),
+      ('2026-10-06 09:01:00+09', '${V('a')}', '${V('9')}', '${ADMIN}', '/admin',   null, null, null, 'desktop','chrome', false),
       ('2026-10-03 21:00:00+09', '${V('8')}', '${V('9')}', null,      '/guide',   null, null, null, 'desktop','chrome', true),
       -- 김: 10/2 유튜브(번호 1) → 10/6 인스타로 다시 와서 가입. 10:00·10:10 한 세션, 11:00 새 세션
       ('2026-10-02 20:00:00+09', '${V('f')}', '${V('1')}', null,      '/',        null, 'youtube', null, 'mobile','kakaotalk', true),
@@ -66,7 +68,8 @@ test('counts by the Korean day and leaves admins out entirely', async () => {
   assert.equal(r.visitor_days, 4);
   assert.equal(r.views, 6);
   assert.equal(r.members, 2);
-  assert.equal(r.pages.find((p) => p.key === '/create').views, 1);  // 관리자 /create 빠짐
+  assert.equal(r.pages.find((p) => p.key === '/create').views, 1);  // 김의 /create 만 남는다
+  assert.equal(r.pages.find((p) => p.key === '/admin'), undefined);  // 관리자 표시 줄은 어떤 숫자에도 안 든다
   assert.equal(r.pages.find((p) => p.key === '/guide').views, 1);   // 관리자 쿠키의 10/3 /guide 빠짐
 });
 
@@ -85,10 +88,10 @@ test('consented browsers are followed across days', async () => {
   assert.equal(Number(r.consent_rate), 0.5); // 하루 방문자 b·c·d·f 중 b·f
 });
 
-test('sources come from the first screen only: utm first, then referrer, else direct', async () => {
+test('sources count the earliest first screen per visitor day: utm first, then referrer, else direct', async () => {
   const r = await traffic();
   assert.deepEqual(r.sources.map((s) => [s.key, s.views]).sort(),
-    [['(direct)', 2], ['instagram', 1], ['search.naver.com', 1], ['youtube', 1]]);
+    [['(direct)', 1], ['instagram', 1], ['search.naver.com', 1], ['youtube', 1]]);
   assert.deepEqual(r.campaigns.map((s) => s.key), ['launch']);
   assert.deepEqual(r.devices.map((d) => [d.key, d.visitors]).sort(), [['desktop', 2], ['mobile', 2]]);
 });

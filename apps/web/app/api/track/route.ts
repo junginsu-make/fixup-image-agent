@@ -22,10 +22,12 @@ export const dynamic = "force-dynamic";
  */
 const NO_CONTENT = () => new Response(null, { status: 204 });
 const MAX_BODY = 4_096;
-// 한 IP 는 1분에 60줄, 서버 전체는 1분에 300줄·하루에 2만 줄. 열린 자리라 IP 를 바꿔 가며 몰아치는 것까지 막는다.
+// 한 IP 는 1분에 60번, 서버 전체는 1분에 300번·하루에 2만 번까지만 받는다. 세는 것은 **요청**이다(줄이 아니다):
+// 봇·교차 출처가 아니면 본문 검사 전에 세므로, 본문이 틀려 버려진 요청도 한도를 먹는다.
+// 열린 자리라 IP 를 바꿔 가며 몰아치는 것까지 막는다.
 const allowIp = createLimiter({ limit: 60, windowMs: 60_000, maxKeys: 5_000 });
 const allowAll = createLimiter({ limit: 300, windowMs: 60_000, maxKeys: 1 });
-// 하루 전체 2만 줄. 1분 상한만으로는 IP 몇 개가 하루 종일(43만 줄) 채워 공용 DB 디스크를 부풀릴 수 있다.
+// 하루 전체 2만 번. 1분 상한만으로는 IP 몇 개가 하루 종일(43만 번) 채워 공용 DB 디스크를 부풀릴 수 있다.
 // 앞 둘을 통과한 요청만 센다(막힌 요청이 하루 몫을 먹지 않게 && 순서를 지킨다).
 const allowDay = createLimiter({ limit: 20_000, windowMs: 86_400_000, maxKeys: 1 });
 

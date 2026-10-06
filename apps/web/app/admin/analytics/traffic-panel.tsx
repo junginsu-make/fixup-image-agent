@@ -21,7 +21,7 @@ export function TrafficPanel({ report }: { report: SiteTraffic | null }) {
       <CardContent className="space-y-4">
         {report ? <TrafficNumbers report={report} /> : (
           <p className="text-sm text-muted-foreground">
-            방문 보고를 읽지 못했습니다. Supabase 에 `202610060002_site_analytics_report.sql` 을 먼저 적용해야 합니다.
+            방문 보고를 읽지 못했습니다. Supabase 에 `202610060002_site_analytics_report.sql` 을 적용하기 전이거나, 잠시 연결이 안 된 경우일 수 있습니다.
           </p>
         )}
       </CardContent>
@@ -50,10 +50,11 @@ function TrafficNumbers({ report }: { report: SiteTraffic }) {
           </div>
         ))}
       </dl>
+      <p className="text-xs text-muted-foreground">화면을 하나만 보고 떠난 방문은 머문 시간을 0초로 세서, 평균 시간은 실제보다 짧게 나옵니다.</p>
       <DailyBars daily={report.daily} />
       <p className="text-xs text-muted-foreground">
         비회원은 하루 단위로만 같은 사람을 알아봅니다(같은 사람이 이틀 오면 2). 여러 날을 잇는 숫자는 방문 통계 쿠키에
-        동의한 브라우저만 셉니다 — 동의율이 낮으면 실제보다 작습니다. 회원은 기간 전체에서 한 번만 셉니다. 관리자 방문은 뺐습니다.
+        동의한 브라우저만 셉니다. 동의율이 낮으면 실제보다 작습니다. 회원은 기간 전체에서 한 번만 셉니다. 관리자 방문은 뺐습니다.
       </p>
       <DailyTable daily={report.daily} />
     </>

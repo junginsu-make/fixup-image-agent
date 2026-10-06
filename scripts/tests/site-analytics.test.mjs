@@ -29,6 +29,8 @@ const cookieKeys = async () => Number(await db.sql('select count(distinct cookie
 
 before(async () => {
   db = await testPostgres();
+  // 기계 시간대와 상관없이 세션을 UTC 로 고정한다(한국 날짜 자르기가 빠지면 이 시험이 잡도록).
+  await db.sql("alter database postgres set timezone to 'UTC';");
   await db.migrate(MIGRATIONS);
   await db.sql(`insert into auth.users(id,email,email_confirmed_at) values
       ('${MEMBER}','m@example.invalid',now()), ('${OTHER_MEMBER}','o@example.invalid',now());

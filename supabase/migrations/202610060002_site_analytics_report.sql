@@ -79,9 +79,13 @@ as $$
     where p.role <> 'admin' and p.created_at >= w.window_start and p.created_at <= p_now
     group by 1
   ),
+  -- 유입은 **방문자(하루)마다 가장 이른 첫 화면 줄 하나**만 센다. 소셜 로그인 복귀·새로고침·메일 확인 링크로
+  -- 돌아올 때마다 entry 줄이 또 생기는데, 그걸 다 세면 「직접 방문」이 부풀려진다(visitor 는 한국 날짜별이라
+  -- 「하루에 한 사람 한 번」이 된다). 가입자의 첫 유입(people)은 따로 이어 보므로 여기와 상관없다.
   entries as (
-    select v.*, coalesce(v.utm_source, v.referrer_host, '(direct)') as source
+    select distinct on (v.visitor) v.*, coalesce(v.utm_source, v.referrer_host, '(direct)') as source
     from v where v.entry
+    order by v.visitor, v.created_at
   ),
   returning_keys as (
     select v.cookie_key from v where v.cookie_key is not null
