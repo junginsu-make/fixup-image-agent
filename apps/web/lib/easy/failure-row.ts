@@ -22,6 +22,19 @@ export function failureRowBody(message: string): string {
   return `${머리}${message}`;
 }
 
+/**
+ * 실패 줄에 남길 글(리뷰 2026-10-06). 안쪽 포스터 라우트는 모든 예외를 잡아 **날것의 오류 글**을
+ * 응답에 싣고 `read()` 가 그것을 `EasyStepError` 로 올린다 — `EasyStepError` 라고 우리가 쓴
+ * 말은 아니다. 우리 멤버십 층이 쓴 글만 남긴다: 크레딧 · 한도 코드가 있거나 402 · 403 일 때.
+ * 나머지(코드 없는 4xx · 5xx 포함, 429 · 503 도 안쪽 글이라 가려진다)는 일반 문장이다.
+ * `relay.ts` 를 못 들이므로 이름으로 알아본다.
+ */
+export function failureRowMessage(error: unknown): string {
+  if (!(error instanceof Error) || error.name !== "EasyStepError") return FAILED_TURN_GENERIC;
+  const { code, status } = error as Error & { code?: string; status?: number };
+  return code || status === 402 || status === 403 ? error.message : FAILED_TURN_GENERIC;
+}
+
 /** 실패 안내 줄인가(글로 알아본다 — 표에 칸을 더하지 않는다). */
 export function isFailureRowBody(body: string): boolean {
   return body.startsWith(머리);

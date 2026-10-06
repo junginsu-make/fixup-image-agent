@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EasyStore } from "../store";
-import { FAILED_TURN_GENERIC, failureRowBody, isFailureRowBody, trackUserTurn } from "../failure-row";
+import { FAILED_TURN_GENERIC, failureRowBody, failureRowMessage, isFailureRowBody, trackUserTurn } from "../failure-row";
+import { EasyStepError } from "../relay";
 
 /**
  * **실패도 대화에 남긴다**(2026-10-06 설계 B4). 실패한 턴은 새로고침하면 내 말만 남고
@@ -79,5 +80,39 @@ describe("실패 안내 줄 (B4)", () => {
   it("실패 안내 줄을 글로 알아본다", () => {
     expect(isFailureRowBody(failureRowBody("x"))).toBe(true);
     expect(isFailureRowBody("요청을 처리했습니다.")).toBe(false);
+  });
+});
+
+/**
+ * 안쪽 포스터 라우트는 모든 예외를 잡아 **날것의 오류 글**을 응답에 싣고, `read()` 가 그것을
+ * `EasyStepError` 로 올린다(리뷰 2026-10-06). 그래서 `EasyStepError` 라는 것만으로는 우리가 쓴
+ * 말이라고 할 수 없다 — 크레딧 · 권한 정지(우리 멤버십 층이 쓴 글)만 남긴다.
+ */
+describe("실패 줄에 남길 글 고르기", () => {
+  const usage = { remaining: 0, used: 1, reserved: 0 } as never;
+
+  it("크레딧 · 한도 코드가 있으면 그 글을 남긴다", () => {
+    expect(failureRowMessage(new EasyStepError("기획", "크레딧이 부족합니다.", 402, false, "credits_required", usage)))
+      .toBe("크레딧이 부족합니다.");
+    expect(failureRowMessage(new EasyStepError("기획", "한도 초과", 429, false, "quota_exceeded", usage))).toBe("한도 초과");
+  });
+
+  it("402 · 403 이면 코드가 없어도 남긴다", () => {
+    expect(failureRowMessage(new EasyStepError("기획", "권한이 없습니다.", 403, false))).toBe("권한이 없습니다.");
+    expect(failureRowMessage(new EasyStepError("기획", "결제가 필요합니다.", 402, false))).toBe("결제가 필요합니다.");
+  });
+
+  it("안쪽 라우트의 500 날것 글은 일반 문장으로 바꾼다", () => {
+    expect(failureRowMessage(new EasyStepError("기획", 'relation "poster_projects" does not exist', 500))).toBe(FAILED_TURN_GENERIC);
+  });
+
+  it("고치기 라우트의 400 날것 글도 일반 문장으로 바꾼다", () => {
+    expect(failureRowMessage(new EasyStepError("고치기", "column x of relation y", 400))).toBe(FAILED_TURN_GENERIC);
+  });
+
+  it("EasyStepError 가 아니면 일반 문장이다", () => {
+    expect(failureRowMessage(new Error("boom"))).toBe(FAILED_TURN_GENERIC);
+    expect(failureRowMessage("문자열")).toBe(FAILED_TURN_GENERIC);
+    expect(failureRowMessage(undefined)).toBe(FAILED_TURN_GENERIC);
   });
 });

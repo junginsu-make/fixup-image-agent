@@ -68,7 +68,7 @@ vi.mock("../../../../lib/poster/stores", () => ({
 const 라우트 = (step: string) => ({
   POST: async (req: Request) => {
     부른라우트.push({ step, url: req.url, body: await req.json() });
-    if (step === "edit" && 고치기실패) return Response.json({ ok: false, message: "고치기가 막혔습니다." }, { status: 502 });
+    if (step === "edit" && 고치기실패) return Response.json({ ok: false, message: "고치기가 막혔습니다." }, { status: 403 });
     return step === "project"
       ? Response.json({ ok: true, project: { id: "new" } })
       : Response.json({ ok: true, submission: { requestRowId: `${step}-row`, falRequestId: "f", endpoint: "e" } });

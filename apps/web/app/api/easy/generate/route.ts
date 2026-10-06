@@ -4,7 +4,7 @@ import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
-import { FAILED_TURN_GENERIC, trackUserTurn } from "../../../../lib/easy/failure-row";
+import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
 import { withRowJob } from "../../../easy/row-image";
 import type { EasyDecision } from "../../../easy/chat";
 import { judgeEasyTurn } from "../../../../lib/easy/judge";
@@ -453,10 +453,10 @@ async function turn(request: Request): Promise<Response> {
   } catch (error) {
     /*
      * 사용자 말을 남긴 뒤 실패했으면 그 안내도 대화에 남긴다(B4). 우리가 알고 낸 실패면
-     * 화면이 보이는 말 그대로, 아니면 일반 문장 — 내부 오류 글(표 이름 등)은 대화에 남기지
-     * 않는다(최종 리뷰 2026-10-06).
+     * 크레딧 · 권한 안내만 그대로, 나머지는 일반 문장 — 안쪽 라우트의 날것 오류 글(표 이름
+     * 등)은 대화에 남기지 않는다(`failureRowMessage`, 리뷰 2026-10-06).
      */
-    await 지킴.leaveFailure(conversationId, error instanceof EasyStepError ? error.message : FAILED_TURN_GENERIC);
+    await 지킴.leaveFailure(conversationId, failureRowMessage(error));
     if (error instanceof EasyStepError) {
       /*
        * **세 갈래를 가려 말한다**(설계 §5-3). 어느 쪽이냐에 따라 할 일이

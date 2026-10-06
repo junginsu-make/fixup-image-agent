@@ -75,10 +75,10 @@ vi.mock("../../poster/projects/route", () => ({
 vi.mock("../../poster/projects/[id]/plan/route", () => ({
   POST: async (req: Request) => {
     부른라우트.push({ step: "plan", body: await req.json() });
-    // 우리가 알고 낸 실패가 아닌 것 — 저장소 · DB 오류가 그대로 올라온 경우(최종 리뷰).
-    if (기획던짐) throw new Error('relation "poster_projects" does not exist');
+    // 실제 모양: 안쪽 라우트는 예외를 잡아 날것의 글을 500 으로 돌려준다(리뷰 2026-10-06).
+    if (기획던짐) return Response.json({ ok: false, message: 'relation "poster_projects" does not exist' }, { status: 500 });
     return 기획실패
-      ? Response.json({ ok: false, message: "기획이 막혔습니다." }, { status: 502 })
+      ? Response.json({ ok: false, message: "기획이 막혔습니다." }, { status: 402 })
       : Response.json({ ok: true });
   },
 }));
@@ -347,11 +347,11 @@ describe("한 턴의 판단 (2026-10-06 A2 · A3)", () => {
 });
 
 describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
-  it("말을 남긴 뒤 기획이 실패하면 실패 안내를 도우미 줄로 남긴다", async () => {
+  it("말을 남긴 뒤 기획이 권한 때문에 막히면 그 안내를 도우미 줄로 남긴다", async () => {
     기획실패 = true;
     판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
     const { status } = await 보낸다({});
-    expect(status).toBe(502);
+    expect(status).toBe(402);
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
     expect(남긴줄[1]!.body).toBe(failureRowBody("기획이 막혔습니다."));
   });
@@ -360,7 +360,7 @@ describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
    * 최종 리뷰(2026-10-06): 우리가 알고 낸 실패(`EasyStepError`)가 아니면 오류 글에 표 이름 ·
    * 칼럼 이름이 섞여 온다. 대화는 남고 다시 열면 보이므로 그 글을 남기지 않는다.
    */
-  it("알고 낸 실패가 아니면 내부 글 대신 일반 문장을 남긴다", async () => {
+  it("안쪽 라우트가 날것의 오류 글을 주면 일반 문장을 남긴다", async () => {
     기획던짐 = true;
     판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
     await 보낸다({});
