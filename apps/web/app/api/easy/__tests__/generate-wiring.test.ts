@@ -214,15 +214,19 @@ describe("비율·결 묻기", () => {
   });
 
   /**
-   * **물어만 볼 때는 아무것도 안 남긴다.** 답 없이 떠나면 아무 일도 안
-   * 일어난 것이 맞다 — 남겨 두면 답 없는 물음만 쌓인다.
+   * **물을 때도 대화에 남긴다**(2026-10-07 사용자 결정 2차 D1 - 이 시험이 뒤집힌 까닭).
+   *
+   * 예전 시험은 「물어만 볼 때는 아무것도 안 남긴다. 답 없이 떠나면 아무 일도 안 일어난 것이
+   * 맞다」(2026-09-21)였다. 그렇게 두었더니 새로고침하면 물음이 사라지고, 단추 대신 말로 답하면
+   * 판단 모델이 앞 물음을 몰랐다. 사용자가 2차 D1 로 그 결정을 바꿨다 - 사용자 줄 + 물음 줄을
+   * 남긴다. 저장은 `lib/easy/ask-turn.ts` 가 한다(라우트에 `role:` 글자를 새로 안 쓴다).
    */
-  it("물어볼 때는 대화에 아무것도 안 쌓는다", () => {
-    const 묻는곳 = generate.indexOf("asked: true");
-    const 남기는곳 = generate.indexOf('role: "user"');
-
-    expect(묻는곳).toBeGreaterThan(0);
-    expect(남기는곳).toBeGreaterThan(묻는곳);
+  it("물어볼 때는 사용자 말과 물음 줄을 남긴다 (2차 D1)", () => {
+    const askTurnFile = readFileSync(new URL("../../../../lib/easy/ask-turn.ts", import.meta.url), "utf8");
+    expect(generate).toMatch(/askTurn\(물음맥락, \{ kind: "ratio"/);
+    expect(generate.indexOf('kind: "ratio"')).toBeLessThan(generate.indexOf("await createProject("));
+    expect(askTurnFile.indexOf('role: "user"')).toBeGreaterThan(0);
+    expect(askTurnFile.indexOf('role: "user"')).toBeLessThan(askTurnFile.indexOf('role: "assistant"'));
   });
 
   /** 고른 비율·결이 실제로 만들기에 들어가야 뜻이 있다. */
@@ -261,9 +265,9 @@ describe("사진 역할 (설계 §2-3)", () => {
     expect(generate).toContain("withLlmMeter(");
   });
 
-  it("사진을 물을 때도 대화에 아무것도 안 쌓는다", () => {
-    const 묻는곳 = generate.indexOf("photoAsk:");
-    expect(묻는곳).toBeGreaterThan(0);
-    expect(generate.indexOf('role: "user"')).toBeGreaterThan(묻는곳);
+  /** 위 「물어볼 때는」과 같은 까닭으로 뒤집혔다(사용자 결정 2차 D1). 사진 물음도 줄을 남긴다. */
+  it("사진을 물을 때도 사용자 말과 물음 줄을 남긴다 (2차 D1)", () => {
+    expect(generate).toMatch(/askTurn\(물음맥락, \{\s*kind: "photo"/);
+    expect(generate).toMatch(/askTurn\(ctx\.물음, \{\s*kind: "photo"/);
   });
 });

@@ -86,6 +86,7 @@ vi.mock("../../poster/projects/[id]/generate/route", () => 라우트("generate")
 const { POST } = await import("../generate/route");
 const { AD_ANSWER_NOTE, AD_CHOICE_IMAGE, AD_CHOICE_SPECS, AD_QUESTION, adGuideBody } = await import("../../../easy/ad-ask");
 const { AD_GUIDE_FALLBACK } = await import("../../../easy/ad-guide");
+const { readAsk } = await import("../../../easy/row-marks");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -139,6 +140,13 @@ describe("물음 뒤의 답", () => {
     expect(부른라우트.map((call) => call.step)).toEqual(["project", "plan", "generate"]);
     expect(부른라우트[0]!.body.instruction).toBe(처음말);
     expect(남긴줄[0]).toMatchObject({ role: "user", body: AD_CHOICE_IMAGE });
+  });
+
+  it("「광고 이미지 만들기」 뒤에 모양을 물으면 물음 줄에 이어짐(cont)을 적는다 - 다음 답이 처음 말을 잇는다 (2차 D1)", async () => {
+    await 보낸다({ prompt: AD_CHOICE_IMAGE });
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readAsk(남긴줄[1] as never)).toMatchObject({ kind: "ratio", data: { cont: true, wants: "image" } });
+    expect(부른라우트).toEqual([]);
   });
 
   it("말로 「광고 이미지로요」라고 답하고 모델이 답이라고 표시하면 처음 말 + 답으로 만든다", async () => {

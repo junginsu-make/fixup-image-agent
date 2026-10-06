@@ -141,6 +141,9 @@ vi.mock("../../../../lib/sns/runtime", () => ({ refreshProjectAssetUrls: async (
 
 const { POST } = await import("../generate/route");
 const { ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING } = await import("../../../easy/cardnews-after");
+const { readAsk } = await import("../../../easy/row-marks");
+const { KIND_QUESTION } = await import("../../../easy/turn-words");
+const { NO_REFERENCE } = await import("../../../easy/cardnews-attachments");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -167,11 +170,12 @@ beforeEach(() => {
 });
 
 describe("갈래 (2단계 §4)", () => {
-  it("한 장인지 여러 장인지 모르면 두 단추로 묻고 아무것도 안 남긴다", async () => {
+  it("한 장인지 여러 장인지 모르면 두 단추로 묻고 사용자 말과 물음 줄을 남긴다 (2차 D1)", async () => {
     판단 = { wants: "either", reply: "", ratio: "", look: "" };
     const { json } = await 보낸다({ prompt: "신메뉴 홍보물 만들어줘" });
     expect(json.kindAsk).toBe(true);
-    expect(남긴줄).toEqual([]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "kind", text: KIND_QUESTION, data: { ids: [] } });
     expect(부른라우트).toEqual([]);
   });
 
@@ -197,18 +201,19 @@ describe("갈래 (2단계 §4)", () => {
 });
 
 describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
-  it("레퍼런스가 없으면 요청하고 아무것도 안 남긴다", async () => {
+  it("레퍼런스가 없으면 요청하고 사용자 말과 요청 줄을 남긴다 (2차 D1)", async () => {
     const { json } = await 보낸다({ prompt: "건강 카드뉴스" });
     expect(json.needReference).toBe(true);
-    expect(남긴줄).toEqual([]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "reference", text: NO_REFERENCE, data: { wants: "cardnews", ids: [] } });
     expect(부른라우트).toEqual([]);
   });
 
-  it("분위기 참고가 없으면(제품 사진만) 레퍼런스를 요청한다", async () => {
+  it("분위기 참고가 없으면(제품 사진만) 레퍼런스를 요청한다 - 요청 줄에 그 사진을 적는다", async () => {
     역할판단 = 역할(["preserve_product", true]);
     const { json } = await 보낸다({ prompt: "1번 제품으로 카드뉴스", referenceIds: [사진(1)] });
     expect(json.needReference).toBe(true);
-    expect(남긴줄).toEqual([]);
+    expect(readAsk(남긴줄[1] as never)?.data).toEqual({ wants: "cardnews", ids: [사진(1)] });
     expect(부른라우트).toEqual([]);
   });
 
@@ -230,11 +235,11 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     expect(남긴줄.map((r) => r.role)).toEqual(["user", "image"]);
   });
 
-  it("모르는 사진이 있으면 카드뉴스 역할로 묻는다", async () => {
+  it("모르는 사진이 있으면 카드뉴스 역할로 묻고 물음 줄을 남긴다", async () => {
     역할판단 = 역할(["unclear", false]);
     const { json } = await 보낸다({ referenceIds: [사진(1)] });
     expect(json.photoAsk).toEqual({ reason: "unclear", rows: [{ id: 사진(1), role: "unclear" }], mode: "cardnews" });
-    expect(남긴줄).toEqual([]);
+    expect(readAsk(남긴줄[1] as never)).toMatchObject({ kind: "photo", data: { wants: "cardnews", mode: "cardnews", ids: [사진(1)] } });
     expect(부른라우트).toEqual([]);
   });
 

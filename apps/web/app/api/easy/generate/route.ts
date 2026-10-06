@@ -21,7 +21,7 @@ import { runPhotoTurn } from "../../../easy/photo-turn";
 import { easyRoleSummary } from "../../../easy/options";
 import { isWebSourceEnabled } from "../../../../lib/sns/feature";
 import { draftCardnews, lastCardnewsProject } from "../../../../lib/easy/cardnews-steps";
-import { NOT_MINE, cardAttachmentsFrom, readChosenSlots, slotsFromWords } from "../../../easy/cardnews-attachments";
+import { NOT_MINE, NO_REFERENCE, cardAttachmentsFrom, readChosenSlots, slotsFromWords } from "../../../easy/cardnews-attachments";
 import { pickCardSource } from "../../../easy/cardnews-source";
 import { cardOptionsFrom, projectSpecFrom, readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
@@ -31,6 +31,8 @@ import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
 import { countEasyImages, imageEditTurn, lastEasyImage } from "../../../../lib/easy/image-edit-turn";
 import { AD_ANSWER_NOTE, adImageInstruction, easyAdStep } from "../../../easy/ad-ask";
 import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
+import { askTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
+import { KIND_QUESTION, RATIO_QUESTION, aiText, askText, photoQuestion } from "../../../easy/turn-words";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -268,8 +270,23 @@ async function turn(request: Request): Promise<Response> {
     const wants = 고른갈래 && (골랐나 || ["image", "cardnews", "either"].includes(decision.wants))
       ? 고른갈래
       : decision.wants;
-    // 한 장인지 여러 장인지 모르면 묻고 아무것도 안 남긴다(2단계 §4).
-    if (wants === "either") return Response.json({ ok: true, kindAsk: true, textModel });
+
+    /*
+     * **물음도 대화에 남긴다**(2026-10-07 사용자 결정 2차 D1 - 2단계 §4 · 설계 §2-5 의 「아무것도
+     * 안 남긴다」를 바꿨다). 사용자 줄 + 물음 줄 두 줄이라 새로고침해도 물음이 보이고, 단추 대신 말로
+     * 답해도 다음 판단이 앞 물음을 안다. 저장은 `lib/easy/ask-turn.ts` 가 한다. 값도 예약도 없다.
+     * 이번 말이 앞 물음의 답이었으면 물음 줄에 `cont` 가 붙어 사슬이 이어진다(`app/easy/ask-chain.ts`).
+     */
+    const 물음맥락: AskTurnContext = {
+      store, conversation, conversationId, prompt, userBody: prompt, textModel,
+      cont: 광고 === "image" || decision.note === AD_ANSWER_NOTE,
+    };
+    // 물을 때의 판단(말에 있던 비율 · 그림체). 단추로 답하면 판단 모델 대신 이것을 쓴다(2차 D1).
+    const 말한것 = { ...(decision.ratio ? { ratio: decision.ratio } : {}), ...(decision.look ? { look: decision.look } : {}) };
+    // 한 장인지 여러 장인지 모르면 묻는다(2단계 §4). 물음 문장은 AI 가 이 갈래로 쓴 물음이 먼저다(2차 D4 · 최종 리뷰 b).
+    if (wants === "either") {
+      return await askTurn(물음맥락, { kind: "kind", text: askText(aiText(decision, wants), KIND_QUESTION), data: { ids: 붙인것, ...말한것 } }, { kindAsk: true });
+    }
     // 규격별 이미지는 여기서 안 만든다. 「광고소재」 안내를 남기고 끝낸다(A5).
     if (wants === "ad_specs") {
       return await adGuideTurn({ store, conversation, conversationId, prompt, textModel, guide: 광고안내 });
@@ -292,9 +309,9 @@ async function turn(request: Request): Promise<Response> {
     /*
      * ⓵ **비율·결을 한 번 물어볼까** (2026-09-21 사용자).
      *
-     * 묻기로 했으면 **아무것도 안 남기고** 그대로 돌려준다. 그림도 안 만들고
-     * 대화 줄도 안 쌓는다 — 물어만 보고 사용자가 답을 안 하고 떠나면 **아무
-     * 일도 일어나지 않은 것**이 맞다. 남겨 두면 답 없는 물음만 쌓인다.
+     * 묻기로 했으면 그림을 안 만들고 사용자 줄 + 물음 줄을 남긴다(2026-10-07 2차 D1. 예전에는
+     * 「답 없이 떠나면 아무 일도 없던 것」이라 안 남겼는데, 그러면 새로고침에 물음이 사라지고 말로
+     * 답할 때 앞 물음을 몰랐다). 물음 문장은 AI 가 쓴 물음이 먼저, 없으면 고정 문장이다.
      *
      * 판단은 `ask.ts` 가 값으로 한다. 여기서 하면 못 잰다.
      */
@@ -307,13 +324,13 @@ async function turn(request: Request): Promise<Response> {
     });
 
     if (wants === "image" && 고르기.asks) {
-      return Response.json({ ok: true, asked: true, textModel });
+      return await askTurn(물음맥락, { kind: "ratio", text: askText(aiText(decision, wants), RATIO_QUESTION), data: { wants: "image" } }, { asked: true });
     }
 
     if (wants === "cardnews" || wants === "revise") {
       return await cardnewsTurn({
         request, userId: auth.member.userId, store, conversation, conversationId, prompt, textModel,
-        wants, 사진들, 붙인것, input, decision, provider, 고칠원고,
+        wants, 사진들, 붙인것, input, decision, provider, 고칠원고, 물음: 물음맥락, 말한것,
       });
     }
 
@@ -331,8 +348,10 @@ async function turn(request: Request): Promise<Response> {
     /*
      * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
      *
-     * 말을 남기기 **전에** 한다. 묻거나 멈추면 아무것도 안 남긴다 — 비율 물음과
-     * 같다. 말 턴 · 상세페이지 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
+     * 말을 남기기 **전에** 한다. 멈추면 아무것도 안 남기고, 물으면 사용자 줄 + 물음 줄을 남긴다
+     * (2차 D1). 물음 줄에 사진 id 와 그때의 판단을 적어 새로고침 뒤 말로 답해도 이어진다. 사진 물음
+     * 문장은 고정이다. 이 판단 뒤에 정해져 AI 가 같은 호출로 못 쓴다(2차 §4). 말 턴 · 상세페이지
+     * 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
      */
     const 사진판단 = wants === "image" && 붙인수
       ? await runPhotoTurn(
@@ -349,7 +368,11 @@ async function turn(request: Request): Promise<Response> {
       : undefined;
     if (사진판단?.kind === "stop") return 멈춘다(사진판단.message);
     if (사진판단?.kind === "ask") {
-      return Response.json({ ok: true, photoAsk: { reason: 사진판단.reason, rows: 사진판단.rows }, textModel });
+      return await askTurn(물음맥락, {
+        kind: "photo",
+        text: photoQuestion(사진판단.reason),
+        data: { wants: "image", reason: 사진판단.reason, mode: "image", rows: 사진판단.rows, ids: 붙인것, ...말한것 },
+      }, { photoAsk: { reason: 사진판단.reason, rows: 사진판단.rows } });
     }
     const 칸 = 사진판단?.fields;
 
@@ -481,7 +504,7 @@ async function turn(request: Request): Promise<Response> {
  * **카드뉴스 원고 턴**(2단계 설계 §3 · §5 · §7 · §9).
  *
  * 원고까지만 쓴다. 원고는 공짜고, 크레딧은 화면의 「이대로 만들기」가 따로 부르는
- * 카드뉴스 `generate` 가 잡는다. 묻거나 멈추면 아무것도 안 남긴다(1단계와 같다).
+ * 카드뉴스 `generate` 가 잡는다. 멈추면 아무것도 안 남기고, 물으면 사용자 줄 + 물음 줄을 남긴다(2차 D1).
  */
 async function cardnewsTurn(ctx: {
   request: Request;
@@ -498,8 +521,15 @@ async function cardnewsTurn(ctx: {
   decision: { ratio?: string; look?: string };
   provider: ReturnType<typeof createEasyChatProvider>;
   고칠원고: Awaited<ReturnType<typeof lastCardnewsProject>>;
+  /** 물음 줄을 남길 때(2차 D1). */
+  물음: AskTurnContext;
+  /** 물을 때의 판단(말에 있던 비율 · 그림체). */
+  말한것: { ratio?: string; look?: string };
 }): Promise<Response> {
-  const 레퍼런스요청 = () => Response.json({ ok: true, needReference: true, textModel: ctx.textModel });
+  // 따라 만들 카드뉴스를 요청한다. 요청도 대화에 남는다(2차 D1). 문장은 고정이다.
+  const 레퍼런스요청 = () => askTurn(ctx.물음, {
+    kind: "reference", text: NO_REFERENCE, data: { wants: "cardnews", ids: ctx.붙인것, ...ctx.말한것 },
+  }, { needReference: true });
   let 입력: unknown;
   let photoRoles: Array<{ id: string; role: string }> = [];
 
@@ -535,9 +565,11 @@ async function cardnewsTurn(ctx: {
     );
     if (판단.kind === "stop") return 멈춘다(판단.message);
     if (판단.kind === "ask") {
-      return Response.json({
-        ok: true, photoAsk: { reason: 판단.reason, rows: 판단.rows, mode: "cardnews" }, textModel: ctx.textModel,
-      });
+      return await askTurn(ctx.물음, {
+        kind: "photo",
+        text: photoQuestion(판단.reason),
+        data: { wants: "cardnews", reason: 판단.reason, mode: "cardnews", rows: 판단.rows, ids: ctx.붙인것, ...ctx.말한것 },
+      }, { photoAsk: { reason: 판단.reason, rows: 판단.rows, mode: "cardnews" } });
     }
     const 첨부 = cardAttachmentsFrom({
       userId: ctx.userId,

@@ -93,6 +93,8 @@ const { POST } = await import("../generate/route");
 const { DETAIL_PAGE_GUIDE } = await import("../../../easy/detail-page");
 const { FAILED_TURN_GENERIC, failureRowBody } = await import("../../../../lib/easy/failure-row");
 const { withRowJob } = await import("../../../easy/row-image");
+const { readAsk } = await import("../../../easy/row-marks");
+const { RATIO_QUESTION } = await import("../../../easy/turn-words");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -170,14 +172,46 @@ describe("사진을 읽지 않는 턴", () => {
   });
 });
 
-describe("물을 때는 아무것도 안 남긴다 (설계 §2-5)", () => {
-  it("모르는 사진이 있으면 묻는다", async () => {
+describe("물을 때는 말과 물음 줄을 남긴다 (2차 D1 - 설계 §2-5 의 「안 남긴다」를 바꿈)", () => {
+  it("모르는 사진이 있으면 묻고, 사용자 말과 사진 물음 줄을 남긴다 - 값이 나가는 라우트는 안 부른다", async () => {
     역할판단 = 역할(["unclear", false]);
     const { json } = await 보낸다({ referenceIds: [사진(1)] });
 
     expect(json.photoAsk).toEqual({ reason: "unclear", rows: [{ id: 사진(1), role: "unclear" }] });
-    expect(남긴줄).toEqual([]);
+    expect(json.message.id).toBe("m2");
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readAsk(남긴줄[1] as never)).toEqual({
+      kind: "photo",
+      text: "사진을 어떻게 쓸지 알려 주세요.",
+      data: { wants: "image", reason: "unclear", mode: "image", rows: [{ id: 사진(1), role: "unclear" }], ids: [사진(1)] },
+    });
     expect(부른라우트).toEqual([]);
+  });
+
+  it("모양을 물을 때 AI 가 물음으로 쓴 글이면 그것, 아니면 고정 문장으로 물음 줄을 남긴다", async () => {
+    판단 = { wants: "image", reply: "", ratio: "", look: "" };
+    expect((await 보낸다({})).json.asked).toBe(true);
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "ratio", data: { wants: "image" }, text: RATIO_QUESTION });
+
+    남긴줄.length = 0;
+    판단 = { wants: "image", reply: "세로 포스터로 할까요, 정사각형으로 할까요?", ratio: "", look: "" };
+    await 보낸다({});
+    expect(readAsk(남긴줄[1] as never)?.text).toBe("세로 포스터로 할까요, 정사각형으로 할까요?");
+    expect(부른라우트).toEqual([]);
+  });
+
+  /** 2차 최종 리뷰 3 - 프롬프트대로 물음 뒤에 설명을 붙여도 AI 물음을 쓴다. */
+  it("AI 물음 뒤에 설명이 붙어도 그 글로 물음 줄을 남긴다", async () => {
+    판단 = { wants: "image", reply: "세로로 할까요, 정사각형으로 할까요? 안 고르시면 정사각형으로 만들어요.", ratio: "", look: "" };
+    await 보낸다({});
+    expect(readAsk(남긴줄[1] as never)?.text).toBe("세로로 할까요, 정사각형으로 할까요? 안 고르시면 정사각형으로 만들어요.");
+  });
+
+  /** 2차 최종 리뷰 b - 옛 화면이 고른 갈래가 이겨 image 로 가면, talk 로 쓴 reply 는 모양 물음이 아니다. */
+  it("코드가 갈래를 바꿔 읽으면 AI 글 대신 고정 물음을 쓴다", async () => {
+    판단 = { wants: "talk", reply: "무엇을 도와드릴까요?", ratio: "", look: "" };
+    await 보낸다({ kind: "image", kindPicked: true });
+    expect(readAsk(남긴줄[1] as never)).toMatchObject({ kind: "ratio", text: RATIO_QUESTION });
   });
 
   it("인물 사진이 둘이면 한 장만 되도록 묻는다", async () => {
