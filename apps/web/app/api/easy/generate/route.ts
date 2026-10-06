@@ -25,6 +25,7 @@ import { redraftInput } from "../../../easy/cardnews-redraft";
 import { draftFailureMessage } from "../../../easy/cardnews-view";
 import { isMade } from "../../../easy/cardnews-after";
 import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
+import { imageEditTurn, lastEasyImage } from "../../../../lib/easy/image-edit-turn";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -176,6 +177,8 @@ async function turn(request: Request): Promise<Response> {
     const 고칠원고 = await lastCardnewsProject(auth.member.userId, 지난줄);
     // 그 원고로 카드를 만들었나. 만들었을 때만 다시 그리기 · 게시글 · 받기를 안다(3단계 §5).
     const 만들었나 = Boolean(고칠원고 && isMade(고칠원고));
+    // 이 대화의 마지막 결과가 이미지 한 장이면 그것을 이어서 고친다(2026-10-06).
+    const 고칠그림 = await lastEasyImage(auth.member.userId, 지난줄);
 
     /*
      * **판정도 값이 나간다 — 예약부터**(설계 2026-09-30 §3.1).
@@ -207,9 +210,10 @@ async function turn(request: Request): Promise<Response> {
             붙인수,
             Boolean(고칠원고),
             만들었나,
+            Boolean(고칠그림),
           ),
         ),
-        { canRevise: Boolean(고칠원고), made: 만들었나 },
+        { canRevise: Boolean(고칠원고), made: 만들었나, editableImage: Boolean(고칠그림) },
       );
     } catch (error) {
       await settleAiUsage(판정예약, false, 0, "easy_decide_failed", llmSettleCost());
@@ -230,6 +234,13 @@ async function turn(request: Request): Promise<Response> {
       return await cardAfterTurn({
         request, userId: auth.member.userId, store, conversationId, prompt, textModel, wants, decision, provider,
         project: 고칠원고, rows: 지난줄,
+      });
+    }
+    // 마지막으로 만든 이미지 한 장 고치기(2026-10-06). 판단 읽기가 고칠 그림이 있을 때만 이 갈래를 준다.
+    if (wants === "image_edit" && 고칠그림) {
+      return await imageEditTurn({
+        request, userId: auth.member.userId, store, conversationId, prompt, textModel,
+        target: 고칠그림, rows: 지난줄, attachments: 붙인것,
       });
     }
 

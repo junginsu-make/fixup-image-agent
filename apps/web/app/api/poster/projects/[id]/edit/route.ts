@@ -2,7 +2,7 @@ import { knownPosterCreditSize } from "../../../../../../lib/membership/image-si
 import { creditImagePlan, markCreditStarted, bindCreditJob } from "../../../../../../lib/membership/credit-ledger";
 import { buildPosterEditJob, estimatePosterCost, planEditJob } from "@fixup/poster-core";
 import { editSourceSize } from "./edit-source-size";
-import { editAttachmentInputs } from "./edit-attachments";
+import { editAttachmentInputs, withAddedAttachments } from "./edit-attachments";
 import { z } from "zod";
 import { creditUnits } from "@fixup/shared";
 import { chooseModelForRatio, IMAGE_MODELS } from "@fixup/sns-core";
@@ -32,6 +32,11 @@ const EditSchema = z.object({
    * 늦게 닿으면 **다른 변형이 고쳐졌다**(2026-09-29 점검).
    */
   imageId: z.string().trim().min(1).max(64).optional(),
+  /**
+   * **고치면서 새로 붙인 사진**(라이브러리 참고 이미지 id). 「쉽게」가 보낸다
+   * (2026-10-06 — 「로고를 이 사진의 로고로 바꿔줘」). 포스터 화면은 안 보낸다.
+   */
+  addedReferenceIds: z.array(z.string().trim().min(1).max(64)).max(8, "한 번에 8장까지 붙일 수 있습니다.").optional(),
 }).strict();
 
 /**
@@ -134,6 +139,33 @@ async function handlePost(request: Request, context: Context) {
       },
     );
 
+    /*
+     * **새로 붙인 사진**(「쉽게」, 2026-10-06). 원본 사진과 달리 **조용히 빼지 않는다**
+     * — 사용자가 방금 붙인 것이 이번 고치기의 핵심이라, 빼고 고치면 값만 나가고
+     * 바라는 것은 안 나온다. 그래서 하나라도 못 찾거나 못 올리면 **예약 전에** 멈춘다.
+     */
+    const addedIds = [...new Set(parsed.data.addedReferenceIds ?? [])];
+    const added = addedIds.length
+      ? await posterReferencesByIds({
+        userId: auth.member.userId,
+        role: auth.member.profile.role,
+        teamId: await teamIdOf(auth.member.userId),
+      }, addedIds)
+      : [];
+    if (added.length !== addedIds.length) {
+      return Response.json({ ok: false, message: "붙인 사진을 찾을 수 없습니다." }, { status: 404 });
+    }
+    const addedUrls = await Promise.all(added.map(async (reference) => {
+      const file = await referenceBytes(reference.storagePath);
+      return fal.uploader.uploadReference(file.bytes, file.contentType);
+    })).catch((error) => {
+      console.error(`[poster] 고치기: 붙인 사진을 올리지 못했습니다: ${error instanceof Error ? error.message : error}`);
+      return null;
+    });
+    if (!addedUrls) {
+      return Response.json({ ok: false, message: "붙인 사진을 읽지 못했습니다. 다시 붙여 주세요." }, { status: 400 });
+    }
+
     // 화면이 수정하면서 비율을 바꿀 수 있으므로 **정해진 뒤의** 값을 본다.
     const ratioId = parsed.data.ratioId ?? project.ratio;
     /*
@@ -148,6 +180,18 @@ async function handlePost(request: Request, context: Context) {
      */
     const parentModelId = await stores.requests.modelOf(parent.generationRequestId).catch(() => null);
     const modelId = chooseModelForRatio(ratioId, parentModelId ?? project.modelId, IMAGE_MODELS).model.id;
+    /*
+     * **새로 붙인 사진은 잘리게 두지 않는다**(2026-10-06 독립 리뷰). 고치기 조립은 한도를
+     * 넘으면 뒤에서 자르는데(`edit-job.ts`), 새것은 이번 고치기의 핵심이라 잘리면 값만
+     * 나간다. 고칠 그림이 한 칸을 쓴다. 원래 작업의 원본 사진은 잘려도 된다 — 보조다.
+     */
+    const room = (IMAGE_MODELS.find((model) => model.id === modelId)?.maxReferenceImages ?? Infinity) - 1;
+    if (addedUrls.length > room) {
+      return Response.json(
+        { ok: false, message: `이 이미지를 만든 모델은 고칠 때 사진을 ${room}장까지 받습니다. 붙인 사진을 줄여 주세요.` },
+        { status: 400 },
+      );
+    }
     const job = planEditJob({
       projectId: id,
       parentImageId: parent.id,
@@ -158,7 +202,7 @@ async function handlePost(request: Request, context: Context) {
       // `match-source` 작업은 크기를 안 넘기면 거절된다(설계 §10 3-b).
       sourceSize: editSourceSize(ratioId, project.data.adMaster, parent),
       slots: project.data.slots,
-      ...editAttachmentInputs(project.data, preserved, preservedUrlById),
+      ...withAddedAttachments(editAttachmentInputs(project.data, preserved, preservedUrlById), addedUrls),
     });
 
     /**

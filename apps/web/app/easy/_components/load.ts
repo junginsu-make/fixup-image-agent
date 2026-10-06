@@ -6,6 +6,7 @@ import { easyStoreForUser } from "../../../lib/easy/store";
 import { posterStoresForUser } from "../../../lib/poster/stores";
 import { cardnewsProject, type EasyCardnewsProject } from "../../../lib/easy/cardnews-steps";
 import { markDeletedWork } from "../deleted-work";
+import { editedRequestIds, pickRowImage } from "../row-image";
 import type { EasyMessage } from "../turn";
 import { easyRoleSummary, type EasyImageOptions } from "../options";
 
@@ -115,7 +116,9 @@ export async function loadEasyConversation(id: string) {
     for (const row of rows) {
       if (!row.workId) continue;
       const mine = images.filter((image) => image.projectId === row.workId);
-      const pick = mine.find((image) => image.selected) ?? mine[0];
+      // 고친 줄은 그 요청의 그림, 처음 줄은 고친 그림을 뺀 나머지에서 고른다(2026-10-06).
+      // 고친 줄이 없는 대화는 예전 규칙(골라 둔 것, 없으면 첫 장) 그대로다(`row-image.ts`).
+      const pick = pickRowImage(row, mine, editedRequestIds(rows, row.workId));
       if (pick?.url) urls[row.id] = pick.url;
 
       const 카드 = 카드작업.get(row.workId);

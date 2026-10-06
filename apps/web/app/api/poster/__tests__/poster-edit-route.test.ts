@@ -472,3 +472,106 @@ describe("옛 화면이 고칠 그림 없이 보내면", () => {
     expect(reserved).toEqual([]);
   });
 });
+
+/**
+ * **새로 붙인 사진을 넣어 고친다** (2026-10-06 「쉽게」 이미지 고치기).
+ *
+ * 「로고를 이 사진에 있는 로고로 바꿔줘」는 고칠 그림만으로는 못 한다. 화면이
+ * 고치면서 새 사진을 붙여 보내면, 그것을 **지킬 대상(제품)** 으로 맨 앞에 붙인다.
+ * 안 보내는 화면(포스터 「이 장만 고치기」)은 지금과 같다 — 위 시험들이 지킨다.
+ */
+describe("새로 붙인 사진을 넣어 고친다", () => {
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    project.data = { ...project.data, slots: EMPTY_SLOTS };
+  });
+
+  it("붙인 사진을 올려 지킬 대상(제품)으로 붙인다 — 고칠 그림 다음 Image 2", async () => {
+    libraryReferences = [{ id: "logo-1", storagePath: "u1/ref/logo.png" }];
+    const response = await call({ instruction: "로고를 이 로고로 바꿔 주세요", addedReferenceIds: ["logo-1"] });
+    expect(response.status).toBe(200);
+    expect(submitted[0]!.attachments).toEqual([{ url: "https://fal/ref-1.png", role: "preserve_product" }]);
+    const built = (builders[0] as (job: unknown) => { input: Record<string, unknown> })(submitted[0]);
+    expect(built.input.image_urls).toEqual(["https://fal/parent.png", "https://fal/ref-1.png"]);
+  });
+
+  it("원래 작업의 지킬 대상도 함께 간다 — 새로 붙인 것이 먼저", async () => {
+    project.data = { ...project.data, preservedIds: ["person-1"], personIds: ["person-1"], attachmentOrder: ["person-1"] };
+    libraryReferences = [
+      { id: "person-1", storagePath: "u1/ref/person.png" },
+      { id: "logo-1", storagePath: "u1/ref/logo.png" },
+    ];
+    await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: ["logo-1"] });
+    expect(submitted[0]!.attachments).toEqual([
+      { url: "https://fal/ref-2.png", role: "preserve_product" },
+      { url: "https://fal/ref-1.png", role: "preserve_person" },
+    ]);
+  });
+
+  it("차례가 없는 옛 작업에서도 원래 지킬 대상이 사라지지 않는다", async () => {
+    project.data = { ...project.data, preservedIds: ["prod-1"] };
+    libraryReferences = [
+      { id: "prod-1", storagePath: "u1/ref/prod.png" },
+      { id: "logo-1", storagePath: "u1/ref/logo.png" },
+    ];
+    await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: ["logo-1"] });
+    expect(submitted[0]!.attachments).toEqual([
+      { url: "https://fal/ref-2.png", role: "preserve_product" },
+      { url: "https://fal/ref-1.png", role: "preserve_product" },
+    ]);
+  });
+
+  it("볼 수 없는 사진이면 404 — 예약도 제출도 안 한다", async () => {
+    libraryReferences = [];
+    const response = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: ["someone-else"] });
+    expect(response.status).toBe(404);
+    expect(reserved).toEqual([]);
+    expect(submitted).toEqual([]);
+  });
+
+  it("붙인 사진을 못 올리면 조용히 빼지 않고 멈춘다 — 돈이 나가기 전에", async () => {
+    libraryReferences = [{ id: "logo-1", storagePath: "u1/ref/logo.png" }];
+    missingPaths = ["u1/ref/logo.png"];
+    const response = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: ["logo-1"] });
+    expect(response.status).toBe(400);
+    expect(reserved).toEqual([]);
+    expect(submitted).toEqual([]);
+  });
+
+  it("너무 많이 붙이면 받지 않는다", async () => {
+    const response = await call({
+      instruction: "로고를 바꿔 주세요",
+      addedReferenceIds: Array.from({ length: 9 }, (_, index) => `ref-${index}`),
+    });
+    expect(response.status).toBe(400);
+    expect(reserved).toEqual([]);
+  });
+});
+
+describe("붙인 사진이 모델 한도를 넘으면", () => {
+  /*
+   * **조용히 자르지 않는다**(2026-10-06 독립 리뷰). 고치기 조립은 한도를 넘으면 뒤에서
+   * 자르는데, 새로 붙인 것은 이번 고치기의 핵심이다 — 잘리면 값만 나가고 바란 것이 안
+   * 나온다. 경제형은 7장(고칠 그림 빼면 6장)이다.
+   */
+  it("돈이 나가기 전에 몇 장까지 되는지 알리고 멈춘다", async () => {
+    project.ratio = "1:1";
+    parent.generationRequestId = "req-parent";
+    parentRequestModel = "nano-banana";
+    libraryReferences = Array.from({ length: 7 }, (_, index) => ({ id: `logo-${index}`, storagePath: `u1/ref/${index}.png` }));
+    const response = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: libraryReferences.map((one) => one.id) });
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toContain("6장");
+    expect(reserved).toEqual([]);
+    expect(submitted).toEqual([]);
+  });
+
+  it("한도 안이면 그대로 간다", async () => {
+    project.ratio = "1:1";
+    parent.generationRequestId = "req-parent";
+    parentRequestModel = "nano-banana";
+    libraryReferences = Array.from({ length: 6 }, (_, index) => ({ id: `logo-${index}`, storagePath: `u1/ref/${index}.png` }));
+    const response = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: libraryReferences.map((one) => one.id) });
+    expect(response.status).toBe(200);
+  });
+});

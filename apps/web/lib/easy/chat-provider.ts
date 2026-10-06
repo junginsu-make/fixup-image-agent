@@ -43,7 +43,7 @@ const EASY_CHAT_SPEC: StructuredSpec = {
        */
       wants: {
         type: "string",
-        enum: ["image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download"],
+        enum: ["image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download", "image_edit"],
       },
       reply: { type: "string" },
       /*
