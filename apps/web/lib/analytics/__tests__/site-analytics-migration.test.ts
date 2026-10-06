@@ -1,0 +1,95 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+/**
+ * **방문 통계 마이그레이션은 새것만 더한다**(계획 2026-10-06 site-analytics).
+ * 같은 Supabase 를 detail-page-studio 가 본다. 동작은 `scripts/tests/site-analytics*.test.mjs`(실제 PostgreSQL)가 본다.
+ */
+const migrationsDir = fileURLToPath(new URL("../../../../../supabase/migrations/", import.meta.url));
+
+function code(name: string): string {
+  return readFileSync(path.join(migrationsDir, name), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*--.*$/gm, "");
+}
+
+const defined = (sql: string) =>
+  [...sql.matchAll(/create\s+or\s+replace\s+function\s+public\.(\w+)\s*\(/gi)].map((m) => m[1]!.toLowerCase()).sort();
+const revoked = (sql: string, fn: string) =>
+  new RegExp(`revoke\\s+all\\s+on\\s+function\\s+public\\.${fn}\\([^)]*\\)\\s+from\\s+public,\\s*anon,\\s*authenticated`, "i").test(sql);
+const granted = (sql: string, fn: string) =>
+  new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${fn}\\([^)]*\\)\\s+to\\s+service_role`, "i").test(sql);
+
+describe("표·함수 파일", () => {
+  const sql = code("202610060001_site_analytics.sql");
+
+  it("함수 다섯만 정의한다 — 방문자 값은 앱이 만든다", () => {
+    expect(defined(sql)).toEqual([
+      "analytics_cookie_key", "analytics_forget", "analytics_link_cookie", "analytics_prune", "analytics_record",
+    ]);
+    expect(sql).not.toMatch(/analytics_visitor_hash|analytics_salts/i);
+  });
+
+  it("다른 표를 바꾸거나 지우지 않는다", () => {
+    expect(sql).not.toMatch(/\balter\s+table\s+(?!public\.analytics_page_views\b)/i);
+    expect(sql).not.toMatch(/\bdrop\s+(table|function|index)\b/i);
+  });
+
+  it("표는 하나이고, RLS 를 켜고 회원·손님 권한을 거둔다", () => {
+    const tables = [...sql.matchAll(/create\s+table\s+if\s+not\s+exists\s+public\.(\w+)/gi)].map((m) => m[1]);
+    expect(tables).toEqual(["analytics_page_views"]);
+    expect(sql).toMatch(/alter\s+table\s+public\.analytics_page_views\s+enable\s+row\s+level\s+security/i);
+    expect(sql).toMatch(/revoke\s+all\s+on\s+table\s+public\.analytics_page_views\s+from\s+public,\s*anon,\s*authenticated/i);
+  });
+
+  it("바깥에서 부르는 넷은 서비스 권한만, 내부 하나는 아무에게도 주지 않는다", () => {
+    for (const fn of ["analytics_record", "analytics_link_cookie", "analytics_forget", "analytics_prune"]) {
+      expect(revoked(sql, fn), fn).toBe(true);
+      expect(granted(sql, fn), fn).toBe(true);
+    }
+    expect(revoked(sql, "analytics_cookie_key")).toBe(true);
+    expect(granted(sql, "analytics_cookie_key")).toBe(false);
+  });
+
+  it("security definer 함수는 모두 search_path 를 public, pg_temp 로 못 박는다", () => {
+    const bodies = sql.split(/create\s+or\s+replace\s+function/i).slice(1);
+    const definers = bodies.filter((body) => /security\s+definer/i.test(body));
+    expect(definers.length).toBeGreaterThan(0);
+    for (const body of definers) {
+      expect(body).toMatch(/set\s+search_path\s*=\s*public,\s*pg_temp/i);
+    }
+  });
+
+  it("IP·브라우저 정보·쿠키 원래 값 칸이 없다", () => {
+    const table = sql.match(/create\s+table\s+if\s+not\s+exists\s+public\.analytics_page_views\s*\(([\s\S]*?)\n\);/i)?.[1] ?? "";
+    expect(table.length).toBeGreaterThan(0);
+    expect(table).not.toMatch(/\b(ip|user_agent|ua|cookie|fx_vid)\b\s+text/i);
+  });
+});
+
+describe("보고 함수 파일", () => {
+  const report = code("202610060002_site_analytics_report.sql");
+
+  it("admin_site_traffic·admin_site_people 둘만 정의하고 표를 바꾸지 않는다", () => {
+    expect(defined(report)).toEqual(["admin_site_people", "admin_site_traffic"]);
+    expect(report).not.toMatch(/\b(alter|drop)\s+table\b/i);
+  });
+
+  it("서비스 권한만 부른다", () => {
+    for (const fn of ["admin_site_traffic", "admin_site_people"]) {
+      expect(revoked(report, fn), fn).toBe(true);
+      expect(granted(report, fn), fn).toBe(true);
+    }
+  });
+
+  it("security definer 함수는 모두 search_path 를 public, pg_temp 로 못 박는다", () => {
+    const bodies = report.split(/create\s+or\s+replace\s+function/i).slice(1);
+    const definers = bodies.filter((body) => /security\s+definer/i.test(body));
+    expect(definers.length).toBe(2);
+    for (const body of definers) {
+      expect(body).toMatch(/set\s+search_path\s*=\s*public,\s*pg_temp/i);
+    }
+  });
+});

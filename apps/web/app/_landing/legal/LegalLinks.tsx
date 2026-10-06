@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { LEGAL_DOCS, type LegalDoc } from "./documents";
 import { parseLegal } from "./render";
+import { ConsentSettingsButton } from "../../_components/consent-banner";
 
 /**
  * 푸터의 법률 문서 링크와 모달.
@@ -69,6 +70,7 @@ export function LegalLinks() {
             {doc.title}
           </button>
         ))}
+        <ConsentSettingsButton />
       </span>
 
       {open ? (
