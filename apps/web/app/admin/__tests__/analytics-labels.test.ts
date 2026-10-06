@@ -44,3 +44,15 @@ describe("기존 이름표", () => {
     expect(providerLabel("kakao")).toBe("카카오");
   });
 });
+
+describe("물려받은 이름은 이름표가 아니다", () => {
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"])("%s 는 그대로", (key) => {
+    expect(sourceLabel(key)).toBe(key);
+    expect(deviceLabel(key)).toBe(key);
+    expect(browserLabel(key)).toBe(key);
+    expect(providerLabel(key)).toBe(key);
+    expect(pageLabel(key)).toBe(key);
+    expect(pageLabel(`/${key}`)).toBe(`/${key}`);
+    expect(pageLabel(`/${key}/x`)).toBe(`/${key}/x`);
+  });
+});

@@ -62,15 +62,15 @@ describe("지난 기간 읽기", () => {
     await getSiteTraffic(7);
     expect(rpcCalls).toEqual([{ fn: "admin_site_traffic", args: { p_days: 7 } }]);
   });
-  it("지난 기간은 p_now 를 이번 창 바로 앞으로 넘긴다", async () => {
+  it("지난 기간은 p_now 를 days 일 전 같은 시각으로 넘긴다", async () => {
     rpcCalls.length = 0;
     rpcResult = { data: {}, error: null };
     const now = new Date("2026-10-06T03:00:00Z");
     await getSiteTrafficBefore(7, now);
     await getSitePeopleBefore(7, now);
     expect(rpcCalls).toEqual([
-      { fn: "admin_site_traffic", args: { p_days: 7, p_now: "2026-09-29T14:59:59.000Z" } },
-      { fn: "admin_site_people", args: { p_days: 7, p_now: "2026-09-29T14:59:59.000Z" } },
+      { fn: "admin_site_traffic", args: { p_days: 7, p_now: "2026-09-29T03:00:00.000Z" } },
+      { fn: "admin_site_people", args: { p_days: 7, p_now: "2026-09-29T03:00:00.000Z" } },
     ]);
   });
   it("못 읽으면 null", async () => {

@@ -1,16 +1,16 @@
 /**
  * **지난 기간 비교 규칙**(계획 2026-10-06 site-analytics). 순수 함수만 둔다.
- * 지난 기간은 이번 창 바로 앞에 붙고 길이가 같다 — 끝 시각만 정하면 RPC 가 같은 길이로 거슬러 센다.
+ * 지난 기간은 이번 창과 길이·모양이 같다 — 끝 시각만 정하면 RPC 가 같은 길이로 거슬러 센다.
  */
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const DAY_MS = 86_400_000;
 
-/** 이번 창 첫날(한국 날짜, 오늘 - (days-1)) 0시 한국 시각에서 1초 앞. */
+/**
+ * `days` 일 전 **같은 시각**. 이번 창 마지막 날(오늘)은 지금 시각까지만 차 있으니, 지난 창 마지막 날도
+ * 같은 시각까지만 세야 같은 조건으로 견준다(오늘 낮 12시까지를 어제 하루 전체와 견주면 늘 줄어 보인다).
+ * 그 대신 지난 창 마지막 날의 남은 시간은 어느 쪽에도 안 들어간다.
+ */
 export function previousWindowEnd(days: number, now: Date): Date {
-  const kst = new Date(now.getTime() + KST_OFFSET_MS);
-  const todayStartKst = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
-  const firstDayStartUtc = todayStartKst - (days - 1) * DAY_MS - KST_OFFSET_MS;
-  return new Date(firstDayStartUtc - 1000);
+  return new Date(now.getTime() - days * DAY_MS);
 }
 
 export type Change = { kind: "up" | "down" | "same"; percent: number } | { kind: "new" } | { kind: "none" };

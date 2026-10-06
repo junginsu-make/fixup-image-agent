@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { change, changeText, previousWindowEnd } from "../compare";
 
 describe("previousWindowEnd", () => {
-  it("days=7: 이번 창 첫날 한국 0시 1초 전", () => {
-    expect(previousWindowEnd(7, new Date("2026-10-06T03:00:00Z")).toISOString()).toBe("2026-09-29T14:59:59.000Z");
+  it("days=7: 7일 전 같은 시각", () => {
+    expect(previousWindowEnd(7, new Date("2026-10-06T03:00:00Z")).toISOString()).toBe("2026-09-29T03:00:00.000Z");
   });
-  it("days=1: 어제 23:59:59 KST", () => {
-    expect(previousWindowEnd(1, new Date("2026-10-06T03:00:00Z")).toISOString()).toBe("2026-10-05T14:59:59.000Z");
+  it("days=1: 정확히 24시간 전", () => {
+    expect(previousWindowEnd(1, new Date("2026-10-06T03:00:00Z")).toISOString()).toBe("2026-10-05T03:00:00.000Z");
   });
   it("days=30", () => {
-    expect(previousWindowEnd(30, new Date("2026-10-06T03:00:00Z")).toISOString()).toBe("2026-09-06T14:59:59.000Z");
+    expect(previousWindowEnd(30, new Date("2026-10-06T03:00:00Z")).toISOString()).toBe("2026-09-06T03:00:00.000Z");
   });
-  it("한국 0시 직후(UTC 15:00:01)는 한국 날짜가 하루 넘어간다", () => {
-    expect(previousWindowEnd(7, new Date("2026-10-05T15:00:01Z")).toISOString()).toBe("2026-09-29T14:59:59.000Z");
+  it("한국 0시 직후(UTC 15:00:01)도 같은 시각을 지킨다", () => {
+    expect(previousWindowEnd(7, new Date("2026-10-05T15:00:01Z")).toISOString()).toBe("2026-09-28T15:00:01.000Z");
   });
 });
 

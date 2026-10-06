@@ -35,17 +35,21 @@ const BROWSER: Record<string, string> = {
 };
 const PROVIDER: Record<string, string> = { email: "이메일", google: "Google", kakao: "카카오" };
 
-export const sourceLabel = (key: string) => SOURCE[key] ?? SOURCE_BY_HOST.get(key.toLowerCase()) ?? key;
-export const deviceLabel = (key: string) => DEVICE[key] ?? key;
-export const browserLabel = (key: string) => BROWSER[key] ?? key;
-export const providerLabel = (key: string) => PROVIDER[key] ?? key;
+/** 제 칸에 있는 이름만 꺼낸다. `constructor`·`toString` 같은 물려받은 이름이 이름표로 새지 않게. */
+const own = (map: Record<string, string>, key: string): string | undefined => (Object.hasOwn(map, key) ? map[key] : undefined);
+
+export const sourceLabel = (key: string) => own(SOURCE, key) ?? SOURCE_BY_HOST.get(key.toLowerCase()) ?? key;
+export const deviceLabel = (key: string) => own(DEVICE, key) ?? key;
+export const browserLabel = (key: string) => own(BROWSER, key) ?? key;
+export const providerLabel = (key: string) => own(PROVIDER, key) ?? key;
 
 /** 주소 → 한글 이름. 같은 주소가 없으면 가장 긴 앞부분 이름 + 나머지 조각. 아무것도 안 맞으면 주소 그대로. */
 export function pageLabel(path: string): string {
-  if (PAGE[path]) return PAGE[path];
+  const exact = own(PAGE, path);
+  if (exact) return exact;
   const parts = path.split("/").filter(Boolean);
   for (let keep = parts.length - 1; keep >= 1; keep -= 1) {
-    const label = PAGE[`/${parts.slice(0, keep).join("/")}`];
+    const label = own(PAGE, `/${parts.slice(0, keep).join("/")}`);
     if (label) return `${label} · ${parts.slice(keep).map((p) => (p.startsWith(":") ? "하나 보기" : p)).join("/")}`;
   }
   return path;
