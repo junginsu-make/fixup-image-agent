@@ -124,3 +124,26 @@ describe("참고 그림 없이 만들기", () => {
     expect(prompt.length).toBeGreaterThan(400);
   });
 });
+
+/** 2026-10-06 — 「내 캐릭터」가 Image 1, 참고할 그림이 Image 2 다. 순서가 곧 이름표다. */
+describe("내 캐릭터", () => {
+  const 내것 = { base64: "bWluZQ==", mimeType: "image/png" };
+
+  it("내 캐릭터만 있으면 정체성 경로로 한 장 보낸다", async () => {
+    sent.length = 0;
+    await generateCandidates({ ...기본, ownCharacter: 내것 });
+    const { input } = sent[0]!;
+    expect(input.references).toHaveLength(1);
+    expect(input.references[0]!.kind).toBe("person");
+    expect(input.prompt).toMatch(/Reproduce the same character/);
+  });
+
+  it("둘이면 내 캐릭터가 먼저, 참고할 그림이 다음이다", async () => {
+    sent.length = 0;
+    await generateCandidates({ ...기본, look: "auto", ownCharacter: 내것, reference: { role: "style", ...그림 } });
+    const { input } = sent[0]!;
+    expect(input.references.map((entry) => entry.kind)).toEqual(["person", "style"]);
+    expect((input.references[0] as never as { base64: string }).base64).toBe(내것.base64);
+    expect(input.prompt).toMatch(/Image 1 is the user's OWN character/);
+  });
+});

@@ -9,6 +9,7 @@ import {
   userInstructionTail,
 } from "@fixup/shared";
 import type { AspectRatio, ImageModelId } from "./types";
+import { OWN_WITH_EXTRACT_MESSAGE, ownCharacterWithStyleDirective } from "./pdp.character-own";
 
 /**
  * 캐릭터.
@@ -281,13 +282,25 @@ const TALL_ASPECTS: AspectRatio[] = ["9:16", "3:4"];
  * 사람과 캐릭터의 차이는 **등신 비율을 강제하느냐**다. 2등신 캐릭터에
  * `anatomically correct human proportions` 를 요구하면 캐릭터가 사람이 된다.
  */
-function framingDirective(aspectRatio: AspectRatio, kind: CharacterKind) {
+function framingDirective(aspectRatio: AspectRatio, kind: CharacterKind, proportionsFromReference = false) {
   const tall = TALL_ASPECTS.includes(aspectRatio);
   const visible =
     " Keep the primary identifying features clearly visible and in sharp focus.";
 
   if (kind === "object") {
     return " Show the whole object inside the frame, with no hands, no people and no props." + visible;
+  }
+
+  // 레퍼런스가 체형을 정하면 사람·동물 비율을 강요하지 않는다. 둘이 같이 가면
+  // 「2등신 레퍼런스」와 「해부학적으로 정확하게」가 부딪힌다.
+  if (proportionsFromReference) {
+    return tall
+      ? " Compose a full-length view from head to toe with the feet inside the frame. Take the body" +
+        " proportions from the style reference image unless the USER INSTRUCTION says otherwise;" +
+        " do not force realistic anatomy." + visible
+      : " Compose the subject to fit this aspect ratio cleanly — typically a head-to-waist or" +
+        " three-quarter view. Take the body proportions from the style reference image unless the" +
+        " USER INSTRUCTION says otherwise." + visible;
   }
 
   if (kind === "animal") {
@@ -365,6 +378,9 @@ function lookDirective(look: CharacterLook, kind: CharacterKind, hasReference: b
  * **그래서 「그리는 방식」을 뽑아내기에서 뗀다.** 뽑아내는 것은 *누구인가*이고,
  * *어떻게 그리는가*는 아래 `lookDirective` 가 따로 말한다. 색도 나눈다 — 머리·
  * 피부·옷의 색은 그 캐릭터의 것이라 지키고, 그림 전체의 색조는 결이 정한다.
+ *
+ * **레퍼런스 스타일은 몸 비율도 가져온다**(사용자 결정 2026-10-06). 그래서
+ * 「베끼지 말 것」에서 실루엣을 뺐다 — 실루엣이 곧 체형이다.
  */
 function referenceDirective(role: CharacterReferenceRole, kind: CharacterKind) {
   const noun = kind === "object" ? "object" : "character";
@@ -384,9 +400,10 @@ function referenceDirective(role: CharacterReferenceRole, kind: CharacterKind) {
     );
   }
   return (
-    " The supplied reference image is a STYLE reference. Imitate only its rendering style," +
-    " line quality, shading, colour palette and overall finish." +
-    ` Do not copy the ${noun} in it — its face, silhouette, outfit, markings and props are not` +
+    " The supplied reference image is a STYLE reference. Imitate its rendering style," +
+    " line quality, shading, colour palette and overall finish, and its body proportions —" +
+    " the same head-to-body ratio and overall figure shape." +
+    ` Do not copy the ${noun} in it — its face, outfit, markings and props are not` +
     " yours to reuse. Create a new subject that matches the description below."
   );
 }
@@ -446,10 +463,19 @@ export function buildCandidatePrompt(input: {
   look?: CharacterLook;
   /** 첨부한 그림이 있을 때만. 없으면 첨부 이야기를 아예 하지 않는다. */
   referenceRole?: CharacterReferenceRole;
+  /**
+   * 「내 캐릭터」 칸에 그림이 있는가. 그 그림이 references 의 맨 앞(Image 1)이다.
+   * 혼자면 뽑아내기와 같고, `referenceRole: "style"` 과 함께면 두 장 지시가 된다.
+   */
+  ownCharacter?: boolean;
   /** 옛 호출. `look` 이 있으면 무시된다. */
   photoreal?: boolean;
 }) {
   const { kind, look } = resolve(input);
+  if (input.ownCharacter && input.referenceRole === "extract") throw new Error(OWN_WITH_EXTRACT_MESSAGE);
+  // 내 캐릭터만 있으면 뽑아내기와 같다. 둘이면 두 장 지시를 쓴다.
+  const role = input.ownCharacter && !input.referenceRole ? "extract" : input.referenceRole;
+  const pair = Boolean(input.ownCharacter && role === "style");
   const noun = kind === "object" ? "object" : "character";
   return (
     // 사용자가 친 말이 **맨 앞**이다. 종류·결은 고르는 값이고 이것은 직접 친
@@ -466,7 +492,7 @@ export function buildCandidatePrompt(input: {
 ` +
     `Create exactly one original fictional ${noun}. Preserve the identity-defining ` +
     `traits from the USER INSTRUCTION above consistently. Do not add a second ${noun}.` +
-    (input.referenceRole ? referenceDirective(input.referenceRole, kind) : "") +
+    (pair ? ownCharacterWithStyleDirective(kind) : role ? referenceDirective(role, kind) : "") +
     ` Show it as ${angleDirective("front", kind)}.` +
     PLAIN_BACKGROUND +
     SINGLE_POSE +
@@ -481,18 +507,18 @@ export function buildCandidatePrompt(input: {
      * 살면 화면을 안 거치는 길로 샌다 — API 직접 호출, 첨부를 뺐다 다시
      * 붙이기(2026-09-17 리뷰).
      */
-    lookDirective(look, kind, input.referenceRole === "style") +
+    lookDirective(look, kind, role === "style") +
     // 첨부가 있을 때만 순위를 밝힌다. 없는데 「레퍼런스보다 세다」고 말하면
     // 모델이 있지도 않은 첨부를 찾는다.
-    (input.referenceRole
-      ? ` ${priorityLine({ hasUserInstruction: true, hasPreserved: input.referenceRole === "extract" })}`
+    (role
+      ? ` ${priorityLine({ hasUserInstruction: true, hasPreserved: role === "extract" || pair })}`
       : "") +
     // 다시 못 박는 자리는 구도 **바로 앞**이다. 맨 뒤가 더 세지만, 구도를 맨
     // 뒤에 두는 것은 2026-09-04 실측으로 정한 것이라 그 자리를 뺏지 않는다 —
     // 결 지시를 길게 붙였더니 앞쪽 구도 지시가 밀려 전신으로 뽑으라는 말이
     // 무시됐다(발이 프레임 밖으로 나갔다).
     ` ${userInstructionTail(input.description)}` +
-    framingDirective(input.aspectRatio, kind)
+    framingDirective(input.aspectRatio, kind, role === "style")
   );
 }
 

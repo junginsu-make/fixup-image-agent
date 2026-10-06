@@ -22,6 +22,11 @@ import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { lookAfterRole, roleAfterLook } from "./look-role";
 import { useOpenedCharacter } from "./use-opened-character";
 import { OpenedNotice } from "./opened-notice";
+import { OwnCharacterField } from "./OwnCharacterField";
+import {
+  IMAGES_TOO_LARGE_MESSAGE, OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, imagesTooLarge, lookLockedByPair, roleWithOwn,
+} from "./own-character";
+import { readImageBlob, type ReadImage } from "./read-image";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
@@ -105,7 +110,7 @@ const REFERENCE_ROLES = [
    * 「레퍼런스 스타일」이라 부르고 있었다 — 한 스위치가 두 이름을 갖고 있었다
    * (2026-09-17 사용자 요청). 이름표는 공용에서 가져온다.
    */
-  { id: "style", label: IMAGE_LOOK_LABEL.auto, hint: "화풍·색·질감만 가져오고 대상은 새로 만듭니다" },
+  { id: "style", label: IMAGE_LOOK_LABEL.auto, hint: "화풍과 몸 비율(등신)을 가져오고 대상은 새로 만듭니다" },
 ] as const;
 
 type ReferenceRole = (typeof REFERENCE_ROLES)[number]["id"];
@@ -159,6 +164,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   const [look, setLook] = useState<Look>("photoreal");
   const [modelId, setModelId] = useState("");
   const [attached, setAttachedRaw] = useState<Attached | null>(null);
+  /** 「내 캐릭터」 칸. 있으면 참고할 그림은 레퍼런스 스타일로만 쓴다(`own-character.ts`). */
+  const [own, setOwnRaw] = useState<(ReadImage & { libraryId?: string }) | null>(null);
 
   /**
    * 붙인 그림이 바뀌면 **그림체도 따라 맞춘다.**
@@ -173,9 +180,18 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 각자 고치면 언젠가 한 곳이 빠진다. 여기 하나로 모은다.
    */
   function setAttached(next: Attached | null) {
-    setAttachedRaw(next);
+    const role = next ? roleWithOwn(next.role, Boolean(own)) : null;
+    setAttachedRaw(next && role ? { ...next, role } : null);
     // 첨부가 없으면 「뽑아내기」와 같다 — 따라갈 그림이 없다.
-    setLook((current) => lookAfterRole(next?.role ?? "extract", current));
+    setLook((current) => lookAfterRole(role ?? "extract", current));
+  }
+
+  /** 내 캐릭터를 넣고 빼는 길도 한곳에 모은다. 역할·그림체를 같이 맞춘다. */
+  function setOwn(next: (ReadImage & { libraryId?: string }) | null) {
+    setOwnRaw(next);
+    const role = attached ? roleWithOwn(attached.role, Boolean(next)) : null;
+    if (attached && role && role !== attached.role) setAttachedRaw({ ...attached, role });
+    setLook((current) => lookAfterRole(role ?? "extract", current));
   }
   const [library, setLibrary] = useState<LibraryImage[]>([]);
 
@@ -198,7 +214,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 그림과 어긋나지 않아야 한다.
    */
   const [chosen, setChosen] = useState<
-    (Candidate & { description: string; name: string; kind: Kind; look: Look; modelId: string }) | null
+    (Candidate & { description: string; identity: string; name: string; kind: Kind; look: Look; modelId: string }) | null
   >(null);
   const [busy, setBusy] = useState<"" | "candidates" | "create">("");
   /** 각도를 만드는 동안 자리를 잡아 둘 칸. 비면 만드는 중이 아니다. */
@@ -272,7 +288,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setLook(lookAfterRole("extract", values.look as Look));
     if (!front) return;
     setChosen({
-      ...front, description: values.description, name: values.name,
+      ...front, description: values.description, identity: "", name: values.name,
       kind: values.kind as Kind, look: values.look as Look, modelId: "",
     });
   }, []);
@@ -297,13 +313,18 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     role: ReferenceRole,
     libraryId?: string,
   ): Promise<Attached> {
-    const buffer = await source.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]!);
-    const base64 = btoa(binary);
-    const mimeType = source.type || "image/png";
-    return { url: `data:${mimeType};base64,${base64}`, base64, mimeType, role, libraryId };
+    return { ...(await readImageBlob(source)), role, libraryId };
+  }
+
+  /** 올린 그림은 라이브러리에도 넣는다. 다음에 다시 쓸 수 있어야 한다. */
+  async function saveToLibrary(file: File) {
+    const form = new FormData();
+    form.set("id", randomId());
+    form.set("title", file.name.replace(/\.[^.]+$/, ""));
+    form.set("purpose", "both");
+    form.set("file", file);
+    await fetch("/api/reference-images", { method: "POST", body: form });
+    await loadLibrary();
   }
 
   async function attachFile(files: FileList | null) {
@@ -312,18 +333,34 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setMessage("");
     try {
       setAttached(await readAsAttached(file, attached?.role ?? DEFAULT_ROLE));
-      // 올린 그림은 라이브러리에도 넣는다. 다음에 다시 쓸 수 있어야 한다.
-      const form = new FormData();
-      form.set("id", randomId());
-      form.set("title", file.name.replace(/\.[^.]+$/, ""));
-      form.set("purpose", "both");
-      form.set("file", file);
-      await fetch("/api/reference-images", { method: "POST", body: form });
-      await loadLibrary();
+      await saveToLibrary(file);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     } finally {
       if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function attachOwnFile(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setMessage("");
+    try {
+      setOwn(await readImageBlob(file));
+      await saveToLibrary(file);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
+    }
+  }
+
+  async function attachOwnFromLibrary(image: { id: string; url: string | null }) {
+    if (!image.url) return setMessage("이 그림은 미리보기가 없어 쓸 수 없습니다.");
+    if (own?.libraryId === image.id) return setOwn(null);
+    try {
+      const response = await fetch(image.url);
+      setOwn({ ...(await readImageBlob(await response.blob())), libraryId: image.id });
+    } catch {
+      setMessage("그림을 불러오지 못했습니다.");
     }
   }
 
@@ -349,6 +386,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    */
   const handleCandidates = async () => {
     if (!description.trim()) return setMessage("무엇을 만들지 적어 주세요.");
+    // 요청 상한(16MB)을 넘으면 서버가 본문을 잘라 엉뚱한 오류가 난다. 그림은 줄이지 않고 막는다.
+    if (imagesTooLarge(attached, own)) return setMessage(IMAGES_TOO_LARGE_MESSAGE);
     setBusy("candidates");
     setMessage("");
     setChosen(null);
@@ -360,17 +399,20 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
           candidates: 1,
           modelId: modelId || undefined,
           reference: attached
-            ? { role: attached.role, base64: attached.base64, mimeType: attached.mimeType }
+            ? { role: roleWithOwn(attached.role, Boolean(own)), base64: attached.base64, mimeType: attached.mimeType }
             : undefined,
+          ownCharacter: own ? { base64: own.base64, mimeType: own.mimeType } : undefined,
         }),
-      })).json() as { ok?: boolean; candidates?: Candidate[]; message?: string };
+      })).json() as {
+        ok?: boolean; candidates?: Candidate[]; message?: string; brief?: { identity?: string };
+      };
 
       const made = body.candidates?.[0];
       if (!body.ok || !made) return setMessage(body.message ?? "정면을 만들지 못했습니다.");
 
       // 만들 때 쓸 값을 함께 얼려 둔다 — 뒤에 왼쪽 칸을 건드려도 이미 나온
       // 그림과 어긋나지 않아야 한다.
-      setChosen({ ...made, description, name, kind, look, modelId });
+      setChosen({ ...made, description, identity: body.brief?.identity || description, name, kind, look, modelId });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "정면을 만들지 못했습니다.");
     } finally {
@@ -388,6 +430,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setDescription("");
     setName("");
     setAttached(null);
+    // 날것으로 비운다 — setOwn 은 낡은 attached 로 그림체를 다시 레퍼런스 스타일로 돌린다.
+    setOwnRaw(null);
     setMessage("");
   };
 
@@ -421,6 +465,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
           name: (chosen.name.trim() || chosen.description).slice(0, 40),
           chosenBase64: chosen.base64,
           chosenMimeType: chosen.mimeType,
+          identityPrompt: chosen.identity || undefined,
         }),
       })).json() as {
         ok?: boolean; id?: string; message?: string; missingAngles?: number; referenceIssue?: string;
@@ -610,7 +655,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       있다는 것을 알 길이 없다 — 포스터에서 그렇게 했다가
                       사용자가 「그게 어디 있냐」고 물었다(2026-09-16).
                     */
-                    const blocked = lookBlockedReason(entry, Boolean(attached));
+                    const pairLock = entry === "auto" ? "" : lookLockedByPair(Boolean(own), Boolean(attached));
+                    const blocked = pairLock || lookBlockedReason(entry, Boolean(attached));
                     return (
                       <Button
                         key={entry} type="button" size="sm"
@@ -636,6 +682,11 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <p className="text-[11px] leading-snug text-subtle-foreground">
                     「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
                     {lookBlockedReason("auto", Boolean(attached))}
+                  </p>
+                ) : null}
+                {lookLockedByPair(Boolean(own), Boolean(attached)) ? (
+                  <p className="text-[11px] leading-snug text-subtle-foreground">
+                    {lookLockedByPair(Boolean(own), Boolean(attached))}
                   </p>
                 ) : null}
               </fieldset>
@@ -689,7 +740,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 <span className="flex-none text-meta text-subtle-foreground">무엇을 만들까요</span>
                 <Textarea
                   className="min-h-[7rem] flex-1 resize-none"
-                  value={description} disabled={locked}
+                  value={description} disabled={locked} maxLength={2000}
                   placeholder={
                     kind === "person" ? "예: 30대 후반 한국인 여성, 단발머리, 베이지색 니트, 차분한 표정"
                       : kind === "animal" ? "예: 주황색 줄무늬 고양이, 초록 눈, 목에 파란 스카프"
@@ -698,13 +749,24 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   }
                   onChange={(event) => setDescription(event.target.value)}
                 />
-                {/* 장식이 아니다. 적은 말이 그대로 모델로 간다는 것과 종류가 묘사를
+                {/* 장식이 아니다. 적은 말이 정리되어 간다는 것과 종류가 묘사를
                     이기지 않는다는 것을 모르면, 엉뚱한 결과를 보고도 원인을 찾을 수 없다. */}
                 <p className="flex-none text-[11px] leading-snug text-subtle-foreground">
-                  적은 말이 <strong>그대로</strong> 모델로 갑니다. 한국어 그대로 보내고,
+                  적은 말을 AI 가 <strong>정리해서</strong> 모델에 보냅니다. 「3등신」 같은 말도 풀어서 전합니다.
                   <strong> 종류는 묘사에 맞춰</strong> 고르세요.
                 </p>
               </label>
+              <OwnCharacterField
+                value={own}
+                locked={locked}
+                library={library.map((image) => ({
+                  id: image.id, title: image.title, url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
+                }))}
+                onUpload={(files) => void attachOwnFile(files)}
+                onPickLibrary={(image) => void attachOwnFromLibrary(image)}
+                onClear={() => setOwn(null)}
+                onReloadLibrary={() => void loadLibrary()}
+              />
 
             </CardContent>
             {/* 단추는 늘 보이는 바닥에 둔다. 굴려 내려가야 나오면 흐름이 끊긴다. */}
@@ -761,7 +823,9 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       <span className="text-meta text-subtle-foreground">이 그림의 역할</span>
                       {REFERENCE_ROLES.map((role) => (
                         <Button
-                          key={role.id} type="button" size="sm" disabled={locked}
+                          key={role.id} type="button" size="sm"
+                          disabled={locked || (role.id === "extract" && Boolean(own))}
+                          title={role.id === "extract" && own ? OWN_EXTRACT_BLOCKED : undefined}
                           variant={attached.role === role.id ? "default" : "secondary"}
                           onClick={() => {
                             setAttached({ ...attached, role: role.id });
@@ -783,7 +847,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       </button>
                     </div>
                     <p className="mt-1 text-[11px] leading-snug text-subtle-foreground">
-                      {REFERENCE_ROLES.find((role) => role.id === attached.role)?.hint}
+                      {own ? OWN_STYLE_HINT : REFERENCE_ROLES.find((role) => role.id === attached.role)?.hint}
                     </p>
                   </div>
                 </>

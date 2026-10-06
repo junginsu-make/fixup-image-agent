@@ -171,6 +171,8 @@ export async function generateCandidates(input: {
   look: CharacterLook;
   modelId?: ImageModelId;
   reference?: CharacterReferenceInput;
+  /** 「내 캐릭터」 칸의 그림. 있으면 references 맨 앞(Image 1)이다. */
+  ownCharacter?: { base64: string; mimeType: string };
   /** 1~3. 안 주면 2장. */
   candidates?: number;
 }) {
@@ -182,8 +184,13 @@ export async function generateCandidates(input: {
     kind: input.kind,
     look: input.look,
     referenceRole: input.reference?.role,
+    ownCharacter: Boolean(input.ownCharacter),
   });
-  const references = input.reference ? [toFalReference(input.reference)] : [];
+  // 순서가 곧 이름표다 — 프롬프트가 「Image 1 = 내 캐릭터」라고 부른다.
+  const references: ReferenceImage[] = [
+    ...(input.ownCharacter ? [{ kind: "person" as const, ...input.ownCharacter }] : []),
+    ...(input.reference ? [toFalReference(input.reference)] : []),
+  ];
 
   const settled = await Promise.allSettled(
     Array.from({ length: count }, () =>
@@ -321,6 +328,8 @@ export async function createCharacter(input: {
   userId: string;
   name: string;
   description: string;
+  /** 정리된 정체성(영어). 없으면 `description` 을 쓴다 — 옛 호출. */
+  identityPrompt?: string;
   aspectRatio: AspectRatio;
   kind: CharacterKind;
   look: CharacterLook;
@@ -348,6 +357,8 @@ export async function createCharacter(input: {
   const characterId = randomUUID();
   const name = input.name.slice(0, 80);
   const createdAt = new Date().toISOString();
+  // 각도와 다시 만들기가 이 말로 그린다. 사용자가 친 말은 `sourcePrompt` 에 그대로 남는다.
+  const identityPrompt = input.identityPrompt?.trim() || input.description;
 
   if (isLocalStoreEnabled()) {
     await insertLocalCharacter({
@@ -355,7 +366,7 @@ export async function createCharacter(input: {
       userId: input.userId,
       name,
       sourcePrompt: input.description,
-      identityPrompt: input.description,
+      identityPrompt,
       kind: input.kind,
       look: input.look,
       createdAt,
@@ -368,7 +379,7 @@ export async function createCharacter(input: {
         user_id: input.userId,
         name,
         source_prompt: input.description,
-        identity_prompt: input.description,
+        identity_prompt: identityPrompt,
         // 옛 칸이다. 결이 실사인지만 담는다 — 종류·결 전체는 kind/look 칸에 있다.
         visual_style: input.look === "photoreal" ? "photoreal" : "illustration",
         kind: input.kind,
@@ -392,7 +403,7 @@ export async function createCharacter(input: {
       ...extraAngles.map((angle) =>
         generateAngle({
           angle,
-          identityPrompt: input.description,
+          identityPrompt,
           aspectRatio: input.aspectRatio,
           kind: input.kind,
           look: input.look,
@@ -403,7 +414,7 @@ export async function createCharacter(input: {
       ),
       ...(wantsSheet
         ? [generateSheet({
-            identityPrompt: input.description,
+            identityPrompt,
             kind: input.kind,
             look: input.look,
             model,
