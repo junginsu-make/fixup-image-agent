@@ -16,7 +16,7 @@ import {
   listCharacters,
 } from "../../../lib/characters";
 import {
-  CHARACTER_ANGLES, CHARACTER_SHEET, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, selectCharacterModel,
+  CHARACTER_ANGLES, CHARACTER_SHEET, DEFAULT_EXTRA_ANGLES, IMAGE_MODELS, OWN_WITH_EXTRACT_MESSAGE, selectCharacterModel,
   type CharacterAngle,
 } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
@@ -61,6 +61,11 @@ const BodySchema = z.object({
   modelId: z.enum(IMAGE_MODELS.map((model) => model.id) as [string, ...string[]]).optional(),
   reference: z.object({
     role: z.enum(["style", "extract"]),
+    base64: z.string().min(1),
+    mimeType: z.string().min(1),
+  }).optional(),
+  /** 「내 캐릭터」 칸. 생김새를 지킬 대상이다. 참고할 그림과 함께면 그 그림은 레퍼런스 스타일이어야 한다. */
+  ownCharacter: z.object({
     base64: z.string().min(1),
     mimeType: z.string().min(1),
   }).optional(),
@@ -159,6 +164,13 @@ async function handlePost(req: Request) {
   const reference = body.reference
     ? { ...body.reference, base64: rawBase64(body.reference.base64) }
     : undefined;
+  const ownCharacter = body.ownCharacter
+    ? { ...body.ownCharacter, base64: rawBase64(body.ownCharacter.base64) }
+    : undefined;
+  // 지킬 대상이 둘이 되면 서로 부딪힌다. 화면이 막지만 화면을 안 거치는 길도 있다.
+  if (ownCharacter && reference?.role === "extract") {
+    return Response.json({ ok: false, message: OWN_WITH_EXTRACT_MESSAGE }, { status: 400 });
+  }
 
   if (body.step === "candidates") {
     // 후보 단계는 후보만 만든다. 각도 몫까지 잡아 두면 크레딧이 모자랄 때
@@ -178,7 +190,7 @@ async function handlePost(req: Request) {
         kind: body.kind,
         look: body.look,
         referenceRole: reference?.role,
-        hasOwnCharacter: false,
+        hasOwnCharacter: Boolean(ownCharacter),
       });
       const result = await generateCandidates({
         description: brief.prompt,
@@ -187,6 +199,7 @@ async function handlePost(req: Request) {
         look: body.look,
         modelId,
         reference,
+        ownCharacter,
         candidates: body.candidates,
       });
       /*

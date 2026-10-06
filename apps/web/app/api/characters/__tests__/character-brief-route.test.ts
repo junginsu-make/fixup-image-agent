@@ -106,3 +106,27 @@ describe("저장", () => {
     expect(calls.create[0]!.identityPrompt).toBe("A cat with one head.");
   });
 });
+
+describe("내 캐릭터", () => {
+  const 내것 = { base64: "bWluZQ==", mimeType: "image/png" };
+
+  it("내 캐릭터와 뽑아내기를 같이 보내면 거절하고 돈을 잡지 않는다", async () => {
+    const response = await post({
+      ...기본, step: "candidates", ownCharacter: 내것,
+      reference: { role: "extract", base64: "Zm9v", mimeType: "image/png" },
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toMatch(/레퍼런스 스타일/);
+    expect(calls.reserve).toBe(0);
+    expect(calls.candidates).toHaveLength(0);
+  });
+
+  it("내 캐릭터를 그림 만들기와 정리에 함께 넘긴다", async () => {
+    await post({
+      ...기본, look: "auto", step: "candidates", ownCharacter: 내것,
+      reference: { role: "style", base64: "Zm9v", mimeType: "image/png" },
+    });
+    expect(calls.candidates[0]!.ownCharacter).toEqual(내것);
+    expect(calls.brief[0]).toMatchObject({ hasOwnCharacter: true, referenceRole: "style" });
+  });
+});

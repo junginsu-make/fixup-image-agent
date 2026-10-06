@@ -171,6 +171,8 @@ export async function generateCandidates(input: {
   look: CharacterLook;
   modelId?: ImageModelId;
   reference?: CharacterReferenceInput;
+  /** 「내 캐릭터」 칸의 그림. 있으면 references 맨 앞(Image 1)이다. */
+  ownCharacter?: { base64: string; mimeType: string };
   /** 1~3. 안 주면 2장. */
   candidates?: number;
 }) {
@@ -182,8 +184,13 @@ export async function generateCandidates(input: {
     kind: input.kind,
     look: input.look,
     referenceRole: input.reference?.role,
+    ownCharacter: Boolean(input.ownCharacter),
   });
-  const references = input.reference ? [toFalReference(input.reference)] : [];
+  // 순서가 곧 이름표다 — 프롬프트가 「Image 1 = 내 캐릭터」라고 부른다.
+  const references: ReferenceImage[] = [
+    ...(input.ownCharacter ? [{ kind: "person" as const, ...input.ownCharacter }] : []),
+    ...(input.reference ? [toFalReference(input.reference)] : []),
+  ];
 
   const settled = await Promise.allSettled(
     Array.from({ length: count }, () =>
