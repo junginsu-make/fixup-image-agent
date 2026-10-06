@@ -50,7 +50,7 @@ describe("동의", () => {
   });
 
   it("x-forwarded-proto 가 망가져도 204, 쿠키는 요청 주소의 https 로 심는다", async () => {
-    const res = await 누르기({ consent: true }, { "x-forwarded-proto": "ht tp" });
+    const res = await 누르기({ consent: true }, { "x-forwarded-host": "formwith.fix-up.kr", "x-forwarded-proto": "ht tp" });
     expect(res.status).toBe(204);
     const cookies = res.headers.getSetCookie();
     expect(cookies).toHaveLength(2);
