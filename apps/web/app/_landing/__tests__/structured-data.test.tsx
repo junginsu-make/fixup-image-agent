@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BUSINESS } from "../legal/business-info";
-import { StructuredData, structuredData } from "../structured-data";
+import { StructuredData, jsonLd, structuredData } from "../structured-data";
 
 /** 검색 결과용 회사·사이트 정보(계획 2026-10-06 seo-search-registration). */
 describe("structuredData", () => {
@@ -28,6 +28,18 @@ describe("StructuredData", () => {
     expect(html.startsWith('<script type="application/ld+json">')).toBe(true);
     const body = html.slice(html.indexOf(">") + 1, html.lastIndexOf("</script>"));
     expect(body).not.toContain("<");
-    expect(JSON.parse(body.replace(/\u003c/g, "<"))).toHaveLength(2);
+    expect(JSON.parse(body)).toHaveLength(2);
+  });
+});
+
+describe("jsonLd", () => {
+  const x = { a: "</script><b>" };
+  it("< 를 남기지 않고 \\u003c 글자로 바꾼다", () => {
+    const out = jsonLd(x);
+    expect(out).not.toContain("<");
+    expect(out).toContain("\\u003c/script>");
+  });
+  it("JSON.parse 로 원래 값이 돌아온다", () => {
+    expect(JSON.parse(jsonLd(x))).toEqual(x);
   });
 });

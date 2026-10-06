@@ -32,7 +32,10 @@ export function structuredData(siteUrl: string = SITE_URL): Array<Record<string,
   ];
 }
 
+export function jsonLd(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 export function StructuredData() {
-  const json = JSON.stringify(structuredData()).replace(/</g, "\u003c");
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />;
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(structuredData()) }} />;
 }
