@@ -14,7 +14,8 @@ import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
-import { pickCollectedImage } from "./row-image";
+import { collectEasyImage } from "./collect";
+import { useEasyResume } from "./use-resume-images";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -67,6 +68,8 @@ interface EasyClientProps {
   ratioId: string;
   /** 줄 id → 카드뉴스 작업(2단계 §8). 다시 열 때 `load.ts` 가 찾아 준다. */
   initialCardnews?: Record<string, CardnewsProjectLike & { title?: string }>;
+  /** 아직 결과를 안 받은 그림 줄 id(2026-10-06 설계 B3). 다시 열 때 이 줄만 이어 받는다(`load.ts`). */
+  initialPending?: string[];
 }
 
 /** 첨부 한 장. 올린 뒤의 모습이다. */
@@ -91,6 +94,7 @@ export function EasyClient({
   defaultImageModel,
   ratioId,
   initialCardnews,
+  initialPending,
 }: EasyClientProps) {
   const creditPolicy = useCreditPolicy();
   const router = useRouter();
@@ -146,6 +150,13 @@ export function EasyClient({
   const bottom = React.useRef<HTMLDivElement>(null);
   const alive = React.useRef(true);
   React.useEffect(() => () => { alive.current = false; }, []);
+  // 다시 열면 아직 결과를 안 받은 줄을 이어 받는다(2026-10-06 설계 B3). 만든 직후와 같은 받기 함수다.
+  const failed = useEasyResume({
+    messages: initialMessages, urls: initialUrls ?? {}, cardnewsIds: new Set(Object.keys(initialCardnews ?? {})),
+    pendingIds: new Set(initialPending ?? []),
+    isAlive: () => alive.current,
+    onImage: (rowId, image) => setUrls((current) => ({ ...current, [rowId]: image.url })),
+  });
 
   const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
   const shown = messages.length ? messages : [인사];
@@ -407,7 +418,7 @@ export function EasyClient({
       setMessages((current) => [...current, { id: 자리, role: "image", body: "" }]);
 
       // 결과는 기존 status 라우트에 물어 받는다. 포스터 화면과 같은 길이다.
-      const image = await collect(body.projectId, body.submission);
+      const image = await collectEasyImage(body.projectId, body.submission, () => alive.current);
       if (!alive.current) return;
       if (image) {
         setUrls((current) => ({ ...current, [자리]: image.url }));
@@ -446,39 +457,6 @@ export function EasyClient({
     }
   }
 
-  /** 기존 `status` 라우트에 물어 결과를 받는다. */
-  async function collect(
-    projectId: string,
-    submission: { requestRowId: string; falRequestId: string; endpoint: string; estimatedUsd?: number },
-  ): Promise<{ id: string; url: string } | undefined> {
-    const body = {
-      requestRowId: submission.requestRowId,
-      falRequestId: submission.falRequestId,
-      endpoint: submission.endpoint,
-      unitCostUsd: submission.estimatedUsd ?? 0,
-    };
-    for (;;) {
-      if (!alive.current) return undefined;
-      await new Promise((resolve) => setTimeout(resolve, 10_000));
-      if (!alive.current) return undefined;
-      /*
-        결과를 묻는 자리다. 예약이 아니라 **정산**이라 열쇠를 요구하지 않지만,
-        포스터 화면과 같은 길(`billableFetch`)로 보내 둔다 — 한 화면에서 두
-        길을 쓰면 어느 쪽이 무엇이었는지 다음 사람이 다시 알아봐야 한다.
-      */
-      const poll = await (await billableFetch(`/api/poster/projects/${projectId}/status`, {
-        body: JSON.stringify(body),
-      })).json();
-      observeAccountResponse(poll, false);
-      if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
-      if (poll.done) {
-        // 이번 요청의 그림 — 고치기는 같은 작업에 그림을 더해 첫 장이 원본이다(`row-image.ts`).
-        const first = pickCollectedImage<{ id: string; url: string; generationRequestId?: string }>(poll.images, submission.requestRowId);
-        return first ? { id: first.id, url: first.url } : undefined;
-      }
-    }
-  }
-
   return (
     <div ref={split} className="flex min-h-0 min-w-0 flex-1">
       {/* ── 가운데: 대화와 입력 ── */}
@@ -513,6 +491,7 @@ export function EasyClient({
               /* 대화에서 눌러도 같은 벌이 열린다. 그 자리에서 시작할 뿐이다. */
               onOpenImage={() => openViewer(results.findIndex((one) => one.id === message.id))}
               cardnews={cardnews.rowProps(message.id, turn.busy)}
+              failed={failed[message.id]}
             />
           ))}
 
@@ -786,7 +765,7 @@ export function EasyClient({
             images={results}
             width={resultWidth}
             /* 자리는 잡혔는데 주소가 아직 없으면 만드는 중이다. */
-            working={cardnews.working || shown.some((one) => one.role === "image" && !urls[one.id] && !cardnews.views[one.id])}
+            working={cardnews.working || shown.some((one) => one.role === "image" && !urls[one.id] && !cardnews.views[one.id] && !failed[one.id])}
             onOpen={openViewer}
           />
         </>

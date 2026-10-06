@@ -152,6 +152,7 @@ export function EasyMessageRow({
   imageUrl,
   onOpenImage,
   cardnews,
+  failed,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
@@ -159,6 +160,8 @@ export function EasyMessageRow({
   onOpenImage?: () => void;
   /** 카드뉴스 원고 줄이면 그 작업(2단계 §7). 그림 한 장 대신 원고 카드를 그린다. */
   cardnews?: React.ComponentProps<typeof EasyCardnewsCard>;
+  /** 다시 열어 이어 받다가 못 받은 까닭(2026-10-06 설계 B3 · B5). 있으면 「만들고 있습니다」 대신 보인다. */
+  failed?: string;
 }) {
   if (message.role === "user") {
     return (
@@ -236,6 +239,10 @@ export function EasyMessageRow({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt="만든 이미지" className="block max-h-64 w-auto" />
         </button>
+      ) : failed ? (
+        <p role="alert" className="max-w-64 whitespace-pre-wrap break-words rounded-2xl rounded-bl-md border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-base leading-7 text-destructive">
+          {failed}
+        </p>
       ) : (
         <EasyImageWorking />
       )}

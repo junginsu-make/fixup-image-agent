@@ -65,6 +65,24 @@ export function rowJobOf(body: string | null | undefined): EasyRowJob | undefine
   }
 }
 
+type JobRow = { id: string; role: string; body?: string | null };
+
+/** 그림 줄들의 받을 정보 요청 번호(설계 B3). 서버가 이것으로 끝났는지 묻는다. */
+export function rowJobRequestIds(rows: ReadonlyArray<JobRow>): string[] {
+  return rows.flatMap((row) => {
+    const job = row.role === "image" ? rowJobOf(row.body) : undefined;
+    return job ? [job.requestRowId] : [];
+  });
+}
+
+/** 안 끝난 요청(`unfinished`)을 가리키는 그림 줄 id. 화면은 이 줄만 이어 받는다. */
+export function pendingJobRowIds(rows: ReadonlyArray<JobRow>, unfinished: ReadonlySet<string>): string[] {
+  return rows.flatMap((row) => {
+    const job = row.role === "image" ? rowJobOf(row.body) : undefined;
+    return job && unfinished.has(job.requestRowId) ? [row.id] : [];
+  });
+}
+
 /**
  * 고친 줄에 남길 글.
  *

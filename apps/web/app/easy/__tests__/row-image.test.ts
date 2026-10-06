@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, pickCollectedImage, pickRowImage, rowJobOf,
-  withRowJob,
+  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, pendingJobRowIds, pickCollectedImage, pickRowImage,
+  rowJobOf, rowJobRequestIds, withRowJob,
 } from "../row-image";
 
 /**
@@ -134,9 +134,9 @@ describe("화면이 결과를 받을 때", () => {
    */
   it("이번 요청 번호로 결과 그림을 고른다", async () => {
     const { readFileSync } = await import("node:fs");
-    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
-    expect(화면).toMatch(/pickCollectedImage(<[^>]*>)?\(poll\.images, submission\.requestRowId\)/);
-    expect(화면).not.toContain("poll.images?.[0]");
+    const 받기 = readFileSync(new URL("../collect.ts", import.meta.url), "utf8");
+    expect(받기).toMatch(/pickCollectedImage(<[^>]*>)?\(poll\.images, submission\.requestRowId\)/);
+    expect(받기).not.toContain("poll.images?.[0]");
   });
 });
 
@@ -180,5 +180,25 @@ describe("받을 정보 (B3)", () => {
     expect(rowJobOf(editRowBody("r2"))).toBeUndefined();
     expect(rowJobOf(";job=a,b")).toBeUndefined();
     expect(rowJobOf(";job=%E0%A4%A,b,c")).toBeUndefined();
+  });
+});
+
+describe("아직 안 받은 줄 (B3, 최종 리뷰 2026-10-06)", () => {
+  const 일감 = (requestRowId: string) => ({ requestRowId, falRequestId: "f", endpoint: "e" });
+  const rows = [
+    { id: "u", role: "user", body: "포스터" },
+    { id: "a", role: "image", body: withRowJob("", 일감("r1")) },
+    { id: "b", role: "image", body: withRowJob(editRowBody("r1"), 일감("r2")) },
+    { id: "c", role: "image", body: "" }, // 옛 줄 — 받을 정보가 없다
+    { id: "d", role: "assistant", body: withRowJob("", 일감("r9")) }, // 그림 줄이 아니다
+  ];
+
+  it("그림 줄의 요청 번호를 모은다", () => {
+    expect(rowJobRequestIds(rows)).toEqual(["r1", "r2"]);
+  });
+
+  it("안 끝난 요청의 그림 줄 id 만 준다", () => {
+    expect(pendingJobRowIds(rows, new Set(["r2", "r9"]))).toEqual(["b"]);
+    expect(pendingJobRowIds(rows, new Set())).toEqual([]);
   });
 });

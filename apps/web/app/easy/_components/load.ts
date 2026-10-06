@@ -5,8 +5,9 @@ import { requireActiveMember } from "../../../lib/membership/server";
 import { easyStoreForUser } from "../../../lib/easy/store";
 import { posterStoresForUser } from "../../../lib/poster/stores";
 import { cardnewsProject, type EasyCardnewsProject } from "../../../lib/easy/cardnews-steps";
+import { unfinishedPosterRequests } from "../../../lib/easy/pending-requests";
 import { markDeletedWork } from "../deleted-work";
-import { editedRequestIds, pickRowImage } from "../row-image";
+import { editedRequestIds, pendingJobRowIds, pickRowImage, rowJobRequestIds } from "../row-image";
 import type { EasyMessage } from "../turn";
 import { easyRoleSummary, type EasyImageOptions } from "../options";
 
@@ -75,6 +76,11 @@ export async function loadEasyConversation(id: string) {
 
   const rows = await store.listMessages(id);
   const projectIds = [...new Set(rows.map((row) => row.workId).filter(Boolean) as string[])];
+  /*
+   * **아직 결과를 안 받은 그림 줄**(2026-10-06 설계 B3, 최종 리뷰). 화면은 이 줄만 이어
+   * 받는다 — 끝난 요청을 다시 물으면 `status` 가 결과를 또 저장하고 또 정산한다.
+   */
+  const pending = pendingJobRowIds(rows, await unfinishedPosterRequests(membership.user.id, rowJobRequestIds(rows)));
 
   /*
    * 골라 둔 것이 있으면 그것을, 없으면 첫 장을 보인다. 04 가 없는 모드라
@@ -145,5 +151,5 @@ export async function loadEasyConversation(id: string) {
     ...(row.workId ? { workId: row.workId } : {}),
   })), 아는작업);
 
-  return { conversation, messages, urls, options, cardnews };
+  return { conversation, messages, urls, options, cardnews, pending };
 }
