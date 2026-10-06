@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /**
- * 관리자 화면의 세 탭(2026-09-22 사용자 요청).
+ * 관리자 화면의 네 탭(2026-09-22 사용자 요청, 「방문 분석」은 2026-10-06).
  *
  * 전에는 `/admin` 한 장에 회원 목록과 시스템 설정이 섞여 있었고, 크레딧 관리
  * (`/admin/members`)와 비용 전략은 상단 버튼으로 따로 들어가는 화면이었다.
@@ -18,6 +18,7 @@ export const ADMIN_TABS = [
   { href: "/admin", label: "회원 관리" },
   { href: "/admin/system", label: "시스템 관리" },
   { href: "/admin/cost-lab", label: "비용 전략" },
+  { href: "/admin/analytics", label: "방문 분석" },
 ] as const;
 
 /** 지금 주소가 어느 탭인가. 긴 주소가 이긴다 — `/admin` 은 모든 관리자 주소의 앞부분이다. */

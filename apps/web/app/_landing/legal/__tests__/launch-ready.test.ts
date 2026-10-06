@@ -11,6 +11,8 @@ import {
   SESSION_START_COOKIE_MAX_AGE_S,
   sessionStartValue,
 } from "../../../../lib/auth/session-window";
+import { ANALYTICS_KEEP_DAYS } from "../../../../lib/analytics/retention";
+import { ANALYTICS_COOKIE_DAYS, CONSENT_COOKIE, VISITOR_COOKIE } from "../../../../lib/analytics/consent";
 
 /**
  * **게시해도 되는 상태인가**(2026-09-29).
@@ -271,7 +273,7 @@ describe("쿠키", () => {
 
   /** 코드가 심는 쿠키가 처리방침에 없으면 알리지 않고 저장한 것이다. */
   it("코드가 심는 쿠키를 모두 적는다", () => {
-    for (const 이름 of ["sb-", SESSION_START_COOKIE, 프로젝트쿠키]) {
+    for (const 이름 of ["sb-", SESSION_START_COOKIE, 프로젝트쿠키, CONSENT_COOKIE, VISITOR_COOKIE]) {
       expect(방침, `${이름} 쿠키가 처리방침에 없다`).toContain(이름);
     }
   });
@@ -281,14 +283,37 @@ describe("쿠키", () => {
     expect(방침).toContain(`${프로젝트일수}일`);
   });
 
-  /** 분석·광고 도구를 안 쓴다고 적었으면, 실제로 안 들어와 있어야 한다. */
-  it("분석·광고 쿠키를 안 쓴다고 적고, 실제로 그런 도구가 없다", () => {
-    expect(방침).toContain("분석·광고 목적의 쿠키를 사용하지 않습니다");
+  /** 광고 쿠키를 안 쓰고 외부 분석 도구도 없다. 방문 분석 쿠키는 우리 것(fx_vid) 하나, 동의한 경우에만. */
+  it("광고 쿠키를 안 쓴다고 적고, 외부 분석·광고 도구가 없다", () => {
+    expect(방침).toContain("광고 목적의 쿠키를 사용하지 않습니다");
+    expect(방침).toContain("동의한 경우에만 저장");
 
     const 패키지 = read(web, "package.json");
     for (const 도구 of ["@vercel/analytics", "posthog", "@next/third-parties", "mixpanel", "react-ga"]) {
       expect(패키지, `${도구} 가 들어왔다 — 처리방침 제11조를 고친다`).not.toContain(도구);
     }
+  });
+
+  /** 방문 통계를 적었으면, 적은 대로 동작해야 한다(계획 2026-10-06 site-analytics). */
+  it("방문 통계의 보유기간·쿠키 기간·저장하지 않는 것이 코드와 같다", () => {
+    expect(방침).toContain("| 서비스 이용 통계 |");
+    expect(방침).toContain(`수집일부터 ${ANALYTICS_KEEP_DAYS}일`);
+    expect(방침).toContain(`| ${VISITOR_COOKIE} (쿠키) |`);
+    expect(방침).toContain(`| ${CONSENT_COOKIE} (쿠키) |`);
+    expect(방침).toContain(`${ANALYTICS_COOKIE_DAYS}일`);
+    expect(방침).toContain("「방문 통계 설정」");
+    // 방문자 값은 서버 메모리 열쇠로 만든다(lib/analytics/visitor.ts) — 문구가 그 사실과 같아야 한다.
+    expect(방침).toContain("서버 메모리에만 두고 날마다 바꾸는");
+    expect(방침).toContain("방문 분석 쿠키 없이 처리합니다");
+    expect(방침).toContain("로그인한 회원의 방문은 회원 식별번호로 기록합니다");
+    expect(방침).not.toContain("그 무작위 값은 다음 날 지웁니다");
+
+    const 보내기 = read(web, "app", "_components", "page-view-tracker.tsx");
+    for (const 저장 of ["document.cookie", "localStorage", "sessionStorage", "indexedDB"]) {
+      expect(보내기, `방문 통계 보내기가 ${저장} 를 쓴다 — 처리방침 제11조를 고친다`).not.toContain(저장);
+    }
+    const 띠 = read(web, "app", "_components", "consent-banner.tsx");
+    expect(띠, "동의 띠의 안내 문구가 처리방침과 다르다").toContain("거부해도 모든 기능을 그대로 쓸 수 있습니다");
   });
 });
 

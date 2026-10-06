@@ -13,8 +13,12 @@ const web = join(__dirname, "..", "..", "..");
 const read = (file: string) => readFileSync(join(web, file), "utf8");
 
 describe("탭", () => {
-  it("회원 관리 · 시스템 관리 · 비용 전략 순서다", () => {
-    expect(ADMIN_TABS.map((tab) => tab.label)).toEqual(["회원 관리", "시스템 관리", "비용 전략"]);
+  it("회원 관리 · 시스템 관리 · 비용 전략 · 방문 분석 순서다", () => {
+    expect(ADMIN_TABS.map((tab) => tab.label)).toEqual(["회원 관리", "시스템 관리", "비용 전략", "방문 분석"]);
+  });
+
+  it("방문 분석 주소는 방문 분석 탭이다", () => {
+    expect(activeAdminTab("/admin/analytics")).toBe("/admin/analytics");
   });
 
   it("주소마다 맞는 탭이 켜진다", () => {

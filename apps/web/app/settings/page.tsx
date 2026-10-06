@@ -16,6 +16,7 @@ import { ClearLegacyKeys } from "./clear-legacy-keys";
 import { ProfileCard } from "./profile-card";
 import { WithdrawCard } from "./withdraw-card";
 import { LoginCard } from "./login-card";
+import { ConsentSettingsButton } from "../_components/consent-banner";
 import { readProfileExtras } from "../../lib/membership/profile-store";
 import { readMyGrants, readUsageHistory } from "../../lib/membership/usage-store";
 import { UsageHistoryCard } from "./usage-history-card";
@@ -117,6 +118,17 @@ export default async function SettingsPage() {
         <div className="grid gap-4">
           <ProfileCard email={membership.profile.email} name={extras?.displayName ?? null} referrer={extras?.referrer ?? null} phone={extras?.phone ?? null} joinedAt={membership.profile.created_at} />
           <LoginCard email={membership.profile.email} socialProvider={membership.profile.signup_provider} owner={isOwnerEmail(membership.profile.email, resolveOwnerEmail(process.env.OWNER_EMAIL))} />
+          <Card>
+            <CardHeader>
+              <CardTitle>방문 통계 쿠키</CardTitle>
+              <CardDescription>
+                다시 방문했는지 알아보는 쿠키(fx_vid)에 동의할지 바꿉니다. 거부하면 번호를 지우고, 그 번호로 남은 방문 기록에서도 지웁니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ConsentSettingsButton outlined />
+            </CardContent>
+          </Card>
           {/*
             **맨 밑에 따로 둔다**(2026-09-23). 되돌릴 수 없는 일은 우연히 닿는
             자리에 두지 않는다.
