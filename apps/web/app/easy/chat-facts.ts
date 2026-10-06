@@ -9,6 +9,7 @@
  */
 import type { EasyWant } from "./chat";
 import { AD_ANSWER_NOTE, AD_QUESTION } from "./ad-ask";
+import type { EasyAskKind } from "./row-marks";
 
 /**
  * 「쉽게」가 하는 일 · 안 하는 일(A4). 안 되는 것을 물으면 모델이 사실을 몰라 엉뚱하게
@@ -72,6 +73,36 @@ export function easyAdAnswerLines(): string[] {
     "광고 이미지를 바라면 image, 규격별 · 사이즈별 · 리사이징 · 베리에이션을 바라면 ad_specs 입니다.",
     // 답일 때만 서버가 물음 앞의 처음 말을 잇는다(최종 리뷰 2026-10-06). 이미지 길은 note 를 안 쓴다.
     `마지막 말이 그 물음의 답이면 \`note\` 에 \`${AD_ANSWER_NOTE}\` 라고 적으세요. 답이 아니면 \`note\` 는 빈 글로 두세요.`,
+    "물음에 답하지 않고 다른 것을 말했으면(「그건 됐고 고양이 포스터 만들어줘」) 그 말대로 가르세요.",
+    "",
+  ];
+}
+
+/**
+ * 물음 갈래마다 답하는 법(2차 최종 리뷰 6). 같은 물음이 되풀이되지 않게 — 서버도 `settleTypedAnswer` 로
+ * 한 번 더 본다(모양 물음 뒤에는 모양을 안 묻고, 갈래 물음 뒤 either 는 한 장으로).
+ */
+const 물음갈래답: Record<EasyAskKind, string> = {
+  kind: "이 물음은 한 장(image)인지 카드뉴스(cardnews)인지입니다. 정하지 못한 답(「아무거나」)이면 image 입니다. either 로 다시 묻지 마세요.",
+  ratio: "이 물음은 모양(비율 · 그림체)입니다. 답에 모양이 있으면 ratio · look 에 적고, 모양을 말하지 않은 답이면 ratio · look 을 비워 두세요. 같은 물음을 다시 하지 않습니다. 정사각형으로 만듭니다.",
+  photo: "이 물음은 붙인 사진을 어떻게 쓸지입니다. 답이면 앞의 주문과 같은 갈래(image · cardnews)로 고르세요.",
+  reference: "이 물음은 따라 만들 카드뉴스입니다. 답이면 cardnews 로 고르세요.",
+  target: "이 물음은 고칠 이미지 번호입니다. 답이면 image_edit 로 고르고 target 에 그 번호(#N)를 적으세요.",
+  card: "이 물음은 카드 장 번호입니다. 답이면 물을 때의 갈래(card_text · card_redo)로 고르고 card 에 그 번호를 적으세요.",
+};
+
+/**
+ * 바로 앞 줄이 물음일 때(2026-10-07 2차 D1 — 1차 광고 물음 안내의 일반화). 단추 대신 말로 답해도
+ * 앞 물음을 알고 가르게 한다. 답이면 서버가 물음을 부른 처음 말을 잇는다 — 대화를 붙잡지 않는다.
+ */
+export function easyAskAnswerLines(ask: { kind: EasyAskKind; text: string }, wants: readonly EasyWant[]): string[] {
+  const 장갈래 = (["card_text", "card_redo"] as const).filter((one) => wants.includes(one));
+  return [
+    `**도우미가 바로 앞에서 「${ask.text}」라고 물었습니다.** 사용자의 마지막 말은 그 답일 수 있습니다.`,
+    "답이면 그 물음을 부른 앞의 주문을 이어서 하는 것입니다. 앞의 주문과 같은 갈래로 고르세요.",
+    물음갈래답[ask.kind],
+    `마지막 말이 그 물음의 답이면 \`note\` 에 \`${AD_ANSWER_NOTE}\` 라고 적으세요. 답이 아니면 \`note\` 는 빈 글로 두세요.`,
+    ...(장갈래.length ? [`단, ${장갈래.join(" · ")} 로 고르면 note 에는 answer 대신 고칠 내용을 적습니다.`] : []),
     "물음에 답하지 않고 다른 것을 말했으면(「그건 됐고 고양이 포스터 만들어줘」) 그 말대로 가르세요.",
     "",
   ];

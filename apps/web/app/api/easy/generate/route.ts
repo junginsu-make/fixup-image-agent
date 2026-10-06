@@ -6,7 +6,12 @@ import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
 import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
 import { withRowJob } from "../../../easy/row-image";
-import type { EasyDecision } from "../../../easy/chat";
+import { plainTyped, withPick } from "../../../easy/row-marks";
+import {
+  askChain, askInstruction, buttonDecision, chosenFor, readButtonAnswer, settleTypedAnswer,
+  type EasyAnswerWay, type EasyChosen,
+} from "../../../easy/ask-chain";
+import { CANNOT_DO_NOW, fitButtonDecision, type EasyDecision } from "../../../easy/chat";
 import { judgeEasyTurn } from "../../../../lib/easy/judge";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
@@ -29,7 +34,7 @@ import { draftFailureMessage } from "../../../easy/cardnews-view";
 import { isMade } from "../../../easy/cardnews-after";
 import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
 import { countEasyImages, imageEditTurn, lastEasyImage } from "../../../../lib/easy/image-edit-turn";
-import { AD_ANSWER_NOTE, adImageInstruction, easyAdStep } from "../../../easy/ad-ask";
+import { easyAdStep } from "../../../easy/ad-ask";
 import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
 import { askTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
 import { KIND_QUESTION, RATIO_QUESTION, aiText, askText, photoQuestion } from "../../../easy/turn-words";
@@ -124,7 +129,8 @@ async function turn(request: Request): Promise<Response> {
 
   const input = await request.json().catch(() => ({}));
   const conversationId = typeof input.conversationId === "string" ? input.conversationId : "";
-  const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+  // 친 말에 섞인 표시 글자는 풀어 둔다 — 단추 답으로 읽히지 않게(2차 §3-0, Review Focus 3).
+  const prompt = typeof input.prompt === "string" ? plainTyped(input.prompt.trim()) : "";
   if (!conversationId) return fail("어느 대화인지 알려 주세요.", 400);
   if (!prompt) return fail("무엇을 만들지 적어 주세요.", 400);
 
@@ -146,27 +152,43 @@ async function turn(request: Request): Promise<Response> {
    * 아니다 — 옛 화면이 그 이름으로 보내므로 이름만 그대로 둔다. 역할은 아래에서
    * 정한다(설계 §2-3). 같은 id 는 한 번만 센다(§2-1 — 두 번 세던 것).
    */
-  const 붙인것 = uniqueIds(input.referenceIds);
-  const 붙인수 = 붙인것.length;
-  if (붙인것.some((id) => !isPhotoId(id))) return 멈춘다(UNUSABLE_PHOTO);
+  const 보낸사진 = uniqueIds(input.referenceIds);
+  if (보낸사진.some((id) => !isPhotoId(id))) return 멈춘다(UNUSABLE_PHOTO);
 
   try {
+    const 지난줄 = await store.listMessages(conversationId);
+    /*
+     * **단추로 한 답**(2026-10-07 2차 D1). 화면은 처음 말을 다시 보내지 않고 단추 글 · 물음 줄 id ·
+     * 고른 값만 보낸다. **지금 마지막 물음 줄의 단추일 때만** 받는다 — 지난 물음의 단추로 지금 맥락과
+     * 다른 지시에 값이 나가지 않게(Review Focus 1). 물음 줄의 판단을 만들 수 있으면 판단 모델을 다시
+     * 안 부른다(`buttonDecision`). 고른 값이 모자라면 말로 본다.
+     */
+    const 단추답 = readButtonAnswer(input, 지난줄);
+    const 단추판단 = 단추답 ? buttonDecision(단추답) : undefined;
+    const 고른단추 = 단추판단 ? 단추답?.pick : undefined;
+    // 말로 답할 수 있는 마지막 물음. 답인지는 판단 모델이 `note` 로 알려 준다.
+    const 물음사슬 = askChain(지난줄);
     /*
      * ⓪ **사진 확인**(설계 §2-3). 이미지 만들기와 같은 함수 · 같은 회원 기준으로
      * 읽고, **요청한 사진이 전부 나왔는지** 센다. 조회는 볼 수 없는 id 를 오류
      * 없이 빼므로, 세지 않으면 사진이 빠지거나 번호가 당겨진다.
+     *
+     * **새로고침 뒤에 답하면 화면에 첨부가 없다**(2차 D1). 그때는 물음 줄에 적어 둔 사진을 쓴다 —
+     * 단추 답은 여기서, 말로 한 답은 판단 뒤 답으로 읽혔을 때만(아래 `정한사진`).
      */
-    const 사진들 = 붙인수
-      ? await posterReferencesByIds({
-        userId: auth.member.userId,
-        role: auth.member.profile.role,
-        teamId: await teamIdOf(auth.member.userId),
-      }, 붙인것)
-      : [];
-    if (missingIds(붙인것, 사진들).length) return 멈춘다(UNUSABLE_PHOTO);
-    const 고른역할 = readChosenRoles(input.photoRoles, 붙인것);
-    // 지난 역할도 고른 값과 같은 검사를 한다 — ⓪ 목록 밖 · 모르는 역할 · 겹친 id 는 버린다.
-    const 지난역할 = readChosenRoles(input.previousRoles, 붙인것);
+    const 사진을정한다 = async (ids: readonly string[]) => {
+      const photos = ids.length
+        ? await posterReferencesByIds({
+          userId: auth.member.userId,
+          role: auth.member.profile.role,
+          teamId: await teamIdOf(auth.member.userId),
+        }, [...ids])
+        : [];
+      return missingIds(ids, photos).length ? undefined : { ids: [...ids], photos };
+    };
+    const 이을사진 = (물음사슬?.photoIds ?? []).filter(isPhotoId);
+    const 처음사진 = await 사진을정한다(보낸사진.length || !단추판단 ? 보낸사진 : 이을사진);
+    if (!처음사진) return 멈춘다(UNUSABLE_PHOTO);
     const provider = createEasyChatProvider(process.env, textModel);
 
     /*
@@ -181,7 +203,6 @@ async function turn(request: Request): Promise<Response> {
      * **판정이 끝나면 바로 닫는다.** 되묻기·대화·주문 — 어느 끝으로 가든 판정
      * 예약은 여기서 끝난다. 주문이면 기획·생성이 각자 따로 예약한다.
      */
-    const 지난줄 = await store.listMessages(conversationId);
     // 고칠 원고가 있을 때만 「고치기」를 안다(2단계 §7). 없으면 고치기는 말로 읽는다.
     const 고칠원고 = await lastCardnewsProject(auth.member.userId, 지난줄);
     // 그 원고로 카드를 만들었나. 만들었을 때만 다시 그리기 · 게시글 · 받기를 안다(3단계 §5).
@@ -194,8 +215,12 @@ async function turn(request: Request): Promise<Response> {
      * 부르고 물음 줄만 남긴다 — 값도 예약도 없다. 단추 글 · 규격 낱말이면 아래 판단이
      * 글 모델 없이 갈래를 정한다.
      */
-    const 광고 = easyAdStep(prompt, 지난줄);
+    // 단추 답은 물음 줄이 갈래를 안다 — 광고 낱말을 다시 보지 않는다.
+    const 광고 = 단추판단 ? undefined : easyAdStep(prompt, 지난줄);
     if (광고 === "ask") return await adQuestionTurn({ store, conversation, conversationId, prompt, textModel });
+
+    // 옛 화면이 싣는 「갈래를 단추로 골랐다」(1차 A2). 판단 모델의 빈 talk 재질문을 막는 데만 쓴다.
+    const 옛골랐나 = (input.kind === "image" || input.kind === "cardnews") && input.kindPicked === true;
 
     /*
      * **판정도 값이 나간다 — 예약부터**(설계 2026-09-30 §3.1).
@@ -203,63 +228,94 @@ async function turn(request: Request): Promise<Response> {
      * 기존 작업 이름(`poster_image`) + `easy:decide`, 0 크레딧(D1). 크레딧이 없거나
      * 운영자가 멈췄으면 여기서 막혀 글 모델을 안 부른다. 열쇠는 단계마다 가른다 —
      * 바깥 열쇠를 그대로 쓰면 뒤의 기획·생성 예약이 `duplicate_request` 로 막힌다.
+     * 대신 부르는 세 라우트와 같은 규칙으로 요청 식별자를 가른다. 이것이 네 번째 단계(`decide`)다.
      *
-     * **`relay` 를 그대로 빌린다** — 다른 라우트를 부르는 것은 아니지만, 헤더의
-     * 요청 식별자를 단계별로 가르는 일은 똑같다. 이것이 네 번째 단계(`decide`)다.
+     * **단추 답도 이 예약은 한다**(2차 최종 리뷰 4). 글 모델만 안 부른다 — 운영자 멈춤 · 크레딧 확인이 그대로
+     * 걸리고, 뒤의 사진 읽기 · 역할 판단 · 끝 장 글의 원가가 이 예약(`bindAiCaller`)에 묶인다.
      */
     const 판정예약 = await reserveAiUsage(
       relay(request, "/api/easy/generate", {}, "decide"), "poster_image", 0, freeCreditPlan("easy:decide"),
     );
     if (!판정예약.ok) return 판정예약.response;
 
-    /*
-     * **갈래를 단추로 골랐나**(2026-10-06 설계 A2, 최종 리뷰). 화면은 「이미지 한 장 ·
-     * 카드뉴스」 단추로 고른 턴에만 `kindPicked` 를 싣는다. 물음 뒤 **말로** 답한 턴도
-     * 갈래를 이어 싣지만(`continuingKind`) 그것은 고른 것이 아니다 — 그 말이 질문이면
-     * 질문에 답해야 한다.
-     */
-    const 고른갈래 = input.kind === "image" || input.kind === "cardnews" ? input.kind as "image" | "cardnews" : undefined;
-    const 골랐나 = Boolean(고른갈래) && input.kindPicked === true;
-
     let decision: EasyDecision;
     let 광고안내 = "";
     try {
-      // 한 턴의 판단 — 선택지(A1) · 빈 답 재질문(A3)은 `lib/easy/judge.ts` 가 한다.
-      decision = await judgeEasyTurn({
-        decide: (text, wants) => provider.decide(text, wants),
-        history: 지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
-        prompt,
+      if (단추판단) {
         /*
-         * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
-         * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
-         * (2026-09-21 실측).
+         * 단추 답은 물음 줄의 판단으로 바로 간다 — 글 모델을 안 부른다(2차 D1, 값 한 번 절약). 물은 뒤 고칠
+         * 것이 사라졌으면 판단 읽기와 같은 사실로 다시 보고 사실만 말한다 — 다른 일로 새지 않는다
+         * (`fitButtonDecision`, 2차 최종 리뷰 1).
          */
-        attachmentCount: 붙인수,
-        choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) },
-        // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
-        kindPicked: 골랐나,
-        adStep: 광고,
-      });
-      /*
-       * **규격 안내는 글 모델이 우리 기능의 사실로 쓴다**(A5). 판정과 같은 예약 안에서
-       * 부른다 — 크레딧이 없거나 운영자가 멈췄으면 여기도 막힌다.
-       *
-       * **갈래를 단추로 골랐으면 쓰지 않는다**(최종 리뷰) — 아래에서 고른 갈래가 이겨 이 글은
-       * 버려진다. 이미지 수는 서로 다른 포스터 작업만 센다(`countEasyImages` — 고친 줄 ·
-       * 카드뉴스 · 지운 작업을 세면 「광고소재」에서 고를 수 있는 수와 어긋난다). 글 모델이
-       * 실패해도 `writeAdGuide` 가 코드가 쓴 안내로 대신한다 — 대화가 멈추지 않는다.
-       */
-      if (decision.wants === "ad_specs" && !골랐나) {
-        광고안내 = await writeAdGuide((text) => provider.writeAdGuide(text), {
+        decision = fitButtonDecision(단추판단, { canRevise: Boolean(고칠원고), made: 만들었나, editableImage: Boolean(고칠그림) });
+      } else {
+        // 한 턴의 판단 — 선택지(A1) · 빈 답 재질문(A3)은 `lib/easy/judge.ts` 가 한다.
+        decision = await judgeEasyTurn({
+          decide: (text, wants) => provider.decide(text, wants),
+          history: 지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
           prompt,
-          imageCount: await countEasyImages(auth.member.userId, 지난줄),
+          // 붙인 것이 있는지 알려 준다. 안 알려 주면 「이걸로 하나 그려줘」를 되묻는다(2026-09-21 실측).
+          attachmentCount: 처음사진.ids.length,
+          choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) },
+          // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
+          kindPicked: 옛골랐나,
+          adStep: 광고,
         });
+        /*
+         * **규격 안내는 글 모델이 우리 기능의 사실로 쓴다**(A5). 판정과 같은 예약 안에서 부른다.
+         * 갈래를 단추로 골랐으면 쓰지 않는다 — 아래에서 고른 갈래가 이겨 이 글은 버려진다. 이미지 수는
+         * 서로 다른 포스터 작업만 센다(`countEasyImages`). 글 모델이 실패해도 코드가 쓴 안내로 대신한다.
+         */
+        if (decision.wants === "ad_specs" && !옛골랐나) {
+          광고안내 = await writeAdGuide((text) => provider.writeAdGuide(text), {
+            prompt,
+            imageCount: await countEasyImages(auth.member.userId, 지난줄),
+          });
+        }
       }
     } catch (error) {
       await settleAiUsage(판정예약, false, 0, "easy_decide_failed", llmSettleCost());
       throw error;
     }
     await settleAiUsage(판정예약, true, 0, undefined, llmSettleCost());
+
+    /*
+     * **말로 한 답의 갈래 정리**(2차 최종 리뷰 6). 바로 앞 물음의 갈래로 판단을 한 번 더 본다 — 모양 물음
+     * 뒤에는 모양을 다시 안 묻고, 갈래 물음 뒤 또 either 면 한 장으로, 번호 · 장 물음 바로 뒤 그 갈래면
+     * note 가 없어도 답이다(`settleTypedAnswer`). 단추 답은 물음 줄의 판단이라 안 건다.
+     */
+    const 말답 = 단추판단 ? undefined : settleTypedAnswer(물음사슬?.ask, decision);
+    if (말답) decision = 말답.decision;
+
+    /*
+     * **이번 말이 앞 물음의 답인가**(2차 D1). 단추 답(물음 줄 단추 · 광고 단추)이면 「단추」(사진 고르기 중
+     * 말로 친 답은 「말」 — 그 말도 잇는다), 말로 한 답은 위 정리가 답이라고 본 때만 「말」. 답이면 물음을
+     * 부른 처음 말 + 그 뒤의 답들로 만들고(`askInstruction`), 앞서 단추로 고른 값을 잇는다(`chosenFor`).
+     * 답이 아니면 이번 말 그대로 — 새로 친 말에 옛 값 · 옛 사진이 몰래 붙지 않는다(Review Focus 5).
+     */
+    const 답방식: EasyAnswerWay = 단추판단 || 광고 === "image"
+      ? (고른단추?.typed ? "typed" : "button")
+      : 말답?.answered ? "typed" : "none";
+    const 이음 = 답방식 === "none" ? undefined : 물음사슬;
+    const 정한사진 = 답방식 === "typed" && !보낸사진.length && 이을사진.length ? await 사진을정한다(이을사진) : 처음사진;
+    if (!정한사진) return 멈춘다(UNUSABLE_PHOTO);
+    const 붙인것 = 정한사진.ids;
+    const 붙인수 = 붙인것.length;
+    const 사진들 = 정한사진.photos;
+    const 고른 = chosenFor(input, 이음, 고른단추);
+    const 고른역할 = readChosenRoles(고른.photoRoles, 붙인것);
+    // 지난 역할도 고른 값과 같은 검사를 한다 — ⓪ 목록 밖 · 모르는 역할 · 겹친 id 는 버린다.
+    const 지난역할 = readChosenRoles(input.previousRoles, 붙인것);
+    const 고른갈래 = 고른.kind;
+    /*
+     * 고른 갈래가 판단을 이기는 것(1차 A2)은 **판단 모델이 다시 가른 턴**에만이다. 단추 답의 판단은 물음 줄의
+     * 갈래 그대로고, 고칠 것이 사라져 사실 문장(talk)이 된 단추 답을 고른 갈래가 만들기로 되돌리면 값이 나간다
+     * (2차 최종 리뷰 1).
+     */
+    const 골랐나 = Boolean(고른갈래) && 고른.kindPicked && !단추판단;
+    const 지시 = askInstruction(이음, prompt, 답방식);
+    // 단추 답이면 사용자 줄에 고른 값을 함께 적는다 — 다음 물음 · 실패 뒤 다시 답할 때 그 값을 잇는다.
+    const 사용자글 = 고른단추 ? withPick(prompt, 고른단추) : prompt;
 
     /*
      * **단추로 고른 갈래는 늘 이긴다**(2026-10-06 설계 A2). 전에는 판단이 image ·
@@ -278,8 +334,8 @@ async function turn(request: Request): Promise<Response> {
      * 이번 말이 앞 물음의 답이었으면 물음 줄에 `cont` 가 붙어 사슬이 이어진다(`app/easy/ask-chain.ts`).
      */
     const 물음맥락: AskTurnContext = {
-      store, conversation, conversationId, prompt, userBody: prompt, textModel,
-      cont: 광고 === "image" || decision.note === AD_ANSWER_NOTE,
+      store, conversation, conversationId, prompt, userBody: 사용자글, textModel,
+      cont: 답방식 !== "none",
     };
     // 물을 때의 판단(말에 있던 비율 · 그림체). 단추로 답하면 판단 모델 대신 이것을 쓴다(2차 D1).
     const 말한것 = { ...(decision.ratio ? { ratio: decision.ratio } : {}), ...(decision.look ? { look: decision.look } : {}) };
@@ -294,14 +350,14 @@ async function turn(request: Request): Promise<Response> {
     // 만든 카드뉴스 손보기(3단계). 판단 읽기가 원고 · 만든 카드가 있을 때만 이 갈래를 준다.
     if ((wants === "card_redo" || wants === "card_text" || wants === "caption" || wants === "download") && 고칠원고) {
       return await cardAfterTurn({
-        request, userId: auth.member.userId, store, conversationId, prompt, textModel, wants, decision, provider,
+        request, userId: auth.member.userId, store, conversationId, prompt: 지시, userBody: 사용자글, textModel, wants, decision, provider,
         project: 고칠원고, rows: 지난줄,
       });
     }
     // 마지막으로 만든 이미지 한 장 고치기(2026-10-06). 판단 읽기가 고칠 그림이 있을 때만 이 갈래를 준다.
     if (wants === "image_edit" && 고칠그림) {
       return await imageEditTurn({
-        request, userId: auth.member.userId, store, conversationId, prompt, textModel,
+        request, userId: auth.member.userId, store, conversationId, prompt: 지시, userBody: 사용자글, textModel,
         target: 고칠그림, rows: 지난줄, attachments: 붙인것,
       });
     }
@@ -317,33 +373,24 @@ async function turn(request: Request): Promise<Response> {
      */
     const 고르기 = easyAsk({
       attachmentCount: 붙인수,
-      chosenRatio: typeof input.ratio === "string" ? input.ratio : undefined,
-      chosenLook: typeof input.look === "string" ? input.look : undefined,
+      // 단추로 고른 것(이번 단추 · 이어진 물음의 단추), 없으면 옛 화면이 보낸 칸(2차 D1).
+      chosenRatio: 고른.ratio,
+      chosenLook: 고른.look,
       saidRatio: decision.ratio,
       saidLook: decision.look,
     });
 
-    if (wants === "image" && 고르기.asks) {
+    // 모양 물음 바로 뒤의 말이면 답이든 아니든 같은 물음을 또 하지 않는다 — 말한 비율이 없으면 정사각형(2차 최종 리뷰 6).
+    if (wants === "image" && 고르기.asks && (말답?.askRatio ?? true)) {
       return await askTurn(물음맥락, { kind: "ratio", text: askText(aiText(decision, wants), RATIO_QUESTION), data: { wants: "image" } }, { asked: true });
     }
 
     if (wants === "cardnews" || wants === "revise") {
       return await cardnewsTurn({
         request, userId: auth.member.userId, store, conversation, conversationId, prompt, textModel,
-        wants, 사진들, 붙인것, input, decision, provider, 고칠원고, 물음: 물음맥락, 말한것,
+        wants, 사진들, 붙인것, input, decision, provider, 고칠원고, 물음: 물음맥락, 말한것, 고른, 지시, userBody: 사용자글,
       });
     }
-
-    /*
-     * **광고 물음에 답해 만드는 이미지는 물음 앞의 말로 그린다**(A5). 단추만 눌렀으면 그
-     * 말 그대로, 말로 답했으면 그 말 + 답. 물음 뒤가 아니면 이번 말 그대로다.
-     *
-     * **답일 때만 잇는다**(최종 리뷰 2026-10-06) — 「광고 이미지 만들기」 단추를 눌렀거나,
-     * 판단 모델이 이 말을 물음의 답이라고 `note` 에 표시했을 때. 물음 뒤에 「그건 됐고 고양이
-     * 포스터 만들어줘」라고 했는데 처음 말을 붙이면 엉뚱한 것을 그린다.
-     */
-    const 답했나 = 광고 === "image" || decision.note === AD_ANSWER_NOTE;
-    const 지시 = adImageInstruction(지난줄, prompt, 답했나) ?? prompt;
 
     /*
      * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
@@ -378,7 +425,7 @@ async function turn(request: Request): Promise<Response> {
 
     // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야
     // 무엇을 하려 했는지 알 수 있다.
-    await store.appendMessage({ conversationId, role: "user", body: prompt });
+    await store.appendMessage({ conversationId, role: "user", body: 사용자글 });
 
     // 제목이 비어 있으면 이 말로 짓는다. 첫 프롬프트 한 번만이다(설계 §4-1).
     if (!conversation.title) await store.renameConversation(conversationId, easyTitle(prompt));
@@ -404,6 +451,16 @@ async function turn(request: Request): Promise<Response> {
        * 화면은 이 문장이 달린 줄에 「상세페이지 만들기 열기」를 단다.
        */
       const saved = await store.appendMessage({ conversationId, role: "assistant", body: DETAIL_PAGE_GUIDE });
+      return Response.json({ ok: true, talked: true, message: saved, textModel });
+    }
+
+    /*
+     * **만들기는 image 갈래만 간다**(2차 최종 리뷰 1 · Review Focus 7). 쓸 수 없게 된 갈래(고칠 것이 사라진
+     * 단추 답 · 원고 없는 장 손보기 등)가 위의 갈래들을 다 지나 여기까지 오면, 사용자가 바라지 않은 새 이미지에
+     * 값이 나간다. 사용자 줄은 이미 남았다 — 안내 한 줄로 끝낸다. 값은 안 든다.
+     */
+    if (wants !== "image") {
+      const saved = await store.appendMessage({ conversationId, role: "assistant", body: CANNOT_DO_NOW });
       return Response.json({ ok: true, talked: true, message: saved, textModel });
     }
 
@@ -525,6 +582,12 @@ async function cardnewsTurn(ctx: {
   물음: AskTurnContext;
   /** 물을 때의 판단(말에 있던 비율 · 그림체). */
   말한것: { ratio?: string; look?: string };
+  /** 이번 턴의 고른 값(단추 · 이어진 물음, 2차 D1). */
+  고른: EasyChosen;
+  /** 만들 때 쓰는 지시 = 처음 말 + 답들(답이 아니면 이번 말). */
+  지시: string;
+  /** 사용자 줄에 남길 글. */
+  userBody: string;
 }): Promise<Response> {
   // 따라 만들 카드뉴스를 요청한다. 요청도 대화에 남는다(2차 D1). 문장은 고정이다.
   const 레퍼런스요청 = () => askTurn(ctx.물음, {
@@ -535,7 +598,7 @@ async function cardnewsTurn(ctx: {
 
   if (ctx.wants === "revise" && ctx.고칠원고) {
     // 고치기: 앞 원고의 조건 · 첨부 그대로, 말만 더한다(설계 §7). 앞 작업은 그대로 둔다.
-    입력 = redraftInput(ctx.고칠원고, { words: ctx.prompt });
+    입력 = redraftInput(ctx.고칠원고, { words: ctx.지시 });
   } else {
     if (!ctx.붙인것.length) return 레퍼런스요청();
 
@@ -543,7 +606,7 @@ async function cardnewsTurn(ctx: {
      * **무엇으로 쓸지를 사진보다 먼저 본다.** 기사 주소처럼 못 쓰는 것이면 여기서
      * 멈춘다. 사진을 먼저 읽으면 어차피 멈출 턴에 읽기값이 나간다.
      */
-    const 내용 = pickCardSource(ctx.prompt, { webEnabled: isWebSourceEnabled() });
+    const 내용 = pickCardSource(ctx.지시, { webEnabled: isWebSourceEnabled() });
     if (!내용.ok) return 멈춘다(내용.message);
 
     const options = cardOptionsFrom({
@@ -554,9 +617,9 @@ async function cardnewsTurn(ctx: {
     const 판단 = await runPhotoTurn(
       {
         photos: ctx.사진들,
-        words: ctx.prompt,
+        words: ctx.지시,
         mode: "cardnews",
-        chosen: readChosenRoles(ctx.input.photoRoles, ctx.붙인것, { cardnews: true }),
+        chosen: readChosenRoles(ctx.고른.photoRoles, ctx.붙인것, { cardnews: true }),
         previous: readChosenRoles(ctx.input.previousRoles, ctx.붙인것, { cardnews: true }),
         ratio: options.ratio,
         imageModel: options.modelId,
@@ -575,14 +638,14 @@ async function cardnewsTurn(ctx: {
       userId: ctx.userId,
       photos: ctx.사진들,
       rows: 판단.rows,
-      slots: { ...slotsFromWords(ctx.prompt, ctx.붙인것), ...readChosenSlots(ctx.input.photoSlots, ctx.붙인것) },
+      slots: { ...slotsFromWords(ctx.지시, ctx.붙인것), ...readChosenSlots(ctx.고른.photoSlots, ctx.붙인것) },
     });
     if (!첨부.ok && 첨부.reason === "no_reference") return 레퍼런스요청();
     if (!첨부.ok) return 멈춘다(첨부.reason === "not_mine" ? NOT_MINE : UNUSABLE_PHOTO);
 
     photoRoles = 판단.rows;
     입력 = {
-      title: easyTitle(ctx.prompt) || "카드뉴스",
+      title: easyTitle(ctx.지시) || "카드뉴스",
       source: 내용.source,
       attachments: 첨부.attachments,
       ...projectSpecFrom(options),
@@ -590,7 +653,7 @@ async function cardnewsTurn(ctx: {
     };
   }
 
-  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.prompt });
+  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody });
   if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
 
   // 빈 마지막 장은 고른 글 모델이 정리 문장으로 채운다(2026-09-30 사용자 결정 B).

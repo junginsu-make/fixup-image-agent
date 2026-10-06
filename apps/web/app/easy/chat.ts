@@ -3,7 +3,10 @@ import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
 import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
-import { easyAdAnswerLines, easyAdWantLines, easyCapabilityLines, easyFirstPhotoLines } from "./chat-facts";
+import {
+  easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines,
+} from "./chat-facts";
+import { askChain } from "./ask-chain";
 
 /**
  * **말인가, 만들어 달라는 것인가.**
@@ -287,6 +290,8 @@ export function easyChatPrompt(
       ? ["**앞서 talk 를 고르고 reply 를 비웠습니다.** talk 이면 이번에는 reply 에 꼭 답을 쓰세요.", ""]
       : []),
     ...(갈래.includes("ad_specs") && adQuestionOrigin(history) !== undefined ? easyAdAnswerLines() : []),
+    // 2차 D1: 광고 물음이 아닌 물음 뒤면 그 답일 수 있다고 알린다. 광고 물음은 바로 위 1차 안내가 맡는다.
+    ...물음뒤줄(history, 갈래),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
     ...지난말,
     "",
@@ -342,6 +347,12 @@ export function fitButtonDecision(decision: EasyDecision, options: EasyAvailabil
   const fitted = availableWant(decision.wants, decision.reply, options);
   if (fitted.wants === decision.wants) return decision;
   return { wants: "talk", reply: fitted.wants === "talk" && fitted.reply ? fitted.reply : CANNOT_DO_NOW };
+}
+
+/** 마지막 줄(단추 답 실패 짝은 건너뛴다)이 물음이면 그 물음 · 답 표시 안내(2차 D1). */
+function 물음뒤줄(history: readonly EasyMessage[], 갈래: readonly EasyWant[]): string[] {
+  const ask = askChain(history)?.ask;
+  return ask && ask.kind !== "ad" ? easyAskAnswerLines({ kind: ask.kind, text: ask.text }, 갈래) : [];
 }
 
 /**

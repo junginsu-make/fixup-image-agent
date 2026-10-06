@@ -20,6 +20,8 @@ export async function cardAfterTurn(ctx: {
   store: ReturnType<typeof easyStoreForUser>;
   conversationId: string;
   prompt: string;
+  /** 사용자 줄에 남길 글(단추 답이면 고른 값 표시가 붙는다, 2차 D1). 없으면 `prompt`. */
+  userBody?: string;
   textModel: string;
   wants: "card_redo" | "card_text" | "caption" | "download";
   decision: EasyDecision;
@@ -40,7 +42,7 @@ export async function cardAfterTurn(ctx: {
    * 답 없는 말만 대화에 남았다.
    */
   const 주고받기를남긴다 = async (answer: string) => {
-    await store.appendMessage({ conversationId, role: "user", body: ctx.prompt });
+    await store.appendMessage({ conversationId, role: "user", body: ctx.userBody ?? ctx.prompt });
     return store.appendMessage({ conversationId, role: "assistant", body: answer });
   };
   // 남기지 않는 답에는 id 를 안 준다. 빈 id 는 화면이 두 답을 같은 줄로 본다(미뤄 둔 것 1).

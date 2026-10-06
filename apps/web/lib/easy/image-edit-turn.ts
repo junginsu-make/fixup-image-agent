@@ -86,6 +86,8 @@ export async function imageEditTurn(ctx: {
   store: ReturnType<typeof easyStoreForUser>;
   conversationId: string;
   prompt: string;
+  /** 사용자 줄에 남길 글(단추 답이면 고른 값 표시가 붙는다, 2차 D1). 없으면 `prompt`. */
+  userBody?: string;
   textModel: string;
   target: EasyImageTarget;
   rows: readonly Row[];
@@ -102,7 +104,7 @@ export async function imageEditTurn(ctx: {
   const found = editTargetImage(ctx.rows, projectId, images, Date.now());
 
   // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야 한다.
-  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.prompt });
+  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody ?? ctx.prompt });
 
   if (!("image" in found)) {
     // 값이 나가기 전이다. 안내만 남긴다.

@@ -174,6 +174,14 @@ describe("말과 주문을 가르는 자리", () => {
     expect(말갈래).toContain('role: "assistant"');
     expect(말갈래).toContain("return Response.json");
   });
+
+  /** 2차 최종 리뷰 1 · Review Focus 7 — 쓸 수 없게 된 갈래가 만들기로 새지 않게 마지막으로 막는다. */
+  it("프로젝트를 만들기 바로 앞에서 image 가 아닌 갈래를 끝낸다", () => {
+    const 막이 = generate.indexOf('if (wants !== "image")');
+    expect(막이).toBeGreaterThan(generate.indexOf('(wants === "detail_page")'));
+    expect(막이).toBeLessThan(generate.indexOf("await createProject("));
+    expect(generate.slice(막이, generate.indexOf("await createProject("))).toContain("CANNOT_DO_NOW");
+  });
 });
 
 /**

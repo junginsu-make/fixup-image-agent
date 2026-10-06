@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NOT_MADE_YET } from "../cardnews-after";
 import { easyChatPrompt, readEasyDecision } from "../chat";
 import type { EasyMessage } from "../turn";
+import { askBody } from "../row-marks";
 
 /**
  * **말인가, 만들어 달라는 것인가** (2026-09-21 사용자).
@@ -198,5 +199,35 @@ describe("만든 카드뉴스 손보기 (3단계 §5)", () => {
     expect(easyChatPrompt([], "3번 다시", 0, true, true)).toContain("card_redo");
     expect(easyChatPrompt([], "3번 다시", 0, true, true)).toContain("download");
     expect(easyChatPrompt([], "안녕")).not.toContain("card_text");
+  });
+});
+
+describe("물음 뒤의 말 (2차 D1)", () => {
+  const 물음뒤 = [말("user", "바다 포스터", "u1"), 말("assistant", askBody("ratio", "어떤 모양으로 만들까요?", { wants: "image" }), "q1")];
+
+  it("마지막 줄이 물음이면 그 물음과 답 표시(note)를 알린다 — 표시 글자는 안 보낸다", () => {
+    const prompt = easyChatPrompt(물음뒤, "세로로");
+    expect(prompt).toContain("도우미가 바로 앞에서 「어떤 모양으로 만들까요?」라고 물었습니다");
+    expect(prompt).toContain("`note` 에 `answer`");
+    expect(prompt).not.toContain("ask:ratio");
+  });
+
+  it("물음 뒤에 다른 말이 이어졌으면 안 알린다", () => {
+    const prompt = easyChatPrompt([...물음뒤, 말("user", "고마워", "u2"), 말("assistant", "네", "a1")], "고양이");
+    expect(prompt).not.toContain("도우미가 바로 앞에서");
+  });
+
+  it("장 번호 갈래가 있으면 note 에 answer 대신 고칠 내용을 적으라고 한다", () => {
+    expect(easyChatPrompt(물음뒤, "3번", 0, true, true, false)).toContain("card_text · card_redo 로 고르면 note 에는 answer 대신 고칠 내용");
+    expect(easyChatPrompt(물음뒤, "3번")).not.toContain("card_text");
+  });
+
+  /** 2차 최종 리뷰 6 — 물음 갈래마다 답하는 법을 한 줄 준다. 같은 물음을 되풀이하지 않게. */
+  it("물음 갈래마다 답하는 법을 알린다", () => {
+    expect(easyChatPrompt(물음뒤, "그냥 해줘")).toContain("모양을 말하지 않은 답이면 ratio · look 을 비워 두세요. 같은 물음을 다시 하지 않습니다");
+    const 갈래물음 = [말("user", "홍보물", "u1"), 말("assistant", askBody("kind", "한 장? 여러 장?", { ids: [] }), "q1")];
+    expect(easyChatPrompt(갈래물음, "아무거나")).toContain("either 로 다시 묻지 마세요");
+    const 번호물음 = [말("user", "고쳐줘", "u1"), 말("assistant", askBody("target", "몇 번?", { numbers: [1, 2] }), "q1")];
+    expect(easyChatPrompt(번호물음, "1번", 0, false, false, true)).toContain("image_edit 로 고르고 target 에 그 번호");
   });
 });
