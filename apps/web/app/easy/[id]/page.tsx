@@ -29,6 +29,7 @@ export default async function EasyConversationPage({
       initialOptions={loaded.options}
       initialCardnews={loaded.cardnews}
       initialPending={loaded.pending}
+      initialFailed={loaded.failed}
       imageModels={easyImageModels()}
       defaultImageModel={defaultEasyImageModel()}
       ratioId={EASY_DEFAULT_RATIO}

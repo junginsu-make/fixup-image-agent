@@ -70,6 +70,8 @@ interface EasyClientProps {
   initialCardnews?: Record<string, CardnewsProjectLike & { title?: string }>;
   /** 아직 결과를 안 받은 그림 줄 id(2026-10-06 설계 B3). 다시 열 때 이 줄만 이어 받는다(`load.ts`). */
   initialPending?: string[];
+  /** 끝났는데 그림이 없는 그림 줄 id(설계 B5). 다시 열면 「만들고 있습니다」 대신 실패로 보인다. */
+  initialFailed?: string[];
 }
 
 /** 첨부 한 장. 올린 뒤의 모습이다. */
@@ -95,6 +97,7 @@ export function EasyClient({
   ratioId,
   initialCardnews,
   initialPending,
+  initialFailed,
 }: EasyClientProps) {
   const creditPolicy = useCreditPolicy();
   const router = useRouter();
@@ -149,11 +152,15 @@ export function EasyClient({
   const file = React.useRef<HTMLInputElement>(null);
   const bottom = React.useRef<HTMLDivElement>(null);
   const alive = React.useRef(true);
-  React.useEffect(() => () => { alive.current = false; }, []);
+  // StrictMode 가 효과를 껐다 켜도 다시 켠다 — 안 그러면 개발 화면에서 결과 받기가 멈춘다.
+  React.useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   // 다시 열면 아직 결과를 안 받은 줄을 이어 받는다(2026-10-06 설계 B3). 만든 직후와 같은 받기 함수다.
   const failed = useEasyResume({
     messages: initialMessages, urls: initialUrls ?? {}, cardnewsIds: new Set(Object.keys(initialCardnews ?? {})),
-    pendingIds: new Set(initialPending ?? []),
+    pendingIds: new Set(initialPending ?? []), failedIds: new Set(initialFailed ?? []),
     isAlive: () => alive.current,
     onImage: (rowId, image) => setUrls((current) => ({ ...current, [rowId]: image.url })),
   });

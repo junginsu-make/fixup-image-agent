@@ -67,20 +67,38 @@ export function rowJobOf(body: string | null | undefined): EasyRowJob | undefine
 
 type JobRow = { id: string; role: string; body?: string | null };
 
-/** 그림 줄들의 받을 정보 요청 번호(설계 B3). 서버가 이것으로 끝났는지 묻는다. */
-export function rowJobRequestIds(rows: ReadonlyArray<JobRow>): string[] {
+/**
+ * 그림이 아직 없는 그림 줄들의 받을 정보 요청 번호(설계 B3). 서버가 이것으로 끝났는지 묻는다.
+ * 그림이 있는 줄은 묻지 않는다 — 긴 대화에서도 묻는 목록이 짧다.
+ */
+export function rowJobRequestIds(rows: ReadonlyArray<JobRow>, urls: Readonly<Record<string, string>> = {}): string[] {
   return rows.flatMap((row) => {
-    const job = row.role === "image" ? rowJobOf(row.body) : undefined;
+    const job = row.role === "image" && !urls[row.id] ? rowJobOf(row.body) : undefined;
     return job ? [job.requestRowId] : [];
   });
 }
 
-/** 안 끝난 요청(`unfinished`)을 가리키는 그림 줄 id. 화면은 이 줄만 이어 받는다. */
-export function pendingJobRowIds(rows: ReadonlyArray<JobRow>, unfinished: ReadonlySet<string>): string[] {
-  return rows.flatMap((row) => {
-    const job = row.role === "image" ? rowJobOf(row.body) : undefined;
-    return job && unfinished.has(job.requestRowId) ? [row.id] : [];
+/**
+ * 그림이 없는 그림 줄의 처지(설계 B3 · B5). `finished` 는 요청 번호 → 끝났는가.
+ *
+ * - `pending`: 안 끝난 요청 — 화면이 이어 받는다
+ * - `failed`: 끝났는데 그림이 없다(0장 · 저장 실패) — 다시 묻지 않고 실패로 보인다
+ * - 지도에 없는 요청(못 읽음)은 어느 쪽도 아니다 — 지금처럼 「만들고 있습니다」
+ */
+export function jobRowStates(
+  rows: ReadonlyArray<JobRow>,
+  urls: Readonly<Record<string, string>>,
+  finished: ReadonlyMap<string, boolean>,
+): { pending: string[]; failed: string[] } {
+  const states = rows.flatMap((row) => {
+    const job = row.role === "image" && !urls[row.id] ? rowJobOf(row.body) : undefined;
+    const done = job ? finished.get(job.requestRowId) : undefined;
+    return done === undefined ? [] : [{ id: row.id, done }];
   });
+  return {
+    pending: states.filter((one) => !one.done).map((one) => one.id),
+    failed: states.filter((one) => one.done).map((one) => one.id),
+  };
 }
 
 /**

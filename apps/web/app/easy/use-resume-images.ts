@@ -45,10 +45,14 @@ export function useEasyResume(input: {
   urls: Readonly<Record<string, string>>;
   cardnewsIds: ReadonlySet<string>;
   pendingIds: ReadonlySet<string>;
+  /** 서버가 본 「끝났는데 그림이 없는 줄」(설계 B5, 리뷰 1차). 묻지 않고 처음부터 실패로 보인다. */
+  failedIds?: ReadonlySet<string>;
   isAlive: () => boolean;
   onImage: (rowId: string, image: { id: string; url: string }) => void;
 }): Readonly<Record<string, string>> {
-  const [failed, setFailed] = React.useState<Record<string, string>>({});
+  const [failed, setFailed] = React.useState<Record<string, string>>(
+    () => Object.fromEntries([...(input.failedIds ?? [])].map((id) => [id, NO_IMAGE_MADE])),
+  );
   const first = React.useRef(input);
   const started = React.useRef(false);
 

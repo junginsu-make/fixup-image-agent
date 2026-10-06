@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, pendingJobRowIds, pickCollectedImage, pickRowImage,
+  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, jobRowStates, pickCollectedImage, pickRowImage,
   rowJobOf, rowJobRequestIds, withRowJob,
 } from "../row-image";
 
@@ -197,8 +197,20 @@ describe("아직 안 받은 줄 (B3, 최종 리뷰 2026-10-06)", () => {
     expect(rowJobRequestIds(rows)).toEqual(["r1", "r2"]);
   });
 
-  it("안 끝난 요청의 그림 줄 id 만 준다", () => {
-    expect(pendingJobRowIds(rows, new Set(["r2", "r9"]))).toEqual(["b"]);
-    expect(pendingJobRowIds(rows, new Set())).toEqual([]);
+  it("이미 그림이 있는 줄은 묻지 않는다 — 긴 대화에서도 묻는 목록이 짧다", () => {
+    expect(rowJobRequestIds(rows, { a: "https://x/a.png" })).toEqual(["r2"]);
+  });
+
+  it("안 끝난 요청의 줄은 이어 받고, 끝났는데 그림이 없는 줄은 실패다", () => {
+    expect(jobRowStates(rows, {}, new Map([["r1", true], ["r2", false], ["r9", false]])))
+      .toEqual({ pending: ["b"], failed: ["a"] });
+  });
+
+  it("끝났어도 그림이 있는 줄은 실패가 아니다", () => {
+    expect(jobRowStates(rows, { a: "https://x/a.png" }, new Map([["r1", true]]))).toEqual({ pending: [], failed: [] });
+  });
+
+  it("못 읽은 요청(모름)은 이어 받지도 실패로도 보이지 않는다", () => {
+    expect(jobRowStates(rows, {}, new Map())).toEqual({ pending: [], failed: [] });
   });
 });

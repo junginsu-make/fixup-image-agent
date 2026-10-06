@@ -33,8 +33,8 @@ const 안받은줄 = new Set(["a", "b", "c", "e"]);
 let view: ReactTestRenderer;
 let failed: Readonly<Record<string, string>> = {};
 const onImage = vi.fn();
-function Probe() {
-  failed = useEasyResume({ messages: 줄들, urls: 그림있음, cardnewsIds: 카드뉴스, pendingIds: 안받은줄, isAlive: () => true, onImage });
+function Probe({ failedIds }: { failedIds?: ReadonlySet<string> }) {
+  failed = useEasyResume({ messages: 줄들, urls: 그림있음, cardnewsIds: 카드뉴스, pendingIds: 안받은줄, failedIds, isAlive: () => true, onImage });
   return null;
 }
 const flush = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise<void>((resolve) => setImmediate(resolve)); }); };
@@ -91,6 +91,27 @@ describe("다시 열 때", () => {
     await flush();
     expect(c.collect).toHaveBeenCalledTimes(2);
   });
+
+  /**
+   * 리뷰 1차(2026-10-06): 끝났는데 그림이 없는 줄(0장 · 저장 실패)은 다시 열면 「만들고
+   * 있습니다」가 영원히 돌았다. 서버가 끝났다고 본 줄은 처음부터 실패로 보인다(B5).
+   */
+  it("서버가 끝났다고 본 그림 없는 줄은 처음부터 실패다 — 묻지 않는다", async () => {
+    await act(async () => { view = create(<Probe failedIds={new Set(["f"])} />); });
+    await flush();
+    expect(failed.f).toBe("이미지가 나오지 않았습니다.");
+    expect(c.collect.mock.calls.map((call) => call[0])).not.toContain("p6");
+  });
+
+  /**
+   * 개발 화면의 StrictMode 는 효과를 껐다 켠다. 그래도 한 줄을 두 번 묻지 않는다 — `started`
+   * 가 막는다. react-test-renderer 18 은 StrictMode 에서도 효과를 한 번만 돌려(2026-10-06
+   * 확인: 레거시 · 동시 · `unstable_strictMode` 모두 1번) 그려서는 못 잰다. 그래서 글로 잰다.
+   */
+  it("StrictMode 가 효과를 다시 돌려도 한 번만 묻는다", () => {
+    const 훅 = readFileSync(new URL("../use-resume-images.ts", import.meta.url), "utf8");
+    expect(훅).toMatch(/if \(started\.current\) return;\s*started\.current = true;/);
+  });
 });
 
 describe("화면이 같은 받기 함수를 쓴다", () => {
@@ -102,6 +123,19 @@ describe("화면이 같은 받기 함수를 쓴다", () => {
   });
   it("서버가 준 「아직 안 받은 줄」만 넘긴다", () => {
     expect(화면).toContain("pendingIds: new Set(initialPending ?? [])");
+  });
+  it("서버가 끝났다고 본 그림 없는 줄을 실패로 넘긴다", () => {
+    expect(화면).toContain("failedIds: new Set(initialFailed ?? [])");
+    expect(readFileSync(new URL("../[id]/page.tsx", import.meta.url), "utf8")).toContain("initialFailed={loaded.failed}");
+  });
+  it("그림 주소를 다 고른 뒤에 끝났는지 묻는다 — 그림 있는 줄은 안 묻는다", () => {
+    const 읽기 = readFileSync(new URL("../_components/load.ts", import.meta.url), "utf8");
+    expect(읽기).toContain("posterRequestsFinished(membership.user.id, rowJobRequestIds(rows, urls))");
+    expect(읽기.indexOf("urls[row.id] = pick.url")).toBeLessThan(읽기.indexOf("posterRequestsFinished("));
+  });
+  /** StrictMode 가 효과를 껐다 켜도 `alive` 가 다시 켜져야 개발 화면에서 이어 받는다. */
+  it("화면이 다시 붙으면 alive 를 다시 켠다", () => {
+    expect(화면).toMatch(/React\.useEffect\(\(\) => \{\s*alive\.current = true;\s*return \(\) => \{ alive\.current = false; \};\s*\}, \[\]\);/);
   });
   it("못 받은 줄을 줄과 결과 칸에 알린다", () => {
     expect(화면).toContain("failed={failed[message.id]}");
