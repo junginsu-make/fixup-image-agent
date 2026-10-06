@@ -318,12 +318,6 @@ async function turn(request: Request): Promise<Response> {
     }
 
     /*
-     * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
-     *
-     * 말을 남기기 **전에** 한다. 묻거나 멈추면 아무것도 안 남긴다 — 비율 물음과
-     * 같다. 말 턴 · 상세페이지 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
-     */
-    /*
      * **광고 물음에 답해 만드는 이미지는 물음 앞의 말로 그린다**(A5). 단추만 눌렀으면 그
      * 말 그대로, 말로 답했으면 그 말 + 답. 물음 뒤가 아니면 이번 말 그대로다.
      *
@@ -334,6 +328,12 @@ async function turn(request: Request): Promise<Response> {
     const 답했나 = 광고 === "image" || decision.note === AD_ANSWER_NOTE;
     const 지시 = adImageInstruction(지난줄, prompt, 답했나) ?? prompt;
 
+    /*
+     * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
+     *
+     * 말을 남기기 **전에** 한다. 묻거나 멈추면 아무것도 안 남긴다 — 비율 물음과
+     * 같다. 말 턴 · 상세페이지 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
+     */
     const 사진판단 = wants === "image" && 붙인수
       ? await runPhotoTurn(
         {

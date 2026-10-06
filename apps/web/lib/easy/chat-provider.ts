@@ -121,10 +121,6 @@ const EASY_ENDING_SPEC: StructuredSpec = {
 };
 
 /**
- * **카드뉴스 한 장 글 고치기**(3단계 §6-2). 말이 가리키는 칸만 채우고 나머지는 빈 글.
- * 네 칸 모두 `required` 다 — 안 채운 칸을 빼 버리면 「안 고친다」를 말할 길이 없다.
- */
-/**
  * **규격별 이미지 안내 글**(2026-10-06 설계 A5). 사실은 `app/easy/ad-guide.ts` 가 프롬프트에
  * 넣고, 모델은 그것으로 글만 쓴다. `text` 하나다.
  */
@@ -138,6 +134,10 @@ const EASY_AD_GUIDE_SPEC: StructuredSpec = {
   },
 };
 
+/**
+ * **카드뉴스 한 장 글 고치기**(3단계 §6-2). 말이 가리키는 칸만 채우고 나머지는 빈 글.
+ * 네 칸 모두 `required` 다 — 안 채운 칸을 빼 버리면 「안 고친다」를 말할 길이 없다.
+ */
 const EASY_CARD_EDIT_SPEC: StructuredSpec = {
   name: "easy_card_edit",
   description: "카드뉴스 한 장의 글을 사용자의 말대로 고친다. 안 고칠 칸은 빈 글.",
