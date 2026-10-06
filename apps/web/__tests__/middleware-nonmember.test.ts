@@ -142,3 +142,18 @@ describe("/demo 를 지운 뒤 (D8)", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 });
+
+describe("검색 로봇 파일은 회원 확인 없이 통과한다(계획 2026-10-06 seo-search-registration)", () => {
+  it.each(["/robots.txt", "/sitemap.xml"])("손님이 %s 를 열면 안내로 보내지 않는다", async (path) => {
+    const response = await middleware(요청(path));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.status).toBe(200);
+  });
+
+  it.each(["/robots.txt", "/sitemap.xml"])("로그인한 회원이 %s 를 열어도 그대로 통과", async (path) => {
+    currentUser = { id: "member-1" };
+    const response = await middleware(요청(path));
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.status).toBe(200);
+  });
+});

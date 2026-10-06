@@ -67,6 +67,9 @@ export async function middleware(request: NextRequest) {
   // EC2/Caddy와 배포 스크립트가 인증 설정과 무관하게 프로세스 상태를 확인한다.
   // readiness 상세 판단은 각 health route가 직접 수행한다.
   if (pathname === "/api/health" || pathname === "/api/health/ready") return response;
+  // 검색 로봇 파일(계획 2026-10-06 seo-search-registration). 회원 확인 없이 연다 — 막으면 로봇이
+  // 「회원가입이 필요합니다」 화면을 받아 사이트 지도를 못 읽는다(운영에서 307 로 확인).
+  if (pathname === "/robots.txt" || pathname === "/sitemap.xml") return response;
 
   if (!url || !publishableKey) {
     if (pathname.startsWith("/api/")) {
