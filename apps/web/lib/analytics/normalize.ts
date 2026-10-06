@@ -10,9 +10,11 @@
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NUMERIC = /^\d+$/;
-// 숫자가 섞인 16자 이상 — 공유 토큰·짧은 id 모양.
-const LONG_TOKEN = /^(?=.*\d)[A-Za-z0-9_-]{16,}$/;
+// 숫자나 대문자가 섞인 16자 이상 — 공유 토큰·짧은 id 모양.
+const LONG_TOKEN = /^(?=.*[\dA-Z])[A-Za-z0-9_-]{16,}$/;
 const MAX_PATH = 200;
+// 주소에 숨겨진 특수문자 — ?·#·/·\·제어문자는 인코딩되면 숨을 수 있으므로 디코딩 후 검사한다.
+const DANGEROUS_CHARS = /[?#/\\]|[\x00-\x1f\x7f]/;
 
 function decodeSegment(segment: string): string {
   try {
@@ -29,7 +31,11 @@ export function normalizePath(pathname: string): string | null {
     .split("/")
     .filter(Boolean)
     .map(decodeSegment)
-    .map((segment) => (UUID.test(segment) || NUMERIC.test(segment) || LONG_TOKEN.test(segment) ? ":id" : segment));
+    .map((segment) => {
+      if (DANGEROUS_CHARS.test(segment)) return ":id";
+      if (UUID.test(segment) || NUMERIC.test(segment) || LONG_TOKEN.test(segment)) return ":id";
+      return segment;
+    });
   return `/${segments.join("/")}`.slice(0, MAX_PATH);
 }
 

@@ -37,6 +37,16 @@ describe("normalizePath — 주소에 든 값은 남기지 않는다", () => {
     expect(normalizePath("/")).toBe("/");
     expect(normalizePath("/guide/")).toBe("/guide");
   });
+  it("인코딩된 ?·#·/·\\·제어문자는 :id 로 바꾼다", () => {
+    expect(normalizePath("/x%3Ftoken=secret")).toBe("/:id");
+    expect(normalizePath("/reset%23access_token=xyz")).toBe("/:id");
+    expect(normalizePath("/a%2Fb")).toBe("/:id");
+    expect(normalizePath("/a%0Ab")).toBe("/:id");
+  });
+  it("숫자 없는 긴 토큰도 :id 로 바꾼다", () => {
+    expect(normalizePath("/share/aBcDeFgHiJkLmNoPq")).toBe("/share/:id");
+    expect(normalizePath("/guide/how-to-make-cardnews")).toBe("/guide/how-to-make-cardnews");
+  });
 });
 
 describe("isTrackedPath — 관리자·API 는 세지 않는다", () => {
