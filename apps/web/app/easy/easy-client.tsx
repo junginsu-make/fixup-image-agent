@@ -14,7 +14,7 @@ import { EasyModelBar, type ImageModelChoice } from "./_components/model-bar";
 import { easyTurn, type EasyMessage } from "./turn";
 import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
-import { collectEasyImage } from "./collect";
+import { STILL_MAKING, collectEasyImage } from "./collect";
 import { useEasyResume } from "./use-resume-images";
 import { askSubmission, carryChoices, type EasyCarry } from "./turn-carry";
 import { EASY_DEFAULT_RATIO } from "./ask";
@@ -463,7 +463,7 @@ export function EasyClient({
         retryable: (cause as { retryable?: boolean }).retryable !== false,
       });
       // 다시 칠 수 있게 되돌린다. 친 말을 잃으면 처음부터 써야 한다.
-      if (!친말) setDraft(prompt);
+      if (!친말 && (cause as Error)?.message !== STILL_MAKING) setDraft(prompt);
     } finally {
       if (alive.current) setSending(false);
     }

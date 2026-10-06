@@ -73,7 +73,7 @@ describe("화면이 마지막 물음에만 단추를 단다 (Review Focus 1)", (
   });
 
   it("단추로 보낸 턴이 실패해도 단추 글을 입력창에 넣지 않는다", () => {
-    expect(화면).toContain("if (!친말) setDraft(prompt);");
+    expect(화면).toContain("if (!친말 && (cause as Error)?.message !== STILL_MAKING) setDraft(prompt);");
     expect(화면).not.toMatch(/\n\s*setDraft\(prompt\);/);
   });
 });
