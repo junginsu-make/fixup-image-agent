@@ -45,6 +45,7 @@ const 기록하는파일: Record<string, RegExp> = {
 
 /** 공급자 모듈을 import 하지만 비용을 여기서 안 적는 파일. 까닭이 곧 확인할 곳이다. */
 const 예외: Record<string, string> = {
+  "apps/web/lib/character-brief.ts": "클라이언트만 만든다 — 호출은 `llm/structured.ts` 가 하고 거기서 적는다(값은 라우트의 `withLlmMeter` 가 잰다)",
   "apps/web/lib/cs/provider.ts": "클라이언트만 만든다 — 호출은 `llm/structured.ts` 가 하고 거기서 적는다",
   "apps/web/lib/easy/chat-provider.ts": "클라이언트만 만든다 — 호출은 `llm/structured.ts` 가 하고 거기서 적는다",
   "apps/web/lib/fal/upload.ts": "참고 그림을 fal 저장소에 올린다 — 모델 호출이 아니라 값이 없다",

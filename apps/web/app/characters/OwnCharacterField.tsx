@@ -4,6 +4,7 @@ import { ImagePlus, X } from "lucide-react";
 import { Button } from "@fixup/ui";
 import { openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
+import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import type { ReadImage } from "./read-image";
 
 /**
@@ -72,6 +73,7 @@ export function OwnCharacterField(props: {
                 <X className="mr-1 inline size-3" />빼기
               </button>
             ) : null}
+            <span className="text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</span>
           </div>
         </div>
       </div>

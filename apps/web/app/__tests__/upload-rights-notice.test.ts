@@ -42,6 +42,7 @@ const 업로드파일들 = tsx파일들(app).filter((path) =>
  */
 const 알려진자리 = [
   "characters/CharacterStudio.tsx",
+  "characters/OwnCharacterField.tsx",
   "create/PdpMakerClient.tsx",
   "create/StyleReferenceAttach.tsx",
   "easy/easy-client.tsx",
