@@ -8,6 +8,7 @@ import {
 import { createLimiter } from "../../../lib/analytics/rate-limit";
 import { pruneSoon, recordPageView } from "../../../lib/analytics/record";
 import { currentUserId } from "../../../lib/analytics/viewer";
+import { visitorHash } from "../../../lib/analytics/visitor";
 import { publicOrigin } from "../../../lib/routes";
 
 export const runtime = "nodejs";
@@ -21,7 +22,9 @@ export const dynamic = "force-dynamic";
  */
 const NO_CONTENT = () => new Response(null, { status: 204 });
 const MAX_BODY = 4_096;
-const allow = createLimiter({ limit: 120, windowMs: 60_000, maxKeys: 5_000 });
+// 한 IP 는 1분에 60줄, 서버 전체는 1분에 300줄. 열린 자리라 IP 를 바꿔 가며 몰아치는 것까지 막는다.
+const allowIp = createLimiter({ limit: 60, windowMs: 60_000, maxKeys: 5_000 });
+const allowAll = createLimiter({ limit: 300, windowMs: 60_000, maxKeys: 1 });
 
 const 방문 = z.object({
   path: z.string().min(1).max(2_000),
@@ -49,7 +52,7 @@ function acceptable(req: Request, userAgent: string, ip: string | null): boolean
   if (isBot(userAgent)) return false;
   const site = req.headers.get("sec-fetch-site");
   if (site && site !== "same-origin") return false;
-  return allow(ip ?? "unknown");
+  return allowIp(ip ?? "unknown") && allowAll("all");
 }
 
 /** 동의한 브라우저의 번호표. 동의했는데 번호가 없거나 모양이 틀리면 새로 만든다 — 그때만 issue. */
@@ -72,8 +75,7 @@ async function handle(req: Request): Promise<Response> {
   const origin = new URL(publicOrigin(req.headers, new URL(req.url).origin));
   const { cookieId, issue } = visitorCookie(req);
   await recordPageView({
-    ip,
-    userAgent,
+    visitor: visitorHash(ip, userAgent),
     userId: await currentUserId(),
     cookieId,
     path,

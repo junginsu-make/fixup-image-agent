@@ -25,33 +25,40 @@ const granted = (sql: string, fn: string) =>
 describe("표·함수 파일", () => {
   const sql = code("202610060001_site_analytics.sql");
 
-  it("함수 여섯만 정의한다", () => {
+  it("함수 다섯만 정의한다 — 방문자 값은 앱이 만든다", () => {
     expect(defined(sql)).toEqual([
-      "analytics_cookie_key", "analytics_forget", "analytics_link_cookie",
-      "analytics_prune", "analytics_record", "analytics_visitor_hash",
+      "analytics_cookie_key", "analytics_forget", "analytics_link_cookie", "analytics_prune", "analytics_record",
     ]);
+    expect(sql).not.toMatch(/analytics_visitor_hash|analytics_salts/i);
   });
 
   it("다른 표를 바꾸거나 지우지 않는다", () => {
-    expect(sql).not.toMatch(/\balter\s+table\s+(?!public\.analytics_(page_views|salts)\b)/i);
+    expect(sql).not.toMatch(/\balter\s+table\s+(?!public\.analytics_page_views\b)/i);
     expect(sql).not.toMatch(/\bdrop\s+(table|function|index)\b/i);
   });
 
-  it("두 표 모두 RLS 를 켜고 회원·손님 권한을 거둔다", () => {
-    for (const table of ["analytics_page_views", "analytics_salts"]) {
-      expect(sql).toMatch(new RegExp(`alter\\s+table\\s+public\\.${table}\\s+enable\\s+row\\s+level\\s+security`, "i"));
-      expect(sql).toMatch(new RegExp(`revoke\\s+all\\s+on\\s+table\\s+public\\.${table}\\s+from\\s+public,\\s*anon,\\s*authenticated`, "i"));
-    }
+  it("표는 하나이고, RLS 를 켜고 회원·손님 권한을 거둔다", () => {
+    const tables = [...sql.matchAll(/create\s+table\s+if\s+not\s+exists\s+public\.(\w+)/gi)].map((m) => m[1]);
+    expect(tables).toEqual(["analytics_page_views"]);
+    expect(sql).toMatch(/alter\s+table\s+public\.analytics_page_views\s+enable\s+row\s+level\s+security/i);
+    expect(sql).toMatch(/revoke\s+all\s+on\s+table\s+public\.analytics_page_views\s+from\s+public,\s*anon,\s*authenticated/i);
   });
 
-  it("바깥에서 부르는 넷은 서비스 권한만, 내부 둘은 아무에게도 주지 않는다", () => {
+  it("바깥에서 부르는 넷은 서비스 권한만, 내부 하나는 아무에게도 주지 않는다", () => {
     for (const fn of ["analytics_record", "analytics_link_cookie", "analytics_forget", "analytics_prune"]) {
       expect(revoked(sql, fn), fn).toBe(true);
       expect(granted(sql, fn), fn).toBe(true);
     }
-    for (const fn of ["analytics_visitor_hash", "analytics_cookie_key"]) {
-      expect(revoked(sql, fn), fn).toBe(true);
-      expect(granted(sql, fn), fn).toBe(false);
+    expect(revoked(sql, "analytics_cookie_key")).toBe(true);
+    expect(granted(sql, "analytics_cookie_key")).toBe(false);
+  });
+
+  it("security definer 함수는 모두 search_path 를 public, pg_temp 로 못 박는다", () => {
+    const bodies = sql.split(/create\s+or\s+replace\s+function/i).slice(1);
+    const definers = bodies.filter((body) => /security\s+definer/i.test(body));
+    expect(definers.length).toBeGreaterThan(0);
+    for (const body of definers) {
+      expect(body).toMatch(/set\s+search_path\s*=\s*public,\s*pg_temp/i);
     }
   });
 

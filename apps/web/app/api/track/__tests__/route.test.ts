@@ -54,8 +54,11 @@ describe("적는다", () => {
     expect(적은것).toEqual([expect.objectContaining({
       path: "/library/:id", entry: true, referrerHost: "instagram.com", userId: "member-1", cookieId: null,
       utm: { source: "instagram", medium: null, campaign: "launch" }, device: "desktop", browser: "chrome",
-      ip: expect.stringMatching(/^198\.51\.100\.\d+$/),
+      visitor: expect.stringMatching(/^[0-9a-f]{64}$/),
     })]);
+    // 원래 IP·브라우저 정보는 DB 쪽으로 넘기지 않는다 — 하루 값만.
+    expect(적은것[0]).not.toHaveProperty("ip");
+    expect(적은것[0]).not.toHaveProperty("userAgent");
   });
 
   it("화면 이동 — referrer·utm 을 보내도 entry 가 아니면 버린다", async () => {
@@ -143,14 +146,14 @@ describe("어떤 경우에도 204", () => {
 });
 
 describe("몰아치기", () => {
-  it("한 IP 가 1분에 120번을 넘으면 그 뒤는 안 적는다", async () => {
-    for (let i = 0; i < 125; i += 1) {
+  it("한 IP 가 1분에 60번을 넘으면 그 뒤는 안 적는다", async () => {
+    for (let i = 0; i < 65; i += 1) {
       await POST(new Request("https://formwith.fix-up.kr/api/track", {
         method: "POST",
         headers: { "user-agent": CHROME, "sec-fetch-site": "same-origin", "x-forwarded-for": "192.0.2.250" },
         body: JSON.stringify({ path: "/", entry: false }),
       }));
     }
-    expect(적은것).toHaveLength(120);
+    expect(적은것).toHaveLength(60);
   });
 });

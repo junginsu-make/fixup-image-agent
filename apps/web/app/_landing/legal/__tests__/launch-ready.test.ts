@@ -302,6 +302,11 @@ describe("쿠키", () => {
     expect(방침).toContain(`| ${CONSENT_COOKIE} (쿠키) |`);
     expect(방침).toContain(`${ANALYTICS_COOKIE_DAYS}일`);
     expect(방침).toContain("「방문 통계 설정」");
+    // 방문자 값은 서버 메모리 열쇠로 만든다(lib/analytics/visitor.ts) — 문구가 그 사실과 같아야 한다.
+    expect(방침).toContain("서버 메모리에만 두고 날마다 바꾸는");
+    expect(방침).toContain("방문 분석 쿠키 없이 처리합니다");
+    expect(방침).toContain("로그인한 회원의 방문은 회원 식별번호로 기록합니다");
+    expect(방침).not.toContain("그 무작위 값은 다음 날 지웁니다");
 
     const 보내기 = read(web, "app", "_components", "page-view-tracker.tsx");
     for (const 저장 of ["document.cookie", "localStorage", "sessionStorage", "indexedDB"]) {

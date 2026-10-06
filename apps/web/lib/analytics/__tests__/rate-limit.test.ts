@@ -21,10 +21,12 @@ describe("createLimiter", () => {
     expect(allow("b", 2)).toBe(true);
     expect(allow("a", 1_000)).toBe(true);
   });
-  it("열쇠가 너무 많아지면 비우고 계속 받는다 — 메모리가 끝없이 늘지 않는다", () => {
+  it("열쇠가 너무 많아지면 가장 오래된 것부터 밀어낸다 — 메모리가 늘지 않고, 남은 것은 그대로 센다", () => {
     const allow = createLimiter({ limit: 1, windowMs: 1_000, maxKeys: 2 });
-    allow("a", 0);
-    allow("b", 0);
-    expect(allow("a", 0)).toBe(true); // 비운 뒤라 새 창
+    expect(allow("a", 0)).toBe(true);
+    expect(allow("b", 0)).toBe(true);
+    expect(allow("c", 0)).toBe(true); // a 를 밀어낸다
+    expect(allow("b", 0)).toBe(false); // b 는 남아 있어 계속 센다
+    expect(allow("a", 0)).toBe(true); // 밀려났던 a 는 새 창
   });
 });

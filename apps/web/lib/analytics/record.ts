@@ -11,8 +11,8 @@ import { ANALYTICS_KEEP_DAYS } from "./retention";
  * 철회를 못 지킨 채 「됐다」고 하면 안 된다. 경고는 10분에 한 번, 방문 내용(IP·주소·번호)은 싣지 않는다.
  */
 export type PageView = {
-  ip: string | null;
-  userAgent: string;
+  /** 그날의 방문자 값(`visitor.ts`). 원래 IP·브라우저 정보는 여기까지 오지 않는다. */
+  visitor: string;
   userId: string | null;
   cookieId: string | null;
   path: string;
@@ -44,8 +44,7 @@ async function call(fn: string, args: Record<string, unknown>): Promise<unknown>
 export async function recordPageView(view: PageView): Promise<void> {
   try {
     await call("analytics_record", {
-      p_ip: view.ip,
-      p_ua: view.userAgent,
+      p_visitor: view.visitor,
       p_user: view.userId,
       p_path: view.path,
       p_referrer_host: view.referrerHost,
@@ -62,10 +61,12 @@ export async function recordPageView(view: PageView): Promise<void> {
   }
 }
 
-/** 동의한 순간, 오늘 같은 방문자의 앞선 줄(첫 화면·유입 경로)에 번호를 잇는다. */
-export async function linkCookie({ cookieId, ip, userAgent }: { cookieId: string; ip: string | null; userAgent: string }): Promise<void> {
+/** 동의한 순간, 같은 방문자의 최근 30분 앞선 줄(첫 화면·유입 경로)에 번호를 잇는다. */
+export async function linkCookie(
+  { cookieId, visitor, userId }: { cookieId: string; visitor: string; userId: string | null },
+): Promise<void> {
   try {
-    await call("analytics_link_cookie", { p_cookie: cookieId, p_ip: ip, p_ua: userAgent });
+    await call("analytics_link_cookie", { p_cookie: cookieId, p_visitor: visitor, p_user: userId });
   } catch (error) {
     warn(error);
   }

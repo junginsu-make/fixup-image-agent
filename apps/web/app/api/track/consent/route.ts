@@ -3,7 +3,10 @@ import {
   ANALYTICS_COOKIE_DAYS, CONSENT_COOKIE, VISITOR_COOKIE, clearCookie, readCookie, setCookie, validVisitorId,
 } from "../../../../lib/analytics/consent";
 import { clientIp } from "../../../../lib/analytics/normalize";
+import { createLimiter } from "../../../../lib/analytics/rate-limit";
 import { forgetCookie, linkCookie } from "../../../../lib/analytics/record";
+import { currentUserId } from "../../../../lib/analytics/viewer";
+import { visitorHash } from "../../../../lib/analytics/visitor";
 import { publicOrigin } from "../../../../lib/routes";
 
 export const runtime = "nodejs";
@@ -14,7 +17,12 @@ export const dynamic = "force-dynamic";
  *
  * 동의 띠와 「방문 통계 설정」이 부른다. 거부는 **DB 에서 먼저 잊고** 쿠키를 지운다 — 거꾸로 하면
  * 잊기가 실패했을 때 번호를 잃어 다시는 지울 수 없다.
+ *
+ * 보안 검토 반영: 같은 사이트 화면이 보낸 JSON 만 받고(남의 사이트가 대신 눌러 주지 못하게), 한 IP 는
+ * 1분에 10번까지다. 동의 때 앞선 기록을 잇는 일은 DB 를 건드리므로 열어 둘 수 없다.
  */
+// 상태 보관 자리(프로세스 하나에 하나). 한 IP 가 1분에 10번.
+const allow = createLimiter({ limit: 10, windowMs: 60_000, maxKeys: 5_000 });
 const 선택 = z.object({ consent: z.boolean() }).strict();
 
 async function readChoice(req: Request): Promise<boolean | null> {
@@ -36,9 +44,26 @@ function isSecure(req: Request): boolean {
   }
 }
 
-export async function POST(req: Request) {
+/** 우리 화면에서 보낸 요청인가. 브라우저가 알려 주는 `sec-fetch-site` 가 먼저, 없으면 `origin` 의 주소로 본다. */
+function sameSite(req: Request): boolean {
   const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin") return new Response(null, { status: 403 });
+  if (site) return site === "same-origin";
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    const own = new URL(publicOrigin(req.headers, new URL(req.url).origin));
+    return new URL(origin).host === own.host;
+  } catch {
+    return false;
+  }
+}
+
+export async function POST(req: Request) {
+  if (!allow(clientIp(req.headers) ?? "unknown")) return new Response(null, { status: 429 });
+  if (!sameSite(req)) return new Response(null, { status: 403 });
+  if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
+    return new Response(null, { status: 415 });
+  }
   const consent = await readChoice(req);
   if (consent === null) return new Response(null, { status: 400 });
 
@@ -49,8 +74,9 @@ export async function POST(req: Request) {
 
 async function agree(req: Request, existing: string | null, secure: boolean): Promise<Response> {
   const cookieId = existing ?? crypto.randomUUID();
-  // /api/track 과 같은 값으로 잇는다 — 하루 방문자 값이 IP·브라우저 정보로 만들어진다.
-  await linkCookie({ cookieId, ip: clientIp(req.headers), userAgent: (req.headers.get("user-agent") ?? "").slice(0, 512) });
+  // /api/track 과 같은 값으로 잇는다 — 하루 방문자 값(IP·브라우저 정보를 서버 메모리 열쇠로 섞은 것).
+  const userAgent = (req.headers.get("user-agent") ?? "").slice(0, 512);
+  await linkCookie({ cookieId, visitor: visitorHash(clientIp(req.headers), userAgent), userId: await currentUserId() });
   const response = new Response(null, { status: 204 });
   response.headers.append("set-cookie", setCookie(CONSENT_COOKIE, "1", { secure, httpOnly: false, days: ANALYTICS_COOKIE_DAYS }));
   if (!existing) {
