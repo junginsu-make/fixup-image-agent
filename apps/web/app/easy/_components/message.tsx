@@ -5,6 +5,8 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button, cn } from "@fixup/ui";
 import { DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
+import { isAdGuide, isAdQuestion, visibleBody } from "../ad-ask";
+import { EasyAdGuide, EasyAdQuestion } from "./ad-rows";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
 import { EasyCardnewsCard } from "./cardnews-card";
@@ -153,6 +155,7 @@ export function EasyMessageRow({
   onOpenImage,
   cardnews,
   failed,
+  onAdChoice,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
@@ -162,6 +165,8 @@ export function EasyMessageRow({
   cardnews?: React.ComponentProps<typeof EasyCardnewsCard>;
   /** 다시 열어 이어 받다가 못 받은 까닭(2026-10-06 설계 B3 · B5). 있으면 「만들고 있습니다」 대신 보인다. */
   failed?: string;
+  /** 광고 물음 줄의 단추를 누를 때(설계 A5). 화면이 마지막 물음 줄에만 넘긴다. */
+  onAdChoice?: (answer: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -196,6 +201,10 @@ export function EasyMessageRow({
               <Link href={DETAIL_PAGE_HREF}>상세페이지 만들기 열기</Link>
             </Button>
           </div>
+        ) : isAdQuestion(message) ? (
+          <EasyAdQuestion body={message.body} bubble={말풍선} onChoose={onAdChoice} />
+        ) : isAdGuide(message) ? (
+          <EasyAdGuide body={visibleBody(message)} bubble={말풍선} />
         ) : (
           <p className={cn("max-w-[85%]", 말풍선)}>{message.body}</p>
         )}

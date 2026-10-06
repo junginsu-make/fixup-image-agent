@@ -294,12 +294,11 @@ export function EasyClient({
   async function send(
     /** 물어본 뒤 다시 보낼 때 쓴다. 비우면 입력창의 말을 보낸다. */
      다시?: EasyResend,
+    친말?: string, // 단추로 고른 답(광고 물음, 설계 A5) — 입력창 말 대신 새 말로 보낸다
   ) {
-    /*
-     * **사진을 물은 뒤 말로 답하면** 처음 말과 답을 잇는다(설계 §2-5).
-     */
-    const 말답 = !다시 && photoAsking && draft.trim() ? photoAnswer(photoAsking, draft) : undefined;
-    const prompt = 다시?.prompt ?? 말답?.prompt ?? draft.trim();
+    /* **사진을 물은 뒤 말로 답하면** 처음 말과 답을 잇는다(설계 §2-5). */
+    const 말답 = !다시 && !친말 && photoAsking && draft.trim() ? photoAnswer(photoAsking, draft) : undefined;
+    const prompt = 다시?.prompt ?? 말답?.prompt ?? 친말 ?? draft.trim();
     const photoRoles = 다시?.photoRoles ?? 말답?.photoRoles;
     if (!prompt || (!다시 && !turn.canSend)) return;
     const 이어감 = Boolean(다시 || 말답);
@@ -333,7 +332,7 @@ export function EasyClient({
       // 물음 줄을 거둔다. 내 말은 이미 그려져 있다.
       setAsking(null);
     } else {
-      setDraft("");
+      if (!친말) setDraft("");
       /*
         **묻던 것을 거둔다.** 답하지 않고 새 말을 치면 그 물음은 버린 것이다.
         남겨 두면 지난 말에 딸린 토글이 새 말 밑에 붙어 무엇을 묻는지 흐려진다.
@@ -464,7 +463,7 @@ export function EasyClient({
         retryable: (cause as { retryable?: boolean }).retryable !== false,
       });
       // 다시 칠 수 있게 되돌린다. 친 말을 잃으면 처음부터 써야 한다.
-      setDraft(prompt);
+      if (!친말) setDraft(prompt);
     } finally {
       if (alive.current) setSending(false);
     }
@@ -505,6 +504,7 @@ export function EasyClient({
               onOpenImage={() => openViewer(results.findIndex((one) => one.id === message.id))}
               cardnews={cardnews.rowProps(message.id, turn.busy)}
               failed={failed[message.id]}
+              onAdChoice={message.id === shown[shown.length - 1]?.id && !turn.busy ? (answer) => void send(undefined, answer) : undefined}
             />
           ))}
 
