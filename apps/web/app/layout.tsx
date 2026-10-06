@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { ThemeProvider, Toaster } from "@fixup/ui";
 import { ImageViewerHost } from "./_components/image-viewer";
+import { PageViewTracker } from "./_components/page-view-tracker";
+import { ConsentBanner } from "./_components/consent-banner";
 /*
   글꼴을 여기서 부른다.
 
@@ -77,11 +79,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko" suppressHydrationWarning>
       <body>
+        <PageViewTracker />
         <ThemeProvider>
           {children}
           {/* 어느 화면에서 눌러도 같은 창이 뜨도록 한 곳에만 둔다. */}
           <ImageViewerHost />
           <Toaster />
+          <ConsentBanner />
         </ThemeProvider>
       </body>
     </html>
