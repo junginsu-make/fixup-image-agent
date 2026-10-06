@@ -4,7 +4,8 @@ import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
-import { easyAvailableWants, easyChatPrompt, readEasyDecision, type EasyDecision } from "../../../easy/chat";
+import type { EasyDecision } from "../../../easy/chat";
+import { judgeEasyTurn } from "../../../../lib/easy/judge";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
 import { DETAIL_PAGE_GUIDE } from "../../../easy/detail-page";
@@ -195,28 +196,32 @@ async function turn(request: Request): Promise<Response> {
     );
     if (!판정예약.ok) return 판정예약.response;
 
+    /*
+     * **갈래를 단추로 골랐나**(2026-10-06 설계 A2, 최종 리뷰). 화면은 「이미지 한 장 ·
+     * 카드뉴스」 단추로 고른 턴에만 `kindPicked` 를 싣는다. 물음 뒤 **말로** 답한 턴도
+     * 갈래를 이어 싣지만(`continuingKind`) 그것은 고른 것이 아니다 — 그 말이 질문이면
+     * 질문에 답해야 한다.
+     */
+    const 고른갈래 = input.kind === "image" || input.kind === "cardnews" ? input.kind as "image" | "cardnews" : undefined;
+    const 골랐나 = Boolean(고른갈래) && input.kindPicked === true;
+
     let decision: EasyDecision;
     try {
-      decision = readEasyDecision(
-        await provider.decide(
-          easyChatPrompt(
-            지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
-            prompt,
-            /*
-             * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
-             * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
-             * (2026-09-21 실측).
-             */
-            붙인수,
-            Boolean(고칠원고),
-            만들었나,
-            Boolean(고칠그림),
-          ),
-          // 선택지는 프롬프트와 같은 함수가 정한다(2026-10-06 설계 A1).
-          easyAvailableWants({ hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) }),
-        ),
-        { canRevise: Boolean(고칠원고), made: 만들었나, editableImage: Boolean(고칠그림) },
-      );
+      // 한 턴의 판단 — 선택지(A1) · 빈 답 재질문(A3)은 `lib/easy/judge.ts` 가 한다.
+      decision = await judgeEasyTurn({
+        decide: (text, wants) => provider.decide(text, wants),
+        history: 지난줄.map((row) => ({ id: row.id, role: row.role, body: row.body })),
+        prompt,
+        /*
+         * **붙인 것이 있는지 알려 준다.** 안 알려 주면 「이걸로 하나 그려줘」를
+         * 되묻는다 — 「이걸로」가 무엇인지 모르니 물을 수밖에 없다
+         * (2026-09-21 실측).
+         */
+        attachmentCount: 붙인수,
+        choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) },
+        // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
+        kindPicked: 골랐나,
+      });
     } catch (error) {
       await settleAiUsage(판정예약, false, 0, "easy_decide_failed", llmSettleCost());
       throw error;
@@ -224,11 +229,14 @@ async function turn(request: Request): Promise<Response> {
     await settleAiUsage(판정예약, true, 0, undefined, llmSettleCost());
 
     /*
-     * **고른 갈래가 판단을 이긴다**(2단계 설계 §4). 「이미지 한 장 · 카드뉴스」 단추로
-     * 답하고 다시 보낸 것이다. 말 · 상세페이지 · 고치기에는 안 끼어든다.
+     * **단추로 고른 갈래는 늘 이긴다**(2026-10-06 설계 A2). 전에는 판단이 image ·
+     * cardnews · either 일 때만 이겨서, 다시 판단한 모델이 고치기나 말을 고르면 단추를
+     * 눌러도 고정 문장이 되풀이됐다. **고른 것이 아니라 이어 온 갈래**(말로 한 답)는
+     * 예전 규칙 그대로다(2단계 §4) — 말 · 상세페이지 · 고치기에는 안 끼어든다.
      */
-    const 고른갈래 = input.kind === "image" || input.kind === "cardnews" ? input.kind as "image" | "cardnews" : undefined;
-    const wants = 고른갈래 && ["image", "cardnews", "either"].includes(decision.wants) ? 고른갈래 : decision.wants;
+    const wants = 고른갈래 && (골랐나 || ["image", "cardnews", "either"].includes(decision.wants))
+      ? 고른갈래
+      : decision.wants;
     // 한 장인지 여러 장인지 모르면 묻고 아무것도 안 남긴다(2단계 §4).
     if (wants === "either") return Response.json({ ok: true, kindAsk: true, textModel });
     // 만든 카드뉴스 손보기(3단계). 판단 읽기가 원고 · 만든 카드가 있을 때만 이 갈래를 준다.

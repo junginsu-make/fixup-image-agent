@@ -59,6 +59,12 @@ export interface EasyDecision {
   look?: string;
 }
 
+/** 이번 판단에만 쓰는 것. */
+export interface EasyPromptOptions {
+  /** A3: 앞서 talk 인데 reply 가 비었다. 이번에는 꼭 쓰라고 한다. */
+  retry?: boolean;
+}
+
 /** 판단 모델이 고를 수 있는 갈래 하나. */
 export type EasyWant = EasyDecision["wants"];
 
@@ -135,6 +141,8 @@ export function easyChatPrompt(
   made = false,
   /** 이 대화의 마지막 결과가 이미지 한 장인가. 그때만 「이미지 고치기」를 알려 준다(2026-10-06). */
   madeImage = false,
+  /** 한 번 더 묻는 때처럼 이번 판단에만 쓰는 것(2026-10-06 설계 A3). */
+  options: EasyPromptOptions = {},
 ): string {
   // 프롬프트의 갈래 안내와 판단 틀의 선택지가 **같은 함수**에서 나온다(2026-10-06 설계 A1).
   const 갈래 = easyAvailableWants({ hasDraft, made, madeImage });
@@ -259,6 +267,9 @@ export function easyChatPrompt(
         // A1-2: 만든 것이 없는 대화에서 「사진 속 ○○을 바꿔줘」는 새 이미지다.
         ...(갈래.includes("image_edit") || 갈래.includes("revise") ? [] : easyFirstPhotoLines()),
       ]
+      : []),
+    ...(options.retry
+      ? ["**앞서 talk 를 고르고 reply 를 비웠습니다.** talk 이면 이번에는 reply 에 꼭 답을 쓰세요.", ""]
       : []),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
     ...지난말,

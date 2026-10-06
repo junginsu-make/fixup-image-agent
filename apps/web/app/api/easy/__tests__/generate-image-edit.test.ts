@@ -16,6 +16,7 @@ let 판단: unknown;
 let 지난줄: Array<{ id: string; role: string; body: string; workId: string | null }>;
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
 const 부른라우트: Array<{ step: string; url: string; body: Record<string, unknown> }> = [];
+let 받은갈래: string[] = [];
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -35,7 +36,10 @@ vi.mock("../../../../lib/easy/store", () => ({
   }),
 }));
 vi.mock("../../../../lib/easy/chat-provider", () => ({
-  createEasyChatProvider: () => ({ decide: async () => 판단, decideRoles: async () => ({ photos: [], conflicting: false }) }),
+  createEasyChatProvider: () => ({
+    decide: async (_prompt: string, wants: readonly string[]) => { 받은갈래 = [...wants]; return 판단; },
+    decideRoles: async () => ({ photos: [], conflicting: false }),
+  }),
 }));
 vi.mock("../../../../lib/easy/cardnews-steps", async (original) => ({
   ...(await original<object>()),
@@ -128,5 +132,31 @@ describe("고칠 것이 없는 대화에서 고쳐 달라고 하면", () => {
     expect(부른라우트).toEqual([]);
     expect(json.talked).toBe(true);
     expect(json.message.body).toBe(NOTHING_TO_EDIT);
+  });
+});
+
+describe("선택지와 고른 갈래 (2026-10-06 A1 · A2)", () => {
+  it("이미지를 만든 대화면 선택지에 image_edit 이 있다", async () => {
+    await 보낸다({ prompt: "배경만 파랗게" });
+    expect(받은갈래).toContain("image_edit");
+  });
+
+  it("만든 것이 없는 대화면 선택지에 고치기 갈래가 없다", async () => {
+    지난줄 = [{ id: "u1", role: "user", body: "안녕", workId: null }];
+    await 보낸다({ prompt: 로고바꿔줘 });
+    expect(받은갈래).not.toContain("image_edit");
+    expect(받은갈래).not.toContain("revise");
+  });
+
+  it("「이미지 한 장」을 고른 답이면 마지막 이미지를 고치지 않고 새로 만든다", async () => {
+    판단 = { ...(판단 as object), wants: "image_edit" };
+    await 보낸다({ prompt: "광고 사진을 만들어주세요", kind: "image", kindPicked: true, ratio: "1:1" });
+    expect(부른라우트.map((call) => call.step)).toEqual(["project", "plan", "generate"]);
+  });
+
+  it("단추로 고른 것이 아니면(이어 온 갈래) 고치기 판단을 따른다", async () => {
+    판단 = { ...(판단 as object), wants: "image_edit" };
+    await 보낸다({ prompt: "배경만 파랗게", kind: "image" });
+    expect(부른라우트.map((call) => call.step)).toEqual(["edit"]);
   });
 });

@@ -296,3 +296,43 @@ describe("역할대로 칸을 채운다 (설계 §2-6)", () => {
     expect(부른라우트[0]!.body).toMatchObject({ attachmentOrder: [사진(1)] });
   });
 });
+
+describe("한 턴의 판단 (2026-10-06 A2 · A3)", () => {
+  it("「이미지 한 장」을 고르고 다시 보내면 모델이 말로 답해도 만든다 (A2)", async () => {
+    판단 = { wants: "talk", reply: "무엇을 만들까요?", ratio: "", look: "" };
+    const { json } = await 보낸다({ kind: "image", kindPicked: true, ratio: "1:1" });
+    expect(json.talked).toBeUndefined();
+    expect(부른라우트.map((call) => call.step)).toEqual(["project", "plan", "generate"]);
+  });
+
+  /**
+   * 최종 리뷰(2026-10-06): 사진 물음 중에 말로 친 질문은 화면이 갈래를 이어 싣지만
+   * (`continuingKind`) 단추로 고른 것이 아니다. 그 말까지 이미지로 만들면 묻는 말에 값이 나간다.
+   */
+  it("고른 것이 아니라 이어 온 갈래면 말로 답한 판단을 따른다", async () => {
+    판단 = { wants: "talk", reply: "1번 사진은 로고로 쓰겠습니다.", ratio: "", look: "" };
+    const { json } = await 보낸다({ prompt: "1번 사진은 뭐로 써요?", kind: "image" });
+    expect(json.talked).toBe(true);
+    expect(json.message.body).toBe("1번 사진은 로고로 쓰겠습니다.");
+    expect(부른라우트).toEqual([]);
+  });
+
+  it("이어 온 갈래도 판단이 image · cardnews · either 면 예전처럼 이긴다 (2단계 §4)", async () => {
+    판단 = { wants: "either", reply: "", ratio: "", look: "" };
+    await 보낸다({ kind: "image", ratio: "1:1" });
+    expect(부른라우트.map((call) => call.step)).toEqual(["project", "plan", "generate"]);
+  });
+
+  it("talk 인데 답이 두 번 다 비면 그때만 기본 문장 (A3)", async () => {
+    판단 = { wants: "talk", reply: "", ratio: "", look: "" };
+    const { json } = await 보낸다({ prompt: "음" });
+    expect(부른횟수.decide).toBe(2);
+    expect(json.message.body).toBe("무엇을 만들어 드릴까요?");
+  });
+
+  it("단추로 고른 턴은 빈 talk 여도 다시 묻지 않는다 — 버릴 판단에 값이 두 번 안 나간다", async () => {
+    판단 = { wants: "talk", reply: "", ratio: "", look: "" };
+    await 보낸다({ kind: "image", kindPicked: true, ratio: "1:1" });
+    expect(부른횟수.decide).toBe(1);
+  });
+});

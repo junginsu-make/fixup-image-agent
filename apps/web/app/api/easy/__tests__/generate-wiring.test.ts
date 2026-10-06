@@ -150,13 +150,13 @@ describe("화면과 서버가 같은 기본값을 쓴다", () => {
  */
 describe("말과 주문을 가르는 자리", () => {
   it("가르는 판단을 라우트 안에 두지 않는다", () => {
-    // 판단은 `app/easy/chat.ts` 가 값으로 잰다. 여기 있으면 못 잰다.
+    // 판단은 `app/easy/chat.ts` 가 값으로 재고, 한 턴의 묻기는 `lib/easy/judge.ts` 가 한다.
     expect(generate).toContain('from "../../../easy/chat"');
-    expect(generate).toContain("readEasyDecision");
+    expect(generate).toContain("judgeEasyTurn(");
   });
 
   it("프로젝트를 만들기 전에 가른다", () => {
-    const 가르는곳 = generate.indexOf("readEasyDecision");
+    const 가르는곳 = generate.indexOf("judgeEasyTurn(");
     const 만드는곳 = generate.indexOf("await createProject(");
 
     expect(가르는곳).toBeGreaterThan(0);
