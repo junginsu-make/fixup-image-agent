@@ -8,6 +8,7 @@ import {
   OpenAIStructuredProvider,
   type StructuredSpec,
 } from "../llm/structured";
+import type { EasyWant } from "../../app/easy/chat";
 
 /**
  * Easy 모드의 **말하는 쪽**.
@@ -30,41 +31,47 @@ import {
  * 화면」이 된다 — 2026-09-18 에 기획 쪽에서 실제로 그랬다.
  */
 
-const EASY_CHAT_SPEC: StructuredSpec = {
-  name: "easy_turn",
-  description: "사용자의 마지막 말이 그림 주문인지 가리고, 아니면 답을 쓴다.",
-  schema: {
-    type: "object",
-    properties: {
-      /*
-       * **틀에 없으면 아무리 시켜도 안 온다.** 구조화 응답은 이 틀에 없는 칸을
-       * 버린다 — 2026-09-17 에 `invented` 로 한 번, `hasText` 로 또 한 번
-       * 당했다. 둘 다 프롬프트에만 적혀 있었다.
-       */
-      wants: {
-        type: "string",
-        enum: ["image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download", "image_edit"],
+/**
+ * 말 판단 틀. **선택지는 부를 때마다 받는다**(2026-10-06 설계 A1).
+ *
+ * 전에는 enum 에 모든 갈래가 늘 열려 있어서, 프롬프트가 안내하지 않은 `image_edit` 을
+ * 모델이 골랐다(실측 6/6). 선택지는 `chat.ts` 의 `easyAvailableWants` 가 정하고,
+ * 프롬프트도 같은 목록으로 안내한다.
+ */
+export function easyChatSpec(wants: readonly string[]): StructuredSpec {
+  return {
+    name: "easy_turn",
+    description: "사용자의 마지막 말이 그림 주문인지 가리고, 아니면 답을 쓴다.",
+    schema: {
+      type: "object",
+      properties: {
+        /*
+         * **틀에 없으면 아무리 시켜도 안 온다.** 구조화 응답은 이 틀에 없는 칸을
+         * 버린다 — 2026-09-17 에 `invented` 로 한 번, `hasText` 로 또 한 번
+         * 당했다. 둘 다 프롬프트에만 적혀 있었다.
+         */
+        wants: { type: "string", enum: [...wants] },
+        reply: { type: "string" },
+        /*
+         * **말 속에 있을 때만 채운다.** 빈 글이 「없다」는 뜻이다.
+         *
+         * `required` 에 넣는 까닭은 하나다 — 구조화 응답은 안 채운 칸을 그냥
+         * 빼 버려서, 모델이 「없음」을 말할 길이 없으면 아무 값이나 채운다.
+         */
+        ratio: { type: "string", enum: ["", ...EASY_RATIOS.map((one) => one.id)] },
+        /*
+          **`auto` 는 안 준다.** 그것은 「안 골랐다」는 뜻의 기본값이라, 고를 거리로
+          주면 모델이 그것을 골라 놓고 「말했다」가 된다 — 그러면 안 묻는다.
+        */
+        look: { type: "string", enum: ["", ...EASY_LOOKS.filter((one) => one.id !== "auto").map((one) => one.id)] },
+        // 3단계: 말한 장 번호(없으면 0)와 그 장에 바라는 점 · 고칠 내용(없으면 빈 글).
+        card: { type: "integer" },
+        note: { type: "string" },
       },
-      reply: { type: "string" },
-      /*
-       * **말 속에 있을 때만 채운다.** 빈 글이 「없다」는 뜻이다.
-       *
-       * `required` 에 넣는 까닭은 하나다 — 구조화 응답은 안 채운 칸을 그냥
-       * 빼 버려서, 모델이 「없음」을 말할 길이 없으면 아무 값이나 채운다.
-       */
-      ratio: { type: "string", enum: ["", ...EASY_RATIOS.map((one) => one.id)] },
-      /*
-        **`auto` 는 안 준다.** 그것은 「안 골랐다」는 뜻의 기본값이라, 고를 거리로
-        주면 모델이 그것을 골라 놓고 「말했다」가 된다 — 그러면 안 묻는다.
-      */
-      look: { type: "string", enum: ["", ...EASY_LOOKS.filter((one) => one.id !== "auto").map((one) => one.id)] },
-      // 3단계: 말한 장 번호(없으면 0)와 그 장에 바라는 점 · 고칠 내용(없으면 빈 글).
-      card: { type: "integer" },
-      note: { type: "string" },
+      required: ["wants", "reply", "ratio", "look", "card", "note"],
     },
-    required: ["wants", "reply", "ratio", "look", "card", "note"],
-  },
-};
+  };
+}
 
 /**
  * **사진마다 쓰임을 정하는 틀**(설계 §2-3 ⓑ2).
@@ -159,7 +166,7 @@ export function createEasyChatProvider(
     const openai = new OpenAI({ apiKey: key, maxRetries: 2, timeout: 60_000 });
     const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
       new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt);
-    return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
+    return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
   }
 
   const key = environment.ANTHROPIC_API_KEY?.trim();
@@ -168,5 +175,5 @@ export function createEasyChatProvider(
   const model = textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5";
   const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
     new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt);
-  return { decide: 부른다(EASY_CHAT_SPEC), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
+  return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC) };
 }

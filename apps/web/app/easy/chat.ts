@@ -1,6 +1,7 @@
 import { EASY_LOOKS, EASY_RATIOS } from "./ask";
 import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
+import { easyCapabilityLines, easyFirstPhotoLines } from "./chat-facts";
 
 /**
  * **말인가, 만들어 달라는 것인가.**
@@ -58,6 +59,36 @@ export interface EasyDecision {
   look?: string;
 }
 
+/** 판단 모델이 고를 수 있는 갈래 하나. */
+export type EasyWant = EasyDecision["wants"];
+
+/** 지금 쓸 수 있는 갈래를 정하는 재료. 모두 이 대화에서 읽은 사실이다. */
+export interface EasyChoices {
+  /** 이 대화에 카드뉴스 원고가 있나. */
+  hasDraft: boolean;
+  /** 그 원고로 카드를 만들었나(그림이 있다). */
+  made: boolean;
+  /** 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가. */
+  madeImage: boolean;
+}
+
+/**
+ * **지금 쓸 수 있는 갈래**(2026-10-06 설계 A1).
+ *
+ * 프롬프트의 갈래 안내(`easyChatPrompt`)와 판단 틀의 선택지(`easyChatSpec`)가 **둘 다
+ * 이 함수에서 나온다.** 전에는 프롬프트만 조건부였고 틀은 늘 열려 있어서, 고칠 것이 없는
+ * 대화에서도 모델이 `image_edit` 을 골라 고정 문장으로 끝났다(실측 6/6).
+ */
+export function easyAvailableWants(choices: EasyChoices): EasyWant[] {
+  return [
+    "image", "cardnews", "either",
+    ...(choices.hasDraft ? (["revise", "card_text"] as const) : []),
+    ...(choices.hasDraft && choices.made ? (["card_redo", "caption", "download"] as const) : []),
+    ...(choices.madeImage ? (["image_edit"] as const) : []),
+    "talk", "detail_page",
+  ];
+}
+
 /**
  * 고쳐 달라는데 고칠 것이 없을 때의 답.
  *
@@ -105,6 +136,8 @@ export function easyChatPrompt(
   /** 이 대화의 마지막 결과가 이미지 한 장인가. 그때만 「이미지 고치기」를 알려 준다(2026-10-06). */
   madeImage = false,
 ): string {
+  // 프롬프트의 갈래 안내와 판단 틀의 선택지가 **같은 함수**에서 나온다(2026-10-06 설계 A1).
+  const 갈래 = easyAvailableWants({ hasDraft, made, madeImage });
   const 지난말 = history
     // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
     .filter((message) => message.id !== "greeting")
@@ -131,7 +164,7 @@ export function easyChatPrompt(
     "            「신메뉴 홍보물 만들어줘」 · 「이걸로 만들어줘」 · 「인스타에 올릴 거 만들어줘」.",
     "            짐작하지 말고 either 로 두세요. 사용자에게 물어봅니다.",
     "            단, 「포스터」 · 「배너」 · 「썸네일」처럼 **원래 한 장인 것**을 말했으면 묻지 말고 image 입니다.",
-    ...(hasDraft
+    ...(갈래.includes("revise")
       ? [
         "  revise    이 대화의 **카드뉴스 원고나 만든 카드를 고쳐 달라는 것**입니다. 「더 짧게」 ·",
         "            「20대 말투로」 · 「더 밝게」 · 「배경 파랗게」. 새 주제를 말하면 cardnews 입니다.",
@@ -139,7 +172,7 @@ export function easyChatPrompt(
         "             장 번호를 card 에, 고칠 내용을 note 에 적습니다. **번호 없이** 전체를 고치면 revise 입니다.",
       ]
       : []),
-    ...(hasDraft && made
+    ...(갈래.includes("card_redo")
       ? [
         "  card_redo  만든 카드 중 **한 장을 다시 그려** 달라는 것입니다. 「3번 다시 그려줘」 · 「5번 글자 크게 다시」.",
         "             장 번호를 card 에, 바라는 점을 note 에 적습니다.",
@@ -147,7 +180,7 @@ export function easyChatPrompt(
         "  download   만든 카드를 **내려받겠다**는 것입니다. 「다 받을게」 · 「저장할래」.",
       ]
       : []),
-    ...(madeImage
+    ...(갈래.includes("image_edit")
       ? [
         "  image_edit  이 대화에서 **마지막으로 만든 이미지를 고쳐** 달라는 것입니다. 「로고를 이걸로 바꿔줘」 ·",
         "              「글자를 크게」 · 「배경만 파랗게」 · 「방금 거에서 ○○만 바꿔줘」. 붙인 이미지가 있으면 그것을",
@@ -159,7 +192,7 @@ export function easyChatPrompt(
       안 알려 주면 모델은 고쳐 달라는 말에 `revise` 를 골라 앞의 카드뉴스 원고를
       고친다 — 사용자는 방금 만든 이미지를 보고 말한 것이다.
     */
-    ...(hasDraft && madeImage
+    ...(갈래.includes("revise") && 갈래.includes("image_edit")
       ? [
         "  **이 대화에서 마지막으로 만든 것은 이미지 한 장입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
         "  image_edit 입니다. 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
@@ -171,7 +204,7 @@ export function easyChatPrompt(
     "               만들어 달라는 것입니다. 사진을 붙였어도 같습니다.",
     "               상세페이지에 대해 **묻는 말**(「상세페이지 문구 좀 봐줘」)은 talk 입니다.",
     "",
-    ...(hasDraft
+    ...(갈래.includes("revise")
       ? [
         "**이 대화에는 카드뉴스 원고가 있습니다.** 「더 짧게」 · 「20대 말투로」 · 「더 밝게」처럼",
         "그 원고의 말투 · 길이 · 내용이나 카드의 모습을 바꿔 달라는 말은 talk 도 image 도 아니라 **revise** 입니다.",
@@ -187,10 +220,12 @@ export function easyChatPrompt(
     "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
     "**무엇을 적으면 되는지 예를 들어** 주세요.",
     "",
-    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise` · `card_text`" : ""}${hasDraft && made ? " · `card_redo` · `caption` · `download`" : ""}${madeImage ? " · `image_edit`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
-    ...(hasDraft ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
+    `${빈답갈래(갈래)} 면 \`reply\` 는 빈 글로 두세요.`,
+    ...(갈래.includes("card_text") ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
     "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
     "",
+    // 갈래 이름은 쓸 수 있는 것만 적는다(A1) — 같은 목록을 넘긴다.
+    ...easyCapabilityLines(갈래),
     "── 말 속에 비율이나 그림체가 있나 ──",
     "",
     "**있을 때만 적습니다.** 없으면 그 칸을 비워 두세요. 지어내면 사용자가 말한",
@@ -221,6 +256,8 @@ export function easyChatPrompt(
         "붙여 둔 채로 「이걸로」·「이거」·「이 사진으로」라고 하면 **그것을 재료로",
         "만들어 달라는 주문**입니다. 무엇을 가리키는지 되묻지 마세요.",
         "",
+        // A1-2: 만든 것이 없는 대화에서 「사진 속 ○○을 바꿔줘」는 새 이미지다.
+        ...(갈래.includes("image_edit") || 갈래.includes("revise") ? [] : easyFirstPhotoLines()),
       ]
       : []),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
@@ -297,6 +334,14 @@ export function readEasyDecision(
       ? { look: value!.look as string }
       : {}),
   };
+}
+
+/** 말 · 안내로 끝나는 갈래. 이것들은 `reply` 를 비우라는 줄에 넣지 않고 따로 적는다. */
+const 따로적는갈래 = new Set<string>(["talk", "detail_page", "ad_specs"]);
+
+/** `reply` 를 비워야 하는 갈래를 프롬프트에 적을 꼴로. 쓸 수 있는 것만 적는다(A1). */
+function 빈답갈래(갈래: readonly EasyWant[]): string {
+  return 갈래.filter((one) => !따로적는갈래.has(one)).map((one) => `\`${one}\``).join(" · ");
 }
 
 const 아는갈래 = new Set([

@@ -4,7 +4,7 @@ import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
-import { easyChatPrompt, readEasyDecision, type EasyDecision } from "../../../easy/chat";
+import { easyAvailableWants, easyChatPrompt, readEasyDecision, type EasyDecision } from "../../../easy/chat";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
 import { easyTitle } from "../../../easy/title";
 import { DETAIL_PAGE_GUIDE } from "../../../easy/detail-page";
@@ -212,6 +212,8 @@ async function turn(request: Request): Promise<Response> {
             만들었나,
             Boolean(고칠그림),
           ),
+          // 선택지는 프롬프트와 같은 함수가 정한다(2026-10-06 설계 A1).
+          easyAvailableWants({ hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) }),
         ),
         { canRevise: Boolean(고칠원고), made: 만들었나, editableImage: Boolean(고칠그림) },
       );

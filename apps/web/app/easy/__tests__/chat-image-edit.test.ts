@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { NOTHING_TO_EDIT, easyChatPrompt, readEasyDecision } from "../chat";
 import { editRowBody } from "../row-image";
@@ -67,9 +66,15 @@ describe("판단 읽기", () => {
 });
 
 describe("판단 틀", () => {
-  it("틀에 image_edit 이 있다 — 틀에 없으면 아무리 시켜도 안 온다", () => {
-    const 제공자 = readFileSync(new URL("../../../lib/easy/chat-provider.ts", import.meta.url), "utf8");
-    expect(제공자).toMatch(/enum: \[[^\]]*"image_edit"/);
+  it("이미지가 있을 때만 틀에 image_edit 이 있다 — 틀에 없으면 아무리 시켜도 안 온다", async () => {
+    const { easyChatSpec } = await import("../../../lib/easy/chat-provider");
+    const { easyAvailableWants } = await import("../chat");
+    const 선택지 = (madeImage: boolean) =>
+      (easyChatSpec(easyAvailableWants({ hasDraft: false, made: false, madeImage })).schema as {
+        properties: { wants: { enum: string[] } };
+      }).properties.wants.enum;
+    expect(선택지(true)).toContain("image_edit");
+    expect(선택지(false)).not.toContain("image_edit");
   });
 });
 
