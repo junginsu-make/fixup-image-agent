@@ -340,7 +340,7 @@ describe("대화 속 이미지 크기", () => {
  */
 describe("사진 물음이 떠 있을 때의 입력창", () => {
   it("친 말이 물음에 대한 답으로 간다고 알린다", () => {
-    expect(client).toMatch(/placeholder=\{[\s\S]{0,400}photoAsking[\s\S]{0,160}사진 물음에 대한 답/);
+    expect(client).toMatch(/placeholder=\{[\s\S]{0,400}asks\.photo[\s\S]{0,160}사진 물음에 대한 답/);
   });
 });
 
@@ -372,12 +372,12 @@ describe("카드뉴스 다시 열기 (2단계 §8)", () => {
 
 describe("카드뉴스 화면 잇기 (2단계)", () => {
   const 화면쪽 = 코드("../easy-client.tsx");
-  const 물음 = 코드("../_components/cardnews-asks.tsx");
   const 훅 = 코드("../use-cardnews.ts");
-  it("한 장 · 카드뉴스를 묻는 줄과 레퍼런스를 요청하는 줄을 그린다", () => {
-    expect(화면쪽).toContain("<EasyCardnewsAsks");
-    expect(물음).toContain("<EasyKindAsk");
-    expect(물음).toContain("<EasyReferenceAsk");
+  it("한 장 · 카드뉴스 물음과 레퍼런스 요청은 물음 줄 밑의 단추 · 고르기로 그린다 (2차 D1)", () => {
+    const 물음줄 = 코드("../_components/ask-row.tsx");
+    expect(화면쪽).toContain("<EasyAskControls");
+    expect(물음줄).toContain("<EasyKindAsk");
+    expect(물음줄).toContain("<EasyReferenceAsk");
   });
   it("원고 카드를 그린다", () => { expect(코드("../_components/message.tsx")).toContain("<EasyCardnewsCard"); });
   it("「이대로 만들기」 · 조건 바꾸기를 새 라우트로 보낸다", () => {

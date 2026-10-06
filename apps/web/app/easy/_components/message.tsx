@@ -157,6 +157,7 @@ export function EasyMessageRow({
   cardnews,
   failed,
   onAdChoice,
+  askControls,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
@@ -168,6 +169,8 @@ export function EasyMessageRow({
   failed?: string;
   /** 광고 물음 줄의 단추를 누를 때(설계 A5). 화면이 마지막 물음 줄에만 넘긴다. */
   onAdChoice?: (answer: string) => void;
+  /** 물음 줄 밑의 단추 · 고르기(2차 D1). 화면이 마지막 물음 줄에만 넘긴다. */
+  askControls?: React.ReactNode;
 }) {
   if (message.role === "user") {
     return (
@@ -206,6 +209,11 @@ export function EasyMessageRow({
           <EasyAdQuestion body={message.body} bubble={말풍선} onChoose={onAdChoice} />
         ) : isAdGuide(message) ? (
           <EasyAdGuide body={visibleBody(message)} bubble={말풍선} />
+        ) : askControls ? (
+          <div className="grid max-w-[85%] gap-2">
+            <p className={말풍선}>{visibleBody(message)}</p>
+            {askControls}
+          </div>
         ) : (
           <p className={cn("max-w-[85%]", 말풍선)}>{visibleBody(message)}</p>
         )}

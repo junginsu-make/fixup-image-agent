@@ -74,7 +74,7 @@ describe("결과 받기", () => {
     /** 재리뷰: 입력창에 같은 말을 다시 채우면 엔터 한 번에 값이 또 나간다. 크레딧 · 권한 실패는 그대로 채운다. */
     it("만든 직후 15분을 넘겨 그만두면 입력창에 같은 말을 다시 채우지 않는다", () => {
       expect(readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8"))
-        .toContain("if (!친말 && (cause as Error)?.message !== STILL_MAKING) setDraft(prompt);");
+        .toContain("if (!보낼것 && (cause as Error)?.message !== STILL_MAKING) setDraft(prompt);");
     });
 
     it("15분 안에 끝나면 받는다", async () => {
