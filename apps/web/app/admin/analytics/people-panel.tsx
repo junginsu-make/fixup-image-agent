@@ -13,7 +13,7 @@ const list = (items: Array<{ key: string; members: number }>, label: (key: strin
  * **누가 무엇을 쓰나**(계획 2026-10-06 site-analytics). 기능은 이미 쌓이고 있는 AI 호출 기록
  * (`ai_cost_events`, 2026-09-30 부터)으로 센다 — 새로 모으지 않는다.
  */
-export function PeoplePanel({ report }: { report: SitePeople | null }) {
+export function PeoplePanel({ report }: { report: SitePeople | null; previous?: SitePeople | null }) {
   return (
     <Card>
       <CardHeader><CardTitle>회원과 기능</CardTitle></CardHeader>

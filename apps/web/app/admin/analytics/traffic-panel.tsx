@@ -14,7 +14,7 @@ export function duration(seconds: number): string {
  * **얼마나 오나**(계획 2026-10-06 site-analytics). 숫자 여덟과 일별 막대.
  * 섞어 쓰기의 한계를 화면에 적는다 — 비회원은 하루 단위, 여러 날은 쿠키에 동의한 브라우저만.
  */
-export function TrafficPanel({ report }: { report: SiteTraffic | null }) {
+export function TrafficPanel({ report }: { report: SiteTraffic | null; previous?: SiteTraffic | null }) {
   return (
     <Card>
       <CardHeader><CardTitle>방문</CardTitle></CardHeader>

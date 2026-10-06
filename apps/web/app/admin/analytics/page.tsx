@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { pruneAnalytics } from "../../../lib/analytics/record";
-import { getSitePeople, getSiteTraffic } from "../../../lib/analytics/report";
+import { getSitePeople, getSitePeopleBefore, getSiteTraffic, getSiteTrafficBefore } from "../../../lib/analytics/report";
 import { PeoplePanel } from "./people-panel";
 import { ANALYTICS_RANGES, pickDays } from "./range";
 import { SourcesPanel } from "./sources-panel";
@@ -16,7 +16,10 @@ export const dynamic = "force-dynamic";
 export default async function AdminAnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const days = pickDays((await searchParams).days);
   void pruneAnalytics();
-  const [traffic, people] = await Promise.all([getSiteTraffic(days), getSitePeople(days)]);
+  const now = new Date();
+  const [traffic, people, previousTraffic, previousPeople] = await Promise.all([
+    getSiteTraffic(days), getSitePeople(days), getSiteTrafficBefore(days, now), getSitePeopleBefore(days, now),
+  ]);
   return (
     <div className="space-y-6">
       <nav className="flex gap-2 text-sm" aria-label="보기 기간">
@@ -31,9 +34,9 @@ export default async function AdminAnalyticsPage({ searchParams }: { searchParam
           </Link>
         ))}
       </nav>
-      <TrafficPanel report={traffic} />
+      <TrafficPanel report={traffic} previous={previousTraffic} />
       <SourcesPanel report={traffic} />
-      <PeoplePanel report={people} />
+      <PeoplePanel report={people} previous={previousPeople} />
     </div>
   );
 }

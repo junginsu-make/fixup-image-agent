@@ -56,7 +56,7 @@ describe("PeoplePanel", () => {
     expect(html).toContain("kim@example.invalid");
     expect(html).toContain("카카오");
     expect(html).toContain("가입자가 처음 들어온 경로");
-    expect(html).toContain("youtube 1명");
+    expect(html).toContain("유튜브 1명");
     expect(html).toContain("확인 못 함");
   });
   it("준비 전이면 null 을 받아도 깨지지 않는다", () => {

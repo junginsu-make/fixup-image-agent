@@ -2,10 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 let rpcResult: { data: unknown; error: { message: string } | null } = { data: null, error: null };
+const rpcCalls: Array<{ fn: string; args: unknown }> = [];
 vi.mock("../../supabase/admin", () => ({
-  createSupabaseAdminClient: () => ({ rpc: async () => rpcResult }),
+  createSupabaseAdminClient: () => ({
+    rpc: async (fn: string, args: unknown) => {
+      rpcCalls.push({ fn, args });
+      return rpcResult;
+    },
+  }),
 }));
-const { getSiteTraffic, parseSitePeople, parseSiteTraffic } = await import("../report");
+const { getSitePeopleBefore, getSiteTraffic, getSiteTrafficBefore, parseSitePeople, parseSiteTraffic } = await import("../report");
 
 describe("parseSiteTraffic", () => {
   it("DB 이름(snake_case)을 화면 이름으로, 숫자 문자열을 숫자로", () => {
@@ -46,5 +52,29 @@ describe("getSiteTraffic", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(await getSiteTraffic(30)).toBeNull();
     warn.mockRestore();
+  });
+});
+
+describe("지난 기간 읽기", () => {
+  it("이번 기간은 p_days 만 넘긴다", async () => {
+    rpcCalls.length = 0;
+    rpcResult = { data: {}, error: null };
+    await getSiteTraffic(7);
+    expect(rpcCalls).toEqual([{ fn: "admin_site_traffic", args: { p_days: 7 } }]);
+  });
+  it("지난 기간은 p_now 를 이번 창 바로 앞으로 넘긴다", async () => {
+    rpcCalls.length = 0;
+    rpcResult = { data: {}, error: null };
+    const now = new Date("2026-10-06T03:00:00Z");
+    await getSiteTrafficBefore(7, now);
+    await getSitePeopleBefore(7, now);
+    expect(rpcCalls).toEqual([
+      { fn: "admin_site_traffic", args: { p_days: 7, p_now: "2026-09-29T14:59:59.000Z" } },
+      { fn: "admin_site_people", args: { p_days: 7, p_now: "2026-09-29T14:59:59.000Z" } },
+    ]);
+  });
+  it("못 읽으면 null", async () => {
+    rpcResult = { data: null, error: { message: "boom" } };
+    expect(await getSiteTrafficBefore(7, new Date())).toBeNull();
   });
 });

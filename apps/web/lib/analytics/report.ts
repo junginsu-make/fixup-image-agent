@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { previousWindowEnd } from "./compare";
 
 /**
  * **방문 분석 보고**(계획 2026-10-06 site-analytics, 2단계). RPC 가 준 jsonb 를 화면 모양으로 바꾼다.
@@ -79,9 +80,9 @@ export function parseSitePeople(raw: unknown): SitePeople {
 }
 
 /** 못 읽으면 null — 탭은 「준비 전」으로 열린다. 던지면 관리자 화면 전체가 500 이 된다. */
-async function readReport<T>(fn: string, days: number, parse: (raw: unknown) => T): Promise<T | null> {
+async function readReport<T>(fn: string, days: number, parse: (raw: unknown) => T, now?: Date): Promise<T | null> {
   try {
-    const { data, error } = await createSupabaseAdminClient().rpc(fn, { p_days: days });
+    const { data, error } = await createSupabaseAdminClient().rpc(fn, now ? { p_days: days, p_now: now.toISOString() } : { p_days: days });
     if (error) throw new Error(error.message);
     return parse(data);
   } catch (error) {
@@ -92,3 +93,9 @@ async function readReport<T>(fn: string, days: number, parse: (raw: unknown) => 
 
 export const getSiteTraffic = (days: number) => readReport("admin_site_traffic", days, parseSiteTraffic);
 export const getSitePeople = (days: number) => readReport("admin_site_people", days, parseSitePeople);
+
+/** 지난 기간(이번 창 바로 앞, 같은 길이). 못 읽으면 null — 이번 기간 화면은 그대로 열리고 증감만 빠진다. */
+export const getSiteTrafficBefore = (days: number, now: Date) =>
+  readReport("admin_site_traffic", days, parseSiteTraffic, previousWindowEnd(days, now));
+export const getSitePeopleBefore = (days: number, now: Date) =>
+  readReport("admin_site_people", days, parseSitePeople, previousWindowEnd(days, now));
