@@ -21,6 +21,7 @@ import { photoTypedReply, type EasyButtonReply } from "./ask-answers";
 import { answerableAskId } from "./ask-chain";
 import { withPick } from "./row-marks";
 import { EasyAskControls } from "./_components/ask-row";
+import { keptAfterFailure, lostAfterFailure } from "./send-failure";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -147,12 +148,15 @@ export function EasyClient({
     return () => { alive.current = false; };
   }, []);
   // 다시 열면 아직 결과를 안 받은 줄을 이어 받는다(2026-10-06 설계 B3). 만든 직후와 같은 받기 함수다.
-  const failed = useEasyResume({
+  const resumed = useEasyResume({
     messages: initialMessages, urls: initialUrls ?? {}, cardnewsIds: new Set(Object.keys(initialCardnews ?? {})),
     pendingIds: new Set(initialPending ?? []), failedIds: new Set(initialFailed ?? []),
     isAlive: () => alive.current,
     onImage: (rowId, image) => setUrls((current) => ({ ...current, [rowId]: image.url })),
   });
+  // 서버가 받은 뒤 받기만 실패한 그림 자리(`send-failure.ts`). 다시 열 때의 실패 표시와 같이 보인다.
+  const [lost, setLost] = React.useState<Record<string, string>>({});
+  const failed = { ...resumed, ...lost };
 
   const turn = easyTurn({ messages, attachments: attachments.map((one) => one.id), sending, startedWithout });
   const shown = messages.length ? messages : [인사];
@@ -308,6 +312,7 @@ export function EasyClient({
      * 이제 `randomId()`(`browser-safe.ts`)를 쓰고, 잠그기 전에 만든다.
      */
     const 자리 = `pending-${randomId()}`;
+    let 받음 = false; // 서버가 이 턴을 받아 그림 줄을 남겼나(값이 잡혔다)
 
     setSending(true);
     setError(null);
@@ -389,6 +394,7 @@ export function EasyClient({
 
       // 그림 자리를 잡아 둔다. 자리가 없으면 도착하는 순간 대화가 아래로 튄다.
       setMessages((current) => [...current, { id: 자리, role: "image", body: "" }]);
+      받음 = true;
 
       // 결과는 기존 status 라우트에 물어 받는다. 포스터 화면과 같은 길이다.
       const image = await collectEasyImage(body.projectId, body.submission, () => alive.current);
@@ -417,10 +423,12 @@ export function EasyClient({
       router.refresh();
     } catch (cause) {
       if (!alive.current) return;
-      // 실패한 그림 자리는 뺀다. 빈 판이 영원히 도는 것보다 낫다.
-      setMessages((current) => current.filter((one) => one.id !== 자리));
+      const 까닭 = cause instanceof Error ? cause.message : "만들지 못했습니다.";
+      // 받기 전 실패면 그림 자리를 뺀다. 받은 뒤면 실패로 남긴다 — 빼면 물음 단추가 다시 뜬다(`send-failure.ts`).
+      setMessages((current) => keptAfterFailure(current, 자리, 받음));
+      setLost((current) => lostAfterFailure(current, 자리, 받음, 까닭));
       setError({
-        message: cause instanceof Error ? cause.message : "만들지 못했습니다.",
+        message: 까닭,
         retryable: (cause as { retryable?: boolean }).retryable !== false,
       });
       // 다시 칠 수 있게 되돌린다. 친 말을 잃으면 처음부터 써야 한다.
