@@ -50,9 +50,22 @@ describe("지금 쓸 수 있는 갈래 (A1)", () => {
 describe("하는 일 · 안 하는 일 (A4)", () => {
   it("상세페이지와 광고 규격은 어디서 하는지 사실대로 적는다", () => {
     const prompt = easyChatPrompt([], "상세페이지도 돼?");
-    expect(prompt).toContain("「상세페이지 만들기」에서 만듭니다");
-    expect(prompt).toContain("「광고소재」 화면에서 합니다");
+    expect(prompt).toContain("「상세페이지 만들기」 화면에서 만들 수 있습니다");
+    expect(prompt).toContain("「광고소재」 화면에서는 됩니다");
     expect(prompt).toContain("**된다고 하지 말고**");
+  });
+
+  it("상세페이지 · 광고 규격은 한 가지 사실 문장으로 답하게 한다", () => {
+    const 줄 = easyCapabilityLines(["image", "talk", "detail_page"]).join("\n");
+    expect(줄).toContain("쉽게(이 대화)에서는 상세페이지를 만들지 않습니다. 「상세페이지 만들기」 화면에서 만들 수 있습니다.");
+    expect(줄).toContain("쉽게(이 대화)에서는 광고 규격별로 여러 장 뽑지 않습니다. 「광고소재」 화면에서는 됩니다.");
+    expect(줄).toContain("그대로(두 부분 모두) 답하세요");
+  });
+
+  it("「이미지」라고 하면 한 장으로 읽고 either 로 두지 않는다", () => {
+    const prompt = easyChatPrompt([], "겨울 화장품 이미지 만들어줘");
+    expect(prompt).toContain("「○○ 이미지 만들어줘」");
+    expect(prompt).toContain("「이미지」는 애매하지 않습니다");
   });
 
   /**
