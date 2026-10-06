@@ -101,7 +101,7 @@ describe("캐릭터 그림체", () => {
    * 첨부를 바꾸는 길이 넷이라 한 자리로 모은다.
    */
   it("첨부를 바꾸는 길이 한 자리로 모인다", () => {
-    expect(source).toContain('lookAfterRole(next?.role ?? "extract", current)');
+    expect(source).toContain('lookAfterRole(role ?? "extract", current)');
     // 날것을 화면 곳곳에서 부르면 그 한 자리를 비껴간다.
     expect(source.split("setAttachedRaw(").length - 1).toBeLessThanOrEqual(3);
   });

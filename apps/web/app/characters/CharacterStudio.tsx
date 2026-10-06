@@ -22,6 +22,9 @@ import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { lookAfterRole, roleAfterLook } from "./look-role";
 import { useOpenedCharacter } from "./use-opened-character";
 import { OpenedNotice } from "./opened-notice";
+import { OwnCharacterField } from "./OwnCharacterField";
+import { OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, lookLockedByPair, roleWithOwn } from "./own-character";
+import { readImageBlob, type ReadImage } from "./read-image";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
@@ -105,7 +108,7 @@ const REFERENCE_ROLES = [
    * 「레퍼런스 스타일」이라 부르고 있었다 — 한 스위치가 두 이름을 갖고 있었다
    * (2026-09-17 사용자 요청). 이름표는 공용에서 가져온다.
    */
-  { id: "style", label: IMAGE_LOOK_LABEL.auto, hint: "화풍·색·질감만 가져오고 대상은 새로 만듭니다" },
+  { id: "style", label: IMAGE_LOOK_LABEL.auto, hint: "화풍과 몸 비율(등신)을 가져오고 대상은 새로 만듭니다" },
 ] as const;
 
 type ReferenceRole = (typeof REFERENCE_ROLES)[number]["id"];
@@ -159,6 +162,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   const [look, setLook] = useState<Look>("photoreal");
   const [modelId, setModelId] = useState("");
   const [attached, setAttachedRaw] = useState<Attached | null>(null);
+  /** 「내 캐릭터」 칸. 있으면 참고할 그림은 레퍼런스 스타일로만 쓴다(`own-character.ts`). */
+  const [own, setOwnRaw] = useState<(ReadImage & { libraryId?: string }) | null>(null);
 
   /**
    * 붙인 그림이 바뀌면 **그림체도 따라 맞춘다.**
@@ -173,9 +178,18 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 각자 고치면 언젠가 한 곳이 빠진다. 여기 하나로 모은다.
    */
   function setAttached(next: Attached | null) {
-    setAttachedRaw(next);
+    const role = next ? roleWithOwn(next.role, Boolean(own)) : null;
+    setAttachedRaw(next && role ? { ...next, role } : null);
     // 첨부가 없으면 「뽑아내기」와 같다 — 따라갈 그림이 없다.
-    setLook((current) => lookAfterRole(next?.role ?? "extract", current));
+    setLook((current) => lookAfterRole(role ?? "extract", current));
+  }
+
+  /** 내 캐릭터를 넣고 빼는 길도 한곳에 모은다. 역할·그림체를 같이 맞춘다. */
+  function setOwn(next: (ReadImage & { libraryId?: string }) | null) {
+    setOwnRaw(next);
+    const role = attached ? roleWithOwn(attached.role, Boolean(next)) : null;
+    if (attached && role && role !== attached.role) setAttachedRaw({ ...attached, role });
+    setLook((current) => lookAfterRole(role ?? "extract", current));
   }
   const [library, setLibrary] = useState<LibraryImage[]>([]);
 
@@ -297,13 +311,18 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     role: ReferenceRole,
     libraryId?: string,
   ): Promise<Attached> {
-    const buffer = await source.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]!);
-    const base64 = btoa(binary);
-    const mimeType = source.type || "image/png";
-    return { url: `data:${mimeType};base64,${base64}`, base64, mimeType, role, libraryId };
+    return { ...(await readImageBlob(source)), role, libraryId };
+  }
+
+  /** 올린 그림은 라이브러리에도 넣는다. 다음에 다시 쓸 수 있어야 한다. */
+  async function saveToLibrary(file: File) {
+    const form = new FormData();
+    form.set("id", randomId());
+    form.set("title", file.name.replace(/\.[^.]+$/, ""));
+    form.set("purpose", "both");
+    form.set("file", file);
+    await fetch("/api/reference-images", { method: "POST", body: form });
+    await loadLibrary();
   }
 
   async function attachFile(files: FileList | null) {
@@ -312,18 +331,34 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setMessage("");
     try {
       setAttached(await readAsAttached(file, attached?.role ?? DEFAULT_ROLE));
-      // 올린 그림은 라이브러리에도 넣는다. 다음에 다시 쓸 수 있어야 한다.
-      const form = new FormData();
-      form.set("id", randomId());
-      form.set("title", file.name.replace(/\.[^.]+$/, ""));
-      form.set("purpose", "both");
-      form.set("file", file);
-      await fetch("/api/reference-images", { method: "POST", body: form });
-      await loadLibrary();
+      await saveToLibrary(file);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     } finally {
       if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function attachOwnFile(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setMessage("");
+    try {
+      setOwn(await readImageBlob(file));
+      await saveToLibrary(file);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
+    }
+  }
+
+  async function attachOwnFromLibrary(image: { id: string; url: string | null }) {
+    if (!image.url) return setMessage("이 그림은 미리보기가 없어 쓸 수 없습니다.");
+    if (own?.libraryId === image.id) return setOwn(null);
+    try {
+      const response = await fetch(image.url);
+      setOwn({ ...(await readImageBlob(await response.blob())), libraryId: image.id });
+    } catch {
+      setMessage("그림을 불러오지 못했습니다.");
     }
   }
 
@@ -362,6 +397,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
           reference: attached
             ? { role: attached.role, base64: attached.base64, mimeType: attached.mimeType }
             : undefined,
+          ownCharacter: own ? { base64: own.base64, mimeType: own.mimeType } : undefined,
         }),
       })).json() as {
         ok?: boolean; candidates?: Candidate[]; message?: string; brief?: { identity?: string };
@@ -390,6 +426,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setDescription("");
     setName("");
     setAttached(null);
+    setOwn(null);
     setMessage("");
   };
 
@@ -613,7 +650,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       있다는 것을 알 길이 없다 — 포스터에서 그렇게 했다가
                       사용자가 「그게 어디 있냐」고 물었다(2026-09-16).
                     */
-                    const blocked = lookBlockedReason(entry, Boolean(attached));
+                    const pairLock = entry === "auto" ? "" : lookLockedByPair(Boolean(own), Boolean(attached));
+                    const blocked = pairLock || lookBlockedReason(entry, Boolean(attached));
                     return (
                       <Button
                         key={entry} type="button" size="sm"
@@ -639,6 +677,11 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <p className="text-[11px] leading-snug text-subtle-foreground">
                     「{IMAGE_LOOK_LABEL.auto}」{withJosa(IMAGE_LOOK_LABEL.auto, "은는").slice(-1)}{" "}
                     {lookBlockedReason("auto", Boolean(attached))}
+                  </p>
+                ) : null}
+                {lookLockedByPair(Boolean(own), Boolean(attached)) ? (
+                  <p className="text-[11px] leading-snug text-subtle-foreground">
+                    {lookLockedByPair(Boolean(own), Boolean(attached))}
                   </p>
                 ) : null}
               </fieldset>
@@ -708,6 +751,17 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <strong> 종류는 묘사에 맞춰</strong> 고르세요.
                 </p>
               </label>
+              <OwnCharacterField
+                value={own}
+                locked={locked}
+                library={library.map((image) => ({
+                  id: image.id, title: image.title, url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
+                }))}
+                onUpload={(files) => void attachOwnFile(files)}
+                onPickLibrary={(image) => void attachOwnFromLibrary(image)}
+                onClear={() => setOwn(null)}
+                onReloadLibrary={() => void loadLibrary()}
+              />
 
             </CardContent>
             {/* 단추는 늘 보이는 바닥에 둔다. 굴려 내려가야 나오면 흐름이 끊긴다. */}
@@ -764,7 +818,9 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       <span className="text-meta text-subtle-foreground">이 그림의 역할</span>
                       {REFERENCE_ROLES.map((role) => (
                         <Button
-                          key={role.id} type="button" size="sm" disabled={locked}
+                          key={role.id} type="button" size="sm"
+                          disabled={locked || (role.id === "extract" && Boolean(own))}
+                          title={role.id === "extract" && own ? OWN_EXTRACT_BLOCKED : undefined}
                           variant={attached.role === role.id ? "default" : "secondary"}
                           onClick={() => {
                             setAttached({ ...attached, role: role.id });
@@ -786,7 +842,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                       </button>
                     </div>
                     <p className="mt-1 text-[11px] leading-snug text-subtle-foreground">
-                      {REFERENCE_ROLES.find((role) => role.id === attached.role)?.hint}
+                      {own ? OWN_STYLE_HINT : REFERENCE_ROLES.find((role) => role.id === attached.role)?.hint}
                     </p>
                   </div>
                 </>
