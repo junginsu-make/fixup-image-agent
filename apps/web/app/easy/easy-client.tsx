@@ -16,6 +16,7 @@ import { easyCost } from "./cost";
 import { easyOptionMeta, type EasyImageOptions } from "./options";
 import { collectEasyImage } from "./collect";
 import { useEasyResume } from "./use-resume-images";
+import { askSubmission, carryChoices, type EasyCarry } from "./turn-carry";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -127,6 +128,8 @@ export function EasyClient({
   const [asking, setAsking] = React.useState<string | null>(null);
   const [askRatio, setAskRatio] = React.useState("");
   const [askLook, setAskLook] = React.useState("");
+  // 같은 말에 이어 답할 때 앞서 고른 비율 · 그림체(설계 B2). 새로 친 말이면 비운다.
+  const carried = React.useRef<EasyCarry>({});
   /*
    * **사진을 어떻게 쓸지 묻는 중**(설계 §2-5). 비율 물음처럼 화면에만 있다.
    */
@@ -299,8 +302,11 @@ export function EasyClient({
     const prompt = 다시?.prompt ?? 말답?.prompt ?? draft.trim();
     const photoRoles = 다시?.photoRoles ?? 말답?.photoRoles;
     if (!prompt || (!다시 && !turn.canSend)) return;
+    const 이어감 = Boolean(다시 || 말답);
+    const 고른값 = carryChoices({ continuing: 이어감, carry: carried.current, picked: 다시 });
+    carried.current = 고른값;
     // 고른 갈래는 이어지는 답에만 싣는다. 새로 친 말은 서버가 다시 가른다(2단계 §4).
-    const kind = cardnews.beginTurn({ explicit: 다시?.kind, continuing: Boolean(다시 || 말답), photoMode: photoAsking?.mode });
+    const kind = cardnews.beginTurn({ explicit: 다시?.kind, continuing: 이어감, photoMode: photoAsking?.mode });
 
     /*
      * **잠그기 전에 id 부터 만든다**(2026-09-21 사용자 보고).
@@ -366,8 +372,8 @@ export function EasyClient({
           // 지난 역할. 이번에 고른 사진은 빼고 보낸다 — 서버도 다시 확인한다.
           previousRoles: previousRolesFor(lastRoles, attachments.map((one) => one.id), photoRoles),
           // 고른 것이 있으면 함께 보낸다. 없으면 서버가 물어볼지 정한다.
-          ...(다시?.ratio ? { ratio: 다시.ratio } : {}),
-          ...(다시?.look ? { look: 다시.look } : {}),
+          ...(고른값.ratio ? { ratio: 고른값.ratio } : {}),
+          ...(고른값.look ? { look: 고른값.look } : {}),
           // 카드뉴스(2단계): 고른 갈래 · 세트에서 온 자리. 있을 때만 싣는다.
           ...(kind ? { kind } : {}), ...(다시?.photoSlots?.length ? { photoSlots: 다시.photoSlots } : {}),
           // 갈래 단추로 고른 턴만(설계 A2). 말로 답한 턴에 이어 온 갈래(`continuingKind`)는 고른 것이 아니다.
@@ -526,7 +532,7 @@ export function EasyClient({
                 const 보낼말 = asking;
                 setAskRatio("");
                 setAskLook("");
-                void send({ prompt: 보낼말, ratio: askRatio, look: askLook });
+                void send(askSubmission(보낼말, { ratio: askRatio, look: askLook }));
               }}
             />
           ) : null}
