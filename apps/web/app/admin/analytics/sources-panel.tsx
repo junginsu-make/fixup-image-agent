@@ -1,49 +1,34 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
 import type { Slice, SiteTraffic } from "../../../lib/analytics/report";
-import { browserLabel, deviceLabel, sourceLabel } from "./labels";
+import { browserLabel, deviceLabel, pageLabel, sourceLabel } from "./labels";
+import { RankList } from "./rank-list";
 
-/** **어디서 와서 어디를 보나**(계획 2026-10-06 site-analytics). 유입은 첫 화면 줄만 센다. */
+const count = (value: number) => value.toLocaleString("ko-KR");
+const views = (row: Slice) => row.views;
+const visitors = (row: Slice) => row.visitors;
+const asIs = (key: string) => key;
+const visitorNote = (row: Slice) => `방문자 ${count(row.visitors)}명`;
+const viewNote = (row: Slice) => `화면 ${count(row.views)}번`;
+/** 화면 목록은 한글 이름 아래 원래 주소를 작게 둔다. 이름을 못 붙인 주소는 두 번 쓰지 않는다. */
+const pageNote = (row: Slice) => (pageLabel(row.key) === row.key ? visitorNote(row) : `${row.key} · ${visitorNote(row)}`);
+
+/**
+ * **어디서 와서 어디를 보나**(계획 2026-10-06 site-analytics). 유입은 첫 화면 줄만 센다.
+ * 줄 세우는 숫자는 RPC 가 정렬한 숫자와 같다(경로·화면은 횟수, 기기·브라우저는 방문자).
+ */
 export function SourcesPanel({ report }: { report: SiteTraffic | null }) {
   if (!report) return null;
   return (
     <Card>
       <CardHeader><CardTitle>들어온 경로와 많이 본 화면</CardTitle></CardHeader>
-      <CardContent className="grid gap-6 xl:grid-cols-2">
-        <SliceTable title="들어온 경로" rows={report.sources} label={sourceLabel} first="경로" />
-        <SliceTable title="광고 캠페인(utm_campaign)" rows={report.campaigns} label={(key) => key} first="캠페인" />
-        <SliceTable title="처음 연 화면" rows={report.landingPages} label={(key) => key} first="화면" />
-        <SliceTable title="많이 본 화면" rows={report.pages} label={(key) => key} first="화면" />
-        <SliceTable title="기기" rows={report.devices} label={deviceLabel} first="기기" />
-        <SliceTable title="브라우저" rows={report.browsers} label={browserLabel} first="브라우저" />
+      <CardContent className="grid gap-8 lg:grid-cols-2">
+        <RankList title="들어온 경로" rows={report.sources} value={views} label={sourceLabel} sublabel={visitorNote} unit="번" />
+        <RankList title="광고 캠페인(utm_campaign)" rows={report.campaigns} value={views} label={asIs} sublabel={visitorNote} unit="번" />
+        <RankList title="처음 연 화면" rows={report.landingPages} value={views} label={pageLabel} sublabel={pageNote} unit="번" />
+        <RankList title="많이 본 화면" rows={report.pages} value={views} label={pageLabel} sublabel={pageNote} unit="번" total={report.views} />
+        <RankList title="기기" rows={report.devices} value={visitors} label={deviceLabel} sublabel={viewNote} unit="명" />
+        <RankList title="브라우저" rows={report.browsers} value={visitors} label={browserLabel} sublabel={viewNote} unit="명" />
       </CardContent>
     </Card>
-  );
-}
-
-function SliceTable({ title, rows, label, first }: { title: string; rows: Slice[]; label: (key: string) => string; first: string }) {
-  return (
-    <div>
-      <h3 className="mb-2 text-sm font-medium">{title}</h3>
-      {rows.length ? (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-muted-foreground">
-              <th className="py-1 pr-3 font-medium">{first}</th>
-              <th className="py-1 pr-3 font-medium">횟수</th>
-              <th className="py-1 font-medium">방문자</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className="border-t">
-                <td className="break-all py-1 pr-3">{label(row.key)}</td>
-                <td className="py-1 pr-3">{row.views.toLocaleString("ko-KR")}</td>
-                <td className="py-1">{row.visitors.toLocaleString("ko-KR")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : <p className="text-sm text-muted-foreground">기록이 없습니다.</p>}
-    </div>
   );
 }

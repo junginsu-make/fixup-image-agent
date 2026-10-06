@@ -1,5 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
+import { CalendarDays, Clock, Cookie, Eye, Layers, Repeat, UserCheck, Users } from "lucide-react";
+import { change } from "../../../lib/analytics/compare";
 import type { DailyVisit, SiteTraffic } from "../../../lib/analytics/report";
+import { StatTile } from "./stat-tile";
+import { TrendChart } from "./trend-chart";
 
 const count = (value: number) => value.toLocaleString("ko-KR");
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`;
@@ -11,15 +15,15 @@ export function duration(seconds: number): string {
 }
 
 /**
- * **얼마나 오나**(계획 2026-10-06 site-analytics). 숫자 여덟과 일별 막대.
+ * **얼마나 오나**(계획 2026-10-06 site-analytics). 숫자 여덟(지난 기간 대비 증감)과 일별 그래프.
  * 섞어 쓰기의 한계를 화면에 적는다 — 비회원은 하루 단위, 여러 날은 쿠키에 동의한 브라우저만.
  */
-export function TrafficPanel({ report }: { report: SiteTraffic | null; previous?: SiteTraffic | null }) {
+export function TrafficPanel({ report, previous = null }: { report: SiteTraffic | null; previous?: SiteTraffic | null }) {
   return (
     <Card>
       <CardHeader><CardTitle>방문</CardTitle></CardHeader>
       <CardContent className="space-y-4">
-        {report ? <TrafficNumbers report={report} /> : (
+        {report ? <TrafficNumbers report={report} previous={previous} /> : (
           <p className="text-sm text-muted-foreground">
             방문 보고를 읽지 못했습니다. Supabase 에 `202610060002_site_analytics_report.sql` 을 적용하기 전이거나, 잠시 연결이 안 된 경우일 수 있습니다.
           </p>
@@ -29,29 +33,12 @@ export function TrafficPanel({ report }: { report: SiteTraffic | null; previous?
   );
 }
 
-function TrafficNumbers({ report }: { report: SiteTraffic }) {
-  const tiles: Array<[string, string]> = [
-    ["오늘 방문자", count(report.todayVisitors)],
-    [`최근 ${report.days}일 방문(하루 단위 합)`, count(report.visitorDays)],
-    [`최근 ${report.days}일 들어온 회원`, count(report.members)],
-    ["화면 본 횟수", count(report.views)],
-    ["한 번 올 때 머문 시간(평균)", duration(report.avgSessionSeconds)],
-    ["한 번 올 때 본 화면(평균)", String(report.avgViewsPerSession)],
-    ["방문 통계 쿠키 동의율", percent(report.consentRate)],
-    ["여러 날 다시 온 브라우저(동의자)", `${count(report.returningBrowsers)} / ${count(report.knownBrowsers)}`],
-  ];
+function TrafficNumbers({ report, previous }: { report: SiteTraffic; previous: SiteTraffic | null }) {
   return (
     <>
-      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {tiles.map(([label, value]) => (
-          <div key={label} className="rounded-lg border p-3">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-lg font-semibold">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <TrafficTiles report={report} previous={previous} />
       <p className="text-xs text-muted-foreground">화면을 하나만 보고 떠난 방문은 머문 시간을 0초로 세서, 평균 시간은 실제보다 짧게 나옵니다.</p>
-      <DailyBars daily={report.daily} />
+      <TrendChart daily={report.daily} />
       <p className="text-xs text-muted-foreground">
         비회원은 하루 단위로만 같은 사람을 알아봅니다(같은 사람이 이틀 오면 2). 여러 날을 잇는 숫자는 방문 통계 쿠키에
         동의한 브라우저만 셉니다. 동의율이 낮으면 실제보다 작습니다. 회원은 기간 전체에서 한 번만 셉니다. 관리자 방문은 뺐습니다.
@@ -61,19 +48,25 @@ function TrafficNumbers({ report }: { report: SiteTraffic }) {
   );
 }
 
-function DailyBars({ daily }: { daily: DailyVisit[] }) {
-  const max = Math.max(1, ...daily.map((day) => day.visitors));
+/** 숫자 칸 여덟. 기간 숫자 셋은 지난 기간과, 오늘 방문자는 어제 하루와 견준다(못 읽었으면 배지 없음). */
+function TrafficTiles({ report, previous }: { report: SiteTraffic; previous: SiteTraffic | null }) {
+  const versus = (current: number, before: number | undefined) => change(current, before ?? null);
+  const hint = previous ? `지난 ${report.days}일 같은 시각까지 대비` : undefined;
+  const yesterday = report.daily.length >= 2 ? report.daily[report.daily.length - 2]!.visitors : undefined;
   return (
-    <div className="flex h-32 items-end gap-px" role="img" aria-label={`일별 방문자 ${daily.length}일`}>
-      {daily.map((day) => (
-        <div
-          key={day.day}
-          title={`${day.day} · 방문 ${day.visitors} · 회원 ${day.members} · 가입 ${day.signups}`}
-          className="flex-1 rounded-t-sm bg-primary/70"
-          style={{ height: `${Math.max(2, (day.visitors / max) * 100)}%` }}
-        />
-      ))}
-    </div>
+    <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatTile icon={Users} label="오늘 방문자" value={count(report.todayVisitors)}
+        change={versus(report.todayVisitors, yesterday)} hint={yesterday === undefined ? undefined : "어제 하루 전체 대비"} />
+      <StatTile icon={CalendarDays} label={`최근 ${report.days}일 방문(하루 단위 합)`} value={count(report.visitorDays)}
+        change={versus(report.visitorDays, previous?.visitorDays)} hint={hint} />
+      <StatTile icon={UserCheck} label={`최근 ${report.days}일 들어온 회원`} value={count(report.members)}
+        change={versus(report.members, previous?.members)} hint={hint} />
+      <StatTile icon={Eye} label="화면 본 횟수" value={count(report.views)} change={versus(report.views, previous?.views)} hint={hint} />
+      <StatTile icon={Clock} label="한 번 올 때 머문 시간(평균)" value={duration(report.avgSessionSeconds)} />
+      <StatTile icon={Layers} label="한 번 올 때 본 화면(평균)" value={String(report.avgViewsPerSession)} />
+      <StatTile icon={Cookie} label="방문 통계 쿠키 동의율" value={percent(report.consentRate)} />
+      <StatTile icon={Repeat} label="여러 날 다시 온 브라우저(동의자)" value={`${count(report.returningBrowsers)} / ${count(report.knownBrowsers)}`} />
+    </dl>
   );
 }
 

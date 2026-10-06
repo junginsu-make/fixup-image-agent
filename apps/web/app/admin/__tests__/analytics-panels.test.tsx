@@ -56,11 +56,86 @@ describe("PeoplePanel", () => {
     expect(html).toContain("kim@example.invalid");
     expect(html).toContain("카카오");
     expect(html).toContain("가입자가 처음 들어온 경로");
-    expect(html).toContain("유튜브 1명");
+    expect(html).toContain("유튜브");
     expect(html).toContain("확인 못 함");
   });
   it("준비 전이면 null 을 받아도 깨지지 않는다", () => {
     expect(renderToStaticMarkup(<PeoplePanel report={null} />)).toContain("읽지 못했습니다");
+  });
+});
+
+const empty = {
+  ...traffic, todayVisitors: 0, visitorDays: 0, views: 0, members: 0, sessions: 0, avgSessionSeconds: 0, avgViewsPerSession: 0,
+  consentRate: 0, knownBrowsers: 0, returningBrowsers: 0,
+  daily: [], sources: [], campaigns: [], landingPages: [], pages: [], devices: [], browsers: [],
+};
+
+describe("증감 배지", () => {
+  it("지난 기간보다 늘면 ▲ 와 「같은 시각까지 대비」", () => {
+    const html = renderToStaticMarkup(<TrafficPanel report={traffic} previous={{ ...traffic, visitorDays: 2, members: 4, views: 6 }} />);
+    expect(html).toContain("▲ 100%");
+    expect(html).toContain("▼ 50%");
+    expect(html).toContain("변화 없음");
+    expect(html).toContain("지난 7일 같은 시각까지 대비");
+  });
+  it("지난 기간이 0 이면 「새로 생김」, 무한대·NaN 은 없다", () => {
+    const html = renderToStaticMarkup(<TrafficPanel report={traffic} previous={empty} />);
+    expect(html).toContain("새로 생김");
+    expect(html).not.toMatch(/Infinity|NaN/);
+  });
+  it("지난 기간 null 이면 기간 증감 배지가 없다", () => {
+    const oneDay = { ...traffic, daily: [traffic.daily[1]!] };
+    const html = renderToStaticMarkup(<TrafficPanel report={oneDay} previous={null} />);
+    expect(html).not.toMatch(/▲|▼|새로 생김|변화 없음|대비/);
+  });
+  it("오늘 방문자는 어제와 견준다", () => {
+    const html = renderToStaticMarkup(<TrafficPanel report={traffic} previous={null} />);
+    expect(html).toContain("어제 하루 전체 대비");
+    expect(html).toContain("▲ 100%");
+  });
+  it("활동 회원도 증감을 보인다", () => {
+    const html = renderToStaticMarkup(<PeoplePanel report={people} previous={{ ...people, activeMembers: 1 }} />);
+    expect(html).toContain("▲ 100%");
+  });
+});
+
+describe("방문 그래프", () => {
+  it("요약 aria-label 에 최고·합계, 막대마다 title", () => {
+    const html = renderToStaticMarkup(<TrafficPanel report={traffic} />);
+    expect(html).toContain('role="img"');
+    expect(html).toContain("최근 2일 방문자, 최고 2명(10/06), 합계 3");
+    expect(html).toContain("<title>10/06 방문 2 · 회원 1 · 가입 1</title>");
+    expect(html).toContain("10/05");
+  });
+  it("빈 데이터에서도 깨지지 않는다", () => {
+    const html = renderToStaticMarkup(<><TrafficPanel report={empty} previous={empty} /><SourcesPanel report={empty} /></>);
+    expect(html).toContain("기록이 없습니다");
+    expect(html).not.toMatch(/Infinity|NaN/);
+  });
+  it("날짜는 최대 7개", () => {
+    const daily = Array.from({ length: 30 }, (_, i) => ({ day: `2026-09-${String(i + 1).padStart(2, "0")}`, visitors: i, members: 0, views: i, signups: 0 }));
+    const html = renderToStaticMarkup(<TrafficPanel report={{ ...traffic, days: 30, daily }} />);
+    const axis = html.slice(html.indexOf('data-axis="days"'));
+    expect(axis.match(/09\/\d\d</g)).toHaveLength(7);
+    expect(axis).toContain("09/01");
+    expect(axis).toContain("09/30");
+  });
+});
+
+describe("비율 막대 목록", () => {
+  it("화면 이름은 한글, 원래 주소는 작은 글씨", () => {
+    const html = renderToStaticMarkup(<SourcesPanel report={traffic} />);
+    expect(html).toContain("상세페이지 만들기");
+    expect(html).toContain("/create");
+    expect(html).toContain("67%");
+  });
+  it("8개 넘으면 「더 보기」", () => {
+    const sources = Array.from({ length: 10 }, (_, i) => ({ key: `site${i}.example`, views: 10 - i, visitors: 1 }));
+    const html = renderToStaticMarkup(<SourcesPanel report={{ ...traffic, sources }} />);
+    expect(html).toContain("더 보기 (2개)");
+  });
+  it("기능은 쓴 회원·실패를 작은 글씨로", () => {
+    expect(renderToStaticMarkup(<PeoplePanel report={people} />)).toContain("쓴 회원 1명 · 실패 1번");
   });
 });
 

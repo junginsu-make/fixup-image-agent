@@ -1,77 +1,74 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@fixup/ui";
-import type { SitePeople } from "../../../lib/analytics/report";
+import { Ticket, UserPlus, Users } from "lucide-react";
+import { change } from "../../../lib/analytics/compare";
+import type { FeatureUse, MemberUse, SitePeople } from "../../../lib/analytics/report";
 import { aiOperationLabel } from "../system/ai-labels";
 import { providerLabel, sourceLabel } from "./labels";
+import { RankList } from "./rank-list";
+import { StatTile } from "./stat-tile";
 
 const count = (value: number) => value.toLocaleString("ko-KR");
 const seen = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" }) : "—";
-const list = (items: Array<{ key: string; members: number }>, label: (key: string) => string) =>
-  items.length ? items.map((item) => `${label(item.key)} ${count(item.members)}명`).join(" · ") : "기록 없음";
+  iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" }) : "기록 없음";
+const members = (row: { members: number }) => row.members;
+const calls = (row: FeatureUse) => row.calls;
+const featureNote = (row: FeatureUse) => `쓴 회원 ${count(row.users)}명 · 실패 ${count(row.failed)}번`;
 
 /**
  * **누가 무엇을 쓰나**(계획 2026-10-06 site-analytics). 기능은 이미 쌓이고 있는 AI 호출 기록
  * (`ai_cost_events`, 2026-09-30 부터)으로 센다 — 새로 모으지 않는다.
  */
-export function PeoplePanel({ report }: { report: SitePeople | null; previous?: SitePeople | null }) {
+export function PeoplePanel({ report, previous = null }: { report: SitePeople | null; previous?: SitePeople | null }) {
   return (
     <Card>
       <CardHeader><CardTitle>회원과 기능</CardTitle></CardHeader>
-      <CardContent className="space-y-6">
-        {report ? <PeopleBody report={report} /> : <p className="text-sm text-muted-foreground">회원 보고를 읽지 못했습니다.</p>}
+      <CardContent className="space-y-8">
+        {report ? <PeopleBody report={report} previous={previous} /> : <p className="text-sm text-muted-foreground">회원 보고를 읽지 못했습니다.</p>}
       </CardContent>
     </Card>
   );
 }
 
-function PeopleBody({ report }: { report: SitePeople }) {
-  const tiles: Array<[string, number]> = [
-    [`최근 ${report.days}일 활동 회원`, report.activeMembers],
-    ["그중 새로 가입", report.newMembers],
-    ["그중 추천코드 입력", report.withReferral],
-  ];
+function PeopleBody({ report, previous }: { report: SitePeople; previous: SitePeople | null }) {
   return (
     <>
       <dl className="grid gap-3 sm:grid-cols-3">
-        {tiles.map(([label, value]) => (
-          <div key={label} className="rounded-lg border p-3">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-lg font-semibold">{count(value)}</dd>
-          </div>
-        ))}
+        <StatTile icon={Users} label={`최근 ${report.days}일 활동 회원`} value={count(report.activeMembers)}
+          change={change(report.activeMembers, previous?.activeMembers ?? null)}
+          hint={previous ? `지난 ${report.days}일 같은 시각까지 대비` : undefined} />
+        <StatTile icon={UserPlus} label="그중 새로 가입" value={count(report.newMembers)} />
+        <StatTile icon={Ticket} label="그중 추천코드 입력" value={count(report.withReferral)} />
       </dl>
-      <div className="space-y-1 text-sm">
-        <p>가입 방법: {list(report.byProvider, providerLabel)}</p>
-        <p>가입자가 처음 들어온 경로: {list(report.signupSources, sourceLabel)}</p>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <RankList title="가입 방법" rows={report.byProvider} value={members} label={providerLabel} unit="명" />
+        <RankList title="가입자가 처음 들어온 경로" rows={report.signupSources} value={members} label={sourceLabel} unit="명" />
       </div>
-      <Table
-        title="많이 쓴 기능(AI 호출 기준)"
-        head={["기능", "횟수", "쓴 회원", "실패"]}
-        rows={report.features.map((f) => [aiOperationLabel(f.key), count(f.calls), count(f.users), count(f.failed)])}
-      />
-      <Table
-        title="많이 쓴 회원(상위 10)"
-        head={["회원", "화면", "AI 호출", "마지막 방문"]}
-        rows={report.topMembers.map((m) => [m.name ? `${m.name} (${m.email})` : m.email, count(m.views), count(m.calls), seen(m.lastSeen)])}
-      />
+      <RankList title="많이 쓴 기능(AI 호출 기준)" rows={report.features} value={calls} label={aiOperationLabel} sublabel={featureNote} unit="번" />
+      <TopMembers rows={report.topMembers} />
     </>
   );
 }
 
-function Table({ title, head, rows }: { title: string; head: string[]; rows: string[][] }) {
+/** 표 대신 줄 목록. 휴대폰에서도 이름·이메일이 줄바꿈되어 옆으로 넘치지 않는다. */
+function TopMembers({ rows }: { rows: MemberUse[] }) {
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-medium">{title}</h3>
+    <section className="min-w-0">
+      <h3 className="mb-2 text-sm font-medium">많이 쓴 회원(상위 10)</h3>
       {rows.length ? (
-        <table className="w-full text-sm">
-          <thead><tr className="text-left text-muted-foreground">{head.map((h) => <th key={h} className="py-1 pr-3 font-medium">{h}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.join("|")} className="border-t">{row.map((cell, i) => <td key={i} className="break-all py-1 pr-3">{cell}</td>)}</tr>
-            ))}
-          </tbody>
-        </table>
+        <ol className="divide-y rounded-lg border">
+          {rows.map((member) => (
+            <li key={member.id || member.email} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                {member.name ? <p className="break-words font-medium">{member.name}</p> : null}
+                <p className="break-all text-xs text-muted-foreground">{member.email}</p>
+              </div>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                화면 {count(member.views)}번 · AI {count(member.calls)}번 · 마지막 방문 {seen(member.lastSeen)}
+              </p>
+            </li>
+          ))}
+        </ol>
       ) : <p className="text-sm text-muted-foreground">기록이 없습니다.</p>}
-    </div>
+    </section>
   );
 }
