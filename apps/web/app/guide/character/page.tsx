@@ -164,13 +164,14 @@ export default function CharacterGuidePage() {
             rows={2}
             value="30대 초반 여성, 단발, 베이지 니트, 부드러운 인상"
           />
+          <MockField label="내 캐릭터 · 선택" marker={4} rows={1} value="(내가 가진 캐릭터 그림)" />
           <MockChoices
             label="참고할 그림 · 선택 → 이 그림의 역할"
-            marker={4}
+            marker={5}
             columns={2}
             items={[
               { title: "이 캐릭터 뽑아내기", hint: "그림 속 그 대상을 살립니다 · 기본값" },
-              { title: REFERENCE_STYLE, hint: "화풍·색·질감만 가져오고 대상은 새로 만듭니다" },
+              { title: REFERENCE_STYLE, hint: "화풍과 몸 비율(등신)을 가져오고 대상은 새로 만듭니다" },
             ]}
           />
           <MockNote>정면은 언제나 한 장입니다. 마음에 안 들면 「다시 뽑기」로 바꿉니다.</MockNote>
@@ -192,16 +193,21 @@ export default function CharacterGuidePage() {
               body: (
                 <>
                   나이·차림새·인상까지 적으세요. 여기가 두루뭉술하면 정면이 흐릿한 인상으로 나옵니다.{" "}
-                  <strong className="text-foreground">이 설명은 저장돼서 나중에 각도를 더 만들 때도 쓰입니다.</strong>
+                  <strong className="text-foreground">이 설명은 저장돼서 나중에 각도를 더 만들 때도 쓰입니다.</strong>{" "}
+                  「3등신」·「SD」 같은 말은 AI 가 풀어서 그림 모델에 전합니다.
                 </>
               ),
+            },
+            {
+              title: "내 캐릭터 · 레퍼런스처럼 바꾸기",
+              body: "내 캐릭터 칸에 넣은 그림은 생김새·색·옷·소품을 그대로 지킵니다. 참고할 그림에 레퍼런스를 함께 넣으면 그 그림의 화풍과 몸 비율(등신)로 다시 그립니다. 이때 「이 캐릭터 뽑아내기」는 쓸 수 없습니다.",
             },
             {
               title: "참고할 그림 · 두 가지 역할",
               body: (
                 <>
                   <strong className="text-foreground">{REFERENCE_STYLE}</strong>
-                  {withJosa(REFERENCE_STYLE, "은는").slice(-1)} 화풍만 가져오고 대상은 새로 만듭니다. 그림체 칸의
+                  {withJosa(REFERENCE_STYLE, "은는").slice(-1)} 화풍과 몸 비율을 가져오고 대상은 새로 만듭니다. 그림체 칸의
                   「{REFERENCE_STYLE}」{withJosa(REFERENCE_STYLE, "과와").slice(-1)} 같은 스위치라 하나를 고르면 다른 쪽도
                   따라 바뀝니다.{" "}
                   <strong className="text-foreground">이 캐릭터 뽑아내기</strong>는 그림 속 그 캐릭터를 그대로 살려
@@ -262,7 +268,8 @@ export default function CharacterGuidePage() {
             ["상세페이지에 모델이 여러 번 나온다", `사람 · ${IMAGE_LOOK_LABEL.photoreal}`, "섹션이 바뀌어도 같은 사람이 유지됩니다"],
             ["브랜드 마스코트가 있다", "이 캐릭터 뽑아내기", "기존 그림의 캐릭터를 그대로 살립니다"],
             ["제품 소품을 여러 장면에 넣는다", "사물", "같은 물건이 각 장면에 나옵니다"],
-            ["화풍만 참고하고 싶다", `참고할 그림 + ${REFERENCE_STYLE}`, "그림은 새로 만들되 결을 맞춥니다"],
+            ["화풍만 참고하고 싶다", `참고할 그림 + ${REFERENCE_STYLE}`, "그림은 새로 만들되 화풍·몸 비율을 맞춥니다"],
+            ["내 캐릭터를 다른 그림 느낌으로", "내 캐릭터 + 참고할 그림", "생김새는 지키고 화풍·등신만 바꿉니다"],
             ["한 장만 필요하다", "이미지 만들기 도구", "재사용할 게 아니면 굳이 고정할 필요가 없습니다"],
           ]}
         />
