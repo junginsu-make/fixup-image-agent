@@ -1,5 +1,8 @@
+import { AD_CHOICE_IMAGE, AD_CHOICE_SPECS } from "./ad-ask";
+import { askChain, askInstruction, readEasyPick } from "./ask-chain";
 import { editRequestOf, rowFromOf } from "./row-image";
-import { visibleBody } from "./row-marks";
+import { readPick, visibleBody } from "./row-marks";
+import type { EasyMessage } from "./turn";
 
 /**
  * **이 대화의 결과물 번호**(2026-10-07 2차 설계 D2 · §3-2, 2차 최종 리뷰 5 — 컨트롤러 결정).
@@ -22,10 +25,11 @@ export interface EasyResultNumber {
   fromRowId?: string;
 }
 
-export type EasyResultKind = "image" | "cardnews" | "deleted";
+/** `unknown`: 저장소를 못 읽어 무엇인지 모른다(리뷰 1차 수정 2). 지운 것으로 말하지 않는다. */
+export type EasyResultKind = "image" | "cardnews" | "deleted" | "unknown";
 
-/** 이미지의 상태. 카드뉴스는 `done`, 지운 것은 `deleted` 로 둔다. */
-export type EasyImageState = "done" | "making" | "failed" | "deleted";
+/** 이미지의 상태. 카드뉴스는 `done`, 지운 것은 `deleted`, 모르는 것은 `unknown` 으로 둔다. */
+export type EasyImageState = "done" | "making" | "failed" | "deleted" | "unknown";
 
 export interface EasyResultEntry extends EasyResultNumber {
   kind: EasyResultKind;
@@ -51,17 +55,52 @@ export function nextResultNumber(rows: readonly Row[]): number {
   return numberEasyResults(rows).length + 1;
 }
 
-/** 그 번호가 무엇인가. 포스터 저장소에 있으면 이미지, 카드뉴스 저장소에 있으면 카드뉴스, 둘 다 없으면 지운 것. */
-export function resultKindOf(workId: string, posters: ReadonlySet<string>, cardnews: ReadonlySet<string>): EasyResultKind {
-  return posters.has(workId) ? "image" : cardnews.has(workId) ? "cardnews" : "deleted";
+/**
+ * 그 번호가 무엇인가. 포스터 저장소에 있으면 이미지, 카드뉴스 저장소에 있으면 카드뉴스, 둘 다 없으면 지운 것.
+ * **못 읽은 작업(`unread`)은 지운 것이 아니라 모르는 것**이다(리뷰 1차 수정 2) — 잠깐 끊긴 것을 「지운 결과」로
+ * 말하면 사용자에게 거짓을 말한다.
+ */
+export function resultKindOf(
+  workId: string,
+  posters: ReadonlySet<string>,
+  cardnews: ReadonlySet<string>,
+  unread: ReadonlySet<string> = new Set(),
+): EasyResultKind {
+  if (posters.has(workId)) return "image";
+  if (cardnews.has(workId)) return "cardnews";
+  return unread.has(workId) ? "unknown" : "deleted";
 }
 
-/** 화면 이름표. 지운 것은 무엇이었는지 모를 수 있어(표시 없는 옛 줄) 「결과물 N」이다. */
+/** 화면 이름표. 지운 것 · 모르는 것은 무엇이었는지 모를 수 있어(표시 없는 옛 줄) 「결과물 N」이다. */
 export function resultLabel(kind: EasyResultKind, n: number): string {
   return kind === "image" ? `이미지 ${n}` : kind === "cardnews" ? `카드뉴스 ${n}` : `결과물 ${n}`;
 }
 
 const 앞말길이 = 40;
+
+type ChainRow = Pick<EasyMessage, "id" | "role" | "body">;
+
+function 단추답인가(row: ChainRow): boolean {
+  const pick = readPick(row);
+  if (pick !== undefined) return readEasyPick(pick).typed !== true;
+  return row.body === AD_CHOICE_IMAGE || row.body === AD_CHOICE_SPECS;
+}
+
+/**
+ * 결과물을 만든 말(리뷰 1차 수정 1). 결과물 앞의 마지막 사용자 말이 물음의 답이면 **처음 주문**을 쓴다 — 라우트가
+ * 지시를 만드는 것과 같은 사슬(`askChain` · `askInstruction`)이다. 단추 답 글(「세로」)은 주문이 아니라 빼고,
+ * 말로 한 답은 처음 말 뒤에 잇는다(번호만 고른 말 답은 안 잇는다). 줄바꿈은 목록 한 줄에 맞게 「 / 」로 바꾼다.
+ */
+function 만든말(rows: readonly ChainRow[], at: number): string {
+  let u = at - 1;
+  while (u >= 0 && rows[u]!.role !== "user") u -= 1;
+  if (u < 0) return "";
+  const 말 = rows[u]!;
+  const 이번 = visibleBody(말);
+  const chain = askChain(rows.slice(0, u));
+  const 주문 = chain ? askInstruction(chain, 이번, 단추답인가(말) ? "button" : "typed") : 이번;
+  return 주문.split("\n").map((one) => one.trim()).filter(Boolean).join(" / ");
+}
 
 /** 번호마다 갈래 · 상태 · 만든 말 · 고친 번호. 갈래 · 상태는 부르는 쪽(서버)이 안다. */
 export function describeEasyResults(
@@ -70,14 +109,14 @@ export function describeEasyResults(
   factOf: (entry: EasyResultNumber) => { kind: EasyResultKind; state: EasyImageState },
 ): EasyResultEntry[] {
   const 번호 = new Map(numbered.map((one) => [one.rowId, one.n]));
+  const 줄들: ChainRow[] = rows.map((row) => ({ id: row.id, role: row.role as EasyMessage["role"], body: row.body ?? "" }));
   return numbered.map((one) => {
     const at = rows.findIndex((row) => row.id === one.rowId);
-    const 말 = rows.slice(0, Math.max(at, 0)).reverse().find((row) => row.role === "user");
     const fromN = one.fromRowId ? 번호.get(one.fromRowId) : undefined;
     return {
       ...one,
       ...factOf(one),
-      words: 말 ? visibleBody({ role: "user", body: 말.body ?? "" }).slice(0, 앞말길이) : "",
+      words: 만든말(줄들, Math.max(at, 0)).slice(0, 앞말길이),
       ...(fromN ? { fromN } : {}),
     };
   });

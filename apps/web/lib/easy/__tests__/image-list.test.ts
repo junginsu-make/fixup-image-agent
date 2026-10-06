@@ -11,16 +11,24 @@ let 작업들: Record<string, { id: string; ratio: string; data: Record<string, 
 let 그림들: 그림[];
 let 카드뉴스: Set<string>;
 let 실패 = false;
+let 카드실패 = false;
 let 읽은수 = 0;
 
 vi.mock("../../poster/stores", () => ({
   posterStoresForUser: () => ({
-    projects: { get: async (id: string) => { 읽은수 += 1; return 작업들[id]; } },
+    projects: {
+      get: async (id: string) => {
+        읽은수 += 1;
+        if (id === "boom") throw new Error("잠깐 끊김");
+        return 작업들[id];
+      },
+    },
     images: { byProjects: async () => { if (실패) throw new Error("db"); return 그림들; } },
   }),
 }));
 vi.mock("../cardnews-steps", () => ({
-  cardnewsProjectIds: async (_userId: string, ids: readonly string[]) => new Set(ids.filter((id) => 카드뉴스.has(id))),
+  cardnewsProjectIds: async (_userId: string, ids: readonly string[]) =>
+    (카드실패 ? null : new Set(ids.filter((id) => 카드뉴스.has(id)))),
 }));
 
 const { loadEasyImages } = await import("../image-list");
@@ -38,6 +46,7 @@ beforeEach(() => {
   그림들 = [{ id: "img-1", projectId: "p1", generationRequestId: "r1", selected: false, assetPath: "me/1.png", thumbPath: null }];
   카드뉴스 = new Set(["card-1"]);
   실패 = false;
+  카드실패 = false;
   읽은수 = 0;
 });
 
@@ -84,6 +93,20 @@ describe("이 대화의 결과물 사실", () => {
     expect((await loadEasyImages("me", [줄("i1", "p1", 일감("r1"), 5), 줄("c1", "card-1", "", 1)], 지금)).lastIsImage).toBe(false);
     expect((await loadEasyImages("me", [줄("c1", "card-1", "", 9), 줄("i1", "p1", 일감("r1"), 5), 줄("i4", "gone", "", 1)], 지금)).lastIsImage)
       .toBe(true);
+  });
+
+  /** 리뷰 1차 수정 2 — 잠깐 못 읽은 것을 「지운 결과」로 말하면 사용자에게 거짓을 말한다. */
+  it("포스터 작업을 못 읽으면 지운 것이 아니라 모름 — 고칠 수 있는 이미지에서도 빼지 않는다", async () => {
+    그림들 = [];
+    const facts = await loadEasyImages("me", [줄("i9", "boom", 일감("r9"), 5)], 지금);
+    expect(facts.entries.map((one) => [one.n, one.kind, one.state])).toEqual([[1, "unknown", "unknown"]]);
+    expect(facts.madeImage).toBe(true);
+  });
+
+  it("카드뉴스 저장소를 못 읽으면 포스터가 아닌 작업은 지운 것이 아니라 모름", async () => {
+    카드실패 = true;
+    const facts = await loadEasyImages("me", [줄("i1", "p1", 일감("r1"), 30), 줄("c1", "card-1", "", 15), 줄("x1", "gone", "", 9)], 지금);
+    expect(facts.entries.map((one) => one.kind)).toEqual(["image", "unknown", "unknown"]);
   });
 
   it("저장소가 실패해도 턴을 깨지 않는다 — 빈 사실", async () => {

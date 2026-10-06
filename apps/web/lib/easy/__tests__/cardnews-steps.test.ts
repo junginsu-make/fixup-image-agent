@@ -146,7 +146,8 @@ describe("카드뉴스 작업 찾기", () => {
     expect(await cardnewsProjectIds("me", [])).toEqual(new Set());
   });
 
-  it("저장소 오류가 나도 실패하지 않고 빈 모음이다", async () => {
-    expect(await cardnewsProjectIds("me", ["mine", "boom"])).toEqual(new Set());
+  /** 리뷰 1차 수정 2 — 빈 모음이면 카드뉴스가 전부 「지운 결과」로 읽힌다. 못 읽었으면 모른다고 돌려준다. */
+  it("저장소 오류가 나도 던지지 않고, 빈 모음이 아니라 null(모름)을 돌려준다", async () => {
+    expect(await cardnewsProjectIds("me", ["mine", "boom"])).toBeNull();
   });
 });

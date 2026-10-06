@@ -3,6 +3,7 @@ import {
   describeEasyResults, doneImageNumbers, nextResultNumber, numberEasyResults, resultKindOf, resultLabel,
 } from "../image-numbers";
 import { editRowBody, withRowFrom, withRowJob } from "../row-image";
+import { askBody, sayBody, withPick } from "../row-marks";
 
 /**
  * **이 대화의 결과물 번호**(2026-10-07 2차 설계 D2 · §3-2, 2차 최종 리뷰 5). 화면과 서버가 같은 함수를 쓴다.
@@ -64,6 +65,32 @@ describe("결과물 번호", () => {
       { n: 3, rowId: "i2", workId: "p1", fromRowId: "i1", fromN: 1, kind: "image", state: "making", words: "배경만 파랗게" },
     ]);
     expect(doneImageNumbers(entries)).toEqual([1]);
+  });
+
+  /** 리뷰 1차 수정 1 — 물음 뒤 결과물의 「만든 말」이 단추 답 글(「세로」)이 되면 처음 주문을 잃는다. */
+  it("물음 사슬 뒤의 결과물은 처음 주문을 만든 말로 적는다 — 단추 답 글은 주문이 아니다", () => {
+    const 물음줄 = (id: string, kind: Parameters<typeof askBody>[0]) =>
+      ({ id, role: "assistant", body: askBody(kind, "물음입니다?"), workId: null });
+    const 머리말 = (id: string) => ({ id, role: "assistant", body: sayBody("만들겠습니다."), workId: null });
+    const 단추답 = [말("u1", "카페 포스터"), 물음줄("q1", "ratio"), 말("u2", withPick("세로", { ratio: "4:5" })), 머리말("s1"), 결과("i1", "p1")];
+    const 말답 = [말("u1", "카페 포스터"), 물음줄("q1", "ratio"), 말("u2", "세로로"), 결과("i1", "p1")];
+    const 번호말답 = [말("u1", "글자 크게"), 물음줄("q1", "target"), 말("u2", "2번"), 결과("i1", "p1")];
+    const 그냥 = [말("u1", "배너 만들어줘"), 머리말("s1"), 결과("i1", "p1")];
+    const 말들 = (rows: Parameters<typeof numberEasyResults>[0]) =>
+      describeEasyResults(rows, numberEasyResults(rows), () => ({ kind: "image", state: "done" })).map((one) => one.words);
+    expect(말들(단추답)).toEqual(["카페 포스터"]);
+    // 말로 한 답은 라우트의 지시(`askInstruction`)처럼 처음 말 뒤에 잇는다. 번호만 고른 말 답은 잇지 않는다.
+    expect(말들(말답)).toEqual(["카페 포스터 / 세로로"]);
+    expect(말들(번호말답)).toEqual(["글자 크게"]);
+    expect(말들(그냥)).toEqual(["배너 만들어줘"]);
+  });
+
+  /** 리뷰 1차 수정 2 — 조회가 실패한 작업은 지운 것이 아니라 모르는 것이다. */
+  it("읽지 못한 작업은 지운 것이 아니라 「모름」이고 이름표는 「결과물 N」", () => {
+    expect(resultKindOf("p9", new Set(), new Set(), new Set(["p9"]))).toBe("unknown");
+    expect(resultKindOf("p1", new Set(["p1"]), new Set(), new Set(["p1"]))).toBe("image");
+    expect(resultKindOf("gone", new Set(), new Set(), new Set(["p9"]))).toBe("deleted");
+    expect(resultLabel("unknown", 4)).toBe("결과물 4");
   });
 
   it("화면 이름표는 갈래를 따른다 — 지운 것은 무엇이었는지 모를 수 있어 「결과물 N」", () => {

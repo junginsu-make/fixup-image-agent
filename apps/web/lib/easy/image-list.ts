@@ -36,9 +36,10 @@ export interface EasyImageFacts {
   /**
    * 고칠 수 있는 이미지가 있나 — **지운 것만 뺀다**(2차 최종 리뷰 a). 만드는 중 · 못 만든 이미지도 넣는다:
    * 그때 「글자 크게」면 「고칠 것이 없다」가 아니라 「아직 준비 안 됨」 · 「못 만든 이미지」를 말해야 한다.
+   * 못 읽은 것(`unknown`)도 넣는다 — 이미지일 수 있다(리뷰 1차 수정 2).
    */
   madeImage: boolean;
-  /** 지운 것을 뺀 이 대화의 마지막 결과물이 이미지인가. 카드뉴스면 false. */
+  /** 지운 것을 뺀 이 대화의 마지막 결과물이 이미지인가(모르는 것이면 이미지로 본다). 카드뉴스면 false. */
   lastIsImage: boolean;
 }
 
@@ -52,10 +53,17 @@ export async function loadEasyImages(userId: string, rows: readonly Row[], now =
   if (!ids.length) return 비었다;
   try {
     const stores = posterStoresForUser(userId);
-    const found = await Promise.all(ids.map((id) => stores.projects.get(id).catch(() => undefined)));
-    const posters = new Set(found.flatMap((project) => (project ? [project.id] : [])));
-    // 포스터가 아닌 작업만 카드뉴스인지 본다(있는지만 — 서명하지 않는다).
-    const cards = await cardnewsProjectIds(userId, ids.filter((id) => !posters.has(id)));
+    // 못 읽은 작업은 「모름」이다 — 없는 것(지운 것)과 가른다(리뷰 1차 수정 2).
+    const found = await Promise.all(ids.map((id) => stores.projects.get(id).then(
+      (project) => ({ id, project, failed: false }),
+      () => ({ id, project: undefined, failed: true }),
+    )));
+    const posters = new Set(found.flatMap((one) => (one.project ? [one.project.id] : [])));
+    // 포스터가 아닌 작업만 카드뉴스인지 본다(있는지만 — 서명하지 않는다). 카드뉴스를 못 읽으면 그 작업들은 모른다.
+    const 나머지 = ids.filter((id) => !posters.has(id));
+    const 카드 = await cardnewsProjectIds(userId, 나머지);
+    const cards = 카드 ?? new Set<string>();
+    const unread = new Set([...found.filter((one) => one.failed).map((one) => one.id), ...(카드 ? [] : 나머지)]);
     const images: EasyPicture[] = posters.size ? await stores.images.byProjects([...posters]) : [];
     const numbered = numberEasyResults(rows);
     const 줄 = (rowId: string) => rows.find((row) => row.id === rowId);
@@ -66,18 +74,21 @@ export async function loadEasyImages(userId: string, rows: readonly Row[], now =
       return picked ? [[one.n, picked] as const] : [];
     }));
     const factOf = (one: EasyResultNumber): { kind: EasyResultKind; state: EasyImageState } => {
-      const kind = resultKindOf(one.workId, posters, cards);
-      if (kind !== "image") return { kind, state: kind === "deleted" ? "deleted" : "done" };
+      const kind = resultKindOf(one.workId, posters, cards, unread);
+      if (kind === "deleted" || kind === "unknown") return { kind, state: kind };
+      if (kind === "cardnews") return { kind, state: "done" };
       if (pictures.has(one.n)) return { kind, state: "done" };
       const at = Date.parse(줄(one.rowId)?.createdAt ?? "");
       return { kind, state: Number.isFinite(at) && now - at >= 실패로볼시간 ? "failed" : "making" };
     };
     const entries = describeEasyResults(rows, numbered, factOf);
     const 마지막 = [...entries].reverse().find((one) => one.kind !== "deleted");
+    // 모르는 것은 이미지일 수 있다 — 「고칠 것이 없다」고 하지 않게 넣는다(리뷰 1차 수정 2).
+    const 이미지일수있다 = (one: EasyResultEntry | undefined) => one?.kind === "image" || one?.kind === "unknown";
     return {
       entries, posters, pictures,
-      madeImage: entries.some((one) => one.kind === "image"),
-      lastIsImage: 마지막?.kind === "image",
+      madeImage: entries.some(이미지일수있다),
+      lastIsImage: 이미지일수있다(마지막),
     };
   } catch (error) {
     console.warn("[easy] 이 대화의 결과물을 읽지 못했습니다", error instanceof Error ? error.message : error);

@@ -123,11 +123,15 @@ export function easyPhotoGoneLines(): string[] {
   ];
 }
 
-const 상태말: Record<EasyImageState, string> = { done: "완료", making: "만드는 중", failed: "만들지 못함", deleted: "지움" };
+const 상태말: Record<EasyImageState, string> = {
+  done: "완료", making: "만드는 중", failed: "만들지 못함", deleted: "지움", unknown: "확인 못 함",
+};
 
 function 결과물줄(one: EasyResultEntry): string {
   const 말 = one.words ? `「${one.words}」` : "";
   if (one.kind === "deleted") return [`#${one.n} (지운 결과)`, 말].filter(Boolean).join(" · ");
+  // 저장소를 못 읽은 것은 지운 것으로 말하지 않는다(리뷰 1차 수정 2).
+  if (one.kind === "unknown") return [`#${one.n} (확인 못 함)`, 말].filter(Boolean).join(" · ");
   if (one.kind === "cardnews") return [`#${one.n} 카드뉴스`, 말].filter(Boolean).join(" · ");
   return [`#${one.n} 이미지`, 말, 상태말[one.state], one.fromN ? `#${one.fromN} 을 고친 것` : ""].filter(Boolean).join(" · ");
 }
@@ -151,5 +155,6 @@ export function easyResultRowText(entry: EasyResultEntry | undefined): string {
   if (!entry) return "(이미지 한 장을 만들어 보여 줬습니다)";
   if (entry.kind === "cardnews") return `(#${entry.n} 카드뉴스를 만들어 보여 줬습니다)`;
   if (entry.kind === "deleted") return `(#${entry.n} 결과물을 만들어 보여 줬습니다. 지금은 지웠습니다)`;
+  if (entry.kind === "unknown") return `(#${entry.n} 결과물을 만들어 보여 줬습니다)`;
   return `(#${entry.n} 이미지를 만들어 보여 줬습니다)`;
 }

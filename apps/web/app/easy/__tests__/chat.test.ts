@@ -250,6 +250,7 @@ describe("이 대화의 결과물 목록 (2차 D2)", () => {
     { n: 2, rowId: "c1", workId: "card-1", kind: "cardnews" as const, state: "done" as const, words: "건강 카드뉴스" },
     { n: 3, rowId: "i2", workId: "p1", fromRowId: "i1", fromN: 1, kind: "image" as const, state: "making" as const, words: "배경만 파랗게" },
     { n: 4, rowId: "i3", workId: "gone", kind: "deleted" as const, state: "deleted" as const, words: "배너" },
+    { n: 5, rowId: "i4", workId: "p9", kind: "unknown" as const, state: "unknown" as const, words: "로고" },
   ];
 
   it("번호 · 갈래 · 만든 말 · 상태 · 고친 관계를 따로 싣고, 지난 대화의 결과물 줄에도 번호를 적는다", () => {
@@ -259,6 +260,9 @@ describe("이 대화의 결과물 목록 (2차 D2)", () => {
     expect(prompt).toContain("#2 카드뉴스 · 「건강 카드뉴스」");
     expect(prompt).toContain("#3 이미지 · 「배경만 파랗게」 · 만드는 중 · #1 을 고친 것");
     expect(prompt).toContain("#4 (지운 결과) · 「배너」");
+    // 리뷰 1차 수정 2: 못 읽은 것은 지운 것으로 말하지 않는다.
+    expect(prompt).toContain("#5 (확인 못 함) · 「로고」");
+    expect(prompt).not.toContain("#5 (지운 결과)");
     expect(prompt).toContain("(#1 이미지를 만들어 보여 줬습니다)");
     expect(prompt).toContain("(#2 카드뉴스를 만들어 보여 줬습니다)");
   });

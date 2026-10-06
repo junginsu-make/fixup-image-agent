@@ -91,9 +91,10 @@ export async function cardnewsProject(userId: string, projectId: string): Promis
 
 /**
  * 이 회원의 카드뉴스 작업인 id(2026-10-07 2차 D2 — 결과물 번호의 갈래). 턴마다 부르므로 **있는지만** 보고
- * 그림 주소는 서명하지 않는다. 못 읽어도 턴을 깨지 않는다 — 빈 모음(그 번호는 「지운 결과」로 보인다).
+ * 그림 주소는 서명하지 않는다. 못 읽어도 턴을 깨지 않는다 — `null`(모름). 빈 모음을 돌려주면 그 번호들이
+ * 「지운 결과」로 읽힌다(리뷰 1차 수정 2).
  */
-export async function cardnewsProjectIds(userId: string, ids: readonly string[]): Promise<Set<string>> {
+export async function cardnewsProjectIds(userId: string, ids: readonly string[]): Promise<Set<string> | null> {
   if (!ids.length) return new Set();
   try {
     const store = await snsFlowStoreForUser(userId);
@@ -101,7 +102,7 @@ export async function cardnewsProjectIds(userId: string, ids: readonly string[])
     return new Set(found.flatMap((one) => (one && one.userId === userId ? [one.id] : [])));
   } catch (error) {
     console.warn("[easy] 카드뉴스 작업을 읽지 못했습니다", error instanceof Error ? error.message : error);
-    return new Set();
+    return null;
   }
 }
 
