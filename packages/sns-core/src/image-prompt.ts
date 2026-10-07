@@ -82,12 +82,27 @@ function lookBlock(look: ImageLook | undefined): string {
     ` CARD-NEWS REFERENCE:\n${directive}`;
 }
 
-/** 표지·속지·엔딩은 자기 역할 레퍼런스만 보고, 보존 대상은 모든 역할에 함께 간다. */
+/**
+ * 이 자리가 따라 만들 카드뉴스 그림.
+ *
+ * **엔딩만 빌려 온다**(2026-10-07): 엔딩 자리 그림이 없으면 속지, 그것도 없으면 표지 그림.
+ * 화면의 기본 자리가 속지라 엔딩 자리를 따로 고른 사람이 드물고, 그러면 마지막 장만 참고 없이
+ * 그려져 시리즈와 다른 모양으로 나왔다(운영 4/4). 「쉽게」의 `styleSlots` 와 같은 규칙이다.
+ * 비용 예상 · 화면 자리 표시 · 실제 제출이 모두 `selectReferencesForRole` 을 거치므로 여기
+ * 한 곳에서 정하면 셋이 어긋나지 않는다.
+ */
+function styleReferencesForRole(grouped: GroupedAttachments, role: StyleRole): Attachment[] {
+  const own = grouped.styleByRole[role];
+  if (role !== "ending" || own.length > 0) return own;
+  return grouped.styleByRole.body.length > 0 ? grouped.styleByRole.body : grouped.styleByRole.cover;
+}
+
+/** 표지·속지·엔딩은 자기 역할 레퍼런스만 보고(엔딩은 빌려 온다), 보존 대상은 모든 역할에 함께 간다. */
 export function selectReferencesForRole(
   grouped: GroupedAttachments,
   role: StyleRole,
 ): Attachment[] {
-  return [...grouped.styleByRole[role], ...grouped.keepIdentity];
+  return [...styleReferencesForRole(grouped, role), ...grouped.keepIdentity];
 }
 
 const ROLE_LABEL: Record<StyleRole, string> = {
@@ -101,7 +116,7 @@ export function referenceWarningsForRole(
   grouped: GroupedAttachments,
   role: StyleRole,
 ): string[] {
-  if (grouped.styleByRole[role].length > 0) return [];
+  if (styleReferencesForRole(grouped, role).length > 0) return [];
   const label = ROLE_LABEL[role];
   return [`${label} 레퍼런스가 없습니다. ${label} 카드가 다른 역할과 다른 모양으로 나올 수 있습니다.`];
 }

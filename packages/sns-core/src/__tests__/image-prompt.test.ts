@@ -137,6 +137,41 @@ describe("역할별 레퍼런스", () => {
     expect(referenceWarningsForRole(coverOnly, "body").join("\n")).toContain("속지 레퍼런스가 없습니다");
     expect(selectReferencesForRole(coverOnly, "body")).toEqual([]);
   });
+
+  /**
+   * **엔딩 자리 그림이 없으면 속지(없으면 표지) 그림을 쓴다**(2026-10-07 Task 5).
+   *
+   * 화면은 기본 자리를 속지로 둬서, 엔딩 자리를 따로 고른 사람이 드물다. 그러면 마지막 장만
+   * 참고 없이 그려져 시리즈와 다른 모양으로 나왔다(운영 4/4). 「쉽게」의 `styleSlots` 규칙과 같다.
+   */
+  it("엔딩 자리 그림이 없으면 속지 그림을 쓴다", () => {
+    const noEnding = groupAttachments([
+      attachment({ id: "cover", kind: "style_reference", role: "cover" }),
+      attachment({ id: "body", kind: "style_reference", role: "body" }),
+      attachment({ id: "product", kind: "keep_identity", subject: "object" }),
+    ]);
+    expect(selectReferencesForRole(noEnding, "ending").map((image) => image.id)).toEqual(["body", "product"]);
+    expect(referenceWarningsForRole(noEnding, "ending")).toEqual([]);
+  });
+
+  it("속지 그림도 없으면 표지 그림을 쓴다", () => {
+    const coverOnly = groupAttachments([attachment({ id: "cover", kind: "style_reference", role: "cover" })]);
+    expect(selectReferencesForRole(coverOnly, "ending").map((image) => image.id)).toEqual(["cover"]);
+    expect(referenceWarningsForRole(coverOnly, "ending")).toEqual([]);
+  });
+
+  it("표지 · 속지는 다른 자리 그림을 빌려 오지 않는다", () => {
+    const endingOnly = groupAttachments([attachment({ id: "ending", kind: "style_reference", role: "ending" })]);
+    expect(selectReferencesForRole(endingOnly, "cover")).toEqual([]);
+    expect(selectReferencesForRole(endingOnly, "body")).toEqual([]);
+    expect(selectReferencesForRole(endingOnly, "ending").map((image) => image.id)).toEqual(["ending"]);
+  });
+
+  it("따라 만들 그림이 하나도 없으면 엔딩도 지금처럼 경고한다", () => {
+    const none = groupAttachments([attachment({ id: "product", kind: "keep_identity", subject: "object" })]);
+    expect(selectReferencesForRole(none, "ending").map((image) => image.id)).toEqual(["product"]);
+    expect(referenceWarningsForRole(none, "ending").join("\n")).toContain("엔딩 레퍼런스가 없습니다");
+  });
 });
 
 describe("다국어와 글자", () => {

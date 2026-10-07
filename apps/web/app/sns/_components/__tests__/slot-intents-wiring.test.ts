@@ -97,8 +97,10 @@ describe("자리별 차례를 값으로 잰다", () => {
   });
 
   it("갈 그림이 없는 자리는 안 나온다", () => {
+    // 엔딩은 표지 그림을 빌려 와 실제로 그 그림이 간다(2026-10-07 Task 5) — 그래서 엔딩 줄은 뜬다.
     const rows = slotRows(groupAttachments([coverRef]));
-    expect(rows.map((row) => row.slot)).toEqual(["cover"]);
+    expect(rows.map((row) => row.slot)).toEqual(["cover", "ending"]);
+    expect(rows.find((row) => row.slot === "ending")!.picks.map((pick) => pick.id)).toEqual(["c"]);
   });
 
   it("**엔딩 이미지를 올렸으면 엔딩 자리를 뺀다**", () => {
@@ -118,9 +120,9 @@ describe("화면에 없는 자리의 글은 안 보낸다", () => {
   const full = { cover: "표지글", body: "속지글", ending: "엔딩글" };
 
   it("보이는 자리만 남는다", () => {
-    // 표지 레퍼런스만 있으면 표지 줄 하나만 뜬다.
+    // 표지 레퍼런스만 있으면 표지 줄과, 표지 그림을 빌려 오는 엔딩 줄이 뜬다(2026-10-07 Task 5).
     expect(visibleIntents(groupAttachments([coverRef]), full))
-      .toEqual({ cover: "표지글", body: "", ending: "" });
+      .toEqual({ cover: "표지글", body: "", ending: "엔딩글" });
   });
 
   it("원본을 안 바꾼다", () => {

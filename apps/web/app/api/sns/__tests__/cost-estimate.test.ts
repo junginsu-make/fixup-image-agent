@@ -20,7 +20,8 @@ describe("카드별 예상 비용", () => {
     });
 
     expect(estimate.generatedCount).toBe(4);
-    expect(estimate.usd).toBeCloseTo(0.178 + 0.165 * 3, 10);
+    // 표지와, 표지 그림을 빌려 오는 엔딩(2026-10-07 Task 5)이 i2i. 속지 둘은 t2i.
+    expect(estimate.usd).toBeCloseTo(0.178 * 2 + 0.165 * 2, 10);
   });
 
   it("원본 그대로 쓸 장과 사용자가 올린 엔딩은 비용에서 뺀다", () => {
