@@ -20,6 +20,35 @@ describe("서버 기록용 오류 글 (errorLogText)", () => {
     expect(errorLogText(undefined)).toBe("undefined");
   });
 
+  /**
+   * 최종 수정 L3(보안 리뷰). 주소 없이 열쇠 칸만 오거나 저장소의 상대 서명 경로만 와도 비밀이 남는다. 칸 이름은
+   * 두고 값만 `<redacted>` 로, 상대 서명 경로는 통째로 `<url>` 로 가린다. 줄바꿈은 빈칸으로 접어 기록 한 줄을
+   * 가짜 줄로 쪼개지 못하게 한다.
+   */
+  it("열쇠 칸(token · apikey · api_key · sig · signature · X-Amz-*)의 값만 가린다", () => {
+    expect(errorLogText(new Error("실패 token=AAA&mode=1"))).toBe("실패 token=<redacted>&mode=1");
+    expect(errorLogText(new Error("실패 ?apikey=BBB"))).toBe("실패 ?apikey=<redacted>");
+    expect(errorLogText(new Error("api_key=CCC; sig=DDD, signature=EEE"))).toBe("api_key=<redacted>; sig=<redacted>, signature=<redacted>");
+    expect(errorLogText(new Error("X-Amz-Signature=FFF&X-Amz-Credential=GGG&x-amz-date=1")))
+      .toBe("X-Amz-Signature=<redacted>&X-Amz-Credential=<redacted>&x-amz-date=<redacted>");
+    expect(errorLogText(new Error("access_token=HHH"))).toBe("access_token=<redacted>");
+  });
+
+  it("열쇠와 이름만 닮은 칸은 건드리지 않는다", () => {
+    expect(errorLogText(new Error("design=a tokens:3 mysig=x"))).toBe("design=a tokens:3 mysig=x");
+  });
+
+  it("저장소의 상대 서명 경로는 통째로 가린다", () => {
+    expect(errorLogText(new Error("읽기 실패 /storage/v1/object/sign/poster-assets/u1/a.png?token=SECRET 끝")))
+      .toBe("읽기 실패 <url> 끝");
+    expect(errorLogText(new Error("읽기 실패 object/sign/poster-assets/u1/a.png?token=SECRET")))
+      .toBe("읽기 실패 <url>");
+  });
+
+  it("줄바꿈(CR · LF)은 빈칸으로 접는다", () => {
+    expect(errorLogText(new Error("첫 줄\r\n[easy] 가짜 줄\n끝\r"))).toBe("첫 줄 [easy] 가짜 줄 끝 ");
+  });
+
   it("주소 없는 글은 그대로다", () => {
     expect(errorLogText(new Error('relation "easy_messages" does not exist'))).toBe('relation "easy_messages" does not exist');
   });
