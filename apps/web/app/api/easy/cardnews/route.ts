@@ -11,6 +11,7 @@ import { NOT_MADE_YET, isMade, type CopyPatch } from "../../../easy/cardnews-aft
 import { readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
 import { draftFailureMessage, type CardnewsProjectLike } from "../../../easy/cardnews-view";
+import { errorLogText } from "../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +49,7 @@ const 고장말: Record<할일, string> = {
 };
 
 function 고장났다(action: 할일, projectId: string, error: unknown) {
-  console.error(`[easy] 카드뉴스 ${action} 실패 project=${projectId}`, error);
+  console.error(`[easy] 카드뉴스 ${action} 실패 project=${projectId}`, errorLogText(error));
   return Response.json({ ok: false, message: 고장말[action] }, { status: 500 });
 }
 
@@ -141,7 +142,7 @@ async function 남긴다(store: 맥락["store"], conversationId: string, body: s
   try {
     return await store.appendMessage({ conversationId, role: "assistant", body });
   } catch (error) {
-    console.error(`[easy] 대화에 남기지 못했습니다 conversation=${conversationId}`, error);
+    console.error(`[easy] 대화에 남기지 못했습니다 conversation=${conversationId}`, errorLogText(error));
     return { role: "assistant" as const, body };
   }
 }
