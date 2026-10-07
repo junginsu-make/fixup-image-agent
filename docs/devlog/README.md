@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **276개**, 저장 기록(커밋, 합치기 제외) **1,042개**, 배포 꾸러미(릴리스) **228개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **277개**, 저장 기록(커밋, 합치기 제외) **1,044개**, 배포 꾸러미(릴리스) **230개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 28 | 207 | 36 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 29 | 209 | 38 |
 
 <a id="w-2026-08-31"></a>
 
@@ -489,8 +489,9 @@
 - 상세페이지 기획 AI가 오래 응답하지 않으면 같은 요청을 다시 기다리지 않고 바로 예비 AI로 넘어가, 기획이 약 4분 빨라집니다.
 - 카드뉴스 「만들기」를 누른 뒤 첫 장이 시작되기까지가 빨라졌고, 한 장이 3분 넘게 걸리면 그림 업체가 늦어지고 있다고 알려 줍니다.
 - 카드뉴스 마지막 장이 늘 같은 문구가 아니라 앞 장 내용에 맞는 글과 그림으로 나옵니다.
+- 상세페이지 이미지 모델 고르기에서 품질 검사를 자주 떨어지던 경제형을 뺐습니다. 경제형으로 저장해 둔 작업은 다시 열면 기본 모델인 표준형으로 바뀝니다.
 
-**운영 배포 13회**
+**운영 배포 14회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -505,8 +506,9 @@
 - 10/7 `20261007T101738Z-c13852ab` · [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286)
 - 10/7 `20261007T102344Z-af6444d5` · [#283](https://github.com/junginsu-make/fixup-image-agent/pull/283), [#284](https://github.com/junginsu-make/fixup-image-agent/pull/284), [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288)
 - 10/7 `20261007T111629Z-1e074fb9` · [#291](https://github.com/junginsu-make/fixup-image-agent/pull/291)
+- 10/7 `20261007T132044Z-d144d972` · [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294)
 
-<details><summary>이 주의 작업 묶음 28개</summary>
+<details><summary>이 주의 작업 묶음 29개</summary>
 
 
 **10/6**
@@ -542,6 +544,7 @@
 - [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286) fix: 서버 처리 31곳의 오류 원문을 화면에 보내지 않는다(카드뉴스 · 다양하게 · 광고 · 관리자 등) <sub>카드뉴스 · 광고 규격 · 관리자 · +2,224 / −162 · 운영 반영 10/7</sub>
 - [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288) feat: 상세페이지·리디자인·쉽게 그림 칸도 같은 방식으로 받는다 (그림 첨부 통일 3단계) <sub>이미지 만들기 · 상세페이지 · 리디자인 · 쉽게 모드 · +364 / −180 · 운영 반영 10/7</sub>
 - [#291](https://github.com/junginsu-make/fixup-image-agent/pull/291) fix: 상세페이지 검수 불합격 크레딧 묶임 · 기획 6분 낭비, 카드뉴스 첫 응답 속도 · 엔딩 원고 · 늦어짐 안내 <sub>카드뉴스 · 상세페이지 · 크레딧·비용 · +1,569 / −51 · 운영 반영 10/7</sub>
+- [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294) fix: 상세페이지 이미지 모델 목록에서 경제형 제외 <sub>상세페이지 · +183 / −33 · 운영 반영 10/7</sub>
 
 </details>
 
