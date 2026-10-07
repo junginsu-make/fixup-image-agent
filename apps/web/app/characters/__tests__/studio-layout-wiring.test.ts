@@ -57,6 +57,19 @@ describe("그림 자리 — 가운데·오른쪽 칸도 줄어들어 단추와 �
   });
 });
 
+/**
+ * 저장 단추의 여는 태그부터 단추 글자 줄까지.
+ *
+ * 이름의 **첫 등장**을 쓰지 않는다 — 주석이 그 이름을 까닭으로 적으면 주석을
+ * 단추로 알고 엉뚱한 곳을 본다(2026-10-07 실제로 그랬다). 글자만 있는 줄을 찾는다.
+ */
+function saveButton(): string {
+  const label = /^[ \t]*캐릭터 저장하기[ \t]*\r?$/m.exec(source);
+  expect(label).not.toBeNull();
+  const at = label!.index;
+  return source.slice(source.lastIndexOf("<Button", at), at);
+}
+
 describe("저장 단추", () => {
   it("이름이 「캐릭터 저장하기」다", () => {
     // 화면에 보이는 단추 글자만 본다. 주석은 옛 이름을 까닭으로 적는다.
@@ -65,9 +78,9 @@ describe("저장 단추", () => {
   });
 
   it("정면이 나왔을 때만 녹색으로 바뀌고 고리가 번진다", () => {
-    const at = source.indexOf("캐릭터 저장하기");
-    const button = source.slice(source.lastIndexOf("<Button", at), at);
-    expect(button).toMatch(/chosen[^\n]*bg-success/);
+    const button = saveButton();
+    // 바탕색 자체를 본다. `hover:bg-success` 에 걸리면 바탕이 바뀌어도 통과한다.
+    expect(button).toMatch(/chosen && "bg-success /);
     expect(button).toMatch(/chosen[^\n]*fixup-cta-pulse/);
     // 밝은 화면은 흰 글자(4.98:1), 어두운 화면은 진한 글자 — 이 토큰이 둘을 맞춰 준다.
     expect(button).toContain("text-primary-foreground");
@@ -75,7 +88,6 @@ describe("저장 단추", () => {
 
   it("번지는 고리 색은 단추 색을 따른다 — 안 넘기면 지금까지처럼 강조색", () => {
     expect(css).toMatch(/var\(--cta-pulse-color,\s*var\(--primary\)\)/);
-    const at = source.indexOf("캐릭터 저장하기");
-    expect(source.slice(source.lastIndexOf("<Button", at), at)).toContain("[--cta-pulse-color:var(--success)]");
+    expect(saveButton()).toContain("[--cta-pulse-color:var(--success)]");
   });
 });
