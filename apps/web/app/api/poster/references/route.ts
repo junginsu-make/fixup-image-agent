@@ -1,5 +1,6 @@
 import { hasFullScope, viewerFrom } from "../../../../lib/access/core";
 import { authenticateApiMember } from "../../../../lib/membership/api";
+import { errorLogText } from "../../../../lib/easy/log-text";
 import { posterReferences } from "../../../../lib/poster/references";
 import { teamIdOf } from "../../../../lib/teams/store";
 
@@ -37,9 +38,8 @@ export async function GET() {
       isAdmin: hasFullScope(viewerFrom(auth.member), "delete"),
     });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "레퍼런스를 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    // 저장소 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[poster] 레퍼런스 목록 실패", errorLogText(error));
+    return Response.json({ ok: false, message: "레퍼런스를 불러오지 못했습니다." }, { status: 500 });
   }
 }

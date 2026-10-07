@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { hasFullScope, viewerFrom } from "../../../../../../../../lib/access/core";
 import path from "node:path";
 import { authenticateApiMember } from "../../../../../../../../lib/membership/api";
+import { errorLogText } from "../../../../../../../../lib/easy/log-text";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../../../../lib/local-store";
 import { posterStoresForUser } from "../../../../../../../../lib/poster/stores";
 import { createSupabaseAdminClient } from "../../../../../../../../lib/supabase/admin";
@@ -126,7 +127,7 @@ export async function GET(request: Request, context: Context) {
       // **한 줄 남긴다.** 경로 규칙이 어긋나거나 정책이 바뀌어 사본 읽기가 전량
       // 실패하면, 화면은 멀쩡히 뜨면서 전송량만 조용히 원래대로 돌아간다.
       bytes = await read(found.thumbPath).catch((error: unknown) => {
-        console.error(`[poster] 사본을 못 읽어 원본으로 떨어집니다(${found.thumbPath}): ${error instanceof Error ? error.message : error}`);
+        console.error(`[poster] 사본을 못 읽어 원본으로 떨어집니다(${found.thumbPath}): ${errorLogText(error)}`);
         return null;
       });
       servedThumb = bytes !== null;

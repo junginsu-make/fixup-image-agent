@@ -1,6 +1,7 @@
 import { planSelection } from "@fixup/poster-core";
 import { z } from "zod";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 
 export const runtime = "nodejs";
@@ -27,13 +28,28 @@ export async function POST(request: Request, context: Context) {
     const { id } = await context.params;
     const stores = posterStoresForUser(auth.member.userId);
     const images = await stores.images.byProject(id);
-    const steps = planSelection(id, images, parsed.data.imageId);
+    const steps = selectionSteps(id, images, parsed.data.imageId);
     if (steps.length) await stores.images.select(id, parsed.data.imageId);
     return Response.json({ ok: true, images: await stores.images.byProject(id) });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "변형을 고르지 못했습니다." },
-      { status: 400 },
-    );
+    if (error instanceof SelectionRejected) {
+      return Response.json({ ok: false, message: error.message }, { status: 400 });
+    }
+    // 저장소 원문은 서버 기록에만 남긴다(2026-10-07). 상태 코드는 전과 같은 400 이다.
+    console.error("[poster] 변형 고르기 실패", errorLogText(error));
+    return Response.json({ ok: false, message: SELECT_FAILED }, { status: 400 });
+  }
+}
+
+const SELECT_FAILED = "변형을 고르지 못했습니다.";
+
+/** `planSelection` 의 거절(「이 프로젝트에 없는 이미지입니다.」)은 우리 문장이라 그대로 보인다. */
+class SelectionRejected extends Error {}
+
+function selectionSteps(...args: Parameters<typeof planSelection>): ReturnType<typeof planSelection> {
+  try {
+    return planSelection(...args);
+  } catch (error) {
+    throw new SelectionRejected(error instanceof Error ? error.message : SELECT_FAILED);
   }
 }

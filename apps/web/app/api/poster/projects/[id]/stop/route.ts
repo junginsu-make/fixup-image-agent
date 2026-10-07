@@ -1,5 +1,6 @@
 import { authenticateApiMember, finalizeAiUsage } from "../../../../../../lib/membership/api";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -57,9 +58,8 @@ export async function POST(_request: Request, context: Context) {
     });
     return Response.json({ ok: true, project: saved });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "멈추지 못했습니다." },
-      { status: 500 },
-    );
+    // 저장소 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[poster] 멈추기 실패", errorLogText(error));
+    return Response.json({ ok: false, message: "멈추지 못했습니다." }, { status: 500 });
   }
 }
