@@ -151,12 +151,20 @@ function queueIdentity(card: SnsFlowCard): { endpoint: string; requestId: string
   };
 }
 
+/**
+ * `injectedNow` 는 시험이 정해 주는 시각이다. 없으면 **보내는 이 순간**의 시각을 읽는다.
+ *
+ * 카드의 시작 시각(`generationStartedAt` · 칸의 `startedAt`)은 fal 에 실제로 보낸 시각이어야
+ * 한다(2026-10-07 Task 6). 부르는 쪽의 요청 시각을 넘기면 장면 프롬프트를 쓰는 동안(운영 224초)이나
+ * 앞 장 검수 시간이 그림 업체가 늦은 것으로 셈해진다. 화면의 「늦어지고 있습니다」 · 30분 포기가 이 값을 잰다.
+ */
 async function submitNext(
   project: SnsProjectRecord,
   flow: SnsFlowState,
   dependencies: QueuedGenerationDependencies,
-  now: string,
+  injectedNow: string | undefined,
 ): Promise<void> {
+  const now = nowIso(injectedNow);
   const selected = new Set(flow.generation?.selectedCardIndexes ?? []);
   // 레이아웃 카드는 칸이 여럿이라 「생성 중」이면서도 아직 안 보낸 칸이 남는다.
   const card = flow.cards.find((entry) => (
@@ -435,7 +443,7 @@ export async function startQueuedFlow(
     card.generationStartedAt = undefined;
     await dependencies.savePrompt(card.index, card.prompt);
   }
-  await submitNext(project, next, dependencies, now);
+  await submitNext(project, next, dependencies, options.now);
   return next;
 }
 
@@ -450,7 +458,7 @@ export async function pollQueuedFlow(
   const selected = new Set(next.generation?.selectedCardIndexes ?? []);
   const card = next.cards.find((entry) => selected.has(entry.index) && entry.status === "generating");
   if (!card) {
-    await submitNext(project, next, dependencies, now);
+    await submitNext(project, next, dependencies, options.now);
     return next;
   }
   /**
@@ -469,17 +477,17 @@ export async function pollQueuedFlow(
     if (card.slotJobs) {
       if (!slotJobsSettled(card)) {
         await dependencies.checkpoint?.(next);
-        await submitNext(project, next, dependencies, now);
+        await submitNext(project, next, dependencies, options.now);
         return next;
       }
       await composeAndSave(card, dependencies);
       if (card.status === "failed") await dependencies.saveFailed(card.index, card.error ?? "");
       await dependencies.checkpoint?.(next);
-      await submitNext(project, next, dependencies, now);
+      await submitNext(project, next, dependencies, options.now);
       return next;
     }
     await dependencies.checkpoint?.(next);
-    await submitNext(project, next, dependencies, now);
+    await submitNext(project, next, dependencies, options.now);
     return next;
   };
 
@@ -495,7 +503,7 @@ export async function pollQueuedFlow(
     card.error = message;
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
-    await submitNext(project, next, dependencies, now);
+    await submitNext(project, next, dependencies, options.now);
     return next;
   }
   const identity = job?.endpoint && job.falRequestId
@@ -523,7 +531,7 @@ export async function pollQueuedFlow(
     card.error = message;
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
-    await submitNext(project, next, dependencies, now);
+    await submitNext(project, next, dependencies, options.now);
     return next;
   }
   if (!ledgerId) throw new Error(`${card.index}번 카드 비용 장부 ID가 없습니다.`);
@@ -549,7 +557,7 @@ export async function pollQueuedFlow(
     card.error = message;
     await dependencies.saveFailed(card.index, card.error);
     await dependencies.checkpoint?.(next);
-    await submitNext(project, next, dependencies, now);
+    await submitNext(project, next, dependencies, options.now);
     return next;
   }
   if (job) {
@@ -576,7 +584,7 @@ export async function pollQueuedFlow(
   card.error = undefined;
   await dependencies.saveReview(card.index, card.status, card.review ?? null, card.reviewIssues);
   await dependencies.checkpoint?.(next);
-  await submitNext(project, next, dependencies, now);
+  await submitNext(project, next, dependencies, options.now);
   return next;
 }
 

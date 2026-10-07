@@ -2,6 +2,7 @@ import type { Attachment } from "@fixup/sns-core";
 import { cardCost, optionsOfProject, type CardOptions } from "./cardnews-options";
 import { cardSourceLabel, type CardSource } from "./cardnews-source";
 import { hasOwnImage, isMade, type Caption } from "./cardnews-after";
+import { cardSubmittedAt } from "../sns/slow-card";
 
 /**
  * **카드뉴스 작업을 「쉽게」가 그릴 것으로**(2단계 설계 §7 · §8). 서버 모듈을
@@ -28,6 +29,7 @@ export interface CardnewsProjectLike {
         index: number; role: string; kind?: string; layout?: unknown;
         copy: { headline: string; body?: string; accent?: string; footnote?: string };
         status: string; assetUrl?: string; assetPath?: string; thumbUrl?: string;
+        generationStartedAt?: string; slotJobs?: Array<{ status: string; startedAt?: string }>;
       }>;
     };
   };
@@ -47,6 +49,8 @@ export interface EasyCardView {
   hasImage: boolean;
   /** 저장 경로. 받은 파일 이름의 확장자를 여기서 읽는다. */
   path?: string;
+  /** 만드는 중이면 fal 에 보낸 시각(밀리초). 3분을 넘으면 늦어진다고 알린다(`app/sns/slow-card.ts`). */
+  submittedAt?: number;
 }
 
 export interface EasyCardnewsView {
@@ -82,6 +86,14 @@ export function draftFailureMessage(issues: readonly string[]): string {
   return `원고를 쓰지 못했습니다. ${issues.join(" ") || "내용을 가져오지 못했습니다."}`;
 }
 
+type ProjectCard = NonNullable<CardnewsProjectLike["data"]["flow"]>["cards"][number];
+
+/** 만드는 중인 장이면 fal 에 보낸 시각. 모르면 칸을 비운다. */
+function submittedOf(card: ProjectCard): { submittedAt?: number } {
+  const at = card.status === "generating" ? cardSubmittedAt(card) : undefined;
+  return at === undefined ? {} : { submittedAt: at };
+}
+
 export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "image-v2"): EasyCardnewsView {
   const flow = project.data.flow;
   const cards = flow?.cards ?? [];
@@ -99,6 +111,7 @@ export function cardnewsView(project: CardnewsProjectLike, policy: "cost-v1" | "
       ...(card.assetUrl ? { url: card.assetUrl } : {}),
       hasImage: hasOwnImage(card),
       ...(card.assetPath ? { path: card.assetPath } : {}),
+      ...submittedOf(card),
     })),
     issues: [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])],
     options: optionsOfProject(project),
