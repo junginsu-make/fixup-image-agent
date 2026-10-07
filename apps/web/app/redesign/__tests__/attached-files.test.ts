@@ -79,6 +79,6 @@ describe("화면이 이 규칙을 쓴다", () => {
   });
 
   it("한 장씩 뺄 수 있는 목록을 그린다", () => {
-    expect(panels).toContain("onRemove={(key) => setFiles(removeAttachedFile(files, key))}");
+    expect(panels).toMatch(/onRemove=\{\(key\) => \{\s*setFiles\(removeAttachedFile\(files, key\)\);/);
   });
 });

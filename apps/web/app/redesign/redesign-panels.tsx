@@ -334,14 +334,20 @@ export function Workspace(props: {
                   {/* 라이브러리에 이미 있는 그림을 디스크에서 다시 찾게 하지 않는다. */}
                   <SavedImagePicker
                     label="라이브러리에서 불러오기"
-                    onPick={(file) => setFiles(mergeAttachedFiles(files, [file]))}
+                    onPick={(file) => {
+                      setFiles(mergeAttachedFiles(files, [file]));
+                      setDropMessage("");
+                    }}
                   />
                 </div>
                 <DropPasteHint locked={false} className="mt-2" />
                 {dropMessage ? <p className="mt-1 text-xs font-bold text-primary">{dropMessage}</p> : null}
                 <AttachedFileList
                   files={files}
-                  onRemove={(key) => setFiles(removeAttachedFile(files, key))}
+                  onRemove={(key) => {
+                    setFiles(removeAttachedFile(files, key));
+                    setDropMessage("");
+                  }}
                 />
               </div>
               <div className="mt-4">

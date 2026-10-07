@@ -620,7 +620,7 @@ export function EasyClient({
           */}
           <div
             role="group"
-            aria-label="그림 붙이는 칸"
+            aria-label="대화 입력 · 그림 붙이기"
             tabIndex={turn.busy ? -1 : 0}
             {...composerDrop.handlers}
             className={cn(
