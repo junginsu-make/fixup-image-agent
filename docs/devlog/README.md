@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 6일까지 **37일**, 작업 묶음(PR) **255개**, 저장 기록(커밋, 합치기 제외) **889개**, 배포 꾸러미(릴리스) **202개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **258개**, 저장 기록(커밋, 합치기 제외) **894개**, 배포 꾸러미(릴리스) **203개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 7 | 54 | 10 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 10 | 59 | 11 |
 
 <a id="w-2026-08-31"></a>
 
@@ -454,8 +454,15 @@
 - 관리자 「방문 분석」 탭과 쿠키 동의 띠를 열었습니다.
 - 캐릭터 묘사를 AI 가 정리하고, 내 캐릭터를 다른 화풍·체형으로 바꿉니다.
 - 네이버·구글·다음 검색 등록을 위한 검색 정보(사이트 지도 등)를 넣었습니다. 검색 사이트별 확인 값은 아직 넣기 전입니다.
+- 네이버 서치어드바이저 등록을 위한 확인 값을 사이트에 넣었습니다.
+- 그림을 다루는 부품에 오늘 알려진 보안 문제가 있어 고친 판으로 바꿨습니다.
+- 개발 일지를 저장소에 남기고, 운영에 배포할 때마다 일지에 적는 규칙을 만들었습니다.
 
-<details><summary>이 주의 작업 묶음 7개</summary>
+**운영 배포 1회**
+
+- 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
+
+<details><summary>이 주의 작업 묶음 10개</summary>
 
 
 **10/6**
@@ -467,6 +474,12 @@
 - [#256](https://github.com/junginsu-make/fixup-image-agent/pull/256) fix(analytics): 동의 띠가 「맨 위로」 단추에 가려 거부를 못 누르던 것 <sub>방문 분석 · +42 / −1</sub>
 - [#257](https://github.com/junginsu-make/fixup-image-agent/pull/257) feat(character): 묘사를 LLM 이 정리하고, 내 캐릭터를 레퍼런스 화풍·체형으로 바꾼다 <sub>캐릭터 · 라이브러리 · +2,874 / −58</sub>
 - [#258](https://github.com/junginsu-make/fixup-image-agent/pull/258) feat(seo): 검색 서비스 등록용 검색 정보 — robots·사이트 지도·화면별 설명·대표 주소·구조화 데이터 <sub>검색 노출 · +2,012 / −32</sub>
+
+**10/7**
+
+- [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259) docs: 개발 일지와 README 정비, 운영 배포마다 일지에 적는 규칙 <sub>배포·서버 · +1,874 / −62 · 운영 반영 10/7</sub>
+- [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260) feat(seo): 네이버 서치어드바이저 소유 확인 값 <sub>검색 노출 · +6 / −1 · 운영 반영 10/7</sub>
+- [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261) fix(deps): sharp 를 0.35.5 로 올린다 — 릴리스 감사가 막힌다 <sub>보안 · 배포·서버 · +125 / −125 · 운영 반영 10/7</sub>
 
 </details>
 
