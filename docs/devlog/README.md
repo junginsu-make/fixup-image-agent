@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **273개**, 저장 기록(커밋, 합치기 제외) **1,013개**, 배포 꾸러미(릴리스) **222개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **275개**, 저장 기록(커밋, 합치기 제외) **1,031개**, 배포 꾸러미(릴리스) **225개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 25 | 178 | 30 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 27 | 196 | 33 |
 
 <a id="w-2026-08-31"></a>
 
@@ -478,8 +478,11 @@
 - 캐릭터를 만든 모델을 기억해 두고, 나중에 없는 장면을 더 만들 때도 같은 모델로 그립니다. 과정 보기로 다시 열어 만들 때도 원래 모델을 이어받습니다.
 - 카드뉴스와 이미지 만들기에서 캐릭터를 불러올 때, 라이브러리에서 지운 장면이 있으면 캐릭터 원본에서 다시 채워 붙입니다.
 - 네이버 기준(40자 이내)에 맞춰 첫 화면 제목을 줄이고, 한글 이름을 「프롬위드」에서 「폼위드」로 바꿨습니다.
+- 카드뉴스, 다양하게, 광고 소재, 관리자 화면 등 31곳에서 실패할 때 영어로 된 내부 오류 글 대신 알아보기 쉬운 안내가 나옵니다.
+- 카드뉴스의 안내 문구와 실패한 카드 설명에도 그림 업체의 영어 원문 대신 우리 문장이 나옵니다.
+- 서버 기록에 열쇠나 비밀번호 같은 값이 섞이지 않도록 가립니다.
 
-**운영 배포 10회**
+**운영 배포 11회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -491,8 +494,9 @@
 - 10/7 `20261007T083455Z-f8fffc77` · [#280](https://github.com/junginsu-make/fixup-image-agent/pull/280)
 - 10/7 `20261007T084910Z-760457a7` · [#274](https://github.com/junginsu-make/fixup-image-agent/pull/274), [#275](https://github.com/junginsu-make/fixup-image-agent/pull/275), [#277](https://github.com/junginsu-make/fixup-image-agent/pull/277), [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279)
 - 10/7 `20261007T100447Z-57256de5` · [#285](https://github.com/junginsu-make/fixup-image-agent/pull/285)
+- 10/7 `20261007T101738Z-c13852ab` · [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286)
 
-<details><summary>이 주의 작업 묶음 25개</summary>
+<details><summary>이 주의 작업 묶음 27개</summary>
 
 
 **10/6**
@@ -525,6 +529,8 @@
 - [#283](https://github.com/junginsu-make/fixup-image-agent/pull/283) feat: 그림 첨부 통일 1단계 — 공용 부품·캐릭터·라이브러리 <sub>이미지 만들기 · 캐릭터 · 라이브러리 · +776 / −455</sub>
 - [#284](https://github.com/junginsu-make/fixup-image-agent/pull/284) feat: 그림 첨부 통일 2단계 — 카드뉴스·이미지 만들기·카드뉴스 레이아웃 <sub>카드뉴스 · 이미지 만들기 · +275 / −36</sub>
 - [#285](https://github.com/junginsu-make/fixup-image-agent/pull/285) fix(seo): 첫 화면 제목을 40자 이내로, 한글 이름은 「폼위드」로 <sub>검색 노출 · 첫 화면 · +10 / −6 · 운영 반영 10/7</sub>
+- [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286) fix: 서버 처리 31곳의 오류 원문을 화면에 보내지 않는다(카드뉴스 · 다양하게 · 광고 · 관리자 등) <sub>카드뉴스 · 광고 규격 · 관리자 · +2,224 / −162 · 운영 반영 10/7</sub>
+- [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288) feat: 상세페이지·리디자인·쉽게 그림 칸도 같은 방식으로 받는다 (그림 첨부 통일 3단계) <sub>이미지 만들기 · 상세페이지 · 리디자인 · 쉽게 모드 · +364 / −180</sub>
 
 </details>
 
