@@ -13,6 +13,7 @@ import {
   createPosterPlanningProviders,
   PosterProviderConfigurationError,
 } from "../../../../../../lib/poster/providers";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,12 +193,22 @@ async function plan(request: Request, context: Context, 고른글모델?: string
   } catch (error) {
     // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.
     if (reservation) await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");
-    if (error instanceof PosterProviderConfigurationError) {
-      return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
-    }
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "기획하지 못했습니다." },
-      { status: 500 },
-    );
+    return planFailure(error);
   }
+}
+
+const PLAN_FAILED = "기획하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+
+/**
+ * **실패를 화면에 어떻게 말할지**(2026-10-07 후속 Task 12, 고치기의 `editFailure` 와 같은 규칙).
+ *
+ * 전에는 모든 예외를 원문으로 돌려줘 Supabase 글과 환경변수 이름이 「다양하게」 화면에 떴다.
+ * 이 길에는 일부러 던지는 우리 문장이 없다 — 첨부 읽기와 기획 모델의 실패는 안에서 잡혀
+ * `issues` 로 온다. 그래서 던진 것은 모두 일반 문장이고 원문은 서버 기록에만 남긴다.
+ * **상태 코드는 전과 같다**(500, 설정 오류만 503).
+ */
+function planFailure(error: unknown): Response {
+  console.error("[poster] 기획 실패", errorLogText(error));
+  const status = error instanceof PosterProviderConfigurationError ? 503 : 500;
+  return Response.json({ ok: false, message: PLAN_FAILED }, { status });
 }
