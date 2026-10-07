@@ -1,6 +1,7 @@
 import { observeAccountResponse } from "../../lib/membership/account-events";
 import { billableFetch } from "../../lib/billable-fetch";
 import type { CardnewsProjectLike } from "./cardnews-view";
+import { CARDNEWS_OFFLINE, orSay } from "./net-say";
 
 /**
  * **「쉽게」 카드뉴스 주소로 보낸다**(2 · 3단계). 크레딧이 깎일 수 있는 요청이라 식별자를
@@ -8,7 +9,7 @@ import type { CardnewsProjectLike } from "./cardnews-view";
  * `retryable: false`).
  */
 export async function cardnewsRequest(body: Record<string, unknown>) {
-  const response = await billableFetch("/api/easy/cardnews", { body: JSON.stringify(body) });
+  const response = await orSay(billableFetch("/api/easy/cardnews", { body: JSON.stringify(body) }), CARDNEWS_OFFLINE);
   const json = await response.json().catch(() => ({}));
   observeAccountResponse(json, true);
   if (!json.ok) {

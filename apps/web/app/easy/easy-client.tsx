@@ -36,6 +36,7 @@ import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
 import { openImageGallery } from "../_components/image-viewer";
 import { attachmentFromUpload, easyUploadForm } from "./upload";
+import { SEND_OFFLINE, UPLOAD_OFFLINE, orSay } from "./net-say";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 
 /**
@@ -221,7 +222,7 @@ export function EasyClient({
       // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`browser-safe.ts`).
       const form = easyUploadForm(one, randomId());
       try {
-        const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json().catch(() => ({}));
+        const body = await (await orSay(fetch("/api/reference-images", { method: "POST", body: form }), UPLOAD_OFFLINE)).json().catch(() => ({}));
         observeAccountResponse(body, true);
         if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");
         setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
@@ -345,7 +346,7 @@ export function EasyClient({
         09-17(카드뉴스)에 이어 **세 번째로 빠졌다.** 이번에는 대신 부르는
         자리라 검사도 비켜 갔다. 그 구멍도 같이 막았다.
       */
-      const response = await billableFetch("/api/easy/generate", {
+      const response = await orSay(billableFetch("/api/easy/generate", {
         body: JSON.stringify({
           conversationId,
           prompt,
@@ -357,7 +358,7 @@ export function EasyClient({
           // 물음 줄 단추면 그 줄 id 와 고른 값(갈래 · 비율 · 사진 쓰임 · 번호)만 싣는다(2차 D1).
           ...(단추 ? { answersRowId: 단추.answersRowId, pick: 단추.pick } : {}),
         }),
-      });
+      }), SEND_OFFLINE);
       const body = await response.json().catch(() => ({}));
       observeAccountResponse(body, true);
       // 만들기에 쓴 턴이면 붙인 사진을 내린다(2차 D3). 물음 · 대화 · 실패에는 그대로 둔다.

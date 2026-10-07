@@ -11,7 +11,7 @@ import { NO_IMAGE_MADE, STILL_MAKING, collectEasyImage } from "../collect";
  * **결과 받기**(화면에서 옮김, 2026-10-06 설계 B3 · B5). 만든 직후와 다시 열 때가 같은
  * 함수를 쓴다. 0장으로 끝나면 「만들고 있습니다」가 영원히 돌았다 — 이제 실패로 알린다.
  */
-const 답 = (body: unknown) => ({ json: async () => body });
+const 답 = (body: unknown, status = 200) => ({ status, json: async () => body });
 const 일감 = { requestRowId: "r1", falRequestId: "f1", endpoint: "e" };
 const 안기다림 = async () => {};
 
@@ -43,23 +43,90 @@ describe("결과 받기", () => {
   });
 
   /**
-   * 후속 Task 11 2차. 앞단(Caddy · Next)이 HTML 502 를 주면 `.json()` 이 SyntaxError 를 던지고, 그 영어 글이
-   * 화면에 실렸다. 말 없는 실패(`ok` 없음)와 같은 갈래로 본다 — 같은 문장, 같은 다시 하기 표시.
+   * **잠깐의 고장은 「아직 안 끝남」으로 보고 계속 묻는다**(후속 Task 11 3차). 연결이 끊기거나(`fetch` 가 던짐),
+   * 앞단(Caddy · Next)이 HTML 502 를 주거나, 502 · 503 · 504 가 우리 말 없이 오면 전에는 영어 글로 실패했고,
+   * 화면의 다시 보내기는 값이 또 드는 재전송이었다. 그 요청은 아직 돌고 있다. 15분 상한은 그대로다.
    */
-  it("답이 JSON 이 아니면 SyntaxError 글 대신 말 없는 실패와 같은 문장으로 알린다", async () => {
-    f.fetch.mockResolvedValueOnce(답({ ok: false }));
-    const 기준 = await collectEasyImage("p1", 일감, () => true, 안기다림).then(() => undefined, (c: unknown) => c) as Error;
-    f.fetch.mockResolvedValueOnce({ json: async () => { throw new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON"); } });
-    const 실패 = await collectEasyImage("p1", 일감, () => true, 안기다림).then(() => undefined, (c: unknown) => c) as Error;
-    expect(실패.message).toBe("상태를 확인하지 못했습니다.");
-    expect(실패.message).toBe(기준.message);
-    expect(실패).not.toBeInstanceOf(SyntaxError);
-    expect((실패 as { retryable?: boolean }).retryable).toBe((기준 as { retryable?: boolean }).retryable);
-  });
+  describe("잠깐의 고장 (후속 Task 11 3차)", () => {
+    const 받은답 = 답({ ok: true, done: true, images: [{ id: "i1", url: "u", generationRequestId: "r1" }] });
+    const HTML답 = (status: number) => ({
+      status, json: async () => { throw new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON"); },
+    });
 
-  it("답이 null 이어도 그 갈래로 알린다", async () => {
-    f.fetch.mockResolvedValueOnce(답(null));
-    await expect(collectEasyImage("p1", 일감, () => true, 안기다림)).rejects.toThrow("상태를 확인하지 못했습니다.");
+    it("연결이 끊겨 fetch 가 던지면 다시 묻는다", async () => {
+      f.fetch.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValueOnce(받은답);
+      expect(await collectEasyImage("p1", 일감, () => true, 안기다림)).toEqual({ id: "i1", url: "u" });
+      expect(f.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([502, 503, 504, 500, 200])("JSON 이 아닌 %i 답이면 다시 묻는다", async (status) => {
+      f.fetch.mockResolvedValueOnce(HTML답(status)).mockResolvedValueOnce(받은답);
+      expect(await collectEasyImage("p1", 일감, () => true, 안기다림)).toEqual({ id: "i1", url: "u" });
+      expect(f.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([502, 503, 504])("%i 가 우리 말 없이 오면(JSON 이어도) 다시 묻는다", async (status) => {
+      f.fetch.mockResolvedValueOnce(답({}, status)).mockResolvedValueOnce(답({ ok: false }, status)).mockResolvedValueOnce(받은답);
+      expect(await collectEasyImage("p1", 일감, () => true, 안기다림)).toEqual({ id: "i1", url: "u" });
+      expect(f.fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("객체가 아닌 답(null)도 4xx 가 아니면 다시 묻는다", async () => {
+      f.fetch.mockResolvedValueOnce(답(null)).mockResolvedValueOnce(받은답);
+      expect(await collectEasyImage("p1", 일감, () => true, 안기다림)).toEqual({ id: "i1", url: "u" });
+    });
+
+    /** 일부러 낸 실패는 지금처럼 곧바로 알린다. */
+    it.each([
+      [503, "운영자가 AI 사용을 잠시 멈췄습니다."],
+      [503, "만든 그림을 가져오지 못했습니다. 잠시 뒤 다시 확인해 주세요."],
+      [502, "만든 그림을 가져오지 못했습니다. 잠시 뒤 다시 확인해 주세요."],
+      [404, "프로젝트를 찾을 수 없습니다."],
+      [409, "생성 요청 정보가 일치하지 않습니다."],
+      [500, "지금 요청이 몰려 있습니다. 잠시 뒤 다시 눌러 주세요."],
+    ])("%i 에 우리 말이 있으면 그 말로 곧바로 알린다", async (status, message) => {
+      f.fetch.mockResolvedValueOnce(답({ ok: false, kind: "fault", message }, status));
+      await expect(collectEasyImage("p1", 일감, () => true, 안기다림)).rejects.toThrow(message);
+      expect(f.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("4xx 는 JSON 이 아니어도 곧바로 알린다 — 영어 글 없이", async () => {
+      f.fetch.mockResolvedValueOnce(HTML답(404));
+      const 실패 = await collectEasyImage("p1", 일감, () => true, 안기다림).then(() => undefined, (c: unknown) => c) as Error;
+      expect(실패.message).toBe("상태를 확인하지 못했습니다.");
+      expect(실패).not.toBeInstanceOf(SyntaxError);
+      expect(f.fetch).toHaveBeenCalledTimes(1);
+      f.fetch.mockResolvedValueOnce(답(null, 400));
+      await expect(collectEasyImage("p1", 일감, () => true, 안기다림)).rejects.toThrow("상태를 확인하지 못했습니다.");
+    });
+
+    it("200 인데 ok 가 없으면 지금처럼 곧바로 알린다", async () => {
+      f.fetch.mockResolvedValueOnce(답({}));
+      await expect(collectEasyImage("p1", 일감, () => true, 안기다림)).rejects.toThrow("상태를 확인하지 못했습니다.");
+    });
+
+    it("고장이 15분 넘게 이어지면 STILL_MAKING 으로 그만둔다 — 영어 글 · 재전송 안내 없이", async () => {
+      let 지금 = 0;
+      let 번 = 0;
+      f.fetch.mockImplementation(async () => {
+        번 += 1;
+        if (번 >= 200) return 받은답;
+        if (번 % 2) throw new TypeError("Failed to fetch");
+        return HTML답(502);
+      });
+      const 실패 = await collectEasyImage("p1", 일감, () => true, async (ms) => { 지금 += ms; }, () => 지금)
+        .then(() => undefined, (c: unknown) => c) as Error;
+      expect(실패.message).toBe(STILL_MAKING);
+      expect((실패 as { retryable?: boolean }).retryable).toBe(false);
+      expect(f.fetch).toHaveBeenCalledTimes(90);
+    });
+
+    it("고장 뒤 화면을 떠났으면 그만둔다", async () => {
+      let 살아있다 = true;
+      f.fetch.mockImplementationOnce(async () => { 살아있다 = false; throw new TypeError("Failed to fetch"); });
+      expect(await collectEasyImage("p1", 일감, () => 살아있다, 안기다림)).toBeUndefined();
+      expect(f.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   /**
@@ -118,7 +185,8 @@ describe("결과 받기", () => {
 describe("화면의 JSON 읽기 (후속 Task 11 2차)", () => {
   it("그림 올리기는 JSON 이 아닌 답을 「그림을 올리지 못했습니다.」로 알린다", () => {
     const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
-    expect(화면).toContain('const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json().catch(() => ({}));');
+    // 3차에서 연결 오류도 감쌌다(`net-say.test.ts`). 답 읽기의 `.catch` 는 그대로다.
+    expect(화면).toContain('const body = await (await orSay(fetch("/api/reference-images", { method: "POST", body: form }), UPLOAD_OFFLINE)).json().catch(() => ({}));');
     expect(화면).toContain('if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");');
   });
 });

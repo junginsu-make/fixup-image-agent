@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, cn } from "@fixup/ui";
 import type { EasyConversationRecord } from "../../../lib/easy/store-core";
+import { orSay } from "../net-say";
 
 /**
  * 지난 대화 목록.
@@ -77,7 +78,7 @@ export function EasyConversationList({
     if (!window.confirm(`「${이름}」을 지울까요?\n\n만든 그림은 라이브러리에 남습니다.`)) return;
     setRemoving(id);
     try {
-      const response = await fetch(`/api/easy/conversations/${id}`, { method: "DELETE" });
+      const response = await orSay(fetch(`/api/easy/conversations/${id}`, { method: "DELETE" }), "지우지 못했습니다. 잠시 뒤 다시 해 주세요.");
       const body = await response.json().catch(() => ({}));
       if (!body.ok) throw new Error(body.message ?? "지우지 못했습니다.");
       setList((current) => current.filter((one) => one.id !== id));
