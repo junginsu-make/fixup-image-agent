@@ -149,3 +149,75 @@ describe("설명서 색인 스크립트 — 옛 판 지우기", () => {
     expect(new Set(이름들).size, "같은 이름의 쪽이 있다").toBe(이름들.length);
   });
 });
+
+/**
+ * **실제로 넣을 때는 주소를 꼭 받고, 로컬 주소는 받지 않는다**(2026-10-07 후속 최종 수정 2, 보안 리뷰).
+ *
+ * 넣기는 운영 DB 의 옛 판을 지운다. `--base` 를 빼먹으면 기본값(로컬)을 긁어 로컬 화면의 글을 운영에 넣고
+ * 운영의 옛 판을 지운다. 그래서 DB 에 붙기 전에, 고정 글 하나를 찍고 1 로 끝난다. 맛보기는 그대로다.
+ */
+describe("설명서 색인 스크립트 — 넣을 주소 지키기", () => {
+  const 글 = script.replace(/\r\n/g, "\n");
+  const 지킴시작 = 글.indexOf("if (!맛보기 && !넣을주소인가()) {");
+  const 지킴 = 지킴시작 < 0 ? "" : 글.slice(지킴시작, 글.indexOf("\n}\n", 지킴시작));
+  const 판정 = (() => {
+    const 시작 = 글.indexOf("function 넣을주소인가(");
+    return 시작 < 0 ? "" : 글.slice(시작, 글.indexOf("\n}\n", 시작));
+  })();
+
+  it("맛보기가 아니면 넣을 주소인지 보고, 아니면 고정 글을 찍고 1 로 끝난다", () => {
+    expect(지킴시작, "넣을 주소 지킴이 없다").toBeGreaterThan(0);
+    expect(지킴).toContain('console.error("실제로 넣을 때는 --base 로 운영 주소를 주세요.');
+    expect(지킴, "주소 값을 찍으면 안 된다").not.toMatch(/\$\{/);
+    expect(지킴).toContain("process.exit(1);");
+  });
+
+  it("DB 에 붙거나 설명서를 긁기 전, 맨 위에서 멈춘다", () => {
+    expect(지킴시작, "넣을 주소 지킴이 없다").toBeGreaterThan(0);
+    expect(지킴시작).toBeLessThan(글.indexOf("async function main()"));
+    expect(지킴시작).toBeLessThan(글.indexOf("색인DB()"));
+    expect(지킴시작).toBeLessThan(글.indexOf("await main();"));
+  });
+
+  it("--base 를 직접 받아야 하고, localhost · 127.0.0.1 은 받지 않는다", () => {
+    expect(판정, "--base 를 받았는지 안 본다").toContain('arg === "--base" || arg.startsWith("--base=")');
+    expect(글).toContain('const 로컬주소들 = ["localhost", "127.0.0.1"];');
+    expect(판정).toContain("로컬주소들.includes(new URL(base).hostname)");
+    expect(판정, "주소를 못 읽으면 넣지 않는다").toMatch(/catch \{\n\s+return false;/);
+  });
+
+  it("맛보기는 --base 없이도 돈다(기본값은 그대로)", () => {
+    expect(글).toContain('const base = (인자("base", "http://127.0.0.1:3000"))');
+    expect(지킴).toContain("!맛보기 &&");
+  });
+});
+
+/**
+ * **틀린 접속 문자열을 찍지 않는다**(2026-10-07 후속 최종 수정 3, 보안 리뷰). DB 드라이버 `neon()` 은 틀린
+ * `DATABASE_URL` 을 받으면 오류 글에 그 값을 통째로(비밀번호 포함) 싣는다. 값 없이 고정 글만 찍고 1 로 끝난다.
+ */
+describe("설명서 색인 스크립트 — 접속 문자열 가리기", () => {
+  const 글 = script.replace(/\r\n/g, "\n");
+  const DB함수 = (() => {
+    const 시작 = 글.indexOf("function 색인DB(");
+    return 시작 < 0 ? "" : 글.slice(시작, 글.indexOf("\n}\n", 시작));
+  })();
+
+  it("neon() 을 try 안에서 만들고, 실패하면 값 없는 고정 글을 찍고 1 로 끝난다", () => {
+    const 시도 = DB함수.indexOf("try {");
+    expect(시도, "neon() 을 감싸지 않았다").toBeGreaterThan(0);
+    expect(DB함수.indexOf("return neon(databaseUrl);")).toBeGreaterThan(시도);
+    const 잡기 = DB함수.slice(DB함수.indexOf("} catch {"));
+    expect(잡기, "잡는 갈래가 없다").toContain('console.error("DATABASE_URL 이 올바른 접속 주소가 아닙니다.');
+    expect(잡기).toContain("process.exit(1);");
+    expect(잡기, "접속 문자열을 찍으면 안 된다").not.toContain("databaseUrl");
+    expect(글.split("neon(").length - 1, "neon() 을 부르는 자리가 하나가 아니다").toBe(1);
+  });
+
+  /** 앱 쪽 넣기도 같은 값으로 `neon()` 을 만든다. 그보다 먼저 여기서 걸러야 그쪽 오류가 값을 찍지 않는다. */
+  it("넣기 전에 먼저 접속을 만든다", () => {
+    const 메인 = 글.slice(글.indexOf("async function main()"));
+    expect(메인.indexOf("const sql = 색인DB();")).toBeGreaterThan(0);
+    expect(메인.indexOf("const sql = 색인DB();")).toBeLessThan(메인.indexOf("await indexKnowledgeDocument("));
+  });
+});

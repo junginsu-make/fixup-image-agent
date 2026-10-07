@@ -1,8 +1,11 @@
 /**
  * 사용 설명서를 CS 응답 AI 의 지식으로 넣는다.
  *
- *   node scripts/index-guide.mjs --base http://127.0.0.1:3000
  *   node scripts/index-guide.mjs --base https://example.com --dry
+ *   node scripts/index-guide.mjs --base https://example.com
+ *
+ * 실제로 넣을 때는 `--base` 를 꼭 주고, 로컬 주소(localhost · 127.0.0.1)는
+ * 받지 않는다. 맛보기(`--dry`)는 주소 없이 돌면 로컬을 긁는다.
  *
  * ── 왜 서버에서 받아 오나 ────────────────────────────────────────────
  *
@@ -39,6 +42,30 @@ function 인자(name, fallback = "") {
 
 const base = (인자("base", "http://127.0.0.1:3000")).replace(/\/$/, "");
 const 맛보기 = process.argv.includes("--dry");
+
+/**
+ * **실제로 넣을 때는 주소를 꼭 받고, 로컬 주소는 받지 않는다**(2026-10-07 보안 리뷰).
+ *
+ * 넣기는 운영 DB 의 옛 판을 지운다(`옛판지우기`). `--base` 를 빼먹으면
+ * 기본값(로컬)을 긁어 로컬 화면의 글을 운영에 넣고 운영의 옛 판을 지운다.
+ * 그래서 DB 에 붙기 전에 멈춘다. 맛보기는 아무것도 안 바꾸므로 그대로다.
+ */
+const 로컬주소들 = ["localhost", "127.0.0.1"];
+
+function 넣을주소인가() {
+  const 받음 = process.argv.some((arg) => arg === "--base" || arg.startsWith("--base="));
+  if (!받음) return false;
+  try {
+    return !로컬주소들.includes(new URL(base).hostname);
+  } catch {
+    return false;
+  }
+}
+
+if (!맛보기 && !넣을주소인가()) {
+  console.error("실제로 넣을 때는 --base 로 운영 주소를 주세요. 로컬 주소는 받지 않습니다. 먼저 --dry 로 확인하세요.");
+  process.exit(1);
+}
 
 /**
  * 어느 쪽을 넣나.
@@ -94,7 +121,13 @@ function 색인DB() {
   if (!databaseUrl) return null;
   const require = createRequire(path.join(root, "packages/redesign-core/package.json"));
   const { neon } = require("@neondatabase/serverless");
-  return neon(databaseUrl);
+  try {
+    return neon(databaseUrl);
+  } catch {
+    // 드라이버는 틀린 접속 문자열을 오류 글에 통째로(비밀번호 포함) 싣는다. 값 없이 고정 글만 찍는다.
+    console.error("DATABASE_URL 이 올바른 접속 주소가 아닙니다. 값은 찍지 않습니다.");
+    process.exit(1);
+  }
 }
 
 /**
