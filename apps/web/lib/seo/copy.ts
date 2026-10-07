@@ -26,7 +26,7 @@ export const HOME_COPY: Record<"ko" | "en", PageCopy> = {
     // 사용자가 정한 문구(2026-10-07). 한글 이름 「프롬위드」로도 찾게 한다.
     title: "FormWith | 프롬위드 AI 이미지·카드뉴스·상세페이지·포스터·광고 소재 만들기",
     description:
-      "프롬위드. 레퍼런스 한 장으로 카드뉴스, 상세페이지, 광고 소재, 포스터, 캐릭터를 AI 마케팅 콘텐츠 제작 스튜디오 FormWith.",
+      "프롬위드. 레퍼런스 한 장으로 카드뉴스, 상세페이지, 광고 소재, 포스터, 캐릭터를 만드는 AI 마케팅 콘텐츠 제작 스튜디오 FormWith.",
   },
   en: {
     title: "FormWith | AI marketing content studio",
