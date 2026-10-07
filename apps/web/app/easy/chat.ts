@@ -5,7 +5,8 @@ import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
 import {
   easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyLastResultLines,
-  easyCardFactLines, easyPhotoGoneLines, easyReplyLines, easyResultListLines, easyResultRowText, easyTargetLines,
+  easyCardFactLines, easyPhotoGoneLines, easyReplyLines, easyResultListLines, easyResultRowText, easySeeLines,
+  easyTargetLines,
 } from "./chat-facts";
 import { doneImageNumbers, type EasyResultEntry } from "./image-numbers";
 import { askChain } from "./ask-chain";
@@ -57,6 +58,8 @@ export interface EasyDecision {
   note?: string;
   /** 2차 D2: 고칠 결과물 번호(이 대화의 「이미지 N」). 없으면 마지막 이미지다. */
   target?: number;
+  /** 2차 D5: 보고 답할 것(이 대화의 이미지 번호 「2」 · 붙인 사진 「p1」). talk 일 때만 있다. */
+  see?: string[];
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -310,6 +313,8 @@ export function easyChatPrompt(
     ...물음뒤줄(history, 갈래),
     // 2차 D2: 지난 대화 창 밖의 결과물도 고를 수 있게 목록을 따로 싣는다.
     ...easyResultListLines(options.images ?? []),
+    // 2차 D5: 다 만든 이미지나 붙인 사진이 있으면 보고 답해야 하는 말을 고르는 법을 알린다(카드뉴스 번호는 안 본다).
+    ...(doneImageNumbers(options.images ?? []).length || attachmentCount > 0 ? easySeeLines() : []),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
     ...지난말,
     "",
@@ -386,7 +391,7 @@ export function readEasyDecision(
   options: EasyAvailability = {},
 ): EasyDecision {
   const value = raw as {
-    wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown; target?: unknown;
+    wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown; target?: unknown; see?: unknown;
   } | null;
   const said = value?.wants;
 
@@ -401,6 +406,13 @@ export function readEasyDecision(
   const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim().slice(0, 500) : undefined;
   // 2차 D2: 고칠 이미지 번호. image_edit 일 때만 쓴다.
   const target = typeof value?.target === "number" && Number.isInteger(value.target) && value.target > 0 ? value.target : undefined;
+  // 2차 D5: 보고 답할 것. 모양이 맞는 것만, 겹친 것은 빼고 네 개까지. talk 일 때만 쓴다.
+  const see = Array.isArray(value?.see)
+    ? [...new Set((value!.see as unknown[])
+      .filter((one): one is string => typeof one === "string")
+      .map((one) => one.trim())
+      .filter((one) => /^p?\d{1,3}$/.test(one)))].slice(0, 4)
+    : [];
 
   return {
     wants,
@@ -408,6 +420,7 @@ export function readEasyDecision(
     ...(card ? { card } : {}),
     ...(note ? { note } : {}),
     ...(target && wants === "image_edit" ? { target } : {}),
+    ...(see.length && wants === "talk" ? { see } : {}),
     /*
       **모르는 값은 버린다.** 목록에 없는 비율·결이 오면 그것은 지어낸 것이고,
       그대로 넘기면 만들기가 거절당한다(`PosterProjectInputSchema`). 비워 두면

@@ -39,6 +39,8 @@ import { easyAdStep } from "../../../easy/ad-ask";
 import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
 import { askTurn, replyTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
 import { loadEasyImages } from "../../../../lib/easy/image-list";
+import { rewriteReplyBySeeing } from "../../../../lib/easy/see-turn";
+import { SEE_FAILED } from "../../../easy/see-prompt";
 import { nextResultNumber, resultLabel } from "../../../easy/image-numbers";
 import {
   KIND_QUESTION, RATIO_QUESTION, SAY_CARDNEWS, SAY_IMAGE, SAY_REVISE, TARGET_QUESTION,
@@ -286,6 +288,20 @@ async function turn(request: Request): Promise<Response> {
             prompt,
             imageCount: await countEasyImages(auth.member.userId, 지난줄),
           });
+        }
+        /*
+         * **이미지를 보고 답한다. 묻거나 볼 때만**(2026-10-07 2차 D5). 판단 모델이 볼 것(`see`)을 적은 talk 턴에만
+         * 그 이미지 · 붙인 사진(⓪ 확인을 지난 것)을 넣어 reply 를 다시 쓴다. 판정 예약 안이라 회원 크레딧은 0 이고
+         * 값은 회사 원가로 계량기에 적힌다. 고른 갈래가 talk 를 이길 턴은 부르지 않는다(버려질 답에 값을 안 쓴다).
+         * 볼 것이 없었으면 판단의 답 그대로, 보기가 실패했으면 못 봤다고 사실대로 말한다(`SEE_FAILED`, 최종 리뷰 10).
+         */
+        if (decision.wants === "talk" && decision.see?.length && !옛골랐나) {
+          const 본것 = await rewriteReplyBySeeing({
+            userId: auth.member.userId, rows: 지난줄, prompt, see: decision.see, facts: 이미지들,
+            photos: 처음사진.photos, write: (text, images) => provider.writeSeenReply(text, images),
+          });
+          if (본것.kind === "seen") decision = { ...decision, reply: 본것.reply };
+          if (본것.kind === "failed") decision = { ...decision, reply: SEE_FAILED };
         }
       }
     } catch (error) {

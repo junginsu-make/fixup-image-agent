@@ -22,11 +22,19 @@ describe("3단계 판단 틀", () => {
     expect(schema.properties.note).toEqual({ type: "string" });
     // 2차 D2: 고칠 이미지 번호(없으면 0). 틀에 없으면 아무리 시켜도 안 온다.
     expect(schema.properties.target).toEqual({ type: "integer" });
-    expect(schema.required).toEqual(["wants", "reply", "ratio", "look", "card", "note", "target"]);
+    // 2차 D5: 보고 답할 것(이미지 번호 · 붙인 사진 p1). talk 일 때만 쓴다.
+    expect(schema.properties.see).toEqual({ type: "array", items: { type: "string" } });
+    expect(schema.required).toEqual(["wants", "reply", "ratio", "look", "card", "note", "target", "see"]);
   });
 
   it("한 장 글 고치기 틀이 있고 두 업체 모두에 실린다", () => {
     expect(제공자).toContain("EASY_CARD_EDIT_SPEC");
     expect(제공자.match(/editCard: 부른다\(EASY_CARD_EDIT_SPEC\)/g)).toHaveLength(2);
+  });
+
+  it("보고 답하기 틀이 있고 두 업체 모두 이미지를 실어 부른다 (2차 D5)", () => {
+    expect(제공자).toContain("EASY_SEE_SPEC");
+    expect(제공자.match(/writeSeenReply: 보고부른다\(EASY_SEE_SPEC\)/g)).toHaveLength(2);
+    expect(제공자.match(/\.generate\(prompt, images\)/g)).toHaveLength(2);
   });
 });

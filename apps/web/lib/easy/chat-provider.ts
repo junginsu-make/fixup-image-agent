@@ -6,6 +6,7 @@ import { EASY_PHOTO_ROLES } from "../../app/easy/photo-roles";
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
+  type StructuredImage,
   type StructuredSpec,
 } from "../llm/structured";
 import type { EasyWant } from "../../app/easy/chat";
@@ -69,8 +70,10 @@ export function easyChatSpec(wants: readonly string[]): StructuredSpec {
         note: { type: "string" },
         // 2차 D2: 고칠 이미지 번호(이 대화의 「이미지 N」, 말하지 않았으면 0).
         target: { type: "integer" },
+        // 2차 D5: 보고 답할 것. 이 대화의 이미지 번호(「2」) · 붙인 사진(「p1」). 없으면 빈 목록.
+        see: { type: "array", items: { type: "string" } },
       },
-      required: ["wants", "reply", "ratio", "look", "card", "note", "target"],
+      required: ["wants", "reply", "ratio", "look", "card", "note", "target", "see"],
     },
   };
 }
@@ -155,6 +158,20 @@ const EASY_CARD_EDIT_SPEC: StructuredSpec = {
   },
 };
 
+/**
+ * **이미지를 보고 다시 쓴 답**(2026-10-07 2차 D5). 판단 모델이 볼 것(`see`)을 적은 talk 턴에만
+ * 부른다. `reply` 하나다.
+ */
+const EASY_SEE_SPEC: StructuredSpec = {
+  name: "easy_seen_reply",
+  description: "보여 준 이미지를 직접 보고 사용자의 말에 답한다.",
+  schema: {
+    type: "object",
+    properties: { reply: { type: "string" } },
+    required: ["reply"],
+  },
+};
+
 export class EasyChatConfigurationError extends Error {
   constructor(readonly missing: string) {
     super(`${missing} 가 없어 대화를 할 수 없습니다.`);
@@ -182,7 +199,9 @@ export function createEasyChatProvider(
     const openai = new OpenAI({ apiKey: key, maxRetries: 2, timeout: 60_000 });
     const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
       new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt);
-    return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC), writeAdGuide: 부른다(EASY_AD_GUIDE_SPEC) };
+    const 보고부른다 = (spec: StructuredSpec) => (prompt: string, images: readonly StructuredImage[]) =>
+      new OpenAIStructuredProvider(openai, textModel!, spec).generate(prompt, images);
+    return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC), writeAdGuide: 부른다(EASY_AD_GUIDE_SPEC), writeSeenReply: 보고부른다(EASY_SEE_SPEC) };
   }
 
   const key = environment.ANTHROPIC_API_KEY?.trim();
@@ -191,5 +210,7 @@ export function createEasyChatProvider(
   const model = textModel ?? environment.ANTHROPIC_MODEL?.trim() ?? "claude-sonnet-5";
   const 부른다 = (spec: StructuredSpec) => (prompt: string) =>
     new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt);
-  return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC), writeAdGuide: 부른다(EASY_AD_GUIDE_SPEC) };
+  const 보고부른다 = (spec: StructuredSpec) => (prompt: string, images: readonly StructuredImage[]) =>
+    new AnthropicStructuredProvider(anthropic, model, spec).generate(prompt, images);
+  return { decide: (prompt: string, wants: readonly EasyWant[]) => 부른다(easyChatSpec(wants))(prompt), decideRoles: 부른다(EASY_ROLE_SPEC), writeEnding: 부른다(EASY_ENDING_SPEC), editCard: 부른다(EASY_CARD_EDIT_SPEC), writeAdGuide: 부른다(EASY_AD_GUIDE_SPEC), writeSeenReply: 보고부른다(EASY_SEE_SPEC) };
 }

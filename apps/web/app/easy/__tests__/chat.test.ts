@@ -327,3 +327,28 @@ describe("카드뉴스 사실 (2차 D4)", () => {
     expect(easyChatPrompt([], "3번 다시", 0, true, false, false, { cards: { count: 0, generating: false } })).not.toContain("이 대화의 카드뉴스는");
   });
 });
+
+describe("이미지를 보고 답할 때 (2차 D5)", () => {
+  const 한장 = [{ n: 1, rowId: "i1", workId: "p1", kind: "image" as const, state: "done" as const, words: "a" }];
+
+  it("다 만든 이미지나 붙인 사진이 있을 때만 볼 것(see)을 적는 법을 알린다", () => {
+    expect(easyChatPrompt([], "방금 거 어때?", 0, false, false, true, { images: 한장 })).toContain("`see` 에 볼 것을 적으세요");
+    expect(easyChatPrompt([], "이 사진 어때?", 1)).toContain("「p1」");
+    expect(easyChatPrompt([], "안녕")).not.toContain("`see`");
+    // 카드뉴스 번호만 있으면 볼 이미지가 없다.
+    expect(easyChatPrompt([], "어때?", 0, false, false, false, { images: [{ ...한장[0]!, kind: "cardnews" as const }] })).not.toContain("`see`");
+  });
+
+  /** 2차 최종 리뷰 10 — 볼 것이 없으면 판단 모델의 답이 그대로 나간다. 「살펴볼게요」 한마디로 두지 않게 한다. */
+  it("볼 것을 적어도 reply 는 혼자서도 뜻이 통하게 쓰게 한다", () => {
+    const prompt = easyChatPrompt([], "방금 거 어때?", 0, false, false, true, { images: 한장 });
+    expect(prompt).toContain("reply 도 혼자서도 뜻이 통하게 쓰세요");
+    expect(prompt).not.toContain("「살펴볼게요.」처럼 짧게");
+  });
+
+  it("볼 것은 talk 일 때만, 모양이 맞는 것만, 겹친 것 빼고 네 개까지 읽는다", () => {
+    expect(readEasyDecision({ wants: "talk", reply: "살펴볼게요.", see: ["1", "p2", "x", "1", "p1", "3", "4"] }).see).toEqual(["1", "p2", "p1", "3"]);
+    expect(readEasyDecision({ wants: "image", reply: "", see: ["1"] }).see).toBeUndefined();
+    expect(readEasyDecision({ wants: "talk", reply: "네" })).toEqual({ wants: "talk", reply: "네" });
+  });
+});
