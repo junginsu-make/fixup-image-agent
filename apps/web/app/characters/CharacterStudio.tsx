@@ -27,7 +27,7 @@ import {
   IMAGES_TOO_LARGE_MESSAGE, OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, imagesTooLarge, lookLockedByPair, roleWithOwn,
 } from "./own-character";
 import { readImageBlob, type ReadImage } from "./read-image";
-import { useImageDropTarget, usePreventFileNavigation } from "./image-drop";
+import { useImageDropTarget } from "../_components/image-drop";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
@@ -572,13 +572,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 고칠 수 있게 두면 바뀐 줄 알고 있다가 다른 것이 나온다.
    */
   const locked = Boolean(busy) || Boolean(chosen);
-  /** 「참고할 그림」 칸의 끌어다 놓기·붙여넣기. 올리기와 같은 길로 넣는다(`image-drop.ts`). */
-  // 칸 옆에 잘못 놓아도 브라우저가 그 파일을 열어 페이지를 떠나지 않게 한다.
-  usePreventFileNavigation();
+  /**
+   * 「참고할 그림」 칸의 끌어다 놓기·붙여넣기. 올리기와 같은 길로 넣는다(`_components/image-drop.ts`).
+   * 한 장 칸이라 여러 장이 오면 첫 장만 넣고 알린다. 칸 밖 놓기 막기는 부품이 건다.
+   */
   const referenceDrop = useImageDropTarget({
     disabled: locked,
-    onFile: (file) => void attachFile([file]),
-    onError: setMessage,
+    onFiles: (files) => void attachFile(files),
+    onMessage: setMessage,
   });
   const chosenSrc = chosen ? `data:${chosen.mimeType};base64,${chosen.base64}` : "";
   const extraCount = pickedAngles.filter((angle) => angle !== "front").length + (sheet ? 1 : 0);

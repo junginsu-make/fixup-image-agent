@@ -19,7 +19,10 @@ function zoneTag(source: string, spread: string): string {
   const at = source.indexOf(spread);
   expect(at).toBeGreaterThan(-1);
   const start = Math.max(source.lastIndexOf("<Card", at), source.lastIndexOf("<div", at));
-  const end = source.indexOf(">\n", at) > -1 ? source.indexOf(">", source.indexOf("className", at)) : -1;
+  // 여는 태그는 className 뒤 첫 「>」에서 끝난다. 줄바꿈(CRLF·LF)에 기대지 않는다 —
+  // 전에는 「>\n」을 찾아 Windows 로 받은 파일에서 빈 문자열을 검사했다.
+  const end = source.indexOf(">", source.indexOf("className", at));
+  expect(end).toBeGreaterThan(at);
   return source.slice(start, end + 1);
 }
 
@@ -27,7 +30,7 @@ describe("「참고할 그림」 칸", () => {
   it("잠겼을 때는 안 받고, 받은 그림은 「새 이미지 올리기」와 같은 길로 넣는다", () => {
     const call = hookCall(studio);
     expect(call).toContain("disabled: locked");
-    expect(call).toContain("attachFile([file])");
+    expect(call).toContain("onFiles: (files) => void attachFile(files)");
   });
 
   it("같은 요소가 손잡이를 갖고, 잠기면 Tab 으로 들어가지 않는다", () => {
@@ -41,7 +44,7 @@ describe("「내 캐릭터」 칸", () => {
   it("잠겼을 때는 안 받고, 받은 그림은 올리기와 같은 길로 넣는다", () => {
     const call = hookCall(own);
     expect(call).toContain("disabled: locked");
-    expect(call).toContain("props.onUpload([file])");
+    expect(call).toContain("onFiles: (files) => props.onUpload(files)");
   });
 
   it("같은 요소가 손잡이를 갖고, 잠기면 Tab 으로 들어가지 않는다", () => {
@@ -52,8 +55,9 @@ describe("「내 캐릭터」 칸", () => {
 });
 
 describe("칸 밖에 놓기", () => {
-  it("화면 전체가 파일 놓기로 페이지를 떠나는 것을 막는다", () => {
-    expect(studio).toContain("usePreventFileNavigation();");
+  it("공용 부품을 쓴다 — 칸 밖 놓기 막기는 그 부품이 저절로 건다", () => {
+    expect(studio).toContain('from "../_components/image-drop"');
+    expect(own).toContain('from "../_components/image-drop"');
   });
 });
 

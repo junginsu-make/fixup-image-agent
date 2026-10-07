@@ -5,7 +5,7 @@ import { Button, cn } from "@fixup/ui";
 import { openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
-import { useImageDropTarget } from "./image-drop";
+import { useImageDropTarget } from "../_components/image-drop";
 import type { ReadImage } from "./read-image";
 
 /**
@@ -22,16 +22,16 @@ export function OwnCharacterField(props: {
   onPickLibrary: (image: { id: string; url: string | null }) => void;
   onClear: () => void;
   onReloadLibrary: () => void;
-  /** 끌어다 놓거나 붙여넣은 것이 그림이 아닐 때 알릴 곳. */
+  /** 끌어다 놓거나 붙여넣은 것이 그림이 아니거나 여러 장일 때 알릴 곳. */
   onError: (message: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const { value, locked } = props;
-  // 끌어다 놓기·붙여넣기도 올리기와 같은 길로 넣는다(`image-drop.ts`).
+  // 끌어다 놓기·붙여넣기도 올리기와 같은 길로 넣는다(`_components/image-drop.ts`). 한 장 칸이다.
   const drop = useImageDropTarget({
     disabled: locked,
-    onFile: (file) => props.onUpload([file]),
-    onError: props.onError,
+    onFiles: (files) => props.onUpload(files),
+    onMessage: props.onError,
   });
   return (
     <div className="grid flex-none gap-1.5">
