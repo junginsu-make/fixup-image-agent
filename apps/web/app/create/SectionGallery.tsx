@@ -20,6 +20,8 @@ import type { CanvasLayer } from "./pdp-drafts";
 // **서버가 차감할 때 쓰는 그 함수다.** 화면이 장수를 따로 세면 안내와 실제가 갈린다.
 import { imageCreditUnits } from "../../lib/credit-cost";
 import { Badge, Button, cn } from "@fixup/ui";
+import { ItemStatusBadge, ItemWorkingOverlay } from "../_components/item-status";
+import { sectionRunState } from "./section-run-state";
 
 /**
  * 섹션 갤러리 — 만든 섹션들을 한눈에 보고 검토하는 화면.
@@ -63,6 +65,13 @@ interface SectionGalleryProps {
   /** 지금 고른 그림 모델. 차감 장수를 서버와 같은 식으로 세는 데 쓴다. */
   imageModel: string;
   generatingKeys: string[];
+  /**
+   * 지금 실제로 보낸 섹션. 잠겼지만 여기 없으면 「차례 대기」다(2026-10-08 사용자).
+   * 일괄은 대상을 처음에 한꺼번에 잠가, 아직 안 보낸 묶음까지 도는 것처럼 보였다.
+   */
+  inFlightKeys: string[];
+  /** 이번 일괄에서 돌아온 섹션. 그림이 없으면 「실패」로 보인다. */
+  settledKeys: string[];
   layerCounts: Record<string, number>;
   onGenerate: (index: number) => void;
   onGenerateAllMissing: () => void;
@@ -124,6 +133,8 @@ export function SectionGallery({
   overlaysBySection,
   imageModel,
   generatingKeys,
+  inFlightKeys,
+  settledKeys,
   layerCounts,
   onGenerate,
   onGenerateAllMissing,
@@ -339,7 +350,7 @@ export function SectionGallery({
         <div className={cn("grid gap-3", CARD_SIZE_CLASS[cardSize])}>
           {sections.map((section, index) => {
             const key = sectionKeys[index] ?? String(index);
-            const busy = generatingKeys.includes(key);
+            const state = sectionRunState(key, Boolean(section.generatedImage), { generatingKeys, inFlightKeys, settledKeys });
             const layers = layerCounts[key] ?? 0;
 
             return (
@@ -384,20 +395,14 @@ export function SectionGallery({
                     {index + 1}
                   </span>
 
-                  {busy ? (
-                    <span className="absolute inset-0 grid place-items-center bg-background/70">
-                      <Loader2 size={22} className="animate-spin text-primary" />
-                    </span>
-                  ) : null}
+                  <ItemWorkingOverlay state={state} />
                 </button>
 
                 <div className="flex-1 p-3">
                   <strong className="block truncate text-sm">{getName(section)}</strong>
                   <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{getGoal(section)}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    <Badge variant={section.generatedImage ? "green" : "outline"}>
-                      {section.generatedImage ? "생성됨" : "대기 중"}
-                    </Badge>
+                    <ItemStatusBadge state={state} />
                     {layers > 0 ? <Badge variant="secondary">레이어 {layers}</Badge> : null}
                   </div>
                 </div>
@@ -443,7 +448,7 @@ export function SectionGallery({
                     disabled={isBusy}
                     onClick={() => onGenerate(index)}
                   >
-                    {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                    {state === "working" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                     {section.generatedImage ? "다시 생성" : "생성"}
                   </Button>
                   <Button size="sm" onClick={() => onEdit(index)} disabled={isBusy || !section.generatedImage}>
@@ -477,13 +482,15 @@ export function SectionGallery({
           <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-md bg-canvas shadow-[var(--shadow-ring)]">
             {sections.map((section, index) => {
               const key = sectionKeys[index] ?? String(index);
+              // 이어보기에서도 섹션마다 같은 말로 덮는다. 빈 자리도 차례를 기다린다.
+              const state = sectionRunState(key, Boolean(section.generatedImage), { generatingKeys, inFlightKeys, settledKeys });
 
               return section.generatedImage ? (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setZoomIndex(index)}
-                  className="block w-full cursor-zoom-in"
+                  className="relative block w-full cursor-zoom-in"
                   aria-label={`${getName(section)} 크게 보기`}
                 >
                   <SectionPreview
@@ -493,17 +500,19 @@ export function SectionGallery({
                     className="block w-full"
                     imageClassName="block w-full"
                   />
+                  <ItemWorkingOverlay state={state} />
                 </button>
               ) : (
                 <div
                   key={key}
-                  className="grid aspect-[3/4] place-items-center border-y border-dashed text-center text-sm text-subtle-foreground"
+                  className="relative grid aspect-[3/4] place-items-center border-y border-dashed text-center text-sm text-subtle-foreground"
                 >
                   <span>
                     {index + 1}. {getName(section)}
                     <br />
                     <span className="text-xs">아직 이미지가 없습니다</span>
                   </span>
+                  <ItemWorkingOverlay state={state} />
                 </div>
               );
             })}

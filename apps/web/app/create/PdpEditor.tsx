@@ -111,7 +111,11 @@ import {
   MODEL_GENDER_OPTIONS,
   STYLE_OPTIONS,
 } from "./editor-options";
-import { ElapsedTime } from "../_components/elapsed-time";
+import { WorkingStatus } from "../_components/working-status";
+import { ItemStatusBadge, ItemWorkingOverlay } from "../_components/item-status";
+import { workingButton } from "../_components/working-words";
+import { GenerationRunBanner } from "./GenerationRunBanner";
+import { sectionRunState } from "./section-run-state";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
   applyLanguageToTextOverlay,
@@ -355,6 +359,14 @@ export function PdpEditor({
   const setSections = onSectionsChange;
   /* 격자에서 여러 장을 동시에 만들 수 있으므로 '생성 중'을 섹션 키 집합으로 둔다. */
   const [generatingKeys, setGeneratingKeys] = useState<string[]>([]);
+  /*
+    **지금 실제로 보낸 섹션만 따로 든다**(2026-10-08 사용자). 보이기만 한다 —
+    일괄은 대상을 처음에 한꺼번에 잠그므로, 잠금만 보면 아직 안 보낸 묶음까지
+    도는 것처럼 보였다. 단추를 막는 기준은 그대로 `generatingKeys` 다.
+  */
+  const [inFlightKeys, setInFlightKeys] = useState<string[]>([]);
+  // 이번 일괄에서 돌아온 섹션. 잠금이 다 끝나야 풀리므로 따로 든다.
+  const [settledKeys, setSettledKeys] = useState<string[]>([]);
   const [generationRun, setGenerationRun] = useState<GenerationRun | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [notice, setNotice] = useState(
@@ -484,6 +496,8 @@ export function PdpEditor({
   const currentSection = sections[currentSectionIndex];
   const currentSectionKey = sectionKeys[currentSectionIndex] ?? String(currentSectionIndex);
   const isGeneratingSection = generatingKeys.includes(currentSectionKey);
+  const sectionRun = { generatingKeys, inFlightKeys, settledKeys };
+  const currentSectionState = sectionRunState(currentSectionKey, Boolean(currentSection?.generatedImage), sectionRun);
   const isGenerating = generatingKeys.length > 0;
   const layerCounts = Object.fromEntries(
     Object.entries(overlaysBySection).map(([key, layers]) => [key, layers.length])
@@ -1658,6 +1672,7 @@ export function PdpEditor({
     }
 
     setGeneratingKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
+    setInFlightKeys((current) => (current.includes(sectionKey) ? current : [...current, sectionKey]));
     setErrorMessage("");
     const requestKey = retryRequestKeysRef.current[sectionKey] ?? randomId();
     retryRequestKeysRef.current[sectionKey] = requestKey;
@@ -1743,6 +1758,7 @@ export function PdpEditor({
       return { ok: false, stopBatch: true };
     } finally {
       setGeneratingKeys((current) => current.filter((key) => key !== sectionKey));
+      setInFlightKeys((current) => current.filter((key) => key !== sectionKey));
     }
   };
 
@@ -1862,6 +1878,9 @@ export function PdpEditor({
         const chunkKeyId = batchRetryKeyId(chunk.map(({ section }) => section.section_id));
         const chunkRequestKey = retryRequestKeysRef.current[chunkKeyId] ?? randomId();
         retryRequestKeysRef.current[chunkKeyId] = chunkRequestKey;
+        // 이 묶음만 「만드는 중」. 보이기만 한다 — 요청은 그대로다.
+        const chunkKeys = chunk.map(({ index }) => sectionKeys[index]).filter((key): key is string => Boolean(key));
+        setInFlightKeys((current) => [...current, ...chunkKeys.filter((key) => !current.includes(key))]);
 
         const response = await apiJson<BatchImagesResponse>("/pdp/images/batch", {
           method: "POST",
@@ -1906,6 +1925,8 @@ export function PdpEditor({
         });
 
         processed += chunk.length;
+        setInFlightKeys((current) => current.filter((key) => !chunkKeys.includes(key)));
+        setSettledKeys((current) => [...current, ...chunkKeys.filter((key) => !current.includes(key))]);
 
         if (!response.ok) {
           // 한 묶음이 막히면 다음 묶음도 같은 이유로 막힌다(크레딧 소진 등).
@@ -1980,6 +2001,8 @@ export function PdpEditor({
     } finally {
       // 잠금을 반드시 푼다. 안 풀면 갤러리가 영영 잠긴 채로 남는다.
       setGeneratingKeys((current) => current.filter((key) => !targetKeys.includes(key)));
+      setInFlightKeys((current) => current.filter((key) => !targetKeys.includes(key)));
+      setSettledKeys((current) => current.filter((key) => !targetKeys.includes(key)));
       setGenerationRun(
         describeRun(
           "finished",
@@ -2844,7 +2867,7 @@ export function PdpEditor({
         >
           {isSavingToLibrary ? <Loader2 className="animate-spin" /> : null}
           {isSavingToLibrary
-            ? "라이브러리에 저장 중"
+            ? workingButton("save")
             : librarySaved
               ? "라이브러리에 저장됨"
               : libraryProgress
@@ -2903,56 +2926,15 @@ export function PdpEditor({
 
       <div className="mb-4 grid gap-2" onClick={stopShellClick}>
         {generationRun ? (
-          <div
-            className={cn(
-              "rounded-lg border px-4 py-3 text-sm",
-              generationRun.status === "running"
-                ? "border-primary/25 bg-primary/5"
-                : generationRun.failed || generationRun.skipped
-                  ? "border-warning/25 bg-warning/5"
-                  : "border-primary/20 bg-primary/5"
-            )}
-            aria-live="polite"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              {generationRun.status === "running" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle2 className="h-4 w-4 text-primary" />}
-              <strong>
-                {generationRun.status === "running"
-                  ? generationRun.mode === "batch"
-                    ? `${generationRun.total}장 만드는 중`
-                    : `${generationRun.currentLabel} 생성 중`
-                  : generationRun.failed || generationRun.skipped
-                    ? "이미지 생성 부분 완료"
-                    : "이미지 생성 완료"}
-              </strong>
-              <Badge variant="secondary">
-                {`${generationRun.completed + generationRun.failed}/${generationRun.total} 처리`}
-              </Badge>
-              {generationRun.status === "running" && generationRun.expectedSeconds ? (
-                <Badge variant="secondary">{`약 ${Math.max(1, Math.round(generationRun.expectedSeconds / 60))}분 남음`}</Badge>
-              ) : null}
-              <Badge variant="outline"><ElapsedTime startedAt={generationRun.startedAt} endedAt={generationRun.endedAt} /></Badge>
-            </div>
-            {/*
-              끝난 묶음만큼은 확실히 안다 — 그만큼은 채운다.
-              지금 만들고 있는 묶음 안에서 몇 장 끝났는지는 알 수 없으므로,
-              가짜 퍼센트를 올리는 대신 그 구간에 왕복 막대를 얹어 "돌고 있음"만 알린다.
-            */}
-            <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-background">
-              <div
-                className="h-full rounded-full bg-primary transition-[width]"
-                style={{
-                  width: `${Math.round(((generationRun.completed + generationRun.failed) / generationRun.total) * 100)}%`,
-                }}
-              />
-              {generationRun.status === "running" && generationRun.mode === "batch" ? (
-                <div className="absolute inset-0 h-full w-1/3 rounded-full bg-primary/40 animate-[pdp-indeterminate_1.4s_ease-in-out_infinite]" />
-              ) : null}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              성공 {generationRun.completed}장 · 실패 {generationRun.failed}장{generationRun.skipped ? ` · 미시도 ${generationRun.skipped}장` : ""} · 성공한 이미지만 차감되며 {generationRun.completed}장이면 {imageCreditUnits(imageModel, generationRun.completed, { policy: creditPolicy })}{단위}입니다.
-            </p>
-          </div>
+          <GenerationRunBanner
+            run={generationRun}
+            creditUnits={imageCreditUnits(imageModel, generationRun.completed, { policy: creditPolicy })}
+            unit={단위}
+          />
+        ) : null}
+        {/* 한 화면에 도는 띠는 하나 — 생성 띠가 돌고 있으면 얹지 않는다(2026-10-08). */}
+        {isSavingToLibrary && generationRun?.status !== "running" ? (
+          <WorkingStatus label="라이브러리에 저장 중입니다" />
         ) : null}
         {개념시안.conceptOnly ? (
           <div className="rounded-md border border-warning/30 bg-warning/5 px-3.5 py-2.5 text-sm">
@@ -3003,6 +2985,8 @@ export function PdpEditor({
             sectionKeys={sectionKeys}
             imageModel={imageModel}
             generatingKeys={generatingKeys}
+            inFlightKeys={inFlightKeys}
+            settledKeys={settledKeys}
             layerCounts={layerCounts}
             // 개수만 넘기면 갤러리가 얹은 글자를 못 그린다.
             overlaysBySection={overlaysBySection}
@@ -3071,6 +3055,7 @@ export function PdpEditor({
             <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
               {sections.map((section, index) => {
                 const isCurrent = index === currentSectionIndex;
+                const runState = sectionRunState(sectionKeys[index] ?? String(index), Boolean(section.generatedImage), sectionRun);
 
                 return (
                   <button
@@ -3105,6 +3090,10 @@ export function PdpEditor({
                         {getDisplaySectionGoal(section) || "전환 목적을 정리한 섹션"}
                       </small>
                     </span>
+                    {/* 도는 섹션만 표시한다. 완료는 왼쪽 동그라미의 체크가 이미 말한다. */}
+                    {runState === "working" || runState === "queued" ? (
+                      <ItemStatusBadge state={runState} className="ml-auto flex-none" />
+                    ) : null}
                   </button>
                 );
               })}
@@ -3407,6 +3396,8 @@ export function PdpEditor({
                     <p>이미지 생성 옵션을 정하고 이미지를 만들면, 캔버스 안에서 바로 텍스트를 얹고 편집할 수 있습니다.</p>
                   </div>
                 )}
+                {/* 지금 섹션이 도는 동안 큰 그림 자리를 덮는다. 레이어(최대 z 5) 위에 둔다. */}
+                <ItemWorkingOverlay state={currentSectionState} className="z-10 rounded-[22px]" />
 
               </div>
 
