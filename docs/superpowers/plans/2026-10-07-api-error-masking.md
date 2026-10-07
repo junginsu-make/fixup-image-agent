@@ -26,3 +26,9 @@
 ### Task 2: 그 밖 15곳
 
 `ad/export`, `admin/cost-plans`, `admin/works`, `candidates`, `pdp/style-references`, `poster/projects/route.ts`, `poster/projects/[id]/route.ts`, `poster/projects/[id]/images/[index]/file`, `poster/projects/[id]/select`, `poster/projects/[id]/stop`, `poster/references`, `reference-sets/route.ts`, `reference-sets/[id]`, `showcase/manage`, `sources/route.ts`, `sources/[id]` (+ 규칙 6 의 확인). 관리자 화면(`admin`)은 운영자만 보지만 같은 규칙.
+
+### Task 3: 카드뉴스 성공 응답 · 저장 흐름에 실리는 업체 원문을 가린다
+
+**Files:** `apps/web/lib/sns/providers.ts`(기획 · 원고 · 게시글 provider 여섯 개의 `generate`, 검수 `review`), `apps/web/lib/sns/source-resolver.ts`(~78), `apps/web/lib/sns/queued-flow.ts`(`jobResult` · `composeAndSave` · `saveOriginal` catch), `apps/web/app/api/sns/layout/analyze/route.ts`(`withIssueFallback` 두 호출), plan · caption 라우트 catch 의 `await settleAiUsage` 가 던질 때(다양하게 12b 처럼 감싸 우리 JSON 유지 — 인자 · 순서 그대로)
+
+**요구:** Task 1 리뷰의 판단 그대로. provider 호출 하나만 감싸 원문은 `errorLogText` 기록, 던지는 글은 고정 문장(계속 던져 주→예비 넘어가기 그대로, 비용 기록은 provider 안이라 그대로). 패키지가 응답을 검사하며 던지는 「AI가 허용 범위 …」 · 「… 자리 합계 …」는 감싸지 않는다(`app/easy/cardnews-view.ts:79` 가 그 글로 갈래를 탄다). source-resolver: ingest-core 의 사용자용 오류(`YoutubeUrlError` · `WebUrlError` · `WebSourceBlockedError` · `SourceInsufficientContentError`)는 문장 그대로, `TranscriptUnavailableError` 는 앞 문장만, 그 밖은 일반 문장. queued-flow: `jobResult` 실패는 `classifyFalFailure(error).message`, 합성 · 원본 저장 실패는 고정 문장, 일부러 쓴 문장(「30분 동안 …」, 「fal 완료 응답에 이미지가 없습니다.」, `STOPPED_BY_*`)은 그대로. 돈 0줄, packages 0줄, 화면 0줄.
