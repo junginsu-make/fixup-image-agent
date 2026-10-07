@@ -50,7 +50,7 @@ const 섹션들 = (장수: number, 만든장수 = 0): SectionBlueprint[] =>
 let renderer: ReactTestRenderer;
 
 /** 부모처럼 섹션을 쥐고 있어야 돌아온 그림이 붙는다. */
-function 편집기({ start, extra }: { start: SectionBlueprint[]; extra?: Record<string, unknown> }) {
+function EditorHarness({ start, extra }: { start: SectionBlueprint[]; extra?: Record<string, unknown> }) {
   const [sections, setSections] = React.useState(start);
   return (
     <PdpEditor
@@ -105,7 +105,7 @@ afterEach(() => {
 
 describe("일괄 생성 — 띠와 섹션마다 상태", () => {
   const 시작한다 = async () => {
-    await act(async () => { renderer = create(<편집기 start={섹션들(4)} />); });
+    await act(async () => { renderer = create(<EditorHarness start={섹션들(4)} />); });
     await 누른다("이미지 4장 만들기");
   };
 
@@ -177,7 +177,7 @@ describe("일괄 생성 — 띠와 섹션마다 상태", () => {
 
 describe("한 장 다시 만들기 — 편집 화면", () => {
   it("**섹션 목록과 큰 그림 자리가 만드는 중을 보인다**", async () => {
-    await act(async () => { renderer = create(<편집기 start={섹션들(2, 2)} />); });
+    await act(async () => { renderer = create(<EditorHarness start={섹션들(2, 2)} />); });
     await 누른다("편집으로");
     await 누른다("이미지 다시 만들기");
 
@@ -198,7 +198,7 @@ describe("라이브러리 저장", () => {
   it("**저장하는 동안 단추는 「저장 중…」, 띠가 저장 중이라고 말한다**", async () => {
     let 끝낸다: (ok: boolean) => void = () => {};
     const 저장 = () => new Promise<boolean>((resolve) => { 끝낸다 = resolve; });
-    await act(async () => { renderer = create(<편집기 start={섹션들(1, 1)} extra={{ onSaveServerDocument: 저장 }} />); });
+    await act(async () => { renderer = create(<EditorHarness start={섹션들(1, 1)} extra={{ onSaveServerDocument: 저장 }} />); });
     await 누른다("라이브러리에 저장");
 
     expect(단추("저장 중…")).toHaveLength(1);
@@ -218,7 +218,7 @@ describe("라이브러리 자동 저장", () => {
   it("**누르지 않은 저장에는 띠가 뜨지 않는다**", async () => {
     let 저장횟수 = 0;
     const 저장 = () => { 저장횟수 += 1; return new Promise<boolean>(() => {}); };
-    await act(async () => { renderer = create(<편집기 start={섹션들(1)} extra={{ onSaveServerDocument: 저장 }} />); });
+    await act(async () => { renderer = create(<EditorHarness start={섹션들(1)} extra={{ onSaveServerDocument: 저장 }} />); });
     await 누른다("이미지 1장 만들기");
     await act(async () => { captured.pending.find((call) => call.path === "/pdp/images/batch")!.resolve(성공묶음(1)); });
     await 가라앉힌다();
