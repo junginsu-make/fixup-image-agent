@@ -179,6 +179,47 @@ describe("지금 저장된 값 읽기", () => {
 
     expect(response.status).toBe(500);
     expect(body.ok).toBe(false);
-    expect(body.message).toContain("표가 없습니다");
+    expect(body.message).toBe("저장된 플랜을 읽지 못했습니다.");
+  });
+
+  /** 데이터베이스 원문(표 이름 등)은 서버 기록에만 남긴다(2026-10-07). */
+  it("**데이터베이스 원문을 화면에 보내지 않는다**", async () => {
+    표읽기 = { data: null, error: { message: 'relation "subscription_plans" does not exist' } };
+
+    const body = (await (await GET()).json()) as { message: string };
+
+    expect(body.message).not.toContain("subscription_plans");
+  });
+});
+
+describe("원문 가리기", () => {
+  it("**저장하다 멈춘 데이터베이스 원문은 안 보이고 어디까지 갔는지는 그대로다**", async () => {
+    rpc오류 = "credit_admin_required";
+    오류낼차례 = 3;
+
+    const response = await 저장한다();
+    const body = (await response.json()) as { ok: boolean; saved: string[]; message: string };
+
+    expect(response.status).toBe(500);
+    expect(body.saved).toEqual(["Basic", "Premium"]);
+    expect(body.message).toBe("Basic·Premium까지 저장하고 Ultra에서 멈췄습니다.");
+    expect(body.message).not.toContain("credit_admin_required");
+  });
+
+  it("**첫 줄 원문도 안 보인다**", async () => {
+    rpc오류 = "invalid_credit_plan";
+    오류낼차례 = 1;
+
+    const body = (await (await 저장한다()).json()) as { message: string };
+
+    expect(body.message).toBe("저장하지 못했습니다.");
+  });
+
+  it("**검사 원문(zod) 대신 우리 문장이다** — 상태 코드는 400 그대로", async () => {
+    const response = await 저장한다([{ ...PLAN_DEFAULTS[0], credits: 0 }]);
+    const body = (await response.json()) as { message: string };
+
+    expect(response.status).toBe(400);
+    expect(body.message).toBe("플랜 값이 올바르지 않습니다.");
   });
 });

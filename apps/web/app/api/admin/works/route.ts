@@ -1,4 +1,5 @@
 import { authenticateApiAdmin } from "../../../../lib/membership/api";
+import { errorLogText } from "../../../../lib/easy/log-text";
 import { listAllWorks } from "./store";
 
 export const runtime = "nodejs";
@@ -21,9 +22,8 @@ export async function GET() {
     const works = await listAllWorks(auth.member.userId);
     return Response.json({ ok: true, ...works });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "작업물을 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    // 데이터베이스 원문(표 이름 등)은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[admin] 전체 작업물 읽기 실패", errorLogText(error));
+    return Response.json({ ok: false, message: "작업물을 불러오지 못했습니다." }, { status: 500 });
   }
 }
