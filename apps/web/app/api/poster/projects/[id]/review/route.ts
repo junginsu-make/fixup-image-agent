@@ -5,6 +5,8 @@ import { llmSettleCost, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, createPosterReviewProviders, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { posterImageBytes } from "../../../../../../lib/poster/asset-bytes";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
+import { FalPoolBusyError, FalPoolUnavailableError } from "../../../../../../lib/fal/pool/router";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,12 +84,25 @@ async function review(request: Request, context: Context) {
   } catch (error) {
     // 실패해도 닫는다. 안 닫으면 예약이 만료까지 남는다.
     if (reservation) await settleAiUsage(reservation, false, 0, "poster_review_failed", llmSettleCost());
-    if (error instanceof PosterProviderConfigurationError) {
-      return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
-    }
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "검수하지 못했습니다." },
-      { status: 500 },
-    );
+    return reviewFailure(error);
   }
+}
+
+const REVIEW_FAILED = "검수하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+
+/**
+ * **실패를 화면에 어떻게 말할지**(2026-10-07 후속 Task 12, 고치기의 `editFailure` 와 같은 규칙).
+ *
+ * 전에는 모든 예외를 원문으로 돌려줘 저장소 · fal 글과 환경변수 이름이 「다양하게」 화면에 떴다.
+ * 우리가 쓴 문장은 fal 계정 풀의 두 문장뿐이라 그것만 그대로 보인다(원문은 풀이 기록에만 남겼다).
+ * 검수 모델의 실패는 안에서 잡혀 `issues` 로 온다. 나머지는 일반 문장이고 원문은 서버 기록에만
+ * 남긴다. **상태 코드는 전과 같다**(500, 설정 오류만 503).
+ */
+function reviewFailure(error: unknown): Response {
+  if (error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError) {
+    return Response.json({ ok: false, message: error.message }, { status: 500 });
+  }
+  console.error("[poster] 검수 실패", errorLogText(error));
+  const status = error instanceof PosterProviderConfigurationError ? 503 : 500;
+  return Response.json({ ok: false, message: REVIEW_FAILED }, { status });
 }
