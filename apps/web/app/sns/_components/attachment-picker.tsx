@@ -3,12 +3,14 @@
 import * as React from "react";
 import { AlertTriangle, ImagePlus, Loader2, X } from "lucide-react";
 import { groupAttachments, modelById, referenceWarningsForRole, validateAttachments, type Attachment, type AttachmentKind, type StyleRole } from "@fixup/sns-core";
-import { Badge, Button, Card, CardContent } from "@fixup/ui";
+import { Badge, Button, Card, CardContent, cn } from "@fixup/ui";
 import { ATTACHMENT_ROLE_HINT, ATTACHMENT_ROLE_LABEL, fromCardNewsAttachment, toCardNewsAttachment, type AttachmentRole } from "@fixup/shared";
 import {
   LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
 import { ThumbImage } from "../../_components/thumb-image";
+import { afterUploadMessage, useImageDropTarget } from "../../_components/image-drop";
+import { DropPasteHint } from "../../_components/drop-paste-hint";
 import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { attachMessage, matchWithRestore, restoreMissingAngles } from "../../_components/character-attach";
@@ -121,10 +123,12 @@ export function AttachmentPicker({
    * 아무 변화가 없었고, 올리기가 안 되는 것처럼 보였다. 실제로는 저장까지 다
    * 되고 있었다(2026-09-03 운영 DB 확인). 올리는 사람은 지금 쓰려고 올린다.
    */
-  async function upload(files: FileList | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말(「받지 않는 형식을 뺐습니다」). 다 붙인 뒤에 보인다. */
+  async function upload(files: ArrayLike<File> | null, notice?: string) {
     if (!files?.length) return;
     setUploading(true);
     const added: string[] = [];
+    let uploadError: string | undefined;
     try {
       for (const file of Array.from(files)) {
         const id = randomId();
@@ -139,15 +143,33 @@ export function AttachmentPicker({
         added.push(id);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "업로드하지 못했습니다.");
+      uploadError = error instanceof Error ? error.message : "업로드하지 못했습니다.";
+      setMessage(uploadError);
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
     }
     if (!added.length) return;
-    const attach = attachmentsForUploaded(added, await load(), attachments);
-    if (attach.length) onChange([...attachments, ...attach]);
+    const fresh = await load();
+    // 기다린 사이 바뀐 첨부를 기준으로 합친다(캐릭터 불러오기와 같은 까닭).
+    const current = latestAttachments.current;
+    const attach = attachmentsForUploaded(added, fresh, current);
+    if (attach.length) onChange([...current, ...attach]);
+    // 다시 읽기가 안내 칸을 비우므로 그 뒤에 말한다. 실패 안내가 있으면 덮지 않고 잇는다.
+    const loadedAll = added.every((id) => fresh.some((entry) => entry.id === id));
+    setMessage((previous) => afterUploadMessage({ loadedAll, previous, uploadError, notice }));
   }
+
+  /**
+   * 참고 이미지 칸의 끌어다 놓기·붙여넣기(2026-10-07 사용자 요청). 여러 장 칸이다.
+   * 「새 참고 이미지 올리기」와 같은 길(`upload`)로 넣는다. 올리는 동안은 받지 않는다.
+   */
+  const attachDrop = useImageDropTarget({
+    disabled: uploading,
+    multiple: true,
+    onFiles: (files, notice) => void upload(files, notice),
+    onMessage: setMessage,
+  });
 
   /**
    * 세트에서 **고른 장만** 넣는다. 표지·속지·엔딩 자리는 그대로 가져온다.
@@ -251,7 +273,18 @@ export function AttachmentPicker({
   }
 
   return (
-    <div className="grid gap-6">
+    /* 이 칸 전체가 받는다. 눌러 두면 붙여넣기도 받는다. */
+    <div
+      role="group"
+      tabIndex={uploading ? -1 : 0}
+      aria-label="카드뉴스 참고 이미지 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+      {...attachDrop.handlers}
+      className={cn(
+        "group grid gap-6 rounded-lg outline-none",
+        !uploading && "focus-within:ring-2 focus-within:ring-primary/30",
+        attachDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-3">
         <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(event) => void upload(event.target.files)} />
         <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={uploading}>
@@ -294,6 +327,7 @@ export function AttachmentPicker({
           onReload={() => void load()}
         />
         <span className="text-sm text-muted-foreground">여기서 올린 그림도 라이브러리에 들어갑니다. {UPLOAD_RIGHTS_NOTE}</span>
+        <DropPasteHint locked={uploading} className="w-full text-xs" />
       </div>
       {message ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{message}</p> : null}
       {attachments.length === 0 ? (

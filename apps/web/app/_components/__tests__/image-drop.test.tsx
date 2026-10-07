@@ -3,7 +3,7 @@ import { act, create } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ACCEPT_ANY_IMAGE, ACCEPT_PNG_JPG_WEBP, ONE_ONLY_MESSAGE,
-  imagesFromTransfer, useImageDropTarget, usePreventFileNavigation,
+  afterUploadMessage, imagesFromTransfer, joinMessages, useImageDropTarget, usePreventFileNavigation,
 } from "../image-drop";
 
 /**
@@ -287,9 +287,73 @@ describe("칸 밖에 놓기", () => {
 
   it("화면을 떠나면 보호 장치도 떼어 낸다", () => {
     render();
-    expect(listeners.size).toBe(2);
+    // 놓기·끌어 지나가기 막기 둘과, 페이지 안 끌기 시작·끝 둘.
+    expect(listeners.size).toBe(4);
     act(() => view?.unmount());
     view = null;
     expect(listeners.size).toBe(0);
+  });
+});
+
+/* ── 올린 뒤의 안내 ─────────────────────────────────────────── */
+
+describe("joinMessages — 안내를 잇는다", () => {
+  it("빈 것은 빼고 잇는다", () => {
+    expect(joinMessages("2장을 올렸습니다.", undefined, "", "받지 않는 형식의 파일 1개는 뺐습니다."))
+      .toBe("2장을 올렸습니다. 받지 않는 형식의 파일 1개는 뺐습니다.");
+    expect(joinMessages(null, undefined)).toBe("");
+  });
+});
+
+describe("afterUploadMessage — 다 올린 뒤 무엇을 보일까", () => {
+  const notice = "받지 않는 형식의 파일 1개는 뺐습니다.";
+
+  it("다 올라가고 목록에도 보이면 알림만", () => {
+    expect(afterUploadMessage({ loadedAll: true, previous: "", notice })).toBe(notice);
+  });
+
+  /*
+    목록 다시 읽기가 실패했거나 올린 것이 안 보이면 그 안내(previous)가 이미 떠
+    있다. 알림으로 덮으면 왜 안 붙었는지 모른다(2026-10-07 리뷰).
+  */
+  it("목록에 안 보이면 이미 뜬 실패 안내를 지키고 알림을 뒤에 잇는다", () => {
+    expect(afterUploadMessage({ loadedAll: false, previous: "참고 이미지를 불러오지 못했습니다.", notice }))
+      .toBe(`참고 이미지를 불러오지 못했습니다. ${notice}`);
+  });
+
+  it("올리다 한 장이 거절됐으면 그 까닭을 먼저 말한다", () => {
+    expect(afterUploadMessage({ loadedAll: true, previous: "", uploadError: "올리지 못했습니다.", notice }))
+      .toBe(`올리지 못했습니다. ${notice}`);
+  });
+
+  it("말할 것이 없으면 빈 문자열 — 화면이 안내 칸을 비운다", () => {
+    expect(afterUploadMessage({ loadedAll: true, previous: "" })).toBe("");
+  });
+});
+
+/* ── 페이지 안에서 시작한 끌기 ─────────────────────────────────── */
+
+describe("페이지 안의 그림을 끌어 놓는 것은 받지 않는다", () => {
+  /*
+    칸 안의 작은 그림을 조금만 끌어도 브라우저가 그 그림을 「파일」로 넘겨줄 수
+    있다. 그러면 같은 그림이 또 올라간다(2026-10-07 리뷰). 밖(탐색기 등)에서
+    가져온 파일만 받는다 — 페이지 안에서 끌기가 시작됐으면 그 끌기는 지나보낸다.
+  */
+  it("페이지 안에서 끌기가 시작되면 칸이 받지 않고 놓기도 막지 않는다", () => {
+    render(false, true);
+    listeners.get("dragstart")!({});
+    const drop = dragEvent([png]);
+    act(() => target.handlers.onDrop(drop));
+    expect(onFiles).not.toHaveBeenCalled();
+    expect(drop.preventDefault).not.toHaveBeenCalled();
+    listeners.get("dragend")!({});
+  });
+
+  it("그 끌기가 끝나면 다시 밖의 파일을 받는다", () => {
+    render(false, true);
+    listeners.get("dragstart")!({});
+    listeners.get("dragend")!({});
+    act(() => target.handlers.onDrop(dragEvent([png])));
+    expect(onFiles).toHaveBeenCalledWith([png], undefined);
   });
 });

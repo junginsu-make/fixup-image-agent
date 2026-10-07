@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Button, Input } from "@fixup/ui";
+import { Button, Input, cn } from "@fixup/ui";
 import { CARD_RATIOS, IMAGE_MODELS } from "@fixup/sns-core";
 import {
   DEFAULT_TEMPLATES,
@@ -19,7 +19,9 @@ import { billableFetch } from "../../../lib/billable-fetch";
 import { UPLOAD_RIGHTS_NOTE } from "../../../lib/rights/upload-notice";
 import { useFitScreen } from "./use-fit-screen";
 import { SlotInspector } from "./slot-inspector";
-import { LibraryPicker, LibraryUploadButton, useLibraryImages } from "./library-picker";
+import { LibraryPicker, LibraryUploadButton, useLibraryImages, useLibraryUpload } from "./library-picker";
+import { useImageDropTarget } from "../../_components/image-drop";
+import { DropPasteHint } from "../../_components/drop-paste-hint";
 import { PreviewPanel, type PreviewCopy, type PreviewResult } from "./preview-panel";
 import { DeckPanel } from "./deck-panel";
 import { SideDrawer } from "./side-drawer";
@@ -139,6 +141,17 @@ export function LayoutStudio() {
 
   const ratio = CARD_RATIOS.find((entry) => entry.id === ratioId)!;
   const { images: libraryImages, add: addLibraryImage } = useLibraryImages();
+  /**
+   * 「레퍼런스」 칸의 올리기 — 단추와 끌어다 놓기·붙여넣기가 함께 쓴다(2026-10-07 사용자 요청).
+   * 칸을 읽어낼 카드 한 장을 고르는 자리라 한 장 칸이다. 올린 그림을 바로 고른다.
+   */
+  const referenceUpload = useLibraryUpload((image) => { addLibraryImage(image); setAnalyzeId(image.id); });
+  const referenceDrop = useImageDropTarget({
+    disabled: referenceUpload.busy,
+    multiple: false,
+    onFiles: (files, notice) => void referenceUpload.upload(files, notice),
+    onMessage: referenceUpload.fail,
+  });
   const compareUrl = libraryImages.find((entry) => entry.id === compareId)?.signedUrl ?? undefined;
 
   const issues = useMemo(
@@ -482,7 +495,18 @@ export function LayoutStudio() {
         </section>
         </div>
 
-        <section className="flex min-h-0 flex-col gap-2 rounded-lg border bg-card p-3">
+        {/* 「레퍼런스」 칸 전체가 받는다. 단추는 파일 창을 열므로, 칸의 빈 곳을 눌러 두고 붙여넣는다. */}
+        <section
+          role="group"
+          tabIndex={referenceUpload.busy ? -1 : 0}
+          aria-label="레퍼런스 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+          {...referenceDrop.handlers}
+          className={cn(
+            "group flex min-h-0 flex-col gap-2 rounded-lg border bg-card p-3 outline-none",
+            !referenceUpload.busy && "focus-within:ring-2 focus-within:ring-primary/30",
+            referenceDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+          )}
+        >
           <div className="flex items-baseline justify-between gap-2">
             {/* 제목은 짧게(2026-09-17 사용자 결정). 무엇을 하는지는 아래 버튼이 말한다. */}
             <h3 className="shrink-0 whitespace-nowrap font-semibold">레퍼런스</h3>
@@ -496,13 +520,14 @@ export function LayoutStudio() {
             <LibraryPicker value={analyzeId} onPick={setAnalyzeId} size="card" images={libraryImages} />
           </div>
           <div className="flex shrink-0 gap-2">
-            <LibraryUploadButton onUploaded={(image) => { addLibraryImage(image); setAnalyzeId(image.id); }} />
+            <LibraryUploadButton uploader={referenceUpload} />
             <Button className="flex-1" type="button" disabled={!analyzeId || busy === "analyze"} onClick={runAnalyze}>
               {busy === "analyze" ? "읽는 중…" : "칸 읽어내기"}
             </Button>
           </div>
           {/* 올리는 버튼(`LibraryUploadButton`)은 좁아 그 안에 두면 세 줄로 접힌다. */}
           <p className="shrink-0 text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
+          <DropPasteHint locked={referenceUpload.busy} className="shrink-0 text-xs" />
         </section>
       </div>
 

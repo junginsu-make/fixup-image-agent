@@ -11,6 +11,8 @@ import {
 } from "../../_components/library-picker";
 import { gridSrc } from "../../_components/grid-src";
 import { ThumbImage } from "../../_components/thumb-image";
+import { joinMessages, useImageDropTarget } from "../../_components/image-drop";
+import { DropPasteHint } from "../../_components/drop-paste-hint";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
 import { attachMessage, characterIdByTitle, matchWithRestore, restoreMissingAngles } from "../../_components/character-attach";
@@ -192,7 +194,8 @@ export function ReferencePicker({
    * — 화면에 붙인 그림은 `references` 에 있는 줄만 그리기 때문이다. 다시 읽기가
    * 실패하면 역할만 남고 그림은 영영 안 나온다. 그때는 조용히 넘기지 않고 말한다.
    */
-  async function upload(files: FileList | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말(「받지 않는 형식을 뺐습니다」). 다 올린 뒤에 보인다. */
+  async function upload(files: ArrayLike<File> | null, notice?: string) {
     if (!files?.length) return;
     setUploading(true);
     setMessage("");
@@ -213,12 +216,13 @@ export function ReferencePicker({
       }
       const fresh = await onUploaded();
       const missing = added.filter((id) => !fresh.some((entry) => entry.id === id));
-      if (missing.length) {
-        setMessage(
-          `${missing.length}장이 라이브러리 목록에 아직 안 보입니다. `
-          + "저장은 됐으니 새로고침하면 나옵니다.",
-        );
-      }
+      // 둘 다 해당되면 둘 다 말한다. 한쪽만 보이면 몇 장을 뺐는지가 사라진다.
+      setMessage(joinMessages(
+        missing.length
+          ? `${missing.length}장이 라이브러리 목록에 아직 안 보입니다. 저장은 됐으니 새로고침하면 나옵니다.`
+          : "",
+        notice,
+      ));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
     } finally {
@@ -228,6 +232,17 @@ export function ReferencePicker({
       if (fileInput.current) fileInput.current.value = "";
     }
   }
+
+  /**
+   * 참고 이미지 칸의 끌어다 놓기·붙여넣기(2026-10-07 사용자 요청). 여러 장 칸이다.
+   * 「새 이미지 올리기」와 같은 길(`upload`)로 넣는다. 올리는 동안은 받지 않는다.
+   */
+  const referenceDrop = useImageDropTarget({
+    disabled: uploading,
+    multiple: true,
+    onFiles: (files, notice) => void upload(files, notice),
+    onMessage: setMessage,
+  });
 
   /**
    * 고른 것만, **고른 차례로** 화면에 남긴다.
@@ -256,7 +271,18 @@ export function ReferencePicker({
   );
 
   return (
-    <div className="grid gap-4">
+    /* 이 칸 전체가 받는다. 눌러 두면 붙여넣기도 받는다. */
+    <div
+      role="group"
+      tabIndex={uploading ? -1 : 0}
+      aria-label="이미지 만들기 참고 이미지 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+      {...referenceDrop.handlers}
+      className={cn(
+        "group grid gap-4 rounded-lg outline-none",
+        !uploading && "focus-within:ring-2 focus-within:ring-primary/30",
+        referenceDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-3">
         <input
           ref={fileInput}
@@ -305,6 +331,7 @@ export function ReferencePicker({
         <span className="text-sm text-muted-foreground">
           여기서 올린 그림도 라이브러리에 들어갑니다. {UPLOAD_RIGHTS_NOTE}
         </span>
+        <DropPasteHint locked={uploading} className="w-full text-xs" />
       </div>
 
       {message ? (

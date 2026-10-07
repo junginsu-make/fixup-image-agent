@@ -89,9 +89,41 @@ function carriesText(data: TransferLike | null | undefined): boolean {
   return Array.from(data?.types ?? []).includes("text/plain");
 }
 
-/** 파일을 끌고 있는가. 글자·링크를 끌 때는 칸을 강조하지도 막지도 않는다. */
+/**
+ * 지금 끌기가 **이 페이지 안에서** 시작됐는가.
+ *
+ * 칸 안의 작은 그림을 조금만 끌어도 브라우저가 그 그림을 「파일」로 넘겨줄 수
+ * 있다. 그러면 같은 그림이 또 올라간다(2026-10-07 리뷰). 밖(탐색기 등)에서
+ * 가져온 끌기는 이 페이지에서 `dragstart` 가 일어나지 않는다.
+ */
+let internalDrag = false;
+
+/** 밖에서 파일을 끌고 있는가. 글자·링크·페이지 안의 그림을 끌 때는 칸을 강조하지도 막지도 않는다. */
 function carriesFiles(data: TransferLike | null | undefined): boolean {
-  return Array.from(data?.types ?? []).includes("Files");
+  return !internalDrag && Array.from(data?.types ?? []).includes("Files");
+}
+
+/** 안내를 잇는다. 빈 것은 뺀다. */
+export function joinMessages(...parts: Array<string | null | undefined>): string {
+  return parts.filter((part): part is string => Boolean(part)).join(" ");
+}
+
+/**
+ * 다 올린 뒤 보일 안내.
+ *
+ * 목록 다시 읽기가 실패했거나 올린 것이 안 보이면 그 안내(`previous`)가 이미
+ * 떠 있다 — 알림으로 덮으면 왜 안 붙었는지 모른다(2026-10-07 리뷰). 그때는
+ * 지키고 알림을 뒤에 잇는다. 올리다 한 장이 거절됐으면 그 까닭을 먼저 말한다.
+ */
+export function afterUploadMessage(input: {
+  loadedAll: boolean;
+  previous: string;
+  uploadError?: string;
+  notice?: string;
+}): string {
+  return input.loadedAll
+    ? joinMessages(input.uploadError, input.notice)
+    : joinMessages(input.previous, input.notice);
 }
 
 /**
@@ -219,11 +251,18 @@ export function usePreventFileNavigation() {
       event.preventDefault();
       if (event.type === "dragover" && event.dataTransfer) event.dataTransfer.dropEffect = "none";
     };
+    // 페이지 안에서 시작한 끌기를 표시한다(`internalDrag`). 끝나면 지운다.
+    const started = () => { internalDrag = true; };
+    const ended = () => { internalDrag = false; };
     window.addEventListener("dragover", block);
     window.addEventListener("drop", block);
+    window.addEventListener("dragstart", started);
+    window.addEventListener("dragend", ended);
     return () => {
       window.removeEventListener("dragover", block);
       window.removeEventListener("drop", block);
+      window.removeEventListener("dragstart", started);
+      window.removeEventListener("dragend", ended);
     };
   }, []);
 }
