@@ -14,6 +14,10 @@ describe("pageLabel", () => {
     expect(pageLabel("/library/:id")).toBe("라이브러리 · 하나 보기");
   });
   it("모르면 원래 주소", () => expect(pageLabel("/nothing/here")).toBe("/nothing/here"));
+  it("키워드 소개 화면은 대표 검색어로(계획 2026-10-07 seo-keyword-pages)", () => {
+    expect(pageLabel("/features")).toBe("기능 소개");
+    expect(pageLabel("/features/cardnews")).toBe("기능 소개 · AI 카드뉴스 만들기");
+  });
 });
 
 describe("sourceLabel", () => {

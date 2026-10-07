@@ -37,6 +37,7 @@ export function LandingHeader({
   localMode,
   signedIn,
   path = "/",
+  showLanguage = true,
 }: {
   t: LandingCopy;
   locale: Locale;
@@ -53,6 +54,11 @@ export function LandingHeader({
    * 없으면 `/about` 에서 언어를 바꾼 사람이 첫 화면으로 튕겨 나간다.
    */
   path?: string;
+  /**
+   * 언어 전환을 낼까. 한국어 한 벌뿐인 화면(키워드 소개 `/features/…`)은 끈다 —
+   * 「EN」을 눌러도 같은 한국어 화면이 다시 뜬다.
+   */
+  showLanguage?: boolean;
 }) {
   const other: Locale = locale === "ko" ? "en" : "ko";
 
@@ -86,15 +92,17 @@ export function LandingHeader({
             **갈 수 있는 쪽 하나만** 조용한 글자로 둔다 — 한국어 화면에서는
             「EN」, 영어 화면에서는 「한」.
           */}
-          <Link
-            className="mcs-lang"
-            href={`${path}?lang=${other}`}
-            hrefLang={other}
-            aria-label={t.langSwitchLabel}
-          >
-            <Languages size={13} strokeWidth={1.9} aria-hidden="true" />
-            {t.langOther}
-          </Link>
+          {showLanguage ? (
+            <Link
+              className="mcs-lang"
+              href={`${path}?lang=${other}`}
+              hrefLang={other}
+              aria-label={t.langSwitchLabel}
+            >
+              <Languages size={13} strokeWidth={1.9} aria-hidden="true" />
+              {t.langOther}
+            </Link>
+          ) : null}
 
           {localMode ? (
             <Link href={LOCAL_BYPASS_ENTRY} className="mcs-btn-sm mcs-btn-sm--solid">

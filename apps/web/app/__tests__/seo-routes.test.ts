@@ -20,4 +20,10 @@ describe("sitemap.ts", () => {
     expect(urls.some((u) => u.endsWith("/about"))).toBe(true);
     expect(urls.some((u) => u.endsWith("/guide/cardnews"))).toBe(true);
   });
+  it("기능 모아 보기와 키워드 화면 여섯을 낸다(계획 2026-10-07 seo-keyword-pages)", () => {
+    const urls = sitemap().map((e) => e.url);
+    for (const path of ["/features", "/features/cardnews", "/features/detail-page", "/features/redesign", "/features/ad-creative", "/features/poster", "/features/character"]) {
+      expect(urls.some((u) => u.endsWith(path)), path).toBe(true);
+    }
+  });
 });
