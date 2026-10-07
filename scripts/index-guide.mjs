@@ -22,6 +22,8 @@
  */
 
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { build } from "esbuild";
 import vm from "node:vm";
@@ -81,6 +83,76 @@ async function 다듬개() {
   return sandbox.GuideText;
 }
 
+/**
+ * 색인 DB 에 붙는다. `rag.ts` 의 `getSql` 과 같은 드라이버다.
+ *
+ * 뿌리 `node_modules` 에는 이 드라이버가 없다(작업 패키지 쪽에만 깔린다).
+ * 그래서 redesign-core 자리에서 찾는다. `DATABASE_URL` 이 없으면 `null`.
+ */
+function 색인DB() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) return null;
+  const require = createRequire(path.join(root, "packages/redesign-core/package.json"));
+  const { neon } = require("@neondatabase/serverless");
+  return neon(databaseUrl);
+}
+
+/**
+ * **같은 설명서의 옛 판을 지운다**(2026-10-07, 사용자 승인).
+ *
+ * `indexKnowledgeDocument` 는 이름+본문의 해시로 문서를 가른다. 글이 바뀌면
+ * 새 판을 더하고 옛 판은 남는다 — 2026-10-06 운영에 13쪽이 39벌 쌓였고,
+ * 화면에서 사라진 문장을 도우미가 근거로 쓸 수 있었다.
+ *
+ * 지우는 것은 **설명서 종류 · 같은 이름 · 방금 넣은 판이 아닌 것**뿐이다.
+ * 관리자가 올린 다른 지식은 종류가 달라 안 걸린다. 조각은 `ON DELETE CASCADE`
+ * 로 함께 지워진다. 지우다 실패해도 새 판은 이미 들어갔고, 옛 판은 다음에
+ * 돌릴 때 같은 조건으로 다시 지운다 — 그래서 멈추지 않고 알리기만 한다.
+ */
+async function 옛판지우기(sql, name, documentId) {
+  if (!documentId) return 0;
+  try {
+    const rows = await sql`
+      DELETE FROM knowledge_documents
+      WHERE kind = 'guide' AND name = ${name} AND id <> ${documentId}
+      RETURNING id
+    `;
+    return rows.length;
+  } catch {
+    // 오류 글을 그대로 찍지 않는다. 접속 정보가 섞일 수 있다.
+    console.error(`  옛 판을 못 지웠습니다 ${name} — 다음에 돌릴 때 다시 지웁니다`);
+    return 0;
+  }
+}
+
+/**
+ * 맛보기에서 **지울 옛 판이 몇 개인지만** 센다. 읽기만 한다.
+ *
+ * 해시는 `rag.ts` 의 `sha256(이름:본문)` 과 같은 꼴이다 — 같은 글이면
+ * 넣을 때 그 행을 그대로 쓰므로(지우지 않으므로) 셈에서 뺀다. 화면에 찍는
+ * 수일 뿐이고, 실제로 지우는 조건은 `옛판지우기` 의 새 판 id 다.
+ *
+ * `DATABASE_URL` 이 없으면 세지 않는다 — 맛보기는 DB 없이도 돌아야 한다.
+ */
+async function 지울옛판수(문서들) {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const sql = 색인DB();
+    let 합 = 0;
+    for (const 문서 of 문서들) {
+      const 해시 = createHash("sha256").update(`${문서.name}:${문서.text}`).digest("hex");
+      const rows = await sql`
+        SELECT count(*)::int AS n FROM knowledge_documents
+        WHERE kind = 'guide' AND name = ${문서.name} AND content_hash <> ${해시}
+      `;
+      합 += rows[0].n;
+    }
+    console.log(`지울 옛 판 ${합}개`);
+  } catch {
+    console.error("옛 판 수를 못 셌습니다. 맛보기라 아무것도 바꾸지 않았습니다.");
+  }
+}
+
 async function main() {
   const { guideDocumentFrom } = await 다듬개();
 
@@ -131,6 +203,7 @@ async function main() {
   if (맛보기) {
     console.log(`\n맛보기입니다. ${문서들.length}쪽을 넣지 않았습니다.`);
     console.log(문서들.map((d) => `  ${d.name} (${d.text.length}자)`).join("\n"));
+    await 지울옛판수(문서들);
     return;
   }
 
@@ -151,7 +224,9 @@ async function main() {
     process.exit(1);
   }
 
+  const sql = 색인DB();
   let 조각 = 0;
+  let 지운판 = 0;
   // 운영 앱 밖에서 돌므로 ai_cost_events 에는 안 적힌다(설계 2026-09-30 §3.4). 대신 여기서 센다.
   let 임베딩토큰 = 0;
   const onUsage = (usage) => { 임베딩토큰 += usage.inputTokens; };
@@ -159,10 +234,13 @@ async function main() {
     const result = await indexKnowledgeDocument({ name: 문서.name, text: 문서.text, kind: "guide", onUsage });
     if (!result.indexed) { console.error(`  못 넣음 ${문서.name} — ${result.reason}`); continue; }
     조각 += result.chunks;
-    console.log(`  넣음 ${문서.name} — 조각 ${result.chunks}개`);
+    // 새 판이 들어간 뒤에만 지운다. 못 넣었으면 옛 판이라도 있어야 도우미가 답한다.
+    const 지움 = await 옛판지우기(sql, 문서.name, result.documentId);
+    지운판 += 지움;
+    console.log(`  넣음 ${문서.name} — 조각 ${result.chunks}개 · 옛 판 ${지움}개 지움`);
   }
 
-  console.log(`\n설명서 ${문서들.length}쪽 · 조각 ${조각}개를 넣었습니다. 임베딩 토큰 ${임베딩토큰}개.`);
+  console.log(`\n설명서 ${문서들.length}쪽 · 조각 ${조각}개를 넣었습니다. 옛 판 ${지운판}개를 지웠습니다. 임베딩 토큰 ${임베딩토큰}개.`);
 }
 
 await main();

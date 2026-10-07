@@ -67,3 +67,85 @@ describe("설명서 색인 스크립트", () => {
     expect(script).toContain("넣지 않습니다");
   });
 });
+
+/**
+ * **같은 설명서의 옛 판을 스스로 지운다**(2026-10-07, 사용자 승인).
+ *
+ * `indexKnowledgeDocument` 는 이름+본문의 해시로 문서를 가른다. 설명서 글이
+ * 바뀌면 새 판을 더하고 옛 판은 남긴다 — 2026-10-06 운영에 13쪽이 39벌
+ * 쌓여 있었고, 지금 화면에 없는 문장을 도우미가 근거로 쓸 수 있었다.
+ *
+ * 운영 DB 의 행을 지우는 일이라 **무엇을 지우는지**를 글에서 못 박는다.
+ */
+describe("설명서 색인 스크립트 — 옛 판 지우기", () => {
+  /** 작업 폴더의 줄바꿈(CRLF)에 흔들리지 않게 LF 로 맞춰 본다. */
+  const 글 = script.replace(/\r\n/g, "\n");
+
+  /** 넣는 줄부터 그 문서 차례가 끝나는 곳까지. 주석의 글자에 속지 않게 여기만 본다. */
+  const 넣는차례 = (() => {
+    const 시작 = 글.indexOf("await indexKnowledgeDocument(");
+    return 글.slice(시작, 글.indexOf("\n  }\n", 시작));
+  })();
+
+  /** 지우는 함수 몸통. */
+  const 지우는함수 = (() => {
+    const 시작 = 글.indexOf("async function 옛판지우기(");
+    return 시작 < 0 ? "" : 글.slice(시작, 글.indexOf("\n}\n", 시작));
+  })();
+
+  it("지우는 SQL 은 한 곳뿐이다", () => {
+    expect(글.split("DELETE FROM").length - 1, "지우는 자리가 하나가 아니다").toBe(1);
+    expect(지우는함수, "지우는 SQL 이 지우는 함수 밖에 있다").toContain("DELETE FROM knowledge_documents");
+  });
+
+  /** 관리자가 올린 다른 지식, 다른 설명서, 방금 넣은 새 판은 건드리지 않는다. */
+  it("설명서 종류 · 같은 이름 · 새 판 아닌 것만 지운다", () => {
+    const 조건 = 지우는함수.slice(지우는함수.indexOf("WHERE"), 지우는함수.indexOf("RETURNING"));
+    expect(조건).toContain("kind = 'guide'");
+    expect(조건).toContain("name = ${name}");
+    expect(조건).toContain("id <> ${documentId}");
+    expect(조건, "또는(OR)이 섞이면 조건이 풀린다").not.toMatch(/\bOR\b/i);
+    expect(지우는함수).toContain("RETURNING id");
+    expect(지우는함수, "새 판 id 가 없으면 지우지 않는다").toMatch(/if \(!documentId\) return 0;/);
+  });
+
+  /** 못 넣은 문서의 옛 판은 남아야 도우미가 그 주제에 답한다. */
+  it("넣기에 성공한 뒤에만, 그 문서 이름과 새 판 id 로 지운다", () => {
+    const 실패갈래 = 넣는차례.indexOf("if (!result.indexed)");
+    const 부름 = 넣는차례.indexOf("옛판지우기(");
+    expect(실패갈래, "넣기 실패 갈래가 없다").toBeGreaterThan(0);
+    expect(부름, "넣은 뒤에 옛 판을 지우지 않는다").toBeGreaterThan(실패갈래);
+    expect(넣는차례.slice(실패갈래, 넣는차례.indexOf("\n", 실패갈래)), "실패하면 다음 문서로 넘어가야 한다").toContain("continue;");
+    expect(넣는차례.slice(부름)).toMatch(/^옛판지우기\(sql, 문서\.name, result\.documentId\)/);
+    expect(글.split("옛판지우기(").length - 1, "정의 하나 · 부름 하나여야 한다").toBe(2);
+  });
+
+  it("맛보기는 아무것도 지우지 않는다", () => {
+    const 시작 = 글.indexOf("if (맛보기) {");
+    const 맛보기갈래 = 글.slice(시작, 글.indexOf("return;", 시작));
+    expect(맛보기갈래).not.toContain("DELETE");
+    expect(맛보기갈래).not.toContain("옛판지우기");
+    const 세기 = 글.slice(글.indexOf("async function 지울옛판수("));
+    const 세기몸통 = 세기.slice(0, 세기.indexOf("\n}\n"));
+    expect(세기몸통, "옛 판 세기가 없다").toContain("SELECT count(*)");
+    expect(세기몸통).not.toContain("DELETE");
+  });
+
+  /** 앱과 같은 드라이버로 붙는다. 다른 드라이버면 같은 DB 라는 보장이 흐려진다. */
+  it("redesign-core 와 같은 DB 드라이버를 쓴다", () => {
+    const rag = readFileSync(join(root, "packages", "redesign-core", "src", "rag.ts"), "utf8");
+    expect(rag).toContain('from "@neondatabase/serverless"');
+    expect(글).toContain('require("@neondatabase/serverless")');
+  });
+
+  it("접속 문자열을 찍지 않는다", () => {
+    expect(글).not.toMatch(/\$\{\s*(process\.env|databaseUrl)/);
+  });
+
+  /** 이름이 겹치면 뒤 문서가 앞 문서의 새 판을 옛 판으로 알고 지운다. */
+  it("쪽 이름이 겹치지 않는다", () => {
+    const 이름들 = [...글.matchAll(/\{ href: "[^"]+", label: "([^"]+)" \}/g)].map((m) => m[1]);
+    expect(이름들.length).toBeGreaterThan(10);
+    expect(new Set(이름들).size, "같은 이름의 쪽이 있다").toBe(이름들.length);
+  });
+});
