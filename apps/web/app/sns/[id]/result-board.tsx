@@ -10,6 +10,8 @@ import { snsCardFilename } from "../download-filename";
 import { SaveToLibrary } from "../../_components/save-to-library";
 import { copyText } from "../../../lib/browser-safe";
 import { cardPlaceholder, trimCardNote, CARD_NOTE_MAX } from "./result-rules";
+import { cardSubmittedAt, SLOW_CARD_NOTICE } from "../slow-card";
+import { useSlowCards } from "../use-slow-cards";
 
 function triggerDownload(url: string, name: string) {
   const anchor = document.createElement("a");
@@ -190,6 +192,8 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
   const counts = flow.cards.reduce((value, card) => ({ ...value, [card.status]: value[card.status] + 1 }), {
     pending: 0, generating: 0, review_required: 0, done: 0, failed: 0,
   });
+  /** fal 에 보낸 지 3분이 넘은 카드(2026-10-07 Task 6). 안내만 한다. */
+  const slow = useSlowCards(flow.cards.map((card) => ({ index: card.index, status: card.status, submittedAt: cardSubmittedAt(card) })));
 
   /**
    * 크게 볼 때 그림 옆에 같이 보여줄 것.
@@ -266,6 +270,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
                 「어느 장이 어떤지」를 못 본다.
               */}
               {card.assetUrl ? <Image src={card.thumbUrl ?? card.assetUrl} alt={`${title} · ${card.index}번 카드`} width={1088} height={1360} unoptimized data-zoomable data-viewer-src={card.assetUrl} data-viewer-meta={cardMeta(card)} className="mx-auto max-h-[38vh] w-full cursor-zoom-in rounded-lg bg-muted object-contain" /> : <CardPlaceholder status={card.status} />}
+              {slow.includes(card.index) ? <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{SLOW_CARD_NOTICE}</p> : null}
               <div>
                 <strong>{card.copy.headline}</strong>
                 {card.copy.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.copy.body}</p> : null}

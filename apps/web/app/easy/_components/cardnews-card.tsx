@@ -8,6 +8,8 @@ import { CARD_COUNTS, CARD_LANGUAGES, CARD_LANGUAGE_LABEL, CARD_RATIOS, type Car
 import type { EasyCardnewsView } from "../cardnews-view";
 import { EasyCardnewsCaption } from "./cardnews-caption";
 import { EasyCardnewsRow, type EasyCardTools } from "./cardnews-card-row";
+import { SLOW_CARD_NOTICE } from "../../sns/slow-card";
+import { useSlowCards } from "../../sns/use-slow-cards";
 
 /**
  * **카드뉴스 원고 · 진행 · 결과**(2단계 설계 §7 · §8).
@@ -35,6 +37,8 @@ export function EasyCardnewsCard({
   tools?: EasyCardTools;
 }) {
   const 원고단계 = view.status === "copy_ready" && !view.made;
+  /** fal 에 보낸 지 3분이 넘은 장(2026-10-07 Task 6). 안내만 한다. 훅이라 이른 돌려주기보다 앞에 둔다. */
+  const 늦은장 = useSlowCards(view.cards);
   if (원고단계 && !latest) {
     return <p className="text-meta text-subtle-foreground">원고를 다시 썼습니다.</p>;
   }
@@ -48,6 +52,9 @@ export function EasyCardnewsCard({
           : view.status === "generating" ? `카드를 만드는 중입니다 (${view.done}/${view.total}장)`
             : `카드뉴스 ${view.done}장을 만들었습니다`}
       </p>
+      {늦은장.length ? (
+        <p role="status" className="text-meta text-primary">{늦은장.join(", ")}번 장: {SLOW_CARD_NOTICE}</p>
+      ) : null}
       <ol className="grid gap-1.5 text-meta">
         {view.cards.map((card) => (
           <EasyCardnewsRow key={card.index} card={card} made={view.made} tools={latest ? tools : undefined} />

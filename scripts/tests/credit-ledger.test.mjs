@@ -141,6 +141,19 @@ test('a migrated account requires a server quote; print images charge two and an
   const free=randomUUID();await db.sql(`select credit_reserve_dispatch('${a}','${free}','pdp_analyze',0,10,array[]::integer[],'test');`);
   assert.equal((await json(`select credit_finalize_dispatch('${a}','${free}',true,0,null,true,null);`)).consumed_units,0);
 });
+// The PDP single image route settles a QA rejection as (false,0,0,terminal,code). Without terminal it is held for review.
+test('a confirmed failure releases a started hold at once; an unconfirmed one waits for review',async()=>{
+  const confirmed=randomUUID(), unknown=randomUUID();
+  await reserve(a,confirmed,1);await db.sql(`select credit_mark_started('${a}','${confirmed}');`);
+  const released=await json(`select credit_finalize_dispatch('${a}','${confirmed}',false,0,0,true,'PDP_IMAGE_QA_REJECTED');`);
+  assert.equal(released.settled,true);assert.equal(released.consumed_units,0);
+  assert.equal(await db.sql(`select status||'/'||credit_phase from generation_events where request_id='${confirmed}';`),'failed/settled');
+  await reserve(a,unknown,1);await db.sql(`select credit_mark_started('${a}','${unknown}');`);
+  const held=await json(`select credit_finalize_dispatch('${a}','${unknown}',false,0,0,false,'AI_PROVIDER_UNAVAILABLE');`);
+  assert.equal(held.settled,false);
+  assert.equal(await db.sql(`select status||'/'||credit_phase from generation_events where request_id='${unknown}';`),'reserved/needs_review');
+  assert.equal(held.usage.reserved,1);assert.equal(held.usage.available,99);
+});
 test('bulk grants are atomic, idempotent and actor audited',async()=>{
   const source=randomUUID(), missing=randomUUID();
   await assert.rejects(db.sql(`select credit_admin_grant_many(array['${a}'::uuid,'${missing}'::uuid],'purchase',10,1000,null,'${source}','bulk','${admin}');`));

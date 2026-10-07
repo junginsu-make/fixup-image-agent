@@ -21,6 +21,11 @@ export interface Attachment {
   url: string;
   /** style_reference 만 갖는다. */
   role?: StyleRole;
+  /**
+   * 다른 자리 그림을 빌려 이 자리에 쓸 때 그 자리(지금은 엔딩만, `selectReferencesForRole`).
+   * 고른 결과에만 붙는다 — 사람이 올린 첨부에는 없다. 프롬프트가 「빌려 왔다」고 적는다.
+   */
+  borrowedFor?: StyleRole;
   /** keep_identity 가 사람인지 물건인지. 사람은 하나만 허용한다. */
   subject?: "person" | "object";
   /**

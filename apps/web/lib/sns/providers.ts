@@ -95,6 +95,21 @@ const COPY_SPEC: StructuredSpec = {
   },
 };
 
+/** 마지막 장 원고와 그림 방향(2026-10-07 Task 5). 읽기는 `ending-copy.ts` 의 `readEndingCopy`. */
+const ENDING_SPEC: StructuredSpec = {
+  name: "submit_card_ending",
+  description: "Submit the closing card copy and its visual direction.",
+  schema: {
+    type: "object",
+    properties: {
+      headline: { type: "string" }, body: { type: "string" },
+      intent: { type: "string" }, visualBrief: { type: "string" },
+    },
+    required: ["headline", "body", "intent", "visualBrief"],
+    additionalProperties: false,
+  },
+};
+
 const CAPTION_SPEC: StructuredSpec = {
   name: "submit_instagram_caption",
   description: "Submit the Instagram caption for the finished card news.",
@@ -288,6 +303,8 @@ export function createSnsPlanningProviders(environment: Record<string, string | 
     planningBackup: maskedStructured("예비 기획", new OpenAIStructuredProvider(openai, openaiTextModel, PLAN_SPEC)),
     copyPrimary: maskedStructured("주 원고", new AnthropicStructuredProvider(anthropic, anthropicModel, COPY_SPEC)),
     copyBackup: maskedStructured("예비 원고", new OpenAIStructuredProvider(openai, openaiTextModel, COPY_SPEC)),
+    endingPrimary: maskedStructured("주 마지막 장", new AnthropicStructuredProvider(anthropic, anthropicModel, ENDING_SPEC)),
+    endingBackup: maskedStructured("예비 마지막 장", new OpenAIStructuredProvider(openai, openaiTextModel, ENDING_SPEC)),
     captionPrimary: maskedStructured("주 게시글", new AnthropicStructuredProvider(anthropic, anthropicModel, CAPTION_SPEC)),
     captionBackup: maskedStructured("예비 게시글", new OpenAIStructuredProvider(openai, openaiTextModel, CAPTION_SPEC)),
   };

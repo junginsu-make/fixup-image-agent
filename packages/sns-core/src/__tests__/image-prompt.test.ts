@@ -137,6 +137,69 @@ describe("역할별 레퍼런스", () => {
     expect(referenceWarningsForRole(coverOnly, "body").join("\n")).toContain("속지 레퍼런스가 없습니다");
     expect(selectReferencesForRole(coverOnly, "body")).toEqual([]);
   });
+
+  /**
+   * **엔딩 자리 그림이 없으면 속지(없으면 표지) 그림을 쓴다**(2026-10-07 Task 5).
+   *
+   * 화면은 기본 자리를 속지로 둬서, 엔딩 자리를 따로 고른 사람이 드물다. 그러면 마지막 장만
+   * 참고 없이 그려져 시리즈와 다른 모양으로 나왔다(운영 4/4). 「쉽게」의 `styleSlots` 규칙과 같다.
+   */
+  it("엔딩 자리 그림이 없으면 속지 그림을 쓴다", () => {
+    const noEnding = groupAttachments([
+      attachment({ id: "cover", kind: "style_reference", role: "cover" }),
+      attachment({ id: "body", kind: "style_reference", role: "body" }),
+      attachment({ id: "product", kind: "keep_identity", subject: "object" }),
+    ]);
+    expect(selectReferencesForRole(noEnding, "ending").map((image) => image.id)).toEqual(["body", "product"]);
+    expect(referenceWarningsForRole(noEnding, "ending")).toEqual([]);
+  });
+
+  it("속지 그림도 없으면 표지 그림을 쓴다", () => {
+    const coverOnly = groupAttachments([attachment({ id: "cover", kind: "style_reference", role: "cover" })]);
+    expect(selectReferencesForRole(coverOnly, "ending").map((image) => image.id)).toEqual(["cover"]);
+    expect(referenceWarningsForRole(coverOnly, "ending")).toEqual([]);
+  });
+
+  it("표지 · 속지는 다른 자리 그림을 빌려 오지 않는다", () => {
+    const endingOnly = groupAttachments([attachment({ id: "ending", kind: "style_reference", role: "ending" })]);
+    expect(selectReferencesForRole(endingOnly, "cover")).toEqual([]);
+    expect(selectReferencesForRole(endingOnly, "body")).toEqual([]);
+    expect(selectReferencesForRole(endingOnly, "ending").map((image) => image.id)).toEqual(["ending"]);
+  });
+
+  /** 빌려 온 그림을 「속지 레퍼런스」라고 부르면 모델이 이 장을 속지로 읽는다(2026-10-07 리뷰). */
+  it("빌려 온 그림은 빌려 왔다고 적고, 제 자리 그림의 문구는 그대로다", () => {
+    const grouped = groupAttachments([
+      attachment({ id: "body", kind: "style_reference", role: "body" }),
+      attachment({ id: "product", kind: "keep_identity", subject: "object" }),
+    ]);
+    const borrowed = selectReferencesForRole(grouped, "ending");
+    expect(borrowed.map((image) => image.borrowedFor)).toEqual(["ending", undefined]);
+    const endingBlock = buildAttachmentBlock(borrowed);
+    expect(endingBlock).toContain(
+      "Image 1 is a CARD-NEWS REFERENCE borrowed from the body card of this series; this card is the ending card. ",
+    );
+    expect(endingBlock).not.toContain("is the body CARD-NEWS REFERENCE");
+
+    const own = selectReferencesForRole(grouped, "body");
+    expect(own.some((image) => "borrowedFor" in image)).toBe(false);
+    expect(buildAttachmentBlock(own)).toContain("Image 1 is the body CARD-NEWS REFERENCE for this card. ");
+    // 묶음의 원본은 그대로다.
+    expect(grouped.styleByRole.body[0]).not.toHaveProperty("borrowedFor");
+  });
+
+  it("엔딩 자리 그림이 있으면 빌리지 않는다", () => {
+    const grouped = groupAttachments([attachment({ id: "ending", kind: "style_reference", role: "ending" })]);
+    const own = selectReferencesForRole(grouped, "ending");
+    expect(own[0]).not.toHaveProperty("borrowedFor");
+    expect(buildAttachmentBlock(own)).toContain("Image 1 is the ending CARD-NEWS REFERENCE for this card. ");
+  });
+
+  it("따라 만들 그림이 하나도 없으면 엔딩도 지금처럼 경고한다", () => {
+    const none = groupAttachments([attachment({ id: "product", kind: "keep_identity", subject: "object" })]);
+    expect(selectReferencesForRole(none, "ending").map((image) => image.id)).toEqual(["product"]);
+    expect(referenceWarningsForRole(none, "ending").join("\n")).toContain("엔딩 레퍼런스가 없습니다");
+  });
 });
 
 describe("다국어와 글자", () => {
