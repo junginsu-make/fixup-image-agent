@@ -10,6 +10,7 @@ import {
 } from "../../../../../lib/layout/analyze-provider";
 import { referenceImageBytes, toDataUrl } from "../../../../../lib/layout/library-image";
 import { snsFailure } from "../../failure";
+import { maskProviderError } from "../../../../../lib/sns/provider-failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,10 +80,13 @@ async function handlePost(request: Request) {
    * 제공자는 이미 `recordFrom` 으로 토큰을 적고 있었지만, 감싸는 계량기가
    * 없으면 그 기록은 갈 곳이 없어 조용히 버려진다(`lib/llm/meter.ts`).
    * 예비까지 두 번 부르면 두 번 다 여기 쌓인다.
+   *
+   * **제공자 원문은 `issues` 에 싣지 않는다**(2026-10-07 오류 원문 가리기 Task 3). 그 목록은 200 으로 화면에
+   * 뜬다. 호출 하나씩 감싸 원문은 서버 기록에만, 던지기는 그대로라 주→예비 넘어가기가 같다.
    */
   const result = await withLlmMeter(() => withIssueFallback(
-    () => providers.primary.analyze(url),
-    providers.backup ? () => providers.backup!.analyze(url) : undefined,
+    () => maskProviderError("주 칸 읽기", () => providers.primary.analyze(url)),
+    providers.backup ? () => maskProviderError("예비 칸 읽기", () => providers.backup!.analyze(url)) : undefined,
     {
       primaryFailure: "주 모델 칸 읽기 실패",
       backupMissing: "예비 제공자가 없어 한 번만 시도했습니다.",

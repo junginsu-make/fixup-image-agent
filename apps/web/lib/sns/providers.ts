@@ -13,11 +13,13 @@ import type {
 import {
   AnthropicStructuredProvider,
   OpenAIStructuredProvider,
+  type StructuredProvider,
   type StructuredSpec,
 } from "../llm/structured";
 import { createFalQueueClient, type FalQueueClient } from "../fal/queue";
 import { createFalUploader, type FalUploader } from "../fal/upload";
 import { defaultFalRouter } from "../fal/pool/default";
+import { maskProviderError } from "./provider-failure";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const DEFAULT_OPENAI_TEXT_MODEL = "gpt-5.6-sol";
@@ -246,6 +248,15 @@ class OpenAIReviewProvider implements ReviewRequest {
   }
 }
 
+/** 제공자가 던진 원문은 서버 기록에만, `issues` 에는 우리 문장(`provider-failure.ts`). */
+function maskedStructured(what: string, provider: StructuredProvider): StructuredProvider {
+  return { generate: (prompt, images) => maskProviderError(what, () => provider.generate(prompt, images)) };
+}
+
+function maskedReview(what: string, provider: ReviewRequest): ReviewRequest {
+  return { review: (input) => maskProviderError(what, () => provider.review(input)) };
+}
+
 export interface SnsProviders {
   planningPrimary: PlanProvider;
   planningBackup: PlanProvider;
@@ -273,12 +284,12 @@ export function createSnsPlanningProviders(environment: Record<string, string | 
   requireSnsProviderKeys("planning", environment);
   const { anthropic, openai, anthropicModel, openaiTextModel } = clients(environment);
   return {
-    planningPrimary: new AnthropicStructuredProvider(anthropic, anthropicModel, PLAN_SPEC),
-    planningBackup: new OpenAIStructuredProvider(openai, openaiTextModel, PLAN_SPEC),
-    copyPrimary: new AnthropicStructuredProvider(anthropic, anthropicModel, COPY_SPEC),
-    copyBackup: new OpenAIStructuredProvider(openai, openaiTextModel, COPY_SPEC),
-    captionPrimary: new AnthropicStructuredProvider(anthropic, anthropicModel, CAPTION_SPEC),
-    captionBackup: new OpenAIStructuredProvider(openai, openaiTextModel, CAPTION_SPEC),
+    planningPrimary: maskedStructured("주 기획", new AnthropicStructuredProvider(anthropic, anthropicModel, PLAN_SPEC)),
+    planningBackup: maskedStructured("예비 기획", new OpenAIStructuredProvider(openai, openaiTextModel, PLAN_SPEC)),
+    copyPrimary: maskedStructured("주 원고", new AnthropicStructuredProvider(anthropic, anthropicModel, COPY_SPEC)),
+    copyBackup: maskedStructured("예비 원고", new OpenAIStructuredProvider(openai, openaiTextModel, COPY_SPEC)),
+    captionPrimary: maskedStructured("주 게시글", new AnthropicStructuredProvider(anthropic, anthropicModel, CAPTION_SPEC)),
+    captionBackup: maskedStructured("예비 게시글", new OpenAIStructuredProvider(openai, openaiTextModel, CAPTION_SPEC)),
   };
 }
 
@@ -294,8 +305,8 @@ export function createSnsGenerationProviders(environment: Record<string, string 
       new AnthropicSceneProvider(anthropic, anthropicModel),
       new OpenAISceneProvider(openai, openaiVisionModel),
     ),
-    reviewPrimary: new AnthropicReviewProvider(anthropic, anthropicModel),
-    reviewBackup: new OpenAIReviewProvider(openai, openaiVisionModel),
+    reviewPrimary: maskedReview("주 검수", new AnthropicReviewProvider(anthropic, anthropicModel)),
+    reviewBackup: maskedReview("예비 검수", new OpenAIReviewProvider(openai, openaiVisionModel)),
     falQueue,
     falUploader,
   };

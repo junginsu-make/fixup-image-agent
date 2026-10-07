@@ -34,6 +34,8 @@ import type { SnsFlowCard, SnsFlowState } from "../../app/api/sns/flow-service";
 import type { SnsProjectRecord } from "../../app/api/sns/projects/project-service";
 import type { FalQueueClient } from "../fal/queue";
 import { uploadUniqueReferences } from "../fal/unique-upload";
+import { classifyFalFailure } from "../fal/failure";
+import { errorLogText } from "../easy/log-text";
 
 export const QUEUE_POLL_INTERVAL_MS = 10_000;
 
@@ -129,8 +131,10 @@ async function composeAndSave(
       : undefined;
     card.error = undefined;
   } catch (error) {
+    // 까닭은 흐름에 저장돼 화면에 뜬다. 저장소 · 합성 원문은 서버 기록에만(2026-10-07 오류 원문 가리기 Task 3).
+    console.error(`[sns] ${card.index}번 카드 합성 실패`, errorLogText(error));
     card.status = "failed";
-    card.error = error instanceof Error ? error.message : "카드를 합성하지 못했습니다.";
+    card.error = "카드를 합성하지 못했습니다.";
   }
 }
 
@@ -307,8 +311,10 @@ export async function startQueuedFlow(
         card.assetUrl = saved.assetUrl;
         card.status = "done";
       } catch (error) {
+        // 까닭은 흐름에 저장돼 화면에 뜬다. 저장소 원문은 서버 기록에만(2026-10-07 오류 원문 가리기 Task 3).
+        console.error(`[sns] ${card.index}번 사용자 원본 저장 실패`, errorLogText(error));
         card.status = "failed";
-        card.error = error instanceof Error ? error.message : "사용자 원본을 저장하지 못했습니다.";
+        card.error = "사용자 원본을 저장하지 못했습니다.";
       }
       continue;
     }
@@ -488,7 +494,12 @@ export async function pollQueuedFlow(
   try {
     result = await dependencies.queue.jobResult(identity.endpoint, identity.requestId);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "fal 결과를 읽지 못했습니다.";
+    /*
+     * 까닭은 흐름에 저장돼(`saveFailed`) 화면에 뜬다. fal 원문(서명한 주소 · 정책 글) 대신 fal 실패 분류의
+     * 사람 말을 쓴다(2026-10-07 오류 원문 가리기 Task 3). 원문은 서버 기록에만.
+     */
+    console.error(`[sns] ${card.index}번 카드 fal 결과 읽기 실패 request_id=${requestId ?? "없음"}`, errorLogText(error));
+    const message = classifyFalFailure(error).message;
     if (job) {
       // 한 칸이 실패해도 나머지로 카드는 만든다.
       job.status = "failed";

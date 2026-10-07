@@ -5,6 +5,7 @@ import { llmSettleCost, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
 import { snsFailure } from "../../../failure";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -56,7 +57,14 @@ async function caption(request: Request, context: Context) {
     await settleAiUsage(reservation, true, 0, undefined, llmSettleCost());
     return Response.json({ ok: true, project: saved });
   } catch (error) {
-    if (reservation) await settleAiUsage(reservation, false, 0, "sns_caption_failed", llmSettleCost());
+    // 닫기가 흔들려도(RPC) 아래 우리 JSON 을 돌려준다. 안 그러면 Next 기본 500 이 나간다(오류 원문 가리기 Task 3).
+    if (reservation) {
+      try {
+        await settleAiUsage(reservation, false, 0, "sns_caption_failed", llmSettleCost());
+      } catch (closeError) {
+        console.error("[sns] 게시글 문구 예약 닫기 실패", errorLogText(closeError));
+      }
+    }
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;

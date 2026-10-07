@@ -14,6 +14,9 @@ vi.mock("server-only", () => ({}));
 const 날것 = 'duplicate key value violates unique constraint "layout_decks_pkey" on table layout_templates';
 
 let finalized: Array<{ success: boolean; reason?: string }> = [];
+let settled: Array<{ success: boolean; reason?: string }> = [];
+let analyzePrimary: () => Promise<unknown>;
+let analyzeBackup: () => Promise<unknown>;
 let referenceImage: { bytes: Buffer; contentType: string } | undefined;
 let providerThrows: unknown;
 let projectGet: () => Promise<unknown>;
@@ -29,7 +32,10 @@ vi.mock("../../../../lib/membership/api", () => ({
   finalizeAiUsage: async (_reservation: unknown, success: boolean, _units: number, reason?: string) => {
     finalized.push({ success, reason });
   },
-  settleAiUsage: async () => undefined,
+  settleAiUsage: async (_reservation: unknown, success: boolean, _units: number, reason?: string) => {
+    settled.push({ success, reason });
+    return undefined;
+  },
 }));
 vi.mock("../../../../lib/membership/credit-ledger", () => ({ freeCreditPlan: () => ({}) }));
 vi.mock("../../../../lib/layout/library-image", () => ({
@@ -38,7 +44,10 @@ vi.mock("../../../../lib/layout/library-image", () => ({
 }));
 vi.mock("../../../../lib/layout/analyze-provider", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../lib/layout/analyze-provider")>()),
-  createLayoutAnalysisProviders: () => { throw providerThrows; },
+  createLayoutAnalysisProviders: () => {
+    if (providerThrows) throw providerThrows;
+    return { primary: { analyze: () => analyzePrimary() }, backup: { analyze: () => analyzeBackup() } };
+  },
 }));
 vi.mock("../../../../lib/sns-flow-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../lib/sns-flow-store")>()),
@@ -101,6 +110,9 @@ async function expectMasked(response: Response, status: number, message: string,
 beforeEach(() => {
   errors = vi.spyOn(console, "error").mockImplementation(() => {});
   finalized = [];
+  settled = [];
+  analyzePrimary = async () => { throw new Error(날것); };
+  analyzeBackup = async () => { throw new Error(날것); };
   referenceImage = { bytes: Buffer.from("x"), contentType: "image/png" };
   providerThrows = undefined;
   projectGet = async () => ({ id: "p1", status: "copy_ready", ratio: "4:5", data: { flow: { cards: [{ index: 1 }] } } });
@@ -117,6 +129,36 @@ describe("레퍼런스 칸 읽기 (layout/analyze)", () => {
     providerThrows = new LayoutAnalysisConfigurationError(["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]);
     await expectMasked(await analyze.POST(post({ referenceImageId: "ref-1" })), 503, "칸을 읽어내지 못했습니다.", "API_KEY");
     expect(finalized).toEqual([{ success: false, reason: "layout_analysis_unconfigured" }]);
+  });
+
+  /*
+   * **칸 읽기 실패는 200 의 `issues` 로 화면에 뜬다**(Task 3). 패키지(`withIssueFallback`)가 던진 글을 그대로
+   * 적으므로, 두 제공자 호출을 감싸 원문은 기록에만 남기고 우리 문장으로 다시 던진다. 주→예비 넘어가기는 같다.
+   */
+  it("두 제공자 원문은 issues 에 없다 — 200 · 직접 만들기 안내 · 정산은 그대로", async () => {
+    const response = await analyze.POST(post({ referenceImageId: "ref-1" }));
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({
+      ok: true,
+      slots: [],
+      issues: [
+        "주 모델 칸 읽기 실패: 응답을 받지 못했습니다.",
+        "OpenAI 예비로도 칸을 읽지 못했습니다: 응답을 받지 못했습니다.",
+        "레퍼런스에서 칸을 읽어내지 못했습니다. 직접 만들어 주세요.",
+      ],
+    });
+    expect(text).not.toContain(날것);
+    expect(logged()).toContain(날것);
+    expect(settled).toEqual([{ success: false, reason: "layout_analysis_empty" }]);
+  });
+
+  it("주 제공자가 실패하면 지금처럼 예비로 읽는다 — 까닭에 원문 없이", async () => {
+    analyzeBackup = async () => ({ slots: [] });
+    const response = await analyze.POST(post({ referenceImageId: "ref-1" }));
+    const body = await response.json();
+    expect(body.issues[0]).toBe("주 모델이 실패해 OpenAI 예비로 칸을 읽었습니다: 응답을 받지 못했습니다.");
+    expect(JSON.stringify(body)).not.toContain(날것);
   });
 
   it("못 찾은 레퍼런스는 404 와 지금 문장 그대로", async () => {

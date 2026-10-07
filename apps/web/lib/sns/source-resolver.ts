@@ -1,6 +1,6 @@
-import { failureReason } from "@fixup/shared";
 import type { ProjectSource } from "../../app/api/sns/projects/schema";
 import { isWebSourceEnabled } from "./feature";
+import { errorLogText } from "../easy/log-text";
 
 /**
  * 01 내용을 **실제로 가져온다.**
@@ -75,6 +75,26 @@ export async function resolveSourceText(
       : { text: "", issues: ["질문에 대한 근거를 찾지 못했습니다. 직접 적어 주세요."] };
   } catch (error) {
     // 실패했는데 계속 진행하면 LLM 이 지어낸다.
-    return { text: "", issues: [`내용을 가져오지 못했습니다: ${failureReason(error)}`] };
+    return { text: "", issues: [fetchFailure(error)] };
   }
+}
+
+/**
+ * 수집 패키지(`@fixup/ingest-core`)가 **사용자에게 하려고 쓴** 오류. 문장이 고정이라 그대로 보인다.
+ * 이름으로 알아본다 — 어댑터는 무거워서 부를 때만 불러온다(`source-adapters.ts`).
+ */
+const 사용자용 = new Set(["YoutubeUrlError", "WebUrlError", "WebSourceBlockedError", "SourceInsufficientContentError"]);
+
+/**
+ * **못 가져온 까닭**(2026-10-07 오류 원문 가리기 Task 3). 이 글은 `planningIssues` 로 저장되고 카드뉴스 화면 ·
+ * 쉽게 모드 대화에 뜬다. 전에는 원문을 그대로 붙여 네트워크 · Apify 글과 설정의 환경변수 이름이 떴다.
+ * 자막 실패는 앞 문장만 쓴다 — 뒤에 붙는 단계별 원문은 운영자용이다. 원문은 서버 기록에만 남긴다.
+ */
+function fetchFailure(error: unknown): string {
+  if (error instanceof Error && 사용자용.has(error.name)) return `내용을 가져오지 못했습니다: ${error.message}`;
+  console.error("[sns] 내용 가져오기 실패", errorLogText(error));
+  if (error instanceof Error && error.name === "TranscriptUnavailableError") {
+    return `내용을 가져오지 못했습니다: ${error.message.split(" (")[0]}`;
+  }
+  return "내용을 가져오지 못했습니다. 잠시 뒤 다시 하거나 내용을 직접 적어 주세요.";
 }

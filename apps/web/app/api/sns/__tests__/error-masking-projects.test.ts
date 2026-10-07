@@ -45,6 +45,7 @@ let pollThrows: unknown;
 let planThrows: unknown;
 let captionThrows: unknown;
 let active = false;
+let settleThrows: unknown;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -54,6 +55,7 @@ vi.mock("../../../../lib/membership/api", () => ({
   },
   settleAiUsage: async (_reservation: unknown, success: boolean, _units: number, reason?: string) => {
     settled.push({ success, reason });
+    if (settleThrows && !success) throw settleThrows;
   },
 }));
 vi.mock("../../../../lib/membership/credit-ledger", () => ({
@@ -157,6 +159,7 @@ beforeEach(() => {
   planThrows = undefined;
   captionThrows = undefined;
   active = false;
+  settleThrows = undefined;
 });
 afterEach(() => errors.mockRestore());
 
@@ -205,6 +208,14 @@ describe("게시글 문구 (caption)", () => {
   it("설정 오류는 503 그대로, 환경변수 이름은 화면에 안 보낸다", async () => {
     planningProvidersThrow = 설정오류();
     await expectMasked(await caption.POST(post(), id), 503, "게시글 문구를 만들지 못했습니다.", "FAL_KEY");
+  });
+
+  it("실패로 닫기가 흔들려도 우리 JSON 을 보낸다 — 닫기는 같은 인자로 한 번", async () => {
+    captionThrows = new Error(날것);
+    settleThrows = new Error("rpc credit_settle failed: connection reset");
+    await expectMasked(await caption.POST(post(), id), 500, "게시글 문구를 만들지 못했습니다.");
+    expect(settled).toEqual([{ success: false, reason: "sns_caption_failed" }]);
+    expect(logged()).toContain("credit_settle");
   });
 
   it("결과가 없으면 404 와 지금 문장 그대로", async () => {
@@ -295,6 +306,14 @@ describe("기획 · 원고 (plan)", () => {
   it("설정 오류는 503 그대로, 환경변수 이름은 화면에 안 보낸다", async () => {
     planningProvidersThrow = 설정오류();
     await expectMasked(await plan.POST(post(), id), 503, "기획과 원고를 만들지 못했습니다.", "FAL_KEY");
+  });
+
+  it("실패로 닫기가 흔들려도 우리 JSON 을 보낸다 — 닫기는 같은 인자로 한 번", async () => {
+    planThrows = new Error(날것);
+    settleThrows = new Error("rpc credit_settle failed: connection reset");
+    await expectMasked(await plan.POST(post(), id), 500, "기획과 원고를 만들지 못했습니다.");
+    expect(settled).toEqual([{ success: false, reason: "sns_plan_failed" }]);
+    expect(logged()).toContain("credit_settle");
   });
 });
 
