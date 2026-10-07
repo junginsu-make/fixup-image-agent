@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { guideDocumentFrom } from "../guide-text";
 
 /**
  * **색인 스크립트가 실제로 돌아야 한다**(2026-09-28 배포 중 드러났다).
@@ -179,11 +180,36 @@ describe("설명서 색인 스크립트 — 넣을 주소 지키기", () => {
     expect(지킴시작).toBeLessThan(글.indexOf("await main();"));
   });
 
-  it("--base 를 직접 받아야 하고, localhost · 127.0.0.1 은 받지 않는다", () => {
+  it("--base 를 직접 받아야 하고, 로컬 주소는 받지 않는다", () => {
     expect(판정, "--base 를 받았는지 안 본다").toContain('arg === "--base" || arg.startsWith("--base=")');
-    expect(글).toContain('const 로컬주소들 = ["localhost", "127.0.0.1"];');
-    expect(판정).toContain("로컬주소들.includes(new URL(base).hostname)");
+    expect(판정).toContain("!로컬주소인가(new URL(base).hostname)");
     expect(판정, "주소를 못 읽으면 넣지 않는다").toMatch(/catch \{\n\s+return false;/);
+  });
+
+  /**
+   * 후속 Task 11 (e). `[::1]` · `0.0.0.0` 도 이 컴퓨터다. 판정 함수를 글에서 꺼내 실제로 돌려 본다.
+   * `new URL()` 이 `0` · `127.1` · `[0:0:0:0:0:0:0:1]` 같은 꼴을 미리 맞춰 주므로 그 이름으로 본다.
+   */
+  describe("로컬 주소 판정 (후속 Task 11 (e))", () => {
+    const 판정글 = (() => {
+      const 시작 = 글.indexOf("const 로컬주소들 = [");
+      const 함수 = 글.indexOf("function 로컬주소인가(");
+      return 시작 < 0 || 함수 < 0 ? "" : 글.slice(시작, 글.indexOf("\n}\n", 함수) + 2);
+    })();
+    const 로컬주소인가 = new Function(`${판정글}\nreturn 로컬주소인가;`)() as (hostname: string) => boolean;
+    const 로컬인가 = (url: string) => 로컬주소인가(new URL(url).hostname);
+
+    it.each([
+      "http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000", "http://0.0.0.0:3000",
+      "http://0:3000", "http://127.1", "http://127.8.9.10", "http://[0:0:0:0:0:0:0:1]/", "http://[::]/",
+      "http://LOCALHOST./", "http://app.localhost/", "http://[::ffff:127.0.0.1]/",
+    ])("%s 는 받지 않는다", (url) => {
+      expect(로컬인가(url)).toBe(true);
+    });
+
+    it.each(["https://formwith.fix-up.kr", "https://127.example.com", "http://10.0.0.5"])("%s 는 로컬이 아니다", (url) => {
+      expect(로컬인가(url)).toBe(false);
+    });
   });
 
   it("맛보기는 --base 없이도 돈다(기본값은 그대로)", () => {
@@ -219,5 +245,95 @@ describe("설명서 색인 스크립트 — 접속 문자열 가리기", () => {
     const 메인 = 글.slice(글.indexOf("async function main()"));
     expect(메인.indexOf("const sql = 색인DB();")).toBeGreaterThan(0);
     expect(메인.indexOf("const sql = 색인DB();")).toBeLessThan(메인.indexOf("await indexKnowledgeDocument("));
+  });
+});
+
+/**
+ * **맛보기가 목록에 없는 옛 설명서를 알려 준다**(2026-10-07 후속 Task 11 (c)). 읽기만 한다.
+ *
+ * `옛판지우기` 는 같은 이름의 옛 판만 지운다. 쪽을 목록에서 빼거나 이름을 바꾸면 그 이름의 판은 아무도 안
+ * 지워 계속 남는다. 맛보기가 그 이름들을 찍어 사람이 보게 한다. 지우지 않는다.
+ *
+ * 운영 DB 없이 보려고, 찾는 함수와 목록(`쪽들`)을 글에서 꺼내 가짜 DB 로 돌린다.
+ */
+describe("설명서 색인 스크립트 — 목록에 없는 옛 설명서 (후속 Task 11 (c))", () => {
+  const 글 = script.replace(/\r\n/g, "\n");
+  const 꺼낸다 = (머리: string, 끝: string) => {
+    const 시작 = 글.indexOf(머리);
+    return 시작 < 0 ? "" : 글.slice(시작, 글.indexOf(끝, 시작) + 끝.length);
+  };
+  const 목록글 = 꺼낸다("const 쪽들 = [", "\n];");
+  const 찾기글 = 꺼낸다("async function 목록밖옛설명서(", "\n}\n");
+
+  /** 가짜 DB. 받은 SQL 글을 모으고, 정한 줄을 돌려준다(또는 던진다). */
+  const 돌린다 = async (names: string[] | Error, env: Record<string, string | undefined> = { DATABASE_URL: "postgres://가짜" }) => {
+    const 받은SQL: string[] = [];
+    let 붙음 = 0;
+    const sql = async (strings: TemplateStringsArray) => {
+      받은SQL.push(strings.join("?"));
+      if (names instanceof Error) throw names;
+      return names.map((name) => ({ name }));
+    };
+    const 색인DB = () => { 붙음 += 1; return sql; };
+    const 찾기 = new Function("색인DB", "process", `${목록글}\n${찾기글}\nreturn 목록밖옛설명서;`)(색인DB, { env }) as () => Promise<void>;
+    const 찍음 = vi.spyOn(console, "log").mockImplementation(() => {});
+    const 오류 = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await 찾기();
+      return { 받은SQL, 붙음, 찍은것: 찍음.mock.calls.map((c) => c.join(" ")), 오류글: 오류.mock.calls.map((c) => c.join(" ")) };
+    } finally {
+      찍음.mockRestore();
+      오류.mockRestore();
+    }
+  };
+
+  /** 지금 목록의 이름. 앱이 문서 이름을 만드는 그 함수로 만든다(두 벌로 적으면 어긋난다). */
+  const 지금이름들 = () => {
+    const 쪽들 = new Function(`${목록글}\nreturn 쪽들;`)() as Array<{ href: string; label: string }>;
+    const 본문 = `<main data-guide-body><p>${"설명서 본문입니다. ".repeat(10)}</p></main>`;
+    return 쪽들.map((쪽) => guideDocumentFrom({ href: 쪽.href, label: 쪽.label, html: 본문 })!.name);
+  };
+
+  it("목록에 없는 이름만, 몇 개인지와 이름을 찍는다", async () => {
+    const 지금 = 지금이름들();
+    expect(지금).toHaveLength(13);
+    const got = await 돌린다([지금[0]!, "이용 안내 · 옛 쪽", 지금[5]!, "이용 안내 · 이름 바뀐 쪽"]);
+    expect(got.찍은것).toEqual(["목록에 없는 옛 설명서 2개: 이용 안내 · 옛 쪽, 이용 안내 · 이름 바뀐 쪽"]);
+  });
+
+  it("지금 목록의 13개 이름은 옛 것으로 안 친다(앱이 만드는 이름과 같다)", async () => {
+    const got = await 돌린다(지금이름들());
+    expect(got.찍은것).toEqual(["목록에 없는 옛 설명서 0개"]);
+  });
+
+  it("설명서 종류의 이름만 읽고, 아무것도 바꾸지 않는다", async () => {
+    const got = await 돌린다([]);
+    expect(got.받은SQL).toHaveLength(1);
+    expect(got.받은SQL[0]).toMatch(/^\s*SELECT DISTINCT name FROM knowledge_documents/);
+    expect(got.받은SQL[0]).toContain("WHERE kind = 'guide'");
+    expect(got.받은SQL[0], "읽기만 해야 한다").not.toMatch(/\b(DELETE|UPDATE|INSERT|DROP|TRUNCATE)\b/i);
+    expect(got.받은SQL[0], "또는(OR)이 섞이면 조건이 풀린다").not.toMatch(/\bOR\b/i);
+  });
+
+  it("DB 가 없으면 붙지 않고 아무것도 찍지 않는다", async () => {
+    const got = await 돌린다(["이용 안내 · 옛 쪽"], {});
+    expect(got.붙음).toBe(0);
+    expect(got.찍은것).toEqual([]);
+    expect(got.오류글).toEqual([]);
+  });
+
+  it("읽다 실패해도 던지지 않고, 오류 원문 없이 고정 글만 찍는다", async () => {
+    const got = await 돌린다(new Error("password=SECRET 접속 실패"));
+    expect(got.찍은것).toEqual([]);
+    expect(got.오류글).toHaveLength(1);
+    expect(got.오류글[0]).not.toContain("SECRET");
+    expect(찾기글, "오류 글에 값을 끼우면 안 된다").not.toMatch(/console\.error\([^)]*\$\{/);
+  });
+
+  it("맛보기 갈래에서만 부른다", () => {
+    const 시작 = 글.indexOf("if (맛보기) {");
+    const 맛보기갈래 = 글.slice(시작, 글.indexOf("return;", 시작));
+    expect(맛보기갈래).toContain("await 목록밖옛설명서();");
+    expect(글.split("목록밖옛설명서(").length - 1, "정의 하나 · 부름 하나여야 한다").toBe(2);
   });
 });

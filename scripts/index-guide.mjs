@@ -49,14 +49,25 @@ const 맛보기 = process.argv.includes("--dry");
  * 넣기는 운영 DB 의 옛 판을 지운다(`옛판지우기`). `--base` 를 빼먹으면
  * 기본값(로컬)을 긁어 로컬 화면의 글을 운영에 넣고 운영의 옛 판을 지운다.
  * 그래서 DB 에 붙기 전에 멈춘다. 맛보기는 아무것도 안 바꾸므로 그대로다.
+ *
+ * `[::1]` · `0.0.0.0` 같은 꼴도 이 컴퓨터다(후속 Task 11 (e)). `new URL()` 이 `0` · `127.1` ·
+ * `[0:0:0:0:0:0:0:1]` 같은 꼴을 미리 맞춰 주므로, 맞춘 이름으로 본다.
  */
-const 로컬주소들 = ["localhost", "127.0.0.1"];
+const 로컬주소들 = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "[::]"];
+
+function 로컬주소인가(hostname) {
+  const 이름 = hostname.replace(/\.$/, "");
+  return 로컬주소들.includes(이름)
+    || 이름.endsWith(".localhost")
+    || /^127\.\d+\.\d+\.\d+$/.test(이름)
+    || /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(이름);
+}
 
 function 넣을주소인가() {
   const 받음 = process.argv.some((arg) => arg === "--base" || arg.startsWith("--base="));
   if (!받음) return false;
   try {
-    return !로컬주소들.includes(new URL(base).hostname);
+    return !로컬주소인가(new URL(base).hostname);
   } catch {
     return false;
   }
@@ -186,6 +197,32 @@ async function 지울옛판수(문서들) {
   }
 }
 
+/**
+ * 맛보기에서 **지금 목록(`쪽들`)에 없는 옛 설명서**의 이름을 찍는다(2026-10-07 후속 Task 11 (c)). 읽기만 한다.
+ *
+ * `옛판지우기` 는 같은 이름의 옛 판만 지운다. 쪽을 목록에서 빼거나 이름을 바꾸면 그 이름의 판은 계속
+ * 남는다. 여기서도 지우지 않는다. 무엇이 남았는지 보여 주고, 지울지는 사람이 정한다.
+ *
+ * 받아 온 문서가 아니라 `쪽들` 로 가른다. 한 쪽을 못 받아 왔다고 그 쪽이 옛 것은 아니다.
+ * 이름 꼴은 `guide-text.ts` 의 `guideDocumentFrom` 과 같다(시험이 그 함수로 맞춰 본다).
+ */
+async function 목록밖옛설명서() {
+  if (!process.env.DATABASE_URL) return;
+  const 지금이름들 = new Set(쪽들.map((쪽) => `이용 안내 · ${쪽.label}`));
+  try {
+    const sql = 색인DB();
+    const rows = await sql`
+      SELECT DISTINCT name FROM knowledge_documents
+      WHERE kind = 'guide'
+      ORDER BY name
+    `;
+    const 옛것 = rows.map((row) => row.name).filter((name) => !지금이름들.has(name));
+    console.log(`목록에 없는 옛 설명서 ${옛것.length}개${옛것.length ? `: ${옛것.join(", ")}` : ""}`);
+  } catch {
+    console.error("목록에 없는 옛 설명서를 못 찾았습니다. 맛보기라 아무것도 바꾸지 않았습니다.");
+  }
+}
+
 async function main() {
   const { guideDocumentFrom } = await 다듬개();
 
@@ -237,6 +274,7 @@ async function main() {
     console.log(`\n맛보기입니다. ${문서들.length}쪽을 넣지 않았습니다.`);
     console.log(문서들.map((d) => `  ${d.name} (${d.text.length}자)`).join("\n"));
     await 지울옛판수(문서들);
+    await 목록밖옛설명서();
     return;
   }
 
