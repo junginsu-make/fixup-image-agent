@@ -11,6 +11,8 @@
 
 import * as React from "react";
 import { useCreditUnit } from "../_components/credit-policy-provider";
+import { ItemWorkingOverlay } from "../_components/item-status";
+import { workingButton } from "../_components/working-words";
 import { failedSectionLines, type FailedSectionLine } from "./failed-sections";
 import {
   ChevronDown,
@@ -39,7 +41,6 @@ import { SaveImagesToLibrary } from "../_components/save-to-library";
 import { copyText } from "../../lib/browser-safe";
 import {
   models,
-  type GenerationProgress,
   type Model,
   type Project,
   type SectionResult,
@@ -242,9 +243,10 @@ export function Results({
                 onChange={(event) => setRolloutRequest(event.target.value)}
                 placeholder="예: 제품은 잘 보이는데 카피가 너무 과장되어 보여요. 나머지는 더 신뢰감 있게, 리뷰/근거 중심으로 만들고 CTA는 덜 튀게 해주세요."
               />
+              {/* 섹션을 고치는 동안에는 이 단추가 만드는 것이 아니다 — 잠기기만 한다(2026-10-08). */}
               <Button onClick={onGenerateRest} disabled={generating}>
-                {generating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                나머지 상세페이지 만들기
+                {generating && !editingSectionId ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                {generating && !editingSectionId ? workingButton("make") : "나머지 상세페이지 만들기"}
               </Button>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 <strong className="text-foreground">전부 성공 시 최대 {Math.max(0, 8 - project.sections.length)}{단위} 차감.</strong><br />
@@ -314,6 +316,9 @@ export function SectionResultCard({
         ) : (
           <PlaceholderThumb index={index} />
         )}
+        {/* **고치는 칸을 그림 위에서 알린다**(2026-10-08). 창이 사라져 화면을 굴리면
+            어느 섹션을 고치는지 안 보였다. 덮개는 클릭을 막지 않는다 — 판 넘기기는 그대로. */}
+        <ItemWorkingOverlay state={editing ? "working" : "idle"} className="pointer-events-none" />
         {revisions.length > 1 ? (
           <>
             <button
@@ -416,7 +421,7 @@ export function SectionResultCard({
             disabled={disabled || editing}
           >
             {editing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            이 섹션 수정
+            {editing ? workingButton("edit") : "이 섹션 수정"}
           </Button>
           <p className="text-xs leading-4 text-muted-foreground">수정 이미지가 성공하면 1{단위} 차감됩니다.</p>
         </div>
@@ -426,92 +431,10 @@ export function SectionResultCard({
   );
 }
 
-export function GenerationProgressPanel({
-  progress,
-  modelLabel,
-  count,
-  currentIndex,
-  onCancel
-}: {
-  progress: GenerationProgress;
-  modelLabel: string;
-  count: number;
-  currentIndex: number;
-  onCancel: () => void;
-}) {
-  const 단위 = useCreditUnit();
-  const isLongWait = progress.elapsedSeconds >= 120;
-  const generationTitle = count > 1
-    ? `${count}장 중 ${currentIndex}번째 이미지 생성중입니다.`
-    : `${modelLabel} · ${count}장 생성`;
-
-  return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-card/55 p-4 backdrop-blur-sm">
-      <div className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-md border border-primary bg-card/95 p-5 shadow-2xl">
-        <div className="mb-3 flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold text-primary">생성 진행 중</p>
-            <h2 className="mt-1 text-base font-bold">{generationTitle}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{count > 1 ? `${modelLabel} · ` : ""}경과 {formatDuration(progress.elapsedSeconds)}</p>
-          </div>
-          {/*
-            **아는 것만 센다**(2026-09-22). 전에는 경과 시간으로 퍼센트를
-            지어내 4~96 사이에 가뒀다. 늦어지면 96% 에 붙어 「예상 5초 남음」을
-            영원히 되풀이했다. 지금은 전사 배치처럼 실제로 셀 수 있는 구간에만
-            숫자가 있다.
-          */}
-          <div className="text-right">
-            {progress.kind === "determinate" ? (
-              <strong className="block text-2xl leading-none">{progress.percent}%</strong>
-            ) : null}
-            <span className="mt-1 block text-xs text-muted-foreground">{progress.note}</span>
-          </div>
-        </div>
-        {progress.kind === "determinate" ? (
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
-              style={{ width: `${progress.percent ?? 0}%` }}
-            />
-          </div>
-        ) : (
-          /* 진척을 모르는 구간이다. 채우는 대신 흐르게 둔다 — 상세페이지와 같은 방식이다. */
-          <div className="relative h-2 overflow-hidden rounded-full bg-muted">
-            <div className="absolute inset-y-0 w-1/3 animate-[pdp-indeterminate_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
-          </div>
-        )}
-        <div className="mt-3 grid grid-cols-[160px_minmax(0,1fr)] gap-3 text-sm max-sm:grid-cols-1">
-          <div className="rounded-md bg-primary px-3 py-2 font-bold text-primary-foreground">{progress.label}</div>
-          <div className="rounded-md border border-border bg-card px-3 py-2 leading-relaxed text-muted-foreground">
-            {isLongWait && modelLabel === models.openai.label
-              ? "정밀형은 이미지 편집 요청이 2분 이상 걸릴 수 있습니다. 특히 긴 상세페이지 캡처나 참조 이미지가 여러 장이면 응답 시간이 길어질 수 있어요."
-              : progress.tip}
-          </div>
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground max-sm:flex-col max-sm:items-stretch">
-          <span>
-            성공 시 현재 요청에서 최대 {count}{단위} 차감됩니다. 취소는 화면의 대기만 멈추며, 이미 외부 API에 전달돼 완료된 이미지는 차감될 수 있습니다.
-          </span>
-          <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
-            요청 취소
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function estimateGenerationSeconds(model: Model, count: number) {
   const setupSeconds = 24;
   const perImageSeconds = model === "google" ? 78 : 65;
   return setupSeconds + Math.max(1, count) * perImageSeconds;
-}
-
-export function formatDuration(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  if (minutes <= 0) return `${rest}초`;
-  return `${minutes}분 ${rest.toString().padStart(2, "0")}초`;
 }
 
 export function isAbortError(error: unknown) {

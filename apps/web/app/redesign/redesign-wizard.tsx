@@ -30,7 +30,6 @@ import { mergeFailedSections } from "./failed-sections";
 const FULL_PAGE_SECTIONS = 8;
 import {
   REDESIGN_STEPS,
-  commerceTips,
   knowledgeStorageKey,
   loadKnowledgeItems,
   loadProjects,
@@ -61,7 +60,8 @@ import {
   normalizeFilesForUpload,
 } from "./redesign-files";
 import { Dashboard, Workspace } from "./redesign-panels";
-import { GenerationProgressPanel, Results, estimateGenerationSeconds, isAbortError } from "./redesign-results";
+import { Results, estimateGenerationSeconds, isAbortError } from "./redesign-results";
+import { RedesignWorkingStatus } from "./redesign-working";
 import { type RedesignPhase } from "./generation-progress";
 import { useGenerationProgress } from "./use-generation-progress";
 import { requestIdentityOf } from "./redesign-request";
@@ -724,6 +724,11 @@ export function RedesignWizard() {
 
   return (
     <div className="min-w-0">
+      {/* 만드는 동안 맨 위 띠 하나. 전체 화면 창이었다(2026-10-08 사용자 승인) — `redesign-working.tsx`. */}
+      {generating && generationProgress && generationPlan && (
+        <RedesignWorkingStatus progress={generationProgress} plan={generationPlan} editing={editingSectionId !== null}
+          transcribeCount={transcribeCount} onStop={cancelGeneration} className="mb-4" />
+      )}
       {/* 단계 표시줄 — 이전에는 자체 248px 사이드바가 셸 안에 또 있었다(내비 중복).
           셸이 좌측 내비를 제공하므로 여기서는 이 도구의 3단계만 표시한다. */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -902,15 +907,6 @@ export function RedesignWizard() {
         <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-md bg-foreground px-4 py-3 text-sm text-background shadow-xl">
           {toast}
         </div>
-      )}
-      {generating && generationProgress && generationPlan && (
-        <GenerationProgressPanel
-          progress={generationProgress}
-          modelLabel={models[generationPlan.model].label}
-          count={generationPlan.displayCount || generationPlan.count}
-          currentIndex={generationPlan.displayIndex || 1}
-          onCancel={cancelGeneration}
-        />
       )}
     </div>
   );

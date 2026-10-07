@@ -1,5 +1,5 @@
 import * as React from "react";
-import { commerceTips, type GenerationPlan, type GenerationProgress } from "./redesign-model";
+import { type GenerationPlan, type GenerationProgress } from "./redesign-model";
 import { describeRedesignProgress, type RedesignPhase } from "./generation-progress";
 import { estimateGenerationSeconds } from "./redesign-results";
 
@@ -29,7 +29,6 @@ export function useGenerationProgress(input: {
     const totalSeconds = estimateGenerationSeconds(plan.model, plan.count);
     const update = () => {
       const elapsedSeconds = Math.max(0, Math.floor((Date.now() - plan.startedAt) / 1000));
-      const tip = commerceTips[Math.floor(elapsedSeconds / 7) % commerceTips.length];
       const view = describeRedesignProgress({
         phase,
         done: transcribeCount?.done,
@@ -37,7 +36,7 @@ export function useGenerationProgress(input: {
         elapsedSeconds,
         estimateSeconds: totalSeconds,
       });
-      setProgress({ ...view, elapsedSeconds, tip: tip ?? "" });
+      setProgress({ ...view, elapsedSeconds });
     };
 
     update();

@@ -12,6 +12,7 @@
 import { REDESIGN_AUTO_ANGLE_HINT } from "../create/auto-angle-hint";
 import * as React from "react";
 import { useCreditUnit } from "../_components/credit-policy-provider";
+import { workingButton } from "../_components/working-words";
 import {
   CircleHelp,
   FileText,
@@ -259,7 +260,7 @@ export function Workspace(props: {
     <section>
       <Topbar eyebrow="REDESIGN WORKSPACE">
         <div className="flex flex-col items-end gap-1">
-          <Button onClick={() => onGenerate()} disabled={generating}>{generating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}리디자인 생성</Button>
+          <Button onClick={() => onGenerate()} disabled={generating}>{generating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{generating ? workingButton("make") : "리디자인 생성"}</Button>
           <span className="text-[11px] text-muted-foreground">전부 성공 시 최대 {count}{단위} 차감</span>
         </div>
       </Topbar>
