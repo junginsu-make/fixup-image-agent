@@ -206,6 +206,24 @@ describe("라이브러리 저장", () => {
   });
 });
 
+describe("라이브러리 자동 저장", () => {
+  /*
+    **생성이 끝나면 저절로 저장한다 — 그때는 띠를 띄우지 않는다**(2026-10-08 리뷰).
+    누르지 않은 일에 띠가 잠깐씩 번쩍이면 무엇이 도는지 헷갈린다.
+  */
+  it("**누르지 않은 저장에는 띠가 뜨지 않는다**", async () => {
+    let 저장횟수 = 0;
+    const 저장 = () => { 저장횟수 += 1; return new Promise<boolean>(() => {}); };
+    await act(async () => { renderer = create(<편집기 start={섹션들(1)} extra={{ onSaveServerDocument: 저장 }} />); });
+    await 누른다("이미지 1장 만들기");
+    await act(async () => { captured.pending.find((call) => call.path === "/pdp/images/batch")!.resolve(성공묶음(1)); });
+    await 가라앉힌다();
+
+    expect(저장횟수, "자동 저장이 돌지 않았다 — 이 시험이 아무것도 재지 않는다").toBeGreaterThan(0);
+    expect(띠().map((node) => node.props.label)).not.toContain("라이브러리에 저장 중입니다");
+  });
+});
+
 describe("글로 시작 — 구성 시나리오와 대표 이미지", () => {
   it("**구성 시나리오를 기다리는 동안 띠가 뜨고 단추는 「기획 중…」**", async () => {
     await act(async () => {

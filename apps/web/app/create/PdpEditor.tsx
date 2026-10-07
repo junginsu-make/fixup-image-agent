@@ -453,6 +453,8 @@ export function PdpEditor({
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   // 라이브러리 저장은 브라우저 초안 저장과 다르다. 계정에 올려 기기를 옮겨도 남는다.
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
+  // 단추로 누른 저장인가. 생성 뒤 저절로 도는 저장에는 띠를 띄우지 않는다(2026-10-08).
+  const [librarySaveByUser, setLibrarySaveByUser] = useState(false);
   const [isDownloadingStitched, setIsDownloadingStitched] = useState(false);
   /*
     **라이브러리에 어느 판을 어디까지 올렸나.**
@@ -2412,7 +2414,7 @@ export function PdpEditor({
     const hasEdits = libraryVersionSections.some((section) => section.layers.length > 0);
     if(onSaveServerDocument && (auto || !hasEdits)){
       if(deferIfLibraryBusy(auto,singleRun))return;
-      librarySavingRef.current=true;setIsSavingToLibrary(true);
+      librarySavingRef.current=true;setIsSavingToLibrary(true);setLibrarySaveByUser(!auto);
       try{
         if(!await onSaveServerDocument())throw new Error("작업 저장을 마치지 못했습니다. 다시 저장해 주세요.");
         const progress={key:currentLibraryKey,sent:libraryEntries.length};
@@ -2439,6 +2441,7 @@ export function PdpEditor({
       if (deferIfLibraryBusy(auto, singleRun)) return;
       librarySavingRef.current = true;
       setIsSavingToLibrary(true);
+      setLibrarySaveByUser(!auto);
       let outcome: ServerLibraryOutcome = "error";
       try {
         /*
@@ -2502,6 +2505,7 @@ export function PdpEditor({
 
     librarySavingRef.current = true;
     setIsSavingToLibrary(true);
+    setLibrarySaveByUser(!auto);
     if (!auto) setErrorMessage("");
     try {
       /*
@@ -2933,7 +2937,7 @@ export function PdpEditor({
           />
         ) : null}
         {/* 한 화면에 도는 띠는 하나 — 생성 띠가 돌고 있으면 얹지 않는다(2026-10-08). */}
-        {isSavingToLibrary && generationRun?.status !== "running" ? (
+        {isSavingToLibrary && librarySaveByUser && generationRun?.status !== "running" ? (
           <WorkingStatus label="라이브러리에 저장 중입니다" />
         ) : null}
         {개념시안.conceptOnly ? (
