@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **268개**, 저장 기록(커밋, 합치기 제외) **1,002개**, 배포 꾸러미(릴리스) **216개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **270개**, 저장 기록(커밋, 합치기 제외) **1,005개**, 배포 꾸러미(릴리스) **219개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 20 | 167 | 24 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 22 | 170 | 27 |
 
 <a id="w-2026-08-31"></a>
 
@@ -474,8 +474,11 @@
 - 쉽게에서 결과를 기다리는 동안 연결이 잠깐 끊겨도 실패로 끝내지 않고 계속 기다립니다. 이미 값이 나간 실패에는 다시 보내기를 띄우지 않아 같은 그림을 두 번 만들지 않습니다.
 - 쉽게에서 물음에 답했다가 실패해도 물음 단추가 바로 다시 보이고, 오래된 결과물을 고치려 하면 어디서 고칠 수 있는지 사실대로 알려 줍니다.
 - 쉽게 설명서에 번호로 고치기, AI 가 되묻기, 이미지 보고 답하기, 광고 소재 물음을 더하고, 도우미가 새 설명서를 읽도록 다시 넣었습니다.
+- 같은 이름으로 캐릭터를 또 만들면 이름 뒤에 (2)를 붙여 저장하고 알려 줍니다. 이름이 같은 캐릭터 하나를 지울 때 다른 캐릭터의 라이브러리 그림까지 지워지던 문제를 막았습니다.
+- 캐릭터를 만든 모델을 기억해 두고, 나중에 없는 장면을 더 만들 때도 같은 모델로 그립니다. 과정 보기로 다시 열어 만들 때도 원래 모델을 이어받습니다.
+- 카드뉴스와 이미지 만들기에서 캐릭터를 불러올 때, 라이브러리에서 지운 장면이 있으면 캐릭터 원본에서 다시 채워 붙입니다.
 
-**운영 배포 8회**
+**운영 배포 9회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -485,8 +488,9 @@
 - 10/7 `20261007T064517Z-8d173288` · [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272)
 - 10/7 `20261007T075908Z-9ecd7eb0` · [#271](https://github.com/junginsu-make/fixup-image-agent/pull/271), [#276](https://github.com/junginsu-make/fixup-image-agent/pull/276)
 - 10/7 `20261007T083455Z-f8fffc77` · [#280](https://github.com/junginsu-make/fixup-image-agent/pull/280)
+- 10/7 `20261007T084910Z-760457a7` · [#274](https://github.com/junginsu-make/fixup-image-agent/pull/274), [#275](https://github.com/junginsu-make/fixup-image-agent/pull/275), [#277](https://github.com/junginsu-make/fixup-image-agent/pull/277), [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279)
 
-<details><summary>이 주의 작업 묶음 20개</summary>
+<details><summary>이 주의 작업 묶음 22개</summary>
 
 
 **10/6**
@@ -510,9 +514,11 @@
 - [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269) fix(seo): 첫 화면 검색 제목·설명에 한글 이름 「프롬위드」 <sub>검색 노출 · 첫 화면 · +9 / −2 · 운영 반영 10/7</sub>
 - [#271](https://github.com/junginsu-make/fixup-image-agent/pull/271) fix: 캐릭터 만들기 칸 겹침·저장 단추, 그림 끌어다 놓기·붙여넣기 <sub>캐릭터 · +715 / −25 · 운영 반영 10/7</sub>
 - [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272) fix(seo): 첫 화면 설명에 빠진 「만드는」을 넣는다 <sub>검색 노출 · 첫 화면 · +2 / −2 · 운영 반영 10/7</sub>
-- [#274](https://github.com/junginsu-make/fixup-image-agent/pull/274) fix: 한 회원 안에서 캐릭터 이름이 겹치지 않게 한다 <sub>캐릭터 · 회원·로그인 · +284 / −6</sub>
+- [#274](https://github.com/junginsu-make/fixup-image-agent/pull/274) fix: 한 회원 안에서 캐릭터 이름이 겹치지 않게 한다 <sub>캐릭터 · 회원·로그인 · +284 / −6 · 운영 반영 10/7</sub>
+- [#275](https://github.com/junginsu-make/fixup-image-agent/pull/275) feat: 캐릭터를 만든 모델을 저장하고 빠진 장면도 그 모델로 그린다 <sub>캐릭터 · +264 / −8 · 운영 반영 10/7</sub>
 - [#276](https://github.com/junginsu-make/fixup-image-agent/pull/276) fix: 파일 이름이 긴 그림도 올라가게 한다(운영 카드뉴스 첨부 오류) <sub>카드뉴스 · 이미지 만들기 · +97 / −5 · 운영 반영 10/7</sub>
-- [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279) test: 캐릭터 첨부 칸 시험이 줄바꿈(CRLF)에 기대지 않게 한다 <sub>이미지 만들기 · 캐릭터 · +4 / −1</sub>
+- [#277](https://github.com/junginsu-make/fixup-image-agent/pull/277) fix: 캐릭터를 불러올 때 지워진 라이브러리 사본을 원본에서 다시 채운다 <sub>캐릭터 · 라이브러리 · +464 / −12 · 운영 반영 10/7</sub>
+- [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279) test: 캐릭터 첨부 칸 시험이 줄바꿈(CRLF)에 기대지 않게 한다 <sub>이미지 만들기 · 캐릭터 · +4 / −1 · 운영 반영 10/7</sub>
 - [#280](https://github.com/junginsu-make/fixup-image-agent/pull/280) fix(easy): 쉽게 후속 정리 — 오류 원문 가리기 · 옛 결과물 안내 · 단추 · 연결 고장 · 다양하게 오류 글 · 설명서와 색인 <sub>쉽게 모드 · 설명서·도우미 · +4,328 / −726 · 운영 반영 10/7</sub>
 
 </details>
