@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **263개**, 저장 기록(커밋, 합치기 제외) **954개**, 배포 꾸러미(릴리스) **210개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **265개**, 저장 기록(커밋, 합치기 제외) **959개**, 배포 꾸러미(릴리스) **213개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 15 | 119 | 18 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 17 | 124 | 21 |
 
 <a id="w-2026-08-31"></a>
 
@@ -466,8 +466,12 @@
 - 첫 화면과 소개 화면 아래에 무엇을 만들 수 있는지 보여 주는 기능 카드를 붙였습니다.
 - 검색 결과와 공유 미리보기에 보이는 첫 화면 제목과 설명에 한글 이름 「프롬위드」를 넣었습니다.
 - 첫 화면 검색 설명에 빠졌던 「만드는」을 넣어 문장을 바로잡았습니다.
+- 캐릭터 만들기 화면에서 모니터가 낮으면 칸이 겹치거나 사라지던 문제를 고쳤습니다. 칸 크기가 화면 크기와 상관없이 같습니다.
+- 정면이 나온 뒤 눌러야 하는 단추 이름을 「캐릭터 저장하기」로 바꾸고, 녹색으로 눈에 띄게 했습니다.
+- 캐릭터 만들기에서 그림을 끌어다 놓거나, 칸을 누르고 Ctrl+V로 붙여넣어 넣을 수 있습니다.
+- 파일 이름이 아주 긴 그림을 카드뉴스 등에 올릴 때 알 수 없는 오류가 나며 올라가지 않던 문제를 고쳤습니다.
 
-**운영 배포 6회**
+**운영 배포 7회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -475,8 +479,9 @@
 - 10/7 `20261007T051500Z-05090376` · [#267](https://github.com/junginsu-make/fixup-image-agent/pull/267)
 - 10/7 `20261007T055936Z-489c2f6c` · [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269)
 - 10/7 `20261007T064517Z-8d173288` · [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272)
+- 10/7 `20261007T075908Z-9ecd7eb0` · [#271](https://github.com/junginsu-make/fixup-image-agent/pull/271), [#276](https://github.com/junginsu-make/fixup-image-agent/pull/276)
 
-<details><summary>이 주의 작업 묶음 15개</summary>
+<details><summary>이 주의 작업 묶음 17개</summary>
 
 
 **10/6**
@@ -498,7 +503,9 @@
 - [#264](https://github.com/junginsu-make/fixup-image-agent/pull/264) fix(seo): 한국어 검색 설명을 80자 이내로 줄인다 — 네이버 간단 체크 <sub>검색 노출 · +9 / −3 · 운영 반영 10/7</sub>
 - [#267](https://github.com/junginsu-make/fixup-image-agent/pull/267) feat(seo): 검색 키워드로 공개 화면 채우기 — 키워드별 기능 소개 7화면, 첫 화면 h1·기능 구획, 소개 구획 <sub>검색 노출 · 첫 화면 · +1,676 / −11 · 운영 반영 10/7</sub>
 - [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269) fix(seo): 첫 화면 검색 제목·설명에 한글 이름 「프롬위드」 <sub>검색 노출 · 첫 화면 · +9 / −2 · 운영 반영 10/7</sub>
+- [#271](https://github.com/junginsu-make/fixup-image-agent/pull/271) fix: 캐릭터 만들기 칸 겹침·저장 단추, 그림 끌어다 놓기·붙여넣기 <sub>캐릭터 · +715 / −25 · 운영 반영 10/7</sub>
 - [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272) fix(seo): 첫 화면 설명에 빠진 「만드는」을 넣는다 <sub>검색 노출 · 첫 화면 · +2 / −2 · 운영 반영 10/7</sub>
+- [#276](https://github.com/junginsu-make/fixup-image-agent/pull/276) fix: 파일 이름이 긴 그림도 올라가게 한다(운영 카드뉴스 첨부 오류) <sub>카드뉴스 · 이미지 만들기 · +97 / −5 · 운영 반영 10/7</sub>
 
 </details>
 
