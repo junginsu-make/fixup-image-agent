@@ -4,6 +4,7 @@ import { deleteAnyWork } from "../../../admin/works/store";
 import path from "node:path";
 import { PosterSlotsSchema } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../../lib/membership/api";
+import { errorLogText } from "../../../../../lib/easy/log-text";
 import { isLocalStoreEnabled, localStoreRoot } from "../../../../../lib/local-store";
 import { posterAssetPathsToRemove } from "../../../../../lib/poster/supabase-store-core";
 import { posterStoresForUser } from "../../../../../lib/poster/stores";
@@ -39,14 +40,13 @@ async function removePosterAssets(assetPaths: string[]) {
   }
 }
 
+/** 입력 검사 거절만 우리 문장이다. 저장소 원문(표 이름 등)은 서버 기록에만 남긴다(2026-10-07). */
 function fail(error: unknown, fallback: string) {
   if (error instanceof PosterValidationError) {
     return Response.json({ ok: false, message: error.issues.join("\n"), issues: error.issues }, { status: 400 });
   }
-  return Response.json(
-    { ok: false, message: error instanceof Error ? error.message : fallback },
-    { status: 500 },
-  );
+  console.error(`[poster] ${fallback}`, errorLogText(error));
+  return Response.json({ ok: false, message: fallback }, { status: 500 });
 }
 
 export async function GET(_request: Request, context: Context) {

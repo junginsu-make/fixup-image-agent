@@ -1,4 +1,5 @@
 import { authenticateApiMember } from "../../../lib/membership/api";
+import { errorLogText } from "../../../lib/easy/log-text";
 import { referenceSetStoreForUser } from "../../../lib/repository-factory";
 import { SetInputSchema } from "./schema";
 
@@ -11,7 +12,9 @@ export async function GET() {
   try {
     return Response.json({ ok: true, sets: await (await referenceSetStoreForUser(auth.member.userId)).list() });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "참고 이미지 세트를 불러오지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[reference-sets] 참고 이미지 세트를 불러오지 못했습니다.", errorLogText(error));
+    return Response.json({ ok: false, message: "참고 이미지 세트를 불러오지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -24,6 +27,8 @@ export async function POST(request: Request) {
     const set = await (await referenceSetStoreForUser(auth.member.userId)).create(auth.member.userId, parsed.data);
     return Response.json({ ok: true, set }, { status: 201 });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "세트를 만들지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[reference-sets] 세트를 만들지 못했습니다.", errorLogText(error));
+    return Response.json({ ok: false, message: "세트를 만들지 못했습니다." }, { status: 500 });
   }
 }

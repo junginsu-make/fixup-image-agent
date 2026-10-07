@@ -1,6 +1,7 @@
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
+import { errorLogText } from "../../../../lib/easy/log-text";
 import { inspectUploadedImage } from "../../../../lib/pdp/image-gate";
 import { BodyLimitError, readBoundedBody } from "../../../../lib/pdp/request";
 import {
@@ -115,10 +116,9 @@ export async function GET(req: Request) {
     if (failed) return fail(500, "레퍼런스를 불러오지 못했습니다.");
     return Response.json({ ok: true, ...page });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "레퍼런스를 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    // 저장소 · 설정 원문(환경변수 이름 등)은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[style-reference] 목록 실패", errorLogText(error));
+    return fail(500, "레퍼런스를 불러오지 못했습니다.");
   }
 }
 
@@ -233,19 +233,22 @@ async function register(req: Request) {
       { model: "", billableImages: 0, llmUsd: meter.usd },
     );
 
-    return Response.json({ ...result, usage }, { status: result.ok ? 200 : 422 });
+    // 저장 · 업로드 원문은 서버 기록에만 남기고 일반 문장을 준다(2026-10-07). 상태 코드 · 다른 칸은 그대로다.
+    if (!result.ok) console.error("[style-reference] 등록 실패", errorLogText(result.message));
+    const shown = result.ok ? result : { ...result, message: REGISTER_FAILED };
+    return Response.json({ ...shown, usage }, { status: result.ok ? 200 : 422 });
   } catch (error) {
     await settleAiUsage(reservation, false, 0, "register_failed", {
       model: "",
       billableImages: 0,
       llmUsd: readLlmMeter().usd,
     });
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "레퍼런스를 등록하지 못했습니다." },
-      { status: 500 },
-    );
+    console.error("[style-reference] 등록 실패", errorLogText(error));
+    return fail(500, REGISTER_FAILED);
   }
 }
+
+const REGISTER_FAILED = "레퍼런스를 등록하지 못했습니다.";
 
 /**
  * **삭제는 세 가지를 갈라 답한다**(C-10-c).
@@ -278,7 +281,9 @@ export async function DELETE(req: Request) {
     */
     const result = await deleteUserStyleReference(auth.member.userId, id);
     if (!result.ok) {
-      return Response.json({ ok: false, message: result.message ?? "삭제하지 못했습니다." }, { status: 500 });
+      // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+      console.error("[style-reference] 삭제 실패", errorLogText(result.message));
+      return fail(500, "삭제하지 못했습니다.");
     }
     if (result.deleted) return Response.json({ ok: true, deleted: true });
 
@@ -288,9 +293,7 @@ export async function DELETE(req: Request) {
       ? fail(404, "레퍼런스를 찾지 못했습니다.")
       : Response.json({ ok: true, deleted: false });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "삭제하지 못했습니다." },
-      { status: 500 },
-    );
+    console.error("[style-reference] 삭제 실패", errorLogText(error));
+    return fail(500, "삭제하지 못했습니다.");
   }
 }

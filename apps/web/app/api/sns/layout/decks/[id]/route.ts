@@ -1,5 +1,6 @@
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { deleteDeck } from "../../../../../../lib/layout/deck-store";
+import { snsFailure } from "../../../failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -15,9 +16,6 @@ export async function DELETE(_request: Request, context: Context) {
     await deleteDeck(auth.member.userId, id);
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "세트를 지우지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("세트 지우기", error, "세트를 지우지 못했습니다.", 500);
   }
 }

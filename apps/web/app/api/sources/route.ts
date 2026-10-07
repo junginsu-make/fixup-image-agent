@@ -1,5 +1,6 @@
 import { disabledRouteResponse } from "../../../lib/access/disabled-api";
 import { authenticateApiMember } from "../../../lib/membership/api";
+import { errorLogText } from "../../../lib/easy/log-text";
 import { sourceServiceForUser } from "../../../lib/repository-factory";
 import { SourceInputSchema } from "./schema";
 
@@ -16,7 +17,9 @@ export async function GET() {
   try {
     return Response.json({ ok: true, sources: await (await sourceServiceForUser(auth.member.userId)).list() });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "소스를 불러오지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[sources] 소스를 불러오지 못했습니다.", errorLogText(error));
+    return Response.json({ ok: false, message: "소스를 불러오지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -33,6 +36,8 @@ export async function POST(request: Request) {
     const source = await (await sourceServiceForUser(auth.member.userId)).create(auth.member.userId, parsed.data);
     return Response.json({ ok: true, source }, { status: 201 });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "소스를 등록하지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[sources] 소스를 등록하지 못했습니다.", errorLogText(error));
+    return Response.json({ ok: false, message: "소스를 등록하지 못했습니다." }, { status: 500 });
   }
 }

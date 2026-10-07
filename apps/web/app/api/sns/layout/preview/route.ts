@@ -5,6 +5,7 @@ import { authenticateApiMember } from "../../../../../lib/membership/api";
 import { renderPreviewCard } from "../../../../../lib/layout/preview-service";
 import { RenderBusyError, withRenderSlot } from "../../../../../lib/layout/render-gate";
 import { PreviewCopySchema } from "../schema";
+import { snsFailure } from "../../failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,9 +74,6 @@ export async function POST(request: Request) {
     if (error instanceof RenderBusyError) {
       return Response.json({ ok: false, message: error.message }, { status: error.status });
     }
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "미리보기를 만들지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("뼈대 미리보기", error, "미리보기를 만들지 못했습니다.", 500);
   }
 }

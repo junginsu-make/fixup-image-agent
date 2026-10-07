@@ -1,5 +1,6 @@
 import { disabledRouteResponse } from "../../../lib/access/disabled-api";
 import { authenticateApiMember } from "../../../lib/membership/api";
+import { errorLogText } from "../../../lib/easy/log-text";
 import { candidateServiceForUser } from "../../../lib/repository-factory";
 
 export const runtime = "nodejs";
@@ -15,6 +16,8 @@ export async function GET() {
   try {
     return Response.json({ ok: true, candidates: await (await candidateServiceForUser(auth.member.userId)).list() });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "수집함을 불러오지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[candidates] 목록 읽기 실패", errorLogText(error));
+    return Response.json({ ok: false, message: "수집함을 불러오지 못했습니다." }, { status: 500 });
   }
 }

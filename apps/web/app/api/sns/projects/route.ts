@@ -5,6 +5,7 @@ import { ProjectValidationError } from "./project-service";
 import { ProjectInputSchema } from "./schema";
 import { isWebSourceEnabled } from "../../../../lib/sns/feature";
 import { selectedProjectFor } from "../../../../lib/teams/current-project";
+import { snsFailure } from "../failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET() {
     // 안 하면 목록과 라이브러리 작업물에 "아직 그림이 없습니다" 만 뜬다.
     return Response.json({ ok: true, projects: await refreshProjectListAssetUrls(projects) });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다." }, { status: 500 });
+    return snsFailure("작업 목록", error, "프로젝트를 불러오지 못했습니다.", 500);
   }
 }
 
@@ -39,6 +40,6 @@ export async function POST(request: Request) {
     if (error instanceof ProjectValidationError) {
       return Response.json({ ok: false, message: error.message, issues: error.issues }, { status: 400 });
     }
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "프로젝트를 만들지 못했습니다." }, { status: 500 });
+    return snsFailure("작업 만들기", error, "프로젝트를 만들지 못했습니다.", 500);
   }
 }

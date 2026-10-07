@@ -12,6 +12,7 @@ import {
   removeShowcaseItem,
   reorderShowcase,
 } from "../store";
+import { errorLogText } from "../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +31,10 @@ function failed(message: string, status = 400) {
   return Response.json({ ok: false, message }, { status });
 }
 
+/** 여기까지 던져 오는 것은 검사 원문(zod) · 저장소 원문뿐이라 서버 기록에만 남긴다(2026-10-07). */
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+  console.error("[showcase] 관리 실패", errorLogText(error));
+  return "요청을 처리하지 못했습니다.";
 }
 
 /** 꺼 놓은 것까지 전부. 다시 켜려면 보여야 한다. */

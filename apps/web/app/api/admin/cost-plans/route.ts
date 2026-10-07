@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { canOpenCostLab } from "../../../../lib/admin/cost-lab";
 import { planRowsToSave } from "../../../../lib/admin/cost-plan-save";
 import { validatePlanInputs } from "../../../../lib/admin/cost-forecast/subscription-plans";
+import { errorLogText } from "../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +55,9 @@ export async function GET() {
     .order("price_krw");
 
   if (error) {
-    return Response.json({ ok: false, message: `저장된 플랜을 읽지 못했습니다: ${error.message}` }, { status: 500 });
+    // 데이터베이스 원문(표 이름 등)은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[admin] 저장된 플랜 읽기 실패", errorLogText(error));
+    return Response.json({ ok: false, message: "저장된 플랜을 읽지 못했습니다." }, { status: 500 });
   }
 
   return Response.json({ ok: true, plans: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
@@ -70,10 +73,9 @@ export async function POST(request: Request) {
     // 값이 말이 되는지는 계산 쪽이 가린다. 두 벌로 적지 않는다.
     rows = planRowsToSave(validatePlanInputs(body?.plans));
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "플랜 값이 올바르지 않습니다." },
-      { status: 400 },
-    );
+    // 검사 원문(zod 의 JSON 글)은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[admin] 플랜 값 검사 실패", errorLogText(error));
+    return Response.json({ ok: false, message: "플랜 값이 올바르지 않습니다." }, { status: 400 });
   }
 
   const db = createSupabaseAdminClient();
@@ -87,14 +89,16 @@ export async function POST(request: Request) {
       /*
         **어디까지 갔는지 말한다.** 셋 중 둘만 들어간 채로 「실패」만 알리면,
         운영자는 지금 어떤 상태인지 모른 채 다시 누르게 된다.
+        데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
       */
+      console.error(`[admin] 플랜 저장 실패(${row.id})`, errorLogText(error));
       return Response.json(
         {
           ok: false,
           saved,
           message: saved.length
-            ? `${saved.join("·")}까지 저장하고 ${row.name}에서 멈췄습니다: ${error.message}`
-            : `저장하지 못했습니다: ${error.message}`,
+            ? `${saved.join("·")}까지 저장하고 ${row.name}에서 멈췄습니다.`
+            : "저장하지 못했습니다.",
         },
         { status: 500 },
       );

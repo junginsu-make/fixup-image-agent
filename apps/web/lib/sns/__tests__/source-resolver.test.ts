@@ -57,7 +57,8 @@ describe("01 내용 가져오기", () => {
       deps({ ingestYoutube: async () => { throw new Error("자막 없음"); } }),
     );
     expect(result.text).toBe("");
-    expect(result.issues.join("\n")).toMatch(/자막 없음/);
+    // 까닭은 남기되 예상 못 한 원문은 싣지 않는다(2026-10-07 오류 원문 가리기 Task 3, `source-resolver-masking.test.ts`).
+    expect(result.issues).toEqual(["내용을 가져오지 못했습니다. 잠시 뒤 다시 하거나 내용을 직접 적어 주세요."]);
   });
 
   it("빈 내용을 가져오면 그것도 막는다 — 빈 글로 카드뉴스를 만들 수 없다", async () => {

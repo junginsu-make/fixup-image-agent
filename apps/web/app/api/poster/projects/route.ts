@@ -1,19 +1,19 @@
 import { PosterProjectInputSchema } from "@fixup/poster-core";
 import { authenticateApiMember } from "../../../../lib/membership/api";
+import { errorLogText } from "../../../../lib/easy/log-text";
 import { posterStoresForUser } from "../../../../lib/poster/stores";
 import { createPosterService, PosterValidationError } from "./poster-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** 입력 검사 거절만 우리 문장이다. 저장소 원문(표 이름 등)은 서버 기록에만 남긴다(2026-10-07). */
 function fail(error: unknown, fallback: string) {
   if (error instanceof PosterValidationError) {
     return Response.json({ ok: false, message: error.issues.join("\n"), issues: error.issues }, { status: 400 });
   }
-  return Response.json(
-    { ok: false, message: error instanceof Error ? error.message : fallback },
-    { status: 500 },
-  );
+  console.error(`[poster] ${fallback}`, errorLogText(error));
+  return Response.json({ ok: false, message: fallback }, { status: 500 });
 }
 
 export async function GET() {

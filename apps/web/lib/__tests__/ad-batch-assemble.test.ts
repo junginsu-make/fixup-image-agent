@@ -65,6 +65,27 @@ describe("조립 규격 뽑기", () => {
     expect(byId["google-rda-landscape"]!.status, "다른 규격은 멀쩡해야 한다").toBe("ok");
   });
 
+  /**
+   * **조립 중 sharp 원문은 화면에 안 보인다**(2026-10-07). 실패 사유(`reason`)는 광고 화면에 그대로 뜬다.
+   * 배경 제거 쪽 사유는 라우트가 이미 사용자 말로 바꿔 던지므로 그대로 둔다(위 시험).
+   */
+  it("조립이 원문으로 실패하면 일반 문장이다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], {
+      cutout: async () => Buffer.from("그림이 아닌 바이트"),
+    });
+    expect(entry!.status).toBe("failed");
+    expect(entry!.reason).toBe("투명 배너를 만들지 못했습니다.");
+  });
+
+  it("오브젝트가 비었다는 안내는 그대로다", async () => {
+    const empty = await sharp({
+      create: { width: 64, height: 64, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).png().toBuffer();
+    const [entry] = await exportBatch(master, ["kakao-bizboard"], { cutout: async () => empty });
+    expect(entry!.reason).toBe("배경을 지운 그림이 비어 있습니다");
+  });
+
   /** 배경 제거를 안 넘기면 조립 규격만 실패한다 — 조용히 빈 배너를 만들지 않는다. */
   it("배경 제거 없이 부르면 조립 규격이 실패한다", async () => {
     const [entry] = await exportBatch(master, ["kakao-bizboard"], {});

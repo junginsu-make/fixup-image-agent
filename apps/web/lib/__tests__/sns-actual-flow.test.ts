@@ -107,6 +107,7 @@ describe("실제 기획·원고 배선", () => {
     });
 
     expect(planningPrimary.generate).not.toHaveBeenCalled();
-    expect(flow.planningIssues.join(" ")).toContain("자막이 없습니다");
+    // 까닭은 남기되 예상 못 한 원문은 싣지 않는다(2026-10-07 오류 원문 가리기 Task 3).
+    expect(flow.planningIssues).toEqual(["내용을 가져오지 못했습니다. 잠시 뒤 다시 하거나 내용을 직접 적어 주세요."]);
   });
 });

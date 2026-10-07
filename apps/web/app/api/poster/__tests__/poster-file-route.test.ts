@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 /**
  * 포스터 결과 한 장을 내려 주는 길.
@@ -17,6 +17,8 @@ const byProjectOptions: unknown[] = [];
 let adminRow: Record<string, unknown> | null = null;
 const reads: string[] = [];
 let missingPaths: string[] = [];
+/** 없을 때 저장소가 돌려주는 글. 서명한 주소가 섞여 올 수 있다. */
+let missingMessage = "없음";
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({
@@ -56,7 +58,7 @@ vi.mock("../../../../lib/supabase/admin", () => ({
       from: () => ({
         download: async (path: string) => {
           reads.push(path);
-          if (missingPaths.includes(path)) return { data: null, error: { message: "없음" } };
+          if (missingPaths.includes(path)) return { data: null, error: { message: missingMessage } };
           const bytes = new Uint8Array([1, 2, 3]);
           return { data: { arrayBuffer: async () => bytes.buffer }, error: null };
         },
@@ -74,6 +76,7 @@ beforeEach(() => {
   member = { userId: "u1", role: "member" };
   reads.length = 0;
   missingPaths = [];
+  missingMessage = "없음";
   adminRow = null;
   byProjectOptions.length = 0;
   byProject = [
@@ -129,6 +132,29 @@ describe("GET 포스터 결과 파일", () => {
     expect(response.status).toBe(200);
     expect(reads).toEqual(["u1/poster/p1/1.thumb.webp", "u1/poster/p1/1.png"]);
     expect(response.headers.get("content-type")).toBe("image/png");
+  });
+
+  /** 서버 기록에도 서명한 주소 · 열쇠를 남기지 않는다(2026-10-07, `errorLogText`). */
+  it("사본을 못 읽은 기록에 서명한 주소를 남기지 않는다", async () => {
+    missingPaths = ["u1/poster/p1/1.thumb.webp"];
+    missingMessage = "Object not found https://x.supabase.co/storage/v1/object/sign/library/a.webp?token=SECRET";
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    onTestFinished(() => logged.mockRestore());
+
+    await call("https://x/f?size=thumb", "1");
+
+    expect(logged).toHaveBeenCalled();
+    expect(logged.mock.calls.flat().join(" ")).not.toContain("SECRET");
+  });
+
+  it("원본까지 못 읽으면 고정 문장이고 500 이다 — 저장소 원문은 안 보인다", async () => {
+    missingPaths = ["u1/poster/p1/1.png"];
+    missingMessage = 'relation "storage.objects" does not exist';
+
+    const response = await call("https://x/f", "1");
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("이미지를 읽지 못했습니다.");
   });
 
   it("없는 변형은 404 다", async () => {

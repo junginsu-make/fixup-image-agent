@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { inspect } from "node:util";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 /**
  * 광고 규격을 뽑는 길.
@@ -345,6 +346,16 @@ describe("실패를 어떻게 말하는가", () => {
     expect((await response.json()).message).toMatch(/고르세요/);
   });
 
+  it("내부 오류 기록에 서명한 주소를 남기지 않는다", async () => {
+    batchThrows = new Error("읽기 실패 https://x.supabase.co/storage/v1/object/sign/a.png?token=SECRET");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    onTestFinished(() => logged.mockRestore());
+    const response = await call(good);
+    expect(response.status).toBe(500);
+    expect(logged).toHaveBeenCalled();
+    expect(logged.mock.calls.flat().map((arg) => inspect(arg)).join(" ")).not.toContain("SECRET");
+  });
+
   it("내부 오류는 문구를 감추고 500 이다", async () => {
     batchThrows = new Error("vips__something: internal detail at /srv/app/node_modules/...");
     const response = await call(good);
@@ -572,6 +583,16 @@ describe("배경 제거 실패를 어떻게 말하는가", () => {
   });
 
   /** 사용자가 고칠 수 있는 말은 그대로 준다 — 다시 누르면 되는 것들이다. */
+  /** 서버 기록에도 서명한 주소 · 열쇠를 남기지 않는다(2026-10-07, `errorLogText`). */
+  it("배경 제거 실패 기록에 서명한 주소를 남기지 않는다", async () => {
+    cutoutThrows = new Error("fal 오류 https://x.supabase.co/storage/v1/object/sign/a.png?token=SECRET");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    onTestFinished(() => logged.mockRestore());
+    await call({ ...good, specIds: ["kakao-bizboard"] });
+    expect(logged).toHaveBeenCalled();
+    expect(logged.mock.calls.flat().map((arg) => inspect(arg)).join(" ")).not.toContain("SECRET");
+  });
+
   it("시한 초과는 그대로 말해 준다", async () => {
     cutoutThrows = new Error("배경을 지우는 데 너무 오래 걸립니다(60초).");
     globalThis.fetch = (async () => new Response(Buffer.from("x"))) as never;

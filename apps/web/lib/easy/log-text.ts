@@ -11,8 +11,19 @@ export function errorLogText(error: unknown): string {
     // 앞이 빈칸인 자리에서만 시작한다 — 빈칸 없는 긴 글에서 이차 시간으로 느려지지 않게(최종 검토 2차).
     .replace(/(?<!\S)\S*object\/sign\/\S*/g, "<url>")
     .replace(열쇠칸, "$1<redacted>")
-    .replace(/\r\n|\r|\n/g, " ");
+    // 주소 없이 오는 비밀(서버 처리 오류 가리기 보안 리뷰 L1). 정규식마다 길이 상한 · 앞 조건을 둬 긴 글에서도 선형이다.
+    .replace(/(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,30}:\/\/[^\s:@/]{1,256}:[^\s@/]{1,256}@/gi, "<cred>@")
+    .replace(/\bsk-[\w-]{16,}/g, "<redacted>")
+    .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, "$1 <redacted>")
+    .replace(/\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*/g, "<jwt>")
+    .replace(/\bKey\s+[\w-]{8,}:[\w-]{8,}/g, "Key <redacted>")
+    .replace(이름칸, "$1<redacted>")
+    // 제어 글자 · 줄 구분 글자는 빈칸으로 접는다(L2) — 기록 줄을 쪼개거나 터미널 표시를 흐리지 못하게.
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ");
 }
+
+/** `"apikey":"…"` · `password: …` 꼴(JSON · 헤더). 값만 가린다(L1). */
+const 이름칸 = /((?:^|[\s{,"'])["']?(?:x-api-key|api[_-]?key|authorization|password|secret|client_secret|access_token|refresh_token|service_role)["']?\s*[:=]\s*["']?)[^\s"',;}&]+/gi;
 
 /** 칸 이름 앞은 글의 처음이거나 구분 글자여야 한다 — `design=` · `mysig=` 같은 남의 칸은 안 건드린다. */
 const 열쇠칸 = /((?:^|[\s?&;,"'({])(?:\w*token|apikey|api_key|sig|signature|x-amz-[\w-]+)=)[^\s&;,"')}]+/gi;

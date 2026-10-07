@@ -10,6 +10,7 @@ import {
   clearLayout,
 } from "../../../../../lib/layout/apply-deck";
 import type { SnsFlowCard } from "../../flow-service";
+import { snsFailure } from "../../failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,9 +114,6 @@ export async function POST(request: Request) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "뼈대를 작업에 붙이지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("뼈대 붙이기", error, "뼈대를 작업에 붙이지 못했습니다.", 500);
   }
 }
