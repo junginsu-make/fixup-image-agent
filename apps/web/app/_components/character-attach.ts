@@ -102,3 +102,52 @@ export function characterIdByTitle(characters: CharacterLike[]): Map<string, str
 
   return byTitle;
 }
+
+/**
+ * 라이브러리에 없는 각도를 **캐릭터 원본에서 다시 채워 달라고** 한다(2026-10-07).
+ *
+ * 라이브러리에서 그 그림을 지웠어도 캐릭터 원본은 남아 있다. 채웠으면 참이다 —
+ * 부르는 쪽이 목록을 다시 읽고 다시 찾는다. 못 채워도 던지지 않는다. 그때는
+ * 지금처럼 「찾지 못했습니다」를 말하면 된다.
+ */
+export async function restoreMissingAngles(characterId: string, missing: string[]): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/characters/${encodeURIComponent(characterId)}/library`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ angles: missing }),
+    });
+    const body = await response.json() as { ok?: boolean; restored?: string[] };
+    return Boolean(body.ok && body.restored?.length);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 고른 각도를 찾고, **없는 것만** 원본에서 다시 채운 뒤 다시 찾는다(2026-10-07).
+ *
+ * 카드뉴스·이미지 만들기가 같이 쓴다 — 두 곳에 따로 적으면 한쪽만 고쳐진다.
+ *
+ * **처음 찾은 것은 잃지 않는다.** 다시 읽기가 실패하면 빈 목록이 오는데, 그
+ * 목록으로 전부 다시 찾으면 원래 붙던 정면까지 사라진다(2026-10-07 리뷰).
+ * 못 찾았던 각도만 다시 읽은 목록에서 찾아 **고른 차례대로** 합친다.
+ */
+export async function matchWithRestore<T extends LibraryLike>(input: {
+  images: T[];
+  name: string;
+  characterId: string;
+  angles: string[];
+  restore: (characterId: string, missing: string[]) => Promise<boolean>;
+  reload: () => Promise<T[]>;
+}): Promise<AngleMatchResult<T>> {
+  const first = matchAngles(input.images, input.name, input.angles);
+  if (!first.missing.length || !(await input.restore(input.characterId, first.missing))) return first;
+
+  const second = matchAngles(await input.reload(), input.name, first.missing);
+  const found = new Map([...first.matched, ...second.matched].map((entry) => [entry.angle, entry]));
+  return {
+    matched: input.angles.map((angle) => found.get(angle)).filter((entry): entry is AngleMatch<T> => Boolean(entry)),
+    missing: input.angles.filter((angle) => !found.has(angle)),
+  };
+}
