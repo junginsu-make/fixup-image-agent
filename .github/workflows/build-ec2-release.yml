@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
+    # 배포 뒤 개발 일지만 고친 합치기는 앱이 그대로라 꾸러미를 만들 까닭이 없다(CLAUDE.md
+    # 「개발 일지」). 다른 파일이 하나라도 섞이면 평소대로 돈다.
+    paths-ignore:
+      - "docs/devlog/**"
 
 permissions:
   # 꾸러미를 **릴리스 자산**으로 올린다. 쓰기 권한이 필요하다.
