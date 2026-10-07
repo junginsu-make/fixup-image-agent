@@ -232,3 +232,17 @@ export function easyReplyLines(wants: readonly EasyWant[]): string[] {
     ...(장갈래.length ? [`  ${장갈래.join(" · ")} 인데 장 번호가 없거나 없는 번호면, 몇 번 장인지 묻는 한 문장입니다.`] : []),
   ];
 }
+
+/**
+ * **카드뉴스 사실**(2026-10-07 2차 D4). 장수와 만드는 중인지를 사실로 준다 — 모델이 「몇 번 장?」 ·
+ * 「다 만든 뒤에」를 제 말로 답하게. 코드가 갈래를 바꿔 읽으면 고정 문장이 나간다.
+ */
+export function easyCardFactLines(cards: { count: number; generating: boolean }): string[] {
+  return [
+    `이 대화의 카드뉴스는 ${cards.count}장입니다. 장 번호는 1부터 ${cards.count}까지입니다.`,
+    ...(cards.generating
+      ? ["**지금 카드를 만드는 중입니다.** 한 장 고치기 · 다시 그리기를 바라면 talk 로 다 만든 뒤에 하자고 답하세요."]
+      : []),
+    "",
+  ];
+}

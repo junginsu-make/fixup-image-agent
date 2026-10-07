@@ -95,7 +95,7 @@ const { FAILED_TURN_GENERIC, failureRowBody } = await import("../../../../lib/ea
 const { withRowJob } = await import("../../../easy/row-image");
 const { readAsk } = await import("../../../easy/row-marks");
 const { RATIO_QUESTION } = await import("../../../easy/turn-words");
-const { sayBody } = await import("../../../easy/row-marks");
+const { guideBody, sayBody } = await import("../../../easy/row-marks");
 const { SAY_IMAGE } = await import("../../../easy/turn-words");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
@@ -152,14 +152,20 @@ describe("사진을 읽지 않는 턴", () => {
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
   });
 
-  it("상세페이지 요청은 안내만 남기고, 사진을 안 읽고, 아무 라우트도 안 부른다", async () => {
+  it("상세페이지 요청은 안내만 남기고, 사진을 안 읽고, 아무 라우트도 안 부른다 — reply 가 없으면 고정 안내", async () => {
     판단 = { wants: "detail_page", reply: "", ratio: "", look: "" };
     const { json } = await 보낸다({ prompt: "이 제품 상세페이지 만들어줘", referenceIds: [사진(1)] });
 
     expect(json.talked).toBe(true);
-    expect(남긴줄[1]).toEqual({ conversationId: "c1", role: "assistant", body: DETAIL_PAGE_GUIDE });
+    expect(남긴줄[1]).toEqual({ conversationId: "c1", role: "assistant", body: guideBody("detail", DETAIL_PAGE_GUIDE) });
     expect(읽은사진).toEqual([]);
     expect(부른라우트).toEqual([]);
+  });
+
+  it("상세페이지 안내 문장은 AI 가 쓴 글이 먼저다 (2차 D4)", async () => {
+    판단 = { wants: "detail_page", reply: "상세페이지는 「상세페이지 만들기」에서 섹션마다 확인하며 만들 수 있어요.", ratio: "", look: "" };
+    await 보낸다({ prompt: "상세페이지 만들어줘" });
+    expect(남긴줄[1]!.body).toBe(guideBody("detail", "상세페이지는 「상세페이지 만들기」에서 섹션마다 확인하며 만들 수 있어요."));
   });
 
   it("사진 없는 주문은 지금 그대로다", async () => {

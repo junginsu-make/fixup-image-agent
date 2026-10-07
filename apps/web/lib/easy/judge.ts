@@ -34,6 +34,8 @@ export interface EasyJudgeInput {
   images?: readonly EasyResultEntry[];
   /** 2차 D2: 마지막 결과가 이미지인가(카드뉴스면 false). */
   lastIsImage?: boolean;
+  /** 2차 D4: 카드뉴스 장수 · 만드는 중인가. */
+  cards?: { count: number; generating: boolean };
 }
 
 export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision> {
@@ -46,7 +48,7 @@ export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision
   const ask = async (retry: boolean) => readEasyDecision(
     await input.decide(
       easyChatPrompt(input.history, input.prompt, input.attachmentCount, hasDraft, made, madeImage, {
-        retry, adNegated, images: input.images, lastIsImage: input.lastIsImage,
+        retry, adNegated, images: input.images, lastIsImage: input.lastIsImage, cards: input.cards,
       }),
       wants,
     ),

@@ -10,7 +10,7 @@ vi.mock("../_components/reference-ask", () => ({ EasyReferenceAsk: () => null })
 
 import { EasyMessageRow } from "../_components/message";
 import { AD_CHOICE_IMAGE, AD_CHOICE_SPECS, AD_QUESTION, adGuideBody } from "../ad-ask";
-import { askBody, sayBody, withPick } from "../row-marks";
+import { askBody, guideBody, sayBody, withPick } from "../row-marks";
 import { EasyAskControls } from "../_components/ask-row";
 import { KIND_REPLY_TEXT } from "../ask-answers";
 import { EASY_DEFAULT_RATIO } from "../ask";
@@ -195,5 +195,26 @@ describe("일하는 턴의 AI 말 (2차 D4)", () => {
     expect(머리말).toBeGreaterThan(0);
     expect(머리말).toBeLessThan(화면.indexOf("cardnews.take(body)"));
     expect(머리말).toBeLessThan(화면.indexOf('{ id: 자리, role: "image", body: "" }'));
+  });
+});
+
+describe("상세페이지 안내 · 장 번호 (2차 D4)", () => {
+  it("AI 가 쓴 상세페이지 안내는 표시를 떼고 보이고 「상세페이지 만들기 열기」를 단다", () => {
+    act(() => { view = create(<EasyMessageRow message={{ id: "d", role: "assistant", body: guideBody("detail", "상세페이지는 저쪽에서 만들어요.") }} />); });
+    expect(글()).toContain("상세페이지는 저쪽에서 만들어요.");
+    expect(글()).not.toContain("guide:");
+    expect(view.root.findByType("a").props.href).toBe("/create");
+  });
+
+  it("몇 번 장 물음 줄은 장수만큼 번호 단추를 달고, 누르면 그 장을 보낸다", () => {
+    const onAnswer = vi.fn();
+    const 물음 = { id: "q5", role: "assistant" as const, body: askBody("card", "몇 번 장인가요?", { wants: "card_text", count: 3 }) };
+    act(() => {
+      view = create(<EasyMessageRow message={물음} askControls={<EasyAskControls message={물음} asks={{} as never} attachments={[]} library={{} as never} onAttach={vi.fn()} onAnswer={onAnswer} />} />);
+    });
+    const 단추 = view.root.findAllByType("button");
+    expect(단추.map(글자)).toEqual(["1번", "2번", "3번"]);
+    act(() => { 단추[2]!.props.onClick(); });
+    expect(onAnswer).toHaveBeenCalledWith({ text: "3번", answersRowId: "q5", pick: { card: 3 } });
   });
 });

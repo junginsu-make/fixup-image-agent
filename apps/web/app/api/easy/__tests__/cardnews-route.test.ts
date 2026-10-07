@@ -141,7 +141,7 @@ vi.mock("../../../../lib/sns/runtime", () => ({ refreshProjectAssetUrls: async (
 
 const { POST } = await import("../generate/route");
 const { ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING } = await import("../../../easy/cardnews-after");
-const { readAsk } = await import("../../../easy/row-marks");
+const { askBody, readAsk, readPick } = await import("../../../easy/row-marks");
 const { KIND_QUESTION } = await import("../../../easy/turn-words");
 const { sayBody } = await import("../../../easy/row-marks");
 const { SAY_CARDNEWS, SAY_REVISE } = await import("../../../easy/turn-words");
@@ -347,14 +347,64 @@ describe("만든 카드뉴스 손보기 말 (3단계 §5 · §6-5)", () => {
     expect(남긴줄).toEqual([]);
   });
 
-  /** Review Focus 4 */
-  it("없는 번호 · 번호 없음은 몇 번인지 되묻고 아무것도 안 남긴다", async () => {
+  /** 3단계 Review Focus 4 · 2차 D1 — 물음도 대화에 남고 장 번호 단추가 달린다. */
+  it("없는 번호 · 번호 없음은 몇 번인지 묻고 물음 줄을 남긴다 — AI 가 물음으로 쓴 글이 먼저", async () => {
     판단하면({ wants: "card_text", card: 9, note: "짧게" });
-    expect((await 보낸다({ prompt: "9번 더 짧게" })).json.message.body).toBe(ASK_CARD_NUMBER);
-    판단하면({ wants: "card_redo", card: 0, note: "" });
-    expect((await 보낸다({ prompt: "다시 그려줘" })).json.message.body).toBe(ASK_CARD_NUMBER);
-    expect(남긴줄).toEqual([]);
+    const 첫 = (await 보낸다({ prompt: "9번 더 짧게" })).json;
+    expect(readAsk(첫.message)).toEqual({ kind: "card", text: ASK_CARD_NUMBER, data: { wants: "card_text", count: 2, note: "짧게" } });
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    남긴줄.length = 0;
+    판단하면({ wants: "card_redo", card: 0, note: "", reply: "몇 번 장을 다시 그릴까요?" });
+    await 보낸다({ prompt: "다시 그려줘" });
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "card", text: "몇 번 장을 다시 그릴까요?", data: { wants: "card_redo", count: 2 } });
     expect(손본것).toEqual([]);
+  });
+
+  it("장 번호 단추로 답하면 판단 없이 그 장을 물을 때의 바라는 점으로 고친다 (2차 D1)", async () => {
+    지난줄들 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "더 짧게 해줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_text", count: 2, note: "더 짧게" }), workId: null },
+    ];
+    판단 = undefined; // 판단 모델을 부르면 읽기가 실패한다 — 단추 답은 안 부른다
+    const { status } = await 보낸다({ prompt: "2번", answersRowId: "q1", pick: { card: 2 } });
+    expect(status).toBe(200);
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "더 짧게" } }]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readPick(남긴줄[0] as never)).toEqual({ card: 2 });
+  });
+
+  /** 2차 D1 — 단추 답도 서버가 장 번호를 다시 본다. 없는 번호는 고치지 않고 다시 묻는다(값 없음). */
+  it("없는 장 번호를 단추 답으로 보내면 고치지 않고 다시 묻는다", async () => {
+    지난줄들 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "더 짧게 해줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_text", count: 2, note: "더 짧게" }), workId: null },
+    ];
+    판단 = undefined;
+    const { json } = await 보낸다({ prompt: "9번", answersRowId: "q1", pick: { card: 9 } });
+    expect(손본것).toEqual([]);
+    expect(readAsk(json.message)).toEqual({ kind: "card", text: ASK_CARD_NUMBER, data: { cont: true, wants: "card_text", count: 2, note: "더 짧게" } });
+  });
+
+  /** 2차 D4 · 최종 리뷰 g — 끝 문장은 고친 뒤에 남는다. 판단 모델에 끝난 일로 쓰게 했다(Task 9). */
+  it("글 고치기 끝 문장은 AI 가 쓴 말이 먼저다 (2차 D4)", async () => {
+    판단하면({ wants: "card_text", card: 2, note: "더 짧게", reply: "2번 장 본문을 더 짧게 고쳤습니다." });
+    await 보낸다({ prompt: "2번 더 짧게" });
+    expect(남긴줄.map((row) => row.body)).toEqual(["2번 더 짧게", "2번 장 본문을 더 짧게 고쳤습니다."]);
+  });
+
+  /** 2차 최종 리뷰 6 · Review Focus 8 — 장 물음 바로 뒤 장 갈래면 note 가 없어도 답이다. 바라는 점은 물을 때의 것. */
+  it("장 물음에 말로 「2번」이라 답하면 note 가 없어도 물을 때의 바라는 점으로 그 장을 고친다", async () => {
+    지난줄들 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "더 짧게 해줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_text", count: 2, note: "더 짧게" }), workId: null },
+    ];
+    판단하면({ wants: "card_text", card: 2, note: "" });
+    await 보낸다({ prompt: "2번" });
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "더 짧게" } }]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
   });
 
   /** Review Focus 4 */
@@ -409,8 +459,9 @@ describe("미뤄 둔 작은 것 (2026-10-01)", () => {
 
   /** 1: 남기지 않은 답에 빈 id 를 주면 화면이 두 답을 같은 줄로 본다. */
   it("남기지 않은 답에는 id 를 안 준다(화면이 저마다 짓는다)", async () => {
-    판단 = { wants: "card_text", reply: "", ratio: "", look: "", card: 9, note: "" };
-    const { json } = await 보낸다({ prompt: "9번 짧게" });
+    카드작업들 = { old: { ...만든원고(), status: "generating" } };
+    판단 = { wants: "card_text", reply: "", ratio: "", look: "", card: 2, note: "" };
+    const { json } = await 보낸다({ prompt: "2번 짧게" });
     expect(json.message).not.toHaveProperty("id");
   });
 

@@ -5,7 +5,7 @@ import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
 import {
   easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyLastResultLines,
-  easyPhotoGoneLines, easyReplyLines, easyResultListLines, easyResultRowText, easyTargetLines,
+  easyCardFactLines, easyPhotoGoneLines, easyReplyLines, easyResultListLines, easyResultRowText, easyTargetLines,
 } from "./chat-facts";
 import { doneImageNumbers, type EasyResultEntry } from "./image-numbers";
 import { askChain } from "./ask-chain";
@@ -80,6 +80,8 @@ export interface EasyPromptOptions {
   images?: readonly EasyResultEntry[];
   /** 2차 D2: 이 대화의 마지막 결과가 이미지인가(카드뉴스면 false). 모르면 예전처럼 이미지로 본다. */
   lastIsImage?: boolean;
+  /** 2차 D4: 이 대화 카드뉴스의 장수 · 만드는 중인가. 원고가 있을 때만 싣는다. */
+  cards?: { count: number; generating: boolean };
 }
 
 /** 판단 모델이 고를 수 있는 갈래 하나. */
@@ -249,6 +251,7 @@ export function easyChatPrompt(
         "",
       ]
       : []),
+    ...(갈래.includes("revise") && options.cards ? easyCardFactLines(options.cards) : []),
     "**낱말로 가르지 마세요.** 「방금 그린 거 왜 그렇게 나왔어?」에는 「그린」이",
     "있지만 묻는 말입니다. 「포스터 만들 때 뭘 적어야 해?」도 묻는 말입니다.",
     "**지금 한 장 만들어 내놓기를 바라는지**만 보세요.",

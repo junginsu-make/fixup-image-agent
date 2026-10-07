@@ -6,7 +6,7 @@ import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
 import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
 import { withRowJob } from "../../../easy/row-image";
-import { plainTyped, sayBody, withPick } from "../../../easy/row-marks";
+import { guideBody, plainTyped, sayBody, withPick } from "../../../easy/row-marks";
 import {
   askChain, askInstruction, buttonDecision, chosenFor, readButtonAnswer, settleTypedAnswer,
   type EasyAnswerWay, type EasyChosen,
@@ -31,7 +31,7 @@ import { pickCardSource } from "../../../easy/cardnews-source";
 import { cardOptionsFrom, projectSpecFrom, readCardOptions } from "../../../easy/cardnews-options";
 import { redraftInput } from "../../../easy/cardnews-redraft";
 import { draftFailureMessage } from "../../../easy/cardnews-view";
-import { isMade } from "../../../easy/cardnews-after";
+import { isGenerating, isMade } from "../../../easy/cardnews-after";
 import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
 import { countEasyImages, imageEditTurn } from "../../../../lib/easy/image-edit-turn";
 import { pickEditTarget, targetAskNumbers } from "../../../../lib/easy/edit-target";
@@ -269,6 +269,8 @@ async function turn(request: Request): Promise<Response> {
           // 고칠 수 있는 이미지가 이 대화에 있나(2차 D2 — 마지막 결과만이 아니라 지우지 않은 이미지 하나라도. 최종 리뷰 a).
           choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: 이미지들.madeImage },
           lastIsImage: 이미지들.lastIsImage,
+          // 카드뉴스 장수 · 만드는 중(2차 D4). 「몇 번 장?」 · 「다 만든 뒤에」를 AI 가 제 말로 답하게.
+          cards: 고칠원고 ? { count: 고칠원고.data.flow?.cards.length ?? 0, generating: isGenerating(고칠원고) } : undefined,
           // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
           kindPicked: 옛골랐나,
           adStep: 광고,
@@ -376,7 +378,7 @@ async function turn(request: Request): Promise<Response> {
     if ((wants === "card_redo" || wants === "card_text" || wants === "caption" || wants === "download") && 고칠원고) {
       return await cardAfterTurn({
         request, userId: auth.member.userId, store, conversationId, prompt: 지시, userBody: 사용자글, textModel, wants, decision, provider,
-        project: 고칠원고, rows: 지난줄,
+        project: 고칠원고, rows: 지난줄, 물음: 물음맥락,
       });
     }
     /*
@@ -488,7 +490,10 @@ async function turn(request: Request): Promise<Response> {
        * 안내 한 줄을 남기고 끝낸다. 사진을 읽지도 값이 나가지도 않는다.
        * 화면은 이 문장이 달린 줄에 「상세페이지 만들기 열기」를 단다.
        */
-      const saved = await store.appendMessage({ conversationId, role: "assistant", body: DETAIL_PAGE_GUIDE });
+      // 안내 문장은 AI 가 쓴다(2차 D4) — 비면 고정 안내. 단추는 표시(`guide:detail:`)로 단다.
+      const saved = await store.appendMessage({
+        conversationId, role: "assistant", body: guideBody("detail", sayText(aiText(decision, wants), DETAIL_PAGE_GUIDE)),
+      });
       return Response.json({ ok: true, talked: true, message: saved, textModel });
     }
 

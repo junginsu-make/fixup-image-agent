@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DETAIL_PAGE_GUIDE, DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
+import { guideBody } from "../row-marks";
 
 /**
  * **상세페이지는 「쉽게」에서 안 만든다 — 안내로 끝낸다**(설계 §2-7).
@@ -22,5 +23,13 @@ describe("상세페이지 안내", () => {
 
   it("상세페이지 만들기 화면으로 보낸다", () => {
     expect(DETAIL_PAGE_HREF).toBe("/create");
+  });
+
+  /** 2차 D4 — 안내 문장은 AI 가 쓰고 단추는 표시로 단다. Review Focus 6 — 옛 완전일치 줄도 안내다. */
+  it("AI 가 쓴 안내는 표시(guide:detail:)로 알아보고, 옛 완전일치 줄도 안내로 본다", () => {
+    expect(isDetailPageGuide({ role: "assistant", body: guideBody("detail", "상세페이지는 「상세페이지 만들기」에서 만들어요.") })).toBe(true);
+    expect(isDetailPageGuide({ role: "assistant", body: DETAIL_PAGE_GUIDE })).toBe(true);
+    expect(isDetailPageGuide({ role: "user", body: guideBody("detail", "x") })).toBe(false);
+    expect(isDetailPageGuide({ role: "assistant", body: guideBody("ad", "x") })).toBe(false);
   });
 });

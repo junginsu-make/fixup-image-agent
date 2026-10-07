@@ -4,7 +4,7 @@ import { Button } from "@fixup/ui";
 import { readAsk } from "../row-marks";
 import type { EasyMessage } from "../turn";
 import {
-  askNumbers, kindReply, photoReply, ratioReply, referenceReply, targetReply, type EasyButtonReply,
+  askNumbers, cardReply, kindReply, photoReply, ratioReply, referenceReply, targetReply, type EasyButtonReply,
 } from "../ask-answers";
 import { photoAskReady } from "../photo-ask-state";
 import type { EasyAsks } from "../use-easy-asks";
@@ -76,6 +76,16 @@ export function EasyAskControls({ message, asks, attachments, library, onAttach,
   if (ask.kind === "target") {
     return (
       <EasyNumberAsk numbers={askNumbers(ask.data.numbers)} label={(n) => `이미지 ${n}`} onPick={(n) => onAnswer(targetReply(message.id, n))} />
+    );
+  }
+  if (ask.kind === "card") {
+    const count = typeof ask.data.count === "number" ? Math.min(Math.max(Math.trunc(ask.data.count), 0), 20) : 0;
+    return (
+      <EasyNumberAsk
+        numbers={Array.from({ length: count }, (_, at) => at + 1)}
+        label={(n) => `${n}번`}
+        onPick={(n) => onAnswer(cardReply(message.id, n))}
+      />
     );
   }
   return null;

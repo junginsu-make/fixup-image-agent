@@ -74,3 +74,8 @@ export function askNumbers(value: unknown): number[] {
 export function targetReply(rowId: string, n: number): EasyButtonReply {
   return { text: `이미지 ${n}`, answersRowId: rowId, pick: { target: n } };
 }
+
+/** 몇 번 장인지(2차 D1). 서버는 물을 때의 갈래 · 바라는 점으로 판단 없이 간다. */
+export function cardReply(rowId: string, n: number): EasyButtonReply {
+  return { text: `${n}번`, answersRowId: rowId, pick: { card: n } };
+}

@@ -208,7 +208,7 @@ export function EasyMessageRow({
             더하지 않고 문장으로 가른다 — 다시 열어도 그대로 보인다.
           */
           <div className="grid max-w-[85%] gap-2">
-            <p className={말풍선}>{message.body}</p>
+            <p className={말풍선}>{visibleBody(message)}</p>
             <Button asChild size="sm" variant="secondary" className="w-fit">
               <Link href={DETAIL_PAGE_HREF}>상세페이지 만들기 열기</Link>
             </Button>

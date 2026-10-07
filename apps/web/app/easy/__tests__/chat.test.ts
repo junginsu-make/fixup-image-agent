@@ -312,3 +312,13 @@ describe("AI 가 늘 말한다 (2차 D4)", () => {
     expect(prompt).not.toContain("say:");
   });
 });
+
+describe("카드뉴스 사실 (2차 D4)", () => {
+  it("원고가 있으면 장수와 만드는 중인지 알린다 — 만드는 중이면 고치지 말고 말로 답하게", () => {
+    const prompt = easyChatPrompt([], "3번 다시", 0, true, true, false, { cards: { count: 6, generating: true } });
+    expect(prompt).toContain("이 대화의 카드뉴스는 6장입니다");
+    expect(prompt).toContain("지금 카드를 만드는 중입니다");
+    expect(easyChatPrompt([], "3번 다시", 0, true, true, false, { cards: { count: 6, generating: false } })).not.toContain("만드는 중입니다");
+    expect(easyChatPrompt([], "안녕", 0, false, false, false, { cards: { count: 6, generating: false } })).not.toContain("6장입니다");
+  });
+});
