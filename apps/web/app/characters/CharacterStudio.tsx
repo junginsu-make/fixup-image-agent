@@ -27,6 +27,7 @@ import {
   IMAGES_TOO_LARGE_MESSAGE, OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, imagesTooLarge, lookLockedByPair, roleWithOwn,
 } from "./own-character";
 import { readImageBlob, type ReadImage } from "./read-image";
+import { useImageDropTarget, usePreventFileNavigation } from "./image-drop";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
@@ -194,6 +195,13 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setLook((current) => lookAfterRole(role ?? "extract", current));
   }
   const [library, setLibrary] = useState<LibraryImage[]>([]);
+  /**
+   * 칸마다 **마지막에 넣은 것**의 순번. 그림 읽기는 기다려야 끝나서, 빠르게 두 번
+   * 넣으면(붙여넣기 두 번) 늦게 끝난 옛 그림이 나중 것을 덮는다(2026-10-07 리뷰).
+   * 읽기가 끝났을 때 순번이 그대로일 때만 칸에 넣는다.
+   */
+  const attachSeq = useRef(0);
+  const ownSeq = useRef(0);
 
   const [angleList, setAngleList] = useState(ANGLE_FALLBACK);
   const [sheetItem, setSheetItem] = useState(SHEET_FALLBACK);
@@ -327,12 +335,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     await loadLibrary();
   }
 
-  async function attachFile(files: FileList | null) {
+  async function attachFile(files: ArrayLike<File> | null) {
     const file = files?.[0];
     if (!file) return;
+    const seq = ++attachSeq.current;
     setMessage("");
     try {
-      setAttached(await readAsAttached(file, attached?.role ?? DEFAULT_ROLE));
+      const read = await readAsAttached(file, attached?.role ?? DEFAULT_ROLE);
+      if (seq === attachSeq.current) setAttached(read);
       await saveToLibrary(file);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
@@ -341,12 +351,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     }
   }
 
-  async function attachOwnFile(files: FileList | null) {
+  async function attachOwnFile(files: ArrayLike<File> | null) {
     const file = files?.[0];
     if (!file) return;
+    const seq = ++ownSeq.current;
     setMessage("");
     try {
-      setOwn(await readImageBlob(file));
+      const read = await readImageBlob(file);
+      if (seq === ownSeq.current) setOwn(read);
       await saveToLibrary(file);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
@@ -355,10 +367,12 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 
   async function attachOwnFromLibrary(image: { id: string; url: string | null }) {
     if (!image.url) return setMessage("이 그림은 미리보기가 없어 쓸 수 없습니다.");
+    const seq = ++ownSeq.current;
     if (own?.libraryId === image.id) return setOwn(null);
     try {
       const response = await fetch(image.url);
-      setOwn({ ...(await readImageBlob(await response.blob())), libraryId: image.id });
+      const read = { ...(await readImageBlob(await response.blob())), libraryId: image.id };
+      if (seq === ownSeq.current) setOwn(read);
     } catch {
       setMessage("그림을 불러오지 못했습니다.");
     }
@@ -367,10 +381,12 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   async function attachFromLibrary(image: { id: string; url: string | null }) {
     if (!image.url) return setMessage("이 그림은 미리보기가 없어 쓸 수 없습니다.");
     // 같은 것을 다시 누르면 뺀다. 고른 표시가 나므로 무엇이 빠지는지 보인다.
+    const seq = ++attachSeq.current;
     if (attached?.libraryId === image.id) return setAttached(null);
     try {
       const response = await fetch(image.url);
-      setAttached(await readAsAttached(await response.blob(), attached?.role ?? DEFAULT_ROLE, image.id));
+      const read = await readAsAttached(await response.blob(), attached?.role ?? DEFAULT_ROLE, image.id);
+      if (seq === attachSeq.current) setAttached(read);
     } catch {
       setMessage("그림을 불러오지 못했습니다.");
     }
@@ -556,6 +572,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 고칠 수 있게 두면 바뀐 줄 알고 있다가 다른 것이 나온다.
    */
   const locked = Boolean(busy) || Boolean(chosen);
+  /** 「참고할 그림」 칸의 끌어다 놓기·붙여넣기. 올리기와 같은 길로 넣는다(`image-drop.ts`). */
+  // 칸 옆에 잘못 놓아도 브라우저가 그 파일을 열어 페이지를 떠나지 않게 한다.
+  usePreventFileNavigation();
+  const referenceDrop = useImageDropTarget({
+    disabled: locked,
+    onFile: (file) => void attachFile([file]),
+    onError: setMessage,
+  });
   const chosenSrc = chosen ? `data:${chosen.mimeType};base64,${chosen.base64}` : "";
   const extraCount = pickedAngles.filter((angle) => angle !== "front").length + (sheet ? 1 : 0);
 
@@ -732,14 +756,15 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
               </label>
 
               {/*
-                **남는 높이를 이 칸이 다 쓴다**(2026-09-11 사용자 결정). 아래에
-                여백을 남겨 둘 이유가 없고, 묘사는 길수록 결과가 좋아진다 —
-                좁은 칸은 짧게 쓰라는 말처럼 읽힌다.
+                **높이를 정해 둔다**(2026-10-07 사용자 결정). 전에는 남는 높이를
+                이 칸이 다 썼는데(2026-09-11), 모니터가 낮으면 이 칸만 0 까지
+                줄어 글상자가 아래 「내 캐릭터」 칸 위로 겹치거나 사라졌다.
+                화면 크기와 상관없이 같은 크기로 두고, 넘치면 왼쪽 칸이 구른다.
               */}
-              <label className="flex min-h-0 flex-1 flex-col gap-1.5">
+              <label className="grid flex-none gap-1.5">
                 <span className="flex-none text-meta text-subtle-foreground">무엇을 만들까요</span>
                 <Textarea
-                  className="min-h-[7rem] flex-1 resize-none"
+                  className="h-40 resize-none"
                   value={description} disabled={locked} maxLength={2000}
                   placeholder={
                     kind === "person" ? "예: 30대 후반 한국인 여성, 단발머리, 베이지색 니트, 차분한 표정"
@@ -766,6 +791,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 onPickLibrary={(image) => void attachOwnFromLibrary(image)}
                 onClear={() => setOwn(null)}
                 onReloadLibrary={() => void loadLibrary()}
+                onError={setMessage}
               />
 
             </CardContent>
@@ -792,9 +818,23 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 
             한 장만 붙이는 자리인데, 설정 아래에 끼워 두면 붙인 그림이 칸 밖으로
             밀려 굴려야 보였다. 무엇을 붙였는지 안 보이면 역할을 고를 근거가 없다.
-            여기서는 칸 높이를 다 써서 크게 보여 준다.
+            여기서는 제 칸에 정해진 높이로 크게 보여 준다(2026-10-07 부터 고정).
+
+            **칸 전체가 받는다** — 그림을 끌어다 놓거나, 칸을 눌러 두고 Ctrl+V
+            (2026-10-07 사용자 요청). 받는 중인 칸은 테두리로 말한다.
           */}
-          <Card className="flex min-h-0 flex-col">
+          <Card
+            role="group"
+            // 잠긴 칸은 받지 않으니 Tab 으로 들어가지 않는다. 들어가면 표시 없는 초점이 된다.
+            tabIndex={locked ? -1 : 0}
+            aria-label="참고할 그림 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+            {...referenceDrop.handlers}
+            className={cn(
+              "group flex min-h-0 flex-col outline-none",
+              !locked && "focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30",
+              referenceDrop.over && "border-primary bg-primary-soft",
+            )}
+          >
             <CardHeader className="flex-none">
               <CardTitle>참고할 그림 · 선택</CardTitle>
               <CardDescription>
@@ -804,13 +844,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
             <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               {attached ? (
                 <>
-                  {/* 칸에 남는 높이를 이 그림이 다 쓴다. `contain` 이라 세로로
-                      긴 그림도 안 잘린다 — 잘라 보여 주면 붙인 것과 다른 것을
-                      보고 고르게 된다. */}
+                  {/* **높이를 정해 둔다**(2026-10-07 사용자 결정). 남는 높이를 다
+                      쓰게 했더니 모니터가 낮으면 0 까지 줄어 그림이 사라졌다.
+                      `contain` 이라 세로로 긴 그림도 안 잘린다 — 잘라 보여 주면
+                      붙인 것과 다른 것을 보고 고르게 된다. */}
                   <button
                     type="button" aria-label="첨부한 그림 크게 보기"
                     onClick={() => openImageViewer(attached.url, "첨부한 그림")}
-                    className="grid min-h-0 flex-1 place-items-center overflow-hidden rounded-md border bg-muted p-1 transition-opacity hover:opacity-90"
+                    className="grid h-64 flex-none place-items-center overflow-hidden rounded-md border bg-muted p-1 transition-opacity hover:opacity-90"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -857,6 +898,12 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <p className="text-xs text-subtle-foreground">
                     붙인 그림이 없습니다. 아래에서 올리거나 라이브러리에서 고르세요.
                   </p>
+                  {locked ? null : (
+                    <p className="text-xs text-subtle-foreground">
+                      그림을 여기로 끌어다 놓거나, 이 칸을 누르고 <kbd>Ctrl+V</kbd>(Mac 은 <kbd>⌘V</kbd>)로 붙여넣어도 됩니다.
+                      <span className="mt-1 hidden font-bold text-primary group-focus-within:block">지금 붙여넣을 수 있습니다</span>
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -913,8 +960,13 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 정면 자리. 만드는 중 · 나온 뒤 · 아직 없음 셋뿐이다.
                 아래 단추들은 **셋 다에서 그대로 보인다**(2026-09-11 사용자 요청) —
                 무엇을 고를 수 있는지 미리 알아야 정면을 만들지 말지 정할 수 있다.
+
+                **높이를 정해 둔다**(2026-10-07 사용자 결정). 남는 높이를 다 쓰게
+                했더니 모니터가 낮으면 0 까지 줄어 아래 단추들이 그 위로 겹쳤다.
+                넘치면 이 칸이 구른다. 256px 인 까닭: 칸이 가장 낮을 때(30rem)도
+                바로 아래 「캐릭터 저장하기」가 굴리지 않고 보인다. 320px 이면 밀린다.
               */}
-              <div className="grid min-h-0 flex-1 place-items-center">
+              <div className="grid h-64 flex-none place-items-center">
                 {busy === "candidates" ? (
                   <MakingBox
                     title="정면을 만드는 중입니다"
@@ -961,14 +1013,26 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 
               {/* ── 단추는 결과물이 없어도 늘 보인다 ────────────────── */}
               <div className="grid flex-none gap-2">
+                {/*
+                  **정면이 나오면 이것을 눌러야 저장된다**(2026-10-07 사용자 요청).
+                  「정면만 만들기」라는 이름은 정면을 또 만드는 것처럼 읽혔다.
+                  정면이 나왔을 때만 녹색으로 바꾸고 고리를 번지게 한다 —
+                  나오기 전에 녹색이면 눌러야 할 때를 알려 주지 못한다.
+                  글자는 `primary-foreground` 다. 밝은 화면은 흰 글자(4.98:1),
+                  어두운 화면은 진한 글자라 둘 다 읽힌다.
+                */}
                 <Button
                   disabled={!chosen || Boolean(busy)}
                   onClick={() => void handleCreate(false)}
+                  className={cn(
+                    chosen && "bg-success font-bold text-primary-foreground hover:bg-success/90",
+                    chosen && !busy && "fixup-cta-pulse [--cta-pulse-color:var(--success)]",
+                  )}
                 >
                   {busy === "create" && !pending.length
                     ? <Loader2 size={16} className="mr-1.5 animate-spin" />
                     : null}
-                  정면만 만들기
+                  캐릭터 저장하기
                 </Button>
 
                 {/* 여기서부터가 「이어서 더 만들기」다. 줄을 그어 나눈다 —
