@@ -68,7 +68,7 @@ async function review(request: Request, context: Context) {
         imageUrl: reviewImageUrl,
         preservedImageUrls: [],
       },
-      providers.primary,
+      { review: (input) => maskProviderError("검수", () => providers.primary.review(input)) },
     );
 
     await stores.images.saveReview(target.id, result.review ?? { decision: "fail", summary: "검수하지 못했습니다.", issues: result.issues });
@@ -89,6 +89,24 @@ async function review(request: Request, context: Context) {
 }
 
 const REVIEW_FAILED = "검수하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+const PROVIDER_FAILED = "응답을 받지 못했습니다.";
+
+/**
+ * **검수 모델이 던진 원문을 우리 문장으로 바꿔 다시 던진다**(2026-10-07 후속 Task 12b, 기획 라우트와 같은 규칙).
+ *
+ * 패키지의 `withIssueFallback` 은 던진 글을 그대로 「주 검수 실패: <원문>」으로 적고, 그 목록이 성공
+ * 응답과 저장한 검수로 「다양하게」 화면에 뜬다. 원문은 서버 기록에만 남긴다. **여전히 던진다** —
+ * 패키지가 실패로 다루는 것은 전과 같다. 값은 원래 호출 안에서 잰다. 응답 모양 검사(패키지 안의
+ * 스키마)가 던지는 글은 이 자리 밖이라 가리지 못한다.
+ */
+async function maskProviderError<T>(what: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    console.error(`[poster] ${what} 호출 실패`, errorLogText(error));
+    throw new Error(PROVIDER_FAILED);
+  }
+}
 
 /**
  * **실패를 화면에 어떻게 말할지**(2026-10-07 후속 Task 12, 고치기의 `editFailure` 와 같은 규칙).

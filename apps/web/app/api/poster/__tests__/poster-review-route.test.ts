@@ -28,6 +28,13 @@ let projectMissing = false;
 /** 그림 읽기 · fal 올리기가 던질 것. */
 let imageBytesThrows: Error | null = null;
 let uploadThrows: Error | null = null;
+/** 참이면 패키지의 진짜 `reviewPoster` 를 쓴다 — 검수 모델이 던진 글이 `issues` 로 가는 길을 본다. */
+let realReview = false;
+let reviewThrows: Error | null = null;
+/** 작업의 칸. 진짜 검수는 원고 칸을 다 읽는다. */
+let projectSlots: unknown = {};
+/** 저장한 검수. */
+const savedReviews: unknown[] = [];
 /** 팀 읽기 규칙으로 보이는 남의 그림 — 주인 조건을 안 걸면 이것이 나온다. */
 const teammateImage = { id: "남의그림", selected: true, assetPath: "u2/poster/p1/req/0.png" };
 
@@ -51,13 +58,13 @@ vi.mock("../../../../lib/membership/api", () => ({
 
 vi.mock("../../../../lib/poster/stores", () => ({
   posterStoresForUser: () => ({
-    projects: { get: async () => (projectMissing ? null : { id: "p1", data: { slots: {} } }) },
+    projects: { get: async () => (projectMissing ? null : { id: "p1", data: { slots: projectSlots } }) },
     images: {
       byProject: async (_projectId: string, options?: { ownOnly?: boolean }) => {
         listOptions.push(options);
         return options?.ownOnly ? ownImages : [...ownImages, teammateImage];
       },
-      saveReview: async () => {},
+      saveReview: async (_id: string, review: unknown) => { savedReviews.push(review); },
     },
   }),
 }));
@@ -90,7 +97,18 @@ vi.mock("../../../../lib/poster/providers", () => {
         },
       };
     },
-    createPosterReviewProviders: () => ({ primary: {} }),
+    createPosterReviewProviders: () => ({
+      primary: {
+        review: async () => {
+          if (reviewThrows) throw reviewThrows;
+          return {
+            decision: "pass", summary: "좋다", issues: [],
+            textFidelity: { headline: "exact", subline: "exact", sideTexts: "exact" },
+            extraCopy: { status: "none", texts: [] },
+          };
+        },
+      },
+    }),
     PosterProviderConfigurationError,
   };
 });
@@ -99,7 +117,9 @@ vi.mock("@fixup/poster-core", async () => {
   const real = await vi.importActual<typeof import("@fixup/poster-core")>("@fixup/poster-core");
   return {
     ...real,
-    reviewPoster: async () => ({ status: "ok", review: { decision: "pass", summary: "좋다", issues: [] }, issues: [] }),
+    reviewPoster: async (...args: Parameters<typeof real.reviewPoster>) => realReview
+      ? real.reviewPoster(...args)
+      : { status: "ok", review: { decision: "pass", summary: "좋다", issues: [] }, issues: [] },
   };
 });
 
@@ -121,6 +141,10 @@ beforeEach(() => {
   projectMissing = false;
   imageBytesThrows = null;
   uploadThrows = null;
+  realReview = false;
+  reviewThrows = null;
+  projectSlots = {};
+  savedReviews.length = 0;
 });
 
 describe("검수는 본인 그림만", () => {
@@ -253,5 +277,45 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     const none = await call();
     expect(none.status).toBe(400);
     expect(await none.json()).toEqual({ ok: false, message: "먼저 변형 하나를 고르세요. 고른 것만 검수합니다." });
+  });
+});
+
+/**
+ * **검수 모델이 던진 원문은 `issues` 에도 싣지 않는다**(2026-10-07 후속 Task 12b).
+ *
+ * 패키지의 `withIssueFallback` 이 던진 글을 그대로 「주 검수 실패: <원문>」으로 적고, 그 목록이 성공
+ * 응답과 저장한 검수(`issues`)로 화면에 뜬다. 라우트가 검수 호출을 감싸 원문은 기록에 남기고 우리
+ * 문장으로 다시 던진다. 응답 모양이 틀린 것(패키지 안 스키마 검사)은 감싸는 자리 밖이라 그대로다.
+ */
+describe("검수 모델 원문은 issues 에도 싣지 않는다", () => {
+  let errors: ReturnType<typeof vi.spyOn>;
+  const logged = () => errors.mock.calls.flat().map(String).join(" ");
+
+  beforeEach(async () => {
+    ownImages = [내그림];
+    realReview = true;
+    projectSlots = (await import("@fixup/poster-core")).EMPTY_SLOTS;
+    errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => errors.mockRestore());
+
+  it("검수 모델이 던지면 「주 검수 실패: 응답을 받지 못했습니다.」 — 응답 · 저장 둘 다 원문 없음", async () => {
+    reviewThrows = new Error("529 Overloaded: request_id=req_abc (https://api.anthropic.com/v1/messages?key=secret)");
+    const response = await call();
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(JSON.parse(text).issues).toContain("주 검수 실패: 응답을 받지 못했습니다.");
+    expect(text).not.toContain("Overloaded");
+    expect(JSON.stringify(savedReviews)).not.toContain("Overloaded");
+    expect(JSON.stringify(savedReviews)).toContain("주 검수 실패: 응답을 받지 못했습니다.");
+    expect(logged()).toContain("Overloaded");
+    expect(logged()).not.toContain("https://");
+    // 돈 흐름 그대로 — 검수는 끝났으므로 성공으로 닫는다(전과 같다).
+    expect(settleCalls).toEqual([{ success: true, code: undefined }]);
+  });
+
+  it("검수 모델이 답하면 지금처럼 그 판정이다", async () => {
+    const body = await (await call()).json();
+    expect(body).toMatchObject({ ok: true, status: "done", review: { decision: "pass", summary: "좋다" } });
   });
 });
