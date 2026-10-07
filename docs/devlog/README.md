@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **265개**, 저장 기록(커밋, 합치기 제외) **959개**, 배포 꾸러미(릴리스) **213개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **268개**, 저장 기록(커밋, 합치기 제외) **1,002개**, 배포 꾸러미(릴리스) **216개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 17 | 124 | 21 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 20 | 167 | 24 |
 
 <a id="w-2026-08-31"></a>
 
@@ -470,8 +470,12 @@
 - 정면이 나온 뒤 눌러야 하는 단추 이름을 「캐릭터 저장하기」로 바꾸고, 녹색으로 눈에 띄게 했습니다.
 - 캐릭터 만들기에서 그림을 끌어다 놓거나, 칸을 누르고 Ctrl+V로 붙여넣어 넣을 수 있습니다.
 - 파일 이름이 아주 긴 그림을 카드뉴스 등에 올릴 때 알 수 없는 오류가 나며 올라가지 않던 문제를 고쳤습니다.
+- 쉽게와 다양하게에서 생각지 못한 오류가 나도 영어로 된 내부 오류 글 대신 알아보기 쉬운 안내가 나옵니다. 크레딧 부족 같은 꼭 필요한 안내는 그대로 보입니다.
+- 쉽게에서 결과를 기다리는 동안 연결이 잠깐 끊겨도 실패로 끝내지 않고 계속 기다립니다. 이미 값이 나간 실패에는 다시 보내기를 띄우지 않아 같은 그림을 두 번 만들지 않습니다.
+- 쉽게에서 물음에 답했다가 실패해도 물음 단추가 바로 다시 보이고, 오래된 결과물을 고치려 하면 어디서 고칠 수 있는지 사실대로 알려 줍니다.
+- 쉽게 설명서에 번호로 고치기, AI 가 되묻기, 이미지 보고 답하기, 광고 소재 물음을 더하고, 도우미가 새 설명서를 읽도록 다시 넣었습니다.
 
-**운영 배포 7회**
+**운영 배포 8회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -480,8 +484,9 @@
 - 10/7 `20261007T055936Z-489c2f6c` · [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269)
 - 10/7 `20261007T064517Z-8d173288` · [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272)
 - 10/7 `20261007T075908Z-9ecd7eb0` · [#271](https://github.com/junginsu-make/fixup-image-agent/pull/271), [#276](https://github.com/junginsu-make/fixup-image-agent/pull/276)
+- 10/7 `20261007T083455Z-f8fffc77` · [#280](https://github.com/junginsu-make/fixup-image-agent/pull/280)
 
-<details><summary>이 주의 작업 묶음 17개</summary>
+<details><summary>이 주의 작업 묶음 20개</summary>
 
 
 **10/6**
@@ -505,7 +510,10 @@
 - [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269) fix(seo): 첫 화면 검색 제목·설명에 한글 이름 「프롬위드」 <sub>검색 노출 · 첫 화면 · +9 / −2 · 운영 반영 10/7</sub>
 - [#271](https://github.com/junginsu-make/fixup-image-agent/pull/271) fix: 캐릭터 만들기 칸 겹침·저장 단추, 그림 끌어다 놓기·붙여넣기 <sub>캐릭터 · +715 / −25 · 운영 반영 10/7</sub>
 - [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272) fix(seo): 첫 화면 설명에 빠진 「만드는」을 넣는다 <sub>검색 노출 · 첫 화면 · +2 / −2 · 운영 반영 10/7</sub>
+- [#274](https://github.com/junginsu-make/fixup-image-agent/pull/274) fix: 한 회원 안에서 캐릭터 이름이 겹치지 않게 한다 <sub>캐릭터 · 회원·로그인 · +284 / −6</sub>
 - [#276](https://github.com/junginsu-make/fixup-image-agent/pull/276) fix: 파일 이름이 긴 그림도 올라가게 한다(운영 카드뉴스 첨부 오류) <sub>카드뉴스 · 이미지 만들기 · +97 / −5 · 운영 반영 10/7</sub>
+- [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279) test: 캐릭터 첨부 칸 시험이 줄바꿈(CRLF)에 기대지 않게 한다 <sub>이미지 만들기 · 캐릭터 · +4 / −1</sub>
+- [#280](https://github.com/junginsu-make/fixup-image-agent/pull/280) fix(easy): 쉽게 후속 정리 — 오류 원문 가리기 · 옛 결과물 안내 · 단추 · 연결 고장 · 다양하게 오류 글 · 설명서와 색인 <sub>쉽게 모드 · 설명서·도우미 · +4,328 / −726 · 운영 반영 10/7</sub>
 
 </details>
 
