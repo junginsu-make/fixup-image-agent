@@ -159,6 +159,36 @@ describe("섹션 생성에 붙일 지시", () => {
   });
 });
 
+/*
+  **리디자인에도 캐릭터의 종류·그림체를 넘긴다**(2026-10-07 사용자 승인, ③).
+  전에는 고양이 캐릭터도 「그 사람의 얼굴·피부·머리를 지켜라」를 들었다.
+*/
+describe("섹션 지시 — 캐릭터 종류·그림체", () => {
+  it("종류·그림체를 안 주거나 사람·실사면 지금 문장 그대로다", () => {
+    const before = buildSceneWithCharacterDirective({ identityPrompt: "단발", hasStyleReference: true });
+    const after = buildSceneWithCharacterDirective({ identityPrompt: "단발", hasStyleReference: true, kind: "person", look: "photoreal" });
+    expect(after).toBe(before);
+  });
+
+  it("동물 캐릭터는 동물로서 지킬 것을 듣고, 사람 얼굴 문장은 듣지 않는다", () => {
+    const line = buildSceneWithCharacterDirective({ identityPrompt: "grey cat", hasStyleReference: true, kind: "animal", look: "anime" });
+    expect(line).toContain("This is the animal character for this image.");
+    expect(line).not.toMatch(/that person's face/i);
+    expect(line).toMatch(/identity anchor overrides conflicting scene instructions/i);
+    expect(line).toContain("The character's identity: grey cat.");
+  });
+
+  it("애니로 만든 캐릭터는 그림체 예외를 단다", () => {
+    const line = buildSceneWithCharacterDirective({ identityPrompt: "grey cat", hasStyleReference: false, kind: "animal", look: "anime" });
+    expect(line).toMatch(/Rendering exception for this animal character/);
+  });
+
+  it("마스코트는 옷을 바꿔도 된다고 하지 않는다 — 옷은 생김새다", () => {
+    const line = buildSceneWithCharacterDirective({ identityPrompt: "yellow mascot", hasStyleReference: false, kind: "character", look: "3d" });
+    expect(line).not.toMatch(/clothing .*may change/i);
+  });
+});
+
 describe("모델 선택", () => {
   // 실사 인물은 Nano Banana Pro 가 낫다는 것이 원본의 결론이다.
   it("실사는 nano-banana-pro", () => {

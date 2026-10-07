@@ -130,6 +130,7 @@ const passingClient = {
 async function generate(options: Record<string, unknown>) {
   const service = new PdpService();
   let prompt = "";
+  let systemPrompt = "";
   let kinds: string[] = [];
   await (service as never as {
     generateSectionImageInternal: (request: unknown) => Promise<unknown>;
@@ -141,14 +142,15 @@ async function generate(options: Record<string, unknown>) {
     client: passingClient,
     generateImage: async (
       _model: string,
-      input: { prompt: string; references: Array<{ kind: string }> },
+      input: { prompt: string; systemPrompt?: string; references: Array<{ kind: string }> },
     ) => {
       prompt = input.prompt;
+      systemPrompt = input.systemPrompt ?? "";
       kinds = input.references.map((reference) => reference.kind);
       return { base64: "IMG", mimeType: "image/jpeg" };
     },
   });
-  return { prompt, kinds };
+  return { prompt, systemPrompt, kinds };
 }
 
 describe("정책이 실제 생성 호출에 닿는다", () => {
@@ -607,5 +609,85 @@ describe("캐릭터 각도를 여러 장 보낼 때", () => {
     });
 
     expect(prompt.split("20대 한국 여성").length - 1).toBe(1);
+  });
+});
+
+/*
+  **캐릭터를 종류·그림체대로 넘긴다**(2026-10-07 사용자 승인, ③).
+
+  전에는 고양이 캐릭터도 「PERSON」으로 붙고 「얼굴·피부·머리를 지켜라」를 들었다.
+  실사 페이지는 「3D·일러스트 금지」를 말해 애니 캐릭터가 사진 속 진짜 동물이 됐다.
+  사용자 결정: 캐릭터는 제 그림체를 지킨다.
+*/
+describe("캐릭터를 종류·그림체대로 넘긴다", () => {
+  const cat = { base64: "CCCC", mimeType: "image/png", identityPrompt: "a small grey tabby cat with a red scarf", kind: "animal", look: "anime" };
+
+  it("동물 캐릭터는 CHARACTER 로 붙고, 동물로서 지킬 것을 듣는다", async () => {
+    const { prompt } = await generate({ characterReferences: [cat] });
+    expect(prompt).toContain("[Image 2 — CHARACTER]");
+    expect(prompt).toContain("This is the animal character for this image.");
+    expect(prompt).not.toContain("This is the person for this page.");
+    expect(prompt).toContain("The character's identity: a small grey tabby cat with a red scarf.");
+    expect(prompt).not.toContain("The person's identity");
+  });
+
+  it("실사 페이지에서도 애니 캐릭터는 애니로 남으라고 말한다 — 프롬프트·시스템 문장·장면 설명 셋 다", async () => {
+    const { prompt, systemPrompt } = await generate({ withModel: true, characterReferences: [cat] });
+    // 실사 지시가 실리는 두 곳에서 각각 뺀다 — 시스템 문장과 장면 설명(JSON).
+    expect(systemPrompt).toMatch(/Rendering exception for this animal character: keep it drawn in its own anime style/);
+    expect(prompt).toMatch(/"character_style_exception": "Rendering exception for this animal character/);
+    // 세 번째로 되풀이하지 않는다. 같은 규칙이 여러 번이면 프롬프트가 규칙으로 찬다.
+    expect(prompt.split("Rendering exception").length - 1).toBe(1);
+  });
+
+  it("사람이 나와야 한다고 하지 않는다 — 그 캐릭터가 나와야 한다", async () => {
+    const { prompt, systemPrompt } = await generate({ withModel: true, characterReferences: [cat] });
+    expect(systemPrompt).toContain("the supplied reference animal character, exactly as shown");
+    expect(systemPrompt).not.toContain("the supplied reference person");
+    expect(prompt).not.toContain("the supplied reference person");
+  });
+
+  it("여러 각도면 그 동물 캐릭터의 각도라고 말한다", async () => {
+    const { prompt } = await generate({ characterReferences: [cat, { ...cat, base64: "DDDD" }] });
+    expect(prompt).toContain("Images of this animal character (2 of them) are the SAME character");
+    expect(prompt).not.toContain("Generate exactly one person");
+  });
+
+  it("사람 + 실사 캐릭터는 지금과 같다", async () => {
+    const before = await generate({
+      withModel: true,
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성" }],
+    });
+    const after = await generate({
+      withModel: true,
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "20대 한국 여성", kind: "person", look: "photoreal" }],
+    });
+    expect(after.prompt).toBe(before.prompt);
+    expect(after.systemPrompt).toBe(before.systemPrompt);
+    expect(after.prompt).toContain("[Image 2 — PERSON]");
+    expect(after.prompt).toContain("The person's identity: 20대 한국 여성.");
+    expect(after.prompt).not.toContain("Rendering exception");
+  });
+
+  it("사람이라도 애니로 만든 캐릭터는 그림체 예외를 단다", async () => {
+    const { prompt } = await generate({
+      characterReferences: [{ base64: "BBBB", mimeType: "image/png", identityPrompt: "a boy", kind: "person", look: "anime" }],
+    });
+    expect(prompt).toContain("[Image 2 — PERSON]");
+    expect(prompt).toContain("This is the person for this page.");
+    expect(prompt).toMatch(/Rendering exception for this person/);
+  });
+
+  it("업로드 사진이 우선해 캐릭터가 빠지면 캐릭터 문장도 빠진다", async () => {
+    const { prompt } = await generate({
+      withModel: true,
+      referenceModelImageBase64: "UUUU",
+      referenceModelImageMimeType: "image/png",
+      referenceModelProfile: { hairstyle: "단발", keepTraits: [], distinctiveFeatures: [] },
+      characterReferences: [cat],
+    });
+    expect(prompt).not.toContain("CHARACTER]");
+    expect(prompt).not.toContain("Rendering exception");
+    expect(prompt).not.toContain("grey tabby");
   });
 });

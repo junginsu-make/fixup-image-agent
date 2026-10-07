@@ -8,9 +8,11 @@ import { isRetriableModelFailure } from "./pdp.retry-policy";
 import type { PdpLlm } from "./pdp.llm";
 import {
   IMAGE_LOOKS,
+  carriedIdentityLine,
   userInstructionHead,
   userInstructionTail,
   resolveLook,
+  type CarriedCharacter,
   type ImageLook,
 } from "@fixup/shared";
 import type {
@@ -841,6 +843,17 @@ ${analyzePrompt}`
       const characterViews = options.characterReferences ?? [];
       // 위에서 한 번 정했다. 여기서 또 부르면 두 벌이 되고, 한쪽만 고치는 날이 온다.
       const usesCharacter = !usesUploadedPerson && characterViews.length > 0;
+      /*
+        **캐릭터의 종류·그림체·생김새**(2026-10-07, ③). 캐릭터를 실제로 보낼 때만.
+        종류·그림체를 모르는 옛 호출은 사람·실사로 본다 — 지금 문장 그대로다.
+      */
+      const carried: CarriedCharacter | undefined = usesCharacter
+        ? {
+            kind: characterViews[0]?.kind ?? "person",
+            look: characterViews[0]?.look ?? "photoreal",
+            identity: characterViews[0]?.identityPrompt,
+          }
+        : undefined;
 
       if (usesUploadedPerson && normalizedReferenceModel) {
         references.push({
@@ -905,7 +918,8 @@ ${analyzePrompt}`
         modelAgeRange: options.modelAgeRange,
         modelCountry: options.modelCountry,
         guidePriorityMode: options.guidePriorityMode,
-        look: options.look
+        look: options.look,
+        character: carried
       };
 
       // 캐릭터는 생김새 서술을 함께 준다 — 이미지 한 장으로는 옆·뒷모습을 만들 때
@@ -913,10 +927,7 @@ ${analyzePrompt}`
       //
       // **캐릭터를 실제로 보냈을 때만** 싣는다. 사진이 우선해 캐릭터가 빠졌는데도
       // 서술을 실으면, 첨부된 얼굴과 다른 사람을 묘사하게 된다.
-      const characterIdentity =
-        usesCharacter && characterViews[0]?.identityPrompt
-          ? `The person's identity: ${characterViews[0].identityPrompt}.`
-          : "";
+      const characterIdentity = carried ? carriedIdentityLine(carried) : "";
 
       // 재시도 지시(QA 결함 교정, 인물 불일치 교정)는 JSON 뒤에 덧붙인다.
       //
@@ -930,6 +941,7 @@ ${analyzePrompt}`
           hasUserInstruction: Boolean(options.userInstruction),
           // 얼마나 지킬지를 함께 넘긴다. 안 넘기면 토글이 아무것도 안 바꾼다.
           anchorRole,
+          character: carried,
         }),
         characterIdentity,
         retryDirective ? `Correction required: ${retryDirective}` : "",

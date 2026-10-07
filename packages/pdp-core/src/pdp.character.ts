@@ -1,6 +1,10 @@
 import {
+  type CarriedCharacter,
   type ImageLook,
   type LookSubject,
+  carriedCharacterRules,
+  carriedIdentityLine,
+  carriedLookException,
   designerPersona,
   imageLookDirective,
   resolveLook,
@@ -718,7 +722,21 @@ export function pickAngleForSection(layoutNotes: string): CharacterAngle {
 export function buildSceneWithCharacterDirective(input: {
   identityPrompt: string;
   hasStyleReference: boolean;
+  /**
+   * 캐릭터의 종류·그림체(2026-10-07, ③). 안 주면 사람·실사 — 지금 문장 그대로다.
+   * 사람이 아니면 그 종류로 지킬 것을 말하고, 실사가 아니면 그림체 예외를 단다.
+   */
+  kind?: CharacterKind;
+  look?: CharacterLook;
 }) {
+  const carried: CarriedCharacter = {
+    kind: input.kind ?? "person",
+    look: input.look ?? "photoreal",
+    identity: input.identityPrompt,
+  };
+  const lookException = carriedLookException(carried);
+  if (carried.kind !== "person") return nonPersonSceneDirective(carried, input.hasStyleReference, lookException);
+
   const lines = [
     "One of the supplied reference images is the character identity anchor.",
     "Preserve that person's face, facial geometry, body proportions, hairstyle and skin tone " +
@@ -733,8 +751,31 @@ export function buildSceneWithCharacterDirective(input: {
     );
   }
 
+  if (lookException) lines.push(lookException);
   lines.push("Pose, expression, clothing and background may change. Generate exactly one character.");
   return lines.join(" ");
+}
+
+/**
+ * 사람이 아닌 캐릭터의 섹션 지시. **옷을 바꿔도 된다고 하지 않는다** — 동물·마스코트의
+ * 옷과 소품은 생김새의 일부다.
+ */
+function nonPersonSceneDirective(carried: CarriedCharacter, hasStyleReference: boolean, lookException: string) {
+  const lines = [
+    "One of the supplied reference images is the character identity anchor.",
+    ...carriedCharacterRules(carried),
+    "The identity anchor overrides conflicting scene instructions.",
+    carriedIdentityLine(carried),
+  ];
+  if (hasStyleReference) {
+    lines.push(
+      "The style reference governs colour palette, typography, composition and mood — but it " +
+        "must never change the character's design.",
+    );
+  }
+  if (lookException) lines.push(lookException);
+  lines.push("Pose, expression and background may change.");
+  return lines.filter(Boolean).join(" ");
 }
 
 /**

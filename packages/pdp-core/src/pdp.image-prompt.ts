@@ -1,5 +1,13 @@
 import { sectionScenePrompt } from "./pdp.scene-prompt";
-import { designerPersona, imageLookDirective, type ImageLook } from "@fixup/shared";
+import {
+  carriedLookException,
+  carriedSubjectNoun,
+  designerPersona,
+  imageLookDirective,
+  type CarriedCharacter,
+  type ImageLook,
+  type LookSubject,
+} from "@fixup/shared";
 import { PAGE_CONTEXT_MAX_LENGTH } from "./pdp.input-limits";
 import type {
   PdpGuidePriorityMode,
@@ -77,6 +85,13 @@ export interface ImagePromptOptions {
    * 「여름 시즌」이 「왼쪽에 놓아 줘」와 다툰다.
    */
   pageContext?: string;
+  /**
+   * **붙은 캐릭터의 종류·그림체**(2026-10-07, ③). 캐릭터를 실제로 보낼 때만 있다.
+   *
+   * 없으면 지금처럼 「사람」으로 말한다. 동물·마스코트면 「사람이 나와야 한다」가
+   * 틀린 말이 되고, 애니 캐릭터에 실사 지시가 걸리면 다른 캐릭터가 된다.
+   */
+  character?: CarriedCharacter;
 }
 
 /** 나라 이름. 안 고르면 지금까지처럼 한국이다. */
@@ -150,9 +165,21 @@ const STYLE_SETTING: Record<PdpImageStyle, string> = {
  * 한쪽만 갈라져 실제로 어긋났다(2026-09-09). 그래서 한 자리로 모은다.
  */
 function whoAppears(options: ImagePromptOptions) {
-  return options.withModel
-    ? "the supplied reference person, exactly as shown"
-    : personDescriptor(options);
+  if (!options.withModel) return personDescriptor(options);
+  const kind = options.character?.kind ?? "person";
+  return `the supplied reference ${carriedSubjectNoun(kind)}, exactly as shown`;
+}
+
+/** 결 지시문이 누구를 두고 말하는가. 붙은 캐릭터가 동물이면 동물이다. */
+function lookSubject(options: ImagePromptOptions): LookSubject {
+  if (!options.withModel) return "generic";
+  const kind = options.character?.kind ?? "person";
+  return kind === "person" || kind === "animal" ? kind : "generic";
+}
+
+/** 붙은 캐릭터의 그림체 예외. 실사 캐릭터·캐릭터 없음이면 빈 문자열. */
+function characterLookException(options: ImagePromptOptions): string {
+  return options.character ? carriedLookException(options.character) : "";
 }
 
 function peopleRule(options: ImagePromptOptions) {
@@ -203,7 +230,9 @@ export function buildImageSystemPrompt(options: ImagePromptOptions) {
     // 지시문으로 갈아 끼운다 — `auto` 면 아무 말도 보태지 않는다.
     look === "photoreal"
       ? "Realism: produce a real photograph shot by a professional — natural skin and material texture, physical light. Never a 3D render, an illustration, or a generic stock photo."
-      : imageLookDirective(look, options.withModel ? "person" : "generic"),
+      : imageLookDirective(look, lookSubject(options)),
+    // 캐릭터는 제 그림체를 지킨다(사용자 결정 2026-10-07). 위 결 지시 바로 뒤에서 뺀다.
+    characterLookException(options),
     "Composition: compose deliberately. Choose the crop, angle and eye level this message deserves instead of defaulting to a safe centred template. Vary it between sections.",
     "Typography: render the given Korean copy exactly, large and legible at phone size. Emphasise only the words listed, in the accent colour.",
     "Never draw buttons, arrows or other clickable controls — these are static images.",
@@ -273,8 +302,11 @@ export function buildImageJson(section: SectionBlueprint, options: ImagePromptOp
       must_not: ["3D render", "illustration", "stock photo look", "waxy over-smoothed skin"],
     };
   } else if (look !== "auto") {
-    brief.look = imageLookDirective(look, options.withModel ? "person" : "generic");
+    brief.look = imageLookDirective(look, lookSubject(options));
   }
+  // `realism` 의 「3D·일러스트 금지」가 애니 캐릭터에 걸리지 않게 같은 자리에서 뺀다.
+  const exception = characterLookException(options);
+  if (exception) brief.character_style_exception = exception;
 
   /*
     **기획이 이 섹션에 대해 적어 둔 것.**

@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto";
 import {
   IMAGE_LOOKS,
   attachmentPlacementRule,
+  carriedCharacterLabel,
   characterAngleDirective,
   designerPersona,
   imageLookDirective,
   priorityLine,
   userInstructionHead,
   userInstructionTail,
+  type CarriedCharacterKind,
   type ImageLook,
 } from "@fixup/shared";
 import { canUseCommonKnowledge } from "./knowledge-access.js";
@@ -166,7 +168,14 @@ export type GenerateSectionsInput = {
    *
    * 지시문(`directive`)은 사람 하나에 하나다. 첫 장의 것을 쓴다.
    */
-  characters?: Array<{ name: string; mimeType: string; buffer: Buffer; directive: string }>;
+  characters?: Array<{
+    name: string;
+    mimeType: string;
+    buffer: Buffer;
+    directive: string;
+    /** 캐릭터의 종류(2026-10-07, ③). 없으면 사람 — 이름표가 지금처럼 PERSON 이다. */
+    kind?: CarriedCharacterKind;
+  }>;
   /**
    * 그림의 결. 기본은 `auto` — 원본의 결을 따라간다.
    *
@@ -277,8 +286,11 @@ export function buildAttachmentRoleDirective(input: {
    * 잘라낸 뒤의 수다. 여기서 다르게 세면 프롬프트의 번호와 첨부 순서가 갈라진다.
    */
   characterCount: number;
+  /** 등장 캐릭터의 종류(2026-10-07, ③). 사람이 아니면 PERSON 이라 부르지 않는다. */
+  characterKind?: CarriedCharacterKind;
 }): string {
   if (input.originalCount <= 0 && input.characterCount <= 0) return "";
+  const characterKind = input.characterKind ?? "person";
 
   const lines = [
     // 첨부가 있어도 모델은 "이런 종류의 페이지"를 기억에서 꺼내 그리는 쪽으로
@@ -294,7 +306,7 @@ export function buildAttachmentRoleDirective(input: {
     // 인물을 지키라는 문장 자체는 buildSceneWithCharacterDirective 가 따로 붙인다.
     // 여기서는 몇 번째 그림이 그것인지만 밝힌다 — 같은 말을 두 번 하지 않는다.
     for (let count = 0; count < input.characterCount; count += 1) {
-      lines.push(`[Image ${index} — PERSON] The character identity anchor for this page.`);
+      lines.push(`[Image ${index} — ${carriedCharacterLabel(characterKind)}] The character identity anchor for this page.`);
       index += 1;
     }
     /*
@@ -303,7 +315,7 @@ export function buildAttachmentRoleDirective(input: {
      * 포스터·상세페이지와 같은 문장을 쓴다 — 두 곳이 다른 말을 하면 같은 캐릭터가
      * 도구마다 다르게 나온다.
      */
-    if (input.characterCount > 1) lines.push(characterAngleDirective(input.characterCount));
+    if (input.characterCount > 1) lines.push(characterAngleDirective(input.characterCount, characterKind));
     lines.push("");
   }
 
@@ -441,6 +453,7 @@ export async function generateSections(input: GenerateSectionsInput) {
   const attachmentDirective = buildAttachmentRoleDirective({
     originalCount: drawReferences.length - attachedCharacterCount,
     characterCount: attachedCharacterCount,
+    characterKind: character?.kind,
   });
   const sections = buildSections(count, startSection, payload, analysis, modelInfo, character?.directive, {
     attachmentDirective,

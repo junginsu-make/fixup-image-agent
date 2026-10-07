@@ -875,7 +875,8 @@ export async function loadCharacterView(
     (await loadViewBytes(userId, characterId, "front"));
   if (!chosen) return null;
 
-  return { identityPrompt: character.identityPrompt, ...chosen };
+  // 종류·그림체도 함께 준다(2026-10-07, ③). 받는 쪽이 고양이를 사람으로 부르지 않게.
+  return { identityPrompt: character.identityPrompt, kind: character.kind, look: character.look, ...chosen };
 }
 
 /**
