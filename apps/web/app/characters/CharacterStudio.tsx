@@ -732,14 +732,15 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
               </label>
 
               {/*
-                **남는 높이를 이 칸이 다 쓴다**(2026-09-11 사용자 결정). 아래에
-                여백을 남겨 둘 이유가 없고, 묘사는 길수록 결과가 좋아진다 —
-                좁은 칸은 짧게 쓰라는 말처럼 읽힌다.
+                **높이를 정해 둔다**(2026-10-07 사용자 결정). 전에는 남는 높이를
+                이 칸이 다 썼는데(2026-09-11), 모니터가 낮으면 이 칸만 0 까지
+                줄어 글상자가 아래 「내 캐릭터」 칸 위로 겹치거나 사라졌다.
+                화면 크기와 상관없이 같은 크기로 두고, 넘치면 왼쪽 칸이 구른다.
               */}
-              <label className="flex min-h-0 flex-1 flex-col gap-1.5">
+              <label className="grid flex-none gap-1.5">
                 <span className="flex-none text-meta text-subtle-foreground">무엇을 만들까요</span>
                 <Textarea
-                  className="min-h-[7rem] flex-1 resize-none"
+                  className="h-40 resize-none"
                   value={description} disabled={locked} maxLength={2000}
                   placeholder={
                     kind === "person" ? "예: 30대 후반 한국인 여성, 단발머리, 베이지색 니트, 차분한 표정"
@@ -792,7 +793,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 
             한 장만 붙이는 자리인데, 설정 아래에 끼워 두면 붙인 그림이 칸 밖으로
             밀려 굴려야 보였다. 무엇을 붙였는지 안 보이면 역할을 고를 근거가 없다.
-            여기서는 칸 높이를 다 써서 크게 보여 준다.
+            여기서는 제 칸에 정해진 높이로 크게 보여 준다(2026-10-07 부터 고정).
           */}
           <Card className="flex min-h-0 flex-col">
             <CardHeader className="flex-none">
@@ -804,13 +805,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
             <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               {attached ? (
                 <>
-                  {/* 칸에 남는 높이를 이 그림이 다 쓴다. `contain` 이라 세로로
-                      긴 그림도 안 잘린다 — 잘라 보여 주면 붙인 것과 다른 것을
-                      보고 고르게 된다. */}
+                  {/* **높이를 정해 둔다**(2026-10-07 사용자 결정). 남는 높이를 다
+                      쓰게 했더니 모니터가 낮으면 0 까지 줄어 그림이 사라졌다.
+                      `contain` 이라 세로로 긴 그림도 안 잘린다 — 잘라 보여 주면
+                      붙인 것과 다른 것을 보고 고르게 된다. */}
                   <button
                     type="button" aria-label="첨부한 그림 크게 보기"
                     onClick={() => openImageViewer(attached.url, "첨부한 그림")}
-                    className="grid min-h-0 flex-1 place-items-center overflow-hidden rounded-md border bg-muted p-1 transition-opacity hover:opacity-90"
+                    className="grid h-64 flex-none place-items-center overflow-hidden rounded-md border bg-muted p-1 transition-opacity hover:opacity-90"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -913,8 +915,13 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 정면 자리. 만드는 중 · 나온 뒤 · 아직 없음 셋뿐이다.
                 아래 단추들은 **셋 다에서 그대로 보인다**(2026-09-11 사용자 요청) —
                 무엇을 고를 수 있는지 미리 알아야 정면을 만들지 말지 정할 수 있다.
+
+                **높이를 정해 둔다**(2026-10-07 사용자 결정). 남는 높이를 다 쓰게
+                했더니 모니터가 낮으면 0 까지 줄어 아래 단추들이 그 위로 겹쳤다.
+                넘치면 이 칸이 구른다. 256px 인 까닭: 칸이 가장 낮을 때(30rem)도
+                바로 아래 「캐릭터 저장하기」가 굴리지 않고 보인다. 320px 이면 밀린다.
               */}
-              <div className="grid min-h-0 flex-1 place-items-center">
+              <div className="grid h-64 flex-none place-items-center">
                 {busy === "candidates" ? (
                   <MakingBox
                     title="정면을 만드는 중입니다"
@@ -961,14 +968,26 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 
               {/* ── 단추는 결과물이 없어도 늘 보인다 ────────────────── */}
               <div className="grid flex-none gap-2">
+                {/*
+                  **정면이 나오면 이것을 눌러야 저장된다**(2026-10-07 사용자 요청).
+                  「정면만 만들기」라는 이름은 정면을 또 만드는 것처럼 읽혔다.
+                  정면이 나왔을 때만 녹색으로 바꾸고 고리를 번지게 한다 —
+                  나오기 전에 녹색이면 눌러야 할 때를 알려 주지 못한다.
+                  글자는 `primary-foreground` 다. 밝은 화면은 흰 글자(4.98:1),
+                  어두운 화면은 진한 글자라 둘 다 읽힌다.
+                */}
                 <Button
                   disabled={!chosen || Boolean(busy)}
                   onClick={() => void handleCreate(false)}
+                  className={cn(
+                    chosen && "bg-success font-bold text-primary-foreground hover:bg-success/90",
+                    chosen && !busy && "fixup-cta-pulse [--cta-pulse-color:var(--success)]",
+                  )}
                 >
                   {busy === "create" && !pending.length
                     ? <Loader2 size={16} className="mr-1.5 animate-spin" />
                     : null}
-                  정면만 만들기
+                  캐릭터 저장하기
                 </Button>
 
                 {/* 여기서부터가 「이어서 더 만들기」다. 줄을 그어 나눈다 —
