@@ -18,6 +18,20 @@ let planningKeyMissing = false;
 let reserveFails = false;
 const reserved: number[] = [];
 const finalized: Array<{ success: boolean; units: number; error?: string }> = [];
+/** 참이면 패키지의 진짜 `readAttachments` · `planPoster` 를 쓴다 — 제공자가 던진 글이 `issues` 로 가는 길을 본다. */
+let realCore = false;
+/** 붙인 그림. 진짜 읽기를 돌릴 때만 채운다. */
+let references: Array<{ id: string; title: string; url: string }> = [];
+/** 제공자가 던질 것과 예비가 있는지. */
+let readThrows: Error | null = null;
+let primaryThrows: Error | null = null;
+let hasBackup = false;
+let backupCalls = 0;
+let backupThrows: Error | null = null;
+/** 실패로 닫는 정산이 던질 것(RPC 흔들림). */
+let finalizeFailureThrows: Error | null = null;
+/** 마지막으로 저장한 것. */
+let saved: Record<string, unknown> | undefined;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -33,6 +47,7 @@ vi.mock("../../../../lib/membership/api", () => ({
   },
   finalizeAiUsage: async (_reservation: unknown, success: boolean, units: number, errorCode?: string) => {
     finalized.push({ success, units, error: errorCode });
+    if (!success && finalizeFailureThrows) throw finalizeFailureThrows;
   },
 }));
 
@@ -45,13 +60,16 @@ vi.mock("../../../../lib/poster/stores", () => ({
       },
       update: async (_id: string, patch: Record<string, unknown>) => {
         if (projectUpdateThrows) throw projectUpdateThrows;
+        saved = patch;
         return { ...project, ...patch };
       },
     },
   }),
 }));
 
-vi.mock("../../../../lib/poster/references", () => ({ posterReferencesByIds: async () => [] }));
+vi.mock("../../../../lib/poster/references", () => ({
+  posterReferencesByIds: async (_viewer: unknown, ids: string[]) => references.filter((reference) => ids.includes(reference.id)),
+}));
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 
 vi.mock("../../../../lib/poster/providers", () => {
@@ -62,10 +80,32 @@ vi.mock("../../../../lib/poster/providers", () => {
     }
   }
   return {
-    createPosterAttachmentReader: () => ({}),
+    createPosterAttachmentReader: () => ({
+      read: async () => {
+        if (readThrows) throw readThrows;
+        return { people: [], staging: "", hasText: false };
+      },
+    }),
     createPosterPlanningProviders: () => {
       if (planningKeyMissing) throw new PosterProviderConfigurationError(["ANTHROPIC_API_KEY"]);
-      return { primary: {}, backup: undefined };
+      const 기획 = { slots: {}, invented: [] };
+      return {
+        primary: {
+          plan: async () => {
+            if (primaryThrows) throw primaryThrows;
+            return 기획;
+          },
+        },
+        backup: hasBackup
+          ? {
+            plan: async () => {
+              backupCalls += 1;
+              if (backupThrows) throw backupThrows;
+              return 기획;
+            },
+          }
+          : undefined,
+      };
     },
     PosterProviderConfigurationError,
   };
@@ -75,8 +115,10 @@ vi.mock("@fixup/poster-core", async () => {
   const real = await vi.importActual<typeof import("@fixup/poster-core")>("@fixup/poster-core");
   return {
     ...real,
-    readAttachments: async () => ({ reads: {}, summaries: {}, people: {}, issues: [] }),
-    planPoster: async () => ({ slots: real.EMPTY_SLOTS, invented: [], issues: [] }),
+    readAttachments: async (...args: Parameters<typeof real.readAttachments>) =>
+      realCore ? real.readAttachments(...args) : { reads: {}, summaries: {}, people: {}, issues: [] },
+    planPoster: async (...args: Parameters<typeof real.planPoster>) =>
+      realCore ? real.planPoster(...args) : { slots: real.EMPTY_SLOTS, invented: [], issues: [] },
   };
 });
 
@@ -97,6 +139,15 @@ beforeEach(() => {
   reserveFails = false;
   reserved.length = 0;
   finalized.length = 0;
+  realCore = false;
+  references = [];
+  readThrows = null;
+  primaryThrows = null;
+  hasBackup = false;
+  backupCalls = 0;
+  backupThrows = null;
+  finalizeFailureThrows = null;
+  saved = undefined;
   errors = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => errors.mockRestore());
@@ -179,5 +230,81 @@ describe("일부러 쓴 안내 · 성공은 그대로", () => {
     expect(response.status).toBe(200);
     expect((await response.json()).ok).toBe(true);
     expect(finalized.map((entry) => entry.success)).toEqual([true]);
+  });
+});
+
+/**
+ * **제공자가 던진 원문은 `issues` 에도 싣지 않는다**(2026-10-07 후속 Task 12b).
+ *
+ * 패키지(`readAttachments` · `withIssueFallback`)는 던진 글을 그대로 「주 모델 기획 실패: <원문>」으로
+ * 적는다. 그 목록은 성공 응답으로 화면에 뜨고 작업(`grammarIssues`)에도 저장된다. 라우트가 제공자 호출을
+ * 감싸 원문은 기록에 남기고 우리 문장으로 **다시 던진다** — 던지기는 그대로라 주→예비 넘어가기가 같다.
+ */
+describe("제공자 원문은 issues 에도 싣지 않는다", () => {
+  const 제공자원문 = new Error("529 Overloaded: request_id=req_abc (https://api.anthropic.com/v1/messages?key=secret)");
+
+  beforeEach(() => {
+    realCore = true;
+  });
+
+  it("주 기획이 던지면 「주 모델 기획 실패: 응답을 받지 못했습니다.」 — 응답 · 저장 둘 다 원문 없음", async () => {
+    primaryThrows = 제공자원문;
+    const response = await call();
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const body = JSON.parse(text);
+    expect(body.issues).toContain("주 모델 기획 실패: 응답을 받지 못했습니다.");
+    expect(text).not.toContain("Overloaded");
+    expect(JSON.stringify(saved)).not.toContain("Overloaded");
+    expect((saved?.data as { grammarIssues: string[] }).grammarIssues).toContain("주 모델 기획 실패: 응답을 받지 못했습니다.");
+    expect(logged()).toContain("Overloaded");
+    expect(logged()).not.toContain("https://");
+  });
+
+  it("주가 던져도 예비로 넘어가는 것은 전과 같다", async () => {
+    primaryThrows = 제공자원문;
+    hasBackup = true;
+    const body = await (await call()).json();
+    expect(backupCalls).toBe(1);
+    expect(body.ok).toBe(true);
+    expect(body.issues.join(" ")).toContain("예비로 기획했습니다: 응답을 받지 못했습니다.");
+    expect(JSON.stringify(body)).not.toContain("Overloaded");
+  });
+
+  it("예비까지 던지면 둘 다 우리 문장이다", async () => {
+    primaryThrows = 제공자원문;
+    hasBackup = true;
+    backupThrows = new Error("400 Bad Request: invalid_api_key sk-proj-abc");
+    const text = await (await call()).text();
+    expect(JSON.parse(text).issues.join(" ")).toContain("예비 기획도 실패했습니다: 응답을 받지 못했습니다.");
+    expect(text).not.toContain("invalid_api_key");
+    expect(text).not.toContain("Overloaded");
+  });
+
+  it("붙인 그림 읽기가 던지면 「… 을 읽지 못했습니다: 응답을 받지 못했습니다.」", async () => {
+    references = [{ id: "r1", title: "표지", url: "https://cdn.example/r1.png" }];
+    project!.data.referenceIds = ["r1"];
+    readThrows = 제공자원문;
+    const text = await (await call()).text();
+    expect(JSON.parse(text).issues).toContain("표지 을 읽지 못했습니다: 응답을 받지 못했습니다.");
+    expect(text).not.toContain("Overloaded");
+    expect(logged()).toContain("Overloaded");
+  });
+});
+
+/**
+ * **실패로 닫는 정산이 흔들려도 화면은 우리 JSON 을 받는다**(Task 12b). 전에는 그 `await` 가 던지면
+ * `planFailure` 를 건너뛰어 Next 기본 500(본문이 JSON 이 아님)이 나갔다. 닫기 호출의 인자 · 순서는 같다.
+ */
+describe("실패로 닫기가 던져도", () => {
+  it("닫기를 같은 인자로 부르고, 응답은 일반 문장 JSON 500 그대로", async () => {
+    projectUpdateThrows = 날것;
+    finalizeFailureThrows = new Error("rpc finalize_generation failed (https://abc.supabase.co/rest/v1/rpc)");
+    const response = await call();
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ ok: false, message: 일반문장 });
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_plan_failed" }]);
+    expect(logged()).toContain("finalize_generation");
+    expect(logged()).not.toContain("https://");
   });
 });
