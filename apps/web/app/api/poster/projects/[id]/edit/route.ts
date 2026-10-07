@@ -134,10 +134,7 @@ async function handlePost(request: Request, context: Context) {
           const file = await referenceBytes(reference.storagePath);
           return await fal.uploader.uploadReference(file.bytes, file.contentType);
         } catch (error) {
-          console.error(
-            `[poster] 고치기: 원본 사진을 못 올려 빼고 갑니다(${reference.id}): `
-            + `${error instanceof Error ? error.message : error}`,
-          );
+          console.error(`[poster] 고치기: 원본 사진을 못 올려 빼고 갑니다(${reference.id}): ${errorLogText(error)}`);
           return "";
         }
       },
@@ -163,7 +160,7 @@ async function handlePost(request: Request, context: Context) {
       const file = await referenceBytes(reference.storagePath);
       return fal.uploader.uploadReference(file.bytes, file.contentType);
     })).catch((error) => {
-      console.error(`[poster] 고치기: 붙인 사진을 올리지 못했습니다: ${error instanceof Error ? error.message : error}`);
+      console.error(`[poster] 고치기: 붙인 사진을 올리지 못했습니다: ${errorLogText(error)}`);
       return null;
     });
     if (!addedUrls) {

@@ -44,6 +44,8 @@ let libraryReferences: Array<{ id: string; storagePath: string }> = [];
 let uploadCount = 0;
 /** 저장소에서 파일이 사라진 라이브러리 그림의 경로. */
 let missingPaths: string[] = [];
+/** 사라진 파일을 읽을 때 저장소가 던질 글(서명한 주소가 섞여 오는 흉내, 최종 수정 L4). */
+let missingMessage = "Object not found";
 /** 예약이 잡은 장수와 확정한 장수. **돈이 오가는 길이라 둘 다 본다.** */
 const reserved: number[] = [];
 const finalized: Array<{ success: boolean; units: number; error?: string }> = [];
@@ -126,7 +128,7 @@ vi.mock("../../../../lib/poster/asset-bytes", () => ({
     return { bytes: Buffer.from("x"), contentType: "image/png" };
   },
   referenceBytes: async (storagePath: string) => {
-    if (missingPaths.includes(storagePath)) throw new Error("Object not found");
+    if (missingPaths.includes(storagePath)) throw new Error(missingMessage);
     return { bytes: Buffer.from("r"), contentType: "image/png" };
   },
 }));
@@ -177,6 +179,7 @@ beforeEach(() => {
   libraryReferences = [];
   uploadCount = 0;
   missingPaths = [];
+  missingMessage = "Object not found";
   reserved.length = 0;
   finalized.length = 0;
   updates.length = 0;
@@ -740,3 +743,40 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
   });
 });
 
+/**
+ * **사진을 못 올린 기록에도 주소는 남기지 않는다**(최종 수정 L4, 보안 리뷰). 저장소 · fal 오류 글에 서명한
+ * 주소가 섞여 올 수 있다. 다른 기록과 같이 `errorLogText` 로 가린 글만 찍는다. 응답과 돈 흐름은 그대로다.
+ */
+describe("사진 올리기 실패 기록 (최종 수정 L4)", () => {
+  const 서명주소 = "fetch failed https://abc.supabase.co/storage/v1/object/sign/u1/ref/x.png?token=SECRET";
+  let errors: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    missingMessage = 서명주소;
+  });
+  afterEach(() => errors.mockRestore());
+
+  const logged = () => errors.mock.calls.flat().map(String).join(" ");
+
+  it("원본 사진을 못 올려 뺄 때 주소를 가리고 남긴다 — 고치기는 그대로 간다", async () => {
+    project.data = { ...project.data, preservedIds: ["gone"], attachmentOrder: ["gone"] };
+    libraryReferences = [{ id: "gone", storagePath: "u1/ref/gone.png" }];
+    missingPaths = ["u1/ref/gone.png"];
+    const response = await call({ instruction: "배경을 밤으로 바꿔 주세요" });
+    expect(response.status).toBe(200);
+    expect(logged()).toContain("gone");
+    expect(logged()).toContain("fetch failed <url>");
+    expect(logged()).not.toContain("SECRET");
+  });
+
+  it("붙인 사진을 못 올릴 때도 주소를 가리고 남긴다 — 응답은 400 그대로", async () => {
+    libraryReferences = [{ id: "logo-1", storagePath: "u1/ref/logo.png" }];
+    missingPaths = ["u1/ref/logo.png"];
+    const response = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: ["logo-1"] });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ ok: false, message: "붙인 사진을 읽지 못했습니다. 다시 붙여 주세요." });
+    expect(logged()).toContain("fetch failed <url>");
+    expect(logged()).not.toContain("SECRET");
+  });
+});
