@@ -25,7 +25,7 @@ export type SearchVerificationCodes = { google: string; naver: string; daumPin: 
  */
 export const SEARCH_VERIFICATION: SearchVerificationCodes = {
   google: "",
-  naver: "",
+  naver: "71bcc9f01c1627643f6ea41d7cabef997708066f",
   daumPin: "",
 };
 

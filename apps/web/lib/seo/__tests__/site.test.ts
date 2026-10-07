@@ -14,6 +14,11 @@ describe("verificationMetadata", () => {
       other: { "naver-site-verification": "n-code" },
     });
   });
+  it("운영 값: 네이버 서치어드바이저가 준 값이 기본으로 나간다", () => {
+    expect(verificationMetadata()).toMatchObject({
+      other: { "naver-site-verification": "71bcc9f01c1627643f6ea41d7cabef997708066f" },
+    });
+  });
   it("둘 다, 앞뒤 공백은 지운다", () => {
     expect(verificationMetadata({ google: " g ", naver: " n ", daumPin: "" })).toEqual({
       google: "g",
