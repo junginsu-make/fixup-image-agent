@@ -13,6 +13,8 @@ import { hasActiveQueuedGeneration, startQueuedFlow } from "../../../../../../..
 import { CARD_NOTE_MAX } from "../../../../../../sns/[id]/result-rules";
 import { withSnsProjectLock } from "../../../../../../../lib/sns/project-lock";
 import { updateFlowCopy } from "../../../../flow-service";
+import { FalPoolBusyError, FalPoolUnavailableError } from "../../../../../../../lib/fal/pool/router";
+import { snsFailure } from "../../../../failure";
 
 type Context = { params: Promise<{ id: string; index: string }> };
 
@@ -38,6 +40,9 @@ const CopyPatchSchema = z.object({
   footnote: z.string().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "바꿀 원고를 하나 이상 보내 주세요.");
 
+/** `updateFlowCopy` 가 없는 장 번호에 던지는 글(`flow-service.ts`). */
+const CARD_NOT_FOUND = "카드를 찾을 수 없습니다.";
+
 function cardIndex(value: string): number | undefined {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
@@ -62,7 +67,11 @@ export async function PATCH(request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "원고를 저장하지 못했습니다." }, { status: 500 });
+    // 없는 장 번호(`updateFlowCopy`)는 우리가 쓴 안내다. 지금처럼 500 과 그 문장 그대로.
+    if (error instanceof Error && error.message === CARD_NOT_FOUND) {
+      return Response.json({ ok: false, message: error.message }, { status: 500 });
+    }
+    return snsFailure("원고 고치기", error, "원고를 저장하지 못했습니다.", 500);
   }
 }
 
@@ -168,7 +177,12 @@ async function handlePost(request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
+    // fal 계정 풀의 두 문장은 우리가 쓴 안내다. 원문은 풀이 기록에만 남겼다(`lib/fal/queue.ts` 가 일부러 넘긴다).
+    if (error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError) {
+      return Response.json({ ok: false, message: error.message }, { status: 500 });
+    }
+    // 설정 오류는 503 을 지키되 환경변수 이름은 서버 기록에만 남긴다.
     const status = error instanceof SnsProviderConfigurationError ? error.status : 500;
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "카드를 다시 만들지 못했습니다." }, { status });
+    return snsFailure("한 장 다시 만들기", error, "카드를 다시 만들지 못했습니다.", status);
   }
 }

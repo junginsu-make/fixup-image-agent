@@ -8,6 +8,8 @@ import { createQueuedGenerationDependencies, refreshProjectAssetUrls } from "../
 import { hasActiveQueuedGeneration, pollQueuedFlow, stopQueuedGeneration, STOPPED_BY_AI_PAUSE } from "../../../../../../lib/sns/queued-flow";
 import { withSnsProjectLock } from "../../../../../../lib/sns/project-lock";
 import { isAiPaused } from "../../../../../../lib/ai-control/pause";
+import { FalPoolBusyError, FalPoolUnavailableError } from "../../../../../../lib/fal/pool/router";
+import { snsFailure } from "../../../failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -90,7 +92,12 @@ async function handlePost(_request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
+    // fal 계정 풀의 두 문장은 우리가 쓴 안내다. 원문은 풀이 기록에만 남겼다(`lib/fal/queue.ts` 가 일부러 넘긴다).
+    if (error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError) {
+      return Response.json({ ok: false, message: error.message }, { status: 502 });
+    }
+    // 설정 오류는 503 을 지키되 환경변수 이름은 서버 기록에만 남긴다. 폴링이 읽는 상태 코드는 그대로다.
     const status = error instanceof SnsProviderConfigurationError ? error.status : 502;
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "fal 상태를 확인하지 못했습니다." }, { status });
+    return snsFailure("상태 조회", error, "fal 상태를 확인하지 못했습니다.", status);
   }
 }

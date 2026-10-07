@@ -6,6 +6,7 @@ import { createActualPlanningFlow } from "../../../../../../lib/sns/actual-flow"
 import { createSourceAdapters } from "../../../../../../lib/sns/source-adapters";
 import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
 import { refreshProjectAssetUrls, replaceSnsCardRows } from "../../../../../../lib/sns/runtime";
+import { snsFailure } from "../../../failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -26,7 +27,7 @@ export async function GET(_request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다." }, { status: 500 });
+    return snsFailure("작업 읽기", error, "프로젝트를 불러오지 못했습니다.", 500);
   }
 }
 
@@ -68,7 +69,8 @@ async function plan(request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
+    // 설정 오류는 503 을 지키되 환경변수 이름은 서버 기록에만 남긴다.
     const status = error instanceof SnsProviderConfigurationError ? error.status : 500;
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "기획과 원고를 만들지 못했습니다." }, { status });
+    return snsFailure("기획 · 원고", error, "기획과 원고를 만들지 못했습니다.", status);
   }
 }

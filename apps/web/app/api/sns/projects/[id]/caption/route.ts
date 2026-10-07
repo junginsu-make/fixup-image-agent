@@ -4,6 +4,7 @@ import { freeCreditPlan } from "../../../../../../lib/membership/credit-ledger";
 import { llmSettleCost, withLlmMeter } from "../../../../../../lib/llm/meter";
 import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-flow-store";
 import { createSnsPlanningProviders, SnsProviderConfigurationError } from "../../../../../../lib/sns/providers";
+import { snsFailure } from "../../../failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -59,10 +60,8 @@ async function caption(request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
+    // 설정 오류는 503 을 지키되 환경변수 이름은 서버 기록에만 남긴다.
     const status = error instanceof SnsProviderConfigurationError ? error.status : 500;
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "게시글 문구를 만들지 못했습니다." },
-      { status },
-    );
+    return snsFailure("게시글 문구", error, "게시글 문구를 만들지 못했습니다.", status);
   }
 }

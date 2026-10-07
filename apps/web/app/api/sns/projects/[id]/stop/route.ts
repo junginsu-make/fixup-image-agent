@@ -3,6 +3,7 @@ import { snsFlowStoreForUser, snsWriteDenied } from "../../../../../../lib/sns-f
 import { stopQueuedGeneration } from "../../../../../../lib/sns/queued-flow";
 import { settleSnsReservation } from "../../../../../../lib/sns/settle";
 import { withSnsProjectLock } from "../../../../../../lib/sns/project-lock";
+import { snsFailure } from "../../../failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -41,9 +42,6 @@ export async function POST(_request: Request, context: Context) {
     // 남의 작업이라 못 고치는 것이면 500 이 아니라 403 으로 답한다.
     const denied = snsWriteDenied(error);
     if (denied) return denied;
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "멈추지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("멈추기", error, "멈추지 못했습니다.", 500);
   }
 }
