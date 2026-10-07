@@ -94,7 +94,9 @@ function lookBlock(look: ImageLook | undefined): string {
 function styleReferencesForRole(grouped: GroupedAttachments, role: StyleRole): Attachment[] {
   const own = grouped.styleByRole[role];
   if (role !== "ending" || own.length > 0) return own;
-  return grouped.styleByRole.body.length > 0 ? grouped.styleByRole.body : grouped.styleByRole.cover;
+  const lent = grouped.styleByRole.body.length > 0 ? grouped.styleByRole.body : grouped.styleByRole.cover;
+  // 빌려 왔다고 표시한다. 그대로 두면 프롬프트가 「속지 레퍼런스」라고 불러 이 장을 속지로 읽게 한다.
+  return lent.map((attachment) => ({ ...attachment, borrowedFor: role }));
 }
 
 /** 표지·속지·엔딩은 자기 역할 레퍼런스만 보고(엔딩은 빌려 온다), 보존 대상은 모든 역할에 함께 간다. */
@@ -160,7 +162,10 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
       // 있던 아이콘을 그대로 베끼거나 반대로 아이콘 없는 허전한 카드가 나왔다.
       // 가져올 것과 가져오지 않을 것을 나눠 말해야 한다.
       lines.push(
-        `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. ` +
+        (image.borrowedFor
+          ? `Image ${number} is a CARD-NEWS REFERENCE borrowed from the ${image.role ?? "other"} card of this series;`
+            + ` this card is the ${image.borrowedFor} card. `
+          : `Image ${number} is the ${image.role ?? "matching"} CARD-NEWS REFERENCE for this card. `) +
         "Imitate its design language only:",
         "  · layout and composition, typography (weight, width, character), text treatment, " +
         "texture and rendering style (photographic / illustrated / 3D)",

@@ -4,10 +4,11 @@ import type { CardPhotoRole } from "./photo-roles";
 /**
  * 정해진 역할을 **카드뉴스가 받는 첨부**로 옮긴다(2단계 설계 §5).
  *
- * 카드는 **자기 자리 레퍼런스만** 본다(`sns-core/image-prompt.ts` 의
- * `selectReferencesForRole`). 자리를 비우면 그 카드는 다른 모양으로 나온다. 그래서
- * 레퍼런스가 한 장이면 세 자리 모두에 넣는다. 같은 그림을 자리만 달리해 여러 번
- * 넣어도 올리기는 한 번이다(`queued-flow.ts` 의 `uploadUniqueReferences`).
+ * 카드는 **자기 자리 레퍼런스**를 본다(`sns-core/image-prompt.ts` 의
+ * `selectReferencesForRole`). 표지 · 속지 자리를 비우면 그 카드는 다른 모양으로 나온다.
+ * 엔딩만은 자리가 비면 속지(없으면 표지) 그림을 빌려 쓴다(2026-10-07) — 이 파일의
+ * `styleSlots` 와 같은 규칙이다. 그래도 레퍼런스가 한 장이면 세 자리 모두에 넣는다. 같은
+ * 그림을 자리만 달리해 여러 번 넣어도 올리기는 한 번이다(`queued-flow.ts` 의 `uploadUniqueReferences`).
  */
 
 export interface CardPhoto {

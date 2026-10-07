@@ -167,6 +167,34 @@ describe("역할별 레퍼런스", () => {
     expect(selectReferencesForRole(endingOnly, "ending").map((image) => image.id)).toEqual(["ending"]);
   });
 
+  /** 빌려 온 그림을 「속지 레퍼런스」라고 부르면 모델이 이 장을 속지로 읽는다(2026-10-07 리뷰). */
+  it("빌려 온 그림은 빌려 왔다고 적고, 제 자리 그림의 문구는 그대로다", () => {
+    const grouped = groupAttachments([
+      attachment({ id: "body", kind: "style_reference", role: "body" }),
+      attachment({ id: "product", kind: "keep_identity", subject: "object" }),
+    ]);
+    const borrowed = selectReferencesForRole(grouped, "ending");
+    expect(borrowed.map((image) => image.borrowedFor)).toEqual(["ending", undefined]);
+    const endingBlock = buildAttachmentBlock(borrowed);
+    expect(endingBlock).toContain(
+      "Image 1 is a CARD-NEWS REFERENCE borrowed from the body card of this series; this card is the ending card. ",
+    );
+    expect(endingBlock).not.toContain("is the body CARD-NEWS REFERENCE");
+
+    const own = selectReferencesForRole(grouped, "body");
+    expect(own.some((image) => "borrowedFor" in image)).toBe(false);
+    expect(buildAttachmentBlock(own)).toContain("Image 1 is the body CARD-NEWS REFERENCE for this card. ");
+    // 묶음의 원본은 그대로다.
+    expect(grouped.styleByRole.body[0]).not.toHaveProperty("borrowedFor");
+  });
+
+  it("엔딩 자리 그림이 있으면 빌리지 않는다", () => {
+    const grouped = groupAttachments([attachment({ id: "ending", kind: "style_reference", role: "ending" })]);
+    const own = selectReferencesForRole(grouped, "ending");
+    expect(own[0]).not.toHaveProperty("borrowedFor");
+    expect(buildAttachmentBlock(own)).toContain("Image 1 is the ending CARD-NEWS REFERENCE for this card. ");
+  });
+
   it("따라 만들 그림이 하나도 없으면 엔딩도 지금처럼 경고한다", () => {
     const none = groupAttachments([attachment({ id: "product", kind: "keep_identity", subject: "object" })]);
     expect(selectReferencesForRole(none, "ending").map((image) => image.id)).toEqual(["product"]);

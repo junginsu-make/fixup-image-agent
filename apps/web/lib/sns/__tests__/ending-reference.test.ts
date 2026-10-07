@@ -75,7 +75,8 @@ describe("엔딩 자리 그림이 없을 때", () => {
     expect(submitted).toHaveLength(1);
     expect(submitted[0]!.endpoint).toBe("openai/gpt-image-2/edit");
     expect(submitted[0]!.input.image_urls).toEqual(["https://fal.media/body-ref"]);
-    expect(started.cards[3]!.prompt).toContain("CARD-NEWS REFERENCE");
+    expect(started.cards[3]!.prompt).toContain("borrowed from the body card of this series; this card is the ending card");
+    expect(started.cards[3]!.prompt).not.toContain("is the body CARD-NEWS REFERENCE");
   });
 
   it("비용 예상이 실제로 보낸 값과 같다", async () => {
