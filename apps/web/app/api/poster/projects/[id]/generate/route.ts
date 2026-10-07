@@ -326,14 +326,19 @@ const GENERATE_FAILED = "생성을 시작하지 못했습니다. 잠시 뒤 다�
  * 우리가 쓴 문장만 그대로 보인다 — 조립 거절(사진 장수 · 크기 등, 사용자가 고칠 수 있다),
  * 과금 뒤 실패(「다시 해 보세요」로 덮으면 두 번째 작업을 만든다 — `flow.ts`), fal 계정 풀의
  * 두 문장(원문은 풀이 기록에만 남겼다). 나머지는 일반 문장이고 원문은 서버 기록에만 남긴다.
- * **상태 코드는 전과 같다**(500, 설정 오류만 503) — 화면과 쉽게 모드가 받는 갈래가 그대로다.
+ * **상태 코드는 전과 같다**(500, 설정 오류만 503) — 화면이 받는 갈래가 그대로다.
+ *
+ * 우리 문장에는 `userFacing` 을 단다(최종 수정 L1). 쉽게 모드는 코드 없는 5xx 를 날것 글로 보고 가리는데,
+ * 이 넷도 500 이라 「만들지 못했습니다.」와 다시 보내기로 덮였다. 과금 뒤 실패에 다시 보내기를 띄우면 fal 값이
+ * 두 번 나간다. 그래서 과금 뒤 실패와 조립 거절은 `retryable: false` 도 단다(같은 것을 또 보내도 같은 곳에서
+ * 막힌다). 계정 풀 두 문장은 잠시 뒤 풀리니 다시 보내기를 둔다. 「다양하게」 화면은 `ok` · `message` 만 읽는다.
  */
 function generateFailure(error: unknown, rejected: string | undefined): Response {
-  if (
-    error instanceof PosterChargedError || error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError
-    || (rejected && error instanceof Error && error.message === rejected)
-  ) {
-    return Response.json({ ok: false, message: error.message }, { status: 500 });
+  if (error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError) {
+    return Response.json({ ok: false, message: error.message, userFacing: true }, { status: 500 });
+  }
+  if (error instanceof PosterChargedError || (rejected && error instanceof Error && error.message === rejected)) {
+    return Response.json({ ok: false, message: error.message, userFacing: true, retryable: false }, { status: 500 });
   }
   console.error("[poster] 만들기 시작 실패", errorLogText(error));
   const status = error instanceof PosterProviderConfigurationError ? 503 : 500;

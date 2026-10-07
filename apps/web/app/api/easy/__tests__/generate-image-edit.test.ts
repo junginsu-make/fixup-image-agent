@@ -20,6 +20,8 @@ let 받은갈래: string[] = [];
 let 그림들: Array<{ id: string; generationRequestId: string; selected: boolean }> = [];
 let 고치기실패 = false;
 let 목록실패 = false;
+// 고치기 라우트가 줄 답을 통째로 정한다(최종 수정 L1).
+let 고치기답: (() => Response) | null = null;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -77,6 +79,7 @@ vi.mock("../../../../lib/poster/stores", () => ({
 const 라우트 = (step: string) => ({
   POST: async (req: Request) => {
     부른라우트.push({ step, url: req.url, body: await req.json() });
+    if (step === "edit" && 고치기답) return 고치기답();
     if (step === "edit" && 고치기실패) return Response.json({ ok: false, message: "고치기가 막혔습니다." }, { status: 403 });
     return step === "project"
       ? Response.json({ ok: true, project: { id: "new" } })
@@ -119,6 +122,7 @@ beforeEach(() => {
   그림들 = [{ id: "img-1", generationRequestId: "r1", selected: false }];
   고치기실패 = false;
   목록실패 = false;
+  고치기답 = null;
 });
 
 describe("이미지를 만든 대화에서 고쳐 달라고 하면", () => {
@@ -199,6 +203,25 @@ describe("고치기가 실패하면 (2026-10-06 B4)", () => {
     await 보낸다({ prompt: "배경만 파랗게" });
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
     expect(남긴줄[2]!.body).toBe(failureRowBody("고치기가 막혔습니다."));
+  });
+
+  /**
+   * **고치기 라우트가 우리 문장이라고 표시한 400**(최종 수정 L1). 아래 본문은 `editFailure` 가 내는 것 그대로다
+   * (`poster-edit-route.test.ts` 가 고정). 과금 뒤 실패 · 조립 거절은 다시 보내기를 안 띄운다 — 과금 뒤에 다시
+   * 보내면 fal 값이 두 번 나간다. 계정 풀 문장은 다시 보내기를 띄운다. 대화의 실패 줄도 같은 문장이다.
+   */
+  it.each([
+    ["제출은 됐는데 장부에 적지 못했습니다.", false],
+    ["첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다.", false],
+    ["지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.", true],
+    ["이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.", true],
+  ] as const)("우리 문장(%s)은 그대로, 다시 보내기는 %s", async (message, retryable) => {
+    고치기답 = () => Response.json({ ok: false, message, userFacing: true, ...(retryable ? {} : { retryable: false }) }, { status: 400 });
+    판단 = { ...(판단 as object), wants: "image_edit" };
+    const { status, json } = await 보낸다({ prompt: "배경만 파랗게" });
+    expect(status).toBe(400);
+    expect(json).toMatchObject({ ok: false, message, retryable });
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(message));
   });
 });
 

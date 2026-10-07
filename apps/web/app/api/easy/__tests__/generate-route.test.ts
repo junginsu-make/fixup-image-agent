@@ -21,6 +21,8 @@ let 기획던짐 = false;
 let 남기기실패: Error | null = null;
 // 기획 라우트가 줄 답을 통째로 정한다(후속 Task 1 수정 1).
 let 기획답: (() => Response) | null = null;
+// 생성 라우트가 줄 답(최종 수정 L1). 없으면 제출 성공이다.
+let 생성답: (() => Response) | null = null;
 let 볼수있는사진: string[];
 const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
@@ -91,6 +93,7 @@ vi.mock("../../poster/projects/[id]/plan/route", () => ({
 vi.mock("../../poster/projects/[id]/generate/route", () => ({
   POST: async (req: Request) => {
     부른라우트.push({ step: "generate", body: await req.json() });
+    if (생성답) return 생성답();
     return Response.json({ ok: true, submission: { requestRowId: "r", falRequestId: "f", endpoint: "e" } });
   },
 }));
@@ -124,7 +127,7 @@ beforeEach(() => {
   역할판단 = { photos: [], conflicting: false };
   역할판단실패 = null;
   기획실패 = false; 기획던짐 = false;
-  남기기실패 = null; 기획답 = null;
+  남기기실패 = null; 기획답 = null; 생성답 = null;
   볼수있는사진 = [사진(1), 사진(2), 사진(3)];
   남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0;
   부른횟수.decide = 0; 부른횟수.roles = 0;
@@ -591,5 +594,57 @@ describe("서버 기록의 주소 가리기 (후속 최종 수정 1)", () => {
     expect(json.message).toBe("만들지 못했습니다.");
     expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "upstream <url> failed");
     expect(기록.mock.calls.flat().join(" ")).not.toContain("SECRET");
+  });
+});
+
+/**
+ * **포스터 생성이 일부러 쓴 500 문장은 가리지 않는다**(최종 수정 L1, 보안 리뷰). 생성 라우트는 계정 풀 두 문장 ·
+ * 조립 거절 · 과금 뒤 실패를 500 으로 주고 `userFacing` 을 단다(`poster-generate-route.test.ts` 가 그 모양을 고정).
+ * 전에는 「만들지 못했습니다.」와 다시 보내기로 덮였다 — 과금 뒤 실패에 다시 보내면 fal 값이 두 번 나간다.
+ * 아래 응답 본문은 생성 라우트의 `generateFailure` 가 내는 것 그대로다.
+ */
+describe("포스터 생성의 우리 문장 (최종 수정 L1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const 그림주문 = () => { 판단 = { wants: "image", reply: "", ratio: "1:1", look: "" }; };
+  const 몰림 = "지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.";
+  const 준비문제 = "이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.";
+  const 과금뒤 = "제출은 됐는데 장부에 적지 못했습니다.";
+  const 거절 = "따라 만들 사진의 크기를 읽지 못했습니다.";
+
+  it.each([몰림, 준비문제])("계정 풀 문장(%s)은 그대로 보이고 다시 보내기를 띄운다", async (message) => {
+    생성답 = () => Response.json({ ok: false, message, userFacing: true }, { status: 500 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "이미지 만들기", message, retryable: true });
+    // 대화에 남는 실패 줄도 같은 문장이다 — 다시 열어도 같은 안내를 본다.
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(message));
+  });
+
+  it.each([과금뒤, 거절])("과금 뒤 실패 · 조립 거절(%s)은 그대로 보이고 다시 보내기를 안 띄운다", async (message) => {
+    생성답 = () => Response.json({ ok: false, message, userFacing: true, retryable: false }, { status: 500 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "이미지 만들기", message, retryable: false });
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(message));
+  });
+
+  it("표시 없는 생성 500 의 날것 글은 지금처럼 가린다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    생성답 = () => Response.json({ ok: false, message: 'relation "poster_requests" does not exist' }, { status: 500 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "이미지 만들기", message: "만들지 못했습니다.", retryable: true });
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(FAILED_TURN_GENERIC));
+  });
+
+  it("표시가 참(true)이 아니면 표시로 보지 않는다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    생성답 = () => Response.json({ ok: false, message: "raw upstream text", userFacing: "yes" }, { status: 500 });
+    그림주문();
+    const { json } = await 보낸다({});
+    expect(json.message).toBe("만들지 못했습니다.");
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EasyStore } from "../store";
 import { FAILED_TURN_GENERIC, failureRowBody, failureRowMessage, isFailureRowBody, trackUserTurn } from "../failure-row";
-import { EasyStepError } from "../relay";
+import { EasyStepError, read } from "../relay";
 import { sayBody } from "../../../app/easy/row-marks";
 
 /**
@@ -170,9 +170,48 @@ describe("실패 줄에 남길 글 고르기", () => {
     expect(failureRowMessage(new EasyStepError("고치기", "column x of relation y", 400))).toBe(FAILED_TURN_GENERIC);
   });
 
+  /** 포스터 생성 · 고치기가 우리 문장이라고 표시한 것(최종 수정 L1). 과금 뒤 실패를 「잠시 뒤 다시」로 덮지 않는다. */
+  it("안쪽이 우리 문장이라고 표시했으면(userFacing) 500 · 400 이어도 그 글을 남긴다", () => {
+    const 과금뒤 = "제출은 됐는데 장부에 적지 못했습니다.";
+    expect(failureRowMessage(new EasyStepError("이미지 만들기", 과금뒤, 500, false, undefined, undefined, true))).toBe(과금뒤);
+    expect(failureRowMessage(new EasyStepError("고치기", 과금뒤, 400, false, undefined, undefined, true))).toBe(과금뒤);
+  });
+
   it("EasyStepError 가 아니면 일반 문장이다", () => {
     expect(failureRowMessage(new Error("boom"))).toBe(FAILED_TURN_GENERIC);
     expect(failureRowMessage("문자열")).toBe(FAILED_TURN_GENERIC);
     expect(failureRowMessage(undefined)).toBe(FAILED_TURN_GENERIC);
+  });
+});
+
+/**
+ * **안쪽 라우트의 답을 읽어 올리는 `read()`**(최종 수정 L1). 포스터 생성은 우리 문장도 500 으로 주므로
+ * `userFacing` 표시를 옮겨야 쉽게 모드가 가리지 않는다. `retryable: false` 는 전부터 옮겼다.
+ */
+describe("안쪽 답 읽기 (read)", () => {
+  const 실패 = async (body: unknown, status = 500) => {
+    try {
+      await read(Response.json(body, { status }), "이미지 만들기");
+    } catch (error) {
+      return error as EasyStepError;
+    }
+    throw new Error("던져야 한다");
+  };
+
+  it("userFacing: true 를 옮긴다", async () => {
+    const error = await 실패({ ok: false, message: "지금 이미지 생성이 몰려 있습니다.", userFacing: true });
+    expect(error).toBeInstanceOf(EasyStepError);
+    expect(error).toMatchObject({ step: "이미지 만들기", status: 500, retryable: true, userFacing: true });
+  });
+
+  it("retryable: false 를 옮긴다", async () => {
+    const error = await 실패({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다.", userFacing: true, retryable: false });
+    expect(error).toMatchObject({ retryable: false, userFacing: true });
+  });
+
+  it("표시가 없거나 참(true)이 아니면 표시가 아니다", async () => {
+    expect((await 실패({ ok: false, message: "raw" })).userFacing).toBe(false);
+    expect((await 실패({ ok: false, message: "raw", userFacing: "true" })).userFacing).toBe(false);
+    expect((await 실패({ ok: false, message: "raw", userFacing: 1 })).userFacing).toBe(false);
   });
 });

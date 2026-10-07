@@ -661,7 +661,10 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     runBuild = true;
     const response = await call({ instruction: "글자를 키워 주세요" });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ ok: false, message: "첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다." });
+    // 쉽게 모드가 우리 문장으로 알아보게 표시하고, 또 보내도 같은 곳에서 막히니 다시 보내기를 안 띄운다(최종 수정 L1).
+    expect(await response.json()).toEqual({
+      ok: false, message: "첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다.", userFacing: true, retryable: false,
+    });
     expect(finalized).toEqual([{ success: false, units: 0, error: "poster_edit_failed" }]);
   });
 
@@ -670,7 +673,8 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     submitThrows = new PosterChargedError("fal-1", 날것);
     const response = await call({ instruction: "글자를 키워 주세요" });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다." });
+    // 다시 보내면 두 번째 작업이 만들어져 값이 또 나간다 — 다시 보내기를 안 띄운다(최종 수정 L1).
+    expect(await response.json()).toEqual({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다.", userFacing: true, retryable: false });
     expect(finalized).toEqual([]);
   });
 
@@ -693,7 +697,7 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     uploadThrows = new FalPoolBusyError();
     const response = await call({ instruction: "글자를 키워 주세요" });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ ok: false, message: "지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요." });
+    expect(await response.json()).toEqual({ ok: false, message: "지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.", userFacing: true });
     expect(reserved).toEqual([]);
   });
 
@@ -702,7 +706,7 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     submitThrows = new FalPoolUnavailableError(503);
     const response = await call({ instruction: "글자를 키워 주세요" });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ ok: false, message: "이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요." });
+    expect(await response.json()).toEqual({ ok: false, message: "이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.", userFacing: true });
     expect(finalized).toEqual([{ success: false, units: 0, error: "poster_edit_failed" }]);
   });
 
@@ -735,3 +739,4 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     expect(step.message).not.toContain("poster_projects");
   });
 });
+

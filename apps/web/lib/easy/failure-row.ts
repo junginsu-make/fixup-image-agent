@@ -28,12 +28,14 @@ export function failureRowBody(message: string): string {
  * 응답에 싣고 `read()` 가 그것을 `EasyStepError` 로 올린다 — `EasyStepError` 라고 우리가 쓴
  * 말은 아니다. 우리 멤버십 층이 쓴 글만 남긴다: 크레딧 · 한도 코드가 있거나 402 · 403 일 때.
  * 나머지(코드 없는 4xx · 5xx 포함, 429 · 503 도 안쪽 글이라 가려진다)는 일반 문장이다.
+ * 안쪽이 우리 문장이라고 표시한 것(`userFacing`, 포스터 생성 · 고치기의 과금 뒤 실패 등)도 남긴다(최종 수정 L1) —
+ * 「잠시 뒤 다시 시도해 주세요」로 덮으면 다시 보내 값이 두 번 나간다.
  * `relay.ts` 를 못 들이므로 이름으로 알아본다.
  */
 export function failureRowMessage(error: unknown): string {
   if (!(error instanceof Error) || error.name !== "EasyStepError") return FAILED_TURN_GENERIC;
-  const { code, status } = error as Error & { code?: string; status?: number };
-  return code || status === 402 || status === 403 ? error.message : FAILED_TURN_GENERIC;
+  const { code, status, userFacing } = error as Error & { code?: string; status?: number; userFacing?: boolean };
+  return code || status === 402 || status === 403 || userFacing === true ? error.message : FAILED_TURN_GENERIC;
 }
 
 /** 실패 안내 줄인가(글로 알아본다 — 표에 칸을 더하지 않는다). */

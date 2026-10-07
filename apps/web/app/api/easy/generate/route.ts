@@ -296,7 +296,8 @@ async function 실패를알린다(
      * 다르다 — 크레딧·권한이면 다시 눌러도 또 막힌다.
      */
     // 코드 없고 다시 눌러 풀릴 5xx 는 안쪽 라우트의 날것 글(표 이름 등)이다. 서버 기록에만(후속 Task 1 수정 1).
-    const 가림 = error.status >= 500 && !error.code && error.retryable;
+    // 안쪽이 우리 문장이라고 표시한 것(포스터 생성의 계정 풀 문장 등)은 그대로 보인다(최종 수정 L1).
+    const 가림 = error.status >= 500 && !error.code && error.retryable && !error.userFacing;
     if (가림) console.error(`[easy] ${error.step} 실패`, errorLogText(error));
     return Response.json({
       ok: false,

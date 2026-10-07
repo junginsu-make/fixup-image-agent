@@ -289,13 +289,17 @@ const EDIT_FAILED = "고치지 못했습니다. 잠시 뒤 다시 시도해 주�
  * fal 계정 풀의 두 문장(원문은 풀이 기록에만 남겼다 — `queue.ts` 가 일부러 넘긴다).
  * 나머지는 일반 문장 500 이다. 쉽게 모드는 5xx 를 한 번 더 가린다. 설정 오류는 503 을
  * 지키되 환경변수 이름은 서버 기록에만 남긴다.
+ *
+ * 우리 문장에는 만들기(`generate/route.ts`)와 같은 표시를 단다(최종 수정 L1). 쉽게 모드는 400 을 안 가리지만
+ * 다시 보내기는 `retryable` 로 정한다 — 과금 뒤 실패에 다시 보내기를 띄우면 fal 값이 두 번 나간다. 그래서 과금 뒤
+ * 실패와 조립 거절은 `retryable: false`, 계정 풀 두 문장은 잠시 뒤 풀리니 그대로 둔다. 상태 코드는 400 그대로다.
  */
 function editFailure(error: unknown, rejected: string | undefined): Response {
-  if (
-    error instanceof PosterChargedError || error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError
-    || (rejected && error instanceof Error && error.message === rejected)
-  ) {
-    return Response.json({ ok: false, message: error.message }, { status: 400 });
+  if (error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError) {
+    return Response.json({ ok: false, message: error.message, userFacing: true }, { status: 400 });
+  }
+  if (error instanceof PosterChargedError || (rejected && error instanceof Error && error.message === rejected)) {
+    return Response.json({ ok: false, message: error.message, userFacing: true, retryable: false }, { status: 400 });
   }
   console.error("[poster] 고치기 실패", errorLogText(error));
   const status = error instanceof PosterProviderConfigurationError ? 503 : 500;

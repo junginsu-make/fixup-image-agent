@@ -467,7 +467,8 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     const response = await call();
     expect(builtRejection, "조립이 거절해야 하는 픽스처다").toBeTruthy();
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ ok: false, message: builtRejection });
+    // 쉽게 모드가 가리지 않게 우리 문장이라고 표시하고, 같은 것을 또 보내도 같은 곳에서 막히니 다시 보내기를 안 띄운다.
+    expect(await response.json()).toEqual({ ok: false, message: builtRejection, userFacing: true, retryable: false });
     expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
   });
 
@@ -475,7 +476,8 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     submitThrows = new PosterChargedError("fal-1", 날것);
     const response = await call();
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다." });
+    // 다시 보내면 두 번째 작업이 만들어져 값이 또 나간다 — 다시 보내기를 안 띄운다.
+    expect(await response.json()).toEqual({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다.", userFacing: true, retryable: false });
     // 안쪽 catch 는 이 갈래에서도 예약을 닫는다(돈 흐름 0줄 — 지금 동작을 고정만 한다).
     expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
     expect(project!.status).toBe("generating");
@@ -490,7 +492,8 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
       submitThrows = pool;
       const response = await call();
       expect(response.status, pool.name).toBe(500);
-      expect(await response.json()).toEqual({ ok: false, message: pool.message });
+      // 잠시 뒤 다시 하면 풀린다 — 다시 보내기는 그대로 둔다(`retryable` 을 싣지 않는다).
+      expect(await response.json()).toEqual({ ok: false, message: pool.message, userFacing: true });
       expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
     }
   });
