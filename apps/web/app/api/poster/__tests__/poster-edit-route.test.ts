@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * 수정이 크기를 실어 보내는 배선.
@@ -50,6 +50,12 @@ const finalized: Array<{ success: boolean; units: number; error?: string }> = []
 const updates: Array<Record<string, unknown>> = [];
 let reserveFails = false;
 let submitThrows: Error | null = null;
+/** 작업 읽기가 던질 오류(Supabase 원문 흉내). */
+let projectGetThrows: Error | null = null;
+/** fal 열쇠가 없는 서버. */
+let falKeyMissing = false;
+/** 진짜 `submitPoster` 처럼 넘긴 조립을 돌리고 거절이면 그 문장으로 던진다. */
+let runBuild = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -66,7 +72,10 @@ vi.mock("../../../../lib/membership/api", () => ({
 vi.mock("../../../../lib/poster/stores", () => ({
   posterStoresForUser: () => ({
     projects: {
-      get: async () => project,
+      get: async () => {
+        if (projectGetThrows) throw projectGetThrows;
+        return project;
+      },
       update: async (_id: string, patch: Record<string, unknown>) => {
         updates.push(patch);
         Object.assign(project, patch);
@@ -84,14 +93,25 @@ vi.mock("../../../../lib/poster/stores", () => ({
   }),
 }));
 
-vi.mock("../../../../lib/poster/providers", () => ({
-  createPosterFalClients: () => ({
-    queue: {},
-    // 첫 업로드는 언제나 고칠 그림이다. 그 뒤가 지킬 대상이다.
-    uploader: { uploadReference: async () => (uploadCount++ === 0 ? "https://fal/parent.png" : `https://fal/ref-${uploadCount - 1}.png`) },
-  }),
-  PosterProviderConfigurationError: class extends Error {},
-}));
+vi.mock("../../../../lib/poster/providers", () => {
+  // 진짜와 같은 문장이다 — 환경변수 이름이 화면에 새는지 본다.
+  class PosterProviderConfigurationError extends Error {
+    constructor(readonly missing: string[]) {
+      super(`다음 환경변수가 없어 포스터를 만들 수 없습니다: ${missing.join(", ")}`);
+    }
+  }
+  return {
+    createPosterFalClients: () => {
+      if (falKeyMissing) throw new PosterProviderConfigurationError(["FAL_KEY"]);
+      return {
+        queue: {},
+        // 첫 업로드는 언제나 고칠 그림이다. 그 뒤가 지킬 대상이다.
+        uploader: { uploadReference: async () => (uploadCount++ === 0 ? "https://fal/parent.png" : `https://fal/ref-${uploadCount - 1}.png`) },
+      };
+    },
+    PosterProviderConfigurationError,
+  };
+});
 
 vi.mock("../../../../lib/poster/asset-bytes", () => ({
   posterImageBytes: async (assetPath: string) => {
@@ -117,6 +137,10 @@ vi.mock("../../../../lib/poster/flow", () => ({
   },
   submitPoster: async (job: SubmittedJob, _dependencies: unknown, build?: unknown) => {
     if (submitThrows) throw submitThrows;
+    if (runBuild) {
+      const built = (build as (job: SubmittedJob) => { rejected?: string })(job);
+      if (built.rejected) throw new Error(built.rejected);
+    }
     submitted.push(job);
     builders.push(build);
     return { requestRowId: "r", falRequestId: "f", endpoint: "e", estimatedUsd: 1 };
@@ -151,6 +175,9 @@ beforeEach(() => {
   updates.length = 0;
   reserveFails = false;
   submitThrows = null;
+  projectGetThrows = null;
+  falKeyMissing = false;
+  runBuild = false;
 });
 
 describe("수정이 크기를 실어 보낸다", () => {
@@ -573,5 +600,108 @@ describe("붙인 사진이 모델 한도를 넘으면", () => {
     libraryReferences = Array.from({ length: 6 }, (_, index) => ({ id: `logo-${index}`, storagePath: `u1/ref/${index}.png` }));
     const response = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: libraryReferences.map((one) => one.id) });
     expect(response.status).toBe(200);
+  });
+});
+
+/**
+ * **예상 못 한 오류의 원문은 화면에 안 보낸다**(2026-10-07 후속 Task 7).
+ *
+ * 마지막 `catch` 가 모든 예외를 400 + `error.message` 로 돌려줬다. Supabase · 저장소 ·
+ * fal 의 날것 글(표 이름 · 서명한 주소)이 「다양하게」 화면에 그대로 떴고, 쉽게 모드는
+ * 400 을 가리지 않아(`status>=500` 만 가린다) 거기서도 그대로 떴다.
+ *
+ * 우리가 일부러 쓴 문장(조립 거절 · 과금 뒤 실패 · 위의 입력 검사들)은 상태 코드 · 글
+ * 그대로다. 돈: 예약 뒤 실패면 지금처럼 돌려준다.
+ */
+describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
+  const 날것 = new Error('relation "poster_projects" does not exist (https://abc.supabase.co/rest/v1/x?token=secret)');
+  const 일반문장 = "고치지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+  let errors: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    const { EMPTY_SLOTS } = await import("@fixup/poster-core");
+    project.data = { ...project.data, slots: EMPTY_SLOTS };
+    errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => errors.mockRestore());
+
+  it("작업 읽기가 원문으로 실패하면 500 + 일반 문장, 원문은 주소를 가려 서버 기록에만", async () => {
+    projectGetThrows = 날것;
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ ok: false, message: 일반문장 });
+    expect(text).not.toContain("poster_projects");
+    expect(text).not.toContain("supabase");
+    const logged = errors.mock.calls.flat().map(String).join(" ");
+    expect(logged).toContain("poster_projects");
+    expect(logged).not.toContain("https://");
+  });
+
+  it("예약 뒤 원문 오류도 가리고, 묶은 장은 지금처럼 돌려준다", async () => {
+    submitThrows = 날것;
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ ok: false, message: 일반문장 });
+    expect(reserved).toHaveLength(1);
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_edit_failed" }]);
+  });
+
+  it("조립이 거절한 우리 문장은 400 그대로 — 묶은 장도 돌려준다", async () => {
+    // 옛 행: 크기를 모르는 원본 비율 작업은 조립이 거절한다(위 「부모 크기를 모르면」).
+    parent = { ...parent, width: null, height: null };
+    runBuild = true;
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ ok: false, message: "첨부한 그림의 크기를 읽지 못해 같은 비율로 만들 수 없습니다." });
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_edit_failed" }]);
+  });
+
+  it("돈이 나간 뒤의 실패는 지금 문장 · 400 그대로 — 묶은 장은 안 돌려준다", async () => {
+    const { PosterChargedError } = await import("../../../../lib/poster/flow");
+    submitThrows = new PosterChargedError("fal-1", 날것);
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다." });
+    expect(finalized).toEqual([]);
+  });
+
+  it("설정 오류는 503 그대로, 환경변수 이름은 화면에 안 보낸다", async () => {
+    falKeyMissing = true;
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(503);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ ok: false, message: 일반문장 });
+    expect(text).not.toContain("FAL_KEY");
+    expect(errors.mock.calls.flat().map(String).join(" ")).toContain("FAL_KEY");
+  });
+
+  it("일부러 쓴 안내는 그대로다 — 붙인 사진을 못 읽음 400, 입력 검사 400", async () => {
+    libraryReferences = [{ id: "logo-1", storagePath: "u1/ref/logo.png" }];
+    missingPaths = ["u1/ref/logo.png"];
+    const broken = await call({ instruction: "로고를 바꿔 주세요", addedReferenceIds: ["logo-1"] });
+    expect(broken.status).toBe(400);
+    expect(await broken.json()).toEqual({ ok: false, message: "붙인 사진을 읽지 못했습니다. 다시 붙여 주세요." });
+
+    const empty = await call({ instruction: "   " });
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({ ok: false, message: "무엇을 고칠지 적어 주세요." });
+  });
+
+  /*
+   * **쉽게 모드도 같은 답을 받는다.** 쉽게는 이 라우트를 함수로 부르고 `read()` 로 읽어
+   * `EasyStepError` 로 올린 뒤, `status>=500 && !code && retryable` 이면 원문을 가린다
+   * (`app/api/easy/generate/route.ts`). 원문 오류가 그 세 조건을 다 맞추는지 여기서 고정한다.
+   */
+  it("쉽게 모드의 read() 로 읽으면 가림 조건(500 · 코드 없음 · 다시 시도 가능)을 맞춘다", async () => {
+    const { EasyStepError, read } = await import("../../../../lib/easy/relay");
+    projectGetThrows = 날것;
+    const thrown = await read(await call({ instruction: "글자를 키워 주세요" }), "이미지 고치기").catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(EasyStepError);
+    const step = thrown as InstanceType<typeof EasyStepError>;
+    expect(step.status).toBeGreaterThanOrEqual(500);
+    expect(step.code).toBeUndefined();
+    expect(step.retryable).toBe(true);
+    expect(step.message).not.toContain("poster_projects");
   });
 });

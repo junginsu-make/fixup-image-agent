@@ -15,6 +15,7 @@ import { posterImageBytes, referenceBytes } from "../../../../../../lib/poster/a
 import { posterReferencesByIds } from "../../../../../../lib/poster/references";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { teamIdOf } from "../../../../../../lib/teams/store";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,8 @@ async function handlePost(request: Request, context: Context) {
   if (!auth.ok) return auth.response;
   /** `catch` 에서도 봐야 한다 — 제출이 실패하면 묶인 장을 돌려줘야 한다. */
   let reservation: { userId: string; requestId: string } | null = null;
+  /** 조립이 거절한 우리 문장. `submitPoster` 가 이 글로 던진다 — `catch` 가 원문과 가른다. */
+  let rejected: string | undefined;
   const parsed = EditSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return Response.json(
@@ -236,7 +239,11 @@ async function handlePost(request: Request, context: Context) {
     },
     // **고치기 조립을 넘긴다.** 안 넘기면 처음 만들기 조립을 타서 지시가 묻히고
     // 고칠 그림이 「느낌만 따라 할 참고」가 된다(2026-09-29 사용자 보고).
-    buildPosterEditJob);
+    (editJob) => {
+      const built = buildPosterEditJob(editJob);
+      rejected = built.rejected;
+      return built;
+    });
 
     /**
      * **예약 열쇠를 작업에 적어 둔다.**
@@ -264,12 +271,28 @@ async function handlePost(request: Request, context: Context) {
         try { await finalizeAiUsage(reservation, false, 0, "poster_edit_failed"); } catch { /* 아래 원인이 우선이다 */ }
       }
     }
-    if (error instanceof PosterProviderConfigurationError) {
-      return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
-    }
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "고치지 못했습니다." },
-      { status: 400 },
-    );
+    return editFailure(error, rejected);
   }
+}
+
+const EDIT_FAILED = "고치지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+
+/**
+ * **실패를 화면에 어떻게 말할지**(2026-10-07 후속 Task 7).
+ *
+ * 전에는 모든 예외를 400 + 원문으로 돌려줬다. Supabase · 저장소 · fal 의 날것 글(표 이름 ·
+ * 서명한 주소)이 「다양하게」 화면에 떴고, 쉽게 모드는 400 을 안 가려 거기서도 떴다.
+ *
+ * 우리가 쓴 문장 둘만 400 그대로 보인다 — 조립 거절(사진 장수 · 크기 등, 사용자가 고칠 수
+ * 있다)과 과금 뒤 실패(「다시 해 보세요」로 덮으면 두 번째 작업을 만든다 — `flow.ts`).
+ * 나머지는 일반 문장 500 이다. 쉽게 모드는 5xx 를 한 번 더 가린다. 설정 오류는 503 을
+ * 지키되 환경변수 이름은 서버 기록에만 남긴다.
+ */
+function editFailure(error: unknown, rejected: string | undefined): Response {
+  if (error instanceof PosterChargedError || (rejected && error instanceof Error && error.message === rejected)) {
+    return Response.json({ ok: false, message: error.message }, { status: 400 });
+  }
+  console.error("[poster] 고치기 실패", errorLogText(error));
+  const status = error instanceof PosterProviderConfigurationError ? 503 : 500;
+  return Response.json({ ok: false, message: EDIT_FAILED }, { status });
 }
