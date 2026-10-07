@@ -1,4 +1,5 @@
 import { authenticateApiMember } from "../../../../lib/membership/api";
+import { errorLogText } from "../../../../lib/easy/log-text";
 import { referenceSetStoreForUser } from "../../../../lib/repository-factory";
 import { SetInputSchema } from "../schema";
 
@@ -13,7 +14,9 @@ export async function PATCH(request: Request, context: Context) {
     const { id } = await context.params;
     return Response.json({ ok: true, set: await (await referenceSetStoreForUser(auth.member.userId)).update(id, parsed.data) });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "세트를 수정하지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[reference-sets] 세트를 수정하지 못했습니다.", errorLogText(error));
+    return Response.json({ ok: false, message: "세트를 수정하지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -25,6 +28,8 @@ export async function DELETE(_request: Request, context: Context) {
     await (await referenceSetStoreForUser(auth.member.userId)).remove(id);
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json({ ok: false, message: error instanceof Error ? error.message : "세트를 삭제하지 못했습니다." }, { status: 500 });
+    // 데이터베이스 원문은 서버 기록에만 남긴다(2026-10-07).
+    console.error("[reference-sets] 세트를 삭제하지 못했습니다.", errorLogText(error));
+    return Response.json({ ok: false, message: "세트를 삭제하지 못했습니다." }, { status: 500 });
   }
 }
