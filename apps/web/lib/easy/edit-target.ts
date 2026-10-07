@@ -15,6 +15,7 @@ import type { EasyImageFacts } from "./image-list";
  *
  * **확인 못 한 결과물(`unknown`)은 고치지 않는다**(리뷰 1차 수정 2). 저장소를 못 읽은 것이라 그림이 있는지
  * 모른다 — 지금은 확인할 수 없다고만 답한다. 번호 없이 고쳐 달라는데 마지막 결과물이 그것이어도 같다.
+ * 다만 최근 100개 밖이라 안 읽은 것(`unreadOld`)은 기다려도 안 되므로 오래되어 못 고친다고 답한다(후속 Task 2).
  */
 type Row = { id?: string; role: string; workId?: string | null; body?: string | null; createdAt?: string };
 
@@ -38,12 +39,22 @@ export const TARGET_BY_NUMBER = "어느 이미지를 고칠지 「이미지 2」
 
 const 확인못함 = (n: number) => `지금은 결과물 ${n} 을 확인할 수 없습니다. 잠시 뒤 다시 말씀해 주세요.`;
 
+/**
+ * 100개 밖의 옛 결과물(후속 Task 2). 고치는 길은 라이브러리가 아니다 — 라이브러리 카드는 보기 창만 열고, 「과정 보기」는
+ * 내 쉽게 작업이면 이 대화로 돌아온다(`app/library/easy-href.ts`). 사이드바 「다양하게」(`/poster`)의 지난 작업은 쉽게로
+ * 만든 포스터 작업도 싣고(`api/poster/projects`), 연 화면(`/poster/{id}`)에 「이 장만 고치기」가 있다. 지운 것일 수도 있다.
+ */
+const 오래됨 = (n: number) =>
+  `결과물 ${n} 은 오래되어 이 대화에서는 고칠 수 없습니다. 지우지 않은 이미지라면 「다양하게」 화면의 지난 작업에서 열어 「이 장만 고치기」로 고쳐 주세요.`;
+
+const 모름답 = (facts: EasyImageFacts, n: number) => (facts.unreadOld?.has(n) ? 오래됨(n) : 확인못함(n));
+
 /** 번호의 사정을 사실대로(이미지가 아니거나 다 안 만든 번호). 다 만든 이미지면 `undefined`. */
 function 못고치는까닭(facts: EasyImageFacts, target: number): string | undefined {
   const entry = facts.entries.find((one) => one.n === target);
   const 고칠것 = 고칠수있는것(facts);
   if (!entry) return 잇는다(`${target}번은 이 대화에 없습니다.`, 고칠것);
-  if (entry.kind === "unknown") return 확인못함(target);
+  if (entry.kind === "unknown") return 모름답(facts, target);
   if (entry.kind === "cardnews") {
     return 잇는다(`${target}번은 카드뉴스라 이미지 고치기로는 고칠 수 없습니다. 카드뉴스는 「3번 장 더 짧게」처럼 말씀해 주세요.`, 고칠것);
   }
@@ -73,7 +84,7 @@ export async function pickEditTarget(
   }
   if (!target) {
     const 끝 = 마지막결과(facts.entries);
-    if (끝?.kind === "unknown") return { ok: false, message: 확인못함(끝.n) };
+    if (끝?.kind === "unknown") return { ok: false, message: 모름답(facts, 끝.n) };
     // 말하지 않았으면 마지막 결과. 마지막이 카드뉴스면 이 대화의 마지막 이미지(지운 것 · 카드뉴스는 건너뜀).
     const 마지막 = await lastEasyImage(userId, rows)
       ?? await projectTarget(userId, [...facts.entries].reverse().find((one) => one.kind === "image")?.workId);

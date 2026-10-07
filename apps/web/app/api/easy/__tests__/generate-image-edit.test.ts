@@ -446,3 +446,31 @@ describe("결과물 목록을 못 읽으면 (최종 수정 7)", () => {
     expect(json.message.body).not.toBe(NOTHING_TO_EDIT);
   });
 });
+
+/**
+ * 후속 Task 2 — 결과물이 100개를 넘는 대화에서 오래된 번호(최근 100개 밖이라 읽지 않은 것)를 고쳐 달라면 「잠시 뒤 다시」가
+ * 아니라 오래되어 이 대화에서는 못 고친다고 답한다. 고치기 라우트를 안 부른다(값 0). 잠깐 못 읽은 것은 위처럼 그대로다.
+ */
+describe("결과물이 100개를 넘는 대화의 옛 번호 (후속 Task 2)", () => {
+  beforeEach(() => {
+    const 옛줄 = Array.from({ length: 100 }, (_, at) => ({ id: `o${at + 1}`, role: "image", body: "", workId: `w${at + 1}` }));
+    지난줄 = [{ id: "u0", role: "user", body: "많이 만들어 줘", workId: null }, ...옛줄, { id: "i1", role: "image", body: "", workId: "p1" }];
+  });
+
+  it("1번을 고쳐 달라면 고치기를 안 부르고 오래되었다고 답한다 — 번호는 그대로다", async () => {
+    판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 1 };
+    const { json } = await 보낸다({ prompt: "1번 글자 크게" });
+    expect(부른라우트).toEqual([]);
+    expect(json.message.body).toBe(
+      "결과물 1 은 오래되어 이 대화에서는 고칠 수 없습니다. 지우지 않은 이미지라면 「다양하게」 화면의 지난 작업에서 열어 「이 장만 고치기」로 고쳐 주세요.",
+    );
+    expect(json.message.body).not.toContain("잠시 뒤");
+  });
+
+  it("최근 것(101번)은 지금처럼 고친다", async () => {
+    판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 101 };
+    await 보낸다({ prompt: "101번 글자 크게" });
+    expect(부른라우트.map((call) => call.step)).toEqual(["edit"]);
+    expect(부른라우트[0]!.url).toContain("/api/poster/projects/p1/edit");
+  });
+});

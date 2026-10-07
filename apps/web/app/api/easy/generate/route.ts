@@ -307,7 +307,7 @@ async function turn(request: Request): Promise<Response> {
             userId: auth.member.userId, rows: 지난줄, prompt, see: decision.see, facts: 이미지들,
             photos: 처음사진.photos, write: (text, images) => provider.writeSeenReply(text, images),
           });
-          if (본것.kind === "seen") decision = { ...decision, reply: 본것.reply };
+          if (본것.kind === "seen" || 본것.kind === "old") decision = { ...decision, reply: 본것.reply };
           if (본것.kind === "failed") decision = { ...decision, reply: SEE_FAILED };
         }
       }
