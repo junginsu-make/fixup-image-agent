@@ -19,6 +19,8 @@ import { useRunningJobs } from "../../_components/running-jobs";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 import { useRouter, useSearchParams } from "next/navigation";
 import { canViewSnsResult, restoredSnsView } from "../saved-view";
+import { workingButton } from "../../_components/working-words";
+import { generationProgress } from "./generation-progress";
 
 const STEPS: StepDefinition[] = [
   { id: "content", label: "01 내용", desc: "직접 쓰거나 가져오기" },
@@ -77,6 +79,8 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   const [regeneratingIndex, setRegeneratingIndex] = React.useState<number>();
   const [writingCaption, setWritingCaption] = React.useState(false);
   const [message, setMessage] = React.useState("");
+  /** 띠에 걸린 시간을 보이려고 일을 시작한 때를 적어 둔다(2026-10-08). 화면에만 쓴다. */
+  const [workStartedAt, setWorkStartedAt] = React.useState<number>();
   /**
    * **남의 작업을 보는 중인가.**
    *
@@ -202,6 +206,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   /** 일을 시작한다. 지난 중지를 여기서 푼다 — 갈래마다 적으면 하나를 빠뜨린다. */
   function beginWork(state: "planning" | "generating") {
     stopped.current = false;
+    setWorkStartedAt(Date.now());
     setBusy(state);
     setMessage("");
   }
@@ -347,6 +352,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }
 
   async function writeCaption() {
+    setWorkStartedAt(Date.now());
     setWritingCaption(true);
     setMessage("");
     try {
@@ -366,6 +372,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
    * 「다른 카드가 생성 중입니다」(409)는 정상 흐름에서 자주 난다.
    */
   async function regenerate(index: number, note?: string): Promise<boolean> {
+    setWorkStartedAt(Date.now());
     setRegeneratingIndex(index);
     setMessage("");
     try {
@@ -393,6 +400,9 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   if (!project) return <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-5 text-destructive">{message || "프로젝트를 찾을 수 없습니다."}</p>;
 
   const flow = project.data.flow;
+  const progress = generationProgress(project.data.flow?.cards ?? []);
+  // **한 화면에 띠는 하나다.** 기획·그림 띠가 떠 있으면 작은 띠(낱장·문구)는 얹지 않는다.
+  const bigBannerShown = busy === "planning" || busy === "generating" || generationActive;
   return (
     <div className="grid gap-8">
       <header>
@@ -428,8 +438,9 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       */}
       {busy === "planning" ? (
         <WorkingBanner
-          label="기획과 원고를 만드는 중입니다"
+          label="기획과 원고를 작성 중입니다"
           hint="1~2분 걸립니다. 이 화면을 닫아도 계속됩니다"
+          startedAt={workStartedAt}
           onStop={() => void stopNow()}
           stopping={stopping}
         />
@@ -438,6 +449,8 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         <WorkingBanner
           label="그림을 만드는 중입니다"
           hint="장수만큼 차례로 만듭니다. 이 화면을 닫아도 계속됩니다"
+          startedAt={workStartedAt}
+          progress={progress}
           onStop={() => void stopNow()}
           stopping={stopping}
         />
@@ -446,8 +459,17 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
         <WorkingBanner
           label="그림을 만드는 중입니다"
           hint="한 장씩 만들고 있습니다. 이 화면을 닫아도 계속됩니다"
+          startedAt={startedAt ? Date.parse(startedAt) : undefined}
+          progress={progress}
           onStop={() => void stopNow()}
           stopping={stopping}
+        />
+      ) : null}
+      {(regeneratingIndex !== undefined || writingCaption) && !bigBannerShown ? (
+        <WorkingBanner
+          label={regeneratingIndex !== undefined ? "카드를 다시 만드는 중입니다" : "게시글 문구를 작성 중입니다"}
+          hint={regeneratingIndex !== undefined ? "한 장을 다시 만듭니다. 몇 분 걸릴 수 있습니다" : "제목·내용·해시태그·첫 댓글을 씁니다"}
+          startedAt={workStartedAt}
         />
       ) : null}
 
@@ -479,13 +501,13 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
       {!flow ? (
         <Card>
           <CardHeader><CardTitle>04 원고 확인 준비</CardTitle><CardDescription>기획 모델이 카드 구조를 정하고, 확인할 원고를 씁니다.</CardDescription></CardHeader>
-          <CardContent><Button disabled={busy === "planning"} onClick={() => void plan()}>{busy === "planning" ? <Loader2 className="animate-spin" /> : null}{busy === "planning" ? "기획·원고 만드는 중…" : "기획·원고 만들기"}</Button></CardContent>
+          <CardContent><Button disabled={busy === "planning"} onClick={() => void plan()}>{busy === "planning" ? <Loader2 className="animate-spin" /> : null}{busy === "planning" ? workingButton("plan") : "기획·원고 만들기"}</Button></CardContent>
         </Card>
       ) : view === "copy" ? (
         <div className="grid gap-8">
           <section><h2 className="text-h2">04 원고 확인</h2><p className="mt-2 text-muted-foreground">글자수 제한 없이 직접 고치고 카드별로 저장하세요. 저장한 글자가 그림에 그대로 들어갑니다.</p></section>
           <CopyReview flow={flow} savingIndex={savingIndex} projectId={projectId} ratioId={project.ratio} onSave={saveCopy} onLayoutChanged={() => void reload()} />
-          <div className="flex justify-end border-t pt-6"><Button disabled={busy === "generating" || flow.cards.length === 0} onClick={() => void generate()}>{busy === "generating" ? <Loader2 className="animate-spin" /> : <ArrowRight />}{busy === "generating" ? "프롬프트·레퍼런스 준비 중…" : "이 원고로 그림 만들기"}</Button></div>
+          <div className="flex justify-end border-t pt-6"><Button disabled={busy === "generating" || flow.cards.length === 0} onClick={() => void generate()}>{busy === "generating" ? <Loader2 className="animate-spin" /> : <ArrowRight />}{busy === "generating" ? workingButton("make") : "이 원고로 그림 만들기"}</Button></div>
         </div>
       ) : (
         <div className="grid gap-8">
