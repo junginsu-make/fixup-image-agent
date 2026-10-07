@@ -57,6 +57,11 @@
   color: var(--mcs-accent);
 }
 
+/* 첫 화면 구획 끝의 「모든 기능 보기」 */
+.feature-more {
+  margin-top: 24px;
+}
+
 /* ── 두 칸 목록(이럴 때 · 넣는 것 / 받는 것 · 품질) ─────────── */
 
 .feature-pair {

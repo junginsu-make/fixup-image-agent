@@ -6,6 +6,7 @@ import { pageMetadata } from "../lib/seo/metadata";
 import { listPublicShowcase } from "./api/showcase/store";
 import { LandingFooter } from "./_landing/cta-footer";
 import { Difference } from "./_landing/difference";
+import { FeaturesSection } from "./_landing/features-section";
 import { BackToTop } from "./_landing/hero/BackToTop";
 import { ClaimStrip } from "./_landing/hero/ClaimStrip";
 import { HeroStage } from "./_landing/hero/HeroStage";
@@ -20,6 +21,7 @@ import { readSignupGate } from "./_landing/signup-gate";
 import { SignupRequiredModal } from "./_landing/signup-required-modal";
 import "./_landing/landing.css";
 import "./_landing/hero/hero.css";
+import "./features/features.css";
 
 /**
  * 첫 화면의 검색 정보. 대표 주소는 언어별로 `/` 또는 `/?lang=en` 하나다 —
@@ -91,11 +93,18 @@ export default async function HomePage({
       <LandingHeader t={t} locale={locale} localMode={isLocalAuthBypass} signedIn={signedIn} />
 
       <main>
+        {/*
+          **주 제목은 화면에 안 보인다**(계획 2026-10-07 seo-keyword-pages). 캐러셀이 첫 화면을
+          다 쓰므로 보이는 제목을 둘 자리가 없다. 검색엔진과 읽기 도구는 이 줄로 화면의 주제를
+          안다. 말은 `<title>` 과 같다 — 숨겨서 다른 말을 하는 글이 아니다.
+        */}
+        <h1 className="sr-only">{t.homeH1}</h1>
         <HeroStage slides={slidesFromShowcase(showcase)} />
         <KeyMessage locale={locale} />
         <ClaimStrip locale={locale} />
         <TrySection t={t} />
         <Difference t={t} />
+        <FeaturesSection t={t} />
       </main>
 
       <LandingFooter t={t} locale={locale} />
