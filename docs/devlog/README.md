@@ -474,4 +474,4 @@
 
 자료: GitHub 저장소의 기록을 10월 7일에 모았습니다. 날짜는 한국 시각, 한 주는 월요일부터입니다. 배포 꾸러미는 만들어진 수이며 실제로 운영에 올린 횟수와 다릅니다.
 
-다시 만들기: 저장소 맨 위에서 `python -X utf8 docs/devlog/build.py` (GitHub CLI 로그인 필요). 새 주의 요약은 `build.py` 의 `SUMMARIES` 에 적습니다.
+다시 만들기: 저장소 맨 위에서 `python -X utf8 docs/devlog/build.py` (GitHub CLI 로그인 필요). 주 제목·요약은 `weeks.json`, 운영 배포 기록은 `entries/` 에 적습니다.

@@ -144,6 +144,12 @@ h1 em { font-style: normal; color: var(--accent); }
 .lines { color: var(--faint); font-variant-numeric: tabular-nums; }
 .lines .p { color: var(--add); }
 .lines .m { color: var(--del); }
+.deploys { margin: 12px 0 0; padding: 10px 12px; list-style: none; background: var(--accent-soft); border-radius: 10px; font-size: 13px; }
+.deploys li { display: flex; flex-wrap: wrap; gap: 2px 8px; padding: 2px 0; }
+.deploys b { color: var(--accent); font-weight: 600; }
+.deploys code { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.deploys a { color: var(--accent); }
+.dep { color: var(--accent); font-weight: 600; }
 .early { margin-top: 16px; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
 .early h4 { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
 .early p { margin: 0 0 8px; font-size: 12.5px; color: var(--faint); }
@@ -205,6 +211,7 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
       <dt>작업 묶음</dt><dd>한 가지 목적의 변경을 모아 검토한 뒤 본 코드에 합친 단위입니다. GitHub 에서는 PR 이라고 부릅니다.</dd>
       <dt>저장 기록</dt><dd>코드를 바꿀 때마다 남기는 기록입니다. 커밋이라고 부르며, 합치기 기록은 세지 않았습니다.</dd>
       <dt>배포 꾸러미</dt><dd>운영 서버에 올릴 수 있게 미리 만들어 둔 묶음입니다. 만들어진 수이며, 실제로 올린 횟수와는 다릅니다.</dd>
+      <dt>운영 배포</dt><dd>실제로 운영 서버에 올린 기록입니다. 2026년 10월 7일부터 배포할 때마다 적습니다.</dd>
       <dt>+ / −</dt><dd>그 작업에서 더한 줄 수와 지운 줄 수입니다.</dd>
     </dl>
     <p id="source"></p>
@@ -329,7 +336,7 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
     return el("div", { class: "pr" }, [
       el("a", { class: "pr-num", href: "https://github.com/" + data.repo + "/pull/" + pr.n, target: "_blank", rel: "noopener", text: "#" + pr.n }),
       el("div", { class: "pr-title" }, highlight(pr.t)),
-      el("div", { class: "pr-sub" }, tags.concat([lines]))
+      el("div", { class: "pr-sub" }, tags.concat([lines], pr.dep ? [el("span", { class: "dep", text: "운영 반영 " + mdShort(pr.dep) })] : []))
     ]);
   }
 
@@ -344,8 +351,17 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
     var nums = el("div", { class: "nums" }, [
       el("span", {}, ["작업 묶음 ", el("b", { text: fmt(w.prs.length) })]),
       el("span", {}, ["저장 기록 ", el("b", { text: fmt(w.commits) })]),
-      el("span", {}, ["배포 꾸러미 ", el("b", { text: fmt(w.releases) })])
+      el("span", {}, ["배포 꾸러미 ", el("b", { text: fmt(w.releases) })]),
+      w.deploys.length ? el("span", {}, ["운영 배포 ", el("b", { text: fmt(w.deploys.length) + "회" })]) : null
     ]);
+    var deploys = w.deploys.length ? el("ul", { class: "deploys", "aria-label": "이 주의 운영 배포" }, w.deploys.map(function (e) {
+      var links = [];
+      e.prs.forEach(function (n, i) {
+        if (i) links.push(", ");
+        links.push(el("a", { href: "https://github.com/" + data.repo + "/pull/" + n, target: "_blank", rel: "noopener", text: "#" + n }));
+      });
+      return el("li", {}, [el("b", { text: mdShort(e.date.slice(5)) + " 운영 배포" }), el("code", { text: e.release })].concat(links.length ? [el("span", {}, links)] : []));
+    })) : null;
     var detailId = "d-" + w.start;
     var toggle = el("button", { class: "toggle", type: "button", "aria-expanded": String(expanded), "aria-controls": detailId }, [
       el("span", { class: "arrow", "aria-hidden": "true", text: "›" }),
@@ -370,7 +386,7 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
       }
     }
     return el("article", { class: "week", id: "w-" + w.start }, [
-      el("div", { class: "card" }, [meta, el("h3", { text: w.title }), el("p", { class: "lede", text: w.lede }), points, nums, toggle, detail])
+      el("div", { class: "card" }, [meta, el("h3", { text: w.title }), el("p", { class: "lede", text: w.lede }), points, nums, deploys, toggle, detail])
     ]);
   }
 
