@@ -25,11 +25,15 @@ let 머리말실패: Error | undefined;
 // 후속 Task 9 고침 1 — 사용자 줄 저장이 실패한다 · 물음 줄에 적힌 사진을 못 찾는다.
 let 사용자줄실패: Error | undefined;
 let 사진못찾음 = false;
+// 후속 Task 9 고침 2 — 판단 모델이 실패한다 · 판정 예약이 거절된다.
+let 판단실패: Error | undefined;
+let 예약거절: Response | undefined;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
   reserveAiUsage: async () => {
     센것.reserve += 1;
+    if (예약거절) return { ok: false as const, response: 예약거절 };
     return { ok: true as const, userId: "me-1", requestId: "decide", usage: undefined };
   },
   settleAiUsage: async () => {
@@ -56,6 +60,7 @@ vi.mock("../../../../lib/easy/chat-provider", () => ({
     decide: async (text: string) => {
       센것.decide += 1;
       받은판단글.push(text);
+      if (판단실패) throw 판단실패;
       return 판단;
     },
     decideRoles: async () => ({ photos: [{ number: 1, role: "preserve_product", said: false }], conflicting: false }),
@@ -132,6 +137,8 @@ beforeEach(() => {
   머리말실패 = undefined;
   사용자줄실패 = undefined;
   사진못찾음 = false;
+  판단실패 = undefined;
+  예약거절 = undefined;
 });
 
 describe("단추로 한 답", () => {
@@ -409,68 +416,82 @@ describe("말 답 뒤 실패 응답의 표시 (후속 Task 9)", () => {
 });
 
 /**
- * 후속 Task 9 고침 1 — 서버가 말 답으로 읽었는데 사용자 줄을 **남기기 전에** 실패하면 아무 줄도 안 남는다. 새로고침하면
- * 꼬리가 [물음] 이라 단추가 다시 뜨고 친 말은 없다. 그 자리 화면도 같게 하도록 실패 응답에 `typedUnsaved` 를 싣는다.
+ * 후속 Task 9 고침 1 · 2 — 이 턴이 사용자 줄을 **남기기 전에** 실패하면(판단 전이든 뒤든) 서버에는 아무 줄도 없다. 새로고침하면
+ * 꼬리가 앞 그대로라 앞 줄이 물음이면 단추가 다시 뜨고 친 말은 없다. 그 자리 화면도 같게 하도록 실패 응답에 `userUnsaved`
+ * 를 싣는다. 응답의 다른 칸 · 상태 코드는 그대로다. 남긴 뒤 실패에는 안 싣는다.
  */
-describe("말 답을 남기기 전 실패 응답의 표시 (후속 Task 9 고침 1)", () => {
+describe("사용자 줄을 남기기 전 실패 응답의 표시 (후속 Task 9 고침 1 · 2)", () => {
   const 말답판단 = { wants: "image", reply: "", ratio: "4:5", look: "", card: 0, note: "answer" };
   const 많은사진 = Array.from({ length: 30 }, (_, at) => 사진(at + 1));
 
-  it("물음 줄의 사진을 못 찾아 멈추면 typedUnsaved 를 싣고 나머지 칸은 그대로다", async () => {
+  it("물음 줄의 사진을 못 찾아 멈추면 userUnsaved 를 싣고 나머지 칸은 그대로다", async () => {
     지난줄 = [처음, 물음("q1", "photo", { wants: "image", ids: [사진(1)] })];
     판단 = 말답판단;
     사진못찾음 = true;
     const { status, json } = await 보낸다({ prompt: "1번은 우리 제품이야" });
     const { UNUSABLE_PHOTO } = await import("../../../easy/photo-check");
     expect(status).toBe(400);
-    expect(json).toEqual({ ok: false, message: UNUSABLE_PHOTO, retryable: false, typedUnsaved: true });
+    expect(json).toEqual({ ok: false, message: UNUSABLE_PHOTO, retryable: false, userUnsaved: true });
     expect(남긴줄).toEqual([]);
   });
 
-  it("이미지 턴이 사진 장수로 멈춰도 typedUnsaved 를 싣는다", async () => {
+  it("이미지 턴이 사진 장수로 멈춰도 userUnsaved 를 싣는다", async () => {
     지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
     판단 = 말답판단;
     const { status, json } = await 보낸다({ prompt: "세로로", referenceIds: 많은사진 });
     expect(status).toBe(400);
-    expect(json).toMatchObject({ ok: false, retryable: false, typedUnsaved: true });
-    expect(Object.keys(json).sort()).toEqual(["message", "ok", "retryable", "typedUnsaved"]);
+    expect(json).toMatchObject({ ok: false, retryable: false, userUnsaved: true });
+    expect(Object.keys(json).sort()).toEqual(["message", "ok", "retryable", "userUnsaved"]);
     expect(남긴줄).toEqual([]);
   });
 
-  it("사용자 줄 저장이 실패하면 가린 글 그대로 typedUnsaved 를 싣는다", async () => {
+  it("사용자 줄 저장이 실패하면 가린 글 그대로 userUnsaved 를 싣는다", async () => {
     지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
     판단 = 말답판단;
     사용자줄실패 = new Error("relation \"easy_messages\" does not exist");
     const { status, json } = await 보낸다({ prompt: "세로로" });
     expect(status).toBe(500);
-    expect(json).toEqual({ ok: false, message: "만들지 못했습니다.", typedUnsaved: true });
+    expect(json).toEqual({ ok: false, message: "만들지 못했습니다.", userUnsaved: true });
   });
 
-  it("답이 아닌 새 말이 남기기 전에 멈추면 예전 그대로 표시가 없다", async () => {
-    판단 = { ...말답판단, note: "" };
-    const { status, json } = await 보낸다({ prompt: "세로 포스터", referenceIds: 많은사진 });
-    expect(status).toBe(400);
-    expect(json.typedUnsaved).toBeUndefined();
-    expect(json.typedAnswer).toBeUndefined();
-  });
-
-  it("단추 답이 남기기 전에 멈추면 예전 그대로 표시가 없다", async () => {
+  it("판단 모델이 실패해도(판단 전) 가린 글 그대로 userUnsaved 를 싣는다", async () => {
     지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
-    const { status, json } = await 보낸다({ prompt: "이대로 만들기", answersRowId: "q1", pick: { ratio: "1:1" }, referenceIds: 많은사진 });
-    expect(status).toBe(400);
-    expect(json.typedUnsaved).toBeUndefined();
+    판단실패 = new Error("무슨 뜻인지 가리지 못했습니다: {raw}");
+    const { status, json } = await 보낸다({ prompt: "세로로" });
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, message: "만들지 못했습니다.", userUnsaved: true });
+    expect(남긴줄).toEqual([]);
   });
 
-  it("사진 고르기가 열린 채 친 답(typed 단추 답)이 남기기 전에 멈춰도 표시가 없다 — 화면 줄에 이미 표시가 있다", async () => {
-    지난줄 = [
-      { ...처음, body: "1번 제품으로 포스터" },
-      물음("q1", "photo", { wants: "image", reason: "unclear", mode: "image", rows: [{ id: 사진(1), role: "unclear" }], ids: [사진(1)] }),
-    ];
-    const pick = { photoRoles: [{ id: 사진(1), role: "preserve_product" }], typed: true };
-    const { status, json } = await 보낸다({ prompt: "1번은 우리 원두 봉투야", answersRowId: "q1", pick, referenceIds: 많은사진 });
+  it("판정 예약이 거절되면 회원 층 응답의 본문 · 상태 그대로 userUnsaved 만 더한다", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    const 거절 = {
+      ok: false, code: "credits_required", message: "크레딧이 부족합니다.", error: "크레딧이 부족합니다.",
+      usage: { remaining: 0, used: 10, reserved: 0, quota: 10 }, retryable: false,
+    };
+    예약거절 = Response.json(거절, { status: 403 });
+    const { status, json } = await 보낸다({ prompt: "세로로" });
+    expect(status).toBe(403);
+    expect(json).toEqual({ ...거절, userUnsaved: true });
+    expect(센것.decide).toBe(0);
+  });
+
+  it("말 길이 상한처럼 판단 전 입력 검사로 막혀도 userUnsaved 를 싣는다", async () => {
+    const { status, json } = await 보낸다({ prompt: "가".repeat(2001) });
     expect(status).toBe(400);
-    expect(json.typedUnsaved).toBeUndefined();
-    expect(남긴줄).toEqual([]);
+    expect(json).toEqual({ ok: false, message: "말은 2000자까지 보낼 수 있습니다.", retryable: false, userUnsaved: true });
+  });
+
+  it("단추 답 · 새 말도 남기기 전 멈춤이면 같은 표시를 싣는다 — 화면이 단추 답 줄은 안 뺀다", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    const 단추 = await 보낸다({ prompt: "이대로 만들기", answersRowId: "q1", pick: { ratio: "1:1" }, referenceIds: 많은사진 });
+    expect(단추.status).toBe(400);
+    expect(단추.json.userUnsaved).toBe(true);
+    지난줄 = [];
+    판단 = { ...말답판단, note: "" };
+    const 새말 = await 보낸다({ prompt: "세로 포스터", referenceIds: 많은사진 });
+    expect(새말.status).toBe(400);
+    expect(새말.json.userUnsaved).toBe(true);
   });
 
   it("남긴 뒤 실패는 typedAnswer 만 싣는다 — 두 표시가 겹치지 않는다", async () => {
@@ -479,6 +500,18 @@ describe("말 답을 남기기 전 실패 응답의 표시 (후속 Task 9 고침
     기획실패 = true;
     const { json } = await 보낸다({ prompt: "세로로" });
     expect(json.typedAnswer).toBe(true);
-    expect(json.typedUnsaved).toBeUndefined();
+    expect(json.userUnsaved).toBeUndefined();
+  });
+
+  it("남긴 뒤 실패한 새 말 · 성공 응답에는 아무 표시도 없다", async () => {
+    판단 = { ...말답판단, note: "" };
+    기획실패 = true;
+    const 실패 = await 보낸다({ prompt: "세로 포스터 만들어줘" });
+    expect(실패.json).toEqual({ ok: false, step: "기획", message: "크레딧이 부족합니다.", retryable: false });
+    기획실패 = false;
+    판단 = { wants: "talk", reply: "네", ratio: "", look: "", card: 0, note: "" };
+    const 말 = await 보낸다({ prompt: "고마워" });
+    expect(말.json.ok).toBe(true);
+    expect(말.json.userUnsaved).toBeUndefined();
   });
 });

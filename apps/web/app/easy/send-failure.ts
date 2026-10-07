@@ -1,3 +1,4 @@
+import { answerableAskId } from "./ask-chain";
 import { plainTyped, readPick, withPick } from "./row-marks";
 import type { EasyMessage } from "./turn";
 
@@ -37,9 +38,13 @@ export function typedAfterFailure(messages: readonly EasyMessage[], rowId: strin
 }
 
 /**
- * **서버가 말 답으로 읽었는데 사용자 줄을 남기기 전에 실패했으면 화면 줄도 뺀다**(후속 Task 9 고침 1). 서버에는 아무 줄도
- * 없어(`typedUnsaved`) 새로고침하면 [물음] 으로 끝나 단추가 다시 뜬다. 친 말은 입력창에 되돌아가 있다. 단추 답 줄은 그대로다.
+ * **사용자 줄을 남기기 전에 실패했으면, 앞이 답할 물음일 때만 화면 줄도 뺀다**(후속 Task 9 고침 1 · 2). 서버에는 그 줄이 없어
+ * (`userUnsaved`) 새로고침하면 앞 꼬리 그대로 물음 단추가 다시 뜬다. 친 말은 입력창에 되돌아가 있다. 앞이 물음이 아니면 예전처럼
+ * 남긴다(물음 밖 화면 동작은 그대로). 고른 값 표시가 있는 단추 답 줄도 그대로다.
  */
 export function unsavedAfterFailure(messages: readonly EasyMessage[], rowId: string): EasyMessage[] {
-  return messages.filter((one) => one.id !== rowId || readPick(one) !== undefined);
+  const 줄 = messages.find((one) => one.id === rowId);
+  if (!줄 || readPick(줄) !== undefined) return [...messages];
+  const 뺀것 = messages.filter((one) => one.id !== rowId);
+  return answerableAskId(뺀것) === undefined ? [...messages] : 뺀것;
 }

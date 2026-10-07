@@ -85,14 +85,27 @@ function fail(message: string, status = 500, extra: Record<string, unknown> = {}
 }
 
 /**
- * 말 답으로 읽은 턴이 사용자 줄을 **남기기 전에** 멈췄으면 알린다(후속 Task 9 고침 1). 서버에는 아무 줄도 없어 새로고침하면
- * 그 물음에 단추가 다시 뜬다 — 화면도 제 줄을 빼 같게 한다. 응답의 다른 칸 · 상태 코드는 그대로다.
+ * **사용자 줄을 남기기 전에 끝난 실패를 알린다**(후속 Task 9 고침 1 · 2). 판단 전이든 뒤든(입력 검사 · 판정 예약 거절 · 판단
+ * 실패 · 사진 멈춤 · 저장 전 예외) 서버에는 이 말의 줄이 없어, 새로고침하면 앞 꼬리 그대로다 — 앞이 물음이면 단추가 다시 뜬다.
+ * 화면이 그때 제 줄을 빼 같게 한다. 응답 본문에 칸 하나만 더하고 다른 칸 · 상태 코드는 그대로다(회원 층 응답도 같은 JSON 이다).
  */
-async function 남기기전멈춤(response: Response, 알린다: () => boolean): Promise<Response> {
-  if (response.ok || !알린다()) return response;
+async function 안남긴실패(response: Response, 남겼나: () => boolean): Promise<Response> {
+  if (response.ok || 남겼나()) return response;
   const body: unknown = await response.clone().json().catch(() => undefined);
-  if (!body || typeof body !== "object") return response;
-  return Response.json({ ...body, typedUnsaved: true }, { status: response.status });
+  if (!body || typeof body !== "object" || Array.isArray(body)) return response;
+  return Response.json({ ...body, userUnsaved: true }, { status: response.status });
+}
+
+/** 지킴(`trackUserTurn`)은 회원을 확인한 뒤에 만들어진다. 그 전에 끝난 턴은 「안 남김」이다. */
+function 사용자줄기록() {
+  let 남겼나 = () => false;
+  return {
+    지켜본다<T extends { savedUser(): boolean }>(지킴: T): T {
+      남겼나 = () => 지킴.savedUser();
+      return 지킴;
+    },
+    남겼나: () => 남겼나(),
+  };
 }
 
 /**
@@ -114,10 +127,13 @@ function 값을적는다(userId: string) {
  * 안에서 부르는 기획 라우트는 제 계량기를 따로 연다 — 두 번 세지 않는다.
  */
 export async function POST(request: Request) {
-  return withLlmMeter(() => turn(request));
+  return withLlmMeter(async () => {
+    const 기록 = 사용자줄기록();
+    return 안남긴실패(await turn(request, 기록.지켜본다), 기록.남겼나);
+  });
 }
 
-async function turn(request: Request): Promise<Response> {
+async function turn(request: Request, 지켜본다: ReturnType<typeof 사용자줄기록>["지켜본다"]): Promise<Response> {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
 
@@ -131,13 +147,10 @@ async function turn(request: Request): Promise<Response> {
   if (prompt.length > PROMPT_LIMIT) return 멈춘다(PROMPT_TOO_LONG);
 
   // 사용자 말 뒤에 답 없이 실패하면 실패 안내를 남길 수 있게 지켜본다(2026-10-06 설계 B4).
-  const 지킴 = trackUserTurn(easyStoreForUser(auth.member.userId));
+  const 지킴 = 지켜본다(trackUserTurn(easyStoreForUser(auth.member.userId)));
   const store = 지킴.store;
   const conversation = await store.getConversation(conversationId);
   if (!conversation) return fail("대화를 찾을 수 없습니다.", 404);
-  // 이번 말을 앞 물음의 말 답으로 읽었나(판단 뒤에 정한다). 사용자 줄을 남기기 전에 실패하면 화면에 알린다(후속 Task 9 고침 1).
-  let 말답읽음 = false;
-  const 안남긴말답 = () => 말답읽음 && !지킴.savedUser();
 
   /*
    * **고른 모델을 믿지 않는다.** 목록에 없는 id 가 오면 기본으로 떨어진다 —
@@ -318,10 +331,9 @@ async function turn(request: Request): Promise<Response> {
     const 답방식: EasyAnswerWay = 단추판단 || 광고 === "image"
       ? (고른단추?.typed ? "typed" : "button")
       : 말답?.answered ? "typed" : "none";
-    말답읽음 = 답방식 === "typed" && !고른단추;
     const 이음 = 답방식 === "none" ? undefined : 물음사슬;
     const 정한사진 = 답방식 === "typed" && !보낸사진.length && 이을사진.length ? await 사진을정한다(이을사진) : 처음사진;
-    if (!정한사진) return await 남기기전멈춤(멈춘다(UNUSABLE_PHOTO), 안남긴말답);
+    if (!정한사진) return 멈춘다(UNUSABLE_PHOTO);
     const 붙인것 = 정한사진.ids;
     const 붙인수 = 붙인것.length;
     const 사진들 = 정한사진.photos;
@@ -438,18 +450,18 @@ async function turn(request: Request): Promise<Response> {
     }
 
     if (wants === "cardnews" || wants === "revise") {
-      return await 남기기전멈춤(await cardnewsTurn({
+      return await cardnewsTurn({
         request, userId: auth.member.userId, store, conversation, conversationId, prompt, textModel,
         wants, 사진들, 붙인것, input, decision, provider, 고칠원고, 물음: 물음맥락, 말한것, 고른, 지시, userBody: 사용자글,
         결과번호: nextResultNumber(지난줄),
-      }), 안남긴말답);
+      });
     }
 
     // ⓒ 사진 역할부터 그림 제출까지는 `lib/easy/image-turn.ts` 가 한다(2026-10-07 후속 Task 6 — 동작 그대로 옮겼다).
-    return await 남기기전멈춤(await imageTurn({
+    return await imageTurn({
       request, store, conversation, conversationId, prompt, textModel, wants, decision, input, provider,
       물음맥락, 사진들, 붙인것, 붙인수, 지시, 고른역할, 지난역할, 고르기, 말한것, 사용자글, 지난줄,
-    }), 안남긴말답);
+    });
   } catch (error) {
     /*
      * 사용자 말을 남긴 뒤 실패했으면 그 안내도 대화에 남긴다(B4). 우리가 알고 낸 실패면
@@ -460,11 +472,9 @@ async function turn(request: Request): Promise<Response> {
     /*
      * 답으로 읽은 말 답(`typed` 표시) 뒤에 실패 줄을 남겼으면 알린다(후속 Task 9). 새로고침 뒤에는 그 물음에 단추가
      * 다시 뜨니, 화면도 제 줄에 같은 표시를 달아 그 자리에서 단추를 다시 단다. 응답의 다른 칸은 그대로다.
-     * 말 답으로 읽고 사용자 줄을 남기기 전에 실패했으면 `typedUnsaved` — 화면이 제 줄을 뺀다(고침 1).
+     * 사용자 줄을 남기기 전에 실패했으면 `POST` 가 `userUnsaved` 를 싣는다(고침 1 · 2).
      */
-    const 말답표시 = 실패한말 === withPick(prompt, { typed: true })
-      ? { typedAnswer: true }
-      : 안남긴말답() ? { typedUnsaved: true } : {};
+    const 말답표시 = 실패한말 === withPick(prompt, { typed: true }) ? { typedAnswer: true } : {};
     if (error instanceof EasyStepError) {
       /*
        * **세 갈래를 가려 말한다**(설계 §5-3). 어느 쪽이냐에 따라 할 일이

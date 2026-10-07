@@ -402,7 +402,7 @@ export function EasyClient({
         throw Object.assign(new Error(body.message ?? "만들지 못했습니다."), {
           retryable: body.retryable !== false,
           typedAnswer: body.typedAnswer === true,
-          typedUnsaved: body.typedUnsaved === true,
+          userUnsaved: body.userUnsaved === true,
         });
       }
 
@@ -450,8 +450,8 @@ export function EasyClient({
       if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {
         setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));
       }
-      // 말 답을 남기기 전에 실패했으면 서버에 없는 제 줄을 뺀다 — 친 말은 입력창에 되돌아간다(후속 Task 9 고침 1).
-      if ((cause as { typedUnsaved?: boolean }).typedUnsaved === true) {
+      // 서버가 이 말을 남기기 전에 실패했고 앞이 물음이면 제 줄을 뺀다 — 친 말은 입력창에 되돌아간다(후속 Task 9 고침 1 · 2).
+      if (!보낼것 && (cause as { userUnsaved?: boolean }).userUnsaved === true) {
         setMessages((current) => unsavedAfterFailure(current, `user-${자리}`));
       }
       setError({
