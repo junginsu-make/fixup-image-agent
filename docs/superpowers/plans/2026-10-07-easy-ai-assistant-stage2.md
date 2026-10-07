@@ -47,7 +47,7 @@
 
 ## 되돌리기(롤백) 메모
 
-2차는 1차와 같은 브랜치로 한 번에 배포한다. 되돌릴 곳(`master`)은 이 표시들을 모른다 — **되돌리면 표시가 붙은 줄이 글자 그대로 보인다**(「ask:ratio:」 머리 · `;pick=%7B…` 꼬리 · 「guide:ad:」 · 「say:」, 그리고 **1차의 광고 안내 줄 「ad-guide:」** — 1차도 같은 배포라 `master` 가 모른다). 그림 줄의 `edit-request:` · `;job=` 은 화면에 글자로 안 보이는 줄이라 그대로 둔다. 화면을 깔끔하게 되돌려야 하면 **사용자 승인을 받은 뒤에만** 운영 DB 에서 아래를 돌린다(표시만 떼고 보일 글을 남긴다 — 칸 · 표는 그대로).
+2차는 1차와 같은 브랜치로 한 번에 배포한다. 되돌릴 곳(`master`)은 이 표시들을 모른다 — **되돌리면 표시가 붙은 줄이 글자 그대로 보인다**(「ask:ratio:」 머리 · `;pick=%7B…` 꼬리 · 「guide:ad:」 · 「say:」, 그리고 **1차의 광고 안내 줄 「ad-guide:」** — 1차도 같은 배포라 `master` 가 모른다). 그림 줄은 화면에 글자로 안 보이지만 **`;from=` · `;job=` 은 떼야 한다** — `master` 의 `editRequestOf` 는 `;added=` 앞까지를 요청 번호로 읽어서, `edit-request:req-123;from=…;job=…` 를 요청 번호 `req-123;from=…;job=…` 로 읽는다(넣은 사진 `;added=a;job=…` 도 깨진다). 그러면 고친 줄의 그림을 못 고른다. `edit-request:` · `;added=` 는 `master` 가 아는 표시라 그대로 둔다. 처음 만든 줄(`;job=…` 만 있는 줄)은 떼면 `master` 가 아는 빈 글이 된다. 화면을 깔끔하게 되돌려야 하면 **사용자 승인을 받은 뒤에만** 운영 DB 에서 아래를 돌린다(표시만 떼고 보일 글을 남긴다 — 칸 · 표는 그대로).
 
 순서: ① 바꿀 줄을 백업 표로 떠 둔다 ② **한 트랜잭션**으로 고친다 — 하나라도 실패하면 아무것도 안 바뀐다 ③ 화면을 확인한 뒤 백업 표를 지울지 사용자에게 묻는다(묻지 않고 지우지 않는다).
 
@@ -57,7 +57,7 @@ create table easy_messages_backup_20261007 as
   select * from easy_messages
    where (role = 'assistant' and (body like 'ask:%' or body like 'say:%' or body like 'guide:%' or body like 'ad-guide:%'))
       or (role = 'user' and strpos(body, ';pick=') > 0)
-      or (role = 'image' and strpos(body, ';from=') > 0);
+      or (role = 'image' and (strpos(body, ';from=') > 0 or strpos(body, ';job=') > 0));
 
 -- ② 한 트랜잭션
 begin;
@@ -76,6 +76,8 @@ update easy_messages set body = substring(body from 10) where role = 'assistant'
 update easy_messages set body = left(body, strpos(body, ';pick=') - 1) where role = 'user' and strpos(body, ';pick=') > 0;
 -- 고친 그림 줄: ';from=…' 을 뗀다(';job=' 앞까지)
 update easy_messages set body = regexp_replace(body, ';from=[^;]*', '') where role = 'image' and strpos(body, ';from=') > 0;
+-- 그림 줄(처음 만든 줄 · 고친 줄): ';job=…' 을 끝까지 뗀다(';from=' 을 뗀 뒤라 늘 맨 뒤다). master 는 이 표시를 모른다
+update easy_messages set body = regexp_replace(body, ';job=.*$', '') where role = 'image' and strpos(body, ';job=') > 0;
 commit;
 
 -- ③ (사용자 확인 뒤, 승인을 받고) drop table easy_messages_backup_20261007;
