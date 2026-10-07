@@ -4,7 +4,7 @@ import {
   ASK_ANSWER_NOTE, answerableAskId, askAnchor, askChain, askInstruction, buttonDecision, chosenFor, closedAnswerRows,
   readButtonAnswer, readEasyPick, settleTypedAnswer,
 } from "../ask-chain";
-import { askBody, sayBody, withPick } from "../row-marks";
+import { askBody, plainTyped, sayBody, withPick } from "../row-marks";
 import { AD_ANSWER_NOTE, AD_CHOICE_IMAGE, AD_QUESTION } from "../ad-ask";
 import { CANNOT_DO_NOW, NOTHING_TO_EDIT, fitButtonDecision } from "../chat";
 import { NOT_MADE_YET } from "../cardnews-after";
@@ -111,11 +111,30 @@ describe("서버가 닫은 장 물음 답은 화면 줄에서도 표시를 뗀�
   /** Review Focus 4 — 실패한 단추 답은 다시 눌러야 한다. 표시 떼기는 성공한 cardAsk 응답에서만. */
   it("화면은 성공한 cardAsk 응답에서만 표시를 떼고, 실패 길에서는 안 뗀다 — 실패하면 단추가 남는다", () => {
     const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
-    const 떼기 = 화면.indexOf("if (body.ok && body.cardAsk) setMessages((current) => closedAnswerRows(current, `user-${자리}`, prompt));");
+    const 떼기 = 화면.indexOf("if (body.ok && body.cardAsk) setMessages((current) => closedAnswerRows(current, `user-${자리}`, plainTyped(prompt)));");
     expect(떼기).toBeGreaterThan(0);
     expect(떼기).toBeLessThan(화면.indexOf("if (body.ok && cardnews.take(body)) return;"));
     expect(화면.split("closedAnswerRows(").length).toBe(2);
     expect(answerableAskId([...앞, 단추답])).toBe("q1");
+  });
+
+  /**
+   * 후속 최종 수정 4 — 서버는 친 말을 `plainTyped` 로 풀어 남긴다(`generate/route.ts`). 화면이 다시 쓰는 줄도 같은
+   * 글이어야 한다. 친 말에 「;pick=...」이 섞여 있으면 날 글로 다시 쓴 줄은 여전히 단추 답으로 읽혀 단추가 다시 떴다.
+   */
+  it("친 말에 고른 값 표시 글자가 섞여도, 서버처럼 풀어 다시 쓰면 단추가 다시 안 뜬다", () => {
+    const 친말 = withPick("2번", { card: 2 });
+    const 친줄 = 말("user-pending-1", 친말);
+    expect(answerableAskId(closedAnswerRows([...앞, 친줄], "user-pending-1", 친말))).toBe("q1");
+    const 줄 = closedAnswerRows([...앞, 친줄], "user-pending-1", plainTyped(친말));
+    expect(줄[2]!.body).toBe(plainTyped(친말));
+    expect(answerableAskId(줄)).toBeUndefined();
+  });
+
+  it("화면은 다시 쓸 글을 서버와 같은 plainTyped 로 풀고, 그 함수를 row-marks 에서 가져온다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain("closedAnswerRows(current, `user-${자리}`, plainTyped(prompt))");
+    expect(화면).toMatch(/import \{[^}]*\bplainTyped\b[^}]*\} from "\.\/row-marks";/);
   });
 });
 

@@ -1,5 +1,6 @@
 import { authenticateApiMember } from "../../../../lib/membership/api";
 import { easyStoreForUser } from "../../../../lib/easy/store";
+import { errorLogText } from "../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export async function GET() {
     return Response.json({ ok: true, workIds: Object.keys(conversations), conversations });
   } catch (error) {
     // 원문(Supabase 글 등)은 서버 기록에만 남긴다(2026-10-07 후속 Task 1).
-    console.error("[easy] 쉽게 작업 목록을 읽지 못했습니다.", error);
+    console.error("[easy] 쉽게 작업 목록을 읽지 못했습니다.", errorLogText(error));
     return Response.json({ ok: false, message: "쉽게 작업 목록을 읽지 못했습니다." }, { status: 500 });
   }
 }

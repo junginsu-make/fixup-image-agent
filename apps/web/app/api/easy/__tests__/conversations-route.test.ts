@@ -57,7 +57,7 @@ describe("대화 목록 · 만들기 (후속 Task 1)", () => {
     const { status, json } = await 읽는다(await 목록.GET());
     expect(status).toBe(500);
     expect(json).toEqual({ ok: false, message: "대화 목록을 읽지 못했습니다." });
-    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 날것);
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 날것.message);
   });
 
   it("만들기가 날것 오류로 실패해도 원문을 싣지 않는다", async () => {
@@ -75,6 +75,31 @@ describe("대화 목록 · 만들기 (후속 Task 1)", () => {
   });
 });
 
+/**
+ * **서버 기록에도 주소는 남기지 않는다**(후속 최종 수정 1, 보안 리뷰). 오류 덩어리 대신 주소를 `<url>` 로
+ * 가린 글만 찍는다 — 저장소 오류 글에 서명한 주소가 섞여 올 수 있다(`see-turn.ts` 와 같은 규칙).
+ */
+describe("서버 기록의 주소 가리기 (후속 최종 수정 1)", () => {
+  const 주소섞인 = new Error("fetch failed https://abc.supabase.co/rest/v1/easy_conversations?apikey=SECRET");
+  const 찍힌것 = (기록: { mock: { calls: unknown[][] } }) => 기록.mock.calls.flat();
+
+  it("목록 · 만들기 · 하나 읽기 · 지우기 모두 주소를 <url> 로 가린 글만 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    던짐 = 주소섞인;
+    await 목록.GET();
+    await 목록.POST(new Request("http://localhost/api/easy/conversations", { method: "POST", body: JSON.stringify({ title: "새 대화" }) }));
+    await 하나.GET(new Request("http://localhost"), 맥락);
+    await 하나.DELETE(new Request("http://localhost"), 맥락);
+    expect(기록).toHaveBeenCalledTimes(4);
+    for (const 글 of 찍힌것(기록)) {
+      expect(typeof 글, "오류 덩어리를 그대로 찍었다").toBe("string");
+      expect(글).not.toContain("SECRET");
+      expect(글).not.toContain("https://");
+    }
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "fetch failed <url>");
+  });
+});
+
 describe("대화 하나 (후속 Task 1)", () => {
   it("읽기가 날것 오류로 실패하면 일반 문장을 500 으로 준다", async () => {
     const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -82,7 +107,7 @@ describe("대화 하나 (후속 Task 1)", () => {
     const { status, json } = await 읽는다(await 하나.GET(new Request("http://localhost"), 맥락));
     expect(status).toBe(500);
     expect(json).toEqual({ ok: false, message: "대화를 읽지 못했습니다." });
-    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 날것);
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 날것.message);
   });
 
   it("지우기가 날것 오류로 실패하면 일반 문장을 500 으로 준다", async () => {

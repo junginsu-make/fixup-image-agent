@@ -33,6 +33,15 @@ describe("오류 글 가리기 (후속 Task 1)", () => {
     const response = await GET();
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ ok: false, message: "쉽게 작업 목록을 읽지 못했습니다." });
-    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 던짐);
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 던짐.message);
+  });
+
+  /** 후속 최종 수정 1(보안 리뷰) — 서버 기록에도 주소는 `<url>` 로 가린 글만 남긴다. */
+  it("서버 기록에는 주소를 <url> 로 가린 글만 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    던짐 = new Error("fetch failed https://abc.supabase.co/rest/v1/easy_messages?apikey=SECRET");
+    await GET();
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "fetch failed <url>");
+    expect(기록.mock.calls.flat().join(" ")).not.toContain("SECRET");
   });
 });

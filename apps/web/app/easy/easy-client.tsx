@@ -20,7 +20,7 @@ import { useEasyAsks } from "./use-easy-asks";
 import { usedAttachments } from "./attachments-after";
 import { photoTypedReply, type EasyButtonReply } from "./ask-answers";
 import { answerableAskId, closedAnswerRows } from "./ask-chain";
-import { withPick } from "./row-marks";
+import { plainTyped, withPick } from "./row-marks";
 import { EasyAskControls } from "./_components/ask-row";
 import { keptAfterFailure, lostAfterFailure } from "./send-failure";
 import { EASY_DEFAULT_RATIO } from "./ask";
@@ -379,7 +379,7 @@ export function EasyClient({
       // 일하는 턴의 AI 말(2차 D4). 그림 · 원고 자리 앞에 붙인다.
       if (body.ok && body.say?.id) setMessages((current) => [...current, { id: body.say.id, role: "assistant", body: body.say.body ?? "" }]);
       // 장 물음 답(다시 그리기)이면 서버는 표시 없이 남겨 물음을 닫았다. 화면 줄도 같게 — 단추가 다시 안 뜬다.
-      if (body.ok && body.cardAsk) setMessages((current) => closedAnswerRows(current, `user-${자리}`, prompt));
+      if (body.ok && body.cardAsk) setMessages((current) => closedAnswerRows(current, `user-${자리}`, plainTyped(prompt)));
       // 카드뉴스 원고 · 손보기(2단계 · 3단계). 값은 원고까지 안 든다.
       if (body.ok && cardnews.take(body)) return;
       if (body.ok && body.talked) {

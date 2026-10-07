@@ -489,7 +489,7 @@ describe("오류 글 가리기 (후속 Task 1)", () => {
     expect(status).toBe(500);
     expect(json.message).toBe("만들지 못했습니다.");
     expect(JSON.stringify(json)).not.toContain("easy_messages");
-    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 남기기실패);
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 남기기실패.message);
   });
 
   it("판단 모델 출력이 섞인 오류 글도 싣지 않는다", async () => {
@@ -535,7 +535,7 @@ describe("안쪽 라우트 5xx 글 가리기 (후속 Task 1 수정 1)", () => {
     expect(status).toBe(500);
     expect(json).toEqual({ ok: false, step: "기획", message: "만들지 못했습니다.", retryable: true });
     expect(JSON.stringify(json)).not.toContain("poster_projects");
-    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), expect.objectContaining({ message: 'relation "poster_projects" does not exist' }));
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 'relation "poster_projects" does not exist');
   });
 
   it("운영자 멈춤(503 · retryable:false)은 우리 문장이라 그대로 보인다", async () => {
@@ -563,5 +563,33 @@ describe("안쪽 라우트 5xx 글 가리기 (후속 Task 1 수정 1)", () => {
     const { status, json } = await 보낸다({});
     expect(status).toBe(409);
     expect(json.message).toBe("다른 작업이 진행 중입니다.");
+  });
+});
+
+/**
+ * **서버 기록에도 주소는 남기지 않는다**(후속 최종 수정 1, 보안 리뷰). 오류 덩어리 대신 주소를 `<url>` 로 가린
+ * 글만 찍는다 — 업체 · 저장소 오류 글에 서명한 주소가 섞여 올 수 있다(`see-turn.ts` 와 같은 규칙).
+ */
+describe("서버 기록의 주소 가리기 (후속 최종 수정 1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const 그림주문 = () => { 판단 = { wants: "image", reply: "", ratio: "1:1", look: "" }; };
+
+  it("예상 못 한 오류의 기록은 주소를 <url> 로 가린 글이다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    남기기실패 = new Error("대화 줄: fetch failed https://abc.supabase.co/rest/v1/easy_messages?apikey=SECRET");
+    그림주문();
+    await 보낸다({});
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "대화 줄: fetch failed <url>");
+    expect(기록.mock.calls.flat().join(" ")).not.toContain("SECRET");
+  });
+
+  it("안쪽 라우트의 날것 5xx 기록도 주소를 <url> 로 가린 글이다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    기획답 = () => Response.json({ ok: false, message: "upstream https://fal.run/x?sig=SECRET failed" }, { status: 500 });
+    그림주문();
+    const { json } = await 보낸다({});
+    expect(json.message).toBe("만들지 못했습니다.");
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "upstream <url> failed");
+    expect(기록.mock.calls.flat().join(" ")).not.toContain("SECRET");
   });
 });

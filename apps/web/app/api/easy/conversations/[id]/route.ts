@@ -1,5 +1,6 @@
 import { authenticateApiMember } from "../../../../../lib/membership/api";
 import { easyStoreForUser } from "../../../../../lib/easy/store";
+import { errorLogText } from "../../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ type Context = { params: Promise<{ id: string }> };
 
 /** 원문(Supabase 글 등)은 서버 기록에만 남긴다(2026-10-07 후속 Task 1). 화면에는 일반 문장. */
 function fail(error: unknown, fallback: string) {
-  console.error(`[easy] ${fallback}`, error);
+  console.error(`[easy] ${fallback}`, errorLogText(error));
   return Response.json({ ok: false, message: fallback }, { status: 500 });
 }
 

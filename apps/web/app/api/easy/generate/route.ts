@@ -6,6 +6,7 @@ import { EasyConversationMissingError } from "../../../../lib/easy/store-core";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, relay } from "../../../../lib/easy/relay";
 import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
+import { errorLogText } from "../../../../lib/easy/log-text";
 import { plainTyped, withPick } from "../../../easy/row-marks";
 import {
   askChain, askInstruction, buttonDecision, chosenFor, readButtonAnswer, settleTypedAnswer,
@@ -448,7 +449,7 @@ async function turn(request: Request): Promise<Response> {
        */
       // 코드 없고 다시 눌러 풀릴 5xx 는 안쪽 라우트의 날것 글(표 이름 등)이다. 서버 기록에만(후속 Task 1 수정 1).
       const 가림 = error.status >= 500 && !error.code && error.retryable;
-      if (가림) console.error(`[easy] ${error.step} 실패`, error);
+      if (가림) console.error(`[easy] ${error.step} 실패`, errorLogText(error));
       return Response.json({
         ok: false,
         step: error.step,
@@ -460,7 +461,7 @@ async function turn(request: Request): Promise<Response> {
     }
     // 「대화를 찾을 수 없습니다.」는 우리가 쓴 안내라 그대로. 나머지 원문은 서버 기록에만(2026-10-07 후속 Task 1).
     if (error instanceof EasyConversationMissingError) return fail(error.message);
-    console.error("[easy] 만들기 실패", error);
+    console.error("[easy] 만들기 실패", errorLogText(error));
     return fail("만들지 못했습니다.");
   } finally {
     값을적는다(auth.member.userId);
