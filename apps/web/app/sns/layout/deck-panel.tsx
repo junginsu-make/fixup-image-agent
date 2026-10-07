@@ -13,6 +13,8 @@ import {
   type LayoutSlot,
 } from "@fixup/layout-core";
 import type { PreviewCopy } from "./preview-panel";
+import { WorkingStatus } from "../../_components/working-status";
+import { workingButton } from "../../_components/working-words";
 
 /**
  * 세트 — 표지 1장 · 속지 N장 · 엔딩 1장을 한 번에 정한다.
@@ -72,6 +74,8 @@ export function DeckPanel({ ratioId, modelId, copy, editing, templates, onRatioC
   const [decks, setDecks] = useState<SavedDeck[]>([]);
   const [preview, setPreview] = useState<DeckPreview | null>(null);
   const [busy, setBusy] = useState<"preview" | "save" | "apply" | null>(null);
+  /** 띠에 걸린 시간을 보이려고 시작한 때를 적어 둔다(2026-10-08). */
+  const [busyStartedAt, setBusyStartedAt] = useState<number>();
   const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
   const [projectId, setProjectId] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
@@ -175,6 +179,7 @@ export function DeckPanel({ ratioId, modelId, copy, editing, templates, onRatioC
 
   async function run(kind: "preview" | "save") {
     if (!deck) return;
+    setBusyStartedAt(Date.now());
     setBusy(kind);
     setNotes([]);
     try {
@@ -203,6 +208,7 @@ export function DeckPanel({ ratioId, modelId, copy, editing, templates, onRatioC
 
   return (
     <div className="grid gap-4">
+      {busy === "preview" ? <WorkingStatus label="세트 미리보기를 만드는 중입니다" hint="표지·속지·엔딩을 한 장씩 그립니다" startedAt={busyStartedAt} /> : null}
       <section className="grid gap-3 rounded-lg border bg-card p-4">
         <div>
           <h3 className="font-semibold">카드 몇 장</h3>
@@ -286,7 +292,7 @@ export function DeckPanel({ ratioId, modelId, copy, editing, templates, onRatioC
 
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" disabled={!ready || blocked || busy === "preview"} onClick={() => run("preview")}>
-          {busy === "preview" ? "그리는 중…" : "세트 미리보기"}
+          {busy === "preview" ? workingButton("make") : "세트 미리보기"}
         </Button>
         <Input
           className="w-56"

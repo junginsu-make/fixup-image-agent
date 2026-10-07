@@ -1,6 +1,8 @@
 "use client";
 
 import { Button, Input, Label, Textarea } from "@fixup/ui";
+import { WorkingStatus } from "../../_components/working-status";
+import { workingButton } from "../../_components/working-words";
 
 /**
  * 원고를 꽂아 보고, 만들기 전에 값을 본다.
@@ -32,15 +34,18 @@ export interface PreviewResult {
   estimate: { calls: number; totalUsd: number; slots: SlotEstimate[] };
 }
 
-export function PreviewPanel({ copy, onCopyChange, result, busy, onPreview }: {
+export function PreviewPanel({ copy, onCopyChange, result, busy, startedAt, onPreview }: {
   copy: PreviewCopy;
   onCopyChange(copy: PreviewCopy): void;
   result: PreviewResult | null;
   busy: boolean;
+  /** 주면 띠에 걸린 시간이 흐른다. */
+  startedAt?: number;
   onPreview(): void;
 }) {
   return (
     <div className="grid gap-4">
+      {busy ? <WorkingStatus label="미리보기를 만드는 중입니다" hint="한 장에 몇 십 초 걸립니다" startedAt={startedAt} /> : null}
       <section className="grid gap-3 rounded-lg border bg-card p-4">
         <div>
           <h3 className="font-semibold">원고 넣어 보기</h3>
@@ -63,7 +68,7 @@ export function PreviewPanel({ copy, onCopyChange, result, busy, onPreview }: {
           </label>
         </div>
         <Button type="button" onClick={onPreview} disabled={busy}>
-          {busy ? "그리는 중…" : "이 틀로 그려 보기"}
+          {busy ? workingButton("make") : "이 틀로 그려 보기"}
         </Button>
       </section>
 

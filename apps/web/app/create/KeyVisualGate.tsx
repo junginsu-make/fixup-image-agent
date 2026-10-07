@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowLeft, Check, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, RefreshCw } from "lucide-react";
 import { Badge, Button } from "@fixup/ui";
+import { WorkingStatus } from "../_components/working-status";
 
 /**
  * 대표 이미지 승인 단계.
@@ -13,14 +14,20 @@ import { Badge, Button } from "@fixup/ui";
 interface KeyVisualGateProps {
   previewUrl: string | null;
   isBusy: boolean;
+  /** 위쪽 띠의 걸린 시간. */
+  busyStartedAt?: number;
+  /** 띠 문구. 승인(그림을 줄여 넘기는 짧은 일) 중에는 「저장 중」이라고 말한다(2026-10-08 리뷰). */
+  busyLabel?: string;
   onApprove: () => void;
   onRegenerate: () => void;
   onBack: () => void;
 }
 
-export function KeyVisualGate({ previewUrl, isBusy, onApprove, onRegenerate, onBack }: KeyVisualGateProps) {
+export function KeyVisualGate({ previewUrl, isBusy, busyStartedAt, busyLabel, onApprove, onRegenerate, onBack }: KeyVisualGateProps) {
   return (
     <section className="rounded-lg bg-card p-5 shadow-[var(--shadow-ring)]">
+      {/* **기다리는 동안 그림 자리 안 상자 대신 위쪽 띠로 말한다**(2026-10-08 사용자). */}
+      {isBusy ? <WorkingStatus className="mb-4" label={busyLabel ?? "대표 이미지 만드는 중입니다"} startedAt={busyStartedAt} /> : null}
       <div className="mb-4 flex flex-wrap items-start gap-3">
         <div className="min-w-0">
           <span className="text-meta text-subtle-foreground">2단계 · 대표 이미지</span>
@@ -37,10 +44,7 @@ export function KeyVisualGate({ previewUrl, isBusy, onApprove, onRegenerate, onB
 
       <div className="grid place-items-center overflow-hidden rounded-md bg-canvas p-3">
         {isBusy ? (
-          <div className="grid h-64 place-items-center gap-2 text-center text-sm text-muted-foreground">
-            <Loader2 className="h-7 w-7 animate-spin text-primary" />
-            대표 이미지를 만드는 중입니다.
-          </div>
+          <div aria-hidden className="h-64 w-full" />
         ) : previewUrl ? (
           <img
             src={previewUrl}

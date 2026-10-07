@@ -16,6 +16,8 @@ import { loadSnsRerun, snsRerunJump } from "./rerun-load";
 import { fetchRerunDeps } from "../_components/rerun-fetch";
 import { rerunStartStep } from "../_components/rerun-step";
 import { billableFetch } from "../../lib/billable-fetch";
+import { WorkingStatus } from "../_components/working-status";
+import { workingButton } from "../_components/working-words";
 
 /**
  * **손으로 박지 않는다.**
@@ -94,6 +96,9 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
   });
   const [message, setMessage] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  /** 저장 → 기획 두 단계 중 어디인가. 기획이 1~2분이라 띠 문구를 나눈다(2026-10-08). */
+  const [phase, setPhase] = React.useState<"saving" | "planning" | null>(null);
+  const [workStartedAt, setWorkStartedAt] = React.useState<number>();
   const [fromLibrary, setFromLibrary] = React.useState<string | null>(null);
   /** 값을 들고 왔다고 화면에 적을 것. 못 들고 온 첨부 수까지 말한다. */
   const [rerun, setRerun] = React.useState<{ title: string; dropped: number } | null>(null);
@@ -221,6 +226,8 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
     const issues = [...attachmentIssues, ...slotPlan.issues];
     if (issues.length) return setMessage(issues.join("\n"));
     setSaving(true);
+    setPhase("saving");
+    setWorkStartedAt(Date.now());
     setMessage("");
     try {
       const response = await fetch("/api/sns/projects", {
@@ -244,6 +251,7 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
       });
       const payload = await response.json() as { ok?: boolean; project?: { id: string }; message?: string };
       if (!response.ok || !payload.project) throw new Error(payload.message ?? "프로젝트를 만들지 못했습니다.");
+      setPhase("planning");
       // 기획은 값이 나가는 요청이다 — 식별자가 없으면 서버가 예약을 400 으로 거절한다.
       const planned = await billableFetch(`/api/sns/projects/${payload.project.id}/plan`);
       const plannedBody = await planned.json() as { ok?: boolean; message?: string };
@@ -254,6 +262,7 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
       setMessage(error instanceof Error ? error.message : "프로젝트를 만들지 못했습니다.");
     } finally {
       setSaving(false);
+      setPhase(null);
     }
   }
 
@@ -265,6 +274,14 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
 
   return (
     <div className="grid gap-8">
+      {/* 멈추는 길이 없는 요청이라 중지 단추는 없다. */}
+      {phase ? (
+        <WorkingStatus
+          label={phase === "saving" ? "저장 중입니다" : "기획 중입니다"}
+          hint={phase === "planning" ? "기획과 원고를 작성하고 있습니다. 1~2분 걸립니다" : undefined}
+          startedAt={workStartedAt}
+        />
+      ) : null}
       <header>
         <p className="text-meta text-subtle-foreground">CARD NEWS STUDIO</p>
         <h1 className="mt-1 text-h1">카드뉴스 만들기</h1>
@@ -341,7 +358,7 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
               {step === "spec" ? <span className="text-sm font-semibold text-primary">{estimateCostLabel(spec, attachments, creditPolicy)}</span> : null}
               {step === "content" ? <Button onClick={nextFromContent}>이미지 고르기<ArrowRight className="size-4" /></Button> : null}
               {step === "images" ? <Button onClick={nextFromImages}>규격 고르기<ArrowRight className="size-4" /></Button> : null}
-              {step === "spec" ? <Button onClick={() => void createProject()} disabled={saving}>{saving ? "저장 중…" : "기획 시작"}</Button> : null}
+              {step === "spec" ? <Button onClick={() => void createProject()} disabled={saving}>{phase === "saving" ? workingButton("save") : phase === "planning" ? workingButton("plan") : "기획 시작"}</Button> : null}
             </div>
           </div>
           )}

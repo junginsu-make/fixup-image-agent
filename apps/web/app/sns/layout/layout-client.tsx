@@ -17,6 +17,8 @@ import { SlotCanvas } from "./slot-canvas";
 import { canvasSize } from "./fit-screen";
 import { billableFetch } from "../../../lib/billable-fetch";
 import { UPLOAD_RIGHTS_NOTE } from "../../../lib/rights/upload-notice";
+import { WorkingStatus } from "../../_components/working-status";
+import { workingButton } from "../../_components/working-words";
 import { useFitScreen } from "./use-fit-screen";
 import { SlotInspector } from "./slot-inspector";
 import { LibraryPicker, LibraryUploadButton, useLibraryImages, useLibraryUpload } from "./library-picker";
@@ -126,6 +128,8 @@ export function LayoutStudio() {
   const [saveName, setSaveName] = useState("");
   const [naming, setNaming] = useState(false);
   const [busy, setBusy] = useState<"preview" | "analyze" | "save" | null>(null);
+  /** 띠에 걸린 시간을 보이려고 미리보기·읽어내기를 시작한 때를 적어 둔다(2026-10-08). */
+  const [busyStartedAt, setBusyStartedAt] = useState<number>();
   const [notes, setNotes] = useState<string[]>([]);
   /** 미리보기와 세트는 다 고친 뒤 한 번 쓰는 것이라 서랍에 넣는다. */
   const [drawer, setDrawer] = useState<"preview" | "deck" | null>(null);
@@ -193,6 +197,7 @@ export function LayoutStudio() {
   useEffect(() => { drawerRef.current = drawer; }, [drawer]);
 
   async function runPreview() {
+    setBusyStartedAt(Date.now());
     setBusy("preview");
     setNotes([]);
     setDrawerAlert(false);
@@ -233,6 +238,7 @@ export function LayoutStudio() {
 
   async function runAnalyze() {
     if (!analyzeId) return;
+    setBusyStartedAt(Date.now());
     setBusy("analyze");
     setNotes([]);
     try {
@@ -305,6 +311,10 @@ export function LayoutStudio() {
       버튼이 반만 보였다.
     */
     <div ref={fit.rootRef} className="flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}>
+      {/* 화면 맨 위 띠. 미리보기는 서랍 안(`PreviewPanel`)에 같은 띠가 있다. */}
+      {busy === "analyze" ? (
+        <WorkingStatus label="칸을 분석 중입니다" hint="레퍼런스에서 칸 자리를 읽고 있습니다" startedAt={busyStartedAt} className="shrink-0" />
+      ) : null}
       {/*
         **네 열이 다 조금씩 줄어든다.** 고정 폭이면 줄어드는 곳이 레퍼런스 열
         하나뿐이라 그 칸만 손톱만 해졌다.
@@ -522,7 +532,7 @@ export function LayoutStudio() {
           <div className="flex shrink-0 gap-2">
             <LibraryUploadButton uploader={referenceUpload} />
             <Button className="flex-1" type="button" disabled={!analyzeId || busy === "analyze"} onClick={runAnalyze}>
-              {busy === "analyze" ? "읽는 중…" : "칸 읽어내기"}
+              {busy === "analyze" ? workingButton("analyze") : "칸 읽어내기"}
             </Button>
           </div>
           {/* 올리는 버튼(`LibraryUploadButton`)은 좁아 그 안에 두면 세 줄로 접힌다. */}
@@ -552,6 +562,7 @@ export function LayoutStudio() {
           onCopyChange={setCopy}
           result={preview}
           busy={busy === "preview"}
+          startedAt={busyStartedAt}
           onPreview={runPreview}
         />
       </SideDrawer>

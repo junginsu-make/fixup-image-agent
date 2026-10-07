@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Wand2 } from "lucide-react";
+import { workingButton } from "../_components/working-words";
 import { Badge, Button, Textarea } from "@fixup/ui";
 import type { CopyIntensity, GapPolicy, PageGoal, ProductKind } from "@fixup/pdp-core";
 import { PAGE_GOALS, PRODUCT_KINDS, productKindLabel } from "@fixup/pdp-core";
@@ -171,7 +172,7 @@ export function TextBriefInput({
           ) : (
             <Wand2 className="mr-1.5 h-4 w-4" />
           )}
-          구성 시나리오 만들기
+          {isBusy ? workingButton("plan") : "구성 시나리오 만들기"}
         </Button>
       </div>
     </section>
