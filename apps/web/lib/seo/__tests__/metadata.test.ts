@@ -58,6 +58,12 @@ describe("문구", () => {
     .map((copy) => [copy.title, copy]))("%s 한국어 설명은 80자 이내", (_title, copy) => {
     expect(copy.description.length).toBeLessThanOrEqual(80);
   });
+  it("첫 화면 제목·설명은 사용자가 정한 문구(2026-10-07, 한글 이름 「프롬위드」 포함)", () => {
+    expect(HOME_COPY.ko.title).toBe("FormWith | 프롬위드 AI 이미지·카드뉴스·상세페이지·포스터·광고 소재 만들기");
+    expect(HOME_COPY.ko.description).toBe(
+      "프롬위드. 레퍼런스 한 장으로 카드뉴스, 상세페이지, 광고 소재, 포스터, 캐릭터를 AI 마케팅 콘텐츠 제작 스튜디오 FormWith.",
+    );
+  });
   it("첫 화면 한국어 설명에 핵심 단어의 중심 말이 들어 있다", () => {
     for (const word of ["카드뉴스", "상세페이지", "광고 소재", "포스터", "캐릭터"]) {
       expect(HOME_COPY.ko.description).toContain(word);
