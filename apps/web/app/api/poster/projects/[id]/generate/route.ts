@@ -12,8 +12,10 @@ import { posterStoresForUser } from "../../../../../../lib/poster/stores";
 import { createPosterFalClients, PosterProviderConfigurationError } from "../../../../../../lib/poster/providers";
 import { PosterChargedError, submitPoster } from "../../../../../../lib/poster/flow";
 import { referenceBytes } from "../../../../../../lib/poster/asset-bytes";
-import { estimatePosterCost } from "@fixup/poster-core";
+import { buildPosterJob, estimatePosterCost } from "@fixup/poster-core";
 import { restoreAttachments } from "@fixup/shared";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
+import { FalPoolBusyError, FalPoolUnavailableError } from "../../../../../../lib/fal/pool/router";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +63,8 @@ export async function POST(request: Request, context: Context) {
 async function handlePost(request: Request, context: Context) {
   /** `catch` 에서도 봐야 한다 — 실패하면 묶인 장을 돌려줘야 한다. */
   let reservation: { userId: string; requestId: string } | null = null;
+  /** 조립이 거절한 우리 문장. `submitPoster` 가 이 글로 던진다 — `catch` 가 원문과 가른다. */
+  let rejected: string | undefined;
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
@@ -244,6 +248,12 @@ async function handlePost(request: Request, context: Context) {
       { queue: fal.queue, requests: stores.requests, images: stores.images, // 제출만 하는 길이라 저장이 일어나지 않는다. 빈 값을 돌려주면 언젠가
         // 불렸을 때 `asset_path: ""` 가 조용히 들어가므로, 시끄럽게 실패한다.
         saveImage: async () => { throw new Error("제출 경로에서는 결과를 저장하지 않습니다."); } },
+      // 조립은 처음 만들기 그대로다. 거절한 문장만 적어 둔다.
+      (job) => {
+        const built = buildPosterJob(job);
+        rejected = built.rejected;
+        return built;
+      },
     );
 
     /**
@@ -301,12 +311,31 @@ async function handlePost(request: Request, context: Context) {
       throw cause;
     }
   } catch (error) {
-    if (error instanceof PosterProviderConfigurationError) {
-      return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
-    }
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "생성을 시작하지 못했습니다." },
-      { status: 500 },
-    );
+    return generateFailure(error, rejected);
   }
+}
+
+const GENERATE_FAILED = "생성을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+
+/**
+ * **실패를 화면에 어떻게 말할지**(2026-10-07 후속 Task 12, 고치기의 `editFailure` 와 같은 규칙).
+ *
+ * 전에는 모든 예외를 원문으로 돌려줬다. Supabase · 저장소 · fal 의 날것 글과 환경변수 이름이
+ * 「다양하게」 화면에 떴다.
+ *
+ * 우리가 쓴 문장만 그대로 보인다 — 조립 거절(사진 장수 · 크기 등, 사용자가 고칠 수 있다),
+ * 과금 뒤 실패(「다시 해 보세요」로 덮으면 두 번째 작업을 만든다 — `flow.ts`), fal 계정 풀의
+ * 두 문장(원문은 풀이 기록에만 남겼다). 나머지는 일반 문장이고 원문은 서버 기록에만 남긴다.
+ * **상태 코드는 전과 같다**(500, 설정 오류만 503) — 화면과 쉽게 모드가 받는 갈래가 그대로다.
+ */
+function generateFailure(error: unknown, rejected: string | undefined): Response {
+  if (
+    error instanceof PosterChargedError || error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError
+    || (rejected && error instanceof Error && error.message === rejected)
+  ) {
+    return Response.json({ ok: false, message: error.message }, { status: 500 });
+  }
+  console.error("[poster] 만들기 시작 실패", errorLogText(error));
+  const status = error instanceof PosterProviderConfigurationError ? 503 : 500;
+  return Response.json({ ok: false, message: GENERATE_FAILED }, { status });
 }
