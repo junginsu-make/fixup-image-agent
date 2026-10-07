@@ -49,6 +49,30 @@ describe("서버 기록용 오류 글 (errorLogText)", () => {
     expect(errorLogText(new Error("첫 줄\r\n[easy] 가짜 줄\n끝\r"))).toBe("첫 줄 [easy] 가짜 줄 끝 ");
   });
 
+  /** 서버 처리 오류 가리기 보안 리뷰 L1 — 주소 없이 오는 열쇠 · 토큰 · 접속 계정도 기록에서 가린다. */
+  it("주소 없이 오는 열쇠 · 토큰 · 접속 계정을 가린다", () => {
+    const 키 = "sk-proj-" + "a".repeat(24);
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk";
+    expect(errorLogText(new Error(`잘못된 키 ${키} 입니다`))).toBe("잘못된 키 <redacted> 입니다");
+    expect(errorLogText(new Error(`인증 Bearer ${jwt}`))).toBe("인증 Bearer <redacted>");
+    expect(errorLogText(new Error(`토큰 ${jwt} 끝`))).toBe("토큰 <jwt> 끝");
+    expect(errorLogText(new Error("fal Key abcdefgh-1234:abcdefgh5678 거절"))).toBe("fal Key <redacted> 거절");
+    expect(errorLogText(new Error("접속 postgresql://user:p4ss@db.example:5432/x 실패"))).toBe("접속 <cred>@db.example:5432/x 실패");
+    expect(errorLogText(new Error('{"apikey":"abc123secretvalue","x":1}'))).toBe('{"apikey":"<redacted>","x":1}');
+    // 닮기만 한 글은 그대로다.
+    expect(errorLogText(new Error("risk-free key value password 없음"))).toBe("risk-free key value password 없음");
+  });
+
+  it("제어 글자 · 줄 구분 글자를 빈칸으로 접는다(보안 리뷰 L2)", () => {
+    expect(errorLogText(new Error("앞\u001b[31m빨강\u2028뒤\u0000끝"))).toBe("앞 [31m빨강 뒤 끝");
+  });
+
+  it("긴 글에서도 빠르다(ReDoS)", () => {
+    const 시작 = Date.now();
+    errorLogText(new Error("a.".repeat(50000) + "sk-" + "b".repeat(100000) + " eyJ".repeat(20000)));
+    expect(Date.now() - 시작).toBeLessThan(500);
+  });
+
   it("주소 없는 글은 그대로다", () => {
     expect(errorLogText(new Error('relation "easy_messages" does not exist'))).toBe('relation "easy_messages" does not exist');
   });
