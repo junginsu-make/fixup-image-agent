@@ -16,6 +16,7 @@ import {
   type CharacterReferenceRole,
   type CharacterViewId,
   DEFAULT_EXTRA_ANGLES,
+  IMAGE_MODELS,
   migrateAngle,
   type ImageModelId,
   type ReferenceImage,
@@ -131,6 +132,8 @@ export interface CharacterSummary {
    * 보게 된다 — 상세 화면이 「다른 회원의 것」이라고 말하는 근거가 이 칸이다.
    */
   mine: boolean;
+  /** 만든 모델. 「과정 보기」가 이어받는다. 옛 캐릭터는 없다. */
+  modelId?: ImageModelId;
 }
 
 /** 후보를 만들 때 함께 보내는 그림 한 장. 없어도 된다. */
@@ -386,6 +389,7 @@ export async function createCharacter(input: {
       kind: input.kind,
       look: input.look,
       createdAt,
+      modelId: model,
     });
   } else {
     const { error } = await createSupabaseAdminClient()
@@ -400,6 +404,8 @@ export async function createCharacter(input: {
         visual_style: input.look === "photoreal" ? "photoreal" : "illustration",
         kind: input.kind,
         look: input.look,
+        // 빠진 장면을 나중에 같은 모델로 그리려고 남긴다(202610070001).
+        model_id: model,
       });
     if (error) return { ok: false as const, message: error.message };
   }
@@ -537,7 +543,8 @@ export async function regenerateAngle(input: {
   if (!front) return { ok: false as const, message: "정면 그림이 없어 다시 만들 수 없습니다." };
 
   const look = character.look;
-  const model = input.modelId ?? selectCharacterModel(look);
+  // 만든 모델로 그린다. 고른 것이 이기고, 기록이 없으면(옛 캐릭터) 그림체의 기본 모델이다.
+  const model = input.modelId ?? character.modelId ?? selectCharacterModel(look);
 
   try {
     // 다각도 한 장은 각도가 아니다. 프롬프트도 비율도 다른 길로 간다.
@@ -669,6 +676,13 @@ interface CharacterRecord {
   kind: CharacterKind;
   look: CharacterLook;
   createdAt: string;
+  /** 만든 모델. 옛 줄이거나 지금 목록에 없는 모델이면 없다. */
+  modelId?: ImageModelId;
+}
+
+/** 지금도 고를 수 있는 모델인가. 모르는 값으로 그리면 그림 통로가 거절한다. */
+function knownModel(value: unknown): ImageModelId | undefined {
+  return IMAGE_MODELS.some((model) => model.id === value) ? (value as ImageModelId) : undefined;
 }
 
 /** 옛 줄에는 kind·look 이 없다. 사람 + (실사|그림) 으로 본다. */
@@ -682,6 +696,7 @@ function normalizeRecord(row: Record<string, unknown>): CharacterRecord {
     kind: (row.kind as CharacterKind) ?? "person",
     look: ((row.look as CharacterLook) ?? (visual === "photoreal" ? "photoreal" : "illustration")),
     createdAt: String(row.created_at ?? row.createdAt ?? ""),
+    modelId: knownModel(row.model_id ?? row.modelId),
   };
 }
 

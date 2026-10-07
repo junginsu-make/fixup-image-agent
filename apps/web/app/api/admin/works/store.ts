@@ -939,6 +939,8 @@ export async function copyCharacterToSelf(
       visual_style: source.visual_style,
       kind: source.kind,
       look: source.look,
+      // 만든 모델도 옮긴다. 빠지면 복사본의 빠진 장면이 다른 모델로 그려진다.
+      model_id: source.model_id ?? null,
     })
     .select("id").single();
   if (createError || !created) throw new Error(createError?.message ?? "복사하지 못했습니다.");

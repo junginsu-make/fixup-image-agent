@@ -294,10 +294,12 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setDescription(values.description);
     setKind(values.kind as Kind);
     setLook(lookAfterRole("extract", values.look as Look));
+    // 원래 캐릭터를 만든 모델로 그린다. 비면(옛 캐릭터) 그림체의 기본 모델이다.
+    setModelId(values.modelId);
     if (!front) return;
     setChosen({
       ...front, description: values.description, identity: "", name: values.name,
-      kind: values.kind as Kind, look: values.look as Look, modelId: "",
+      kind: values.kind as Kind, look: values.look as Look, modelId: values.modelId,
     });
   }, []);
   const showCarried = useCallback(async (createdId: string) => {

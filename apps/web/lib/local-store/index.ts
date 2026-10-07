@@ -53,6 +53,8 @@ export interface LocalCharacterRow {
   kind: string;
   look: string;
   createdAt: string;
+  /** 만든 모델. 옛 줄에는 없다 — 그때는 그림체의 기본 모델로 그린다. */
+  modelId?: string;
 }
 
 /** 각도 한 장. path 는 characters/{characterId}/{angle}.{ext} 다. */
