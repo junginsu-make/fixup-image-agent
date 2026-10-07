@@ -2,6 +2,7 @@ import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RedesignWorkingStatus } from "../redesign-working";
+import { WorkingStatus } from "../../_components/working-status";
 import { describeRedesignProgress } from "../generation-progress";
 import type { GenerationPlan } from "../redesign-model";
 
@@ -193,6 +194,19 @@ describe("위쪽 띠", () => {
  * 채워지는 막대로 같은 것을 말한다.
  */
 describe("여러 장", () => {
+  /* **걸린 시간은 전체, 남은 시간은 이번 장**(2026-10-08 리뷰 M2). 장마다 0초로 돌아가고,
+     「8장 만드는 중」 옆 남은 시간이 전체처럼 읽혔다. */
+  it("**걸린 시간은 처음 장부터 세고, 남은 시간은 이번 장이라고 밝힌다**", async () => {
+    await 띄운다(보기({ phase: "generate", elapsedSeconds: 3, estimateSeconds: 60 }), {
+      plan: { model: "google", count: 1, displayCount: 8, displayIndex: 3, startedAt: 5_000 },
+      runStartedAt: 1_000,
+    });
+    const 띠 = renderer.root.findByType(WorkingStatus);
+    expect(띠.props.startedAt).toBe(1_000);
+    expect(String(띠.props.remaining)).toMatch(/^이번 장 /);
+  });
+
+
   it("**장 수와 끝난 장을 그린다**", async () => {
     await 띄운다(보기({ phase: "generate", elapsedSeconds: 3 }), {
       plan: { model: "google", count: 1, displayCount: 8, displayIndex: 3, startedAt: Date.now() },

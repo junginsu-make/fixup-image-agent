@@ -33,6 +33,23 @@ describe("화면 배선", () => {
     expect(wizard).toMatch(/function cancelGeneration\(\) \{\s*generationAbortRef\.current\?\.abort\(\);/);
   });
 
+  /* **만드는 동안 단계를 옮기지 못한다**(2026-10-08 리뷰 H1). 전체 화면 창이 유일한 잠금이었다 —
+     그 사이 대시보드에서 지운 작업이 생성 끝에 되살아났다. */
+  it("**만드는 동안 단계 표시줄로 옮기지 못한다**", () => {
+    expect(wizard).toMatch(/onJump=\{\(id\) => \{ if \(!generating\) setView\(id as View\); \}\}/);
+  });
+
+  /* **화면을 떠나면 멈춘다**(2026-10-08 리뷰 M1). 창이 막던 사이드바 이동이 열려, 떠난 뒤에도
+     남은 섹션 요청이 보이지 않게 나갔다. 떠나면 요청을 끊는다. */
+  it("**화면을 떠나면 진행 중 요청을 끊는다**", () => {
+    expect(wizard).toContain("React.useEffect(() => () => generationAbortRef.current?.abort(), []);");
+  });
+
+  it("**걸린 시간은 처음 장부터 센다**", () => {
+    expect(wizard).toMatch(/<RedesignWorkingStatus[\s\S]{0,400}runStartedAt=\{runStartedAt\}/);
+    expect(wizard).toContain("setRunStartedAt((current) => (displayIndex && displayIndex > 1 && current ? current : Date.now()));");
+  });
+
   it("**전사 구간 수와 수정 여부를 띠에 넘긴다**", () => {
     expect(wizard).toMatch(/<RedesignWorkingStatus[\s\S]{0,400}transcribeCount=\{transcribeCount\}/);
     expect(wizard).toMatch(/<RedesignWorkingStatus[\s\S]{0,400}editing=\{editingSectionId !== null\}/);

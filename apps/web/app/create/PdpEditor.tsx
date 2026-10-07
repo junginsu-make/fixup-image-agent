@@ -2757,7 +2757,8 @@ export function PdpEditor({
   // 셸이 <main> 을 제공하므로 여기서는 열지 않는다(이전에는 <main> 이 중첩됐다).
   return (
     <div
-      className="min-w-0"
+      // 도는 동안만 작은 화면 메뉴 줄(h-14 + 테두리) 아래로 띠를 내린다(2026-10-08 리뷰).
+      className={cn("min-w-0", generationRun?.status === "running" && "[--shell-head:calc(3.5rem+1px)] lg:[--shell-head:0px]")}
       style={{ "--run-banner-h": `${generationRun?.status === "running" ? runBannerMeasured : 0}px` } as CSSProperties}
       onClick={clearLayerSelection}
     >
@@ -2943,7 +2944,7 @@ export function PdpEditor({
       {generationRun ? (
         <div
           ref={runBannerRef}
-          className={cn("mb-4", generationRun.status === "running" ? "sticky top-0 z-40" : "")}
+          className={cn("mb-4", generationRun.status === "running" ? "sticky top-[var(--shell-head,0px)] z-30" : "")}
           onClick={stopShellClick}
         >
           <GenerationRunBanner
@@ -3002,7 +3003,7 @@ export function PdpEditor({
 
       {screen === "gallery" ? (
         <div
-          className="[&_.sticky]:top-[calc(var(--run-banner-h,0px)+0.5rem)]"
+          className="[&_.sticky]:top-[calc(var(--run-banner-h,0px)+var(--shell-head,0px)+0.5rem)]"
           onClick={stopShellClick}
         >
           <SectionGallery
@@ -3048,7 +3049,7 @@ export function PdpEditor({
           `sticky` 라 겹칠 때 위에 그려져, 가운데 편집 화면의 제목과 도구 단추를
           덮었다. 칸마다 `minmax(0, 1fr)` 로 「내용보다 작아져도 된다」를 적는다.
         */}
-        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 xl:sticky xl:top-6" onClick={stopShellClick}>
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 xl:sticky xl:top-[calc(var(--run-banner-h,0px)+1.5rem)]" onClick={stopShellClick}>
           <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-ring)]">
             <p className="text-meta text-subtle-foreground">현재 섹션</p>
             <h2 className="text-h2">{getDisplaySectionName(currentSection)}</h2>

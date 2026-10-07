@@ -28,12 +28,14 @@ function workingProgress(plan: GenerationPlan, transcribeCount: Count | null) {
  * 만드는 동안 결과도 다른 섹션도 볼 수 없었다. 창이 보이던 구간 수·걸린 시간·
  * 지금 하는 일·차감 안내·취소는 띠로 옮겼다. 넘겨 보이던 상세페이지 팁만 뺐다.
  */
-export function RedesignWorkingStatus({ progress, plan, editing, transcribeCount, onStop, className }: {
+export function RedesignWorkingStatus({ progress, plan, editing, transcribeCount, runStartedAt, onStop, className }: {
   progress: GenerationProgress;
   plan: GenerationPlan;
   /** 섹션 수정이면 참. 수정은 원본을 다시 읽지 않아 생성 구간 이름을 띄우지 않는다. */
   editing: boolean;
   transcribeCount: Count | null;
+  /** 여러 장이면 처음 장을 시작한 때. 장마다 0초로 돌아가지 않게(2026-10-08 리뷰). */
+  runStartedAt?: number;
   /** 창의 「요청 취소」와 같은 손잡이. 요청을 끊는다. */
   onStop: () => void;
   className?: string;
@@ -47,9 +49,10 @@ export function RedesignWorkingStatus({ progress, plan, editing, transcribeCount
     <WorkingStatus
       label={editing ? "섹션 고치는 중입니다" : total > 1 ? `${total}장 만드는 중입니다` : "리디자인 만드는 중입니다"}
       hint={editing ? undefined : progress.label}
-      startedAt={plan.startedAt}
+      startedAt={runStartedAt ?? plan.startedAt}
       progress={workingProgress(plan, transcribeCount)}
-      remaining={남음 ? progress.note : undefined}
+      // 남은 시간은 이번 장 기준이다 — 여러 장이면 그렇게 밝힌다.
+      remaining={남음 ? (total > 1 ? `이번 장 ${progress.note}` : progress.note) : undefined}
       onStop={onStop}
       className={className}
     >

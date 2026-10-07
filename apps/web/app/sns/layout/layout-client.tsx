@@ -318,7 +318,7 @@ export function LayoutStudio() {
         박아 두어서, 띠가 자리를 차지하면 네 열이 줄고 캔버스가 작아졌다 돌아왔다.
       */}
       {busy === "analyze" ? (
-        <WorkingStatus label="칸을 분석 중입니다" hint="레퍼런스에서 칸 자리를 읽고 있습니다" startedAt={busyStartedAt} className="absolute inset-x-0 top-0 z-30" />
+        <WorkingStatus label="칸을 분석 중입니다" hint="레퍼런스에서 칸 자리를 읽고 있습니다" startedAt={busyStartedAt} className="pointer-events-none absolute inset-x-0 top-0 z-30" />
       ) : null}
       {/*
         **네 열이 다 조금씩 줄어든다.** 고정 폭이면 줄어드는 곳이 레퍼런스 열

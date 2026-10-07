@@ -103,6 +103,7 @@ export function RedesignWizard() {
   const [knowledgeOpen, setKnowledgeOpen] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [generationPlan, setGenerationPlan] = React.useState<GenerationPlan | null>(null);
+  const [runStartedAt, setRunStartedAt] = React.useState<number>(); // 띠의 걸린 시간 — 여러 장이면 처음 장부터(2026-10-08 리뷰)
   /** 지금 **실제로** 지나는 구간. 사연은 `generation-progress.ts`. */
   const [phase, setPhase] = React.useState<RedesignPhase>("convert");
   /** 전사에서 끝난 배치와 전체 배치. 아는 구간에서만 찬다. */
@@ -235,6 +236,7 @@ export function RedesignWizard() {
       displayIndex,
       startedAt: Date.now()
     });
+    setRunStartedAt((current) => (displayIndex && displayIndex > 1 && current ? current : Date.now()));
     setGenerating(true);
     setPhase("convert");
     setTranscribeCount(null);
@@ -639,7 +641,7 @@ export function RedesignWizard() {
     }
 
     setEditingSectionId(sectionId);
-    setGenerationPlan({ model, count: 1, startedAt: Date.now() });
+    setGenerationPlan({ model, count: 1, startedAt: Date.now() }); setRunStartedAt(Date.now());
     setGenerating(true);
     setToast(`${section.name} 섹션을 수정하고 있습니다.`);
     const abortController = new AbortController();
@@ -714,6 +716,9 @@ export function RedesignWizard() {
     }
   }
 
+  // 화면을 떠나면 요청을 끊는다 — 전체 화면 창이 막던 이동이 열렸다(2026-10-08 리뷰).
+  React.useEffect(() => () => generationAbortRef.current?.abort(), []);
+
   function cancelGeneration() {
     generationAbortRef.current?.abort();
     generationAbortRef.current = null;
@@ -727,12 +732,12 @@ export function RedesignWizard() {
       {/* 만드는 동안 맨 위 띠 하나. 전체 화면 창이었다(2026-10-08 사용자 승인) — `redesign-working.tsx`. */}
       {generating && generationProgress && generationPlan && (
         <RedesignWorkingStatus progress={generationProgress} plan={generationPlan} editing={editingSectionId !== null}
-          transcribeCount={transcribeCount} onStop={cancelGeneration} className="mb-4" />
+          transcribeCount={transcribeCount} runStartedAt={runStartedAt} onStop={cancelGeneration} className="mb-4" />
       )}
       {/* 단계 표시줄 — 이전에는 자체 248px 사이드바가 셸 안에 또 있었다(내비 중복).
           셸이 좌측 내비를 제공하므로 여기서는 이 도구의 3단계만 표시한다. */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <StepBar steps={REDESIGN_STEPS} current={view} onJump={(id) => setView(id as View)} />
+        <StepBar steps={REDESIGN_STEPS} current={view} onJump={(id) => { if (!generating) setView(id as View); }} />
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Badge variant={serverConfig.serverOpenaiKeyConfigured ? "green" : "default"}>정밀형 {serverConfig.serverOpenaiKeyConfigured ? "서버 연결" : "서버 미설정"}</Badge>
