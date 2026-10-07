@@ -4,52 +4,40 @@ import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
 import { EasyConversationMissingError } from "../../../../lib/easy/store-core";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
-import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
+import { EasyStepError, relay } from "../../../../lib/easy/relay";
 import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
-import { withRowJob } from "../../../easy/row-image";
-import { guideBody, plainTyped, sayBody, withPick } from "../../../easy/row-marks";
+import { plainTyped, withPick } from "../../../easy/row-marks";
 import {
   askChain, askInstruction, buttonDecision, chosenFor, readButtonAnswer, settleTypedAnswer,
-  type EasyAnswerWay, type EasyChosen,
+  type EasyAnswerWay,
 } from "../../../easy/ask-chain";
-import { CANNOT_DO_NOW, fitButtonDecision, type EasyDecision } from "../../../easy/chat";
+import { fitButtonDecision, type EasyDecision } from "../../../easy/chat";
 import { judgeEasyTurn } from "../../../../lib/easy/judge";
 import { EASY_DEFAULT_RATIO, easyAsk } from "../../../easy/ask";
-import { easyTitle } from "../../../easy/title";
-import { DETAIL_PAGE_GUIDE } from "../../../easy/detail-page";
-import { readEasyPhotos } from "../../../../lib/easy/read-photos";
 import { llmSettleCost, readLlmMeter, withLlmMeter } from "../../../../lib/llm/meter";
 import { posterReferencesByIds } from "../../../../lib/poster/references";
 import { teamIdOf } from "../../../../lib/teams/store";
 import { UNUSABLE_PHOTO, isPhotoId, missingIds, uniqueIds } from "../../../easy/photo-check";
 import { readChosenRoles } from "../../../easy/photo-roles";
-import { runPhotoTurn } from "../../../easy/photo-turn";
-import { easyRoleSummary } from "../../../easy/options";
-import { isWebSourceEnabled } from "../../../../lib/sns/feature";
-import { draftCardnews, lastCardnewsProject } from "../../../../lib/easy/cardnews-steps";
-import { NOT_MINE, NO_REFERENCE, cardAttachmentsFrom, readChosenSlots, slotsFromWords } from "../../../easy/cardnews-attachments";
-import { pickCardSource } from "../../../easy/cardnews-source";
-import { cardOptionsFrom, projectSpecFrom, readCardOptions } from "../../../easy/cardnews-options";
-import { redraftInput } from "../../../easy/cardnews-redraft";
-import { draftFailureMessage } from "../../../easy/cardnews-view";
+import { lastCardnewsProject } from "../../../../lib/easy/cardnews-steps";
 import { isGenerating, isMade } from "../../../easy/cardnews-after";
 import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
+import { cardnewsTurn } from "../../../../lib/easy/cardnews-turn";
 import { countEasyImages, imageEditTurn } from "../../../../lib/easy/image-edit-turn";
+import { VARIANTS, imageTurn } from "../../../../lib/easy/image-turn";
 import { pickEditTarget, targetAskNumbers } from "../../../../lib/easy/edit-target";
 import { easyAdStep } from "../../../easy/ad-ask";
 import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
 import { askTurn, replyTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
 import { loadEasyImages } from "../../../../lib/easy/image-list";
 import { rewriteReplyBySeeing } from "../../../../lib/easy/see-turn";
+import { 멈춘다 } from "../../../../lib/easy/stop";
 import { SEE_FAILED } from "../../../easy/see-prompt";
 import { nextResultNumber, resultLabel } from "../../../easy/image-numbers";
 import {
-  KIND_QUESTION, RATIO_QUESTION, SAY_CARDNEWS, SAY_IMAGE, SAY_REVISE, TARGET_QUESTION,
-  aiText, askText, photoQuestion, sayEditText, sayText,
+  KIND_QUESTION, RATIO_QUESTION, TARGET_QUESTION,
+  aiText, askText, sayEditText, sayText,
 } from "../../../easy/turn-words";
-import { POST as createProject } from "../../poster/projects/route";
-import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
-import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,31 +75,12 @@ export const maxDuration = 300;
  * 있게 되고, 그 사이 화면을 떠난 사람은 결과를 잃는다.
  */
 
-/**
- * 기본값 — 고를 것을 없앴으므로 나머지는 여기서 정한다(설계 §9).
- *
- * **비율은 더 이상 여기서 못 박지 않는다**(2026-09-21 사용자 — 「지금은 무조건
- * 1:1로만 나옵니다」). 말 속에 있으면 그것, 물어서 고르면 그것, 아무것도
- * 없으면 `ask.ts` 의 기본값이다.
- */
-const VARIANTS = 1;
-
 /** 한 번에 받는 말 길이(최종 수정 9). */
 const PROMPT_LIMIT = 2000;
 const PROMPT_TOO_LONG = `말은 ${PROMPT_LIMIT}자까지 보낼 수 있습니다.`;
 
 function fail(message: string, status = 500) {
   return Response.json({ ok: false, message }, { status });
-}
-
-/**
- * **값이 나가기 전에 멈춘다**(설계 §2-3 ⓪ · §2-6 ⓒ).
- *
- * 다시 눌러도 같은 곳에서 막히므로 `retryable: false` 다 — 화면이 「다시 보내면
- * 값이 또 듭니다」를 띄우지 않는다. 실제로 아무 값도 안 나갔다.
- */
-function 멈춘다(message: string) {
-  return Response.json({ ok: false, message, retryable: false }, { status: 400 });
 }
 
 /**
@@ -460,159 +429,10 @@ async function turn(request: Request): Promise<Response> {
       });
     }
 
-    /*
-     * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
-     *
-     * 말을 남기기 **전에** 한다. 멈추면 아무것도 안 남기고, 물으면 사용자 줄 + 물음 줄을 남긴다
-     * (2차 D1). 물음 줄에 사진 id 와 그때의 판단을 적어 새로고침 뒤 말로 답해도 이어진다. 사진 물음
-     * 문장은 고정이다. 이 판단 뒤에 정해져 AI 가 같은 호출로 못 쓴다(2차 §4). 말 턴 · 상세페이지
-     * 안내 턴은 여기 오지 않으므로 사진을 안 읽는다.
-     */
-    const 사진판단 = wants === "image" && 붙인수
-      ? await runPhotoTurn(
-        {
-          photos: 사진들,
-          words: 지시,
-          chosen: 고른역할,
-          previous: 지난역할,
-          ratio: 고르기.ratio,
-          imageModel: typeof input.imageModel === "string" ? input.imageModel : undefined,
-        },
-        { read: (photos) => readEasyPhotos(photos), judge: (text) => provider.decideRoles(text) },
-      )
-      : undefined;
-    if (사진판단?.kind === "stop") return 멈춘다(사진판단.message);
-    if (사진판단?.kind === "ask") {
-      return await askTurn(물음맥락, {
-        kind: "photo",
-        text: photoQuestion(사진판단.reason),
-        data: { wants: "image", reason: 사진판단.reason, mode: "image", rows: 사진판단.rows, ids: 붙인것, ...말한것 },
-      }, { photoAsk: { reason: 사진판단.reason, rows: 사진판단.rows } });
-    }
-    const 칸 = 사진판단?.fields;
-
-    // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야
-    // 무엇을 하려 했는지 알 수 있다.
-    await store.appendMessage({ conversationId, role: "user", body: 사용자글 });
-
-    // 제목이 비어 있으면 이 말로 짓는다. 첫 프롬프트 한 번만이다(설계 §4-1).
-    if (!conversation.title) await store.renameConversation(conversationId, easyTitle(prompt));
-
-    if (wants === "talk") {
-      /*
-       * **답만 적고 끝낸다.** 그림을 안 만들었으므로 값도 거의 안 든다 —
-       * 화면이 「약 N장」을 적던 자리도 그래서 「그림을 만들면」으로 바뀌었다.
-       */
-      const saved = await store.appendMessage({
-        conversationId,
-        role: "assistant",
-        body: decision.reply || "무엇을 만들어 드릴까요?",
-      });
-      return Response.json({ ok: true, talked: true, message: saved, textModel });
-    }
-
-    if (wants === "detail_page") {
-      /*
-       * **상세페이지는 여기서 안 만든다**(설계 §2-7, 2026-09-30 사용자 결정).
-       *
-       * 안내 한 줄을 남기고 끝낸다. 사진을 읽지도 값이 나가지도 않는다.
-       * 화면은 이 문장이 달린 줄에 「상세페이지 만들기 열기」를 단다.
-       */
-      // 안내 문장은 AI 가 쓴다(2차 D4) — 비면 고정 안내. 단추는 표시(`guide:detail:`)로 단다.
-      const saved = await store.appendMessage({
-        conversationId, role: "assistant", body: guideBody("detail", sayText(aiText(decision, wants), DETAIL_PAGE_GUIDE)),
-      });
-      return Response.json({ ok: true, talked: true, message: saved, textModel });
-    }
-
-    /*
-     * **만들기는 image 갈래만 간다**(2차 최종 리뷰 1 · Review Focus 7). 쓸 수 없게 된 갈래(고칠 것이 사라진
-     * 단추 답 · 원고 없는 장 손보기 등)가 위의 갈래들을 다 지나 여기까지 오면, 사용자가 바라지 않은 새 이미지에
-     * 값이 나간다. 사용자 줄은 이미 남았다 — 안내 한 줄로 끝낸다. 값은 안 든다.
-     */
-    if (wants !== "image") {
-      const saved = await store.appendMessage({ conversationId, role: "assistant", body: CANNOT_DO_NOW });
-      return Response.json({ ok: true, talked: true, message: saved, textModel });
-    }
-
-    /*
-     * **일하는 턴에도 AI 가 말한다**(2026-10-07 2차 D4). 판단과 같은 호출의 reply 를 머리말 줄로
-     * 남긴다 — 비었거나 다른 갈래로 쓴 글이면(고른 갈래가 이김 등, 최종 리뷰 b) 코드 문장(다시 묻지 않는다,
-     * 값이 두 번 나간다). 차례는 사용자 줄 → 머리말 → 그림 줄이고, 머리말 뒤에 실패해도 실패 줄이 남는다
-     * (`failure-row.ts` 가 머리말을 답으로 안 친다).
-     */
-    const 머리말 = await store.appendMessage({
-      conversationId, role: "assistant", body: sayBody(sayText(aiText(decision, wants), SAY_IMAGE)),
-    });
-
-    // ① 프로젝트
-    const created = await read(await createProject(relay(request, "/api/poster/projects", {
-      title: easyTitle(지시) || "Easy",
-      // 말 속에 있던 것 · 물어서 고른 것 · 기본값 차례다(`ask.ts`).
-      ratio: 고르기.ratio,
-      look: 고르기.look,
-      modelId: typeof input.imageModel === "string" ? input.imageModel : undefined,
-      variants: VARIANTS,
-      instruction: 지시,
-      referenceIds: 칸?.referenceIds ?? [],
-      preservedIds: 칸?.preservedIds ?? [],
-      personIds: 칸?.personIds ?? [],
-      restyledIds: 칸?.restyledIds ?? [],
-      // AI 가 다듬는다. 그것이 이 모드의 값어치다(설계 §9).
-      promptMode: "assisted",
-      // **붙인 순서 그대로**(설계 §2-6). 전에는 따라 만들기를 앞으로 당겼다.
-      attachmentOrder: 칸?.attachmentOrder ?? [],
-      // 말과 최종 역할이 맞을 때만 말 전체, 아니면 빈 글(설계 §2-6).
-      attachmentIntent: 사진판단?.attachmentIntent ?? "",
-    }, "project")), "기획 준비");
-
-    const projectId = created.project?.id as string | undefined;
-    if (!projectId) throw new EasyStepError("기획 준비", "작업을 만들지 못했습니다.", 500);
-    const params = Promise.resolve({ id: projectId });
-
-    // ② 기획 — 붙인 그림을 읽고 칸을 채운다
-    /*
-     * **고른 글 모델을 넘긴다.** 안 넘기면 드롭다운이 모양만 있고 환경변수가
-     * 정한 모델로 간다 — 2026-09-18 에 실제로 그랬다(설계 §5-4).
-     */
-    await read(
-      await runPlan(relay(request, `/api/poster/projects/${projectId}/plan`, { textModel }, "plan"), { params }),
-      "기획",
-    );
-
-    // ③ 제출 — 그림은 화면이 `status` 로 받아 간다
-    const submitted = await read(
-      await submitGenerate(relay(request, `/api/poster/projects/${projectId}/generate`, {}, "generate"), { params }),
-      "이미지 만들기",
-    );
-
-    /*
-     * **그림 자리를 대화에 남긴다.** `work_id` 는 포스터 **작업**을 가리킨다 —
-     * 라이브러리의 작업물 탭이 세는 단위가 그것이고, 그림은 그 아래 달린다.
-     * 그림 id 를 적으면 대화를 다시 열 때 그것만으로 주소를 찾을 길이 없다
-     * (`PosterImageStore` 에 `byIds` 가 없다).
-     *
-     * **제출한 직후에 남긴다.** 결과를 기다려 남기면, 화면을 떠난 사람의 대화에
-     * 그 그림이 안 들어간다.
-     */
-    // 받을 정보를 함께 적는다 — 화면을 떠났다 다시 열어도 이어 받는다(2026-10-06 설계 B3).
-    await store.appendMessage({ conversationId, role: "image", workId: projectId, body: withRowJob("", submitted.submission) });
-
-    return Response.json({
-      ok: true,
-      projectId,
-      say: 머리말,
-      submission: submitted.submission,
-      textModel,
-      ratio: 고르기.ratio,
-      look: 고르기.look,
-      // 만든 조건에 곧바로 적는다. 다시 열 때는 `load.ts` 가 같은 함수로 읽는다.
-      roles: 칸 ? easyRoleSummary(칸) : "",
-      // 화면이 들고 있다가 다음 그림 턴에 지난 역할로 보낸다(설계 §2-4 차례 3).
-      photoRoles: 사진판단?.rows ?? [],
-      // 화면의 「이미지 N」(2차 D2). 화면과 같은 함수로 센 결과물 번호다.
-      resultLabel: resultLabel("image", nextResultNumber(지난줄)),
-      ...(submitted.notice ? { notice: submitted.notice } : {}),
+    // ⓒ 사진 역할부터 그림 제출까지는 `lib/easy/image-turn.ts` 가 한다(2026-10-07 후속 Task 6 — 동작 그대로 옮겼다).
+    return await imageTurn({
+      request, store, conversation, conversationId, prompt, textModel, wants, decision, input, provider,
+      물음맥락, 사진들, 붙인것, 붙인수, 지시, 고른역할, 지난역할, 고르기, 말한것, 사용자글, 지난줄,
     });
   } catch (error) {
     /*
@@ -645,143 +465,6 @@ async function turn(request: Request): Promise<Response> {
   } finally {
     값을적는다(auth.member.userId);
   }
-}
-
-/**
- * **카드뉴스 원고 턴**(2단계 설계 §3 · §5 · §7 · §9).
- *
- * 원고까지만 쓴다. 원고는 공짜고, 크레딧은 화면의 「이대로 만들기」가 따로 부르는
- * 카드뉴스 `generate` 가 잡는다. 멈추면 아무것도 안 남기고, 물으면 사용자 줄 + 물음 줄을 남긴다(2차 D1).
- */
-async function cardnewsTurn(ctx: {
-  request: Request;
-  userId: string;
-  store: ReturnType<typeof easyStoreForUser>;
-  conversation: { title?: string | null };
-  conversationId: string;
-  prompt: string;
-  textModel: string;
-  wants: "cardnews" | "revise";
-  사진들: Array<{ id: string; title?: string | null; url?: string | null; storagePath: string }>;
-  붙인것: string[];
-  input: Record<string, unknown>;
-  decision: { wants: string; reply: string; ratio?: string; look?: string };
-  provider: ReturnType<typeof createEasyChatProvider>;
-  고칠원고: Awaited<ReturnType<typeof lastCardnewsProject>>;
-  /** 물음 줄을 남길 때(2차 D1). */
-  물음: AskTurnContext;
-  /** 물을 때의 판단(말에 있던 비율 · 그림체). */
-  말한것: { ratio?: string; look?: string };
-  /** 이번 턴의 고른 값(단추 · 이어진 물음, 2차 D1). */
-  고른: EasyChosen;
-  /** 만들 때 쓰는 지시 = 처음 말 + 답들(답이 아니면 이번 말). */
-  지시: string;
-  /** 사용자 줄에 남길 글. */
-  userBody: string;
-  /** 남길 원고 줄의 결과물 번호(2차 D2 — 화면의 「카드뉴스 N」). */
-  결과번호: number;
-}): Promise<Response> {
-  // 따라 만들 카드뉴스를 요청한다. 요청도 대화에 남는다(2차 D1). 문장은 고정이다.
-  const 레퍼런스요청 = () => askTurn(ctx.물음, {
-    kind: "reference", text: NO_REFERENCE, data: { wants: "cardnews", ids: ctx.붙인것, ...ctx.말한것 },
-  }, { needReference: true });
-  let 입력: unknown;
-  let photoRoles: Array<{ id: string; role: string }> = [];
-
-  if (ctx.wants === "revise" && ctx.고칠원고) {
-    // 고치기: 앞 원고의 조건 · 첨부 그대로, 말만 더한다(설계 §7). 앞 작업은 그대로 둔다.
-    입력 = redraftInput(ctx.고칠원고, { words: ctx.지시 });
-  } else {
-    if (!ctx.붙인것.length) return 레퍼런스요청();
-
-    /*
-     * **무엇으로 쓸지를 사진보다 먼저 본다.** 기사 주소처럼 못 쓰는 것이면 여기서
-     * 멈춘다. 사진을 먼저 읽으면 어차피 멈출 턴에 읽기값이 나간다.
-     */
-    const 내용 = pickCardSource(ctx.지시, { webEnabled: isWebSourceEnabled() });
-    if (!내용.ok) return 멈춘다(내용.message);
-
-    const options = cardOptionsFrom({
-      said: { ratio: ctx.decision.ratio, look: ctx.decision.look },
-      chosen: readCardOptions(ctx.input.cardOptions),
-      imageModel: typeof ctx.input.imageModel === "string" ? ctx.input.imageModel : undefined,
-    });
-    const 판단 = await runPhotoTurn(
-      {
-        photos: ctx.사진들,
-        words: ctx.지시,
-        mode: "cardnews",
-        chosen: readChosenRoles(ctx.고른.photoRoles, ctx.붙인것, { cardnews: true }),
-        previous: readChosenRoles(ctx.input.previousRoles, ctx.붙인것, { cardnews: true }),
-        ratio: options.ratio,
-        imageModel: options.modelId,
-      },
-      { read: (photos) => readEasyPhotos(photos), judge: (text) => ctx.provider.decideRoles(text) },
-    );
-    if (판단.kind === "stop") return 멈춘다(판단.message);
-    if (판단.kind === "ask") {
-      return await askTurn(ctx.물음, {
-        kind: "photo",
-        text: photoQuestion(판단.reason),
-        data: { wants: "cardnews", reason: 판단.reason, mode: "cardnews", rows: 판단.rows, ids: ctx.붙인것, ...ctx.말한것 },
-      }, { photoAsk: { reason: 판단.reason, rows: 판단.rows, mode: "cardnews" } });
-    }
-    const 첨부 = cardAttachmentsFrom({
-      userId: ctx.userId,
-      photos: ctx.사진들,
-      rows: 판단.rows,
-      slots: { ...slotsFromWords(ctx.지시, ctx.붙인것), ...readChosenSlots(ctx.고른.photoSlots, ctx.붙인것) },
-    });
-    if (!첨부.ok && 첨부.reason === "no_reference") return 레퍼런스요청();
-    if (!첨부.ok) return 멈춘다(첨부.reason === "not_mine" ? NOT_MINE : UNUSABLE_PHOTO);
-
-    photoRoles = 판단.rows;
-    입력 = {
-      title: easyTitle(ctx.지시) || "카드뉴스",
-      source: 내용.source,
-      attachments: 첨부.attachments,
-      ...projectSpecFrom(options),
-      ...(판단.attachmentIntent ? { userInstruction: 판단.attachmentIntent.slice(0, 2000) } : {}),
-    };
-  }
-
-  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody });
-  if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
-
-  // 빈 마지막 장은 고른 글 모델이 정리 문장으로 채운다(2026-09-30 사용자 결정 B).
-  const { projectId, project } = await draftCardnews(ctx.request, 입력, (text) => ctx.provider.writeEnding(text));
-  const flow = project.data.flow;
-  if (!flow?.cards.length) {
-    /*
-     * **원고 0장은 조용히 끝내지 않는다**(설계 §9). 카드뉴스 원고 라우트는 이때도
-     * `ok` 다. 까닭을 말하고, 작업은 지우지 않는다(2026-09-30 사용자 결정).
-     */
-    const 까닭 = [...(flow?.planningIssues ?? []), ...(flow?.copyIssues ?? [])];
-    const saved = await ctx.store.appendMessage({
-      conversationId: ctx.conversationId,
-      role: "assistant",
-      body: draftFailureMessage(까닭),
-    });
-    return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
-  }
-  /*
-   * 일하는 턴의 AI 말(2차 D4). 화면은 이 응답이 온 뒤에야 이 말을 붙인다 — 원고(1~2분)가 다 된 뒤라 다 된 원고를
-   * 보여 주는 말이다(Task 9 리뷰). 그래서 원고가 있을 때만 남긴다. 0장 · 실패면 안 남기고, 실패 줄은 사용자 줄
-   * 뒤에 그대로 남는다(`failure-row.ts`).
-   */
-  const 머리말 = await ctx.store.appendMessage({
-    conversationId: ctx.conversationId,
-    role: "assistant",
-    body: sayBody(sayText(aiText(ctx.decision, ctx.wants), ctx.wants === "revise" ? SAY_REVISE : SAY_CARDNEWS)),
-  });
-  const row = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "image", workId: projectId });
-  return Response.json({
-    ok: true, cardnews: { rowId: row.id, project }, message: row, say: 머리말, photoRoles, textModel: ctx.textModel,
-    // 원고 고치기는 붙인 사진을 안 쓴다 — 화면이 첨부를 내리지 않게 알린다(최종 수정 8).
-    ...(ctx.wants === "revise" && ctx.고칠원고 ? { revised: true } : {}),
-    // 화면의 「카드뉴스 N」(2차 D2). 이미지와 같은 결과물 번호다.
-    resultLabel: resultLabel("cardnews", ctx.결과번호),
-  });
 }
 
 /** 화면이 기본값을 물어볼 자리. 두 벌로 적지 않게 여기서 준다. */
