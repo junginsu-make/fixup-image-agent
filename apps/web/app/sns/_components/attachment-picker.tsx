@@ -9,7 +9,7 @@ import {
   LibraryPickerButton, type LibraryPickSet,
 } from "../../_components/library-picker";
 import { ThumbImage } from "../../_components/thumb-image";
-import { useImageDropTarget } from "../../_components/image-drop";
+import { afterUploadMessage, useImageDropTarget } from "../../_components/image-drop";
 import { DropPasteHint } from "../../_components/drop-paste-hint";
 import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
@@ -128,6 +128,7 @@ export function AttachmentPicker({
     if (!files?.length) return;
     setUploading(true);
     const added: string[] = [];
+    let uploadError: string | undefined;
     try {
       for (const file of Array.from(files)) {
         const id = randomId();
@@ -142,7 +143,8 @@ export function AttachmentPicker({
         added.push(id);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "업로드하지 못했습니다.");
+      uploadError = error instanceof Error ? error.message : "업로드하지 못했습니다.";
+      setMessage(uploadError);
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -153,8 +155,9 @@ export function AttachmentPicker({
     const current = latestAttachments.current;
     const attach = attachmentsForUploaded(added, fresh, current);
     if (attach.length) onChange([...current, ...attach]);
-    // 다시 읽기가 안내 칸을 비우므로 그 뒤에 말한다.
-    if (notice) setMessage(notice);
+    // 다시 읽기가 안내 칸을 비우므로 그 뒤에 말한다. 실패 안내가 있으면 덮지 않고 잇는다.
+    const loadedAll = added.every((id) => fresh.some((entry) => entry.id === id));
+    setMessage((previous) => afterUploadMessage({ loadedAll, previous, uploadError, notice }));
   }
 
   /**

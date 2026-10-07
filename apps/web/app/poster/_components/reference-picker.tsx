@@ -11,7 +11,7 @@ import {
 } from "../../_components/library-picker";
 import { gridSrc } from "../../_components/grid-src";
 import { ThumbImage } from "../../_components/thumb-image";
-import { useImageDropTarget } from "../../_components/image-drop";
+import { joinMessages, useImageDropTarget } from "../../_components/image-drop";
 import { DropPasteHint } from "../../_components/drop-paste-hint";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
@@ -216,14 +216,13 @@ export function ReferencePicker({
       }
       const fresh = await onUploaded();
       const missing = added.filter((id) => !fresh.some((entry) => entry.id === id));
-      if (missing.length) {
-        setMessage(
-          `${missing.length}장이 라이브러리 목록에 아직 안 보입니다. `
-          + "저장은 됐으니 새로고침하면 나옵니다.",
-        );
-      } else if (notice) {
-        setMessage(notice);
-      }
+      // 둘 다 해당되면 둘 다 말한다. 한쪽만 보이면 몇 장을 뺐는지가 사라진다.
+      setMessage(joinMessages(
+        missing.length
+          ? `${missing.length}장이 라이브러리 목록에 아직 안 보입니다. 저장은 됐으니 새로고침하면 나옵니다.`
+          : "",
+        notice,
+      ));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
     } finally {
