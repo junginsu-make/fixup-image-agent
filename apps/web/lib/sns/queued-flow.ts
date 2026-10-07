@@ -36,8 +36,11 @@ import type { FalQueueClient } from "../fal/queue";
 import { uploadUniqueReferences } from "../fal/unique-upload";
 import { classifyFalFailure } from "../fal/failure";
 import { errorLogText } from "../easy/log-text";
+import { mapWithLimit } from "./limited-map";
 
 export const QUEUE_POLL_INTERVAL_MS = 10_000;
+/** 장면 프롬프트를 동시에 쓰는 장 수의 천장. 이유는 `startQueuedFlow` 에. */
+export const SCENE_PROMPT_CONCURRENCY = 3;
 
 /** 작업에 저장된 지시와 이번에 적은 말 사이. */
 const NOTE_SEPARATOR = String.fromCharCode(10);
@@ -299,6 +302,38 @@ export async function startQueuedFlow(
    * 돌 때마다 그 자리 것을 골라 넣는다.
    */
   const intents = project.data.attachmentIntents;
+  /**
+   * **장면 프롬프트는 미리, 동시에 3장까지 쓴다**(2026-10-07 생성 속도 Task 4).
+   *
+   * 한 장씩 차례로 쓰느라 6장 작업의 첫 제출이 224초 늦었다. 카드마다 받는 입력은
+   * 그대로고, 결과는 카드 번호로 찾아 쓰며, 저장 · 제출 순서도 아래에서 그대로다.
+   * 3을 넘기지 않는다 — Anthropic 동시 호출 한도와 서버 메모리(911MB, 참고 그림을
+   * 읽어 담는다) 때문이다. 실패는 `writeImagePrompt` 가 지금처럼 빈 장면으로 바꾼다.
+   */
+  const sceneCards = next.cards.filter((entry) => selected.has(entry.index) && entry.kind === "generated" && !entry.layout);
+  const sceneResults = await mapWithLimit(sceneCards, SCENE_PROMPT_CONCURRENCY, (card) => writeImagePrompt({
+    role: card.role,
+    copy: card.copy,
+    plan: card.plan ?? {
+      index: card.index,
+      role: card.role === "cover" ? "cover" as const : "body" as const,
+      intent: card.copy.headline,
+      visualBrief: card.copy.body ?? card.copy.headline,
+    },
+    grouped,
+    size: ratio.pixel,
+    language: project.language,
+    ...tuning,
+    attachmentIntents: intents,
+    /*
+     * 어떤 모델이 그릴지 알려 준다. 여기서는 LLM 이 프롬프트 본문을 직접 쓴다.
+     *
+     * **이 카드가 실제로 부를 엔드포인트를 준다.** 레퍼런스가 있으면 `edit`
+     * 쪽으로 가는데 늘 `t2i` 를 알려 주면 틀린 이름이 간다(2026-09-17 리뷰).
+     */
+    modelId: modelEndpointLabel(project.modelId, selectReferencesForRole(grouped, card.role).length > 0),
+  }, dependencies.sceneProvider));
+  const scenes = new Map(sceneCards.map((card, offset) => [card.index, sceneResults[offset]!]));
   for (const card of next.cards.filter((entry) => selected.has(entry.index))) {
     card.error = undefined;
     card.review = undefined;
@@ -318,12 +353,6 @@ export async function startQueuedFlow(
       }
       continue;
     }
-    const plan = card.plan ?? {
-      index: card.index,
-      role: card.role === "cover" ? "cover" as const : "body" as const,
-      intent: card.copy.headline,
-      visualBrief: card.copy.body ?? card.copy.headline,
-    };
     if (card.layout) {
       // 칸 프롬프트는 카드 전체가 아니라 그 칸에 들어갈 그림만 말한다.
       // 모델에게 물어볼 것이 없으므로 장면 프롬프트 LLM 호출도 건너뛴다.
@@ -380,23 +409,7 @@ export async function startQueuedFlow(
       continue;
     }
 
-    const prompted = await writeImagePrompt({
-      role: card.role,
-      copy: card.copy,
-      plan,
-      grouped,
-      size: ratio.pixel,
-      language: project.language,
-      ...tuning,
-      attachmentIntents: intents,
-      /*
-       * 어떤 모델이 그릴지 알려 준다. 여기서는 LLM 이 프롬프트 본문을 직접 쓴다.
-       *
-       * **이 카드가 실제로 부를 엔드포인트를 준다.** 레퍼런스가 있으면 `edit`
-       * 쪽으로 가는데 늘 `t2i` 를 알려 주면 틀린 이름이 간다(2026-09-17 리뷰).
-       */
-      modelId: modelEndpointLabel(project.modelId, selectReferencesForRole(grouped, card.role).length > 0),
-    }, dependencies.sceneProvider);
+    const prompted = scenes.get(card.index)!;
     const images = selectReferencesForRole(grouped, card.role);
     /**
      * **이 카드의 자리 지시까지 넣어 하나로 만든다.**

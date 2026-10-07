@@ -112,7 +112,8 @@ describe("장면 LLM 이 아는 모델", () => {
    */
   it("장면 LLM 에는 날 id 를 안 준다", () => {
     const 부름 = source.slice(
-      source.indexOf("await writeImagePrompt({"),
+      // 장면은 미리 동시에 쓴다(2026-10-07 Task 4) — `await` 가 앞에 붙지 않는다.
+      source.indexOf("=> writeImagePrompt({"),
       source.indexOf("dependencies.sceneProvider)"),
     );
 
