@@ -24,6 +24,7 @@ const { POST: batch } = await import("../images/batch/route");
 const { POST: single } = await import("../images/route");
 const { POST: plan } = await import("../plan-from-text/route");
 const { POST: keyVisual } = await import("../key-visual/route");
+const { imageCreditUnits } = await import("../../../../lib/credit-cost");
 const section = { section_id: "s1", headline: "제품", bullets: [], prompt_en: "a product", layout_notes: "" };
 const body = () => ({ originalImageBase64: "AAAA", aspectRatio: "3:4", sections: [section], section });
 const request = (data: unknown) => new Request("http://local/api/pdp", { method: "POST", body: JSON.stringify(data) });
@@ -133,10 +134,10 @@ describe("T-COST: 대표 이미지", () => {
 
   it("싼 모델은 그만큼만 받는다", async () => {
     await keyVisual(
-      request({ brief: { offeringName: "제품" }, blueprint: { sections: [section] }, imageModel: "nano-banana" }),
+      request({ brief: { offeringName: "제품" }, blueprint: { sections: [section] }, imageModel: "nano-banana-2" }),
     );
 
-    expect(state.reserve.mock.calls[0]![2]).toBe(1);
+    expect(state.reserve.mock.calls[0]![2]).toBe(imageCreditUnits("nano-banana-2", 1));
   });
 });
 
@@ -148,7 +149,7 @@ describe("T-COST: 대표 이미지", () => {
  */
 describe("T-COST: 단건과 배치의 모델 선택", () => {
   it("페이지가 정한 모델을 두 라우트가 똑같이 쓴다", async () => {
-    await single(request({ ...body(), page: { imageModel: "nano-banana" } }));
+    await single(request({ ...body(), page: { imageModel: "nano-banana-2" } }));
     const 단건 = state.reserve.mock.calls[0]![2] as number;
 
     vi.clearAllMocks();
@@ -156,14 +157,14 @@ describe("T-COST: 단건과 배치의 모델 선택", () => {
     state.settle.mockResolvedValue(undefined);
     state.generate.mockResolvedValue({ imageBase64: "R", mimeType: "image/png", generatedImages: 1 });
 
-    await batch(request({ ...body(), page: { imageModel: "nano-banana" } }));
+    await batch(request({ ...body(), page: { imageModel: "nano-banana-2" } }));
 
     expect(state.reserve.mock.calls[0]![2]).toBe(단건);
-    expect(단건).toBe(1);
+    expect(단건).toBe(imageCreditUnits("nano-banana-2", 1));
   });
 
   it("섹션 옵션에만 모델이 있으면 두 라우트가 같은 값을 쓴다", async () => {
-    const 모델 = "nano-banana";
+    const 모델 = "nano-banana-2";
     await single(request({ ...body(), options: { imageModel: 모델 } }));
     const 단건예약 = state.reserve.mock.calls[0]![2] as number;
 

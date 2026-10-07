@@ -3,6 +3,7 @@ import { ATTACHMENT_INTENT_MAX_LENGTH, DEFAULT_IMAGE_MODEL, IMAGE_MODELS, IMAGE_
 import type { ImageModelId } from "@fixup/pdp-core";
 import { IMAGE_LOOKS } from "@fixup/shared";
 import { authenticateApiMember, type ApiMember } from "../membership/api";
+import { PDP_RETIRED_MODEL_MESSAGE, isRetiredPdpModel } from "./image-models";
 
 // 기존 decoded 업로드 예산 20MiB + base64 팽창 + JSON 메타데이터 여유.
 export const PDP_JSON_LIMIT = Math.ceil(20 * 1024 * 1024 * 4 / 3) + 1024 * 1024;
@@ -255,6 +256,13 @@ export async function readRedesignForm(req: Request): Promise<
   } catch (error) { return { ok: false, response: bodyError(error) }; }
 }
 
+/** 그림을 만드는 요청에서만 본다. 기획 요청에 실린 옛 값은 그림을 만들지 않는다. */
+function retiredModelRequest(kind: keyof typeof schemas, data: unknown): boolean {
+  if (kind !== "single" && kind !== "batch" && kind !== "keyVisual") return false;
+  const body = data as { imageModel?: string; page?: { imageModel?: string } };
+  return isRetiredPdpModel(body.imageModel) || isRetiredPdpModel(body.page?.imageModel);
+}
+
 export async function readPdpRequest<T>(req: Request, kind: keyof typeof schemas): Promise<
   { ok: true; body: T; member: ApiMember } | { ok: false; response: Response }
 > {
@@ -272,6 +280,10 @@ export async function readPdpRequest<T>(req: Request, kind: keyof typeof schemas
       console.warn(`[pdp] 요청 형식 거절 (${kind})`,
         parsed.error.issues.slice(0, 10).map((issue) => `${issue.path.join(".") || "(몸통)"}:${issue.code}`).join(", "));
       return { ok: false, response: invalidPdpRequest() };
+    }
+    // 화면에서 뺀 모델을 옛 탭이 보낸다. 몰래 바꿔 만들면 본 것과 다른 값이 차감된다.
+    if (retiredModelRequest(kind, parsed.data)) {
+      return { ok: false, response: invalidPdpRequest(PDP_RETIRED_MODEL_MESSAGE) };
     }
     return { ok: true, body: parsed.data as T, member: auth.member };
   } catch (error) {

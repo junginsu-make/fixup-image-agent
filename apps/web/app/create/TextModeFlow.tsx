@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { takeHandoff } from "../../lib/handoff";
+import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
 import { AlertCircle } from "lucide-react";
 import {
-  DEFAULT_IMAGE_MODEL,
   collectUnverified,
   defaultPreserveProduct,
   mergeArtDirection,
@@ -148,7 +148,7 @@ export function TextModeFlow({
   // 비어 있으면 자동이다. `create/CharacterPicker.tsx` 머리말 참조.
   const [characterAngles, setCharacterAngles] = useState<string[]>(initialDraft?.characterAngles ?? []);
   const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(initialDraft?.keyVisual ?? null);
-  const [imageModel, setImageModel] = useState<ImageModelId>(initialDraft?.imageModel ?? DEFAULT_IMAGE_MODEL);
+  const [imageModel, setImageModel] = useState<ImageModelId>(pdpImageModelOrDefault(initialDraft?.imageModel));
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [planningExecutions, setPlanningExecutions] = useState<PdpLlmExecution[] | undefined>(initialDraft?.planningExecutions);
