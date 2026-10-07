@@ -8,7 +8,8 @@
 export function errorLogText(error: unknown): string {
   return 글로(error)
     .replace(/https?:\/\/\S+/g, "<url>")
-    .replace(/\S*object\/sign\/\S*/g, "<url>")
+    // 앞이 빈칸인 자리에서만 시작한다 — 빈칸 없는 긴 글에서 이차 시간으로 느려지지 않게(최종 검토 2차).
+    .replace(/(?<!\S)\S*object\/sign\/\S*/g, "<url>")
     .replace(열쇠칸, "$1<redacted>")
     .replace(/\r\n|\r|\n/g, " ");
 }
