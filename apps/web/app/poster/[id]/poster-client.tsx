@@ -40,7 +40,6 @@ interface BusyState {
   label: string;
   hint?: string;
   startedAt?: number;
-  count?: number;
   edit?: boolean;
 }
 
@@ -676,7 +675,7 @@ export function PosterClient(
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
-    beginWork({ kind: "generate", label: makingLabel(project.data.variants), hint: "첨부한 그림을 올리고 있습니다", count: project.data.variants });
+    beginWork({ kind: "generate", label: makingLabel(project.data.variants), hint: "첨부한 그림을 올리고 있습니다" });
     try {
       /*
        * **고친 칸을 먼저 저장한다.**
@@ -698,7 +697,7 @@ export function PosterClient(
       const submission = start.submission;
       setBusy((current) => ({
         kind: "generate", label: makingLabel(project.data.variants), hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다",
-        count: project.data.variants, startedAt: current?.startedAt ?? Date.now(),
+        startedAt: current?.startedAt ?? Date.now(),
       }));
       await pollUntilDone(submission, project.data.variants);
     } catch (cause) {
@@ -917,7 +916,6 @@ export function PosterClient(
           onStop={() => void stopNow()}
           stopping={stopping}
           startedAt={busy.startedAt}
-          progress={busy.count && busy.count > 1 ? { done: 0, total: busy.count } : undefined}
         />
       ) : null}
 

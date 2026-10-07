@@ -30,8 +30,9 @@ describe("캐릭터 — 공통 띠와 칸 표시", () => {
     expect(source).toContain("startedAt={startedAt}");
   });
 
-  it("각도를 만들 때는 요청한 장 수를 progress 로 준다", () => {
-    expect(source).toMatch(/progress=\{pending \? \{ done: 0, total: pending \}/);
+  // 한 번에 보내 끝난 장 수를 모른다 — 「0/N장」이 멈춰 보이지 않게 장 수는 문구로만(2026-10-08 검토).
+  it("각도를 만들 때 끝난 장 수를 모르므로 장 수 막대를 주지 않는다", () => {
+    expect(source).not.toMatch(/progress=\{[^}]*done: 0/);
   });
 
   it("각도마다 ItemStatusBadge 로 만드는 중을 보인다 (한 번에 보내므로 모두 working)", () => {

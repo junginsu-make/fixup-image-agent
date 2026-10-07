@@ -12,9 +12,13 @@ describe("다양하게 띠", () => {
     expect(source).toMatch(/<WorkingBanner[\s\S]{0,200}startedAt=\{busy\.startedAt\}/);
   });
 
-  it("여러 장 만들 때만 장 수를 준다", () => {
-    expect(source).toMatch(/<WorkingBanner[\s\S]{0,400}progress=\{/);
-    expect(source).toContain("busy.count");
+  /*
+    **끝난 장 수를 모르면 장 수 막대를 주지 않는다**(2026-10-08 검토). 서버가 다 만든 뒤
+    한꺼번에 알려 주므로 「0/4장」이 끝까지 멈춰 있다가 사라진다. 장 수는 문구가 말한다.
+  */
+  it("끝난 장 수를 모르므로 장 수 막대를 주지 않고 문구로 장 수를 말한다", () => {
+    expect(source).not.toMatch(/progress=\{[^}]*done: 0/);
+    expect(source).toContain("makingLabel(project.data.variants)");
   });
 
   it("문구는 공통 낱말을 쓴다", () => {

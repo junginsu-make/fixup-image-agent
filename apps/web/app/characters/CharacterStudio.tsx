@@ -1186,7 +1186,6 @@ function StudioWorkingBanner({ busy, pending, redoingAngle, startedAt }: {
         label={pending ? `${pending}장 만드는 중입니다` : "저장 중입니다"}
         hint={pending ? "한 장에 30~90초 걸립니다" : undefined}
         startedAt={startedAt}
-        progress={pending ? { done: 0, total: pending } : undefined}
         className="mb-4"
       />
     );
