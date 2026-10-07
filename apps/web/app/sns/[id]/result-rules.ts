@@ -1,3 +1,5 @@
+import type { ItemState } from "../../_components/item-status";
+
 /**
  * 결과판의 판단들.
  *
@@ -43,4 +45,17 @@ export function trimCardNote(raw: string | undefined | null): string | undefined
   const note = (raw ?? "").trim();
   if (!note) return undefined;
   return note.slice(0, CARD_NOTE_MAX);
+}
+
+/**
+ * 카드 상태를 공통 칸 표시(`ItemStatusBadge`)의 말로 바꾼다(2026-10-08).
+ *
+ * `review_required` 같은 검수 상태는 공통 말이 아니라 **그대로 둔다** — 없음(undefined)을 돌려준다.
+ */
+export function cardItemState(status: string): ItemState | undefined {
+  if (status === "generating") return "working";
+  if (status === "pending") return "queued";
+  if (status === "done") return "done";
+  if (status === "failed") return "failed";
+  return undefined;
 }

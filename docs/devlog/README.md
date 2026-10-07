@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **279개**, 저장 기록(커밋, 합치기 제외) **1,051개**, 배포 꾸러미(릴리스) **232개**.
+8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **280개**, 저장 기록(커밋, 합치기 제외) **1,059개**, 배포 꾸러미(릴리스) **233개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 31 | 216 | 40 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 32 | 224 | 41 |
 
 <a id="w-2026-08-31"></a>
 
@@ -494,8 +494,11 @@
 - 실사 상세페이지에 애니 캐릭터를 넣어도 캐릭터는 원래 그림체를 지킵니다. 그림 느낌만 바꾸기를 직접 고르면 그 선택을 따릅니다.
 - 카드뉴스와 이미지 만들기에도 캐릭터를 만들 때 정리해 둔 생김새 설명이 함께 가고, 같은 캐릭터의 여러 각도를 붙여도 한 캐릭터로 읽습니다.
 - 카드뉴스에 저장한 캐릭터를 붙이면 프로젝트 입력을 확인해 달라며 만들기가 막히던 문제를 고쳤습니다.
+- 카드뉴스와 상세페이지에서 시간이 걸리는 단계마다 화면 위에 같은 모양의 진행 띠가 뜹니다. 무엇을 하는 중인지와 걸린 시간을 보여 주고, 여러 장을 만들 때는 몇 장째인지도 보여 줍니다.
+- 카드뉴스 첫 「기획 시작」을 누르면 기획 중이라는 띠가 뜹니다.
+- 상세페이지 이미지를 만들 때 섹션마다 「만드는 중」, 「차례 대기」, 「완료」가 보입니다.
 
-**운영 배포 15회**
+**운영 배포 16회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -512,8 +515,9 @@
 - 10/7 `20261007T111629Z-1e074fb9` · [#291](https://github.com/junginsu-make/fixup-image-agent/pull/291)
 - 10/7 `20261007T132044Z-d144d972` · [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294)
 - 10/8 `20261007T150107Z-bbf99b9e` · [#293](https://github.com/junginsu-make/fixup-image-agent/pull/293), [#296](https://github.com/junginsu-make/fixup-image-agent/pull/296)
+- 10/8 `20261007T160441Z-0e45da11` · [#299](https://github.com/junginsu-make/fixup-image-agent/pull/299)
 
-<details><summary>이 주의 작업 묶음 31개</summary>
+<details><summary>이 주의 작업 묶음 32개</summary>
 
 
 **10/6**
@@ -552,6 +556,10 @@
 - [#293](https://github.com/junginsu-make/fixup-image-agent/pull/293) feat: 캐릭터를 상세페이지·리디자인에 종류·그림체대로 넘긴다 (캐릭터 넘기기 1단계) <sub>상세페이지 · 리디자인 · 캐릭터 · +811 / −24 · 운영 반영 10/8</sub>
 - [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294) fix: 상세페이지 이미지 모델 목록에서 경제형 제외 <sub>상세페이지 · +183 / −33 · 운영 반영 10/7</sub>
 - [#296](https://github.com/junginsu-make/fixup-image-agent/pull/296) feat: 캐릭터를 카드뉴스·이미지 만들기에도 종류·그림체·생김새대로 넘긴다 (캐릭터 넘기기 2단계) <sub>카드뉴스 · 이미지 만들기 · 캐릭터 · +1,754 / −56 · 운영 반영 10/8</sub>
+
+**10/8**
+
+- [#299](https://github.com/junginsu-make/fixup-image-agent/pull/299) feat: 시간이 걸리는 단계 공통 표시 1차 — 카드뉴스·상세페이지 <sub>카드뉴스 · 상세페이지 · +1,249 / −181 · 운영 반영 10/8</sub>
 
 </details>
 

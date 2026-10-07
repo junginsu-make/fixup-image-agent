@@ -45,7 +45,7 @@ import { RATIO_OPTIONS, TONE_OPTIONS, apiJson, prepareImageFile } from "./pdp-ut
 import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type RecoverableJob } from "./job-recovery";
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
-import { ElapsedTime } from "../_components/elapsed-time";
+import { WorkingStatus } from "../_components/working-status";
 import { ACCEPT_ANY_IMAGE, joinMessages, useImageDropTarget } from "../_components/image-drop";
 import { DropPasteHint } from "../_components/drop-paste-hint";
 import { copyText, randomId } from "../../lib/browser-safe";
@@ -1535,23 +1535,17 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
       ) : null}
 
       {appState === "processing" ? (
-        <section className="grid place-items-center gap-4 rounded-lg bg-card px-6 py-16 text-center shadow-[var(--shadow-ring)]">
-          <div className="grid h-16 w-16 place-items-center rounded-full bg-primary-soft text-primary">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-          <div>
-            <h2 className="text-h1">AI가 상세페이지 구조를 만드는 중입니다</h2>
-            <PlanProgress progressId={planProgressId} fallback={loadingStep} />
-            <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs">
-              <Badge variant="secondary">분석 단계 · 이미지 크레딧 0장</Badge>
-              {analysisStartedAt ? <Badge variant="outline"><ElapsedTime startedAt={analysisStartedAt} /></Badge> : null}
-            </div>
-          </div>
-          {/* 진행률을 알 수 없는 작업이라 무한 왕복 막대를 쓴다(가짜 퍼센트 대신). */}
-          <div className="h-1.5 w-full max-w-md overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/3 animate-[pdp-indeterminate_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
-          </div>
-        </section>
+        /*
+          **공통 띠 하나로 말한다**(2026-10-08 사용자). 분석 단계 목록은 띠 안에 담는다.
+          진행률을 모르는 작업이라 띠의 막대는 흐르기만 한다(가짜 퍼센트 대신).
+        */
+        <WorkingStatus
+          label="AI 분석 중입니다"
+          hint="분석 단계 · 이미지 크레딧 0장"
+          startedAt={analysisStartedAt ?? undefined}
+        >
+          <PlanProgress progressId={planProgressId} fallback={loadingStep} />
+        </WorkingStatus>
       ) : startMode === "text" ? (
         <TextModeFlow
           key={editorSessionKey}

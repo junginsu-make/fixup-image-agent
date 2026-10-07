@@ -26,6 +26,7 @@ import type {
   PdpLlmExecution,
 } from "@fixup/pdp-core";
 import { KeyVisualGate } from "./KeyVisualGate";
+import { WorkingStatus } from "../_components/working-status";
 import { ScenarioEditor } from "./ScenarioEditor";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { TextBriefInput } from "./TextBriefInput";
@@ -150,6 +151,10 @@ export function TextModeFlow({
   const [keyVisual, setKeyVisual] = useState<KeyVisualImage | null>(initialDraft?.keyVisual ?? null);
   const [imageModel, setImageModel] = useState<ImageModelId>(pdpImageModelOrDefault(initialDraft?.imageModel));
   const [isBusy, setIsBusy] = useState(false);
+  // 위쪽 띠의 걸린 시간. 보이기만 한다(2026-10-08).
+  const [busyStartedAt, setBusyStartedAt] = useState<number | undefined>();
+  // 대표 이미지 승인 중인가 — 띠가 「만드는 중」이 아니라 「저장 중」이라고 말한다(2026-10-08 리뷰).
+  const [approving, setApproving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [planningExecutions, setPlanningExecutions] = useState<PdpLlmExecution[] | undefined>(initialDraft?.planningExecutions);
 
@@ -165,6 +170,7 @@ export function TextModeFlow({
 
   const handlePlan = async () => {
     setIsBusy(true);
+    setBusyStartedAt(Date.now());
     setErrorMessage("");
     try {
       if ((blueprint || keyVisual) && onBeforeReplace && !(await onBeforeReplace())) {
@@ -215,6 +221,8 @@ export function TextModeFlow({
   const requestKeyVisual = async (source: LandingPageBlueprint) => {
     if (!brief) return;
     setIsBusy(true);
+    setBusyStartedAt(Date.now());
+    setApproving(false);
     setErrorMessage("");
     try {
       if (keyVisual && onBeforeReplace && !(await onBeforeReplace())) {
@@ -257,6 +265,8 @@ export function TextModeFlow({
   const handleApprove = async () => {
     if (!blueprint || !originalBlueprint || !keyVisual) return;
     setIsBusy(true);
+    setApproving(true);
+    setBusyStartedAt(Date.now());
     try {
       // 대표 이미지는 2K로 생성된다. 섹션마다 다시 올라가는 앵커라
       // 업로드 이미지와 같은 규격(1024px)으로 줄여서 넘긴다.
@@ -280,6 +290,7 @@ export function TextModeFlow({
     } catch (error) {
       setErrorMessage(`대표 이미지를 준비하지 못했습니다. ${errorText(error)}`);
       setIsBusy(false);
+      setApproving(false);
     }
   };
 
@@ -291,6 +302,11 @@ export function TextModeFlow({
           <AlertCircle size={16} className="mt-0.5 flex-none text-destructive" />
           <span>{errorMessage}</span>
         </div>
+      ) : null}
+
+      {/* **기획을 기다리는 동안 위쪽 띠 하나로 말한다**(2026-10-08 사용자). 전에는 단추 안 도는 표시뿐이었다. */}
+      {stage === "input" && isBusy ? (
+        <WorkingStatus label="구성 시나리오 기획 중입니다" startedAt={busyStartedAt} />
       ) : null}
 
       {stage === "input" ? (
@@ -359,6 +375,8 @@ export function TextModeFlow({
         <KeyVisualGate
           previewUrl={keyVisual ? toDataUrl(keyVisual.mimeType, keyVisual.base64) : null}
           isBusy={isBusy}
+          busyStartedAt={busyStartedAt}
+          busyLabel={approving ? "대표 이미지를 저장 중입니다" : undefined}
           onApprove={() => void handleApprove()}
           onRegenerate={() => void (blueprint && requestKeyVisual(blueprint))}
           onBack={() => onStageChange("scenario")}

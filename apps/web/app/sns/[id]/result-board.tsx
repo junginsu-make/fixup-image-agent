@@ -9,7 +9,9 @@ import type { SnsFlowCard, SnsFlowState } from "../../api/sns/flow-service";
 import { snsCardFilename } from "../download-filename";
 import { SaveToLibrary } from "../../_components/save-to-library";
 import { copyText } from "../../../lib/browser-safe";
-import { cardPlaceholder, trimCardNote, CARD_NOTE_MAX } from "./result-rules";
+import { cardItemState, cardPlaceholder, trimCardNote, CARD_NOTE_MAX } from "./result-rules";
+import { ItemStatusBadge, ItemWorkingOverlay } from "../../_components/item-status";
+import { workingButton } from "../../_components/working-words";
 import { cardSubmittedAt, SLOW_CARD_NOTICE } from "../slow-card";
 import { useSlowCards } from "../use-slow-cards";
 
@@ -33,6 +35,15 @@ function triggerDownload(url: string, name: string) {
  */
 function CardPlaceholder({ status }: { status: string }) {
   const { label, spinning } = cardPlaceholder(status);
+  const state = cardItemState(status);
+  // **만드는 중·차례 대기는 다른 기능과 같은 덮개로 말한다**(2026-10-08 사용자 — 한 모양으로).
+  if (state === "working" || state === "queued") {
+    return (
+      <div className="relative aspect-[4/5] max-h-[38vh] rounded-lg border border-dashed bg-muted">
+        <ItemWorkingOverlay state={state} />
+      </div>
+    );
+  }
   return (
     <div className="grid aspect-[4/5] max-h-[38vh] place-items-center rounded-lg border border-dashed bg-muted">
       <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -45,9 +56,9 @@ function CardPlaceholder({ status }: { status: string }) {
 
 function ReviewStatus({ card }: { card: SnsFlowCard }) {
   if (card.kind !== "generated") return <Badge variant="outline">사용자 원본 · 검수 생략</Badge>;
-  if (card.status === "pending") return <Badge variant="secondary">대기 중</Badge>;
-  if (card.status === "generating") return <Badge variant="secondary"><Loader2 className="animate-spin" />생성 중</Badge>;
-  if (card.status === "failed") return <Badge variant="destructive">생성 실패</Badge>;
+  // 만드는 중·대기·실패는 공통 칸 표시(2026-10-08). 검수 상태는 아래에 그대로 둔다.
+  const state = cardItemState(card.status);
+  if (state === "working" || state === "queued" || state === "failed") return <ItemStatusBadge state={state} />;
   if (card.status === "review_required") return <Badge variant="destructive">사람의 검수 필요</Badge>;
   if (card.review?.decision === "pass") return <Badge variant="green">검수 통과</Badge>;
   return <Badge variant="secondary">검수 결과 없음</Badge>;
@@ -147,7 +158,7 @@ function CaptionSection({ flow, writing, onWrite }: {
         </div>
         <Button variant={caption ? "outline" : "default"} disabled={writing} onClick={() => void onWrite()}>
           {writing ? <Loader2 className="animate-spin" /> : <Sparkles />}
-          {writing ? "쓰는 중…" : caption ? "다시 쓰기" : "게시글 문구 만들기"}
+          {writing ? workingButton("write") : caption ? "다시 쓰기" : "게시글 문구 만들기"}
         </Button>
       </div>
 
@@ -341,7 +352,7 @@ export function ResultBoard({ title, flow, regeneratingIndex, onRegenerate, writ
                     >
                       {regeneratingIndex === card.index ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                       {regeneratingIndex === card.index
-                        ? "다시 만드는 중…"
+                        ? workingButton("make")
                         // 「이대로」는 적은 말을 안 쓰겠다는 뜻으로 읽힌다.
                         : trimCardNote(notes[card.index]) ? "적은 대로 다시 만들기" : "그대로 다시 만들기"}
                     </Button>
