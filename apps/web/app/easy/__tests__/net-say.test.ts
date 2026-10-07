@@ -40,6 +40,10 @@ describe("쉽게 화면의 fetch 자리 (후속 Task 11 3차)", () => {
 
   it("카드뉴스 손보기 · 만들기", () => {
     expect(글("../cardnews-request.ts")).toContain('const response = await orSay(billableFetch("/api/easy/cardnews", { body: JSON.stringify(body) }), CARDNEWS_OFFLINE);');
+    // 답만 끊겼을 수 있다(서버는 이미 했을 수 있다). 단정하지 않고 확인부터 하게 한다(Task 11 검토 Minor 1).
+    expect(글("../net-say.ts")).toContain(
+      'export const CARDNEWS_OFFLINE = "답을 받지 못했습니다. 이미 했을 수 있으니 이 대화를 다시 열어 확인한 뒤 다시 해 주세요.";',
+    );
   });
 
   it("카드뉴스 전부 받기", () => {

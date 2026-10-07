@@ -21,4 +21,5 @@ export const UPLOAD_OFFLINE = "그림을 올리지 못했습니다. 잠시 뒤 �
  */
 export const SEND_OFFLINE = "답을 받지 못했습니다. 이미 시작했을 수 있으니 이 대화를 다시 열어 확인한 뒤 다시 보내 주세요.";
 
-export const CARDNEWS_OFFLINE = "서버와 연결되지 않아 하지 못했습니다. 잠시 뒤 다시 해 주세요.";
+/** 답만 끊겼을 수 있다(서버는 이미 했을 수 있다). 말 보내기처럼 확인부터 하게 한다. */
+export const CARDNEWS_OFFLINE = "답을 받지 못했습니다. 이미 했을 수 있으니 이 대화를 다시 열어 확인한 뒤 다시 해 주세요.";

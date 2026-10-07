@@ -4,7 +4,7 @@
  *   node scripts/index-guide.mjs --base https://example.com --dry
  *   node scripts/index-guide.mjs --base https://example.com
  *
- * 실제로 넣을 때는 `--base` 를 꼭 주고, 로컬 주소(localhost · 127.0.0.1)는
+ * 실제로 넣을 때는 `--base` 를 꼭 주고, 로컬 주소(localhost · 127.x · [::1] · 0.0.0.0 등)는
  * 받지 않는다. 맛보기(`--dry`)는 주소 없이 돌면 로컬을 긁는다.
  *
  * ── 왜 서버에서 받아 오나 ────────────────────────────────────────────
