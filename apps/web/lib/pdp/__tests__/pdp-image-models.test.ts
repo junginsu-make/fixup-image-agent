@@ -35,7 +35,9 @@ describe("상세페이지 모델 목록", () => {
     expect(pdpImageModelOrDefault("nano-banana")).toBe(DEFAULT_IMAGE_MODEL);
     expect(pdpImageModelOrDefault(undefined)).toBe(DEFAULT_IMAGE_MODEL);
     expect(pdpImageModelOrDefault("없는-모델")).toBe(DEFAULT_IMAGE_MODEL);
-    expect(pdpImageModelOrDefault("gpt-image-2")).toBe("gpt-image-2");
+    // 2026-10-08 사용자 결정: 상세페이지는 GPT Image 2.5·Nano Banana Pro 둘만 — 정밀형도 기본 모델로 연다.
+    expect(pdpImageModelOrDefault("gpt-image-2")).toBe(DEFAULT_IMAGE_MODEL);
+    expect(pdpImageModelOrDefault("nano-banana-pro")).toBe("nano-banana-pro");
   });
 });
 
@@ -55,9 +57,18 @@ describe("서버도 나노바나나 일반판 상세페이지 그림 요청을 �
       expect((await result.response.json()).message).toContain("새로고침");
     });
 
-    it(`${kind}: 다른 모델은 그대로 받는다`, async () => {
-      const result = await readPdpRequest(post(body("gpt-image-2")), kind);
-      expect(result.ok).toBe(true);
+    it(`${kind}: 두 모델(GPT Image 2.5·Nano Banana Pro)은 받는다`, async () => {
+      for (const model of ["gpt-image-2.5-flare", "nano-banana-pro"]) {
+        const result = await readPdpRequest(post(body(model)), kind);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it(`${kind}: 두 모델 밖(정밀형·속도형 라이트)도 거절한다`, async () => {
+      for (const model of ["gpt-image-2", "nano-banana-2"]) {
+        const result = await readPdpRequest(post(body(model)), kind);
+        expect(result.ok).toBe(false);
+      }
     });
   }
 });

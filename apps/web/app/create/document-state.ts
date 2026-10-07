@@ -1,6 +1,7 @@
 import type { CopyGapOutcome, LandingPageBlueprint, SectionBlueprint, BlueprintReview, PdpLlmExecution, ProductReadingStatus } from "@fixup/pdp-core";
 import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 import { randomId } from "../../lib/browser-safe";
+import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
 import type { PdpDraftInput, PdpEditorDraftState, PreparedImageDraft } from "./pdp-drafts";
 
 export interface PdpSection extends SectionBlueprint { id: string; sourceSectionId: string; generatedAssetId?: string }
@@ -136,6 +137,8 @@ export function documentToDraft(doc: PdpDocumentV3): PdpDraftInput {
   const blueprint = { ...doc.blueprint, sections: doc.sections };
   return {
     id: doc.id, createdAt: doc.createdAt, ...doc.settings,
+    // 상세페이지에서 안 쓰는 모델로 저장된 문서는 기본 모델로 연다(2026-10-08). 안 고치면 그림 만들기가 계속 거절된다.
+    imageModel: pdpImageModelOrDefault(doc.settings.imageModel),
     appState: doc.stage === "planning" ? "processing" : doc.stage === "editor" ? "editor"
       : doc.stage === "outline" && doc.originalAssetId ? "scenario" : "upload",
     preparedImage: prepared("product"), modelImage: prepared("person"), modelImageUsage: doc.inputs.modelImageUsage,

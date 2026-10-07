@@ -41,3 +41,21 @@ describe("T-STATE: 문서 정본", () => {
     expect(doc.stage).toBe("input");
   });
 });
+
+/*
+  **서버에 저장된 작업을 열 때도 모델을 고친다**(2026-10-08 #294 검토). 전에는 브라우저 옛 저장칸만
+  기본 모델로 바꿔, 서버에 경제형으로 저장된 작업(운영 2건)은 열어도 그대로라 그림 만들기가 계속 거절됐다.
+*/
+describe("저장된 모델 — 상세페이지 두 모델만", () => {
+  it("상세페이지에서 안 쓰는 모델로 저장된 문서는 기본 모델로 연다", () => {
+    for (const old of ["nano-banana", "gpt-image-2", "nano-banana-2"] as const) {
+      const doc = createPdpDocument({ ...source(), imageModel: old });
+      expect(documentToDraft(doc).imageModel).toBe("gpt-image-2.5-flare");
+    }
+  });
+
+  it("두 모델 중 하나면 그대로 연다", () => {
+    const doc = createPdpDocument({ ...source(), imageModel: "nano-banana-pro" });
+    expect(documentToDraft(doc).imageModel).toBe("nano-banana-pro");
+  });
+});

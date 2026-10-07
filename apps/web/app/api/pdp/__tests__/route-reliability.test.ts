@@ -134,10 +134,10 @@ describe("T-COST: 대표 이미지", () => {
 
   it("싼 모델은 그만큼만 받는다", async () => {
     await keyVisual(
-      request({ brief: { offeringName: "제품" }, blueprint: { sections: [section] }, imageModel: "nano-banana-2" }),
+      request({ brief: { offeringName: "제품" }, blueprint: { sections: [section] }, imageModel: "nano-banana-pro" }),
     );
 
-    expect(state.reserve.mock.calls[0]![2]).toBe(imageCreditUnits("nano-banana-2", 1));
+    expect(state.reserve.mock.calls[0]![2]).toBe(imageCreditUnits("nano-banana-pro", 1));
   });
 });
 
@@ -149,7 +149,7 @@ describe("T-COST: 대표 이미지", () => {
  */
 describe("T-COST: 단건과 배치의 모델 선택", () => {
   it("페이지가 정한 모델을 두 라우트가 똑같이 쓴다", async () => {
-    await single(request({ ...body(), page: { imageModel: "nano-banana-2" } }));
+    await single(request({ ...body(), page: { imageModel: "nano-banana-pro" } }));
     const 단건 = state.reserve.mock.calls[0]![2] as number;
 
     vi.clearAllMocks();
@@ -157,14 +157,14 @@ describe("T-COST: 단건과 배치의 모델 선택", () => {
     state.settle.mockResolvedValue(undefined);
     state.generate.mockResolvedValue({ imageBase64: "R", mimeType: "image/png", generatedImages: 1 });
 
-    await batch(request({ ...body(), page: { imageModel: "nano-banana-2" } }));
+    await batch(request({ ...body(), page: { imageModel: "nano-banana-pro" } }));
 
     expect(state.reserve.mock.calls[0]![2]).toBe(단건);
-    expect(단건).toBe(imageCreditUnits("nano-banana-2", 1));
+    expect(단건).toBe(imageCreditUnits("nano-banana-pro", 1));
   });
 
   it("섹션 옵션에만 모델이 있으면 두 라우트가 같은 값을 쓴다", async () => {
-    const 모델 = "nano-banana-2";
+    const 모델 = "nano-banana-pro";
     await single(request({ ...body(), options: { imageModel: 모델 } }));
     const 단건예약 = state.reserve.mock.calls[0]![2] as number;
 

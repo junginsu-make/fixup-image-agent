@@ -125,7 +125,7 @@ describe("일괄 생성도 인물 사진을 받는다", () => {
         sectionIndexes: [0, 1],
         aspectRatio: "3:4",
         page: {
-          imageModel: "nano-banana-2",
+          imageModel: "nano-banana-pro",
           referenceModel: 인물사진,
           referenceModelUsage: "all-sections",
         },
@@ -146,7 +146,7 @@ describe("일괄 생성도 인물 사진을 받는다", () => {
         sectionIndexes: [3, 4],
         aspectRatio: "3:4",
         page: {
-          imageModel: "nano-banana-2",
+          imageModel: "nano-banana-pro",
           referenceModel: 인물사진,
           referenceModelUsage: "hero-only",
         },
@@ -168,7 +168,7 @@ describe("캐릭터를 붙이면 장면 지시도 사람을 요구한다", () =>
         sections: [section("s1")],
         aspectRatio: "3:4",
         characterId: "c1",
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
 
@@ -179,7 +179,7 @@ describe("캐릭터를 붙이면 장면 지시도 사람을 요구한다", () =>
 
 describe("두 라우트가 같은 옵션을 만든다", () => {
   const page = {
-    imageModel: "nano-banana-2",
+    imageModel: "nano-banana-pro",
     outputMode: "full-image",
     look: "anime",
     userInstruction: "밤 장면으로",
@@ -232,7 +232,7 @@ describe("장은 두 라우트가 같은 규칙으로 센다", () => {
         originalImageBase64: "AAAA",
         section: section("s1"),
         aspectRatio: "3:4",
-        page: { imageModel: "gpt-image-2" },
+        page: { imageModel: "gpt-image-2.5-flare" },
       }),
     );
 
@@ -247,7 +247,7 @@ describe("장은 두 라우트가 같은 규칙으로 센다", () => {
         originalImageBase64: "AAAA",
         section: section("s1"),
         aspectRatio: "3:4",
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
     const 싼모델 = reserved[0]!;
@@ -258,7 +258,7 @@ describe("장은 두 라우트가 같은 규칙으로 센다", () => {
         originalImageBase64: "AAAA",
         section: section("s1"),
         aspectRatio: "3:4",
-        page: { imageModel: "gpt-image-2" },
+        page: { imageModel: "gpt-image-2.5-flare" },
       }),
     );
 
@@ -281,7 +281,7 @@ describe("자리별 지시가 라우트를 지나 생성까지 간다", () => {
         originalImageBase64: "AAAA",
         section: section("s1"),
         aspectRatio: "3:4",
-        page: { imageModel: "nano-banana-2", attachmentIntents: intents },
+        page: { imageModel: "nano-banana-pro", attachmentIntents: intents },
       }),
     );
     expect(calls[0]!.options.attachmentIntents).toEqual(intents);
@@ -294,7 +294,7 @@ describe("자리별 지시가 라우트를 지나 생성까지 간다", () => {
         sections: [section("s1"), section("s2")],
         sectionIndexes: [0, 1],
         aspectRatio: "3:4",
-        page: { imageModel: "nano-banana-2", attachmentIntents: intents },
+        page: { imageModel: "nano-banana-pro", attachmentIntents: intents },
       }),
     );
     expect(calls.map((c) => c.options.attachmentIntents)).toEqual([intents, intents]);
@@ -306,7 +306,7 @@ describe("자리별 지시가 라우트를 지나 생성까지 간다", () => {
         originalImageBase64: "AAAA",
         section: section("s1"),
         aspectRatio: "3:4",
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
     expect(calls[0]!.options.attachmentIntents).toBeUndefined();
@@ -321,7 +321,7 @@ describe("자리별 지시가 라우트를 지나 생성까지 간다", () => {
  */
 describe("레퍼런스 조각이 두 라우트 모두에서 나간다", () => {
   const page = {
-    imageModel: "nano-banana-2",
+    imageModel: "nano-banana-pro",
     styleReference: { imageBase64: "WHOLE", mimeType: "image/png", description: "참고" },
   };
 
@@ -378,7 +378,7 @@ describe("고른 각도가 엔진까지 닿는다", () => {
         aspectRatio: "3:4",
         characterId: "c1",
         characterAngles: ["back", "front"],
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
 
@@ -394,7 +394,7 @@ describe("고른 각도가 엔진까지 닿는다", () => {
         aspectRatio: "3:4",
         characterId: "c1",
         characterAngles: ["front", "back"],
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
 
@@ -409,7 +409,7 @@ describe("고른 각도가 엔진까지 닿는다", () => {
         sections: [{ ...section("s1"), layout_notes: "뒤돌아 걸어가는 뒷모습" }],
         aspectRatio: "3:4",
         characterId: "c1",
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
 
@@ -424,7 +424,7 @@ describe("고른 각도가 엔진까지 닿는다", () => {
         sections: [section("s1")],
         aspectRatio: "3:4",
         characterAngles: ["front", "back"],
-        page: { imageModel: "nano-banana-2" },
+        page: { imageModel: "nano-banana-pro" },
       }),
     );
 

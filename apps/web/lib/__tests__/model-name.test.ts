@@ -131,11 +131,18 @@ describe("회원 화면에 모델 이름이 없다", () => {
   // 저장된 경로는 `/` 로 적혀 있다. `join` 은 윈도에서 `\` 를 써서 안 맞는다.
   const 법이_이름을_요구하는_문서 = "legal/documents.ts";
   const 업체이름 = new Set(["Anthropic", "OpenAI Image"]);
+  /*
+    **상세페이지 모델 고르기는 실제 모델 이름으로 보인다**(2026-10-08 사용자 결정). 이 보호를 푼다는
+    것을 알고 정했다. 그 이름을 적는 곳은 이 한 파일뿐이다 — 다른 화면은 계속 막는다.
+  */
+  const 상세페이지_모델_이름 = "lib/pdp/image-models.ts";
+  const 상세페이지_허용 = new Set(["GPT Image", "Nano Banana"]);
 
   for (const 이름 of 새면_안_되는_이름) {
     it(`「${이름}」이 없다`, () => {
       const 걸린곳 = 화면들
         .filter((file) => !(업체이름.has(이름) && file.path.endsWith(법이_이름을_요구하는_문서)))
+        .filter((file) => !(상세페이지_허용.has(이름) && file.path.endsWith(상세페이지_모델_이름)))
         .filter((file) => 문자열들(file.source).some((글) => 글.includes(이름)))
         .map((file) => file.path);
 

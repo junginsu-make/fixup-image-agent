@@ -50,6 +50,7 @@ import { ACCEPT_ANY_IMAGE, joinMessages, useImageDropTarget } from "../_componen
 import { DropPasteHint } from "../_components/drop-paste-hint";
 import { copyText, randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
+import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
 import { PlanProgress } from "./PlanProgress";
 
 type PreparedImage = PreparedImageDraft;
@@ -748,7 +749,8 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
         setResult(draft.result && draft.editorState?.sections.length
           ? { ...draft.result, blueprint: { ...draft.result.blueprint, sections: draft.editorState.sections } }
           : draft.result);
-        setImageModel(draft.imageModel ?? DEFAULT_IMAGE_MODEL);
+        // 서버·브라우저 어느 저장에서 열든 상세페이지 두 모델 안으로 고친다(2026-10-08).
+        setImageModel(pdpImageModelOrDefault(draft.imageModel));
         setCharacterId(draft.characterId);
         setCharacterAngles(draft.characterAngles ?? []);
         setPreserveProduct(draft.preserveProduct ?? true);
