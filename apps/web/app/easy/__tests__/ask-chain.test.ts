@@ -320,3 +320,52 @@ describe("이번 턴에 쓸 고른 값 (chosenFor)", () => {
     expect(ASK_ANSWER_NOTE).toBe(AD_ANSWER_NOTE);
   });
 });
+
+/**
+ * Task 8 고침 1 — 번호 물음 · 장 물음의 말 답은 **번호를 고르는 말**이다. 번호가 없는 답(「그거요」)은 지시에 아무것도
+ * 더하지 않고, 번호만 있는 답(「1번이요」)도 그렇다. 번호와 함께 고칠 내용을 말하면(「이미지 1 글자도 크게」) 번호를
+ * 뺀 나머지를 처음 말 뒤에 잇는다. 사용자가 한 말을 잃거나 엉뚱한 말이 지시에 섞이지 않게.
+ */
+describe("번호 물음의 말 답 (Task 8 고침 1)", () => {
+  const 번호물음 = [말("u1", "배경만 하얗게"), 물음("q1", "target", { numbers: [1, 2] })];
+
+  it("번호 없는 답 뒤 다시 물어 단추로 고르면 지시는 처음 말뿐이다", () => {
+    const 다시 = askChain([...번호물음, 말("u2", "그거요"), 물음("q2", "target", { numbers: [1, 2], cont: true })])!;
+    expect(askInstruction(다시, "이미지 1", "button")).toBe("배경만 하얗게");
+    expect(askInstruction(다시, "1번", "typed")).toBe("배경만 하얗게");
+  });
+
+  it("번호 없는 말 답 · 번호만 있는 말 답은 지시에 더하지 않는다", () => {
+    const 하나 = askChain(번호물음)!;
+    expect(askInstruction(하나, "그거요", "typed")).toBe("배경만 하얗게");
+    expect(askInstruction(하나, "1번이요", "typed")).toBe("배경만 하얗게");
+    expect(askInstruction(하나, "이미지 2", "typed")).toBe("배경만 하얗게");
+    expect(askInstruction(하나, "2번으로 해 주세요", "typed")).toBe("배경만 하얗게");
+    expect(askInstruction(하나, "#2", "typed")).toBe("배경만 하얗게");
+  });
+
+  it("번호와 함께 고칠 내용을 말하면 번호를 뺀 나머지를 잇는다", () => {
+    const 하나 = askChain(번호물음)!;
+    expect(askInstruction(하나, "이미지 1 글자도 크게", "typed")).toBe("배경만 하얗게\n글자도 크게");
+    expect(askInstruction(하나, "1번에서 로고도 빼줘", "typed")).toBe("배경만 하얗게\n로고도 빼줘");
+    // 번호 말은 처음 하나만 뺀다 — 고칠 내용 속 숫자는 그대로다.
+    expect(askInstruction(하나, "이미지 1 글자 2배로", "typed")).toBe("배경만 하얗게\n글자 2배로");
+  });
+
+  it("앞 물음에 번호와 함께 한 말도 사슬이 잇는다 — 번호 말은 뺀다", () => {
+    const 이어 = askChain([...번호물음, 말("u2", "이미지 1 글자도 크게"), 물음("q2", "ratio", { cont: true })])!;
+    expect(askInstruction(이어, "이대로 만들기", "button")).toBe("배경만 하얗게\n글자도 크게");
+  });
+
+  it("장 물음도 같다 — 번호만이면 안 더하고, 고칠 내용이 있으면 잇는다", () => {
+    const 장 = askChain([말("u1", "더 짧게"), 물음("q1", "card", { wants: "card_text", count: 5 })])!;
+    expect(askInstruction(장, "3번", "typed")).toBe("더 짧게");
+    expect(askInstruction(장, "3번 장", "typed")).toBe("더 짧게");
+    expect(askInstruction(장, "3번 장 제목도 바꿔줘", "typed")).toBe("더 짧게\n제목도 바꿔줘");
+  });
+
+  it("다른 물음의 말 답은 숫자가 있어도 그대로 잇는다", () => {
+    const 모양 = askChain([말("u1", "바다 포스터"), 물음("q1", "ratio")])!;
+    expect(askInstruction(모양, "2번째 모양으로", "typed")).toBe("바다 포스터\n2번째 모양으로");
+  });
+});

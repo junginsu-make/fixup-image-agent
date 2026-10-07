@@ -354,8 +354,9 @@ async function turn(request: Request): Promise<Response> {
      * 본다 — 고른 갈래가 이겨 image 로 가는 턴에서는 묻지 않는다. 물음 글은 AI 가 이 갈래로 쓴 물음이 먼저다.
      * 번호 물음에 말로 답했는데 번호가 없으면 마지막 이미지로 떨어뜨리지 않고 다시 묻는다.
      */
+    const 번호물음뒤 = 답방식 === "typed" && 이음?.ask.kind === "target";
     const 고칠번호들 = targetAskNumbers({ wants, note: decision.note, target: decision.target }, 이미지들, {
-      afterTargetAsk: 답방식 === "typed" && 이음?.ask.kind === "target",
+      afterTargetAsk: 번호물음뒤,
     });
     if (고칠번호들) {
       return await askTurn(물음맥락, { kind: "target", text: askText(aiText(decision, wants), TARGET_QUESTION), data: { numbers: 고칠번호들 } });
@@ -382,7 +383,8 @@ async function turn(request: Request): Promise<Response> {
      * (`lib/easy/edit-target.ts`).
      */
     if (wants === "image_edit" && 이미지들.madeImage) {
-      const 고칠것 = await pickEditTarget(auth.member.userId, 지난줄, 이미지들, decision.target);
+      // 번호 물음 뒤 번호 없는 답이면 마지막 이미지가 아니라 다 만든 하나 · 사실 문장이다(Task 8 고침 2).
+      const 고칠것 = await pickEditTarget(auth.member.userId, 지난줄, 이미지들, decision.target, { afterTargetAsk: 번호물음뒤 });
       if (!고칠것.ok) return await replyTurn(물음맥락, 고칠것.message);
       return await imageEditTurn({
         request, userId: auth.member.userId, store, conversationId, prompt: 지시, userBody: 사용자글, textModel,

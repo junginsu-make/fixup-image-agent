@@ -17,7 +17,7 @@ vi.mock("../image-edit-turn", () => ({
     (projectId ? { projectId, ratio: "1:1", keptIds: new Set<string>() } : null),
 }));
 
-const { pickEditTarget, targetAskNumbers } = await import("../edit-target");
+const { NO_DONE_IMAGE, TARGET_BY_NUMBER, pickEditTarget, targetAskNumbers } = await import("../edit-target");
 const { IMAGE_NOT_READY } = await import("../image-edit-turn");
 
 type 항목 = {
@@ -110,5 +110,31 @@ describe("어느 이미지인지 묻기 (2차 D2)", () => {
     expect(targetAskNumbers({ wants: "image_edit", target: 3 }, 사실(), { afterTargetAsk: true })).toBeUndefined();
     expect(targetAskNumbers({ wants: "image_edit" }, 사실())).toBeUndefined();
     expect(targetAskNumbers({ wants: "image" }, 사실(), { afterTargetAsk: true })).toBeUndefined();
+  });
+});
+
+/**
+ * Task 8 고침 2 — 번호 물음에 번호 없이 답했는데 다 만든 이미지가 둘이 안 되면(그 사이 지움 · 만드는 중) 다시 묻지
+ * 않는다. 다 만든 것이 하나면 **그 줄**을 고친다 — 「마지막 이미지」는 만드는 중 · 못 만든 것일 수 있다. 하나도 없으면
+ * 값 없이 사실대로 답한다.
+ */
+describe("번호 물음 뒤 번호 없는 고치기 (Task 8 고침 2)", () => {
+  it("다 만든 이미지가 하나면 마지막 결과가 아니라 그 줄을 고친다", async () => {
+    expect(await pickEditTarget("me", [], 사실([목록[0]!, 목록[1]!]), undefined, { afterTargetAsk: true }))
+      .toMatchObject({ ok: true, target: { projectId: "p1" }, rowId: "i1", n: 1 });
+  });
+
+  it("다 만든 이미지가 없으면 값 없이 사실대로 답한다", async () => {
+    expect(await pickEditTarget("me", [], 사실([목록[1]!, 목록[4]!]), undefined, { afterTargetAsk: true }))
+      .toEqual({ ok: false, message: NO_DONE_IMAGE });
+  });
+
+  it("다 만든 것이 둘 이상이면 아무것도 고르지 않고 번호로 말해 달라고 한다", async () => {
+    expect(await pickEditTarget("me", [], 사실(), undefined, { afterTargetAsk: true }))
+      .toEqual({ ok: false, message: TARGET_BY_NUMBER });
+  });
+
+  it("번호 물음 뒤가 아니면 예전처럼 마지막 결과다", async () => {
+    expect(await pickEditTarget("me", [], 사실([목록[0]!, 목록[1]!]), undefined)).toMatchObject({ ok: true, target: { projectId: "last" } });
   });
 });

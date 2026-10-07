@@ -152,6 +152,31 @@ export function readEasyPick(raw: unknown): EasyPick {
   };
 }
 
+/** 번호를 고르는 물음(어느 이미지 · 몇 번 장). */
+const 번호물음 = new Set<string>(["target", "card"]);
+
+/** 번호 말: 「#2」 · 「이미지 2(번)」 · 「2번(째)( 장)」 · 맨 앞의 숫자. 처음 하나만 본다. */
+const 번호말 = /#\s*\d+|(?:이미지|그림|카드|결과물)\s*\d+(?:\s*(?:번째|번|장))?|\d+\s*(?:번째|번|장)(?:\s*(?:장|이미지|그림|카드))?|^\s*\d+(?=[\s.,!?요이에으로]|$)/;
+/** 번호 말 바로 뒤에 붙는 토씨. */
+const 붙은토씨 = /^(?:이요|으로요|로요|으로|로|에서|이에요|예요|입니다|요|을|를|이|가|은|는|의)(?=[\s.,!?~]|$)/;
+/** 번호만 고른 말의 꼬리. 이것뿐이면 고칠 내용이 없다. */
+const 꼬리 = /^(?:해\s*주세요|해\s*줘|해요|고쳐\s*주세요|고쳐\s*줘|부탁(?:해요|드려요|합니다)|좋아요|좋습니다|할게요|요)?[\s.,!?~]*$/;
+
+/**
+ * **번호 물음 · 장 물음의 말 답에서 지시에 이을 말**(Task 8 고침 1 · 3). 그 답은 번호를 고르는 말이다.
+ * 번호가 없으면(「그거요」) 잇지 않는다 — 다시 물은 뒤의 지시에 섞인다. 번호만이면(「1번이요」) 잇지 않고, 번호와
+ * 고칠 내용을 함께 말하면(「이미지 1 글자도 크게」) 번호 말을 뺀 나머지를 잇는다 — 사용자 말을 잃지 않게.
+ * 다른 물음의 답은 그대로 잇는다.
+ */
+function 답으로잇는말(kind: string, text: string): string[] {
+  if (!번호물음.has(kind)) return [text];
+  const found = 번호말.exec(text);
+  if (!found) return [];
+  const 뒤 = text.slice(found.index + found[0].length).trimStart().replace(붙은토씨, "");
+  const 나머지 = `${text.slice(0, found.index).trim()} ${뒤.trim()}`.trim();
+  return 꼬리.test(나머지) ? [] : [나머지];
+}
+
 /** 고른 값만(말로 친 답 표시 `typed` 는 그 줄의 것이라 사슬의 고른 값에 안 남긴다). */
 function 고른값만(pick: EasyPick): EasyPick {
   return Object.fromEntries(Object.entries(pick).filter(([key]) => key !== "typed")) as EasyPick;
@@ -171,7 +196,8 @@ function 거슬러간다(rows: readonly Row[], i: number): Omit<EasyAskChain, "a
   const 말답 = !단추 || 고른.typed === true;
   return {
     origin: 앞쪽.origin,
-    answers: 말답 ? [...앞쪽.answers, visibleBody(말!)] : 앞쪽.answers,
+    // 번호 물음 · 장 물음의 말 답은 번호 말을 뺀 나머지만 잇는다(Task 8 고침 1 · 3).
+    answers: 말답 ? [...앞쪽.answers, ...답으로잇는말(물음(rows[앞])!.kind, visibleBody(말!))] : 앞쪽.answers,
     picks: 단추 ? { ...앞쪽.picks, ...고른값만(고른) } : 앞쪽.picks,
     photoIds: ids.length ? ids : 앞쪽.photoIds,
   };
@@ -187,12 +213,13 @@ export function askChain(rows: readonly Row[]): EasyAskChain | undefined {
  * 만들 때 쓰는 지시 = 처음 말 + 줄바꿈 + 말 답들(설계 §3-1). **답일 때만 잇는다** — 단추 답이면
  * 처음 말 + 앞의 말 답, 말로 한 답이면 이번 말까지. 답이 아니면 이번 말 그대로다.
  *
- * 번호만 고르는 물음(어느 이미지 · 몇 번 장)의 말 답(「2번」)은 넣지 않는다 — 고칠 내용이 아니다.
+ * 번호만 고르는 물음(어느 이미지 · 몇 번 장)의 말 답은 번호 말을 뺀 나머지만 넣는다 — 「2번」 · 「그거요」는
+ * 고칠 내용이 아니고, 「이미지 1 글자도 크게」의 「글자도 크게」는 고칠 내용이다(`답으로잇는말`).
  * 옛 화면이 처음 말을 다시 보내도(배포 사이) 두 번 붙지 않게 처음 말과 같은 답은 뺀다.
  */
 export function askInstruction(chain: EasyAskChain | undefined, prompt: string, way: EasyAnswerWay): string {
   if (!chain || way === "none" || !chain.origin) return prompt;
-  const 이번답 = way === "typed" && chain.ask.kind !== "target" && chain.ask.kind !== "card" ? [prompt] : [];
+  const 이번답 = way === "typed" ? 답으로잇는말(chain.ask.kind, prompt) : [];
   const 답들 = [...chain.answers, ...이번답].filter((one) => one.trim() && one !== chain.origin);
   return [chain.origin, ...답들].join("\n");
 }

@@ -29,6 +29,13 @@ function 고칠수있는것(facts: EasyImageFacts): string {
 
 const 잇는다 = (...parts: string[]) => parts.filter(Boolean).join(" ");
 
+/** 번호 물음 뒤 번호 없이 답했는데 다 만든 이미지가 없을 때(Task 8 고침 2). */
+export const NO_DONE_IMAGE =
+  "다 만든 이미지가 아직 없어 고칠 수 없습니다. 만드는 중이면 끝난 뒤에, 만들지 못했으면 새로 만든 뒤에 말씀해 주세요.";
+
+/** 번호 물음 뒤 번호 없이 답했는데 다 만든 이미지가 여럿일 때. 라우트가 먼저 다시 묻는다 — 막이다. */
+export const TARGET_BY_NUMBER = "어느 이미지를 고칠지 「이미지 2」처럼 번호로 말씀해 주세요.";
+
 const 확인못함 = (n: number) => `지금은 결과물 ${n} 을 확인할 수 없습니다. 잠시 뒤 다시 말씀해 주세요.`;
 
 /** 번호의 사정을 사실대로(이미지가 아니거나 다 안 만든 번호). 다 만든 이미지면 `undefined`. */
@@ -51,9 +58,19 @@ function 마지막결과(entries: readonly EasyResultEntry[]): EasyResultEntry |
   return [...entries].reverse().find((one) => one.kind !== "deleted");
 }
 
+/**
+ * `afterTargetAsk`: 번호 물음에 번호 없이 말로 답했다(Task 8 고침 2). 「마지막 이미지」로 가지 않는다 — 그것은
+ * 만드는 중 · 못 만든 것일 수 있다. 다 만든 것이 하나면 **그 줄**, 없으면 값 없이 사실 문장이다.
+ */
 export async function pickEditTarget(
   userId: string, rows: readonly Row[], facts: EasyImageFacts, target: number | undefined,
+  options: { afterTargetAsk?: boolean } = {},
 ): Promise<EditTargetPick> {
+  if (!target && options.afterTargetAsk) {
+    const 다만든 = doneImageNumbers(facts.entries);
+    if (다만든.length === 1) return pickEditTarget(userId, rows, facts, 다만든[0]);
+    return { ok: false, message: 다만든.length ? TARGET_BY_NUMBER : NO_DONE_IMAGE };
+  }
   if (!target) {
     const 끝 = 마지막결과(facts.entries);
     if (끝?.kind === "unknown") return { ok: false, message: 확인못함(끝.n) };

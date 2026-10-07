@@ -90,6 +90,7 @@ const { failureRowBody } = await import("../../../../lib/easy/failure-row");
 const { askBody, readAsk } = await import("../../../easy/row-marks");
 const { editRowBody, rowFromOf } = await import("../../../easy/row-image");
 const { IMAGE_NOT_READY } = await import("../../../../lib/easy/image-edit-turn");
+const { NO_DONE_IMAGE } = await import("../../../../lib/easy/edit-target");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -306,5 +307,49 @@ describe("만드는 중인 이미지를 고쳐 달라면 (2차 최종 리뷰 a)"
     const { json } = await 보낸다({ prompt: "글자 크게" });
     expect(json.message.body).toBe(IMAGE_NOT_READY);
     expect(부른라우트).toEqual([]);
+  });
+});
+
+/** Task 8 고침 1 · 2 · 3 — 번호 물음의 말 답이 지시를 더럽히거나 사용자 말을 잃지 않는다. */
+describe("번호 물음의 말 답 (Task 8 고침)", () => {
+  const 물음줄 = (id: string, cont = false) => ({
+    id, role: "assistant", body: askBody("target", "어느 이미지를 고칠까요?", { numbers: [1, 2], ...(cont ? { cont: true } : {}) }), workId: null,
+  });
+  beforeEach(() => {
+    그림들 = [{ id: "img-1", generationRequestId: "r1", selected: false }, { id: "img-3", generationRequestId: "r3", selected: false }];
+    지난줄 = [
+      { id: "u1", role: "user", body: "화장품을 넣어줘", workId: null }, { id: "i1", role: "image", body: "", workId: "p1" },
+      { id: "u2", role: "user", body: "배경 파랗게", workId: null }, { id: "i3", role: "image", body: editRowBody("r3"), workId: "p1" },
+      { id: "u3", role: "user", body: "배경만 하얗게", workId: null }, 물음줄("q1"),
+    ];
+  });
+
+  it("번호 없이 답해 다시 물은 뒤 단추로 고르면 지시는 처음 말뿐이다 (고침 1)", async () => {
+    지난줄 = [...지난줄, { id: "u4", role: "user", body: "그거요", workId: null }, 물음줄("q2", true)];
+    판단 = undefined;
+    await 보낸다({ prompt: "이미지 1", answersRowId: "q2", pick: { target: 1 } });
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "배경만 하얗게", imageId: "img-1" });
+  });
+
+  it("번호와 함께 고칠 내용을 말하면 그 내용도 지시에 잇는다 (고침 3)", async () => {
+    판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 1 };
+    await 보낸다({ prompt: "이미지 1 글자도 크게" });
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "배경만 하얗게\n글자도 크게", imageId: "img-1" });
+  });
+
+  it("번호 없이 답했는데 다 만든 이미지가 하나뿐이면 그 이미지를 고친다 — 만드는 중인 마지막 것이 아니라 (고침 2)", async () => {
+    그림들 = [{ id: "img-1", generationRequestId: "r1", selected: false }]; // 이미지 2(i3)는 아직 만드는 중
+    판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 0 };
+    await 보낸다({ prompt: "그거요" });
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "배경만 하얗게", imageId: "img-1" });
+    expect(rowFromOf(남긴줄.at(-1)!.body)).toBe("i1");
+  });
+
+  it("번호 없이 답했는데 다 만든 이미지가 없으면 값 없이 사실대로 답한다 (고침 2)", async () => {
+    그림들 = [];
+    판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 0 };
+    const { json } = await 보낸다({ prompt: "그거요" });
+    expect(부른라우트).toEqual([]);
+    expect(json.message.body).toBe(NO_DONE_IMAGE);
   });
 });
