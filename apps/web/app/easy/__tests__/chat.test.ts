@@ -294,6 +294,9 @@ describe("AI 가 늘 말한다 (2차 D4)", () => {
     const prompt = easyChatPrompt([], "바다 풍경 이미지 만들어줘");
     expect(prompt).toContain("묻는 한 문장은 **「?」로 끝나는 물음**으로 쓰세요");
     expect(prompt).toContain("「정사각형으로 만들겠습니다」처럼 미리 정해 말하지 마세요");
+    // 재실행 — 「image 면 지금 하는 일을 말한다」와 부딪쳐 모델이 앞의 것을 따랐다(2/2).
+    expect(prompt).toContain("모양을 물어야 하는 image 는 하는 일을 말하지 말고 묻기만 합니다");
+    expect(prompt).toContain("**만들겠다고 말하지 말고** 어떤 모양으로 만들지 묻는 한 문장");
   });
 
   it("장 번호 없이 다시 그려 · 고쳐 달라면 talk 가 아니라 그 갈래로 고르게 한다", () => {

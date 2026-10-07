@@ -130,6 +130,16 @@ describe("고칠 이미지 번호 (2차 D2)", () => {
     expect(easyChatPrompt([], "고쳐줘", 0, false, false, false)).not.toContain("`target`");
   });
 
+  /**
+   * Task 12 실제 모델 확인 — 이미지 둘을 만들고 「고마워」를 주고받은 뒤 「글자를 더 크게 고쳐줘」에 묻지 않고
+   * 마지막 이미지를 골랐다(2/2). 사이에 다른 말이 끼면 「바로 앞 이미지 이야기」가 아니다.
+   */
+  it("둘 이상이면 가리킴 없는 고치기는 마지막 이미지로 짐작하지 말고 묻게 한다", () => {
+    const prompt = easyChatPrompt([], "글자를 더 크게 고쳐줘", 0, false, false, true, { images: 둘 });
+    expect(prompt).toContain("바로 앞 턴에서 만든 이미지 이야기를 그 사이 다른 말 없이 이어 가면 0");
+    expect(prompt).toContain("마지막 이미지라고 짐작하지 마세요");
+  });
+
   it("마지막 결과가 카드뉴스면 콕 집지 않은 고치기는 원고 고치기라고 알린다", () => {
     const prompt = easyChatPrompt([], "고쳐줘", 0, true, false, true, { lastIsImage: false });
     expect(prompt).toContain("마지막으로 만든 것은 카드뉴스입니다");

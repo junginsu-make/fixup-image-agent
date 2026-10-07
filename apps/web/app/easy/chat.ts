@@ -374,7 +374,6 @@ export function fitButtonDecision(decision: EasyDecision, options: EasyAvailabil
   return { wants: "talk", reply: fitted.wants === "talk" && fitted.reply ? fitted.reply : CANNOT_DO_NOW };
 }
 
-/** 마지막 줄(단추 답 실패 짝은 건너뛴다)이 물음이면 그 물음 · 답 표시 안내(2차 D1). */
 /**
  * 장 번호 없는 「다시 그려줘」 · 「한 장 고쳐줘」(Task 12 실제 모델 확인). talk 로 고르면 장 번호 물음 줄 ·
  * 단추가 안 생긴다. 쓸 수 있는 갈래 이름만 적는다(A1).
@@ -387,6 +386,7 @@ function 장번호없는말(갈래: readonly EasyWant[]): string[] {
   ];
 }
 
+/** 마지막 줄(단추 답 실패 짝은 건너뛴다)이 물음이면 그 물음 · 답 표시 안내(2차 D1). */
 function 물음뒤줄(history: readonly EasyMessage[], 갈래: readonly EasyWant[]): string[] {
   const ask = askChain(history)?.ask;
   return ask && ask.kind !== "ad" ? easyAskAnswerLines({ kind: ask.kind, text: ask.text }, 갈래) : [];
