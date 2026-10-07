@@ -88,7 +88,7 @@ function 모두옛것(see: readonly string[], old: ReadonlySet<number> | undefin
 }
 
 const 오래됨 = (ns: readonly number[]) =>
-  `결과물 ${ns.join(" · ")} 은 오래되어 이 대화에서는 볼 수 없습니다. 지우지 않았다면 라이브러리에서 열어 볼 수 있습니다. 안 보이면 사이드바에서 프로젝트를 골라 두었는지 보고 「전체 보기」를 눌러 주세요.`;
+  `결과물 ${ns.join(" · ")} 은 오래되어 이 대화에서는 볼 수 없습니다. 지우지 않았다면 라이브러리에서 열어 볼 수 있습니다.`;
 
 export async function rewriteReplyBySeeing(input: SeeInput): Promise<EasySeen> {
   if (없는사진을골랐나(input.see, input.photos.length)) return { kind: "failed" };
