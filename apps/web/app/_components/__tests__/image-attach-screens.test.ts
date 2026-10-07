@@ -60,6 +60,34 @@ const SCREENS: Screen[] = [
     disabled: "disabled: uploading",
     tabIndex: "tabIndex={uploading ? -1 : 0}",
   },
+  // ── 2단계 ──
+  {
+    name: "카드뉴스 · 참고 이미지",
+    file: "../../sns/_components/attachment-picker.tsx",
+    zone: "attachDrop",
+    multiple: true,
+    onFiles: "onFiles: (files, notice) => void upload(files, notice)",
+    disabled: "disabled: uploading",
+    tabIndex: "tabIndex={uploading ? -1 : 0}",
+  },
+  {
+    name: "이미지 만들기 · 참고 이미지",
+    file: "../../poster/_components/reference-picker.tsx",
+    zone: "referenceDrop",
+    multiple: true,
+    onFiles: "onFiles: (files, notice) => void upload(files, notice)",
+    disabled: "disabled: uploading",
+    tabIndex: "tabIndex={uploading ? -1 : 0}",
+  },
+  {
+    name: "카드뉴스 레이아웃 · 레퍼런스",
+    file: "../../sns/layout/layout-client.tsx",
+    zone: "referenceDrop",
+    multiple: false,
+    onFiles: "onFiles: (files, notice) => void referenceUpload.upload(files, notice)",
+    disabled: "disabled: referenceUpload.busy",
+    tabIndex: "tabIndex={referenceUpload.busy ? -1 : 0}",
+  },
 ];
 
 function read(file: string): string {

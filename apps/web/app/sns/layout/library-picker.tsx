@@ -45,11 +45,41 @@ export function useLibraryImages() {
   return { images, error, loading, add };
 }
 
-/** 그림을 골라 올리는 버튼. 하던 일을 끊지 않게 이 자리에 둔다. */
-export function LibraryUploadButton({ onUploaded }: { onUploaded(image: LibraryImage): void }) {
+/**
+ * 레퍼런스 한 장을 올리는 일. **단추와 끌어다 놓기·붙여넣기가 함께 쓴다**(2026-10-07).
+ *
+ * 둘이 따로 올리면 「올리는 중」이 갈려, 단추로 올리는 동안 놓은 그림이 겹쳐 올라간다.
+ * `notice` 는 끌어다 놓기가 덧붙인 말(「한 장만 씁니다」) — 다 올린 뒤에 보인다.
+ */
+export function useLibraryUpload(onUploaded: (image: LibraryImage) => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
+  async function upload(files: ArrayLike<File> | null, note?: string) {
+    const file = files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      onUploaded(await uploadLibraryImage(file));
+      if (note) setNotice(note);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "그림을 올리지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { busy, error, notice, upload, fail: (message: string) => { setNotice(null); setError(message); } };
+}
+
+export type LibraryUpload = ReturnType<typeof useLibraryUpload>;
+
+/** 그림을 골라 올리는 버튼. 하던 일을 끊지 않게 이 자리에 둔다. */
+export function LibraryUploadButton({ uploader }: { uploader: LibraryUpload }) {
+  const { busy, error, notice, upload } = uploader;
   return (
     <label className="grid gap-1">
       <span
@@ -63,24 +93,16 @@ export function LibraryUploadButton({ onUploaded }: { onUploaded(image: LibraryI
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
           disabled={busy}
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
+          onChange={(event) => {
+            const files = event.target.files ? Array.from(event.target.files) : [];
             // 같은 파일을 다시 골라도 change 가 뜨게 값을 비운다.
             event.target.value = "";
-            if (!file) return;
-            setBusy(true);
-            setError(null);
-            try {
-              onUploaded(await uploadLibraryImage(file));
-            } catch (cause) {
-              setError(cause instanceof Error ? cause.message : "그림을 올리지 못했습니다.");
-            } finally {
-              setBusy(false);
-            }
+            void upload(files);
           }}
         />
       </span>
       {error ? <span className="text-xs text-destructive">{error}</span> : null}
+      {!error && notice ? <span className="text-xs text-muted-foreground">{notice}</span> : null}
     </label>
   );
 }
