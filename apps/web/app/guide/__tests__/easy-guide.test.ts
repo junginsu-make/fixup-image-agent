@@ -61,6 +61,22 @@ describe("쉽게 설명서 · 2026-10-07 기능", () => {
     expect(SEE_FAILED.startsWith("지금은 이미지를 볼 수 없었습니다.")).toBe(true);
   });
 
+  /**
+   * **100개 밖의 옛 결과물만 고르면 SEE_FAILED 가 아니다**(최종 수정, 2차 최종 리뷰). `see-turn.ts` 는 고른 것이
+   * 모두 최근 작업 100개보다 앞선 결과물이면 「오래되어 이 대화에서는 볼 수 없습니다 … 라이브러리에서 열어 볼 수
+   * 있습니다」라고 답한다. 설명서가 그 예외를 말해야 한다. 코드 쪽 문장이나 100 이 바뀌면 이 시험이 알린다.
+   */
+  it("오래된 결과물을 보라고 하면 다른 말을 한다는 것을 사실대로 적는다", () => {
+    const seeTurn = readFileSync(new URL("../../../lib/easy/see-turn.ts", import.meta.url), "utf8");
+    const imageList = readFileSync(new URL("../../../lib/easy/image-list.ts", import.meta.url), "utf8");
+    expect(seeTurn).toContain("은 오래되어 이 대화에서는 볼 수 없습니다. 지우지 않았다면 라이브러리에서 열어 볼 수 있습니다.");
+    expect(imageList).toContain("export const RECENT_RESULT_WORKS = 100;");
+    const text = 주석을뺀다(source);
+    expect(text).toContain("최근에 만든 작업 100개보다 앞선 것");
+    expect(text).toContain("오래되어 이 대화에서는 볼 수 없다");
+    expect(text).toContain("라이브러리에서 열어 보시라고");
+  });
+
   /** 2026-10-06 부터 말로 고친다(#254). 「다시 적어서 다시 만든다」는 옛 안내다. */
   it("고치는 법이 옛 안내로 남아 있지 않다", () => {
     expect(source).not.toContain("다시 적어서 다시 만든다");
