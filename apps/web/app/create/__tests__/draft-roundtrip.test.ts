@@ -20,10 +20,10 @@ function fixture(): PdpDraftInput {
     attachmentIntents: { anchor: "제품은 그대로", style: "색만 참고" },
     styleReference: { id: "style-1", name: "참조", imageBase64: "BBBB", mimeType: "image/png", description: "파랑", reason: "선택" },
     styleReferenceEnabled: false,
-    imageModel: "gpt-image-2", characterId: "character-1", characterAngles: ["front", "back"],
+    imageModel: "nano-banana-pro", characterId: "character-1", characterAngles: ["front", "back"],
     preserveProduct: false, startMode: "text", analyzedBlueprint: blueprint,
     textDraft: { stage: "keyVisual", text: "작성 중인 원문", brief: null, blueprint, originalBlueprint: blueprint,
-      imageModel: "gpt-image-2", keyVisual: { base64: "CCCC", mimeType: "image/png" },
+      imageModel: "nano-banana-pro", keyVisual: { base64: "CCCC", mimeType: "image/png" },
       copyIntensity: "strong", gapPolicy: "ask", preserveProduct: false, characterId: "character-1",
       characterAngles: ["front"], styleReferenceEnabled: false },
     editorState: { currentSectionIndex: 0, sections: [section], sectionKeys: ["S1"], sectionOptions: {},
@@ -62,7 +62,7 @@ describe("T-SAVE: 화면 입력부터 IndexedDB 왕복", () => {
   it("모델·캐릭터·각도·제품 보존과 텍스트 중간 상태를 보존한다", async () => {
     const input = fixture(); ids.push(input.id!);
     await savePdpDraft(input);
-    expect(await getPdpDraft(input.id!)).toMatchObject({ imageModel: "gpt-image-2", characterId: "character-1",
+    expect(await getPdpDraft(input.id!)).toMatchObject({ imageModel: "nano-banana-pro", characterId: "character-1",
       characterAngles: ["front", "back"], preserveProduct: false, startMode: "text",
       analyzedBlueprint: input.result!.blueprint,
       textDraft: { stage: "keyVisual", text: "작성 중인 원문", keyVisual: { base64: "CCCC" } } });
@@ -159,7 +159,7 @@ describe("상품 종류와 목적이 초안을 따라다닌다", () => {
         stage: "input", text: "나무 도마를 팝니다", brief: null,
         blueprint: null, originalBlueprint: null,
         styleReferenceEnabled: true, preserveProduct: true, characterAngles: [],
-        keyVisual: null, imageModel: "gpt-image-2", copyIntensity: "normal", gapPolicy: "ask",
+        keyVisual: null, imageModel: "nano-banana-pro", copyIntensity: "normal", gapPolicy: "ask",
         productKind: "physical", pageGoal: "inquiry",
       } as never,
     });

@@ -337,7 +337,8 @@ export function SectionGallery({
             이미지 {missingCount}장 만들기
           </Button>
           <span className="text-[11px] text-subtle-foreground">
-            전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount)}장 차감
+            {/* 지금 요금 방식으로 센다 — 위 「남은 장 만들기」와 같은 셈이다(2026-10-08, 전에는 옛 계산·「장」이었다). */}
+            전부 성공 시 최대 {imageCreditUnits(imageModel, missingCount, { policy: creditPolicy })}{단위} 차감
           </span>
         </section>
       ) : null}

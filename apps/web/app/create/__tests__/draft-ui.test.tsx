@@ -36,12 +36,12 @@ it.each([false, true])("T-SAVE UI(v3=%s): 모델·캐릭터 복원과 브리프 
   const input: PdpDraftInput = { id: "ui-draft", appState: "editor", preparedImage: null, modelImage: null, modelImageUsage: null,
     result: { originalImage: "AAAA", blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [createSectionFor([])] } },
     additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
-    imageModel: "gpt-image-2", characterId: "chosen-character", characterAngles: ["back"], preserveProduct: false,
+    imageModel: "nano-banana-pro", characterId: "chosen-character", characterAngles: ["back"], preserveProduct: false,
   };
   await savePdpDraft(input);
   await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
   await flush();
-  expect(captured.editor.imageModel).toBe("gpt-image-2");
+  expect(captured.editor.imageModel).toBe("nano-banana-pro");
   expect(captured.editor.characterId).toBe("chosen-character");
   expect(captured.editor.characterAngles).toEqual(["back"]);
   expect(captured.editor.preserveProduct).toBe(false);
