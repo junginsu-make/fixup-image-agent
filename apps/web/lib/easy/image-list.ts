@@ -6,6 +6,7 @@ import { editedRequestIds, pickRowImage } from "../../app/easy/row-image";
 import { posterStoresForUser } from "../poster/stores";
 import { cardnewsProjectIds } from "./cardnews-steps";
 import { READ_BATCH, readInBatches } from "./read-batches";
+import { errorLogText } from "./log-text";
 
 /**
  * **이 대화의 결과물 사실**(2026-10-07 2차 설계 D2 · D5).
@@ -19,7 +20,8 @@ import { READ_BATCH, readInBatches } from "./read-batches";
  * 없으면 저장소를 안 읽는다.
  *
  * **한 턴에 읽는 수를 묶는다**(최종 수정 10, 보안 리뷰). 같은 작업은 한 번, 최근 작업 `RECENT_RESULT_WORKS` 개만 읽는다.
- * 그보다 오래된 작업은 번호를 그대로 두고 「모름」이다 — 고치기 · 보기는 지금 확인할 수 없다고 답한다.
+ * 그보다 오래된 작업은 번호를 그대로 두고 「모름」이다. 그 번호는 `unreadOld` 에 따로 둔다(후속 Task 2) — 잠깐 못 읽은
+ * 것은 「잠시 뒤 다시」가 맞지만 100개 밖은 기다려도 안 읽으므로 고치기 · 보기가 사실대로(오래됨) 답한다.
  */
 type Row = { id: string; role: string; workId?: string | null; body?: string | null; createdAt?: string };
 
@@ -46,6 +48,11 @@ export interface EasyImageFacts {
   madeImage: boolean;
   /** 지운 것을 뺀 이 대화의 마지막 결과물이 이미지인가(모르는 것이면 이미지로 본다). 카드뉴스면 false. */
   lastIsImage: boolean;
+  /**
+   * 최근 `RECENT_RESULT_WORKS` 개 밖이라 읽지 않은 결과물 번호(후속 Task 2). 그 entry 는 지금처럼 `unknown` 이다 —
+   * 번호 · 이름표 · `madeImage` · `lastIsImage` 는 그대로고 답하는 말만 가른다. 없으면 오래된 것이 없다.
+   */
+  unreadOld?: ReadonlySet<number>;
 }
 
 const 비었다: EasyImageFacts = { entries: [], posters: new Set(), pictures: new Map(), madeImage: false, lastIsImage: false };
@@ -54,9 +61,15 @@ const 비었다: EasyImageFacts = { entries: [], posters: new Set(), pictures: n
 export const RECENT_RESULT_WORKS = 100;
 
 /** 통째로 못 읽었을 때(최종 수정 7). 번호는 그대로, 모두 「모름」 — 이미지일 수 있다. */
-function 모두모름(rows: readonly Row[]): EasyImageFacts {
+function 모두모름(rows: readonly Row[], unreadOld: ReadonlySet<number>): EasyImageFacts {
   const entries = describeEasyResults(rows, numberEasyResults(rows), () => ({ kind: "unknown", state: "unknown" }));
-  return { entries, posters: new Set(), pictures: new Map(), madeImage: entries.length > 0, lastIsImage: entries.length > 0 };
+  return { entries, posters: new Set(), pictures: new Map(), madeImage: entries.length > 0, lastIsImage: entries.length > 0, unreadOld };
+}
+
+/** 오래되어 안 읽은 작업의 결과물 번호(후속 Task 2). */
+function 오래된번호(rows: readonly Row[], 오래된: readonly string[]): ReadonlySet<number> {
+  const 작업 = new Set(오래된);
+  return new Set(numberEasyResults(rows).filter((one) => 작업.has(one.workId)).map((one) => one.n));
 }
 
 /** 그림이 없는 줄이 이만큼 지나면 못 만든 것으로 본다(`row-image.ts` 의 고치기 실패 시간과 같다). */
@@ -69,6 +82,7 @@ export async function loadEasyImages(userId: string, rows: readonly Row[], now =
   const ids = [...new Set([...작업들].reverse())].slice(0, RECENT_RESULT_WORKS);
   const 읽을것 = new Set(ids);
   const 오래된 = [...new Set(작업들)].filter((id) => !읽을것.has(id));
+  const unreadOld = 오래된번호(rows, 오래된);
   try {
     const stores = posterStoresForUser(userId);
     // 못 읽은 작업은 「모름」이다 — 없는 것(지운 것)과 가른다(리뷰 1차 수정 2).
@@ -107,9 +121,10 @@ export async function loadEasyImages(userId: string, rows: readonly Row[], now =
       entries, posters, pictures,
       madeImage: entries.some(이미지일수있다),
       lastIsImage: 이미지일수있다(마지막),
+      unreadOld,
     };
   } catch (error) {
-    console.warn("[easy] 이 대화의 결과물을 읽지 못했습니다", error instanceof Error ? error.message : error);
-    return 모두모름(rows);
+    console.warn("[easy] 이 대화의 결과물을 읽지 못했습니다", errorLogText(error));
+    return 모두모름(rows, unreadOld);
   }
 }

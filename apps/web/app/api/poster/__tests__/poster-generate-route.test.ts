@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PosterChargedError } from "../../../../lib/poster/flow";
 
 /**
@@ -26,6 +26,14 @@ const submitted: Array<{
 const LIBRARY: Array<{ id: string; storagePath: string }> = [];
 const updates: Array<Record<string, unknown>> = [];
 let submitThrows: Error | null = null;
+/** 작업 읽기가 던질 것(저장소 원문). */
+let projectGetThrows: Error | null = null;
+/** 참이면 `createPosterFalClients` 가 진짜처럼 설정 오류를 던진다. */
+let falKeyMissing = false;
+/** 참이면 가짜 `submitPoster` 도 진짜처럼 조립을 돌려 거절이면 던진다. */
+let runBuild = false;
+/** 조립이 거절한 문장. `runBuild` 일 때 가짜가 적어 둔다. */
+let builtRejection: string | undefined;
 
 vi.mock("sharp", () => ({
   default: () => ({ metadata: async () => ({ width: 800, height: 600 }) }),
@@ -60,7 +68,10 @@ vi.mock("../../../../lib/membership/api", () => ({
 vi.mock("../../../../lib/poster/stores", () => ({
   posterStoresForUser: () => ({
     projects: {
-      get: async () => project,
+      get: async () => {
+        if (projectGetThrows) throw projectGetThrows;
+        return project;
+      },
       /**
        * **patch 를 담기만 하면 안 된다.** 그러면 두 번째 요청이 첫 번째가 바꾼
        * 상태를 못 보고, 동시 제출 구멍이 시험에 안 보인다.
@@ -89,10 +100,21 @@ vi.mock("../../../../lib/poster/references", () => ({
 
 vi.mock("../../../../lib/teams/store", () => ({ teamIdOf: async () => null }));
 
-vi.mock("../../../../lib/poster/providers", () => ({
-  createPosterFalClients: () => ({ queue: {} }),
-  PosterProviderConfigurationError: class extends Error {},
-}));
+vi.mock("../../../../lib/poster/providers", () => {
+  // 진짜와 같은 문장이다 — 환경변수 이름이 화면에 새는지 본다.
+  class PosterProviderConfigurationError extends Error {
+    constructor(readonly missing: string[]) {
+      super(`다음 환경변수가 없어 포스터를 만들 수 없습니다: ${missing.join(", ")}`);
+    }
+  }
+  return {
+    createPosterFalClients: () => {
+      if (falKeyMissing) throw new PosterProviderConfigurationError(["FAL_KEY"]);
+      return { queue: {} };
+    },
+    PosterProviderConfigurationError,
+  };
+});
 
 vi.mock("../../../../lib/fal/upload", () => ({
   uploadUniqueReferences: async (rows: Array<{ id: string }>) => {
@@ -104,9 +126,16 @@ vi.mock("../../../../lib/fal/upload", () => ({
 
 vi.mock("../../../../lib/poster/flow", async () => ({
   ...(await vi.importActual<typeof import("../../../../lib/poster/flow")>("../../../../lib/poster/flow")),
-  submitPoster: async (job: (typeof submitted)[number]) => {
+  submitPoster: async (job: (typeof submitted)[number], _dependencies: unknown, build?: unknown) => {
     submitted.push(job);
     if (submitThrows) throw submitThrows;
+    if (runBuild) {
+      // 진짜 `submitPoster` 처럼 넘긴 조립(없으면 처음 만들기 조립)을 돌린다.
+      const { buildPosterJob } = await vi.importActual<typeof import("@fixup/poster-core")>("@fixup/poster-core");
+      const built = ((build ?? buildPosterJob) as (job: unknown) => { rejected?: string })(job);
+      builtRejection = built.rejected;
+      if (built.rejected) throw new Error(built.rejected);
+    }
     await new Promise((resolve) => setTimeout(resolve, 30));
     return { requestRowId: "req1", falRequestId: "fal1", endpoint: "e", estimatedUsd: 1 };
   },
@@ -131,6 +160,10 @@ beforeEach(() => {
   submitted.length = 0;
   updates.length = 0;
   submitThrows = null;
+  projectGetThrows = null;
+  falKeyMissing = false;
+  runBuild = false;
+  builtRejection = undefined;
   reserved.length = 0;
   finalized.length = 0;
   reserveFails = false;
@@ -359,5 +392,127 @@ describe("돈이 장부에 남는가", () => {
   it("예약 열쇠를 작업에 적어 둔다 — 확정이 다른 요청에서 일어난다", async () => {
     await call();
     expect(project!.data.reservationId).toBe("req-key");
+  });
+});
+
+/**
+ * **예상 못 한 오류의 원문을 화면에 보내지 않는다**(2026-10-07 후속 Task 12, 고치기의 Task 7 과 같은 규칙).
+ *
+ * 마지막 `catch` 가 모든 예외를 원문으로 돌려줘 Supabase · fal 글과 환경변수 이름이 「다양하게」 화면에
+ * 떴다. 상태 코드는 그대로(500 · 503) 두고 글만 일반 문장으로 바꾼다 — 화면과 쉽게 모드가 받는 상태가
+ * 전과 같다. 우리가 일부러 쓴 문장은 그대로 보인다.
+ */
+describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
+  const 날것 = new Error('relation "poster_projects" does not exist (https://abc.supabase.co/rest/v1/x?token=secret)');
+  const 일반문장 = "생성을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+  let errors: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => errors.mockRestore());
+
+  const logged = () => errors.mock.calls.flat().map(String).join(" ");
+
+  it("작업 읽기가 원문으로 실패하면 500 + 일반 문장, 원문은 주소를 가려 서버 기록에만", async () => {
+    projectGetThrows = 날것;
+    const response = await call();
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ ok: false, message: 일반문장 });
+    expect(text).not.toContain("poster_projects");
+    expect(text).not.toContain("supabase");
+    expect(logged()).toContain("poster_projects");
+    expect(logged()).not.toContain("https://");
+  });
+
+  it("예약 뒤 원문 오류도 가리고, 묶은 장과 자리는 지금처럼 돌려준다", async () => {
+    submitThrows = 날것;
+    const response = await call();
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ ok: false, message: 일반문장 });
+    expect(reserved).toHaveLength(1);
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
+    expect(project!.status).toBe("ready");
+  });
+
+  it("fal 이 준 원문(계정 잠김 사유 등)도 화면에 안 보낸다", async () => {
+    const { FalQueueFailure } = await import("../../../../lib/fal/queue");
+    submitThrows = new FalQueueFailure(403, JSON.stringify({ message: "User is locked. Reason: Exhausted balance." }));
+    const response = await call();
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ ok: false, message: 일반문장 });
+    expect(text).not.toContain("locked");
+    expect(logged()).toContain("Exhausted balance");
+  });
+
+  it("설정 오류는 503 그대로, 환경변수 이름과 `missing` 칸은 화면에 안 보낸다", async () => {
+    falKeyMissing = true;
+    const response = await call();
+    expect(response.status).toBe(503);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ ok: false, message: 일반문장 });
+    expect(text).not.toContain("FAL_KEY");
+    expect(logged()).toContain("FAL_KEY");
+    // 예약 전에 막혔다 — 돈이 오가지 않았고 자리도 돌려준다.
+    expect(reserved).toEqual([]);
+    expect(project!.status).toBe("ready");
+  });
+
+  it("조립이 거절한 우리 문장은 500 · 그 글 그대로 — 묶은 장도 돌려준다", async () => {
+    // 따라 할 첨부가 없으면 원본 비율의 크기를 못 읽어 조립이 거절한다.
+    project!.data.referenceIds = [];
+    runBuild = true;
+    const response = await call();
+    expect(builtRejection, "조립이 거절해야 하는 픽스처다").toBeTruthy();
+    expect(response.status).toBe(500);
+    // 쉽게 모드가 가리지 않게 우리 문장이라고 표시하고, 같은 것을 또 보내도 같은 곳에서 막히니 다시 보내기를 안 띄운다.
+    expect(await response.json()).toEqual({ ok: false, message: builtRejection, userFacing: true, retryable: false });
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
+  });
+
+  it("돈이 나간 뒤의 실패는 지금 문장 · 500 그대로 — 자리는 안 돌려준다, 장부 닫기는 지금 그대로", async () => {
+    submitThrows = new PosterChargedError("fal-1", 날것);
+    const response = await call();
+    expect(response.status).toBe(500);
+    // 다시 보내면 두 번째 작업이 만들어져 값이 또 나간다 — 다시 보내기를 안 띄운다.
+    expect(await response.json()).toEqual({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다.", userFacing: true, retryable: false });
+    // 안쪽 catch 는 이 갈래에서도 예약을 닫는다(돈 흐름 0줄 — 지금 동작을 고정만 한다).
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
+    expect(project!.status).toBe("generating");
+  });
+
+  /* fal 계정 풀의 두 문장은 `queue.ts` 가 일부러 화면에 넘기는 글이다. 원문은 풀이 기록에만 남겼다. */
+  it("계정 풀이 몰렸다 · 준비 문제 글은 500 · 그 글 그대로", async () => {
+    const { FalPoolBusyError, FalPoolUnavailableError } = await import("../../../../lib/fal/pool/router");
+    for (const pool of [new FalPoolBusyError(), new FalPoolUnavailableError(503)]) {
+      finalized.length = 0;
+      project = { ...base, data: { ...base.data } };
+      submitThrows = pool;
+      const response = await call();
+      expect(response.status, pool.name).toBe(500);
+      // 잠시 뒤 다시 하면 풀린다 — 다시 보내기는 그대로 둔다(`retryable` 을 싣지 않는다).
+      expect(await response.json()).toEqual({ ok: false, message: pool.message, userFacing: true });
+      expect(finalized).toEqual([{ success: false, units: 0, error: "poster_submit_failed" }]);
+    }
+  });
+
+  it("일부러 쓴 안내는 그대로다 — 작업 없음 404, 방금 시작 409, 예약 거절은 받은 응답 그대로", async () => {
+    project = undefined;
+    const missing = await call();
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ ok: false, message: "포스터 작업을 찾을 수 없습니다." });
+
+    project = { ...base, data: { ...base.data }, status: "generating", updatedAt: new Date().toISOString() };
+    const busy = await call();
+    expect(busy.status).toBe(409);
+    expect(await busy.json()).toEqual({ ok: false, message: "방금 만들기를 시작했습니다. 잠시 뒤에 다시 눌러 주세요." });
+
+    project = { ...base, data: { ...base.data } };
+    reserveFails = true;
+    const refused = await call();
+    expect(refused.status).toBe(429);
+    expect(await refused.text()).toBe("한도 초과");
   });
 });

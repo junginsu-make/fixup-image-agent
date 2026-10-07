@@ -13,7 +13,7 @@ import { gridSrc } from "../../_components/grid-src";
 import { ThumbImage } from "../../_components/thumb-image";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
 import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
-import { attachMessage, characterIdByTitle, matchAngles } from "../../_components/character-attach";
+import { attachMessage, characterIdByTitle, matchWithRestore, restoreMissingAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
 import { attachmentNumber } from "@fixup/shared";
 import { openImageViewer } from "../../_components/image-viewer";
@@ -99,6 +99,8 @@ export function ReferencePicker({
   const [sets, setSets] = React.useState<LibraryPickSet[]>([]);
   const [characters, setCharacters] = React.useState<PickableCharacter[]>([]);
   const fileInput = React.useRef<HTMLInputElement>(null);
+  /** 다시 채우는 중인가. 그 사이 또 고르면 같은 그림이 둘 생긴다. */
+  const restoring = React.useRef(false);
 
   /**
    * 묶음 세트도 여기서 부른다.
@@ -136,8 +138,16 @@ export function ReferencePicker({
    * 지키려는 것이므로 「따라 만들기」로 들어가면 뜻이 반대가 된다. 사물
    * 캐릭터라면 화면에서 「제품 그대로 지키기」로 바꾸면 된다.
    */
-  function pickCharacter({ character, angles }: CharacterPick) {
-    const { matched, missing } = matchAngles(references, character.name, angles);
+  async function pickCharacter({ character, angles }: CharacterPick) {
+    if (restoring.current) return;
+    restoring.current = true;
+    setMessage(`'${character.name}' 의 장면을 찾는 중입니다. 라이브러리에 없으면 원본에서 다시 채우는 중입니다…`);
+    // 라이브러리에서 지운 각도는 캐릭터 원본에서 다시 채운 뒤 다시 찾는다(2026-10-07).
+    // 역할은 갱신 함수로 바뀌므로(`changeRole`) 기다린 사이의 다른 변경을 덮지 않는다.
+    const { matched, missing } = await matchWithRestore({
+      images: references, name: character.name, characterId: character.id, angles,
+      restore: restoreMissingAngles, reload: onUploaded,
+    }).finally(() => { restoring.current = false; });
     for (const entry of matched) onRoleChange(entry.image.id, "preserve_person");
     setMessage(attachMessage(character.name, matched.length, missing, characterAngleLabel));
   }
@@ -289,7 +299,7 @@ export function ReferencePicker({
         <CharacterPickerButton
           characters={characters}
           angleLabel={characterAngleLabel}
-          onPick={pickCharacter}
+          onPick={(pick) => void pickCharacter(pick)}
           onReload={onUploaded}
         />
         <span className="text-sm text-muted-foreground">

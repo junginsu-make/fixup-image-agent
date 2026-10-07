@@ -73,6 +73,44 @@ describe("이미지를 보고 답하기", () => {
   });
 
   /**
+   * 후속 Task 2 — 최근 100개 밖이라 읽지 않은 결과물(`unreadOld`)만 골랐으면 판단의 답(못 본 채 쓴 글)을 내보내지
+   * 않고 오래되어 볼 수 없다고 사실대로 말한다. 「잠시 뒤 다시」(SEE_FAILED)는 기다려도 안 되므로 쓰지 않는다.
+   */
+  describe("100개 밖의 옛 결과물 (후속 Task 2)", () => {
+    const 옛사실 = {
+      ...사실,
+      entries: [
+        { n: 3, rowId: "i3", workId: "w3", kind: "unknown" as const, state: "unknown" as const, words: "옛것" },
+        { n: 4, rowId: "i4", workId: "w4", kind: "unknown" as const, state: "unknown" as const, words: "옛것" },
+        { n: 5, rowId: "i5", workId: "w5", kind: "unknown" as const, state: "unknown" as const, words: "모름" },
+        ...사실.entries,
+      ],
+      unreadOld: new Set([3, 4]),
+    };
+
+    it("고른 것이 모두 오래된 번호면 부르지 않고 오래되어 볼 수 없다고 답한다", async () => {
+      expect(await 본다({ see: ["3"], facts: 옛사실 })).toEqual({
+        kind: "old", reply: "결과물 3 은 오래되어 이 대화에서는 볼 수 없습니다. 지우지 않았다면 라이브러리에서 열어 볼 수 있습니다.",
+      });
+      expect(await 본다({ see: ["3", "4", "3"], facts: 옛사실 })).toEqual({
+        kind: "old", reply: "결과물 3 · 4 은 오래되어 이 대화에서는 볼 수 없습니다. 지우지 않았다면 라이브러리에서 열어 볼 수 있습니다.",
+      });
+      expect(받은).toEqual([]);
+    });
+
+    it("오래된 번호와 볼 수 있는 것을 함께 골랐으면 볼 수 있는 것만 본다", async () => {
+      expect(await 본다({ see: ["3", "1"], facts: 옛사실 })).toMatchObject({ kind: "seen" });
+      expect(받은).toHaveLength(1);
+    });
+
+    it("오래되지 않은 못 읽은 번호 · 없는 번호가 섞이면 지금처럼 none 이다", async () => {
+      expect(await 본다({ see: ["3", "5"], facts: 옛사실 })).toEqual({ kind: "none" });
+      expect(await 본다({ see: ["3", "9"], facts: 옛사실 })).toEqual({ kind: "none" });
+      expect(await 본다({ see: ["5"], facts: 옛사실 })).toEqual({ kind: "none" });
+    });
+  });
+
+  /**
    * Fix round 1 — 이번 턴에 확인한 사진이 없는데 사진(「p1」)을 보라고 했으면 판단의 답(보지 못한 사진 이야기)을
    * 그대로 내보내지 않는다. 새로고침 뒤 말 답에서는 프롬프트가 물음 줄의 사진 수를 알려 주지만 볼 사진은 없다.
    */

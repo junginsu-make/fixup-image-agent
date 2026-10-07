@@ -1,9 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  ASK_ANSWER_NOTE, answerableAskId, askAnchor, askChain, askInstruction, buttonDecision, chosenFor, readButtonAnswer,
-  readEasyPick, settleTypedAnswer,
+  ASK_ANSWER_NOTE, answerableAskId, askAnchor, askChain, askInstruction, buttonDecision, chosenFor, closedAnswerRows,
+  readButtonAnswer, readEasyPick, settleTypedAnswer,
 } from "../ask-chain";
-import { askBody, sayBody, withPick } from "../row-marks";
+import { askBody, plainTyped, sayBody, withPick } from "../row-marks";
 import { AD_ANSWER_NOTE, AD_CHOICE_IMAGE, AD_QUESTION } from "../ad-ask";
 import { CANNOT_DO_NOW, NOTHING_TO_EDIT, fitButtonDecision } from "../chat";
 import { NOT_MADE_YET } from "../cardnews-after";
@@ -79,6 +80,61 @@ describe("지금 답할 수 있는 물음 줄 (화면의 단추 자리, Review F
     expect(answerableAskId([...앞, 말("u2", "세로로")])).toBeUndefined();
     expect(answerableAskId([...앞, 말("u2", withPick("이대로 만들기", { ratio: "1:1" })), 도우미("s", sayBody("만들겠습니다.")), { id: "i1", role: "image", body: "" }])).toBeUndefined();
     expect(answerableAskId([말("u1", "안녕"), 도우미("a", "안녕하세요")])).toBeUndefined();
+  });
+});
+
+/**
+ * 후속 Task 3 — 장 물음에 다시 그리기로 답하면(`cardAsk`) 서버는 사용자 줄을 고른 값 표시 없이 남겨 물음을 닫는다.
+ * 화면이 붙인 줄에 표시가 남으면 [물음, 단추 답] 대체 규칙으로 단추가 새로고침 전까지 다시 떴다.
+ */
+describe("서버가 닫은 장 물음 답은 화면 줄에서도 표시를 뗀다 (closedAnswerRows)", () => {
+  const 장물음 = 물음("q1", "card", { wants: "card_redo", count: 5 });
+  const 앞 = [말("u1", "카드뉴스 다시 그려줘"), 장물음];
+  const 단추답 = 말("user-pending-1", withPick("2번", { card: 2 }));
+
+  it("「2번」 단추 → cardAsk 응답 뒤에는 단추를 달 물음이 없다 — 서버 줄과 같다", () => {
+    expect(answerableAskId([...앞, 단추답])).toBe("q1");
+    const 줄 = closedAnswerRows([...앞, 단추답], "user-pending-1", "2번");
+    expect(줄).toEqual([...앞, 말("user-pending-1", "2번")]);
+    expect(answerableAskId(줄)).toBeUndefined();
+  });
+
+  it("다른 줄과 받은 목록은 그대로 둔다(새 목록)", () => {
+    const 원래 = [...앞, 단추답];
+    const 줄 = closedAnswerRows(원래, "user-pending-1", "2번");
+    expect(원래[2]!.body).toBe(withPick("2번", { card: 2 }));
+    expect(줄[0]).toBe(원래[0]);
+    expect(줄[1]).toBe(원래[1]);
+    expect(closedAnswerRows(원래, "없는-id", "2번")).toEqual(원래);
+  });
+
+  /** Review Focus 4 — 실패한 단추 답은 다시 눌러야 한다. 표시 떼기는 성공한 cardAsk 응답에서만. */
+  it("화면은 성공한 cardAsk 응답에서만 표시를 떼고, 실패 길에서는 안 뗀다 — 실패하면 단추가 남는다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    const 떼기 = 화면.indexOf("if (body.ok && body.cardAsk) setMessages((current) => closedAnswerRows(current, `user-${자리}`, plainTyped(prompt)));");
+    expect(떼기).toBeGreaterThan(0);
+    expect(떼기).toBeLessThan(화면.indexOf("if (body.ok && cardnews.take(body)) return;"));
+    expect(화면.split("closedAnswerRows(").length).toBe(2);
+    expect(answerableAskId([...앞, 단추답])).toBe("q1");
+  });
+
+  /**
+   * 후속 최종 수정 4 — 서버는 친 말을 `plainTyped` 로 풀어 남긴다(`generate/route.ts`). 화면이 다시 쓰는 줄도 같은
+   * 글이어야 한다. 친 말에 「;pick=...」이 섞여 있으면 날 글로 다시 쓴 줄은 여전히 단추 답으로 읽혀 단추가 다시 떴다.
+   */
+  it("친 말에 고른 값 표시 글자가 섞여도, 서버처럼 풀어 다시 쓰면 단추가 다시 안 뜬다", () => {
+    const 친말 = withPick("2번", { card: 2 });
+    const 친줄 = 말("user-pending-1", 친말);
+    expect(answerableAskId(closedAnswerRows([...앞, 친줄], "user-pending-1", 친말))).toBe("q1");
+    const 줄 = closedAnswerRows([...앞, 친줄], "user-pending-1", plainTyped(친말));
+    expect(줄[2]!.body).toBe(plainTyped(친말));
+    expect(answerableAskId(줄)).toBeUndefined();
+  });
+
+  it("화면은 다시 쓸 글을 서버와 같은 plainTyped 로 풀고, 그 함수를 row-marks 에서 가져온다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain("closedAnswerRows(current, `user-${자리}`, plainTyped(prompt))");
+    expect(화면).toMatch(/import \{[^}]*\bplainTyped\b[^}]*\} from "\.\/row-marks";/);
   });
 });
 

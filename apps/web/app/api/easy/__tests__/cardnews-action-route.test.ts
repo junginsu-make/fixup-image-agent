@@ -365,6 +365,35 @@ describe("다시 만들기는 시작됐는데 대화 저장만 실패하면 (미
 });
 
 /**
+ * **서버 기록에는 오류 덩어리가 아니라 주소를 가린 글을 남긴다**(2026-10-07 후속 Task 11 (d)).
+ * 업체 · 저장소 오류 글에는 서명한 주소가 섞여 온다. 기록 머리말은 그대로다.
+ */
+describe("서버 기록 (후속 Task 11 (d))", () => {
+  it("만들기 실패는 머리말 그대로, 주소를 가린 글로 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: 원고(2) };
+    시작실패 = new Error("fetch failed https://abc.supabase.co/storage/v1/object/sign/a.png?token=SECRET");
+    const { status } = await 보낸다({ action: "generate", projectId: "c1" });
+    expect(status).toBe(500);
+    expect(기록).toHaveBeenCalledWith("[easy] 카드뉴스 generate 실패 project=c1", "fetch failed <url>");
+    기록.mockRestore();
+  });
+
+  it("대화 저장 실패도 머리말 그대로, 글로 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    지난줄들 = [{ id: "r1", role: "image", workId: "c1" }];
+    카드작업들 = { c1: { ...원고(2), data: { ...원고(2).data, flow: { ...원고(2).data.flow, cards: [
+      { index: 1, role: "cover", kind: "generated", copy: { headline: "a" }, status: "done", assetPath: "me-1/sns/c1/1.png" },
+    ] } } } };
+    남기기실패 = true;
+    expect((await 보낸다({ action: "redo", projectId: "c1", index: 1 })).status).toBe(200);
+    expect(기록).toHaveBeenCalledWith("[easy] 대화에 남기지 못했습니다 conversation=conv", "대화 저장 실패");
+    기록.mockRestore();
+  });
+});
+
+/**
  * **글 모델을 부르는 두 길은 먼저 예약한다**(master 2026-09-30 AI 사용 통제 §3.1).
  *
  * 말로 한 장 고치기와 조건 바꾸기(마지막 장 채우기)는 글 모델을 부른다. 예약 없이 돌면

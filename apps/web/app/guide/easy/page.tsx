@@ -3,6 +3,9 @@ import { GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Summary } from "../_components/summary";
 import { EASY_LOOKS, EASY_RATIOS } from "../../easy/ask";
+import { AD_CHOICE_IMAGE, AD_CHOICE_SPECS } from "../../easy/ad-ask";
+import { resultLabel } from "../../easy/image-numbers";
+import { SEE_FAILED } from "../../easy/see-prompt";
 
 export const metadata = guideMetadata("/guide/easy");
 
@@ -25,6 +28,10 @@ export const metadata = guideMetadata("/guide/easy");
  * 2026-09-29 에 한 번 더 맞췄다 — 입력창 위에서 모델을 고를 수 있고
  * (`model-bar.tsx`), 모양은 주문마다 묻고, 이미지를 붙이면 안 묻고 1:1 로
  * 간다(`ask.ts`).
+ *
+ * 2026-10-07 에 2차 기능을 더했다(후속 Task 5) — 물음 줄 · 결과물 번호 · 보고 답하기 · 광고 물음 ·
+ * 크레딧. 이름표 · 단추 글은 화면이 쓰는 값을 가져다 쓴다(`__tests__/easy-guide.test.ts`).
+ * 표의 「고치려면」도 그때 고쳤다. 2026-10-06(#254)부터 말로 고치는데 「다시 적어 새로 만든다」는 옛 안내로 남아 있었다.
  */
 export default function EasyGuidePage() {
   return (
@@ -48,7 +55,7 @@ export default function EasyGuidePage() {
           },
           {
             title: "모양은 주문마다 한 번 묻습니다",
-            body: "붙인 이미지 없이 주문하면 비율과 그림체를 한 번 묻습니다. 안 고르고 넘어가도 됩니다. 말 속에 이미 있으면 묻지 않습니다.",
+            body: "붙인 이미지 없이 주문하면 비율과 그림체를 한 번 묻습니다. 안 고르고 넘어가도 됩니다. 말 속에 이미 있으면 묻지 않습니다. 물은 바로 뒤에 새로 주문하면 다시 묻지 않습니다.",
           },
           {
             title: "지난 대화가 왼쪽에 쌓입니다",
@@ -110,6 +117,23 @@ export default function EasyGuidePage() {
         </p>
       </Section>
 
+      <Section title="AI 가 물으면 단추로도, 말로도 답합니다" hint="처음 주문을 다시 적지 않아도 됩니다.">
+        <p>
+          모양 말고도 AI 가 물을 때가 있습니다. 한 장으로 만들지 카드뉴스로 만들지, 어느 이미지를
+          고칠지, 카드뉴스의 몇 번 장인지 같은 것입니다. <strong>물음 밑에 단추가 붙습니다.</strong> 단추를
+          눌러도 되고, 「세로로 해줘」처럼 말로 답해도 됩니다.
+        </p>
+        <p>
+          <strong>답하면 처음 주문을 이어 갑니다.</strong> 「고양이 포스터 만들어줘」에 모양을 묻고
+          「포스터 세로」를 고르고 「이걸로 만들기」를 누르면, 주문을 다시 적지 않아도 고양이 포스터를 세로로 만듭니다.
+        </p>
+        <p>
+          <strong>물음은 대화에 남습니다.</strong> 새로고침하거나 나중에 대화를 다시 열어도 그대로
+          있습니다. 단추는 아직 답하지 않은 마지막 물음에만 붙습니다. 사진을 고르는 물음처럼 다시 연
+          뒤 단추가 안 보이면 말로 이어 답하시면 됩니다.
+        </p>
+      </Section>
+
       <Section title="「다양하게」와 무엇이 다른가">
         <p>
           같은 엔진을 씁니다. 이미지를 만드는 방식은 똑같고, <strong>고를 것의 수</strong>만
@@ -148,7 +172,7 @@ export default function EasyGuidePage() {
               <tr>
                 <td className="py-2 pr-4">고치려면</td>
                 <td className="py-2 pr-4">04 로 돌아가 고친다</td>
-                <td className="py-2">다시 적어서 다시 만든다</td>
+                <td className="py-2">「이미지 2 배경만 바꿔줘」처럼 말로 고친다</td>
               </tr>
             </tbody>
           </table>
@@ -174,6 +198,11 @@ export default function EasyGuidePage() {
           따라갑니다. 비율은 말 속에 적지 않았으면 <strong>정사각형(1:1)</strong>으로
           만듭니다. 다른 비율이 필요하면 「세로로」·「인스타 피드에 올릴」처럼 함께 적어 주세요.
         </p>
+        <p>
+          이미지를 만들거나 고치거나 카드뉴스 원고를 쓰고 나면
+          <strong> 쓴 사진은 입력창에서 내려갑니다.</strong> 다음 주문에 같은 사진을 쓰려면 다시 붙여 주세요. 올린 사진은
+          라이브러리에 남아 있어 거기서 다시 고를 수 있습니다.
+        </p>
       </Section>
 
       <Section title="만든 것은 오른쪽에 모입니다">
@@ -189,6 +218,71 @@ export default function EasyGuidePage() {
         <p>
           아무 이미지나 누르면 크게 열리고, 그 안에서 <strong>이 대화의 결과를 넘겨
           가며</strong> 볼 수 있습니다. 내려받기도 거기 있습니다.
+        </p>
+        <p>
+          라이브러리에서 「쉽게」로 만든 작업의 「과정 보기」를 누르면 <strong>그 대화가 다시
+          열립니다.</strong> 대화를 지웠으면 그 작업에 따라 「다양하게」나 「카드뉴스」 화면이 열립니다.
+        </p>
+      </Section>
+
+      <Section title="만든 것에 번호가 붙습니다" hint="번호로 골라 고칩니다.">
+        <p>
+          만든 결과물마다 「{resultLabel("image", 1)}」·「{resultLabel("cardnews", 2)}」처럼 번호가
+          붙습니다. 이미지와 카드뉴스가 한 줄로 이어서 번호를 받습니다. 지운 결과물도 번호를 그대로
+          차지해서, 뒤 번호가 당겨지지 않습니다.
+        </p>
+        <p>
+          <strong>번호로 골라 고칩니다.</strong> 「이미지 2 배경만 바꿔줘」·「아까 첫 번째 거 글자 크게」처럼
+          말하면 그 이미지를 고칩니다. 「방금 거」라고 하면 마지막 이미지입니다. 다 만든 이미지가 여럿인데
+          어느 것인지 말에서 알 수 없으면, AI 가 몇 번을 고칠지 묻고 번호 단추를 붙입니다.
+        </p>
+        <p>
+          고친 이미지는 새 번호를 받고, 고치기 전 이미지는 그대로 남습니다. <strong>고치기도 이미지를
+          새로 한 장 만드는 일이라 크레딧이 듭니다.</strong> 카드뉴스 번호는 이미지 고치기로 고치지 않습니다.
+          카드뉴스는 「3번 장 더 짧게」처럼 장 번호로 말씀해 주세요.
+        </p>
+      </Section>
+
+      <Section title="이미지를 보고 답합니다" hint="크레딧이 들지 않습니다.">
+        <p>
+          「방금 거 어때?」·「1번이랑 2번 중 뭐가 나아?」처럼 이미지에 대해 물으면 AI 가 <strong>그
+          이미지를 직접 보고</strong> 답합니다. 붙인 사진을 두고 물어도 됩니다. 한 번에 네 장까지 봅니다.
+        </p>
+        <p>
+          볼 수 없을 때는 지어내지 않습니다. 「{SEE_FAILED}」라고 말합니다. 다만 고른 결과물이 모두 아주 오래된
+          것(이 대화에서 최근에 만든 작업 100개보다 앞선 것)이면, 오래되어 이 대화에서는 볼 수 없다고 말하고 지우지
+          않았다면 라이브러리에서 열어 보시라고 안내합니다.
+        </p>
+      </Section>
+
+      <Section title="「광고 소재」라고 하면 먼저 묻습니다">
+        <p>
+          「광고 소재」는 두 뜻일 수 있습니다. 광고에 쓸 이미지 한 장을 만드는 것과, 만든 이미지를 네이버·구글·카카오
+          규격별로 여러 장 뽑는 것입니다. 그래서 <strong>어느 쪽인지 먼저 묻습니다.</strong>
+        </p>
+        <p>
+          「{AD_CHOICE_IMAGE}」 단추를 누르면 여기서 만듭니다. 「{AD_CHOICE_SPECS}」 단추를 누르면 규격별로 뽑는 법을
+          알려 드리고 「광고소재 열기」 단추를 붙입니다. 규격별로 뽑는 일은 이 대화가 아니라 「광고소재」 화면에서 합니다.
+        </p>
+        <p>
+          「광고 소재」와 함께 「규격별」·「사이즈별」·「리사이즈」·「네이버」처럼 규격을 가리키는 말을 적으면 묻지 않고 바로
+          안내합니다.
+        </p>
+      </Section>
+
+      <Section title="크레딧은 이미지가 나올 때만 듭니다">
+        <ul className="grid gap-2 text-sm leading-7 text-muted-foreground">
+          <li>
+            · <strong className="text-foreground">듭니다.</strong> 이미지 만들기, 이미지 고치기, 카드뉴스의
+            「이대로 만들기」, 카드 한 장 「다시 만들기」
+          </li>
+          <li>
+            · <strong className="text-foreground">들지 않습니다.</strong> 대화, AI 의 물음과 답, 이미지를 보고 답하기,
+            카드뉴스 원고 쓰기와 고치기, 광고 규격 안내
+          </li>
+        </ul>
+        <p>
+          입력창 밑에 적힌 「이미지를 만들면 약 ○」는 만들 때 드는 양입니다. 보낸다고 늘 드는 것이 아닙니다.
         </p>
       </Section>
 
@@ -208,7 +302,7 @@ export default function EasyGuidePage() {
           },
           {
             q: "모양을 물었는데 답을 안 하고 다른 말을 쳤습니다",
-            a: "그 물음은 버려집니다. 아무것도 만들지 않았으니 값도 들지 않습니다. 다시 주문하시면 다시 묻습니다.",
+            a: "친 말이 답이 아니면 그 물음은 거기서 끝납니다. 글은 대화에 남지만 단추는 사라집니다. 그 물음 때문에 값이 들지는 않습니다. 다만 모양을 물은 바로 뒤에 새 주문을 치면 모양을 다시 묻지 않고 바로 만듭니다. 말에 모양이 없으면 정사각형이고, 그때는 크레딧이 듭니다.",
           },
         ]}
       />

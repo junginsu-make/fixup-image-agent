@@ -25,6 +25,9 @@ import type { EasyImageFacts, EasyPicture } from "./image-list";
  * 골랐거나(새로고침 뒤 말 답 — 프롬프트는 물음 줄의 사진 수를 안다) 고른 것을 하나도 못 찾았거나 못 읽었거나
  * 호출이 실패했거나 빈 답이면 `failed`(라우트가 「지금은 이미지를 볼 수 없었습니다…」로 바꾼다, 2차 최종
  * 리뷰 10). 보지 못한 채 지어낸 답을 남기지 않는다. 대화는 멈추지 않는다.
+ *
+ * 고른 것이 모두 최근 100개 밖이라 안 읽은 결과물(`unreadOld`)이면 `old` — 부르지 않고 오래되어 볼 수 없다고 사실대로
+ * 답한다(후속 Task 2). 기다려도 안 되므로 「잠시 뒤 다시」(`failed`)가 아니다. 하나라도 아니면 지금 규칙 그대로다.
  */
 interface SeeInput {
   userId: string;
@@ -37,7 +40,7 @@ interface SeeInput {
   write: (prompt: string, images: readonly StructuredImage[]) => Promise<unknown>;
 }
 
-export type EasySeen = { kind: "seen"; reply: string } | { kind: "none" } | { kind: "failed" };
+export type EasySeen = { kind: "seen"; reply: string } | { kind: "old"; reply: string } | { kind: "none" } | { kind: "failed" };
 
 const 서명시간 = 300;
 const 지난말수 = 6;
@@ -78,10 +81,22 @@ function 없는사진을골랐나(see: readonly string[], photoCount: number): b
   });
 }
 
+/** 고른 것이 모두 100개 밖의 옛 결과물이면 그 번호들(겹친 것은 한 번). 하나라도 아니면 빈 목록. */
+function 모두옛것(see: readonly string[], old: ReadonlySet<number> | undefined): number[] {
+  const 번호들 = see.map(Number);
+  return 번호들.length && old && 번호들.every((n) => old.has(n)) ? [...new Set(번호들)] : [];
+}
+
+const 오래됨 = (ns: readonly number[]) =>
+  `결과물 ${ns.join(" · ")} 은 오래되어 이 대화에서는 볼 수 없습니다. 지우지 않았다면 라이브러리에서 열어 볼 수 있습니다.`;
+
 export async function rewriteReplyBySeeing(input: SeeInput): Promise<EasySeen> {
   if (없는사진을골랐나(input.see, input.photos.length)) return { kind: "failed" };
   const targets = seeTargets(input.see, input.facts.entries, input.photos.length);
-  if (!targets.length) return { kind: "none" };
+  if (!targets.length) {
+    const 옛 = 모두옛것(input.see, input.facts.unreadOld);
+    return 옛.length ? { kind: "old", reply: 오래됨(옛) } : { kind: "none" };
+  }
   try {
     const 그림들 = await Promise.all(targets.map(async (target) => ({ target, image: await 보낼그림(input, target) })));
     const 보낼것 = 그림들.flatMap((one) => (one.image ? [{ label: seeLabel(one.target), image: one.image }] : []));

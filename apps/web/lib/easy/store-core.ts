@@ -63,6 +63,17 @@ export interface EasyMessageRow {
   created_at: string;
 }
 
+/**
+ * **사용자에게 그대로 보일 「대화를 찾을 수 없습니다.」**(2026-10-07 후속 Task 1). 라우트는
+ * 예상 못 한 오류의 원문을 가리는데, 이 글은 우리가 쓴 안내라 이름으로 알아보고 그대로 보인다.
+ */
+export class EasyConversationMissingError extends Error {
+  constructor() {
+    super("대화를 찾을 수 없습니다.");
+    this.name = "EasyConversationMissingError";
+  }
+}
+
 export const CONVERSATION_COLUMNS = "id,user_id,title,created_at,updated_at";
 export const MESSAGE_COLUMNS = "id,conversation_id,role,body,work_id,created_at";
 

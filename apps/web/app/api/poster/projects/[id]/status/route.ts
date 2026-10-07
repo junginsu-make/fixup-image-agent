@@ -15,6 +15,7 @@ import { collectPoster } from "../../../../../../lib/poster/flow";
 import { posterAssetPath, posterThumbPath } from "../../../../../../lib/poster/supabase-store-core";
 import { createSupabaseAdminClient } from "../../../../../../lib/supabase/admin";
 import { markAsAi } from "../../../../../../lib/watermark";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 
 /** 결과도 라이브러리 버킷에 둔다. 포스터만의 버킷을 따로 두지 않는다. */
 const LIBRARY_BUCKET = "library";
@@ -147,6 +148,9 @@ async function modelUsedFor(
   }
 }
 
+/** 설정 오류 때 화면에 보낼 글. 우리 쪽 고장(`classifyFalFailure` 의 `fault`)과 같은 문장이다. */
+const STATUS_UNAVAILABLE = "만든 그림을 가져오지 못했습니다. 잠시 뒤 다시 확인해 주세요.";
+
 export async function POST(request: Request, context: Context) {
   return withLlmMeter(() => handlePost(request, context));
 }
@@ -253,7 +257,9 @@ async function handlePost(request: Request, context: Context) {
     });
   } catch (error) {
     if (error instanceof PosterProviderConfigurationError) {
-      return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
+      // 503 은 지키되 환경변수 이름은 서버 기록에만 남긴다(2026-10-07 후속 Task 12).
+      console.error("[poster] 상태 확인 설정 오류", errorLogText(error));
+      return Response.json({ ok: false, message: STATUS_UNAVAILABLE }, { status: 503 });
     }
 
     /**
@@ -302,11 +308,15 @@ async function handlePost(request: Request, context: Context) {
     }
 
     /**
-     * 제공자가 준 원문을 함께 싣는다. 운영자가 이것으로 fal 기록을 찾는다 —
-     * 사용자에게 보여 줄지는 화면이 정한다.
+     * 제공자가 준 원문은 **서버 기록에** 남긴다. 운영자가 이것으로 fal 기록을 찾는다.
+     *
+     * 전에는 응답의 `detail` 칸에 실었다(2026-10-07 후속 Task 12 에서 뺐다). 화면 셋(포스터 ·
+     * 쉽게 · 셸 폴러) 다 안 읽었고, 우리 쪽 고장이면 저장소 글 · 서명 주소가, fal 거절이면 계정
+     * 잠김 사유가 섞여 나갔다. 상태 코드 · `kind` · 우리 문장은 그대로다.
      */
+    console.error(`[poster] 상태 확인 실패(${verdict.kind})`, errorLogText(error));
     return Response.json(
-      { ok: false, kind: verdict.kind, message: verdict.message, detail: verdict.detail },
+      { ok: false, kind: verdict.kind, message: verdict.message },
       { status: verdict.httpStatus },
     );
   }

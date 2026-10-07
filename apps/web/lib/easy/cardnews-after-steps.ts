@@ -11,6 +11,7 @@ import { saveReferenceImage } from "../reference-images";
 import { createSupabaseAdminClient } from "../supabase/admin";
 import { inOwnerFolder } from "../storage/owner-folder";
 import { EasyStepError, read, relay } from "./relay";
+import { errorLogText } from "./log-text";
 
 /**
  * **만든 카드뉴스 손보기의 서버 일**(3단계 설계 §6). 카드뉴스 라우트를 함수로 부른다 —
@@ -142,7 +143,7 @@ export async function redoCard(
   try {
     archived = await archiveCard(userId, project, index, deps);
   } catch (error) {
-    console.error(`[easy] 앞 그림 보관 실패 project=${project.id} card=${index}`, error);
+    console.error(`[easy] 앞 그림 보관 실패 project=${project.id} card=${index}`, errorLogText(error));
     throw new EasyStepError("다시 만들기", "앞 그림을 보관하지 못해 다시 만들지 않았습니다. 잠시 뒤 다시 해 주세요.", 409);
   }
   const 말 = note?.trim().slice(0, 바라는점상한);

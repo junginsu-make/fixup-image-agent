@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { answerableAskId } from "../ask-chain";
 import { NO_IMAGE_MADE, STILL_MAKING } from "../collect";
-import { askBody, withPick } from "../row-marks";
-import { keptAfterFailure, lostAfterFailure } from "../send-failure";
+import { askBody, readPick, visibleBody, withPick } from "../row-marks";
+import { keptAfterFailure, lostAfterFailure, typedAfterFailure, unsavedAfterFailure } from "../send-failure";
 import type { EasyMessage } from "../turn";
 
 /**
@@ -42,5 +42,89 @@ describe("보낸 턴이 실패했을 때 화면에 남는 것", () => {
     expect(화면).toContain("setMessages((current) => keptAfterFailure(current, 자리, 받음));");
     expect(화면).toContain("setLost((current) => lostAfterFailure(current, 자리, 받음, 까닭));");
     expect(화면).not.toContain("current.filter((one) => one.id !== 자리)");
+  });
+});
+
+/**
+ * 후속 Task 9 — 서버가 말 답을 물음의 답으로 읽어 `typed` 표시로 남긴 뒤 실패하면(`typedAnswer`), 새로고침 뒤에는 물음
+ * 단추가 다시 뜬다. 화면 줄은 표시 없는 말이라 그 자리에서는 안 떴다. 화면 줄에도 같은 표시를 단다.
+ */
+describe("말 답 뒤 실패 (후속 Task 9)", () => {
+  const 말답: EasyMessage = { id: "user-pending-2", role: "user", body: "세로로" };
+
+  it("서버가 typedAnswer 를 주면 화면 줄에 typed 표시를 달아 물음 단추가 다시 뜬다", () => {
+    const 전 = [물음, 말답];
+    expect(answerableAskId(전)).toBeUndefined();
+    const 줄 = typedAfterFailure(전, "user-pending-2", "세로로");
+    expect(줄[1]!.body).toBe(withPick("세로로", { typed: true }));
+    expect(visibleBody(줄[1]!)).toBe("세로로");
+    expect(answerableAskId(줄)).toBe("q1");
+    // 바꾸지 않고 새로 만든다.
+    expect(전[1]!.body).toBe("세로로");
+    expect(줄[0]).toBe(물음);
+  });
+
+  it("서버가 쓴 글과 같게 친 말의 표시 글자를 푼다", () => {
+    const 줄 = typedAfterFailure([물음, { ...말답, body: "a;pick=b" }], "user-pending-2", "a;pick=b");
+    expect(줄[1]!.body).toBe(withPick("a; pick=b", { typed: true }));
+  });
+
+  it("단추 답 줄은 그대로 둔다 — 고른 값을 덮지 않는다", () => {
+    const 줄 = typedAfterFailure([물음, 답], "user-pending-1", "이대로 만들기");
+    expect(줄).toEqual([물음, 답]);
+    expect(readPick(줄[1]!)).toEqual({ ratio: "1:1" });
+  });
+
+  it("화면이 typedAnswer 를 실패에 실어 받고, 있을 때만 제 줄에 표시를 단다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain("typedAnswer: body.typedAnswer === true,");
+    expect(화면).toContain("if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {");
+    expect(화면).toContain("setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));");
+  });
+});
+
+/**
+ * 후속 Task 9 고침 1 · 2 — 이 턴이 사용자 줄을 남기기 전에 실패하면(`userUnsaved`) 서버에는 그 줄이 없다. 새로고침하면 앞 꼬리
+ * 그대로라 앞이 물음이면 단추가 뜨고 친 말은 없다(입력창에 되돌아가 있다). 그때만 화면도 제 줄을 뺀다. 앞이 물음이 아니면 예전 그대로.
+ */
+describe("사용자 줄을 남기기 전 실패 (후속 Task 9 고침 1 · 2)", () => {
+  const 말답: EasyMessage = { id: "user-pending-3", role: "user", body: "세로로" };
+
+  it("앞 줄이 답할 물음이면 제 줄을 빼 새로고침 뒤와 같아진다 — 물음 단추가 다시 뜬다", () => {
+    const 전 = [물음, 말답];
+    expect(answerableAskId(전)).toBeUndefined();
+    const 줄 = unsavedAfterFailure(전, "user-pending-3");
+    expect(줄).toEqual([물음]);
+    expect(answerableAskId(줄)).toBe("q1");
+    expect(전).toEqual([물음, 말답]);
+  });
+
+  it("다시 연 대화의 [물음, 말 답, 실패 줄] 뒤에서도 빼면 그 물음 단추가 뜬다", () => {
+    const 앞말: EasyMessage = { id: "u2", role: "user", body: withPick("세로로", { typed: true }) };
+    const 실패: EasyMessage = { id: "f1", role: "assistant", body: "요청을 처리하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+    const 줄 = unsavedAfterFailure([물음, 앞말, 실패, 말답], "user-pending-3");
+    expect(줄).toEqual([물음, 앞말, 실패]);
+    expect(answerableAskId(줄)).toBe("q1");
+  });
+
+  it("앞 줄이 물음이 아니면 예전 그대로 제 줄을 남긴다", () => {
+    const 말: EasyMessage = { id: "a1", role: "assistant", body: "안녕하세요" };
+    const 전 = [말, 말답];
+    expect(unsavedAfterFailure(전, "user-pending-3")).toEqual(전);
+    expect(unsavedAfterFailure([말답], "user-pending-3")).toEqual([말답]);
+  });
+
+  it("단추 답 줄은 빼지 않는다 — 예전 그대로 그 줄로 단추를 단다", () => {
+    const 줄 = unsavedAfterFailure([물음, 답], "user-pending-1");
+    expect(줄).toEqual([물음, 답]);
+    expect(answerableAskId(줄)).toBe("q1");
+  });
+
+  it("화면이 userUnsaved 를 실패에 실어 받고, 입력창에서 친 말일 때만 제 줄을 뺀다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain("userUnsaved: body.userUnsaved === true,");
+    expect(화면).toContain("if (!보낼것 && (cause as { userUnsaved?: boolean }).userUnsaved === true) {");
+    expect(화면).toContain("setMessages((current) => unsavedAfterFailure(current, `user-${자리}`));");
+    expect(화면).not.toContain("typedUnsaved");
   });
 });

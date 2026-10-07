@@ -50,3 +50,33 @@ describe("라이브러리에 넣을 목록", () => {
     expect(characterReferenceEntries("민수", [])).toEqual([]);
   });
 });
+
+describe("겹치지 않는 캐릭터 이름", () => {
+  /*
+    라이브러리는 캐릭터 각도를 **제목(이름)으로만** 찾고 지운다. 이름이 같은 둘이
+    생기면 하나를 지울 때 다른 쪽 그림까지 지워진다(2026-10-07 로컬 재현).
+  */
+  it("겹치지 않으면 그대로", async () => {
+    const { uniqueCharacterName } = await import("../character-library");
+    expect(uniqueCharacterName("민지", ["민수"])).toBe("민지");
+  });
+
+  it("겹치면 (2)·(3) 을 붙인다", async () => {
+    const { uniqueCharacterName } = await import("../character-library");
+    expect(uniqueCharacterName("민지", ["민지"])).toBe("민지 (2)");
+    expect(uniqueCharacterName("민지", ["민지", "민지 (2)"])).toBe("민지 (3)");
+  });
+
+  it("앞뒤 빈칸은 같은 이름으로 본다", async () => {
+    const { uniqueCharacterName } = await import("../character-library");
+    expect(uniqueCharacterName(" 민지 ", ["민지"])).toBe("민지 (2)");
+  });
+
+  it("길이 상한 안에서 꼬리표가 남게 본문을 줄인다", async () => {
+    const { uniqueCharacterName } = await import("../character-library");
+    const long = "가".repeat(80);
+    const next = uniqueCharacterName(long, [long], 80);
+    expect(next.length).toBeLessThanOrEqual(80);
+    expect(next.endsWith(" (2)")).toBe(true);
+  });
+});

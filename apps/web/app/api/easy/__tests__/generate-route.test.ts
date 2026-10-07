@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * **「쉽게」 문**(설계 §2-3 · §2-6 · §2-7).
@@ -17,6 +17,12 @@ let 역할판단: unknown;
 let 역할판단실패: Error | null;
 let 기획실패 = false;
 let 기획던짐 = false;
+// 그림 줄을 남길 때 저장소가 던질 오류(2026-10-07 후속 Task 1).
+let 남기기실패: Error | null = null;
+// 기획 라우트가 줄 답을 통째로 정한다(후속 Task 1 수정 1).
+let 기획답: (() => Response) | null = null;
+// 생성 라우트가 줄 답(최종 수정 L1). 없으면 제출 성공이다.
+let 생성답: (() => Response) | null = null;
 let 볼수있는사진: string[];
 const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
@@ -35,6 +41,7 @@ vi.mock("../../../../lib/easy/store", () => ({
     getConversation: async () => ({ id: "c1", title: "있음" }),
     listMessages: async () => [],
     appendMessage: async (row: { role: string; body?: string }) => {
+      if (남기기실패 && row.role === "image") throw 남기기실패;
       남긴줄.push(row);
       return { id: `m${남긴줄.length}`, ...row };
     },
@@ -75,6 +82,7 @@ vi.mock("../../poster/projects/route", () => ({
 vi.mock("../../poster/projects/[id]/plan/route", () => ({
   POST: async (req: Request) => {
     부른라우트.push({ step: "plan", body: await req.json() });
+    if (기획답) return 기획답();
     // 실제 모양: 안쪽 라우트는 예외를 잡아 날것의 글을 500 으로 돌려준다(리뷰 2026-10-06).
     if (기획던짐) return Response.json({ ok: false, message: 'relation "poster_projects" does not exist' }, { status: 500 });
     return 기획실패
@@ -85,6 +93,7 @@ vi.mock("../../poster/projects/[id]/plan/route", () => ({
 vi.mock("../../poster/projects/[id]/generate/route", () => ({
   POST: async (req: Request) => {
     부른라우트.push({ step: "generate", body: await req.json() });
+    if (생성답) return 생성답();
     return Response.json({ ok: true, submission: { requestRowId: "r", falRequestId: "f", endpoint: "e" } });
   },
 }));
@@ -97,6 +106,7 @@ const { readAsk } = await import("../../../easy/row-marks");
 const { RATIO_QUESTION } = await import("../../../easy/turn-words");
 const { guideBody, sayBody } = await import("../../../easy/row-marks");
 const { SAY_IMAGE } = await import("../../../easy/turn-words");
+const { EasyConversationMissingError } = await import("../../../../lib/easy/store-core");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -117,6 +127,7 @@ beforeEach(() => {
   역할판단 = { photos: [], conflicting: false };
   역할판단실패 = null;
   기획실패 = false; 기획던짐 = false;
+  남기기실패 = null; 기획답 = null; 생성답 = null;
   볼수있는사진 = [사진(1), 사진(2), 사진(3)];
   남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0;
   부른횟수.decide = 0; 부른횟수.roles = 0;
@@ -463,5 +474,177 @@ describe("일하는 턴에도 AI 가 말한다 (2차 D4)", () => {
     await 보낸다({});
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
     expect(남긴줄[2]!.body).toBe(failureRowBody("기획이 막혔습니다."));
+  });
+});
+
+/**
+ * **예상 못 한 오류의 원문을 화면에 보내지 않는다**(2026-10-07 후속 Task 1). Supabase 글 · 모델 출력은
+ * 서버 기록에만 남기고, 우리가 쓴 안내(크레딧 · 「대화를 찾을 수 없습니다.」)는 그대로 보인다.
+ */
+describe("오류 글 가리기 (후속 Task 1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("저장소의 날것 오류 글은 응답에 싣지 않고 일반 문장을 같은 500 으로 준다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    남기기실패 = new Error('대화 줄: new row violates row-level security policy for table "easy_messages"');
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json.message).toBe("만들지 못했습니다.");
+    expect(JSON.stringify(json)).not.toContain("easy_messages");
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 남기기실패.message);
+  });
+
+  it("판단 모델 출력이 섞인 오류 글도 싣지 않는다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    역할판단실패 = new Error('무슨 뜻인지 가리지 못했습니다: {"wants":"???"}');
+    const { status, json } = await 보낸다({ referenceIds: [사진(1)] });
+    expect(status).toBe(500);
+    expect(json.message).toBe("만들지 못했습니다.");
+    expect(JSON.stringify(json)).not.toContain("???");
+  });
+
+  it("「대화를 찾을 수 없습니다.」는 그대로 보인다 (상태 코드도 지금처럼 500)", async () => {
+    남기기실패 = new EasyConversationMissingError();
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json.message).toBe("대화를 찾을 수 없습니다.");
+  });
+
+  it("우리가 알고 낸 실패(402)는 글 · 상태 코드 · retryable 이 그대로다", async () => {
+    기획실패 = true;
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(402);
+    expect(json).toMatchObject({ ok: false, message: "기획이 막혔습니다.", retryable: false });
+  });
+});
+
+/**
+ * **안쪽 라우트의 날것 5xx 글도 가린다**(후속 Task 1 수정 1). 안쪽 포스터 라우트는 예외를 잡아 원문을 500 으로
+ * 주고 `read()` 가 그것을 `EasyStepError` 로 올린다. 코드가 없고 다시 눌러 풀릴 5xx 면 일반 문장을 준다.
+ * 크레딧 · 권한(4xx) · 코드 있는 거절 · 운영자 멈춤(503, retryable:false)은 우리 문장이라 그대로다.
+ */
+describe("안쪽 라우트 5xx 글 가리기 (후속 Task 1 수정 1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const 그림주문 = () => { 판단 = { wants: "image", reply: "", ratio: "1:1", look: "" }; };
+
+  it("안쪽 500 의 날것 글은 싣지 않고 step · 상태 · retryable 은 그대로 준다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    기획던짐 = true;
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "기획", message: "만들지 못했습니다.", retryable: true });
+    expect(JSON.stringify(json)).not.toContain("poster_projects");
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 'relation "poster_projects" does not exist');
+  });
+
+  it("운영자 멈춤(503 · retryable:false)은 우리 문장이라 그대로 보인다", async () => {
+    기획답 = () => Response.json({
+      ok: false, code: "ai_paused", message: "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", retryable: false,
+    }, { status: 503 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(503);
+    expect(json).toMatchObject({ message: "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", retryable: false });
+  });
+
+  it("크레딧 부족(코드 있음)은 글 · 코드 · 사용량이 그대로다", async () => {
+    const usage = { remaining: 0, used: 3, reserved: 0 };
+    기획답 = () => Response.json({ ok: false, code: "credits_required", message: "크레딧이 없어 이 기능을 쓸 수 없습니다.", usage }, { status: 403 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(403);
+    expect(json).toMatchObject({ message: "크레딧이 없어 이 기능을 쓸 수 없습니다.", code: "credits_required", usage, retryable: false });
+  });
+
+  it("코드 없는 4xx 글은 지금처럼 그대로 준다", async () => {
+    기획답 = () => Response.json({ ok: false, message: "다른 작업이 진행 중입니다." }, { status: 409 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(409);
+    expect(json.message).toBe("다른 작업이 진행 중입니다.");
+  });
+});
+
+/**
+ * **서버 기록에도 주소는 남기지 않는다**(후속 최종 수정 1, 보안 리뷰). 오류 덩어리 대신 주소를 `<url>` 로 가린
+ * 글만 찍는다 — 업체 · 저장소 오류 글에 서명한 주소가 섞여 올 수 있다(`see-turn.ts` 와 같은 규칙).
+ */
+describe("서버 기록의 주소 가리기 (후속 최종 수정 1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const 그림주문 = () => { 판단 = { wants: "image", reply: "", ratio: "1:1", look: "" }; };
+
+  it("예상 못 한 오류의 기록은 주소를 <url> 로 가린 글이다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    남기기실패 = new Error("대화 줄: fetch failed https://abc.supabase.co/rest/v1/easy_messages?apikey=SECRET");
+    그림주문();
+    await 보낸다({});
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "대화 줄: fetch failed <url>");
+    expect(기록.mock.calls.flat().join(" ")).not.toContain("SECRET");
+  });
+
+  it("안쪽 라우트의 날것 5xx 기록도 주소를 <url> 로 가린 글이다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    기획답 = () => Response.json({ ok: false, message: "upstream https://fal.run/x?sig=SECRET failed" }, { status: 500 });
+    그림주문();
+    const { json } = await 보낸다({});
+    expect(json.message).toBe("만들지 못했습니다.");
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), "upstream <url> failed");
+    expect(기록.mock.calls.flat().join(" ")).not.toContain("SECRET");
+  });
+});
+
+/**
+ * **포스터 생성이 일부러 쓴 500 문장은 가리지 않는다**(최종 수정 L1, 보안 리뷰). 생성 라우트는 계정 풀 두 문장 ·
+ * 조립 거절 · 과금 뒤 실패를 500 으로 주고 `userFacing` 을 단다(`poster-generate-route.test.ts` 가 그 모양을 고정).
+ * 전에는 「만들지 못했습니다.」와 다시 보내기로 덮였다 — 과금 뒤 실패에 다시 보내면 fal 값이 두 번 나간다.
+ * 아래 응답 본문은 생성 라우트의 `generateFailure` 가 내는 것 그대로다.
+ */
+describe("포스터 생성의 우리 문장 (최종 수정 L1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const 그림주문 = () => { 판단 = { wants: "image", reply: "", ratio: "1:1", look: "" }; };
+  const 몰림 = "지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.";
+  const 준비문제 = "이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.";
+  const 과금뒤 = "제출은 됐는데 장부에 적지 못했습니다.";
+  const 거절 = "따라 만들 사진의 크기를 읽지 못했습니다.";
+
+  it.each([몰림, 준비문제])("계정 풀 문장(%s)은 그대로 보이고 다시 보내기를 띄운다", async (message) => {
+    생성답 = () => Response.json({ ok: false, message, userFacing: true }, { status: 500 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "이미지 만들기", message, retryable: true });
+    // 대화에 남는 실패 줄도 같은 문장이다 — 다시 열어도 같은 안내를 본다.
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(message));
+  });
+
+  it.each([과금뒤, 거절])("과금 뒤 실패 · 조립 거절(%s)은 그대로 보이고 다시 보내기를 안 띄운다", async (message) => {
+    생성답 = () => Response.json({ ok: false, message, userFacing: true, retryable: false }, { status: 500 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "이미지 만들기", message, retryable: false });
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(message));
+  });
+
+  it("표시 없는 생성 500 의 날것 글은 지금처럼 가린다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    생성답 = () => Response.json({ ok: false, message: 'relation "poster_requests" does not exist' }, { status: 500 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "이미지 만들기", message: "만들지 못했습니다.", retryable: true });
+    expect(남긴줄.at(-1)!.body).toBe(failureRowBody(FAILED_TURN_GENERIC));
+  });
+
+  it("표시가 참(true)이 아니면 표시로 보지 않는다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    생성답 = () => Response.json({ ok: false, message: "raw upstream text", userFacing: "yes" }, { status: 500 });
+    그림주문();
+    const { json } = await 보낸다({});
+    expect(json.message).toBe("만들지 못했습니다.");
   });
 });

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * **제공자가 거절했을 때 상태 조회가 무엇을 하는가.**
@@ -21,6 +21,8 @@ let project: { id: string; modelId: string; data: Record<string, unknown> } | un
 let resultThrows: unknown = null;
 /** fal 을 물었는가(엔드포인트 검사가 그 앞에서 막는지 본다). */
 let falAsked = 0;
+/** 참이면 `createPosterFalClients` 가 진짜처럼 설정 오류를 던진다. */
+let falKeyMissing = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -44,21 +46,30 @@ vi.mock("../../../../lib/poster/stores", () => ({
   }),
 }));
 
-vi.mock("../../../../lib/poster/providers", () => ({
-  createPosterFalClients: () => ({
-    queue: {
-      jobStatus: async () => { falAsked += 1; return "completed"; },
-      jobResult: async () => {
-        falAsked += 1;
-        if (resultThrows) throw resultThrows;
-        return { images: [] };
-      },
+vi.mock("../../../../lib/poster/providers", () => {
+  // 진짜와 같은 문장이다 — 환경변수 이름이 화면에 새는지 본다.
+  class PosterProviderConfigurationError extends Error {
+    constructor(readonly missing: string[]) {
+      super(`다음 환경변수가 없어 포스터를 만들 수 없습니다: ${missing.join(", ")}`);
+    }
+  }
+  return {
+    createPosterFalClients: () => {
+      if (falKeyMissing) throw new PosterProviderConfigurationError(["FAL_KEY"]);
+      return {
+        queue: {
+          jobStatus: async () => { falAsked += 1; return "completed"; },
+          jobResult: async () => {
+            falAsked += 1;
+            if (resultThrows) throw resultThrows;
+            return { images: [] };
+          },
+        },
+      };
     },
-  }),
-  PosterProviderConfigurationError: class extends Error {
-    missing: string[] = [];
-  },
-}));
+    PosterProviderConfigurationError,
+  };
+});
 
 const { POST } = await import("../projects/[id]/status/route");
 
@@ -76,13 +87,19 @@ const call = (endpoint = "openai/gpt-image-2.5/sunburst/edit") =>
 const falError = (status: number, message: string) =>
   Object.assign(new Error(message), { name: "ApiError", status });
 
+let errors: ReturnType<typeof vi.spyOn>;
+const logged = () => errors.mock.calls.flat().map(String).join(" ");
+
 beforeEach(() => {
+  errors = vi.spyOn(console, "error").mockImplementation(() => {});
   finalized.length = 0;
   updates.length = 0;
   resultThrows = null;
   falAsked = 0;
+  falKeyMissing = false;
   project = { id: "p1", modelId: "gpt-image-2.5-sunburst", data: { reservationId: "res-1" } };
 });
+afterEach(() => errors.mockRestore());
 
 describe("제공자가 거절하면", () => {
   /** 이것이 실제로 난 일이다. 500 이면 「우리가 고장났다」는 뜻이 된다. */
@@ -102,12 +119,18 @@ describe("제공자가 거절하면", () => {
     expect(body.message).toContain("거절");
   });
 
-  /** 운영자는 이 원문으로 fal 기록을 찾는다. 버리면 못 찾는다. */
-  it("제공자가 준 원문을 함께 싣는다", async () => {
+  /**
+   * 운영자는 이 원문으로 fal 기록을 찾는다. 버리면 못 찾는다 — **서버 기록에** 남긴다(2026-10-07 후속
+   * Task 12). 전에는 응답의 `detail` 칸에 실었는데 화면 셋(포스터 · 쉽게 · 셸 폴러) 다 안 읽고, fal 원문에는
+   * 계정 잠김 사유처럼 고객에게 보이면 안 되는 말이 섞일 수 있다(`lib/fal/queue.ts`).
+   */
+  it("제공자가 준 원문은 서버 기록에만 남기고 응답에는 싣지 않는다", async () => {
     resultThrows = falError(422, "flagged by a content checker");
-    const body = await (await call()).json();
+    const text = await (await call()).text();
 
-    expect(body.detail).toContain("flagged by a content checker");
+    expect(JSON.parse(text).detail).toBeUndefined();
+    expect(text).not.toContain("flagged by a content checker");
+    expect(logged()).toContain("flagged by a content checker");
   });
 
   /**
@@ -262,5 +285,50 @@ describe("결과가 사라졌으면", () => {
     const body = await (await call()).json();
 
     expect(typeof body.kind).toBe("string");
+  });
+});
+
+/**
+ * **예상 못 한 오류의 원문을 화면에 보내지 않는다**(2026-10-07 후속 Task 12).
+ *
+ * 화면이 되풀이해 묻는 길이다(포스터 화면 · 쉽게 `collect.ts` · 셸 폴러). **상태 코드와 `kind` 는 전과
+ * 같다** — 셸은 404 면 지우고 `kind` 가 있으면 끝으로 본다(`jobDone`). 글만 바꾼다.
+ */
+describe("예상 못 한 오류는 원문 대신 우리 문장으로", () => {
+  it("우리 쪽 원문(저장소 글 · 서명 주소)은 응답에 없고, 주소를 가려 서버 기록에만", async () => {
+    resultThrows = new Error('new row violates row-level security policy for table "objects" (https://abc.supabase.co/storage/v1/object/library/x?token=secret)');
+    const response = await call();
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({
+      ok: false, kind: "fault", message: "만든 그림을 가져오지 못했습니다. 잠시 뒤 다시 확인해 주세요.",
+    });
+    expect(text).not.toContain("row-level security");
+    expect(text).not.toContain("supabase");
+    expect(logged()).toContain("row-level security");
+    expect(logged()).not.toContain("https://");
+  });
+
+  it("설정 오류는 503 그대로, 환경변수 이름과 `missing` 칸은 화면에 안 보낸다", async () => {
+    falKeyMissing = true;
+    const response = await call();
+    expect(response.status).toBe(503);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ ok: false, message: "만든 그림을 가져오지 못했습니다. 잠시 뒤 다시 확인해 주세요." });
+    expect(text).not.toContain("FAL_KEY");
+    expect(logged()).toContain("FAL_KEY");
+    // 돈 흐름 그대로 — 설정 오류는 장을 풀지 않는다(전과 같다).
+    expect(finalized).toHaveLength(0);
+  });
+
+  /* 셸 폴러가 응답을 읽는 규칙(`lib/running-jobs.ts` 의 `jobDone`)이 전과 같은 답을 내는지. */
+  it("셸은 설정 오류면 계속 묻고, 제공자 거절이면 끝으로 본다 — 전과 같다", async () => {
+    const { jobDone } = await import("../../../../lib/running-jobs");
+    falKeyMissing = true;
+    expect(jobDone(await (await call()).json())).toBe(false);
+
+    falKeyMissing = false;
+    resultThrows = falError(422, "flagged by a content checker");
+    expect(jobDone(await (await call()).json())).toBe(true);
   });
 });

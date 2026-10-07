@@ -11,7 +11,7 @@ import {
 import { ThumbImage } from "../../_components/thumb-image";
 import { referenceDeletePrompt } from "../../_components/reference-delete-prompt";
 import { CharacterPickerButton, type CharacterPick, type PickableCharacter } from "../../_components/character-picker";
-import { attachMessage, matchAngles } from "../../_components/character-attach";
+import { attachMessage, matchWithRestore, restoreMissingAngles } from "../../_components/character-attach";
 import { characterAngleLabel } from "../../../lib/character-library";
 import type { ReferenceImageRow } from "../../library/reference-upload";
 import { randomId } from "../../../lib/browser-safe";
@@ -73,6 +73,14 @@ export function AttachmentPicker({
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const fileInput = React.useRef<HTMLInputElement>(null);
+  /**
+   * 기다린 뒤에 합칠 **지금의** 첨부. 캐릭터를 원본에서 다시 채우는 몇 초 사이에
+   * 다른 그림을 넣거나 빼면, 고를 때 받아 둔 값으로 합치면 그 변경이 사라진다.
+   */
+  const latestAttachments = React.useRef(attachments);
+  latestAttachments.current = attachments;
+  /** 다시 채우는 중인가. 그 사이 또 고르면 같은 그림이 둘 생긴다. */
+  const restoring = React.useRef(false);
 
   /** 읽은 목록을 돌려준다 — 방금 올린 그림을 바로 붙이려면 그 줄이 필요하다. */
   const load = React.useCallback(async (): Promise<ImageView[]> => {
@@ -177,14 +185,22 @@ export function AttachmentPicker({
    * 역할은 「인물 그대로 지키기」다. 캐릭터를 붙이는 이유가 그 대상을 지키려는
    * 것이므로 「따라 만들기」로 들어가면 뜻이 반대가 된다.
    */
-  function pickCharacter({ character, angles }: CharacterPick) {
-    const { matched, missing } = matchAngles(images, character.name, angles);
+  async function pickCharacter({ character, angles }: CharacterPick) {
+    if (restoring.current) return;
+    restoring.current = true;
+    setMessage(`'${character.name}' 의 장면을 찾는 중입니다. 라이브러리에 없으면 원본에서 다시 채우는 중입니다…`);
+    // 라이브러리에서 지운 각도는 캐릭터 원본에서 다시 채운 뒤 다시 찾는다(2026-10-07).
+    const { matched, missing } = await matchWithRestore({
+      images, name: character.name, characterId: character.id, angles,
+      restore: restoreMissingAngles, reload: load,
+    }).finally(() => { restoring.current = false; });
+    const current = latestAttachments.current;
     const fresh = matched.filter(
-      (entry) => !attachments.some((attachment) => attachment.id === entry.image.id),
+      (entry) => !current.some((attachment) => attachment.id === entry.image.id),
     );
 
     if (fresh.length) {
-      onChange([...attachments, ...fresh.map((entry) => ({
+      onChange([...current, ...fresh.map((entry) => ({
         id: entry.image.id,
         // 인물은 카드마다 얼굴이 유지되어야 한다. 카드 자리는 없다 — 자리가 아니라
         // 모든 카드에 함께 가는 정체성 기준이다.
@@ -274,7 +290,7 @@ export function AttachmentPicker({
           characters={characters}
           loading={loading}
           angleLabel={characterAngleLabel}
-          onPick={pickCharacter}
+          onPick={(pick) => void pickCharacter(pick)}
           onReload={() => void load()}
         />
         <span className="text-sm text-muted-foreground">여기서 올린 그림도 라이브러리에 들어갑니다. {UPLOAD_RIGHTS_NOTE}</span>

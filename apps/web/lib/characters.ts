@@ -16,6 +16,7 @@ import {
   type CharacterReferenceRole,
   type CharacterViewId,
   DEFAULT_EXTRA_ANGLES,
+  IMAGE_MODELS,
   migrateAngle,
   type ImageModelId,
   type ReferenceImage,
@@ -33,8 +34,10 @@ const falImage: ReturnType<typeof createPdpImageGenerator> = (model, input) =>
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { inOwnerFolder, onlyInOwnerFolder } from "./storage/owner-folder";
 import { scopedRead } from "./teams/scope";
-import { characterReferenceEntries, characterReferenceTitle } from "./character-library";
-import { saveReferenceImage, removeReferenceImagesByTitle } from "./reference-images";
+import {
+  CHARACTER_NAME_MAX, characterReferenceEntries, characterReferenceTitle, uniqueCharacterName,
+} from "./character-library";
+import { saveReferenceImage, removeReferenceImagesByTitle, referenceTitlesOf } from "./reference-images";
 import { isLocalStoreEnabled } from "./local-store";
 import {
   deleteLocalCharacter,
@@ -129,6 +132,8 @@ export interface CharacterSummary {
    * 보게 된다 — 상세 화면이 「다른 회원의 것」이라고 말하는 근거가 이 칸이다.
    */
   mine: boolean;
+  /** 만든 모델. 「과정 보기」가 이어받는다. 옛 캐릭터는 없다. */
+  modelId?: ImageModelId;
 }
 
 /** 후보를 만들 때 함께 보내는 그림 한 장. 없어도 된다. */
@@ -317,6 +322,19 @@ async function putView(storagePath: string, view: ViewBytes) {
   return thumbPath;
 }
 
+/** 이 회원이 이미 쓴 캐릭터 이름. 팀 것은 안 본다 — 라이브러리 제목은 회원마다 따로다. */
+async function takenCharacterNames(userId: string): Promise<string[]> {
+  if (isLocalStoreEnabled()) return (await listLocalCharacters(userId)).map((row) => row.name);
+  const { data, error } = await createSupabaseAdminClient()
+    .from("characters").select("name").eq("user_id", userId);
+  if (error) {
+    // 원문은 기록에만 남긴다. 화면에 DB 구조가 나가면 안 된다.
+    console.error(`[character] 이름 목록을 읽지 못했습니다: ${error.message}`);
+    throw new Error("캐릭터 목록을 확인하지 못했습니다. 잠시 뒤 다시 저장해 주세요.");
+  }
+  return ((data ?? []) as Array<{ name: string | null }>).map((row) => row.name ?? "");
+}
+
 /**
  * 고른 후보를 기준으로 다각도를 만들고 캐릭터로 저장한다.
  *
@@ -355,7 +373,8 @@ export async function createCharacter(input: {
   const wantsSheet = Boolean(input.sheet);
   const model = input.modelId ?? selectCharacterModel(input.look);
   const characterId = randomUUID();
-  const name = input.name.slice(0, 80);
+  // 이 회원의 다른 캐릭터와 이름이 겹치지 않게 한다. 라이브러리가 이름으로 찾아 지운다.
+  const name = uniqueCharacterName(input.name, await takenCharacterNames(input.userId), CHARACTER_NAME_MAX);
   const createdAt = new Date().toISOString();
   // 각도와 다시 만들기가 이 말로 그린다. 사용자가 친 말은 `sourcePrompt` 에 그대로 남는다.
   const identityPrompt = input.identityPrompt?.trim() || input.description;
@@ -370,6 +389,7 @@ export async function createCharacter(input: {
       kind: input.kind,
       look: input.look,
       createdAt,
+      modelId: model,
     });
   } else {
     const { error } = await createSupabaseAdminClient()
@@ -384,6 +404,8 @@ export async function createCharacter(input: {
         visual_style: input.look === "photoreal" ? "photoreal" : "illustration",
         kind: input.kind,
         look: input.look,
+        // 빠진 장면을 나중에 같은 모델로 그리려고 남긴다(202610070001).
+        model_id: model,
       });
     if (error) return { ok: false as const, message: error.message };
   }
@@ -476,6 +498,8 @@ export async function createCharacter(input: {
     return {
       ok: true as const,
       id: characterId,
+      // 겹쳐서 꼬리표를 붙였으면 화면이 그 이름을 알린다.
+      name,
       angleCount: rows.length,
       // 정면 + 고른 각도 + 다각도 중 실제로 저장된 것을 뺀 수.
       missingAngles: 1 + extraAngles.length + (wantsSheet ? 1 : 0) - rows.length,
@@ -519,7 +543,8 @@ export async function regenerateAngle(input: {
   if (!front) return { ok: false as const, message: "정면 그림이 없어 다시 만들 수 없습니다." };
 
   const look = character.look;
-  const model = input.modelId ?? selectCharacterModel(look);
+  // 만든 모델로 그린다. 고른 것이 이기고, 기록이 없으면(옛 캐릭터) 그림체의 기본 모델이다.
+  const model = input.modelId ?? character.modelId ?? selectCharacterModel(look);
 
   try {
     // 다각도 한 장은 각도가 아니다. 프롬프트도 비율도 다른 길로 간다.
@@ -651,6 +676,13 @@ interface CharacterRecord {
   kind: CharacterKind;
   look: CharacterLook;
   createdAt: string;
+  /** 만든 모델. 옛 줄이거나 지금 목록에 없는 모델이면 없다. */
+  modelId?: ImageModelId;
+}
+
+/** 지금도 고를 수 있는 모델인가. 모르는 값으로 그리면 그림 통로가 거절한다. */
+function knownModel(value: unknown): ImageModelId | undefined {
+  return IMAGE_MODELS.some((model) => model.id === value) ? (value as ImageModelId) : undefined;
 }
 
 /** 옛 줄에는 kind·look 이 없다. 사람 + (실사|그림) 으로 본다. */
@@ -664,6 +696,7 @@ function normalizeRecord(row: Record<string, unknown>): CharacterRecord {
     kind: (row.kind as CharacterKind) ?? "person",
     look: ((row.look as CharacterLook) ?? (visual === "photoreal" ? "photoreal" : "illustration")),
     createdAt: String(row.created_at ?? row.createdAt ?? ""),
+    modelId: knownModel(row.model_id ?? row.modelId),
   };
 }
 
@@ -843,6 +876,67 @@ export async function loadCharacterView(
   if (!chosen) return null;
 
   return { identityPrompt: character.identityPrompt, ...chosen };
+}
+
+/**
+ * **지워진 라이브러리 사본을 캐릭터 원본에서 다시 채운다**(2026-10-07).
+ *
+ * 카드뉴스·이미지 만들기는 캐릭터 각도를 라이브러리 사본(제목)에서 찾는다.
+ * 라이브러리에서 그 그림을 지우면 캐릭터에는 그림이 있어도 못 붙였다. 원본은
+ * 캐릭터 저장소에 그대로 있으니 거기서 다시 넣는다.
+ *
+ * - **내 캐릭터만.** 팀원 것을 내 라이브러리로 옮기지 않는다 — 없으면 `null`
+ * - **이미 있는 제목은 다시 넣지 않는다.** 같은 제목이 둘이면 어느 쪽을 붙일지 갈린다
+ * - 각도 다섯과 정면만 받는다. 다각도 한 장은 격자라 정체성 기준으로 못 쓴다
+ *
+ * 그림을 새로 그리지 않으므로 크레딧이 들지 않는다.
+ */
+export function restoreCharacterReferences(
+  userId: string,
+  characterId: string,
+  angles: readonly string[],
+): Promise<{ restored: string[]; unavailable: string[] } | null> {
+  /*
+    **한 캐릭터는 한 번에 하나씩.** 「있나 보고 → 넣기」 사이에 같은 요청이 또
+    오면 둘 다 「없음」으로 보고 같은 제목을 둘 넣는다(2026-10-07 리뷰). 서버는
+    한 대라 메모리 줄로 충분하다. 앞의 것이 끝난 뒤 다시 보므로 두 번째는 건너뛴다.
+  */
+  const key = `${userId}:${characterId}`;
+  const previous = restoreQueue.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => restoreNow(userId, characterId, angles));
+  const settled = run.catch(() => undefined);
+  restoreQueue.set(key, settled);
+  void settled.then(() => { if (restoreQueue.get(key) === settled) restoreQueue.delete(key); });
+  return run;
+}
+
+const restoreQueue = new Map<string, Promise<unknown>>();
+
+async function restoreNow(
+  userId: string,
+  characterId: string,
+  angles: readonly string[],
+): Promise<{ restored: string[]; unavailable: string[] } | null> {
+  const character = await findCharacter(userId, characterId);
+  if (!character) return null;
+
+  const known = new Set<string>(CHARACTER_ANGLES.map((angle) => angle.id as string));
+  const wanted = [...new Set(angles.map(migrateAngle))].filter((angle) => known.has(angle)) as CharacterAngle[];
+  const present = await referenceTitlesOf(
+    userId, wanted.map((angle) => characterReferenceTitle(character.name, angle)),
+  );
+
+  const restored: string[] = [];
+  const unavailable: string[] = [];
+  for (const angle of wanted) {
+    if (present.has(characterReferenceTitle(character.name, angle))) continue;
+    const bytes = await loadViewBytes(userId, characterId, angle);
+    const issue = bytes ? await saveAsReferences(userId, character.name, [{ angle, ...bytes }]) : "없음";
+    // 원본은 있는데 넣지 못했으면 이유를 기록에 남긴다. 화면에는 「없음」으로만 간다.
+    if (bytes && issue) console.error(`[character] ${characterId} ${angle} 을 라이브러리에 다시 넣지 못했습니다: ${issue}`);
+    (issue ? unavailable : restored).push(angle);
+  }
+  return { restored, unavailable };
 }
 
 /** 로컬 모드에서 각도 파일을 화면에 내려 준다. 운영은 서명 URL 을 쓴다. */

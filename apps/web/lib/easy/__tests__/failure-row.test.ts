@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EasyStore } from "../store";
 import { FAILED_TURN_GENERIC, failureRowBody, failureRowMessage, isFailureRowBody, trackUserTurn } from "../failure-row";
-import { EasyStepError } from "../relay";
+import { EasyStepError, read } from "../relay";
 import { sayBody } from "../../../app/easy/row-marks";
 
 /**
@@ -89,6 +89,45 @@ describe("실패 안내 줄 (B4)", () => {
     await expect(지킴.leaveFailure("c1", "x")).resolves.toBeUndefined();
   });
 
+  /** 후속 Task 9 — 라우트가 실패 줄을 남긴 그 사용자 줄이 `typed` 표시 줄인지 알아야 화면에 알린다. */
+  it("실패 안내를 남기면 답 못 받은 사용자 줄 글을 돌려준다 — 머리말을 지나도 같다", async () => {
+    const { store } = 저장소();
+    const 지킴 = trackUserTurn(store);
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "user", body: "세로로;pick=x" });
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "assistant", body: sayBody("만들겠습니다.") });
+    await expect(지킴.leaveFailure("c1", "x")).resolves.toBe("세로로;pick=x");
+    await expect(지킴.leaveFailure("c1", "x")).resolves.toBeUndefined();
+  });
+
+  it("실패 안내를 안 남기면 아무것도 돌려주지 않는다 — 말 전 · 답 뒤", async () => {
+    const 말전 = trackUserTurn(저장소().store);
+    await expect(말전.leaveFailure("c1", "x")).resolves.toBeUndefined();
+    const 답뒤 = trackUserTurn(저장소().store);
+    await 답뒤.store.appendMessage({ conversationId: "c1", role: "user", body: "안녕" });
+    await 답뒤.store.appendMessage({ conversationId: "c1", role: "assistant", body: "안녕하세요" });
+    await expect(답뒤.leaveFailure("c1", "x")).resolves.toBeUndefined();
+  });
+
+  /** 후속 Task 9 고침 1 — 사용자 줄을 남기기 전에 실패했는지 라우트가 알아야 화면에 알린다. */
+  it("이 턴에 사용자 줄을 남겼는지 알려 준다 — 실패 안내를 남긴 뒤에도 그대로다", async () => {
+    const { store } = 저장소();
+    const 지킴 = trackUserTurn(store);
+    expect(지킴.savedUser()).toBe(false);
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "assistant", body: "안내" });
+    expect(지킴.savedUser()).toBe(false);
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "user", body: "포스터" });
+    expect(지킴.savedUser()).toBe(true);
+    await 지킴.leaveFailure("c1", "x");
+    expect(지킴.savedUser()).toBe(true);
+  });
+
+  it("사용자 줄 저장이 실패하면 남긴 것으로 치지 않는다", async () => {
+    const 실패저장소 = { appendMessage: async () => { throw new Error("저장 실패"); } };
+    const 지킴 = trackUserTurn(실패저장소 as unknown as ReturnType<typeof 저장소>["store"]);
+    await expect(지킴.store.appendMessage({ conversationId: "c1", role: "user", body: "포스터" })).rejects.toThrow();
+    expect(지킴.savedUser()).toBe(false);
+  });
+
   it("안내 글은 사용자가 본 말을 그대로 담는다", () => {
     expect(failureRowBody("크레딧이 없습니다.")).toBe("요청을 처리하지 못했습니다. 크레딧이 없습니다.");
   });
@@ -131,9 +170,48 @@ describe("실패 줄에 남길 글 고르기", () => {
     expect(failureRowMessage(new EasyStepError("고치기", "column x of relation y", 400))).toBe(FAILED_TURN_GENERIC);
   });
 
+  /** 포스터 생성 · 고치기가 우리 문장이라고 표시한 것(최종 수정 L1). 과금 뒤 실패를 「잠시 뒤 다시」로 덮지 않는다. */
+  it("안쪽이 우리 문장이라고 표시했으면(userFacing) 500 · 400 이어도 그 글을 남긴다", () => {
+    const 과금뒤 = "제출은 됐는데 장부에 적지 못했습니다.";
+    expect(failureRowMessage(new EasyStepError("이미지 만들기", 과금뒤, 500, false, undefined, undefined, true))).toBe(과금뒤);
+    expect(failureRowMessage(new EasyStepError("고치기", 과금뒤, 400, false, undefined, undefined, true))).toBe(과금뒤);
+  });
+
   it("EasyStepError 가 아니면 일반 문장이다", () => {
     expect(failureRowMessage(new Error("boom"))).toBe(FAILED_TURN_GENERIC);
     expect(failureRowMessage("문자열")).toBe(FAILED_TURN_GENERIC);
     expect(failureRowMessage(undefined)).toBe(FAILED_TURN_GENERIC);
+  });
+});
+
+/**
+ * **안쪽 라우트의 답을 읽어 올리는 `read()`**(최종 수정 L1). 포스터 생성은 우리 문장도 500 으로 주므로
+ * `userFacing` 표시를 옮겨야 쉽게 모드가 가리지 않는다. `retryable: false` 는 전부터 옮겼다.
+ */
+describe("안쪽 답 읽기 (read)", () => {
+  const 실패 = async (body: unknown, status = 500) => {
+    try {
+      await read(Response.json(body, { status }), "이미지 만들기");
+    } catch (error) {
+      return error as EasyStepError;
+    }
+    throw new Error("던져야 한다");
+  };
+
+  it("userFacing: true 를 옮긴다", async () => {
+    const error = await 실패({ ok: false, message: "지금 이미지 생성이 몰려 있습니다.", userFacing: true });
+    expect(error).toBeInstanceOf(EasyStepError);
+    expect(error).toMatchObject({ step: "이미지 만들기", status: 500, retryable: true, userFacing: true });
+  });
+
+  it("retryable: false 를 옮긴다", async () => {
+    const error = await 실패({ ok: false, message: "제출은 됐는데 장부에 적지 못했습니다.", userFacing: true, retryable: false });
+    expect(error).toMatchObject({ retryable: false, userFacing: true });
+  });
+
+  it("표시가 없거나 참(true)이 아니면 표시가 아니다", async () => {
+    expect((await 실패({ ok: false, message: "raw" })).userFacing).toBe(false);
+    expect((await 실패({ ok: false, message: "raw", userFacing: "true" })).userFacing).toBe(false);
+    expect((await 실패({ ok: false, message: "raw", userFacing: 1 })).userFacing).toBe(false);
   });
 });

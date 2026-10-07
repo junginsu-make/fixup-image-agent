@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 let 판단: unknown;
-let 본결과: { kind: "seen"; reply: string } | { kind: "none" } | { kind: "failed" };
+let 본결과: { kind: "seen"; reply: string } | { kind: "old"; reply: string } | { kind: "none" } | { kind: "failed" };
 const 차례: string[] = [];
 const 본것: Array<Record<string, unknown>> = [];
 const 남긴줄: Array<{ role: string; body?: string }> = [];
@@ -142,6 +142,14 @@ describe("이미지를 보고 답하기 (2차 D5)", () => {
     본결과 = { kind: "failed" };
     const { json } = await 보낸다("방금 거 어때?");
     expect(json.message.body).toBe(SEE_FAILED);
+    expect(차례).toEqual(["reserve", "decide", "see", "settle"]);
+  });
+
+  /** 후속 Task 2 — 100개 밖의 옛 결과물만 골랐으면 see-turn 이 쓴 사실 문장을 그대로 남긴다(「잠시 뒤 다시」가 아니다). */
+  it("오래된 결과물만 골랐으면 see-turn 의 사실 문장을 남긴다", async () => {
+    본결과 = { kind: "old", reply: "결과물 1 은 오래되어 이 대화에서는 볼 수 없습니다." };
+    const { json } = await 보낸다("1번 어때?");
+    expect(json.message.body).toBe("결과물 1 은 오래되어 이 대화에서는 볼 수 없습니다.");
     expect(차례).toEqual(["reserve", "decide", "see", "settle"]);
   });
 });

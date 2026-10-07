@@ -294,10 +294,12 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     setDescription(values.description);
     setKind(values.kind as Kind);
     setLook(lookAfterRole("extract", values.look as Look));
+    // 원래 캐릭터를 만든 모델로 그린다. 비면(옛 캐릭터) 그림체의 기본 모델이다.
+    setModelId(values.modelId);
     if (!front) return;
     setChosen({
       ...front, description: values.description, identity: "", name: values.name,
-      kind: values.kind as Kind, look: values.look as Look, modelId: "",
+      kind: values.kind as Kind, look: values.look as Look, modelId: values.modelId,
     });
   }, []);
   const showCarried = useCallback(async (createdId: string) => {
@@ -463,6 +465,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     const angles = withExtras ? pickedAngles.filter((angle) => angle !== "front") : [];
     const wantsSheet = withExtras && sheet;
     const extras = angles.length + (wantsSheet ? 1 : 0);
+    // 서버도 앞뒤 빈칸을 떼고 비교한다. 같게 떼야 「이름이 바뀌었다」를 잘못 말하지 않는다.
+    const requestedName = (chosen.name.trim() || chosen.description).slice(0, 40).trim();
 
     setBusy("create");
     setPending([...angles, ...(wantsSheet ? [sheetItem.id] : [])]);
@@ -478,19 +482,21 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
           angles,
           sheet: wantsSheet,
           modelId: chosen.modelId || undefined,
-          name: (chosen.name.trim() || chosen.description).slice(0, 40),
+          name: requestedName,
           chosenBase64: chosen.base64,
           chosenMimeType: chosen.mimeType,
           identityPrompt: chosen.identity || undefined,
         }),
       })).json() as {
-        ok?: boolean; id?: string; message?: string; missingAngles?: number; referenceIssue?: string;
+        ok?: boolean; id?: string; name?: string; message?: string; missingAngles?: number; referenceIssue?: string;
       };
 
       if (!body.ok) return setMessage(body.message ?? "만들지 못했습니다.");
 
       // 조용히 넘어가지 않는다. 빠진 장도 라이브러리 실패도 알린다.
       setMessage([
+        // 같은 이름이 있어 서버가 꼬리표를 붙였다. 말없이 바뀌면 라이브러리에서 못 찾는다.
+        body.name && body.name !== requestedName ? `같은 이름의 캐릭터가 있어 「${body.name}」(으)로 저장했습니다.` : "",
         body.missingAngles ? `${body.missingAngles}장이 실패했습니다. 「내 캐릭터」에서 다시 만드세요.` : "",
         body.referenceIssue ?? "",
       ].filter(Boolean).join(" "));
