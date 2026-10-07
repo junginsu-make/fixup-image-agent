@@ -62,7 +62,7 @@ const { POST: batch } = await import("../images/batch/route");
 
 const section = (id: string) => ({ section_id: id, headline: "제목", subheadline: "부제", prompt_en: "a product", layout_notes: "" });
 const post = (body: unknown) => new Request("http://localhost/api/pdp/images", { method: "POST", body: JSON.stringify(body) });
-const common = { originalImageBase64: "AAAA", aspectRatio: "3:4", page: { imageModel: "nano-banana" } };
+const common = { originalImageBase64: "AAAA", aspectRatio: "3:4", page: { imageModel: "nano-banana-2" } };
 
 beforeEach(() => {
   recorded.length = 0;

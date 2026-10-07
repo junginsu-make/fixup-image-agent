@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deletePdpDraft, getPdpDraft, savePdpDraft, preservePdpDraft, purgeExpiredPdpDrafts, type PdpDraftInput } from "../pdp-drafts";
 import { createSectionFor } from "../scenario-sections";
+import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 
 const ids: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); await Promise.all(ids.splice(0).map(deletePdpDraft)); });
@@ -19,10 +20,10 @@ function fixture(): PdpDraftInput {
     attachmentIntents: { anchor: "제품은 그대로", style: "색만 참고" },
     styleReference: { id: "style-1", name: "참조", imageBase64: "BBBB", mimeType: "image/png", description: "파랑", reason: "선택" },
     styleReferenceEnabled: false,
-    imageModel: "nano-banana", characterId: "character-1", characterAngles: ["front", "back"],
+    imageModel: "gpt-image-2", characterId: "character-1", characterAngles: ["front", "back"],
     preserveProduct: false, startMode: "text", analyzedBlueprint: blueprint,
     textDraft: { stage: "keyVisual", text: "작성 중인 원문", brief: null, blueprint, originalBlueprint: blueprint,
-      imageModel: "nano-banana", keyVisual: { base64: "CCCC", mimeType: "image/png" },
+      imageModel: "gpt-image-2", keyVisual: { base64: "CCCC", mimeType: "image/png" },
       copyIntensity: "strong", gapPolicy: "ask", preserveProduct: false, characterId: "character-1",
       characterAngles: ["front"], styleReferenceEnabled: false },
     editorState: { currentSectionIndex: 0, sections: [section], sectionKeys: ["S1"], sectionOptions: {},
@@ -53,10 +54,15 @@ describe("T-SAVE: 화면 입력부터 IndexedDB 왕복", () => {
       styleReference: input.styleReference, styleReferenceEnabled: false,
       editorState: { sections: input.editorState!.sections, overlaysBySection: input.editorState!.overlaysBySection } });
   });
+  it("상세페이지에서 뺀 경제형으로 저장된 작업은 기본 모델로 연다", async () => {
+    const input = { ...fixture(), imageModel: "nano-banana" } as PdpDraftInput; ids.push(input.id!);
+    await savePdpDraft(input);
+    expect((await getPdpDraft(input.id!))?.imageModel).toBe(DEFAULT_IMAGE_MODEL);
+  });
   it("모델·캐릭터·각도·제품 보존과 텍스트 중간 상태를 보존한다", async () => {
     const input = fixture(); ids.push(input.id!);
     await savePdpDraft(input);
-    expect(await getPdpDraft(input.id!)).toMatchObject({ imageModel: "nano-banana", characterId: "character-1",
+    expect(await getPdpDraft(input.id!)).toMatchObject({ imageModel: "gpt-image-2", characterId: "character-1",
       characterAngles: ["front", "back"], preserveProduct: false, startMode: "text",
       analyzedBlueprint: input.result!.blueprint,
       textDraft: { stage: "keyVisual", text: "작성 중인 원문", keyVisual: { base64: "CCCC" } } });
@@ -153,7 +159,7 @@ describe("상품 종류와 목적이 초안을 따라다닌다", () => {
         stage: "input", text: "나무 도마를 팝니다", brief: null,
         blueprint: null, originalBlueprint: null,
         styleReferenceEnabled: true, preserveProduct: true, characterAngles: [],
-        keyVisual: null, imageModel: "nano-banana", copyIntensity: "normal", gapPolicy: "ask",
+        keyVisual: null, imageModel: "gpt-image-2", copyIntensity: "normal", gapPolicy: "ask",
         productKind: "physical", pageGoal: "inquiry",
       } as never,
     });
