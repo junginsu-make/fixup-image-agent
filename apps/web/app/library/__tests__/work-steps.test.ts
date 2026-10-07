@@ -66,7 +66,7 @@ describe("화면이 규칙을 부르는가", () => {
     const button = source.slice(at, at + 700);
 
     expect(button).toContain("event.stopPropagation()");
-    expect(button).toContain("router.push(work.href)");
+    expect(button).toContain("router.push(stepsHref(work, easyConversations))"); // 설계 C
   });
 
   it("카드 본문 클릭은 그대로 뷰어를 연다", () => {
@@ -79,7 +79,7 @@ describe("화면이 규칙을 부르는가", () => {
       튕긴다(2026-09-16).
     */
     expect(source).toContain(
-      "work.imageCount ? void openWork(work) : router.push(work.href)");
+      "work.imageCount ? void openWork(work) : router.push(stepsHref(work, easyConversations))");
     expect(source).not.toContain("work.images.length ? openWork(work)");
   });
 

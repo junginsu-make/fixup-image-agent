@@ -10,8 +10,7 @@ import { cardnewsRequest, readCardnewsProject } from "./cardnews-request";
 import { useCardnewsAfter } from "./use-cardnews-after";
 import type { CopyPatch } from "./cardnews-after";
 import {
-  cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, redoCostLabel, startedDespiteError,
-  type EasyKind,
+  cardnewsJob, generatingProjects, jobsToRegister, latestCardnewsRow, redoCostLabel, startedDespiteError,
 } from "./cardnews-state";
 import { cardnewsView, type CardnewsProjectLike, type EasyCardnewsView } from "./cardnews-view";
 import type { EasyMessage } from "./turn";
@@ -53,13 +52,6 @@ export function useEasyCardnews(input: {
   // 「이대로 만들기」를 보낸 줄. 응답까지 몇 분 걸려 그동안 그 원고에 표시한다.
   const [starting, setStarting] = React.useState<string | null>(null);
   const { jobs, start, finish } = useRunningJobs();
-  /*
-   * **한 장인가 여러 장인가를 묻는 중**(설계 §4) · **레퍼런스를 요청하는 중**(§5-3).
-   * 비율 물음처럼 화면에만 있다. 고른 갈래는 이어지는 답에도 싣는다.
-   */
-  const [kindAsking, setKindAsking] = React.useState<string | null>(null);
-  const [referenceAsking, setReferenceAsking] = React.useState<string | null>(null);
-  const [pendingKind, setPendingKind] = React.useState<EasyKind | undefined>(undefined);
 
   const views = React.useMemo<Record<string, EasyCardnewsView>>(
     () => Object.fromEntries(Object.entries(projects).map(([row, project]) => [row, cardnewsView(project, policy)])),
@@ -124,30 +116,16 @@ export function useEasyCardnews(input: {
     }
   }
 
-  /** 한 턴을 보낼 때. 새로 친 말이면 고른 갈래도 버린다. 실을 갈래를 준다. */
-  function beginTurn(turn: { explicit?: EasyKind; continuing: boolean; photoMode?: "image" | "cardnews" }) {
-    setKindAsking(null);
-    setReferenceAsking(null);
-    if (!turn.continuing) setPendingKind(undefined);
-    return continuingKind({ ...turn, pending: pendingKind });
-  }
-
-  /** 서버가 되물었을 때(비율 · 사진). 답에 같은 갈래를 싣게 기억한다. */
-  function rememberKind(kind: EasyKind | undefined) {
-    if (kind) setPendingKind(kind);
-  }
-
   /** 카드뉴스 갈래의 답이면 받아 그리고 `true`. 값은 원고까지 안 든다. */
   // 만든 카드뉴스 손보기(3단계). 채팅 턴의 답도 `take` 가 먼저 그쪽에 건넨다.
   const after = useCardnewsAfter({
     conversationId, projects, views, replace, start, onMessage: handlers.onMessage, onError: handlers.onError,
   });
 
-  function take(body: { kindAsk?: boolean; needReference?: boolean; cardnews?: { rowId: string; project: Project }; photoRoles?: unknown }, prompt: string) {
+  // 갈래 · 레퍼런스 물음은 이제 대화 줄이다(2차 D1, `_components/ask-row.tsx`). 여기는 원고 · 손보기만 받는다.
+  function take(body: { cardnews?: { rowId: string; project: Project }; photoRoles?: unknown }) {
     if (after.take(body as Parameters<typeof after.take>[0])) return true;
-    if (body.kindAsk) setKindAsking(prompt);
-    else if (body.needReference) setReferenceAsking(prompt);
-    else if (body.cardnews) {
+    if (body.cardnews) {
       // 원고를 쓰고 끝낸다. 그림을 기다리지 않는다. 만들기는 원고 카드가 따로 한다.
       add(body.cardnews.rowId, body.cardnews.project);
       handlers.onDrafted(body.photoRoles);
@@ -186,12 +164,6 @@ export function useEasyCardnews(input: {
       onRedraft: (options: Partial<CardOptions>) => void redraft(rowId, options),
     } : undefined),
     after,
-    kindAsking,
-    referenceAsking,
-    /** 사진이 바뀌면 갈래 물음은 뜻을 잃는다. 레퍼런스 요청은 붙이는 것이 답이라 둔다. */
-    dropKindAsk: () => setKindAsking(null),
-    beginTurn,
-    rememberKind,
     take,
     generate,
     redraft,

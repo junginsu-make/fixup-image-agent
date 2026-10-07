@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, pickCollectedImage, pickRowImage,
+  editAddedOf, editRequestOf, editRowBody, editTargetImage, editedRequestIds, jobRowStates, pickCollectedImage, pickRowImage,
+  rowFromOf, rowJobOf, rowJobRequestIds, withRowFrom, withRowJob,
 } from "../row-image";
 
 /**
@@ -133,8 +134,102 @@ describe("화면이 결과를 받을 때", () => {
    */
   it("이번 요청 번호로 결과 그림을 고른다", async () => {
     const { readFileSync } = await import("node:fs");
-    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
-    expect(화면).toMatch(/pickCollectedImage(<[^>]*>)?\(poll\.images, submission\.requestRowId\)/);
-    expect(화면).not.toContain("poll.images?.[0]");
+    const 받기 = readFileSync(new URL("../collect.ts", import.meta.url), "utf8");
+    expect(받기).toMatch(/pickCollectedImage(<[^>]*>)?\(poll\.images, submission\.requestRowId\)/);
+    expect(받기).not.toContain("poll.images?.[0]");
+  });
+});
+
+describe("받을 정보 (B3)", () => {
+  const 일감 = { requestRowId: "r1", falRequestId: "f-1", endpoint: "fal-ai/gpt-image-2/edit" };
+
+  it("처음 만든 줄 · 고친 줄 모두 끝에 붙이고 다시 읽는다", () => {
+    expect(rowJobOf(withRowJob("", 일감))).toEqual(일감);
+    expect(rowJobOf(withRowJob(editRowBody("r2", ["logo"]), 일감))).toEqual(일감);
+  });
+
+  it("붙여도 고친 줄 표시는 그대로 읽힌다", () => {
+    const body = withRowJob(editRowBody("r2", ["logo-1", "logo-2"]), 일감);
+    expect(editRequestOf(body)).toBe("r2");
+    expect(editAddedOf(body)).toEqual(["logo-1", "logo-2"]);
+    expect(editRequestOf(withRowJob(editRowBody("r3"), 일감))).toBe("r3");
+  });
+
+  it("처음 만든 줄에 붙여도 고친 줄로 안 읽힌다 — 예전 고르기 규칙 그대로", () => {
+    expect(editRequestOf(withRowJob("", 일감))).toBeUndefined();
+    const images = [그림("a", "r1"), 그림("b", "r1", true)];
+    expect(pickRowImage({ body: withRowJob("", 일감) }, images, new Set())?.id).toBe("b");
+  });
+
+  /** Review Focus 3 */
+  it("주소에 쉼표 · 쌍반점 · 표시 글자가 있어도 서로 안 섞인다", () => {
+    const 이상한 = { ...일감, endpoint: "fal-ai/x,y;added=z;job=w" };
+    const body = withRowJob(editRowBody("r2"), 이상한);
+    expect(rowJobOf(body)).toEqual(이상한);
+    expect(editAddedOf(body)).toEqual([]);
+    expect(editRequestOf(body)).toBe("r2");
+  });
+
+  it("셋 중 하나라도 없으면 붙이지 않는다 — 옛 응답", () => {
+    expect(withRowJob("", { requestRowId: "r1" })).toBe("");
+    expect(withRowJob("", undefined)).toBe("");
+  });
+
+  it("표시가 없거나 깨졌으면 없다", () => {
+    expect(rowJobOf("")).toBeUndefined();
+    expect(rowJobOf(editRowBody("r2"))).toBeUndefined();
+    expect(rowJobOf(";job=a,b")).toBeUndefined();
+    expect(rowJobOf(";job=%E0%A4%A,b,c")).toBeUndefined();
+  });
+});
+
+describe("아직 안 받은 줄 (B3, 최종 리뷰 2026-10-06)", () => {
+  const 일감 = (requestRowId: string) => ({ requestRowId, falRequestId: "f", endpoint: "e" });
+  const rows = [
+    { id: "u", role: "user", body: "포스터" },
+    { id: "a", role: "image", body: withRowJob("", 일감("r1")) },
+    { id: "b", role: "image", body: withRowJob(editRowBody("r1"), 일감("r2")) },
+    { id: "c", role: "image", body: "" }, // 옛 줄 — 받을 정보가 없다
+    { id: "d", role: "assistant", body: withRowJob("", 일감("r9")) }, // 그림 줄이 아니다
+  ];
+
+  it("그림 줄의 요청 번호를 모은다", () => {
+    expect(rowJobRequestIds(rows)).toEqual(["r1", "r2"]);
+  });
+
+  it("이미 그림이 있는 줄은 묻지 않는다 — 긴 대화에서도 묻는 목록이 짧다", () => {
+    expect(rowJobRequestIds(rows, { a: "https://x/a.png" })).toEqual(["r2"]);
+  });
+
+  it("안 끝난 요청의 줄은 이어 받고, 끝났는데 그림이 없는 줄은 실패다", () => {
+    expect(jobRowStates(rows, {}, new Map([["r1", true], ["r2", false], ["r9", false]])))
+      .toEqual({ pending: ["b"], failed: ["a"] });
+  });
+
+  it("끝났어도 그림이 있는 줄은 실패가 아니다", () => {
+    expect(jobRowStates(rows, { a: "https://x/a.png" }, new Map([["r1", true]]))).toEqual({ pending: [], failed: [] });
+  });
+
+  it("못 읽은 요청(모름)은 이어 받지도 실패로도 보이지 않는다", () => {
+    expect(jobRowStates(rows, {}, new Map())).toEqual({ pending: [], failed: [] });
+  });
+});
+
+/** 2차 D2 · Review Focus 3 — 고친 대상 줄 표시가 다른 표시와 섞이지 않는다. */
+describe("고친 대상 줄 (;from=)", () => {
+  const 일감 = { requestRowId: "r2", falRequestId: "f;a,b", endpoint: "fal-ai/x;from=y" };
+
+  it("고친 줄 표시 · 넣은 사진 · 고친 대상 · 받을 정보가 안 섞인다", () => {
+    const body = withRowJob(withRowFrom(editRowBody("r2", ["logo-1", "logo-2"]), "row;1,2"), 일감);
+    expect(editRequestOf(body)).toBe("r2");
+    expect(editAddedOf(body)).toEqual(["logo-1", "logo-2"]);
+    expect(rowFromOf(body)).toBe("row;1,2");
+    expect(rowJobOf(body)).toEqual(일감);
+  });
+
+  it("고친 대상이 없으면 붙이지 않고, 옛 줄은 비어 있다", () => {
+    expect(withRowFrom(editRowBody("r2"), undefined)).toBe("edit-request:r2");
+    expect(rowFromOf(withRowJob(editRowBody("r2"), 일감))).toBeUndefined();
+    expect(rowFromOf("")).toBeUndefined();
   });
 });

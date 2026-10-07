@@ -12,8 +12,38 @@ import OpenAI from "openai";
 export type JsonSchema = Record<string, unknown>;
 export type StructuredSpec = { name: string; description: string; schema: JsonSchema };
 
+/**
+ * 판단 · 답에 함께 보일 이미지(2026-10-07 「쉽게」 2차 D5). 서버가 서명한 주소 또는 base64 원문.
+ * 새 파일에서 SDK 를 부르지 않게 여기에만 더한다(`ai-cost-call-sites.test.ts`).
+ */
+export type StructuredImage = { url: string } | { mediaType: string; data: string };
+
 export interface StructuredProvider {
-  generate(prompt: string): Promise<unknown>;
+  generate(prompt: string, images?: readonly StructuredImage[]): Promise<unknown>;
+}
+
+/** Anthropic 의 사용자 글. 이미지가 없으면 지금처럼 글 하나다 — 다른 곳의 호출은 그대로다. 그림이 먼저다. */
+export function anthropicUserContent(prompt: string, images: readonly StructuredImage[] = []) {
+  if (!images.length) return prompt;
+  return [
+    ...images.map((image) => ("url" in image
+      ? { type: "image" as const, source: { type: "url" as const, url: image.url } }
+      : { type: "image" as const, source: { type: "base64" as const, media_type: image.mediaType as "image/png", data: image.data } })),
+    { type: "text" as const, text: prompt },
+  ];
+}
+
+/** OpenAI 의 사용자 글. 그림은 주소 또는 `data:` 주소로 싣는다(`lib/pdp/providers.ts` 와 같은 모양). */
+export function openaiUserContent(prompt: string, images: readonly StructuredImage[] = []) {
+  if (!images.length) return prompt;
+  return [
+    ...images.map((image) => ({
+      type: "input_image" as const,
+      image_url: "url" in image ? image.url : `data:${image.mediaType};base64,${image.data}`,
+      detail: "auto" as const,
+    })),
+    { type: "input_text" as const, text: prompt },
+  ];
 }
 
 /**
@@ -63,11 +93,11 @@ export class AnthropicStructuredProvider implements StructuredProvider {
     private readonly spec: StructuredSpec,
   ) {}
 
-  async generate(prompt: string): Promise<unknown> {
+  async generate(prompt: string, images: readonly StructuredImage[] = []): Promise<unknown> {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: anthropicUserContent(prompt, images) }],
       tools: [{
         name: this.spec.name,
         description: this.spec.description,
@@ -92,12 +122,12 @@ export class OpenAIStructuredProvider implements StructuredProvider {
     private readonly spec: StructuredSpec,
   ) {}
 
-  async generate(prompt: string): Promise<unknown> {
+  async generate(prompt: string, images: readonly StructuredImage[] = []): Promise<unknown> {
     const response = await this.client.responses.create({
       model: this.model,
       input: [
         { role: "developer", content: "Return only the requested structured result." },
-        { role: "user", content: prompt },
+        { role: "user", content: openaiUserContent(prompt, images) },
       ],
       tools: [{
         type: "function",

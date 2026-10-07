@@ -16,8 +16,9 @@ export async function GET() {
   const auth = await authenticateApiMember();
   if (!auth.ok) return auth.response;
   try {
-    const workIds = await easyStoreForUser(auth.member.userId).listWorkIds();
-    return Response.json({ ok: true, workIds });
+    const conversations = await easyStoreForUser(auth.member.userId).listWorkConversations();
+    // `workIds` 는 그대로 준다 — 쉽게와 다양하게를 가르는 화면이 이 칸을 읽는다(설계 C).
+    return Response.json({ ok: true, workIds: Object.keys(conversations), conversations });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "쉽게 작업 목록을 읽지 못했습니다." },

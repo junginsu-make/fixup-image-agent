@@ -6,6 +6,7 @@ import { endingPrompt, endingToFill, fallbackEnding, readEnding } from "../../ap
 import { snsFlowStoreForUser } from "../sns-flow-store";
 import { refreshProjectAssetUrls } from "../sns/runtime";
 import { EasyStepError, read, relay } from "./relay";
+import { READ_BATCH, readInBatches } from "./read-batches";
 import type { CardnewsProjectLike } from "../../app/easy/cardnews-view";
 
 /**
@@ -87,6 +88,23 @@ export async function cardnewsProject(userId: string, projectId: string): Promis
   // 저장소는 팀 읽기 규칙으로 팀원 것도 준다. 잠든 팀 기능 때문에 남의 것이 끼지 않게 막는다.
   if (!project || project.userId !== userId) return null;
   return (await refreshProjectAssetUrls(project)) as unknown as EasyCardnewsProject;
+}
+
+/**
+ * 이 회원의 카드뉴스 작업인 id(2026-10-07 2차 D2 — 결과물 번호의 갈래). 턴마다 부르므로 **있는지만** 보고
+ * 그림 주소는 서명하지 않는다. 못 읽어도 턴을 깨지 않는다 — `null`(모름). 빈 모음을 돌려주면 그 번호들이
+ * 「지운 결과」로 읽힌다(리뷰 1차 수정 2). 같은 id 는 한 번, 한꺼번에 몇 개씩만 읽는다(최종 수정 10).
+ */
+export async function cardnewsProjectIds(userId: string, ids: readonly string[]): Promise<Set<string> | null> {
+  if (!ids.length) return new Set();
+  try {
+    const store = await snsFlowStoreForUser(userId);
+    const found = await readInBatches([...new Set(ids)], READ_BATCH, (id) => store.get(id));
+    return new Set(found.flatMap((one) => (one && one.userId === userId ? [one.id] : [])));
+  } catch (error) {
+    console.warn("[easy] 카드뉴스 작업을 읽지 못했습니다", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 /** 다시 쓰기 대상을 찾을 최근 그림 줄 수. 그보다 앞의 원고를 고치려면 새로 부탁한다. */

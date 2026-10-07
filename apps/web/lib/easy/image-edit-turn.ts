@@ -1,5 +1,8 @@
 import { POST as submitEdit } from "../../app/api/poster/projects/[id]/edit/route";
-import { editAddedOf, editRowBody, editTargetImage } from "../../app/easy/row-image";
+import {
+  editRowBody, editTargetImage, editedRequestIds, pickRowImage, withRowFrom, withRowJob,
+} from "../../app/easy/row-image";
+import { sayBody } from "../../app/easy/row-marks";
 import { posterStoresForUser } from "../poster/stores";
 import { read, relay } from "./relay";
 import type { easyStoreForUser } from "./store";
@@ -22,16 +25,17 @@ import type { easyStoreForUser } from "./store";
  * `status` 로 결과를 받는다 — 화면 코드를 고칠 일이 없다.
  */
 
-type Row = { role: string; workId?: string | null; body?: string | null; createdAt?: string };
+type Row = { id?: string; role: string; workId?: string | null; body?: string | null; createdAt?: string };
 
 export interface EasyImageTarget {
   projectId: string;
   ratio: string;
   /**
-   * 그 작업에 이미 쓴 사진 — 처음 만들 때 쓴 것과 앞서 고칠 때 넣은 것. 다시 붙어
-   * 와도 새것으로 안 넣는다(화면의 첨부는 보낸 뒤에도 남는다, 2026-10-06 리뷰).
+   * 그 작업의 **지킬 사진**(제품 · 인물 그대로). 고치기 라우트가 알아서 다시 붙이므로 새로 안 넣는다.
+   * 그 밖에 붙어 있는 사진은 이번에 일부러 붙인 새 재료다 첨부는 쓴 뒤 입력창에서 내려가므로
+   * (2026-10-07 2차 D3) 예전 고치기에 넣은 로고 · 따라 만들 사진도 다시 붙였으면 넣는다.
    */
-  usedIds: ReadonlySet<string>;
+  keptIds: ReadonlySet<string>;
 }
 
 /**
@@ -42,19 +46,61 @@ export interface EasyImageTarget {
  */
 export async function lastEasyImage(userId: string, rows: readonly Row[]): Promise<EasyImageTarget | null> {
   const row = [...rows].reverse().find((one) => one.role === "image" && one.workId);
-  if (!row?.workId) return null;
-  const project = await posterStoresForUser(userId).projects.get(row.workId).catch(() => undefined);
+  return projectTarget(userId, row?.workId ?? undefined);
+}
+
+/** 포스터 작업 하나를 고칠 대상으로(2차 D2). 없거나 볼 수 없는 작업(카드뉴스 · 지운 것)이면 `null`. */
+export async function projectTarget(userId: string, projectId: string | undefined): Promise<EasyImageTarget | null> {
+  if (!projectId) return null;
+  const project = await posterStoresForUser(userId).projects.get(projectId).catch(() => undefined);
   if (!project) return null;
   const data = project.data;
   return {
     projectId: project.id,
     ratio: project.ratio,
-    usedIds: new Set([
-      ...(data.referenceIds ?? []), ...(data.preservedIds ?? []),
-      ...(data.personIds ?? []), ...(data.restyledIds ?? []),
-      ...rows.filter((one) => one.role === "image" && one.workId === project.id).flatMap((one) => editAddedOf(one.body)),
-    ]),
+    keptIds: new Set([...(data.preservedIds ?? []), ...(data.personIds ?? [])]),
   };
+}
+
+type Picture = { id: string; generationRequestId: string; selected: boolean };
+
+/**
+ * 고칠 그림과 그 그림이 보이는 줄(2차 D2). **번호로 골랐으면 그 줄의 그림** — 같은 작업의 마지막 줄로
+ * 가면 「이미지 1 고쳐줘」가 이미지 3(1 을 고친 것)을 고친다. 번호가 없으면 예전처럼 그 작업의 마지막
+ * 줄의 그림(실패면 앞으로 거슬러 감). 없으면 `undefined` — 아직 만드는 중이다.
+ */
+function 고칠그림<T extends Picture>(
+  rows: readonly Row[], projectId: string, images: readonly T[], rowId: string | undefined,
+): { image: T; fromRowId?: string } | undefined {
+  const edited = editedRequestIds(rows, projectId);
+  if (rowId) {
+    // 그 작업의 줄일 때만 — 다른 작업의 줄 id 가 오면 다른 그림을 고치지 않는다.
+    const row = rows.find((one) => one.id === rowId && one.role === "image" && one.workId === projectId);
+    const image = row ? pickRowImage(row, images, edited) : undefined;
+    return image ? { image, fromRowId: rowId } : undefined;
+  }
+  const found = editTargetImage(rows, projectId, images, Date.now());
+  if (!("image" in found)) return undefined;
+  const 줄 = [...rows].reverse().find((row) =>
+    row.role === "image" && row.workId === projectId && pickRowImage(row, images, edited)?.id === found.image.id);
+  return { image: found.image, fromRowId: 줄?.id };
+}
+
+/**
+ * 이 대화에서 만든 **이미지 수**(규격 안내용, 최종 리뷰 2026-10-06).
+ *
+ * 그림 줄을 그대로 세면 고친 줄(같은 작업) · 카드뉴스 줄 · 지운 작업까지 센다 — 안내가
+ * 「만든 이미지가 5장」이라 하고 「광고소재」에서는 2장만 보인다. 그림 줄이 가리키는 **서로
+ * 다른 작업** 가운데 **포스터 작업**만 센다. 카드뉴스 작업 · 지운 작업은 포스터 저장소에 없다.
+ *
+ * 작업마다 한 번씩 읽으므로 **규격 안내 턴에서만** 부른다.
+ */
+export async function countEasyImages(userId: string, rows: readonly Row[]): Promise<number> {
+  const ids = [...new Set(rows.flatMap((one) => (one.role === "image" && one.workId ? [one.workId] : [])))];
+  if (!ids.length) return 0;
+  const projects = posterStoresForUser(userId).projects;
+  const found = await Promise.all(ids.map((id) => projects.get(id).catch(() => undefined)));
+  return found.filter(Boolean).length;
 }
 
 /** 고칠 그림이 아직 없을 때. 만드는 중이거나 만들지 못한 그림이다. */
@@ -69,11 +115,19 @@ export async function imageEditTurn(ctx: {
   store: ReturnType<typeof easyStoreForUser>;
   conversationId: string;
   prompt: string;
+  /** 사용자 줄에 남길 글(단추 답이면 고른 값 표시가 붙는다, 2차 D1). 없으면 `prompt`. */
+  userBody?: string;
   textModel: string;
   target: EasyImageTarget;
   rows: readonly Row[];
   /** 지금 붙어 있는 사진(확인을 마친 id). */
   attachments: readonly string[];
+  /** 2차 D2: 번호로 고른 줄. 있으면 그 줄의 그림을 고친다. */
+  rowId?: string;
+  /** 2차 D2: 새 고친 줄의 이름표(화면의 「이미지 N」 — 결과물 번호). */
+  resultLabel?: string;
+  /** 2차 D4: 일하는 턴의 AI 말. 있으면 사용자 줄 뒤 · 고치기 앞에 머리말 줄로 남긴다. */
+  say?: string;
 }): Promise<Response> {
   const { projectId } = ctx.target;
   /*
@@ -81,24 +135,29 @@ export async function imageEditTurn(ctx: {
    * 그 라우트가 404 로 막는데, 그 전에 말 줄이 남는다.
    */
   const images = await posterStoresForUser(ctx.userId).images.byProject(projectId, { lineage: false, ownOnly: true });
-  // 마지막 줄의 그림. 앞의 고치기가 실패했으면 그 앞의 그림으로 거슬러 간다(`row-image.ts`).
-  const found = editTargetImage(ctx.rows, projectId, images, Date.now());
+  // 번호로 골랐으면 그 줄의 그림, 아니면 마지막 줄의 그림(실패면 앞으로 거슬러 간다).
+  const found = 고칠그림(ctx.rows, projectId, images, ctx.rowId);
 
   // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야 한다.
-  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.prompt });
+  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody ?? ctx.prompt });
 
-  if (!("image" in found)) {
+  if (!found) {
     // 값이 나가기 전이다. 안내만 남긴다.
     const saved = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "assistant", body: IMAGE_NOT_READY });
     return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
   }
 
+  // 일하는 턴의 AI 말(2차 D4). 고치기 라우트를 부르기 전에 남긴다 — 실패해도 실패 줄이 그 뒤에 남는다.
+  const 머리말 = ctx.say
+    ? await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "assistant", body: sayBody(ctx.say) })
+    : undefined;
+
   /*
-   * **새로 붙인 사진만** 넣는다. 처음에 쓴 원본 사진은 입력창에 그대로 붙어 있기
-   * 쉬운데, 그것을 다시 넣으면 고친 그림에 원본의 모습이 되살아난다. 원래 작업의
-   * 지킬 대상은 고치기 라우트가 알아서 다시 붙인다.
+   * **이번에 붙인 사진은 넣는다**(2026-10-07 2차 D3). 첨부는 만들기 · 고치기에 쓴 뒤 입력창에서
+   * 내려가므로, 붙어 있다면 사용자가 이번에 일부러 붙인 것이다. 원래 작업의 지킬 사진만 뺀다
+   * 고치기 라우트가 알아서 다시 붙인다.
    */
-  const added = ctx.attachments.filter((id) => !ctx.target.usedIds.has(id));
+  const added = ctx.attachments.filter((id) => !ctx.target.keptIds.has(id));
   const submitted = await read(
     await submitEdit(
       relay(ctx.request, `/api/poster/projects/${projectId}/edit`, {
@@ -119,7 +178,8 @@ export async function imageEditTurn(ctx: {
     conversationId: ctx.conversationId,
     role: "image",
     workId: projectId,
-    body: editRowBody(submitted.submission.requestRowId, added),
+    // 고친 대상 줄도 적는다 — 목록의 「#N 을 고친 것」(2차 D2).
+    body: withRowJob(withRowFrom(editRowBody(submitted.submission.requestRowId, added), found.fromRowId), submitted.submission),
   });
 
   return Response.json({
@@ -129,5 +189,7 @@ export async function imageEditTurn(ctx: {
     textModel: ctx.textModel,
     ratio: ctx.target.ratio,
     photoRoles: [],
+    ...(ctx.resultLabel ? { resultLabel: ctx.resultLabel } : {}),
+    ...(머리말 ? { say: 머리말 } : {}),
   });
 }

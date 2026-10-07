@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EASY_WORK_PAGE, collectEasyWorkIds } from "../store-core";
+import { EASY_WORK_PAGE, collectEasyWorkConversations, collectEasyWorkIds } from "../store-core";
 
 /**
  * **쉽게로 만든 작업 id 모으기** (2026-09-22 라이브러리 필터).
@@ -32,6 +32,32 @@ describe("쉽게 작업 id", () => {
   /** 못 읽었는데 빈 목록을 주면 쉽게 작업이 전부 「다양하게」로 보인다. */
   it("못 읽으면 빈 목록이 아니라 실패다", async () => {
     await expect(collectEasyWorkIds(async () => ({ data: null, error: { message: "boom" } })))
+      .rejects.toThrow("boom");
+  });
+});
+
+describe("쉽게 작업 → 대화 (2026-10-06 설계 C)", () => {
+  it("작업마다 그 대화를 준다 — 빈 칸은 빼고, 겹치는 작업은 처음 것", async () => {
+    const map = await collectEasyWorkConversations(async () => ({
+      data: [
+        { work_id: "p1", conversation_id: "c1" }, { work_id: null, conversation_id: "c1" },
+        { work_id: "p1", conversation_id: "c1" }, { work_id: "p2", conversation_id: "c2" },
+      ],
+      error: null,
+    }));
+    expect(map).toEqual({ p1: "c1", p2: "c2" });
+  });
+
+  it("한 쪽을 꽉 채우면 다음 쪽도 받는다", async () => {
+    const 쪽 = (count: number, prefix: string) =>
+      Array.from({ length: count }, (_, index) => ({ work_id: `${prefix}${index}`, conversation_id: "c" }));
+    const pages = [쪽(EASY_WORK_PAGE, "a"), 쪽(2, "b")];
+    const map = await collectEasyWorkConversations(async () => ({ data: pages.shift() ?? [], error: null }));
+    expect(Object.keys(map)).toHaveLength(EASY_WORK_PAGE + 2);
+  });
+
+  it("못 읽으면 실패다", async () => {
+    await expect(collectEasyWorkConversations(async () => ({ data: null, error: { message: "boom" } })))
       .rejects.toThrow("boom");
   });
 });

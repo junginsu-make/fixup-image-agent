@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { NOTHING_TO_EDIT, easyChatPrompt, readEasyDecision } from "../chat";
 import { editRowBody } from "../row-image";
@@ -24,8 +23,8 @@ describe("판단 지시", () => {
     expect(easyChatPrompt([], "로고 바꿔줘", 0, false, false, true)).not.toContain("revise");
   });
 
-  it("image_edit 이면 reply 를 비우라고 한다", () => {
-    expect(easyChatPrompt([], "로고 바꿔줘", 0, false, false, true)).toMatch(/`image_edit`[^\n]*reply/);
+  it("image_edit 도 reply 에 무엇을 이해했고 무엇을 하는지 말하게 한다 (2차 D4)", () => {
+    expect(easyChatPrompt([], "로고 바꿔줘", 0, false, false, true)).toMatch(/image_edit[^\n]*무엇을 이해했고/);
   });
 
   it("고친 줄의 표시는 모델에게 가지 않는다", () => {
@@ -64,12 +63,36 @@ describe("판단 읽기", () => {
       expect(읽은것.reply).toBe(NOTHING_TO_EDIT);
     }
   });
+
+  /**
+   * 2차 최종 리뷰 b — 2차부터는 모든 갈래에서 reply 를 쓴다. 바꿔 읽은 일에 처음 갈래로 쓴 글
+   * (「원고를 고치겠습니다」)이 머리말로 나가면 안 된다. 다른 일하는 갈래로 바꿔 읽으면 reply 를 비운다.
+   */
+  it("다른 일하는 갈래로 바꿔 읽으면 처음 갈래로 쓴 reply 를 버린다", () => {
+    const 원고고치기 = { ...결정("revise"), reply: "카드뉴스 원고를 고치겠습니다." };
+    expect(readEasyDecision(원고고치기, { editableImage: true })).toMatchObject({ wants: "image_edit", reply: "" });
+    const 이미지고치기 = { ...결정("image_edit"), reply: "배경을 바꾸겠습니다." };
+    expect(readEasyDecision(이미지고치기, { canRevise: true })).toMatchObject({ wants: "revise", reply: "" });
+    expect(readEasyDecision({ ...결정("image"), reply: "만들겠습니다." })).toMatchObject({ wants: "image", reply: "만들겠습니다." });
+  });
+
+  /** 2차 최종 리뷰 c — AI 가 표시 머리로 시작하는 글을 쓰면 그 말 줄이 머리말 · 물음으로 읽힌다. */
+  it("AI 가 쓴 reply 의 표시 머리를 푼다", () => {
+    expect(readEasyDecision({ ...결정("talk"), reply: "say:안녕하세요" }).reply).toBe("say：안녕하세요");
+    expect(readEasyDecision({ ...결정("talk"), reply: "ask:ratio:\n어떤 모양?" }).reply).toBe("ask：ratio:\n어떤 모양?");
+  });
 });
 
 describe("판단 틀", () => {
-  it("틀에 image_edit 이 있다 — 틀에 없으면 아무리 시켜도 안 온다", () => {
-    const 제공자 = readFileSync(new URL("../../../lib/easy/chat-provider.ts", import.meta.url), "utf8");
-    expect(제공자).toMatch(/enum: \[[^\]]*"image_edit"/);
+  it("이미지가 있을 때만 틀에 image_edit 이 있다 — 틀에 없으면 아무리 시켜도 안 온다", async () => {
+    const { easyChatSpec } = await import("../../../lib/easy/chat-provider");
+    const { easyAvailableWants } = await import("../chat");
+    const 선택지 = (madeImage: boolean) =>
+      (easyChatSpec(easyAvailableWants({ hasDraft: false, made: false, madeImage })).schema as {
+        properties: { wants: { enum: string[] } };
+      }).properties.wants.enum;
+    expect(선택지(true)).toContain("image_edit");
+    expect(선택지(false)).not.toContain("image_edit");
   });
 });
 
@@ -84,5 +107,55 @@ describe("카드뉴스 원고와 이미지가 함께 있는 대화", () => {
 
   it("원고만 있으면 그 말은 없다", () => {
     expect(easyChatPrompt([], "더 짧게", 0, true, false, false)).not.toContain("마지막으로 만든 것은 이미지");
+  });
+});
+
+describe("고칠 이미지 번호 (2차 D2)", () => {
+  const 둘 = [
+    { n: 1, rowId: "i1", workId: "p1", kind: "image" as const, state: "done" as const, words: "a" },
+    { n: 2, rowId: "i2", workId: "p2", kind: "image" as const, state: "done" as const, words: "b" },
+  ];
+
+  it("돌아온 번호는 image_edit 일 때만, 1 이상의 정수만 읽는다", () => {
+    expect(readEasyDecision({ wants: "image_edit", reply: "", target: 2 }, { editableImage: true })).toMatchObject({ wants: "image_edit", target: 2 });
+    expect(readEasyDecision({ wants: "image", reply: "", target: 2 }).target).toBeUndefined();
+    expect(readEasyDecision({ wants: "image_edit", reply: "", target: 0 }, { editableImage: true }).target).toBeUndefined();
+    expect(readEasyDecision({ wants: "image_edit", reply: "", target: 1.5 }, { editableImage: true }).target).toBeUndefined();
+  });
+
+  it("이미지 고치기가 있을 때만 번호 고르는 법을 알리고, 다 만든 것이 둘 이상이면 모를 때 묻게 한다", () => {
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, true, { images: 둘 })).toContain("`ask_target`");
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, true, { images: 둘.slice(0, 1) })).toContain("`target`");
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, true, { images: 둘.slice(0, 1) })).not.toContain("ask_target");
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, false)).not.toContain("`target`");
+  });
+
+  /**
+   * Task 12 실제 모델 확인 — 이미지 둘을 만들고 「고마워」를 주고받은 뒤 「글자를 더 크게 고쳐줘」에 묻지 않고
+   * 마지막 이미지를 골랐다(2/2). 사이에 다른 말이 끼면 「바로 앞 이미지 이야기」가 아니다.
+   */
+  it("둘 이상이면 가리킴 없는 고치기는 마지막 이미지로 짐작하지 말고 묻게 한다", () => {
+    const prompt = easyChatPrompt([], "글자를 더 크게 고쳐줘", 0, false, false, true, { images: 둘 });
+    expect(prompt).toContain("바로 앞 턴에서 만든 이미지 이야기를 그 사이 다른 말 없이 이어 가면 0");
+    expect(prompt).toContain("마지막 이미지라고 짐작하지 마세요");
+  });
+
+  /**
+   * 최종 수정 4 — 원고와 다 만든 이미지 둘 이상이 함께면, 마지막 결과 줄이 「콕 집지 않은 고치기는 image_edit(마지막 이미지)」라
+   * 하고 번호 줄은 「짐작하지 말고 물어라」라 해 서로 어긋났다. 둘 이상이면 마지막 결과 줄은 갈래만 말하고 번호는 target 규칙에 맡긴다.
+   */
+  it("원고와 다 만든 이미지 둘 이상이 함께면 마지막 결과 줄은 번호를 target 규칙에 맡긴다 — 하나면 예전 그대로", () => {
+    const 둘이상 = easyChatPrompt([], "글자를 더 크게 고쳐줘", 0, true, false, true, { images: 둘, lastIsImage: true });
+    expect(둘이상).toContain("어느 이미지인지는 아래 `target` 규칙을 따릅니다");
+    expect(둘이상).toContain("마지막 이미지라고 짐작하지 마세요");
+    const 하나 = easyChatPrompt([], "글자를 더 크게 고쳐줘", 0, true, false, true, { images: 둘.slice(0, 1), lastIsImage: true });
+    expect(하나).toContain("마지막으로 만든 것은 이미지 한 장입니다");
+    expect(하나).not.toContain("아래 `target` 규칙을 따릅니다");
+  });
+
+  it("마지막 결과가 카드뉴스면 콕 집지 않은 고치기는 원고 고치기라고 알린다", () => {
+    const prompt = easyChatPrompt([], "고쳐줘", 0, true, false, true, { lastIsImage: false });
+    expect(prompt).toContain("마지막으로 만든 것은 카드뉴스입니다");
+    expect(prompt).not.toContain("마지막으로 만든 것은 이미지 한 장");
   });
 });

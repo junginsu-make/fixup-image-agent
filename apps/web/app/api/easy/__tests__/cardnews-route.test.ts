@@ -141,6 +141,13 @@ vi.mock("../../../../lib/sns/runtime", () => ({ refreshProjectAssetUrls: async (
 
 const { POST } = await import("../generate/route");
 const { ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING } = await import("../../../easy/cardnews-after");
+const { askBody, readAsk, readPick } = await import("../../../easy/row-marks");
+const { KIND_QUESTION } = await import("../../../easy/turn-words");
+const { sayBody } = await import("../../../easy/row-marks");
+const { SAY_CARDNEWS, SAY_REVISE } = await import("../../../easy/turn-words");
+const { NO_REFERENCE } = await import("../../../easy/cardnews-attachments");
+const { usedAttachments } = await import("../../../easy/attachments-after");
+const { ASK_ANSWER_NOTE, answerableAskId } = await import("../../../easy/ask-chain");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -167,11 +174,12 @@ beforeEach(() => {
 });
 
 describe("갈래 (2단계 §4)", () => {
-  it("한 장인지 여러 장인지 모르면 두 단추로 묻고 아무것도 안 남긴다", async () => {
+  it("한 장인지 여러 장인지 모르면 두 단추로 묻고 사용자 말과 물음 줄을 남긴다 (2차 D1)", async () => {
     판단 = { wants: "either", reply: "", ratio: "", look: "" };
     const { json } = await 보낸다({ prompt: "신메뉴 홍보물 만들어줘" });
     expect(json.kindAsk).toBe(true);
-    expect(남긴줄).toEqual([]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "kind", text: KIND_QUESTION, data: { ids: [] } });
     expect(부른라우트).toEqual([]);
   });
 
@@ -197,18 +205,19 @@ describe("갈래 (2단계 §4)", () => {
 });
 
 describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
-  it("레퍼런스가 없으면 요청하고 아무것도 안 남긴다", async () => {
+  it("레퍼런스가 없으면 요청하고 사용자 말과 요청 줄을 남긴다 (2차 D1)", async () => {
     const { json } = await 보낸다({ prompt: "건강 카드뉴스" });
     expect(json.needReference).toBe(true);
-    expect(남긴줄).toEqual([]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "reference", text: NO_REFERENCE, data: { wants: "cardnews", ids: [] } });
     expect(부른라우트).toEqual([]);
   });
 
-  it("분위기 참고가 없으면(제품 사진만) 레퍼런스를 요청한다", async () => {
+  it("분위기 참고가 없으면(제품 사진만) 레퍼런스를 요청한다 - 요청 줄에 그 사진을 적는다", async () => {
     역할판단 = 역할(["preserve_product", true]);
     const { json } = await 보낸다({ prompt: "1번 제품으로 카드뉴스", referenceIds: [사진(1)] });
     expect(json.needReference).toBe(true);
-    expect(남긴줄).toEqual([]);
+    expect(readAsk(남긴줄[1] as never)?.data).toEqual({ wants: "cardnews", ids: [사진(1)] });
     expect(부른라우트).toEqual([]);
   });
 
@@ -227,14 +236,16 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     });
     expect(json.cardnews.project.id).toBeDefined();
     expect(json.photoRoles).toEqual([{ id: 사진(1), role: "style" }]);
-    expect(남긴줄.map((r) => r.role)).toEqual(["user", "image"]);
+    expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant", "image"]);
+    expect(남긴줄[1]!.body).toBe(sayBody(SAY_CARDNEWS));
+    expect(json.say).toMatchObject({ body: sayBody(SAY_CARDNEWS) });
   });
 
-  it("모르는 사진이 있으면 카드뉴스 역할로 묻는다", async () => {
+  it("모르는 사진이 있으면 카드뉴스 역할로 묻고 물음 줄을 남긴다", async () => {
     역할판단 = 역할(["unclear", false]);
     const { json } = await 보낸다({ referenceIds: [사진(1)] });
     expect(json.photoAsk).toEqual({ reason: "unclear", rows: [{ id: 사진(1), role: "unclear" }], mode: "cardnews" });
-    expect(남긴줄).toEqual([]);
+    expect(readAsk(남긴줄[1] as never)).toMatchObject({ kind: "photo", data: { wants: "cardnews", mode: "cardnews", ids: [사진(1)] } });
     expect(부른라우트).toEqual([]);
   });
 
@@ -248,12 +259,16 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     expect(부른라우트).toEqual([]);
   });
 
-  /** Review Focus 4 */
-  it("원고 0장이면 까닭을 말하고 원고 줄을 안 남긴다", async () => {
+  /**
+   * Review Focus 4. Task 9 리뷰 — 원고 머리말은 다 된 원고를 보여 주는 말이라(「카드뉴스 원고입니다」) 원고가
+   * 0장이면 남기지 않는다. 남기면 「원고입니다」 바로 밑에 「원고를 쓰지 못했습니다」가 온다.
+   */
+  it("원고 0장이면 까닭을 말하고 원고 줄 · 머리말 줄을 안 남긴다", async () => {
     역할판단 = 역할(["style", false]);
     원고작업 = { ...원고작업, data: { ...원고작업.data, flow: { planningIssues: ["자막이 없습니다"], copyIssues: [], cards: [] } } };
     const { json } = await 보낸다({ prompt: "https://youtu.be/x 카드뉴스", referenceIds: [사진(1)] });
     expect(json.talked).toBe(true);
+    expect(json.say).toBeUndefined();
     expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant"]);
     expect(남긴줄[1]!.body).toContain("자막이 없습니다");
   });
@@ -265,6 +280,14 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     } } };
     await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] });
     expect(남긴줄[1]!.body).toBe("원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.");
+  });
+
+  /** 2차 D2 · 최종 리뷰 5 — 카드뉴스 줄도 결과물 번호를 받는다. 앞의 이미지 줄과 함께 센다. */
+  it("원고 응답에 「카드뉴스 N」 이름표를 싣는다 — 번호는 앞의 결과물 줄과 함께 센다", async () => {
+    역할판단 = 역할(["style", false]);
+    expect((await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] })).json.resultLabel).toBe("카드뉴스 1");
+    지난줄들 = [{ id: "r0", role: "image", body: "", workId: "p-old" }];
+    expect((await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] })).json.resultLabel).toBe("카드뉴스 2");
   });
 });
 
@@ -290,6 +313,19 @@ describe("다시 쓰기 (2단계 §7)", () => {
 
     expect(부른라우트.map((c) => c.step)).toEqual(["cardnews-project", "cardnews-plan"]);
     expect(부른라우트[0]!.body).toMatchObject({ toneNote: "더 짧게", title: "건강" });
+    // 2차 D4 · Task 9 리뷰: 고친 원고 위에 「고쳤습니다」 머리말(AI 말이 비면 코드 문장).
+    expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant", "image"]);
+    expect(남긴줄[1]!.body).toBe(sayBody(SAY_REVISE));
+  });
+
+  /** 최종 수정 8 — 원고 고치기는 붙인 사진을 안 쓴다. 화면이 첨부를 내리지 않게 알린다. 새 원고는 알리지 않는다. */
+  it("원고 고치기 응답은 고친 것이라고 알린다 — 새 원고는 아니다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", body: "", workId: "old" }];
+    카드작업들 = { old: { ...원고작업, id: "old", title: "건강", toneNote: "" } };
+    판단 = { wants: "revise", reply: "", ratio: "", look: "" };
+    const { json } = await 보낸다({ prompt: "더 짧게" });
+    expect(json).toMatchObject({ ok: true, revised: true });
+    expect(usedAttachments(json)).toBe(false);
   });
 
   it("원고가 없는 대화에서 고치기로 읽혀도 고치기로 가지 않는다", async () => {
@@ -323,14 +359,100 @@ describe("만든 카드뉴스 손보기 말 (3단계 §5 · §6-5)", () => {
     expect(남긴줄).toEqual([]);
   });
 
-  /** Review Focus 4 */
-  it("없는 번호 · 번호 없음은 몇 번인지 되묻고 아무것도 안 남긴다", async () => {
+  /** 3단계 Review Focus 4 · 2차 D1 — 물음도 대화에 남고 장 번호 단추가 달린다. */
+  it("없는 번호 · 번호 없음은 몇 번인지 묻고 물음 줄을 남긴다 — AI 가 물음으로 쓴 글이 먼저", async () => {
     판단하면({ wants: "card_text", card: 9, note: "짧게" });
-    expect((await 보낸다({ prompt: "9번 더 짧게" })).json.message.body).toBe(ASK_CARD_NUMBER);
-    판단하면({ wants: "card_redo", card: 0, note: "" });
-    expect((await 보낸다({ prompt: "다시 그려줘" })).json.message.body).toBe(ASK_CARD_NUMBER);
-    expect(남긴줄).toEqual([]);
+    const 첫 = (await 보낸다({ prompt: "9번 더 짧게" })).json;
+    expect(readAsk(첫.message)).toEqual({ kind: "card", text: ASK_CARD_NUMBER, data: { wants: "card_text", count: 2, note: "짧게" } });
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    남긴줄.length = 0;
+    판단하면({ wants: "card_redo", card: 0, note: "", reply: "몇 번 장을 다시 그릴까요?" });
+    await 보낸다({ prompt: "다시 그려줘" });
+    expect(readAsk(남긴줄[1] as never)).toEqual({ kind: "card", text: "몇 번 장을 다시 그릴까요?", data: { wants: "card_redo", count: 2 } });
     expect(손본것).toEqual([]);
+  });
+
+  it("장 번호 단추로 답하면 판단 없이 그 장을 물을 때의 바라는 점으로 고친다 (2차 D1)", async () => {
+    지난줄들 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "더 짧게 해줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_text", count: 2, note: "더 짧게" }), workId: null },
+    ];
+    판단 = undefined; // 판단 모델을 부르면 읽기가 실패한다 — 단추 답은 안 부른다
+    const { status } = await 보낸다({ prompt: "2번", answersRowId: "q1", pick: { card: 2 } });
+    expect(status).toBe(200);
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "더 짧게" } }]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(readPick(남긴줄[0] as never)).toEqual({ card: 2 });
+  });
+
+  /** 2차 D1 — 단추 답도 서버가 장 번호를 다시 본다. 없는 번호는 고치지 않고 다시 묻는다(값 없음). */
+  it("없는 장 번호를 단추 답으로 보내면 고치지 않고 다시 묻는다", async () => {
+    지난줄들 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "더 짧게 해줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_text", count: 2, note: "더 짧게" }), workId: null },
+    ];
+    판단 = undefined;
+    const { json } = await 보낸다({ prompt: "9번", answersRowId: "q1", pick: { card: 9 } });
+    expect(손본것).toEqual([]);
+    expect(readAsk(json.message)).toEqual({ kind: "card", text: ASK_CARD_NUMBER, data: { cont: true, wants: "card_text", count: 2, note: "더 짧게" } });
+  });
+
+  /** Task 10 고침 1 — 장 물음에 다시 그리기로 답하면 물음이 닫혀야 한다. 값은 여전히 확인 단추에서만. */
+  it("장 물음에 다시 그리기로 답하면(단추 · 말) 사용자 줄을 남겨 물음을 닫고, 확인 줄만 연다", async () => {
+    const 물음까지 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "다시 그려줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_redo", count: 2, note: "글자 크게" }), workId: null },
+    ];
+    const 닫혔나 = () => answerableAskId([...물음까지, ...남긴줄.map((row, at) => ({ id: `s${at}`, role: row.role, body: row.body ?? "" }))] as never);
+
+    지난줄들 = 물음까지;
+    판단 = undefined;
+    const 단추 = (await 보낸다({ prompt: "2번", answersRowId: "q1", pick: { card: 2 } })).json;
+    expect(단추.cardAsk).toEqual({ rowId: "r1", index: 2, note: "글자 크게" });
+    expect(남긴줄.map((row) => [row.role, row.body])).toEqual([["user", "2번"]]);
+    expect(닫혔나()).toBeUndefined();
+
+    남긴줄.length = 0;
+    판단하면({ wants: "card_redo", card: 2, note: "" });
+    const 말 = (await 보낸다({ prompt: "2번이요" })).json;
+    expect(말.cardAsk).toEqual({ rowId: "r1", index: 2, note: "글자 크게" });
+    expect(남긴줄.map((row) => [row.role, row.body])).toEqual([["user", "2번이요"]]);
+    expect(닫혔나()).toBeUndefined();
+    expect(부른라우트).toEqual([]);
+    expect(손본것).toEqual([]);
+  });
+
+  /** Task 10 고침 3 — 답 표시(answer)는 바라는 점이 아니다. 물음 줄 · 글 고치기에 새지 않는다. */
+  it("판단의 note 가 답 표시면 물음 줄에 적지 않고 글 고치기에도 쓰지 않는다", async () => {
+    판단하면({ wants: "card_text", card: 0, note: ASK_ANSWER_NOTE });
+    const 물음 = (await 보낸다({ prompt: "더 짧게" })).json;
+    expect(readAsk(물음.message)?.data).toEqual({ wants: "card_text", count: 2 });
+    판단하면({ wants: "card_text", card: 2, note: ASK_ANSWER_NOTE });
+    await 보낸다({ prompt: "2번 더 짧게" });
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "2번 더 짧게" } }]);
+  });
+
+  /** 2차 D4 · 최종 리뷰 g — 끝 문장은 고친 뒤에 남는다. 판단 모델에 끝난 일로 쓰게 했다(Task 9). */
+  it("글 고치기 끝 문장은 AI 가 쓴 말이 먼저다 (2차 D4)", async () => {
+    판단하면({ wants: "card_text", card: 2, note: "더 짧게", reply: "2번 장 본문을 더 짧게 고쳤습니다." });
+    await 보낸다({ prompt: "2번 더 짧게" });
+    expect(남긴줄.map((row) => row.body)).toEqual(["2번 더 짧게", "2번 장 본문을 더 짧게 고쳤습니다."]);
+  });
+
+  /** 2차 최종 리뷰 6 · Review Focus 8 — 장 물음 바로 뒤 장 갈래면 note 가 없어도 답이다. 바라는 점은 물을 때의 것. */
+  it("장 물음에 말로 「2번」이라 답하면 note 가 없어도 물을 때의 바라는 점으로 그 장을 고친다", async () => {
+    지난줄들 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "더 짧게 해줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_text", count: 2, note: "더 짧게" }), workId: null },
+    ];
+    판단하면({ wants: "card_text", card: 2, note: "" });
+    await 보낸다({ prompt: "2번" });
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "더 짧게" } }]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
   });
 
   /** Review Focus 4 */
@@ -385,8 +507,9 @@ describe("미뤄 둔 작은 것 (2026-10-01)", () => {
 
   /** 1: 남기지 않은 답에 빈 id 를 주면 화면이 두 답을 같은 줄로 본다. */
   it("남기지 않은 답에는 id 를 안 준다(화면이 저마다 짓는다)", async () => {
-    판단 = { wants: "card_text", reply: "", ratio: "", look: "", card: 9, note: "" };
-    const { json } = await 보낸다({ prompt: "9번 짧게" });
+    카드작업들 = { old: { ...만든원고(), status: "generating" } };
+    판단 = { wants: "card_text", reply: "", ratio: "", look: "", card: 2, note: "" };
+    const { json } = await 보낸다({ prompt: "2번 짧게" });
     expect(json.message).not.toHaveProperty("id");
   });
 

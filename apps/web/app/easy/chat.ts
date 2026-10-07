@@ -1,6 +1,15 @@
 import { EASY_LOOKS, EASY_RATIOS } from "./ask";
 import { NOT_MADE_YET } from "./cardnews-after";
 import type { EasyMessage } from "./turn";
+import { adQuestionOrigin } from "./ad-ask";
+import { plainAiText, visibleBody } from "./row-marks";
+import {
+  easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyLastResultLines,
+  easyCardFactLines, easyPhotoGoneLines, easyReplyLines, easyResultListLines, easyResultRowText, easySeeLines,
+  easyTargetLines,
+} from "./chat-facts";
+import { doneImageNumbers, type EasyResultEntry } from "./image-numbers";
+import { askChain } from "./ask-chain";
 
 /**
  * **말인가, 만들어 달라는 것인가.**
@@ -40,11 +49,17 @@ export interface EasyDecision {
     // 3단계: 만든 카드뉴스 손보기(한 장 다시 그리기 · 한 장 글 고치기 · 게시글 · 받기).
     | "card_redo" | "card_text" | "caption" | "download"
     // 이 대화에서 마지막으로 만든 이미지 한 장을 고친다(2026-10-06).
-    | "image_edit";
+    | "image_edit"
+    // 포털 광고 규격별로 여러 장 — 여기서 안 만들고 「광고소재」로 안내한다(2026-10-06 설계 A5).
+    | "ad_specs";
   /** 3단계: 말한 장 번호. 없으면 비어 있다. */
   card?: number;
   /** 3단계: 그 장에 바라는 점 · 고칠 내용. */
   note?: string;
+  /** 2차 D2: 고칠 결과물 번호(이 대화의 「이미지 N」). 없으면 마지막 이미지다. */
+  target?: number;
+  /** 2차 D5: 보고 답할 것(이 대화의 이미지 번호 「2」 · 붙인 사진 「p1」). talk 일 때만 있다. */
+  see?: string[];
   /** 말로 답할 때 그 답. 주문일 때는 안 쓴다. */
   reply: string;
   /**
@@ -58,6 +73,53 @@ export interface EasyDecision {
   look?: string;
 }
 
+/** 이번 판단에만 쓰는 것. */
+export interface EasyPromptOptions {
+  /** A3: 앞서 talk 인데 reply 가 비었다. 이번에는 꼭 쓰라고 한다. */
+  retry?: boolean;
+  /** A5: 「광고 소재 말고 ○○」라고 했다. 규격 안내를 선택지에서 뺀다. */
+  adNegated?: boolean;
+  /** 2차 D2: 이 대화의 결과물(번호 · 갈래 · 상태). 목록으로 싣고, 지난 대화의 결과물 줄에도 번호를 적는다. */
+  images?: readonly EasyResultEntry[];
+  /** 2차 D2: 이 대화의 마지막 결과가 이미지인가(카드뉴스면 false). 모르면 예전처럼 이미지로 본다. */
+  lastIsImage?: boolean;
+  /** 2차 D4: 이 대화 카드뉴스의 장수 · 만드는 중인가. 원고가 있을 때만 싣는다. */
+  cards?: { count: number; generating: boolean };
+}
+
+/** 판단 모델이 고를 수 있는 갈래 하나. */
+export type EasyWant = EasyDecision["wants"];
+
+/** 지금 쓸 수 있는 갈래를 정하는 재료. 모두 이 대화에서 읽은 사실이다. */
+export interface EasyChoices {
+  /** 이 대화에 카드뉴스 원고가 있나. */
+  hasDraft: boolean;
+  /** 그 원고로 카드를 만들었나(그림이 있다). */
+  made: boolean;
+  /** 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가. */
+  madeImage: boolean;
+  /** A5: 「광고 소재 말고 ○○」라고 했나. 그러면 규격 안내를 고를 수 없다. */
+  adNegated?: boolean;
+}
+
+/**
+ * **지금 쓸 수 있는 갈래**(2026-10-06 설계 A1).
+ *
+ * 프롬프트의 갈래 안내(`easyChatPrompt`)와 판단 틀의 선택지(`easyChatSpec`)가 **둘 다
+ * 이 함수에서 나온다.** 전에는 프롬프트만 조건부였고 틀은 늘 열려 있어서, 고칠 것이 없는
+ * 대화에서도 모델이 `image_edit` 을 골라 고정 문장으로 끝났다(실측 6/6).
+ */
+export function easyAvailableWants(choices: EasyChoices): EasyWant[] {
+  return [
+    "image", "cardnews", "either",
+    ...(choices.hasDraft ? (["revise", "card_text"] as const) : []),
+    ...(choices.hasDraft && choices.made ? (["card_redo", "caption", "download"] as const) : []),
+    ...(choices.madeImage ? (["image_edit"] as const) : []),
+    "talk", "detail_page",
+    ...(choices.adNegated ? [] : (["ad_specs"] as const)),
+  ];
+}
+
 /**
  * 고쳐 달라는데 고칠 것이 없을 때의 답.
  *
@@ -67,8 +129,19 @@ export interface EasyDecision {
 export const NOTHING_TO_EDIT =
   "이 대화에는 아직 고칠 이미지나 카드뉴스가 없습니다. 먼저 무엇을 만들지 알려 주세요. 예: 「카페 신메뉴 포스터 만들어줘」";
 
-/** 지난 대화를 몇 줄까지 보여 줄까. */
-const 되돌아볼줄 = 12;
+/**
+ * 지난 대화를 **사용자 말 몇 번**까지 보여 줄까(2026-10-07 2차 §3-4). 물음 줄 · 머리말 줄이 늘어
+ * 줄 수로 자르면 사용자 말이 금방 절반으로 준다. 한 말 뒤에 줄이 끝없이 붙는 대화를 위해 줄 수
+ * 상한도 둔다.
+ */
+const 되돌아볼말 = 8;
+const 최대줄 = 40;
+
+function 최근대화(history: readonly EasyMessage[]): readonly EasyMessage[] {
+  const 말자리 = history.flatMap((message, at) => (message.role === "user" ? [at] : []));
+  const 시작 = 말자리.length > 되돌아볼말 ? 말자리[말자리.length - 되돌아볼말]! : 0;
+  return history.slice(시작).slice(-최대줄);
+}
 
 /** 한 줄이 길면 잘라 넣는다. 지난 말은 흐름만 알면 된다. */
 const 한줄최대 = 400;
@@ -104,15 +177,19 @@ export function easyChatPrompt(
   made = false,
   /** 이 대화의 마지막 결과가 이미지 한 장인가. 그때만 「이미지 고치기」를 알려 준다(2026-10-06). */
   madeImage = false,
+  /** 한 번 더 묻는 때처럼 이번 판단에만 쓰는 것(2026-10-06 설계 A3). */
+  options: EasyPromptOptions = {},
 ): string {
-  const 지난말 = history
-    // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
-    .filter((message) => message.id !== "greeting")
-    .slice(-되돌아볼줄)
+  // 프롬프트의 갈래 안내와 판단 틀의 선택지가 **같은 함수**에서 나온다(2026-10-06 설계 A1).
+  const 갈래 = easyAvailableWants({ hasDraft, made, madeImage, adNegated: options.adNegated });
+  // 2차 D2: 결과물 줄에도 화면의 「이미지 N」 · 「카드뉴스 N」 번호를 적는다.
+  const 결과물 = new Map((options.images ?? []).map((one) => [one.rowId, one]));
+  // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
+  const 지난말 = 최근대화(history.filter((message) => message.id !== "greeting"))
     .map((message) => {
       const body = message.role === "image"
-        ? "(이미지 한 장을 만들어 보여 줬습니다)"
-        : message.body.slice(0, 한줄최대);
+        ? easyResultRowText(결과물.get(message.id))
+        : visibleBody(message).slice(0, 한줄최대);
       return `${말한이(message.role)}: ${body}`;
     });
 
@@ -126,12 +203,14 @@ export function easyChatPrompt(
     "  image     지금 이미지 **한 장**을 만들어 달라는 것입니다. 포스터 · 배너 · 썸네일 ·",
     "            그림 · 사진 · 로고 · 프로필처럼 원래 한 장인 것이거나, 「한 장」 · 「하나」를",
     "            말했을 때입니다. 「카드뉴스 표지 한 장만」도 image 입니다.",
+    "            **「이미지」라고 말해도 한 장입니다.** 「○○ 이미지 만들어줘」 · 「이미지 하나」 → image.",
     "  cardnews  **카드뉴스**(여러 장으로 된 카드 · 슬라이드 · 캐러셀)를 만들어 달라는 것입니다.",
     "  either    만들어 달라는 것은 분명한데 **한 장인지 여러 장인지 알 수 없습니다.**",
     "            「신메뉴 홍보물 만들어줘」 · 「이걸로 만들어줘」 · 「인스타에 올릴 거 만들어줘」.",
     "            짐작하지 말고 either 로 두세요. 사용자에게 물어봅니다.",
     "            단, 「포스터」 · 「배너」 · 「썸네일」처럼 **원래 한 장인 것**을 말했으면 묻지 말고 image 입니다.",
-    ...(hasDraft
+    "            「이미지」는 애매하지 않습니다. 「이미지 만들어줘」는 either 가 아니라 image 입니다.",
+    ...(갈래.includes("revise")
       ? [
         "  revise    이 대화의 **카드뉴스 원고나 만든 카드를 고쳐 달라는 것**입니다. 「더 짧게」 ·",
         "            「20대 말투로」 · 「더 밝게」 · 「배경 파랗게」. 새 주제를 말하면 cardnews 입니다.",
@@ -139,7 +218,7 @@ export function easyChatPrompt(
         "             장 번호를 card 에, 고칠 내용을 note 에 적습니다. **번호 없이** 전체를 고치면 revise 입니다.",
       ]
       : []),
-    ...(hasDraft && made
+    ...(갈래.includes("card_redo")
       ? [
         "  card_redo  만든 카드 중 **한 장을 다시 그려** 달라는 것입니다. 「3번 다시 그려줘」 · 「5번 글자 크게 다시」.",
         "             장 번호를 card 에, 바라는 점을 note 에 적습니다.",
@@ -147,11 +226,11 @@ export function easyChatPrompt(
         "  download   만든 카드를 **내려받겠다**는 것입니다. 「다 받을게」 · 「저장할래」.",
       ]
       : []),
-    ...(madeImage
+    ...(갈래.includes("image_edit")
       ? [
-        "  image_edit  이 대화에서 **마지막으로 만든 이미지를 고쳐** 달라는 것입니다. 「로고를 이걸로 바꿔줘」 ·",
-        "              「글자를 크게」 · 「배경만 파랗게」 · 「방금 거에서 ○○만 바꿔줘」. 붙인 이미지가 있으면 그것을",
-        "              넣어 고쳐 달라는 뜻입니다. 전혀 다른 새 이미지를 말하면 image 입니다.",
+        "  image_edit  이 대화의 **이미지를 고쳐** 달라는 것입니다. 「로고를 이걸로 바꿔줘」 · 「글자를 크게」 ·",
+        "              「배경만 파랗게」 · 「아까 첫 번째 거에서 ○○만 바꿔줘」. 붙인 이미지가 있으면 그것을",
+        "              넣어 고쳐 달라는 뜻입니다. 전혀 다른 새 이미지를 말하면 image 입니다. 고칠 번호는 target 에 적습니다.",
       ]
       : []),
     /*
@@ -159,19 +238,17 @@ export function easyChatPrompt(
       안 알려 주면 모델은 고쳐 달라는 말에 `revise` 를 골라 앞의 카드뉴스 원고를
       고친다 — 사용자는 방금 만든 이미지를 보고 말한 것이다.
     */
-    ...(hasDraft && madeImage
-      ? [
-        "  **이 대화에서 마지막으로 만든 것은 이미지 한 장입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
-        "  image_edit 입니다. 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
-      ]
+    ...(갈래.includes("revise") && 갈래.includes("image_edit")
+      ? easyLastResultLines(options.lastIsImage !== false, doneImageNumbers(options.images ?? []).length)
       : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
     "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
     "               만들어 달라는 것입니다. 사진을 붙였어도 같습니다.",
     "               상세페이지에 대해 **묻는 말**(「상세페이지 문구 좀 봐줘」)은 talk 입니다.",
+    ...(갈래.includes("ad_specs") ? easyAdWantLines() : []),
     "",
-    ...(hasDraft
+    ...(갈래.includes("revise")
       ? [
         "**이 대화에는 카드뉴스 원고가 있습니다.** 「더 짧게」 · 「20대 말투로」 · 「더 밝게」처럼",
         "그 원고의 말투 · 길이 · 내용이나 카드의 모습을 바꿔 달라는 말은 talk 도 image 도 아니라 **revise** 입니다.",
@@ -179,18 +256,23 @@ export function easyChatPrompt(
         "",
       ]
       : []),
+    ...(갈래.includes("revise") && options.cards ? easyCardFactLines(options.cards) : []),
     "**낱말로 가르지 마세요.** 「방금 그린 거 왜 그렇게 나왔어?」에는 「그린」이",
     "있지만 묻는 말입니다. 「포스터 만들 때 뭘 적어야 해?」도 묻는 말입니다.",
     "**지금 한 장 만들어 내놓기를 바라는지**만 보세요.",
     "",
-    "`talk` 이면 `reply` 에 답을 쓰세요. 두세 문장이면 충분합니다.",
-    "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
-    "**무엇을 적으면 되는지 예를 들어** 주세요.",
+    // 2차 D4: 모든 갈래에서 AI 가 말한다. 같은 판단 호출의 reply 다 — 추가 호출이 없다.
+    ...easyReplyLines(갈래),
+    ...(갈래.includes("card_text") ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
+    // Task 12 실제 모델 확인: 번호 없는 「다시 그려줘」를 talk 로 골라 장 번호 물음 줄 · 단추가 안 생겼다.
+    ...(장번호없는말(갈래)),
     "",
-    `\`image\` · \`cardnews\` · \`either\`${hasDraft ? " · `revise` · `card_text`" : ""}${hasDraft && made ? " · `card_redo` · `caption` · `download`" : ""}${madeImage ? " · `image_edit`" : ""} 면 \`reply\` 는 빈 글로 두세요.`,
-    ...(hasDraft ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
-    "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
-    "",
+    // 갈래 이름은 쓸 수 있는 것만 적는다(A1) — 같은 목록을 넘긴다.
+    ...easyCapabilityLines(갈래),
+    // 2차 D2: 고칠 이미지 번호 고르는 법. 다 만든 것이 둘 이상이면 모를 때 묻게 한다.
+    ...(갈래.includes("image_edit")
+      ? easyTargetLines(doneImageNumbers(options.images ?? []).length)
+      : []),
     "── 말 속에 비율이나 그림체가 있나 ──",
     "",
     "**있을 때만 적습니다.** 없으면 그 칸을 비워 두세요. 지어내면 사용자가 말한",
@@ -221,14 +303,95 @@ export function easyChatPrompt(
         "붙여 둔 채로 「이걸로」·「이거」·「이 사진으로」라고 하면 **그것을 재료로",
         "만들어 달라는 주문**입니다. 무엇을 가리키는지 되묻지 마세요.",
         "",
+        // A1-2: 만든 것이 없는 대화에서 「사진 속 ○○을 바꿔줘」는 새 이미지다.
+        ...(갈래.includes("image_edit") || 갈래.includes("revise") ? [] : easyFirstPhotoLines()),
       ]
       : []),
+    // 2차 D3: 쓴 사진은 내려간다. 만든 것이 있는데 붙은 사진이 없으면 다시 붙여 달라고 하게 한다.
+    ...(attachmentCount === 0 && history.some((message) => message.role === "image") ? easyPhotoGoneLines() : []),
+    ...(options.retry
+      ? ["**앞서 talk 를 고르고 reply 를 비웠습니다.** talk 이면 이번에는 reply 에 꼭 답을 쓰세요.", ""]
+      : []),
+    ...(갈래.includes("ad_specs") && adQuestionOrigin(history) !== undefined ? easyAdAnswerLines() : []),
+    // 2차 D1: 광고 물음이 아닌 물음 뒤면 그 답일 수 있다고 알린다. 광고 물음은 바로 위 1차 안내가 맡는다.
+    ...물음뒤줄(history, 갈래),
+    // 2차 D2: 지난 대화 창 밖의 결과물도 고를 수 있게 목록을 따로 싣는다.
+    ...easyResultListLines(options.images ?? []),
+    // 2차 D5: 다 만든 이미지나 붙인 사진이 있으면 보고 답해야 하는 말을 고르는 법을 알린다(카드뉴스 번호는 안 본다).
+    ...(doneImageNumbers(options.images ?? []).length || attachmentCount > 0 ? easySeeLines() : []),
     지난말.length ? "── 지난 대화 ──" : "── 첫 말입니다 ──",
     ...지난말,
     "",
     "── 사용자의 마지막 말 ──",
     prompt,
   ].join("\n");
+}
+
+/** 「지금 쓸 수 있는 것」 사실. 판단 읽기와 단추 답(`fitButtonDecision`)이 같은 것을 본다. */
+export interface EasyAvailability {
+  canRevise?: boolean;
+  made?: boolean;
+  /** 고칠 수 있는 이미지가 이 대화에 있나(2차: 지운 것만 빼고 — 만드는 중 · 못 만든 것도 넣는다). */
+  editableImage?: boolean;
+}
+
+/**
+ * **쓸 수 없는 갈래를 바꿔 읽는다**(2026-10-06, 2차 최종 리뷰 1 · b).
+ *
+ * - 이미지 고치기는 고칠 이미지가 있어야 한다. 없으면 원고 고치기로, 원고도 없으면 고칠 것이 없다고 답한다
+ * - 고칠 원고가 없는데 고치라고 하면 만든 이미지를 고친다 — 모델은 이미지를 고쳐 달라는 말에도 `revise` 를
+ *   골랐다(2026-10-06 실측 6/6). 둘 다 없으면 빈 답이 아니라 안내 — 빈 답은 같은 말을 되풀이했다
+ * - 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다
+ *
+ * **다른 일하는 갈래로 바꿔 읽으면 `reply` 를 비운다**(2차 최종 리뷰 b). 2차부터는 모든 갈래에서 reply 를
+ * 쓰는데, 그 글은 모델이 처음 고른 일로 쓴 말이라(「원고를 고치겠습니다」) 바뀐 일의 머리말로 나가면 틀린다.
+ * 비우면 코드 문장이 나간다.
+ */
+export function availableWant(said: EasyWant, reply: string, options: EasyAvailability): { wants: EasyWant; reply: string } {
+  if (said === "image_edit" && !options.editableImage) {
+    return options.canRevise ? { wants: "revise", reply: "" } : { wants: "talk", reply: NOTHING_TO_EDIT };
+  }
+  if ((said === "revise" || said === "card_text") && !options.canRevise) {
+    return options.editableImage ? { wants: "image_edit", reply: "" } : { wants: "talk", reply: NOTHING_TO_EDIT };
+  }
+  if (만든뒤갈래.has(said) && !options.canRevise) return { wants: "talk", reply };
+  if (만든뒤갈래.has(said) && !options.made) return { wants: "talk", reply: NOT_MADE_YET };
+  return { wants: said, reply };
+}
+
+/** 단추 답이 다른 일로 바뀌어 읽힐 자리일 때의 답(2차 최종 리뷰 1). 프로젝트 만들기 앞의 막이도 쓴다. */
+export const CANNOT_DO_NOW =
+  "고칠 이미지나 카드뉴스가 그 사이 바뀌어 말씀대로 할 수 없습니다. 무엇을 할지 다시 알려 주세요.";
+
+/**
+ * **단추 답의 갈래도 지금 사실로 다시 본다**(2차 최종 리뷰 1 · Review Focus 7). 단추 답은 판단 모델을 안
+ * 부르고 물음 줄에 적어 둔 판단으로 간다 — 물은 뒤에 이미지를 지웠거나 원고가 사라졌으면 그 판단은 낡았다.
+ * 판단 읽기와 같은 `availableWant` 를 지나고, **바뀌면 다른 일로 새지 않는다**: 판단 읽기라면 바꿔 읽을
+ * 다른 일하는 갈래(원고 고치기 ↔ 이미지 고치기)여도 그 일을 안 하고 사실 문장으로 끝낸다. 누른 단추와 다른
+ * 일에 값이 나가면 안 된다.
+ */
+export function fitButtonDecision(decision: EasyDecision, options: EasyAvailability): EasyDecision {
+  const fitted = availableWant(decision.wants, decision.reply, options);
+  if (fitted.wants === decision.wants) return decision;
+  return { wants: "talk", reply: fitted.wants === "talk" && fitted.reply ? fitted.reply : CANNOT_DO_NOW };
+}
+
+/**
+ * 장 번호 없는 「다시 그려줘」 · 「한 장 고쳐줘」(Task 12 실제 모델 확인). talk 로 고르면 장 번호 물음 줄 ·
+ * 단추가 안 생긴다. 쓸 수 있는 갈래 이름만 적는다(A1).
+ */
+function 장번호없는말(갈래: readonly EasyWant[]): string[] {
+  const 장갈래 = (["card_redo", "card_text"] as const).filter((one) => 갈래.includes(one));
+  if (장갈래.length === 0) return [];
+  return [
+    `장 번호 없이 한 장을 다시 그려 · 고쳐 달라면 talk 가 아니라 ${장갈래.join(" · ")} 이고 card 는 0 입니다. 몇 번 장인지 묻는 것은 그 갈래의 reply 입니다.`,
+  ];
+}
+
+/** 마지막 줄(단추 답 실패 짝은 건너뛴다)이 물음이면 그 물음 · 답 표시 안내(2차 D1). */
+function 물음뒤줄(history: readonly EasyMessage[], 갈래: readonly EasyWant[]): string[] {
+  const ask = askChain(history)?.ask;
+  return ask && ask.kind !== "ad" ? easyAskAnswerLines({ kind: ask.kind, text: ask.text }, 갈래) : [];
 }
 
 /**
@@ -241,47 +404,39 @@ export function easyChatPrompt(
 export function readEasyDecision(
   raw: unknown,
   /** `editableImage`: 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가(2026-10-06). */
-  options: { canRevise?: boolean; made?: boolean; editableImage?: boolean } = {},
+  options: EasyAvailability = {},
 ): EasyDecision {
-  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown } | null;
+  const value = raw as {
+    wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown; target?: unknown; see?: unknown;
+  } | null;
   const said = value?.wants;
 
   if (typeof said !== "string" || !아는갈래.has(said)) {
     throw new Error(`무슨 뜻인지 가리지 못했습니다: ${JSON.stringify(said)}`);
   }
-  let wants = said as EasyDecision["wants"];
-  let reply = typeof value?.reply === "string" ? value.reply.trim() : "";
-  /*
-    **이미지 고치기는 고칠 이미지가 있어야 한다.** 없으면 원고 고치기로, 원고도
-    없으면 고칠 것이 없다고 답한다.
-  */
-  if (said === "image_edit" && !options.editableImage) {
-    if (options.canRevise) wants = "revise";
-    else { wants = "talk"; reply = NOTHING_TO_EDIT; }
-  }
-  /*
-    고칠 원고가 없는데 고치라고 하면 — **만든 이미지가 있으면 그것을 고친다.**
-    모델은 이미지를 고쳐 달라는 말에도 `revise` 를 골랐다(2026-10-06 실측 6/6).
-    둘 다 없으면 빈 답이 아니라 안내를 한다 — 빈 답은 같은 말을 되풀이했다.
-  */
-  else if ((said === "revise" || said === "card_text") && !options.canRevise) {
-    if (options.editableImage) wants = "image_edit";
-    else { wants = "talk"; reply = NOTHING_TO_EDIT; }
-  }
-  // 다시 그리기 · 게시글 · 받기는 만든 카드가 있어야 한다(3단계 §5). 원고만 있으면 먼저 만들라고 답한다.
-  else if (만든뒤갈래.has(said) && !options.canRevise) wants = "talk";
-  else if (만든뒤갈래.has(said) && !options.made) {
-    wants = "talk";
-    reply = NOT_MADE_YET;
-  }
+  // AI 가 쓴 글이 표시 머리로 시작하면 풀어 둔다 — 저장한 말 줄이 물음 · 머리말로 읽히지 않게(2차 최종 리뷰 c).
+  const { wants, reply } = availableWant(
+    said as EasyWant, plainAiText(typeof value?.reply === "string" ? value.reply.trim() : ""), options,
+  );
   const card = typeof value?.card === "number" && Number.isInteger(value.card) && value.card > 0 ? value.card : undefined;
   const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim().slice(0, 500) : undefined;
+  // 2차 D2: 고칠 이미지 번호. image_edit 일 때만 쓴다.
+  const target = typeof value?.target === "number" && Number.isInteger(value.target) && value.target > 0 ? value.target : undefined;
+  // 2차 D5: 보고 답할 것. 모양이 맞는 것만, 겹친 것은 빼고 네 개까지. talk 일 때만 쓴다.
+  const see = Array.isArray(value?.see)
+    ? [...new Set((value!.see as unknown[])
+      .filter((one): one is string => typeof one === "string")
+      .map((one) => one.trim())
+      .filter((one) => /^p?\d{1,3}$/.test(one)))].slice(0, 4)
+    : [];
 
   return {
     wants,
     reply,
     ...(card ? { card } : {}),
     ...(note ? { note } : {}),
+    ...(target && wants === "image_edit" ? { target } : {}),
+    ...(see.length && wants === "talk" ? { see } : {}),
     /*
       **모르는 값은 버린다.** 목록에 없는 비율·결이 오면 그것은 지어낸 것이고,
       그대로 넘기면 만들기가 거절당한다(`PosterProjectInputSchema`). 비워 두면
@@ -301,7 +456,7 @@ export function readEasyDecision(
 
 const 아는갈래 = new Set([
   "image", "cardnews", "either", "revise", "talk", "detail_page", "card_redo", "card_text", "caption", "download",
-  "image_edit",
+  "image_edit", "ad_specs",
 ]);
 const 만든뒤갈래 = new Set(["card_redo", "caption", "download"]);
 const 아는비율 = new Set(EASY_RATIOS.map((one) => one.id));

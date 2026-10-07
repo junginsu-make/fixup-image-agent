@@ -35,11 +35,10 @@ const 카드단추: ReadonlyArray<{ role: CardPhotoRole; label: string }> = [
 /**
  * **사진을 어떻게 쓸지 묻는 줄**(설계 §2-5).
  *
- * 물음은 코드가 짓는다 — 같은 상황에 같은 물음이 나와야 사용자가 배운다.
+ * 물음 글은 코드가 짓고(`turn-words.ts` 의 `photoQuestion`) 물음 줄이 보인다(2차 D1).
  * 분명한 사진은 이미 고른 채로 보이고, 틀렸으면 여기서 바꾼다.
  */
 export function EasyPhotoAsk({
-  reason,
   mode = "image",
   rows,
   picked,
@@ -48,7 +47,6 @@ export function EasyPhotoAsk({
   onSubmit,
   disabled,
 }: {
-  reason: "unclear" | "people";
   mode?: "image" | "cardnews";
   rows: readonly PhotoAskRow[];
   picked: Readonly<Record<string, CardPhotoRole | undefined>>;
@@ -60,12 +58,6 @@ export function EasyPhotoAsk({
 }) {
   return (
     <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5">
-      <p className="text-base leading-7">
-        {reason === "people"
-          ? "인물을 그대로 지킬 사진은 한 장만 됩니다. 두 사람의 얼굴이 섞이기 때문이에요. 한 장만 「인물 그대로」로 골라 주세요."
-          : "사진을 어떻게 쓸지 알려 주세요."}
-      </p>
-
       {rows.map((row, index) => {
         const 고를것: ReadonlyArray<{ role: CardPhotoRole; label: string }> = [
           ...단추,

@@ -122,3 +122,28 @@ export async function collectEasyWorkIds(page: (from: number, to: number) => Wor
     if (rows.length < EASY_WORK_PAGE) return [...ids];
   }
 }
+
+type WorkConversationPage = PromiseLike<{
+  data: { work_id: string | null; conversation_id: string }[] | null;
+  error: { message: string } | null;
+}>;
+
+/**
+ * 쉽게 대화의 그림 줄이 가리키는 작업 → **그 대화**(2026-10-06 설계 C). 라이브러리
+ * 「과정 보기」가 쉽게 작업을 그 대화로 보낸다. 한 작업은 한 대화에서 나오므로 처음 본
+ * 것을 쓴다. 1000줄에서 잘리지 않게 끝날 때까지 나눠 받는다(`collectEasyWorkIds` 와 같다).
+ */
+export async function collectEasyWorkConversations(
+  page: (from: number, to: number) => WorkConversationPage,
+): Promise<Record<string, string>> {
+  const found = new Map<string, string>();
+  for (let from = 0; ; from += EASY_WORK_PAGE) {
+    const { data, error } = await page(from, from + EASY_WORK_PAGE - 1);
+    if (error) throw new Error(`쉽게 작업 목록: ${error.message}`);
+    const rows = data ?? [];
+    for (const row of rows) {
+      if (row.work_id && !found.has(row.work_id)) found.set(row.work_id, row.conversation_id);
+    }
+    if (rows.length < EASY_WORK_PAGE) return Object.fromEntries(found);
+  }
+}

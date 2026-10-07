@@ -13,13 +13,18 @@ vi.mock("server-only", () => ({}));
 type Image = { id: string; generationRequestId: string; selected: boolean };
 let project: { id: string; ratio: string; data: Record<string, unknown> } | undefined;
 let images: Image[];
+let 다른작업 = new Set<string>();
 const imageOptions: unknown[] = [];
 const edits: Array<{ url: string; body: Record<string, unknown>; step: string | null }> = [];
 let editResponse: Response;
 
 vi.mock("../../poster/stores", () => ({
   posterStoresForUser: () => ({
-    projects: { get: async (id: string) => (project && project.id === id ? project : undefined) },
+    projects: {
+      get: async (id: string) => (project && project.id === id
+        ? project
+        : 다른작업.has(id) ? { id, ratio: "1:1", data: {} } : undefined),
+    },
     images: {
       byProject: async (_id: string, options?: unknown) => { imageOptions.push(options); return images; },
     },
@@ -32,8 +37,9 @@ vi.mock("../../../app/api/poster/projects/[id]/edit/route", () => ({
   },
 }));
 
-const { imageEditTurn, lastEasyImage } = await import("../image-edit-turn");
-const { editRowBody } = await import("../../../app/easy/row-image");
+const { countEasyImages, imageEditTurn, lastEasyImage, projectTarget } = await import("../image-edit-turn");
+const { editRowBody, rowFromOf, withRowFrom, withRowJob } = await import("../../../app/easy/row-image");
+const { sayBody } = await import("../../../app/easy/row-marks");
 
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
 const store = {
@@ -59,6 +65,7 @@ beforeEach(() => {
   imageOptions.length = 0;
   edits.length = 0;
   남긴줄.length = 0;
+  다른작업 = new Set();
   editResponse = Response.json({ ok: true, submission: { requestRowId: "r2", falRequestId: "f2", endpoint: "e" } });
 });
 
@@ -115,13 +122,17 @@ describe("고치기", () => {
     await 고친다([줄.image("p1")]);
     expect(남긴줄).toEqual([
       { conversationId: "c1", role: "user", body: "로고를 이걸로 바꿔줘" },
-      { conversationId: "c1", role: "image", workId: "p1", body: editRowBody("r2") },
+      { conversationId: "c1", role: "image", workId: "p1", body: withRowJob(withRowFrom(editRowBody("r2"), "i-p1-"), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) },
     ]);
   });
 
-  it("새로 붙인 사진만 넣는다 — 그 작업에 이미 쓴 사진은 다시 안 넣는다", async () => {
+  /**
+   * 2차 D3: 첨부는 만들기 · 고치기에 쓴 뒤 입력창에서 내려간다. 붙어 있다면 이번에 일부러 붙인 것이다.
+   * 원래 작업의 **지킬 사진**(제품 · 인물 그대로)만 뺀다 — 고치기 라우트가 알아서 다시 붙인다.
+   */
+  it("지킬 사진만 빼고 붙인 사진을 넣는다 — 따라 만들 사진도 다시 붙였으면 넣는다 (2차 D3)", async () => {
     await 고친다([줄.image("p1")], ["src-1", "keep-1", "logo-1"]);
-    expect(edits[0]!.body.addedReferenceIds).toEqual(["logo-1"]);
+    expect(edits[0]!.body.addedReferenceIds).toEqual(["src-1", "logo-1"]);
   });
 
   it("고칠 그림이 아직 없으면(만드는 중) 값 없이 안내만 한다", async () => {
@@ -150,7 +161,8 @@ describe("이어서 고칠 때", () => {
     });
   };
 
-  it("앞서 고칠 때 넣은 사진은 다시 넣지 않는다 — 입력창에 남아 있어도", async () => {
+  /** 2차 D3: 예전에는 남아 있던 첨부를 걸렀다. 이제 첨부가 내려가므로 다시 붙인 로고는 일부러 붙인 것이다. */
+  it("앞서 고칠 때 넣은 로고를 다시 붙이면 다시 넣는다 (2차 D3)", async () => {
     images = [
       { id: "img-1", generationRequestId: "r1", selected: false },
       { id: "img-2", generationRequestId: "r2", selected: false },
@@ -159,13 +171,13 @@ describe("이어서 고칠 때", () => {
       { id: "i1", role: "image", body: "", workId: "p1" },
       { id: "i2", role: "image", body: editRowBody("r2", ["logo-1"]), workId: "p1" },
     ), ["src-1", "logo-1"]);
-    expect(edits[0]!.body).not.toHaveProperty("addedReferenceIds");
+    expect(edits[0]!.body.addedReferenceIds).toEqual(["src-1", "logo-1"]);
     expect(edits[0]!.body.imageId).toBe("img-2");
   });
 
   it("넣은 사진을 고친 줄에 적어 둔다", async () => {
     await 고친다(대화({ id: "i1", role: "image", body: "", workId: "p1" }), ["logo-1"]);
-    expect(남긴줄.at(-1)).toMatchObject({ role: "image", body: editRowBody("r2", ["logo-1"]) });
+    expect(남긴줄.at(-1)).toMatchObject({ role: "image", body: withRowJob(withRowFrom(editRowBody("r2", ["logo-1"]), "i1"), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) });
   });
 
   it("앞의 고치기가 실패했으면(오래 지나도 그림 없음) 그 앞의 그림을 고친다 — 막히지 않는다", async () => {
@@ -194,5 +206,82 @@ describe("기다리라는 안내", () => {
     const { IMAGE_NOT_READY } = await import("../image-edit-turn");
     expect(IMAGE_NOT_READY).toContain("10분");
     expect(IMAGE_NOT_READY).toContain("새로 만들어");
+  });
+});
+
+describe("이 대화에서 만든 이미지 수 (규격 안내, 최종 리뷰 2026-10-06)", () => {
+  /**
+   * 그림 줄을 그대로 세면 고친 줄 · 카드뉴스 줄 · 지운 작업까지 센다 — 「만든 이미지가 5장
+   * 있습니다」라고 안내하고 「광고소재」에서는 2장만 보인다.
+   */
+  it("서로 다른 포스터 작업만 센다 — 고친 줄 · 카드뉴스 · 지운 작업은 안 센다", async () => {
+    다른작업 = new Set(["p2"]);
+    const rows = [
+      줄.user("카페 포스터 만들어줘"),
+      줄.image("p1"),
+      줄.image("p1", editRowBody("r2")), // 같은 작업을 고친 줄
+      줄.image("p2"),
+      줄.image("card-9"), // 카드뉴스 작업 — 포스터 저장소에 없다
+      줄.image("gone"), // 지운 작업
+      줄.user("규격별로"),
+    ];
+    expect(await countEasyImages("me", rows)).toBe(2);
+  });
+
+  it("그림 줄이 없으면 0", async () => {
+    expect(await countEasyImages("me", [줄.user("안녕")])).toBe(0);
+  });
+});
+
+describe("번호로 고르기 (2차 D2)", () => {
+  const 줄들 = [
+    { id: "i1", role: "image", body: "", workId: "p1" },
+    { id: "i3", role: "image", body: editRowBody("r3"), workId: "p1" },
+  ];
+  const 고친다 = async (rowId: string | undefined, resultLabel?: string) => imageEditTurn({
+    request: 요청(), userId: "me", store, conversationId: "c1", prompt: "배경만 파랗게", textModel: "m",
+    target: (await projectTarget("me", "p1"))!, rows: 줄들, attachments: [], rowId, resultLabel,
+  });
+
+  /** Review Focus 4 */
+  it("번호로 고른 줄의 그림을 고친다 — 같은 작업의 나중 줄이 아니라", async () => {
+    images = [{ id: "img-1", generationRequestId: "r1", selected: false }, { id: "img-3", generationRequestId: "r3", selected: false }];
+    const json = await (await 고친다("i1", "이미지 4")).json();
+    expect(edits[0]!.body.imageId).toBe("img-1");
+    expect(rowFromOf(남긴줄.at(-1)!.body)).toBe("i1");
+    expect(json.resultLabel).toBe("이미지 4");
+  });
+
+  it("번호가 없으면 예전처럼 그 작업의 마지막 줄의 그림이고, 그 줄을 고친 대상으로 적는다", async () => {
+    images = [{ id: "img-1", generationRequestId: "r1", selected: false }, { id: "img-3", generationRequestId: "r3", selected: false }];
+    await 고친다(undefined);
+    expect(edits[0]!.body.imageId).toBe("img-3");
+    expect(rowFromOf(남긴줄.at(-1)!.body)).toBe("i3");
+  });
+
+  it("고른 줄의 그림이 아직 없으면 값 없이 기다리라고 한다", async () => {
+    images = [];
+    const json = await (await 고친다("i1")).json();
+    expect(edits).toEqual([]);
+    expect(json.talked).toBe(true);
+  });
+
+  it("작업 대상은 지킬 사진만 들고, 없는 작업이면 비어 있다", async () => {
+    expect([...(await projectTarget("me", "p1"))!.keptIds]).toEqual(["keep-1"]);
+    expect(await projectTarget("me", "nope")).toBeNull();
+    expect(await projectTarget("me", undefined)).toBeNull();
+  });
+});
+
+describe("고치기 머리말 (2차 D4)", () => {
+  it("사용자 줄 → 머리말 줄 → 고친 줄 차례로 남기고 머리말을 응답에 싣는다", async () => {
+    const all = [줄.user("만들어줘"), 줄.image("p1")];
+    const json = await (await imageEditTurn({
+      request: 요청(), userId: "me", store, conversationId: "c1", prompt: "글자 크게", textModel: "m",
+      target: (await lastEasyImage("me", all))!, rows: all, attachments: [], say: "글자를 크게 고치겠습니다.",
+    })).json();
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "image"]);
+    expect(남긴줄[1]!.body).toBe(sayBody("글자를 크게 고치겠습니다."));
+    expect(json.say).toMatchObject({ body: sayBody("글자를 크게 고치겠습니다.") });
   });
 });

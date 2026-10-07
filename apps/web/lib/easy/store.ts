@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createSupabaseServerClient } from "../supabase/server";
 import { getLocalDatabase, isLocalStoreEnabled } from "../local-store";
 import {
-  collectEasyWorkIds,
+  collectEasyWorkConversations,
   CONVERSATION_COLUMNS,
   MESSAGE_COLUMNS,
   toConversationRecord,
@@ -45,10 +45,10 @@ export interface EasyStore {
     workId?: string | null;
   }): Promise<EasyMessageRecord>;
   /**
-   * 내 쉽게 대화가 만든 작업의 id. 라이브러리가 쉽게와 다양하게를 가르는 데 쓴다 —
-   * 둘 다 같은 포스터 작업으로 저장되어 작업만 보고는 못 가른다.
+   * 내 쉽게 대화가 만든 작업 → 그 대화. 라이브러리가 쉽게와 다양하게를 가르고(작업만
+   * 보고는 못 가른다), 「과정 보기」를 그 대화로 보내는 데 쓴다(2026-10-06 설계 C).
    */
-  listWorkIds(): Promise<string[]>;
+  listWorkConversations(): Promise<Record<string, string>>;
 }
 
 const DEFAULT_LIMIT = 50;
@@ -163,11 +163,11 @@ function supabaseEasyStore(userId: string): EasyStore {
       return row;
     },
 
-    async listWorkIds() {
+    async listWorkConversations() {
       const supabase = await createSupabaseServerClient();
-      return collectEasyWorkIds((from, to) => supabase
+      return collectEasyWorkConversations((from, to) => supabase
         .from("easy_messages")
-        .select("work_id")
+        .select("work_id,conversation_id")
         .not("work_id", "is", null)
         .order("id")
         .range(from, to));
@@ -289,14 +289,16 @@ function localEasyStore(userId: string): EasyStore {
       return record;
     },
 
-    async listWorkIds() {
+    async listWorkConversations() {
       return database.read((data) => {
         const mine = new Set(bucket(data, "easyConversations")
           .filter((row) => row.userId === userId)
           .map((row) => row.id));
-        return [...new Set(bucket(data, "easyMessages")
-          .filter((row) => row.workId && mine.has(row.conversationId))
-          .map((row) => row.workId!))];
+        const found = new Map<string, string>();
+        for (const row of bucket(data, "easyMessages")) {
+          if (row.workId && mine.has(row.conversationId) && !found.has(row.workId)) found.set(row.workId, row.conversationId);
+        }
+        return Object.fromEntries(found);
       });
     },
   };

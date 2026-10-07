@@ -15,11 +15,17 @@ let 고치기실패: boolean;
 const 고친것: Array<{ id: string; index: string; body: Record<string, unknown> }> = [];
 
 const 찾은것: string[] = [];
+let 읽는중 = 0;
+let 가장많이 = 0;
 const 서명한것: string[] = [];
 vi.mock("../../sns-flow-store", () => ({
   snsFlowStoreForUser: async () => ({
     get: async (id: string) => {
       찾은것.push(id);
+      읽는중 += 1;
+      가장많이 = Math.max(가장많이, 읽는중);
+      await Promise.resolve();
+      읽는중 -= 1;
       if (id === "boom") throw new Error("저장소 오류");
       return 작업들[id];
     },
@@ -41,7 +47,7 @@ vi.mock("../../../app/api/sns/projects/[id]/cards/[index]/route", () => ({
 }));
 vi.mock("../../../app/api/sns/projects/[id]/generate/route", () => ({ POST: async () => Response.json({}) }));
 
-const { cardnewsProject, draftCardnews, lastCardnewsProject } = await import("../cardnews-steps");
+const { cardnewsProject, cardnewsProjectIds, draftCardnews, lastCardnewsProject } = await import("../cardnews-steps");
 
 const 카드 = (index: number, role: string, headline: string, extra: Record<string, unknown> = {}) =>
   ({ index, role, kind: "generated", copy: { headline }, status: "pending", ...extra });
@@ -137,5 +143,27 @@ describe("카드뉴스 작업 찾기", () => {
 
   it("저장소 오류가 나도 실패하지 않고 원고 없음으로 본다(평범한 이미지 주문이 안 깨진다)", async () => {
     expect(await lastCardnewsProject("me", [{ role: "image", workId: "mine" }, { role: "image", workId: "boom" }])).toBeNull();
+  });
+
+  /** 2차 D2 — 결과물 번호의 갈래(카드뉴스인가)만 본다. 턴마다 부르므로 서명하지 않는다. */
+  it("카드뉴스 작업인 id 만 고른다 — 남의 것 · 포스터는 빼고, 서명하지 않는다", async () => {
+    expect(await cardnewsProjectIds("me", ["mine", "theirs", "poster-1"])).toEqual(new Set(["mine"]));
+    expect(서명한것).toEqual([]);
+    expect(await cardnewsProjectIds("me", [])).toEqual(new Set());
+  });
+
+  /** 리뷰 1차 수정 2 — 빈 모음이면 카드뉴스가 전부 「지운 결과」로 읽힌다. 못 읽었으면 모른다고 돌려준다. */
+  it("저장소 오류가 나도 던지지 않고, 빈 모음이 아니라 null(모름)을 돌려준다", async () => {
+    expect(await cardnewsProjectIds("me", ["mine", "boom"])).toBeNull();
+  });
+
+  /** 최종 수정 10(보안 리뷰) — 한꺼번에 읽는 수를 묶는다. 같은 id 는 한 번만. */
+  it("한꺼번에 읽는 수를 묶고 같은 id 는 한 번만 읽는다", async () => {
+    가장많이 = 0;
+    찾은것.length = 0;
+    const ids = [...Array.from({ length: 40 }, (_, at) => `x${at}`), "mine", "mine"];
+    expect(await cardnewsProjectIds("me", ids)).toEqual(new Set(["mine"]));
+    expect(가장많이).toBeLessThanOrEqual(10);
+    expect(찾은것.filter((id) => id === "mine")).toHaveLength(1);
   });
 });

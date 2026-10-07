@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cardResults, cardnewsJob, continuingKind, generatingProjects, jobsToRegister, latestCardnewsRow, newestFirst, referenceAnswer,
+  cardResults, cardnewsJob, generatingProjects, jobsToRegister, latestCardnewsRow, newestFirst, referenceAnswer,
   openTool, redoCostLabel, startedDespiteError,
   setItemsToAttach,
 } from "../cardnews-state";
@@ -52,24 +52,6 @@ describe("카드뉴스 화면 상태", () => {
   /** Review Focus 2 */
   it("셸 등록 주소는 그 대화", () => {
     expect(cardnewsJob("p", "c1", "건강")).toMatchObject({ id: "sns:p", tool: "sns", href: "/easy/c1", poll: { url: "/api/sns/projects/p/status" } });
-  });
-});
-
-describe("고른 갈래가 이어진다 (2단계 §4)", () => {
-  it("다시 보낼 때 정한 갈래가 먼저", () => {
-    expect(continuingKind({ explicit: "image", pending: "cardnews", continuing: true })).toBe("image");
-  });
-
-  it("비율 · 사진 물음에 답할 때는 앞서 고른 갈래를 잇는다", () => {
-    expect(continuingKind({ pending: "image", continuing: true })).toBe("image");
-  });
-
-  it("카드뉴스 사진 물음에 답하면 카드뉴스로 보낸다", () => {
-    expect(continuingKind({ continuing: true, photoMode: "cardnews" })).toBe("cardnews");
-  });
-
-  it("새로 친 말에는 앞서 고른 갈래를 안 붙인다", () => {
-    expect(continuingKind({ pending: "cardnews", continuing: false, photoMode: "cardnews" })).toBeUndefined();
   });
 });
 

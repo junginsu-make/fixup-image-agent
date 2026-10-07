@@ -93,22 +93,6 @@ export function cardnewsJob(projectId: string, conversationId: string, title: st
 }
 
 /**
- * **고른 갈래를 이어 보낸다**(설계 §4). 「이미지 한 장」을 고른 뒤 비율 물음이나
- * 사진 물음에 답해 다시 보내면, 서버는 같은 말을 또 판단한다. 갈래를 안 실으면
- * 「한 장인가 여러 장인가」가 또 뜬다. 새로 친 말에는 안 붙인다.
- */
-export function continuingKind(input: {
-  explicit?: EasyKind;
-  pending?: EasyKind;
-  continuing: boolean;
-  photoMode?: "image" | "cardnews";
-}): EasyKind | undefined {
-  if (input.explicit) return input.explicit;
-  if (!input.continuing) return undefined;
-  return input.pending ?? (input.photoMode === "cardnews" ? "cardnews" : undefined);
-}
-
-/**
  * **레퍼런스 요청의 답**(설계 §5-3). 「따라 만들 카드뉴스를 붙여 주세요」에 답해 붙인
  * 그림은 분위기 참고로 **확정**해 보낸다. 판단에 맡기면 제품 사진으로 읽혀 자리가
  * 버려지고, 분위기 참고가 없다며 같은 요청이 다시 뜬다(2단계 독립 리뷰 2). 요청 전부터

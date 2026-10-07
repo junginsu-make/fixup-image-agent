@@ -5,6 +5,9 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button, cn } from "@fixup/ui";
 import { DETAIL_PAGE_HREF, isDetailPageGuide } from "../detail-page";
+import { isAdGuide, isAdQuestion } from "../ad-ask";
+import { visibleBody } from "../row-marks";
+import { EasyAdGuide, EasyAdQuestion } from "./ad-rows";
 import { ElapsedTime } from "../../_components/elapsed-time";
 import type { EasyMessage } from "../turn";
 import { EasyCardnewsCard } from "./cardnews-card";
@@ -147,11 +150,20 @@ function AssistantMark() {
   );
 }
 
+/** 「이미지 N」 · 「카드뉴스 N」(2차 D2). 사용자가 번호로 말할 수 있게 결과물 밑에 작게 적는다. */
+function ResultLabel({ label }: { label?: string }) {
+  return label ? <span className="text-meta text-subtle-foreground">{label}</span> : null;
+}
+
 export function EasyMessageRow({
   message,
   imageUrl,
   onOpenImage,
   cardnews,
+  failed,
+  onAdChoice,
+  askControls,
+  resultLabel,
 }: {
   message: EasyMessage;
   /** 그림 줄이면 미리보기 주소. 아직 안 왔으면 비어 있다. */
@@ -159,12 +171,20 @@ export function EasyMessageRow({
   onOpenImage?: () => void;
   /** 카드뉴스 원고 줄이면 그 작업(2단계 §7). 그림 한 장 대신 원고 카드를 그린다. */
   cardnews?: React.ComponentProps<typeof EasyCardnewsCard>;
+  /** 다시 열어 이어 받다가 못 받은 까닭(2026-10-06 설계 B3 · B5). 있으면 「만들고 있습니다」 대신 보인다. */
+  failed?: string;
+  /** 광고 물음 줄의 단추를 누를 때(설계 A5). 화면이 마지막 물음 줄에만 넘긴다. */
+  onAdChoice?: (answer: string) => void;
+  /** 물음 줄 밑의 단추 · 고르기(2차 D1). 화면이 마지막 물음 줄에만 넘긴다. */
+  askControls?: React.ReactNode;
+  /** 이 대화의 결과물 이름표(2차 D2). 지운 결과의 줄에도 자리를 지킨 이름표가 온다. */
+  resultLabel?: string;
 }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
         <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary-soft px-4 py-2.5 text-base leading-7">
-          {message.body}
+          {visibleBody(message)}
         </p>
       </div>
     );
@@ -188,13 +208,27 @@ export function EasyMessageRow({
             더하지 않고 문장으로 가른다 — 다시 열어도 그대로 보인다.
           */
           <div className="grid max-w-[85%] gap-2">
-            <p className={말풍선}>{message.body}</p>
+            <p className={말풍선}>{visibleBody(message)}</p>
             <Button asChild size="sm" variant="secondary" className="w-fit">
               <Link href={DETAIL_PAGE_HREF}>상세페이지 만들기 열기</Link>
             </Button>
           </div>
+        ) : isAdQuestion(message) ? (
+          <EasyAdQuestion body={message.body} bubble={말풍선} onChoose={onAdChoice} />
+        ) : isAdGuide(message) ? (
+          <EasyAdGuide body={visibleBody(message)} bubble={말풍선} />
+        ) : resultLabel ? (
+          <div className="grid max-w-[85%] gap-1">
+            <p className={말풍선}>{visibleBody(message)}</p>
+            <ResultLabel label={resultLabel} />
+          </div>
+        ) : askControls ? (
+          <div className="grid max-w-[85%] gap-2">
+            <p className={말풍선}>{visibleBody(message)}</p>
+            {askControls}
+          </div>
         ) : (
-          <p className={cn("max-w-[85%]", 말풍선)}>{message.body}</p>
+          <p className={cn("max-w-[85%]", 말풍선)}>{visibleBody(message)}</p>
         )}
       </div>
     );
@@ -204,7 +238,10 @@ export function EasyMessageRow({
     return (
       <div className="flex items-start gap-2">
         <AssistantMark />
-        <EasyCardnewsCard {...cardnews} />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <EasyCardnewsCard {...cardnews} />
+          <ResultLabel label={resultLabel} />
+        </div>
       </div>
     );
   }
@@ -216,6 +253,7 @@ export function EasyMessageRow({
   return (
     <div className="flex items-start gap-2">
       <AssistantMark />
+      <div className="grid gap-1">
       {imageUrl ? (
         /*
           **대화 속 이미지는 작다**(2026-09-21 사용자 — 「채팅 기록이 오히려
@@ -236,9 +274,15 @@ export function EasyMessageRow({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt="만든 이미지" className="block max-h-64 w-auto" />
         </button>
+      ) : failed ? (
+        <p role="alert" className="max-w-64 whitespace-pre-wrap break-words rounded-2xl rounded-bl-md border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-base leading-7 text-destructive">
+          {failed}
+        </p>
       ) : (
         <EasyImageWorking />
       )}
+      <ResultLabel label={resultLabel} />
+      </div>
     </div>
   );
 }

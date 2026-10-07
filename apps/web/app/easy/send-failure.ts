@@ -1,0 +1,24 @@
+import type { EasyMessage } from "./turn";
+
+/**
+ * **보낸 턴이 실패했을 때 화면에 남길 줄**(2차 Task 5 리뷰).
+ *
+ * 서버가 받은 뒤(그림 줄을 남기고 `projectId` 를 준 뒤 — 값이 잡혔다) 받기만 실패하면 그림 자리를
+ * **남긴다**. 서버 꼬리가 [물음, 답, 그림 줄] 이니 화면도 같아야 한다. 빼면 화면 꼬리가 [물음, 단추 답]
+ * 이 되어 물음 단추가 다시 뜨고(`answerableAskId`), 다시 누르면 새 말로 가서 값이 또 나갈 수 있다.
+ *
+ * 받기 전의 실패(요청 오류 · 거절)는 지금처럼 뺀다 — 서버가 실패 줄을 남겨 그 물음에 다시 답할 수 있다.
+ */
+export function keptAfterFailure(messages: readonly EasyMessage[], rowId: string, accepted: boolean): EasyMessage[] {
+  return accepted ? [...messages] : messages.filter((one) => one.id !== rowId);
+}
+
+/** 남긴 그림 자리에 못 받은 까닭을 적는다(다시 열 때의 `useEasyResume` 실패 표시와 같다). */
+export function lostAfterFailure(
+  lost: Readonly<Record<string, string>>,
+  rowId: string,
+  accepted: boolean,
+  reason: string,
+): Record<string, string> {
+  return accepted ? { ...lost, [rowId]: reason } : { ...lost };
+}

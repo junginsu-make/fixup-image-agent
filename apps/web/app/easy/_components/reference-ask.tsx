@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Button } from "@fixup/ui";
-import { NO_REFERENCE } from "../cardnews-attachments";
 import { referenceAnswer, setItemsToAttach, type EasyResend } from "../cardnews-state";
 import { EasyLibraryPicker, type EasyLibrary } from "./library-attach";
 
@@ -58,7 +57,6 @@ export function EasyReferenceAsk({
 
   return (
     <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5">
-      <p className="text-base leading-7">{NO_REFERENCE}</p>
       <div className="flex flex-wrap gap-2">
         <EasyLibraryPicker library={library} selectedIds={attachedIds} onPick={attach} label="라이브러리에서 고르기" />
         <Button size="sm" variant="secondary" disabled={disabled} onClick={() => void openSets()}>저장한 레퍼런스 세트</Button>
