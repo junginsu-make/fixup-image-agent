@@ -321,4 +321,9 @@ describe("카드뉴스 사실 (2차 D4)", () => {
     expect(easyChatPrompt([], "3번 다시", 0, true, true, false, { cards: { count: 6, generating: false } })).not.toContain("만드는 중입니다");
     expect(easyChatPrompt([], "안녕", 0, false, false, false, { cards: { count: 6, generating: false } })).not.toContain("6장입니다");
   });
+
+  /** Task 10 고침 2 — 카드가 없으면 「0장 · 1부터 0까지」를 말하지 않는다. */
+  it("장수가 0 이면 카드 사실을 싣지 않는다", () => {
+    expect(easyChatPrompt([], "3번 다시", 0, true, false, false, { cards: { count: 0, generating: false } })).not.toContain("이 대화의 카드뉴스는");
+  });
 });

@@ -146,6 +146,7 @@ const { KIND_QUESTION } = await import("../../../easy/turn-words");
 const { sayBody } = await import("../../../easy/row-marks");
 const { SAY_CARDNEWS, SAY_REVISE } = await import("../../../easy/turn-words");
 const { NO_REFERENCE } = await import("../../../easy/cardnews-attachments");
+const { ASK_ANSWER_NOTE, answerableAskId } = await import("../../../easy/ask-chain");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -385,6 +386,42 @@ describe("만든 카드뉴스 손보기 말 (3단계 §5 · §6-5)", () => {
     const { json } = await 보낸다({ prompt: "9번", answersRowId: "q1", pick: { card: 9 } });
     expect(손본것).toEqual([]);
     expect(readAsk(json.message)).toEqual({ kind: "card", text: ASK_CARD_NUMBER, data: { cont: true, wants: "card_text", count: 2, note: "더 짧게" } });
+  });
+
+  /** Task 10 고침 1 — 장 물음에 다시 그리기로 답하면 물음이 닫혀야 한다. 값은 여전히 확인 단추에서만. */
+  it("장 물음에 다시 그리기로 답하면(단추 · 말) 사용자 줄을 남겨 물음을 닫고, 확인 줄만 연다", async () => {
+    const 물음까지 = [
+      { id: "r1", role: "image", body: "", workId: "old" },
+      { id: "u1", role: "user", body: "다시 그려줘", workId: null },
+      { id: "q1", role: "assistant", body: askBody("card", ASK_CARD_NUMBER, { wants: "card_redo", count: 2, note: "글자 크게" }), workId: null },
+    ];
+    const 닫혔나 = () => answerableAskId([...물음까지, ...남긴줄.map((row, at) => ({ id: `s${at}`, role: row.role, body: row.body ?? "" }))] as never);
+
+    지난줄들 = 물음까지;
+    판단 = undefined;
+    const 단추 = (await 보낸다({ prompt: "2번", answersRowId: "q1", pick: { card: 2 } })).json;
+    expect(단추.cardAsk).toEqual({ rowId: "r1", index: 2, note: "글자 크게" });
+    expect(남긴줄.map((row) => [row.role, row.body])).toEqual([["user", "2번"]]);
+    expect(닫혔나()).toBeUndefined();
+
+    남긴줄.length = 0;
+    판단하면({ wants: "card_redo", card: 2, note: "" });
+    const 말 = (await 보낸다({ prompt: "2번이요" })).json;
+    expect(말.cardAsk).toEqual({ rowId: "r1", index: 2, note: "글자 크게" });
+    expect(남긴줄.map((row) => [row.role, row.body])).toEqual([["user", "2번이요"]]);
+    expect(닫혔나()).toBeUndefined();
+    expect(부른라우트).toEqual([]);
+    expect(손본것).toEqual([]);
+  });
+
+  /** Task 10 고침 3 — 답 표시(answer)는 바라는 점이 아니다. 물음 줄 · 글 고치기에 새지 않는다. */
+  it("판단의 note 가 답 표시면 물음 줄에 적지 않고 글 고치기에도 쓰지 않는다", async () => {
+    판단하면({ wants: "card_text", card: 0, note: ASK_ANSWER_NOTE });
+    const 물음 = (await 보낸다({ prompt: "더 짧게" })).json;
+    expect(readAsk(물음.message)?.data).toEqual({ wants: "card_text", count: 2 });
+    판단하면({ wants: "card_text", card: 2, note: ASK_ANSWER_NOTE });
+    await 보낸다({ prompt: "2번 더 짧게" });
+    expect(손본것).toEqual([{ what: "edit", index: 2, change: { words: "2번 더 짧게" } }]);
   });
 
   /** 2차 D4 · 최종 리뷰 g — 끝 문장은 고친 뒤에 남는다. 판단 모델에 끝난 일로 쓰게 했다(Task 9). */

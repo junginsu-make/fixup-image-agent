@@ -238,6 +238,8 @@ export function easyReplyLines(wants: readonly EasyWant[]): string[] {
  * 「다 만든 뒤에」를 제 말로 답하게. 코드가 갈래를 바꿔 읽으면 고정 문장이 나간다.
  */
 export function easyCardFactLines(cards: { count: number; generating: boolean }): string[] {
+  // 카드가 없으면 「0장 · 1부터 0까지」가 된다(Task 10 고침 2). 싣지 않는다.
+  if (cards.count < 1) return [];
   return [
     `이 대화의 카드뉴스는 ${cards.count}장입니다. 장 번호는 1부터 ${cards.count}까지입니다.`,
     ...(cards.generating
