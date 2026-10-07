@@ -146,3 +146,9 @@
 **요구:** (a) status 라우트의 503 설정 오류 글(환경변수 이름)을 화면에 그대로 보이지 않게 — 일반 문장으로. 다른 503(운영자 멈춤 등 사용자용)은 그대로. (b) 배선 시험이 `lib/easy/stop.ts` 와 Task 10 의 새 파일도 읽는다. (c) 색인 스크립트 `--dry` 가 DB 가 있을 때 `kind='guide'` 인데 지금 13개 이름에 없는 옛 이름을 찾아 「목록에 없는 옛 설명서 N개: <이름들>」을 찍는다 — **지우지 않는다**(읽기 전용).
 
 **Task 11 더함(최종 수정 보고 뒤):** (d) 오류 덩어리를 그대로 기록하던 나머지 쉽게 줄(`app/api/easy/cardnews/route.ts` 51 · 144, `lib/easy/cardnews-after-steps.ts` 145)도 `errorLogText()` 로. (e) 색인 스크립트의 실제 실행 거절 목록에 `[::1]` · `0.0.0.0` 도.
+
+### Task 12: 「다양하게」의 만들기 · 기획 · 검토 · 진행 확인도 예상 못 한 오류 원문을 가린다
+
+**Files:** `apps/web/app/api/poster/projects/[id]/generate/route.ts`, `.../plan/route.ts`, `.../review/route.ts`, `.../status/route.ts`(마지막 catch · 503 설정 오류 응답), 각 시험
+
+**요구:** Task 7(고치기 라우트, aff58caf)과 같은 규칙. 각 라우트와 그 라우트가 부르는 lib 의 `throw` · 오류 응답을 모두 찾아 「사용자용(정확한 상태 · 문장 유지)」과 「예상 못 한 것(500 + 일반 문장 + `errorLogText` 기록)」으로 표를 만든다. 사용자용 예: 입력 검증 · 404 · `PosterValidationError`(issues) · 조립 거절 · `PosterChargedError` · `FalPoolBusyError` · `FalPoolUnavailableError` · 예약 거절 응답(그대로 return). 503 설정 오류는 상태는 지키고 환경변수 이름 대신 일반 문장, `missing` 칸은 쓰는 곳이 없으면 뺀다(화면 · 쉽게 · 카드뉴스 쪽 grep). **돈 흐름(예약 · 확정 · 환불 · `PosterChargedError` 갈래) 0줄 변경**. 「다양하게」 화면과 쉽게(relay → EasyStepError, 5xx·code없음·retryable 이면 가림)가 상태 코드 변화를 어떻게 받는지 확인 — 특히 status 라우트는 화면이 되풀이해 묻는다(폴링): 400→500 이 폴링을 멈추거나 「다시 시도」를 바꾸는지 확인하고, 바꾸면 상태 코드는 그대로 두고 문장만 가린다. 이 네 라우트 밖의 poster · sns · packages 는 0줄.
