@@ -377,14 +377,17 @@
    누르려는 순간 빗나가게 만든다.
 
    위 「손잡이」와 같은 규칙으로 **여섯 번 뛰고 선다.** 멈추지 않는 움직임은
-   계속 신경을 긁는다. 그 사이에 못 봤으면 옆의 안내 글이 대신 말한다. */
+   계속 신경을 긁는다. 그 사이에 못 봤으면 옆의 안내 글이 대신 말한다.
+
+   고리 색은 `--cta-pulse-color` 로 바꿀 수 있다. 단추 색이 강조색이 아니면
+   (캐릭터 저장 단추는 녹색) 그 색을 넘긴다. 안 넘기면 강조색이다. */
 @keyframes fixup-cta-pulse {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cta-pulse-color, var(--primary)) 55%, transparent);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 12px color-mix(in srgb, var(--primary) 0%, transparent);
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--cta-pulse-color, var(--primary)) 0%, transparent);
   }
 }
 

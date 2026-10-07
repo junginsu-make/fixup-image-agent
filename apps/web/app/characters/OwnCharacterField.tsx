@@ -1,10 +1,11 @@
 "use client";
 import { useRef } from "react";
 import { ImagePlus, X } from "lucide-react";
-import { Button } from "@fixup/ui";
+import { Button, cn } from "@fixup/ui";
 import { openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
+import { useImageDropTarget } from "./image-drop";
 import type { ReadImage } from "./read-image";
 
 /**
@@ -17,17 +18,37 @@ export function OwnCharacterField(props: {
   value: (ReadImage & { libraryId?: string }) | null;
   locked: boolean;
   library: Array<{ id: string; title: string | null; url: string | null; thumbUrl: string | null }>;
-  onUpload: (files: FileList | null) => void;
+  onUpload: (files: ArrayLike<File> | null) => void;
   onPickLibrary: (image: { id: string; url: string | null }) => void;
   onClear: () => void;
   onReloadLibrary: () => void;
+  /** 끌어다 놓거나 붙여넣은 것이 그림이 아닐 때 알릴 곳. */
+  onError: (message: string) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const { value, locked } = props;
+  // 끌어다 놓기·붙여넣기도 올리기와 같은 길로 넣는다(`image-drop.ts`).
+  const drop = useImageDropTarget({
+    disabled: locked,
+    onFile: (file) => props.onUpload([file]),
+    onError: props.onError,
+  });
   return (
     <div className="grid flex-none gap-1.5">
       <span className="text-meta text-subtle-foreground">내 캐릭터 · 선택</span>
-      <div className="flex items-center gap-3 rounded-md border border-dashed p-2">
+      {/* 눌러 두면 이 칸이 붙여넣기를 받는다. 받는 중인 칸은 테두리로 말한다. */}
+      <div
+        role="group"
+        // 잠긴 칸은 받지 않으니 Tab 으로 들어가지 않는다. 들어가면 표시 없는 초점이 된다.
+        tabIndex={locked ? -1 : 0}
+        aria-label="내 캐릭터 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+        {...drop.handlers}
+        className={cn(
+          "group flex items-center gap-3 rounded-md border border-dashed p-2 outline-none",
+          !locked && "focus-within:border-solid focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30",
+          drop.over && "border-solid border-primary bg-primary-soft",
+        )}
+      >
         {value ? (
           <button
             type="button" aria-label="내 캐릭터 크게 보기"
@@ -47,6 +68,12 @@ export function OwnCharacterField(props: {
             넣으면 이 캐릭터의 생김새를 그대로 지킵니다. 오른쪽 참고할 그림에 레퍼런스를 넣으면
             그 화풍과 몸 비율로 바꿉니다.
           </p>
+          {locked ? null : (
+            <p className="text-[11px] leading-snug text-subtle-foreground">
+              그림을 끌어다 놓거나, 이 칸을 누르고 <kbd>Ctrl+V</kbd>(Mac 은 <kbd>⌘V</kbd>)로 붙여넣어도 됩니다.
+              <span className="ml-1 hidden font-bold text-primary group-focus-within:inline">· 지금 붙여넣을 수 있습니다</span>
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
