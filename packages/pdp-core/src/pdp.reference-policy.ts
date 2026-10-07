@@ -1,4 +1,12 @@
-import { attachmentPlacementRule, characterAngleDirective, priorityLine } from "@fixup/shared";
+import {
+  attachmentPlacementRule,
+  carriedCharacterLabel,
+  carriedCharacterRules,
+  carriedSubjectNoun,
+  characterAngleDirective,
+  priorityLine,
+  type CarriedCharacter,
+} from "@fixup/shared";
 import type { AnchorRole } from "./pdp.product-anchor";
 import type { ReferenceImage } from "./types";
 
@@ -192,11 +200,22 @@ export function buildReferenceRoleDirective(
      * **안 주면 `identity` 다.** 옛 호출자가 조용히 보존을 잃으면 안 된다.
      */
     anchorRole?: AnchorRole;
+    /**
+     * 인물 자리가 **캐릭터**일 때 그 종류·그림체(2026-10-07, ③). 업로드 사진이면 없다.
+     *
+     * 동물·마스코트·물건이면 사람 문장 대신 그 종류의 문장을 쓴다. 사람 + 실사는
+     * 지금 그대로다. 그림체 예외는 여기 적지 않는다 — 실사 지시가 실리는 두 곳
+     * (시스템 문장·장면 설명, `pdp.image-prompt.ts`)이 그 자리에서 뺀다.
+     */
+    character?: CarriedCharacter;
   },
 ): string {
   if (references.length === 0) return "";
+  const character = options?.character;
+  const characterRules = character ? carriedCharacterRules(character) : [];
 
   const rulesFor = (role: ReferenceRole): string[] => {
+    if (role === "person" && characterRules.length) return characterRules;
     if (role !== "anchor") return ROLE_RULES[role];
     // 안 주면 `identity` 다. 옛 호출자가 조용히 보존을 잃으면 안 된다.
     if (options?.anchorRole === "shape-only") return ANCHOR_SHAPE_ONLY;
@@ -229,10 +248,13 @@ export function buildReferenceRoleDirective(
   references.forEach((reference, index) => {
     const isSlice = reference.kind === "style" && styleCount > 1;
     if (isSlice) stylePart += 1;
+    const label = reference.kind === "person" && character
+      ? carriedCharacterLabel(character.kind)
+      : ROLE_LABEL[reference.kind];
     lines.push(
       isSlice
-        ? `[Image ${index + 1} — ${ROLE_LABEL[reference.kind]}, part ${stylePart} of ${styleCount}]`
-        : `[Image ${index + 1} — ${ROLE_LABEL[reference.kind]}]`,
+        ? `[Image ${index + 1} — ${label}, part ${stylePart} of ${styleCount}]`
+        : `[Image ${index + 1} — ${label}]`,
     );
     const intent = reference.intent?.trim();
     if (intent) {
@@ -310,7 +332,7 @@ export function buildReferenceRoleDirective(
    * 한 장일 때는 안 적는다. 없는 각도를 찾게 만든다.
    */
   const personCount = references.filter((reference) => reference.kind === "person").length;
-  if (personCount > 1) lines.push(characterAngleDirective(personCount), "");
+  if (personCount > 1) lines.push(characterAngleDirective(personCount, character?.kind), "");
 
   // 지시를 적어 규칙을 뺀 자리는 더 이상 「지킨 대상」이 아니다. 그대로 세면
   // 「deliberately omitted」와 같은 단락에서 「preserved subject」가 부딪힌다.
@@ -337,7 +359,7 @@ export function buildReferenceRoleDirective(
 
   if (hasIdentity && hasStyle) {
     lines.push(
-      "When they conflict: the product and the person win over the design reference. " +
+      `When they conflict: the product and the ${character ? carriedSubjectNoun(character.kind) : "person"} win over the design reference. ` +
         "The design reference governs the surrounding design only.",
     );
   }

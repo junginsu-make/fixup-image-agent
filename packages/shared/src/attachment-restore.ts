@@ -1,5 +1,6 @@
 import { ATTACHMENT_ROLE_LABEL, type AttachmentRole } from "./attachment-role";
 import type { OrderedAttachment } from "./attachment-order";
+import type { CarriedCharacter } from "./carried-character";
 
 /**
  * 저장된 작업에서 첨부를 되살린다.
@@ -20,6 +21,11 @@ export interface StoredAttachmentData {
   personIds?: string[];
   /** personIds 중 그림 느낌만 바꿔도 되는 것 (설계 §4-3). */
   restyledIds?: string[];
+  /**
+   * 첨부 번호 → 그 그림이 어느 캐릭터의 각도인가와 그 캐릭터의 종류·그림체·생김새
+   * (2026-10-07, ③). **서버가 작업을 만들 때 적는다.** 옛 작업에는 없다.
+   */
+  characters?: Record<string, CarriedCharacter & { characterId: string }>;
 }
 
 /**
@@ -55,7 +61,15 @@ export function restoreAttachments(
 
   return order
     .filter((id) => urls[id])
-    .map((id): OrderedAttachment => ({ url: urls[id]!, role: roleOf(data, id) }));
+    .map((id): OrderedAttachment => {
+      const role = roleOf(data, id);
+      // 사람(캐릭터)으로 지키는 자리에만 붙인다. 화면에서 물건으로 바꿨으면 캐릭터 말을 하지 않는다.
+      const person = role === "preserve_person" || role === "preserve_person_restyled";
+      const stored = person ? data.characters?.[id] : undefined;
+      if (!stored) return { url: urls[id]!, role };
+      const { characterId, ...character } = stored;
+      return { url: urls[id]!, role, characterId, character };
+    });
 }
 
 /** 기획 AI 에게 넘길 한 줄. 번호는 화면·프롬프트와 같은 것을 쓴다. */

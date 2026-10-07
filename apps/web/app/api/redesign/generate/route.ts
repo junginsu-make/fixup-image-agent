@@ -155,10 +155,14 @@ async function generate(req: Request) {
           name: `character-${angle}.png`,
           mimeType: view.mimeType,
           buffer: Buffer.from(view.base64, "base64"),
+          // 캐릭터의 종류·그림체를 함께 넘긴다(2026-10-07, ③) — 고양이를 사람으로 부르지 않게.
+          kind: view.kind,
           directive: buildSceneWithCharacterDirective({
             identityPrompt: view.identityPrompt,
             // 원본 상세페이지가 늘 함께 간다. 그것이 색·구성을 정한다.
             hasStyleReference: files.length > 0,
+            kind: view.kind,
+            look: view.look,
           }),
         });
       }

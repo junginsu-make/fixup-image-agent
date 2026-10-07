@@ -1,3 +1,5 @@
+import { carriedSubjectNoun, type CarriedCharacterKind } from "./carried-character";
+
 /**
  * 첨부 이미지의 역할 — 세 도구가 같은 말을 쓴다.
  *
@@ -191,12 +193,28 @@ export function personOverflow(entries: Array<AttachmentRole | PersonEntry>): bo
  *
  * 여러 장을 그냥 주면 모델은 서로 다른 사람으로 읽거나, 각도와 장면까지
  * 그대로 베낀다. 다섯 도구가 같은 문장을 써야 도구를 옮겨도 같은 결과가 난다.
+ *
+ * **사람이 아니면 옷을 빼라고 하지 않는다**(2026-10-07, ③). 동물·마스코트의 옷과
+ * 소품은 생김새의 일부다. 사람이면 지금 문장 그대로다.
  */
-export function characterAngleDirective(count: number): string {
+export function characterAngleDirective(
+  count: number,
+  kind: CarriedCharacterKind = "person",
+  /** 무엇을 그리는가. 안 주면 지금 문장 그대로(사람 「this card」, 그 밖 「this image」). 포스터는 「this poster」. */
+  scene?: string,
+): string {
+  if (kind !== "person") {
+    return (
+      `Images of this ${carriedSubjectNoun(kind)} (${count} of them) are the SAME character seen from different angles. ` +
+      "They are identity references, not scenes to copy: use them together to keep one consistent " +
+      "design. Its outfit and accessories are part of its design — keep them. Do NOT reproduce their " +
+      `poses, camera angles, framing or backgrounds — compose the scene ${scene ?? "this image"} asks for. Draw exactly one of it.`
+    );
+  }
   return (
     `Images of this person (${count} of them) are the SAME character seen from different angles. ` +
     "They are identity references, not scenes to copy: use them together to keep one consistent " +
     "face, body and hair. Do NOT reproduce their poses, camera angles, framing, clothing or " +
-    "backgrounds — compose the scene this card asks for. Generate exactly one person."
+    `backgrounds — compose the scene ${scene ?? "this card"} asks for. Generate exactly one person.`
   );
 }

@@ -1,4 +1,5 @@
 import type { AttachmentRole } from "./attachment-role";
+import type { CarriedCharacter } from "./carried-character";
 
 /**
  * 첨부한 그림을 **화면에 놓인 순서 그대로** 다룬다.
@@ -20,6 +21,10 @@ export interface OrderedAttachment {
   /** 이미 fal 에 올려 둔 주소. */
   url: string;
   role: AttachmentRole;
+  /** 캐릭터의 각도면 그 캐릭터 번호(2026-10-07, ③). 같은 번호끼리 한 캐릭터다. */
+  characterId?: string;
+  /** 그 캐릭터의 종류·그림체·생김새. 서버가 작업을 만들 때 찾아 적어 둔 것이다. */
+  character?: CarriedCharacter;
 }
 
 /**

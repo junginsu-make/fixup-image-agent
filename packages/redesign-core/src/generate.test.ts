@@ -205,6 +205,20 @@ describe("첨부 원본 역할 지시", () => {
     expect(directive).toContain("[Images 2-3 — ORIGINAL DETAIL PAGE]");
   });
 
+  // 캐릭터가 사람이 아니면 PERSON 이라 부르지 않는다(2026-10-07, ③).
+  it("동물·마스코트 캐릭터는 CHARACTER 로 부르고, 여러 각도도 그 종류로 말한다", () => {
+    const directive = buildAttachmentRoleDirective({ originalCount: 1, characterCount: 2, characterKind: "animal" });
+    expect(directive).toContain("[Image 1 — CHARACTER]");
+    expect(directive).not.toContain("— PERSON]");
+    expect(directive).toContain("Images of this animal character (2 of them)");
+  });
+
+  it("종류를 안 주면 지금처럼 PERSON 이다", () => {
+    expect(buildAttachmentRoleDirective({ originalCount: 1, characterCount: 1 })).toBe(
+      buildAttachmentRoleDirective({ originalCount: 1, characterCount: 1, characterKind: "person" }),
+    );
+  });
+
   it("섹션 프롬프트에 실린다", () => {
     const base = { request: "", rolloutRequest: "", knowledgeText: "", options: { channel: "스마트스토어", ratio: "9:16", count: 1 } };
     const sections = buildSections(2, 1, base, {}, modelInfo, undefined, {

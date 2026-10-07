@@ -1,7 +1,8 @@
 import {
-  attachmentPlacementRule, designerPersona, imageLookDirective, preserveDirective,
+  attachmentPlacementRule, carriedCharacterRules, carriedIdentityLine, carriedLookException, carriedRestyleLine,
+  characterAngleDirective, designerPersona, imageLookDirective, preserveDirective,
   priorityLine, resolveLook, restyledPersonDirective, userInstructionHead, userInstructionTail,
-  type ImageLook,
+  type CarriedCharacter, type ImageLook,
 } from "@fixup/shared";
 import type { PosterSlots } from "./schemas";
 import { attachmentNumber } from "@fixup/shared";
@@ -37,6 +38,10 @@ export interface PosterPromptImage {
    */
   restyle?: boolean;
   title?: string;
+  /** 캐릭터의 각도면 그 번호(2026-10-07, ③). 같은 번호끼리 한 캐릭터다. */
+  characterId?: string;
+  /** 그 캐릭터의 종류·그림체·생김새. 없으면(옛 작업·낱장 사진) 지금처럼 사람으로 말한다. */
+  character?: CarriedCharacter;
 }
 
 export interface PosterPromptInput {
@@ -134,6 +139,17 @@ function attachmentLines(
   images.forEach((image, index) => {
     const number = attachmentNumber(index);
     if (image.kind === "preserved") {
+      // 사람이 아닌 캐릭터(동물·마스코트·물건)는 그 종류로 지킬 것을 말한다(2026-10-07, ③).
+      const characterRules = image.subject === "person" && image.character
+        ? carriedCharacterRules(image.character)
+        : [];
+      if (characterRules.length) {
+        // 「그림 느낌만 바꾸기」를 골랐으면 사용자 선택이 이긴다(사용자 결정 2026-10-07).
+        lines.push(image.restyle
+          ? `Image ${number} is a PRESERVED CHARACTER, REDRAWN. ${characterRules.join(" ")} ${carriedRestyleLine}`
+          : `Image ${number} is a PRESERVED CHARACTER. ${characterRules.join(" ")}`);
+        return;
+      }
       /**
        * **그림 느낌만 바꾸는 사람은 다른 말을 쓴다**(설계 §4-3).
        *
@@ -192,6 +208,7 @@ function attachmentLines(
       + "did not contradict still apply in full. Read the USER INSTRUCTION and follow it.",
     );
   }
+  lines.push(...characterLines(images));
   // 순서는 공용 어휘(@fixup/shared)가 정한다. 다섯 도구가 갈리면 안 된다.
   //
   // 전에는 여기에 「PRESERVED > REFERENCE > scene」 이 박혀 있었고 사용자가 친
@@ -204,7 +221,9 @@ function attachmentLines(
   lines.push(attachmentPlacementRule(images.some((image) => image.kind === "preserved")));
   // 얼굴이 둘이면 모델이 절충해 제3의 인물을 만든다(2026-07-30 실측,
   // pdp-core/src/pdp.reference-policy.ts). 막을 수 없으면 못이라도 박는다.
-  if (images.filter((image) => image.kind === "preserved" && image.subject === "person").length > 1) {
+  //
+  // **장이 아니라 사람을 센다**(2026-10-07, ③). 같은 캐릭터의 각도 넷은 한 사람이다.
+  if (countPeople(images) > 1) {
     lines.push(
       "Multiple preserved people are attached. Show only one person in the poster — pick the first "
       + "preserved person and do not blend the faces into a new individual.",
@@ -309,6 +328,38 @@ function copyLines(slots: PosterSlots, verbatim = false): string[] {
     "Incidental environmental text on signs, signboards, or props is allowed when visually natural;",
     "keep it sparse and subordinate, and never use it as authored copy or a factual claim.",
   ];
+}
+
+/** 지킬 사람의 수 — 같은 캐릭터의 각도는 하나로, 캐릭터가 아닌 사진은 장마다 하나로 센다. */
+function countPeople(images: PosterPromptImage[]): number {
+  const people = images.filter((image) => image.kind === "preserved" && image.subject === "person");
+  const characters = new Set(people.filter((image) => image.characterId).map((image) => image.characterId));
+  return characters.size + people.filter((image) => !image.characterId).length;
+}
+
+/**
+ * 캐릭터마다 한 번씩 — 여러 각도 문장, 생김새 설명, 그림체 예외(2026-10-07, ③).
+ *
+ * 카드뉴스·상세페이지와 같은 공용 문장이다. 전에는 이미지 만들기에만 「같은 캐릭터」
+ * 말이 없어 각도 넷이 서로 다른 넷으로 읽혔다. 캐릭터 정보가 없으면 아무 말도 안 한다.
+ */
+function characterLines(images: PosterPromptImage[]): string[] {
+  const groups = new Map<string, { count: number; character?: CarriedCharacter; restyled: boolean }>();
+  for (const image of images) {
+    if (image.kind !== "preserved" || image.subject !== "person" || !image.characterId) continue;
+    const group = groups.get(image.characterId) ?? { count: 0, restyled: false };
+    groups.set(image.characterId, {
+      count: group.count + 1,
+      character: group.character ?? image.character,
+      // 한 각도라도 「그림 느낌만 바꾸기」면 다시 그린다 — 제 그림체 유지를 말하지 않는다.
+      restyled: group.restyled || Boolean(image.restyle),
+    });
+  }
+  return [...groups.values()].flatMap(({ count, character, restyled }) => [
+    count > 1 ? characterAngleDirective(count, character?.kind, "this poster") : "",
+    character ? carriedIdentityLine(character) : "",
+    character && !restyled ? carriedLookException(character) : "",
+  ]).filter(Boolean);
 }
 
 export function buildPosterPrompt(input: PosterPromptInput): string {

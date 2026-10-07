@@ -1,6 +1,6 @@
 import type { PageGoal, ProductKind } from "./pdp.offering";
 export type { PageGoal, ProductKind };
-import type { ImageLook } from "@fixup/shared";
+import type { CarriedCharacterKind, ImageLook } from "@fixup/shared";
 import type { BlueprintReview } from "./pdp.review";
 import type { AnchorKind } from "./pdp.product-anchor";
 import type { PersonSource } from "./pdp.person-source";
@@ -18,6 +18,10 @@ export interface CharacterImageReference {
   base64: string;
   mimeType: string;
   identityPrompt: string;
+  /** 캐릭터의 종류. 없으면 사람으로 본다 — 옛 호출과 같다(2026-10-07, ③). */
+  kind?: CarriedCharacterKind;
+  /** 캐릭터를 만든 그림체. 없으면 실사로 본다 — 그림체 예외가 붙지 않아 옛 호출과 같다. */
+  look?: ImageLook;
 }
 export type AspectRatio = "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
 export type PdpImageStyle = "studio" | "lifestyle" | "outdoor";

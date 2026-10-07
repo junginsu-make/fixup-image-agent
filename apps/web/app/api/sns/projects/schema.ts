@@ -25,6 +25,17 @@ const AttachmentSchema = z.object({
    */
   restyle: z.boolean().optional(),
   bodySlot: z.number().int().optional(),
+  /**
+   * 어느 캐릭터의 각도인가. **2026-09-15 부터 화면이 보내는데 여기 없어서 캐릭터를 붙인
+   * 카드뉴스가 통째로 거절됐다**(2026-10-07 확인).
+   */
+  characterId: z.string().min(1).max(100).optional(),
+  /**
+   * 그 캐릭터의 종류·그림체·생김새. **받기만 하고 쓰지 않는다** — 다시 만들기가 저장된
+   * 값을 되보내도 거절하지 않으려는 것이다. 서버가 캐릭터 번호로 다시 찾아 바꾼다
+   * (`lib/carried-characters-server.ts`).
+   */
+  character: z.unknown().optional().transform(() => undefined),
 }).strict();
 
 /**
