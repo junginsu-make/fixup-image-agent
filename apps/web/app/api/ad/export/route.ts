@@ -15,6 +15,7 @@ import { exportBatch, isAdExportEnabled, MAX_SPECS_PER_REQUEST } from "../../../
 import { needsCutout } from "../../../../lib/ad/master-plan";
 import { assertCutoutSize, createBackgroundRemover, removeBackground } from "../../../../lib/ad/background";
 import { createPosterFalClients } from "../../../../lib/poster/providers";
+import { errorLogText } from "../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -305,7 +306,7 @@ async function handlePost(request: Request) {
          */
         const message = error instanceof Error ? error.message : "";
         const sayable = /오래 걸립니다|받지 못했습니다|내려받지 못했습니다|너무 큽니다/.test(message);
-        if (!sayable) console.error(`[ad] 배경 제거 실패: ${message}`);
+        if (!sayable) console.error(`[ad] 배경 제거 실패: ${errorLogText(error)}`);
         cutoutFailed = sayable ? message : "배경을 지우지 못했습니다.";
       }
     }
@@ -399,7 +400,7 @@ async function handlePost(request: Request) {
     if (sayable) {
       return Response.json({ ok: false, message: (error as Error).message }, { status: 400 });
     }
-    console.error("[ad-export] 뽑기 실패", { userId: auth.member.userId, error });
+    console.error("[ad-export] 뽑기 실패", { userId: auth.member.userId, error: errorLogText(error) });
     return Response.json({ ok: false, message: "뽑지 못했습니다." }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 // 스위치는 잎 모듈에 있다 — 그것만 읽으려고 sharp 를 끌고 오면 안 된다.
 export { isAdExportEnabled } from "./feature";
-import { assembleBanner, type AssembledBanner } from "./assemble";
+import { assembleBanner, EMPTY_OBJECT, type AssembledBanner } from "./assemble";
+import { errorLogText } from "../easy/log-text";
 import { isTooSmall } from "./layout-rules";
 import { checkAgainstSpec } from "./check";
 import { planDerivation } from "./derive";
@@ -248,11 +249,22 @@ async function assembleFor(
   if (!options.cutout) {
     return { failed: "투명 배경을 만들 준비가 안 됐습니다." };
   }
+  let object: Buffer;
   try {
     // 마스터당 한 번. 두 번째 규격부터는 같은 오브젝트를 쓴다.
-    cache.object ??= await options.cutout(master);
-    return await assembleBanner(spec.target, cache.object);
+    object = cache.object ??= await options.cutout(master);
   } catch (error) {
-    return { failed: error instanceof Error ? error.message : "투명 배너를 만들지 못했습니다." };
+    // 부르는 쪽(`api/ad/export`)이 이미 사용자에게 보일 말로 바꿔 던진다.
+    return { failed: error instanceof Error ? error.message : ASSEMBLE_FAILED };
+  }
+  try {
+    return await assembleBanner(spec.target, object);
+  } catch (error) {
+    // 「비어 있습니다」만 우리 문장이다. sharp 원문은 화면(`reason`)에 안 보이고 서버 기록에만(2026-10-07).
+    if (error instanceof Error && error.message === EMPTY_OBJECT) return { failed: EMPTY_OBJECT };
+    console.error("[ad] 조립 실패", errorLogText(error));
+    return { failed: ASSEMBLE_FAILED };
   }
 }
+
+const ASSEMBLE_FAILED = "투명 배너를 만들지 못했습니다.";
