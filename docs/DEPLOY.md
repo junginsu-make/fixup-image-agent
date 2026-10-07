@@ -275,9 +275,16 @@ sudo grep -rq "<이번에 추가한 문구>" /opt/fixup-image-agent/current/apps
 # 1. 최신 master 에서 문서 브랜치 (dev 서버가 뜬 폴더가 아닌 곳에서)
 git fetch origin && git switch -c docs/devlog-<YYYYMMDD>-<sha8> origin/master
 
-# 2. 이번 배포에 처음 들어간 PR 번호 — 지난 배포 sha 는 직전 entries 파일의 release 끝 8자리
+# 2. 이번 배포에 처음 들어간 PR 번호
+#    지난 배포 sha = 서버의 바로 앞 릴리스 id 끝 8자리 (릴리스 id 는 시각 순으로 정렬된다)
+ssh ... 'ls /opt/fixup-image-agent/releases | sort | tail -2'   # 둘째 줄이 이번, 첫째 줄이 지난 배포
 git log --merges --format=%s <지난배포sha>..<이번sha> | grep -o '#[0-9]*'
 ```
+
+   **브랜치에서 별도 배포했으면**(`workflow_dispatch`, 이번 sha 가 master 줄기에 없다) 위 범위가
+   틀린다. 그 브랜치의 PR 번호를 직접 적는다. PR 이 아직 안 합쳐졌어도 그 번호를 적는다 —
+   합쳐진 뒤 다음 일지 갱신 때 「운영 반영」 표시가 붙는다. 같은 이유로 바로 앞 릴리스가 브랜치
+   배포였으면, 그 릴리스에 이미 적힌 PR 은 이번 목록에서 뺀다(직전 entries 파일을 본다).
 
 3. 기록 파일 하나를 만든다. 이름은 `docs/devlog/entries/<배포한 날>-<sha8>.json` (한국 날짜).
 
@@ -293,7 +300,9 @@ git log --merges --format=%s <지난배포sha>..<이번sha> | grep -o '#[0-9]*'
 }
 ```
 
-   - `release` 는 서버 `current` 의 릴리스 id 그대로
+   - `release` 는 서버 `current` 의 릴리스 id 그대로(`20261007T031500Z-1a2b3c4d` 꼴). 파일 이름 끝
+     8자리와 같아야 하고, 같은 릴리스의 기록이 둘이면 `build.py` 가 멈춘다
+   - 날짜는 **한국 날짜**다. 릴리스 id 앞부분은 세계 표준시라 오전 9시 전에는 하루 다를 수 있다
    - `points` 는 **사용자가 무엇이 달라졌는지 알 수 있는 쉬운 말**로, PR 하나에 한두 줄.
      기능 이름은 사이드바 이름(쉽게·다양하게·카드뉴스…)으로, 기술 용어·파일 이름·줄표는 쓰지 않는다
    - 공개 저장소다 — 비밀 값·서버 주소·이메일·회원 정보는 적지 않는다
@@ -309,8 +318,8 @@ git log --merges --format=%s <지난배포sha>..<이번sha> | grep -o '#[0-9]*'
 
 **다른 터미널과 겹치면:** 기록 파일은 배포마다 따로라 겹치지 않는다. 다시 만든 `index.html`·
 `README.md` 가 충돌하면 손으로 고르지 말고 `git merge origin/master` 뒤 `build.py` 를 다시 돌린다.
-브랜치에서 별도 배포(`workflow_dispatch`)해 PR 이 아직 안 합쳐졌어도 그 번호를 적는다 —
-합쳐진 뒤 다음 일지 갱신 때 「운영 반영」 표시가 붙는다.
+같은 새 주에 두 터미널이 각자 `weeks.json` 에 그 주를 더했으면 거기서도 충돌한다 — 그 주는
+**한 벌만** 남기고(두 제목 중 하나, `points` 는 합친다) `build.py` 를 다시 돌린다.
 
 ### 하지 말 것
 

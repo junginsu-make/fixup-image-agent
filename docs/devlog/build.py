@@ -9,7 +9,7 @@ index.html(브라우저로 여는 판)과 README.md(GitHub 에서 읽는 판)를
 - weeks.json        주마다 제목·한 줄·요약. 작업 묶음이 있는 주에 제목이 없으면 멈춘다
 - entries/*.json    운영 배포 한 번에 한 파일. 그 배포의 쉬운 말 요약이 그 주 요약 뒤에 붙는다
 """
-import json, sys, subprocess, pathlib
+import json, re, sys, subprocess, pathlib
 from datetime import datetime, timedelta, timezone, date
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -105,26 +105,39 @@ def load_entry(f):
         bad(f"{f.name} 이 JSON 이 아닙니다 ({err})")
     if not isinstance(e, dict):
         bad(f"{f.name} 은 {{...}} 하나여야 합니다")
+    name = re.fullmatch(r"(\d{4}-\d{2}-\d{2})-([0-9a-f]{8})\.json", f.name)
+    if not name:
+        bad(f"{f.name} 의 이름은 <배포일 2026-10-07>-<sha8 소문자 8자리>.json 이어야 합니다")
     d = e.get("date")
     try:
+        if not isinstance(d, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+            raise ValueError
         date.fromisoformat(d)
-    except (TypeError, ValueError):
+    except ValueError:
         bad(f"{f.name} 의 date 는 2026-10-07 꼴이어야 합니다")
-    if not f.name.startswith(d + "-"):
+    if d != name.group(1):
         bad(f"{f.name} 의 이름은 date({d}) 로 시작해야 합니다")
-    if not isinstance(e.get("release"), str) or not e["release"].strip():
-        bad(f"{f.name} 에 배포한 릴리스 id(release)가 없습니다")
+    release = e.get("release")
+    if not isinstance(release, str) or not re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}", release):
+        bad(f"{f.name} 의 release 는 서버 current 의 릴리스 id(예: 20261007T031500Z-1a2b3c4d)여야 합니다")
+    if not release.endswith("-" + name.group(2)):
+        bad(f"{f.name} 의 이름 끝 8자리와 release 끝 8자리가 다릅니다")
     prs_ = e.get("prs")
     if not isinstance(prs_, list) or not all(isinstance(n, int) and not isinstance(n, bool) for n in prs_):
         bad(f"{f.name} 의 prs 는 PR 번호 목록이어야 합니다 (예: [259])")
     pts = e.get("points")
-    if not isinstance(pts, list) or not pts or not all(isinstance(t, str) and t.strip() for t in pts):
-        bad(f"{f.name} 에 쉬운 말 요약(points)이 한 줄 이상 있어야 합니다")
-    return {"date": d, "release": e["release"].strip(), "prs": prs_, "points": [t.strip() for t in pts]}
+    if not isinstance(pts, list) or not pts or not all(isinstance(t, str) and t.strip() and chr(10) not in t for t in pts):
+        bad(f"{f.name} 에 쉬운 말 요약(points)이 한 줄 이상 있어야 합니다 (한 항목은 줄바꿈 없는 한 문장)")
+    return {"date": d, "release": release, "prs": prs_, "points": [t.strip() for t in pts]}
 
 
 ENTRIES = sorted((load_entry(f) for f in (HERE / "entries").glob("*.json")),
                  key=lambda e: (e["date"], e["release"]))
+seen = set()
+for e in ENTRIES:
+    if e["release"] in seen:
+        bad(f"릴리스 {e['release']} 의 기록 파일이 둘입니다. 하나만 남기세요")
+    seen.add(e["release"])
 deployed_on = {}
 for e in ENTRIES:
     for n in e["prs"]:
@@ -164,7 +177,10 @@ for k in sorted(weeks):
     summary = WEEKS.get(k)
     if not summary or not summary.get("title") or not summary.get("lede"):
         bad(f"weeks.json 에 {k} 주의 title·lede 가 없습니다. 그 주 제목과 한 줄 요약을 먼저 적으세요")
-    points = list(summary.get("points", []))
+    points = summary.get("points", [])
+    if not isinstance(points, list) or not all(isinstance(t, str) and chr(10) not in t for t in points):
+        bad(f"weeks.json 의 {k} 주 points 는 한 줄 문장 목록이어야 합니다")
+    points = list(points)
     for e in w["deploys"]:
         points += [t for t in e["points"] if t not in points]
     w.update(title=summary["title"], lede=summary["lede"], points=points)
