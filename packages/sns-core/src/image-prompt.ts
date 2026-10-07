@@ -3,6 +3,7 @@ import {
   carriedCharacterRules,
   carriedIdentityLine,
   carriedLookException,
+  carriedRestyleLine,
   characterAngleDirective,
   designerPersona,
   imageLookDirective,
@@ -183,7 +184,10 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
       // 사람이 아닌 캐릭터(동물·마스코트·물건)는 그 종류로 지킬 것을 말한다(2026-10-07, ③).
       const characterRules = person && image.character ? carriedCharacterRules(image.character) : [];
       if (characterRules.length) {
-        lines.push(`Image ${number} is a PRESERVED CHARACTER. ${characterRules.join(" ")}`);
+        // 「그림 느낌만 바꾸기」를 골랐으면 사용자 선택이 이긴다(사용자 결정 2026-10-07).
+        lines.push(image.restyle
+          ? `Image ${number} is a PRESERVED CHARACTER, REDRAWN. ${characterRules.join(" ")} ${carriedRestyleLine}`
+          : `Image ${number} is a PRESERVED CHARACTER. ${characterRules.join(" ")}`);
         return;
       }
       // 사람을 그대로 두고 그림 느낌만 바꾸는 경우는 다른 말을 쓴다 (설계 §4-3).
@@ -229,11 +233,14 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
   */
   const angleCounts = new Map<string, number>();
   const characterOf = new Map<string, Attachment["character"]>();
+  // 한 각도라도 「그림 느낌만 바꾸기」면 그 캐릭터는 다시 그린다 — 제 그림체 유지를 말하지 않는다.
+  const restyled = new Set<string>();
   for (const image of images) {
     if (image.kind !== "keep_identity" || image.subject !== "person") continue;
     if (!image.characterId) continue;
     angleCounts.set(image.characterId, (angleCounts.get(image.characterId) ?? 0) + 1);
     if (image.character && !characterOf.has(image.characterId)) characterOf.set(image.characterId, image.character);
+    if (image.restyle) restyled.add(image.characterId);
   }
   for (const [characterId, count] of angleCounts) {
     if (count > 1) lines.push(characterAngleDirective(count, characterOf.get(characterId)?.kind));
@@ -242,11 +249,11 @@ export function buildAttachmentBlock(images: Attachment[], tuning: PromptTuning 
     **생김새 설명과 그림체 예외는 캐릭터마다 한 번**(2026-10-07, ③). 전에는 카드뉴스에
     생김새 설명이 아예 가지 않았다. 각도마다 되풀이하면 같은 말이 넷이 되어 소음이 된다.
   */
-  for (const character of characterOf.values()) {
+  for (const [characterId, character] of characterOf) {
     if (!character) continue;
     const identity = carriedIdentityLine(character);
     if (identity) lines.push(identity);
-    const exception = carriedLookException(character);
+    const exception = restyled.has(characterId) ? "" : carriedLookException(character);
     if (exception) lines.push(exception);
   }
 

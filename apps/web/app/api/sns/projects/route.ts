@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   }
   try {
     // 캐릭터 각도에 종류·그림체·생김새를 서버가 찾아 채운다(2026-10-07, ③). 화면이 보낸 것은 버린다.
-    const attachments = await withCarriedCharacters(auth.member.userId, parsed.data.attachments);
+    const attachments = await withCarriedCharacters(auth.member, parsed.data.attachments);
     const project = await (await snsProjectServiceForUser(auth.member.userId)).create(auth.member.userId, { ...parsed.data, attachments });
     return Response.json({ ok: true, project }, { status: 201 });
   } catch (error) {

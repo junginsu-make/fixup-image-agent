@@ -86,7 +86,26 @@ describe("작업 만들기가 서버에서 채운다", () => {
   const route = readFileSync(new URL("../../app/api/sns/projects/route.ts", import.meta.url), "utf8");
 
   it("검사를 통과한 첨부를 캐릭터 정보로 채운 뒤 만든다", () => {
-    expect(route).toMatch(/withCarriedCharacters\(auth\.member\.userId, parsed\.data\.attachments\)/);
+    expect(route).toMatch(/withCarriedCharacters\(auth\.member, parsed\.data\.attachments\)/);
     expect(route).toMatch(/\.create\(auth\.member\.userId, \{ \.\.\.parsed\.data, attachments \}\)/);
+  });
+});
+
+describe("캐릭터 번호 없이 온 첨부(쉽게 카드뉴스)", () => {
+  const 찾은것 = new Map([["cat", { kind: "animal" as const, look: "anime" as const, identity: "grey cat" }]]);
+  it("그림 제목으로 찾은 캐릭터를 번호와 함께 붙인다", () => {
+    const byAttachment = new Map([["ref-1", { characterId: "cat", kind: "animal" as const, look: "anime" as const, identity: "grey cat" }]]);
+    const [first] = applyCarriedCharacters(
+      [{ id: "ref-1", kind: "keep_identity" as const, subject: "person" as const, assetPath: "p", url: "u" }],
+      찾은것,
+      byAttachment,
+    );
+    expect(first).toMatchObject({ characterId: "cat", character: { kind: "animal", look: "anime", identity: "grey cat" } });
+  });
+
+  it("번호가 있으면 번호가 이긴다 — 제목으로 덮지 않는다", () => {
+    const byAttachment = new Map([["a", { characterId: "dog", kind: "animal" as const, look: "3d" as const }]]);
+    const [first] = applyCarriedCharacters([각도("a")], 찾은것, byAttachment);
+    expect(first).toMatchObject({ characterId: "cat", character: { identity: "grey cat" } });
   });
 });

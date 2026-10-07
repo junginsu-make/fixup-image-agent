@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { groupAttachments, type Attachment } from "../attachments";
 import { characterAngleDirective } from "@fixup/shared";
@@ -754,3 +755,43 @@ describe("캐릭터를 종류·그림체·생김새대로", () => {
 });
 
 const 각도옛 = (id: string) => attachment({ id, kind: "keep_identity", subject: "person", characterId: "old" });
+
+describe("「그림 느낌만 바꾸기」를 고른 캐릭터 — 사용자 선택이 이긴다(사용자 결정 2026-10-07)", () => {
+  const 고양이 = { kind: "animal" as const, look: "anime" as const, identity: "grey cat" };
+
+  it("동물 캐릭터도 다시 그리고, 제 그림체를 지키라는 말은 하지 않는다", () => {
+    const block = buildAttachmentBlock([
+      attachment({ id: "a", kind: "keep_identity", subject: "person", restyle: true, characterId: "cat", character: 고양이 }),
+    ]);
+    expect(block).toContain("Image 1 is a PRESERVED CHARACTER, REDRAWN.");
+    expect(block).toContain("This is the animal character for this image.");
+    expect(block).not.toContain("Rendering exception");
+  });
+
+  it("사람 캐릭터는 지금의 REDRAWN 문장 그대로, 제 그림체 유지는 빠진다", () => {
+    const block = buildAttachmentBlock([
+      attachment({ id: "a", kind: "keep_identity", subject: "person", restyle: true, characterId: "m", character: { kind: "person", look: "anime", identity: "a boy" } }),
+    ]);
+    expect(block).toContain("Image 1 is a PRESERVED PERSON, REDRAWN.");
+    expect(block).not.toContain("Rendering exception");
+  });
+});
+
+/*
+  **캐릭터 정보가 없는 옛 첨부는 변경 전 출력 그대로**(2026-10-07 독립 리뷰). 위 「옛 첨부」 시험은
+  문장이 들어 있는지만 봤다. 변경 전 커밋(bbc0d1b4)의 출력을 통째로 비교한다.
+*/
+describe("변경 전 출력과 같다 — 캐릭터 정보 없음", () => {
+  const baseline = JSON.parse(readFileSync(new URL("../__fixtures__/character-carry-baseline.json", import.meta.url), "utf8")) as Record<string, string>;
+  const 옛 = (id: string, extra: Partial<Attachment> = {}) => attachment({ id, kind: "keep_identity", subject: "person", url: "u", assetPath: "p", ...extra });
+  const cases: Record<string, Attachment[]> = {
+    twoAngles: [옛("a", { characterId: "old" }), 옛("b", { characterId: "old" })],
+    restyledAndStyle: [옛("a", { restyle: true }), attachment({ id: "s", kind: "style_reference", url: "u", assetPath: "p", role: "cover" })],
+    personAndObject: [옛("a"), attachment({ id: "o", kind: "keep_identity", subject: "object", url: "u", assetPath: "p" })],
+  };
+  for (const [name, images] of Object.entries(cases)) {
+    it(name, () => {
+      expect(buildAttachmentBlock(images, { attachmentIntent: "왼쪽에" })).toBe(baseline[name]);
+    });
+  }
+});

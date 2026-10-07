@@ -97,7 +97,7 @@ describe("캐릭터를 종류·그림체·생김새대로", () => {
   it("사람 캐릭터의 각도 둘도 같은 사람이라 말하고, 생김새를 보낸다", () => {
     const 민지 = { kind: "preserved" as const, subject: "person" as const, characterId: "m", character: { kind: "person" as const, look: "photoreal" as const, identity: "short black hair" } };
     const two = buildPosterPrompt({ slots, size, images: [민지, 민지] });
-    expect(two).toContain(characterAngleDirective(2));
+    expect(two).toContain(characterAngleDirective(2, "person", "this poster"));
     expect(two).toContain("The person's identity: short black hair.");
     expect(two).not.toContain("Multiple preserved people");
     expect(two).toContain("Image 1 is a PRESERVED PERSON.");
@@ -125,5 +125,28 @@ describe("저장된 캐릭터 정보를 첨부에 되살린다", () => {
   it("프롬프트 그림까지 이어진다 — 미리보기와 생성이 같은 함수를 쓴다", () => {
     const images = promptImagesFrom(restoreAttachments(data, { a: "A", b: "B", c: "C" }));
     expect(images[1]).toMatchObject({ kind: "preserved", subject: "person", characterId: "cat", character: 고양이 });
+  });
+});
+
+describe("「그림 느낌만 바꾸기」를 고른 캐릭터 — 사용자 선택이 이긴다(사용자 결정 2026-10-07)", () => {
+  it("동물 캐릭터도 다시 그리고, 제 그림체를 지키라는 말은 하지 않는다", () => {
+    const prompt = buildPosterPrompt({ slots, size, look: "3d", images: [{ ...고양이각도, restyle: true }] });
+    expect(prompt).toContain("Image 1 is a PRESERVED CHARACTER, REDRAWN.");
+    expect(prompt).not.toContain("Rendering exception");
+  });
+
+  it("사람 캐릭터는 지금의 REDRAWN 문장 그대로, 제 그림체 유지는 빠진다", () => {
+    const 소년 = { kind: "preserved" as const, subject: "person" as const, restyle: true, characterId: "b", character: { kind: "person" as const, look: "anime" as const, identity: "a boy" } };
+    const prompt = buildPosterPrompt({ slots, size, look: "3d", images: [소년] });
+    expect(prompt).toContain("Image 1 is a PRESERVED PERSON, REDRAWN.");
+    expect(prompt).not.toContain("Rendering exception");
+  });
+});
+
+describe("여러 각도 문장이 포스터라고 말한다", () => {
+  it("「this card」가 아니라 「this poster」", () => {
+    const prompt = buildPosterPrompt({ slots, size, images: [고양이각도, 고양이각도] });
+    expect(prompt).toContain("compose the scene this poster asks for");
+    expect(prompt).not.toContain("this card");
   });
 });

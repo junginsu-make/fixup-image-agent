@@ -23,16 +23,23 @@ export async function carriedCharactersById(userId: string, ids: string[]): Prom
 }
 
 /**
- * 첨부의 캐릭터 각도를 서버가 찾은 정보로 채운다. **찾다 실패해도 만들기를 막지 않는다** —
- * 그때는 정보 없이(지금처럼 사람으로) 간다. 화면이 보낸 정보는 어느 경우든 버린다.
+ * 첨부의 캐릭터 각도를 서버가 찾은 정보로 채운다(카드뉴스). **찾다 실패해도 만들기를 막지
+ * 않는다** — 그때는 정보 없이(지금처럼 사람으로) 간다. 화면이 보낸 정보는 어느 경우든 버린다.
+ *
+ * 일반 카드뉴스는 캐릭터 번호를 보낸다. **쉽게 카드뉴스는 안 보낸다** — 그때는 사람으로
+ * 지킬 그림의 제목으로 찾는다(이미지 만들기와 같은 방법, 사용자 결정 2026-10-07).
  */
-export async function withCarriedCharacters<T extends { kind: string; subject?: string; characterId?: string; character?: unknown }>(
-  userId: string,
+export async function withCarriedCharacters<T extends { id: string; kind: string; subject?: string; characterId?: string; character?: unknown }>(
+  member: { userId: string; profile: { role: ReferenceViewer["role"] } },
   attachments: T[],
 ): Promise<WithCarried<T>[]> {
   try {
-    const found = await carriedCharactersById(userId, attachments.map((attachment) => attachment.characterId ?? ""));
-    return applyCarriedCharacters(attachments, found);
+    const found = await carriedCharactersById(member.userId, attachments.map((attachment) => attachment.characterId ?? ""));
+    const untitled = attachments
+      .filter((attachment) => attachment.kind === "keep_identity" && attachment.subject === "person" && !attachment.characterId)
+      .map((attachment) => attachment.id);
+    const byAttachment = new Map(Object.entries(await carriedCharactersForPosterPeople(member, untitled)));
+    return applyCarriedCharacters(attachments, found, byAttachment);
   } catch (error) {
     console.error("[carried-characters] 캐릭터 정보를 찾지 못해 정보 없이 만듭니다", error instanceof Error ? error.message : String(error));
     return applyCarriedCharacters(attachments, new Map());

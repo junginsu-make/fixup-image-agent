@@ -1,5 +1,5 @@
 import {
-  attachmentPlacementRule, carriedCharacterRules, carriedIdentityLine, carriedLookException,
+  attachmentPlacementRule, carriedCharacterRules, carriedIdentityLine, carriedLookException, carriedRestyleLine,
   characterAngleDirective, designerPersona, imageLookDirective, preserveDirective,
   priorityLine, resolveLook, restyledPersonDirective, userInstructionHead, userInstructionTail,
   type CarriedCharacter, type ImageLook,
@@ -144,7 +144,10 @@ function attachmentLines(
         ? carriedCharacterRules(image.character)
         : [];
       if (characterRules.length) {
-        lines.push(`Image ${number} is a PRESERVED CHARACTER. ${characterRules.join(" ")}`);
+        // 「그림 느낌만 바꾸기」를 골랐으면 사용자 선택이 이긴다(사용자 결정 2026-10-07).
+        lines.push(image.restyle
+          ? `Image ${number} is a PRESERVED CHARACTER, REDRAWN. ${characterRules.join(" ")} ${carriedRestyleLine}`
+          : `Image ${number} is a PRESERVED CHARACTER. ${characterRules.join(" ")}`);
         return;
       }
       /**
@@ -341,16 +344,21 @@ function countPeople(images: PosterPromptImage[]): number {
  * 말이 없어 각도 넷이 서로 다른 넷으로 읽혔다. 캐릭터 정보가 없으면 아무 말도 안 한다.
  */
 function characterLines(images: PosterPromptImage[]): string[] {
-  const groups = new Map<string, { count: number; character?: CarriedCharacter }>();
+  const groups = new Map<string, { count: number; character?: CarriedCharacter; restyled: boolean }>();
   for (const image of images) {
     if (image.kind !== "preserved" || image.subject !== "person" || !image.characterId) continue;
-    const group = groups.get(image.characterId) ?? { count: 0 };
-    groups.set(image.characterId, { count: group.count + 1, character: group.character ?? image.character });
+    const group = groups.get(image.characterId) ?? { count: 0, restyled: false };
+    groups.set(image.characterId, {
+      count: group.count + 1,
+      character: group.character ?? image.character,
+      // 한 각도라도 「그림 느낌만 바꾸기」면 다시 그린다 — 제 그림체 유지를 말하지 않는다.
+      restyled: group.restyled || Boolean(image.restyle),
+    });
   }
-  return [...groups.values()].flatMap(({ count, character }) => [
-    count > 1 ? characterAngleDirective(count, character?.kind) : "",
+  return [...groups.values()].flatMap(({ count, character, restyled }) => [
+    count > 1 ? characterAngleDirective(count, character?.kind, "this poster") : "",
     character ? carriedIdentityLine(character) : "",
-    character ? carriedLookException(character) : "",
+    character && !restyled ? carriedLookException(character) : "",
   ]).filter(Boolean);
 }
 

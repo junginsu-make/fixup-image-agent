@@ -6,6 +6,7 @@ import {
   carriedIdentityLine,
   carriedKindOf,
   carriedLookException,
+  carriedRestyleLine,
   carriedSubjectNoun,
   type CarriedCharacter,
 } from "../carried-character";
@@ -152,5 +153,21 @@ describe("여러 각도 문장 — 종류를 안다", () => {
     expect(line).toMatch(/exactly one of it/i);
     expect(line).toMatch(/outfit and accessories are part of its design/i);
     expect(line).not.toMatch(/clothing or backgrounds/i);
+  });
+});
+
+describe("「그림 느낌만 바꾸기」를 고르면 사용자 선택이 이긴다(사용자 결정 2026-10-07)", () => {
+  it("장면의 그림체로 다시 그리되 생김새는 알아볼 수 있게", () => {
+    expect(carriedRestyleLine).toMatch(/rendering style described elsewhere in this prompt/i);
+    expect(carriedRestyleLine).toMatch(/design .*recognisable/i);
+  });
+});
+
+describe("여러 각도 문장 — 어느 그림인지 말한다", () => {
+  it("이미지 만들기는 「this poster」, 사람 기본은 지금 문장(「this card」) 그대로", () => {
+    expect(characterAngleDirective(2, "person", "this poster")).toContain("compose the scene this poster asks for");
+    expect(characterAngleDirective(2, "animal", "this poster")).toContain("compose the scene this poster asks for");
+    expect(characterAngleDirective(2)).toContain("compose the scene this card asks for");
+    expect(characterAngleDirective(2, "animal")).toContain("compose the scene this image asks for");
   });
 });

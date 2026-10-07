@@ -24,14 +24,25 @@ export type WithCarried<T> = Omit<T, "character"> & { character?: CarriedCharact
  * @param found 서버가 찾은 캐릭터 — 번호 → 정보. 못 찾은 번호(지웠거나 남의 것)는 없다.
  * @returns 새 목록. 받은 것은 바꾸지 않는다.
  */
-export function applyCarriedCharacters<T extends CarriableAttachment>(
+export function applyCarriedCharacters<T extends CarriableAttachment & { id: string }>(
   attachments: readonly T[],
   found: ReadonlyMap<string, CarriedCharacter>,
+  /**
+   * 캐릭터 번호 없이 온 첨부(쉽게 카드뉴스) — 첨부 번호 → 그림 제목으로 찾은 캐릭터.
+   * 번호가 있는 첨부에는 쓰지 않는다. 번호가 이긴다.
+   */
+  byAttachment: ReadonlyMap<string, CarriedCharacter & { characterId: string }> = new Map(),
 ): WithCarried<T>[] {
   return attachments.map((attachment): WithCarried<T> => {
     const { character: _fromClient, ...rest } = attachment;
-    const isCharacterAngle = attachment.kind === "keep_identity" && attachment.subject === "person";
-    const character = isCharacterAngle && attachment.characterId ? found.get(attachment.characterId) : undefined;
-    return character ? { ...rest, character } : rest;
+    if (attachment.kind !== "keep_identity" || attachment.subject !== "person") return rest;
+    if (attachment.characterId) {
+      const character = found.get(attachment.characterId);
+      return character ? { ...rest, character } : rest;
+    }
+    const byTitle = byAttachment.get(attachment.id);
+    if (!byTitle) return rest;
+    const { characterId, ...character } = byTitle;
+    return { ...rest, characterId, character };
   });
 }

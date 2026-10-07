@@ -131,6 +131,16 @@ export function carriedLookException(character: CarriedCharacter): string {
 }
 
 /**
+ * **「그림 느낌만 바꾸기」를 고른 캐릭터**(사용자 결정 2026-10-07: 사용자 선택이 이긴다).
+ *
+ * 캐릭터는 원래 제 그림체를 지키지만, 사람이 직접 다시 그려 달라고 골랐으면 그쪽이다.
+ * 생김새(무늬·옷·비율)는 지키고 그리는 방식만 장면을 따른다. 그림체 예외는 함께 보내지 않는다.
+ */
+export const carriedRestyleLine =
+  "Redraw it in the rendering style described elsewhere in this prompt — only the drawing medium changes; " +
+  "its design (markings, outfit, proportions, colours) must stay recognisable.";
+
+/**
  * 정리해 둔 생김새 한 줄. 없으면 빈 문자열.
  *
  * **사람은 지금 문장과 글자 하나까지 같다** — 앞뒤 빈칸도 자르지 않는다(2026-10-07

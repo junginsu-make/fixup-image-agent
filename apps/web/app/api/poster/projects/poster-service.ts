@@ -60,7 +60,7 @@ export function createPosterService(store: PosterProjectStore) {
 
     /**
      * @param characters 사람으로 지킬 그림이 캐릭터의 각도면 그 캐릭터(2026-10-07, ③).
-     *   **서버가 찾은 것만** 받는다(`carriedCharactersForReferences`). 화면 입력에는 없다.
+     *   **서버가 찾은 것만** 받는다(`carriedCharactersForPosterPeople`). 화면 입력에는 없다.
      */
     async create(
       input: PosterProjectInput,
