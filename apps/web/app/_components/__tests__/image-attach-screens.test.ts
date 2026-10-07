@@ -21,6 +21,8 @@ interface Screen {
   disabled: string;
   /** 잠기면 Tab 으로 들어가지 않게 하는 식. */
   tabIndex: string;
+  /** 받는 형식 — 그 칸의 `accept` 를 옮긴 규칙. 없으면 기본(PNG·JPG·WEBP). */
+  accept?: string;
 }
 
 const SCREENS: Screen[] = [
@@ -88,6 +90,59 @@ const SCREENS: Screen[] = [
     disabled: "disabled: referenceUpload.busy",
     tabIndex: "tabIndex={referenceUpload.busy ? -1 : 0}",
   },
+  // ── 3단계 ──
+  // 상세페이지 사진 칸은 칸 전체가 「파일 고르기」 단추다. 누르면 파일 창이 열려
+  // 붙여넣을 수 없다 — 단추를 감싼 카드를 칸으로 삼는다(레이아웃 화면과 같은 까닭).
+  {
+    name: "상세페이지 · 제품 사진",
+    file: "../../create/PdpMakerClient.tsx",
+    zone: "productDrop",
+    multiple: false,
+    onFiles: "onFiles: (files, notice) => void handlePreparedImage(files[0]!, notice)",
+    disabled: "disabled: false",
+    tabIndex: "tabIndex={0}",
+    accept: "ACCEPT_ANY_IMAGE",
+  },
+  {
+    name: "상세페이지 · 인물 사진",
+    file: "../../create/PdpMakerClient.tsx",
+    zone: "personDrop",
+    multiple: false,
+    onFiles: "onFiles: (files, notice) => void handleModelImage(files[0]!, notice)",
+    disabled: "disabled: false",
+    tabIndex: "tabIndex={0}",
+    accept: "ACCEPT_ANY_IMAGE",
+  },
+  {
+    name: "상세페이지 · 디자인 레퍼런스",
+    file: "../../create/StyleReferenceAttach.tsx",
+    zone: "drop",
+    multiple: false,
+    onFiles: "onFiles: (files, notice) => void attach(files[0]!, undefined, notice)",
+    disabled: "disabled: busy",
+    tabIndex: "tabIndex={busy ? -1 : 0}",
+  },
+  {
+    name: "리디자인 · 원본 페이지",
+    file: "../../redesign/redesign-panels.tsx",
+    zone: "sourceDrop",
+    multiple: true,
+    onFiles: "onFiles: (dropped, notice) => addSourceFiles(dropped, notice)",
+    disabled: "disabled: false",
+    tabIndex: "tabIndex={0}",
+    // 그림뿐 아니라 PDF 도 받는 칸이다(`accept="image/*,.pdf"`).
+    accept: "ACCEPT_IMAGE_OR_PDF",
+  },
+  {
+    name: "쉽게 · 대화 입력창",
+    file: "../../easy/easy-client.tsx",
+    zone: "composerDrop",
+    multiple: true,
+    onFiles: "onFiles: (files, notice) => void upload(files, notice)",
+    disabled: "disabled: turn.busy",
+    tabIndex: "tabIndex={turn.busy ? -1 : 0}",
+    accept: "ACCEPT_ANY_IMAGE",
+  },
 ];
 
 function read(file: string): string {
@@ -122,6 +177,7 @@ describe.each(SCREENS)("$name", (screen) => {
     expect(call).toContain(screen.multiple ? "multiple: true" : "multiple: false");
     expect(call).toContain(screen.onFiles);
     expect(call).toContain(screen.disabled);
+    if (screen.accept) expect(call).toContain(`accept: ${screen.accept}`);
   });
 
   it("칸을 눌러 고를 수 있고, 잠기면 Tab 으로 들어가지 않는다", () => {

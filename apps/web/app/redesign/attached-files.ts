@@ -6,6 +6,8 @@
  * 남았다(2026-09-23 실제 브라우저로 확인). 한 장씩 뺄 길도 없었다.
  */
 
+import type { AcceptRule } from "../_components/image-drop";
+
 function isPdf(file: File): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
@@ -17,6 +19,15 @@ function isPdf(file: File): boolean {
 export function isAcceptedFile(file: File): boolean {
   return file.type.startsWith("image/") || isPdf(file);
 }
+
+/**
+ * 끌어다 놓기·붙여넣기도 **파일 고르기와 같은 기준**으로 받는다(2026-10-07 사용자:
+ * 그림 칸은 모두 동일하게). 공용 부품의 기본(PNG·JPG·WEBP)이면 PDF 가 빠진다.
+ */
+export const ACCEPT_IMAGE_OR_PDF: AcceptRule = {
+  accepts: isAcceptedFile,
+  message: "그림이나 PDF 파일만 넣을 수 있습니다.",
+};
 
 /**
  * 같은 파일인지 가리는 열쇠. **이름만 보지 않는다** — 라이브러리에서 고른

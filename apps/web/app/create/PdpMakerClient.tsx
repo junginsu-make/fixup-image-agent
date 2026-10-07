@@ -4,7 +4,7 @@ import { createServerBrowserDrafts } from "./draft-repository";
 import { ServerDocumentHistory } from "./ServerDocumentHistory";
 import { uuid as serverDocumentId } from "../../lib/pdp/documents/model";
 
-import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Clock3, Copy, FolderOpen, Loader2, RectangleHorizontal, RectangleVertical, RotateCcw, Smartphone, Sparkles, Square, Trash2, Upload, Wand2 } from "lucide-react";
 import type { AspectRatio, BlueprintReview, GeneratedResult, ImageModelId, LandingPageBlueprint, PdpAnalyzeResponse, PdpOutputMode, PersonSource, ReferenceModelUsage } from "@fixup/pdp-core";
@@ -46,6 +46,8 @@ import { bakeRecoveredImages, recoverableSections, shouldAskForRecovery, type Re
 import { recoveredFailureLines, type RecoveredFailureLine } from "./recovered-failures";
 import { TONE_AUTO_LABEL } from "@fixup/pdp-core";
 import { ElapsedTime } from "../_components/elapsed-time";
+import { ACCEPT_ANY_IMAGE, joinMessages, useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 import { copyText, randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { PlanProgress } from "./PlanProgress";
@@ -420,7 +422,8 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
     void refreshDrafts();
   }, [refreshDrafts]);
 
-  const handlePreparedImage = async (file: File) => {
+  /** @param dropNotice 끌어다 놓기·붙여넣기가 알릴 말(「한 장만 씁니다」 등). */
+  const handlePreparedImage = async (file: File, dropNotice?: string) => {
     try {
       if (!file.type.startsWith("image/")) {
         setErrorMessage("이미지 파일만 업로드할 수 있습니다.");
@@ -432,14 +435,14 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
       setErrorMessage("");
       setErrorDetail("");
       setShowErrorDetail(false);
-      setNotice(`${file.name} 이미지를 준비했습니다. 설정을 확인한 뒤 AI 분석을 시작해 보세요.`);
+      setNotice(joinMessages(`${file.name} 이미지를 준비했습니다. 설정을 확인한 뒤 AI 분석을 시작해 보세요.`, dropNotice));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "이미지를 준비하지 못했습니다.");
       setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     }
   };
 
-  const handleModelImage = async (file: File) => {
+  const handleModelImage = async (file: File, dropNotice?: string) => {
     try {
       if (!file.type.startsWith("image/")) {
         setErrorMessage("이미지 파일만 업로드할 수 있습니다.");
@@ -452,12 +455,32 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
       setErrorMessage("");
       setErrorDetail("");
       setShowErrorDetail(false);
-      setNotice(`${file.name} 모델 이미지를 준비했습니다. 히어로우 전용 또는 전체 일관성 유지 방식을 선택해 주세요.`);
+      setNotice(joinMessages(`${file.name} 모델 이미지를 준비했습니다. 히어로우 전용 또는 전체 일관성 유지 방식을 선택해 주세요.`, dropNotice));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "모델 이미지를 준비하지 못했습니다.");
       setErrorDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     }
   };
+
+  /*
+    사진 칸은 칸 전체가 「파일 고르기」 단추라 누르면 파일 창이 열린다 — 붙여넣을
+    수 없다. 단추를 감싼 카드가 칸이다(그림 칸 통일, 2026-10-07 사용자).
+    「파일 고르기」와 같이 언제나 받는다.
+  */
+  const productDrop = useImageDropTarget({
+    disabled: false,
+    multiple: false,
+    accept: ACCEPT_ANY_IMAGE,
+    onFiles: (files, notice) => void handlePreparedImage(files[0]!, notice),
+    onMessage: setErrorMessage,
+  });
+  const personDrop = useImageDropTarget({
+    disabled: false,
+    multiple: false,
+    accept: ACCEPT_ANY_IMAGE,
+    onFiles: (files, notice) => void handleModelImage(files[0]!, notice),
+    onMessage: setErrorMessage,
+  });
 
   const buildDraftInput = useCallback(
     () =>
@@ -1658,7 +1681,16 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
             )}
           </section>
 
-            <div className="rounded-lg bg-card p-5 shadow-[var(--shadow-ring)]">
+            <div
+              role="group"
+              aria-label="제품 사진 넣는 칸"
+              tabIndex={0}
+              {...productDrop.handlers}
+              className={cn(
+                "group rounded-lg bg-card p-5 shadow-[var(--shadow-ring)] outline-none focus-within:ring-2 focus-within:ring-primary/30",
+                productDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+              )}
+            >
               <SectionHeading
                 step={1}
                 title="원본 이미지 업로드"
@@ -1666,12 +1698,13 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
               />
 
               <UploadDropzone
-                description="드래그 앤 드롭 또는 클릭으로 JPG, PNG, WEBP 파일을 선택할 수 있습니다."
+                description="클릭해서 JPG, PNG, WEBP 파일을 선택할 수 있습니다."
                 hint={preparedImage?.fileName ? `선택됨: ${preparedImageDisplayName}` : "권장 최대 10MB"}
                 onSelect={handlePreparedImage}
                 selectedFileName={preparedImage?.fileName}
                 title="제품 이미지를 업로드하세요"
               />
+              <DropPasteHint locked={false} className="mt-1" />
 
               {/* 계정에 이미 있는 이미지를 다시 올리게 하지 않는다. */}
               <SavedImagePicker
@@ -1766,7 +1799,16 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="grid content-start gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)]">
+                <div
+                  role="group"
+                  aria-label="인물 사진 넣는 칸"
+                  tabIndex={0}
+                  {...personDrop.handlers}
+                  className={cn(
+                    "group grid content-start gap-2 rounded-md bg-background p-3.5 shadow-[var(--shadow-ring)] outline-none focus-within:ring-2 focus-within:ring-primary/30",
+                    personDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+                  )}
+                >
                   <div className="min-h-[74px]">
                     <Badge variant="secondary">그대로 지킵니다</Badge>
                     <strong className="mt-1.5 block text-sm">인물 · 캐릭터</strong>
@@ -1810,6 +1852,7 @@ export function PdpMakerClient({ documentV3Enabled = false, serverDocumentsEnabl
                     onSelect={handleModelImage}
                     title="사진 올리기"
                   />
+                  <DropPasteHint locked={false} />
                   <SavedImagePicker
                     label="라이브러리에서 고르기"
                     origin="library"
@@ -2504,29 +2547,8 @@ function UploadDropzone({
   selectedFileName?: string;
   title: string;
 }) {
+  // 끌어다 놓기·붙여넣기는 이 단추를 감싼 카드가 받는다(`useImageDropTarget`).
   const inputRef = useRef<HTMLInputElement>(null);
-  const [dragActive, setDragActive] = useState(false);
-
-  const handleDrag = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.type === "dragenter" || event.type === "dragover") {
-      setDragActive(true);
-    } else if (event.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDragActive(false);
-
-    const file = event.dataTransfer.files?.[0];
-    if (file) {
-      await onSelect(file);
-    }
-  };
 
   return (
     <>
@@ -2548,13 +2570,9 @@ function UploadDropzone({
         <button
           className={cn(
             "flex w-full items-center justify-center gap-2 rounded-md border border-dashed bg-background px-3 py-2.5 text-sm transition-colors",
-            dragActive ? "border-primary bg-primary-soft" : "hover:border-primary/50 hover:bg-muted",
+            "hover:border-primary/50 hover:bg-muted",
           )}
           onClick={() => inputRef.current?.click()}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
           type="button"
         >
           <Upload size={15} className="flex-none text-primary" />
@@ -2567,22 +2585,16 @@ function UploadDropzone({
         className={cn(
           "grid w-full place-items-center gap-1.5 rounded-md border border-dashed bg-background text-center transition-colors",
           compact ? "px-4 py-5" : "px-4 py-8",
-          dragActive
-            ? "border-primary bg-primary-soft"
-            : "hover:border-primary/50 hover:bg-muted"
+          "hover:border-primary/50 hover:bg-muted"
         )}
         onClick={() => inputRef.current?.click()}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
         type="button"
       >
         <span
           className={cn(
             "grid place-items-center rounded-full",
             compact ? "h-9 w-9" : "h-11 w-11",
-            dragActive ? "bg-primary text-primary-foreground" : "bg-primary-soft text-primary"
+            "bg-primary-soft text-primary"
           )}
         >
           <Upload size={compact ? 18 : 22} />

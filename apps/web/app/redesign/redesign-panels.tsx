@@ -39,7 +39,9 @@ import {
 } from "@fixup/ui";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, type ImageLook } from "@fixup/shared";
 import { SavedImagePicker } from "../create/SavedImagePicker";
-import { mergeAttachedFiles, removeAttachedFile } from "./attached-files";
+import { ACCEPT_IMAGE_OR_PDF, mergeAttachedFiles, removeAttachedFile } from "./attached-files";
+import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 import { AttachedFileList } from "./attached-file-list";
 import { CharacterPickerButton, type PickableCharacter } from "../_components/character-picker";
 import {
@@ -236,6 +238,22 @@ export function Workspace(props: {
     generating,
     onGenerate
   } = props;
+  /** 놓기·붙여넣기에서 뺀 것·못 받은 까닭. 이 화면에는 따로 알릴 칸이 없었다. */
+  const [dropMessage, setDropMessage] = React.useState("");
+
+  function addSourceFiles(incoming: File[], notice?: string) {
+    setFiles(mergeAttachedFiles(files, incoming));
+    setDropMessage(notice ?? "");
+  }
+
+  // 단추가 파일 창을 열어 그 위에서는 붙여넣을 수 없다 — 단추를 감싼 영역이 칸이다.
+  const sourceDrop = useImageDropTarget({
+    disabled: false,
+    multiple: true,
+    accept: ACCEPT_IMAGE_OR_PDF,
+    onFiles: (dropped, notice) => addSourceFiles(dropped, notice),
+    onMessage: setDropMessage,
+  });
 
   return (
     <section>
@@ -257,67 +275,81 @@ export function Workspace(props: {
               <Badge variant="green" className="shrink-0 whitespace-nowrap">대용량 가능</Badge>
             </CardHeader>
             <CardContent>
-              <button
-                className="grid min-h-64 w-full place-items-center rounded-md border border-dashed border-primary bg-card/60 p-6 text-center"
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  // **더한다.** 전에는 끌어 놓을 때마다 앞에 올린 것이 사라졌다.
-                  setFiles(mergeAttachedFiles(files, Array.from(event.dataTransfer.files)));
-                }}
+              <div
+                role="group"
+                aria-label="원본 페이지 넣는 칸"
+                tabIndex={0}
+                {...sourceDrop.handlers}
+                className={cn(
+                  "group rounded-md outline-none focus-within:ring-2 focus-within:ring-primary/30",
+                  sourceDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+                )}
               >
-                <span>
-                  <span className="mx-auto mb-3 grid size-14 place-items-center rounded-md border border-border bg-card text-primary">
-                    <Upload className="size-7" />
-                  </span>
-                  <strong>이미지 또는 PDF를 여기에 놓기</strong>
-                  {/*
-                    **몇 장까지 반영되는지 먼저 말한다.**
+                <button
+                  className="grid min-h-64 w-full place-items-center rounded-md border border-dashed border-primary bg-card/60 p-6 text-center"
+                  onClick={() => inputRef.current?.click()}
+                >
+                  <span>
+                    <span className="mx-auto mb-3 grid size-14 place-items-center rounded-md border border-border bg-card text-primary">
+                      <Upload className="size-7" />
+                    </span>
+                    <strong>이미지 또는 PDF를 여기에 놓기</strong>
+                    {/*
+                      **몇 장까지 반영되는지 먼저 말한다.**
 
-                    서버는 앞 4장만 쓴다(`MAX_REFERENCE_IMAGES`). 그동안 화면은
-                    장수 제한 없이 받아 놓고 넘친 장을 조용히 버렸다 — 긴
-                    상세페이지를 조각으로 나눠 올리는 것이 이 도구의 정상
-                    사용이라, 버려진 줄 모른 채 결과만 이상해졌다.
-                  */}
-                  <span className="mt-1 block text-xs font-bold text-primary">
-                    앞 {MAX_REFERENCE_IMAGES}장까지 그림 생성에 반영됩니다
+                      서버는 앞 4장만 쓴다(`MAX_REFERENCE_IMAGES`). 그동안 화면은
+                      장수 제한 없이 받아 놓고 넘친 장을 조용히 버렸다 — 긴
+                      상세페이지를 조각으로 나눠 올리는 것이 이 도구의 정상
+                      사용이라, 버려진 줄 모른 채 결과만 이상해졌다.
+                    */}
+                    <span className="mt-1 block text-xs font-bold text-primary">
+                      앞 {MAX_REFERENCE_IMAGES}장까지 그림 생성에 반영됩니다
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">원본 제품컷, 수치, 리뷰, 인증, 오퍼 문구를 최대한 보존합니다.</span>
                   </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">원본 제품컷, 수치, 리뷰, 인증, 오퍼 문구를 최대한 보존합니다.</span>
-                </span>
-              </button>
-              <p className="mt-2 text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
-              <input
-                ref={inputRef}
-                hidden
-                multiple
-                type="file"
-                accept="image/*,.pdf"
-                onChange={(event) => {
-                  // **더한다.** 전에는 고를 때마다 앞에 고른 것이 사라졌다(2026-09-23).
-                  setFiles(mergeAttachedFiles(files, Array.from(event.target.files || [])));
-                  /**
-                   * **고른 뒤에 비운다.**
-                   *
-                   * 안 비우면 같은 파일을 다시 고를 때 값이 안 바뀌어 change 가
-                   * 안 뜬다. a.png 를 고르고 드래그로 b.png 로 바꾼 뒤 파일창에서
-                   * 다시 a.png 를 고르면 아무 일도 안 일어났고, 배지에는 b.png 가
-                   * 남아 있는데 사용자는 a.png 를 올린 줄 알고 크레딧을 썼다.
-                   */
-                  event.target.value = "";
-                }}
-              />
-              <div className="mt-3">
-                {/* 라이브러리에 이미 있는 그림을 디스크에서 다시 찾게 하지 않는다. */}
-                <SavedImagePicker
-                  label="라이브러리에서 불러오기"
-                  onPick={(file) => setFiles(mergeAttachedFiles(files, [file]))}
+                </button>
+                <p className="mt-2 text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
+                <input
+                  ref={inputRef}
+                  hidden
+                  multiple
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(event) => {
+                    // **더한다.** 전에는 고를 때마다 앞에 고른 것이 사라졌다(2026-09-23).
+                    setFiles(mergeAttachedFiles(files, Array.from(event.target.files || [])));
+                    setDropMessage("");
+                    /**
+                     * **고른 뒤에 비운다.**
+                     *
+                     * 안 비우면 같은 파일을 다시 고를 때 값이 안 바뀌어 change 가
+                     * 안 뜬다. a.png 를 고르고 드래그로 b.png 로 바꾼 뒤 파일창에서
+                     * 다시 a.png 를 고르면 아무 일도 안 일어났고, 배지에는 b.png 가
+                     * 남아 있는데 사용자는 a.png 를 올린 줄 알고 크레딧을 썼다.
+                     */
+                    event.target.value = "";
+                  }}
+                />
+                <div className="mt-3">
+                  {/* 라이브러리에 이미 있는 그림을 디스크에서 다시 찾게 하지 않는다. */}
+                  <SavedImagePicker
+                    label="라이브러리에서 불러오기"
+                    onPick={(file) => {
+                      setFiles(mergeAttachedFiles(files, [file]));
+                      setDropMessage("");
+                    }}
+                  />
+                </div>
+                <DropPasteHint locked={false} className="mt-2" />
+                {dropMessage ? <p className="mt-1 text-xs font-bold text-primary">{dropMessage}</p> : null}
+                <AttachedFileList
+                  files={files}
+                  onRemove={(key) => {
+                    setFiles(removeAttachedFile(files, key));
+                    setDropMessage("");
+                  }}
                 />
               </div>
-              <AttachedFileList
-                files={files}
-                onRemove={(key) => setFiles(removeAttachedFile(files, key))}
-              />
               <div className="mt-4">
                 <label className="mb-2 block text-xs font-bold text-muted-foreground">그림체</label>
                 <div className="flex flex-wrap gap-2">

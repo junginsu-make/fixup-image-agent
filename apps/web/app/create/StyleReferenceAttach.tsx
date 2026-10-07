@@ -2,11 +2,14 @@
 
 import { useRef, useState } from "react";
 import { ImagePlus, Loader2 } from "lucide-react";
+import { cn } from "@fixup/ui";
 import type { StyleReferenceView } from "./StyleReferenceCard";
 import { SavedImagePicker, type SavedImageSource } from "./SavedImagePicker";
 import { STYLE_REFERENCE_LIMIT_HINT } from "../../lib/pdp/reference-limits";
 import { randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
+import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 
 /**
  * 시나리오 화면에서 레퍼런스를 바로 첨부한다.
@@ -38,8 +41,9 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
   /**
    * @param existing 이미 계정에 레퍼런스로 등록돼 있는 것이면 그 정보. 있으면
    *   등록 요청을 보내지 않는다 — 같은 이미지가 두 벌 쌓이고 분석이 한 번 더 돈다.
+   * @param dropNotice 끌어다 놓기·붙여넣기가 알릴 말(「한 장만 씁니다」). 붙인 뒤에 보인다.
    */
-  const attach = async (file: File, existing?: SavedImageSource) => {
+  const attach = async (file: File, existing?: SavedImageSource, dropNotice?: string) => {
     setBusy(true);
     setMessage("이미지를 읽고 있습니다…");
     try {
@@ -62,7 +66,7 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
           mimeType,
           reason: "직접 고르신 레퍼런스입니다.",
         });
-        setMessage("");
+        setMessage(dropNotice ?? "");
         return;
       }
 
@@ -96,7 +100,7 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
         mimeType,
         reason: "직접 첨부하신 이미지입니다.",
       });
-      setMessage("");
+      setMessage(dropNotice ?? "");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "이미지를 읽지 못했습니다.");
     } finally {
@@ -105,8 +109,26 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
     }
   };
 
+  // 단추는 파일 창을 열어 그 위에서는 붙여넣을 수 없다 — 이 묶음 전체가 칸이다.
+  const drop = useImageDropTarget({
+    disabled: busy,
+    multiple: false,
+    onFiles: (files, notice) => void attach(files[0]!, undefined, notice),
+    onMessage: setMessage,
+  });
+
   return (
-    <div className="grid gap-2">
+    <div
+      role="group"
+      aria-label="디자인 레퍼런스 넣는 칸"
+      tabIndex={busy ? -1 : 0}
+      {...drop.handlers}
+      className={cn(
+        "group grid gap-2 rounded-md outline-none",
+        !busy && "focus-within:ring-2 focus-within:ring-primary/30",
+        drop.over && "bg-primary-soft ring-2 ring-primary/40",
+      )}
+    >
       <input
         ref={input}
         type="file"
@@ -134,6 +156,7 @@ export function StyleReferenceAttach({ onAttached }: StyleReferenceAttachProps) 
       </button>
       {/* 인물 칸·제품 칸과 같은 자리 — 올리는 단추 바로 아래. */}
       <p className="text-xs text-muted-foreground">{UPLOAD_RIGHTS_NOTE}</p>
+      <DropPasteHint locked={busy} />
 
       {/* 계정에 이미 있는 이미지를 파일로 다시 올리게 하지 않는다. */}
       <SavedImagePicker
