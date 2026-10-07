@@ -15,7 +15,14 @@ describe("연 캐릭터로 칸을 채운다", () => {
   it("이름에는 「(수정본)」을 붙이고, 설명·종류·그림체는 저장된 그대로", () => {
     expect(openedValues(호롱이, KINDS, LOOKS, [])).toEqual({
       name: "호롱이 2 (수정본)", description: "여러 각도의 캐릭터 이미지", kind: "character", look: "3d",
+      modelId: "",
     });
+  });
+
+  // 만든 모델을 저장하게 됐다(202610070001). 새 캐릭터도 같은 모델로 그려야 옮겨 온 각도와 느낌이 맞는다.
+  it("원래 캐릭터를 만든 모델을 이어받는다", () => {
+    expect(openedValues({ ...호롱이, modelId: "gpt-image-2.5-flare" }, KINDS, LOOKS, []))
+      .toMatchObject({ modelId: "gpt-image-2.5-flare" });
   });
 
   it("이미 있는 이름과 겹치지 않게 번호를 붙인다", () => {

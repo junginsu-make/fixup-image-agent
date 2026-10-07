@@ -1,9 +1,10 @@
 /**
  * 라이브러리 「과정 보기」로 연 캐릭터 — 도구 칸을 무엇으로 채울지.
  *
- * 저장된 것: 이름·설명·종류·그림체·각도 그림. **저장 안 된 것**: 처음에 붙인
- * 참고 그림과 역할, 고른 모델(비율은 늘 3:4). 그래서 그 둘은 비운 채 연다
- * (2026-10-02 조사).
+ * 저장된 것: 이름·설명·종류·그림체·각도 그림·만든 모델(2026-10-07 부터).
+ * **저장 안 된 것**: 처음에 붙인 참고 그림과 역할(비율은 늘 3:4). 그래서 그것은
+ * 비운 채 연다(2026-10-02 조사). 모델은 이어받는다 — 원래 캐릭터에서 옮겨 온
+ * 각도와 새로 그리는 각도가 같은 모델이어야 느낌이 맞는다(2026-10-07 사용자 결정).
  */
 
 export interface OpenedCharacter {
@@ -12,6 +13,8 @@ export interface OpenedCharacter {
   sourcePrompt: string;
   kind: string;
   look: string;
+  /** 만든 모델. 기록이 없는 옛 캐릭터는 없다 — 그때는 그림체의 기본 모델로 그린다. */
+  modelId?: string | null;
   views: ReadonlyArray<{ angle: string; url: string | null }>;
 }
 
@@ -20,6 +23,8 @@ export interface OpenedValues {
   description: string;
   kind: string;
   look: string;
+  /** 비면 그림체의 기본 모델이다. */
+  modelId: string;
 }
 
 export interface OpenedFront {
@@ -94,6 +99,7 @@ export function openedValues(
     description: opened.sourcePrompt,
     kind: kinds.some((entry) => entry.id === opened.kind) ? opened.kind : kinds[0]?.id ?? "person",
     look: looks.includes(opened.look) ? opened.look : "photoreal",
+    modelId: opened.modelId ?? "",
   };
 }
 

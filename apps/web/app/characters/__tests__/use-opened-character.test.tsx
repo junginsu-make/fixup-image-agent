@@ -78,7 +78,7 @@ describe("연 캐릭터로 도구를 채운다", () => {
     await 연다(new Response(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" })));
     await 비운다();
     expect(prefill).toHaveBeenCalledWith(
-      { name: "호롱이 (수정본)", description: "주황 호랑이", kind: "character", look: "3d" },
+      { name: "호롱이 (수정본)", description: "주황 호랑이", kind: "character", look: "3d", modelId: "" },
       { base64: "AQID", mimeType: "image/png" },
     );
     expect(state.front).toBe("loaded");
@@ -110,7 +110,7 @@ describe("이름 목록을 기다린다", () => {
 
     expect(prefill).toHaveBeenCalledTimes(1);
     expect(prefill).toHaveBeenCalledWith(
-      { name: "호롱이 (수정본 2)", description: "주황 호랑이", kind: "character", look: "3d" },
+      { name: "호롱이 (수정본 2)", description: "주황 호랑이", kind: "character", look: "3d", modelId: "" },
       { base64: "AQID", mimeType: "image/png" },
     );
     expect(state.front).toBe("loaded");
