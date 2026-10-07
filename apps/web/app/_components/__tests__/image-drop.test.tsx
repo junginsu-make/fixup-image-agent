@@ -25,9 +25,9 @@ describe("imagesFromTransfer — 옮겨 온 것 중 받을 그림", () => {
     expect(imagesFromTransfer({ files: [png, webp] }, 여러장)).toEqual({ files: [png, webp] });
   });
 
-  it("여러 장 칸에서 섞인 그림 아닌 파일은 빼고, 뺀 것을 말한다", () => {
-    expect(imagesFromTransfer({ files: [png, pdf] }, 여러장))
-      .toEqual({ files: [png], notice: "그림이 아닌 파일 1개는 뺐습니다." });
+  it("여러 장 칸에서 받지 않는 형식은 빼고, 뺀 것을 말한다", () => {
+    expect(imagesFromTransfer({ files: [png, pdf, heic] }, 여러장))
+      .toEqual({ files: [png], notice: "받지 않는 형식의 파일 2개는 뺐습니다." });
   });
 
   it("한 장 칸에 여러 장이 오면 첫 장만 넣고 알린다", () => {
@@ -48,7 +48,7 @@ describe("imagesFromTransfer — 옮겨 온 것 중 받을 그림", () => {
     expect(imagesFromTransfer({ files: [], items }, 한장)).toEqual({ files: [png] });
   });
 
-  it("그림이 아닌 파일만 있으면 왜 안 되는지 말한다", () => {
+  it("받을 수 있는 파일이 하나도 없으면 왜 안 되는지 말한다", () => {
     expect(imagesFromTransfer({ files: [pdf] }, 여러장)).toEqual({ error: ACCEPT_PNG_JPG_WEBP.message });
   });
 
@@ -60,7 +60,7 @@ describe("imagesFromTransfer — 옮겨 온 것 중 받을 그림", () => {
 
 /* ── 칸에 거는 손잡이 ─────────────────────────────────────────── */
 
-const onFiles = vi.fn<(files: File[]) => void>();
+const onFiles = vi.fn<(files: File[], notice?: string) => void>();
 const onMessage = vi.fn<(message: string) => void>();
 let target: ReturnType<typeof useImageDropTarget>;
 
@@ -69,14 +69,17 @@ function Probe({ disabled, multiple = false }: { disabled: boolean; multiple?: b
   return null;
 }
 
+let view: ReturnType<typeof create> | null = null;
 function render(disabled = false, multiple = false) {
-  act(() => { create(<Probe disabled={disabled} multiple={multiple} />); });
+  act(() => { view = create(<Probe disabled={disabled} multiple={multiple} />); });
 }
 
 const ZONE = { name: "zone" };
 const CHILD = { name: "child" };
 const PORTAL = { name: "portal" };
-const zone = { contains: (node: unknown) => node === ZONE || node === CHILD };
+const zone = { contains: (node: unknown) => node === ZONE || node === CHILD || node === TEXT_FIELD };
+/** 칸 안의 글상자(세트 이름 등). */
+const TEXT_FIELD = { tagName: "INPUT", type: "text", isContentEditable: false };
 
 function dragEvent(files: File[], options: { types?: string[]; at?: object } = {}) {
   return {
@@ -87,12 +90,12 @@ function dragEvent(files: File[], options: { types?: string[]; at?: object } = {
   } as unknown as React.DragEvent<HTMLElement>;
 }
 
-function pasteEvent(files: File[], at: object = ZONE) {
+function pasteEvent(files: File[], options: { at?: object; types?: string[] } = {}) {
   return {
     preventDefault: vi.fn(),
     currentTarget: zone,
-    target: at,
-    clipboardData: { files, items: [], types: files.length ? ["Files"] : ["text/plain"] },
+    target: options.at ?? ZONE,
+    clipboardData: { files, items: [], types: options.types ?? (files.length ? ["Files"] : ["text/plain"]) },
   } as unknown as React.ClipboardEvent<HTMLElement>;
 }
 
@@ -106,7 +109,11 @@ beforeEach(() => {
     removeEventListener: (type: string) => { listeners.delete(type); },
   });
 });
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => {
+  act(() => view?.unmount());
+  view = null;
+  vi.unstubAllGlobals();
+});
 
 describe("useImageDropTarget — 끌어다 놓기", () => {
   it("파일을 끌고 들어오면 칸을 강조하고, 밖으로 나가면 끈다", () => {
@@ -127,6 +134,17 @@ describe("useImageDropTarget — 끌어다 놓기", () => {
     expect(target.over).toBe(false);
   });
 
+  it("놓으면 강조를 끄고, 다시 끌고 들어오면 처음부터 센다", () => {
+    render();
+    act(() => target.handlers.onDragEnter(dragEvent([png])));
+    act(() => target.handlers.onDragEnter(dragEvent([png], { at: CHILD })));
+    act(() => target.handlers.onDrop(dragEvent([png], { at: CHILD })));
+    expect(target.over).toBe(false);
+    act(() => target.handlers.onDragEnter(dragEvent([png])));
+    act(() => target.handlers.onDragLeave(dragEvent([png])));
+    expect(target.over).toBe(false);
+  });
+
   it("글자를 끌어오면 강조하지 않고, 놓아도 막지 않는다", () => {
     render();
     act(() => target.handlers.onDragEnter(dragEvent([], { types: ["text/plain"] })));
@@ -139,18 +157,22 @@ describe("useImageDropTarget — 끌어다 놓기", () => {
   it("여러 장 칸은 놓은 그림을 전부 넘긴다", () => {
     render(false, true);
     act(() => target.handlers.onDrop(dragEvent([png, webp])));
-    expect(onFiles).toHaveBeenCalledWith([png, webp]);
+    expect(onFiles).toHaveBeenCalledWith([png, webp], undefined);
     expect(onMessage).not.toHaveBeenCalled();
   });
 
-  it("한 장 칸은 첫 장만 넘기고 알린다", () => {
+  /*
+    알림은 **넣는 쪽에 함께 넘긴다.** 화면의 올리기가 시작·끝에 안내 칸을 다시
+    쓰므로, 여기서 따로 띄우면 그 사이에 지워졌다(2026-10-07 리뷰).
+  */
+  it("한 장 칸은 첫 장만 넘기고, 알림은 넣는 쪽에 함께 넘긴다", () => {
     render();
     act(() => target.handlers.onDrop(dragEvent([png, webp])));
-    expect(onFiles).toHaveBeenCalledWith([png]);
-    expect(onMessage).toHaveBeenCalledWith(ONE_ONLY_MESSAGE);
+    expect(onFiles).toHaveBeenCalledWith([png], ONE_ONLY_MESSAGE);
+    expect(onMessage).not.toHaveBeenCalled();
   });
 
-  it("그림이 아닌 파일을 놓으면 안내한다", () => {
+  it("받을 수 있는 파일이 없으면 안내만 한다", () => {
     render();
     act(() => target.handlers.onDrop(dragEvent([pdf])));
     expect(onFiles).not.toHaveBeenCalled();
@@ -170,8 +192,10 @@ describe("useImageDropTarget — 끌어다 놓기", () => {
     expect(onFiles).not.toHaveBeenCalled();
   });
 
-  it("라이브러리 창(포털)에 놓은 것은 뒤의 칸이 받지 않는다", () => {
+  it("라이브러리 창(포털)에서 끌어도 뒤의 칸은 강조하지 않고, 놓아도 받지 않는다", () => {
     render();
+    act(() => target.handlers.onDragEnter(dragEvent([png], { at: PORTAL })));
+    expect(target.over).toBe(false);
     act(() => target.handlers.onDrop(dragEvent([png], { at: PORTAL })));
     expect(onFiles).not.toHaveBeenCalled();
   });
@@ -183,7 +207,7 @@ describe("useImageDropTarget — 붙여넣기", () => {
     const paste = pasteEvent([png, webp]);
     act(() => target.handlers.onPaste(paste));
     expect(paste.preventDefault).toHaveBeenCalled();
-    expect(onFiles).toHaveBeenCalledWith([png, webp]);
+    expect(onFiles).toHaveBeenCalledWith([png, webp], undefined);
   });
 
   it("글자만 붙여넣으면 건드리지 않는다", () => {
@@ -195,12 +219,38 @@ describe("useImageDropTarget — 붙여넣기", () => {
     expect(onMessage).not.toHaveBeenCalled();
   });
 
-  it("잠긴 칸·포털에는 붙여넣지 않는다", () => {
-    render(true);
-    act(() => target.handlers.onPaste(pasteEvent([png])));
-    render();
-    act(() => target.handlers.onPaste(pasteEvent([png], PORTAL)));
+  /*
+    칸 안의 글상자(세트 이름 등)에 글을 붙여넣는데 클립보드에 그림도 함께
+    실려 있으면(엑셀 셀 복사 등) 글 대신 그림이 올라갔다(2026-10-07 리뷰).
+  */
+  it("칸 안의 글상자에 글이 함께 실린 붙여넣기는 글상자에 맡긴다", () => {
+    render(false, true);
+    const paste = pasteEvent([png], { at: TEXT_FIELD, types: ["text/plain", "Files"] });
+    act(() => target.handlers.onPaste(paste));
+    expect(paste.preventDefault).not.toHaveBeenCalled();
     expect(onFiles).not.toHaveBeenCalled();
+  });
+
+  it("글상자라도 그림만 붙여넣으면 받는다", () => {
+    render(false, true);
+    act(() => target.handlers.onPaste(pasteEvent([png], { at: TEXT_FIELD, types: ["Files"] })));
+    expect(onFiles).toHaveBeenCalledWith([png], undefined);
+  });
+
+  it("잠긴 칸에는 붙여넣지 않는다", () => {
+    render(true);
+    const paste = pasteEvent([png]);
+    act(() => target.handlers.onPaste(paste));
+    expect(onFiles).not.toHaveBeenCalled();
+    expect(paste.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("라이브러리 창(포털)에서 붙여넣으면 뒤의 칸이 받지 않는다", () => {
+    render();
+    const paste = pasteEvent([png], { at: PORTAL });
+    act(() => target.handlers.onPaste(paste));
+    expect(onFiles).not.toHaveBeenCalled();
+    expect(paste.preventDefault).not.toHaveBeenCalled();
   });
 });
 
@@ -221,7 +271,7 @@ describe("칸 밖에 놓기", () => {
 
   it("칸이 이미 받은 놓기는 건드리지 않는다", () => {
     function Guard() { usePreventFileNavigation(); return null; }
-    act(() => { create(<Guard />); });
+    act(() => { view = create(<Guard />); });
     const over = nativeDrag("dragover", ["Files"], true);
     listeners.get("dragover")!(over);
     expect(over.dataTransfer.dropEffect).toBe("copy");
@@ -233,5 +283,13 @@ describe("칸 밖에 놓기", () => {
     const drop = nativeDrag("drop", ["text/plain"]);
     listeners.get("drop")!(drop);
     expect(drop.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("화면을 떠나면 보호 장치도 떼어 낸다", () => {
+    render();
+    expect(listeners.size).toBe(2);
+    act(() => view?.unmount());
+    view = null;
+    expect(listeners.size).toBe(0);
   });
 });

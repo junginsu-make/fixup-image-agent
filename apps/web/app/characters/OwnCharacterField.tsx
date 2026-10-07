@@ -6,6 +6,7 @@ import { openImageViewer } from "../_components/image-viewer";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 import type { ReadImage } from "./read-image";
 
 /**
@@ -18,7 +19,8 @@ export function OwnCharacterField(props: {
   value: (ReadImage & { libraryId?: string }) | null;
   locked: boolean;
   library: Array<{ id: string; title: string | null; url: string | null; thumbUrl: string | null }>;
-  onUpload: (files: ArrayLike<File> | null) => void;
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말. 넣은 뒤에 보인다. */
+  onUpload: (files: ArrayLike<File> | null, notice?: string) => void;
   onPickLibrary: (image: { id: string; url: string | null }) => void;
   onClear: () => void;
   onReloadLibrary: () => void;
@@ -30,7 +32,8 @@ export function OwnCharacterField(props: {
   // 끌어다 놓기·붙여넣기도 올리기와 같은 길로 넣는다(`_components/image-drop.ts`). 한 장 칸이다.
   const drop = useImageDropTarget({
     disabled: locked,
-    onFiles: (files) => props.onUpload(files),
+    multiple: false,
+    onFiles: (files, notice) => props.onUpload(files, notice),
     onMessage: props.onError,
   });
   return (
@@ -68,12 +71,7 @@ export function OwnCharacterField(props: {
             넣으면 이 캐릭터의 생김새를 그대로 지킵니다. 오른쪽 참고할 그림에 레퍼런스를 넣으면
             그 화풍과 몸 비율로 바꿉니다.
           </p>
-          {locked ? null : (
-            <p className="text-[11px] leading-snug text-subtle-foreground">
-              그림을 끌어다 놓거나, 이 칸을 누르고 <kbd>Ctrl+V</kbd>(Mac 은 <kbd>⌘V</kbd>)로 붙여넣어도 됩니다.
-              <span className="ml-1 hidden font-bold text-primary group-focus-within:inline">· 지금 붙여넣을 수 있습니다</span>
-            </p>
-          )}
+          <DropPasteHint locked={locked} />
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"

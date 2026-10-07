@@ -15,28 +15,50 @@ interface Screen {
   /** 손잡이를 펼친 변수 이름 — `{...<이것>.handlers}` */
   zone: string;
   multiple: boolean;
-  /** 받은 그림을 넣는 길 — 그 칸의 「올리기」와 같아야 한다. */
+  /** 받은 그림을 넣는 길 — 그 칸의 「올리기」와 같아야 하고, 알림도 함께 넘긴다. */
   onFiles: string;
-  /** 칸을 잠그는 조건(없으면 null). */
+  /** 칸을 잠그는 조건. */
   disabled: string;
+  /** 잠기면 Tab 으로 들어가지 않게 하는 식. */
+  tabIndex: string;
 }
 
 const SCREENS: Screen[] = [
+  {
+    name: "캐릭터 · 참고할 그림",
+    file: "../../characters/CharacterStudio.tsx",
+    zone: "referenceDrop",
+    multiple: false,
+    onFiles: "onFiles: (files, notice) => void attachFile(files, notice)",
+    disabled: "disabled: locked",
+    tabIndex: "tabIndex={locked ? -1 : 0}",
+  },
+  {
+    name: "캐릭터 · 내 캐릭터",
+    file: "../../characters/OwnCharacterField.tsx",
+    zone: "drop",
+    multiple: false,
+    onFiles: "onFiles: (files, notice) => props.onUpload(files, notice)",
+    disabled: "disabled: locked",
+    tabIndex: "tabIndex={locked ? -1 : 0}",
+  },
   {
     name: "라이브러리 · 참고 이미지",
     file: "../../library/references-tab.tsx",
     zone: "imagesDrop",
     multiple: true,
-    onFiles: "onFiles: (files) => void upload(files)",
+    onFiles: "onFiles: (files, notice) => void upload(files, notice)",
     disabled: "disabled: uploading",
+    tabIndex: "tabIndex={uploading ? -1 : 0}",
   },
   {
     name: "라이브러리 · 세트 편집",
     file: "../../library/set-editor.tsx",
     zone: "uploadDrop",
     multiple: true,
-    onFiles: "onFiles: (files) => void upload(files)",
+    onFiles: "onFiles: (files, notice) => void upload(files, notice)",
     disabled: "disabled: uploading",
+    tabIndex: "tabIndex={uploading ? -1 : 0}",
   },
 ];
 
@@ -51,7 +73,7 @@ function hookCall(source: string, zone: string): string {
   return source.slice(at, source.indexOf("});", at));
 }
 
-/** 손잡이를 펼친 요소의 여는 태그. */
+/** 손잡이를 펼친 요소의 여는 태그(속성들). */
 function zoneTag(source: string, zone: string): string {
   const at = source.indexOf(`{...${zone}.handlers}`);
   expect(at, `${zone} 를 펼친 칸이 없다`).toBeGreaterThan(-1);
@@ -63,31 +85,32 @@ function zoneTag(source: string, zone: string): string {
 describe.each(SCREENS)("$name", (screen) => {
   const source = read(screen.file);
 
-  it("공용 부품을 쓴다", () => {
-    expect(source).toMatch(/from "(\.\.\/)+_components\/image-drop"|from "\.\/image-drop"/);
+  it("공용 부품을 쓴다 — 화면에 따로 복사해 두지 않는다", () => {
+    expect(source).toMatch(/from "(\.\.\/)+_components\/image-drop"/);
   });
 
-  it("여러 장 여부·넣는 길·잠그는 조건이 그 칸과 같다", () => {
+  it("여러 장 여부·넣는 길(알림 포함)·잠그는 조건이 그 칸과 같다", () => {
     const call = hookCall(source, screen.zone);
     expect(call).toContain(screen.multiple ? "multiple: true" : "multiple: false");
     expect(call).toContain(screen.onFiles);
     expect(call).toContain(screen.disabled);
   });
 
-  it("칸을 눌러 고를 수 있고(붙여넣기를 받는 칸), 그 칸에 손잡이가 걸려 있다", () => {
+  it("칸을 눌러 고를 수 있고, 잠기면 Tab 으로 들어가지 않는다", () => {
     const tag = zoneTag(source, screen.zone);
     expect(tag).toContain('role="group"');
-    expect(tag).toMatch(/tabIndex=\{/);
+    expect(tag).toContain(screen.tabIndex);
   });
 
-  it("마우스로 눌러도 테두리로 「이 칸이 받는다」를 보인다 — 캐릭터 화면과 같게", () => {
+  it("마우스로 눌러도 테두리로 「이 칸이 받는다」를 보이고, 끄는 동안 강조한다", () => {
     const at = source.indexOf(`{...${screen.zone}.handlers}`);
     const classes = source.slice(at, source.indexOf(")}", at));
+    expect(classes).toContain("group");
     expect(classes).toContain("focus-within:ring-2");
     expect(classes).toMatch(/\.over && /);
   });
 
-  it("끌어다 놓기·붙여넣기를 쓸 수 있다고 칸 옆에 적는다", () => {
-    expect(source).toContain("DROP_PASTE_HINT");
+  it("안내는 공용 문구 부품으로 — 잠기면 숨고, 누르면 「지금 붙여넣을 수 있습니다」", () => {
+    expect(source).toMatch(/<DropPasteHint locked=\{/);
   });
 });

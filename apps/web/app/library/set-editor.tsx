@@ -8,7 +8,8 @@ import { randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { gridSrc } from "../_components/grid-src";
 import { ThumbImage } from "../_components/thumb-image";
-import { DROP_PASTE_HINT, useImageDropTarget } from "../_components/image-drop";
+import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 
 type ImageOption = ReferenceImageRow & {
   signedUrl: string | null;
@@ -55,7 +56,8 @@ export function SetEditor({
   }, [initialSet, open]);
 
   /** 세트를 만들다 그림이 모자라면 여기서 바로 올린다. */
-  async function upload(files: ArrayLike<File> | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말. 다 올린 뒤에 보인다. */
+  async function upload(files: ArrayLike<File> | null, notice?: string) {
     if (!files?.length) return;
     setUploading(true);
     setMessage("");
@@ -70,6 +72,7 @@ export function SetEditor({
         if (!body.ok) throw new Error(body.message ?? "올리지 못했습니다.");
       }
       await onUploaded();
+      if (notice) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
     } finally {
@@ -85,7 +88,7 @@ export function SetEditor({
   const uploadDrop = useImageDropTarget({
     disabled: uploading,
     multiple: true,
-    onFiles: (files) => void upload(files),
+    onFiles: (files, notice) => void upload(files, notice),
     onMessage: setMessage,
   });
 
@@ -139,7 +142,7 @@ export function SetEditor({
           aria-label="세트 그림 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
           {...uploadDrop.handlers}
           className={cn(
-            "grid max-h-[65vh] gap-6 overflow-y-auto rounded-lg p-1 outline-none",
+            "group grid max-h-[65vh] gap-6 overflow-y-auto rounded-lg p-1 outline-none",
             !uploading && "focus-within:ring-2 focus-within:ring-primary/30",
             uploadDrop.over && "bg-primary-soft ring-2 ring-primary/40",
           )}
@@ -163,7 +166,7 @@ export function SetEditor({
               {uploading ? "올리는 중…" : "이미지 올리기"}
             </Button>
             <span className="text-xs text-muted-foreground">여기서 올린 그림도 라이브러리 낱장에 들어갑니다. {UPLOAD_RIGHTS_NOTE}</span>
-            <span className="w-full text-xs text-subtle-foreground">{DROP_PASTE_HINT}</span>
+            <DropPasteHint locked={uploading} className="w-full text-xs" />
           </div>
 
           {compatibleImages.length === 0 ? (

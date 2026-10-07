@@ -11,7 +11,8 @@ import { SetEditor } from "./set-editor";
 import { randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { ThumbImage } from "../_components/thumb-image";
-import { DROP_PASTE_HINT, useImageDropTarget } from "../_components/image-drop";
+import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 
 /**
  * 화면이 보는 참고 이미지 한 장.
@@ -74,7 +75,8 @@ export function ReferencesTab() {
 
   React.useEffect(() => { void load(); }, [load]);
 
-  async function upload(files: ArrayLike<File> | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말(「받지 않는 형식을 뺐습니다」). 다 올린 뒤에 보인다. */
+  async function upload(files: ArrayLike<File> | null, notice?: string) {
     if (!files?.length) return;
     setUploading(true);
     setMessage("");
@@ -90,8 +92,9 @@ export function ReferencesTab() {
         const payload = await response.json() as { ok?: boolean; message?: string };
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 올리지 못했습니다.");
       }
-      setMessage(`${files.length}장을 올렸습니다.`);
+      // 목록을 다시 읽은 **뒤에** 말한다. 다시 읽기가 안내 칸을 비우므로 먼저 말하면 지워진다.
       await load();
+      setMessage([`${files.length}장을 올렸습니다.`, notice].filter(Boolean).join(" "));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 올리지 못했습니다.");
     } finally {
@@ -107,7 +110,7 @@ export function ReferencesTab() {
   const imagesDrop = useImageDropTarget({
     disabled: uploading,
     multiple: true,
-    onFiles: (files) => void upload(files),
+    onFiles: (files, notice) => void upload(files, notice),
     onMessage: setMessage,
   });
 
@@ -244,7 +247,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
             aria-label="참고 이미지 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
             {...imagesDrop.handlers}
             className={cn(
-              "grid gap-5 rounded-lg outline-none",
+              "group grid gap-5 rounded-lg outline-none",
               !uploading && "focus-within:ring-2 focus-within:ring-primary/30",
               imagesDrop.over && "bg-primary-soft ring-2 ring-primary/40",
             )}
@@ -256,7 +259,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
               {uploading ? "올리는 중…" : "참고 이미지 올리기"}
             </Button>
             <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 올린 참고 이미지는 나만 봅니다. 다른 회원에게는 보이지 않습니다. {UPLOAD_RIGHTS_NOTE}</span>
-            <span className="w-full text-xs text-subtle-foreground">{DROP_PASTE_HINT}</span>
+            <DropPasteHint locked={uploading} className="w-full text-xs" />
           </div>
 
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">참고 이미지를 불러오는 중입니다.</p> : visibleImages.length === 0 ? (

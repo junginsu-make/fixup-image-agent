@@ -28,6 +28,7 @@ import {
 } from "./own-character";
 import { readImageBlob, type ReadImage } from "./read-image";
 import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
@@ -337,7 +338,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     await loadLibrary();
   }
 
-  async function attachFile(files: ArrayLike<File> | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말(「한 장만 씁니다」). 넣은 뒤에 보인다. */
+  async function attachFile(files: ArrayLike<File> | null, notice?: string) {
     const file = files?.[0];
     if (!file) return;
     const seq = ++attachSeq.current;
@@ -346,6 +348,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       const read = await readAsAttached(file, attached?.role ?? DEFAULT_ROLE);
       if (seq === attachSeq.current) setAttached(read);
       await saveToLibrary(file);
+      if (notice) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     } finally {
@@ -353,7 +356,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     }
   }
 
-  async function attachOwnFile(files: ArrayLike<File> | null) {
+  async function attachOwnFile(files: ArrayLike<File> | null, notice?: string) {
     const file = files?.[0];
     if (!file) return;
     const seq = ++ownSeq.current;
@@ -362,6 +365,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       const read = await readImageBlob(file);
       if (seq === ownSeq.current) setOwn(read);
       await saveToLibrary(file);
+      if (notice) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     }
@@ -584,7 +588,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    */
   const referenceDrop = useImageDropTarget({
     disabled: locked,
-    onFiles: (files) => void attachFile(files),
+    multiple: false,
+    onFiles: (files, notice) => void attachFile(files, notice),
     onMessage: setMessage,
   });
   const chosenSrc = chosen ? `data:${chosen.mimeType};base64,${chosen.base64}` : "";
@@ -794,7 +799,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 library={library.map((image) => ({
                   id: image.id, title: image.title, url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
                 }))}
-                onUpload={(files) => void attachOwnFile(files)}
+                onUpload={(files, notice) => void attachOwnFile(files, notice)}
                 onPickLibrary={(image) => void attachOwnFromLibrary(image)}
                 onClear={() => setOwn(null)}
                 onReloadLibrary={() => void loadLibrary()}
@@ -905,12 +910,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <p className="text-xs text-subtle-foreground">
                     붙인 그림이 없습니다. 아래에서 올리거나 라이브러리에서 고르세요.
                   </p>
-                  {locked ? null : (
-                    <p className="text-xs text-subtle-foreground">
-                      그림을 여기로 끌어다 놓거나, 이 칸을 누르고 <kbd>Ctrl+V</kbd>(Mac 은 <kbd>⌘V</kbd>)로 붙여넣어도 됩니다.
-                      <span className="mt-1 hidden font-bold text-primary group-focus-within:block">지금 붙여넣을 수 있습니다</span>
-                    </p>
-                  )}
+                  <DropPasteHint locked={locked} className="text-xs" />
                 </div>
               )}
             </CardContent>

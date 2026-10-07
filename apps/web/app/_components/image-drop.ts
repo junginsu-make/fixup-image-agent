@@ -80,12 +80,33 @@ export function imagesFromTransfer(
     return images.length > 1 ? { files: [images[0]!], notice: ONE_ONLY_MESSAGE } : { files: [images[0]!] };
   }
   const skipped = files.length - images.length;
-  return skipped ? { files: images, notice: `그림이 아닌 파일 ${skipped}개는 뺐습니다.` } : { files: images };
+  // GIF·HEIC 도 그림이다. 「그림이 아닌」이 아니라 「받지 않는 형식」이라 말한다.
+  return skipped ? { files: images, notice: `받지 않는 형식의 파일 ${skipped}개는 뺐습니다.` } : { files: images };
+}
+
+/** 글이 함께 실렸는가. */
+function carriesText(data: TransferLike | null | undefined): boolean {
+  return Array.from(data?.types ?? []).includes("text/plain");
 }
 
 /** 파일을 끌고 있는가. 글자·링크를 끌 때는 칸을 강조하지도 막지도 않는다. */
 function carriesFiles(data: TransferLike | null | undefined): boolean {
   return Array.from(data?.types ?? []).includes("Files");
+}
+
+/**
+ * 글을 쓰는 자리인가(글상자·글 칸·직접 고치는 칸).
+ *
+ * 칸 안의 글상자(세트 이름 등)에 글을 붙여넣는데 클립보드에 그림도 함께 실려
+ * 있으면(엑셀 셀 복사 등) 글 대신 그림이 올라갔다(2026-10-07 리뷰). 거기서는
+ * 글이 함께 실린 붙여넣기를 글상자에 맡긴다.
+ */
+function isTextField(node: unknown): boolean {
+  const element = node as { tagName?: string; type?: string; isContentEditable?: boolean } | null;
+  if (!element) return false;
+  if (element.isContentEditable) return true;
+  if (element.tagName === "TEXTAREA") return true;
+  return element.tagName === "INPUT" && !["file", "checkbox", "radio", "button", "submit"].includes(element.type ?? "text");
 }
 
 /**
@@ -105,17 +126,23 @@ interface DropTargetInput {
   multiple?: boolean;
   /** 받는 형식. 안 주면 PNG·JPG·WEBP. */
   accept?: AcceptRule;
-  onFiles: (files: File[]) => void;
-  /** 안 받은 까닭이나 덧붙일 말(한 장만 씀·그림 아님). */
+  /**
+   * 받은 그림과, 함께 알릴 말(「한 장만 씁니다」·「받지 않는 형식을 뺐습니다」).
+   *
+   * **알림을 여기서 따로 띄우지 않는다.** 화면의 올리기가 시작·끝에 안내 칸을
+   * 다시 써서, 따로 띄우면 그 사이에 지워졌다(2026-10-07 리뷰). 넣는 쪽이 올리기를
+   * 마친 뒤 함께 보인다.
+   */
+  onFiles: (files: File[], notice?: string) => void;
+  /** 하나도 받지 못했을 때 그 까닭. */
   onMessage: (message: string) => void;
 }
 
-/** 고른 결과를 넘긴다 — 그림이면 넣고, 할 말이 있으면 한다. */
+/** 고른 결과를 넘긴다 — 그림이면 넣고(알림과 함께), 하나도 없으면 까닭을 말한다. */
 function deliver(pick: TransferPick, { onFiles, onMessage }: DropTargetInput) {
   if (!pick) return;
   if ("error" in pick) return onMessage(pick.error);
-  onFiles(pick.files);
-  if (pick.notice) onMessage(pick.notice);
+  onFiles(pick.files, pick.notice);
 }
 
 /**
@@ -163,6 +190,7 @@ export function useImageDropTarget(input: DropTargetInput) {
     },
     onPaste(event: ClipboardEvent<HTMLElement>) {
       if (disabled || !fromInside(event)) return;
+      if (isTextField(event.target) && carriesText(event.clipboardData)) return;
       const pick = imagesFromTransfer(event.clipboardData, rule);
       if (!pick) return;
       event.preventDefault();

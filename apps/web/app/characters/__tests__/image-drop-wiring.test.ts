@@ -30,7 +30,7 @@ describe("「참고할 그림」 칸", () => {
   it("잠겼을 때는 안 받고, 받은 그림은 「새 이미지 올리기」와 같은 길로 넣는다", () => {
     const call = hookCall(studio);
     expect(call).toContain("disabled: locked");
-    expect(call).toContain("onFiles: (files) => void attachFile(files)");
+    expect(call).toContain("onFiles: (files, notice) => void attachFile(files, notice)");
   });
 
   it("같은 요소가 손잡이를 갖고, 잠기면 Tab 으로 들어가지 않는다", () => {
@@ -44,7 +44,7 @@ describe("「내 캐릭터」 칸", () => {
   it("잠겼을 때는 안 받고, 받은 그림은 올리기와 같은 길로 넣는다", () => {
     const call = hookCall(own);
     expect(call).toContain("disabled: locked");
-    expect(call).toContain("onFiles: (files) => props.onUpload(files)");
+    expect(call).toContain("onFiles: (files, notice) => props.onUpload(files, notice)");
   });
 
   it("같은 요소가 손잡이를 갖고, 잠기면 Tab 으로 들어가지 않는다", () => {
