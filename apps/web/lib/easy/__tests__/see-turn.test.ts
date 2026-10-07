@@ -67,9 +67,37 @@ describe("이미지를 보고 답하기", () => {
     ]);
   });
 
-  it("다 안 만든 이미지 · 없는 번호 · 없는 사진이면 부르지 않는다 — 볼 것이 없다(none)", async () => {
-    expect(await 본다({ see: ["2", "9", "p3"] })).toEqual({ kind: "none" });
+  it("다 안 만든 이미지 · 없는 번호면 부르지 않는다 — 볼 것이 없다(none)", async () => {
+    expect(await 본다({ see: ["2", "9"] })).toEqual({ kind: "none" });
     expect(받은).toEqual([]);
+  });
+
+  /**
+   * Fix round 1 — 이번 턴에 확인한 사진이 없는데 사진(「p1」)을 보라고 했으면 판단의 답(보지 못한 사진 이야기)을
+   * 그대로 내보내지 않는다. 새로고침 뒤 말 답에서는 프롬프트가 물음 줄의 사진 수를 알려 주지만 볼 사진은 없다.
+   */
+  it("확인한 사진이 없는 사진 번호를 고르면 부르지 않고 failed", async () => {
+    expect(await 본다({ see: ["p1"], photos: [] })).toEqual({ kind: "failed" });
+    expect(await 본다({ see: ["1", "p3"] })).toEqual({ kind: "failed" });
+    expect(받은).toEqual([]);
+    expect(읽은경로).toEqual([]);
+  });
+
+  /** Fix round 1 — 붙인 사진도 사본(서명한 작은 그림)이 먼저다. 큰 원본 하나로 호출 전체가 실패하지 않게. */
+  it("운영에서 붙인 사진은 사본 주소가 있으면 그것을 넘긴다", async () => {
+    await 본다({ see: ["p1"], photos: [{ id: "ref-1", url: "https://signed.test/ref-1", thumbUrl: "https://signed.test/ref-1.thumb", storagePath: "me/references/ref-1.jpg" }] });
+    expect(받은[0]!.images).toEqual([{ url: "https://signed.test/ref-1.thumb" }]);
+  });
+
+  /** Fix round 1 — 운영에서 주소를 못 만든 사진은 원본을 메모리로 읽지 않고 뺀다. 다 빠지면 failed. */
+  it("운영에서 주소가 없는 사진은 원본을 읽지 않고 빼고, 볼 것이 다 빠지면 failed", async () => {
+    const 주소없음 = [{ id: "ref-1", url: null, thumbUrl: null, storagePath: "me/references/ref-1.jpg" }];
+    await 본다({ see: ["1", "p1"], photos: 주소없음 });
+    expect(받은[0]!.images).toEqual([{ url: "https://signed.test/library/me/p1/1.thumb.webp" }]);
+    expect(받은[0]!.prompt).not.toContain("사용자가 붙인 사진 1");
+    expect(await 본다({ see: ["p1"], photos: 주소없음 })).toEqual({ kind: "failed" });
+    expect(받은).toHaveLength(1);
+    expect(읽은경로).toEqual([]);
   });
 
   /** 2차 최종 리뷰 10 — 라우트가 「지금은 이미지를 볼 수 없었습니다…」로 바꾼다. */

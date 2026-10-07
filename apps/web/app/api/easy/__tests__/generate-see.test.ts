@@ -105,6 +105,13 @@ describe("이미지를 보고 답하기 (2차 D5)", () => {
     expect(본것[0]!.photos).toEqual([붙인사진]);
   });
 
+  /** Fix round 1 — 이번 턴에 붙여 확인한 사진만 넘긴다. 없으면 빈 목록이라 「p1」은 see-turn 이 failed 로 본다. */
+  it("붙인 사진이 없으면 사진 목록은 비어 있다", async () => {
+    판단 = { ...(판단 as object), see: ["p1"] };
+    await 보낸다("아까 그 사진 어때?");
+    expect(본것[0]!.photos).toEqual([]);
+  });
+
   it("볼 것이 없으면 부르지 않는다 — 값이 늘지 않는다", async () => {
     판단 = { wants: "talk", reply: "네, 안녕하세요.", ratio: "", look: "", card: 0, note: "", target: 0, see: [] };
     await 보낸다("안녕");

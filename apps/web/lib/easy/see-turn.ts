@@ -17,9 +17,12 @@ import type { EasyImageFacts, EasyPicture } from "./image-list";
  * 로컬 저장소 주소는 바깥에서 못 받는다. 바이트 읽기를 따로 짜지 않는다(2차 최종 리뷰 e). 그 파일은 경로를
  * 안 거르므로 넘기는 경로의 출처를 적어 둔다: 결과 그림은 본인 포스터 저장소의 그림 행(`image-list.ts` —
  * `posterStoresForUser`), 붙인 사진은 ⓪ 확인(`posterReferencesByIds`)이 걸러 준 행의 `storagePath` 다.
- * 사용자가 보낸 주소 · 경로는 여기 닿지 않는다. 결과 그림은 사본(작다)이 있으면 그것 — 이미지 토큰이 준다.
+ * 사용자가 보낸 주소 · 경로는 여기 닿지 않는다. 결과 그림 · 붙인 사진 모두 사본(작다)이 있으면 그것 — 이미지
+ * 토큰이 줄고, 큰 원본 하나로 호출 전체가 실패하지 않는다. 운영에서 주소를 못 만든 사진은 원본을 메모리로 읽지
+ * 않고 뺀다(911MB 서버, Fix round 1). 바이트는 로컬(`LOCAL_STORE`)에서만 읽는다.
  *
- * **던지지 않는다.** 볼 것이 없으면 `none`(판단 모델의 답 그대로), 고른 것을 하나도 못 찾았거나 못 읽었거나
+ * **던지지 않는다.** 볼 것이 없으면 `none`(판단 모델의 답 그대로), 확인한 사진이 없는 사진 번호(「p1」)를
+ * 골랐거나(새로고침 뒤 말 답 — 프롬프트는 물음 줄의 사진 수를 안다) 고른 것을 하나도 못 찾았거나 못 읽었거나
  * 호출이 실패했거나 빈 답이면 `failed`(라우트가 「지금은 이미지를 볼 수 없었습니다…」로 바꾼다, 2차 최종
  * 리뷰 10). 보지 못한 채 지어낸 답을 남기지 않는다. 대화는 멈추지 않는다.
  */
@@ -30,7 +33,7 @@ interface SeeInput {
   see: readonly string[];
   facts: EasyImageFacts;
   /** 지금 붙은 사진(⓪ 확인을 마친 것). 붙인 순서다 — 「p1」이 첫 장. */
-  photos: ReadonlyArray<{ id: string; url?: string | null; storagePath: string }>;
+  photos: ReadonlyArray<{ id: string; url?: string | null; thumbUrl?: string | null; storagePath: string }>;
   write: (prompt: string, images: readonly StructuredImage[]) => Promise<unknown>;
 }
 
@@ -47,8 +50,12 @@ async function 결과그림(picture: EasyPicture): Promise<StructuredImage> {
   return { mediaType: contentType, data: bytes.toString("base64") };
 }
 
-async function 붙인사진(photo: SeeInput["photos"][number]): Promise<StructuredImage> {
-  if (!isLocalStoreEnabled() && photo.url) return { url: photo.url };
+/** 운영은 조회가 서명해 준 사본 · 원본 주소만 쓴다. 둘 다 없으면 뺀다(`undefined`). */
+async function 붙인사진(photo: SeeInput["photos"][number]): Promise<StructuredImage | undefined> {
+  if (!isLocalStoreEnabled()) {
+    const url = photo.thumbUrl || photo.url;
+    return url ? { url } : undefined;
+  }
   const { bytes, contentType } = await referenceBytes(photo.storagePath);
   return { mediaType: contentType, data: bytes.toString("base64") };
 }
@@ -62,7 +69,17 @@ async function 보낼그림(input: SeeInput, target: EasySeeTarget): Promise<Str
   return picture ? 결과그림(picture) : undefined;
 }
 
+/** 이번 턴에 확인한 사진이 없는 사진 번호를 골랐나. 그 답은 보지 못한 사진 이야기다. */
+function 없는사진을골랐나(see: readonly string[], photoCount: number): boolean {
+  return see.some((one) => {
+    if (!one.startsWith("p")) return false;
+    const index = Number(one.slice(1));
+    return !(Number.isInteger(index) && index >= 1 && index <= photoCount);
+  });
+}
+
 export async function rewriteReplyBySeeing(input: SeeInput): Promise<EasySeen> {
+  if (없는사진을골랐나(input.see, input.photos.length)) return { kind: "failed" };
   const targets = seeTargets(input.see, input.facts.entries, input.photos.length);
   if (!targets.length) return { kind: "none" };
   try {
