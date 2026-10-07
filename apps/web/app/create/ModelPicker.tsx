@@ -1,9 +1,10 @@
 "use client";
 import { useCreditPolicy } from "../_components/credit-policy-provider";
 
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
+import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 import type { ImageModelId } from "@fixup/pdp-core";
 import { cn } from "@fixup/ui";
+import { PDP_IMAGE_MODELS } from "../../lib/pdp/image-models";
 
 /**
  * 이미지 모델 선택.
@@ -27,8 +28,9 @@ export function ModelPicker({ value, sectionCount, disabled, onChange }: ModelPi
       <legend className="mb-1 text-meta text-subtle-foreground">이미지 생성 모델</legend>
       {/* 캐릭터에서 먼저 비교 중인 모델은 여기 안 띄운다. 상세페이지는 섹션
           이미지 품질을 실측으로 맞춰 왔다 — 검증 안 된 모델을 섞으면 어느
-          모델로 만든 페이지인지 뒤죽박죽이 된다. */}
-      {IMAGE_MODELS.filter((model) => !model.characterOnly).map((model) => {
+          모델로 만든 페이지인지 뒤죽박죽이 된다. 경제형은 상세페이지 품질 검사를
+          자주 떨어져 뺐다(2026-10-07, `lib/pdp/image-models.ts`). */}
+      {PDP_IMAGE_MODELS.map((model) => {
         const selected = model.id === value;
         return (
           <button

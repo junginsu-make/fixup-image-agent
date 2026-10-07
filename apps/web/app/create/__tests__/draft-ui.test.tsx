@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { savePdpDraft, getPdpDraft, deletePdpDraft, listPdpDrafts, type PdpDraftInput } from "../pdp-drafts";
 import { createSectionFor } from "../scenario-sections";
 import { deletePdpDocument } from "../document-store";
+import { DEFAULT_IMAGE_MODEL } from "@fixup/pdp-core";
 
 const captured = vi.hoisted(() => ({ editor: {} as Record<string, any>, scenario: {} as Record<string, any>, search: new URLSearchParams("draft=ui-draft") }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => captured.search }));
@@ -35,12 +36,12 @@ it.each([false, true])("T-SAVE UI(v3=%s): 모델·캐릭터 복원과 브리프 
   const input: PdpDraftInput = { id: "ui-draft", appState: "editor", preparedImage: null, modelImage: null, modelImageUsage: null,
     result: { originalImage: "AAAA", blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [createSectionFor([])] } },
     additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null,
-    imageModel: "nano-banana", characterId: "chosen-character", characterAngles: ["back"], preserveProduct: false,
+    imageModel: "gpt-image-2", characterId: "chosen-character", characterAngles: ["back"], preserveProduct: false,
   };
   await savePdpDraft(input);
   await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
   await flush();
-  expect(captured.editor.imageModel).toBe("nano-banana");
+  expect(captured.editor.imageModel).toBe("gpt-image-2");
   expect(captured.editor.characterId).toBe("chosen-character");
   expect(captured.editor.characterAngles).toEqual(["back"]);
   expect(captured.editor.preserveProduct).toBe(false);
@@ -53,6 +54,16 @@ it.each([false, true])("T-SAVE UI(v3=%s): 모델·캐릭터 복원과 브리프 
   }
   const { createDraftRepository } = await import("../draft-repository");
   expect((await createDraftRepository(documentV3Enabled).get("ui-draft"))?.sellerBrief?.audience).toBe("고객 6");
+});
+
+// 상세페이지에서 뺀 나노바나나 일반판(2026-10-07)으로 저장된 작업은 기본 모델로 연다.
+it.each([false, true])("옛 경제형 작업(v3=%s)은 기본 모델로 연다", async (documentV3Enabled) => {
+  await savePdpDraft({ id: "ui-draft", appState: "editor", preparedImage: null, modelImage: null, modelImageUsage: null,
+    result: { originalImage: "AAAA", blueprint: { executiveSummary: "전략", scorecard: [], blueprintList: [], sections: [createSectionFor([])] } },
+    additionalInfo: "", desiredTone: "", aspectRatio: "3:4", notice: "", editorState: null, imageModel: "nano-banana" });
+  await act(async () => { renderer = create(<PdpMakerClient documentV3Enabled={documentV3Enabled} />); });
+  await flush();
+  expect(captured.editor.imageModel).toBe(DEFAULT_IMAGE_MODEL);
 });
 
 it("T-STATE: 편집기에서 돌아가 수정한 구성안을 다시 편집할 때 옛 섹션이 덮지 않는다", async () => {

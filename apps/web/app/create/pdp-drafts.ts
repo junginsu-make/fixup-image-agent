@@ -21,11 +21,11 @@ import type {
   ProductKind,
   PageGoal,
 } from "@fixup/pdp-core";
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@fixup/pdp-core";
 import { IMAGE_LOOKS, type ImageLook } from "@fixup/shared";
 
 import { selectExpiredDraftIds } from "./draft-retention";
 import { randomId } from "../../lib/browser-safe";
+import { pdpImageModelOrDefault } from "../../lib/pdp/image-models";
 
 const PDP_DRAFT_DB = "hanirum-pdp-maker";
 const PDP_DRAFT_STORE = "drafts";
@@ -456,7 +456,7 @@ function normalizeDraftRecord(record: PdpDraftRecord): PdpDraftRecord {
     attachmentIntents: record.attachmentIntents,
     styleReference: record.styleReference,
     styleReferenceEnabled: record.styleReferenceEnabled ?? true,
-    imageModel: IMAGE_MODELS.some((model) => model.id === record.imageModel) ? record.imageModel : DEFAULT_IMAGE_MODEL,
+    imageModel: pdpImageModelOrDefault(record.imageModel),
     characterId: record.characterId,
     characterAngles: record.characterAngles ?? [],
     preserveProduct: record.preserveProduct ?? true,
