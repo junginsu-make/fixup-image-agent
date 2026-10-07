@@ -8,6 +8,7 @@ import { AD_ANSWER_NOTE, AD_CHOICE_IMAGE, AD_QUESTION } from "../ad-ask";
 import { CANNOT_DO_NOW, NOTHING_TO_EDIT, fitButtonDecision } from "../chat";
 import { NOT_MADE_YET } from "../cardnews-after";
 import { failureRowBody } from "../../../lib/easy/failure-row";
+import { ASK_TARGET_NOTE } from "../chat-facts";
 
 /**
  * **물음 사슬**(2026-10-07 2차 설계 D1 · §3-1). 화면은 처음 말을 다시 보내지 않는다. 서버가 대화
@@ -24,6 +25,16 @@ describe("마지막 물음 자리", () => {
     expect(askAnchor([말("u1", "바다"), 물음("q1", "ratio")])).toBe(1);
     expect(askAnchor([말("u1", "바다"), 물음("q1", "ratio"), 말("u2", "고양이"), 도우미("a", "네")])).toBe(-1);
     expect(askAnchor([])).toBe(-1);
+  });
+
+  /** 최종 수정 2 — 서버가 답으로 본 말 답은 `typed` 표시가 붙는다. 그 답이 실패한 짝은 건너뛴다. */
+  it("답으로 본 말 답(typed 표시)이 실패한 짝도 건너뛴다", () => {
+    const 말답실패 = [
+      말("u1", "바다"), 물음("q1", "ratio"), 말("u2", withPick("세로로", { typed: true })),
+      도우미("s", sayBody("세로로 만들겠습니다.")), 도우미("f", failureRowBody("x")),
+    ];
+    expect(askAnchor(말답실패)).toBe(1);
+    expect(askChain(말답실패)).toMatchObject({ origin: "바다", answers: [] });
   });
 
   it("단추로 답했다가 실패한 짝은 건너뛴다 — 말로 한 답의 실패는 안 건너뛴다", () => {
@@ -268,6 +279,17 @@ describe("말로 한 답의 갈래 정리 (settleTypedAnswer)", () => {
     expect(settleTypedAnswer(장, { wants: "card_text", reply: "", card: 2, note: "제목만" }).decision.note).toBe("제목만");
   });
 
+  /**
+   * 최종 수정 1 — 번호 물음에 「그거요」처럼 번호 없이 답하면 판단 모델이 talk + ask_target 으로 다시 묻는다. 그 말을 답으로
+   * 안 보면 새 물음 줄에 `cont` 가 없어 사슬의 처음 말이 「그거요」가 되고, 단추로 고르면 「그거요」로 고친다(값이 나간다).
+   */
+  it("번호 물음 바로 뒤 talk + ask_target(다시 묻기)이면 답으로 본다 — 다른 물음 뒤면 아니다", () => {
+    const 다시묻기 = { wants: "talk" as const, reply: "몇 번 이미지를 고칠까요?", note: ASK_TARGET_NOTE };
+    expect(settleTypedAnswer(물음줄("target", { numbers: [1, 2] }), 다시묻기)).toEqual({ decision: 다시묻기, answered: true, askRatio: true });
+    expect(settleTypedAnswer(물음줄("photo"), 다시묻기)).toMatchObject({ answered: false });
+    expect(settleTypedAnswer(물음줄("target", { numbers: [1, 2] }), { wants: "talk", reply: "네" })).toMatchObject({ answered: false });
+  });
+
   it("사진 · 레퍼런스 · 광고 물음은 note 의 answer 로만 답이다", () => {
     expect(settleTypedAnswer(물음줄("photo"), { wants: "image", reply: "", note: ASK_ANSWER_NOTE })).toMatchObject({ answered: true });
     expect(settleTypedAnswer(물음줄("reference"), { wants: "cardnews", reply: "" })).toMatchObject({ answered: false });
@@ -362,6 +384,21 @@ describe("번호 물음의 말 답 (Task 8 고침 1)", () => {
     expect(askInstruction(장, "3번", "typed")).toBe("더 짧게");
     expect(askInstruction(장, "3번 장", "typed")).toBe("더 짧게");
     expect(askInstruction(장, "3번 장 제목도 바꿔줘", "typed")).toBe("더 짧게\n제목도 바꿔줘");
+  });
+
+  /** 최종 수정 6 — 「첫 번째」 · 「셋째」 같은 서수 말과 전각 숫자(「２번」)도 번호 말이다. */
+  it("서수 말 · 전각 숫자도 번호 말이다 — 번호만이면 안 더하고, 고칠 내용이 있으면 잇는다", () => {
+    const 하나 = askChain(번호물음)!;
+    for (const 번호만 of ["두 번째요", "첫 번째 거", "첫번째 거로 해 주세요", "열 번째 이미지로 해줘", "둘째요", "셋째 거요", "２번", "이미지 ２"]) {
+      expect(askInstruction(하나, 번호만, "typed")).toBe("배경만 하얗게");
+    }
+    expect(askInstruction(하나, "첫 번째 거 배경도 파랗게", "typed")).toBe("배경만 하얗게\n배경도 파랗게");
+    expect(askInstruction(하나, "세 번째 글자도 크게", "typed")).toBe("배경만 하얗게\n글자도 크게");
+    expect(askInstruction(하나, "이미지 ２ 로고도 빼줘", "typed")).toBe("배경만 하얗게\n로고도 빼줘");
+    // 「거울」의 「거」는 번호 말이 아니다 — 사용자 말을 잃지 않는다.
+    expect(askInstruction(하나, "두 번째 거울을 지워줘", "typed")).toBe("배경만 하얗게\n거울을 지워줘");
+    // 서수가 아닌 「세로」 · 「두 번」은 번호 말이 아니다 — 번호 없는 답이라 안 잇는다.
+    expect(askInstruction(하나, "세로로 두 번 해줘", "typed")).toBe("배경만 하얗게");
   });
 
   it("다른 물음의 말 답은 숫자가 있어도 그대로 잇는다", () => {

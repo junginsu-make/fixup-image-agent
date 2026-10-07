@@ -3,6 +3,7 @@ import type { EasyMessage } from "./turn";
 import { AD_ANSWER_NOTE, AD_CHOICE_IMAGE, AD_CHOICE_SPECS, isAdQuestion } from "./ad-ask";
 import { isSayBody, readAsk, readPick, visibleBody, type EasyAskKind } from "./row-marks";
 import { isFailureRowBody } from "../../lib/easy/failure-row";
+import { ASK_TARGET_NOTE } from "./chat-facts";
 
 /**
  * **물음 사슬**(2026-10-07 2차 설계 D1 · §3-1).
@@ -77,8 +78,8 @@ function 머리말인가(row: Row | undefined): boolean {
  * `at` 자리에 놓인 사용자 말이 답한 물음 줄의 자리. 없으면 -1. 보통은 바로 앞 줄이다.
  * 단추로 답했다가 실패한 짝(단추 답 줄 → (머리말 줄) → 실패 줄)이 사이에 있으면 건너뛴다(1차 `물음자리`
  * 일반화). **머리말 줄은 답이 아니다**(2차 최종 리뷰 2) — 일하는 턴은 사용자 줄 → 머리말 줄 → 그림 줄이라,
- * 머리말 뒤에 실패하면 짝 사이에 머리말이 낀다. 말로 한 답이 실패한 것은 건너뛰지 않는다 — 그 말이 답이었는지
- * 코드는 모른다.
+ * 머리말 뒤에 실패하면 짝 사이에 머리말이 낀다. 말로 한 답은 서버가 답으로 본 것만 `typed` 표시가 붙어(최종 수정 2)
+ * 단추 답처럼 건너뛴다. 표시 없는 말(답이 아니었거나 옛 줄)의 실패는 건너뛰지 않는다 — 답이었는지 모른다.
  */
 function 물음자리(rows: readonly Row[], at: number): number {
   if (물음(rows[at - 1])) return at - 1;
@@ -155,8 +156,14 @@ export function readEasyPick(raw: unknown): EasyPick {
 /** 번호를 고르는 물음(어느 이미지 · 몇 번 장). */
 const 번호물음 = new Set<string>(["target", "card"]);
 
-/** 번호 말: 「#2」 · 「이미지 2(번)」 · 「2번(째)( 장)」 · 맨 앞의 숫자. 처음 하나만 본다. */
-const 번호말 = /#\s*\d+|(?:이미지|그림|카드|결과물)\s*\d+(?:\s*(?:번째|번|장))?|\d+\s*(?:번째|번|장)(?:\s*(?:장|이미지|그림|카드))?|^\s*\d+(?=[\s.,!?요이에으로]|$)/;
+/** 「첫 번째」 · 「셋째」 같은 서수 말(최종 수정 6). 「거울」의 「거」는 안 먹는다 — 「거」 뒤는 띄움 · 토씨 · 끝뿐이다. */
+const 서수말 = /(?:(?:첫|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*번\s*째|(?:첫|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열)째)(?:\s*(?:이미지|그림|카드|장|(?:거|것)(?=[\s.,!?~요로를은는이가의에]|$)))?/;
+/** 숫자 번호 말: 「#2」 · 「이미지 2(번)」 · 「2번(째)( 장)」 · 맨 앞의 숫자. */
+const 숫자말 = /#\s*\d+|(?:이미지|그림|카드|결과물)\s*\d+(?:\s*(?:번째|번|장))?|\d+\s*(?:번째|번|장)(?:\s*(?:장|이미지|그림|카드))?|^\s*\d+(?=[\s.,!?요이에으로]|$)/;
+/** 번호 말(숫자 · 서수). 처음 하나만 본다. */
+const 번호말 = new RegExp(`${숫자말.source}|${서수말.source}`);
+/** 전각 숫자(「２」)를 반각으로. 한 글자씩 바꿔 자리가 안 밀린다. */
+const 반각숫자 = (text: string) => text.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
 /** 번호 말 바로 뒤에 붙는 토씨. */
 const 붙은토씨 = /^(?:이요|으로요|로요|으로|로|에서|이에요|예요|입니다|요|을|를|이|가|은|는|의)(?=[\s.,!?~]|$)/;
 /** 번호만 고른 말의 꼬리. 이것뿐이면 고칠 내용이 없다. */
@@ -168,8 +175,9 @@ const 꼬리 = /^(?:해\s*주세요|해\s*줘|해요|고쳐\s*주세요|고쳐\s
  * 고칠 내용을 함께 말하면(「이미지 1 글자도 크게」) 번호 말을 뺀 나머지를 잇는다 — 사용자 말을 잃지 않게.
  * 다른 물음의 답은 그대로 잇는다.
  */
-function 답으로잇는말(kind: string, text: string): string[] {
-  if (!번호물음.has(kind)) return [text];
+function 답으로잇는말(kind: string, typed: string): string[] {
+  if (!번호물음.has(kind)) return [typed];
+  const text = 반각숫자(typed);
   const found = 번호말.exec(text);
   if (!found) return [];
   const 뒤 = text.slice(found.index + found[0].length).trimStart().replace(붙은토씨, "");
@@ -318,6 +326,8 @@ export interface EasyTypedAnswer {
  * - 갈래 물음 뒤 또 `either`: 한 장으로 가고 답으로 본다(「아무거나」). 그 reply 는 갈래 물음 글이라 버린다
  * - 번호 물음 바로 뒤 `image_edit` · 장 물음 바로 뒤 장 갈래: 물음이 바란 갈래라 `note` 가 없어도 답이다.
  *   장 물음이면 바라는 점은 이번 `note`, 없거나 `answer` 면 물을 때 적어 둔 것
+ * - 번호 물음 바로 뒤 talk + `ask_target`(번호 없는 답이라 다시 묻기): 답이다(최종 수정 1). 아니면 새 물음 줄에 `cont` 가
+ *   없어 처음 말이 「그거요」가 되고, 단추로 고르면 그 말로 고친다. 번호 없는 말은 지시에 안 잇는다(`답으로잇는말`)
  * - 그 밖(사진 · 레퍼런스 · 광고): 판단 모델이 `note` 에 answer 라고 적었을 때만 답이다
  */
 export function settleTypedAnswer(ask: EasyChainAsk | undefined, decision: EasyDecision): EasyTypedAnswer {
@@ -328,6 +338,9 @@ export function settleTypedAnswer(ask: EasyChainAsk | undefined, decision: EasyD
     return { decision: { ...decision, wants: "image", reply: "", note: ASK_ANSWER_NOTE }, answered: true, askRatio: true };
   }
   if (ask.kind === "target" && decision.wants === "image_edit") return { decision, answered: true, askRatio: true };
+  if (ask.kind === "target" && decision.wants === "talk" && decision.note === ASK_TARGET_NOTE) {
+    return { decision, answered: true, askRatio: true };
+  }
   if (ask.kind === "card" && (decision.wants === "card_text" || decision.wants === "card_redo")) {
     const 바라는점 = decision.note && !답표시 ? decision.note : 짧은글(ask.data.note, 500);
     return {

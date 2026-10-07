@@ -13,12 +13,21 @@ let 카드뉴스: Set<string>;
 let 실패 = false;
 let 카드실패 = false;
 let 읽은수 = 0;
+let 읽는중 = 0;
+let 가장많이 = 0;
+let 읽은작업: string[] = [];
+let 카드로물은것: string[] = [];
 
 vi.mock("../../poster/stores", () => ({
   posterStoresForUser: () => ({
     projects: {
       get: async (id: string) => {
         읽은수 += 1;
+        읽은작업.push(id);
+        읽는중 += 1;
+        가장많이 = Math.max(가장많이, 읽는중);
+        await Promise.resolve();
+        읽는중 -= 1;
         if (id === "boom") throw new Error("잠깐 끊김");
         return 작업들[id];
       },
@@ -27,8 +36,10 @@ vi.mock("../../poster/stores", () => ({
   }),
 }));
 vi.mock("../cardnews-steps", () => ({
-  cardnewsProjectIds: async (_userId: string, ids: readonly string[]) =>
-    (카드실패 ? null : new Set(ids.filter((id) => 카드뉴스.has(id)))),
+  cardnewsProjectIds: async (_userId: string, ids: readonly string[]) => {
+    카드로물은것.push(...ids);
+    return 카드실패 ? null : new Set(ids.filter((id) => 카드뉴스.has(id)));
+  },
 }));
 
 const { loadEasyImages } = await import("../image-list");
@@ -48,6 +59,10 @@ beforeEach(() => {
   실패 = false;
   카드실패 = false;
   읽은수 = 0;
+  읽는중 = 0;
+  가장많이 = 0;
+  읽은작업 = [];
+  카드로물은것 = [];
 });
 
 describe("이 대화의 결과물 사실", () => {
@@ -109,9 +124,41 @@ describe("이 대화의 결과물 사실", () => {
     expect(facts.entries.map((one) => one.kind)).toEqual(["image", "unknown", "unknown"]);
   });
 
-  it("저장소가 실패해도 턴을 깨지 않는다 — 빈 사실", async () => {
+  /**
+   * 최종 수정 7 — 통째로 못 읽으면 빈 사실이 아니라 번호마다 「모름」이다. 빈 사실이면 고치기 갈래가 빠져 「고쳐줘」가 새
+   * 이미지 만들기로 새거나(값), 번호 단추가 「고칠 것이 없다」로 끝난다. 번호는 그대로다.
+   */
+  it("저장소가 실패해도 턴을 깨지 않는다 — 번호는 그대로, 모두 모름", async () => {
     실패 = true;
-    const facts = await loadEasyImages("me", [줄("i1", "p1", 일감("r1"), 5)], 지금);
-    expect(facts).toMatchObject({ entries: [], madeImage: false });
+    const facts = await loadEasyImages("me", [줄("i1", "p1", 일감("r1"), 5), 줄("c1", "card-1", "", 1)], 지금);
+    expect(facts.entries.map((one) => [one.n, one.kind, one.state])).toEqual([[1, "unknown", "unknown"], [2, "unknown", "unknown"]]);
+    expect(facts).toMatchObject({ madeImage: true, lastIsImage: true });
+    expect(facts.pictures.size).toBe(0);
+  });
+});
+
+/**
+ * 최종 수정 10(보안 리뷰) — 결과물이 아주 많은 대화도 한 턴에 저장소를 끝없이 읽지 않는다. 같은 작업은 한 번, 최근 100개
+ * 작업만, 한꺼번에 몇 개씩만 읽는다. 오래된 것은 번호를 그대로 두고 「모름」이다(고치기 · 보기는 지금 확인할 수 없다고 답한다).
+ */
+describe("한 턴에 읽는 결과물 수 (최종 수정 10)", () => {
+  const 많은줄 = (n: number) => Array.from({ length: n }, (_, at) => 줄(`i${at + 1}`, `w${at + 1}`, "", 60 - at / 10));
+
+  it("최근 100개 작업만 읽고, 오래된 것은 번호 그대로 모름이다", async () => {
+    const facts = await loadEasyImages("me", 많은줄(105), 지금);
+    expect(facts.entries.map((one) => one.n)).toEqual(Array.from({ length: 105 }, (_, at) => at + 1));
+    expect(facts.entries.slice(0, 5).map((one) => one.kind)).toEqual(Array(5).fill("unknown"));
+    expect(facts.entries.slice(5).every((one) => one.kind === "deleted")).toBe(true);
+    expect(읽은수).toBe(100);
+    expect(읽은작업).not.toContain("w1");
+    expect(카드로물은것).not.toContain("w5");
+    expect(카드로물은것).toContain("w6");
+  });
+
+  it("같은 작업(고친 줄)은 한 번만 읽고, 한꺼번에 읽는 수를 묶는다", async () => {
+    const rows = [...많은줄(30), 줄("e1", "w1", "", 1), 줄("e2", "w1", "", 1)];
+    await loadEasyImages("me", rows, 지금);
+    expect(읽은수).toBe(30);
+    expect(가장많이).toBeLessThanOrEqual(10);
   });
 });

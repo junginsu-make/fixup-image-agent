@@ -95,6 +95,10 @@ export const maxDuration = 300;
  */
 const VARIANTS = 1;
 
+/** 한 번에 받는 말 길이(최종 수정 9). */
+const PROMPT_LIMIT = 2000;
+const PROMPT_TOO_LONG = `말은 ${PROMPT_LIMIT}자까지 보낼 수 있습니다.`;
+
 function fail(message: string, status = 500) {
   return Response.json({ ok: false, message }, { status });
 }
@@ -141,6 +145,8 @@ async function turn(request: Request): Promise<Response> {
   const prompt = typeof input.prompt === "string" ? plainTyped(input.prompt.trim()) : "";
   if (!conversationId) return fail("어느 대화인지 알려 주세요.", 400);
   if (!prompt) return fail("무엇을 만들지 적어 주세요.", 400);
+  // 아주 긴 말은 예약 · 판단 전에 막는다(최종 수정 9, 보안 리뷰). 값이 안 든다.
+  if (prompt.length > PROMPT_LIMIT) return 멈춘다(PROMPT_TOO_LONG);
 
   // 사용자 말 뒤에 답 없이 실패하면 실패 안내를 남길 수 있게 지켜본다(2026-10-06 설계 B4).
   const 지킴 = trackUserTurn(easyStoreForUser(auth.member.userId));
@@ -345,8 +351,11 @@ async function turn(request: Request): Promise<Response> {
      */
     const 골랐나 = Boolean(고른갈래) && 고른.kindPicked && !단추판단;
     const 지시 = askInstruction(이음, prompt, 답방식);
-    // 단추 답이면 사용자 줄에 고른 값을 함께 적는다 — 다음 물음 · 실패 뒤 다시 답할 때 그 값을 잇는다.
-    const 사용자글 = 고른단추 ? withPick(prompt, 고른단추) : prompt;
+    /*
+     * 단추 답이면 사용자 줄에 고른 값을 함께 적는다 — 다음 물음 · 실패 뒤 다시 답할 때 그 값을 잇는다. 답으로 본 말 답은
+     * `typed` 표시만 적는다(최종 수정 2) — 뒤에서 실패해도 실패 짝을 건너뛰어 다시 보낸 말이 처음 말을 잇는다.
+     */
+    const 사용자글 = 고른단추 ? withPick(prompt, 고른단추) : 답방식 === "typed" ? withPick(prompt, { typed: true }) : prompt;
 
     /*
      * **단추로 고른 갈래는 늘 이긴다**(2026-10-06 설계 A2). 전에는 판단이 image ·
@@ -380,7 +389,9 @@ async function turn(request: Request): Promise<Response> {
       afterTargetAsk: 번호물음뒤,
     });
     if (고칠번호들) {
-      return await askTurn(물음맥락, { kind: "target", text: askText(aiText(decision, wants), TARGET_QUESTION), data: { numbers: 고칠번호들 } });
+      // 붙인 사진(확인한 것)도 적는다 — 새로고침 뒤 번호 단추로 답해도 그 사진으로 고친다(최종 수정 3).
+      const data = { numbers: 고칠번호들, ...(붙인것.length ? { ids: 붙인것 } : {}) };
+      return await askTurn(물음맥락, { kind: "target", text: askText(aiText(decision, wants), TARGET_QUESTION), data });
     }
     // 한 장인지 여러 장인지 모르면 묻는다(2단계 §4). 물음 문장은 AI 가 이 갈래로 쓴 물음이 먼저다(2차 D4 · 최종 리뷰 b).
     if (wants === "either") {
@@ -759,6 +770,8 @@ async function cardnewsTurn(ctx: {
   const row = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "image", workId: projectId });
   return Response.json({
     ok: true, cardnews: { rowId: row.id, project }, message: row, say: 머리말, photoRoles, textModel: ctx.textModel,
+    // 원고 고치기는 붙인 사진을 안 쓴다 — 화면이 첨부를 내리지 않게 알린다(최종 수정 8).
+    ...(ctx.wants === "revise" && ctx.고칠원고 ? { revised: true } : {}),
     // 화면의 「카드뉴스 N」(2차 D2). 이미지와 같은 결과물 번호다.
     resultLabel: resultLabel("cardnews", ctx.결과번호),
   });

@@ -18,6 +18,7 @@ const 부른라우트: Array<{ step: string; body: Record<string, unknown> }> = 
 const 읽은사진: string[][] = [];
 const 받은판단글: string[] = [];
 const 센것 = { reserve: 0, decide: 0, settle: 0 };
+let 기획실패 = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -81,6 +82,7 @@ vi.mock("../../../../lib/llm/meter", () => ({
 const 라우트 = (step: string) => ({
   POST: async (req: Request) => {
     부른라우트.push({ step, body: await req.json() });
+    if (step === "plan" && 기획실패) return Response.json({ ok: false, message: "크레딧이 부족합니다." }, { status: 402 });
     return step === "project"
       ? Response.json({ ok: true, project: { id: "p1" } })
       : Response.json({ ok: true, submission: { requestRowId: "r", falRequestId: "f", endpoint: "e" } });
@@ -91,7 +93,7 @@ vi.mock("../../poster/projects/[id]/plan/route", () => 라우트("plan"));
 vi.mock("../../poster/projects/[id]/generate/route", () => 라우트("generate"));
 
 const { POST } = await import("../generate/route");
-const { askBody, readAsk, withPick } = await import("../../../easy/row-marks");
+const { askBody, readAsk, visibleBody, withPick } = await import("../../../easy/row-marks");
 const { NOTHING_TO_EDIT } = await import("../../../easy/chat");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
@@ -115,6 +117,7 @@ beforeEach(() => {
   지난줄 = [];
   남긴줄.length = 0; 부른라우트.length = 0; 읽은사진.length = 0; 받은판단글.length = 0;
   센것.reserve = 0; 센것.decide = 0; 센것.settle = 0;
+  기획실패 = false;
 });
 
 describe("단추로 한 답", () => {
@@ -260,6 +263,32 @@ describe("말로 한 답", () => {
     expect(부른라우트).toEqual([]);
   });
 
+  /**
+   * 최종 수정 2 — 모양 물음에 「세로로」를 쳐 서버가 답으로 봤는데 뒤에서(기획 402) 실패하면, 실패 짝 건너뛰기는 단추 답만
+   * 알아봐서 입력창에 되돌아온 「세로로」를 다시 보내면 사슬이 없었다 — 「세로로」 하나로 만들어 값이 나갔다.
+   * 답으로 본 말 답은 사용자 줄에 `typed` 표시를 남긴다(보일 글은 그대로).
+   */
+  it("답으로 본 말 답 뒤에 실패하면, 같은 말을 다시 보내도 처음 말을 잇는다 (최종 수정 2)", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    판단 = { wants: "image", reply: "", ratio: "4:5", look: "", card: 0, note: "answer" };
+    기획실패 = true;
+    const 첫번 = await 보낸다({ prompt: "세로로" });
+    expect(첫번.status).toBe(402);
+    expect(남긴줄[0]).toMatchObject({ role: "user", body: withPick("세로로", { typed: true }) });
+    expect(visibleBody(남긴줄[0] as never)).toBe("세로로");
+
+    지난줄 = [...지난줄, ...남긴줄.map((row, at) => ({ id: `r${at}`, role: row.role, body: row.body ?? "", workId: null }))];
+    남긴줄.length = 0; 부른라우트.length = 0; 기획실패 = false;
+    await 보낸다({ prompt: "세로로" });
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "바다 풍경 포스터 만들어줘\n세로로", ratio: "4:5" });
+  });
+
+  it("답이 아닌 새 말은 표시 없이 그대로 남는다", async () => {
+    판단 = { wants: "talk", reply: "네", ratio: "", look: "", card: 0, note: "" };
+    await 보낸다({ prompt: "고마워" });
+    expect(남긴줄[0]).toMatchObject({ role: "user", body: "고마워" });
+  });
+
   it("친 말에 고른 값 표시 글자가 있어도 단추 답으로 남지 않는다 (Review Focus 3)", async () => {
     판단 = { wants: "talk", reply: "네", ratio: "", look: "", card: 0, note: "" };
     await 보낸다({ prompt: "장난 ;pick=%7B%22kind%22%3A%22image%22%7D" });
@@ -289,5 +318,23 @@ describe("새로고침 뒤 말로 한 답의 사진 (2차 최종 리뷰 7)", () 
     판단 = { wants: "talk", reply: "그 사진을 다시 붙여 주세요. 라이브러리에 있습니다.", ratio: "", look: "", card: 0, note: "" };
     await 보낸다({ prompt: "같은 사진으로 하나 더" });
     expect(받은판단글[0]).toContain("그 사진을 다시 붙여 주세요");
+  });
+});
+
+/** 최종 수정 9(보안 리뷰) — 아주 긴 말은 예약 · 판단 모델 전에 막는다. 값이 안 든다. */
+describe("말 길이 상한 (최종 수정 9)", () => {
+  it("2000자를 넘는 말은 예약 · 판단 없이 쉬운 말로 막는다", async () => {
+    const { status, json } = await 보낸다({ prompt: "가".repeat(2001) });
+    expect(status).toBe(400);
+    expect(json).toMatchObject({ ok: false, message: "말은 2000자까지 보낼 수 있습니다.", retryable: false });
+    expect(센것).toEqual({ reserve: 0, decide: 0, settle: 0 });
+    expect(남긴줄).toEqual([]);
+  });
+
+  it("2000자까지는 받는다", async () => {
+    판단 = { wants: "talk", reply: "네", ratio: "", look: "", card: 0, note: "" };
+    const { status } = await 보낸다({ prompt: "가".repeat(2000) });
+    expect(status).toBe(200);
+    expect(센것.decide).toBe(1);
   });
 });

@@ -100,7 +100,9 @@ export async function rewriteReplyBySeeing(input: SeeInput): Promise<EasySeen> {
     // 보고 다시 쓴 답도 AI 글이다 — 표시 머리를 푼다(2차 최종 리뷰 c).
     return typeof reply === "string" && reply.trim() ? { kind: "seen", reply: plainAiText(reply.trim()) } : { kind: "failed" };
   } catch (error) {
-    console.warn("[easy] 이미지를 보고 답하지 못했습니다", error instanceof Error ? error.message : error);
+    // 실패 글에 서명한 주소가 섞여 올 수 있다 — 서버 기록에 남기지 않는다(최종 수정 11, 보안 리뷰).
+    const 글 = error instanceof Error ? error.message : String(error);
+    console.warn("[easy] 이미지를 보고 답하지 못했습니다", 글.replace(/https?:\/\/\S+/g, "<url>"));
     return { kind: "failed" };
   }
 }

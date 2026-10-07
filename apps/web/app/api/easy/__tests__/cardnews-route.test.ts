@@ -146,6 +146,7 @@ const { KIND_QUESTION } = await import("../../../easy/turn-words");
 const { sayBody } = await import("../../../easy/row-marks");
 const { SAY_CARDNEWS, SAY_REVISE } = await import("../../../easy/turn-words");
 const { NO_REFERENCE } = await import("../../../easy/cardnews-attachments");
+const { usedAttachments } = await import("../../../easy/attachments-after");
 const { ASK_ANSWER_NOTE, answerableAskId } = await import("../../../easy/ask-chain");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
@@ -315,6 +316,16 @@ describe("다시 쓰기 (2단계 §7)", () => {
     // 2차 D4 · Task 9 리뷰: 고친 원고 위에 「고쳤습니다」 머리말(AI 말이 비면 코드 문장).
     expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant", "image"]);
     expect(남긴줄[1]!.body).toBe(sayBody(SAY_REVISE));
+  });
+
+  /** 최종 수정 8 — 원고 고치기는 붙인 사진을 안 쓴다. 화면이 첨부를 내리지 않게 알린다. 새 원고는 알리지 않는다. */
+  it("원고 고치기 응답은 고친 것이라고 알린다 — 새 원고는 아니다", async () => {
+    지난줄들 = [{ id: "r1", role: "image", body: "", workId: "old" }];
+    카드작업들 = { old: { ...원고작업, id: "old", title: "건강", toneNote: "" } };
+    판단 = { wants: "revise", reply: "", ratio: "", look: "" };
+    const { json } = await 보낸다({ prompt: "더 짧게" });
+    expect(json).toMatchObject({ ok: true, revised: true });
+    expect(usedAttachments(json)).toBe(false);
   });
 
   it("원고가 없는 대화에서 고치기로 읽혀도 고치기로 가지 않는다", async () => {

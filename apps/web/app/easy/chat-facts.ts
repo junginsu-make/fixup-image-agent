@@ -187,12 +187,16 @@ export function easyTargetLines(doneCount: number): string[] {
 /**
  * 원고와 이미지가 함께 있을 때 **마지막 결과**를 알린다(2026-10-06 독립 리뷰, 2차 D2). 마지막이
  * 카드뉴스면 콕 집지 않은 「고쳐줘」는 원고 고치기다.
+ *
+ * 다 만든 이미지가 둘 이상이면(`doneCount`) 갈래만 말하고 어느 이미지인지는 `target` 규칙(`easyTargetLines` — 모르면
+ * 묻는다)에 맡긴다(최종 수정 4). 「마지막 이미지를 고친다」로 읽히면 그 규칙과 어긋난다.
  */
-export function easyLastResultLines(lastIsImage: boolean): string[] {
+export function easyLastResultLines(lastIsImage: boolean, doneCount = 0): string[] {
   return lastIsImage
     ? [
       "  **이 대화에서 마지막으로 만든 것은 이미지 한 장입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
-      "  image_edit 입니다. 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
+      `  image_edit 입니다.${doneCount >= 2 ? " 어느 이미지인지는 아래 `target` 규칙을 따릅니다." : ""}`
+        + " 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
     ]
     : [
       "  **이 대화에서 마지막으로 만든 것은 카드뉴스입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",

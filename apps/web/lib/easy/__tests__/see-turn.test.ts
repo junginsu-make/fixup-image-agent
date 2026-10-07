@@ -116,6 +116,16 @@ describe("이미지를 보고 답하기", () => {
   });
 
   /** 2차 최종 리뷰 c — 보고 다시 쓴 답도 표시 머리를 푼다. */
+  /** 최종 수정 11(보안 리뷰) — 실패 글에 서명한 주소가 섞여 오면 서버 기록에 주소를 남기지 않는다. */
+  it("보기 실패 기록에서 주소를 가린다", async () => {
+    const 경고 = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await 본다({ write: async () => { throw new Error("못 받음 https://signed.test/library/me/p1/1.thumb.webp?token=abc 다음 http://x.test/y"); } });
+    const 남긴글 = 경고.mock.calls.flat().join(" ");
+    경고.mockRestore();
+    expect(남긴글).not.toMatch(/https?:\/\//);
+    expect(남긴글).toContain("못 받음 <url> 다음 <url>");
+  });
+
   it("다시 쓴 답의 표시 머리를 푼다", async () => {
     expect(await 본다({ write: 쓴다({ reply: "say:좋아 보여요." }) })).toEqual({ kind: "seen", reply: "say：좋아 보여요." });
   });

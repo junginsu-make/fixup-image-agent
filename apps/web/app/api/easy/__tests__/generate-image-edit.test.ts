@@ -19,6 +19,7 @@ const 부른라우트: Array<{ step: string; url: string; body: Record<string, u
 let 받은갈래: string[] = [];
 let 그림들: Array<{ id: string; generationRequestId: string; selected: boolean }> = [];
 let 고치기실패 = false;
+let 목록실패 = false;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -66,7 +67,10 @@ vi.mock("../../../../lib/poster/stores", () => ({
     },
     images: {
       byProject: async () => 그림들,
-      byProjects: async () => 그림들.map((one) => ({ ...one, projectId: "p1", assetPath: `me-1/${one.id}.png`, thumbPath: null })),
+      byProjects: async () => {
+        if (목록실패) throw new Error("잠깐 끊김");
+        return 그림들.map((one) => ({ ...one, projectId: "p1", assetPath: `me-1/${one.id}.png`, thumbPath: null }));
+      },
     },
   }),
 }));
@@ -87,7 +91,7 @@ vi.mock("../../poster/projects/[id]/edit/route", () => 라우트("edit"));
 const { POST } = await import("../generate/route");
 const { NOTHING_TO_EDIT } = await import("../../../easy/chat");
 const { failureRowBody } = await import("../../../../lib/easy/failure-row");
-const { askBody, readAsk } = await import("../../../easy/row-marks");
+const { askBody, readAsk, visibleBody } = await import("../../../easy/row-marks");
 const { editRowBody, rowFromOf } = await import("../../../easy/row-image");
 const { IMAGE_NOT_READY } = await import("../../../../lib/easy/image-edit-turn");
 const { NO_DONE_IMAGE } = await import("../../../../lib/easy/edit-target");
@@ -114,6 +118,7 @@ beforeEach(() => {
   남긴줄.length = 0; 부른라우트.length = 0;
   그림들 = [{ id: "img-1", generationRequestId: "r1", selected: false }];
   고치기실패 = false;
+  목록실패 = false;
 });
 
 describe("이미지를 만든 대화에서 고쳐 달라고 하면", () => {
@@ -239,6 +244,26 @@ describe("번호로 고르기 (2차 D2)", () => {
     expect(부른라우트).toEqual([]);
   });
 
+  /**
+   * 최종 수정 3 — 번호 물음 줄에 붙인 사진 id 를 적는다. 안 적으면 새로고침 · 새 탭에서 번호를 누를 때 화면에 첨부가
+   * 없어 로고 없이 고친다(값은 나간다). 단추 답은 다른 물음처럼 물음 줄의 사진을 같은 확인 길로 되살린다.
+   */
+  it("붙인 사진과 함께 어느 이미지인지 물으면 물음 줄에 사진을 적고, 새로고침 뒤 번호 단추로 고르면 그 사진으로 고친다", async () => {
+    판단 = { wants: "talk", reply: "어느 이미지를 고칠까요?", ratio: "", look: "", card: 0, note: "ask_target" };
+    await 보낸다({ prompt: "로고를 이걸로 바꿔줘", referenceIds: [사진(2)] });
+    expect(readAsk(남긴줄[1] as never)?.data).toEqual({ numbers: [1, 2], ids: [사진(2)] });
+
+    지난줄 = [
+      ...지난줄,
+      { id: "u3", role: "user", body: 남긴줄[0]!.body!, workId: null },
+      { id: "q1", role: "assistant", body: 남긴줄[1]!.body!, workId: null },
+    ];
+    남긴줄.length = 0; 판단 = undefined;
+    await 보낸다({ prompt: "이미지 2", answersRowId: "q1", pick: { target: 2 } });
+    expect(부른라우트.map((call) => call.step)).toEqual(["edit"]);
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "로고를 이걸로 바꿔줘", imageId: "img-3", addedReferenceIds: [사진(2)] });
+  });
+
   it("번호 단추로 답하면 판단 없이 물음을 부른 말로 그 이미지를 고친다", async () => {
     지난줄 = [
       ...지난줄,
@@ -349,6 +374,26 @@ describe("번호 물음의 말 답 (Task 8 고침)", () => {
     expect(부른라우트[0]!.body).toMatchObject({ instruction: "배경만 하얗게\n글자도 크게", imageId: "img-1" });
   });
 
+  /**
+   * 최종 수정 1 — 「글자 크게 고쳐줘」 → 번호 물음 → 「그거요」 → 판단 모델이 talk + ask_target 으로 다시 묻는다. 그 말을 답으로
+   * 보고 사슬을 잇는다. 안 이으면 새 물음의 처음 말이 「그거요」가 되어 단추로 고르면 「그거요」로 고친다(값이 나가고 말을 잃는다).
+   */
+  it("번호 없이 답해 AI 가 다시 물으면(talk + ask_target) 사슬을 잇는다 — 단추로 고르면 처음 말로 고친다 (최종 수정 1)", async () => {
+    판단 = { wants: "talk", reply: "몇 번 이미지를 고칠까요?", ratio: "", look: "", card: 0, note: "ask_target" };
+    await 보낸다({ prompt: "그거요" });
+    expect(readAsk(남긴줄[1] as never)).toMatchObject({ kind: "target", data: { cont: true, numbers: [1, 2] } });
+    expect(visibleBody(남긴줄[0] as never)).toBe("그거요");
+
+    지난줄 = [
+      ...지난줄,
+      { id: "u4", role: "user", body: 남긴줄[0]!.body!, workId: null },
+      { id: "q2", role: "assistant", body: 남긴줄[1]!.body!, workId: null },
+    ];
+    남긴줄.length = 0; 판단 = undefined;
+    await 보낸다({ prompt: "이미지 2", answersRowId: "q2", pick: { target: 2 } });
+    expect(부른라우트[0]!.body).toMatchObject({ instruction: "배경만 하얗게", imageId: "img-3" });
+  });
+
   it("번호 없이 답했는데 다 만든 이미지가 하나뿐이면 그 이미지를 고친다 — 만드는 중인 마지막 것이 아니라 (고침 2)", async () => {
     그림들 = [{ id: "img-1", generationRequestId: "r1", selected: false }]; // 이미지 2(i3)는 아직 만드는 중
     판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 0 };
@@ -363,5 +408,41 @@ describe("번호 물음의 말 답 (Task 8 고침)", () => {
     const { json } = await 보낸다({ prompt: "그거요" });
     expect(부른라우트).toEqual([]);
     expect(json.message.body).toBe(NO_DONE_IMAGE);
+  });
+});
+
+/**
+ * 최종 수정 7 — 결과물 목록을 통째로 못 읽으면(그림 목록 조회 실패) 「이미지가 없다」가 아니라 번호마다 「모름」이다.
+ * 빈 목록이면 고치기 갈래가 빠져 「고쳐줘」가 새 이미지 만들기(값)로 새거나, 번호 단추가 「고칠 것이 없다」로 끝난다.
+ */
+describe("결과물 목록을 못 읽으면 (최종 수정 7)", () => {
+  beforeEach(() => {
+    그림들 = [{ id: "img-1", generationRequestId: "r1", selected: false }, { id: "img-3", generationRequestId: "r3", selected: false }];
+    지난줄 = [
+      { id: "u1", role: "user", body: "화장품을 넣어줘", workId: null }, { id: "i1", role: "image", body: "", workId: "p1" },
+      { id: "u2", role: "user", body: "배경 파랗게", workId: null }, { id: "i3", role: "image", body: editRowBody("r3"), workId: "p1" },
+    ];
+    목록실패 = true;
+  });
+
+  it("말로 「고쳐줘」면 고치기 갈래를 주고, 새로 만들지 않고 지금 확인할 수 없다고 답한다", async () => {
+    판단 = { wants: "image_edit", reply: "", ratio: "", look: "", card: 0, note: "", target: 0 };
+    const { json } = await 보낸다({ prompt: "글자 크게 고쳐줘" });
+    expect(받은갈래).toContain("image_edit");
+    expect(부른라우트).toEqual([]);
+    expect(json.message.body).toContain("결과물 2 을 확인할 수 없습니다");
+  });
+
+  it("번호 단추로 답해도 「고칠 것이 없다」 · 「그 사이 바뀌어」가 아니라 지금 확인할 수 없다고 답한다", async () => {
+    지난줄 = [
+      ...지난줄,
+      { id: "u3", role: "user", body: "글자 크게", workId: null },
+      { id: "q1", role: "assistant", body: askBody("target", "어느 이미지를 고칠까요?", { numbers: [1, 2] }), workId: null },
+    ];
+    판단 = undefined;
+    const { json } = await 보낸다({ prompt: "이미지 1", answersRowId: "q1", pick: { target: 1 } });
+    expect(부른라우트).toEqual([]);
+    expect(json.message.body).toContain("결과물 1 을 확인할 수 없습니다");
+    expect(json.message.body).not.toBe(NOTHING_TO_EDIT);
   });
 });

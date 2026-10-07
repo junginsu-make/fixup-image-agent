@@ -19,6 +19,11 @@ describe("쓴 사진은 내린다 (2차 D3)", () => {
     expect(usedAttachments({ ok: true, cardEdited: {} })).toBe(false);
   });
 
+  /** 최종 수정 8 — 원고 고치기(revise)는 앞 원고의 첨부를 쓰고 붙인 사진은 안 쓴다. 안 쓴 사진을 내리면 다시 붙여야 한다. */
+  it("원고 고치기 턴이면 그대로 둔다", () => {
+    expect(usedAttachments({ ok: true, cardnews: { rowId: "r", project: {} }, revised: true })).toBe(false);
+  });
+
   it("화면은 답을 받자마자 이 판단으로 첨부를 비운다", () => {
     const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
     expect(화면).toContain("if (usedAttachments(body)) setAttachments([]);");

@@ -238,7 +238,9 @@ export function easyChatPrompt(
       안 알려 주면 모델은 고쳐 달라는 말에 `revise` 를 골라 앞의 카드뉴스 원고를
       고친다 — 사용자는 방금 만든 이미지를 보고 말한 것이다.
     */
-    ...(갈래.includes("revise") && 갈래.includes("image_edit") ? easyLastResultLines(options.lastIsImage !== false) : []),
+    ...(갈래.includes("revise") && 갈래.includes("image_edit")
+      ? easyLastResultLines(options.lastIsImage !== false, doneImageNumbers(options.images ?? []).length)
+      : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
     "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",

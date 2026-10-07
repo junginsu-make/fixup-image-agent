@@ -140,6 +140,19 @@ describe("고칠 이미지 번호 (2차 D2)", () => {
     expect(prompt).toContain("마지막 이미지라고 짐작하지 마세요");
   });
 
+  /**
+   * 최종 수정 4 — 원고와 다 만든 이미지 둘 이상이 함께면, 마지막 결과 줄이 「콕 집지 않은 고치기는 image_edit(마지막 이미지)」라
+   * 하고 번호 줄은 「짐작하지 말고 물어라」라 해 서로 어긋났다. 둘 이상이면 마지막 결과 줄은 갈래만 말하고 번호는 target 규칙에 맡긴다.
+   */
+  it("원고와 다 만든 이미지 둘 이상이 함께면 마지막 결과 줄은 번호를 target 규칙에 맡긴다 — 하나면 예전 그대로", () => {
+    const 둘이상 = easyChatPrompt([], "글자를 더 크게 고쳐줘", 0, true, false, true, { images: 둘, lastIsImage: true });
+    expect(둘이상).toContain("어느 이미지인지는 아래 `target` 규칙을 따릅니다");
+    expect(둘이상).toContain("마지막 이미지라고 짐작하지 마세요");
+    const 하나 = easyChatPrompt([], "글자를 더 크게 고쳐줘", 0, true, false, true, { images: 둘.slice(0, 1), lastIsImage: true });
+    expect(하나).toContain("마지막으로 만든 것은 이미지 한 장입니다");
+    expect(하나).not.toContain("아래 `target` 규칙을 따릅니다");
+  });
+
   it("마지막 결과가 카드뉴스면 콕 집지 않은 고치기는 원고 고치기라고 알린다", () => {
     const prompt = easyChatPrompt([], "고쳐줘", 0, true, false, true, { lastIsImage: false });
     expect(prompt).toContain("마지막으로 만든 것은 카드뉴스입니다");
