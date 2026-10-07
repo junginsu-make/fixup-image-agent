@@ -6,6 +6,7 @@ import { ProjectInputSchema } from "./schema";
 import { isWebSourceEnabled } from "../../../../lib/sns/feature";
 import { selectedProjectFor } from "../../../../lib/teams/current-project";
 import { snsFailure } from "../failure";
+import { withCarriedCharacters } from "../../../../lib/carried-characters-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,9 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, message: "웹 주소로 가져오기는 지금 쓰지 않습니다. 글의 내용을 직접 붙여 넣어 주세요." }, { status: 400 });
   }
   try {
-    const project = await (await snsProjectServiceForUser(auth.member.userId)).create(auth.member.userId, parsed.data);
+    // 캐릭터 각도에 종류·그림체·생김새를 서버가 찾아 채운다(2026-10-07, ③). 화면이 보낸 것은 버린다.
+    const attachments = await withCarriedCharacters(auth.member.userId, parsed.data.attachments);
+    const project = await (await snsProjectServiceForUser(auth.member.userId)).create(auth.member.userId, { ...parsed.data, attachments });
     return Response.json({ ok: true, project }, { status: 201 });
   } catch (error) {
     if (error instanceof ProjectValidationError) {

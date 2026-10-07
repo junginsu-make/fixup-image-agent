@@ -53,7 +53,8 @@ export class ProjectValidationError extends Error {
 export function createProjectService(repository: SnsProjectRepository) {
   return {
     list: (projectId?: string | null) => repository.list(projectId),
-    async create(userId: string, input: ProjectInput): Promise<SnsProjectRecord> {
+    /** 첨부의 캐릭터 정보는 서버가 채운 것이다(`withCarriedCharacters`) — 입력 검사는 그 칸을 비운다. */
+    async create(userId: string, input: Omit<ProjectInput, "attachments"> & { attachments: Attachment[] }): Promise<SnsProjectRecord> {
       const model = modelById(input.modelId);
       const totalCards = input.cardCountMode === "fixed" ? input.cardCount! : MAX_CARDS;
       const issues = validateAttachments(input.attachments, model.maxReferenceImages, totalCards);

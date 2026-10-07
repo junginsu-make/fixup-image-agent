@@ -4,7 +4,7 @@
  * 2026-07-30 상세페이지 참조 정책을 카드뉴스에 옮긴 것이다.
  * 그대로 지키는 것(identity)과 비슷하게 따라가는 것(design language)을 가른다.
  */
-import { countPreservedPeople } from "@fixup/shared";
+import { countPreservedPeople, type CarriedCharacter } from "@fixup/shared";
 
 export type AttachmentKind =
   | "keep_identity"    // 그대로 넣을 것 — 제품·인물·로고. 각도는 바뀌어도 정체성 유지
@@ -45,6 +45,13 @@ export interface Attachment {
    * 한 사람으로 센다.
    */
   characterId?: string;
+  /**
+   * 그 캐릭터의 종류·그림체·생김새(2026-10-07, ③).
+   *
+   * **서버가 작업을 만들 때 캐릭터 번호로 찾아 채운다** — 화면이 보낸 값은 믿지 않는다.
+   * 없으면(옛 작업·낱장 사진) 지금처럼 사람으로 말한다.
+   */
+  character?: CarriedCharacter;
 }
 
 export interface GroupedAttachments {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { groupAttachments, type Attachment } from "../attachments";
+import { characterAngleDirective } from "@fixup/shared";
 import {
   buildAttachmentBlock,
   buildFrame,
@@ -699,3 +700,57 @@ describe("모델 이름이 새지 않는다", () => {
     expect(stripModelMentions("")).toBe("");
   });
 });
+
+/*
+  **카드뉴스에도 캐릭터를 종류·그림체·생김새대로 넘긴다**(2026-10-07 사용자 승인, ③).
+
+  전에는 고양이 캐릭터도 「PRESERVED PERSON」 + 「얼굴·피부·머리를 지켜라」를 들었고,
+  캐릭터를 만들 때 정리해 둔 생김새 설명은 카드뉴스에 가지 않았다.
+*/
+describe("캐릭터를 종류·그림체·생김새대로", () => {
+  const 고양이 = { kind: "animal" as const, look: "anime" as const, identity: "a small grey tabby cat with a red scarf" };
+  const 고양이각도 = (id: string) =>
+    attachment({ id, kind: "keep_identity", subject: "person", characterId: "cat", character: 고양이 });
+
+  it("동물 캐릭터는 PRESERVED CHARACTER 로 부르고 동물로서 지킬 것을 말한다", () => {
+    const block = buildAttachmentBlock([고양이각도("a")]);
+    expect(block).toContain("Image 1 is a PRESERVED CHARACTER.");
+    expect(block).toContain("This is the animal character for this image.");
+    expect(block).not.toContain("PRESERVED PERSON");
+    expect(block).not.toMatch(/Facial structure/);
+  });
+
+  it("생김새 설명과 그림체 예외를 캐릭터마다 한 번만 말한다", () => {
+    const block = buildAttachmentBlock([고양이각도("a"), 고양이각도("b"), 고양이각도("c")]);
+    expect(block.split("The character's identity: a small grey tabby cat with a red scarf.").length - 1).toBe(1);
+    expect(block.split("Rendering exception for this animal character").length - 1).toBe(1);
+    expect(block).toContain("Images of this animal character (3 of them) are the SAME character");
+  });
+
+  it("사람 캐릭터도 생김새 설명을 함께 보낸다 — 지키는 문장은 지금 그대로", () => {
+    const 민지 = { kind: "person" as const, look: "photoreal" as const, identity: "a woman with short black hair" };
+    const block = buildAttachmentBlock([
+      attachment({ id: "a", kind: "keep_identity", subject: "person", characterId: "m", character: 민지 }),
+    ]);
+    expect(block).toContain("Image 1 is a PRESERVED PERSON.");
+    expect(block).toContain("The person's identity: a woman with short black hair.");
+    expect(block).not.toContain("Rendering exception");
+  });
+
+  it("캐릭터 정보가 없는 옛 첨부는 지금과 한 글자도 다르지 않다", () => {
+    const before = buildAttachmentBlock([각도옛("a"), 각도옛("b")]);
+    expect(before).toContain("Image 1 is a PRESERVED PERSON.");
+    expect(before).not.toContain("identity:");
+    expect(before).toContain(characterAngleDirective(2));
+  });
+
+  it("물건으로 붙인 첨부에는 캐릭터 말을 하지 않는다", () => {
+    const block = buildAttachmentBlock([
+      attachment({ id: "a", kind: "keep_identity", subject: "object", characterId: "cat", character: 고양이 }),
+    ]);
+    expect(block).toContain("PRESERVED SUBJECT");
+    expect(block).not.toContain("animal character");
+  });
+});
+
+const 각도옛 = (id: string) => attachment({ id, kind: "keep_identity", subject: "person", characterId: "old" });
