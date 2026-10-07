@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 /**
  * 포스터 결과 한 장을 내려 주는 길.
@@ -139,12 +139,12 @@ describe("GET 포스터 결과 파일", () => {
     missingPaths = ["u1/poster/p1/1.thumb.webp"];
     missingMessage = "Object not found https://x.supabase.co/storage/v1/object/sign/library/a.webp?token=SECRET";
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    onTestFinished(() => logged.mockRestore());
 
     await call("https://x/f?size=thumb", "1");
 
     expect(logged).toHaveBeenCalled();
     expect(logged.mock.calls.flat().join(" ")).not.toContain("SECRET");
-    logged.mockRestore();
   });
 
   it("원본까지 못 읽으면 고정 문장이고 500 이다 — 저장소 원문은 안 보인다", async () => {
