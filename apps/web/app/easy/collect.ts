@@ -29,6 +29,15 @@ const 최대기다림 = 15 * 60_000;
 const 기다린다 = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
+ * JSON 이 아닌 답(앞단의 HTML 502 등)이나 객체가 아닌 답은 말 없는 실패(`{}`)로 본다(후속 Task 11 2차).
+ * 전에는 SyntaxError 의 영어 글이 화면에 실렸다. 아래 `!poll.ok` 갈래가 그대로 알린다.
+ */
+async function 읽는다(response: Response): Promise<Record<string, any>> {
+  const body: unknown = await response.json().catch(() => ({}));
+  return body && typeof body === "object" ? body as Record<string, any> : {};
+}
+
+/**
  * 받으면 그 그림, 화면을 떠났으면 `undefined`. 0장이면 `NO_IMAGE_MADE`, 시작한 지
  * 15분이 지나도 안 끝나면 `STILL_MAKING` 으로 던진다.
  */
@@ -54,9 +63,9 @@ export async function collectEasyImage(
       결과를 묻는 자리다. 예약이 아니라 **정산**이라 열쇠를 요구하지 않지만,
       포스터 화면과 같은 길(`billableFetch`)로 보낸다.
     */
-    const poll = await (await billableFetch(`/api/poster/projects/${projectId}/status`, {
+    const poll = await 읽는다(await billableFetch(`/api/poster/projects/${projectId}/status`, {
       body: JSON.stringify(body),
-    })).json();
+    }));
     observeAccountResponse(poll, false);
     if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
     if (poll.done) {

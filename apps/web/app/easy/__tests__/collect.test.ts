@@ -43,6 +43,26 @@ describe("결과 받기", () => {
   });
 
   /**
+   * 후속 Task 11 2차. 앞단(Caddy · Next)이 HTML 502 를 주면 `.json()` 이 SyntaxError 를 던지고, 그 영어 글이
+   * 화면에 실렸다. 말 없는 실패(`ok` 없음)와 같은 갈래로 본다 — 같은 문장, 같은 다시 하기 표시.
+   */
+  it("답이 JSON 이 아니면 SyntaxError 글 대신 말 없는 실패와 같은 문장으로 알린다", async () => {
+    f.fetch.mockResolvedValueOnce(답({ ok: false }));
+    const 기준 = await collectEasyImage("p1", 일감, () => true, 안기다림).then(() => undefined, (c: unknown) => c) as Error;
+    f.fetch.mockResolvedValueOnce({ json: async () => { throw new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON"); } });
+    const 실패 = await collectEasyImage("p1", 일감, () => true, 안기다림).then(() => undefined, (c: unknown) => c) as Error;
+    expect(실패.message).toBe("상태를 확인하지 못했습니다.");
+    expect(실패.message).toBe(기준.message);
+    expect(실패).not.toBeInstanceOf(SyntaxError);
+    expect((실패 as { retryable?: boolean }).retryable).toBe((기준 as { retryable?: boolean }).retryable);
+  });
+
+  it("답이 null 이어도 그 갈래로 알린다", async () => {
+    f.fetch.mockResolvedValueOnce(답(null));
+    await expect(collectEasyImage("p1", 일감, () => true, 안기다림)).rejects.toThrow("상태를 확인하지 못했습니다.");
+  });
+
+  /**
    * 보안 리뷰 L1: 멈춘 요청이면 끝없이 물었다. 시작한 지 15분이 지나도 안 끝나면 실패로
    * 알린다. 만든 직후와 다시 열 때가 같은 함수라 둘 다 멈춘다.
    */
@@ -87,5 +107,18 @@ describe("결과 받기", () => {
   it("화면을 떠났으면 묻지 않고 그만둔다", async () => {
     expect(await collectEasyImage("p1", 일감, () => false, 안기다림)).toBeUndefined();
     expect(f.fetch).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 후속 Task 11 2차. 화면이 서버 답을 `.json()` 으로 읽고 **잡은 오류 글을 그대로 보이는** 자리는 HTML 답에
+ * SyntaxError 글이 실린다. 그런 자리는 읽기 실패를 빈 답으로 받아 그 자리의 우리 문장으로 알린다.
+ * (목록 읽기처럼 실패를 빈 목록으로 삼키는 자리는 글이 안 보여 그대로 둔다.)
+ */
+describe("화면의 JSON 읽기 (후속 Task 11 2차)", () => {
+  it("그림 올리기는 JSON 이 아닌 답을 「그림을 올리지 못했습니다.」로 알린다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain('const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json().catch(() => ({}));');
+    expect(화면).toContain('if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");');
   });
 });

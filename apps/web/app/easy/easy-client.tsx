@@ -221,7 +221,7 @@ export function EasyClient({
       // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`browser-safe.ts`).
       const form = easyUploadForm(one, randomId());
       try {
-        const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json();
+        const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json().catch(() => ({}));
         observeAccountResponse(body, true);
         if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");
         setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
