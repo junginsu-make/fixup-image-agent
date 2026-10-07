@@ -108,3 +108,41 @@
 3. PR → 검사 → 병합 → `docs/DEPLOY.md` 「매 배포」 → 배포 확인(이번 문구 빌드 안에) → 운영에서 Task 1 · 5 확인(설명서 화면 200 · 새 문장)
 4. 도우미 색인: `--dry` 로 13쪽 · 지울 옛 판 수 확인 → 실제 실행(서버 `app.env` 의 `DATABASE_URL` · `OPENAI_API_KEY` 를 화면에 안 찍고 환경변수로만) → 옛 판 0 · 새 문장 검색 확인
 5. 개발 일지 PR
+
+---
+
+## 2단계 (사용자 지시 2026-10-07 14:54 — 「개선할 부분이 있다면 아예 다 개선하고 당신이 한 것들만 별도 배포」)
+
+배포는 **브랜치 별도 배포**(workflow_dispatch). 운영 `current`(05090376)를 먼저 브랜치에 합친다 — 안 그러면 다른 터미널이 올린 검색 키워드 화면이 운영에서 빠진다. 배포 뒤 master 에 병합.
+
+### Task 7: 「이 장만 고치기」의 예상 못 한 오류 원문을 가린다
+
+**Files:** `apps/web/app/api/poster/projects/[id]/edit/route.ts`(약 260-273 마지막 catch), 그 라우트 시험
+
+**요구:** 마지막 `catch` 가 모든 예외를 400 + `error.message` 로 돌려준다. 일부러 사용자에게 보이려고 던지는 오류(입력 검증 · 「붙인 사진을 읽지 못했습니다」 류 · `PosterValidationError` · 크레딧/권한 등 — 라우트와 그 라우트가 부르는 lib 에서 `throw` 를 모두 찾아 분류해 보고서에 적는다)는 **지금 상태 코드 · 문장 그대로**. 예상 못 한 예외(Supabase · Storage · fal · 설정 오류)만 `{ ok:false, message:"고치지 못했습니다. 잠시 뒤 다시 시도해 주세요." }`(상태 500) + `console.error`(주소는 `<url>` 로 가린 문자열). 이 라우트는 「다양하게」 화면과 쉽게 고치기가 같이 쓴다 — 두 화면이 400/500 을 어떻게 다루는지(다시 시도 단추, `retryable`) 확인하고, 쉽게 쪽 가림 규칙(`status>=500 && !code && retryable`)과 맞물려 원문이 안 새는지 시험으로 고정한다. 돈: 예약 뒤 실패면 지금처럼 정산(환불) — 정산 흐름 0줄 변경.
+
+### Task 8: 오래된 결과물 안내 문장을 실제에 맞춘다
+
+**Files:** `apps/web/lib/easy/edit-target.ts`(47-48), 시험
+
+**요구:** 100개 밖 옛 결과물 문장에 (a) 「다양하게」의 위쪽에서 다른 갈래를 골라 두었으면 지난 작업 목록에 안 보일 수 있다는 것(갈래를 바꿔 보라), (b) 카드뉴스였다면 「카드뉴스」 화면에서 고친다는 것을 짧게. 실제 화면 이름 · 위치를 코드로 확인. 줄표 금지.
+
+### Task 9: 말로 답했다가 실패해도 물음 단추가 바로 다시 보인다
+
+**Files:** `apps/web/app/api/easy/generate/route.ts`(실패 응답), `apps/web/app/easy/easy-client.tsx`(실패 처리 · `keptAfterFailure`), `apps/web/app/easy/send-failure.ts`, 시험
+
+**요구:** 서버가 말 답을 물음의 답으로 읽고(`답방식 === "typed"`) 사용자 줄을 `withPick(prompt, { typed: true })` 로 남긴 뒤 실패하면, 새로고침 뒤에는 단추가 다시 보이는데 그 화면에서는 안 보인다. 실패 응답에 그 사실(예: `typedAnswer: true` 또는 저장한 사용자 줄 본문)을 실어, 화면이 제 사용자 줄을 서버와 같게 바꿔 단추가 바로 다시 보이게 한다. 성공 경로 · 단추 답 실패 경로 · 돈 흐름은 그대로. 가림(Task 1)과 부딪히지 않게 — 실패 응답의 다른 칸은 그대로.
+
+### Task 10: 긴 함수를 동작 그대로 더 나눈다
+
+**Files:** `apps/web/app/api/easy/generate/route.ts`(`turn()` 361줄), `apps/web/lib/easy/image-turn.ts`(`imageTurn` 약 159줄)
+
+**요구:** Task 6 과 같은 순수 옮기기 규칙(글자 그대로 · 순서 그대로 · `return await` · 같은 try 안). `turn()` 의 갈래(물음 단추 답 · 번호 물음 · 고치기 · 광고 · 카드뉴스 손보기 등)와 `imageTurn` 의 단계(사진 역할 · 끝내기 갈래 · 기획/제출)를 각각 함수로. 목표: 함수마다 약 100줄 이하(50줄 권고에 가깝게, 무리하면 상태 넘기기 타입이 늘어 위험하니 멈출 곳은 구현자가 판단해 보고). 판정 예약 · 정산 블록은 라우트에 그대로. 배선 시험은 새 파일까지 읽게(단언 약화 금지).
+
+### Task 11: 작은 것 셋
+
+**Files:** `apps/web/app/easy/collect.ts`(약 61), `apps/web/app/api/easy/__tests__/generate-wiring.test.ts`, `scripts/index-guide.mjs`
+
+**요구:** (a) status 라우트의 503 설정 오류 글(환경변수 이름)을 화면에 그대로 보이지 않게 — 일반 문장으로. 다른 503(운영자 멈춤 등 사용자용)은 그대로. (b) 배선 시험이 `lib/easy/stop.ts` 와 Task 10 의 새 파일도 읽는다. (c) 색인 스크립트 `--dry` 가 DB 가 있을 때 `kind='guide'` 인데 지금 13개 이름에 없는 옛 이름을 찾아 「목록에 없는 옛 설명서 N개: <이름들>」을 찍는다 — **지우지 않는다**(읽기 전용).
+
+**Task 11 더함(최종 수정 보고 뒤):** (d) 오류 덩어리를 그대로 기록하던 나머지 쉽게 줄(`app/api/easy/cardnews/route.ts` 51 · 144, `lib/easy/cardnews-after-steps.ts` 145)도 `errorLogText()` 로. (e) 색인 스크립트의 실제 실행 거절 목록에 `[::1]` · `0.0.0.0` 도.
