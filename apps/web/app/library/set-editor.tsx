@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from "@fixup/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, cn } from "@fixup/ui";
 import type { ReferencePurpose, ReferenceRole, ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { gridSrc } from "../_components/grid-src";
 import { ThumbImage } from "../_components/thumb-image";
+import { DROP_PASTE_HINT, useImageDropTarget } from "../_components/image-drop";
 
 type ImageOption = ReferenceImageRow & {
   signedUrl: string | null;
@@ -54,7 +55,7 @@ export function SetEditor({
   }, [initialSet, open]);
 
   /** 세트를 만들다 그림이 모자라면 여기서 바로 올린다. */
-  async function upload(files: FileList | null) {
+  async function upload(files: ArrayLike<File> | null) {
     if (!files?.length) return;
     setUploading(true);
     setMessage("");
@@ -76,6 +77,17 @@ export function SetEditor({
       if (fileInput.current) fileInput.current.value = "";
     }
   }
+
+  /**
+   * 세트 창의 끌어다 놓기·붙여넣기(2026-10-07 사용자 요청). 여러 장 칸이다.
+   * 「이미지 올리기」와 같은 길(`upload`)로 넣는다. 올리는 동안은 받지 않는다.
+   */
+  const uploadDrop = useImageDropTarget({
+    disabled: uploading,
+    multiple: true,
+    onFiles: (files) => void upload(files),
+    onMessage: setMessage,
+  });
 
   const compatibleImages = React.useMemo(
     () => images.filter((image) => image.purpose === purpose || image.purpose === "both"),
@@ -120,7 +132,18 @@ export function SetEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid max-h-[65vh] gap-6 overflow-y-auto p-1">
+        {/* 창 안 전체가 받는다. 눌러 두면 붙여넣기도 받는다. */}
+        <div
+          role="group"
+          tabIndex={uploading ? -1 : 0}
+          aria-label="세트 그림 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+          {...uploadDrop.handlers}
+          className={cn(
+            "grid max-h-[65vh] gap-6 overflow-y-auto rounded-lg p-1 outline-none",
+            !uploading && "focus-within:ring-2 focus-within:ring-primary/30",
+            uploadDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+          )}
+        >
           <div className="grid gap-2">
             <Label htmlFor="reference-set-name">세트 이름</Label>
             <Input id="reference-set-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="예: 브랜드 기본 카드 세트" />
@@ -140,6 +163,7 @@ export function SetEditor({
               {uploading ? "올리는 중…" : "이미지 올리기"}
             </Button>
             <span className="text-xs text-muted-foreground">여기서 올린 그림도 라이브러리 낱장에 들어갑니다. {UPLOAD_RIGHTS_NOTE}</span>
+            <span className="w-full text-xs text-subtle-foreground">{DROP_PASTE_HINT}</span>
           </div>
 
           {compatibleImages.length === 0 ? (
