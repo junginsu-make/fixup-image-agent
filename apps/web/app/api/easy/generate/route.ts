@@ -2,6 +2,7 @@ import { DEFAULT_TEXT_MODEL, resolveTextModel } from "@fixup/shared";
 import { authenticateApiMember, reserveAiUsage, settleAiUsage } from "../../../../lib/membership/api";
 import { freeCreditPlan } from "../../../../lib/membership/credit-ledger";
 import { easyStoreForUser } from "../../../../lib/easy/store";
+import { EasyConversationMissingError } from "../../../../lib/easy/store-core";
 import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
 import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
@@ -634,7 +635,10 @@ async function turn(request: Request): Promise<Response> {
         retryable: error.retryable && error.status !== 402 && error.status !== 403,
       }, { status: error.status });
     }
-    return fail(error instanceof Error ? error.message : "만들지 못했습니다.");
+    // 「대화를 찾을 수 없습니다.」는 우리가 쓴 안내라 그대로. 나머지 원문은 서버 기록에만(2026-10-07 후속 Task 1).
+    if (error instanceof EasyConversationMissingError) return fail(error.message);
+    console.error("[easy] 만들기 실패", error);
+    return fail("만들지 못했습니다.");
   } finally {
     값을적는다(auth.member.userId);
   }

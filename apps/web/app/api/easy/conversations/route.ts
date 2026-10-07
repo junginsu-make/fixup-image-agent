@@ -12,11 +12,10 @@ export const dynamic = "force-dynamic";
  * `api/easy/generate` 가 기존 포스터 경로를 불러서 한다(설계 §8).
  */
 
+/** 원문(Supabase 글 등)은 서버 기록에만 남긴다(2026-10-07 후속 Task 1). 화면에는 일반 문장. */
 function fail(error: unknown, fallback: string) {
-  return Response.json(
-    { ok: false, message: error instanceof Error ? error.message : fallback },
-    { status: 500 },
-  );
+  console.error(`[easy] ${fallback}`, error);
+  return Response.json({ ok: false, message: fallback }, { status: 500 });
 }
 
 /** 레일에 걸 목록. */

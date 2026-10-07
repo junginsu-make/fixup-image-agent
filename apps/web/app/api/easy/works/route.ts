@@ -20,9 +20,8 @@ export async function GET() {
     // `workIds` 는 그대로 준다 — 쉽게와 다양하게를 가르는 화면이 이 칸을 읽는다(설계 C).
     return Response.json({ ok: true, workIds: Object.keys(conversations), conversations });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "쉽게 작업 목록을 읽지 못했습니다." },
-      { status: 500 },
-    );
+    // 원문(Supabase 글 등)은 서버 기록에만 남긴다(2026-10-07 후속 Task 1).
+    console.error("[easy] 쉽게 작업 목록을 읽지 못했습니다.", error);
+    return Response.json({ ok: false, message: "쉽게 작업 목록을 읽지 못했습니다." }, { status: 500 });
   }
 }

@@ -6,6 +6,7 @@ import { getLocalDatabase, isLocalStoreEnabled } from "../local-store";
 import {
   collectEasyWorkConversations,
   CONVERSATION_COLUMNS,
+  EasyConversationMissingError,
   MESSAGE_COLUMNS,
   toConversationRecord,
   toMessageRecord,
@@ -270,7 +271,7 @@ function localEasyStore(userId: string): EasyStore {
 
     async appendMessage(input) {
       if (!await owns(input.conversationId)) {
-        throw new Error("대화를 찾을 수 없습니다.");
+        throw new EasyConversationMissingError();
       }
       const record: EasyMessageRecord = {
         id: randomUUID(),

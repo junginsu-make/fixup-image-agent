@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * **「쉽게」 문**(설계 §2-3 · §2-6 · §2-7).
@@ -17,6 +17,8 @@ let 역할판단: unknown;
 let 역할판단실패: Error | null;
 let 기획실패 = false;
 let 기획던짐 = false;
+// 그림 줄을 남길 때 저장소가 던질 오류(2026-10-07 후속 Task 1).
+let 남기기실패: Error | null = null;
 let 볼수있는사진: string[];
 const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
@@ -35,6 +37,7 @@ vi.mock("../../../../lib/easy/store", () => ({
     getConversation: async () => ({ id: "c1", title: "있음" }),
     listMessages: async () => [],
     appendMessage: async (row: { role: string; body?: string }) => {
+      if (남기기실패 && row.role === "image") throw 남기기실패;
       남긴줄.push(row);
       return { id: `m${남긴줄.length}`, ...row };
     },
@@ -97,6 +100,7 @@ const { readAsk } = await import("../../../easy/row-marks");
 const { RATIO_QUESTION } = await import("../../../easy/turn-words");
 const { guideBody, sayBody } = await import("../../../easy/row-marks");
 const { SAY_IMAGE } = await import("../../../easy/turn-words");
+const { EasyConversationMissingError } = await import("../../../../lib/easy/store-core");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -117,6 +121,7 @@ beforeEach(() => {
   역할판단 = { photos: [], conflicting: false };
   역할판단실패 = null;
   기획실패 = false; 기획던짐 = false;
+  남기기실패 = null;
   볼수있는사진 = [사진(1), 사진(2), 사진(3)];
   남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0;
   부른횟수.decide = 0; 부른횟수.roles = 0;
@@ -463,5 +468,49 @@ describe("일하는 턴에도 AI 가 말한다 (2차 D4)", () => {
     await 보낸다({});
     expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
     expect(남긴줄[2]!.body).toBe(failureRowBody("기획이 막혔습니다."));
+  });
+});
+
+/**
+ * **예상 못 한 오류의 원문을 화면에 보내지 않는다**(2026-10-07 후속 Task 1). Supabase 글 · 모델 출력은
+ * 서버 기록에만 남기고, 우리가 쓴 안내(크레딧 · 「대화를 찾을 수 없습니다.」)는 그대로 보인다.
+ */
+describe("오류 글 가리기 (후속 Task 1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("저장소의 날것 오류 글은 응답에 싣지 않고 일반 문장을 같은 500 으로 준다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    남기기실패 = new Error('대화 줄: new row violates row-level security policy for table "easy_messages"');
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json.message).toBe("만들지 못했습니다.");
+    expect(JSON.stringify(json)).not.toContain("easy_messages");
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), 남기기실패);
+  });
+
+  it("판단 모델 출력이 섞인 오류 글도 싣지 않는다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    역할판단실패 = new Error('무슨 뜻인지 가리지 못했습니다: {"wants":"???"}');
+    const { status, json } = await 보낸다({ referenceIds: [사진(1)] });
+    expect(status).toBe(500);
+    expect(json.message).toBe("만들지 못했습니다.");
+    expect(JSON.stringify(json)).not.toContain("???");
+  });
+
+  it("「대화를 찾을 수 없습니다.」는 그대로 보인다 (상태 코드도 지금처럼 500)", async () => {
+    남기기실패 = new EasyConversationMissingError();
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json.message).toBe("대화를 찾을 수 없습니다.");
+  });
+
+  it("우리가 알고 낸 실패(402)는 글 · 상태 코드 · retryable 이 그대로다", async () => {
+    기획실패 = true;
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(402);
+    expect(json).toMatchObject({ ok: false, message: "기획이 막혔습니다.", retryable: false });
   });
 });
