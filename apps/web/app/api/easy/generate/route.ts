@@ -626,10 +626,13 @@ async function turn(request: Request): Promise<Response> {
        * **세 갈래를 가려 말한다**(설계 §5-3). 어느 쪽이냐에 따라 할 일이
        * 다르다 — 크레딧·권한이면 다시 눌러도 또 막힌다.
        */
+      // 코드 없고 다시 눌러 풀릴 5xx 는 안쪽 라우트의 날것 글(표 이름 등)이다. 서버 기록에만(후속 Task 1 수정 1).
+      const 가림 = error.status >= 500 && !error.code && error.retryable;
+      if (가림) console.error(`[easy] ${error.step} 실패`, error);
       return Response.json({
         ok: false,
         step: error.step,
-        message: error.message,
+        message: 가림 ? "만들지 못했습니다." : error.message,
         ...(error.code ? { code: error.code, usage: error.usage } : {}),
         // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 안쪽이 「안 풀린다」고 한 것(멈춤 503)도 같다.
         retryable: error.retryable && error.status !== 402 && error.status !== 403,

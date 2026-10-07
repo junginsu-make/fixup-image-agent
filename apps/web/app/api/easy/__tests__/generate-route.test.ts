@@ -19,6 +19,8 @@ let 기획실패 = false;
 let 기획던짐 = false;
 // 그림 줄을 남길 때 저장소가 던질 오류(2026-10-07 후속 Task 1).
 let 남기기실패: Error | null = null;
+// 기획 라우트가 줄 답을 통째로 정한다(후속 Task 1 수정 1).
+let 기획답: (() => Response) | null = null;
 let 볼수있는사진: string[];
 const 남긴줄: Array<{ role: string; body?: string }> = [];
 const 읽은사진: string[][] = [];
@@ -78,6 +80,7 @@ vi.mock("../../poster/projects/route", () => ({
 vi.mock("../../poster/projects/[id]/plan/route", () => ({
   POST: async (req: Request) => {
     부른라우트.push({ step: "plan", body: await req.json() });
+    if (기획답) return 기획답();
     // 실제 모양: 안쪽 라우트는 예외를 잡아 날것의 글을 500 으로 돌려준다(리뷰 2026-10-06).
     if (기획던짐) return Response.json({ ok: false, message: 'relation "poster_projects" does not exist' }, { status: 500 });
     return 기획실패
@@ -121,7 +124,7 @@ beforeEach(() => {
   역할판단 = { photos: [], conflicting: false };
   역할판단실패 = null;
   기획실패 = false; 기획던짐 = false;
-  남기기실패 = null;
+  남기기실패 = null; 기획답 = null;
   볼수있는사진 = [사진(1), 사진(2), 사진(3)];
   남긴줄.length = 0; 읽은사진.length = 0; 부른라우트.length = 0;
   부른횟수.decide = 0; 부른횟수.roles = 0;
@@ -512,5 +515,53 @@ describe("오류 글 가리기 (후속 Task 1)", () => {
     const { status, json } = await 보낸다({});
     expect(status).toBe(402);
     expect(json).toMatchObject({ ok: false, message: "기획이 막혔습니다.", retryable: false });
+  });
+});
+
+/**
+ * **안쪽 라우트의 날것 5xx 글도 가린다**(후속 Task 1 수정 1). 안쪽 포스터 라우트는 예외를 잡아 원문을 500 으로
+ * 주고 `read()` 가 그것을 `EasyStepError` 로 올린다. 코드가 없고 다시 눌러 풀릴 5xx 면 일반 문장을 준다.
+ * 크레딧 · 권한(4xx) · 코드 있는 거절 · 운영자 멈춤(503, retryable:false)은 우리 문장이라 그대로다.
+ */
+describe("안쪽 라우트 5xx 글 가리기 (후속 Task 1 수정 1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const 그림주문 = () => { 판단 = { wants: "image", reply: "", ratio: "1:1", look: "" }; };
+
+  it("안쪽 500 의 날것 글은 싣지 않고 step · 상태 · retryable 은 그대로 준다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    기획던짐 = true;
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, step: "기획", message: "만들지 못했습니다.", retryable: true });
+    expect(JSON.stringify(json)).not.toContain("poster_projects");
+    expect(기록).toHaveBeenCalledWith(expect.stringContaining("[easy]"), expect.objectContaining({ message: 'relation "poster_projects" does not exist' }));
+  });
+
+  it("운영자 멈춤(503 · retryable:false)은 우리 문장이라 그대로 보인다", async () => {
+    기획답 = () => Response.json({
+      ok: false, code: "ai_paused", message: "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", retryable: false,
+    }, { status: 503 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(503);
+    expect(json).toMatchObject({ message: "운영자가 AI 사용을 잠시 멈췄습니다. 잠시 후 다시 시도해 주세요.", retryable: false });
+  });
+
+  it("크레딧 부족(코드 있음)은 글 · 코드 · 사용량이 그대로다", async () => {
+    const usage = { remaining: 0, used: 3, reserved: 0 };
+    기획답 = () => Response.json({ ok: false, code: "credits_required", message: "크레딧이 없어 이 기능을 쓸 수 없습니다.", usage }, { status: 403 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(403);
+    expect(json).toMatchObject({ message: "크레딧이 없어 이 기능을 쓸 수 없습니다.", code: "credits_required", usage, retryable: false });
+  });
+
+  it("코드 없는 4xx 글은 지금처럼 그대로 준다", async () => {
+    기획답 = () => Response.json({ ok: false, message: "다른 작업이 진행 중입니다." }, { status: 409 });
+    그림주문();
+    const { status, json } = await 보낸다({});
+    expect(status).toBe(409);
+    expect(json.message).toBe("다른 작업이 진행 중입니다.");
   });
 });
