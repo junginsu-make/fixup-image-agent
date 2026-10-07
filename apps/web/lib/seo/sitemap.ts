@@ -13,13 +13,19 @@ export interface SitemapPage {
   english?: string;
 }
 
-export function publicPages(guideHrefs: readonly string[]): SitemapPage[] {
+/** `featurePaths` 는 키워드별 기능 소개(계획 2026-10-07 seo-keyword-pages) — 모아 보기 0.8, 키워드 화면 0.7. */
+export function publicPages(guideHrefs: readonly string[], featurePaths: readonly string[] = []): SitemapPage[] {
   return [
     { path: "/", priority: 1, changeFrequency: "weekly", english: "/?lang=en" },
     { path: "/about", priority: 0.8, changeFrequency: "monthly", english: "/about?lang=en" },
     ...guideHrefs.map((path) => ({
       path,
       priority: path === "/guide" ? 0.7 : 0.6,
+      changeFrequency: "monthly" as const,
+    })),
+    ...featurePaths.map((path) => ({
+      path,
+      priority: path === "/features" ? 0.8 : 0.7,
       changeFrequency: "monthly" as const,
     })),
   ];

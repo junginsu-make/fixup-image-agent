@@ -6,6 +6,17 @@ import { publicPages, sitemapEntries } from "../sitemap";
 const entries = sitemapEntries("https://formwith.fix-up.kr", publicPages(GUIDE_TOPICS.map((t) => t.href)));
 const urls = entries.map((e) => e.url);
 
+describe("키워드 소개 화면(계획 2026-10-07 seo-keyword-pages)", () => {
+  const pages = publicPages([], ["/features", "/features/cardnews"]);
+  it("모아 보기는 0.8, 키워드 화면은 0.7, 달마다, 영어 줄 없음", () => {
+    expect(pages).toContainEqual({ path: "/features", priority: 0.8, changeFrequency: "monthly" });
+    expect(pages).toContainEqual({ path: "/features/cardnews", priority: 0.7, changeFrequency: "monthly" });
+  });
+  it("둘째 인자를 안 주면 예전과 같다", () => {
+    expect(publicPages([])).toHaveLength(2);
+  });
+});
+
 describe("sitemapEntries", () => {
   it("첫 화면·소개·설명서 목차 전부를 절대 주소로", () => {
     expect(urls).toContain("https://formwith.fix-up.kr/");
