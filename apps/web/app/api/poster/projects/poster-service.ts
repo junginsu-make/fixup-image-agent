@@ -58,7 +58,14 @@ export function createPosterService(store: PosterProjectStore) {
     get: (id: string) => store.get(id),
     remove: (id: string) => store.remove(id),
 
-    async create(input: PosterProjectInput): Promise<PosterProjectRecord> {
+    /**
+     * @param characters 사람으로 지킬 그림이 캐릭터의 각도면 그 캐릭터(2026-10-07, ③).
+     *   **서버가 찾은 것만** 받는다(`carriedCharactersForReferences`). 화면 입력에는 없다.
+     */
+    async create(
+      input: PosterProjectInput,
+      characters?: PosterProjectRecord["data"]["characters"],
+    ): Promise<PosterProjectRecord> {
       const estimate = estimatePosterCost({
         modelId: input.modelId,
         ratioId: input.ratio,
@@ -89,6 +96,8 @@ export function createPosterService(store: PosterProjectStore) {
           attachmentIntent: input.attachmentIntent,
           slots: input.slots ?? EMPTY_SLOTS,
           ...adMasterFor(input.adMasterId),
+          // 없으면 칸을 만들지 않는다 — 옛 작업과 같은 모양이다.
+          ...(characters && Object.keys(characters).length ? { characters } : {}),
         },
       });
     },

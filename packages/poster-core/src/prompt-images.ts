@@ -22,6 +22,9 @@ export function promptImagesFrom(attachments: OrderedAttachment[]): PosterPrompt
       kind: "preserved",
       subject: person ? "person" : "object",
       restyle: attachment.role === "preserve_person_restyled",
+      // 캐릭터의 각도면 그 캐릭터를 함께 넘긴다(2026-10-07, ③). 옛 작업에는 없다.
+      ...(person && attachment.characterId ? { characterId: attachment.characterId } : {}),
+      ...(person && attachment.character ? { character: attachment.character } : {}),
     };
   });
 }

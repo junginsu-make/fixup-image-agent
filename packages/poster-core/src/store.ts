@@ -1,4 +1,4 @@
-import type { ImageLook } from "@fixup/shared";
+import type { CarriedCharacter, ImageLook } from "@fixup/shared";
 import type { PosterImageEdit } from "./image-lineage";
 import type { PosterSlots, PosterStatus, PromptMode } from "./schemas";
 
@@ -52,6 +52,11 @@ export interface PosterProjectRecord {
     preservedIds: string[];
     /** preservedIds 중 사람인 것. 옛 작업에는 없다. */
     personIds?: string[];
+    /**
+     * 사람으로 지킬 그림 번호 → 어느 캐릭터의 각도인가와 그 종류·그림체·생김새
+     * (2026-10-07, ③). **서버가 작업을 만들 때 적는다.** 옛 작업에는 없다.
+     */
+    characters?: Record<string, CarriedCharacter & { characterId: string }>;
     /** personIds 중 그림 느낌만 바꿔도 되는 것. 옛 작업에는 없다 (설계 §4-3). */
     restyledIds?: string[];
     /**
