@@ -83,3 +83,59 @@ describe("한 장 다시 만들기의 실패 정산", () => {
     expect(정산()[4].completionConfirmed).not.toBe(true);
   });
 });
+
+/**
+ * **검수가 왜 버렸는지 서버 기록에 남는다**(2026-10-07). 전에는 오류 봉투 안에만 있어
+ * nano-banana 일반판이 3/3 불합격한 까닭을 알 수 없었다. 결함 종류 · 자리 · 심각도만
+ * 남긴다 — 검수 설명에는 사용자 카피가 섞일 수 있고, 주소도 넣지 않는다.
+ */
+const 기록 = () => warn.mock.calls.map((call: unknown[]) => call.join(" ")).filter((line: string) => line.includes("품질검수 불합격"));
+
+describe("검수 불합격 까닭 기록", () => {
+  it("한 장: 결함 종류를 한 줄로 남기고, 화면 응답은 그대로다", async () => {
+    state.generate.mockRejectedValue(qaRejected());
+    const response = await single(request(body()));
+
+    expect(기록()).toHaveLength(1);
+    expect(기록()[0]).toContain("s1");
+    expect(기록()[0]).toContain("forbidden_brand/critical");
+    expect(기록()[0]).toContain("text_typo@headline/minor");
+    expect(기록()[0]).not.toContain(사용자글);
+    expect(기록()[0]).not.toContain("http");
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ ok: false, code: "PDP_IMAGE_QA_REJECTED", message: "생성 결과가 품질 기준에 미달했습니다." });
+  });
+
+  it("일괄: 버린 섹션마다 남긴다", async () => {
+    state.generate.mockResolvedValueOnce({ imageBase64: "OK", mimeType: "image/png", generatedImages: 1 }).mockRejectedValueOnce(qaRejected());
+    const response = await batch(request({ ...body(), sections: [section, { ...section, section_id: "s2" }] }));
+
+    expect(기록()).toHaveLength(1);
+    expect(기록()[0]).toContain("s2");
+    expect(기록()[0]).toContain("forbidden_brand/critical");
+    expect(기록()[0]).not.toContain(사용자글);
+    expect((await response.json()).results[1]).toMatchObject({ ok: false, code: "PDP_IMAGE_QA_REJECTED" });
+  });
+
+  it("검수 불합격이 아니면 남기지 않는다", async () => {
+    state.generate.mockRejectedValue(new PdpServiceError("AI_PROVIDER_UNAVAILABLE", "업체 장애", "fal 503"));
+    await single(request(body()));
+
+    expect(기록()).toHaveLength(0);
+  });
+
+  it("상세가 깨졌거나 낯선 값이 와도 던지지 않고 글을 싣지 않는다", async () => {
+    state.generate.mockRejectedValue(new PdpServiceError("PDP_IMAGE_QA_REJECTED", "미달", "not json", 1));
+    const broken = await single(request(body()));
+    expect(broken.status).toBe(422);
+
+    state.generate.mockRejectedValue(
+      new PdpServiceError("PDP_IMAGE_QA_REJECTED", "미달", JSON.stringify([{ type: `${사용자글} https://x.example`, severity: "critical" }]), 1),
+    );
+    await single(request(body()));
+
+    expect(기록()).toHaveLength(2);
+    expect(기록().join("\n")).not.toContain(사용자글);
+    expect(기록().join("\n")).not.toContain("http");
+  });
+});

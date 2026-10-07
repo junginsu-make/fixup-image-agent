@@ -59,6 +59,7 @@ import { createJobRecorder, type JobRecorder } from "../../../../lib/pdp/jobs/re
 import { fingerprintOf, isPdpJobsEnabled } from "../../../../lib/pdp/jobs";
 import { syncDocumentLibraryLater } from "../../../../lib/pdp/jobs/library-sync";
 import { librarySyncFromBody } from "../../../../lib/pdp/jobs/library-sync-request";
+import { logQaRejection } from "../../../../lib/pdp/qa-reject-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -211,6 +212,7 @@ async function handlePost(req: Request) {
     return Response.json({ ok: true, imageBase64, mimeType, usage, qa });
   } catch (err) {
     const envelope = toPdpErrorResponse(err);
+    logQaRejection(sectionId, envelope);
     await jobs?.sectionFailed({ sectionId, attempt: 1, errorCode: String(envelope.code || "image_failed") });
     await jobs?.finished({ succeeded: 0, requested: 1, settled: true });
     await settleAiUsage(

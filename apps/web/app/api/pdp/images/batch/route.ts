@@ -29,6 +29,7 @@ import { fingerprintOf, isPdpJobsEnabled } from "../../../../../lib/pdp/jobs";
 import { syncDocumentLibraryLater } from "../../../../../lib/pdp/jobs/library-sync";
 import { librarySyncFromBody } from "../../../../../lib/pdp/jobs/library-sync-request";
 import { readPdpRequest } from "../../../../../lib/pdp/request";
+import { logQaRejection } from "../../../../../lib/pdp/qa-reject-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -264,6 +265,7 @@ async function handlePost(req: Request) {
       };
     }
     const envelope = toPdpErrorResponse(outcome.reason);
+    logQaRejection(section.section_id, envelope);
     return {
       sectionId: section.section_id,
       ok: false as const,
