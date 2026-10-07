@@ -330,3 +330,17 @@ describe("공개 홈의 크레딧 사실", () => {
     expect(코드만).not.toContain("Model weights");
   });
 });
+
+describe("소개 화면의 「FormWith 로 만드는 것」(계획 2026-10-07 seo-keyword-pages)", () => {
+  const about = read("app/about/page.tsx");
+  it("기능 카드가 마지막 가입 신청 구획 앞에 있다", () => {
+    expect(about).toContain("<FeatureCards");
+    expect(about.indexOf("<FeatureCards")).toBeLessThan(about.indexOf("mcs-h2--cta"));
+  });
+  it("한국어 안내에 다섯 도구의 이름이 다 있다", () => {
+    for (const word of ["카드뉴스", "상세페이지", "광고 소재", "포스터", "캐릭터"]) {
+      expect(ABOUT_KO.makeLead).toContain(word);
+    }
+    expect(ABOUT_EN.makeTitle).toBeTruthy();
+  });
+});

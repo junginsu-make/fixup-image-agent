@@ -4,6 +4,8 @@ import { isLocalAuthBypass } from "../../lib/dev-auth";
 import { getMembership } from "../../lib/membership/server";
 import { languageAlternates, pageMetadata } from "../../lib/seo/metadata";
 import { ABOUT } from "../_landing/about-content";
+import { FEATURE_PAGES } from "../_landing/features-content";
+import { FeatureCards } from "../features/feature-body";
 import { LandingFooter } from "../_landing/cta-footer";
 import { CONTENT, type Locale } from "../_landing/landing-content";
 import { LandingHeader } from "../_landing/landing-header";
@@ -11,6 +13,7 @@ import { WheelBoost } from "../_landing/hero/WheelBoost";
 import "../_landing/landing.css";
 import "../_landing/hero/hero.css";
 import "./about.css";
+import "../features/features.css";
 
 /**
  * FormWith 란 — 브랜드 소개.
@@ -192,6 +195,15 @@ export default async function AboutPage({
                 </li>
               ))}
             </ul>
+          </div>
+        </section>
+
+        {/* 무엇을 만드는지 검색어 그대로(계획 2026-10-07 seo-keyword-pages). 카드 글은 한국어 한 벌. */}
+        <section className="mcs-section">
+          <div className="mcs-shell">
+            <h2 className="mcs-h2 about-measure">{a.makeTitle}</h2>
+            <p className="mcs-lead about-measure">{a.makeLead}</p>
+            <FeatureCards pages={FEATURE_PAGES} />
           </div>
         </section>
 

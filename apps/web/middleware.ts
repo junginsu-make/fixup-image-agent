@@ -36,6 +36,9 @@ const PUBLIC_PATHS = [
     사이드바를 보여 주면 눌러 봐야 전부 첫 화면 회원가입 안내로 간다.
   */
   "/guide",
+  // 키워드별 기능 소개(계획 2026-10-07 seo-keyword-pages). 검색으로 들어온 사람이
+  // 로그인 화면이 아니라 기능 설명을 먼저 만나야 한다. `/features/…` 도 함께 열린다.
+  "/features",
   "/login",
   "/signup",
   "/forgot-password",

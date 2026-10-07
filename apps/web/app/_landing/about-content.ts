@@ -104,6 +104,10 @@ export const ABOUT_KO = {
     { title: "모르는 건 모른다고 적습니다", desc: "아직 정하지 못한 것은 그럴듯하게 채우지 않고 비워 둡니다. 안 되는 것도 그 자리에 적습니다." },
   ] as readonly Vow[],
 
+  // 무엇을 만드는지 검색어 그대로 적는 구획(계획 2026-10-07 seo-keyword-pages). 위 글의 분위기는 그대로 둔다.
+  makeTitle: "FormWith 로 만드는 것",
+  makeLead: "카드뉴스, 상세페이지와 리디자인, 광고 소재, 포스터, 캐릭터. 그림 한 장과 한 줄에서 시작하는 여섯 가지 일입니다. 하나씩 눌러 무엇을 넣고 무엇을 받는지 보세요.",
+
   endA: "잘 만들고 싶은 마음이,",
   endB: "시간에 막히지 않도록.",
   endLead: "그 하나를 위해 만들었습니다. 가입 신청 후 이메일 인증과 승인을 거치면 바로 쓰실 수 있습니다.",
@@ -183,6 +187,9 @@ export const ABOUT_EN: AboutCopy = {
     { title: "Your work stays private", desc: "Output is kept where only you can open it. You never sign up for an AI service or bring your own key." },
     { title: "We write down what we do not know", desc: "What is undecided is left blank rather than plausibly filled in. What does not work is written down where it happens." },
   ],
+
+  makeTitle: "What FormWith makes",
+  makeLead: "Card news, detail pages and redesigns, ad creatives, posters and characters. Six jobs that start from one image and one line. Open each to see what goes in and what comes out.",
 
   endA: "So that wanting to make it well",
   endB: "is not stopped by the clock.",

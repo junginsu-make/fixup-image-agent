@@ -1,4 +1,5 @@
 import { APP_ROUTES } from "../../../lib/access/routes";
+import { FEATURE_PAGES } from "../../_landing/features-content";
 
 /** 방문 분석 이름표. 모르는 키는 그대로 보인다 — 지어낸 이름으로 덮지 않는다(`system/ai-labels.ts` 와 같은 판단). */
 const SOURCE: Record<string, string> = {
@@ -27,6 +28,8 @@ const PAGE: Record<string, string> = {
   "/onboarding": "가입 정보 확인", "/access": "승인 대기", "/forgot-password": "비밀번호 찾기",
   "/reset-password": "비밀번호 바꾸기", "/ad": "광고 규격 만들기", "/auth/confirm": "메일 인증",
   ...Object.fromEntries(APP_ROUTES.map((route) => [route.path, route.label])),
+  "/features": "기능 소개",
+  ...Object.fromEntries(FEATURE_PAGES.map((page) => [page.path, `기능 소개 · ${page.keyword}`])),
 };
 const DEVICE: Record<string, string> = { mobile: "휴대폰", tablet: "태블릿", desktop: "컴퓨터" };
 const BROWSER: Record<string, string> = {
