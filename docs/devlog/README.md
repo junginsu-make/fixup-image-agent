@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **277개**, 저장 기록(커밋, 합치기 제외) **1,044개**, 배포 꾸러미(릴리스) **230개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **279개**, 저장 기록(커밋, 합치기 제외) **1,051개**, 배포 꾸러미(릴리스) **232개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 29 | 209 | 38 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 31 | 216 | 40 |
 
 <a id="w-2026-08-31"></a>
 
@@ -490,8 +490,12 @@
 - 카드뉴스 「만들기」를 누른 뒤 첫 장이 시작되기까지가 빨라졌고, 한 장이 3분 넘게 걸리면 그림 업체가 늦어지고 있다고 알려 줍니다.
 - 카드뉴스 마지막 장이 늘 같은 문구가 아니라 앞 장 내용에 맞는 글과 그림으로 나옵니다.
 - 상세페이지 이미지 모델 고르기에서 품질 검사를 자주 떨어지던 경제형을 뺐습니다. 경제형으로 저장해 둔 작업은 다시 열면 기본 모델인 표준형으로 바뀝니다.
+- 캐릭터를 상세페이지, 리디자인, 카드뉴스, 이미지 만들기에 넣을 때 사람으로만 설명하지 않고 동물, 마스코트, 물건 같은 종류에 맞게 무늬와 옷, 비율을 지키라고 알려 줍니다.
+- 실사 상세페이지에 애니 캐릭터를 넣어도 캐릭터는 원래 그림체를 지킵니다. 그림 느낌만 바꾸기를 직접 고르면 그 선택을 따릅니다.
+- 카드뉴스와 이미지 만들기에도 캐릭터를 만들 때 정리해 둔 생김새 설명이 함께 가고, 같은 캐릭터의 여러 각도를 붙여도 한 캐릭터로 읽습니다.
+- 카드뉴스에 저장한 캐릭터를 붙이면 프로젝트 입력을 확인해 달라며 만들기가 막히던 문제를 고쳤습니다.
 
-**운영 배포 14회**
+**운영 배포 15회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -507,8 +511,9 @@
 - 10/7 `20261007T102344Z-af6444d5` · [#283](https://github.com/junginsu-make/fixup-image-agent/pull/283), [#284](https://github.com/junginsu-make/fixup-image-agent/pull/284), [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288)
 - 10/7 `20261007T111629Z-1e074fb9` · [#291](https://github.com/junginsu-make/fixup-image-agent/pull/291)
 - 10/7 `20261007T132044Z-d144d972` · [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294)
+- 10/8 `20261007T150107Z-bbf99b9e` · [#293](https://github.com/junginsu-make/fixup-image-agent/pull/293), [#296](https://github.com/junginsu-make/fixup-image-agent/pull/296)
 
-<details><summary>이 주의 작업 묶음 29개</summary>
+<details><summary>이 주의 작업 묶음 31개</summary>
 
 
 **10/6**
@@ -544,12 +549,14 @@
 - [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286) fix: 서버 처리 31곳의 오류 원문을 화면에 보내지 않는다(카드뉴스 · 다양하게 · 광고 · 관리자 등) <sub>카드뉴스 · 광고 규격 · 관리자 · +2,224 / −162 · 운영 반영 10/7</sub>
 - [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288) feat: 상세페이지·리디자인·쉽게 그림 칸도 같은 방식으로 받는다 (그림 첨부 통일 3단계) <sub>이미지 만들기 · 상세페이지 · 리디자인 · 쉽게 모드 · +364 / −180 · 운영 반영 10/7</sub>
 - [#291](https://github.com/junginsu-make/fixup-image-agent/pull/291) fix: 상세페이지 검수 불합격 크레딧 묶임 · 기획 6분 낭비, 카드뉴스 첫 응답 속도 · 엔딩 원고 · 늦어짐 안내 <sub>카드뉴스 · 상세페이지 · 크레딧·비용 · +1,569 / −51 · 운영 반영 10/7</sub>
+- [#293](https://github.com/junginsu-make/fixup-image-agent/pull/293) feat: 캐릭터를 상세페이지·리디자인에 종류·그림체대로 넘긴다 (캐릭터 넘기기 1단계) <sub>상세페이지 · 리디자인 · 캐릭터 · +811 / −24 · 운영 반영 10/8</sub>
 - [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294) fix: 상세페이지 이미지 모델 목록에서 경제형 제외 <sub>상세페이지 · +183 / −33 · 운영 반영 10/7</sub>
+- [#296](https://github.com/junginsu-make/fixup-image-agent/pull/296) feat: 캐릭터를 카드뉴스·이미지 만들기에도 종류·그림체·생김새대로 넘긴다 (캐릭터 넘기기 2단계) <sub>카드뉴스 · 이미지 만들기 · 캐릭터 · +1,754 / −56 · 운영 반영 10/8</sub>
 
 </details>
 
 ---
 
-자료: GitHub 저장소의 기록을 10월 7일에 모았습니다. 날짜는 한국 시각, 한 주는 월요일부터입니다. 배포 꾸러미는 만들어진 수이며 실제로 운영에 올린 횟수와 다릅니다.
+자료: GitHub 저장소의 기록을 10월 8일에 모았습니다. 날짜는 한국 시각, 한 주는 월요일부터입니다. 배포 꾸러미는 만들어진 수이며 실제로 운영에 올린 횟수와 다릅니다.
 
 다시 만들기: 저장소 맨 위에서 `python -X utf8 docs/devlog/build.py` (GitHub CLI 로그인 필요). 주 제목·요약은 `weeks.json`, 운영 배포 기록은 `entries/` 에 적습니다.
