@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ABOUT_KO } from "../../../app/_landing/about-content";
 import { GUIDE_TOPICS } from "../../../app/guide/_components/topics";
 import { GUIDE_COPY, HOME_COPY, KEYWORDS } from "../copy";
 import { guideMetadata, languageAlternates, noIndexMetadata, pageMetadata } from "../metadata";
@@ -51,6 +52,11 @@ describe("문구", () => {
     expect(copy.description.length).toBeLessThanOrEqual(160);
     expect(copy.description).not.toMatch(/[—–]/);
     expect(copy.title).not.toMatch(/[—–]/);
+  });
+  // 네이버 서치어드바이저 「사이트 간단 체크」가 80자를 넘으면 고치라고 한다(2026-10-07).
+  it.each([HOME_COPY.ko, ...Object.values(GUIDE_COPY), { title: "FormWith란", description: ABOUT_KO.metaDescription }]
+    .map((copy) => [copy.title, copy]))("%s 한국어 설명은 80자 이내", (_title, copy) => {
+    expect(copy.description.length).toBeLessThanOrEqual(80);
   });
   it("첫 화면 한국어 설명에 핵심 단어의 중심 말이 들어 있다", () => {
     for (const word of ["카드뉴스", "상세페이지", "광고 소재", "포스터", "캐릭터"]) {

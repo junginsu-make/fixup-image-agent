@@ -38,7 +38,7 @@ export interface Vow {
 export const ABOUT_KO = {
   metaTitle: "FormWith란",
   metaDescription:
-    "따라 만들 그림 한 장과 한 줄. 손으로 하는 건 거기까지입니다. 구조를 잡고 글자를 정하고 그림을 만들고 검수하고 매체 규격에 맞추는 일은 FormWith 가 이어서 합니다.",
+    "따라 만들 그림 한 장과 한 줄이면 됩니다. 구조, 글자, 그림, 검수, 매체 규격 맞추기는 FormWith 가 이어서 합니다.",
 
   kicker: "브랜드 소개",
   h1a: "그림 한 장과 한 줄,",
