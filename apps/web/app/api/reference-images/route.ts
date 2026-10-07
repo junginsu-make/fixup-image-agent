@@ -15,6 +15,18 @@ export const dynamic = "force-dynamic";
 const IdSchema = z.string().uuid();
 
 /**
+ * **제목은 거절하지 않고 자른다**(2026-10-07 운영 보고).
+ *
+ * 화면은 파일 이름을 제목으로 보낸다. 전에는 200자를 넘으면 거절해, 이름이 긴
+ * 그림(인터넷에서 받은 그림 등)은 한 장도 못 올렸다. 제목은 이름표일 뿐이다.
+ *
+ * **글자 단위로 자른다.** 칸 단위(`slice`)로 자르면 이모지(두 칸)가 반쪽만 남아
+ * DB 가 거절한다(2026-10-07 리뷰). DB 의 `char_length` 도 글자 단위다.
+ */
+const TITLE_MAX = 200;
+const TitleSchema = z.string().transform((value) => Array.from(value).slice(0, TITLE_MAX).join(""));
+
+/**
  * 라이브러리의 참고 이미지.
  *
  * 로컬이든 운영이든 이 길 하나만 쓴다. 전에는 로컬에서만 열리고 운영에서는
@@ -92,7 +104,7 @@ export async function POST(request: Request) {
 
   try {
     const id = IdSchema.parse(form.get("id"));
-    const title = z.string().max(200).parse(form.get("title") ?? "");
+    const title = TitleSchema.parse(form.get("title") ?? "");
     const purpose = ReferencePurposeSchema.parse(form.get("purpose"));
     const file = form.get("file");
     if (!(file instanceof File)) throw new Error("이미지 파일을 골라 주세요.");
@@ -138,9 +150,13 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "참고 이미지를 올리지 못했습니다." },
-      { status: 400 },
-    );
+    /*
+      **입력 검사 원문을 화면에 내지 않는다.** zod 오류의 `message` 는 JSON 배열
+      이라 `[{"code":"too_big",…}]` 가 그대로 떴다(2026-10-07 운영 보고).
+    */
+    const message = error instanceof z.ZodError
+      ? "그림 정보를 읽지 못했습니다. 다시 올려 주세요."
+      : error instanceof Error ? error.message : "참고 이미지를 올리지 못했습니다.";
+    return Response.json({ ok: false, message }, { status: 400 });
   }
 }
