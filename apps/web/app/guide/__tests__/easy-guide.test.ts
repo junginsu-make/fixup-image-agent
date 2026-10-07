@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AD_CHOICE_IMAGE, AD_CHOICE_SPECS } from "../../easy/ad-ask";
+import { EASY_RATIOS } from "../../easy/ask";
 import { resultLabel } from "../../easy/image-numbers";
 import { SEE_FAILED } from "../../easy/see-prompt";
 
@@ -63,6 +64,30 @@ describe("쉽게 설명서 · 2026-10-07 기능", () => {
   /** 2026-10-06 부터 말로 고친다(#254). 「다시 적어서 다시 만든다」는 옛 안내다. */
   it("고치는 법이 옛 안내로 남아 있지 않다", () => {
     expect(source).not.toContain("다시 적어서 다시 만든다");
+  });
+
+  /**
+   * **모양 물음 바로 뒤의 새 주문은 다시 묻지 않고 만든다**(Task 5 리뷰 Critical). `settleTypedAnswer` 의 ratio
+   * 갈래가 `askRatio: false` 다(`ask-chain.ts`, 라우트의 모양 물음 조건). 「다시 주문하시면 다시 묻습니다」는 거짓이었다.
+   */
+  it("모양 물음 뒤 새 주문을 다시 묻는다고 말하지 않는다", () => {
+    const text = 주석을뺀다(source);
+    expect(text).not.toContain("다시 주문하시면 다시 묻습니다");
+    expect(text).toContain("모양을 다시 묻지 않고 바로 만듭니다");
+  });
+
+  /** 예로 든 단추 이름은 화면에 실제로 있어야 한다. 「세로」라는 단추는 없다. */
+  it("모양 답의 예가 실제 단추 이름이다", () => {
+    const askChoice = readFileSync(new URL("../../easy/_components/ask-choice.tsx", import.meta.url), "utf8");
+    expect(EASY_RATIOS.map((ratio) => ratio.label)).toContain("포스터 세로");
+    expect(askChoice).toContain('"이걸로 만들기"');
+    expect(source).toContain("「포스터 세로」를 고르고 「이걸로 만들기」를 누르면");
+    expect(source).not.toContain("「세로」를 고르면");
+  });
+
+  /** 대화가 없으면 `work.href`(`/poster/{id}` · `/sns/{id}`)로 간다 — 사이드바 이름은 「다양하게」 · 「카드뉴스」. */
+  it("과정 보기가 대화를 못 찾을 때 가는 화면 이름을 말한다", () => {
+    expect(source).toContain("「다양하게」나 「카드뉴스」 화면이 열립니다");
   });
 
   it("값이 드는 것과 안 드는 것을 함께 말한다", () => {
