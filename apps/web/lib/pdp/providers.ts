@@ -77,10 +77,35 @@ function dataUrl(image: { base64: string; mimeType: string }) {
   return `data:${image.mimeType};base64,${image.base64}`;
 }
 
+/**
+ * **시간 초과면 SDK 가 같은 요청을 다시 기다리지 않게 한다**(2026-10-07).
+ *
+ * SDK 는 시간 초과도 재시도한다. 그래서 120초에 걸린 기획이 같은 요청을 두 번 더
+ * 기다려 약 6분 뒤에야 예비로 넘어갔다. 시도마다 도는 미들웨어가 제한 시간에 끊긴
+ * 것을 보면 `giveUp` 을 끊는다 — 요청 신호가 끊겨 있으면 SDK 는 다시 부르지 않는다.
+ * 과부하(429 · 529) 응답과 다른 연결 실패는 건드리지 않으므로 지금처럼 다시 부른다.
+ */
+function stopRetryOnTimeout(giveUp: AbortController): Anthropic.RequestOptions {
+  return {
+    signal: giveUp.signal,
+    middleware: [
+      async (request, next) => {
+        try {
+          return await next(request);
+        } catch (error) {
+          if ((error as { name?: unknown })?.name === "AbortError") giveUp.abort();
+          throw error;
+        }
+      },
+    ],
+  };
+}
+
 async function viaAnthropic(
   client: Anthropic,
   model: string,
   request: PdpLlmRequest,
+  options?: Anthropic.RequestOptions,
 ): Promise<unknown> {
   const response = await client.messages.create({
     model,
@@ -112,7 +137,7 @@ async function viaAnthropic(
     ],
     // 도구를 반드시 부르게 한다. 자유 문장으로 답하면 파싱이 깨진다.
     tool_choice: { type: "tool", name: request.name, disable_parallel_tool_use: true },
-  });
+  }, options);
   recordFrom(model, response);
 
   // **답이 잘렸으면 여기서 멈춘다.** 아래로 흘리면 조각난 값이 정상 응답으로
@@ -205,8 +230,10 @@ export function createPdpLlm(environment: Env = process.env): PdpLlm {
       // 생긴 날 두 곳이 갈린다.
       const purpose = request.purpose ?? purposeOfCall(request.name);
       const model = purpose === "planning" ? planningModel : anthropicModel;
+      // 기획 · 검수만 시간 초과에 바로 예비로 간다. 인물 대조(reference)는 지금 그대로.
+      const giveUp = purpose === "reference" ? null : new AbortController();
       try {
-        const text = JSON.stringify(await viaAnthropic(anthropic, model, request));
+        const text = JSON.stringify(await viaAnthropic(anthropic, model, request, giveUp ? stopRetryOnTimeout(giveUp) : undefined));
         const execution = { purpose, provider: "anthropic" as const, model };
         executions.push(execution);
         return { text, execution };
@@ -218,7 +245,9 @@ export function createPdpLlm(environment: Env = process.env): PdpLlm {
         // 잘못된 모델/권한/요청 설정을 정상적인 영구 폴백처럼 숨기지 않는다.
         if (purpose === "planning" && status && [400, 401, 403, 404, 422].includes(status)) throw error;
         if (!openai) throw error;
-        const fallbackReason = status ? `provider_${status}` : "provider_unavailable";
+        const timedOut = giveUp?.signal.aborted === true;
+        const fallbackReason = timedOut ? "timeout" : status ? `provider_${status}` : "provider_unavailable";
+        if (timedOut) console.warn(`[pdp] 기획 시간 초과 → 예비 (${request.name})`);
         console.warn(`[pdp] 대체 기획/검수 모델 사용 (${request.name}, ${fallbackReason})`);
         const text = JSON.stringify(await viaOpenAI(openai, openaiModel, request));
         const execution = { purpose, provider: "openai" as const, model: openaiModel, fallbackFrom: model, fallbackReason };
