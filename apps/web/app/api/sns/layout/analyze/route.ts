@@ -9,6 +9,7 @@ import {
   createLayoutAnalysisProviders,
 } from "../../../../../lib/layout/analyze-provider";
 import { referenceImageBytes, toDataUrl } from "../../../../../lib/layout/library-image";
+import { snsFailure } from "../../failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +65,8 @@ async function handlePost(request: Request) {
     if (error instanceof LayoutAnalysisConfigurationError) {
       // 부른 것이 없으니 나간 값도 없다. 묶어 둔 자리를 그대로 돌려준다.
       await finalizeAiUsage(reservation, false, 0, "layout_analysis_unconfigured");
-      return Response.json({ ok: false, message: error.message }, { status: error.status });
+      // 503 은 지키되 환경변수 이름은 서버 기록에만 남긴다. 문장은 화면이 이 실패에 쓰던 것이다.
+      return snsFailure("레퍼런스 칸 읽기", error, "칸을 읽어내지 못했습니다.", error.status);
     }
     await finalizeAiUsage(reservation, false, 0, "layout_analysis_unavailable");
     throw error;

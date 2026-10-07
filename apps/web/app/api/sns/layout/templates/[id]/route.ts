@@ -1,6 +1,7 @@
 import { templateById } from "@fixup/layout-core";
 import { authenticateApiMember } from "../../../../../../lib/membership/api";
 import { deleteTemplate } from "../../../../../../lib/layout/template-store";
+import { snsFailure } from "../../../failure";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -21,9 +22,6 @@ export async function DELETE(_request: Request, context: Context) {
     await deleteTemplate(auth.member.userId, id);
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "뼈대를 지우지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("뼈대 지우기", error, "뼈대를 지우지 못했습니다.", 500);
   }
 }

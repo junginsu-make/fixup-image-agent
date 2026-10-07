@@ -1,6 +1,7 @@
 import { LayoutDeckSchema, validateDeck } from "@fixup/layout-core";
 import { authenticateApiMember } from "../../../../../lib/membership/api";
 import { listDecks, saveDeck } from "../../../../../lib/layout/deck-store";
+import { snsFailure } from "../../failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,10 +12,7 @@ export async function GET() {
   try {
     return Response.json({ ok: true, decks: await listDecks(auth.member.userId) });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "세트를 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("세트 목록", error, "세트를 불러오지 못했습니다.", 500);
   }
 }
 
@@ -43,9 +41,6 @@ export async function POST(request: Request) {
   try {
     return Response.json({ ok: true, deck: await saveDeck(auth.member.userId, parsed.data) }, { status: 201 });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "세트를 저장하지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("세트 저장", error, "세트를 저장하지 못했습니다.", 500);
   }
 }

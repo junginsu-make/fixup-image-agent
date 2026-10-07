@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DEFAULT_TEMPLATES, SlotListSchema, validateTemplate } from "@fixup/layout-core";
 import { authenticateApiMember } from "../../../../../lib/membership/api";
 import { listSavedTemplates, saveTemplate } from "../../../../../lib/layout/template-store";
+import { snsFailure } from "../../failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,10 +26,7 @@ export async function GET() {
     const saved = await listSavedTemplates(auth.member.userId);
     return Response.json({ ok: true, defaults: DEFAULT_TEMPLATES, saved });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "뼈대 목록을 불러오지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("뼈대 목록", error, "뼈대 목록을 불러오지 못했습니다.", 500);
   }
 }
 
@@ -56,9 +54,6 @@ export async function POST(request: Request) {
     const template = await saveTemplate(auth.member.userId, parsed.data);
     return Response.json({ ok: true, template }, { status: 201 });
   } catch (error) {
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "뼈대를 저장하지 못했습니다." },
-      { status: 500 },
-    );
+    return snsFailure("뼈대 저장", error, "뼈대를 저장하지 못했습니다.", 500);
   }
 }
