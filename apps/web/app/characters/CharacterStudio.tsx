@@ -27,7 +27,8 @@ import {
   IMAGES_TOO_LARGE_MESSAGE, OWN_EXTRACT_BLOCKED, OWN_STYLE_HINT, imagesTooLarge, lookLockedByPair, roleWithOwn,
 } from "./own-character";
 import { readImageBlob, type ReadImage } from "./read-image";
-import { useImageDropTarget, usePreventFileNavigation } from "./image-drop";
+import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
 /**
@@ -337,7 +338,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     await loadLibrary();
   }
 
-  async function attachFile(files: ArrayLike<File> | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말(「한 장만 씁니다」). 넣은 뒤에 보인다. */
+  async function attachFile(files: ArrayLike<File> | null, notice?: string) {
     const file = files?.[0];
     if (!file) return;
     const seq = ++attachSeq.current;
@@ -346,6 +348,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       const read = await readAsAttached(file, attached?.role ?? DEFAULT_ROLE);
       if (seq === attachSeq.current) setAttached(read);
       await saveToLibrary(file);
+      // 그 사이 다른 그림을 넣었으면 이 알림은 낡았다. 그림과 같은 순번으로 거른다.
+      if (notice && seq === attachSeq.current) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     } finally {
@@ -353,7 +357,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     }
   }
 
-  async function attachOwnFile(files: ArrayLike<File> | null) {
+  async function attachOwnFile(files: ArrayLike<File> | null, notice?: string) {
     const file = files?.[0];
     if (!file) return;
     const seq = ++ownSeq.current;
@@ -362,6 +366,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       const read = await readImageBlob(file);
       if (seq === ownSeq.current) setOwn(read);
       await saveToLibrary(file);
+      if (notice && seq === ownSeq.current) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     }
@@ -578,13 +583,15 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
    * 고칠 수 있게 두면 바뀐 줄 알고 있다가 다른 것이 나온다.
    */
   const locked = Boolean(busy) || Boolean(chosen);
-  /** 「참고할 그림」 칸의 끌어다 놓기·붙여넣기. 올리기와 같은 길로 넣는다(`image-drop.ts`). */
-  // 칸 옆에 잘못 놓아도 브라우저가 그 파일을 열어 페이지를 떠나지 않게 한다.
-  usePreventFileNavigation();
+  /**
+   * 「참고할 그림」 칸의 끌어다 놓기·붙여넣기. 올리기와 같은 길로 넣는다(`_components/image-drop.ts`).
+   * 한 장 칸이라 여러 장이 오면 첫 장만 넣고 알린다. 칸 밖 놓기 막기는 부품이 건다.
+   */
   const referenceDrop = useImageDropTarget({
     disabled: locked,
-    onFile: (file) => void attachFile([file]),
-    onError: setMessage,
+    multiple: false,
+    onFiles: (files, notice) => void attachFile(files, notice),
+    onMessage: setMessage,
   });
   const chosenSrc = chosen ? `data:${chosen.mimeType};base64,${chosen.base64}` : "";
   const extraCount = pickedAngles.filter((angle) => angle !== "front").length + (sheet ? 1 : 0);
@@ -793,7 +800,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 library={library.map((image) => ({
                   id: image.id, title: image.title, url: image.signedUrl, thumbUrl: image.thumbUrl ?? null,
                 }))}
-                onUpload={(files) => void attachOwnFile(files)}
+                onUpload={(files, notice) => void attachOwnFile(files, notice)}
                 onPickLibrary={(image) => void attachOwnFromLibrary(image)}
                 onClear={() => setOwn(null)}
                 onReloadLibrary={() => void loadLibrary()}
@@ -904,12 +911,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   <p className="text-xs text-subtle-foreground">
                     붙인 그림이 없습니다. 아래에서 올리거나 라이브러리에서 고르세요.
                   </p>
-                  {locked ? null : (
-                    <p className="text-xs text-subtle-foreground">
-                      그림을 여기로 끌어다 놓거나, 이 칸을 누르고 <kbd>Ctrl+V</kbd>(Mac 은 <kbd>⌘V</kbd>)로 붙여넣어도 됩니다.
-                      <span className="mt-1 hidden font-bold text-primary group-focus-within:block">지금 붙여넣을 수 있습니다</span>
-                    </p>
-                  )}
+                  <DropPasteHint locked={locked} className="text-xs" />
                 </div>
               )}
             </CardContent>

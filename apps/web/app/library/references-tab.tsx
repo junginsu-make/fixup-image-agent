@@ -4,13 +4,15 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { FolderPlus, ImageIcon, ImagePlus, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { putHandoff } from "../../lib/handoff";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@fixup/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@fixup/ui";
 import type { ReferenceSetRecord } from "../api/reference-sets/schema";
 import type { ReferenceImageRow } from "./reference-upload";
 import { SetEditor } from "./set-editor";
 import { randomId } from "../../lib/browser-safe";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 import { ThumbImage } from "../_components/thumb-image";
+import { useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 
 /**
  * 화면이 보는 참고 이미지 한 장.
@@ -64,8 +66,10 @@ export function ReferencesTab() {
       if (!response.ok || !payload.ok) throw new Error(payload.message ?? "묶음 세트를 불러오지 못했습니다.");
       setSets(payload.sets ?? []);
       setMessage("");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -73,7 +77,8 @@ export function ReferencesTab() {
 
   React.useEffect(() => { void load(); }, [load]);
 
-  async function upload(files: FileList | null) {
+  /** `notice` — 끌어다 놓기·붙여넣기가 덧붙인 말(「받지 않는 형식을 뺐습니다」). 다 올린 뒤에 보인다. */
+  async function upload(files: ArrayLike<File> | null, notice?: string) {
     if (!files?.length) return;
     setUploading(true);
     setMessage("");
@@ -89,8 +94,9 @@ export function ReferencesTab() {
         const payload = await response.json() as { ok?: boolean; message?: string };
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 올리지 못했습니다.");
       }
-      setMessage(`${files.length}장을 올렸습니다.`);
-      await load();
+      // 목록을 다시 읽은 **뒤에** 말한다. 다시 읽기가 안내 칸을 비우므로 먼저 말하면 지워진다.
+      // 다시 읽기가 실패했으면 그 안내를 덮지 않는다 — 목록이 안 바뀌었는데 성공만 보이면 안 된다.
+      if (await load()) setMessage([`${files.length}장을 올렸습니다.`, notice].filter(Boolean).join(" "));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 올리지 못했습니다.");
     } finally {
@@ -98,6 +104,17 @@ export function ReferencesTab() {
       if (fileInput.current) fileInput.current.value = "";
     }
   }
+
+  /**
+   * 「낱장」 칸의 끌어다 놓기·붙여넣기(2026-10-07 사용자 요청). 여러 장 칸이다.
+   * 올리기 단추와 같은 길(`upload`)로 넣는다. 올리는 동안은 받지 않는다.
+   */
+  const imagesDrop = useImageDropTarget({
+    disabled: uploading,
+    multiple: true,
+    onFiles: (files, notice) => void upload(files, notice),
+    onMessage: setMessage,
+  });
 
   /**
    * 라이브러리의 그림을 도구로 보낸다.
@@ -225,6 +242,18 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
         </TabsList>
 
         <TabsContent value="images" className="grid gap-5">
+          {/* 낱장 칸 전체가 받는다. 눌러 두면 붙여넣기도 받는다. */}
+          <div
+            role="group"
+            tabIndex={uploading ? -1 : 0}
+            aria-label="참고 이미지 칸. 그림을 끌어다 놓거나, 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣을 수 있습니다"
+            {...imagesDrop.handlers}
+            className={cn(
+              "group grid gap-5 rounded-lg outline-none",
+              !uploading && "focus-within:ring-2 focus-within:ring-primary/30",
+              imagesDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+            )}
+          >
           <div className="flex flex-wrap items-center gap-3">
             <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(event) => void upload(event.target.files)} />
             <Button onClick={() => fileInput.current?.click()} disabled={uploading}>
@@ -232,6 +261,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
               {uploading ? "올리는 중…" : "참고 이미지 올리기"}
             </Button>
             <span className="text-xs text-muted-foreground">올린 그림은 카드뉴스·포스터·상세페이지에서 모두 쓸 수 있습니다. 올린 참고 이미지는 나만 봅니다. 다른 회원에게는 보이지 않습니다. {UPLOAD_RIGHTS_NOTE}</span>
+            <DropPasteHint locked={uploading} className="w-full text-xs" />
           </div>
 
           {loading ? <p className="py-12 text-center text-sm text-muted-foreground">참고 이미지를 불러오는 중입니다.</p> : visibleImages.length === 0 ? (
@@ -275,6 +305,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
               ))}
             </div>
           )}
+          </div>
         </TabsContent>
 
         <TabsContent value="sets" className="grid gap-5">
@@ -374,7 +405,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
         images={images}
         initialSet={editingSet}
         onClose={() => setEditorOpen(false)}
-        onUploaded={load}
+        onUploaded={async () => { await load(); }}
         onSaved={(saved) => setSets((current) => {
           const exists = current.some((set) => set.id === saved.id);
           return exists ? current.map((set) => set.id === saved.id ? saved : set) : [saved, ...current];
