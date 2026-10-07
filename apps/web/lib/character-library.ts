@@ -49,6 +49,36 @@ export function characterReferenceTitle(name: string, angle: string): string {
   return `${name} (캐릭터) · ${characterAngleLabel(angle)}`;
 }
 
+/** 캐릭터 이름의 길이 상한. 저장할 때 이 길이로 자른다(`lib/characters.ts`). */
+export const CHARACTER_NAME_MAX = 80;
+
+/**
+ * **한 회원 안에서 겹치지 않는 캐릭터 이름.**
+ *
+ * 위 제목이 각도를 찾는 유일한 손잡이라, 이름이 같은 캐릭터가 둘이면 하나를
+ * 지우거나 각도를 다시 만들 때 **다른 쪽 그림까지** 지워진다(2026-10-07 로컬
+ * 재현). 겹치면 「 (2)」「 (3)」을 붙인다. 길이 상한 안에서 꼬리표가 남게
+ * 본문을 줄인다 — 꼬리표가 잘리면 다시 같은 이름이 된다.
+ *
+ * 다른 회원의 이름과는 겹쳐도 된다. 라이브러리는 회원마다 따로다.
+ */
+export function uniqueCharacterName(
+  name: string,
+  taken: readonly string[],
+  limit: number = CHARACTER_NAME_MAX,
+): string {
+  const base = name.trim().slice(0, limit);
+  const used = new Set(taken.map((entry) => entry.trim()));
+  if (!used.has(base)) return base;
+  let candidate = base;
+  for (let count = 2; count <= 999; count += 1) {
+    const suffix = ` (${count})`;
+    candidate = `${base.slice(0, limit - suffix.length).trimEnd()}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return candidate;
+}
+
 /**
  * 이 참고 이미지가 **캐릭터의 한 각도인가.**
  *
