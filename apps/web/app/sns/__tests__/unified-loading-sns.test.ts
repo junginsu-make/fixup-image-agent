@@ -19,15 +19,33 @@ const previewPanel = read("../layout/preview-panel.tsx");
 
 describe("값 — 몇 장째인지", () => {
   const card = (kind: string, status: string) => ({ kind, status }) as never;
-  it("만들 카드만 세고, 끝난 것(완료·검수 필요)을 done 으로 센다", () => {
-    expect(generationProgress([
+  const flow = (cards: unknown[], selected: number[], completedAt?: string) =>
+    ({ cards, generation: { selectedCardIndexes: selected, falReferenceUrls: {}, startedAt: "t", completedAt } }) as never;
+
+  it("이번 만들기에 고른 만들 카드만 세고, 끝난 것(완료·검수 필요·실패)을 done 으로 센다", () => {
+    expect(generationProgress(flow([
       card("generated", "done"), card("generated", "review_required"), card("generated", "generating"),
-      card("generated", "pending"), card("place_as_is", "done"),
-    ])).toEqual({ done: 2, total: 4 });
+      card("generated", "pending"), card("place_as_is", "done"), card("generated", "failed"),
+    ], [0, 1, 2, 3, 4, 5]))).toEqual({ done: 3, total: 5 });
   });
-  it("한 장이면 막대를 안 준다 — 여러 장일 때만 진행률이다", () => {
-    expect(generationProgress([card("generated", "generating")])).toBeUndefined();
-    expect(generationProgress([])).toBeUndefined();
+  /*
+    **고르지 않은 카드는 안 센다**(2026-10-08 리뷰 M1). 여섯 장 중 한 장만 다시 만드는데
+    「5/6장」·막대 83% 가 떠, 거의 끝난 여섯 장 작업처럼 보였다.
+  */
+  it("한 장만 다시 만들면 막대를 안 준다 — 나머지 완료 카드를 세지 않는다", () => {
+    expect(generationProgress(flow([
+      card("generated", "done"), card("generated", "done"), card("generated", "generating"),
+    ], [2]))).toBeUndefined();
+  });
+  it("고른 것 밖의 완료 카드는 안 센다", () => {
+    expect(generationProgress(flow([
+      card("generated", "done"), card("generated", "pending"), card("generated", "generating"),
+    ], [1, 2]))).toEqual({ done: 0, total: 2 });
+  });
+  it("끝난 만들기·만들기 없음이면 안 준다 — 다시 누른 직전에 옛 6/6 이 뜨지 않게", () => {
+    expect(generationProgress(flow([card("generated", "done"), card("generated", "done")], [0, 1], "끝"))).toBeUndefined();
+    expect(generationProgress({ cards: [card("generated", "done"), card("generated", "done")] } as never)).toBeUndefined();
+    expect(generationProgress(undefined)).toBeUndefined();
   });
 });
 
@@ -66,7 +84,7 @@ describe("작업 화면 띠", () => {
     expect(project).toContain("startedAt={workStartedAt}");
   });
   it("그림 만들기 띠에 몇 장째인지를 준다", () => {
-    expect(project).toContain("generationProgress(project.data.flow?.cards ?? [])");
+    expect(project).toContain("generationProgress(project.data.flow)");
     expect(project).toContain("progress={progress}");
   });
   it("멈추는 자리는 그대로 셋이다", () => {

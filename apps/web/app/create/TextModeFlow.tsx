@@ -153,6 +153,8 @@ export function TextModeFlow({
   const [isBusy, setIsBusy] = useState(false);
   // 위쪽 띠의 걸린 시간. 보이기만 한다(2026-10-08).
   const [busyStartedAt, setBusyStartedAt] = useState<number | undefined>();
+  // 대표 이미지 승인 중인가 — 띠가 「만드는 중」이 아니라 「저장 중」이라고 말한다(2026-10-08 리뷰).
+  const [approving, setApproving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [planningExecutions, setPlanningExecutions] = useState<PdpLlmExecution[] | undefined>(initialDraft?.planningExecutions);
 
@@ -220,6 +222,7 @@ export function TextModeFlow({
     if (!brief) return;
     setIsBusy(true);
     setBusyStartedAt(Date.now());
+    setApproving(false);
     setErrorMessage("");
     try {
       if (keyVisual && onBeforeReplace && !(await onBeforeReplace())) {
@@ -262,6 +265,7 @@ export function TextModeFlow({
   const handleApprove = async () => {
     if (!blueprint || !originalBlueprint || !keyVisual) return;
     setIsBusy(true);
+    setApproving(true);
     setBusyStartedAt(Date.now());
     try {
       // 대표 이미지는 2K로 생성된다. 섹션마다 다시 올라가는 앵커라
@@ -286,6 +290,7 @@ export function TextModeFlow({
     } catch (error) {
       setErrorMessage(`대표 이미지를 준비하지 못했습니다. ${errorText(error)}`);
       setIsBusy(false);
+      setApproving(false);
     }
   };
 
@@ -371,6 +376,7 @@ export function TextModeFlow({
           previewUrl={keyVisual ? toDataUrl(keyVisual.mimeType, keyVisual.base64) : null}
           isBusy={isBusy}
           busyStartedAt={busyStartedAt}
+          busyLabel={approving ? "대표 이미지를 저장 중입니다" : undefined}
           onApprove={() => void handleApprove()}
           onRegenerate={() => void (blueprint && requestKeyVisual(blueprint))}
           onBack={() => onStageChange("scenario")}

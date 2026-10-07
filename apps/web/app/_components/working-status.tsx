@@ -49,8 +49,6 @@ export function WorkingStatus({ label, hint, startedAt, progress, remaining, onS
     : null;
   return (
     <div
-      role="status"
-      aria-live="polite"
       className={cn(
         "sticky top-2 z-20 overflow-hidden rounded-md border border-primary/40",
         "bg-primary-soft px-4 py-3 shadow-sm backdrop-blur",
@@ -59,12 +57,17 @@ export function WorkingStatus({ label, hint, startedAt, progress, remaining, onS
     >
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-        <span className="text-sm font-medium text-primary">{label}</span>
-        {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+        {/* **읽어 주는 곳은 문구·장 수뿐이다**(2026-10-08 리뷰). 띠 전체를 알림 영역으로 두면
+            매초 바뀌는 걸린 시간이 「경과 1초, 2초…」로 계속 읽힌다. */}
+        <span role="status" aria-live="polite" className="contents">
+          <span className="text-sm font-medium text-primary">{label}</span>
+          {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+          {progress ? <span className="sr-only">{`${progress.done}/${progress.total}${progress.unit ?? "장"}`}</span> : null}
+        </span>
         <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-          {progress ? <span className="tabular-nums font-medium text-primary">{`${progress.done}/${progress.total}${progress.unit ?? "장"}`}</span> : null}
+          {progress ? <span aria-hidden className="tabular-nums font-medium text-primary">{`${progress.done}/${progress.total}${progress.unit ?? "장"}`}</span> : null}
           {remaining ? <span>{remaining}</span> : null}
-          {startedAt ? <ElapsedTime startedAt={startedAt} /> : null}
+          {startedAt ? <span aria-hidden><ElapsedTime startedAt={startedAt} /></span> : null}
           {onStop ? (
             <Button type="button" variant="secondary" size="sm" className="shrink-0" disabled={stopping} onClick={onStop}>
               <Square className="size-3.5" />
@@ -75,9 +78,10 @@ export function WorkingStatus({ label, hint, startedAt, progress, remaining, onS
       </div>
       {/* 띠 아래 가는 막대. 도는 표시만으로는 멀리서 안 보인다. */}
       <span aria-hidden className="fixup-working-track relative mt-2.5 block h-1 rounded-full bg-primary/15">
-        {percent === null
-          ? <span className="fixup-working-bar block h-full w-1/3 rounded-full bg-primary/70" />
-          : <span data-working-fill="progress" className="block h-full rounded-full bg-primary/70 transition-[width] duration-500" style={{ width: `${percent}%` }} />}
+        {percent === null ? null : <span data-working-fill="progress" className="absolute inset-y-0 left-0 rounded-full bg-primary/70 transition-[width] duration-500" style={{ width: `${percent}%` }} />}
+        {/* **다 차기 전에는 흐르는 막대를 겹친다**(2026-10-08 리뷰). 한 묶음 안에서 몇 장
+            끝났는지는 모른다 — 채운 막대만 두면 첫 묶음 내내 0% 에 멈춰 보인다. */}
+        {percent === null || percent < 100 ? <span className="fixup-working-bar block h-full w-1/3 rounded-full bg-primary/50" /> : null}
       </span>
       {children ? <div className="mt-2.5 text-sm">{children}</div> : null}
       {/* fal 에 이미 보낸 요청은 취소하지 못한다. 숨기면 사용자가 오해한다 —

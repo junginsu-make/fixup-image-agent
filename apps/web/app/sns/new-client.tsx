@@ -278,7 +278,7 @@ export function NewSnsClient({ webSource = false }: { webSource?: boolean } = {}
       {phase ? (
         <WorkingStatus
           label={phase === "saving" ? "저장 중입니다" : "기획 중입니다"}
-          hint="기획과 원고를 작성하고 있습니다. 1~2분 걸립니다"
+          hint={phase === "planning" ? "기획과 원고를 작성하고 있습니다. 1~2분 걸립니다" : undefined}
           startedAt={workStartedAt}
         />
       ) : null}

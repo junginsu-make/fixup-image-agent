@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import "fake-indexeddb/auto";
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -187,6 +188,9 @@ describe("한 장 다시 만들기 — 편집 화면", () => {
     expect(칸말()).toEqual(["working"]);
     // 큰 그림 자리에도 덮는다.
     expect(덮개()).toEqual(["working"]);
+    // **덮개가 손을 막지 않는다**(2026-10-08 리뷰) — 기다리는 동안에도 얹은 글자를 옮기고 고친다.
+    const 큰그림덮개 = renderer.root.findAllByType(ItemWorkingOverlay).map((node) => String(node.props.className ?? ""));
+    expect(큰그림덮개.every((name) => name.includes("pointer-events-none"))).toBe(true);
   });
 });
 
@@ -259,5 +263,18 @@ describe("글로 시작 — 구성 시나리오와 대표 이미지", () => {
 
     act(() => renderer.update(<KeyVisualGate previewUrl={null} isBusy={false} onApprove={() => {}} onRegenerate={() => {}} onBack={() => {}} />));
     expect(띠()).toHaveLength(0);
+  });
+
+  /*
+    **승인은 새로 만드는 일이 아니다**(2026-10-08 리뷰 L2). 그림을 줄여 넘기는 짧은 일인데
+    「만드는 중」이라고 말했다.
+  */
+  it("**승인하는 동안은 「저장 중」이라고 말한다**", async () => {
+    await act(async () => {
+      renderer = create(<KeyVisualGate previewUrl={null} isBusy busyLabel="대표 이미지를 저장 중입니다" onApprove={() => {}} onRegenerate={() => {}} onBack={() => {}} />);
+    });
+    expect(띠().map((node) => node.props.label)).toEqual(["대표 이미지를 저장 중입니다"]);
+    const flow = readFileSync(new URL("../TextModeFlow.tsx", import.meta.url), "utf8");
+    expect(flow).toMatch(/busyLabel=\{approving \? "대표 이미지를 저장 중입니다" : undefined\}/);
   });
 });

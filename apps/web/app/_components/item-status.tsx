@@ -43,7 +43,6 @@ export function ItemWorkingOverlay({ state, className }: { state: ItemState; cla
   if (state !== "working" && state !== "queued") return null;
   return (
     <span
-      role="status"
       className={cn(
         "absolute inset-0 grid place-content-center justify-items-center gap-1.5 bg-background/70 text-xs font-medium",
         state === "working" ? "text-primary" : "text-muted-foreground",

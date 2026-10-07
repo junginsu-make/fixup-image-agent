@@ -352,7 +352,8 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   }
 
   async function writeCaption() {
-    setWorkStartedAt(Date.now());
+    // 낱장을 다시 만드는 중이면 띠는 그 일을 말한다 — 그 걸린 시간을 0초로 되돌리지 않는다(2026-10-08 리뷰).
+    setWorkStartedAt((current) => (regeneratingIndex !== undefined ? current : Date.now()));
     setWritingCaption(true);
     setMessage("");
     try {
@@ -400,7 +401,7 @@ export function SnsProjectClient({ projectId }: { projectId: string }) {
   if (!project) return <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-5 text-destructive">{message || "프로젝트를 찾을 수 없습니다."}</p>;
 
   const flow = project.data.flow;
-  const progress = generationProgress(project.data.flow?.cards ?? []);
+  const progress = generationProgress(project.data.flow);
   // **한 화면에 띠는 하나다.** 기획·그림 띠가 떠 있으면 작은 띠(낱장·문구)는 얹지 않는다.
   const bigBannerShown = busy === "planning" || busy === "generating" || generationActive;
   return (

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkingStatus } from "../working-status";
 import { ItemStatusBadge, ItemWorkingOverlay, ITEM_STATE_TEXT } from "../item-status";
 import { workingButton } from "../working-words";
+import { ElapsedTime } from "../elapsed-time";
 
 /**
  * **시간이 걸리는 단계는 모두 같은 모양으로 「돌고 있다」를 말한다**(2026-10-08 사용자).
@@ -43,6 +44,23 @@ describe("위쪽 띠", () => {
     expect(filled.props.style.width).toBe("33%");
   });
 
+  it("장 수를 알아도 다 차기 전에는 흐르는 막대를 겹친다 — 첫 묶음 내내 0% 로 멈춰 보이지 않게", () => {
+    act(() => { renderer = create(<WorkingStatus label="3장 만드는 중입니다" progress={{ done: 0, total: 3 }} />); });
+    expect(text()).toContain("fixup-working-bar");
+    act(() => { renderer.update(<WorkingStatus label="3장 만드는 중입니다" progress={{ done: 3, total: 3 }} />); });
+    expect(text()).not.toContain("fixup-working-bar");
+  });
+
+  it("걸린 시간은 화면 읽기 도구가 매초 읽지 않는다", () => {
+    vi.stubGlobal("window", { setInterval, clearInterval });
+    act(() => { renderer = create(<WorkingStatus label="만드는 중입니다" startedAt={Date.now()} />); });
+    expect(renderer.root.findAll((node) => node.props["aria-live"] === "polite")).toHaveLength(1);
+    const 조상 = [];
+    for (let node = renderer.root.findByType(ElapsedTime).parent; node; node = node.parent) 조상.push(node.props);
+    expect(조상.some((props) => props["aria-live"]), "걸린 시간이 알림 영역 안에 있다").toBe(false);
+    expect(조상.some((props) => props["aria-hidden"] === true)).toBe(true);
+  });
+
   it("장 수를 모르면 흐르는 막대를 쓴다 — 진행률처럼 보이면 거짓말이 된다", () => {
     act(() => { renderer = create(<WorkingStatus label="분석 중입니다" />); });
     expect(renderer.root.findAllByProps({ "data-working-fill": "progress" })).toHaveLength(0);
@@ -79,6 +97,11 @@ describe("칸 표시", () => {
       expect(text()).toContain(ITEM_STATE_TEXT[state]);
       act(() => renderer.unmount());
     }
+  });
+
+  it("덮개는 칸마다 따로 읽히지 않는다 — 위 띠가 이미 알린다", () => {
+    act(() => { renderer = create(<ItemWorkingOverlay state="working" />); });
+    expect(renderer.root.findAll((node) => node.props.role === "status")).toHaveLength(0);
   });
 
   it("그림 위 덮개는 만드는 중·차례 대기일 때만 뜬다", () => {

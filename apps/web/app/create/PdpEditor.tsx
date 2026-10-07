@@ -3401,7 +3401,7 @@ export function PdpEditor({
                   </div>
                 )}
                 {/* 지금 섹션이 도는 동안 큰 그림 자리를 덮는다. 레이어(최대 z 5) 위에 둔다. */}
-                <ItemWorkingOverlay state={currentSectionState} className="z-10 rounded-[22px]" />
+                <ItemWorkingOverlay state={currentSectionState} className="pointer-events-none z-10 rounded-[22px]" />
 
               </div>
 
