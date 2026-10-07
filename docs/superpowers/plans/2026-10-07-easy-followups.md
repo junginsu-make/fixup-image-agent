@@ -152,3 +152,11 @@
 **Files:** `apps/web/app/api/poster/projects/[id]/generate/route.ts`, `.../plan/route.ts`, `.../review/route.ts`, `.../status/route.ts`(마지막 catch · 503 설정 오류 응답), 각 시험
 
 **요구:** Task 7(고치기 라우트, aff58caf)과 같은 규칙. 각 라우트와 그 라우트가 부르는 lib 의 `throw` · 오류 응답을 모두 찾아 「사용자용(정확한 상태 · 문장 유지)」과 「예상 못 한 것(500 + 일반 문장 + `errorLogText` 기록)」으로 표를 만든다. 사용자용 예: 입력 검증 · 404 · `PosterValidationError`(issues) · 조립 거절 · `PosterChargedError` · `FalPoolBusyError` · `FalPoolUnavailableError` · 예약 거절 응답(그대로 return). 503 설정 오류는 상태는 지키고 환경변수 이름 대신 일반 문장, `missing` 칸은 쓰는 곳이 없으면 뺀다(화면 · 쉽게 · 카드뉴스 쪽 grep). **돈 흐름(예약 · 확정 · 환불 · `PosterChargedError` 갈래) 0줄 변경**. 「다양하게」 화면과 쉽게(relay → EasyStepError, 5xx·code없음·retryable 이면 가림)가 상태 코드 변화를 어떻게 받는지 확인 — 특히 status 라우트는 화면이 되풀이해 묻는다(폴링): 400→500 이 폴링을 멈추거나 「다시 시도」를 바꾸는지 확인하고, 바꾸면 상태 코드는 그대로 두고 문장만 가린다. 이 네 라우트 밖의 poster · sns · packages 는 0줄.
+
+### Task 13: 파일 이름이 긴 사진을 올리면 날것 검사 오류가 뜬다(사용자 보고 2026-10-07 16:16, 카드뉴스 02 이미지)
+
+**Files:** `apps/web/app/api/reference-images/route.ts`(95 `z.string().max(200)` · 140 catch), 시험
+
+**원인:** 카드뉴스 첨부(`app/sns/_components/attachment-picker.tsx:125`)를 비롯해 캐릭터 · 라이브러리 · 세트 · 다양하게 · 쉽게 올리기가 파일 이름을 자르지 않고 `title` 로 보낸다. 200자를 넘으면 zod 가 던지고, catch 가 `error.message`(ZodError JSON)를 400 으로 그대로 보낸다 — 화면에 `[{"origin":"string","code":"too_big",...}]`.
+
+**요구:** (a) 서버가 `title` 을 거절하지 않고 앞뒤 공백을 떼고 200자(유니코드 글자 단위로 깨지지 않게)로 잘라 받는다 — 화면 여섯 곳을 고칠 필요 없이 한 곳에서. (b) catch: 우리가 쓴 문장(「이미지 파일을 골라 주세요.」, 용량 · 픽셀 안내 등 — 라우트와 `saveReferenceImage` 등 호출 그래프에서 찾아 표로)은 그대로, ZodError(id · purpose 형식)는 「요청 형식이 올바르지 않습니다.」, 그 밖의 예상 못 한 오류(저장소 · DB)는 「참고 이미지를 올리지 못했습니다. 잠시 뒤 다시 시도해 주세요.」 + `errorLogText` 기록. 상태 코드는 지금 그대로(400). 같은 라우트의 다른 메서드(GET 목록 · DELETE 가 `[id]` 라우트에 있으면 그것도) catch 가 원문을 보내면 같은 규칙. 시험: 250자 이름 → 201 · 저장된 제목 200자, id 형식 오류 → 일반 문장, 저장 실패 원문 → 가림.
