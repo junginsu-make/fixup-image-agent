@@ -28,12 +28,14 @@ export function failureRowBody(message: string): string {
  * 응답에 싣고 `read()` 가 그것을 `EasyStepError` 로 올린다 — `EasyStepError` 라고 우리가 쓴
  * 말은 아니다. 우리 멤버십 층이 쓴 글만 남긴다: 크레딧 · 한도 코드가 있거나 402 · 403 일 때.
  * 나머지(코드 없는 4xx · 5xx 포함, 429 · 503 도 안쪽 글이라 가려진다)는 일반 문장이다.
+ * 안쪽이 우리 문장이라고 표시한 것(`userFacing`, 포스터 생성 · 고치기의 과금 뒤 실패 등)도 남긴다(최종 수정 L1) —
+ * 「잠시 뒤 다시 시도해 주세요」로 덮으면 다시 보내 값이 두 번 나간다.
  * `relay.ts` 를 못 들이므로 이름으로 알아본다.
  */
 export function failureRowMessage(error: unknown): string {
   if (!(error instanceof Error) || error.name !== "EasyStepError") return FAILED_TURN_GENERIC;
-  const { code, status } = error as Error & { code?: string; status?: number };
-  return code || status === 402 || status === 403 ? error.message : FAILED_TURN_GENERIC;
+  const { code, status, userFacing } = error as Error & { code?: string; status?: number; userFacing?: boolean };
+  return code || status === 402 || status === 403 || userFacing === true ? error.message : FAILED_TURN_GENERIC;
 }
 
 /** 실패 안내 줄인가(글로 알아본다 — 표에 칸을 더하지 않는다). */
@@ -45,27 +47,38 @@ type Append = EasyStore["appendMessage"];
 
 export function trackUserTurn<S extends { appendMessage: Append }>(store: S): {
   store: S;
-  leaveFailure(conversationId: string, message: string): Promise<void>;
+  /** 실패 안내를 남겼으면 답 못 받은 그 사용자 줄 글(표시 포함), 안 남겼으면 undefined(후속 Task 9). */
+  leaveFailure(conversationId: string, message: string): Promise<string | undefined>;
+  /** 이 턴에 사용자 줄을 남겼나. 남기기 전에 실패했는지 라우트가 화면에 알린다(후속 Task 9 고침 1). */
+  savedUser(): boolean;
 } {
-  let 답없는말 = false;
+  // 답 못 받은 사용자 줄 글. 답을 받았거나 아직 말을 안 남겼으면 undefined.
+  let 답없는말: string | undefined;
+  let 말남김 = false;
   const appendMessage: Append = async (input) => {
     const row = await store.appendMessage(input);
+    말남김 = 말남김 || input.role === "user";
     /*
      * **머리말 줄은 답이 아니다**(2026-10-07 2차 D4 · §3-4). 일하는 턴은 사용자 줄 -> 머리말 줄 ->
      * 그림 줄 차례다. 머리말 뒤에 기획 · 생성이 실패해도 실패 줄이 남아야 한다.
      */
-    답없는말 = input.role === "user" || (답없는말 && input.role === "assistant" && isSayBody(input.body ?? ""));
+    const 머리말 = 답없는말 !== undefined && input.role === "assistant" && isSayBody(input.body ?? "");
+    답없는말 = input.role === "user" ? input.body ?? "" : 머리말 ? 답없는말 : undefined;
     return row;
   };
   return {
     store: { ...store, appendMessage },
+    savedUser: () => 말남김,
     async leaveFailure(conversationId, message) {
-      if (!답없는말) return;
-      답없는말 = false;
+      const 말 = 답없는말;
+      if (말 === undefined) return undefined;
+      답없는말 = undefined;
       try {
         await store.appendMessage({ conversationId, role: "assistant", body: failureRowBody(message) });
+        return 말;
       } catch {
         // 삼킨다. 실패 안내 하나 때문에 원래 오류를 덮지 않는다.
+        return undefined;
       }
     },
   };

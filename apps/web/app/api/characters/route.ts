@@ -271,7 +271,8 @@ async function handlePost(req: Request) {
       angles: angles as CharacterAngle[],
       sheet: body.sheet,
       userId: auth.member.userId,
-      name: (body.name || body.description).slice(0, 80),
+      // 빈칸뿐인 이름은 없는 것과 같다. 그대로 두면 이름 없는 캐릭터가 된다.
+      name: (body.name?.trim() || body.description).slice(0, 80),
       description: body.description,
       identityPrompt,
       aspectRatio: body.aspectRatio,

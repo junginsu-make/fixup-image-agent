@@ -28,6 +28,31 @@ const 묻는간격 = 10_000;
 const 최대기다림 = 15 * 60_000;
 const 기다린다 = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** 앞단(Caddy · Next)이 서버를 못 닿았을 때 주는 상태. 우리 말이 없으면 잠깐의 고장이다. */
+const 잠깐상태 = new Set([502, 503, 504]);
+
+/**
+ * 상태를 한 번 묻는다. **잠깐의 고장이면 `undefined`**(후속 Task 11 3차) — 부른 쪽이 「아직 안 끝남」으로
+ * 보고 다시 묻는다. 연결이 끊긴 것(`fetch` 가 던짐), JSON 이 아닌 답(HTML 502 등), 우리 말 없는 502 · 503 · 504.
+ * 그 요청은 아직 돌고 있다. 전에는 영어 글로 실패해 화면의 다시 보내기가 값이 또 드는 재전송이 됐다.
+ *
+ * 일부러 낸 실패(우리 말이 있는 `ok: false`, 4xx)는 답 그대로 돌려 지금처럼 곧바로 알린다. 4xx 인데
+ * JSON 이 아니면 말 없는 실패(`{}`)로 본다. 영어 글은 어느 갈래로도 화면에 안 간다.
+ */
+async function 묻는다(projectId: string, body: string): Promise<Record<string, any> | undefined> {
+  let response: Response;
+  try {
+    response = await billableFetch(`/api/poster/projects/${projectId}/status`, { body });
+  } catch {
+    return undefined;
+  }
+  const 거절됨 = response.status >= 400 && response.status < 500;
+  const poll: unknown = await response.json().catch(() => undefined);
+  if (!poll || typeof poll !== "object") return 거절됨 ? {} : undefined;
+  const 우리말 = (poll as { ok?: unknown }).ok === false && typeof (poll as { message?: unknown }).message === "string";
+  return 잠깐상태.has(response.status) && !우리말 ? undefined : poll as Record<string, any>;
+}
+
 /**
  * 받으면 그 그림, 화면을 떠났으면 `undefined`. 0장이면 `NO_IMAGE_MADE`, 시작한 지
  * 15분이 지나도 안 끝나면 `STILL_MAKING` 으로 던진다.
@@ -40,12 +65,12 @@ export async function collectEasyImage(
   now: () => number = Date.now,
 ): Promise<{ id: string; url: string } | undefined> {
   const 시작 = now();
-  const body = {
+  const body = JSON.stringify({
     requestRowId: submission.requestRowId,
     falRequestId: submission.falRequestId,
     endpoint: submission.endpoint,
     unitCostUsd: submission.estimatedUsd ?? 0,
-  };
+  });
   for (;;) {
     if (!isAlive()) return undefined;
     await wait(묻는간격);
@@ -54,16 +79,17 @@ export async function collectEasyImage(
       결과를 묻는 자리다. 예약이 아니라 **정산**이라 열쇠를 요구하지 않지만,
       포스터 화면과 같은 길(`billableFetch`)로 보낸다.
     */
-    const poll = await (await billableFetch(`/api/poster/projects/${projectId}/status`, {
-      body: JSON.stringify(body),
-    })).json();
-    observeAccountResponse(poll, false);
-    if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
-    if (poll.done) {
-      // 이번 요청의 그림 — 고치기는 같은 작업에 그림을 더해 첫 장이 원본이다(`row-image.ts`).
-      const first = pickCollectedImage<{ id: string; url: string; generationRequestId?: string }>(poll.images, submission.requestRowId);
-      if (!first) throw new Error(NO_IMAGE_MADE);
-      return { id: first.id, url: first.url };
+    const poll = await 묻는다(projectId, body);
+    // 잠깐의 고장(`undefined`)은 아직 안 끝난 것과 같다 — 아래 상한까지 다시 묻는다.
+    if (poll) {
+      observeAccountResponse(poll, false);
+      if (!poll.ok) throw new Error(poll.message ?? "상태를 확인하지 못했습니다.");
+      if (poll.done) {
+        // 이번 요청의 그림 — 고치기는 같은 작업에 그림을 더해 첫 장이 원본이다(`row-image.ts`).
+        const first = pickCollectedImage<{ id: string; url: string; generationRequestId?: string }>(poll.images, submission.requestRowId);
+        if (!first) throw new Error(NO_IMAGE_MADE);
+        return { id: first.id, url: first.url };
+      }
     }
     // 다시 보낼 실패가 아니다(`retryable: false`) — 화면이 「값이 또 듭니다」 재전송 안내를 안 붙인다.
     if (now() - 시작 >= 최대기다림) throw Object.assign(new Error(STILL_MAKING), { retryable: false });

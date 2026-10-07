@@ -92,6 +92,31 @@ describe("확인 못 한 결과물 (2차 D2 · 리뷰 1차 수정 2)", () => {
   });
 });
 
+/**
+ * 후속 Task 2 — 최근 100개 밖이라 읽지 않은 결과물(`unreadOld`)은 기다려도 확인할 수 없다. 「잠시 뒤 다시」가 아니라
+ * 오래되어 이 대화에서는 못 고친다고, 실제로 고칠 수 있는 곳(「다양하게」의 지난 작업 → 「이 장만 고치기」)을 말한다.
+ */
+describe("100개 밖의 옛 결과물 (후속 Task 2)", () => {
+  const 옛것: 항목 = { n: 7, rowId: "u7", workId: "p9", kind: "unknown", state: "unknown", words: "옛것" };
+  const 오래된사실 = (entries: 항목[]) => ({ ...사실(entries), unreadOld: new Set([7]) });
+  const 오래됨 = "결과물 7 은 오래되어 이 대화에서는 고칠 수 없습니다. 지우지 않았다면 이미지는 「다양하게」 화면의 지난 작업에서 열어 「이 장만 고치기」로, 카드뉴스는 「카드뉴스」 화면의 지난 작업에서 열어 「다시 만들기」로 고쳐 주세요.";
+
+  it("그 번호를 고쳐 달라면 값 없이 오래되었다고 사실대로 답한다", async () => {
+    expect(await pickEditTarget("me", [], 오래된사실([...목록, 옛것]), 7)).toEqual({ ok: false, message: 오래됨 });
+  });
+
+  it("번호 없이 고쳐 달라는데 마지막 결과물이 그것이어도 같다", async () => {
+    const 지움: 항목 = { n: 8, rowId: "g8", workId: "gone2", kind: "deleted", state: "deleted", words: "" };
+    expect(await pickEditTarget("me", [], 오래된사실([...목록, 옛것, 지움]), undefined)).toEqual({ ok: false, message: 오래됨 });
+  });
+
+  it("오래된 번호가 아닌 못 읽은 번호는 지금처럼 「잠시 뒤 다시」다", async () => {
+    const 모름: 항목 = { ...옛것, n: 8, rowId: "u8" };
+    expect(await pickEditTarget("me", [], 오래된사실([...목록, 옛것, 모름]), 8))
+      .toEqual({ ok: false, message: "지금은 결과물 8 을 확인할 수 없습니다. 잠시 뒤 다시 말씀해 주세요." });
+  });
+});
+
 describe("어느 이미지인지 묻기 (2차 D2)", () => {
   it("판단 모델이 talk + ask_target 이고 다 만든 이미지가 둘 이상이면 그 번호들", () => {
     expect(targetAskNumbers({ wants: "talk", note: "ask_target" }, 사실())).toEqual([1, 3]);

@@ -25,6 +25,7 @@ import {
 import { orderPosterImages, type PosterProjectRecord } from "@fixup/poster-core";
 import type { SnsProjectCreateRecord, SnsProjectRecord } from "../../sns/projects/project-service";
 import { listCharacters } from "../../../../lib/characters";
+import { uniqueCharacterName } from "../../../../lib/character-library";
 import { ownerIdsOf, withOwner } from "./core";
 import { snsCardPathsToRemove } from "../../../../lib/sns/thumbnail";
 import { collectEasyWorkIds } from "../../../../lib/easy/store-core";
@@ -918,11 +919,21 @@ export async function copyCharacterToSelf(
   if (readError) throw new Error(readError.message);
   if (!source) throw new Error("원본을 찾을 수 없습니다.");
 
+  /*
+    **이름이 겹치지 않게 한다**(2026-10-07). 복사본은 관리자 계정에 들어간다.
+    관리자에게 같은 이름이 있으면 라이브러리가 이름으로 찾아 지울 때 다른 쪽
+    그림까지 지워진다(`uniqueCharacterName`).
+  */
+  const { data: mine, error: namesError } = await admin
+    .from("characters").select("name").eq("user_id", ownerUserId);
+  if (namesError) throw new Error(namesError.message);
+  const taken = ((mine ?? []) as Array<{ name: string | null }>).map((row) => row.name ?? "");
+
   // 1) 행을 먼저. 그림 자리는 새 캐릭터 id 가 있어야 정해진다.
   const { data: created, error: createError } = await admin.from("characters")
     .insert({
       user_id: ownerUserId,
-      name: source.name,
+      name: uniqueCharacterName(String(source.name ?? ""), taken),
       source_prompt: source.source_prompt,
       identity_prompt: source.identity_prompt,
       visual_style: source.visual_style,
