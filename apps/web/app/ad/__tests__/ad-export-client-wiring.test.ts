@@ -354,3 +354,21 @@ describe("아무것도 없는 사람이 먼저 왔을 때", () => {
     expect(shell).toContain("hasAd={isAdExportEnabled()}");
   });
 });
+
+describe("뽑는 동안 공통 띠", () => {
+  /** 2026-10-08 — 시간이 걸리는 단계는 맨 위 띠 하나로 말한다. 요청은 한 번이라 장 수 막대는 없다. */
+  it("화면 위에 띠를 띄우고 걸린 시간을 보인다", () => {
+    expect(client).toMatch(/<WorkingStatus[\s\S]{0,300}startedAt=\{busyStartedAt\}/);
+    expect(client).toContain("busyStartedAt");
+  });
+
+  it("단추 글자는 공통 낱말이다", () => {
+    expect(client).toContain('workingButton("make")');
+    expect(client).not.toContain('"뽑는 중…"');
+  });
+
+  it("요청 몸통과 순서는 그대로다", () => {
+    expect(client).toContain('fetch("/api/ad/export"');
+    expect(client).toContain("specIds: picked");
+  });
+});

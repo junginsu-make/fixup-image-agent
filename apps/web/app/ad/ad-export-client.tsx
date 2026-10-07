@@ -12,6 +12,8 @@ import type { LibraryItem } from "@fixup/shared";
 import { getAccountItemImages } from "../../lib/library";
 import { LibraryPickerButton } from "../_components/library-picker";
 import { AD_STEPS } from "./steps";
+import { WorkingStatus } from "../_components/working-status";
+import { workingButton } from "../_components/working-words";
 import { randomId } from "../../lib/browser-safe";
 import { planDerivation } from "../../lib/ad/derive";
 import type { AdBatchEntry } from "../../lib/ad/batch";
@@ -106,6 +108,8 @@ export function AdExportClient() {
     setPicked(next.picked);
   };
   const [busy, setBusy] = React.useState(false);
+  /** 뽑기를 시작한 때. 띠가 걸린 시간을 보인다(2026-10-08). */
+  const [busyStartedAt, setBusyStartedAt] = React.useState<number | undefined>(undefined);
   /** ZIP 을 묶는 중. 두 번 누르면 봉투가 둘 나온다. */
   const [zipping, setZipping] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -292,6 +296,7 @@ export function AdExportClient() {
     if (!item) return;
     const mine = (token.current += 1);
     setBusy(true);
+    setBusyStartedAt(Date.now());
     setError(null);
     setResults(null);
     try {
@@ -424,6 +429,15 @@ export function AdExportClient() {
         부품이다. `allowJump` 을 안 넘겨 **어느 단계로든 자유롭게** 간다.
       */}
       <StepBar steps={AD_STEPS} current={step} onJump={setStep} />
+
+      {/* **요청은 한 번이라 장 수 막대는 없다** — 고른 그림 한 장에서 규격 여러 개를 한꺼번에 뽑는다. */}
+      {busy ? (
+        <WorkingStatus
+          label={`규격 ${picked.length}개 만드는 중입니다`}
+          hint="새로 만들지 않아 비용이 들지 않습니다"
+          startedAt={busyStartedAt}
+        />
+      ) : null}
 
       {step === "pick" ? (
 
@@ -678,7 +692,7 @@ export function AdExportClient() {
           >
             {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
             {/* 저장소는 도는 동안 글자를 바꾼다 — 「만드는 중…」·「저장 중…」. */}
-            {busy ? "뽑는 중…" : "뽑아 보기"}
+            {busy ? workingButton("make") : "뽑아 보기"}
           </Button>
           <span className="text-sm text-muted-foreground">
             {/* 이 기능의 핵심이 「새로 만들지 않는다」이므로 그것을 말한다. */}
