@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **261개**, 저장 기록(커밋, 합치기 제외) **950개**, 배포 꾸러미(릴리스) **206개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **263개**, 저장 기록(커밋, 합치기 제외) **954개**, 배포 꾸러미(릴리스) **210개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 13 | 115 | 14 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 15 | 119 | 18 |
 
 <a id="w-2026-08-31"></a>
 
@@ -464,15 +464,19 @@
 - 네이버 검색에 보이는 사이트 설명을 네이버 권장 길이(80자 이내)로 줄였습니다.
 - 검색에 잘 보이도록 기능별 소개 화면 일곱 개를 새로 열었습니다. AI 카드뉴스 만들기, AI 상세페이지 제작, 광고 소재 제작처럼 사람들이 찾는 말을 제목과 본문에 썼습니다.
 - 첫 화면과 소개 화면 아래에 무엇을 만들 수 있는지 보여 주는 기능 카드를 붙였습니다.
+- 검색 결과와 공유 미리보기에 보이는 첫 화면 제목과 설명에 한글 이름 「프롬위드」를 넣었습니다.
+- 첫 화면 검색 설명에 빠졌던 「만드는」을 넣어 문장을 바로잡았습니다.
 
-**운영 배포 4회**
+**운영 배포 6회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
 - 10/7 `20261007T041209Z-7a0423ab` · [#264](https://github.com/junginsu-make/fixup-image-agent/pull/264)
 - 10/7 `20261007T051500Z-05090376` · [#267](https://github.com/junginsu-make/fixup-image-agent/pull/267)
+- 10/7 `20261007T055936Z-489c2f6c` · [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269)
+- 10/7 `20261007T064517Z-8d173288` · [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272)
 
-<details><summary>이 주의 작업 묶음 13개</summary>
+<details><summary>이 주의 작업 묶음 15개</summary>
 
 
 **10/6**
@@ -493,6 +497,8 @@
 - [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263) fix(easy): 쉽게 모드를 AI 비서처럼 — 대화 이어가기·번호로 고치기·AI 가 말하고 이미지를 본다 <sub>쉽게 모드 · +20,956 / −617 · 운영 반영 10/7</sub>
 - [#264](https://github.com/junginsu-make/fixup-image-agent/pull/264) fix(seo): 한국어 검색 설명을 80자 이내로 줄인다 — 네이버 간단 체크 <sub>검색 노출 · +9 / −3 · 운영 반영 10/7</sub>
 - [#267](https://github.com/junginsu-make/fixup-image-agent/pull/267) feat(seo): 검색 키워드로 공개 화면 채우기 — 키워드별 기능 소개 7화면, 첫 화면 h1·기능 구획, 소개 구획 <sub>검색 노출 · 첫 화면 · +1,676 / −11 · 운영 반영 10/7</sub>
+- [#269](https://github.com/junginsu-make/fixup-image-agent/pull/269) fix(seo): 첫 화면 검색 제목·설명에 한글 이름 「프롬위드」 <sub>검색 노출 · 첫 화면 · +9 / −2 · 운영 반영 10/7</sub>
+- [#272](https://github.com/junginsu-make/fixup-image-agent/pull/272) fix(seo): 첫 화면 설명에 빠진 「만드는」을 넣는다 <sub>검색 노출 · 첫 화면 · +2 / −2 · 운영 반영 10/7</sub>
 
 </details>
 
