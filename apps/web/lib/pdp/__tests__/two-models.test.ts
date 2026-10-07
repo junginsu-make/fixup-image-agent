@@ -33,3 +33,24 @@ describe("상세페이지 모델 두 개", () => {
     expect(isRetiredPdpModel(undefined)).toBe(false);
   });
 });
+
+/*
+  **처음 만들기 화면의 크레딧 안내가 실제 차감과 같다**(2026-10-08 독립 리뷰). 전에는 이 한 곳만 옛 계산·「장」
+  단위를 써서, 운영(image-v2)에서 6섹션이면 「최대 30장」이라고 보였다 — 실제 차감은 6크레딧이다.
+*/
+describe("상세페이지 크레딧 안내", () => {
+  it("이미지 만들기 안내는 모두 지금 요금 방식으로 계산하고 그 단위로 말한다", async () => {
+    const { readFileSync } = await import("node:fs");
+    const gallery = readFileSync(new URL("../../../app/create/SectionGallery.tsx", import.meta.url), "utf8");
+    const calls = gallery.match(/imageCreditUnits\([^)]*\)/g) ?? [];
+    expect(calls.length).toBeGreaterThan(1);
+    for (const call of calls) expect(call).toContain("{ policy: creditPolicy }");
+    expect(gallery).not.toMatch(/imageCreditUnits\([^)]*\)\}장 차감/);
+  });
+
+  it("image-v2 에서는 두 모델 모두 한 장 1크레딧이다", async () => {
+    const { imageCreditUnits } = await import("../../credit-cost");
+    expect(imageCreditUnits("gpt-image-2.5-flare", 6, { policy: "image-v2" })).toBe(6);
+    expect(imageCreditUnits("nano-banana-pro", 6, { policy: "image-v2" })).toBe(6);
+  });
+});
