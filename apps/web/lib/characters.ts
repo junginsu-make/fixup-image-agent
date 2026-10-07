@@ -33,7 +33,9 @@ const falImage: ReturnType<typeof createPdpImageGenerator> = (model, input) =>
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { inOwnerFolder, onlyInOwnerFolder } from "./storage/owner-folder";
 import { scopedRead } from "./teams/scope";
-import { characterReferenceEntries, characterReferenceTitle } from "./character-library";
+import {
+  CHARACTER_NAME_MAX, characterReferenceEntries, characterReferenceTitle, uniqueCharacterName,
+} from "./character-library";
 import { saveReferenceImage, removeReferenceImagesByTitle, referenceTitlesOf } from "./reference-images";
 import { isLocalStoreEnabled } from "./local-store";
 import {
@@ -317,6 +319,19 @@ async function putView(storagePath: string, view: ViewBytes) {
   return thumbPath;
 }
 
+/** 이 회원이 이미 쓴 캐릭터 이름. 팀 것은 안 본다 — 라이브러리 제목은 회원마다 따로다. */
+async function takenCharacterNames(userId: string): Promise<string[]> {
+  if (isLocalStoreEnabled()) return (await listLocalCharacters(userId)).map((row) => row.name);
+  const { data, error } = await createSupabaseAdminClient()
+    .from("characters").select("name").eq("user_id", userId);
+  if (error) {
+    // 원문은 기록에만 남긴다. 화면에 DB 구조가 나가면 안 된다.
+    console.error(`[character] 이름 목록을 읽지 못했습니다: ${error.message}`);
+    throw new Error("캐릭터 목록을 확인하지 못했습니다. 잠시 뒤 다시 저장해 주세요.");
+  }
+  return ((data ?? []) as Array<{ name: string | null }>).map((row) => row.name ?? "");
+}
+
 /**
  * 고른 후보를 기준으로 다각도를 만들고 캐릭터로 저장한다.
  *
@@ -355,7 +370,8 @@ export async function createCharacter(input: {
   const wantsSheet = Boolean(input.sheet);
   const model = input.modelId ?? selectCharacterModel(input.look);
   const characterId = randomUUID();
-  const name = input.name.slice(0, 80);
+  // 이 회원의 다른 캐릭터와 이름이 겹치지 않게 한다. 라이브러리가 이름으로 찾아 지운다.
+  const name = uniqueCharacterName(input.name, await takenCharacterNames(input.userId), CHARACTER_NAME_MAX);
   const createdAt = new Date().toISOString();
   // 각도와 다시 만들기가 이 말로 그린다. 사용자가 친 말은 `sourcePrompt` 에 그대로 남는다.
   const identityPrompt = input.identityPrompt?.trim() || input.description;
@@ -476,6 +492,8 @@ export async function createCharacter(input: {
     return {
       ok: true as const,
       id: characterId,
+      // 겹쳐서 꼬리표를 붙였으면 화면이 그 이름을 알린다.
+      name,
       angleCount: rows.length,
       // 정면 + 고른 각도 + 다각도 중 실제로 저장된 것을 뺀 수.
       missingAngles: 1 + extraAngles.length + (wantsSheet ? 1 : 0) - rows.length,

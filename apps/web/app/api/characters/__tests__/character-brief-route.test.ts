@@ -99,6 +99,12 @@ describe("저장", () => {
     expect((calls.create[0]!.identityPrompt as string).length).toBe(2000);
   });
 
+  /** 빈칸만 있는 이름은 없는 것과 같다 — 그대로 두면 이름 없는 캐릭터가 된다(2026-10-07 리뷰). */
+  it("이름이 빈칸뿐이면 묘사에서 이름을 가져온다", async () => {
+    await post({ ...저장, name: "   ", identityPrompt: "x" });
+    expect(calls.create[0]!.name).toBe(기본.description);
+  });
+
   /** Review Focus 3 — 옛 화면·「과정 보기」로 연 캐릭터는 정체성을 안 보낸다. */
   it("정체성이 없으면 저장 단계가 직접 정리한다", async () => {
     await post(저장);
