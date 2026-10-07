@@ -66,8 +66,10 @@ export function ReferencesTab() {
       if (!response.ok || !payload.ok) throw new Error(payload.message ?? "묶음 세트를 불러오지 못했습니다.");
       setSets(payload.sets ?? []);
       setMessage("");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 불러오지 못했습니다.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -93,8 +95,8 @@ export function ReferencesTab() {
         if (!response.ok || !payload.ok) throw new Error(payload.message ?? "참고 이미지를 올리지 못했습니다.");
       }
       // 목록을 다시 읽은 **뒤에** 말한다. 다시 읽기가 안내 칸을 비우므로 먼저 말하면 지워진다.
-      await load();
-      setMessage([`${files.length}장을 올렸습니다.`, notice].filter(Boolean).join(" "));
+      // 다시 읽기가 실패했으면 그 안내를 덮지 않는다 — 목록이 안 바뀌었는데 성공만 보이면 안 된다.
+      if (await load()) setMessage([`${files.length}장을 올렸습니다.`, notice].filter(Boolean).join(" "));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "참고 이미지를 올리지 못했습니다.");
     } finally {
@@ -403,7 +405,7 @@ ${image.ownerEmail ?? "다른 회원"}이 올린 것입니다. 이 그림을 쓰
         images={images}
         initialSet={editingSet}
         onClose={() => setEditorOpen(false)}
-        onUploaded={load}
+        onUploaded={async () => { await load(); }}
         onSaved={(saved) => setSets((current) => {
           const exists = current.some((set) => set.id === saved.id);
           return exists ? current.map((set) => set.id === saved.id ? saved : set) : [saved, ...current];

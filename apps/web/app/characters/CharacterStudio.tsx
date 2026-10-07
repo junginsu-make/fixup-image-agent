@@ -348,7 +348,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       const read = await readAsAttached(file, attached?.role ?? DEFAULT_ROLE);
       if (seq === attachSeq.current) setAttached(read);
       await saveToLibrary(file);
-      if (notice) setMessage(notice);
+      // 그 사이 다른 그림을 넣었으면 이 알림은 낡았다. 그림과 같은 순번으로 거른다.
+      if (notice && seq === attachSeq.current) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     } finally {
@@ -365,7 +366,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       const read = await readImageBlob(file);
       if (seq === ownSeq.current) setOwn(read);
       await saveToLibrary(file);
-      if (notice) setMessage(notice);
+      if (notice && seq === ownSeq.current) setMessage(notice);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "그림을 읽지 못했습니다.");
     }

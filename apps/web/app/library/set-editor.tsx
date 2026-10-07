@@ -72,7 +72,8 @@ export function SetEditor({
         if (!body.ok) throw new Error(body.message ?? "올리지 못했습니다.");
       }
       await onUploaded();
-      if (notice) setMessage(notice);
+      // 일부를 뺐다는 말만 빨갛게 뜨면 실패로 읽힌다. 몇 장을 올렸는지 함께 말한다.
+      if (notice) setMessage(`${files.length}장을 올렸습니다. ${notice}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "올리지 못했습니다.");
     } finally {
