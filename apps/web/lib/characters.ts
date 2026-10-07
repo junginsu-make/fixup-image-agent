@@ -36,7 +36,7 @@ import { scopedRead } from "./teams/scope";
 import {
   CHARACTER_NAME_MAX, characterReferenceEntries, characterReferenceTitle, uniqueCharacterName,
 } from "./character-library";
-import { saveReferenceImage, removeReferenceImagesByTitle } from "./reference-images";
+import { saveReferenceImage, removeReferenceImagesByTitle, referenceTitlesOf } from "./reference-images";
 import { isLocalStoreEnabled } from "./local-store";
 import {
   deleteLocalCharacter,
@@ -861,6 +861,67 @@ export async function loadCharacterView(
   if (!chosen) return null;
 
   return { identityPrompt: character.identityPrompt, ...chosen };
+}
+
+/**
+ * **지워진 라이브러리 사본을 캐릭터 원본에서 다시 채운다**(2026-10-07).
+ *
+ * 카드뉴스·이미지 만들기는 캐릭터 각도를 라이브러리 사본(제목)에서 찾는다.
+ * 라이브러리에서 그 그림을 지우면 캐릭터에는 그림이 있어도 못 붙였다. 원본은
+ * 캐릭터 저장소에 그대로 있으니 거기서 다시 넣는다.
+ *
+ * - **내 캐릭터만.** 팀원 것을 내 라이브러리로 옮기지 않는다 — 없으면 `null`
+ * - **이미 있는 제목은 다시 넣지 않는다.** 같은 제목이 둘이면 어느 쪽을 붙일지 갈린다
+ * - 각도 다섯과 정면만 받는다. 다각도 한 장은 격자라 정체성 기준으로 못 쓴다
+ *
+ * 그림을 새로 그리지 않으므로 크레딧이 들지 않는다.
+ */
+export function restoreCharacterReferences(
+  userId: string,
+  characterId: string,
+  angles: readonly string[],
+): Promise<{ restored: string[]; unavailable: string[] } | null> {
+  /*
+    **한 캐릭터는 한 번에 하나씩.** 「있나 보고 → 넣기」 사이에 같은 요청이 또
+    오면 둘 다 「없음」으로 보고 같은 제목을 둘 넣는다(2026-10-07 리뷰). 서버는
+    한 대라 메모리 줄로 충분하다. 앞의 것이 끝난 뒤 다시 보므로 두 번째는 건너뛴다.
+  */
+  const key = `${userId}:${characterId}`;
+  const previous = restoreQueue.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => restoreNow(userId, characterId, angles));
+  const settled = run.catch(() => undefined);
+  restoreQueue.set(key, settled);
+  void settled.then(() => { if (restoreQueue.get(key) === settled) restoreQueue.delete(key); });
+  return run;
+}
+
+const restoreQueue = new Map<string, Promise<unknown>>();
+
+async function restoreNow(
+  userId: string,
+  characterId: string,
+  angles: readonly string[],
+): Promise<{ restored: string[]; unavailable: string[] } | null> {
+  const character = await findCharacter(userId, characterId);
+  if (!character) return null;
+
+  const known = new Set<string>(CHARACTER_ANGLES.map((angle) => angle.id as string));
+  const wanted = [...new Set(angles.map(migrateAngle))].filter((angle) => known.has(angle)) as CharacterAngle[];
+  const present = await referenceTitlesOf(
+    userId, wanted.map((angle) => characterReferenceTitle(character.name, angle)),
+  );
+
+  const restored: string[] = [];
+  const unavailable: string[] = [];
+  for (const angle of wanted) {
+    if (present.has(characterReferenceTitle(character.name, angle))) continue;
+    const bytes = await loadViewBytes(userId, characterId, angle);
+    const issue = bytes ? await saveAsReferences(userId, character.name, [{ angle, ...bytes }]) : "없음";
+    // 원본은 있는데 넣지 못했으면 이유를 기록에 남긴다. 화면에는 「없음」으로만 간다.
+    if (bytes && issue) console.error(`[character] ${characterId} ${angle} 을 라이브러리에 다시 넣지 못했습니다: ${issue}`);
+    (issue ? unavailable : restored).push(angle);
+  }
+  return { restored, unavailable };
 }
 
 /** 로컬 모드에서 각도 파일을 화면에 내려 준다. 운영은 서명 URL 을 쓴다. */

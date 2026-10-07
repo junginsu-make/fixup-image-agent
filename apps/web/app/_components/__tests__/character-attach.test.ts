@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { attachMessage, characterIdByTitle, matchAngles } from "../character-attach";
 import { characterReferenceTitle } from "../../../lib/character-library";
 
@@ -118,5 +118,53 @@ describe("그림에서 캐릭터 되짚기", () => {
     ];
 
     expect(characterIdByTitle(겹침).get(characterReferenceTitle("호랑이", "front"))).toBe("first");
+  });
+});
+
+describe("matchWithRestore — 없는 각도는 원본에서 다시 채운 뒤 다시 찾는다", () => {
+  const 정면 = { id: "f", title: "민지 (캐릭터) · 정면" };
+  const 뒷면 = { id: "b", title: "민지 (캐릭터) · 뒷면" };
+
+  it("다 있으면 다시 채우지 않는다", async () => {
+    const { matchWithRestore } = await import("../character-attach");
+    const restore = vi.fn(async () => true);
+    const reload = vi.fn(async () => [정면]);
+    const result = await matchWithRestore({ images: [정면], name: "민지", characterId: "c", angles: ["front"], restore, reload });
+    expect(result.matched.map((entry) => entry.image.id)).toEqual(["f"]);
+    expect(restore).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("없는 것만 채워 달라고 하고, 다시 읽은 목록에서 찾아 고른 차례대로 합친다", async () => {
+    const { matchWithRestore } = await import("../character-attach");
+    const restore = vi.fn(async () => true);
+    const result = await matchWithRestore({
+      images: [정면], name: "민지", characterId: "c", angles: ["back", "front"],
+      restore, reload: async () => [정면, 뒷면],
+    });
+    expect(restore).toHaveBeenCalledWith("c", ["back"]);
+    expect(result.matched.map((entry) => entry.angle)).toEqual(["back", "front"]);
+    expect(result.missing).toEqual([]);
+  });
+
+  it("다시 읽기가 실패해 빈 목록이 와도 처음 찾은 것은 잃지 않는다", async () => {
+    const { matchWithRestore } = await import("../character-attach");
+    const result = await matchWithRestore({
+      images: [정면], name: "민지", characterId: "c", angles: ["front", "back"],
+      restore: async () => true, reload: async () => [],
+    });
+    expect(result.matched.map((entry) => entry.image.id)).toEqual(["f"]);
+    expect(result.missing).toEqual(["back"]);
+  });
+
+  it("채우지 못했으면 다시 읽지 않는다", async () => {
+    const { matchWithRestore } = await import("../character-attach");
+    const reload = vi.fn(async () => [정면, 뒷면]);
+    const result = await matchWithRestore({
+      images: [정면], name: "민지", characterId: "c", angles: ["front", "back"],
+      restore: async () => false, reload,
+    });
+    expect(reload).not.toHaveBeenCalled();
+    expect(result.missing).toEqual(["back"]);
   });
 });

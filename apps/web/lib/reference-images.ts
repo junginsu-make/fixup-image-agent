@@ -450,6 +450,35 @@ export async function saveReferenceImage(input: {
 }
 
 /**
+ * 이 회원의 라이브러리에 **이미 있는 제목**만 골라 돌려준다.
+ *
+ * 캐릭터 각도를 다시 채울 때 같은 제목이 둘이 되지 않게 먼저 본다. 제목이
+ * 캐릭터 각도의 유일한 손잡이라 둘이 되면 어느 쪽을 붙일지 갈린다.
+ */
+export async function referenceTitlesOf(userId: string, titles: readonly string[]): Promise<Set<string>> {
+  if (!titles.length) return new Set();
+  if (isLocalStoreEnabled()) {
+    return getLocalDatabase().read((data) => new Set(
+      data.referenceImages
+        .filter((image) => image.userId === userId && titles.includes(image.title ?? ""))
+        .map((image) => image.title ?? ""),
+    ));
+  }
+  /*
+    **제목마다 따로 묻는다.** `in()` 은 값 안의 따옴표·역슬래시를 거르지 않아,
+    이름에 `"` 가 있으면 조회가 깨진다(2026-10-07 리뷰). 각도는 많아야 여섯이다.
+  */
+  const supabase = createSupabaseAdminClient();
+  const found = await Promise.all(titles.map(async (title) => {
+    const { data, error } = await supabase
+      .from("reference_images").select("id").eq("user_id", userId).eq("title", title).limit(1);
+    if (error) throw new Error(error.message);
+    return (data ?? []).length ? title : null;
+  }));
+  return new Set(found.filter((title): title is string => title !== null));
+}
+
+/**
  * 제목이 같은 참고 이미지를 지운다.
  *
  * 캐릭터가 각도마다 「이름 (캐릭터) · 정면」 이라는 정해진 제목으로 들어간다.
