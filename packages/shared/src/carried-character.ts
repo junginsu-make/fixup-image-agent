@@ -33,9 +33,9 @@ const NOUN: Record<CarriedCharacterKind, string> = {
   object: "object character",
 };
 
-/** 문장 안에서 부르는 말. 사람은 지금처럼 「person」이다. */
+/** 문장 안에서 부르는 말. 사람은 지금처럼 「person」이다. 모르는 값은 「character」. */
 export function carriedSubjectNoun(kind: CarriedCharacterKind): string {
-  return NOUN[kind];
+  return NOUN[kind] ?? "character";
 }
 
 /** 첨부 번호 옆 이름표. 사람은 지금처럼 PERSON 이다. */
@@ -75,7 +75,9 @@ const COMMON_TAIL = "Its pose, expression and framing follow the scene descripti
  */
 export function carriedCharacterRules(character: CarriedCharacter): string[] {
   if (character.kind === "person") return [];
-  return [...RULES[character.kind], COMMON_TAIL];
+  // 모르는 종류(로컬 저장소의 옛 값 등)로 그림 만들기가 멈추면 안 된다 — 사람 문장으로 둔다.
+  const rules = RULES[character.kind as Exclude<CarriedCharacterKind, "person">];
+  return rules ? [...rules, COMMON_TAIL] : [];
 }
 
 const LOOK_NAME: Record<Exclude<ImageLook, "photoreal" | "auto">, string> = {
@@ -90,24 +92,42 @@ const LOOK_NAME: Record<Exclude<ImageLook, "photoreal" | "auto">, string> = {
  * 실사 상세페이지는 「진짜 사진, 3D·일러스트 금지」를 두 번 말한다. 애니 캐릭터에
  * 그 말이 걸리면 사진 속 진짜 고양이가 되어 다른 캐릭터가 된다. 캐릭터만 빼 준다.
  * 실사 캐릭터는 예외가 필요 없다 — 빈 문자열.
+ *
+ * **「참고 그림 따라 만들기」(`auto`)는 그림체를 모른다**(2026-10-07 독립 리뷰). 진짜
+ * 사진을 붙여 만든 사람 캐릭터도 `auto` 다 — 거기에 「사진으로 바꾸지 마라」를 붙이면
+ * 지금 잘 되는 사람이 그림처럼 나온다. 그래서 사람 + `auto` 는 지금 그대로(빈 문자열),
+ * 사람이 아니면 「참고 그림이 그림이면 그림으로, 사진이면 사진으로」라고만 말한다.
  */
 export function carriedLookException(character: CarriedCharacter): string {
   if (character.look === "photoreal") return "";
-  const style = character.look === "auto"
-    ? "its own rendering style as shown in its reference images"
-    : `its own ${LOOK_NAME[character.look]}, exactly as in its reference images`;
+  const noun = carriedSubjectNoun(character.kind);
+  if (character.look === "auto") {
+    if (character.kind === "person") return "";
+    return (
+      `Rendering note for this ${noun}: keep the rendering style shown in its reference images. ` +
+      "If they are drawings or 3D renders, keep it that way even if the rest of the image is a real photograph; " +
+      "if they are photographs, keep it photographic."
+    );
+  }
+  const style = LOOK_NAME[character.look];
+  if (!style) return "";
   return (
-    `Rendering exception for this ${NOUN[character.kind]}: keep it drawn in ${style}, ` +
+    `Rendering exception for this ${noun}: keep it drawn in its own ${style}, exactly as in its reference images, ` +
     "even if the rest of the image is a real photograph. Do not convert it into a photographic or real-life version — " +
     "that would make it a different character. Light and place it so it sits naturally in the scene."
   );
 }
 
-/** 정리해 둔 생김새 한 줄. 사람은 지금 문장 그대로다. 없으면 빈 문자열. */
+/**
+ * 정리해 둔 생김새 한 줄. 없으면 빈 문자열.
+ *
+ * **사람은 지금 문장과 글자 하나까지 같다** — 앞뒤 빈칸도 자르지 않는다(2026-10-07
+ * 독립 리뷰). 고정값 비교: `pdp-core/src/pdp.character-carry-baseline.test.ts`.
+ */
 export function carriedIdentityLine(character: CarriedCharacter): string {
+  if (character.kind === "person") {
+    return character.identity ? `The person's identity: ${character.identity}.` : "";
+  }
   const identity = character.identity?.trim();
-  if (!identity) return "";
-  return character.kind === "person"
-    ? `The person's identity: ${identity}.`
-    : `The character's identity: ${identity}.`;
+  return identity ? `The character's identity: ${identity}.` : "";
 }

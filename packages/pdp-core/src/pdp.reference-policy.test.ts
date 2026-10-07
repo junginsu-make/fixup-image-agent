@@ -678,6 +678,12 @@ describe("캐릭터를 종류·그림체대로 넘긴다", () => {
     expect(prompt).toMatch(/Rendering exception for this person/);
   });
 
+  it("디자인 레퍼런스와 다툴 때도 사람이라 부르지 않는다", async () => {
+    const { prompt } = await generate({ characterReferences: [cat], styleReferenceImages: [{ base64: "AAAA", mimeType: "image/png" }] });
+    expect(prompt).toContain("the product and the animal character win over the design reference");
+    expect(prompt).not.toContain("the product and the person win");
+  });
+
   it("업로드 사진이 우선해 캐릭터가 빠지면 캐릭터 문장도 빠진다", async () => {
     const { prompt } = await generate({
       withModel: true,

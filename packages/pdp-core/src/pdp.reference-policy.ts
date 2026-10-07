@@ -2,6 +2,7 @@ import {
   attachmentPlacementRule,
   carriedCharacterLabel,
   carriedCharacterRules,
+  carriedSubjectNoun,
   characterAngleDirective,
   priorityLine,
   type CarriedCharacter,
@@ -358,7 +359,7 @@ export function buildReferenceRoleDirective(
 
   if (hasIdentity && hasStyle) {
     lines.push(
-      "When they conflict: the product and the person win over the design reference. " +
+      `When they conflict: the product and the ${character ? carriedSubjectNoun(character.kind) : "person"} win over the design reference. ` +
         "The design reference governs the surrounding design only.",
     );
   }

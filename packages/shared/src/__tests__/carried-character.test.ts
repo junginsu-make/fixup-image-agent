@@ -69,8 +69,22 @@ describe("그림체 예외 — 캐릭터는 제 그림체를 지킨다(사용자
     expect(carriedLookException(물건)).toMatch(/illustrat/i);
   });
 
-  it("「이 그림처럼」으로 만든 캐릭터는 제 첨부 그림의 결을 따른다", () => {
-    expect(carriedLookException({ kind: "animal", look: "auto" })).toMatch(/as shown in its reference images/i);
+  it("「이 그림처럼」으로 만든 캐릭터는 제 첨부 그림의 결을 따른다 — 사진이면 사진으로", () => {
+    const line = carriedLookException({ kind: "animal", look: "auto" });
+    expect(line).toMatch(/shown in its reference images/i);
+    expect(line).toMatch(/if they are photographs, keep it photographic/i);
+    expect(line).not.toMatch(/do not convert it into a photographic/i);
+  });
+
+  // 진짜 사진을 붙여 만든 사람 캐릭터도 auto 다. 지금 잘 되는 것을 그림으로 바꾸면 안 된다(독립 리뷰).
+  it("사람 + 「이 그림처럼」은 예외가 없다 — 지금과 같다", () => {
+    expect(carriedLookException({ kind: "person", look: "auto" })).toBe("");
+  });
+
+  it("모르는 종류·그림체로 멈추지 않는다", () => {
+    expect(() => carriedLookException({ kind: "alien" as never, look: "anime" })).not.toThrow();
+    expect(carriedCharacterRules({ kind: "alien" as never, look: "anime" })).toEqual([]);
+    expect(carriedLookException({ kind: "animal", look: "pixel" as never })).toBe("");
   });
 
   it("실사 캐릭터는 예외가 없다 — 지금과 같다", () => {
@@ -84,8 +98,9 @@ describe("그림체 예외 — 캐릭터는 제 그림체를 지킨다(사용자
 });
 
 describe("생김새 설명 한 줄", () => {
-  it("사람은 지금 문장 그대로다", () => {
+  it("사람은 지금 문장 그대로다 — 앞뒤 빈칸도 자르지 않는다", () => {
     expect(carriedIdentityLine(사람)).toBe("The person's identity: a woman with short black hair.");
+    expect(carriedIdentityLine({ ...사람, identity: "a woman \n" })).toBe("The person's identity: a woman \n.");
   });
 
   it("사람이 아니면 캐릭터라고 부른다", () => {
@@ -95,6 +110,7 @@ describe("생김새 설명 한 줄", () => {
   it("설명이 없으면 말하지 않는다", () => {
     expect(carriedIdentityLine(물건)).toBe("");
     expect(carriedIdentityLine({ kind: "animal", look: "anime", identity: "   " })).toBe("");
+    expect(carriedIdentityLine({ kind: "person", look: "photoreal", identity: "" })).toBe("");
   });
 });
 
