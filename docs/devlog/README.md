@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **275개**, 저장 기록(커밋, 합치기 제외) **1,031개**, 배포 꾸러미(릴리스) **225개**.
+8월 31일 첫 저장부터 10월 7일까지 **38일**, 작업 묶음(PR) **275개**, 저장 기록(커밋, 합치기 제외) **1,032개**, 배포 꾸러미(릴리스) **227개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 27 | 196 | 33 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 27 | 197 | 35 |
 
 <a id="w-2026-08-31"></a>
 
@@ -481,8 +481,12 @@
 - 카드뉴스, 다양하게, 광고 소재, 관리자 화면 등 31곳에서 실패할 때 영어로 된 내부 오류 글 대신 알아보기 쉬운 안내가 나옵니다.
 - 카드뉴스의 안내 문구와 실패한 카드 설명에도 그림 업체의 영어 원문 대신 우리 문장이 나옵니다.
 - 서버 기록에 열쇠나 비밀번호 같은 값이 섞이지 않도록 가립니다.
+- 그림을 넣는 칸이면 어디서든 같은 방법이 됩니다. 파일을 끌어다 놓거나, 칸을 한 번 누르고 Ctrl+V(Mac 은 ⌘V)로 붙여넣거나, 여러 장을 한꺼번에 넣을 수 있습니다.
+- 캐릭터, 라이브러리, 카드뉴스, 다양하게, 카드뉴스 레이아웃, 상세페이지 만들기와 리디자인, 쉽게의 대화 입력창까지 같은 방식으로 바꿨습니다.
+- 한 장만 쓰는 칸에 여러 장을 넣으면 첫 장만 넣고 그렇게 했다고 알려 줍니다. 받지 않는 형식의 파일이 섞이면 그것만 빼고 알려 줍니다.
+- 쉽게의 입력창에 캡처를 붙여넣으면 그림으로 붙고, 글을 붙여넣으면 글로 들어갑니다. 리디자인은 지금처럼 그림과 PDF 를 함께 받습니다.
 
-**운영 배포 11회**
+**운영 배포 12회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -495,6 +499,7 @@
 - 10/7 `20261007T084910Z-760457a7` · [#274](https://github.com/junginsu-make/fixup-image-agent/pull/274), [#275](https://github.com/junginsu-make/fixup-image-agent/pull/275), [#277](https://github.com/junginsu-make/fixup-image-agent/pull/277), [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279)
 - 10/7 `20261007T100447Z-57256de5` · [#285](https://github.com/junginsu-make/fixup-image-agent/pull/285)
 - 10/7 `20261007T101738Z-c13852ab` · [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286)
+- 10/7 `20261007T102344Z-af6444d5` · [#283](https://github.com/junginsu-make/fixup-image-agent/pull/283), [#284](https://github.com/junginsu-make/fixup-image-agent/pull/284), [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288)
 
 <details><summary>이 주의 작업 묶음 27개</summary>
 
@@ -526,11 +531,11 @@
 - [#277](https://github.com/junginsu-make/fixup-image-agent/pull/277) fix: 캐릭터를 불러올 때 지워진 라이브러리 사본을 원본에서 다시 채운다 <sub>캐릭터 · 라이브러리 · +464 / −12 · 운영 반영 10/7</sub>
 - [#279](https://github.com/junginsu-make/fixup-image-agent/pull/279) test: 캐릭터 첨부 칸 시험이 줄바꿈(CRLF)에 기대지 않게 한다 <sub>이미지 만들기 · 캐릭터 · +4 / −1 · 운영 반영 10/7</sub>
 - [#280](https://github.com/junginsu-make/fixup-image-agent/pull/280) fix(easy): 쉽게 후속 정리 — 오류 원문 가리기 · 옛 결과물 안내 · 단추 · 연결 고장 · 다양하게 오류 글 · 설명서와 색인 <sub>쉽게 모드 · 설명서·도우미 · +4,328 / −726 · 운영 반영 10/7</sub>
-- [#283](https://github.com/junginsu-make/fixup-image-agent/pull/283) feat: 그림 첨부 통일 1단계 — 공용 부품·캐릭터·라이브러리 <sub>이미지 만들기 · 캐릭터 · 라이브러리 · +776 / −455</sub>
-- [#284](https://github.com/junginsu-make/fixup-image-agent/pull/284) feat: 그림 첨부 통일 2단계 — 카드뉴스·이미지 만들기·카드뉴스 레이아웃 <sub>카드뉴스 · 이미지 만들기 · +275 / −36</sub>
+- [#283](https://github.com/junginsu-make/fixup-image-agent/pull/283) feat: 그림 첨부 통일 1단계 — 공용 부품·캐릭터·라이브러리 <sub>이미지 만들기 · 캐릭터 · 라이브러리 · +776 / −455 · 운영 반영 10/7</sub>
+- [#284](https://github.com/junginsu-make/fixup-image-agent/pull/284) feat: 그림 첨부 통일 2단계 — 카드뉴스·이미지 만들기·카드뉴스 레이아웃 <sub>카드뉴스 · 이미지 만들기 · +275 / −36 · 운영 반영 10/7</sub>
 - [#285](https://github.com/junginsu-make/fixup-image-agent/pull/285) fix(seo): 첫 화면 제목을 40자 이내로, 한글 이름은 「폼위드」로 <sub>검색 노출 · 첫 화면 · +10 / −6 · 운영 반영 10/7</sub>
 - [#286](https://github.com/junginsu-make/fixup-image-agent/pull/286) fix: 서버 처리 31곳의 오류 원문을 화면에 보내지 않는다(카드뉴스 · 다양하게 · 광고 · 관리자 등) <sub>카드뉴스 · 광고 규격 · 관리자 · +2,224 / −162 · 운영 반영 10/7</sub>
-- [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288) feat: 상세페이지·리디자인·쉽게 그림 칸도 같은 방식으로 받는다 (그림 첨부 통일 3단계) <sub>이미지 만들기 · 상세페이지 · 리디자인 · 쉽게 모드 · +364 / −180</sub>
+- [#288](https://github.com/junginsu-make/fixup-image-agent/pull/288) feat: 상세페이지·리디자인·쉽게 그림 칸도 같은 방식으로 받는다 (그림 첨부 통일 3단계) <sub>이미지 만들기 · 상세페이지 · 리디자인 · 쉽게 모드 · +364 / −180 · 운영 반영 10/7</sub>
 
 </details>
 
