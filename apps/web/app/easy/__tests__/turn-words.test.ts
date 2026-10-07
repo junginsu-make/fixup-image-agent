@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { KIND_QUESTION, RATIO_QUESTION, SAY_IMAGE, aiText, askText, photoQuestion, sayEditText, sayText } from "../turn-words";
+import {
+  KIND_QUESTION, RATIO_QUESTION, SAY_CARDNEWS, SAY_IMAGE, SAY_REVISE, aiText, askText, photoQuestion, sayEditText, sayText,
+} from "../turn-words";
 
 /**
  * **물음 문장**(2026-10-07 2차 설계 §3-4). 갈래 · 모양 물음은 판단과 같은 호출의 reply 를 쓴다.
@@ -47,6 +49,13 @@ describe("머리말 문장 (2차 D4)", () => {
     expect(sayText("포스터를 만들겠습니다. 다른 크기도 필요하세요?", SAY_IMAGE)).toBe("포스터를 만들겠습니다. 다른 크기도 필요하세요?");
     expect(sayText("  ", SAY_IMAGE)).toBe(SAY_IMAGE);
     expect(sayText(undefined, SAY_IMAGE)).toBe(SAY_IMAGE);
+  });
+
+  /** Task 9 리뷰 — 원고 머리말은 다 된 원고와 함께 보인다. 앞으로 할 일 · 걸리는 시간을 말하면 틀린다. */
+  it("원고 · 원고 고치기 머리말은 다 된 것을 보여 주는 말이다", () => {
+    expect(SAY_CARDNEWS).toBe("카드뉴스 원고입니다. 장마다 고칠 곳이 있으면 말씀해 주세요.");
+    expect(SAY_REVISE).toBe("말씀하신 대로 원고를 고쳤습니다. 더 고칠 곳이 있으면 말씀해 주세요.");
+    for (const text of [SAY_CARDNEWS, SAY_REVISE]) expect(text).not.toMatch(/겠|분쯤|걸립니다/);
   });
 
   it("고치기 머리말은 번호를 말한다", () => {

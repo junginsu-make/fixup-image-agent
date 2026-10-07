@@ -43,8 +43,9 @@ export function aiText(decision: { wants: string; reply: string }, executed: str
 
 /** 일하는 턴의 머리말 — AI 말이 비었거나 다른 갈래로 쓴 글이면 대신 쓴다(2차 D4 · 최종 리뷰 b). */
 export const SAY_IMAGE = "말씀하신 내용으로 이미지 한 장을 만들겠습니다. 다 되면 이 자리에 보여 드릴게요.";
-export const SAY_CARDNEWS = "카드뉴스 원고를 쓰겠습니다. 1~2분쯤 걸립니다.";
-export const SAY_REVISE = "말씀하신 대로 카드뉴스 원고를 다시 쓰겠습니다. 1~2분쯤 걸립니다.";
+/** 원고 머리말은 다 된 원고와 함께 보인다(Task 9 리뷰). 앞으로 할 일 · 걸리는 시간을 말하지 않는다. */
+export const SAY_CARDNEWS = "카드뉴스 원고입니다. 장마다 고칠 곳이 있으면 말씀해 주세요.";
+export const SAY_REVISE = "말씀하신 대로 원고를 고쳤습니다. 더 고칠 곳이 있으면 말씀해 주세요.";
 
 export function sayEditText(n?: number): string {
   return n ? `이미지 ${n}번을 말씀대로 고치겠습니다.` : "방금 이미지를 말씀대로 고치겠습니다.";

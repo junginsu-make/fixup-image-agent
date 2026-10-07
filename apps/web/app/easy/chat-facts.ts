@@ -204,18 +204,25 @@ export function easyLastResultLines(lastIsImage: boolean): string[] {
  * 물음 문장이다. 갈래 이름은 쓸 수 있는 것만 적는다(A1).
  */
 export function easyReplyLines(wants: readonly EasyWant[]): string[] {
-  const 일하는 = (["image", "cardnews", "revise", "image_edit"] as const).filter((one) => wants.includes(one));
-  // 일을 마친 뒤에 남는 끝 문장(2차 최종 리뷰 g). 「고칠게요」면 시제가 틀린다.
-  const 마친 = (["card_text", "caption"] as const).filter((one) => wants.includes(one));
+  // 그림은 화면이 나중에 받는다. 이 말이 그림보다 먼저 보인다.
+  const 일하는 = (["image", "image_edit"] as const).filter((one) => wants.includes(one));
+  /*
+   * 일을 마친 뒤에 남는 말(2차 최종 리뷰 g). 「고칠게요」면 시제가 틀린다. 카드뉴스 원고 · 원고 고치기도 원고가
+   * 다 된 뒤에 원고와 함께 보인다(Task 9 리뷰) — 「쓰겠습니다」면 다 된 원고 바로 위에서 틀린다.
+   */
+  const 마친 = (["cardnews", "revise", "card_text", "caption"] as const).filter((one) => wants.includes(one));
   const 장갈래 = (["card_text", "card_redo"] as const).filter((one) => wants.includes(one));
   return [
-    "**모든 갈래에서 `reply` 에 한국어로 1~2문장을 쓰세요.** 사용자는 그 말을 대화 창에서 바로 읽습니다.",
+    "**모든 갈래에서 `reply` 에 한국어로 짧게 쓰세요(talk 은 세 문장까지, 그 밖의 갈래는 1~2문장).** 사용자는 그 말을 대화 창에서 바로 읽습니다.",
     "  talk 이면 물은 것에 답합니다. 두세 문장이면 충분합니다. 상대는 이미지를 만들러 온 사람입니다.",
     "    도움이 될 말을 하고, 필요하면 **무엇을 적으면 되는지 예를 들어** 주세요.",
     `  ${일하는.join(" · ")} 이면 무엇을 이해했고 지금 무엇을 하는지 말합니다. 붙인 사진이 있으면 어떻게 쓰는지,`,
     "    다음에 할 수 있는 것도 짧게 덧붙입니다. **아직 하는 중**으로 말하세요(「만들겠습니다」). 다 됐다고 하지 마세요.",
     ...(마친.length
-      ? [`  ${마친.join(" · ")} 이면 일을 마친 뒤에 보이는 말입니다. 「2번 장 글을 짧게 고쳤습니다」처럼 **끝난 일**로 쓰세요.`]
+      ? [
+        `  ${마친.join(" · ")} 이면 일을 마친 뒤에 보이는 말입니다. 「카드뉴스 원고를 썼습니다」 · 「2번 장 글을 짧게 고쳤습니다」처럼`,
+        "    **끝난 일**로 쓰세요. 장 수 · 내용처럼 아직 모르는 것은 지어내지 마세요.",
+      ]
       : []),
     "  either 이면 한 장으로 만들지 여러 장짜리 카드뉴스로 만들지 묻는 한 문장입니다.",
     "  image 인데 말에 비율 · 그림체가 없고 붙인 사진도 없으면, 어떤 모양으로 만들지 묻는 한 문장입니다.",

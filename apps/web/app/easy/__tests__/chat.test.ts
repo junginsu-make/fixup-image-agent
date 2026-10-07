@@ -276,6 +276,8 @@ describe("AI 가 늘 말한다 (2차 D4)", () => {
   it("모든 갈래에서 reply 를 쓰게 하고, 일하는 갈래는 하는 중으로 말하게 한다", () => {
     const prompt = easyChatPrompt([], "카페 포스터 만들어줘");
     expect(prompt).toContain("모든 갈래에서 `reply` 에");
+    // talk 은 세 문장까지, 그 밖은 1~2문장(Task 9 리뷰 Minor — 두 줄이 서로 어긋나지 않게).
+    expect(prompt).toContain("talk 은 세 문장까지, 그 밖의 갈래는 1~2문장");
     expect(prompt).toContain("아직 하는 중");
     expect(prompt).toContain("either 이면 한 장으로 만들지 여러 장짜리 카드뉴스로 만들지 묻는 한 문장");
     expect(prompt).toContain("어떤 모양으로 만들지 묻는 한 문장");
@@ -283,12 +285,20 @@ describe("AI 가 늘 말한다 (2차 D4)", () => {
     expect(prompt).not.toContain("`detail_page` 도 `reply` 는 빈 글로");
   });
 
-  /** 2차 최종 리뷰 g — 글 고치기 · 게시글의 끝 문장은 일을 마친 뒤 대화에 남는다. 「고칠게요」면 시제가 틀린다. */
-  it("글 고치기 · 게시글은 끝난 일로 쓰게 하고, 그 둘은 「하는 중」 갈래에 넣지 않는다", () => {
-    const prompt = easyChatPrompt([], "2번 더 짧게", 0, true, true, false);
-    expect(prompt).toContain("card_text · caption 이면 일을 마친 뒤에 보이는 말입니다");
-    expect(prompt).toMatch(/image · cardnews · revise 이면 무엇을 이해했고/);
-    expect(easyChatPrompt([], "안녕")).not.toContain("일을 마친 뒤에 보이는 말");
+  /**
+   * 2차 최종 리뷰 g — 글 고치기 · 게시글의 끝 문장은 일을 마친 뒤 대화에 남는다. 「고칠게요」면 시제가 틀린다.
+   * Task 9 리뷰 — 카드뉴스 원고 · 원고 고치기도 원고가 다 된 뒤에 보인다(1~2분 뒤). 「쓰겠습니다」면 다 된 원고
+   * 바로 위에서 시제가 틀린다. 이미지 만들기 · 고치기만 「하는 중」이다(그림은 화면이 나중에 받는다).
+   */
+  it("원고 · 원고 고치기 · 글 고치기 · 게시글은 끝난 일로, 이미지 만들기 · 고치기만 하는 중으로 쓰게 한다", () => {
+    const prompt = easyChatPrompt([], "2번 더 짧게", 0, true, true, true);
+    expect(prompt).toContain("cardnews · revise · card_text · caption 이면 일을 마친 뒤에 보이는 말입니다");
+    expect(prompt).toMatch(/ image · image_edit 이면 무엇을 이해했고/);
+    expect(prompt).not.toMatch(/cardnews[^\n]*무엇을 이해했고 지금 무엇을 하는지/);
+    expect(prompt).toContain("장 수 · 내용처럼 아직 모르는 것은 지어내지 마세요");
+    // 원고가 없는 대화에서도 카드뉴스 원고는 끝난 일이다.
+    expect(easyChatPrompt([], "안녕")).toContain("  cardnews 이면 일을 마친 뒤에 보이는 말입니다");
+    expect(easyChatPrompt([], "안녕")).toMatch(/ image 이면 무엇을 이해했고/);
   });
 
   it("지난 대화는 사용자 말 8번까지 싣는다 — 물음 · 머리말 줄이 많아도 (2차 §3-4)", () => {

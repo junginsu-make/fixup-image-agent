@@ -708,12 +708,6 @@ async function cardnewsTurn(ctx: {
 
   await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody });
   if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
-  // 일하는 턴의 AI 말(2차 D4). 원고는 1~2분 걸려 그동안 이 말이 보인다. 뒤에 실패해도 실패 줄이 남는다.
-  const 머리말 = await ctx.store.appendMessage({
-    conversationId: ctx.conversationId,
-    role: "assistant",
-    body: sayBody(sayText(aiText(ctx.decision, ctx.wants), ctx.wants === "revise" ? SAY_REVISE : SAY_CARDNEWS)),
-  });
 
   // 빈 마지막 장은 고른 글 모델이 정리 문장으로 채운다(2026-09-30 사용자 결정 B).
   const { projectId, project } = await draftCardnews(ctx.request, 입력, (text) => ctx.provider.writeEnding(text));
@@ -729,8 +723,18 @@ async function cardnewsTurn(ctx: {
       role: "assistant",
       body: draftFailureMessage(까닭),
     });
-    return Response.json({ ok: true, talked: true, message: saved, say: 머리말, textModel: ctx.textModel });
+    return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
   }
+  /*
+   * 일하는 턴의 AI 말(2차 D4). 화면은 이 응답이 온 뒤에야 이 말을 붙인다 — 원고(1~2분)가 다 된 뒤라 다 된 원고를
+   * 보여 주는 말이다(Task 9 리뷰). 그래서 원고가 있을 때만 남긴다. 0장 · 실패면 안 남기고, 실패 줄은 사용자 줄
+   * 뒤에 그대로 남는다(`failure-row.ts`).
+   */
+  const 머리말 = await ctx.store.appendMessage({
+    conversationId: ctx.conversationId,
+    role: "assistant",
+    body: sayBody(sayText(aiText(ctx.decision, ctx.wants), ctx.wants === "revise" ? SAY_REVISE : SAY_CARDNEWS)),
+  });
   const row = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "image", workId: projectId });
   return Response.json({
     ok: true, cardnews: { rowId: row.id, project }, message: row, say: 머리말, photoRoles, textModel: ctx.textModel,
