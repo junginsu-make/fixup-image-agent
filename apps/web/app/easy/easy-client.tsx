@@ -22,7 +22,7 @@ import { photoTypedReply, type EasyButtonReply } from "./ask-answers";
 import { answerableAskId, closedAnswerRows } from "./ask-chain";
 import { plainTyped, withPick } from "./row-marks";
 import { EasyAskControls } from "./_components/ask-row";
-import { keptAfterFailure, lostAfterFailure } from "./send-failure";
+import { keptAfterFailure, lostAfterFailure, typedAfterFailure } from "./send-failure";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -401,6 +401,7 @@ export function EasyClient({
          */
         throw Object.assign(new Error(body.message ?? "만들지 못했습니다."), {
           retryable: body.retryable !== false,
+          typedAnswer: body.typedAnswer === true,
         });
       }
 
@@ -444,6 +445,10 @@ export function EasyClient({
       // 받기 전 실패면 그림 자리를 뺀다. 받은 뒤면 실패로 남긴다 — 빼면 물음 단추가 다시 뜬다(`send-failure.ts`).
       setMessages((current) => keptAfterFailure(current, 자리, 받음));
       setLost((current) => lostAfterFailure(current, 자리, 받음, 까닭));
+      // 서버가 말 답으로 읽고 남긴 뒤 실패했으면 제 줄도 같게 — 물음 단추가 그 자리에서 다시 뜬다(후속 Task 9).
+      if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {
+        setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));
+      }
       setError({
         message: 까닭,
         retryable: (cause as { retryable?: boolean }).retryable !== false,

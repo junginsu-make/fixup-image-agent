@@ -89,6 +89,25 @@ describe("실패 안내 줄 (B4)", () => {
     await expect(지킴.leaveFailure("c1", "x")).resolves.toBeUndefined();
   });
 
+  /** 후속 Task 9 — 라우트가 실패 줄을 남긴 그 사용자 줄이 `typed` 표시 줄인지 알아야 화면에 알린다. */
+  it("실패 안내를 남기면 답 못 받은 사용자 줄 글을 돌려준다 — 머리말을 지나도 같다", async () => {
+    const { store } = 저장소();
+    const 지킴 = trackUserTurn(store);
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "user", body: "세로로;pick=x" });
+    await 지킴.store.appendMessage({ conversationId: "c1", role: "assistant", body: sayBody("만들겠습니다.") });
+    await expect(지킴.leaveFailure("c1", "x")).resolves.toBe("세로로;pick=x");
+    await expect(지킴.leaveFailure("c1", "x")).resolves.toBeUndefined();
+  });
+
+  it("실패 안내를 안 남기면 아무것도 돌려주지 않는다 — 말 전 · 답 뒤", async () => {
+    const 말전 = trackUserTurn(저장소().store);
+    await expect(말전.leaveFailure("c1", "x")).resolves.toBeUndefined();
+    const 답뒤 = trackUserTurn(저장소().store);
+    await 답뒤.store.appendMessage({ conversationId: "c1", role: "user", body: "안녕" });
+    await 답뒤.store.appendMessage({ conversationId: "c1", role: "assistant", body: "안녕하세요" });
+    await expect(답뒤.leaveFailure("c1", "x")).resolves.toBeUndefined();
+  });
+
   it("안내 글은 사용자가 본 말을 그대로 담는다", () => {
     expect(failureRowBody("크레딧이 없습니다.")).toBe("요청을 처리하지 못했습니다. 크레딧이 없습니다.");
   });

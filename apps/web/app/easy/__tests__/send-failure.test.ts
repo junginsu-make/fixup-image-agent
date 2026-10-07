@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { answerableAskId } from "../ask-chain";
 import { NO_IMAGE_MADE, STILL_MAKING } from "../collect";
-import { askBody, withPick } from "../row-marks";
-import { keptAfterFailure, lostAfterFailure } from "../send-failure";
+import { askBody, readPick, visibleBody, withPick } from "../row-marks";
+import { keptAfterFailure, lostAfterFailure, typedAfterFailure } from "../send-failure";
 import type { EasyMessage } from "../turn";
 
 /**
@@ -42,5 +42,43 @@ describe("보낸 턴이 실패했을 때 화면에 남는 것", () => {
     expect(화면).toContain("setMessages((current) => keptAfterFailure(current, 자리, 받음));");
     expect(화면).toContain("setLost((current) => lostAfterFailure(current, 자리, 받음, 까닭));");
     expect(화면).not.toContain("current.filter((one) => one.id !== 자리)");
+  });
+});
+
+/**
+ * 후속 Task 9 — 서버가 말 답을 물음의 답으로 읽어 `typed` 표시로 남긴 뒤 실패하면(`typedAnswer`), 새로고침 뒤에는 물음
+ * 단추가 다시 뜬다. 화면 줄은 표시 없는 말이라 그 자리에서는 안 떴다. 화면 줄에도 같은 표시를 단다.
+ */
+describe("말 답 뒤 실패 (후속 Task 9)", () => {
+  const 말답: EasyMessage = { id: "user-pending-2", role: "user", body: "세로로" };
+
+  it("서버가 typedAnswer 를 주면 화면 줄에 typed 표시를 달아 물음 단추가 다시 뜬다", () => {
+    const 전 = [물음, 말답];
+    expect(answerableAskId(전)).toBeUndefined();
+    const 줄 = typedAfterFailure(전, "user-pending-2", "세로로");
+    expect(줄[1]!.body).toBe(withPick("세로로", { typed: true }));
+    expect(visibleBody(줄[1]!)).toBe("세로로");
+    expect(answerableAskId(줄)).toBe("q1");
+    // 바꾸지 않고 새로 만든다.
+    expect(전[1]!.body).toBe("세로로");
+    expect(줄[0]).toBe(물음);
+  });
+
+  it("서버가 쓴 글과 같게 친 말의 표시 글자를 푼다", () => {
+    const 줄 = typedAfterFailure([물음, { ...말답, body: "a;pick=b" }], "user-pending-2", "a;pick=b");
+    expect(줄[1]!.body).toBe(withPick("a; pick=b", { typed: true }));
+  });
+
+  it("단추 답 줄은 그대로 둔다 — 고른 값을 덮지 않는다", () => {
+    const 줄 = typedAfterFailure([물음, 답], "user-pending-1", "이대로 만들기");
+    expect(줄).toEqual([물음, 답]);
+    expect(readPick(줄[1]!)).toEqual({ ratio: "1:1" });
+  });
+
+  it("화면이 typedAnswer 를 실패에 실어 받고, 있을 때만 제 줄에 표시를 단다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain("typedAnswer: body.typedAnswer === true,");
+    expect(화면).toContain("if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {");
+    expect(화면).toContain("setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));");
   });
 });

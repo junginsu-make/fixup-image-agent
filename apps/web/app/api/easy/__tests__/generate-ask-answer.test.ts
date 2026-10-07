@@ -19,6 +19,9 @@ const 읽은사진: string[][] = [];
 const 받은판단글: string[] = [];
 const 센것 = { reserve: 0, decide: 0, settle: 0 };
 let 기획실패 = false;
+// 후속 Task 9 — 기획 라우트가 날것 예외를 던진다 · 머리말 줄 저장이 실패한다.
+let 기획던짐 = false;
+let 머리말실패: Error | undefined;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "me-1", profile: { role: "member" } } }),
@@ -37,6 +40,7 @@ vi.mock("../../../../lib/easy/store", () => ({
     getConversation: async () => ({ id: "c1", title: "있음" }),
     listMessages: async () => 지난줄,
     appendMessage: async (row: { role: string; body?: string }) => {
+      if (머리말실패 && row.body?.startsWith("say:")) throw 머리말실패;
       남긴줄.push(row);
       return { id: `m${남긴줄.length}`, ...row };
     },
@@ -82,6 +86,7 @@ vi.mock("../../../../lib/llm/meter", () => ({
 const 라우트 = (step: string) => ({
   POST: async (req: Request) => {
     부른라우트.push({ step, body: await req.json() });
+    if (step === "plan" && 기획던짐) throw new Error("relation \"poster_plans\" does not exist");
     if (step === "plan" && 기획실패) return Response.json({ ok: false, message: "크레딧이 부족합니다." }, { status: 402 });
     return step === "project"
       ? Response.json({ ok: true, project: { id: "p1" } })
@@ -118,6 +123,8 @@ beforeEach(() => {
   남긴줄.length = 0; 부른라우트.length = 0; 읽은사진.length = 0; 받은판단글.length = 0;
   센것.reserve = 0; 센것.decide = 0; 센것.settle = 0;
   기획실패 = false;
+  기획던짐 = false;
+  머리말실패 = undefined;
 });
 
 describe("단추로 한 답", () => {
@@ -336,5 +343,60 @@ describe("말 길이 상한 (최종 수정 9)", () => {
     const { status } = await 보낸다({ prompt: "가".repeat(2000) });
     expect(status).toBe(200);
     expect(센것.decide).toBe(1);
+  });
+});
+
+/**
+ * 후속 Task 9 — 서버가 말 답을 물음의 답으로 읽어 사용자 줄을 `typed` 표시로 남긴 뒤 실패하면, 새로고침 뒤에는
+ * [물음, 말 답, (머리말), 실패] 로 물음 단추가 다시 뜬다. 그 자리 화면도 같게 하도록 실패 응답에 `typedAnswer` 를 싣는다.
+ * 실패 응답의 다른 칸은 그대로다(Task 1 가림 포함).
+ */
+describe("말 답 뒤 실패 응답의 표시 (후속 Task 9)", () => {
+  const 말답판단 = { wants: "image", reply: "", ratio: "4:5", look: "", card: 0, note: "answer" };
+
+  it("말 답 뒤 기획이 402 로 막히면 typedAnswer 를 싣고 나머지 칸은 그대로다", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    판단 = 말답판단;
+    기획실패 = true;
+    const { status, json } = await 보낸다({ prompt: "세로로" });
+    expect(status).toBe(402);
+    expect(json).toEqual({ ok: false, step: "기획", message: "크레딧이 부족합니다.", retryable: false, typedAnswer: true });
+    expect(남긴줄[0]).toMatchObject({ role: "user", body: withPick("세로로", { typed: true }) });
+  });
+
+  it("말 답 뒤 날것 예외도 가린 글 그대로 typedAnswer 를 싣는다", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    판단 = 말답판단;
+    기획던짐 = true;
+    const { status, json } = await 보낸다({ prompt: "세로로" });
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, message: "만들지 못했습니다.", typedAnswer: true });
+  });
+
+  it("말 답 뒤 대화가 사라졌다는 안내도 그대로 typedAnswer 를 싣는다", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    판단 = 말답판단;
+    const { EasyConversationMissingError } = await import("../../../../lib/easy/store-core");
+    머리말실패 = new EasyConversationMissingError();
+    const { status, json } = await 보낸다({ prompt: "세로로" });
+    expect(status).toBe(500);
+    expect(json).toEqual({ ok: false, message: "대화를 찾을 수 없습니다.", typedAnswer: true });
+  });
+
+  it("단추 답이 실패하면 예전 그대로 typedAnswer 가 없다", async () => {
+    지난줄 = [처음, 물음("q1", "ratio", { wants: "image" })];
+    기획실패 = true;
+    const { status, json } = await 보낸다({ prompt: "이대로 만들기", answersRowId: "q1", pick: { ratio: "1:1" } });
+    expect(status).toBe(402);
+    expect(json).toEqual({ ok: false, step: "기획", message: "크레딧이 부족합니다.", retryable: false });
+  });
+
+  it("답이 아닌 새 말이 실패하면 typedAnswer 가 없다", async () => {
+    판단 = { ...말답판단, note: "" };
+    기획실패 = true;
+    const { status, json } = await 보낸다({ prompt: "세로 포스터 만들어줘" });
+    expect(status).toBe(402);
+    expect(json).toEqual({ ok: false, step: "기획", message: "크레딧이 부족합니다.", retryable: false });
+    expect(남긴줄[0]).toMatchObject({ role: "user", body: "세로 포스터 만들어줘" });
   });
 });

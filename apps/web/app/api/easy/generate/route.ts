@@ -80,8 +80,8 @@ export const maxDuration = 300;
 const PROMPT_LIMIT = 2000;
 const PROMPT_TOO_LONG = `말은 ${PROMPT_LIMIT}자까지 보낼 수 있습니다.`;
 
-function fail(message: string, status = 500) {
-  return Response.json({ ok: false, message }, { status });
+function fail(message: string, status = 500, extra: Record<string, unknown> = {}) {
+  return Response.json({ ok: false, message, ...extra }, { status });
 }
 
 /**
@@ -441,7 +441,12 @@ async function turn(request: Request): Promise<Response> {
      * 크레딧 · 권한 안내만 그대로, 나머지는 일반 문장 — 안쪽 라우트의 날것 오류 글(표 이름
      * 등)은 대화에 남기지 않는다(`failureRowMessage`, 리뷰 2026-10-06).
      */
-    await 지킴.leaveFailure(conversationId, failureRowMessage(error));
+    const 실패한말 = await 지킴.leaveFailure(conversationId, failureRowMessage(error));
+    /*
+     * 답으로 읽은 말 답(`typed` 표시) 뒤에 실패 줄을 남겼으면 알린다(후속 Task 9). 새로고침 뒤에는 그 물음에 단추가
+     * 다시 뜨니, 화면도 제 줄에 같은 표시를 달아 그 자리에서 단추를 다시 단다. 응답의 다른 칸은 그대로다.
+     */
+    const 말답표시 = 실패한말 === withPick(prompt, { typed: true }) ? { typedAnswer: true } : {};
     if (error instanceof EasyStepError) {
       /*
        * **세 갈래를 가려 말한다**(설계 §5-3). 어느 쪽이냐에 따라 할 일이
@@ -457,12 +462,13 @@ async function turn(request: Request): Promise<Response> {
         ...(error.code ? { code: error.code, usage: error.usage } : {}),
         // 402·403 은 다시 눌러도 같은 곳에서 막힌다. 안쪽이 「안 풀린다」고 한 것(멈춤 503)도 같다.
         retryable: error.retryable && error.status !== 402 && error.status !== 403,
+        ...말답표시,
       }, { status: error.status });
     }
     // 「대화를 찾을 수 없습니다.」는 우리가 쓴 안내라 그대로. 나머지 원문은 서버 기록에만(2026-10-07 후속 Task 1).
-    if (error instanceof EasyConversationMissingError) return fail(error.message);
+    if (error instanceof EasyConversationMissingError) return fail(error.message, 500, 말답표시);
     console.error("[easy] 만들기 실패", errorLogText(error));
-    return fail("만들지 못했습니다.");
+    return fail("만들지 못했습니다.", 500, 말답표시);
   } finally {
     값을적는다(auth.member.userId);
   }
