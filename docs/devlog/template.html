@@ -1,0 +1,425 @@
+<title>FormWith 개발 일지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e6;
+  --surface: #fffcf5;
+  --surface-2: #f0e9dc;
+  --ink: #1f1a14;
+  --muted: #6d6356;
+  --faint: #9a8f80;
+  --line: #e2d8c6;
+  --accent: #b8430f;
+  --accent-ink: #ffffff;
+  --accent-soft: #f8e1cf;
+  --add: #2c7a4b;
+  --del: #b42318;
+  --bar: #d9c7ad;
+  --bar-hot: #b8430f;
+  --shadow: 0 1px 0 rgba(60, 40, 20, 0.04), 0 8px 24px -16px rgba(60, 40, 20, 0.25);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15120e;
+    --surface: #1e1a15;
+    --surface-2: #29231c;
+    --ink: #f2ece2;
+    --muted: #b2a797;
+    --faint: #85796a;
+    --line: #3a3229;
+    --accent: #f08a4b;
+    --accent-ink: #1b120b;
+    --accent-soft: #3b2417;
+    --add: #73cf98;
+    --del: #f39089;
+    --bar: #4a3f33;
+    --bar-hot: #f08a4b;
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px -16px rgba(0, 0, 0, 0.6);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15120e;
+  --surface: #1e1a15;
+  --surface-2: #29231c;
+  --ink: #f2ece2;
+  --muted: #b2a797;
+  --faint: #85796a;
+  --line: #3a3229;
+  --accent: #f08a4b;
+  --accent-ink: #1b120b;
+  --accent-soft: #3b2417;
+  --add: #73cf98;
+  --del: #f39089;
+  --bar: #4a3f33;
+  --bar-hot: #f08a4b;
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 8px 24px -16px rgba(0, 0, 0, 0.6);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans KR", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 40px 16px 64px; }
+.serif { font-family: "Gowun Batang", serif; }
+.eyebrow { font-size: 13px; letter-spacing: 0.08em; color: var(--accent); font-weight: 600; }
+h1 { font-family: "Gowun Batang", serif; font-size: clamp(30px, 6vw, 46px); line-height: 1.2; margin: 8px 0 12px; font-weight: 700; }
+h1 em { font-style: normal; color: var(--accent); }
+.lead { color: var(--muted); margin: 0 0 28px; max-width: 640px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 28px; }
+.stat { background: var(--surface); padding: 14px 16px; }
+.stat b { display: block; font-family: "Gowun Batang", serif; font-size: 26px; line-height: 1.2; }
+.stat span { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+.pulse { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 16px 12px; margin-bottom: 20px; box-shadow: var(--shadow); }
+.pulse-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.pulse-head h2 { font-size: 14px; margin: 0; font-weight: 600; }
+.pulse-head small { color: var(--faint); font-size: 12px; }
+.bars { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; align-items: end; height: 120px; }
+.bar-btn { all: unset; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; height: 100%; gap: 4px; }
+.bar-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.bar-fill { background: var(--bar); border-radius: 6px 6px 2px 2px; min-height: 4px; transition: background 0.15s; }
+.bar-btn:hover .bar-fill, .bar-btn[aria-pressed="true"] .bar-fill { background: var(--bar-hot); }
+.bar-num { font-size: 12px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar-lab { font-size: 11.5px; text-align: center; color: var(--faint); white-space: nowrap; }
+
+.filters { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0 10px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row + .row { margin-top: 8px; }
+.row-label { font-size: 12px; color: var(--faint); min-width: 30px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding-bottom: 2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { all: unset; cursor: pointer; flex: none; font-size: 13px; padding: 5px 11px; border-radius: 999px; background: var(--surface-2); color: var(--ink); border: 1px solid transparent; white-space: nowrap; }
+.chip small { color: var(--faint); margin-left: 4px; font-size: 11.5px; }
+.chip:hover { border-color: var(--line); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.chip[aria-pressed="true"] small { color: var(--accent-ink); opacity: 0.8; }
+.search { flex: 1; min-width: 0; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; }
+.search::placeholder { color: var(--faint); }
+.search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.reset { all: unset; cursor: pointer; font-size: 13px; color: var(--accent); padding: 4px 6px; }
+.reset:focus-visible { outline: 2px solid var(--accent); border-radius: 6px; }
+.result-note { font-size: 13px; color: var(--muted); margin: 10px 0 0; min-height: 1em; }
+
+.timeline { position: relative; margin-top: 20px; padding-left: 28px; }
+.timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+.week { position: relative; margin-bottom: 22px; }
+.week::before { content: ""; position: absolute; left: -27px; top: 22px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); border: 3px solid var(--accent); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 20px 16px; box-shadow: var(--shadow); }
+.week-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.week-meta .when { color: var(--accent); font-weight: 600; }
+.tag-live { display: inline-block; font-size: 11px; font-weight: 600; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px; }
+.week h3 { font-family: "Gowun Batang", serif; font-size: 22px; line-height: 1.35; margin: 6px 0 8px; }
+.week .lede { margin: 0 0 12px; color: var(--ink); }
+.points { margin: 0 0 14px; padding: 0; list-style: none; }
+.points li { position: relative; padding-left: 16px; margin: 4px 0; color: var(--muted); font-size: 14.5px; }
+.points li::before { content: ""; position: absolute; left: 2px; top: 0.72em; width: 6px; height: 6px; border-radius: 50%; background: var(--bar); }
+.nums { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--faint); border-top: 1px dashed var(--line); padding-top: 12px; }
+.nums b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.toggle { all: unset; cursor: pointer; margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.toggle .arrow { display: inline-block; transition: transform 0.15s; }
+.toggle[aria-expanded="true"] .arrow { transform: rotate(90deg); }
+.detail { margin-top: 12px; }
+.detail[hidden] { display: none; }
+.day { margin-top: 12px; }
+.day-label { font-size: 12px; color: var(--faint); font-weight: 600; margin-bottom: 4px; }
+.pr { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.pr:first-of-type { border-top: 0; }
+.pr-num { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--accent); text-decoration: none; padding-top: 1px; }
+.pr-num:hover { text-decoration: underline; }
+.pr-title { font-size: 14px; }
+.pr-sub { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 11.5px; }
+.atag { background: var(--surface-2); color: var(--muted); border-radius: 6px; padding: 0 6px; }
+.lines { color: var(--faint); font-variant-numeric: tabular-nums; }
+.lines .p { color: var(--add); }
+.lines .m { color: var(--del); }
+.deploys { margin: 12px 0 0; padding: 10px 12px; list-style: none; background: var(--accent-soft); border-radius: 10px; font-size: 13px; }
+.deploys li { display: flex; flex-wrap: wrap; gap: 2px 8px; padding: 2px 0; }
+.deploys b { color: var(--accent); font-weight: 600; }
+.deploys code { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.deploys a { color: var(--accent); }
+.dep { color: var(--accent); font-weight: 600; }
+.early { margin-top: 16px; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
+.early h4 { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.early p { margin: 0 0 8px; font-size: 12.5px; color: var(--faint); }
+.early ol { margin: 0; padding: 0; list-style: none; }
+.early li { display: grid; grid-template-columns: 44px 1fr; gap: 8px; font-size: 13px; padding: 3px 0; }
+.early li span { color: var(--faint); font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); text-align: center; padding: 40px 0; }
+.foot { margin-top: 36px; font-size: 12.5px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 16px; }
+.foot p { margin: 4px 0; }
+.foot a { color: var(--muted); }
+.glossary { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; }
+.glossary dt { color: var(--muted); font-weight: 600; }
+.glossary dd { margin: 0; }
+mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+@media (max-width: 480px) {
+  .wrap { padding-top: 28px; }
+  .card { padding: 16px 14px 14px; }
+  .timeline { padding-left: 22px; }
+  .timeline::before { left: 5px; }
+  .week::before { left: -22px; width: 12px; height: 12px; }
+  .week h3 { font-size: 19px; }
+  .bars { height: 96px; gap: 5px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">FORMWITH 개발 일지</div>
+    <h1 class="serif" id="headline"></h1>
+    <p class="lead" id="lead"></p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section class="pulse" aria-labelledby="pulse-h">
+    <div class="pulse-head">
+      <h2 id="pulse-h">주별 작업 묶음 수</h2>
+      <small>막대를 누르면 그 주만 봅니다</small>
+    </div>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <div class="filters" role="search">
+    <div class="row">
+      <span class="row-label">분야</span>
+      <div class="chips" id="area-chips"></div>
+    </div>
+    <div class="row">
+      <span class="row-label">찾기</span>
+      <input class="search" id="q" type="search" placeholder="작업 이름으로 찾기 (예: 크레딧, 로그인)" aria-label="작업 이름으로 찾기">
+      <button class="reset" id="reset" type="button">전체 보기</button>
+    </div>
+    <p class="result-note" id="note" aria-live="polite"></p>
+  </div>
+
+  <main class="timeline" id="timeline"></main>
+
+  <footer class="foot">
+    <dl class="glossary">
+      <dt>작업 묶음</dt><dd>한 가지 목적의 변경을 모아 검토한 뒤 본 코드에 합친 단위입니다. GitHub 에서는 PR 이라고 부릅니다.</dd>
+      <dt>저장 기록</dt><dd>코드를 바꿀 때마다 남기는 기록입니다. 커밋이라고 부르며, 합치기 기록은 세지 않았습니다.</dd>
+      <dt>배포 꾸러미</dt><dd>운영 서버에 올릴 수 있게 미리 만들어 둔 묶음입니다. 만들어진 수이며, 실제로 올린 횟수와는 다릅니다.</dd>
+      <dt>운영 배포</dt><dd>실제로 운영 서버에 올린 기록입니다. 2026년 10월 7일부터 배포할 때마다 적습니다.</dd>
+      <dt>+ / −</dt><dd>그 작업에서 더한 줄 수와 지운 줄 수입니다.</dd>
+    </dl>
+    <p id="source"></p>
+  </footer>
+</div>
+
+<script type="application/json" id="devlog-data">__DATA__</script>
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById("devlog-data").textContent);
+  var areaLabel = {};
+  data.areas.forEach(function (a) { areaLabel[a.k] = a.label; });
+  var state = { week: null, area: null, q: "", open: {} };
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "class") n.className = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function fmt(n) { return n.toLocaleString("ko-KR"); }
+  function md(iso) { var p = iso.split("-"); return Number(p[1]) + "월 " + Number(p[2]) + "일"; }
+  function mdShort(mmdd) { var p = mmdd.split("-"); return Number(p[0]) + "/" + Number(p[1]); }
+
+  function prMatches(pr) {
+    if (state.area && pr.a.indexOf(state.area) < 0) return false;
+    if (state.q && pr.t.toLowerCase().indexOf(state.q) < 0) return false;
+    return true;
+  }
+  function filtering() { return Boolean(state.area || state.q); }
+
+  function highlight(text) {
+    if (!state.q) return [document.createTextNode(text)];
+    var out = [], lower = text.toLowerCase(), i = 0, j;
+    while ((j = lower.indexOf(state.q, i)) >= 0) {
+      if (j > i) out.push(document.createTextNode(text.slice(i, j)));
+      out.push(el("mark", { text: text.slice(j, j + state.q.length) }));
+      i = j + state.q.length;
+    }
+    if (i < text.length) out.push(document.createTextNode(text.slice(i)));
+    return out;
+  }
+
+  function renderHeader() {
+    document.getElementById("headline").replaceChildren(
+      fmt(data.days) + "일 동안, ", el("em", { text: fmt(data.prCount) + "개의 작업 묶음" })
+    );
+    document.getElementById("lead").textContent =
+      md(data.first) + " 첫 저장부터 " + md(data.last) + "까지, 그림을 만드는 웹 서비스 FormWith 를 어떻게 쌓아 왔는지 한 주씩 적었습니다. 위에는 쉬운 말 요약을, 펼치면 그 주의 작업 묶음 목록을 볼 수 있습니다.";
+    var stats = [
+      [fmt(data.days) + "일", "첫 저장부터 마지막 합치기까지"],
+      [fmt(data.commits), "저장 기록"],
+      [fmt(data.prCount), "작업 묶음"],
+      [fmt(data.releaseCount), "배포 꾸러미"]
+    ];
+    document.getElementById("stats").replaceChildren.apply(
+      document.getElementById("stats"),
+      stats.map(function (s) { return el("div", { class: "stat" }, [el("b", { text: s[0] }), el("span", { text: s[1] })]); })
+    );
+    document.getElementById("source").replaceChildren(
+      "자료: GitHub 저장소 ",
+      el("a", { href: "https://github.com/" + data.repo, target: "_blank", rel: "noopener", text: data.repo }),
+      " 의 기록을 " + md(data.asOf) + "에 모았습니다. 날짜는 한국 시각, 한 주는 월요일부터입니다."
+    );
+  }
+
+  function renderBars() {
+    var max = Math.max.apply(null, data.weeks.map(function (w) { return w.prs.length; }));
+    var box = document.getElementById("bars");
+    box.replaceChildren.apply(box, data.weeks.map(function (w) {
+      var n = w.prs.filter(prMatches).length;
+      var b = el("button", {
+        class: "bar-btn", type: "button",
+        "aria-pressed": String(state.week === w.start),
+        "aria-label": md(w.start) + " 주, 작업 묶음 " + n + "개"
+      }, [
+        el("span", { class: "bar-num", text: String(n) }),
+        el("span", { class: "bar-fill", style: "height:" + Math.max(4, Math.round((n / max) * 72)) + "%" }),
+        el("span", { class: "bar-lab", text: mdShort(w.start.slice(5)) })
+      ]);
+      b.addEventListener("click", function () {
+        state.week = state.week === w.start ? null : w.start;
+        render();
+        if (state.week) document.getElementById("timeline").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return b;
+    }));
+  }
+
+  function renderChips() {
+    var counts = {};
+    data.weeks.forEach(function (w) {
+      if (state.week && w.start !== state.week) return;
+      w.prs.forEach(function (p) {
+        if (state.q && p.t.toLowerCase().indexOf(state.q) < 0) return;
+        p.a.forEach(function (a) { counts[a] = (counts[a] || 0) + 1; });
+      });
+    });
+    var box = document.getElementById("area-chips");
+    var all = el("button", { class: "chip", type: "button", "aria-pressed": String(!state.area) }, ["전체"]);
+    all.addEventListener("click", function () { state.area = null; render(); });
+    var list = [all];
+    data.areas.forEach(function (a) {
+      if (!counts[a.k] && state.area !== a.k) return;
+      var c = el("button", { class: "chip", type: "button", "aria-pressed": String(state.area === a.k) },
+        [a.label, el("small", { text: String(counts[a.k] || 0) })]);
+      c.addEventListener("click", function () { state.area = state.area === a.k ? null : a.k; render(); });
+      list.push(c);
+    });
+    box.replaceChildren.apply(box, list);
+  }
+
+  function prRow(pr) {
+    var tags = pr.a.map(function (a) { return el("span", { class: "atag", text: areaLabel[a] }); });
+    var lines = el("span", { class: "lines" }, [
+      el("span", { class: "p", text: "+" + fmt(pr.add) }), " / ", el("span", { class: "m", text: "−" + fmt(pr.del) })
+    ]);
+    return el("div", { class: "pr" }, [
+      el("a", { class: "pr-num", href: "https://github.com/" + data.repo + "/pull/" + pr.n, target: "_blank", rel: "noopener", text: "#" + pr.n }),
+      el("div", { class: "pr-title" }, highlight(pr.t)),
+      el("div", { class: "pr-sub" }, tags.concat([lines], pr.dep ? [el("span", { class: "dep", text: "운영 반영 " + mdShort(pr.dep) })] : []))
+    ]);
+  }
+
+  function weekCard(w, list) {
+    var isLast = w === data.weeks[data.weeks.length - 1] && w.end >= data.asOf;
+    var expanded = filtering() || Boolean(state.open[w.start]);
+    var meta = el("div", { class: "week-meta" }, [
+      el("span", { class: "when" }, [md(w.start) + " ~ " + md(w.end), isLast ? el("span", { class: "tag-live", text: "진행 중" }) : null]),
+      el("span", { text: filtering() ? "맞는 작업 " + list.length + "개" : "" })
+    ]);
+    var points = el("ul", { class: "points" }, w.points.map(function (p) { return el("li", { text: p }); }));
+    var nums = el("div", { class: "nums" }, [
+      el("span", {}, ["작업 묶음 ", el("b", { text: fmt(w.prs.length) })]),
+      el("span", {}, ["저장 기록 ", el("b", { text: fmt(w.commits) })]),
+      el("span", {}, ["배포 꾸러미 ", el("b", { text: fmt(w.releases) })]),
+      w.deploys.length ? el("span", {}, ["운영 배포 ", el("b", { text: fmt(w.deploys.length) + "회" })]) : null
+    ]);
+    var deploys = w.deploys.length ? el("ul", { class: "deploys", "aria-label": "이 주의 운영 배포" }, w.deploys.map(function (e) {
+      var links = [];
+      e.prs.forEach(function (n, i) {
+        if (i) links.push(", ");
+        links.push(el("a", { href: "https://github.com/" + data.repo + "/pull/" + n, target: "_blank", rel: "noopener", text: "#" + n }));
+      });
+      return el("li", {}, [el("b", { text: mdShort(e.date.slice(5)) + " 운영 배포" }), el("code", { text: e.release })].concat(links.length ? [el("span", {}, links)] : []));
+    })) : null;
+    var detailId = "d-" + w.start;
+    var toggle = el("button", { class: "toggle", type: "button", "aria-expanded": String(expanded), "aria-controls": detailId }, [
+      el("span", { class: "arrow", "aria-hidden": "true", text: "›" }),
+      (expanded ? "접기" : "이 주의 작업 묶음 " + list.length + "개 펼치기")
+    ]);
+    toggle.addEventListener("click", function () { state.open[w.start] = !expanded; render(); });
+
+    var detail = el("div", { class: "detail", id: detailId });
+    if (!expanded) detail.hidden = true;
+    else {
+      var byDay = {};
+      list.forEach(function (p) { (byDay[p.d] = byDay[p.d] || []).push(p); });
+      Object.keys(byDay).sort().forEach(function (d) {
+        detail.appendChild(el("div", { class: "day" }, [el("div", { class: "day-label", text: mdShort(d) })].concat(byDay[d].map(prRow))));
+      });
+      if (w.early && !filtering()) {
+        detail.appendChild(el("div", { class: "early" }, [
+          el("h4", { text: "작업 묶음 방식 이전의 저장 기록 (8월 31일 ~ 9월 4일)" }),
+          el("p", { text: "처음 며칠은 본 코드에 바로 저장했습니다. 그중 큰 줄기만 골랐습니다." }),
+          el("ol", {}, w.early.map(function (e) { return el("li", {}, [el("span", { text: mdShort(e.d) }), el("div", { text: e.t })]); }))
+        ]));
+      }
+    }
+    return el("article", { class: "week", id: "w-" + w.start }, [
+      el("div", { class: "card" }, [meta, el("h3", { text: w.title }), el("p", { class: "lede", text: w.lede }), points, nums, deploys, toggle, detail])
+    ]);
+  }
+
+  function renderTimeline() {
+    var box = document.getElementById("timeline");
+    var cards = [], total = 0;
+    data.weeks.forEach(function (w) {
+      if (state.week && w.start !== state.week) return;
+      var list = w.prs.filter(prMatches);
+      total += list.length;
+      if (filtering() && list.length === 0) return;
+      cards.push(weekCard(w, list));
+    });
+    if (!cards.length) cards.push(el("p", { class: "empty", text: "조건에 맞는 작업이 없습니다." }));
+    box.replaceChildren.apply(box, cards);
+    var parts = [];
+    if (state.week) parts.push(md(state.week) + " 주");
+    if (state.area) parts.push(areaLabel[state.area]);
+    if (state.q) parts.push("「" + state.q + "」");
+    document.getElementById("note").textContent = parts.length ? parts.join(" · ") + ": 작업 묶음 " + total + "개" : "";
+  }
+
+  function render() { renderBars(); renderChips(); renderTimeline(); }
+
+  var q = document.getElementById("q");
+  q.addEventListener("input", function () { state.q = q.value.trim().toLowerCase(); render(); });
+  document.getElementById("reset").addEventListener("click", function () {
+    state = { week: null, area: null, q: "", open: {} };
+    q.value = "";
+    render();
+  });
+
+  renderHeader();
+  render();
+})();
+</script>

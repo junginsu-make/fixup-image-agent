@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import { GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
 import { Summary } from "../_components/summary";
 import { EASY_LOOKS, EASY_RATIOS } from "../../easy/ask";
 
-export const metadata: Metadata = { title: "쉽게 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/easy");
 
 /**
  * 「이미지 > 쉽게」 설명서.

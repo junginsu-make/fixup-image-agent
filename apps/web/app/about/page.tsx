@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { isLocalAuthBypass } from "../../lib/dev-auth";
 import { getMembership } from "../../lib/membership/server";
+import { languageAlternates, pageMetadata } from "../../lib/seo/metadata";
 import { ABOUT } from "../_landing/about-content";
 import { LandingFooter } from "../_landing/cta-footer";
 import { CONTENT, type Locale } from "../_landing/landing-content";
@@ -29,12 +30,15 @@ export async function generateMetadata({
   searchParams: Promise<{ lang?: string }>;
 }): Promise<Metadata> {
   const { lang } = await searchParams;
-  const a = ABOUT[lang === "en" ? "en" : "ko"];
-  return {
+  const locale = lang === "en" ? "en" : "ko";
+  const a = ABOUT[locale];
+  return pageMetadata({
+    path: locale === "en" ? "/about?lang=en" : "/about",
     title: a.metaTitle,
     description: a.metaDescription,
-    openGraph: { title: `${a.metaTitle} — FormWith`, description: a.metaDescription },
-  };
+    locale,
+    languages: languageAlternates("/about", "/about?lang=en"),
+  });
 }
 
 export default async function AboutPage({

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { guideMetadata } from "../../../lib/seo/metadata";
 import Link from "next/link";
 import { ChoiceTable, DiffList, Flow, FlowLegend, GuideHeader, Pitfalls, Section } from "../_components/flow";
 import { GuideFooter } from "../_components/guide-footer";
@@ -6,7 +6,7 @@ import { Details, Summary } from "../_components/summary";
 import { Callouts, Mock, MockButtons, MockChoices, MockField, MockNote, MockSteps } from "../_components/mockup";
 import { IMAGE_LOOKS, IMAGE_LOOK_HINT, IMAGE_LOOK_LABEL, withJosa } from "@fixup/shared";
 
-export const metadata: Metadata = { title: "캐릭터 만들기 · 사용 설명서" };
+export const metadata = guideMetadata("/guide/character");
 
 /** 화면(`app/characters/CharacterStudio.tsx`)의 목록과 같은 말을 쓴다. */
 const KINDS = [

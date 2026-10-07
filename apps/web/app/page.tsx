@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { isLocalAuthBypass } from "../lib/dev-auth";
 import { getMembership } from "../lib/membership/server";
+import { HOME_COPY, KEYWORDS } from "../lib/seo/copy";
+import { pageMetadata } from "../lib/seo/metadata";
 import { listPublicShowcase } from "./api/showcase/store";
 import { LandingFooter } from "./_landing/cta-footer";
 import { Difference } from "./_landing/difference";
@@ -10,11 +13,38 @@ import { KeyMessage } from "./_landing/hero/KeyMessage";
 import { slidesFromShowcase } from "./_landing/hero/slides";
 import { CONTENT, type Locale } from "./_landing/landing-content";
 import { LandingHeader } from "./_landing/landing-header";
+import { HomeLinks } from "./_landing/home-links";
+import { StructuredData } from "./_landing/structured-data";
 import { TrySection } from "./_landing/try-section";
 import { readSignupGate } from "./_landing/signup-gate";
 import { SignupRequiredModal } from "./_landing/signup-required-modal";
 import "./_landing/landing.css";
 import "./_landing/hero/hero.css";
+
+/**
+ * 첫 화면의 검색 정보. 대표 주소는 언어별로 `/` 또는 `/?lang=en` 하나다 —
+ * `/?signup=required&next=…` 로 열려도 대표 주소는 `/` 다(계획 2026-10-06 seo-search-registration).
+ * 대표 주소·언어 연결·og:url 은 메타데이터가 아니라 `<HomeLinks />` 가 낸다(Next 가 `/` 의 조회 값을 버림).
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ lang?: string }>;
+}): Promise<Metadata> {
+  const { lang } = await searchParams;
+  const locale = lang === "en" ? "en" : "ko";
+  return {
+    ...pageMetadata({
+      path: "/",
+      title: HOME_COPY[locale].title,
+      description: HOME_COPY[locale].description,
+      absoluteTitle: true,
+      locale,
+      selfLinks: false,
+    }),
+    ...(locale === "ko" ? { keywords: [...KEYWORDS] } : {}),
+  };
+}
 
 /**
  * 첫 화면.
@@ -52,6 +82,8 @@ export default async function HomePage({
 
   return (
     <div className="mcs mcs-dark">
+      <StructuredData />
+      <HomeLinks locale={locale} />
       {/*
         상단바가 히어로 **위에 얹힌다.** 자리를 차지하지 않으므로 첫 화면이
         온전히 한 화면을 쓰고, 경계선도 없어 메뉴와 히어로가 한 덩어리로 읽힌다.
