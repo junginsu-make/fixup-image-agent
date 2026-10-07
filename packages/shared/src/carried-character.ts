@@ -26,6 +26,18 @@ export interface CarriedCharacter {
   identity?: string;
 }
 
+const KINDS: readonly CarriedCharacterKind[] = ["person", "animal", "character", "object"];
+
+/**
+ * 저장된 종류 값을 정리한다. **모르는 값은 사람으로**(2026-10-07 독립 리뷰).
+ *
+ * 운영 DB 는 제약이 막지만 로컬 저장소는 아니다. 모르는 값이 그대로 가면 상세페이지는
+ * 사람 문장에 CHARACTER 이름표를, 리디자인은 지킬 것 없는 문장을 냈다.
+ */
+export function carriedKindOf(value: unknown): CarriedCharacterKind {
+  return KINDS.includes(value as CarriedCharacterKind) ? (value as CarriedCharacterKind) : "person";
+}
+
 const NOUN: Record<CarriedCharacterKind, string> = {
   person: "person",
   animal: "animal character",

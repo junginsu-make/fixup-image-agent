@@ -4,6 +4,7 @@ import {
   carriedCharacterLabel,
   carriedCharacterRules,
   carriedIdentityLine,
+  carriedKindOf,
   carriedLookException,
   carriedSubjectNoun,
   type CarriedCharacter,
@@ -111,6 +112,15 @@ describe("생김새 설명 한 줄", () => {
     expect(carriedIdentityLine(물건)).toBe("");
     expect(carriedIdentityLine({ kind: "animal", look: "anime", identity: "   " })).toBe("");
     expect(carriedIdentityLine({ kind: "person", look: "photoreal", identity: "" })).toBe("");
+  });
+});
+
+describe("종류 값 정리", () => {
+  it("아는 값은 그대로, 모르는 값은 사람 — 도구마다 다르게 처리하지 않게 한 곳에서", () => {
+    expect(carriedKindOf("animal")).toBe("animal");
+    expect(carriedKindOf("object")).toBe("object");
+    expect(carriedKindOf("alien")).toBe("person");
+    expect(carriedKindOf(undefined)).toBe("person");
   });
 });
 
