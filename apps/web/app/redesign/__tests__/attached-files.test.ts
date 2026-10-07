@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { attachedFileKey, mergeAttachedFiles, removeAttachedFile } from "../attached-files";
+import { ACCEPT_IMAGE_OR_PDF, attachedFileKey, mergeAttachedFiles, removeAttachedFile } from "../attached-files";
 
 /**
  * **첨부는 쌓인다**(2026-09-23 사용자: 「리디자인 이미지 첨부부터 문제가 많다」).
@@ -42,6 +42,24 @@ describe("첨부를 더한다", () => {
   it("종류 표시가 빈 그림 파일은 받지 않는다 — 보낼 때 빠지는 파일이다", () => {
     const merged = mergeAttachedFiles([], [파일("scan.heic", ""), 파일("doc.pdf", "")]);
     expect(merged.map((file) => file.name)).toEqual(["doc.pdf"]);
+  });
+});
+
+/*
+  **끌어다 놓기·붙여넣기도 같은 기준으로 받는다**(2026-10-07 사용자: 그림 칸은 모두 동일하게).
+  공용 부품의 기본은 PNG·JPG·WEBP 라, 이 칸에 그대로 쓰면 PDF 가 「받지 않는 형식」이 된다.
+*/
+describe("놓기·붙여넣기 형식 규칙", () => {
+  it("그림과 PDF 를 받고, 파일 고르기와 같은 기준이다", () => {
+    expect(ACCEPT_IMAGE_OR_PDF.accepts(파일("page.pdf", "application/pdf"))).toBe(true);
+    expect(ACCEPT_IMAGE_OR_PDF.accepts(파일("shot.gif", "image/gif"))).toBe(true);
+    expect(ACCEPT_IMAGE_OR_PDF.accepts(파일("doc.pdf", ""))).toBe(true);
+    expect(ACCEPT_IMAGE_OR_PDF.accepts(파일("memo.txt", "text/plain"))).toBe(false);
+    expect(ACCEPT_IMAGE_OR_PDF.accepts(파일("scan.heic", ""))).toBe(false);
+  });
+
+  it("못 받을 때 PDF 도 된다고 말한다", () => {
+    expect(ACCEPT_IMAGE_OR_PDF.message).toBe("그림이나 PDF 파일만 넣을 수 있습니다.");
   });
 });
 

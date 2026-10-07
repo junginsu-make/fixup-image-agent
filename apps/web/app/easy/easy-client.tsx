@@ -38,6 +38,8 @@ import { openImageGallery } from "../_components/image-viewer";
 import { attachmentFromUpload, easyUploadForm } from "./upload";
 import { SEND_OFFLINE, UPLOAD_OFFLINE, orSay } from "./net-say";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
+import { ACCEPT_ANY_IMAGE, useImageDropTarget } from "../_components/image-drop";
+import { DropPasteHint } from "../_components/drop-paste-hint";
 
 /**
  * Easy 모드의 대화 (설계 §1·§3).
@@ -215,9 +217,15 @@ export function EasyClient({
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [shown.length]);
 
-  /** 그림을 올린다. 기존 경로를 그대로 쓴다(설계 §8). */
-  async function upload(files: FileList) {
+  /**
+   * 그림을 올린다. 기존 경로를 그대로 쓴다(설계 §8).
+   *
+   * @param notice 끌어다 놓기·붙여넣기가 알릴 말(「받지 않는 형식을 뺐습니다」).
+   *   올리다 실패하면 그 까닭이 먼저다.
+   */
+  async function upload(files: ArrayLike<File>, notice?: string) {
     setError(null);
+    let failed = false;
     for (const one of Array.from(files)) {
       // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`browser-safe.ts`).
       const form = easyUploadForm(one, randomId());
@@ -229,13 +237,24 @@ export function EasyClient({
         // 사진이 바뀌면 사진 물음의 고르기는 뜻을 잃는다(1차 Review Focus 1). 물음 글은 남는다.
         asks.dropPhoto();
       } catch (cause) {
+        failed = true;
         setError({
           message: cause instanceof Error ? cause.message : "그림을 올리지 못했습니다.",
           retryable: true,
         });
       }
     }
+    if (notice && !failed) setError({ message: notice, retryable: false });
   }
+
+  // 입력창에 캡처를 붙여넣으면 그림으로 붙고, 글을 붙여넣으면 글로 들어간다.
+  const composerDrop = useImageDropTarget({
+    disabled: turn.busy,
+    multiple: true,
+    accept: ACCEPT_ANY_IMAGE,
+    onFiles: (files, notice) => void upload(files, notice),
+    onMessage: (message) => setError({ message, retryable: false }),
+  });
 
   /**
    * 라이브러리에서 고른다 (설계 §3 의 「라이브러리에서」).
@@ -599,81 +618,94 @@ export function EasyClient({
             모음**처럼 보였다. 채팅의 입력창은 하나의 판이고, 그 안에 붙이기와
             보내기가 들어 있다.
           */}
-          <div className="flex items-end gap-1 rounded-2xl border border-border bg-background p-1.5 focus-within:border-primary">
-            {/*
-              **대화 목록 손잡이가 여기 있다**(2026-09-18 사용자).
+          <div
+            role="group"
+            aria-label="그림 붙이는 칸"
+            tabIndex={turn.busy ? -1 : 0}
+            {...composerDrop.handlers}
+            className={cn(
+              "group rounded-2xl outline-none",
+              !turn.busy && "focus-within:ring-2 focus-within:ring-primary/30",
+              composerDrop.over && "bg-primary-soft ring-2 ring-primary/40",
+            )}
+          >
+            <div className="flex items-end gap-1 rounded-2xl border border-border bg-background p-1.5 focus-within:border-primary">
+              {/*
+                **대화 목록 손잡이가 여기 있다**(2026-09-18 사용자).
 
-              전에는 화면 왼쪽 위에 떠 있었는데, 상단바가 생기면서 그 자리에
-              둘이 겹쳤다. 누르는 것들이 한 줄에 모이는 편이 찾기도 쉽다.
-              넓은 화면에서는 목록 칸이 늘 보이므로 이 단추가 없다.
-            */}
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="대화 목록"
-              className="md:hidden"
-              onClick={() => window.dispatchEvent(new Event(TOGGLE_EVENT))}
-            >
-              <PanelLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="이미지 붙이기"
-              disabled={turn.busy}
-              onClick={() => file.current?.click()}
-            >
-              <ImagePlus className="h-4 w-4" />
-            </Button>
-            {/*
-              **라이브러리도 입력창에서 연다** (2026-09-23 사용자).
+                전에는 화면 왼쪽 위에 떠 있었는데, 상단바가 생기면서 그 자리에
+                둘이 겹쳤다. 누르는 것들이 한 줄에 모이는 편이 찾기도 쉽다.
+                넓은 화면에서는 목록 칸이 늘 보이므로 이 단추가 없다.
+              */}
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="대화 목록"
+                className="md:hidden"
+                onClick={() => window.dispatchEvent(new Event(TOGGLE_EVENT))}
+              >
+                <PanelLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="이미지 붙이기"
+                disabled={turn.busy}
+                onClick={() => file.current?.click()}
+              >
+                <ImagePlus className="h-4 w-4" />
+              </Button>
+              {/*
+                **라이브러리도 입력창에서 연다** (2026-09-23 사용자).
 
-              전에는 라이브러리로 가는 길이 첫 화면의 단추뿐이었다. 한 장 붙이면
-              그 화면이 사라져서, 두 장째부터는 고를 방법이 없었다.
-            */}
-            <EasyLibraryPicker
-              library={library}
-              selectedIds={attachments.map((one) => one.id)}
-              onPick={pickFromLibrary}
-              label=""
-              triggerVariant="ghost"
-              triggerAriaLabel="라이브러리에서 붙이기"
-            />
-            <Textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                // 엔터로 보낸다. 줄바꿈은 Shift+Enter — 채팅의 관례다.
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
+                전에는 라이브러리로 가는 길이 첫 화면의 단추뿐이었다. 한 장 붙이면
+                그 화면이 사라져서, 두 장째부터는 고를 방법이 없었다.
+              */}
+              <EasyLibraryPicker
+                library={library}
+                selectedIds={attachments.map((one) => one.id)}
+                onPick={pickFromLibrary}
+                label=""
+                triggerVariant="ghost"
+                triggerAriaLabel="라이브러리에서 붙이기"
+              />
+              <Textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  // 엔터로 보낸다. 줄바꿈은 Shift+Enter — 채팅의 관례다.
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}
+                /*
+                  **못 쓰는 까닭을 그대로 적는다.** 보내는 중인데 「위에서 먼저
+                  골라 주세요」라고 하면 고른 것이 안 먹힌 줄 안다
+                  (2026-09-18 확인).
+                */
+                placeholder={
+                  turn.busy ? "답을 기다리는 중입니다"
+                    // 사진 물음이 떠 있으면 친 말은 처음 말에 이어진다(설계 §2-5).
+                    : asks.photo ? "위 사진 물음에 대한 답으로 보냅니다. 예: 1번은 우리 원두 봉투야"
+                    : turn.canSend ? "무엇이든 물어보거나, 만들 것을 적어 주세요"
+                      : "위에서 먼저 골라 주세요"
                 }
-              }}
-              /*
-                **못 쓰는 까닭을 그대로 적는다.** 보내는 중인데 「위에서 먼저
-                골라 주세요」라고 하면 고른 것이 안 먹힌 줄 안다
-                (2026-09-18 확인).
-              */
-              placeholder={
-                turn.busy ? "답을 기다리는 중입니다"
-                  // 사진 물음이 떠 있으면 친 말은 처음 말에 이어진다(설계 §2-5).
-                  : asks.photo ? "위 사진 물음에 대한 답으로 보냅니다. 예: 1번은 우리 원두 봉투야"
-                  : turn.canSend ? "무엇이든 물어보거나, 만들 것을 적어 주세요"
-                    : "위에서 먼저 골라 주세요"
-              }
-              disabled={!turn.canSend}
-              rows={1}
-              className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 md:text-base"
-            />
-            <Button
-              size="icon"
-              aria-label="보내기"
-              className="size-9 shrink-0 rounded-full"
-              disabled={!turn.canSend || !draft.trim()}
-              onClick={() => void send()}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+                disabled={!turn.canSend}
+                rows={1}
+                className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 md:text-base"
+              />
+              <Button
+                size="icon"
+                aria-label="보내기"
+                className="size-9 shrink-0 rounded-full"
+                disabled={!turn.canSend || !draft.trim()}
+                onClick={() => void send()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+            <DropPasteHint locked={turn.busy} className="px-2 pt-1" />
           </div>
           {/*
             **대화는 남고 그림은 라이브러리에 저장된다.** 설계 §11-③ 이 「그
