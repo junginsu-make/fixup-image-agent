@@ -6,6 +6,7 @@ import { MAX_INPUT_PIXELS } from "../../../lib/image-encoding";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { inOwnerFolder } from "../../../lib/storage/owner-folder";
 import { isLocalStoreEnabled } from "../../../lib/local-store";
+import { errorLogText } from "../../../lib/easy/log-text";
 import {
   mimeForStoragePath,
   showcaseAssetPath,
@@ -30,6 +31,15 @@ import {
  */
 
 const BUCKET = "library";
+
+/** 관리 라우트(`manage/route.ts`)가 쓰는 일반 문장. */
+const STORE_FAILED = "요청을 처리하지 못했습니다.";
+
+/** 저장소 · 데이터베이스 원문은 서버 기록에만 남기고 일반 문장을 준다(2026-10-07). */
+function storeFailed(what: string, error: unknown) {
+  console.error(`[showcase] ${what}`, errorLogText(error));
+  return { ok: false as const, message: STORE_FAILED };
+}
 
 const ROW_SELECT =
   "id,source_kind,source_id,source_index,owner_id,storage_path,thumb_path,mime_type,width,height,caption,kind_label,position,visible,created_at";
@@ -281,7 +291,7 @@ export async function addShowcaseItem(
   const uploaded = await supabase.storage
     .from(BUCKET)
     .upload(storagePath, bytes, { contentType: mimeType, upsert: true });
-  if (uploaded.error) return { ok: false, message: uploaded.error.message };
+  if (uploaded.error) return storeFailed("복사본을 올리지 못했습니다", uploaded.error);
 
   /**
    * 화면에 걸 사본.
@@ -323,10 +333,8 @@ export async function addShowcaseItem(
       .from(BUCKET)
       .remove([storagePath, thumbPath].filter(Boolean) as string[]);
     const duplicate = error.code === "23505";
-    return {
-      ok: false,
-      message: duplicate ? "이미 갤러리에 걸린 그림입니다." : error.message,
-    };
+    if (!duplicate) return storeFailed("줄을 넣지 못했습니다", error);
+    return { ok: false, message: "이미 갤러리에 걸린 그림입니다." };
   }
 
   return { ok: true, id };
@@ -367,7 +375,7 @@ export async function reorderShowcase(order: string[]) {
       .from("showcase_items")
       .update({ position: next, updated_at: stamp })
       .eq("id", item.id);
-    if (error) return { ok: false as const, message: error.message };
+    if (error) return storeFailed("차례를 적지 못했습니다", error);
   }
   return { ok: true as const };
 }
@@ -378,7 +386,7 @@ export async function patchShowcaseItem(input: ShowcasePatchInput) {
     .from("showcase_items")
     .update(showcasePatchRow(input, new Date().toISOString()))
     .eq("id", input.id);
-  return error ? { ok: false as const, message: error.message } : { ok: true as const };
+  return error ? storeFailed("고치지 못했습니다", error) : { ok: true as const };
 }
 
 /**
@@ -397,7 +405,7 @@ export async function removeShowcaseItem(id: string) {
   if (!data) return { ok: false as const, message: "갤러리 항목을 찾지 못했습니다." };
 
   const { error } = await supabase.from("showcase_items").delete().eq("id", id);
-  if (error) return { ok: false as const, message: error.message };
+  if (error) return storeFailed("내리지 못했습니다", error);
 
   // **사본도 함께 지운다.** 행이 사라지면 사본의 자리를 아는 곳이 없어진다.
   const paths = [data.storage_path as string, data.thumb_path as string | null].filter(Boolean) as string[];
