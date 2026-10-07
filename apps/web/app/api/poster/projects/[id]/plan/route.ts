@@ -13,6 +13,7 @@ import {
   createPosterPlanningProviders,
   PosterProviderConfigurationError,
 } from "../../../../../../lib/poster/providers";
+import { errorLogText } from "../../../../../../lib/easy/log-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,9 +123,10 @@ async function plan(request: Request, context: Context, 고른글모델?: string
     if (!reserved.ok) return reserved.response;
     reservation = { userId: reserved.userId, requestId: reserved.requestId };
 
+    const reader = createPosterAttachmentReader();
     const read = await readAttachments(
       읽을것.map((reference) => ({ id: reference.id, title: reference.title ?? "첨부", url: reference.url! })),
-      createPosterAttachmentReader(),
+      { read: (input) => maskProviderError("첨부 읽기", () => reader.read(input)) },
     );
     /** 실제로 읽힌 장 수. 확정의 어림값에 쓴다 — 실패한 읽기는 `read.issues` 로 빠진다. */
     const visionReads = Object.keys(read.reads).length;
@@ -136,6 +138,7 @@ async function plan(request: Request, context: Context, 고른글모델?: string
      * 간다. `resolveTextModel` 이 목록에 없는 id 를 기본으로 떨어뜨린다.
      */
     const providers = createPosterPlanningProviders(process.env, resolveTextModel(고른글모델));
+    const backup = providers.backup;
     const plan = await planPoster(
       {
         instruction: project.data.instruction,
@@ -145,8 +148,8 @@ async function plan(request: Request, context: Context, 고른글모델?: string
         ),
         attachmentIntent: project.data.attachmentIntent,
       },
-      providers.primary,
-      providers.backup,
+      { plan: (prompt) => maskProviderError("기획", () => providers.primary.plan(prompt)) },
+      backup ? { plan: (prompt) => maskProviderError("예비 기획", () => backup.plan(prompt)) } : undefined,
     );
 
     /*
@@ -191,13 +194,49 @@ async function plan(request: Request, context: Context, 고른글모델?: string
     return Response.json({ ok: true, project: saved, issues: [...read.issues, ...plan.issues] });
   } catch (error) {
     // 실패했으면 묶어 둔 장을 돌려준다. 안 풀면 만료될 때까지 한도에서 빠져 있다.
-    if (reservation) await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");
-    if (error instanceof PosterProviderConfigurationError) {
-      return Response.json({ ok: false, message: error.message, missing: error.missing }, { status: 503 });
+    // 닫기가 흔들려도(RPC) 아래 우리 JSON 을 돌려준다. 안 그러면 Next 기본 500 이 나간다(Task 12b).
+    if (reservation) {
+      try {
+        await finalizeAiUsage(reservation, false, 0, "poster_plan_failed");
+      } catch (closeError) {
+        console.error("[poster] 기획 예약 닫기 실패", errorLogText(closeError));
+      }
     }
-    return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "기획하지 못했습니다." },
-      { status: 500 },
-    );
+    return planFailure(error);
   }
+}
+
+const PROVIDER_FAILED = "응답을 받지 못했습니다.";
+
+/**
+ * **제공자가 던진 원문을 우리 문장으로 바꿔 다시 던진다**(2026-10-07 후속 Task 12b).
+ *
+ * 패키지는 던진 글을 그대로 `issues` 에 적는다(「주 모델 기획 실패: <원문>」, 「표지 을 읽지 못했습니다:
+ * <원문>」). 그 목록은 성공 응답으로 「다양하게」 화면에 뜨고 작업의 `grammarIssues` 로 저장된다.
+ * 원문(SDK · 네트워크 글)은 서버 기록에만 남긴다. **여전히 던진다** — 주→예비 넘어가기와 첨부 하나
+ * 건너뛰기가 전과 같다. 값은 원래 호출 안에서 잰다.
+ */
+async function maskProviderError<T>(what: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    console.error(`[poster] ${what} 호출 실패`, errorLogText(error));
+    throw new Error(PROVIDER_FAILED);
+  }
+}
+
+const PLAN_FAILED = "기획하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+
+/**
+ * **실패를 화면에 어떻게 말할지**(2026-10-07 후속 Task 12, 고치기의 `editFailure` 와 같은 규칙).
+ *
+ * 전에는 모든 예외를 원문으로 돌려줘 Supabase 글과 환경변수 이름이 「다양하게」 화면에 떴다.
+ * 이 길에는 일부러 던지는 우리 문장이 없다 — 첨부 읽기와 기획 모델의 실패는 안에서 잡혀
+ * `issues` 로 온다. 그래서 던진 것은 모두 일반 문장이고 원문은 서버 기록에만 남긴다.
+ * **상태 코드는 전과 같다**(500, 설정 오류만 503).
+ */
+function planFailure(error: unknown): Response {
+  console.error("[poster] 기획 실패", errorLogText(error));
+  const status = error instanceof PosterProviderConfigurationError ? 503 : 500;
+  return Response.json({ ok: false, message: PLAN_FAILED }, { status });
 }

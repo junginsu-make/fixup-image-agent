@@ -11,6 +11,7 @@ let 작업들: Record<string, { id: string; ratio: string; data: Record<string, 
 let 그림들: 그림[];
 let 카드뉴스: Set<string>;
 let 실패 = false;
+let 그림실패오류: unknown = new Error("db");
 let 카드실패 = false;
 let 읽은수 = 0;
 let 읽는중 = 0;
@@ -32,7 +33,7 @@ vi.mock("../../poster/stores", () => ({
         return 작업들[id];
       },
     },
-    images: { byProjects: async () => { if (실패) throw new Error("db"); return 그림들; } },
+    images: { byProjects: async () => { if (실패) throw 그림실패오류; return 그림들; } },
   }),
 }));
 vi.mock("../cardnews-steps", () => ({
@@ -57,6 +58,7 @@ beforeEach(() => {
   그림들 = [{ id: "img-1", projectId: "p1", generationRequestId: "r1", selected: false, assetPath: "me/1.png", thumbPath: null }];
   카드뉴스 = new Set(["card-1"]);
   실패 = false;
+  그림실패오류 = new Error("db");
   카드실패 = false;
   읽은수 = 0;
   읽는중 = 0;
@@ -155,10 +157,50 @@ describe("한 턴에 읽는 결과물 수 (최종 수정 10)", () => {
     expect(카드로물은것).toContain("w6");
   });
 
+  /** 후속 Task 2 — 100개 밖은 기다려도 못 읽는다. 잠깐 못 읽은 것(「잠시 뒤 다시」)과 가르게 번호를 따로 둔다. */
+  it("100개 밖이라 안 읽은 번호를 따로 둔다 — 잠깐 못 읽은 것 · 번호 · 갈래는 그대로다", async () => {
+    const rows = [...많은줄(105), 줄("x1", "boom", "", 1)];
+    const facts = await loadEasyImages("me", rows, 지금);
+    expect([...(facts.unreadOld ?? [])]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(facts.entries.map((one) => one.n)).toEqual(Array.from({ length: 106 }, (_, at) => at + 1));
+    expect(facts.entries.at(-1)).toMatchObject({ n: 106, kind: "unknown", state: "unknown" });
+    expect(facts.entries.slice(0, 6).every((one) => one.kind === "unknown" && one.state === "unknown")).toBe(true);
+    expect(facts).toMatchObject({ madeImage: true, lastIsImage: true });
+  });
+
+  it("옛 작업을 최근에 고쳤으면(최근 줄) 그 작업은 읽으므로 오래된 것이 아니다", async () => {
+    const facts = await loadEasyImages("me", [...많은줄(105), 줄("e1", "w1", "", 1)], 지금);
+    expect([...(facts.unreadOld ?? [])]).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it("통째로 못 읽어도 100개 밖 번호는 따로 둔다 — 100개 안은 그대로 모름", async () => {
+    실패 = true;
+    // 그림 목록을 읽어야 실패가 난다 — 최근 줄에 포스터 작업(p1)을 둔다.
+    const facts = await loadEasyImages("me", [...많은줄(103), 줄("z1", "p1", "", 1)], 지금);
+    expect([...(facts.unreadOld ?? [])]).toEqual([1, 2, 3, 4]);
+    expect(facts.entries.every((one) => one.kind === "unknown")).toBe(true);
+  });
+
+  it("100개 이하면 오래된 번호가 없다", async () => {
+    expect([...((await loadEasyImages("me", 많은줄(100), 지금)).unreadOld ?? [])]).toEqual([]);
+  });
+
   it("같은 작업(고친 줄)은 한 번만 읽고, 한꺼번에 읽는 수를 묶는다", async () => {
     const rows = [...많은줄(30), 줄("e1", "w1", "", 1), 줄("e2", "w1", "", 1)];
     await loadEasyImages("me", rows, 지금);
     expect(읽은수).toBe(30);
     expect(가장많이).toBeLessThanOrEqual(10);
+  });
+});
+
+/** 후속 Task 11 2차. 저장소 오류 덩어리 대신 주소를 가린 글로 남긴다. 머리말은 그대로다. */
+describe("서버 기록 (후속 Task 11 2차)", () => {
+  it("결과물을 못 읽으면 주소를 가린 글로 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "warn").mockImplementation(() => {});
+    실패 = true;
+    그림실패오류 = { message: "db https://abc.supabase.co/rest/v1/images?apikey=SECRET", code: "PGRST000" };
+    await loadEasyImages("me", [줄("a", "p1", 일감("r1"), 1)], 지금);
+    expect(기록).toHaveBeenCalledWith("[easy] 이 대화의 결과물을 읽지 못했습니다", "db <url>");
+    기록.mockRestore();
   });
 });

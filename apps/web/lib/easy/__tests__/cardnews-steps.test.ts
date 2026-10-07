@@ -12,6 +12,8 @@ vi.mock("server-only", () => ({}));
 let 작업들: Record<string, { id: string; userId: string }>;
 let 원고: Record<string, unknown>;
 let 고치기실패: boolean;
+let 고치기실패글 = "저장 실패";
+let 저장소오류: unknown = new Error("저장소 오류");
 const 고친것: Array<{ id: string; index: string; body: Record<string, unknown> }> = [];
 
 const 찾은것: string[] = [];
@@ -26,7 +28,7 @@ vi.mock("../../sns-flow-store", () => ({
       가장많이 = Math.max(가장많이, 읽는중);
       await Promise.resolve();
       읽는중 -= 1;
-      if (id === "boom") throw new Error("저장소 오류");
+      if (id === "boom") throw 저장소오류;
       return 작업들[id];
     },
   }),
@@ -41,7 +43,7 @@ vi.mock("../../../app/api/sns/projects/[id]/cards/[index]/route", () => ({
     const { id, index } = await params;
     const body = await req.json();
     고친것.push({ id, index, body });
-    if (고치기실패) return Response.json({ ok: false, message: "저장 실패" }, { status: 500 });
+    if (고치기실패) return Response.json({ ok: false, message: 고치기실패글 }, { status: 500 });
     return Response.json({ ok: true, project: { ...원고, patched: body } });
   },
 }));
@@ -63,6 +65,8 @@ beforeEach(() => {
   작업들 = { mine: { id: "mine", userId: "me" }, theirs: { id: "theirs", userId: "other" } };
   원고 = 기본원고();
   고치기실패 = false;
+  고치기실패글 = "저장 실패";
+  저장소오류 = new Error("저장소 오류");
   고친것.length = 0;
   찾은것.length = 0;
   서명한것.length = 0;
@@ -165,5 +169,32 @@ describe("카드뉴스 작업 찾기", () => {
     expect(await cardnewsProjectIds("me", ids)).toEqual(new Set(["mine"]));
     expect(가장많이).toBeLessThanOrEqual(10);
     expect(찾은것.filter((id) => id === "mine")).toHaveLength(1);
+  });
+});
+
+/**
+ * **서버 기록에는 주소를 가린 글만 남긴다**(2026-10-07 후속 Task 11 2차). 저장소 오류는 Error 가 아닌
+ * `{ message }` 덩어리로도 오고, 글에 서명한 주소가 섞여 온다. 머리말은 그대로다.
+ */
+describe("서버 기록 (후속 Task 11 2차)", () => {
+  const 기록을본다 = () => vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  it("마지막 장 저장 실패는 주소를 가린 글로 남긴다", async () => {
+    const 기록 = 기록을본다();
+    고치기실패 = true;
+    고치기실패글 = "저장 실패 https://abc.supabase.co/rest/v1/x?apikey=SECRET";
+    await draftCardnews(요청(), {}, async () => ({ headline: "a", body: "b" }));
+    expect(기록).toHaveBeenCalledWith("[easy] 마지막 장을 채우지 못했습니다 project=c1", "저장 실패 <url>");
+    기록.mockRestore();
+  });
+
+  it("카드뉴스 작업 읽기 실패 · 원고 찾기 실패도 덩어리 대신 가린 글로 남긴다", async () => {
+    const 기록 = 기록을본다();
+    저장소오류 = { message: "저장소 오류 https://abc.supabase.co/rest/v1/sns?apikey=SECRET", code: "PGRST000" };
+    expect(await cardnewsProjectIds("me", ["boom"])).toBeNull();
+    expect(기록).toHaveBeenCalledWith("[easy] 카드뉴스 작업을 읽지 못했습니다", "저장소 오류 <url>");
+    expect(await lastCardnewsProject("me", [{ role: "image", workId: "boom" }])).toBeNull();
+    expect(기록).toHaveBeenCalledWith("[easy] 고칠 카드뉴스 원고를 찾지 못했습니다", "저장소 오류 <url>");
+    기록.mockRestore();
   });
 });

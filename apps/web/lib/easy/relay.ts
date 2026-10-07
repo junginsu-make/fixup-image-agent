@@ -49,17 +49,20 @@ export async function read(response: Response, step: string) {
      *
      * **다시 눌러도 안 풀린다고 안쪽이 말했으면 그대로 옮긴다**(설계 2026-09-30 §3.2).
      * 멈춤(503)은 상태 코드만으로는 「잠시 뒤 다시」와 가를 수 없다.
+     *
+     * **안쪽이 「우리 문장」이라고 표시했으면 그것도 옮긴다**(최종 수정 L1). 포스터 생성은 일부러 쓴 문장도
+     * 500 으로 주므로, 표시 없이는 날것 글과 가를 수 없다. 참(true)일 때만 표시로 본다.
      */
     const shortage = body.code === "credits_required" || body.code === "quota_exceeded";
     const usage = shortage && body.usage && [body.usage.remaining, body.usage.used, body.usage.reserved].every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) ? body.usage as UsageSummary : undefined;
-    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status, !shortage && body.retryable !== false, shortage ? body.code : undefined, usage);
+    throw new EasyStepError(step, body.message ?? `${step} 단계가 실패했습니다.`, response.status, !shortage && body.retryable !== false, shortage ? body.code : undefined, usage, body.userFacing === true);
   }
   return body;
 }
 
 export class EasyStepError extends Error {
   constructor(readonly step: string, message: string, readonly status: number, readonly retryable = true,
-    readonly code?: "credits_required" | "quota_exceeded", readonly usage?: UsageSummary) {
+    readonly code?: "credits_required" | "quota_exceeded", readonly usage?: UsageSummary, readonly userFacing = false) {
     super(message);
     this.name = "EasyStepError";
   }

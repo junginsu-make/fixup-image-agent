@@ -107,6 +107,15 @@ export function answerableAskId(rows: readonly Row[]): string | undefined {
   return 단추답인가(rows[n - 1]) && 물음(rows[n - 2]) ? rows[n - 2]!.id : undefined;
 }
 
+/**
+ * **서버가 닫은 물음 답은 화면 줄에서도 고른 값 표시를 뗀다**(후속 Task 3). 장 물음에 다시 그리기로 답하면(`cardAsk`)
+ * 서버는 사용자 줄을 표시 없이 남겨 물음을 닫는다(`cardnews-after-turn.ts`). 화면 줄에 표시가 남으면 위의 [물음, 단추 답]
+ * 규칙으로 단추가 새로고침 전까지 다시 떴다. 실패한 단추 답에는 안 건다 — 그 단추는 다시 떠야 한다.
+ */
+export function closedAnswerRows<T extends Row>(rows: readonly T[], rowId: string, prompt: string): T[] {
+  return rows.map((row) => (row.id === rowId ? { ...row, body: prompt } : row));
+}
+
 function 아이디들(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((one): one is string => typeof one === "string" && one.length > 0) : [];
 }

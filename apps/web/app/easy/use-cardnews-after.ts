@@ -5,6 +5,7 @@ import type { RunningJob } from "../../lib/running-jobs";
 import { snsCardFilename } from "../sns/download-filename";
 import { downloadList, type CopyPatch } from "./cardnews-after";
 import { cardnewsRequest, readCardnewsProject } from "./cardnews-request";
+import { orSay } from "./net-say";
 import { cardnewsJob, openTool, type CardTool } from "./cardnews-state";
 import type { CardnewsProjectLike, EasyCardnewsView } from "./cardnews-view";
 import type { EasyMessage } from "./turn";
@@ -104,10 +105,13 @@ export function useCardnewsAfter(input: {
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       for (const card of list) {
-        const response = await fetch(card.url);
-        if (!response.ok) throw new Error(`${card.index}번 그림을 받지 못했습니다.`);
+        // 연결이 끊겨도 영어 글 대신 같은 문장으로(후속 Task 11 3차). 받는 도중 끊겨도 같다.
+        const blob = await orSay(
+          fetch(card.url).then((response) => (response.ok ? response.blob() : Promise.reject(new Error("not ok")))),
+          `${card.index}번 그림을 받지 못했습니다.`,
+        );
         // 확장자는 저장 경로에서 읽는다. 로컬 주소에는 확장자가 없어 PNG 가 .jpg 로 붙었다(미뤄 둔 것 3).
-        zip.file(snsCardFilename(project.title ?? "", card.index, card.path ?? new URL(card.url, window.location.href).pathname), await response.blob());
+        zip.file(snsCardFilename(project.title ?? "", card.index, card.path ?? new URL(card.url, window.location.href).pathname), blob);
       }
       const url = URL.createObjectURL(await zip.generateAsync({ type: "blob" }));
       const link = Object.assign(document.createElement("a"), { href: url, download: `${project.title || "card-news"}.zip` });

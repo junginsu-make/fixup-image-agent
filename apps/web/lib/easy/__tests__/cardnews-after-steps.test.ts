@@ -148,6 +148,16 @@ describe("한 장 다시 만들기 (3단계 §6-3)", () => {
     expect(다시만든것).toEqual([]);
   });
 
+  /** 후속 Task 11 (d). 저장소 오류 글에는 서명한 주소가 섞여 온다. 덩어리 대신 주소를 가린 글로 남긴다. */
+  it("보관 실패는 머리말 그대로, 주소를 가린 글로 서버 기록에 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { deps } = 보관();
+    const 실패 = { ...deps, save: async () => { throw new Error("올리기 실패 https://abc.supabase.co/storage/v1/x?token=SECRET"); } };
+    await expect(redoCard(요청(), "me", 만든작업(), 2, undefined, 실패)).rejects.toThrow("보관하지 못해");
+    expect(기록).toHaveBeenCalledWith("[easy] 앞 그림 보관 실패 project=c1 card=2", "올리기 실패 <url>");
+    기록.mockRestore();
+  });
+
   it("그림이 없던 장(실패한 장)은 보관 없이 다시 만든다", async () => {
     const { 넣은것, deps } = 보관();
     const got = await redoCard(요청(), "me", 만든작업(), 3, undefined, deps);

@@ -19,10 +19,10 @@ import { useEasyResume } from "./use-resume-images";
 import { useEasyAsks } from "./use-easy-asks";
 import { usedAttachments } from "./attachments-after";
 import { photoTypedReply, type EasyButtonReply } from "./ask-answers";
-import { answerableAskId } from "./ask-chain";
-import { withPick } from "./row-marks";
+import { answerableAskId, closedAnswerRows } from "./ask-chain";
+import { plainTyped, withPick } from "./row-marks";
 import { EasyAskControls } from "./_components/ask-row";
-import { keptAfterFailure, lostAfterFailure } from "./send-failure";
+import { keptAfterFailure, lostAfterFailure, typedAfterFailure, unsavedAfterFailure } from "./send-failure";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -36,6 +36,7 @@ import { EasyResultPanel } from "./_components/result-panel";
 import { EasySplitHandle, useSplitWidth } from "./_components/split-handle";
 import { openImageGallery } from "../_components/image-viewer";
 import { attachmentFromUpload, easyUploadForm } from "./upload";
+import { SEND_OFFLINE, UPLOAD_OFFLINE, orSay } from "./net-say";
 import { UPLOAD_RIGHTS_NOTE } from "../../lib/rights/upload-notice";
 
 /**
@@ -221,7 +222,7 @@ export function EasyClient({
       // `crypto.randomUUID` 는 HTTPS·localhost 에서만 있다(`browser-safe.ts`).
       const form = easyUploadForm(one, randomId());
       try {
-        const body = await (await fetch("/api/reference-images", { method: "POST", body: form })).json();
+        const body = await (await orSay(fetch("/api/reference-images", { method: "POST", body: form }), UPLOAD_OFFLINE)).json().catch(() => ({}));
         observeAccountResponse(body, true);
         if (!body.ok) throw new Error(body.message ?? "그림을 올리지 못했습니다.");
         setAttachments((current) => [...current, attachmentFromUpload(body.image, one)]);
@@ -345,7 +346,7 @@ export function EasyClient({
         09-17(카드뉴스)에 이어 **세 번째로 빠졌다.** 이번에는 대신 부르는
         자리라 검사도 비켜 갔다. 그 구멍도 같이 막았다.
       */
-      const response = await billableFetch("/api/easy/generate", {
+      const response = await orSay(billableFetch("/api/easy/generate", {
         body: JSON.stringify({
           conversationId,
           prompt,
@@ -357,7 +358,7 @@ export function EasyClient({
           // 물음 줄 단추면 그 줄 id 와 고른 값(갈래 · 비율 · 사진 쓰임 · 번호)만 싣는다(2차 D1).
           ...(단추 ? { answersRowId: 단추.answersRowId, pick: 단추.pick } : {}),
         }),
-      });
+      }), SEND_OFFLINE);
       const body = await response.json().catch(() => ({}));
       observeAccountResponse(body, true);
       // 만들기에 쓴 턴이면 붙인 사진을 내린다(2차 D3). 물음 · 대화 · 실패에는 그대로 둔다.
@@ -378,6 +379,8 @@ export function EasyClient({
       }
       // 일하는 턴의 AI 말(2차 D4). 그림 · 원고 자리 앞에 붙인다.
       if (body.ok && body.say?.id) setMessages((current) => [...current, { id: body.say.id, role: "assistant", body: body.say.body ?? "" }]);
+      // 장 물음 답(다시 그리기)이면 서버는 표시 없이 남겨 물음을 닫았다. 화면 줄도 같게 — 단추가 다시 안 뜬다.
+      if (body.ok && body.cardAsk) setMessages((current) => closedAnswerRows(current, `user-${자리}`, plainTyped(prompt)));
       // 카드뉴스 원고 · 손보기(2단계 · 3단계). 값은 원고까지 안 든다.
       if (body.ok && cardnews.take(body)) return;
       if (body.ok && body.talked) {
@@ -399,6 +402,8 @@ export function EasyClient({
          */
         throw Object.assign(new Error(body.message ?? "만들지 못했습니다."), {
           retryable: body.retryable !== false,
+          typedAnswer: body.typedAnswer === true,
+          userUnsaved: body.userUnsaved === true,
         });
       }
 
@@ -442,6 +447,14 @@ export function EasyClient({
       // 받기 전 실패면 그림 자리를 뺀다. 받은 뒤면 실패로 남긴다 — 빼면 물음 단추가 다시 뜬다(`send-failure.ts`).
       setMessages((current) => keptAfterFailure(current, 자리, 받음));
       setLost((current) => lostAfterFailure(current, 자리, 받음, 까닭));
+      // 서버가 말 답으로 읽고 남긴 뒤 실패했으면 제 줄도 같게 — 물음 단추가 그 자리에서 다시 뜬다(후속 Task 9).
+      if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {
+        setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));
+      }
+      // 서버가 이 말을 남기기 전에 실패했고 앞이 물음이면 제 줄을 뺀다 — 친 말은 입력창에 되돌아간다(후속 Task 9 고침 1 · 2).
+      if (!보낼것 && (cause as { userUnsaved?: boolean }).userUnsaved === true) {
+        setMessages((current) => unsavedAfterFailure(current, `user-${자리}`));
+      }
       setError({
         message: 까닭,
         retryable: (cause as { retryable?: boolean }).retryable !== false,
