@@ -5,7 +5,7 @@ import type { EasyAsk } from "../../app/easy/ask";
 import { easyTitle } from "../../app/easy/title";
 import { DETAIL_PAGE_GUIDE } from "../../app/easy/detail-page";
 import type { readChosenRoles } from "../../app/easy/photo-roles";
-import { runPhotoTurn, type PhotoTurnInput } from "../../app/easy/photo-turn";
+import { runPhotoTurn, type PhotoTurn, type PhotoTurnInput } from "../../app/easy/photo-turn";
 import { easyRoleSummary } from "../../app/easy/options";
 import { nextResultNumber, resultLabel } from "../../app/easy/image-numbers";
 import { SAY_IMAGE, aiText, photoQuestion, sayText } from "../../app/easy/turn-words";
@@ -28,14 +28,7 @@ import type { easyStoreForUser } from "./store";
  */
 export const VARIANTS = 1;
 
-/**
- * **그림 턴의 끝**(2026-10-07 후속 Task 6 — `app/api/easy/generate/route.ts` 에서 동작 그대로 옮겼다).
- *
- * 묻기 · 고치기 · 카드뉴스 갈래를 다 지난 턴이 여기 온다. 사진 역할을 보고(멈추거나 묻거나), 사용자 줄을
- * 남기고, 말 · 상세페이지 안내 · 쓸 수 없게 된 갈래는 답 한 줄로 끝내고, image 갈래만 포스터 라우트 셋을
- * 그대로 불러 제출한다. 여기서 던진 오류는 라우트의 `catch` 가 받는다(실패 줄 · 가림이 그대로다).
- */
-export async function imageTurn(ctx: {
+type ImageTurnContext = {
   request: Request;
   store: ReturnType<typeof easyStoreForUser>;
   conversation: { title?: string | null };
@@ -57,11 +50,23 @@ export async function imageTurn(ctx: {
   말한것: { ratio?: string; look?: string };
   사용자글: string;
   지난줄: Parameters<typeof nextResultNumber>[0];
-}): Promise<Response> {
-  const {
-    request, store, conversation, conversationId, prompt, textModel, wants, decision, input, provider,
-    물음맥락, 사진들, 붙인것, 붙인수, 지시, 고른역할, 지난역할, 고르기, 말한것, 사용자글, 지난줄,
-  } = ctx;
+};
+
+/** 사진 역할을 본 뒤 아래 두 단계가 함께 쓰는 것(후속 Task 10). 멈춤 · 물음은 이미 `imageTurn` 에서 끝났다. */
+type ImageRowsContext = ImageTurnContext & {
+  사진판단: Extract<PhotoTurn, { kind: "go" }> | undefined;
+  칸: Extract<PhotoTurn, { kind: "go" }>["fields"];
+};
+
+/**
+ * **그림 턴의 끝**(2026-10-07 후속 Task 6 — `app/api/easy/generate/route.ts` 에서 동작 그대로 옮겼다).
+ *
+ * 묻기 · 고치기 · 카드뉴스 갈래를 다 지난 턴이 여기 온다. 사진 역할을 보고(멈추거나 묻거나), 사용자 줄을
+ * 남기고, 말 · 상세페이지 안내 · 쓸 수 없게 된 갈래는 답 한 줄로 끝내고, image 갈래만 포스터 라우트 셋을
+ * 그대로 불러 제출한다. 여기서 던진 오류는 라우트의 `catch` 가 받는다(실패 줄 · 가림이 그대로다).
+ */
+export async function imageTurn(ctx: ImageTurnContext): Promise<Response> {
+  const { wants, input, provider, 물음맥락, 사진들, 붙인것, 붙인수, 지시, 고른역할, 지난역할, 고르기, 말한것 } = ctx;
   /*
    * ⓒ → ⓐ → ⓑ2 → ⓓ **사진이 붙은 그림 턴**(설계 §2-3).
    *
@@ -93,6 +98,13 @@ export async function imageTurn(ctx: {
   }
   const 칸 = 사진판단?.fields;
 
+  // 사용자 줄부터는 아래 두 단계가 한다(2026-10-07 후속 Task 10 — 동작 그대로 나눴다).
+  return await imageRowsTurn({ ...ctx, 사진판단, 칸 });
+}
+
+/** 사용자 줄 · 제목 · 끝내는 갈래(말 · 상세페이지 안내 · image 아닌 갈래). image 갈래만 `imageSubmitTurn` 으로 간다. */
+async function imageRowsTurn(ctx: ImageRowsContext): Promise<Response> {
+  const { store, conversation, conversationId, prompt, textModel, wants, decision, 사용자글 } = ctx;
   // 사용자가 친 말을 남긴다. 아래가 실패해도 대화에는 그 말이 있어야
   // 무엇을 하려 했는지 알 수 있다.
   await store.appendMessage({ conversationId, role: "user", body: 사용자글 });
@@ -137,6 +149,12 @@ export async function imageTurn(ctx: {
     return Response.json({ ok: true, talked: true, message: saved, textModel });
   }
 
+  return await imageSubmitTurn(ctx);
+}
+
+/** 머리말 → 포스터 라우트 셋(프로젝트 · 기획 · 제출) → 그림 줄 → 응답. */
+async function imageSubmitTurn(ctx: ImageRowsContext): Promise<Response> {
+  const { request, store, conversationId, textModel, wants, decision, input, 지시, 고르기, 지난줄, 사진판단, 칸 } = ctx;
   /*
    * **일하는 턴에도 AI 가 말한다**(2026-10-07 2차 D4). 판단과 같은 호출의 reply 를 머리말 줄로
    * 남긴다 — 비었거나 다른 갈래로 쓴 글이면(고른 갈래가 이김 등, 최종 리뷰 b) 코드 문장(다시 묻지 않는다,

@@ -22,11 +22,17 @@ import { describe, expect, it } from "vitest";
  * 2026-10-07 후속 Task 6 — 라우트가 길어 동작 그대로 나눴다. 한 턴의 글자는 부르는 차례대로 이어 읽는다:
  * 라우트(판단 · 예약 · 묻기 · 갈래) → 그림 턴(사진 역할 · 사용자 줄 · 포스터 라우트 셋) → 카드뉴스 원고 턴.
  * 단언은 그대로다. 「없다」는 세 파일 모두에서, 차례는 이어 읽은 글에서 본다.
+ *
+ * 후속 Task 10 — 더 나눴다. 부르는 차례는 라우트(예약 · 정산) → 판단(`decide-turn.ts`) → 답 읽기 · 갈래
+ * (`branch-turn.ts`) → 그림 턴 · 카드뉴스 원고 턴이고, 이어 읽는 차례도 같다. 같이 쓰는 `stop.ts` 도 읽는다(Task 11 (b)).
  */
 const generate = [
   "../generate/route.ts",
+  "../../../../lib/easy/decide-turn.ts",
+  "../../../../lib/easy/branch-turn.ts",
   "../../../../lib/easy/image-turn.ts",
   "../../../../lib/easy/cardnews-turn.ts",
+  "../../../../lib/easy/stop.ts",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 
 describe("그림 만드는 길", () => {
