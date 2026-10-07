@@ -262,6 +262,8 @@ export function easyChatPrompt(
     // 2차 D4: 모든 갈래에서 AI 가 말한다. 같은 판단 호출의 reply 다 — 추가 호출이 없다.
     ...easyReplyLines(갈래),
     ...(갈래.includes("card_text") ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
+    // Task 12 실제 모델 확인: 번호 없는 「다시 그려줘」를 talk 로 골라 장 번호 물음 줄 · 단추가 안 생겼다.
+    ...(장번호없는말(갈래)),
     "",
     // 갈래 이름은 쓸 수 있는 것만 적는다(A1) — 같은 목록을 넘긴다.
     ...easyCapabilityLines(갈래),
@@ -373,6 +375,18 @@ export function fitButtonDecision(decision: EasyDecision, options: EasyAvailabil
 }
 
 /** 마지막 줄(단추 답 실패 짝은 건너뛴다)이 물음이면 그 물음 · 답 표시 안내(2차 D1). */
+/**
+ * 장 번호 없는 「다시 그려줘」 · 「한 장 고쳐줘」(Task 12 실제 모델 확인). talk 로 고르면 장 번호 물음 줄 ·
+ * 단추가 안 생긴다. 쓸 수 있는 갈래 이름만 적는다(A1).
+ */
+function 장번호없는말(갈래: readonly EasyWant[]): string[] {
+  const 장갈래 = (["card_redo", "card_text"] as const).filter((one) => 갈래.includes(one));
+  if (장갈래.length === 0) return [];
+  return [
+    `장 번호 없이 한 장을 다시 그려 · 고쳐 달라면 talk 가 아니라 ${장갈래.join(" · ")} 이고 card 는 0 입니다. 몇 번 장인지 묻는 것은 그 갈래의 reply 입니다.`,
+  ];
+}
+
 function 물음뒤줄(history: readonly EasyMessage[], 갈래: readonly EasyWant[]): string[] {
   const ask = askChain(history)?.ask;
   return ask && ask.kind !== "ad" ? easyAskAnswerLines({ kind: ask.kind, text: ask.text }, 갈래) : [];
