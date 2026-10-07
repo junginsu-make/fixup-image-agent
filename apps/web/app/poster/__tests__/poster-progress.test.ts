@@ -75,7 +75,7 @@ describe("진행 표시가 화면에 이어져 있는가", () => {
    */
   it("일을 시작하는 다섯 자리가 모두 같은 문을 지난다", () => {
     // 기획·만들기·고치기·검수, 그리고 돌아와서 이어받을 때.
-    expect(source).toMatch(/stopped\.current = false;\s*setBusy\(state\);/);
+    expect(source).toMatch(/stopped\.current = false;\s*setBusy\(\{ \.\.\.state, startedAt: Date\.now\(\) \}\);/);
     expect((source.match(/beginWork\(\{ kind:/g) ?? []).length).toBe(5);
     // 갈래 안에서 따로 풀면 그 자리만 또 달라진다.
     expect(source.match(/stopped\.current = false;/g)?.length).toBe(1);

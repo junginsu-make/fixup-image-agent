@@ -27,10 +27,26 @@ import {
   placeholderRatio, planSlotRows, splitFilledSlots, type PlanSlotRow,
 } from "../poster-form-rules";
 import { WorkingBanner } from "../_components/working-banner";
+import { ItemStatusBadge, ItemWorkingOverlay } from "../../_components/item-status";
+import { workingButton } from "../../_components/working-words";
 import { rerunHref } from "../../_components/rerun-step";
 import { PlanWriting } from "../_components/plan-writing";
 import { blockedByReadOnly, READ_ONLY_MESSAGE } from "../../_components/read-only-work";
 import { PlanBar } from "./plan-bar";
+
+/** 일하는 중 표시에 필요한 것. `count` 는 여러 장을 만들 때만, `edit` 는 한 장 고칠 때만. */
+interface BusyState {
+  kind: "plan" | "generate" | "review";
+  label: string;
+  hint?: string;
+  startedAt?: number;
+  edit?: boolean;
+}
+
+/** 「6장 만드는 중입니다」. 한 장이면 장 수를 안 적는다. */
+function makingLabel(count: number): string {
+  return count > 1 ? `${count}장 만드는 중입니다` : "만드는 중입니다";
+}
 
 interface PosterImage {
   id: string;
@@ -159,7 +175,7 @@ export function PosterClient(
    * **`kind` 를 따로 든다.** 「그리는 중」일 때만 결과 자리에 빈 칸을 깔아야
    * 하는데, 글자만으로 판단하면 문구를 고칠 때마다 그 조건이 깨진다.
    */
-  const [busy, setBusy] = React.useState<{ kind: "plan" | "generate" | "review"; label: string; hint?: string } | null>(null);
+  const [busy, setBusy] = React.useState<BusyState | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notes, setNotes] = React.useState<string[]>(project.data.grammarIssues ?? []);
   const [list, setList] = React.useState(images);
@@ -471,9 +487,9 @@ export function PosterClient(
    * 「눌렀는데 아무 일도 안 일어난다」로 보인다(2026-09-17 독립 리뷰).
    * 갈래가 하나 늘 때마다 같은 구멍이 다시 생기므로 한 곳에 둔다.
    */
-  function beginWork(state: { kind: "plan" | "generate" | "review"; label: string; hint?: string }) {
+  function beginWork(state: BusyState) {
     stopped.current = false;
-    setBusy(state);
+    setBusy({ ...state, startedAt: Date.now() });
     setError(null);
   }
 
@@ -538,7 +554,7 @@ export function PosterClient(
     resumed.current = true;
     // 이어받는 것도 「일을 시작하는」 자리다. 같은 문을 지난다.
     // **무엇이 돌던 것인지는 모른다** — 그릴 수도, 고칠 수도 있다. 아는 만큼만 말한다.
-    beginWork({ kind: "generate", label: "만들던 것을 이어받는 중입니다", hint: "잠시 기다려 주세요" });
+    beginWork({ kind: "generate", label: "만드는 중입니다", hint: "만들던 것을 이어받는 중입니다. 잠시 기다려 주세요" });
     void (async () => {
       try {
         if (await collect(job.poll.body as Record<string, unknown>)) finish(job.id);
@@ -633,7 +649,7 @@ export function PosterClient(
 
   /** 기획을 채운다. 실패해도 빈 슬롯이 남고 사람이 직접 쓸 수 있다. */
   async function runPlan() {
-    beginWork({ kind: "plan", label: "기획하는 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
+    beginWork({ kind: "plan", label: "기획 중입니다", hint: "AI 가 칸을 채우고 있습니다" });
     try {
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/plan`)).json();
       // 중지를 눌렀으면 도착한 초안을 안 쓴다 — 멈춘 뒤에 칸이 채워지면 안 된다.
@@ -659,7 +675,7 @@ export function PosterClient(
    * GPT Image 2 는 2분을 넘긴다.
    */
   async function generate() {
-    beginWork({ kind: "generate", label: "보내는 중입니다", hint: "첨부한 그림을 올리고 있습니다" });
+    beginWork({ kind: "generate", label: makingLabel(project.data.variants), hint: "첨부한 그림을 올리고 있습니다" });
     try {
       /*
        * **고친 칸을 먼저 저장한다.**
@@ -679,7 +695,10 @@ export function PosterClient(
       if (stopped.current) return;
       if (!start.ok) throw new Error(start.message ?? "생성을 시작하지 못했습니다.");
       const submission = start.submission;
-      setBusy({ kind: "generate", label: "그리는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
+      setBusy((current) => ({
+        kind: "generate", label: makingLabel(project.data.variants), hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다",
+        startedAt: current?.startedAt ?? Date.now(),
+      }));
       await pollUntilDone(submission, project.data.variants);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "생성하지 못했습니다.");
@@ -707,7 +726,7 @@ export function PosterClient(
 
   /** 고른 것만 검수한다. 반려해도 이미지는 남고 다시 만들지는 사람이 누른다. */
   async function review() {
-    beginWork({ kind: "review", label: "검수하는 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
+    beginWork({ kind: "review", label: "검수 중입니다", hint: "글자가 원고대로 들어갔는지 봅니다" });
     try {
       // 검수도 값이 나간다 — 식별자 길목을 지나야 서버가 예약을 받는다.
       const body = await (await billableRequest(`/api/poster/projects/${project.id}/review`)).json();
@@ -729,7 +748,7 @@ export function PosterClient(
       setError("무엇을 고칠지 적어 주세요. 비어 있으면 같은 것을 또 만듭니다.");
       return;
     }
-    beginWork({ kind: "generate", label: "보내는 중입니다", hint: "고칠 그림을 올리고 있습니다" });
+    beginWork({ kind: "generate", label: "고치는 중입니다", hint: "고칠 그림을 올리고 있습니다", edit: true });
     try {
       // 수정도 크레딧이 깎이는 요청이다 — 열쇠가 없으면 예약이 거절된다.
       const start = await (await billableRequest(`/api/poster/projects/${project.id}/edit`, {
@@ -742,7 +761,10 @@ export function PosterClient(
       })).json();
       observeAccountResponse(start, true);
       if (!start.ok) throw new Error(start.message ?? "고치지 못했습니다.");
-      setBusy({ kind: "generate", label: "고치는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다" });
+      setBusy((current) => ({
+        kind: "generate", label: "고치는 중입니다", hint: "2~3분 걸립니다. 이 화면을 닫아도 계속됩니다",
+        edit: true, startedAt: current?.startedAt ?? Date.now(),
+      }));
       await pollUntilDone(start.submission, 1);
       setEditText("");
       setEditing(null);
@@ -885,12 +907,15 @@ export function PosterClient(
       ) : null}
 
       {/* 멈추는 자리는 여기 하나다 — 사이드바 칸은 없앴다(2026-09-17 사용자 결정). */}
+      {/* **몇 장이 끝났는지는 서버가 중간에 알려 주지 않는다** — 다 만들어져야 한꺼번에 온다.
+          그래서 0장에서 시작해 흐르는 막대로 「돌고 있다」만 말하고, 장 수는 문구가 말한다(2026-10-08). */}
       {busy ? (
         <WorkingBanner
           label={busy.label}
           hint={busy.hint}
           onStop={() => void stopNow()}
           stopping={stopping}
+          startedAt={busy.startedAt}
         />
       ) : null}
 
@@ -1049,17 +1074,17 @@ export function PosterClient(
           <SidePanelFooter className="flex flex-wrap justify-end gap-2">
             {list.length > 0 ? <Button variant="outline" onClick={() => setPlanOpen(false)}>결과로 돌아가기</Button> : null}
             <Button variant="secondary" onClick={() => void runPlan()} disabled={Boolean(busy)}>
-              {busy?.kind === "plan" ? <><Loader2 className="mr-1.5 size-4 animate-spin" />기획하는 중…</> : "초안 다시 채우기"}
+              {busy?.kind === "plan" ? <><Loader2 className="mr-1.5 size-4 animate-spin" />{workingButton("plan")}</> : "초안 다시 채우기"}
             </Button>
             <Button variant="secondary" onClick={() => void saveSlots()} disabled={saving || Boolean(busy)}>
-              {saving ? "저장하는 중…" : "기획 저장"}
+              {saving ? workingButton("save") : "기획 저장"}
             </Button>
             <Button
               onClick={() => { setPlanOpen(false); void generate(); }}
               disabled={Boolean(busy)}
             >
               {busy?.kind === "generate"
-                ? <><Loader2 className="mr-1.5 size-4 animate-spin" />만드는 중…</>
+                ? <><Loader2 className="mr-1.5 size-4 animate-spin" />{workingButton("make")}</>
                 : `${project.data.variants}장 만들기`}
             </Button>
           </SidePanelFooter>
@@ -1078,7 +1103,7 @@ export function PosterClient(
             <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-4">
               <p className="text-sm">고른 변형만 검수합니다. 글자가 원고대로 들어갔는지 봅니다.</p>
               <Button size="sm" variant="secondary" onClick={() => void review()} disabled={Boolean(busy)}>
-                검수하기
+                {busy?.kind === "review" ? workingButton("review") : "검수하기"}
               </Button>
             </div>
           ) : null}
@@ -1101,7 +1126,8 @@ export function PosterClient(
                   style={{ aspectRatio: placeholderRatio(project.ratio) }}
                   className="flex animate-pulse flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary/40 bg-primary-soft"
                 >
-                  <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+                  {/* 한꺼번에 보낸 한 묶음이라 모든 칸이 같이 만드는 중이다. */}
+                  <ItemStatusBadge state="working" />
                   <span className="text-xs text-primary">{index + 1}번째 그림</span>
                 </div>
               ))}
@@ -1117,7 +1143,7 @@ export function PosterClient(
                     onClick={() => void select(image.id)}
                     aria-pressed={image.selected}
                     className={cn(
-                      "overflow-hidden rounded-lg border-2 transition-colors",
+                      "relative overflow-hidden rounded-lg border-2 transition-colors",
                       image.selected ? "border-primary" : "border-transparent hover:border-border",
                     )}
                   >
@@ -1138,6 +1164,8 @@ export function PosterClient(
                         미리보기 없음
                       </div>
                     )}
+                    {/* 고치는 그림만 덮는다. 눌림은 막지 않는다(고른 그림을 바꿀 수 있어야 한다). */}
+                    {busy?.edit && editing === image.id ? <ItemWorkingOverlay state="working" className="pointer-events-none" /> : null}
                   </button>
                   <figcaption className="grid gap-2 text-xs">
                     <span className={cn("font-bold", image.selected && "text-primary")}>
@@ -1201,7 +1229,9 @@ export function PosterClient(
                         </p>
                         <div className="flex justify-end gap-1.5">
                           <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>취소</Button>
-                          <Button size="sm" onClick={() => void edit()} disabled={Boolean(busy)}>고치기</Button>
+                          <Button size="sm" onClick={() => void edit()} disabled={Boolean(busy)}>
+                            {busy?.edit ? workingButton("edit") : "고치기"}
+                          </Button>
                         </div>
                       </div>
                     ) : null}

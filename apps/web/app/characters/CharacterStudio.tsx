@@ -28,6 +28,9 @@ import {
 } from "./own-character";
 import { readImageBlob, type ReadImage } from "./read-image";
 import { useImageDropTarget } from "../_components/image-drop";
+import { WorkingStatus } from "../_components/working-status";
+import { ItemStatusBadge, ItemWorkingOverlay } from "../_components/item-status";
+import { workingButton } from "../_components/working-words";
 import { DropPasteHint } from "../_components/drop-paste-hint";
 import type { OpenedCharacter, OpenedFront, OpenedValues } from "./opened-character";
 
@@ -231,6 +234,8 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   /** 방금 만든 캐릭터. 2단계가 이것만 보여 준다. */
   const [created, setCreated] = useState<Character | null>(null);
   const [redoing, setRedoing] = useState("");
+  /** **걸린 시간을 흘리는 시작 시각.** 정면·각도·다시 만들기 중 어느 것이든 하나만 돈다. */
+  const [workStartedAt, setWorkStartedAt] = useState<number | undefined>(undefined);
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -412,6 +417,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     // 요청 상한(16MB)을 넘으면 서버가 본문을 잘라 엉뚱한 오류가 난다. 그림은 줄이지 않고 막는다.
     if (imagesTooLarge(attached, own)) return setMessage(IMAGES_TOO_LARGE_MESSAGE);
     setBusy("candidates");
+    setWorkStartedAt(Date.now());
     setMessage("");
     setChosen(null);
     setCreated(null);
@@ -440,6 +446,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       setMessage(error instanceof Error ? error.message : "정면을 만들지 못했습니다.");
     } finally {
       setBusy("");
+      setWorkStartedAt(undefined);
     }
   };
 
@@ -469,15 +476,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     if (!chosen) return;
     const angles = withExtras ? pickedAngles.filter((angle) => angle !== "front") : [];
     const wantsSheet = withExtras && sheet;
-    const extras = angles.length + (wantsSheet ? 1 : 0);
     // 서버도 앞뒤 빈칸을 떼고 비교한다. 같게 떼야 「이름이 바뀌었다」를 잘못 말하지 않는다.
     const requestedName = (chosen.name.trim() || chosen.description).slice(0, 40).trim();
 
     setBusy("create");
+    setWorkStartedAt(Date.now());
     setPending([...angles, ...(wantsSheet ? [sheetItem.id] : [])]);
-    setMessage(extras
-      ? `고른 정면을 기준으로 ${extras}장을 더 만드는 중입니다…`
-      : "정면 한 장으로 저장하는 중입니다…");
+    // **무엇을 몇 장 만드는지는 위쪽 띠가 말한다.** 같은 말을 여기 또 적지 않는다.
+    setMessage("");
     try {
       const body = await (await billableFetch("/api/characters", {
         body: JSON.stringify({
@@ -521,11 +527,13 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
     } finally {
       setPending([]);
       setBusy("");
+      setWorkStartedAt(undefined);
     }
   };
 
   const handleRedo = async (character: Character, angle: string) => {
     setRedoing(`${character.id}:${angle}`);
+    setWorkStartedAt(Date.now());
     setMessage("");
     try {
       const body = await (await billableFetch("/api/characters/views", {
@@ -540,6 +548,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
       setMessage(error instanceof Error ? error.message : "다시 만들지 못했습니다.");
     } finally {
       setRedoing("");
+      setWorkStartedAt(undefined);
     }
   };
 
@@ -595,9 +604,16 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
   });
   const chosenSrc = chosen ? `data:${chosen.mimeType};base64,${chosen.base64}` : "";
   const extraCount = pickedAngles.filter((angle) => angle !== "front").length + (sheet ? 1 : 0);
+  const redoingAngle = redoing ? angleLabel(redoing.slice(redoing.indexOf(":") + 1)) : "";
 
   return (
     <div className="min-w-0">
+      <StudioWorkingBanner
+        busy={busy}
+        pending={pending.length}
+        redoingAngle={redoingAngle}
+        startedAt={workStartedAt}
+      />
       <div className="mb-5 flex items-start justify-between gap-4 max-md:flex-col">
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs font-bold text-muted-foreground">부가 기능</p>
@@ -814,7 +830,7 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   그건 장식이 아니라 지금 무슨 일이 벌어지는지를 말한다. */}
               <Button className="w-full" disabled={locked} onClick={() => void handleCandidates()}>
                 {busy === "candidates" ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : null}
-                {busy === "candidates" ? "정면을 만드는 중…" : "정면 만들기"}
+                {busy === "candidates" ? workingButton("make") : "정면 만들기"}
               </Button>
               {chosen ? (
                 <p className="mt-2 text-xs text-muted-foreground">
@@ -976,10 +992,10 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
               */}
               <div className="grid h-64 flex-none place-items-center">
                 {busy === "candidates" ? (
-                  <MakingBox
-                    title="정면을 만드는 중입니다"
-                    hint="보통 30~60초 걸립니다. 이 칸을 떠나도 계속 만듭니다"
-                  />
+                  /* 안내 글은 위쪽 띠에 있다. 칸은 다른 기능과 같은 덮개만 쓴다. */
+                  <div className="relative h-full w-full overflow-hidden rounded-md border border-dashed bg-muted">
+                    <ItemWorkingOverlay state="working" />
+                  </div>
                 ) : chosen ? (
                   <button
                     type="button" aria-label="이번 정면 크게 보기"
@@ -1005,18 +1021,14 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                 도는 표시만 있으면 얼마나 남았는지도, 무엇이 되고 있는지도 모른다.
               */}
               {pending.length ? (
-                <div className="flex-none rounded-md border-2 border-primary/40 bg-primary-soft/30 p-3">
-                  <p className="flex items-center gap-2 text-sm font-bold text-primary">
-                    <Loader2 className="size-4 animate-spin" />
-                    {pending.length}장을 만드는 중입니다
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {pending.map((angle) => angleLabel(angle)).join(" · ")} · 한 장에 30~90초 걸립니다
-                  </p>
-                  <span className="mt-2 block h-1 overflow-hidden rounded-full bg-primary/20">
-                    <span className="block h-full w-1/3 animate-pulse rounded-full bg-primary" />
-                  </span>
-                </div>
+                <ul className="flex flex-none flex-wrap gap-1.5">
+                  {pending.map((angle) => (
+                    <li key={angle} className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs">
+                      {angleLabel(angle)}
+                      <ItemStatusBadge state="working" />
+                    </li>
+                  ))}
+                </ul>
               ) : null}
 
               {/* ── 단추는 결과물이 없어도 늘 보인다 ────────────────── */}
@@ -1038,9 +1050,10 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                   )}
                 >
                   {busy === "create" && !pending.length
-                    ? <Loader2 size={16} className="mr-1.5 animate-spin" />
-                    : null}
-                  캐릭터 저장하기
+                    ? <><Loader2 size={16} className="mr-1.5 animate-spin" />{workingButton("save")}</>
+                    : <>
+                      캐릭터 저장하기
+                    </>}
                 </Button>
 
                 {/* 여기서부터가 「이어서 더 만들기」다. 줄을 그어 나눈다 —
@@ -1106,7 +1119,9 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
                     {busy === "create" && pending.length
                       ? <Loader2 size={16} className="mr-1.5 animate-spin" />
                       : null}
-                    {extraCount ? `${extraCount}장 더 만들고 저장` : "더 만들 것을 고르세요"}
+                    {busy === "create" && pending.length
+                      ? workingButton("make")
+                      : extraCount ? `${extraCount}장 더 만들고 저장` : "더 만들 것을 고르세요"}
                   </Button>
                 </div>
 
@@ -1144,22 +1159,45 @@ export function CharacterStudio({ opened }: { opened?: OpenedCharacter } = {}) {
 }
 
 /**
- * 만드는 중이라는 것을 **크게** 말하는 자리.
+ * 화면 맨 위의 띠. **한 화면에 띠 하나** — 정면·각도·다시 만들기는 동시에 돌지 않는다.
  *
- * 전에는 점선 칸 가운데 작은 표시 하나가 돌았다. 몇 십 초가 걸리는 일인데
- * 그것만으로는 시작이 됐는지 멈춘 것인지 알 수 없다(2026-09-11 사용자 요청).
- * 색을 주고, 무엇을 하는 중인지와 얼마나 걸리는지를 글로 적는다.
+ * 멈추는 길이 없는 요청이라 중지 단추는 두지 않는다. 각도는 한 요청으로 한꺼번에
+ * 보내므로 몇 장 끝났는지 모른다 — 0장에서 시작해 끝나면 사라진다.
  */
-function MakingBox({ title, hint }: { title: string; hint: string }) {
+function StudioWorkingBanner({ busy, pending, redoingAngle, startedAt }: {
+  busy: "" | "candidates" | "create";
+  pending: number;
+  redoingAngle: string;
+  startedAt: number | undefined;
+}) {
+  if (busy === "candidates") {
+    return (
+      <WorkingStatus
+        label="정면 만드는 중입니다"
+        hint="보통 30~60초 걸립니다. 이 칸을 떠나도 계속 만듭니다"
+        startedAt={startedAt}
+        className="mb-4"
+      />
+    );
+  }
+  if (busy === "create") {
+    return (
+      <WorkingStatus
+        label={pending ? `${pending}장 만드는 중입니다` : "저장 중입니다"}
+        hint={pending ? "한 장에 30~90초 걸립니다" : undefined}
+        startedAt={startedAt}
+        className="mb-4"
+      />
+    );
+  }
+  if (!redoingAngle) return null;
   return (
-    <div className="grid h-full w-full place-content-center place-items-center gap-3 rounded-md border-2 border-primary/40 bg-primary-soft/30 p-6 text-center">
-      <Loader2 className="size-8 animate-spin text-primary" />
-      <p className="text-sm font-bold text-primary">{title}</p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
-      <span className="block h-1 w-40 overflow-hidden rounded-full bg-primary/20">
-        <span className="block h-full w-1/3 animate-pulse rounded-full bg-primary" />
-      </span>
-    </div>
+    <WorkingStatus
+      label={`${redoingAngle} 만드는 중입니다`}
+      hint="한 장에 30~90초 걸립니다"
+      startedAt={startedAt}
+      className="mb-4"
+    />
   );
 }
 
@@ -1395,16 +1433,17 @@ function CharacterCard({ character, angles, angleLabel, fresh, redoing, deleting
                 {missing.map((angle) => {
                   const busy = redoing === `${character.id}:${angle.id}`;
                   return (
-                    <Button
-                      key={angle.id} type="button" variant="secondary" size="sm"
-                      disabled={busy}
-                      onClick={() => onRedo(angle.id)}
-                    >
-                      {busy
-                        ? <Loader2 className="mr-1 size-3 animate-spin" />
-                        : <Sparkles className="mr-1 size-3" />}
-                      {angle.label}
-                    </Button>
+                    <span key={angle.id} className="inline-flex items-center gap-1">
+                      <Button
+                        type="button" variant="secondary" size="sm"
+                        disabled={busy}
+                        onClick={() => onRedo(angle.id)}
+                      >
+                        <Sparkles className="mr-1 size-3" />
+                        {angle.label}
+                      </Button>
+                      {busy ? <ItemStatusBadge state="working" /> : null}
+                    </span>
                   );
                 })}
               </div>

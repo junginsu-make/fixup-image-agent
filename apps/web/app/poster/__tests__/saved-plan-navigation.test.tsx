@@ -26,7 +26,7 @@ const label = (node: unknown): string => typeof node === "string" ? node : node 
 const button = (text: string) => view.root.findAllByType("button").find(node => label(node).includes(text))!;
 const current = () => label(view.root.findAllByType("button").find(node => node.props["aria-current"] === "step"));
 
-beforeEach(() => { f.push.mockReset(); f.fetch.mockReset(); f.params = new URLSearchParams(); vi.stubGlobal("fetch", f.fetch); });
+beforeEach(() => { f.push.mockReset(); f.fetch.mockReset(); f.params = new URLSearchParams(); vi.stubGlobal("fetch", f.fetch); vi.stubGlobal("window", { setInterval, clearInterval }); });
 afterEach(() => { act(() => view?.unmount()); vi.unstubAllGlobals(); });
 
 describe("saved poster plan navigation", () => {

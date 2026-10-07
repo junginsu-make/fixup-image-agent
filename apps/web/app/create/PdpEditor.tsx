@@ -115,6 +115,7 @@ import { WorkingStatus } from "../_components/working-status";
 import { ItemStatusBadge, ItemWorkingOverlay } from "../_components/item-status";
 import { workingButton } from "../_components/working-words";
 import { GenerationRunBanner } from "./GenerationRunBanner";
+import { useElementHeight } from "./use-element-height";
 import { sectionRunState } from "./section-run-state";
 import { SaveImagesToLibrary } from "../_components/save-to-library";
 import {
@@ -396,6 +397,7 @@ export function PdpEditor({
    * 지금은 순서 변경·삭제가 잠겨 있어 그 창이 안 열린다. 다만 **잠금이 유일한
    * 방어**이면 잠금을 안 거는 길이 하나 생길 때 조용히 되살아난다.
    */
+  const { ref: runBannerRef, height: runBannerMeasured } = useElementHeight();
   const sectionKeysRef = useRef<string[]>(sectionKeys);
   // 렌더 중에 대입하지 않는다 — 버려지는 렌더에서도 대입된다.
   useEffect(() => {
@@ -2754,7 +2756,12 @@ export function PdpEditor({
 
   // 셸이 <main> 을 제공하므로 여기서는 열지 않는다(이전에는 <main> 이 중첩됐다).
   return (
-    <div className="min-w-0" onClick={clearLayerSelection}>
+    <div
+      // 도는 동안만 작은 화면 메뉴 줄(h-14 + 테두리) 아래로 띠를 내린다(2026-10-08 리뷰).
+      className={cn("min-w-0", generationRun?.status === "running" && "[--shell-head:calc(3.5rem+1px)] lg:[--shell-head:0px]")}
+      style={{ "--run-banner-h": `${generationRun?.status === "running" ? runBannerMeasured : 0}px` } as CSSProperties}
+      onClick={clearLayerSelection}
+    >
       <header
         className="mb-4 flex flex-wrap items-start gap-3"
         onClick={stopShellClick}
@@ -2928,14 +2935,26 @@ export function PdpEditor({
         </div>
       ) : null}
 
-      <div className="mb-4 grid gap-2" onClick={stopShellClick}>
-        {generationRun ? (
+      {/*
+        **도는 동안 띠가 굴려도 보이게 한다**(2026-10-08). `sticky` 는 부모 상자 안에서만
+        붙는다 — 안내 줄 묶음 안에 두면 그 상자가 끝날 때 같이 사라졌다. 편집기 루트의
+        직계 자식으로 두어 갤러리 끝까지 따라온다. 갤러리 막대(`sticky top-0`)는
+        아래에서 띠 높이만큼 내린다.
+      */}
+      {generationRun ? (
+        <div
+          ref={runBannerRef}
+          className={cn("mb-4", generationRun.status === "running" ? "sticky top-[var(--shell-head,0px)] z-30" : "")}
+          onClick={stopShellClick}
+        >
           <GenerationRunBanner
             run={generationRun}
             creditUnits={imageCreditUnits(imageModel, generationRun.completed, { policy: creditPolicy })}
             unit={단위}
           />
-        ) : null}
+        </div>
+      ) : null}
+      <div className="mb-4 grid gap-2" onClick={stopShellClick}>
         {/* 한 화면에 도는 띠는 하나 — 생성 띠가 돌고 있으면 얹지 않는다(2026-10-08). */}
         {isSavingToLibrary && librarySaveByUser && generationRun?.status !== "running" ? (
           <WorkingStatus label="라이브러리에 저장 중입니다" />
@@ -2983,7 +3002,10 @@ export function PdpEditor({
       </div>
 
       {screen === "gallery" ? (
-        <div onClick={stopShellClick}>
+        <div
+          className="[&_.sticky]:top-[calc(var(--run-banner-h,0px)+var(--shell-head,0px)+0.5rem)]"
+          onClick={stopShellClick}
+        >
           <SectionGallery
             sections={sections}
             sectionKeys={sectionKeys}
@@ -3027,7 +3049,7 @@ export function PdpEditor({
           `sticky` 라 겹칠 때 위에 그려져, 가운데 편집 화면의 제목과 도구 단추를
           덮었다. 칸마다 `minmax(0, 1fr)` 로 「내용보다 작아져도 된다」를 적는다.
         */}
-        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 xl:sticky xl:top-6" onClick={stopShellClick}>
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 xl:sticky xl:top-[calc(var(--run-banner-h,0px)+1.5rem)]" onClick={stopShellClick}>
           <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-ring)]">
             <p className="text-meta text-subtle-foreground">현재 섹션</p>
             <h2 className="text-h2">{getDisplaySectionName(currentSection)}</h2>
