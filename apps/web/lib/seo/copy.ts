@@ -25,7 +25,7 @@ export const HOME_COPY: Record<"ko" | "en", PageCopy> = {
   ko: {
     title: "FormWith | AI 카드뉴스·상세페이지·광고 소재 만들기",
     description:
-      "레퍼런스 한 장이면 같은 결의 이미지가 나옵니다. 카드뉴스, 상세페이지, 광고 소재, 포스터, 캐릭터를 AI로 한 곳에서 만드는 마케팅 콘텐츠 제작 스튜디오 FormWith.",
+      "레퍼런스 한 장으로 카드뉴스, 상세페이지, 광고 소재, 포스터, 캐릭터를 AI로 만드는 마케팅 콘텐츠 제작 스튜디오 FormWith.",
   },
   en: {
     title: "FormWith | AI marketing content studio",
@@ -38,7 +38,7 @@ export const GUIDE_COPY: Readonly<Record<string, PageCopy>> = {
   "/guide": {
     title: "사용 설명서",
     description:
-      "FormWith 사용 설명서. AI로 카드뉴스, 이미지, 상세페이지, 캐릭터를 만드는 도구가 무엇이고 서로 어떻게 이어지는지 처음부터 안내합니다.",
+      "FormWith 사용 설명서. AI로 카드뉴스, 이미지, 상세페이지, 캐릭터를 만드는 도구와 쓰는 순서를 처음부터 안내합니다.",
   },
   "/guide/easy": {
     title: "쉽게 · 사용 설명서",
