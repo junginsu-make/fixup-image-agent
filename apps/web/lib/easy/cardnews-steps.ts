@@ -7,6 +7,7 @@ import { snsFlowStoreForUser } from "../sns-flow-store";
 import { refreshProjectAssetUrls } from "../sns/runtime";
 import { EasyStepError, read, relay } from "./relay";
 import { READ_BATCH, readInBatches } from "./read-batches";
+import { errorLogText } from "./log-text";
 import type { CardnewsProjectLike } from "../../app/easy/cardnews-view";
 
 /**
@@ -66,7 +67,7 @@ async function fillEnding(
     );
     return saved.project as CardnewsProjectLike;
   } catch (error) {
-    console.warn(`[easy] 마지막 장을 채우지 못했습니다 project=${projectId}`, error instanceof Error ? error.message : error);
+    console.warn(`[easy] 마지막 장을 채우지 못했습니다 project=${projectId}`, errorLogText(error));
     return project;
   }
 }
@@ -102,7 +103,7 @@ export async function cardnewsProjectIds(userId: string, ids: readonly string[])
     const found = await readInBatches([...new Set(ids)], READ_BATCH, (id) => store.get(id));
     return new Set(found.flatMap((one) => (one && one.userId === userId ? [one.id] : [])));
   } catch (error) {
-    console.warn("[easy] 카드뉴스 작업을 읽지 못했습니다", error instanceof Error ? error.message : error);
+    console.warn("[easy] 카드뉴스 작업을 읽지 못했습니다", errorLogText(error));
     return null;
   }
 }
@@ -131,7 +132,7 @@ export async function lastCardnewsProject(
     const project = found.find((one) => one && one.userId === userId);
     return project ? (await refreshProjectAssetUrls(project)) as unknown as EasyCardnewsProject : null;
   } catch (error) {
-    console.warn("[easy] 고칠 카드뉴스 원고를 찾지 못했습니다", error instanceof Error ? error.message : error);
+    console.warn("[easy] 고칠 카드뉴스 원고를 찾지 못했습니다", errorLogText(error));
     return null;
   }
 }

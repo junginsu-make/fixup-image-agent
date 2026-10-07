@@ -11,6 +11,7 @@ let 작업들: Record<string, { id: string; ratio: string; data: Record<string, 
 let 그림들: 그림[];
 let 카드뉴스: Set<string>;
 let 실패 = false;
+let 그림실패오류: unknown = new Error("db");
 let 카드실패 = false;
 let 읽은수 = 0;
 let 읽는중 = 0;
@@ -32,7 +33,7 @@ vi.mock("../../poster/stores", () => ({
         return 작업들[id];
       },
     },
-    images: { byProjects: async () => { if (실패) throw new Error("db"); return 그림들; } },
+    images: { byProjects: async () => { if (실패) throw 그림실패오류; return 그림들; } },
   }),
 }));
 vi.mock("../cardnews-steps", () => ({
@@ -57,6 +58,7 @@ beforeEach(() => {
   그림들 = [{ id: "img-1", projectId: "p1", generationRequestId: "r1", selected: false, assetPath: "me/1.png", thumbPath: null }];
   카드뉴스 = new Set(["card-1"]);
   실패 = false;
+  그림실패오류 = new Error("db");
   카드실패 = false;
   읽은수 = 0;
   읽는중 = 0;
@@ -188,5 +190,17 @@ describe("한 턴에 읽는 결과물 수 (최종 수정 10)", () => {
     await loadEasyImages("me", rows, 지금);
     expect(읽은수).toBe(30);
     expect(가장많이).toBeLessThanOrEqual(10);
+  });
+});
+
+/** 후속 Task 11 2차. 저장소 오류 덩어리 대신 주소를 가린 글로 남긴다. 머리말은 그대로다. */
+describe("서버 기록 (후속 Task 11 2차)", () => {
+  it("결과물을 못 읽으면 주소를 가린 글로 남긴다", async () => {
+    const 기록 = vi.spyOn(console, "warn").mockImplementation(() => {});
+    실패 = true;
+    그림실패오류 = { message: "db https://abc.supabase.co/rest/v1/images?apikey=SECRET", code: "PGRST000" };
+    await loadEasyImages("me", [줄("a", "p1", 일감("r1"), 1)], 지금);
+    expect(기록).toHaveBeenCalledWith("[easy] 이 대화의 결과물을 읽지 못했습니다", "db <url>");
+    기록.mockRestore();
   });
 });

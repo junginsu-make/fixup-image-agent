@@ -6,6 +6,7 @@ import { editedRequestIds, pickRowImage } from "../../app/easy/row-image";
 import { posterStoresForUser } from "../poster/stores";
 import { cardnewsProjectIds } from "./cardnews-steps";
 import { READ_BATCH, readInBatches } from "./read-batches";
+import { errorLogText } from "./log-text";
 
 /**
  * **이 대화의 결과물 사실**(2026-10-07 2차 설계 D2 · D5).
@@ -123,7 +124,7 @@ export async function loadEasyImages(userId: string, rows: readonly Row[], now =
       unreadOld,
     };
   } catch (error) {
-    console.warn("[easy] 이 대화의 결과물을 읽지 못했습니다", error instanceof Error ? error.message : error);
+    console.warn("[easy] 이 대화의 결과물을 읽지 못했습니다", errorLogText(error));
     return 모두모름(rows, unreadOld);
   }
 }
