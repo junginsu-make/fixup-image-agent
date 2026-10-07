@@ -19,7 +19,10 @@ function zoneTag(source: string, spread: string): string {
   const at = source.indexOf(spread);
   expect(at).toBeGreaterThan(-1);
   const start = Math.max(source.lastIndexOf("<Card", at), source.lastIndexOf("<div", at));
-  const end = source.indexOf(">\n", at) > -1 ? source.indexOf(">", source.indexOf("className", at)) : -1;
+  // 여는 태그는 className 뒤 첫 「>」에서 끝난다. 줄바꿈(CRLF·LF)에 기대지 않는다 —
+  // 전에는 「>\n」을 찾아 Windows 로 받은 파일에서 빈 문자열을 검사하고 실패했다.
+  const end = source.indexOf(">", source.indexOf("className", at));
+  expect(end).toBeGreaterThan(at);
   return source.slice(start, end + 1);
 }
 
