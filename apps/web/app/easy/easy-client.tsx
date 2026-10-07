@@ -376,6 +376,8 @@ export function EasyClient({
       if (body.ok && body.cardnews?.rowId && typeof body.resultLabel === "string") {
         setLabels((current) => ({ ...current, [body.cardnews.rowId]: body.resultLabel }));
       }
+      // 일하는 턴의 AI 말(2차 D4). 그림 · 원고 자리 앞에 붙인다 — 0장 실패 안내도 그 뒤에 온다.
+      if (body.ok && body.say?.id) setMessages((current) => [...current, { id: body.say.id, role: "assistant", body: body.say.body ?? "" }]);
       // 카드뉴스 원고 · 손보기(2단계 · 3단계). 값은 원고까지 안 든다.
       if (body.ok && cardnews.take(body)) return;
       if (body.ok && body.talked) {

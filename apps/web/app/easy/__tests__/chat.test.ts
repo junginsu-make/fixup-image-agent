@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NOT_MADE_YET } from "../cardnews-after";
 import { easyChatPrompt, readEasyDecision } from "../chat";
 import type { EasyMessage } from "../turn";
-import { askBody } from "../row-marks";
+import { askBody, sayBody } from "../row-marks";
 
 /**
  * **말인가, 만들어 달라는 것인가** (2026-09-21 사용자).
@@ -269,5 +269,36 @@ describe("이 대화의 결과물 목록 (2차 D2)", () => {
 
   it("결과물이 없으면 목록을 안 싣는다", () => {
     expect(easyChatPrompt([], "안녕")).not.toContain("── 이 대화의 결과물");
+  });
+});
+
+describe("AI 가 늘 말한다 (2차 D4)", () => {
+  it("모든 갈래에서 reply 를 쓰게 하고, 일하는 갈래는 하는 중으로 말하게 한다", () => {
+    const prompt = easyChatPrompt([], "카페 포스터 만들어줘");
+    expect(prompt).toContain("모든 갈래에서 `reply` 에");
+    expect(prompt).toContain("아직 하는 중");
+    expect(prompt).toContain("either 이면 한 장으로 만들지 여러 장짜리 카드뉴스로 만들지 묻는 한 문장");
+    expect(prompt).toContain("어떤 모양으로 만들지 묻는 한 문장");
+    expect(prompt).not.toContain("면 `reply` 는 빈 글로 두세요");
+    expect(prompt).not.toContain("`detail_page` 도 `reply` 는 빈 글로");
+  });
+
+  /** 2차 최종 리뷰 g — 글 고치기 · 게시글의 끝 문장은 일을 마친 뒤 대화에 남는다. 「고칠게요」면 시제가 틀린다. */
+  it("글 고치기 · 게시글은 끝난 일로 쓰게 하고, 그 둘은 「하는 중」 갈래에 넣지 않는다", () => {
+    const prompt = easyChatPrompt([], "2번 더 짧게", 0, true, true, false);
+    expect(prompt).toContain("card_text · caption 이면 일을 마친 뒤에 보이는 말입니다");
+    expect(prompt).toMatch(/image · cardnews · revise 이면 무엇을 이해했고/);
+    expect(easyChatPrompt([], "안녕")).not.toContain("일을 마친 뒤에 보이는 말");
+  });
+
+  it("지난 대화는 사용자 말 8번까지 싣는다 — 물음 · 머리말 줄이 많아도 (2차 §3-4)", () => {
+    const 대화 = Array.from({ length: 10 }, (_, at) => [
+      말("user", `말${at}`, `u${at}`), 말("assistant", sayBody(`머리말${at}`), `s${at}`), 말("assistant", `답${at}`, `a${at}`),
+    ]).flat();
+    const prompt = easyChatPrompt(대화, "마지막");
+    expect(prompt).toContain("사용자: 말2\n");
+    expect(prompt).not.toContain("사용자: 말1\n");
+    expect(prompt).toContain("도우미: 머리말9");
+    expect(prompt).not.toContain("say:");
   });
 });

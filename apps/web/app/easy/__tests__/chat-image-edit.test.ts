@@ -23,8 +23,8 @@ describe("판단 지시", () => {
     expect(easyChatPrompt([], "로고 바꿔줘", 0, false, false, true)).not.toContain("revise");
   });
 
-  it("image_edit 이면 reply 를 비우라고 한다", () => {
-    expect(easyChatPrompt([], "로고 바꿔줘", 0, false, false, true)).toMatch(/`image_edit`[^\n]*reply/);
+  it("image_edit 도 reply 에 무엇을 이해했고 무엇을 하는지 말하게 한다 (2차 D4)", () => {
+    expect(easyChatPrompt([], "로고 바꿔줘", 0, false, false, true)).toMatch(/image_edit[^\n]*무엇을 이해했고/);
   });
 
   it("고친 줄의 표시는 모델에게 가지 않는다", () => {

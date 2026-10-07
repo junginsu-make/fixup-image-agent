@@ -39,6 +39,7 @@ vi.mock("../../../app/api/poster/projects/[id]/edit/route", () => ({
 
 const { countEasyImages, imageEditTurn, lastEasyImage, projectTarget } = await import("../image-edit-turn");
 const { editRowBody, rowFromOf, withRowFrom, withRowJob } = await import("../../../app/easy/row-image");
+const { sayBody } = await import("../../../app/easy/row-marks");
 
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
 const store = {
@@ -269,5 +270,18 @@ describe("번호로 고르기 (2차 D2)", () => {
     expect([...(await projectTarget("me", "p1"))!.keptIds]).toEqual(["keep-1"]);
     expect(await projectTarget("me", "nope")).toBeNull();
     expect(await projectTarget("me", undefined)).toBeNull();
+  });
+});
+
+describe("고치기 머리말 (2차 D4)", () => {
+  it("사용자 줄 → 머리말 줄 → 고친 줄 차례로 남기고 머리말을 응답에 싣는다", async () => {
+    const all = [줄.user("만들어줘"), 줄.image("p1")];
+    const json = await (await imageEditTurn({
+      request: 요청(), userId: "me", store, conversationId: "c1", prompt: "글자 크게", textModel: "m",
+      target: (await lastEasyImage("me", all))!, rows: all, attachments: [], say: "글자를 크게 고치겠습니다.",
+    })).json();
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "image"]);
+    expect(남긴줄[1]!.body).toBe(sayBody("글자를 크게 고치겠습니다."));
+    expect(json.say).toMatchObject({ body: sayBody("글자를 크게 고치겠습니다.") });
   });
 });

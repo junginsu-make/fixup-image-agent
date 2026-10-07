@@ -91,6 +91,8 @@ const { askBody, readAsk } = await import("../../../easy/row-marks");
 const { editRowBody, rowFromOf } = await import("../../../easy/row-image");
 const { IMAGE_NOT_READY } = await import("../../../../lib/easy/image-edit-turn");
 const { NO_DONE_IMAGE } = await import("../../../../lib/easy/edit-target");
+const { sayBody } = await import("../../../easy/row-marks");
+const { sayEditText } = await import("../../../easy/turn-words");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -123,7 +125,17 @@ describe("이미지를 만든 대화에서 고쳐 달라고 하면", () => {
     // 2차 D3: 첨부는 쓴 뒤 내려간다 — 붙어 있으면 일부러 붙인 것이라 다 넣는다(지킬 사진만 뺀다. 이 작업엔 없다).
     expect(부른라우트[0]!.body).toEqual({ instruction: 로고바꿔줘, imageId: "img-1", addedReferenceIds: [사진(1), 사진(2)] });
     expect(json).toMatchObject({ ok: true, projectId: "p1", submission: { requestRowId: "edit-row" } });
-    expect(남긴줄.map((row) => row.role)).toEqual(["user", "image"]);
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "image"]);
+  });
+
+  /**
+   * 2차 최종 리뷰 b — 판단 읽기가 revise 를 이미지 고치기로 바꿔 읽으면, 모델이 revise 로 쓴 「원고를 고치겠습니다」는
+   * 이 일과 안 맞는다. 판단 읽기가 그 reply 를 비우고 코드 문장이 머리말로 나간다.
+   */
+  it("revise 를 이미지 고치기로 바꿔 읽으면 처음 갈래로 쓴 말 대신 코드 문장을 머리말로 쓴다", async () => {
+    판단 = { ...(판단 as object), wants: "revise", reply: "카드뉴스 원고를 짧게 고치겠습니다." };
+    await 보낸다({ prompt: 로고바꿔줘 });
+    expect(남긴줄[1]!.body).toBe(sayBody(sayEditText()));
   });
 
   it("모델이 image_edit 이라고 해도 같다", async () => {
@@ -180,8 +192,8 @@ describe("고치기가 실패하면 (2026-10-06 B4)", () => {
     고치기실패 = true;
     판단 = { ...(판단 as object), wants: "image_edit" };
     await 보낸다({ prompt: "배경만 파랗게" });
-    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
-    expect(남긴줄[1]!.body).toBe(failureRowBody("고치기가 막혔습니다."));
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(남긴줄[2]!.body).toBe(failureRowBody("고치기가 막혔습니다."));
   });
 });
 

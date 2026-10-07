@@ -40,3 +40,21 @@ export function askText(reply: string | undefined, fallback: string): string {
 export function aiText(decision: { wants: string; reply: string }, executed: string): string | undefined {
   return decision.wants === executed ? decision.reply : undefined;
 }
+
+/** 일하는 턴의 머리말 — AI 말이 비었거나 다른 갈래로 쓴 글이면 대신 쓴다(2차 D4 · 최종 리뷰 b). */
+export const SAY_IMAGE = "말씀하신 내용으로 이미지 한 장을 만들겠습니다. 다 되면 이 자리에 보여 드릴게요.";
+export const SAY_CARDNEWS = "카드뉴스 원고를 쓰겠습니다. 1~2분쯤 걸립니다.";
+export const SAY_REVISE = "말씀하신 대로 카드뉴스 원고를 다시 쓰겠습니다. 1~2분쯤 걸립니다.";
+
+export function sayEditText(n?: number): string {
+  return n ? `이미지 ${n}번을 말씀대로 고치겠습니다.` : "방금 이미지를 말씀대로 고치겠습니다.";
+}
+
+/**
+ * 머리말 · 안내 · 끝 문장. AI 가 쓴 글이 **비지 않았으면** 그것, 아니면 코드 문장(2차 최종 리뷰 3). 프롬프트가
+ * 「다음에 할 수 있는 것도 덧붙이라」고 시켜 끝에 물음이 올 수 있다 — 그래도 받는다. 다른 갈래로 쓴 글은
+ * 부르는 쪽이 `aiText(decision, wants)` 로 먼저 거른다(최종 리뷰 b).
+ */
+export function sayText(reply: string | undefined, fallback: string): string {
+  return reply?.trim() || fallback;
+}

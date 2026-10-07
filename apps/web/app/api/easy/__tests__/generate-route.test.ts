@@ -95,6 +95,8 @@ const { FAILED_TURN_GENERIC, failureRowBody } = await import("../../../../lib/ea
 const { withRowJob } = await import("../../../easy/row-image");
 const { readAsk } = await import("../../../easy/row-marks");
 const { RATIO_QUESTION } = await import("../../../easy/turn-words");
+const { sayBody } = await import("../../../easy/row-marks");
+const { SAY_IMAGE } = await import("../../../easy/turn-words");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
   const response = await POST(new Request("http://localhost/api/easy/generate", {
@@ -386,8 +388,9 @@ describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
     판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
     const { status } = await 보낸다({});
     expect(status).toBe(402);
-    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
-    expect(남긴줄[1]!.body).toBe(failureRowBody("기획이 막혔습니다."));
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(남긴줄[1]!.body).toBe(sayBody(SAY_IMAGE));
+    expect(남긴줄[2]!.body).toBe(failureRowBody("기획이 막혔습니다."));
   });
 
   /**
@@ -398,9 +401,9 @@ describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
     기획던짐 = true;
     판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
     await 보낸다({});
-    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant"]);
-    expect(남긴줄[1]!.body).toBe(failureRowBody(FAILED_TURN_GENERIC));
-    expect(남긴줄[1]!.body).not.toContain("poster_projects");
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(남긴줄[2]!.body).toBe(failureRowBody(FAILED_TURN_GENERIC));
+    expect(남긴줄[2]!.body).not.toContain("poster_projects");
   });
 
   it("그림 줄에 결과를 받을 정보를 남긴다 — 다시 열면 이어 받는다", async () => {
@@ -414,5 +417,45 @@ describe("실패 줄 · 받을 정보 (2026-10-06 B4 · B3)", () => {
   it("만든 이미지의 이름표를 응답에 싣는다 — 화면의 「이미지 N」 (2차 D2)", async () => {
     판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
     expect((await 보낸다({})).json.resultLabel).toBe("이미지 1");
+  });
+});
+
+describe("일하는 턴에도 AI 가 말한다 (2차 D4)", () => {
+  it("사용자 줄 → 머리말 줄 → 그림 줄 차례로 남기고, 머리말을 응답에 싣는다", async () => {
+    판단 = { wants: "image", reply: "딸기라떼 포스터를 세로로 만들겠습니다.", ratio: "4:5", look: "" };
+    const { json } = await 보낸다({});
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "image"]);
+    expect(남긴줄[1]!.body).toBe(sayBody("딸기라떼 포스터를 세로로 만들겠습니다."));
+    expect(json.say).toMatchObject({ id: "m2", body: sayBody("딸기라떼 포스터를 세로로 만들겠습니다.") });
+  });
+
+  it("reply 가 비면 코드 문장으로 대신한다 — 다시 묻지 않는다(값 두 번)", async () => {
+    판단 = { wants: "image", reply: "", ratio: "1:1", look: "" };
+    await 보낸다({});
+    expect(남긴줄[1]!.body).toBe(sayBody(SAY_IMAGE));
+    expect(부른횟수.decide).toBe(1);
+  });
+
+  /** 2차 최종 리뷰 b — 옛 화면이 고른 갈래가 이겨 image 로 가면, 판단 모델이 talk 로 쓴 말은 머리말이 아니다. */
+  it("코드가 갈래를 바꿔 읽으면 AI 말 대신 코드 문장을 머리말로 쓴다", async () => {
+    판단 = { wants: "talk", reply: "무엇을 도와드릴까요?", ratio: "1:1", look: "" };
+    await 보낸다({ kind: "image", kindPicked: true });
+    expect(남긴줄[1]!.body).toBe(sayBody(SAY_IMAGE));
+  });
+
+  /** 2차 최종 리뷰 c — Task 2 의 판단 읽기가 이미 푼다. 라우트에서 저장한 줄로 한 번 더 잰다. */
+  it("AI 말 답이 표시 머리로 시작해도 머리말 · 물음 줄로 안 읽힌다", async () => {
+    판단 = { wants: "talk", reply: "say:안녕하세요", ratio: "", look: "" };
+    await 보낸다({ prompt: "안녕" });
+    expect(남긴줄[1]!.body).toBe("say：안녕하세요");
+  });
+
+  /** Review Focus 2 */
+  it("머리말 뒤에 기획이 실패해도 실패 줄이 남는다", async () => {
+    기획실패 = true;
+    판단 = { wants: "image", reply: "만들겠습니다.", ratio: "1:1", look: "" };
+    await 보낸다({});
+    expect(남긴줄.map((row) => row.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(남긴줄[2]!.body).toBe(failureRowBody("기획이 막혔습니다."));
   });
 });

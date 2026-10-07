@@ -117,8 +117,9 @@ describe("광고 규격 갈래 (A5)", () => {
       { id: "u", role: "user" as const, body: "광고 소재 만들어줘" },
       { id: "q", role: "assistant" as const, body: AD_QUESTION },
     ];
-    expect(easyChatPrompt(물은뒤, "사이즈별로요")).toContain("바로 앞에서");
-    expect(easyChatPrompt([], "사이즈별로요")).not.toContain("바로 앞에서");
+    // 「도우미가」까지 본다 — 2차 D4 의 reply 규칙에도 「바로 앞에서 모양을 이미 물었으면」이 있다.
+    expect(easyChatPrompt(물은뒤, "사이즈별로요")).toContain("도우미가 바로 앞에서");
+    expect(easyChatPrompt([], "사이즈별로요")).not.toContain("도우미가 바로 앞에서");
   });
 
   /** 최종 리뷰(2026-10-06): 답일 때만 처음 말을 잇는다. 답인지는 모델이 이미 있는 `note` 칸에 적는다. */

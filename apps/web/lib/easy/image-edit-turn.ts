@@ -2,6 +2,7 @@ import { POST as submitEdit } from "../../app/api/poster/projects/[id]/edit/rout
 import {
   editRowBody, editTargetImage, editedRequestIds, pickRowImage, withRowFrom, withRowJob,
 } from "../../app/easy/row-image";
+import { sayBody } from "../../app/easy/row-marks";
 import { posterStoresForUser } from "../poster/stores";
 import { read, relay } from "./relay";
 import type { easyStoreForUser } from "./store";
@@ -125,6 +126,8 @@ export async function imageEditTurn(ctx: {
   rowId?: string;
   /** 2차 D2: 새 고친 줄의 이름표(화면의 「이미지 N」 — 결과물 번호). */
   resultLabel?: string;
+  /** 2차 D4: 일하는 턴의 AI 말. 있으면 사용자 줄 뒤 · 고치기 앞에 머리말 줄로 남긴다. */
+  say?: string;
 }): Promise<Response> {
   const { projectId } = ctx.target;
   /*
@@ -143,6 +146,11 @@ export async function imageEditTurn(ctx: {
     const saved = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "assistant", body: IMAGE_NOT_READY });
     return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
   }
+
+  // 일하는 턴의 AI 말(2차 D4). 고치기 라우트를 부르기 전에 남긴다 — 실패해도 실패 줄이 그 뒤에 남는다.
+  const 머리말 = ctx.say
+    ? await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "assistant", body: sayBody(ctx.say) })
+    : undefined;
 
   /*
    * **이번에 붙인 사진은 넣는다**(2026-10-07 2차 D3). 첨부는 만들기 · 고치기에 쓴 뒤 입력창에서
@@ -182,5 +190,6 @@ export async function imageEditTurn(ctx: {
     ratio: ctx.target.ratio,
     photoRoles: [],
     ...(ctx.resultLabel ? { resultLabel: ctx.resultLabel } : {}),
+    ...(머리말 ? { say: 머리말 } : {}),
   });
 }

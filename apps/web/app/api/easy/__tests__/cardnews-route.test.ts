@@ -143,6 +143,8 @@ const { POST } = await import("../generate/route");
 const { ASK_CARD_NUMBER, NOT_MADE_YET, STILL_GENERATING } = await import("../../../easy/cardnews-after");
 const { readAsk } = await import("../../../easy/row-marks");
 const { KIND_QUESTION } = await import("../../../easy/turn-words");
+const { sayBody } = await import("../../../easy/row-marks");
+const { SAY_CARDNEWS } = await import("../../../easy/turn-words");
 const { NO_REFERENCE } = await import("../../../easy/cardnews-attachments");
 
 const 보낸다 = async (body: Record<string, unknown>) => {
@@ -232,7 +234,9 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     });
     expect(json.cardnews.project.id).toBeDefined();
     expect(json.photoRoles).toEqual([{ id: 사진(1), role: "style" }]);
-    expect(남긴줄.map((r) => r.role)).toEqual(["user", "image"]);
+    expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant", "image"]);
+    expect(남긴줄[1]!.body).toBe(sayBody(SAY_CARDNEWS));
+    expect(json.say).toMatchObject({ body: sayBody(SAY_CARDNEWS) });
   });
 
   it("모르는 사진이 있으면 카드뉴스 역할로 묻고 물음 줄을 남긴다", async () => {
@@ -259,8 +263,8 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
     원고작업 = { ...원고작업, data: { ...원고작업.data, flow: { planningIssues: ["자막이 없습니다"], copyIssues: [], cards: [] } } };
     const { json } = await 보낸다({ prompt: "https://youtu.be/x 카드뉴스", referenceIds: [사진(1)] });
     expect(json.talked).toBe(true);
-    expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant"]);
-    expect(남긴줄[1]!.body).toContain("자막이 없습니다");
+    expect(남긴줄.map((r) => r.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(남긴줄[2]!.body).toContain("자막이 없습니다");
   });
 
   it("장수 계산이 어긋난 실패는 개발자 말 대신 쉬운 말로 알린다", async () => {
@@ -269,7 +273,7 @@ describe("카드뉴스 원고 (2단계 §3 · §5)", () => {
       planningIssues: ["주 모델 기획 실패: AI가 고른 8장과 실제 자리 합계 9장이 다릅니다."], copyIssues: [], cards: [],
     } } };
     await 보낸다({ prompt: "건강 카드뉴스", referenceIds: [사진(1)] });
-    expect(남긴줄[1]!.body).toBe("원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.");
+    expect(남긴줄[2]!.body).toBe("원고를 쓰다가 장수 계산이 어긋났습니다. 다시 보내 주시면 한 번 더 씁니다.");
   });
 
   /** 2차 D2 · 최종 리뷰 5 — 카드뉴스 줄도 결과물 번호를 받는다. 앞의 이미지 줄과 함께 센다. */

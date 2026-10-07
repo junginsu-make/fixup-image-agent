@@ -186,3 +186,14 @@ describe("결과물 이름표 (2차 D2)", () => {
     expect(글()).toContain("결과물 1");
   });
 });
+
+describe("일하는 턴의 AI 말 (2차 D4)", () => {
+  const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+
+  it("머리말 줄을 그림 · 원고 자리보다 먼저 붙인다", () => {
+    const 머리말 = 화면.indexOf("if (body.ok && body.say?.id)");
+    expect(머리말).toBeGreaterThan(0);
+    expect(머리말).toBeLessThan(화면.indexOf("cardnews.take(body)"));
+    expect(머리말).toBeLessThan(화면.indexOf('{ id: 자리, role: "image", body: "" }'));
+  });
+});

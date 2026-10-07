@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KIND_QUESTION, RATIO_QUESTION, aiText, askText, photoQuestion } from "../turn-words";
+import { KIND_QUESTION, RATIO_QUESTION, SAY_IMAGE, aiText, askText, photoQuestion, sayEditText, sayText } from "../turn-words";
 
 /**
  * **물음 문장**(2026-10-07 2차 설계 §3-4). 갈래 · 모양 물음은 판단과 같은 호출의 reply 를 쓴다.
@@ -34,5 +34,23 @@ describe("물음 문장", () => {
 
   it("고정 문장에 줄표가 없다", () => {
     for (const one of [KIND_QUESTION, RATIO_QUESTION, photoQuestion("unclear"), photoQuestion("people")]) expect(one).not.toContain("—");
+  });
+});
+
+describe("머리말 문장 (2차 D4)", () => {
+  /**
+   * 2차 최종 리뷰 3 — 프롬프트가 「다음에 할 수 있는 것도 덧붙이라」고 시켜 머리말 끝에 물음이 올 수 있다
+   * (「다른 크기도 만들어 드릴까요?」). 비지 않았으면 받는다. 다른 갈래로 쓴 글은 `aiText` 가 먼저 거른다.
+   */
+  it("AI 가 쓴 글이면 그것(물음이 섞여도), 비었으면 코드 문장 — 다시 묻지 않는다", () => {
+    expect(sayText("딸기라떼 포스터를 세로로 만들겠습니다.", SAY_IMAGE)).toBe("딸기라떼 포스터를 세로로 만들겠습니다.");
+    expect(sayText("포스터를 만들겠습니다. 다른 크기도 필요하세요?", SAY_IMAGE)).toBe("포스터를 만들겠습니다. 다른 크기도 필요하세요?");
+    expect(sayText("  ", SAY_IMAGE)).toBe(SAY_IMAGE);
+    expect(sayText(undefined, SAY_IMAGE)).toBe(SAY_IMAGE);
+  });
+
+  it("고치기 머리말은 번호를 말한다", () => {
+    expect(sayEditText(2)).toBe("이미지 2번을 말씀대로 고치겠습니다.");
+    expect(sayEditText()).toBe("방금 이미지를 말씀대로 고치겠습니다.");
   });
 });

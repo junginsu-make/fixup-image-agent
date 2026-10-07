@@ -5,7 +5,7 @@ import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
 import {
   easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyLastResultLines,
-  easyPhotoGoneLines, easyResultListLines, easyResultRowText, easyTargetLines,
+  easyPhotoGoneLines, easyReplyLines, easyResultListLines, easyResultRowText, easyTargetLines,
 } from "./chat-facts";
 import { doneImageNumbers, type EasyResultEntry } from "./image-numbers";
 import { askChain } from "./ask-chain";
@@ -124,8 +124,19 @@ export function easyAvailableWants(choices: EasyChoices): EasyWant[] {
 export const NOTHING_TO_EDIT =
   "이 대화에는 아직 고칠 이미지나 카드뉴스가 없습니다. 먼저 무엇을 만들지 알려 주세요. 예: 「카페 신메뉴 포스터 만들어줘」";
 
-/** 지난 대화를 몇 줄까지 보여 줄까. */
-const 되돌아볼줄 = 12;
+/**
+ * 지난 대화를 **사용자 말 몇 번**까지 보여 줄까(2026-10-07 2차 §3-4). 물음 줄 · 머리말 줄이 늘어
+ * 줄 수로 자르면 사용자 말이 금방 절반으로 준다. 한 말 뒤에 줄이 끝없이 붙는 대화를 위해 줄 수
+ * 상한도 둔다.
+ */
+const 되돌아볼말 = 8;
+const 최대줄 = 40;
+
+function 최근대화(history: readonly EasyMessage[]): readonly EasyMessage[] {
+  const 말자리 = history.flatMap((message, at) => (message.role === "user" ? [at] : []));
+  const 시작 = 말자리.length > 되돌아볼말 ? 말자리[말자리.length - 되돌아볼말]! : 0;
+  return history.slice(시작).slice(-최대줄);
+}
 
 /** 한 줄이 길면 잘라 넣는다. 지난 말은 흐름만 알면 된다. */
 const 한줄최대 = 400;
@@ -168,10 +179,8 @@ export function easyChatPrompt(
   const 갈래 = easyAvailableWants({ hasDraft, made, madeImage, adNegated: options.adNegated });
   // 2차 D2: 결과물 줄에도 화면의 「이미지 N」 · 「카드뉴스 N」 번호를 적는다.
   const 결과물 = new Map((options.images ?? []).map((one) => [one.rowId, one]));
-  const 지난말 = history
-    // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
-    .filter((message) => message.id !== "greeting")
-    .slice(-되돌아볼줄)
+  // 인사는 뺀다. 우리가 넣은 줄이라 대화의 내용이 아니다.
+  const 지난말 = 최근대화(history.filter((message) => message.id !== "greeting"))
     .map((message) => {
       const body = message.role === "image"
         ? easyResultRowText(결과물.get(message.id))
@@ -244,14 +253,9 @@ export function easyChatPrompt(
     "있지만 묻는 말입니다. 「포스터 만들 때 뭘 적어야 해?」도 묻는 말입니다.",
     "**지금 한 장 만들어 내놓기를 바라는지**만 보세요.",
     "",
-    "`talk` 이면 `reply` 에 답을 쓰세요. 두세 문장이면 충분합니다.",
-    "상대는 이미지를 만들러 온 사람입니다. 도움이 될 말을 하고, 필요하면",
-    "**무엇을 적으면 되는지 예를 들어** 주세요.",
-    "",
-    `${빈답갈래(갈래)} 면 \`reply\` 는 빈 글로 두세요.`,
+    // 2차 D4: 모든 갈래에서 AI 가 말한다. 같은 판단 호출의 reply 다 — 추가 호출이 없다.
+    ...easyReplyLines(갈래),
     ...(갈래.includes("card_text") ? ["`card` 는 말에 장 번호가 있을 때만 적고 없으면 0, `note` 는 없으면 빈 글로 두세요."] : []),
-    "`detail_page` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다.",
-    ...(갈래.includes("ad_specs") ? ["`ad_specs` 도 `reply` 는 빈 글로 두세요. 안내는 따로 드립니다."] : []),
     "",
     // 갈래 이름은 쓸 수 있는 것만 적는다(A1) — 같은 목록을 넘긴다.
     ...easyCapabilityLines(갈래),
@@ -416,14 +420,6 @@ export function readEasyDecision(
       ? { look: value!.look as string }
       : {}),
   };
-}
-
-/** 말 · 안내로 끝나는 갈래. 이것들은 `reply` 를 비우라는 줄에 넣지 않고 따로 적는다. */
-const 따로적는갈래 = new Set<string>(["talk", "detail_page", "ad_specs"]);
-
-/** `reply` 를 비워야 하는 갈래를 프롬프트에 적을 꼴로. 쓸 수 있는 것만 적는다(A1). */
-function 빈답갈래(갈래: readonly EasyWant[]): string {
-  return 갈래.filter((one) => !따로적는갈래.has(one)).map((one) => `\`${one}\``).join(" · ");
 }
 
 const 아는갈래 = new Set([

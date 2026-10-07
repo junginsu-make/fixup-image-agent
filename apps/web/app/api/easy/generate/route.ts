@@ -6,7 +6,7 @@ import { createEasyChatProvider } from "../../../../lib/easy/chat-provider";
 import { EasyStepError, read, relay } from "../../../../lib/easy/relay";
 import { failureRowMessage, trackUserTurn } from "../../../../lib/easy/failure-row";
 import { withRowJob } from "../../../easy/row-image";
-import { plainTyped, withPick } from "../../../easy/row-marks";
+import { plainTyped, sayBody, withPick } from "../../../easy/row-marks";
 import {
   askChain, askInstruction, buttonDecision, chosenFor, readButtonAnswer, settleTypedAnswer,
   type EasyAnswerWay, type EasyChosen,
@@ -40,7 +40,10 @@ import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/
 import { askTurn, replyTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
 import { loadEasyImages } from "../../../../lib/easy/image-list";
 import { nextResultNumber, resultLabel } from "../../../easy/image-numbers";
-import { KIND_QUESTION, RATIO_QUESTION, TARGET_QUESTION, aiText, askText, photoQuestion } from "../../../easy/turn-words";
+import {
+  KIND_QUESTION, RATIO_QUESTION, SAY_CARDNEWS, SAY_IMAGE, SAY_REVISE, TARGET_QUESTION,
+  aiText, askText, photoQuestion, sayEditText, sayText,
+} from "../../../easy/turn-words";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -389,6 +392,8 @@ async function turn(request: Request): Promise<Response> {
       return await imageEditTurn({
         request, userId: auth.member.userId, store, conversationId, prompt: 지시, userBody: 사용자글, textModel,
         target: 고칠것.target, rowId: 고칠것.rowId, rows: 지난줄, attachments: 붙인것,
+        // 일하는 턴의 AI 말(2차 D4). 이 갈래로 쓴 말이 없으면(바꿔 읽은 갈래 · 빈 말) 번호를 말하는 코드 문장.
+        say: sayText(aiText(decision, wants), sayEditText(고칠것.n)),
         // 새 고친 줄의 「이미지 N」(결과물 번호, 2차 D2).
         resultLabel: resultLabel("image", nextResultNumber(지난줄)),
       });
@@ -497,6 +502,16 @@ async function turn(request: Request): Promise<Response> {
       return Response.json({ ok: true, talked: true, message: saved, textModel });
     }
 
+    /*
+     * **일하는 턴에도 AI 가 말한다**(2026-10-07 2차 D4). 판단과 같은 호출의 reply 를 머리말 줄로
+     * 남긴다 — 비었거나 다른 갈래로 쓴 글이면(고른 갈래가 이김 등, 최종 리뷰 b) 코드 문장(다시 묻지 않는다,
+     * 값이 두 번 나간다). 차례는 사용자 줄 → 머리말 → 그림 줄이고, 머리말 뒤에 실패해도 실패 줄이 남는다
+     * (`failure-row.ts` 가 머리말을 답으로 안 친다).
+     */
+    const 머리말 = await store.appendMessage({
+      conversationId, role: "assistant", body: sayBody(sayText(aiText(decision, wants), SAY_IMAGE)),
+    });
+
     // ① 프로젝트
     const created = await read(await createProject(relay(request, "/api/poster/projects", {
       title: easyTitle(지시) || "Easy",
@@ -553,6 +568,7 @@ async function turn(request: Request): Promise<Response> {
     return Response.json({
       ok: true,
       projectId,
+      say: 머리말,
       submission: submitted.submission,
       textModel,
       ratio: 고르기.ratio,
@@ -610,7 +626,7 @@ async function cardnewsTurn(ctx: {
   사진들: Array<{ id: string; title?: string | null; url?: string | null; storagePath: string }>;
   붙인것: string[];
   input: Record<string, unknown>;
-  decision: { ratio?: string; look?: string };
+  decision: { wants: string; reply: string; ratio?: string; look?: string };
   provider: ReturnType<typeof createEasyChatProvider>;
   고칠원고: Awaited<ReturnType<typeof lastCardnewsProject>>;
   /** 물음 줄을 남길 때(2차 D1). */
@@ -692,6 +708,12 @@ async function cardnewsTurn(ctx: {
 
   await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody });
   if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
+  // 일하는 턴의 AI 말(2차 D4). 원고는 1~2분 걸려 그동안 이 말이 보인다. 뒤에 실패해도 실패 줄이 남는다.
+  const 머리말 = await ctx.store.appendMessage({
+    conversationId: ctx.conversationId,
+    role: "assistant",
+    body: sayBody(sayText(aiText(ctx.decision, ctx.wants), ctx.wants === "revise" ? SAY_REVISE : SAY_CARDNEWS)),
+  });
 
   // 빈 마지막 장은 고른 글 모델이 정리 문장으로 채운다(2026-09-30 사용자 결정 B).
   const { projectId, project } = await draftCardnews(ctx.request, 입력, (text) => ctx.provider.writeEnding(text));
@@ -707,11 +729,11 @@ async function cardnewsTurn(ctx: {
       role: "assistant",
       body: draftFailureMessage(까닭),
     });
-    return Response.json({ ok: true, talked: true, message: saved, textModel: ctx.textModel });
+    return Response.json({ ok: true, talked: true, message: saved, say: 머리말, textModel: ctx.textModel });
   }
   const row = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "image", workId: projectId });
   return Response.json({
-    ok: true, cardnews: { rowId: row.id, project }, message: row, photoRoles, textModel: ctx.textModel,
+    ok: true, cardnews: { rowId: row.id, project }, message: row, say: 머리말, photoRoles, textModel: ctx.textModel,
     // 화면의 「카드뉴스 N」(2차 D2). 이미지와 같은 결과물 번호다.
     resultLabel: resultLabel("cardnews", ctx.결과번호),
   });
