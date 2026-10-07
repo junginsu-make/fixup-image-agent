@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **280개**, 저장 기록(커밋, 합치기 제외) **1,059개**, 배포 꾸러미(릴리스) **233개**.
+8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **281개**, 저장 기록(커밋, 합치기 제외) **1,062개**, 배포 꾸러미(릴리스) **235개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 32 | 224 | 41 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 33 | 227 | 43 |
 
 <a id="w-2026-08-31"></a>
 
@@ -497,8 +497,11 @@
 - 카드뉴스와 상세페이지에서 시간이 걸리는 단계마다 화면 위에 같은 모양의 진행 띠가 뜹니다. 무엇을 하는 중인지와 걸린 시간을 보여 주고, 여러 장을 만들 때는 몇 장째인지도 보여 줍니다.
 - 카드뉴스 첫 「기획 시작」을 누르면 기획 중이라는 띠가 뜹니다.
 - 상세페이지 이미지를 만들 때 섹션마다 「만드는 중」, 「차례 대기」, 「완료」가 보입니다.
+- 상세페이지 이미지 모델을 GPT Image 2.5(기본)와 Nano Banana Pro 두 가지로 줄이고, 경제형·표준형 같은 등급 이름 대신 실제 모델 이름으로 보여 줍니다. 두 모델 모두 한 장에 1크레딧입니다.
+- 예전 모델로 저장해 둔 상세페이지 작업을 열면 이미지 만들기가 계속 거절되던 문제를 고쳤습니다. 이제 열 때 GPT Image 2.5로 바뀝니다.
+- 상세페이지에서 이미지를 처음 만들 때 보이던 차감 안내가 실제보다 크게 나오던 것을 실제 차감 크레딧과 같게 고쳤습니다.
 
-**운영 배포 16회**
+**운영 배포 17회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -516,8 +519,9 @@
 - 10/7 `20261007T132044Z-d144d972` · [#294](https://github.com/junginsu-make/fixup-image-agent/pull/294)
 - 10/8 `20261007T150107Z-bbf99b9e` · [#293](https://github.com/junginsu-make/fixup-image-agent/pull/293), [#296](https://github.com/junginsu-make/fixup-image-agent/pull/296)
 - 10/8 `20261007T160441Z-0e45da11` · [#299](https://github.com/junginsu-make/fixup-image-agent/pull/299)
+- 10/8 `20261007T163905Z-110892a4` · [#298](https://github.com/junginsu-make/fixup-image-agent/pull/298)
 
-<details><summary>이 주의 작업 묶음 32개</summary>
+<details><summary>이 주의 작업 묶음 33개</summary>
 
 
 **10/6**
@@ -559,6 +563,7 @@
 
 **10/8**
 
+- [#298](https://github.com/junginsu-make/fixup-image-agent/pull/298) fix: 상세페이지 그림 모델을 GPT Image 2.5(기본)·Nano Banana Pro 둘로 <sub>상세페이지 · +169 / −50 · 운영 반영 10/8</sub>
 - [#299](https://github.com/junginsu-make/fixup-image-agent/pull/299) feat: 시간이 걸리는 단계 공통 표시 1차 — 카드뉴스·상세페이지 <sub>카드뉴스 · 상세페이지 · +1,249 / −181 · 운영 반영 10/8</sub>
 
 </details>
