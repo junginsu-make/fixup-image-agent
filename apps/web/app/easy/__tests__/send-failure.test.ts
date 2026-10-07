@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { answerableAskId } from "../ask-chain";
 import { NO_IMAGE_MADE, STILL_MAKING } from "../collect";
 import { askBody, readPick, visibleBody, withPick } from "../row-marks";
-import { keptAfterFailure, lostAfterFailure, typedAfterFailure } from "../send-failure";
+import { keptAfterFailure, lostAfterFailure, typedAfterFailure, unsavedAfterFailure } from "../send-failure";
 import type { EasyMessage } from "../turn";
 
 /**
@@ -80,5 +80,35 @@ describe("말 답 뒤 실패 (후속 Task 9)", () => {
     expect(화면).toContain("typedAnswer: body.typedAnswer === true,");
     expect(화면).toContain("if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {");
     expect(화면).toContain("setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));");
+  });
+});
+
+/**
+ * 후속 Task 9 고침 1 — 서버가 말 답으로 읽었는데 사용자 줄을 남기기 전에 실패하면(`typedUnsaved`) 서버에는 아무 줄도
+ * 없다. 새로고침하면 [물음] 으로 끝나 단추가 뜨고 친 말은 없다(입력창에 되돌아가 있다). 화면도 제 줄을 뺀다.
+ */
+describe("말 답을 남기기 전 실패 (후속 Task 9 고침 1)", () => {
+  const 말답: EasyMessage = { id: "user-pending-3", role: "user", body: "세로로" };
+
+  it("서버가 typedUnsaved 를 주면 제 줄을 빼 새로고침 뒤와 같아진다 — 물음 단추가 다시 뜬다", () => {
+    const 전 = [물음, 말답];
+    expect(answerableAskId(전)).toBeUndefined();
+    const 줄 = unsavedAfterFailure(전, "user-pending-3");
+    expect(줄).toEqual([물음]);
+    expect(answerableAskId(줄)).toBe("q1");
+    expect(전).toEqual([물음, 말답]);
+  });
+
+  it("단추 답 줄은 빼지 않는다 — 예전 그대로 그 줄로 단추를 단다", () => {
+    const 줄 = unsavedAfterFailure([물음, 답], "user-pending-1");
+    expect(줄).toEqual([물음, 답]);
+    expect(answerableAskId(줄)).toBe("q1");
+  });
+
+  it("화면이 typedUnsaved 를 실패에 실어 받고, 있을 때만 제 줄을 뺀다", () => {
+    const 화면 = readFileSync(new URL("../easy-client.tsx", import.meta.url), "utf8");
+    expect(화면).toContain("typedUnsaved: body.typedUnsaved === true,");
+    expect(화면).toContain("if ((cause as { typedUnsaved?: boolean }).typedUnsaved === true) {");
+    expect(화면).toContain("setMessages((current) => unsavedAfterFailure(current, `user-${자리}`));");
   });
 });

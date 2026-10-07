@@ -35,3 +35,11 @@ export function typedAfterFailure(messages: readonly EasyMessage[], rowId: strin
     ? { ...one, body: withPick(plainTyped(prompt), { typed: true }) }
     : one));
 }
+
+/**
+ * **서버가 말 답으로 읽었는데 사용자 줄을 남기기 전에 실패했으면 화면 줄도 뺀다**(후속 Task 9 고침 1). 서버에는 아무 줄도
+ * 없어(`typedUnsaved`) 새로고침하면 [물음] 으로 끝나 단추가 다시 뜬다. 친 말은 입력창에 되돌아가 있다. 단추 답 줄은 그대로다.
+ */
+export function unsavedAfterFailure(messages: readonly EasyMessage[], rowId: string): EasyMessage[] {
+  return messages.filter((one) => one.id !== rowId || readPick(one) !== undefined);
+}

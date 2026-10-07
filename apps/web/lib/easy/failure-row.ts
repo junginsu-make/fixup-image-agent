@@ -47,11 +47,15 @@ export function trackUserTurn<S extends { appendMessage: Append }>(store: S): {
   store: S;
   /** 실패 안내를 남겼으면 답 못 받은 그 사용자 줄 글(표시 포함), 안 남겼으면 undefined(후속 Task 9). */
   leaveFailure(conversationId: string, message: string): Promise<string | undefined>;
+  /** 이 턴에 사용자 줄을 남겼나. 남기기 전에 실패했는지 라우트가 화면에 알린다(후속 Task 9 고침 1). */
+  savedUser(): boolean;
 } {
   // 답 못 받은 사용자 줄 글. 답을 받았거나 아직 말을 안 남겼으면 undefined.
   let 답없는말: string | undefined;
+  let 말남김 = false;
   const appendMessage: Append = async (input) => {
     const row = await store.appendMessage(input);
+    말남김 = 말남김 || input.role === "user";
     /*
      * **머리말 줄은 답이 아니다**(2026-10-07 2차 D4 · §3-4). 일하는 턴은 사용자 줄 -> 머리말 줄 ->
      * 그림 줄 차례다. 머리말 뒤에 기획 · 생성이 실패해도 실패 줄이 남아야 한다.
@@ -62,6 +66,7 @@ export function trackUserTurn<S extends { appendMessage: Append }>(store: S): {
   };
   return {
     store: { ...store, appendMessage },
+    savedUser: () => 말남김,
     async leaveFailure(conversationId, message) {
       const 말 = 답없는말;
       if (말 === undefined) return undefined;

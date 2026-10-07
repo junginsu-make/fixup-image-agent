@@ -22,7 +22,7 @@ import { photoTypedReply, type EasyButtonReply } from "./ask-answers";
 import { answerableAskId, closedAnswerRows } from "./ask-chain";
 import { plainTyped, withPick } from "./row-marks";
 import { EasyAskControls } from "./_components/ask-row";
-import { keptAfterFailure, lostAfterFailure, typedAfterFailure } from "./send-failure";
+import { keptAfterFailure, lostAfterFailure, typedAfterFailure, unsavedAfterFailure } from "./send-failure";
 import { EASY_DEFAULT_RATIO } from "./ask";
 import { EasyAttachChoice } from "./_components/attach-choice";
 import { EasyLibraryPicker, useEasyLibrary } from "./_components/library-attach";
@@ -402,6 +402,7 @@ export function EasyClient({
         throw Object.assign(new Error(body.message ?? "만들지 못했습니다."), {
           retryable: body.retryable !== false,
           typedAnswer: body.typedAnswer === true,
+          typedUnsaved: body.typedUnsaved === true,
         });
       }
 
@@ -448,6 +449,10 @@ export function EasyClient({
       // 서버가 말 답으로 읽고 남긴 뒤 실패했으면 제 줄도 같게 — 물음 단추가 그 자리에서 다시 뜬다(후속 Task 9).
       if ((cause as { typedAnswer?: boolean }).typedAnswer === true) {
         setMessages((current) => typedAfterFailure(current, `user-${자리}`, prompt));
+      }
+      // 말 답을 남기기 전에 실패했으면 서버에 없는 제 줄을 뺀다 — 친 말은 입력창에 되돌아간다(후속 Task 9 고침 1).
+      if ((cause as { typedUnsaved?: boolean }).typedUnsaved === true) {
+        setMessages((current) => unsavedAfterFailure(current, `user-${자리}`));
       }
       setError({
         message: 까닭,
