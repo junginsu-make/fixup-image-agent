@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 
 const shell = readFileSync(new URL("../studio-layout.tsx", import.meta.url), "utf8");
 const jobs = readFileSync(new URL("../running-jobs.tsx", import.meta.url), "utf8");
-const banner = readFileSync(new URL("../../poster/_components/working-banner.tsx", import.meta.url), "utf8");
+const banner = readFileSync(new URL("../working-status.tsx", import.meta.url), "utf8");
 const sns = readFileSync(new URL("../../sns/[id]/project-client.tsx", import.meta.url), "utf8");
 
 describe("만드는 중 표시", () => {
