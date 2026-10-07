@@ -310,10 +310,15 @@ export function LayoutStudio() {
       위에 놓인 것이 어림보다 두꺼워 아래로 넘쳤고, 레퍼런스의 「칸 읽어내기」
       버튼이 반만 보였다.
     */
-    <div ref={fit.rootRef} className="flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}>
-      {/* 화면 맨 위 띠. 미리보기는 서랍 안(`PreviewPanel`)에 같은 띠가 있다. */}
+    <div ref={fit.rootRef} className="relative flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}>
+      {/*
+        화면 맨 위 띠. 미리보기는 서랍 안(`PreviewPanel`)에 같은 띠가 있다.
+
+        **자리를 차지하지 않고 위에 얹는다**(2026-10-08). 루트 높이를 `useFitScreen` 이
+        박아 두어서, 띠가 자리를 차지하면 네 열이 줄고 캔버스가 작아졌다 돌아왔다.
+      */}
       {busy === "analyze" ? (
-        <WorkingStatus label="칸을 분석 중입니다" hint="레퍼런스에서 칸 자리를 읽고 있습니다" startedAt={busyStartedAt} className="shrink-0" />
+        <WorkingStatus label="칸을 분석 중입니다" hint="레퍼런스에서 칸 자리를 읽고 있습니다" startedAt={busyStartedAt} className="absolute inset-x-0 top-0 z-30" />
       ) : null}
       {/*
         **네 열이 다 조금씩 줄어든다.** 고정 폭이면 줄어드는 곳이 레퍼런스 열

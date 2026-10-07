@@ -22,7 +22,7 @@ describe("작업 영역 높이", () => {
 
   it("실제로 남은 높이를 재서 준다", () => {
     expect(client).toContain("const fit = useFitScreen();");
-    expect(client).toContain('ref={fit.rootRef} className="flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}');
+    expect(client).toContain('ref={fit.rootRef} className="relative flex min-w-0 flex-col gap-3" style={{ height: fit.rootHeight }}');
   });
 });
 
