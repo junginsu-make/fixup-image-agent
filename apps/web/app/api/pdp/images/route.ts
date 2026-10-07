@@ -219,7 +219,9 @@ async function handlePost(req: Request) {
       0,
       String(envelope.code || "image_failed"),
       // 품질 미달로 버린 장도 이미 값을 치렀다. 0 이면 기록하지 않는다.
-      { model, billableImages: envelope.billableImages ?? 0 },
+      // 검수 불합격은 fal 이 그림을 돌려준 뒤 우리가 버린 것이라 끝난 것이 확실하다 —
+      // 예약을 바로 푼다(일괄과 같다). 끝났는지 모르는 실패는 그대로 확인 대기로 둔다.
+      { model, billableImages: envelope.billableImages ?? 0, completionConfirmed: envelope.code === "PDP_IMAGE_QA_REJECTED" },
     );
     return Response.json(envelope, { status: mapPdpErrorCodeToStatus(envelope.code) });
   }
