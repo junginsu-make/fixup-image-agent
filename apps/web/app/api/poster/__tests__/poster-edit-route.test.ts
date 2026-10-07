@@ -56,6 +56,8 @@ let projectGetThrows: Error | null = null;
 let falKeyMissing = false;
 /** 진짜 `submitPoster` 처럼 넘긴 조립을 돌리고 거절이면 그 문장으로 던진다. */
 let runBuild = false;
+/** 고칠 그림을 fal 에 올릴 때 던질 오류(계정 풀 문장 등). */
+let uploadThrows: Error | null = null;
 
 vi.mock("../../../../lib/membership/api", () => ({
   authenticateApiMember: async () => ({ ok: true as const, member: { userId: "u1", profile: { role: "member" } } }),
@@ -106,7 +108,12 @@ vi.mock("../../../../lib/poster/providers", () => {
       return {
         queue: {},
         // 첫 업로드는 언제나 고칠 그림이다. 그 뒤가 지킬 대상이다.
-        uploader: { uploadReference: async () => (uploadCount++ === 0 ? "https://fal/parent.png" : `https://fal/ref-${uploadCount - 1}.png`) },
+        uploader: {
+          uploadReference: async () => {
+            if (uploadThrows) throw uploadThrows;
+            return uploadCount++ === 0 ? "https://fal/parent.png" : `https://fal/ref-${uploadCount - 1}.png`;
+          },
+        },
       };
     },
     PosterProviderConfigurationError,
@@ -178,6 +185,7 @@ beforeEach(() => {
   projectGetThrows = null;
   falKeyMissing = false;
   runBuild = false;
+  uploadThrows = null;
 });
 
 describe("수정이 크기를 실어 보낸다", () => {
@@ -674,6 +682,28 @@ describe("예상 못 한 오류는 원문 대신 일반 문장으로", () => {
     expect(JSON.parse(text)).toEqual({ ok: false, message: 일반문장 });
     expect(text).not.toContain("FAL_KEY");
     expect(errors.mock.calls.flat().map(String).join(" ")).toContain("FAL_KEY");
+  });
+
+  /*
+   * **fal 계정 풀의 문장은 일부러 화면에 보내는 글이다**(`lib/fal/queue.ts` 가 일부러 넘긴다).
+   * 원문은 풀이 이미 기록에만 남겼다. 전처럼 400 + 그 글.
+   */
+  it("계정 풀이 몰렸다는 글은 400 그대로 — 고칠 그림 올리기에서, 예약 전", async () => {
+    const { FalPoolBusyError } = await import("../../../../lib/fal/pool/router");
+    uploadThrows = new FalPoolBusyError();
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ ok: false, message: "지금 이미지 생성이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요." });
+    expect(reserved).toEqual([]);
+  });
+
+  it("계정 풀 준비 문제 글도 400 그대로 — 제출에서 나면 묶은 장은 지금처럼 돌려준다", async () => {
+    const { FalPoolUnavailableError } = await import("../../../../lib/fal/pool/router");
+    submitThrows = new FalPoolUnavailableError(503);
+    const response = await call({ instruction: "글자를 키워 주세요" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ ok: false, message: "이미지 생성 준비 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요." });
+    expect(finalized).toEqual([{ success: false, units: 0, error: "poster_edit_failed" }]);
   });
 
   it("일부러 쓴 안내는 그대로다 — 붙인 사진을 못 읽음 400, 입력 검사 400", async () => {

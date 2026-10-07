@@ -16,6 +16,7 @@ import { posterReferencesByIds } from "../../../../../../lib/poster/references";
 import { uploadUniqueReferences } from "../../../../../../lib/fal/upload";
 import { teamIdOf } from "../../../../../../lib/teams/store";
 import { errorLogText } from "../../../../../../lib/easy/log-text";
+import { FalPoolBusyError, FalPoolUnavailableError } from "../../../../../../lib/fal/pool/router";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -283,13 +284,17 @@ const EDIT_FAILED = "고치지 못했습니다. 잠시 뒤 다시 시도해 주�
  * 전에는 모든 예외를 400 + 원문으로 돌려줬다. Supabase · 저장소 · fal 의 날것 글(표 이름 ·
  * 서명한 주소)이 「다양하게」 화면에 떴고, 쉽게 모드는 400 을 안 가려 거기서도 떴다.
  *
- * 우리가 쓴 문장 둘만 400 그대로 보인다 — 조립 거절(사진 장수 · 크기 등, 사용자가 고칠 수
- * 있다)과 과금 뒤 실패(「다시 해 보세요」로 덮으면 두 번째 작업을 만든다 — `flow.ts`).
+ * 우리가 쓴 문장만 400 그대로 보인다 — 조립 거절(사진 장수 · 크기 등, 사용자가 고칠 수
+ * 있다), 과금 뒤 실패(「다시 해 보세요」로 덮으면 두 번째 작업을 만든다 — `flow.ts`),
+ * fal 계정 풀의 두 문장(원문은 풀이 기록에만 남겼다 — `queue.ts` 가 일부러 넘긴다).
  * 나머지는 일반 문장 500 이다. 쉽게 모드는 5xx 를 한 번 더 가린다. 설정 오류는 503 을
  * 지키되 환경변수 이름은 서버 기록에만 남긴다.
  */
 function editFailure(error: unknown, rejected: string | undefined): Response {
-  if (error instanceof PosterChargedError || (rejected && error instanceof Error && error.message === rejected)) {
+  if (
+    error instanceof PosterChargedError || error instanceof FalPoolBusyError || error instanceof FalPoolUnavailableError
+    || (rejected && error instanceof Error && error.message === rejected)
+  ) {
     return Response.json({ ok: false, message: error.message }, { status: 400 });
   }
   console.error("[poster] 고치기 실패", errorLogText(error));
