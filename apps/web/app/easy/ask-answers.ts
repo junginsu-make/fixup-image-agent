@@ -62,3 +62,15 @@ export function referenceReply(rowId: string, answer: Pick<EasyResend, "photoRol
     },
   };
 }
+
+/** 물음 줄 자료의 번호 목록. 모양만 거른다(서버가 쓴 값이다). */
+export function askNumbers(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((one): one is number => typeof one === "number" && Number.isInteger(one) && one >= 1 && one <= 999).slice(0, 20)
+    : [];
+}
+
+/** 어느 이미지를 고칠지(2차 D2). 서버는 판단 없이 그 번호로 고친다. */
+export function targetReply(rowId: string, n: number): EasyButtonReply {
+  return { text: `이미지 ${n}`, answersRowId: rowId, pick: { target: n } };
+}

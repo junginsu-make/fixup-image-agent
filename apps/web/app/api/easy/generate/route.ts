@@ -33,13 +33,14 @@ import { redraftInput } from "../../../easy/cardnews-redraft";
 import { draftFailureMessage } from "../../../easy/cardnews-view";
 import { isMade } from "../../../easy/cardnews-after";
 import { cardAfterTurn } from "../../../../lib/easy/cardnews-after-turn";
-import { countEasyImages, imageEditTurn, lastEasyImage } from "../../../../lib/easy/image-edit-turn";
+import { countEasyImages, imageEditTurn } from "../../../../lib/easy/image-edit-turn";
+import { pickEditTarget, targetAskNumbers } from "../../../../lib/easy/edit-target";
 import { easyAdStep } from "../../../easy/ad-ask";
 import { adGuideTurn, adQuestionTurn, writeAdGuide } from "../../../../lib/easy/ad-turn";
-import { askTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
+import { askTurn, replyTurn, type AskTurnContext } from "../../../../lib/easy/ask-turn";
 import { loadEasyImages } from "../../../../lib/easy/image-list";
 import { nextResultNumber, resultLabel } from "../../../easy/image-numbers";
-import { KIND_QUESTION, RATIO_QUESTION, aiText, askText, photoQuestion } from "../../../easy/turn-words";
+import { KIND_QUESTION, RATIO_QUESTION, TARGET_QUESTION, aiText, askText, photoQuestion } from "../../../easy/turn-words";
 import { POST as createProject } from "../../poster/projects/route";
 import { POST as runPlan } from "../../poster/projects/[id]/plan/route";
 import { POST as submitGenerate } from "../../poster/projects/[id]/generate/route";
@@ -209,8 +210,6 @@ async function turn(request: Request): Promise<Response> {
     const 고칠원고 = await lastCardnewsProject(auth.member.userId, 지난줄);
     // 그 원고로 카드를 만들었나. 만들었을 때만 다시 그리기 · 게시글 · 받기를 안다(3단계 §5).
     const 만들었나 = Boolean(고칠원고 && isMade(고칠원고));
-    // 이 대화의 마지막 결과가 이미지 한 장이면 그것을 이어서 고친다(2026-10-06).
-    const 고칠그림 = await lastEasyImage(auth.member.userId, 지난줄);
     // 이 대화의 결과물(번호 · 갈래 · 상태 · 그림, 2차 D2). 판단 모델에 목록으로 준다. 못 읽어도 턴은 간다.
     const 이미지들 = await loadEasyImages(auth.member.userId, 지난줄);
 
@@ -251,7 +250,7 @@ async function turn(request: Request): Promise<Response> {
          * 것이 사라졌으면 판단 읽기와 같은 사실로 다시 보고 사실만 말한다 — 다른 일로 새지 않는다
          * (`fitButtonDecision`, 2차 최종 리뷰 1).
          */
-        decision = fitButtonDecision(단추판단, { canRevise: Boolean(고칠원고), made: 만들었나, editableImage: Boolean(고칠그림) });
+        decision = fitButtonDecision(단추판단, { canRevise: Boolean(고칠원고), made: 만들었나, editableImage: 이미지들.madeImage });
       } else {
         // 한 턴의 판단 — 선택지(A1) · 빈 답 재질문(A3)은 `lib/easy/judge.ts` 가 한다.
         decision = await judgeEasyTurn({
@@ -264,7 +263,9 @@ async function turn(request: Request): Promise<Response> {
            * 「그 사진을 다시 붙여 주세요」(D3 줄)가 나가는데, 그 사진은 답으로 읽히면 아래에서 그대로 쓴다.
            */
           attachmentCount: 처음사진.ids.length || 이을사진.length,
-          choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: Boolean(고칠그림) },
+          // 고칠 수 있는 이미지가 이 대화에 있나(2차 D2 — 마지막 결과만이 아니라 지우지 않은 이미지 하나라도. 최종 리뷰 a).
+          choices: { hasDraft: Boolean(고칠원고), made: 만들었나, madeImage: 이미지들.madeImage },
+          lastIsImage: 이미지들.lastIsImage,
           // 골랐으면 판단의 갈래는 버려진다 — 빈 talk 재질문을 안 한다(A3 · 최종 리뷰).
           kindPicked: 옛골랐나,
           adStep: 광고,
@@ -348,6 +349,17 @@ async function turn(request: Request): Promise<Response> {
     };
     // 물을 때의 판단(말에 있던 비율 · 그림체). 단추로 답하면 판단 모델 대신 이것을 쓴다(2차 D1).
     const 말한것 = { ...(decision.ratio ? { ratio: decision.ratio } : {}), ...(decision.look ? { look: decision.look } : {}) };
+    /*
+     * 고칠 이미지가 둘 이상인데 어느 것인지 모르면 AI 가 묻는다(2차 D2). 번호 단추를 단다. 실행하는 갈래(`wants`)로
+     * 본다 — 고른 갈래가 이겨 image 로 가는 턴에서는 묻지 않는다. 물음 글은 AI 가 이 갈래로 쓴 물음이 먼저다.
+     * 번호 물음에 말로 답했는데 번호가 없으면 마지막 이미지로 떨어뜨리지 않고 다시 묻는다.
+     */
+    const 고칠번호들 = targetAskNumbers({ wants, note: decision.note, target: decision.target }, 이미지들, {
+      afterTargetAsk: 답방식 === "typed" && 이음?.ask.kind === "target",
+    });
+    if (고칠번호들) {
+      return await askTurn(물음맥락, { kind: "target", text: askText(aiText(decision, wants), TARGET_QUESTION), data: { numbers: 고칠번호들 } });
+    }
     // 한 장인지 여러 장인지 모르면 묻는다(2단계 §4). 물음 문장은 AI 가 이 갈래로 쓴 물음이 먼저다(2차 D4 · 최종 리뷰 b).
     if (wants === "either") {
       return await askTurn(물음맥락, { kind: "kind", text: askText(aiText(decision, wants), KIND_QUESTION), data: { ids: 붙인것, ...말한것 } }, { kindAsk: true });
@@ -363,11 +375,20 @@ async function turn(request: Request): Promise<Response> {
         project: 고칠원고, rows: 지난줄,
       });
     }
-    // 마지막으로 만든 이미지 한 장 고치기(2026-10-06). 판단 읽기가 고칠 그림이 있을 때만 이 갈래를 준다.
-    if (wants === "image_edit" && 고칠그림) {
+    /*
+     * **이 대화의 이미지 고치기**(2026-10-06, 2차 D2). 번호(target)로 고르면 그 줄의 그림을 고치고,
+     * 말하지 않았으면 마지막 이미지다. 번호 단추 답도 누른 번호가 `target` 이다. 없는 번호 · 카드뉴스 번호 ·
+     * 지운 결과 · 확인 못 한 것 · 못 만든 것 · 만드는 중이면 값 없이 코드가 쓴 사실 문장으로 답한다
+     * (`lib/easy/edit-target.ts`).
+     */
+    if (wants === "image_edit" && 이미지들.madeImage) {
+      const 고칠것 = await pickEditTarget(auth.member.userId, 지난줄, 이미지들, decision.target);
+      if (!고칠것.ok) return await replyTurn(물음맥락, 고칠것.message);
       return await imageEditTurn({
         request, userId: auth.member.userId, store, conversationId, prompt: 지시, userBody: 사용자글, textModel,
-        target: 고칠그림, rows: 지난줄, attachments: 붙인것,
+        target: 고칠것.target, rowId: 고칠것.rowId, rows: 지난줄, attachments: 붙인것,
+        // 새 고친 줄의 「이미지 N」(결과물 번호, 2차 D2).
+        resultLabel: resultLabel("image", nextResultNumber(지난줄)),
       });
     }
 

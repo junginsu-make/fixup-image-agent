@@ -109,3 +109,30 @@ describe("카드뉴스 원고와 이미지가 함께 있는 대화", () => {
     expect(easyChatPrompt([], "더 짧게", 0, true, false, false)).not.toContain("마지막으로 만든 것은 이미지");
   });
 });
+
+describe("고칠 이미지 번호 (2차 D2)", () => {
+  const 둘 = [
+    { n: 1, rowId: "i1", workId: "p1", kind: "image" as const, state: "done" as const, words: "a" },
+    { n: 2, rowId: "i2", workId: "p2", kind: "image" as const, state: "done" as const, words: "b" },
+  ];
+
+  it("돌아온 번호는 image_edit 일 때만, 1 이상의 정수만 읽는다", () => {
+    expect(readEasyDecision({ wants: "image_edit", reply: "", target: 2 }, { editableImage: true })).toMatchObject({ wants: "image_edit", target: 2 });
+    expect(readEasyDecision({ wants: "image", reply: "", target: 2 }).target).toBeUndefined();
+    expect(readEasyDecision({ wants: "image_edit", reply: "", target: 0 }, { editableImage: true }).target).toBeUndefined();
+    expect(readEasyDecision({ wants: "image_edit", reply: "", target: 1.5 }, { editableImage: true }).target).toBeUndefined();
+  });
+
+  it("이미지 고치기가 있을 때만 번호 고르는 법을 알리고, 다 만든 것이 둘 이상이면 모를 때 묻게 한다", () => {
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, true, { images: 둘 })).toContain("`ask_target`");
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, true, { images: 둘.slice(0, 1) })).toContain("`target`");
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, true, { images: 둘.slice(0, 1) })).not.toContain("ask_target");
+    expect(easyChatPrompt([], "고쳐줘", 0, false, false, false)).not.toContain("`target`");
+  });
+
+  it("마지막 결과가 카드뉴스면 콕 집지 않은 고치기는 원고 고치기라고 알린다", () => {
+    const prompt = easyChatPrompt([], "고쳐줘", 0, true, false, true, { lastIsImage: false });
+    expect(prompt).toContain("마지막으로 만든 것은 카드뉴스입니다");
+    expect(prompt).not.toContain("마지막으로 만든 것은 이미지 한 장");
+  });
+});

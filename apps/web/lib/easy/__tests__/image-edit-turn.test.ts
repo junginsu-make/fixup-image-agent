@@ -37,8 +37,8 @@ vi.mock("../../../app/api/poster/projects/[id]/edit/route", () => ({
   },
 }));
 
-const { countEasyImages, imageEditTurn, lastEasyImage } = await import("../image-edit-turn");
-const { editRowBody, withRowJob } = await import("../../../app/easy/row-image");
+const { countEasyImages, imageEditTurn, lastEasyImage, projectTarget } = await import("../image-edit-turn");
+const { editRowBody, rowFromOf, withRowFrom, withRowJob } = await import("../../../app/easy/row-image");
 
 const 남긴줄: Array<{ role: string; body?: string; workId?: string | null }> = [];
 const store = {
@@ -121,7 +121,7 @@ describe("고치기", () => {
     await 고친다([줄.image("p1")]);
     expect(남긴줄).toEqual([
       { conversationId: "c1", role: "user", body: "로고를 이걸로 바꿔줘" },
-      { conversationId: "c1", role: "image", workId: "p1", body: withRowJob(editRowBody("r2"), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) },
+      { conversationId: "c1", role: "image", workId: "p1", body: withRowJob(withRowFrom(editRowBody("r2"), "i-p1-"), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) },
     ]);
   });
 
@@ -176,7 +176,7 @@ describe("이어서 고칠 때", () => {
 
   it("넣은 사진을 고친 줄에 적어 둔다", async () => {
     await 고친다(대화({ id: "i1", role: "image", body: "", workId: "p1" }), ["logo-1"]);
-    expect(남긴줄.at(-1)).toMatchObject({ role: "image", body: withRowJob(editRowBody("r2", ["logo-1"]), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) });
+    expect(남긴줄.at(-1)).toMatchObject({ role: "image", body: withRowJob(withRowFrom(editRowBody("r2", ["logo-1"]), "i1"), { requestRowId: "r2", falRequestId: "f2", endpoint: "e" }) });
   });
 
   it("앞의 고치기가 실패했으면(오래 지나도 그림 없음) 그 앞의 그림을 고친다 — 막히지 않는다", async () => {
@@ -229,5 +229,45 @@ describe("이 대화에서 만든 이미지 수 (규격 안내, 최종 리뷰 20
 
   it("그림 줄이 없으면 0", async () => {
     expect(await countEasyImages("me", [줄.user("안녕")])).toBe(0);
+  });
+});
+
+describe("번호로 고르기 (2차 D2)", () => {
+  const 줄들 = [
+    { id: "i1", role: "image", body: "", workId: "p1" },
+    { id: "i3", role: "image", body: editRowBody("r3"), workId: "p1" },
+  ];
+  const 고친다 = async (rowId: string | undefined, resultLabel?: string) => imageEditTurn({
+    request: 요청(), userId: "me", store, conversationId: "c1", prompt: "배경만 파랗게", textModel: "m",
+    target: (await projectTarget("me", "p1"))!, rows: 줄들, attachments: [], rowId, resultLabel,
+  });
+
+  /** Review Focus 4 */
+  it("번호로 고른 줄의 그림을 고친다 — 같은 작업의 나중 줄이 아니라", async () => {
+    images = [{ id: "img-1", generationRequestId: "r1", selected: false }, { id: "img-3", generationRequestId: "r3", selected: false }];
+    const json = await (await 고친다("i1", "이미지 4")).json();
+    expect(edits[0]!.body.imageId).toBe("img-1");
+    expect(rowFromOf(남긴줄.at(-1)!.body)).toBe("i1");
+    expect(json.resultLabel).toBe("이미지 4");
+  });
+
+  it("번호가 없으면 예전처럼 그 작업의 마지막 줄의 그림이고, 그 줄을 고친 대상으로 적는다", async () => {
+    images = [{ id: "img-1", generationRequestId: "r1", selected: false }, { id: "img-3", generationRequestId: "r3", selected: false }];
+    await 고친다(undefined);
+    expect(edits[0]!.body.imageId).toBe("img-3");
+    expect(rowFromOf(남긴줄.at(-1)!.body)).toBe("i3");
+  });
+
+  it("고른 줄의 그림이 아직 없으면 값 없이 기다리라고 한다", async () => {
+    images = [];
+    const json = await (await 고친다("i1")).json();
+    expect(edits).toEqual([]);
+    expect(json.talked).toBe(true);
+  });
+
+  it("작업 대상은 지킬 사진만 들고, 없는 작업이면 비어 있다", async () => {
+    expect([...(await projectTarget("me", "p1"))!.keptIds]).toEqual(["keep-1"]);
+    expect(await projectTarget("me", "nope")).toBeNull();
+    expect(await projectTarget("me", undefined)).toBeNull();
   });
 });

@@ -67,8 +67,10 @@ export function easyChatSpec(wants: readonly string[]): StructuredSpec {
         // 3단계: 말한 장 번호(없으면 0)와 그 장에 바라는 점 · 고칠 내용(없으면 빈 글).
         card: { type: "integer" },
         note: { type: "string" },
+        // 2차 D2: 고칠 이미지 번호(이 대화의 「이미지 N」, 말하지 않았으면 0).
+        target: { type: "integer" },
       },
-      required: ["wants", "reply", "ratio", "look", "card", "note"],
+      required: ["wants", "reply", "ratio", "look", "card", "note", "target"],
     },
   };
 }

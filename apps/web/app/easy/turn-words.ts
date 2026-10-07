@@ -11,6 +11,9 @@ export const KIND_QUESTION = "이미지 한 장으로 만들까요, 여러 장�
 /** 모양(비율 · 그림체). 묻되 막지 않는다. 「이대로 만들기」가 늘 열려 있다(2026-09-21). */
 export const RATIO_QUESTION = "어떤 모양으로 만들까요? 안 고르셔도 됩니다. 그때는 정사각형에, 적어 주신 말에 맞춰 만듭니다.";
 
+/** 어느 이미지를 고칠지(2차 D2). AI 가 물음으로 쓴 글이 먼저다. */
+export const TARGET_QUESTION = "어느 이미지를 고칠까요? 아래에서 고르시거나 「이미지 2」처럼 말씀해 주세요.";
+
 /** 사진 물음. 다른 판단(사진 역할) 뒤에 정해져 AI 가 같은 호출로 못 쓴다. 고정이다(2차 §4). */
 export function photoQuestion(reason: "unclear" | "people"): string {
   return reason === "people"

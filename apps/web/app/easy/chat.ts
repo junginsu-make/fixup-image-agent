@@ -4,10 +4,10 @@ import type { EasyMessage } from "./turn";
 import { adQuestionOrigin } from "./ad-ask";
 import { plainAiText, visibleBody } from "./row-marks";
 import {
-  easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyPhotoGoneLines,
-  easyResultListLines, easyResultRowText,
+  easyAdAnswerLines, easyAdWantLines, easyAskAnswerLines, easyCapabilityLines, easyFirstPhotoLines, easyLastResultLines,
+  easyPhotoGoneLines, easyResultListLines, easyResultRowText, easyTargetLines,
 } from "./chat-facts";
-import type { EasyResultEntry } from "./image-numbers";
+import { doneImageNumbers, type EasyResultEntry } from "./image-numbers";
 import { askChain } from "./ask-chain";
 
 /**
@@ -78,6 +78,8 @@ export interface EasyPromptOptions {
   adNegated?: boolean;
   /** 2차 D2: 이 대화의 결과물(번호 · 갈래 · 상태). 목록으로 싣고, 지난 대화의 결과물 줄에도 번호를 적는다. */
   images?: readonly EasyResultEntry[];
+  /** 2차 D2: 이 대화의 마지막 결과가 이미지인가(카드뉴스면 false). 모르면 예전처럼 이미지로 본다. */
+  lastIsImage?: boolean;
 }
 
 /** 판단 모델이 고를 수 있는 갈래 하나. */
@@ -212,9 +214,9 @@ export function easyChatPrompt(
       : []),
     ...(갈래.includes("image_edit")
       ? [
-        "  image_edit  이 대화에서 **마지막으로 만든 이미지를 고쳐** 달라는 것입니다. 「로고를 이걸로 바꿔줘」 ·",
-        "              「글자를 크게」 · 「배경만 파랗게」 · 「방금 거에서 ○○만 바꿔줘」. 붙인 이미지가 있으면 그것을",
-        "              넣어 고쳐 달라는 뜻입니다. 전혀 다른 새 이미지를 말하면 image 입니다.",
+        "  image_edit  이 대화의 **이미지를 고쳐** 달라는 것입니다. 「로고를 이걸로 바꿔줘」 · 「글자를 크게」 ·",
+        "              「배경만 파랗게」 · 「아까 첫 번째 거에서 ○○만 바꿔줘」. 붙인 이미지가 있으면 그것을",
+        "              넣어 고쳐 달라는 뜻입니다. 전혀 다른 새 이미지를 말하면 image 입니다. 고칠 번호는 target 에 적습니다.",
       ]
       : []),
     /*
@@ -222,12 +224,7 @@ export function easyChatPrompt(
       안 알려 주면 모델은 고쳐 달라는 말에 `revise` 를 골라 앞의 카드뉴스 원고를
       고친다 — 사용자는 방금 만든 이미지를 보고 말한 것이다.
     */
-    ...(갈래.includes("revise") && 갈래.includes("image_edit")
-      ? [
-        "  **이 대화에서 마지막으로 만든 것은 이미지 한 장입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
-        "  image_edit 입니다. 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
-      ]
-      : []),
+    ...(갈래.includes("revise") && 갈래.includes("image_edit") ? easyLastResultLines(options.lastIsImage !== false) : []),
     "  talk   그 밖의 모든 것입니다. 인사 · 질문 · 방금 만든 것에 대한 이야기 ·",
     "         무엇을 적어야 할지 묻는 것 · 잡담.",
     "  detail_page  **상세페이지**(쇼핑몰 제품을 길게 소개하는 세로 페이지)를 지금",
@@ -258,6 +255,10 @@ export function easyChatPrompt(
     "",
     // 갈래 이름은 쓸 수 있는 것만 적는다(A1) — 같은 목록을 넘긴다.
     ...easyCapabilityLines(갈래),
+    // 2차 D2: 고칠 이미지 번호 고르는 법. 다 만든 것이 둘 이상이면 모를 때 묻게 한다.
+    ...(갈래.includes("image_edit")
+      ? easyTargetLines(doneImageNumbers(options.images ?? []).length)
+      : []),
     "── 말 속에 비율이나 그림체가 있나 ──",
     "",
     "**있을 때만 적습니다.** 없으면 그 칸을 비워 두세요. 지어내면 사용자가 말한",
@@ -377,7 +378,9 @@ export function readEasyDecision(
   /** `editableImage`: 이 대화의 마지막 결과가 고칠 수 있는 이미지 한 장인가(2026-10-06). */
   options: EasyAvailability = {},
 ): EasyDecision {
-  const value = raw as { wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown } | null;
+  const value = raw as {
+    wants?: unknown; reply?: unknown; ratio?: unknown; look?: unknown; card?: unknown; note?: unknown; target?: unknown;
+  } | null;
   const said = value?.wants;
 
   if (typeof said !== "string" || !아는갈래.has(said)) {
@@ -389,12 +392,15 @@ export function readEasyDecision(
   );
   const card = typeof value?.card === "number" && Number.isInteger(value.card) && value.card > 0 ? value.card : undefined;
   const note = typeof value?.note === "string" && value.note.trim() ? value.note.trim().slice(0, 500) : undefined;
+  // 2차 D2: 고칠 이미지 번호. image_edit 일 때만 쓴다.
+  const target = typeof value?.target === "number" && Number.isInteger(value.target) && value.target > 0 ? value.target : undefined;
 
   return {
     wants,
     reply,
     ...(card ? { card } : {}),
     ...(note ? { note } : {}),
+    ...(target && wants === "image_edit" ? { target } : {}),
     /*
       **모르는 값은 버린다.** 목록에 없는 비율·결이 오면 그것은 지어낸 것이고,
       그대로 넘기면 만들기가 거절당한다(`PosterProjectInputSchema`). 비워 두면

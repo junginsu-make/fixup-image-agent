@@ -32,6 +32,8 @@ export interface EasyJudgeInput {
   adStep?: EasyAdStep;
   /** 2차 D2: 이 대화의 결과물(번호 · 갈래 · 상태). 판단 모델이 고칠 번호를 고른다. */
   images?: readonly EasyResultEntry[];
+  /** 2차 D2: 마지막 결과가 이미지인가(카드뉴스면 false). */
+  lastIsImage?: boolean;
 }
 
 export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision> {
@@ -44,7 +46,7 @@ export async function judgeEasyTurn(input: EasyJudgeInput): Promise<EasyDecision
   const ask = async (retry: boolean) => readEasyDecision(
     await input.decide(
       easyChatPrompt(input.history, input.prompt, input.attachmentCount, hasDraft, made, madeImage, {
-        retry, adNegated, images: input.images,
+        retry, adNegated, images: input.images, lastIsImage: input.lastIsImage,
       }),
       wants,
     ),

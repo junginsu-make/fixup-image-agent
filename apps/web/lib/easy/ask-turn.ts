@@ -38,3 +38,14 @@ export async function askTurn(
   });
   return Response.json({ ok: true, ask: { kind: ask.kind }, message, userMessage, textModel: ctx.textModel, ...legacy });
 }
+
+/**
+ * 물음이 아니라 안내 한 줄로 끝내는 턴(2차 D2 — 고칠 번호가 없거나 지운 이미지일 때). 사용자 줄 +
+ * 도우미 줄을 남긴다. 값은 안 든다.
+ */
+export async function replyTurn(ctx: AskTurnContext, body: string): Promise<Response> {
+  await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "user", body: ctx.userBody });
+  if (!ctx.conversation.title) await ctx.store.renameConversation(ctx.conversationId, easyTitle(ctx.prompt));
+  const message = await ctx.store.appendMessage({ conversationId: ctx.conversationId, role: "assistant", body });
+  return Response.json({ ok: true, talked: true, message, textModel: ctx.textModel });
+}

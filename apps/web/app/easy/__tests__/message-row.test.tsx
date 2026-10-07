@@ -142,6 +142,16 @@ describe("물음 줄의 단추 · 고르기 (2차 D1)", () => {
     expect(글()).toContain("사진을 어떻게 쓸지 알려 주세요.");
     expect(view.root.findAllByType("button")).toHaveLength(0);
   });
+
+  it("어느 이미지 물음 줄은 번호 단추를 달고, 누르면 그 번호를 보낸다 (2차 D2)", () => {
+    const onAnswer = vi.fn();
+    const 물음 = { id: "q4", role: "assistant" as const, body: askBody("target", "어느 이미지를 고칠까요?", { numbers: [1, 3] }) };
+    act(() => { view = create(그린다(물음, onAnswer)); });
+    const 단추 = view.root.findAllByType("button");
+    expect(단추.map(글자)).toEqual(["이미지 1", "이미지 3"]);
+    act(() => { 단추[1]!.props.onClick(); });
+    expect(onAnswer).toHaveBeenCalledWith({ text: "이미지 3", answersRowId: "q4", pick: { target: 3 } });
+  });
 });
 
 describe("표시를 뗀 글 (2차 §3-0)", () => {

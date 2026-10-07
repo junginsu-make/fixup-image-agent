@@ -158,3 +158,42 @@ export function easyResultRowText(entry: EasyResultEntry | undefined): string {
   if (entry.kind === "unknown") return `(#${entry.n} 결과물을 만들어 보여 줬습니다)`;
   return `(#${entry.n} 이미지를 만들어 보여 줬습니다)`;
 }
+
+/** 판단 모델이 「어느 이미지인지 물어야 한다」고 `note` 에 적는 값(2026-10-07 2차 D2). */
+export const ASK_TARGET_NOTE = "ask_target";
+
+/**
+ * 고칠 이미지 번호를 고르는 법(2차 D2). 갈래 목록에 image_edit 이 있을 때만 싣는다. 다 만든 이미지가
+ * 둘 이상이면, 어느 것인지 말에서 알 수 없을 때 묻게 한다(`ask:target` 물음 줄 · 번호 단추).
+ */
+export function easyTargetLines(doneCount: number): string[] {
+  return [
+    "`target`: image_edit 이면 고칠 이미지 번호(아래 「이 대화의 결과물」의 #N 가운데 「이미지」 번호)를 적습니다. 「아까 첫 번째 거」는 첫 이미지의 번호입니다.",
+    "카드뉴스 번호나 지운 결과의 번호는 이미지로 고칠 수 없습니다.",
+    "「방금 거」 · 「마지막 거」처럼 마지막 이미지를 가리키거나 바로 앞에서 만든 이미지 이야기를 이어 가면 0 입니다.",
+    "image_edit 이 아니면 0 입니다.",
+    ...(doneCount >= 2
+      ? [
+        `이 대화에 다 만든 이미지가 ${doneCount}장 있습니다. 고쳐 달라는데 **어느 이미지인지 말에서 알 수 없으면**`,
+        `image_edit 대신 talk 로 고르고, reply 에 몇 번 이미지를 고칠지 묻는 한 문장을 쓰고, note 에 \`${ASK_TARGET_NOTE}\` 라고 적으세요.`,
+      ]
+      : []),
+    "",
+  ];
+}
+
+/**
+ * 원고와 이미지가 함께 있을 때 **마지막 결과**를 알린다(2026-10-06 독립 리뷰, 2차 D2). 마지막이
+ * 카드뉴스면 콕 집지 않은 「고쳐줘」는 원고 고치기다.
+ */
+export function easyLastResultLines(lastIsImage: boolean): string[] {
+  return lastIsImage
+    ? [
+      "  **이 대화에서 마지막으로 만든 것은 이미지 한 장입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
+      "  image_edit 입니다. 카드뉴스 원고나 카드를 **콕 집어** 말할 때만 revise · card_text 입니다.",
+    ]
+    : [
+      "  **이 대화에서 마지막으로 만든 것은 카드뉴스입니다.** 무엇을 고칠지 콕 집지 않은 고쳐 달라는 말은",
+      "  revise 입니다. 「이미지 2」처럼 이미지를 **콕 집어** 말할 때만 image_edit 입니다.",
+    ];
+}

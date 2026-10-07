@@ -20,7 +20,9 @@ describe("3단계 판단 틀", () => {
     for (const 갈래 of ["card_redo", "card_text", "caption", "download"]) expect(schema.properties.wants!.enum).toContain(갈래);
     expect(schema.properties.card).toEqual({ type: "integer" });
     expect(schema.properties.note).toEqual({ type: "string" });
-    expect(schema.required).toEqual(["wants", "reply", "ratio", "look", "card", "note"]);
+    // 2차 D2: 고칠 이미지 번호(없으면 0). 틀에 없으면 아무리 시켜도 안 온다.
+    expect(schema.properties.target).toEqual({ type: "integer" });
+    expect(schema.required).toEqual(["wants", "reply", "ratio", "look", "card", "note", "target"]);
   });
 
   it("한 장 글 고치기 틀이 있고 두 업체 모두에 실린다", () => {

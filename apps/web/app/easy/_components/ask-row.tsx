@@ -1,8 +1,11 @@
 "use client";
 
+import { Button } from "@fixup/ui";
 import { readAsk } from "../row-marks";
 import type { EasyMessage } from "../turn";
-import { kindReply, photoReply, ratioReply, referenceReply, type EasyButtonReply } from "../ask-answers";
+import {
+  askNumbers, kindReply, photoReply, ratioReply, referenceReply, targetReply, type EasyButtonReply,
+} from "../ask-answers";
 import { photoAskReady } from "../photo-ask-state";
 import type { EasyAsks } from "../use-easy-asks";
 import { EasyAskChoice } from "./ask-choice";
@@ -70,5 +73,25 @@ export function EasyAskControls({ message, asks, attachments, library, onAttach,
       />
     );
   }
+  if (ask.kind === "target") {
+    return (
+      <EasyNumberAsk numbers={askNumbers(ask.data.numbers)} label={(n) => `이미지 ${n}`} onPick={(n) => onAnswer(targetReply(message.id, n))} />
+    );
+  }
   return null;
+}
+
+/** 번호 단추(어느 이미지 · 몇 번 장, 2차 D1 · D2). 다시 열어도 그대로 나온다. */
+function EasyNumberAsk({ numbers, label, onPick }: {
+  numbers: readonly number[];
+  label: (n: number) => string;
+  onPick: (n: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {numbers.map((n) => (
+        <Button key={n} size="sm" variant="secondary" onClick={() => onPick(n)}>{label(n)}</Button>
+      ))}
+    </div>
+  );
 }
