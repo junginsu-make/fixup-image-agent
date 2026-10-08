@@ -102,6 +102,31 @@ export interface LibraryImageInput {
 
 export type LibrarySourceType = "generation" | "character";
 
+/** 무엇으로 만들었나. 광고소재는 2026-10-08 부터 저장한다(`202610080001_library_ad_tool.sql`). */
+export type LibraryTool = "create" | "redesign" | "ad";
+
+/** 받은 그대로(`asIs`) 넣을 수 있는 형식. 광고 규격은 JPG·PNG 뿐이다. */
+const AS_IS_FORMATS = new Set(["image/png", "image/jpeg"]);
+
+/**
+ * 이 회원이 `since` 뒤로 이 도구로 남긴 작업 수.
+ *
+ * 광고 내보내기는 자르기만 하면 0크레딧이라 장부가 막지 않는데, 뽑을 때마다 라이브러리에 한
+ * 묶음이 영구로 쌓인다. 그 저장에 상한을 거는 데 쓴다(2026-10-08 보안 리뷰). **못 세면 던진다** —
+ * 부르는 쪽이 저장하지 않는 쪽으로 닫는다.
+ */
+export async function countRecentLibraryItems(userId: string, tool: LibraryTool, since: Date): Promise<number> {
+  if (isLocalStoreEnabled()) return 0;
+  const { count, error } = await createSupabaseAdminClient()
+    .from("library_items")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("tool", tool)
+    .gte("created_at", since.toISOString());
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 /**
  * 이 그림을 AI 가 만들었는가.
  *
@@ -115,9 +140,16 @@ export type LibraryOrigin = "ai" | "upload";
 export interface SaveLibraryItemInput {
   userId: string;
   title: string;
-  tool: "create" | "redesign";
+  tool: LibraryTool;
   /** 기본값을 두지 않는다. 부르는 쪽이 매번 정하게 해야 나중에 빠지지 않는다. */
   origin: LibraryOrigin;
+  /**
+   * **받은 바이트 그대로 넣는다**(2026-10-08, 광고소재). 표기를 새기지 않고 저장 형식도 바꾸지 않는다.
+   *
+   * 광고 규격은 크기·형식·용량이 곧 규격이고, AI 표기는 내보낼 때 이미 새겼다(`lib/ad/finish.ts`).
+   * WebP 로 바꾸면 라이브러리에서 내려받은 파일을 광고 매체가 안 받고, 또 새기면 표기가 두 번 찍힌다.
+   */
+  asIs?: boolean;
   aspectRatio?: string;
   /** 같은 결과물이 전용 목록에도 있을 때 선택창에서 중복되지 않게 구분한다. */
   sourceType?: LibrarySourceType;
@@ -155,7 +187,7 @@ export interface SaveLibraryItemInput {
 export interface ServerLibraryItem {
   id: string;
   title: string;
-  tool: "create" | "redesign";
+  tool: LibraryTool;
   aspectRatio: string | null;
   sourceType: LibrarySourceType;
   sourceId: string | null;
@@ -217,6 +249,13 @@ export { sniffImageMime };
 export async function saveLibraryItem(input: SaveLibraryItemInput) {
   if (input.images.length === 0) {
     return { ok: false as const, message: "저장할 이미지가 없습니다." };
+  }
+  /*
+    **받은 그대로 넣는 길은 그림만 받는다**(2026-10-08 보안 리뷰). 다시 굽지 않으므로 바이트가
+    무엇인지 여기서밖에 못 본다. 형식을 모르면 딱지만 믿고 넣는 대신 거절한다.
+  */
+  if (input.asIs && input.images.some((image) => !AS_IS_FORMATS.has(sniffImageMime(Buffer.from(image.base64, "base64"), "")))) {
+    return { ok: false as const, message: "저장할 수 없는 파일입니다." };
   }
 
   const supabase = createSupabaseAdminClient();
@@ -282,10 +321,11 @@ export async function saveLibraryItem(input: SaveLibraryItemInput) {
     for (const [offset, image] of input.images.entries()) {
       const position = startPosition + offset;
       const original = Buffer.from(image.base64, "base64");
-      const marked = input.origin === "ai" ? await markAsAi(original) : original;
-      // 표기까지 새긴 뒤에 줄인다. 표기가 픽셀을 바꾸므로 순서가 뒤바뀌면
-      // 줄여 놓은 것을 다시 부풀린 채로 저장하게 된다.
-      const { bytes, mimeType } = await encodeForStorage(marked, image.mimeType);
+      const { bytes, mimeType } = input.asIs
+        ? { bytes: original, mimeType: sniffImageMime(original, image.mimeType) }
+        // 표기까지 새긴 뒤에 줄인다. 표기가 픽셀을 바꾸므로 순서가 뒤바뀌면
+        // 줄여 놓은 것을 다시 부풀린 채로 저장하게 된다.
+        : await encodeForStorage(input.origin === "ai" ? await markAsAi(original) : original, image.mimeType);
 
       const path = `${input.userId}/${item.id}/${position}-${batchTag}.${extensionFor(mimeType)}`;
       const { error } = await supabase.storage
@@ -713,7 +753,7 @@ async function listLegacyLibraryItems(viewer: LibraryViewer): Promise<ServerLibr
   return data.map((row: Record<string, unknown>) => ({
     id: row.id as string,
     title: row.title as string,
-    tool: row.tool as "create" | "redesign",
+    tool: row.tool as LibraryTool,
     aspectRatio: (row.aspect_ratio as string | null) ?? null,
     sourceType: (row.source_type as LibrarySourceType | null) ?? "generation",
     sourceId: (row.source_id as string | null) ?? null,
@@ -771,7 +811,7 @@ export async function getLibraryItem(viewer: LibraryViewer, itemId: string) {
   return {
     id: row.id as string,
     title: row.title as string,
-    tool: row.tool as "create" | "redesign",
+    tool: row.tool as LibraryTool,
     aspectRatio: (row.aspect_ratio as string | null) ?? null,
     imageCount: Number(row.image_count ?? 0),
     createdAt: String(row.created_at),

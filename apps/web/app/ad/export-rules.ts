@@ -174,6 +174,8 @@ export interface AdAccountWork {
   title: string;
   /** `"character"` 면 캐릭터다. 서버가 `library_items.source_type` 으로 준다. */
   sourceType?: string | null;
+  /** 무엇으로 만들었나(`library_items.tool`). `"ad"` 면 이 화면이 뽑아 남긴 결과다. */
+  tool?: string | null;
   /** 내가 만든 것인가. **서버가 세션으로 정해서 보낸다** — 화면이 셈하지 않는다. */
   mine?: boolean;
   coverThumbUrl?: string | null;
@@ -291,6 +293,11 @@ export function adSourceItems(input: {
   const fromWorks = onlyMine(input.works)
     // 캐릭터는 이 화면이 다루지 않는다.
     .filter((work) => work.sourceType !== "character")
+    /*
+      **이 화면이 뽑아 남긴 결과는 원본이 아니다**(2026-10-08). 뽑을 때마다 라이브러리에 한 묶음이
+      쌓여 원본 목록 맨 위를 덮는다. 고르면 214×214 를 늘려 다시 뽑아 화질이 깨지고 표기가 두 번 찍힌다.
+    */
+    .filter((work) => work.tool !== "ad")
     .map((work) => ({
       id: work.id,
       title: work.title || "제목 없음",

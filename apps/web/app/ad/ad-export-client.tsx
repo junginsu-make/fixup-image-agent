@@ -89,6 +89,8 @@ export function AdExportClient() {
   const [portals, setPortals] = React.useState<AdSpec["portal"][]>([]);
   const [picked, setPicked] = React.useState<string[]>([]);
   const [results, setResults] = React.useState<ResultEntry[] | null>(null);
+  /** 뽑은 결과를 라이브러리에 남겼나(2026-10-08). 서버가 알린다 — 한 장도 안 나왔으면 `null`. */
+  const [librarySaved, setLibrarySaved] = React.useState<{ saved: boolean; message?: string } | null>(null);
   /** 고른 포털의 규격만 그린다. 매번 세는 대신 한 번만 판단한다. */
   const visibleRows = rowsForPortals(ROWS, portals);
 
@@ -299,6 +301,7 @@ export function AdExportClient() {
     setBusyStartedAt(Date.now());
     setError(null);
     setResults(null);
+    setLibrarySaved(null);
     try {
       const response = await fetch("/api/ad/export", {
         method: "POST",
@@ -326,6 +329,8 @@ export function AdExportClient() {
           imageId: images?.find((image) => image.position === position)?.imageId ?? undefined,
           specIds: picked,
           source: item.source,
+          // 라이브러리에 남길 작업 이름(2026-10-08). 서버가 「· 광고 규격 N개」를 붙인다.
+          title: item.title,
         }),
       });
       const body = await response.json().catch(() => null);
@@ -346,6 +351,7 @@ export function AdExportClient() {
         return;
       }
       setResults(body.results as ResultEntry[]);
+      setLibrarySaved(body.library ?? null);
       // 결과는 03 에 그려진다. 뽑아 놓고 안 보여 주면 안 된다.
       setStep("result");
     } catch {
@@ -752,6 +758,12 @@ export function AdExportClient() {
             </span>
           </CardHeader>
           <CardContent className="grid gap-3">
+          {/* 어디 갔는지 말한다. 저장이 실패해도 결과는 여기 있다 — 내려받으면 된다. */}
+          {librarySaved ? (
+            <p role="status" className={librarySaved.saved ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>
+              {librarySaved.saved ? "라이브러리 「광고소재」에 한 묶음으로 저장했습니다." : librarySaved.message}
+            </p>
+          ) : null}
           {/*
             **띠가 없는 것을 「제약이 없다」로 읽히게 두면 안 된다.** `safeArea` 를
             가진 규격은 카카오 디스플레이 넷뿐이고, 나머지 열셋에 띠가 없는 것은

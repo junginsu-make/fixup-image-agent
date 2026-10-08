@@ -14,13 +14,15 @@ import { coverOf } from "./works-cover";
  * **`server-only` 을 붙이지 않는다.** 순수한 규칙이라 값으로 잰다.
  */
 
-export type WorkTool = "sns" | "poster" | "create" | "redesign";
+export type WorkTool = "sns" | "poster" | "create" | "redesign" | "ad";
 
 export const TOOL_LABEL: Record<WorkTool, string> = {
   sns: "카드뉴스",
   poster: "이미지",
   create: "상세페이지",
   redesign: "리디자인",
+  // 광고 내보내기가 뽑을 때마다 한 묶음을 남긴다(2026-10-08).
+  ad: "광고소재",
 };
 
 /**
@@ -57,7 +59,7 @@ export function isWorkShowcased(
 export interface LibraryListItem {
   id: string;
   title: string;
-  tool: "create" | "redesign";
+  tool: "create" | "redesign" | "ad";
   aspectRatio: string | null;
   sourceType: "generation" | "character";
   imageCount: number;
@@ -118,10 +120,11 @@ export function libraryWorks(items: readonly LibraryListItem[]): LibraryWork[] {
 }
 
 /**
- * 캐릭터 만들기 결과. **「캐릭터」 거르기를 골랐을 때만 보인다**(2026-09-22 사용자 요청).
+ * 예전 캐릭터 만들기 결과. **「전체」에 「캐릭터」 이름표로 보인다**(2026-10-08).
  *
- * 「전체」에는 넣지 않는다 — 위 `libraryWorks` 가 뺀 까닭 그대로, 캐릭터 탭과 두 번
- * 보인다. 거르기가 그 규칙을 지킨다(`work-filter.ts`).
+ * 「캐릭터」 단추가 캐릭터 화면이 되어 작업물 안의 캐릭터 거르기는 없앴다. 지금 캐릭터
+ * 만들기는 여기 저장하지 않아 옛 줄뿐이고, 그 원본은 캐릭터 화면에 없다 — 빼면 어디서도
+ * 안 보인다(`work-filter.ts`).
  */
 export function libraryCharacterWorks(items: readonly LibraryListItem[]): LibraryWork[] {
   return items

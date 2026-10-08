@@ -2,7 +2,7 @@ import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const st = vi.hoisted(() => ({ push: vi.fn(), conversations: true }));
+const st = vi.hoisted(() => ({ push: vi.fn(), conversations: true, blank: false }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: st.push, replace: vi.fn() }) }));
 vi.mock("../../_components/image-viewer", () => ({ openImageGallery: vi.fn() }));
 vi.mock("../../_components/thumb-image", () => ({ ThumbImage: () => null }));
@@ -30,7 +30,9 @@ function reply(url: string): Response {
   if (url.startsWith("/api/poster/projects")) {
     return json(200, { ok: true, projects: [{
       id: P, title: "쉽게 포스터", status: "generating", ratio: "1:1", modelId: "gpt-image-2",
-      createdAt: "2026-10-06T00:00:00.000Z", updatedAt: "2026-10-06T00:00:00.000Z", data: { instruction: "포스터" }, images: [],
+      createdAt: "2026-10-06T00:00:00.000Z", updatedAt: "2026-10-06T00:00:00.000Z", data: { instruction: "포스터" },
+      // 그림 없는 작업은 라이브러리에 안 보인다(2026-10-08). 과정 보기 단추는 카드에 달린다.
+      images: st.blank ? [] : [{ url: "https://img/p.png", variantIndex: 0 }],
     }] });
   }
   if (url.startsWith("/api/easy/works")) {
@@ -61,6 +63,7 @@ const 카드 = (title: string) => view.root.find((node) =>
 beforeEach(() => {
   st.push.mockReset();
   st.conversations = true;
+  st.blank = false;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => reply(url)));
 });
 afterEach(() => { act(() => view?.unmount()); vi.unstubAllGlobals(); });
@@ -72,10 +75,11 @@ describe("과정 보기 → 쉽게 대화", () => {
     expect(st.push).toHaveBeenCalledWith(`/easy/${C}`);
   });
 
-  it("그림 없는 카드를 눌러도 그 대화로 간다", async () => {
+  /** 그림 없는 작업은 크레딧이 안 나갔다 — 라이브러리에 안 보인다(2026-10-08 사용자 결정). 이어서 하기는 쉽게 대화에서. */
+  it("그림 없는 쉽게 작업은 카드가 없다", async () => {
+    st.blank = true;
     await 연다();
-    await act(async () => { 카드("쉽게 포스터").props.onClick(); });
-    expect(st.push).toHaveBeenCalledWith(`/easy/${C}`);
+    expect(() => 카드("쉽게 포스터")).toThrow();
   });
 
   it("대화를 모르는 옛 응답이면 지금처럼 도구 화면으로 간다", async () => {

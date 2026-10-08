@@ -50,8 +50,9 @@ vi.mock("../supabase/admin", () => ({
 
 vi.mock("../local-store", () => ({ isLocalStoreEnabled: () => false }));
 
-// 표기(배지)는 이 시험의 대상이 아니다. 원본을 그대로 흘려보낸다.
-vi.mock("../watermark", () => ({ markAsAi: async (bytes: Buffer) => bytes }));
+// 표기(배지)는 이 시험의 대상이 아니다. 원본을 그대로 흘려보낸다. 불렸는지만 센다.
+const marked: number[] = [];
+vi.mock("../watermark", () => ({ markAsAi: async (bytes: Buffer) => { marked.push(1); return bytes; } }));
 
 const { saveLibraryItem } = await import("../server-library");
 
@@ -83,6 +84,7 @@ async function save(bytes: Buffer, mimeType: string, origin: "ai" | "upload") {
 beforeEach(() => {
   uploads.length = 0;
   insertedImageRows = [];
+  marked.length = 0;
 });
 
 describe("saveLibraryItem — 저장 형식", () => {
@@ -150,5 +152,57 @@ describe("saveLibraryItem — 저장 형식", () => {
     expect(uploads[0]!.bytes.equals(original)).toBe(true);
     expect(uploads[0]!.path).toMatch(/\.jpg$/);
     expect(uploads[0]!.contentType).toBe("image/jpeg");
+  });
+});
+
+/**
+ * **광고 결과는 받은 그대로 넣는다**(2026-10-08). 광고 규격은 크기·형식·용량이 곧 규격이고,
+ * AI 표기는 내보낼 때 이미 새겼다(`lib/ad/finish.ts`). WebP 로 바꾸면 광고 매체가 안 받고,
+ * 또 새기면 표기가 두 번 찍힌다.
+ */
+describe("saveLibraryItem — 받은 그대로(asIs)", () => {
+  it("PNG 를 다시 굽지 않고 표기도 다시 새기지 않는다", async () => {
+    const original = await texturedPng();
+
+    const result = await saveLibraryItem({
+      userId: "user-1", title: "광고 규격 1개", tool: "ad", origin: "ai", asIs: true,
+      images: [{ base64: original.toString("base64"), mimeType: "image/png" }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(marked).toEqual([]);
+    expect(uploads[0]!.bytes.equals(original)).toBe(true);
+    expect(uploads[0]!.path).toMatch(/\.png$/);
+    expect(uploads[0]!.contentType).toBe("image/png");
+    expect(insertedImageRows[0]!.mime_type).toBe("image/png");
+  });
+
+  it("형식은 바이트를 보고 정한다 — 딱지를 믿지 않는다", async () => {
+    const jpeg = await sharp(await texturedPng()).jpeg({ quality: 90 }).toBuffer();
+
+    await saveLibraryItem({
+      userId: "user-1", title: "광고", tool: "ad", origin: "ai", asIs: true,
+      images: [{ base64: jpeg.toString("base64"), mimeType: "image/png" }],
+    });
+
+    expect(uploads[0]!.path).toMatch(/\.jpg$/);
+    expect(uploads[0]!.contentType).toBe("image/jpeg");
+  });
+
+  it("asIs 가 없으면 지금처럼 표기를 새긴다", async () => {
+    await save(await texturedPng(), "image/png", "ai");
+    expect(marked).toEqual([1]);
+  });
+});
+
+/** 받은 그대로 넣는 길은 **그림만** 받는다(보안 리뷰 LOW). 형식을 몰라 딱지만 믿고 넣지 않는다. */
+describe("saveLibraryItem — asIs 는 그림만", () => {
+  it("PNG·JPEG 가 아닌 바이트는 넣지 않는다", async () => {
+    const result = await saveLibraryItem({
+      userId: "user-1", title: "광고", tool: "ad", origin: "ai", asIs: true,
+      images: [{ base64: Buffer.from("<script>alert(1)</script>").toString("base64"), mimeType: "image/png" }],
+    });
+    expect(result.ok).toBe(false);
+    expect(uploads).toEqual([]);
   });
 });
