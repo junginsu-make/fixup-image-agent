@@ -1,6 +1,6 @@
 # FormWith 개발 일지
 
-8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **287개**, 저장 기록(커밋, 합치기 제외) **1,100개**, 배포 꾸러미(릴리스) **246개**.
+8월 31일 첫 저장부터 10월 8일까지 **39일**, 작업 묶음(PR) **288개**, 저장 기록(커밋, 합치기 제외) **1,102개**, 배포 꾸러미(릴리스) **247개**.
 
 한 주씩 쉬운 말 요약을 먼저 적고, 그 주의 작업 묶음은 접어 두었습니다. 분야로 거르거나 찾아보려면 이 폴더의 `index.html` 을 내려받아 브라우저로 여세요.
 
@@ -11,7 +11,7 @@
 | [9/14](#w-2026-09-14) | 만든 과정을 다시 열고, 쉽게 모드가 태어난 주 | 48 | 162 | 47 |
 | [9/21](#w-2026-09-21) | 이름을 FormWith 로 바꾸고 크레딧·구독 체계를 세운 주 | 39 | 78 | 38 |
 | [9/28](#w-2026-09-28) | 출시를 앞두고 도우미·약관·보안·서버를 다진 주 | 60 | 238 | 67 |
-| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 39 | 265 | 54 |
+| [10/5](#w-2026-10-05) | 운영을 들여다보는 눈을 단 주 | 40 | 267 | 55 |
 
 <a id="w-2026-08-31"></a>
 
@@ -517,8 +517,10 @@
 - 카드뉴스·다양하게·쉽게·상세페이지·캐릭터·리디자인 모두 같은 모양의 모델 단추를 씁니다. 단추에 마우스를 올리면 그 모델의 특징이 보이고, 고른 모델의 설명은 단추 아래에 늘 보입니다.
 - 예전 모델로 만든 작업은 그대로 열리고, 그 그림을 고칠 때는 처음 모델로 고칩니다. 새로 만들 때는 표준형으로 만듭니다.
 - 리디자인도 세 모델 중에서 고릅니다. 섹션을 고치거나 나머지 섹션을 만들 때는 그 작업에 쓴 모델을 따릅니다.
+- 라이브러리 「전체」에 캐릭터도 함께 나옵니다. 이 시스템이 만든 것은 모두 한곳에서 최신순으로 봅니다.
+- 캐릭터 카드를 누르면 각도를 옆으로 넘겨 보고, 내려받을 때 실제 파일 형식대로 이름이 붙습니다.
 
-**운영 배포 23회**
+**운영 배포 24회**
 
 - 10/7 `20261007T025711Z-f5109ea8` · [#259](https://github.com/junginsu-make/fixup-image-agent/pull/259), [#260](https://github.com/junginsu-make/fixup-image-agent/pull/260), [#261](https://github.com/junginsu-make/fixup-image-agent/pull/261)
 - 10/7 `20261007T035150Z-4848eac7` · [#263](https://github.com/junginsu-make/fixup-image-agent/pull/263)
@@ -543,8 +545,9 @@
 - 10/8 `20261008T051238Z-dfe579c2` · [#308](https://github.com/junginsu-make/fixup-image-agent/pull/308)
 - 10/8 `20261008T055755Z-1eff3436` · [#310](https://github.com/junginsu-make/fixup-image-agent/pull/310)
 - 10/8 `20261008T101621Z-cbcdf325` · [#312](https://github.com/junginsu-make/fixup-image-agent/pull/312)
+- 10/8 `20261008T120413Z-78f0c29e` · [#314](https://github.com/junginsu-make/fixup-image-agent/pull/314)
 
-<details><summary>이 주의 작업 묶음 39개</summary>
+<details><summary>이 주의 작업 묶음 40개</summary>
 
 
 **10/6**
@@ -594,6 +597,7 @@
 - [#308](https://github.com/junginsu-make/fixup-image-agent/pull/308) feat: 캐릭터 자동 저장·관리자 전체 보기·라이브러리 카드 정면 한 장 <sub>캐릭터 · 관리자 · 라이브러리 · +841 / −114 · 운영 반영 10/8</sub>
 - [#310](https://github.com/junginsu-make/fixup-image-agent/pull/310) fix: 라이브러리 캐릭터 카드를 작업물과 같게, 「캐릭터」 단추에 개수 <sub>캐릭터 · 라이브러리 · +242 / −28 · 운영 반영 10/8</sub>
 - [#312](https://github.com/junginsu-make/fixup-image-agent/pull/312) feat: 그림 모델 세 개로 정리 (표준형·디테일형·속도형) <sub>기타 · +2,642 / −630 · 운영 반영 10/8</sub>
+- [#314](https://github.com/junginsu-make/fixup-image-agent/pull/314) feat: 라이브러리 「전체」에 캐릭터도 — 시스템이 만든 것은 모두 생성 결과 <sub>캐릭터 · 라이브러리 · +243 / −11 · 운영 반영 10/8</sub>
 
 </details>
 

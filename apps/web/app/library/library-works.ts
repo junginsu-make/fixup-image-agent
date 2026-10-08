@@ -91,12 +91,15 @@ export interface LibraryWork {
    * 낱장을 미뤄 받는 작업은 영영 뷰어가 안 열린다(늘 0장이다).
    */
   imageCount: number;
-  images: Array<{ url: string; label: string; index: number }>;
+  /** `ext` 는 내려받을 이름의 확장자. 모르면 화면이 png 로 붙인다. */
+  images: Array<{ url: string; label: string; index: number; ext?: string }>;
   intent: string;
   settings: Array<[string, string]>;
   href: string;
   /** 캐릭터 만들기로 만든 것. 도구 칸(`create`)으로는 못 가른다(`work-filter.ts`). */
   origin?: "character";
+  /** 캐릭터 표에서 온 카드(`character-works.ts`). 라이브러리 줄이 아니라 첫 화면에 걸 수 없다. */
+  characterId?: string;
   sourceId?:string|null;
   documentId?:string;
   documentOwner?:string;
