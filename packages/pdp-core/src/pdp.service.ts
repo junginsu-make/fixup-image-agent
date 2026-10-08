@@ -666,7 +666,8 @@ ${analyzePrompt}`
   }
 
   async generateSectionImage(request: {
-    originalImageBase64: string;
+    originalImageBase64?: string;
+    productImageUrl?: string;
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
@@ -731,7 +732,8 @@ ${analyzePrompt}`
   }
 
   private async generateSectionImageInternal(request: {
-    originalImageBase64: string;
+    originalImageBase64?: string;
+    productImageUrl?: string;
     section: SectionBlueprint;
     aspectRatio: AspectRatio;
     desiredTone?: string;
@@ -741,7 +743,8 @@ ${analyzePrompt}`
     generateImage?: ImageGenerator;
   }): Promise<SectionImageResult> {
     const client = request.client ?? this.getClient();
-    const originalImageBase64 = sanitizeBase64Payload(request.originalImageBase64);
+    // 주소가 오면 몸통의 그림은 없다. 빈 값을 다듬으면 「그림이 깨졌다」로 던진다.
+    const originalImageBase64 = request.productImageUrl ? "" : sanitizeBase64Payload(request.originalImageBase64 ?? "");
     const section = normalizeSection(request.section, 0);
     const normalizedReferenceModel = normalizeReferenceModelImage(
       request.options?.referenceModelImageBase64,
@@ -830,6 +833,7 @@ ${analyzePrompt}`
           kind: "anchor",
           base64: originalImageBase64,
           mimeType: DEFAULT_IMAGE_MIME,
+          ...(request.productImageUrl ? { url: request.productImageUrl } : {}),
           intent: options.attachmentIntents?.anchor,
         });
       }

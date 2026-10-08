@@ -85,4 +85,21 @@ describe("제품 블록 배선", () => {
     });
     expect(prompt).toMatch(/both be clearly recognisable/);
   });
+
+  it("제품 주소가 오면 첫 참조가 그 주소다", async () => {
+    const refs: Array<{ url?: string; base64: string }> = [];
+    await (new PdpService() as never as { generateSectionImageInternal(input: unknown): Promise<unknown> })
+      .generateSectionImageInternal({
+        productImageUrl: "https://v3.fal.media/files/a/b.jpg",
+        section: section(),
+        aspectRatio: "3:4",
+        options: { style: "studio", withModel: false, outputMode: "editable" },
+        client: { llm: { generate: async () => ({ text: "{}" }) }, models: { generateContent: async () => ({ text: "{}" }) } },
+        generateImage: async (_m: unknown, input: { references: Array<{ url?: string; base64: string }> }) => {
+          refs.push(...input.references);
+          return { base64: "IMG", mimeType: "image/jpeg" };
+        },
+      });
+    expect(refs[0]).toMatchObject({ url: "https://v3.fal.media/files/a/b.jpg" });
+  });
 });

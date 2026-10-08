@@ -387,6 +387,11 @@ export interface ReferenceImage {
   base64: string;
   mimeType: string;
   /**
+   * **이미 올려 둔 주소**(설계 2026-10-08 §4). 있으면 `base64` 대신 이것을 fal 에 넘긴다.
+   * 원본 사진을 요청마다 몸통에 싣지 않으려는 것이다 — 서버가 큰 그림을 30~90초 쥐고 있게 된다.
+   */
+  url?: string;
+  /**
    * 디자인 레퍼런스가 **디자인 언어를 어떻게 쓰는지** 적은 서술. `style` 에만 쓴다.
    *
    * 이미지만 보내면 모델이 색을 글자색으로만 쓰고 면으로는 쓰지 않는다 —
@@ -671,7 +676,10 @@ export interface PdpAnalyzeSuccessResponse {
 export type ImageGenOptionsInput = Partial<ImageGenOptions>;
 
 export interface PdpGenerateImageRequest {
-  originalImageBase64: string;
+  /** 옛 길·글 경로. `productImageUrl` 이 있으면 안 쓴다. */
+  originalImageBase64?: string;
+  /** 제품 원본을 올려 둔 fal 주소(설계 2026-10-08 §4). */
+  productImageUrl?: string;
   section: SectionBlueprint;
   aspectRatio: AspectRatio;
   desiredTone?: string;

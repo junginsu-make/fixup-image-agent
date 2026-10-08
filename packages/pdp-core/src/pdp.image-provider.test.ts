@@ -387,3 +387,12 @@ describe("결에 맞는 모델", () => {
     expect(selectCharacterModel(false)).not.toBe("nano-banana-pro");
   });
 });
+
+describe("주소 참조", () => {
+  const 주소앵커: ReferenceImage = { kind: "anchor", base64: "", mimeType: "image/jpeg", url: "https://v3.fal.media/files/a/b.jpg" };
+
+  it.each(["gpt-image-2.5-flare", "nano-banana-pro"] as const)("%s: 주소는 그대로, base64 는 data: 로", (model) => {
+    const payload = buildFalPayload(model, { ...base, references: [주소앵커, style] });
+    expect(payload.image_urls).toEqual(["https://v3.fal.media/files/a/b.jpg", "data:image/png;base64,BBBB"]);
+  });
+});
