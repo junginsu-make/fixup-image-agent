@@ -21,4 +21,11 @@ describe("제품 원본 임시저장", () => {
     const reopened = documentToDraft(createPdpDocument(draft()));
     expect(reopened.preparedImage?.original).toBeUndefined();
   });
+
+  it("1024 사본 그림 안에 원본이 겹쳐 담기지 않는다", () => {
+    const doc = createPdpDocument(draft({ base64: "ORIGINAL", mimeType: "image/png" }));
+    const ref = doc.references.find((r) => r.role === "product")!;
+    expect(Object.hasOwn(doc.assets[ref.assetId], "original")).toBe(false);
+    expect(doc.assets[ref.originalAssetId!].base64).toBe("ORIGINAL");
+  });
 });

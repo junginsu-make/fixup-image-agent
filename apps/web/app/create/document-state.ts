@@ -71,10 +71,11 @@ export function createPdpDocument(input: PdpDraftInput, previous?: PdpDocumentV3
   };
   const references: PdpDocumentV3["references"] = [];
   if (input.preparedImage) {
-    const { original } = input.preparedImage;
+    const { original, base64, mimeType, fileName, previewUrl } = input.preparedImage;
     references.push({
       role: "product",
-      assetId: addAsset(input.preparedImage),
+      // 사본 그림에는 사본 칸만 넣는다. 통째로 넘기면 원본이 사본 안에 한 벌 더 담긴다.
+      assetId: addAsset({ base64, mimeType, fileName, previewUrl }),
       // 원본은 따로 둔다. 1024 사본(미리보기·분석)과 원본(그림 모델)은 쓰임이 다르다.
       ...(original ? { originalAssetId: addAsset({ base64: original.base64, mimeType: original.mimeType }) } : {}),
       enabled: true,
